@@ -417,6 +417,7 @@ class Screen(object):
         self.tag = tag
         self.mark = mark
         self.safe_cls = safe_cls
+        self._busy = {"on": False, "frame": 0, "enabled": None}
 
     # -- 例外を外へ出さないための土台 ---------------------------------------
     def _oops(self, what):
@@ -576,6 +577,116 @@ class Screen(object):
             done.append("hud not found")
 
         return done
+
+    # -- 待機表示（「.」→「..」→「...」）-----------------------------------
+    #
+    # **ゲーム自身の待機表示を実測して、そのまま真似る**（2026-07-27、`301_`）。
+    # 掲示板の「クエストを探す」（`QuestSearchManager`）を1回押した記録:
+    #
+    #   18:35:55.598  enabled=False  hud.buttons=['.',   '.',   '.',   '.'  ]  send_disabled=True
+    #   18:35:55.902  enabled=False  hud.buttons=['..',  '..',  '..',  '..' ]  send_disabled=True
+    #   18:35:56.205  enabled=False  hud.buttons=['...', '...', '...', '...']  send_disabled=True
+    #   18:35:56.508  enabled=False  hud.buttons=['.',   '.',   '.',   '.'  ]   ← 約0.3秒で循環
+    #   18:35:59.437  enabled=True   hud.buttons=['沈黙の森の影を討伐せよ', ...]
+    #
+    # 分かったこと:
+    #
+    #   * `is_button_enabled = False` を**立てている**。以前「立てていない」と
+    #     結論したのは `process_choice` の**前後**しか測っていなかったため
+    #     （`execute` は別スレッドなので、前後の標本は「最中」を捉えない）
+    #   * 点は1個の `…` ではなく `.` → `..` → `...` のアニメーションで、
+    #     **ボタン全枠**に出る（枠数は `hud.buttons` の数）
+    #   * `text_send_button.disabled = True`（自由入力を塞ぐ）
+    #   * `app.text_input_disabled` は False のまま ＝ **これは機構ではない**
+    #
+    # **`app.buttons`（spec の一覧）には触らない。** ゲームも表示だけ差し替えて
+    # いるので、こちらも表示だけにすれば後始末が要らない。
+    BUSY_FRAMES = (".", "..", "...")
+    BUSY_INTERVAL = 0.3
+
+    def busy_slots(self, app):
+        """待機表示を出す枠の数。実物のボタンウィジェット数に合わせる。"""
+        hud = find_hud(app)
+        widgets = getattr(hud, "buttons", None) if hud is not None else None
+        if isinstance(widgets, (list, tuple)) and widgets:
+            return len(widgets)
+        return max(1, len(list(getattr(app, "to_display_buttons", []) or [])))
+
+    def set_send_button(self, app, enabled):
+        """自由入力の送信ボタンを塞ぐ／戻す。効かなくても処理は続ける。"""
+        hud = find_hud(app)
+        name = "enable_text_send_button" if enabled else "disable_text_send_button"
+        toggle = getattr(hud, name, None) if hud is not None else None
+        if callable(toggle):
+            # HUD のウィジェットを触るのでメインスレッドへ回す。
+            self.schedule(toggle, 0)
+
+    def busy_state(self, app):
+        """待機表示になっているかを見るための一行。前後で記録する用。"""
+        return "is_button_enabled={!r} text_input_disabled={!r} buttons={!r}".format(
+            getattr(app, "is_button_enabled", "<missing>"),
+            getattr(app, "text_input_disabled", "<missing>"),
+            list(getattr(app, "to_display_buttons", []) or [])[:6])
+
+    def is_busy(self):
+        """いま待機表示を出しているか。"""
+        return bool(self._busy["on"])
+
+    def busy_on(self, app):
+        """待機表示を出す。ゲーム自身と同じ見た目・同じ止め方。
+
+        LLM を待つ間これを出さないと、**画面が固まったように見える**
+        （`301_` が実機で入れたもの。`305_` も同じ待ち方をする）。
+        """
+        busy = self._busy
+        busy["enabled"] = getattr(app, "is_button_enabled", None)
+        busy["frame"] = 0
+        busy["on"] = True
+        slots = self.busy_slots(app)
+
+        try:
+            app.is_button_enabled = False
+        except Exception:
+            self._oops("cannot clear is_button_enabled")
+        self.set_send_button(app, False)
+
+        def tick(_dt):
+            if not busy["on"]:
+                return False                    # Clock から外れる
+            frame = self.BUSY_FRAMES[busy["frame"] % len(self.BUSY_FRAMES)]
+            busy["frame"] += 1
+            try:
+                texts = [frame] * slots
+                app.to_display_buttons = texts
+                self.paint(app, texts)
+            except Exception:
+                self._oops("busy frame failed")
+            return True
+
+        self.schedule(lambda: tick(0), 0)       # 1コマ目はすぐ
+        self._interval(tick, self.BUSY_INTERVAL)
+        self.write("{}: busy on ({} slots) -> {}".format(
+            self.tag, slots, self.busy_state(app)))
+        return slots
+
+    def busy_off(self, app, restore=True):
+        """待機表示を解く。
+
+        `restore=False` は「この後すぐ別の画面を出すので、選択肢は塗らない」
+        （掲示板を開き直す経路。ここで元に戻すと一瞬だけ古い画面が見える）。
+        """
+        busy = self._busy
+        busy["on"] = False
+        try:
+            app.is_button_enabled = (True if busy["enabled"] is None
+                                     else busy["enabled"])
+        except Exception:
+            self._oops("cannot restore is_button_enabled")
+        self.set_send_button(app, True)
+        if restore:
+            # `app.buttons` は触っていないので、いまの中身を塗り直すだけでよい。
+            self.apply_buttons(app, None, "busy off")
+        self.write("{}: busy off (restore={})".format(self.tag, restore))
 
     def apply_buttons(self, app, entries, tag):
         """選択肢を差し替えて画面に反映する。**必ず次のフレーム**で行う。

@@ -665,6 +665,11 @@ def apply(ctx):
         write("generate: kind={} ({}) combat={}".format(
             kind["key"], kind["label"], COMBAT_MODE))
         screen.say(app, "――掲示板の隅の、割の良くない頼まれごとを探している……")
+        # 生成は LLM を回すので数十秒〜数分かかる（実測 27秒〜352秒）。
+        # 待機表示を出さないと**画面が固まったように見える**ので、ゲーム自身と
+        # 同じ「.」→「..」→「...」を出す（`301_` が実機で入れたもの。中身は
+        # `ui.Screen` にある）。
+        screen.busy_on(app)
 
         started = time.monotonic()
         before = set(quest_ids(app))
@@ -673,6 +678,12 @@ def apply(ctx):
             display_cls(app).generate_random_quest()
         except Exception:
             ctx.log_exc("mini quest: generate_random_quest failed")
+            # 待機表示を出したまま抜けると操作不能になる。ここで必ず解く。
+            screen.busy_off(app)
+            state["generating"] = False
+            state["pending"] = None
+            settle(app, lambda: screen.say(app, "（頼まれごとは見つからなかった）"))
+            return
         else:
             added = sorted(set(quest_ids(app)) - before, key=_id_sort)
             quest_id = added[-1] if added else None
@@ -682,6 +693,7 @@ def apply(ctx):
         state["pending"] = None
 
         if quest_id is None:
+            screen.busy_off(app)
             settle(app, lambda: screen.say(app, "（頼まれごとにはならなかった）"))
             return
 
@@ -693,6 +705,10 @@ def apply(ctx):
         # **受注画面へは自分で飛ばない。** `QuestChoiceManager` を自前で組んで
         # 落とした前科がある（TECH GAME.md §2.9）。掲示板を開き直せば、作ったばかりの
         # 依頼もゲームが正しい spec で並べてくれる。
+        # `restore=False` ＝ この後すぐ掲示板を開くので、元の選択肢は塗り直さない
+        # （塗ると一瞬だけ古い画面が見える。`301_` の教訓）。
+        screen.busy_off(app, restore=False)
+
         def reopen():
             screen.say(app, "「{}」の頼まれごとが見つかった。".format(
                 title or "名も無い依頼"))

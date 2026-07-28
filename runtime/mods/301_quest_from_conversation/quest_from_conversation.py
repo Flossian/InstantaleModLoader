@@ -183,10 +183,6 @@ def apply(ctx):
         # ゲーム本来の「クエスト掲示板」から開いたときは None のままにして
         # 一切手を触れない。
         "filter_npc": None,
-        # 待機表示（点のアニメーション）の状態。
-        "busy_on": False,
-        "busy_frame": 0,
-        "busy_enabled": None,   # 入る前の is_button_enabled
     }
     INJECT_TTL = 300.0
 
@@ -546,7 +542,7 @@ def apply(ctx):
         # 並べ直すので、こちらの点のアニメーションが上から塗ってしまわないよう
         # **掲示板を起こす前**に止める。`restore=False` は「元の選択肢は
         # 塗り直さない」＝ NPC 一覧を出さないため。
-        if state["busy_on"]:
+        if screen.is_busy():
             clear_busy(app, restore=False)
         write("open board: process_choice(DisplayQuestChoice, {!r})".format(choice_text))
         try:
@@ -589,101 +585,18 @@ def apply(ctx):
     # ======================================================= 会話から生成する
     def wait_state(app):
         """待機表示になっているかを見るための一行。生成の前後で記録する。"""
-        return "is_button_enabled={!r} text_input_disabled={!r} buttons={!r}".format(
-            getattr(app, "is_button_enabled", "<missing>"),
-            getattr(app, "text_input_disabled", "<missing>"),
-            list(getattr(app, "to_display_buttons", []) or [])[:6])
+        return screen.busy_state(app)
 
     # ------------------------------------------------------ 待機表示（「...」）
     #
-    # **ゲーム自身の待機表示を実測して、そのまま真似る**（2026-07-27）。
-    # 掲示板の「クエストを探す」（`QuestSearchManager`）を1回押した記録:
-    #
-    #   18:35:55.598  enabled=False  hud.buttons=['.',   '.',   '.',   '.'  ]  send_disabled=True
-    #   18:35:55.902  enabled=False  hud.buttons=['..',  '..',  '..',  '..' ]  send_disabled=True
-    #   18:35:56.205  enabled=False  hud.buttons=['...', '...', '...', '...']  send_disabled=True
-    #   18:35:56.508  enabled=False  hud.buttons=['.',   '.',   '.',   '.'  ]   ← 約0.3秒で循環
-    #   18:35:59.437  enabled=True   hud.buttons=['沈黙の森の影を討伐せよ', ...]
-    #
-    # 分かったこと:
-    #
-    #   * `is_button_enabled = False` を**立てている**。以前「立てていない」と
-    #     結論したのは、`process_choice` の**前後**しか測っていなかったため。
-    #     `execute` は別スレッドなので、前後の標本は「最中」を捉えない
-    #   * 点は **1個だけの `…` ではなく `.` → `..` → `...` のアニメーション**で、
-    #     **ボタン全枠**に出る（枠数は `hud.buttons` の数＝4）
-    #   * `text_send_button.disabled = True`（自由入力を塞ぐ）
-    #   * `app.text_input_disabled` は False のまま ＝ **これは機構ではない**
-    #
-    # `app.buttons`（spec の一覧）には触らない。ゲームも表示だけ差し替えて
-    # いるので、こちらも表示だけにすれば後始末が要らない。
-    BUSY_FRAMES = (".", "..", "...")
-    BUSY_INTERVAL = 0.3
-
-    def busy_slots(app):
-        """待機表示を出す枠の数。実物のボタンウィジェット数に合わせる。"""
-        hud = ui.find_hud(app)
-        widgets = getattr(hud, "buttons", None) if hud is not None else None
-        if isinstance(widgets, (list, tuple)) and widgets:
-            return len(widgets)
-        return max(1, len(list(getattr(app, "to_display_buttons", []) or [])))
-
+    # **実測して分かった「ゲームがどう動いているか」は `ui.Screen` に移した**
+    # （2026-07-28。点のアニメーション・`is_button_enabled`・送信ボタンの塞ぎ方）。
+    # `305_` も同じ待ち方をするので、二重に持たない（TECH.md §6）。
     def show_busy(app):
-        """生成中の待機表示を出す。ゲーム自身と同じ見た目・同じ止め方。"""
-        state["busy_enabled"] = getattr(app, "is_button_enabled", None)
-        state["busy_frame"] = 0
-        state["busy_on"] = True
-        slots = busy_slots(app)
-
-        try:
-            app.is_button_enabled = False
-        except Exception:
-            ctx.log_exc("quest offer: cannot clear is_button_enabled")
-        set_send_button(app, False)
-
-        def tick(_dt):
-            if not state["busy_on"]:
-                return False                    # Clock から外れる
-            frame = BUSY_FRAMES[state["busy_frame"] % len(BUSY_FRAMES)]
-            state["busy_frame"] += 1
-            try:
-                texts = [frame] * slots
-                app.to_display_buttons = texts
-                screen.paint(app, texts)
-            except Exception:
-                ctx.log_exc("quest offer: busy frame failed")
-            return True
-
-        screen.schedule(lambda: tick(0), 0)     # 1コマ目はすぐ
-        screen._interval(tick, BUSY_INTERVAL)
-        write("busy: on ({} slots) -> {}".format(slots, wait_state(app)))
+        screen.busy_on(app)
 
     def clear_busy(app, restore=True):
-        """待機表示を解く。
-
-        `restore=False` は「この後すぐ別の画面を出すので、選択肢は塗らない」
-        （掲示板を開き直す経路。ここで元に戻すと一瞬だけ古い画面が見える）。
-        """
-        state["busy_on"] = False
-        try:
-            app.is_button_enabled = True if state["busy_enabled"] is None \
-                else state["busy_enabled"]
-        except Exception:
-            ctx.log_exc("quest offer: cannot restore is_button_enabled")
-        set_send_button(app, True)
-        if restore:
-            # `app.buttons` は触っていないので、いまの中身を塗り直すだけでよい。
-            apply_buttons(app, None, "busy off")
-        write("busy: off (restore={})".format(restore))
-
-    def set_send_button(app, enabled):
-        """自由入力の送信ボタンを塞ぐ／戻す。効かなくても生成は続ける。"""
-        hud = ui.find_hud(app)
-        name = "enable_text_send_button" if enabled else "disable_text_send_button"
-        toggle = getattr(hud, name, None) if hud is not None else None
-        if callable(toggle):
-            # HUD のウィジェットを触るのでメインスレッドへ回す。
-            screen.schedule(toggle, 0)
+        screen.busy_off(app, restore=restore)
 
     def generate_from_conversation(app):
         """ゲーム自身の生成経路を、会話の書き起こしを添えて呼ぶ。

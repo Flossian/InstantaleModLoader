@@ -743,6 +743,7 @@ screen.apply_buttons(app, [entry, cancel], "confirm")   # 次のフレームで�
 screen.start_phase(app, MyPhase(app), "依頼を受ける")   # process_choice に乗せる
 screen.end_conversation(app, end_entry, follow_up, end_text="<行動: …>")
 screen.when_idle(app, then, cancel_if=..., proceed_on_timeout=True)
+screen.busy_on(app) / screen.busy_off(app, restore=False)   # 「…」の待機表示
 screen.paint(app) / screen.refresh(app) / screen.say(app, text)
 ```
 
@@ -753,6 +754,8 @@ screen.paint(app) / screen.refresh(app) / screen.say(app, text)
 | `start_phase` | `app.process_choice(インスタンス, 文字列)`。自前フェーズを `PhaseSpec` に載せずに起こす |
 | `end_conversation` | 画面のボタンの args を写し `end_text` だけ差し替えて閉じ、閉じ終わってから続きを実行 |
 | `when_idle` | `is_adding_text` / `is_button_enabled` / `is_popup_window_opened` を見張り、手が空いてから実行 |
+| `busy_on` / `busy_off` | LLM を待つ間の待機表示。ゲーム自身と同じ `.` → `..` → `...` を**ボタン全枠**に 0.3 秒周期で出し、`is_button_enabled=False` と送信ボタンの無効化まで行う。**`app.buttons` には触らない**（表示だけなので後始末が要らない）。`busy_off(restore=False)` は「この後すぐ別の画面を出す」経路用（塗り直すと一瞬だけ古い画面が見える） |
+| `is_busy` / `busy_state` | いま待機表示中か／前後で記録するための一行 |
 
 読み取り系:
 
@@ -840,7 +843,7 @@ frames.MISSING             # 「属性が無い」を None と区別する番兵
 | 自前の選択肢ボタンを足して押下を横取りする | `301_` / `302_` / `305_`（`on_button_press` + 独自キー） |
 | ゲーム本来のフェーズを自分から起こす | `300_`（`ConversationStartManager`）、`301_` / `305_`（`DisplayQuestChoice`） |
 | 会話を正しく閉じてから次へ進む | `301_` / `302_`（`ui.Screen.end_conversation`） |
-| 待機表示で画面の繋ぎ目を隠す | `301_`（`show_busy` / `clear_busy(restore=False)`） |
+| 待機表示で画面の繋ぎ目を隠す | `301_` / `305_`（`ui.Screen.busy_on` / `busy_off(restore=False)`） |
 | 手が空くのを待ってから実行する | `300_` / `303_`（`ui.Screen.when_idle`） |
 | ゲームの処理を止めず「結果の置き先」だけ変える | `303_`（3層で置き先を差し替える） |
 | ゲームの処理そのものを起こさせない | `304_`（`remove_party_member` を通さず、置き直しと文言も控えで見分けて抑える） |
