@@ -107,7 +107,7 @@ def apply(ctx):
                     pass      # 計測の失敗で本体を止めない
                 return orig(*args, **kwargs)
             return probe
-        # 存在確認は既定値付き getattr で行う（TECH.md §8 の hasattr 禁止）。
+        # 存在確認は既定値付き getattr で行う（TECH.md §6 の hasattr 禁止）。
         if getattr(sys.modules.get("scripts.llm.llm_manager", object()),
                    fn_name, None) is not None:
             make(fn_name)

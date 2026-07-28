@@ -1,5 +1,6 @@
 {
   "entry": "quest_end_party_to_guild.py",
+  "api": 1,
   "name": {
     "en": "Disband at local guild",
     "ja": "解散先をいまの町に"
@@ -9,5 +10,27 @@
     "ja": "クエストクリアの解散で、仲間をいま居る町のギルドに残す"
   },
   "version": "1",
-  "author": "R01/Flossian"
+  "author": "R01/Flossian",
+  "settings": {
+    "ANNOUNCE_DESTINATION": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "行き先を画面に出す",
+        "en": "Announce where they stay"
+      }
+    },
+    "ALSO_ON_QUEST_RETIRE": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "クエスト放棄でも同じ扱いにする",
+        "en": "Also on quest retire"
+      },
+      "note": {
+        "ja": "未検証",
+        "en": "not verified"
+      }
+    }
+  }
 }

@@ -22,29 +22,10 @@ import os
 import sys
 import types
 
-from . import log, log_exc
-
-# ゲーム自身のトップレベルモジュール。最初のリコンで確認した。
-#
-# 「ゲーム以外を除外する」ではなく「ゲームのものを列挙する」形にしている。
-# 配布物には約 4200 のモジュールが入っており、除外方式では
-# click / joblib / keyring / dill / pygments といった同梱ライブラリが
-# 紛れ込んでしまう。さらに悪いことに、"__main__" は
-# sys.stdlib_module_names に含まれているため、標準ライブラリを除外すると
-# instantale.py 本体（＝最も重要な対象）まで落ちてしまった。
-GAME_TOPLEVEL = {
-    "__main__",                      # instantale.py。約1万行のメインモジュール
-    "scripts",                       # scripts.hud.*, scripts.llm.*, scripts.items ...
-    "Embedding",
-    "image_generation",
-    "llama_cpp_runtime_completion",
-    "sidecar_process",
-    "save_area_json",
-    "save_world_json",
-    "api_key_manager",
-    "build_type",
-    "sdcpp_cuda",                    # 同梱の stable-diffusion.cpp バインディング
-}
+# ゲーム自身のトップレベルモジュールの表（GAME_TOPLEVEL）はパッケージ側にある。
+# patch.py もエイリアス張り替えの範囲を決めるのに同じ表を見るので、2箇所に
+# 書き写さないため。名前はここからも引けるように再公開しておく。
+from . import GAME_TOPLEVEL, is_game_module, log, log_exc  # noqa: F401
 
 MAX_REPR = 300
 MAX_CONST_ITEMS = 40
@@ -59,10 +40,6 @@ def is_compiled(module: types.ModuleType) -> bool:
         return "__compiled__" in vars(module)
     except Exception:
         return False
-
-
-def is_game_module(name: str) -> bool:
-    return name.split(".")[0] in GAME_TOPLEVEL
 
 
 def safe_repr(value: object) -> str:

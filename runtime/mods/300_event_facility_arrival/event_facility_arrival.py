@@ -54,8 +54,9 @@ narration モードでは印を `orig` の**前**に置いて、入れ子の nar
 
 ## 発生率
 
-`CHANCE_OVERRIDE` が None でなければその確率を全施設に使う（動作確認用）。
-None なら施設種別ごとの `CHANCE_BY_TYPE`。乱数はこの mod 専用の
+施設種別ごとに `CHANCE_INN` / `CHANCE_GUILD` / … があり、**0 にすればその種別では
+出なくなる**。`CHANCE_OVERRIDE` が None でなければそちらを全施設に使う（動作確認用）。
+どれも `mod.json` から変えられる。乱数はこの mod 専用の
 `random.Random` を使う ― グローバルから引くとゲーム自身の乱数列がずれるため
 （104_balance_area_bgm.py と同じ方針）。同じ施設で連続しては出さない。
 """
@@ -72,18 +73,23 @@ LOG_BASENAME = "player_events.log"
 # "conversation"（立ち絵つきの会話フェーズ） / "narration"（1行だけ足す）
 EVENT_MODE = "conversation"
 
-# 施設種別ごとの発生率。ここに無い種別では発生しない。
-# 'ward' / 'location' / 'entrance' / 'exit' は「主のいない通路」なので入れていない。
-CHANCE_BY_TYPE = {
-    "inn": 0.50,
-    "guild": 0.30,
-    "general_store": 0.25,
-    "specialty_shop": 0.25,
-    "blacksmith": 0.15,
-    "medical_facility": 0.20,
-    "administrative_office": 0.25,
-    "underworld_office": 0.20,
-}
+# 施設種別ごとの発生率。**0 にするとその種別では出なくなる。**
+# ここに項目が無い種別（'ward' / 'location' / 'entrance' / 'exit' ＝ 主のいない
+# 通路）では発生しない。
+#
+# 表（dict）ではなく **1種別1定数** にしてあるのは、`mod.json` の "settings" で
+# 宣言できる型が bool/int/float/str/choice だけだから（config.py）。辞書のままだと
+# GUI から触れず、「プレイヤーの体験に関わる設定は mod.json に置く」方針から外れる。
+# 施設種別はセーブの `facility_type` そのもので、ゲーム側で閉じた集合なので
+# 1つずつ並べても増えない。
+CHANCE_INN = 0.50
+CHANCE_GUILD = 0.30
+CHANCE_GENERAL_STORE = 0.25
+CHANCE_SPECIALTY_SHOP = 0.25
+CHANCE_BLACKSMITH = 0.15
+CHANCE_MEDICAL_FACILITY = 0.20
+CHANCE_ADMINISTRATIVE_OFFICE = 0.25
+CHANCE_UNDERWORLD_OFFICE = 0.20
 
 # None なら上の表を使う。数値ならその確率を全施設種別に適用する（動作確認用）。
 # **確認が済んだら None に戻すこと。**
@@ -170,12 +176,27 @@ def apply(ctx):
     screen = ui.Screen(ctx, write, tag="arrival event")
     find_app = ui.find_app
 
+    # 施設種別ごとの発生率を表に組み直す。**ここ（apply の中）で組むこと** ―
+    # 設定の反映はモジュールのグローバルへの書き込みで、それが済むのは
+    # apply() を呼ぶ直前だから（config.apply_to_module）。モジュールの
+    # トップレベルで組むと、利用者が選んだ値ではなく既定値の表になる。
+    chance_table = {
+        "inn": CHANCE_INN,
+        "guild": CHANCE_GUILD,
+        "general_store": CHANCE_GENERAL_STORE,
+        "specialty_shop": CHANCE_SPECIALTY_SHOP,
+        "blacksmith": CHANCE_BLACKSMITH,
+        "medical_facility": CHANCE_MEDICAL_FACILITY,
+        "administrative_office": CHANCE_ADMINISTRATIVE_OFFICE,
+        "underworld_office": CHANCE_UNDERWORLD_OFFICE,
+    }
+
     # ------------------------------------------------------------ 発火の判定
     def chance_for(facility_type):
         if CHANCE_OVERRIDE is not None:
             # 表に無い種別（通路など）は override でも対象外のままにする。
-            return CHANCE_OVERRIDE if facility_type in CHANCE_BY_TYPE else 0.0
-        return CHANCE_BY_TYPE.get(facility_type, 0.0)
+            return CHANCE_OVERRIDE if facility_type in chance_table else 0.0
+        return chance_table.get(facility_type, 0.0)
 
     def pick_speaker(app, facility):
         """話しかけてくる NPC を (id, インスタンス) で返す。主がいれば主。"""

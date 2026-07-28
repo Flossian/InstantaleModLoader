@@ -1,5 +1,6 @@
 {
   "entry": "probe_bug_sites.py",
+  "api": 1,
   "name": {
     "en": "Crash site probe",
     "ja": "クラッシュ地点の計測"

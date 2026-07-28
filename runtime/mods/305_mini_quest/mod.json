@@ -1,5 +1,6 @@
 {
   "entry": "mini_quest.py",
+  "api": 1,
   "name": {
     "en": "Non-combat mini quests",
     "ja": "戦闘なしミニクエスト"
@@ -9,5 +10,60 @@
     "ja": "戦闘を伴わないミニクエスト（採集・救助・偵察）を掲示板に追加する"
   },
   "version": "1",
-  "author": "R01/Flossian"
+  "author": "R01/Flossian",
+  "after": [
+    "105_fix_schema_compact"
+  ],
+  "settings": {
+    "COMBAT_MODE": {
+      "type": "choice",
+      "values": [
+        "none",
+        "mobs"
+      ],
+      "default": "none",
+      "label": {
+        "ja": "道中の戦闘",
+        "en": "Combat on the way"
+      },
+      "note": {
+        "ja": "none=起こさせない / mobs=雑魚のみ許す（ボス戦はどちらでも出ない）",
+        "en": "none = never / mobs = allow mobs (never a boss)"
+      }
+    },
+    "TURN_BUDGET": {
+      "type": "int",
+      "default": 10,
+      "min": 1,
+      "max": 99,
+      "label": {
+        "ja": "決着までの目安ターン数",
+        "en": "Turns to aim for"
+      }
+    },
+    "EVENT_COUNT": {
+      "type": "str",
+      "default": "4から6",
+      "label": {
+        "ja": "生成させる出来事の数",
+        "en": "How many events to generate"
+      },
+      "note": {
+        "ja": "プロンプトにそのまま入る文字列。道中が薄いなら増やす",
+        "en": "Goes into the prompt as written"
+      }
+    },
+    "RETURN_INSTEAD_OF_RETIRE": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "目的を果たしての帰還を達成として扱う",
+        "en": "Returning after the objective counts as success"
+      },
+      "note": {
+        "ja": "切ると撤退かどうかの判断はゲーム任せになる",
+        "en": "Off = the game decides whether it was a retreat"
+      }
+    }
+  }
 }

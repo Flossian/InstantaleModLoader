@@ -1,5 +1,6 @@
 {
   "entry": "quest_from_conversation.py",
+  "api": 1,
   "name": {
     "en": "Quests from conversation",
     "ja": "会話から依頼を受ける"
@@ -9,5 +10,71 @@
     "ja": "会話から依頼を受注できる。いま話した内容から依頼を1件生成することもできる"
   },
   "version": "1",
-  "author": "R01/Flossian"
+  "author": "R01/Flossian",
+  "settings": {
+    "FILTER_BY_NPC": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "その NPC の依頼だけを見せる",
+        "en": "List only this NPC's quests"
+      }
+    },
+    "ENABLE_GENERATION": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "「この話から依頼を作る」を出す",
+        "en": "Offer \"make a quest from this talk\""
+      }
+    },
+    "MAX_LISTED": {
+      "type": "int",
+      "default": 8,
+      "min": 1,
+      "max": 20,
+      "label": {
+        "ja": "一覧に並べる依頼の数",
+        "en": "Quests listed at once"
+      }
+    },
+    "CONVERSATION_TURNS": {
+      "type": "int",
+      "default": 12,
+      "min": 1,
+      "max": 50,
+      "label": {
+        "ja": "依頼を作るのに使う会話の発言数",
+        "en": "Conversation turns used to generate"
+      },
+      "note": {
+        "ja": "多いほど話の流れを汲むが、生成が長くなる",
+        "en": "More context, slower generation"
+      }
+    },
+    "CONVERSATION_CHARS": {
+      "type": "int",
+      "default": 2500,
+      "min": 200,
+      "max": 20000,
+      "label": {
+        "ja": "同じく文字数の上限",
+        "en": "…and its character limit"
+      }
+    },
+    "KEEP_TRANSCRIPT_MOVES": {
+      "type": "int",
+      "default": 3,
+      "min": 0,
+      "max": 20,
+      "label": {
+        "ja": "会話の内容を覚えている移動回数",
+        "en": "Moves the transcript is remembered"
+      },
+      "note": {
+        "ja": "0 にすると、会話を出た時点で作れなくなる",
+        "en": "0 = only usable during the conversation"
+      }
+    }
+  }
 }

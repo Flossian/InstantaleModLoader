@@ -201,7 +201,7 @@ def apply(ctx):
         """クラスが持つメソッド一覧と __init__ の形。
 
         targets.txt はモジュールレベルの掃引なので、ネストした関数や
-        後から生えたメソッドが漏れることがある（TECH.md §5.1 の罠）。
+        後から生えたメソッドが漏れることがある（TECH.md §4.1 の罠）。
         受注経路を辿るには実物の vars(cls) を見る必要がある。
         """
         module = sys.modules.get(module_name)
@@ -365,7 +365,7 @@ def apply(ctx):
 
         # --- 5. ゲーム自身のヘルパを実データで呼ぶ（副作用の無い参照関数）。
         #        「この土地で今どの難易度の依頼が出ているか」がここで分かる。
-        #        TECH.md §10「純粋関数は総当たりで定義域を割り出す」と同じ手。
+        #        TECH.md GAME.md §3「純粋関数は総当たりで定義域を割り出す」と同じ手。
         functions = sys.modules.get("scripts.functions")
         if functions is not None and area is not None and world is not None:
             for fname, args in (("get_quest_difficulties", (area, world)),
@@ -625,7 +625,7 @@ def apply(ctx):
     # どちらの値もストーリー側の分岐に落ちていた）。
     #
     # 引数で分岐して辞書を引くだけの処理なので総当たりが効く
-    # （TECH.md §10「純粋関数は総当たりで定義域を割り出す」）。**実在する
+    # （TECH.md GAME.md §3「純粋関数は総当たりで定義域を割り出す」）。**実在する
     # quest_id を渡し、例外が出ないものを探す。** 作ったインスタンスは捨てる
     # ― `execute` を呼ばないので画面も状態も動かない。
     PROBE_QUEST_TYPES = True

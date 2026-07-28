@@ -1,5 +1,6 @@
 {
   "entry": "event_facility_arrival.py",
+  "api": 1,
   "name": {
     "en": "NPC greets on arrival",
     "ja": "施設でNPCが話しかける"
@@ -9,5 +10,175 @@
     "ja": "施設に着くと、その場に居る NPC の方から会話を始めてくるようにする"
   },
   "version": "1",
-  "author": "R01/Flossian"
+  "author": "R01/Flossian",
+  "after": [
+    "205_probe_player_events"
+  ],
+  "settings": {
+    "EVENT_MODE": {
+      "type": "choice",
+      "values": [
+        "conversation",
+        "narration"
+      ],
+      "default": "conversation",
+      "label": {
+        "ja": "イベントの出方",
+        "en": "Event style"
+      },
+      "note": {
+        "ja": "conversation=会話が始まる / narration=情景描写に一言足す",
+        "en": "conversation = a talk starts / narration = one added line"
+      }
+    },
+    "CHANCE_INN": {
+      "type": "float",
+      "default": 0.5,
+      "min": 0.0,
+      "max": 1.0,
+      "label": {
+        "ja": "宿屋の発生率",
+        "en": "Inn chance"
+      },
+      "note": {
+        "ja": "0 にするとこの施設では出ない",
+        "en": "0 disables this facility type"
+      }
+    },
+    "CHANCE_GUILD": {
+      "type": "float",
+      "default": 0.3,
+      "min": 0.0,
+      "max": 1.0,
+      "label": {
+        "ja": "ギルドの発生率",
+        "en": "Guild chance"
+      },
+      "note": {
+        "ja": "0 にするとこの施設では出ない",
+        "en": "0 disables this facility type"
+      }
+    },
+    "CHANCE_GENERAL_STORE": {
+      "type": "float",
+      "default": 0.25,
+      "min": 0.0,
+      "max": 1.0,
+      "label": {
+        "ja": "雑貨屋の発生率",
+        "en": "General store chance"
+      },
+      "note": {
+        "ja": "0 にするとこの施設では出ない",
+        "en": "0 disables this facility type"
+      }
+    },
+    "CHANCE_SPECIALTY_SHOP": {
+      "type": "float",
+      "default": 0.25,
+      "min": 0.0,
+      "max": 1.0,
+      "label": {
+        "ja": "専門店の発生率",
+        "en": "Specialty shop chance"
+      },
+      "note": {
+        "ja": "0 にするとこの施設では出ない",
+        "en": "0 disables this facility type"
+      }
+    },
+    "CHANCE_BLACKSMITH": {
+      "type": "float",
+      "default": 0.15,
+      "min": 0.0,
+      "max": 1.0,
+      "label": {
+        "ja": "鍛冶屋の発生率",
+        "en": "Blacksmith chance"
+      },
+      "note": {
+        "ja": "0 にするとこの施設では出ない",
+        "en": "0 disables this facility type"
+      }
+    },
+    "CHANCE_MEDICAL_FACILITY": {
+      "type": "float",
+      "default": 0.2,
+      "min": 0.0,
+      "max": 1.0,
+      "label": {
+        "ja": "診療所の発生率",
+        "en": "Clinic chance"
+      },
+      "note": {
+        "ja": "0 にするとこの施設では出ない",
+        "en": "0 disables this facility type"
+      }
+    },
+    "CHANCE_ADMINISTRATIVE_OFFICE": {
+      "type": "float",
+      "default": 0.25,
+      "min": 0.0,
+      "max": 1.0,
+      "label": {
+        "ja": "市政庁の発生率",
+        "en": "Administrative office chance"
+      },
+      "note": {
+        "ja": "0 にするとこの施設では出ない",
+        "en": "0 disables this facility type"
+      }
+    },
+    "CHANCE_UNDERWORLD_OFFICE": {
+      "type": "float",
+      "default": 0.2,
+      "min": 0.0,
+      "max": 1.0,
+      "label": {
+        "ja": "闇市の発生率",
+        "en": "Underworld office chance"
+      },
+      "note": {
+        "ja": "0 にするとこの施設では出ない",
+        "en": "0 disables this facility type"
+      }
+    },
+    "CHANCE_OVERRIDE": {
+      "type": "float",
+      "default": null,
+      "allow_null": true,
+      "min": 0.0,
+      "max": 1.0,
+      "label": {
+        "ja": "発生率を全施設で固定する",
+        "en": "Force one chance everywhere"
+      },
+      "note": {
+        "ja": "空欄なら施設ごとの既定値。1.0 で必ず発生（動作確認用）",
+        "en": "Empty = per-facility defaults. 1.0 always fires"
+      }
+    },
+    "COOLDOWN_MOVES": {
+      "type": "int",
+      "default": 3,
+      "min": 0,
+      "max": 99,
+      "label": {
+        "ja": "同じ施設で続けて出さない移動回数",
+        "en": "Moves before the same facility may fire again"
+      }
+    },
+    "REPHRASE_OPENING": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "NPCから話しかけた体裁にする",
+        "en": "Phrase it as the NPC approaching you"
+      },
+      "note": {
+        "ja": "切ると、こちらから話しかけたときと同じ第一声になる",
+        "en": "Off = the same opening as when you talk to them yourself"
+      }
+    }
+  }
 }

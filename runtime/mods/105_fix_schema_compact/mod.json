@@ -1,5 +1,6 @@
 {
   "entry": "fix_schema_compact.py",
+  "api": 1,
   "name": {
     "en": "Schema compaction",
     "ja": "スキーマ説明の圧縮"

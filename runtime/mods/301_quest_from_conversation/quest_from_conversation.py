@@ -46,7 +46,7 @@ id の採番・`world_dict['quests']` への登録・セーブまで面倒を見
 その内側で走る `llm_manager_world_generate:random_quest_generator` を包み、
 `area_description` に**この会話の書き起こしを添える**。引数の書き換えだけなので
 出力スキーマ（QuestStructure）はゲームのものが 1 バイトも変わらない。
-TECH.md §10「ゲーム自身のヘルパを探す」と同じ手口。
+TECH.md GAME.md §3「ゲーム自身のヘルパを探す」と同じ手口。
 
 印は1回で使い切る。掲示板から普通に生成した依頼は素通しする。
 """

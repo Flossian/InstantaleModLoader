@@ -29,6 +29,7 @@ CreateRemoteThread で実行する。この方式には次の利点がある。
     python injector.py              # 動いている instantale.exe に注入する
     python injector.py --pid 1234   # プロセスを指定して注入する
     python injector.py --dry-run    # アドレスの解決だけ行い、何も書き込まない
+    python injector.py --unload     # 当てたパッチを剥がす（ゲームは終了しない）
 """
 
 from __future__ import annotations
@@ -330,18 +331,30 @@ try:
                   if k == "instantale_modloader" or k.startswith("instantale_modloader.")]:
         del sys.modules[_name]
     import instantale_modloader
-    instantale_modloader.boot(__OUT__)
+    __CALL__
     _w("bootstrap ok")
 except BaseException:
     _w("bootstrap FAILED\n" + traceback.format_exc())
 '''
 
+# 流し込むコードの最後の1行。注入の目的はこれだけが違う。
+#
+# unload 側も同じ経路（モジュールを落として再 import）を通る。パッチを剥がすための
+# 記録は sys に置いてあるので（patch.py の _undo_log）、ローダを読み直しても
+# 前回の注入で当てた分を剥がせる。
+CALLS = {
+    "boot": "instantale_modloader.boot(__OUT__)",
+    "unload": "instantale_modloader.unload(__OUT__)",
+}
 
-def make_bootstrap(runtime_dir: str, out_dir: str, log_path: str) -> bytes:
+
+def make_bootstrap(runtime_dir: str, out_dir: str, log_path: str,
+                   action: str = "boot") -> bytes:
     """テンプレートにパスを埋め込み、NUL 終端付きのバイト列にする。"""
     # repr() を使うのは、クォートやバックスラッシュを正しくエスケープするため。
     # Windows のパスには "\" が入るので、そのまま埋めると壊れる。
     src = (BOOTSTRAP_TEMPLATE
+           .replace("__CALL__", CALLS[action])
            .replace("__LOG__", repr(log_path))
            .replace("__RUNTIME__", repr(runtime_dir))
            .replace("__OUT__", repr(out_dir)))
@@ -489,6 +502,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Inject the Instantale mod loader.")
     ap.add_argument("--pid", type=int, help="target pid (default: the running instantale.exe)")
     ap.add_argument("--dry-run", action="store_true", help="resolve addresses, write nothing")
+    ap.add_argument("--unload", action="store_true",
+                    help="revert the patches instead of applying mods")
     logrotate.add_arguments(ap)
     args = ap.parse_args()
 
@@ -520,18 +535,23 @@ def main() -> int:
     print(f"runtime dir         : {RUNTIME_DIR}")
     print(f"out dir             : {OUT_DIR}")
 
+    action = "unload" if args.unload else "boot"
     # 注入 = 1世代の境目。書き込みが始まる前にここで入れ替える。
     # --dry-run は「何も書かない」ための指定なので、ログにも触らない。
-    if not args.dry_run:
+    # --unload はこのプレイの続きなので**入れ替えない**（剥がした記録を、
+    # そのとき当てた記録と同じファイルに残したい）。
+    if not args.dry_run and not args.unload:
         rotate_logs(args.log_rotate, log=lambda msg: print(f"  {msg}"))
 
-    payload = make_bootstrap(RUNTIME_DIR, OUT_DIR, BOOT_LOG)
+    payload = make_bootstrap(RUNTIME_DIR, OUT_DIR, BOOT_LOG, action=action)
     rc = inject(pid, payload, dry_run=args.dry_run)
 
     if args.dry_run:
         return 0
     if rc == 0:
         print("\nOK: PyRun_SimpleString returned 0.")
+        if args.unload:
+            print("mods reverted; on_ready side effects and game-state writes remain.")
         print(f"See {BOOT_LOG} and {os.path.join(OUT_DIR, 'modloader.log')}")
     elif rc == -2:
         # 上の GIL 待ちで時間切れになったケース。失敗ではなく保留。

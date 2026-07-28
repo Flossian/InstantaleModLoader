@@ -219,7 +219,7 @@ def apply(ctx):
     def sweep(app, where):
         """`app.world.characters` と `app.player` を掃く。掃いた人数を返す。
 
-        名簿は `{id: Character}`（TECH.md §7.7）。**保存はしない** ―
+        名簿は `{id: Character}`（TECH.md GAME.md §2.7）。**保存はしない** ―
         ゲームが次に保存するときに一緒に入る。ここで保存を起こすと、
         こちらが選んだ時点でセーブを書き換えることになる。
         """
@@ -232,7 +232,7 @@ def apply(ctx):
             for character in list(characters.values()):
                 fixed += 1 if fix(character, where) else 0
         elif isinstance(characters, (list, tuple)):
-            # 名簿の入れ物は辞書とは限らない（TECH.md §7.8）。
+            # 名簿の入れ物は辞書とは限らない（TECH.md GAME.md §2.8）。
             for character in list(characters):
                 fixed += 1 if fix(character, where) else 0
         player = frames.attr(app, "player", None)

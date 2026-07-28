@@ -1,5 +1,6 @@
 {
   "entry": "probe_battle_bgm.py",
+  "api": 1,
   "name": {
     "en": "Battle BGM probe",
     "ja": "戦闘BGMの計測"
@@ -9,5 +10,8 @@
     "ja": "戦闘 BGM の切り替え経路（play_music_from_src の呼び出し元）を計測する"
   },
   "version": "1",
-  "author": "R01/Flossian"
+  "author": "R01/Flossian",
+  "after": [
+    "106_fix_battle_bgm_restore"
+  ]
 }

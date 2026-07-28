@@ -1,5 +1,6 @@
 {
   "entry": "fix_prompt_dedup.py",
+  "api": 1,
   "name": {
     "en": "Prompt dedup",
     "ja": "プロンプト重複の除去"

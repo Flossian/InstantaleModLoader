@@ -1,5 +1,6 @@
 {
   "entry": "leave_party_in_conversation.py",
+  "api": 1,
   "name": {
     "en": "Part ways in conversation",
     "ja": "会話で仲間と別れる"
@@ -9,5 +10,15 @@
     "ja": "会話から仲間と別れられる。別れた相手は雇われた場所（土地を跨ぐ場合はいまの町のギルド）に残る"
   },
   "version": "1",
-  "author": "R01/Flossian"
+  "author": "R01/Flossian",
+  "settings": {
+    "RETURN_TO_INITIAL_LOCATION": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "別れた相手を雇った場所に戻す",
+        "en": "Send the ex-member back to where they were hired"
+      }
+    }
+  }
 }

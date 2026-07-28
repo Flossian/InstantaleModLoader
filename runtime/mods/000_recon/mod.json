@@ -1,5 +1,6 @@
 {
   "entry": "recon.py",
+  "api": 1,
   "name": {
     "en": "Module recon",
     "ja": "モジュール調査"

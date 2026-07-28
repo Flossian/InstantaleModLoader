@@ -76,7 +76,7 @@ def _describe(annotation) -> str:
 
 def apply(ctx):
     module = sys.modules.get(MODULE)
-    # 存在確認は既定値付き getattr で行う（TECH.md §8 の hasattr 禁止）。
+    # 存在確認は既定値付き getattr で行う（TECH.md §6 の hasattr 禁止）。
     if module is None or getattr(module, "create_model", None) is None:
         ctx.log("{}.create_model not available; skipping".format(MODULE), level="WARN")
         return

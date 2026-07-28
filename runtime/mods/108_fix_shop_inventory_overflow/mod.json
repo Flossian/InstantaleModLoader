@@ -1,5 +1,6 @@
 {
   "entry": "fix_shop_inventory_overflow.py",
+  "api": 1,
   "name": {
     "en": "Shop crash fix",
     "ja": "売買画面クラッシュの修正"

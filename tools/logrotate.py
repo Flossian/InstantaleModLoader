@@ -25,7 +25,7 @@ quest_flow.log は数 MB まで育っていて、「今回のプレイで何が�
     2. 環境変数              INSTANTALE_LOG_ROTATE=0 / 1
     3. このファイルの既定値  ROTATE_LOGS
 
-OFF にすると従来どおり追記され続けるので、複数回の注入をまたいで
+OFF にすると入れ替えずに追記され続けるので、複数回の注入をまたいで
 挙動を追いたいときはこちらを使う。
 """
 
@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import os
 
-# 世代管理の既定値。False にすると常に追記（従来の挙動）になる。
+# 世代管理の既定値。False にすると入れ替えず、常に追記していく。
 #ROTATE_LOGS = True
 ROTATE_LOGS = False
 

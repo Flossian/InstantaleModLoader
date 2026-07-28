@@ -1,5 +1,6 @@
 {
   "entry": "crash_recorder.py",
+  "api": 1,
   "name": {
     "en": "Crash recorder",
     "ja": "クラッシュ記録"

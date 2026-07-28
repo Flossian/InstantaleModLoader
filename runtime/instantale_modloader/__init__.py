@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """mod ローダ本体。ゲームの Python インタプリタ（CPython 3.10）の中で動く。
 
-injector.py がこのディレクトリを sys.path に追加して boot() を呼ぶことで
+tools/injector.py がこのディレクトリを sys.path に追加して boot() を呼ぶことで
 読み込まれる。ここから先はゲームと同じプロセス・同じインタプリタなので、
 ここで例外を投げるとゲームを巻き込む。そのため mod が失敗した場合は
 ログに残して次へ進むだけにしてあり、外へは投げない。
@@ -9,11 +9,13 @@ injector.py がこのディレクトリを sys.path に追加して boot() を�
 ディレクトリ構成:
 
     instantale_modloader/   このパッケージ（ローダ + パッチ API + リコン）
-    mods/                   1つの修正につき1ファイル。ファイル名順に適用される
+    mods/                   1つの修正につき1フォルダ
+    mods/load_order.json    適用順（"order"）と無効一覧（"disabled"）
 
-mod ファイルの書き方は次の2つを定義するだけ:
+mod は1フォルダで、名乗りは `mod.json`、中身は入口の `.py`:
 
-    NAME = "何をする mod か（ログに出る）"
+    mods/mini_quest/mod.json      {"entry": "quest.py", "name": ..., ...}
+    mods/mini_quest/quest.py      入口。apply(ctx) を定義する
 
     def apply(ctx):
         @ctx.wrap("モジュール名:関数名")
@@ -21,8 +23,17 @@ mod ファイルの書き方は次の2つを定義するだけ:
             ...
             return orig(*args, **kwargs)
 
-NAME 以外に VERSION / DESCRIPTION / AUTHOR も書ける（全て任意）。
-書いてあればログと status() に出るだけで、動作は変わらない。
+`mod.json` は `entry` 以外すべて任意。名乗り（name / description / version / author）
+は書いてあればログと status() に出るだけだが、次の3つは動作に関わる:
+
+    "api": 1                        前提にしているローダ API（下の API を参照）
+    "after": ["101_fix_..."]         適用順の制約（_sort_dependencies）
+    "settings": {...}               利用者が変えられる設定の宣言（config.py）
+
+名乗りをコード側の変数ではなく JSON に置いているのは、**一覧を作るために mod を
+import しない**ため（GUI は無効な mod も壊れた mod も、走らせずに一覧へ出せる）。
+上の3つも同じ理由でここに置いてある ― 適用順も API の可否も、コードを1行も
+走らせる前に決まっていなければならない。
 
 ctx に何があるかは下の ModContext を参照。パッチの当て方は patch.py に
 詳しく書いてある。
@@ -45,6 +56,59 @@ import uuid
 
 __version__ = "0.1.0"
 
+# mod との契約。`mod.json` の "api" がこれと突き合わされる。
+#
+# `__version__` とは別に持っている。前者はこの配布物の版で、上がっても mod が
+# 壊れるとは限らない。こちらは**壊れる変更のときだけ**動かす番号で、だからこそ
+# 判定に使える情報になる。上げるのは次のような場合:
+#
+#   ctx のメンバを削除・改名 / 引数の順序や意味の変更 / 既定値の変更
+#   （alias_scan, required）/ on_ready のキー導出の変更 / ui.Screen の signature 変更
+#
+# 上げないのは: ctx へのメンバ追加 / 省略可能な引数の追加 / ログ書式 / 内部の整理。
+#
+# ゲーム側のバージョンを mod に宣言させないのとは事情が違う（TECH.md §3.7）。
+# ゲームの版は信頼できる形で取れず、依存先が在るかは実行時に確かめられる
+# （台帳の UNRESOLVED）。ローダ API はその逆で、版は自分のコードにあるので確実に
+# 取れる一方、**意味の変化は hasattr では捕まえられない**。
+API = 1
+
+# まだ受け入れる最古の API。ここを上げると、それより古い mod は読み込まずに撥ねる。
+MIN_API = 1
+
+# "api" を書いていない mod をどう扱うか。この番号が導入された時点では外部の mod が
+# 存在しなかったので、「無い＝1」と定義できる。後から入れると
+# 「API 1 向けに書かれた」と「作者がこの項目を知らなかった」が区別できなくなる。
+DEFAULT_API = 1
+
+# ゲーム自身のトップレベルモジュール。最初のリコンで確認した。
+#
+# 「ゲーム以外を除外する」ではなく「ゲームのものを列挙する」形にしている。
+# 配布物には約 4200 のモジュールが入っており、除外方式では click / joblib /
+# keyring / dill / pygments といった同梱ライブラリが紛れ込む。さらに悪いことに
+# "__main__" は sys.stdlib_module_names に含まれるため、標準ライブラリを除外すると
+# instantale.py 本体（＝最も重要な対象）まで落ちてしまった。
+#
+# ここに置いているのは、patch.py（エイリアス張り替えの範囲）と recon.py
+# （ダンプ対象の選別）の両方が同じ表を見るため。
+GAME_TOPLEVEL = {
+    "__main__",                      # instantale.py。約1万行のメインモジュール
+    "scripts",                       # scripts.hud.*, scripts.llm.*, scripts.items ...
+    "Embedding",
+    "image_generation",
+    "llama_cpp_runtime_completion",
+    "sidecar_process",
+    "save_area_json",
+    "save_world_json",
+    "api_key_manager",
+    "build_type",
+    "sdcpp_cuda",                    # 同梱の stable-diffusion.cpp バインディング
+}
+
+
+def is_game_module(name: str) -> bool:
+    return name.split(".")[0] in GAME_TOPLEVEL
+
 # 「まだ import されていないモジュール」を待つ見張りの設定。
 # ゲームは LLM 系モジュールを最初のリクエストまで import しないので、
 # 起動直後に注入すると llama 系のフックが1つも載らない。詳しくは _arm_deferred。
@@ -57,11 +121,17 @@ MAX_DEFERRED_BOOTS = 8       # 当て直しの上限。暴走よけ
 _state: dict = {
     "booted": False,
     "boot_count": 0,
+    "api": API,
+    "version": __version__,
     "out_dir": None,
     "log_path": None,
     "mods": {},
-    # mod ファイル名 -> マニフェスト（NAME / VERSION / DESCRIPTION / AUTHOR）。
+    # mod フォルダ名 -> マニフェスト（名乗り / api / settings / 適用順の制約）。
     "manifests": {},
+    # mod フォルダ名 -> その mod に実際に効いている設定値（config.py）。
+    "settings": {},
+    # discover() が見つけた宣言と実体のずれ。status() から GUI に出す。
+    "problems": [],
     # この boot で ctx.on_ready() に積まれた処理。mod の適用が全部済んでから流す。
     "ready": [],
     # 見張りが mod を当て直した回数。boot() では数え直さない（上限の判定に使う）。
@@ -83,6 +153,25 @@ def _once_store() -> set:
         store = set()
         setattr(sys, _ONCE_ATTR, store)
     return store
+
+
+def reset_once(prefix: str | None = None) -> int:
+    """`on_ready` の「もう実行した」印を捨てる。**開発中の逃げ道**。
+
+    印はプロセスに残るので、注入し直しても1回きりの初期化は二度と走らない。
+    それが本来の意図だが、その初期化そのものを直しているときは邪魔になる。
+    `prefix` を渡すとその mod のぶんだけ落とす。
+
+    捨てるのは印だけで、**既に起きた副作用は戻らない**。もう一度走らせても
+    問題ない処理かどうかは呼ぶ側が判断すること。
+    """
+    store = _once_store()
+    victims = {k for k in store if prefix is None or k.startswith(prefix)}
+    store -= victims
+    if victims:
+        log("on_ready: dropped {} once-mark(s){}".format(
+            len(victims), "" if prefix is None else " for " + prefix))
+    return len(victims)
 
 
 # --------------------------------------------------------------------------
@@ -132,6 +221,12 @@ class ModContext:
     それに加えて、1回だけ実行したい処理を預けられる:
 
         ctx.on_ready(関数)  プロセスにつき1回だけ、メインスレッドで実行する
+
+    設定とローダの版:
+
+        ctx.config          この mod に効いている設定値（mod.json の宣言 + 利用者の選択）
+        ctx.setting(名前)   その1件だけ引く
+        ctx.api             ローダ API の番号（下位互換の分岐が要るとき用）
     """
 
     def __init__(self, out_dir: str, runtime_dir: str):
@@ -139,6 +234,8 @@ class ModContext:
         self.runtime_dir = runtime_dir
         self.log = log
         self.log_exc = log_exc
+        self.api = API
+        self.version = __version__
         # 今 apply() を実行中の mod ファイル名。boot() が出し入れする。
         # on_ready の既定のキーに使う。
         self._mod: str | None = None
@@ -168,8 +265,29 @@ class ModContext:
         from . import patch_registry as _registry
         return _registry.by_target()
 
+    # -- 設定 ---------------------------------------------------------------
+    @property
+    def config(self) -> dict:
+        """この mod に効いている設定値。`mod.json` の "settings" が宣言したものだけ。
+
+        値はローダが**apply() を呼ぶ前にモジュールの定数へ書き込んである**ので
+        （config.py）、普通は `EVENT_MODE` のように定数をそのまま読めばよい。
+        こちらを使うのは、宣言した覚えのある名前を一覧で確かめたいときと、
+        `apply()` の外（`on_ready` の中など）で値を控えておきたいとき。
+
+        apply() の外では `{}` になる（どの mod の話か決まらないため）。
+        """
+        if self._mod is None:
+            return {}
+        return dict(_state["settings"].get(self._mod) or {})
+
+    def setting(self, name: str, default=None):
+        """設定を1件引く。宣言されていなければ `default`。"""
+        return self.config.get(name, default)
+
     # -- 1回きりの処理 -------------------------------------------------------
-    def on_ready(self, fn, *, key: str | None = None, delay: float = 0.0) -> bool:
+    def on_ready(self, fn, *, key: str | None = None, delay: float = 0.0,
+                 force: bool = False) -> bool:
         """`fn` を「このプロセスで1回だけ」「メインスレッドで」実行する。
 
         apply() は1プロセスの中で**何度も呼ばれる**。手で注入し直したときと、
@@ -192,6 +310,10 @@ class ModContext:
         キーの既定は「mod ファイル名 + 関数名」。同じ mod の中で複数の
         on_ready を使い分けたい場合や、mod をまたいで1回にしたい場合は
         `key` を明示する。
+
+        `force=True` は印を無視して積み直す。**開発中の逃げ道**で、注入し直しても
+        初期化がもう走らない（印はプロセスに残る）のを抜けるためにある。
+        配布する mod に書いてはいけない ― 遅延当て直しのたびに副作用が起きる。
         """
         name = key or "{}:{}".format(
             self._mod or "<loader>",
@@ -199,9 +321,11 @@ class ModContext:
         store = _once_store()
         # 印を「積んだ時点」で付ける。実行時に付けると、実行前にもう一度
         # boot() が走ったときに二重に積まれる（Clock はまだ流していない）。
-        if name in store:
+        if name in store and not force:
             log("on_ready: {} already done in this process; skipped".format(name))
             return False
+        if force and name in store:
+            log("on_ready: {} forced (the once-mark was set)".format(name), level="WARN")
         store.add(name)
         _state["ready"].append((name, fn, delay))
         return True
@@ -302,11 +426,65 @@ def _installed(mods_dir: str) -> list[str]:
     return found
 
 
-def _discover(mods_dir: str) -> list[str]:
+def discover(mods_dir: str | None = None) -> dict:
+    """インストールされている mod を調べて、適用順まで決めて返す。
+
+    **ローダ・GUI・静的検査の3者が共通で使う唯一の入口**。以前はこの規則
+    （`_` と `.` で始まるフォルダを除く / `mod.json` を持つものだけ / `order` と
+    `disabled` の意味 / 載っていない mod は末尾）が3箇所に別々に書かれていて、
+    片方だけ直すと GUI の一覧と実際の適用順がずれる状態だった。
+
+        {"mods_dir":  "...\\runtime\\mods",
+         "order":     ["000_recon", ...],       有効な mod。**適用順**
+         "listed":    ["000_recon", ...],       一覧に出す順（無効なものも宣言位置に）
+         "installed": ["000_recon", ...],       在るもの全部（フォルダ名順）
+         "disabled":  ["..."],                  切られているもの
+         "manifests": {名前: マニフェスト},      無効なものも壊れたものも含む
+         "problems":  ["..."]}                  宣言と実体のずれ。人が読む行
+
+    `manifests` に無効な mod も入れているのは、GUI が「消えたように見せない」ため。
+
+    `order` と `listed` を分けているのは、無効な mod には適用順が無い一方で、
+    一覧では**宣言された位置に置いたままにしたい**から。表示順を「有効なものの後」に
+    すると、GUI で切って保存するたびにその mod が末尾へ移動してしまう
+    （利用者は順序を触っていないのに `load_order.json` が書き換わる）。
+
+    ゲームの中でも外でも同じ結果になる（ファイルを読むだけで、mod のコードは
+    一切 import しない）。
+    """
+    mods_dir = mods_dir or _mods_dir()
+    if not os.path.isdir(mods_dir):
+        return {"mods_dir": mods_dir, "order": [], "listed": [], "installed": [],
+                "disabled": [], "manifests": {},
+                "problems": ["mods ディレクトリが無い: {}".format(mods_dir)]}
+
+    installed = _installed(mods_dir)
+    manifests = {name: _manifest(mods_dir, name) for name in installed}
+    order, listed, disabled, problems = _order(mods_dir, installed)
+
+    order, notes = _sort_dependencies(order, manifests)
+    problems += notes
+    problems += _check_conflicts(order, manifests)
+
+    # 並べ替えが起きたぶんを一覧の順にも反映する。**無効な mod は動かさない**ので、
+    # 有効な mod が入っていた位置を新しい並びで順に埋め直す形にする
+    # （末尾に寄せると、切ってあるだけの mod が一覧の下に集まってしまう）。
+    enabled = set(order)
+    if order != [n for n in listed if n in enabled]:
+        fresh = iter(order)
+        listed = [next(fresh) if n in enabled else n for n in listed]
+
+    return {"mods_dir": mods_dir, "order": order, "listed": listed,
+            "installed": installed, "disabled": disabled,
+            "manifests": manifests, "problems": problems}
+
+
+def _order(mods_dir: str,
+           found: list[str]) -> tuple[list[str], list[str], list[str], list[str]]:
     """mod を**適用順に**並べて返す。
 
     このローダでは適用順が動作の前提になっている（TECH.md §3.2 — 計測は修正より
-    外側に置く、など）。順序はフォルダ名から決めるのをやめ、`load_order.json` が
+    外側に置く、など）。順序はフォルダ名からは決めず、`load_order.json` が
     明示的に持つ:
 
         {"order": ["recon", "crash_recorder", "fix_kivy_shutdown", ...],
@@ -316,7 +494,7 @@ def _discover(mods_dir: str) -> list[str]:
     フォルダ名を変えずに切れるようにしてある（`_` を付ける方式だと、無効にした
     瞬間に `order` の中の名前と食い違う）。
 
-    こうしたのは、フォルダ名を自由に付けられるようにしたため。名前で順序を表すと
+    こうするのは、フォルダ名を自由に付けられるようにするため。名前で順序を表すと
     「名前は自由」と「順序は名前で決まる」が両立しない。
 
     **順序ファイルに無い mod は捨てずに末尾へ回す**（フォルダ名順）。新しい mod を
@@ -325,8 +503,11 @@ def _discover(mods_dir: str) -> list[str]:
 
     順序ファイルが読めなければフォルダ名順。**必ず何らかの決まった順で動く**ように
     しておく ― ここで例外にすると、順序ファイルが壊れた瞬間に mod が全滅する。
+
+    戻り値は `(有効な mod の適用順, 一覧に出す順, 切られている mod, 報告)`。
+    2つ目は無効な mod も**宣言された位置に**含む（GUI の一覧用）。
     """
-    found = _installed(mods_dir)
+    problems: list[str] = []
     data = _read_json(os.path.join(mods_dir, ORDER_NAME))
 
     order = []
@@ -335,19 +516,24 @@ def _discover(mods_dir: str) -> list[str]:
     elif isinstance(data, list):        # 素の配列で書かれていても読む
         order = data
     if not isinstance(order, list):
-        log("{}: \"order\" is not a list; falling back to name order".format(ORDER_NAME),
-            level="WARN")
+        problems.append("{}: \"order\" が配列ではない。フォルダ名順で動かす".format(ORDER_NAME))
         order = []
 
     disabled = data.get("disabled") if isinstance(data, dict) else None
     if not isinstance(disabled, list):
         disabled = []
     off = {name for name in disabled if isinstance(name, str)}
-    if off:
+    skipped = sorted(off & set(found))
+    if skipped:
         # 「入れたのに効かない」を黙って起こさない。切ったことは必ず残す。
-        skipped = sorted(off & set(found))
-        if skipped:
-            log("disabled in {}; not loaded: {}".format(ORDER_NAME, ", ".join(skipped)))
+        problems.append("無効化されている（読み込まれない）: {}".format(", ".join(skipped)))
+
+    # 一覧に出す順。無効なものも宣言された位置に残す。
+    listed: list[str] = []
+    for name in order:
+        if isinstance(name, str) and name in found and name not in listed:
+            listed.append(name)
+    listed += [name for name in found if name not in listed]
 
     known = set(found) - off
     ordered = []
@@ -359,8 +545,16 @@ def _discover(mods_dir: str) -> list[str]:
     if extra and order:
         # 順序ファイルに無い mod。落とさずに末尾へ回したことを残す
         # （「入れたのに効かない」を黙って起こさないため）。
-        log("not in {}; applied last: {}".format(ORDER_NAME, ", ".join(extra)))
-    return ordered + extra
+        problems.append("{} に無い mod（末尾に回る）: {}".format(ORDER_NAME, ", ".join(extra)))
+
+    stale = [name for name in order if isinstance(name, str) and name not in found]
+    if stale:
+        problems.append("{} に実体の無い記述: {}".format(ORDER_NAME, ", ".join(stale)))
+    dupes = sorted({n for n in order if isinstance(n, str) and order.count(n) > 1})
+    if dupes:
+        problems.append("{} に重複: {}".format(ORDER_NAME, ", ".join(dupes)))
+
+    return ordered + extra, listed, skipped, problems
 
 
 def _load_mod_file(path: str):
@@ -375,7 +569,7 @@ def _load_mod_file(path: str):
     name = "instantale_mod_" + os.path.basename(mod_dir)
     # submodule_search_locations を渡すとパッケージ扱いになる。
     # これが無いと mod の中の相対 import が
-    # 「親パッケージが無い」で落ちる（単一ファイルの頃は不要だった）。
+    # 「親パッケージが無い」で落ちる。
     spec = importlib.util.spec_from_file_location(
         name, path, submodule_search_locations=[mod_dir])
     if spec is None or spec.loader is None:
@@ -430,17 +624,169 @@ def _manifest(mods_dir: str, name: str) -> dict:
         en = en or ja or default
         return {"en": en, "ja": ja or en}
 
+    def names(key: str) -> list[str]:
+        """フォルダ名の並びを読む。文字列1つでも受ける。"""
+        value = data.get(key)
+        if isinstance(value, str):
+            value = [value]
+        if not isinstance(value, list):
+            return []
+        return [text(v) for v in value if text(v)]
+
+    api = data.get("api")
+    try:
+        api = int(api)
+    except (TypeError, ValueError):
+        if api is not None:
+            log("{}: \"api\" が整数ではない（{!r}）。{} として扱う".format(
+                name, api, DEFAULT_API), level="WARN")
+        api = DEFAULT_API
+
     return {
         "dir": name,
         # 入口の既定。mod.json が無い/壊れている場合の受け皿で、
         # 実際に読めるかどうかは boot() が確かめる。
         "entry": text(data.get("entry")) or "mod.py",
+        # 前提にしているローダ API。boot() がこれを見て、扱えない mod は
+        # **コードを読み込む前に**撥ねる。
+        "api": api,
         # 名前が無ければフォルダ名。GUI の行が名無しにならないように。
         "name": localized("name", name),
         "description": localized("description"),
         "version": text(data.get("version")),
         "author": text(data.get("author")),
+        # 適用順の制約と、既知の非互換。_sort_dependencies が使う。
+        "after": names("after"),
+        "before": names("before"),
+        "conflicts": names("conflicts"),
+        # 利用者が変えられる設定の宣言（config.py）。
+        "settings": _config_module().normalize_decls(data.get("settings")),
     }
+
+
+def api_status(manifest: dict) -> tuple[str | None, str]:
+    """この mod を扱えるか。扱えるなら `(None, "")`、駄目なら `(結果, 理由)`。
+
+    判定を boot() から分けてあるのは、**コードを読み込む前に決まる**ことを形として
+    残すためと、`tools/check_mods.py` と GUI が同じ判定を使えるようにするため。
+    """
+    api = manifest.get("api", DEFAULT_API)
+    if api > API:
+        return ("api-too-new",
+                "needs loader API {} but this loader provides {}; "
+                "update InstantaleModLoader".format(api, API))
+    if api < MIN_API:
+        return ("api-too-old",
+                "written for loader API {}, no longer supported (minimum is {})"
+                .format(api, MIN_API))
+    return (None, "")
+
+
+def _config_module():
+    # 遅延 import。config.py はこのモジュールから log を import している。
+    from . import config as _config
+    return _config
+
+
+# --------------------------------------------------------------------------
+# 適用順の制約
+# --------------------------------------------------------------------------
+def _sort_dependencies(order: list[str], manifests: dict) -> tuple[list[str], list[str]]:
+    """`after` / `before` を満たす並びに直す。`(並び, 報告)` を返す。
+
+    `load_order.json` の並びは利用者が触るもので、**動作の前提を知らない**。
+    「計測は修正より外側」「305_ は 105_ より先」といった関係は、これまで
+    ドキュメントにしか無く、GUI で行を動かせば無警告で壊せた。それを mod 自身に
+    宣言させて、ここで満たす。
+
+        "after":  ["101_fix_npc_employ_price"]   自分はこれより後（＝外側）
+        "before": ["105_fix_schema_compact"]     自分はこれより先（＝内側）
+
+    やっているのは安定なトポロジカルソート。**基準の並びは `load_order.json`** で、
+    制約に触れない mod の相対順は動かさない。利用者が並べ替えた意図を、制約を
+    満たす範囲でそのまま残すため。
+
+    存在しない mod や無効な mod を指した制約は黙って捨てる（消した mod の記述が
+    残っていても壊れないように ― 順序ファイルの扱いと同じ）。
+
+    循環していたら**基準の並びをそのまま返す**。ここで例外にすると mod が全滅する。
+    """
+    notes: list[str] = []
+    index = {name: i for i, name in enumerate(order)}
+    known = set(order)
+
+    # 辺は「先に来る側 -> 後に来る側」。
+    edges: dict[str, set[str]] = {name: set() for name in order}
+    for name in order:
+        manifest = manifests.get(name) or {}
+        for other in manifest.get("after") or []:
+            if other in known:
+                edges[other].add(name)
+            elif other in manifests:
+                notes.append("{}: \"after\" が無効な mod を指している（{}）".format(name, other))
+            else:
+                notes.append("{}: \"after\" の {} が見つからない".format(name, other))
+        for other in manifest.get("before") or []:
+            if other in known:
+                edges[name].add(other)
+            elif other in manifests:
+                notes.append("{}: \"before\" が無効な mod を指している（{}）".format(name, other))
+            else:
+                notes.append("{}: \"before\" の {} が見つからない".format(name, other))
+
+    incoming = {name: 0 for name in order}
+    for src, targets in edges.items():
+        for dst in targets:
+            incoming[dst] += 1
+
+    # 出せるものが複数あるときは、基準の並びで一番前のものから出す（安定にするため）。
+    ready = sorted((n for n in order if incoming[n] == 0), key=index.get)
+    result: list[str] = []
+    while ready:
+        name = ready.pop(0)
+        result.append(name)
+        for dst in sorted(edges[name], key=index.get):
+            incoming[dst] -= 1
+            if incoming[dst] == 0:
+                ready.append(dst)
+        ready.sort(key=index.get)
+
+    if len(result) != len(order):
+        stuck = [n for n in order if n not in result]
+        notes.append("適用順の制約が循環している（{}）。load_order.json の並びで動かす"
+                     .format(", ".join(stuck)))
+        return list(order), notes
+
+    if result != order:
+        # 名指しするのは**制約を持っている mod だけ**。位置が変わった mod を全部並べると、
+        # 1つ動かした煽りで後ろが全部ずれるので、20行の羅列になって読めなくなる。
+        constrained = [n for n in result
+                       if ((manifests.get(n) or {}).get("after")
+                           or (manifests.get(n) or {}).get("before"))
+                       and result.index(n) != index[n]]
+        notes.append("\"after\"/\"before\" に従って並べ替えた: {}".format(
+            ", ".join(constrained) or "（順序は同じ）"))
+    return result, notes
+
+
+def _check_conflicts(order: list[str], manifests: dict) -> list[str]:
+    """`conflicts` に挙がっている相手が同時に有効なら報告する。
+
+    **落とさずに報告するだけ**にしてある。このローダは同じ対象に複数の mod を
+    重ねるのが正常な使い方で（patch_registry.py）、どちらを外すべきかはローダには
+    決められない。片方を黙って落とすより、両方動かして名指しする方が筋が通る。
+    外すのは利用者の判断（`load_order.json` の "disabled"）。
+    """
+    notes: list[str] = []
+    active = set(order)
+    for name in order:
+        for other in (manifests.get(name) or {}).get("conflicts") or []:
+            if other in active and other != name:
+                pair = " と ".join(sorted((name, other)))
+                note = "非互換が宣言されている mod が両方有効: {}".format(pair)
+                if note not in notes:
+                    notes.append(note)
+    return notes
 
 
 # --------------------------------------------------------------------------
@@ -580,31 +926,54 @@ def boot(out_dir: str) -> dict:
     _patch.set_generation(generation)
 
     log("=" * 70)
-    log("instantale_modloader {} boot #{} gen={} (pid {})".format(
-        __version__, _state["boot_count"], generation, os.getpid()))
+    log("instantale_modloader {} (API {}) boot #{} gen={} (pid {})".format(
+        __version__, API, _state["boot_count"], generation, os.getpid()))
     log("python {} | {} modules loaded".format(sys.version.split()[0], len(sys.modules)))
 
     runtime_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ctx = ModContext(out_dir, runtime_dir)
 
+    from . import config as _config
     from . import patch_registry as _registry
 
-    mods_dir = _mods_dir()
     results: dict[str, str] = {}
-    manifests: dict[str, dict] = {}
+    settings: dict[str, dict] = {}
     _state["ready"] = []      # 前回の boot で流し残した分は持ち越さない
+    # `ctx.config` はここを読む。apply() が始まる前に**この boot のもの**に差し替えて
+    # おくこと（同じ辞書を持たせるので、以降は settings に足すだけで見える）。
+    # 前回の boot の値を残すと、設定を宣言しなくなった mod に古い値が見え続ける。
+    _state["settings"] = settings
+
+    found = discover()
+    mods_dir = found["mods_dir"]
+    manifests = found["manifests"]
+    names = found["order"]
+    _state["manifests"] = manifests
+    _state["problems"] = found["problems"]
+
+    # 宣言と実体のずれは先に出す。この後に mod ごとのログが数十行流れるので、
+    # 後ろに回すと埋もれる。
+    for line in found["problems"]:
+        log(line, level="WARN")
 
     if not os.path.isdir(mods_dir):
         log("no mods dir at {}".format(mods_dir), level="WARN")
     else:
-        # 適用順は load_order.json が決める（_discover を参照）。
-        names = _discover(mods_dir)
+        # 利用者が選んだ設定値。全 mod ぶんまとめて1回読む。
+        chosen = _config.load_store(runtime_dir)
         log("{} mod(s) in {}".format(len(names), mods_dir))
         for fname in names:
-            # 名乗りは**コードを読み込む前**に集める。こうしておくと、
-            # 読み込みに失敗した mod も GUI の一覧に名前付きで出せる。
-            manifest = _manifest(mods_dir, fname)
-            manifests[fname] = manifest
+            manifest = manifests[fname]
+
+            # ローダ API の可否を**コードを読み込む前に**判定する。名乗りが JSON に
+            # あるからここで撥ねられる。扱えない mod を import してから
+            # AttributeError で落ちるのに比べ、利用者に読める形で止まる。
+            verdict, reason = api_status(manifest)
+            if verdict:
+                log("{}: {}".format(fname, reason), level="WARN")
+                results[fname] = verdict
+                continue
+
             path = os.path.join(mods_dir, fname, manifest["entry"])
 
             # 読み込みでも apply() でも、失敗したらログに残して次の mod へ進む。
@@ -627,6 +996,17 @@ def boot(out_dir: str) -> dict:
                 results[fname] = "no-apply"
                 continue
 
+            # 設定は**読み込んだ後・apply() の前**に書き込む。apply() の中で作られる
+            # 入れ子の関数は定数をモジュールのグローバルとして読むので、この順なら
+            # mod のコードに手を入れずに値が効く（config.py）。
+            if manifest["settings"]:
+                try:
+                    settings[fname] = _config.apply_to_module(
+                        module, manifest["settings"], chosen.get(fname))
+                except BaseException:
+                    # 設定の適用で落ちても mod は動かす。既定値のままになるだけ。
+                    log_exc("settings failed: {}".format(fname))
+
             # 台帳とコンテキストに「今どの mod を実行中か」を教える。
             # patch.py はこれを見てパッチの帰属を決め、ctx.on_ready は
             # 既定のキーに使う。apply が例外で抜けても必ず戻すこと（finally）。
@@ -646,7 +1026,7 @@ def boot(out_dir: str) -> dict:
             results[fname] = "ok"
 
     _state["mods"] = results
-    _state["manifests"] = manifests
+    _state["settings"] = settings
     _state["booted"] = True
 
     ok = sum(1 for v in results.values() if v == "ok")
@@ -667,6 +1047,10 @@ def boot(out_dir: str) -> dict:
         log(line)
     log("-" * 70)
 
+    # ここまでの結果をファイルへ落とす。GUI はこれを読んで「何本入ったか・何が
+    # 失敗したか」を出す（動いているプロセスへ問い合わせる経路が無いため）。
+    write_status(out_dir)
+
     # 1回きりの処理を流す。mod の適用が全部済んでから（適用中に Clock が
     # 回り始めると、まだ当たっていないパッチを前提にした処理が走りうる）。
     _dispatch_ready()
@@ -677,21 +1061,104 @@ def boot(out_dir: str) -> dict:
     return dict(results)
 
 
+STATUS_NAME = "status.json"
+
+
+def write_status(out_dir: str | None = None) -> str | None:
+    """`status()` の中身を `out/status.json` に書く。
+
+    台帳も適用結果も、これまでプロセスの中にしか無かった。`status()` は用意されて
+    いたが**呼ぶ側が存在せず**、GUI は注入が成功したかどうかしか出せていなかった
+    （「28個中3個が apply-error」は利用者がログを自力で開かないと分からない）。
+
+    ゲームの中から問い合わせる経路を作るには注入をもう1本増やすことになるので、
+    boot の最後に**こちらから書き出す**。1方向で済み、ゲームが終了した後でも読める。
+
+    遅延当て直し（`_arm_deferred`）のたびに上書きされるので、中身は常に最新の boot。
+    ログ（`*.log`）とは別扱いなので世代管理の対象にしない ― 常に「今の状態」を
+    表すファイルで、履歴に意味が無い。
+    """
+    out_dir = out_dir or _state.get("out_dir")
+    if not out_dir:
+        return None
+    path = os.path.join(out_dir, STATUS_NAME)
+    try:
+        os.makedirs(out_dir, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(status(), fh, ensure_ascii=False, indent=2, default=str)
+            fh.write("\n")
+        return path
+    except Exception:
+        # 書けなくても boot は続ける。報告のためのファイルなので。
+        log_exc("cannot write {}".format(path))
+        return None
+
+
+def unload(out_dir: str | None = None) -> dict:
+    """当てたパッチを全て剥がして、素のゲームに戻す。
+
+    ゲームを終了せずに mod を外すための入口。`tools/injector.py --unload` が
+    これを呼ぶ。記録は `sys` に置いてあるので（patch.py の `_undo_log`）、
+    注入から今までの間にローダが何度読み直されていても剥がせる。
+
+    **完全に元通りにはならない**ことは断っておく。戻せるのは属性の差し替えと
+    複製束縛の張り替えだけで、次のものは戻らない:
+
+        `on_ready` で既に起きた副作用（掃除・状態ファイルの初期化）
+        mod がゲームの状態そのものに書いた値（パーティの名簿・依頼）
+        mod が立てたスレッドや Clock の予約
+
+    そのため「入れ忘れた状態に戻す」用途ではなく、**mod を疑うときの切り分け**に
+    使うもの。素のゲームで確かめたいなら、注入せずに起動し直すのが確実。
+    """
+    # 注入し直して呼ばれるので、このモジュールは読み込み直された直後＝out_dir を
+    # 知らない状態で入ってくる。ログの行き先を先に決める（記録が残らないと、
+    # 剥がしたのか失敗したのかが後から分からない）。
+    if out_dir:
+        _state["out_dir"] = out_dir
+        _state["log_path"] = os.path.join(out_dir, "modloader.log")
+
+    from . import patch as _patch
+    log("=" * 70)
+    log("unload: reverting patches (gen={})".format(_state.get("generation")))
+    count = _patch.revert_all()
+    _state["mods"] = {}
+    _state["settings"] = {}
+    _state["booted"] = False
+    _state["unloaded"] = count
+    from . import patch_registry as _registry
+    _registry.reset()
+    write_status()
+    log("unload: done; {} patch(es) reverted".format(count))
+    log("note: on_ready side effects and game-state writes are not undone")
+    return {"reverted": count}
+
+
 def status() -> dict:
     """今のローダの状態を返す。動いているプロセスに問い合わせて調べるとき用。
 
     これ1回で GUI が要るものが揃うようにしてある:
 
-        ["mods"]       ファイル名 -> "ok" / "load-error" / "apply-error" / "no-apply"
-        ["manifests"]  ファイル名 -> 名乗り（name/description は {"en","ja"}）
+        ["mods"]       フォルダ名 -> "ok" / "load-error" / "apply-error" / "no-apply"
+                       / "no-entry" / "api-too-new" / "api-too-old"
+        ["manifests"]  フォルダ名 -> 名乗り（name/description は {"en","ja"}）
+        ["settings"]   フォルダ名 -> その mod に実際に効いている設定値
+        ["problems"]   宣言と実体のずれ（順序・依存・非互換）。人が読む行
         ["patches"]    台帳（by_target / by_mod / conflicts / unresolved / counts）
+        ["api"]        このローダの API 番号
 
     `_state` を浅く写してから台帳を足している。`_state` をそのまま返すと
     呼び出し側の書き換えがローダに届いてしまうため。
+
+    `ready`（実行待ちの関数）は落とす。関数は JSON にできないので、そのまま残すと
+    `write_status()` がこれ1つのために失敗する。
     """
     from . import patch_registry as _registry
     snapshot = dict(_state)
+    snapshot.pop("ready", None)
+    snapshot["ready_pending"] = len(_state.get("ready") or [])
     snapshot["patches"] = _registry.summary()
+    snapshot["written_at"] = datetime.datetime.now().isoformat(timespec="seconds")
     return snapshot
 
 

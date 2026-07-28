@@ -1,5 +1,6 @@
 {
   "entry": "fix_battle_flag_stuck.py",
+  "api": 1,
   "name": {
     "en": "Battle flag fix",
     "ja": "戦闘フラグの修正"

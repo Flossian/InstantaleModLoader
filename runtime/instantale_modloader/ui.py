@@ -161,7 +161,7 @@ def spec_args(entry):
     """ボタンの spec の args。**読むだけ** ― 値の意味は解釈しない。
 
     セーブのフィールド値をそのまま引数の語彙だと決めつけてゲームを落とした
-    ことがある（TECH.md §7.2）。ボタンに載っている args をそのまま使えば、
+    ことがある（TECH.md GAME.md §2.2）。ボタンに載っている args をそのまま使えば、
     値が何を意味するのか知らなくても正しく起こせる。
     """
     data = spec_data(spec_of(entry))
@@ -200,7 +200,7 @@ def pressed_entry(app, button_index):
     **地図があるなら地図を使う。** ゲーム自身が
     `display_button_map[button_index]` で添字を引き直していることは、事故時の
     フレームローカルに `mapped_button = 1` が残っていたことで確定した
-    （TECH.md §7.2）。恒等写像なら結果は同じ、恒等でなければこちらが正しい。
+    （TECH.md GAME.md §2.2）。恒等写像なら結果は同じ、恒等でなければこちらが正しい。
     """
     buttons = getattr(app, "buttons", None)
     if not isinstance(buttons, (list, tuple)) or not isinstance(button_index, int):
@@ -494,7 +494,7 @@ class Screen(object):
         """ボタンの `PhaseSpec` から、それが呼ぶはずのマネージャを組み立てる。
 
         **引数を自分で考えない**のが要点。`QuestChoiceManager` の `quest_type` を
-        推測して組み立ててゲームを落とした前科がある（TECH.md §7.2）。
+        推測して組み立ててゲームを落とした前科がある（TECH.md GAME.md §2.2）。
         ゲームが既にボタンへ載せている `cls_name` と `args` をそのまま使えば、
         値の意味を知らなくても正しく起こせる。
         """

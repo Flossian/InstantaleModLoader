@@ -21,7 +21,7 @@
   を切ったままのクエスト放棄）は、`303_` が本来どおり置き先を差し替える
 * この mod のファイル名の頭に `_` を付けて止めれば、`303_` の挙動だけが残る
 
-## どこで解散しているか（実測で確定・2026-07-26。TECH.md §7.8）
+## どこで解散しているか（実測で確定・2026-07-26。TECH.md GAME.md §2.8）
 
 ```
 add_text('パーティは帰還した...') → 報酬・才能
@@ -152,7 +152,7 @@ def apply(ctx):
         return names
 
     # 見張る相手（＝設計判断）だけがここに残る。判定そのものは `303_` と共通の
-    # `frames.MethodWatch`（段数で数えない・関数名で決めない。TECH.md §7.8）。
+    # `frames.MethodWatch`（段数で数えない・関数名で決めない。TECH.md GAME.md §2.8）。
     disband = frames.MethodWatch(watched_managers(), WATCH_METHODS,
                                  max_stack=MAX_STACK, on_warn=write)
 

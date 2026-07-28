@@ -1,5 +1,6 @@
 {
   "entry": "quest_end_keep_party.py",
+  "api": 1,
   "name": {
     "en": "Keep party after quest",
     "ja": "クエスト後も解散しない"
@@ -9,5 +10,34 @@
     "ja": "クエストクリアでパーティを解散しない（ゲームバランスは意図的に変わる）"
   },
   "version": "1",
-  "author": "R01/Flossian"
+  "author": "R01/Flossian",
+  "after": [
+    "303_quest_end_party_to_guild"
+  ],
+  "settings": {
+    "KEEP_TEXT": {
+      "type": "str",
+      "default": "{name}はパーティに残り、引き続き行動を共にすることになった。",
+      "label": {
+        "ja": "解散を止めたときに出す文",
+        "en": "Text shown when disband is blocked"
+      },
+      "note": {
+        "ja": "{name} が仲間の名前に置き換わる",
+        "en": "{name} becomes the member name"
+      }
+    },
+    "ALSO_ON_QUEST_RETIRE": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "クエスト放棄でも解散を止める",
+        "en": "Also block disband on quest retire"
+      },
+      "note": {
+        "ja": "未検証",
+        "en": "not verified"
+      }
+    }
+  }
 }

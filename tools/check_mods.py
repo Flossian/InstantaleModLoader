@@ -16,6 +16,16 @@
 
 どちらも「デコレータの対象名」と「関数の引数の並び」を突き合わせれば静的に
 捕まる。ソースが読めない環境では、こういう機械的な検査ほど効く。
+
+同じ考えで、**宣言と実体のずれ**も注入前に捕まえる。
+
+  * `mod.json` の `"entry"` が指すファイルが無い（mod が黙って読み込まれない）
+  * `"api"` がこのローダで扱えない
+  * `load_order.json` と実体の食い違い、`"after"` / `"before"` の循環
+  * `"settings"` の宣言と、コード側の定数のずれ（**既定値が2箇所にある**ため）
+
+探索と適用順の判定は**ローダ本体の `discover()` を呼ぶ**。以前はここに同じ規則を
+書き写していたので、片方だけ直すと検査と実際の適用順がずれた。
 """
 
 import ast
@@ -24,8 +34,13 @@ import json
 import os
 import sys
 
-MODS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                        os.pardir, "runtime", "mods")
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(_ROOT, "runtime"))
+
+import instantale_modloader as ml            # noqa: E402
+from instantale_modloader import config as C  # noqa: E402
+
+MODS_DIR = os.path.join(_ROOT, "runtime", "mods")
 MANIFEST_NAME = "mod.json"
 ORDER_NAME = "load_order.json"
 
@@ -50,15 +65,24 @@ def _decorators(node):
     return found
 
 
+def _parse(path):
+    """AST を返す。読めなければ `(None, 問題)`。"""
+    try:
+        return ast.parse(io.open(path, encoding="utf-8").read()), None
+    except SyntaxError as exc:
+        return None, (path, "<file>", "syntax error: {}".format(exc))
+    except Exception as exc:
+        return None, (path, "<file>", "読めない: {}".format(exc))
+
+
 def check_file(path):
     problems = []
-    try:
-        tree = ast.parse(io.open(path, encoding="utf-8").read())
-    except SyntaxError as exc:
-        return [(path, "<file>", "syntax error: {}".format(exc))]
+    tree, broken = _parse(path)
+    if tree is None:
+        return [broken]
 
     for node in ast.walk(tree):
-        if not isinstance(node, ast.FunctionDef):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         args = [a.arg for a in node.args.args]
         for kind, target in _decorators(node):
@@ -83,7 +107,7 @@ def check_file(path):
 def _mod_files(name):
     """mod フォルダの中の .py を全て返す（入口 + 分割した中身）。
 
-    ローダは `__init__.py` しか呼ばないが、検査は**フォルダの中身を全部**見る。
+    ローダは入口しか呼ばないが、検査は**フォルダの中身を全部**見る。
     `@ctx.wrap` は入口以外のファイルにも書けるので、そこだけ検査から漏れると
     この検査の意味（デコレータの対象と引数の食い違いを注入前に捕まえる）が
     無くなる。`data/` のようなサブフォルダも辿る。
@@ -97,93 +121,173 @@ def _mod_files(name):
     return found
 
 
-def check_manifest(name):
-    """mod.json の中身を見る。
+def _module_constants(path):
+    """モジュール直下の `NAME = 定数` を `{名前: 値}` で返す。
 
-    フォルダ名も入口のファイル名も自由になったぶん、**入口がどれかは mod.json
-    だけが知っている**。ここが食い違うと mod が黙って読み込まれないので、
-    注入前に静的に捕まえる。
+    設定の宣言（`mod.json`）と実体（コードの定数）を突き合わせるために使う。
+    リテラルとして読めない代入（式・関数呼び出し）は入れない ― そこは
+    「宣言された既定値と比べられない」であって、間違いではない。
     """
-    problems = []
+    tree, _broken = _parse(path)
+    if tree is None:
+        return {}, set()
+    values, names = {}, set()
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        for target in node.targets:
+            if not isinstance(target, ast.Name):
+                continue
+            names.add(target.id)
+            try:
+                values[target.id] = ast.literal_eval(node.value)
+            except Exception:
+                pass
+    return values, names
+
+
+def check_manifest(name, manifest):
+    """`mod.json` の中身を見る。
+
+    フォルダ名も入口のファイル名も自由なので、**入口がどれかは mod.json だけが
+    知っている**。ここが食い違うと mod が黙って読み込まれないので、注入前に
+    静的に捕まえる。
+
+    名乗り（name / description / version / author）は**仕様では任意**なので、
+    欠けていても「問題」にはしない（外部の mod が任意の項目で検査に落ちるのは
+    筋が通らない）。同梱 mod は全部揃えておきたいので、`--strict` のときだけ
+    見落としとして数える。
+    """
+    problems, notes = [], []
     path = os.path.join(MODS_DIR, name, MANIFEST_NAME)
     try:
-        with io.open(path, encoding="utf-8") as fh:
-            data = json.load(fh)
+        data = json.load(io.open(path, encoding="utf-8"))
     except Exception as exc:
-        return [(path, MANIFEST_NAME, "読めない: {}".format(exc))]
+        return [(path, MANIFEST_NAME, "読めない: {}".format(exc))], []
     if not isinstance(data, dict):
-        return [(path, MANIFEST_NAME, "オブジェクトではない")]
+        return [(path, MANIFEST_NAME, "オブジェクトではない")], []
 
     entry = data.get("entry")
+    entry_path = os.path.join(MODS_DIR, name, entry) if entry else None
     if not entry:
         problems.append((path, MANIFEST_NAME, '"entry" が無い'))
-    elif not os.path.isfile(os.path.join(MODS_DIR, name, entry)):
+    elif not os.path.isfile(entry_path):
         problems.append((path, MANIFEST_NAME,
                          '"entry" が指す {!r} が無い'.format(entry)))
 
-    # GUI の一覧が空欄にならないよう、表示用の項目も揃っているか見る
+    # ローダ API。ここで撥ねられる mod は注入しても読み込まれない。
+    verdict, reason = ml.api_status(manifest)
+    if verdict:
+        problems.append((path, MANIFEST_NAME,
+                         "{}: {}（このローダは API {}）".format(verdict, reason, ml.API)))
+    if "api" not in data:
+        notes.append((path, MANIFEST_NAME,
+                      '"api" が無い（{} として扱う）'.format(ml.DEFAULT_API)))
+
+    # 表示用の項目。無くても動くので、報告はするが問題として数えない。
     for key in ("name", "description", "version", "author"):
         if not data.get(key):
-            problems.append((path, MANIFEST_NAME, "{!r} が空".format(key)))
+            notes.append((path, MANIFEST_NAME, "{!r} が空（表示だけの項目）".format(key)))
+
+    # 依存の宣言が自分自身を指していないか（循環は discover() が見る）
+    for key in ("after", "before", "conflicts"):
+        for other in manifest.get(key) or []:
+            if other == name:
+                problems.append((path, MANIFEST_NAME,
+                                 '"{}" が自分自身を指している'.format(key)))
+
+    problems += check_settings(name, data, manifest, entry_path)
+    return problems, notes
+
+
+def check_settings(name, raw, manifest, entry_path):
+    """`"settings"` の宣言を見る。
+
+    **既定値が2箇所に書かれている**のがこの検査の存在理由。実際に使われるのは
+    コードの定数で、GUI が表示に使うのは `mod.json` の `"default"`（GUI は mod の
+    コードを import しない決まりなので定数を読めない）。ずれると「GUI では
+    既定 3 と出るのに実際は 5 で動く」という、最も気付きにくい形になる。
+    """
+    problems = []
+    path = os.path.join(MODS_DIR, name, MANIFEST_NAME)
+    declared_raw = raw.get("settings")
+    if declared_raw is None:
+        return problems
+    if not isinstance(declared_raw, dict):
+        return [(path, MANIFEST_NAME, '"settings" がオブジェクトではない')]
+
+    decls = manifest.get("settings") or {}
+    # normalize_decls が落とした宣言＝書き方が壊れているもの。
+    for key in declared_raw:
+        if key not in decls:
+            problems.append((path, MANIFEST_NAME,
+                             '設定 {!r} の宣言が読めない（type / values を確認）'.format(key)))
+
+    if not entry_path or not os.path.isfile(entry_path):
+        return problems      # 入口が無いことは既に報告済み
+
+    constants, names = _module_constants(entry_path)
+    for key, decl in decls.items():
+        # 宣言した既定値そのものが自分の宣言を満たしているか
+        ok, _value, why = C.coerce(decl, decl["default"])
+        if not ok:
+            problems.append((path, MANIFEST_NAME,
+                             '設定 {!r} の "default" が宣言に合わない（{}）'.format(key, why)))
+        if key not in names:
+            # ローダは「宣言だけあってコードに無い名前」を作らない。
+            # つまりこの設定は GUI に出るが**何も効かない**。
+            problems.append((path, MANIFEST_NAME,
+                             '設定 {!r} に対応する定数が {} に無い'
+                             .format(key, os.path.basename(entry_path))))
+            continue
+        if key in constants and constants[key] != decl["default"]:
+            problems.append((path, MANIFEST_NAME,
+                             '設定 {!r} の既定値がコードとずれている'
+                             '（コード {!r} / mod.json {!r}）'
+                             .format(key, constants[key], decl["default"])))
     return problems
 
 
-def check_order(mods):
-    """load_order.json と実体の突き合わせ。
+def check_order(found):
+    """`load_order.json` と実体、`after` / `before` の突き合わせ。
 
-    適用順は動作の前提（計測は修正より外側、など）なので、
-    **順序ファイルと実体のずれは黙って通さない**。
+    判定そのものはローダの `discover()` が持っている（同じ規則を2箇所に書かない）。
+    ここはその報告を検査の書式に移し替えるだけ。適用順は動作の前提なので、
+    **宣言と実体のずれは黙って通さない**。
     """
     path = os.path.join(MODS_DIR, ORDER_NAME)
-    try:
-        with io.open(path, encoding="utf-8") as fh:
-            data = json.load(fh)
-        order = data.get("order") or []
-        disabled = data.get("disabled") or []
-    except Exception as exc:
-        return [(path, ORDER_NAME, "読めない: {}".format(exc))]
-
-    problems = []
-    # 無効な mod は「入れたのに効かない」の原因そのものなので、
-    # 検査でも必ず名前を出す（異常ではないので警告ではなく報告）。
-    off = [m for m in disabled if m in mods]
-    if off:
-        problems.append((path, ORDER_NAME,
-                         "無効化されている（読み込まれない）: {}".format(", ".join(off))))
-    missing = [m for m in mods if m not in order]
-    if missing:
-        # 落ちはしない（ローダは末尾に回す）が、順序が宣言されていない状態
-        problems.append((path, ORDER_NAME,
-                         "順序に無い mod（末尾に回る）: {}".format(", ".join(missing))))
-    stale = [m for m in order if m not in mods]
-    if stale:
-        problems.append((path, ORDER_NAME,
-                         "実体の無い記述: {}".format(", ".join(stale))))
-    dupes = sorted({m for m in order if order.count(m) > 1})
-    if dupes:
-        problems.append((path, ORDER_NAME, "重複: {}".format(", ".join(dupes))))
-    return problems
+    return [(path, ORDER_NAME, line) for line in found["problems"]]
 
 
 def main():
-    # 1 mod = 1 フォルダ。`mod.json` を持つものだけを mod とみなす
-    # （ローダの `_installed` と同じ規則）。
-    mods = sorted(name for name in os.listdir(MODS_DIR)
-                  if not name.startswith(("_", "."))
-                  and os.path.isfile(os.path.join(MODS_DIR, name, MANIFEST_NAME)))
-    problems = []
-    for name in mods:
-        problems.extend(check_manifest(name))
-        for path in _mod_files(name):
-            problems.extend(check_file(path))
-    problems.extend(check_order(mods))
+    strict = "--strict" in sys.argv
+    found = ml.discover(MODS_DIR)
+    mods = found["installed"]
 
-    for path, func, message in problems:
-        # フォルダ名を残す。ファイル名だけだと全部 __init__.py になって
-        # どの mod の話か分からなくなる。
-        label = os.path.relpath(path, MODS_DIR).replace(os.sep, "/")
-        print("MISMATCH {} :: def {}()\n    {}".format(label, func, message))
-    print("checked {} mod(s); problems: {}".format(len(mods), len(problems)))
+    problems, notes = [], []
+    for name in mods:
+        mod_problems, mod_notes = check_manifest(name, found["manifests"][name])
+        problems += mod_problems
+        notes += mod_notes
+        for path in _mod_files(name):
+            problems += check_file(path)
+    problems += check_order(found)
+
+    if strict:
+        problems += notes
+        notes = []
+
+    def show(entries, head):
+        for path, func, message in entries:
+            # フォルダ名を残す。ファイル名だけだと、どの mod の話か分からなくなる。
+            label = os.path.relpath(path, MODS_DIR).replace(os.sep, "/")
+            print("{} {} :: {}\n    {}".format(head, label, func, message))
+
+    show(problems, "MISMATCH")
+    show(notes, "note    ")
+    print("checked {} mod(s); problems: {}{}".format(
+        len(mods), len(problems),
+        "; notes: {}".format(len(notes)) if notes else ""))
     return 1 if problems else 0
 
 

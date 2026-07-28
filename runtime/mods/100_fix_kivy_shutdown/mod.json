@@ -1,5 +1,6 @@
 {
   "entry": "fix_kivy_shutdown.py",
+  "api": 1,
   "name": {
     "en": "Shutdown crash fix",
     "ja": "終了時クラッシュの修正"

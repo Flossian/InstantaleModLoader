@@ -25,6 +25,13 @@ Nuitka は Python コードをネイティブコードに変換するが、モ�
     "pkg.mod:Cls.method"    クラスのメソッド
     "pkg.mod.func"          ":" を省いた形。ロード済みのモジュール名として
                             成立する最長の部分を自動で切り分ける
+
+共通のキーワード引数:
+
+    required=True   対象が見つからないとき例外にする（既定）。False なら警告だけ
+    safe=False      True にすると、フックの例外をゲームへ流さず元の動作に落とす
+    alias_scan=True 張り替える範囲。True＝関係するモジュールだけ / "all"＝全部 /
+                    False＝張り替えない（下の _alias_scope を参照）
 """
 
 from __future__ import annotations
@@ -33,11 +40,24 @@ import functools
 import sys
 from typing import Any, Callable
 
-from . import log, log_exc
+from . import GAME_TOPLEVEL, log, log_exc
 from . import patch_registry as _registry
 
 # 元に戻すための記録。(ラベル, 持ち主, 属性名, 元の値, 元々存在したか)
-_undo: list[tuple[str, Any, str, Any, bool]] = []
+#
+# sys に置いているのは on_ready の印と同じ理由で、**注入し直すとこのモジュール自体が
+# 読み込み直される**ため。モジュール変数に持つと、再注入した瞬間に「元の値」の記録だけが
+# 消えて revert_all() が何も戻せなくなる（＝前回の注入で当てたパッチが永久に残る）。
+# sys はプロセスに1つしか無く、誰かが読み直すこともない。
+_UNDO_ATTR = "__instantale_undo__"
+
+
+def _undo_log() -> list[tuple[str, Any, str, Any, bool]]:
+    entries = getattr(sys, _UNDO_ATTR, None)
+    if not isinstance(entries, list):
+        entries = []
+        setattr(sys, _UNDO_ATTR, entries)
+    return entries
 
 # こちらが仕掛けたものに付ける目印。
 # 再注入したときに「自分が前回付けたもの」を見分けるために使う。
@@ -79,14 +99,14 @@ def _defer_if_not_imported(target: str, kind: str) -> bool:
 
     `required=True` でもここでは例外にしない。呼び出し側が悪いのではなく、
     単に順番の問題だからで、モジュールが現れた時点で当て直せば済む。
-    「モジュールは在るが属性が無い」は本物の問題なので、こちらは従来どおり
+    「モジュールは在るが属性が無い」は本物の問題なので、こちらは
     `required` の指定に従う。
     """
     try:
         mod_name, _qual = split_target(target)
     except LookupError:
         # ":" を省いた書き方で、どこまでがモジュール名か特定できなかった場合。
-        # 推測で保留にはしない（従来どおりのエラー経路に流す）。
+        # 推測で保留にはしない（通常のエラー経路に流す）。
         return False
     if sys.modules.get(mod_name) is not None:
         return False
@@ -164,11 +184,40 @@ def resolve(target: str) -> tuple[Any, str, Any]:
 # --------------------------------------------------------------------------
 # エイリアスの張り替え
 # --------------------------------------------------------------------------
-def rebind_aliases(old: Any, new: Any, *, skip: Any = None) -> list[str]:
+def _alias_scope(target: str, mode: Any) -> set[str] | None:
+    """張り替えを探しに行くトップレベルパッケージ。None なら全モジュール。
+
+    既定（`alias_scan=True`）は**ゲーム自身のモジュール＋対象と同じトップレベル
+    パッケージ**に絞る。配布物には約 4200 のモジュールが入っているので、全件なめると
+    次の2つが起きる。
+
+      * コスト ― パッチ1本ごとに全モジュールの全グローバルを見る。当て直しは
+        最大 8 回あるので、これが積み上がる
+      * 巻き添え ― 同じオブジェクトを指しているだけの無関係な名前まで張り替わる。
+        `tools/` の検証スクリプトが握っている変数が書き換わるのがその実例で、
+        「テストで identity 比較が使えない」制約はここから来ていた
+
+    対象のトップレベルを足しているのは、ゲーム以外を狙うパッチのため。
+    `kivy.input.providers.wm_common:SetWindowLong_WndProc_wrapper` の複製束縛は
+    kivy の中にあるので、ゲームのモジュールだけに絞ると届かない。
+
+    全部なめてほしい場合は `alias_scan="all"` を明示する。
+    """
+    if mode == "all":
+        return None
+    top = target.split(":")[0].split(".")[0]
+    return set(GAME_TOPLEVEL) | {top}
+
+
+def rebind_aliases(old: Any, new: Any, *, skip: Any = None,
+                   scope: set[str] | None = None) -> list[str]:
     """まだ old を指しているモジュール変数を全て new に張り替える。
 
     `from x import y` でコピーされた名前を拾うための処理。
     属性を1つ書き換えるだけでは、これらは取りこぼす。
+
+    `scope` にトップレベルパッケージ名の集合を渡すと、その配下だけを見る
+    （`_alias_scope` が組み立てる）。None なら全モジュール。
     """
     if old is None or old is new:
         return []
@@ -177,6 +226,8 @@ def rebind_aliases(old: Any, new: Any, *, skip: Any = None) -> list[str]:
     # 走査中に sys.modules が変化することがあるので、list() でコピーしてから回す。
     for mod_name, module in list(sys.modules.items()):
         if module is None or module is skip:
+            continue
+        if scope is not None and mod_name.split(".")[0] not in scope:
             continue
         try:
             namespace = vars(module)
@@ -199,7 +250,7 @@ def rebind_aliases(old: Any, new: Any, *, skip: Any = None) -> list[str]:
 # --------------------------------------------------------------------------
 # 公開している API
 # --------------------------------------------------------------------------
-def set_attr(target: str, value: Any, *, alias_scan: bool = True,
+def set_attr(target: str, value: Any, *, alias_scan: Any = True,
              label: str | None = None) -> Any:
     """対象に値を設定し、元に戻すための記録を残す。低レベルの処理。
 
@@ -215,18 +266,19 @@ def set_attr(target: str, value: Any, *, alias_scan: bool = True,
     # 存在しなかったものは、戻すときに delattr する必要があるため
     # （None を入れて残すのとは意味が違う）。
     existed = hasattr(owner, name)
-    _undo.append((label or target, owner, name, original, existed))
+    _undo_log().append((label or target, owner, name, original, existed))
     setattr(owner, name, value)
 
     if alias_scan:
         # 持ち主がモジュール自身なら、今 setattr したばかりなので走査から除く。
         skip = owner if isinstance(owner, type(sys)) else None
+        scope = _alias_scope(target, alias_scan)
         rebound: list[str] = []
         # 他のモジュールが持っているのは、素の関数のことも、前回の注入で
         # 残ったラッパのこともある。取りこぼさないよう両方を張り替える。
         for stale in (current, original):
             if stale is not None and stale is not value:
-                rebound += rebind_aliases(stale, value, skip=skip)
+                rebound += rebind_aliases(stale, value, skip=skip, scope=scope)
         if rebound:
             unique = list(dict.fromkeys(rebound))
             log("  rebound {} alias(es): {}".format(
@@ -234,7 +286,8 @@ def set_attr(target: str, value: Any, *, alias_scan: bool = True,
     return original
 
 
-def patch(target: str, *, alias_scan: bool = True, required: bool = True) -> Callable:
+def patch(target: str, *, alias_scan: Any = True, required: bool = True,
+          safe: bool = False) -> Callable:
     """対象を丸ごと差し替える。
 
     差し替えた関数には __original__ が付くので、中から元の実装を呼べる。
@@ -245,6 +298,9 @@ def patch(target: str, *, alias_scan: bool = True, required: bool = True) -> Cal
 
     required=False にすると、対象が見つからなくても警告だけ出して先へ進む。
     ビルドによって存在しない関数を狙うときに使う。
+
+    safe=True にすると、差し替えた関数が例外を投げてもゲームへ流さず、元の実装を
+    呼んだ結果を返す（`_guard` を参照）。
     """
     def decorator(func: Callable) -> Callable:
         if _defer_if_not_imported(target, "patch"):
@@ -278,20 +334,63 @@ def patch(target: str, *, alias_scan: bool = True, required: bool = True) -> Cal
             functools.update_wrapper(func, old)
         except Exception:
             pass
+        installed = _guard(func, old, target) if safe else func
         # 次の3行は update_wrapper の後で設定すること。
         # update_wrapper は元の関数の __dict__ をコピーするので、
         # 先に設定すると上書きされて消える。
-        func.__original__ = old
-        setattr(func, PATCH_MARK, target)
-        setattr(func, GENERATION_MARK, _generation)
-        set_attr(target, func, alias_scan=alias_scan)
-        _registry.record(_registry.APPLIED, target, detail="patch")
-        log("patched {} ({!r} -> {!r})".format(target, _short(old), _short(func)))
+        installed.__original__ = old
+        setattr(installed, PATCH_MARK, target)
+        setattr(installed, GENERATION_MARK, _generation)
+        set_attr(target, installed, alias_scan=alias_scan)
+        _registry.record(_registry.APPLIED, target,
+                         detail="patch safe" if safe else "patch")
+        log("patched {} ({!r} -> {!r}){}".format(
+            target, _short(old), _short(func), " [safe]" if safe else ""))
+        # ゲームに差し込むのは installed だが、返すのは func 自身。
+        # こうしておくと、デコレートした名前で mod の中から直接呼べる。
         return func
     return decorator
 
 
-def wrap(target: str, *, alias_scan: bool = True, required: bool = True) -> Callable:
+def _guard(func: Callable, old: Callable, target: str) -> Callable:
+    """`safe=True` の中身。フックの例外をゲームへ流さず、素の動作に落とす。
+
+    「落とす」の意味が2つに分かれるので、元の関数が**もう走ったかどうか**で決める。
+
+        まだ走っていない  → 元の関数を呼んでその結果を返す（素のゲームと同じ挙動）
+        もう走った        → その結果をそのまま返す（後処理だけが失敗した）
+
+    2つ目が要点で、単純に「失敗したら元を呼び直す」と書くと、元の関数が持つ副作用
+    （テキストの追加・セーブ・状態の更新）が2回起きる。フックが `orig` を呼んだ後に
+    壊れるのはよくある形（返り値を加工していて型を間違えた等）なので、ここを
+    間違えると `safe=True` が事故の原因になる。
+
+    `wrap` では第1引数として渡す `orig` がこの記録を兼ねる。`patch` では元の関数を
+    呼ぶかどうかが差し替え側の自由なので、記録は取らず「まだ走っていない」扱いにする。
+    """
+    is_wrap = getattr(func, "__instantale_wrap__", False)
+
+    @functools.wraps(old)
+    def guarded(*args, **kwargs):
+        box: dict = {}
+
+        def orig(*a, **kw):
+            box["result"] = old(*a, **kw)
+            return box["result"]
+
+        try:
+            return func(orig, *args, **kwargs) if is_wrap else func(*args, **kwargs)
+        except BaseException:
+            log_exc("safe hook failed on {}; falling back to the original".format(target))
+            if "result" in box:
+                return box["result"]
+            return old(*args, **kwargs)
+
+    return guarded
+
+
+def wrap(target: str, *, alias_scan: Any = True, required: bool = True,
+         safe: bool = False) -> Callable:
     """対象を包む。元の関数が第1引数として渡ってくる。
 
         @wrap("llama_cpp_runtime_completion:start")
@@ -304,6 +403,10 @@ def wrap(target: str, *, alias_scan: bool = True, required: bool = True) -> Call
 
     メソッドを対象にする場合、self は元の関数の第1引数として自分で受け取る
     （上の例のとおり orig, self, ... の順になる）。
+
+    safe=True にすると、この関数が投げた例外をゲームへ流さず、元の動作に落とす
+    （`_guard` を参照）。ゲームを落としたくないだけの `try`/`except` を毎回書く
+    代わりに使える。
     """
     def decorator(func: Callable) -> Callable:
         if _defer_if_not_imported(target, "wrap"):
@@ -332,18 +435,27 @@ def wrap(target: str, *, alias_scan: bool = True, required: bool = True) -> Call
         # 委譲先は素の関数にする。前回の注入で残ったラッパを呼ぶと二重実行になる。
         old = unwrap_ours(old)
 
-        @functools.wraps(old)
-        def wrapper(*args, **kwargs):
-            # 元の関数を第1引数に差し込む。これがこの API の中心。
-            return func(old, *args, **kwargs)
+        if safe:
+            # _guard が「orig を呼んだか」を見分けられるように印を付ける。
+            try:
+                func.__instantale_wrap__ = True
+            except Exception:
+                pass
+            wrapper = _guard(func, old, target)
+        else:
+            @functools.wraps(old)
+            def wrapper(*args, **kwargs):
+                # 元の関数を第1引数に差し込む。これがこの API の中心。
+                return func(old, *args, **kwargs)
 
         wrapper.__original__ = old
         wrapper.__wrapper_of__ = target
         setattr(wrapper, PATCH_MARK, target)
         setattr(wrapper, GENERATION_MARK, _generation)
         set_attr(target, wrapper, alias_scan=alias_scan)
-        _registry.record(_registry.APPLIED, target, detail="wrap")
-        log("wrapped {} ({!r})".format(target, _short(old)))
+        _registry.record(_registry.APPLIED, target,
+                         detail="wrap safe" if safe else "wrap")
+        log("wrapped {} ({!r}){}".format(target, _short(old), " [safe]" if safe else ""))
         # ゲームに差し込むのは wrapper だが、返すのは func 自身。
         # こうしておくと、デコレートした名前で mod の中から直接呼べる。
         return func
@@ -351,18 +463,37 @@ def wrap(target: str, *, alias_scan: bool = True, required: bool = True) -> Call
 
 
 def revert_all() -> int:
-    """当てたパッチを全て元に戻す。新しいものから順に。"""
+    """当てたパッチを全て元に戻す。新しいものから順に。
+
+    記録は sys に置いてあるので（`_undo_log`）、**前回の注入で当てた分も戻せる**。
+    ローダを読み込み直しても記録は残るため、`unload()` は「注入 → 遊ぶ → 外す」の
+    間にローダが何度読み直されていても成立する。
+
+    同じ対象に複数の世代が層を重ねている場合、各世代が記録しているのはどれも
+    「素の元の関数」なので、後入れ先出しで戻せば最後に書き戻されるのは
+    一番古い記録＝素の関数になる。
+    """
     count = 0
+    entries = _undo_log()
     # 必ず後入れ先出しで戻すこと。
     # 同じ対象に複数の層が乗っている場合、順番を逆にすると
     # 古い層が最後に書き戻されて残ってしまう。
-    while _undo:
-        label, owner, name, old, existed = _undo.pop()
+    while entries:
+        label, owner, name, old, existed = entries.pop()
         try:
+            # 属性を戻すだけでは足りない。当てるときに張り替えた複製束縛
+            # （`from x import y` でコピーされた名前）はこちらのラッパを指したままで、
+            # そこから呼ばれる経路が生き残ってしまう。当てたときと同じ範囲を
+            # 逆向きに張り替える。
+            current = getattr(owner, name, None)
             if existed:
                 setattr(owner, name, old)
             else:
                 delattr(owner, name)
+            if current is not None and current is not old:
+                rebind_aliases(current, old,
+                               skip=owner if isinstance(owner, type(sys)) else None,
+                               scope=_alias_scope(label, True))
             count += 1
         except Exception:
             log_exc("revert failed: {}".format(label))
@@ -372,7 +503,7 @@ def revert_all() -> int:
 
 def active() -> list[str]:
     """今当たっているパッチの一覧。調査用。"""
-    return [entry[0] for entry in _undo]
+    return [entry[0] for entry in _undo_log()]
 
 
 def _short(obj: Any) -> str:

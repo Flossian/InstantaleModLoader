@@ -1,5 +1,6 @@
 {
   "entry": "fix_eventlog_trim.py",
+  "api": 1,
   "name": {
     "en": "Event log trim",
     "ja": "イベントログの刈り込み"

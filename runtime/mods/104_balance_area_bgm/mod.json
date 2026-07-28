@@ -1,5 +1,6 @@
 {
   "entry": "balance_area_bgm.py",
+  "api": 1,
   "name": {
     "en": "Area BGM balance",
     "ja": "エリアBGMの均し"
@@ -9,5 +10,15 @@
     "ja": "新しく生成されるエリアの BGM の偏りを均し、使われていなかった曲も出るようにする"
   },
   "version": "1",
-  "author": "R01/Flossian"
+  "author": "R01/Flossian",
+  "settings": {
+    "FILL_MISSING": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "曲が無いエリアにも割り当てる",
+        "en": "Fill areas with no BGM"
+      }
+    }
+  }
 }

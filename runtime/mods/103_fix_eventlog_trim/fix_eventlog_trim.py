@@ -80,7 +80,7 @@ def apply(ctx):
 
     installed = 0
     for fn_name in TARGETS:
-        # 存在確認は既定値付き getattr で行う（TECH.md §8 の hasattr 禁止）。
+        # 存在確認は既定値付き getattr で行う（TECH.md §6 の hasattr 禁止）。
         if getattr(module, fn_name, None) is None:
             ctx.log("  {} not present; skipped".format(fn_name), level="WARN")
             continue
