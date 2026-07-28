@@ -28,7 +28,12 @@
 import datetime
 import hashlib
 
-NAME = "fix: collapse duplicated prompt blocks (DEDUP, source-side)"
+NAME = "Prompt dedup"
+NAME_JA = "プロンプト重複の除去"
+VERSION = "1"
+DESCRIPTION = "Collapses duplicated blocks in the LLM prompt to stop it from growing"
+DESCRIPTION_JA = "LLM プロンプト内で重複した同一ブロックを畳み、プロンプトの肥大を抑える"
+AUTHOR = "R01/Flossian"
 
 MIN_BLOCK_CHARS = 1000   # プロキシ側と同じ閾値
 AUDIT_FIRST_N = 5        # 最初の数回だけ、残った内容を詳しくログに出す

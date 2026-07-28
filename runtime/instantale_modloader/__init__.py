@@ -21,6 +21,9 @@ mod ファイルの書き方は次の2つを定義するだけ:
             ...
             return orig(*args, **kwargs)
 
+NAME 以外に VERSION / DESCRIPTION / AUTHOR も書ける（全て任意）。
+書いてあればログと status() に出るだけで、動作は変わらない。
+
 ctx に何があるかは下の ModContext を参照。パッチの当て方は patch.py に
 詳しく書いてある。
 
@@ -56,10 +59,29 @@ _state: dict = {
     "out_dir": None,
     "log_path": None,
     "mods": {},
+    # mod ファイル名 -> マニフェスト（NAME / VERSION / DESCRIPTION / AUTHOR）。
+    "manifests": {},
+    # この boot で ctx.on_ready() に積まれた処理。mod の適用が全部済んでから流す。
+    "ready": [],
     # 見張りが mod を当て直した回数。boot() では数え直さない（上限の判定に使う）。
     # 手で注入し直すとローダごと読み直されるので、そこで 0 に戻る。
     "deferred_boots": 0,
 }
+
+# on_ready の「もう実行した」印を置く場所。sys に生やしているのは、
+# **注入し直すとこのモジュール自体が読み込み直される**ため。
+# ここをモジュール変数にすると印ごと消えて、再注入や遅延再適用のたびに
+# 1回きりのはずの処理（溜まった状態の掃除など）が走り直してしまう。
+# sys はプロセスに1つしか無く、誰かが読み直すこともない。
+_ONCE_ATTR = "__instantale_ready_once__"
+
+
+def _once_store() -> set:
+    store = getattr(sys, _ONCE_ATTR, None)
+    if not isinstance(store, set):
+        store = set()
+        setattr(sys, _ONCE_ATTR, store)
+    return store
 
 
 # --------------------------------------------------------------------------
@@ -105,6 +127,10 @@ class ModContext:
         ctx.log(文字列)     modloader.log に出す
         ctx.log_exc(文字列) 例外をトレースバック付きで出す
         ctx.out_path(名前)  out/ 以下のパスを作る（親ディレクトリも作成）
+
+    それに加えて、1回だけ実行したい処理を預けられる:
+
+        ctx.on_ready(関数)  プロセスにつき1回だけ、メインスレッドで実行する
     """
 
     def __init__(self, out_dir: str, runtime_dir: str):
@@ -112,6 +138,9 @@ class ModContext:
         self.runtime_dir = runtime_dir
         self.log = log
         self.log_exc = log_exc
+        # 今 apply() を実行中の mod ファイル名。boot() が出し入れする。
+        # on_ready の既定のキーに使う。
+        self._mod: str | None = None
 
     # -- patch モジュールへの入口 -------------------------------------------
     # ここで遅延 import しているのは循環 import を避けるため。
@@ -128,6 +157,53 @@ class ModContext:
         """対象を (持ち主, 属性名, 現在の値) として取り出す。調査用。"""
         from . import patch as _patch
         return _patch.resolve(target)
+
+    def patches(self) -> dict:
+        """対象 -> その対象に当てた mod の一覧。
+
+        自分より前に読み込まれた mod が同じ関数を触っているかを、apply() の中から
+        確かめられる。ファイル名順の適用なので、見えるのは自分より前の分だけ。
+        """
+        from . import patch_registry as _registry
+        return _registry.by_target()
+
+    # -- 1回きりの処理 -------------------------------------------------------
+    def on_ready(self, fn, *, key: str | None = None, delay: float = 0.0) -> bool:
+        """`fn` を「このプロセスで1回だけ」「メインスレッドで」実行する。
+
+        apply() は1プロセスの中で**何度も呼ばれる**。手で注入し直したときと、
+        未 import のモジュールが現れて当て直したとき（`_arm_deferred`）で、
+        後者は最大 MAX_DEFERRED_BOOTS 回まで起こりうる。
+
+        パッチを当てる分にはこれで問題ない。patch.py の世代管理が前の層を
+        置き換えるので、何度当てても結果は1回分になる。困るのは**副作用のある
+        初期化**で、apply() の中で直接やると回数ぶん繰り返される:
+
+            溜まった「迷子の曲」の掃除、状態ファイルの初期化、スレッドの起動
+
+        そういう処理をここへ預ける。同じキーで2回目以降に積まれたものは黙って
+        捨てられる（戻り値 False）。
+
+        実行は Kivy の Clock 経由にしてある。ゲームの状態を触ってよいのは
+        メインスレッドだけで、`boot()` 自体は注入したリモートスレッドの上で
+        走っているため。Clock が無い環境（オフライン検証など）ではその場で呼ぶ。
+
+        キーの既定は「mod ファイル名 + 関数名」。同じ mod の中で複数の
+        on_ready を使い分けたい場合や、mod をまたいで1回にしたい場合は
+        `key` を明示する。
+        """
+        name = key or "{}:{}".format(
+            self._mod or "<loader>",
+            getattr(fn, "__qualname__", None) or getattr(fn, "__name__", repr(fn)))
+        store = _once_store()
+        # 印を「積んだ時点」で付ける。実行時に付けると、実行前にもう一度
+        # boot() が走ったときに二重に積まれる（Clock はまだ流していない）。
+        if name in store:
+            log("on_ready: {} already done in this process; skipped".format(name))
+            return False
+        store.add(name)
+        _state["ready"].append((name, fn, delay))
+        return True
 
     def out_path(self, *parts: str) -> str:
         """out/ 以下のパスを返す。親ディレクトリは先に作っておく。"""
@@ -183,6 +259,101 @@ def _load_mod_file(path: str):
         sys.modules.pop(name, None)
         raise
     return module
+
+
+def _manifest(module, fname: str) -> dict:
+    """mod ファイルが名乗っている情報を集める。GUI の一覧に出す用。
+
+    NAME 以外は全て任意で、無ければ空になるだけ。mod 側に何も強制しないのは、
+    ここが「動作に関わらない表示用の情報」だから。VERSION を必須にすると
+    バグ修正1本の mod にまで版番号を付けて回ることになる。
+
+    多言語は**接尾辞**で持つ。`NAME` が英語、`NAME_JA` が日本語:
+
+        NAME    = "Item detail autosize"
+        NAME_JA = "アイテム説明欄の拡張"
+
+    受け取る側が言語ごとの分岐を書かなくて済むように、ここで
+
+        {"name": {"en": ..., "ja": ...}, ...}
+
+    の形に均してから返す。**片方しか書かれていなければもう片方で埋める**ので、
+    `manifest["name"]["ja"]` は必ず何かを返す（GUI が空欄にならない）。
+    `_JA` を書かない mod もそのまま動く。
+
+    値は str() に通す。mod が数値やタプルを入れていても整形で落ちないように。
+    """
+    def field(attr: str) -> str:
+        value = getattr(module, attr, None)
+        if value is None:
+            return ""
+        try:
+            return str(value).strip()
+        except Exception:
+            return ""
+
+    def localized(attr: str, default: str = "") -> dict:
+        en = field(attr)
+        ja = field(attr + "_JA")
+        en = en or ja or default
+        return {"en": en, "ja": ja or en}
+
+    return {
+        "file": fname,
+        # NAME が無ければファイル名。GUI の行が名無しにならないように。
+        "name": localized("NAME", fname),
+        "description": localized("DESCRIPTION"),
+        "version": field("VERSION"),
+        "author": field("AUTHOR"),
+    }
+
+
+# --------------------------------------------------------------------------
+# 1回きりの処理の実行
+# --------------------------------------------------------------------------
+def _dispatch_ready() -> None:
+    """この boot で積まれた on_ready を流す。
+
+    Clock に載せるのは、`boot()` が注入したリモートスレッドの上で走っていて、
+    ゲームの状態（Kivy のウィジェット、pygame の音）をそこから触れないため。
+    `schedule_once` は次のフレーム＝メインスレッドで呼ばれる。
+    """
+    entries = _state["ready"]
+    _state["ready"] = []
+    if not entries:
+        return
+
+    try:
+        from kivy.clock import Clock
+    except Exception:
+        Clock = None      # ゲームの外（オフライン検証など）
+
+    log("on_ready: {} task(s){}".format(
+        len(entries), "" if Clock else " (no kivy Clock; running inline)"))
+
+    for name, fn, delay in entries:
+        # 既定引数で束縛する。ループ変数のまま閉じ込めると、Clock が呼ぶ頃には
+        # 最後の1件を全員が指している。
+        def call(_dt=None, name=name, fn=fn):
+            try:
+                fn()
+                log("on_ready: {} done".format(name))
+            except BaseException:
+                # ここは Clock（メインスレッド）の中なので、投げるとゲームが落ちる。
+                log_exc("on_ready failed: {}".format(name))
+
+        if Clock is None:
+            call()
+            continue
+        try:
+            Clock.schedule_once(call, delay)
+        except BaseException:
+            # 載せられなかった＝一度も走っていない。印を外して、次の boot
+            # （再注入や遅延当て直し）で積み直せるようにする。
+            # 印は「実行した」ではなく「実行したか、Clock に渡ってもう走る」の意。
+            # ここで残すと、走らないまま二度と積まれない一件が生まれる。
+            _once_store().discard(name)
+            log_exc("on_ready: could not schedule {} (will retry next boot)".format(name))
 
 
 # --------------------------------------------------------------------------
@@ -281,8 +452,12 @@ def boot(out_dir: str) -> dict:
     runtime_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ctx = ModContext(out_dir, runtime_dir)
 
+    from . import patch_registry as _registry
+
     mods_dir = _mods_dir()
     results: dict[str, str] = {}
+    manifests: dict[str, dict] = {}
+    _state["ready"] = []      # 前回の boot で流し残した分は持ち越さない
 
     if not os.path.isdir(mods_dir):
         log("no mods dir at {}".format(mods_dir), level="WARN")
@@ -303,26 +478,60 @@ def boot(out_dir: str) -> dict:
                 results[fname] = "load-error"
                 continue
 
-            label = getattr(module, "NAME", fname)
+            # 名乗りは GUI 用に集めるだけで、ログには出さない。
+            # ログの見出しは常にファイル名にしてある。ファイル名は適用順そのもの
+            # （番号付き）で一意、cp932 のコンソールでも化けない、grep もしやすい。
+            manifests[fname] = _manifest(module, fname)
+
             apply_fn = getattr(module, "apply", None)
             if apply_fn is None:
                 log("{} has no apply(), skipped".format(fname), level="WARN")
                 results[fname] = "no-apply"
                 continue
+
+            # 台帳とコンテキストに「今どの mod を実行中か」を教える。
+            # patch.py はこれを見てパッチの帰属を決め、ctx.on_ready は
+            # 既定のキーに使う。apply が例外で抜けても必ず戻すこと（finally）。
+            # 戻し忘れると、次に記録されたパッチが前の mod のものとして残る。
+            _registry.begin_mod(fname)
+            ctx._mod = fname
             try:
                 apply_fn(ctx)
             except BaseException:
-                log_exc("apply failed: {} ({})".format(fname, label))
+                log_exc("apply failed: {}".format(fname))
                 results[fname] = "apply-error"
                 continue
-            log("applied: {} ({})".format(fname, label))
+            finally:
+                _registry.end_mod()
+                ctx._mod = None
+            log("applied: {}".format(fname))
             results[fname] = "ok"
 
     _state["mods"] = results
+    _state["manifests"] = manifests
     _state["booted"] = True
 
     ok = sum(1 for v in results.values() if v == "ok")
+    log("-" * 70)
     log("boot complete: {}/{} mod(s) applied".format(ok, len(results)))
+
+    # 適用に失敗した mod を先に名指しする。トレースバックは上に出ているが、
+    # 何本読み込んだか分からないログの中では埋もれるため。
+    broken = {f: v for f, v in results.items() if v != "ok"}
+    if broken:
+        log("{} mod(s) not applied:".format(len(broken)), level="WARN")
+        for fname in sorted(broken):
+            log("  {} [{}]".format(fname, broken[fname]), level="WARN")
+
+    # どの mod がどこへ当てたか、重なりはどこか、解決できなかった対象は何か。
+    # ゲーム更新で関数が消えた場合はここの UNRESOLVED に出る。
+    for line in _registry.format_report():
+        log(line)
+    log("-" * 70)
+
+    # 1回きりの処理を流す。mod の適用が全部済んでから（適用中に Clock が
+    # 回り始めると、まだ当たっていないパッチを前提にした処理が走りうる）。
+    _dispatch_ready()
 
     # まだ import されていないモジュール宛てのフックがあれば、現れるまで見張る。
     # mod の適用が全部終わってから立てること（適用中に当て直しが走らないように）。
@@ -331,5 +540,36 @@ def boot(out_dir: str) -> dict:
 
 
 def status() -> dict:
-    """今のローダの状態を返す。動いているプロセスに問い合わせて調べるとき用。"""
-    return dict(_state)
+    """今のローダの状態を返す。動いているプロセスに問い合わせて調べるとき用。
+
+    これ1回で GUI が要るものが揃うようにしてある:
+
+        ["mods"]       ファイル名 -> "ok" / "load-error" / "apply-error" / "no-apply"
+        ["manifests"]  ファイル名 -> 名乗り（name/description は {"en","ja"}）
+        ["patches"]    台帳（by_target / by_mod / conflicts / unresolved / counts）
+
+    `_state` を浅く写してから台帳を足している。`_state` をそのまま返すと
+    呼び出し側の書き換えがローダに届いてしまうため。
+    """
+    from . import patch_registry as _registry
+    snapshot = dict(_state)
+    snapshot["patches"] = _registry.summary()
+    return snapshot
+
+
+def patches() -> dict:
+    """対象 -> その対象に当てた mod の一覧。動いているプロセスへの問い合わせ用。"""
+    from . import patch_registry as _registry
+    return _registry.by_target()
+
+
+def mod_patches() -> dict:
+    """mod -> その mod が当てた対象の一覧（`patches()` の逆引き）。"""
+    from . import patch_registry as _registry
+    return _registry.by_mod()
+
+
+def conflicts() -> dict:
+    """2つ以上の mod が触っている対象だけ。"""
+    from . import patch_registry as _registry
+    return _registry.conflicts()

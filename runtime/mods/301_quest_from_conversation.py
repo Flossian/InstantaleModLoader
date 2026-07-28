@@ -59,7 +59,12 @@ import time
 from instantale_modloader import ui
 from instantale_modloader.frames import repr_value
 
-NAME = "feature: accept (and generate) quests from NPC conversation"
+NAME = "Quests from conversation"
+NAME_JA = "会話から依頼を受ける"
+VERSION = "1"
+DESCRIPTION = "Accept quests from conversation, or generate one from what you just talked about"
+DESCRIPTION_JA = "会話から依頼を受注できる。いま話した内容から依頼を1件生成することもできる"
+AUTHOR = "R01/Flossian"
 
 LOG_BASENAME = "quest_offer.log"
 

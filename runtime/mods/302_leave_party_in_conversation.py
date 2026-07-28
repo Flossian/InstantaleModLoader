@@ -87,7 +87,12 @@ import time
 from instantale_modloader import frames, ui
 from instantale_modloader.frames import repr_value
 
-NAME = "feature: part ways with a party member from conversation"
+NAME = "Part ways in conversation"
+NAME_JA = "会話で仲間と別れる"
+VERSION = "1"
+DESCRIPTION = "Part ways with a party member from conversation; they stay where they were hired"
+DESCRIPTION_JA = "会話から仲間と別れられる。別れた相手は雇われた場所（土地を跨ぐ場合はいまの町のギルド）に残る"
+AUTHOR = "R01/Flossian"
 
 LOG_BASENAME = "party_leave.log"
 

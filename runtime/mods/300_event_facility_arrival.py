@@ -67,7 +67,12 @@ import time
 
 from instantale_modloader import ui
 
-NAME = "feature: NPC starts a conversation when the player arrives"
+NAME = "NPC greets on arrival"
+NAME_JA = "施設でNPCが話しかける"
+VERSION = "1"
+DESCRIPTION = "An NPC at the facility starts a conversation when you arrive"
+DESCRIPTION_JA = "施設に着くと、その場に居る NPC の方から会話を始めてくるようにする"
+AUTHOR = "R01/Flossian"
 
 LOG_BASENAME = "player_events.log"
 

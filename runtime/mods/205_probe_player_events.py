@@ -27,7 +27,12 @@ import sys
 
 from instantale_modloader.frames import repr_value
 
-NAME = "probe: player-action event trigger sites"
+NAME = "Player event probe"
+NAME_JA = "行動イベントの計測"
+VERSION = "1"
+DESCRIPTION = "Finds where to hook events triggered by player actions"
+DESCRIPTION_JA = "プレイヤーの行動をトリガーにしたイベントの差し込み場所を特定する"
+AUTHOR = "R01/Flossian"
 
 LOG_BASENAME = "events.log"
 

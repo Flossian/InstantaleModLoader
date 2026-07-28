@@ -79,7 +79,12 @@ import time
 
 from instantale_modloader import frames
 
-NAME = "feature: quest-end no longer disbands the party"
+NAME = "Keep party after quest"
+NAME_JA = "クエスト後も解散しない"
+VERSION = "1"
+DESCRIPTION = "Quest completion no longer disbands the party (game balance changes on purpose)"
+DESCRIPTION_JA = "クエストクリアでパーティを解散しない（ゲームバランスは意図的に変わる）"
+AUTHOR = "R01/Flossian"
 
 # `302_` / `303_` と同じログに書く（パーティの増減を1つの時系列で読むため）。
 LOG_BASENAME = "party_leave.log"

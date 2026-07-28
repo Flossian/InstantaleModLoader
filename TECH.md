@@ -34,8 +34,9 @@ watch.bat / watcher.py    ゲームの起動を監視して自動注入
 injector.py               PE解析 → x64スタブ → CreateRemoteThread
 logrotate.py              out/*.log の世代管理（注入 = 1世代の境目）
 runtime/instantale_modloader/
-    __init__.py   boot() / ログ / mod ディスカバリ / 世代発行 / 遅延設置の監視
+    __init__.py   boot() / ログ / mod ディスカバリ / 世代発行 / 遅延設置の監視 / on_ready
     patch.py      @patch / @wrap / alias再束縛 / 世代管理 / 未import保留 / revert
+    patch_registry.py  どの MOD がどこへ当てたかの台帳・重なり・未解決の報告
     frames.py     フレームローカル採取・値の要約・呼び出し元の特定
     ui.py         選択肢 / 画面の塗り替え / 会話の閉じ方 / idle待ち / 施設の引き当て
     recon.py      実行時リコン（モジュール構造ダンプ）
@@ -72,6 +73,7 @@ python -m compileall -q runtime tools
 python tools/check_mods.py
 
 # 2. 該当するオフライン検証（ゲーム不要）
+python tools/test_patch_registry.py    # ローダ本体（台帳 / on_ready / 名乗り）
 python tools/test_arrival_event.py     # 300_
 python tools/test_quest_offer.py       # 301_
 python tools/test_party_leave.py       # 302_
@@ -140,10 +142,48 @@ def apply(ctx):
 | `ctx.resolve(target)` | `(owner, name, value)` を返す。調査用 |
 | `ctx.log(...)` / `ctx.log_exc(...)` | `out/modloader.log` へ |
 | `ctx.out_path(name)` | `out/<name>` の絶対パス。MOD 専用ログはここへ |
+| `ctx.on_ready(fn)` | **プロセスにつき1回だけ**メインスレッドで実行（§3.6） |
+| `ctx.patches()` | 対象 → 当てた MOD の一覧。自分より前の分が見える（§3.7） |
 
 `target` は `module:qualname` 形式（`llm_manager:quest_referee_event_resolve`、
 `llama_cpp_runtime_completion:LlamaCppClient.chat`）。`required=False` を渡すと対象が
 無くても黙って降りる。
+
+`@ctx.patch` は**対象の名前が無ければ撥ねる**。`setattr` は黙って新しい名前を作るので、
+対象名を打ち間違えた MOD が「当たった」ことになってしまうため。名前を新設したいときだけ
+`required=False` を明示する。
+
+**名乗り（モジュール変数。すべて任意・表示専用）:**
+
+```python
+NAME    = "Item detail autosize"          # 一覧に出す短い名前。無ければファイル名
+NAME_JA = "アイテム説明欄の拡張"
+VERSION = "1"
+DESCRIPTION    = "Grows the item detail box only when a long name will not fit"
+DESCRIPTION_JA = "アイテム説明欄を、長い名前・説明が入り切らないときだけ広げる"
+AUTHOR  = "R01/Flossian"
+```
+
+多言語は**接尾辞**で持つ（`_JA` が日本語、無印が英語）。`status()["manifests"]` は
+言語ごとの分岐を書かなくて済むよう、次の形に均して返す:
+
+```python
+{"file": "109_...py",
+ "name":        {"en": "Item detail autosize", "ja": "アイテム説明欄の拡張"},
+ "description": {"en": "...",                  "ja": "..."},
+ "version": "1", "author": "R01/Flossian"}
+```
+
+**片方しか書かれていなければもう片方で埋める**ので、`name["ja"]` は必ず何かを返す
+（GUI の行が空にならない）。`_JA` を書かない MOD もそのまま動く。
+
+`NAME` は**一覧に並べる名前**なので短く保つ（英語 半角30 / 日本語 全角12 まで。
+`tools/test_patch_registry.py` が長さを検査する）。何をする MOD かの説明は
+`DESCRIPTION` 側に置き、設計判断は docstring に書く。
+
+**ログにはファイル名を出す**（名乗りは出さない）。ファイル名は適用順そのもので一意、
+cp932 のコンソールでも化けず、grep もしやすい。VERSION を必須にしないのは、
+バグ修正1本の MOD にまで版番号を付けて回ることになるため。
 
 ### 3.2 採番と適用順
 
@@ -210,7 +250,8 @@ boot complete: 27/27 mod(s) applied
 
 **MOD 側でやること**: 対象が未 import でも `apply()` は普通に書いてよい。ただし `apply()`
 は当て直しのたびに走るので、**何度走らせても結果が変わらないように書く**
-（グローバルな状態を作るなら、既にあるかを見てから作る）。
+（グローバルな状態を作るなら、既にあるかを見てから作る）。副作用のある初期化は
+`ctx.on_ready()` へ預ける（§3.6）。
 
 ### 3.5 再注入しても層が積み重ならない（世代管理）
 
@@ -223,6 +264,101 @@ boot complete: 27/27 mod(s) applied
 | `boot #N gen=xxxxxxxx` | この注入の世代 |
 | `replacing a previous patch layer on ...` | 前回注入の層を剥がした（正常） |
 | （この行が出ない） | 同一 boot 内で後段の MOD が包んだ＝先の層が保持されている |
+
+### 3.6 1回きりの初期化（`ctx.on_ready`）
+
+`apply()` は**1プロセスの中で何度も呼ばれる**。手で注入し直したときと、未 import の
+モジュールが現れて当て直したとき（§3.4、最大8回）。
+
+パッチを当てるだけなら世代管理（§3.5）が結果を1回分にまとめるので問題ない。困るのは
+**副作用のある初期化**で、`apply()` の中で直接やると回数ぶん繰り返される:
+
+```
+溜まった「迷子の曲」の掃除 / 状態ファイルの初期化 / スレッドの起動
+```
+
+これを `ctx.on_ready()` に預ける。
+
+```python
+def apply(ctx):
+    @ctx.wrap("...")            # パッチは今までどおり apply() で当てる
+    def hook(orig, *a, **kw):
+        return orig(*a, **kw)
+
+    ctx.on_ready(lambda: sweep_orphan_tracks(ctx))   # 掃除は1回だけ
+```
+
+| | |
+|---|---|
+| 実行回数 | **プロセスにつき1回**。再注入・当て直しをまたいでも増えない |
+| 実行スレッド | Kivy の `Clock` 経由＝**メインスレッド**（`boot()` はリモートスレッドの上） |
+| タイミング | 全 MOD の適用が済んでから。`delay=` で先送りできる |
+| 例外 | 握り潰してログへ。`Clock` の中で投げるとゲームが落ちるため |
+| キー | 既定は「ファイル名 + 関数名」。`key=` で明示できる |
+| 戻り値 | 積まれたら `True`、既に実行済みで捨てられたら `False` |
+
+印は**積んだ時点**で付ける（実行時ではない）。流す前に次の boot が来ても二重に積まれない
+ようにするため。ただし `Clock` に載せられなかった場合は**一度も走っていない**ので印を外し、
+次の boot で積み直せるようにしてある ― 印の意味は「実行した」ではなく
+「実行したか、もう走ることが確定している」。処理自体が例外で終わった場合は印を残す
+（毎回の再注入で失敗し続けるのを避けるため）。
+
+「1回だけ」の印は `sys` に置いてある。**注入し直すとローダのモジュール自体が読み込み
+直される**ので、モジュール変数に持つと印ごと消えて再実行されてしまう。
+
+`Clock` が無い環境（`tools/` のオフライン検証）ではその場で同期的に呼ばれる。
+
+### 3.7 誰がどこへ当てたか（台帳）
+
+`patch_registry.py` が「どの MOD がどの対象に当てたか」を持つ。同じ対象に複数の MOD を
+**意図的に重ねる**設計（§3.2）なので、意図しない重なりをログを目で追わずに見つけるため。
+
+`boot()` の最後にまとめて出る:
+
+```
+patches: 61 applied on 54 target(s) by 26 mod(s)
+overlapping targets (5):
+  llama_cpp_runtime_completion:LlamaCppClient.chat <- 105_fix_schema_compact.py, 305_mini_quest.py
+deferred (2): waiting for the module to be imported
+  llm_manager:quest_referee_event_resolve (scripts.llm.llm_manager) <- 206_probe_quest_flow.py
+UNRESOLVED (1): target not found in the running build
+  scripts.ui.shop:ShopFrame.refresh <- 108_fix_shop_inventory_overflow.py (attribute not found)
+```
+
+| 節 | 意味 | 対処 |
+|---|---|---|
+| `overlapping targets` | 2つ以上の MOD が同じ対象を触っている | 正常なことも多い。§3.2 の帯順と突き合わせる |
+| `deferred` | モジュールが未 import。後で当て直す（§3.4） | 待てばよい |
+| `UNRESOLVED` | モジュールは在るが対象が無い | **ゲーム更新を最初に疑う**。`out/recon/` で名前を取り直す |
+
+`UNRESOLVED` は `required=True`（既定）なら例外にもなるが、**投げる前に記録している**ので、
+その MOD が `apply-error` で落ちても何が見つからなかったかは報告に残る。バージョン番号を
+宣言させるより、実際に対象が在るかを見る方がこの環境では確実（`.pyc` が無く、ゲームの
+バージョンを取得する経路も無い）。
+
+動いているプロセスへの問い合わせ:
+
+```python
+instantale_modloader.patches()      # {対象: [MOD, ...]}
+instantale_modloader.mod_patches()  # {MOD: [対象, ...]}（逆引き）
+instantale_modloader.conflicts()    # 重なっている対象だけ
+instantale_modloader.status()       # 下記すべてを1回で
+```
+
+`status()` はこれ1回で GUI に要るものが揃う:
+
+| キー | 内容 |
+|---|---|
+| `["mods"]` | ファイル名 → `ok` / `load-error` / `apply-error` / `no-apply` |
+| `["manifests"]` | ファイル名 → 名乗り（`name` / `description` は `{"en", "ja"}`。§3.1） |
+| `["patches"]` | 台帳（`by_target` / `by_mod` / `conflicts` / `deferred` / `unresolved` / `counts`） |
+
+`format_report()` が「人が読む行」を返すのに対し、`status()["patches"]`（＝
+`patch_registry.summary()`）は**データのまま**返す。並び順や言い回しは受け取った側で
+決められるよう、ここでは整形しない。
+
+`apply()` の中からは `ctx.patches()`。ファイル名順の適用なので、見えるのは**自分より前に
+読み込まれた MOD の分だけ**。
 
 ---
 

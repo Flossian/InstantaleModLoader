@@ -31,7 +31,12 @@ import datetime
 import threading
 import traceback
 
-NAME = "record: full tracebacks + frame locals from the running build"
+NAME = "Crash recorder"
+NAME_JA = "クラッシュ記録"
+VERSION = "1"
+DESCRIPTION = "Records full tracebacks and frame locals to out/live_crashes.log"
+DESCRIPTION_JA = "クラッシュ時のトレースバックとフレーム変数を、省略なしで out/live_crashes.log に残す"
+AUTHOR = "R01/Flossian"
 
 from instantale_modloader.frames import format_locals
 

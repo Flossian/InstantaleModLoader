@@ -34,6 +34,7 @@ import sys
 from typing import Any, Callable
 
 from . import log, log_exc
+from . import patch_registry as _registry
 
 # 元に戻すための記録。(ラベル, 持ち主, 属性名, 元の値, 元々存在したか)
 _undo: list[tuple[str, Any, str, Any, bool]] = []
@@ -64,6 +65,8 @@ def set_generation(generation: str) -> None:
     # 保留は boot ごとに数え直す。前回の注入で保留だったものが今回は載っている、
     # という場合に古い名前が残っていると見張りが終わらない。
     _pending_modules.clear()
+    # 台帳も同じ寿命。世代が変われば前回の帰属は無効になる。
+    _registry.reset()
 
 
 def pending_modules() -> list[str]:
@@ -88,6 +91,7 @@ def _defer_if_not_imported(target: str, kind: str) -> bool:
     if sys.modules.get(mod_name) is not None:
         return False
     _pending_modules.add(mod_name)
+    _registry.record(_registry.DEFERRED, target, detail=mod_name)
     log("defer {} {} ({} is not imported yet)".format(kind, target, mod_name))
     return True
 
@@ -248,10 +252,25 @@ def patch(target: str, *, alias_scan: bool = True, required: bool = True) -> Cal
         try:
             owner, name, old = resolve(target)
         except (LookupError, AttributeError) as exc:
+            # required=True でも記録してから投げる。ここで投げると boot() が
+            # この mod を apply-error にして次へ進むので、記録を先にしておかないと
+            # 「何が見つからなかったのか」が最後の報告に出ない。
+            _registry.record(_registry.UNRESOLVED, target, detail=str(exc))
             if required:
                 raise
             log("skip patch {} ({})".format(target, exc), level="WARN")
             return func
+
+        # 属性が無い場合、setattr は黙って**新しい名前を作る**。
+        # 対象名を打ち間違えた patch が「当たった」ものとして台帳に載ってしまい、
+        # 未解決の報告があてにならなくなるので、ここで撥ねる。
+        # 名前を新設したいときは required=False を明示する。
+        if not hasattr(owner, name):
+            _registry.record(_registry.UNRESOLVED, target, detail="attribute not found")
+            if required:
+                raise LookupError(f"{target}: no attribute {name!r} to replace")
+            log("patch {} creates a new attribute (was not there)".format(target),
+                level="WARN")
 
         old = unwrap_ours(old)
         try:
@@ -266,6 +285,7 @@ def patch(target: str, *, alias_scan: bool = True, required: bool = True) -> Cal
         setattr(func, PATCH_MARK, target)
         setattr(func, GENERATION_MARK, _generation)
         set_attr(target, func, alias_scan=alias_scan)
+        _registry.record(_registry.APPLIED, target, detail="patch")
         log("patched {} ({!r} -> {!r})".format(target, _short(old), _short(func)))
         return func
     return decorator
@@ -289,15 +309,21 @@ def wrap(target: str, *, alias_scan: bool = True, required: bool = True) -> Call
         if _defer_if_not_imported(target, "wrap"):
             return func
         try:
-            _owner, _name, old = resolve(target)
+            owner, name, old = resolve(target)
         except (LookupError, AttributeError) as exc:
+            _registry.record(_registry.UNRESOLVED, target, detail=str(exc))
             if required:
                 raise
             log("skip wrap {} ({})".format(target, exc), level="WARN")
             return func
 
         if old is None:
-            # 名前はあるが中身が None。包む相手が無いので何もしない。
+            # 包む相手が無い。理由は2つあり、報告では区別する。
+            # 「名前ごと無い」＝ゲーム更新で関数が消えた可能性が高い。
+            # 「名前はあるが None」＝そういう値が入っている（別の話）。
+            _registry.record(_registry.UNRESOLVED, target,
+                             detail="attribute not found" if not hasattr(owner, name)
+                             else "resolved to None")
             if required:
                 raise LookupError(f"{target} resolved to None")
             log("skip wrap {} (resolved to None)".format(target), level="WARN")
@@ -316,6 +342,7 @@ def wrap(target: str, *, alias_scan: bool = True, required: bool = True) -> Call
         setattr(wrapper, PATCH_MARK, target)
         setattr(wrapper, GENERATION_MARK, _generation)
         set_attr(target, wrapper, alias_scan=alias_scan)
+        _registry.record(_registry.APPLIED, target, detail="wrap")
         log("wrapped {} ({!r})".format(target, _short(old)))
         # ゲームに差し込むのは wrapper だが、返すのは func 自身。
         # こうしておくと、デコレートした名前で mod の中から直接呼べる。

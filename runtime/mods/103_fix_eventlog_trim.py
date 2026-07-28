@@ -26,7 +26,12 @@
 
 import datetime
 
-NAME = "fix: trim quest event log to the last 3 turns (EVENTLOG, source-side)"
+NAME = "Event log trim"
+NAME_JA = "イベントログの刈り込み"
+VERSION = "1"
+DESCRIPTION = "Trims the in-event log to the last 3 turns to stop prompt growth"
+DESCRIPTION_JA = "【今回のイベント内ログ】を直近3ターンぶんに刈り込み、プロンプトの肥大を抑える"
+AUTHOR = "R01/Flossian"
 
 SEPARATOR = "〈プレイヤーの入力〉"
 KEEP_TURNS = 3            # フィールドイベントは仕様上3ターンで決着する

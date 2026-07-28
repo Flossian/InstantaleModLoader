@@ -19,7 +19,12 @@ import sys
 
 from instantale_modloader.frames import format_locals, repr_value
 
-NAME = "probe: summarizer/facilitator list arguments (empty Literal[] hunt)"
+NAME = "Summarizer probe"
+NAME_JA = "サマライザの計測"
+VERSION = "1"
+DESCRIPTION = "Measures summarizer/facilitator arguments to find the source of empty Literal[]"
+DESCRIPTION_JA = "サマライザ／ファシリテータ一族の引数を計測し、空 Literal[] の発生源を追う"
+AUTHOR = "R01/Flossian"
 
 MODULE = "scripts.llm.llm_manager"
 

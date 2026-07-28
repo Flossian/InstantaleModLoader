@@ -33,7 +33,12 @@ import sys
 
 from instantale_modloader import frames
 
-NAME = "probe: item detail box geometry (why the description is cut off)"
+NAME = "Item detail probe"
+NAME_JA = "アイテム説明欄の計測"
+VERSION = "1"
+DESCRIPTION = "Captures the real geometry of the item detail box to see why text is cut off"
+DESCRIPTION_JA = "アイテム説明欄の実寸と中身を写し取り、説明が途中で切れる原因を測る"
+AUTHOR = "R01/Flossian"
 
 LOG_BASENAME = "item_detail.log"
 

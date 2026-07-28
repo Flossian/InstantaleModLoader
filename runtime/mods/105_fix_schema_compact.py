@@ -70,7 +70,12 @@ TECH.md の「平均約4割」より大きいのは分母の違いによるも�
 
 import datetime
 
-NAME = "fix: compact embedded schema description in prompt (COMPACT, source-side)"
+NAME = "Schema compaction"
+NAME_JA = "スキーマ説明の圧縮"
+VERSION = "1"
+DESCRIPTION = "Replaces the schema description embedded in the prompt with a compact list"
+DESCRIPTION_JA = "プロンプトに埋め込まれたスキーマ説明文を、簡潔な一覧表記に置き換える"
+AUTHOR = "R01/Flossian"
 
 # Python 表記／JSON 表記のどちらでも拾う。プロキシの SchemaMarkers と同じ。
 SCHEMA_MARKERS = ("{'$defs':", "{'properties':", '{"$defs":', '{"properties":')

@@ -66,7 +66,12 @@ import time
 from instantale_modloader import ui
 
 
-NAME = "feature: non-combat mini quests (gather / rescue / scout)"
+NAME = "Non-combat mini quests"
+NAME_JA = "戦闘なしミニクエスト"
+VERSION = "1"
+DESCRIPTION = "Adds non-combat mini quests (gather / rescue / scout) to the notice board"
+DESCRIPTION_JA = "戦闘を伴わないミニクエスト（採集・救助・偵察）を掲示板に追加する"
+AUTHOR = "R01/Flossian"
 
 LOG_BASENAME = "mini_quest.log"
 

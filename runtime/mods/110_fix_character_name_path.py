@@ -82,7 +82,12 @@ import sys
 
 from instantale_modloader import frames
 
-NAME = "fix: sanitize character names that cannot be Windows path components"
+NAME = "Character name sanitize"
+NAME_JA = "キャラクタ名の正規化"
+VERSION = "1"
+DESCRIPTION = "Replaces path-unsafe characters in character names so portraits generate"
+DESCRIPTION_JA = "パスに使えない文字を含むキャラクタ名を全角に置き換え、画像生成の失敗を防ぐ"
+AUTHOR = "R01/Flossian"
 
 LOG_BASENAME = "character_name.log"
 

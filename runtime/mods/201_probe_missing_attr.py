@@ -23,7 +23,12 @@ import sys
 
 from instantale_modloader.frames import repr_value
 
-NAME = "probe: tripwire on missing attributes of FreeInputStart"
+NAME = "Missing attribute probe"
+NAME_JA = "欠落属性の計測"
+VERSION = "1"
+DESCRIPTION = "Finds where the missing FreeInputStart attribute is read, via a __getattr__ tripwire"
+DESCRIPTION_JA = "FreeInputStart の欠落属性を読んでいる箇所を、__getattr__ トリップワイヤで特定する"
+AUTHOR = "R01/Flossian"
 
 WATCH_CLASSES = ("FreeInputStart",)
 HIGHLIGHT = "facility_move_to"
