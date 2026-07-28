@@ -1,0 +1,33 @@
+{
+  "order": [
+    "000_recon",
+    "001_crash_recorder",
+    "100_fix_kivy_shutdown",
+    "101_fix_npc_employ_price",
+    "102_fix_prompt_dedup",
+    "103_fix_eventlog_trim",
+    "104_balance_area_bgm",
+    "105_fix_schema_compact",
+    "106_fix_battle_bgm_restore",
+    "107_fix_battle_flag_stuck",
+    "108_fix_shop_inventory_overflow",
+    "109_fix_item_detail_autosize",
+    "110_fix_character_name_path",
+    "200_probe_bug_sites",
+    "201_probe_missing_attr",
+    "202_probe_summarizers",
+    "203_probe_create_model",
+    "204_probe_prompt_bloat",
+    "205_probe_player_events",
+    "206_probe_quest_flow",
+    "207_probe_battle_bgm",
+    "208_probe_item_detail",
+    "300_event_facility_arrival",
+    "301_quest_from_conversation",
+    "302_leave_party_in_conversation",
+    "303_quest_end_party_to_guild",
+    "304_quest_end_keep_party",
+    "305_mini_quest"
+  ],
+  "disabled": []
+}

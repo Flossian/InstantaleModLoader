@@ -33,13 +33,6 @@ import traceback
 
 from instantale_modloader.frames import repr_value
 
-NAME = "Battle BGM probe"
-NAME_JA = "戦闘BGMの計測"
-VERSION = "1"
-DESCRIPTION = "Measures how the battle BGM switches (call sites of play_music_from_src)"
-DESCRIPTION_JA = "戦闘 BGM の切り替え経路（play_music_from_src の呼び出し元）を計測する"
-AUTHOR = "R01/Flossian"
-
 LOG_BASENAME = "battle_bgm.log"
 
 # 起動直後に一度だけ、音まわりの今の姿を写し取る。

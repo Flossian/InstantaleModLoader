@@ -42,9 +42,12 @@ from ctypes import wintypes
 
 import logrotate
 
+# このファイルは tools/ にあるので、1階層上がった所が配布フォルダの根。
+# runtime/ と out/ はそこに置かれる（ここを間違えると tools/runtime を見に行く）。
 HERE = os.path.dirname(os.path.abspath(__file__))
-RUNTIME_DIR = os.path.join(HERE, "runtime")
-OUT_DIR = os.path.join(HERE, "out")
+ROOT = os.path.dirname(HERE)
+RUNTIME_DIR = os.path.join(ROOT, "runtime")
+OUT_DIR = os.path.join(ROOT, "out")
 BOOT_LOG = os.path.join(OUT_DIR, "bootstrap.log")
 
 TARGET_EXE = "instantale.exe"

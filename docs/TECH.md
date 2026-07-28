@@ -27,12 +27,14 @@ PyGILState_Release(s);
 これを 74 バイトの x64 スタブとして `VirtualAllocEx` + `CreateRemoteThread` で実行する。
 C コンパイラも管理者権限も要らず、ゲームフォルダは読むだけ（`sys.path` は本ディレクトリ
 配下の `runtime/` を向く）。注入されたコードは `instantale_modloader.boot()` を呼び、
-`runtime/mods/*.py` をファイル名順に適用する。
+`runtime/mods/` の各フォルダを `load_order.json` の順に適用する。
 
 ```
-watch.bat / watcher.py    ゲームの起動を監視して自動注入
-injector.py               PE解析 → x64スタブ → CreateRemoteThread
-logrotate.py              out/*.log の世代管理（注入 = 1世代の境目）
+InstantaleModLoader.bat   GUI を開く（配布物で唯一の入口）
+tools/gui.py              MOD 一覧・適用順・有効/無効・起動と注入
+tools/watch.bat, watcher.py  ゲームの起動を監視して自動注入（GUI 無し）
+tools/injector.py         PE解析 → x64スタブ → CreateRemoteThread
+tools/logrotate.py        out/*.log の世代管理（注入 = 1世代の境目）
 runtime/instantale_modloader/
     __init__.py   boot() / ログ / mod ディスカバリ / 世代発行 / 遅延設置の監視 / on_ready
     patch.py      @patch / @wrap / alias再束縛 / 世代管理 / 未import保留 / revert
@@ -40,19 +42,21 @@ runtime/instantale_modloader/
     frames.py     フレームローカル採取・値の要約・呼び出し元の特定
     ui.py         選択肢 / 画面の塗り替え / 会話の閉じ方 / idle待ち / 施設の引き当て
     recon.py      実行時リコン（モジュール構造ダンプ）
-runtime/mods/     MOD 本体（1バグ・1機能 = 1ファイル）
+runtime/mods/     MOD 本体（1バグ・1機能 = 1フォルダ。入口は mod.json が名指し）
+runtime/mods/load_order.json  適用順（"order"）と無効一覧（"disabled"）
 out/              ログとリコン成果物
-tools/            静的検査・オフライン検証・セーブ操作（すべてゲーム不要）
+tools/            上記に加え、静的検査・オフライン検証・セーブ操作（ゲーム不要）
+docs/             README.md / TECH.md / VERIFICATION.md
 ```
 
-**注入のタイミング。** `watcher.py` は新しい pid に対し、(1) `Py_IsInitialized` をリモート
+**注入のタイミング。** `tools/watcher.py` は新しい pid に対し、(1) `Py_IsInitialized` をリモート
 スレッドで直接呼んでインタプリタ初期化を確認し、(2) 可視ウィンドウの出現を待つ。後者は
 Kivy が立ち上がり `__main__` の実行が終わった合図。これより早く注入してもパッチ対象が
 まだ存在しない。
 
 **ログの世代管理。** ログは全て「開く→追記→閉じる」で書かれるので、何もしなければ
 プレイをまたいで積み上がる（実測で `events.log` / `quest_flow.log` が数MB）。
-`logrotate.py` が**注入の直前に** `out/` 直下の `*.log` を `名前.log.1` へ送り、本体を
+`tools/logrotate.py` が**注入の直前に** `out/` 直下の `*.log` を `名前.log.1` へ送り、本体を
 空から始める（`KEEP_GENERATIONS` 世代ぶん保持、既定 1）。切り替えは
 `--no-log-rotate` → 環境変数 `INSTANTALE_LOG_ROTATE` → `ROTATE_LOGS` の順に優先。
 
@@ -86,11 +90,11 @@ python tools/test_character_name_sanitize.py  # 110_
 python -c "import sys; sys.path.insert(0,'runtime'); import instantale_modloader as l; print(l.boot('out/test/bootcheck'))"
 
 # 4. 注入（ゲームが起動している状態で）
-python injector.py
-python injector.py --dry-run   # アドレス解決だけ。何も書き込まない
+python tools/injector.py
+python tools/injector.py --dry-run   # アドレス解決だけ。何も書き込まない
 ```
 
-**編集ループは「MOD を編集 → `python injector.py`」。** `boot()` が
+**編集ループは「MOD を編集 → `python tools/injector.py`」。** `boot()` が
 `instantale_modloader` を `sys.modules` から落として再 import するので、そのまま反映される
 （層は積み上がらない。§3.5）。
 
@@ -104,7 +108,7 @@ python injector.py --dry-run   # アドレス解決だけ。何も書き込ま�
 **ゲーム側は Python 3.10。** 3.11 以降の構文を使わないこと（この環境の python は 3.13 しか
 無いので `compileall` は 3.10 互換を保証しない）。
 
-**`watch.bat` は ASCII のみ。** `.bat` はその時のコンソールのコードページで読まれるため、
+**`.bat` は ASCII のみ。** `.bat` はその時のコンソールのコードページで読まれるため、
 日本語を入れると環境によって解析が壊れる。
 
 **ツールから MOD を読むときは番号を書かない。** `tools/` の各スクリプトは
@@ -117,11 +121,44 @@ python injector.py --dry-run   # アドレス解決だけ。何も書き込ま�
 
 ### 3.1 最小の形
 
+**1つの MOD = 1つのフォルダ**で、`mod.json` を持つものが MOD:
+
+```
+runtime/mods/
+    load_order.json             適用順（§3.2）
+    fix_timings/
+        mod.json                名乗りと入口の宣言。ローダはまずこれを読む
+        timings.py              入口。apply(ctx) を定義する
+    mini_quest/
+        mod.json
+        quest.py                入口
+        prompts.py              分割した中身（from . import prompts）
+        data/quest_table.json   同梱データ（ctx.mod_dir から読む）
+```
+
+**フォルダ名にもファイル名にも決まりは無い。** 入口は `mod.json` が名指しする:
+
+```json
+{
+  "entry": "timings.py",
+  "name":        {"en": "Timings KeyError fix", "ja": "timings 欠落の修正"},
+  "description": {"en": "Swallows the KeyError ...", "ja": "..."},
+  "version": "1",
+  "author": "R01/Flossian"
+}
+```
+
+探索は**この1階層だけ**で、再帰しない。深く潜ると MOD の中の補助モジュール
+（上の `prompts.py`）まで MOD として拾ってしまい、「何が MOD なのか」の規則が増える。
+
+小さい MOD でもフォルダにする。**単一ファイルとの混在を許さない**のは、
+探索・静的検査・GUI・「新しい MOD をどう作るか」の4箇所すべてに分岐が増えるため。
+
+入口ファイル:
+
 ```python
 # -*- coding: utf-8 -*-
 """何をする MOD か。なぜその作りなのか。"""
-
-NAME = "fix: swallow KeyError 'timings'"
 
 def apply(ctx):
     @ctx.wrap("scripts.llm.request_llm_inference_llama_cpp_completion:send_request")
@@ -142,6 +179,7 @@ def apply(ctx):
 | `ctx.resolve(target)` | `(owner, name, value)` を返す。調査用 |
 | `ctx.log(...)` / `ctx.log_exc(...)` | `out/modloader.log` へ |
 | `ctx.out_path(name)` | `out/<name>` の絶対パス。MOD 専用ログはここへ |
+| `ctx.mod_dir` | いま apply() 中の MOD のフォルダ。**同梱データを読む用**（書くのは `out/`） |
 | `ctx.on_ready(fn)` | **プロセスにつき1回だけ**メインスレッドで実行（§3.6） |
 | `ctx.patches()` | 対象 → 当てた MOD の一覧。自分より前の分が見える（§3.7） |
 
@@ -153,41 +191,74 @@ def apply(ctx):
 対象名を打ち間違えた MOD が「当たった」ことになってしまうため。名前を新設したいときだけ
 `required=False` を明示する。
 
-**名乗り（モジュール変数。すべて任意・表示専用）:**
+**名乗り（`mod.json`。`entry` 以外は任意・表示専用）:**
 
-```python
-NAME    = "Item detail autosize"          # 一覧に出す短い名前。無ければファイル名
-NAME_JA = "アイテム説明欄の拡張"
-VERSION = "1"
-DESCRIPTION    = "Grows the item detail box only when a long name will not fit"
-DESCRIPTION_JA = "アイテム説明欄を、長い名前・説明が入り切らないときだけ広げる"
-AUTHOR  = "R01/Flossian"
+```json
+{
+  "entry": "item_detail.py",
+  "name":        {"en": "Item detail autosize", "ja": "アイテム説明欄の拡張"},
+  "description": {"en": "Grows the item detail box only when a long name will not fit",
+                  "ja": "アイテム説明欄を、長い名前・説明が入り切らないときだけ広げる"},
+  "version": "1",
+  "author": "R01/Flossian"
+}
 ```
 
-多言語は**接尾辞**で持つ（`_JA` が日本語、無印が英語）。`status()["manifests"]` は
-言語ごとの分岐を書かなくて済むよう、次の形に均して返す:
+**名乗りを Python ではなく JSON に置いているのが要点。** GUI は MOD の一覧を作るのに
+**コードを1行も走らせずに済む** — 無効化中の MOD も、壊れている MOD も、名前付きで
+並べられる。モジュール変数に置くと、一覧表示のためだけに他人の MOD を import する
+ことになり、import した時点でトップレベルのコードは走ってしまう。
+
+`status()["manifests"]` は言語ごとの分岐を書かなくて済むよう、次の形に均して返す:
 
 ```python
-{"file": "109_...py",
+{"dir": "109_fix_item_detail_autosize", "entry": "item_detail.py",
  "name":        {"en": "Item detail autosize", "ja": "アイテム説明欄の拡張"},
  "description": {"en": "...",                  "ja": "..."},
  "version": "1", "author": "R01/Flossian"}
 ```
 
-**片方しか書かれていなければもう片方で埋める**ので、`name["ja"]` は必ず何かを返す
-（GUI の行が空にならない）。`_JA` を書かない MOD もそのまま動く。
+**片方の言語しか書かれていなければもう片方で埋める**ので、`name["ja"]` は必ず何かを
+返す（GUI の行が空にならない）。`"name": "Some mod"` のように文字列1つでも書ける。
 
-`NAME` は**一覧に並べる名前**なので短く保つ（英語 半角30 / 日本語 全角12 まで。
+`name` は**一覧に並べる名前**なので短く保つ（英語 半角30 / 日本語 全角12 まで。
 `tools/test_patch_registry.py` が長さを検査する）。何をする MOD かの説明は
-`DESCRIPTION` 側に置き、設計判断は docstring に書く。
+`description` 側に置き、設計判断は入口ファイルの docstring に書く。
 
-**ログにはファイル名を出す**（名乗りは出さない）。ファイル名は適用順そのもので一意、
-cp932 のコンソールでも化けず、grep もしやすい。VERSION を必須にしないのは、
+**ログにはフォルダ名を出す**（名乗りは出さない）。フォルダ名はインストール単位で一意、
+cp932 のコンソールでも化けず、grep もしやすい。`version` を必須にしないのは、
 バグ修正1本の MOD にまで版番号を付けて回ることになるため。
 
-### 3.2 採番と適用順
+### 3.2 適用順
 
-ファイル名順（`sorted()`）に適用され、**後から適用した MOD が外側**になる。
+**`runtime/mods/load_order.json` が適用順を決める。** 先に適用した MOD ほど内側、
+**後から適用した MOD が外側**になる。
+
+```json
+{"order": ["000_recon", "001_crash_recorder", "100_fix_kivy_shutdown", "..."],
+ "disabled": ["000_recon"]}
+```
+
+`"disabled"` に載っている MOD は読み込まない。GUI のチェックボックスの実体で、
+**フォルダ名を変えずに切れる**ようにしてある（無効化を `_` 接頭辞でやると、切った
+瞬間に `"order"` の中の名前と食い違う）。切った MOD は `modloader.log` に
+`disabled in load_order.json; not loaded: ...` として必ず残す。
+
+順序をフォルダ名から決めるのをやめたのは、フォルダ名を自由に付けられるようにしたため
+（「名前は自由」と「順序は名前で決まる」は両立しない）。同梱 MOD のフォルダ名に残って
+いる `000_` `100_` などの番号は**作者側の整理のためだけのもので、ローダは見ていない**。
+
+| 状況 | 挙動 |
+|---|---|
+| 順序ファイルに無い MOD | 捨てずに**末尾へ回す**（フォルダ名順）。置いただけで動く |
+| 順序ファイルにあるが実体が無い | 黙って飛ばす（消した MOD の記述が残っていても壊れる） |
+| 順序ファイルが壊れている / 無い | **フォルダ名順で動く**。ここで例外にすると MOD が全滅する |
+| `"disabled"` にあるが実体が無い | 何もしない（無効化の記述が残っていても壊れない） |
+
+順序は動作の前提なので、`tools/check_mods.py` が
+**宣言と実体のずれ（未記載・実体なし・重複）を注入前に報告する。**
+
+同梱 MOD の番号は次の意味で振ってある:
 
 | 帯 | 分類 | 基準 |
 |---|---|---|
@@ -210,11 +281,11 @@ cp932 のコンソールでも化けず、grep もしやすい。VERSION を必�
                              → 305_ が先に前提を書き換え、105_ がその後でスキーマを縮める
 ```
 
-`NAME` の接頭辞（`fix:` / `feature:` / `probe:`）は帯とは別の軸。ゲーム本体の挙動を変える
-なら機能追加でも 100番台でよい（`104_balance_area_bgm`）。番号を振り直すときは
-「計測は対象より外側」という関係が崩れていないかだけ確かめる。
+帯は帯であって分類の軸ではない。ゲーム本体の挙動を変えるなら機能追加でも 100番台で
+よい（`104_balance_area_bgm`）。**番号を振り直すときは `load_order.json` も直すこと**
+（フォルダ名を変えるので）。`check_mods.py` が食い違いを報告する。
 
-**先頭に `_` を付けたファイルは読み込まれない**（一時的な無効化）。
+**先頭に `_` を付けたフォルダは読み込まれない**（一時的な無効化。GUI が入るまでの手段）。
 
 ### 3.3 同じ場面に複数の MOD が乗るとき
 
@@ -294,7 +365,7 @@ def apply(ctx):
 | 実行スレッド | Kivy の `Clock` 経由＝**メインスレッド**（`boot()` はリモートスレッドの上） |
 | タイミング | 全 MOD の適用が済んでから。`delay=` で先送りできる |
 | 例外 | 握り潰してログへ。`Clock` の中で投げるとゲームが落ちるため |
-| キー | 既定は「ファイル名 + 関数名」。`key=` で明示できる |
+| キー | 既定は「MOD 名 + 関数名」。`key=` で明示できる |
 | 戻り値 | 積まれたら `True`、既に実行済みで捨てられたら `False` |
 
 印は**積んだ時点**で付ける（実行時ではない）。流す前に次の boot が来ても二重に積まれない
@@ -318,11 +389,11 @@ def apply(ctx):
 ```
 patches: 61 applied on 54 target(s) by 26 mod(s)
 overlapping targets (5):
-  llama_cpp_runtime_completion:LlamaCppClient.chat <- 105_fix_schema_compact.py, 305_mini_quest.py
+  llama_cpp_runtime_completion:LlamaCppClient.chat <- 105_fix_schema_compact/, 305_mini_quest/
 deferred (2): waiting for the module to be imported
-  llm_manager:quest_referee_event_resolve (scripts.llm.llm_manager) <- 206_probe_quest_flow.py
+  llm_manager:quest_referee_event_resolve (scripts.llm.llm_manager) <- 206_probe_quest_flow/
 UNRESOLVED (1): target not found in the running build
-  scripts.ui.shop:ShopFrame.refresh <- 108_fix_shop_inventory_overflow.py (attribute not found)
+  scripts.ui.shop:ShopFrame.refresh <- 108_fix_shop_inventory_overflow/ (attribute not found)
 ```
 
 | 節 | 意味 | 対処 |
@@ -349,15 +420,15 @@ instantale_modloader.status()       # 下記すべてを1回で
 
 | キー | 内容 |
 |---|---|
-| `["mods"]` | ファイル名 → `ok` / `load-error` / `apply-error` / `no-apply` |
-| `["manifests"]` | ファイル名 → 名乗り（`name` / `description` は `{"en", "ja"}`。§3.1） |
+| `["mods"]` | MOD 名（フォルダ名）→ `ok` / `no-entry` / `load-error` / `apply-error` / `no-apply` |
+| `["manifests"]` | MOD 名 → 名乗り（`name` / `description` は `{"en", "ja"}`。§3.1） |
 | `["patches"]` | 台帳（`by_target` / `by_mod` / `conflicts` / `deferred` / `unresolved` / `counts`） |
 
 `format_report()` が「人が読む行」を返すのに対し、`status()["patches"]`（＝
 `patch_registry.summary()`）は**データのまま**返す。並び順や言い回しは受け取った側で
 決められるよう、ここでは整形しない。
 
-`apply()` の中からは `ctx.patches()`。ファイル名順の適用なので、見えるのは**自分より前に
+`apply()` の中からは `ctx.patches()`。順に適用されるので、見えるのは**自分より前に
 読み込まれた MOD の分だけ**。
 
 ---

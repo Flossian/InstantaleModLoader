@@ -17,7 +17,8 @@ rem  then whatever "python" is on PATH.
 rem
 rem  ASCII only on purpose: a .bat is read using the current console code page,
 rem  so non-ASCII text here would break parsing on some machines.
-rem  Japanese notes live in README.md / TECH.md.
+rem  Japanese notes live in docs\README.md / docs\TECH.md.
+rem  The GUI (..\InstantaleModLoader.bat) does the same job with a window.
 rem ---------------------------------------------------------------------------
 setlocal
 cd /d "%~dp0"

@@ -1,0 +1,13 @@
+{
+  "entry": "probe_missing_attr.py",
+  "name": {
+    "en": "Missing attribute probe",
+    "ja": "欠落属性の計測"
+  },
+  "description": {
+    "en": "Finds where the missing FreeInputStart attribute is read, via a __getattr__ tripwire",
+    "ja": "FreeInputStart の欠落属性を読んでいる箇所を、__getattr__ トリップワイヤで特定する"
+  },
+  "version": "1",
+  "author": "R01/Flossian"
+}

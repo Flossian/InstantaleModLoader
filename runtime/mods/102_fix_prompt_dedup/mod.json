@@ -1,0 +1,13 @@
+{
+  "entry": "fix_prompt_dedup.py",
+  "name": {
+    "en": "Prompt dedup",
+    "ja": "プロンプト重複の除去"
+  },
+  "description": {
+    "en": "Collapses duplicated blocks in the LLM prompt to stop it from growing",
+    "ja": "LLM プロンプト内で重複した同一ブロックを畳み、プロンプトの肥大を抑える"
+  },
+  "version": "1",
+  "author": "R01/Flossian"
+}

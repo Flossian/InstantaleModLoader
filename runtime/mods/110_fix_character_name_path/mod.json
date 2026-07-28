@@ -1,0 +1,13 @@
+{
+  "entry": "fix_character_name_path.py",
+  "name": {
+    "en": "Character name sanitize",
+    "ja": "キャラクタ名の正規化"
+  },
+  "description": {
+    "en": "Replaces path-unsafe characters in character names so portraits generate",
+    "ja": "パスに使えない文字を含むキャラクタ名を全角に置き換え、画像生成の失敗を防ぐ"
+  },
+  "version": "1",
+  "author": "R01/Flossian"
+}

@@ -80,13 +80,6 @@ import os
 import random
 import sys
 
-NAME = "Area BGM balance"
-NAME_JA = "エリアBGMの均し"
-VERSION = "1"
-DESCRIPTION = "Evens out BGM for newly generated areas so unused tracks get played too"
-DESCRIPTION_JA = "新しく生成されるエリアの BGM の偏りを均し、使われていなかった曲も出るようにする"
-AUTHOR = "R01/Flossian"
-
 MUSIC_MARKER = "assets/sounds/musics"
 AUDIO_EXT = (".mp3", ".wav", ".ogg", ".flac", ".opus", ".m4a")
 

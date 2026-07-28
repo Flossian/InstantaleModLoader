@@ -31,13 +31,6 @@ import traceback
 
 from instantale_modloader.frames import describe_instance, format_locals, repr_value
 
-NAME = "Crash site probe"
-NAME_JA = "クラッシュ地点の計測"
-VERSION = "1"
-DESCRIPTION = "Instruments the 4 open crash sites on every call, not just on failure (read-only)"
-DESCRIPTION_JA = "未解決の4つのクラッシュ地点を、失敗時だけでなく毎回計測する（読み取り専用）"
-AUTHOR = "R01/Flossian"
-
 LOG_BASENAME = "probes.log"
 MAX_TABLE_DICTS = 12
 

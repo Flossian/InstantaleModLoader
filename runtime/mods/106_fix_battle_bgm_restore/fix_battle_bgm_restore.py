@@ -61,13 +61,6 @@ import datetime
 import sys
 import time
 
-NAME = "Battle BGM restore"
-NAME_JA = "戦闘BGMの復帰"
-VERSION = "1"
-DESCRIPTION = "Stops the battle BGM after a battle and clears orphaned overlapping tracks"
-DESCRIPTION_JA = "戦闘終了後も鳴り続ける戦闘 BGM を止め、重なって残った迷子の曲を掃除する"
-AUTHOR = "R01/Flossian"
-
 LOG_BASENAME = "battle_bgm.log"      # 207_ の計測と同じログに時系列で並べる
 
 # 戦闘曲かどうかの判定。Assets/sounds/musics/battle/ 配下だけが戦闘曲。

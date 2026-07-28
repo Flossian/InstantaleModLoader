@@ -1,0 +1,13 @@
+{
+  "entry": "event_facility_arrival.py",
+  "name": {
+    "en": "NPC greets on arrival",
+    "ja": "施設でNPCが話しかける"
+  },
+  "description": {
+    "en": "An NPC at the facility starts a conversation when you arrive",
+    "ja": "施設に着くと、その場に居る NPC の方から会話を始めてくるようにする"
+  },
+  "version": "1",
+  "author": "R01/Flossian"
+}

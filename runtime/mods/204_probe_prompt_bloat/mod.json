@@ -1,0 +1,13 @@
+{
+  "entry": "probe_prompt_bloat.py",
+  "name": {
+    "en": "Prompt bloat probe",
+    "ja": "プロンプト肥大の計測"
+  },
+  "description": {
+    "en": "Measures the EVENTLOG / DEDUP / sidecar launch prompt bloat behaviours",
+    "ja": "EVENTLOG / DEDUP / サイドカー起動という3つのプロンプト肥大化挙動を実測する"
+  },
+  "version": "1",
+  "author": "R01/Flossian"
+}

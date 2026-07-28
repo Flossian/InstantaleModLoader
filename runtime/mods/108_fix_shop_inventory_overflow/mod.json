@@ -1,0 +1,13 @@
+{
+  "entry": "fix_shop_inventory_overflow.py",
+  "name": {
+    "en": "Shop crash fix",
+    "ja": "売買画面クラッシュの修正"
+  },
+  "description": {
+    "en": "Prevents the IndexError when a shop item lands outside the inventory grid",
+    "ja": "売買画面で持ち物の置き場所がはみ出したときの IndexError を防ぐ"
+  },
+  "version": "1",
+  "author": "R01/Flossian"
+}

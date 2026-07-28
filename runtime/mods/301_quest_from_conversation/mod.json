@@ -1,0 +1,13 @@
+{
+  "entry": "quest_from_conversation.py",
+  "name": {
+    "en": "Quests from conversation",
+    "ja": "会話から依頼を受ける"
+  },
+  "description": {
+    "en": "Accept quests from conversation, or generate one from what you just talked about",
+    "ja": "会話から依頼を受注できる。いま話した内容から依頼を1件生成することもできる"
+  },
+  "version": "1",
+  "author": "R01/Flossian"
+}

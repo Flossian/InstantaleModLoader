@@ -1,0 +1,13 @@
+{
+  "entry": "fix_schema_compact.py",
+  "name": {
+    "en": "Schema compaction",
+    "ja": "スキーマ説明の圧縮"
+  },
+  "description": {
+    "en": "Replaces the schema description embedded in the prompt with a compact list",
+    "ja": "プロンプトに埋め込まれたスキーマ説明文を、簡潔な一覧表記に置き換える"
+  },
+  "version": "1",
+  "author": "R01/Flossian"
+}

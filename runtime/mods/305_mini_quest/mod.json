@@ -1,0 +1,13 @@
+{
+  "entry": "mini_quest.py",
+  "name": {
+    "en": "Non-combat mini quests",
+    "ja": "戦闘なしミニクエスト"
+  },
+  "description": {
+    "en": "Adds non-combat mini quests (gather / rescue / scout) to the notice board",
+    "ja": "戦闘を伴わないミニクエスト（採集・救助・偵察）を掲示板に追加する"
+  },
+  "version": "1",
+  "author": "R01/Flossian"
+}

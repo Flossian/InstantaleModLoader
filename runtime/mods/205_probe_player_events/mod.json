@@ -1,0 +1,13 @@
+{
+  "entry": "probe_player_events.py",
+  "name": {
+    "en": "Player event probe",
+    "ja": "行動イベントの計測"
+  },
+  "description": {
+    "en": "Finds where to hook events triggered by player actions",
+    "ja": "プレイヤーの行動をトリガーにしたイベントの差し込み場所を特定する"
+  },
+  "version": "1",
+  "author": "R01/Flossian"
+}

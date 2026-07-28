@@ -1,0 +1,13 @@
+{
+  "entry": "probe_item_detail.py",
+  "name": {
+    "en": "Item detail probe",
+    "ja": "アイテム説明欄の計測"
+  },
+  "description": {
+    "en": "Captures the real geometry of the item detail box to see why text is cut off",
+    "ja": "アイテム説明欄の実寸と中身を写し取り、説明が途中で切れる原因を測る"
+  },
+  "version": "1",
+  "author": "R01/Flossian"
+}

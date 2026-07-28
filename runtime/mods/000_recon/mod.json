@@ -1,0 +1,13 @@
+{
+  "entry": "recon.py",
+  "name": {
+    "en": "Module recon",
+    "ja": "モジュール調査"
+  },
+  "description": {
+    "en": "Dumps the running module structure to out/recon/ (changes nothing in the game)",
+    "ja": "ゲームの内部構造を走査し、パッチ対象の一覧を out/recon/ に書き出す（ゲームは変更しない）"
+  },
+  "version": "1",
+  "author": "R01/Flossian"
+}

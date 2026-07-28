@@ -1,0 +1,13 @@
+{
+  "entry": "crash_recorder.py",
+  "name": {
+    "en": "Crash recorder",
+    "ja": "クラッシュ記録"
+  },
+  "description": {
+    "en": "Records full tracebacks and frame locals to out/live_crashes.log",
+    "ja": "クラッシュ時のトレースバックとフレーム変数を、省略なしで out/live_crashes.log に残す"
+  },
+  "version": "1",
+  "author": "R01/Flossian"
+}

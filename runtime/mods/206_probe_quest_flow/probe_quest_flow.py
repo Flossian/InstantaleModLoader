@@ -35,13 +35,6 @@ import time
 
 from instantale_modloader.frames import repr_value
 
-NAME = "Quest flow probe"
-NAME_JA = "クエスト経路の計測"
-VERSION = "1"
-DESCRIPTION = "Finds the quest acceptance path and how choice buttons are registered"
-DESCRIPTION_JA = "クエストの受注経路と、選択肢ボタンの登録方法を特定する"
-AUTHOR = "R01/Flossian"
-
 LOG_BASENAME = "quest_flow.log"
 
 # 起動直後に一度だけ、今のゲーム状態を写し取る。

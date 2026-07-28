@@ -1,0 +1,13 @@
+{
+  "entry": "fix_battle_bgm_restore.py",
+  "name": {
+    "en": "Battle BGM restore",
+    "ja": "戦闘BGMの復帰"
+  },
+  "description": {
+    "en": "Stops the battle BGM after a battle and clears orphaned overlapping tracks",
+    "ja": "戦闘終了後も鳴り続ける戦闘 BGM を止め、重なって残った迷子の曲を掃除する"
+  },
+  "version": "1",
+  "author": "R01/Flossian"
+}

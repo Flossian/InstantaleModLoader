@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import datetime
 import importlib.util
+import json
 import os
 import sys
 import threading
@@ -211,6 +212,22 @@ class ModContext:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
+    @property
+    def mod_dir(self) -> str | None:
+        """いま apply() が走っている mod のフォルダ。同梱データを読むとき用。
+
+            table = json.load(open(os.path.join(ctx.mod_dir, "data", "x.json")))
+
+        **読む専用**。書き込みは `ctx.out_path()`（out/ 以下）へ。mods/ は
+        配布物そのもので、遊ぶ側が書き換わることを想定していない。
+
+        apply() の外（`on_ready` の中など）では None になるので、フォルダを
+        後で使うなら apply() の中で控えておく。
+        """
+        if self._mod is None:
+            return None
+        return os.path.join(self.runtime_dir, "mods", self._mod)
+
     # -- 実行環境の情報 -----------------------------------------------------
     @property
     def game_dir(self) -> str:
@@ -241,12 +258,126 @@ def _mods_dir() -> str:
     return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "mods")
 
 
+MANIFEST_NAME = "mod.json"
+ORDER_NAME = "load_order.json"
+
+
+def _read_json(path: str):
+    """JSON を読む。読めなければ None（呼び出し側が既定へ倒す）。"""
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except FileNotFoundError:
+        return None
+    except Exception:
+        log_exc("cannot read {}".format(path))
+        return None
+
+
+def _installed(mods_dir: str) -> list[str]:
+    """mods/ に入っている mod のフォルダ名。並びは名前順。
+
+    **1つの mod は1つのフォルダ**で、`mod.json` を持つものだけを mod とみなす:
+
+        mods/mini_quest/mod.json      名乗りと入口ファイルの宣言
+        mods/mini_quest/quest.py      入口（mod.json の "entry"）
+        mods/mini_quest/prompts.py    分割した中身（from . import prompts）
+        mods/mini_quest/data/...      同梱データ（ctx.mod_dir から読む）
+
+    フォルダ名にもファイル名にも決まりは無い。入口は `mod.json` が名指しする。
+
+    探索は**この1階層だけ**で、再帰しない。深く潜ると mod の中の補助モジュール
+    （上の `prompts.py`）まで mod として拾ってしまい、「何が mod なのか」の規則が
+    増える。
+
+    先頭が "_" のフォルダは読み込まない（手で切るときの逃げ道。GUI から切った
+    ものは `load_order.json` の "disabled" に載る ― `_discover` を参照）。
+    """
+    found = []
+    for name in sorted(os.listdir(mods_dir)):
+        if name.startswith("_") or name.startswith("."):
+            continue
+        if os.path.isfile(os.path.join(mods_dir, name, MANIFEST_NAME)):
+            found.append(name)
+    return found
+
+
+def _discover(mods_dir: str) -> list[str]:
+    """mod を**適用順に**並べて返す。
+
+    このローダでは適用順が動作の前提になっている（TECH.md §3.2 — 計測は修正より
+    外側に置く、など）。順序はフォルダ名から決めるのをやめ、`load_order.json` が
+    明示的に持つ:
+
+        {"order": ["recon", "crash_recorder", "fix_kivy_shutdown", ...],
+         "disabled": ["recon"]}
+
+    `disabled` に載っている mod は**読み込まない**。GUI のチェックボックスの実体で、
+    フォルダ名を変えずに切れるようにしてある（`_` を付ける方式だと、無効にした
+    瞬間に `order` の中の名前と食い違う）。
+
+    こうしたのは、フォルダ名を自由に付けられるようにしたため。名前で順序を表すと
+    「名前は自由」と「順序は名前で決まる」が両立しない。
+
+    **順序ファイルに無い mod は捨てずに末尾へ回す**（フォルダ名順）。新しい mod を
+    フォルダごと置いただけで動くようにするため。逆に、順序ファイルに載っているが
+    実体が無いものは黙って飛ばす（消した mod の記述が残っていても壊れない）。
+
+    順序ファイルが読めなければフォルダ名順。**必ず何らかの決まった順で動く**ように
+    しておく ― ここで例外にすると、順序ファイルが壊れた瞬間に mod が全滅する。
+    """
+    found = _installed(mods_dir)
+    data = _read_json(os.path.join(mods_dir, ORDER_NAME))
+
+    order = []
+    if isinstance(data, dict):
+        order = data.get("order") or []
+    elif isinstance(data, list):        # 素の配列で書かれていても読む
+        order = data
+    if not isinstance(order, list):
+        log("{}: \"order\" is not a list; falling back to name order".format(ORDER_NAME),
+            level="WARN")
+        order = []
+
+    disabled = data.get("disabled") if isinstance(data, dict) else None
+    if not isinstance(disabled, list):
+        disabled = []
+    off = {name for name in disabled if isinstance(name, str)}
+    if off:
+        # 「入れたのに効かない」を黙って起こさない。切ったことは必ず残す。
+        skipped = sorted(off & set(found))
+        if skipped:
+            log("disabled in {}; not loaded: {}".format(ORDER_NAME, ", ".join(skipped)))
+
+    known = set(found) - off
+    ordered = []
+    for name in order:
+        if name in known and name not in ordered:
+            ordered.append(name)
+
+    extra = [name for name in found if name in known and name not in ordered]
+    if extra and order:
+        # 順序ファイルに無い mod。落とさずに末尾へ回したことを残す
+        # （「入れたのに効かない」を黙って起こさないため）。
+        log("not in {}; applied last: {}".format(ORDER_NAME, ", ".join(extra)))
+    return ordered + extra
+
+
 def _load_mod_file(path: str):
-    """mod ファイルをパス指定で読み込む。ゲームのモジュール名とは隔離する。"""
+    """mod をパス指定で読み込む。ゲームのモジュール名とは隔離する。
+
+    `path` は `mod.json` の "entry" が指すファイル。**パッケージとして**読み込むので、
+    入口の名前が何であれ、mod の中から `from . import prompts` で隣を引ける。
+    """
     # 専用の接頭辞を付けた名前で sys.modules に登録する。
     # ゲーム側のモジュール名とぶつかると、どちらかが壊れるため。
-    name = "instantale_mod_" + os.path.splitext(os.path.basename(path))[0]
-    spec = importlib.util.spec_from_file_location(name, path)
+    mod_dir = os.path.dirname(path)
+    name = "instantale_mod_" + os.path.basename(mod_dir)
+    # submodule_search_locations を渡すとパッケージ扱いになる。
+    # これが無いと mod の中の相対 import が
+    # 「親パッケージが無い」で落ちる（単一ファイルの頃は不要だった）。
+    spec = importlib.util.spec_from_file_location(
+        name, path, submodule_search_locations=[mod_dir])
     if spec is None or spec.loader is None:
         raise ImportError(f"cannot load spec for {path}")
     module = importlib.util.module_from_spec(spec)
@@ -261,30 +392,28 @@ def _load_mod_file(path: str):
     return module
 
 
-def _manifest(module, fname: str) -> dict:
-    """mod ファイルが名乗っている情報を集める。GUI の一覧に出す用。
+def _manifest(mods_dir: str, name: str) -> dict:
+    """mod.json を読んで、扱いやすい形に均して返す。GUI の一覧に出す用。
 
-    NAME 以外は全て任意で、無ければ空になるだけ。mod 側に何も強制しないのは、
-    ここが「動作に関わらない表示用の情報」だから。VERSION を必須にすると
-    バグ修正1本の mod にまで版番号を付けて回ることになる。
+        {"entry": "quest.py",
+         "name":        {"en": "Non-combat mini quests", "ja": "戦闘なしミニクエスト"},
+         "description": {"en": "...", "ja": "..."},
+         "version": "1", "author": "R01/Flossian"}
 
-    多言語は**接尾辞**で持つ。`NAME` が英語、`NAME_JA` が日本語:
+    **mod のコードを import せずに読める**ことがこの形の要点。GUI は無効化中の
+    mod も、壊れている mod も、一覧に出すだけならコードを一切走らせずに済む。
+    名乗りを Python のモジュール変数に置いていると、一覧を作るだけのために
+    他人の mod を import することになる（import した時点でトップレベルは走る）。
 
-        NAME    = "Item detail autosize"
-        NAME_JA = "アイテム説明欄の拡張"
-
-    受け取る側が言語ごとの分岐を書かなくて済むように、ここで
-
-        {"name": {"en": ..., "ja": ...}, ...}
-
-    の形に均してから返す。**片方しか書かれていなければもう片方で埋める**ので、
-    `manifest["name"]["ja"]` は必ず何かを返す（GUI が空欄にならない）。
-    `_JA` を書かない mod もそのまま動く。
-
-    値は str() に通す。mod が数値やタプルを入れていても整形で落ちないように。
+    `entry` 以外は全て任意。`name` は文字列でも `{"en":..., "ja":...}` でも書ける。
+    **片方の言語しか無ければもう片方で埋める**ので、`name["ja"]` は必ず何かを返す
+    （GUI の行が空にならない）。
     """
-    def field(attr: str) -> str:
-        value = getattr(module, attr, None)
+    data = _read_json(os.path.join(mods_dir, name, MANIFEST_NAME))
+    if not isinstance(data, dict):
+        data = {}
+
+    def text(value) -> str:
         if value is None:
             return ""
         try:
@@ -292,19 +421,25 @@ def _manifest(module, fname: str) -> dict:
         except Exception:
             return ""
 
-    def localized(attr: str, default: str = "") -> dict:
-        en = field(attr)
-        ja = field(attr + "_JA")
+    def localized(key: str, default: str = "") -> dict:
+        value = data.get(key)
+        if isinstance(value, dict):
+            en, ja = text(value.get("en")), text(value.get("ja"))
+        else:
+            en, ja = text(value), ""     # 文字列1つなら英語として扱う
         en = en or ja or default
         return {"en": en, "ja": ja or en}
 
     return {
-        "file": fname,
-        # NAME が無ければファイル名。GUI の行が名無しにならないように。
-        "name": localized("NAME", fname),
-        "description": localized("DESCRIPTION"),
-        "version": field("VERSION"),
-        "author": field("AUTHOR"),
+        "dir": name,
+        # 入口の既定。mod.json が無い/壊れている場合の受け皿で、
+        # 実際に読めるかどうかは boot() が確かめる。
+        "entry": text(data.get("entry")) or "mod.py",
+        # 名前が無ければフォルダ名。GUI の行が名無しにならないように。
+        "name": localized("name", name),
+        "description": localized("description"),
+        "version": text(data.get("version")),
+        "author": text(data.get("author")),
     }
 
 
@@ -462,26 +597,29 @@ def boot(out_dir: str) -> dict:
     if not os.path.isdir(mods_dir):
         log("no mods dir at {}".format(mods_dir), level="WARN")
     else:
-        # ファイル名順がそのまま適用順になる。
-        # 先頭が "_" のファイルは読み込まない（一時的に無効化したいとき用）。
-        files = sorted(f for f in os.listdir(mods_dir)
-                       if f.endswith(".py") and not f.startswith("_"))
-        log("{} mod file(s) in {}".format(len(files), mods_dir))
-        for fname in files:
-            path = os.path.join(mods_dir, fname)
+        # 適用順は load_order.json が決める（_discover を参照）。
+        names = _discover(mods_dir)
+        log("{} mod(s) in {}".format(len(names), mods_dir))
+        for fname in names:
+            # 名乗りは**コードを読み込む前**に集める。こうしておくと、
+            # 読み込みに失敗した mod も GUI の一覧に名前付きで出せる。
+            manifest = _manifest(mods_dir, fname)
+            manifests[fname] = manifest
+            path = os.path.join(mods_dir, fname, manifest["entry"])
+
             # 読み込みでも apply() でも、失敗したらログに残して次の mod へ進む。
             # 1つの mod が壊れているせいで残り全部が動かないのを防ぐため。
+            if not os.path.isfile(path):
+                log("{}: entry {!r} not found".format(fname, manifest["entry"]),
+                    level="WARN")
+                results[fname] = "no-entry"
+                continue
             try:
                 module = _load_mod_file(path)
             except BaseException:
                 log_exc("load failed: {}".format(fname))
                 results[fname] = "load-error"
                 continue
-
-            # 名乗りは GUI 用に集めるだけで、ログには出さない。
-            # ログの見出しは常にファイル名にしてある。ファイル名は適用順そのもの
-            # （番号付き）で一意、cp932 のコンソールでも化けない、grep もしやすい。
-            manifests[fname] = _manifest(module, fname)
 
             apply_fn = getattr(module, "apply", None)
             if apply_fn is None:

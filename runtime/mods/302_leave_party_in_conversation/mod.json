@@ -1,0 +1,13 @@
+{
+  "entry": "leave_party_in_conversation.py",
+  "name": {
+    "en": "Part ways in conversation",
+    "ja": "会話で仲間と別れる"
+  },
+  "description": {
+    "en": "Part ways with a party member from conversation; they stay where they were hired",
+    "ja": "会話から仲間と別れられる。別れた相手は雇われた場所（土地を跨ぐ場合はいまの町のギルド）に残る"
+  },
+  "version": "1",
+  "author": "R01/Flossian"
+}

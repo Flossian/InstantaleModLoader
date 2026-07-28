@@ -71,13 +71,6 @@ import datetime
 
 from instantale_modloader import frames, ui
 
-NAME = "Disband at local guild"
-NAME_JA = "解散先をいまの町に"
-VERSION = "1"
-DESCRIPTION = "Quest-end disband leaves members at the guild of the town you are in"
-DESCRIPTION_JA = "クエストクリアの解散で、仲間をいま居る町のギルドに残す"
-AUTHOR = "R01/Flossian"
-
 # `302_` と同じログに書く（パーティの増減と解散を1つの時系列で読むため）。
 LOG_BASENAME = "party_leave.log"
 LOG_TAG = "quest-end"

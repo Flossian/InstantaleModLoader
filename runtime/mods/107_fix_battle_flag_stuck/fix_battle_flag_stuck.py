@@ -48,13 +48,6 @@ instantale.py:1460  play_music_from_src(area)     ← in_battle=0 のときの�
 import datetime
 import sys
 
-NAME = "Battle flag fix"
-NAME_JA = "戦闘フラグの修正"
-VERSION = "1"
-DESCRIPTION = "Clears the in_battle flag left set after a battle, keeping it out of saves"
-DESCRIPTION_JA = "戦闘終了後も残る in_battle フラグを下ろし、セーブへの焼き付きを防ぐ"
-AUTHOR = "R01/Flossian"
-
 LOG_BASENAME = "battle_bgm.log"   # 106_ / 207_ と同じ時系列で読めるようにする
 
 # 下ろすフラグ。実測で「ゲーム自身が下ろしている」ことを確認できたものだけ。

@@ -40,13 +40,6 @@ Nuitka 環境でパッチが「効かない」ときは、まずここを疑う�
 import ctypes
 from ctypes import wintypes
 
-NAME = "Shutdown crash fix"
-NAME_JA = "終了時クラッシュの修正"
-VERSION = "1"
-DESCRIPTION = "Stops the crash on exit and unmasks the real exception hidden behind it"
-DESCRIPTION_JA = "ゲーム終了時に Kivy が落ちるのを抑え、隠れていた本来の例外を表に出す"
-AUTHOR = "R01/Flossian"
-
 GWL_WNDPROC_DEFAULT = -4
 
 # user32 を自前で読み込み直している。

@@ -27,13 +27,6 @@ import sys
 
 from instantale_modloader.frames import repr_value
 
-NAME = "Player event probe"
-NAME_JA = "行動イベントの計測"
-VERSION = "1"
-DESCRIPTION = "Finds where to hook events triggered by player actions"
-DESCRIPTION_JA = "プレイヤーの行動をトリガーにしたイベントの差し込み場所を特定する"
-AUTHOR = "R01/Flossian"
-
 LOG_BASENAME = "events.log"
 
 # 属性の全列挙は量が多いので、中身まで出すのはこのキーワードを含むものだけ。

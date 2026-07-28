@@ -1,0 +1,13 @@
+{
+  "entry": "probe_quest_flow.py",
+  "name": {
+    "en": "Quest flow probe",
+    "ja": "クエスト経路の計測"
+  },
+  "description": {
+    "en": "Finds the quest acceptance path and how choice buttons are registered",
+    "ja": "クエストの受注経路と、選択肢ボタンの登録方法を特定する"
+  },
+  "version": "1",
+  "author": "R01/Flossian"
+}

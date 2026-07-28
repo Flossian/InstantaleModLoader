@@ -29,13 +29,6 @@ import datetime
 import hashlib
 import sys
 
-NAME = "Prompt bloat probe"
-NAME_JA = "プロンプト肥大の計測"
-VERSION = "1"
-DESCRIPTION = "Measures the EVENTLOG / DEDUP / sidecar launch prompt bloat behaviours"
-DESCRIPTION_JA = "EVENTLOG / DEDUP / サイドカー起動という3つのプロンプト肥大化挙動を実測する"
-AUTHOR = "R01/Flossian"
-
 TURN_SEPARATOR = "〈プレイヤーの入力〉"
 EVENT_LOG_ARG = 2          # referee 2関数いずれも quest_event_log は第3引数
 DEDUP_MIN_BLOCK = 1000     # TECH.md と同じ閾値

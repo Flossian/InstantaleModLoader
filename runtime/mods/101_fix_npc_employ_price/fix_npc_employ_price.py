@@ -29,13 +29,6 @@ get_npc_employ_price は「int を受け取って int を返す、副作用の�
 上限超えの NPC 自体がバグなら、下に入れたクランプのログがその頻度を教えてくれる。
 """
 
-NAME = "NPC hire price fix"
-NAME_JA = "NPC雇用価格の修正"
-VERSION = "1"
-DESCRIPTION = "Prevents the KeyError in NPC hire pricing by using the game's own clamp"
-DESCRIPTION_JA = "NPC 雇用価格の KeyError を、ゲーム自身のクランプ関数を通して防ぐ"
-AUTHOR = "R01/Flossian"
-
 
 def apply(ctx):
     import sys

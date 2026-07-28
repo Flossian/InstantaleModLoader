@@ -1,0 +1,13 @@
+{
+  "entry": "fix_battle_flag_stuck.py",
+  "name": {
+    "en": "Battle flag fix",
+    "ja": "戦闘フラグの修正"
+  },
+  "description": {
+    "en": "Clears the in_battle flag left set after a battle, keeping it out of saves",
+    "ja": "戦闘終了後も残る in_battle フラグを下ろし、セーブへの焼き付きを防ぐ"
+  },
+  "version": "1",
+  "author": "R01/Flossian"
+}

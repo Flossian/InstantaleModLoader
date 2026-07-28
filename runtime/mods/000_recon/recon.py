@@ -13,13 +13,6 @@
 このファイルはゲームを一切変更しない。書き出すだけ。
 """
 
-NAME = "Module recon"
-NAME_JA = "モジュール調査"
-VERSION = "1"
-DESCRIPTION = "Dumps the running module structure to out/recon/ (changes nothing in the game)"
-DESCRIPTION_JA = "ゲームの内部構造を走査し、パッチ対象の一覧を out/recon/ に書き出す（ゲームは変更しない）"
-AUTHOR = "R01/Flossian"
-
 
 def apply(ctx):
     # ローダ本体のモジュールは、mod ファイルの先頭ではなく apply() の中で import する。

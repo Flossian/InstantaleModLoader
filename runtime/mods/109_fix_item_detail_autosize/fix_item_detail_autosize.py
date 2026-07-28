@@ -91,13 +91,6 @@ import weakref
 
 from instantale_modloader import frames
 
-NAME = "Item detail autosize"
-NAME_JA = "アイテム説明欄の拡張"
-VERSION = "1"
-DESCRIPTION = "Grows the item detail box only when a long name or description will not fit"
-DESCRIPTION_JA = "アイテム説明欄を、長い名前・説明が入り切らないときだけ広げる"
-AUTHOR = "R01/Flossian"
-
 LOG_BASENAME = "item_detail_autosize.log"
 
 # ログに残す組み合わせの上限。1アイテムにつき1件なので少しでいい。

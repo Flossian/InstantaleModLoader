@@ -1,0 +1,13 @@
+{
+  "entry": "quest_end_keep_party.py",
+  "name": {
+    "en": "Keep party after quest",
+    "ja": "クエスト後も解散しない"
+  },
+  "description": {
+    "en": "Quest completion no longer disbands the party (game balance changes on purpose)",
+    "ja": "クエストクリアでパーティを解散しない（ゲームバランスは意図的に変わる）"
+  },
+  "version": "1",
+  "author": "R01/Flossian"
+}

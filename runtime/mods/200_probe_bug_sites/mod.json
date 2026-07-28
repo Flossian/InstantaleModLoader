@@ -1,0 +1,13 @@
+{
+  "entry": "probe_bug_sites.py",
+  "name": {
+    "en": "Crash site probe",
+    "ja": "クラッシュ地点の計測"
+  },
+  "description": {
+    "en": "Instruments the 4 open crash sites on every call, not just on failure (read-only)",
+    "ja": "未解決の4つのクラッシュ地点を、失敗時だけでなく毎回計測する（読み取り専用）"
+  },
+  "version": "1",
+  "author": "R01/Flossian"
+}

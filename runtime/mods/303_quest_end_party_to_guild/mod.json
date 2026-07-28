@@ -1,0 +1,13 @@
+{
+  "entry": "quest_end_party_to_guild.py",
+  "name": {
+    "en": "Disband at local guild",
+    "ja": "解散先をいまの町に"
+  },
+  "description": {
+    "en": "Quest-end disband leaves members at the guild of the town you are in",
+    "ja": "クエストクリアの解散で、仲間をいま居る町のギルドに残す"
+  },
+  "version": "1",
+  "author": "R01/Flossian"
+}

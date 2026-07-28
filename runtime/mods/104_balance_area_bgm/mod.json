@@ -1,0 +1,13 @@
+{
+  "entry": "balance_area_bgm.py",
+  "name": {
+    "en": "Area BGM balance",
+    "ja": "エリアBGMの均し"
+  },
+  "description": {
+    "en": "Evens out BGM for newly generated areas so unused tracks get played too",
+    "ja": "新しく生成されるエリアの BGM の偏りを均し、使われていなかった曲も出るようにする"
+  },
+  "version": "1",
+  "author": "R01/Flossian"
+}

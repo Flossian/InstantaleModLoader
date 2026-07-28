@@ -26,13 +26,6 @@ import typing
 
 from instantale_modloader.frames import owner_of, repr_value
 
-NAME = "Model build probe"
-NAME_JA = "モデル生成の計測"
-VERSION = "1"
-DESCRIPTION = "Catches empty Literal[] as the pydantic model is built, recording the caller"
-DESCRIPTION_JA = "pydantic モデル生成の瞬間に空 Literal[] を捕らえ、呼び出し元まで記録する"
-AUTHOR = "R01/Flossian"
-
 MODULE = "scripts.llm.llm_manager"
 MAX_SCAN_DEPTH = 6
 

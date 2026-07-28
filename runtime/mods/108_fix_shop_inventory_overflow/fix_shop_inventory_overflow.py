@@ -57,13 +57,6 @@ import sys
 
 from instantale_modloader import frames
 
-NAME = "Shop crash fix"
-NAME_JA = "売買画面クラッシュの修正"
-VERSION = "1"
-DESCRIPTION = "Prevents the IndexError when a shop item lands outside the inventory grid"
-DESCRIPTION_JA = "売買画面で持ち物の置き場所がはみ出したときの IndexError を防ぐ"
-AUTHOR = "R01/Flossian"
-
 LOG_BASENAME = "inventory.log"
 
 # 正常に置けた呼び出しを何件記録するか。比較用の下地なので少しでいい。

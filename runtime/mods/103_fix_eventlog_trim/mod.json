@@ -1,0 +1,13 @@
+{
+  "entry": "fix_eventlog_trim.py",
+  "name": {
+    "en": "Event log trim",
+    "ja": "イベントログの刈り込み"
+  },
+  "description": {
+    "en": "Trims the in-event log to the last 3 turns to stop prompt growth",
+    "ja": "【今回のイベント内ログ】を直近3ターンぶんに刈り込み、プロンプトの肥大を抑える"
+  },
+  "version": "1",
+  "author": "R01/Flossian"
+}
