@@ -1,0 +1,82 @@
+{
+  "entry": "party_train_exp.py",
+  "api": 1,
+  "name": {
+    "en": "Party trains too",
+    "ja": "仲間も訓練で育つ"
+  },
+  "description": {
+    "en": "Shares the experience the player gains from training with the party members travelling with them",
+    "ja": "訓練で得た経験値を同行中の仲間にも入れ、仲間もレベルアップするようにする"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "settings": {
+    "SHARE_INN_TRAINING": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "宿屋の訓練で仲間にも入れる",
+        "en": "Share exp from training at the inn"
+      }
+    },
+    "SHARE_FACILITY_TRAINING": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "施設の訓練でも仲間に入れる",
+        "en": "Share exp from training at a facility"
+      },
+      "note": {
+        "ja": "年月と代金を払って主に教わる訓練。切ると宿屋だけになる",
+        "en": "Off = only the inn's training is shared"
+      }
+    },
+    "SHARE_REST": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "休養でも仲間に入れる",
+        "en": "Share exp from resting too"
+      },
+      "note": {
+        "ja": "訓練ではないので既定オフ・未検証",
+        "en": "Off by default; resting is not training"
+      }
+    },
+    "SHARE_RATIO": {
+      "type": "float",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 10.0,
+      "label": {
+        "ja": "仲間に渡す割合",
+        "en": "Share ratio"
+      },
+      "note": {
+        "ja": "1.0 でプレイヤーと同じ点数。0.5 なら半分",
+        "en": "1.0 = the same exp the player got"
+      }
+    },
+    "ANNOUNCE_LEVELUP": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "仲間のレベルアップを画面に出す",
+        "en": "Announce companion level-ups"
+      }
+    },
+    "ANNOUNCE_GAIN": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "経験値が入ったことも出す",
+        "en": "Announce the exp gain as well"
+      },
+      "note": {
+        "ja": "「…も同じ月日を鍛錬に充て…」の行。レベルが上がらない回でも出る",
+        "en": "Adds a line even when nobody levels up"
+      }
+    }
+  }
+}

@@ -116,6 +116,7 @@ def inject_pid(pid: int) -> bool:
 
 
 def main() -> int:
+    injector.use_utf8_console()
     ap = argparse.ArgumentParser(description="Auto-inject the Instantale mod loader.")
     ap.add_argument("--interval", type=float, default=2.0, help="poll seconds (default 2)")
     ap.add_argument("--once", action="store_true", help="handle the running game, then exit")

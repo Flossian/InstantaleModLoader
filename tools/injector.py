@@ -56,6 +56,23 @@ PYTHON_DLL = "python310.dll"
 NEEDED_EXPORTS = ("PyGILState_Ensure", "PyRun_SimpleString", "PyGILState_Release")
 
 
+def use_utf8_console() -> None:
+    """コンソールへの出力で UnicodeEncodeError が出ないようにする。
+
+    このツールはフォルダのパスをそのまま画面に出す。日本語版 Windows の
+    既定のコードページ（cp932）では表せない文字がパスに入っていると、
+    print() が例外を投げて処理そのものが止まってしまう。表示が多少崩れても
+    処理は続く方が良いので、UTF-8 と errors="replace" に切り替える。
+
+    pythonw.exe（GUI）では stdout が無いことがあるので、その場合は何もしない。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError, OSError):
+            pass      # 差し替え不可でも致命的ではない
+
+
 # --------------------------------------------------------------------------
 # DLL から関数のアドレスを調べる
 # --------------------------------------------------------------------------
@@ -307,7 +324,8 @@ def build_stub(ensure: int, run: int, release: int, code_addr: int) -> bytes:
 # 【注意】この文字列は C の文字列としてリモートプロセスへ渡すため、
 # ASCII だけで書く必要がある。make_bootstrap() が isascii() で検査していて、
 # 違反すると注入を中止する。そのためこのテンプレートの中のコメントだけは
-# 日本語にできない。
+# 日本語にできない。埋め込むパスの方は ascii() が \uXXXX に直すので、
+# 日本語を含むフォルダに置いても問題ない。
 # --------------------------------------------------------------------------
 BOOTSTRAP_TEMPLATE = r'''
 import sys, os, datetime, traceback
@@ -351,19 +369,21 @@ CALLS = {
 def make_bootstrap(runtime_dir: str, out_dir: str, log_path: str,
                    action: str = "boot") -> bytes:
     """テンプレートにパスを埋め込み、NUL 終端付きのバイト列にする。"""
-    # repr() を使うのは、クォートやバックスラッシュを正しくエスケープするため。
-    # Windows のパスには "\" が入るので、そのまま埋めると壊れる。
+    # ascii() を使うのは、クォートとバックスラッシュのエスケープに加えて、
+    # ASCII 以外の文字を \uXXXX に置き換えてくれるため。repr() だと
+    # 「C:\ゲーム\...」のような日本語のパスがそのまま残り、下の isascii()
+    # 検査に落ちて注入できなくなる（日本語環境では珍しくない）。
+    # \uXXXX はゲーム側の Python が文字列リテラルとして元の文字に戻すので、
+    # 埋め込んだパスの意味は変わらない。
     src = (BOOTSTRAP_TEMPLATE
            .replace("__CALL__", CALLS[action])
-           .replace("__LOG__", repr(log_path))
-           .replace("__RUNTIME__", repr(runtime_dir))
-           .replace("__OUT__", repr(out_dir)))
-    data = src.encode("utf-8")
+           .replace("__LOG__", ascii(log_path))
+           .replace("__RUNTIME__", ascii(runtime_dir))
+           .replace("__OUT__", ascii(out_dir)))
     if not src.isascii():
-        # 日本語を含むパスでも repr() の時点でエスケープされるはずだが、
         # C の文字列として渡す以上、ここは明示的に確認しておく。
         raise RuntimeError("bootstrap must stay ASCII-only")
-    return data + b"\0"
+    return src.encode("ascii") + b"\0"
 
 
 # --------------------------------------------------------------------------
@@ -499,6 +519,7 @@ def rotate_logs(cli_override: bool | None = None, log=None) -> int:
 
 
 def main() -> int:
+    use_utf8_console()
     ap = argparse.ArgumentParser(description="Inject the Instantale mod loader.")
     ap.add_argument("--pid", type=int, help="target pid (default: the running instantale.exe)")
     ap.add_argument("--dry-run", action="store_true", help="resolve addresses, write nothing")

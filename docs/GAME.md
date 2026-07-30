@@ -24,7 +24,7 @@ TECH.md と分けているのは、読む理由が違うから。あちらは**�
 
 | ファイル | 内容 |
 |---|---|
-| `targets.txt` | `module:qualname(signature)` 形式。`@patch` にそのまま貼れる（1466件） |
+| `targets.txt` | `module:qualname(signature)` 形式。`@patch` にそのまま貼れる（1585件） |
 | `game_modules.txt` | ゲーム自身のモジュールの全属性ダンプ（擬似ソース一覧） |
 | `modules.json` | 全モジュールの機械可読インベントリ |
 | `summary.txt` | 環境・`sys.path`・モジュール census |
@@ -33,8 +33,9 @@ TECH.md と分けているのは、読む理由が違うから。あちらは**�
 ### 1.2 ゲーム自身のモジュール
 
 ```
-__main__                       instantale.py, 約10,600行, 516ターゲット
+__main__                       instantale.py, 516ターゲット
 scripts                        scripts.hud.* / scripts.llm.* / items / functions ほか
+                               scripts.save_codec, scripts.steam.server_process
 Embedding, image_generation, llama_cpp_runtime_completion, sidecar_process
 save_area_json, save_world_json, api_key_manager, build_type, sdcpp_cuda
 ```
@@ -59,13 +60,185 @@ save_area_json, save_world_json, api_key_manager, build_type, sdcpp_cuda
 |---|---|
 | ゲーム本体 | `C:\Program Files\Epic Games\Instantaleq6Ve7\instantale.exe` |
 | ランタイム | CPython 3.10.11 / Kivy / SDL2 |
-| `game_version` | **`013`**（`__main__.get_game_version()`）。Epic の `AppVersion: main_022` は別系統 |
-| ロード済みモジュール | 4175（うち 3240 が Nuitka コンパイル済み）／ゲーム自身は 70 |
+| `game_version` | **`014`**（`__main__.get_game_version()`）。Epic の `AppVersion: main_023` は別系統 |
+| ロード済みモジュール | 4208（うち 3243 が Nuitka コンパイル済み）／ゲーム自身は 72 |
 | セーブ | `%LOCALAPPDATA%\Darmabeko\Instantale\` |
-| クラッシュログ | `<ゲームdir>\crash_log.txt` |
+| クラッシュログ | `<ゲームdir>\crash_log.txt`。**更新で消える**（§1.5） |
 | LLM 入出力の記録 | `<ゲームdir>\output_data\<世界>\<PC>\<manager>\N.json` |
 
 **ゲーム内部のバージョンは実行時に問い合わせること**（Epic のマニフェストとは無関係）。
+
+### 1.5 更新の記録
+
+#### main_022 (`013`) → main_023 (`014`)（2026-07-30 に更新、同日リコン）
+
+**MOD 側の対応は不要だった。** 28/28 が適用され、警告・例外ともゼロ。
+
+置き換わったのは `instantale.exe` だけで、**同梱の site-packages と `python310.dll` は
+2026-06-03 のまま**（＝注入基盤は無傷。CPython 3.10 も据え置き）。
+
+| | main_022 | main_023 |
+|---|---|---|
+| `game_version` | `013` | `014` |
+| ロード済みモジュール | 4175（3240 compiled） | 4208（3243 compiled） |
+| ゲーム自身のモジュール | 70 | **72** |
+| `targets.txt` | 1466 | **1585** |
+| `__main__` のターゲット | 516 | 516 |
+
+**現行の MOD が掴んでいるゲーム内の対象 78 件は、全て新ビルドにも存在する**
+（`targets.txt` と機械的に突き合わせ）。**シグネチャも一致**していて、
+GAME.md が記録している以下は変わっていない:
+
+```
+QuestEndManager.__init__(self, app)                             引数ゼロ（§2.9）
+InstantaleApp.remove_party_member(self, member_id)              （§2.8）
+InstantaleApp.move_npc_to_facility(self, character_id, character_instance,
+                                   target_facility, target_node=None,
+                                   register_facility=True)      （§2.8）
+QuestChoiceManager.__init__(self, app, quest_type, quest_id)    （§2.9）
+ConversationEndManager.__init__(self, app, in_conversation_id,
+                                finisher, end_text)             （§2.5）
+send_request_with_no_structure(manager_name, message,
+                               max_tokens=16384, timeout=None)  （§2.12）
+SAVE_OBFUSCATION_KEY = b'Instantale_Save_Key_2026'              （§2.16）
+```
+
+**セーブの方式も鍵も変わっていない**ので `tools\rebalance_saved_bgm.py` はそのまま使える。
+復号は `scripts.save_codec`（`xor_with_key` / `read_obfuscated_json_file` /
+`write_obfuscated_json_file` / `read_json_with_obfuscation_fallback`）に集約されている。
+
+**公式アナウンスの変更点**と、それに対応する実測の対象:
+
+| アナウンス | 実測で見えている対象 |
+|---|---|
+| 施設の処理そのものの自由生成（実験的） | `scripts.free_facility`（38ターゲット。`FreeFacilityManager` + `lint_program` / `validate_program` / `get_phase_class`）、`scripts.llm.llm_manager_free_facility`（`generate_program` / `generate_programs_for_node` / `run_llm_step` / `summarize_session`）。世界生成側の入口は `save_world_json:generate_new_world(..., free_facility_enabled=False)` と `create_settlement_detail(..., include_free_facility=False)`、UI は `WorldGenerateScreen.toggle_free_facility` |
+| サウンドの設定 | `scripts.sounds:SoundManager.apply_music_volume(self, app)`（**`106_` が包んでいる 4 メソッドとは別の新メソッド**） |
+| ワールドエディタ機能のための処理部品 | `scripts.save_codec`（`xor_with_key` / `read_obfuscated_json_file` / `write_obfuscated_json_file` / `read_json_with_obfuscation_fallback`） |
+| 四体以上の敵で表示が壊れる／進行不可 | 戦闘側。**未検証**（更新後まだ戦闘していない） |
+| スキーマの重複・増幅（ローカルLLM） | `105_` の COMPACT とは別物。§1.6 |
+| サーバーの多重起動（ローカルLLM） | `LlamaCppSidecar`。§2.12 の所有者調停と関わる。**未検証** |
+| コンテキスト長限界の超過 | `102_` / `103_` と重なる。§1.6 |
+| 味方が敵になる／世界生成の無限テキスト | 対応する対象を特定していない |
+
+**アナウンスに無いが増えているもの**（新ビルドに存在することを確認した対象）:
+
+| | |
+|---|---|
+| `scripts.steam.server_process` | Steam 認証と課金。`auth_steam_and_get_jwt` / `get_ticket_hex` / `get_entitlement` / `subscription_start` / `subscription_wait` / `cancel_contract` / `upgrade_start` |
+| クラウドLLMのサブスクリプション | `hud_auto_configuration:AutoConfigurationScreen.use_cloud_subscription_process` / `hud_option:OptionAIScreen.show_subscription_screen` / `OptionLLMScreen.get_cloud_llm_list(cloud_billing_type=None)` / `check_device_info:get_setting_for_cloud_llm` |
+| 装備の強化 | `__main__:EquipmentReinforcementStart` / `EquipmentReinforcementManager`（`calculate_modification(item_type, item_price)`）/ `InstantaleApp.reinforce_equipment` / `get_upgrade_equipment_price` / `toggle_reinforcement_inventory_window`、HUD 側は `set_reinforce_equipment_button_callback` / `toggle_reinforcement_inventory_visibility` |
+| `Item` に `upgrade_level` | `Item.__init__(..., grid_pos=None, upgrade_level=0)` |
+
+> **前版との厳密な差分は取れていない。** `out/recon/` は注入のたびに上書きされ、
+> main_022 の `targets.txt` は残っていない。上の表は、新ビルドに存在すること（実測）と
+> アナウンスを突き合わせたもので、**どれが本当に「増えた」のかを機械的には確かめていない**
+> （`scripts.free_facility` と `llm_manager_free_facility` は前版のリコンにも名前があった
+> 可能性がある）。増えた 119 ターゲットの内訳も全部は説明できていない。
+> **次の更新に備えるなら、リコン成果物を更新前に退避しておくとここが機械的に出せる。**
+
+> **`enemy_count_per_battle` は更新で増えたものではない。** `Quest` の
+> `get_enemy_count_per_battle()` と併せて 2026-07-27 の記録（`quest_flow.log`）に既にある。
+> 「四体以上の敵」の修正と結び付けて読まないこと。なお `Quest` の**インスタンス属性は 19、
+> セーブに出る dict のキーは 14** で、差分（`enemy_count_per_battle` /
+> `remaining_boss_list` / `remaining_event_list` / `remaining_miniboss_list` /
+> `remaining_normal_battle_count`）は実行時だけのもの。
+
+**`crash_log.txt` は更新で消えた。** 同梱されていた 114 件（`100_` や `204_` が件数を
+根拠に挙げているもの）は現物が無くなっている。`out/crashlog_baseline.txt` の
+173055 バイトも、もう対応する相手がいない。**あの 114 件は `013` の記録**であって、
+いま走っているのは `014`。件数を根拠にする議論は、この境目を跨がせないこと。
+
+### 1.6 公式修正と MOD の重なり（main_023、実測）
+
+アナウンスの3項目は `102_` / `103_` / `105_` が直しているものと重なる。
+`out/prompt_bloat.log` は 2026-07-27 21:50 から連続していて世代交代していない
+（`out/*.log.1` は無い）ので、**同一ファイル内で前後を比べられる**:
+
+| MOD | タグ | 更新前（07-27〜07-28） | 更新後（07-30 13:09〜14:46） | 判定 |
+|---|---|---|---|---|
+| `102_fix_prompt_dedup` | `[DEDUP]` | 3 | **0** | **不要**（同じ操作を通して確認） |
+| `103_fix_eventlog_trim` | `[EVENTLOG]` | 49 | **発火**（15:16〜） | **引き続き必要** |
+| `105_fix_schema_compact` | `[COMPACT]` | 359 | 継続（`8250 -> 2195` ほか） | **引き続き必要** |
+
+- **`102_` は仕事が無くなった。発生源で直っている**（2026-07-30、クエスト生成を
+  実際に通して確認）。**更新前と同じメッセージで、重複だけが消えている**:
+
+  ```
+  07-28  4 msgs, 7475c  system:2195:26683d974c, system:2195:26683d974c,
+                        system:1898:59395e72f3, user:1187:843f040d98
+  07-30  3 msgs, 4505c  system:2195:26683d974c,
+                        system:1898:59395e72f3, user:412:aa22a58bd1
+  ```
+
+  `26683d974c` / `59395e72f3` はハッシュが一致＝**同じメッセージ**。`COMPACT` の
+  `8250 -> 2195` も一致するので同一の経路（`QuestStructure` の生成）。
+  **重複していたのは圧縮後のスキーマ system メッセージ**で、それが2つ並ばなくなった。
+  今日の `_apply_chat_template` 154 回（うち複数メッセージ 153 回）で
+  **隣接完全一致は 0 件**
+- **`103_` は引き続き必要。** 一時 0 件だったのは**出番が来ていなかっただけ**で、
+  クエストを進めた 15:16 に発火した:
+
+  ```
+  [EVENTLOG] quest_referee_event_evaluate_new: dropped 3 turn(s), kept 3 | 1456 -> 531 chars
+  [EVENTLOG] quest_referee_event_resolve:      dropped 3 turn(s), kept 3 | 1526 -> 601 chars
+  ```
+
+  `quest_event_log` が育つのはクエスト進行の後半なので、**町にいる間はいくら遊んでも
+  0 件のまま**。公式の「コンテキスト長限界の超過」の修正はここを肩代わりしていない
+- **どちらも外さなくてよい。** 冪等で、対象が無ければ何もしない。**むしろ残しておくと
+  検出器になる** — 再び発火したらゲーム側の修正に穴があったということ（§2.12 で
+  プロキシのログを取りこぼしの検出に使っているのと同じ考え方）
+- **`105_` は引き続き効いている。** こちらが削るのは
+  **プロンプト本文に埋め込まれたスキーマの repr**（§2.12）で、ゲームが直した
+  「再生成時にスキーマが重複・増幅する」とは別物。プロンプト全体も小さくなっていて
+  （`total_chars` が 580〜2164）、両方が効いた状態に見える
+- **クラウドLLM経路は依然として未検証**（§1.5 の注記のとおり）
+
+> **0 件だけでは「不要になった」ことの証拠にならない。** その操作を通していなければ、
+> 出番が来ていないのと区別が付かない。`102_` は**発火していた操作を実際に通し、
+> 同じメッセージで重複が消えていること**を見て初めて言えた。`103_` はまだそこに至って
+> いない。戦闘も更新後は未実施。
+
+### 1.7 起動直後に注入したときの見え方（更新とは無関係）
+
+段階適用の途中経過が WARN として大量に出るので、**更新で壊れたように見える**。
+2026-07-30 の実例（ゲーム起動 13:08:14）:
+
+| 時刻 | patches | 中身 |
+|---|---|---|
+| 13:08:17（起動3秒後） | 11 / 9 target / 9 mod | `__main__` がまだ空。`module '__main__' has no attribute 'InstantaleApp'` が大量に出る |
+| 13:08:23 | 47 / 35 / 20 | 一部のモジュールが import され、再適用 |
+| **13:09:39** | **137 / 93 / 26** | **満額**（12:42・12:50 の健全値と一致） |
+
+- **`boot complete: 28/28 mod(s) applied` は「掴めた」ことの証拠にならない。**
+  `apply()` が例外を出さなければ 28/28 になる。**見るのは次の行の
+  `patches: N applied on M target(s)`**
+- 満額は **137 / 93 / 26**。ここに届いていなければ、まだ段階適用の途中か、対象を失っている
+- 再注入は安全（`replacing a previous patch layer` が出て**二重には掛からない**）
+- `ERROR bgm restore: channel scan failed`（`pygame.error: mixer not initialized`）も
+  この状況で出る。**迷子の曲の掃除が mixer 起動前に走っただけ**で、捕捉済み・処理は継続。
+  2026-07-27 から出ており**更新とは無関係**。満額の注入以降は再発していない
+
+### 1.8 影響を確かめていないこと（main_023）
+
+- **クラウドLLM経路にプロンプト系 MOD が効くかは未確認。** `102_` / `103_` / `105_` と
+  `301_` / `305_` は `llama_cpp_runtime_completion:LlamaCppClient.chat` と
+  `request_llm_inference_llama_cpp_completion:send_request*`（＝ローカルの llama.cpp）を
+  掴んでいる。サブスクリプション経路が別の送信口を通るなら、そこは素通りになる。
+  ローカル実行では従来どおり効いている（§1.6）
+- **自由生成施設（`FreeFacilityManager`）の最中に `300_` の施設イベントが乗るか未確認。**
+  どちらも「施設に入ったとき」に働くので、二重に始まる余地がある（§2.5）
+- **四体以上の敵との戦闘を更新後にまだ通していない。** 公式修正が入った箇所なので、
+  `106_`（BGM の引き取り）/ `107_`（`in_battle` の下ろし忘れ）/ `207_` と
+  噛み合うかはこれから
+- **サイドカーの多重起動抑止が三者競合になった。** ゲーム自身の修正・
+  `LlamaCppSidecar` の所有者調停・InstantaleLLMProxy の3つが同じことを見る（§2.12）
+- **装備強化の画面が `109_`（アイテム詳細の自動伸縮）と噛み合うか未確認。**
+  `ItemDetailBox` の構造（`update_content` / `define_text_color` / `_update_rect`）は
+  変わっていないが、`upgrade_level` が詳細欄に出るなら文字量が増える側の変化になる
+- **`InventoryGrid` に `try_place_item(self, item, pos)` と `get_unique_items(self)` がある。**
+  `108_` が掴む `place_existing_item(self, item)` とは別経路。強化画面のグリッド
+  （`toggle_reinforcement_inventory_visibility`）で同じはみ出しが起きるかは未確認
 
 ---
 
@@ -77,7 +250,7 @@ save_area_json, save_world_json, api_key_manager, build_type, sdcpp_cuda
 
 ```
 process_choice(MovePhaseManager, ...)                   [MainThread]
-ConversationStartManager.execute('謎の女・ミラ')         [Thread-767 (execute)]
+ConversationStartManager.execute('テストNPC A')         [Thread-767 (execute)]
 QuestEndManager.execute -> method_1                      [別スレッド]
 ```
 
@@ -95,7 +268,7 @@ QuestEndManager.execute -> method_1                      [別スレッド]
 
 ```python
 app.buttons = [{'text': '会話する', 'spec': PhaseSpec('DisplayTalkChoice', [])},
-               {'text': 'リリス・アクエリア', 'spec': PhaseSpec('ConversationStartManager', ['73'])},
+               {'text': 'テストNPC B', 'spec': PhaseSpec('ConversationStartManager', ['73'])},
                {'text': '出る',     'spec': PhaseSpec('MovePhaseManager', ['20','134','7'])}]
 app.to_display_buttons    # 表示中の文字列のリスト
 app.display_button_map    # 表示位置 -> buttons の添字
@@ -147,7 +320,7 @@ app.refresh_choice_buttons(reset_page=True)
 **画面に実際に出ている文字は `hud.buttons[i].text`**（`app.to_display_buttons` とは別物）:
 
 ```
-hud={'buttons': ['沈黙の森の影を討伐せよ', 'クエストを探す', 'やめる', ''],
+hud={'buttons': ['テスト討伐依頼A', 'クエストを探す', 'やめる', ''],
      'status_label': 'Atk:299(+326)...', 'send_disabled': False}
 ```
 
@@ -211,6 +384,20 @@ args = ['77', 'user', '<行動: 会話を終了する>']
 | `DisplayTalkChoice` がある | 会話相手を選べる＝施設のルートメニュー |
 
 依頼一覧（`QuestChoiceManager` が並ぶ）にはどちらも無いので入れ子にならない。
+
+**main_023 で `FreeFacilityManager` が `process_choice` を通るようになった**
+（施設の自由生成。§1.5）。2026-07-30 の実プレイで 16 回観測:
+
+```
+process_choice(FreeFacilityManager, choice_text='店を去る') [MainThread]
+```
+
+- クラス自体は `__main__` ではなく **`scripts.free_facility`** にある。
+  `getattr(__main__, cls_name)` では引けない
+- **上の2つの目印はどちらも立たない**ので、「会話画面でも施設のルートメニューでもない
+  第3の状態」として通り抜ける。`300_` / `301_` / `206_` はこれで例外を出していない
+  （実測）が、**自由生成施設の最中を「施設のルートメニュー」と見なす作りにしていると
+  取り違える**。判定は目印の有無で書き、既知以外を既定側に倒さないこと
 
 **「行動」メニューは `app.buttons` とは別系統**（HUD 上部の info レイアウト）:
 
@@ -329,10 +516,10 @@ InstantaleApp.move_npc_to_facility(character_id, character_instance,
 
 ```
 add_text('パーティは帰還した...') → 報酬・才能
-remove_party_member('71' '魔導師・リアナ')
+remove_party_member('71' 'テスト仲間C')
   from QuestEndManager.method_1 (instantale.py:6602)
   <- QuestEndManager.execute (instantale.py:6635) <- run (threading.py:953)
-add_text('魔導師・リアナはパーティから離脱した。')
+add_text('テスト仲間Cはパーティから離脱した。')
 ```
 
 - `QuestEndManager`（`__init__@6508` / `method_1@6511` / `execute@6634`。解散は 6602 行）。
@@ -366,9 +553,9 @@ app.world_dict['quests']  {id: dict}                 セーブに出るのはこ
 **掲示板（`DisplayQuestChoice`）のボタン構成**:
 
 ```python
-app.buttons = ['沈黙の森の影を討伐せよ' -> PhaseSpec('QuestChoiceManager', ('settlement_quest', '2')),
-               'クエストを探す'          -> PhaseSpec('QuestSearchManager', ()),
-               'やめる'                 -> PhaseSpec('JustSetButtonToNormalPhase', ())]
+app.buttons = ['テスト討伐依頼A' -> PhaseSpec('QuestChoiceManager', ('settlement_quest', '2')),
+               'クエストを探す'   -> PhaseSpec('QuestSearchManager', ()),
+               'やめる'           -> PhaseSpec('JustSetButtonToNormalPhase', ())]
 ```
 
 - **`QuestChoiceManager(app, quest_type, quest_id)` の `quest_type` は `'settlement_quest'`。**
@@ -461,7 +648,13 @@ DisplayQuestChoice                       get_active_quest_count() -> 5
 ```
 play_music_from_src(app, src)   app.music に差し替えて再生
 stop_music(app)                 app.music を止める
+apply_music_volume(app)         main_023 で追加。音量設定（§1.5）
 ```
+
+`SoundManager` の現在のメソッドは実測で
+`apply_music_volume` / `play_music_from_src` / `play_sound` / `play_sound_from_src` /
+`stop_music` / `stop_sound` の6つ。**`106_` が包んでいるのはこのうち4つで、
+`apply_music_volume` は包んでいない**（`app.music` を差し替えないので取っ手は失われない）。
 
 **`app.music` が「今鳴っている曲」の唯一の取っ手で、ここを失った曲は誰にも止められなくなる**
 （プロセスが終わるまで残る。チャンネルは8本しかないので、埋まると効果音も鳴らせなくなる）。
@@ -512,6 +705,23 @@ scripts.llm.llm_manager:*                                                    マ
   `json_schema` が揃う唯一の地点はそこだが、実際に流れるのは `chat` 側。**位置が確信
   できないときは、判定条件を保ったまま複数箇所に仕掛ける** — どこで何回発火しても結果が
   同じになる書き方にしておけば、二重に効いても壊れない
+- **その代償として、ログの件数はそのまま呼び出し回数にならない。** 1回の推論が複数の
+  フック地点から記録されるので、`prompt_bloat.log` の行を数えると**実際の3〜4倍**に
+  膨らむ（2026-07-30 の実測: 146 行 → 相異なる秒は 41。同一ミリ秒に 2〜4 行が 45 箇所）。
+  **数えるならタイムスタンプで一意化してから**。これを怠って「再送が5回→89回に激増した」と
+  誤読しかけた
+
+  ```
+  14:44:54.378  _apply_chat_template: ... layout=...user:412:aa22a58bd1   ← 同じ1回の推論が
+  14:44:54.379  _apply_chat_template: ... layout=...user:412:aa22a58bd1   ← 4行に見える
+  14:44:54.379  _apply_chat_template: ... layout=...user:412:aa22a58bd1
+  14:44:54.379  _apply_chat_template: ... layout=...user:412:aa22a58bd1
+  ```
+- **プロセス内の本文は復号済み。** プロキシが見ていた HTTP ボディでは改行が `\n` の
+  2文字、日本語が `あ`（`json.dumps(ensure_ascii=True)`）だった。プロセスの中で
+  `messages` / `payload["prompt"]` として見えるのは**復号後の Python 文字列**なので、
+  ボディの形を前提に書かれた文字列（プロキシ用の置換ルールなど）はそのままでは当たらない。
+  `111_` は置換前を素の形と復号形の両方で持ち、置換後は必ず復号している
 - `send_request_with_no_structure(manager_name, messages, max_tokens=, timeout=)` は
   **`str` を返す**（`output_data/` の記録が `{"text": ...}` なのは保存側の形式）
 - **`output_data/` の記録は `LlamaCppClient.chat` より上流で取られる。**
@@ -625,11 +835,11 @@ ItemDetailBox      size=[333, 500]  size_hint=(None, None)      ← 箱ごと固
 
 ```
 worlds/<世界>/characters/<キャラクタ名>/
-  実データ: 「銀鱗」のジーン / イリス・ステラ (Iris Stella)
+  例: 「試作」のテストA / テスト・ネーム (Test Name)
 ```
 
 **名前に Windows のパスに使えない文字（`< > : " / \ | ? *`）が入ると `os.makedirs` が落ちる。**
-LLM が生成した名前に引用符が混じる経路が実在する（`魔導演習人形「プロト・レガリア"`）。
+LLM が生成した名前に引用符が混じる経路が実在する（`試験人形「テストダミー"` のような形）。
 
 - **バックグラウンドスレッドで起きるのでゲームは落ちない。** 画像が生成されないまま無言で
   失敗し、その NPC に関わるたび再発する
@@ -653,6 +863,52 @@ cipher[i]  = plaintext[i] ^ b"Instantale_Save_Key_2026"[i % 24]
 
 `savedata.json` も同じ方式。セーブを書き換えるツールは、**書き込み前に毎回
 復号→再暗号化のラウンドトリップを検査し、一致しなければ拒否する**こと。
+
+### 2.17 経験値・レベル・訓練
+
+経験値は**キャラクタが自分で持っている**（`scripts.characters:Character`。
+`__main__.Character` は同じクラスオブジェクト）:
+
+```
+Character.experience_level / experience_point        値（`__init__` の既定は 0 / 0）
+Character.gain_exp(exp)                             経験値を足す
+Character.check_levelup()                           上がるか
+Character.levelup()                                 上げる（HP・能力値の更新まで持つ）
+Character.calculate_exp()                           必要経験値
+Character.calculate_current_required_exp_on_display()      表示用
+Character.calculate_current_gained_exp_on_display(gained)  表示用
+```
+
+- **`gain_exp` が内部でレベルまで上げるのか、呼び出し元が `check_levelup` →
+  `levelup` を回すのかは読めない。** 両方に耐える書き方（レベルが動いていなければ
+  `check_levelup` を聞く）にすること
+- 支給の点数を決めているのは `scripts.functions` 側:
+  `get_training_experience_point(cleared_quest_difficulty)` /
+  `get_days_elapsed_experience_point(experience_level)` /
+  `get_enemy_exp_lvl(enemy_tier, quest_difficulty)` /
+  `training_efficiency_ratio(alpha, beta, A, base=1.265)`。
+  **式を再現するより、支給された点数を写すほうが確実**（`306_`）
+- `app.exp_to_gain` という溜め場が app 側にある（用途は未確定）
+
+訓練・休暇のマネージャ（すべて `__main__`。`process_choice` から `execute` で起きる）:
+
+| クラス | `__init__` | 何か |
+|---|---|---|
+| `DisplayVacationChoice` | — | 宿屋の休暇の選択肢（`free_facility` の `CALL_PHASE_ALLOWED` に入っている） |
+| `VacationTrainManager` | `(app, months, quality)` | **宿屋で月日を訓練に充てる。** `quality` は宿の等級 |
+| `VacationRestManager` | `(app, months, quality)` | 宿屋での休養 |
+| `DisplayTrainingChoice` | `(app, training_type)` | 施設での訓練の選択肢 |
+| `TrainingStartManager` | `(app, training_years, training_price)` | 施設の主に年月と代金を払って教わる |
+| `TrainingPhaseManager` | `(app, training_type, remaining_years, training_log)` | その各段（`simple_training` / `fundamental_training` / `enhance_skill` / `learn_new_skill`） |
+
+関連: `InstantaleApp.change_background_image_to_inn_room(quality)` /
+`app.vacation_hobby_log` / LLM 側は `scripts.llm.llm_manager` の
+`vacation_rest_overview_generator` / `fundamental_training_manager` /
+`skill_train_manager` / `free_input_training_manager` / `training_conversation_starter`。
+
+**「いま訓練の中か」を `frames.MethodWatch` で見るときは、その `execute` を自分で
+包んでいないことを確かめる**（包んでいると表に入るのはローダのラッパのコード
+オブジェクトで、全パッチが共有しているので誤爆する。`306_` が踏んだ）。
 
 ---
 

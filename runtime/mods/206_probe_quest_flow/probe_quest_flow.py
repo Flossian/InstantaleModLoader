@@ -884,7 +884,7 @@ def apply(ctx):
     @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.update_top_info_texts", required=False)
     def update_top_info_texts(orig, self, instance, value, *args, **kwargs):
         # 上部ボタンの文字列が変わるたびに記録する。会話に入った瞬間に
-        # 何が並ぶかが分かれば、ユーザーに「この文字のボタン」と言える。
+        # 何が並ぶかが分かれば、利用者に「この文字のボタン」と言える。
         if sample("update_top_info_texts"):
             write("hud top info texts -> {}".format(repr_value(value)))
         return orig(self, instance, value, *args, **kwargs)

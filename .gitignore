@@ -1,0 +1,20 @@
+# ---- 生成物 / ローカル状態（ルート直下のみ） ----
+/out/
+/dist/
+/graphify-out/
+/settings/
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+/.venv/
+/venv/
+
+# ---- ローカル環境ファイル ----
+/InstantaleModLoader.code-workspace
+/make_dist.bat
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

@@ -9,7 +9,7 @@
 ## ボタンの仕組み（206_ の計測で確定）
 
     app.buttons = [{'text': '会話する', 'spec': PhaseSpec('DisplayTalkChoice', [])},
-                   {'text': 'リリス・アクエリア', 'spec': PhaseSpec('ConversationStartManager', ['73'])},
+                   {'text': 'テストNPC B', 'spec': PhaseSpec('ConversationStartManager', ['73'])},
                    {'text': '出る',      'spec': PhaseSpec('MovePhaseManager', ['20','134','7'])}]
     app.to_display_buttons   表示中の文字列
     app.display_button_map   表示位置 -> buttons の添字
@@ -100,7 +100,7 @@ END_TEXT = "<行動: 依頼の話を切り出すため、会話を切り上げ�
 #                  ＝ 会話画面の上部右ボタン）。そこは HUD 上部のボタンで
 #                  app.buttons とは別系統らしく、一度も発火していない
 #
-# **会話中だけに出す**（ユーザー指示・2026-07-26）。この機能の値打ちは
+# **会話中だけに出す**（方針・2026-07-26）。この機能の値打ちは
 # 「話の流れから依頼になる」ことで、施設に出すとゲーム本来の
 # 「クエスト掲示板」と同じ動作の重複ボタンになるだけだった
 # （実測: 施設の選択肢に 'クエスト掲示板' -> DisplayQuestChoice が既にある）。
@@ -509,7 +509,7 @@ def apply(ctx):
             write("open board: still in conversation; closing it first")
             # **会話の終了処理は `buttons_backup`（会話相手の一覧）を復元する。**
             # そのまま掲示板へ移ると、途中で NPC 一覧が一瞬見える
-            # （2026-07-27 のユーザー報告）。待機表示を出したまま繋いで隠す。
+            # （2026-07-27 に実測）。待機表示を出したまま繋いで隠す。
             # 出すのはゲーム自身と同じ点のアニメーションなので、割り込みが
             # 挟まったようには見えない。
             show_busy(app)
@@ -606,7 +606,7 @@ def apply(ctx):
         初版は `threading.Thread(...).start()` して即座に戻していた。すると
         `process_choice` は「この行動は終わった」と判断して操作を戻すので、
         LLM が裏で回っている最中にプレイヤーが移動も会話もできてしまった
-        （2026-07-26 のユーザー報告）。
+        （2026-07-26 に実測）。
 
         ゲーム自身の長い処理（会話の開始・依頼の生成）はどれも
         `process_choice` が `execute` を走らせている**間ずっと**待機表示
@@ -668,7 +668,7 @@ def apply(ctx):
             # **受注画面へは自分で飛ばない。** `QuestChoiceManager` を自前で
             # 組み立てて落とした前科がある（冒頭の `LIST_MODE` の説明）。
             if in_conversation:
-                # 会話は閉じない（ユーザー指示・2026-07-27）。待機表示を解いて
+                # 会話は閉じない（方針・2026-07-27）。待機表示を解いて
                 # 会話画面へ戻すだけ。依頼は世界に登録済みなので、受注は
                 # 「依頼を受ける」から後でできる。
                 clear_busy(app)
@@ -763,7 +763,7 @@ def apply(ctx):
                 write("quest board: filtered for {!r} -> kept {}, dropped {}".format(
                     npc_name, sum(1 for b in kept if quest_id_of_button(b)), dropped))
 
-            # **掲示板には「この話から依頼を作る」を出さない**（ユーザー指示・
+            # **掲示板には「この話から依頼を作る」を出さない**（方針・
             # 2026-07-27）。会話画面に直接置いてあり、そちらなら会話を閉じずに
             # 生成できる。掲示板は「既にある依頼を選ぶ場所」に徹する。
 
@@ -857,7 +857,7 @@ def apply(ctx):
     def insert_generate_button(app, buttons, at, npc_name):
         """「この話から依頼を作る」を会話画面に直接置く。
 
-        掲示板を経由しない ＝ **会話を閉じずに生成できる**（ユーザー指示・
+        掲示板を経由しない ＝ **会話を閉じずに生成できる**（方針・
         2026-07-27）。掲示板を開くには会話を閉じるしかないが、生成するだけなら
         その必要が無い ― 依頼は世界に登録されるので、受注は後から掲示板でできる。
         """

@@ -232,7 +232,7 @@ def install_from_zip(zip_path: str) -> list[str]:
     with zipfile.ZipFile(zip_path) as zf:
         names = [n for n in zf.namelist() if not n.endswith("/")]
         if not names:
-            raise ValueError("zip が空")
+            raise ValueError("zip ファイルが空です")
 
         # mod.json の位置から、mod のフォルダがどこかを決める。
         roots = set()
@@ -242,7 +242,7 @@ def install_from_zip(zip_path: str) -> list[str]:
                 continue
             roots.add("/".join(parts[:-1]))
         if not roots:
-            raise ValueError("{} が見つからない（mod の zip ではない）".format(
+            raise ValueError("{} が見つかりません（MOD の zip ファイルではありません）".format(
                 ml.MANIFEST_NAME))
 
         installed = []
@@ -254,7 +254,7 @@ def install_from_zip(zip_path: str) -> list[str]:
                 folder = root.split("/")[-1]
             dest = os.path.abspath(os.path.join(MODS_DIR, folder))
             if not dest.startswith(os.path.abspath(MODS_DIR) + os.sep):
-                raise ValueError("展開先が mods/ の外を指している: {}".format(folder))
+                raise ValueError("展開先が mods/ の外を指しています: {}".format(folder))
 
             prefix = (root + "/") if root else ""
             members = [n for n in names if n.replace("\\", "/").startswith(prefix)]
@@ -276,7 +276,8 @@ def install_from_folder(src: str) -> str:
     """フォルダを `runtime/mods/` へ複製する。フォルダ名を返す。"""
     src = os.path.abspath(src)
     if not os.path.isfile(os.path.join(src, ml.MANIFEST_NAME)):
-        raise ValueError("{} が無い（mod のフォルダではない）".format(ml.MANIFEST_NAME))
+        raise ValueError("{} がありません（MOD のフォルダではありません）".format(
+            ml.MANIFEST_NAME))
     folder = os.path.basename(src.rstrip(os.sep))
     dest = os.path.join(MODS_DIR, folder)
     if os.path.abspath(dest) == src:
@@ -411,7 +412,7 @@ class SettingsDialog(tk.Toplevel):
             if value != decl["default"]:
                 chosen[name] = value
         if bad:
-            messagebox.showerror("値を使えない", "\n".join(bad), parent=self)
+            messagebox.showerror("値が不正です", "\n".join(bad), parent=self)
             return
         self.result = chosen
         self._close()
@@ -467,7 +468,7 @@ class App(ttk.Frame):
         head.pack(fill="x")
         ttk.Label(head, text="Instantale ModLoader",
                   font=("Yu Gothic UI", 14, "bold")).pack(side="left")
-        ttk.Label(head, text="上にあるものから順に適用される（行をドラッグして並べ替え）",
+        ttk.Label(head, text="上から順に適用されます（行をドラッグして並べ替え）",
                   foreground="#666").pack(side="left", padx=(12, 0))
 
         body = ttk.Frame(self)
@@ -536,7 +537,7 @@ class App(ttk.Frame):
 
         foot = ttk.Frame(self)
         foot.pack(fill="x", pady=(10, 0))
-        self.launch_btn = ttk.Button(foot, text="Mod を注入してゲームを起動",
+        self.launch_btn = ttk.Button(foot, text="MOD を注入してゲームを起動",
                                      command=self.launch)
         self.launch_btn.pack(side="left")
         ttk.Button(foot, text="ゲームの場所を設定…",
@@ -558,7 +559,7 @@ class App(ttk.Frame):
         self._refresh()
 
         off = len(self.disabled & {m["dir"] for m in self.mods})
-        msg = "{} 個の mod（有効 {} / 無効 {}）".format(
+        msg = "{} 個の MOD（有効 {} / 無効 {}）".format(
             len(self.mods), len(self.mods) - off, off)
         results = self.status.get("mods") or {}
         if results:
@@ -574,10 +575,25 @@ class App(ttk.Frame):
         lines = list(self.problems)
         patches = self.status.get("patches") or {}
         unresolved = patches.get("unresolved") or []
+        deferred = patches.get("deferred") or []
         if unresolved:
-            # 対象が見つからない＝ゲーム側が変わった可能性を最初に疑う。
-            lines.append("前回の注入で対象が見つからなかったフック {} 件"
-                         "（ゲームが更新された可能性）".format(len(unresolved)))
+            # ゲームの起動直後に注入すると、まだ import されていないモジュールが多く、
+            # 対象が「無い」ように見える。ローダはそれを覚えていて、import された時点で
+            # 掛け直す（段階適用）。**その途中で status.json を読むと、後で解決する分まで
+            # unresolved に並ぶ** ― 実際に「81 件」と出た直後の再適用で 0 件になった例がある。
+            #
+            # ここでゲームの更新を疑わせると、正常な起動を毎回誤診することになる。
+            # まだ待っている対象があるうちは「途中」と言い、本当に消えた可能性の話は
+            # 待ちが無くなってからにする。
+            if deferred:
+                lines.append(
+                    "注入は段階適用の途中です（未 import のモジュール待ち {} 件、"
+                    "対象が見つからないフック {} 件）。"
+                    "揃うまで数十秒かかります ― 一覧を開き直すと確定した数が出ます"
+                    .format(len(deferred), len(unresolved)))
+            else:
+                lines.append("前回の注入で対象が見つからなかったフック {} 件"
+                             "（ゲームが更新された可能性があります）".format(len(unresolved)))
         self.warn.configure(text="\n".join("⚠ " + line for line in lines))
 
     def _refresh(self, keep: str | None = None) -> None:
@@ -636,7 +652,7 @@ class App(ttk.Frame):
                 bits.append("{}: {}".format(word, ", ".join(mod[key])))
         chosen = self.settings.get(mod["dir"]) or {}
         if chosen:
-            bits.append("変更した設定: " + ", ".join(
+            bits.append("変更済みの設定: " + ", ".join(
                 "{}={!r}".format(k, v) for k, v in sorted(chosen.items())))
 
         # 前回の注入で当てた対象。どこを触る mod なのかは、これが一番確か。
@@ -646,7 +662,7 @@ class App(ttk.Frame):
             shown = ", ".join(targets[:4])
             if len(targets) > 4:
                 shown += " ほか {} 件".format(len(targets) - 4)
-            bits.append("前回当てた対象: " + shown)
+            bits.append("前回適用した対象: " + shown)
         self.detail.configure(text="\n".join(bits))
 
     def _selected(self) -> dict | None:
@@ -675,7 +691,7 @@ class App(ttk.Frame):
         self.mods.insert(len(self.mods) if pos < 0 else pos, mod)
         self._mark_dirty(mod["dir"])
 
-    def _mark_dirty(self, keep: str, what: str = "順序を変更した") -> None:
+    def _mark_dirty(self, keep: str, what: str = "順序を変更しました") -> None:
         self.dirty = True
         self._refresh(keep=keep)
         self._set_status(f"{what}（未保存）")
@@ -736,10 +752,10 @@ class App(ttk.Frame):
         name = mod["dir"]
         if name in self.disabled:
             self.disabled.discard(name)
-            what = f"{mod['name_ja']} を有効にした"
+            what = f"{mod['name_ja']} を有効にしました"
         else:
             self.disabled.add(name)
-            what = f"{mod['name_ja']} を無効にした"
+            what = f"{mod['name_ja']} を無効にしました"
         self._mark_dirty(name, what)
 
     def _enable_all(self) -> None:
@@ -747,17 +763,17 @@ class App(ttk.Frame):
             return
         keep = self.tree.selection()
         self.disabled.clear()
-        self._mark_dirty(keep[0] if keep else "", "全て有効にした")
+        self._mark_dirty(keep[0] if keep else "", "全て有効にしました")
 
     def save(self) -> None:
         try:
             write_order([m["dir"] for m in self.mods], self.disabled)
         except Exception as exc:
-            messagebox.showerror("保存できない", f"{type(exc).__name__}: {exc}")
+            messagebox.showerror("保存に失敗しました", f"{type(exc).__name__}: {exc}")
             return
         self.dirty = False
         off = len(self.disabled & {m["dir"] for m in self.mods})
-        self._set_status("load_order.json に保存した"
+        self._set_status("load_order.json に保存しました"
                          f"（有効 {len(self.mods) - off} / 無効 {off}）")
 
     # -- 設定 --------------------------------------------------------------
@@ -767,9 +783,9 @@ class App(ttk.Frame):
             return
         if not mod["settings"]:
             messagebox.showinfo(
-                "設定は無い",
-                "{} は GUI から変えられる設定を宣言していない。\n"
-                "コード側の定数を直接編集する形になる。".format(mod["name_ja"]))
+                "設定がありません",
+                "{} は GUI から変更できる設定を宣言していません。\n"
+                "コード側の定数を直接編集してください。".format(mod["name_ja"]))
             return
         chosen = dict(self.settings.get(mod["dir"]) or {})
         dialog = SettingsDialog(self.winfo_toplevel(), mod, chosen)
@@ -781,38 +797,38 @@ class App(ttk.Frame):
         try:
             C.save_store(RUNTIME_DIR, store)
         except Exception as exc:
-            messagebox.showerror("保存できない", f"{type(exc).__name__}: {exc}")
+            messagebox.showerror("保存に失敗しました", f"{type(exc).__name__}: {exc}")
             return
         self.settings = C.load_store(RUNTIME_DIR)
         self._refresh(keep=mod["dir"])
         if dialog.result:
-            self._set_status("{} の設定を保存した（{} 件変更・次の注入から効く）".format(
+            self._set_status("{} の設定を保存しました（{} 件変更・次回の注入から反映）".format(
                 mod["name_ja"], len(dialog.result)))
         else:
-            self._set_status("{} の設定を既定に戻した".format(mod["name_ja"]))
+            self._set_status("{} の設定を既定値に戻しました".format(mod["name_ja"]))
 
     # -- mod の追加とフォルダ ------------------------------------------------
     def add_mod(self) -> None:
         path = filedialog.askopenfilename(
-            title="mod の zip を選ぶ（フォルダを入れたい場合はキャンセル）",
+            title="MOD の zip ファイルを選択（フォルダから追加する場合はキャンセル）",
             filetypes=[("zip", "*.zip"), ("すべて", "*.*")])
         try:
             if path:
                 added = install_from_zip(path)
             else:
-                folder = filedialog.askdirectory(title="mod のフォルダを選ぶ")
+                folder = filedialog.askdirectory(title="MOD のフォルダを選択")
                 if not folder:
                     return
                 added = [install_from_folder(folder)]
         except Exception as exc:
-            messagebox.showerror("追加できない", f"{type(exc).__name__}: {exc}")
+            messagebox.showerror("追加に失敗しました", f"{type(exc).__name__}: {exc}")
             return
 
         self.reload()
         # 置いただけで動く（順序ファイルに無い mod は末尾に回る）が、順序は
         # 保存しておかないと宣言されないままになる。
         self.save()
-        self._set_status("追加した: {}（一覧の末尾・次の注入から効く）".format(
+        self._set_status("追加しました: {}（一覧の末尾・次回の注入から反映）".format(
             ", ".join(added)))
         if added and self.tree.exists(added[0]):
             self.tree.selection_set(added[0])
@@ -826,7 +842,7 @@ class App(ttk.Frame):
         """
         mod = self._selected()
         if not mod:
-            self._set_status("先に一覧から mod を選ぶ")
+            self._set_status("一覧から MOD を選択してください")
             return
         self._open(os.path.join(MODS_DIR, mod["dir"]))
 
@@ -837,19 +853,19 @@ class App(ttk.Frame):
         try:
             os.startfile(path)              # type: ignore[attr-defined]
         except Exception as exc:
-            messagebox.showerror("開けない", f"{type(exc).__name__}: {exc}")
+            messagebox.showerror("開けませんでした", f"{type(exc).__name__}: {exc}")
 
     # -- 起動と注入 --------------------------------------------------------
     def choose_game(self) -> str:
         """ゲームの exe を選ばせて覚える。Epic の URL でも構わない。"""
         path = filedialog.askopenfilename(
-            title="instantale.exe を選ぶ",
+            title="instantale.exe を選択",
             filetypes=[("実行ファイル", "*.exe"), ("すべて", "*.*")])
         if path:
             cfg = read_config()
             cfg["game_path"] = path
             write_config(cfg)
-            self._set_status(f"ゲームの場所を覚えた: {path}")
+            self._set_status(f"ゲームの場所を設定しました: {path}")
         return path
 
     def launch(self) -> None:
@@ -857,8 +873,8 @@ class App(ttk.Frame):
             return
         if self.dirty and messagebox.askyesno(
                 "未保存の変更",
-                "順序と有効/無効の変更が未保存。保存してから起動する？\n"
-                "保存しない場合、注入されるのは保存済みの内容になる。"):
+                "順序と有効/無効の変更が未保存です。保存してから起動しますか？\n"
+                "保存しない場合、保存済みの内容が注入されます。"):
             self.save()
 
         running = injector.find_processes(injector.TARGET_EXE)
@@ -868,8 +884,8 @@ class App(ttk.Frame):
             if not game_path or not os.path.isfile(game_path):
                 messagebox.showinfo(
                     "ゲームの場所が未設定",
-                    "起動するゲームの場所が分からない。\n"
-                    "instantale.exe を選んでほしい。")
+                    "起動するゲームの場所が未設定です。\n"
+                    "instantale.exe を選択してください。")
                 game_path = self.choose_game()
                 if not game_path:
                     return
@@ -886,20 +902,22 @@ class App(ttk.Frame):
             return
         procs = injector.find_processes(injector.TARGET_EXE)
         if not procs:
-            messagebox.showinfo("ゲームが動いていない",
-                                "外す相手が居ない（MOD はプロセスと一緒に消える）。")
+            messagebox.showinfo("ゲームが起動していません",
+                                "解除する対象がありません"
+                                "（MOD はプロセスの終了時に解除されます）。")
             return
         if len(procs) > 1:
-            messagebox.showerror("複数動いている",
-                                 "instantale.exe が複数動いている。1つだけにしてほしい。")
+            messagebox.showerror("ゲームが複数起動中",
+                                 "instantale.exe が複数起動しています。")
             return
         if not messagebox.askyesno(
                 "MOD を外す",
-                "当てたパッチを剥がして素の動作に戻す（ゲームは終了しない）。\n\n"
-                "戻らないものがある:\n"
-                "  ・起動時に一度だけ走った処理の結果\n"
-                "  ・MOD がセーブに書いた値（パーティ・依頼など）\n\n"
-                "完全に素のゲームで確かめたいなら、注入せずに起動し直すこと。"):
+                "適用中のパッチを解除して本来の動作に戻します"
+                "（ゲームは終了しません）。\n\n"
+                "以下は元に戻りません:\n"
+                "  ・起動時に一度だけ実行された処理の結果\n"
+                "  ・MOD がセーブデータに書き込んだ値（パーティ・依頼など）\n\n"
+                "完全に素の状態で確認する場合は、注入せずに起動し直してください。"):
             return
         self._start(self._unload_worker, procs[0][0])
 
@@ -919,50 +937,50 @@ class App(ttk.Frame):
                 report("ゲームを起動中…")
                 subprocess.Popen([game_path], cwd=os.path.dirname(game_path))
 
-            report("ゲームのプロセスを探している…")
+            report("ゲームのプロセスを検索中…")
             pid = None
             for _ in range(FIND_TRIES):
                 procs = injector.find_processes(injector.TARGET_EXE)
                 if len(procs) > 1:
                     # 複数動いていると取り違える。injector.py と同じく自動で選ばない。
-                    self.events.put(("error", "instantale.exe が複数動いている。"
-                                              "1つだけにしてほしい。"))
+                    self.events.put(("error", "instantale.exe が複数起動しています。"
+                                              "一つだけにしてください"))
                     return
                 if procs:
                     pid = procs[0][0]
                     break
                 time.sleep(FIND_POLL)
             if pid is None:
-                self.events.put(("error", "ゲームのプロセスが見つからなかった。"))
+                self.events.put(("error", "ゲームのプロセスが見つかりません"))
                 return
 
-            report(f"pid {pid}: 準備待ち（Python の初期化とウィンドウの出現）…")
+            report(f"pid {pid}: 準備待ち（Python の初期化とウィンドウの表示）…")
             if not watcher.wait_until_ready(pid):
-                self.events.put(("error", f"pid {pid}: 準備が整わなかった。"))
+                self.events.put(("error", f"pid {pid}: 起動に失敗しました"))
                 return
 
             report(f"pid {pid}: 注入中…")
             injector.rotate_logs(None, log=report)
             ok = watcher.inject_pid(pid)
             if ok:
-                self.events.put(("done", f"pid {pid} に注入した"))
+                self.events.put(("done", f"pid {pid} に注入しました"))
             else:
-                self.events.put(("error", f"pid {pid}: 注入に失敗した"
-                                          "（out/bootstrap.log を見る）"))
+                self.events.put(("error", f"pid {pid}: 注入に失敗しました"
+                                          "（out/bootstrap.log を確認してください）"))
         except Exception as exc:
             self.events.put(("error", f"{type(exc).__name__}: {exc}"))
 
     def _unload_worker(self, pid: int) -> None:
         try:
-            self.events.put(("status", f"pid {pid}: パッチを剥がしている…"))
+            self.events.put(("status", f"pid {pid}: パッチを解除中…"))
             payload = injector.make_bootstrap(
                 injector.RUNTIME_DIR, injector.OUT_DIR, injector.BOOT_LOG,
                 action="unload")
             rc = injector.inject(pid, payload)
             if rc == 0:
-                self.events.put(("done", f"pid {pid}: MOD を外した"))
+                self.events.put(("done", f"pid {pid}: MOD を外しました"))
             else:
-                self.events.put(("error", f"pid {pid}: 外せなかった"
+                self.events.put(("error", f"pid {pid}: 解除に失敗しました"
                                           f"（PyRun_SimpleString が {rc}）"))
         except Exception as exc:
             self.events.put(("error", f"{type(exc).__name__}: {exc}"))
@@ -977,7 +995,7 @@ class App(ttk.Frame):
                     self._finish(msg, reload=True)
                 elif kind == "error":
                     self._finish(msg)
-                    messagebox.showerror("失敗", msg)
+                    messagebox.showerror("エラー", msg)
         except queue.Empty:
             pass
         self._tick = self.after(200, self._drain_events)
@@ -990,7 +1008,25 @@ class App(ttk.Frame):
             # 結果（status.json）はローダが書き出す。少し待ってから読む
             # ―注入が返った直後はまだ boot の途中のことがある。
             self.after(1500, self.reload)
+            # 1.5 秒では足りないことがある。ゲームの起動直後に注入すると、
+            # モジュールが出揃って段階適用が終わるまで実測で 80 秒ほどかかり、
+            # その間の status.json は「対象が見つからない」が並んだ途中経過になる。
+            # 待ちが残っているうちだけ、確定するまで数回読み直す。
+            self.after(6000, self._reload_while_deferred)
         self._set_status(msg)
+
+    # 段階適用が終わるまでの追従。待ちが無くなるか回数を使い切ったら止める。
+    _SETTLE_CHECKS = 12          # 10 秒間隔で最大 2 分
+    _SETTLE_INTERVAL = 10000
+
+    def _reload_while_deferred(self, remaining: int | None = None) -> None:
+        if remaining is None:
+            remaining = self._SETTLE_CHECKS
+        self.reload()
+        patches = self.status.get("patches") or {}
+        if (patches.get("deferred") or []) and remaining > 0:
+            self.after(self._SETTLE_INTERVAL,
+                       lambda: self._reload_while_deferred(remaining - 1))
 
     def _set_status(self, msg: str) -> None:
         self.status_label.configure(text=msg)
@@ -1014,7 +1050,7 @@ class App(ttk.Frame):
 
 def main() -> int:
     if os.name != "nt":
-        print("ERROR: Windows 用。", file=sys.stderr)
+        print("ERROR: Windows 専用です。", file=sys.stderr)
         return 2
     root = tk.Tk()
     root.title("Instantale ModLoader")

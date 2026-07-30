@@ -6,11 +6,11 @@
 ```
 OSError: [WinError 123] ファイル名、ディレクトリ名、またはボリューム ラベルの
 構文が間違っています。:
-'...\\worlds\\ドスケベフェスティバル\\characters\\魔導演習人形「プロト・レガリア"'
+'...\\worlds\\...\\characters\\試験人形「テストダミー"'
 ```
 
-キャラクタ `id='101'` の名前 `魔導演習人形「プロト・レガリア"` が **`「` で開いて
-ASCII の `"` で閉じている**（LLM が生成した名前への引用符の混入。原因はユーザー判断で
+キャラクタ `id='101'` の名前 `試験人形「テストダミー"` が **`「` で開いて
+ASCII の `"` で閉じている**（LLM が生成した名前への引用符の混入。原因は
 確定済み）。`"` は Windows のパス構成要素に使えないので `os.makedirs` が落ちる。
 
 | 時刻 | スレッド | 経路 |
@@ -24,7 +24,7 @@ ASCII の `"` で閉じている**（LLM が生成した名前への引用符の
 ## どこを直すか ― 入口ひとつ
 
 `worlds/<世界>/characters/` の**ディレクトリ名はキャラクタ名そのもの**（実データ:
-`「銀鱗」のジーン` / `イリス・ステラ (Iris Stella)`）。名前からパスを組む箇所は
+`「試作」のテストA` / `テスト・ネーム (Test Name)`）。名前からパスを組む箇所は
 **5つある**（`generate_and_write_character_detail` / `generate_character_image` /
 `generate_character_image_from_enemy` / `generate_enemy_image_from_character` /
 `delete_world_character_images`）。**5箇所で個別に消毒すると、書き込みと削除で

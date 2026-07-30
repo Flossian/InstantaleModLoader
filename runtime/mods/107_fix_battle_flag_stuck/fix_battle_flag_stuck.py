@@ -24,7 +24,7 @@ instantale.py:1458  play_music_from_src(battle)   ← in_battle=1 のときの�
 instantale.py:1460  play_music_from_src(area)     ← in_battle=0 のときの枝
 ```
 
-つまり戦闘後に保存すると、**次にロードしたとき戦闘BGMで始まる**（ユーザー報告・
+つまり戦闘後に保存すると、**次にロードしたとき戦闘BGMで始まる**（実測・
 2026-07-27）。さらに mod 側でもこのフラグを「戦闘中は出さない」条件に使っているので、
 一度戦闘するとその後ずっとイベントが出なくなる（実測: `player_events.log` に
 `skip: 水底管理局 busy ['in_battle']`）。

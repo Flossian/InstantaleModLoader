@@ -33,7 +33,7 @@
                          target_facility, ...)              そこへ置く
 
 死別・クエスト解散が通っているのもこの経路のはずなので、そのまま呼ぶ。
-## どこへ置くか（ユーザー指示・2026-07-26）
+## どこへ置くか（方針・2026-07-26）
 
 1. **雇用された場所（`initial_location`）へ戻す**
 2. ただし**土地を跨いで別れた場合は、いまの町のギルド**へ置く
@@ -107,7 +107,7 @@ END_TEXT_TEMPLATE = "<行動: {name}と別れ、パーティから外れても�
 # 次のセーブまで落ちると「別れたのに居る」状態で復帰してしまう。
 SAVE_AFTER_LEAVE = True
 
-# 別れた仲間をどこへ置くか（ユーザー指示・2026-07-26）。
+# 別れた仲間をどこへ置くか（方針・2026-07-26）。
 #   True  雇用された場所（`initial_location`）へ戻す。ただし**土地を跨いで
 #         別れた場合**は、いまの町のギルドへ置く
 #   False ゲーム自身の `get_party_leave_facility` に任せる（元の挙動）
@@ -216,139 +216,17 @@ def apply(ctx):
         screen.schedule(fn, delay)
 
     # ------------------------------------------------------------ パーティ名簿
-    def party_stores(app):
-        """メンバーの名簿になりうる入れ物を、心当たりのある場所から全部集める。
-
-        `(どこから取ったか, その配列)` で返す。**`app.party` を名簿だと決めつけ
-        ない。** 実機では仲間を入れた直後でも `app.party` は空で、
-        `add_party_member('83') -> party=[]` とログに出た（2026-07-26）。
-        セーブに出るのは `game_variables['party']` の方なので、両方を候補として
-        持っておき、**中身を見てから**どれが本物かを決める（`pick_store`）。
-
-        書くときは同じ id を持つ入れ物すべてから落とす（片方だけ直すと画面と
-        セーブがずれる ― `301_` のクエストと同じ理由）。
-        """
-        stores, seen = [], set()
-
-        def add(label, value):
-            # **list だけを名簿とみなさない。** セーブに出るのが
-            # `['player', '83']` の配列でも、実行時は `{id: Character}` の辞書で
-            # 持っていて保存時にキーを並べているだけ、ということがある
-            # （実機で候補が1つも見つからなかった原因。2026-07-26）。
-            if not isinstance(value, (list, dict)) or id(value) in seen:
-                return
-            seen.add(id(value))
-            stores.append((label, value))
-
-        add("app.party", getattr(app, "party", None))
-        variables = getattr(app, "game_variables", None)
-        if isinstance(variables, dict):
-            add("app.game_variables['party']", variables.get("party"))
-        world_dict = getattr(app, "world_dict", None)
-        if isinstance(world_dict, dict):
-            add("world_dict['party']", world_dict.get("party"))
-            inner = world_dict.get("game_variables")
-            if isinstance(inner, dict):
-                add("world_dict['game_variables']['party']", inner.get("party"))
-        world = getattr(app, "world", None)
-        if world is not None:
-            add("world.party", getattr(world, "party", None))
-        player = getattr(app, "player", None)
-        if player is not None:
-            add("player.party", getattr(player, "party", None))
-
-        # 心当たりが全部空振りしたときの最後の網。**名前に party が入っている
-        # 属性・キーだけ**を見る。何でも拾うと `escaped_member_in_battle` や
-        # `surrendered_characters` のような「'player' が入りうる別の配列」を
-        # 名簿と誤認する。`original_party`（差し替えの控え）と
-        # `accompany`（クエスト同行者）は名簿ではないので外す。
-        def sweep(container, label_for):
-            if not isinstance(container, dict):
-                return
-            for key, value in list(container.items()):
-                if not isinstance(key, str) or "party" not in key:
-                    continue
-                if "original" in key or "accompany" in key:
-                    continue
-                add(label_for(key), value)
-
-        sweep(getattr(app, "__dict__", None), lambda key: "app." + key)
-        sweep(variables if isinstance(variables, dict) else None,
-              lambda key: "game_variables[{!r}]".format(key))
-        return stores
-
-    def element_id(value):
-        """名簿の要素を id の文字列にする。
-
-        セーブでは `['player', '83']` の文字列だが、実行時に Character の
-        インスタンスが並んでいる可能性もある。**どちらの形でも読めるように**
-        してある（形を決めつけて空振りしたのが最初の失敗）。
-        """
-        if value is None:
-            return ""
-        if isinstance(value, str):
-            return value
-        for attr in ("id", "character_id", "npc_id"):
-            found = getattr(value, attr, None)
-            if isinstance(found, (str, int)):
-                return str(found)
-        if isinstance(value, dict):
-            for key in ("id", "character_id", "npc_id"):
-                if key in value:
-                    return str(value[key])
-        return str(value)
-
-    def store_ids(store):
-        """名簿の中身を id の一覧にする。配列でも辞書でも同じ形で返す。
-
-        辞書のときは**キー**が id（`{id: Character}` の形を想定）。キーが id に
-        見えないときだけ値から引く。
-        """
-        if isinstance(store, dict):
-            ids = []
-            for key, value in store.items():
-                found = element_id(key)
-                if not found or found.startswith("<"):
-                    found = element_id(value)
-                ids.append(found)
-            return ids
-        return [element_id(value) for value in store]
-
-    def drop_from_store(store, member_id):
-        """名簿から1人落とす。配列でも辞書でも扱えるようにする。"""
-        if isinstance(store, dict):
-            for key in [k for k in list(store) if element_id(k) == member_id]:
-                store.pop(key, None)
-            return
-        store[:] = [value for value in store if element_id(value) != member_id]
-
-    def pick_store(app):
-        """本物の名簿を選ぶ。`(どこから, id の一覧)`。無ければ `(None, [])`。
-
-        セーブの `party` は必ず先頭に `'player'` が入る `['player', '83']` の形
-        なので、**`'player'` を含む入れ物を本物とみなす**。それが無ければ
-        中身のある入れ物、それも無ければ空を返す。
-        """
-        candidates = party_stores(app)
-        for label, store in candidates:
-            ids = store_ids(store)
-            if "player" in ids:
-                return label, ids
-        for label, store in candidates:
-            ids = store_ids(store)
-            if ids:
-                return label, ids
-        return None, []
-
-    def party_ids(app):
-        return pick_store(app)[1]
-
-    def describe_stores(app):
-        """候補の入れ物を全部並べた1行。名簿が見つからないときの手がかり。"""
-        parts = []
-        for label, store in party_stores(app):
-            parts.append("{}={}".format(label, store_ids(store)))
-        return " ".join(parts) if parts else "(no candidate found)"
+    # 名簿の**読み方**は共通部品（`ui.party_stores` / `pick_store` / …）に置いて
+    # ある。ここで4回外して固めた手順（在り処も形も決めつけない・中身を見て本物を
+    # 選ぶ・書くときは見つかった入れ物すべて）は `306_` でも同じものが要ったので、
+    # 発見のあった側ではなく `ui` に集約した（TECH.md §5・§6.1）。
+    party_stores = ui.party_stores
+    element_id = ui.element_id
+    store_ids = ui.store_ids
+    drop_from_store = ui.drop_from_store
+    pick_store = ui.pick_store
+    party_ids = ui.party_ids
+    describe_stores = ui.describe_stores
 
     # ------------------------------------------------ 名簿が見つからないとき
     def dump_census(app):
@@ -426,11 +304,7 @@ def apply(ctx):
             pass
         return "{} {}".format(kind, repr_value(value))
 
-    def character_of(app, character_id):
-        characters = getattr(getattr(app, "world", None), "characters", None)
-        if isinstance(characters, dict) and character_id is not None:
-            return characters.get(str(character_id))
-        return None
+    character_of = ui.character_of
 
     def name_of(app, character_id):
         character = character_of(app, character_id)
@@ -581,7 +455,7 @@ def apply(ctx):
     def choose_destination(app, character):
         """別れた仲間をどこへ置くか。`(施設, ノード, 理由)` を返す。
 
-        ユーザー指示（2026-07-26）:
+        方針（2026-07-26）:
 
         1. **初期位置（雇用された場所）に戻す**
         2. ただし**土地を跨いで別れた場合は、いまの町のギルド**に置く

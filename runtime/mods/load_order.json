@@ -13,6 +13,7 @@
     "108_fix_shop_inventory_overflow",
     "109_fix_item_detail_autosize",
     "110_fix_character_name_path",
+    "111_llm_prompt_replace",
     "200_probe_bug_sites",
     "201_probe_missing_attr",
     "202_probe_summarizers",
@@ -27,7 +28,8 @@
     "302_leave_party_in_conversation",
     "303_quest_end_party_to_guild",
     "304_quest_end_keep_party",
-    "305_mini_quest"
+    "305_mini_quest",
+    "306_party_train_exp"
   ],
   "disabled": []
 }

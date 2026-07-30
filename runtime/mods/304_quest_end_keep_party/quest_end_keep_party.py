@@ -25,12 +25,12 @@
 
 ```
 add_text('パーティは帰還した...') → 報酬・才能
-remove_party_member('71' '魔導師・リアナ')
+remove_party_member('71' 'テスト仲間C')
   from QuestEndManager.method_1 (instantale.py:6602)
   <- QuestEndManager.execute (instantale.py:6635) <- run (threading.py:953)
 remove_party_member: party ['player', '71'] -> ['player']
-add_text('魔導師・リアナはパーティから離脱した。')
-observed: the game placed '71' at '漣のギルド (Ripple Guild)' after its own removal
+add_text('テスト仲間Cはパーティから離脱した。')
+observed: the game placed '71' at 'テストのギルド (Test Guild)' after its own removal
 ```
 
 名簿を実際に書き換えているのは `remove_party_member` の**中**（前後のログで
@@ -112,7 +112,7 @@ KEEP_WINDOW = 30.0
 # 書かれるので、切り分けのとき以外は勧めない）。
 REPLACE_LEAVE_TEXT = True
 
-# 離脱を告げる文を見分ける手掛かり。実測は '魔導師・リアナはパーティから離脱した。'。
+# 離脱を告げる文を見分ける手掛かり。実測は 'テスト仲間Cはパーティから離脱した。'。
 # 相手の名前が入っていることも併せて確かめるので、これだけで巻き込むことはない。
 LEAVE_TEXT_HINTS = ("パーティから離脱", "left the party")
 KEEP_TEXT = "{name}はパーティに残り、引き続き行動を共にすることになった。"

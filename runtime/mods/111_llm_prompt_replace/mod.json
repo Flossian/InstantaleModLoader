@@ -1,0 +1,48 @@
+{
+  "entry": "llm_prompt_replace.py",
+  "api": 1,
+  "name": {
+    "en": "Prompt replacement rules",
+    "ja": "AIへの指示文を置換"
+  },
+  "description": {
+    "en": "Rewrites the text sent to the LLM with the user's replacement rules; reads the same llm_replacements.txt as InstantaleLlmProxy",
+    "ja": "LLM に送る文章を置換ルールで書き換える。InstantaleLlmProxy と同じ llm_replacements.txt をそのまま読む"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "after": [
+    "102_fix_prompt_dedup",
+    "103_fix_eventlog_trim",
+    "105_fix_schema_compact"
+  ],
+  "before": [
+    "305_mini_quest"
+  ],
+  "settings": {
+    "LOG_REPLACE": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "置換したことを記録する",
+        "en": "Log replacements"
+      },
+      "note": {
+        "ja": "out\\prompt_bloat.log の [REPLACE] / [SKIP]",
+        "en": "[REPLACE] / [SKIP] in out\\prompt_bloat.log"
+      }
+    },
+    "LOG_RULES": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "ルールの読込を記録する",
+        "en": "Log rule loading"
+      },
+      "note": {
+        "ja": "out\\prompt_bloat.log の [RULES]。書式の誤りは切っても必ず残る",
+        "en": "[RULES] lines; broken rules are always logged"
+      }
+    }
+  }
+}

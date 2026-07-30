@@ -54,7 +54,7 @@ import time
 import traceback
 import uuid
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 # mod との契約。`mod.json` の "api" がこれと突き合わされる。
 #
@@ -516,7 +516,8 @@ def _order(mods_dir: str,
     elif isinstance(data, list):        # 素の配列で書かれていても読む
         order = data
     if not isinstance(order, list):
-        problems.append("{}: \"order\" が配列ではない。フォルダ名順で動かす".format(ORDER_NAME))
+        problems.append("{}: \"order\" が配列ではありません。"
+                        "フォルダ名順で読み込みます".format(ORDER_NAME))
         order = []
 
     disabled = data.get("disabled") if isinstance(data, dict) else None
@@ -526,7 +527,8 @@ def _order(mods_dir: str,
     skipped = sorted(off & set(found))
     if skipped:
         # 「入れたのに効かない」を黙って起こさない。切ったことは必ず残す。
-        problems.append("無効化されている（読み込まれない）: {}".format(", ".join(skipped)))
+        problems.append("無効化されています（読み込まれません）: {}".format(
+            ", ".join(skipped)))
 
     # 一覧に出す順。無効なものも宣言された位置に残す。
     listed: list[str] = []
@@ -545,14 +547,16 @@ def _order(mods_dir: str,
     if extra and order:
         # 順序ファイルに無い mod。落とさずに末尾へ回したことを残す
         # （「入れたのに効かない」を黙って起こさないため）。
-        problems.append("{} に無い mod（末尾に回る）: {}".format(ORDER_NAME, ", ".join(extra)))
+        problems.append("{} に記載の無い MOD（末尾に配置されます）: {}".format(
+            ORDER_NAME, ", ".join(extra)))
 
     stale = [name for name in order if isinstance(name, str) and name not in found]
     if stale:
-        problems.append("{} に実体の無い記述: {}".format(ORDER_NAME, ", ".join(stale)))
+        problems.append("{} に実体の無い記述があります: {}".format(
+            ORDER_NAME, ", ".join(stale)))
     dupes = sorted({n for n in order if isinstance(n, str) and order.count(n) > 1})
     if dupes:
-        problems.append("{} に重複: {}".format(ORDER_NAME, ", ".join(dupes)))
+        problems.append("{} に重複があります: {}".format(ORDER_NAME, ", ".join(dupes)))
 
     return ordered + extra, listed, skipped, problems
 

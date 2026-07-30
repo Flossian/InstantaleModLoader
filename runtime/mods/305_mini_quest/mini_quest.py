@@ -1000,7 +1000,7 @@ def apply(ctx):
 # （`105_` と同じ方針）。
 # --------------------------------------------------------------------------
 SAMPLE_REFEREE_SYSTEM = (
-    "現在クエストが進行中である。このクエストはラスボス'迷宮の守護龍'"
+    "現在クエストが進行中である。このクエストはラスボス'テストボスB'"
     "を討伐することか、プレイヤーが攻略自体を諦めて撤退することのどちらかでのみ終了される。\n"
     "あなたはダークファンタジーTRPGシステムのベースモデルとして、以下の役割を持つ:\n"
 )
@@ -1024,14 +1024,14 @@ SAMPLE_REFEREE_USER = (
     "- 雑魚敵や中ボスがもはやいない場合、ラスボスと邂逅させること。\n"
     "- nothing_happens: 上述のどの処理も発生しない。プレイヤーが無理のある試みをした場合にもこれ。\n"
     "【クエストの構造】\n"
-    "- quest_title: 中央商業区の失われた宝\n"
+    "- quest_title: テスト依頼C\n"
     "- battle: 雑魚敵や中ボスやラスボスとの戦闘の開始。最大3体の敵を一度に選択できるが、"
     "特に状況的な理由が無ければ平均1.6体くらいを出すのが適正難易度。\n"
     "【ダンジョン要素】\n"
     "- 残り通常戦闘回数: **3\\**\n"
     "- 残り中ボス戦闘: **[]**\n"
     "- 残りフィールドイベント: **[]**\n"
-    "- 残りラスボス戦闘: **['迷宮の守護龍']**\n"
+    "- 残りラスボス戦闘: **['テストボスB']**\n"
 )
 
 SAMPLE_GENERATOR = (
@@ -1082,11 +1082,11 @@ def check_samples(combat_mode=None):
                     problems.append("rule not applied: {}".format(old[:24]))
                 if not new and old in body:
                     problems.append("rule not removed: {}".format(old[:24]))
-            if "- quest_title: 中央商業区の失われた宝" not in body:
+            if "- quest_title: テスト依頼C" not in body:
                 problems.append("the quest structure block was damaged")
             if "- battleとfield_eventは同時に実行できない。" not in body:
                 problems.append("an untargeted line was lost")
-            if "- 残りラスボス戦闘: **['迷宮の守護龍']**" not in body:
+            if "- 残りラスボス戦闘: **['テストボスB']**" not in body:
                 problems.append("the dungeon stock block was damaged")
 
     gen = rewrite_generator(SAMPLE_GENERATOR, KINDS[0])

@@ -399,6 +399,176 @@ def _short(value, limit):
 
 
 # --------------------------------------------------------------------------
+# パーティの名簿（`302_` が4回外して固めた手順。GAME.md §2.8）
+# --------------------------------------------------------------------------
+# **在り処も形も決めつけない。** セーブに出るのは `game_variables['party']` の
+# `['player', '63', ...]` という id の配列だが、実行時に `app.party` から同じものが
+# 読めるとは限らず（仲間を入れた直後でも空だった）、`list` とも限らない
+# （`{id: Character}` の辞書のこともある）。だから候補を全部集め、**中身を見て**
+# 本物を選ぶ。
+#
+# ここに置いてあるのは読み取りと1人落とすところまで。**名簿に誰を足す/落とすかを
+# 決めるのは mod 側の判断**で、外す処理そのものはゲーム自身の
+# `remove_party_member` を通すこと（GAME.md §2.8）。
+PLAYER_ID = "player"
+
+# 名簿の要素から id を読むときに見る属性・キー（文字列でも Character でも読む）。
+ID_ATTRS = ("id", "character_id", "npc_id")
+
+
+def element_id(value):
+    """名簿の要素を id の文字列にする。
+
+    セーブでは `['player', '83']` の文字列だが、実行時に Character の
+    インスタンスが並んでいる可能性もある。**どちらの形でも読めるように**して
+    ある（形を決めつけて空振りしたのが `302_` の最初の失敗）。
+    """
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    for attr in ID_ATTRS:
+        found = getattr(value, attr, None)
+        if isinstance(found, (str, int)):
+            return str(found)
+    if isinstance(value, dict):
+        for key in ID_ATTRS:
+            if key in value:
+                return str(value[key])
+    return str(value)
+
+
+def party_stores(app):
+    """メンバーの名簿になりうる入れ物を、心当たりのある場所から全部集める。
+
+    `(どこから取ったか, その入れ物)` の一覧で返す。書くときは同じ id を持つ
+    入れ物**すべて**を直す（片方だけ直すと画面とセーブがずれる）。
+    """
+    stores, seen = [], set()
+
+    def add(label, value):
+        if not isinstance(value, (list, dict)) or id(value) in seen:
+            return
+        seen.add(id(value))
+        stores.append((label, value))
+
+    add("app.party", getattr(app, "party", None))
+    variables = getattr(app, "game_variables", None)
+    if isinstance(variables, dict):
+        add("app.game_variables['party']", variables.get("party"))
+    world_dict = getattr(app, "world_dict", None)
+    if isinstance(world_dict, dict):
+        add("world_dict['party']", world_dict.get("party"))
+        inner = world_dict.get("game_variables")
+        if isinstance(inner, dict):
+            add("world_dict['game_variables']['party']", inner.get("party"))
+    world = getattr(app, "world", None)
+    if world is not None:
+        add("world.party", getattr(world, "party", None))
+    player = getattr(app, "player", None)
+    if player is not None:
+        add("player.party", getattr(player, "party", None))
+
+    # 心当たりが全部空振りしたときの最後の網。**名前に party が入っている
+    # 属性・キーだけ**を見る。何でも拾うと `escaped_member_in_battle` や
+    # `surrendered_characters` のような「'player' が入りうる別の配列」を名簿と
+    # 誤認する。`original_party`（差し替えの控え）と `accompany`（クエスト
+    # 同行者）は名簿ではないので外す。
+    def sweep(container, label_for):
+        if not isinstance(container, dict):
+            return
+        for key, value in list(container.items()):
+            if not isinstance(key, str) or "party" not in key:
+                continue
+            if "original" in key or "accompany" in key:
+                continue
+            add(label_for(key), value)
+
+    sweep(getattr(app, "__dict__", None), lambda key: "app." + key)
+    sweep(variables if isinstance(variables, dict) else None,
+          lambda key: "game_variables[{!r}]".format(key))
+    return stores
+
+
+def store_ids(store):
+    """名簿の中身を id の一覧にする。配列でも辞書でも同じ形で返す。
+
+    辞書のときは**キー**が id（`{id: Character}` の形を想定）。キーが id に
+    見えないときだけ値から引く。
+    """
+    if isinstance(store, dict):
+        ids = []
+        for key, value in store.items():
+            found = element_id(key)
+            if not found or found.startswith("<"):
+                found = element_id(value)
+            ids.append(found)
+        return ids
+    return [element_id(value) for value in store]
+
+
+def drop_from_store(store, member_id):
+    """名簿から1人落とす。配列でも辞書でも扱えるようにする。"""
+    if isinstance(store, dict):
+        for key in [k for k in list(store) if element_id(k) == member_id]:
+            store.pop(key, None)
+        return
+    store[:] = [value for value in store if element_id(value) != member_id]
+
+
+def pick_store(app):
+    """本物の名簿を選ぶ。`(どこから, id の一覧)`。無ければ `(None, [])`。
+
+    セーブの `party` は必ず `'player'` を含む `['player', '83']` の形なので、
+    **`'player'` を含む入れ物を本物とみなす**。それが無ければ中身のある入れ物、
+    それも無ければ空を返す。
+    """
+    candidates = party_stores(app)
+    for label, store in candidates:
+        ids = store_ids(store)
+        if PLAYER_ID in ids:
+            return label, ids
+    for label, store in candidates:
+        ids = store_ids(store)
+        if ids:
+            return label, ids
+    return None, []
+
+
+def party_ids(app):
+    """名簿の id の一覧（プレイヤーを含む）。"""
+    return pick_store(app)[1]
+
+
+def party_member_ids(app):
+    """プレイヤーを除いた同行者の id。順序は名簿のまま。"""
+    return [member_id for member_id in party_ids(app)
+            if member_id and member_id != PLAYER_ID]
+
+
+def describe_stores(app):
+    """名簿の在り処と中身を1行で。切り分けのときこれが頼りになる。"""
+    return "; ".join("{}={}".format(label, store_ids(store))
+                     for label, store in party_stores(app)) or "(no party store found)"
+
+
+def character_of(app, character_id):
+    """id から Character を引く。`world.characters` は id の**文字列**が鍵。"""
+    characters = getattr(getattr(app, "world", None), "characters", None)
+    if isinstance(characters, dict) and character_id is not None:
+        return characters.get(str(character_id))
+    return None
+
+
+def character_name(app, character_id, limit=40):
+    """表示に使う名前。引けなければ id をそのまま返す（空にはしない）。"""
+    name = getattr(character_of(app, character_id), "name", None)
+    if isinstance(name, str) and name.strip():
+        return _short(name, limit)
+    return str(character_id)
+
+
+# --------------------------------------------------------------------------
 # 画面を触る側（ログと例外処理が要るので ctx を握る）
 # --------------------------------------------------------------------------
 class Screen(object):
@@ -587,7 +757,7 @@ class Screen(object):
     #   18:35:55.902  enabled=False  hud.buttons=['..',  '..',  '..',  '..' ]  send_disabled=True
     #   18:35:56.205  enabled=False  hud.buttons=['...', '...', '...', '...']  send_disabled=True
     #   18:35:56.508  enabled=False  hud.buttons=['.',   '.',   '.',   '.'  ]   ← 約0.3秒で循環
-    #   18:35:59.437  enabled=True   hud.buttons=['沈黙の森の影を討伐せよ', ...]
+    #   18:35:59.437  enabled=True   hud.buttons=['テスト討伐依頼A', ...]
     #
     # 分かったこと:
     #
@@ -694,7 +864,7 @@ class Screen(object):
         実機（2026-07-26）: 押下と同じ流れの中で差し替えると `app.buttons` は
         変わるのに**画面は古いまま**だった。見えているものと押されるものが
         食い違うので、確認画面が出ていないように見えて裏では新しい選択肢が
-        押せてしまう（ユーザー報告: 連打したら別れられた）。
+        押せてしまう（実測: 連打したら別れられた）。
 
         ゲーム自身は押下の処理の中で描画しているので、こちらの差し替えはその
         **後**に置く必要がある。`Clock.schedule_once(..., 0)` なら次のフレーム、

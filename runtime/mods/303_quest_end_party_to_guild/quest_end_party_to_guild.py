@@ -9,12 +9,12 @@
 ## どこで解散しているか（実測で確定・2026-07-26。TECH.md GAME.md §2.8）
 
 ```
-remove_party_member('71' '魔導師・リアナ')
+remove_party_member('71' 'テスト仲間C')
   from QuestEndManager.method_1 (instantale.py:6602)
   <- QuestEndManager.execute (instantale.py:6635)
   <- run (threading.py:953)            ← **別スレッド**
 remove_party_member: party ['player', '71'] -> ['player']
-observed: the game placed '71' at '漣のギルド (Ripple Guild)' after its own removal
+observed: the game placed '71' at 'テストのギルド (Test Guild)' after its own removal
 ```
 
 読み取れることが3つある:

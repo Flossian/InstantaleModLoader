@@ -24,6 +24,11 @@ setlocal
 cd /d "%~dp0"
 title Instantale mod watcher
 
+rem Run Python in UTF-8 mode. Without it, text handling falls back to the
+rem machine's code page (cp932 and friends), which breaks once this folder
+rem sits under a path containing Japanese or other non-ASCII characters.
+set "PYTHONUTF8=1"
+
 set "PY=%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
 if exist "%PY%" goto :run
 

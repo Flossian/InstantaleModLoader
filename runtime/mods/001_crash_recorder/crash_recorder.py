@@ -1,11 +1,16 @@
 # -*- coding: utf-8 -*-
 """クラッシュしたときの情報を、省略なしで out/live_crashes.log に残す。
 
-ゲームに同梱されている crash_log.txt には 114 件のクラッシュが記録されていて、
-**全て game_version 013 ＝ 今動いているビルドのもの**（`get_game_version()` の
-実測値。Epic のマニフェストにある `main_022` は別系統の番号で、混同すると
-「同梱ログは昔の版だ」という誤った判断になる。実際に一度そう誤認した ―
-TECH.md GAME.md §1.4）。したがって同梱ログは現行版のバグ一覧として読める。
+ゲームに同梱されていた crash_log.txt には 114 件のクラッシュが記録されていた。
+**あれは全て game_version 013 のもの**（`get_game_version()` の実測値。Epic の
+マニフェストにある `main_022` は別系統の番号で、混同すると「同梱ログは昔の版だ」
+という誤った判断になる。実際に一度そう誤認した ― GAME.md §1.4）。
+
+**そして 013 はもう現行版ではない。** main_023（`game_version` = `014`）への更新で
+crash_log.txt は消え、現物も残っていない（GAME.md §1.5）。したがって同梱ログは
+**現行版のバグ一覧としては読めない** ― 直っているかもしれないし、まだ残って
+いるかもしれない。件数を根拠にする議論は 013／014 の境目を跨がせないこと。
+いま動いている版で何が落ちるかは、この MOD が取る記録だけが答える。
 
 ただし記録されているクラッシュ地点のいくつかは、モジュールのグローバルには
 見当たらない（`send_request_on_id` はトレースバックに 62 回出るのに
@@ -81,8 +86,12 @@ def apply(ctx):
         version = main.get_game_version()
     except Exception:
         version = "?"
+    # バージョンはログに書くだけ。判定には使わない（'013' 前提で書いていた頃の
+    # 文面は main_023 で嘘になった）。同梱の crash_log.txt は '013' のもので、
+    # その版はもう走っていない。
     ctx.log("running build reports game_version={!r} "
-            "(crash_log.txt is entirely from '013' = this same build)".format(version))
+            "(the bundled crash_log.txt was '013'; do not read it as this "
+            "build's bug list)".format(version))
 
     def record(exc_type, exc_value, exc_traceback, title):
         # 記録処理そのものが例外を出すと、ゲームのクラッシュ処理を巻き込んで
