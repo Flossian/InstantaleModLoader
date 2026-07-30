@@ -36,6 +36,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -45,7 +46,7 @@ import threading
 import time
 import tkinter as tk
 import zipfile
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, font as tkfont, messagebox, ttk
 
 # このファイルは tools/ にある。runtime/ と設定は1階層上（配布フォルダの根）。
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -60,15 +61,14 @@ from instantale_modloader import config as C     # noqa: E402
 RUNTIME_DIR = os.path.join(ROOT, "runtime")
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 ORDER_PATH = os.path.join(MODS_DIR, ml.ORDER_NAME)
-STATUS_PATH = os.path.join(ROOT, "out", ml.STATUS_NAME)
+OUT_DIR = os.path.join(ROOT, "out")
+STATUS_PATH = os.path.join(OUT_DIR, ml.STATUS_NAME)
 
 # 利用者が選んだものは全部 settings/ に集める（mod ごとの設定は
 # instantale_modloader.config が同じフォルダへ mod_settings.json を書く）。
 # ここに入るのは「このウィンドウの覚えていること」＝ゲームの場所と窓の大きさ。
 SETTINGS_DIR = C.settings_dir(RUNTIME_DIR)
 CONFIG_PATH = os.path.join(SETTINGS_DIR, "gui.json")
-
-CHECKED, UNCHECKED = "☑", "☐"
 
 FIND_POLL = 1.0      # ゲームのプロセスを探す間隔（秒）
 FIND_TRIES = 60      # 何回まで探すか（Epic 経由だと立ち上がりが遅いので長めに）
@@ -83,6 +83,319 @@ RESULT_TEXT = {
     "api-too-new": "ローダが古い",
     "api-too-old": "mod が古い",
 }
+
+
+# --------------------------------------------------------------------------
+# 配色とフォント
+# --------------------------------------------------------------------------
+# 色は全部ここに置く。以前は widget を作る場所に "#666" のような文字列が直に
+# 書いてあって、1色変えるのに散らばった箇所を追う必要があった。名前は「何色か」
+# ではなく「何に使うか」で付ける ― 後で暗い配色に振るときに、使う側を書き換え
+# ずに済むように。
+PALETTE = {
+    "bg":         "#f4f5f7",   # 窓の地
+    "surface":    "#ffffff",   # 一覧・入力欄。地より一段手前にあるもの
+    "raised":     "#eceef2",   # 触れているボタン
+    "pressed":    "#e0e3e9",   # 押されているボタン
+    "border":     "#d4d7dd",   # 仕切り線・一覧の外枠
+    # 押せるもの（ボタン・入力欄）の輪郭。地が #f4f5f7 で中が白だと、その差は
+    # 256 段階で 11 しかない ― 面の色では境目が出ないので、線で示すしかない。
+    # 仕切り線と同じ濃さでは足りないため、一段濃い色を別に持つ。
+    "control_edge": "#b0b8c4",
+    "text":       "#1f2328",   # 本文
+    "text_sub":   "#57606a",   # 補足（説明・状態・見出し）
+    "text_faint": "#8c959f",   # 既定値・無効な行
+    "accent":     "#2f6feb",   # 主操作（注入して起動）
+    "accent_lit": "#4681f2",   # 主操作に触れている
+    "accent_dim": "#1f57c3",   # 主操作を押している
+    "accent_off": "#a8bfe8",   # 主操作が押せないとき
+    "on_accent":  "#ffffff",   # 主操作の上に乗る字
+    "on_accent_off": "#f2f6fd",
+    "select":     "#dce7fb",   # 一覧の選択行
+    "check":      "#2f6feb",   # 入っているチェックの地（主操作と同じ明るい青）
+    "check_edge": "#9aa2ad",   # 入っていないチェックの枠
+    "danger":     "#b3261e",   # 前回の注入で入らなかった mod
+    "warn":       "#9a5b00",   # 警告の行
+}
+
+# 日本語と英語が同じ列に並ぶので、両方が同じ太さで出る書体を選ぶ。上から順に
+# 探して、入っていなければ Tk の既定のまま（環境によっては Yu Gothic UI が
+# 無い ― その場合に読めない字が出るより、既定の書体で出る方がまだ良い）。
+FONT_CANDIDATES = ("Yu Gothic UI", "Meiryo UI", "Segoe UI")
+FONT_SIZE = 10
+
+
+def setup_theme(root: tk.Tk) -> ttk.Style:
+    """配色と書体を決める。窓を作った直後・中身を組む前に1回だけ呼ぶ。
+
+    土台に **clam** を敷く。Windows の既定は `vista` で、これはボタンや入力欄を
+    OS に描かせるため `style.configure` の色がほとんど効かない（配色を1か所に
+    まとめても反映されないので、まとめる意味が無くなる）。clam は全部 Tk 側で
+    描くので指定が通る。
+
+    戻り値の `Style` は使わなくても良いが、後から名前付きの style を足したい
+    ときのために返しておく。
+    """
+    style = ttk.Style(root)
+    try:
+        style.theme_use("clam")
+    except tk.TclError:
+        pass            # clam が無い Tk。既定のテーマのまま先へ進む
+
+    p = PALETTE
+
+    # -- 書体。名前付きフォントを差し替えると、個別に font= を書いていない
+    #    widget（一覧・ボタン・ラベル）が揃って追随する。
+    families = set(tkfont.families(root))
+    family = next((f for f in FONT_CANDIDATES if f in families), None)
+    for name in ("TkDefaultFont", "TkTextFont", "TkHeadingFont", "TkMenuFont"):
+        try:
+            font = tkfont.nametofont(name, root)
+        except tk.TclError:
+            continue
+        if family:
+            font.configure(family=family)
+        font.configure(size=FONT_SIZE)
+
+    root.configure(background=p["bg"])
+    # コンボボックスの一覧は ttk ではなく素の Listbox なので、style ではなく
+    # option データベース越しにしか色を渡せない。
+    root.option_add("*TCombobox*Listbox.background", p["surface"])
+    root.option_add("*TCombobox*Listbox.foreground", p["text"])
+    root.option_add("*TCombobox*Listbox.selectBackground", p["select"])
+    root.option_add("*TCombobox*Listbox.selectForeground", p["text"])
+
+    style.configure(".",
+                    background=p["bg"], foreground=p["text"],
+                    fieldbackground=p["surface"], bordercolor=p["border"],
+                    lightcolor=p["border"], darkcolor=p["border"],
+                    troughcolor=p["bg"], focuscolor=p["accent"],
+                    selectbackground=p["select"], selectforeground=p["text"])
+    style.configure("TFrame", background=p["bg"])
+    style.configure("TLabel", background=p["bg"], foreground=p["text"])
+    style.configure("TSeparator", background=p["border"])
+
+    # -- ラベルの役割。呼ぶ側は色ではなく「何のラベルか」を指定する。
+    style.configure("Title.TLabel",
+                    font=(family or "", FONT_SIZE + 5, "bold"))
+    style.configure("Sub.TLabel", foreground=p["text_sub"])
+    style.configure("Faint.TLabel", foreground=p["text_faint"])
+    style.configure("Warn.TLabel", foreground=p["warn"])
+    # ボタンの群に付ける小さな見出し。区切り線だけだと「なぜここで切れているか」
+    # が伝わらないので、群の名前を出す。
+    style.configure("Group.TLabel", foreground=p["text_faint"],
+                    font=(family or "", FONT_SIZE - 1, "bold"))
+
+    # -- ボタン。既定は地に沈む見た目にして、主操作だけ色を持たせる
+    #    （どれも同じ濃さで並ぶと、押すべきものを毎回探すことになる）。
+    # relief は "solid"。clam は "flat" だと枠を描かないので、地と地色が近い
+    # このボタンは輪郭ごと消えて、押せる物に見えなくなる。
+    # lightcolor/darkcolor も枠と同じ色にする（片方でも地色のままだと、その辺
+    # だけ線が切れる）。押下・ホバーで**動かすのは中の色だけ**にして、輪郭は
+    # 常に残す ― ここを一緒に動かすと、触った瞬間に枠が消える。
+    style.configure("TButton",
+                    background=p["surface"], foreground=p["text"],
+                    bordercolor=p["control_edge"], lightcolor=p["control_edge"],
+                    darkcolor=p["control_edge"],
+                    relief="solid", borderwidth=1, padding=(10, 5))
+    style.map("TButton",
+              background=[("pressed", p["pressed"]), ("active", p["raised"]),
+                          ("disabled", p["bg"])],
+              foreground=[("disabled", p["text_faint"])],
+              bordercolor=[("focus", p["accent"]), ("disabled", p["border"])],
+              lightcolor=[("focus", p["accent"]), ("disabled", p["border"])],
+              darkcolor=[("focus", p["accent"]), ("disabled", p["border"])])
+
+    style.configure("Accent.TButton",
+                    background=p["accent"], foreground=p["on_accent"],
+                    bordercolor=p["accent"], lightcolor=p["accent"],
+                    darkcolor=p["accent"], padding=(14, 6))
+    style.map("Accent.TButton",
+              background=[("pressed", p["accent_dim"]),
+                          ("active", p["accent_lit"]),
+                          ("disabled", p["accent_off"])],
+              foreground=[("disabled", p["on_accent_off"])],
+              lightcolor=[("pressed", p["accent_dim"]),
+                          ("active", p["accent_lit"]),
+                          ("disabled", p["accent_off"])],
+              darkcolor=[("pressed", p["accent_dim"]),
+                         ("active", p["accent_lit"]),
+                         ("disabled", p["accent_off"])],
+              bordercolor=[("pressed", p["accent_dim"]),
+                           ("active", p["accent_lit"]),
+                           ("disabled", p["accent_off"])])
+
+    # -- 一覧。行の高さは既定だと日本語が窮屈なので広げる。
+    style.configure("Treeview",
+                    background=p["surface"], fieldbackground=p["surface"],
+                    foreground=p["text"], bordercolor=p["border"],
+                    relief="flat", rowheight=26)
+    style.map("Treeview",
+              background=[("selected", p["select"])],
+              foreground=[("selected", p["text"])])
+    style.configure("Treeview.Heading",
+                    background=p["bg"], foreground=p["text_sub"],
+                    relief="flat", padding=(6, 7),
+                    font=(family or "", FONT_SIZE - 1, "bold"))
+    style.map("Treeview.Heading",
+              background=[("active", p["raised"])],
+              relief=[("active", "flat"), ("pressed", "flat")])
+
+    # -- 入力まわり。触れている欄が分かるように、焦点だけ枠を色で示す。
+    # 入力欄もボタンと同じ理由で輪郭を濃くする（白い中身が地に沈む）。
+    style.configure("TEntry", fieldbackground=p["surface"],
+                    bordercolor=p["control_edge"],
+                    lightcolor=p["control_edge"], darkcolor=p["control_edge"],
+                    insertcolor=p["text"], padding=4)
+    style.map("TEntry",
+              bordercolor=[("focus", p["accent"])],
+              lightcolor=[("focus", p["accent"])],
+              darkcolor=[("focus", p["accent"])])
+    style.configure("TCombobox", fieldbackground=p["surface"],
+                    background=p["surface"], bordercolor=p["control_edge"],
+                    lightcolor=p["control_edge"], darkcolor=p["control_edge"],
+                    arrowcolor=p["text_sub"], padding=3)
+    style.map("TCombobox",
+              fieldbackground=[("readonly", p["surface"])],
+              bordercolor=[("focus", p["accent"])],
+              lightcolor=[("focus", p["accent"])],
+              darkcolor=[("focus", p["accent"])])
+    # チェックボタンの印は clam に描かせない。clam の既定の印は、この大きさだと
+    # 「入」が × に見える ― 有効にしているのに否定の記号が出るので、意味が逆に
+    # 伝わる。一覧の行と**同じ絵**に差し替えて、塗りつぶしの有無で示す。
+    style.configure("TCheckbutton", background=p["bg"], foreground=p["text"],
+                    focuscolor=p["bg"], padding=2)
+    on, off = check_images(root)
+    try:
+        style.element_create("Check.indicator", "image", off,
+                             ("selected", on), border=0, sticky="")
+    except tk.TclError:
+        pass        # 既に作ってある（同じ過程を2度通った）
+    try:
+        style.layout("TCheckbutton", [
+            ("Checkbutton.padding", {"sticky": "nswe", "children": [
+                ("Check.indicator", {"side": "left", "sticky": ""}),
+                ("Checkbutton.focus", {"side": "left", "sticky": "w",
+                                       "children": [
+                                           ("Checkbutton.label",
+                                            {"sticky": "nswe"}),
+                                       ]}),
+            ]}),
+        ])
+    except tk.TclError:
+        pass        # 差し替えられず。clam の既定の印のまま出る（形は悪いが動く）
+
+    # 作業中の帯。溝を地に近い色にして、動く部分だけが目に入るようにする。
+    # （clam では thickness を下げても高さは変わらないので指定しない）
+    style.configure("Thin.Horizontal.TProgressbar",
+                    troughcolor=p["raised"], background=p["accent"],
+                    bordercolor=p["raised"], lightcolor=p["accent"],
+                    darkcolor=p["accent"], borderwidth=0)
+
+    style.configure("Vertical.TScrollbar",
+                    background=p["border"], troughcolor=p["bg"],
+                    bordercolor=p["bg"], arrowcolor=p["text_sub"],
+                    relief="flat")
+    style.map("Vertical.TScrollbar",
+              background=[("pressed", p["text_faint"]),
+                          ("active", p["text_faint"])])
+    return style
+
+
+# --------------------------------------------------------------------------
+# 一覧のチェックボックス
+# --------------------------------------------------------------------------
+# 以前は「☑」「☐」の**文字**を一覧に流し込んでいた。この2つは字形が似ていて、
+# 小さい字だと ☑ の中のチェックが × に潰れる ― 有効なのに「禁止」に見えるので、
+# 意味が逆に伝わる。字ではなく絵にして、入/切を塗りつぶしの有無で分ける。
+#
+# 描き方は素の tk だけで済ませる（PIL を要求すると、配布物に依存が増える）。
+# 背景は透明のままにする。行の色で塗ると、選択された行の上で四角が浮く。
+
+
+def _stroke(img: tk.PhotoImage, color: str,
+            x0: float, y0: float, x1: float, y1: float, weight: int) -> None:
+    """2点を結ぶ線を置く。PhotoImage には線を引く手段が無いので点で埋める。
+
+    太さは通る点を**中心**に広げる。左上を起点にすると、太くするほど線全体が
+    右下へずれる ― 四角の中でチェックが右下に寄って見えるのはこれが原因だった。
+
+    刻みは長さより細かく取る。点を等間隔に置くだけなので、粗いと斜めの線が
+    切れて破線に見える。
+    """
+    half = weight / 2.0
+    span = max(abs(x1 - x0), abs(y1 - y0))
+    steps = max(1, int(math.ceil(span * 3)))
+    for i in range(steps + 1):
+        x = math.floor(x0 + (x1 - x0) * i / steps - half + 0.5)
+        y = math.floor(y0 + (y1 - y0) * i / steps - half + 0.5)
+        img.put(color, to=(x, y, x + weight, y + weight))
+
+
+def _rounded(img: tk.PhotoImage, color: str,
+             x0: float, y0: float, x1: float, y1: float, radius: float) -> None:
+    """角を丸めた四角を塗る。行ごとに横線を置いて、両端を円弧の分だけ縮める。"""
+    for y in range(int(y0), int(y1)):
+        dy = 0.0
+        if y < y0 + radius:
+            dy = (y0 + radius) - y - 0.5
+        elif y >= y1 - radius:
+            dy = y - (y1 - radius) + 0.5
+        inset = radius - math.sqrt(max(0.0, radius * radius - dy * dy)) if dy else 0.0
+        xa, xb = int(round(x0 + inset)), int(round(x1 - inset))
+        if xb > xa:
+            img.put(color, to=(xa, y, xb, y + 1))
+
+
+def make_check_image(master: tk.Misc, size: int, on: bool) -> tk.PhotoImage:
+    """入/切のチェックボックスを1枚描く。`size` は辺の画素数。
+
+    角を丸めるのは Windows 11 の見た目に寄せるため。直角のままだと、同じ画面に
+    並ぶ OS 側の部品から浮く。
+    """
+    p = PALETTE
+    img = tk.PhotoImage(master=master, width=size, height=size)
+    radius = max(2, int(round(size * 0.22)))
+    if not on:
+        # 枠だけ。外周を枠色で塗ってから、1px 内側を地の色で抜く。
+        _rounded(img, p["check_edge"], 0, 0, size, size, radius)
+        _rounded(img, p["surface"], 1, 1, size - 1, size - 1, max(1, radius - 1))
+        return img
+    _rounded(img, p["check"], 0, 0, size, size, radius)
+    # チェックは細めに、四角の中で余白を残す形で置く。太くすると中が詰まって、
+    # 印ではなく「塗り」に見える ― 入っているかどうかが形から読めなくなる。
+    #
+    # 16px を基準にした比率。太さは点を中心に広がる（`_stroke`）ので、この3点が
+    # 描く形の外接がそのまま四角の中央に来る。左右・上下とも画素 4〜11 に収まり、
+    # 中心が四角の中心（0〜15 の真ん中）と一致する。
+    k = size / 16.0
+    weight = max(2, int(round(size / 8)))
+    _stroke(img, p["on_accent"], 4.5 * k, 8.0 * k, 6.8 * k, 10.5 * k, weight)
+    _stroke(img, p["on_accent"], 6.8 * k, 10.5 * k, 11.0 * k, 5.0 * k, weight)
+    return img
+
+
+# 作った絵はここで抱えたままにする。PhotoImage は Python 側の参照が切れると
+# 中身ごと消える（Tk が握るのは名前だけ）ので、貼った先から絵が消える。
+_CHECKS: dict[bool, tk.PhotoImage] = {}
+
+
+def check_images(master: tk.Misc) -> tuple[tk.PhotoImage, tk.PhotoImage]:
+    """（入, 切）を返す。1度作って使い回す。
+
+    一覧の行と、mod ごとの設定ウィンドウの両方がこれを使う。同じ「入」が場所に
+    よって違う形で出ると、どちらかが別の意味に見える。
+    """
+    if not _CHECKS:
+        # 画面の拡大率に合わせる。字だけ大きくなって絵が取り残されると目立つ。
+        try:
+            scaling = float(master.tk.call("tk", "scaling"))
+        except Exception:
+            scaling = 1.0
+        size = max(14, int(round(12 * scaling)))
+        _CHECKS[True] = make_check_image(master, size, True)
+        _CHECKS[False] = make_check_image(master, size, False)
+    return _CHECKS[True], _CHECKS[False]
 
 
 def _read_json(path: str):
@@ -305,6 +618,9 @@ class SettingsDialog(tk.Toplevel):
     def __init__(self, master: tk.Misc, mod: dict, chosen: dict):
         super().__init__(master)
         self.title("{} の設定".format(mod["name_ja"]))
+        # Toplevel は素の tk widget なので、ttk の style ではなく直に地の色を渡す
+        # （渡さないと本体の窓と違う灰色が出る）。
+        self.configure(background=PALETTE["bg"])
         self.transient(master)
         self.resizable(True, False)
         self.mod = mod
@@ -313,7 +629,7 @@ class SettingsDialog(tk.Toplevel):
 
         frame = ttk.Frame(self, padding=12)
         frame.pack(fill="both", expand=True)
-        ttk.Label(frame, text=mod["dir"], foreground="#666").grid(
+        ttk.Label(frame, text=mod["dir"], style="Sub.TLabel").grid(
             row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
 
         row = 1
@@ -327,13 +643,13 @@ class SettingsDialog(tk.Toplevel):
             row += 1
             note = decl["note"]["ja"]
             if note:
-                ttk.Label(frame, text=note, foreground="#777",
+                ttk.Label(frame, text=note, style="Sub.TLabel",
                           wraplength=420, justify="left").grid(
                     row=row, column=1, sticky="w", pady=(0, 6))
                 row += 1
             # 既定値を必ず見せる。「元に戻したい」ときに何に戻すのかが分かるように。
             ttk.Label(frame, text="既定: {!r}".format(decl["default"]),
-                      foreground="#999").grid(row=row, column=1, sticky="w")
+                      style="Faint.TLabel").grid(row=row, column=1, sticky="w")
             row += 1
 
         frame.columnconfigure(1, weight=1)
@@ -419,12 +735,83 @@ class SettingsDialog(tk.Toplevel):
 
 
 # --------------------------------------------------------------------------
+# 説明の吹き出し
+# --------------------------------------------------------------------------
+class Tooltip:
+    """widget に説明を出す。
+
+    一覧の「有効」「設定」の列は記号しか出ていない（チェック、● と ○）。
+    何を表しているかも、押せることも、触ってみるまで判らない。列の意味を
+    見出しに全部書くと幅が要るので、指した所だけ出す。
+
+    `text` には文字列のほか、event を受けて文字列を返す関数を渡せる。列ごとに
+    中身を変えるため ― 出す物が変わったら出し直し、空を返したらしまう。
+    """
+
+    DELAY = 550          # ms。動かしている最中に次々出さないための間
+
+    def __init__(self, widget: tk.Misc, text) -> None:
+        self.widget = widget
+        self.text = text
+        self.tip: tk.Toplevel | None = None
+        self.pending: str | None = None
+        self.showing = ""
+        # add="+" で足す。この widget には既に別の用途の割り当てがある
+        # （一覧のドラッグなど）ので、置き換えると壊れる。
+        widget.bind("<Motion>", self._on_motion, add="+")
+        widget.bind("<Leave>", lambda _e: self._hide(), add="+")
+        widget.bind("<Button-1>", lambda _e: self._hide(), add="+")
+        widget.bind("<Button-3>", lambda _e: self._hide(), add="+")
+
+    def _resolve(self, event: tk.Event) -> str:
+        if callable(self.text):
+            try:
+                return self.text(event) or ""
+            except Exception:
+                return ""       # 説明が出ないことと、一覧が使えないことは別の話
+        return str(self.text)
+
+    def _on_motion(self, event: tk.Event) -> None:
+        text = self._resolve(event)
+        if text == self.showing:
+            return              # 同じ物の上を動いているだけ。出し直さない
+        self._hide()
+        if not text:
+            return
+        x, y = event.x_root + 16, event.y_root + 22
+        self.pending = self.widget.after(
+            self.DELAY, lambda: self._show(text, x, y))
+
+    def _show(self, text: str, x: int, y: int) -> None:
+        self.pending = None
+        tip = tk.Toplevel(self.widget)
+        tip.wm_overrideredirect(True)            # 枠もタイトルも出さない
+        tip.configure(background=PALETTE["border"])
+        tk.Label(tip, text=text, justify="left", bd=0, padx=8, pady=5,
+                 background=PALETTE["surface"],
+                 foreground=PALETTE["text"]).pack(padx=1, pady=1)
+        tip.wm_geometry("+{}+{}".format(x, y))
+        self.tip = tip
+        self.showing = text
+
+    def _hide(self) -> None:
+        if self.pending is not None:
+            self.widget.after_cancel(self.pending)
+            self.pending = None
+        if self.tip is not None:
+            self.tip.destroy()
+            self.tip = None
+        self.showing = ""
+
+
+# --------------------------------------------------------------------------
 # GUI 本体
 # --------------------------------------------------------------------------
 class App(ttk.Frame):
     # (キー, 見出し, 幅, 寄せ, 伸ばすか)
+    # 「有効」はここに無い。チェックは絵なので、Treeview で絵を置ける唯一の列
+    # （一番左の #0）に入れる。
     COLUMNS = (
-        ("on", "有効", 44, "center", False),
         ("order", "順", 40, "center", False),
         ("name_ja", "Name（日本語）", 200, "w", True),
         ("name_en", "Name (English)", 200, "w", True),
@@ -433,6 +820,23 @@ class App(ttk.Frame):
         ("author", "Author", 120, "w", False),
         ("state", "前回", 76, "center", False),
     )
+
+    # 列に指したときに出す説明。記号だけの列（有効・設定）は、意味と「押せる」
+    # ことの両方を書く ― 見出しの文字数では入りきらない。
+    COLUMN_HELP = {
+        "on": "この MOD を適用するかどうか。クリックで切り替え（Space キーでも同じ）",
+        "order": "上から適用される順番。無効なものには番号を振りません",
+        "name_ja": "行をドラッグすると適用順を変えられます",
+        "name_en": "行をドラッグすると適用順を変えられます",
+        "cfg": "● = 既定から変更あり ／ ○ = 既定のまま。クリックで設定を開きます\n"
+               "（印が無い MOD は、変更できる設定を持っていません）",
+        "version": "mod.json に書かれた版",
+        "author": "mod.json に書かれた作者",
+        "state": "前回の注入の結果。「適用」以外だった行は赤で出ます",
+    }
+
+    # 絞り込みの種類。並び順は「よく使う順」。
+    FILTERS = ("すべて", "有効のみ", "無効のみ", "前回失敗", "設定あり")
 
     def __init__(self, master: tk.Tk) -> None:
         super().__init__(master, padding=10)
@@ -446,6 +850,11 @@ class App(ttk.Frame):
         self.drag: str | None = None      # ドラッグ中の mod のフォルダ名
         self.dirty = False
         self.busy = False
+        self._status_text = ""            # 状態表示に今出ている文言
+        self.shown_count = 0              # 絞り込みの結果、一覧に出ている数
+        # 絞り込みの条件。widget より先に作る（`_build` の中で参照する）。
+        self.query = tk.StringVar()
+        self.filter_mode = tk.StringVar(value=self.FILTERS[0])
         # 注入は別スレッドで動くので、進捗はキュー越しに受け取って
         # メインスレッドの after で描く（tkinter は他スレッドから触れない）。
         self.events: queue.Queue[tuple[str, str]] = queue.Queue()
@@ -464,26 +873,58 @@ class App(ttk.Frame):
 
     # -- 組み立て ----------------------------------------------------------
     def _build(self) -> None:
+        self._build_menu()
+
         head = ttk.Frame(self)
         head.pack(fill="x")
         ttk.Label(head, text="Instantale ModLoader",
-                  font=("Yu Gothic UI", 14, "bold")).pack(side="left")
+                  style="Title.TLabel").pack(side="left")
         ttk.Label(head, text="上から順に適用されます（行をドラッグして並べ替え）",
-                  foreground="#666").pack(side="left", padx=(12, 0))
+                  style="Sub.TLabel").pack(side="left", padx=(12, 0))
+
+        # 絞り込み。MOD が 30 個を超えると、上から目で追うしか無くなる。
+        filters = ttk.Frame(self)
+        filters.pack(fill="x", pady=(10, 0))
+        ttk.Label(filters, text="検索", style="Sub.TLabel").pack(side="left")
+        entry = ttk.Entry(filters, textvariable=self.query, width=28)
+        entry.pack(side="left", padx=(6, 0))
+        entry.bind("<Escape>", lambda _e: self.clear_filter())
+        self.search_entry = entry
+        ttk.Label(filters, text="表示", style="Sub.TLabel").pack(
+            side="left", padx=(16, 0))
+        ttk.Combobox(filters, textvariable=self.filter_mode, state="readonly",
+                     values=list(self.FILTERS), width=10).pack(
+            side="left", padx=(6, 0))
+        ttk.Button(filters, text="解除", width=6,
+                   command=self.clear_filter).pack(side="left", padx=(8, 0))
+        self.count_label = ttk.Label(filters, text="", style="Faint.TLabel")
+        self.count_label.pack(side="left", padx=(12, 0))
+        # 条件が変わったら組み直す。入力のたびに走るが、30 個程度なら気にならない。
+        self.query.trace_add("write", self._on_filter_change)
+        self.filter_mode.trace_add("write", self._on_filter_change)
 
         body = ttk.Frame(self)
         body.pack(fill="both", expand=True, pady=(8, 0))
 
+        # `show` に "tree" を含めるのは、#0 の列にチェックの絵を置くため
+        # （"headings" だけだと #0 が隠れて、絵を出す場所が無くなる）。
+        self.check_on, self.check_off = check_images(self)
         self.tree = ttk.Treeview(body, columns=[c[0] for c in self.COLUMNS],
-                                 show="headings", selectmode="browse", height=15)
+                                 show="tree headings", selectmode="browse",
+                                 height=15)
+        self.tree.heading("#0", text="有効", anchor="center")
+        self.tree.column("#0", width=52, minwidth=52, stretch=False,
+                         anchor="center")
         for key, title, width, anchor, stretch in self.COLUMNS:
-            self.tree.heading(key, text=title)
+            # 見出しは中身と同じ側に寄せる。ttk の既定は中央なので、左寄せの列
+            # （名前・作者）で見出しだけが中に浮いて、列の切れ目が読めなくなる。
+            self.tree.heading(key, text=title, anchor=anchor)
             self.tree.column(key, width=width, anchor=anchor, stretch=stretch)
         # 無効な行は灰色にする。チェックだけだと、一覧を眺めたときに
         # 「効いていない mod がある」ことに気付きにくい。
-        self.tree.tag_configure("off", foreground="#9a9a9a")
+        self.tree.tag_configure("off", foreground=PALETTE["text_faint"])
         # 前回の注入で入らなかった mod は赤。ログを開かずに気付けるように。
-        self.tree.tag_configure("bad", foreground="#b00020")
+        self.tree.tag_configure("bad", foreground=PALETTE["danger"])
         self.tree.pack(side="left", fill="both", expand=True)
         self.tree.bind("<<TreeviewSelect>>", lambda _e: self._show_detail())
         self.tree.bind("<Button-1>", self._on_press)
@@ -491,61 +932,255 @@ class App(ttk.Frame):
         self.tree.bind("<ButtonRelease-1>", self._on_release)
         self.tree.bind("<space>", lambda _e: self._toggle())
         self.tree.bind("<Double-1>", self._on_double)
+        self.tree.bind("<Return>", lambda _e: self._edit_settings())
+        self.tree.bind("<Button-3>", self._on_context)
+        self._build_row_menu()
+        self.tree_tip = Tooltip(self.tree, self._tip_for)
 
         bar = ttk.Scrollbar(body, orient="vertical", command=self.tree.yview)
         bar.pack(side="left", fill="y")
         self.tree.configure(yscrollcommand=bar.set)
 
-        side = ttk.Frame(body, padding=(10, 0, 0, 0))
+        # 一覧の脇に残すのは**並べ替えだけ**。ここは「一覧の中の位置を動かす」
+        # 操作しか無い場所にする ― 以前は追加・フォルダを開く・保存まで同じ幅で
+        # 12 個並んでいて、区切り線はあっても群の意味が伝わらず、よく使うものを
+        # 毎回探すことになっていた。残りはメニューと右クリックに移した。
+        side = ttk.Frame(body, padding=(12, 0, 0, 0))
         side.pack(side="left", fill="y")
-        for label, delta in (("▲ 上へ", -1), ("▼ 下へ", 1)):
-            ttk.Button(side, text=label, width=13,
-                       command=lambda d=delta: self._move(d)).pack(pady=2)
-        ttk.Button(side, text="最上部へ", width=13,
-                   command=lambda: self._move_to(0)).pack(pady=2)
-        ttk.Button(side, text="最下部へ", width=13,
-                   command=lambda: self._move_to(-1)).pack(pady=2)
-        ttk.Separator(side).pack(fill="x", pady=6)
-        ttk.Button(side, text="有効/無効", width=13,
-                   command=self._toggle).pack(pady=2)
-        ttk.Button(side, text="全て有効", width=13,
-                   command=self._enable_all).pack(pady=2)
-        self.cfg_btn = ttk.Button(side, text="設定…", width=13,
-                                  command=self._edit_settings)
-        self.cfg_btn.pack(pady=2)
-        ttk.Separator(side).pack(fill="x", pady=6)
-        ttk.Button(side, text="MOD を追加…", width=13,
-                   command=self.add_mod).pack(pady=2)
-        self.open_btn = ttk.Button(side, text="MOD を開く", width=13,
-                                   command=self.open_mod_dir)
-        self.open_btn.pack(pady=2)
-        ttk.Button(side, text="mods/ を開く", width=13,
-                   command=self.open_mods_dir).pack(pady=2)
-        ttk.Separator(side).pack(fill="x", pady=6)
-        ttk.Button(side, text="保存", width=13,
-                   command=self.save).pack(pady=2)
-        ttk.Button(side, text="再読み込み", width=13,
-                   command=self.reload).pack(pady=2)
+        ttk.Label(side, text="並べ替え", style="Group.TLabel").pack(
+            anchor="w", pady=(0, 5))
+        for label, command in (
+                ("▲ 上へ", lambda: self._move(-1)),
+                ("▼ 下へ", lambda: self._move(1)),
+                ("⤒ 最上部へ", lambda: self._move_to(0)),
+                ("⤓ 最下部へ", lambda: self._move_to(-1))):
+            ttk.Button(side, text=label, width=12, command=command).pack(
+                fill="x", pady=1)
+        # ボタンを減らした分、他の操作の在り処を書いておく。減らしただけだと
+        # 「できなくなった」ように見える。
+        ttk.Label(side, text="そのほかの操作は\n行を右クリック、\nまたは上のメニュー",
+                  style="Faint.TLabel", justify="left").pack(
+            anchor="w", pady=(14, 0))
 
-        self.detail = ttk.Label(self, text="", foreground="#444",
+        self.detail = ttk.Label(self, text="", style="Sub.TLabel",
                                 wraplength=860, justify="left")
         self.detail.pack(fill="x", pady=(8, 0))
         # 宣言と実体のずれ（順序・依存・非互換）。何も無ければ行ごと出さない。
-        self.warn = ttk.Label(self, text="", foreground="#a05000",
+        self.warn = ttk.Label(self, text="", style="Warn.TLabel",
                               wraplength=860, justify="left")
         self.warn.pack(fill="x")
 
         foot = ttk.Frame(self)
-        foot.pack(fill="x", pady=(10, 0))
+        foot.pack(fill="x", pady=(6, 0))
+        # このウィンドウで押すものの中で、これだけが「実際にゲームが変わる」操作。
+        # 他と同じ濃さで並べると毎回探すことになるので、色を持たせて1つだけ立たせる。
         self.launch_btn = ttk.Button(foot, text="MOD を注入してゲームを起動",
-                                     command=self.launch)
+                                     style="Accent.TButton", command=self.launch)
         self.launch_btn.pack(side="left")
-        ttk.Button(foot, text="ゲームの場所を設定…",
-                   command=self.choose_game).pack(side="left", padx=6)
         self.unload_btn = ttk.Button(foot, text="MOD を外す", command=self.unload)
-        self.unload_btn.pack(side="left")
-        self.status_label = ttk.Label(foot, text="", foreground="#444")
+        self.unload_btn.pack(side="left", padx=6)
+        # 保存は一覧の脇ではなく起動の隣に置く。「並べ替えて、保存して、起動する」
+        # が一続きの流れなので、最後の2つが同じ場所にある方が追える。押せるかどうか
+        # が未保存の有無をそのまま表す（`_update_actions`）。
+        self.save_btn = ttk.Button(foot, text="保存", command=self.save)
+        self.save_btn.pack(side="left")
+        self.status_label = ttk.Label(foot, text="", style="Sub.TLabel")
         self.status_label.pack(side="left", padx=10)
+        # 作業中の帯。動いていないときは出さない。
+        #
+        # 幅は決め打ちで短くする。clam の動く部分は溝の長さに関わらず 30px 弱に
+        # しかならないので、行いっぱいに伸ばすと、長い溝の上を小さな点が滑るだけ
+        # になって、動いていることが伝わらない。
+        self.progress = ttk.Progressbar(foot, mode="indeterminate", length=180,
+                                        style="Thin.Horizontal.TProgressbar")
+
+    # -- 絞り込み ------------------------------------------------------------
+    def _matches(self, mod: dict) -> bool:
+        """この mod を一覧に出すか。"""
+        text = self.query.get().strip().lower()
+        if text:
+            # 説明も対象にする。「BGM」で探して、名前に入っていない mod まで
+            # 見つかる方が、探している側の意図に近い。
+            hay = " ".join((mod["dir"], mod["name_ja"], mod["name_en"],
+                            mod["author"], mod["desc_ja"], mod["desc_en"])).lower()
+            if text not in hay:
+                return False
+        mode = self.filter_mode.get()
+        if mode == "有効のみ":
+            return mod["dir"] not in self.disabled
+        if mode == "無効のみ":
+            return mod["dir"] in self.disabled
+        if mode == "前回失敗":
+            result = (self.status.get("mods") or {}).get(mod["dir"], "")
+            return bool(result) and result != "ok"
+        if mode == "設定あり":
+            return bool(mod["settings"])
+        return True
+
+    def _visible_mods(self) -> list[dict]:
+        """今その順で一覧に並んでいるものだけ。"""
+        return [m for m in self.mods if self._matches(m)]
+
+    def _filtering(self) -> bool:
+        return bool(self.query.get().strip()) or self.filter_mode.get() != self.FILTERS[0]
+
+    def _on_filter_change(self, *_args) -> None:
+        keep = self.tree.selection()
+        self._refresh(keep=keep[0] if keep else None)
+        if self._filtering():
+            self._set_status("{} 個中 {} 個を表示しています（絞り込み中）".format(
+                len(self.mods), self.shown_count))
+        else:
+            self._set_status("絞り込みを解除しました")
+
+    def focus_search(self) -> None:
+        self.search_entry.focus_set()
+        self.search_entry.select_range(0, "end")
+
+    def clear_filter(self) -> None:
+        """検索語と表示条件を戻す。どちらも既定なら何もしない。"""
+        if not self._filtering():
+            return
+        self.filter_mode.set(self.FILTERS[0])
+        self.query.set("")          # 2つ目の書き換えで `_on_filter_change` が走る
+
+    def _tip_for(self, event: tk.Event) -> str:
+        """指した場所に応じた説明。列の意味は見出しだけでは足りない。"""
+        region = self.tree.identify_region(event.x, event.y)
+        if region not in ("tree", "cell", "heading"):
+            return ""
+        # チェックの列は #0。cell ではなく "tree" として来るが、見出しの上では
+        # "heading" になるので、列番号でも見る。
+        if region == "tree" or self.tree.identify_column(event.x) == "#0":
+            return self.COLUMN_HELP["on"]
+        return self.COLUMN_HELP.get(self._column_key(event.x), "")
+
+    # -- メニュー ------------------------------------------------------------
+    #  一覧の脇から外した操作の行き先。ここに置くのは「たまにしか押さないが
+    #  無いと困る」もの ― 出しっぱなしにすると、よく使うものが埋もれる。
+    #  ショートカットも同じ場所で決める（メニューに出る表記と実際の割り当てが
+    #  離れていると、片方だけ直したときに嘘になる）。
+    MENU_KEYS = (
+        ("<Control-o>", "add_mod"),
+        ("<Control-s>", "save"),
+        ("<Control-f>", "focus_search"),
+        ("<F5>", "reload"),
+        ("<F9>", "launch"),
+    )
+
+    def _build_menu(self) -> None:
+        master = self.winfo_toplevel()
+        bar = tk.Menu(master, tearoff=0)
+
+        m_file = tk.Menu(bar, tearoff=0)
+        m_file.add_command(label="MOD を追加…", accelerator="Ctrl+O",
+                           command=self.add_mod)
+        m_file.add_separator()
+        m_file.add_command(label="保存", accelerator="Ctrl+S", command=self.save)
+        m_file.add_command(label="再読み込み", accelerator="F5", command=self.reload)
+        m_file.add_separator()
+        m_file.add_command(label="ゲームの場所を設定…", command=self.choose_game)
+        m_file.add_separator()
+        m_file.add_command(label="終了", command=self._on_close)
+        bar.add_cascade(label="ファイル", menu=m_file)
+
+        # 開いた瞬間に押せる項目を揃える（postcommand）。選択が変わるたびに
+        # 更新すると、見ていないメニューのために毎回書き換えることになる。
+        self.mod_menu = tk.Menu(bar, tearoff=0, postcommand=self._sync_mod_menu)
+        self.mod_menu.add_command(label="有効 / 無効", accelerator="Space",
+                                  command=self._toggle)
+        self.mod_menu.add_command(label="全て有効にする", command=self._enable_all)
+        self.mod_menu.add_command(label="設定…", accelerator="Enter",
+                                  command=self._edit_settings)
+        self.mod_menu.add_separator()
+        self.mod_menu.add_command(label="一番上へ", command=lambda: self._move_to(0))
+        self.mod_menu.add_command(label="上へ", command=lambda: self._move(-1))
+        self.mod_menu.add_command(label="下へ", command=lambda: self._move(1))
+        self.mod_menu.add_command(label="一番下へ", command=lambda: self._move_to(-1))
+        self.mod_menu.add_separator()
+        self.mod_menu.add_command(label="この MOD のフォルダを開く",
+                                  command=self.open_mod_dir)
+        self.mod_menu.add_command(label="mods/ フォルダを開く",
+                                  command=self.open_mods_dir)
+        bar.add_cascade(label="MOD", menu=self.mod_menu)
+
+        m_run = tk.Menu(bar, tearoff=0)
+        m_run.add_command(label="MOD を注入してゲームを起動", accelerator="F9",
+                          command=self.launch)
+        m_run.add_command(label="MOD を外す", command=self.unload)
+        m_run.add_separator()
+        # 失敗したときの案内文が out/bootstrap.log を指すのに、そこへ行く手段が
+        # どこにも無かった。
+        m_run.add_command(label="out/ フォルダを開く（ログ）",
+                          command=self.open_out_dir)
+        bar.add_cascade(label="実行", menu=m_run)
+
+        master.configure(menu=bar)
+
+        for sequence, name in self.MENU_KEYS:
+            master.bind(sequence, lambda _e, n=name: (getattr(self, n)(), "break")[1])
+
+        # 一覧を選んだ状態で並べ替えるための割り当て。Treeview 自身は Up/Down を
+        # 「選択の移動」に使うので、Ctrl を足して住み分ける。
+        for sequence, command in (
+                ("<Control-Up>", lambda: self._move(-1)),
+                ("<Control-Down>", lambda: self._move(1)),
+                ("<Control-Home>", lambda: self._move_to(0)),
+                ("<Control-End>", lambda: self._move_to(-1))):
+            master.bind(sequence, lambda _e, c=command: (c(), "break")[1])
+
+    def _build_row_menu(self) -> None:
+        """行の上での右クリック。その mod に対してできることだけを出す。
+
+        一覧が出来てから呼ぶ（menu の親に tree を渡すので、`_build_menu` と
+        一緒には作れない）。
+        """
+        self.row_menu = tk.Menu(self.tree, tearoff=0)
+        self.row_menu.add_command(label="有効 / 無効", command=self._toggle)
+        self.row_menu.add_command(label="設定…", command=self._edit_settings)
+        self.row_menu.add_separator()
+        self.row_menu.add_command(label="一番上へ", command=lambda: self._move_to(0))
+        self.row_menu.add_command(label="一番下へ", command=lambda: self._move_to(-1))
+        self.row_menu.add_separator()
+        self.row_menu.add_command(label="フォルダを開く", command=self.open_mod_dir)
+
+    def _sync_mod_menu(self) -> None:
+        """メニューバーの「MOD」を開く直前に、押せる項目だけを押せる状態にする。"""
+        mod = self._selected()
+        picked = "normal" if mod else "disabled"
+        for label in ("有効 / 無効", "一番上へ", "上へ", "下へ", "一番下へ",
+                      "この MOD のフォルダを開く"):
+            self.mod_menu.entryconfigure(label, state=picked)
+        self.mod_menu.entryconfigure(
+            "設定…",
+            state="normal" if (mod and mod["settings"]) else "disabled")
+        self.mod_menu.entryconfigure(
+            "全て有効にする", state="normal" if self.disabled else "disabled")
+
+    def _on_context(self, event: tk.Event) -> None:
+        row = self.tree.identify_row(event.y)
+        if not row:
+            return
+        # 右クリックでは選択が動かないので、押した行を選んでから出す
+        # （見えている選択と、メニューが効く相手を一致させる）。
+        self.tree.selection_set(row)
+        self.tree.focus(row)
+        mod = self._selected()
+        self.row_menu.entryconfigure(
+            "設定…",
+            state="normal" if (mod and mod["settings"]) else "disabled")
+        try:
+            self.row_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self.row_menu.grab_release()
+
+    def _update_actions(self) -> None:
+        """未保存かどうかを「保存」の押せる/押せないに反映する。
+
+        押せない＝書き戻すものが無い。状態表示の行にも「（未保存）」は出るが、
+        そちらは操作のたびに書き換わるので、常に見える印をボタン側にも置く。
+        """
+        self.save_btn.state(["!disabled"] if self.dirty else ["disabled"])
 
     # -- 一覧 --------------------------------------------------------------
     def reload(self) -> None:
@@ -557,6 +1192,7 @@ class App(ttk.Frame):
         self.status = read_status()
         self.dirty = False
         self._refresh()
+        self._update_actions()
 
         off = len(self.disabled & {m["dir"] for m in self.mods})
         msg = "{} 個の MOD（有効 {} / 無効 {}）".format(
@@ -600,6 +1236,7 @@ class App(ttk.Frame):
         self.tree.delete(*self.tree.get_children())
         results = self.status.get("mods") or {}
         n = 0
+        shown = 0
         for mod in self.mods:
             name = mod["dir"]
             on = name not in self.disabled
@@ -607,6 +1244,11 @@ class App(ttk.Frame):
             # 「何番目に読まれるか」が実際とずれて読めてしまう。
             if on:
                 n += 1
+            # 番号を数えてから絞る。絞り込み中に振り直すと、見えている行の番号が
+            # 実際の適用順とずれる ― 番号が飛ぶ方が、嘘の番号より読める。
+            if not self._matches(mod):
+                continue
+            shown += 1
             result = results.get(name, "")
             tags = ()
             if not on:
@@ -618,11 +1260,17 @@ class App(ttk.Frame):
             changed = bool(self.settings.get(name))
             cfg = ("●" if changed else "○") if mod["settings"] else ""
             self.tree.insert("", "end", iid=name, tags=tags,
-                             values=(CHECKED if on else UNCHECKED,
-                                     n if on else "-",
+                             image=self.check_on if on else self.check_off,
+                             values=(n if on else "-",
                                      mod["name_ja"], mod["name_en"], cfg,
                                      mod["version"] or "-", mod["author"] or "-",
                                      RESULT_TEXT.get(result, result or "-")))
+        self.shown_count = shown
+        if self._filtering():
+            self.count_label.configure(
+                text="{} / {} 件".format(shown, len(self.mods)))
+        else:
+            self.count_label.configure(text="")
         if keep and self.tree.exists(keep):
             self.tree.selection_set(keep)
             self.tree.see(keep)
@@ -632,12 +1280,8 @@ class App(ttk.Frame):
         mod = self._selected()
         if not mod:
             self.detail.configure(text="")
-            self.cfg_btn.state(["disabled"])
-            self.open_btn.state(["disabled"])
             return
-        self.cfg_btn.state(["!disabled"] if mod["settings"] else ["disabled"])
-        self.open_btn.state(["!disabled"])
-
+        # 押せる/押せないの出し分けはメニューを開くときに行う（`_sync_mod_menu`）。
         state = "無効" if mod["dir"] in self.disabled else "有効"
         bits = ["{}  /  entry: {}  /  API {}  /  {}".format(
             mod["dir"], mod["entry"], mod["api"], state)]
@@ -673,13 +1317,23 @@ class App(ttk.Frame):
 
     # -- 並べ替え ----------------------------------------------------------
     def _move(self, delta: int) -> None:
+        """選んでいるものを1つ上 / 下へ。
+
+        隣は**一覧に見えている隣**で数える。絞り込み中に全体の並びで1つ動かすと、
+        隠れているものと入れ替わって、画面の上では何も起きていないように見える。
+        絞り込んでいなければ見えている並び＝全体の並びなので、結果は変わらない。
+        """
         mod = self._selected()
         if not mod:
             return
-        i = self.mods.index(mod)
-        j = i + delta
-        if not 0 <= j < len(self.mods):
+        shown = self._visible_mods()
+        if mod not in shown:
             return
+        k = shown.index(mod) + delta
+        if not 0 <= k < len(shown):
+            return
+        other = shown[k]
+        i, j = self.mods.index(mod), self.mods.index(other)
         self.mods[i], self.mods[j] = self.mods[j], self.mods[i]
         self._mark_dirty(mod["dir"])
 
@@ -694,6 +1348,7 @@ class App(ttk.Frame):
     def _mark_dirty(self, keep: str, what: str = "順序を変更しました") -> None:
         self.dirty = True
         self._refresh(keep=keep)
+        self._update_actions()
         self._set_status(f"{what}（未保存）")
 
     # -- ドラッグでの並べ替え ------------------------------------------------
@@ -701,23 +1356,38 @@ class App(ttk.Frame):
     #  「今どの行の上にいるか」を毎回引いて、その位置へ差し込み直す。
     def _on_press(self, event: tk.Event) -> None:
         row = self.tree.identify_row(event.y)
-        if not row or self.tree.identify_region(event.x, event.y) != "cell":
+        if not row:
             self.drag = None
             return
-        column = self.tree.identify_column(event.x)
-        # 「有効」の列を押したときは並べ替えではなく切り替え。
-        if column == "#1":
+        region = self.tree.identify_region(event.x, event.y)
+        # チェックの列（#0）は Treeview の呼び方では "tree"。押したら切り替え。
+        if region == "tree":
             self.drag = None
             self.tree.selection_set(row)
             self._toggle()
             return
-        # 「設定」の列は設定を開く。
-        if column == "#5":
+        if region != "cell":
+            self.drag = None
+            return
+        # 「設定」の列は設定を開く。列は番号ではなく名前で引く ― 番号を直に書くと、
+        # 列を1つ増やしただけで別の列を押したことになる。
+        if self._column_key(event.x) == "cfg":
             self.drag = None
             self.tree.selection_set(row)
             self._edit_settings()
             return
         self.drag = row
+
+    def _column_key(self, x: int) -> str:
+        """横位置から列のキーを引く。当たらなければ空。"""
+        column = self.tree.identify_column(x)
+        try:
+            index = int(column.lstrip("#"))
+        except ValueError:
+            return ""
+        if not 1 <= index <= len(self.COLUMNS):
+            return ""          # #0（チェックの列）は "tree" 側で拾っている
+        return self.COLUMNS[index - 1][0]
 
     def _on_drag(self, event: tk.Event) -> None:
         if not self.drag:
@@ -739,10 +1409,14 @@ class App(ttk.Frame):
 
     def _on_double(self, event: tk.Event) -> str | None:
         # 見出しのダブルクリックは列幅の自動調整に取られるので、行だけ拾う。
-        if self.tree.identify_row(event.y):
-            self._toggle()
+        if not self.tree.identify_row(event.y):
+            return None
+        # チェックの列は押した時点で切り替わっている。ここで重ねると2度目の押下と
+        # 合わせて3回切り替わり、どちらに倒れたのか分からなくなる。
+        if self.tree.identify_region(event.x, event.y) == "tree":
             return "break"
-        return None
+        self._toggle()
+        return "break"
 
     # -- 有効 / 無効 --------------------------------------------------------
     def _toggle(self) -> None:
@@ -772,6 +1446,7 @@ class App(ttk.Frame):
             messagebox.showerror("保存に失敗しました", f"{type(exc).__name__}: {exc}")
             return
         self.dirty = False
+        self._update_actions()
         off = len(self.disabled & {m["dir"] for m in self.mods})
         self._set_status("load_order.json に保存しました"
                          f"（有効 {len(self.mods) - off} / 無効 {off}）")
@@ -849,6 +1524,11 @@ class App(ttk.Frame):
     def open_mods_dir(self) -> None:
         self._open(MODS_DIR)
 
+    def open_out_dir(self) -> None:
+        """ログと status.json の置き場。注入に失敗したときの案内先。"""
+        os.makedirs(OUT_DIR, exist_ok=True)
+        self._open(OUT_DIR)
+
     def _open(self, path: str) -> None:
         try:
             os.startfile(path)              # type: ignore[attr-defined]
@@ -925,7 +1605,26 @@ class App(ttk.Frame):
         self.busy = True
         self.launch_btn.state(["disabled"])
         self.unload_btn.state(["disabled"])
+        self._show_progress(True)
         threading.Thread(target=worker, args=(arg,), daemon=True).start()
+
+    def _show_progress(self, active: bool) -> None:
+        """作業中の帯を出す / しまう。
+
+        注入は段階適用まで含めると実測 80 秒ほどかかる。文字が変わるだけだと、
+        進んでいるのか固まっているのか判らない ― 動くものを1つ置いておく。
+        止まっているときは出さない。ずっと居ると、動いていることの意味が薄れる。
+        """
+        if active:
+            if not self.progress.winfo_ismapped():
+                # `before` で状態表示より先に場所を取る。後ろに回すと、状態の
+                # 文が長いとき（段階適用の待ち）に押し出されて幅が残らない。
+                self.progress.pack(side="right", padx=(10, 0),
+                                   before=self.status_label)
+            self.progress.start(12)
+        else:
+            self.progress.stop()
+            self.progress.pack_forget()
 
     def _launch_worker(self, game_path: str) -> None:
         """別スレッド。tkinter には触らず、進捗はキューへ流す。"""
@@ -939,7 +1638,7 @@ class App(ttk.Frame):
 
             report("ゲームのプロセスを検索中…")
             pid = None
-            for _ in range(FIND_TRIES):
+            for attempt in range(1, FIND_TRIES + 1):
                 procs = injector.find_processes(injector.TARGET_EXE)
                 if len(procs) > 1:
                     # 複数動いていると取り違える。injector.py と同じく自動で選ばない。
@@ -949,6 +1648,10 @@ class App(ttk.Frame):
                 if procs:
                     pid = procs[0][0]
                     break
+                # Epic 経由だと 1 分近く待つことがある。何回目かを出して、
+                # 待っているのか見失ったのかが判るようにする。
+                report("ゲームのプロセスを検索中…（{}/{} 回）".format(
+                    attempt, FIND_TRIES))
                 time.sleep(FIND_POLL)
             if pid is None:
                 self.events.put(("error", "ゲームのプロセスが見つかりません"))
@@ -1012,7 +1715,12 @@ class App(ttk.Frame):
             # モジュールが出揃って段階適用が終わるまで実測で 80 秒ほどかかり、
             # その間の status.json は「対象が見つからない」が並んだ途中経過になる。
             # 待ちが残っているうちだけ、確定するまで数回読み直す。
+            #
+            # 帯はここでは止めない。注入そのものは終わっていても、数字がまだ
+            # 動いている ― 止めると「終わった」に見えて、後から数が変わる。
             self.after(6000, self._reload_while_deferred)
+        else:
+            self._show_progress(False)
         self._set_status(msg)
 
     # 段階適用が終わるまでの追従。待ちが無くなるか回数を使い切ったら止める。
@@ -1022,13 +1730,22 @@ class App(ttk.Frame):
     def _reload_while_deferred(self, remaining: int | None = None) -> None:
         if remaining is None:
             remaining = self._SETTLE_CHECKS
-        self.reload()
+        self.reload()          # 状態表示は reload が書く。続きはその後ろに足す
         patches = self.status.get("patches") or {}
-        if (patches.get("deferred") or []) and remaining > 0:
+        waiting = patches.get("deferred") or []
+        if waiting and remaining > 0:
+            # 残りの件数を出す。減っていくのが見えれば、止まっていないと判る。
+            self._set_status("{} ｜ 段階適用の途中（未 import {} 件・あと最大 {} 回確認）"
+                             .format(self._status_text, len(waiting), remaining))
             self.after(self._SETTLE_INTERVAL,
                        lambda: self._reload_while_deferred(remaining - 1))
+            return
+        self._show_progress(False)
 
     def _set_status(self, msg: str) -> None:
+        # 直前の文言を覚えておく。段階適用の待ちは reload が書いた内容の後ろに
+        # 足したいが、widget から読み戻すと足した分がまた足されて伸び続ける。
+        self._status_text = msg
         self.status_label.configure(text=msg)
 
     # -- 窓の大きさと位置 ----------------------------------------------------
@@ -1055,6 +1772,9 @@ def main() -> int:
     root = tk.Tk()
     root.title("Instantale ModLoader")
     root.minsize(820, 480)
+    # 配色と書体は中身を組む前に決める。後から差し替えると、既に作られた
+    # widget が古い色のまま残る。
+    setup_theme(root)
     # 大きさと位置は閉じるときに settings/gui.json へ入る（App._on_close）。
     restore_geometry(root, read_config())
     App(root)
