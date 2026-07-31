@@ -380,12 +380,27 @@ def make_check_image(master: tk.Misc, size: int, on: bool) -> tk.PhotoImage:
 _CHECKS: dict[bool, tk.PhotoImage] = {}
 
 
+def _image_alive(img: tk.PhotoImage, master: tk.Misc) -> bool:
+    """`img` が `master` の Tk にまだ在るか。
+
+    PhotoImage は作られた Tk インタプリタに属する。窓を閉じて作り直すと、
+    Python 側の参照は残るのに中身は消えていて、貼ろうとした所で落ちる。
+    """
+    try:
+        master.tk.call("image", "type", str(img))
+        return True
+    except tk.TclError:
+        return False
+
+
 def check_images(master: tk.Misc) -> tuple[tk.PhotoImage, tk.PhotoImage]:
     """（入, 切）を返す。1度作って使い回す。
 
     一覧の行と、mod ごとの設定ウィンドウの両方がこれを使う。同じ「入」が場所に
     よって違う形で出ると、どちらかが別の意味に見える。
     """
+    if _CHECKS and not _image_alive(_CHECKS[True], master):
+        _CHECKS.clear()          # 別の Tk になっている。作り直す
     if not _CHECKS:
         # 画面の拡大率に合わせる。字だけ大きくなって絵が取り残されると目立つ。
         try:
@@ -481,7 +496,10 @@ def update_config(**values) -> None:
 # --------------------------------------------------------------------------
 # ウィンドウの大きさと位置
 # --------------------------------------------------------------------------
-GEOMETRY_DEFAULT = "1000x620"
+# 初めて開くときの大きさ。一覧 15 行と、MOD を選んだときに伸びる説明欄
+# （最大 5 行）と、足元のボタンが全部入る高さを取る。1000x620 では、選んだ
+# 瞬間に説明が伸びて一覧が潰れ、窓の下が詰まっていた。
+GEOMETRY_DEFAULT = "1180x760"
 
 
 def _on_screen(root: tk.Misc, geom: str) -> bool:
@@ -903,8 +921,12 @@ class App(ttk.Frame):
         self.query.trace_add("write", self._on_filter_change)
         self.filter_mode.trace_add("write", self._on_filter_change)
 
+        # body は作るだけで、置くのは最後。pack は先に置いた物から場所を配り、
+        # 足りなくなった分は後ろの物から削られる ― 一覧を先に置くと、窓が低い
+        # ときに**足元のボタンごと消える**（MOD を選んで説明が伸びた瞬間に、
+        # 起動ボタンが画面の外に出ていたのはこれ）。下に付く物を先に確保して、
+        # 余りを一覧に渡す。
         body = ttk.Frame(self)
-        body.pack(fill="both", expand=True, pady=(8, 0))
 
         # `show` に "tree" を含めるのは、#0 の列にチェックの絵を置くため
         # （"headings" だけだと #0 が隠れて、絵を出す場所が無くなる）。
@@ -964,14 +986,11 @@ class App(ttk.Frame):
 
         self.detail = ttk.Label(self, text="", style="Sub.TLabel",
                                 wraplength=860, justify="left")
-        self.detail.pack(fill="x", pady=(8, 0))
         # 宣言と実体のずれ（順序・依存・非互換）。何も無ければ行ごと出さない。
         self.warn = ttk.Label(self, text="", style="Warn.TLabel",
                               wraplength=860, justify="left")
-        self.warn.pack(fill="x")
 
         foot = ttk.Frame(self)
-        foot.pack(fill="x", pady=(6, 0))
         # このウィンドウで押すものの中で、これだけが「実際にゲームが変わる」操作。
         # 他と同じ濃さで並べると毎回探すことになるので、色を持たせて1つだけ立たせる。
         self.launch_btn = ttk.Button(foot, text="MOD を注入してゲームを起動",
@@ -993,6 +1012,14 @@ class App(ttk.Frame):
         # になって、動いていることが伝わらない。
         self.progress = ttk.Progressbar(foot, mode="indeterminate", length=180,
                                         style="Thin.Horizontal.TProgressbar")
+
+        # ここで置く順が、窓が足りないときに何を守るかを決める。下から順に
+        # 確保して、最後に残りを一覧へ渡す。一覧は縮んでも行が減るだけだが、
+        # ボタンは消えると押せなくなる。
+        foot.pack(side="bottom", fill="x", pady=(6, 0))
+        self.warn.pack(side="bottom", fill="x")
+        self.detail.pack(side="bottom", fill="x", pady=(8, 0))
+        body.pack(side="top", fill="both", expand=True, pady=(8, 0))
 
     # -- 絞り込み ------------------------------------------------------------
     def _matches(self, mod: dict) -> bool:

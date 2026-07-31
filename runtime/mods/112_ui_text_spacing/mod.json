@@ -1,0 +1,46 @@
+{
+  "entry": "ui_text_spacing.py",
+  "api": 1,
+  "name": {
+    "en": "Tighter text spacing",
+    "ja": "本文の行間を詰める"
+  },
+  "description": {
+    "en": "Tightens the line spacing of the main text and drops the blank line between paragraphs",
+    "ja": "本文（AIの応答・システムメッセージ）の行間を詰め、段落の間の空行を減らす"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "settings": {
+    "LINE_SCALE": {
+      "type": "float",
+      "default": 0.8,
+      "min": 0.5,
+      "max": 2.0,
+      "allow_null": true,
+      "label": {
+        "ja": "行間（ゲームの元の値に対する倍率）",
+        "en": "Line spacing (x the game's own value)"
+      },
+      "note": {
+        "ja": "1.0 でゲームのまま。空欄にすると行間には触らない。元の値は out\\text_spacing.log に出る",
+        "en": "1.0 keeps the game's spacing. Empty = do not touch it. The original value is logged to out\\text_spacing.log"
+      }
+    },
+    "BLANK_LINES": {
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 3,
+      "allow_null": true,
+      "label": {
+        "ja": "段落の間に残す空行の数",
+        "en": "Blank lines kept between paragraphs"
+      },
+      "note": {
+        "ja": "0 なら空行なし（改行1つ）、1 ならゲームのまま。空欄にすると本文の改行には触らない",
+        "en": "0 = no blank line, 1 = as the game writes it. Empty = do not touch the text"
+      }
+    }
+  }
+}

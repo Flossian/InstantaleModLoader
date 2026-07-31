@@ -150,6 +150,7 @@ python tools/test_quest_end_keep.py    # 304_
 python tools/test_item_detail_autosize.py     # 109_
 python tools/test_character_name_sanitize.py  # 110_
 python tools/test_llm_prompt_replace.py       # 111_
+python tools/test_ui_text_spacing.py          # 112_
 
 # 3. ローダ全体が読めるかの確認（フックは大半が保留になるが、import と apply() の失敗が出る）
 python -c "import sys; sys.path.insert(0,'runtime'); import instantale_modloader as l; print(l.boot('out/test/bootcheck'))"
