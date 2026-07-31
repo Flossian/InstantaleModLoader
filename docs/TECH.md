@@ -195,9 +195,31 @@ type out\status.json                 # 適用結果・台帳・効いている�
 
 | 決まり | 理由 |
 |---|---|
-| **ゲーム側は Python 3.10。** 3.11 以降の構文を使わない | この環境の python は 3.13 しか無いので `compileall` は 3.10 互換を保証しない |
+| **ゲーム側は Python 3.10。** 3.11 以降の構文を使わない | 手元の python は 3.13 しか無いので `compileall` だけでは 3.10 互換を保証できない。`check_mods.py` が `ast` の `feature_version=(3,10)` で**構文は**弾き、CI が本物の 3.10 で `runtime/` をコンパイルして残りを見る（§2.5） |
 | **`.bat` は ASCII のみ** | `.bat` はその時のコンソールのコードページで読まれるため、日本語を入れると環境によって解析が壊れる |
 | **ツールから MOD を読むときは番号を書かない** | `tools/` の各スクリプトは `find_mod("_balance_area_bgm.py")` のように番号を除いた名前で引く。分類を見直して番号を振り直しても壊れないようにするため |
+
+### 2.5 CI（`.github/workflows/ci.yml`）
+
+push と pull request で、**§2.1 と同じコマンドを同じ順に**走らせる。CI 専用の細工は無い
+ので、手元で通ったものは CI でも通る。Windows で動かすのは、このプロジェクトが
+Windows 専用（注入が Win32 API を直接叩く）で、Linux では実際の利用環境と関係のない
+差でしか落ちないため。
+
+| ジョブ | Python | 見るもの |
+|---|---|---|
+| `game-python` | **3.10** | `compileall runtime` — **本物の 3.10** で、ゲームの中に入るコードが通るか |
+| `checks` | 3.13 | `compileall` / `check_mods.py` / `tools/test_*.py` 全件 |
+| `packaging` | 3.13 | `make_dist.bat` が通ること、zip に `LICENSE` / `NOTICE` が入っていること |
+
+`game-python` が `runtime/` だけを見るのは、`tools/` が利用者の Python（3.13）で動く
+もので、ゲームの中には入らないから。
+
+**除外一覧は置いていない。** `tools/test_*.py` は1本でも落ちたら CI が失敗する。
+「既知の失敗」の枠を作ると、そこに積まれたものが直ったかどうか誰も見なくなるため。
+
+`packaging` が zip の中身まで見るのは、**`LICENSE` の入っていない配布物は誰も合法的に
+再配布できない**から。MIT は著作権表示が複製に付いて回ることを要求する。
 
 ---
 

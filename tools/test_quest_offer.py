@@ -536,17 +536,26 @@ print("=== 掲示板の絞り込みと「この話から依頼を作る」 ===")
 clock = install_fake_kivy()
 mod, ctx, app = setup(history=history)
 app.refresh_choice_buttons()
+
+# 「この話から依頼を作る」が出るのは**会話画面**。掲示板ではない
+# （方針・2026-07-27）。会話画面に置けば会話を閉じずに生成でき、掲示板は
+# 「既にある依頼を選ぶ場所」に徹せる。
+generate = [b for b in app.buttons if b.get(MARK) == "generate"]
+check("会話メニューに「この話から依頼を作る」が出る", generate,
+      [b["text"] for b in app.buttons])
+check("依頼人の名前が文言に入る",
+      generate and "テストNPC D" in generate[0]["text"],
+      generate[0]["text"] if generate else None)
+
 app.on_button_press(index_of(app, "offer"))
 clock.settle()
 quest_buttons = [b for b in app.buttons
                  if b["spec"].cls_name == "QuestChoiceManager"]
 check("会話から開くと、その NPC 発でない依頼は間引かれる", not quest_buttons,
       [b["text"] for b in app.buttons])
-check("「この話から依頼を作る」が先頭に出る",
-      app.buttons and app.buttons[0].get(MARK) == "generate",
+check("掲示板には「この話から依頼を作る」を出さない",
+      not any(b.get(MARK) == "generate" for b in app.buttons),
       [b["text"] for b in app.buttons])
-check("依頼人の名前が文言に入る", "テストNPC D" in app.buttons[0]["text"],
-      app.buttons[0]["text"])
 check("掲示板をいじった後も HUD を塗り直す", app.hud.painted, app.hud.painted)
 
 # 会話が無ければ「作る」は出さない（押した先で失敗するボタンを見せない）。

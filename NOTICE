@@ -1,0 +1,94 @@
+InstantaleModLoader — 権利関係についての補足
+=============================================
+
+このファイルは LICENSE の**補足**であり、LICENSE を書き換えるものではない。
+`LICENSE` は MIT の原文そのままで、このプロジェクトのライセンスは MIT である。
+ここには「MIT が何に及び、何に及ばないか」だけを書いてある。
+
+--------------------------------------------------------------------------
+MIT が及ぶもの（すべて本プロジェクトの著作物）
+--------------------------------------------------------------------------
+
+  * ローダ本体          runtime/instantale_modloader/
+  * 同梱 MOD            runtime/mods/
+  * ツール類            tools/
+  * ランチャー          InstantaleModLoader.bat, make_dist.bat
+  * ドキュメント        docs/
+
+--------------------------------------------------------------------------
+MIT が及ばないもの
+--------------------------------------------------------------------------
+
+本プロジェクトは Instantale というゲームを対象に動作する。そのため、
+**ゲーム側に由来する次のものは本プロジェクトの著作物ではなく、MIT の許諾は
+これらに及ばない。**
+
+  * Instantale 本体、その実行ファイル、アセット（画像・音声・テキスト）、
+    セーブデータの内容
+  * 相互運用のために引用しているゲーム内の文字列・識別子
+    例: 会話を閉じるための合図 `<行動: 会話を終了する>`、
+        プロンプトの照合に使うスキーマの文面
+    これらは「そこに何が書かれているか」を知らなければ動作を合わせられない
+    ために置いてあるもので、機能上必要な最小限に留めている
+  * docs/GAME.md に記録した、ゲーム内部の関数名・データ構造・セーブ形式
+    （実行中のゲームを観察して得た事実の記録であって、ゲームのコードその
+    ものではない）
+
+これらの権利は各権利者に帰属する。本プロジェクトはそれらについて、いかなる
+権利も主張しない。
+
+--------------------------------------------------------------------------
+非公式であることの表明
+--------------------------------------------------------------------------
+
+本プロジェクトは**非公式**であり、Instantale の開発元・発売元、および
+Epic Games とは一切関係が無い。これらの企業・団体から承認・後援・提携を
+受けたものではない。
+
+--------------------------------------------------------------------------
+ライセンスが扱わないこと
+--------------------------------------------------------------------------
+
+**MIT はコードの再利用について定めるだけで、「このソフトウェアを使う行為」
+が適法かどうかについては何も述べない。** 具体的には次の2点はライセンスとは
+別の問題であり、利用者自身の判断と責任に属する。
+
+  * ゲームの利用規約（EULA / ToS）との関係
+  * 動作中のゲームプロセスへコードを注入するという手法が、環境や規約の上で
+    許されるかどうか
+
+いずれも docs/README.md の「導入する前に」に説明がある。**導入前にそちらを
+読むこと。**
+
+
+===========================================================================
+InstantaleModLoader — Scope of the MIT License (English summary)
+===========================================================================
+
+This NOTICE supplements, and does not modify, the MIT License in `LICENSE`.
+
+COVERED BY THE MIT LICENSE
+  The loader (runtime/instantale_modloader/), the bundled mods
+  (runtime/mods/), the tools (tools/), the launchers, and the documentation
+  (docs/). All of these are original works of this project.
+
+NOT COVERED
+  Instantale itself, its executables, its assets (images, audio, text), and
+  the contents of its save data. Also not covered are the game-originated
+  strings and identifiers quoted in this repository for interoperability
+  (for example the in-game marker used to close a conversation, and schema
+  text matched against prompts), and the record of the game's internal
+  function names, data structures and save format in docs/GAME.md. All
+  rights in those remain with their respective owners; this project claims
+  none of them.
+
+NOT AFFILIATED
+  This is an unofficial project. It is not affiliated with, endorsed by, or
+  sponsored by the developers or publishers of Instantale, or Epic Games.
+
+WHAT THE LICENSE DOES NOT ADDRESS
+  The MIT License governs reuse of this code. It says nothing about whether
+  *using* this software is permitted under the game's EULA or terms of
+  service, nor about the acceptability of injecting code into a running
+  game process. Those are separate questions and remain the user's own
+  responsibility. See docs/README.md before installing.

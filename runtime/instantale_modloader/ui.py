@@ -908,6 +908,28 @@ class Screen(object):
         return False
 
     # -- 手が空くのを待つ ---------------------------------------------------
+    def _others_busy(self, app):
+        """手が空いていない理由。ただし**自分が出している待機表示は数えない。**
+
+        `busy_on` は `is_button_enabled=False` にする。これは「ゲームが忙しい」
+        印ではなく「こちらが待たせている」印なので、そのまま `busy_signals` に
+        通すと**自分の出した印が消えるのを自分で待つ**ことになる。誰も消さない
+        ので必ずタイムアウトまで進まない。
+
+        実際に踏んだ: `301_` の「会話を閉じてから掲示板を開く」経路は、
+        NPC 一覧が一瞬見えるのを隠すため `busy_on` してから
+        `end_conversation` を呼ぶ。その中の `when_idle` がこの印を見て待ち続け、
+        掲示板が開くのが `proceed_on_timeout` の分だけ遅れていた
+        （`tools/test_quest_offer.py` が捕まえていた失敗）。
+
+        他の2つ（`is_adding_text` / `is_popup_window_opened`）はゲーム側が
+        立てるものなので、そのまま数える。
+        """
+        reasons = busy_signals(app)
+        if self.is_busy():
+            reasons = [r for r in reasons if r != "is_button_enabled=False"]
+        return reasons
+
     def when_idle(self, app, then, timeout=IDLE_TIMEOUT, settle=IDLE_SETTLE,
                   poll=IDLE_POLL, cancel_if=None, proceed_on_timeout=False,
                   tag="idle"):
@@ -935,7 +957,7 @@ class Screen(object):
                     if reason:
                         self.write("{}: cancelled ({})".format(tag, reason))
                         return False
-                busy = busy_signals(app)
+                busy = self._others_busy(app)
                 if not busy:
                     self.schedule(then, settle)
                     return False

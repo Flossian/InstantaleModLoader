@@ -569,7 +569,13 @@ def main():
     print("=== 同梱 mod は全て名乗っている ===")
     mods_dir = os.path.join(_ROOT, "runtime", "mods")
     found = order_of(mods_dir)
-    check(len(found) == 30, "30 個の mod が見つかる: {}".format(len(found)))
+    # 本数は数え上げで確かめる。定数で持つと mod を1本足すたびにここが赤くなり、
+    # 「テストを直す」が習慣になってしまう（実際 28 -> 30 と追いかけていた）。
+    on_disk = sorted(d for d in os.listdir(mods_dir)
+                     if not d.startswith(("_", "."))
+                     and os.path.isfile(os.path.join(mods_dir, d, "mod.json")))
+    check(sorted(found) == on_disk,
+          "mod.json を持つフォルダが全て見つかる（{} 個）".format(len(on_disk)))
     check(all(os.path.isdir(os.path.join(mods_dir, f)) for f in found),
           "見つかるのは全てフォルダ（単一ファイルの mod は残っていない）")
 

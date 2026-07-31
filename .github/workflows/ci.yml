@@ -1,0 +1,138 @@
+# 注入せずに確かめられることを、押すたびに全部通す。
+#
+# ここで走るものは全て `docs/TECH.md` §2「開発の流れ」に載っている手順そのもので、
+# 手元で実行するのと同じコマンドを同じ順に呼んでいる。CI 専用の細工は無い。
+#
+# Windows で走らせているのは、このプロジェクトが Windows 専用だから
+# （注入は Win32 API を直接叩く）。Linux で動かすとパス区切りや cp932 まわりの
+# 差でしか落ちず、実際の利用環境の情報にならない。
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# 日本語のログを出すので UTF-8 を強制する。指定しないと Windows ランナーの
+# 既定コードページで文字化けし、失敗の内容が読めなくなる。
+env:
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: "utf-8"
+
+jobs:
+  # ------------------------------------------------------------------
+  # ゲームに埋まっているのは CPython 3.10。MOD はその中で動くので、
+  # 3.11 以降の構文を書くと**注入した瞬間に落ちる**。
+  #
+  # `tools/check_mods.py` は ast の feature_version で構文だけを見ているが、
+  # そこで捕まらないもの（3.11 以降で入った標準ライブラリの関数など）がある。
+  # ここは本物の 3.10 を用意して、実際にコンパイルが通るかを確かめる。
+  # ------------------------------------------------------------------
+  game-python:
+    name: 3.10 (ゲーム内で動く部分)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      # runtime/ だけが対象。tools/ は利用者の Python（3.13）で動くもので、
+      # ゲームの中には入らないため 3.10 に縛る必要が無い。
+      - name: compileall runtime (3.10)
+        run: python -m compileall -q runtime
+
+  # ------------------------------------------------------------------
+  # 利用者の環境（3.13）で、静的検査とオフライン検証を通す。
+  # ------------------------------------------------------------------
+  checks:
+    name: 3.13 (静的検査とオフライン検証)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: compileall
+        run: python -m compileall -q runtime tools
+
+      # デコレータの対象と引数の食い違い、mod.json の entry、load_order の
+      # 突き合わせ。構文が正しくてもゲームを落とすものはここで捕まる。
+      - name: check_mods
+        run: python tools/check_mods.py
+
+      # tools/test_*.py は全てゲーム不要（偽のゲームを差し込んで走る）。
+      # **1本でも落ちたら失敗**。除外一覧は置かない ― 一度置くと、そこに
+      # 積まれたものが直ったかどうか誰も見なくなる。
+      - name: offline tests
+        shell: pwsh
+        run: |
+          $failed = @()
+          foreach ($f in Get-ChildItem tools/test_*.py | Sort-Object Name) {
+            python $f.FullName > $null 2>&1
+            if ($LASTEXITCODE -ne 0) {
+              $failed += $f.BaseName
+              Write-Host "  FAIL  $($f.BaseName)"
+            } else {
+              Write-Host "  ok    $($f.BaseName)"
+            }
+          }
+          if ($failed) {
+            Write-Host ""
+            Write-Host "失敗: $($failed -join ', ')"
+            Write-Host "内容を見るには手元で該当のスクリプトを直接実行する。"
+            exit 1
+          }
+
+  # ------------------------------------------------------------------
+  # 配布物が実際に組めること、そして**配れる状態**であることを確かめる。
+  # ------------------------------------------------------------------
+  packaging:
+    name: 配布物のビルド
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      # MIT は著作権表示が複製に付いて回ることを要求する。LICENSE の欠けた
+      # 状態で公開すると、誰も合法的に再配布できない。
+      - name: LICENSE は MIT の原文か
+        shell: pwsh
+        run: |
+          if (-not (Select-String -Path LICENSE -Pattern 'MIT License' -Quiet)) {
+            Write-Host "LICENSE が MIT の原文になっていない"
+            exit 1
+          }
+          Write-Host "  ok    LICENSE は MIT の原文"
+
+      - name: make_dist
+        shell: cmd
+        run: make_dist.bat
+
+      # 配布物に LICENSE / NOTICE が入っていなければ、それは配れない zip。
+      # make_dist.bat 自身も欠けていれば止まるが、**組み上がった中身**を
+      # 見るのはここだけ。
+      - name: zip の中身
+        shell: pwsh
+        run: |
+          # 一番新しいものを見る。名前順で取ると、古い版の zip が残って
+          # いる環境（手元）でそちらを検査してしまう。
+          $zip = Get-ChildItem dist/*.zip | Sort-Object LastWriteTime -Descending |
+                 Select-Object -First 1
+          if (-not $zip) { Write-Host "zip が作られていない"; exit 1 }
+          Write-Host "  $($zip.Name)"
+
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          # Windows で作った zip の区切りは "\"。"/" 決め打ちだと必ず外れる。
+          $leaves = [IO.Compression.ZipFile]::OpenRead($zip.FullName).Entries |
+                    ForEach-Object { $_.Name }
+          foreach ($want in @('LICENSE', 'NOTICE', 'InstantaleModLoader.bat')) {
+            if ($leaves -notcontains $want) {
+              Write-Host "$want が配布物に入っていない"
+              exit 1
+            }
+            Write-Host "  ok    $want"
+          }
+          Write-Host "  $($leaves.Count) ファイル / $([math]::Round($zip.Length/1KB)) KB"

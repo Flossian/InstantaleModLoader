@@ -1796,6 +1796,23 @@ def main() -> int:
     if os.name != "nt":
         print("ERROR: Windows 専用です。", file=sys.stderr)
         return 2
+
+    # 32bit の Python では注入できない（`instantale.exe` は x64。injector.py も
+    # 同じことを確かめている）。ここで先に止めるのは、**ランチャーが pythonw で
+    # 起動していて画面が無いから** ― injector が stderr に出す警告は誰にも
+    # 見えず、「ボタンを押しても何も起きない」だけになる。
+    # ランチャーは既定のインストール先が無ければ `pyw -3` や PATH へ倒れるので、
+    # そこで 32bit を拾う可能性がある。
+    if sys.maxsize <= 2 ** 32:
+        tk.Tk().withdraw()
+        messagebox.showerror(
+            "64bit の Python が必要です",
+            "いま動いている Python は 32bit です。\n"
+            "ゲーム（instantale.exe）は 64bit なので、注入できません。\n\n"
+            "python.org から 64bit 版の Python をインストールしてください。\n\n"
+            "いま動いている Python:\n" + sys.executable)
+        return 2
+
     root = tk.Tk()
     root.title("Instantale ModLoader")
     root.minsize(820, 480)

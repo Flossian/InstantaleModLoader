@@ -13,7 +13,6 @@ __pycache__/
 
 # ---- ローカル環境ファイル ----
 /InstantaleModLoader.code-workspace
-/make_dist.bat
 .vscode/
 .idea/
 Thumbs.db

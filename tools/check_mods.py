@@ -65,11 +65,34 @@ def _decorators(node):
     return found
 
 
+# ゲームに埋まっている CPython の版。MOD はこのインタプリタの中で動くので、
+# ここより新しい構文を書くと**注入した瞬間に SyntaxError で落ちる**。
+# 手元の python は 3.13 しか無く、`compileall` は 3.13 として通してしまうため、
+# パーサに版を指定して 3.11 以降の構文を弾く。
+#
+# 捕まるのは**構文だけ**。3.11 以降で追加された標準ライブラリの関数を使った場合は
+# ここでは分からない（CI で実際に 3.10 を動かす方でしか捕まらない）。
+GAME_PYTHON = (3, 10)
+
+
 def _parse(path):
     """AST を返す。読めなければ `(None, 問題)`。"""
+    source = None
     try:
-        return ast.parse(io.open(path, encoding="utf-8").read()), None
+        source = io.open(path, encoding="utf-8").read()
+        return ast.parse(source, feature_version=GAME_PYTHON), None
     except SyntaxError as exc:
+        # 手元の版では通るのに 3.10 では通らない、を見分けて言い分ける。
+        # 「動いているのに怒られた」と受け取られると、この検査ごと無視されるため。
+        if source is not None:
+            try:
+                ast.parse(source)
+            except SyntaxError:
+                pass
+            else:
+                return None, (path, "<file>",
+                              "ゲームの Python {}.{} には無い構文: {}".format(
+                                  GAME_PYTHON[0], GAME_PYTHON[1], exc.msg))
         return None, (path, "<file>", "syntax error: {}".format(exc))
     except Exception as exc:
         return None, (path, "<file>", "読めない: {}".format(exc))
