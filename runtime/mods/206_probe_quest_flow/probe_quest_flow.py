@@ -200,7 +200,7 @@ def apply(ctx):
     def dump_class(name, module_name="__main__"):
         """クラスが持つメソッド一覧と __init__ の形。
 
-        targets.txt はモジュールレベルの掃引なので、ネストした関数や
+        targets.txt はモジュールレベルのスキャンなので、ネストした関数や
         後から生えたメソッドが漏れることがある（TECH.md §4.1 の罠）。
         受注経路を辿るには実物の vars(cls) を見る必要がある。
         """

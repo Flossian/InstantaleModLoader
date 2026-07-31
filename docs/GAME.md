@@ -1,7 +1,7 @@
 # GAME: Instantale 内部リファレンス
 
-実機で確かめた「ゲームがどう動いているか」。MOD を書くときに必要な、Instantale
-そのものの構造・語彙・作法をここに集める。
+実機で確かめた「ゲームがどう動いているか」をまとめた。
+MOD を書くときに必要な、Instantaleそのものの構造・語彙・作法をここに集める。
 
 - ローダの仕組みと MOD の書き方は [TECH.md](TECH.md)
 - 遊ぶだけなら [README.md](README.md)
@@ -9,7 +9,7 @@
 
 TECH.md と分けているのは、読む理由が違うから。あちらはこのローダで MOD をどう書くか
 （他のゲームにも通じる話）で、こちらは Instantale が何をしているか（このゲーム限定の
-事実）。ゲームが更新されて食い違うのはこちら側だけなので、疑う場所が1つに寄る。
+事実）。ゲームが更新されて食い違うのはこちら側だけなので、疑う場所が1つになる。
 
 > ここに書いてあるのはすべて実測で、ソースは読めない（Nuitka standalone）。
 > 推測は書かない。確かめていないことは VERIFICATION.md の未確認項目に置く。
@@ -28,7 +28,7 @@ TECH.md と分けているのは、読む理由が違うから。あちらはこ
 | `game_modules.txt` | ゲーム自身のモジュールの全属性ダンプ（擬似ソース一覧） |
 | `modules.json` | 全モジュールの機械可読インベントリ |
 | `summary.txt` | 環境・`sys.path`・モジュール census |
-| `bug_sites.txt` | crash_log.txt の各クラッシュ地点のプローブ + キーワード掃引 |
+| `bug_sites.txt` | crash_log.txt の各クラッシュ地点のプローブ + キーワードスキャン |
 
 ### 1.2 ゲーム自身のモジュール
 
@@ -43,12 +43,12 @@ save_area_json, save_world_json, api_key_manager, build_type, sdcpp_cuda
 `__main__` は `sys.stdlib_module_names` に含まれる。素朴に stdlib を除外すると
 ゲーム本体が丸ごと漏れる（`recon.py` の `GAME_TOPLEVEL` はアローリスト）。
 
-### 1.3 掃引で見つからないもの
+### 1.3 スキャンで見つからないもの
 
 - ネスト関数はモジュールのグローバルに現れない。`send_request_on_id` はトレース
   バックに 62 回出るが `vars(module)` には無い（`send_request` 内の `backoff` デコレータ
   付きネスト関数）。実際の対象は外側の `send_request` / `send_request_with_no_structure`
-- クラスのメソッドはモジュールレベルのキーワード掃引で 0 件に見える
+- クラスのメソッドはモジュールレベルのキーワードスキャンで 0 件に見える
   （`set_ai_models` / `show_world_choice` など）。`game_modules.txt` を見る
 - 属性名を推測して探すと空振りする。`vars(obj)` を一度全部出すほうが速い
   （HUD の描画先を `texts` / `labels` という名前で探して見つからなかった実例がある。
@@ -493,7 +493,7 @@ app.world.characters     -> {id: Character}    Facility.owner はこの id（str
 
 1. 候補を全部集める。`app.party` / `app.game_variables['party']` /
    `world_dict['game_variables']['party']` / `world_dict['party']` / `world.party` /
-   `player.party`、加えて名前に `party` が入る属性・キーの掃引（`escaped_member_in_battle`
+   `player.party`、加えて名前に `party` が入る属性・キーのスキャン（`escaped_member_in_battle`
    のような紛らわしい配列を拾わないよう名前で絞る）
 2. 中身を見て本物を選ぶ。名簿には必ず `'player'` が入る
 3. `list` と `dict` の両方を受ける（辞書ならキーを id として読む）
