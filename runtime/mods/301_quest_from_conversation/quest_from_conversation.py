@@ -816,8 +816,38 @@ def apply(ctx):
                 ctx.log_exc("quest offer: cannot set {} on {!r}".format(name, quest_id))
 
     # ================================================================ フック
+    def button_text(entry):
+        if not isinstance(entry, dict):
+            return ""
+        text = entry.get("text")
+        return text if isinstance(text, str) else ""
+
+    def claim_existing(buttons, mark_value, matches_text):
+        """同じ選択肢が既にあれば印を付け直して True。
+
+        タイトルへ戻って再開したときや、会話中に注入し直したとき、セーブ経由で
+        ボタン辞書の印だけが落ちた残骸が残ることがある。印だけで判定すると
+        同じ文言が多重で並ぶ（実測: `依頼を受ける` が二重、VERIFICATION §3.12）。
+        """
+        for entry in buttons:
+            if not isinstance(entry, dict):
+                continue
+            if entry.get(MARK) == mark_value:
+                return True
+            if matches_text(button_text(entry)):
+                entry[MARK] = mark_value
+                return True
+        return False
+
     def has_offer_button(buttons):
-        return any(isinstance(b, dict) and b.get(MARK) == "offer" for b in buttons)
+        return claim_existing(
+            buttons, "offer",
+            lambda text: text in (OFFER_LABEL, CONVERSATION_OFFER_LABEL))
+
+    def has_generate_button(buttons):
+        return claim_existing(
+            buttons, "generate",
+            lambda text: text.startswith(GENERATE_LABEL))
 
     def offer_slot(buttons):
         """「依頼を受ける」を挿す位置と、そこがどの画面かを返す。
@@ -849,7 +879,7 @@ def apply(ctx):
         """
         if not ENABLE_GENERATION:
             return False
-        if any(isinstance(b, dict) and screen.mark_of(b) == "generate" for b in buttons):
+        if has_generate_button(buttons):
             return False
         label = "{}（{}）".format(GENERATE_LABEL, npc_name) if npc_name else GENERATE_LABEL
         entry = button(label, mark="generate")
