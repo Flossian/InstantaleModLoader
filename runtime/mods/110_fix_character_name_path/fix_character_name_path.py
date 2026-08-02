@@ -1,27 +1,16 @@
 # -*- coding: utf-8 -*-
 """修正: 名前に Windows のパスに使えない文字が入ると画像が生成できないのを直す。
 
-## 実測（2026-07-28、`out/live_crashes.log` ＝ `001_crash_recorder`。VERIFICATION.md §2.14）
+## 何が起きているか（GAME.md §2.15 / VERIFICATION.md §2.14）
 
-```
-OSError: [WinError 123] ファイル名、ディレクトリ名、またはボリューム ラベルの
-構文が間違っています。:
-'...\\worlds\\...\\characters\\試験人形「テストダミー"'
-```
-
-キャラクタ `id='101'` の名前 `試験人形「テストダミー"` が **`「` で開いて
-ASCII の `"` で閉じている**（LLM が生成した名前への引用符の混入。原因は
-確定済み）。`"` は Windows のパス構成要素に使えないので `os.makedirs` が落ちる。
-
-| 時刻 | スレッド | 経路 |
-|---|---|---|
-| 00:06:36 | Thread-111 (execute) | `start_battle` → `create_enemies_from_npc_id` → `generate_and_write_character_detail` → `generate_character_image` → `os.makedirs` |
-| 00:11:20 | Thread-123 (generate_images) | `ConversationStartManager.generate_images` → 同上 |
+LLM が生成した名前に引用符が混入すると（`試験人形「テストダミー"` のように
+`「` で開いて ASCII の `"` で閉じる）、`"` は Windows のパス構成要素に使えないので
+`os.makedirs` が `OSError: [WinError 123]` で落ちる。
 
 **バックグラウンドスレッドなのでゲームは落ちない。** 画像が生成されないまま無言で
-失敗し、その NPC に関わるたび再発する（2回とも同一人物）。
+失敗し、その NPC に関わるたび再発する。
 
-## どこを直すか ― 入口ひとつ
+## どこを直すか。入口ひとつ
 
 `worlds/<世界>/characters/` の**ディレクトリ名はキャラクタ名そのもの**（実データ:
 `「試作」のテストA` / `テスト・ネーム (Test Name)`）。名前からパスを組む箇所は
@@ -38,7 +27,7 @@ ASCII の `"` で閉じている**（LLM が生成した名前への引用符の
 どう組み立てているかを知らなくても効くのと、`name=None` のような経路を巻き込まない
 ため。
 
-## 置き換え方 ― 消さずに全角へ写す
+## 置き換え方: 消さずに全角へ写す
 
 `< > : " / \\ | ? *` → `＜ ＞ ： ” ／ ＼ ｜ ？ ＊`（VERIFICATION.md §2.14 の方針）。
 消すと表示上も名前が欠けるが、全角なら見た目はほぼ変わらず、パスにも使える。
@@ -52,13 +41,13 @@ Windows は**末尾の空白・ピリオドを黙って切る**ので、こち�
 
 ## 既存キャラクタの救済
 
-`id='101'` は**もう世界の中に居る**。`world_data.json` は暗号化されていて外部からは
-読めない（先頭が `2L\\x04\\x1b...`、zlib/gzip でもない）ので、**注入後にゲーム内から
+壊れた名前を持つキャラクタは**もう世界の中に居る**。`world_data.json` は難読化
+されていて外部からは書き換えられない（GAME.md §2.16）ので、**注入後にゲーム内から
 直す**しかない。この mod は3か所で名簿を掃く:
 
 | 掃く時点 | 目的 |
 |---|---|
-| 注入直後 | 起動済みのセッションに居る残骸（`id='101'`） |
+| 注入直後 | 起動済みのセッションに居る残骸 |
 | `load_game_new` / `start_game` の直後 | 不正な名前が焼かれたセーブ |
 | `__init__` | 以後に作られる全員 |
 
@@ -67,8 +56,8 @@ Windows は**末尾の空白・ピリオドを黙って切る**ので、こち�
 これが「既存キャラクタを触ってよい」根拠。
 
 **残る懸念**: セーブ側 JSON には旧名が残り、次の保存で入れ替わる。その間、名前で
-突き合わせる処理があると食い違う。実測では突き合わせは id（`'101'`）で行われて
-いるように見えるが**未確証**なので、**旧名は必ずログに残す**（`out/character_name.log`）。
+突き合わせる処理があると食い違う。突き合わせは id で行われているように見えるが
+**未確証**なので、**旧名は必ずログに残す**（`out/character_name.log`）。
 
 同じ理由で、名前と同じ生文字列を持つ他の属性が同じインスタンスにあれば
 **記録だけ**する（勝手に書き換えない。どこが名前の写しなのかは未確認のため）。
@@ -219,7 +208,7 @@ def apply(ctx):
     def sweep(app, where):
         """`app.world.characters` と `app.player` を掃く。掃いた人数を返す。
 
-        名簿は `{id: Character}`（TECH.md GAME.md §2.7）。**保存はしない** ―
+        名簿は `{id: Character}`（GAME.md §2.7）。**保存はしない**。
         ゲームが次に保存するときに一緒に入る。ここで保存を起こすと、
         こちらが選んだ時点でセーブを書き換えることになる。
         """
@@ -232,7 +221,7 @@ def apply(ctx):
             for character in list(characters.values()):
                 fixed += 1 if fix(character, where) else 0
         elif isinstance(characters, (list, tuple)):
-            # 名簿の入れ物は辞書とは限らない（TECH.md GAME.md §2.8）。
+            # 名簿の入れ物は辞書とは限らない（GAME.md §2.8）。
             for character in list(characters):
                 fixed += 1 if fix(character, where) else 0
         player = frames.attr(app, "player", None)

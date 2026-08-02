@@ -6,18 +6,10 @@
 組みたくても会いに行けない。この mod は解散のときだけ置き先を差し替え、
 **プレイヤーがいま立っている町のギルド**に残す。
 
-## どこで解散しているか（実測で確定・2026-07-26。TECH.md GAME.md §2.8）
+## どこで解散しているか（GAME.md §2.8）
 
-```
-remove_party_member('71' 'テスト仲間C')
-  from QuestEndManager.method_1 (instantale.py:6602)
-  <- QuestEndManager.execute (instantale.py:6635)
-  <- run (threading.py:953)            ← **別スレッド**
-remove_party_member: party ['player', '71'] -> ['player']
-observed: the game placed '71' at 'テストのギルド (Test Guild)' after its own removal
-```
-
-読み取れることが3つある:
+解散は `QuestEndManager.method_1` の中で `remove_party_member` を呼ぶ形で行われ、
+それは **`execute` から別スレッドで**走る。ここから3つ読める:
 
 * `remove_party_member` 自身は NPC を動かさない。**置き直すのは呼び出し元**で、
   removal の**後**に `move_npc_to_facility` を呼んでいる
@@ -25,21 +17,21 @@ observed: the game placed '71' at 'テストのギルド (Test Guild)' after its
   同じ役どころ（未観測なので既定では触らない。`ALSO_ON_QUEST_RETIRE`）
 * 帰還は解散より**先**に済んでいる（`add_text('パーティは帰還した...')` →
   報酬 → `add_text('…はパーティから離脱した。')`）。つまり解散の時点で
-  `player.current_area` は**もう町**になっている ― だから「いま居る町」を
+  `player.current_area` は**もう町**になっている。だから「いま居る町」を
   その場で引いてよい
 
-## 差し替え方 ― 解散処理は書かない。置き先だけ変える
+## 差し替え方: 解散処理は書かない。置き先だけ変える
 
 `remove_party_member` の結果には**一切触らない**。パーティから外すのはゲームの
 仕事で、こちらは「外れた後どこへ置くか」だけを変える。層は3つで、上から順に
 効けば下は何もしない:
 
-1. `get_party_leave_facility` ― 解散処理の中で呼ばれたら、いま居る町のギルドを
-   返す。**戻り値の形はゲームのものに合わせる**（実機では `(施設, ノード)` の
-   タプル。長さ1のビルドもありうるので、元の形を見てから同じ形で返す）
-2. `move_npc_to_facility` ― 解散した相手を動かす呼び出しだけ、引数の置き先を
+1. `get_party_leave_facility`: 解散処理の中で呼ばれたら、いま居る町のギルドを
+   返す。**戻り値の形はゲームのものに合わせる**（`(施設, ノード)` のタプル。
+   長さ1のビルドもありうるので、元の形を見てから同じ形で返す）
+2. `move_npc_to_facility`: 解散した相手を動かす呼び出しだけ、引数の置き先を
    ギルドに差し替える。1 が効いていれば置き先は既にギルドなので何もしない
-3. 時間切れの置き直し ― `PLACE_TIMEOUT` 秒待っても誰も動かさなかったら、
+3. 時間切れの置き直し。`PLACE_TIMEOUT` 秒待っても誰も動かさなかったら、
    こちらで置く。**観測できているビルドではここまで来ない**（保険）
 
 `move_npc_to_facility` は NPC の日常の移動でも呼ばれる。**スタックを見に行くのは
@@ -49,7 +41,7 @@ observed: the game placed '71' at 'テストのギルド (Test Guild)' after its
 ## 解散の中かどうかは、コードオブジェクトの同一性で見る
 
 呼び出し元を**段数で数えてはいけない**（`@ctx.wrap` の層が1段挟まる。`302_` が
-実際に踏んだ）。関数名でも足りない ― `method_1` / `execute` は12個のマネージャが
+実際に踏んだ）。関数名でも足りない。`method_1` / `execute` は12個のマネージャが
 持っている。そこで `QuestEndManager.method_1` / `.execute` の**コードオブジェクト
 そのもの**を先に引いておき、スタックの `f_code` と `is` で突き合わせる。
 この判定は `frames.MethodWatch` に置いてある（`304_` にも同じものが要ったので
@@ -57,7 +49,7 @@ observed: the game placed '71' at 'テストのギルド (Test Guild)' after its
 
 ## ギルドが無い土地では何もしない
 
-置き先が決まらないまま外すのは `302_` と違ってこちらの管轄ではない ―
+置き先が決まらないまま外すのは `302_` と違ってこちらの管轄ではない。
 ゲームは自分の置き先を持っているので、**こちらが黙って降りればゲーム本来の
 挙動に戻るだけ**。ダンジョンで解散した場合や、その町にギルドが無い場合は
 差し替えを諦めて理由をログに残す。
@@ -162,7 +154,7 @@ def apply(ctx):
     def guild_here(app):
         """いま居る町のギルド。`(施設, ノード, エリア)`。
 
-        ギルドが無ければ `(None, None, エリア)` ― **見つからないことは正常な
+        ギルドが無ければ `(None, None, エリア)`。**見つからないことは正常な
         答え**で、そのときは差し替えを諦めてゲーム本来の置き先に任せる。
         """
         area = ui.current_area(app)
@@ -286,9 +278,8 @@ def apply(ctx):
     def get_party_leave_facility(orig, self, character_instance=None, *args, **kwargs):
         """解散処理の中で聞かれたら、いま居る町のギルドを答える。
 
-        **戻り値の形はゲームのものに合わせる。** 実機では `(施設, ノード)` の
-        タプルだった（`302_` が中身を解釈せずそのまま渡して落ちた反省で、
-        こちらも解釈はせず**形だけ**写す）。
+        **戻り値の形はゲームのものに合わせる。** `(施設, ノード)` のタプル
+        （GAME.md §2.8）。中身は解釈せず、**形だけ**写す。
         """
         try:
             value = orig(self, character_instance, *args, **kwargs)
@@ -318,7 +309,7 @@ def apply(ctx):
             if isinstance(value, list):
                 return [facility, node] if len(value) >= 2 else [facility]
             if value is None:
-                # 形が分からない（ゲーム側が落ちた）。実機で観測した形で答える。
+                # 形が分からない（ゲーム側が落ちた）。既知の形で答える。
                 return (facility, node)
             return facility
         except Exception:

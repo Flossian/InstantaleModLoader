@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """機能追加: 施設に着くと、その場の NPC の方から会話を始めてくる。
 
-宿屋に入れば主人が、店に入れば店主が声をかけてくる ―
+宿屋に入れば主人が、店に入れば店主が声をかけてくる。
 「プレイヤーの行動をトリガーにしたイベント」。
 
 ## 2つのモード
@@ -11,7 +11,7 @@
 
 **conversation** は、プレイヤーが「会話する」→ NPC を選んだときと**同じ経路**を
 こちらから起こす。したがって立ち絵の表示・会話履歴・関係値の更新・会話の終了処理は
-全てゲーム本来の実装がそのまま動く。実プレイの計測で確かめた本来の経路:
+全てゲーム本来の実装がそのまま動く。ゲーム本来の経路（GAME.md §2.5）:
 
 ```
 process_choice(DisplayTalkChoice,        choice_text='会話する')
@@ -21,14 +21,14 @@ process_choice(ConversationEndManager,   choice_text='会話を終了する')
 
 つまり `app.process_choice(ConversationStartManager(app, npc_id), npc_name)` が
 「その NPC のボタンを押した」に相当する。`DisplayTalkChoice`（NPC 一覧の表示）は
-挟まない ― こちらが相手を決めているため。
+挟まない。こちらが相手を決めているため。
 
-**narration** は初版の挙動で、自前で LLM を1回呼んで情景描写に1行足す。立ち絵も
-会話モードも無いが LLM 1回で済む。conversation が合わない場面用に残してある。
+**narration** は自前で LLM を1回呼んで情景描写に1行足すだけの軽い方。立ち絵も
+会話モードも無いが LLM 1回で済む。conversation が合わない場面用に用意してある。
 
 ## いつ発火させるか
 
-`__main__:MovePhaseManager.move_phase` の**復帰後**。計測で分かったこの関数の構造:
+`__main__:MovePhaseManager.move_phase` の**復帰後**。この関数の構造（GAME.md §2.6）:
 
 ```
 process_choice(MovePhaseManager, ...)    ボタン押下
@@ -37,16 +37,16 @@ process_choice(MovePhaseManager, ...)    ボタン押下
   move_phase 復帰                        ← ここで到着が確定している
 ```
 
-初版は「move_phase の復帰後に印を置き、次の narrator で回収する」形にしていたが、
-narrator が内側にある以上それは**1手ずれる**（印を回収するのは次の移動の narrator）。
-narration モードでは印を `orig` の**前**に置いて、入れ子の narrator に回収させる。
+narrator が **`move_phase` の内側**にあるので、印を復帰後に置くと**1手ずれる**
+（回収するのは次の移動の narrator になる）。narration モードでは印を `orig` の
+**前**に置いて、入れ子の narrator に回収させる。
 
 会話フェーズの開始は、移動の後始末（テキストの流し込み・ボタンの張り替え）が
 終わってからでないと噛み合わない。そこで Kivy の Clock で
 `is_adding_text` / `is_button_enabled` を見張り、**手が空いた時点で**押す。
 これは「テキストが出終わってからプレイヤーがボタンを押す」のと同じ状況になる。
 
-## その時点で読める情報（実機のスナップショットで確認済み）
+## その時点で読める情報（GAME.md §2.7）
 
     app.player.location      -> Facility   name / description / facility_type /
                                            owner / characters(その場の NPC id)
@@ -57,7 +57,7 @@ narration モードでは印を `orig` の**前**に置いて、入れ子の nar
 施設種別ごとに `CHANCE_INN` / `CHANCE_GUILD` / … があり、**0 にすればその種別では
 出なくなる**。`CHANCE_OVERRIDE` が None でなければそちらを全施設に使う（動作確認用）。
 どれも `mod.json` から変えられる。乱数はこの mod 専用の
-`random.Random` を使う ― グローバルから引くとゲーム自身の乱数列がずれるため
+`random.Random` を使う。グローバルから引くとゲーム自身の乱数列がずれるため
 （104_balance_area_bgm.py と同じ方針）。同じ施設で連続しては出さない。
 """
 
@@ -124,12 +124,10 @@ BUSY_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle",
               "in_conversation", "in_free_input",
               "in_action_in_conversation")
 
-# `in_shopping` はここに**入れない**（2026-07-26 の実測による）。
-# 店の外をただ往復しているだけの 38 回の移動すべてで True のままだった
-# （`events.log` の 01:13〜01:16。全て MovePhaseManager による素の移動）。
-# 「買い物中か」の信号としては当てにならず、これを見ていると店系の施設で
-# イベントがほとんど出なくなる ― 実際、この間の不発 39 件のうち 38 件が
-# これだった。買い物窓が開いている状態は `is_popup_window_opened`
+# `in_shopping` はここに**入れない**。店の外をただ往復しているだけの移動でも
+# True のままなので、「買い物中か」の信号としては当てにならない ― これを見ていると
+# 店系の施設でイベントがほとんど出なくなる。買い物窓が開いている状態は
+# `is_popup_window_opened`
 # （会話を始める直前に見る）で弾ける。
 
 LANGUAGE_NAMES = {"japanese": "日本語", "english": "英語"}
@@ -275,7 +273,7 @@ def apply(ctx):
 
         押すのは *今すぐ* ではない。移動の後始末（テキストの流し込み・ボタンの
         張り替え）の最中に割り込むと噛み合わないので、手が空くまで待つ。
-        待ち合わせは Kivy の Clock で行う ― ゲーム自身が UI を触るのと同じ土俵。
+        待ち合わせは Kivy の Clock で行う。ゲーム自身が UI を触るのと同じ土俵。
         """
         main = sys.modules.get("__main__")
         manager_cls = getattr(main, "ConversationStartManager", None) if main else None
@@ -423,7 +421,7 @@ def apply(ctx):
 
         `send_request_with_no_structure` は str を返す（実機で確認済み）。
         それでも型を決め打ちしないのは、モデルが地の文を足してくることが
-        あるため ― 最初の非空行だけを採り、鉤括弧が無ければ付ける。
+        あるため。最初の非空行だけを採り、鉤括弧が無ければ付ける。
         """
         if not isinstance(result, str):
             result = "" if result is None else str(result)

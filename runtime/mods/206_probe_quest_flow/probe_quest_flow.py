@@ -4,20 +4,20 @@
 やりたいこと（機能追加）は「NPC との会話中に依頼を受注する」で、そのために
 必要な情報は3つある。どれもソースが読めない以上、実行中のプロセスに聞くしかない。
 
-  1. **選択肢ボタンをどう出すか** — `Display*Choice.update_button_display()` が
+  1. **選択肢ボタンをどう出すか**。`Display*Choice.update_button_display()` が
      何を触っているのか。`app` には `buttons` / `to_display_buttons` /
      `display_button_map` / `function_correspond_to_input` / `choice_button_page`
      の5つがあり、どれが「押されたときに呼ぶマネージャ」の対応表なのかが不明。
      これが分からないと「依頼を受ける」ボタンも「個別依頼の一覧」も出せない。
      **`update_button_display` の前後で差分を取る**ことで確定させる。
 
-  2. **どうやって受注するか** — `QuestChoiceManager(app, quest_type, quest_id)` と
+  2. **どうやって受注するか**。`QuestChoiceManager(app, quest_type, quest_id)` と
      `QuestStartManager(app, quest_type, quest_id)` がある。`quest_type` に何が
      入るのか（セーブ上は 'normal_quest'）、`quest_id` は str か int か、
      受注確定はどちらのどのメソッドか。300_ で確立した
      `app.process_choice(マネージャのインスタンス, choice_text)` の形に乗せたい。
 
-  3. **クエストの実体をどう作るか** — セーブ上のクエストは
+  3. **クエストの実体をどう作るか**。セーブ上のクエストは
      `world_dict['quests'][id]` に QuestStructure（random_quest_generator の出力）
      ＋ difficulty / neighboring_settlement_id / id / quest_type / config /
      quest_area_id が付いた dict。**`quest_area_id` が指すエリアは別に生成が要る**
@@ -101,10 +101,10 @@ def apply(ctx):
     def describe_spec(spec):
         """PhaseSpec の中身を「どのクラスを何の引数で呼ぶか」として出す。
 
-        1回目の計測で `app.buttons` が `[{'text': str, 'spec': PhaseSpec}, ...]`
-        だと分かった。`PhaseSpec.__init__(self, cls_name, args)` なので、
-        ボタンは**マネージャのインスタンスではなくその作り方**を持っている。
-        自前でボタンを足すにはこの `args` の並びを知る必要がある。
+`app.buttons` は `[{'text': str, 'spec': PhaseSpec}, ...]` で、
+        `PhaseSpec.__init__(self, cls_name, args)` なので、ボタンは**マネージャの
+        インスタンスではなくその作り方**を持っている（GAME.md §2.2）。自前で
+        ボタンを足すにはこの `args` の並びを知る必要がある。
         """
         if spec is None:
             return "None"
@@ -151,8 +151,8 @@ def apply(ctx):
                 state[attr] = "{}(len={}) {!r}".format(
                     type(value).__name__, len(value), entries)
             elif attr == "function_correspond_to_input":
-                # 名前に反して対応表ではなく PhaseSpec 1個だった（1回目の計測）。
-                # 「今テキスト入力を受けたら何を呼ぶか」を保持しているとみられる。
+                # 名前に反して対応表ではなく PhaseSpec 1個。「今テキスト入力を
+                # 受けたら何を呼ぶか」を保持しているとみられる。
                 state[attr] = describe_spec(value)
             else:
                 state[attr] = repr_value(value)
@@ -215,13 +215,10 @@ def apply(ctx):
         if init is not None:
             write("      __init__{}".format(_sig_of(init)))
 
-    # **画面を塗っているのは HUD 側**（`302_` の実測）。`app.to_display_buttons`
+    # **画面を塗っているのは HUD 側**（GAME.md §2.3）。`app.to_display_buttons`
     # は監視対象ではないので、「…」が HUD の中だけで起きているならこちらを
-    # 見ないと捕まらない。HUD のどの属性がラベルを持っているかは
-    # `dump_hud()` で名前から当てる。
-    # `vars(hud)` の 88 属性を実際に見て確定（2026-07-27）。**画面に出ている
-    # 文字は `hud.buttons` の各ウィジェットの `.text`**。`app.to_display_buttons`
-    # とは別物なので、ゲームが待機表示（「…」）を出すならここに現れる。
+    # 見ないと捕まらない。**画面に出ている文字は `hud.buttons` の各ウィジェットの
+    # `.text`** で、`app.to_display_buttons` とは別物。
     def hud_texts(app):
         hud = ui_find_hud(app)
         if hud is None:
@@ -365,7 +362,7 @@ def apply(ctx):
 
         # --- 5. ゲーム自身のヘルパを実データで呼ぶ（副作用の無い参照関数）。
         #        「この土地で今どの難易度の依頼が出ているか」がここで分かる。
-        #        TECH.md GAME.md §3「純粋関数は総当たりで定義域を割り出す」と同じ手。
+        #        GAME.md §3「純粋関数は総当たりで定義域を割り出す」と同じ手。
         functions = sys.modules.get("scripts.functions")
         if functions is not None and area is not None and world is not None:
             for fname, args in (("get_quest_difficulties", (area, world)),
@@ -620,12 +617,11 @@ def apply(ctx):
     # ------------------------------------ quest_type の語彙を総当たりで割り出す
     # `QuestChoiceManager(app, quest_type, quest_id)` の `quest_type` は、クエスト
     # 辞書の `quest_type` フィールド（'normal_quest' / 'random_quest'）**とは
-    # 別の語彙**だと分かった（301_ が両方で KeyError を出してゲームを落とした。
-    # id で引ける辞書のうち両方の id を持たないのは story_quests だけなので、
-    # どちらの値もストーリー側の分岐に落ちていた）。
+    # 別の語彙**（どちらを渡しても KeyError になる ＝ ストーリー側の分岐に落ちる。
+    # GAME.md §2.2）。
     #
     # 引数で分岐して辞書を引くだけの処理なので総当たりが効く
-    # （TECH.md GAME.md §3「純粋関数は総当たりで定義域を割り出す」）。**実在する
+    # （GAME.md §3「純粋関数は総当たりで定義域を割り出す」）。**実在する
     # quest_id を渡し、例外が出ないものを探す。** 作ったインスタンスは捨てる
     # ― `execute` を呼ばないので画面も状態も動かない。
     PROBE_QUEST_TYPES = True

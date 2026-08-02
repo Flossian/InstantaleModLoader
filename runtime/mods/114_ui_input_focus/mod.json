@@ -1,0 +1,54 @@
+{
+  "entry": "ui_input_focus.py",
+  "api": 1,
+  "name": {
+    "en": "Keep the input box focused",
+    "ja": "入力欄のフォーカスを保つ"
+  },
+  "description": {
+    "en": "Puts the keyboard focus back into the free-input box after each send, so you can keep typing without clicking it again",
+    "ja": "自由入力を送るたびに外れるフォーカスを入力欄へ戻す。毎回クリックし直さずに次の一言を打てる"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "settings": {
+    "REFOCUS_ON_BLUR": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "フォーカスが外れたら戻す",
+        "en": "Restore focus whenever it is lost"
+      },
+      "note": {
+        "ja": "既定 ON。送信でも、画面のどこかを触ったときでも入力欄に戻る。OFF にすると下の「送信のあとに戻す」だけが効く",
+        "en": "Default ON. Focus returns to the box after a send or after clicking elsewhere. Turn OFF to only refocus after a send"
+      }
+    },
+    "REFOCUS_AFTER_SEND": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "応答待ちが明けたら戻す",
+        "en": "Restore focus when the reply arrives"
+      },
+      "note": {
+        "ja": "既定 ON。AI の応答を待つ間ゲームは入力を塞ぐので、その間は戻さず、解けた瞬間に戻す",
+        "en": "Default ON. The game blocks input while waiting for the reply; focus returns the moment it is unblocked"
+      }
+    },
+    "REFOCUS_DELAY": {
+      "type": "float",
+      "default": 0.05,
+      "min": 0.0,
+      "max": 1.0,
+      "label": {
+        "ja": "戻すまでの待ち（秒）",
+        "en": "Delay before restoring focus (seconds)"
+      },
+      "note": {
+        "ja": "ゲーム側の処理が終わる前に戻すと、そのあとまた外れる。戻り方が不安定なら 0.1〜0.2 に上げる",
+        "en": "Restoring too early lets the game take focus away again. Raise to 0.1-0.2 if focus does not stick"
+      }
+    }
+  }
+}

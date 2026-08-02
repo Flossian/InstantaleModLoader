@@ -7,10 +7,7 @@
 外部プロキシ側の計測では 29 ターン / 8,300 文字を超え、プロンプト全体の
 6割以上を占めていた。
 
-本ビルドでも、クエストの序盤で既に溜まり始めているのを確認している:
-
-    quest_referee_event_evaluate_new: quest_event_log str chars=1699 turns=7
-    quest_referee_event_resolve:      quest_event_log str chars=1813 turns=7
+本ビルドでもクエストの序盤で既に溜まり始めている（VERIFICATION.md §2.3）。
 
 注意点として、quest_event_log はターンのリストではなく1本の文字列である。
 そのためこの修正でも、プロキシと同じく「〈プレイヤーの入力〉」で分割するしかなく、

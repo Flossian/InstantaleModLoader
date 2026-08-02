@@ -17,7 +17,7 @@
            掲示板から開いたときは1件も間引かない
   共存   … `302_` と印のキーが衝突していない
 
-この mod は実機での確認がまだ済んでいないので、まずここを通すこと。
+ゲームが起動していなくても走るので、mod を編集したらまずこれを通すこと。
 """
 import importlib.util
 import io
@@ -538,7 +538,7 @@ mod, ctx, app = setup(history=history)
 app.refresh_choice_buttons()
 
 # 「この話から依頼を作る」が出るのは**会話画面**。掲示板ではない
-# （方針・2026-07-27）。会話画面に置けば会話を閉じずに生成でき、掲示板は
+# 会話画面に置けば会話を閉じずに生成でき、掲示板は
 # 「既にある依頼を選ぶ場所」に徹せる。
 generate = [b for b in app.buttons if b.get(MARK) == "generate"]
 check("会話メニューに「この話から依頼を作る」が出る", generate,

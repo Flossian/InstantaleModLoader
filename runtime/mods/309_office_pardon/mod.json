@@ -1,0 +1,70 @@
+{
+  "entry": "office_pardon.py",
+  "api": 1,
+  "name": {
+    "en": "Pay off your bounty",
+    "ja": "役場で手配を解く"
+  },
+  "description": {
+    "en": "Adds a choice at the administrative office: pay a fine and clear the wanted status for the area you are in",
+    "ja": "役場の選択肢に「罰金を納めて手配を解く」を追加する。対象は今いるエリアの手配度だけ"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "settings": {
+    "PRICE_PER_POINT": {
+      "type": "int",
+      "default": 1000,
+      "min": 0,
+      "max": 1000000,
+      "label": {
+        "ja": "手配度1あたりの罰金",
+        "en": "Fine per wanted point"
+      },
+      "note": {
+        "ja": "手配度3なら3倍を払う。0にすると無料で解ける",
+        "en": "A wanted level of 3 costs three times this. 0 makes it free"
+      }
+    },
+    "WANTED_THRESHOLD": {
+      "type": "int",
+      "default": 0,
+      "min": -100,
+      "max": 100,
+      "label": {
+        "ja": "手配とみなす手配度",
+        "en": "Wanted below this lawfulness"
+      },
+      "note": {
+        "ja": "既定0＝手配度が0未満なら犯罪者。罰金はこの値との差で決まる",
+        "en": "0 = wanted while lawfulness is negative. The fine scales with the gap"
+      }
+    },
+    "RESTORE_TO": {
+      "type": "int",
+      "default": 10,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "罰金を納めた後の手配度",
+        "en": "Lawfulness after paying"
+      },
+      "note": {
+        "ja": "既定10＝素の平常値。今の値より低い値を入れても下がらない",
+        "en": "10 = the untouched default. It never lowers the current value"
+      }
+    },
+    "ANNOUNCE_ON_ARRIVAL": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "役場に入ったら手配を知らせる",
+        "en": "Mention the bounty on arrival"
+      },
+      "note": {
+        "ja": "手配されている状態で役場に入ったときだけ1行出す",
+        "en": "One line, only while you are wanted in this area"
+      }
+    }
+  }
+}

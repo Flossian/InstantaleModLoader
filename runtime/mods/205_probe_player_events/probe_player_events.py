@@ -5,16 +5,16 @@
 そのために必要な情報は3つある。どれもソースが読めない以上、実行中の
 プロセスに聞くしかない。
 
-  1. **いつ発火させるか** — 移動が完了した瞬間はどこか。候補は
+  1. **いつ発火させるか**。移動が完了した瞬間はどこか。候補は
      `MovePhaseManager.move_phase`（移動先の facility_id を持つ）と
      `llm_manager:narrator`（移動後の情景描写。current_location を受け取る）。
 
-  2. **その時点で何が分かるか** — 現在地の施設オブジェクト、その
+  2. **その時点で何が分かるか**。現在地の施設オブジェクト、その
      `facility_type`（セーブ上は 'inn'/'guild'/... ）と `owner`（NPC id）。
      セーブファイルの形は判明済みだが、**実行時のオブジェクトが同じ属性名を
      持っているとは限らない**（Facility.__init__ が何を self に置くかは不明）。
 
-  3. **どうやって出すか** — テキストの表示経路（`InstantaleApp.add_text`）と、
+  3. **どうやって出すか**。テキストの表示経路（`InstantaleApp.add_text`）と、
      自前の LLM 呼び出し（`send_request_with_no_structure`）の戻り値の形。
      `output_data/` の記録では応答は {"text": ...} だが、Python 側で何の型で
      返ってくるかは分からない。

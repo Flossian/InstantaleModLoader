@@ -1,0 +1,127 @@
+{
+  "entry": "area_move_dungeon.py",
+  "api": 1,
+  "name": {
+    "en": "Travel the dangerous road",
+    "ja": "危険な道を行く"
+  },
+  "description": {
+    "en": "Adds a third way to travel between areas: clear a dungeon on the road and you arrive at the destination",
+    "ja": "エリア移動に「危険な道を行く」を追加する。道中のクエストを踏破すると目的地に着く"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "after": [
+    "301_quest_from_conversation",
+    "305_mini_quest"
+  ],
+  "settings": {
+    "DIFFICULTY_MODE": {
+      "type": "choice",
+      "values": [
+        "between",
+        "destination",
+        "harder"
+      ],
+      "default": "between",
+      "label": {
+        "ja": "道の難易度の決め方",
+        "en": "How the road's difficulty is picked"
+      },
+      "note": {
+        "ja": "between=移動元と移動先の間から抽選 / destination=移動先に合わせる / harder=高いほう",
+        "en": "between = rolled between both areas / destination / harder"
+      }
+    },
+    "DIFFICULTY_OFFSET": {
+      "type": "int",
+      "default": 0,
+      "min": -5,
+      "max": 20,
+      "label": {
+        "ja": "難易度に足す下駄",
+        "en": "Difficulty offset"
+      },
+      "note": {
+        "ja": "危険な道を素の依頼より重くしたいときに足す",
+        "en": "Added to the rolled difficulty"
+      }
+    },
+    "TRAVEL_DAYS": {
+      "type": "int",
+      "default": 14,
+      "min": 0,
+      "max": 365,
+      "label": {
+        "ja": "道にかける日数の上限",
+        "en": "Day limit for the road"
+      },
+      "note": {
+        "ja": "道中のクエストと最後の移動の合計。既定14は馬車と同じ。365で実質上限なし",
+        "en": "Quest plus the final move. 14 = the same as the coach"
+      }
+    },
+    "ARRIVAL_MODE": {
+      "type": "choice",
+      "values": [
+        "walk",
+        "carriage"
+      ],
+      "default": "walk",
+      "label": {
+        "ja": "踏破した後の移動手段",
+        "en": "How the last leg is travelled"
+      },
+      "note": {
+        "ja": "walk=所持金が要らない（日数は上の上限で切り詰める） / carriage=馬車と同じ（所持金が要る）",
+        "en": "walk = free (days are capped above) / carriage = the coach (costs gold)"
+      }
+    },
+    "STAMINA_MIN_PERCENT": {
+      "type": "int",
+      "default": 33,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "体力がこの割合を切ったら断る",
+        "en": "Refuse below this much stamina"
+      },
+      "note": {
+        "ja": "既定33＝体力が3分の1を下回ったら道を行けない。0にすると体力を見ない",
+        "en": "33 = a third of max stamina. 0 disables the check"
+      }
+    },
+    "HIDE_TRAVEL_TEXT": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "「長旅だ…」を出さない",
+        "en": "Hide the long-journey line"
+      },
+      "note": {
+        "ja": "到着の移動中だけ。道中を踏破した後に「徒歩で目指す。長旅だ...」と出るのを伏せる",
+        "en": "Only while arriving after the road has been cleared"
+      }
+    },
+    "NOTE_IN_SUMMARY": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "依頼概要に移動先を明記する",
+        "en": "Note the destination in the summary"
+      },
+      "note": {
+        "ja": "「※このクエストをクリアすると「〜」に移動します。」を末尾に足す。掲示板に残った道を後から受けても分かる",
+        "en": "Appends a line so the quest states where clearing it takes you"
+      }
+    },
+    "ANNOUNCE_DIFFICULTY": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "出発時に道の危険度を出す",
+        "en": "Show the road's difficulty"
+      }
+    }
+  }
+}

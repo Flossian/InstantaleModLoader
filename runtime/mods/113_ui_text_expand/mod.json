@@ -1,0 +1,95 @@
+{
+  "entry": "ui_text_expand.py",
+  "api": 1,
+  "name": {
+    "en": "Expandable text area",
+    "ja": "本文の表示域を広げる"
+  },
+  "description": {
+    "en": "Adds a corner button that widens the narration area so more text fits on screen, and puts it back when pressed again",
+    "ja": "画面の隅にボタンを足し、押すと本文の表示域が広がってまとめて読める。もう一度押すと元に戻る"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "settings": {
+    "WIDTH_SCALE": {
+      "type": "float",
+      "default": 1.0,
+      "min": 1.0,
+      "max": 4.0,
+      "label": {
+        "ja": "広げたときの幅（元の何倍）",
+        "en": "Width when expanded (x original)"
+      },
+      "note": {
+        "ja": "既定の 1.0 は横に広げない（上へ伸ばすだけ）。上げると右へ広がる。元の寸法は out\\text_expand.log に出る",
+        "en": "1.0 (default) = do not widen; the frame only grows upwards. Above 1.0 it grows to the right"
+      }
+    },
+    "HEIGHT_SCALE": {
+      "type": "float",
+      "default": 2.5,
+      "min": 1.0,
+      "max": 4.0,
+      "label": {
+        "ja": "広げたときの高さ（元の何倍）",
+        "en": "Height when expanded (x original)"
+      },
+      "note": {
+        "ja": "1.0 で縦には広げない。下端は動かず上へ伸びる。窓に入る分で頭打ち",
+        "en": "1.0 = do not grow taller. The bottom edge stays put and the frame grows upwards"
+      }
+    },
+    "BUTTON_CORNER": {
+      "type": "choice",
+      "default": "キャラの上",
+      "values": ["キャラの上", "右上", "左上", "右下", "左下"],
+      "label": {
+        "ja": "ボタンの置き場所",
+        "en": "Where to put the button"
+      },
+      "note": {
+        "ja": "既定は立ち絵の上。立ち絵が出ていない画面では右上に出る",
+        "en": "Default is just above the character portrait; falls back to the top-right corner"
+      }
+    },
+    "BUTTON_SIZE": {
+      "type": "int",
+      "default": 48,
+      "min": 20,
+      "max": 200,
+      "label": {
+        "ja": "ボタンの高さ（px）",
+        "en": "Button height (px)"
+      },
+      "note": {
+        "ja": "幅はこの2倍。ゲーム側の画面拡縮に合わせて調整される",
+        "en": "The width is twice this. Scaled with the game's own UI scaling"
+      }
+    },
+    "LABEL_EXPAND": {
+      "type": "str",
+      "default": "拡張",
+      "label": {
+        "ja": "ボタンの文字（広げる前）",
+        "en": "Button text (collapsed)"
+      }
+    },
+    "LABEL_RESTORE": {
+      "type": "str",
+      "default": "戻す",
+      "label": {
+        "ja": "ボタンの文字（広げた後）",
+        "en": "Button text (expanded)"
+      }
+    },
+    "START_EXPANDED": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "最初から広げておく",
+        "en": "Start expanded"
+      }
+    }
+  }
+}

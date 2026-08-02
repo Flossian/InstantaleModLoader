@@ -48,7 +48,7 @@ def find_mod(suffix):
 
 MOD = find_mod("_fix_character_name_path")
 
-# 実機で落ちた名前そのもの（out/live_crashes.log、2026-07-28T00:06:36）。
+# 実機で落ちた名前そのもの（VERIFICATION.md §2.14）。
 CRASHED = '試験人形「テストダミー"'
 
 failures = []
@@ -257,7 +257,7 @@ app.world.characters["104"] = Character(name='別人"', id="104")
 app.start_game()
 check("start_game でも掃かれる", app.world.characters["104"].name == "別人”")
 
-# 名簿が辞書でない場合（TECH.md GAME.md §2.8: 入れ物は形で決めつけない）。
+# 名簿が辞書でない場合（GAME.md §2.8: 入れ物は形で決めつけない）。
 mod, ctx, char_cls, app = setup()
 listed = Character(name=CRASHED, id="101")
 app.world.characters = [listed]

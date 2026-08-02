@@ -1,0 +1,95 @@
+{
+  "entry": "battle_damage_display.py",
+  "api": 1,
+  "name": {
+    "en": "Battle damage numbers",
+    "ja": "戦闘のダメージ表示"
+  },
+  "description": {
+    "en": "Shows how much HP actually moved each turn: damage your side deals to the enemies and damage the enemies deal to you and your party",
+    "ja": "戦闘で自分や味方が敵に与えたダメージ、敵が自分や味方に与えたダメージを数字で表示する"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "settings": {
+    "SHOW_DAMAGE_TO_ENEMIES": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "敵に与えたダメージを出す",
+        "en": "Show damage dealt to enemies"
+      }
+    },
+    "SHOW_DAMAGE_TO_ALLIES": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "自分や味方が受けたダメージを出す",
+        "en": "Show damage taken by you and your party"
+      }
+    },
+    "SHOW_HEALING": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "回復も出す",
+        "en": "Show healing too"
+      },
+      "note": {
+        "ja": "HP が増えたときにも1行出る",
+        "en": "Adds a line when HP goes up"
+      }
+    },
+    "SHOW_REMAINING_HP": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "残りの HP を添える",
+        "en": "Append the remaining HP"
+      },
+      "note": {
+        "ja": "「（残り HP 11/34）」の部分。最大 HP が読めないビルドでは現在値だけになる",
+        "en": "The \"(HP 11/34)\" part; falls back to the current value alone"
+      }
+    },
+    "SHOW_INTEGRITY": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "身体の負傷の増減も出す",
+        "en": "Show body damage as well"
+      },
+      "note": {
+        "ja": "HP とは別の数字（physical_integrity）。1手では動かない回が多いので既定オフ",
+        "en": "physical_integrity, a separate stat from HP. Off by default"
+      }
+    },
+    "LINE_PREFIX": {
+      "type": "choice",
+      "default": "なし",
+      "values": ["なし", "-", "*", ">", "・", "→", "※", "●", "◆", "■", "★"],
+      "label": {
+        "ja": "行の頭に付ける記号",
+        "en": "Prefix for each line"
+      },
+      "note": {
+        "ja": "既定は「なし」。選ぶと記号＋半角空白が各行の頭に付く（例: 「● ゴブリンの斥候 に 23 のダメージ」）",
+        "en": "Default \"なし\" = none. The symbol and a space are put in front of every line"
+      }
+    },
+    "MIN_AMOUNT": {
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 9999,
+      "label": {
+        "ja": "この値未満の増減は出さない",
+        "en": "Hide changes smaller than this"
+      },
+      "note": {
+        "ja": "0 にすると 0 点の行まで出る",
+        "en": "0 shows even zero-point lines"
+      }
+    }
+  }
+}

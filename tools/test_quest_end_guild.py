@@ -197,7 +197,7 @@ class InstantaleApp:
 
 
 class QuestEndManager:
-    """クエストクリア。実測の順序をそのまま真似る（TECH.md GAME.md §2.8）:
+    """クエストクリア。実測の順序をそのまま真似る（GAME.md §2.8）:
 
         帰還 → 報酬 → `remove_party_member` → **呼び出し元が**置き直す
 

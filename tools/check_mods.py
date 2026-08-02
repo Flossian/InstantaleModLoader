@@ -7,10 +7,9 @@
 どれも構文としては正しいコードだった:
 
   * `@ctx.wrap("...InstantaleApp.process_choice")` が、コード移動の巻き添えで
-    **別の関数（`snapshot()`）に付いた**。`process_choice` が `snapshot` に
+    **別の関数（`snapshot()`）に付く**。`process_choice` が `snapshot` に
     差し替わり、ボタンを押すたびに
     `TypeError: snapshot() got an unexpected keyword argument 'function'`
-    （2026-07-27）
   * `@ctx.wrap` が飾る関数の第1引数は `orig`、メソッド対象なら第2引数は `self`。
     ここがずれると引数が1つずつ食い違ったまま本体が呼ばれる
 

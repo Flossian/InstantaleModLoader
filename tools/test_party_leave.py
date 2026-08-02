@@ -152,8 +152,8 @@ class ConversationEndManager:
 class InstantaleApp:
     def __init__(self, world, party, decoy=None):
         self.world = world
-        # セーブでは game_variables['party']。実機では `app.party` が空のまま
-        # だったことがある（2026-07-26）ので、名簿の在り処は形で決めつけない。
+        # セーブでは game_variables['party']。`app.party` が空のままのことが
+        # あるので、名簿の在り処は形で決めつけない（GAME.md §2.8）。
         # decoy を渡すと「app.party は別物」の状況を再現できる。
         self.party = party if decoy is None else decoy
         self.game_variables = {"party": party}
@@ -378,7 +378,7 @@ def setup(party=("player", "63"), partner="63", shape="shared"):
       split     `app.party` は空の別物で、本物は `game_variables['party']`
       instances 名簿に Character のインスタンスが並ぶ
       dict      名簿が `{id: Character}` の辞書（セーブに出る配列はキーの並び）
-      bare      名簿がどこにも見つからない（**実機で起きた形**。2026-07-26）
+      bare      名簿がどこにも見つからない（**実機で起きた形**）
     """
     # クラスは毎回作り直す（前のテストで差し替えたメソッドを持ち越さないため）。
     # 派生元は `BASES` から引く（グローバル名は書き換わっている）。
@@ -474,10 +474,9 @@ app.current_quest_data = {"quest_title": "瘴霧の夜警"}
 app.refresh_choice_buttons()
 check("クエスト中は出ない", index_of(app, "confirm") < 0)
 
-# `original_party` は**判定に使わない**。2度読み違えて2度ボタンを消している:
-#   1回目「入っていたら差し替え中」 -> 平常時も名簿と同じ内容で入っていた
-#   2回目「名簿と食い違えば差し替え中」 -> 雇用直後は控えが古いだけで食い違う
-# 意味を確かめていないフィールドで断らない、が結論。クエスト中は
+# `original_party` は**判定に使わない**（GAME.md §2.8）。平常時も名簿と同じ内容で
+# 入っており、雇用直後は控えが古いだけで食い違うので、どちらの読み方でも
+# 「差し替え中」は判定できない。クエスト中は
 # `current_quest_data` で断っているので、守りたい場面はそちらで足りる。
 mod, ctx, app = setup()
 app.original_party = ["player", "63"]          # 名簿と同じ
@@ -523,12 +522,12 @@ check("押すと確認の選択肢になる",
 check("確認文が出る", any("別れる" in t for t in app.texts), app.texts)
 check("この時点ではまだ外していない", app.removed == [] and "63" in app.party)
 
-# 差し替えは「次のフレーム・メインスレッド」で行う。実機では押下と同じ流れの中で
-# 差し替えたせいで、app.buttons だけ変わって画面が古いままになった（2026-07-26）。
+# 差し替えは「次のフレーム・メインスレッド」で行う。押下と同じ流れの中で差し替えると
+# app.buttons だけ変わって画面が古いまま残る（GAME.md §2.3）。
 check("画面に出る文字列も入れ替わる",
       app.to_display_buttons == [mod.CONFIRM_LABEL, mod.CANCEL_LABEL],
       app.to_display_buttons)
-# 塗るのは HUD 側の update_button_texts（実測で確定）。app.to_display_buttons を
+# 塗るのは HUD 側の update_button_texts（GAME.md §2.3）。app.to_display_buttons を
 # どう触っても画面は変わらないので、ここが呼ばれることが表示更新の条件になる。
 check("ゲーム自身のボタン読み込みを呼ぶ",
       app.loaded and app.loaded[-1] == [mod.CONFIRM_LABEL, mod.CANCEL_LABEL],
@@ -623,8 +622,8 @@ clock.run_onces()
 check("会話が閉じていてもそのまま外せる", app.party == ["player"], app.party)
 
 # ============================================================ 置き場所の決め方
-# 方針（2026-07-26）: 初期位置（雇用された場所）へ戻す。ただし土地を
-# 跨いで別れた場合は、いまの町のギルドへ。
+# 初期位置（雇用された場所）へ戻す。ただし土地を跨いで別れた場合は、
+# いまの町のギルドへ。
 print("=== 置き場所 ===")
 
 
@@ -669,7 +668,7 @@ check("そのときタプルはほどいて渡す",
       app.moved and app.moved[0][2] is app.leave_facility[1], app.moved)
 
 # ============================================ 名簿がどこに載っているか分からない
-# 実機では `app.party` が空のまま `add_party_member` が通った（2026-07-26）。
+# `app.party` が空のまま `add_party_member` が通ることがある（GAME.md §2.8）。
 # 名簿の形と在り処を決めつけると、判定が黙って外れてボタンが出ない。
 print("=== 名簿の在り処 ===")
 
@@ -744,8 +743,8 @@ check("その行に名簿の在り処が入る", "ConversationEndManager" in log
 # ================================================ ゲーム本来の解散を記録できるか
 # 死別・クエストクリアの解散は `remove_party_member` を通るはず。そこを読み取り
 # 専用で記録しておけば、起きたときに経路が確定する。**呼び出し元の特定を
-# 段数で数えてはいけない**（@ctx.wrap の層が1段挟まって、実機では自分の
-# ラッパを指してしまった。2026-07-26）。
+# 段数で数えてはいけない**（@ctx.wrap の層が1段挟まるので、自分のラッパを
+# 指してしまう）。
 print("=== ゲーム本来の解散 ===")
 
 mod, ctx, app = setup()

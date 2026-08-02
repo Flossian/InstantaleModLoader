@@ -1,20 +1,9 @@
 # -*- coding: utf-8 -*-
 """選択肢ボタンと画面描画の共通部品。
 
-ここに置いてあるのは **実機で確かめた事実だけ**。同じ発見を mod ごとに書き直すと
-「片方に入って片方に入っていない」状態になる ― 実際に `301_` と `302_` で起きた:
-
-  * `302_` が4回外してようやく突き止めた**描画の経路**（`paint`）が `301_` には
-    無く、`301_` は `refresh_choice_buttons` を直接呼ぶだけだった。それでは
-    画面は塗り替わらない（`302_` の実測）
-  * `301_` が痛い目に遭った**会話を閉じずに画面を変える**（立ち絵が付いてくる）を
-    `302_` は取り込んだが、`302_` が足した **`end_text` の差し替え**は `301_` に
-    無かった
-  * `300_` が確立した**手が空くまで待つ**（移動の後始末の最中に割り込むと
-    噛み合わない）は、会話終了の後始末にもそのまま当てはまるのに、どちらの mod も
-    固定待ちだった
-
-以後、この種の知見は判明した時点でここへ移し、全部の mod がここを使う。
+ここに置いてあるのは **実機で確かめた事実だけ**。同じ知見を mod ごとに書き写すと
+「片方に入って片方に入っていない」状態になるので、選択肢まわりの発見は全てここへ
+集め、どの mod もここを使う。
 
 ## 分かっている事実
 
@@ -158,10 +147,10 @@ def spec_cls_name(entry):
 
 
 def spec_args(entry):
-    """ボタンの spec の args。**読むだけ** ― 値の意味は解釈しない。
+    """ボタンの spec の args。**読むだけ**。値の意味は解釈しない。
 
     セーブのフィールド値をそのまま引数の語彙だと決めつけてゲームを落とした
-    ことがある（TECH.md GAME.md §2.2）。ボタンに載っている args をそのまま使えば、
+    ことがある（GAME.md §2.2）。ボタンに載っている args をそのまま使えば、
     値が何を意味するのか知らなくても正しく起こせる。
     """
     data = spec_data(spec_of(entry))
@@ -200,7 +189,7 @@ def pressed_entry(app, button_index):
     **地図があるなら地図を使う。** ゲーム自身が
     `display_button_map[button_index]` で添字を引き直していることは、事故時の
     フレームローカルに `mapped_button = 1` が残っていたことで確定した
-    （TECH.md GAME.md §2.2）。恒等写像なら結果は同じ、恒等でなければこちらが正しい。
+    （GAME.md §2.2）。恒等写像なら結果は同じ、恒等でなければこちらが正しい。
     """
     buttons = getattr(app, "buttons", None)
     if not isinstance(buttons, (list, tuple)) or not isinstance(button_index, int):
@@ -255,7 +244,7 @@ def is_idle(app):
 
 
 # --------------------------------------------------------------------------
-# エリアの引き当て（`302_` の実測）
+# エリアの引き当て（GAME.md §2.7）
 # --------------------------------------------------------------------------
 def world_areas(app):
     """エリア表 `{id: Area}`。**属性名ではなく中身で見分ける。**"""
@@ -281,9 +270,8 @@ def world_areas(app):
 def current_area(app):
     """いまプレイヤーが居るエリア。**id で持っている場合も引き当てる。**
 
-    `player.current_area` はエリアのオブジェクトとは限らない ― NPC 側のセーブでは
-    `"7"` という id の文字列だった。持ち方を決めつけて2度外している（`302_`）ので、
-    どちらでも引き当てる。
+    `player.current_area` はエリアのオブジェクトとは限らない。NPC 側のセーブでは
+    `"7"` という id の文字列。持ち方は決めつけず、どちらでも引き当てる。
     """
     value = getattr(getattr(app, "player", None), "current_area", None)
     if isinstance(value, (str, int)):
@@ -296,7 +284,7 @@ def area_id_of(area):
 
 
 # --------------------------------------------------------------------------
-# 施設の引き当て（`302_` の実測。`303_` にも同じものが要ったのでここへ移した）
+# 施設の引き当て（GAME.md §2.7）
 # --------------------------------------------------------------------------
 # 施設はエリアの直下ではなく**ノードの下**にぶら下がっている（実セーブ）:
 #
@@ -306,7 +294,7 @@ def area_id_of(area):
 # **`node` が null のことがある**。だから施設は id だけを頼りにノードを総当たり
 # して探す（`find_facility`）。
 #
-# 実在する `facility_type`（実セーブで確認・2026-07-26）:
+# 実在する `facility_type`（実セーブで確認）:
 #   entrance / exit / ward / guild / inn / general_store / specialty_shop /
 #   blacksmith / medical_facility / administrative_office / underworld_office /
 #   colosseum / slave_market / location / dungeon_location
@@ -357,7 +345,7 @@ def find_facility(area, facility_id):
 def find_guild(area, facility_type=GUILD_FACILITY_TYPE):
     """そのエリアのギルド。`(施設, ノード)`。無ければ `(None, None)`。
 
-    ダンジョンや野外のエリアにはギルドが無い ― **見つからないことが正常な答え**
+    ダンジョンや野外のエリアにはギルドが無い。**見つからないことが正常な答え**
     なので、呼ぶ側はそこで別の置き場所へ下がること。
     """
     if area is None:
@@ -372,7 +360,7 @@ def find_guild(area, facility_type=GUILD_FACILITY_TYPE):
 def facility_name(app, facility, limit=40):
     """施設の名前。取れなければ空文字（呼ぶ側は場所抜きの文言に切り替える）。
 
-    施設そのものが渡ってくるとは限らない ― id の文字列で持っていることがあるので、
+    施設そのものが渡ってくるとは限らない。id の文字列で持っていることがあるので、
     そのときは世界の施設表から引き直す。
     """
     if facility is None:
@@ -399,7 +387,7 @@ def _short(value, limit):
 
 
 # --------------------------------------------------------------------------
-# パーティの名簿（`302_` が4回外して固めた手順。GAME.md §2.8）
+# パーティの名簿（GAME.md §2.8）
 # --------------------------------------------------------------------------
 # **在り処も形も決めつけない。** セーブに出るのは `game_variables['party']` の
 # `['player', '63', ...]` という id の配列だが、実行時に `app.party` から同じものが
@@ -664,8 +652,8 @@ class Screen(object):
     def instantiate_spec(self, app, entry_or_spec):
         """ボタンの `PhaseSpec` から、それが呼ぶはずのマネージャを組み立てる。
 
-        **引数を自分で考えない**のが要点。`QuestChoiceManager` の `quest_type` を
-        推測して組み立ててゲームを落とした前科がある（TECH.md GAME.md §2.2）。
+        **引数を自分で考えない**のが要点。`QuestChoiceManager` の `quest_type` は
+        推測して組み立てるとゲームが落ちる（GAME.md §2.2）。
         ゲームが既にボタンへ載せている `cls_name` と `args` をそのまま使えば、
         値の意味を知らなくても正しく起こせる。
         """
@@ -703,21 +691,12 @@ class Screen(object):
         """選択肢の文字列を実際に画面へ塗る。効いた手段の一覧を返す。
 
         `refresh_choice_buttons` は `to_display_buttons` と `display_button_map`
-        を組み直すところまでで、**そこまで正しくても画面は塗り替わらない**
-        （実機・2026-07-26）:
-
-            confirm: to_display_buttons ['ここで別れる',...] -> ['ああ、…','やめておく']
-            （それでも画面は古いまま）
+        を組み直すところまでで、**そこまで正しくても画面は塗り替わらない**。
 
         塗っているのは HUD 側の `InstanTaleHUD.update_button_texts(self,
-        instance, value)`。上限付きのトレースで誰が起こしているかを実測した:
-
-            update_button_texts(ObservableList [...]) <- InstanTaleHUD  ゲーム自身
-            update_button_texts(list ['ああ、…','やめておく']) <- InstantaleApp  こちら
-
-        **監視されているプロパティは HUD 側にあり、`app.to_display_buttons` は
-        監視対象ではない**（空にして入れ直しても dispatch が1本も出なかった）。
-        だからそこをどう触っても画面は変わらない ― この関数を直接呼ぶのが正解。
+        instance, value)`。**監視されているプロパティは HUD 側にあり、
+        `app.to_display_buttons` は監視対象ではない**ので、そこをどう触っても
+        画面は変わらない。この関数を直接呼ぶのが正解（GAME.md §2.3）。
 
         ついでに `display_button_load(self, dt)`（ゲーム自身のボタン読み込み。
         Clock コールバックの形なので `dt` を渡せば直接呼べる）も通す。
@@ -750,20 +729,9 @@ class Screen(object):
 
     # -- 待機表示（「.」→「..」→「...」）-----------------------------------
     #
-    # **ゲーム自身の待機表示を実測して、そのまま真似る**（2026-07-27、`301_`）。
-    # 掲示板の「クエストを探す」（`QuestSearchManager`）を1回押した記録:
+    # **ゲーム自身の待機表示を実測して、そのまま真似る**（値は GAME.md §2.4）:
     #
-    #   18:35:55.598  enabled=False  hud.buttons=['.',   '.',   '.',   '.'  ]  send_disabled=True
-    #   18:35:55.902  enabled=False  hud.buttons=['..',  '..',  '..',  '..' ]  send_disabled=True
-    #   18:35:56.205  enabled=False  hud.buttons=['...', '...', '...', '...']  send_disabled=True
-    #   18:35:56.508  enabled=False  hud.buttons=['.',   '.',   '.',   '.'  ]   ← 約0.3秒で循環
-    #   18:35:59.437  enabled=True   hud.buttons=['テスト討伐依頼A', ...]
-    #
-    # 分かったこと:
-    #
-    #   * `is_button_enabled = False` を**立てている**。以前「立てていない」と
-    #     結論したのは `process_choice` の**前後**しか測っていなかったため
-    #     （`execute` は別スレッドなので、前後の標本は「最中」を捉えない）
+    #   * `is_button_enabled = False` を立てる
     #   * 点は1個の `…` ではなく `.` → `..` → `...` のアニメーションで、
     #     **ボタン全枠**に出る（枠数は `hud.buttons` の数）
     #   * `text_send_button.disabled = True`（自由入力を塞ぐ）
@@ -806,7 +774,7 @@ class Screen(object):
         """待機表示を出す。ゲーム自身と同じ見た目・同じ止め方。
 
         LLM を待つ間これを出さないと、**画面が固まったように見える**
-        （`301_` が実機で入れたもの。`305_` も同じ待ち方をする）。
+        （GAME.md §2.4）。
         """
         busy = self._busy
         busy["enabled"] = getattr(app, "is_button_enabled", None)
@@ -861,10 +829,9 @@ class Screen(object):
     def apply_buttons(self, app, entries, tag):
         """選択肢を差し替えて画面に反映する。**必ず次のフレーム**で行う。
 
-        実機（2026-07-26）: 押下と同じ流れの中で差し替えると `app.buttons` は
-        変わるのに**画面は古いまま**だった。見えているものと押されるものが
-        食い違うので、確認画面が出ていないように見えて裏では新しい選択肢が
-        押せてしまう（実測: 連打したら別れられた）。
+        押下と同じ流れの中で差し替えると `app.buttons` は変わるのに**画面は
+        古いまま**になる。見えているものと押されるものが食い違うので、確認画面が
+        出ていないように見えて裏では新しい選択肢が押せてしまう。
 
         ゲーム自身は押下の処理の中で描画しているので、こちらの差し替えはその
         **後**に置く必要がある。`Clock.schedule_once(..., 0)` なら次のフレーム、
@@ -893,7 +860,7 @@ class Screen(object):
         ゲーム自身は選択肢を変えるとき必ず `process_choice(マネージャ, 文字列)`
         を通し、その中で `execute` が別スレッドへ渡される。描画の面倒はその経路が
         見ているので、同じ経路に乗せる。フェーズは `execute(choice_text)` だけを
-        持つ自前クラスでよい ― **`PhaseSpec` には決して載せない。**
+        持つ自前クラスでよい。**`PhaseSpec` には決して載せない。**
         """
         try:
             app.process_choice(phase, choice_text)
@@ -942,7 +909,7 @@ class Screen(object):
 
         `cancel_if` は理由の文字列（または None）を返す関数。前提が崩れたら
         取り消す（待っている間に施設を出た、戦闘に入った等）。
-        `proceed_on_timeout` は「待ちきれなくても実行する」― 既に確定した
+        `proceed_on_timeout` は「待ちきれなくても実行する」。既に確定した
         行動の後始末では、遅れても実行する方が正しい。
 
         既に手が空いているなら見張りは立てず、その場で予約する（無駄に
@@ -988,7 +955,7 @@ class Screen(object):
         """会話をゲーム自身の経路で閉じてから `follow_up(app)` を走らせる。
 
         閉じずに画面を変えると **NPC の立ち絵が消えずに移動しても付いてくる**
-        （`301_` で実際に起きた）。会話は「状態」であって画面ではない ―
+        （`301_` で実際に起きた）。会話は「状態」であって画面ではない。
         立ち絵の片付けも関係値の更新も会話の要約も終了処理の中にある。
 
         起こし方は「画面にある『会話を終了する』ボタンの spec をそのまま使い、

@@ -1,0 +1,58 @@
+{
+  "entry": "ui_item_list_fit.py",
+  "api": 1,
+  "name": {
+    "en": "Fit the item list",
+    "ja": "アイテム一覧を収める"
+  },
+  "description": {
+    "en": "Keeps the item/skill list that opens above the input box inside the window by laying it out in columns. Position and row size stay as the game made them",
+    "ja": "入力欄の上に開くアイテム・スキル一覧を、列を増やして画面内に収める。位置も行の大きさもゲームのまま"
+  },
+  "version": "2",
+  "author": "R01/Flossian",
+  "settings": {
+    "MAX_FILL": {
+      "type": "float",
+      "default": 0.9,
+      "min": 0.2,
+      "max": 1.0,
+      "label": {
+        "ja": "一覧が画面の高さに占めてよい割合",
+        "en": "How much of the window height the list may use"
+      },
+      "note": {
+        "ja": "既定 0.9。小さくすると早く2列目へ折り返す。1.0 に近づけるほど1列が長くなる",
+        "en": "Default 0.9. Lower values wrap into the next column sooner; closer to 1.0 makes each column longer"
+      }
+    },
+    "MAX_COLUMNS": {
+      "type": "int",
+      "default": 4,
+      "min": 1,
+      "max": 12,
+      "label": {
+        "ja": "列数の上限",
+        "en": "Most columns to use"
+      },
+      "note": {
+        "ja": "件数が多いほど列が増える。1 にすると列を増やさない（＝この MOD は何もしない）",
+        "en": "More items means more columns. Set to 1 to never add a column (the mod then does nothing)"
+      }
+    },
+    "FIXED_COLUMNS": {
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 12,
+      "label": {
+        "ja": "列数を固定する（0 で自動）",
+        "en": "Force a number of columns (0 = automatic)"
+      },
+      "note": {
+        "ja": "既定 0 ＝ 件数と画面の高さから自動で決める。2 にすると、収まっていても常に2列にする",
+        "en": "Default 0 = decided from the item count and the window height. Set to 2 to always use two columns, even when one would fit"
+      }
+    }
+  }
+}

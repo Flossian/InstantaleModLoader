@@ -41,7 +41,7 @@ save_area_json, save_world_json, api_key_manager, build_type, sdcpp_cuda
 ```
 
 `__main__` は `sys.stdlib_module_names` に含まれる。素朴に stdlib を除外すると
-ゲーム本体が丸ごと漏れる（`recon.py` の `GAME_TOPLEVEL` はアローリスト）。
+ゲーム本体が丸ごと対象から抜け落ちる（`recon.py` の `GAME_TOPLEVEL` はアローリスト）。
 
 ### 1.3 スキャンで見つからないもの
 
@@ -450,6 +450,20 @@ app.process_choice(ConversationStartManager(app, npc_id), npc_name)
 戦闘・会話中かを見るフラグ: `in_battle` / `in_boss_battle` / `in_colosseum_battle` /
 `in_conversation` / `in_free_input` / `in_action_in_conversation`。
 
+移動が終わった瞬間は `__main__:MovePhaseManager.move_phase` の**復帰後**。
+**情景描写（`llm_manager:narrator`）は `move_phase` の内側**で呼ばれる。
+
+```
+process_choice(MovePhaseManager, ...)    ボタン押下
+  move_phase()
+    narrator(...)                        ← 情景描写はここ（内側）
+  move_phase 復帰                        ← ここで到着が確定している
+```
+
+したがって「復帰後に印を置いて次の `narrator` で回収する」形にすると**1手ずれる**
+（回収するのは次の移動の `narrator`）。情景描写に合流したいなら、印は `orig` を
+呼ぶ**前**に置いて入れ子の `narrator` に拾わせる（`300_event_facility_arrival`）。
+
 `in_shopping` は状態の判定に使えない。店の外を往復しているだけの移動でも True の
 まま残る。買い物窓が開いているかは `is_popup_window_opened` で見る。`in_battle` も経路に
 よって下ろし忘れがある（§2.10）。
@@ -610,9 +624,19 @@ DisplayQuestChoice                       get_active_quest_count() -> 5
   → BattlePhaseManager / LootPhaseManager                     戦闘とその戦利品
   → QuestEventManager(app, event_name, enemies_info, event_turn)   フィールドイベント
   → QuestEncounterFinalBoss(app, [[boss_name]])                ラスボスとの邂逅
-  → QuestEndManager(app)                                       ★完了。**引数ゼロ**
   → buttons ['帰還する', '漁る']
+  → LootPhaseManager(app)     '漁る'      戦利品。**完了より前**
+  → QuestEndManager(app)      '帰還する'  ★完了。**引数ゼロ**
 ```
+
+`帰還する` と `漁る` は**完了の後に出るのではなく、`QuestEndManager` を起こす側**
+（2026-08-01 の実測。`process_choice(QuestEndManager, choice_text='帰還する')` の
+14分前に `process_choice(LootPhaseManager, choice_text='漁る')` が来ている）。
+
+`QuestEndManager.execute` の中で帰還・報酬・才能まで済み、抜けた先は**エリアの入口**
+（`facility_type='entrance'`）。入口の選択肢は隣の施設への `MovePhaseManager` だけで、
+`DisplayTalkChoice` も `DisplayAreaMoveChoice` も無い。「町に戻ったか」を後者2つで
+判定すると、プレイヤーが歩き出すまで拾えない（`307_` が実際にこれを踏んだ）。
 
 毎ターンの分岐は `QuestPhaseManager.quest_referee_phase` →
 `llm_manager:quest_referee_with_free_action` が決める。その戻り値
@@ -660,6 +684,66 @@ DisplayQuestChoice                       get_active_quest_count() -> 5
 残骸かどうかは `app.current_enemy_dict` が空かで見分けられる。
 
 `in_boss_battle` / `in_colosseum_battle` は 1→0 の遷移を観測できていない。
+
+#### 1手ぶんの内訳（`BattlePhaseManager`。署名は実測、順序は未実測）
+
+`out/recon/targets.txt` にある `BattlePhaseManager` のメソッド:
+
+```
+battle(command, choice_text)
+handle_battle_situation(character_key, character_side, battle_action)   1手ぶん
+  calculate_battle_effect(battle_action)                               効果を決める
+  resolve_battle_effect(character_key, character_side, battle_action,
+                        effect_to_enemies, *args)                      当てる
+  process_battle_text(character_key, character_side, battle_action,
+                      effect_to_enemies, death_player, death_member_list,
+                      escape_succeeded_member_list, escape_failed_member_list,
+                      death_enemy_list, *args)                         地の文
+reduce_status_turns_and_log(character)      毒などの継続分
+check_character_death(index, character) / check_team_annihilation() / check_battle_end()
+enemy_delete_animation(index, character)
+convert_llm_output_to_instruction_dict(actor, skill, referee_response)
+```
+
+実測（2026-08-01。`308_` のログ。VERIFICATION.md §3.14）で分かっていること:
+
+- **1手 = `handle_battle_situation` 1回。** 味方の手も敵の手もここを通る
+- `character_side` は**日本語の文字列**（`'味方陣営'` / `'敵側'`）。列挙値ではないので
+  文字列で分岐しないこと
+- `character_key` は敵だと `'泥濘の亡者1'` のように連番付き。`Character.name` の側は
+  連番が付かない（`'泥濘の亡者'`）ので、**鍵と表示名は別物**
+- 1手で複数の敵に当たる手がある（スキル）
+- **倒れた敵は1手の中で `current_enemy_dict` から抜ける。** 手が終わった後に見ると
+  もう居ない（`enemy_delete_animation` / `check_character_death` がその担当と読める）。
+  1手の前後で敵の状態を比べる MOD は、この抜けた敵を**別に拾わないと取りこぼす**
+  （`308_` が実機1回目でとどめの一撃を落とした原因）
+
+> **入れ子の順序（`calculate` → `resolve` → `process`）は署名から読んだだけで
+> 実測していない。** 引数名（`effect_to_enemies` が `resolve` と `process` の
+> 両方に居る）からそう読めるだけ。`308_battle_damage_display` はこの順序に
+> **寄りかからない**形（1手の外側で HP の差を測る）にしてある。
+
+ダメージの計算そのものは `scripts.functions` 側:
+
+```
+get_base_damage_value(character_attack, weapon_attack)
+get_instant_damage(attack, defense)
+```
+
+引数は数値だけで、**誰に当たった値なのかは引数から分からない**（1手で何回呼ばれるかも
+不明）。数字が欲しいだけなら、ここを包むより HP の前後を比べるほうが確実。
+
+戦闘中の HP の在り処:
+
+| 誰 | どこ |
+|---|---|
+| 敵 | `app.current_enemy_dict`（鍵 → その敵。戦闘の実体の有無もここで見る） |
+| プレイヤー | `app.player` |
+| 同行者 | 名簿の id から `world.characters`（§2.6 のパーティ名簿） |
+
+`Character` 側の項目は `current_hp` / `physical_integrity` /
+`max_physical_integrity`（`__init__` の署名。実測）。最大 HP は
+`update_max_hp()` があることから `max_hp` と**推測**しているだけで未実測。
 
 ### 2.11 BGM
 
@@ -849,6 +933,37 @@ ItemDetailBox      size=[333, 500]  size_hint=(None, None)      ← 箱ごと固
 文字が要求する高さの測り方: `text_size` を `(元の幅, None)` にして `texture_update()` を
 呼ぶと、折り返した結果が `texture_size[1]` に出る。幅はこちらで決めず、ゲームの値のまま使う。
 
+### 2.14.1 自由入力のアイテム一覧（`ToolListPopup`）
+
+入力欄の左下のアイコン（`InstanTaleHUD.press_item_icon` / `press_skill_icon`）で開く
+一覧。選ぶと `select_item_to_action_input(btn)` が入力欄へ差し込む。
+
+```
+scripts.hud.new_hud:ToolListPopup(callback, tool_text_list=['a','b','c'])
+    bases = [GridLayout]                     ← 列を持てる（modules.json の mro）
+
+cols=1  rows=None  spacing=[0,0]  padding=[0,0,0,0]
+size_hint=[1,1]  pos=(0,0)  size=[926.64, 78.75]   ← 親（入力欄の帯）と同じ寸法
+minimum_height=1026                                 ← 中身が要求する高さ
+行 18個  173x57  行の下端 y=0 → 上端 y=1026        ← 箱の外まで並んでいる
+```
+
+- **`GridLayout` 派生**なので `cols` を増やせば折り返す**はずだが、`cols=2` を入れても
+  見た目は変わらなかった**（2026-08-02 実測）。`size_hint=[1,1]` で箱は入力欄の帯と
+  同じ 78.75 しか無いのに行は 0〜1026 に並んでいる ＝ **行の位置をこの格子が決めて
+  いない**。列にするには、`cols` を入れたうえで箱の高さを中身ぶんにし、それでも
+  折り返らなければ行の位置を自分で入れる（`115_ui_item_list_fit`）
+- 一覧の幅（926.6）は行の幅（175）よりずっと広い。2〜4列なら幅は足りる
+- 行は直接の子。`spacing` は `[x, y]` の列（`GridLayout` の形）
+- 一覧は入力欄を下端にして上へ積まれるので、件数が増えると**画面の上端を突き抜ける**。
+  ゲーム側に高さの頭打ちは無い（Kivy の `DropDown` ではないので `_reposition()` の
+  自動縮小も働かない）
+- 開いた直後は、まだレイアウトが走っていない寸法が読める。しかも
+  **行が並び終わっているのに入れ物の矩形だけが `(0, 0, 926.6, 78.75)` のまま**、
+  という瞬間がある（2026-08-02 実測）。組み上がったかどうかは**行の位置と高さ**で
+  判断すること。入れ物の矩形を条件にすると永久に成立しない。§2.14 の
+  `ItemDetailBox` と同じ注意がここにも要る
+
 ### 2.15 キャラクタ名はそのままファイルパスになる
 
 ```
@@ -927,6 +1042,125 @@ Character.calculate_current_gained_exp_on_display(gained)  表示用
 「いま訓練の中か」を `frames.MethodWatch` で見るときは、その `execute` を自分で
 包んでいないことを確かめる（包んでいると表に入るのはローダのラッパのコード
 オブジェクトで、全パッチが共有しているので誤爆する。`306_` が踏んだ）。
+
+### 2.19 体力（スタミナ）は `physical_integrity`
+
+`Character.physical_integrity` / `max_physical_integrity`（`__init__` の既定は
+どちらも 100）。**戦闘のHP（`current_hp` / `max_hp`）とは別物。**
+
+同じプレイヤーを1晩追った実測（2026-08-01、`out/events.log` のダンプ3点）:
+
+| 時刻 | `physical_integrity` | `max_hp` | `exhausted` |
+|---|---|---|---|
+| 01:47 | 100 | 1560（`original_max_hp` と同じ） | `False` |
+| 01:49 | 50 | 1365 | `True` |
+| 02:03 | 0 | 1170 | `True` |
+
+- 土地の移動やクエストで**減る**。回復は医療施設
+  （`MedicalTreatmentManager(app, treatment_price)` /
+  `scripts.functions:get_heal_physical_integrity_barden(value)`）
+- **体力が減ると最大HPが下がる**（1560 → 1365 → 1170。`original_max_hp` は
+  1560 のまま）。式は特定していないが、`physical_integrity` が上限を削る側
+- `exhausted`（bool）は 50/100 の時点で既に `True`。どの閾値で立つかは未特定。
+  減る量・回復量・`get_max_physical_integrity(level)` との関係も未確認
+- `current_hp` が `max_hp` を超えている状態を観測している（2591 > 1560）。
+  戦闘に入る時点で丸めていると思われるが未確認。**HP を条件に使うなら
+  `current_hp <= max_hp` を前提にしないこと**
+- 「体力が足りないなら断る」を書くならここを見る（`307_` の
+  `STAMINA_MIN_PERCENT`）
+
+### 2.18 エリア移動（土地から土地へ）
+
+`out/events.log` の実測（2026-07-28 / 07-30 / 07-31、計4回）と `targets.txt`:
+
+```
+process_choice(DisplayAreaMoveChoice, choice_text='他の土地へ行く')   [MainThread]
+process_choice(AreaMoveCofirmation,   choice_text='陽光の砦')          [MainThread]
+process_choice(AreaMoveManager,       choice_text='馬車(1000G)')       [MainThread]
+                                                   '徒歩(3ヵ月)'
+```
+
+| クラス | `__init__` | 何か |
+|---|---|---|
+| `DisplayAreaMoveChoice` | `(self, app)` | 行き先の一覧 |
+| `AreaMoveCofirmation` | `(self, app, target_area_id)` | 手段の確認（徒歩・馬車が並ぶ）。綴りは `Cofirmation` |
+| `AreaMoveManager` | `(self, app, target_area_id, mode)` | 実際の移動。`method_1` / `show_loading_text` |
+| `AreaMoveRestriction` | `(self, app, target_area_id)` | 行けないときの画面 |
+
+- `mode` の実値は **`'on_foot'` / `'coach'`**（2026-08-01、確認画面のボタンの
+  `args` を読んで実測）:
+
+  ```
+  ('徒歩(3ヵ月)', ['7', 'on_foot'])    ('馬車(1000G)', ['7', 'coach'])
+  ```
+
+  それでも値を書き起こして組み立てるより、確認画面のボタンの `args`
+  （`[target_area_id, mode]`）をそのまま写すほうが安全（`307_` はこの形で、
+  実値は照合にだけ使う）
+- **日数を進めているのは `InstantaleApp.elapse_days(days)`**（2026-08-01 に実測）。
+  徒歩の移動で `90` が渡ってくる（表示は `徒歩(3ヵ月)`）。`307_` がここで渡す数を
+  `14` に減らし、実際にその日数で移動が完了することを確認済み。LLM 側にも
+  `ElapseDays: type:="elapse_days", days` というモデルがある（`out/prompt_bloat.log`）
+- 移動中の表示は `徒歩で目指す。長旅だ...` → `.` `..` `...` → `辿り着いた。`
+  （すべて `InstantaleApp.add_text(context)` を通る。点は
+  `AreaMoveManager.show_loading_text`）。馬車の側の文言は未実測
+- `AreaMoveManager.show_loading_text` は `__main__` にある数少ない
+  「ゲーム native の待機表示」の入口（`206_` が発火を確認済み）
+- LLM 側に `llm_manager:area_move_rejector(character_life_log, player,
+  character_instance, worldview)` がある。同行者が移動を拒む経路と思われるが未検証
+
+### 2.20 手配度（`area_history` の `lawfulness`）
+
+治安上の立場は**土地ごと**に持たれている。実セーブの復号（2026-08-01。§2.16）:
+
+```python
+player_data["area_history"] = {
+    "0": {"residency": {"total_days": 909, "last_stay_end": 104},
+          "achievements": ["…", "…"],
+          "lawfulness": 10},          # ← エリア id ごとに1つ
+    "1": {...},
+}
+```
+
+| 項目 | 分かっていること |
+|---|---|
+| 在り処 | `Character.__init__` の引数にある（`area_history=None`）。プレイヤーもNPCも同じ `Character` |
+| 鍵 | **エリア id**（`player.current_area` と同じ語彙。文字列） |
+| `lawfulness` | 素の平常値は `10`（40エリア全てが 10 の実セーブで確認）。**小さいほど手配が重く、0 未満で犯罪者**。実プレイのセーブで `-40` を観測している（2026-07-16 の別ワールド。エリア `"2"` だけが -40 で他は 10）ので、負の側は少なくとも -40 まで伸びる。上限は未特定 |
+| `residency` | その土地に滞在した日数の累計と、最後に発った日 |
+| `achievements` | その土地で成した事の文章（LLM が書いたもの）の配列 |
+
+- 読み書きするヘルパは無い（`scripts.functions` にも `__main__` にも
+  `lawfulness` を名前に含む関数は無い）。**値を直接触るしかない**
+- 減らしているのは LLM の判定側。プロンプトのスキーマに `lawfulness_loss` が
+  ある（`111_llm_prompt_replace` の置換ルールが実プロンプトで拾っている）。
+  どの行為でいくつ減るかは未特定
+- 関連しそうな `__main__` のクラス: `ImprisonmentStartManager(app,
+  imprisonment_years, charges, incident_details)` /
+  `ImprisonmentPhaseManager` / `ImprisonmentEndManager(app, imprisonment_years)` /
+  `DisplayCitizenshipChoice` / `CitizenshipChoiceManager(app, status)` /
+  `GetCitizenshipManager(app, status)` / `DieFromOldAgePrison`。
+  **手配度との繋がりは未確認**（`309_office_pardon` はこれらを一切通らず、
+  `area_history` の値だけを書き換える）
+- **手配度を直接書き換えても、ゲーム側の帳尻は崩れない**（2026-08-01 の実機。
+  `-10` → `10` に書き換えたあと普通に遊び、ゲーム自身のセーブに `10` と
+  所持金の減りが両方そのまま残った）
+
+#### 役場（`administrative_office`）の選択肢（2026-08-01 実測）
+
+```
+Facility.choices = ['労働の募集をみる', '市民権の発行', '出る']
+   ↓ ゲームがこれに『会話する』を足して並べる
+app.buttons      = ['労働の募集をみる', '市民権の発行', '出る', '会話する']
+```
+
+- **手配を解く選択肢は素のゲームには無い**（`309_office_pardon` と二重にならない）
+- `出る` が `会話する` より**前**に来る。施設の選択肢は「操作 → 退出」の順とは
+  限らないので、位置を文字列や並び順で決め打ちしないこと（`309_` は
+  `MovePhaseManager` を呼ぶ最初のボタンの手前に挿している）
+- 会話（`ConversationStartManager` → `ConversationEndManager`）を挟んでも、
+  抜けた後に施設の選択肢が組み直されるので、そこへ足した自前のボタンは
+  組み直しのたびに入れ直す必要がある（`refresh_choice_buttons` を包む形）
 
 ---
 

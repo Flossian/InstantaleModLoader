@@ -32,7 +32,7 @@ mod は1フォルダで、名乗りは `mod.json`、中身は入口の `.py`:
 
 名乗りをコード側の変数ではなく JSON に置いているのは、**一覧を作るために mod を
 import しない**ため（GUI は無効な mod も壊れた mod も、走らせずに一覧へ出せる）。
-上の3つも同じ理由でここに置いてある ― 適用順も API の可否も、コードを1行も
+上の3つも同じ理由でここに置いてある。適用順も API の可否も、コードを1行も
 走らせる前に決まっていなければならない。
 
 ctx に何があるかは下の ModContext を参照。パッチの当て方は patch.py に
@@ -54,7 +54,7 @@ import time
 import traceback
 import uuid
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 # mod との契約。`mod.json` の "api" がこれと突き合わされる。
 #
@@ -313,7 +313,7 @@ class ModContext:
 
         `force=True` は印を無視して積み直す。**開発中の逃げ道**で、注入し直しても
         初期化がもう走らない（印はプロセスに残る）のを抜けるためにある。
-        配布する mod に書いてはいけない ― 遅延当て直しのたびに副作用が起きる。
+        配布する mod に書いてはいけない。遅延当て直しのたびに副作用が起きる。
         """
         name = key or "{}:{}".format(
             self._mod or "<loader>",
@@ -415,7 +415,7 @@ def _installed(mods_dir: str) -> list[str]:
     増える。
 
     先頭が "_" のフォルダは読み込まない（手で切るときの逃げ道。GUI から切った
-    ものは `load_order.json` の "disabled" に載る ― `_discover` を参照）。
+    ものは `load_order.json` の "disabled" に載る。`_discover` を参照）。
     """
     found = []
     for name in sorted(os.listdir(mods_dir)):
@@ -483,7 +483,7 @@ def _order(mods_dir: str,
            found: list[str]) -> tuple[list[str], list[str], list[str], list[str]]:
     """mod を**適用順に**並べて返す。
 
-    このローダでは適用順が動作の前提になっている（TECH.md §3.2 — 計測は修正より
+    このローダでは適用順が動作の前提になっている（TECH.md §3.2: 計測は修正より
     外側に置く、など）。順序はフォルダ名からは決めず、`load_order.json` が
     明示的に持つ:
 
@@ -502,7 +502,7 @@ def _order(mods_dir: str,
     実体が無いものは黙って飛ばす（消した mod の記述が残っていても壊れない）。
 
     順序ファイルが読めなければフォルダ名順。**必ず何らかの決まった順で動く**ように
-    しておく ― ここで例外にすると、順序ファイルが壊れた瞬間に mod が全滅する。
+    しておく。ここで例外にすると、順序ファイルが壊れた瞬間に mod が全滅する。
 
     戻り値は `(有効な mod の適用順, 一覧に出す順, 切られている mod, 報告)`。
     2つ目は無効な mod も**宣言された位置に**含む（GUI の一覧用）。
@@ -711,7 +711,7 @@ def _sort_dependencies(order: list[str], manifests: dict) -> tuple[list[str], li
     満たす範囲でそのまま残すため。
 
     存在しない mod や無効な mod を指した制約は黙って捨てる（消した mod の記述が
-    残っていても壊れないように ― 順序ファイルの扱いと同じ）。
+    残っていても壊れないように。順序ファイルの扱いと同じ）。
 
     循環していたら**基準の並びをそのまま返す**。ここで例外にすると mod が全滅する。
     """
@@ -1079,7 +1079,7 @@ def write_status(out_dir: str | None = None) -> str | None:
     boot の最後に**こちらから書き出す**。1方向で済み、ゲームが終了した後でも読める。
 
     遅延当て直し（`_arm_deferred`）のたびに上書きされるので、中身は常に最新の boot。
-    ログ（`*.log`）とは別扱いなので世代管理の対象にしない ― 常に「今の状態」を
+    ログ（`*.log`）とは別扱いなので世代管理の対象にしない。常に「今の状態」を
     表すファイルで、履歴に意味が無い。
     """
     out_dir = out_dir or _state.get("out_dir")

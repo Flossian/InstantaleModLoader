@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""ゲーム終了時に Kivy が落ちる問題を直す。crash_log.txt の 114 件中 47 件がこれ。
+"""ゲーム終了時に Kivy が落ちる問題を直す。
 
-出ていたエラー:
+出ていたエラー（VERIFICATION.md §2.1）:
 
     File "...\\kivy\\input\\providers\\wm_pen.py", line 119, in stop
     File "...\\kivy\\input\\providers\\wm_common.py", line 115, in _closure
@@ -11,13 +11,12 @@ Kivy は終了処理の中で、乗っ取っていたウィンドウプロシー
 元に戻そうとする。そのとき保存しておいたハンドラを ctypes が受け付けずに
 落ちている。
 
-これを最初に直した理由は2つある。
+これを他より先に直す理由は2つ。
 
-1つ目。これは stopTouchApp() から呼ばれる。つまり「本当に落ちた原因」の後始末を
-している最中に発生する。crash_log.txt の該当箇所は例外なく
-"During handling of the above exception, another exception occurred" で始まって
-いて、本来知りたかった原因がこのエラーで上書きされてしまう。
-先にこれを潰さないと、他のバグの調査が進まない。
+1つ目。これは stopTouchApp() から呼ばれる ＝「本当に落ちた原因」の後始末をして
+いる最中に発生するので、本来知りたかった原因がこのエラーで上書きされてしまう
+（該当箇所は例外なく "During handling of the above exception, another exception
+occurred" で始まる）。先にこれを潰さないと、他のバグの調査が進まない。
 
 2つ目。この処理は実質的に無意味である。直後に破棄されるウィンドウの WndProc を
 戻しているだけなので、失敗しても目に見える影響はない。つまり握り潰しても安全。

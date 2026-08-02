@@ -1,29 +1,19 @@
 # -*- coding: utf-8 -*-
 """修正: 売買画面（twin inventory）を開くと IndexError で落ちるのを直す。
 
-## 実測（2026-07-27T21:01:41、`out/live_crashes.log` の MAIN CRASH）
+## 原因（GAME.md §2.13 / VERIFICATION.md §2.16）
 
-会話から売買に入った瞬間に落ちた。トレースの末端はこう:
+会話から売買に入った瞬間、`InventoryGrid.occupy_slots` が
+`IndexError: list index out of range` で落ちる。
 
-```
-instantale.py:1692   InstantaleApp.toggle_twin_inventory_window   situation='shop'
-new_hud.py:2661      InstanTaleHUD.toggle_twin_inventory_visibility   item_id='item_1'
-new_hud.py:379       InventoryGrid.place_existing_item   new_x=1422.7  new_y=1052.855
-new_hud.py:410       InventoryGrid.occupy_slots          grid_x=1 grid_y=5 x=1 y=6
-                     IndexError: list index out of range   slot_index=25
-```
-
-読み取れること:
-
-* `occupy_slots` は `grid_x/grid_y` から始めてアイテムの占有マスを走査している。
-  `x` が `grid_x` のまま（幅1）で `y` が `grid_y+1` に進んだところで落ちているので、
-  **縦2マス以上のアイテムが最下段に置かれ、1マスはみ出した**状態。
-* `slot_index=25` は `self.slots` の範囲外。つまり `place_existing_item` は
-  **置ける場所かどうかを確かめずに** `occupy_slots` を呼んでいる。
-  クラスには `is_valid_placement()` があるのに、この経路だけ通っていない。
-* `place_existing_item` が受け取っているのはピクセル座標（1422.7, 1052.855）。
-  「既存の位置をそのまま復元する」経路なので、**元いたグリッドと売買画面の
-  グリッドで寸法が違う**と、そのままでは収まらない位置になり得る。
+* `occupy_slots` は `grid_x/grid_y` から始めてアイテムの占有マスを走査する。
+  **縦2マス以上のアイテムが最下段に置かれ、1マスはみ出した**ときに範囲外へ出る。
+* つまり `place_existing_item` は**置ける場所かどうかを確かめずに**
+  `occupy_slots` を呼んでいる。クラスには `is_valid_placement()` があるのに、
+  この経路だけ通っていない。
+* `place_existing_item` が受け取るのはピクセル座標。「既存の位置をそのまま
+  復元する」経路なので、**元いたグリッドと売買画面のグリッドで寸法が違う**と、
+  そのままでは収まらない位置になり得る。
 
 `toggle_twin_inventory_visibility` は所持品を順に並べている最中で、
 これが Kivy の property dispatch → Clock コールバックの中で起きるため、
@@ -36,7 +26,7 @@ new_hud.py:410       InventoryGrid.occupy_slots          grid_x=1 grid_y=5 x=1 y
 
 代わりに、はみ出したときは**ゲーム自身の「新しく置く」経路に流す**。
 `InventoryGrid` は `find_placement_position(w, h)` で空きを探し、
-`place_new_item(item)` で置く手段を持っている ― 店の在庫を初めて並べるときに
+`place_new_item(item)` で置く手段を持っている。店の在庫を初めて並べるときに
 ゲーム自身が使っている道具。復元位置が使えないアイテムを、そこへ渡すだけ。
 （`101_` で `clamp_npc_difficulty_value` を当てたのと同じ形）
 
@@ -50,7 +40,7 @@ new_hud.py:410       InventoryGrid.occupy_slots          grid_x=1 grid_y=5 x=1 y
 ここが埋まれば「そもそもなぜ復元位置がはみ出すのか」（グリッドの列数が
 画面ごとに違うのか、ピクセル→マスの変換が別スケールなのか）を、
 座標を推測せずに次の段で詰められる。成功した呼び出しも最初の
-`SAMPLE_OK` 件だけ同じ形式で残す ― 正常時の寸法が無いと異常の判定ができない。
+`SAMPLE_OK` 件だけ同じ形式で残す。正常時の寸法が無いと異常の判定ができない。
 """
 
 import sys

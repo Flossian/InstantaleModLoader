@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """未解決の4つのクラッシュ地点を、失敗時だけでなく毎回計測する。
 
-ここで再現を待つのは筋の悪い戦略である: これらのバグは2週間で 2〜6 回しか
-発火しておらず、2回のプレイセッションでは何も起きなかった。そこで各地点を
-ラップし、*成功した* 呼び出しの時点で既にデータの形が分かるようにする。
-4つのうち2つは、二度とクラッシュを見ないまま決着できる見込みが高い:
+**再現を待つのは筋が悪い。** これらは数回しか発火しない稀なクラッシュで、
+何セッション遊んでも起きないことがある。そこで各地点をラップし、*成功した*
+呼び出しの時点で既にデータの形が分かるようにする。4つのうち2つは、二度と
+クラッシュを見ないまま決着できる見込みが高い:
 
   get_npc_employ_price(npc_difficulty_level) -> KeyError: 80
       引数は難易度レベルで、失敗したキーは int。つまりティア表にエントリが
@@ -22,7 +22,7 @@
 `FreeInputStart.method`（facility_move_to への AttributeError）。どちらも例外時に
 状態を全部ダンプする。
 
-何も握り潰さない ― 例外はログしてから再送出する。この mod は観測するだけ。
+何も握り潰さない。例外はログしてから再送出する。この mod は観測するだけ。
 """
 
 import datetime
@@ -53,7 +53,7 @@ def apply(ctx):
         write("   traceback:\n" + "".join(traceback.format_tb(exc.__traceback__)).rstrip())
 
     def dump_module_dicts(module_name: str, note: str) -> None:
-        """モジュール直下の dict をログする ― 参照表はここにあり、f_locals には無い。"""
+        """モジュール直下の dict をログする。参照表はここにあり、f_locals には無い。"""
         module = sys.modules.get(module_name)
         if module is None:
             return
@@ -124,7 +124,7 @@ def apply(ctx):
 
         scripts.functions は clamp_npc_difficulty_value() を公開している。その
         上限が価格表の最終ティア（76）と一致するなら、価格参照は他のコードが
-        既に適用しているクランプを単に通していないだけ、ということになる ―
+        既に適用しているクランプを単に通していないだけ、ということになる。
         つまり修正はゲーム自身のルールであって、こちらの発明ではなくなる。
         """
         functions = sys.modules.get("scripts.functions")
@@ -146,7 +146,7 @@ def apply(ctx):
             write("{}: {}".format(fname, results))
 
     def dump_module_constants(module_name: str):
-        """モジュール直下のスカラー定数 ― MAX_* の類が本当の上限を名指しする。"""
+        """モジュール直下のスカラー定数: MAX_* の類が本当の上限を名指しする。"""
         module = sys.modules.get(module_name)
         if module is None:
             return
