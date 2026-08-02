@@ -14,6 +14,7 @@
     "109_fix_item_detail_autosize",
     "110_fix_character_name_path",
     "111_llm_prompt_replace",
+    "1115_message_text_integrity",
     "112_ui_text_spacing",
     "113_ui_text_expand",
     "114_ui_input_focus",
