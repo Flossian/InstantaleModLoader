@@ -505,6 +505,54 @@ def orig_dict(self, *a, **k):
 hooks["move"](orig_dict, object())
 check("dict['text'] に足される", "「" in captured["d"]["text"], captured["d"])
 
+print("16. 現在地が違う主は話者に選ばない")
+clock = install_fake_kivy()
+mod, ctx, calls, hooks = setup()
+app, inn, ward = build_world()
+main = sys.modules["__main__"]
+main.InstantaleApp = InstantaleApp
+main.ConversationStartManager = ConversationStartManager
+main.app_instance = app
+owner = app.world.characters["64"]
+owner.location = ward          # 名簿には居るが、今は別の施設にいる
+app.process_choice_calls = []
+do_move(hooks)
+clock.tick()
+clock.run_onces()
+check("現在地外の主では会話を起こさない", not app.process_choice_calls,
+      app.process_choice_calls)
+owner.location = None          # 現在地が読めない相手は名簿を信じる
+app.process_choice_calls = []
+do_move(hooks)
+clock.tick()
+clock.run_onces()
+check("現在地不明の主なら従来どおり起こす",
+      len(app.process_choice_calls) == 1, app.process_choice_calls)
+
+print("17. llama_cpp が無くても any_server で narration できる")
+clock = install_fake_kivy()
+# llama_cpp を外して any_server だけ載せる
+sys.modules.pop("scripts.llm.request_llm_inference_llama_cpp_completion", None)
+any_name = "scripts.llm.request_llm_inference_any_server"
+any_mod = types.ModuleType(any_name)
+any_calls = []
+
+
+def any_send(manager_name, message, max_tokens=None, timeout=None):
+    any_calls.append((manager_name, message, max_tokens))
+    return "「奥からどうぞ」"
+
+
+any_mod.send_request_with_no_structure = any_send
+sys.modules[any_name] = any_mod
+mod, ctx, calls, hooks = setup(mode="narration")
+# setup() が llama_cpp を載せ直すので、apply 後に差し替える
+sys.modules.pop("scripts.llm.request_llm_inference_llama_cpp_completion", None)
+sys.modules[any_name] = any_mod
+out17 = do_move(hooks)
+check("any_server 経由でセリフが足される", "「奥からどうぞ」" in out17, out17)
+check("any_server が呼ばれる", len(any_calls) == 1, any_calls)
+
 print()
 if failures:
     print("FAILED: {}".format(failures))
