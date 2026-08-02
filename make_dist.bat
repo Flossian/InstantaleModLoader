@@ -266,9 +266,26 @@ endlocal & exit /b 0
 rem ---------------------------------------------------------------------------
 rem  :zip <staging folder> <zip path>
 rem  Packs the folder itself, so the zip carries that folder as its top entry.
+rem
+rem  The entries are written one by one instead of with Compress-Archive.
+rem  Windows PowerShell 5.1 ships a Compress-Archive that emits a bare
+rem  directory entry for any folder holding no files directly -- runtime\ is
+rem  exactly that, holding only instantale_modloader\ and mods\ -- and it
+rem  writes that entry with no attributes set. Extractors that read the
+rem  attributes rather than the trailing slash then create a 0-byte *file*
+rem  named runtime, and every runtime\... file after it has nowhere to go.
+rem  Explorer copes, several other archivers do not.
+rem
+rem  ZipFile::CreateFromDirectory is not the fix: on .NET Framework, which is
+rem  what 5.1 runs on, it separates entry names with "\" instead of "/", which
+rem  breaks a different set of extractors.
+rem
+rem  So: open the archive and add each file under a forward-slash relative
+rem  name. Empty folders are dropped, which costs nothing here -- the loader
+rem  reads files, and out\ and settings\ are made at runtime anyway.
 rem ---------------------------------------------------------------------------
 :zip
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -Path '%~1' -DestinationPath '%~2' -Force"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $src=(Resolve-Path -LiteralPath '%~1').Path; $dst=[IO.Path]::GetFullPath([IO.Path]::Combine((Get-Location).Path,'%~2')); if (Test-Path -LiteralPath $dst) { Remove-Item -LiteralPath $dst -Force }; $base=Split-Path -Parent $src; $zip=[IO.Compression.ZipFile]::Open($dst,'Create'); try { Get-ChildItem -LiteralPath $src -Recurse -File | ForEach-Object { $rel=$_.FullName.Substring($base.Length+1).Replace('\','/'); [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip,$_.FullName,$rel,'Optimal') | Out-Null } } finally { $zip.Dispose() } } catch { Write-Host $_.Exception.Message; exit 1 }"
 if errorlevel 1 (
   echo   ERROR: Compress-Archive failed for %~2.
   exit /b 1
