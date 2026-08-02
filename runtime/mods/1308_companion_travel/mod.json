@@ -1,0 +1,77 @@
+{
+  "entry": "companion_travel.py",
+  "api": 1,
+  "name": {
+    "en": "Travel with an NPC",
+    "ja": "NPCを連れて歩く"
+  },
+  "description": {
+    "en": "Ask an NPC to come along without hiring them. They follow you between facilities, and decide for themselves whether to keep going when you leave the area",
+    "ja": "会話から NPC に同行を持ちかける。雇用（パーティ）は使わず、施設間は無条件に、土地を跨ぐときは本人の判断で付いて来る"
+  },
+  "version": "1",
+  "author": "yoshinari/tomotomo-y",
+  "after": [
+    "300_event_facility_arrival"
+  ],
+  "settings": {
+    "FOLLOW_ON_AREA_MOVE": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "土地を跨ぐときも連れて行く",
+        "en": "Companions cross areas with you"
+      },
+      "note": {
+        "ja": "切ると同行者はその土地に残る（施設間の移動には付いて来る）",
+        "en": "Off = companions stay behind when you leave the area"
+      }
+    },
+    "JUDGE_ON_AREA_MOVE": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "土地を跨ぐ前に同行の継続を訊く",
+        "en": "Ask whether they keep following you"
+      },
+      "note": {
+        "ja": "切ると無条件に付いて来る。判定は同行者の数だけ待ち時間が伸びる",
+        "en": "Off = they always follow. Each judgement costs one LLM call"
+      }
+    },
+    "LEAVE_NEEDS_CONSENT": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "同行を解くのにも相手の承諾を要る事にする",
+        "en": "Parting also needs their consent"
+      },
+      "note": {
+        "ja": "入れると断られることがある（解けない同行が残りうる）",
+        "en": "On = they may refuse to be let go"
+      }
+    },
+    "MAX_COMPANIONS": {
+      "type": "int",
+      "default": 3,
+      "min": 1,
+      "max": 10,
+      "label": {
+        "ja": "同行者の上限",
+        "en": "Maximum companions"
+      },
+      "note": {
+        "ja": "上限に達すると新しく持ちかけるボタンが出なくなる",
+        "en": "At the limit the offer button stops appearing"
+      }
+    },
+    "ANNOUNCE_ARRIVAL": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "土地移動の後に同行者の名前を出す",
+        "en": "Name your companions after an area move"
+      }
+    }
+  }
+}

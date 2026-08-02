@@ -30,6 +30,7 @@
     "209_probe_free_facility",
     "210_probe_character_state",
     "300_event_facility_arrival",
+    "1308_companion_travel",
     "301_quest_from_conversation",
     "302_leave_party_in_conversation",
     "303_quest_end_party_to_guild",
