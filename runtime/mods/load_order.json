@@ -18,6 +18,7 @@
     "113_ui_text_expand",
     "114_ui_input_focus",
     "115_ui_item_list_fit",
+    "1116_batch_message_render",
     "200_probe_bug_sites",
     "201_probe_missing_attr",
     "202_probe_summarizers",
