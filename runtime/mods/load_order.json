@@ -27,6 +27,8 @@
     "206_probe_quest_flow",
     "207_probe_battle_bgm",
     "208_probe_item_detail",
+    "209_probe_free_facility",
+    "210_probe_character_state",
     "300_event_facility_arrival",
     "301_quest_from_conversation",
     "302_leave_party_in_conversation",
@@ -36,7 +38,8 @@
     "306_party_train_exp",
     "307_area_move_dungeon",
     "308_battle_damage_display",
-    "309_office_pardon"
+    "309_office_pardon",
+    "310_city_case"
   ],
   "disabled": []
 }

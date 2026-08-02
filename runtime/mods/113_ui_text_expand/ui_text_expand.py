@@ -85,12 +85,31 @@ MOD 側の変数に持つと、注入し直したときに「広げた後の寸�
 ## ボタン
 
 選択肢の枠（`hud.buttons` ＝ 4枠）は使わない。あそこはゲームの行動に使う場所で、
-1枠を常時潰すと遊ぶ手数が減る。代わりに HUD（`Screen` ＝ FloatLayout）へ
-`Button` を1枚足し、`pos_hint` で隅に置く。`add_widget` の既定は先頭挿入で、
-Kivy は子を逆順に描くので**後から足したものが一番上**に出る。
+1枠を常時潰すと遊ぶ手数が減る。代わりに `Button` を1枚足す。`add_widget` の既定は
+先頭挿入で、Kivy は子を逆順に描くので**後から足したものが一番上**に出る。
 
-文字は**本文のラベルからフォント名を写して**描く。Kivy の既定フォント（Roboto）には
-日本語が無く、写さないとボタンの文字が豆腐になる。
+**足す先は HUD ではなく、HUD が持っている `FloatLayout` の中**（`host_of`）。
+素の HUD の子はその 1枚だけで、そこへ直接足すと子が2つになり、
+**「画面の最初の子」を取る側から見える相手が変わる**
+（`scripts.hud.new_hud:get_current_screen_root`）。実際、この形にする前は
+**アイテムを持ち物へ移す・装備する操作が効かなくなった**（利用者の報告、2026-08-02）。
+ドラッグ中のアイテムの置き場所や `InventoryItem.get_all_inventories()` の起点が
+こちらのボタンにすり替わったためと考えられる。
+
+> 他人の画面に物を足すときは、**その画面の子の並びを変えない**。並びを手がかりに
+> している処理は、こちらからは見えない（ソースが読めない以上、確かめようもない）。
+
+見た目は**背景なしの白いアイコン**（既定）。**画像ファイルは持たない** ― Kivy の
+canvas に線で描く。0〜1 の座標で形を持つので、どの解像度でも滲まず、色も透過も
+こちらで決められる（配布物にバイナリが増えないのも利点）。押すと上下が入れ替わり、
+「次に何が起きるか」がそのまま形になる（上向き＝広がる／下向き＝戻る）。
+
+線を引き直すのは**位置・大きさ・向き・絵柄のどれかが変わったときだけ**。本文は
+1文字ずつ増えるので塗り直しは何十回も来る。毎回引き直すと無駄が積み上がる。
+
+絵柄に「文字」を選ぶと今までどおりの文字ボタンになる。そのときフォントは
+**本文のラベルから写す** ― Kivy の既定（Roboto）には日本語が無く、写さないと
+ボタンの文字が豆腐になる。
 
 置き場所の既定は**キャラの欄の上**（画面の隅はどれも既存の表示と重なりやすい）。
 その欄は**位置から探す**（`side_panel_of`）。画面下の帯は「左（状態）／入力欄／
@@ -101,7 +120,9 @@ Kivy は子を逆順に描くので**後から足したものが一番上**に�
 同じ絵を持つウィジェットを探す方法は一見すじが良いが、会話に入った瞬間に相手の絵を
 持つ別のウィジェットへ乗り換えて**ボタンが画面の左へ飛ぶ**（VERIFICATION.md §2.26）。
 場所で決めるほうが、画面が変わっても動かない。どちらも無い画面では右上へ落とす。
-隅を直に指定したい場合のために、設定で選べるようにしてある。
+
+設定で「枠の右上」（本文の枠の内側）と、画面の四隅も選べる。枠の内側に置いた場合は
+**枠が伸びれば一緒に上がる**（毎回の塗り直しで枠の矩形から座標を出し直す）。
 
 ## 窓の大きさが変わったとき
 
@@ -140,14 +161,23 @@ LOG_BASENAME = "text_expand.log"
 WIDTH_SCALE = 1.0
 HEIGHT_SCALE = 2.5
 
-# ボタンの置き場所。既定は立ち絵の上（画面の隅は他の表示と重なりやすい）。
-# 立ち絵が見つからないときは右上へ落ちる。
+# ボタンの置き場所。既定はキャラの欄の上（画面の隅は他の表示と重なりやすい）。
+# 手がかりが見つからない画面では右上へ落ちる。
 BUTTON_CORNER = "キャラの上"
 
-# ボタンの高さ（px）。幅はこの 2 倍。ゲームの `upx()` が読めればそれで拡縮する。
-BUTTON_SIZE = 48
+# ボタンの絵柄。線で描くので画像ファイルは要らない（背景なし・白）。
+# 「文字」を選ぶと LABEL_EXPAND / LABEL_RESTORE の文字ボタンになる。
+ICON = "二重山形"
 
-# ボタンの文字。押すと入れ替わる。
+# 線の太さ（px）と濃さ（0〜1）。背景に溶けるなら濃さを上げる。
+ICON_WIDTH = 2.0
+ICON_ALPHA = 0.85
+
+# ボタンの高さ（px）。アイコンなら正方形、文字ならこの 2 倍の幅。
+# ゲームの `upx()` が読めればそれで拡縮する。
+BUTTON_SIZE = 32
+
+# ボタンの文字（絵柄に「文字」を選んだときだけ使う）。押すと入れ替わる。
 LABEL_EXPAND = "拡張"
 LABEL_RESTORE = "戻す"
 
@@ -165,9 +195,15 @@ CORNERS = {
     "左下": {"x": 0.005, "y": 0.005},
 }
 
-# 立ち絵の上に置くときの呼び名と、立ち絵との隙間（px）。
+# 隅ではない置き場所（こちらが座標を入れるもの）と、その余白（px）。
 ON_PORTRAIT = "キャラの上"
+IN_FRAME = "枠の右上"
+PLACEMENTS = (ON_PORTRAIT, IN_FRAME)
 PORTRAIT_GAP = 4.0
+FRAME_INSET = 8.0
+
+# 絵柄に「文字」を選んだときの呼び名。
+AS_TEXT = "文字"
 
 # 立ち絵を探すのに木を何段まで降りるか。本文のラベルより深いところに居る
 # （画面下の帯 → 右の入れ物 → その中）。
@@ -205,6 +241,7 @@ EXPANDED_ATTR = "_instantale_expand_on"
 BUTTON_ATTR = "_instantale_expand_button"
 CALLBACK_ATTR = "_instantale_expand_callback"
 WINDOW_ATTR = "_instantale_expand_on_resize"
+ICON_ATTR = "_instantale_expand_icon"
 
 
 def apply(ctx):
@@ -460,6 +497,13 @@ def apply(ctx):
                 member.pop("text_size", None)
                 saved["members"] = [member]
             return saved
+        if frames.attr(box, EXPANDED_ATTR) is True:
+            # 広がっている枠からは**絶対に控えない**。今の寸法はこちらが入れた値
+            # なので、それを設計値にすると二度と元に戻せない（押すたびに育つ）。
+            # 控えだけ失われた状態（畳むのに失敗したなど）はここで止める。
+            warn_once("orphan", "the text frame is expanded but its original size "
+                                "is gone; leaving it as it is")
+            return None
         fresh = capture(hud, box, label)
         if fresh is None or not fresh["size"]:
             return None
@@ -745,10 +789,15 @@ def apply(ctx):
         box = container_of(hud, label) if label is not None else None
         if box is not None:
             collapse(hud, box, label)
-            try:
-                setattr(box, DESIGN_ATTR, None)
-            except Exception:
-                pass          # 捨てられなくても、次の当て直しで寸法は合う
+            # **畳めたときだけ**控えを捨てる。畳めていない（＝今の寸法がこちらの
+            # 入れた値のままの）枠で控えを捨てると、次に控えるのが広げた後の寸法に
+            # なる。畳めなかったときは古い窓の控えを残す ― 寸法は合わないが、
+            # 「戻せる」ほうを優先する。
+            if frames.attr(box, EXPANDED_ATTR) is not True:
+                try:
+                    setattr(box, DESIGN_ATTR, None)
+                except Exception:
+                    pass      # 捨てられなくても、次の当て直しで寸法は合う
 
         def resettled():
             # ここまで来て初めて控え直してよい（ゲームの入れ直しが済んでいる）。
@@ -827,6 +876,8 @@ def apply(ctx):
         return float(value)
 
     def button_text():
+        if ICON != AS_TEXT:
+            return ""         # アイコンで示すので文字は出さない
         return LABEL_RESTORE if state["expanded"] else LABEL_EXPAND
 
     def toggle(hud):
@@ -839,6 +890,7 @@ def apply(ctx):
                 button.text = button_text()
             except Exception:
                 ctx.log_exc("text expand: could not relabel the button")
+            place_button(hud, button)     # 枠が動いたぶんを追い、向きも描き直す
 
     def basename(path):
         return path.replace("\\", "/").rsplit("/", 1)[-1]
@@ -934,40 +986,148 @@ def apply(ctx):
         return best[1] if best is not None else None
 
     def place_button(hud, button):
-        """立ち絵の上へ置き直す。塗り直しのたびに呼ぶ（立ち絵は動くことがある）。
+        """置き直す。塗り直しのたびに呼ぶ（枠も立ち絵も動くことがある）。
 
-        隅に置く設定のときは `pos_hint` に任せるので、ここは何もしない。
+        隅に置く設定のときは `pos_hint` に任せるので、位置は入れない
+        （それでもアイコンは描き直す ― 窓が変われば座標が変わる）。
         """
-        if BUTTON_CORNER != ON_PORTRAIT:
+        if BUTTON_CORNER not in PLACEMENTS:
+            paint_icon(button)
             return
-        # **場所から探すほうを先に見る。** 立ち絵の画像（`source`）で探すと、会話に
-        # 入った瞬間に相手の絵を持つ別のウィジェットへ乗り換えてボタンが飛ぶ。
-        # 枠の右隣に並ぶ入れ物＝キャラの欄は、会話中も同じ場所に居座る。
         label = label_of(hud)
         box = container_of(hud, label) if label is not None else None
-        anchor, how = (side_panel_of(hud, box) if box is not None else None), "panel"
-        if anchor is None:
-            anchor, how = portrait_of(hud), "portrait"
-        rect = rect_of(anchor) if anchor is not None else None
-        if rect is None:
-            # 立ち絵も右の入れ物も無い画面（会話前・戦闘中など）では隅に落とす。
-            if not button.pos_hint:
-                button.pos_hint = dict(CORNERS["右上"])
-            return
-        try:
-            button.pos_hint = {}          # 位置はこちらが入れる
-            button.x = rect[0]
-            button.y = rect[1] + rect[3] + upx(PORTRAIT_GAP)
-        except Exception:
-            ctx.log_exc("text expand: could not place the button over the portrait")
-            return
-        clamp(button)
-        # 置き場所が変わったときだけ記録する（毎フレームは書かない）。**動いたら
-        # ここに残る** ― ボタンが飛ぶ不具合はこの行でしか追えない。
+
+        if BUTTON_CORNER == IN_FRAME:
+            # 本文の枠の内側・右上。枠が伸びれば一緒に上がる。
+            rect = rect_of(box) if box is not None else None
+            if rect is not None:
+                inset = upx(FRAME_INSET)
+                try:
+                    button.pos_hint = {}
+                    button.x = rect[0] + rect[2] - button.width - inset
+                    button.y = rect[1] + rect[3] - button.height - inset
+                except Exception:
+                    ctx.log_exc("text expand: could not place the button in the frame")
+                    return
+                clamp(button)
+                paint_icon(button)
+                remember("frame", rect)
+                return
+        else:
+            # **場所から探すほうを先に見る。** 立ち絵の画像（`source`）で探すと、
+            # 会話に入った瞬間に相手の絵を持つ別のウィジェットへ乗り換えてボタンが
+            # 飛ぶ。枠の右隣に並ぶ入れ物＝キャラの欄は、会話中も同じ場所に居座る。
+            anchor, how = (side_panel_of(hud, box) if box is not None else None), "panel"
+            if anchor is None:
+                anchor, how = portrait_of(hud), "portrait"
+            rect = rect_of(anchor) if anchor is not None else None
+            if rect is not None:
+                try:
+                    button.pos_hint = {}          # 位置はこちらが入れる
+                    button.x = rect[0]
+                    button.y = rect[1] + rect[3] + upx(PORTRAIT_GAP)
+                except Exception:
+                    ctx.log_exc("text expand: could not place the button")
+                    return
+                clamp(button)
+                paint_icon(button)
+                remember(how, rect)
+                return
+
+        # 手がかりが無い画面（会話前・戦闘中など）では隅に落とす。
+        if not button.pos_hint:
+            button.pos_hint = dict(CORNERS["右上"])
+        paint_icon(button)
+
+    def remember(how, rect):
+        """置き場所が変わったときだけ記録する（毎フレームは書かない）。
+
+        **動いたらここに残る** ― ボタンが飛ぶ不具合はこの行でしか追えない。
+        """
         where = (how, tuple(round(value) for value in rect))
         if state.get("anchor") != where:
             state["anchor"] = where
-            note("button placed above the {} at {}".format(how, where[1]))
+            note("button placed by the {} at {}".format(how, where[1]))
+
+    # -- 絵柄 ----------------------------------------------------------------
+    def strokes(expanded):
+        """アイコンの線。**0〜1 の座標**で返す（ボタンの大きさに依らない形）。
+
+        画像ファイルは持たない。線で描けば、どの解像度でも滲まず、色も透過も
+        こちらで決められる（白／背景なし）。絵柄は設定から選べる。
+
+        `expanded` は「今広がっている」＝押すと**戻る**状態。上下を反転して
+        「どちらへ動くか」をそのまま形にする。
+        """
+        flip = (lambda y: 1.0 - y) if expanded else (lambda y: y)
+
+        def line(*points):
+            return [(x, flip(y)) for x, y in points]
+
+        if ICON == "二重山形":
+            return [line((0.22, 0.40), (0.50, 0.66), (0.78, 0.40)),
+                    line((0.22, 0.20), (0.50, 0.46), (0.78, 0.20))]
+        if ICON == "山形":
+            return [line((0.20, 0.34), (0.50, 0.66), (0.80, 0.34))]
+        if ICON == "矢印":
+            return [line((0.50, 0.18), (0.50, 0.82)),
+                    line((0.28, 0.60), (0.50, 0.82), (0.72, 0.60))]
+        if ICON == "伸縮":
+            # 広げる前は外向き（↕）、広がっているときは内向き。上下反転では
+            # 同じ形になるので、こちらは向きを明示して描く。
+            if expanded:
+                return [line((0.50, 0.20), (0.50, 0.80)),
+                        line((0.30, 0.38), (0.50, 0.20), (0.70, 0.38)),
+                        line((0.30, 0.62), (0.50, 0.80), (0.70, 0.62))]
+            return [line((0.50, 0.20), (0.50, 0.80)),
+                    line((0.30, 0.62), (0.50, 0.80), (0.70, 0.62)),
+                    line((0.30, 0.38), (0.50, 0.20), (0.70, 0.38))]
+        if ICON == "枠":
+            # 四隅のかぎ括弧。広げる前は外を向き、広がっているときは内を向く。
+            if expanded:
+                return [line((0.20, 0.42), (0.42, 0.42), (0.42, 0.20)),
+                        line((0.80, 0.42), (0.58, 0.42), (0.58, 0.20)),
+                        line((0.20, 0.58), (0.42, 0.58), (0.42, 0.80)),
+                        line((0.80, 0.58), (0.58, 0.58), (0.58, 0.80))]
+            return [line((0.20, 0.42), (0.20, 0.20), (0.42, 0.20)),
+                    line((0.80, 0.42), (0.80, 0.20), (0.58, 0.20)),
+                    line((0.20, 0.58), (0.20, 0.80), (0.42, 0.80)),
+                    line((0.80, 0.58), (0.80, 0.80), (0.58, 0.80))]
+        return []
+
+    def paint_icon(button):
+        """ボタンにアイコンを描き直す。**変わったときだけ**（毎フレーム描かない）。
+
+        本文は1文字ずつ増えるので塗り直しは何十回も来る。位置・大きさ・向き・
+        絵柄のどれも変わっていなければ、線を引き直す必要は無い。
+        """
+        if ICON == AS_TEXT:
+            return
+        signature = (ICON, state["expanded"], ICON_WIDTH, ICON_ALPHA,
+                     tuple(frames.attr(button, "pos", ()) or ()),
+                     tuple(frames.attr(button, "size", ()) or ()))
+        if frames.attr(button, ICON_ATTR, None) == signature:
+            return
+        try:
+            from kivy.graphics import Color, Line
+        except Exception:
+            # 線が引けない環境（オフライン検証）では文字のままにする。
+            return
+        try:
+            group = button.canvas.after
+            group.clear()
+            x, y = float(button.x), float(button.y)
+            width, height = float(button.width), float(button.height)
+            group.add(Color(1, 1, 1, float(ICON_ALPHA)))
+            for points in strokes(state["expanded"]):
+                flat = []
+                for fx, fy in points:
+                    flat.extend((x + fx * width, y + fy * height))
+                group.add(Line(points=flat, width=upx(ICON_WIDTH),
+                               cap="round", joint="round"))
+            setattr(button, ICON_ATTR, signature)
+        except Exception:
+            ctx.log_exc("text expand: could not draw the icon")
 
     def make_button(hud, label):
         try:
@@ -976,35 +1136,82 @@ def apply(ctx):
             warn_once("button", "kivy Button unavailable; no toggle will be shown")
             return None
         height = upx(BUTTON_SIZE)
+        # 文字は横長、アイコンは正方形。
+        width = height if ICON != AS_TEXT else height * 2.0
         button = Button(text=button_text(), size_hint=(None, None),
-                        size=(height * 2.0, height),
+                        size=(width, height),
                         pos_hint=dict(CORNERS.get(BUTTON_CORNER, CORNERS["右上"]))
-                        if BUTTON_CORNER != ON_PORTRAIT else {})
+                        if BUTTON_CORNER not in PLACEMENTS else {})
         # 日本語を出すのでフォントは本文から写す。Kivy の既定（Roboto）には
         # 日本語が無く、写さないとボタンの文字が豆腐になる。
         font = frames.attr(label, "font_name")
         if isinstance(font, str) and font:
             button.font_name = font
         button.font_size = height * 0.45
+        if ICON != AS_TEXT:
+            # 背景を消す。`background_normal` を空にしないと、色を透明にしても
+            # ttk 風の既定テクスチャがうっすら残る。
+            for name, value in (("background_normal", ""), ("background_down", ""),
+                                ("background_disabled_normal", ""),
+                                ("background_color", (0, 0, 0, 0)),
+                                ("border", (0, 0, 0, 0))):
+                try:
+                    setattr(button, name, value)
+                except Exception:
+                    pass      # そのプロパティを持たないビルドでも描画は成り立つ
         return button
 
+    def host_of(hud):
+        """ボタンを載せる相手。**HUD 自身の子の並びは変えない。**
+
+        素の HUD の子は `FloatLayout` 1枚だけだった（`out/text_expand.log` の
+        `frame neighbours:`）。そこへ足すと HUD の子が2つになり、
+        **「画面の最初の子」を取る側から見える相手が変わる**
+        （`scripts.hud.new_hud:get_current_screen_root`）。実際、アイテムを
+        持ち物へ移す・装備する操作が効かなくなった（利用者の報告、2026-08-02）。
+        ドラッグ中のアイテムの置き場所や `InventoryItem.get_all_inventories()` の
+        起点がこちらのボタンにすり替わったためと考えられる。
+
+        なので足すのは**その `FloatLayout` の中**。HUD の子は1枚のまま保たれる。
+        ゲーム自身も、この中へ効果や窓を出し入れしている。
+        """
+        children = frames.attr(hud, "children")
+        if isinstance(children, (list, tuple)):
+            for child in children:
+                if frames.attr(child, "add_widget") is frames.MISSING:
+                    continue
+                if child is frames.attr(hud, BUTTON_ATTR):
+                    continue
+                return child
+        return hud            # 子を持たない画面なら HUD 自身に（従来どおり）
+
     def ensure_button(hud):
-        """HUD にボタンを1枚だけ足す。既にあれば押下先だけ今の注入へ付け替える。"""
+        """ボタンを1枚だけ足す。既にあれば押下先だけ今の注入へ付け替える。"""
         label = label_of(hud)
         if label is None:
             return
+        host = host_of(hud)
         button = frames.attr(hud, BUTTON_ATTR)
-        if button in (None, frames.MISSING) or frames.attr(button, "parent") is not hud:
+        if button in (None, frames.MISSING):
             button = make_button(hud, label)
             if button is None:
                 return
+            setattr(hud, BUTTON_ATTR, button)
+        parent = frames.attr(button, "parent")
+        if parent is not host:
+            # 置き場所が違う（初回、画面の作り直し、古い版が HUD 直下に足した後の
+            # 注入し直し）。**前の親から外してから**足す。
+            if parent not in (None, frames.MISSING):
+                try:
+                    parent.remove_widget(button)
+                except Exception:
+                    ctx.log_exc("text expand: could not detach the toggle button")
             try:
-                hud.add_widget(button)          # 既定は先頭挿入＝一番上に描かれる
-                setattr(hud, BUTTON_ATTR, button)
+                host.add_widget(button)         # 既定は先頭挿入＝一番上に描かれる
             except Exception:
                 ctx.log_exc("text expand: could not add the toggle button")
                 return
-            note("button added to {} at {}".format(type(hud).__name__, BUTTON_CORNER))
+            note("button added to {} at {}".format(type(host).__name__, BUTTON_CORNER))
 
         # 押下先の付け替え。注入し直したとき、古い注入の切り替えを呼び続けないため。
         previous = frames.attr(button, CALLBACK_ATTR)

@@ -294,6 +294,23 @@ app.refresh_choice_buttons(reset_page=True)
 瞬間にゲーム側で実行されるので（`getattr(__main__, cls_name)(app, *args)`）、こちらの
 `try`/`except` の外側。引数を1つ間違えるとそのままゲームが落ちる。
 
+**セーブに焼かれるのは `text` と `spec` だけ。独自キー（印）は落ちる。**
+実セーブ 8 件で確認（2026-08-02）:
+
+```
+savedata.json に '依頼を受ける' は入っている / 'mod_action' は入っていない
+```
+
+したがってタイトルへ戻る・ロード・再注入のあと、**印の無い自分のボタンが復元されている**。
+印で重複を判定していると自分のものと見なせず、同じボタンが2つ並ぶ。しかも復元された方は
+spec が `JustSetButtonToNormalPhase` なので押しても無反応 ―
+**見た目は同じなのに片方だけ効かない**という、最も分かりにくい壊れ方になる。
+
+差し込む前に `ui.Screen.prune_stale(buttons, ラベル一覧)` を通すこと。
+「自分のラベル（前方一致）」かつ「印が無い」かつ「無害 spec」の3つが揃ったものだけを
+落とすので、ゲーム側の同名ボタンは巻き込まない。落としてから差し直すため、残骸は
+消えるのではなく生き返る。
+
 ### 2.3 選択肢を変える手順
 
 この3点を外すと、データは正しいのに画面が変わらない。
@@ -1161,6 +1178,181 @@ app.buttons      = ['労働の募集をみる', '市民権の発行', '出る', 
 - 会話（`ConversationStartManager` → `ConversationEndManager`）を挟んでも、
   抜けた後に施設の選択肢が組み直されるので、そこへ足した自前のボタンは
   組み直しのたびに入れ直す必要がある（`refresh_choice_buttons` を包む形）
+
+### 2.21 自由生成施設のシーン記述エンジン（`scripts.free_facility`）
+
+main_023 で入った**イベント記述用の実行エンジン**。JSON のステップ列を解釈して
+シーンを走らせる。`209_probe_free_facility` の実測（2026-08-02）。
+
+MOD にとっての要点は、**プログラムがセーブの中にあり、書き換えられる**こと。
+
+```python
+world_dict["free_facility_programs"]     # {program_id: プログラム(dict)}
+world_dict["free_facility_enabled"]      # 世界生成時のオプション
+```
+
+#### 2.21.1 施設との結び付き
+
+ゲーム自身がエンジンを起こすのは `facility_type == 'free'` の施設。実測した世界には
+集落ごとに1つ、計3つあった（`0/10` `7/29` `8/57`）。
+
+> **ただしエンジン自身は施設の種類を見ていない。** MOD から
+> `FreeFacilityManager(app, program_id)` を組んで `process_choice` に渡せば、
+> **宿屋でもギルドでも同じように走る**（2026-08-02 に実機で確認。
+> VERIFICATION.md §3.16）。`free` 施設が3つしか無いことは制約にならない。
+
+```python
+facility.facility_type = 'free'
+facility.choices       = {'利用する', '出る'}
+facility.config = {
+    "level_of_detail": 0,
+    "concept":    "プレイヤーはここで、わずかな運勢を占うか、…",
+    "program_id": "free_10",              # = "free_" + facility.id
+    "free_flags": {"visited_fire": 1},    # ← フラグの実体はここ
+}
+```
+
+`FreeFacilityManager(app, program_id, resume=None, vars=None)` が実行する。
+選択肢を1つ押すたびに**入り直す**形で、再開位置と会話の蓄積を引数で渡す:
+
+```
+FreeFacilityManager(app, 'free_10')
+FreeFacilityManager(app, 'free_10', {'kind': 'goto', 'label': 'drink_action'},
+                                    {'__session': ['また泥にまみれて戻ってきたのか。…']})
+```
+
+`FreeFacilityManager` は `__main__` ではなく `scripts.free_facility` にある
+（`getattr(__main__, ...)` では引けない。§2.5 と同じ罠）。
+
+#### 2.21.2 ステップと効果
+
+`STEP_TYPES` は18種。`lint_program(program)` がゲーム自身の検証器として露出して
+いるので、**実機に入れる前にプログラムの正しさを確かめられる**。
+
+| 分類 | ステップ |
+|---|---|
+| 制御 | `label` / `goto` / `if` / `end` / `random` / `calc` / `var_set` |
+| 表示と入力 | `text` / `choice` / `input`（`store` に自由入力、`append_history`） |
+| 状態 | `flag_set` / `flag_get` / `memory` / `history_clear` |
+| 外部 | `llm` / `effect` / `elapse` / `call_phase` |
+
+`effect` は `gold_add` / `item_add` / `exp_add` / `status_add` / `heal` / `wait` /
+`show_character_image` / `play_sound` / `remove_character_image`。
+**金もアイテムも経験値もここから渡せる。**
+
+`call_phase` で渡せる先は5つで、`get_phase_class` は全部 `__main__.X` に解決する
+（実測）:
+
+```
+BattleStartManager / DisplayQuestChoice / DisplayTrainingChoice
+DisplayVacationChoice / ShoppingStartManagerRemake
+```
+
+`llm` ステップは2形。**判断と描写が分けてある。**
+
+```json
+{"type":"llm","context":["facility","player","owner","area"],
+ "prompt":"（ゲームマスターへの指示。プレイヤーには見えない）",
+ "use_history":true,"output":{"mode":"text"},"store":"VAR"}
+
+{"type":"llm","...","output":{"mode":"choice","options":["A","B"]},
+ "branch":[{"choice":"A","goto":"..."},{"choice":"B","goto":"..."}]}
+```
+
+後者は「LLM が状況を判断して1つ選び、プログラムがその先へ飛ぶ」。仕様書
+（`_DSL_SPEC`）は使い分けまで明記している:
+
+> llm choice mode expresses the judgment of the NPC or the world.
+> Decisions that belong to the player (consent, purchases, accepting a price)
+> must be a player "choice" step instead.
+
+`memory` は訪問の要約をプレイヤーのライフログと**目撃者の記憶**に入れる。
+
+#### 2.21.3 フラグは施設ローカル。世界規模の状態は持てない
+
+**これが MOD 側の設計を決める制約。** 条件が読めるソースは3つしかない:
+
+```json
+{"type":"if","cond":{"source":"var"|"flag"|"player","key":K,"op":"==","value":V}}
+```
+
+- `flag` … `facility.config['free_flags']`。**その施設だけ。**来訪をまたいで残る
+  （実測: `visited_fire` が前回の来訪から生きていて `welcome_back` へ分岐した）
+- `var` … その訪問の中だけ
+- `player` … `gold` と `age` のみ
+
+`_flag_store(scope)` は scope 引数を取るが、実測で観測できたのは `'facility'` だけ。
+生成側のスキーマ（`_GenFlagSet`）にもスコープを選ぶ項目が無いので、**プログラムから
+選べるスコープは施設ローカル1種**。
+
+したがって**施設をまたぐ話は DSL だけでは書けない**。跨ぎたい MOD は状態を自分で
+持ち、**渡すプログラムをその都度組む**（DSL に分岐を書かせるのではなく、
+その時点のプログラムを渡す）。
+
+渡し方は2つある。**後者を使うこと。**
+
+| 方法 | 痕跡 |
+|---|---|
+| `world_dict['free_facility_programs']` に足す | **セーブに残る。**MOD を外しても id が残る |
+| `_lookup_program` を包んで自前のものを返す | **何も残らない** |
+
+```python
+@ctx.wrap("scripts.free_facility:FreeFacilityManager._lookup_program")
+def lookup_program(orig, self, *args, **kwargs):
+    if getattr(self, "program_id", None) == MY_ID:    # 完全一致のみ
+        return build_program_for_now()               # その時点の状態で組む
+    return orig(self, *args, **kwargs)               # free_* は必ず素通し
+```
+
+この形にすると**`flag_set` を使う理由も無くなる**。分岐の前提は MOD が組む
+プログラムに焼き込めばよく、DSL 側は `var`（訪問中だけ）で足りる。
+`flag_set` は施設の `config` に書かれてセーブに残るので、使わずに済むなら
+使わない（実測: 受け皿の無い宿屋にも `free_flags` が新設された）。
+
+#### 2.21.4 上限と禁止事項
+
+| | |
+|---|---|
+| `MAX_STEPS_PER_EXECUTE` | 300 |
+| LLM 呼び出し | 既定 20、生成物は 12。1本 2〜6 ステップが指針 |
+| プログラムの大きさ | 15〜45 ステップ |
+| `SESSION_MAX_CHARS` / `_ENTRIES` | 4000 / 40 |
+| `elapse` | 訓練・長逗留の概念にのみ。1経路1回、units 1〜2 |
+| `item_add` | 1回の来訪で最大2つ |
+| `status_add` | 1回2つまで、`duration` は戦闘ターン数 |
+| 禁止 | 賭博をテーマにした施設、性的な内容 |
+
+金額を直に書かないのが作法。`prices` / `payouts` に名前付きで宣言し、
+`{price.X}` `{payout.X}` で参照する（エンジンがその土地の相場で解決する）。
+「金を取って文を出すだけ」の活動は `lint_program` が defect として弾く。
+
+### 2.22 NPC の退場は `config['is_dead']`
+
+`Character.config` の中にある（セーブされる33項目のうち `config` の下。トップレベル
+には無い）。`210_probe_character_state` の実測（2026-08-02）:
+
+```python
+character.config = {"level_of_detail": 2, "is_player": False,
+                    "is_dead": True, "difficulty_level": 4}
+```
+
+**印が立っても、施設の名簿からは外れない。**世界の全 NPC 35 人を舐めて、
+`is_dead=True` の1人が `roster x1` のまま残っていることを確認した
+（`referenced by nothing: 0`）。にもかかわらずゲーム内では会話にも呼び出しにも
+出てこない（実プレイで確認）。つまり:
+
+> 名簿からは外さない。**読む側が印を見て飛ばしている。**
+
+MOD にとっては都合がよい。参照が切れないので何も壊れず、`False` に戻せば復帰する。
+NPC を退場させたい MOD は `move_npc_to_facility` で移送する必要が無い。
+
+**ただし施設の主には使えない。**`Facility.owner` に載っている NPC を消すと、その店に
+話せる相手が居なくなる。実測した世界では 35 人中 **24 人が主**で、自由に使えるのは
+名簿にだけ載っている 11 人だった。事件ものなどで NPC を退場させる MOD は、
+主でない NPC から選ぶか、`save_area_json:generate_npc` で自前に用意する。
+
+`state` は死亡とは無関係（全員 `''`）。HP は `current_hp` / `max_hp` /
+`original_max_hp` で、`physical_integrity`（§2.19）とは別物。
 
 ---
 

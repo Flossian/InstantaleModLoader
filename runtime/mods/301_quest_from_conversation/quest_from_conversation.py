@@ -78,6 +78,11 @@ CONVERSATION_OFFER_LABEL = "依頼を受ける（話を切り上げる）"
 GENERATE_LABEL = "この話から依頼を作る"
 CANCEL_LABEL = "やめる"
 
+# セーブから復元された残骸を見分けるための、こちらのラベル一覧。
+# 生成ボタンは「この話から依頼を作る（NPC名）」と後ろが変わるので**前方一致**で
+# 照合する（`ui.Screen.prune_stale`）。
+OUR_LABELS = (OFFER_LABEL, CONVERSATION_OFFER_LABEL, GENERATE_LABEL)
+
 # 会話を終わらせてから掲示板を開くまでの待ち。会話の終了処理は要約のために
 # LLM を回すことがあるので、状態が落ちるのを見張る。
 END_POLL = 0.3
@@ -879,6 +884,12 @@ def apply(ctx):
         try:
             buttons = getattr(self, "buttons", None)
             if isinstance(buttons, list) and not state["generating"]:
+                # **印を失った自前ボタンの残骸を先に落とす。**
+                # セーブに焼かれるのは text と spec だけで印は落ちるので、
+                # タイトルへ戻る・ロード・再注入のあとは「自分のものと
+                # 見なせない自分のボタン」が並んでいる。落としてから差し直す
+                # ことで、二重化も「押しても無反応」も同時に消える。
+                screen.prune_stale(buttons, OUR_LABELS)
                 at, where = offer_slot(buttons)
                 if at is not None:
                     # 会話画面には「この話から依頼を作る」も置く。掲示板を

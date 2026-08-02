@@ -43,28 +43,65 @@
     "BUTTON_CORNER": {
       "type": "choice",
       "default": "キャラの上",
-      "values": ["キャラの上", "右上", "左上", "右下", "左下"],
+      "values": ["キャラの上", "枠の右上", "右上", "左上", "右下", "左下"],
       "label": {
         "ja": "ボタンの置き場所",
         "en": "Where to put the button"
       },
       "note": {
-        "ja": "既定は立ち絵の上。立ち絵が出ていない画面では右上に出る",
-        "en": "Default is just above the character portrait; falls back to the top-right corner"
+        "ja": "既定はキャラの欄（右下の立ち絵とHP）の上。「枠の右上」は本文の枠の内側の右上で、枠が伸びると一緒に上がる",
+        "en": "Default is just above the character panel. \"枠の右上\" puts it inside the narration frame's top-right corner"
+      }
+    },
+    "ICON": {
+      "type": "choice",
+      "default": "二重山形",
+      "values": ["二重山形", "山形", "矢印", "伸縮", "枠", "文字"],
+      "label": {
+        "ja": "ボタンの絵柄",
+        "en": "Button icon"
+      },
+      "note": {
+        "ja": "背景なしの白い線で描く。押すと向きが入れ替わる（拡張＝上向き／戻す＝下向き）。「文字」を選ぶと下の文字設定を使ったボタンになる",
+        "en": "Drawn as white lines on a transparent background; flips direction when pressed. \"文字\" falls back to a text button"
+      }
+    },
+    "ICON_WIDTH": {
+      "type": "float",
+      "default": 2.0,
+      "min": 1.0,
+      "max": 8.0,
+      "label": {
+        "ja": "アイコンの線の太さ（px）",
+        "en": "Icon stroke width (px)"
+      }
+    },
+    "ICON_ALPHA": {
+      "type": "float",
+      "default": 0.85,
+      "min": 0.2,
+      "max": 1.0,
+      "label": {
+        "ja": "アイコンの濃さ",
+        "en": "Icon opacity"
+      },
+      "note": {
+        "ja": "1.0 で真っ白。背景に溶けて見えにくいときに上げる",
+        "en": "1.0 is solid white. Raise it if the icon disappears into the background"
       }
     },
     "BUTTON_SIZE": {
       "type": "int",
-      "default": 48,
-      "min": 20,
+      "default": 32,
+      "min": 16,
       "max": 200,
       "label": {
         "ja": "ボタンの高さ（px）",
         "en": "Button height (px)"
       },
       "note": {
-        "ja": "幅はこの2倍。ゲーム側の画面拡縮に合わせて調整される",
-        "en": "The width is twice this. Scaled with the game's own UI scaling"
+        "ja": "アイコンなら正方形、文字なら幅はこの2倍。ゲーム側の画面拡縮に合わせて調整される",
+        "en": "Square for icons; twice as wide for text. Scaled with the game's own UI scaling"
       }
     },
     "LABEL_EXPAND": {
@@ -73,6 +110,10 @@
       "label": {
         "ja": "ボタンの文字（広げる前）",
         "en": "Button text (collapsed)"
+      },
+      "note": {
+        "ja": "絵柄に「文字」を選んだときだけ使う",
+        "en": "Only used when the icon is set to \"文字\""
       }
     },
     "LABEL_RESTORE": {

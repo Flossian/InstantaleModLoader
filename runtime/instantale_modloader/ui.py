@@ -649,6 +649,61 @@ class Screen(object):
             return None
         return entry.get(self.mark)
 
+    def prune_stale(self, buttons, labels):
+        """**印を失った自前ボタンの残骸**を取り除く。差し込む前に必ず通すこと。
+
+        `PhaseSpec.to_dict()` がボタンをセーブに焼くとき、**書かれるのは
+        `text` と `spec` だけで、こちらが足した印（`mod_action` 等）は落ちる**。
+        実セーブ 8 件で確認済み（2026-08-02）:
+
+            savedata.json に '依頼を受ける' は入っている / 'mod_action' は無い
+
+        するとタイトルへ戻る・ロード・再注入のあと、**印の無い自分のボタンが
+        復元されている**。`mark_of()` はそれを自分のものと見なせないので
+        重複判定をすり抜け、同じボタンが2つ並ぶ（ユーザー報告・2026-08-02）。
+        しかも復元された方は spec が `JustSetButtonToNormalPhase` なので
+        押しても無反応 ― 見た目は同じなのに片方だけ効かない、という
+        最も分かりにくい壊れ方になる。
+
+        取り除く条件は **「自分のラベル」かつ「印が無い」かつ「無害 spec」** の
+        3つ揃ったときだけ。ゲーム側の同名ボタンを巻き込まないための保険で、
+        `labels` は完全一致か前後の括弧付き（`'この話から依頼を作る（誰か）'`）を
+        見るため**前方一致**で照合する。
+
+        取り除いた分は呼び出し側が新しい印つきで差し直すので、残骸は
+        「消える」のではなく「生き返る」。
+        """
+        if not isinstance(buttons, list) or not labels:
+            return []
+        if not self.mark:
+            # 印を持たない Screen（`300_` のようにボタンを作らない MOD）では
+            # 「自分のもの」を見分けられない。ラベルだけで消すとゲーム側の
+            # 同名ボタンまで巻き込むので、**何もしない**のが正しい。
+            self.write("{}: prune_stale skipped (this Screen has no mark)"
+                       .format(self.tag))
+            return []
+        removed, kept = [], []
+        for entry in buttons:
+            if self._is_stale(entry, labels):
+                removed.append(entry.get("text"))
+                continue
+            kept.append(entry)
+        if removed:
+            buttons[:] = kept
+            self.write("{}: dropped {} stale button(s) without our mark: {}".format(
+                self.tag, len(removed), removed))
+        return removed
+
+    def _is_stale(self, entry, labels):
+        if not isinstance(entry, dict) or self.mark_of(entry) is not None:
+            return False
+        if spec_cls_name(entry) != self.safe_cls:
+            return False
+        text = entry.get("text")
+        if not isinstance(text, str):
+            return False
+        return any(text == label or text.startswith(label) for label in labels)
+
     def instantiate_spec(self, app, entry_or_spec):
         """ボタンの `PhaseSpec` から、それが呼ぶはずのマネージャを組み立てる。
 

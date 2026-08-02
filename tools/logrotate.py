@@ -34,8 +34,7 @@ from __future__ import annotations
 import os
 
 # 世代管理の既定値。False にすると入れ替えず、常に追記していく。
-#ROTATE_LOGS = True
-ROTATE_LOGS = False
+ROTATE_LOGS = True
 
 # 取っておく古い世代の数。1 なら `名前.log.1` だけが残る。
 # 0 にすると退避せずに消す（ディスクを一切使いたくないとき用）。

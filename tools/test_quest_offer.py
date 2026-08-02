@@ -590,6 +590,44 @@ check("自前で QuestChoiceManager を組む既定にはなっていない",
       mod.LIST_MODE == "game" or mod.QUEST_TYPE_FOR_CHOICE is not None,
       (mod.LIST_MODE, mod.QUEST_TYPE_FOR_CHOICE))
 
+# ================================================ セーブから戻った残骸との二重化
+print("=== タイトル戻り・再注入後の残骸 ===")
+
+# `PhaseSpec.to_dict()` がセーブに書くのは text と spec だけで、**印は落ちる**
+# （実セーブ8件で確認。GAME.md §2.2）。タイトルへ戻る・ロード・再注入のあとは
+# 「印の無い自分のボタン」が復元されているので、印だけで重複を見ていると
+# 同じボタンが2つ並ぶ（ユーザー報告・2026-08-02）。
+def stale(text):
+    """セーブから復元された自前ボタン（印が落ちている）。"""
+    return {"text": text, "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}
+
+mod, ctx, app = setup(history=history)
+app.buttons = ([stale("この話から依頼を作る（事務官エドガー）"),
+                stale("依頼を受ける（話を切り上げる）")] + talk_buttons("62"))
+app.refresh_choice_buttons(reset_page=True)
+texts = [b["text"] for b in app.buttons]
+check("残骸と合わせて二重にならない",
+      texts.count("依頼を受ける（話を切り上げる）") == 1, texts)
+check("生成ボタンも二重にならない",
+      len([t for t in texts if t.startswith("この話から依頼を作る")]) == 1, texts)
+check("残った方は印がある（押せば効く）",
+      all(mod.MARK in b for b in app.buttons
+          if b["text"].startswith(("依頼を受ける", "この話から依頼を作る"))), texts)
+check("会話を終了するは残る", "会話を終了する" in texts, texts)
+
+# ゲーム側の同名ボタンを巻き込まないこと。spec が違えば別物。
+from instantale_modloader import ui as _ui
+screen = _ui.Screen(ctx, lambda m: None, tag="t", mark=mod.MARK)
+game = [{"text": "依頼を受ける", "spec": PhaseSpec("DisplayQuestChoice", [])}]
+check("ゲーム側の同名ボタンは落とさない",
+      screen.prune_stale(game, mod.OUR_LABELS) == [], game)
+
+# 印を持たない Screen（`300_` のようにボタンを作らない MOD）では何もしない。
+nomark = _ui.Screen(ctx, lambda m: None, tag="t", mark=None)
+victims = [stale("依頼を受ける（話を切り上げる）")]
+check("印を持たない Screen では何も落とさない",
+      nomark.prune_stale(victims, mod.OUR_LABELS) == [], victims)
+
 # ============================================================ 302_ との共存
 print("=== 302_ との共存 ===")
 

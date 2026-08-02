@@ -95,6 +95,12 @@ LEAVE_LABEL = "ここで別れる"
 CONFIRM_QUESTION = "{name}とはここで別れることになる。よいか？"
 CONFIRM_LABEL = "ああ、ここで別れよう"
 CANCEL_LABEL = "やめておく"
+
+# セーブから復元された残骸を見分けるための、こちらのラベル一覧。
+# `PhaseSpec.to_dict()` は text と spec しか書かないので**印は落ちる**。
+# 落ちたものは `has_leave_button()` が自分のものと見なせず、タイトル戻り・
+# ロード・再注入のあとにボタンが二重に出る（`301_` で実際に起きた）。
+OUR_LABELS = (LEAVE_LABEL, CONFIRM_LABEL, CANCEL_LABEL)
 FAREWELL_TEXT = "{name}はパーティを離れ、{place}に残った。"
 FAREWELL_TEXT_NO_PLACE = "{name}はパーティを離れた。"
 NO_PLACE_TEXT = "……こんな場所で放り出すわけにはいかない。人の居る場所まで戻ろう。"
@@ -700,6 +706,10 @@ def apply(ctx):
                 # 確認画面（自前ボタンが並んでいる状態）も記録する。表示と
                 # 中身が食い違ったときに、どちらが古いのかを後から見るため。
                 trace_screen(self, buttons, member_id)
+            if isinstance(buttons, list):
+                # 印を失った自前ボタンの残骸を先に落とす（`ui.Screen.prune_stale`）。
+                # 落としてから差し直すので、二重化も「押しても無反応」も消える。
+                screen.prune_stale(buttons, OUR_LABELS)
             if isinstance(buttons, list) and not has_leave_button(buttons):
                 if member_id and is_member(self, member_id):
                     reason = blocking_reason(self, member_id)

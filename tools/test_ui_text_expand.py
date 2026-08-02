@@ -6,8 +6,10 @@
 偽の `scripts.hud.new_hud` / `InstanTaleHUD` / Kivy（Button・Clock・Window）を
 差し込んで、次を確認する。
 
-  ボタン   … HUD に1枚だけ足される（塗り直しのたびに増えない）
-  文字     … 押すたびに「拡張」と「戻す」が入れ替わる。フォントは本文から写す
+  ボタン   … 1枚だけ足される（塗り直しのたびに増えない）
+  子の並び … **HUD 自身の子は増やさない**（ゲームの「画面の最初の子」を変えない）
+  絵柄     … 背景なし・白い線のアイコン。押すと上下が入れ替わる。どの絵柄も描ける
+  文字     … 絵柄に「文字」を選ぶと、今までどおり文字のボタンになる
   置き場所 … 既定ではキャラの欄（枠の右隣）の上。無ければ立ち絵の上、それも無ければ隅
   不動     … 会話で立ち絵が差し替わってもボタンは動かない（実機で左へ飛んだ）
   拡張     … 枠が倍率どおりに（上へ）広がる
@@ -126,6 +128,16 @@ class FakeWidget(object):
     def pos(self):
         return (self.x, self.y)
 
+    def add_widget(self, widget, index=0):
+        self.children.insert(index, widget)
+        widget.parent = self
+
+    def remove_widget(self, widget):
+        if widget in self.children:
+            self.children.remove(widget)
+        if widget.parent is self:
+            widget.parent = None
+
 
 class FakeLabel(FakeWidget):
     def __init__(self, parent=None):
@@ -157,9 +169,53 @@ class FakeScroll(FakeWidget):
         self.pos_hint = dict(pos_hint or {})
 
 
+class FakeCanvasGroup(object):
+    """`canvas.after`。mod は clear して描き直す。"""
+
+    def __init__(self):
+        self.instructions = []
+
+    def clear(self):
+        self.instructions = []
+
+    def add(self, instruction):
+        self.instructions.append(instruction)
+
+    def lines(self):
+        return [i for i in self.instructions if isinstance(i, FakeLine)]
+
+    def colors(self):
+        return [i for i in self.instructions if isinstance(i, FakeColor)]
+
+
+class FakeCanvas(object):
+    def __init__(self):
+        self.after = FakeCanvasGroup()
+
+
+class FakeColor(object):
+    def __init__(self, *rgba):
+        self.rgba = rgba
+
+
+class FakeLine(object):
+    def __init__(self, points=None, width=1.0, **_kwargs):
+        self.points = list(points or [])
+        self.width = width
+
+    def xs(self):
+        return self.points[0::2]
+
+    def ys(self):
+        return self.points[1::2]
+
+
 class FakeButton(FakeWidget):
     def __init__(self, text="", size_hint=None, size=None, pos_hint=None):
         FakeWidget.__init__(self)
+        self.canvas = FakeCanvas()
+        self.background_normal = "atlas://data/images/defaulttheme/button"
+        self.background_color = (1, 1, 1, 1)
         self.text = text
         self.size_hint = size_hint or (1, 1)
         self.width, self.height = size or (0.0, 0.0)
@@ -226,21 +282,28 @@ class FakeHUD(FakeWidget):
         self.height_updates = 0
         self.sizer_calls = 0
         self.sizer = sizer
+        # 実機と同じ入れ子（`out/text_expand.log` の `frame neighbours:`）:
+        # HUD の子は **FloatLayout 1枚だけ**で、中身はその下にぶら下がる。
+        self.root = FakeWidget()
+        self.root.size_hint = (None, None)
+        self.root.width, self.root.height = WIN_WIDTH, WIN_HEIGHT
+        self.root.parent = self
         self.scroll = FakeScroll(pos_hint)
-        self.scroll.parent = self
+        self.scroll.parent = self.root
         # 本文の枠と同じ場所に居るもの（枠線）と、関係ないもの（下の入力欄）。
         self.border = FakeBorder()
-        self.border.parent = self
+        self.border.parent = self.root
         self.elsewhere = FakeWidget()
         self.elsewhere.size_hint = (None, None)
         self.elsewhere.width, self.elsewhere.height = 900.0, 120.0
         self.elsewhere.x, self.elsewhere.y = 600.0, 120.0
-        self.elsewhere.parent = self
-        self.children = [self.scroll, self.border, self.elsewhere]
+        self.elsewhere.parent = self.root
+        self.children = [self.root]
+        self.root.children = [self.scroll, self.border, self.elsewhere]
         if with_portrait:
             self.portrait = FakePortrait(self.image_portrait)
-            self.portrait.parent = self
-            self.children.append(self.portrait)
+            self.portrait.parent = self.root
+            self.root.children.append(self.portrait)
         else:
             self.portrait = None
         # 立ち絵が見つからないビルド用の受け皿（枠の右隣に並ぶ入れ物）。
@@ -249,8 +312,8 @@ class FakeHUD(FakeWidget):
             self.panel.size_hint = (None, None)
             self.panel.width, self.panel.height = 400.0, 300.0
             self.panel.x, self.panel.y = 2100.0, 60.0
-            self.panel.parent = self
-            self.children.append(self.panel)
+            self.panel.parent = self.root
+            self.root.children.append(self.panel)
         else:
             self.panel = None
         if with_label:
@@ -277,6 +340,10 @@ class FakeHUD(FakeWidget):
     def add_widget(self, widget, index=0):
         self.children.insert(index, widget)
         widget.parent = self
+
+    def screen_root(self):
+        """ゲームが「画面の最初の子」として取る相手（`get_current_screen_root`）。"""
+        return self.children[0] if self.children else None
 
     def update_display_text(self, instance, value):
         if self.text_display is not None:
@@ -308,9 +375,10 @@ class FakeHUD(FakeWidget):
         self.update_button_texts(self, ["会話する", "出る"])
 
     def toggle_button(self):
-        for child in self.children:
-            if isinstance(child, FakeButton):
-                return child
+        for parent in (self.root, self):
+            for child in getattr(parent, "children", []):
+                if isinstance(child, FakeButton):
+                    return child
         return None
 
 
@@ -342,11 +410,15 @@ def install_fake_kivy():
     window_mod.Window = FakeWindow
     button_mod = types.ModuleType("kivy.uix.button")
     button_mod.Button = FakeButton
+    graphics_mod = types.ModuleType("kivy.graphics")
+    graphics_mod.Color = FakeColor
+    graphics_mod.Line = FakeLine
     for name, module in (("kivy", kivy), ("kivy.clock", clock_mod),
                          ("kivy.core", types.ModuleType("kivy.core")),
                          ("kivy.core.window", window_mod),
                          ("kivy.uix", types.ModuleType("kivy.uix")),
-                         ("kivy.uix.button", button_mod)):
+                         ("kivy.uix.button", button_mod),
+                         ("kivy.graphics", graphics_mod)):
         sys.modules[name] = module
 
 
@@ -438,10 +510,40 @@ def run():
         hud.show()
         hud.repaint()
     check("repainting does not add a second button",
-          sum(1 for c in hud.children if isinstance(c, FakeButton)) == 1,
+          sum(1 for c in hud.root.children if isinstance(c, FakeButton)) == 1,
+          [type(c).__name__ for c in hud.root.children])
+    # 素の HUD の子は FloatLayout 1枚だけ。そこへ足すと「画面の最初の子」を取る
+    # 側から見える相手が変わり、アイテムの移動・装備が壊れた（2026-08-02）。
+    check("the HUD's own child list is left exactly as the game built it",
+          hud.children == [hud.root] and hud.screen_root() is hud.root,
           [type(c).__name__ for c in hud.children])
-    check("the button reads the collapsed label", button.text == mod.LABEL_EXPAND,
-          button.text)
+    check("the button rides inside the game's root layout, on top",
+          hud.root.children[0] is button, [type(c).__name__ for c in hud.root.children])
+    def icon_apex(widget):
+        """山形の頂点が上向きなら正、下向きなら負（真ん中の点と両端の差）。"""
+        lines = widget.canvas.after.lines()
+        if not lines:
+            return None
+        ys = lines[0].ys()
+        if len(ys) < 3:
+            return None
+        return ys[len(ys) // 2] - (ys[0] + ys[-1]) / 2.0
+
+    check("the button shows an icon instead of text", button.text == "", button.text)
+    check("the icon has no background",
+          button.background_normal == "" and button.background_color[3] == 0,
+          (button.background_normal, button.background_color))
+    check("the icon is drawn in white",
+          [c.rgba[:3] for c in button.canvas.after.colors()] == [(1, 1, 1)],
+          [c.rgba for c in button.canvas.after.colors()])
+    check("the icon is drawn inside the button",
+          all(button.x <= x <= button.x + button.width
+              and button.y <= y <= button.y + button.height
+              for line in button.canvas.after.lines()
+              for x, y in zip(line.xs(), line.ys())),
+          [line.points for line in button.canvas.after.lines()])
+    check("the collapsed icon points up", (icon_apex(button) or 0) > 0,
+          icon_apex(button))
     check("the button borrows the game's font", button.font_name == GAME_FONT,
           button.font_name)
     check("the button sits just above the character panel",
@@ -463,8 +565,8 @@ def run():
     frame = hud.scroll
     check("the frame grows by the configured scale",
           close(frame.height, FRAME_SIZE[1] * tall), frame.size)
-    check("the button now reads the expanded label", button.text == mod.LABEL_RESTORE,
-          button.text)
+    check("pressing flips the icon over",
+          (icon_apex(button) or 0) < 0, icon_apex(button))
     check("a width scale of 1.0 leaves the width exactly as it was",
           close(frame.width, FRAME_SIZE[0]) and close(hud.border.width,
                                                       FRAME_SIZE[0] + 6.0),
@@ -519,8 +621,8 @@ def run():
           close(hud.border.height, FRAME_SIZE[1] + 6.0)
           and close(hud.border.x, FRAME_POS[0] - 3.0),
           (hud.border.size, hud.border.pos))
-    check("the button reads the collapsed label again",
-          button.text == mod.LABEL_EXPAND, button.text)
+    check("pressing again flips the icon back", (icon_apex(button) or 0) > 0,
+          icon_apex(button))
     hud.show()
     check("a restored frame is left alone by later paints",
           frame.size == FRAME_SIZE, frame.size)
@@ -607,9 +709,75 @@ def run():
     hud.show()
     check("START_EXPANDED opens the frame without a press",
           close(hud.scroll.height, FRAME_SIZE[1] * tall), hud.scroll.size)
-    check("START_EXPANDED shows the restore label on the button",
-          hud.toggle_button().text == mod.LABEL_RESTORE, hud.toggle_button().text)
+    check("START_EXPANDED draws the icon the other way up",
+          (icon_apex(hud.toggle_button()) or 0) < 0,
+          icon_apex(hud.toggle_button()))
     mod.START_EXPANDED = False
+
+    # -- 絵柄を「文字」にする設定 --------------------------------------------
+    mod.ICON = mod.AS_TEXT
+    install(mod, ctx)
+    hud = FakeHUD()
+    hud.show()
+    button = hud.toggle_button()
+    check("the text setting still gives a labelled button",
+          button.text == mod.LABEL_EXPAND and not button.canvas.after.lines(),
+          (button.text, button.canvas.after.instructions))
+    button.press()
+    check("the text setting swaps the label on press",
+          button.text == mod.LABEL_RESTORE, button.text)
+
+    # -- 絵柄はどれを選んでも白い線になる ------------------------------------
+    for kind in ("山形", "矢印", "伸縮", "枠"):
+        mod.ICON = kind
+        install(mod, ctx)
+        hud = FakeHUD()
+        hud.show()
+        drawn = hud.toggle_button().canvas.after
+        check("the {} icon is drawn".format(kind),
+              bool(drawn.lines())
+              and [c.rgba[:3] for c in drawn.colors()] == [(1, 1, 1)],
+              drawn.instructions)
+    mod.ICON = "二重山形"
+
+    # -- 枠の右上に置く設定 --------------------------------------------------
+    mod.BUTTON_CORNER = mod.IN_FRAME
+    install(mod, ctx)
+    hud = FakeHUD()
+    hud.show()
+    button = hud.toggle_button()
+    check("the in-frame setting puts the button inside the frame's top right",
+          close(button.x + button.width,
+                hud.scroll.x + hud.scroll.width - mod.FRAME_INSET)
+          and close(button.y + button.height,
+                    hud.scroll.y + hud.scroll.height - mod.FRAME_INSET),
+          (button.pos, hud.scroll.pos, hud.scroll.size))
+    button.press()
+    check("the in-frame button rides up with the frame",
+          close(button.y + button.height,
+                hud.scroll.y + hud.scroll.height - mod.FRAME_INSET),
+          (button.pos, hud.scroll.size))
+    check("the icon follows the button when it moves",
+          all(button.x <= x <= button.x + button.width
+              for line in button.canvas.after.lines() for x in line.xs()),
+          [line.points for line in button.canvas.after.lines()])
+    mod.BUTTON_CORNER = mod.ON_PORTRAIT
+
+    # -- 古い版が HUD 直下に足したボタン --------------------------------------
+    # ゲームを起動したまま新しい版を注入したときに、置き場所が直ること。
+    install(mod, ctx)
+    hud = FakeHUD()
+    stray = FakeButton(text="拡張", size=(30.0, 30.0))
+    hud.add_widget(stray)                       # 古い版のやり方
+    setattr(hud, mod.BUTTON_ATTR, stray)
+    hud.show()
+    check("a button left on the HUD by an older version is moved off it",
+          hud.children == [hud.root] and stray in hud.root.children,
+          ([type(c).__name__ for c in hud.children],
+           [type(c).__name__ for c in hud.root.children]))
+    check("moving it does not leave a second button behind",
+          sum(1 for c in hud.root.children if isinstance(c, FakeButton)) == 1,
+          [type(c).__name__ for c in hud.root.children])
 
     # -- 窓の大きさが変わったとき --------------------------------------------
     # 塗り直しは来ないので、窓の `on_resize` を拾えていないと、ボタンは古い座標に
@@ -636,6 +804,23 @@ def run():
     check("pressing restore after a resize returns the new design size",
           close(hud.scroll.height, FRAME_SIZE[1] * 0.5), hud.scroll.size)
     FakeWindow.width, FakeWindow.height = WIN_WIDTH, WIN_HEIGHT
+
+    # -- 控えだけ失われた枠（畳むのに失敗した後など） ------------------------
+    # 広がっている枠から控え直すと、その寸法が設計値になって二度と戻せなくなる。
+    install(mod, ctx)
+    hud = FakeHUD()
+    hud.show()
+    hud.toggle_button().press()
+    CLOCK.tick()
+    grown = hud.scroll.size
+    setattr(hud.scroll, mod.DESIGN_ATTR, None)      # 控えだけ消える
+    warnings = len(ctx.warnings)
+    hud.show()
+    hud.show()
+    check("an expanded frame with no design is left alone, not re-captured",
+          hud.scroll.size == grown, (grown, hud.scroll.size))
+    check("that state is reported once", len(ctx.warnings) - warnings == 1,
+          ctx.warnings)
 
     # -- 立ち絵を `source` で見つけられないビルド ----------------------------
     # `frames.MISSING` は文字列（"<missing>"）なので、既定値のまま照合すると
