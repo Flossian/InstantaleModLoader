@@ -39,7 +39,8 @@
     "307_area_move_dungeon",
     "308_battle_damage_display",
     "309_office_pardon",
-    "310_city_case"
+    "310_city_case",
+    "1307_npc_profile_memory"
   ],
   "disabled": []
 }
