@@ -15,6 +15,7 @@
     "110_fix_character_name_path",
     "111_llm_prompt_replace",
     "112_ui_text_spacing",
+    "1114_message_viewport_height",
     "113_ui_text_expand",
     "114_ui_input_focus",
     "115_ui_item_list_fit",

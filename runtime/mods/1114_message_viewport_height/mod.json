@@ -1,0 +1,33 @@
+{
+  "entry": "message_viewport_height.py",
+  "api": 1,
+  "name": {
+    "en": "Taller message viewport",
+    "ja": "本文の表示領域を広げる"
+  },
+  "description": {
+    "en": "Expands the message viewport upward with a window-filling toggle and translucent black background",
+    "ja": "メッセージ表示領域を下端固定で拡張し、ウィンドウ高から求める全画面切替と半透明の黒背景を追加する"
+  },
+  "version": "1",
+  "author": "yoshinari/tomotomo-y",
+  "after": [
+    "112_ui_text_spacing"
+  ],
+  "settings": {
+    "HEIGHT_SCALE": {
+      "type": "float",
+      "default": 1.5,
+      "min": 1.0,
+      "max": 3.0,
+      "label": {
+        "ja": "表示領域の高さ（ゲーム標準に対する倍率）",
+        "en": "Viewport height (x the game's default)"
+      },
+      "note": {
+        "ja": "通常時の倍率。右上の⛶で、ウィンドウ上端の10px手前まで広がる。下端は動かず、増えた高さは上方向へ広がる",
+        "en": "Normal multiplier. The top-right ⛶ button expands to 10px below the window top. The bottom edge stays fixed and added height grows upward"
+      }
+    }
+  }
+}
