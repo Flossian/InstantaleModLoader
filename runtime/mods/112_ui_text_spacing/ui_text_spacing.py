@@ -38,22 +38,26 @@
 
 ## ラベルの見つけ方
 
-**属性名を推測しない**（GAME.md §1.3）。`InstanTaleHUD` の
-Kivy プロパティは `modules.json` から読めるが（`display_text` はここにある）、
-**本文を実際に描いているラベルはインスタンス属性**なので、リコンのダンプには
-出てこない。そこで `update_display_text(self, instance, value)` の `value` を
-手がかりに、**その文字列を持っているラベルを実行時に探す**:
+**まず名前で引く**（`hud.text_display`）。これは初版の探索が実機で当てた属性名で、
+GAME.md §2.3 に実測として載っている。リコンのダンプには出ない（インスタンス属性
+なので）が、**一度分かった名前は推測ではない**。
 
-    vars(hud) の中で text が value と一致するもの   ← 見つかれば属性名も分かる
-    → 無ければウィジェット木を降りて同じ条件で探す
-    → それでも無ければ「含む/含まれる」でもう一度（ゲームが本文を加工して
-       いる場合。この場合も書き換えるのはそのラベル自身の text なので安全）
+名前で引くことには、本文を書き換える他の MOD と共存できるという実利がある。
+初版は「`value` と同じ文字列を持つラベル」を探していて、これが 2026-08-03 に
+**動かなくなった**:
 
-**完全一致では取れない。** `hud.text_display.text` と `hud.display_text` は塗る
-ときにゲームがどちらかを足すか削るかしているので、実機で当たるのは3段階目の
-「末尾が一致する」（`match=2`）。完全一致だけを条件にすると**このラベルは1回も
-見つからない**。
+    117_message_text_integrity が長い本文を
+    「前置き + ［…省略］ + 末尾 1000 文字」に載せ替える（112 より内側で走る）
+    → ラベルの text は value と一致も包含もしなくなる
+    → 探索が空振りし、200 回で `no label is showing display_text` を出して終わり
 
+**本文を手がかりにラベルを探す作りは、本文を触る MOD が増えた時点で壊れる。**
+名前で引けばこの依存が消える（`117_` / `118_` / `113_` も同じく名前で引いている）。
+
+名前で引けなかったときのために、初版の探索は**予備として**残してある
+（ゲーム更新で属性名が変わった場合。`value` を手がかりに `vars(hud)` →
+ウィジェット木の順で探す）。予備の一致は完全一致に限らない ― 実機で当たったのは
+「末尾が一致する」（`match=2`）で、完全一致だけを条件にすると1回も見つからない。
 短い文字列で「含まれる」を許すと選択肢のボタン（あれも `Label`）を掴みうるので、
 完全一致以外は本文と同じくらい長いラベルに限る（`MIN_MATCH`）。
 
@@ -69,6 +73,11 @@ import weakref
 from instantale_modloader import frames
 
 LOG_BASENAME = "text_spacing.log"
+
+# 本文のラベルが入っている HUD の属性名（実測。GAME.md §2.3）。
+# ここが引ければ本文の中身に一切依存しない ＝ 本文を書き換える他の MOD と
+# 共存できる。引けなければ下の探索（`value` を手がかりにする予備）に落ちる。
+LABEL_ATTR = "text_display"
 
 # 行間。ゲームが入れている `line_height` に対する倍率。
 # 絶対値ではなく倍率なのは、ゲーム側の値を実測で控えてから掛けるため（上の説明）。
@@ -197,6 +206,14 @@ def apply(ctx):
             return None
         return best(hits) if hits else None
 
+    def by_name(hud):
+        """`hud.text_display` をそのまま引く。**本文の中身を見ない**ので、
+        本文を載せ替える MOD（`117_` など）が先に走っていても外さない。"""
+        label = frames.attr(hud, LABEL_ATTR)
+        if label in (None, frames.MISSING) or not is_label(label):
+            return None
+        return (4, "hud." + LABEL_ATTR, label)
+
     def find_label(hud, value):
         """本文のラベル。見つからなければ None。"""
         ref = labels.get(hud)
@@ -206,17 +223,19 @@ def apply(ctx):
             return label
 
         state["tries"] += 1
-        if len(value) < MIN_MATCH:
-            return None      # 手がかりとしては短すぎる
-
-        hit = scan_attrs(hud, value)
-        if hit is None and state["tries"] % WALK_EVERY == 1:
-            hit = scan_tree(hud, value)
+        hit = by_name(hud)
+        # 予備の探索は本文を手がかりにするので、短すぎる文字列では走らせない
+        # （選択肢のボタンなど、他のラベルとも一致しうる）。
+        if hit is None and len(value) >= MIN_MATCH:
+            hit = scan_attrs(hud, value)
+            if hit is None and state["tries"] % WALK_EVERY == 1:
+                hit = scan_tree(hud, value)
         if hit is None:
             if state["tries"] == WARN_AFTER and not state["warned"]:
                 state["warned"] = True
-                ctx.log("text spacing: no label is showing display_text; "
-                        "leaving the text as the game drew it", level="WARN")
+                ctx.log("text spacing: hud.{} is not a label and no other label is "
+                        "showing display_text; leaving the text as the game drew it"
+                        .format(LABEL_ATTR), level="WARN")
             return None
 
         score, path, label = hit
@@ -228,7 +247,8 @@ def apply(ctx):
             state["logged"] += 1
             write("label {} at {} (match={}) line_height={!r} design={!r} "
                   "font_size={!r} texture={!r} text_size={!r} len(text)={}".format(
-                      type(label).__name__, path, score,
+                      type(label).__name__, path,
+                      "name" if score == 4 else score,
                       frames.attr(label, "line_height"), design_of(label),
                       frames.attr(label, "font_size"),
                       frames.attr(label, "texture_size"),
@@ -270,8 +290,11 @@ def apply(ctx):
         """行間と本文を変えた後で、ゲームに本文の高さを決め直させる。
 
         **次のフレームに1回だけ**にする。本文は1文字ずつ増えるので
-        （`InstantaleApp.add_text_display`）、その場で `texture_update()` を
-        呼ぶと1文字ごとに同期描画が1回増える。予約済みなら積まない。
+        （`InstantaleApp.add_text_display`）、その場で呼ぶと1文字ごとに
+        仕事が1回増える。予約済みなら積まない。
+
+        ここでやるのは**高さの計算だけ**。テクスチャの作り直しは Kivy に任せる
+        （下の `run` を参照 ― ここを自分で呼んでいたのが表示が遅い原因だった）。
         """
         if state.get("pending"):
             return
@@ -279,9 +302,27 @@ def apply(ctx):
         def run(_dt=None, hud=hud, label=label):
             state["pending"] = False
             try:
-                # 先に texture を更新する。ゲームは texture_size を見て高さを
-                # 出しているので、そのままだと1フレーム前の行間で計算される。
-                label.texture_update()
+                # **`texture_update()` は呼ばない。**
+                #
+                # 以前はここで呼んでいた（ゲームは `texture_size` を見て高さを
+                # 出すので、新しい行間で測り直させるつもりだった）。実測でこれが
+                # **表示が遅い原因の一角**と分かったので外した ―
+                # `211_probe_text_speed` の計測（2026-08-03）:
+                #
+                #     render x2.86/tick avg=14.9ms  texture=[1340, 3549]
+                #
+                # 本文のラベルは1文字ごとに**3回**作り直されていた。1回は Kivy 自身
+                # （テキストが変われば次のフレームで必ず作り直す）、残る2回が
+                # `112_` と `117_` の明示的な呼び出し。1回 15ms なので、
+                # 1文字あたり 45ms ― ティックの間隔 63.5ms の 3分の2 を
+                # ここで食っていた。フレームが落ちるので `text_speed` どおりにも
+                # 打てなくなる。
+                #
+                # 外しても困らない。Kivy の作り直しは**この予約より先に**走る
+                # （テキストを変えた時点で予約されるので、こちらより早い）ので、
+                # 高さを出す時点の `texture_size` は新しい行間のものになっている。
+                # 万一順序が入れ替わっても、遅れるのは1フレームぶんだけで、
+                # 次の文字で必ず組み直される。
                 update_height = frames.attr(hud, "update_label_height")
                 if callable(update_height):
                     update_height()

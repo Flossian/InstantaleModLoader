@@ -165,6 +165,11 @@ def run():
     CLOCK.tick()
     check("height recalculation follows display limiting", hud.height_updates == 1,
           hud.height_updates)
+    # テクスチャの作り直しは Kivy 自身が（テキストを変えた時点で）次のフレームに
+    # 予約する。ここで自分でも呼ぶと1文字ごとに二度手間になり、実機で 15ms x 1回
+    # ぶん打ち出しが遅くなる（VERIFICATION.md §2.34）。
+    check("does not rebuild the texture itself (kivy already does)",
+          hud.text_display.texture_updates == 0, hud.text_display.texture_updates)
 
     hud = FakeHUD()
     hud.show("短文")

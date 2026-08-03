@@ -86,21 +86,51 @@ class FakeLabel(object):
     """Kivy の Label のうち、この mod が触るところだけ。"""
 
     def __init__(self, text="", parent=None):
-        self.text = text
-        self.line_height = LINE_HEIGHT
+        self._text = text
+        self._line_height = LINE_HEIGHT
         self.font_size = FONT_SIZE
         self.text_size = [1400, None]
         self.texture_size = [1400, 0]
         self.height = 0
         self.parent = parent
         self.children = []
-        self.updates = 0
+        self.updates = 0        # テクスチャを作り直した回数（重さの代理）
+        self._dirty = False
+
+    # `text` と `line_height` は Kivy と同じく**代入でテクスチャが汚れる**。
+    # 汚れたら次のフレームに作り直しが1回予約される（Kivy の
+    # `_trigger_texture_update`）。この予約こそが実機で効いていて、MOD 側が
+    # 自分でも `texture_update()` を呼ぶと**二度手間**になる（実測 3回/文字）。
+    @property
+    def text(self):
+        return self._text
+
+    @text.setter
+    def text(self, value):
+        self._text = value
+        self._mark()
+
+    @property
+    def line_height(self):
+        return self._line_height
+
+    @line_height.setter
+    def line_height(self, value):
+        self._line_height = value
+        self._mark()
+
+    def _mark(self):
+        if self._dirty:
+            return          # 予約済み。1フレームに1回しか作り直さない
+        self._dirty = True
+        CLOCK.schedule_once(lambda _dt: self.texture_update(), 0)
 
     def texture_update(self):
+        self._dirty = False
         self.updates += 1
-        lines = self.text.count("\n") + 1 if self.text else 0
+        lines = self._text.count("\n") + 1 if self._text else 0
         self.texture_size = [self.text_size[0],
-                             lines * self.font_size * GLYPH_TO_LINE * self.line_height]
+                             lines * self.font_size * GLYPH_TO_LINE * self._line_height]
 
     def pitch(self):
         """1行ぶんの送り（判定用。mod は使わない）。"""
@@ -118,13 +148,17 @@ class FakeLayout(object):
 class FakeHUD(object):
     """本物の `InstanTaleHUD` のうち、この mod から見える部分だけ。
 
-    `nested=True` にすると本文のラベルを属性として持たず、木の奥にだけ置く
-    （ビルドによって持ち方が違っても届くことを確かめるため）。
+    `nested=True` にすると本文のラベルを `hud.text_display` に持たせず、木の奥に
+    だけ置く（名前で引けないビルドで予備の探索に落ちることを確かめるため）。
+
+    `paint` を渡すと**ラベルに何を塗るか**を変えられる。他の MOD が本文を
+    載せ替えた状態（`117_message_text_integrity` など）を作るのに使う。
     """
 
-    def __init__(self, nested=False):
+    def __init__(self, nested=False, paint=None):
         self.display_text = ""
         self.height_updates = 0
+        self.paint = paint or (lambda value: PAINT_PREFIX + value)
         label = FakeLabel(parent=self)
         # 本文と紛らわしいラベルを2枚混ぜておく。状態表示（画面左下）と、
         # **本文に出てくる語と同じ文字列を持つ選択肢のボタン**（Kivy の Button も
@@ -137,7 +171,8 @@ class FakeHUD(object):
             self.children = [FakeLayout([inner]), self.status_label,
                              self.choice_button]
         else:
-            self.text_label = label
+            # 実測の属性名（GAME.md §2.3）。MOD はまずここを引く。
+            self.text_display = label
             self.children = [label, self.status_label, self.choice_button]
         self._label = label
 
@@ -146,7 +181,7 @@ class FakeHUD(object):
 
         **完全一致では塗らない**（実測。GAME.md §2.3）。前に何かを足した形にする。
         """
-        self._label.text = PAINT_PREFIX + value
+        self._label.text = self.paint(value)
 
     def update_label_height(self, *args):
         self.height_updates += 1
@@ -267,11 +302,11 @@ def run():
           "scripts.hud.new_hud:InstanTaleHUD.update_display_text" in ctx.wrapped)
     scale, blanks = mod.LINE_SCALE, mod.BLANK_LINES
 
-    # -- 属性から見つける ---------------------------------------------------
+    # -- 名前で見つける -----------------------------------------------------
     hud = FakeHUD()
     hud.show(NARRATION)
     label = hud._label
-    check("the label found from vars(hud) gets the tightened line height",
+    check("the label at hud.text_display gets the tightened line height",
           close(label.line_height, LINE_HEIGHT * scale), label.line_height)
     check("the label is found even though its text is not exactly display_text",
           label.text.startswith(PAINT_PREFIX.replace("\n\n", "\n")), repr(label.text[:20]))
@@ -292,22 +327,41 @@ def run():
     check("a choice button whose text appears in the narration is not restyled",
           close(hud.choice_button.line_height, LINE_HEIGHT), hud.choice_button.line_height)
 
+    # -- 本文を載せ替える MOD が先に走っていても外さない ----------------------
+    # 2026-08-03 の実機で起きた退行そのもの。`117_message_text_integrity` が
+    # 長い本文を「前置き + 省略通知 + 末尾 1000 文字」に載せ替えるので、
+    # ラベルの text は value と一致も包含もしなくなる。名前で引いていれば効く。
+    def truncating(value):
+        return PAINT_PREFIX + "［表示負荷を抑えるため、前の本文は省略］\n" + value[-20:]
+
+    hud = FakeHUD(paint=truncating)
+    hud.show(NARRATION)
+    check("the label is still found when another mod replaced its text entirely",
+          close(hud._label.line_height, LINE_HEIGHT * scale), hud._label.line_height)
+    check("the replaced text is tightened too, not left alone",
+          hud._label.text.count("\n\n") == 0, repr(hud._label.text))
+
     # -- 1文字ずつ来ても縮み続けない ----------------------------------------
     hud = FakeHUD()
     hud.type_out(NARRATION)
     check("typing the text out one character at a time keeps one line height",
           close(hud._label.line_height, LINE_HEIGHT * scale), hud._label.line_height)
 
-    # -- 高さの決め直しは1フレームに1回 --------------------------------------
+    # -- 1フレームぶんの仕事は1回だけ ----------------------------------------
+    # ここが表示速度に直結する。実機ではラベル1枚の作り直しが 15ms かかっており
+    # （テクスチャ 1340x3549）、1文字ごとに余計に1回呼ぶだけで打ち出しが目に見えて
+    # 遅くなる（VERIFICATION.md §2.34）。
     CLOCK.tick()                             # ここまでの予約を流してから数える
     before = CLOCK.scheduled
     hud = FakeHUD()
     hud.type_out(NARRATION)
     check("the height update is scheduled once, not once per character",
-          CLOCK.scheduled - before == 1, CLOCK.scheduled - before)
+          CLOCK.scheduled - before == 2, CLOCK.scheduled - before)   # 作り直し1 + 高さ1
     CLOCK.tick()
     check("the height is recomputed after the frame", hud.height_updates == 1,
           hud.height_updates)
+    check("the texture is rebuilt once per frame, and never by this mod",
+          hud._label.updates == 1, hud._label.updates)
     lines = hud._label.text.count("\n") + 1
     check("the height matches the tightened text",
           close(hud._label.height, lines * hud._label.pitch()), hud._label.height)
@@ -321,9 +375,11 @@ def run():
     check("re-injecting does not scale the line height twice",
           close(hud._label.line_height, once), hud._label.line_height)
 
-    # -- 木を降りて見つける -------------------------------------------------
+    # -- 名前で引けないビルドでは予備の探索に落ちる --------------------------
     install(mod, ctx)
     hud = FakeHUD(nested=True)
+    check("the fallback search is only used when hud.text_display is not there",
+          not hasattr(hud, "text_display"))
     hud.type_out(NARRATION)
     check("a label that is only in the widget tree is found too",
           close(hud._label.line_height, LINE_HEIGHT * scale)
@@ -349,10 +405,10 @@ def run():
     mod.BLANK_LINES = blanks
 
     # -- ラベルが見つからないビルドでは何もしない ----------------------------
+    # 名前で引けず（`nested=True`）、本文もラベルに出ない形。
     install(mod, ctx)
-    hud = FakeHUD()
-    hud._label.text = "(このビルドは本文をラベルに入れない)"
-    hud.update_display_text = lambda instance, value: None    # 本文を塗らない
+    hud = FakeHUD(nested=True,
+                  paint=lambda value: "(このビルドは本文をラベルに入れない)")
     hud.show(NARRATION)
     check("a build that shows the text elsewhere is left untouched",
           close(hud._label.line_height, LINE_HEIGHT) and hud.height_updates == 0,
