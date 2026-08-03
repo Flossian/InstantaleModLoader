@@ -613,6 +613,13 @@ def _load_mod_file(path: str):
     if spec is None or spec.loader is None:
         raise ImportError(f"cannot load spec for {path}")
     module = importlib.util.module_from_spec(spec)
+    # 前の注入で読み込んだ**中の部品**を捨ててから入れ直す。入口は毎回
+    # 読み直しているのに、`from . import panel` の相手は sys.modules に残るので、
+    # 放っておくと **新しい入口 × 古い部品** で動く。分割した mod を直して
+    # 注入し直したのに、入口が呼ぶ関数だけ古いままで AttributeError になる
+    # （`116_ui_party_expand` で実際に踏んだ。2026-08-03）。
+    for cached in [key for key in sys.modules if key.startswith(name + ".")]:
+        sys.modules.pop(cached, None)
     sys.modules[name] = module
     try:
         spec.loader.exec_module(module)

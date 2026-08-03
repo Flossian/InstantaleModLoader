@@ -704,6 +704,21 @@ MOD 側でやること: 対象が未 import でも `apply()` は普通に書い�
 | `replacing a previous patch layer on ...` | 前回注入の層を剥がした（正常） |
 | （この行が出ない） | 同一 boot 内で後段の MOD が包んだ＝先の層が保持されている |
 
+読み直されるのは**モジュールも同じ**。注入のたびに `sys.modules` から落としてから
+入れ直すものが3段ある。
+
+| 何を | どこで |
+|---|---|
+| ローダ本体（`instantale_modloader.*`） | 注入コードの冒頭（`tools/injector.py`） |
+| MOD の入口（`instantale_mod_<フォルダ名>`） | `_load_mod_file` |
+| **MOD の中の部品**（`instantale_mod_<フォルダ名>.*`） | `_load_mod_file`（入口を入れ直す直前） |
+
+3段目が要点。入口だけ読み直して `from . import panel` の相手を残すと、
+**新しい入口が古い部品を呼ぶ**。分割した MOD を直して注入し直したのに、
+部品に足したばかりの関数が `AttributeError: module ... has no attribute` になる
+（`116_ui_party_expand` で実際に踏んだ。2026-08-03）。しかも入口側のコードは
+新しいので、ログを読んでも「直したはずの行」で落ちているように見える。
+
 ### 3.6 1回きりの初期化（`ctx.on_ready`）
 
 `apply()` は1プロセスの中で何度も呼ばれる。手で注入し直したときと、未 import の

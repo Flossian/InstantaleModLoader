@@ -318,6 +318,16 @@ def main():
         check("instantale_mod_zebra.helper" in sys.modules,
               "分割した中身も mod 固有の名前空間に入る（ゲームと衝突しない）")
 
+        # 分割した mod を直して注入し直したとき、**中の部品も読み直される**こと。
+        # 入口だけ読み直して部品を sys.modules に残すと、新しい入口が古い部品を
+        # 呼び続け、追加した関数が「無い」と言われる（実際に踏んだ。2026-08-03）。
+        put("zebra/helper.py", "VALUE = 99\nFRESH = True\n")
+        again = ml._load_mod_file(os.path.join(tmp_mods, "zebra", "whatever.py"))
+        check(again.LOADED == 99,
+              "注入し直すと分割した中身も読み直される（{} を読んだ）".format(again.LOADED))
+        check(getattr(sys.modules["instantale_mod_zebra.helper"], "FRESH", False),
+              "部品に足した名前が、注入し直した入口から見える")
+
         # 同梱データは ctx.mod_dir から読む
         ctx.runtime_dir = tmp
         ctx._mod = "zebra"
