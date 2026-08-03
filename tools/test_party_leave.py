@@ -790,6 +790,60 @@ check("display_button_map があればそれで引く",
       [b["text"] for b in app.buttons] == [mod.CONFIRM_LABEL, mod.CANCEL_LABEL],
       [b["text"] for b in app.buttons])
 
+# ============================================================ 他 mod のボタン
+# `prune_stale`（残骸の掃除）は `refresh_choice_buttons` のたびに、**画面が
+# 何であれ**走る。判定が「こちらのラベル ＋ 無害 spec ＋ こちらの印が無い」
+# だけだと、**他の mod が今この場で出しているボタン**が3条件すべてに当たる。
+#
+# 実際に起きていた（2026-08-03）: `309_`（役場で罰金を納める）の確認画面の
+# キャンセルは「やめておく」で、こちらの `CANCEL_LABEL` と同じ文字列。
+# `309_` が `apply_buttons` を呼ぶと、その中の `refresh_choice_buttons` で
+# こちらのフックが走り、**確認画面からキャンセルが最初から消えていた**。
+print("=== 他の mod のボタンを消さない ===")
+
+FOREIGN_MARK = "mod_pardon_action"          # 309_ の印
+
+
+def foreign_confirm():
+    """`309_` の確認画面（印のキーだけがこちらと違う）。"""
+    return [{"text": "1000ゴールドを納める", FOREIGN_MARK: "pay",
+             "spec": PhaseSpec("JustSetButtonToNormalPhase", [])},
+            {"text": "やめておく", FOREIGN_MARK: "cancel",
+             "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}]
+
+
+mod, ctx, app = setup()
+app.buttons = foreign_confirm()
+app.refresh_choice_buttons()
+check("他の mod の確認画面からボタンを1枚も消さない",
+      [b["text"] for b in app.buttons] == ["1000ゴールドを納める", "やめておく"],
+      [b["text"] for b in app.buttons])
+
+# 汎用の文言はそもそも掃除の対象にしない（ゲーム自身が同じ文言を出していても
+# 巻き込まないため）。印を持たない「やめておく」でも消えてはいけない。
+mod, ctx, app = setup()
+app.buttons = [{"text": "やめておく",
+                "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}]
+app.refresh_choice_buttons()
+check("印の無い「やめておく」も消さない（掃除の対象にしていない）",
+      [b["text"] for b in app.buttons] == ["やめておく"],
+      [b["text"] for b in app.buttons])
+check("掃除に使う文言はこちらにしか無いものだけ",
+      mod.CANCEL_LABEL not in mod.OUR_LABELS, mod.OUR_LABELS)
+
+# 掃除そのものは効いたままであること（セーブから戻った印無しの自前ボタン）。
+mod, ctx, app = setup()
+app.refresh_choice_buttons()
+live = [b for b in app.buttons if b.get(app_mark)][0]
+app.buttons = [{"text": live["text"],           # 印の落ちた復元ぶん
+                "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}] + \
+    [b for b in app.buttons if not b.get(app_mark)]
+app.refresh_choice_buttons()
+same = [b for b in app.buttons if b["text"] == live["text"]]
+check("セーブから戻った自分の残骸は今までどおり差し直す", len(same) == 1,
+      [b["text"] for b in app.buttons])
+check("差し直した1枚は印を持つ", bool(same and same[0].get(app_mark)), same)
+
 print()
 if failures:
     print("FAILED: {} 件".format(len(failures)))

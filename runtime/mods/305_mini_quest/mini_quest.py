@@ -76,6 +76,19 @@ RECORD_BASENAME = "mini_quests.json"
 # 掲示板に出すボタンの文言。
 BOARD_LABEL = "軽い頼まれごとを探す"
 
+# セーブから復元された残骸を見分けるための、こちらのラベル一覧
+# （`ui.Screen.prune_stale`）。`PhaseSpec.to_dict()` は text と spec しか書か
+# ないので**印は落ちる**。落ちたものは下の印による重複判定をすり抜け、同じ
+# ボタンが2つ並んで復元された方は押しても無反応になる（`301_` で実際に起きた）。
+#
+# **ここは実機で観測した症状ではなく、保険**（2026-08-03）。`301_` / `309_` が
+# 踏んだのは `refresh_choice_buttons`（ゲームが組んだ一覧を塗り直すだけ）で、
+# こちらは掲示板が並び終えた後 ― 掲示板がそのつど一覧を組み直すビルドなら
+# 残骸はゲーム自身が消している。組み直さないビルドがあっても壊れないよう、
+# 同じ掃除を通しておく。掃除に使う文言は**こちらにしか無いもの**だけ
+# （汎用語を入れると他 MOD やゲームのボタンを巻き込む。`302_` の項を参照）。
+OUR_LABELS = (BOARD_LABEL,)
+
 # 押下を横取りするための印。**`301_`（mod_action）/ `302_`（mod_party_action）と
 # 別のキーにすること。**
 MARK = "mod_mini_action"
@@ -759,6 +772,9 @@ def apply(ctx):
                 write("board: app.buttons is {}; leaving it alone".format(
                     type(buttons).__name__))
                 return result
+            # **印を失った自前ボタンの残骸を先に落とす**（`ui.Screen.prune_stale`）。
+            # 掲示板だと分かっている場所（`orig` が並べ終えた直後）でだけ呼ぶ。
+            screen.prune_stale(buttons, OUR_LABELS)
             if any(screen.mark_of(entry) for entry in buttons):
                 return result           # 既に在る（開き直しても二重にしない）
             entry = screen.button(BOARD_LABEL, mark="generate")

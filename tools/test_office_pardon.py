@@ -651,6 +651,56 @@ check("True を手配度1と読まない", pardon_label(app) is None, app.labels
 module, ctx, app = setup(history={0: {"lawfulness": -1}})
 check("id が数値でも引き当てる", pardon_label(app) is not None, app.labels())
 
+# ================================================================== 残骸
+# `PhaseSpec.to_dict()` は text と spec しか書かない ＝ **セーブに焼かれた
+# 自前ボタンは印を失って戻ってくる**。印による重複判定はそれをすり抜けるので、
+# 役場でセーブ → タイトル → ロードのあと同じボタンが2つ並び、復元された方は
+# 押しても無反応になる（`301_` で実際に起きた壊れ方）。
+print("\n[残骸] セーブから戻ってきた印無しの自前ボタンを差し直す")
+
+
+def restored(text):
+    """セーブから復元された自前ボタン＝ text と spec だけ、印は落ちている。"""
+    return {"text": text, "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}
+
+
+module, ctx, app = setup()
+label = pardon_label(app)
+app.buttons.insert(0, restored(label))          # ロード直後の並びを作る
+app.buttons = [e for e in app.buttons if not e.get(MARK_KEY)]
+before = list(app.buttons)
+app.refresh_choice_buttons()
+CLOCK.settle()
+same = [e for e in app.buttons if e.get("text") == label]
+check("復元された残骸が二重にならない", len(same) == 1, app.labels())
+check("残った1枚は印を持つ（押せば効く）",
+      bool(same and same[0].get(MARK_KEY)), same)
+check("ゲーム側のボタンは1枚も減っていない",
+      len([e for e in app.buttons if e.get("text") != label])
+      == len([e for e in before if e.get("text") != label]),
+      (app.labels(), [e.get("text") for e in before]))
+
+# **他の mod の生きているボタンには触らない。** `302_` の確認画面の
+# 「やめておく」はこちらの `CANCEL_LABEL` と同じ文字列で、印のキーだけが違う。
+# ラベルと無害 spec だけで残骸と判定すると、他の mod の画面からキャンセルが
+# 消える（実際に `302_` がこちらのものを消していた・2026-08-03）。
+module, ctx, app = setup()
+foreign = {"text": "やめておく", "mod_party_action": "cancel",
+           "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}
+app.buttons.insert(0, foreign)
+app.refresh_choice_buttons()
+CLOCK.settle()
+check("他の mod の印が付いたボタンを消さない", foreign in app.buttons, app.labels())
+
+# ゲーム自身の同名ボタン（印が無い）も、こちらのラベルでなければ触らない。
+module, ctx, app = setup()
+vanilla = {"text": "やめておく",
+           "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}
+app.buttons.insert(0, vanilla)
+app.refresh_choice_buttons()
+CLOCK.settle()
+check("ゲーム側の別文言のボタンを消さない", vanilla in app.buttons, app.labels())
+
 # ================================================================== 共存
 print("\n[共存] 他の mod と印が衝突しない")
 marks = {}
