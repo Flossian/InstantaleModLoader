@@ -43,15 +43,26 @@ def check(cond, msg):
         _FAILS.append(msg)
 
 
-def order_of(mods_dir):
-    """適用順だけを取り出す。discover() はローダ・GUI・静的検査の共通の入口。
+def survey(mods_dir):
+    """同梱 mod の一覧と適用順を取り出す。discover() はローダ・GUI・静的検査の共通の入口。
 
     `debug=True` で呼ぶのは `check_mods.py` と同じ理由 ― 検査は**入っている MOD を
     全部見る**のが仕事で、デバッグモードの入切で範囲が変わってはいけない。
     切のまま呼ぶと、計測 MOD（`"debug": true`）が `order` に居ないぶん
     「同梱 mod は全て名乗っている」が素の配布物でも赤くなる。
+
+    突き合わせに `order` ではなく `listed` を使う。`order` は**切られている mod が
+    落ちた後**の並びなので、利用者が GUI で1本切っただけでこの検査が赤くなる
+    （手元で未公開の mod を `disabled` に置いている間もずっと赤い）。
+    `listed` は無効な mod も宣言された位置に残すので、切った・切らないに
+    左右されずに「宣言と実体が一致しているか」だけを見られる。
     """
-    return ml.discover(mods_dir, debug=True)["order"]
+    return ml.discover(mods_dir, debug=True)
+
+
+def order_of(mods_dir):
+    """適用順だけを取り出す（`survey()` の要約）。"""
+    return survey(mods_dir)["order"]
 
 
 def main():
@@ -438,6 +449,89 @@ def main():
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
+    print("=== デバッグモード（開発者向けの MOD を伏せる）===")
+    # 実物と同じ配置を丸ごと作る。`settings/` は **runtime の隣**（TECH.md §3.2.4）
+    # なので、`runtime/mods` だけの temp では書き出し先がシステムの temp 直下に
+    # なってしまう。配布物1つ分を temp に作って、その中で閉じる。
+    dist = tempfile.mkdtemp(prefix="instantale_dist_")
+    dist_runtime = os.path.join(dist, "runtime")
+    dist_mods = os.path.join(dist_runtime, "mods")
+    try:
+        def put_mod(name, manifest):
+            folder = os.path.join(dist_mods, name)
+            os.makedirs(folder, exist_ok=True)
+            with open(os.path.join(folder, "mod.json"), "w", encoding="utf-8") as fh:
+                json.dump(manifest, fh, ensure_ascii=False)
+            with open(os.path.join(folder, "m.py"), "w", encoding="utf-8") as fh:
+                fh.write("def apply(ctx):\n    pass\n")
+
+        def put_order(obj):
+            with open(os.path.join(dist_mods, "load_order.json"),
+                      "w", encoding="utf-8") as fh:
+                json.dump(obj, fh, ensure_ascii=False)
+
+        put_mod("100_fix", {"entry": "m.py"})
+        put_mod("200_probe", {"entry": "m.py", "debug": True})
+        # 伏せた相手を名指しする制約。実物では `300_` の
+        # `"after": ["205_probe_player_events"]` がこれに当たる。
+        put_mod("300_feature", {"entry": "m.py", "after": ["200_probe"]})
+        put_order({"order": ["100_fix", "200_probe", "300_feature"]})
+
+        from instantale_modloader import config as C
+        check(C.debug_mode(dist_runtime) is False,
+              "settings/loader.json が無ければ切（配布物には入っていない）")
+
+        off = ml.discover(dist_mods)
+        check(off["debug_mode"] is False, "既定は切")
+        check(off["order"] == ["100_fix", "300_feature"],
+              "切っている間は order に載らない＝読み込まれない: {}".format(off["order"]))
+        check(off["listed"] == ["100_fix", "200_probe", "300_feature"],
+              "一覧には**宣言された位置に**残る（保存で記述ごと消えない）: {}"
+              .format(off["listed"]))
+        check(off["debug"] == {"200_probe"},
+              "どれを伏せたかは debug で分かる: {}".format(off["debug"]))
+        check(off["manifests"].get("200_probe"),
+              "名乗りは残す（GUI が「消えた」ように見せない）")
+        # 伏せたのは利用者ではないので、**報告に出してはいけない**。
+        # 「無効化されています」「記載の無い MOD」「無効な MOD を指している」の
+        # どれで出ても、利用者から見れば身に覚えのない警告になる。
+        noisy = [line for line in off["problems"] + off["notes"] if "200_probe" in line]
+        check(not noisy, "伏せた MOD は報告に出さない: {}".format(noisy or "出ていない"))
+        check("300_feature" in off["order"],
+              "伏せた相手を after で指している MOD は、そのまま動く")
+
+        C.save_flags(dist_runtime, {"debug": True})
+        check(C.debug_mode(dist_runtime) is True, "loader.json に残る")
+        on = ml.discover(dist_mods)
+        check(on["debug_mode"] is True and
+              on["order"] == ["100_fix", "200_probe", "300_feature"],
+              "入れれば宣言どおりの位置で読み込まれる: {}".format(on["order"]))
+
+        C.save_flags(dist_runtime, {"debug": False})
+        check(ml.discover(dist_mods)["order"] == ["100_fix", "300_feature"],
+              "切れば元に戻る")
+        # 静的検査（check_mods.py / この検査自身）が使う逃げ道。利用者が今どちらに
+        # 倒しているかで検査の範囲が変わってはいけない。
+        check(ml.discover(dist_mods, debug=True)["order"] ==
+              ["100_fix", "200_probe", "300_feature"],
+              "debug=True は設定を無視して全部見る（静的検査はこちら）")
+        check(ml.discover(dist_mods, debug=False)["order"] == ["100_fix", "300_feature"],
+              "debug=False も設定を無視する")
+
+        # 印の付いていない MOD は、デバッグモードとは無関係。
+        check("100_fix" in ml.discover(dist_mods)["order"],
+              "印の無い MOD は切っていても動く")
+        # 切る（disabled）のと伏せる（debug）のは別物。切ったものは**必ず見せる**。
+        put_order({"order": ["100_fix", "200_probe", "300_feature"],
+                   "disabled": ["100_fix"]})
+        both = ml.discover(dist_mods)
+        check("100_fix" in both["disabled"] and "100_fix" not in both["order"],
+              "切ったものは disabled に出る（伏せたものとは別扱い）")
+        check(any("100_fix" in line for line in both["problems"] + both["notes"]),
+              "切ったことは報告する（利用者が切ったので見せる）")
+    finally:
+        shutil.rmtree(dist, ignore_errors=True)
+
     print("=== 設定（mod.json の宣言 + 利用者の選択）===")
     from instantale_modloader import config as C
     decls = C.normalize_decls({
@@ -613,7 +707,8 @@ def main():
 
     print("=== 同梱 mod は全て名乗っている ===")
     mods_dir = os.path.join(_ROOT, "runtime", "mods")
-    found = order_of(mods_dir)
+    survey_result = survey(mods_dir)
+    found = survey_result["listed"]
     # 本数は数え上げで確かめる。定数で持つと mod を1本足すたびにここが赤くなり、
     # 「テストを直す」が習慣になってしまう（実際 28 -> 30 と追いかけていた）。
     on_disk = sorted(d for d in os.listdir(mods_dir)
@@ -647,7 +742,7 @@ def main():
           "全 mod の entry が実在する: {}".format(missing_entry or "欠落なし"))
     check(not short, "表示名が一覧に収まる長さ: {}".format(short or "全て収まる"))
 
-    # 適用順が宣言と一致していること。順序は動作の前提なので、
+    # 並びが宣言と一致していること。順序は動作の前提なので、
     # 「順序ファイルに無くて末尾に回っている」状態を見逃さない。
     #
     # 突き合わせる相手は**いま効いている順序ファイル**（`ml.order_path`）。
@@ -657,7 +752,16 @@ def main():
     with open(order_file, encoding="utf-8") as fh:
         declared = json.load(fh)["order"]
     check(found == declared,
-          "適用順が {} の宣言どおり".format(os.path.basename(order_file)))
+          "並びが {} の宣言どおり".format(os.path.basename(order_file)))
+
+    # 適用順は「宣言の並びから、切られているものを抜いたもの」。切った mod が
+    # 落ちること・**残りの順序が入れ替わらないこと**の両方をここで見る
+    # （`_sort_dependencies` が `after` / `before` で並べ替えると、宣言と実際の
+    # 適用順が食い違う。同梱 mod の宣言はその並びをそのまま固定してある）。
+    disabled = set(survey_result["disabled"])
+    check(survey_result["order"] == [n for n in declared if n not in disabled],
+          "適用順は宣言から無効なものを抜いた並び（切っている: {}）"
+          .format(sorted(disabled) or "無し"))
 
     print()
     if _FAILS:
