@@ -60,7 +60,10 @@ from instantale_modloader import config as C     # noqa: E402
 
 RUNTIME_DIR = os.path.join(ROOT, "runtime")
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
-ORDER_PATH = os.path.join(MODS_DIR, ml.ORDER_NAME)
+# 書き戻す先はローダに聞く。手元用の `load_order.local.json` が在ればそちら
+# （未公開の MOD を手元で動かしている間、配布用のファイルを書き換えないため）。
+# ここで `ORDER_NAME` を直に組むと、GUI で保存するたびに手元の MOD が
+# 配布用の順序ファイルへ書き戻される。
 OUT_DIR = os.path.join(ROOT, "out")
 STATUS_PATH = os.path.join(OUT_DIR, ml.STATUS_NAME)
 
@@ -460,7 +463,7 @@ def write_order(names: list[str], disabled: set[str]) -> None:
     追いやすいのと、無効にした順で溜まっていくのを避けるため。
     """
     off = [n for n in names if n in disabled]
-    with open(ORDER_PATH, "w", encoding="utf-8") as fh:
+    with open(ml.order_path(MODS_DIR), "w", encoding="utf-8") as fh:
         json.dump({"order": names, "disabled": off}, fh,
                   ensure_ascii=False, indent=2)
         fh.write("\n")

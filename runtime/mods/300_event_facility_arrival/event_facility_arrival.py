@@ -196,8 +196,26 @@ def apply(ctx):
             return CHANCE_OVERRIDE if facility_type in chance_table else 0.0
         return chance_table.get(facility_type, 0.0)
 
+    def is_at(character, facility):
+        """NPC の現在地が対象施設なら True を返す。
+
+        現在地を読めない相手は施設の名簿を信じて True に倒す。名簿にしか
+        居場所が無い NPC を弾くと、話者が一人も選ばれずイベント自体が
+        出なくなる。
+        """
+        here = getattr(character, "location", None)
+        if here is None:
+            return True
+        if here is facility:
+            return True
+        here_id = getattr(here, "id", None)
+        facility_id = getattr(facility, "id", None)
+        if here_id is None or facility_id is None:
+            return True
+        return here_id == facility_id
+
     def pick_speaker(app, facility):
-        """話しかけてくる NPC を (id, インスタンス) で返す。主がいれば主。"""
+        """施設に現在居る話者を (id, インスタンス) で返す。主がいれば主。"""
         characters = getattr(getattr(app, "world", None), "characters", None)
         if not isinstance(characters, dict):
             return None, None
@@ -205,12 +223,15 @@ def apply(ctx):
         if owner is not None:
             npc_id = str(owner)
             npc = characters.get(npc_id)
-            if npc is not None:
+            if npc is not None and is_at(npc, facility):
                 return npc_id, npc
         # 施設に居合わせた NPC（重複することがあるので一意化してから選ぶ）。
         present = getattr(facility, "characters", None)
         if isinstance(present, (list, tuple)) and present:
-            ids = sorted({str(cid) for cid in present if str(cid) in characters})
+            ids = sorted({
+                str(cid) for cid in present
+                if str(cid) in characters and is_at(characters[str(cid)], facility)
+            })
             if ids:
                 npc_id = rng.choice(ids)
                 return npc_id, characters[npc_id]
@@ -403,9 +424,15 @@ def apply(ctx):
         return ""
 
     def generate_line(app, facility, npc):
-        module = sys.modules.get(
-            "scripts.llm.request_llm_inference_llama_cpp_completion")
-        send = getattr(module, "send_request_with_no_structure", None) if module else None
+        # スロットによって llama_cpp / any_server のどちらかだけが載る。
+        send = None
+        for name in ("scripts.llm.request_llm_inference_llama_cpp_completion",
+                     "scripts.llm.request_llm_inference_any_server"):
+            module = sys.modules.get(name)
+            send = (getattr(module, "send_request_with_no_structure", None)
+                    if module else None)
+            if send is not None:
+                break
         if send is None:
             write("skip: send_request_with_no_structure unavailable")
             return None

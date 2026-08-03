@@ -28,7 +28,7 @@
     },
     "HEIGHT_SCALE": {
       "type": "float",
-      "default": 2.5,
+      "default": 4.0,
       "min": 1.0,
       "max": 4.0,
       "label": {

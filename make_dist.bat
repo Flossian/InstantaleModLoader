@@ -164,14 +164,30 @@ rem ===========================================================================
 rem  mods
 rem ===========================================================================
 echo   [mods] copying ...
-robocopy "runtime\mods" "%MODS%" /E /XD "__pycache__" "_template" /XF "*.pyc" "llm_replacements.txt" "load_order.json" /NFL /NDL /NJH /NJS /NP >nul
+robocopy "runtime\mods" "%MODS%" /E /XD "__pycache__" "_template" /XF "*.pyc" "llm_replacements.txt" "load_order.json" "load_order.local.json" /NFL /NDL /NJH /NJS /NP >nul
 if errorlevel 8 (
   echo   ERROR: robocopy failed on runtime\mods ^(code %ERRORLEVEL%^).
   goto :fail
 )
 
+rem  Only ship what load_order.json names. A mod that is still being written
+rem  is listed in load_order.local.json instead (git-ignored, see .gitignore),
+rem  so it is on disk and the robocopy above already copied it -- this is the
+rem  one place that keeps it out of a release. Dropping it here rather than
+rem  failing means a release still builds while an unfinished mod sits in the
+rem  working tree.
+for /d %%d in ("%MODS%\*") do (
+  if exist "%%d\mod.json" (
+    findstr /c:"\"%%~nxd\"" "runtime\mods\load_order.json" >nul || (
+      echo   [mods] skipping %%~nxd ^(not listed in load_order.json^)
+      rd /s /q "%%d"
+    )
+  )
+)
+
 rem  A pack with no mod.json in it would install as nothing. Catch that here
-rem  rather than after it is uploaded.
+rem  rather than after it is uploaded. Counted after the skip above, so a
+rem  load_order.json that names nothing installed is caught too.
 set "MODCOUNT=0"
 for /d %%d in ("%MODS%\*") do if exist "%%d\mod.json" set /a MODCOUNT+=1
 if "%MODCOUNT%"=="0" (

@@ -99,6 +99,17 @@ PAID_TEXT = "役場に{price}ゴールドを納めた。"
 CLEARED_TEXT = "{area}での手配は取り消された。"
 BROKE_TEXT = "「その額を持たない者に、書き換える帳面はありません」"
 BROKE_DETAIL = "（罰金 {price}ゴールド ／ 手持ち {gold}ゴールド）"
+
+# セーブから復元された残骸を見分けるための、こちらのラベル一覧
+# （`ui.Screen.prune_stale`）。`PhaseSpec.to_dict()` は text と spec しか書か
+# ないので**印は落ちる**。落ちたものは `insert_button()` の印による重複判定を
+# すり抜けるので、役場でセーブ → タイトル → ロードのあと同じボタンが2つ並び、
+# 復元された方は押しても無反応になる（`301_` で実際に起きた壊れ方）。
+#
+# 金額つきのラベルは `{price}` の手前までを見る（照合は**前方一致**）。
+# `PAY_LABEL` / `CANCEL_LABEL` は入れない ― 確認画面は一瞬しか出ないうえ、
+# 「やめておく」は `302_` も出す文言で、こちらのものだと言い切れない。
+OUR_LABELS = (BUTTON_LABEL.split("(")[0], BUTTON_LABEL_FREE)
 GONE_TEXT = "（手配はもう残っていない）"
 FAILED_TEXT = "（帳面は書き換えられなかった）"
 
@@ -207,6 +218,11 @@ def apply(ctx):
             return False
         if not is_facility_screen(buttons):
             return False
+        # **印を失った自前ボタンの残骸を先に落とす**（`ui.Screen.prune_stale`）。
+        # 施設の選択肢だと分かってから呼ぶので、他の画面には手を出さない。
+        # 落とした分は下で新しい印つきに差し直されるため、残骸は「消える」の
+        # ではなく「生き返る」。
+        screen.prune_stale(buttons, OUR_LABELS)
         if any(screen.mark_of(entry) for entry in buttons):
             return False        # 既に在る（塗り直しで増やさない）
         if not at_office(app):
