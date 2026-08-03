@@ -432,6 +432,11 @@ def read_mods() -> dict:
 
     **無効なものも一覧には出す**（消えたように見せない）。適用順の番号は
     有効なものだけに振る。
+
+    開発者向けの MOD（`discover()` の `debug`）も**落とさずに返す**。デバッグモードが
+    切のときに描画から外すのは `_matches()` の仕事で、`self.mods` からは消さない ―
+    `save()` が `self.mods` の並びをそのまま `order` に書き戻すので、ここで落とすと
+    保存した瞬間に `load_order.json` から記述ごと消える。
     """
     found = ml.discover(MODS_DIR)
     disabled = set(found["disabled"])
@@ -452,8 +457,10 @@ def read_mods() -> dict:
             "settings": manifest.get("settings") or {},
             "after": manifest.get("after") or [],
             "before": manifest.get("before") or [],
+            "debug": bool(manifest.get("debug")),
         })
-    return {"mods": mods, "disabled": disabled, "problems": found["problems"]}
+    return {"mods": mods, "disabled": disabled, "problems": found["problems"],
+            "debug_mode": bool(found.get("debug_mode"))}
 
 
 def write_order(names: list[str], disabled: set[str]) -> None:
@@ -873,9 +880,15 @@ class App(ttk.Frame):
         self.busy = False
         self._status_text = ""            # 状態表示に今出ている文言
         self.shown_count = 0              # 絞り込みの結果、一覧に出ている数
+        # デバッグモード。切のあいだ、開発者向けの MOD は一覧に出ないし
+        # 読み込まれもしない。実体は settings/loader.json で、ローダも同じ値を読む。
+        self.debug_mode = False
         # 絞り込みの条件。widget より先に作る（`_build` の中で参照する）。
         self.query = tk.StringVar()
         self.filter_mode = tk.StringVar(value=self.FILTERS[0])
+        # メニューのチェックの見た目。実体は `self.debug_mode` の方で、
+        # こちらは表示専用（`reload` が毎回 `set` で揃える）。
+        self.debug_var = tk.BooleanVar(value=False)
         # 注入は別スレッドで動くので、進捗はキュー越しに受け取って
         # メインスレッドの after で描く（tkinter は他スレッドから触れない）。
         self.events: queue.Queue[tuple[str, str]] = queue.Queue()
@@ -1025,8 +1038,31 @@ class App(ttk.Frame):
         body.pack(side="top", fill="both", expand=True, pady=(8, 0))
 
     # -- 絞り込み ------------------------------------------------------------
+    def _hidden(self, mod: dict) -> bool:
+        """デバッグモードが切のあいだ伏せる mod か。
+
+        絞り込み（`_matches`）とは別物として扱う。絞り込みは利用者が今かけている
+        条件で、解除すれば戻る。こちらは**存在しないものとして扱う**もので、
+        件数の分母にも入れない。
+        """
+        return mod["debug"] and not self.debug_mode
+
+    def _known_mods(self) -> list[dict]:
+        """利用者から見て「入っている」mod。件数の分母はこちら。"""
+        return [m for m in self.mods if not self._hidden(m)]
+
+    def _off_known(self) -> set[str]:
+        """切られている mod のうち、一覧に出ているものだけ。
+
+        伏せている mod の有効/無効は**利用者に見えないので触らない**。まとめて
+        有効にする操作がここを通ることで、見えないものまで巻き込まずに済む。
+        """
+        return self.disabled & {m["dir"] for m in self._known_mods()}
+
     def _matches(self, mod: dict) -> bool:
         """この mod を一覧に出すか。"""
+        if self._hidden(mod):
+            return False
         text = self.query.get().strip().lower()
         if text:
             # 説明も対象にする。「BGM」で探して、名前に入っていない mod まで
@@ -1059,7 +1095,7 @@ class App(ttk.Frame):
         self._refresh(keep=keep[0] if keep else None)
         if self._filtering():
             self._set_status("{} 個中 {} 個を表示しています（絞り込み中）".format(
-                len(self.mods), self.shown_count))
+                len(self._known_mods()), self.shown_count))
         else:
             self._set_status("絞り込みを解除しました")
 
@@ -1143,6 +1179,12 @@ class App(ttk.Frame):
         # どこにも無かった。
         m_run.add_command(label="out/ フォルダを開く（ログ）",
                           command=self.open_out_dir)
+        m_run.add_separator()
+        # 絞り込み（`FILTERS`）ではなくメニューに置く。あちらは「表示だけ」の
+        # 条件で揃えてあり、注入する中身まで変わる項目を混ぜると意味が濁る。
+        m_run.add_checkbutton(label="デバッグモード（開発者向けの MOD を使う）",
+                              variable=self.debug_var,
+                              command=self._toggle_debug_mode)
         bar.add_cascade(label="実行", menu=m_run)
 
         master.configure(menu=bar)
@@ -1185,7 +1227,7 @@ class App(ttk.Frame):
             "設定…",
             state="normal" if (mod and mod["settings"]) else "disabled")
         self.mod_menu.entryconfigure(
-            "全て有効にする", state="normal" if self.disabled else "disabled")
+            "全て有効にする", state="normal" if self._off_known() else "disabled")
 
     def _on_context(self, event: tk.Event) -> None:
         row = self.tree.identify_row(event.y)
@@ -1218,15 +1260,18 @@ class App(ttk.Frame):
         self.mods = found["mods"]
         self.disabled = found["disabled"]
         self.problems = found["problems"]
+        # 一覧を作り直すたびに読み直す。GUI を開いたまま `settings/loader.json` を
+        # 手で書き換えた場合にも、F5 で追いつけるようにしておく。
+        self.debug_mode = found["debug_mode"]
+        self.debug_var.set(self.debug_mode)
         self.settings = C.load_store(RUNTIME_DIR)
         self.status = read_status()
         self.dirty = False
         self._refresh()
         self._update_actions()
 
-        off = len(self.disabled & {m["dir"] for m in self.mods})
-        msg = "{} 個の MOD（有効 {} / 無効 {}）".format(
-            len(self.mods), len(self.mods) - off, off)
+        known, off = len(self._known_mods()), len(self._off_known())
+        msg = "{} 個の MOD（有効 {} / 無効 {}）".format(known, known - off, off)
         results = self.status.get("mods") or {}
         if results:
             bad = sorted(k for k, v in results.items() if v != "ok")
@@ -1271,8 +1316,9 @@ class App(ttk.Frame):
             name = mod["dir"]
             on = name not in self.disabled
             # 適用順の番号は**有効なものだけ**に振る。無効な行に番号があると、
-            # 「何番目に読まれるか」が実際とずれて読めてしまう。
-            if on:
+            # 「何番目に読まれるか」が実際とずれて読めてしまう。伏せている mod も
+            # 読み込まれないので、同じ理由で番号を食わせない。
+            if on and not self._hidden(mod):
                 n += 1
             # 番号を数えてから絞る。絞り込み中に振り直すと、見えている行の番号が
             # 実際の適用順とずれる ― 番号が飛ぶ方が、嘘の番号より読める。
@@ -1298,7 +1344,7 @@ class App(ttk.Frame):
         self.shown_count = shown
         if self._filtering():
             self.count_label.configure(
-                text="{} / {} 件".format(shown, len(self.mods)))
+                text="{} / {} 件".format(shown, len(self._known_mods())))
         else:
             self.count_label.configure(text="")
         if keep and self.tree.exists(keep):
@@ -1463,23 +1509,62 @@ class App(ttk.Frame):
         self._mark_dirty(name, what)
 
     def _enable_all(self) -> None:
-        if not self.disabled:
+        off = self._off_known()
+        if not off:
             return
         keep = self.tree.selection()
-        self.disabled.clear()
+        self.disabled -= off
         self._mark_dirty(keep[0] if keep else "", "全て有効にしました")
+
+    def _toggle_debug_mode(self) -> None:
+        """デバッグモードの入切。`settings/loader.json` に書いて一覧を作り直す。
+
+        書き先が `load_order.json` ではないのは、これが**構成ではなく利用者の
+        切り替え**だから。伏せている MOD は順序ファイルに載ったまま動かないだけで、
+        入れ直せば宣言された位置に戻る。
+
+        切り替えても、**動いているゲームには届かない**。効くのは次の注入からで、
+        `discover()` を通るのがそこだけなため。
+        """
+        want = bool(self.debug_var.get())
+        # 一覧を作り直すと未保存の並びが消える。`launch()` と同じ聞き方で先に促す。
+        if self.dirty and messagebox.askyesno(
+                "未保存の変更",
+                "順序と有効/無効の変更が未保存です。保存してから切り替えますか？\n"
+                "保存しない場合、変更は失われます。"):
+            self.save()
+        try:
+            flags = C.load_flags(RUNTIME_DIR)
+            flags["debug"] = want
+            C.save_flags(RUNTIME_DIR, flags)
+        except Exception as exc:
+            # 書けなかったのにチェックだけ入った状態にしない。
+            self.debug_var.set(self.debug_mode)
+            messagebox.showerror("設定を保存できませんでした",
+                                 f"{type(exc).__name__}: {exc}")
+            return
+
+        self.reload()           # 状態表示は件数で上書きされるので、案内はこの後
+        if self.debug_mode:
+            self._set_status("デバッグモードを入れました"
+                             "（開発者向けの MOD が一覧に出ます。次の注入から効きます）")
+        else:
+            self._set_status("デバッグモードを切りました"
+                             "（開発者向けの MOD は読み込まれません）")
 
     def save(self) -> None:
         try:
+            # 伏せている mod も**そのままの位置で**書く。一覧に出ていないだけで
+            # 入っていることに変わりはないので、保存のたびに記述が消えるのは困る。
             write_order([m["dir"] for m in self.mods], self.disabled)
         except Exception as exc:
             messagebox.showerror("保存に失敗しました", f"{type(exc).__name__}: {exc}")
             return
         self.dirty = False
         self._update_actions()
-        off = len(self.disabled & {m["dir"] for m in self.mods})
+        known, off = len(self._known_mods()), len(self._off_known())
         self._set_status("load_order.json に保存しました"
-                         f"（有効 {len(self.mods) - off} / 無効 {off}）")
+                         f"（有効 {known - off} / 無効 {off}）")
 
     # -- 設定 --------------------------------------------------------------
     def _edit_settings(self) -> None:

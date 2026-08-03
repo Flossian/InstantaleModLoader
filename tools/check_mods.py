@@ -290,7 +290,9 @@ def check_order(found):
 
 def main():
     strict = "--strict" in sys.argv
-    found = ml.discover(MODS_DIR)
+    # デバッグモードの設定に関わらず、入っている mod を全部見る。切っている間だけ
+    # 計測 mod の `after` が誰にも確かめられない、という穴を作らないため。
+    found = ml.discover(MODS_DIR, debug=True)
     mods = found["installed"]
 
     problems, notes = [], []

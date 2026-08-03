@@ -10,5 +10,6 @@
     "ja": "FreeInputStart の欠落属性を読んでいる箇所を、__getattr__ トリップワイヤで特定する"
   },
   "version": "1",
-  "author": "R01/Flossian"
+  "author": "R01/Flossian",
+  "debug": true
 }

@@ -62,6 +62,15 @@ from . import log, log_exc
 STORE_NAME = "mod_settings.json"
 SETTINGS_DIR_NAME = "settings"
 
+#: ローダ自身の切り替え。**mod ごとの設定とは別ファイル**にしてある。
+#: `mod_settings.json` の中身は「mod フォルダ名 -> 値」で、ここに mod ではない
+#: キーを混ぜると `load_store()` の形が崩れる。
+#:
+#: GUI の `gui.json` にも置けない。あれは GUI しか読まない覚え書き（窓の位置など）
+#: だが、こちらは**ゲームの中で `discover()` が読む**。両者が同じファイルを指せる
+#: 場所は `settings/` だけで、GUI もローダもここの `settings_dir()` を通っている。
+FLAGS_NAME = "loader.json"
+
 TYPES = ("bool", "int", "float", "str", "choice")
 
 
@@ -71,6 +80,10 @@ def settings_dir(runtime_dir: str) -> str:
 
 def store_path(runtime_dir: str) -> str:
     return os.path.join(settings_dir(runtime_dir), STORE_NAME)
+
+
+def flags_path(runtime_dir: str) -> str:
+    return os.path.join(settings_dir(runtime_dir), FLAGS_NAME)
 
 
 # --------------------------------------------------------------------------
@@ -225,6 +238,47 @@ def load_store(runtime_dir: str) -> dict:
         log("{}: オブジェクトではない（無視した）".format(STORE_NAME), level="WARN")
         return {}
     return {k: v for k, v in data.items() if isinstance(k, str) and isinstance(v, dict)}
+
+
+def load_flags(runtime_dir: str) -> dict:
+    """`loader.json` を読む。無ければ `{}`（＝全て既定＝切）。
+
+    このファイルは**配布物に入っていない**。利用者が何か切り替えて初めてできるので、
+    「無い＝デバッグモードは切」が自然に成り立つ。
+    """
+    path = flags_path(runtime_dir)
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except FileNotFoundError:
+        return {}
+    except Exception:
+        log_exc("cannot read {}".format(path))
+        return {}
+    if not isinstance(data, dict):
+        log("{}: オブジェクトではない（無視した）".format(FLAGS_NAME), level="WARN")
+        return {}
+    return data
+
+
+def debug_mode(runtime_dir: str) -> bool:
+    """デバッグモードが入っているか。
+
+    入れると `"debug": true` の mod（計測系）が読み込まれ、GUI の一覧にも出る。
+    切っている間は**一覧にも出ないし読み込まれもしない**（`discover()`）。
+
+    切り替えが効くのは `discover()` を通る時＝次の注入から。動いているゲームには
+    届かない（既に当たっているパッチをファイル1つで剥がす経路は無い）。
+    """
+    return bool(load_flags(runtime_dir).get("debug"))
+
+
+def save_flags(runtime_dir: str, data: dict) -> None:
+    """`loader.json` を書く。GUI の切り替えから呼ばれる。"""
+    os.makedirs(settings_dir(runtime_dir), exist_ok=True)
+    with open(flags_path(runtime_dir), "w", encoding="utf-8") as fh:
+        json.dump(dict(data), fh, ensure_ascii=False, indent=2, sort_keys=True)
+        fh.write("\n")
 
 
 def save_store(runtime_dir: str, data: dict) -> None:

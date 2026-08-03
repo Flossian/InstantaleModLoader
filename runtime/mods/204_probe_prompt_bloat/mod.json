@@ -11,6 +11,7 @@
   },
   "version": "1",
   "author": "R01/Flossian",
+  "debug": true,
   "after": [
     "103_fix_eventlog_trim"
   ]

@@ -44,8 +44,14 @@ def check(cond, msg):
 
 
 def order_of(mods_dir):
-    """適用順だけを取り出す。discover() はローダ・GUI・静的検査の共通の入口。"""
-    return ml.discover(mods_dir)["order"]
+    """適用順だけを取り出す。discover() はローダ・GUI・静的検査の共通の入口。
+
+    `debug=True` で呼ぶのは `check_mods.py` と同じ理由 ― 検査は**入っている MOD を
+    全部見る**のが仕事で、デバッグモードの入切で範囲が変わってはいけない。
+    切のまま呼ぶと、計測 MOD（`"debug": true`）が `order` に居ないぶん
+    「同梱 mod は全て名乗っている」が素の配布物でも赤くなる。
+    """
+    return ml.discover(mods_dir, debug=True)["order"]
 
 
 def main():

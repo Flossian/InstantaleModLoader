@@ -11,6 +11,7 @@
   },
   "version": "1",
   "author": "R01/Flossian",
+  "debug": true,
   "after": [
     "106_fix_battle_bgm_restore"
   ]

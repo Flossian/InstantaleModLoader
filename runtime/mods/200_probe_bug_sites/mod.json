@@ -10,5 +10,6 @@
     "ja": "未解決の4つのクラッシュ地点を、失敗時だけでなく毎回計測する（読み取り専用）"
   },
   "version": "1",
-  "author": "R01/Flossian"
+  "author": "R01/Flossian",
+  "debug": true
 }

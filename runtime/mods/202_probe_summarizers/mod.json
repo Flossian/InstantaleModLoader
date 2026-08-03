@@ -10,5 +10,6 @@
     "ja": "サマライザ／ファシリテータ一族の引数を計測し、空 Literal[] の発生源を追う"
   },
   "version": "1",
-  "author": "R01/Flossian"
+  "author": "R01/Flossian",
+  "debug": true
 }
