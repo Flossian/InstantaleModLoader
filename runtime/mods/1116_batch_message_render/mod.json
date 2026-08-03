@@ -1,0 +1,30 @@
+{
+  "entry": "batch_message_render.py",
+  "api": 1,
+  "name": {
+    "en": "Batch message rendering",
+    "ja": "メッセージを一括表示する"
+  },
+  "description": {
+    "en": "Keeps recently added messages white, grays older text, then reveals each new message from the beginning",
+    "ja": "指定秒数以内の本文を白く保ち、古い本文を灰色にして、新着部分を先頭行から順に表示する"
+  },
+  "version": "1",
+  "author": "yoshinari/tomotomo-y",
+  "settings": {
+    "FRESH_SECONDS": {
+      "type": "float",
+      "default": 10.0,
+      "min": 0.0,
+      "max": 300.0,
+      "label": {
+        "ja": "白色を維持する秒数",
+        "en": "Seconds to keep recent messages white"
+      },
+      "note": {
+        "ja": "新しいメッセージが追加された時点で、この秒数以内の本文を白色にする。表示中には色を変えない。0なら追加直後から灰色にする",
+        "en": "When a new message is added, messages younger than this many seconds are white. Colors do not change while idle. 0 grays them immediately"
+      }
+    }
+  }
+}
