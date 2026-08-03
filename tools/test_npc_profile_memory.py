@@ -342,6 +342,12 @@ def bind_function(ctx, target, module, name):
 # ==========================================================================
 # 検査の土台
 # ==========================================================================
+def reset_mod_store():
+    """`sys` に置かれた mod の共有一式を落とす（筋書きごとの独立を保つ）。"""
+    if hasattr(sys, MOD.STATE_STORE_ATTR):
+        delattr(sys, MOD.STATE_STORE_ATTR)
+
+
 class Run(object):
     """1つの筋書き。偽のゲームを組んで mod を適用したところまで。"""
 
@@ -349,6 +355,12 @@ class Run(object):
                  seed_world=None, with_llm=True, legacy=False):
         self.tmp = tempfile.mkdtemp(prefix="npc_profile_test_")
         unbind_all()
+        # mod は控えとワーカーを `sys` に置いて**世代をまたいで共有する**
+        # （再注入で `apply()` が何度も走っても2本目のワーカーを立てないため）。
+        # 筋書きごとに新しいプロセスにはできないので、ここで落として1件ずつ
+        # 独立させる。落とさないと前の筋書きのワーカーが今回の仕事を拾い、
+        # 古い `out/` へ書いてしまう（実際に 20 件が時間切れで落ちた）。
+        reset_mod_store()
         Clock.reset()
         Facilitator.reset()
         Llm.reset({MOD.MANAGER_EXTRACT: answers} if answers else None, raises)
@@ -723,6 +735,28 @@ def test_life_log_is_not_touched():
     return run
 
 
+def test_reapply_shares_one_worker_and_one_lock():
+    """当て直しても控え・待ち行列・錠は1組のまま
+
+    `apply()` は再注入と遅延当て直しで最大8回走る（TECH.md §3.4）。
+    以前は `state` / `jobs` / `data_lock` を `apply()` の中で作っていたため、
+    走るたびに `state["worker"]` が `None` に戻り、前の世代のワーカーが
+    生きている間に2本目が起動した。しかも `data_lock` が別インスタンスに
+    なるので、2本が同じ `out/npc_profiles/<世界>.json` を排他なしで
+    read-modify-write できた（人物像の更新が消える経路）。
+    """
+    run = Run(seed="北方の村の生まれ。")
+    first = getattr(sys, MOD.STATE_STORE_ATTR)
+
+    MOD.apply(run.ctx)          # 遅延当て直し・手での再注入に相当
+
+    second = getattr(sys, MOD.STATE_STORE_ATTR)
+    check(second is first, "当て直しで控え一式が作り直された")
+    for key in ("state", "cache", "jobs", "data_lock", "worker_lock", "log_lock"):
+        check(second[key] is first[key], "{} が別物になった".format(key))
+    return run
+
+
 def test_all_five_conversation_hooks_inject_profile():
     """5つの会話生成経路すべてで追加プロフィールを渡す"""
     run = Run(seed="古い剣を好む無口な傭兵。")
@@ -793,6 +827,7 @@ def main():
                  test_id_comes_from_the_world_index,
                  test_injection_leaves_a_trace,
                  test_life_log_is_not_touched,
+                 test_reapply_shares_one_worker_and_one_lock,
                  test_all_five_conversation_hooks_inject_profile,
                  test_turn_survives_without_llm,
                  test_turn_survives_a_failing_extraction):

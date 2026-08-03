@@ -13,6 +13,7 @@
   "author": "yoshinari/tomotomo-y",
   "after": [
     "105_fix_schema_compact",
+    "111_llm_prompt_replace",
     "305_mini_quest"
   ]
 }

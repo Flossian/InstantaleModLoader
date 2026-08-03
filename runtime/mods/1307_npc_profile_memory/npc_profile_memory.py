@@ -78,6 +78,15 @@ PROFILE_HEADING = "【会話から形成された追加プロフィール】"
 # 抽出に載せる書き起こしの長さ（`306_` と同じ考え。長すぎると要点が薄まる）。
 CONVERSATION_CHARS = 2000
 
+# ワーカーと控えの置き場所。**`apply()` の中で作ってはいけない**（TECH.md §3.4）。
+# `apply()` は再注入と遅延当て直しで最大8回走り、そのたびに `state["worker"]` が
+# `None` に戻る。前の世代のワーカーがまだ生きている間に2本目が起動し、しかも
+# `data_lock` が別インスタンスになるので、2本が同じ
+# `out/npc_profiles/<世界>.json` を排他なしで read-modify-write できてしまう。
+# 注入し直すとこのモジュール自体が読み込み直されるため、モジュール変数では
+# 足りない。`sys` に置けば世代をまたいで同じ1組を共有できる（`1116_` と同じ手）。
+STATE_STORE_ATTR = "__instantale_npc_profile_memory_store__"
+
 
 def _text(value, limit=200):
     if value is None:
@@ -102,17 +111,29 @@ def safe_world_filename(world_key):
 def apply(ctx):
     log_path = ctx.out_path(LOG_BASENAME)
     state_dir = os.path.join(ctx.out_dir, STATE_DIRNAME)
-    state = {
-        "warned_world": False,  # 世界名で控えが引けなかったことを1度だけ残す
-        "last_inject": None,    # 直前に書いた注入の結末（同じ理由を繰り返さない）
-        "last_extract_skip": None,  # 抽出を始められない理由の連続重複を抑える
-        "worker": None,         # 抽出専用ワーカー（仕事が無ければ終了する）
-    }
-    cache = {"buckets": {}}     # 世界名 -> 控え（書くのはこの mod だけ）
-    jobs = queue.Queue()
-    data_lock = threading.RLock()
-    worker_lock = threading.Lock()
-    log_lock = threading.Lock()
+    # 世代をまたいで1組だけ持つ（STATE_STORE_ATTR の説明を参照）。
+    store = getattr(sys, STATE_STORE_ATTR, None)
+    if not isinstance(store, dict):
+        store = {
+            "state": {
+                "warned_world": False,  # 世界名で控えが引けなかったことを1度だけ残す
+                "last_inject": None,    # 直前に書いた注入の結末（同じ理由を繰り返さない）
+                "last_extract_skip": None,  # 抽出を始められない理由の連続重複を抑える
+                "worker": None,         # 抽出専用ワーカー（仕事が無ければ終了する）
+            },
+            "cache": {"buckets": {}},   # 世界名 -> 控え（書くのはこの mod だけ）
+            "jobs": queue.Queue(),
+            "data_lock": threading.RLock(),
+            "worker_lock": threading.Lock(),
+            "log_lock": threading.Lock(),
+        }
+        setattr(sys, STATE_STORE_ATTR, store)
+    state = store["state"]
+    cache = store["cache"]
+    jobs = store["jobs"]
+    data_lock = store["data_lock"]
+    worker_lock = store["worker_lock"]
+    log_lock = store["log_lock"]
 
     def write(text):
         try:
