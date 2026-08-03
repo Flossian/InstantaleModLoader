@@ -38,7 +38,8 @@
     "306_party_train_exp",
     "307_area_move_dungeon",
     "308_battle_damage_display",
-    "309_office_pardon"
+    "309_office_pardon",
+    "1307_npc_profile_memory"
   ],
   "disabled": []
 }
