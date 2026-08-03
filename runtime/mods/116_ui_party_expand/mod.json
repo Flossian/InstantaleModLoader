@@ -1,0 +1,159 @@
+{
+  "entry": "ui_party_expand.py",
+  "api": 1,
+  "name": {
+    "en": "Show 4th party member",
+    "ja": "4人目以降を表示"
+  },
+  "description": {
+    "en": "The party panel only has three slots, so the 4th member onwards is never drawn. Adds a button that grows the panel and copies extra slots for them",
+    "ja": "パーティ欄の枠は3つしか作られず、4人目以降が出ない。ボタンを足し、押すと帯が上へ伸びて足りないぶんの枠が現れる。もう一度押すと元に戻る"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "settings": {
+    "MAX_ROWS": {
+      "type": "int",
+      "default": 8,
+      "min": 3,
+      "max": 20,
+      "label": {
+        "ja": "広げたときに出す人数の上限",
+        "en": "Most rows to show when expanded"
+      },
+      "note": {
+        "ja": "1人ぶんの高さは変わらない。窓に入る行数のほうが少なければそちらで頭打ちになる",
+        "en": "Each row keeps its original height; capped further by what fits in the window"
+      }
+    },
+    "HIDE_COVERED": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "広げている間、重なるボタンを隠す",
+        "en": "Hide buttons the panel covers"
+      },
+      "note": {
+        "ja": "伸びた帯の下に入るボタン（本文の表示域を広げるボタンなど）を、広げている間だけ見えなくして押せなくする。戻すと元に戻る",
+        "en": "Buttons that end up behind the grown panel are hidden and disabled while expanded, and restored when it collapses"
+      }
+    },
+    "PORTRAIT_FIT": {
+      "type": "choice",
+      "default": "枠に収める",
+      "values": ["枠に収める", "枠いっぱい"],
+      "label": {
+        "ja": "足した枠の立ち絵の入れ方",
+        "en": "How portraits fit the added slots"
+      },
+      "note": {
+        "ja": "「枠に収める」は縦横比のまま枠の中へ収める。ゲームの元の枠は絵を切り取って埋めているので、そちらに近づけたいときは「枠いっぱい」",
+        "en": "\"枠に収める\" keeps the aspect ratio inside the slot; \"枠いっぱい\" fills the slot like the game's own cropped look"
+      }
+    },
+    "BUTTON_CORNER": {
+      "type": "choice",
+      "default": "帯の上",
+      "values": ["帯の上", "帯の右上", "右上", "左上", "右下", "左下"],
+      "label": {
+        "ja": "ボタンの置き場所",
+        "en": "Where to put the button"
+      },
+      "note": {
+        "ja": "既定はパーティ欄のすぐ上・右寄せ（本文の表示域を広げるボタンは同じ場所の左寄せなので重ならない）。「帯の右上」は欄の内側",
+        "en": "Default sits just above the party panel, right-aligned. \"帯の右上\" puts it inside the panel's top-right corner"
+      }
+    },
+    "ICON": {
+      "type": "choice",
+      "default": "二重山形",
+      "values": ["二重山形", "山形", "矢印", "人", "枠", "文字"],
+      "label": {
+        "ja": "ボタンの絵柄",
+        "en": "Button icon"
+      },
+      "note": {
+        "ja": "背景なしの白い線で描く。押すと向きが入れ替わる（広げる＝上向き／戻す＝下向き）。「文字」を選ぶと下の文字設定を使ったボタンになる",
+        "en": "Drawn as white lines on a transparent background; flips direction when pressed. \"文字\" falls back to a text button"
+      }
+    },
+    "ICON_WIDTH": {
+      "type": "float",
+      "default": 2.0,
+      "min": 1.0,
+      "max": 8.0,
+      "label": {
+        "ja": "アイコンの線の太さ（px）",
+        "en": "Icon stroke width (px)"
+      }
+    },
+    "ICON_ALPHA": {
+      "type": "float",
+      "default": 0.85,
+      "min": 0.2,
+      "max": 1.0,
+      "label": {
+        "ja": "アイコンの濃さ",
+        "en": "Icon opacity"
+      },
+      "note": {
+        "ja": "1.0 で真っ白。背景に溶けて見えにくいときに上げる",
+        "en": "1.0 is solid white. Raise it if the icon disappears into the background"
+      }
+    },
+    "BUTTON_SIZE": {
+      "type": "int",
+      "default": 32,
+      "min": 16,
+      "max": 200,
+      "label": {
+        "ja": "ボタンの高さ（px）",
+        "en": "Button height (px)"
+      },
+      "note": {
+        "ja": "アイコンなら正方形、文字なら幅はこの2倍。ゲーム側の画面拡縮に合わせて調整される",
+        "en": "Square for icons; twice as wide for text. Scaled with the game's own UI scaling"
+      }
+    },
+    "LABEL_EXPAND": {
+      "type": "str",
+      "default": "仲間",
+      "label": {
+        "ja": "ボタンの文字（広げる前）",
+        "en": "Button text (collapsed)"
+      },
+      "note": {
+        "ja": "絵柄に「文字」を選んだときだけ使う",
+        "en": "Only used when the icon is set to \"文字\""
+      }
+    },
+    "LABEL_RESTORE": {
+      "type": "str",
+      "default": "戻す",
+      "label": {
+        "ja": "ボタンの文字（広げた後）",
+        "en": "Button text (expanded)"
+      }
+    },
+    "ALWAYS_SHOW_BUTTON": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "収まっているときもボタンを出す",
+        "en": "Always show the button"
+      },
+      "note": {
+        "ja": "既定では、枠に収まらない仲間が居るときだけボタンが出る",
+        "en": "By default the button only appears when there are more members than slots"
+      }
+    },
+    "START_EXPANDED": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "最初から広げておく",
+        "en": "Start expanded"
+      }
+    }
+  }
+}

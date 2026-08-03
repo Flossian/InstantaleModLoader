@@ -104,6 +104,19 @@ STATE_BASENAME = "road_travel.json"
 # 確認画面に足すボタンの文字列。
 ROAD_LABEL = "危険な道を行く"
 
+# セーブから復元された残骸を見分けるための、こちらのラベル一覧
+# （`ui.Screen.prune_stale`）。`PhaseSpec.to_dict()` は text と spec しか書か
+# ないので**印は落ちる**。落ちたものは下の印による重複判定をすり抜け、同じ
+# ボタンが2つ並んで復元された方は押しても無反応になる（`301_` で実際に起きた）。
+#
+# **ここは実機で観測した症状ではなく、保険**（2026-08-03）。`301_` / `309_` が
+# 踏んだのは `refresh_choice_buttons`（ゲームが組んだ一覧を塗り直すだけ）で、
+# こちらは徒歩・馬車が並び終えた後 ― 確認画面がそのつど一覧を組み直すビルド
+# なら残骸はゲーム自身が消している。組み直さないビルドがあっても壊れないよう、
+# 同じ掃除を通しておく。掃除に使う文言は**こちらにしか無いもの**だけ
+# （汎用語を入れると他 MOD やゲームのボタンを巻き込む。`302_` の項を参照）。
+OUR_LABELS = (ROAD_LABEL,)
+
 # 押下を横取りするための印。**他の MOD と別のキーにすること。**
 MARK = "mod_road_action"
 
@@ -666,6 +679,9 @@ def apply(ctx):
             write("confirm: options {}".format(
                 [(entry.get("text"), opts) for entry, opts in options]))
             state["options"] = options
+            # **印を失った自前ボタンの残骸を先に落とす**（`ui.Screen.prune_stale`）。
+            # 移動の確認画面だと分かってから（`options` が取れてから）呼ぶ。
+            screen.prune_stale(buttons, OUR_LABELS)
             if any(screen.mark_of(entry) for entry in buttons):
                 return result       # 既に在る（開き直しても二重にしない）
             entry = screen.button(ROAD_LABEL, mark="road")

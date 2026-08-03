@@ -385,6 +385,27 @@ def _mods_dir() -> str:
 MANIFEST_NAME = "mod.json"
 ORDER_NAME = "load_order.json"
 
+#: 手元だけの順序ファイル。**在ればこちらが `load_order.json` に優先する。**
+#: `.gitignore` に入れてあるので配布物にもコミットにも入らない。
+#:
+#: 用途は「まだ公開しない MOD を手元で動かす」こと。`load_order.json` は
+#: 配布する構成そのものなので、開発中の MOD を書くと配った先で「実体の無い
+#: 記述」になり、GUI で保存するたびに書き戻されて毎回コミットに紛れ込む。
+#: 利用者のファイルが同梱ぶんに優先する形は `111_` の置換ルールと同じ
+#: （TECH.md §3.1.1）。
+ORDER_LOCAL_NAME = "load_order.local.json"
+
+
+def order_path(mods_dir: str) -> str:
+    """いま効いている順序ファイルの場所。**書き戻すのもここ。**
+
+    手元用（`load_order.local.json`）が在ればそれ、無ければ配布用
+    （`load_order.json`）。GUI の保存先をこれで決めるので、手元用を置いている
+    間は配布用のファイルが書き換わらない。
+    """
+    local = os.path.join(mods_dir, ORDER_LOCAL_NAME)
+    return local if os.path.isfile(local) else os.path.join(mods_dir, ORDER_NAME)
+
 
 def _read_json(path: str):
     """JSON を読む。読めなければ None（呼び出し側が既定へ倒す）。"""
@@ -440,7 +461,8 @@ def discover(mods_dir: str | None = None) -> dict:
          "installed": ["000_recon", ...],       在るもの全部（フォルダ名順）
          "disabled":  ["..."],                  切られているもの
          "manifests": {名前: マニフェスト},      無効なものも壊れたものも含む
-         "problems":  ["..."]}                  宣言と実体のずれ。人が読む行
+         "problems":  ["..."],                  宣言と実体のずれ。人が読む行
+         "notes":     ["..."]}                  直すべきずれではない知らせ
 
     `manifests` に無効な mod も入れているのは、GUI が「消えたように見せない」ため。
 
@@ -455,15 +477,15 @@ def discover(mods_dir: str | None = None) -> dict:
     mods_dir = mods_dir or _mods_dir()
     if not os.path.isdir(mods_dir):
         return {"mods_dir": mods_dir, "order": [], "listed": [], "installed": [],
-                "disabled": [], "manifests": {},
+                "disabled": [], "manifests": {}, "notes": [],
                 "problems": ["mods ディレクトリが無い: {}".format(mods_dir)]}
 
     installed = _installed(mods_dir)
     manifests = {name: _manifest(mods_dir, name) for name in installed}
-    order, listed, disabled, problems = _order(mods_dir, installed)
+    order, listed, disabled, problems, notes = _order(mods_dir, installed)
 
-    order, notes = _sort_dependencies(order, manifests)
-    problems += notes
+    order, dep_notes = _sort_dependencies(order, manifests)
+    problems += dep_notes
     problems += _check_conflicts(order, manifests)
 
     # 並べ替えが起きたぶんを一覧の順にも反映する。**無効な mod は動かさない**ので、
@@ -476,7 +498,7 @@ def discover(mods_dir: str | None = None) -> dict:
 
     return {"mods_dir": mods_dir, "order": order, "listed": listed,
             "installed": installed, "disabled": disabled,
-            "manifests": manifests, "problems": problems}
+            "manifests": manifests, "problems": problems, "notes": notes}
 
 
 def _order(mods_dir: str,
@@ -504,11 +526,23 @@ def _order(mods_dir: str,
     順序ファイルが読めなければフォルダ名順。**必ず何らかの決まった順で動く**ように
     しておく。ここで例外にすると、順序ファイルが壊れた瞬間に mod が全滅する。
 
+    手元用の `load_order.local.json` が在ればそちらを**丸ごと**使う
+    （`ORDER_LOCAL_NAME`）。混ぜないのは、2つのファイルの差分から順序を
+    組み立てる規則を増やしたくないため ― 効いている順序は常に1ファイルで読める。
+
     戻り値は `(有効な mod の適用順, 一覧に出す順, 切られている mod, 報告)`。
     2つ目は無効な mod も**宣言された位置に**含む（GUI の一覧用）。
     """
     problems: list[str] = []
-    data = _read_json(os.path.join(mods_dir, ORDER_NAME))
+    notes: list[str] = []
+    path = order_path(mods_dir)
+    order_file = os.path.basename(path)
+    data = _read_json(path)
+    if order_file == ORDER_LOCAL_NAME:
+        # 「配った構成と違うもので動いている」ことは必ず見えるようにする。
+        # ただし**直すべきずれではない**ので `problems` ではなく `notes`。
+        notes.append("{} を使っています（{} より優先。手元だけの構成です）"
+                     .format(ORDER_LOCAL_NAME, ORDER_NAME))
 
     order = []
     if isinstance(data, dict):
@@ -517,7 +551,7 @@ def _order(mods_dir: str,
         order = data
     if not isinstance(order, list):
         problems.append("{}: \"order\" が配列ではありません。"
-                        "フォルダ名順で読み込みます".format(ORDER_NAME))
+                        "フォルダ名順で読み込みます".format(order_file))
         order = []
 
     disabled = data.get("disabled") if isinstance(data, dict) else None
@@ -548,17 +582,17 @@ def _order(mods_dir: str,
         # 順序ファイルに無い mod。落とさずに末尾へ回したことを残す
         # （「入れたのに効かない」を黙って起こさないため）。
         problems.append("{} に記載の無い MOD（末尾に配置されます）: {}".format(
-            ORDER_NAME, ", ".join(extra)))
+            order_file, ", ".join(extra)))
 
     stale = [name for name in order if isinstance(name, str) and name not in found]
     if stale:
         problems.append("{} に実体の無い記述があります: {}".format(
-            ORDER_NAME, ", ".join(stale)))
+            order_file, ", ".join(stale)))
     dupes = sorted({n for n in order if isinstance(n, str) and order.count(n) > 1})
     if dupes:
-        problems.append("{} に重複があります: {}".format(ORDER_NAME, ", ".join(dupes)))
+        problems.append("{} に重複があります: {}".format(order_file, ", ".join(dupes)))
 
-    return ordered + extra, listed, skipped, problems
+    return ordered + extra, listed, skipped, problems, notes
 
 
 def _load_mod_file(path: str):
@@ -579,6 +613,13 @@ def _load_mod_file(path: str):
     if spec is None or spec.loader is None:
         raise ImportError(f"cannot load spec for {path}")
     module = importlib.util.module_from_spec(spec)
+    # 前の注入で読み込んだ**中の部品**を捨ててから入れ直す。入口は毎回
+    # 読み直しているのに、`from . import panel` の相手は sys.modules に残るので、
+    # 放っておくと **新しい入口 × 古い部品** で動く。分割した mod を直して
+    # 注入し直したのに、入口が呼ぶ関数だけ古いままで AttributeError になる
+    # （`116_ui_party_expand` で実際に踏んだ。2026-08-03）。
+    for cached in [key for key in sys.modules if key.startswith(name + ".")]:
+        sys.modules.pop(cached, None)
     sys.modules[name] = module
     try:
         spec.loader.exec_module(module)
@@ -959,6 +1000,10 @@ def boot(out_dir: str) -> dict:
     # 後ろに回すと埋もれる。
     for line in found["problems"]:
         log(line, level="WARN")
+    # 知らせ（手元用の順序ファイルを使っている、など）は WARN にしない。
+    # 直すべきずれではないが、**何で動いているかは必ず残す**。
+    for line in found.get("notes", []):
+        log(line)
 
     if not os.path.isdir(mods_dir):
         log("no mods dir at {}".format(mods_dir), level="WARN")

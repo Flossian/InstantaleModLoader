@@ -1,0 +1,33 @@
+{
+  "entry": "message_text_integrity.py",
+  "api": 1,
+  "name": {
+    "en": "Show more of long messages",
+    "ja": "長い本文をより多く見せる"
+  },
+  "description": {
+    "en": "The game truncates long replies before they fill the label; this keeps the latest 1,000 characters visible while leaving stored text unchanged",
+    "ja": "ゲーム本体は長い応答をラベルに載せ切る前に切ってしまう。表示ラベルだけを末尾1,000文字まで広げ、保持している本文は変えない"
+  },
+  "version": "1",
+  "author": "yoshinari/tomotomo-y",
+  "before": [
+    "112_ui_text_spacing"
+  ],
+  "settings": {
+    "DISPLAY_CHARS": {
+      "type": "int",
+      "default": 1000,
+      "min": 100,
+      "max": 10000,
+      "label": {
+        "ja": "表示する末尾の文字数",
+        "en": "Latest characters kept visible"
+      },
+      "note": {
+        "ja": "ゲーム本体が切る長い本文を、表示ラベルではこの文字数まで末尾から見せる。それより前は省略表示になる",
+        "en": "Long replies truncated by the game are shown from the end up to this many characters. Older text is replaced by a truncation notice"
+      }
+    }
+  }
+}

@@ -14,10 +14,12 @@
     "109_fix_item_detail_autosize",
     "110_fix_character_name_path",
     "111_llm_prompt_replace",
+    "1115_message_text_integrity",
     "112_ui_text_spacing",
     "113_ui_text_expand",
     "114_ui_input_focus",
     "115_ui_item_list_fit",
+    "1116_batch_message_render",
     "200_probe_bug_sites",
     "201_probe_missing_attr",
     "202_probe_summarizers",
@@ -27,8 +29,6 @@
     "206_probe_quest_flow",
     "207_probe_battle_bgm",
     "208_probe_item_detail",
-    "209_probe_free_facility",
-    "210_probe_character_state",
     "300_event_facility_arrival",
     "301_quest_from_conversation",
     "302_leave_party_in_conversation",
@@ -40,7 +40,7 @@
     "307_area_move_dungeon",
     "308_battle_damage_display",
     "309_office_pardon",
-    "310_city_case"
+    "1307_npc_profile_memory"
   ],
   "disabled": []
 }

@@ -628,6 +628,21 @@ victims = [stale("依頼を受ける（話を切り上げる）")]
 check("印を持たない Screen では何も落とさない",
       nomark.prune_stale(victims, mod.OUR_LABELS) == [], victims)
 
+# **他の MOD の印が付いていたら残骸ではない。**
+# セーブに焼かれるのは text と spec だけ ＝ 復元された残骸は印を1つも持たない。
+# 逆に印があれば、いま誰かが挿した生きているボタンなので触ってはいけない。
+# ここを見ていなかったため、`302_` が `309_`（役場の罰金）の確認画面から
+# キャンセルを消していた（2026-08-03。同じ文言・違う印のキー）。
+foreign = {"text": "依頼を受ける（話を切り上げる）", "mod_pardon_action": "cancel",
+           "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}
+other = [dict(foreign)]
+check("他の MOD の印が付いたボタンは落とさない",
+      screen.prune_stale(other, mod.OUR_LABELS) == [], other)
+check("marked_by_a_mod が他人の印を見つける",
+      _ui.Screen.marked_by_a_mod(foreign) is True, foreign)
+check("印の無い残骸は marked_by_a_mod に引っかからない",
+      _ui.Screen.marked_by_a_mod(stale("依頼を受ける")) is False)
+
 # ============================================================ 302_ との共存
 print("=== 302_ との共存 ===")
 

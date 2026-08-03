@@ -277,8 +277,15 @@ def check_order(found):
     ここはその報告を検査の書式に移し替えるだけ。適用順は動作の前提なので、
     **宣言と実体のずれは黙って通さない**。
     """
-    path = os.path.join(MODS_DIR, ORDER_NAME)
-    return [(path, ORDER_NAME, line) for line in found["problems"]]
+    path = ml.order_path(MODS_DIR)
+    name = os.path.basename(path)
+    problems = [(path, name, line) for line in found["problems"]]
+    # `notes` は「直すべきずれではない知らせ」（手元用の順序ファイルを使っている、
+    # など）。**問題として数えない** ― 数えると、未公開の MOD を手元で動かして
+    # いる間ずっと赤が出ることになり、本当のずれが埋もれる。`--strict` では
+    # 呼び出し側が問題に格上げする。
+    notes = [(path, name, line) for line in found.get("notes", [])]
+    return problems, notes
 
 
 def main():
@@ -293,7 +300,9 @@ def main():
         notes += mod_notes
         for path in _mod_files(name):
             problems += check_file(path)
-    problems += check_order(found)
+    order_problems, order_notes = check_order(found)
+    problems += order_problems
+    notes += order_notes
 
     if strict:
         problems += notes

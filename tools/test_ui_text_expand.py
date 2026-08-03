@@ -72,7 +72,7 @@ def check(name, cond, detail=""):
 
 # ---------------------------------------------------------------- 実測値
 WIN_WIDTH, WIN_HEIGHT = 2560.0, 1440.0
-FRAME_SIZE = (1400.0, 400.0)          # 本文の枠（スクロールする入れ物）
+FRAME_SIZE = (1400.0, 300.0)          # 本文の枠（スクロールする入れ物）
 FRAME_POS = (580.0, 120.0)           # 画面の下寄り（実機と同じく下端が近い）
 WRAP_WIDTH = 1340.8                   # out/text_spacing.log の text_size[0]
 GAME_FONT = "fonts/NotoSansJP.ttf"    # 本文のフォント（豆腐にしないために写す）
@@ -640,7 +640,7 @@ def run():
 
     # -- 窓より大きくは広げない ----------------------------------------------
     install(mod, ctx)
-    mod.WIDTH_SCALE, mod.HEIGHT_SCALE = 4.0, 4.0
+    mod.WIDTH_SCALE, mod.HEIGHT_SCALE = 8.0, 8.0    # 窓より大きい倍率
     install(mod, ctx)
     hud = FakeHUD()
     hud.show()

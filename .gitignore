@@ -11,6 +11,11 @@ __pycache__/
 /.venv/
 /venv/
 
+# ---- 手元だけの構成 ----
+# 未公開の MOD を手元で動かすための順序ファイル。在れば load_order.json に
+# 優先する（instantale_modloader.order_path）。配布物にもコミットにも入れない。
+/runtime/mods/load_order.local.json
+
 # ---- ローカル環境ファイル ----
 /InstantaleModLoader.code-workspace
 .vscode/
