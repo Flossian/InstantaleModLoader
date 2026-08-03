@@ -40,9 +40,19 @@ from __future__ import annotations
 
 import time
 
+from . import frames
+
 # HUD は属性名で探さず、この型で見分ける（属性名は決めつけない）。
 HUD_MODULE = "scripts.hud.new_hud"
 HUD_CLASS = "InstanTaleHUD"
+
+# MOD が自分のウィジェットに付ける控えの接頭辞。どの MOD も
+# `_instantale_<mod>_<用途>` の形で印を持たせている（`113_` の
+# `_instantale_expand_callback`、`116_` の `_instantale_party_icon`）。
+# `overlay_host` が「他の MOD が足したウィジェット」を置き場所の候補から
+# 外すのに使う。ボタン辞書の印（`MARK_PREFIX`）とは別物で、こちらは
+# **ウィジェット**の印。新しい MOD もこの接頭辞に揃えること。
+MOD_WIDGET_PREFIX = "_instantale_"
 
 # 自前ボタンに持たせる無害な既存クラス。mod 無しで押されても選択肢が戻るだけ。
 SAFE_CLS = "JustSetButtonToNormalPhase"
@@ -232,6 +242,56 @@ def find_hud(app):
         if isinstance(value, cls):
             return value
     return None
+
+
+def added_by_a_mod(widget):
+    """MOD が足したウィジェットか。印は `MOD_WIDGET_PREFIX` で始まる属性。
+
+    ゲームのウィジェットにこの接頭辞は付かない（MOD 側で `setattr` した控えだけ）。
+    Kivy のプロパティは class 側にあるので `vars()` には出ず、ここに現れるのは
+    インスタンスに直接足したものだけ ＝ MOD の印。
+    """
+    try:
+        names = list(vars(widget))
+    except Exception:
+        return False        # `vars()` を持たない相手（`__slots__` 等）は素通し
+    return any(isinstance(name, str) and name.startswith(MOD_WIDGET_PREFIX)
+               for name in names)
+
+
+def overlay_host(hud):
+    """HUD へ自前のウィジェットを1枚足すときの置き場所。
+
+    **HUD 自身の子の並びは変えない。** 素の HUD の子は `FloatLayout` 1枚だけで
+    （`113_` の実測。`out/text_expand.log` の `frame neighbours:`）、そこへ直接
+    足すと HUD の子が2つになり、「画面の最初の子」を取る側から見える相手が
+    変わる（`scripts.hud.new_hud:get_current_screen_root`）。実際にアイテムを
+    持ち物へ移す・装備する操作が効かなくなった（利用者の報告、2026-08-02）。
+    だから足すのはその `FloatLayout` の**中**。ゲーム自身もこの中へ効果や窓を
+    出し入れしている。
+
+    **どれを選ぶかは「いちばん古い子」で決める**（2026-08-03）。Kivy の
+    `children` は新しい順なので、`113_` / `116_` の初版のように先頭を採ると
+
+      * ゲームが一時的に出している窓（消えるときにこちらのボタンも道連れになる。
+        VERIFICATION.md §2.31 の「残った懸念」）
+      * 他の MOD が HUD 直下に残したウィジェット（`113_` の古い版の置き方）
+
+    のほうを掴む。初版はどちらも**自分のボタンしか**除外していなかったので、
+    HUD へウィジェットを足す MOD が2本になった時点で、相手のボタンの中へ
+    入り込みうる状態になっていた。ゲームの `FloatLayout` は画面が組まれた
+    時点で居る ＝ `children` の**最後尾**なので、そこから探せばどちらも避けられる。
+    """
+    children = frames.attr(hud, "children")
+    if not isinstance(children, (list, tuple)):
+        return hud
+    for child in reversed(list(children)):
+        if frames.attr(child, "add_widget") is frames.MISSING:
+            continue
+        if added_by_a_mod(child):
+            continue        # 他の MOD のウィジェット。この中には入らない
+        return child
+    return hud            # 子を持たない画面なら HUD 自身に（従来どおり）
 
 
 def busy_signals(app):

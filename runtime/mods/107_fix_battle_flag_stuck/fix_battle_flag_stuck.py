@@ -40,6 +40,8 @@
 import datetime
 import sys
 
+from instantale_modloader import frames
+
 LOG_BASENAME = "battle_bgm.log"   # 106_ / 207_ と同じ時系列で読めるようにする
 
 # 下ろすフラグ。実測で「ゲーム自身が下ろしている」ことを確認できたものだけ。
@@ -129,7 +131,13 @@ def apply(ctx):
         def _load(orig, self, *args, **kwargs):
             result = orig(self, *args, **kwargs)
             try:
-                clear_stale(self if hasattr(self, "in_battle") else find_app(), label)
+                # `hasattr` は使わない ― 失敗するルックアップを1回起こすので
+                # `__getattr__` トリップワイヤ（`201_`）を自己発火させる。
+                # 既定値付きの読み取りなら「本当に読まれた1回」と区別が付かない
+                # （TECH.md §6.3。この mod は初版が `hasattr` のままだった）。
+                owner = self if frames.attr(self, "in_battle") is not frames.MISSING \
+                    else find_app()
+                clear_stale(owner, label)
             except Exception:
                 ctx.log_exc("battle flag: clear failed")
             return result

@@ -1117,6 +1117,43 @@ def run():
           extras and extras[0].image().keep_ratio)
     mod.PORTRAIT_FIT = mod.FIT_INSIDE
 
+    # -- 他の MOD が HUD 直下に置いたウィジェット ------------------------------
+    # 初版は `113_` から写した「`children` の先頭を採る」形で、除外していたのは
+    # 自分のボタンだけだった。`113_` の古い版はボタンを HUD 直下へ足していたので、
+    # そこから注入し直すと**相手のボタンの中**へ入り込む。Kivy の `children` は
+    # 新しい順なので、ゲームの `FloatLayout` は最後尾から探すのが正しい。
+    install(mod, ctx)
+    hud = FakeHUD(members=4)
+    other = FakeWidget()
+    setattr(other, "_instantale_expand_callback", object())   # 113_ の印
+    hud.add_widget(other)
+    hud.show()
+    hud.update_button_texts(hud, ["会話する", "出る"])
+    button = hud.toggle_button()
+    check("another mod's widget on the HUD is not used as the host",
+          button is not None and button.parent is hud.root,
+          (type(button.parent).__name__ if button is not None else None,
+           [type(c).__name__ for c in hud.children]))
+    check("and nothing is nested inside it",
+          other.children == [], [type(c).__name__ for c in other.children])
+
+    # -- ゲームが一時的に出している窓 ------------------------------------------
+    # 掴むとその窓が消えるときにボタンも道連れになる（VERIFICATION.md §2.31）。
+    install(mod, ctx)
+    hud = FakeHUD(members=4)
+    popup = FakeWidget()
+    hud.add_widget(popup)                       # Kivy の既定は先頭挿入
+    hud.show()
+    hud.update_button_texts(hud, ["会話する", "出る"])
+    button = hud.toggle_button()
+    check("a transient window on the HUD is not used as the host",
+          button is not None and button.parent is hud.root,
+          (type(button.parent).__name__ if button is not None else None,
+           [type(c).__name__ for c in hud.children]))
+    check("the button survives that window going away",
+          (hud.remove_widget(popup) or True) and button in hud.root.children,
+          [type(c).__name__ for c in hud.root.children])
+
     # -- パーティ欄が無いビルドでは何もしない --------------------------------
     install(mod, ctx)
     hud = FakeHUD(members=4, with_panel=False)

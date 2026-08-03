@@ -779,6 +779,43 @@ def run():
           sum(1 for c in hud.root.children if isinstance(c, FakeButton)) == 1,
           [type(c).__name__ for c in hud.root.children])
 
+    # -- 他の MOD が HUD 直下に置いたウィジェット ------------------------------
+    # 初版は `children` の**先頭**（＝いちばん新しい子）を置き場所に採っていて、
+    # 除外していたのは自分のボタンだけだった。HUD へウィジェットを足す MOD が
+    # 2本になった時点（`116_`）で、相手のボタンの中へ入り込みうる状態になる。
+    # VERIFICATION.md §2.31 の「残った懸念」。
+    install(mod, ctx)
+    hud = FakeHUD()
+    other = FakeButton(text="パーティ", size=(30.0, 30.0))
+    setattr(other, "_instantale_party_icon", object())   # 116_ の印
+    hud.add_widget(other)
+    hud.show()
+    button = hud.toggle_button()
+    check("another mod's widget on the HUD is not used as the host",
+          button is not None and button.parent is hud.root,
+          (type(button.parent).__name__ if button is not None else None,
+           [type(c).__name__ for c in hud.children]))
+    check("and nothing is nested inside it",
+          other.children == [], [type(c).__name__ for c in other.children])
+
+    # -- ゲームが一時的に出している窓 ------------------------------------------
+    # 消えるときにこちらのボタンも道連れになる。ゲームの `FloatLayout` は画面が
+    # 組まれた時点で居る ＝ `children` の最後尾なので、そこから探せば避けられる。
+    install(mod, ctx)
+    hud = FakeHUD()
+    popup = FakeWidget()
+    hud.add_widget(popup)                       # Kivy の既定は先頭挿入
+    hud.show()
+    button = hud.toggle_button()
+    check("a transient window on the HUD is not used as the host",
+          button is not None and button.parent is hud.root,
+          (type(button.parent).__name__ if button is not None else None,
+           [type(c).__name__ for c in hud.children]))
+    check("the button survives that window going away",
+          (hud.remove_widget(popup) or True) and button.parent is hud.root
+          and button in hud.root.children,
+          [type(c).__name__ for c in hud.root.children])
+
     # -- 窓の大きさが変わったとき --------------------------------------------
     # 塗り直しは来ないので、窓の `on_resize` を拾えていないと、ボタンは古い座標に
     # 取り残され、枠の控えも古い窓の値のまま残る（VERIFICATION.md §2.26）。

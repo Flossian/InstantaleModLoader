@@ -176,7 +176,7 @@ id の列が同じなら何もしない。
 import datetime
 import weakref
 
-from instantale_modloader import frames
+from instantale_modloader import frames, ui
 
 from . import button as toggle_button
 from . import panel as party_panel
@@ -972,18 +972,18 @@ def apply(ctx):
     def host_of(hud):
         """ボタンを載せる相手。**HUD 自身の子の並びは変えない。**
 
-        素の HUD の子は `FloatLayout` 1枚だけで、そこへ直接足すと子が2つになり、
-        「画面の最初の子」を取る側から見える相手が変わる
-        （`scripts.hud.new_hud:get_current_screen_root`）。実際に
+        規則は `ui.overlay_host` に集約してある（`113_` と共通。同じ発見を
+        2箇所に書かない。TECH.md §6.1）。素の HUD の子は `FloatLayout` 1枚だけで、
+        そこへ直接足すと子が2つになり、「画面の最初の子」を取る側から見える相手が
+        変わる（`scripts.hud.new_hud:get_current_screen_root`）。実際に
         `113_ui_text_expand` がそれでアイテムの移動・装備を壊した（2026-08-02）。
+
+        選ぶのは**いちばん古い子**。初版は `113_` から写した「先頭を採る」形で、
+        `113_` のボタンが HUD 直下に残っている状態（古い版からの注入し直し）では
+        その中へ入り込みうる ― HUD へウィジェットを足す MOD が2本になった時点で
+        成立してしまう組み合わせだった。
         """
-        for child in party_panel.children_of(hud):
-            if frames.attr(child, "add_widget") is frames.MISSING:
-                continue
-            if child is frames.attr(hud, BUTTON_ATTR):
-                continue
-            return child
-        return hud            # 子を持たない画面なら HUD 自身に（従来どおり）
+        return ui.overlay_host(hud)
 
     def place_button(hud, widget):
         """置き直す。塗り直しのたびに呼ぶ（帯は伸び縮みする）。"""

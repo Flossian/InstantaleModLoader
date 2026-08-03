@@ -152,7 +152,7 @@ canvas に線で描く。0〜1 の座標で形を持つので、どの解像度�
 import datetime
 import weakref
 
-from instantale_modloader import frames
+from instantale_modloader import frames, ui
 
 LOG_BASENAME = "text_expand.log"
 
@@ -1164,26 +1164,17 @@ def apply(ctx):
     def host_of(hud):
         """ボタンを載せる相手。**HUD 自身の子の並びは変えない。**
 
-        素の HUD の子は `FloatLayout` 1枚だけだった（`out/text_expand.log` の
-        `frame neighbours:`）。そこへ足すと HUD の子が2つになり、
-        **「画面の最初の子」を取る側から見える相手が変わる**
-        （`scripts.hud.new_hud:get_current_screen_root`）。実際、アイテムを
-        持ち物へ移す・装備する操作が効かなくなった（利用者の報告、2026-08-02）。
-        ドラッグ中のアイテムの置き場所や `InventoryItem.get_all_inventories()` の
-        起点がこちらのボタンにすり替わったためと考えられる。
+        規則は `ui.overlay_host` に集約してある（`116_` も同じものが要るので、
+        同じ発見を2箇所に書かない。TECH.md §6.1）。要点は2つ:
 
-        なので足すのは**その `FloatLayout` の中**。HUD の子は1枚のまま保たれる。
-        ゲーム自身も、この中へ効果や窓を出し入れしている。
+        * 足すのは HUD 直下ではなく、その中の `FloatLayout`。HUD の子を増やすと
+          「画面の最初の子」を取る側から見える相手が変わり、アイテムの移動・装備が
+          効かなくなる（利用者の報告、2026-08-02）
+        * 選ぶのは**いちばん古い子**。初版は先頭（＝いちばん新しい子）を採って
+          いて、ゲームの一時的な窓や**他の MOD が置いたウィジェット**を掴みうる
+          状態だった（VERIFICATION.md §2.31 の「残った懸念」）
         """
-        children = frames.attr(hud, "children")
-        if isinstance(children, (list, tuple)):
-            for child in children:
-                if frames.attr(child, "add_widget") is frames.MISSING:
-                    continue
-                if child is frames.attr(hud, BUTTON_ATTR):
-                    continue
-                return child
-        return hud            # 子を持たない画面なら HUD 自身に（従来どおり）
+        return ui.overlay_host(hud)
 
     def ensure_button(hud):
         """ボタンを1枚だけ足す。既にあれば押下先だけ今の注入へ付け替える。"""
