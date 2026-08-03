@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""`1113_fix_crime_attribution` の純粋関数テスト。ゲーム不要。
+"""`119_fix_crime_attribution` の純粋関数テスト。ゲーム不要。
 
     python tools/test_crime_attribution.py
 """

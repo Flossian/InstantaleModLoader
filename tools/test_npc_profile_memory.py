@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""`1307_npc_profile_memory` の検証。ゲーム不要。
+"""`311_npc_profile_memory` の検証。ゲーム不要。
 
     python tools/test_npc_profile_memory.py
 

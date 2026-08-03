@@ -84,7 +84,7 @@ CONVERSATION_CHARS = 2000
 # `data_lock` が別インスタンスになるので、2本が同じ
 # `out/npc_profiles/<世界>.json` を排他なしで read-modify-write できてしまう。
 # 注入し直すとこのモジュール自体が読み込み直されるため、モジュール変数では
-# 足りない。`sys` に置けば世代をまたいで同じ1組を共有できる（`1116_` と同じ手）。
+# 足りない。`sys` に置けば世代をまたいで同じ1組を共有できる（`118_` と同じ手）。
 STATE_STORE_ATTR = "__instantale_npc_profile_memory_store__"
 
 

@@ -1,20 +1,39 @@
 # -*- coding: utf-8 -*-
-"""1115_message_text_integrity をゲーム抜きで通す。
+"""117_message_text_integrity をゲーム抜きで通す。
 
     python tools/test_message_text_integrity.py
 """
 
 import importlib.util
+import io
+import json
 import os
 import sys
 import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, "runtime"))
-MOD_PATH = os.path.join(
-    RUNTIME_DIR, "mods", "1115_message_text_integrity", "message_text_integrity.py")
+MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
+
+
+def find_mod(suffix):
+    """mod を **番号を除いた名前** で探す（番号は振り直されることがある）。"""
+    matches = sorted(name for name in os.listdir(MODS_DIR)
+                     if name.endswith(suffix)
+                     and os.path.isfile(os.path.join(MODS_DIR, name, "mod.json")))
+    if not matches:
+        raise SystemExit("cannot find *{} in {}".format(suffix, MODS_DIR))
+    if len(matches) > 1:
+        raise SystemExit("ambiguous: {} in {}".format(matches, MODS_DIR))
+    folder = os.path.join(MODS_DIR, matches[0])
+    with io.open(os.path.join(folder, "mod.json"), encoding="utf-8") as fh:
+        entry = json.load(fh)["entry"]
+    return os.path.join(folder, entry)
+
+
+MOD_PATH = find_mod("_message_text_integrity")
 
 FAILURES = []
 PREFIX = "案内: "

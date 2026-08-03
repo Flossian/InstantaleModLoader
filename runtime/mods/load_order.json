@@ -14,13 +14,13 @@
     "109_fix_item_detail_autosize",
     "110_fix_character_name_path",
     "111_llm_prompt_replace",
-    "1115_message_text_integrity",
+    "117_message_text_integrity",
     "112_ui_text_spacing",
     "113_ui_text_expand",
     "114_ui_input_focus",
     "115_ui_item_list_fit",
     "116_ui_party_expand",
-    "1116_batch_message_render",
+    "118_batch_message_render",
     "200_probe_bug_sites",
     "201_probe_missing_attr",
     "202_probe_summarizers",
@@ -36,12 +36,12 @@
     "303_quest_end_party_to_guild",
     "304_quest_end_keep_party",
     "305_mini_quest",
-    "1113_fix_crime_attribution",
+    "119_fix_crime_attribution",
     "306_party_train_exp",
     "307_area_move_dungeon",
     "308_battle_damage_display",
     "309_office_pardon",
-    "1307_npc_profile_memory"
+    "311_npc_profile_memory"
   ],
   "disabled": []
 }
