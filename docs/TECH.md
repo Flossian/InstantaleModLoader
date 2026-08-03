@@ -83,6 +83,7 @@ runtime/instantale_modloader/
     recon.py      実行時リコン（モジュール構造ダンプ）
 runtime/mods/     MOD 本体（1バグ・1機能 = 1フォルダ。入口は mod.json が名指し）
 runtime/mods/load_order.json  適用順（"order"）と無効一覧（"disabled"）
+runtime/mods/load_order.local.json  手元だけの適用順。在れば上に優先（git 管理外）
 settings/         利用者が変えたものだけ（無くてよい）
                   mod_settings.json … MOD の設定 / gui.json … ゲームの場所・窓の位置
 out/              ログ・リコン成果物・status.json（最後の boot の結果）
@@ -102,7 +103,36 @@ found["order"]      # 有効な MOD。適用順（依存の制約も解決済み
 found["listed"]     # 一覧に出す順。無効なものも宣言された位置に含む
 found["manifests"]  # 名乗り・api・settings・依存（MOD のコードは import しない）
 found["problems"]   # 宣言と実体のずれ。人が読む行
+found["notes"]      # 直すべきずれではない知らせ（手元用の順序ファイルを使っている等）
 ```
+
+`problems` と `notes` を分けているのは、**未公開の MOD を手元で動かしている間ずっと
+赤が出る**状態を作らないため。赤が常態になると本当のずれが埋もれる。
+`check_mods.py --strict` は `notes` も問題に格上げする。
+
+#### 手元だけの適用順（`load_order.local.json`）
+
+まだ公開しない MOD を手元で動かすためのもの。`runtime/mods/load_order.local.json`
+が在れば、`load_order.json` の代わりに**丸ごと**これが使われる
+（`instantale_modloader.order_path` が「効いている順序ファイル」を1箇所で決める）。
+
+| なぜ要るか | |
+|---|---|
+| `load_order.json` は配布する構成そのもの | 開発中の MOD を書くと、配った先で「実体の無い記述」になる |
+| GUI は保存のたびに順序ファイルを書き戻す | 一覧に出ている MOD が全部書かれるので、消しても次の保存で戻ってくる |
+| コミットに紛れ込む | 未公開の MOD の名前が履歴に残る |
+
+仕掛けは3点。**どれか1つでも欠けると漏れる。**
+
+| 場所 | 何をしているか |
+|---|---|
+| `.gitignore` | `load_order.local.json` を除外（MOD のフォルダ自体は `.git/info/exclude` で各自が除外する） |
+| `tools/gui.py` | 書き戻し先を `ml.order_path()` に聞く。手元用が在る間は配布用を書き換えない |
+| `make_dist.bat` | `load_order.json` に載っていない MOD フォルダは**staging から落とす**（`[mods] skipping ...` が出る）。ここが最後の砦で、落とさないと未完成の MOD がリリースに入る |
+
+2つのファイルを混ぜないのは、差分から順序を組み立てる規則を増やさないため ―
+効いている順序は常に1ファイルを読めば分かる。何で動いているかは `notes` と
+`modloader.log` に必ず出る。
 
 ### 1.4 注入のタイミング
 
@@ -1012,7 +1042,7 @@ screen.mark_of(entry)        # 'offer'（自分のボタンでなければ None�
 キーを他の MOD と共有すると、相手の `on_button_press` が自分のボタンを握り潰す。
 同梱 MOD が使用中のキーは `mod_action`（`301_`）/ `mod_party_action`（`302_`）/
 `mod_mini_action`（`305_`）/ `mod_road_action`（`307_`）/ `mod_pardon_action`
-（`309_`）/ `mod_city_case_action`（`310_`）。
+（`309_`）。
 
 **印のキーは必ず `ui.MARK_PREFIX`（`mod_`）で始めること。** 残骸の掃除
 （`prune_stale`）が「他の MOD が今その場に出しているボタン」を見分けるのに、この

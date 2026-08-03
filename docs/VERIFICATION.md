@@ -474,8 +474,9 @@ python tools/test_ui_text_expand.py            # 113_  72件
 python -c "import sys; sys.path.insert(0,'runtime'); import instantale_modloader as l; print(l.boot('out/test/bootcheck'))"
 ```
 
-`boot complete: 40/40 mod(s) applied` が出れば読み込み側は健全（mod を足したら
-この数も更新すること。2026-08-03 時点で 40 個）。
+`boot complete: 37/37 mod(s) applied` が出れば読み込み側は健全（mod を足したら
+この数も更新すること。2026-08-03 時点で公開ぶん 37 個）。手元だけの MOD を
+`load_order.local.json` に載せている間はその本数ぶん多く出る（TECH.md §1.3）。
 
 ### 2.12 `107_` 戦闘終了時の発火（2026-07-28、決着）
 
@@ -1498,8 +1499,8 @@ run 後:     facility config keys: ['level_of_detail', 'free_flags']
 
 #### ついでに塞いだ「残骸」の残り（`305_` / `307_` / `309_`）
 
-`prune_stale` が入っていたのは `301_` / `302_` / `310_` だけで、自前ボタンを挿す
-残り3本は重複判定が印だけだった。
+`prune_stale` が入っていたのは `301_` / `302_` だけで、自前ボタンを挿す残り3本は
+重複判定が印だけだった。
 
 | mod | 挿す場所 | 露出 |
 |---|---|---|
@@ -1526,8 +1527,10 @@ run 後:     facility config keys: ['level_of_detail', 'free_flags']
 外すと `test_quest_offer` が、`309_` の掃除を外すと `test_office_pardon` が、
 `302_` に汎用語を戻すと `test_party_leave` が失敗する）。
 
-`python tools/check_mods.py` は 40 mod / 問題 0、オフライン検証 19 本すべて通過、
-`boot complete: 40/40 mod(s) applied`。
+`python tools/check_mods.py` は問題 0、オフライン検証 19 本すべて通過、
+`boot complete: 37/37 mod(s) applied`（公開している 37 本での数。手元に未公開の
+MOD を置いている場合はその本数ぶん増え、`load_order.local.json` を使っている旨が
+`notes` に1行出る。TECH.md §1.3）。
 
 #### この点検で問題が無かったもの
 

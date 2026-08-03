@@ -8,8 +8,14 @@
 # 差でしか落ちず、実際の利用環境の情報にならない。
 name: CI
 
+# push は main だけを見る。ブランチや fork の head でも走らせると、PR の
+# チェック欄に「同じ内容の実行」が2つ並ぶうえ、head 側は main を取り込むまで
+# 古い状態のまま走るので、こちらで直した後も赤が残り続ける。
+# PR は `refs/pull/N/merge`（head + 最新の main）で検査されるので、
+# main を直せば再実行で追いつく。
 on:
   push:
+    branches: [main]
   pull_request:
 
 # 日本語のログを出すので UTF-8 を強制する。指定しないと Windows ランナーの

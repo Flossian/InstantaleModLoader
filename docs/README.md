@@ -127,7 +127,7 @@ MOD が入る。
 `out\modloader.log` の末尾に、こう出ていれば入っている:
 
 ```
-boot complete: 40/40 mod(s) applied
+boot complete: 37/37 mod(s) applied
 ```
 
 数が足りなくても失敗とは限らない。AI関連の MOD は最初の会話まで待ってから入る
