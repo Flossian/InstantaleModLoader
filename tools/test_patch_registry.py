@@ -282,6 +282,35 @@ def main():
               "順序ファイルが壊れていても名前順で動く")
         put_json("load_order.json", {"order": ["zebra", "apple"]})
 
+        # -- 手元だけの順序ファイル ---------------------------------------
+        # 未公開の MOD を手元で動かすためのもの。在れば load_order.json に
+        # 優先し、`.gitignore` に入っているのでコミットにも配布物にも入らない。
+        check(ml.order_path(tmp_mods).endswith(ml.ORDER_NAME),
+              "手元用が無ければ配布用を使う: {}".format(ml.order_path(tmp_mods)))
+        put_json("load_order.local.json", {"order": ["apple", "zebra"]})
+        check(ml.order_path(tmp_mods).endswith(ml.ORDER_LOCAL_NAME),
+              "手元用が在ればそちらを使う: {}".format(ml.order_path(tmp_mods)))
+        check(order_of(tmp_mods) == ["apple", "zebra"],
+              "手元用が適用順を決める（配布用は無視される）: {}".format(
+                  order_of(tmp_mods)))
+        found_local = ml.discover(tmp_mods)
+        check(any(ml.ORDER_LOCAL_NAME in n for n in found_local["notes"]),
+              "何で動いているかを notes に残す: {}".format(found_local["notes"]))
+        check(found_local["problems"] == [],
+              "**問題としては数えない**（未公開 MOD の間ずっと赤にしない）: {}"
+              .format(found_local["problems"]))
+        # 手元用にだけ載っている mod は、配布用から見れば「記載が無い」。
+        # それでも問題にならないこと（＝配布用の側を読みに行っていないこと）。
+        put_json("load_order.json", {"order": ["zebra"]})
+        check(ml.discover(tmp_mods)["problems"] == [],
+              "手元用が在る間は配布用の記載漏れを問題にしない: {}".format(
+                  ml.discover(tmp_mods)["problems"]))
+        os.remove(os.path.join(tmp_mods, "load_order.local.json"))
+        check(any("記載の無い" in p for p in ml.discover(tmp_mods)["problems"]),
+              "手元用を消せば配布用の記載漏れがまた見える: {}".format(
+                  ml.discover(tmp_mods)["problems"]))
+        put_json("load_order.json", {"order": ["zebra", "apple"]})
+
         mod = ml._load_mod_file(os.path.join(tmp_mods, "zebra", "whatever.py"))
         check(mod.LOADED == 42, "入口名が何であれ from . import が効く（パッケージ扱い）")
         check(sys.modules.get("instantale_mod_zebra") is mod,
@@ -604,9 +633,15 @@ def main():
 
     # 適用順が宣言と一致していること。順序は動作の前提なので、
     # 「順序ファイルに無くて末尾に回っている」状態を見逃さない。
-    with open(os.path.join(mods_dir, "load_order.json"), encoding="utf-8") as fh:
+    #
+    # 突き合わせる相手は**いま効いている順序ファイル**（`ml.order_path`）。
+    # 手元に `load_order.local.json` を置いて未公開の MOD を動かしている間は
+    # そちらが宣言なので、`load_order.json` を直に読むとここが必ず赤くなる。
+    order_file = ml.order_path(mods_dir)
+    with open(order_file, encoding="utf-8") as fh:
         declared = json.load(fh)["order"]
-    check(found == declared, "適用順が load_order.json の宣言どおり")
+    check(found == declared,
+          "適用順が {} の宣言どおり".format(os.path.basename(order_file)))
 
     print()
     if _FAILS:

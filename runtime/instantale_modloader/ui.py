@@ -47,6 +47,13 @@ HUD_CLASS = "InstanTaleHUD"
 # 自前ボタンに持たせる無害な既存クラス。mod 無しで押されても選択肢が戻るだけ。
 SAFE_CLS = "JustSetButtonToNormalPhase"
 
+# 自前ボタンに足す印のキーは、**すべてこの接頭辞で始める**（`mod_action` /
+# `mod_party_action` / `mod_pardon_action` …）。`prune_stale` が「他の MOD の
+# 生きているボタン」と「セーブから復元された自分の残骸」を見分けるのに使う。
+# セーブに焼かれるのは text と spec だけなので、**印が1つでも残っている＝
+# いま誰かが挿したもの＝残骸ではない**。新しい MOD の印もこれに揃えること。
+MARK_PREFIX = "mod_"
+
 # 会話の終了処理は要約で LLM を回すことがあるので、待ちは長めに取る。
 END_POLL = 0.3
 END_TIMEOUT = 120.0
@@ -665,10 +672,18 @@ class Screen(object):
         押しても無反応 ― 見た目は同じなのに片方だけ効かない、という
         最も分かりにくい壊れ方になる。
 
-        取り除く条件は **「自分のラベル」かつ「印が無い」かつ「無害 spec」** の
-        3つ揃ったときだけ。ゲーム側の同名ボタンを巻き込まないための保険で、
-        `labels` は完全一致か前後の括弧付き（`'この話から依頼を作る（誰か）'`）を
-        見るため**前方一致**で照合する。
+        取り除く条件は **「自分のラベル」かつ「印がどれも無い」かつ「無害
+        spec」** の3つ揃ったときだけ。ゲーム側・他 MOD の同名ボタンを巻き
+        込まないための保険で、`labels` は完全一致か前後の括弧付き
+        （`'この話から依頼を作る（誰か）'`）を見るため**前方一致**で照合する。
+
+        「印がどれも無い」は**自分の印だけでは足りない**（2026-08-03）。
+        `302_` の `やめておく` と `309_` の `やめておく` のように、別々の MOD が
+        同じ文言のボタンを出すことがある。`mark_of()` は自分の印しか見ないので、
+        他 MOD の生きているボタンが「印が無い」に見えて消えていた ―
+        `309_` の罰金の確認画面から**キャンセルが最初から消えている**、という
+        壊れ方をしていた。セーブから復元された残骸は印を1つも持たないので、
+        `MARK_PREFIX` で始まるキーが1つでもあれば残骸ではないと分かる。
 
         取り除いた分は呼び出し側が新しい印つきで差し直すので、残骸は
         「消える」のではなく「生き返る」。
@@ -697,12 +712,27 @@ class Screen(object):
     def _is_stale(self, entry, labels):
         if not isinstance(entry, dict) or self.mark_of(entry) is not None:
             return False
+        if self.marked_by_a_mod(entry):
+            return False        # 他の MOD が今この場で挿したもの。残骸ではない
         if spec_cls_name(entry) != self.safe_cls:
             return False
         text = entry.get("text")
         if not isinstance(text, str):
             return False
         return any(text == label or text.startswith(label) for label in labels)
+
+    @staticmethod
+    def marked_by_a_mod(entry):
+        """どれかの MOD の印が付いているか（自分のものとは限らない）。
+
+        セーブに焼かれるのは text と spec だけ ＝ **復元された残骸に印は
+        1つも残らない**。逆に印があれば、いまこの場で誰かが挿したものなので
+        触ってはいけない。`MARK_PREFIX` の約束が効くのはここ。
+        """
+        if not isinstance(entry, dict):
+            return False
+        return any(isinstance(key, str) and key.startswith(MARK_PREFIX)
+                   for key in entry)
 
     def instantiate_spec(self, app, entry_or_spec):
         """ボタンの `PhaseSpec` から、それが呼ぶはずのマネージャを組み立てる。

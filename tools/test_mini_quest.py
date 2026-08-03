@@ -628,6 +628,26 @@ CLOCK.settle()
 texts = [entry["text"] for entry in app.buttons]
 check("開き直しても二重にならない", texts.count(mod.BOARD_LABEL) == 1, texts)
 
+# セーブから復元された残骸（印が落ちている）を掴めること。掲示板が一覧を
+# 組み直すビルドではゲーム自身が消しているので**保険**だが、組み直さない
+# ビルドで二重化しないことをここで担保する。
+from instantale_modloader import ui as _ui
+screen = _ui.Screen(ctx, lambda m: None, tag="t", mark=mod.MARK)
+restored = [{"text": mod.BOARD_LABEL,
+             "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}]
+check("印の落ちた自前ボタンを残骸として掴む",
+      screen.prune_stale(restored, mod.OUR_LABELS) == [mod.BOARD_LABEL], restored)
+check("掲示板の掃除が仕掛けてある",
+      "prune_stale(buttons, OUR_LABELS)" in open(MOD, encoding="utf-8").read())
+
+# 他 MOD の生きているボタン（印のキーだけが違う）を巻き込まないこと。
+foreign = [{"text": mod.BOARD_LABEL, "mod_pardon_action": "open",
+            "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}]
+check("他の MOD の印が付いたボタンは落とさない",
+      screen.prune_stale(foreign, mod.OUR_LABELS) == [], foreign)
+check("掃除に使う文言はこちらにしか無いものだけ",
+      mod.OUR_LABELS == (mod.BOARD_LABEL,), mod.OUR_LABELS)
+
 # ============================================================ 押下と生成
 print()
 print("=== 押下と生成 ===")

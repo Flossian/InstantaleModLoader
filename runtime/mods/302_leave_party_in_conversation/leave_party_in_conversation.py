@@ -100,7 +100,13 @@ CANCEL_LABEL = "やめておく"
 # `PhaseSpec.to_dict()` は text と spec しか書かないので**印は落ちる**。
 # 落ちたものは `has_leave_button()` が自分のものと見なせず、タイトル戻り・
 # ロード・再注入のあとにボタンが二重に出る（`301_` で実際に起きた）。
-OUR_LABELS = (LEAVE_LABEL, CONFIRM_LABEL, CANCEL_LABEL)
+#
+# **`CANCEL_LABEL` はここに入れない。** 「やめておく」はこの MOD 固有の文言では
+# なく、`309_` も同じ文字列を確認画面に出す。他 MOD の印は `ui.Screen` 側で
+# 見分けるようになった（`marked_by_a_mod`）が、ゲーム自身が同じ文言のボタンを
+# 出していた場合はどうやっても見分けられない。**残骸の掃除は、こちらにしか
+# 無い文言だけで行う。**
+OUR_LABELS = (LEAVE_LABEL, CONFIRM_LABEL)
 FAREWELL_TEXT = "{name}はパーティを離れ、{place}に残った。"
 FAREWELL_TEXT_NO_PLACE = "{name}はパーティを離れた。"
 NO_PLACE_TEXT = "……こんな場所で放り出すわけにはいかない。人の居る場所まで戻ろう。"
