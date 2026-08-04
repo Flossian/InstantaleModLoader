@@ -156,7 +156,7 @@ for %%f in (gui.py injector.py watcher.py logrotate.py watch.bat check_mods.py) 
 
 echo   [loader] docs ...
 md "%LOADER%\docs" 2>nul
-for %%f in (README.md TECH.md GAME.md VERIFICATION.md) do (
+for %%f in (README.md MODS.md TECH.md GAME.md VERIFICATION.md) do (
   if exist "docs\%%f" copy /y "docs\%%f" "%LOADER%\docs\" >nul || goto :copyfail
 )
 

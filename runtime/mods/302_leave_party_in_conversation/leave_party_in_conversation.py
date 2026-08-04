@@ -617,6 +617,13 @@ def apply(ctx):
                     write("leave: saved")
                 except Exception:
                     ctx.log_exc("party leave: save_game failed")
+            # 仲間欄は名簿を書き換えただけでは変わらない（選択肢ボタンと同じ構図）。
+            # **別れの文が出終わってから**消す（ユーザー指示・2026-07-28）― 文より
+            # 先に消えると、まだ別れていないうちに居なくなったように見える。
+            # `when_idle` はテキストの流し込み（`is_adding_text`）が終わるのを待つ。
+            # 既に確定した行動なので、待ちきれなくても実行する。
+            screen.when_idle(app, lambda: repaint_party(app, name),
+                             proceed_on_timeout=True, tag="party ui")
             write("leave: done ({!r})".format(name))
         except Exception:
             ctx.log_exc("party leave: finishing the farewell failed")
@@ -624,6 +631,12 @@ def apply(ctx):
             state["leaving"] = False
             state["pending"] = None
             state["end_button"] = None
+
+    def repaint_party(app, name):
+        """仲間欄を塗り直す。手段は `ui.Screen.paint_party`（ゲーム自身の2つ）。"""
+        done = screen.paint_party(app)
+        write("party ui: repainted after {!r} left via {}".format(
+            name, "+".join(done) if done else "(nothing)"))
 
     def place_character(app, member_id, character, facility, node):
         """外れた NPC を、ゲームが指した施設へ置く。

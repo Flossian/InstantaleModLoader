@@ -872,6 +872,42 @@ class Screen(object):
 
         return done
 
+    def paint_party(self, app):
+        """HUD の仲間欄を塗り直す。効いた手段の一覧を返す。
+
+        パーティの増減は `app.party` を書き換えるだけでは画面に出ない ―
+        選択肢ボタンと同じ構図で、塗るのは別の関数。ゲーム自身が持っている
+        2つをそのまま通す（引数を作らずに済む形になっている）:
+
+            InstantaleApp.update_party_member(self, dt)   Clock コールバックの形
+            InstanTaleHUD.update_party_display(self, *args)
+
+        `dt` は Clock が渡す経過秒なので `0` でよい。HUD は属性名ではなく
+        **型**で探す。例外はどれも外へ出さない。
+        """
+        done = []
+
+        updater = getattr(app, "update_party_member", None)
+        if callable(updater):
+            try:
+                updater(0)
+                done.append("update_party_member")
+            except Exception:
+                self._oops("update_party_member failed")
+
+        hud = find_hud(app)
+        display = getattr(hud, "update_party_display", None) if hud is not None else None
+        if callable(display):
+            try:
+                display()
+                done.append("hud.update_party_display")
+            except Exception:
+                self._oops("hud.update_party_display failed")
+        elif hud is None:
+            done.append("hud not found")
+
+        return done
+
     # -- 待機表示（「.」→「..」→「...」）-----------------------------------
     #
     # **ゲーム自身の待機表示を実測して、そのまま真似る**（値は GAME.md §2.4）:

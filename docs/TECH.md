@@ -5,13 +5,14 @@ Instantale（Epic版 / Nuitka standalone / CPython 3.10）に外部から Python
 
 ## 0. この文書の位置
 
-4つの文書はそれぞれ読む理由が違う。
+5つの文書はそれぞれ読む理由が違う。
 
 | 文書 | 何が書いてあるか |
 |---|---|
 | TECH.md（本書） | このローダで MOD をどう書くか。事実とルール。他のゲームにも通じる話 |
 | [GAME.md](GAME.md) | Instantale が何をしているか。パッチ対象の見つけ方、選択肢ボタン、会話、パーティ、クエスト、BGM、LLM 経路。このゲーム限定の事実 |
-| [README.md](README.md) | 遊ぶだけの人向け |
+| [README.md](README.md) | 遊ぶだけの人向け。ローダと GUI の使い方 |
+| [MODS.md](MODS.md) | 同梱している MOD 一本ずつの説明・設定・困ったとき |
 | [VERIFICATION.md](VERIFICATION.md) | 各 MOD の検証状況・未確認項目・実測ログ |
 
 GAME.md と分けているのは、ゲームが更新されて食い違うのはあちら側だけだから。疑う場所が
@@ -90,7 +91,7 @@ settings/         利用者が変えたものだけ（無くてよい）
                   loader.json … デバッグモード（GUI とローダの両方が読む。§3.2.4）
 out/              ログ・リコン成果物・status.json（最後の boot の結果）
 tools/            上記に加え、オフライン検証・セーブ操作（ゲーム不要）
-docs/             README.md / TECH.md / GAME.md / VERIFICATION.md
+docs/             README.md / MODS.md / TECH.md / GAME.md / VERIFICATION.md
 ```
 
 ### 1.3 探索と適用順は `discover()` が1箇所で決める
@@ -1184,13 +1185,14 @@ screen.start_phase(app, MyPhase(app), "依頼を受ける")   # process_choice �
 screen.end_conversation(app, end_entry, follow_up, end_text="<行動: …>")
 screen.when_idle(app, then, cancel_if=..., proceed_on_timeout=True)
 screen.busy_on(app) / screen.busy_off(app, restore=False)   # 「…」の待機表示
-screen.paint(app) / screen.refresh(app) / screen.say(app, text)
+screen.paint(app) / screen.paint_party(app) / screen.refresh(app) / screen.say(app, text)
 ```
 
 | 関数 | 何をするか |
 |---|---|
 | `apply_buttons` | `Clock.schedule_once(..., 0)` 経由で `app.buttons` を差し替え、`refresh` と `paint` まで行う |
 | `paint` | `display_button_load(0)` と `hud.update_button_texts` の2手。`hud not found` を返したら HUD の構成が変わった合図 |
+| `paint_party` | 仲間欄を塗り直す。`update_party_member(0)` と `hud.update_party_display()` の2手。パーティを増減させたら最後に呼ぶ |
 | `start_phase` | `app.process_choice(インスタンス, 文字列)`。自前フェーズを `PhaseSpec` に載せずに起こす |
 | `end_conversation` | 画面のボタンの args を写し `end_text` だけ差し替えて閉じ、閉じ終わってから続きを実行 |
 | `when_idle` | `is_adding_text` / `is_button_enabled` / `is_popup_window_opened` を見張り、手が空いてから実行 |

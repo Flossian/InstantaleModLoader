@@ -4,7 +4,7 @@
 MOD を書くときに必要な、Instantaleそのものの構造・語彙・作法をここに集める。
 
 - ローダの仕組みと MOD の書き方は [TECH.md](TECH.md)
-- 遊ぶだけなら [README.md](README.md)
+- 遊ぶだけなら [README.md](README.md)（ローダと GUI）と [MODS.md](MODS.md)（同梱 MOD の一覧）
 - 各 MOD の検証状況・未確認項目・実測ログは [VERIFICATION.md](VERIFICATION.md)
 
 TECH.md と分けているのは、読む理由が違うから。あちらはこのローダで MOD をどう書くか
@@ -340,6 +340,18 @@ MOD の掃除は**画面が何であれ**走るので、他の MOD が今その�
    を直接呼ぶ。HUD は属性名ではなく `InstanTaleHUD` の型で探す
 
 いずれも `ui.Screen.apply_buttons` / `Screen.paint` に入っている。MOD 側で書き直さないこと。
+
+**仲間欄（パーティ表示）も同じ構図。** `app.party` を書き換えただけでは変わらない。
+塗るのはゲーム自身の次の2つで、どちらも引数を作らずに呼べる:
+
+```
+InstantaleApp.update_party_member(self, dt)      Clock コールバックの形。dt は 0 でよい
+InstanTaleHUD.update_party_display(self, *args)  HUD 側
+```
+
+`ui.Screen.paint_party(app)` がこの2手を通す。パーティを増減させた MOD は最後にこれを
+呼ぶこと（`302_` は別れの文が流れ終わってから呼んでいる ― 文より先に消えると、
+まだ別れていないうちに居なくなったように見えるため）。
 
 画面に実際に出ている文字は `hud.buttons[i].text`（`app.to_display_buttons` とは別物）:
 
@@ -1417,6 +1429,104 @@ NPC を退場させたい MOD は `move_npc_to_facility` で移送する必要�
 
 `state` は死亡とは無関係（全員 `''`）。HP は `current_hp` / `max_hp` /
 `original_max_hp` で、`physical_integrity`（§2.19）とは別物。
+
+### 2.23 NPC を作る（`save_data_dict['npcs']` に書いてから組む）
+
+MOD が事件の登場人物などを世界に足したいとき。実測でここに至るまでに
+**3回外している**ので、通る手順だけを書く（記録は VERIFICATION.md §2.31）。
+
+```python
+npcs = app.save_data_dict["npcs"]          # ★ ここが本体
+npc_id = str(max(int(k) for k in 名簿) + 1)
+npcs[npc_id] = データ                       # セーブの形（§2.22 の33項目）
+character = app.world.generate_character(npc_id, データ)
+app.move_npc_to_facility(npc_id, character, 施設, ノード)
+```
+
+| 関数 | 役割 |
+|---|---|
+| `World.generate_character(id, value)` | **作る側ではない。**`save_data_dict['npcs'][id]` を id で引いて `Character` を組む。無い id は `KeyError` |
+| `save_area_json:generate_npc(...)` | **呼んでも何も作られない**（世界のどこにも現れない）。返るのは `world_dict` そのもの |
+| `scripts.characters:Character(...)` | コンストラクタが完全な署名で露出。最後の手段として直に組める |
+
+> **素データの置き場所は1つではない。**`app.world_dict['npcs']` と
+> `app.save_data_dict['npcs']` は**別の辞書で件数も違う**。`generate_character`
+> が読むのは後者。どちらか一方に賭けず、**既存の character id が鍵になって
+> いる辞書を全部探して全部に書く**のが確実（`302_` の `ui.party_stores` と
+> 同じ考え方）。
+>
+> 採番も決め打たない。ゲームは遊んでいる最中にも NPC を作る（新しい町の
+> 生成で 10 体が一度に増えた）。空き id は `world.characters` と
+> `npcs` の**両方**を見て決める。
+
+生成した NPC は HP もスキルも装備も立ち絵も空でよい。ゲームが会話や戦闘の
+直前に `ensure_npc_detail_generated` で埋める（§2.22）。**名前に `"` などを
+入れないこと**（`110_` の対象。立ち絵だけが無言で作られなくなる）。
+
+#### 項目の並び順は、揃えるだけでなく**この順でなければならない**
+
+セーブは辞書をそのまま JSON に落とす。**書いた順がそのままファイルの行順に
+なる。**そしてセーブを読む側には、項目を上から順に並べて見せる道具がある
+（別途あるセーブエディタ）。順番が変わると、項目は全部揃っているのに
+**表示が崩れる。**
+
+33項目の正しい並びは実際のセーブから起こせる
+（`saves/<世界名>/savedata_plain.json` の `npcs`）。
+
+| # | 項目 | | # | 項目 | | # | 項目 |
+|---|---|---|---|---|---|---|---|
+| 1 | `name` | | 12 | `experience_point` | | 23 | `look` |
+| 2 | `id` | | 13 | `original_max_hp` | | 24 | `memory` |
+| 3 | `category` | | 14 | `max_hp` | | 25 | `life_log` |
+| 4 | `profile` | | 15 | `current_hp` | | 26 | `current_log` |
+| 5 | `personality` | | 16 | `age` | | 27 | `relationship` |
+| 6 | `look_description` | | 17 | `skills` | | 28 | `initial_location` |
+| 7 | `speech_style` | | 18 | `equipments` | | 29 | `config` |
+| 8 | `job` | | 19 | `weakness` | | 30 | `current_area` |
+| 9 | `state` | | 20 | `location` | | 31 | `current_location` |
+| 10 | `ability_scores` | | 21 | `inventory` | | 32 | `knowledge` |
+| 11 | `experience_level` | | 22 | `image_src` | | 33 | `display_position_in_battle` |
+
+後ろの4つ（30〜33）は**遊び始めてから増える**。プリセットの `world_data` は
+29項目までで、`savedata` になると33項目になる。`knowledge` は**リスト**
+（`[]`）で、辞書ではない。
+
+> **守り方は「全項目を持ったひな型を先に作り、上書きだけする」。**
+> `dict.update` は既にある鍵の位置を動かさないので、ひな型が33項目を漏らさず
+> 持っている限り並びは保たれる。逆に**1つでも欠けていると、その項目だけが
+> 末尾に足されて並びが壊れる**。項目を足すときは必ず表の正しい位置へ差し込む
+> こと ― 末尾に足さない。
+>
+> `310_city_case` の `world.NEW_NPC_TEMPLATE` がこの形。検査は
+> `tools/test_city_case.py` の「セーブの項目の並び順を崩さない」。
+
+### 2.24 会話中の NPC に知識を持たせる
+
+「この人物はこれを知っている」を会話に差し込む口が、ゲーム側に2つある。
+
+```python
+llm_manager:conversation_starter(messages, ...)          # 第一声
+llm_manager:conversation_facilitator(..., retrieved_knowledge, job_knowledge='')
+llm_manager:conversation_facilitator_after_retrieval(..., retrieved_knowledge)
+```
+
+- **第一声だけ変えたいなら** `conversation_starter` に渡す messages の
+  コピーを差し替える（`300_` の手口。§2.5）
+- **プレイヤーが自由入力で尋ねたときにも効かせたいなら**
+  `retrieved_knowledge` に足す。ゲーム自身が持っている「この人物が引き出した
+  知識」の枠で、受け答えを組むときに読まれる
+
+> **差し込む条件は「誰と話しているか」で決めること。**`character_instance`
+> （両者とも引数の4番目）から id を引いて突き合わせる。MOD が用意した
+> ボタン経由かどうかで判定すると、**プレイヤーが普通に「会話する」で
+> 話しかけたときに何も起きない**（実機で踏んだ・2026-08-03）。
+>
+> 引数の位置は版で動きうるので、キーワードを先に見て、無ければ位置で拾う。
+
+会話の履歴・記憶はゲーム自身が持っている。差し込んだ知識はその会話の要約と
+して記憶に残るので、**後の会話にも影響する**（同じ相手が前の話を引きずる）。
+1回きりにしたいなら、差し込む条件の側で「まだ拾っていない手がかりだけ」と
+絞る。
 
 ---
 

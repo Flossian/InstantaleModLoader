@@ -174,6 +174,7 @@ class InstantaleApp:
         self.saves = 0
         self.to_display_buttons = []
         self.loaded = []
+        self.party_updates = 0
         self.hud = HUD()
         # 実装の分からない部分を切り替えるつまみ（本番では観測して決まる）。
         # 実機の `get_party_leave_facility` は (Facility, Node) のタプルを返す。
@@ -193,6 +194,10 @@ class InstantaleApp:
         # 画面に出る文字列はこちら。
         self.refreshes += 1
         self.to_display_buttons = [entry["text"] for entry in self.buttons]
+
+    def update_party_member(self, dt):
+        # ゲーム自身の仲間欄の更新（Clock コールバックの形）。
+        self.party_updates += 1
 
     def display_button_load(self, dt):
         # ゲーム自身のボタン読み込み。呼ばれたことを控える。
@@ -285,9 +290,14 @@ def install_fake_hud():
     class InstanTaleHUD:
         def __init__(self):
             self.painted = []
+            self.party_painted = 0
 
         def update_button_texts(self, instance, value):
             self.painted.append(list(value))
+
+        def update_party_display(self, *args):
+            # 仲間欄を塗る側。呼ばれた回数を控える。
+            self.party_painted += 1
 
     module.InstanTaleHUD = InstanTaleHUD
     sys.modules[name] = module
@@ -566,7 +576,31 @@ check("ノードも一緒に渡す",
       app.moved and app.moved[0][2] is node_of(app, "7"), app.moved)
 check("別れの文が出る", any("パーティを離れ" in t for t in app.texts), app.texts)
 check("保存した", app.saves == 1, app.saves)
+# 仲間欄は名簿を書き換えただけでは変わらない。ゲーム自身の2つを通して塗り直す。
+check("仲間欄を塗り直す（app 側）", app.party_updates > 0, app.party_updates)
+check("仲間欄を塗り直す（HUD 側）", app.hud.party_painted > 0, app.hud.party_painted)
 check("例外は出ていない", ctx.errors == [], ctx.errors)
+
+# 別れの文が流れている最中は塗らない（先に消えると、まだ別れていないうちに
+# 居なくなったように見える）。テキストが終わってから塗る。
+mod, ctx, app = setup()
+app.refresh_choice_buttons()
+app.on_button_press(index_of(app, "confirm"))
+clock.run_onces()
+app.on_button_press(index_of(app, "leave"))
+app.is_adding_text = True                      # 文を流している最中
+clock.tick()
+clock.run_onces()
+check("文が流れている間は仲間欄を塗らない",
+      app.party_updates == 0 and app.hud.party_painted == 0,
+      (app.party_updates, app.hud.party_painted))
+app.is_adding_text = False                     # 流し終わった
+clock.tick()
+clock.run_onces()
+check("文が終わってから仲間欄を塗る",
+      app.party_updates > 0 and app.hud.party_painted > 0,
+      (app.party_updates, app.hud.party_painted))
+check("そのとき名簿からも外れている", app.party == ["player"], app.party)
 
 # ------------------------------------------------- ゲームが自分で置き直す場合
 mod, ctx, app = setup()
