@@ -565,7 +565,7 @@ check("知らない形なら何もしない（推測して壊さない）",
       MOD_MODULE.retire_to_return(object()) is False)
 check("形が読めなければ素通し（None も落ちない）",
       MOD_MODULE.retire_to_return({"game_master_statement": None}) is False)
-check("既定で有効（実機で2回外したので文面には頼らない）",
+check("既定で有効（文面での説得は効かないので戻り値で持つ）",
       MOD_MODULE.RETURN_INSTEAD_OF_RETIRE is True)
 
 # 実際のフック経由。控えに在る依頼のときだけ差し替わること。

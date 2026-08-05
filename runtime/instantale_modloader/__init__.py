@@ -24,16 +24,22 @@ mod は1フォルダで、名乗りは `mod.json`、中身は入口の `.py`:
             return orig(*args, **kwargs)
 
 `mod.json` は `entry` 以外すべて任意。名乗り（name / description / version / author）
-は書いてあればログと status() に出るだけだが、次の4つは動作に関わる:
+は書いてあればログと status() に出るだけだが、次の5つは動作に関わる:
 
     "api": 1                        前提にしているローダ API（下の API を参照）
     "after": ["101_fix_..."]         適用順の制約（_sort_dependencies）
     "settings": {...}               利用者が変えられる設定の宣言（config.py）
     "debug": true                   開発者向け。デバッグモードのときだけ動く（discover）
+    "superseded": "main_024"        本体がその版で同じ修正を取り込んだので降ろした
+
+`debug` と `superseded` は**読み込みの扱いが同じ**（どちらもデバッグモードのときだけ
+動く）。分けてあるのは伏せた理由が違うからで、GUI が表示で見分ける。計測のために
+作ったものと、要らなくなった修正とが同じ見た目で並んでいると、次にゲームが
+更新されたときに「どれを試しに戻すか」が分からなくなる。
 
 名乗りをコード側の変数ではなく JSON に置いているのは、**一覧を作るために mod を
 import しない**ため（GUI は無効な mod も壊れた mod も、走らせずに一覧へ出せる）。
-上の4つも同じ理由でここに置いてある。適用順も API の可否も伏せるかどうかも、
+上の5つも同じ理由でここに置いてある。適用順も API の可否も伏せるかどうかも、
 コードを1行も走らせる前に決まっていなければならない。
 
 ctx に何があるかは下の ModContext を参照。パッチの当て方は patch.py に
@@ -463,6 +469,7 @@ def discover(mods_dir: str | None = None, *, debug: bool | None = None) -> dict:
          "disabled":  ["..."],                  切られているもの
          "debug":     {"200_probe_..."},        開発者向け。今は伏せられている
          "debug_mode": False,                   デバッグモードが入っているか
+         "superseded": {"101_...": "main_024"}, 本体が取り込んだので降ろしたもの
          "manifests": {名前: マニフェスト},      無効なものも壊れたものも含む
          "problems":  ["..."],                  宣言と実体のずれ。人が読む行
          "notes":     ["..."]}                  直すべきずれではない知らせ
@@ -487,7 +494,7 @@ def discover(mods_dir: str | None = None, *, debug: bool | None = None) -> dict:
     if not os.path.isdir(mods_dir):
         return {"mods_dir": mods_dir, "order": [], "listed": [], "installed": [],
                 "disabled": [], "debug": set(), "debug_mode": False,
-                "manifests": {}, "notes": [],
+                "superseded": {}, "manifests": {}, "notes": [],
                 "problems": ["mods ディレクトリが無い: {}".format(mods_dir)]}
 
     installed = _installed(mods_dir)
@@ -500,7 +507,13 @@ def discover(mods_dir: str | None = None, *, debug: bool | None = None) -> dict:
     debug_mode = (_config_module().debug_mode(os.path.dirname(mods_dir))
                   if debug is None else bool(debug))
     marked = {name for name in installed if (manifests[name] or {}).get("debug")}
-    hide = frozenset() if debug_mode else frozenset(marked)
+    # 本体が取り込んだので降ろした mod。伏せ方は計測系と同じだが、名前と一緒に
+    # 「どの版で取り込まれたか」を持ち回る（GUI がそこを表示で分ける）。
+    superseded = {name: (manifests[name] or {}).get("superseded")
+                  for name in installed
+                  if (manifests[name] or {}).get("superseded")}
+    hide = (frozenset() if debug_mode
+            else frozenset(marked) | frozenset(superseded))
 
     order, listed, disabled, problems, notes = _order(mods_dir, installed, hide)
 
@@ -519,6 +532,7 @@ def discover(mods_dir: str | None = None, *, debug: bool | None = None) -> dict:
     return {"mods_dir": mods_dir, "order": order, "listed": listed,
             "installed": installed, "disabled": disabled,
             "debug": marked, "debug_mode": debug_mode,
+            "superseded": superseded,
             "manifests": manifests, "problems": problems, "notes": notes}
 
 
@@ -649,7 +663,7 @@ def _load_mod_file(path: str):
     # 読み直しているのに、`from . import panel` の相手は sys.modules に残るので、
     # 放っておくと **新しい入口 × 古い部品** で動く。分割した mod を直して
     # 注入し直したのに、入口が呼ぶ関数だけ古いままで AttributeError になる
-    # （`116_ui_party_expand` で実際に踏んだ。2026-08-03）。
+    # （分割した mod ＝ `116_` / `307_` / `309_` が該当する）。
     for cached in [key for key in sys.modules if key.startswith(name + ".")]:
         sys.modules.pop(cached, None)
     sys.modules[name] = module
@@ -740,6 +754,12 @@ def _manifest(mods_dir: str, name: str) -> dict:
         # 判定はここ＝**コードを読み込む前**に済む。名乗りと同じ理由で、外すために
         # 他人の mod を import することにならない。
         "debug": bool(data.get("debug")),
+        # ゲーム本体が同じ修正を取り込んだので降ろした mod。値はその版
+        # （例 "main_024"）。**読み込みの扱いは "debug" と同じ**で、違うのは
+        # 「なぜ伏せられているか」だけ ― 計測用に作ったものと、要らなくなった
+        # 修正とを一覧で見分けられないと、次にゲームが更新されたとき
+        # 「どれを試しに戻すか」が分からなくなる。
+        "superseded": text(data.get("superseded")),
         # 利用者が変えられる設定の宣言（config.py）。
         "settings": _config_module().normalize_decls(data.get("settings")),
     }

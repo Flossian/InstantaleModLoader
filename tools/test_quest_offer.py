@@ -244,7 +244,7 @@ class InstantaleApp:
 # にはこのテスト自身**なので、`main.InstantaleApp = app_cls` がここのグローバル名を
 # 書き換えてしまう。素朴に `type("InstantaleApp", (InstantaleApp,), {})` と書くと
 # 2回目以降は「前回の派生クラス」から派生し、フックの層が積み上がって
-# 同じ処理が何度も走る（実際にそれで1件誤判定した）。
+# 同じ処理が何度も走る。
 BASES = {"app": InstantaleApp, "board": DisplayQuestChoice,
          "start": ConversationStartManager, "end": ConversationEndManager}
 
@@ -596,7 +596,7 @@ print("=== タイトル戻り・再注入後の残骸 ===")
 # `PhaseSpec.to_dict()` がセーブに書くのは text と spec だけで、**印は落ちる**
 # （実セーブ8件で確認。GAME.md §2.2）。タイトルへ戻る・ロード・再注入のあとは
 # 「印の無い自分のボタン」が復元されているので、印だけで重複を見ていると
-# 同じボタンが2つ並ぶ（ユーザー報告・2026-08-02）。
+# 同じボタンが2つ並ぶ。
 def stale(text):
     """セーブから復元された自前ボタン（印が落ちている）。"""
     return {"text": text, "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}
@@ -631,8 +631,8 @@ check("印を持たない Screen では何も落とさない",
 # **他の MOD の印が付いていたら残骸ではない。**
 # セーブに焼かれるのは text と spec だけ ＝ 復元された残骸は印を1つも持たない。
 # 逆に印があれば、いま誰かが挿した生きているボタンなので触ってはいけない。
-# ここを見ていなかったため、`302_` が `309_`（役場の罰金）の確認画面から
-# キャンセルを消していた（2026-08-03。同じ文言・違う印のキー）。
+# ここを見ないと、`302_` が `309_`（役場の罰金）の確認画面からキャンセルを
+# 消すことになる（同じ文言・違う印のキー。VERIFICATION.md §2.31）。
 foreign = {"text": "依頼を受ける（話を切り上げる）", "mod_pardon_action": "cancel",
            "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}
 other = [dict(foreign)]

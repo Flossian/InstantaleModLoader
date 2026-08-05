@@ -328,8 +328,8 @@ def run():
           close(hud.choice_button.line_height, LINE_HEIGHT), hud.choice_button.line_height)
 
     # -- 本文を載せ替える MOD が先に走っていても外さない ----------------------
-    # 2026-08-03 の実機で起きた退行そのもの。`117_message_text_integrity` が
-    # 長い本文を「前置き + 省略通知 + 末尾 1000 文字」に載せ替えるので、
+    # 実機で起きた退行の回帰（VERIFICATION.md §2.32）。`117_message_text_integrity`
+    # が長い本文を「前置き + 省略通知 + 末尾 1000 文字」に載せ替えるので、
     # ラベルの text は value と一致も包含もしなくなる。名前で引いていれば効く。
     def truncating(value):
         return PAINT_PREFIX + "［表示負荷を抑えるため、前の本文は省略］\n" + value[-20:]

@@ -134,7 +134,7 @@ def apply(ctx):
                 # `hasattr` は使わない ― 失敗するルックアップを1回起こすので
                 # `__getattr__` トリップワイヤ（`201_`）を自己発火させる。
                 # 既定値付きの読み取りなら「本当に読まれた1回」と区別が付かない
-                # （TECH.md §6.3。この mod は初版が `hasattr` のままだった）。
+                # （TECH.md §6.3）。
                 owner = self if frames.attr(self, "in_battle") is not frames.MISSING \
                     else find_app()
                 clear_stale(owner, label)

@@ -1,0 +1,67 @@
+{
+  "entry": "fix_npc_name_collision.py",
+  "api": 1,
+  "name": {
+    "en": "NPC name dedup",
+    "ja": "NPC名の重複防止"
+  },
+  "description": {
+    "en": "Renames a newly generated NPC whose name reads the same as someone already in the world (Vargas / Varugasu / \"One-eyed\" Vargas). The replacement is picked from a bundled name roster, with an epithet some of the time",
+    "ja": "生成された NPC の名前が世界に居る誰かと同じに読めるとき（バルガス／ヴァルガス／「隻眼の」バルガス）、同梱の名簿から空いている名前を選んで付け直す。一定の割合で二つ名も付く"
+  },
+  "version": "3",
+  "author": "R01/Flossian",
+  "settings": {
+    "EPITHET_CHANCE": {
+      "type": "int",
+      "default": 30,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "二つ名を付ける割合（%）",
+        "en": "Chance of adding an epithet (%)"
+      },
+      "note": {
+        "ja": "「死神」ドルレイン／沈黙のドルレイン のように名前の前に付く。0 で付けない",
+        "en": "Prefixed to the name. 0 never adds one"
+      }
+    },
+    "SIMILARITY": {
+      "type": "choice",
+      "values": ["strict", "normal", "loose"],
+      "default": "normal",
+      "label": {
+        "ja": "どこまで近ければ重複とみなすか",
+        "en": "How close counts as a duplicate"
+      },
+      "note": {
+        "ja": "strict は読みが完全に一致したときだけ。normal は1文字違いまで。loose は短い名前や2文字違いまで拾う",
+        "en": "strict: identical reading only. normal: up to one character apart. loose: also short names and two characters apart"
+      }
+    },
+    "FOLD_VOICING": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "濁点・半濁点の違いも同じ音とみなす",
+        "en": "Treat voiced and unvoiced kana as the same sound"
+      },
+      "note": {
+        "ja": "バルガスとバルカスを重複にする。小さいモデルほどここが揺れる",
+        "en": "Makes Barugasu and Barukasu duplicates. Smaller models waver here the most"
+      }
+    },
+    "FIX_EXISTING": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "既に世界に居る重複も改名する",
+        "en": "Also rename duplicates already in the world"
+      },
+      "note": {
+        "ja": "既定では記録だけ。既存 NPC の画像は名前のフォルダに入っているので、改名すると次に作る画像だけが新しい名前の側へ行く",
+        "en": "Off by default (logged only). Existing portraits live in a folder named after the character, so renaming sends only newly generated images to the new name"
+      }
+    }
+  }
+}

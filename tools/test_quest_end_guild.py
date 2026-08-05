@@ -519,7 +519,7 @@ QuestEndManager(app).method_1("71")
 check("いまの町にギルドが無い場合も同じ",
       [m["facility"] for m in app.moved] == [app.leave_facility[0]], names_of(app.moved))
 
-print("=== エリアを id で持っている場合（実機で2回外した形） ===")
+print("=== エリアを id で持っている場合 ===")
 app, ctx, clock, mod, areas = setup()
 app.player.current_area = "9"      # Area ではなく id の文字列
 QuestEndManager(app).method_1("71")

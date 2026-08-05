@@ -44,13 +44,10 @@ def apply(ctx):
         def run(_dt=None, hud=hud, label=label, state=state):
             state["pending"] = False
             try:
-                # **`texture_update()` は呼ばない**（2026-08-03 に外した）。
-                # 本文のラベルは1文字ごとに3回作り直されていた ― 1回は Kivy 自身、
-                # 残る2回がこの MOD と `112_ui_text_spacing` の明示的な呼び出し。
-                # 1回 15ms（テクスチャ 1340x3549）なので、ティックの間隔 63.5ms の
-                # 3分の2 をここで食っていた（`211_probe_text_speed` の実測。
-                # VERIFICATION.md §2.34）。Kivy の作り直しはこの予約より先に走るので、
-                # 高さを出す時点の `texture_size` は新しい本文のものになっている。
+                # **`texture_update()` は呼ばない。** これを呼ぶと、本文が1文字
+                # 進むたびにラベルを余計に作り直すことになる（1回 15ms ＝ ティックの
+                # 間隔の 3分の2。VERIFICATION.md §2.34）。Kivy の作り直しはこの予約
+                # より先に走るので、高さを出す時点の `texture_size` は既に新しい。
                 update_height = frames.attr(hud, "update_label_height")
                 if callable(update_height):
                     update_height()

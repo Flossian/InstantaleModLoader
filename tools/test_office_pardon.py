@@ -683,7 +683,7 @@ check("ゲーム側のボタンは1枚も減っていない",
 # **他の mod の生きているボタンには触らない。** `302_` の確認画面の
 # 「やめておく」はこちらの `CANCEL_LABEL` と同じ文字列で、印のキーだけが違う。
 # ラベルと無害 spec だけで残骸と判定すると、他の mod の画面からキャンセルが
-# 消える（実際に `302_` がこちらのものを消していた・2026-08-03）。
+# 消える（VERIFICATION.md §2.31）。
 module, ctx, app = setup()
 foreign = {"text": "やめておく", "mod_party_action": "cancel",
            "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}

@@ -23,17 +23,28 @@ quest_flow.log は数 MB まで育っていて、「今回のプレイで何が�
 
     1. コマンドライン        --no-log-rotate / --log-rotate
     2. 環境変数              INSTANTALE_LOG_ROTATE=0 / 1
-    3. このファイルの既定値  ROTATE_LOGS
+    3. 設定ファイル          settings/loader.json の "log_rotate"（GUI の切り替え）
+    4. このファイルの既定値  ROTATE_LOGS
 
 OFF にすると入れ替えずに追記され続けるので、複数回の注入をまたいで
 挙動を追いたいときはこちらを使う。
+
+3 を 1・2 より下に置いているのは、その場限りの上書き（コマンドラインや
+環境変数）が、保存された設定より強くあるべきだから。逆にすると
+`--no-log-rotate` を付けても GUI の設定に負けることになる。
 """
 
 from __future__ import annotations
 
+import json
 import os
 
 # 世代管理の既定値。False にすると入れ替えず、常に追記していく。
+#
+# **ここを書き換えるのは最後の手段**。切り替えたいだけなら GUI の
+# 「実行 > 注入のたびにログを新しくする」を使う（`settings/loader.json` に入り、
+# この既定値より優先される）。設定ファイルなら MOD を差し替えても残るが、
+# ここを直すと版を上げたときに黙って元に戻る。
 ROTATE_LOGS = True
 
 # 取っておく古い世代の数。1 なら `名前.log.1` だけが残る。
@@ -42,8 +53,40 @@ KEEP_GENERATIONS = 1
 
 ENV_VAR = "INSTANTALE_LOG_ROTATE"
 
+#: GUI の切り替えの保存先。実体は `settings/loader.json` で、
+#: 持ち主は `runtime/instantale_modloader/config.py`（`FLAGS_NAME` / `flags_path`）。
+#: ここから import しないのは、このファイルが injector / watcher から
+#: **runtime を sys.path に入れずに**呼ばれるため。名前を2箇所に書くことになるが、
+#: そのために起動経路へ import の前提を足す方が高くつく。
+SETTINGS_FLAGS_NAME = "loader.json"
+SETTINGS_FLAG_KEY = "log_rotate"
+
 _TRUE = {"1", "true", "yes", "on"}
 _FALSE = {"0", "false", "no", "off"}
+
+
+def settings_flag() -> bool | None:
+    """`settings/loader.json` の `"log_rotate"` を読む。無ければ `None`。
+
+    `None` を返すのは「書かれていない」場合で、`False`（切ってある）とは区別する。
+    区別しないと、設定ファイルが無いだけで既定値 `ROTATE_LOGS` に届かなくなる。
+
+    読めなくても止めない。ログの世代管理は注入のついでの処理で、ここで例外を
+    上げると注入そのものが失敗する ― 設定が読めないことより注入できない方が困る。
+    """
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "settings", SETTINGS_FLAGS_NAME)
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except FileNotFoundError:
+        return None
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    value = data.get(SETTINGS_FLAG_KEY)
+    return value if isinstance(value, bool) else None
 
 
 def enabled(cli_override: bool | None = None) -> bool:
@@ -58,6 +101,9 @@ def enabled(cli_override: bool | None = None) -> bool:
         if value in _FALSE:
             return False
         # 解釈できない値（綴り間違いなど）は既定値に落とす。
+    stored = settings_flag()
+    if stored is not None:
+        return stored
     return ROTATE_LOGS
 
 
@@ -70,10 +116,12 @@ def add_arguments(parser) -> None:
     help はコンソールに出るので ASCII で書く（日本語だと cp932 のコンソールで
     文字化けする。watch.bat と同じ理由。日本語の説明は README / TECH に置く）。
     """
+    # 既定値は ROTATE_LOGS ではなく enabled() を出す。設定ファイル（GUI の
+    # 切り替え）や環境変数で変わるので、このファイルの定数を出すと嘘になる。
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--log-rotate", dest="log_rotate", action="store_true", default=None,
                        help="start fresh out/*.log on every injection (default: {})".format(
-                           "on" if ROTATE_LOGS else "off"))
+                           "on" if enabled() else "off"))
     group.add_argument("--no-log-rotate", dest="log_rotate", action="store_false",
                        help="keep appending to the existing logs (for debugging)")
 

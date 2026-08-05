@@ -36,8 +36,8 @@ rem  does and does not cover (game-derived strings, GAME.md, the EULA question).
 rem
 rem  Never shipped: out\ and settings\ (both made at runtime), __pycache__ /
 rem  *.pyc, tools\test_*.py and the one-off save fixers, and
-rem  llm_replacements.txt -- that last one is the player's own copy of a mod's
-rem  data file, so only the shipped llm_replacements.default.txt goes in.
+rem  llm_replacements.txt / npc.json -- those last two are the player's own copy
+rem  of a mod's data file, so only the shipped *.default.* versions go in.
 rem
 rem    make_dist.bat           version comes from runtime\instantale_modloader
 rem    make_dist.bat 1.2.0     override the version string
@@ -164,7 +164,7 @@ rem ===========================================================================
 rem  mods
 rem ===========================================================================
 echo   [mods] copying ...
-robocopy "runtime\mods" "%MODS%" /E /XD "__pycache__" "_template" /XF "*.pyc" "llm_replacements.txt" "load_order.json" "load_order.local.json" /NFL /NDL /NJH /NJS /NP >nul
+robocopy "runtime\mods" "%MODS%" /E /XD "__pycache__" "_template" /XF "*.pyc" "llm_replacements.txt" "npc.json" "load_order.json" "load_order.local.json" /NFL /NDL /NJH /NJS /NP >nul
 if errorlevel 8 (
   echo   ERROR: robocopy failed on runtime\mods ^(code %ERRORLEVEL%^).
   goto :fail

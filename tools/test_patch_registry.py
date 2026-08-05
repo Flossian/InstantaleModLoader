@@ -337,7 +337,7 @@ def main():
 
         # 分割した mod を直して注入し直したとき、**中の部品も読み直される**こと。
         # 入口だけ読み直して部品を sys.modules に残すと、新しい入口が古い部品を
-        # 呼び続け、追加した関数が「無い」と言われる（実際に踏んだ。2026-08-03）。
+        # 呼び続け、追加した関数が「無い」と言われる。
         put("zebra/helper.py", "VALUE = 99\nFRESH = True\n")
         again = ml._load_mod_file(os.path.join(tmp_mods, "zebra", "whatever.py"))
         check(again.LOADED == 99,

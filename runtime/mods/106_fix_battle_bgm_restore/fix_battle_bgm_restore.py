@@ -17,8 +17,8 @@ BGM は pygame の `Sound` オブジェクトで、`play_music_from_src(app, src
    エリア曲が重なる
 2. 鳴り始めたエリア曲は使い捨てオブジェクトにぶら下がる。**迷子**になり、
    以後どの `stop_music` でも止まらない
-3. 次の戦闘では `app.music`（＝戦闘曲）だけが止められ、迷子のエリア曲は鳴り続ける
-。戦闘中もエリア曲が重なる
+3. 次の戦闘では `app.music`（＝戦闘曲）だけが止められ、迷子のエリア曲は
+   鳴り続ける。戦闘中もエリア曲が重なる
 
 ## 直し方
 
@@ -83,6 +83,9 @@ def apply(ctx):
         # 「本当に戦闘が走っているか」。フラグ（`in_battle`）は戦闘が終わっても
         # 1 のまま残るので使えない（GAME.md §2.10 / `107_`）。開始と終了のフックで持つ。
         "battle_active": False,
+        # ミキサーがまだ無いことを一度知らせたか（`stray_channels`）。
+        # 掃除は何度も走るので、毎回出すとログが同じ行で埋まる。
+        "mixer_absent_logged": False,
     }
 
     def write(text):
@@ -271,6 +274,20 @@ def apply(ctx):
         found = []
         try:
             import pygame
+            # ゲームの音声が立ち上がる前に注入すると、ここは必ず失敗する
+            # （`pygame.error: mixer not initialized`）。**走査できないだけで
+            # 異常ではない** ― ミキサーが無いなら鳴っている音も無く、迷子の曲は
+            # 存在し得ない。例外にすると想定内の状態が毎回 ERROR とトレースバックで
+            # 出て、本物の失敗が埋もれる。
+            #
+            # `get_init()` で先に聞くのは、例外を握り潰すのと違って
+            # 「ミキサーが無い」と「走査が壊れた」を取り違えないため。
+            if pygame.mixer.get_init() is None:
+                if not state.get("mixer_absent_logged"):
+                    state["mixer_absent_logged"] = True
+                    ctx.log("bgm restore: mixer is not up yet; "
+                            "skipping the stray-track sweep (harmless at injection)")
+                return found
             keep = sfx_sounds(manager, app)
             app_music = getattr(app, "music", None)
             for index in range(pygame.mixer.get_num_channels()):

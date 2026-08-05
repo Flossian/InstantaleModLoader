@@ -618,8 +618,8 @@ def apply(ctx):
                 except Exception:
                     ctx.log_exc("party leave: save_game failed")
             # 仲間欄は名簿を書き換えただけでは変わらない（選択肢ボタンと同じ構図）。
-            # **別れの文が出終わってから**消す（ユーザー指示・2026-07-28）― 文より
-            # 先に消えると、まだ別れていないうちに居なくなったように見える。
+            # **別れの文が出終わってから**消す ― 文より先に消えると、まだ
+            # 別れていないうちに居なくなったように見える。
             # `when_idle` はテキストの流し込み（`is_adding_text`）が終わるのを待つ。
             # 既に確定した行動なので、待ちきれなくても実行する。
             screen.when_idle(app, lambda: repaint_party(app, name),
@@ -642,7 +642,7 @@ def apply(ctx):
         """外れた NPC を、ゲームが指した施設へ置く。
 
         値は `get_party_leave_facility` が返したものをほどいて渡すだけ。中身が
-        何なのかは**解釈しない**（`301_` で引数を推測して落とした反省）。
+        何なのかは**解釈しない**（引数の意味を推測するとゲームが落ちる。GAME.md §2.2）。
         """
         try:
             app.move_npc_to_facility(member_id, character, facility, node)

@@ -174,8 +174,8 @@ def apply(ctx):
     def describe_answer(app, value):
         """ゲームが返した置き先を、ログに読める形にする。**読むだけ。**
 
-        中身の解釈はしない（`302_` が `(施設, ノード)` を解釈せずそのまま渡して
-        落ちた反省）。名前が引ければ名前、駄目なら型だけ出す。
+        中身の解釈はしない（`(施設, ノード)` をほどかずに渡すとゲームが落ちる。
+        GAME.md §2.8）。名前が引ければ名前、駄目なら型だけ出す。
         """
         first = value[0] if isinstance(value, (tuple, list)) and value else value
         return ui.facility_name(app, first) or type(first).__name__

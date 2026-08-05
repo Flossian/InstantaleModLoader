@@ -49,6 +49,36 @@ def apply(ctx):
     # 上限超えの分だけクランプのログが出てしまう。テスト中は黙らせるためのフラグ。
     state = {"verifying": False}
 
+    # 包む前の素の関数を控えておく。これが「本体がまだ壊れているか」を測る唯一の
+    # 手がかりになる ― 包んだ後の関数を総当たりしても、確かめられるのは
+    # 「この mod が効いていること」だけで、mod がもう要らないかは分からない。
+    #
+    # このバグは能動的に起こせない（難易度 77 以上の NPC が生まれるのを待つしかない）。
+    # だが `get_npc_employ_price` は副作用の無い参照関数なので、稼働中のプロセスで
+    # 直接呼んで有効域を割り出せる（GAME.md §3。0..76 もこの手で判明した）。
+    # 下の自己テストがどのみち同じ範囲を呼ぶので、呼び出しが増えるわけでもない。
+    #
+    # **ここで module の属性をそのまま掴んではいけない。** 再注入のとき、その属性は
+    # まだ「前回の注入で付けたラッパ」のままで（層を剥がすのは ctx.wrap の中）、
+    # 掴むと clamp 済みの関数を測ることになる。当然どの入力でも落ちないので、
+    # 本体が直っていなくても「もう要らない」と出てしまう。
+    # 上の `clamp` と同じく `__original__` をたどって最下層まで戻す
+    # （`200_probe_bug_sites` もここを包むので、層は 1 枚とは限らない）。
+    raw = functions.get_npc_employ_price
+    raw_depth = 0
+    for _ in range(32):                       # 連鎖が壊れていても止まるように上限を置く
+        deeper = getattr(raw, "__original__", None)
+        if deeper is None:
+            break
+        raw = deeper
+        raw_depth += 1
+
+    # 底まで来たかを推論で済ませない。ローダは自分が被せたものに必ず印を付ける
+    # （patch.py の PATCH_MARK / __wrapper_of__）ので、印が残っていれば
+    # まだこちら側のラッパを測っていることになる。判定を覆せる材料なので必ず出す。
+    raw_is_ours = any(hasattr(raw, mark)
+                      for mark in ("__instantale_patch__", "__wrapper_of__"))
+
     @ctx.wrap("scripts.functions:get_npc_employ_price")
     def get_npc_employ_price(orig, npc_difficulty_level, *args, **kwargs):
         try:
@@ -91,3 +121,38 @@ def apply(ctx):
     else:
         ctx.log("verified: get_npc_employ_price(0..200) no longer raises; "
                 "levels >=76 all price at {}".format(top))
+
+    # --------------------------------------------------------------- 上流の状態
+    # 素の関数がまだ落ちるかを測る。ゲームが本体側で直した版では落ちなくなるので、
+    # そうなったらこの mod は要らない。落ちる限りは要る。
+    # **判定に使わず記録するだけ**にしておく ― 「落ちなくなった」の一度の観測で
+    # 自動的に降りると、測り方の側が間違っていたときに黙って穴が開く。
+    upstream_first_raise, upstream_error = None, None
+    try:
+        for level in range(0, 201):
+            try:
+                raw(level)
+            except Exception as exc:
+                upstream_first_raise = (level, "{}: {}".format(type(exc).__name__, exc))
+                break
+    except Exception as exc:                      # raw の呼び出し自体が壊れている
+        upstream_error = "{}: {}".format(type(exc).__name__, exc)
+
+    if raw_is_ours:
+        # ここに来たら測定そのものが無効。剥がし切れていないラッパを測っている。
+        ctx.log("upstream probe measured a patched function (unwrapped={}); "
+                "result discarded, keeping the fix".format(raw_depth), level="WARN")
+    elif upstream_error is not None:
+        ctx.log("upstream probe failed ({}); keeping the fix".format(upstream_error),
+                level="WARN")
+    elif upstream_first_raise is None:
+        # ここに来たら、本体が直したか、こちらの測り方が変わったかのどちらか。
+        # unwrapped= を必ず添える ― 0 なら素の関数を測っている。1 以上なら層を
+        # 剥がした後なので、剥がし損ねていないかを疑う手がかりになる。
+        ctx.log("upstream: get_npc_employ_price(0..200) no longer raises "
+                "(unwrapped={}) -- this mod may be redundant on this build "
+                "(verify before removing)".format(raw_depth))
+    else:
+        ctx.log("upstream: get_npc_employ_price still raises from level {} ({}) "
+                "(unwrapped={}) -- this mod is still needed".format(
+                    upstream_first_raise[0], upstream_first_raise[1], raw_depth))

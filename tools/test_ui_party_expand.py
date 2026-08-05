@@ -153,8 +153,8 @@ class FakeWidget(object):
             widget.parent = None
 
 
-# 立ち絵ごとの幅（絵の縦横比で決まる）。実機では絵を差し替えると幅が変わり、
-# 複製した枠ではそれが枠の外へはみ出した（2026-08-03）。
+# 立ち絵ごとの幅（絵の縦横比で決まる）。絵を差し替えると幅が変わり、複製した枠
+# では `StencilFloatLayout` の切り取りが効かないので枠の外へはみ出す。
 PORTRAIT_WIDTH = {"portraits/player.png": 67.0, "portraits/leon.png": 67.0,
                   "portraits/mina.png": 67.0, "portraits/kai.png": 125.0}
 
@@ -456,7 +456,7 @@ class FakeHUD(FakeWidget):
 
     def paint_cell(self, cell, member_id):
         # ゲームは枠の中身を直に触る。**枠でないものが混じるとここで落ちる**
-        # （実機のクラッシュはこの形。2026-08-03）。
+        # （実機のクラッシュはこの形。GAME.md §2.8）。
         image, label = cell.image(), cell.label()
         cell.member_id = member_id
         data = self.party_members.get(member_id)
@@ -765,12 +765,12 @@ def run():
           button.opacity == 1 and button.disabled is False,
           (button.opacity, button.disabled))
     # 木を降りて `disabled` を持つものを全部拾う作りだと、ゲームの選択肢まで
-    # 掴んで、畳んだ後も押せなくなった（実機で踏んだ。2026-08-03）。
+    # 掴んで、畳んだ後も押せなくなる（GAME.md §2.8）。
     check("the game's own choice buttons are never touched, even when covered",
           all(c.opacity == 1 and c.disabled is False for c in hud.right_buttons),
           [(c.opacity, c.disabled) for c in hud.right_buttons])
     # 足した枠は背景を持たないので、下のゲームの選択肢が透けて見え、押せてしまう
-    # （実機で「会話する」の文字が枠に重なった。2026-08-03）。黒い板1枚で塞ぐ。
+    # （下の「会話する」の文字が枠に重なって出る）。黒い板1枚で塞ぐ。
     blockers = [c for c in hud.root.children if isinstance(c, FakeBlocker)]
     blocker = blockers[0] if blockers else None
     gained = (PANEL_POS[0], PANEL_POS[1] + PANEL_SIZE[1], PANEL_SIZE[0], ROW_PITCH)
@@ -786,8 +786,7 @@ def run():
           blocker is not None and blocker.disabled is True,
           blocker and blocker.disabled)
     # **帯の中に入れてはいけない。** ゲームは帯の子を1つずつ「パーティの枠」と
-    # して塗るので、枠の形をしていない板が混じるとそこで落ちる（実機のクラッシュ。
-    # 2026-08-03、別れた仲間を雇い直した場面）。
+    # して塗るので、枠の形をしていない板が混じるとそこで落ちる（GAME.md §2.8）。
     check("the blocker is not a child of the party panel",
           not [c for c in hud.panel.children if isinstance(c, FakeBlocker)],
           [type(c).__name__ for c in hud.panel.children])
@@ -1118,10 +1117,10 @@ def run():
     mod.PORTRAIT_FIT = mod.FIT_INSIDE
 
     # -- 他の MOD が HUD 直下に置いたウィジェット ------------------------------
-    # 初版は `113_` から写した「`children` の先頭を採る」形で、除外していたのは
-    # 自分のボタンだけだった。`113_` の古い版はボタンを HUD 直下へ足していたので、
-    # そこから注入し直すと**相手のボタンの中**へ入り込む。Kivy の `children` は
-    # 新しい順なので、ゲームの `FloatLayout` は最後尾から探すのが正しい。
+    # 「`children` の先頭を採る」形で除外を自分のボタンだけにすると、他の MOD が
+    # HUD 直下へ足したウィジェットの**中**へ入り込む。Kivy の `children` は
+    # 新しい順なので、ゲームの `FloatLayout` は最後尾から探すのが正しい
+    # （VERIFICATION.md §2.33）。
     install(mod, ctx)
     hud = FakeHUD(members=4)
     other = FakeWidget()

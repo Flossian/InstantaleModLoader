@@ -513,7 +513,7 @@ def run():
           sum(1 for c in hud.root.children if isinstance(c, FakeButton)) == 1,
           [type(c).__name__ for c in hud.root.children])
     # 素の HUD の子は FloatLayout 1枚だけ。そこへ足すと「画面の最初の子」を取る
-    # 側から見える相手が変わり、アイテムの移動・装備が壊れた（2026-08-02）。
+    # 側から見える相手が変わり、アイテムの移動・装備が壊れる（VERIFICATION.md §2.33）。
     check("the HUD's own child list is left exactly as the game built it",
           hud.children == [hud.root] and hud.screen_root() is hud.root,
           [type(c).__name__ for c in hud.children])
@@ -780,10 +780,9 @@ def run():
           [type(c).__name__ for c in hud.root.children])
 
     # -- 他の MOD が HUD 直下に置いたウィジェット ------------------------------
-    # 初版は `children` の**先頭**（＝いちばん新しい子）を置き場所に採っていて、
-    # 除外していたのは自分のボタンだけだった。HUD へウィジェットを足す MOD が
-    # 2本になった時点（`116_`）で、相手のボタンの中へ入り込みうる状態になる。
-    # VERIFICATION.md §2.31 の「残った懸念」。
+    # `children` の**先頭**（＝いちばん新しい子）を置き場所に採り、除外を自分の
+    # ボタンだけにすると、HUD へウィジェットを足す MOD が2本になった時点で
+    # 相手のボタンの中へ入り込む（VERIFICATION.md §2.33）。
     install(mod, ctx)
     hud = FakeHUD()
     other = FakeButton(text="パーティ", size=(30.0, 30.0))

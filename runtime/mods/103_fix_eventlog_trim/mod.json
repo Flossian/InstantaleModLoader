@@ -10,5 +10,6 @@
     "ja": "【今回のイベント内ログ】を直近3ターンぶんに刈り込み、プロンプトの肥大を抑える"
   },
   "version": "1",
-  "author": "R01/Flossian"
+  "author": "R01/Flossian",
+  "superseded": "main_024"
 }
