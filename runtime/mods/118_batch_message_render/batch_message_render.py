@@ -35,6 +35,14 @@ STATE_STORE_ATTR = "__instantale_batch_message_render_states__"
 # 残らないよう、結び直す前にこれで外す（`113_` の `on_resize` と同じ作法）。
 WINDOW_ATTR = "_instantale_batch_render_touch"
 
+# 「この本文はもう画面に出ているか」を見るのに使う先頭の文字数（`settle_label`）。
+PROBE_CHARS = 8
+
+# 打ち切った直後の画面を1回だけ記録する（`watch_after_skip`）。原因が決まったら
+# 落とす。読み取りしかしないので、付けたままでも本文には触らない。
+WATCH_AFTER_SKIP = True
+WATCH_MOMENTS = (0.1, 0.5, 1.5)
+
 # 覚えておく本文の数。照合は1文字ごとに走るので、際限なく伸ばさない。
 # 画面に載る本文は `117_` が上限を掛けているので、これより古い本文は
 # そもそも照合対象に残っていない。
@@ -67,6 +75,10 @@ def apply(ctx):
     # 打ち出しの最中かどうかは1本しか無い（同時に2つの本文は流れない）ので、
     # app ごとの控えではなくここに置く。クリックの見張りから引ける場所が要る。
     store.setdefault("stream", None)
+    # 打ち切りの最中は塗り直しを止める（`mute`）。自分で回した鎖の残りを
+    # 捨てるための印（`dropped`）。どちらも注入し直しをまたいで同じ辞書を使う。
+    store.setdefault("mute", False)
+    store.setdefault("dropped", None)
     states = store["states"]
     fallback_states = store["fallback_states"]
     warned = {}     # 一度きりの警告の控え（種類ごと）
@@ -76,6 +88,8 @@ def apply(ctx):
             "generation": 0,
             "overlay": None,
             "markup_label": None,
+            "tagged": None,
+            "plain": None,
             "segments": [],
             "session": 0,
             "stream_cache": None,
@@ -227,6 +241,23 @@ def apply(ctx):
         return estimate_height(label, shown[start:], line_height)
 
     # -- 色 ------------------------------------------------------------------
+    def compact(text):
+        """空白を除いた文字列と、元の位置の対応表を返す。
+
+        **控えた本文をそのまま探してはいけない。** ゲームは打ち出しの最中に
+        本文には無い改行を混ぜるので、見つかる本文と見つからない本文が混ざり、
+        色が白・灰・白・灰と交互になる（実機で出た）。空白を落として突き合わせ、
+        位置だけ元に戻せば、どちらの形でも同じ1本の本文として扱える。
+        """
+        chars = []
+        positions = []
+        for index, char in enumerate(text):
+            if char.isspace():
+                continue
+            chars.append(char)
+            positions.append(index)
+        return "".join(chars), positions
+
     def build_markup(state, shown):
         """`shown` を色付きの markup に組み直す。
 
@@ -238,23 +269,28 @@ def apply(ctx):
             has_old     灰色にした部分があるか
             fresh_start 白いままの部分の先頭（一括表示のときの新着位置）
         """
+        packed, positions = compact(shown)
         visible_segments = []
         claimed = []
         for segment in reversed(state["segments"]):
             text, added_at, session = segment_parts(segment)
-            if not text:
+            key = "".join(text.split())
+            if not key:
                 continue
-            start = shown.rfind(text)
-            end = start + len(text)
+            start = packed.rfind(key)
+            end = start + len(key)
             while start >= 0 and any(
                     start < claimed_end and end > claimed_start
                     for claimed_start, claimed_end in claimed):
-                start = shown.rfind(text, 0, start)
-                end = start + len(text)
+                start = packed.rfind(key, 0, start)
+                end = start + len(key)
             if start < 0:
                 continue
-            visible_segments.append((start, end, added_at, session))
             claimed.append((start, end))
+            # 位置は元の本文に戻す。中に挟まっている改行はその本文のものとして
+            # 一緒に色を付ける（間に挟まる空白だけが「どの本文でもない」）。
+            visible_segments.append(
+                (positions[start], positions[end - 1] + 1, added_at, session))
         if not visible_segments:
             return None
         visible_segments.sort()
@@ -266,9 +302,14 @@ def apply(ctx):
         position = 0
         for start, end, added_at, session in visible_segments:
             if position < start:
+                gap = shown[position:start]
                 parts.append("[color={}]{}[/color]".format(
-                    OLD_TEXT_COLOR, escape_markup(shown[position:start])))
-                has_old = True
+                    OLD_TEXT_COLOR, escape_markup(gap)))
+                # 本文と本文の間の空白だけの隙間は、灰色にしても何も見えない。
+                # それで markup を立てると、色を変える必要が無い場面でラベルを
+                # 組み直すことになるので数に入れない。
+                if gap.strip():
+                    has_old = True
             escaped = escape_markup(shown[start:end])
             if is_old(state, added_at, session):
                 parts.append("[color={}]{}[/color]".format(
@@ -302,7 +343,7 @@ def apply(ctx):
             if built["has_old"]:
                 label.markup = True
                 label.text = text
-                state["markup_label"] = label
+                remember_markup(state, label, text, shown)
                 update = frames.attr(label, "texture_update")
                 if callable(update):
                     update()
@@ -333,8 +374,7 @@ def apply(ctx):
             if built is None or not built["has_old"]:
                 # 灰色にするものが無い＝生の本文をそのまま出してよい。markup を
                 # 落としておかないと、本文中の `[` を書式として食われる。
-                if frames.attr(label, "markup", False):
-                    label.markup = False
+                drop_markup(state, label)
                 state["stream_cache"] = None
                 return
             cache = {
@@ -344,17 +384,39 @@ def apply(ctx):
             }
             state["stream_cache"] = cache
         label.markup = True
-        label.text = cache["head"] + escape_markup(shown[len(cache["prefix"]):])
+        tagged = cache["head"] + escape_markup(shown[len(cache["prefix"]):])
+        label.text = tagged
+        remember_markup(state, label, tagged, shown)
+
+    def remember_markup(state, label, tagged, plain):
+        """いま書いた色付きの文字列と、その素の形を控える。
+
+        色を外すときに**素の形へ戻す**ために要る（`drop_markup`）。
+        """
+        state["markup_label"] = label
+        state["tagged"] = tagged
+        state["plain"] = plain
 
     def drop_markup(state, label):
-        """ゲームが生の本文を入れる直前に markup を落とす。"""
+        """こちらが付けた色を外す。**素の本文に戻してから markup を落とす。**
+
+        タグの付いた文字列を残したまま markup だけ落とすと、ゲームが本文を
+        塗り直すまでの間、`[color=#808080]` がそのまま画面に出る（実機で見えた ―
+        場面転換のときに一瞬タグが出る）。塗り直しがいつ来るかはこちらの都合では
+        決まらないので、その瞬間を作らない。
+        """
         if state.get("markup_label") is not label:
             return
         try:
+            if (frames.attr(label, "text") == state.get("tagged")
+                    and isinstance(state.get("plain"), str)):
+                label.text = state["plain"]
             label.markup = False
         except Exception:
             ctx.log_exc("batch message render: could not reset text markup")
         state["markup_label"] = None
+        state["tagged"] = None
+        state["plain"] = None
 
     # -- 一括表示 ------------------------------------------------------------
     def schedule(callback, delay=0):
@@ -480,10 +542,10 @@ def apply(ctx):
         # （`out/text_viewport.log`: 行列が 1 から 0 に減るのは `index == len(context)`
         # の呼び出しと同時）。ここを自分で真似して行列を放置した結果、次の本文が
         # 永久に出ず、消えない先頭が何度も再表示された ― 実機で踏んだ。
-        before = frames.attr(app, "display_text")
+        _owner, before = canonical_text(app, None)
         result = orig(app, dt, context, len(context))
-        after = frames.attr(app, "display_text")
-        if before != after and not warned.get("tail"):
+        _owner, after = canonical_text(app, None)
+        if before is not None and before != after and not warned.get("tail"):
             # 終端の index が「何も足さずに完了だけ」である保証は実測3件からの
             # 推定でしかない。外れていれば末尾が重複するので、黙って壊れないよう
             # 一度だけ残す。
@@ -514,6 +576,7 @@ def apply(ctx):
             "state": state,
             "context": context,
             "skip": False,
+            "owner": None,      # 塗り直しの相手（塗り直し自身が教える）
         }
         try:
             return orig(app, dt, context, index)
@@ -521,47 +584,178 @@ def apply(ctx):
             store["stream"] = None
             raise
 
-    def typed_length(shown, context, hint):
-        """いま何文字ぶん出ているかを、`index` を手掛かりに確かめる。
+    def canonical_text(app, stream):
+        """1文字ずつ伸びている本文の正本と、その持ち主を返す。
 
-        `index` の意味（次に足す文字の1つ手前）は実測からの推定なので、
-        鵜呑みにはしない。前後1文字まで見て、それでも本文の末尾と噛み合わ
-        なければ諦める（打ち切らずに逐次のまま続ける）。
+        **どのオブジェクトが本文を持っているかを決めつけない。** 塗り直しの通知
+        （`update_display_text`）に渡ってくる `instance` が本人なので、それを
+        最優先で使い、無ければ HUD → app の順に当たる。
+
+        `frames.attr` の既定値は**文字列**の `MISSING` なので、`isinstance(str)`
+        だけでは「属性が無い」を弾けない ― ここを取り違えて、実機で打ち切りが
+        毎回見送られていた（`out/modloader.log` の
+        `could not tell how much of the message is already shown`）。
         """
-        if not isinstance(shown, str) or type(hint) is not int:
-            return None
-        for length in (hint, hint - 1, hint + 1):
-            if 1 <= length <= len(context) and shown.endswith(context[:length]):
-                return length
-        return None
+        owners = []
+        if isinstance(stream, dict) and stream.get("owner") is not None:
+            owners.append(stream["owner"])
+        try:
+            hud = ui.find_hud(app)
+        except Exception:
+            hud = None
+        if hud is not None:
+            owners.append(hud)
+        owners.append(app)
+        for owner in owners:
+            value = frames.attr(owner, "display_text")
+            if value is not frames.MISSING and isinstance(value, str):
+                return owner, value
+        return None, None
+
+    def repaint(app, owner, text):
+        """ゲーム本来の塗り直しを通す。
+
+        本文の正本へ書けば塗り直しが走る、とは限らない ― 実機ではそれで画面が
+        更新されず、打ちかけの数文字（NPC の名前）だけが残った
+        （`out/modloader.log`: `canonical 57552 -> 57569` と書けているのに画面は
+        7文字のまま）。自分でラベルを塗らずにゲームの塗り直しを呼ぶのは、
+        `117_` の切り詰めなど内側の層をそのまま通すため。
+        """
+        for host in (owner, ui.find_hud(app)):
+            paint = frames.attr(host, "update_display_text")
+            if callable(paint):
+                paint(host, text)
+                return True
+        return False
+
+    def settle_label(app):
+        """打ち切った後にラベルの寸法を計算し直す。
+
+        Kivy はテクスチャの作り直しを次のフレームへ回すので、ゲームが
+        `update_label_height()` を呼ぶ時点の `texture_size` は1手前のもの。
+        1文字ずつなら見えない遅れが、まとめて足すと「増えた行が枠から切り
+        落とされる」形で出る（実機で踏んだ）。GAME.md §2.3 の作法どおり、
+        `texture_update()` の後に高さを出し直す。
+        """
+        hud = ui.find_hud(app)
+        label = frames.attr(hud, "text_display")
+        if label in (None, frames.MISSING):
+            return False
+        update = frames.attr(label, "texture_update")
+        if callable(update):
+            update()
+        update_height = frames.attr(hud, "update_label_height")
+        if callable(update_height):
+            update_height()
+        return True
+
+    def watch_after_skip(app, context):
+        """打ち切った直後の数フレームを1回だけ記録する（読み取りのみ）。
+
+        実機で「一瞬全文が出た後に消える」が出たときに足した。原因（正本だと
+        思って書いていた先が写しで、0.1 秒後に作り直されていた）は決着済みだが、
+        同じ種類の「出した後に誰かが変える」を次に疑うときの目になるので残す。
+        """
+        if not WATCH_AFTER_SKIP or warned.get("watch"):
+            return
+        warned["watch"] = True
+        head = context[:PROBE_CHARS]
+
+        def look(moment):
+            def run(_dt=None):
+                try:
+                    hud = ui.find_hud(app)
+                    label = frames.attr(hud, "text_display")
+                    scroll = frames.attr(hud, "scroll_view")
+                    _owner, canonical = canonical_text(app, None)
+                    shown = frames.attr(label, "text", "")
+                    ctx.log("batch message render: after the skip +{}s"
+                            " canonical={} label={} height={} opacity={}"
+                            " texture={} scroll_y={} markup={} head shown={}"
+                            .format(
+                                moment,
+                                len(canonical) if isinstance(canonical, str) else "?",
+                                len(shown) if isinstance(shown, str) else "?",
+                                frames.attr(label, "height"),
+                                frames.attr(label, "opacity"),
+                                frames.attr(label, "texture_size"),
+                                frames.attr(scroll, "scroll_y"),
+                                frames.attr(label, "markup"),
+                                isinstance(shown, str) and head in shown))
+                except Exception:
+                    ctx.log_exc("batch message render: could not look at the screen")
+            return run
+
+        for moment in WATCH_MOMENTS:
+            schedule(look(moment), moment)
 
     def finish_stream(orig, app, dt, context, index, stream):
-        """クリックされた。残りを一度に出して、後始末はゲームに返す。"""
-        state = stream["state"]
-        shown = frames.attr(app, "display_text")
-        typed = typed_length(shown, context, index + 1)
-        if typed is None:
-            store["stream"] = None
-            if not warned.get("skip"):
-                warned["skip"] = True
-                ctx.log("batch message render: could not tell how much of the"
-                        " message is already shown; the click was ignored",
-                        level="WARN")
-            return orig(app, dt, context, index)
-        remaining = context[typed:]
-        if remaining:
-            try:
-                # 1文字ずつ足しているのと同じ経路（`display_text` の書き換え）に
-                # 残り全部を一度に流す。塗り直しは1回で済む。
-                app.display_text = shown + remaining
-            except Exception:
-                store["stream"] = None
-                ctx.log_exc("batch message render: could not skip to the end")
-                return orig(app, dt, context, index)
+        """クリックされた。残りをゲーム本来の経路で一気に流す。
+
+        **本文はこちらで書かない。** 正本の名前を当てて書きにいく形は、実機で
+        行き止まりだった ― `hud.display_text` へ書けても 0.1 秒後には元へ戻され
+        ていた（`out/modloader.log` の `after the skip +0.1s` で `canonical` が
+        書く前の長さに戻っている）。あれは正本ではなく写しで、ゲームは自分の
+        控えから作り直す。
+
+        そこで、1文字ずつの呼び出しを**その場で最後まで回す**。書くのはゲーム
+        自身なので、どこに本文があるかを知る必要が無く、打ち出しの最中に足して
+        いる改行もそのまま入る。代金は塗り直しだが、そこは止められる ―
+        こちらが `update_display_text` を包んでいるので、回している間は素通し
+        にして、終わってから1回だけ塗る。
+
+        鎖は1回ごとに次を予約しているので、回した後には予約が残る。それを
+        ゲームへ渡すと本文の終端を何度も踏む（＝次の本文が消える）ので、
+        この本文の続きは捨てる印を置く。
+        """
+        store["dropped"] = {"app": app, "context": context}
+        store["mute"] = True
+        steps = 0
+        try:
+            position = index
+            # 終わりの判定はゲームに任せる（`is_adding_text` が下りたら終わり）。
+            # 終端の呼び出しがどの `index` なのかは実測できていないので、
+            # 数え方を決め打ちにしない。
+            while (position <= len(context)
+                   and frames.attr(app, "is_adding_text", True) is not False):
+                orig(app, dt, context, position)
+                position += 1
+                steps += 1
+        except Exception:
+            ctx.log_exc("batch message render: could not run the rest of the message")
+        finally:
+            store["mute"] = False
+
+        if frames.attr(app, "is_adding_text", False) is True:
+            # 鎖が終わっていない（回し方の見立てが外れた）。後始末だけ渡す。
+            orig(app, dt, context, len(context))
+
+        _owner, canonical = canonical_text(app, stream)
+        try:
+            if isinstance(canonical, str):
+                repaint(app, stream.get("owner"), canonical)
+            settle_label(app)
+        except Exception:
+            ctx.log_exc("batch message render: could not repaint after the skip")
+
+        if not warned.get("skipped"):
+            warned["skipped"] = True
+            ctx.log("batch message render: skipped a message (index={},"
+                    " len(context)={}, steps={}, canonical={} chars,"
+                    " adding={})".format(
+                        index, len(context), steps,
+                        len(canonical) if isinstance(canonical, str) else "?",
+                        frames.attr(app, "is_adding_text")))
+        watch_after_skip(app, context)
         store["stream"] = None
-        return orig(app, dt, context, len(context))
+        return None
 
     def continue_stream(orig, app, dt, context, index):
+        dropped = store.get("dropped")
+        if (isinstance(dropped, dict) and dropped["app"] is app
+                and dropped["context"] == context):
+            # 打ち切りで自分で回した鎖の残り。ゲームへ渡すと終端を二度踏む。
+            return None
         stream = store.get("stream")
         if (not isinstance(stream, dict) or stream["app"] is not app
                 or stream["context"] != context):
@@ -621,6 +815,7 @@ def apply(ctx):
 
         state = state_for(self)
         store["stream"] = None      # 新しい本文が始まった＝前の鎖は終わっている
+        store["dropped"] = None
         if BATCH_MODE == "always" and callable(
                 frames.attr(self, "add_text_immediately")):
             return show_at_once(orig, self, dt, context, state)
@@ -631,10 +826,17 @@ def apply(ctx):
     def update_display_text(orig, self, instance=None, value=None, *args, **kwargs):
         # 先にゲームに塗らせる。こちらは塗り終わった後の色だけを直す（`112_` と
         # 同じ作法）。打ち出し中でなければ何もしない ＝ 一括表示のときは素通り。
+        if store.get("mute"):
+            # 打ち切りで1文字ずつ回している最中。塗り直しは終わってから1回だけ。
+            return None
         result = orig(self, instance, value, *args, **kwargs)
         stream = store.get("stream")
         if isinstance(stream, dict):
             try:
+                if instance is not None and isinstance(value, str):
+                    # 本文の正本を持っているのはこの `instance`。打ち切りの
+                    # 書き戻し先はここで教わる（名前で探し当てない）。
+                    stream["owner"] = instance
                 label = frames.attr(self, "text_display")
                 if label not in (None, frames.MISSING):
                     stream_colors(stream["state"], label)
