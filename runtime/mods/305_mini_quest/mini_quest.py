@@ -71,6 +71,7 @@ LOG_BASENAME = "mini_quest.log"
 
 # どの依頼がこの MOD 製かの控え。**セーブには書かない**（クエスト辞書に独自キーを
 # 足すとセーブに焼かれるうえ、再読み込み後に Quest がそのキーを持つ保証が無い）。
+# 置き場は `state/`（`ctx.state_path`）。消すと受注中の依頼が素の依頼に見える。
 RECORD_BASENAME = "mini_quests.json"
 
 # 掲示板に出すボタンの文言。
@@ -516,7 +517,7 @@ def _text(value, limit=120):
 # --------------------------------------------------------------------------
 def apply(ctx):
     log_path = ctx.out_path(LOG_BASENAME)
-    record_path = ctx.out_path(RECORD_BASENAME)
+    record_path = ctx.state_path(RECORD_BASENAME)
 
     state = {
         "pending": None,        # 生成待ちの印 {"kind": ..., "at": ...}

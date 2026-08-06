@@ -75,6 +75,18 @@
         "ja": "0 にすると、会話を出た時点で作れなくなる",
         "en": "0 = only usable during the conversation"
       }
+    },
+    "USE_NPC_MEMORY": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "依頼人の人物像を依頼の生成に使う",
+        "en": "Use the client's remembered persona"
+      },
+      "note": {
+        "ja": "「NPCが会話を覚える」が覚えた人物像を添える。その MOD を入れていなければ何も起きない",
+        "en": "Adds the persona built by \"NPC conversation memory\". Does nothing without that MOD"
+      }
     }
   }
 }

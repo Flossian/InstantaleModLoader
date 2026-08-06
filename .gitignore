@@ -1,5 +1,6 @@
 # ---- 生成物 / ローカル状態（ルート直下のみ） ----
 /out/
+/state/
 /dist/
 /graphify-out/
 /settings/

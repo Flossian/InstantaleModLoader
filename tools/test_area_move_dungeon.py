@@ -457,12 +457,19 @@ def install_fake_functions(levels):
 class FakeCtx:
     def __init__(self, out_dir):
         self.out_dir = out_dir
+        self.state_dir = os.path.join(out_dir, "state")
         self.hooks = {}
         self.errors = []
         self.logs = []
 
     def out_path(self, *parts):
         path = os.path.join(self.out_dir, *parts)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        return path
+
+    def state_path(self, *parts):
+        """永続データの置き場。本番と同じく out/ とは**別のフォルダ**にする。"""
+        path = os.path.join(self.state_dir, *parts)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
@@ -516,7 +523,7 @@ def install(hooks, targets):
 HUD_CLS = install_fake_hud()
 CLOCK = install_fake_kivy()
 
-STATE_PATH = os.path.join(OUT_DIR, "road_travel.json")
+STATE_PATH = os.path.join(OUT_DIR, "state", "road_travel.json")
 LOG_PATH = os.path.join(OUT_DIR, "road_travel.log")
 
 

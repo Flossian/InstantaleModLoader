@@ -151,8 +151,12 @@ def rotate(out_dir: str, *, cli_override: bool | None = None,
     """out_dir 直下の *.log を1世代ぶん送る。入れ替えた本数を返す。
 
     OFF のときは何もせず 0 を返す。out/ 直下の `*.log` だけが対象で、
-    サブディレクトリ（out/test, out/recon）や状態ファイル
-    （quest_clients.json, crashlog_baseline.txt）には触らない。
+    サブディレクトリ（out/test, out/recon）や `*.log` でないもの
+    （status.json, crashlog_baseline.txt）には触らない。
+
+    MOD が持つ永続データはそもそもここに来ない（`state/`。ローダの
+    `ctx.state_path`）。以前は `out/quest_clients.json` のような状態ファイルが
+    同じ場所に居て、「`*.log` だけ」という但し書きだけが遊びの続きを守っていた。
 
     失敗しても例外は投げない。ログの入れ替えに失敗したからといって、
     注入そのものを止める理由は無いため。

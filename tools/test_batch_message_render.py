@@ -160,6 +160,39 @@ class CoreLabel(object):
         pass
 
 
+class FakeWindow(object):
+    """クリックの見張りの結び先。
+
+    **結び直しで手が積み重ならないこと**を検査するために、外した手が
+    ちゃんと消えるところまで写している（注入し直すたびに1本増えると、
+    1クリックで複数の本文が打ち切られる）。
+    """
+
+    def __init__(self):
+        self.handlers = []
+
+    def bind(self, **kwargs):
+        for name, callback in kwargs.items():
+            self.handlers.append((name, callback))
+
+    def unbind(self, **kwargs):
+        for name, callback in kwargs.items():
+            if (name, callback) in self.handlers:
+                self.handlers.remove((name, callback))
+
+    def click(self):
+        """画面が押された。**戻り値は捨てない** ― 真を返す手があると、
+        Kivy はそこで配送を止めてボタンが押せなくなる。"""
+        swallowed = False
+        for name, callback in list(self.handlers):
+            if name == "on_touch_down" and callback(self, object()):
+                swallowed = True
+        return swallowed
+
+
+WINDOW = FakeWindow()
+
+
 def install_fake_kivy():
     kivy = types.ModuleType("kivy")
     clock = types.ModuleType("kivy.clock")
@@ -175,12 +208,15 @@ def install_fake_kivy():
     core_text.Label = CoreLabel
     utils.escape_markup = lambda text: (
         text.replace("&", "&amp;").replace("[", "&bl;").replace("]", "&br;"))
+    core_window = types.ModuleType("kivy.core.window")
+    core_window.Window = WINDOW
     sys.modules["kivy"] = kivy
     sys.modules["kivy.clock"] = clock
     sys.modules["kivy.animation"] = animation
     sys.modules["kivy.graphics"] = graphics
     sys.modules["kivy.core"] = core
     sys.modules["kivy.core.text"] = core_text
+    sys.modules["kivy.core.window"] = core_window
     sys.modules["kivy.utils"] = utils
 
 
@@ -247,6 +283,15 @@ class HUD(object):
     def update_label_height(self):
         self.text_display.height = self.text_display.texture_size[1]
 
+    def update_display_text(self, _instance=None, value=None):
+        """本文が変わるたびにゲームがラベルを塗り直す経路。
+
+        Kivy のプロパティ監視で呼ばれるので、**1文字進むたびに生の本文が
+        ラベルへ入り直す** ＝ MOD が付けた色はそのたびに消える。逐次表示の
+        色付けはここを包んで直しているので、その形を写しておく。
+        """
+        self.text_display.set_text(value)
+
 
 class InstantaleApp(object):
     """本物の流し込みの骨格を写す（`out/text_viewport.log` の実測に基づく）。
@@ -255,16 +300,28 @@ class InstantaleApp(object):
     `to_add_text_list` が 1 のまま流し込みが続き、0 に減るのは `index == len(context)`
     の呼び出しと同時だった。ここを写しておかないと、行列を放置する MOD でも
     このテストを全通してしまう。
+
+    1文字ぶんの続きは `add_text_display` 自身が次を予約する（実機と同じ）。
+    予約を写しておかないと、鎖を止める側（クリックでの打ち切り）が検査できない。
     """
 
     def __init__(self):
         self.hud = HUD()
-        self.display_text = ""
+        self._display_text = ""
         self.is_adding_text = False
         self.to_add_text_list = []
         self.immediate_calls = []
         self.original_calls = []
         self.message_separator = ""
+
+    @property
+    def display_text(self):
+        return self._display_text
+
+    @display_text.setter
+    def display_text(self, value):
+        self._display_text = value
+        self.hud.update_display_text(self, value)
 
     def add_text(self, context):
         self.to_add_text_list.append(context)
@@ -277,45 +334,64 @@ class InstantaleApp(object):
 
     def add_text_immediately(self, content):
         self.immediate_calls.append(content)
-        if self.display_text:
-            self.display_text += self.message_separator
-        self.display_text += content
-        self.hud.text_display.set_text(self.display_text)
+        text = self.display_text
+        if text:
+            text += self.message_separator
+        self.display_text = text + content
 
     def add_text_display(self, _dt, context, index=-1):
         self.original_calls.append(index)
         position = index + 1
         if position < len(context):
-            self.display_text += context[position]
-            self.hud.text_display.set_text(self.display_text)
+            self.display_text = self.display_text + context[position]
+            CLOCK.schedule_once(
+                lambda dt: self.add_text_display(dt, context, position),
+                TEXT_SPEED)
             return
         if self.to_add_text_list:
             self.to_add_text_list.pop(0)
         self.is_adding_text = False
 
 
+# 1文字ぶんの間隔（実機の `app.text_speed` の既定は 0.07）。
+TEXT_SPEED = 0.07
+
 PRISTINE = InstantaleApp.add_text_display
+PRISTINE_UPDATE = HUD.update_display_text
 
 
 class FakeCtx(object):
+    # 包む相手は1つではないので、対象名から持ち主を引く（対象名の綴りを
+    # 間違えた MOD がテストを全通しないように、知らない名前は落とす）。
+    TARGETS = {
+        "__main__:InstantaleApp.add_text_display":
+            (lambda: InstantaleApp, "add_text_display"),
+        "scripts.hud.new_hud:InstanTaleHUD.update_display_text":
+            (lambda: HUD, "update_display_text"),
+    }
+
     def __init__(self):
         self.errors = []
         self.wrapped = {}
+        self.logs = []
 
     def wrap(self, target, **_kwargs):
+        owner, name = self.TARGETS[target]
+        owner = owner()
+
         def decorate(func):
-            original = InstantaleApp.add_text_display
+            original = getattr(owner, name)
 
             def wrapper(self, *args, **kwargs):
                 return func(original, self, *args, **kwargs)
 
-            InstantaleApp.add_text_display = wrapper
+            setattr(owner, name, wrapper)
             self.wrapped[target] = wrapper
             return func
         return decorate
 
-    def log(self, _message, level="INFO"):
-        pass
+    def log(self, message, level="INFO"):
+        self.logs.append((level, message))
 
     def log_exc(self, message):
         self.errors.append(message)
@@ -328,8 +404,11 @@ def load_mod():
     return module
 
 
-def install(module, ctx):
+def install(module, ctx, batch_mode="click", fresh_mode="seconds"):
     InstantaleApp.add_text_display = PRISTINE
+    HUD.update_display_text = PRISTINE_UPDATE
+    module.BATCH_MODE = batch_mode
+    module.FRESH_MODE = fresh_mode
     module.apply(ctx)
 
 
@@ -362,6 +441,150 @@ def run():
     install(mod, ctx)
     check("hooked character streaming",
           "__main__:InstantaleApp.add_text_display" in ctx.wrapped)
+    check("hooked the repaint that erases the colors",
+          "scripts.hud.new_hud:InstanTaleHUD.update_display_text" in ctx.wrapped)
+
+    # -- 逐次表示（既定）----------------------------------------------------
+    app = InstantaleApp()
+    text = "逐次で流れる本文"
+    app.add_text(text)
+    app.process_text_queue(0)
+    check("the game keeps typing the message out",
+          app.immediate_calls == [] and app.hud.text_display.text == text[:1],
+          (app.immediate_calls, app.hud.text_display.text))
+    CLOCK.tick()
+    check("one character per tick", app.hud.text_display.text == text[:2],
+          app.hud.text_display.text)
+    CLOCK.drain()
+    check("the whole message arrives on its own",
+          app.hud.text_display.text == text, app.hud.text_display.text)
+    check("the game finishes the sequential message",
+          app.is_adding_text is False and app.to_add_text_list == []
+          and app.original_calls == list(range(-1, len(text))),
+          (app.is_adding_text, app.to_add_text_list, app.original_calls))
+    check("nothing is left ticking", not CLOCK.pending, CLOCK.pending)
+
+    # -- クリックで打ち切る -------------------------------------------------
+    check("a click with no message running is harmless",
+          WINDOW.click() is False)
+
+    app = InstantaleApp()
+    text = "クリックで一括表示にする本文"
+    app.add_text(text)
+    app.process_text_queue(0)
+    CLOCK.tick()
+    CLOCK.tick()
+    typed = app.hud.text_display.text
+    check("the click is not swallowed", WINDOW.click() is False)
+    CLOCK.tick()
+    check("a click shows the rest of the message at once",
+          typed == text[:3] and app.hud.text_display.text == text,
+          (typed, app.hud.text_display.text))
+    check("the finish is still handed back to the game",
+          app.original_calls[-1] == len(text)
+          and app.is_adding_text is False and app.to_add_text_list == [],
+          (app.original_calls, app.is_adding_text, app.to_add_text_list))
+    check("the character ticks stop after the click",
+          not CLOCK.pending, CLOCK.pending)
+    check("the skipped message is not written twice",
+          app.display_text == text, app.display_text)
+
+    # 打ち切りは1通ぶん。次の本文はまた最初から逐次で流れる。
+    app.add_text("次の本文")
+    app.process_text_queue(0)
+    check("the next message starts typing again",
+          app.hud.text_display.text == text + "次", app.hud.text_display.text)
+    CLOCK.drain()
+
+    # -- 逐次表示の最中の色 -------------------------------------------------
+    app = InstantaleApp()
+    app.add_text("[一つ目]")
+    app.process_text_queue(0)
+    CLOCK.drain()
+    check("brackets survive while there is nothing to gray",
+          app.hud.text_display.markup is False
+          and app.hud.text_display.text == "[一つ目]",
+          (app.hud.text_display.markup, app.hud.text_display.text))
+    CLOCK.advance(mod.FRESH_SECONDS)
+    app.add_text("[二つ目]")
+    app.process_text_queue(0)
+    check("older text grays from the first character of the next message",
+          app.hud.text_display.text == "[color=#808080]&bl;一つ目&br;[/color]&bl;",
+          app.hud.text_display.text)
+    CLOCK.drain()
+    check("the message being typed stays white to the end",
+          app.hud.text_display.text
+          == "[color=#808080]&bl;一つ目&br;[/color]&bl;二つ目&br;",
+          app.hud.text_display.text)
+
+    CLOCK.advance(mod.FRESH_SECONDS)
+    app.add_text("三つ目")
+    app.process_text_queue(0)
+    CLOCK.tick()
+    WINDOW.click()
+    CLOCK.tick()
+    check("a skipped message keeps the colors of the older text",
+          app.hud.text_display.text
+          == "[color=#808080]&bl;一つ目&br;[/color]"
+             "[color=#808080]&bl;二つ目&br;[/color]三つ目",
+          app.hud.text_display.text)
+
+    # 注入し直すと、こちらが始めていない鎖の続きが飛んでくる（逐次でも同じ）。
+    app = InstantaleApp()
+    app.is_adding_text = True
+    app.to_add_text_list = ["注入前から流れていた本文"]
+    app.add_text_display(0, "注入前から流れていた本文", 3)
+    check("an in-flight sequential stream is handed back to the game",
+          app.original_calls == [3] and app.is_adding_text is True,
+          (app.original_calls, app.is_adding_text))
+    CLOCK.pending = []
+
+    # -- セッション数で色を変える -------------------------------------------
+    install(mod, ctx, "click", "sessions")
+    mod.FRESH_SESSIONS = 1
+    app = InstantaleApp()
+    for message in ("一つ目", "二つ目", "三つ目"):
+        app.add_text(message)
+        app.process_text_queue(0)
+        CLOCK.drain()
+    check("one session of white keeps only the newest message white",
+          app.hud.text_display.text
+          == "[color=#808080]一つ目[/color][color=#808080]二つ目[/color]三つ目",
+          app.hud.text_display.text)
+
+    mod.FRESH_SESSIONS = 2
+    started_at = CLOCK.now
+    app = InstantaleApp()
+    for message in ("一つ目", "二つ目", "三つ目"):
+        app.add_text(message)
+        app.process_text_queue(0)
+        CLOCK.drain()
+    check("two sessions of white keep the last two messages white",
+          app.hud.text_display.text == "[color=#808080]一つ目[/color]二つ目三つ目",
+          app.hud.text_display.text)
+    # 秒数で見ていたら、この短さでは1つも灰色にならない ＝ セッション数で
+    # 決めていることの裏取り。
+    check("sessions do not wait for the clock",
+          CLOCK.now - started_at < mod.FRESH_SECONDS,
+          CLOCK.now - started_at)
+
+    mod.FRESH_SESSIONS = 0
+    app = InstantaleApp()
+    app.add_text("追加直後でも灰色")
+    app.process_text_queue(0)
+    CLOCK.drain()
+    check("zero sessions grays the message it belongs to",
+          app.hud.text_display.text == "[color=#808080]追加直後でも灰色[/color]",
+          app.hud.text_display.text)
+
+    check("re-applying does not stack click watchers",
+          len([handler for handler in WINDOW.handlers
+               if handler[0] == "on_touch_down"]) == 1, WINDOW.handlers)
+
+    # -- 一括表示 ------------------------------------------------------------
+    install(mod, ctx, "always")
+    check("the click watcher is dropped when messages are always batched",
+          not WINDOW.handlers, WINDOW.handlers)
 
     app = InstantaleApp()
     text = "一括で表示する本文"
@@ -524,7 +747,7 @@ def run():
     CLOCK.drain()
     reloaded_mod = load_mod()
     reloaded_mod.monotonic_time = lambda: CLOCK.now
-    install(reloaded_mod, ctx)
+    install(reloaded_mod, ctx, "always")
     app.add_text("再適用後")
     app.process_text_queue(0)
     CLOCK.drain()

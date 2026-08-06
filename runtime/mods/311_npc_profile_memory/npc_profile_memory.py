@@ -9,17 +9,26 @@
     プレイヤーが1行入力
         │
         ├─ conversation_facilitator ── 注入 ── NPC の profile に控えを足す
-        │        │
+        │        │                              （人物像 ＋ プレイヤーへの認識）
         │        └─ NPC の返答
         │
         └─ 返答が描画された次のフレーム
-                 └─ 自前 LLM ── 人物像を更新 ── out/npc_profiles/<世界名>.json
+                 └─ 自前 LLM ── JSON で受け取る ── state/npc_profiles/<世界名>.json
 ```
+
+控えは1人につき2欄ある:
+
+    profile        その人物自身の像（性格・嗜好・経歴・目標・秘密）
+    about_player   **その人物から見たプレイヤー**（呼び方・感情・約束・貸し借り）
+
+分けているのは、片方に混ぜると要約のたびに弱い方が食われるため。「前に頼んだ
+件を覚えている」という手応えは `about_player` が担っていて、これが人物像の
+文章に溶けると真っ先に消える。
 
 ## この mod が守っている決め事
 
 **ゲームのセーブ構造に独自キーを足さない**（TECH.md §6）。控えは
-`out/npc_profiles/<世界名>.json` に置く ― `out/` は世界を跨いで残るので、
+`state/npc_profiles/<世界名>.json` に置く ― `out/` は世界を跨いで残るので、
 世界ごとにファイルを分けないと別の世界の人物像が湧く（`306_` と同じ）。
 
 **注入は NPC の複製の `profile` にだけ足す。** `conversation_starter` /
@@ -32,10 +41,42 @@ NPC を浅く複製し、複製の `profile` を拡張すれば全経路を賄�
 
 **抽出は専用ワーカーで順番に回す。** 返答後の次フレームでは、会話と NPC の
 文字列をコピーしてキューへ渡すだけ。LLM 待ちの間も Kivy のメインスレッドを
-止めない。続けて来たターンは直列に処理し、後の更新は前のプロフィールを読む。
+止めない。続けて来たターンは直列に処理し、後の更新は前の控えを読む。
 
 **安全側の倒し方は「変更しない」。** 捏造された素性が永続化されるのが最悪の
-壊れ方なので、空応答・LLM 不在・例外は既存プロフィールを維持する。
+壊れ方なので、空応答・LLM 不在・例外・読めない返却は既存の控えを維持する。
+
+## 受け取りは JSON。**ゲームの構造化出力経路は使わない**
+
+抽出の結果は「更新後の全文」だけでなく「変わったのか」「何が新しく分かったのか」
+も要る。以前は日本語の言い回し（「変更なし」「新しく分かった事は無い」）を
+照合していたが、これは小さいモデルほど揺れる。そこで **JSON オブジェクト1個**
+を出させて読む（`parse_result`）。
+
+`send_request(manager_name, message, structure, ...)` に pydantic モデルを渡す
+経路はゲーム自身が持っているが、こちらからは使わない:
+
+- 引数の形を間違えると例外がゲームの内部スレッドで上がり、**呼び出しが
+  永久に返らない**（GAME.md §2.12・実機で実測）。この mod の抽出は1本の
+  ワーカーで直列に回しているので、1回返らないと以後の抽出が全部止まる
+- 構造化経路は空 `Literal[]` と `$defs` の肥大という既知の壊れ方を抱えている
+  （`105_` / `203_`）。他人のスキーマの都合をこの mod が背負う理由が無い
+
+`send_request_with_no_structure` は `str` を返すだけで、返らない経路も
+スキーマも増えない。読めない返却は「変更しない」に倒せば済む。
+
+## 覚えたことは他の mod も読む。**渡すのはファイルで、関数ではない**
+
+依頼の文面を作る `301_` は、依頼主の人物像をこの mod の控えから読む。ただし
+**mod が mod を import することはしない**（TECH.md §3.2.3 / §3.7 の作法）。
+ローダは mod を `instantale_mod_<フォルダ名>` で登録するので、番号を振り直した
+瞬間に名前で掴む側が壊れる。共有してよいのはローダの `instantale_modloader.*`
+だけで、mod どうしは**同じ場所を読む**ことで繋がる。
+
+そのため `state/npc_profiles/<世界名>.json` の形は、この mod の内部表現ではなく
+**mod をまたいだ取り決め**として扱う（MODS.md の `311_` の項に書いてある）。
+鍵の並びを `RECORD_KEYS` で固定しているのはこのため。読む側はファイルが無ければ
+何も足さない ― この mod を切っていても、まだ一度も会話していなくても成立する。
 """
 
 import copy
@@ -54,9 +95,20 @@ from instantale_modloader import ui
 #      `tools/check_mods.py` が AST で突き合わせる）------------------------
 CONVERSATION_TURNS = 8     # 抽出に載せる直近のやり取りの数
 INJECT_CHARS = 1200        # 抽出LLMへの目標長（要約で収める。保存・注入では切らない）
+RECORD_PLAYER_MEMORY = True   # 「その人物から見たプレイヤー」を別欄で覚えるか
+FACT_LOG_LIMIT = 200       # 判明した事実の追記専用ログの上限件数（0 で記録しない）
 
 LOG_BASENAME = "npc_profile.log"
+
+# 世界ごとの控えを置くフォルダ。`state/` の下（`ctx.state_path`）。ログと同じ
+# `out/` に置いていたが、あちらは消してよい場所なので、掃除のつもりで消した人の
+# 「覚えていたはずの人物像」まで飛んでいた。`301_` も同じ名前でここを読む。
 STATE_DIRNAME = "npc_profiles"
+
+# 書き出しの途中経過を置く名前（`save_bucket`）。**世界ファイルと同じフォルダに
+# 置くこと。** 別のドライブへ跨ぐと `os.replace` が不可分でなくなる。
+# `.json` で終わらせないのは、`known_world_files()` が世界として拾わないため。
+TEMP_SUFFIX = ".writing"
 
 # ファイル名に使えない文字（Windows 禁則＋制御文字）。世界名そのものは鍵に残す。
 _UNSAFE_FILENAME = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
@@ -69,11 +121,35 @@ MANAGER_EXTRACT = "mod_npc_profile_extract"
 # 旧版 `slots` の読み取り順。移行にだけ使い、新しいプロフィールは分類しない。
 LEGACY_SLOTS = ("好み", "嫌悪", "経歴", "人間関係", "目標", "秘密", "約束")
 
-# 新情報が無いときの応答。モデルが説明を足した場合も下の語を含めば変更しない。
+# 新情報が無いときの応答。**JSON が読めなかったときの受け皿**でだけ使う。
+# 普段は `{"changed": false}` で判断する（`parse_result`）。
 NO_CHANGE = "変更なし"
 EMPTY_WORDS = ("なし", "特になし", "不明", "無し", "該当なし", "none", NO_CHANGE)
 
 PROFILE_HEADING = "【会話から形成された追加プロフィール】"
+ABOUT_PLAYER_HEADING = "【この人物から見た{player}】"
+
+# 控えの鍵と、ファイルに書くときの並び。**順番を保つ**（増えた鍵を後ろに足すだけ
+# にすると、後から見比べたときに人物ごとの形が揃う）。
+RECORD_KEYS = ("name", "updated", "profile", "about_player", "facts")
+
+# 抽出LLMに書かせる JSON の鍵。
+KEY_CHANGED = "changed"
+KEY_PROFILE = "profile"
+KEY_ABOUT_PLAYER = "about_player"
+KEY_NEW_FACTS = "new_facts"
+
+# `about_player` の目標長。`INJECT_CHARS` から導く（設定を増やさない）。
+ABOUT_PLAYER_RATIO = 2
+
+# 構造化出力に渡す制限時間（秒）。**必ず渡す。** 抽出は1本のワーカーで直列に
+# 回しているので、1回返らないと以後の抽出が全部止まる（GAME.md §2.12）。
+EXTRACT_TIMEOUT = 120
+
+# 待ち行列に積んだままにする仕事の上限。ワーカーが（返らない推論などで）
+# 止まったときに、会話を続けるだけで際限なく溜まるのを防ぐ。溢れたら**古い方**
+# を捨てる ― 新しい会話ほど人物像に効くため。
+MAX_PENDING = 8
 
 # 抽出に載せる書き起こしの長さ（`306_` と同じ考え。長すぎると要点が薄まる）。
 CONVERSATION_CHARS = 2000
@@ -82,7 +158,7 @@ CONVERSATION_CHARS = 2000
 # `apply()` は再注入と遅延当て直しで最大8回走り、そのたびに `state["worker"]` が
 # `None` に戻る。前の世代のワーカーがまだ生きている間に2本目が起動し、しかも
 # `data_lock` が別インスタンスになるので、2本が同じ
-# `out/npc_profiles/<世界>.json` を排他なしで read-modify-write できてしまう。
+# `state/npc_profiles/<世界>.json` を排他なしで read-modify-write できてしまう。
 # 注入し直すとこのモジュール自体が読み込み直されるため、モジュール変数では
 # 足りない。`sys` に置けば世代をまたいで同じ1組を共有できる（`118_` と同じ手）。
 STATE_STORE_ATTR = "__instantale_npc_profile_memory_store__"
@@ -98,7 +174,7 @@ def _text(value, limit=200):
 
 
 def safe_world_filename(world_key):
-    """世界名を `out/npc_profiles/` 配下のファイル名にする。拡張子 `.json` 付き。"""
+    """世界名を `state/npc_profiles/` 配下のファイル名にする。拡張子 `.json` 付き。"""
     name = world_key if isinstance(world_key, str) else ""
     name = _UNSAFE_FILENAME.sub("_", name.strip()).rstrip(". ")
     if not name or name in (".", ".."):
@@ -108,9 +184,137 @@ def safe_world_filename(world_key):
     return name + ".json"
 
 
+def ordered_record(record):
+    """控え1件を `RECORD_KEYS` の並びに直す。**知らない鍵は落とさず後ろへ回す。**
+
+    並びを固定するのは、この JSON が mod をまたいだ取り決めだから（`301_` が
+    読む）。人物ごとに鍵の順が違うと、差分を見たときに何が増えたのか分からない。
+    旧版の `slots` のような知らない鍵を捨てないのは、移行を1度きりにせず
+    何度でもやり直せるようにするため。
+    """
+    if not isinstance(record, dict):
+        return {}
+    out = {key: record[key] for key in RECORD_KEYS if key in record}
+    for key, value in record.items():
+        if key not in out:
+            out[key] = value
+    return out
+
+
+def _strip_code_fence(body):
+    """```json … ``` で包まれていたら中身だけにする。"""
+    if not body.startswith("```"):
+        return body
+    body = body[3:]
+    end = body.rfind("```")
+    if end >= 0:
+        body = body[:end]
+    body = body.strip()
+    for tag in ("json\n", "JSON\n", "text\n", "markdown\n"):
+        if body.startswith(tag):
+            return body[len(tag):].strip()
+    return body
+
+
+def _looks_like_json_attempt(body):
+    """JSON を書こうとして失敗した返却か。
+
+    そうであれば**受け皿へ落とさない**。丸ごと人物像として保存すると、
+    壊れた JSON がそのままプロフィールになって以後の会話に注入される。
+    """
+    return "{" in body and ('"' + KEY_PROFILE + '"' in body
+                            or "'" + KEY_PROFILE + "'" in body
+                            or '"' + KEY_CHANGED + '"' in body)
+
+
+def parse_result(result):
+    """抽出LLMの返却を控えの更新内容に直す。
+
+    戻り値は次のいずれか:
+
+        None                    読めなかった。**何も変更しない**
+        {}                      変更なし（`changed` が false）
+        {"profile": str, "about_player": str, "new_facts": [str, ...]}
+
+    JSON を1個だけ書かせているが、モデルは前置きを足すことも囲みを付けることも
+    ある。前後の地の文は落とし、最初の `{` から最後の `}` までを読む。
+    """
+    if not isinstance(result, str):
+        return None
+    body = _strip_code_fence(result.strip())
+    if not body:
+        return None
+
+    start, end = body.find("{"), body.rfind("}")
+    data = None
+    if 0 <= start < end:
+        try:
+            data = json.loads(body[start:end + 1])
+        except Exception:
+            data = None
+    if not isinstance(data, dict):
+        # JSON のつもりで書かれた壊れた返却は捨てる。素の文章なら受け皿へ。
+        return None if _looks_like_json_attempt(body) else _parse_plain(body)
+    return normalize_update(data)
+
+
+def normalize_update(data):
+    """辞書1つを控えの更新内容に直す。**構造化出力と JSON の共通の出口。**
+
+    どちらの経路で来たかによって受け入れる形が変わらないようにする。
+    戻り値は `parse_result` と同じ（`{}` は変更なし）。
+    """
+    if not isinstance(data, dict):
+        return None
+    if not _truthy(data.get(KEY_CHANGED, True)):
+        return {}
+    update = {}
+    for key in (KEY_PROFILE, KEY_ABOUT_PLAYER):
+        value = data.get(key)
+        if isinstance(value, str) and value.strip():
+            update[key] = value.strip()
+    facts = data.get(KEY_NEW_FACTS)
+    if isinstance(facts, list):
+        update[KEY_NEW_FACTS] = [fact.strip() for fact in facts
+                                 if isinstance(fact, str) and fact.strip()]
+    # 何を書くのか1つも決まっていないなら、変更なしと同じに倒す。
+    if not update.get(KEY_PROFILE) and not update.get(KEY_ABOUT_PLAYER):
+        return {}
+    return update
+
+
+def _truthy(value):
+    """`changed` の値。文字列で `"false"` と書いてくるモデルにも耐える。"""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() not in ("false", "no", "0", "", "なし", NO_CHANGE)
+    return bool(value)
+
+
+def _parse_plain(body):
+    """JSON を書かなかったモデルのための受け皿。本文を丸ごと人物像として扱う。
+
+    JSON を出させる前の版と同じ判定。**新しい判断はここに足さない** ―
+    ここが太ると「どちらの経路で決まったのか」が読めなくなる。
+    """
+    plain = body.strip(" 　。()（）「」[]【】").lower()
+    if plain in EMPTY_WORDS:
+        return {}
+    if (("新たに判明" in body or "新しく分かった" in body)
+            and any(word in body for word in ("無い", "ない", "ありません",
+                                              "存在しません", "見当たりません"))):
+        return {}
+    return {KEY_PROFILE: body}
+
+
 def apply(ctx):
     log_path = ctx.out_path(LOG_BASENAME)
-    state_dir = os.path.join(ctx.out_dir, STATE_DIRNAME)
+    # 世界ごとの控えの置き場。**ここで1回だけ引く**のが要点で、`ctx.state_path()`
+    # は `out/` に同じ名前が在れば移してくるので、フォルダごと引き取れる
+    # （1ファイルずつ移すと、まだ触っていない世界の控えが `out/` に残り、
+    # `known_world_files()` の一覧が実際より少なく見える）。
+    state_dir = ctx.state_path(STATE_DIRNAME)
     # 世代をまたいで1組だけ持つ（STATE_STORE_ATTR の説明を参照）。
     store = getattr(sys, STATE_STORE_ATTR, None)
     if not isinstance(store, dict):
@@ -207,7 +411,9 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 控えの読み書き
     def state_path_for(key):
-        return ctx.out_path(STATE_DIRNAME, safe_world_filename(key))
+        # フォルダを作るのはここ（`ctx.state_path` が親を作る）。apply() では
+        # 作らない ― 一度も会話していない人の `state/` に空のフォルダを置かない。
+        return ctx.state_path(STATE_DIRNAME, safe_world_filename(key))
 
     def known_world_files():
         """診断用。ディレクトリにある世界ファイル名（拡張子なし）の一覧。"""
@@ -242,15 +448,35 @@ def apply(ctx):
             return bucket
 
     def save_bucket(key, bucket):
+        """1世界分を書き出す。**書けたか書けなかったかの2つしか起こさない。**
+
+        `open(path, "w")` は開いた時点でファイルを切り詰めるので、素朴に書くと
+        `json.dump` の途中で落ちた瞬間にその世界の控えが壊れる。壊れたものは
+        `load_bucket` が黙って `{}` に倒すので、次の更新で1人ぶんだけが書かれ、
+        **他の人物の記憶が消えたことにも気付けない**。ゲームは落ちるもの
+        （`001_crash_recorder` がある）なので、隣に書いてから差し替える。
+        """
         with data_lock:
             cache["buckets"][key] = bucket
             path = state_path_for(key)
+            tmp = path + TEMP_SUFFIX
             try:
-                with open(path, "w", encoding="utf-8") as fh:
-                    json.dump(bucket, fh, ensure_ascii=False, indent=1)
+                ordered = {npc_id: ordered_record(record)
+                           for npc_id, record in bucket.items()}
+                with open(tmp, "w", encoding="utf-8") as fh:
+                    json.dump(ordered, fh, ensure_ascii=False, indent=1)
+                    # 差し替える前に中身をディスクまで落とす。ここを省くと、
+                    # 電源断のときに「差し替えは済んだが中身は空」になりうる。
+                    fh.flush()
+                    os.fsync(fh.fileno())
+                os.replace(tmp, path)   # 同じフォルダなので不可分に入れ替わる
                 return True
             except Exception:
                 ctx.log_exc("npc profile: cannot write {}".format(path))
+                try:
+                    os.remove(tmp)      # 書きかけを残さない（残しても実害は無い）
+                except Exception:
+                    pass
                 return False
 
     def bucket_of(app):
@@ -286,36 +512,74 @@ def apply(ctx):
                 lines.append("{}: {}".format(label, "／".join(values)))
         return "\n".join(lines)
 
-    def profile_for(key, npc_id, npc_name):
-        """世界名と人物 id だけで引く。ワーカーからゲームオブジェクトを触らない。"""
+    def record_for(key, npc_id, npc_name):
+        """世界名と人物 id だけで引く。ワーカーからゲームオブジェクトを触らない。
+
+        旧版の分類別 `slots` しか無い控えは、ここを最初に通ったときに
+        `profile` へ移す。**移した後も `slots` は消さない**（この mod を
+        古い版に戻しても遊べるように）。
+        """
         with data_lock:
             bucket = load_bucket(key)
             record = bucket.get(str(npc_id))
             if not isinstance(record, dict):
-                return ""
+                return {}
             profile = record.get("profile")
             if isinstance(profile, str) and profile.strip():
-                return profile.strip()
+                return record
             profile = flatten_slots(record.get("slots"))
             if not profile:
-                return ""
+                return record
             record["profile"] = profile
             if save_bucket(key, bucket):
                 write("migrated: {!r} ({}) slots -> profile ({} chars)".format(
                     npc_name, npc_id, len(profile)))
-            return profile
+            return record
 
-    def profile_of(app, npc_id):
-        """MOD 固有プロフィール。旧 `slots` は初回に自動移行する。"""
+    def profile_for(key, npc_id, npc_name):
+        """人物像の本文だけ。"""
+        return _field(record_for(key, npc_id, npc_name), "profile")
+
+    def _field(record, name):
+        value = record.get(name) if isinstance(record, dict) else None
+        return value.strip() if isinstance(value, str) and value.strip() else ""
+
+    def record_of(app, npc_id):
+        """この世界のこの人物の控え。旧 `slots` は初回に自動移行する。"""
         key = world_key(app)
         if not load_bucket(key):
             bucket_of(app)  # 世界名不一致の診断だけ残す
-            return ""
-        return profile_for(key, npc_id, name_of(app, npc_id))
+            return {}
+        return record_for(key, npc_id, name_of(app, npc_id))
 
-    def update_profile(key, npc_id, npc_name, profile):
-        """更新後のプロフィール全文を保存する。空なら既存を維持する。"""
-        if not profile:
+    def append_facts(record, facts):
+        """判明した事実を追記専用で残す。**要約統合で消えた分の控え。**
+
+        `profile` は毎回まるごと書き直されるので、統合の過程で落ちた事実は
+        どこにも残らない。捏造を疑ったときに「いつの会話で出たのか」を辿れる
+        ようにしておく。上限を超えたら古い方から落とす（増え続けさせない）。
+        """
+        if FACT_LOG_LIMIT <= 0 or not facts:
+            return
+        log = record.get("facts")
+        if not isinstance(log, list):
+            log = []
+        stamp = datetime.datetime.now().isoformat(timespec="seconds")
+        known = {item.get("text") for item in log if isinstance(item, dict)}
+        for fact in facts:
+            if fact in known:
+                continue
+            known.add(fact)
+            log.append({"at": stamp, "text": fact})
+        record["facts"] = log[-FACT_LOG_LIMIT:]
+
+    def update_record(key, npc_id, npc_name, update):
+        """抽出の結果を控えへ書く。**空・変更なしなら既存を維持する。**"""
+        if not update:
+            return
+        profile = update.get(KEY_PROFILE, "")
+        about = update.get(KEY_ABOUT_PLAYER, "") if RECORD_PLAYER_MEMORY else ""
+        if not profile and not about:
             return
         with data_lock:
             bucket = load_bucket(key)
@@ -323,16 +587,46 @@ def apply(ctx):
             if not isinstance(record, dict):
                 record = {}
                 bucket[str(npc_id)] = record
-            old = record.get("profile")
-            if isinstance(old, str) and old.strip() == profile:
+            old_profile = _field(record, "profile")
+            old_about = _field(record, "about_player")
+            if profile == old_profile and about == old_about \
+                    and not update.get(KEY_NEW_FACTS):
                 return
             record["name"] = npc_name
             record["updated"] = datetime.datetime.now().isoformat(timespec="seconds")
-            record["profile"] = profile
+            if profile:
+                record["profile"] = profile
+            if about:
+                record["about_player"] = about
+            append_facts(record, update.get(KEY_NEW_FACTS) or ())
             if save_bucket(key, bucket):
-                write("updated: {!r} ({}) {} -> {} chars".format(
-                    npc_name, npc_id,
-                    len(old) if isinstance(old, str) else 0, len(profile)))
+                write("updated: {!r} ({}) profile {} -> {} chars, "
+                      "about_player {} -> {} chars, +{} facts".format(
+                          npc_name, npc_id, len(old_profile),
+                          len(_field(record, "profile")), len(old_about),
+                          len(_field(record, "about_player")),
+                          len(update.get(KEY_NEW_FACTS) or ())))
+
+    def player_name_of(app):
+        name = getattr(getattr(app, "player", None), "name", None)
+        return _text(name, 40) or "冒険者"
+
+    def memory_block(record, player_name):
+        """控えを、プロフィール欄に足す本文にする。空なら空文字。
+
+        人物像とプレイヤーへの認識を**見出しで分ける**。1つに繋げると、
+        会話の LLM が「この人物の設定」と「相手についての記憶」を混同して、
+        プレイヤーの経歴を NPC 自身の経歴として話し始める。
+        """
+        blocks = []
+        profile = _field(record, "profile")
+        if profile:
+            blocks.append(PROFILE_HEADING + "\n" + profile)
+        about = _field(record, "about_player") if RECORD_PLAYER_MEMORY else ""
+        if about:
+            blocks.append(ABOUT_PLAYER_HEADING.format(player=player_name)
+                          + "\n" + about)
+        return "\n\n".join(blocks)
 
     def with_profile(label, args, kwargs):
         """NPC の浅い複製の `profile` に控えを足した引数を組み直す。
@@ -358,8 +652,8 @@ def apply(ctx):
             note_inject("{}: cannot name the character ({})".format(
                 label, type(npc).__name__))
             return args, kwargs
-        profile = profile_of(app, npc_id)
-        if not profile:
+        addition = memory_block(record_of(app, npc_id), player_name_of(app))
+        if not addition:
             note_inject("{}: nothing recorded for {!r} ({})".format(
                 label, name_of(app, npc_id), npc_id))
             return args, kwargs
@@ -375,10 +669,10 @@ def apply(ctx):
         if not isinstance(base, str):
             note_inject("{}: profile is {}".format(label, type(base).__name__))
             return args, kwargs
-        clone.profile = (base.rstrip() + "\n\n" + PROFILE_HEADING + "\n" + profile
-                         if base.strip() else PROFILE_HEADING + "\n" + profile)
+        clone.profile = (base.rstrip() + "\n\n" + addition
+                         if base.strip() else addition)
         note_inject("{}: {!r} ({}) +{} chars into profile".format(
-            label, name_of(app, npc_id), npc_id, len(profile)))
+            label, name_of(app, npc_id), npc_id, len(addition)))
         if "character_instance" in kwargs:
             merged = dict(kwargs)
             merged["character_instance"] = clone
@@ -433,26 +727,86 @@ def apply(ctx):
             _text(result, 300)))
         return result
 
-    def read_profile(result):
-        """更新後のプロフィール全文。変更なしの応答なら空を返す。"""
-        if not isinstance(result, str):
-            return ""
-        body = result.strip()
-        if not body:
-            return ""
-        plain = body.strip(" 　。()（）「」[]【】").lower()
-        if plain in EMPTY_WORDS:
-            return ""
-        if (("新たに判明" in body or "新しく分かった" in body)
-                and any(word in body for word in ("無い", "ない", "ありません",
-                                                   "存在しません", "見当たりません"))):
-            return ""
-        if body.startswith("```") and body.endswith("```"):
-            body = body[3:-3].strip()
-            if body.startswith(("text\n", "markdown\n")):
-                body = body.split("\n", 1)[1].strip()
-        # 長さは抽出LLMの要約に任せる。ここで切ると文の途中で壊れる。
-        return body
+    # -- 構造化出力（使えるときだけ）---------------------------------------
+    # `send_request` と `create_model` は `llm_manager` にある（`310_` と同じ）。
+    # grammar が JSON の形をトークン単位で強制するので、頼み文だけで JSON を
+    # 書かせるより確実。**使えなければ黙って上の `ask` に降りる。**
+    MANAGER_MODULE = "scripts.llm.llm_manager"
+
+    def structured_module():
+        module = sys.modules.get(MANAGER_MODULE)
+        if (module is not None
+                and callable(getattr(module, "send_request", None))
+                and callable(getattr(module, "create_model", None))):
+            return module
+        return None
+
+    def build_structure(module):
+        """抽出の返却の型。**`Literal` は使わない**（`310_` と同じ理由）。
+
+        空の `Literal[]` は pydantic が拒否してゲームごと落ちる
+        （`203_probe_create_model` が押さえた実際の落ち方）。`changed` も
+        `bool` ではなく `str` にして、真偽の読み取りは `_truthy` で持つ。
+        """
+        import typing
+
+        return module.create_model(
+            "NpcProfileUpdate",
+            **{KEY_CHANGED: (str, ...),
+               KEY_PROFILE: (str, ...),
+               KEY_ABOUT_PLAYER: (str, ...),
+               KEY_NEW_FACTS: (typing.List[str], ...)})
+
+    def as_dict(raw):
+        """返ってきたものを辞書にする。**形を決めつけない**（`310_` と同じ）。"""
+        if isinstance(raw, dict):
+            return raw
+        for name in ("model_dump", "dict"):
+            method = getattr(raw, name, None)
+            if callable(method):
+                try:
+                    got = method()
+                except Exception:
+                    continue
+                if isinstance(got, dict):
+                    return got
+        if isinstance(raw, str):
+            try:
+                got = json.loads(raw)
+            except Exception:
+                return None
+            if isinstance(got, dict):
+                return got
+        return None
+
+    def ask_structured(manager_name, messages):
+        """構造化出力で1回。使えない・読めないなら `None`（呼び側が降りる）。
+
+        `timeout` を必ず渡す。この mod の抽出は1本のワーカーで直列に回して
+        いるので、1回返らないと以後の抽出が全部止まる（GAME.md §2.12）。
+        """
+        module = structured_module()
+        if module is None:
+            return None
+        try:
+            structure = build_structure(module)
+        except Exception:
+            ctx.log_exc("npc profile: cannot build the extraction structure")
+            return None
+        started = time.monotonic()
+        try:
+            raw = module.send_request(manager_name, list(messages), structure,
+                                      max_tokens=INJECT_CHARS * 3,
+                                      timeout=EXTRACT_TIMEOUT)
+        except Exception:
+            ctx.log_exc("npc profile: {} failed via {}".format(
+                manager_name, MANAGER_MODULE))
+            return None
+        data = as_dict(raw)
+        write("{}: {:.1f}s via {} (structured) -> {}".format(
+            manager_name, time.monotonic() - started, MANAGER_MODULE,
+            _text(repr(data), 300)))
+        return data
 
     # ------------------------------------------------------------ 抽出の材料
     def transcribe(app, npc_id):
@@ -505,50 +859,84 @@ def apply(ctx):
             "world": world_key(app),
             "npc_id": str(npc_id),
             "npc_name": name_of(app, npc_id),
+            "player_name": player_name_of(app),
             "game_profile": _text(getattr(npc, "profile", ""), 400),
             "personality": _text(getattr(npc, "personality", ""), 300),
             "job": _text(getattr(npc, "job", ""), 60),
             "transcript": transcript,
         }
 
-    def build_messages(snapshot, known):
+    def build_messages(snapshot, record):
+        """抽出の頼み文。**返すのは JSON オブジェクト1つだけ**と指示する。
+
+        構造化出力が使える版では grammar が形を強制するが、頼み文の側でも
+        同じ形を書いておく。ゲーム自身がスキーマをプロンプト本文にも埋める
+        のと同じ考えで、降りた先（`send_request_with_no_structure`）でも
+        同じ読み取り（`parse_result`）で済む。
+        """
+        npc_name = snapshot["npc_name"]
+        player_name = snapshot["player_name"]
+        about_chars = max(1, INJECT_CHARS // ABOUT_PLAYER_RATIO)
+        fields = [
+            '"{}": 記録に加えるものが有れば "true"、何も無ければ "false"'.format(
+                KEY_CHANGED),
+            '"{}": 更新後の{}自身の人物像の全文（{}文字以内）'.format(
+                KEY_PROFILE, npc_name, INJECT_CHARS),
+        ]
+        if RECORD_PLAYER_MEMORY:
+            fields.append(
+                '"{}": 更新後の、{}から見た{}についての記録の全文（{}文字以内）'
+                .format(KEY_ABOUT_PLAYER, npc_name, player_name, about_chars))
+        fields.append('"{}": この会話で新しく判明した事実だけの配列。'
+                      '既に記録にあるものは入れない。無ければ []'.format(KEY_NEW_FACTS))
         instruction = (
-            "あなたは人物プロフィールの記録係だ。現在の追加プロフィールと"
-            "新しい会話を統合し、更新後の追加プロフィール全文を作れ。\n\n"
-            "【出力の決まり】\n"
-            "- 更新後のプロフィール本文だけを書く。前置き・説明・見出しは要らない\n"
+            "あなたは人物の記録係だ。現在の記録と新しい会話を統合し、"
+            "更新後の記録を **JSON オブジェクト1つ** で出力せよ。\n\n"
+            "【出力する項目】\n- {fields}\n\n"
+            "【決まり】\n"
+            "- JSON の前後に説明・見出し・コードフェンスを書いてはならない\n"
+            "- 会話に出ていない事を推測で補ってはならない\n"
+            "- 記録に加えるものが何も無ければ {changed} を \"false\" にし、"
+            "他の項目には現在の記録をそのまま写す\n"
             "- 固定の分類は使わず、継続的な性格、価値観、嗜好、経歴、関係、"
             "目標、秘密、約束を自然な人物像として簡潔に統合する\n"
-            "- 会話に出ていない事を推測で補ってはならない\n"
-            "- 重複はまとめ、既存内容と新しい会話が矛盾するときは新しい会話を優先する\n"
-            "- 書き足すのではなく要約して統合し、全体を{chars}文字以内に収める\n"
-            "- 人物像に加える内容が無ければ「{no_change}」だけを出力する"
-        ).format(chars=INJECT_CHARS, no_change=NO_CHANGE)
-        context = (
-            "【{npc_name}の素性（ゲームの記録）】\n"
-            "- プロフィール: {profile}\n- 人格: {personality}\n- 役割: {job}\n\n"
-            "【現在の追加プロフィール】\n{known}\n\n"
-            "【新しい会話】\n{transcript}"
-        ).format(npc_name=snapshot["npc_name"],
-                 profile=snapshot["game_profile"],
-                 personality=snapshot["personality"],
-                 job=snapshot["job"],
-                 known=known or "（まだ記録が無い）",
-                 transcript=snapshot["transcript"])
+            "- {about} には、呼び方、抱いている感情、交わした約束、貸し借り、"
+            "頼まれた用件を書く\n"
+            "- 重複はまとめ、既存の記録と新しい会話が矛盾するときは新しい会話を優先する\n"
+            "- 書き足すのではなく要約して統合し、各項目を指定の文字数以内に収める"
+        ).format(fields="\n- ".join(fields), changed=KEY_CHANGED,
+                 about=KEY_ABOUT_PLAYER)
+        blocks = [
+            "【{}の素性（ゲームの記録）】\n- プロフィール: {}\n- 人格: {}\n- 役割: {}"
+            .format(npc_name, snapshot["game_profile"], snapshot["personality"],
+                    snapshot["job"]),
+            "【現在の人物像】\n{}".format(
+                _field(record, "profile") or "（まだ記録が無い）"),
+        ]
+        if RECORD_PLAYER_MEMORY:
+            blocks.append("【現在の、{}から見た{}についての記録】\n{}".format(
+                npc_name, player_name,
+                _field(record, "about_player") or "（まだ記録が無い）"))
+        blocks.append("【新しい会話】\n{}".format(snapshot["transcript"]))
         return [
-            {"role": "user", "content": instruction + "\n\n" + context},
-            {"role": "user", "content": "<行動: 追加プロフィールを更新する>"},
+            {"role": "user", "content": instruction + "\n\n" + "\n\n".join(blocks)},
+            {"role": "user", "content": "<行動: 記録を更新する>"},
         ]
 
     def extract(snapshot):
-        known = profile_for(snapshot["world"], snapshot["npc_id"],
+        record = record_for(snapshot["world"], snapshot["npc_id"],
                             snapshot["npc_name"])
-        profile = read_profile(ask(
-            MANAGER_EXTRACT, build_messages(snapshot, known)))
-        if not profile:
+        messages = build_messages(snapshot, record)
+        # 構造化出力を先に試し、使えない版では頼み文だけの JSON に降りる。
+        update = normalize_update(ask_structured(MANAGER_EXTRACT, messages))
+        if update is None:
+            update = parse_result(ask(MANAGER_EXTRACT, messages))
+        if not update:
+            write("extract: nothing to change for {!r} ({})".format(
+                snapshot["npc_name"], snapshot["npc_id"]))
             return
-        update_profile(snapshot["world"], snapshot["npc_id"],
-                       snapshot["npc_name"], profile)
+        update_record(snapshot["world"], snapshot["npc_id"],
+                      snapshot["npc_name"], update)
 
     def worker_loop():
         """仕事を順番に処理する。30秒空けば再注入時の残骸を残さず終了する。"""
@@ -575,6 +963,17 @@ def apply(ctx):
         if snapshot is None:
             return
         with worker_lock:
+            # ワーカーが（返らない推論などで）止まっている間に会話を続けても
+            # 際限なく溜めない。溢れたぶんは**古い方**から捨てる。
+            while jobs.qsize() >= MAX_PENDING:
+                try:
+                    dropped = jobs.get_nowait()
+                except queue.Empty:
+                    break
+                jobs.task_done()
+                write("extract: dropped the oldest job for {!r} ({}) "
+                      "- {} already waiting".format(
+                          dropped["npc_name"], dropped["npc_id"], MAX_PENDING))
             jobs.put(snapshot)
             state["last_extract_skip"] = None
             write("extract queued: {!r} ({}) {} transcript chars".format(

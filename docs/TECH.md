@@ -35,6 +35,7 @@ GAME.md と分けているのは、ゲームが更新されて食い違うのは
 | 適用順と依存の宣言 / 複数 MOD の重なり | §3.2 / §3.3 |
 | `apply()` が何度も呼ばれる理由と書き方 | §3.4 / §3.5 / §3.6 |
 | 誰がどこへ当てたか / 利用者設定 / API 番号 / 剥がし方 | §3.7 / §3.8 / §3.9 / §3.10 |
+| ログと永続データの置き分け（`out/` と `state/`） | §3.11 |
 | Nuitka で効くもの・効かないもの | §4 |
 | 画面・選択肢・会話を扱う既製部品 | §5 |
 | 踏んだ罠の一覧（守るべきルール） | §6 |
@@ -89,7 +90,8 @@ runtime/mods/load_order.local.json  手元だけの適用順。在れば上に�
 settings/         利用者が変えたものだけ（無くてよい）
                   mod_settings.json … MOD の設定 / gui.json … ゲームの場所・窓の位置
                   loader.json … デバッグモード（GUI とローダの両方が読む。§3.2.4）
-out/              ログ・リコン成果物・status.json（最後の boot の結果）
+out/              ログ・リコン成果物・status.json（最後の boot の結果）。消してよい
+state/            MOD が持つ永続データ（§3.11）。消すと遊びが巻き戻る
 tools/            上記に加え、オフライン検証・セーブ操作（ゲーム不要）
 docs/             README.md / MODS.md / TECH.md / GAME.md / VERIFICATION.md
 ```
@@ -162,8 +164,11 @@ found["notes"]      # 直すべきずれではない知らせ（手元用の順�
 自分で `modloader.log` に書いている最中に走ること。もう1つは遅延設置の当て直し（§3.4）
 でも `boot()` が呼ばれるため、1回のプレイの記録が途中で分断されること。注入は世代の
 境目そのものなので、注入する側で1回だけ行えば両方とも起きない。対象は `out/` 直下の
-`*.log` だけで、`out/test/` `out/recon/` と `quest_clients.json` のような状態ファイルには
-触らない。
+`*.log` だけで、`out/test/` `out/recon/` と `status.json` には触らない。
+
+MOD が持つ永続データはそもそも `out/` に来ない（`state/`。§3.11）。以前は
+`out/quest_clients.json` のような状態ファイルが同じ場所に居て、「`*.log` だけ」
+という但し書きだけが遊びの続きを守っていた。
 
 ---
 
@@ -191,6 +196,7 @@ python tools/test_ui_text_expand.py           # 113_
 python tools/test_ui_input_focus.py           # 114_
 python tools/test_ui_item_list_fit.py         # 115_
 python tools/test_office_pardon.py     # 309_
+python tools/test_npc_profile_memory.py       # 311_（`301_` との取り決めもここで見る）
 
 # 3. ローダ全体が読めるかの確認（フックは大半が保留になるが、import と apply() の失敗が出る）
 python -c "import sys; sys.path.insert(0,'runtime'); import instantale_modloader as l; print(l.boot('out/test/bootcheck'))"
@@ -419,7 +425,8 @@ runtime/mods/
 （`sys.modules` への登録を忘れると `from . import ...` が落ちる）。
 
 > MOD 単体の部品は MOD のフォルダの中で完結させる。出ていってよいのは
-> `out/` のログだけ（`ctx.out_path`）。利用者が編むデータファイルも
+> `out/` のログ（`ctx.out_path`）と `state/` の永続データ（`ctx.state_path`。
+> §3.11）だけ。利用者が編むデータファイルも
 > `mods/<その MOD>/` に置き、配布フォルダの `settings/` や外部ツールの置き場所を
 > 探しに行かないこと。フォルダを1つコピーすれば動き、消せば残らない状態を保つため
 > （`111_llm_prompt_replace` の置換ルールがこの形。当初は `settings/` と外部プロキシ
@@ -483,8 +490,9 @@ def apply(ctx):
 | `@ctx.wrap(target)` | 元関数を第1引数で受け取るラッパ |
 | `ctx.resolve(target)` | `(owner, name, value)` を返す。調査用 |
 | `ctx.log(...)` / `ctx.log_exc(...)` | `out/modloader.log` へ |
-| `ctx.out_path(name)` | `out/<name>` の絶対パス。MOD 専用ログはここへ |
-| `ctx.mod_dir` | いま apply() 中の MOD のフォルダ。同梱データを読む用（書くのは `out/`） |
+| `ctx.out_path(name)` | `out/<name>` の絶対パス。MOD 専用ログはここへ（§3.11） |
+| `ctx.state_path(name)` | `state/<name>` の絶対パス。遊びの続きに要るデータはここへ（§3.11） |
+| `ctx.mod_dir` | いま apply() 中の MOD のフォルダ。同梱データを読む用（書くのは `out/` か `state/`） |
 | `ctx.on_ready(fn)` | プロセスにつき1回だけメインスレッドで実行（§3.6） |
 | `ctx.patches()` | 対象 → 当てた MOD の一覧。自分より前の分が見える（§3.7） |
 | `ctx.config` / `ctx.setting(名前)` | この MOD に効いている設定値（§3.8） |
@@ -561,9 +569,22 @@ def paint(orig, self, instance, value):
 片方の言語しか書かれていなければもう片方で埋めるので、`name["ja"]` は必ず何かを
 返す（GUI の行が空にならない）。`"name": "Some mod"` のように文字列1つでも書ける。
 
-`name` は一覧に並べる名前なので短く保つ（英語 半角30 / 日本語 全角12 まで。
-`tools/test_patch_registry.py` が長さを検査する）。何をする MOD かの説明は
-`description` 側に置き、設計判断は入口ファイルの docstring に書く。
+`name` は一覧に並べる名前なので短く保つ。何をする MOD かの説明は `description` 側に
+置き、設計判断は入口ファイルの docstring に書く。目安は日本語で全角12文字ぶん、
+英語で半角30文字ぶん ― 名前列の既定幅（200px）に収まる量。
+
+**これは書き方の約束で、検査はしない。** 以前は `tools/test_patch_registry.py` が
+長さを落としていたが、外した:
+
+- 名前列は伸縮する（`gui.py` の `COLUMNS` は `stretch=True`）。固定幅で切り落とされる
+  わけではなく、窓を広げれば見えるし大きさは記憶される
+- **行に描くのは `mod.json` の名前そのものではない。** `superseded` の MOD には
+  `〔main_024 で本体が取込〕` が付く ― それだけで旧上限を超えるので、名前の側だけ
+  短くしても守りたかったものは守れていなかった
+
+実際にこの検査は `121_ui_character_sheet` の正確な名前を弾いていて、**通すために
+名前を悪くする**方向に効いていた。目安を外れて困るのは読み手だけなので、機械ではなく
+書く側が決める。
 
 ログにはフォルダ名を出す（名乗りは出さない）。フォルダ名はインストール単位で一意、
 cp932 のコンソールでも化けず、grep もしやすい。`version` を必須にしないのは、
@@ -1063,6 +1084,55 @@ MOD が立てたスレッドや Clock の予約
 ```
 
 素のゲームで確かめたいなら、注入せずに起動し直すのが確実。
+
+### 3.11 書き込み先（`out/` と `state/`）
+
+配布フォルダ直下に書いてよい場所は3つ。役割で分けてあり、混ぜない。
+
+| 場所 | 何が入るか | 消すと |
+|---|---|---|
+| `settings/` | 利用者が決めたこと（MOD の設定・GUI の覚え書き・デバッグモード） | 既定に戻る |
+| `out/` | MOD が吐いたもの（ログ・リコン成果物・`status.json`） | 何も起きない |
+| `state/` | MOD が持つ永続データ（進行中の道中・依頼の出所・NPC の控え） | 遊びが巻き戻る |
+
+MOD からは `ctx.out_path(名前)` と `ctx.state_path(名前)` で引く。どちらも親
+ディレクトリを作ってから絶対パスを返すので、使い分けは1行の差でしかない。
+
+```python
+log_path    = ctx.out_path("road_travel.log")     # 追えればよい記録
+journey_path = ctx.state_path("road_travel.json")  # 続きに要るデータ
+```
+
+**判定は「消されたときに何が起きるか」で行う。** 消えても次のプレイに影響しない
+なら `out/`。消えるとプレイヤーが積み上げたものが失われるなら `state/`。
+
+元は `out/` が両方を兼ねていた。性質が正反対なので破綻する:
+
+| | |
+|---|---|
+| 不具合報告の案内 | 「`out/` を消してから再現してください」と言えない（進行中の依頼や NPC の記憶まで飛ぶ） |
+| 世代管理（§1.5） | 永続データを飛ばさないことが「対象は `*.log` だけ」という但し書きだけで守られている |
+| 利用者の掃除 | ログのつもりで消したものが、遊びの続きだった |
+
+セーブに書かずに `state/` へ持つ理由は MOD ごとに違うが、だいたい次のどちらか。
+どちらも「ゲームのデータを汚さない」ための判断で、その代わりに置き場所の責任が
+こちらへ来る（「MOD が足したものは MOD が片付ける」）。
+
+| 理由 | 例 |
+|---|---|
+| セーブの構造を壊さずに足せない | NPC は33項目の並びが決まっている（`310_` の台帳） |
+| 足しても往復で残る保証が無い | `Quest` が独自キーを写すかは読めない（`301_` / `305_`） |
+
+置き場所を分ける前に遊んでいた人のデータは、`ctx.state_path()` が拾う。
+`state/` 側に無くて `out/` に同じ名前が在れば、1度だけ移してくる（フォルダも
+丸ごと移る）。両方には残さない ― 次に読むのがどちらか分からないファイルを
+`out/` に残すと、「`out/` は消してよい」がまた崩れるため。移した記録は
+`modloader.log` の `state: moved ...` に出る。
+
+> 他の MOD が持っているデータを読むときは、**フォルダを作らないこと**。
+> `ctx.state_path()` は親を作るので、`os.path.join(ctx.state_dir, ...)` で組む。
+> 相手を切っている人の `state/` に、使われない空のフォルダを置かないため
+> （`301_` が `311_` の `npc_profiles/` を読む形）。
 
 ---
 

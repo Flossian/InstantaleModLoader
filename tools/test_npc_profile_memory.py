@@ -11,7 +11,7 @@
 
 見ているのは振る舞いだけ:
 
-- 1ターン終わると抽出が走り、更新後のプロフィール全文が `out/npc_profiles/<世界名>.json` に残る
+- 1ターン終わると抽出が走り、更新後のプロフィール全文が `state/npc_profiles/<世界名>.json` に残る
 - **変更なし・空・読めない返答では既存プロフィールを維持する**
 - 旧版の分類別 `slots` は情報を落とさず `profile` へ自動移行する
 - 控えは次の会話で、浅く複製した NPC の `profile` に足される
@@ -50,6 +50,22 @@ def find_mod(suffix):
     with io.open(os.path.join(folder, "mod.json"), encoding="utf-8") as fh:
         entry = json.load(fh)["entry"]
     return os.path.join(folder, entry)
+
+
+def load_neighbour(suffix):
+    """他の mod を番号を除いた名前で読む（取り決めの突き合わせ用）。
+
+    **これが許されるのは `tools/` の検証だけ**（TECH.md §2.4）。mod どうしは
+    実行時に互いを import しない ― ローダは mod を `instantale_mod_<フォルダ名>`
+    で登録するので、番号を振り直した瞬間に名前で掴む側が壊れる。
+    """
+    path = find_mod(suffix)
+    folder = os.path.dirname(path)
+    spec = importlib.util.spec_from_file_location(
+        "neighbour" + suffix, path, submodule_search_locations=[folder])
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 MOD_PATH = find_mod("_npc_profile_memory")
@@ -184,6 +200,54 @@ class Llm(object):
         return ""
 
 
+class Structured(object):
+    """`send_request` + `create_model`（構造化出力）の代わり。
+
+    この2つが `llm_manager` に載っている版を再現する。**載っていない版もある**
+    ので既定では外しておき、`Run(structured=...)` のときだけ載せる。そうすると
+    「構造化が使える版では使う」「使えない版では頼み文だけの JSON に降りる」の
+    両方を、同じ筋書きの並びで確かめられる。
+    """
+
+    payloads = {}
+    raises = set()
+    calls = []
+    models = []
+
+    @classmethod
+    def create_model(cls, model_name, **fields):
+        cls.models.append((model_name, dict(fields)))
+        return type(str(model_name), (object,), {"mod_fields": dict(fields)})
+
+    @classmethod
+    def send(cls, manager_name, message, structure, max_tokens=None, timeout=None):
+        cls.calls.append({"manager": manager_name, "message": message,
+                          "structure": structure, "timeout": timeout})
+        if manager_name in cls.raises:
+            raise RuntimeError("構造化推論が落ちた")
+        queue = cls.payloads.get(manager_name)
+        if isinstance(queue, list) and queue:
+            return queue.pop(0)
+        return queue
+
+    @classmethod
+    def reset(cls, payloads=None, raises=()):
+        cls.payloads = dict(payloads or {})
+        cls.raises = set(raises)
+        cls.calls = []
+        cls.models = []
+
+
+def install_structured(on):
+    """`llm_manager` に構造化出力の2関数を載せる／外す。"""
+    for name, value in (("send_request", Structured.send),
+                        ("create_model", Structured.create_model)):
+        if on:
+            setattr(llm_manager, name, value)
+        elif getattr(llm_manager, name, None) is not None:
+            delattr(llm_manager, name)
+
+
 class Facilitator(object):
     """会話の返答を作る側。**受け取った引数をそのまま控える。**"""
 
@@ -262,11 +326,21 @@ class Ctx(object):
 
     def __init__(self, out_dir):
         self.out_dir = out_dir
+        # 永続データの置き場は out/ と別（ローダの `state_dir`）。ここでも
+        # **別のフォルダ**にしておかないと、状態を out/ に書く mod が素通りする。
+        self.state_dir = os.path.join(out_dir, "state")
         self.hooks = {}
         self.errors = []
 
     def out_path(self, *parts):
-        path = os.path.join(self.out_dir, *parts)
+        return self._under(self.out_dir, parts)
+
+    def state_path(self, *parts):
+        return self._under(self.state_dir, parts)
+
+    @staticmethod
+    def _under(root, parts):
+        path = os.path.join(root, *parts)
         parent = os.path.dirname(path)
         if parent:
             os.makedirs(parent, exist_ok=True)
@@ -352,7 +426,8 @@ class Run(object):
     """1つの筋書き。偽のゲームを組んで mod を適用したところまで。"""
 
     def __init__(self, world_name="灰都", answers=None, raises=(), seed=None,
-                 seed_world=None, with_llm=True, legacy=False):
+                 seed_world=None, with_llm=True, legacy=False, structured=None,
+                 structured_raises=False, seed_record=None):
         self.tmp = tempfile.mkdtemp(prefix="npc_profile_test_")
         unbind_all()
         # mod は控えとワーカーを `sys` に置いて**世代をまたいで共有する**
@@ -364,6 +439,9 @@ class Run(object):
         Clock.reset()
         Facilitator.reset()
         Llm.reset({MOD.MANAGER_EXTRACT: answers} if answers else None, raises)
+        Structured.reset({MOD.MANAGER_EXTRACT: structured} if structured else None,
+                         (MOD.MANAGER_EXTRACT,) if structured_raises else ())
+        install_structured(structured is not None or structured_raises)
 
         self.npc = Character("77", "傭兵ガロ")
         self.other = Character("88", "薬売りミラ")
@@ -380,6 +458,8 @@ class Run(object):
         self.ctx = Ctx(self.tmp)
         if seed:
             self.seed(seed_world or world_name, seed, legacy=legacy)
+        if seed_record:
+            self.seed_full(seed_world or world_name, seed_record)
         MOD.apply(self.ctx)
 
         bind_method(self.ctx, TURN, ConversationPhaseManager,
@@ -391,7 +471,15 @@ class Run(object):
         """既に何か覚えている状態から始める。"""
         record = {"name": "傭兵ガロ", "updated": "2026-07-30T00:00:00"}
         record["slots" if legacy else "profile"] = profile
-        path = os.path.join(self.tmp, "npc_profiles",
+        path = os.path.join(self.tmp, "state", "npc_profiles",
+                            MOD.safe_world_filename(world_name))
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump({npc_id: record}, fh, ensure_ascii=False)
+
+    def seed_full(self, world_name, record, npc_id="77"):
+        """控えの中身をこちらで丸ごと決めて始める（欄ごとの検査用）。"""
+        path = os.path.join(self.tmp, "state", "npc_profiles",
                             MOD.safe_world_filename(world_name))
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as fh:
@@ -416,7 +504,7 @@ class Run(object):
 
     def profiles(self):
         """全世界分。キーはファイル名の幹（通常は世界名そのもの）。"""
-        root = os.path.join(self.tmp, "npc_profiles")
+        root = os.path.join(self.tmp, "state", "npc_profiles")
         result = {}
         if not os.path.isdir(root):
             return result
@@ -448,12 +536,23 @@ class Run(object):
             self.app.player, npc if npc is not None else self.npc,
             "", "", "", "", [], [], "", None)
 
-    def profile(self, npc_id="77", world_name=None):
+    def record(self, npc_id="77", world_name=None):
         stem = MOD.safe_world_filename(world_name or self.app.world.name)[:-5]
-        bucket = self.profiles().get(stem, {})
-        return (bucket.get(npc_id) or {}).get("profile", "")
+        return self.profiles().get(stem, {}).get(npc_id) or {}
+
+    def profile(self, npc_id="77", world_name=None):
+        return self.record(npc_id, world_name).get("profile", "")
+
+    def about_player(self, npc_id="77", world_name=None):
+        return self.record(npc_id, world_name).get("about_player", "")
+
+    def facts(self, npc_id="77", world_name=None):
+        got = self.record(npc_id, world_name).get("facts")
+        return [item.get("text") for item in got] if isinstance(got, list) else []
+
     def cleanup(self):
         APP_HOLDER.running = None
+        install_structured(False)
         if self.saved_llm is not None:
             sys.modules[LLAMA_CPP] = self.saved_llm
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -490,7 +589,7 @@ def test_turn_updates_profile():
     record = run.profiles()[stem]["77"]
     check(record.get("name") == "傭兵ガロ", "名前が控えられていない: {}".format(record))
     check(bool(record.get("updated")), "更新時刻が無い: {}".format(record))
-    path = os.path.join(run.tmp, "npc_profiles",
+    path = os.path.join(run.tmp, "state", "npc_profiles",
                         MOD.safe_world_filename(run.app.world.name))
     check(os.path.isfile(path), "世界ファイルが無い: {}".format(path))
     return run
@@ -509,8 +608,12 @@ def test_extraction_runs_after_the_reply():
     prompt = Llm.last_prompt(MOD.MANAGER_EXTRACT)
     check("お前の故郷はどこだ" in prompt, "入力が載っていない: {}".format(prompt[:200]))
     check(Facilitator.reply[1:6] in prompt, "返答が載っていない: {}".format(prompt[:200]))
-    check("更新後の追加プロフィール全文" in prompt,
-          "全文更新の指示が無い: {}".format(prompt[:200]))
+    check("JSON オブジェクト1つ" in prompt,
+          "JSON で返す指示が無い: {}".format(prompt[:200]))
+    for key in (MOD.KEY_CHANGED, MOD.KEY_PROFILE, MOD.KEY_ABOUT_PLAYER,
+                MOD.KEY_NEW_FACTS):
+        check('"{}"'.format(key) in prompt,
+              "項目 {} の指示が無い: {}".format(key, prompt[:300]))
     return run
 
 
@@ -600,12 +703,16 @@ def test_profile_keeps_full_llm_response():
 
 
 def test_extraction_prompt_asks_for_summary_budget():
-    """抽出LLMには目標長までの要約を指示する"""
+    """抽出LLMには欄ごとの目標長を指示する"""
     run = Run(answers=FOUND)
     run.turn()
     prompt = Llm.last_prompt(MOD.MANAGER_EXTRACT)
-    check("要約して統合し、全体を{}文字以内に収める".format(MOD.INJECT_CHARS) in prompt,
-          "要約の目標長指示が無い: {}".format(prompt[:300]))
+    check("{}文字以内".format(MOD.INJECT_CHARS) in prompt,
+          "人物像の目標長指示が無い: {}".format(prompt[:400]))
+    about = max(1, MOD.INJECT_CHARS // MOD.ABOUT_PLAYER_RATIO)
+    check("{}文字以内".format(about) in prompt,
+          "プレイヤーの記録の目標長指示が無い: {}".format(prompt[:400]))
+    check("要約して統合" in prompt, "要約の指示が無い: {}".format(prompt[:400]))
     return run
 
 
@@ -742,7 +849,7 @@ def test_reapply_shares_one_worker_and_one_lock():
     以前は `state` / `jobs` / `data_lock` を `apply()` の中で作っていたため、
     走るたびに `state["worker"]` が `None` に戻り、前の世代のワーカーが
     生きている間に2本目が起動した。しかも `data_lock` が別インスタンスに
-    なるので、2本が同じ `out/npc_profiles/<世界>.json` を排他なしで
+    なるので、2本が同じ `state/npc_profiles/<世界>.json` を排他なしで
     read-modify-write できた（人物像の更新が消える経路）。
     """
     run = Run(seed="北方の村の生まれ。")
@@ -783,6 +890,322 @@ def test_all_five_conversation_hooks_inject_profile():
           "追加プロフィールが無い経路がある")
     check(all(npc is not run.npc for npc in seen), "NPC本体を渡した経路がある")
     return run
+
+
+# ========================================================== 構造化出力と JSON
+def test_structured_output_is_used_when_available():
+    """`send_request` が在る版では構造化出力で受け取る"""
+    run = Run(structured={MOD.KEY_CHANGED: "true",
+                          MOD.KEY_PROFILE: FOUND,
+                          MOD.KEY_ABOUT_PLAYER: "命の恩人として扱っている。",
+                          MOD.KEY_NEW_FACTS: ["北方の村の生まれ", "古い剣を好む"]})
+    run.turn()
+    check(run.profile() == FOUND, "人物像が残らない: {!r}".format(run.profile()))
+    check(run.about_player() == "命の恩人として扱っている。",
+          "プレイヤーの記録が残らない: {!r}".format(run.about_player()))
+    check(run.facts() == ["北方の村の生まれ", "古い剣を好む"],
+          "判明した事実が残らない: {}".format(run.facts()))
+    check(len(Structured.calls) == 1,
+          "構造化で1回呼んでいない: {}".format(len(Structured.calls)))
+    # 非構造化には**降りていない**こと（両方に投げると2回課金される）。
+    check(not [name for name, _m in Llm.prompts if name == MOD.MANAGER_EXTRACT],
+          "構造化が通ったのに非構造化にも投げた")
+    return run
+
+
+def test_structured_call_follows_the_house_rules():
+    """構造化の呼び方は message=リスト・timeout 付き・Literal 無し"""
+    run = Run(structured={MOD.KEY_CHANGED: "true", MOD.KEY_PROFILE: FOUND,
+                          MOD.KEY_ABOUT_PLAYER: "", MOD.KEY_NEW_FACTS: []})
+    run.turn()
+    call = Structured.calls[-1]
+    # 文字列を渡すとゲームの内部スレッドで落ち、**呼び出しが永久に返らない**
+    # （GAME.md §2.12・実機で実測）。
+    check(isinstance(call["message"], list),
+          "message がリストでない: {}".format(type(call["message"])))
+    check(all(isinstance(item, dict) and "role" in item and "content" in item
+              for item in call["message"]),
+          "message の形が違う: {}".format(call["message"]))
+    check(call["timeout"] == MOD.EXTRACT_TIMEOUT,
+          "timeout を渡していない: {!r}".format(call["timeout"]))
+    check(call["manager"].startswith("mod_"),
+          "manager_name が mod_ で始まらない: {!r}".format(call["manager"]))
+    # 空の `Literal[]` は pydantic が拒否してゲームごと落ちる（`203_` の実測）。
+    fields = dict(Structured.models[-1][1])
+    for name, definition in fields.items():
+        annotation = definition[0] if isinstance(definition, tuple) else definition
+        check("Literal" not in repr(annotation),
+              "{} に Literal を使っている: {!r}".format(name, annotation))
+    check(fields.get(MOD.KEY_CHANGED, (None,))[0] is str,
+          "changed が str でない: {!r}".format(fields.get(MOD.KEY_CHANGED)))
+    return run
+
+
+def test_structured_failure_falls_back_to_text():
+    """構造化が落ちたら頼み文だけのJSONに降りる"""
+    run = Run(structured_raises=True,
+              answers=json.dumps({MOD.KEY_CHANGED: "true",
+                                  MOD.KEY_PROFILE: FOUND,
+                                  MOD.KEY_ABOUT_PLAYER: "借りがあると思っている。",
+                                  MOD.KEY_NEW_FACTS: []}, ensure_ascii=False))
+    run.turn()
+    check(run.profile() == FOUND, "降りた先で保存されない: {!r}".format(run.profile()))
+    check(run.about_player() == "借りがあると思っている。",
+          "降りた先でプレイヤーの記録が残らない: {!r}".format(run.about_player()))
+    # 落ちたことは握り潰さず記録する。ここだけは errors が空でないのが正しい。
+    check(any("mod_npc_profile_extract" in message for message in run.ctx.errors),
+          "落ちたのに記録が無い: {}".format(run.ctx.errors))
+    run.ctx.errors = []
+    return run
+
+
+def test_changed_false_keeps_the_record():
+    """`changed` が false なら控えを変えない"""
+    run = Run(seed_record={"name": "傭兵ガロ", "profile": "古い剣を好む。",
+                           "about_player": "まだ値踏みしている。"},
+              structured={MOD.KEY_CHANGED: "false",
+                          MOD.KEY_PROFILE: "全く別の人物像",
+                          MOD.KEY_ABOUT_PLAYER: "全く別の態度",
+                          MOD.KEY_NEW_FACTS: ["作り話"]})
+    run.turn()
+    check(run.profile() == "古い剣を好む。",
+          "人物像が変わった: {!r}".format(run.profile()))
+    check(run.about_player() == "まだ値踏みしている。",
+          "プレイヤーの記録が変わった: {!r}".format(run.about_player()))
+    check(run.facts() == [], "変更なしなのに事実が増えた: {}".format(run.facts()))
+    return run
+
+
+def test_json_in_plain_text_is_read():
+    """構造化が無い版でも、本文のJSONを読む"""
+    run = Run(answers="```json\n" + json.dumps(
+        {MOD.KEY_CHANGED: "true", MOD.KEY_PROFILE: FOUND,
+         MOD.KEY_ABOUT_PLAYER: "恩義を感じている。",
+         MOD.KEY_NEW_FACTS: ["妹を探している"]}, ensure_ascii=False) + "\n```")
+    run.turn()
+    check(run.profile() == FOUND, "囲み付きJSONを読めない: {!r}".format(run.profile()))
+    check(run.about_player() == "恩義を感じている。",
+          "プレイヤーの記録を読めない: {!r}".format(run.about_player()))
+    check(run.facts() == ["妹を探している"],
+          "事実を読めない: {}".format(run.facts()))
+    return run
+
+
+def test_broken_json_changes_nothing():
+    """JSONのつもりで壊れた返却では控えを変えない
+
+    丸ごと人物像として保存すると、壊れた JSON がそのままプロフィールになって
+    以後の会話に注入される。**安全側は「変更しない」。**
+    """
+    run = Run(seed="古い剣を好む無口な傭兵。",
+              answers='{"changed": "true", "profile": "北方の村の生ま')
+    run.turn()
+    check(run.profile() == "古い剣を好む無口な傭兵。",
+          "壊れたJSONで上書きされた: {!r}".format(run.profile()))
+    return run
+
+
+# ========================================================== プレイヤーへの認識
+def test_about_player_is_injected_under_its_own_heading():
+    """プレイヤーへの認識は人物像とは別の見出しで注入する"""
+    run = Run(seed_record={"name": "傭兵ガロ", "profile": "古い剣を好む。",
+                           "about_player": "ギルドの件を調べる約束をしている。"})
+    run.facilitate()
+    passed = Facilitator.calls[-1]["npc"]
+    check(MOD.PROFILE_HEADING in passed.profile,
+          "人物像の見出しが無い: {!r}".format(passed.profile))
+    heading = MOD.ABOUT_PLAYER_HEADING.format(player=run.app.player.name)
+    check(heading in passed.profile,
+          "プレイヤーの見出しが無い: {!r}".format(passed.profile))
+    check("古い剣を好む。" in passed.profile and "ギルドの件を調べる" in passed.profile,
+          "両方が載っていない: {!r}".format(passed.profile))
+    check(passed.profile.index(MOD.PROFILE_HEADING) < passed.profile.index(heading),
+          "並びが逆: {!r}".format(passed.profile))
+    return run
+
+
+def test_about_player_alone_is_enough_to_inject():
+    """人物像がまだ無くても、プレイヤーへの認識だけで注入する"""
+    run = Run(seed_record={"name": "傭兵ガロ", "about_player": "借りがある。"})
+    run.facilitate()
+    passed = Facilitator.calls[-1]["npc"]
+    check(passed is not run.npc, "複製していない")
+    check("借りがある。" in passed.profile,
+          "認識だけでは注入されない: {!r}".format(passed.profile))
+    check(MOD.PROFILE_HEADING not in passed.profile,
+          "空の人物像の見出しまで足した: {!r}".format(passed.profile))
+    return run
+
+
+# ========================================================== 判明した事実の控え
+def test_facts_accumulate_without_duplicates():
+    """事実は追記され、同じものは二度入らない"""
+    run = Run(structured=[{MOD.KEY_CHANGED: "true", MOD.KEY_PROFILE: "一度目。",
+                           MOD.KEY_ABOUT_PLAYER: "", MOD.KEY_NEW_FACTS: ["北方の生まれ"]},
+                          {MOD.KEY_CHANGED: "true", MOD.KEY_PROFILE: "二度目。",
+                           MOD.KEY_ABOUT_PLAYER: "",
+                           MOD.KEY_NEW_FACTS: ["北方の生まれ", "妹を探している"]}])
+    phase = ConversationPhaseManager(run.app, "自由入力")
+    phase.conversation_continued("故郷はどこだ")
+    phase.conversation_continued("何を探している")
+    Clock.pump()
+    run.wait_finished(2)
+    check(run.facts() == ["北方の生まれ", "妹を探している"],
+          "事実の積み方がおかしい: {}".format(run.facts()))
+    stamped = run.record().get("facts")
+    check(all(isinstance(item, dict) and item.get("at") for item in stamped),
+          "いつ分かったのかが残っていない: {}".format(stamped))
+    return run
+
+
+def test_facts_are_capped():
+    """事実の控えは上限を超えたら古い方から落とす"""
+    old = [{"at": "2026-07-30T00:00:00", "text": "古い事実{}".format(i)}
+           for i in range(MOD.FACT_LOG_LIMIT)]
+    run = Run(seed_record={"name": "傭兵ガロ", "profile": "既に何か覚えている。",
+                           "facts": old},
+              structured={MOD.KEY_CHANGED: "true", MOD.KEY_PROFILE: FOUND,
+                          MOD.KEY_ABOUT_PLAYER: "",
+                          MOD.KEY_NEW_FACTS: ["新しい事実A", "新しい事実B"]})
+    run.turn()
+    facts = run.facts()
+    check(len(facts) == MOD.FACT_LOG_LIMIT,
+          "上限に収まっていない: {}".format(len(facts)))
+    check(facts[-2:] == ["新しい事実A", "新しい事実B"],
+          "新しい事実が末尾に無い: {}".format(facts[-3:]))
+    check("古い事実0" not in facts, "落ちたのが古い方でない: {}".format(facts[:3]))
+    return run
+
+
+# ========================================================== 控えの形（取り決め）
+def test_record_keys_are_written_in_order():
+    """控えの鍵は `RECORD_KEYS` の並びで書く
+
+    この JSON は `301_quest_from_conversation` も読む取り決めなので、
+    人物ごとに鍵の順が違うと差分を見たときに何が増えたのか分からない。
+    """
+    run = Run(structured={MOD.KEY_CHANGED: "true", MOD.KEY_PROFILE: FOUND,
+                          MOD.KEY_ABOUT_PLAYER: "恩義を感じている。",
+                          MOD.KEY_NEW_FACTS: ["北方の生まれ"]})
+    run.turn()
+    keys = list(run.record().keys())
+    check(keys == [key for key in MOD.RECORD_KEYS if key in keys],
+          "鍵の並びが宣言と違う: {}".format(keys))
+    check(set(keys) == set(MOD.RECORD_KEYS),
+          "書かれた鍵が揃っていない: {}".format(keys))
+    return run
+
+
+def test_legacy_slots_survive_the_migration():
+    """移行しても旧`slots`は消さない（古い版へ戻せるように）"""
+    slots = {"好み": ["古い剣の話"], "経歴": ["北方の村の生まれ"]}
+    run = Run(seed=slots, legacy=True)
+    run.facilitate()
+    check(run.record().get("slots") == slots,
+          "旧slotsを消した: {}".format(run.record()))
+    keys = list(run.record().keys())
+    check(keys[-1] == "slots",
+          "知らない鍵が先頭に来た: {}".format(keys))
+    return run
+
+
+class BrokenJson(object):
+    """`json.dump` だけが落ちる差し替え。読む側はそのまま通す。"""
+
+    loads = staticmethod(json.loads)
+    load = staticmethod(json.load)
+
+    @staticmethod
+    def dump(obj, fh, **kwargs):
+        # 途中まで書いてから落ちる（切り詰めだけで終わらせない）。
+        fh.write('{"77": {"name": "傭')
+        raise RuntimeError("書き込みが落ちた")
+
+
+def test_a_failed_write_keeps_the_previous_file():
+    """書き込みが途中で落ちても前の控えは残る
+
+    `open(path, "w")` は開いた時点で切り詰めるので、素朴に書くと落ちた瞬間に
+    その世界の控えが壊れる。壊れたものは `{}` に倒れて読まれるので、次の更新で
+    1人ぶんだけが書かれ、**他の人物の記憶が消えたことにも気付けない**。
+    """
+    run = Run(seed_record={"name": "傭兵ガロ", "profile": "先に覚えていた人物像。"},
+              structured={MOD.KEY_CHANGED: "true", MOD.KEY_PROFILE: FOUND,
+                          MOD.KEY_ABOUT_PLAYER: "", MOD.KEY_NEW_FACTS: []})
+    path = os.path.join(run.tmp, "state", "npc_profiles",
+                        MOD.safe_world_filename(run.app.world.name))
+    with open(path, "rb") as fh:
+        before = fh.read()
+
+    saved_json = MOD.json
+    MOD.json = BrokenJson
+    try:
+        run.turn()
+    finally:
+        MOD.json = saved_json
+
+    with open(path, "rb") as fh:
+        after = fh.read()
+    check(after == before, "落ちた書き込みで前の控えが壊れた: {!r}".format(after[:80]))
+    check(run.profile() == "先に覚えていた人物像。",
+          "読み直すと控えが消えている: {!r}".format(run.profile()))
+    leftovers = [name for name in os.listdir(os.path.dirname(path))
+                 if name.endswith(MOD.TEMP_SUFFIX)]
+    check(not leftovers, "書きかけが残った: {}".format(leftovers))
+    # 落ちたことは握り潰さず記録する。ここだけは errors が空でないのが正しい。
+    check(any("cannot write" in message for message in run.ctx.errors),
+          "落ちたのに記録が無い: {}".format(run.ctx.errors))
+    run.ctx.errors = []
+    return run
+
+
+def test_a_normal_write_leaves_no_temp_file():
+    """普通に書けたときは書きかけを残さない"""
+    run = Run(structured={MOD.KEY_CHANGED: "true", MOD.KEY_PROFILE: FOUND,
+                          MOD.KEY_ABOUT_PLAYER: "恩義を感じている。",
+                          MOD.KEY_NEW_FACTS: []})
+    run.turn()
+    root = os.path.join(run.tmp, "state", "npc_profiles")
+    names = sorted(os.listdir(root))
+    check(names == [MOD.safe_world_filename(run.app.world.name)],
+          "世界ファイル以外が残った: {}".format(names))
+    # 世界の一覧を出す診断が、書きかけを世界として数えないこと。
+    check(not MOD.TEMP_SUFFIX.endswith(".json"),
+          "書きかけの名前が世界ファイルと同じ拡張子: {!r}".format(MOD.TEMP_SUFFIX))
+    return run
+
+
+def test_settings_match_the_manifest():
+    """`mod.json` の既定値とコードの定数が一致する
+
+    実際に効くのはコードの定数で、GUI が出すのは `mod.json` の `default`。
+    ずれると「GUI では 8 と出るのに実際は 5 で動く」になる。
+    """
+    folder = os.path.dirname(MOD_PATH)
+    with io.open(os.path.join(folder, "mod.json"), encoding="utf-8") as fh:
+        declared = json.load(fh)["settings"]
+    mismatch = [name for name, spec in declared.items()
+                if getattr(MOD, name, object()) != spec["default"]]
+    check(not mismatch, "mod.json とコードの既定値がずれている: {}".format(mismatch))
+
+
+def test_the_quest_mod_reads_the_same_file():
+    """`301_` が同じ世界ファイルを同じ規則で引ける
+
+    mod どうしはコードを共有せず**同じ場所を読む**ことで繋がっている
+    （TECH.md §3.2.3）。ファイル名の規則がずれた時点で、依頼の生成に
+    人物像が載らなくなる。そのずれをここで捕まえる。
+    """
+    offer = load_neighbour("_quest_from_conversation")
+    for world in ("灰都", "a/b:c", "  ", "." , "長" * 200):
+        check(offer.safe_world_filename(world) == MOD.safe_world_filename(world),
+              "ファイル名の規則がずれた: {!r}".format(world))
+    check(offer.NPC_MEMORY_DIRNAME == MOD.STATE_DIRNAME,
+          "置き場所がずれた: {!r} / {!r}".format(offer.NPC_MEMORY_DIRNAME,
+                                                MOD.STATE_DIRNAME))
+    unknown = [key for key, _label in offer.NPC_MEMORY_FIELDS
+               if key not in MOD.RECORD_KEYS]
+    check(not unknown, "301_ が知らない欄を読もうとしている: {}".format(unknown))
 
 
 def test_turn_survives_without_llm():
@@ -829,6 +1252,22 @@ def main():
                  test_life_log_is_not_touched,
                  test_reapply_shares_one_worker_and_one_lock,
                  test_all_five_conversation_hooks_inject_profile,
+                 test_structured_output_is_used_when_available,
+                 test_structured_call_follows_the_house_rules,
+                 test_structured_failure_falls_back_to_text,
+                 test_changed_false_keeps_the_record,
+                 test_json_in_plain_text_is_read,
+                 test_broken_json_changes_nothing,
+                 test_about_player_is_injected_under_its_own_heading,
+                 test_about_player_alone_is_enough_to_inject,
+                 test_facts_accumulate_without_duplicates,
+                 test_facts_are_capped,
+                 test_record_keys_are_written_in_order,
+                 test_legacy_slots_survive_the_migration,
+                 test_a_failed_write_keeps_the_previous_file,
+                 test_a_normal_write_leaves_no_temp_file,
+                 test_settings_match_the_manifest,
+                 test_the_quest_mod_reads_the_same_file,
                  test_turn_survives_without_llm,
                  test_turn_survives_a_failing_extraction):
         scenario(test)

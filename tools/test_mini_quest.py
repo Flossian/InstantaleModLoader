@@ -12,7 +12,7 @@
              `PhaseSpec` には自前クラス名を書かない
   生成     … ゲーム自身の `generate_random_quest()` を呼び、`area_description` に
              お題を足し、生成プロンプトの【討伐】を種類の札に差し替える
-  控え     … `out/test/mini_quests.json` に残り、**セーブには触らない**
+  控え     … `out/test/state/mini_quests.json` に残り、**セーブには触らない**
   進行     … 控えに在るクエストのときだけ referee プロンプトを書き換える。
              書き換えは system と user に**分かれて**入る（1メッセージに揃っていない）
   素通し   … 控えに無いクエスト・イベント処理・要約のプロンプトは1バイトも変えない
@@ -280,12 +280,19 @@ def install_fake_kivy():
 class FakeCtx:
     def __init__(self, out_dir):
         self.out_dir = out_dir
+        self.state_dir = os.path.join(out_dir, "state")
         self.hooks = {}
         self.errors = []
         self.logs = []
 
     def out_path(self, *parts):
         path = os.path.join(self.out_dir, *parts)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        return path
+
+    def state_path(self, *parts):
+        """永続データの置き場。本番と同じく out/ とは**別のフォルダ**にする。"""
+        path = os.path.join(self.state_dir, *parts)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
@@ -347,7 +354,7 @@ def setup(records=None):
     main.JustSetButtonToNormalPhase = JustSetButtonToNormalPhase
     main.PhaseSpec = PhaseSpec
 
-    record_path = os.path.join(OUT_DIR, "mini_quests.json")
+    record_path = os.path.join(OUT_DIR, "state", "mini_quests.json")
     os.makedirs(OUT_DIR, exist_ok=True)
     # ログは追記なので、消しておかないと**前回の実行の行を数えてしまう**
     # （「1度だけ記録する」の判定が実行のたびに増えて落ちた）。
@@ -718,7 +725,7 @@ check("解けば元の選択肢に戻る",
       _busy_app.hud.painted[-1] == ["A", "B"], _busy_app.hud.painted[-1])
 check("エラーを1件も出していない", ctx.errors == [], ctx.errors)
 
-record_path = os.path.join(OUT_DIR, "mini_quests.json")
+record_path = os.path.join(OUT_DIR, "state", "mini_quests.json")
 records = json.load(open(record_path, encoding="utf-8"))
 bucket = records.get("テスト世界", {})
 check("控えに残る", "44" in bucket, records)

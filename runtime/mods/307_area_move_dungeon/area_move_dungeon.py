@@ -98,7 +98,8 @@ from .journey import Journey
 
 LOG_BASENAME = "road_travel.log"
 
-# 進行中の道中の控え。**セーブには書かない。**
+# 進行中の道中の控え。**セーブには書かない。**置き場は `state/`
+# （`ctx.state_path`）。道中の途中で消えると、着くはずの街へ着けなくなる。
 STATE_BASENAME = "road_travel.json"
 
 # 確認画面に足すボタンの文字列。
@@ -288,7 +289,7 @@ def apply(ctx):
     screen = ui.Screen(ctx, write, tag="road travel", mark=MARK)
 
     # 道中の控え。注入し直しても前の層が書いたものを引き継ぐ（`journey.py`）。
-    journey = Journey(ctx.out_path(STATE_BASENAME), write,
+    journey = Journey(ctx.state_path(STATE_BASENAME), write,
                       ttl=PENDING_TTL, move_timeout=MOVE_TIMEOUT)
     journey.reload()
 

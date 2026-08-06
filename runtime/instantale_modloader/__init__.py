@@ -116,6 +116,31 @@ GAME_TOPLEVEL = {
 def is_game_module(name: str) -> bool:
     return name.split(".")[0] in GAME_TOPLEVEL
 
+
+# 配布フォルダ直下の書き込み先は3つある。**役割で分けてあり、混ぜない。**
+#
+#     settings/   利用者が決めたこと（mod の設定・GUI の覚え書き・デバッグモード）
+#     out/        mod が吐いたもの（ログ・リコン成果物・status.json）
+#     state/      mod が持つ永続データ（進行中の道中、依頼の出所、NPC の控え）
+#
+# 元は out/ が後ろ2つを兼ねていたが、性質が正反対だった。out/ は「消してよい・
+# 消せば静かになる」ものの置き場で、GUI は「ログを開く」の案内先として指し、
+# logrotate は注入のたびに中身を送る。永続データを同じ場所に置くと:
+#
+#   * 不具合報告で「out/ を消してから再現してください」と言えない
+#     （消すと進行中の依頼や NPC の記憶まで飛ぶ）
+#   * 世代管理の対象が「*.log だけ」という但し書きでしか守られない
+#   * 利用者が掃除のつもりで消したものが、遊びの続きだった
+#
+# 置き場所を分ければ、どちらも説明が1行で済む。out/ は捨ててよい。state/ は
+# セーブと同じ重みで残す。
+STATE_DIR_NAME = "state"
+
+
+def state_dir(runtime_dir: str) -> str:
+    """`state/` の場所。`runtime/` の1つ上＝配布フォルダ直下（`settings/` と同じ並び）。"""
+    return os.path.join(os.path.dirname(runtime_dir), STATE_DIR_NAME)
+
 # 「まだ import されていないモジュール」を待つ見張りの設定。
 # ゲームは LLM 系モジュールを最初のリクエストまで import しないので、
 # 起動直後に注入すると llama 系のフックが1つも載らない。詳しくは _arm_deferred。
@@ -131,6 +156,7 @@ _state: dict = {
     "api": API,
     "version": __version__,
     "out_dir": None,
+    "state_dir": None,
     "log_path": None,
     "mods": {},
     # mod フォルダ名 -> マニフェスト（名乗り / api / settings / 適用順の制約）。
@@ -225,6 +251,11 @@ class ModContext:
         ctx.log_exc(文字列) 例外をトレースバック付きで出す
         ctx.out_path(名前)  out/ 以下のパスを作る（親ディレクトリも作成）
 
+    書き込み先は2つあり、**役割で使い分ける**（STATE_DIR_NAME の説明を参照）:
+
+        ctx.out_path(名前)    ログ・調査の出力。消してよいもの
+        ctx.state_path(名前)  遊びの続きに要る永続データ。消すと巻き戻るもの
+
     それに加えて、1回だけ実行したい処理を預けられる:
 
         ctx.on_ready(関数)  プロセスにつき1回だけ、メインスレッドで実行する
@@ -236,9 +267,13 @@ class ModContext:
         ctx.api             ローダ API の番号（下位互換の分岐が要るとき用）
     """
 
-    def __init__(self, out_dir: str, runtime_dir: str):
+    def __init__(self, out_dir: str, runtime_dir: str, state_root: str | None = None):
         self.out_dir = out_dir
         self.runtime_dir = runtime_dir
+        # 既定は配布フォルダ直下の state/。オフライン検証が別の場所を指せるよう
+        # 引数でも受ける（out_dir と同じ扱い）。引数名を `state_dir` にしないのは、
+        # 場所を決める関数 `state_dir()` を中で呼べなくなるため。
+        self.state_dir = state_root or state_dir(runtime_dir)
         self.log = log
         self.log_exc = log_exc
         self.api = API
@@ -338,10 +373,58 @@ class ModContext:
         return True
 
     def out_path(self, *parts: str) -> str:
-        """out/ 以下のパスを返す。親ディレクトリは先に作っておく。"""
+        """out/ 以下のパスを返す。親ディレクトリは先に作っておく。
+
+        **消してよいもの**の置き場。ログ・調査の出力・status.json。注入のたびに
+        `tools/logrotate.py` が直下の `*.log` を1世代送る。遊びの続きに要るものは
+        `state_path()` へ。
+        """
         path = os.path.join(self.out_dir, *parts)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
+
+    def state_path(self, *parts: str) -> str:
+        """state/ 以下のパスを返す。親ディレクトリは先に作っておく。
+
+        **消すと巻き戻るもの**の置き場。進行中の道中、依頼の出所、NPC の控え。
+        セーブに書けない（または書きたくない）が、次に遊ぶときに要るデータ。
+
+        同じ名前が `out/` に在って `state/` に無ければ、**1度だけ移してくる**。
+        置き場所を分ける前に遊んでいた人の続きを、こちらで拾うため。移設は
+        `state/` 側が空のときだけなので、2回目以降は何もしない。
+        """
+        path = os.path.join(self.state_dir, *parts)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        if not os.path.exists(path):
+            self._adopt_from_out(parts, path)
+        return path
+
+    def _adopt_from_out(self, parts: tuple, path: str) -> None:
+        """`out/<同じ名前>` が在れば `state/` へ移す（移設の跡はログに残す）。
+
+        コピーではなく移動にしてある。両方に残すと、次に読むのがどちらなのか
+        分からないファイルが `out/` に居座る（`out/` を消してよいという説明も
+        崩れる）。移せなかった場合は何もしない ― state/ 側が空のまま始まるだけで、
+        壊れるより巻き戻るほうがましなため。
+        """
+        legacy = os.path.join(self.out_dir, *parts)
+        if not os.path.exists(legacy) or os.path.abspath(legacy) == os.path.abspath(path):
+            return
+        try:
+            os.replace(legacy, path)
+        except OSError:
+            # ディレクトリの移設と、ドライブを跨ぐ場合。
+            try:
+                import shutil
+                shutil.move(legacy, path)
+            except Exception:
+                log_exc("state: cannot move {} to {}".format(legacy, path))
+                return
+        except Exception:
+            log_exc("state: cannot move {} to {}".format(legacy, path))
+            return
+        log("state: moved {} from out/ (kept as {})".format(
+            os.path.join(*parts), path))
 
     @property
     def mod_dir(self) -> str | None:
@@ -349,7 +432,8 @@ class ModContext:
 
             table = json.load(open(os.path.join(ctx.mod_dir, "data", "x.json")))
 
-        **読む専用**。書き込みは `ctx.out_path()`（out/ 以下）へ。mods/ は
+        **読む専用**。書き込みは `ctx.out_path()`（ログ）か `ctx.state_path()`
+        （永続データ）へ。mods/ は
         配布物そのもので、遊ぶ側が書き換わることを想定していない。
 
         apply() の外（`on_ready` の中など）では None になるので、フォルダを
@@ -371,13 +455,15 @@ class ModContext:
             "compiled    : {}\n"
             "modules     : {}\n"
             "out_dir     : {}\n"
+            "state_dir   : {}\n"
         ).format(sys.version.replace("\n", " "),
                  sys.executable,
                  # __compiled__ があれば Nuitka でビルドされたモジュール。
                  # 素の Python で動かしているのか、ゲームの中なのかの区別に使える。
                  "__compiled__" in dir(sys.modules.get("__main__", object())),
                  len(sys.modules),
-                 self.out_dir)
+                 self.out_dir,
+                 self.state_dir)
 
 
 # --------------------------------------------------------------------------
@@ -1045,6 +1131,10 @@ def boot(out_dir: str) -> dict:
 
     runtime_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ctx = ModContext(out_dir, runtime_dir)
+    # 場所は毎回ログに出す。out/ を消してくださいと頼めるのは、永続データが
+    # そこに無いと言い切れるときだけなので、どこを使っているかを残す。
+    _state["state_dir"] = ctx.state_dir
+    log("out {} | state {}".format(out_dir, ctx.state_dir))
 
     from . import config as _config
     from . import patch_registry as _registry

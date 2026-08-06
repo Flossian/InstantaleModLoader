@@ -1,17 +1,50 @@
 {
   "entry": "batch_message_render.py",
   "api": 1,
+  "after": [
+    "117_message_text_integrity",
+    "112_ui_text_spacing",
+    "113_ui_text_expand",
+    "114_ui_input_focus",
+    "116_ui_party_expand"
+  ],
   "name": {
     "en": "Batch message rendering",
-    "ja": "メッセージを一括表示する"
+    "ja": "メッセージの表示速度と文字色"
   },
   "description": {
-    "en": "Keeps recently added messages white, grays older text, then reveals each new message from the beginning",
-    "ja": "指定秒数以内の本文を白く保ち、古い本文を灰色にして、新着部分を先頭行から順に表示する"
+    "en": "Shows the rest of a message at once when the screen is clicked (or always), and grays out older text",
+    "ja": "表示中に画面をクリックすると残りを一括表示する（常時一括にもできる）。古い本文は灰色にする"
   },
-  "version": "1",
+  "version": "2",
   "author": "yoshinari/tomotomo-y",
   "settings": {
+    "BATCH_MODE": {
+      "type": "choice",
+      "values": ["click", "always"],
+      "default": "click",
+      "label": {
+        "ja": "本文の出し方",
+        "en": "How messages appear"
+      },
+      "note": {
+        "ja": "click は1文字ずつの逐次表示で、表示中に画面をクリックすると残りを一括で出す。always は最初から一括で出し、新着部分を先頭行から順に現す",
+        "en": "click types the message out and shows the rest at once when you click the screen. always shows the whole message immediately and reveals it line by line"
+      }
+    },
+    "FRESH_MODE": {
+      "type": "choice",
+      "values": ["seconds", "sessions"],
+      "default": "seconds",
+      "label": {
+        "ja": "古い本文の見分け方",
+        "en": "What counts as older text"
+      },
+      "note": {
+        "ja": "seconds は追加からの経過秒数（白色を維持する秒数）、sessions はその後に本文が何回追加されたか（白色を維持するセッション数）で決める",
+        "en": "seconds uses the time since a message was added; sessions counts how many messages have been added since"
+      }
+    },
     "FRESH_SECONDS": {
       "type": "float",
       "default": 10.0,
@@ -22,8 +55,22 @@
         "en": "Seconds to keep recent messages white"
       },
       "note": {
-        "ja": "新しいメッセージが追加された時点で、この秒数以内の本文を白色にする。表示中には色を変えない。0なら追加直後から灰色にする",
-        "en": "When a new message is added, messages younger than this many seconds are white. Colors do not change while idle. 0 grays them immediately"
+        "ja": "古い本文の見分け方が seconds のときに使う。新しいメッセージが追加された時点で、この秒数以内の本文を白色にする。表示中には色を変えない。0なら追加直後から灰色にする",
+        "en": "Used when older text is decided by seconds. When a new message is added, messages younger than this many seconds are white. Colors do not change while idle. 0 grays them immediately"
+      }
+    },
+    "FRESH_SESSIONS": {
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 99,
+      "label": {
+        "ja": "白色を維持するセッション数",
+        "en": "Messages to keep white"
+      },
+      "note": {
+        "ja": "古い本文の見分け方が sessions のときに使う。本文が1つ表示されるたびに1セッション。1なら最新の本文だけが白色で、3なら直近3つが白色のまま残る。0なら追加直後から灰色にする",
+        "en": "Used when older text is decided by sessions. Each displayed message counts as one session. 1 keeps only the newest message white, 3 keeps the last three. 0 grays them immediately"
       }
     }
   }

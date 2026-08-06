@@ -68,6 +68,11 @@ MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 OUT_DIR = os.path.join(ROOT, "out")
 STATUS_PATH = os.path.join(OUT_DIR, ml.STATUS_NAME)
 
+# MOD が持つ永続データ（進行中の道中、依頼の出所、NPC の控え）。out/ とは別。
+# 場所はローダに聞く（`ml.state_dir`）― ゲームの中で書く側と GUI で開く側とで
+# 同じ場所を組み立てる規則を2箇所に書かないため。
+STATE_DIR = ml.state_dir(RUNTIME_DIR)
+
 # 利用者が選んだものは全部 settings/ に集める（mod ごとの設定は
 # instantale_modloader.config が同じフォルダへ mod_settings.json を書く）。
 # ここに入るのは「このウィンドウの覚えていること」＝ゲームの場所と窓の大きさ。
@@ -1199,8 +1204,12 @@ class App(ttk.Frame):
         m_run.add_separator()
         # 失敗したときの案内文が out/bootstrap.log を指すのに、そこへ行く手段が
         # どこにも無かった。
-        m_run.add_command(label="out/ フォルダを開く（ログ）",
+        m_run.add_command(label="out/ フォルダを開く（ログ。消してよい）",
                           command=self.open_out_dir)
+        # 「out/ を消してください」と案内できるのは、消えては困るものが別に
+        # 置いてあると示せるときだけ。開く手段もここに並べておく。
+        m_run.add_command(label="state/ フォルダを開く（MOD の記録。消すと巻き戻る）",
+                          command=self.open_state_dir)
         m_run.add_separator()
         # 絞り込み（`FILTERS`）ではなくメニューに置く。あちらは「表示だけ」の
         # 条件で揃えてあり、注入する中身まで変わる項目を混ぜると意味が濁る。
@@ -1734,6 +1743,11 @@ class App(ttk.Frame):
         """ログと status.json の置き場。注入に失敗したときの案内先。"""
         os.makedirs(OUT_DIR, exist_ok=True)
         self._open(OUT_DIR)
+
+    def open_state_dir(self) -> None:
+        """MOD が持つ永続データの置き場。**ログとは別**（消すと遊びが巻き戻る）。"""
+        os.makedirs(STATE_DIR, exist_ok=True)
+        self._open(STATE_DIR)
 
     def _open(self, path: str) -> None:
         try:

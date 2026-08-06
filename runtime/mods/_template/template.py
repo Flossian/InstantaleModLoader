@@ -72,4 +72,6 @@ def apply(ctx):
 
     # apply() の中で出したログは out/modloader.log に入る。
     # 量が多くなるなら MOD 専用のファイルに分ける（`ctx.out_path("template.log")`）。
+    # 次に遊ぶときに要るデータは `ctx.state_path("template.json")` へ。out/ は
+    # 消してよい場所なので、消えると巻き戻るものを置かない（TECH.md §3.11）。
     ctx.log("template: installed (LOG_LIMIT={})".format(LOG_LIMIT))

@@ -6,10 +6,10 @@
     "ja": "NPCが会話を覚える"
   },
   "description": {
-    "en": "After each turn, a background LLM call updates a persistent profile formed from what conversations reveal about that NPC. The extra profile is appended to the NPC profile in every later conversation",
-    "ja": "会話1ターンごとに、バックグラウンドの LLM が会話から形成された人物プロフィールを更新する。追加プロフィールは以降の会話でゲーム本体のプロフィール欄に毎回載る"
+    "en": "After each turn, a background LLM call updates a persistent profile formed from what conversations reveal about that NPC, plus a separate record of how that NPC sees the player. Both are appended to the NPC profile in every later conversation",
+    "ja": "会話1ターンごとに、バックグラウンドの LLM が会話から形成された人物プロフィールと、その人物から見たプレイヤーの記録を更新する。どちらも以降の会話でゲーム本体のプロフィール欄に毎回載る"
   },
-  "version": "1",
+  "version": "2",
   "author": "yoshinari/tomotomo-y",
   "settings": {
     "CONVERSATION_TURNS": {
@@ -38,6 +38,32 @@
       "note": {
         "ja": "抜き出しLLMへの要約の目安。保存や注入では切らない。上げるほど会話が遅く高くつく",
         "en": "Soft target for the extractor summary. Not hard-truncated on save or inject"
+      }
+    },
+    "RECORD_PLAYER_MEMORY": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "その人物から見たあなたの記録も残す",
+        "en": "Also record how the NPC sees you"
+      },
+      "note": {
+        "ja": "呼び方・抱いている感情・交わした約束を人物像とは別の欄に覚える。切ると人物像だけになる",
+        "en": "Keeps how they address you, how they feel, and promises made in a field of its own"
+      }
+    },
+    "FACT_LOG_LIMIT": {
+      "type": "int",
+      "default": 200,
+      "min": 0,
+      "max": 2000,
+      "label": {
+        "ja": "判明した事実を残しておく件数",
+        "en": "Discovered facts kept per person"
+      },
+      "note": {
+        "ja": "要約でプロフィールから消えた事実の控え。会話には使わず、記録を後から確かめる用。0 で残さない",
+        "en": "An append-only trail of what each conversation revealed. Never sent to the game; 0 disables it"
       }
     }
   }
