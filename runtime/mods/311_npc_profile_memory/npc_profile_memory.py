@@ -90,6 +90,7 @@ import threading
 import time
 
 from instantale_modloader import ui
+from instantale_modloader.state import world_filename, world_key
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
 #      `tools/check_mods.py` が AST で突き合わせる）------------------------
@@ -104,11 +105,6 @@ LOG_BASENAME = "npc_profile.log"
 # `out/` に置いていたが、あちらは消してよい場所なので、掃除のつもりで消した人の
 # 「覚えていたはずの人物像」まで飛んでいた。`301_` も同じ名前でここを読む。
 STATE_DIRNAME = "npc_profiles"
-
-# 書き出しの途中経過を置く名前（`save_bucket`）。**世界ファイルと同じフォルダに
-# 置くこと。** 別のドライブへ跨ぐと `os.replace` が不可分でなくなる。
-# `.json` で終わらせないのは、`known_world_files()` が世界として拾わないため。
-TEMP_SUFFIX = ".writing"
 
 # ファイル名に使えない文字（Windows 禁則＋制御文字）。世界名そのものは鍵に残す。
 _UNSAFE_FILENAME = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
@@ -171,17 +167,6 @@ def _text(value, limit=200):
         value = str(value)
     value = value.strip()
     return value if len(value) <= limit else value[:limit] + "…"
-
-
-def safe_world_filename(world_key):
-    """世界名を `state/npc_profiles/` 配下のファイル名にする。拡張子 `.json` 付き。"""
-    name = world_key if isinstance(world_key, str) else ""
-    name = _UNSAFE_FILENAME.sub("_", name.strip()).rstrip(". ")
-    if not name or name in (".", ".."):
-        name = "_"
-    if len(name) > 120:
-        name = name[:120]
-    return name + ".json"
 
 
 def ordered_record(record):
@@ -352,18 +337,6 @@ def apply(ctx):
     screen = ui.Screen(ctx, write, tag="npc profile")
 
     # ------------------------------------------------------------ 世界と人物
-    def world_key(app):
-        """世界を見分ける名前。取れなければ '_'（1世界しか使わない前提に落ちる）。"""
-        world_dict = getattr(app, "world_dict", None)
-        if isinstance(world_dict, dict):
-            data = world_dict.get("world_data")
-            if isinstance(data, dict):
-                for key in ("world_name", "name", "title"):
-                    value = data.get(key)
-                    if isinstance(value, str) and value:
-                        return value
-        name = getattr(getattr(app, "world", None), "name", None)
-        return name if isinstance(name, str) and name else "_"
 
     def character_of(app, npc_id):
         characters = getattr(getattr(app, "world", None), "characters", None)
@@ -413,7 +386,7 @@ def apply(ctx):
     def state_path_for(key):
         # フォルダを作るのはここ（`ctx.state_path` が親を作る）。apply() では
         # 作らない ― 一度も会話していない人の `state/` に空のフォルダを置かない。
-        return ctx.state_path(STATE_DIRNAME, safe_world_filename(key))
+        return ctx.state_path(STATE_DIRNAME, world_filename(key))
 
     def known_world_files():
         """診断用。ディレクトリにある世界ファイル名（拡張子なし）の一覧。"""
@@ -450,34 +423,18 @@ def apply(ctx):
     def save_bucket(key, bucket):
         """1世界分を書き出す。**書けたか書けなかったかの2つしか起こさない。**
 
-        `open(path, "w")` は開いた時点でファイルを切り詰めるので、素朴に書くと
-        `json.dump` の途中で落ちた瞬間にその世界の控えが壊れる。壊れたものは
-        `load_bucket` が黙って `{}` に倒すので、次の更新で1人ぶんだけが書かれ、
-        **他の人物の記憶が消えたことにも気付けない**。ゲームは落ちるもの
-        （`001_crash_recorder` がある）なので、隣に書いてから差し替える。
+        書き方の理屈（隣に書いてから差し替える／落ちても壊れない）は
+        `ctx.write_json()` に寄せてある。ここが素朴な `open(path, "w")` だと、
+        `json.dump` の途中で落ちた瞬間にその世界の控えが壊れ、`load_bucket` は
+        壊れたものを黙って `{}` に倒すので、次の更新で1人ぶんだけが書かれて
+        **他の人物の記憶が消えたことにも気付けない**。
         """
         with data_lock:
             cache["buckets"][key] = bucket
             path = state_path_for(key)
-            tmp = path + TEMP_SUFFIX
-            try:
-                ordered = {npc_id: ordered_record(record)
-                           for npc_id, record in bucket.items()}
-                with open(tmp, "w", encoding="utf-8") as fh:
-                    json.dump(ordered, fh, ensure_ascii=False, indent=1)
-                    # 差し替える前に中身をディスクまで落とす。ここを省くと、
-                    # 電源断のときに「差し替えは済んだが中身は空」になりうる。
-                    fh.flush()
-                    os.fsync(fh.fileno())
-                os.replace(tmp, path)   # 同じフォルダなので不可分に入れ替わる
-                return True
-            except Exception:
-                ctx.log_exc("npc profile: cannot write {}".format(path))
-                try:
-                    os.remove(tmp)      # 書きかけを残さない（残しても実害は無い）
-                except Exception:
-                    pass
-                return False
+            ordered = {npc_id: ordered_record(record)
+                       for npc_id, record in bucket.items()}
+            return ctx.write_json(path, ordered)
 
     def bucket_of(app):
         """この世界の控え `{npc_id: レコード}`。

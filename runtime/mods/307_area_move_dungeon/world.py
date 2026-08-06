@@ -13,6 +13,8 @@
 import sys
 
 from instantale_modloader import ui
+# 世界の見分け方はローダの語彙。ここで再輸出して `world.world_key(app)` を保つ。
+from instantale_modloader.state import world_key
 
 
 def short(value, limit=60):
@@ -31,20 +33,6 @@ def id_sort(value):
         return (0, int(value))
     except (TypeError, ValueError):
         return (1, str(value))
-
-
-def world_key(app):
-    """世界を見分ける名前。取れなければ `'_'`。"""
-    world_dict = getattr(app, "world_dict", None)
-    if isinstance(world_dict, dict):
-        data = world_dict.get("world_data")
-        if isinstance(data, dict):
-            for key in ("world_name", "name", "title"):
-                value = data.get(key)
-                if isinstance(value, str) and value:
-                    return value
-    name = getattr(getattr(app, "world", None), "name", None)
-    return name if isinstance(name, str) and name else "_"
 
 
 def current_quest_id(app):

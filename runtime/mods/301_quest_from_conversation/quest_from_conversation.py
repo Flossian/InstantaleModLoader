@@ -70,6 +70,7 @@ import sys
 import time
 
 from instantale_modloader import ui
+from instantale_modloader.state import world_filename, world_key
 from instantale_modloader.frames import repr_value
 
 LOG_BASENAME = "quest_offer.log"
@@ -200,23 +201,6 @@ def _text(value, limit=200):
         value = str(value)
     value = value.strip()
     return value if len(value) <= limit else value[:limit] + "…"
-
-
-def safe_world_filename(world_key):
-    """世界名を `state/npc_profiles/` 配下のファイル名にする。
-
-    `311_npc_profile_memory` の同名関数と**1文字も違ってはいけない**（同じ
-    ファイルを指すため）。写しているのは、mod どうしがコードを共有しないから
-    （`world_key` を `311_` と互いに持っているのと同じ）。ずれた場合は
-    「読めない」＝人物像を添えないになるだけで、依頼の生成そのものは通る。
-    """
-    name = world_key if isinstance(world_key, str) else ""
-    name = _UNSAFE_FILENAME.sub("_", name.strip()).rstrip(". ")
-    if not name or name in (".", ".."):
-        name = "_"
-    if len(name) > 120:
-        name = name[:120]
-    return name + ".json"
 
 
 def apply(ctx):
@@ -449,18 +433,6 @@ def apply(ctx):
         return None
 
     # ------------------------------------ どの依頼がどの NPC 発かの控え
-    def world_key(app):
-        """世界を見分ける名前。取れなければ '_'（1世界しか使わない前提に落ちる）。"""
-        world_dict = getattr(app, "world_dict", None)
-        if isinstance(world_dict, dict):
-            data = world_dict.get("world_data")
-            if isinstance(data, dict):
-                for key in ("world_name", "name", "title"):
-                    value = data.get(key)
-                    if isinstance(value, str) and value:
-                        return value
-        name = getattr(getattr(app, "world", None), "name", None)
-        return name if isinstance(name, str) and name else "_"
 
     def npc_memory(app, npc_id):
         """`311_npc_profile_memory` が覚えている依頼人の人物像。無ければ空文字。
@@ -475,7 +447,7 @@ def apply(ctx):
         if not USE_NPC_MEMORY or not npc_id:
             return ""
         path = os.path.join(ctx.state_dir, NPC_MEMORY_DIRNAME,
-                            safe_world_filename(world_key(app)))
+                            world_filename(world_key(app)))
         try:
             with open(path, "r", encoding="utf-8") as fh:
                 data = json.load(fh)
@@ -506,8 +478,9 @@ def apply(ctx):
         bucket[str(quest_id)] = {"npc_id": str(npc_id) if npc_id else "",
                                  "npc_name": npc_name or ""}
         try:
-            with open(clients_path, "w", encoding="utf-8") as fh:
-                json.dump(data, fh, ensure_ascii=False, indent=1)
+            # 途中で落ちても控えが壊れない書き方（`ctx.write_json`）。素朴に
+            # open(..., "w") で書くと、依頼の出所が丸ごと読めなくなる。
+            ctx.write_json(clients_path, data)
             write("remembered client: quest {!r} <- {!r} ({})".format(
                 quest_id, npc_name, npc_id))
         except Exception:

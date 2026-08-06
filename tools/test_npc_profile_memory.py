@@ -34,6 +34,8 @@ import types
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(_ROOT, "runtime"))
 
+import instantale_modloader as ml                      # noqa: E402
+
 MODS_DIR = os.path.join(_ROOT, "runtime", "mods")
 
 
@@ -352,6 +354,14 @@ class Ctx(object):
     def log_exc(self, message):
         self.errors.append(message)
 
+    # 本物の `ctx.write_json` と同じものを使う。ここを自前の open(..., "w") に
+    # すると、テストだけが「壊れない書き方」を通らなくなる。
+    def write_json(self, path, data, *, indent=1):
+        return ml.write_json(path, data, indent=indent, report=self.log_exc)
+
+    def write_text(self, path, text):
+        return ml.write_text(path, text, report=self.log_exc)
+
     def wrap(self, target, required=True):
         def decorate(fn):
             self.hooks[target] = fn
@@ -472,7 +482,7 @@ class Run(object):
         record = {"name": "傭兵ガロ", "updated": "2026-07-30T00:00:00"}
         record["slots" if legacy else "profile"] = profile
         path = os.path.join(self.tmp, "state", "npc_profiles",
-                            MOD.safe_world_filename(world_name))
+                            ml.state.world_filename(world_name))
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as fh:
             json.dump({npc_id: record}, fh, ensure_ascii=False)
@@ -480,7 +490,7 @@ class Run(object):
     def seed_full(self, world_name, record, npc_id="77"):
         """控えの中身をこちらで丸ごと決めて始める（欄ごとの検査用）。"""
         path = os.path.join(self.tmp, "state", "npc_profiles",
-                            MOD.safe_world_filename(world_name))
+                            ml.state.world_filename(world_name))
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as fh:
             json.dump({npc_id: record}, fh, ensure_ascii=False)
@@ -537,7 +547,7 @@ class Run(object):
             "", "", "", "", [], [], "", None)
 
     def record(self, npc_id="77", world_name=None):
-        stem = MOD.safe_world_filename(world_name or self.app.world.name)[:-5]
+        stem = ml.state.world_filename(world_name or self.app.world.name)[:-5]
         return self.profiles().get(stem, {}).get(npc_id) or {}
 
     def profile(self, npc_id="77", world_name=None):
@@ -585,12 +595,12 @@ def test_turn_updates_profile():
     run = Run(answers=FOUND)
     run.turn()
     check(run.profile() == FOUND, "プロフィールが残らない: {!r}".format(run.profile()))
-    stem = MOD.safe_world_filename(run.app.world.name)[:-5]
+    stem = ml.state.world_filename(run.app.world.name)[:-5]
     record = run.profiles()[stem]["77"]
     check(record.get("name") == "傭兵ガロ", "名前が控えられていない: {}".format(record))
     check(bool(record.get("updated")), "更新時刻が無い: {}".format(record))
     path = os.path.join(run.tmp, "state", "npc_profiles",
-                        MOD.safe_world_filename(run.app.world.name))
+                        ml.state.world_filename(run.app.world.name))
     check(os.path.isfile(path), "世界ファイルが無い: {}".format(path))
     return run
 
@@ -682,7 +692,7 @@ def test_legacy_slots_migrate_to_profile():
     check("好み: 古い剣の話" in profile, "好みが落ちた: {!r}".format(profile))
     check("経歴: 北方の村の生まれ" in profile, "経歴が落ちた: {!r}".format(profile))
     check("約束: ギルドの件を調べる" in profile, "約束が落ちた: {!r}".format(profile))
-    stem = MOD.safe_world_filename(run.app.world.name)[:-5]
+    stem = ml.state.world_filename(run.app.world.name)[:-5]
     check(run.profiles()[stem]["77"].get("slots") == slots,
           "移行で旧slotsを消した: {}".format(run.profiles()))
     return run
@@ -1109,40 +1119,39 @@ def test_legacy_slots_survive_the_migration():
     return run
 
 
-class BrokenJson(object):
-    """`json.dump` だけが落ちる差し替え。読む側はそのまま通す。"""
-
-    loads = staticmethod(json.loads)
-    load = staticmethod(json.load)
-
-    @staticmethod
-    def dump(obj, fh, **kwargs):
-        # 途中まで書いてから落ちる（切り詰めだけで終わらせない）。
-        fh.write('{"77": {"name": "傭')
-        raise RuntimeError("書き込みが落ちた")
-
-
 def test_a_failed_write_keeps_the_previous_file():
     """書き込みが途中で落ちても前の控えは残る
 
-    `open(path, "w")` は開いた時点で切り詰めるので、素朴に書くと落ちた瞬間に
-    その世界の控えが壊れる。壊れたものは `{}` に倒れて読まれるので、次の更新で
-    1人ぶんだけが書かれ、**他の人物の記憶が消えたことにも気付けない**。
+    **落ちても壊れない書き方そのもの**（隣に書いてから差し替える）は
+    `instantale_modloader.write_text` に一本化されていて、その仕組みは
+    `tools/test_patch_registry.py` が見ている。ここで確かめるのは
+    **この mod 側の約束**の方 ―
+
+      * 書けなかったとき、前の控えがそのまま残る（`{}` に倒れない）
+      * 書けなかったことを握り潰さず記録する
+
+    書き込みを失敗させるには、`os.replace`（＝差し替えの瞬間）を落とす。
+    仮ファイルまでは書けていて本体だけが古いまま、という**いちばん危ない窓**を
+    再現できる。
     """
     run = Run(seed_record={"name": "傭兵ガロ", "profile": "先に覚えていた人物像。"},
               structured={MOD.KEY_CHANGED: "true", MOD.KEY_PROFILE: FOUND,
                           MOD.KEY_ABOUT_PLAYER: "", MOD.KEY_NEW_FACTS: []})
     path = os.path.join(run.tmp, "state", "npc_profiles",
-                        MOD.safe_world_filename(run.app.world.name))
+                        ml.state.world_filename(run.app.world.name))
     with open(path, "rb") as fh:
         before = fh.read()
 
-    saved_json = MOD.json
-    MOD.json = BrokenJson
+    saved_replace = ml.os.replace
+
+    def broken_replace(src, dst):
+        raise OSError("差し替えが落ちた")
+
+    ml.os.replace = broken_replace
     try:
         run.turn()
     finally:
-        MOD.json = saved_json
+        ml.os.replace = saved_replace
 
     with open(path, "rb") as fh:
         after = fh.read()
@@ -1150,7 +1159,7 @@ def test_a_failed_write_keeps_the_previous_file():
     check(run.profile() == "先に覚えていた人物像。",
           "読み直すと控えが消えている: {!r}".format(run.profile()))
     leftovers = [name for name in os.listdir(os.path.dirname(path))
-                 if name.endswith(MOD.TEMP_SUFFIX)]
+                 if name.endswith(ml.TEMP_SUFFIX)]
     check(not leftovers, "書きかけが残った: {}".format(leftovers))
     # 落ちたことは握り潰さず記録する。ここだけは errors が空でないのが正しい。
     check(any("cannot write" in message for message in run.ctx.errors),
@@ -1167,11 +1176,11 @@ def test_a_normal_write_leaves_no_temp_file():
     run.turn()
     root = os.path.join(run.tmp, "state", "npc_profiles")
     names = sorted(os.listdir(root))
-    check(names == [MOD.safe_world_filename(run.app.world.name)],
+    check(names == [ml.state.world_filename(run.app.world.name)],
           "世界ファイル以外が残った: {}".format(names))
     # 世界の一覧を出す診断が、書きかけを世界として数えないこと。
-    check(not MOD.TEMP_SUFFIX.endswith(".json"),
-          "書きかけの名前が世界ファイルと同じ拡張子: {!r}".format(MOD.TEMP_SUFFIX))
+    check(not ml.TEMP_SUFFIX.endswith(".json"),
+          "書きかけの名前が世界ファイルと同じ拡張子: {!r}".format(ml.TEMP_SUFFIX))
     return run
 
 
@@ -1198,7 +1207,7 @@ def test_the_quest_mod_reads_the_same_file():
     """
     offer = load_neighbour("_quest_from_conversation")
     for world in ("灰都", "a/b:c", "  ", "." , "長" * 200):
-        check(offer.safe_world_filename(world) == MOD.safe_world_filename(world),
+        check(ml.state.world_filename(world) == ml.state.world_filename(world),
               "ファイル名の規則がずれた: {!r}".format(world))
     check(offer.NPC_MEMORY_DIRNAME == MOD.STATE_DIRNAME,
           "置き場所がずれた: {!r} / {!r}".format(offer.NPC_MEMORY_DIRNAME,

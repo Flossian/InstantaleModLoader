@@ -56,7 +56,7 @@ from __future__ import annotations
 import json
 import os
 
-from . import log, log_exc
+from . import log, log_exc, write_json
 
 # 利用者が選んだ値の置き場所。配布フォルダ直下の settings/（runtime/ の1つ上）。
 STORE_NAME = "mod_settings.json"
@@ -273,12 +273,25 @@ def debug_mode(runtime_dir: str) -> bool:
     return bool(load_flags(runtime_dir).get("debug"))
 
 
+def _save_settings_json(runtime_dir: str, path: str, data: dict) -> None:
+    """`settings/` の JSON を書く。**書けなければ例外を投げる。**
+
+    書き方（隣に書いてから差し替える）は `write_json()` に一本化してある。
+    ここだけ戻り値ではなく例外にしているのは、**呼び出し元が GUI だから**。
+    MOD の書き込みはゲームのスレッドで走るので黙って False を返すのが正しいが、
+    こちらは利用者が「保存」を押した結果で、失敗したら画面に出す必要がある
+    （`gui.py` が捕まえてダイアログにする）。黙って False を返すと、
+    設定が保存されていないのに保存されたように見える。
+    """
+    # settings/ は配布物に入っていない（利用者が何か変えて初めてできる）。
+    os.makedirs(settings_dir(runtime_dir), exist_ok=True)
+    if not write_json(path, data, indent=2, sort_keys=True):
+        raise OSError("cannot write {}".format(path))
+
+
 def save_flags(runtime_dir: str, data: dict) -> None:
     """`loader.json` を書く。GUI の切り替えから呼ばれる。"""
-    os.makedirs(settings_dir(runtime_dir), exist_ok=True)
-    with open(flags_path(runtime_dir), "w", encoding="utf-8") as fh:
-        json.dump(dict(data), fh, ensure_ascii=False, indent=2, sort_keys=True)
-        fh.write("\n")
+    _save_settings_json(runtime_dir, flags_path(runtime_dir), dict(data))
 
 
 def save_store(runtime_dir: str, data: dict) -> None:
@@ -288,11 +301,7 @@ def save_store(runtime_dir: str, data: dict) -> None:
     溜まっていくと、差分を見たときに何を変えたのか分からなくなる。
     """
     trimmed = {mod: dict(values) for mod, values in sorted(data.items()) if values}
-    # settings/ は配布物に入っていない（利用者が何か変えて初めてできる）。
-    os.makedirs(settings_dir(runtime_dir), exist_ok=True)
-    with open(store_path(runtime_dir), "w", encoding="utf-8") as fh:
-        json.dump(trimmed, fh, ensure_ascii=False, indent=2, sort_keys=True)
-        fh.write("\n")
+    _save_settings_json(runtime_dir, store_path(runtime_dir), trimmed)
 
 
 # --------------------------------------------------------------------------

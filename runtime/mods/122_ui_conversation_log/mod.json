@@ -1,0 +1,151 @@
+{
+  "entry": "ui_conversation_log.py",
+  "api": 1,
+  "name": {
+    "en": "Conversation log viewer",
+    "ja": "会話ログのビューア"
+  },
+  "description": {
+    "en": "Keeps every message that scrolled past and shows it in a scrollable window opened by a book icon next to the text-expand button",
+    "ja": "画面に流れた本文を残し、本のアイコンから読み返せる窓を出す。ログは state\\conversation_log\\ に世界ごとに残る"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "after": ["113_ui_text_expand"],
+  "settings": {
+    "BUTTON_CORNER": {
+      "type": "choice",
+      "default": "113の左",
+      "values": ["113の左", "枠の右上", "右上", "左上", "右下", "左下"],
+      "label": {
+        "ja": "ボタンの置き場所",
+        "en": "Where to put the button"
+      },
+      "note": {
+        "ja": "既定は「本文の表示域を広げる」(113) のボタンのすぐ左。Modが入っていないときは本文の枠の内側・右上に出る",
+        "en": "Default is just left of 113_ui_text_expand's button; falls back to that mod's own spot (the narration frame's top-right) when it is not installed"
+      }
+    },
+    "ICON": {
+      "type": "choice",
+      "default": "本",
+      "values": ["本", "本（閉じた）", "一覧", "吹き出し", "文字"],
+      "label": {
+        "ja": "ボタンの絵柄",
+        "en": "Button icon"
+      },
+      "note": {
+        "ja": "背景なしの白い線で描く（画像ファイルは持たない）。「文字」を選ぶと下の文字設定を使ったボタンになる",
+        "en": "Drawn as white lines on a transparent background. \"文字\" falls back to a text button"
+      }
+    },
+    "ICON_WIDTH": {
+      "type": "float",
+      "default": 2.0,
+      "min": 1.0,
+      "max": 8.0,
+      "label": {
+        "ja": "アイコンの線の太さ（px）",
+        "en": "Icon stroke width (px)"
+      }
+    },
+    "ICON_ALPHA": {
+      "type": "float",
+      "default": 0.85,
+      "min": 0.2,
+      "max": 1.0,
+      "label": {
+        "ja": "アイコンの濃さ",
+        "en": "Icon opacity"
+      },
+      "note": {
+        "ja": "1.0 で真っ白。背景に溶けて見えにくいときに上げる",
+        "en": "1.0 is solid white. Raise it if the icon disappears into the background"
+      }
+    },
+    "BUTTON_SIZE": {
+      "type": "int",
+      "default": 32,
+      "min": 16,
+      "max": 200,
+      "label": {
+        "ja": "ボタンの高さ（px）",
+        "en": "Button height (px)"
+      },
+      "note": {
+        "ja": "表示域拡大Modのボタンの隣に並ぶときは、そちらの高さに合わせるので使われない",
+        "en": "Ignored while the button sits next to Expandable text area Mod's, where it copies that button's height"
+      }
+    },
+    "BUTTON_GAP": {
+      "type": "int",
+      "default": 6,
+      "min": 0,
+      "max": 64,
+      "label": {
+        "ja": "表示域拡大Modのボタンとの間隔（px）",
+        "en": "Gap from Expandable text area Mod's button (px)"
+      }
+    },
+    "MAX_ENTRIES": {
+      "type": "int",
+      "default": 500,
+      "min": 20,
+      "max": 5000,
+      "label": {
+        "ja": "残しておく本文の件数",
+        "en": "How many messages to keep"
+      },
+      "note": {
+        "ja": "超えたぶんは古いほうから落ちる。ログは state\\conversation_log\\<世界名>.jsonl",
+        "en": "Older messages drop off. The log lives in state\\conversation_log\\<world>.jsonl"
+      }
+    },
+    "SHOW_TIME": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "日時を出す",
+        "en": "Show timestamps"
+      }
+    },
+    "VIEW_BORDER": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "白い枠を付ける",
+        "en": "Draw a white border around the window"
+      },
+      "note": {
+        "ja": "窓の縁に白い線を1本引く。背景との境目が分かりにくいときに",
+        "en": "Outlines the window so it stands out from what is behind it"
+      }
+    },
+    "FONT_SCALE": {
+      "type": "float",
+      "default": 1.0,
+      "min": 0.4,
+      "max": 2.0,
+      "label": {
+        "ja": "文字の大きさ（本文の何倍）",
+        "en": "Window font size (x the narration's)"
+      },
+      "note": {
+        "ja": "既定の 1.0 はゲームの本文と同じ大きさ。一度に読める量を増やしたいときだけ下げる",
+        "en": "1.0 (default) matches the game's own narration. Lower it only to fit more on screen"
+      }
+    },
+    "LABEL_OPEN": {
+      "type": "str",
+      "default": "記録",
+      "label": {
+        "ja": "ボタンの文字",
+        "en": "Button text"
+      },
+      "note": {
+        "ja": "絵柄に「文字」を選んだときだけ使う",
+        "en": "Only used when the icon is set to \"文字\""
+      }
+    }
+  }
+}

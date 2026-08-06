@@ -35,6 +35,8 @@ MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
+import instantale_modloader as ml                      # noqa: E402
+
 
 def find_mod(suffix):
     """mod を **番号を除いた名前** で探す（番号は振り直されることがある）。"""
@@ -333,6 +335,14 @@ class FakeCtx:
 
     def log_exc(self, msg):
         self.errors.append(msg)
+
+    # 本物の `ctx.write_json` / `write_text` と同じものを使う。ここを自前の
+    # open(..., "w") にすると、テストだけが「壊れない書き方」を通らなくなる。
+    def write_json(self, path, data, *, indent=1):
+        return ml.write_json(path, data, indent=indent, report=self.log_exc)
+
+    def write_text(self, path, text):
+        return ml.write_text(path, text, report=self.log_exc)
 
     def wrap(self, target, **kw):
         def decorator(func):
@@ -708,7 +718,7 @@ def press_generate(ctx_obj, app_obj):
 def seed_persona(state_dir, record):
     """`311_` が書くのと同じ場所・同じ形で控えを置く（`state/npc_profiles/`）。"""
     path = os.path.join(state_dir, mod.NPC_MEMORY_DIRNAME,
-                        mod.safe_world_filename("テスト世界"))
+                        ml.state.world_filename("テスト世界"))
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with io.open(path, "w", encoding="utf-8") as fh:
         fh.write(json.dumps({"62": record}, ensure_ascii=False))

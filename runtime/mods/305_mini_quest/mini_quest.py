@@ -65,6 +65,7 @@ import json
 import time
 
 from instantale_modloader import ui
+from instantale_modloader.state import world_key
 
 
 LOG_BASENAME = "mini_quest.log"
@@ -541,18 +542,6 @@ def apply(ctx):
     screen = ui.Screen(ctx, write, tag="mini quest", mark=MARK)
 
     # ------------------------------------------------------------ 控え
-    def world_key(app):
-        """世界を見分ける名前。取れなければ '_'（1世界しか使わない前提に落ちる）。"""
-        world_dict = getattr(app, "world_dict", None)
-        if isinstance(world_dict, dict):
-            data = world_dict.get("world_data")
-            if isinstance(data, dict):
-                for key in ("world_name", "name", "title"):
-                    value = data.get(key)
-                    if isinstance(value, str) and value:
-                        return value
-        name = getattr(getattr(app, "world", None), "name", None)
-        return name if isinstance(name, str) and name else "_"
 
     def load_records():
         try:
@@ -579,11 +568,9 @@ def apply(ctx):
             # 古いものから捨てる。id は採番順なので数値として並べられる。
             for stale in sorted(bucket, key=_id_sort)[:len(bucket) - MAX_RECORDS]:
                 bucket.pop(stale, None)
-        try:
-            with open(record_path, "w", encoding="utf-8") as fh:
-                json.dump(data, fh, ensure_ascii=False, indent=1)
-        except Exception:
-            ctx.log_exc("mini quest: cannot write {}".format(record_path))
+        # 途中で落ちても控えが壊れない書き方（`ctx.write_json`）。失敗は
+        # 例外ではなく戻り値で返るので、ここで捕まえる必要は無い。
+        ctx.write_json(record_path, data)
         state["titles"] = None      # 次の参照で読み直す
         write("remembered: quest {!r} {!r} kind={} world={!r}".format(
             quest_id, title, kind["key"], world_key(app)))

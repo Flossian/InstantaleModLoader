@@ -61,7 +61,7 @@ import time
 import traceback
 import uuid
 
-__version__ = "1.3.1"
+__version__ = "1.4.0"
 
 # mod との契約。`mod.json` の "api" がこれと突き合わされる。
 #
@@ -140,6 +140,76 @@ STATE_DIR_NAME = "state"
 def state_dir(runtime_dir: str) -> str:
     """`state/` の場所。`runtime/` の1つ上＝配布フォルダ直下（`settings/` と同じ並び）。"""
     return os.path.join(os.path.dirname(runtime_dir), STATE_DIR_NAME)
+
+
+#: 書きかけの一時ファイルに付ける拡張子。`write_json()` が使う。
+TEMP_SUFFIX = ".tmp"
+
+
+def write_text(path: str, text: str, *, report=None) -> bool:
+    """テキストを**壊れないように**書く。書けたら True、書けなければ False。
+
+    **残すデータを書くときは必ずここを通すこと。** `open(path, "w")` は開いた
+    時点でファイルを切り詰めるので、素朴に書くと書いている途中で落ちた瞬間に
+    中身が壊れる。読む側は壊れた JSON を黙って `{}` に倒すのが常なので、
+    **消えたことに気付けないまま次の更新で上書きされる**（NPC の記憶なら
+    1人ぶんだけが書かれ、他の全員が消える）。ゲームは落ちるものだという前提で
+    作っている（`001_crash_recorder` がある）以上、ここは落ちても壊れない形に
+    しておく必要がある。
+
+    やっていることは3つ:
+
+      1. 隣に `名前.tmp` として書く（本体は最後まで無傷）
+      2. `flush` + `fsync` で中身をディスクまで落とす。ここを省くと、電源断で
+         「差し替えは済んだが中身は空」になりうる
+      3. `os.replace` で差し替える。同じフォルダなので不可分に入れ替わる
+
+    **例外を投げない。** 呼ぶのはゲームのスレッドの中で、書けないことより
+    ゲームを巻き込むことの方が困る。成否は戻り値で返す（`311_` の
+    `save_bucket` が採っていた作法をここに寄せた）。
+
+    JSON なら `write_json()` を使う。こちらを直に使うのは、1行1レコードの
+    記録（`122_` の会話ログ）のように JSON 文書1つではないものを書くとき。
+    """
+    tmp = path + TEMP_SUFFIX
+    try:
+        parent = os.path.dirname(path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.write(text)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+        return True
+    except Exception:
+        (report or log_exc)("cannot write {}".format(path))
+        try:
+            os.remove(tmp)      # 書きかけを残さない（残しても実害は無い）
+        except Exception:
+            pass
+        return False
+
+
+def write_json(path: str, data, *, indent: int = 1, sort_keys: bool = False,
+               report=None) -> bool:
+    """JSON を壊れないように書く。書けたら True、書けなければ False。
+
+    差し替えの作法は `write_text()` にある。分けてあるのは、**JSON にできない
+    記録**（1行1レコードの会話ログなど）にも同じ安全さが要るため ― 規則を
+    2箇所に書かないよう、土台はテキスト側に置いて JSON はその上に載せている。
+
+    `default=str` を付けてあるのは、記録に日時や `Path` が紛れても書けなく
+    ならないようにするため。**書けないより、文字列になってでも残る方がよい。**
+    """
+    try:
+        text = json.dumps(data, ensure_ascii=False, indent=indent,
+                          sort_keys=sort_keys, default=str) + "\n"
+    except Exception:
+        (report or log_exc)("cannot serialise {}".format(path))
+        return False
+    return write_text(path, text, report=report)
+
 
 # 「まだ import されていないモジュール」を待つ見張りの設定。
 # ゲームは LLM 系モジュールを最初のリクエストまで import しないので、
@@ -398,6 +468,26 @@ class ModContext:
         if not os.path.exists(path):
             self._adopt_from_out(parts, path)
         return path
+
+    def write_json(self, path: str, data, *, indent: int = 1) -> bool:
+        """JSON を壊れないように書く。書けたら True、書けなければ False。
+
+        **`state_path()` で取った場所へ書くときは必ずこれを使う。** 素朴に
+        `open(path, "w")` で書くと、途中で落ちた瞬間に控えが壊れる ― 読む側は
+        壊れた JSON を `{}` に倒すので、消えたことに気付けないまま次の更新で
+        上書きされる。詳しくはモジュール側の `write_text()` を参照。
+
+        失敗は例外ではなく戻り値で返る。記録にはこの MOD の名前が入るので、
+        どの MOD が書けなかったかがログから分かる。
+        """
+        return write_json(path, data, indent=indent, report=self.log_exc)
+
+    def write_text(self, path: str, text: str) -> bool:
+        """テキストを壊れないように書く。JSON なら `write_json()` を使う。
+
+        こちらを使うのは1行1レコードの記録のように、JSON 文書1つではないもの。
+        """
+        return write_text(path, text, report=self.log_exc)
 
     def _adopt_from_out(self, parts: tuple, path: str) -> None:
         """`out/<同じ名前>` が在れば `state/` へ移す（移設の跡はログに残す）。
@@ -1289,16 +1379,10 @@ def write_status(out_dir: str | None = None) -> str | None:
     if not out_dir:
         return None
     path = os.path.join(out_dir, STATUS_NAME)
-    try:
-        os.makedirs(out_dir, exist_ok=True)
-        with open(path, "w", encoding="utf-8") as fh:
-            json.dump(status(), fh, ensure_ascii=False, indent=2, default=str)
-            fh.write("\n")
-        return path
-    except Exception:
-        # 書けなくても boot は続ける。報告のためのファイルなので。
-        log_exc("cannot write {}".format(path))
-        return None
+    # 失っても次の注入で作り直される軽いファイルだが、書き方は他と揃える
+    # （「なぜここだけ素朴な open なのか」を残さない）。書けなくても boot は
+    # 続ける ― 報告のためのファイルなので、無くても遊べる。
+    return path if write_json(path, status(), indent=2) else None
 
 
 def unload(out_dir: str | None = None) -> dict:

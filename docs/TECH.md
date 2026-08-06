@@ -183,6 +183,7 @@ python tools/check_mods.py
 
 # 2. 該当するオフライン検証（ゲーム不要）
 python tools/test_patch_registry.py    # ローダ本体（台帳 / on_ready / 名乗り）
+python tools/test_state.py             # state/ の住所と壊れない書き込み
 python tools/test_arrival_event.py     # 300_
 python tools/test_quest_offer.py       # 301_
 python tools/test_party_leave.py       # 302_
@@ -195,6 +196,7 @@ python tools/test_ui_text_spacing.py          # 112_
 python tools/test_ui_text_expand.py           # 113_
 python tools/test_ui_input_focus.py           # 114_
 python tools/test_ui_item_list_fit.py         # 115_
+python tools/test_ui_conversation_log.py      # 122_（113_ との並びの取り決めもここで見る）
 python tools/test_office_pardon.py     # 309_
 python tools/test_npc_profile_memory.py       # 311_（`301_` との取り決めもここで見る）
 
@@ -492,6 +494,8 @@ def apply(ctx):
 | `ctx.log(...)` / `ctx.log_exc(...)` | `out/modloader.log` へ |
 | `ctx.out_path(name)` | `out/<name>` の絶対パス。MOD 専用ログはここへ（§3.11） |
 | `ctx.state_path(name)` | `state/<name>` の絶対パス。遊びの続きに要るデータはここへ（§3.11） |
+| `ctx.write_json(path, data)` | 落ちても壊れないように書く。成否を返す（§3.11.1）。**残すデータは必ずこれ** |
+| `ctx.write_text(path, text)` | 同上。JSON 文書1つではないもの（1行1レコードなど）用 |
 | `ctx.mod_dir` | いま apply() 中の MOD のフォルダ。同梱データを読む用（書くのは `out/` か `state/`） |
 | `ctx.on_ready(fn)` | プロセスにつき1回だけメインスレッドで実行（§3.6） |
 | `ctx.patches()` | 対象 → 当てた MOD の一覧。自分より前の分が見える（§3.7） |
@@ -652,6 +656,74 @@ cp932 のコンソールでも化けず、grep もしやすい。`version` を�
 帯は帯であって分類の軸ではない。ゲーム本体の挙動を変えるなら機能追加でも 100番台で
 よい（`104_balance_area_bgm`）。番号を振り直すときは `load_order.json` も直すこと
 （フォルダ名を変えるので）。`check_mods.py` が食い違いを報告する。
+
+#### 3.2.2b MOD どうしは import しない。**ローダの語彙は共有する**
+
+ローダは MOD を `instantale_mod_<フォルダ名>` で登録する。名前で掴むと**番号を
+振り直した瞬間に壊れる**ので、MOD が MOD を import することはしない。MOD どうしが
+繋がるのは**同じファイルを読む**ことによってで、相手が入っていなければ何も起きない。
+
+**この規約は「何も共有しない」ではない。** 共有してよい相手は最初からローダ
+（`instantale_modloader.*`）で、そこは番号に依存しないし、`121_` が
+`from instantale_modloader import frames, ui` を実際にやっている。
+
+| 置き場所 | 例 |
+|---|---|
+| **ローダ**（共有する） | ゲームの読み方（`ui` / `frames`）、`state/` の住所（`state`）、壊れない書き込み（`ctx.write_json`） |
+| **MOD**（共有しない） | その MOD 固有の判断 ― どの画面に何を出すか、プロンプトをどう書き換えるか |
+
+**写して回るものが出たら、それはローダの語彙**だと考えること。写した時点で
+ドリフトは予告されていて、実際に起きる:
+
+- `world_key(app)`（世界の見分け方）は**5本**にコメントごと同じものがあった
+- ファイル名の正規化は**4本**にあり、`301_` の docstring は「`311_` と1文字も
+  違ってはいけない」と書いていた ― **同じファイルを指すため**
+- そして `312_` が実際にずれた。`strip` と `sub` の順が逆で、120文字の切り詰めも
+  `"."` / `".."` の除外も無い。末尾に空白の残る名前を作るので、Windows が黙って
+  切る先とこちらの持つ文字列がずれる
+- 3本とも Windows の**予約デバイス名**（`CON` / `NUL`）を見ていなかった。世界名が
+  それだと `open()` が失敗し、広い `except` に吸われて控えが黙って空に倒れる。
+  **この知識は `110_fix_character_name_path` が先に持っていた**のに隣へ届いていない
+
+いまは `instantale_modloader.state` に1つだけある:
+
+```python
+from instantale_modloader.state import world_filename, world_key
+
+path = ctx.state_path("npc_profiles", world_filename(world_key(app)))
+```
+
+> **`import state` ではなく関数を直に import する。** `301_` / `305_` は
+> `apply()` の中に `state = {...}` というローカル変数を持っている。モジュール名で
+> 入れると、その代入によって**関数の中では `state` がローカル扱いになり**、
+> 参照が `UnboundLocalError` になる。読む側にとっても、元の呼び出し
+> （`world_key(app)`）と同じ形で残るほうが差分が小さい。
+
+##### `state.py` は内部ヘルパではなく**互換面**
+
+MOD から import された時点で、ここは `API = 1` と同格の約束になった。
+**`world_filename()` の出力を変えると、既存の `state/` が全 MOD で一斉に迷子になる。**
+`ctx.write_json()` は書き方が変わるだけだが、こちらは**ファイルの在り処**そのもの。
+
+| 変えてよいもの | 変えてはいけないもの |
+|---|---|
+| 内部の書き方・コメント | 同じ鍵から出る名前（既存のファイルを指せなくなる） |
+| 新しい引数を既定値付きで足す | 既定の挙動（`suffix=".json"` を含む） |
+
+やむを得ず変えるなら、**古い名前でも読めるようにしてから**にすること
+（`ctx._adopt_from_out` が置き場所を変えたときに採った形）。
+
+**`world_filename()` は単射でなければならない。** 使える文字に均すだけだと
+`"a/b"` と `"a\b"`、`"CON"` と `"_CON"`、上限を超える先頭が同じ2つが同じ名前に
+落ちる ― **別の世界の控えを自分のものとして読む**事故になる。そこで均した結果が
+元の鍵と違うときだけ、鍵から作った短い印を後ろに付ける。普通の世界名には印が
+付かないので、既存のファイルはそのまま引ける。
+
+> `301_` の `quest_clients.json` だけはこの心配が無い。単一ファイルで
+> **世界名が中身のキー**になっているため（`data[world_key(app)]`）。世界ごとに
+> ファイルを分ける形（`311_` / `312_` / `122_`）が、名前の一意性に頼っている。
+
+検査は `tools/test_state.py`。
 
 #### 3.2.3 順序の前提は MOD 自身に宣言させる
 
@@ -1134,6 +1206,41 @@ journey_path = ctx.state_path("road_travel.json")  # 続きに要るデータ
 > 相手を切っている人の `state/` に、使われない空のフォルダを置かないため
 > （`301_` が `311_` の `npc_profiles/` を読む形）。
 
+#### 3.11.1 書くときは `ctx.write_json()` を通す
+
+**`open(path, "w")` で残すデータを書かないこと。** 開いた時点でファイルを
+切り詰めるので、書いている途中で落ちるとその瞬間に中身が壊れる。読む側は
+壊れた JSON を黙って `{}` に倒すのが常なので、**消えたことに気付けないまま
+次の更新で上書きされる** ― NPC の記憶なら1人ぶんだけが書かれ、他の全員が消える。
+ゲームは落ちるものだという前提で作っている（`001_crash_recorder` がある）以上、
+残すデータの書き込みは落ちても壊れない形にしておく必要がある。
+
+```python
+ctx.write_json(ctx.state_path("npc_profiles", "世界.json"), bucket)  # -> True/False
+ctx.write_text(ctx.state_path("log.jsonl"), text)                    # JSON 文書でないもの
+```
+
+やっているのは3つ。隣に `名前.tmp` を書く → `flush` + `fsync` でディスクまで
+落とす → `os.replace` で差し替える。2つ目を省くと電源断で「差し替えは済んだが
+中身は空」になりうる。3つ目は同じフォルダなので不可分に入れ替わる。
+
+**例外を投げない。成否は戻り値で返る。** 呼ぶのはゲームのスレッドの中で、
+書けないことよりゲームを巻き込むことの方が困るため。失敗は `ctx.log_exc` に
+出るので、どの MOD が書けなかったかはログから分かる。
+
+| 場面 | 使うもの |
+|---|---|
+| 残すデータ（`state/`）| **必ず** `ctx.write_json()` / `ctx.write_text()` |
+| ログの追記（`out/`）| `open(path, "a")` でよい。1行ずつ足すだけで、壊れても捨てられる |
+| 利用者の操作の結果 | 例外にする（`config.py` の `_save_settings_json`、`gui.py` の `write_order`）。GUI がダイアログに出す ― 黙って False を返すと、保存されていないのに保存されたように見える |
+
+> **同じ規則を2箇所に書かない。** 以前は `311_` / `312_` / `122_` が同じ
+> tmp→fsync→replace を各自で持ち、一方で `301_` / `305_` / `307_` /
+> `config.save_store` は素の `open(..., "w")` のままだった。理屈は全部に等しく
+> 当てはまるのに、書いてある場所にだけ適用されている状態だった。仕組みは
+> `instantale_modloader.write_text()` の1箇所にあり、`write_json()` はその上に
+> 載っている（JSON にできない記録にも同じ安全さが要るため、土台はテキスト側）。
+
 ---
 
 ## 4. Nuitka 環境の制約
@@ -1472,6 +1579,9 @@ frames.MISSING             # 「属性が無い」を None と区別する番兵
 | 待機表示で画面の繋ぎ目を隠す | `301_` / `305_`（`ui.Screen.busy_on` / `busy_off(restore=False)`） |
 | 手が空くのを待ってから実行する | `300_` / `303_`（`ui.Screen.when_idle`） |
 | 選択肢の枠を使わず、HUD へ自前のウィジェットを1枚足す | `113_`（`Button` を `pos_hint` で隅に置く。`add_widget` の既定は先頭挿入＝一番上に描かれる。フォントは本文のラベルから写す。Kivy の既定に日本語が無いため） |
+| 他の MOD が置いたウィジェットの隣に並ぶ | `122_`（相手は HUD の控え（`_instantale_expand_button`）から引き、大きさを写して `pos` / `size` に束ねる。塗り直しを待つと1手ぶん遅れて追いかけることになる。相手が居なければ相手と同じ置き方に落ちる） |
+| ゲームの画面を一切動かさずに読み物を出す | `122_`（`ModalView` に `ScrollView` + `Label` を1枚。書体は本文のラベルから写す。版差のあるプロパティ（`background_color` / `overlay_color`）は持っているほうにだけ効かせる） |
+| 流れて消える情報を、追記専用の控えとして残す | `122_`（`state/` に JSON Lines で1行1件。途中で落ちても壊れるのは最後の1行だけで、読む側はその行を捨てる。上限の倍まで伸びたら隣に書いて差し替える） |
 | ゲームが決めた寸法を、元に戻せる形で変える | `109_` / `113_`（設計値はウィジェット自身に控える。MOD 側の変数に持つと、注入し直したときに変えた後の値を設計値として控える） |
 | はみ出した一覧を、位置も中身の大きさも変えずに収める | `115_`（`GridLayout` の `cols` を増やして折り返す。ウィジェットを移し替えないので、ゲームの開閉の後始末と衝突しない） |
 | 触ってよい相手を「その直し方が成り立つ能力」で選ぶ | `115_`（列にできるのは `cols` と `minimum_height` を持つ入れ物だけ。型名で弾くのではなく、能力で選ぶと関係ない相手（`ItemDetailBox`）が自然に落ちる） |

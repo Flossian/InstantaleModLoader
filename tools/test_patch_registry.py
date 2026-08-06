@@ -816,6 +816,71 @@ def main():
         check(ml.state_dir(os.path.join(_ROOT, "runtime"))
               == os.path.join(_ROOT, ml.STATE_DIR_NAME),
               "既定の state/ は配布フォルダ直下（settings/ と同じ並び）")
+
+        # -- 壊れない書き方 ------------------------------------------------
+        # 残すデータは全てここを通す（`ctx.write_json` / `write_text`）。
+        # 素朴な open(..., "w") は開いた時点で切り詰めるので、途中で落ちると
+        # 中身が消える ― 読む側は壊れた JSON を {} に倒すため、消えたことに
+        # 気付けないまま次の更新で上書きされる。
+        print("=== 壊れない書き方（write_json / write_text） ===")
+        target = sctx.state_path("atomic.json")
+        check(sctx.write_json(target, {"a": 1}) is True,
+              "書けたら True を返す")
+        with open(target, encoding="utf-8") as fh:
+            check(json.load(fh) == {"a": 1}, "書いた内容がそのまま読める")
+
+        # 素直に書けない値でも `default=str` が文字列にして通す。**書けないより、
+        # 文字列になってでも残る方がよい**という判断なので、ここは成功が正しい。
+        check(sctx.write_json(target, {"odd": {1, 2}}) is True,
+              "JSON にできない値も文字列にして書く（default=str）")
+
+        # **途中で落ちても本体が無傷**であること。循環参照は `default` でも
+        # 救えないので、直列化の時点で失敗して書き込みまで到達しない。
+        loop = {}
+        loop["self"] = loop
+        before = open(target, encoding="utf-8").read()
+        check(sctx.write_json(target, loop) is False,
+              "書けなければ False を返す（例外を投げない）")
+        check(open(target, encoding="utf-8").read() == before,
+              "失敗しても元のファイルは無傷（切り詰められていない）")
+        check(not os.path.exists(target + ml.TEMP_SUFFIX),
+              "書きかけの .tmp を残さない")
+
+        # 置き換えであって追記ではない。短い内容で上書きしたときに前の内容が
+        # 尻に残らないこと（`os.replace` なので当然だが、規則として押さえる）。
+        sctx.write_json(target, {"long": "x" * 200})
+        sctx.write_json(target, {"s": 1})
+        with open(target, encoding="utf-8") as fh:
+            check(json.load(fh) == {"s": 1}, "短い内容で上書きしても前の内容が残らない")
+
+        # JSON にできない記録（1行1レコード）は write_text 側。
+        lines = sctx.state_path("lines.jsonl")
+        check(sctx.write_text(lines, '{"a":1}\n{"a":2}\n') is True,
+              "write_text も書けたら True")
+        with open(lines, encoding="utf-8") as fh:
+            check(len(fh.read().splitlines()) == 2, "1行1レコードで書ける")
+
+        # 親フォルダが無くても自分で作る（呼び出し側に makedirs を強いない）。
+        nested = os.path.join(s_state, "deep", "er", "n.json")
+        check(ml.write_json(nested, {"n": 1}) and os.path.isfile(nested),
+              "親フォルダが無ければ作ってから書く")
+
+        # **いちばん危ない窓**: 仮ファイルは書けたのに差し替えで落ちる場合。
+        # ここで本体が壊れると、隣に書く意味そのものが無くなる。
+        sctx.write_json(target, {"keep": "me"})
+        kept = open(target, encoding="utf-8").read()
+        saved_replace = ml.os.replace
+        ml.os.replace = lambda src, dst: (_ for _ in ()).throw(OSError("差し替え失敗"))
+        try:
+            check(sctx.write_json(target, {"lost": 1}) is False,
+                  "差し替えに失敗したら False")
+        finally:
+            ml.os.replace = saved_replace
+        check(open(target, encoding="utf-8").read() == kept,
+              "差し替えに失敗しても本体は前のまま")
+        check(not os.path.exists(target + ml.TEMP_SUFFIX),
+              "差し替えに失敗しても書きかけを片付ける")
+
     finally:
         shutil.rmtree(sandbox, ignore_errors=True)
 

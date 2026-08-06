@@ -479,10 +479,13 @@ def write_order(names: list[str], disabled: set[str]) -> None:
     追いやすいのと、無効にした順で溜まっていくのを避けるため。
     """
     off = [n for n in names if n in disabled]
-    with open(ml.order_path(MODS_DIR), "w", encoding="utf-8") as fh:
-        json.dump({"order": names, "disabled": off}, fh,
-                  ensure_ascii=False, indent=2)
-        fh.write("\n")
+    # 落ちても壊れない書き方は `ml.write_json` に一本化してある。ここは MOD の
+    # 構成そのもの（適用順と有効/無効）なので、壊れると一覧が組み直せない。
+    # 失敗は例外にする ― `save()` が捕まえてダイアログに出す（config.py の
+    # `_save_settings_json` と同じ理由で、利用者の操作の結果だから）。
+    path = ml.order_path(MODS_DIR)
+    if not ml.write_json(path, {"order": names, "disabled": off}, indent=2):
+        raise OSError("cannot write {}".format(path))
 
 
 def read_config() -> dict:
@@ -491,10 +494,13 @@ def read_config() -> dict:
 
 
 def write_config(data: dict) -> None:
+    """`gui.json`（窓の位置など GUI だけの覚え書き）を書く。
+
+    失っても既定値で開き直せるだけなので、書けなくても黙って続ける。書き方は
+    他と揃える（規則は `ml.write_json` に一本化してある）。
+    """
     os.makedirs(SETTINGS_DIR, exist_ok=True)
-    with open(CONFIG_PATH, "w", encoding="utf-8") as fh:
-        json.dump(data, fh, ensure_ascii=False, indent=2)
-        fh.write("\n")
+    ml.write_json(CONFIG_PATH, data, indent=2)
 
 
 def update_config(**values) -> None:

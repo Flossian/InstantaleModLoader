@@ -72,10 +72,10 @@
 
 import json
 import os
-import re
 import sys
 
 from instantale_modloader import frames, ui
+from instantale_modloader.state import world_filename, world_key
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
 #      `tools/check_mods.py` が AST で突き合わせる）------------------------
@@ -87,9 +87,6 @@ LOG_BASENAME = "shop_restock.log"
 # 世界ごとの控えの置き場。`state/` の下（消すと入れ替えの間隔が巻き戻る）。
 STATE_DIRNAME = "shop_restock"
 
-# 書き出しの途中経過。**同じフォルダに置くこと**（`os.replace` の不可分性）。
-TEMP_SUFFIX = ".writing"
-
 # 空にした後、補充されたかを見るまでの待ち（秒）。生成が次のフレームへ
 # 回される版でも取りこぼさないだけの間を取る。
 VERIFY_DELAY = 1.0
@@ -100,9 +97,6 @@ RECORD_KEYS = ("day", "facility", "count", "tier")
 # 再注入しても1組だけ持つ（世代をまたいで覚えていたい: 段(tier)と、
 # 「この版は空にしても補充しない」の判定）。
 STORE_ATTR = "_instantale_shop_restock_store"
-
-# ファイル名に使えない文字（Windows 禁則＋制御文字）。世界名そのものは鍵に残す。
-_UNSAFE_FILENAME = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
 
 
 def apply(ctx):
@@ -130,28 +124,12 @@ def apply(ctx):
     screen = ui.Screen(ctx, write, tag="shop restock")
 
     # ------------------------------------------------------------ 世界と控え
-    def world_key(app):
-        """世界を見分ける名前。取れなければ '_'（1世界しか使わない前提に落ちる）。"""
-        world_dict = getattr(app, "world_dict", None)
-        if isinstance(world_dict, dict):
-            data = world_dict.get("world_data")
-            if isinstance(data, dict):
-                for key in ("world_name", "name", "title"):
-                    value = data.get(key)
-                    if isinstance(value, str) and value:
-                        return value
-        name = getattr(getattr(app, "world", None), "name", None)
-        return name if isinstance(name, str) and name else "_"
-
-    def safe_world_filename(key):
-        cleaned = _UNSAFE_FILENAME.sub("_", key).strip().rstrip(".")
-        return (cleaned or "_") + ".json"
 
     def bucket_of(app):
         key = world_key(app)
         bucket = store["buckets"].get(key)
         if bucket is None:
-            path = os.path.join(state_dir, safe_world_filename(key))
+            path = os.path.join(state_dir, world_filename(key))
             try:
                 with open(path, "r", encoding="utf-8") as fh:
                     data = json.load(fh)
@@ -162,29 +140,15 @@ def apply(ctx):
         return key, bucket
 
     def save_bucket(key, bucket):
-        """1世界分を書き出す。隣に書いてから差し替える（途中で落ちても壊れない）。"""
-        path = ctx.state_path(STATE_DIRNAME, safe_world_filename(key))
-        tmp = path + TEMP_SUFFIX
-        try:
-            ordered = {}
-            for owner_id, record in bucket.items():
-                if not isinstance(record, dict):
-                    continue
-                ordered[owner_id] = {k: record[k] for k in RECORD_KEYS
-                                     if k in record}
-            with open(tmp, "w", encoding="utf-8") as fh:
-                json.dump(ordered, fh, ensure_ascii=False, indent=1)
-                fh.flush()
-                os.fsync(fh.fileno())
-            os.replace(tmp, path)
-            return True
-        except Exception:
-            ctx.log_exc("shop restock: cannot write {}".format(path))
-            try:
-                os.remove(tmp)
-            except Exception:
-                pass
-            return False
+        """1世界分を書き出す。落ちても壊れない書き方は `ctx.write_json()` 側。"""
+        path = ctx.state_path(STATE_DIRNAME, world_filename(key))
+        ordered = {}
+        for owner_id, record in bucket.items():
+            if not isinstance(record, dict):
+                continue
+            ordered[owner_id] = {k: record[k] for k in RECORD_KEYS
+                                 if k in record}
+        return ctx.write_json(path, ordered)
 
     # ------------------------------------------------------------ ゲームを読む
     def app_of(manager):
