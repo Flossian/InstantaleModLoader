@@ -144,9 +144,10 @@ MOD が足すボタンはその入れ物の直接の子になる（`get_current_
 ## 仲間が増えた・減ったとき
 
 **その場で当て直す。** 画面の側（`party_members`）は
-`InstantaleApp.update_party_member` が 0.1 秒ごとに入れ直しているので放っておいても
-追いつくが、「雇った瞬間に枠が増える」「別れた瞬間に減る」を確かめられるのは名簿が
-動いた地点だけなので、`add_party_member` / `remove_party_member` からも直に当て直す。
+`InstantaleApp.update_party_member` が 0.1 秒ごとに入れ直すので、放っておいても
+いずれ追いつく。ただし「雇った瞬間に枠が増える」「別れた瞬間に減る」を確かめられる
+のは名簿が動いた地点だけなので、`add_party_member` / `remove_party_member` からも
+直に当て直す。
 
 名簿が動いた**直後はまだ画面の側が古い**（入れ直しは次の周期）。だから次のフレームと、
 周期をまたいだ後（`REFRESH_DELAY`）の2回に分けて当てる。`upkeep` は何度呼んでも

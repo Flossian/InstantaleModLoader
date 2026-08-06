@@ -263,10 +263,10 @@ def overlay_host(hud):
     """HUD へ自前のウィジェットを1枚足すときの置き場所。
 
     **HUD 自身の子の並びは変えない。** 素の HUD の子は `FloatLayout` 1枚だけで、
-    そこへ直接足すと子が2つになり、「画面の最初の子」を取る側から見える相手が
-    変わる（`scripts.hud.new_hud:get_current_screen_root`）― アイテムを持ち物へ
-    移す・装備する操作が効かなくなる（VERIFICATION.md §2.33）。だから足すのは
-    その `FloatLayout` の**中**。ゲーム自身もこの中へ効果や窓を出し入れしている。
+    そこへ直接足すと子が2つになる。すると「画面の最初の子」を取る側
+    （`scripts.hud.new_hud:get_current_screen_root`）から見える相手が変わり、
+    アイテムを持ち物へ移す・装備する操作が効かなくなる（VERIFICATION.md §2.33）。
+    だから足すのはその `FloatLayout` の**中**。ゲーム自身もこの中へ効果や窓を出し入れしている。
 
     **どれを選ぶかは「いちばん古い子」で決める。** Kivy の `children` は新しい順
     なので、先頭を採ると

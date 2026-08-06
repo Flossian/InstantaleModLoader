@@ -796,7 +796,7 @@ def apply(ctx):
     # ------------------- ゲームの掲示板を、その NPC 発の依頼だけに絞る＋生成を足す
     @ctx.wrap("__main__:DisplayQuestChoice.update_button_display", required=False)
     def quest_board_buttons(orig, self, *args, **kwargs):
-        """掲示板が並び終えた**後**に、絞り込みと自前項目の追加を行う。
+        """掲示板が並び終えた**後**に、絞り込みと自前項目の追加をする。
 
         **依頼ボタンは作らず、ゲームが作ったものを間引くだけ。** `quest_type` の
         語彙を知らずに済ませるのが設計の要点なので、組み立てには絶対に回らない

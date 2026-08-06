@@ -90,7 +90,7 @@ def settings_flag() -> bool | None:
 
 
 def enabled(cli_override: bool | None = None) -> bool:
-    """世代管理を行うかどうかを決める。cli_override が None なら環境変数→既定値。"""
+    """世代管理をするかどうかを決める。cli_override が None なら環境変数→既定値。"""
     if cli_override is not None:
         return cli_override
     raw = os.environ.get(ENV_VAR)

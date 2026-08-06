@@ -44,7 +44,8 @@
     "307_area_move_dungeon",
     "308_battle_damage_display",
     "309_office_pardon",
-    "311_npc_profile_memory"
+    "311_npc_profile_memory",
+    "312_shop_restock"
   ],
   "disabled": []
 }

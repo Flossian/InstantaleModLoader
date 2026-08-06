@@ -785,6 +785,16 @@ InstantaleApp.move_npc_to_facility(character_id, character_instance,
   removal の後
 - 置き場所を決めずに外さない。置き先が引けない土地（ダンジョン等）で外すと、その NPC
   は世界のどこにも居なくなる。逆に、本当に外れた相手の置き直しを止めてもいけない
+- **動かした NPC は自主的には持ち場へ戻らない。** `move_npc_to_facility` で移した
+  相手は、移した先に居続ける。ゲーム側に「元の場所へ帰る」動きは無い（過去のプレイで
+  確認。生ログは残っていないが、判断の前提に使えるだけの確度はある）。
+
+  だから **NPC を動かす MOD は、戻す責任も持つ。** 動かす前の `location` と
+  `current_node` を控え、役目が終わったら帰す。控えずに動かすと、その移動は
+  世界のどこからも取り消せなくなる ― MOD を無効化しても、フォルダごと消しても、
+  NPC はそこに残る。パーティ由来の移送（`302_` / `303_` / `304_`）が問題に
+  ならないのは、**動かす主体がゲームで、MOD は置き先を差し替えているだけ**だから。
+  ゲームが動かすつもりの無い NPC を MOD の都合で動かすのは、これとは別の話になる。
 
 クエストクリアの解散:
 
@@ -1159,6 +1169,41 @@ InventoryGrid   cols=4  rows=6  len(slots)=24  size=[259, 389]  spacing=[1, 1]
 `toggle_twin_inventory_visibility` は Kivy の property dispatch → Clock コールバックの中で
 走るので、ここで例外が出るとアプリのループまで抜けてゲームごと落ちる。
 
+### 2.13.1 店の品揃え（`ShoppingStartManagerRemake`）
+
+店に並ぶのは**その施設の主の持ち物そのもの**。売買画面は主とプレイヤーの
+2つの持ち物を左右に並べているだけで、店専用の在庫という入れ物は無い。
+
+```
+__main__:ShoppingStartManagerRemake.execute(self, choice_text)
+                                    .shopping_start_method_1(self)
+                                    .set_item_from_world_data(self, shop_owner_instance, next_tier)
+                                    .generate_item_in_shopping(self, item_data, shop_owner_instance,
+                                                               item_stock_tier)
+__main__:InstantaleApp.toggle_twin_inventory_window(left_inventory_obtainer,
+                       right_inventory_obtainer, left_label_text, situation, *args)
+__main__:InstantaleApp.buy_item(item_instance) / sell_item(item_instance)
+__main__:InstantaleApp.set_shop_price_for_owner(item_instance) / set_shop_price_for_player(...)
+__main__:InstantaleApp.normalize_shop_inventory_prices(shop_obtainer, player_obtainer)
+```
+
+- 主の持ち物はセーブの `npcs[<id>].inventory`（`{item_id: アイテム}`。§2.23 の21番）。
+  実セーブでは51人中8人だけが中身を持っていた（2026-08-06 に復号して確認）。
+  中身を持っているのは店として開いた施設の主だけで、**開いていない店は空**
+- つまり品揃えは「初めて開いたときに作られて、そのまま残る」。**入れ替える
+  仕組みは見当たらない**。プレイヤーが売った品も `sell_item` で主の持ち物に
+  積まれるので、24マス（§2.13）が埋まると売却そのものができなくなる
+- `next_tier` / `item_stock_tier` は品物の段。値の意味も決め方も未特定。
+  ゲームが `set_item_from_world_data` に渡す値をそのまま使い回すこと
+  （`312_shop_restock` はこの形で、値は解釈しない）
+- 主の持ち物を空にしてから売買を始めると、ゲームが初回と同じ経路で品揃えを
+  作り直す ― という前提で `312_` は書かれているが、**実機では未確認**。
+  外れたときのために、空にした後で補充されたかを見て、駄目なら控えを戻す
+  （VERIFICATION.md §3 の該当項）
+
+日付は世界に1つ（`world.days_elapsed`。セーブでは `world_data.days_elapsed`。
+実セーブで `3651` を確認）。進めているのは `InstantaleApp.elapse_days(days)`（§2.19）。
+
 ### 2.14 アイテム詳細ボックス
 
 ホバーで出る `ItemDetailBox`（window=2560x1387 のときの実測）:
@@ -1244,10 +1289,10 @@ LLM が生成した名前に引用符が混じる経路が実在する（`試験
 - Windows は末尾の空白とピリオドを黙って切るので、パスに使うなら先に落としておく
 - 世界名（`worlds/<世界>/`）の入口は未調査。同じ壊れ方をしうる
 
-main_024 で本体が直した。 `sanitize_path_name(name)` が追加され
-（`scripts.functions` と `save_world_json` の2箇所。main_023 のリコンには無い。
-併せて `__main__:sanitize_enemy_names(quest_value)` も新規）、置換先は
-`110_` と同じ全角。2026-08-05 の実測:
+main_024 で本体が直した。`sanitize_path_name(name)` が `scripts.functions` と
+`save_world_json` の2箇所に追加され、置換先は `110_` と同じ全角になっている。
+どちらも main_023 のリコンには無く、`__main__:sanitize_enemy_names(quest_value)` も
+新規。2026-08-05 の実測:
 
 ```
 worlds/<世界>/characters/「沈黙の」ミテ／     末尾は U+FF0F（全角スラッシュ）
@@ -1318,8 +1363,8 @@ Character.calculate_current_gained_exp_on_display(gained)  表示用
 `skill_train_manager` / `free_input_training_manager` / `training_conversation_starter`。
 
 「いま訓練の中か」を `frames.MethodWatch` で見るときは、その `execute` を自分で
-包んでいないことを確かめる（包んでいると表に入るのはローダのラッパのコード
-オブジェクトで、全パッチが共有しているので誤爆する。`306_` が踏んだ）。
+包んでいないことを確かめる。包んでいると、表に入るのはローダのラッパのコード
+オブジェクトになる。これは全パッチが共有しているので誤爆する（`306_` が踏んだ）。
 
 ### 2.19 体力（スタミナ）は `physical_integrity`
 

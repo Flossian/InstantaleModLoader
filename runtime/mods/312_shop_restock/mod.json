@@ -1,0 +1,32 @@
+{
+  "entry": "shop_restock.py",
+  "api": 1,
+  "name": {
+    "en": "Shop restock",
+    "ja": "店の品揃えの入れ替え"
+  },
+  "description": {
+    "en": "Regenerates a shop owner's stock after a number of in-game days, so the shop never stays clogged with what the player sold",
+    "ja": "ゲーム内で一定の日数が経った店の品揃えを入れ替える。売った品で埋まって売却できなくなるのを防ぐ"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "settings": {
+    "RESTOCK_DAYS": {
+      "type": "int",
+      "default": 30,
+      "min": 1,
+      "max": 3650,
+      "label": {"ja": "品揃えを入れ替える日数", "en": "Days between restocks"},
+      "note": {"ja": "最後に入れ替えてからこの日数が経った店を、次に開いたときに入れ替える",
+               "en": "A shop is restocked the next time it is opened, this many in-game days after the last restock"}
+    },
+    "RESTOCK_ON_FIRST_SHOP": {
+      "type": "bool",
+      "default": false,
+      "label": {"ja": "初回の来店でも入れ替える", "en": "Restock on the first visit"},
+      "note": {"ja": "切っていると、初めて開いた店はその日を基準にするだけで素の品揃えのまま",
+               "en": "When off, the first visit only records the day and leaves the original stock alone"}
+    }
+  }
+}
