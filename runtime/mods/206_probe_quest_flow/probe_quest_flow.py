@@ -465,12 +465,11 @@ def apply(ctx):
             write("    after  -> {}".format(wait_state(app) if app else "<no app>"))
         return result
 
-    # 再注入のたびにスレッドが積み上がらないようにする。boot ごとに新しい
-    # 合言葉を `__main__` に置き、古いスレッドは自分の合言葉が外れたら降りる
-    # （ローダの遅延設置が `_superseded` でやっているのと同じ考え方）。
-    WATCH_TOKEN_ATTR = "_instantale_mod_waitstate_token"
-
-    def watch_wait_state(token):
+    # 再注入のたびにスレッドが積み上がらないようにする。判定はローダが持って
+    # いる（`ctx.superseded()`）ので、合言葉を自前で置かない ― 置き場所と
+    # 判定が MOD ごとにばらつくうえ、「ローダごと読み込み直された」の判定が
+    # 抜けやすい（TECH.md §3.6.1）。
+    def watch_wait_state():
         """待機表示に関わる状態が変わった瞬間だけを記録する。
 
         誰が立てたかまでは分からない（属性への代入は追えない）。だが
@@ -479,8 +478,7 @@ def apply(ctx):
         """
         last = None
         while True:
-            main = sys.modules.get("__main__")
-            if main is None or getattr(main, WATCH_TOKEN_ATTR, None) is not token:
+            if ctx.superseded():
                 return                      # 新しい boot に交代した
             try:
                 app = find_app()
@@ -498,13 +496,9 @@ def apply(ctx):
 
     if WATCH_WAIT_STATE:
         import threading
-        _token = object()
-        _main = sys.modules.get("__main__")
-        if _main is not None:
-            setattr(_main, WATCH_TOKEN_ATTR, _token)
-            threading.Thread(target=watch_wait_state, args=(_token,),
-                             name="instantale_mod.waitstate_watch",
-                             daemon=True).start()
+        threading.Thread(target=watch_wait_state,
+                         name="instantale_mod.waitstate_watch",
+                         daemon=True).start()
 
     @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False)
     def on_button_press_waitstate(orig, self, button_index, *args, **kwargs):

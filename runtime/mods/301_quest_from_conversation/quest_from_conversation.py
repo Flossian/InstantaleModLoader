@@ -464,12 +464,12 @@ def apply(ctx):
         return _text("\n".join(lines), NPC_MEMORY_CHARS)
 
     def load_clients():
-        try:
-            with open(clients_path, "r", encoding="utf-8") as fh:
-                data = json.load(fh)
-            return data if isinstance(data, dict) else {}
-        except Exception:
-            return {}
+        # このファイルは**全世界ぶんが1つ**なので、読めない1回を黙って {} に
+        # 倒すと、次の remember_client が全世界の出所を空で書き直してしまう。
+        # 「無い（初回）」だけを黙って倒し、「在るのに読めない」は記録に残す
+        # （ctx.read_json）。
+        data = ctx.read_json(clients_path, {})
+        return data if isinstance(data, dict) else {}
 
     def remember_client(app, quest_id, npc_id, npc_name):
         """この依頼はこの NPC 発、と控える。セーブには触らない。"""

@@ -384,6 +384,11 @@ def _guard(func: Callable, old: Callable, target: str) -> Callable:
             log_exc("safe hook failed on {}; falling back to the original".format(target))
             if "result" in box:
                 return box["result"]
+            if old is None:
+                # `required=False` で**属性を新設**した patch。元の実装が無いので
+                # 落とす先も無い ― ここで `None(...)` を呼ぶと TypeError が
+                # ゲームへ抜けて、safe の約束（例外を流さない）が破れる。
+                return None
             return old(*args, **kwargs)
 
     return guarded

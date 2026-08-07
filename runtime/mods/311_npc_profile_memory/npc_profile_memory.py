@@ -411,11 +411,10 @@ def apply(ctx):
             if bucket is not None:
                 return bucket
             path = state_path_for(key)
-            try:
-                with open(path, "r", encoding="utf-8") as fh:
-                    data = json.load(fh)
-            except Exception:
-                data = {}
+            # 「無い（初回）」と「在るのに読めない（ロック・破損）」を同じ {} に
+            # 倒さない。後者を黙って倒すと、次の save_bucket が空に近い正本を
+            # **無傷で**作る ― 記録だけは必ず残す（ctx.read_json）。
+            data = ctx.read_json(path, {})
             bucket = data if isinstance(data, dict) else {}
             cache["buckets"][key] = bucket
             return bucket

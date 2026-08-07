@@ -494,13 +494,16 @@ def apply(ctx):
 | `ctx.log(...)` / `ctx.log_exc(...)` | `out/modloader.log` へ |
 | `ctx.out_path(name)` | `out/<name>` の絶対パス。MOD 専用ログはここへ（§3.11） |
 | `ctx.state_path(name)` | `state/<name>` の絶対パス。遊びの続きに要るデータはここへ（§3.11） |
+| `ctx.read_json(path, default)` | JSON を読む。無ければ `default`、**在るのに読めなければ**記録してから `default`（§3.11.1） |
 | `ctx.write_json(path, data)` | 落ちても壊れないように書く。成否を返す（§3.11.1）。**残すデータは必ずこれ** |
 | `ctx.write_text(path, text)` | 同上。JSON 文書1つではないもの（1行1レコードなど）用 |
 | `ctx.mod_dir` | いま apply() 中の MOD のフォルダ。同梱データを読む用（書くのは `out/` か `state/`） |
 | `ctx.on_ready(fn)` | プロセスにつき1回だけメインスレッドで実行（§3.6） |
+| `ctx.superseded()` | 自分より新しい注入が来たか。自前のスレッド・`Clock` の繰り返しはこれで降りる（§3.6.1） |
 | `ctx.patches()` | 対象 → 当てた MOD の一覧。自分より前の分が見える（§3.7） |
 | `ctx.config` / `ctx.setting(名前)` | この MOD に効いている設定値（§3.8） |
 | `ctx.api` / `ctx.version` | ローダの API 番号と版（§3.9） |
+| `ctx.generation` | この注入の世代。`on_ready` のキーに混ぜる用（§3.6.1） |
 
 `target` は `module:qualname` 形式（`llm_manager:quest_referee_event_resolve`、
 `llama_cpp_runtime_completion:LlamaCppClient.chat`）。
@@ -937,29 +940,56 @@ def apply(ctx):
 ところだった。
 
 1回きりの初期化（掃除・状態ファイル）なら意図どおりだが、注入し直すたびに
-入れ替わってほしいもの（見張り・計測）は別の書き方が要る。組は2つ:
+入れ替わってほしいもの（見張り・計測）は別の書き方が要る。組は2つ ―
+**新しい版を必ず立てる**（キーに世代を混ぜる）ことと、**古い版が自分で降りる**
+（`ctx.superseded()`）こと:
 
 ```python
-POLL_TOKEN_ATTR = "__instantale_myprobe_poll__"      # 置き場所は sys（上と同じ理由）
-
 def apply(ctx):
-    token = "{:x}".format(id(state))        # この apply() 固有の値
-    setattr(sys, POLL_TOKEN_ATTR, token)    # いま有効な世代を宣言する
-
     def start_poll():
         def poll(_dt):
-            if getattr(sys, POLL_TOKEN_ATTR, None) != token:
+            if ctx.superseded():
                 return False                # 新しい注入が来た ＝ Clock から降りる
             ...
             return True
         Clock.schedule_interval(poll, 1.0)
 
     # キーに世代を混ぜる。混ぜないと2回目以降は積まれない
-    ctx.on_ready(start_poll, key="211_probe_text_speed:poll:{}".format(token))
+    ctx.on_ready(start_poll,
+                 key="211_probe_text_speed:poll:{}".format(ctx.generation))
+```
+
+自前のスレッドも同じで、`while True:` の頭で聞く:
+
+```python
+def watch():
+    while not ctx.superseded():
+        ...
+        time.sleep(POLL)
 ```
 
 `force=True` でも積み直せるが、あれは印を無視するだけで古い見張りは止まらない
 （二重に回る）。降りる側の合図まで含めてこの形にする。
+
+##### 降りる合図を MOD 側で作らない
+
+`ctx.superseded()` は**2つ**見ている。同じローダで次の boot が走った
+（`generation` が変わった）か、注入し直されて**ローダごと読み込み直された**か。
+後者では古い版が握っている `_state` はもう誰も更新しないので、世代を比べるだけ
+では永遠に「まだ現役」に見える ― `sys.modules` の中身が別の `_state` を持って
+いるかで見分けるしかない。
+
+以前は `206_` が `__main__` に、`211_` が `sys` に、それぞれ自前の合言葉を
+置いていた。どちらも2つ目の判定が無く、置き場所も判定も違う。**世代の持ち回りは
+ローダの語彙**（`state.py` の `world_key` と同じ話。§3.2.3）なので、MOD 側で
+作り直さない。
+
+> 似て見えるが**別のもの**が2つある。`118_batch_message_render` の
+> `state["generation"]` は「走っている一括表示の続きを止める」印で、本文が
+> 新しくなるたびに進む（注入とは無関係）。`311_npc_profile_memory` のワーカーは
+> 世代をまたいで**1本のまま使い続ける**のが正しい ― 待ち行列も錠も控えも `sys` に
+> 置いた1組を共有しているので（§3.4）、降ろすと処理中の抽出が消える。
+> `ctx.superseded()` を足すのは、**自分の世代のためだけに回しているもの**に限る。
 
 ### 3.7 誰がどこへ当てたか（台帳）
 
@@ -1206,7 +1236,7 @@ journey_path = ctx.state_path("road_travel.json")  # 続きに要るデータ
 > 相手を切っている人の `state/` に、使われない空のフォルダを置かないため
 > （`301_` が `311_` の `npc_profiles/` を読む形）。
 
-#### 3.11.1 書くときは `ctx.write_json()` を通す
+#### 3.11.1 書くときは `ctx.write_json()`、読むときは `ctx.read_json()` を通す
 
 **`open(path, "w")` で残すデータを書かないこと。** 開いた時点でファイルを
 切り詰めるので、書いている途中で落ちるとその瞬間に中身が壊れる。読む側は
@@ -1216,9 +1246,18 @@ journey_path = ctx.state_path("road_travel.json")  # 続きに要るデータ
 残すデータの書き込みは落ちても壊れない形にしておく必要がある。
 
 ```python
+data = ctx.read_json(ctx.state_path("npc_profiles", "世界.json"), {})   # 読む
 ctx.write_json(ctx.state_path("npc_profiles", "世界.json"), bucket)  # -> True/False
 ctx.write_text(ctx.state_path("log.jsonl"), text)                    # JSON 文書でないもの
 ```
+
+**読み側にも同じ規則がある。** 素朴な `open` + 広い `except` で `{}` に倒すと、
+「無い（初回・正常）」と「**在るのに読めない**（ウイルス対策やインデクサの
+一時ロック・外部破損）」の区別が消える。後者を黙って倒したまま次の書き込みを
+すると、`write_json()` がいくら壊れない書き方でも**空に近い正本を無傷で作って
+しまう** ― 壊れずに、静かに失われる。`ctx.read_json()` は前者だけを黙って
+`default` に倒し、後者は記録してから倒す（mod は止めない。倒した先が読める
+ことより、消えたことが後から追えることが要点）。
 
 やっているのは3つ。隣に `名前.tmp` を書く → `flush` + `fsync` でディスクまで
 落とす → `os.replace` で差し替える。2つ目を省くと電源断で「差し替えは済んだが
@@ -1230,7 +1269,7 @@ ctx.write_text(ctx.state_path("log.jsonl"), text)                    # JSON 文�
 
 | 場面 | 使うもの |
 |---|---|
-| 残すデータ（`state/`）| **必ず** `ctx.write_json()` / `ctx.write_text()` |
+| 残すデータ（`state/`）| **必ず** `ctx.write_json()` / `ctx.write_text()`、読むのは `ctx.read_json()` |
 | ログの追記（`out/`）| `open(path, "a")` でよい。1行ずつ足すだけで、壊れても捨てられる |
 | 利用者の操作の結果 | 例外にする（`config.py` の `_save_settings_json`、`gui.py` の `write_order`）。GUI がダイアログに出す ― 黙って False を返すと、保存されていないのに保存されたように見える |
 

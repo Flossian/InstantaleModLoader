@@ -362,6 +362,9 @@ class Ctx(object):
     def write_text(self, path, text):
         return ml.write_text(path, text, report=self.log_exc)
 
+    def read_json(self, path, default=None):
+        return ml.read_json(path, default, report=self.log_exc)
+
     def wrap(self, target, required=True):
         def decorate(fn):
             self.hooks[target] = fn

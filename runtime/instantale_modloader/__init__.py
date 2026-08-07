@@ -211,6 +211,34 @@ def write_json(path: str, data, *, indent: int = 1, sort_keys: bool = False,
     return write_text(path, text, report=report)
 
 
+def read_json(path: str, default=None, *, report=None):
+    """JSON を読む。無ければ `default`。**在るのに読めなければ、記録してから** `default`。
+
+    読めない理由は2つに割れていて、**同じ扱いにしてはいけない**:
+
+        無い（`FileNotFoundError`）   初回・正常。黙って `default` でよい
+        在るのに読めない              一時的なロック（ウイルス対策・インデクサ）
+                                      か破損。黙って倒すと「無かったこと」になる
+
+    後者が危ないのは、読んだ側が**その結果を次の書き込みの土台にする**から。
+    `write_json()` でいくら壊れない書き方をしても、読み側が壊れた控えを黙って
+    `{}` に倒せば、次の書き込みは空に近い正本を**無傷で**作ってしまう ―
+    壊れずに、静かに失われる。だからここは必ず記録を残す。
+
+    倒した先が `default` なのは変わらない（読めない控えのために mod を止める
+    ほうが損害が大きい。`load_order.json` が壊れていても必ず動かすのと同じ判断）。
+    変わるのは**消えたことが後から分かる**ことだけ。
+    """
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except FileNotFoundError:
+        return default
+    except Exception:
+        (report or log_exc)("cannot read {}".format(path))
+        return default
+
+
 # 「まだ import されていないモジュール」を待つ見張りの設定。
 # ゲームは LLM 系モジュールを最初のリクエストまで import しないので、
 # 起動直後に注入すると llama 系のフックが1つも載らない。詳しくは _arm_deferred。
@@ -348,6 +376,9 @@ class ModContext:
         self.log_exc = log_exc
         self.api = API
         self.version = __version__
+        # この boot の世代。`superseded()` がこれと今の世代を突き合わせる。
+        # boot() が `_state["generation"]` を決めた後にこの ctx を作っている。
+        self.generation = _state.get("generation")
         # 今 apply() を実行中の mod ファイル名。boot() が出し入れする。
         # on_ready の既定のキーに使う。
         self._mod: str | None = None
@@ -442,6 +473,45 @@ class ModContext:
         _state["ready"].append((name, fn, delay))
         return True
 
+    # -- 自分より新しい注入が来たか ------------------------------------------
+    def superseded(self) -> bool:
+        """この apply() が仕掛けたものが**用済みか**。降りるべきなら True。
+
+        `apply()` は1プロセスの中で何度も走る（手での再注入と、遅延当て直し）。
+        パッチは patch.py の世代管理が前の層を置き換えるので重ならないが、
+        **自分で回し続けるもの**は誰も止めてくれない:
+
+            自前のスレッド（`while True:` の見張り）
+            `Clock.schedule_interval` の繰り返し
+
+        `revert_all()` は Clock の予約もスレッドも取り消せないので、放っておくと
+        注入のたびに1本ずつ積み上がり、全員が同じログへ書き、全員が同じ状態を
+        触る。そこで**自分で降りる**:
+
+            def watch():
+                while not ctx.superseded():     # スレッド
+                    ...
+                    time.sleep(POLL)
+
+            def poll(_dt):
+                if ctx.superseded():
+                    return False                # Clock から外れる
+                ...
+                return True
+
+        判定は2つ。同じローダで別の boot が走った（`generation` が変わった）か、
+        注入し直されて**ローダ自体が読み込み直された**か。後者では自分が握って
+        いる `_state` はもう誰も更新しないので、世代の比較だけでは気付けない
+        （`sys.modules` の中身が別の `_state` を持っているかで見分ける）。
+
+        ローダの遅延設置（`_superseded`）と同じ判定をそのまま出したもの。
+        MOD 側で `sys` に合言葉を置いて代用すると、置き場所も判定も MOD ごとに
+        ばらつく上、**2つ目の判定が抜けたものが混ざる**。
+
+        `apply()` の外でも呼べる（世代は ctx が作られた時点で控えてある）。
+        """
+        return _superseded(self.generation)
+
     def out_path(self, *parts: str) -> str:
         """out/ 以下のパスを返す。親ディレクトリは先に作っておく。
 
@@ -468,6 +538,17 @@ class ModContext:
         if not os.path.exists(path):
             self._adopt_from_out(parts, path)
         return path
+
+    def read_json(self, path: str, default=None):
+        """JSON を読む。無ければ `default`。**在るのに読めなければ**記録してから `default`。
+
+        `state_path()` で取った場所を読むときは必ずこれを使う。理由はモジュール側の
+        `read_json()` にある ― 素朴な `open` + 広い `except` で `{}` に倒すと、
+        一時的に読めなかっただけの控え（ロック・破損）が「無かったこと」になり、
+        **次の `write_json()` が空に近い正本を無傷で作る**。読めなかった記録には
+        この MOD の名前が入るので、どの控えが飛んだのかログから追える。
+        """
+        return read_json(path, default, report=self.log_exc)
 
     def write_json(self, path: str, data, *, indent: int = 1) -> bool:
         """JSON を壊れないように書く。書けたら True、書けなければ False。
@@ -590,16 +671,6 @@ def order_path(mods_dir: str) -> str:
     return local if os.path.isfile(local) else os.path.join(mods_dir, ORDER_NAME)
 
 
-def _read_json(path: str):
-    """JSON を読む。読めなければ None（呼び出し側が既定へ倒す）。"""
-    try:
-        with open(path, "r", encoding="utf-8") as fh:
-            return json.load(fh)
-    except FileNotFoundError:
-        return None
-    except Exception:
-        log_exc("cannot read {}".format(path))
-        return None
 
 
 def _installed(mods_dir: str) -> list[str]:
@@ -755,7 +826,7 @@ def _order(mods_dir: str, found: list[str],
     notes: list[str] = []
     path = order_path(mods_dir)
     order_file = os.path.basename(path)
-    data = _read_json(path)
+    data = read_json(path)
     if order_file == ORDER_LOCAL_NAME:
         # 「配った構成と違うもので動いている」ことは必ず見えるようにする。
         # ただし**直すべきずれではない**ので `problems` ではなく `notes`。
@@ -870,7 +941,7 @@ def _manifest(mods_dir: str, name: str) -> dict:
     **片方の言語しか無ければもう片方で埋める**ので、`name["ja"]` は必ず何かを返す
     （GUI の行が空にならない）。
     """
-    data = _read_json(os.path.join(mods_dir, name, MANIFEST_NAME))
+    data = read_json(os.path.join(mods_dir, name, MANIFEST_NAME))
     if not isinstance(data, dict):
         data = {}
 
