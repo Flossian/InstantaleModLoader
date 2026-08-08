@@ -1,102 +1,73 @@
 # -*- coding: utf-8 -*-
 """LLM へ送る文章を、利用者が書いた置換ルールで書き換える。
 
-外部プロキシ（InstantaleLLMProxy）の `Proxy.Rules.cs` にある置換機能を、
-プロセスの中で同じ書式のまま動かす。**ルールファイルは流用できる**。
-プロキシ用に書いた `llm_replacements.txt` をそのまま読む（プロキシを入れて
-あれば探し出して読む。下の「ルールファイルの探索」）。
+外部プロキシ（InstantaleLLMProxy）の置換機能をプロセス内で同じ書式のまま動かす。
+プロキシ用に書いた `llm_replacements.txt` をこの MOD のフォルダへ置けばそのまま動く。
 
     置換前=>置換後            そのまま置き換える
     置換前=>置換後=>60        60% の確率で置き換える（0-100・省略時は 100）
     regex:正規表現=>$1…       置換前を正規表現として解釈する
     #tab:名前 / #offtab:名前  タブの区切り。`#offtab:` の中は全部無視
-    #off:… や行頭 #           コメント（プロキシ GUI の「有効」を外した行）
-    #memo:…                   ルールの覚え書き。`#` で始まるので読み飛ばす
+    #off:… や行頭 #           コメント（`#memo:…` も読み飛ばす）
 
-同じ「置換前」の行が複数あるときは**グループとして1回だけ抽選する**のもプロキシと
-同じ。確率の合計が 100 以下なら残りは無置換、100 を超えるなら `値/合計` の割合で
-必ずどれかに置き換わる。
+同じ「置換前」の行はグループとして**1回だけ抽選する**（プロキシと同じ。確率の合計が
+100 を超えるなら `値/合計` の割合で必ずどれかに置き換わる）。
 
 ## プロキシとの違い（同じルールでも扱いを変えている3点）
 
-プロキシが見ていたのは **HTTP ボディの文字列**、つまり `json.dumps` を通した後の
-JSON テキストだった。プロセスの中で見えるのは**復号済みの Python の文字列**なので、
-そのままでは同じルールが当たらない。
+プロキシは JSON エンコード後の HTTP ボディを見ていたが、ここで見えるのは復号済みの
+Python 文字列。そのままでは当たらないので:
 
-1. **`\\n` や `\\uXXXX` は実際の文字に直してから使う。** ボディの中では改行は
-   `\\n` の2文字で、日本語は `ensure_ascii=True` で `\\u3042` になっていた。
-   だから既存のルールには `…振ろう。\\n- narration:` のような書き方がある。
-   ここでは**置換後を必ず復号し**、置換前は「そのままの形」と「復号した形」の
-   両方を登録する（プロキシがエスケープ版を機械的に足していたのと同じ発想で、
-   向きが逆になっただけ）。**本物の `\\` を書きたいときは `\\\\`。**
-2. **正規表現の方言。** 置換後の `$1` / `${name}` / `$&` / `$$`（.NET）を
-   Python の後方参照へ読み替える。存在しない番号を指していたら、読み込み時に
-   警告して文字列として扱う（.NET と同じ挙動）。**パターン側は読み替えない**。
-   プロキシ向けの説明では「改行に当てるにはパターンに `\\\\n` と書く」（ボディの
-   中の `\\n` の2文字を狙う指定）だが、ここでは素直に `\\n` と書く。機械的に
-   直すと本物の `\\\\` を書いたパターンの意味が変わるので、変換はしない。
-3. **正規表現に時間制限が無い。** .NET には 1 秒のタイムアウトがあったが Python の
-   `re` には無く、途中で止められない。代わりに**照合に 1 秒以上かかったルールは
-   その場で捨てる**（`SLOW_REGEX_SECONDS`）。1回目の暴走は止められないので、
-   凝った後方参照や入れ子の繰り返しを書かないこと。
+1. **エスケープは復号してから使う。** 置換後は必ず復号し、置換前は素の形と復号形の
+   両方を登録する（`\\n` 入りの既存ルールを生かすため）。本物の `\\` は `\\\\`
+2. **置換後の `$1` / `${name}` / `$&` / `$$`（.NET）は Python の後方参照へ読み替える。**
+   存在しない番号は警告して文字列扱い。**パターン側は読み替えない**（改行は素直に `\\n`）
+3. **.NET の 1 秒タイムアウトの代わり**に、照合へ 1 秒以上かかった正規表現ルールを
+   以後捨てる（`SLOW_REGEX_SECONDS`。1回目の暴走だけは止められない）
 
-## どこに仕掛けるか
+## どこに仕掛けるか（経路の実測と経緯は GAME.md §2.12 / VERIFICATION.md §2.24）
 
-プロキシはゲームの外に居たので、送信の直前を1箇所で押さえられた。プロセスの中では
-経路が3つに分かれている（GAME.md §2.12）:
+  * ローカル（llama.cpp）: `LlamaCppClient` の chat / _apply_chat_template /
+    _post_with_model_loading_retry の3点。どれが通るかはビルドと経路で変わる
+  * クラウド（APIキー）: 送信モジュールがプロバイダごとに違うので名指しせず、
+    どの経路でも import される **`llm_manager` の別名 `send_request*`** を包む
+    （ローダの alias_scan が、同じ関数を持つ全モジュールを張り替える）。
+    ログの site はラップした元関数の `__module__` から採る＝プロバイダ名が残る
 
-    LlamaCppClient.chat                       messages（実際に流れるのはここ）
-    LlamaCppClient._apply_chat_template       messages（`102_` が使っている地点）
-    LlamaCppClient._post_with_model_loading_retry   payload["prompt"]（非ストリーム）
+はまりどころ3つ（詳細は各実装コメント）:
 
-どれが通るかはビルドと経路で変わるので3つとも仕掛ける。ただし**1回の推論で置換は
-1回だけ**にしないと、確率付きのルールが経路の数だけ抽選されて「60%」が
-60%にならない。そこで2重に歯止めを置く:
+  * **1回の推論で抽選は1回だけ。** 複数地点で抽選すると確率の分母が壊れる。
+    スレッドごとの印で内側の地点を素通しし、印が届かない別スレッド経路は
+    「自分が作った文章」のハッシュで二度目を止める（`306_` と同じ手口）
+  * **ローカル実行では `llm_manager` 境界に触らない。** send_request は内部で
+    別スレッドに降りてから chat を呼ぶため印が届かず、二重抽選になる。
+    llama.cpp の送信モジュールが import されているかで見分ける
+  * **`llm_manager` の別名は初期化時に後から生える。** ローダの保留はモジュール
+    単位で、属性の後生えは拾わない。無かったぶんは自前の見張りで当てる
+    （`ALIAS_POLL_SECONDS` ごと・`ALIAS_WATCH_SECONDS` で諦める・注入し直しで降りる）
 
-  * **スレッドごとの印。** 外側のフックが置換したら、その呼び出しの間だけ印を立て、
-    内側のフックは素通しする（`306_` と同じ手口）
-  * **自分が作った文章を覚えておく。** 印が届かない経路（別スレッドで送る場合）でも、
-    同じ文字列が二度目に来たら触らない
+クラウド境界で見えるのは呼び出し側が渡した `message` だけで、send_request の中で
+足される部分（Gemini のスキーマ文など）には当たらない（GAME.md §1.8）。
 
-## 適用順
+## 適用順（`mod.json` の `after` / `before`）
 
-`105_`（スキーマ圧縮）より**後**に適用し、`305_`（ミニクエスト）より**前**に
-適用する（`mod.json` の `after` / `before`）。理由:
+`105_`（スキーマ圧縮）より後＝外側で、置換は**圧縮前**の本文を見る（「JSON安定化」
+タブがスキーマの repr を狙うため）。`305_`（ミニクエスト）より前＝内側で、あちらには
+書き換え前の本文を見せる（完全一致前提のため）。置換ルールが `103_` の目印を
+書き換えるとあちらが止まるのは、ルールを書く側の責任。
 
-  * `105_` の後＝**外側**なので、置換は**圧縮される前の本文**を見る。既存ルールの
-    「JSON安定化」タブ（`True=>true` など）はスキーマの repr を狙っているので、
-    先に圧縮されると当たらなくなる
-  * `305_` の前＝**内側**なので、`305_` は書き換えられていない本文を見る。あちらは
-    8つの文の完全一致を前提にしていて、**1つでも当たらなければ丸ごと諦める**
+## ルールファイル
 
-つまり置換ルールで `305_` の前提を壊すことはできない。逆に、置換ルールが
-`103_`（イベントログの削減）の目印「【今回のイベント内ログ】」を書き換えると
-あちらは何もしなくなる。ルールを書く側の責任。
+この MOD のフォルダの中だけ。**探索はしない**（TECH.md §3.1.1）:
 
-## ルールファイルの置き場所
+    llm_replacements.txt          利用者のルール。あればこちらを読む
+    llm_replacements.default.txt  同梱の既定。MOD 更新で上書きされるのはこちらだけ
+                                  （利用者のルールは配布物に無いので生き残る）
 
-この MOD のフォルダの中の2つだけ。**探索はしない**（MOD 単体の部品は MOD のフォルダで
-完結させる決まり: 外に出るのは `out\\` のログだけ。TECH.md §3.1.1）:
-
-    llm_replacements.txt          利用者のルール。**あればこちらを読む**
-    llm_replacements.default.txt  同梱の既定。利用者のものが無いときに読む
-
-2つに分けてあるのは、**MOD を新しい版に差し替えても利用者のルールが残る**ようにするため。
-更新で上書きされるのは配布物が持っているファイル（＝`.default.txt`）だけで、
-`llm_replacements.txt` は配布物に入っていないので生き残る。自分のルールを書くときは
-`.default.txt` を `llm_replacements.txt` としてコピーしてから編集する。プロキシ用に
-書いたファイルがあるなら、それを `llm_replacements.txt` として置けばそのまま動く。
-
-利用者のファイルを後から置いた（または消した）場合は、**次のリクエストで読む先が
-切り替わる**（切り替えは `[RULES]` に残る）。
-
-**変更はリクエストのたびに反映される**（更新時刻と大きさを見て読み直す）。保存の
-書き込み途中で読めなかった場合は前回のルールを使い続け、次のリクエストで再試行する。
-どちらも無ければ何もしない（置換しないだけで、警告にはしない）。
-
-`out\\prompt_bloat.log` に `[RULES]`（読込）・`[REPLACE]`（置換）・`[SKIP]`（確率で
-見送り）が出る。`102_` / `103_` / `105_` と同じファイルなので、置換と圧縮の
-どちらが先に効いたかが時系列で読める。
+変更は**リクエストのたびに反映**（更新時刻と大きさで読み直す。読めない間は前回の
+ルールで続け、無ければ何もしない）。`out\\prompt_bloat.log` に `[RULES]`（読込）・
+`[REPLACE]`（置換）・`[SKIP]`（確率で見送り）が出る。`102_` / `103_` / `105_` と
+同じファイルなので、置換と圧縮のどちらが先に効いたかを時系列で読める。
 """
 
 import collections
@@ -105,6 +76,7 @@ import hashlib
 import os
 import random
 import re
+import sys
 import threading
 import time
 
@@ -129,10 +101,25 @@ SNIP_CHARS = 40              # ログに出す断片の長さ（プロキシの 
 SLOW_REGEX_SECONDS = 1.0     # 照合にこれ以上かかった正規表現は以後使わない
 SEEN_TEXTS = 64              # 「自分が作った文章」を覚えておく件数
 
-# 仕掛ける先。3つとも `required=False`（ビルドによって無い可能性がある）。
+# 仕掛ける先。全部 `required=False`（ビルドと経路によって無い可能性がある）。
 CHAT_TARGET = "llama_cpp_runtime_completion:LlamaCppClient.chat"
 TEMPLATE_TARGET = "llama_cpp_runtime_completion:LlamaCppClient._apply_chat_template"
 POST_TARGET = "llama_cpp_runtime_completion:LlamaCppClient._post_with_model_loading_retry"
+
+# 外部APIキー（クラウド）経路。プロバイダごとに送信モジュールが分かれているので、
+# モジュール名ではなく `llm_manager` が持つ別名を包む（docstring「どこに仕掛けるか」）。
+# 第2要素は send_request_with_no_structure か（ログの site に "_ns" を付ける）。
+MANAGER_SEND_TARGETS = (
+    ("scripts.llm.llm_manager:send_request", False),
+    ("scripts.llm.llm_manager:send_request_with_no_structure", True),
+)
+
+# これが import されていたらローカル実行（クラウドとどちらか片方しか載らない）。
+LOCAL_REQUEST_MODULE = "scripts.llm.request_llm_inference_llama_cpp_completion"
+
+# 「別名の後生え」の見張り（docstring「どこに仕掛けるか」）。
+ALIAS_POLL_SECONDS = 5.0     # 生えたかを見る間隔
+ALIAS_WATCH_SECONDS = 3600.0  # これだけ待って生えなければ諦める
 
 _RNG = random.Random()
 _RNG_LOCK = threading.Lock()
@@ -806,13 +793,101 @@ def apply(ctx):
         finally:
             end_pass(previous)
 
+    # ---------------------------------------------- 外部APIキー（クラウド）経路
+    # クラウドは LlamaCppClient を通らないので、上の3つだけでは素通りになる
+    # （利用者の報告で判明・2026-08-08）。送信モジュールはプロバイダごとに違う
+    # うえコンパイル済みなので、モジュール名に依存しない `llm_manager` の別名を
+    # 包む（docstring「どこに仕掛けるか」）。本文は第2位置引数（または message=）の
+    # リスト。Gemini とローカルで
+    # `send_request(manager_name, message, structure, ...)` を実測済みだが、
+    # 未実測のモジュールでも壊れないよう、位置に決め打ちせず両方を見る。
+    def replace_message_arg(site, args, kwargs):
+        """呼び出しの (args, kwargs) の中の message にルールを当てる。"""
+        if len(args) >= 2 and isinstance(args[1], list):
+            replaced = replace_messages(args[1], site)
+            if replaced is not args[1]:
+                args = args[:1] + (replaced,) + args[2:]
+        elif isinstance(kwargs.get("message"), list):
+            replaced = replace_messages(kwargs["message"], site)
+            if replaced is not kwargs["message"]:
+                kwargs = dict(kwargs, message=replaced)
+        return args, kwargs
+
+    def cloud_site(orig, ns):
+        """ログの site。ラップした元関数の持ち主からプロバイダ名を採る。"""
+        module = (getattr(orig, "__module__", "") or "").rpartition(".")[2]
+        if module.startswith("request_llm_inference_"):
+            module = module[len("request_llm_inference_"):]
+        return (module or "cloud") + ("_ns" if ns else "")
+
+    def hook_manager_send(target, ns):
+        @ctx.wrap(target, required=False)
+        def manager_send(orig, *args, **kwargs):
+            # ローカル実行ではここでは触らない。send_request は内部で別スレッドに
+            # 降りるため印が届かず、LlamaCppClient 側の3点と二重に抽選してしまう。
+            if sys.modules.get(LOCAL_REQUEST_MODULE) is not None:
+                return orig(*args, **kwargs)
+            previous = begin_pass()
+            try:
+                if not previous:
+                    site = cloud_site(orig, ns)
+                    args, kwargs = safely(
+                        site, lambda: replace_message_arg(site, args, kwargs),
+                        (args, kwargs))
+                return orig(*args, **kwargs)
+            finally:
+                end_pass(previous)
+
+    def resolvable(target):
+        try:
+            return ctx.resolve(target)[2] is not None
+        except Exception:
+            return False
+
+    # 居る別名は今すぐ包む。まだ生えていない別名は見張りに回す（起動直後の
+    # 注入では llm_manager に send_request がまだ無い。docstring のとおり）。
+    unarmed = []
+    for _target, _ns in MANAGER_SEND_TARGETS:
+        if resolvable(_target):
+            hook_manager_send(_target, _ns)
+        else:
+            unarmed.append((_target, _ns))
+
+    if unarmed:
+        def watch_manager_alias():
+            deadline = time.monotonic() + ALIAS_WATCH_SECONDS
+            remaining = list(unarmed)
+            while remaining and not ctx.superseded():
+                for item in list(remaining):
+                    target, ns = item
+                    if not resolvable(target):
+                        continue
+                    hook_manager_send(target, ns)
+                    remaining.remove(item)
+                    ctx.log("prompt replace: late-armed on {} "
+                            "(the alias appeared)".format(target))
+                    report("[RULES] 遅れて仕掛けた: {}".format(target), force=True)
+                if not remaining:
+                    return
+                if time.monotonic() > deadline:
+                    ctx.log("prompt replace: gave up waiting for {} "
+                            "({}s)".format(
+                                ", ".join(t for t, _n in remaining),
+                                int(ALIAS_WATCH_SECONDS)), level="WARN")
+                    return
+                time.sleep(ALIAS_POLL_SECONDS)
+
+        threading.Thread(target=watch_manager_alias,
+                         name="111_replace_alias_watch", daemon=True).start()
+
     # 注入した時点で、作ったデータで正しさを確かめておく。実経路はゲームが LLM を
     # 呼ぶまで通らず、起動直後に通る保証が無いため（102_ / 105_ と同じ方針）。
     _verify(ctx)
 
     # どこに仕掛かったかと、どのルールファイルを読むのかを残す。
     armed = []
-    for target in (CHAT_TARGET, TEMPLATE_TARGET, POST_TARGET):
+    for target in ((CHAT_TARGET, TEMPLATE_TARGET, POST_TARGET)
+                   + tuple(t for t, _ns in MANAGER_SEND_TARGETS)):
         try:
             _owner, _name, value = ctx.resolve(target)
         except Exception:

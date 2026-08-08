@@ -209,6 +209,10 @@ NPC の言動の調整を入れたルールが同梱されていて、そのま�
 （ゲーム再起動は不要）。`InstantaleLlmProxy` のルールファイルは書式が同じなので、
 `llm_replacements.txt` として置けばそのまま動く。
 
+AI をローカル（llama.cpp）で動かす場合も、APIキーで外部サービスに繋ぐ場合も効く
+（APIキー経由で効かなかったのは v1 の不具合。v2 で修正した）。効いているかは
+`out\prompt_bloat.log` に `[REPLACE]` が出ることで確かめられる。
+
 | 設定 | 意味 |
 |---|---|
 | 置換したことを記録する | 既定 ON。`out\prompt_bloat.log` の `[REPLACE]` |

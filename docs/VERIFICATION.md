@@ -26,7 +26,7 @@
 | `108_fix_shop_inventory_overflow` | 売買画面を開くと `IndexError` で落ちる | 修正投入済（原因はクラッシュ全文から確定）。救済経路はまだ一度も発火していない（正常時の寸法 104 件のみ） | §2.16 / §3.8 |
 | `109_fix_item_detail_autosize` | アイテム説明欄が固定サイズで長い説明・名前が切れる | 実機で発火（箱が 500 → 最大 1300 まで伸びている）。横幅の拡張は未観測 | §2.17 |
 | `110_fix_character_name_path` | 名前の `"` でキャラクタ画像が生成できない（`OSError: [WinError 123]`） | 決着（`id='101'` の改名・画像8点の生成・`WinError 123` が増えないことまで実機確認。2026-07-28） | §2.14 / §2.15 |
-| `111_llm_prompt_replace` | プロンプトの置換ルール（プロキシの REPLACE をプロセス内へ） | オフライン検証済（63件全通。同梱ルール29行を実プロンプト51,897件に当てて 26/27 グループが発火）・実機未確認 | §2.24 |
+| `111_llm_prompt_replace` | プロンプトの置換ルール（プロキシの REPLACE をプロセス内へ） | オフライン検証済（72件全通。同梱ルール29行を実プロンプト51,897件に当てて 26/27 グループが発火）・実機未確認。APIキー経由で効かない報告（2026-08-08）→ v4 でプロバイダ非依存（`llm_manager` の別名包み）、v5 で「別名の後生え」の見張りを追加。**ローカル + Gemini / OpenAI / Claude の4経路すべて実機で発火確認・決着**（同日、オフライン76件全通。ローカルは `[REPLACE] chat` のみ＝二重抽選防止も実機確認、見張りの late-armed も実機発火）。Alibaba / 任意互換は未実測だが同じ別名を通る設計 | §2.24 |
 | `112_ui_text_spacing` | 本文の行間が広く、段落の間に空行が入って読みづらい | 決着（`line_height` 1.8 → 1.44 を実機確認。2026-08-03 の退行 ＝ ラベルを見失う件と、余計なテクスチャ作り直しで打ち出しが 1.6 倍遅くなる件も、修正後の実測まで確認） | §2.25 / §2.32 / §2.34 |
 | `113_ui_text_expand` | 本文の表示域が狭く、長い応答を読むのに毎回スクロールする | 実機で6回直している（最新は 2026-08-02 のアイテム移動が壊れる不具合。ボタンを HUD 直下ではなくその中の `FloatLayout` へ移した）。それ以前の4回目までは利用者の確認済み: 1回目 枠線が付いてこない、2回目 上下に伸びる＋ボタンが画面上端、3回目 会話でボタンが左へ飛ぶ。2026-08-03 に置き場所の選び方を `ui.overlay_host` へ移した（先頭の子 → 最後尾の子。他の MOD のウィジェットを掴まない） | §2.26 / §2.33 |
 | `114_ui_input_focus` | 自由入力を送るたびに入力欄からフォーカスが外れ、毎回クリックし直す | オフライン検証済（24件全通）・実機未確認。入力欄の特定（`focus` と `insert_text` を持つウィジェット）と、送信ボタンの `disabled` の出入りを合図にする作りはどちらも実機で未観測。最初の起動で `out\input_focus.log` の `input ...` の行を確認すること | §2.27 |
@@ -445,7 +445,7 @@ python tools/test_battle_damage_display.py # 308_  72件
 python tools/test_office_pardon.py    # 309_  73件
 python tools/test_item_detail_autosize.py      # 109_  25件
 python tools/test_character_name_sanitize.py   # 110_  36件
-python tools/test_llm_prompt_replace.py        # 111_  63件（うち3件は output_data/ の実プロンプトと突き合わせ）
+python tools/test_llm_prompt_replace.py        # 111_  72件（うち3件は output_data/ の実プロンプトと突き合わせ）
 python tools/test_ui_text_spacing.py           # 112_  23件
 python tools/test_ui_text_expand.py            # 113_  76件
 python tools/test_ui_input_focus.py            # 114_  24件
@@ -1005,6 +1005,104 @@ MOD の更新で利用者のルールが消えないようにするため。更�
 未確認は、実機で1回も通していないこと。確かめ方は `out\prompt_bloat.log` に
 `[RULES] 読込`（起動時）と `[REPLACE] chat`（会話1回で出るはず）が出ること。
 `[SKIP]` が出るのは確率付きルールを書いたときだけ。
+
+**2026-08-08 追記（v2）: APIキー経由では置換されないとの報告があり、原因を特定して
+対処した。** クラウドの推論は `scripts.llm.request_llm_inference_any_server` を通り、
+v1 が仕掛けていた `LlamaCppClient` の3点を一切通らない（GAME.md §2.12。ローカルと
+クラウドはどちらか片方しか import されない）。any_server の中身はコンパイル済みで
+送信直前の関数名が判らないため、v2 は境界の `send_request` /
+`send_request_with_no_structure` を `required=False` で包んだ（ローダの保留機構が
+モジュールの出現時に当て、from-import の別名も張り替える）。オフライン検証は
+70件全通（クラウド経路6件を追加: 両関数で置換・`message=` のキーワード渡し・
+抽選1回・site 付きログ）。
+
+**2026-08-08 追記2（v3）: 無料 Gemini の実機で経路を実測したところ、クラウドは
+プロバイダごとにモジュールが分かれていた。** Gemini のセッションでは
+`request_llm_inference_gemini_test_streaming` だけが import され、v2 が包んだ
+any_server も、ローカル用の llama_cpp_completion も `[not loaded]`（recon dump で
+確認。つまり **v2 でも Gemini には効いていなかった**。`[REPLACE]` も出ていない）。
+`llm_manager.send_request` は gemini モジュール由来の別名だったことも dump で確定
+（alias_scan が効く前提が成立）。v3 は境界の `send_request*` を gemini /
+any_server の両モジュールぶん包む形に一般化した。境界のシグネチャは
+`send_request(manager_name, message, structure, model=None, ...)` を実測済み。
+オフライン検証は 72 件全通（Gemini 経路2件を追加）。
+
+残る限界: 境界で見えるのは呼び出し側が渡した `message` だけで、send_request の
+**中で**足される部分には当たらない。Gemini では `SCHEMA_IN_PROMPT = True` の
+スキーマ文（`_schema_instruction`）がこれに当たる（GAME.md §2.12）。旧ルールの
+「JSON安定化」タブはローカルのスキーマ repr を狙ったものなので、Gemini では
+そもそも対象が違う（実害は要観察）。any_server は依然未実測（OpenAI 互換と推定）。
+
+**同日、Gemini 実機で v3 の発火を確認して決着。** 再注入後の armed 行に gemini の
+2点が載り、会話1回で `[REPLACE] gemini_test_streaming`（構造化）と
+`gemini_test_streaming_ns`（無構造）の両境界から計6件が出た。当たったのは同梱ルール
+（「口調: None →指定なし」「始めて→初めて」「入力ルールの追記」等）で、エラー・
+クラッシュ記録は無し。クラウド（Gemini・APIキー）は実機確認済みになった。
+
+**2026-08-08 追記3（v4）: プロバイダに依存しない形に置き換えた。** UI の選択肢には
+Gemini のほかに OpenAI API / Claude API / Alibaba Cloud API / 任意 OpenAI 互換
+サーバーがあり、モジュール名指しでは選択肢が増えるたびに素通りが再発する。v4 は
+送信モジュールではなく **`llm_manager:send_request*`（使われる送信モジュールからの
+from-import 別名）を包む**（GAME.md §2.12 のパターン）。alias_scan が同じ関数を持つ
+全モジュールを張り替えるので、モジュール名を知らないまま全プロバイダに届く。
+site はラップした元関数の `__module__` から採るため、ログのプロバイダ名は
+v3 と変わらない（`[REPLACE] gemini_test_streaming` 等）。**ローカル実行では
+この地点は素通し**（send_request は内部で別スレッドに降りるため印が届かず、
+`chat` 側と二重抽選になる。llama.cpp の送信モジュールが import されているかで
+見分ける）。オフライン検証は 72 件全通（v3 のクラウド8件を v4 の内容に差し替え:
+両関数・キーワード渡し・抽選1回・site 名・ローカル時の素通し）。
+
+**同日、v4 も Gemini 実機で確認して決着。** 再注入（armed 行が
+`llm_manager:send_request, llm_manager:send_request_with_no_structure` に変わる・
+32/32 適用）ののち、会話で `[REPLACE] gemini_test_streaming` / `_ns` が両境界から
+発火。site 名が出ている＝`__module__` からのプロバイダ名導出も実機で機能。
+なお v4 差し替え後に**再注入せず**会話だけした時間帯があり、そこでも `[REPLACE]` は
+出ていた（＝プロセスに残った v3 のフック）。**注入の版は armed 行の形でしか
+見分けられない**（v3: `request_llm_inference_...`、v4: `llm_manager:...`）。
+ローカル実機は従来どおり `[REPLACE] chat` が出て `llm_manager` 側からは何も
+出ないのが正（こちらの実機確認は未実施のまま）。
+
+**同日、OpenAI API でも実機確認。** `[REPLACE] openai` が発火。site 名から
+OpenAI 用モジュールは `request_llm_inference_openai` と判明（111_ は名指し
+していないモジュールに自動で届いた＝プロバイダ非依存設計の実証）。境界の
+シグネチャは Gemini と同形（GAME.md §2.12 に内部の dump を記録）。
+なおこの回も最初は**ゲーム側の再起動／設定切替後に再注入が抜けていて**、
+その間のプレイは 111 なしで動いていた（`[RULES]` が出ていないことで判別）。
+プロバイダを切り替えたら再注入、が運用の決まり。
+
+**2026-08-08 追記4（v5）: Claude API の試行で「別名の後生え」の取りこぼしが
+見つかった。** 起動直後の注入で armed が nothing になり、ローダの未解決報告に
+`scripts.llm.llm_manager:send_request <- 111_llm_prompt_replace (resolved to
+None)` が出た。同じ apply で `llm_manager:conversation_starter` の wrap は
+成立している＝ llm_manager は import 済みで、**send_request だけが無い**
+（プロバイダの初期化時に生える）。ローダの保留機構はモジュール単位なので
+属性の後生えは当て直されず、このセッションの置換は素通りだった。v5 で
+「無かった別名を5秒ごとに見張り、生えたら包む」を追加（1時間で諦める・
+`ctx.superseded()` で注入し直し時に降りる。オフライン 76 件全通、後生え4件を
+追加）。
+
+**同日、Claude API も実機で発火確認。** モジュールは `request_llm_inference_claude`
+（`anthropic` SDK 直・既定 `claude-sonnet-5`。内部は GAME.md §2.12）。再注入で
+armed が即時成立し（このときはゲームの初期化済み＝別名が既に居た）、会話1回で
+`[REPLACE] claude` / `claude_ns` が両境界から発火。これで実機確認は
+**Gemini / OpenAI / Claude の3プロバイダ**になった。残りは Alibaba と
+任意 OpenAI 互換サーバー（= any_server と推定）が未実測なだけで、設計上は同じ
+別名を通るので届くはず。
+
+**同日、ローカル（llama.cpp）でも実機確認して全て決着。** この1回で残っていた
+2点が同時に取れた:
+
+- **v5 の「後生えの見張り」が実機で発火。** 注入（11:56:44）時点では
+  `llm_manager` に `send_request` が無く、25秒後に `late-armed on
+  scripts.llm.llm_manager:send_request` / `send_request_with_no_structure` が
+  出て見張りが包んだ。**別名の後生えはローカルでも起こる**（クラウド固有では
+  ない）ことも確定
+- **ローカルの置換は従来どおり `chat` 側で1回だけ。** 会話で
+  `[REPLACE] chat` が出て、`llm_manager` 境界からは何も出ない＝ローカル素通しの
+  歯止め（二重抽選の防止）が実機で機能している
+
+これで 111_ v5 は、ローカルと Gemini / OpenAI / Claude の4経路すべてで実機確認
+済み。未実測は Alibaba と任意 OpenAI 互換サーバーだけ（同じ別名を通る設計）。
 
 ### 2.25 `112_` 本文の行間（2026-07-31、画面から採寸）
 
@@ -1703,7 +1801,7 @@ app か」を見ていた。`hasattr` を使わないという規則（TECH.md �
 | 残骸の掃除（`prune_stale`）を持つ MOD の文言の重複 | `301_` / `302_` / `305_` / `307_` / `309_` の `OUR_LABELS` に汎用語・他 MOD との重複は無し |
 | 自前ボタンを挿すのに `prune_stale` を通していない MOD | 無し（挿す6本すべてが通している） |
 | 名前・ID がそのままファイルパスになる箇所 | MOD が `out/` へ書くファイル名は全て定数。唯一の可変（`311_` の世界名）は `safe_world_filename` を通している |
-| LLM 経路のフック地点 | `102_` は `_apply_chat_template` 1点だが、そこは実機で発火が確認済み（§2.3 の DEDUP 行）。`105_` は `chat` + `payload`、`111_` は3点すべて。どれも二重に効いても結果が変わらない書き方 |
+| LLM 経路のフック地点 | `102_` は `_apply_chat_template` 1点だが、そこは実機で発火が確認済み（§2.3 の DEDUP 行）。`105_` は `chat` + `payload`、`111_` はローカル3点＋クラウド（`any_server:send_request*`）2点。どれも二重に効いても結果が変わらない書き方。クラウドでは素通りになるが、実害があるのは `103_` と `305_` の書き換えだけ（`102_` はゲーム側修正済み・`105_` は対象がローカル固有。GAME.md §1.8。`301_` と `305_` の判定差し替えはマネージャ層なので効く） |
 | 116_ の「他人が管理する状態を控えて書き戻す」 | 対象を帯の直接の子に限ってあり（`panel.coverable`）、ゲームの選択肢は掴まない |
 
 ### 2.34 本文の表示速度（2026-08-03、決着・修正まで確認）

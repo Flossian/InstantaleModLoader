@@ -31,6 +31,7 @@ import shutil
 import sys
 import tempfile
 import threading
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, os.pardir))
@@ -118,6 +119,37 @@ class FakeClient(object):
         return {"content": "ok"}
 
 
+class FakeLlmManager(object):
+    """`llm_manager` が持つ `send_request*` の別名の偽物。
+
+    本物はモジュール関数なので **self が無い**。インスタンス属性の関数として
+    持たせて、`FakeCtx.wrap` もこちらには self を差し込まない。
+    `__module__` は from-import 元（＝送信モジュール）の名前になるので、
+    偽物にもそれを付ける。MOD はここから site（プロバイダ名）を採る。
+    """
+
+    BACKEND = "scripts.llm.request_llm_inference_gemini_test_streaming"
+
+    def __init__(self, backend=None):
+        self.sent = []          # 実際に送られた本文（リストのリスト）
+
+        def send_request(manager_name, message, structure,
+                         model=None, max_tokens=30000, timeout=None):
+            self.sent.append([m.get("content") or "" for m in message])
+            return {"content": "ok"}
+
+        def send_request_with_no_structure(manager_name, message,
+                                           model=None, max_tokens=30000,
+                                           timeout=30):
+            self.sent.append([m.get("content") or "" for m in message])
+            return "ok"
+
+        send_request.__module__ = backend or self.BACKEND
+        send_request_with_no_structure.__module__ = backend or self.BACKEND
+        self.send_request = send_request
+        self.send_request_with_no_structure = send_request_with_no_structure
+
+
 class FakeCtx(object):
     """`apply(ctx)` が使うぶんだけの ctx。`wrap` は偽クライアントに当てる。
 
@@ -128,6 +160,7 @@ class FakeCtx(object):
 
     def __init__(self, client, out_dir, mod_dir=None):
         self.client = client
+        self.manager = FakeLlmManager()     # llm_manager の別名（クラウド経路）
         self.out_dir = out_dir
         self.runtime_dir = os.path.join(out_dir, "runtime")
         self.mod_dir = mod_dir or os.path.join(out_dir, "mod")
@@ -150,7 +183,22 @@ class FakeCtx(object):
         return path
 
     def wrap(self, target, required=True):
-        name = target.rsplit(".", 1)[-1]
+        name = target.partition(":")[2].rsplit(".", 1)[-1]
+
+        # llm_manager の別名はモジュール関数なので self を差し込まず、
+        # インスタンス（＝偽モジュール）の属性を入れ替える。
+        if "llm_manager" in target:
+            manager = self.manager
+
+            def decorate_manager(fn):
+                original = getattr(manager, name)
+
+                def wrapper(*args, **kwargs):
+                    return fn(original, *args, **kwargs)
+
+                setattr(manager, name, wrapper)
+                return fn
+            return decorate_manager
 
         def decorate(fn):
             original = getattr(type(self.client), name)
@@ -163,8 +211,13 @@ class FakeCtx(object):
         return decorate
 
     def resolve(self, target):
-        name = target.rsplit(".", 1)[-1]
+        name = target.partition(":")[2].rsplit(".", 1)[-1]
+        if "llm_manager" in target:
+            return self.manager, name, getattr(self.manager, name, None)
         return type(self.client), name, getattr(type(self.client), name, None)
+
+    def superseded(self):
+        return False              # テスト中に注入し直しは起きない
 
 
 def revert_client():
@@ -402,6 +455,133 @@ def test_paths(tmp):
     client3, _ctx3, _path = arm(RULES, out_dir, roll=lambda d: 0)
     client3._post_with_model_loading_retry("/completion", {"prompt": "古い言い方"})
     check("経路: payload 単体でも替わる", client3.sent == ["新しい言い方"], client3.sent)
+
+
+def test_cloud_path(tmp):
+    """外部APIキー経路でも置換されること。
+
+    クラウドは LlamaCppClient を通らず、送信モジュールもプロバイダごとに違う
+    （v1 で素通りの報告 → v3 の Gemini 実測を経て、v4 からプロバイダに依存しない
+    `llm_manager:send_request*` の別名を包む）。境界で見えるのは第2引数の
+    message だけ。site はラップした元関数の `__module__` から採る。
+    """
+    out_dir = os.path.join(tmp, "cloud")
+    os.makedirs(out_dir, exist_ok=True)
+
+    _client, ctx, _path = arm(RULES, out_dir, roll=lambda d: 0)
+    ctx.manager.send_request("quest_referee",
+                             [{"role": "user", "content": "古い言い方をする"}],
+                             object())
+    check("クラウド: send_request の message が替わる",
+          ctx.manager.sent == [["新しい言い方をする"]], ctx.manager.sent)
+
+    ctx.manager.send_request_with_no_structure(
+        "narrator", [{"role": "system", "content": "半分の話"},
+                     {"role": "user", "content": "古い言い方"}])
+    check("クラウド: send_request_with_no_structure でも替わる",
+          ctx.manager.sent[-1] == ["替わったの話", "新しい言い方"],
+          ctx.manager.sent[-1])
+    check("クラウド: 例外を握り潰していない", not ctx.errors, ctx.errors)
+
+    # site は送信モジュール名から request_llm_inference_ を落としたもの。
+    log = read_log(out_dir)
+    check("クラウド: [REPLACE] がプロバイダ名の site 付きで残る",
+          "[REPLACE] gemini_test_streaming " in log
+          and "[REPLACE] gemini_test_streaming_ns " in log, log)
+
+    # message= のキーワード渡しでも同じ（未実測のモジュールに備えて、位置に
+    # 決め打ちしていないことを固定する）。
+    _client2, ctx2, _path = arm(RULES, out_dir, roll=lambda d: 0)
+    ctx2.manager.send_request("quest_referee",
+                              message=[{"role": "user", "content": "古い言い方"}],
+                              structure=object())
+    check("クラウド: message= のキーワード渡しでも替わる",
+          ctx2.manager.sent == [["新しい言い方"]], ctx2.manager.sent)
+
+    # 抽選は1回だけ（確率付きルールの分母が経路の数で増えないこと）。
+    draws = []
+
+    def counting_roll(denom):
+        draws.append(denom)
+        return 0
+
+    _client3, ctx3, _path = arm("#tab:t\n半分=>替わった=>50\n", out_dir,
+                                roll=counting_roll)
+    ctx3.manager.send_request("m", [{"role": "user", "content": "半分の話"}],
+                              object())
+    check("クラウド: 抽選は1回", len(draws) == 1, draws)
+    check("クラウド: 置換は1度だけ当たる",
+          ctx3.manager.sent == [["替わったの話"]], ctx3.manager.sent)
+
+    # ローカル実行（llama.cpp の送信モジュールが import されている）では、この
+    # 地点では何もしない。send_request は内部で別スレッドに降りるため印が届かず、
+    # LlamaCppClient 側の3点と二重に抽選してしまうから。
+    del draws[:]
+    _client4, ctx4, _path = arm("#tab:t\n半分=>替わった=>50\n", out_dir,
+                                roll=counting_roll)
+    sys.modules[mod.LOCAL_REQUEST_MODULE] = object()      # 印だけ。中身は見ない
+    try:
+        ctx4.manager.send_request("m", [{"role": "user", "content": "半分の話"}],
+                                  object())
+    finally:
+        del sys.modules[mod.LOCAL_REQUEST_MODULE]
+    check("クラウド: ローカル実行ではこの地点で抽選しない", not draws, draws)
+    check("クラウド: ローカル実行ではこの地点で置換しない",
+          ctx4.manager.sent == [["半分の話"]], ctx4.manager.sent)
+
+
+def test_alias_appears_late(tmp):
+    """`llm_manager` の別名が注入の後から生えても包まれること。
+
+    起動直後の注入では llm_manager に send_request がまだ無い（プロバイダの
+    初期化時に生える。Claude 選択の実機で観測・2026-08-08）。無かったぶんは
+    見張りが5秒ごとに（テストでは短縮）当て直す。
+    """
+    out_dir = os.path.join(tmp, "late")
+    mod_dir = os.path.join(out_dir, "mod")
+    os.makedirs(mod_dir, exist_ok=True)
+    with io.open(os.path.join(mod_dir, "llm_replacements.default.txt"),
+                 "w", encoding="utf-8") as fh:
+        fh.write(RULES)
+
+    revert_client()
+    mod.LOG_REPLACE = True
+    mod.LOG_RULES = True
+    mod._roll = lambda denom: 0
+    old_poll = mod.ALIAS_POLL_SECONDS
+    mod.ALIAS_POLL_SECONDS = 0.02
+    try:
+        ctx = FakeCtx(FakeClient(), out_dir)
+        send = ctx.manager.send_request
+        send_ns = ctx.manager.send_request_with_no_structure
+        del ctx.manager.send_request
+        del ctx.manager.send_request_with_no_structure
+
+        mod.apply(ctx)
+        check("後生え: 無い間は属性を作らない",
+              not hasattr(ctx.manager, "send_request"), vars(ctx.manager).keys())
+
+        # プロバイダの初期化に相当。生えたら見張りが包む。
+        ctx.manager.send_request = send
+        ctx.manager.send_request_with_no_structure = send_ns
+        deadline = time.time() + 2.0
+        while time.time() < deadline and (
+                ctx.manager.send_request is send
+                or ctx.manager.send_request_with_no_structure is send_ns):
+            time.sleep(0.01)
+        check("後生え: 生えたら両方とも包まれる",
+              ctx.manager.send_request is not send
+              and ctx.manager.send_request_with_no_structure is not send_ns,
+              "watcher did not arm in time")
+
+        ctx.manager.send_request(
+            "m", [{"role": "user", "content": "古い言い方"}], object())
+        check("後生え: 置換が効く",
+              ctx.manager.sent == [["新しい言い方"]], ctx.manager.sent)
+        check("後生え: 例外を握り潰していない", not ctx.errors, ctx.errors)
+    finally:
+        mod.ALIAS_POLL_SECONDS = old_poll
+        reset_settings()
 
 
 def test_single_pass(tmp):
@@ -708,6 +888,8 @@ def main():
         test_regex()
         test_probability()
         test_paths(tmp)
+        test_cloud_path(tmp)
+        test_alias_appears_late(tmp)
         test_single_pass(tmp)
         test_self_contained(tmp)
         test_not_shipped()

@@ -238,7 +238,7 @@ SAVE_OBFUSCATION_KEY = b'Instantale_Save_Key_2026'              （§2.16）
 | | |
 |---|---|
 | `scripts.steam.server_process` | Steam 認証と課金。`auth_steam_and_get_jwt` / `get_ticket_hex` / `get_entitlement` / `subscription_start` / `subscription_wait` / `cancel_contract` / `upgrade_start` |
-| クラウドLLMのサブスクリプション | `hud_auto_configuration:AutoConfigurationScreen.use_cloud_subscription_process` / `hud_option:OptionAIScreen.show_subscription_screen` / `OptionLLMScreen.get_cloud_llm_list(cloud_billing_type=None)` / `check_device_info:get_setting_for_cloud_llm` |
+| クラウドLLMのサブスクリプション | `hud_auto_configuration:AutoConfigurationScreen.use_cloud_subscription_process` / `hud_option:OptionAIScreen.show_subscription_screen` / `OptionLLMScreen.get_cloud_llm_list(cloud_billing_type=None)` / `check_device_info:get_setting_for_cloud_llm`。**サブスクはゲーム側が未実装**（2026-08-08 時点。画面と関数はあるが生きているのは APIキー方式だけ。クラウド経路の検証は APIキーで行えば足りる） |
 | 装備の強化 | `__main__:EquipmentReinforcementStart` / `EquipmentReinforcementManager`（`calculate_modification(item_type, item_price)`）/ `InstantaleApp.reinforce_equipment` / `get_upgrade_equipment_price` / `toggle_reinforcement_inventory_window`、HUD 側は `set_reinforce_equipment_button_callback` / `toggle_reinforcement_inventory_visibility` |
 | `Item` に `upgrade_level` | `Item.__init__(..., grid_pos=None, upgrade_level=0)` |
 
@@ -321,7 +321,7 @@ main_024 のアナウンスには入っていない＝直っていない。ど�
   プロンプト本文に埋め込まれたスキーマの repr（§2.12）で、ゲームが直した
   「再生成時にスキーマが重複・増幅する」とは別物。プロンプト全体も小さくなっていて
   （`total_chars` が 580〜2164）、両方が効いた状態に見える
-- クラウドLLM経路は依然として未検証（§1.5 の注記のとおり）
+- クラウドLLM経路は素通りが確定し、`111_` は v4 で対処済み（§1.8・§2.12）
 
 > 0 件だけでは「不要になった」ことの証拠にならない。その操作を通していなければ、
 > 出番が来ていないのと区別が付かない。`102_` は発火していた操作を実際に通し、
@@ -350,11 +350,29 @@ main_024 のアナウンスには入っていない＝直っていない。ど�
 
 ### 1.8 影響を確かめていないこと（main_023）
 
-- クラウドLLM経路にプロンプト系 MOD が効くかは未確認。`102_` / `103_` / `105_` と
-  `301_` / `305_` は `llama_cpp_runtime_completion:LlamaCppClient.chat` と
-  `request_llm_inference_llama_cpp_completion:send_request*`（＝ローカルの llama.cpp）を
-  掴んでいる。サブスクリプション経路が別の送信口を通るなら、そこは素通りになる。
-  ローカル実行では従来どおり効いている（§1.6）
+- クラウドLLM経路はプロンプト系 MOD が**素通りになることが確定した**
+  （2026-08-08・APIキー利用者から「`111_` の置換が効かない」との報告。同日、
+  無料 Gemini の実機で経路を実測）。経路はプロバイダごとの
+  `request_llm_inference_*`（Gemini は `_gemini_test_streaming`）で、
+  `LlamaCppClient` を通らない（§2.12）。`111_` は v3 で gemini / any_server の
+  境界 `send_request*` を包み、Gemini 実機で `[REPLACE]` の発火を確認。v4 で
+  プロバイダに依存しない `llm_manager` の別名包みに置き換えた（OpenAI / Claude /
+  Alibaba / 任意互換サーバーもモジュール名を知らないまま届く。§2.12 のパターン。
+  v4 も Gemini 実機で発火確認済み・同日）。境界で見えるのは
+  呼び出し側が渡した `message` だけで、**send_request の中で足される部分
+  （Gemini なら `_schema_instruction` のスキーマ文）には当たらない**。
+  `102_` / `103_` / `105_` はクラウドでは素通りだが、**実害があるのは `103_` だけ**:
+  `102_` の対象バグはゲーム本体（main_023）で発生源から修正済み（§1.6。公式文言も
+  「ローカルLLM使用時」で、Gemini の再生成は壊れた部分木だけ修復する別実装なので
+  重複の仕組み自体が無いとみられる）。`105_` が削るスキーマ repr の埋め込みは
+  ローカル送信モジュール側の行いで、Gemini は `_schema_instruction` という別実装
+  （§2.12）＝対象がクラウドの本文に無いとみられる。`103_` の対象
+  （`quest_event_log` の肥大）はマネージャ層で起きるのでクラウドでも育つ＝素通りの
+  実害あり。`305_` は半分だけ素通り（プロンプトの書き換えは `LlamaCppClient.chat`
+  なので効かず、ミニクエストが普通の討伐依頼として生成される。撤退→達成の
+  差し替えは `llm_manager:quest_referee*` なので効く）。`301_` は `LlamaCppClient`
+  を使っておらず（差し込みは `llm_manager_world_generate:random_quest_generator` の
+  引数へ）、クラウドでも効く。ローカル実行では従来どおり効いている（§1.6）
 - 自由生成施設（`FreeFacilityManager`）の最中に `300_` の施設イベントが乗るか未確認。
   どちらも「施設に入ったとき」に働くので、二重に始まる余地がある（§2.5）
 - 四体以上の敵との戦闘を更新後にまだ通していない。公式修正が入った箇所なので、
@@ -1051,9 +1069,64 @@ areas["7"]["bgm"] = "Assets/sounds/musics/town/solemn/Ambient 7 Loop.mp3"
 llama_cpp_runtime_completion:LlamaCppClient.chat                             上流
 llama_cpp_runtime_completion:LlamaCppClient._apply_chat_template             messages
 llama_cpp_runtime_completion:LlamaCppClient._post_with_model_loading_retry   payload
-scripts.llm.request_llm_inference_llama_cpp_completion:send_request*         リクエスト
+scripts.llm.request_llm_inference_llama_cpp_completion:send_request*         リクエスト（ローカル）
+scripts.llm.request_llm_inference_gemini_test_streaming:send_request*        リクエスト（Gemini・実測）
+scripts.llm.request_llm_inference_openai:send_request*                       リクエスト（OpenAI・実測）
+scripts.llm.request_llm_inference_claude:send_request*                       リクエスト（Claude・実測）
+scripts.llm.request_llm_inference_any_server:send_request*                   リクエスト（任意 OpenAI 互換サーバー用と推定・未実測）
 scripts.llm.llm_manager:*                                                    マネージャ群
 ```
+
+- **外部APIキー（クラウド）はプロバイダごとの `request_llm_inference_*` を通り、
+  `LlamaCppClient` を一切通らない**。使われるモジュールは1つだけが import され、
+  残りは `sys.modules` に載らない（Gemini セッションの実測・2026-08-08: gemini だけが
+  載り、llama_cpp_completion も any_server も `[not loaded]`）。UI の選択肢は
+  Gemini / OpenAI API / Claude API / Alibaba Cloud API / 任意 OpenAI 互換サーバー。
+  実測済みは Gemini（`_gemini_test_streaming`）・OpenAI（`_openai`）・
+  Claude（`_claude`）。Alibaba は未実測、any_server が任意互換サーバー用と
+  推定される。`LlamaCppClient` に仕掛けたプロンプト系 MOD はクラウドでは
+  素通りになる（`111_` で実際に報告があった）
+- OpenAI モジュールの内部（実測・2026-08-08）: 境界は Gemini と同形
+  （`send_request(manager_name, message, structure, model=None, max_tokens=30000,
+  timeout=None)`）。`openai.OpenAI` クライアント直で、`default_model =
+  'gpt-5.4-nano'`。Gemini に在ったストリーミング収集・JSON修復ループ・
+  `SCHEMA_IN_PROMPT` は**無い**（構造化出力を API に任せる作りとみられる＝
+  スキーマ文のプロンプト埋め込みも無いとみられる）。`save_output_log` /
+  `calculate_price` / `total_cost` は Gemini と同名で持つ
+- Claude モジュールの内部（実測・2026-08-08）: OpenAI 版と同構成。
+  `anthropic.Anthropic` クライアント直で、`default_model = 'claude-sonnet-5'`。
+  境界のシグネチャも同じ。ストリーミング収集・修復ループ・スキーマ埋め込みは無い
+- **プロバイダに依存しない仕掛け方（`111_` v4 のパターン）**: 送信モジュールを
+  名指しせず、`scripts.llm.llm_manager:send_request` /
+  `:send_request_with_no_structure` を包む。この2つは**使われる送信モジュールから
+  from-import した別名**（Gemini セッションの recon で `__module__` が gemini 側を
+  指すことを確認）なので、alias_scan（既定有効）が同じ関数を持つ全モジュール
+  （送信モジュール本体・`llm_manager_battle` などの別名）を張り替え、どの
+  プロバイダでも1箇所で効く。プロバイダ名はラップした元関数の `__module__` から
+  採れる。**ただしローカル実行では、この地点で本文を触ってはならない**。
+  `send_request` は内部で別スレッド（`send_request_on_id`）に降りてから
+  `LlamaCppClient` を呼ぶため、スレッド頼みの一回制御が効かず、`chat` 側の
+  フックと二重適用になる（`111_` は llama.cpp の送信モジュールが import されて
+  いるかで見分けて、ローカル時は素通ししている）。**もう1つの罠: この別名は
+  プロバイダの初期化時に生える。** 起動直後に注入すると `llm_manager` は
+  import 済みなのに `send_request` が**まだ無い**（Claude 選択の実機で観測・
+  2026-08-08。同じ apply の中で `llm_manager:conversation_starter` の wrap は
+  成立していたので、モジュールの有無ではなく属性の有無）。ローダの保留機構は
+  **モジュール単位**で、属性の後生えは当て直さない。`111_` v5 は無かった別名を
+  5秒ごとに見張って、生えた時点で包む（1時間で諦める・注入し直されたら
+  `ctx.superseded()` で降りる）
+- Gemini モジュールの内部（APIキー環境の recon dump・2026-08-08）:
+  `send_request(manager_name, message, structure, model=None, max_tokens=30000,
+  timeout=None)` / `send_request_with_no_structure(..., timeout=30)`。
+  `google.genai` の `Client` を直接使い、ストリーミングで受けて
+  （`_stream_and_collect`）、pydantic 検証に失敗した部分木だけを LLM に修復させる
+  ループを持つ（`_validate_with_repair` / `_regenerate_subtree`、最大3周・
+  修復用の system 文は `_REPAIR_SYSTEM_LINES`）。`SCHEMA_IN_PROMPT = True` で
+  スキーマ文（`_schema_instruction`）を **send_request の中で**足すので、境界の
+  `message` には入っていない。system 文は `_build_config(system_text, ...)` 経由
+  （Gemini の system_instruction）。`save_output_log` はローカル版と同名・同位置。
+  `default_model = 'gemini-3.5-flash'`、`calculate_price` / `total_cost` で
+  料金も追っている。他プロバイダを実測したら同様に recon dump を取ること
 
 - ストリーミング経路は `_post_with_model_loading_retry` を通らない。`prompt` と
   `json_schema` が揃う唯一の地点はそこだが、実際に流れるのは `chat` 側。位置が確信
