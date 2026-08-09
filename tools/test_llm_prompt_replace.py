@@ -534,7 +534,7 @@ def test_alias_appears_late(tmp):
     """`llm_manager` の別名が注入の後から生えても包まれること。
 
     起動直後の注入では llm_manager に send_request がまだ無い（プロバイダの
-    初期化時に生える。Claude 選択の実機で観測・2026-08-08）。無かったぶんは
+    初期化時に生える）。無かったぶんは
     見張りが5秒ごとに（テストでは短縮）当て直す。
     """
     out_dir = os.path.join(tmp, "late")

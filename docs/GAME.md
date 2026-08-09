@@ -1534,38 +1534,6 @@ Character.calculate_current_gained_exp_on_display(gained)  表示用
 包んでいないことを確かめる。包んでいると、表に入るのはローダのラッパのコード
 オブジェクトになる。これは全パッチが共有しているので誤爆する（`306_` が踏んだ）。
 
-### 2.19 体力（スタミナ）は `physical_integrity`
-
-`Character.physical_integrity` / `max_physical_integrity`（`__init__` の既定は
-どちらも 100）。戦闘のHP（`current_hp` / `max_hp`）とは別物。
-
-同じプレイヤーを1晩追った実測（2026-08-01、`out/events.log` のダンプ3点）:
-
-| 時刻 | `physical_integrity` | `max_hp` | `exhausted` |
-|---|---|---|---|
-| 01:47 | 100 | 1560（`original_max_hp` と同じ） | `False` |
-| 01:49 | 50 | 1365 | `True` |
-| 02:03 | 0 | 1170 | `True` |
-
-- 土地の移動やクエストで減る。回復は医療施設
-  （`MedicalTreatmentManager(app, treatment_price)` /
-  `scripts.functions:get_heal_physical_integrity_barden(value)`）
-- 体力が減ると最大HPが下がる（1560 → 1365 → 1170。`original_max_hp` は
-  1560 のまま）。式は特定していないが、`physical_integrity` が上限を削る側
-- `exhausted`（bool）は 50/100 の時点で既に `True`。どの閾値で立つかは未特定。
-  減る量・回復量は未確認
-- **上限はレベルで伸びる**（`get_max_physical_integrity(level)`）。同一プレイヤーを
-  追ったセーブの実測 ― レベル 1→10 / 5→11 / 8→12 / 15→15 / 22→19 / 25→22 /
-  30→26 / 41→34 / 49→39 / 50→40 / 55→42 / 58→43 / 73→50。式は未特定だが、
-  **`100` は既定値（`__init__`）で、実際に遊んで到達する値ではない**。
-  レベルに対して上限が合っていないセーブは、どこかが壊れている合図になる
-  （VERIFICATION.md §2.36 でこれを使って新規キャラのレベル60を切り分けた）
-- `current_hp` が `max_hp` を超えている状態を観測している（2591 > 1560）。
-  戦闘に入る時点で丸めていると思われるが未確認。HP を条件に使うなら
-  `current_hp <= max_hp` を前提にしないこと
-- 「体力が足りないなら断る」を書くならここを見る（`307_` の
-  `STAMINA_MIN_PERCENT`）
-
 ### 2.18 エリア移動（土地から土地へ）
 
 `out/events.log` の実測（2026-07-28 / 07-30 / 07-31、計4回）と `targets.txt`:
@@ -1605,6 +1573,38 @@ process_choice(AreaMoveManager,       choice_text='馬車(1000G)')       [MainTh
   「ゲーム native の待機表示」の入口（`206_` が発火を確認済み）
 - LLM 側に `llm_manager:area_move_rejector(character_life_log, player,
   character_instance, worldview)` がある。同行者が移動を拒む経路と思われるが未検証
+
+### 2.19 体力（スタミナ）は `physical_integrity`
+
+`Character.physical_integrity` / `max_physical_integrity`（`__init__` の既定は
+どちらも 100）。戦闘のHP（`current_hp` / `max_hp`）とは別物。
+
+同じプレイヤーを1晩追った実測（2026-08-01、`out/events.log` のダンプ3点）:
+
+| 時刻 | `physical_integrity` | `max_hp` | `exhausted` |
+|---|---|---|---|
+| 01:47 | 100 | 1560（`original_max_hp` と同じ） | `False` |
+| 01:49 | 50 | 1365 | `True` |
+| 02:03 | 0 | 1170 | `True` |
+
+- 土地の移動やクエストで減る。回復は医療施設
+  （`MedicalTreatmentManager(app, treatment_price)` /
+  `scripts.functions:get_heal_physical_integrity_barden(value)`）
+- 体力が減ると最大HPが下がる（1560 → 1365 → 1170。`original_max_hp` は
+  1560 のまま）。式は特定していないが、`physical_integrity` が上限を削る側
+- `exhausted`（bool）は 50/100 の時点で既に `True`。どの閾値で立つかは未特定。
+  減る量・回復量は未確認
+- **上限はレベルで伸びる**（`get_max_physical_integrity(level)`）。同一プレイヤーを
+  追ったセーブの実測 ― レベル 1→10 / 5→11 / 8→12 / 15→15 / 22→19 / 25→22 /
+  30→26 / 41→34 / 49→39 / 50→40 / 55→42 / 58→43 / 73→50。式は未特定だが、
+  **`100` は既定値（`__init__`）で、実際に遊んで到達する値ではない**。
+  レベルに対して上限が合っていないセーブは、どこかが壊れている合図になる
+  （VERIFICATION.md §2.36 でこれを使って新規キャラのレベル60を切り分けた）
+- `current_hp` が `max_hp` を超えている状態を観測している（2591 > 1560）。
+  戦闘に入る時点で丸めていると思われるが未確認。HP を条件に使うなら
+  `current_hp <= max_hp` を前提にしないこと
+- 「体力が足りないなら断る」を書くならここを見る（`307_` の
+  `STAMINA_MIN_PERCENT`）
 
 ### 2.20 手配度（`area_history` の `lawfulness`）
 

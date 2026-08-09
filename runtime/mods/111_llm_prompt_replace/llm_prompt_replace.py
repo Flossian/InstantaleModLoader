@@ -794,13 +794,12 @@ def apply(ctx):
             end_pass(previous)
 
     # ---------------------------------------------- 外部APIキー（クラウド）経路
-    # クラウドは LlamaCppClient を通らないので、上の3つだけでは素通りになる
-    # （利用者の報告で判明・2026-08-08）。送信モジュールはプロバイダごとに違う
-    # うえコンパイル済みなので、モジュール名に依存しない `llm_manager` の別名を
-    # 包む（docstring「どこに仕掛けるか」）。本文は第2位置引数（または message=）の
-    # リスト。Gemini とローカルで
-    # `send_request(manager_name, message, structure, ...)` を実測済みだが、
-    # 未実測のモジュールでも壊れないよう、位置に決め打ちせず両方を見る。
+    # クラウドは LlamaCppClient を通らないので、上の3つだけでは素通りになる。
+    # 送信モジュールはプロバイダごとに違ううえコンパイル済みなので、モジュール名に
+    # 依存しない `llm_manager` の別名を包む（docstring「どこに仕掛けるか」）。
+    # 本文は第2位置引数（または message=）のリスト。並びが
+    # `send_request(manager_name, message, structure, ...)` でないプロバイダも
+    # ありうるので、位置に決め打ちせず両方を見る。
     def replace_message_arg(site, args, kwargs):
         """呼び出しの (args, kwargs) の中の message にルールを当てる。"""
         if len(args) >= 2 and isinstance(args[1], list):

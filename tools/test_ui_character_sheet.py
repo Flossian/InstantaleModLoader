@@ -25,7 +25,7 @@
   特性      … ゲームが空のまま置いている箱に入る（元は中央寄せ・広い余白）
   別人      … 人物欄に出ている名前が別人なら、その相手の値を出す
 
-実測（`212_probe_character_sheet` / 2026-08-06、窓 1920x1000）:
+ゲーム側の作り（`212_probe_character_sheet` で採寸。窓 1920x1000）:
 枠 810x497 `pos_hint {center_x:0.37, center_y:0.68}`、
 `character_sheet_empty` は毎回 `text=''`、
 `player.skills` は `{名前: {...}}`、`player.traits` は `[{'name':...}]`、

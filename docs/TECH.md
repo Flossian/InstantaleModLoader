@@ -89,7 +89,7 @@ runtime/mods/load_order.json  適用順（"order"）と無効一覧（"disabled"
 runtime/mods/load_order.local.json  手元だけの適用順。在れば上に優先（git 管理外）
 settings/         利用者が変えたものだけ（無くてよい）
                   mod_settings.json … MOD の設定 / gui.json … ゲームの場所・窓の位置
-                  loader.json … デバッグモード（GUI とローダの両方が読む。§3.2.4）
+                  loader.json … デバッグモード（GUI とローダの両方が読む。§3.2.5）
 out/              ログ・リコン成果物・status.json（最後の boot の結果）。消してよい
 state/            MOD が持つ永続データ（§3.11）。消すと遊びが巻き戻る
 tools/            上記に加え、オフライン検証・セーブ操作（ゲーム不要）
@@ -108,7 +108,7 @@ found["order"]      # 有効な MOD。適用順（依存の制約も解決済み
 found["listed"]     # 一覧に出す順。無効なものも宣言された位置に含む
 found["manifests"]  # 名乗り・api・settings・依存（MOD のコードは import しない）
 found["debug"]      # "debug": true の MOD。デバッグモードが切なら order に居ない
-found["debug_mode"] # デバッグモードが入っているか（settings/loader.json。§3.2.4）
+found["debug_mode"] # デバッグモードが入っているか（settings/loader.json。§3.2.5）
 found["superseded"] # {MOD 名: 取り込まれた版}。伏せ方は debug と同じ
 found["problems"]   # 宣言と実体のずれ。人が読む行
 found["notes"]      # 直すべきずれではない知らせ（手元用の順序ファイルを使っている等）
@@ -181,24 +181,21 @@ MOD が持つ永続データはそもそも `out/` に来ない（`state/`。§3
 python -m compileall -q runtime tools
 python tools/check_mods.py
 
-# 2. 該当するオフライン検証（ゲーム不要）
-python tools/test_patch_registry.py    # ローダ本体（台帳 / on_ready / 名乗り）
-python tools/test_state.py             # state/ の住所と壊れない書き込み
-python tools/test_arrival_event.py     # 300_
-python tools/test_quest_offer.py       # 301_
-python tools/test_party_leave.py       # 302_
-python tools/test_quest_end_guild.py   # 303_
-python tools/test_quest_end_keep.py    # 304_
-python tools/test_item_detail_autosize.py     # 109_
-python tools/test_character_name_sanitize.py  # 110_
+# 2. オフライン検証（ゲーム不要）。CI と同じく全件を走らせる
+Get-ChildItem tools/test_*.py | Sort-Object Name | ForEach-Object {
+  python $_.FullName > $null 2>&1
+  if ($LASTEXITCODE -ne 0) { Write-Host "  FAIL  $($_.BaseName)" }
+  else                     { Write-Host "  ok    $($_.BaseName)" }
+}
+
+# 直している最中は、触った MOD のものだけを直接叩けばよい（落ちた内容が読める）
+python tools/test_patch_registry.py           # ローダ本体（台帳 / on_ready / 名乗り）
+python tools/test_state.py                    # state/ の住所と壊れない書き込み
 python tools/test_llm_prompt_replace.py       # 111_
-python tools/test_ui_text_spacing.py          # 112_
-python tools/test_ui_text_expand.py           # 113_
-python tools/test_ui_input_focus.py           # 114_
-python tools/test_ui_item_list_fit.py         # 115_
 python tools/test_ui_conversation_log.py      # 122_（113_ との並びの取り決めもここで見る）
-python tools/test_office_pardon.py     # 309_
-python tools/test_npc_profile_memory.py       # 311_（`301_` との取り決めもここで見る）
+python tools/test_new_character_level.py      # 123_
+python tools/test_npc_profile_memory.py       # 311_（301_ との取り決めもここで見る）
+python tools/test_event_ability_check.py      # 313_
 
 # 3. ローダ全体が読めるかの確認（フックは大半が保留になるが、import と apply() の失敗が出る）
 python -c "import sys; sys.path.insert(0,'runtime'); import instantale_modloader as l; print(l.boot('out/test/bootcheck'))"
@@ -662,7 +659,7 @@ cp932 のコンソールでも化けず、grep もしやすい。`version` を�
 よい（`104_balance_area_bgm`）。番号を振り直すときは `load_order.json` も直すこと
 （フォルダ名を変えるので）。`check_mods.py` が食い違いを報告する。
 
-#### 3.2.2b MOD どうしは import しない。**ローダの語彙は共有する**
+#### 3.2.3 MOD どうしは import しない。**ローダの語彙は共有する**
 
 ローダは MOD を `instantale_mod_<フォルダ名>` で登録する。名前で掴むと**番号を
 振り直した瞬間に壊れる**ので、MOD が MOD を import することはしない。MOD どうしが
@@ -730,7 +727,7 @@ MOD から import された時点で、ここは `API = 1` と同格の約束に
 
 検査は `tools/test_state.py`。
 
-#### 3.2.3 順序の前提は MOD 自身に宣言させる
+#### 3.2.4 順序の前提は MOD 自身に宣言させる
 
 順序ファイルは利用者が触るもので、こういう前提を知らない。GUI で行をドラッグすれば
 壊せてしまう。文章で書いてあるだけでは守れないので、`mod.json` に書く:
@@ -749,7 +746,7 @@ MOD から import された時点で、ここは `API = 1` と同格の約束に
 | 状況 | 挙動 |
 |---|---|
 | 制約が実体の無い / 無効な MOD を指している | 黙って捨てる。ただし `problems` に報告する |
-| 制約が伏せている MOD を指している | 黙って捨てる。報告もしない（§3.2.4） |
+| 制約が伏せている MOD を指している | 黙って捨てる。報告もしない（§3.2.5） |
 | 制約が循環している | `load_order.json` の並びで動かす（ここで全滅させない）。報告する |
 | `conflicts` の相手が同時に有効 | 報告するだけで落とさない（下記） |
 
@@ -760,7 +757,7 @@ MOD から import された時点で、ここは `API = 1` と同格の約束に
 同梱 MOD の宣言はいまの `load_order.json` の並びをそのまま固定しているので、これを
 入れても適用順は変わらない。変わるのは「壊せなくなった」ことだけ。
 
-#### 3.2.4 開発者向けの MOD を伏せる（デバッグモード）
+#### 3.2.5 開発者向けの MOD を伏せる（デバッグモード）
 
 計測 MOD（`2xx`）は原因を測るための道具で、遊ぶだけなら要らない。それが配布物では
 全部 `order` に載っていて、利用者の環境で常時動いていた。読み取り専用とはいえ、
@@ -1524,7 +1521,7 @@ frames.MISSING             # 「属性が無い」を None と区別する番兵
 | 何度実行しても結果が変わらないように書く | 当て直し（§3.4）と再注入で `apply()` は何度も走る。フックが複数発火しても壊れない形にしておけば、フック選択が致命的でなくなる |
 | 同じ規則を2箇所に実装しない | 探索・適用順は `discover()`、設定は `config.py`。GUI もツールもそれを呼ぶ（§1.3） |
 | 同じ発見を2箇所に書かない | 実機で確かめた事実は `ui.py` / `frames.py` と GAME.md へ。MOD には設計判断だけ（§5） |
-| 順序の前提は文章ではなく `after` / `before` に書く | 文章は守られない。GUI で行を動かせば壊せる（§3.2.3） |
+| 順序の前提は文章ではなく `after` / `before` に書く | 文章は守られない。GUI で行を動かせば壊せる（§3.2.4） |
 | 利用者に触らせる値は `"settings"` に宣言する | コードの定数だけだと GUI から見えず、MOD の更新で消える（§3.8） |
 | `safe=True` を握り潰しの代わりに使わない | 例外はログに残るが見えなくなる。`safe hook failed` が出たら直す（§3.1.5） |
 | `on_ready` に `force=True` を残さない | 開発中の逃げ道。配ると当て直しのたびに副作用が起きる（§3.6） |
@@ -1594,6 +1591,7 @@ frames.MISSING             # 「属性が無い」を None と区別する番兵
 | 「直してよい相手」を素データの名簿で決める | `120_`（`npcs` に id があるものだけ ＝ 敵と魔物とプレイヤーが自然に落ちる。`category` の値を知らずに済む） |
 | 生成物の質が要るところで、生成をやめて用意した表から選ぶ | `120_`（名前は音替えでも LLM でも当たり外れが出た。同梱の名簿から空いているものを引く形にすると、質が入力で決まる。引くたび引き直すが名前は落ち着く ― 結果を素データにも書くので、次に同じ NPC を見たときには衝突が無い。再現性を持たせようと `crc32(id)` で選んだ版は、世界をまたぐと同じ id が同じ名前になった） |
 | LLM の出力の揺れを、正規化した鍵で畳んでから裁く | `120_`（表記ゆれ・修飾語・姓名を落とした「読みの骨」で比べる。モデルを問わない） |
+| 本体が直ったら自動で降りる修正にする | `123_`（「新規開始だから」ではなく「レベルだけが他の値と食い違っているから」直す。食い違いそのものを条件にすると、本体が直った版では1行も動かず、手で編集したセーブも巻き込まない） |
 | 例外を条件付きで握り潰す | `100_`（`hWnd=None` のときだけ。それ以外は再送出） |
 | どのフックが効くか分からないので全部に仕掛ける（重複しても平気な書き方で） | `104_`（BGM）、`105_`（`chat` と `payload`） |
 
@@ -1607,6 +1605,9 @@ frames.MISSING             # 「属性が無い」を None と区別する番兵
 | 外部（プロキシ）でやっていた加工をプロセス内へ移す | `102_` / `103_` / `105_`（判定条件と出力書式を揃える）、`111_`（ルールファイルの書式まで揃えるので、外部で書いたものをフォルダにコピーすれば動く。本文が復号済みなので `\n` / `\uXXXX` / `$1` の読み替えが要る） |
 | 利用者が編むデータファイルを持つ | `111_`（`mods/111_.../llm_replacements.txt` があればそれ、無ければ同梱の `.default.txt`。更新で消えない名前の分け方は §3.1.1。探索も外部参照もしない） |
 | 利用者が書いた規則をリクエストのたびに読み直す | `111_`（更新時刻と大きさを見る。読めない間は前回の規則で続ける＝保存の書き込み途中で壊れない。消えたら置換を止める） |
+| ゲームの式を読まずに、入口の値を動かして結果を動かす | `313_`（確率は `credibility*10+20` が上限で単調なので、判定に入る前の `credibility` を上げれば確率が下がることはない。式を推測せずに済む） |
+| 代入が通ったかを書いた後に読み直して確かめる | `313_`（スキーマ上は整数の項目に端数を入れる。入らなければ整数に丸めて入れ直し、落ちたことを1度だけ記録する。「たぶん通る」で進めない） |
+| 自前の manager 名で LLM に1問だけ聞く | `313_`（`mod_ability_for_action`。記録が `output_data/` に分かれるので後から質を見られる。`timeout` を必ず渡し、失敗したら語句の表へ降り、同じ入力は聞き直さない） |
 | 同じ加工を複数の地点に仕掛けても1回しか効かせない | `111_`（スレッドの印で内側を素通しし、自分が作った文章を覚えて別スレッド経由の二度目も止める。確率付きの加工はこれが無いと成立しない） |
 
 ### 7.3 UI・選択肢・会話
@@ -1640,6 +1641,7 @@ frames.MISSING             # 「属性が無い」を None と区別する番兵
 | ゲームが計算した値を横取りして、別の相手にも同じことをする | `306_`（`Character.gain_exp` を包み、プレイヤーに入った点数を同行者へ写す。式は読まない） |
 | 複数の場面をまたぐ状態を `out/` の控えで持つ（再注入・再起動をまたぐ） | `307_`（移動の予約。段階を `offered` → `armed` → `ready` と進め、前提が崩れたら捨てる） |
 | 「いまその処理の中か」を自分のラッパの印で持つ | `306_`（`execute` を包んでスレッドごとの印。見張る対象を自分で包むので `MethodWatch` は使えない） |
+| 書き直しで落ちる情報を、控えから差し戻す | `311_`（人物像は毎回まるごと書き直され、確定した事実も数ターン後には本文から消える。記録済みの `facts` を抽出プロンプトへ戻すと、落ちた事実が戻り、同じ事実を毎ターン報告し直すのも止まる） |
 | ゲームが出さない数字を、状態の前後の差から出す | `308_`（1手の前後で全員の HP を比べる。ダメージの式も、誰が誰に当てたかの語彙も読まない） |
 | 差分の報告点を何箇所にも置いて二重に出さない | `308_`（台帳方式。「比べる → 出す → 台帳を今の値へ進める」を1つの操作にする。内側が先に報告すれば外側には差が残らないので、報告点をいくつ足しても重ならない） |
 
@@ -1650,6 +1652,8 @@ frames.MISSING             # 「属性が無い」を None と区別する番兵
 | 読み取り専用で経路を特定する | `205_` / `206_` / `207_`（計測は修正より後＝外側に置く） |
 | `__getattr__` トリップワイヤ | `201_` |
 | 20Hz で画面状態の変化だけ拾う | `206_`（waitstate watcher） |
+| 残っている記録だけで先に詰める | `215_`（`output_data/` の LLM 記録とセーブのバックアップを突き合わせ、実機に行く前に候補を潰す。実機で見るのは「判定の瞬間にしか存在しない値」だけになる） |
+| 計測 mod が自分の測定でログを埋めない | `214_`（総当たりの呼び出しは `state["probing"]` で自分の記録から外す。包む前の素の関数を測る） |
 
 ---
 

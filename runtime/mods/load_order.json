@@ -49,7 +49,9 @@
     "311_npc_profile_memory",
     "312_shop_restock",
     "313_event_ability_check",
-    "215_probe_event_roll"
+    "215_probe_event_roll",
+    "213_probe_npc_memory",
+    "214_probe_new_character"
   ],
   "disabled": []
 }

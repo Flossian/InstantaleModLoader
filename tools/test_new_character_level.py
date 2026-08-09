@@ -4,7 +4,7 @@
     python tools/test_new_character_level.py
 
 偽の `scripts.characters.Character`（レベルから HP を決める）と偽の
-`scripts.functions`（実測どおりのレベル→体力上限）を差し込んで、次を確認する。
+`scripts.functions`（本体と同じレベル→体力上限）を差し込んで、次を確認する。
 
   新規      … 新規作成の引数（レベル60・経験値なし・体力上限はレベル1の値）が
               レベル1に直り、HP もレベル1で計算し直される
@@ -20,9 +20,8 @@
   二段目    … `__init__` の後でレベルが戻された場合に警告が出る
   無事故    … どの経路でも ctx.log_exc が呼ばれない
 
-実測の根拠は VERIFICATION.md §2.36（`214_probe_new_character` の実機1回目）:
-`instantale.py:876` が `experience_level=60` を渡し、883〜885 行が
-`get_max_physical_integrity(1) -> 10` を渡している。
+根拠は VERIFICATION.md §2.36。`instantale.py:876` が `experience_level=60` を
+渡し、883〜885 行が `get_max_physical_integrity(1) -> 10` を渡している。
 """
 import importlib.util
 import io

@@ -452,7 +452,7 @@ def main():
         shutil.rmtree(tmp, ignore_errors=True)
 
     print("=== デバッグモード（開発者向けの MOD を伏せる）===")
-    # 実物と同じ配置を丸ごと作る。`settings/` は **runtime の隣**（TECH.md §3.2.4）
+    # 実物と同じ配置を丸ごと作る。`settings/` は **runtime の隣**（TECH.md §3.2.5）
     # なので、`runtime/mods` だけの temp では書き出し先がシステムの temp 直下に
     # なってしまう。配布物1つ分を temp に作って、その中で閉じる。
     dist = tempfile.mkdtemp(prefix="instantale_dist_")

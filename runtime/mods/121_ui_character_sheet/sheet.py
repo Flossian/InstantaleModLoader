@@ -5,7 +5,7 @@
 `ui_character_sheet.py` にある。分けてあるのは、この部分がゲームを
 起動せずに確かめられるようにするため（`tools/test_ui_character_sheet.py`）。
 
-実測（`212_probe_character_sheet` / 2026-08-06、窓 1920x1000）:
+ゲーム側の作り（`212_probe_character_sheet` で採寸。窓 1920x1000）:
 
     hud.character_sheet_layout   FloatLayout 810x497  pos_hint {center_x:0.37, center_y:0.68}
       character_sheet_name              size_hint (0.5,  0.1 )  {x:0.02, center_y:0.94}
@@ -244,8 +244,8 @@ def _name_of(item):
 # ---------------------------------------------------------------- 文面
 #
 # ゲーム自身の「出自:」「健康状態:」と同じ形 ― 見出しの次の行から中身が始まり、
-# 行頭は下げない。**空行も字下げも入れない**のは実機で決めたこと（2026-08-06）:
-# 空行を挟むとスキル欄が1件で埋まり、字下げると箱の余白と二重にずれて見える。
+# 行頭は下げない。**空行も字下げも入れない**。空行を挟むとスキル欄が1件で埋まり、
+# 字下げると箱の余白と二重にずれて見える。
 def wanted_text(entries):
     if not entries:
         return ""

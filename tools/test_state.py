@@ -4,7 +4,7 @@
     python tools/test_state.py
 
 見ているのは2つ。どちらも**ローダの語彙**で、MOD 側に写すとドリフトする
-（TECH.md §3.2.2b）。
+（TECH.md §3.2.3）。
 
   住所   … `world_key(app)` と `world_filename(key)`
   書込   … `write_json` / `write_text`（隣に書いてから差し替える）
