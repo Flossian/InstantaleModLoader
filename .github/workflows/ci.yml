@@ -70,15 +70,23 @@ jobs:
       # tools/test_*.py は全てゲーム不要（偽のゲームを差し込んで走る）。
       # **1本でも落ちたら失敗**。除外一覧は置かない ― 一度置くと、そこに
       # 積まれたものが直ったかどうか誰も見なくなる。
+      #
+      # 出力は捨てずに控え、落ちた本のぶんだけ吐く。落ちるものの中には
+      # **手元では再現せずランナーでだけ出るもの**（背景スレッドの待ちが
+      # 間に合わない等）があり、名前だけ残しても手掛かりにならない。
+      # 通った本は今までどおり1行だけ。
       - name: offline tests
         shell: pwsh
         run: |
           $failed = @()
           foreach ($f in Get-ChildItem tools/test_*.py | Sort-Object Name) {
-            python $f.FullName > $null 2>&1
+            $out = & python $f.FullName 2>&1
             if ($LASTEXITCODE -ne 0) {
               $failed += $f.BaseName
               Write-Host "  FAIL  $($f.BaseName)"
+              Write-Host "::group::$($f.BaseName) の出力"
+              $out | ForEach-Object { Write-Host $_ }
+              Write-Host "::endgroup::"
             } else {
               Write-Host "  ok    $($f.BaseName)"
             }
@@ -86,7 +94,7 @@ jobs:
           if ($failed) {
             Write-Host ""
             Write-Host "失敗: $($failed -join ', ')"
-            Write-Host "内容を見るには手元で該当のスクリプトを直接実行する。"
+            Write-Host "各本の出力は上の折り畳みに入っている。"
             exit 1
           }
 

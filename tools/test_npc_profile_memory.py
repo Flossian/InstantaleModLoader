@@ -431,6 +431,14 @@ def bind_function(ctx, target, module, name):
 # ==========================================================================
 # 検査の土台
 # ==========================================================================
+# 背景の抽出が終わるのを待つ上限。手元では1件あたり 1ms 未満で終わるので、
+# この数字は**壊れたときに永久に止まらない**ためだけにあり、通る回には
+# 1度も効かない。2 秒にしていたときに CI だけが落ちている
+# （VERIFICATION.md §4「CI だけで落ちるもの」）。待ち切れなかったときに
+# 待った秒数と件数を残すのは、時間切れと本当の不発をログだけで分けるため。
+WAIT_SECONDS = 15.0
+
+
 def reset_mod_store():
     """`sys` に置かれた mod の共有一式を落とす（筋書きごとの独立を保つ）。"""
     if hasattr(sys, MOD.STATE_STORE_ATTR):
@@ -510,10 +518,15 @@ class Run(object):
         return reply
 
     def wait_finished(self, count=1):
-        deadline = time.monotonic() + 2.0
+        started = time.monotonic()
+        deadline = started + WAIT_SECONDS
         while self.log().count("extract: finished") < count:
             if time.monotonic() >= deadline:
-                self.ctx.errors.append("background extraction timed out")
+                self.ctx.errors.append(
+                    "background extraction timed out: {:.1f}s 待って "
+                    "finished {}/{}".format(time.monotonic() - started,
+                                            self.log().count("extract: finished"),
+                                            count))
                 break
             time.sleep(0.005)
 

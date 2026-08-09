@@ -568,7 +568,10 @@ def test_alias_appears_late(tmp):
         # プロバイダの初期化に相当。生えたら見張りが包む。
         ctx.manager.send_request = send
         ctx.manager.send_request_with_no_structure = send_ns
-        deadline = time.time() + 2.0
+        # 15 秒は「壊れたときに止まらない」ためだけの上限。見張りは 0.02 秒
+        # ごとに回るので通る回は一瞬で抜ける（VERIFICATION.md §4「CI だけで
+        # 落ちるもの」）。
+        deadline = time.time() + 15.0
         while time.time() < deadline and (
                 ctx.manager.send_request is send
                 or ctx.manager.send_request_with_no_structure is send_ns):
