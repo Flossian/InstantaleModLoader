@@ -1,0 +1,18 @@
+{
+  "entry": "probe_npc_memory.py",
+  "api": 1,
+  "name": {
+    "en": "NPC memory probe",
+    "ja": "NPC記憶とプロンプト重複の計測"
+  },
+  "description": {
+    "en": "Measures what the game itself remembers per NPC (memory / life_log / relationship / knowledge), how those fields enter conversation prompts, and how much of each prompt is duplicated - including the blocks injected by 311_npc_profile_memory",
+    "ja": "ゲーム自身が NPC ごとに覚えるもの（memory・life_log・relationship・knowledge）の実体と、それが会話プロンプトへどう載るか、そして 311_npc_profile_memory の注入分も含めてプロンプト内の重複量を測る"
+  },
+  "version": "4",
+  "author": "R01/Flossian",
+  "debug": true,
+  "after": [
+    "311_npc_profile_memory"
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "entry": "fix_new_character_level.py",
+  "api": 1,
+  "name": {
+    "en": "New character starts at level 1",
+    "ja": "新規キャラをレベル1で始める"
+  },
+  "description": {
+    "en": "A newly created character is handed experience_level 60 with no experience, while the rest of the same character (its stamina cap) is built for level 1. Puts the level back to 1 so HP is computed for level 1 too. Only fires on that exact inconsistency, so it stops doing anything once the game itself is fixed",
+    "ja": "新規作成したキャラクタが経験値0のままレベル60で渡される。同じキャラの体力上限はレベル1で計算されており本体の中で食い違っているので、レベルを1に戻して HP もレベル1で計算させる。この食い違いが揃ったときだけ効くので、本体が直れば自動的に何もしなくなる"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "settings": {
+    "REPAIR_LOADED": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "レベル60で保存済みのキャラも読み込み時に直す",
+        "en": "Also repair characters already saved at level 60"
+      },
+      "note": {
+        "ja": "既にこのバグで作られたセーブが直る代わりに、遊んでいたキャラのレベルとHPが下がる。既定は切（記録に警告だけ出す）",
+        "en": "Repairs saves already made with the bug, at the cost of dropping the level and HP of a character you were playing. Off by default; the log warns instead"
+      }
+    }
+  }
+}

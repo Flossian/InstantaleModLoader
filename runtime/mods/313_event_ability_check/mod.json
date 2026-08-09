@@ -1,0 +1,145 @@
+{
+  "entry": "event_ability_check.py",
+  "api": 1,
+  "name": {
+    "en": "Ability scores in action rolls",
+    "ja": "行動判定に能力値を効かせる"
+  },
+  "description": {
+    "en": "Neither of the game's two success rolls uses the player's ability scores. In quest field events the LLM picks a reference_attribute that is then ignored; in free actions the LLM sets the odds with no scores in the prompt at all. Raises both by the relevant ability (4% per 3 points from 15, up to +20% at 28-30) plus a flat bonus, inferring which ability applies from the action text where the game does not say. Never lowers the vanilla odds by default",
+    "ja": "ゲームの成否判定は2系統あり、どちらもキャラクタの能力値を見ていない。クエスト中のミニイベントは参照能力値が選ばれるだけで使われず、街や会話での自由入力は LLM が確率を決めていてプロンプトに能力値が載っていない。両方に能力値の加点を入れる（15から3点ごとに+4%、28〜30で最大+20%）。どの能力値の判定かをゲームが言わない自由入力では、行動文から推定する。減点はしないので素のゲームより不利にはならない"
+  },
+  "version": "5",
+  "author": "R01/Flossian",
+  "settings": {
+    "PIVOT": {
+      "type": "int",
+      "default": 15,
+      "min": 1,
+      "max": 99,
+      "label": {
+        "ja": "加点が始まる能力値",
+        "en": "Ability score where the bonus starts"
+      },
+      "note": {
+        "ja": "この値までは補正なし。1点でも超えれば1段目。能力値はレベルでは伸びず、作成時に振った値がほぼそのまま続くので低めに置いてある",
+        "en": "No bonus up to this value; one point above it already gives the first step"
+      }
+    },
+    "STEP": {
+      "type": "int",
+      "default": 3,
+      "min": 1,
+      "max": 50,
+      "label": {
+        "ja": "1段ぶんの能力値の幅",
+        "en": "Ability points per step"
+      },
+      "note": {
+        "ja": "既定は3点ごと。16-18/19-21/22-24/25-27/28以上 と上がる",
+        "en": "Default: every 3 points"
+      }
+    },
+    "BONUS_PER_STEP": {
+      "type": "int",
+      "default": 4,
+      "min": 0,
+      "max": 50,
+      "label": {
+        "ja": "1段ぶんの加点(%)",
+        "en": "Bonus per step (%)"
+      },
+      "note": {
+        "ja": "成功率に直接足す割合。10未満にすると説得力に端数を渡すことになる（下の「10%未満の刻みを使う」を参照）",
+        "en": "Percentage points added to the success rate"
+      }
+    },
+    "MAX_BONUS": {
+      "type": "int",
+      "default": 20,
+      "min": 0,
+      "max": 90,
+      "label": {
+        "ja": "加点の上限(%)",
+        "en": "Cap on the ability bonus (%)"
+      },
+      "note": {
+        "ja": "既定 20（能力値28以上で頭打ち）。0 にすると能力値は効かなくなる",
+        "en": "20 by default, reached at a score of 28"
+      }
+    },
+    "MAX_PENALTY": {
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 90,
+      "label": {
+        "ja": "減点の上限(%)",
+        "en": "Cap on the ability penalty (%)"
+      },
+      "note": {
+        "ja": "既定 0（低い能力値でも素のゲームより不利にはならない）。1以上にすると、基準を下回るぶんが同じ幅で下がる",
+        "en": "0 keeps low scores from ever being worse than vanilla"
+      }
+    },
+    "FLAT_BONUS": {
+      "type": "int",
+      "default": 0,
+      "min": -50,
+      "max": 50,
+      "label": {
+        "ja": "全体の底上げ(%)",
+        "en": "Flat bonus for every roll (%)"
+      },
+      "note": {
+        "ja": "能力値と無関係に毎回足す。既定 0 = 素のゲームの水準のまま能力値の差だけが効く。全体を易しくしたいなら 10 で一律+10%",
+        "en": "0 (default) keeps the vanilla success rate and only adds the ability bonus"
+      }
+    },
+    "FINE_STEPS": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "10%未満の刻みを使う",
+        "en": "Allow steps finer than 10%"
+      },
+      "note": {
+        "ja": "ゲームの確率は説得力×10+20 なので、4%のような刻みには説得力に端数を渡す必要がある。通らないビルドでは自動で整数に丸める。切ると最初から10%刻み",
+        "en": "The game's odds move in 10% steps; finer steps need a fractional credibility"
+      }
+    },
+    "FREE_ACTION_MODE": {
+      "type": "choice",
+      "values": [
+        "llm",
+        "keywords",
+        "off"
+      ],
+      "default": "llm",
+      "label": {
+        "ja": "街や会話での自由入力にも効かせる",
+        "en": "Also apply to free actions"
+      },
+      "note": {
+        "ja": "どの能力値の判定かをゲームが言わないので行動文から推定する。llm=6択を1問だけ AI に聞く(推論が1回増える) / keywords=語句の表だけで決める(追加の推論なし・判別できるのは半分ほど) / off=この経路には触らない",
+        "en": "llm asks the model once which of the six abilities applies; keywords uses a word table only"
+      }
+    },
+    "SCORE_SOURCE": {
+      "type": "choice",
+      "values": [
+        "raw",
+        "condition"
+      ],
+      "default": "raw",
+      "label": {
+        "ja": "使う能力値",
+        "en": "Which score to read"
+      },
+      "note": {
+        "ja": "raw=素の能力値 / condition=負傷や体力で目減りした換算値。ゲーム側が既に状態で確率を下げている疑いがあるので既定は raw",
+        "en": "condition applies the game's own wound/condition scaling on top"
+      }
+    }
+  }
+}

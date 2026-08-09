@@ -90,10 +90,12 @@ class Character(object):
 
 
 class World(object):
-    def __init__(self, name, characters):
+    def __init__(self, name, characters, days_elapsed=100):
         self.name = name
         self.worldview = "灰の空の下"
         self.characters = {c.id: c for c in characters}
+        # 日付は世界に1つ（GAME.md §2.16）。宿泊で大きく飛ぶ。
+        self.days_elapsed = days_elapsed
 
 
 class InstantaleApp(object):
@@ -729,6 +731,222 @@ def test_extraction_prompt_asks_for_summary_budget():
     return run
 
 
+def test_extraction_prompt_forbids_event_narration():
+    """抽出LLMには出来事のあらすじを書かせない（GAME.md §2.25 の棲み分け）
+
+    会話のあらすじはゲーム自身が `current_log` に覚えて次の会話にも載せる。
+    この mod まで語り直すと同じ事実が1つのプロンプトに3回並ぶ（213_ の実測）
+    ので、頼み文に禁止の決まりが入っていることを確かめる。
+    """
+    run = Run(answers=FOUND)
+    run.turn()
+    prompt = Llm.last_prompt(MOD.MANAGER_EXTRACT)
+    check("出来事の経過や会話のあらすじ" in prompt,
+          "あらすじ禁止の決まりが無い: {}".format(prompt[:400]))
+    check("会話そのものの記録はゲームが別に残している" in prompt,
+          "棲み分けの理由が無い: {}".format(prompt[:400]))
+    check("何をどう話したかの経過は書かない" in prompt,
+          "about_player の絞りが無い: {}".format(prompt[:400]))
+    return run
+
+
+# ===================================================== 判明済みの事実の差し戻し
+def _seeded_facts(count, prefix="事実", pad=""):
+    return [{"at": "2026-08-08T00:00:{:02d}".format(min(i, 59)),
+             "text": "{}{}{}".format(prefix, i, pad)} for i in range(count)]
+
+
+def test_recorded_facts_are_shown_to_the_extractor():
+    """抽出LLMに判明済みの事実を差し戻す
+
+    人物像は毎回まるごと書き直されるので、見せなければ落ちた事実は戻らない。
+    """
+    run = Run(answers=FOUND, seed_record={
+        "name": "傭兵ガロ", "profile": "古い剣を好む。",
+        "facts": [{"at": "2026-08-08T00:00:00", "text": "報酬は倍増の約束だった"},
+                  {"at": "2026-08-08T00:00:01", "text": "妹が北方の村に居る"}]})
+    run.turn()
+    prompt = Llm.last_prompt(MOD.MANAGER_EXTRACT)
+    # 見出しの語そのものは【決まり】の中にも出るので、**箇条書きが続く形**で
+    # 探す。これが本文に差し戻された欄の目印。
+    check(MOD.FACTS_HEADING + "\n- " in prompt,
+          "事実の欄が本文に無い: {}".format(prompt[:400]))
+    for fact in ("報酬は倍増の約束だった", "妹が北方の村に居る"):
+        check(fact in prompt, "事実 {!r} が載っていない".format(fact))
+    check("抜け落ちていたら書き戻すこと" in prompt,
+          "書き戻しの指示が無い: {}".format(prompt[:600]))
+    # 既出を再掲させない指示は、見せて初めて守れる（v3 までは守りようが無かった）。
+    check("{}に有るものは入れない".format(MOD.FACTS_HEADING) in prompt,
+          "再掲禁止が事実の欄に結び付いていない: {}".format(prompt[:600]))
+    return run
+
+
+def test_no_facts_means_no_block():
+    """事実がまだ無いなら見出しごと出さない（空欄を見せない）"""
+    run = Run(answers=FOUND, seed_record={"name": "傭兵ガロ",
+                                          "profile": "古い剣を好む。"})
+    run.turn()
+    prompt = Llm.last_prompt(MOD.MANAGER_EXTRACT)
+    check(MOD.FACTS_HEADING + "\n- " not in prompt,
+          "事実が無いのに欄が出た: {}".format(prompt[:400]))
+    return run
+
+
+def test_recalled_facts_are_capped_by_count():
+    """差し戻す事実は件数で頭打ちにし、**新しい方**を残す"""
+    facts = _seeded_facts(MOD.FACT_RECALL + 5)
+    kept = MOD.recent_facts({"facts": facts})
+    check(len(kept) == MOD.FACT_RECALL,
+          "件数の頭打ちが効かない: {}".format(len(kept)))
+    check(kept[-1] == facts[-1]["text"],
+          "いちばん新しい事実が落ちた: {}".format(kept[-1]))
+    check(facts[0]["text"] not in kept, "古い方が残っている")
+    # 書き出しは古い順（読む側が時系列で追えるように）。
+    check(kept == sorted(kept, key=lambda t: int(t[len("事実"):])),
+          "並びが古い順でない: {}".format(kept[:3]))
+
+
+def test_recalled_facts_are_capped_by_chars():
+    """件数に収まっていても文字数で頭打ちにする"""
+    facts = _seeded_facts(10, pad="あ" * 400)
+    kept = MOD.recent_facts({"facts": facts})
+    check(len(kept) < 10, "文字数の頭打ちが効かない: {}件".format(len(kept)))
+    total = sum(len(text) + 2 for text in kept)
+    check(total <= MOD.FACT_RECALL_CHARS,
+          "文字数の上限を超えた: {}字".format(total))
+    check(kept[-1] == facts[-1]["text"], "新しい方を優先していない")
+
+
+def test_recalled_facts_survive_a_broken_record():
+    """控えが壊れていても差し戻しで落ちない（読めない形は黙って飛ばす）"""
+    check(MOD.recent_facts(None) == [], "None で落ちた")
+    check(MOD.recent_facts({}) == [], "facts が無い控えで落ちた")
+    check(MOD.recent_facts({"facts": "文字列"}) == [], "facts が文字列で落ちた")
+    check(MOD.recent_facts({"facts": [None, 3, {"text": ""}, {"nope": 1}]}) == [],
+          "読めない要素を拾った")
+    # 素の文字列で書かれていても拾う（mod をまたいだ取り決めなので形を決めない）。
+    check(MOD.recent_facts({"facts": ["生の事実"]}) == ["生の事実"],
+          "素の文字列を拾えない")
+
+
+def test_v1_record_still_works():
+    """配布済み v1 の控えをそのまま読める（`about_player` も `facts` も無い形）
+
+    v1（ローダ 1.3.0 同梱）の控えは `name` / `updated` / `profile` / `slots`
+    だけで、v2 で足した2欄が無い。差し戻し（v4）が**欄の存在を前提にして
+    いない**ことを、実際に1ターン回して確かめる。
+    """
+    run = Run(answers=FOUND, seed_record={
+        "name": "傭兵ガロ", "updated": "2026-07-30T00:00:00",
+        "profile": "古い剣を好む。",
+        "slots": {"経歴": ["北方の村の生まれ"]}})
+    run.turn()
+    check(not run.ctx.errors, "v1 の控えで例外: {}".format(run.ctx.errors))
+    prompt = Llm.last_prompt(MOD.MANAGER_EXTRACT)
+    check(MOD.FACTS_HEADING + "\n- " not in prompt,
+          "事実が無い控えなのに欄が出た: {}".format(prompt[:300]))
+    check("古い剣を好む。" in prompt, "v1 の人物像が抽出に渡っていない")
+    check(run.profile() == FOUND, "更新できない: {!r}".format(run.profile()))
+    stem = ml.state.world_filename(run.app.world.name)[:-5]
+    record = run.profiles()[stem]["77"]
+    check(record.get("slots") == {"経歴": ["北方の村の生まれ"]},
+          "v1 の slots を消した: {}".format(record))
+    # 古い版に戻しても読めるよう、v1 が見る鍵は先頭のままにしておく。
+    check(list(record)[:3] == ["name", "updated", "profile"],
+          "v1 が読む鍵の並びが崩れた: {}".format(list(record)))
+
+
+# ============================================================ 日数の経過
+def test_elapsed_days_reads_the_world_day():
+    """経過日数は控えの `day` と世界の日付の差（巻き戻りは黙って捨てる）"""
+    check(MOD.elapsed_days({MOD.DAY_KEY: 100}, 130) == 30, "差が出ない")
+    check(MOD.elapsed_days({MOD.DAY_KEY: 100}, 100) is None, "同じ日で言う")
+    check(MOD.elapsed_days({MOD.DAY_KEY: 130}, 100) is None, "巻き戻りで言う")
+    check(MOD.elapsed_days({}, 130) is None, "day が無いのに言う")
+    check(MOD.elapsed_days({MOD.DAY_KEY: 100}, None) is None, "今日が不明でも言う")
+    check(MOD.elapsed_days({MOD.DAY_KEY: "百"}, 130) is None, "数でない day を読んだ")
+    check(MOD.elapsed_days({MOD.DAY_KEY: True}, 130) is None, "真偽値を日数にした")
+
+
+def test_elapsed_note_avoids_a_reunion():
+    """但し書きは「地続きにしない」と「久しぶりにもしない」の両方を言う"""
+    note = MOD.elapsed_note(90, "エリス")
+    check("90日" in note, "日数が入っていない: {}".format(note))
+    check("エリス" in note, "相手の名が入っていない: {}".format(note))
+    check("そのまま再開" in note, "地続き禁止が無い: {}".format(note))
+    check("再会のようにも" in note, "久しぶり抑制が無い: {}".format(note))
+    check(MOD.elapsed_note(None, "エリス") == "", "日数が無いのに書いた")
+    check(MOD.elapsed_note(0, "エリス") == "", "0日で書いた")
+
+
+def test_the_day_is_recorded_and_injected_next_time():
+    """会話した日を控え、日が飛んだ次の会話で経過を伝える"""
+    run = Run(answers=FOUND)
+    run.turn()
+    stem = ml.state.world_filename(run.app.world.name)[:-5]
+    check(run.profiles()[stem]["77"].get(MOD.DAY_KEY) == 100,
+          "会話した日を控えていない: {}".format(run.profiles()[stem]["77"]))
+    # 同じ日のうちは何も言わない。
+    run.facilitate()
+    check(MOD.ELAPSED_HEADING.format(player="冒険者")
+          not in Facilitator.calls[-1]["npc"].profile,
+          "同じ日なのに日数を言った")
+    # 宿泊で日が飛ぶ。
+    run.app.world.days_elapsed = 190
+    run.facilitate()
+    injected = Facilitator.calls[-1]["npc"].profile
+    check("90日" in injected, "経過日数が注入されない: {!r}".format(injected))
+    check("再会のようにも" in injected, "久しぶり抑制が注入されない")
+    return run
+
+
+def test_elapsed_days_can_be_turned_off():
+    """設定を切ると日数には一切触らない（控えにも書かない）"""
+    original = MOD.TELL_ELAPSED_DAYS
+    MOD.TELL_ELAPSED_DAYS = False
+    try:
+        run = Run(answers=FOUND)
+        run.turn()
+        stem = ml.state.world_filename(run.app.world.name)[:-5]
+        check(MOD.DAY_KEY not in run.profiles()[stem]["77"],
+              "切っているのに日を控えた: {}".format(run.profiles()[stem]["77"]))
+        run.app.world.days_elapsed = 190
+        run.facilitate()
+        check("90日" not in Facilitator.calls[-1]["npc"].profile,
+              "切っているのに日数を注入した")
+        return run
+    finally:
+        MOD.TELL_ELAPSED_DAYS = original
+
+
+def test_the_extractor_is_told_the_gap():
+    """抽出LLMにも経過日数を渡す（「今しがた」の口調で書かせない）"""
+    run = Run(answers=FOUND, seed_record={
+        "name": "傭兵ガロ", "profile": "古い剣を好む。", MOD.DAY_KEY: 40})
+    run.turn()
+    prompt = Llm.last_prompt(MOD.MANAGER_EXTRACT)
+    check("【前回の会話からの経過】" in prompt,
+          "経過の欄が無い: {}".format(prompt[:400]))
+    check("60日が経っている" in prompt, "日数が違う: {}".format(prompt[:400]))
+    return run
+
+
+def test_a_world_without_a_day_counter_is_harmless():
+    """日付が読めない世界でも壊れない（何も言わないだけ）"""
+    run = Run(answers=FOUND)
+    del run.app.world.days_elapsed
+    run.turn()
+    check(not run.ctx.errors, "日付が無い世界で例外: {}".format(run.ctx.errors))
+    stem = ml.state.world_filename(run.app.world.name)[:-5]
+    check(MOD.DAY_KEY not in run.profiles()[stem]["77"],
+          "読めないのに日を控えた: {}".format(run.profiles()[stem]["77"]))
+    run.facilitate()
+    check(MOD.ELAPSED_HEADING.format(player="冒険者")
+          not in Facilitator.calls[-1]["npc"].profile,
+          "読めないのに日数を言った")
+    return run
+
+
 def test_profile_reaches_the_next_reply():
     """控えは複製NPCのprofileに足され、元NPCは変わらない"""
     run = Run(answers=MOD.NO_CHANGE, seed="北方の村で育った無口な傭兵。")
@@ -1253,6 +1471,19 @@ def main():
                  test_legacy_slots_migrate_to_profile,
                  test_profile_keeps_full_llm_response,
                  test_extraction_prompt_asks_for_summary_budget,
+                 test_extraction_prompt_forbids_event_narration,
+                 test_recorded_facts_are_shown_to_the_extractor,
+                 test_no_facts_means_no_block,
+                 test_recalled_facts_are_capped_by_count,
+                 test_recalled_facts_are_capped_by_chars,
+                 test_recalled_facts_survive_a_broken_record,
+                 test_v1_record_still_works,
+                 test_elapsed_days_reads_the_world_day,
+                 test_elapsed_note_avoids_a_reunion,
+                 test_the_day_is_recorded_and_injected_next_time,
+                 test_elapsed_days_can_be_turned_off,
+                 test_the_extractor_is_told_the_gap,
+                 test_a_world_without_a_day_counter_is_harmless,
                  test_profile_reaches_the_next_reply,
                  test_profile_reaches_keyword_calls,
                  test_profile_reaches_the_opening_line,

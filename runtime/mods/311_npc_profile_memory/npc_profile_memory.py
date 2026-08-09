@@ -5,6 +5,16 @@
 その後の会話でどれだけ人となりが見えても増えない。人生ログ（`life_log`）は
 出来事の記録で、「何が好きか」「誰と繋がっているか」を引くようには出来ていない。
 
+一方、**会話の出来事そのものはゲーム自身が覚えている**。会話を正規の経路で
+閉じると `conversation_resolver` が要約を `current_log` へ追記し、それは同じ
+相手との次の会話のプロンプトに毎回全文載る（GAME.md §2.25・`213_` の実測。
+ただし正規以外の抜け方で要約が走るかは未実測 ― 同節の注意を参照）。だから
+この mod まで出来事のあらすじを覚えると、同じ事実が `current_log`・注入
+プロフィール・`about_player` の3箇所で同一プロンプトに並ぶ。3者は言い換えの
+関係なので `102_` でも畳めない。そこで抽出には**出来事の経過を書かない**と
+指示している（`build_messages`）― この mod が足す価値は「何があったか」
+ではなく「どういう人物か」で、出来事はゲームの記録に任せる。
+
 ```
     プレイヤーが1行入力
         │
@@ -24,6 +34,19 @@
 分けているのは、片方に混ぜると要約のたびに弱い方が食われるため。「前に頼んだ
 件を覚えている」という手応えは `about_player` が担っていて、これが人物像の
 文章に溶けると真っ先に消える。
+
+3つめは**いつの話か**。宿泊は数ヶ月飛ぶことがあるのに、ゲームが会話に渡すのは
+人生ログの日付だけで、「前にこの人と話したのがいつか」はどこにも無い。だから
+日が飛んだ次の会話が数秒前の続きのように始まる。最後に話したゲーム内の日
+（`world.days_elapsed`）を控えて経過を添えるが、**日数だけを渡して解釈は
+指示で縛る** ― そのまま見せると毎回「久しぶり」になるので、「同じ土地に
+留まっている間は日々見かけているはず」を併せて言う。実際に離れていたかは
+ゲーム自身が渡している滞在歴が語れるので、こちらは判定しない。
+
+この2欄はどちらも**毎回まるごと書き直される**ので、統合のたびに細部が落ちる。
+落ちた分の拠り所が3つめの欄 `facts`（追記専用）で、次の抽出に差し戻して
+書き戻させる（`recent_facts`）。ゲームの記憶もこの mod の2欄も書き換えで
+更新される以上、**追記でしか伸びない記録はここだけ**になる。
 
 ## この mod が守っている決め事
 
@@ -98,6 +121,7 @@ CONVERSATION_TURNS = 8     # 抽出に載せる直近のやり取りの数
 INJECT_CHARS = 1200        # 抽出LLMへの目標長（要約で収める。保存・注入では切らない）
 RECORD_PLAYER_MEMORY = True   # 「その人物から見たプレイヤー」を別欄で覚えるか
 FACT_LOG_LIMIT = 200       # 判明した事実の追記専用ログの上限件数（0 で記録しない）
+TELL_ELAPSED_DAYS = True   # 前に話してからのゲーム内日数を会話に伝えるか
 
 LOG_BASENAME = "npc_profile.log"
 
@@ -127,7 +151,23 @@ ABOUT_PLAYER_HEADING = "【この人物から見た{player}】"
 
 # 控えの鍵と、ファイルに書くときの並び。**順番を保つ**（増えた鍵を後ろに足すだけ
 # にすると、後から見比べたときに人物ごとの形が揃う）。
-RECORD_KEYS = ("name", "updated", "profile", "about_player", "facts")
+RECORD_KEYS = ("name", "updated", "profile", "about_player", "facts", "day")
+
+# 最後に話したゲーム内日（`world.days_elapsed`。GAME.md §2.16）。控えの鍵は
+# **末尾に足す**（上の註のとおり、既にある鍵の位置を動かさない）。
+DAY_KEY = "day"
+
+# 経過日数の但し書き。**日数だけを渡して、解釈の仕方は指示で与える。**
+# 宿泊は数ヶ月飛ぶことがあるので、日数をそのまま見せると必ず「久しぶり」に
+# なる。一方で同じ街に居る限り日々顔は合わせているはずで、そこはゲーム自身が
+# 渡している滞在歴（`area_residency`）が語れる。だからこちらは
+# 「地続きに再開しない」「不在明けの再会にもしない」の2つだけを言う。
+ELAPSED_HEADING = "【前に{player}と話してからの日数】"
+ELAPSED_BODY = (
+    "{days}日。前回の会話はこの日数ぶん前の出来事なので、続きをこの場で"
+    "そのまま再開しているかのようには話さない。ただし同じ土地に留まっている"
+    "間は日々見かけているはずなので、長く離れていた相手との再会のようにも"
+    "扱わない。")
 
 # 抽出LLMに書かせる JSON の鍵。
 KEY_CHANGED = "changed"
@@ -137,6 +177,13 @@ KEY_NEW_FACTS = "new_facts"
 
 # `about_player` の目標長。`INJECT_CHARS` から導く（設定を増やさない）。
 ABOUT_PLAYER_RATIO = 2
+
+# 抽出のときに差し戻す「判明済みの事実」の上限（件数と文字数）。設定にはしない
+# ― 増やすほど落ちた事実が戻りやすいが、抽出の頼み文が伸びる。実測では1人
+# あたりの `facts` は数件〜20件程度なので、40件あればほぼ全部が載る。
+FACT_RECALL = 40
+FACT_RECALL_CHARS = 1500
+FACTS_HEADING = "【既に記録した事実】"
 
 # 構造化出力に渡す制限時間（秒）。**必ず渡す。** 抽出は1本のワーカーで直列に
 # 回しているので、1回返らないと以後の抽出が全部止まる（GAME.md §2.12）。
@@ -184,6 +231,64 @@ def ordered_record(record):
         if key not in out:
             out[key] = value
     return out
+
+
+def elapsed_days(record, today):
+    """前に話してからのゲーム内日数。分からない・同じ日・巻き戻りなら `None`。
+
+    巻き戻り（古いセーブを読み込んだ）で負になった場合も `None` に倒す。
+    「-30日ぶりだ」と言わせるより、何も言わせない方が害が小さい。
+    """
+    if not isinstance(record, dict) or today is None:
+        return None
+    before = record.get(DAY_KEY)
+    if isinstance(before, bool) or not isinstance(before, (int, float)):
+        return None
+    days = int(today) - int(before)
+    return days if days > 0 else None
+
+
+def elapsed_note(days, player_name):
+    """経過日数の但し書き。日数が無ければ空文字。"""
+    if not days:
+        return ""
+    return "{}\n{}".format(ELAPSED_HEADING.format(player=player_name),
+                           ELAPSED_BODY.format(days=days))
+
+
+def recent_facts(record):
+    """控えの `facts` から、抽出に差し戻すぶんを古い順で返す。
+
+    **人物像は毎回まるごと書き直される。** 統合のたびに細部が落ちるので、
+    一度確定した事実でも数ターン後には本文から消えている（実機で確認 ―
+    「報酬倍増の条件」「宿の料金の内訳」が落ちていた）。落ちた事実は
+    `facts` に残っているのに、**抽出LLMはそれを見ていなかった**。だから
+    書き戻せず、しかも既に記録した事実かどうかも判らないので同じ事実を
+    毎ターン報告し直していた（同じ内容の言い換えが4回並ぶ）。ここで
+    差し戻すと、その両方が同時に閉じる。
+
+    件数と文字数の両方で頭打ちにし、溢れたら**古い方**から落とす。
+    """
+    log = record.get("facts") if isinstance(record, dict) else None
+    if not isinstance(log, list):
+        return []
+    texts = []
+    for item in reversed(log):
+        # 追記の形は `{"at":…, "text":…}`。素の文字列で書かれていても拾う
+        # （このファイルは mod をまたいだ取り決めなので、形を決めつけない）。
+        text = item.get("text") if isinstance(item, dict) else item
+        if isinstance(text, str) and text.strip():
+            texts.append(text.strip())
+        if len(texts) >= FACT_RECALL:
+            break
+    kept, total = [], 0
+    for text in texts:          # 新しい方から詰める
+        total += len(text) + 2
+        if total > FACT_RECALL_CHARS:
+            break
+        kept.append(text)
+    kept.reverse()              # 書き出すのは古い順
+    return kept
 
 
 def _strip_code_fence(body):
@@ -514,6 +619,10 @@ def apply(ctx):
         `profile` は毎回まるごと書き直されるので、統合の過程で落ちた事実は
         どこにも残らない。捏造を疑ったときに「いつの会話で出たのか」を辿れる
         ようにしておく。上限を超えたら古い方から落とす（増え続けさせない）。
+
+        **この控えは次の抽出に差し戻す**（`recent_facts`）。この mod と
+        ゲームを通じて、書き換えではなく追記で伸びる記録はここだけなので、
+        落ちた事実を書き戻せる拠り所もここしかない。
         """
         if FACT_LOG_LIMIT <= 0 or not facts:
             return
@@ -529,8 +638,12 @@ def apply(ctx):
             log.append({"at": stamp, "text": fact})
         record["facts"] = log[-FACT_LOG_LIMIT:]
 
-    def update_record(key, npc_id, npc_name, update):
-        """抽出の結果を控えへ書く。**空・変更なしなら既存を維持する。**"""
+    def update_record(key, npc_id, npc_name, update, day=None):
+        """抽出の結果を控えへ書く。**空・変更なしなら既存を維持する。**
+
+        日も一緒に書く ― 控えを起こすのはここだけなので、`stamp_day` が
+        作れない初回の日はここで入る。
+        """
         if not update:
             return
         profile = update.get(KEY_PROFILE, "")
@@ -550,6 +663,8 @@ def apply(ctx):
                 return
             record["name"] = npc_name
             record["updated"] = datetime.datetime.now().isoformat(timespec="seconds")
+            if day is not None:
+                record[DAY_KEY] = day
             if profile:
                 record["profile"] = profile
             if about:
@@ -567,7 +682,47 @@ def apply(ctx):
         name = getattr(getattr(app, "player", None), "name", None)
         return _text(name, 40) or "冒険者"
 
-    def memory_block(record, player_name):
+    def game_day(app):
+        """いまのゲーム内日数。読めなければ `None`（そのときは何も言わない）。
+
+        日付は世界に1つ（`world.days_elapsed`。GAME.md §2.16）。進めるのは
+        `InstantaleApp.elapse_days` で、宿泊はここを大きく飛ばす。
+        """
+        if not TELL_ELAPSED_DAYS:
+            return None
+        value = getattr(getattr(app, "world", None), "days_elapsed", None)
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float):
+            return int(value)
+        return None
+
+    def stamp_day(key, npc_id, day):
+        """最後に話したゲーム内日を控える。**同じ日なら書かない。**
+
+        起点は「会話したこと」であって「記録が変わったこと」ではないので、
+        人物像が1文字も変わらなかったターンでも控える（そうしないと
+        「変更なし」が続いた分だけ経過日数が伸び続ける）。日が変わるのは
+        宿泊や移動のときだけなので、書き込みは会話1回につき多くて1度。
+
+        **控えがまだ無い相手には作らない。** 何も分かっていない相手の控えを
+        ここで起こすと、LLM が居ない・抽出が落ちたときに「日付だけの控え」が
+        残る。この mod の安全側の倒し方は「変更しない」なので、初回の記録は
+        抽出が実って `update_record` が書くときだけにする（あちらも日を書く）。
+        """
+        if day is None:
+            return
+        with data_lock:
+            bucket = load_bucket(key)
+            record = bucket.get(str(npc_id))
+            if not isinstance(record, dict) or record.get(DAY_KEY) == day:
+                return
+            record[DAY_KEY] = day
+            save_bucket(key, bucket)
+
+    def memory_block(record, player_name, today=None):
         """控えを、プロフィール欄に足す本文にする。空なら空文字。
 
         人物像とプレイヤーへの認識を**見出しで分ける**。1つに繋げると、
@@ -582,6 +737,11 @@ def apply(ctx):
         if about:
             blocks.append(ABOUT_PLAYER_HEADING.format(player=player_name)
                           + "\n" + about)
+        # 経過日数は**いちばん後ろ**に置く。人物像より後に読ませたいのは、
+        # これが人物の設定ではなく「いつの話か」の但し書きだから。
+        note = elapsed_note(elapsed_days(record, today), player_name)
+        if note:
+            blocks.append(note)
         return "\n\n".join(blocks)
 
     def with_profile(label, args, kwargs):
@@ -608,7 +768,8 @@ def apply(ctx):
             note_inject("{}: cannot name the character ({})".format(
                 label, type(npc).__name__))
             return args, kwargs
-        addition = memory_block(record_of(app, npc_id), player_name_of(app))
+        addition = memory_block(record_of(app, npc_id), player_name_of(app),
+                                game_day(app))
         if not addition:
             note_inject("{}: nothing recorded for {!r} ({})".format(
                 label, name_of(app, npc_id), npc_id))
@@ -820,6 +981,9 @@ def apply(ctx):
             "personality": _text(getattr(npc, "personality", ""), 300),
             "job": _text(getattr(npc, "job", ""), 60),
             "transcript": transcript,
+            # ゲーム内の日付もここで採る。ワーカーは `app` を触らないので、
+            # 日を跨ぐ処理に必要な値は全部この写しに乗せておく。
+            "day": game_day(app),
         }
 
     def build_messages(snapshot, record):
@@ -829,6 +993,15 @@ def apply(ctx):
         同じ形を書いておく。ゲーム自身がスキーマをプロンプト本文にも埋める
         のと同じ考えで、降りた先（`send_request_with_no_structure`）でも
         同じ読み取り（`parse_result`）で済む。
+
+        **出来事の経過は書かせない。** 会話のあらすじはゲーム自身が
+        `current_log` に覚えて次の会話にも載せるので、こちらまで語り直すと
+        同じ事実が1つのプロンプトに3回並ぶ（GAME.md §2.25）。この mod が
+        書くのは、会話から**分かったこと**（続く性格・関係・約束）だけ。
+
+        **判明済みの事実は差し戻す。** 人物像は毎回まるごと書き直されるので、
+        見せなければ落ちた事実は戻らない（`recent_facts`）。差し戻す先は
+        抽出の頼み文だけで、**会話のプロンプトは1文字も増えない**。
         """
         npc_name = snapshot["npc_name"]
         player_name = snapshot["player_name"]
@@ -844,7 +1017,8 @@ def apply(ctx):
                 '"{}": 更新後の、{}から見た{}についての記録の全文（{}文字以内）'
                 .format(KEY_ABOUT_PLAYER, npc_name, player_name, about_chars))
         fields.append('"{}": この会話で新しく判明した事実だけの配列。'
-                      '既に記録にあるものは入れない。無ければ []'.format(KEY_NEW_FACTS))
+                      '{}に有るものは入れない。無ければ []'.format(
+                          KEY_NEW_FACTS, FACTS_HEADING))
         instruction = (
             "あなたは人物の記録係だ。現在の記録と新しい会話を統合し、"
             "更新後の記録を **JSON オブジェクト1つ** で出力せよ。\n\n"
@@ -852,16 +1026,22 @@ def apply(ctx):
             "【決まり】\n"
             "- JSON の前後に説明・見出し・コードフェンスを書いてはならない\n"
             "- 会話に出ていない事を推測で補ってはならない\n"
+            "- 出来事の経過や会話のあらすじ（誰が何を言った・どうしたの時系列）を"
+            "書いてはならない。会話そのものの記録はゲームが別に残している。"
+            "書くのは会話から分かった、この先も変わらずに残ることだけ\n"
             "- 記録に加えるものが何も無ければ {changed} を \"false\" にし、"
             "他の項目には現在の記録をそのまま写す\n"
             "- 固定の分類は使わず、継続的な性格、価値観、嗜好、経歴、関係、"
             "目標、秘密、約束を自然な人物像として簡潔に統合する\n"
             "- {about} には、呼び方、抱いている感情、交わした約束、貸し借り、"
-            "頼まれた用件を書く\n"
+            "頼まれた用件だけを書く。何をどう話したかの経過は書かない\n"
+            "- {facts}は確定済みの記録である。要約の過程でこれらが人物像から"
+            "抜け落ちていたら書き戻すこと。固有名・数値・金額・約束・条件は"
+            "言い換えず、そのままの形で残す\n"
             "- 重複はまとめ、既存の記録と新しい会話が矛盾するときは新しい会話を優先する\n"
             "- 書き足すのではなく要約して統合し、各項目を指定の文字数以内に収める"
         ).format(fields="\n- ".join(fields), changed=KEY_CHANGED,
-                 about=KEY_ABOUT_PLAYER)
+                 about=KEY_ABOUT_PLAYER, facts=FACTS_HEADING)
         blocks = [
             "【{}の素性（ゲームの記録）】\n- プロフィール: {}\n- 人格: {}\n- 役割: {}"
             .format(npc_name, snapshot["game_profile"], snapshot["personality"],
@@ -873,6 +1053,17 @@ def apply(ctx):
             blocks.append("【現在の、{}から見た{}についての記録】\n{}".format(
                 npc_name, player_name,
                 _field(record, "about_player") or "（まだ記録が無い）"))
+        # 判明済みの事実を差し戻す（`recent_facts` の説明）。人物像は毎回
+        # 書き直されるので、ここで見せないと落ちた事実は二度と戻らない。
+        recalled = recent_facts(record)
+        if recalled:
+            blocks.append("{}\n{}".format(
+                FACTS_HEADING, "\n".join("- " + fact for fact in recalled)))
+        # 前の会話からの経過日数。これが無いと、日を跨いだ会話でも
+        # `about_player` が「今しがた約束した」の口調で書かれる。
+        gap = elapsed_days(record, snapshot.get("day"))
+        if gap:
+            blocks.append("【前回の会話からの経過】\n{}日が経っている。".format(gap))
         blocks.append("【新しい会話】\n{}".format(snapshot["transcript"]))
         return [
             {"role": "user", "content": instruction + "\n\n" + "\n\n".join(blocks)},
@@ -883,6 +1074,9 @@ def apply(ctx):
         record = record_for(snapshot["world"], snapshot["npc_id"],
                             snapshot["npc_name"])
         messages = build_messages(snapshot, record)
+        # 頼み文を組んだ**後**に日を控える。先に控えると経過が 0 日になり、
+        # 「日が飛んだこと」を抽出LLMに伝えられなくなる。
+        stamp_day(snapshot["world"], snapshot["npc_id"], snapshot.get("day"))
         # 構造化出力を先に試し、使えない版では頼み文だけの JSON に降りる。
         update = normalize_update(ask_structured(MANAGER_EXTRACT, messages))
         if update is None:
@@ -892,7 +1086,7 @@ def apply(ctx):
                 snapshot["npc_name"], snapshot["npc_id"]))
             return
         update_record(snapshot["world"], snapshot["npc_id"],
-                      snapshot["npc_name"], update)
+                      snapshot["npc_name"], update, snapshot.get("day"))
 
     def worker_loop():
         """仕事を順番に処理する。30秒空けば再注入時の残骸を残さず終了する。"""

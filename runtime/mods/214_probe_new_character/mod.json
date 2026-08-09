@@ -1,0 +1,15 @@
+{
+  "entry": "probe_new_character.py",
+  "api": 1,
+  "name": {
+    "en": "New character level probe",
+    "ja": "新規キャラのレベル60の計測"
+  },
+  "description": {
+    "en": "A freshly created character starts at experience_level 60 with 0 experience_point. Records the whole start-of-game path - what the creation screen hands over, what Character.__init__ receives, which scripts.functions helper returns 60, and who called it - to find where the level is set",
+    "ja": "新規作成したキャラクタが経験値0のままレベル60で始まる。作成画面が何を渡すか、`Character.__init__` が何を受け取るか、`scripts.functions` のどの関数が 60 を返すか、それを誰が呼んだかを記録して、レベルが決まる場所を特定する"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "debug": true
+}

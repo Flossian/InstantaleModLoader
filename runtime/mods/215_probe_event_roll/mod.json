@@ -1,0 +1,18 @@
+{
+  "entry": "probe_event_roll.py",
+  "api": 1,
+  "name": {
+    "en": "Field event roll probe",
+    "ja": "フィールドイベントの判定の計測"
+  },
+  "description": {
+    "en": "Records everything around the success roll of a quest mini event - the credibility and reference_attribute the LLM returned, the probability the game wrote into the log, the outcome, and the player's ability scores / condition at that moment - to find out what the probability is actually made of",
+    "ja": "クエスト中のミニイベントの成否判定の周りを記録する。LLM が返した説得力(credibility)と参照能力値、ゲームがログに書き込んだ確率、判定結果、そのときのプレイヤーの能力値と状態。確率が何でできているかを突き止めるための計測"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "after": [
+    "313_event_ability_check"
+  ],
+  "debug": true
+}

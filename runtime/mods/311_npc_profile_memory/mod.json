@@ -9,7 +9,7 @@
     "en": "After each turn, a background LLM call updates a persistent profile formed from what conversations reveal about that NPC, plus a separate record of how that NPC sees the player. Both are appended to the NPC profile in every later conversation",
     "ja": "会話1ターンごとに、バックグラウンドの LLM が会話から形成された人物プロフィールと、その人物から見たプレイヤーの記録を更新する。どちらも以降の会話でゲーム本体のプロフィール欄に毎回載る"
   },
-  "version": "2",
+  "version": "5",
   "author": "yoshinari/tomotomo-y",
   "settings": {
     "CONVERSATION_TURNS": {
@@ -52,6 +52,18 @@
         "en": "Keeps how they address you, how they feel, and promises made in a field of its own"
       }
     },
+    "TELL_ELAPSED_DAYS": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "前に話してからの日数を伝える",
+        "en": "Tell the NPC how long since you last talked"
+      },
+      "note": {
+        "ja": "宿泊などで日が飛んでも、直前の会話の続きのようには話さなくなる。同じ土地に居る間は日々見かけている前提なので、毎回「久しぶり」にはならない",
+        "en": "Stops NPCs from carrying on as if no time passed when sleeping skips days, without turning every greeting into a reunion while you stay in the same place"
+      }
+    },
     "FACT_LOG_LIMIT": {
       "type": "int",
       "default": 200,
@@ -62,8 +74,8 @@
         "en": "Discovered facts kept per person"
       },
       "note": {
-        "ja": "要約でプロフィールから消えた事実の控え。会話には使わず、記録を後から確かめる用。0 で残さない",
-        "en": "An append-only trail of what each conversation revealed. Never sent to the game; 0 disables it"
+        "ja": "書き換えではなく追記で伸びる唯一の控え。次の抜き出しに差し戻して、要約で人物像から消えた事実を書き戻させる（会話のプロンプトには載らない）。0 で残さない",
+        "en": "The only append-only record here. Fed back into the next extraction so facts dropped by summarising are restored; never added to the conversation prompt. 0 disables it"
       }
     }
   }

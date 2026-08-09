@@ -652,6 +652,8 @@ cp932 のコンソールでも化けず、grep もしやすい。`version` を�
 304_quest_end_keep_party   が 303_quest_end_party_to_guild を包む
 305_mini_quest             が 105_fix_schema_compact を包む（LlamaCppClient.chat を共有）
                              → 305_ が先に前提を書き換え、105_ がその後でスキーマを縮める
+215_probe_event_roll       が 313_event_ability_check を包む（quest_referee_event_evaluate_new を共有）
+                             → 計測は 313_ が動かした後の credibility を控える
 111_llm_prompt_replace     が 102_ / 103_ / 105_ を包み、305_ に包まれる
                              → 305_ の完全一致の前提を壊さず、置換は圧縮前の本文を見る
 ```
