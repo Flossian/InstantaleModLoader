@@ -14,9 +14,28 @@
 
 マーカー欠落・未知の戻り値・書換失敗では従来結果を維持する。本物の犯罪を
 推測で消すより、誤判定を残して監査ログに出す方を選ぶ。
+
+## 二段のうち、どちらがどの経路で効くか
+
+戻り値を直す2段目は `llm_manager` の `master_ai_*` を包む＝プロバイダに依存
+しないので、ローカルでもクラウドでも同じように効く。**効かなかったのは1段目**
+（プロンプトの置換）で、v1 は `LlamaCppClient.chat` しか包んでいなかった。
+クラウド（APIキー）ではそこを通らないので system 文が書き換わらず、LLM は
+マーカーを出さない。マーカーが無ければ2段目は既定の素通しに倒れる ―
+**クラウドでは MOD 全体が何もしていなかった**（v2 で修正）。
+
+仕掛ける場所は `instantale_modloader.llm` が持っている（TECH.md §3.2.3 の
+「写して回るものが出たら、それはローダの語彙」）。ローカルの3点とクラウドの
+`llm_manager` 別名、別名の後生えの見張りまでそちらの担当で、この MOD が持つ
+のは**どう書き換えるか**だけ。`111_llm_prompt_replace` も同じ口を使う。
+
+二度当たっても壊れない（`INJECT_MARKER` が本文にあれば `already_injected` で
+何もしない）ので、印が届かない別スレッド経路でも安全。
 """
 
 import datetime
+
+from instantale_modloader.llm import wrap_outgoing
 
 
 LOG_BASENAME = "crime_attribution_fix.log"
@@ -179,18 +198,23 @@ def postprocess_summarizer(result):
     return result, "other_loss_zeroed", loss
 
 
-def rewrite_messages(messages):
-    """対象 system 文を浅いコピーで置換する。`(messages, kind, reason)` を返す。"""
-    if not isinstance(messages, list):
-        return messages, None, "not_list"
-    contents = [
-        message.get("content")
-        for message in messages
-        if isinstance(message, dict) and isinstance(message.get("content"), str)
-    ]
+def rewrite_texts(texts):
+    """出ていく文章の並びのうち、対象 system 文だけを置換する。
+
+    `(新しい並び, kind, reason)`。書き換えないときは**渡された並びをそのまま**
+    返す（`kind` は None）。messages の組み直しはローダ側（`instantale_modloader.llm`）
+    の担当なので、ここは文字列の並びしか見ない。
+
+    どちらの目印が何個あるかで facilitator / summarizer を見分ける。片方が
+    ちょうど1つ、もう片方が0のときだけ書き換える ― 数が合わないものは
+    知らない形なので、素通しして理由を残す。
+    """
+    if not isinstance(texts, (list, tuple)):
+        return texts, None, "not_list"
+    contents = [text for text in texts if isinstance(text, str)]
     blob = "\n".join(contents)
     if INJECT_MARKER in blob:
-        return messages, None, "already_injected"
+        return texts, None, "already_injected"
 
     arrest_count = blob.count(ARREST_ANCHOR)
     law_count = blob.count(LAW_ANCHOR)
@@ -199,38 +223,31 @@ def rewrite_messages(messages):
     elif law_count == 1 and arrest_count == 0:
         anchor, replacement, kind = LAW_ANCHOR, SUMMARIZER_REPLACEMENT, "summarizer"
     elif arrest_count == 0 and law_count == 0:
-        return messages, None, "not_target"
+        return texts, None, "not_target"
     else:
-        return messages, None, "ambiguous_anchor"
+        return texts, None, "ambiguous_anchor"
 
     rewritten = []
     changed = 0
-    for message in messages:
-        if not isinstance(message, dict):
-            rewritten.append(message)
+    for text in texts:
+        if not isinstance(text, str) or anchor not in text:
+            rewritten.append(text)
             continue
-        content = message.get("content")
-        if not isinstance(content, str) or anchor not in content:
-            rewritten.append(message)
-            continue
-        copy = dict(message)
-        copy["content"] = content.replace(anchor, replacement, 1)
-        rewritten.append(copy)
+        rewritten.append(text.replace(anchor, replacement, 1))
         changed += 1
     if changed != 1:
-        return messages, None, "anchor_change_count_{}".format(changed)
+        return texts, None, "anchor_change_count_{}".format(changed)
     return rewritten, kind, "rewritten"
 
 
 def apply(ctx):
     log_path = ctx.out_path(LOG_BASENAME)
-    sample = [{"role": "system", "content": LAW_ANCHOR}]
-    rewritten, check_kind, check_reason = rewrite_messages(sample)
+    rewritten, check_kind, check_reason = rewrite_texts([LAW_ANCHOR])
     verified = (
         check_kind == "summarizer"
         and check_reason == "rewritten"
-        and INJECT_MARKER in rewritten[0]["content"]
-        and rewrite_messages(rewritten)[2] == "already_injected"
+        and INJECT_MARKER in rewritten[0]
+        and rewrite_texts(rewritten)[2] == "already_injected"
     )
     state = {"enabled": verified, "missing": set(), "rewrites": 0}
 
@@ -242,24 +259,27 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("crime attribution fix: log write failed")
 
-    @ctx.wrap("llama_cpp_runtime_completion:LlamaCppClient.chat", required=False)
-    def chat(orig, self, model, messages, format=None, *args, **kwargs):
-        try:
-            if state["enabled"] and isinstance(format, dict):
-                new_messages, kind, reason = rewrite_messages(messages)
-                if kind is not None:
-                    messages = new_messages
-                    state["rewrites"] += 1
-                    write("prompt {} rewritten (count={})".format(
-                        kind, state["rewrites"]))
-                elif reason not in ("not_target", "already_injected"):
-                    key = "chat:" + reason
-                    if key not in state["missing"]:
-                        state["missing"].add(key)
-                        write("prompt unchanged: {}".format(reason))
-        except Exception:
-            ctx.log_exc("crime attribution fix: prompt rewrite failed")
-        return orig(self, model, messages, format, *args, **kwargs)
+    def rewrite(texts, site):
+        """ローダから呼ばれる。書き換えないときは None。"""
+        if not state["enabled"]:
+            return None
+        new_texts, kind, reason = rewrite_texts(texts)
+        if kind is not None:
+            state["rewrites"] += 1
+            write("prompt {} rewritten at {} (count={})".format(
+                kind, site, state["rewrites"]))
+            return new_texts
+        if reason not in ("not_target", "already_injected"):
+            # 知らない形は1種類につき1度だけ残す（毎回の推論で溢れさせない）。
+            key = site + ":" + reason
+            if key not in state["missing"]:
+                state["missing"].add(key)
+                write("prompt unchanged at {}: {}".format(site, reason))
+        return None
+
+    hooks = wrap_outgoing(
+        ctx, rewrite, label="crime attribution fix",
+        on_arm=lambda target: write("late-armed on {}".format(target)))
 
     def wrap_facilitator(name):
         @ctx.wrap("scripts.llm.llm_manager:{}".format(name), required=False)
@@ -299,7 +319,10 @@ def apply(ctx):
         wrap_summarizer(target_name)
 
     if verified:
-        ctx.log("crime attribution fix installed; log {}".format(log_path))
+        armed = hooks.armed()
+        ctx.log("crime attribution fix installed; prompt sites {}; log {}".format(
+            ", ".join(armed) if armed else "none yet (waiting for the alias)",
+            log_path))
     else:
         ctx.log("crime attribution fix self-check failed: {!r}/{!r}".format(
             check_kind, check_reason), level="ERROR")

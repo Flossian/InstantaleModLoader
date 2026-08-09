@@ -13,6 +13,18 @@
 このファイルはゲームを一切変更しない。書き出すだけ。
 """
 
+# 上書きする前の `out/recon/` を zip で残すか。
+#
+# 残しておかないと**ゲームが更新された瞬間に前の版のダンプが消える**ので、
+# 「何が増えて何が消えたか」を機械的に出せなくなる（GAME.md §1.5 に、退避が
+# あった main_023 → main_024 では 68 ターゲット増を出せて、退避が無かった
+# main_024 → main_025 では出せなかった、という記録がそのまま残っている）。
+#
+# 退避先は `out/recon_snapshots/main_025_20260809.zip` の形で、走るのは
+# **ビルドが変わったときだけ**（同じ版を何度走らせても増えない）。見分け方と
+# 「中身の差を引き金にしない」理由は `instantale_modloader/recon.py` の「退避」の節にある。
+BACKUP_PREVIOUS = True
+
 
 def apply(ctx):
     # ローダ本体のモジュールは、mod ファイルの先頭ではなく apply() の中で import する。
@@ -25,5 +37,5 @@ def apply(ctx):
     ctx.log("environment:\n" + ctx.describe())
 
     # sys.modules を全部なめて、out/recon/ に成果物一式を書き出す。
-    recon_dir = recon.dump(ctx.out_dir)
+    recon_dir = recon.dump(ctx.out_dir, backup=BACKUP_PREVIOUS)
     ctx.log("recon written to {}".format(recon_dir))

@@ -9,7 +9,7 @@
     "en": "Rewrites the text sent to the LLM with the user's replacement rules; reads the same llm_replacements.txt as InstantaleLlmProxy",
     "ja": "LLM に送る文章を置換ルールで書き換える。InstantaleLlmProxy と同じ llm_replacements.txt をそのまま読む"
   },
-  "version": "5",
+  "version": "6",
   "author": "R01/Flossian",
   "after": [
     "102_fix_prompt_dedup",

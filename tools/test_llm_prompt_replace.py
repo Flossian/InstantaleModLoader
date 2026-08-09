@@ -59,6 +59,10 @@ def find_mod(suffix):
 
 MOD_DIR, MOD_PATH = find_mod("_llm_prompt_replace")
 
+# 仕掛ける場所はローダの語彙（`instantale_modloader.llm`）。経路の定数と見張りの
+# 間隔はそちらにあるので、テストからもそちらを触る（TECH.md §3.2.3）。
+from instantale_modloader import llm as ml_llm          # noqa: E402
+
 # ゲームが自分で保存した実プロンプト。無ければ実データの照合だけ飛ばす。
 GAME_DIR = r"C:\Program Files\Epic Games\Instantaleq6Ve7"
 REAL_FILE_SAMPLE = 1200          # 実データは間引いて読む（全件は1万件を超える）
@@ -519,12 +523,12 @@ def test_cloud_path(tmp):
     del draws[:]
     _client4, ctx4, _path = arm("#tab:t\n半分=>替わった=>50\n", out_dir,
                                 roll=counting_roll)
-    sys.modules[mod.LOCAL_REQUEST_MODULE] = object()      # 印だけ。中身は見ない
+    sys.modules[ml_llm.LOCAL_REQUEST_MODULE] = object()      # 印だけ。中身は見ない
     try:
         ctx4.manager.send_request("m", [{"role": "user", "content": "半分の話"}],
                                   object())
     finally:
-        del sys.modules[mod.LOCAL_REQUEST_MODULE]
+        del sys.modules[ml_llm.LOCAL_REQUEST_MODULE]
     check("クラウド: ローカル実行ではこの地点で抽選しない", not draws, draws)
     check("クラウド: ローカル実行ではこの地点で置換しない",
           ctx4.manager.sent == [["半分の話"]], ctx4.manager.sent)
@@ -548,8 +552,8 @@ def test_alias_appears_late(tmp):
     mod.LOG_REPLACE = True
     mod.LOG_RULES = True
     mod._roll = lambda denom: 0
-    old_poll = mod.ALIAS_POLL_SECONDS
-    mod.ALIAS_POLL_SECONDS = 0.02
+    old_poll = ml_llm.ALIAS_POLL_SECONDS
+    ml_llm.ALIAS_POLL_SECONDS = 0.02
     try:
         ctx = FakeCtx(FakeClient(), out_dir)
         send = ctx.manager.send_request
@@ -580,7 +584,7 @@ def test_alias_appears_late(tmp):
               ctx.manager.sent == [["新しい言い方"]], ctx.manager.sent)
         check("後生え: 例外を握り潰していない", not ctx.errors, ctx.errors)
     finally:
-        mod.ALIAS_POLL_SECONDS = old_poll
+        ml_llm.ALIAS_POLL_SECONDS = old_poll
         reset_settings()
 
 

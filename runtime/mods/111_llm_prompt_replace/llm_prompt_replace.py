@@ -25,26 +25,22 @@ Python 文字列。そのままでは当たらないので:
 3. **.NET の 1 秒タイムアウトの代わり**に、照合へ 1 秒以上かかった正規表現ルールを
    以後捨てる（`SLOW_REGEX_SECONDS`。1回目の暴走だけは止められない）
 
-## どこに仕掛けるか（経路の実測と経緯は GAME.md §2.12 / VERIFICATION.md §2.24）
+## どこに仕掛けるか
 
-  * ローカル（llama.cpp）: `LlamaCppClient` の chat / _apply_chat_template /
-    _post_with_model_loading_retry の3点。どれが通るかはビルドと経路で変わる
-  * クラウド（APIキー）: 送信モジュールがプロバイダごとに違うので名指しせず、
-    どの経路でも import される **`llm_manager` の別名 `send_request*`** を包む
-    （ローダの alias_scan が、同じ関数を持つ全モジュールを張り替える）。
-    ログの site はラップした元関数の `__module__` から採る＝プロバイダ名が残る
+`instantale_modloader.llm.wrap_outgoing` に渡すだけ。ローカル（llama.cpp）の
+3点も、クラウド（APIキー）の `llm_manager` 別名包みも、別名の後生えの見張りも、
+入れ子で通る地点を素通しする印も**あちらの担当**（v5 まではこのファイルが
+持っていたものを、`119_` が同じものを要ることになった時点でローダへ移した。
+TECH.md §3.2.3「写して回るものが出たら、それはローダの語彙」）。経路の実測と
+経緯は GAME.md §2.12 / VERIFICATION.md §2.24。
 
-はまりどころ3つ（詳細は各実装コメント）:
+こちらに残るのは**この MOD 固有の歯止め**1つだけ:
 
   * **1回の推論で抽選は1回だけ。** 複数地点で抽選すると確率の分母が壊れる。
-    スレッドごとの印で内側の地点を素通しし、印が届かない別スレッド経路は
-    「自分が作った文章」のハッシュで二度目を止める（`306_` と同じ手口）
-  * **ローカル実行では `llm_manager` 境界に触らない。** send_request は内部で
-    別スレッドに降りてから chat を呼ぶため印が届かず、二重抽選になる。
-    llama.cpp の送信モジュールが import されているかで見分ける
-  * **`llm_manager` の別名は初期化時に後から生える。** ローダの保留はモジュール
-    単位で、属性の後生えは拾わない。無かったぶんは自前の見張りで当てる
-    （`ALIAS_POLL_SECONDS` ごと・`ALIAS_WATCH_SECONDS` で諦める・注入し直しで降りる）
+    入れ子の地点はローダの印で素通しになるが、印が届かない別スレッド経路
+    （`chat` が返った後に別のスレッドが送る場合）は止められないので、
+    「自分が作った文章」のハッシュで二度目を止める（`306_` と同じ手口）。
+    `119_` は書き換えが冪等なので、あちらにこの受け皿は要らない
 
 クラウド境界で見えるのは呼び出し側が渡した `message` だけで、send_request の中で
 足される部分（Gemini のスキーマ文など）には当たらない（GAME.md §1.8）。
@@ -76,9 +72,10 @@ import hashlib
 import os
 import random
 import re
-import sys
 import threading
 import time
+
+from instantale_modloader.llm import wrap_outgoing
 
 # --------------------------------------------------------------------------
 # 設定（既定値。`mod.json` の "settings" が同じ値を宣言している）
@@ -100,26 +97,6 @@ OFFTAB_PREFIX = "#offtab:"
 SNIP_CHARS = 40              # ログに出す断片の長さ（プロキシの Snip と同じ）
 SLOW_REGEX_SECONDS = 1.0     # 照合にこれ以上かかった正規表現は以後使わない
 SEEN_TEXTS = 64              # 「自分が作った文章」を覚えておく件数
-
-# 仕掛ける先。全部 `required=False`（ビルドと経路によって無い可能性がある）。
-CHAT_TARGET = "llama_cpp_runtime_completion:LlamaCppClient.chat"
-TEMPLATE_TARGET = "llama_cpp_runtime_completion:LlamaCppClient._apply_chat_template"
-POST_TARGET = "llama_cpp_runtime_completion:LlamaCppClient._post_with_model_loading_retry"
-
-# 外部APIキー（クラウド）経路。プロバイダごとに送信モジュールが分かれているので、
-# モジュール名ではなく `llm_manager` が持つ別名を包む（docstring「どこに仕掛けるか」）。
-# 第2要素は send_request_with_no_structure か（ログの site に "_ns" を付ける）。
-MANAGER_SEND_TARGETS = (
-    ("scripts.llm.llm_manager:send_request", False),
-    ("scripts.llm.llm_manager:send_request_with_no_structure", True),
-)
-
-# これが import されていたらローカル実行（クラウドとどちらか片方しか載らない）。
-LOCAL_REQUEST_MODULE = "scripts.llm.request_llm_inference_llama_cpp_completion"
-
-# 「別名の後生え」の見張り（docstring「どこに仕掛けるか」）。
-ALIAS_POLL_SECONDS = 5.0     # 生えたかを見る間隔
-ALIAS_WATCH_SECONDS = 3600.0  # これだけ待って生えなければ諦める
 
 _RNG = random.Random()
 _RNG_LOCK = threading.Lock()
@@ -591,20 +568,8 @@ class RuleFile(object):
 # --------------------------------------------------------------------------
 # 「1回の推論で1回だけ」の歯止め
 # --------------------------------------------------------------------------
-_pass_local = threading.local()
-
-
-def begin_pass():
-    """このスレッドで既に置換したかを返し、印を立てる。"""
-    already = getattr(_pass_local, "active", False)
-    _pass_local.active = True
-    return already
-
-
-def end_pass(previous):
-    _pass_local.active = previous
-
-
+# 入れ子で通る地点を素通しする印はローダ側（`instantale_modloader.llm`）にある。
+# こちらが持つのは、その印が**届かない**場合の受け皿だけ。
 class Seen(object):
     """自分が作った文章を覚えておく輪。二度目に来たものは触らない。
 
@@ -638,15 +603,6 @@ class Seen(object):
             return self._mark(text) in self.marks
 
 
-def content_of(message):
-    """メッセージの本文。dict でなければ None（＝触らない）。"""
-    try:
-        content = message.get("content")
-    except Exception:
-        return None
-    return content if isinstance(content, str) else None
-
-
 # --------------------------------------------------------------------------
 # 注入
 # --------------------------------------------------------------------------
@@ -673,8 +629,12 @@ def apply(ctx):
 
     rules = RuleFile(mod_dir, report)
 
-    def run(site, texts):
-        """文章の並びにルールを当てる。変わらなければ None。"""
+    def run(texts, site):
+        """文章の並びにルールを当てる。変わらなければ None。
+
+        ローダ（`instantale_modloader.llm`）から、1回の推論で出ていく本文の
+        並びとして呼ばれる。引数の順はあちらの約束（`rewrite(texts, site)`）。
+        """
         groups = rules.current()
         if not groups:
             return None
@@ -714,185 +674,20 @@ def apply(ctx):
             result.append(new_text)
         return result if changed else None
 
-    def replace_messages(messages, site):
-        """messages の本文にルールを当てる。**元のリストは書き換えない**。
-
-        会話履歴としてゲーム側が同じ dict を持ち続けている可能性があるため、
-        浅い写しを作って差し替える（`105_` と同じ理由）。
-        """
-        if not isinstance(messages, list) or not messages:
-            return messages
-        spots = []
-        for index, message in enumerate(messages):
-            content = content_of(message)
-            if content:
-                spots.append((index, content))
-        if not spots:
-            return messages
-
-        result = run(site, [content for _index, content in spots])
-        if result is None:
-            return messages
-
-        new_messages = list(messages)
-        for (index, before), after in zip(spots, result):
-            if after == before:
-                continue
-            replacement = dict(new_messages[index])
-            replacement["content"] = after
-            new_messages[index] = replacement
-        return new_messages
-
-    def safely(what, fn, fallback):
-        try:
-            return fn()
-        except Exception:
-            # 置換に失敗しても文章はそのまま送る。ここで止める方が損害が大きい。
-            ctx.log_exc("replace: {} pass failed; sending the text untouched".format(what))
-            return fallback
-
-    # ------------------------------------------------------- chat（実際の経路）
-    @ctx.wrap(CHAT_TARGET, required=False)
-    def chat(orig, self, model, messages, format=None, *args, **kwargs):
-        previous = begin_pass()
-        try:
-            if not previous:
-                messages = safely("chat", lambda: replace_messages(messages, "chat"),
-                                  messages)
-            return orig(self, model, messages, format, *args, **kwargs)
-        finally:
-            end_pass(previous)
-
-    # ------------------------------------------ messages（102_ と同じ地点・保険）
-    @ctx.wrap(TEMPLATE_TARGET, required=False)
-    def apply_chat_template(orig, self, model, messages, timeout=None, *args, **kwargs):
-        previous = begin_pass()
-        try:
-            if not previous:
-                messages = safely("template",
-                                  lambda: replace_messages(messages, "template"),
-                                  messages)
-            return orig(self, model, messages, timeout, *args, **kwargs)
-        finally:
-            end_pass(previous)
-
-    # ------------------------------------------- payload（プロキシと同位置・保険）
-    @ctx.wrap(POST_TARGET, required=False)
-    def post_with_retry(orig, self, url, payload, timeout=None, *args, **kwargs):
-        previous = begin_pass()
-        try:
-            if not previous and isinstance(payload, dict):
-                prompt = payload.get("prompt")
-                if isinstance(prompt, str) and prompt:
-                    result = safely("payload", lambda: run("payload", [prompt]), None)
-                    if result and result[0] != prompt:
-                        # 呼び出し元の dict は変えず、浅い写しを渡す。
-                        payload = dict(payload)
-                        payload["prompt"] = result[0]
-            return orig(self, url, payload, timeout, *args, **kwargs)
-        finally:
-            end_pass(previous)
-
-    # ---------------------------------------------- 外部APIキー（クラウド）経路
-    # クラウドは LlamaCppClient を通らないので、上の3つだけでは素通りになる。
-    # 送信モジュールはプロバイダごとに違ううえコンパイル済みなので、モジュール名に
-    # 依存しない `llm_manager` の別名を包む（docstring「どこに仕掛けるか」）。
-    # 本文は第2位置引数（または message=）のリスト。並びが
-    # `send_request(manager_name, message, structure, ...)` でないプロバイダも
-    # ありうるので、位置に決め打ちせず両方を見る。
-    def replace_message_arg(site, args, kwargs):
-        """呼び出しの (args, kwargs) の中の message にルールを当てる。"""
-        if len(args) >= 2 and isinstance(args[1], list):
-            replaced = replace_messages(args[1], site)
-            if replaced is not args[1]:
-                args = args[:1] + (replaced,) + args[2:]
-        elif isinstance(kwargs.get("message"), list):
-            replaced = replace_messages(kwargs["message"], site)
-            if replaced is not kwargs["message"]:
-                kwargs = dict(kwargs, message=replaced)
-        return args, kwargs
-
-    def cloud_site(orig, ns):
-        """ログの site。ラップした元関数の持ち主からプロバイダ名を採る。"""
-        module = (getattr(orig, "__module__", "") or "").rpartition(".")[2]
-        if module.startswith("request_llm_inference_"):
-            module = module[len("request_llm_inference_"):]
-        return (module or "cloud") + ("_ns" if ns else "")
-
-    def hook_manager_send(target, ns):
-        @ctx.wrap(target, required=False)
-        def manager_send(orig, *args, **kwargs):
-            # ローカル実行ではここでは触らない。send_request は内部で別スレッドに
-            # 降りるため印が届かず、LlamaCppClient 側の3点と二重に抽選してしまう。
-            if sys.modules.get(LOCAL_REQUEST_MODULE) is not None:
-                return orig(*args, **kwargs)
-            previous = begin_pass()
-            try:
-                if not previous:
-                    site = cloud_site(orig, ns)
-                    args, kwargs = safely(
-                        site, lambda: replace_message_arg(site, args, kwargs),
-                        (args, kwargs))
-                return orig(*args, **kwargs)
-            finally:
-                end_pass(previous)
-
-    def resolvable(target):
-        try:
-            return ctx.resolve(target)[2] is not None
-        except Exception:
-            return False
-
-    # 居る別名は今すぐ包む。まだ生えていない別名は見張りに回す（起動直後の
-    # 注入では llm_manager に send_request がまだ無い。docstring のとおり）。
-    unarmed = []
-    for _target, _ns in MANAGER_SEND_TARGETS:
-        if resolvable(_target):
-            hook_manager_send(_target, _ns)
-        else:
-            unarmed.append((_target, _ns))
-
-    if unarmed:
-        def watch_manager_alias():
-            deadline = time.monotonic() + ALIAS_WATCH_SECONDS
-            remaining = list(unarmed)
-            while remaining and not ctx.superseded():
-                for item in list(remaining):
-                    target, ns = item
-                    if not resolvable(target):
-                        continue
-                    hook_manager_send(target, ns)
-                    remaining.remove(item)
-                    ctx.log("prompt replace: late-armed on {} "
-                            "(the alias appeared)".format(target))
-                    report("[RULES] 遅れて仕掛けた: {}".format(target), force=True)
-                if not remaining:
-                    return
-                if time.monotonic() > deadline:
-                    ctx.log("prompt replace: gave up waiting for {} "
-                            "({}s)".format(
-                                ", ".join(t for t, _n in remaining),
-                                int(ALIAS_WATCH_SECONDS)), level="WARN")
-                    return
-                time.sleep(ALIAS_POLL_SECONDS)
-
-        threading.Thread(target=watch_manager_alias,
-                         name="111_replace_alias_watch", daemon=True).start()
+    # 仕掛ける場所はローダの担当（`instantale_modloader.llm`）。ローカルの3点も
+    # クラウドの `llm_manager` 別名も、別名の後生えの見張りも向こうにある。
+    # こちらが渡すのは「この並びをどう書き換えるか」だけ。
+    hooks = wrap_outgoing(
+        ctx, run, label="prompt replace",
+        on_arm=lambda target: report(
+            "[RULES] 遅れて仕掛けた: {}".format(target), force=True))
 
     # 注入した時点で、作ったデータで正しさを確かめておく。実経路はゲームが LLM を
     # 呼ぶまで通らず、起動直後に通る保証が無いため（102_ / 105_ と同じ方針）。
     _verify(ctx)
 
     # どこに仕掛かったかと、どのルールファイルを読むのかを残す。
-    armed = []
-    for target in ((CHAT_TARGET, TEMPLATE_TARGET, POST_TARGET)
-                   + tuple(t for t, _ns in MANAGER_SEND_TARGETS)):
-        try:
-            _owner, _name, value = ctx.resolve(target)
-        except Exception:
-            value = None
-        if value is not None:
-            armed.append(target.rpartition(".")[2])
+    armed = hooks.armed()
     groups = rules.current()
     ctx.log("prompt replace: armed on {} | {} | log {}".format(
         ", ".join(armed) if armed else "nothing (targets missing)",

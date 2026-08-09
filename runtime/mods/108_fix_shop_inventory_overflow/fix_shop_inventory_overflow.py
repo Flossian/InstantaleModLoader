@@ -1,6 +1,17 @@
 # -*- coding: utf-8 -*-
 """修正: 売買画面（twin inventory）を開くと IndexError で落ちるのを直す。
 
+## main_024 で本体が取り込んだ扱いにして降ろした（VERIFICATION.md §3.8.1）
+
+main_024 のアナウンスにこの件（売買画面）が挙がっている。ただし他の5本と違い、
+**印での判定は付いていない** ― このクラッシュは能動的に起こせないので、
+本体が直したのか、この MOD が防いでいるのかを区別できない（GAME.md の
+main_024 の表）。救済経路も `out/inventory.log` の正常サンプル 192 件の間で
+一度も走っていない（VERIFICATION.md §3.8）。
+
+`mod.json` に `superseded` を入れてデバッグモード限定にしてある。コードは
+そのままなので、デバッグモードを入れれば一覧の元の位置に戻る。以下は当時の記録。
+
 ## 原因（GAME.md §2.13 / VERIFICATION.md §2.16）
 
 会話から売買に入った瞬間、`InventoryGrid.occupy_slots` が

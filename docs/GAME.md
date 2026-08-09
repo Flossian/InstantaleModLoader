@@ -60,7 +60,7 @@ save_area_json, save_world_json, api_key_manager, build_type, sdcpp_cuda
 |---|---|
 | ゲーム本体 | `C:\Program Files\Epic Games\Instantaleq6Ve7\instantale.exe` |
 | ランタイム | CPython 3.10.11 / Kivy / SDL2 |
-| `game_version` | `014`（`__main__.get_game_version()`）。Epic の `AppVersion: main_023` は別系統 |
+| `game_version` | `014`（`__main__.get_game_version()`）。Epic の `AppVersion`（現在 `main_025`）は別系統。読み方は §1.5 |
 | ロード済みモジュール | 4208（うち 3243 が Nuitka コンパイル済み）／ゲーム自身は 72 |
 | セーブ | `%LOCALAPPDATA%\Darmabeko\Instantale\` |
 | クラッシュログ | `<ゲームdir>\crash_log.txt`。更新で消えることがある（§1.5） |
@@ -69,6 +69,32 @@ save_area_json, save_world_json, api_key_manager, build_type, sdcpp_cuda
 ゲーム内部のバージョンは実行時に問い合わせること（Epic のマニフェストとは無関係）。
 
 ### 1.5 更新の記録
+
+#### main_024 → main_025（2026-08-09 に更新、同日リコン）
+
+`game_version` は `014` のまま（main_023 から3版すえ置き）。上がったのは Epic の
+`AppVersion` だけで、値は `%PROGRAMDATA%\Epic\EpicGamesLauncher\Data\Manifests\*.item` の
+`AppVersionString` から読める（ゲームを起動しなくても分かる。§1.4 の「別系統」の実体）。
+
+**新規キャラのレベル60が直った**（§2.36）。`InstantaleApp.start_game` の
+**同じ 876 行**が `experience_level=60` → `1` になっただけで、体力上限を組む
+883〜885 行（`get_max_physical_integrity(1) -> 10`）は変わっていない。
+こちらが「876 行だけが食い違っている」と読んだとおりの直し方。
+
+| MOD | 対応する修正 | 印 | 判定 |
+|---|---|---|---|
+| `123_fix_new_character_level` | 新規キャラがレベル60で始まる | `experience_level 60 -> 1` 0 件（`fixed 0`） | 本体が直した（§2.36） |
+
+> **リコンは上書きされる。** `out/recon/` は注入のたびに同じ名前で書き直されるので、
+> 更新前に退避していないと main_024 との差分が取れない（main_023 → main_024 では
+> 退避してあったので 68 ターゲット増を機械的に出せた）。今回は退避が無く、
+> 差分は出せていない。
+>
+> **この取りこぼしを受けて、退避は `000_recon` が自動でやるようにした。**
+> `out/recon/` の中身がどのビルドを見たものかを `build.json` に控えておき、次の回に
+> 版が変わっていれば、上書きする前に `out/recon_snapshots/<版>_<日付>.zip` へ固める。
+> 走るのは版が変わったときだけなので、同じ版を何度遊んでも zip は増えない。
+> 次の更新からは、更新後に一度起動するだけで差分の材料が揃う。
 
 #### main_023 → main_024（2026-08-05 に更新、同日リコン）
 
@@ -109,7 +135,7 @@ MOD が手を出したかどうかは、その MOD 自身の印で判定する�
 | `101_fix_npc_employ_price` | 高レベルNPCの雇用でクラッシュ | 上流プローブ＋リコン差分 | 本体が直した |
 | `110_fix_character_name_path` | 禁則文字を含む名前で画像が生成されない | `[NAMEFIX]` 実ゲームで 0 件 | 本体が直した（§2.15） |
 | `103_fix_eventlog_trim` | クエストログが際限なく溜まる | `[EVENTLOG]` 0 件（イベント5回） | 本体が直した |
-| `108_` | 売買画面 | なし | 未検証（能動的に起こせない） |
+| `108_` | 売買画面 | なし | 未検証（能動的に起こせない）。**判定が付かないまま 2026-08-09 に `superseded: main_024` で降ろした**（ユーザー判断。VERIFICATION.md §3.8.1） |
 
 `107_` の根拠（2026-08-05 16:54、会話から戦闘）:
 
@@ -156,6 +182,11 @@ BattleEndInFreeAction.end_phase done         in_battle=0  app.music = 'None'
 > 本体が名前を触らずに直しているなら、残す限りこちらだけが余計に改変する側に回る。
 > ただし main_024 では実ゲームで一度も発火していないので、急いで外す理由も無い。
 > 外すかどうかは、上の「保存名を確認できていない」が片付いてからでよい。
+
+> **`108_` はその後、別の理由で降ろした（2026-08-09）。** 「無害だから残す」は
+> こちらでは通るが、印でも症状でも判定が付かない ＝ **確かめようのないものを
+> 既定で配り続けることになる**ので、`superseded` でデバッグモード限定にした
+> （VERIFICATION.md §3.8.1）。`102_` は据え置き。
 
 > そこで `101_` に上流プローブを足した（§3）。包む前の素の関数を控えておき、
 > 注入のたびに `0..200` を総当たりする。2026-08-05 の結果:

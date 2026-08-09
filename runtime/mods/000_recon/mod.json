@@ -9,6 +9,20 @@
     "en": "Dumps the running module structure to out/recon/ (changes nothing in the game)",
     "ja": "ゲームの内部構造を走査し、パッチ対象の一覧を out/recon/ に書き出す（ゲームは変更しない）"
   },
-  "version": "1",
+  "settings": {
+    "BACKUP_PREVIOUS": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "en": "Archive the previous dump when the game updates",
+        "ja": "ゲーム更新時に前回の走査結果を退避する"
+      },
+      "note": {
+        "en": "Zips out/recon/ into out/recon_snapshots/<version>_<date>.zip before overwriting it, so the two builds can be compared. Only runs when the build changed.",
+        "ja": "上書きする前に out\\recon\\ を out\\recon_snapshots\\<版>_<日付>.zip へ固めます。版が変わったときだけ走ります"
+      }
+    }
+  },
+  "version": "2",
   "author": "R01/Flossian"
 }

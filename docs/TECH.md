@@ -191,6 +191,7 @@ Get-ChildItem tools/test_*.py | Sort-Object Name | ForEach-Object {
 # 直している最中は、触った MOD のものだけを直接叩けばよい（落ちた内容が読める）
 python tools/test_patch_registry.py           # ローダ本体（台帳 / on_ready / 名乗り）
 python tools/test_state.py                    # state/ の住所と壊れない書き込み
+python tools/test_recon_archive.py            # 000_（リコンの退避が走る条件と名前）
 python tools/test_llm_prompt_replace.py       # 111_
 python tools/test_ui_conversation_log.py      # 122_（113_ との並びの取り決めもここで見る）
 python tools/test_new_character_level.py      # 123_
@@ -294,9 +295,19 @@ InstantaleModLoader.bat        # GUI からゲームを起動して注入する�
 | `out/recon/targets.txt` | これが本命。`module:qualname(signature)` 形式で 1,585 件。`@ctx.wrap` にそのまま貼れる |
 | `out/recon/game_modules.txt` | ゲーム自身のモジュールの全属性ダンプ。擬似ソースとして読む |
 | `out/recon/modules.json` | 機械可読のインベントリ |
+| `out/recon/build.json` | このダンプが**どのビルドを見たものか**（Epic の版・ゲームの版・各ファイルの sha256） |
 
 読み方と、スキャンで見つからないもの（ネスト関数・クラスのメソッド）は
 [GAME.md §1](GAME.md) に集約してある。
+
+`out/recon/` は毎回同じ名前で上書きされるが、`build.json` と突き合わせて
+**ゲームが更新されていれば、上書きの前に前回ぶんが
+`out/recon_snapshots/<版>_<日付>.zip` へ退避される**。更新の前後で
+`targets.txt` を突き合わせれば、増えた対象・消えた対象がそのまま出る
+（GAME.md §1.5 に、退避があった版とそうでない版の実例がある）。退避が走るのは
+版が変わったときだけで、中身の差では走らない ― リコンは `sys.modules` を見るので
+**同じ版でも起動直後と長時間プレイ後で中身が変わる**（3452 と 4235）。中身の差を
+引き金にすると同じ版の zip が毎回増え、肝心の1回が埋もれる。
 
 #### 手順 1. 雛形をコピーする
 
@@ -687,13 +698,26 @@ cp932 のコンソールでも化けず、grep もしやすい。`version` を�
   それだと `open()` が失敗し、広い `except` に吸われて控えが黙って空に倒れる。
   **この知識は `110_fix_character_name_path` が先に持っていた**のに隣へ届いていない
 
-いまは `instantale_modloader.state` に1つだけある:
+いまは2つある。**世界の住所**（`state`）と、**LLM へ出ていく文章が通る場所**
+（`llm`。§5.3）:
 
 ```python
 from instantale_modloader.state import world_filename, world_key
 
 path = ctx.state_path("npc_profiles", world_filename(world_key(app)))
 ```
+
+```python
+from instantale_modloader.llm import wrap_outgoing
+
+wrap_outgoing(ctx, rewrite, label="my mod")     # rewrite(texts, site) -> 並び / None
+```
+
+後者は `111_llm_prompt_replace` が v5 まで自分で持っていた。`119_` が同じものを
+要ることになった時点で（クラウドで効かないのは**仕掛ける場所を1か所しか
+知らなかった**ため）、写す前にローダへ移した ― 上の「写して回るものが出たら、
+それはローダの語彙」をそのまま適用した形。**どう書き換えるかは移していない**
+（あちらは確率つきの置換ルール、こちらは目印の差し替え。上の表のとおり）。
 
 > **`import state` ではなく関数を直に import する。** `301_` / `305_` は
 > `apply()` の中に `state = {...}` というローカル変数を持っている。モジュール名で
@@ -1507,6 +1531,56 @@ frames.MISSING             # 「属性が無い」を None と区別する番兵
 思ったまま照合し続けていた（実機でクリックの打ち切りが毎回不発。症状はログの
 1行だけで、例外は出ない）。文字列を期待するなら
 `value is not frames.MISSING and isinstance(value, str)` の順で書く。
+
+### 5.3 `instantale_modloader.llm`
+
+LLM へ**出ていく文章**を書き換えたい MOD が使う。仕掛ける場所（＝ゲームの読み方）
+だけを持ち、書き換えの中身は持たない。
+
+```python
+from instantale_modloader.llm import wrap_outgoing
+
+def rewrite(texts, site):
+    """この1回の推論で出ていく本文の並び。変えないなら None を返す。"""
+    return [t.replace("前", "後") for t in texts]
+
+hooks = wrap_outgoing(ctx, rewrite, label="my mod")
+hooks.armed()          # 今その名前がある対象（起動直後はクラウドの別名がまだ無い）
+```
+
+包む先は4種類。全部 `required=False`（ビルドと経路によって無い）:
+
+| 経路 | 対象 | site |
+|---|---|---|
+| ローカル | `LlamaCppClient.chat` | `chat` |
+| ローカル | `LlamaCppClient._apply_chat_template` | `template` |
+| ローカル | `LlamaCppClient._post_with_model_loading_retry` | `payload`（本文は prompt 1本） |
+| クラウド | `llm_manager:send_request` / `_with_no_structure` | プロバイダ名 / `+_ns` |
+
+引き受けているのは次の4つ。**MOD ごとに書くと必ずどれかが抜ける**（`119_` は
+最初の1つしか知らず、クラウドで丸ごと素通しになっていた）:
+
+- **クラウドはモジュール名で名指ししない。** 送信モジュールはプロバイダごとに
+  違ううえコンパイル済みなので、どの経路でも import される `llm_manager` の
+  **別名**を包む（`patch.py` の alias_scan が持ち主を全部張り替える）
+- **その別名は初期化時に後から生える。** ローダの保留はモジュール単位なので
+  属性の後生えは拾わない。無かったぶんは見張って当てる（`ctx.superseded()` で降りる）
+- **ローカル実行では `llm_manager` 境界に触らない。** `send_request` は内部で
+  別スレッドに降りてから `chat` を呼ぶため、印が届かず二重に当たる
+- **入れ子で通る地点は内側を素通しする。** 印は `wrap_outgoing` の呼び出しごとに
+  別なので、MOD どうしが互いを塞がない
+
+**面倒を見ないもの**は2つ。どちらも書き換えの中身しだいなので MOD 側の責任:
+
+- 印はスレッドに立つので、`chat` が返った後に**別のスレッド**が送る経路には
+  届かない。二度当たって困るなら自分で止める（`111_` は自分の出力のハッシュ、
+  `119_` は本文に自分の目印があるかで見る＝冪等）
+- **適用順は約束しない。** ローカルの3点は `mod.json` の `after` / `before` で
+  重なるが、クラウドの別名は**見張りが先に当てた方が内側**になる（後生えを待つ
+  時刻が MOD ごとに違う）。互いの書き換えが相手の目印を壊さない前提で書くこと
+
+クラウド境界で見えるのは呼び出し側が渡した `message` だけ。`send_request` の中で
+足される部分（Gemini のスキーマ文など）には当たらない（GAME.md §1.8）。
 
 ---
 
