@@ -1,0 +1,116 @@
+{
+  "entry": "city_case.py",
+  "api": 1,
+  "name": {
+    "en": "City case",
+    "ja": "街の事件"
+  },
+  "description": {
+    "en": "A case to investigate around town: gather clues at facilities, then name the culprit",
+    "ja": "街を回って調べる事件。施設で聞き込み、手がかりが揃ったら犯人を告発する"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "settings": {
+    "START_FACILITY_TYPE": {
+      "type": "str",
+      "default": "guild",
+      "label": {
+        "ja": "依頼を受ける施設",
+        "en": "Facility that offers the case"
+      },
+      "note": {
+        "ja": "facility_type。告発もここで行う",
+        "en": "facility_type; the accusation happens here too"
+      }
+    },
+    "REWARD_GOLD": {
+      "type": "int",
+      "default": 500,
+      "min": 0,
+      "max": 100000,
+      "label": {
+        "ja": "解決したときの報酬",
+        "en": "Reward for solving the case"
+      }
+    },
+    "ARREST_CULPRIT": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "犯人を退場させる",
+        "en": "Retire the culprit"
+      },
+      "note": {
+        "ja": "切ると真相が分かるだけで、犯人は町に残る",
+        "en": "Off leaves the culprit in town"
+      }
+    },
+    "SUSPECT_COUNT": {
+      "type": "int",
+      "default": 4,
+      "min": 3,
+      "max": 8,
+      "label": {
+        "ja": "容疑者の人数",
+        "en": "Number of suspects"
+      },
+      "note": {
+        "ja": "犯人を含む。多いほど手がかりが増え、聞き込みも長くなる",
+        "en": "Includes the culprit; more suspects means more clues to collect"
+      }
+    },
+    "MISTAKE_PERCENT": {
+      "type": "int",
+      "default": 50,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "思い違いの証言が混じる割合（％）",
+        "en": "Chance of a mistaken testimony (%)"
+      },
+      "note": {
+        "ja": "混じると、聞いた話を全部信じたときに誰も当てはまらなくなる。0 で従来どおり全部が真",
+        "en": "With one wrong clue, believing every clue leaves nobody; 0 keeps all clues true"
+      }
+    },
+    "USE_LLM": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "事件の文章を AI に書かせる",
+        "en": "Let the AI write the case"
+      },
+      "note": {
+        "ja": "切ると同梱の8人から選び、文章も定型になる。謎の作りは変わらない",
+        "en": "Off uses the built-in cast and fixed wording; the puzzle is the same"
+      }
+    },
+    "LLM_TIMEOUT": {
+      "type": "int",
+      "default": 120,
+      "min": 10,
+      "max": 600,
+      "label": {
+        "ja": "AI の返事を待つ秒数",
+        "en": "Seconds to wait for the AI"
+      },
+      "note": {
+        "ja": "超えたら定型で事件を始める",
+        "en": "Past this the case starts with the built-in wording"
+      }
+    },
+    "WATCH_CONVERSATION": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "会話の経路を計測する",
+        "en": "Trace conversation calls"
+      },
+      "note": {
+        "ja": "既定 OFF。届かないときだけ入れる（会話のたびにログが伸びる）",
+        "en": "Off by default; turn on only when the knowledge does not arrive"
+      }
+    }
+  }
+}

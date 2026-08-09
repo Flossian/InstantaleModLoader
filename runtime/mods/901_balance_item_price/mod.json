@@ -1,0 +1,278 @@
+{
+  "entry": "balance_item_price.py",
+  "api": 1,
+  "name": {
+    "en": "Item price rebalance",
+    "ja": "アイテムの値付けの調整"
+  },
+  "description": {
+    "en": "Reprices items from their own category, ability scores and rarity, instead of the flat scale the game uses",
+    "ja": "アイテムの値段を、種別・能力値・レア度から付け直す。素のゲームがレア度をほぼ無視して一律に安いのを直す"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "settings": {
+    "PRICE_SCALE": {
+      "type": "float",
+      "default": 1.0,
+      "min": 0.05,
+      "max": 100.0,
+      "label": {
+        "ja": "全体の倍率",
+        "en": "Overall multiplier"
+      },
+      "note": {
+        "ja": "値段すべてに最後に掛かる。高いと感じたら 0.5、安いと感じたら 2.0 のように動かす",
+        "en": "Applied last to every price. Halve it if things feel expensive, double it if they feel cheap"
+      }
+    },
+    "SELL_RATE": {
+      "type": "float",
+      "default": 0.4,
+      "min": 0.01,
+      "max": 1.0,
+      "label": {
+        "ja": "店の買取率",
+        "en": "Shop buy-back rate"
+      },
+      "note": {
+        "ja": "店に売るときの値段は、店が売る値段のこの割合になる",
+        "en": "What the player gets when selling, as a fraction of the shop's asking price"
+      }
+    },
+    "MULT_WEAPON": {
+      "type": "float",
+      "default": 1.0,
+      "min": 0.05,
+      "max": 100.0,
+      "label": {
+        "ja": "武器の倍率",
+        "en": "Weapon multiplier"
+      },
+      "note": {
+        "ja": "短剣・長物・投擲など weapon 全体に掛かる",
+        "en": "Applies to every weapon sub-type"
+      }
+    },
+    "MULT_WEARABLE": {
+      "type": "float",
+      "default": 1.0,
+      "min": 0.05,
+      "max": 100.0,
+      "label": {
+        "ja": "防具・装身具の倍率",
+        "en": "Wearable multiplier"
+      },
+      "note": {
+        "ja": "鎧・兜・盾・装飾品・衣服など wearable 全体に掛かる",
+        "en": "Applies to every wearable sub-type"
+      }
+    },
+    "MULT_HEALING_ITEM": {
+      "type": "float",
+      "default": 1.0,
+      "min": 0.05,
+      "max": 100.0,
+      "label": {
+        "ja": "回復アイテムの倍率",
+        "en": "Healing item multiplier"
+      },
+      "note": {
+        "ja": "回復量を持つ薬・薬草・食料などに掛かる",
+        "en": "Applies to items that carry a recovery amount"
+      }
+    },
+    "MULT_CONSUMABLE": {
+      "type": "float",
+      "default": 1.0,
+      "min": 0.05,
+      "max": 100.0,
+      "label": {
+        "ja": "消耗品の倍率",
+        "en": "Consumable multiplier"
+      },
+      "note": {
+        "ja": "回復量を持たない食料・巻物などに掛かる",
+        "en": "Applies to consumables with no recovery amount"
+      }
+    },
+    "MULT_UTILITY": {
+      "type": "float",
+      "default": 1.0,
+      "min": 0.05,
+      "max": 100.0,
+      "label": {
+        "ja": "道具・書物の倍率",
+        "en": "Utility multiplier"
+      },
+      "note": {
+        "ja": "道具と文書に掛かる",
+        "en": "Applies to tools and documents"
+      }
+    },
+    "MULT_MATERIAL": {
+      "type": "float",
+      "default": 1.0,
+      "min": 0.05,
+      "max": 100.0,
+      "label": {
+        "ja": "素材・財宝の倍率",
+        "en": "Material multiplier"
+      },
+      "note": {
+        "ja": "鉱石・宝石・遺物・財宝・がらくたなど material 全体に掛かる",
+        "en": "Applies to ores, gems, relics, treasure and scrap"
+      }
+    },
+    "RARITY_RARE": {
+      "type": "float",
+      "default": 1.4,
+      "min": 1.0,
+      "max": 100.0,
+      "label": {
+        "ja": "レア度 rare の倍率",
+        "en": "Rarity multiplier: rare"
+      },
+      "note": {
+        "ja": "common は常に 1.0（基準）",
+        "en": "common is always 1.0 (the baseline)"
+      }
+    },
+    "RARITY_MAGICAL": {
+      "type": "float",
+      "default": 2.0,
+      "min": 1.0,
+      "max": 100.0,
+      "label": {
+        "ja": "レア度 magical の倍率",
+        "en": "Rarity multiplier: magical"
+      },
+      "note": {
+        "ja": "素のゲームはレア度をほとんど値段に反映しない",
+        "en": "The unmodded game barely prices rarity in"
+      }
+    },
+    "RARITY_EPIC": {
+      "type": "float",
+      "default": 3.0,
+      "min": 1.0,
+      "max": 100.0,
+      "label": {
+        "ja": "レア度 epic の倍率",
+        "en": "Rarity multiplier: epic"
+      },
+      "note": {
+        "ja": "",
+        "en": ""
+      }
+    },
+    "RARITY_LEGENDARY": {
+      "type": "float",
+      "default": 4.5,
+      "min": 1.0,
+      "max": 100.0,
+      "label": {
+        "ja": "レア度 legendary の倍率",
+        "en": "Rarity multiplier: legendary"
+      },
+      "note": {
+        "ja": "",
+        "en": ""
+      }
+    },
+    "RARITY_MYTHIC": {
+      "type": "float",
+      "default": 7.0,
+      "min": 1.0,
+      "max": 100.0,
+      "label": {
+        "ja": "レア度 mythic の倍率",
+        "en": "Rarity multiplier: mythic"
+      },
+      "note": {
+        "ja": "",
+        "en": ""
+      }
+    },
+    "UPGRADE_STEP": {
+      "type": "float",
+      "default": 0.3,
+      "min": 0.0,
+      "max": 10.0,
+      "label": {
+        "ja": "強化1段あたりの上乗せ",
+        "en": "Bonus per upgrade level"
+      },
+      "note": {
+        "ja": "鍛冶で強化した装備の値段に、段数×この割合を足す",
+        "en": "Reinforced equipment gains this fraction of its price per upgrade level"
+      }
+    },
+    "SKILL_MULT": {
+      "type": "float",
+      "default": 1.5,
+      "min": 1.0,
+      "max": 100.0,
+      "label": {
+        "ja": "スキル付きの倍率",
+        "en": "Multiplier for items with a skill"
+      },
+      "note": {
+        "ja": "スキルを持つアイテムの値段に掛かる",
+        "en": "Applied to items that carry a skill"
+      }
+    },
+    "MIN_PRICE": {
+      "type": "int",
+      "default": 5,
+      "min": 0,
+      "max": 1000000,
+      "label": {
+        "ja": "値段の下限",
+        "en": "Price floor"
+      },
+      "note": {
+        "ja": "宿の簡易寝台が 10G。それより安いものを作らないための下限",
+        "en": "The cheapest inn bed costs 10G; this keeps items from going below a sane floor"
+      }
+    },
+    "MAX_PRICE": {
+      "type": "int",
+      "default": 9999999,
+      "min": 1,
+      "max": 999999999,
+      "label": {
+        "ja": "値段の上限",
+        "en": "Price ceiling"
+      },
+      "note": {
+        "ja": "桁が壊れた入力を受け取っても値段が暴れないための安全弁",
+        "en": "A safety valve so a broken input cannot produce an absurd price"
+      }
+    },
+    "REPRICE_ON_SIGHT": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "手持ちの品も開いたときに付け直す",
+        "en": "Reprice items when they are shown"
+      },
+      "note": {
+        "ja": "切ると、これから作られる品だけが新しい値段になる（古いセーブの品は元の値段のまま）",
+        "en": "When off, only newly generated items get the new prices"
+      }
+    },
+    "RECONCILE_GOLD": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "売買した金額を表示どおりに合わせる",
+        "en": "Match the gold moved to the shown price"
+      },
+      "note": {
+        "ja": "ゲームが表示と違う額で決済していたら、その差だけ所持金を直す。差が出た回数はログに残る",
+        "en": "If the game settles at a different amount than shown, the difference is corrected and logged"
+      }
+    }
+  }
+}

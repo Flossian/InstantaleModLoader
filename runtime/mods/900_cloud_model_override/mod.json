@@ -1,0 +1,54 @@
+{
+  "entry": "cloud_model_override.py",
+  "api": 1,
+  "name": {
+    "en": "Cloud model override",
+    "ja": "クラウドモデルの差し替え"
+  },
+  "description": {
+    "en": "Uses an OpenAI model that is not in the game's built-in list, by swapping the model name on the wire just before the request goes out",
+    "ja": "ゲームの選択肢に無い OpenAI のモデルを、送信直前に名前だけ差し替えて使う"
+  },
+  "version": "1",
+  "author": "flossian",
+  "settings": {
+    "SOURCE_MODEL": {
+      "type": "str",
+      "default": "gpt-5.5",
+      "label": {
+        "ja": "ゲーム側で選ぶモデル",
+        "en": "Model selected in the game"
+      },
+      "note": {
+        "ja": "この名前で送られてきたリクエストだけを差し替える。ゲームの設定画面で選んだものと同じにする",
+        "en": "Only requests carrying this model name are swapped. Keep it equal to what you picked in the game's settings"
+      }
+    },
+    "TARGET_MODEL": {
+      "type": "str",
+      "default": "gpt-5.6-terra",
+      "label": {
+        "ja": "実際に送るモデル",
+        "en": "Model actually sent"
+      },
+      "note": {
+        "ja": "空にするか SOURCE_MODEL と同じにすると、この MOD は何もしない",
+        "en": "Leave empty, or equal to SOURCE_MODEL, to turn this mod off"
+      }
+    },
+    "LOG_LIMIT": {
+      "type": "int",
+      "default": 3,
+      "min": 0,
+      "max": 999,
+      "label": {
+        "ja": "差し替えをログに出す回数",
+        "en": "How many swaps to log"
+      },
+      "note": {
+        "ja": "0 にすると何も出さない。効いているかの確認用なので数回で足りる",
+        "en": "0 = log nothing. A few lines are enough to confirm the hook works"
+      }
+    }
+  }
+}
