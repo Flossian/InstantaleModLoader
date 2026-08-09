@@ -351,6 +351,40 @@ do_move(hooks)
 check("直後の再訪はクールダウンで発火しない",
       not clock.intervals and not clock.onces, (clock.intervals, clock.onces))
 
+print("6b. 同じ施設の間引きは「その施設に入った回数」で数える")
+# 出入りを繰り返しても、間に他所へ寄っても、数えるのはこの施設への訪問だけ。
+clock = install_fake_kivy()
+mod, ctx, calls, hooks = setup(override=1.0, COOLDOWN_VISITS=2)
+app.process_choice_calls = []
+
+
+def enter(facility):
+    app.player.location = facility
+    do_move(hooks)
+    clock.tick()
+    clock.run_onces()
+
+
+enter(inn)
+check("1回目は出る", len(app.process_choice_calls) == 1, app.process_choice_calls)
+enter(ward)                      # 別の場所を挟んでも宿の回数は増えない
+enter(inn)
+check("2回目は出ない", len(app.process_choice_calls) == 1, app.process_choice_calls)
+enter(inn)
+check("3回目も出ない", len(app.process_choice_calls) == 1, app.process_choice_calls)
+enter(inn)
+check("4回目で出る", len(app.process_choice_calls) == 2, app.process_choice_calls)
+
+# 0 なら毎回抽選する。
+clock = install_fake_kivy()
+mod, ctx, calls, hooks = setup(override=1.0, COOLDOWN_VISITS=0)
+app.process_choice_calls = []
+enter(inn)
+enter(inn)
+check("0 にすると毎回出る", len(app.process_choice_calls) == 2,
+      app.process_choice_calls)
+app.player.location = inn
+
 print("7. 会話中・戦闘中は発火しない")
 clock = install_fake_kivy()
 mod, ctx, calls, hooks = setup()

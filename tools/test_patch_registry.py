@@ -732,10 +732,23 @@ def main():
     on_disk = sorted(d for d in os.listdir(mods_dir)
                      if not d.startswith(("_", "."))
                      and os.path.isfile(os.path.join(mods_dir, d, "mod.json")))
-    check(sorted(found) == on_disk,
+    # 「全部見つかるか」は `installed`（在るもの全部）で見る。`listed` は一覧に
+    # 出す順で、宣言に無い開発中の mod（9xx）はそこから外れている ―
+    # GUI の保存で `load_order.json` に混ざらないようにするため（§2.6）。
+    installed = survey_result["installed"]
+    check(sorted(installed) == on_disk,
           "mod.json を持つフォルダが全て見つかる（{} 個）".format(len(on_disk)))
-    check(all(os.path.isdir(os.path.join(mods_dir, f)) for f in found),
+    check(all(os.path.isdir(os.path.join(mods_dir, f)) for f in installed),
           "見つかるのは全てフォルダ（単一ファイルの mod は残っていない）")
+
+    # 開発中の mod（9xx。TECH.md §2.6）は `load_order.json` にも配布物にも
+    # 入らない。以下の「同梱 mod として揃っているか」の検査からは外す ―
+    # 書きかけの一本でリリースする側の検査が止まらないようにするため。
+    # **外した名前は必ず出す。** 黙って減らすと、宣言の抜けを見逃す検査になる。
+    wip = [f for f in found if ml.is_wip(f)]
+    if wip:
+        print("  note 開発中のため同梱の検査から外す: {}".format(", ".join(wip)))
+    found = [f for f in found if f not in wip]
 
     # 名乗りは mod.json から読む＝**mod のコードを1行も走らせずに**一覧が作れる。
     # GUI が他人の mod を並べるときに import せずに済む、という性質の確認。
@@ -772,8 +785,12 @@ def main():
     order_file = ml.order_path(mods_dir)
     with open(order_file, encoding="utf-8") as fh:
         declared = json.load(fh)["order"]
-    check(found == declared,
-          "並びが {} の宣言どおり".format(os.path.basename(order_file)))
+    # 宣言の側からも開発中の mod を抜く。手元の `load_order.local.json` は
+    # 9xx を名指ししている（そうしないと動かない）ので、片側だけ抜くと今度は
+    # 手元でだけ赤くなる。
+    check(found == [n for n in declared if not ml.is_wip(n)],
+          "並びが {} の宣言どおり（開発中を除く）"
+          .format(os.path.basename(order_file)))
 
     # 適用順は「宣言の並びから、切られているものを抜いたもの」。切った mod が
     # 落ちること・**残りの順序が入れ替わらないこと**の両方をここで見る

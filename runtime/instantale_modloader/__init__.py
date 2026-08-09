@@ -701,6 +701,21 @@ def _installed(mods_dir: str) -> list[str]:
     return found
 
 
+def is_wip(name: str) -> bool:
+    """開発中の mod か（フォルダ名が `900`〜`999` で始まる）。
+
+    番号帯そのものが印。`debug` / `superseded` のようにマニフェストの旗で
+    持たないのは、**まだ配る形が決まっていないもの**だからで、フォルダ名を
+    見ただけで「これは配布物に入らない」と分かるほうが事故が少ない
+    （TECH.md §2.6）。リリースするときに正式な番号へ振り直す。
+
+    順序ファイルに名前があれば普通に読み込む（手元の `load_order.local.json`）。
+    無ければ黙って外す ― 配布物に入らないものなので、「記載の無い MOD」として
+    報告しても直しようが無い。
+    """
+    return len(name) >= 3 and name[:3].isdigit() and name[0] == "9"
+
+
 def discover(mods_dir: str | None = None, *, debug: bool | None = None) -> dict:
     """インストールされている mod を調べて、適用順まで決めて返す。
 
@@ -717,6 +732,7 @@ def discover(mods_dir: str | None = None, *, debug: bool | None = None) -> dict:
          "debug":     {"200_probe_..."},        開発者向け。今は伏せられている
          "debug_mode": False,                   デバッグモードが入っているか
          "superseded": {"101_...": "main_024"}, 本体が取り込んだので降ろしたもの
+         "wip":       {"901_..."},              開発中（9xx）。順序ファイルに載っていなければ読まない
          "manifests": {名前: マニフェスト},      無効なものも壊れたものも含む
          "problems":  ["..."],                  宣言と実体のずれ。人が読む行
          "notes":     ["..."]}                  直すべきずれではない知らせ
@@ -741,7 +757,7 @@ def discover(mods_dir: str | None = None, *, debug: bool | None = None) -> dict:
     if not os.path.isdir(mods_dir):
         return {"mods_dir": mods_dir, "order": [], "listed": [], "installed": [],
                 "disabled": [], "debug": set(), "debug_mode": False,
-                "superseded": {}, "manifests": {}, "notes": [],
+                "superseded": {}, "wip": set(), "manifests": {}, "notes": [],
                 "problems": ["mods ディレクトリが無い: {}".format(mods_dir)]}
 
     installed = _installed(mods_dir)
@@ -761,6 +777,9 @@ def discover(mods_dir: str | None = None, *, debug: bool | None = None) -> dict:
                   if (manifests[name] or {}).get("superseded")}
     hide = (frozenset() if debug_mode
             else frozenset(marked) | frozenset(superseded))
+    # 開発中の mod（9xx）。デバッグモードでも自動では動かさない ― 動かすかどうかを
+    # 決めるのは順序ファイルで、そこに名前が無いものは `_order()` が伏せる。
+    wip = {name for name in installed if is_wip(name)}
 
     order, listed, disabled, problems, notes = _order(mods_dir, installed, hide)
 
@@ -779,7 +798,7 @@ def discover(mods_dir: str | None = None, *, debug: bool | None = None) -> dict:
     return {"mods_dir": mods_dir, "order": order, "listed": listed,
             "installed": installed, "disabled": disabled,
             "debug": marked, "debug_mode": debug_mode,
-            "superseded": superseded,
+            "superseded": superseded, "wip": wip,
             "manifests": manifests, "problems": problems, "notes": notes}
 
 
@@ -843,6 +862,15 @@ def _order(mods_dir: str, found: list[str],
                         "フォルダ名順で読み込みます".format(order_file))
         order = []
 
+    # 開発中の mod（9xx）は、この順序ファイルが名指ししているものだけ読み込む。
+    # 名前が無いものは `hide` と同じ扱いにする ― 適用もしないし報告もしない。
+    # 配布物には入らないので、利用者の画面に「記載の無い MOD」として出しても
+    # 直しようが無い（`is_wip` の説明を参照）。
+    named = {name for name in order if isinstance(name, str)}
+    undeclared_wip = {name for name in found
+                      if is_wip(name) and name not in named}
+    hide = frozenset(hide) | undeclared_wip
+
     disabled = data.get("disabled") if isinstance(data, dict) else None
     if not isinstance(disabled, list):
         disabled = []
@@ -863,6 +891,12 @@ def _order(mods_dir: str, found: list[str],
         if isinstance(name, str) and name in found and name not in listed:
             listed.append(name)
     listed += [name for name in found if name not in listed]
+    # 伏せた計測 mod（`hide`）は一覧に残すが、**宣言に無い開発中の mod は外す**。
+    # GUI の保存は `listed` をそのまま `order` へ書き戻すので（gui.py の `save`）、
+    # 残しておくと、順序ファイルを開いて保存しただけで `load_order.json` に
+    # 開発中の名前が入ってしまう。残す理由（保存で記述ごと消えるのを防ぐ）も
+    # こちらには無い ― まだどこにも書かれていない mod なので、消える記述が無い。
+    listed = [name for name in listed if name not in undeclared_wip]
 
     known = set(found) - off - hide
     ordered = []

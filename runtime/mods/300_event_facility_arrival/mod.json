@@ -158,14 +158,18 @@
         "en": "Empty = per-facility defaults. 1.0 always fires"
       }
     },
-    "COOLDOWN_MOVES": {
+    "COOLDOWN_VISITS": {
       "type": "int",
-      "default": 3,
+      "default": 2,
       "min": 0,
-      "max": 99,
+      "max": 20,
       "label": {
-        "ja": "同じ施設で続けて出さない移動回数",
-        "en": "Moves before the same facility may fire again"
+        "ja": "同じ施設で続けて出さない訪問回数",
+        "en": "Visits before the same facility may fire again"
+      },
+      "note": {
+        "ja": "2 なら、出た後その施設に2回入るまでは出ない（3回に1回まで）。0 で毎回抽選する",
+        "en": "2 = the next two visits stay quiet. 0 = roll every visit"
       }
     },
     "REPHRASE_OPENING": {

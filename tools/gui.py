@@ -656,6 +656,11 @@ class SettingsDialog(tk.Toplevel):
     なく1つ**で、どの mod の設定を開いても同じ場所に出る ― 設定を見て回るときに
     毎回同じ所に出る方が追いやすい。高さは覚えない。設定の数で変わるので、
     覚えた高さを当てると項目が切れるか余白が空く。
+
+    項目が画面に入り切らない mod があるので、**設定の並びだけを巻き取り可能**に
+    してある（ボタンの列は下に据え置き）。以前は中身の高さをそのまま窓の高さに
+    していたので、項目が多いと OK ボタンごと画面の外へ出て、設定を保存できなかった。
+    巻き取りが出るのは入り切らないときだけで、収まる mod の見え方は変わらない。
     """
 
     def __init__(self, master: tk.Misc, mod: dict, chosen: dict):
@@ -665,13 +670,38 @@ class SettingsDialog(tk.Toplevel):
         # （渡さないと本体の窓と違う灰色が出る）。
         self.configure(background=PALETTE["bg"])
         self.transient(master)
-        self.resizable(True, False)
+        self.resizable(True, True)
         self.mod = mod
         self.result: dict | None = None
         self.vars: dict[str, tuple[dict, tk.Variable]] = {}
 
-        frame = ttk.Frame(self, padding=12)
-        frame.pack(fill="both", expand=True)
+        outer = ttk.Frame(self, padding=12)
+        outer.pack(fill="both", expand=True)
+        outer.rowconfigure(0, weight=1)
+        outer.columnconfigure(0, weight=1)
+
+        # 設定の並びは Canvas に載せて巻き取れるようにする。ボタンの列は
+        # `outer` の下の段に置くので、どれだけ項目があっても画面から出ない。
+        self.canvas = tk.Canvas(outer, borderwidth=0, highlightthickness=0,
+                                background=PALETTE["bg"])
+        self.canvas.grid(row=0, column=0, sticky="nsew")
+        self.scroll = ttk.Scrollbar(outer, orient="vertical",
+                                    command=self.canvas.yview,
+                                    style="Vertical.TScrollbar")
+        self.canvas.configure(yscrollcommand=self.scroll.set)
+
+        frame = ttk.Frame(self.canvas)
+        self.body = frame
+        self.body_id = self.canvas.create_window((0, 0), window=frame, anchor="nw")
+        # 中身の幅は Canvas に合わせる（合わせないと説明の折り返しと入力欄の
+        # 伸縮が効かず、窓を広げても左端に寄ったままになる）。
+        self.canvas.bind(
+            "<Configure>",
+            lambda e: self.canvas.itemconfigure(self.body_id, width=e.width))
+        frame.bind(
+            "<Configure>",
+            lambda _e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+
         ttk.Label(frame, text=mod["dir"], style="Sub.TLabel").grid(
             row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
 
@@ -696,12 +726,13 @@ class SettingsDialog(tk.Toplevel):
             row += 1
 
         frame.columnconfigure(1, weight=1)
-        bar = ttk.Frame(frame)
-        bar.grid(row=row, column=0, columnspan=2, sticky="e", pady=(12, 0))
+        bar = ttk.Frame(outer)
+        bar.grid(row=1, column=0, columnspan=2, sticky="e", pady=(12, 0))
         ttk.Button(bar, text="既定に戻す", command=self._reset).pack(side="left", padx=4)
         ttk.Button(bar, text="キャンセル", command=self._close).pack(side="left", padx=4)
         ttk.Button(bar, text="OK", command=self._ok).pack(side="left")
 
+        self.bind("<MouseWheel>", self._on_wheel)
         self.bind("<Escape>", lambda _e: self._close())
         self.protocol("WM_DELETE_WINDOW", self._close)
         self._restore()
@@ -711,25 +742,57 @@ class SettingsDialog(tk.Toplevel):
     # -- 窓の幅と位置 --------------------------------------------------------
     def _restore(self) -> None:
         geom = read_config().get("settings_window")
-        if not isinstance(geom, str) or "x" not in geom:
-            return          # 覚えていなければ Tk の既定の置き場所に任せる
-        # 中身を組み終えてからでないと、必要な高さが分からない。
+        # 中身を組み終えてからでないと、必要な寸法が分からない。
+        height = self._fit_height()
+        width = self.winfo_reqwidth()
+
+        remembered = isinstance(geom, str) and "x" in geom
+        if remembered:
+            try:
+                width = max(int(geom.split("x")[0]), width)
+            except ValueError:
+                pass
+
+        # 覚えていなければ置き場所は Tk に任せる（大きさだけ指定する）。
+        pos = ""
+        if remembered:
+            if "+" in geom and _on_screen(self, geom):
+                pos = geom[geom.index("+"):]
+            else:
+                # 覚えた位置が画面の外。大きさだけ指定すると画面の左上に張り付く
+                # ので、呼び出し元の窓に重ねる（Tk が transient に選ぶのと同じ）。
+                master = self.master
+                pos = "+{}+{}".format(master.winfo_rootx() + 60,
+                                      master.winfo_rooty() + 60)
+        self.geometry("{}x{}{}".format(width, height, pos))
+
+    def _fit_height(self) -> int:
+        """窓の高さを返し、入り切らなければ巻き取りを出す。
+
+        Canvas は中の物に合わせて伸びないので、こちらから要求する高さを渡す。
+        そうしないと「中身が収まる mod」でも Tk の既定の高さ（中身とは無関係）が
+        窓の高さになる。
+        """
         self.update_idletasks()
-        try:
-            width = int(geom.split("x")[0])
-        except ValueError:
+        content = self.body.winfo_reqheight()
+        self.canvas.configure(width=self.body.winfo_reqwidth(), height=content)
+        self.update_idletasks()
+
+        natural = self.winfo_reqheight()        # 余白 + 中身 + ボタンの列
+        limit = int(self.winfo_screenheight() * 0.85)
+        if natural <= limit:
+            self.scroll.grid_remove()
+            return natural
+        self.scroll.grid(row=0, column=1, sticky="ns", padx=(6, 0))
+        # 窓を上限まで詰めたぶんだけ、見える中身も縮む。
+        self.canvas.configure(height=max(content - (natural - limit), 80))
+        return limit
+
+    def _on_wheel(self, event: tk.Event) -> None:
+        """巻き取りが出ているときだけホイールを効かせる。"""
+        if not self.scroll.winfo_ismapped():
             return
-        width = max(width, self.winfo_reqwidth())
-        size = "{}x{}".format(width, self.winfo_reqheight())
-        if "+" in geom and _on_screen(self, geom):
-            pos = geom[geom.index("+"):]
-        else:
-            # 覚えた位置が画面の外。大きさだけ指定すると画面の左上に張り付くので、
-            # 呼び出し元の窓に重ねる（Tk が transient に選ぶのと同じ見え方）。
-            master = self.master
-            pos = "+{}+{}".format(master.winfo_rootx() + 60,
-                                  master.winfo_rooty() + 60)
-        self.geometry(size + pos)
+        self.canvas.yview_scroll(-3 if event.delta > 0 else 3, "units")
 
     def _close(self) -> None:
         update_config(settings_window=self.geometry())

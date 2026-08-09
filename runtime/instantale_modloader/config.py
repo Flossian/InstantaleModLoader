@@ -36,7 +36,7 @@
         "default": "conversation",
         "label": {"ja": "イベントの出方", "en": "Event style"}
       },
-      "COOLDOWN_MOVES": {"type": "int", "default": 3, "min": 0, "max": 99},
+      "COOLDOWN_VISITS": {"type": "int", "default": 2, "min": 0, "max": 20},
       "CHANCE_OVERRIDE": {"type": "float", "default": null, "allow_null": true}
     }
 

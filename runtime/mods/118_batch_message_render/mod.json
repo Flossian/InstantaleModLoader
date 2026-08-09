@@ -16,7 +16,7 @@
     "en": "Shows the rest of a message at once when the screen is clicked (or always), and grays out older text",
     "ja": "表示中に画面をクリックすると残りを一括表示する（常時一括にもできる）。古い本文は灰色にする"
   },
-  "version": "2",
+  "version": "3",
   "author": "yoshinari/tomotomo-y",
   "settings": {
     "BATCH_MODE": {

@@ -58,7 +58,10 @@ narrator が **`move_phase` の内側**にあるので、印を復帰後に置�
 出なくなる**。`CHANCE_OVERRIDE` が None でなければそちらを全施設に使う（動作確認用）。
 どれも `mod.json` から変えられる。乱数はこの mod 専用の
 `random.Random` を使う。グローバルから引くとゲーム自身の乱数列がずれるため
-（104_balance_area_bgm.py と同じ方針）。同じ施設で連続しては出さない。
+（104_balance_area_bgm.py と同じ方針）。
+
+**この % は「その施設に入った1回あたり」**の値。同じ施設で続けて出ないように、
+発火した施設は `COOLDOWN_VISITS` 回ぶん訪問を挟むまで抽選しない。
 """
 
 import datetime
@@ -96,8 +99,16 @@ CHANCE_UNDERWORLD_OFFICE = 0.20
 #CHANCE_OVERRIDE = 1.0
 CHANCE_OVERRIDE = None
 
-# 同じ施設で連続して発火させない。直近この回数の移動のうちに出した施設は飛ばす。
-COOLDOWN_MOVES = 3
+# 同じ施設で続けて出さない間隔。**その施設に入った回数**で数える。
+# 2 なら「出た後、その施設に2回入るまでは出さない」（＝ 3回に1回まで）。
+#
+# 元は移動回数で数えていたが（`COOLDOWN_MOVES = 3`）、それだと出入りするだけで
+# 抜けてしまい、**同じ施設で繰り返し出る**という体感になっていた。実際、同じ宿の
+# 同じ NPC が1日に3回発火していた（ログの `roll 0.23 / 0.02 / 0.17`）。
+# 数える単位を「その施設への訪問」に変えると、間隔がそのまま訪問回数で決まる。
+#
+# 0 にすると間引かない（入るたびに抽選する）。
+COOLDOWN_VISITS = 2
 
 # 会話フェーズを開始する前に「手が空く」のを待つ。
 IDLE_POLL = 0.3          # 見張りの間隔（秒）
@@ -154,7 +165,8 @@ def apply(ctx):
     state = {
         "pending": None,      # narration モード: 入れ子の narrator が回収する印
         "move_count": 0,
-        "fired_at": {},       # 施設 id -> 発火したときの move_no
+        "visits": {},         # 施設 id -> その施設に入った回数
+        "fired_at": {},       # 施設 id -> 発火したときの訪問回数
         "rephrase": None,     # conversation モード: 第一声の読み替え待ち
         "npc_id_kind": None,  # ゲーム自身が character_id に何を渡しているか
     }
@@ -254,9 +266,14 @@ def apply(ctx):
             return None
         where = "{} ({})".format(getattr(facility, "name", ""), facility_type)
 
+        # ここまで来た＝この施設に入った。間引きはこの回数で数える。
+        visits = state["visits"].get(facility_id, 0) + 1
+        state["visits"][facility_id] = visits
+
         last = state["fired_at"].get(facility_id)
-        if last is not None and state["move_count"] - last <= COOLDOWN_MOVES:
-            write("skip: {} on cooldown".format(where))
+        if last is not None and visits - last <= COOLDOWN_VISITS:
+            write("skip: {} on cooldown ({}/{} visit(s) since the last one)".format(
+                where, visits - last, COOLDOWN_VISITS))
             return None
 
         # 状態の判定は施設が決まってから。どこで何に邪魔されたのかが分かる。
@@ -283,7 +300,7 @@ def apply(ctx):
         write("fire: {} ({}) roll {:.2f} < {:.2f} speaker={!r} id={!r}".format(
             getattr(facility, "name", ""), facility_type, roll, chance,
             getattr(npc, "name", ""), npc_id))
-        state["fired_at"][facility_id] = state["move_count"]
+        state["fired_at"][facility_id] = visits
         return facility, npc_id, npc
 
     # ================================================================

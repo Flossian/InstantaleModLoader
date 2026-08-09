@@ -1373,6 +1373,98 @@ __main__:InstantaleApp.normalize_shop_inventory_prices(shop_obtainer, player_obt
 日付は世界に1つ（`world.days_elapsed`。セーブでは `world_data.days_elapsed`。
 実セーブで `3651` を確認）。進めているのは `InstantaleApp.elapse_days(days)`（§2.19）。
 
+### 2.13.2 アイテムの値付け
+
+アイテムの分類は2段になっている。粗いほうが `item_type`、細かいほうが
+`attributes` の中の `item_detail`。
+
+```
+scripts.items:Item.__init__(self, name, item_type, attributes, description,
+                            value, size, image_src, rarity, skill, obtainer,
+                            id, grid_pos=None, upgrade_level=0)
+```
+
+| 段 | 値 | どこから分かるか |
+|---|---|---|
+| `item_type` | `weapon` / `wearable` / `healing_item` / `consumable` / `utility` / `material` の6種 | 店の品揃え生成の構造化出力スキーマ（`output_data\<世界>\<PC>\shop_item_generator_ordinary\N.json` の system） |
+| `attributes["item_detail"]` | `small_weapon` `body_armor` `magical_material` … 32種 | 同じスキーマの `sub_type` と、本体の `Assets\images\item_candidates_dark\` のフォルダ名 |
+| `rarity` | `common` / `rare` / `magical` / `epic` / `legendary` / `mythic` の6段 | 同じスキーマ |
+| `value` | 1〜70 の価値段階 | 同じスキーマ（プロンプトに「最低が1で最高が70」と書かれている） |
+
+`sub_type` と `item_detail` は綴りが揃っていない（`weapon/small` は
+`small_weapon`、`herb` は `plant` になる）。**表の鍵にするなら `item_detail` の
+ほうを取る** ― アイテムに実際に書かれているのはこちら。
+
+`value` はその品が出たクエストの難易度と一致する。実セーブでは 21 種類の値が
+出たが、そのすべてがその世界の `quests[*].difficulty`（3〜53）か、より深い
+土地の難度に対応していた。`get_equipment_price(quest_difficulty)` /
+`get_heal_item_price` / `get_other_item_price` が返しているのはこの段階で、
+**gold ではない**。逆算する `get_*_level_from_price(item_price)` も同じ段階を
+扱う。gold に直すのは `get_item_base_price(item_instance)` /
+`get_randomized_item_price(item_instance)` のほう。
+
+#### 値段は `attributes` に書かれている
+
+```
+__main__:InstantaleApp.set_shop_price_for_owner(item_instance)    → attributes['買価']
+__main__:InstantaleApp.set_shop_price_for_player(item_instance)   → attributes['売価']
+__main__:InstantaleApp.normalize_shop_inventory_prices(shop_obtainer, player_obtainer)
+__main__:InstantaleApp.buy_item(item_instance) / sell_item(item_instance)
+```
+
+**`買価` と `売価` は排他**で、どちらか一方しか書かれない（実セーブ 151 個の
+アイテムで例外なし）。店の持ち物には `買価`、売買画面に出したプレイヤーの
+持ち物には `売価`。説明欄（§2.14）もここを読んで描く。
+
+`attributes` の並びは `item_detail` → 能力値 → 値段。能力値は種別ごとに違う。
+
+| `item_type` | 能力値の鍵 |
+|---|---|
+| `weapon` | `攻撃力` |
+| `wearable` | `防御力` |
+| `healing_item` | `回復` と `疲労負荷` |
+| `consumable` / `utility` / `material` | 無し（`item_detail` と値段だけ） |
+
+#### レア度が値段に効いていない
+
+実セーブ（`ヴェスティア`、Lv31 / 3651日）から拾った実額。
+
+| 品 | `value` | 能力値 | 買価 | 売価 |
+|---|---|---|---|---|
+| 短剣 common | 3 | 攻撃力 23 | 72 | ― |
+| 短剣 common | 20 | 攻撃力 96 | 463 | ― |
+| 短剣 magical | 48 | 攻撃力 245 | 1,831 | ― |
+| 革鎧 common | 48 | 防御力 227 | 1,833 | ― |
+| 薬 magical | 48 | 回復 198 | 353 | ― |
+| 魔法素材 magical | 24 | ― | 128 | ― |
+| 魔法素材 mythic | 24 | ― | ― | 19 |
+| 魔法素材 epic | 4 | ― | ― | 3 |
+| 財宝 mythic | 66 | ― | ― | 102 |
+| 遺物 mythic | 12 | ― | ― | 7 |
+
+読み取れること:
+
+- **買価はレア度でほとんど動かない。** 同じ `value` 24 の魔法素材が、magical で
+  買価 128、mythic で売価 19。段が3つ違っても額の桁は変わらない
+- **売価は `value` とほぼ同じ数字になる。** 能力値を持たない品では
+  `売価 ≒ value × 0.8〜1.0`（mythic の財宝 `value` 66 で 102）。買価と比べると
+  6分の1ほど
+- 買価は能力値に対して上に反る。攻撃力 23 → 72（3.1倍）に対し、
+  攻撃力 245 → 1,831（7.5倍）
+
+#### 物価の目安
+
+宿の主の台詞（実プレイのログ）が、この世界の物価をそのまま言っている。
+
+```
+簡易寝台なら10G、個室なら100G、それから、どうしてもって言うなら高級個室も1000G
+（3ヵ月単位の長期滞在、前払い）
+```
+
+比較用の他の値: NPC の雇用は難易度 76 で 5,045G（`get_npc_employ_price` の上端。
+VERIFICATION.md §2.2）。実セーブのプレイヤー所持金は 1,116,472G。**ゲームで一番高いアイテム
+（2,342G）より、宿の高級個室2部屋ぶんのほうが近い**という開きがある。
+
 ### 2.14 アイテム詳細ボックス
 
 ホバーで出る `ItemDetailBox`（window=2560x1387 のときの実測）:

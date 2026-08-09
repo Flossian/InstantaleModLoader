@@ -298,10 +298,18 @@ def main():
     problems, notes = [], []
     for name in mods:
         mod_problems, mod_notes = check_manifest(name, found["manifests"][name])
-        problems += mod_problems
-        notes += mod_notes
         for path in _mod_files(name):
-            problems += check_file(path)
+            mod_problems += check_file(path)
+        # 開発中の mod（9xx。TECH.md §2.6）は**見るが、赤にはしない**。
+        # 配布物にも `load_order.json` にも入らないものなので、書きかけの一本で
+        # CI が止まると、リリースする側の検査が使えなくなる。検査そのものを
+        # 飛ばさないのは、直しどきに手掛かりが無くなるため ― `note` として出す。
+        # `--strict` は今までどおり note も問題に格上げする。
+        if ml.is_wip(name):
+            notes += mod_problems + mod_notes
+        else:
+            problems += mod_problems
+            notes += mod_notes
     order_problems, order_notes = check_order(found)
     problems += order_problems
     notes += order_notes

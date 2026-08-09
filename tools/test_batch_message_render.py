@@ -200,14 +200,30 @@ class FakeWindow(object):
             if (name, callback) in self.handlers:
                 self.handlers.remove((name, callback))
 
-    def click(self):
+    def click(self, button=None):
         """画面が押された。**戻り値は捨てない** ― 真を返す手があると、
-        Kivy はそこで配送を止めてボタンが押せなくなる。"""
+        Kivy はそこで配送を止めてボタンが押せなくなる。
+
+        `button` を渡さないとタッチ画面と同じ「ボタンの無い touch」になる。
+        """
+        touch = object() if button is None else FakeTouch(button)
         swallowed = False
         for name, callback in list(self.handlers):
-            if name == "on_touch_down" and callback(self, object()):
+            if name == "on_touch_down" and callback(self, touch):
                 swallowed = True
         return swallowed
+
+    def scroll(self, button="scrolldown"):
+        """ホイールを回した。**Kivy はこれも `on_touch_down` で配る。**"""
+        return self.click(button=button)
+
+
+class FakeTouch(object):
+    """`on_touch_down` に渡ってくるもの。ホイールの回転も同じ手に来るので、
+    見分けが付くように `button` を持つ（Kivy のマウス入力と同じ名前）。"""
+
+    def __init__(self, button):
+        self.button = button
 
 
 WINDOW = FakeWindow()
@@ -442,9 +458,14 @@ class InstantaleApp(object):
             # （クリックした瞬間に本文が縮んで見える）。実機で何が起きるかは
             # 分からないので、どちらでも結果が同じになることを求める。
             self.hud.display_text = self.base_text + context[:self.typed]
-        if self.to_add_text_list:
-            self.to_add_text_list.pop(0)
+        # **行列から取り除くのは終端の仕事**で、空なら例外になる（実機と同じ）。
+        # 終端を二度踏む MOD はここで落ちる ― 実機では
+        # `IndexError: pop from empty list` でゲームごと落ちた。
+        self.to_add_text_list.pop(0)
         self.is_adding_text = False
+        # 次の本文はその場で始まる。**打ち切りの最中にも入ってくる**ので、
+        # 前の本文の後始末が新しい本文に踏み潰されないかがここで出る。
+        self.process_text_queue(_dt)
 
 
 # 1文字ぶんの間隔（実機の `app.text_speed` の既定は 0.07）。
@@ -736,6 +757,54 @@ def run():
     check("an in-flight sequential stream is handed back to the game",
           app.original_calls == [3] and app.is_adding_text is True,
           (app.original_calls, app.is_adding_text))
+    CLOCK.pending = []
+
+    # 打ち切りの残骸は、**次の本文が始まった後**に飛んでくる。終端がその場で
+    # 次の本文を始めるので、捨てる印を1枠で持っていると、いま捨てたい印が新しい
+    # 本文に消される ― 残骸がゲームへ渡って終端をもう一度踏み、空の行列を
+    # pop した（実機のクラッシュ。docs/VERIFICATION.md）。
+    app = InstantaleApp()
+    app.add_text("全ての敵を倒した")
+    app.add_text("次の本文がすぐ後ろに控えている")
+    app.process_text_queue(0)
+    CLOCK.tick()
+    WINDOW.click()
+    CLOCK.tick()
+    check("skipping hands the queue over to the message waiting behind it",
+          app.to_add_text_list == ["次の本文がすぐ後ろに控えている"],
+          app.to_add_text_list)
+    crashed = None
+    try:
+        CLOCK.drain()
+    except Exception as error:      # 実機ではここでゲームごと落ちていた
+        crashed = repr(error)
+    check("the leftovers of a skipped message never reach the game",
+          crashed is None, crashed)
+    check("each message leaves the queue exactly once",
+          app.to_add_text_list == [] and app.is_adding_text is False,
+          (app.to_add_text_list, app.is_adding_text))
+    check("the message waiting behind the skipped one is shown in full",
+          app.hud.display_text == "全ての敵を倒した次の本文がすぐ後ろに控えている",
+          app.hud.display_text)
+
+    # ホイールは打ち切りの合図ではない（本文を読み返しているだけ）。
+    app = InstantaleApp()
+    app.add_text("ホイールでは打ち切らない本文")
+    app.process_text_queue(0)
+    CLOCK.tick()
+    typed = len(app.hud.display_text)
+    WINDOW.scroll()
+    CLOCK.tick()
+    check("the wheel does not skip the message",
+          len(app.hud.display_text) == typed + 1
+          and app.is_adding_text is True,
+          (typed, app.hud.display_text, app.is_adding_text))
+    WINDOW.click()
+    CLOCK.tick()
+    check("a real click still skips it",
+          app.hud.display_text == "ホイールでは打ち切らない本文"
+          and app.is_adding_text is False,
+          (app.hud.display_text, app.is_adding_text))
     CLOCK.pending = []
 
     # -- セッション数で色を変える -------------------------------------------

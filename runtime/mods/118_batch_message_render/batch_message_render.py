@@ -43,6 +43,10 @@ PROBE_CHARS = 8
 WATCH_AFTER_SKIP = True
 WATCH_MOMENTS = (0.1, 0.5, 1.5)
 
+# 打ち切って捨てる本文の控えの数（`remember_dropped`）。予約の残りは打ち切りの
+# 直後に飛んでくるので、数件あれば足りる。
+MAX_DROPPED = 8
+
 # 覚えておく本文の数。照合は1文字ごとに走るので、際限なく伸ばさない。
 # 画面に載る本文は `117_` が上限を掛けているので、これより古い本文は
 # そもそも照合対象に残っていない。
@@ -78,7 +82,11 @@ def apply(ctx):
     # 打ち切りの最中は塗り直しを止める（`mute`）。自分で回した鎖の残りを
     # 捨てるための印（`dropped`）。どちらも注入し直しをまたいで同じ辞書を使う。
     store.setdefault("mute", False)
-    store.setdefault("dropped", None)
+    store.setdefault("dropped", [])
+    # 新しい本文が始まった回数。打ち切りの最中に終端が次の本文を始めたことを、
+    # ゲームの旗（`is_adding_text`）ではなくこれで知る ― 旗は次の本文で
+    # すぐ True に戻るので、「終わった」と「次が始まった」を見分けられない。
+    store.setdefault("starts", 0)
     states = store["states"]
     fallback_states = store["fallback_states"]
     warned = {}     # 一度きりの警告の控え（種類ごと）
@@ -689,6 +697,40 @@ def apply(ctx):
         for moment in WATCH_MOMENTS:
             schedule(look(moment), moment)
 
+    # -- 打ち切って捨てる本文の控え ------------------------------------------
+    # 打ち切りで自分で回した鎖には予約の残りが付いてくる。それを捨てる印。
+    #
+    # **1枠では足りない。** 終端はその場で次の本文を始めるので、`finish_stream`
+    # を回している最中に新しい本文の `index == -1` が入る。1枠だと、そこでいま
+    # 捨てたい印が消える ― 残りがゲームへ渡って終端をもう一度踏み、
+    # `to_add_text_list.pop` が空の行列を叩いた（実機のクラッシュ。docs/VERIFICATION.md）。
+    # 本文ごとに1件持ち、落とすのは**その本文が始め直された**ときだけにする。
+    def dropped_entries():
+        # `is_dropped` は1文字ごとに通るので、ここでは掃除をしない
+        # （死んだ参照を落とすのは `remember_dropped` の側）。
+        entries = store.get("dropped")
+        if not isinstance(entries, list):
+            entries = []            # 前の版は1枠だった（注入し直しで混ざる）
+            store["dropped"] = entries
+        return entries
+
+    def remember_dropped(app, context):
+        entries = dropped_entries()
+        forget_dropped(app, context)
+        entries[:] = [entry for entry in entries if entry["app"]() is not None]
+        entries.append({"app": weakref.ref(app), "context": context})
+        del entries[:-MAX_DROPPED]
+
+    def forget_dropped(app, context):
+        entries = dropped_entries()
+        entries[:] = [entry for entry in entries
+                      if entry["context"] != context
+                      or entry["app"]() is not app]
+
+    def is_dropped(app, context):
+        return any(entry["context"] == context and entry["app"]() is app
+                   for entry in dropped_entries())
+
     def finish_stream(orig, app, dt, context, index, stream):
         """クリックされた。残りをゲーム本来の経路で一気に流す。
 
@@ -706,17 +748,21 @@ def apply(ctx):
 
         鎖は1回ごとに次を予約しているので、回した後には予約が残る。それを
         ゲームへ渡すと本文の終端を何度も踏む（＝次の本文が消える）ので、
-        この本文の続きは捨てる印を置く。
+        この本文の続きは捨てる印を置く（`remember_dropped`）。
         """
-        store["dropped"] = {"app": app, "context": context}
+        remember_dropped(app, context)
         store["mute"] = True
         steps = 0
+        position = index
+        started = store.get("starts", 0)
         try:
-            position = index
-            # 終わりの判定はゲームに任せる（`is_adding_text` が下りたら終わり）。
-            # 終端の呼び出しがどの `index` なのかは実測できていないので、
-            # 数え方を決め打ちにしない。
+            # 終わりの判定はゲームに任せる。終端の呼び出しがどの `index` なの
+            # かは実測できていないので、数え方を決め打ちにしない。合図は2つ ―
+            # `is_adding_text` が下りたか、`starts` が動いた（＝終端がその場で
+            # 次の本文を始めた）か。**後者で止めないと、終わった本文の続きを
+            # もう一巡ぶん流し込んで終端を二度踏む。**
             while (position <= len(context)
+                   and store.get("starts", 0) == started
                    and frames.attr(app, "is_adding_text", True) is not False):
                 orig(app, dt, context, position)
                 position += 1
@@ -726,8 +772,12 @@ def apply(ctx):
         finally:
             store["mute"] = False
 
-        if frames.attr(app, "is_adding_text", False) is True:
+        if (store.get("starts", 0) == started
+                and frames.attr(app, "is_adding_text", False) is True):
             # 鎖が終わっていない（回し方の見立てが外れた）。後始末だけ渡す。
+            # **終端まで回せたならここへ来ないこと。** 終端はその場で次の本文を
+            # 始めるので `is_adding_text` は再び True になっており、旗だけを見ると
+            # 打ち終わった本文の終端をもう一度踏む（＝空の行列を pop する）。
             orig(app, dt, context, len(context))
 
         _owner, canonical = canonical_text(app, stream)
@@ -747,13 +797,14 @@ def apply(ctx):
                         len(canonical) if isinstance(canonical, str) else "?",
                         frames.attr(app, "is_adding_text")))
         watch_after_skip(app, context)
-        store["stream"] = None
+        if store.get("stream") is stream:
+            # 打ち切りの最中に次の本文が始まっていたら、そちらの帳簿が入って
+            # いる。消すと次の本文が打ち切れず、色も付かなくなる。
+            store["stream"] = None
         return None
 
     def continue_stream(orig, app, dt, context, index):
-        dropped = store.get("dropped")
-        if (isinstance(dropped, dict) and dropped["app"] is app
-                and dropped["context"] == context):
+        if is_dropped(app, context):
             # 打ち切りで自分で回した鎖の残り。ゲームへ渡すと終端を二度踏む。
             return None
         stream = store.get("stream")
@@ -769,13 +820,20 @@ def apply(ctx):
             return orig(app, dt, context, index)
         return finish_stream(orig, app, dt, context, index, stream)
 
-    def on_screen_touch(_window, _touch):
+    def on_screen_touch(_window, touch):
         """画面のどこかが押された。打ち出し中なら打ち切りの合図にする。
 
         **偽を返して（何も返さないで）おくこと。** 真を返すと Kivy はここで
         配送を止めるので、ボタンが押せなくなる。
+
+        ホイールは弾く。Kivy は回転も `on_touch_down` で配るので、本文を読み返そう
+        としてスクロールしただけで打ち切りが走っていた（押した記録がどこにも
+        残らないので、原因を追うときに見えない）。
         """
         try:
+            button = getattr(touch, "button", None)
+            if isinstance(button, str) and button.startswith("scroll"):
+                return
             stream = store.get("stream")
             if isinstance(stream, dict):
                 stream["skip"] = True
@@ -814,8 +872,12 @@ def apply(ctx):
             return continue_stream(orig, self, dt, context, index)
 
         state = state_for(self)
+        store["starts"] = store.get("starts", 0) + 1
         store["stream"] = None      # 新しい本文が始まった＝前の鎖は終わっている
-        store["dropped"] = None
+        # 落とすのは**この本文**の印だけ。打ち切った本文の残りは、次の本文が
+        # 始まった後に飛んでくる（終端がその場で次を始めるため）ので、ここで
+        # 全部落とすとその残りがゲームへ渡ってしまう。
+        forget_dropped(self, context)
         if BATCH_MODE == "always" and callable(
                 frames.attr(self, "add_text_immediately")):
             return show_at_once(orig, self, dt, context, state)

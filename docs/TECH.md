@@ -110,6 +110,7 @@ found["manifests"]  # 名乗り・api・settings・依存（MOD のコードは 
 found["debug"]      # "debug": true の MOD。デバッグモードが切なら order に居ない
 found["debug_mode"] # デバッグモードが入っているか（settings/loader.json。§3.2.5）
 found["superseded"] # {MOD 名: 取り込まれた版}。伏せ方は debug と同じ
+found["wip"]        # 開発中（9xx）。順序ファイルに名前が無ければ読まない（§2.6）
 found["problems"]   # 宣言と実体のずれ。人が読む行
 found["notes"]      # 直すべきずれではない知らせ（手元用の順序ファイルを使っている等）
 ```
@@ -272,6 +273,43 @@ Windows 専用（注入が Win32 API を直接叩く）で、Linux では実際�
 
 `packaging` が zip の中身まで見るのは、`LICENSE` の入っていない配布物は誰も合法的に
 再配布できないから。MIT は著作権表示が複製に付いて回ることを要求する。
+
+**開発中の MOD（9xx）と `test_wip_*.py` だけは外してある**（§2.6）。これは番号帯と
+いう決まった形での除外で、「既知の失敗」の一覧ではない ― 正式な番号へ振り直した
+瞬間に、何もしなくても検査の対象へ戻る。外したものは CI のログに `skip` として出る。
+
+### 2.6 開発中の MOD（900番台）
+
+**まだ実機で確かめていない・作りかけの MOD は `900`〜`999` で採番する。**
+リリースすると決めたときに、番号帯に応じた正式な番号へ振り直す。
+
+| | 入れる | 入れない |
+|---|---|---|
+| Git | ○ 普通にコミットする | |
+| `load_order.local.json`（手元） | ○ ここに書けば手元では動く（§1.3） | |
+| `load_order.json`（配布の適用順） | | × |
+| 配布物（`make_dist.bat`） | | × `load_order.json` に無いものは staging から落ちる |
+| CI | | × `compileall` の `-x`、`check_mods.py` は `note` 扱い、`tools/test_wip_*.py` は走らせない |
+| `docs/MODS.md` | | × 同梱している MOD の一覧なので、載せると利用者が探して見つからない |
+
+**文書は MOD のフォルダに `DOC.md` として置く。** 遊び方も検証の記録も、`docs/` の
+4冊に書かずにそこへ書く。9xx は配布物に入らないので、その1枚も外へ出て行かない。
+リリースのときに各節を元の場所（`MODS.md` / `VERIFICATION.md` / `GAME.md` /
+`TECH.md`）へ戻す ― どの節をどこへ戻すかは `DOC.md` の先頭に表として持たせておく。
+検査は `tools/test_wip_<名前>.py` に置き、同じタイミングで `tools/test_<名前>.py`
+へ改名する。
+
+ローダ側の扱いは `is_wip()` の1箇所（`instantale_modloader/__init__.py`）。
+**順序ファイルに名前があれば普通に読み込み、無ければ黙って外す。**
+「`load_order.json` に記載の無い MOD」として報告しないのは、配布物に入らない
+ものを利用者の画面で警告しても直しようが無いため ― 伏せた mod を報告しない
+`debug` / `superseded` と同じ考え方（§3.2.5）。
+
+> **なぜ `mod.json` の旗ではなく番号帯なのか。** `debug` や `superseded` は
+> 「配るが伏せる」ので、旗を立てたまま何年でも同梱される。9xx は逆で、
+> **リリースする＝必ずフォルダ名を変える**。旗だと消し忘れたまま配ってしまうが、
+> 番号は変えない限り配布物に入らないので、消し忘れが事故にならない。
+> フォルダ一覧を見ただけで「これは配らない」と分かる利点もある。
 
 ---
 
@@ -1113,7 +1151,7 @@ settings/mod_settings.json 利用者が選んだ値だけ
                  "default": "conversation",
                  "label": {"ja": "イベントの出方", "en": "Event style"},
                  "note":  {"ja": "narration は情景描写に一言足すだけ", "en": "..."}},
-  "COOLDOWN_MOVES":  {"type": "int",   "default": 3, "min": 0, "max": 99},
+  "COOLDOWN_VISITS": {"type": "int",   "default": 2, "min": 0, "max": 20},
   "CHANCE_OVERRIDE": {"type": "float", "default": null, "allow_null": true}
 }
 ```
