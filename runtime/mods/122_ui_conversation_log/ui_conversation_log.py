@@ -63,6 +63,11 @@
 いる間もゲームの画面はそのまま。書体は本文のラベルから写す（Kivy の既定には
 日本語が無く、写さないと豆腐になる）。開いた直後は**いちばん下**（＝最新）を出す。
 
+中身は **Label 1枚ではなく、縦に並べた複数枚**で持つ。Kivy の Label は中身を
+1枚のテクスチャに焼くので、GPU の上限（多くの環境で 16384px）を超えた瞬間に
+**何も描かれない** ― 実機で 500 件を1枚に入れて窓が空になった（2026-08-10）。
+件数が増えれば必ず踏むので、`VIEW_CHUNK_CHARS` ごとの塊に割ってある。
+
 開いている最中に新しい本文が来たら、その場で足す。下まで読んでいたときだけ
 下へ追従する（途中を読んでいる人の位置を動かさない）。
 
@@ -177,6 +182,14 @@ VIEW_BORDER_ALPHA = 0.8
 VIEW_CLOSE = "×"
 VIEW_EMPTY = "まだ記録がありません。"
 
+# Label 1枚に入れる文字数の上限と、その間隔（px）。**1枚に全部入れない**
+# （`view_blocks` の説明。テクスチャの上限を超えると何も描かれない）。
+VIEW_CHUNK_CHARS = 1200
+VIEW_GAP = 8
+
+# 窓を開くときに組む文字数の上限。あふれるのは古いほう。
+VIEW_MAX_CHARS = 200000
+
 # 記録の上限（`out/conversation_log.log` に出す診断の行数）。本文そのものは
 # `state/` の側に残るので、こちらは「どこへ置いたか」「拾えたか」だけ。
 MAX_LOG = 40
@@ -209,16 +222,45 @@ def entry_text(entry):
     return text if isinstance(text, str) else ""
 
 
-def view_text(entries):
-    """窓に出す本文。古い順に並べ、間に1行あける。"""
-    blocks = []
-    for entry in entries:
-        text = entry_text(entry)
-        if not text:
-            continue
-        head = short_time(entry.get("t")) if SHOW_TIME else ""
-        blocks.append(("── {} ──\n".format(head) if head else "") + text)
-    return "\n\n".join(blocks) if blocks else VIEW_EMPTY
+def entry_block(entry):
+    """1件ぶんの見出しと本文。"""
+    text = entry_text(entry)
+    if not text:
+        return ""
+    head = short_time(entry.get("t")) if SHOW_TIME else ""
+    return ("── {} ──\n".format(head) if head else "") + text
+
+
+def view_blocks(entries):
+    """窓に出す本文を、**Label 1枚ぶんずつの塊**にして古い順に返す。
+
+    全部を1枚に入れてはいけない。Kivy の Label は中身を1枚のテクスチャに焼くので、
+    GPU の上限（多くの環境で 16384px）を超えた瞬間に**何も描かれない** ―
+    実機で 500 件を1枚に入れて窓が空になったのがこれ（2026-08-10）。
+    件数が増えるほど確実に踏むので、塊に割って複数枚で持つ。
+
+    それでも組む量には上限を置く（`VIEW_MAX_CHARS`）。件数の上限を大きくした人の
+    窓が、開くたびに何十万字を組み直すことにならないように ― あふれるのは
+    **古いほう**で、新しい本文は必ず出る。
+    """
+    blocks = [block for block in (entry_block(entry) for entry in entries) if block]
+    kept, total = [], 0
+    for block in reversed(blocks):
+        total += len(block)
+        if kept and total > VIEW_MAX_CHARS:
+            break
+        kept.append(block)
+    kept.reverse()
+    chunks, current = [], ""
+    for block in kept:
+        if current and len(current) + len(block) > VIEW_CHUNK_CHARS:
+            chunks.append(current)
+            current = block
+        else:
+            current = block if not current else current + "\n\n" + block
+    if current:
+        chunks.append(current)
+    return chunks or [VIEW_EMPTY]
 
 
 def apply(ctx):
@@ -820,30 +862,27 @@ def apply(ctx):
         header.add_widget(title)
         header.add_widget(close)
 
+        # 本文は**Label 1枚ではなく縦に並べた複数枚**で持つ（`view_blocks`）。
+        # 縦の BoxLayout は先に足したものが上に来るので、古い順に足せばそのまま
+        # 上から古い順に並ぶ。高さは中身（`minimum_height`）が決める。
         scroll = ScrollView(do_scroll_x=False)
-        body = Label(text=view_text(entries), markup=False,
-                     halign="left", valign="top", size_hint_y=None)
-        if isinstance(font_name, str) and font_name:
-            soft_set(body, "font_name", font_name)
-        if font_size:
-            soft_set(body, "font_size", font_size)
-        soft_set(body, "line_height", VIEW_LINE_HEIGHT)
-
-        def fit(*_args):
-            # 折り返し幅は入れ物に合わせる。高さは中身が決める（`texture_size`）。
-            body.text_size = (max(scroll.width - upx(VIEW_PAD) * 2, 1), None)
-
-        body.bind(texture_size=lambda instance, value: setattr(
-            instance, "height", value[1]))
-        scroll.bind(width=fit)
-        fit()
-        scroll.add_widget(body)
+        column = BoxLayout(orientation="vertical", size_hint_y=None,
+                           padding=upx(VIEW_PAD), spacing=upx(VIEW_GAP))
+        column.bind(minimum_height=lambda instance, value: setattr(
+            instance, "height", value))
+        scroll.add_widget(column)
 
         root.add_widget(header)
         root.add_widget(scroll)
         view.add_widget(root)
         view.bind(on_dismiss=lambda *_args: store.update({"view": None}))
-        store["view"] = {"view": view, "body": body, "scroll": scroll, "key": key}
+        opened = {"view": view, "column": column, "scroll": scroll, "key": key,
+                  "font_name": font_name, "font_size": font_size, "chunks": [],
+                  "empty": not entries}
+        store["view"] = opened
+        chunks = view_blocks(entries)
+        for chunk in chunks:
+            add_chunk(opened, chunk)
         try:
             view.open()
         except Exception:
@@ -853,21 +892,67 @@ def apply(ctx):
         # 開いた直後はいちばん下（＝最新）を出す。中身の高さが決まるのは
         # 次のフレームなので、そこで寄せる。
         schedule(lambda: soft_set(scroll, "scroll_y", 0))
-        note("opened the window with {} entr(y/ies) for {!r}".format(len(entries), key))
+        note("opened the window with {} entr(y/ies) for {!r} in {} label(s)".format(
+            len(entries), key, len(chunks)))
+
+    def add_chunk(opened, text):
+        """本文の塊を1枚の Label にして窓の下へ足す。
+
+        折り返し幅は**自分の幅**から決める（親の幅に `size_hint_x=1` で従うので、
+        入れ物の寸法を別途たどらなくてよい）。高さは中身が決める。
+        """
+        try:
+            from kivy.uix.label import Label
+        except Exception:
+            return None
+        label = Label(text=text, markup=False, halign="left", valign="top",
+                      size_hint_y=None)
+        font_name, font_size = opened.get("font_name"), opened.get("font_size")
+        if isinstance(font_name, str) and font_name:
+            soft_set(label, "font_name", font_name)
+        if font_size:
+            soft_set(label, "font_size", font_size)
+        soft_set(label, "line_height", VIEW_LINE_HEIGHT)
+        label.bind(width=lambda instance, value: setattr(
+            instance, "text_size", (value, None)))
+        label.bind(texture_size=lambda instance, value: setattr(
+            instance, "height", value[1]))
+        column = opened["column"]
+        label.text_size = (column.width, None)
+        column.add_widget(label)
+        opened["chunks"].append(label)
+        return label
 
     def refresh_view(key):
-        """開いている窓に新しい本文を映す。**読んでいる位置は動かさない。**
+        """開いている窓に**来たぶんだけ**足す。読んでいる位置は動かさない。
+
+        全部を組み直さないのは、窓を開いたまま遊べる限り本文は何度も来るから。
+        最後の塊に入るならそこへ継ぎ足し、あふれるなら次の1枚にする。
 
         下まで読んでいた（`scroll_y` が 0 付近）ときだけ下へ追う。途中を読んで
         いる人の位置を動かすと、本文が来るたびに読みかけの行が飛ぶ。
         """
-        view = store.get("view")
-        if not isinstance(view, dict) or view.get("key") != key:
+        opened = store.get("view")
+        if not isinstance(opened, dict) or opened.get("key") != key:
             return
-        scroll, body = view["scroll"], view["body"]
+        entries = store["buckets"].get(key) or []
+        block = entry_block(entries[-1]) if entries else ""
+        if not block:
+            return
+        scroll = opened["scroll"]
         try:
             at_bottom = float(frames.attr(scroll, "scroll_y", 0.0)) <= 0.01
-            body.text = view_text(store["buckets"].get(key) or [])
+            if opened.get("empty"):
+                # 「まだ記録がありません」を出していた窓。1件目が来たので外す。
+                for label in opened["chunks"]:
+                    opened["column"].remove_widget(label)
+                del opened["chunks"][:]
+                opened["empty"] = False
+            last = opened["chunks"][-1] if opened["chunks"] else None
+            if last is not None and len(last.text) + len(block) <= VIEW_CHUNK_CHARS:
+                last.text = last.text + "\n\n" + block
+            else:
+                add_chunk(opened, block)
         except Exception:
             ctx.log_exc("conversation log: could not refresh the window")
             return

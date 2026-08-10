@@ -9,7 +9,7 @@
     "en": "Adds non-combat mini quests (gather / rescue / scout) to the notice board (unfinished: completing one can still be logged as a retreat)",
     "ja": "戦闘を伴わないミニクエスト（採集・救助・偵察）を掲示板に追加する（未完成。達成しても撤退扱いになることがあるためデバッグ用）"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "debug": true,
   "after": [

@@ -550,6 +550,31 @@ def running(app):
     setattr(sys.modules["__main__"], "the_running_app", app)
 
 
+def opened_view():
+    return FakeModalView.opened[0] if FakeModalView.opened else None
+
+
+def view_parts(view):
+    """開いている窓の `(地の箱, ScrollView, 本文の Label 一覧)`。
+
+    本文は Label 1枚ではなく縦に並べた複数枚（テクスチャの上限。`view_blocks`）。
+    偽の `add_widget` も本物と同じく先頭挿入なので、**逆順が上から下の並び**。
+    """
+    if view is None or not view.children:
+        return None, None, []
+    root = view.children[0]
+    scrolls = [c for c in root.children if isinstance(c, FakeScrollView)]
+    if not scrolls or not scrolls[0].children:
+        return root, (scrolls[0] if scrolls else None), []
+    column = scrolls[0].children[0]
+    return root, scrolls[0], list(reversed(column.children))
+
+
+def view_body(view):
+    """窓に出ている本文を、並び順のままひと繋ぎにしたもの。"""
+    return "\n\n".join(label.text for label in view_parts(view)[2])
+
+
 def lines_of(path):
     with io.open(path, encoding="utf-8") as fh:
         return [line for line in fh.read().splitlines() if line.strip()]
@@ -671,25 +696,22 @@ def run():
     CLOCK.tick()
     check("pressing the button opens a window", len(FakeModalView.opened) == 1,
           FakeModalView.opened)
-    view = FakeModalView.opened[0] if FakeModalView.opened else None
-    body = None
-    root = view.children[0] if view is not None else None
-    if view is not None:
-        scroll = [c for c in root.children if isinstance(c, FakeScrollView)]
-        body = scroll[0].children[0] if scroll and scroll[0].children else None
+    view = opened_view()
+    root, scroll, labels = view_parts(view)
+    body = view_body(view)
+    first = labels[0] if labels else None
     check("the window shows the messages oldest first",
-          body is not None and body.text.index(NARRATION) < body.text.index(NARRATION2),
-          None if body is None else body.text[:120])
+          body.index(NARRATION) < body.index(NARRATION2), body[:120])
     check("the window starts at the newest message",
-          view is not None and close(scroll[0].scroll_y, 0.0),
-          None if view is None else scroll[0].scroll_y)
+          scroll is not None and close(scroll.scroll_y, 0.0),
+          None if scroll is None else scroll.scroll_y)
     check("the window borrows the game's font",
-          body is not None and body.font_name == GAME_FONT,
-          None if body is None else body.font_name)
+          first is not None and first.font_name == GAME_FONT,
+          None if first is None else first.font_name)
     check("the window's text is the same size as the narration by default",
-          body is not None and close(mod.FONT_SCALE, 1.0)
-          and close(body.font_size, FONT_SIZE),
-          None if body is None else (body.font_size, FONT_SIZE, mod.FONT_SCALE))
+          first is not None and close(mod.FONT_SCALE, 1.0)
+          and close(first.font_size, FONT_SIZE),
+          None if first is None else (first.font_size, FONT_SIZE, mod.FONT_SCALE))
 
     # 枠線は地の色の後（`canvas.after`）に、窓の矩形どおりに引く。
     border = root.canvas.after.lines() if root is not None else []
@@ -712,8 +734,7 @@ def run():
     app.add_text_display(0, "その後、扉が軋んで開いた。")
     CLOCK.tick()
     check("a message that arrives while the window is open shows up",
-          body is not None and "扉が軋んで" in body.text,
-          None if body is None else body.text[-60:])
+          "扉が軋んで" in view_body(view), view_body(view)[-60:])
 
     button.press()
     check("pressing the button again closes the window",
@@ -731,16 +752,10 @@ def run():
     fresh_button = fresh.log_button()
     fresh_button.press()
     CLOCK.tick()
-    reloaded = FakeModalView.opened[0] if FakeModalView.opened else None
-    reloaded_body = None
-    if reloaded is not None:
-        scrolls = [c for c in reloaded.children[0].children
-                   if isinstance(c, FakeScrollView)]
-        reloaded_body = scrolls[0].children[0] if scrolls and scrolls[0].children else None
+    reloaded_body = view_body(opened_view())
     check("the log survives a reload of the mod",
-          reloaded_body is not None and NARRATION in reloaded_body.text
-          and "扉が軋んで" in reloaded_body.text,
-          None if reloaded_body is None else reloaded_body.text[:120])
+          NARRATION in reloaded_body and "扉が軋んで" in reloaded_body,
+          reloaded_body[:120])
     fresh_button.press()
 
     # 壊れた行（書き込みの途中で落ちた最後の1行）はその行だけ捨てる。
@@ -754,15 +769,9 @@ def run():
     broken_button = broken_hud.log_button()
     broken_button.press()
     CLOCK.tick()
-    broken_view = FakeModalView.opened[0] if FakeModalView.opened else None
-    broken_body = None
-    if broken_view is not None:
-        scrolls = [c for c in broken_view.children[0].children
-                   if isinstance(c, FakeScrollView)]
-        broken_body = scrolls[0].children[0] if scrolls and scrolls[0].children else None
+    broken_body = view_body(opened_view())
     check("a half-written line does not take the rest of the log with it",
-          broken_body is not None and NARRATION in broken_body.text,
-          None if broken_body is None else broken_body.text[:120])
+          NARRATION in broken_body, broken_body[:120])
     broken_button.press()
 
     # -- 上限と畳み直し -------------------------------------------------------
@@ -789,15 +798,9 @@ def run():
     reread_button = reread.log_button()
     reread_button.press()
     CLOCK.tick()
-    last = FakeModalView.opened[0] if FakeModalView.opened else None
-    last_body = None
-    if last is not None:
-        scrolls = [c for c in last.children[0].children
-                   if isinstance(c, FakeScrollView)]
-        last_body = scrolls[0].children[0] if scrolls and scrolls[0].children else None
+    last_body = view_body(opened_view())
     check("re-reading the folded file keeps at most the limit",
-          last_body is not None and last_body.text.count("── ") <= mod.MAX_ENTRIES,
-          None if last_body is None else last_body.text.count("── "))
+          last_body.count("── ") <= mod.MAX_ENTRIES, last_body.count("── "))
     reread_button.press()
 
     # -- 窓の大きさが変わっても置き場所が付いてくる --------------------------
@@ -809,12 +812,48 @@ def run():
           close(button.x, 1500.0 - button.width - mod.BUTTON_GAP)
           and close(button.y, 500.0), (button.pos, hud.expand_button.pos))
 
+    # -- 長いログを1枚に入れない ---------------------------------------------
+    # Kivy の Label は中身を1枚のテクスチャに焼くので、GPU の上限を超えると
+    # **何も描かれない**（実機で 500 件の窓が空になった。2026-08-10）。
+    long_app = InstantaleApp(world="ノルン")
+    running(long_app)
+    forget_store(mod)
+    install(mod, ctx)
+    for index in range(120):
+        long_app.add_text_display(0, "長い本文 {} ".format(index) + "あ" * 400)
+    long_hud = FakeHUD()
+    long_hud.show()
+    long_button = long_hud.log_button()
+    long_button.press()
+    CLOCK.tick()
+    long_labels = view_parts(opened_view())[2]
+    check("a long log is split across several labels",
+          len(long_labels) > 1, len(long_labels))
+    check("no single label goes over the chunk limit",
+          long_labels
+          and max(len(label.text) for label in long_labels) <= mod.VIEW_CHUNK_CHARS,
+          None if not long_labels else max(len(l.text) for l in long_labels))
+    check("the labels are in order, oldest at the top",
+          view_body(opened_view()).index("長い本文 0 ")
+          < view_body(opened_view()).index("長い本文 119 "),
+          [label.text[:12] for label in long_labels[:3]])
+    # 開いたままでも、来たぶんだけ足す（全部組み直さない）。
+    grew = len(long_labels[-1].text)
+    long_app.add_text_display(0, "続きの本文")
+    CLOCK.tick()
+    tail = view_parts(opened_view())[2]
+    check("a new message extends the last label or starts a new one",
+          "続きの本文" in tail[-1].text
+          and (len(tail) == len(long_labels) or len(tail) == len(long_labels) + 1)
+          and len(tail[-1].text) <= mod.VIEW_CHUNK_CHARS,
+          (len(long_labels), len(tail), grew, len(tail[-1].text)))
+    long_button.press()
+
     # -- 枠線を切る -----------------------------------------------------------
     mod.VIEW_BORDER = False
     button.press()
     CLOCK.tick()
-    plain_view = FakeModalView.opened[0] if FakeModalView.opened else None
-    plain_root = plain_view.children[0] if plain_view is not None else None
+    plain_root = view_parts(opened_view())[0]
     check("the outline can be switched off",
           plain_root is not None and not plain_root.canvas.after.lines(),
           None if plain_root is None else

@@ -1386,6 +1386,12 @@ class App(ttk.Frame):
             msg += " ｜ 前回の注入: {}/{} 適用".format(ok, len(results))
             if bad:
                 msg += "（失敗 {}）".format(len(bad))
+        # 「待たない」と決めた保留（ローダの `settle_deferred`）。件数だけ出す。
+        # 黙って消すと、クラウド実行のときに `102_` などが何も当てていない理由が
+        # 一覧から読めなくなる ― 失敗ではないので ⚠ には出さない。
+        skipped = (self.status.get("patches") or {}).get("skipped") or []
+        if skipped:
+            msg += " ｜ この実行では通らない経路のフック {} 件".format(len(skipped))
         self._set_status(msg)
         self._show_warnings()
 

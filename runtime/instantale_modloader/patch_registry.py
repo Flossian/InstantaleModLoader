@@ -10,10 +10,11 @@
 アイテム詳細（`109_` / `208_`）は同じ関数を別々の MOD が触る。重なること自体は
 正常だが、**意図しない重なり**が起きたとき、ログを目で追う以外の手段が無かった。
 
-記録するのは3種類:
+記録するのは4種類:
 
     applied     実際に当たった（wrap / patch）
     deferred    対象のモジュールが未 import なので見送った（後で当て直す）
+    skipped     待つのをやめた保留（その経路をこの実行では通らないと分かった）
     unresolved  モジュールは在るが対象が見つからない / None だった
 
 `unresolved` はゲーム更新で関数が消えた場合に出る。`required=True` なら例外に
@@ -35,6 +36,7 @@ _entries: list[tuple[str, str, str, str]] = []
 
 APPLIED = "applied"
 DEFERRED = "deferred"
+SKIPPED = "skipped"
 UNRESOLVED = "unresolved"
 
 
@@ -69,6 +71,33 @@ def record(kind: str, target: str, *, detail: str = "") -> None:
     残す。台帳の目的は「取りこぼしを無くすこと」なので、帰属不明でも載せる。
     """
     _entries.append((kind, target, _current or "<loader>", detail))
+
+
+def settle_deferred(modules, detail: str = "") -> int:
+    """このモジュール宛ての保留を「待たない」（`skipped`）へ移す。戻り値は移した件数。
+
+    `deferred` は「まだ来ていないだけ」＝いずれ当たる見込みの印なので、見込みが
+    無くなったら降ろす。見込みの有無はローダ側の判断（クラウド実行と分かった・
+    見張りが時間切れになった）なので、判定そのものはここには置かない。
+
+    **消さずに残す**のが要点。消すと台帳の合計が合わなくなり、その MOD の
+    フックがどこへ行ったのかを追えなくなる。種類だけ替えて理由を `detail` に
+    書き足せば、`status.json` からも「待っているのか・降ろしたのか」が読める。
+
+    呼ぶのは見張りのスレッド（`__init__._deferred_loop`）。触るのは要素の
+    差し替えだけで、並びの長さは変えない。
+    """
+    wanted = set(modules)
+    moved = 0
+    for index, (kind, target, mod, module) in enumerate(_entries):
+        if kind != DEFERRED or module not in wanted:
+            continue
+        # 元の detail（モジュール名）は捨てない。理由で上書きすると、どの
+        # モジュールを待っていたのかが台帳から読めなくなる。
+        _entries[index] = (SKIPPED, target, mod,
+                           "{} ({})".format(module, detail) if detail else module)
+        moved += 1
+    return moved
 
 
 # --------------------------------------------------------------------------
@@ -140,12 +169,14 @@ def summary() -> dict:
             "mods": len(by_mod()),
             "conflicts": len(conflicts()),
             "deferred": len(entries(DEFERRED)),
+            "skipped": len(entries(SKIPPED)),
             "unresolved": len(unresolved()),
         },
         "by_target": by_target(),
         "by_mod": by_mod(),
         "conflicts": conflicts(),
         "deferred": entries(DEFERRED),
+        "skipped": entries(SKIPPED),
         "unresolved": unresolved(),
     }
 
@@ -174,6 +205,15 @@ def format_report() -> list[str]:
         lines.append("deferred ({}): waiting for the module to be imported".format(
             len(deferred)))
         for _k, target, mod, detail in deferred:
+            lines.append("  {} ({}) <- {}".format(target, detail or "?", mod))
+
+    skipped = entries(SKIPPED)
+    if skipped:
+        # 待たないと決めたもの。ゲーム更新を疑う話ではないので大文字にしない
+        # （ログを目で追ったときに UNRESOLVED と同じ重さに読ませない）。
+        lines.append("skipped ({}): the module is not used in this run".format(
+            len(skipped)))
+        for _k, target, mod, detail in skipped:
             lines.append("  {} ({}) <- {}".format(target, detail or "?", mod))
 
     missing = unresolved()

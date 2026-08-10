@@ -80,6 +80,15 @@ MANAGER_SEND_TARGETS = (
 #: これが import されていたらローカル実行（クラウドとどちらか片方しか載らない）。
 LOCAL_REQUEST_MODULE = "scripts.llm.request_llm_inference_llama_cpp_completion"
 
+#: 送信モジュールの名前空間。プロバイダごとに1つだけ import される（GAME.md §2.12）。
+#: 名前を全部並べないのは、Alibaba のモジュール名が未実測だから ― 前置きで拾えば
+#: 知らないプロバイダでも「llama.cpp ではない」ことは言える。
+REQUEST_MODULE_PREFIX = "scripts.llm.request_llm_inference_"
+
+#: ローカル（llama.cpp）でしか import されないモジュール。クラウドで動いていると
+#: 分かった時点で、ここ宛ての保留は待っても無駄になる（`_arm_deferred`）。
+LOCAL_ONLY_MODULES = ("llama_cpp_runtime_completion", LOCAL_REQUEST_MODULE)
+
 #: 「別名の後生え」の見張り。
 ALIAS_POLL_SECONDS = 5.0
 ALIAS_WATCH_SECONDS = 3600.0
@@ -88,6 +97,31 @@ ALIAS_WATCH_SECONDS = 3600.0
 def is_local_runtime() -> bool:
     """ローカル（llama.cpp）で動いているか。クラウドとは排他。"""
     return sys.modules.get(LOCAL_REQUEST_MODULE) is not None
+
+
+def request_modules() -> list[str]:
+    """いま読み込まれている送信モジュール。
+
+    `sys.modules` はゲーム側のスレッドが import している最中に増えるので、
+    鍵の並びを先に固めてから引く（走査しながらだと `RuntimeError` になる）。
+    """
+    return sorted(name for name in list(sys.modules)
+                  if name.startswith(REQUEST_MODULE_PREFIX)
+                  and sys.modules.get(name) is not None)
+
+
+def is_cloud_runtime() -> bool:
+    """llama.cpp 以外の送信モジュールが読み込まれているか。
+
+    `is_local_runtime()` の否定ではない。**起動直後はどちらも False** ―
+    まだ1度も LLM を呼んでいなければプロバイダは決まっておらず、そこで
+    「クラウドだ」と決めつけると、ローカル実行の保留を取り下げてしまう。
+
+    `any_server`（任意の OpenAI 互換サーバー）は手元のサーバーを指すことも
+    あるので、厳密には「クラウド」ではなく**プロセス内の `LlamaCppClient` を
+    通らない経路**。保留を取り下げてよいかの判定としてはこれで正しい。
+    """
+    return any(name != LOCAL_REQUEST_MODULE for name in request_modules())
 
 
 def content_of(message):

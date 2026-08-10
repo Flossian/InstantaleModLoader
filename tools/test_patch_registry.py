@@ -10,6 +10,7 @@
   重なり   … 2つ以上の MOD が触っている対象だけが競合として出る
   未解決   … 対象が消えている場合を検出し、理由（名前ごと無い / None）まで分かる
   記録先送 … 未 import のモジュールは「未解決」ではなく「保留」に入る
+  経路外   … クラウドと分かった保留は待たずに降ろす（`deferred` → `skipped`）
   投げる前 … required=True で例外になる場合も、投げる前に台帳へ載っている
   打ち間違 … @patch は存在しない名前を黙って新設しない
   巻き戻し … apply() が例外で抜けても「実行中の MOD」が残らない
@@ -174,12 +175,55 @@ def main():
     check(s["counts"]["applied"] == 3 and s["counts"]["targets"] == 2
           and s["counts"]["mods"] == 2 and s["counts"]["conflicts"] == 1,
           "集計が台帳と一致: {}".format(s["counts"]))
-    check(set(s) == {"counts", "by_target", "by_mod", "conflicts", "deferred", "unresolved"},
+    check(set(s) == {"counts", "by_target", "by_mod", "conflicts", "deferred",
+                     "skipped", "unresolved"},
           "summary の項目: {}".format(sorted(s)))
 
     print("-- 報告の見え方 --")
     for line in R.format_report():
         print("   " + line)
+
+    print("=== クラウドと分かったら待つのをやめる ===")
+    # ゲームは選ばれたプロバイダの送信モジュールを1つだけ import する
+    # （GAME.md §2.12）。ローカル（llama.cpp）専用のモジュール宛ての保留は、
+    # クラウドと分かった時点で「当たらない」が確定する ― 待ち続けると GUI が
+    # 「段階適用の途中」と言い続ける。
+    from instantale_modloader import llm as LLM              # noqa: E402
+
+    local_mod = LLM.LOCAL_ONLY_MODULES[0]
+    cloud_mod = LLM.REQUEST_MODULE_PREFIX + "openai"
+    sys.modules.pop(cloud_mod, None)
+    sys.modules.pop(LLM.LOCAL_REQUEST_MODULE, None)
+    R._entries.append((R.DEFERRED, local_mod + ":LlamaCppClient.chat",
+                       "102_fake", local_mod))
+    waiting = [local_mod, "save_area_json"]
+
+    check(not LLM.is_cloud_runtime() and not LLM.is_local_runtime(),
+          "起動直後はローカルでもクラウドでもない（どちらも False）")
+    kept = ml._settle_unused_local(out_dir, waiting)
+    check(kept == waiting, "プロバイダが決まる前は1つも降ろさない: {}".format(kept))
+
+    sys.modules[cloud_mod] = types.ModuleType(cloud_mod)
+    try:
+        check(LLM.is_cloud_runtime(), "送信モジュールが載ればクラウドと分かる")
+        kept = ml._settle_unused_local(out_dir, waiting)
+        check(kept == ["save_area_json"],
+              "ローカル専用だけ降ろし、他の保留は待ち続ける: {}".format(kept))
+        moved = [e for e in R.entries(R.SKIPPED) if e[3].startswith(local_mod)]
+        check(len(moved) == 1, "降ろした先は skipped 1件: {}".format(moved))
+        check(moved and moved[0][1] == local_mod + ":LlamaCppClient.chat"
+              and moved[0][2] == "102_fake",
+              "対象と帰属は変えない: {}".format(moved))
+        check(moved and "openai" in moved[0][3],
+              "理由にプロバイダ名が残る: {}".format(moved[0][3] if moved else None))
+        check(not [e for e in R.entries(R.DEFERRED) if e[3] == local_mod],
+              "同じ対象が保留に残らない（二重に数えない）")
+        check(R.settle_deferred([local_mod], "again") == 0,
+              "もう保留に無いものを降ろしても何も動かない")
+        check(ml._settle_unused_local(out_dir, ["save_area_json"]) == ["save_area_json"],
+              "ローカル専用でない保留はクラウドでも降ろさない")
+    finally:
+        sys.modules.pop(cloud_mod, None)
 
     print("=== on_ready は 1 回きり ===")
     calls = []

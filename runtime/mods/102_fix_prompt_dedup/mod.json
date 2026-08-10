@@ -10,5 +10,6 @@
     "ja": "LLM プロンプト内で重複した同一ブロックを畳み、プロンプトの肥大を抑える"
   },
   "version": "1",
-  "author": "R01/Flossian"
+  "author": "R01/Flossian",
+  "superseded": "main_023"
 }

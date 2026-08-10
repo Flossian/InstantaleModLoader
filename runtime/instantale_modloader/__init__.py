@@ -1248,11 +1248,48 @@ def _superseded(generation: str) -> bool:
     return current is not None and getattr(current, "_state", None) is not _state
 
 
+def _settle_unused_local(out_dir: str, pending: list) -> list:
+    """ローカル（llama.cpp）専用の保留を、クラウドと分かった時点で降ろす。
+
+    ゲームは選ばれたプロバイダの送信モジュールを**1つだけ** import する
+    （GAME.md §2.12）。クラウドなら `llama_cpp_runtime_completion` は一生
+    import されないので、待ち続けても当たらない。それでも `deferred` に居座ると
+    GUI は「段階適用の途中」と言い続け、注入のたびに無駄な見張りが立つ。
+
+    戻り値は**待ち続けるべきモジュール**の並び。降ろすのは「クラウドと分かった」
+    ときだけで、起動直後（プロバイダ未確定）は何もしない ― `is_cloud_runtime()` は
+    `is_local_runtime()` の否定ではなく、どちらも False の時間帯がある。そこで
+    決めつけると、ローカル実行の保留まで降ろしてしまう。
+    """
+    from . import llm as _llm
+    from . import patch_registry as _registry
+
+    local = [name for name in pending if name in _llm.LOCAL_ONLY_MODULES]
+    if not local or not _llm.is_cloud_runtime():
+        return pending
+    providers = [name[len(_llm.REQUEST_MODULE_PREFIX):]
+                 for name in _llm.request_modules()
+                 if name != _llm.LOCAL_REQUEST_MODULE] or ["cloud"]
+    moved = _registry.settle_deferred(local, "not used with " + "/".join(providers))
+    log("deferred: {} in use; {} hook(s) for {} will not be waited for "
+        "(that path is not taken in this run)".format(
+            "/".join(providers), moved, ", ".join(local)))
+    # 台帳が変わったので書き直す。GUI は status.json しか見ていないので、
+    # ここで書かないと「途中」のまま残る（それがこの関数を足した動機）。
+    write_status(out_dir)
+    return [name for name in pending if name not in local]
+
+
 def _deferred_loop(out_dir: str, generation: str, pending: list) -> None:
     deadline = time.monotonic() + DEFERRED_TIMEOUT
     while time.monotonic() < deadline:
         time.sleep(DEFERRED_POLL)
         if _superseded(generation):
+            return
+        # プロバイダが決まるのは最初の LLM リクエスト＝この見張りが立った後の
+        # ことがある。だから arm のときだけでなく、毎回見る。
+        pending = _settle_unused_local(out_dir, pending)
+        if not pending:
             return
         arrived = [name for name in pending if sys.modules.get(name) is not None]
         if not arrived:
@@ -1268,9 +1305,14 @@ def _deferred_loop(out_dir: str, generation: str, pending: list) -> None:
             # ここで投げるとゲーム側のスレッドを道連れにするので、記録だけして降りる。
             log_exc("deferred re-apply failed")
         return
+    from . import patch_registry as _registry
+    late = [n for n in pending if sys.modules.get(n) is None]
     log("deferred: gave up after {:.0f}s; still not imported: {}".format(
-        DEFERRED_TIMEOUT, ", ".join(n for n in pending if sys.modules.get(n) is None)),
-        level="WARN")
+        DEFERRED_TIMEOUT, ", ".join(late)), level="WARN")
+    # 見張りが降りた以上、もう当たらない。`deferred` のまま残すと「まだ待って
+    # いる」と読めてしまうので、諦めたことを台帳に書いて status.json へ流す。
+    if _registry.settle_deferred(late, "gave up after {:.0f}s".format(DEFERRED_TIMEOUT)):
+        write_status(out_dir)
 
 
 def _arm_deferred(out_dir: str, generation: str) -> None:
@@ -1286,12 +1328,17 @@ def _arm_deferred(out_dir: str, generation: str) -> None:
     再注入と同じ経路で、世代管理（patch.py）が前の層を置き換えるので重ならない。
     """
     from . import patch as _patch
-    pending = _patch.pending_modules()
+    from . import patch_registry as _registry
+    # 見張りを立てる前に、待っても無駄と分かっているものを降ろす。当て直しの
+    # boot はプロバイダが決まった後に走るので、この時点で片付くことが多い。
+    pending = _settle_unused_local(out_dir, _patch.pending_modules())
     if not pending:
         return
     if _state["deferred_boots"] >= MAX_DEFERRED_BOOTS:
         log("deferred: already re-applied {} time(s); not watching again for {}".format(
             _state["deferred_boots"], ", ".join(pending)), level="WARN")
+        if _registry.settle_deferred(pending, "re-apply limit reached"):
+            write_status(out_dir)
         return
     log("deferred: waiting for {} (checking every {:.0f}s)".format(
         ", ".join(pending), DEFERRED_POLL))

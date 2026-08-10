@@ -531,6 +531,26 @@ check("進行: 1文目でも帰還の解釈を示す",
 check("撤退そのものは残す（達成できない依頼で詰ませない）",
       "retire_from_the_quest" in body, body)
 
+# retire の行は**行頭だけ**で当てる。ゲームの原文には誤植（「しかし具体的が
+# 無いならば」）があり、`111_llm_prompt_replace` の同梱ルールがそれを直すので、
+# 送信される文の末尾は 111_ を入れているかどうかで変わる（VERIFICATION.md §2.43）。
+# 末尾まで含めた完全一致にしていたときは、直された側で当たらなくなっていた。
+FIXED_TYPO = MOD_MODULE.SAMPLE_REFEREE_USER.replace(
+    "しかし具体的が無いならば", "しかし具体的な理由が無いならば")
+check("見本に誤植が在る（この回帰の前提。ゲームが直したらここが落ちる）",
+      FIXED_TYPO != MOD_MODULE.SAMPLE_REFEREE_USER)
+check("進行: retire の行は末尾が変わっても当たる（111_ が誤植を直した後の文）",
+      MOD_MODULE.referee_anchors_missing(
+          MOD_MODULE.SAMPLE_REFEREE_SYSTEM + FIXED_TYPO) == [],
+      MOD_MODULE.referee_anchors_missing(
+          MOD_MODULE.SAMPLE_REFEREE_SYSTEM + FIXED_TYPO))
+fixed_body = MOD_MODULE.rewrite_referee_text(FIXED_TYPO, "お題。", None, "見本。")
+check("進行: 末尾が変わっていても説明ごと差し替わる",
+      "その場合は必ず return_after_completion を選ぶこと" in (fixed_body or ""),
+      fixed_body)
+check("進行: 差し替えた行にゲームの原文が残らない",
+      "さっさと撤退させること" not in (fixed_body or ""), fixed_body)
+
 # ---- 在庫が尽きた終盤にラスボス戦へ流れた件の回帰（VERIFICATION.md §2.21）
 check("進行: battle 行に「ラスボスを含めるな」を書き足す",
       "ラスボスを enemies に含めてはならない" in body, body)

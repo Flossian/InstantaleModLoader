@@ -923,6 +923,31 @@ MOD から import された時点で、ここは `API = 1` と同格の約束に
 `boot()` をやり直す（当て直しは手作業の再注入と同じ経路なので層は重ならない）。
 1つでも現れたら当て直す。上限は 8 回 / 1 時間。
 
+保留は「まだ来ていない」だけの印なので、**来ないと分かったら降ろす**。ゲームは選ばれた
+プロバイダの送信モジュールを1つだけ import するので（GAME.md §2.12）、クラウド実行では
+`llama_cpp_runtime_completion` が一生 import されない。見張りは 5 秒ごとに
+`instantale_modloader.llm.is_cloud_runtime()` を見て、そうと分かった時点でローカル専用の
+保留を `skipped` へ移し、`status.json` を書き直して降りる。
+
+| 台帳の種類 | 意味 |
+|---|---|
+| `deferred` | まだ来ていない。見張りが待っている |
+| `skipped` | 待つのをやめた。理由は detail に残る（`not used with openai` / `gave up after 3600s` / `re-apply limit reached`） |
+
+**`is_cloud_runtime()` は `is_local_runtime()` の否定ではない。** 最初の LLM リクエストまでは
+どちらも False で、そこで決めつけるとローカル実行の保留まで降ろしてしまう。降ろすのは
+「クラウドと分かった」ときだけ。判定に送信モジュールの前置き
+（`scripts.llm.request_llm_inference_`）を使うのは、Alibaba のモジュール名が未実測でも
+「llama.cpp ではない」ことは言えるため。
+
+降ろした分は消さずに残す。台帳の合計が合わなくなると、その MOD のフックがどこへ行ったのかを
+追えなくなる。GUI は件数だけを状態欄に出す（`この実行では通らない経路のフック N 件`）―
+失敗ではないので ⚠ には出さない。
+
+> これを入れる前は、クラウド利用者の GUI が「段階適用の途中（未 import 14 件）」を出し
+> 続けていた（14 件は全て llama.cpp 宛て）。件数が減らないので、正常な起動が毎回
+> 「途中で止まっている」ように見えていた。
+
 ```
 defer wrap llama_cpp_runtime_completion:LlamaCppClient.chat (... is not imported yet)
 deferred: waiting for llama_cpp_runtime_completion, scripts.llm.llm_manager (checking every 5s)
@@ -1749,7 +1774,8 @@ hooks.armed()          # 今その名前がある対象（起動直後はクラ�
 | 手が空くのを待ってから実行する | `300_` / `303_`（`ui.Screen.when_idle`） |
 | 選択肢の枠を使わず、HUD へ自前のウィジェットを1枚足す | `113_`（`Button` を `pos_hint` で隅に置く。`add_widget` の既定は先頭挿入＝一番上に描かれる。フォントは本文のラベルから写す。Kivy の既定に日本語が無いため） |
 | 他の MOD が置いたウィジェットの隣に並ぶ | `122_`（相手は HUD の控え（`_instantale_expand_button`）から引き、大きさを写して `pos` / `size` に束ねる。塗り直しを待つと1手ぶん遅れて追いかけることになる。相手が居なければ相手と同じ置き方に落ちる） |
-| ゲームの画面を一切動かさずに読み物を出す | `122_`（`ModalView` に `ScrollView` + `Label` を1枚。書体は本文のラベルから写す。版差のあるプロパティ（`background_color` / `overlay_color`）は持っているほうにだけ効かせる） |
+| ゲームの画面を一切動かさずに読み物を出す | `122_`（`ModalView` に `ScrollView` + 縦に並べた `Label`。書体は本文のラベルから写す。版差のあるプロパティ（`background_color` / `overlay_color`）は持っているほうにだけ効かせる） |
+| 長い文章を Label 1枚に入れない | `122_`（Kivy の Label は中身を1枚のテクスチャに焼くので、GPU の上限（多くの環境で 16384px）を超えると**例外も出さずに何も描かれない**。塊に割って複数枚で持つ。VERIFICATION.md §3.21） |
 | 流れて消える情報を、追記専用の控えとして残す | `122_`（`state/` に JSON Lines で1行1件。途中で落ちても壊れるのは最後の1行だけで、読む側はその行を捨てる。上限の倍まで伸びたら隣に書いて差し替える） |
 | ゲームが決めた寸法を、元に戻せる形で変える | `109_` / `113_`（設計値はウィジェット自身に控える。MOD 側の変数に持つと、注入し直したときに変えた後の値を設計値として控える） |
 | はみ出した一覧を、位置も中身の大きさも変えずに収める | `115_`（`GridLayout` の `cols` を増やして折り返す。ウィジェットを移し替えないので、ゲームの開閉の後始末と衝突しない） |

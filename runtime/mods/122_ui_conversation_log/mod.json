@@ -11,7 +11,7 @@
   },
   "version": "1",
   "author": "R01/Flossian",
-  "after": ["113_ui_text_expand"],
+  "after": ["113_ui_text_expand", "118_batch_message_render"],
   "settings": {
     "BUTTON_CORNER": {
       "type": "choice",

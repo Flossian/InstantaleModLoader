@@ -230,16 +230,6 @@ REFEREE_RULES = (
         "ラスボス以外に残り戦闘が無い場合には強制的にラスボス戦を開始する。",
         {"none": "", "mobs": ""},
     ),
-    # **達成したのに「撤退」になる**ところ（VERIFICATION.md §2.20）。素の説明文が
-    # 「プレイヤーがその意思を明確に示したときにのみ選択するべき」なので、
-    # **帰還の意思＝放棄** と読まれる。討伐クエストでは正しいが、お使いでは逆。
-    (
-        "- retire_from_the_quest: クエストを放棄し帰還する。プレイヤーがその意思を明確に示したときにのみ選択するべきだが、ふさわしい状況下（幽閉されているので脱出不可能、今まさに敵に襲撃を受けようとしているなど）では他の処理を選んでもいい。しかし具体的が無いならばさっさと撤退させること。",
-        {
-            "none": "- retire_from_the_quest: **目的を果たせないまま**クエストを放棄して帰還する。これは失敗として扱われる。**【このクエストの目的】が果たされているなら、プレイヤーが帰還・離脱・引き上げを望んでもこれを選んではならない。その場合は必ず return_after_completion を選ぶこと。** 目的が果たされていない状態で、プレイヤーが明確に諦めの意思を示したときにだけ選ぶ。",
-            "mobs": "- retire_from_the_quest: **目的を果たせないまま**クエストを放棄して帰還する。これは失敗として扱われる。**【このクエストの目的】が果たされているなら、プレイヤーが帰還・離脱・引き上げを望んでもこれを選んではならない。その場合は必ず return_after_completion を選ぶこと。** 目的が果たされていない状態で、プレイヤーが明確に諦めの意思を示したときにだけ選ぶ。",
-        },
-    ),
     # 同じ取り違えを起こすもう1行。「エリア外への移動＝攻略を諦めての撤退」と
     # 定義してしまっているので、帰還そのものが失敗に寄る。
     (
@@ -287,6 +277,36 @@ REFEREE_LINE_RULES = (
 )
 
 # 進行プロンプトからクエスト名を読む目印。
+# 行の**先頭**で当てて、その行を**丸ごと**差し替える規則。
+#
+# 末尾に書き足す `REFEREE_LINE_RULES` と違い、説明文そのものを別の文に置き換える。
+# 完全一致（`REFEREE_RULES`）にしないのは、**同じ行の末尾が動くから**:
+#
+#   * ゲームの原文には誤植があり（「しかし具体的が無いならば」）、
+#     `111_llm_prompt_replace` の同梱ルールがそれを直している。111_ は送信の
+#     直前で当たるので、**ゲームが記録する `output_data/` には直った後の文が
+#     残る**（VERIFICATION.md §2.43）
+#   * 本体の更新で語尾が変わることもある
+#
+# どちらも「この選択肢の説明を差し替える」という目的には関係が無い。
+# 行頭の `- retire_from_the_quest: ` だけを頼りにすれば、末尾が何であっても当たる。
+RETIRE_LINE = (
+    "- retire_from_the_quest: **目的を果たせないまま**クエストを放棄して帰還する。これは失敗として扱われる。**【このクエストの目的】が果たされているなら、プレイヤーが帰還・離脱・引き上げを望んでもこれを選んではならない。その場合は必ず return_after_completion を選ぶこと。** 目的が果たされていない状態で、プレイヤーが明確に諦めの意思を示したときにだけ選ぶ。"
+)
+
+REFEREE_LINE_SWAPS = (
+    # **達成したのに「撤退」になる**ところ（VERIFICATION.md §2.20）。素の説明文が
+    # 「プレイヤーがその意思を明確に示したときにのみ選択するべき」なので、
+    # **帰還の意思＝放棄** と読まれる。討伐クエストでは正しいが、お使いでは逆。
+    (
+        "- retire_from_the_quest: ",
+        {
+            "none": RETIRE_LINE,
+            "mobs": RETIRE_LINE,
+        },
+    ),
+)
+
 REFEREE_TITLE_MARK = "- quest_title: "
 
 
@@ -334,7 +354,7 @@ def referee_anchors_missing(blob):
         if old not in blob:
             missed.append(old[:24])
     lines = blob.split("\n")
-    for prefix, _table in REFEREE_LINE_RULES:
+    for prefix, _table in REFEREE_LINE_RULES + REFEREE_LINE_SWAPS:
         if not any(line.startswith(prefix) for line in lines):
             missed.append(prefix[:24])
     return missed
@@ -379,6 +399,14 @@ def rewrite_referee_text(content, objective, combat_mode=None, summary=None):
             if line.endswith(addition):
                 continue
             lines[index] = line + addition
+        # 行ごと差し替えるもの。**当たった行はゲームの文を捨てる**ので、
+        # 追記の後に回す（同じ行に両方当たることは今のところ無いが、
+        # 順番で結果が変わる形にしない）。既に差し替わっていれば触らない。
+        for prefix, table in REFEREE_LINE_SWAPS:
+            swap = table.get(mode)
+            if not swap or not lines[index].startswith(prefix):
+                continue
+            lines[index] = swap
     new = "\n".join(lines)
 
     return new if new != content else None
