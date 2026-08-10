@@ -12,8 +12,7 @@
   "version": "1",
   "author": "R01/Flossian",
   "after": [
-    "301_quest_from_conversation",
-    "305_mini_quest"
+    "301_quest_from_conversation"
   ],
   "settings": {
     "DIFFICULTY_MODE": {

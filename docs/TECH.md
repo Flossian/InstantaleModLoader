@@ -446,9 +446,9 @@ runtime/mods/
     fix_timings/
         mod.json                名乗りと入口の宣言。ローダはまずこれを読む
         timings.py              入口。apply(ctx) を定義する
-    mini_quest/
+    area_move_dungeon/
         mod.json
-        quest.py                入口
+        area_move_dungeon.py    入口
         prompts.py              分割した中身（from . import prompts）
         data/quest_table.json   同梱データ（ctx.mod_dir から読む）
 ```
@@ -703,12 +703,10 @@ cp932 のコンソールでも化けず、grep もしやすい。`version` を�
 206_probe_quest_flow       が 104_balance_area_bgm    を包む（save_area_json:generate_quest_area を共有）
 300_event_facility_arrival が 205_probe_player_events を包む
 304_quest_end_keep_party   が 303_quest_end_party_to_guild を包む
-305_mini_quest             が 105_fix_schema_compact を包む（LlamaCppClient.chat を共有）
-                             → 305_ が先に前提を書き換え、105_ がその後でスキーマを縮める
 215_probe_event_roll       が 313_event_ability_check を包む（quest_referee_event_evaluate_new を共有）
                              → 計測は 313_ が動かした後の credibility を控える
-111_llm_prompt_replace     が 102_ / 103_ / 105_ を包み、305_ に包まれる
-                             → 305_ の完全一致の前提を壊さず、置換は圧縮前の本文を見る
+111_llm_prompt_replace     が 102_ / 103_ / 105_ を包む
+                             → 置換は圧縮前の本文を見る
 ```
 
 帯は帯であって分類の軸ではない。ゲーム本体の挙動を変えるなら機能追加でも 100番台で
@@ -783,7 +781,7 @@ wrap_outgoing(ctx, rewrite, label="my mod")     # rewrite(texts, site) -> 並び
 それはローダの語彙」をそのまま適用した形。**どう書き換えるかは移していない**
 （あちらは確率つきの置換ルール、こちらは目印の差し替え。上の表のとおり）。
 
-> **`import state` ではなく関数を直に import する。** `301_` / `305_` は
+> **`import state` ではなく関数を直に import する。** `301_` は
 > `apply()` の中に `state = {...}` というローカル変数を持っている。モジュール名で
 > 入れると、その代入によって**関数の中では `state` がローカル扱いになり**、
 > 参照が `UnboundLocalError` になる。読む側にとっても、元の呼び出し
@@ -1122,7 +1120,7 @@ def watch():
 ```
 patches: 61 applied on 54 target(s) by 26 mod(s)
 overlapping targets (5):
-  llama_cpp_runtime_completion:LlamaCppClient.chat <- 105_fix_schema_compact/, 305_mini_quest/
+  llama_cpp_runtime_completion:LlamaCppClient.chat <- 105_fix_schema_compact/, 111_llm_prompt_replace/
 deferred (2): waiting for the module to be imported
   llm_manager:quest_referee_event_resolve (scripts.llm.llm_manager) <- 206_probe_quest_flow/
 UNRESOLVED (1): target not found in the running build
@@ -1344,7 +1342,7 @@ journey_path = ctx.state_path("road_travel.json")  # 続きに要るデータ
 | 理由 | 例 |
 |---|---|
 | セーブの構造を壊さずに足せない | NPC は33項目の並びが決まっている（`310_` の台帳） |
-| 足しても往復で残る保証が無い | `Quest` が独自キーを写すかは読めない（`301_` / `305_`） |
+| 足しても往復で残る保証が無い | `Quest` が独自キーを写すかは読めない（`301_` / `307_`） |
 
 置き場所を分ける前に遊んでいた人のデータは、`ctx.state_path()` が拾う。
 `state/` 側に無くて `out/` に同じ名前が在れば、1度だけ移してくる（フォルダも
@@ -1420,7 +1418,7 @@ write = ctx.logger("item_detail.log", stamp=False)   # 本文だけ
 | 利用者の操作の結果 | 例外にする（`config.py` の `_save_settings_json`、`gui.py` の `write_order`）。GUI がダイアログに出す ― 黙って False を返すと、保存されていないのに保存されたように見える |
 
 > **同じ規則を2箇所に書かない。** 以前は `311_` / `312_` / `122_` が同じ
-> tmp→fsync→replace を各自で持ち、一方で `301_` / `305_` / `307_` /
+> tmp→fsync→replace を各自で持ち、一方で `301_` / `307_` /
 > `config.save_store` は素の `open(..., "w")` のままだった。理屈は全部に等しく
 > 当てはまるのに、書いてある場所にだけ適用されている状態だった。仕組みは
 > `instantale_modloader.write_text()` の1箇所にあり、`write_json()` はその上に
@@ -1522,8 +1520,8 @@ screen.mark_of(entry)        # 'offer'（自分のボタンでなければ None�
 
 キーを他の MOD と共有すると、相手の `on_button_press` が自分のボタンを握り潰す。
 同梱 MOD が使用中のキーは `mod_action`（`301_`）/ `mod_party_action`（`302_`）/
-`mod_mini_action`（`305_`）/ `mod_road_action`（`307_`）/ `mod_pardon_action`
-（`309_`）。
+`mod_road_action`（`307_`）/ `mod_pardon_action`（`309_`）。開発中の MOD も
+それぞれ別のキーを持つ（`mod_mini_action` ほか）。
 
 印のキーは必ず `ui.MARK_PREFIX`（`mod_`）で始めること。 残骸の掃除
 （`prune_stale`）が「他の MOD が今その場に出しているボタン」を見分けるのに、この
@@ -1600,7 +1598,7 @@ ui.find_guild(area) / ui.find_facility(area, id) / ui.facility_name(app, facilit
 ui.facility_type_of(...) / ui.GUILD_FACILITY_TYPE
 ```
 
-クエストの格納先（`301_` / `305_` / `307_` が共有。GAME.md §2.9）:
+クエストの格納先（`301_` / `307_` が共有。GAME.md §2.9）:
 
 ```python
 ui.quest_stores(app)      # クエストが入っている2つの場所
@@ -1896,8 +1894,8 @@ data = llm.ask(ctx, "mod_my_question", message, timeout=30, structure=structure)
 | 手口 | 見る MOD |
 |---|---|
 | 関数の引数を書き換える（出力の形は変えない） | `103_`（`quest_event_log`）、`105_`（`messages`）、`301_`（`area_description` に会話を添える） |
-| ゲームのプロンプトの前提そのものを差し替える | `305_`（討伐前提の8つの文を実データで裏を取ってから置換。1つでも当たらなければ丸ごと諦める） |
-| 判定は全メッセージを繋いで、書き換えは各メッセージに | `305_`（進行判定は1文目が system・クエスト名が user と分かれている）、`111_`（確率の抽選も繋いだ本文に対して1回） |
+| ゲームのプロンプトの前提そのものを差し替える | 開発中の MOD（討伐前提の8つの文を実データで裏を取ってから置換。1つでも当たらなければ丸ごと諦める。§2.6） |
+| 判定は全メッセージを繋いで、書き換えは各メッセージに | `111_`（確率の抽選も繋いだ本文に対して1回）。目印が system と user に散っているプロンプトでは、これでないと当たらない |
 | 外部（プロキシ）でやっていた加工をプロセス内へ移す | `102_` / `103_` / `105_`（判定条件と出力書式を揃える）、`111_`（ルールファイルの書式まで揃えるので、外部で書いたものをフォルダにコピーすれば動く。本文が復号済みなので `\n` / `\uXXXX` / `$1` の読み替えが要る） |
 | 利用者が編むデータファイルを持つ | `111_`（`mods/111_.../llm_replacements.txt` があればそれ、無ければ同梱の `.default.txt`。更新で消えない名前の分け方は §3.1.1。探索も外部参照もしない） |
 | 利用者が書いた規則をリクエストのたびに読み直す | `111_`（更新時刻と大きさを見る。読めない間は前回の規則で続ける＝保存の書き込み途中で壊れない。消えたら置換を止める） |
@@ -1910,11 +1908,11 @@ data = llm.ask(ctx, "mod_my_question", message, timeout=30, structure=structure)
 
 | 手口 | 見る MOD |
 |---|---|
-| 自前の選択肢ボタンを足して押下を横取りする | `301_` / `302_` / `305_`（`on_button_press` + 独自キー） |
-| ゲーム本来のフェーズを自分から起こす | `300_`（`ConversationStartManager`）、`301_` / `305_`（`DisplayQuestChoice`） |
+| 自前の選択肢ボタンを足して押下を横取りする | `301_` / `302_`（`on_button_press` + 独自キー） |
+| ゲーム本来のフェーズを自分から起こす | `300_`（`ConversationStartManager`）、`301_`（`DisplayQuestChoice`） |
 | 引数の語彙を知らないまま、ゲームのボタンの `args` を写して同じ処理を起こす | `307_`（`AreaMoveManager` の `mode`。確認画面から読み取って控え、後で同じ値で起こす） |
 | 会話を正しく閉じてから次へ進む | `301_` / `302_`（`ui.Screen.end_conversation`） |
-| 待機表示で画面の繋ぎ目を隠す | `301_` / `305_`（`ui.Screen.busy_on` / `busy_off(restore=False)`） |
+| 待機表示で画面の繋ぎ目を隠す | `301_`（`ui.Screen.busy_on` / `busy_off(restore=False)`） |
 | 手が空くのを待ってから実行する | `300_` / `303_`（`ui.Screen.when_idle`） |
 | 選択肢の枠を使わず、HUD へ自前のウィジェットを1枚足す | `113_`（`Button` を `pos_hint` で隅に置く。`add_widget` の既定は先頭挿入＝一番上に描かれる。フォントは本文のラベルから写す。Kivy の既定に日本語が無いため） |
 | 他の MOD が置いたウィジェットの隣に並ぶ | `122_`（相手は HUD の控え（`_instantale_expand_button`）から引き、大きさを写して `pos` / `size` に束ねる。塗り直しを待つと1手ぶん遅れて追いかけることになる。相手が居なければ相手と同じ置き方に落ちる） |

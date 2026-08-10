@@ -13,11 +13,7 @@
   "author": "R01/Flossian",
   "after": [
     "102_fix_prompt_dedup",
-    "103_fix_eventlog_trim",
     "105_fix_schema_compact"
-  ],
-  "before": [
-    "305_mini_quest"
   ],
   "settings": {
     "LOG_REPLACE": {

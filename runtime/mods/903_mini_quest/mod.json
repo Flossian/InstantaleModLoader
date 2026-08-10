@@ -11,9 +11,13 @@
   },
   "version": "2",
   "author": "R01/Flossian",
-  "debug": true,
   "after": [
-    "105_fix_schema_compact"
+    "105_fix_schema_compact",
+    "111_llm_prompt_replace"
+  ],
+  "before": [
+    "119_fix_crime_attribution",
+    "307_area_move_dungeon"
   ],
   "settings": {
     "COMBAT_MODE": {
