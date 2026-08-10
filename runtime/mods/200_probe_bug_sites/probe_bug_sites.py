@@ -25,8 +25,9 @@
 何も握り潰さない。例外はログしてから再送出する。この mod は観測するだけ。
 """
 
-import datetime
 import sys
+
+from instantale_modloader import patch
 import traceback
 
 from instantale_modloader.frames import describe_instance, format_locals, repr_value
@@ -38,13 +39,7 @@ MAX_TABLE_DICTS = 12
 def apply(ctx):
     log_path = ctx.out_path(LOG_BASENAME)
 
-    def write(text: str) -> None:
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            ctx.log_exc("probe: write failed")
+    write = ctx.logger(LOG_BASENAME)
 
     def on_error(label: str, exc: BaseException) -> None:
         """例外を、後から読める形（型・ローカル変数・トレースバック）で残す。"""
@@ -92,7 +87,7 @@ def apply(ctx):
             return
         # 101_ が既にクランプを被せているので、素の関数を取り出して測る。
         # そうしないと「クランプ後の挙動」を測ってしまい定義域が見えない。
-        original = getattr(target, "__original__", target)
+        original = patch.original_of(target)   # 底まで剥がす
 
         ok, failed = {}, {}
         for level in range(0, 151):
@@ -135,7 +130,7 @@ def apply(ctx):
             if fn is None:
                 write("clamp probe: {} not found".format(fname))
                 continue
-            fn = getattr(fn, "__original__", fn)
+            fn = patch.original_of(fn)         # 底まで剥がす
             results = {}
             # 境界（75/76/77）を挟むように値を選び、上限がどこかを一発で見る。
             for value in (-10, -1, 0, 1, 40, 70, 75, 76, 77, 80, 100, 150, 999):

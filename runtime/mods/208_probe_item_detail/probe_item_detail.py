@@ -61,16 +61,9 @@ def apply(ctx):
         ctx.log("scripts.hud.new_hud not loaded; skipping", level="WARN")
         return
 
-    log_path = ctx.out_path(LOG_BASENAME)
     seen = set()
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write(text.rstrip("\n") + "\n")
-        except Exception:
-            # 記録のせいでゲームを落とさない。ここは常に握り潰す。
-            ctx.log_exc("item detail probe: write failed")
+    write = ctx.logger(LOG_BASENAME, stamp=False)
 
     def props(widget, names):
         out = []
@@ -154,7 +147,10 @@ def apply(ctx):
                 own = vars(self)
             except Exception:
                 own = {}
-            lines.append("  vars(box): " + ", ".join(sorted(own)) or "  vars(box): <none>")
+            # `+` は `or` より先に評価されるので、`"..." + x or y` の y は
+            # 決して使われない（左辺が必ず真になる）。組んでから判定する。
+            names = ", ".join(sorted(own))
+            lines.append("  vars(box): " + (names or "<none>"))
             for name in sorted(own):
                 lines.append("    {:<28} = {}".format(name, frames.repr_value(own[name])))
 

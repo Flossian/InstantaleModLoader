@@ -225,6 +225,161 @@ def main():
     finally:
         sys.modules.pop(cloud_mod, None)
 
+    print("=== MOD 専用のログ（ctx.logger）===")
+    # 同じ7行が42本の MOD に写されていて、時刻付き・印付き・時刻なし・錠付きの
+    # 4通りに枝分かれしていた（TECH.md §3.2.3「写して回るものはローダの語彙」）。
+    ctx._mod = "300_gamma.py"
+    for stale in ("logger_plain.log", "logger_tagged.log", "logger_bare.log"):
+        try:
+            os.remove(ctx.out_path(stale))   # 前の実行ぶんに足さない
+        except OSError:
+            pass
+
+    plain = ctx.logger("logger_plain.log")
+    plain("一行目")
+    plain("二行目\n")                     # 末尾の改行は重ねない
+    body = open(ctx.out_path("logger_plain.log"), encoding="utf-8").read()
+    lines = body.splitlines()
+    check(len(lines) == 2, "1回1行で追記する: {!r}".format(body))
+    check(lines[0].endswith("] 一行目"), "時刻が頭に付く: {!r}".format(lines[0]))
+    check(lines[1].endswith("] 二行目") and not body.endswith("\n\n"),
+          "渡された末尾の改行で空行を作らない: {!r}".format(body))
+
+    # 印は**逐語**で挟む。既にあるログの見た目（角括弧の形と区切りの形の2通り）を
+    # 変えないため ― どちらも実機の記録として docs に引用されている。
+    tagged = ctx.logger("logger_tagged.log", tag="[FLAGFIX]")
+    tagged("戦闘中の印を下ろした")
+    colon = ctx.logger("logger_tagged.log", tag="quest-end:")
+    colon("ギルドに残した")
+    body = open(ctx.out_path("logger_tagged.log"), encoding="utf-8").read()
+    check("] [FLAGFIX] 戦闘中の印を下ろした" in body,
+          "角括弧の形をそのまま保つ: {!r}".format(body))
+    check("] quest-end: ギルドに残した" in body,
+          "区切りの形もそのまま保つ: {!r}".format(body))
+
+    bare = ctx.logger("logger_bare.log", stamp=False)
+    bare("そのまま")
+    check(open(ctx.out_path("logger_bare.log"), encoding="utf-8").read()
+          == "そのまま\n", "stamp=False なら時刻を付けない")
+
+    # 書けなくてもゲームを巻き込まない（例外にせず modloader.log に残す）。
+    # 書き先と同じ名前のフォルダを置いて、`open(..., "a")` を失敗させる。
+    os.makedirs(ctx.out_path("logger_blocked.log"), exist_ok=True)
+    doomed = ctx.logger("logger_blocked.log")
+    try:
+        doomed("これは書けない")
+        wrote = True
+    except Exception:
+        wrote = False
+    check(wrote, "書けなくても例外を投げない（呼び側は素通り）")
+
+    print("=== 文字列を期待する読み方（frames.text_of）===")
+    # `frames.attr` の番人は**2つとも文字列**（`"<missing>"` と
+    # `"<... while reading>"`）なので、`isinstance(値, str)` では両方素通りする。
+    # `118_` は本文を、`115_` は一覧の行を、`116_` はフォント名をこれで取り違えた。
+    from instantale_modloader import frames as F                # noqa: E402
+
+    class Bare(object):
+        pass
+
+    class Angry(object):
+        @property
+        def text(self):
+            raise RuntimeError("この property は評価できない")
+
+    holder = Bare()
+    holder.text = "本文"
+    check(F.text_of(holder) == "本文", "文字列はそのまま返る")
+    check(F.text_of(Bare()) is None,
+          "属性が無ければ None（`\"<missing>\"` を本文だと思わせない）")
+    check(F.text_of(None) is None, "相手が None でも None")
+    check(F.text_of(Angry()) is None,
+          "property の評価が失敗しても None（`\"<... while reading>\"` を返さない）")
+    numeric = Bare()
+    numeric.text = 42
+    check(F.text_of(numeric) is None, "文字列でない値は None")
+    check(isinstance(F.attr(Bare(), "text"), str),
+          "（前提）`attr` の番人は文字列 ― だから `isinstance(str)` では弾けない")
+
+    print("=== MOD から1問だけ聞く（llm.ask）===")
+    # 送信モジュールを名指しした MOD は、知らないプロバイダで黙って空振りする
+    # （`300_` / `311_` が `llama_cpp` と `any_server` の2つしか知らないまま
+    # Gemini / OpenAI / Claude で何もしていなかった）。名指しをここで畳む。
+    for stale in [n for n in list(sys.modules)
+                  if n.startswith(LLM.REQUEST_MODULE_PREFIX)]:
+        sys.modules.pop(stale, None)
+    sys.modules.pop(LLM.MANAGER_MODULE, None)
+    try:
+        check(LLM.resolve_send() == (None, None),
+              "どのプロバイダも載っていなければ (None, None)")
+        check(LLM.ask(ctx, "mod_q", [{"role": "user", "content": "x"}],
+                      timeout=1.0) is None,
+              "呼べないときは例外ではなく None（mod は止めない）")
+
+        unknown = LLM.REQUEST_MODULE_PREFIX + "some_future_provider"
+        seen = []
+
+        def plain_send(manager_name, message, max_tokens=None, timeout=None):
+            seen.append((manager_name, message, max_tokens, timeout))
+            return "答え"
+
+        provider = types.ModuleType(unknown)
+        provider.send_request_with_no_structure = plain_send
+        sys.modules[unknown] = provider
+        check(LLM.resolve_send()[1] == unknown,
+              "名前を知らないプロバイダでも前置きで見つかる")
+        got = LLM.ask(ctx, "mod_q", [{"role": "user", "content": "x"}],
+                      timeout=12.5, max_tokens=64)
+        check(got == "答え", "戻り値がそのまま返る: {!r}".format(got))
+        check(seen and seen[0][3] == 12.5,
+              "timeout を必ず渡す（既定は無期限なので省略させない）: {}".format(seen))
+        check(seen and isinstance(seen[0][1], list),
+              "message はリストで渡す（素の文字列は TypeError になる）")
+
+        manager = types.ModuleType(LLM.MANAGER_MODULE)
+        alias_seen = []
+
+        def alias_send(manager_name, message, max_tokens=None, timeout=None):
+            alias_seen.append(manager_name)
+            return "別名の答え"
+
+        manager.send_request_with_no_structure = alias_send
+        sys.modules[LLM.MANAGER_MODULE] = manager
+        check(LLM.resolve_send()[1] == LLM.MANAGER_MODULE,
+              "別名があればそちらを先に見る（プロバイダを名指ししない）")
+
+        def structured_send(manager_name, message, structure,
+                            max_tokens=None, timeout=None):
+            alias_seen.append(structure)
+            return '{"a": 1}'
+
+        manager.send_request = structured_send
+        manager.create_model = lambda name, **fields: (name, tuple(sorted(fields)))
+        built = LLM.create_structure(ctx, "Probe", {"a": (str, ...)})
+        check(built == ("Probe", ("a",)), "create_structure が型を組む: {}".format(built))
+        check(LLM.ask(ctx, "mod_q", [{"role": "user", "content": "x"}],
+                      timeout=1.0, structure=built) == {"a": 1},
+              "structure を渡すと send_request 経由で辞書に均す")
+
+        class Model(object):
+            def model_dump(self):
+                return {"b": 2}
+
+        check(LLM.as_dict(Model()) == {"b": 2}, "pydantic のモデルも辞書に均す")
+        check(LLM.as_dict('{"c": 3}') == {"c": 3}, "JSON 文字列も辞書に均す")
+        check(LLM.as_dict("ただの文") is None, "読めなければ None（呼び側が降りる）")
+
+        def angry(manager_name, message, max_tokens=None, timeout=None):
+            raise RuntimeError("provider is down")
+
+        manager.send_request_with_no_structure = angry
+        check(LLM.ask(ctx, "mod_q", [{"role": "user", "content": "x"}],
+                      timeout=1.0) is None,
+              "プロバイダが落ちても例外を通さない（None に倒す）")
+    finally:
+        sys.modules.pop(unknown, None)
+        sys.modules.pop(LLM.MANAGER_MODULE, None)
+
     print("=== on_ready は 1 回きり ===")
     calls = []
     ctx._mod = "300_gamma.py"

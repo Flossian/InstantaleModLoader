@@ -42,7 +42,7 @@ LLM は遅いし、落ちるし、変なものを返す。**呼べなければ�
 定型の事件が始まるほうがよい。
 """
 
-import json
+from instantale_modloader import llm
 
 #: `send_request` に渡す名前。**ゲームのマネージャ名と被らせない。**
 #: この名前で `output_data/<世界>/<主人公>/<名前>/` にログが残るので、
@@ -232,54 +232,31 @@ def as_messages(message):
     return [{"role": "user", "content": message}]
 
 
-def ask(module, message, structure, timeout=None, write=None):
+def ask(ctx, message, structure, timeout=None, write=None):
     """LLM を呼ぶ。**落ちても呼び出し側には None しか返さない。**
 
-    版によって戻りの形が違いうる（pydantic のインスタンス・辞書・JSON 文字列）。
-    どれで来ても読めるようにし、読めなければ諦める。
+    呼び方（プロバイダを名指ししない・`timeout` を必ず渡す・返却を辞書に
+    均す）はローダに集約してある（`llm.ask`。`311_` / `313_` と共有。
+    TECH.md §5.3）。ここが持つのは**何を聞くか**（`build_prompt`）と、
+    返事をどう検算するか（`read_people` / `read_facts`）だけ。
 
-    **ここで例外を捕まえきれるとは限らない**（上の `as_messages`）。
-    呼び出し側は「返ってこない」場合も面倒を見ること。
+    **`timeout` を渡しても返ってこない場合は面倒を見ない。** 呼び出し側は
+    その備え（`city_case.py` の `BUSY_GRACE`）を別に持つこと。
     """
-    try:
-        raw = module.send_request(MANAGER_NAME, as_messages(message), structure,
-                                  timeout=timeout)
-    except Exception as exc:
-        if write:
-            write("    writer: send_request failed: {}: {}".format(
-                type(exc).__name__, exc))
-        return None
-    if write:
-        write("    writer: got {}".format(type(raw).__name__))
-    return as_dict(raw, write=write)
+    payload = llm.ask(ctx, MANAGER_NAME, as_messages(message),
+                      timeout=timeout, structure=structure,
+                      label="city case", write=write)
+    if payload is None and write:
+        write("    writer: no readable payload came back")
+    return payload
 
 
 def as_dict(raw, write=None):
-    """返ってきたものを辞書にする。**形を決めつけない。**"""
-    if raw is None:
-        return None
-    if isinstance(raw, dict):
-        return raw
-    for name in ("model_dump", "dict"):
-        method = getattr(raw, name, None)
-        if callable(method):
-            try:
-                got = method()
-                if isinstance(got, dict):
-                    return got
-            except Exception:
-                pass
-    if isinstance(raw, str):
-        try:
-            got = json.loads(raw)
-            return got if isinstance(got, dict) else None
-        except Exception:
-            if write:
-                write("    writer: response is a string but not JSON")
-            return None
-    if write:
+    """返ってきたものを辞書にする。**形を決めつけない**（`llm.as_dict`）。"""
+    got = llm.as_dict(raw)
+    if got is None and write:
         write("    writer: cannot read a {}".format(type(raw).__name__))
-    return None
+    return got
 
 
 def _text(value, limit):

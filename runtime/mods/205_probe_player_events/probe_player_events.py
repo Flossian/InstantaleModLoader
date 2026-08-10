@@ -22,8 +22,9 @@
 この mod は**観測しかしない**。値は変えず、例外も握り潰さない。
 """
 
-import datetime
 import sys
+
+from instantale_modloader import ui
 
 from instantale_modloader.frames import repr_value
 
@@ -56,13 +57,7 @@ def apply(ctx):
     log_path = ctx.out_path(LOG_BASENAME)
     llm_samples = {}
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            ctx.log_exc("events probe: write failed")
+    write = ctx.logger(LOG_BASENAME)
 
     # ----------------------------------------------------------------- 補助
     def dump_obj(obj, label, indent="  ", full=False):
@@ -83,23 +78,7 @@ def apply(ctx):
                 continue
             write("{}    {:<28} = {}".format(indent, name, repr_value(value)))
 
-    def find_app():
-        """走っている InstantaleApp のインスタンスを取る。"""
-        main = sys.modules.get("__main__")
-        cls = getattr(main, "InstantaleApp", None)
-        try:
-            from kivy.app import App
-            app = App.get_running_app()
-            if app is not None and (cls is None or isinstance(app, cls)):
-                return app
-        except Exception:
-            pass
-        # kivy 経由が駄目なら __main__ のグローバルから探す。
-        if main is not None and cls is not None:
-            for value in vars(main).values():
-                if isinstance(value, cls):
-                    return value
-        return None
+    find_app = ui.find_app     # 走っている app の探し方はローダの語彙
 
     # ------------------------------------------------- 一発計測: 現在の状態
     def snapshot():
@@ -210,8 +189,14 @@ def apply(ctx):
 
     if RUN_LLM_SHAPE_PROBE:
         import threading
-        threading.Thread(target=lambda: _guarded(ctx, llm_shape_probe),
-                         name="instantale_mod.llm_shape_probe", daemon=True).start()
+
+        # **`on_ready` に預ける**（TECH.md §3.6）。`apply()` は再注入と遅延
+        # 当て直しで最大8回走るので、ここで直に起こすと**実 LLM リクエストが
+        # 最大8回重なる**。1回きりの計測は印を付けて1回に畳む。
+        ctx.on_ready(lambda: threading.Thread(
+            target=lambda: _guarded(ctx, llm_shape_probe),
+            name="instantale_mod.llm_shape_probe", daemon=True).start(),
+            key="205_probe_player_events:llm_shape")
 
     # ------------------------------------------------------------ 移動の完了
     @ctx.wrap("__main__:MovePhaseManager.__init__", required=False)

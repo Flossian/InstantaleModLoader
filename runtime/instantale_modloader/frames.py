@@ -49,6 +49,32 @@ def attr(obj, name, default=MISSING):
         return "<{} while reading>".format(type(exc).__name__)
 
 
+def text_of(obj, name: str = "text"):
+    """文字列の属性を読む。**文字列でなければ None。**
+
+    `attr()` が返す番人は**2つとも文字列**（属性が無ければ `MISSING` ＝
+    `"<missing>"`、property の評価が失敗すれば `"<... while reading>"`）なので、
+    `isinstance(値, str)` で受けると**どちらも素通りする**。
+
+    実際に踏んだもの:
+
+      * `118_` … 本文を `isinstance(str)` で受け、`"<missing>"` を本文だと
+        思ったまま照合し続けた（打ち切りが毎回不発。例外は出ない）
+      * `115_` … `text` を持たない飾りのウィジェットが一覧の「行」に数えられ、
+        列数の計算と格子の座標が汚れた
+      * `116_` … 本文ラベルが None のとき `"<missing>"` をフォント名として
+        ボタンに代入していた
+
+    ここは番人を作らずに読む ― 「無い」も「読めない」も呼ぶ側にとっては
+    同じ「文字列が取れなかった」なので、区別が要るときだけ `attr()` を使う。
+    """
+    try:
+        value = getattr(obj, name, None)
+    except Exception:
+        return None
+    return value if isinstance(value, str) else None
+
+
 def repr_value(value) -> str:
     """値を短く文字列化する。コンテナは中身ではなく「形」を出す。
 

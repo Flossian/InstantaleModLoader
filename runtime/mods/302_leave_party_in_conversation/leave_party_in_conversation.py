@@ -81,7 +81,6 @@
 `on_button_press` が知らない action を握り潰してしまう）。
 """
 
-import datetime
 import sys
 import time
 
@@ -196,13 +195,7 @@ def apply(ctx):
         "recent_remove": None,   # ゲーム本来の解散の直後を見張る印 (id, 時刻)
     }
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            ctx.log_exc("party leave: write failed")
+    write = ctx.logger(LOG_BASENAME)
 
     # ------------------------------------------------------------ 基本の道具
     # 選択肢・spec の読み取り・画面の塗り替え・会話の閉じ方は

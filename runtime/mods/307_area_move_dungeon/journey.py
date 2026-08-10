@@ -21,11 +21,10 @@
 再起動をまたいでも上限が守られる。
 """
 
-import json
 import os
 import time
 
-from instantale_modloader import write_json
+from instantale_modloader import read_json, write_json
 
 
 class Journey(object):
@@ -48,12 +47,16 @@ class Journey(object):
             return None
 
     def _read(self):
-        """ファイルから読む。寿命切れ・壊れているときは None。"""
-        try:
-            with open(self.path, "r", encoding="utf-8") as fh:
-                data = json.load(fh)
-        except Exception:
-            return None
+        """ファイルから読む。寿命切れ・壊れているときは None。
+
+        **読みも `read_json` を通す**（TECH.md §3.11.1）。素朴な `open` +
+        広い `except` だと「まだ道に出ていない（正常）」と「**在るのに
+        読めない**（一時ロック・外部破損）」が同じ None になり、後者でも
+        `sync()` が「道が消えた」と判断して進行中の道中が黙って捨てられる。
+        読めなかったことは MOD のログに残す。
+        """
+        data = read_json(self.path, None,
+                         report=lambda msg: self.write("WARN pending: " + msg))
         record = data.get("pending") if isinstance(data, dict) else None
         if not isinstance(record, dict):
             return None

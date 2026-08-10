@@ -27,12 +27,8 @@ def short(value, limit=60):
     return value if len(value) <= limit else value[:limit] + "…"
 
 
-def id_sort(value):
-    """id の並べ替え。数字なら数として、そうでなければ文字列として。"""
-    try:
-        return (0, int(value))
-    except (TypeError, ValueError):
-        return (1, str(value))
+# id を数として並べる鍵はローダの語彙（`301_` / `305_` と共有）。
+id_sort = ui.id_sort_key
 
 
 def current_quest_id(app):
@@ -100,38 +96,13 @@ def area_level(app, area, write, label, minimum=1):
 
 # --------------------------------------------------------------- クエスト
 # クエストは2箇所にある。**書くときは必ず両方**（GAME.md §2.9）。
-def quest_stores(app):
-    stores = []
-    quests = getattr(getattr(app, "world", None), "quests", None)
-    if isinstance(quests, dict):
-        stores.append(quests)
-    world_dict = getattr(app, "world_dict", None)
-    if isinstance(world_dict, dict) and isinstance(world_dict.get("quests"), dict):
-        stores.append(world_dict["quests"])
-    return stores
-
-
-def quest_ids(app):
-    """両方の合併。どちらに登録されるか決め打ちしないため。"""
-    seen = []
-    for store in quest_stores(app):
-        for qid in store:
-            if str(qid) not in seen:
-                seen.append(str(qid))
-    return seen
-
-
-def quest_of(app, quest_id):
-    for store in quest_stores(app):
-        if quest_id in store:
-            return store[quest_id]
-    return None
-
-
-def quest_value(quest, name, default=None):
-    if isinstance(quest, dict):
-        return quest.get(name, default)
-    return getattr(quest, name, default)
+# クエストは2箇所にある（`206_` の計測）。読むのはどちらでもよいが、
+# **書くときは必ず両方**。その作法はローダに集約してある（`301_` / `305_` と
+# 共有。TECH.md §3.2.3）。ここで再輸出して `world.quest_ids(app)` の書き方を保つ。
+quest_stores = ui.quest_stores
+quest_ids = ui.quest_ids
+quest_of = ui.quest_of
+quest_value = ui.quest_value
 
 
 def append_quest_value(app, quest_id, name, suffix, mark=None, on_error=None):

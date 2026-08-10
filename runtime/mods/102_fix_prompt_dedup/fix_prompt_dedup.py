@@ -21,7 +21,6 @@
 その点はプロキシ版と同じ割り切りをしている。
 """
 
-import datetime
 import hashlib
 
 MIN_BLOCK_CHARS = 1000   # プロキシ側と同じ閾値
@@ -66,18 +65,11 @@ def collapse_adjacent(messages, min_chars=MIN_BLOCK_CHARS):
 
 
 def apply(ctx):
-    log_path = ctx.out_path("prompt_bloat.log")
     state = {"collapses": 0}
 
-    def write(text: str) -> None:
-        # プロンプト関係の計測は modloader.log とは分けて prompt_bloat.log に出す。
-        # 103_fix_eventlog_trim.py も同じファイルに書くので、時系列で並べて読める。
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            ctx.log_exc("dedup: write failed")
+    # プロンプト関係の計測は modloader.log とは分けて prompt_bloat.log に出す。
+    # 103_fix_eventlog_trim.py も同じファイルに書くので、時系列で並べて読める。
+    write = ctx.logger(LOG_BASENAME)
 
     @ctx.wrap("llama_cpp_runtime_completion:LlamaCppClient._apply_chat_template")
     def _apply_chat_template(orig, self, model, messages, timeout=None, *args, **kwargs):

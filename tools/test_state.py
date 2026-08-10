@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
-"""`state/` の住所と、壊れない書き込みを通す。ゲーム不要。
+"""`state/` の保存先の決め方と、壊れない書き込みを通す。ゲーム不要。
 
     python tools/test_state.py
 
 見ているのは2つ。どちらも**ローダの語彙**で、MOD 側に写すとドリフトする
 （TECH.md §3.2.3）。
 
-  住所   … `world_key(app)` と `world_filename(key)`
+  保存先 … `world_key(app)` と `world_filename(key)`
   書込   … `write_json` / `write_text`（隣に書いてから差し替える）
 
-住所の検査が厚いのは、ここが**複数の MOD にまたがる取り決め**だから。
+保存先の検査が厚いのは、ここが**複数の MOD にまたがる取り決め**だから。
 `301_` は `311_` が書いた `state/npc_profiles/<世界>.json` を読む ― 名前の
 作り方が1文字でも違えば「相手のデータが無い」ことになる。以前は MOD ごとに
 写していて、実際に `312_` がずれた。
@@ -211,8 +211,32 @@ def test_safe_writes():
         shutil.rmtree(sandbox, ignore_errors=True)
 
 
+def test_world_key_of_dict():
+    """**セーブの辞書から**引く入口（`104_` のように app を持たないフック用）。"""
+    from instantale_modloader.state import world_key_of_dict
+
+    for key in ("world_name", "name", "title"):
+        check(world_key_of_dict({"world_data": {key: "灰の街"}}) == "灰の街",
+              "world_data['{}'] から引ける".format(key))
+    check(world_key_of_dict({}, "id:1") == "id:1",
+          "読めなければ呼び側が決めた fallback")
+    check(world_key_of_dict(None, "id:1") == "id:1", "辞書でなくても落ちない")
+    check(world_key_of_dict({"world_data": {"name": ""}}, "x") == "x",
+          "空文字は名前として採らない")
+    # app 経由と辞書経由で**同じ鍵**が出ること（別々に持つとここがずれる）。
+    from instantale_modloader.state import world_key
+
+    class App(object):
+        world_dict = {"world_data": {"world_name": "澱みの宿場町"}}
+        world = None
+
+    check(world_key(App()) == world_key_of_dict(App.world_dict),
+          "app 経由と辞書経由で同じ鍵が出る")
+
+
 def main():
     test_world_key()
+    test_world_key_of_dict()
     test_world_filename_is_stable()
     test_world_filename_is_injective()
     test_plain_names_keep_their_file()

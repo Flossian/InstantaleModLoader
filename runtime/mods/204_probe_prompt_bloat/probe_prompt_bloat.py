@@ -25,7 +25,6 @@ InstantaleLLMProxy/TECH.md は3つの暫定対策を記録しているが、い�
 ためのものである。何も変更せず、何も握り潰さない。
 """
 
-import datetime
 import hashlib
 import sys
 
@@ -48,13 +47,7 @@ def _digest(text: str) -> str:
 def apply(ctx):
     log_path = ctx.out_path("prompt_bloat.log")
 
-    def write(text: str) -> None:
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            ctx.log_exc("bloat probe: write failed")
+    write = ctx.logger("prompt_bloat.log")
 
     write("=" * 78)
     write("prompt bloat probe start (pid {})".format(__import__("os").getpid()))
@@ -107,12 +100,14 @@ def apply(ctx):
                     pass      # 計測の失敗で本体を止めない
                 return orig(*args, **kwargs)
             return probe
-        # 存在確認は既定値付き getattr で行う（TECH.md §6 の hasattr 禁止）。
-        if getattr(sys.modules.get("scripts.llm.llm_manager", object()),
-                   fn_name, None) is not None:
-            make(fn_name)
-            installed += 1
-    ctx.log("eventlog probes: {}/{}".format(installed, len(EVENT_TARGETS)))
+        # **存在確認をしてから登録しない。** `scripts.llm.llm_manager` は最初の
+        # LLM リクエストまで import されないので、ここで確認すると常に「無い」に
+        # なり、**フックが1本も登録されないまま保留の見張りも立たない**。
+        # `required=False` に任せれば、モジュールが未 import なら保留し、
+        # 在るのに属性が無ければ黙って降りる（TECH.md §3.4 の表）。
+        make(fn_name)
+        installed += 1
+    ctx.log("eventlog probes: {} target(s) armed or deferred".format(installed))
 
     # --------------------------------------------------------------- DEDUP
     @ctx.wrap("llama_cpp_runtime_completion:LlamaCppClient._apply_chat_template",

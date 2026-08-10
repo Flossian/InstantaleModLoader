@@ -29,10 +29,10 @@
 記録に失敗しても本体は必ず呼ぶ）。
 """
 
-import datetime
 import sys
 import time
 
+from instantale_modloader import ui
 from instantale_modloader.frames import repr_value
 
 LOG_BASENAME = "quest_flow.log"
@@ -67,13 +67,7 @@ def apply(ctx):
     log_path = ctx.out_path(LOG_BASENAME)
     counts = {}
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            ctx.log_exc("quest probe: write failed")
+    write = ctx.logger(LOG_BASENAME)
 
     def sample(key):
         """記録回数の上限管理。True の間だけ書く。"""
@@ -81,21 +75,7 @@ def apply(ctx):
         counts[key] = n + 1
         return n < MAX_SAMPLES
 
-    def find_app():
-        main = sys.modules.get("__main__")
-        cls = getattr(main, "InstantaleApp", None)
-        try:
-            from kivy.app import App
-            app = App.get_running_app()
-            if app is not None and (cls is None or isinstance(app, cls)):
-                return app
-        except Exception:
-            pass
-        if main is not None and isinstance(cls, type):
-            for value in vars(main).values():
-                if isinstance(value, cls):
-                    return value
-        return None
+    find_app = ui.find_app     # 走っている app の探し方はローダの語彙
 
     # ------------------------------------------------------------ ボタンの状態
     def describe_spec(spec):
@@ -446,7 +426,7 @@ def apply(ctx):
     #
     #   1. 状態の変化そのものを監視する（下の watcher）。誰が立てたかは
     #      分からないが、**立つかどうか・どんな見た目か**は確実に分かる
-    #   2. `AreaMoveManager.show_loading_text` — `__main__` にある唯一の
+    #   2. `AreaMoveManager.show_loading_text` ― `__main__` にある唯一の
     #      「待機表示」らしきメソッド。**移動のたびに走る**ので、特別な操作を
     #      頼まなくても普段のプレイで捕まる。ゲーム native の待機表示の
     #      実例として、その前後の差分がそのまま答えになる
@@ -633,7 +613,17 @@ def apply(ctx):
     PROBE_WAIT_LIMIT = 360      # 10秒 x 360 = 1時間
 
     def wait_for_world():
+        """世界がロードされるまで待つ。降りたら None。
+
+        **`ctx.superseded()` を毎周見る**（TECH.md §3.6.1）。この待ちは最長
+        1時間で、その間に注入し直されると古い版が回り続ける ― 上の
+        `watch_wait_state` と同じ理由・同じ形。降りる側の合図が無いと、
+        世界がロードされた瞬間に**古い世代と新しい世代の総当たりが同時に走る**
+        （`QuestChoiceManager` を候補ぶん組む処理なので、重なるほど濃くなる）。
+        """
         for _ in range(PROBE_WAIT_LIMIT):
+            if ctx.superseded():
+                return None                 # 新しい boot に交代した
             app = find_app()
             quests = getattr(getattr(app, "world", None), "quests", None)
             if isinstance(quests, dict) and quests:

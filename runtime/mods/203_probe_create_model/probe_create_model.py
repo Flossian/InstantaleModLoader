@@ -20,7 +20,6 @@ create_model を包むと、検出器が障害地点そのものに置かれる:
 読み取り専用: アノテーションは検査するだけで一切変更せず、例外はそのまま再送出する。
 """
 
-import datetime
 import sys
 import typing
 
@@ -81,15 +80,7 @@ def apply(ctx):
         ctx.log("{}.create_model not available; skipping".format(MODULE), level="WARN")
         return
 
-    log_path = ctx.out_path("probes.log")
-
-    def write(text: str) -> None:
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            ctx.log_exc("create_model probe: write failed")
+    write = ctx.logger("probes.log")
 
     @ctx.wrap("{}:create_model".format(MODULE))
     def create_model(orig, model_name, *args, **field_definitions):

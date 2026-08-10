@@ -107,12 +107,11 @@ import datetime
 import json
 import os
 import queue
-import re
 import sys
 import threading
 import time
 
-from instantale_modloader import ui
+from instantale_modloader import llm, ui
 from instantale_modloader.state import world_filename, world_key
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
@@ -130,8 +129,9 @@ LOG_BASENAME = "npc_profile.log"
 # 「覚えていたはずの人物像」まで飛んでいた。`301_` も同じ名前でここを読む。
 STATE_DIRNAME = "npc_profiles"
 
-# ファイル名に使えない文字（Windows 禁則＋制御文字）。世界名そのものは鍵に残す。
-_UNSAFE_FILENAME = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
+# 世界ごとのファイル名は `instantale_modloader.state.world_filename` が作る。
+# ここに同じ規則を写さないこと（`301_` が同じファイルを読むので、1文字でも
+# ずれると引けなくなる。TECH.md §3.2.3）。
 
 # 自前の `manager_name`。これを付けると自分のプロンプトも
 # `output_data/<世界>/<PC>/<manager_name>/N.json` に残り、抽出の検証が
@@ -398,7 +398,6 @@ def _parse_plain(body):
 
 
 def apply(ctx):
-    log_path = ctx.out_path(LOG_BASENAME)
     # 世界ごとの控えの置き場。**ここで1回だけ引く**のが要点で、`ctx.state_path()`
     # は `out/` に同じ名前が在れば移してくるので、フォルダごと引き取れる
     # （1ファイルずつ移すと、まだ触っていない世界の控えが `out/` に残り、
@@ -428,14 +427,7 @@ def apply(ctx):
     worker_lock = store["worker_lock"]
     log_lock = store["log_lock"]
 
-    def write(text):
-        try:
-            with log_lock:
-                with open(log_path, "a", encoding="utf-8") as fh:
-                    fh.write("[{}] {}\n".format(
-                        datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            ctx.log_exc("npc profile: write failed")
+    write = ctx.logger(LOG_BASENAME)
 
     # ボタンは出さないので `mark` は要らない。`schedule` と例外の握りだけ借りる。
     screen = ui.Screen(ctx, write, tag="npc profile")
@@ -806,123 +798,49 @@ def apply(ctx):
         return orig(*args, **kwargs)
 
     # ------------------------------------------------------------ LLM 呼び出し
-    # ゲームはスロットによって推論モジュールが違う。ローカルは llama_cpp、
-    # 外部 API は any_server。片方しか sys.modules に載らない（`306_` と同じ）。
-    REQUEST_MODULES = (
-        "scripts.llm.request_llm_inference_llama_cpp_completion",
-        "scripts.llm.request_llm_inference_any_server",
-    )
-
-    def resolve_send():
-        """いま載っている推論モジュールから `send_request_with_no_structure` を拾う。"""
-        for name in REQUEST_MODULES:
-            module = sys.modules.get(name)
-            send = (getattr(module, "send_request_with_no_structure", None)
-                    if module else None)
-            if send is not None:
-                return send, name
-        return None, None
-
     def ask(manager_name, messages):
-        """`send_request_with_no_structure` を1回。`str` が返る（GAME.md §2.12）。"""
-        send, module_name = resolve_send()
-        if send is None:
-            write("{}: send_request_with_no_structure unavailable "
-                  "(checked {})".format(manager_name, ", ".join(REQUEST_MODULES)))
-            return None
-        started = time.monotonic()
-        try:
-            # 出力上限は INJECT_CHARS に比例。日本語は1字≒1〜2tok なので ×3。
-            result = send(manager_name, messages, max_tokens=INJECT_CHARS * 3)
-        except Exception:
-            ctx.log_exc("npc profile: {} failed via {}".format(
-                manager_name, module_name))
-            return None
-        write("{}: {:.1f}s via {} -> {!r}".format(
-            manager_name, time.monotonic() - started, module_name,
-            _text(result, 300)))
-        return result
+        """`send_request_with_no_structure` を1回。`str` が返る（GAME.md §2.12）。
+
+        **送信モジュールを名指ししない。** 以前はローカルの `llama_cpp` と
+        `any_server` の2つだけを見ていたが、Gemini / OpenAI / Claude では
+        どちらも載らないので毎回空振りしていた。`llm.ask` が `llm_manager` の
+        別名から引く（TECH.md §5.3）。
+
+        `timeout` も必ず渡す。抽出は1本のワーカーで直列に回しているので、
+        1回返らないと以後の抽出が全部止まる（下の `ask_structured` と同じ）。
+        """
+        # 出力上限は INJECT_CHARS に比例。日本語は1字≒1〜2tok なので ×3。
+        return llm.ask(ctx, manager_name, messages, timeout=EXTRACT_TIMEOUT,
+                       max_tokens=INJECT_CHARS * 3, label="npc profile",
+                       write=write)
 
     # -- 構造化出力（使えるときだけ）---------------------------------------
-    # `send_request` と `create_model` は `llm_manager` にある（`310_` と同じ）。
     # grammar が JSON の形をトークン単位で強制するので、頼み文だけで JSON を
     # 書かせるより確実。**使えなければ黙って上の `ask` に降りる。**
-    MANAGER_MODULE = "scripts.llm.llm_manager"
-
-    def structured_module():
-        module = sys.modules.get(MANAGER_MODULE)
-        if (module is not None
-                and callable(getattr(module, "send_request", None))
-                and callable(getattr(module, "create_model", None))):
-            return module
-        return None
-
-    def build_structure(module):
-        """抽出の返却の型。**`Literal` は使わない**（`310_` と同じ理由）。
-
-        空の `Literal[]` は pydantic が拒否してゲームごと落ちる
-        （`203_probe_create_model` が押さえた実際の落ち方）。`changed` も
-        `bool` ではなく `str` にして、真偽の読み取りは `_truthy` で持つ。
-        """
-        import typing
-
-        return module.create_model(
-            "NpcProfileUpdate",
-            **{KEY_CHANGED: (str, ...),
-               KEY_PROFILE: (str, ...),
-               KEY_ABOUT_PLAYER: (str, ...),
-               KEY_NEW_FACTS: (typing.List[str], ...)})
-
-    def as_dict(raw):
-        """返ってきたものを辞書にする。**形を決めつけない**（`310_` と同じ）。"""
-        if isinstance(raw, dict):
-            return raw
-        for name in ("model_dump", "dict"):
-            method = getattr(raw, name, None)
-            if callable(method):
-                try:
-                    got = method()
-                except Exception:
-                    continue
-                if isinstance(got, dict):
-                    return got
-        if isinstance(raw, str):
-            try:
-                got = json.loads(raw)
-            except Exception:
-                return None
-            if isinstance(got, dict):
-                return got
-        return None
-
+    # 呼び方（プロバイダを名指ししない・`timeout` を必ず渡す・返却を辞書に均す）は
+    # ローダに集約してある（`llm.ask`。`313_` / `902_` と共有。TECH.md §5.3）。
     def ask_structured(manager_name, messages):
         """構造化出力で1回。使えない・読めないなら `None`（呼び側が降りる）。
 
-        `timeout` を必ず渡す。この mod の抽出は1本のワーカーで直列に回して
-        いるので、1回返らないと以後の抽出が全部止まる（GAME.md §2.12）。
+        返却の型に **`Literal` は使わない**（空の `Literal[]` は pydantic が
+        拒否してゲームごと落ちる。`203_probe_create_model` が押さえた実際の
+        落ち方）。`changed` も `bool` ではなく `str` にして、真偽の読み取りは
+        `_truthy` で持つ。
         """
-        module = structured_module()
-        if module is None:
+        import typing
+
+        structure = llm.create_structure(
+            ctx, "NpcProfileUpdate",
+            {KEY_CHANGED: (str, ...),
+             KEY_PROFILE: (str, ...),
+             KEY_ABOUT_PLAYER: (str, ...),
+             KEY_NEW_FACTS: (typing.List[str], ...)},
+            label="npc profile")
+        if structure is None:
             return None
-        try:
-            structure = build_structure(module)
-        except Exception:
-            ctx.log_exc("npc profile: cannot build the extraction structure")
-            return None
-        started = time.monotonic()
-        try:
-            raw = module.send_request(manager_name, list(messages), structure,
-                                      max_tokens=INJECT_CHARS * 3,
-                                      timeout=EXTRACT_TIMEOUT)
-        except Exception:
-            ctx.log_exc("npc profile: {} failed via {}".format(
-                manager_name, MANAGER_MODULE))
-            return None
-        data = as_dict(raw)
-        write("{}: {:.1f}s via {} (structured) -> {}".format(
-            manager_name, time.monotonic() - started, MANAGER_MODULE,
-            _text(repr(data), 300)))
-        return data
+        return llm.ask(ctx, manager_name, messages, timeout=EXTRACT_TIMEOUT,
+                       structure=structure, max_tokens=INJECT_CHARS * 3,
+                       label="npc profile", write=write)
 
     # ------------------------------------------------------------ 抽出の材料
     def transcribe(app, npc_id):

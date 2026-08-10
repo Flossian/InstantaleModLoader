@@ -33,7 +33,6 @@
 何もしない）ので、印が届かない別スレッド経路でも安全。
 """
 
-import datetime
 
 from instantale_modloader.llm import wrap_outgoing
 
@@ -251,13 +250,7 @@ def apply(ctx):
     )
     state = {"enabled": verified, "missing": set(), "rewrites": 0}
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            ctx.log_exc("crime attribution fix: log write failed")
+    write = ctx.logger(LOG_BASENAME)
 
     def rewrite(texts, site):
         """ローダから呼ばれる。書き換えないときは None。"""

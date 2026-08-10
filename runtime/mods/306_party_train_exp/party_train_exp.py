@@ -91,7 +91,6 @@
 `save_game()` を呼んで割り込むことはしない。
 """
 
-import datetime
 import threading
 
 from instantale_modloader import frames, ui
@@ -165,14 +164,7 @@ def apply(ctx):
         "no_party_said": 0,  # 仲間が居ないときのログ（1セッション1回に絞る）
     }
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}: {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"),
-                    LOG_TAG, text))
-        except Exception:
-            ctx.log_exc("train exp: write failed")
+    write = ctx.logger(LOG_BASENAME, tag=LOG_TAG + ":")
 
     # -------------------------------------------------- 訓練の中かどうかを見る
     def shared_managers():
@@ -459,7 +451,7 @@ def apply(ctx):
             # 黙って終わらせず、次に何を見るべきかまで書く。
             write("WARN the player's exp changed but no Character.gain_exp call was "
                   "seen inside {}; nothing was shared. The game may be writing "
-                  "experience_point directly — report this line with the numbers "
+                  "experience_point directly ― report this line with the numbers "
                   "above.".format(label))
 
     for name in (INN_TRAINING_MANAGERS + FACILITY_TRAINING_MANAGERS + REST_MANAGERS):

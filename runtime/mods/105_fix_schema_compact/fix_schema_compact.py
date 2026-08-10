@@ -48,9 +48,22 @@
 - 置換後の方が長くなる場合は何もしない
 
 一時的に止めたいときはファイル名の先頭に `_` を付ける（ローダが読み込まなくなる）。
+
+## クラウド（APIキー）では動かない。**それでよい**
+
+仕掛けているのは `LlamaCppClient` の2点だけで、`llm.wrap_outgoing`（プロバイダ
+非依存の口）には載せていない。理由は2つあり、どちらも載せても意味が無い:
+
+* 圧縮してよいかの判定が `json_schema` / `grammar` の有無で、これは llama.cpp の
+  payload と format にしか無い。境界の `message` からは分からない
+* そもそもクラウドではスキーマ文が**プロンプトに埋まっていない**。Gemini は
+  `send_request` の中で足すので境界の外、OpenAI / Claude は API 側に任せていて
+  埋め込み自体が無い（GAME.md §2.12）
+
+つまり圧縮する対象がクラウド経路には存在しない。`119_` / `305_` が
+「ローカルにしか仕掛けていない」ことで**取りこぼしていた**のとは事情が違う。
 """
 
-import datetime
 
 # Python 表記／JSON 表記のどちらでも拾う。プロキシの SchemaMarkers と同じ。
 SCHEMA_MARKERS = ("{'$defs':", "{'properties':", '{"$defs":', '{"properties":')
@@ -383,14 +396,7 @@ def apply(ctx):
     log_path = ctx.out_path("prompt_bloat.log")
     state = {"hits": 0}
 
-    def write(text):
-        # DEDUP / EVENTLOG と同じファイルに出す。時系列で並べて読めるようにするため。
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            ctx.log_exc("compact: write failed")
+    write = ctx.logger("prompt_bloat.log")
 
     def report(site, before_text, after_text, compact):
         state["hits"] += 1

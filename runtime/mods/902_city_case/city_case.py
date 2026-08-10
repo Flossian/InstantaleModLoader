@@ -25,7 +25,7 @@
 **4. セーブを汚さない。**
 プログラムは `_lookup_program` を包んで渡す（`free_facility_programs` には
 書かない）。`flag_set` も使わない（施設の `config` に残るため）。
-報酬は `309_` が実証した経路で直接渡す。事件の控えは `out/` だけ。
+報酬は `309_` が実証した経路で直接渡す。事件の控えは `state/` だけ。
 
 ##### 犯人の退場
 
@@ -68,6 +68,11 @@ from . import ledger
 from . import patterns
 from . import world as game
 from . import writer
+
+# **この MOD 専用の乱数器。** グローバルの `random` を引くとゲーム自身の
+# 乱数列がずれる（TECH.md §6.1。`104_balance_area_bgm` と同じ方針）。事件は
+# 1回組むたびに何十回も引くので、混ぜると影響が積み上がる。
+_RNG = random.Random()
 
 LOG_BASENAME = "city_case.log"
 
@@ -214,9 +219,8 @@ NO_PLACE_TEXT = "「この町には、聞いて回れる場所が無い」"
 NO_CAST_TEXT = "（噂は立ち消えになった ― out/city_case.log を見ること）"
 
 #: ここが真の間はボタンを出さない（`309_` と同じ）。
-BUSY_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle",
-              "in_conversation", "in_free_input", "in_action_in_conversation",
-              "in_shopping")
+# ここが真の間は選択肢を足さない。表はローダが持つ（`309_` と共有）。
+BUSY_FLAGS = ui.BUSY_FLAGS
 
 #: 施設の選択肢だと見なす目印。**文字列ではなく spec のクラス名で見る。**
 FACILITY_MARK = "MovePhaseManager"
@@ -354,11 +358,7 @@ def has_clock():
         return False
 
 
-def money(value):
-    try:
-        return "{:,}".format(int(value))
-    except (TypeError, ValueError):
-        return str(value)
+money = ui.money          # 金額の表示（`309_` と共有）
 
 
 def apply(ctx):
@@ -371,12 +371,7 @@ def apply(ctx):
     # 実機でこれを踏んだ。
     mod_dir = getattr(ctx, "mod_dir", None)
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write(text.rstrip("\n") + "\n")
-        except Exception:
-            ctx.log_exc("city case: write failed")
+    write = ctx.logger(LOG_BASENAME, stamp=False)
 
     screen = ui.Screen(ctx, write, tag="city case", mark=MARK)
     state = {"case": None, "loaded": False, "accusing": False,
@@ -545,7 +540,7 @@ def apply(ctx):
         だけを見るので、**軸を増やしてもコードは触らなくてよい。**
         """
         axes = patterns.draw_axes(
-            book_of(app), random, patterns.axes_wanted(SUSPECT_COUNT))
+            book_of(app), _RNG, patterns.axes_wanted(SUSPECT_COUNT))
         words, facts, hints, looks, shorts = patterns.tables_for(axes)
         state.update({"axes": axes, "words": words, "facts": facts,
                       "hints": hints, "looks": looks, "shorts": shorts})
@@ -553,7 +548,7 @@ def apply(ctx):
 
     def draw_incident(app):
         """この事件の題材を引く。文言と、AI への説明に使う。"""
-        found = patterns.draw_incident(book_of(app), random)
+        found = patterns.draw_incident(book_of(app), _RNG)
         state["incident"] = found or dict(BUILT_IN["incidents"][0])
         return state["incident"]
 
@@ -618,8 +613,9 @@ def apply(ctx):
 
         そこで「**どの事実も抜けない**」を条件に足した。1本でも欠けたら
         絞れない、という形にしておけば、集めた手がかりが全部きちんと働く。
-        併せて**最低3本**（容疑者が4人以上のとき）を要求する ― 2本しか
-        無い事件は、1本目を拾った時点でほぼ答えが見えてしまう。
+        併せて**最低2本**（容疑者が2人以上のとき）を要求する ― 1本で
+        終わる事件は、拾った時点で答えが出てしまう。3本にしないのは下の
+        `least` の註のとおりで、求めると犯人が多数派で割れる。
 
         試算では 3〜8 人のどの設定でも `CAST_ATTEMPTS` 回で必ず組める。
         """
@@ -632,7 +628,7 @@ def apply(ctx):
         pool = book_of(app).get("cast") or []
         drawn = draw_axes(app)
         for _attempt in range(CAST_ATTEMPTS):
-            picks = random.sample(list(pool), min(wanted, len(pool)))
+            picks = _RNG.sample(list(pool), min(wanted, len(pool)))
             cast = lay_out(picks, drawn)
             tells = [tell_of(member["traits"]) for member in cast]
             if len(set(tells)) != len(tells):
@@ -646,7 +642,7 @@ def apply(ctx):
                 continue                # 覆えない／薄すぎる
             # **思い違いを混ぜる。**混ぜられない置き方なら、そのまま真の
             # 証言だけで出す（事件が始まらないより、素直な事件のほうがよい）。
-            if random.randrange(100) < MISTAKE_PERCENT:
+            if _RNG.randrange(100) < MISTAKE_PERCENT:
                 facts = add_mistake(cast, drawn, facts)
             for member, tell in zip(cast, tells):
                 member["tell"] = tell
@@ -747,7 +743,7 @@ def apply(ctx):
         cast = [dict(base, traits={"sex": base["sex"]}) for base in picks]
         for member in cast:
             for axis in axes:
-                member["traits"][axis["id"]] = random.choice(
+                member["traits"][axis["id"]] = _RNG.choice(
                     [v["id"] for v in axis["values"]])
         return cast
 
@@ -773,7 +769,7 @@ def apply(ctx):
             picks = [combo for combo in itertools.combinations(candidates, size)
                      if covers(others, combo) and needed(others, combo)]
             if picks:
-                best = list(random.choice(picks))
+                best = list(_RNG.choice(picks))
                 break
         return best, bool(best)
 
@@ -850,7 +846,7 @@ def apply(ctx):
                 tries.append({"kind": "trait", "fact": texts[(name, value)],
                               "drops": drops + [0], "axis": name, "value": value,
                               "wrong": True})
-        random.shuffle(tries)
+        _RNG.shuffle(tries)
         for wrong in tries:
             if resolves_once(cast, facts + [wrong], wrong):
                 return facts + [wrong]
@@ -899,25 +895,6 @@ def apply(ctx):
         # 引く軸ではない）が、全員同じなら同じ語が全行に並ぶのは変わらない。
         if len({member["traits"].get("sex") for member in cast}) < 2:
             return False
-        return True
-
-    def all_needed(cast, facts):
-        """どの事実も抜けないか。**1本でも欠けたら絞れない**なら真。
-
-        重複した事実（別々の手がかりが同じ容疑者しか消さない）も、
-        他の事実が既に消している者しか消さない事実も、ここで落ちる ―
-        どちらも「拾いに行った意味が無い」という同じ症状になる。
-
-        判定は素直に「1本抜いてまだ絞れるか」を全部試すだけ。手がかりは
-        多くて4本なので、総当たりで足りる。
-        """
-        for index in range(len(facts)):
-            rest = set()
-            for other, fact in enumerate(facts):
-                if other != index:
-                    rest.update(fact["drops"])
-            if len(rest) == len(cast) - 1:
-                return False        # この1本が無くても絞れる＝要らない
         return True
 
     def pick_clues(app, area, cast, culprit_index, facts, written=None):
@@ -1057,7 +1034,7 @@ def apply(ctx):
             place=place_notes(app, area))
         write("[{}] asking {} for the case material ({} people, {} facts)"
               .format(stamp(), writer.MANAGER_NAME, count, len(orders)))
-        payload = writer.ask(module, message, structure,
+        payload = writer.ask(ctx, message, structure,
                              timeout=LLM_TIMEOUT, write=write)
         if payload is None:
             return None
@@ -1125,9 +1102,9 @@ def apply(ctx):
         # 言い分を配る。**犯人だけ裏が取れない場所**を挙げる。
         places = whereabouts()
         public = places.get("public") or []
-        spots = random.sample(public, min(len(cast), len(public)))
+        spots = _RNG.sample(public, min(len(cast), len(public)))
         for index, member in enumerate(cast):
-            member["claim"] = (random.choice(places.get("alone") or [""])
+            member["claim"] = (_RNG.choice(places.get("alone") or [""])
                                if index == culprit_index
                                else spots[index % len(spots)])
         clues, available = pick_clues(app, area, cast, culprit_index, facts,
@@ -1808,6 +1785,15 @@ def apply(ctx):
                 material = write_material(app, members, facts)
             except Exception:
                 ctx.log_exc("city case: writing the material failed")
+            # **注入し直されていたら、ここで降りる**（TECH.md §3.6.1）。
+            # このスレッドは LLM を待つあいだ最長で `LLM_TIMEOUT + BUSY_GRACE`
+            # 生き残るので、その間に注入し直されると**古い世代の続き**が
+            # 新しい世代と同じ `state/city_case.json` に書き込む ― 新しい側は
+            # 既に控えを読み終えているので、書いた内容が食い違ったまま残る。
+            if ctx.superseded():
+                write("[{}] a newer injection arrived; dropping this material"
+                      .format(stamp()))
+                return
             # **戻るのはメインスレッド。**ここで画面に触らない。
             screen.schedule(lambda: finish_start(app, members, facts, material))
 

@@ -132,7 +132,6 @@ NPC の名前は LLM が生成する。小さいモデル（Gemma 系）ほど**
 **記録だけ**して元の名前のまま通す。**名前を発明する経路は持たない。**
 """
 
-import datetime
 import io
 import json
 import os
@@ -141,7 +140,7 @@ import re
 import sys
 import unicodedata
 
-from instantale_modloader import frames
+from instantale_modloader import frames, ui
 
 LOG_BASENAME = "npc_name.log"
 
@@ -475,30 +474,9 @@ def apply(ctx):
     # 直せない重複がロードのたびに現れても、行が増えないように。
     seen = set()
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] [NPCNAME] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            # 記録のせいでゲームを落とさない。
-            ctx.log_exc("npc name: write failed")
+    write = ctx.logger(LOG_BASENAME, tag="[NPCNAME]")
 
-    def find_app():
-        main = sys.modules.get("__main__")
-        cls = getattr(main, "InstantaleApp", None)
-        try:
-            from kivy.app import App
-            app = App.get_running_app()
-            if app is not None and (cls is None or isinstance(app, cls)):
-                return app
-        except Exception:
-            pass
-        if main is not None and isinstance(cls, type):
-            for value in vars(main).values():
-                if isinstance(value, cls):
-                    return value
-        return None
+    find_app = ui.find_app     # 走っている app の探し方はローダの語彙
 
     def npc_tables(app):
         """id を鍵に持つ素データの辞書を全部返す（GAME.md §2.23）。"""

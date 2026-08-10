@@ -38,6 +38,7 @@
 
 from __future__ import annotations
 
+import sys
 import time
 
 from . import frames
@@ -247,9 +248,19 @@ def find_hud(app):
 def added_by_a_mod(widget):
     """MOD が足したウィジェットか。印は `MOD_WIDGET_PREFIX` で始まる属性。
 
-    ゲームのウィジェットにこの接頭辞は付かない（MOD 側で `setattr` した控えだけ）。
     Kivy のプロパティは class 側にあるので `vars()` には出ず、ここに現れるのは
     インスタンスに直接足したものだけ ＝ MOD の印。
+
+    **「MOD が作ったか」ではなく「MOD が触ったか」を見ている。** ゲーム自身の
+    ウィジェットにもこの接頭辞は付く ― `112_` は本文のラベルに設計値を、
+    `113_` は本文の枠に、`114_` は入力欄に、`115_` は一覧に、`116_` は
+    パーティの帯に、`121_` は人物欄に、それぞれ控えを刻む（元に戻せるように
+    するには、ウィジェット自身に持たせるのがいちばん確実だから。§7.4）。
+
+    いま唯一の呼び出し元は `overlay_host` で、見るのは **HUD の直下**
+    （素のゲームでは `FloatLayout` 1枚）だけなので取り違えは起きない。
+    **より深くまで走査する用途に広げるときは、この関数では足りない** ―
+    「MOD が作った」を知りたいなら、作った側が別の印を1つ足すこと。
     """
     try:
         names = list(vars(widget))
@@ -288,6 +299,320 @@ def overlay_host(hud):
             continue        # 他の MOD のウィジェット。この中には入らない
         return child
     return hud            # 子を持たない画面なら HUD 自身に（従来どおり）
+
+
+# --------------------------------------------------------------------------
+# プレイヤーの所持金と、画面を出してはいけない状態
+# --------------------------------------------------------------------------
+#: ゲームが「別のこと」をしている最中を表す旗。ここが真の間は施設の選択肢を
+#: 足さない（`309_` / `902_` が共有）。`300_` は **`in_shopping` を外した**
+#: ものを使う ― 店の外を往復しているだけでも真のままなので、イベントの
+#: 抑止条件に使うと店系の施設でほとんど出なくなる（あちらの註を参照）。
+BUSY_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle",
+              "in_conversation", "in_free_input", "in_action_in_conversation",
+              "in_shopping")
+
+
+def money(value):
+    """金額の表示。3桁ごとに区切る。読めない値はそのまま文字列にする。"""
+    try:
+        return "{:,}".format(int(value))
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def gold_of(app):
+    """プレイヤーの所持金。読めなければ `None`。
+
+    **`bool` を弾く。** Python では `True` は `int` なので、`isinstance` の
+    素朴な判定だと `gold = True` を所持金 1 として通してしまう。
+    """
+    value = frames.attr(frames.attr(app, "player", None), "gold", None)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return int(value)
+
+
+def add_gold(app, amount, on_error=None):
+    """所持金を増減する。書けたら新しい額、書けなければ `None`。
+
+    ゲーム自身の支払い経路を通さずに直接触るので、**呼ぶ側が理由を記録する**
+    こと（報酬・罰金など）。読めない所持金には書き込まない。
+    """
+    current = gold_of(app)
+    if current is None:
+        return None
+    try:
+        player = frames.attr(app, "player", None)
+        player.gold = current + int(amount)
+        return player.gold
+    except Exception:
+        if on_error is not None:
+            on_error("cannot change the player's gold")
+        return None
+
+
+# --------------------------------------------------------------------------
+# クエストの格納先（`301_` / `305_` / `307_` が共有する）
+# --------------------------------------------------------------------------
+def quest_stores(app):
+    """クエストが入っている**2つ**の場所（`206_` の計測。GAME.md §2.9）。
+
+        app.world.quests          {id: Quest インスタンス}  ゲームが遊ぶときに読む
+        app.world_dict['quests']  {id: dict}                セーブに出るのはこちら
+
+    **読むのはどちらでもよいが、書くときは必ず両方。** 片方だけ直すと画面の
+    表示と保存内容がずれる。どちらに登録されるかを決め打ちしないので、
+    無い側は黙って落ちる。
+
+    この4つは `301_` / `305_` / `307_` に1字違わず写されていた。写して回る
+    ものはローダの語彙（TECH.md §3.2.3）。
+    """
+    stores = []
+    quests = frames.attr(frames.attr(app, "world", None), "quests", None)
+    if isinstance(quests, dict):
+        stores.append(quests)
+    world_dict = frames.attr(app, "world_dict", None)
+    if isinstance(world_dict, dict) and isinstance(world_dict.get("quests"), dict):
+        stores.append(world_dict["quests"])
+    return stores
+
+
+def quest_ids(app):
+    """両方の合併（文字列の id）。どちらに登録されるか決め打ちしないため。"""
+    seen = []
+    for store in quest_stores(app):
+        for qid in store:
+            if str(qid) not in seen:
+                seen.append(str(qid))
+    return seen
+
+
+def quest_of(app, quest_id):
+    """先に見つかった側のクエスト。無ければ None。"""
+    for store in quest_stores(app):
+        if quest_id in store:
+            return store[quest_id]
+    return None
+
+
+def id_sort_key(value):
+    """id を**数として**並べるための鍵。数にできないものは後ろへ。
+
+    ゲームの id は文字列で採番順（`"9"` の次が `"10"`）。素の `sorted()` は
+    辞書順なので `"10" < "9"` になり、「いちばん新しい id」を採ると
+    **1回の生成で複数増えた回だけ取り違える**（`301_` が実際にそうなっていた）。
+    """
+    try:
+        return (0, int(value))
+    except Exception:
+        return (1, str(value))
+
+
+def quest_value(quest, name, default=None):
+    """クエストの項目を読む。**インスタンスでも dict でも同じ書き方で。**"""
+    if isinstance(quest, dict):
+        return quest.get(name, default)
+    return frames.attr(quest, name, default)
+
+
+def set_quest_value(app, quest_id, name, value, on_error=None):
+    """**両方の格納先に**書く。書けた数を返す。
+
+    片方だけに書くと、画面に出ているものとセーブされるものがずれる。
+    書けなかったことは `on_error(メッセージ)` に渡す（無ければ黙る）。
+    """
+    written = 0
+    for store in quest_stores(app):
+        target = store.get(quest_id)
+        if target is None:
+            continue
+        try:
+            if isinstance(target, dict):
+                target[name] = value
+            else:
+                setattr(target, name, value)
+            written += 1
+        except Exception:
+            if on_error is not None:
+                on_error("cannot set {} on quest {!r}".format(name, quest_id))
+    return written
+
+
+# --------------------------------------------------------------------------
+# HUD に足す自前のボタン（`113_` / `116_` / `122_` が共有する）
+# --------------------------------------------------------------------------
+#: 絵柄に「文字」を選んだときの呼び名（アイコンではなく文字ボタンになる）。
+AS_TEXT = "文字"
+
+#: 隅と `pos_hint` の対応。縁からわずかに内側へ入れる。
+CORNERS = {
+    "右上": {"right": 0.995, "top": 0.995},
+    "左上": {"x": 0.005, "top": 0.995},
+    "右下": {"right": 0.995, "y": 0.005},
+    "左下": {"x": 0.005, "y": 0.005},
+}
+
+
+def upx(value):
+    """ゲームの拡縮（`scripts.hud.new_hud:upx`）に合わせる。無ければ素の値。"""
+    module = sys.modules.get("scripts.hud.new_hud")
+    scale = frames.attr(module, "upx", None) if module is not None else None
+    if callable(scale):
+        try:
+            return float(scale(value))
+        except Exception:
+            pass
+    return float(value)
+
+
+def window_size():
+    """窓の大きさ。引けなければ `(0.0, 0.0)`（＝「分からない」）。"""
+    try:
+        from kivy.core.window import Window
+
+        return float(Window.width), float(Window.height)
+    except Exception:
+        return 0.0, 0.0
+
+
+def clamp_into_window(widget):
+    """窓の内側へ寄せる。**置いた後に必ず通す** ― はみ出したボタンは押せない。"""
+    width, height = window_size()
+    if not width or not height:
+        return
+    try:
+        if widget.y + widget.height > height:
+            widget.y = height - widget.height
+        if widget.y < 0:
+            widget.y = 0
+        if widget.x + widget.width > width:
+            widget.x = width - widget.width
+        if widget.x < 0:
+            widget.x = 0
+    except Exception:
+        pass          # 座標を持たない相手。置けないだけで害は無い
+
+
+def icon_strokes(icon, flipped=False):
+    """共有の絵柄を **0〜1 の座標**で返す。知らない名前なら空。
+
+    画像ファイルを持たないのは、線で描けばどの解像度でも滲まず、色も透過も
+    こちらで決められるため（配布物にバイナリが増えないのも利点）。
+
+    `flipped` は「押すと**戻る**状態」＝上下を反転して、次に何が起きるかを
+    そのまま形にする。**MOD 固有の絵柄はここに足さない** ― `113_` の「伸縮」、
+    `116_` の「人」、`122_` の本や吹き出しは、その MOD だけの語彙なので
+    MOD のフォルダに置く（TECH.md §3.2.3 の表でいう MOD 側）。
+    """
+    flip = (lambda y: 1.0 - y) if flipped else (lambda y: y)
+
+    def line(*points):
+        return [(x, flip(y)) for x, y in points]
+
+    if icon == "二重山形":
+        return [line((0.22, 0.40), (0.50, 0.66), (0.78, 0.40)),
+                line((0.22, 0.20), (0.50, 0.46), (0.78, 0.20))]
+    if icon == "山形":
+        return [line((0.20, 0.34), (0.50, 0.66), (0.80, 0.34))]
+    if icon == "矢印":
+        return [line((0.50, 0.18), (0.50, 0.82)),
+                line((0.28, 0.60), (0.50, 0.82), (0.72, 0.60))]
+    if icon == "枠":
+        # 四隅のかぎ括弧。広げる前は外を向き、広がっているときは内を向く。
+        if flipped:
+            return [line((0.20, 0.42), (0.42, 0.42), (0.42, 0.20)),
+                    line((0.80, 0.42), (0.58, 0.42), (0.58, 0.20)),
+                    line((0.20, 0.58), (0.42, 0.58), (0.42, 0.80)),
+                    line((0.80, 0.58), (0.58, 0.58), (0.58, 0.80))]
+        return [line((0.20, 0.42), (0.20, 0.20), (0.42, 0.20)),
+                line((0.80, 0.42), (0.80, 0.20), (0.58, 0.20)),
+                line((0.20, 0.58), (0.20, 0.80), (0.42, 0.80)),
+                line((0.80, 0.58), (0.80, 0.80), (0.58, 0.80))]
+    return []
+
+
+def make_icon_button(*, text="", size=32.0, square=True, font_name=None,
+                     pos_hint=None):
+    """HUD に足す自前のボタンを1枚作る。作れないビルドでは None。
+
+    | すること | なぜ |
+    |---|---|
+    | 文字は横長・アイコンは正方形 | 文字だと1文字ぶんでは収まらない |
+    | フォントを本文のラベルから写す | Kivy の既定（Roboto）に日本語が無く、写さないと豆腐になる |
+    | 背景を5つとも消す | `background_normal` を空にしないと、色を透明にしても既定のテクスチャがうっすら残る |
+
+    `font_name` は `frames.text_of(label, "font_name")` で採ったものを渡す
+    （`"<missing>"` を掴まないため。TECH.md §5.2）。
+    """
+    try:
+        from kivy.uix.button import Button
+    except Exception:
+        return None
+    height = upx(size)
+    width = height if square else height * 2.0
+    button = Button(text=text, size_hint=(None, None), size=(width, height),
+                    pos_hint=dict(pos_hint or {}))
+    if isinstance(font_name, str) and font_name:
+        button.font_name = font_name
+    button.font_size = height * 0.45
+    if square:
+        for name, value in (("background_normal", ""), ("background_down", ""),
+                            ("background_disabled_normal", ""),
+                            ("background_color", (0, 0, 0, 0)),
+                            ("border", (0, 0, 0, 0))):
+            try:
+                setattr(button, name, value)
+            except Exception:
+                pass      # その属性を持たないビルドでも描画は成り立つ
+    return button
+
+
+def paint_icon(button, strokes, *, attr, key=(), width=2.0, alpha=0.85,
+               log_exc=None):
+    """線を引き直す。**変わったときだけ**（毎フレーム描かない）。
+
+    本文は1文字ずつ増え、パーティ欄は相手の HP が動くたびに塗り直されるので、
+    塗り直しの呼び出しは何十回も来る。位置・大きさ・太さ・濃さと `key`
+    （MOD 側の「どの絵柄か・どちら向きか」）が同じなら引き直す必要は無い。
+    控えは `attr` に置く ― **`MOD_WIDGET_PREFIX` で始める名前にすること**
+    （`overlay_host` が「他の MOD が足したもの」の見分けに使う）。
+    """
+    signature = (tuple(key) if isinstance(key, (list, tuple)) else (key,),
+                 width, alpha,
+                 tuple(frames.attr(button, "pos", ()) or ()),
+                 tuple(frames.attr(button, "size", ()) or ()))
+    if frames.attr(button, attr, None) == signature:
+        return
+    try:
+        from kivy.graphics import Color, Line
+    except Exception:
+        return            # 線が引けない環境（オフライン検証）では文字のまま
+    try:
+        group = button.canvas.after
+        group.clear()
+        x, y = float(button.x), float(button.y)
+        box_width, box_height = float(button.width), float(button.height)
+        group.add(Color(1, 1, 1, float(alpha)))
+        for points in strokes:
+            flat = []
+            for fx, fy in points:
+                flat.extend((x + fx * box_width, y + fy * box_height))
+            group.add(Line(points=flat, width=upx(width), cap="round",
+                           joint="round"))
+        setattr(button, attr, signature)
+    except Exception:
+        if log_exc is not None:
+            log_exc("could not draw the icon")
+
+
+def show_widget(widget, visible):
+    """見せる／隠す。隠すときは**押せなくもする**（見えない当たり判定を残さない）。"""
+    try:
+        widget.opacity = 1.0 if visible else 0.0
+        widget.disabled = not visible
+    except Exception:
+        pass
 
 
 def busy_signals(app):

@@ -92,7 +92,6 @@ HP の持ち主が `Character` インスタンスか辞書かは**決めつけ�
 読むのは HP だけ、書くのは画面のテキストだけ。セーブにも `world` にも触らない。
 """
 
-import datetime
 
 from instantale_modloader import ui
 
@@ -195,14 +194,7 @@ def apply(ctx):
     # `enemies` は `current_enemy_dict` の入れ物の id（差し替わったら捨てる）。
     state = {"ledger": {}, "enemies": None, "reported": 0, "no_max_said": False}
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}: {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"),
-                    LOG_TAG, text))
-        except Exception:
-            ctx.log_exc("battle dmg: write failed")
+    write = ctx.logger(LOG_BASENAME, tag=LOG_TAG + ":")
 
     # ------------------------------------------------------------ 読み取り
     def read_value(holder, key):

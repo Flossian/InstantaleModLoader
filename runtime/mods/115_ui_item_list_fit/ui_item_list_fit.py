@@ -96,7 +96,6 @@
 いた一覧は次の開閉でゲームの組み方に戻る。
 """
 
-import datetime
 import math
 
 from instantale_modloader import frames
@@ -152,18 +151,10 @@ BOX_ATTR = "_instantale_itemfit_box"
 
 
 def apply(ctx):
-    log_path = ctx.out_path(LOG_BASENAME)
     state = {"logged": 0, "shape": None, "boxes": []}
     warned = set()
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            # 記録のせいでゲームを落とさない。
-            ctx.log_exc("item list: write failed")
+    write = ctx.logger(LOG_BASENAME)
 
     def note(text):
         if state["logged"] < MAX_LOG:
@@ -258,9 +249,17 @@ def apply(ctx):
         return False
 
     def is_row(widget):
-        """一覧の1行か。**型では見ない**（GAME.md §1.3）。"""
-        text = frames.attr(widget, "text")
-        if not isinstance(text, str):
+        """一覧の1行か。**型では見ない**（GAME.md §1.3）。
+
+        文字列は `frames.text_of` で受ける。`frames.attr` の既定は文字列の
+        番人（`"<missing>"`）なので、`isinstance(str)` で受けると **`text` を
+        持たない飾りのウィジェット（背景・枠線・画像）まで「行」に数えて
+        しまう** ― 列数の計算が狂うだけでなく、飾りが本物の行と同じ高さに
+        居ると `rows_of` の「横並びだから一覧ではない」判定に掛かって、
+        一覧が丸ごと棄却される（TECH.md §5.2 の罠。`118_` が先に踏んでいる）。
+        """
+        text = frames.text_of(widget)
+        if text is None:
             return False
         height = size_of(widget, "height")
         return height is not None and height > 0

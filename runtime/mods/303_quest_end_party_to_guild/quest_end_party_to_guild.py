@@ -59,7 +59,6 @@
 切り分けが速い（`106_` と `207_` が `battle_bgm.log` を共有しているのと同じ理由）。
 """
 
-import datetime
 
 from instantale_modloader import frames, ui
 
@@ -120,14 +119,7 @@ def apply(ctx):
         "pending": {},
     }
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}: {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"),
-                    LOG_TAG, text))
-        except Exception:
-            ctx.log_exc("quest-end guild: write failed")
+    write = ctx.logger(LOG_BASENAME, tag=LOG_TAG + ":")
 
     # 画面と Clock は共通部品を通す（`add_text` の待ち方・スレッドの扱いが
     # そこに入っている）。自前ボタンは出さないので mark は要らない。
@@ -196,7 +188,7 @@ def apply(ctx):
         if facility is None:
             # ダンジョンで解散した・その町にギルドが無い。黙って降りると
             # ゲーム本来の置き先（雇った町）になる。
-            write("{!r} ({}) left the party in {} via {} — no {!r} there; "
+            write("{!r} ({}) left the party in {} via {} ― no {!r} there; "
                   "leaving the game's own destination alone"
                   .format(name, member_id, where_label(area), source,
                           GUILD_FACILITY_TYPE))

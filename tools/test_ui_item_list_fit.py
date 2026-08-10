@@ -401,6 +401,15 @@ class FakeCtx(object):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
+    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
+    _mod = None
+
+    def logger(self, name, *, tag=None, stamp=True, label=None):
+        import instantale_modloader as _ml
+        return _ml.ModContext.logger(self, name, tag=tag, stamp=stamp,
+                                     label=label)
+
     def log(self, msg, level="INFO"):
         if level == "WARN":
             self.warnings.append(msg)
@@ -618,6 +627,32 @@ def run():
         hud.settle()
     check("並べ直しても同じ", sorted(set(round(row.x, 1) for row in rows)) == xs
           and close(extent(grid)[0], LIST_Y), (xs, extent(grid)))
+
+    print("\n[飾り] `text` を持たないウィジェットを行に数えない")
+    # `frames.attr` の既定は**文字列**の番人（`"<missing>"`）なので、
+    # `isinstance(値, str)` で受けると背景・枠線・画像まで「行」になる
+    # （`118_` が同じ罠を踏んでいる。TECH.md §5.2）。飾りが本物の行と同じ
+    # 高さに居ると「横並び＝一覧ではない」に掛かり、**一覧が丸ごと棄却される**。
+    # 手で並べるビルド（`ToolListPopup` の形）で見る。格子が自力で折り返す側だと
+    # mod は行に触らないので、飾りを行と取り違えても表に出ない。
+    install(mod, ctx)
+    hud = FakeHUD(count=18, obeys_cols=False)
+    hud.press_item_icon()
+    grid = hud.item_list
+    decoration = FakeWidget()               # 背景板。`text` を持たない
+    decoration.width, decoration.height = ROW_WIDTH, ROW_HEIGHT
+    decoration.x, decoration.y = -999.0, -999.0    # 行の並びから外れた場所
+    grid.add_widget(decoration)
+    hud.settle()
+    rows = [child for child in grid.children if isinstance(child, FakeRow)]
+    xs = sorted(set(round(row.x, 1) for row in rows))
+    check("飾りが混じっても一覧を掴む（棄却されない）", len(xs) > 1, xs)
+    check("行はすべて残る", len(rows) == 18, len(rows))
+    check("飾りは動かさない（行として並べ替えない）",
+          close(decoration.x, -999.0) and close(decoration.y, -999.0),
+          (decoration.x, decoration.y))
+    check("握り潰した例外が無い（飾り混在）", not ctx.errors,
+          "\n".join(ctx.errors[:2]))
 
     print("\n[無傷] 一覧が出てこないビルド")
     install(mod, ctx)

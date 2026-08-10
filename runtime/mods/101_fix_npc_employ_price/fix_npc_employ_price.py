@@ -22,6 +22,9 @@
 回数はログに残るので、上限超えの発生頻度はそこから読める。
 """
 
+from instantale_modloader import patch
+
+
 
 def apply(ctx):
     import sys
@@ -37,7 +40,10 @@ def apply(ctx):
         return
     # 他の mod がクランプ関数を包んでいる可能性があるので、素の実装を取り出す。
     # 包まれたものを掴むと、ログが二重に出たり余計な処理が挟まったりする。
-    clamp = getattr(clamp, "__original__", clamp)
+    # **底まで剥がす。** 1段だけでは、`200_` など他の MOD が同じ関数を
+    # 包んでいるときに向こうのラッパを掴む（同じ対象への重ねがけは正常な
+    # 使い方。TECH.md §3.7）。剥がし方はローダの語彙（`patch.unwrap`）。
+    clamp = patch.original_of(clamp)
 
     # ゲームが宣言している難易度の上下限を記録しておく。
     # 上の調査結果（0〜76）と食い違っていたら、この修正の前提が崩れている。
@@ -64,20 +70,7 @@ def apply(ctx):
     # 本体が直っていなくても「もう要らない」と出てしまう。
     # 上の `clamp` と同じく `__original__` をたどって最下層まで戻す
     # （`200_probe_bug_sites` もここを包むので、層は 1 枚とは限らない）。
-    raw = functions.get_npc_employ_price
-    raw_depth = 0
-    for _ in range(32):                       # 連鎖が壊れていても止まるように上限を置く
-        deeper = getattr(raw, "__original__", None)
-        if deeper is None:
-            break
-        raw = deeper
-        raw_depth += 1
-
-    # 底まで来たかを推論で済ませない。ローダは自分が被せたものに必ず印を付ける
-    # （patch.py の PATCH_MARK / __wrapper_of__）ので、印が残っていれば
-    # まだこちら側のラッパを測っていることになる。判定を覆せる材料なので必ず出す。
-    raw_is_ours = any(hasattr(raw, mark)
-                      for mark in ("__instantale_patch__", "__wrapper_of__"))
+    raw, raw_depth, raw_is_ours = patch.unwrap(functions.get_npc_employ_price)
 
     @ctx.wrap("scripts.functions:get_npc_employ_price")
     def get_npc_employ_price(orig, npc_difficulty_level, *args, **kwargs):

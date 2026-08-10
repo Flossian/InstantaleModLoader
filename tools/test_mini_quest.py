@@ -292,6 +292,15 @@ class FakeCtx:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
+    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
+    _mod = None
+
+    def logger(self, name, *, tag=None, stamp=True, label=None):
+        import instantale_modloader as _ml
+        return _ml.ModContext.logger(self, name, tag=tag, stamp=stamp,
+                                     label=label)
+
     def state_path(self, *parts):
         """永続データの置き場。本番と同じく out/ とは**別のフォルダ**にする。"""
         path = os.path.join(self.state_dir, *parts)
@@ -304,8 +313,12 @@ class FakeCtx:
     def log_exc(self, msg):
         self.errors.append(msg)
 
-    # 本物の `ctx.write_json` / `write_text` と同じものを使う。ここを自前の
-    # open(..., "w") にすると、テストだけが「壊れない書き方」を通らなくなる。
+    # 本物の `ctx.write_json` / `write_text` / `read_json` と同じものを使う。
+    # ここを自前の open にすると、テストだけが「壊れない書き方」「読めなかった
+    # ことを記録する読み方」を通らなくなる。
+    def read_json(self, path, default=None):
+        return ml.read_json(path, default, report=self.log_exc)
+
     def write_json(self, path, data, *, indent=1):
         return ml.write_json(path, data, indent=indent, report=self.log_exc)
 
@@ -317,6 +330,15 @@ class FakeCtx:
             self.hooks[target] = func
             return func
         return decorator
+
+    # `llm.wrap_outgoing` はここを見て「今その名前が在るか」を決める。返さないと
+    # クラウド側の別名が全部「後生え待ち」に回り、**この検査でクラウド経路が
+    # 一度も通らなくなる**（版4がクラウドで無音だったのと同じ死角をテストに作る）。
+    def resolve(self, target):
+        return (None, target.rpartition(":")[2], object())
+
+    def superseded(self):
+        return False
 
 
 def load_mod(path=MOD, name="mini_quest_mod"):
@@ -883,6 +905,48 @@ plain = [{"role": "user", "content": "会話の要約を作れ。"}]
 chat(fake_orig, client, "m", plain, None)
 check("関係の無いプロンプトは触らない",
       blob_of(sent["messages"]) == blob_of(plain))
+
+# ---------------------------------------------------------- クラウド（APIキー）
+# **版4までは `LlamaCppClient.chat` の1点にしか仕掛けていなかった。** クラウドは
+# chat を一度も通らないので、討伐前提を外す書き換えが丸ごと落ち、しかも
+# `plan()` が呼ばれないため `missed:` すら出ない ＝ 無音で普通の討伐になっていた
+# （`119_` v1 と同じ死角。TECH.md §5.3 / VERIFICATION.md §2.41）。
+mod, ctx, app, board_cls, client = setup(RECORDS)
+send_hook = ctx.hooks.get("scripts.llm.llm_manager:send_request")
+check("クラウドの送信口にも仕掛かっている", send_hook is not None,
+      sorted(ctx.hooks))
+
+cloud_sent = {}
+
+
+def cloud_orig(manager_name, message, structure=None, **kw):
+    cloud_sent["message"] = message
+    return None
+
+
+if send_hook is not None:
+    # ローカル（llama.cpp）が載っていないクラウド実行を装う。載っていると
+    # ローダは `llm_manager` 境界を意図的に素通しする（二重に当たるため）。
+    saved = sys.modules.pop(
+        "scripts.llm.request_llm_inference_llama_cpp_completion", None)
+    gemini = "scripts.llm.request_llm_inference_gemini_test_streaming"
+    sys.modules[gemini] = types.ModuleType(gemini)
+    try:
+        send_hook(cloud_orig, "manager", referee_messages("谷底の薬草採り"), None)
+        cloud_out = blob_of(cloud_sent.get("message") or [])
+        check("クラウド経由でも控えの達成条件が乗る",
+              "月光草を5株、採ってきてほしい。" in cloud_out, cloud_out[:200])
+        check("クラウド経由でもラスボス宣言が消える",
+              mod.REFEREE_HEAD_END not in cloud_out)
+
+        cloud_sent.clear()
+        send_hook(cloud_orig, "manager", referee_messages("尾根路のカラス退治"), None)
+        check("クラウドでも控えに無いクエストは触らない",
+              mod.REFEREE_HEAD_END in blob_of(cloud_sent.get("message") or []))
+    finally:
+        sys.modules.pop(gemini, None)
+        if saved is not None:
+            sys.modules["scripts.llm.request_llm_inference_llama_cpp_completion"] = saved
 
 # ============================================================ 目印が変わったとき
 print()

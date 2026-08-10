@@ -82,7 +82,6 @@
 import datetime
 import json
 import os
-import re
 import sys
 import weakref
 
@@ -150,16 +149,12 @@ PLACEMENTS = (NEXT_TO_EXPAND, IN_FRAME)
 # 枠の内側に置くときの余白（px。113 の `FRAME_INSET` と同じ値）。
 FRAME_INSET = 8.0
 
-# 隅と `pos_hint` の対応。縁からわずかに内側へ入れる（113 と同じ）。
-CORNERS = {
-    "右上": {"right": 0.995, "top": 0.995},
-    "左上": {"x": 0.005, "top": 0.995},
-    "右下": {"right": 0.995, "y": 0.005},
-    "左下": {"x": 0.005, "y": 0.005},
-}
+# 隅と `pos_hint` の対応。ボタンの作り方ごとローダに集約してある
+# （`113_` / `116_` と共有。TECH.md §3.2.3）。
+CORNERS = ui.CORNERS
 
 # 絵柄に「文字」を選んだときの呼び名。
-AS_TEXT = "文字"
+AS_TEXT = ui.AS_TEXT
 
 # ラベルから親を何段まで上へたどるか（ラベル → 入れ物 → ScrollView → HUD）。
 MAX_UP = 6
@@ -264,7 +259,6 @@ def view_blocks(entries):
 
 
 def apply(ctx):
-    log_path = ctx.out_path(LOG_BASENAME)
     # 控えの置き場。**ここで1回だけ引く**（`ctx.state_path` は `out/` に同じ名前が
     # 在ればフォルダごと移してくる。1ファイルずつ引くと、まだ触っていない世界の
     # 控えが `out/` に残る）。
@@ -285,14 +279,7 @@ def apply(ctx):
         setattr(sys, STATE_STORE_ATTR, store)
     warned = set()
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            # 記録のせいでゲームを落とさない。
-            ctx.log_exc("conversation log: write failed")
+    write = ctx.logger(LOG_BASENAME)
 
     def note(text):
         if store["logged"] < MAX_LOG:
@@ -481,40 +468,12 @@ def apply(ctx):
             return None
         return button
 
-    def window_size():
-        try:
-            from kivy.core.window import Window
-            return float(Window.width), float(Window.height)
-        except Exception:
-            return 0.0, 0.0
-
-    def upx(value):
-        """ゲームの拡縮（`scripts.hud.new_hud:upx`）に合わせる。無ければ素の値。"""
-        module = sys.modules.get("scripts.hud.new_hud")
-        scale = getattr(module, "upx", None) if module is not None else None
-        if callable(scale):
-            try:
-                return float(scale(value))
-            except Exception:
-                pass
-        return float(value)
+    window_size = ui.window_size
+    upx = ui.upx
 
     def clamp(widget):
         """窓の内側へ寄せる。`pos_hint` を持たない相手にだけ効く。"""
-        win_width, win_height = window_size()
-        if not win_width or not win_height:
-            return
-        try:
-            if widget.x + widget.width > win_width:
-                widget.x = win_width - widget.width
-            if widget.x < 0:
-                widget.x = 0
-            if widget.y + widget.height > win_height:
-                widget.y = win_height - widget.height
-            if widget.y < 0:
-                widget.y = 0
-        except Exception:
-            ctx.log_exc("conversation log: clamp failed")
+        ui.clamp_into_window(widget)
 
     # -- 絵柄 ----------------------------------------------------------------
     def strokes():
@@ -546,63 +505,30 @@ def apply(ctx):
         return []
 
     def paint_icon(button):
-        """ボタンにアイコンを描き直す。**変わったときだけ**（毎フレーム描かない）。"""
+        """ボタンにアイコンを描き直す。**変わったときだけ**（毎フレーム描かない）。
+
+        引き直すかの判定はローダ側（`ui.paint_icon`）に集約してある
+        （`113_` / `116_` と共有）。**向きは持たない** ― この MOD の絵柄は
+        押しても反転しないので、控えに `expanded` を混ぜない。
+        """
         if ICON == AS_TEXT:
             return
-        signature = (ICON, ICON_WIDTH, ICON_ALPHA,
-                     tuple(frames.attr(button, "pos", ()) or ()),
-                     tuple(frames.attr(button, "size", ()) or ()))
-        if frames.attr(button, ICON_ATTR, None) == signature:
-            return
-        try:
-            from kivy.graphics import Color, Line
-        except Exception:
-            return            # 線が引けない環境（オフライン検証）
-        try:
-            group = button.canvas.after
-            group.clear()
-            x, y = float(button.x), float(button.y)
-            width, height = float(button.width), float(button.height)
-            group.add(Color(1, 1, 1, float(ICON_ALPHA)))
-            for points in strokes():
-                flat = []
-                for fx, fy in points:
-                    flat.extend((x + fx * width, y + fy * height))
-                group.add(Line(points=flat, width=upx(ICON_WIDTH),
-                               cap="round", joint="round"))
-            setattr(button, ICON_ATTR, signature)
-        except Exception:
-            ctx.log_exc("conversation log: could not draw the icon")
+        ui.paint_icon(button, strokes(), attr=ICON_ATTR, key=(ICON,),
+                      width=ICON_WIDTH, alpha=ICON_ALPHA,
+                      log_exc=lambda msg: ctx.log_exc("conversation log: " + msg))
 
     # -- ボタン --------------------------------------------------------------
     def make_button(hud, label):
-        try:
-            from kivy.uix.button import Button
-        except Exception:
-            warn_once("button", "kivy Button unavailable; no log button will be shown")
-            return None
-        height = upx(BUTTON_SIZE)
-        width = height if ICON != AS_TEXT else height * 2.0
-        button = Button(text="" if ICON != AS_TEXT else LABEL_OPEN,
-                        size_hint=(None, None), size=(width, height),
-                        pos_hint=dict(CORNERS.get(BUTTON_CORNER, {}))
-                        if BUTTON_CORNER not in PLACEMENTS else {})
-        # 日本語を出すのでフォントは本文から写す（既定の書体では豆腐になる）。
-        font = frames.attr(label, "font_name")
-        if isinstance(font, str) and font:
-            button.font_name = font
-        button.font_size = height * 0.45
-        if ICON != AS_TEXT:
-            # 背景を消す。`background_normal` を空にしないと、色を透明にしても
-            # 既定のテクスチャがうっすら残る。
-            for name, value in (("background_normal", ""), ("background_down", ""),
-                                ("background_disabled_normal", ""),
-                                ("background_color", (0, 0, 0, 0)),
-                                ("border", (0, 0, 0, 0))):
-                try:
-                    setattr(button, name, value)
-                except Exception:
-                    pass      # そのプロパティを持たないビルドでも描画は成り立つ
+        """ボタンを1枚作る（背景消し・フォント写し・大きさはローダの作法）。"""
+        button = ui.make_icon_button(
+            text="" if ICON != AS_TEXT else LABEL_OPEN,
+            size=BUTTON_SIZE, square=(ICON != AS_TEXT),
+            font_name=frames.text_of(label, "font_name"),
+            pos_hint=(dict(CORNERS.get(BUTTON_CORNER, {}))
+                      if BUTTON_CORNER not in PLACEMENTS else {}))
+        if button is None:
+            warn_once("button",
+                      "kivy Button unavailable; no log button will be shown")
         return button
 
     def match_size(button, other):

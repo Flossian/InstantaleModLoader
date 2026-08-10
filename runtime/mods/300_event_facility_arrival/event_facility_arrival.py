@@ -64,12 +64,11 @@ narrator が **`move_phase` の内側**にあるので、印を復帰後に置�
 発火した施設は `COOLDOWN_VISITS` 回ぶん訪問を挟むまで抽選しない。
 """
 
-import datetime
 import random
 import sys
 import time
 
-from instantale_modloader import ui
+from instantale_modloader import llm, ui
 
 LOG_BASENAME = "player_events.log"
 
@@ -127,6 +126,10 @@ MAX_TOKENS = 256
 MAX_CHARS = 300
 PENDING_TTL = 90.0
 
+# セリフ1本にかける上限（秒）。**必ず渡す。** ゲーム側の既定は無期限で、
+# ここは narrator の中＝情景描写のスレッドなので、返らないと画面ごと止まる。
+LINE_TIMEOUT = 30.0
+
 # ここが真の間はイベントを出さない ― 戦闘中・会話中など。
 # 「手が空いているか」（テキストの流し込み中・操作を受け付けていない・
 # ポップアップが開いている）の判定は `ui.IDLE_SIGNALS` 側にあり、そちらは
@@ -171,13 +174,7 @@ def apply(ctx):
         "npc_id_kind": None,  # ゲーム自身が character_id に何を渡しているか
     }
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            ctx.log_exc("arrival event: write failed")
+    write = ctx.logger(LOG_BASENAME)
 
     # 選択肢まわりと「手が空くのを待つ」は `instantale_modloader.ui` に集約
     # してある（`301_` / `302_` と共有）。この mod で確立した
@@ -441,23 +438,20 @@ def apply(ctx):
         return ""
 
     def generate_line(app, facility, npc):
-        # スロットによって llama_cpp / any_server のどちらかだけが載る。
-        send = None
-        for name in ("scripts.llm.request_llm_inference_llama_cpp_completion",
-                     "scripts.llm.request_llm_inference_any_server"):
-            module = sys.modules.get(name)
-            send = (getattr(module, "send_request_with_no_structure", None)
-                    if module else None)
-            if send is not None:
-                break
-        if send is None:
-            write("skip: send_request_with_no_structure unavailable")
+        """セリフを1本作る。作れなければ None（＝情景描写に何も足さない）。
+
+        送信モジュールは名指ししない ― プロバイダごとに違ううえ、名前を並べた
+        一覧は増えた時点で古くなる（`llama_cpp` と `any_server` しか知らないまま、
+        Gemini / OpenAI / Claude では毎回空振りしていた）。`llm.ask` が
+        `llm_manager` の別名から引く（TECH.md §5.3）。
+        """
+        result = llm.ask(ctx, MANAGER_NAME, build_messages(app, facility, npc),
+                         timeout=LINE_TIMEOUT, max_tokens=MAX_TOKENS,
+                         label="arrival event", write=write)
+        if result is None:
             return None
-        messages = build_messages(app, facility, npc)
-        started = time.monotonic()
-        result = send(MANAGER_NAME, messages, max_tokens=MAX_TOKENS)
         line = clean_line(result)
-        write("generated in {:.1f}s: {!r}".format(time.monotonic() - started, line))
+        write("generated: {!r}".format(line))
         return line
 
     def clean_line(result):
@@ -609,8 +603,12 @@ def apply(ctx):
             except Exception:
                 ctx.log_exc("arrival event: selftest failed")
 
-        threading.Thread(target=_run, name="instantale_mod.arrival_selftest",
-                         daemon=True).start()
+        # **`on_ready` に預ける**（TECH.md §3.6）。`apply()` は再注入と遅延
+        # 当て直しで最大8回走るので、ここで直に起こすと**そのたびに LLM を
+        # 1回呼ぶ**。1回きりの副作用は印を付けて1回に畳む。
+        ctx.on_ready(lambda: threading.Thread(
+            target=_run, name="instantale_mod.arrival_selftest",
+            daemon=True).start(), key="300_event_facility_arrival:selftest")
 
     ctx.log("arrival events: mode={} chance={} log={}".format(
         EVENT_MODE,

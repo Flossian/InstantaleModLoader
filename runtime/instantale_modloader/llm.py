@@ -41,6 +41,26 @@ messages の dict を組み直す・元のリストを壊さない・例外を�
 クラウド境界で見えるのは呼び出し側が渡した `message` だけで、send_request の中で
 足される部分（Gemini のスキーマ文など）には当たらない（GAME.md §1.8）。
 
+## MOD から LLM に1問だけ聞く（`ask`）
+
+書き換えではなく**自分から聞く**側の口。こちらも「どこから呼ぶか」がゲームの
+読み方なので、ここに置く。
+
+    from instantale_modloader import llm
+
+    text = llm.ask(ctx, "mod_my_question", [{"role": "user", "content": "..."}],
+                   timeout=30, label="my mod")
+
+`timeout` は**キーワードで必ず渡す**（既定値を置いていない）。ゲーム側の既定は
+`timeout=None` ＝ 無期限で、1回返らないと呼んだ側が永久に止まる ―
+`311_` は抽出を1本のワーカーで直列に回しているので以後の抽出が全部止まり、
+`300_` は情景描写のスレッドを巻き込む（GAME.md §2.12）。
+
+**送信モジュールを名指ししないこと。** プロバイダごとに違ううえ、名指しの
+一覧は必ず古くなる（`300_` / `311_` が `llama_cpp` と `any_server` の2つしか
+知らないまま、Gemini / OpenAI / Claude で毎回空振りしていた）。`resolve_send()`
+は `llm_manager` の別名を先に見て、無ければ**前置きで**送信モジュールを走査する。
+
 ## 印だけでは足りない場合は MOD 側で止める
 
 印はスレッドに立つので、`chat` が返った後に**別のスレッド**が送る経路には
@@ -76,6 +96,9 @@ MANAGER_SEND_TARGETS = (
     ("scripts.llm.llm_manager:send_request", False),
     ("scripts.llm.llm_manager:send_request_with_no_structure", True),
 )
+
+#: 送信の別名が集まる場所。プロバイダを問わずここを通る（GAME.md §2.12）。
+MANAGER_MODULE = "scripts.llm.llm_manager"
 
 #: これが import されていたらローカル実行（クラウドとどちらか片方しか載らない）。
 LOCAL_REQUEST_MODULE = "scripts.llm.request_llm_inference_llama_cpp_completion"
@@ -139,6 +162,200 @@ def provider_of(orig) -> str:
     if module.startswith("request_llm_inference_"):
         module = module[len("request_llm_inference_"):]
     return module or "cloud"
+
+
+# --------------------------------------------------------------------------
+# MOD から1問だけ聞く
+# --------------------------------------------------------------------------
+def manager():
+    """`llm_manager` モジュール。まだ import されていなければ None。"""
+    return sys.modules.get(MANAGER_MODULE)
+
+
+def resolve_send(name: str = "send_request_with_no_structure"):
+    """送信関数を `(関数, どこから引いたか)` で返す。無ければ `(None, None)`。
+
+    **`llm_manager` の別名を先に見る。** どのプロバイダでもここを通るので、
+    送信モジュールを名指しせずに済む（GAME.md §2.12）。別名は初期化時に
+    後から生えるので、まだ無いときだけ送信モジュール側を**前置きで**走査する
+    ― 名前を並べた一覧は、プロバイダが増えた時点で黙って古くなる。
+    """
+    module = manager()
+    if module is not None:
+        found = getattr(module, name, None)
+        if callable(found):
+            return found, MANAGER_MODULE
+    for module_name in request_modules():
+        found = getattr(sys.modules.get(module_name), name, None)
+        if callable(found):
+            return found, module_name
+    return None, None
+
+
+def create_structure(ctx, name: str, fields: dict, *, label: str = "llm"):
+    """`create_model` で構造化出力の返却型を作る。作れなければ None。
+
+    `fields` は `{"項目名": (型, ...)}`。**`Literal` を使わないこと** ―
+    候補が空の `Literal[]` は pydantic が拒否してゲームごと落ちる
+    （`203_probe_create_model` が実際の落ち方を押さえている）。真偽も
+    `bool` ではなく `str` で受けて、読み取りは呼び側で行う。
+    """
+    module = manager()
+    factory = getattr(module, "create_model", None) if module is not None else None
+    if not callable(factory):
+        return None
+    try:
+        return factory(name, **fields)
+    except Exception:
+        ctx.log_exc("{}: cannot build the structure {!r}".format(label, name))
+        return None
+
+
+def as_dict(raw):
+    """返ってきたものを辞書にする。**形を決めつけない。**
+
+    pydantic のモデル・素の辞書・JSON 文字列のどれで返るかはプロバイダと
+    版で変わる。読めなければ None（呼び側が降りる）。
+    """
+    if isinstance(raw, dict):
+        return raw
+    for name in ("model_dump", "dict"):
+        method = getattr(raw, name, None)
+        if callable(method):
+            try:
+                got = method()
+            except Exception:
+                continue
+            if isinstance(got, dict):
+                return got
+    if isinstance(raw, str):
+        try:
+            import json
+
+            got = json.loads(raw)
+        except Exception:
+            return None
+        if isinstance(got, dict):
+            return got
+    return None
+
+
+def ask(ctx, manager_name: str, message, *, timeout, structure=None,
+        max_tokens=None, label: str = "llm", write=None):
+    """LLM に1問だけ聞く。呼べない・失敗した・読めないときは None。
+
+    戻り値は `structure` を渡したときは辞書（`as_dict` で均したもの）、
+    渡さなければ文字列。
+
+    | 引数 | |
+    |---|---|
+    | `manager_name` | 記録の分かれ目。MOD 専用の名前にする（`output_data/` に別々に残る） |
+    | `message` | **必ずリスト**（`[{"role": "user", "content": ...}]`）。素の文字列は `TypeError` になる（GAME.md §2.12） |
+    | `timeout` | **キーワードで必ず渡す。** 既定値は置いていない ― ゲーム側の既定は無期限で、1回返らないと呼んだ側が永久に止まる |
+    | `write` | MOD 自身のログ関数（かかった秒数と結果を1行）。無くてよい |
+
+    `timeout` を受け付けない未実測のプロバイダでは `TypeError` で失敗して
+    None を返す（呼び側は LLM を使わない道へ降りる）。渡さずに呼び直さない
+    のは、**止まらないことのほうが大事**だから。
+    """
+    name = "send_request" if structure is not None else "send_request_with_no_structure"
+    send, where = resolve_send(name)
+    if send is None:
+        if write is not None:
+            write("{}: {} unavailable (no provider module is loaded yet)".format(
+                manager_name, name))
+        return None
+    kwargs = {"timeout": timeout}
+    if max_tokens is not None:
+        kwargs["max_tokens"] = max_tokens
+    args = (manager_name, list(message))
+    if structure is not None:
+        args += (structure,)
+    started = time.monotonic()
+    try:
+        raw = send(*args, **kwargs)
+    except Exception:
+        ctx.log_exc("{}: {} failed via {}".format(label, manager_name, where))
+        return None
+    result = as_dict(raw) if structure is not None else raw
+    if write is not None:
+        write("{}: {:.1f}s via {}{} -> {!r}".format(
+            manager_name, time.monotonic() - started, where,
+            " (structured)" if structure is not None else "",
+            repr(result)[:300]))
+    return result
+
+
+def watch_aliases(ctx, targets, install, *, label="llm", on_arm=None):
+    """**後から生える別名**を見張って、現れた時点で `install(target)` を呼ぶ。
+
+        watch_aliases(ctx, targets, hook_it, label="my probe")
+
+    `llm_manager` の `send_request*` は初期化時に後から生える。ローダの保留は
+    モジュール単位なので**属性の後生えは拾わない**（TECH.md §3.4）。今在るぶんは
+    その場で当て、無いぶんだけ見張りに回す。
+
+    `install(target)` は当て方そのもの ― 何を仕掛けるかは呼ぶ側が決める。
+    `wrap_outgoing` は書き換えを、`213_` は観測を仕掛けるので、**当て方までは
+    共有しない**（あちらはローカル実行でも生の引数を見たいが、`wrap_outgoing`
+    はローカルでは `llm_manager` 境界を意図的に素通しする）。
+
+    見張りは `ALIAS_POLL_SECONDS` ごと・`ALIAS_WATCH_SECONDS` で諦め・
+    注入し直されたら `ctx.superseded()` で降りる。**降りるときは必ず何か残す**
+    （黙って死ぬと、残りが一生当たらないのに追う手がかりが1つも無い）。
+
+    戻り値は「見張りに回した対象」の並び（すぐ当たったものは入らない）。
+    """
+    def can_resolve(target):
+        try:
+            return ctx.resolve(target)[2] is not None
+        except Exception:
+            return False
+
+    unarmed = []
+    for target in targets:
+        if can_resolve(target):
+            install(target)
+        else:
+            unarmed.append(target)
+    if not unarmed:
+        return []
+
+    def loop():
+        deadline = time.monotonic() + ALIAS_WATCH_SECONDS
+        remaining = list(unarmed)
+        while remaining and not ctx.superseded():
+            for target in list(remaining):
+                if not can_resolve(target):
+                    continue
+                install(target)
+                remaining.remove(target)
+                ctx.log("{}: late-armed on {} (the alias appeared)".format(
+                    label, target))
+                if on_arm is not None:
+                    try:
+                        on_arm(target)
+                    except Exception:
+                        ctx.log_exc("{}: on_arm failed".format(label))
+            if not remaining:
+                return
+            if time.monotonic() > deadline:
+                ctx.log("{}: gave up waiting for {} ({}s)".format(
+                    label, ", ".join(remaining), int(ALIAS_WATCH_SECONDS)),
+                    level="WARN")
+                return
+            time.sleep(ALIAS_POLL_SECONDS)
+
+    def guarded():
+        try:
+            loop()
+        except Exception:
+            ctx.log_exc("{}: the alias watch stopped; {} target(s) will not be "
+                        "wrapped in this run".format(label, len(unarmed)))
+
+    threading.Thread(target=guarded,
+                     name="llm_alias_watch:{}".format(label), daemon=True).start()
+    return unarmed
 
 
 class Hooks(object):
@@ -325,49 +542,10 @@ def wrap_outgoing(ctx, rewrite, *, label="llm", local=True, cloud=True,
             finally:
                 end_pass(previous)
 
-    def resolvable(target):
-        try:
-            return ctx.resolve(target)[2] is not None
-        except Exception:
-            return False
-
-    # 居る別名は今すぐ包む。まだ生えていない別名は見張りに回す（起動直後の
-    # 注入では llm_manager に send_request がまだ無い。docstring のとおり）。
-    unarmed = []
-    for target, ns in MANAGER_SEND_TARGETS:
-        if resolvable(target):
-            hook_manager_send(target, ns)
-        else:
-            unarmed.append((target, ns))
-    if not unarmed:
-        return hooks
-
-    def watch_alias():
-        deadline = time.monotonic() + ALIAS_WATCH_SECONDS
-        remaining = list(unarmed)
-        while remaining and not ctx.superseded():
-            for item in list(remaining):
-                target, ns = item
-                if not resolvable(target):
-                    continue
-                hook_manager_send(target, ns)
-                remaining.remove(item)
-                ctx.log("{}: late-armed on {} (the alias appeared)".format(
-                    label, target))
-                if on_arm is not None:
-                    try:
-                        on_arm(target)
-                    except Exception:
-                        ctx.log_exc("{}: on_arm failed".format(label))
-            if not remaining:
-                return
-            if time.monotonic() > deadline:
-                ctx.log("{}: gave up waiting for {} ({}s)".format(
-                    label, ", ".join(t for t, _n in remaining),
-                    int(ALIAS_WATCH_SECONDS)), level="WARN")
-                return
-            time.sleep(ALIAS_POLL_SECONDS)
-
-    threading.Thread(target=watch_alias,
-                     name="llm_alias_watch:{}".format(label), daemon=True).start()
+    # 居る別名は今すぐ、まだ生えていない別名は見張って当てる。仕組みは
+    # `watch_aliases` に切り出してある（`213_` も同じ見張りを要る）。
+    ns_of = dict(MANAGER_SEND_TARGETS)
+    watch_aliases(ctx, [target for target, _ns in MANAGER_SEND_TARGETS],
+                  lambda target: hook_manager_send(target, ns_of[target]),
+                  label=label, on_arm=on_arm)
     return hooks

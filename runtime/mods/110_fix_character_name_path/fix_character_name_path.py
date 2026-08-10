@@ -66,10 +66,9 @@ Windows は**末尾の空白・ピリオドを黙って切る**ので、こち�
 なので触らない（発生すれば `001_` が同じ形で捕まえる）。
 """
 
-import datetime
 import sys
 
-from instantale_modloader import frames
+from instantale_modloader import frames, ui
 
 LOG_BASENAME = "character_name.log"
 
@@ -126,14 +125,7 @@ def apply(ctx):
     log_path = ctx.out_path(LOG_BASENAME)
     seen = set()          # (id, 生の名前) ごとに1回だけ記録する
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] [NAMEFIX] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            # 記録のせいでゲームを落とさない。
-            ctx.log_exc("character name: write failed")
+    write = ctx.logger(LOG_BASENAME, tag="[NAMEFIX]")
 
     def echoes(character, raw):
         """名前と同じ生文字列を持つ他の属性。**記録だけ**する（書き換えない）。"""
@@ -189,21 +181,7 @@ def apply(ctx):
         return result
 
     # ------------------------------------------------------ 既にいる人の救済
-    def find_app():
-        main = sys.modules.get("__main__")
-        cls = getattr(main, "InstantaleApp", None)
-        try:
-            from kivy.app import App
-            app = App.get_running_app()
-            if app is not None and (cls is None or isinstance(app, cls)):
-                return app
-        except Exception:
-            pass
-        if main is not None and isinstance(cls, type):
-            for value in vars(main).values():
-                if isinstance(value, cls):
-                    return value
-        return None
+    find_app = ui.find_app     # 走っている app の探し方はローダの語彙
 
     def sweep(app, where):
         """`app.world.characters` と `app.player` を掃く。掃いた人数を返す。

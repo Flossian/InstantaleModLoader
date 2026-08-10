@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""`state/` に置くデータの**住所**。世界の見分け方と、そこから作るファイル名。
+"""`state/` に置くデータの**保存先の決め方**。世界を見分けて、ファイル名にする。
 
 MOD は世界ごとにデータを分けて持つ（依頼の出所・NPC の人物像・店の入れ替え日・
 道中の控え）。そのために要るのは2つだけ:
@@ -79,7 +79,26 @@ def world_key(app):
     「決めつけない」に従い、読めた方を使う）。行方不明になったことが分かるよう、
     `311_` は既知の世界ファイルを一覧して1度だけ知らせる形にしている。
     """
-    world_dict = getattr(app, "world_dict", None)
+    found = world_key_of_dict(getattr(app, "world_dict", None))
+    if found is not None:
+        return found
+    name = getattr(getattr(app, "world", None), "name", None)
+    return name if isinstance(name, str) and name else UNKNOWN_WORLD
+
+
+def world_key_of_dict(world_dict, fallback=None):
+    """**セーブの辞書から**世界を見分ける鍵。読めなければ `fallback`。
+
+    `world_key(app)` は `app` を受けるが、`104_balance_area_bgm` のように
+    ゲームから **`world_dict` を直に渡されるフック**もある（そちらには app が
+    無い）。同じ鍵の見方を MOD 側に写すとずれるので、入口だけ分けて中身は
+    共有する ― 実際、写した版は `world_data["name"]` の1鍵しか見ておらず、
+    `world_name` / `title` で名前を持つ世界では毎回 `fallback` に落ちていた。
+
+    `fallback` を呼び側に決めさせるのは、用途が違うため。控えのファイル名に
+    するなら `UNKNOWN_WORLD`、集計の見出しなら「その辞書に固有の何か」
+    （`104_` は `id()`）が要る。
+    """
     if isinstance(world_dict, dict):
         data = world_dict.get("world_data")
         if isinstance(data, dict):
@@ -87,8 +106,7 @@ def world_key(app):
                 value = data.get(key)
                 if isinstance(value, str) and value:
                     return value
-    name = getattr(getattr(app, "world", None), "name", None)
-    return name if isinstance(name, str) and name else UNKNOWN_WORLD
+    return fallback
 
 
 def _clean(key: str) -> str:

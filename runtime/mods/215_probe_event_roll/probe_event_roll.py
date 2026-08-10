@@ -76,8 +76,11 @@ ABILITIES = ("strength", "constitution", "dexterity",
 # 頼りに拾う。最後の1つが今回の判定。
 MARK_RE = re.compile(r"<[^<>]{0,24}?(\d{1,3})\s*%\s*[:：]?\s*([^<>]{0,16})>")
 
-# 判定の窓（evaluate の入口から resolve の出口まで）に限って
-# calculate_attribute を記録する。窓の外は戦闘でも画面表示でも呼ばれうる。
+# 判定の窓に限って calculate_attribute を記録する（窓の外は戦闘でも画面表示でも
+# 呼ばれうる）。窓は `evaluate` の入口から **`resolve` の入口**まで ―
+# `resolve` は元の関数を呼ぶ**前**に窓を閉じるので、`resolve` の本体の中の
+# 呼び出しは数えない。確率は resolve に入る時点で既に決まっているので、
+# 見たいものは窓の中に収まっている。
 CALC_LOG_LIMIT = 40
 
 
@@ -208,23 +211,18 @@ def snapshot(character):
 def apply(ctx):
     import sys
 
-    module = sys.modules.get("scripts.llm.llm_manager")
-    if module is None:
-        ctx.log("scripts.llm.llm_manager not loaded; skipping", level="WARN")
-        return
+    # **未 import でも降りない。** `scripts.llm.llm_manager` は最初の LLM
+    # リクエストまで import されない（TECH.md §3.4）。ここで早期 return すると
+    # フックが1本も登録されず、**保留の見張りが立たない** ― 動くかどうかが
+    # 「他の MOD が同じモジュールを保留してくれるか」に依存する。`required=False`
+    # で先に登録しておけば、現れた時点でローダが当て直す（`209_` の形）。
 
     log_path = ctx.out_path(LOG_BASENAME)
     record_path = ctx.out_path(RECORD_BASENAME)
     state = {"open": False, "pending": None, "calc": [], "shape": None,
              "rolls": 0, "probing": False}
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            ctx.log_exc("event roll: write failed")
+    write = ctx.logger(LOG_BASENAME)
 
     def record(row):
         try:

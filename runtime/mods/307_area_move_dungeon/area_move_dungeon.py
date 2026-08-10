@@ -86,7 +86,6 @@ id。いつ見ても答えが返る。`QuestStartManager` の経路も残して�
 （値が読めないことを理由に遊びを止めない。WARN は残す）。
 """
 
-import datetime
 import random
 import time
 
@@ -245,7 +244,7 @@ def road_brief(origin_name, target_name, difficulty):
     origin = origin_name or "出発地"
     target = target_name or "目的地"
     return (
-        "\n\n【この依頼の性質 — 最優先で反映すること】\n"
+        "\n\n【この依頼の性質 ― 最優先で反映すること】\n"
         "これは町で受ける雑事ではなく、**「{origin}」から「{target}」へ抜ける"
         "危険な道のり、その旅路そのもの**である。\n"
         "- 舞台は2つの土地を繋ぐ道中（街道・峠道・古い地下道・森・湿地・廃墟など）"
@@ -277,14 +276,7 @@ def roll_difficulty(origin_level, target_level):
 
 def apply(ctx):
     log_path = ctx.out_path(LOG_BASENAME)
-
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            ctx.log_exc("road travel: write failed")
+    write = ctx.logger(LOG_BASENAME)
 
     screen = ui.Screen(ctx, write, tag="road travel", mark=MARK)
 

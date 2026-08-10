@@ -16,16 +16,25 @@
 import sys
 
 from instantale_modloader import frames, ui
+from instantale_modloader.state import UNKNOWN_WORLD, world_key
 
 
 def world_name(app):
-    """控えを紐付ける鍵。引けなければ空文字（そのときは紐付けない）。"""
-    world = getattr(app, "world", None)
-    for attr in ("name", "world_name"):
-        value = getattr(world, attr, None)
-        if isinstance(value, str) and value:
-            return value
-    return ""
+    """控えを紐付ける鍵。引けなければ空文字（そのときは紐付けない）。
+
+    **見分け方はローダの語彙**（`state.world_key`）。ここに写した版は
+    `app.world` の属性しか見ておらず、**ロード直後は必ず空文字**になっていた
+    ― そのとき `app.world` はまだ組み上がっておらず、世界名はセーブ側
+    （`world_dict["world_data"]`）にしか無い。空文字は呼び側で「どの世界か
+    分からない」の合図なので、控えの世界照合（`current`）と後始末（`sweep`）が
+    **ロードした直後だけ黙って素通り**していた（TECH.md §3.2.3・`state.py`）。
+
+    空文字の契約はそのまま保つ。ローダは読めないとき `"_"` を返すので、
+    ここで戻し直す ― この MOD は「分からないなら紐付けない」に倒す作りで、
+    知らない世界の控えを1つの鍵にまとめてしまうより安全側。
+    """
+    key = world_key(app)
+    return "" if key == UNKNOWN_WORLD else key
 
 
 def current_facility(app):
@@ -404,9 +413,10 @@ def _drop_from_rosters(app, npc_id):
     return dropped
 
 
-def gold_of(app):
-    value = frames.attr(getattr(app, "player", None), "gold")
-    return value if isinstance(value, (int, float)) else None
+# 所持金の読み書きはローダの語彙（`309_` / `901_` と共有。TECH.md §3.2.3）。
+# ローダ版は `bool` も弾く ― `True` は `int` なので、素朴な判定だと
+# `gold = True` を所持金 1 として通してしまう。
+gold_of = ui.gold_of
 
 
 def add_gold(app, amount):
@@ -416,15 +426,7 @@ def add_gold(app, amount):
     （仕様書 DESIGN RULES 3）に従うことになり、事件の報酬という
     一度きりの支払いには噛み合わない。`309_` が実証した経路で直接渡す。
     """
-    player = getattr(app, "player", None)
-    current = gold_of(app)
-    if current is None:
-        return None
-    try:
-        player.gold = current + int(amount)
-    except Exception:
-        return None
-    return getattr(player, "gold", None)
+    return ui.add_gold(app, amount)
 
 
 # --------------------------------------------------------------------------
@@ -773,10 +775,3 @@ def _place(app, npc_id, character, area, facility, write=None):
             write("    move_npc_to_facility failed: {}: {}".format(
                 type(exc).__name__, exc))
         return False
-
-
-def _as_number(value):
-    try:
-        return int(str(value))
-    except (TypeError, ValueError):
-        return -1

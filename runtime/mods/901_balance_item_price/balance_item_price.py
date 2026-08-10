@@ -62,6 +62,8 @@ VERIFICATION.md §2.2）。売買の値段はこの mod、内部の段階計算�
 
 import sys
 
+from instantale_modloader import ui
+
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
 #      `tools/check_mods.py` が AST で突き合わせる）------------------------
 PRICE_SCALE = 1.0          # 最後に全体へ掛かる倍率
@@ -221,7 +223,6 @@ def read_item(item):
 
 
 def apply(ctx):
-    log_path = ctx.out_path(LOG_BASENAME)
 
     store = getattr(sys, STORE_ATTR, None)
     if not isinstance(store, dict):
@@ -229,12 +230,7 @@ def apply(ctx):
                  "gold_before": None}
         setattr(sys, STORE_ATTR, store)
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write(text + "\n")
-        except Exception:
-            ctx.log_exc("item price: log write failed")
+    write = ctx.logger(LOG_BASENAME, stamp=False)
 
     def note(text):
         """件数を数えつつ、最初の LOG_LIMIT 件だけ書き出す。"""
@@ -412,8 +408,8 @@ def apply(ctx):
 
     # ---- 決済とのずれ -----------------------------------------------------
 
-    def gold_of(app):
-        return _num(getattr(getattr(app, "player", None), "gold", None))
+    # 所持金の読み方はローダの語彙（`309_` / `902_` と共有）。
+    gold_of = ui.gold_of
 
     def settle(app, item, key, sign, label):
         """`orig` の前後で所持金を測り、表示との差を直す。

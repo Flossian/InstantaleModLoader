@@ -99,7 +99,6 @@ STORE_ATTR = "_instantale_shop_restock_store"
 
 
 def apply(ctx):
-    log_path = ctx.out_path(LOG_BASENAME)
     state_dir = ctx.state_path(STATE_DIRNAME)
 
     store = getattr(sys, STORE_ATTR, None)
@@ -112,12 +111,7 @@ def apply(ctx):
         }
         setattr(sys, STORE_ATTR, store)
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write(text + "\n")
-        except Exception:
-            ctx.log_exc("shop restock: log write failed")
+    write = ctx.logger(LOG_BASENAME, stamp=False)
 
     # ボタンは出さないので `mark` は要らない。`schedule` と例外の握りだけ借りる。
     screen = ui.Screen(ctx, write, tag="shop restock")

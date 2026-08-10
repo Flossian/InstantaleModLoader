@@ -61,10 +61,9 @@
 """
 
 import datetime
-import json
 import time
 
-from instantale_modloader import ui
+from instantale_modloader import llm, ui
 from instantale_modloader.state import world_key
 
 
@@ -441,7 +440,7 @@ def generator_brief(kind):
     （`QuestStructure`）にも呼び出し側にも影響しない（`301_` と同じ手）。
     """
     return (
-        "\n\n【この依頼の種類 — 最優先で反映すること】\n"
+        "\n\n【この依頼の種類 ― 最優先で反映すること】\n"
         "{brief}\n"
         "- request_summary と client_statement は、上記の目的を頼むものにすること。\n"
         "- request_summary には**何をどれだけ達成すれば依頼が完了するのか**を、"
@@ -528,11 +527,8 @@ def title_in(blob):
     return line.strip() or None
 
 
-def _id_sort(value):
-    try:
-        return (0, int(value))
-    except Exception:
-        return (1, str(value))
+# id を数として並べる鍵はローダの語彙（`301_` / `307_` と共有）。
+_id_sort = ui.id_sort_key
 
 
 def _text(value, limit=120):
@@ -559,25 +555,23 @@ def apply(ctx):
         "missed_logged": False,
     }
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            ctx.log_exc("mini quest: write failed")
+    write = ctx.logger(LOG_BASENAME)
 
     screen = ui.Screen(ctx, write, tag="mini quest", mark=MARK)
 
     # ------------------------------------------------------------ 控え
 
     def load_records():
-        try:
-            with open(record_path, "r", encoding="utf-8") as fh:
-                data = json.load(fh)
-            return data if isinstance(data, dict) else {}
-        except Exception:
-            return {}
+        """控えを読む。**`ctx.read_json` を通す**（TECH.md §3.11.1）。
+
+        素朴な `open` + 広い `except` で `{}` に倒すと、「無い（初回・正常）」と
+        「**在るのに読めない**（ウイルス対策やインデクサの一時ロック・外部破損）」
+        の区別が消える。ここは読んだ結果に足して `ctx.write_json` で書き戻す
+        経路なので、後者を黙って倒すと**その1回で控えが丸ごと空になる** ―
+        壊れずに、静かに失われる。
+        """
+        data = ctx.read_json(record_path, {})
+        return data if isinstance(data, dict) else {}
 
     def remember_quest(app, quest_id, kind, title, summary):
         data = load_records()
@@ -627,35 +621,13 @@ def apply(ctx):
         return table.get(title)
 
     # ------------------------------------------------------------ クエスト辞書
-    def quest_stores(app):
-        """クエストは2箇所にある。**どちらに登録されるか決め打ちしない**。"""
-        stores = []
-        quests = getattr(getattr(app, "world", None), "quests", None)
-        if isinstance(quests, dict):
-            stores.append(quests)
-        world_dict = getattr(app, "world_dict", None)
-        if isinstance(world_dict, dict) and isinstance(world_dict.get("quests"), dict):
-            stores.append(world_dict["quests"])
-        return stores
-
-    def quest_ids(app):
-        seen = []
-        for store in quest_stores(app):
-            for qid in store:
-                if str(qid) not in seen:
-                    seen.append(str(qid))
-        return seen
-
-    def quest_of(app, quest_id):
-        for store in quest_stores(app):
-            if quest_id in store:
-                return store[quest_id]
-        return None
-
-    def quest_value(quest, name, default=None):
-        if isinstance(quest, dict):
-            return quest.get(name, default)
-        return getattr(quest, name, default)
+    # クエストは2箇所にある（`206_` の計測）。読むのはどちらでもよいが、
+    # **書くときは必ず両方**。その作法はローダに集約してある
+    # （`301_` / `307_` と共有。TECH.md §3.2.3）。
+    quest_stores = ui.quest_stores
+    quest_ids = ui.quest_ids
+    quest_of = ui.quest_of
+    quest_value = ui.quest_value
 
     # ------------------------------------------------------------ 生成
     def pick_kind():
@@ -866,25 +838,22 @@ def apply(ctx):
         if state["missed_logged"]:
             return
         state["missed_logged"] = True
-        write("missed: {} — これらの目印が見つからない: {}".format(
+        write("missed: {} ― これらの目印が見つからない: {}".format(
             where, ", ".join(_text(m, 30) for m in missed)))
         write("missed: 書き換えを行わないので、依頼は通常の討伐として進行する")
         ctx.log("mini quest: prompt markers missed in {}; rewriting is disabled "
                 "until they match again (see {})".format(where, log_path),
                 level="WARN")
 
-    def plan(messages):
-        """この `chat` 呼び出しをどう扱うか決める。
+    def plan(blob):
+        """この1回の推論をどう扱うか決める。
 
         **判定は全メッセージを繋いだもので行う。** 進行判定のプロンプトは
         1文目が system、クエスト名と【強制事項】が user と分かれているので、
         1メッセージずつ見ると必ずどちらかが欠けて見える。
         """
-        contents = [m.get("content") for m in messages
-                    if isinstance(m, dict) and isinstance(m.get("content"), str)]
-        if not contents:
+        if not blob:
             return None
-        blob = "\n".join(contents)
 
         mark = state["pending"]
         if mark is not None and GEN_HEADER in blob:
@@ -929,49 +898,45 @@ def apply(ctx):
                                                  "nothing_happens")):
                     write("    {}".format(_text(line, 200)))
 
-    @ctx.wrap("llama_cpp_runtime_completion:LlamaCppClient.chat", required=False)
-    def chat(orig, self, model, messages, format=None, *args, **kwargs):
-        """`105_` と同じ地点。**ストリーミングでもここは必ず通る**（実測）。
+    def rewrite_outgoing(texts, site):
+        """出ていく本文を書き換える。変えないなら None（`llm.wrap_outgoing` の契約）。
 
-        `messages` そのものは書き換えない。会話履歴としてゲーム側が同じ dict を
-        保持している可能性があるので、浅いコピーを渡す。
+        **`LlamaCppClient.chat` だけに仕掛けないこと。** 版4までがそうで、
+        クラウド（APIキー）実行では chat を一度も通らないため、討伐前提を外す
+        書き換えが丸ごと落ちていた ― しかも `plan()` 自体が呼ばれないので
+        `missed:` の警告すら出ず、**無音で普通の討伐クエストになる**。
+        `119_` が同じ落とし穴を踏んでいる（TECH.md §5.3 / VERIFICATION.md §2.41）。
+
+        仕掛け先の選択と「1回の推論で1回だけ」はローダ側が持つ。ここは
+        **何をどう書き換えるか**だけを持つ。
         """
-        try:
-            if isinstance(messages, list):
-                decision = plan(messages)
-                if decision is not None:
-                    what, payload = decision
-                    new_messages = []
-                    changed = False
-                    for message in messages:
-                        content = (message.get("content")
-                                   if isinstance(message, dict) else None)
-                        new_content = None
-                        if isinstance(content, str):
-                            if what == "generator":
-                                if GEN_KIND_MARK in content:
-                                    new_content = rewrite_generator(content, payload)
-                            else:
-                                new_content = rewrite_referee_text(
-                                    content, payload[1], summary=payload[2])
-                        if new_content is not None and new_content != content:
-                            replacement = dict(message)
-                            replacement["content"] = new_content
-                            new_messages.append(replacement)
-                            changed = True
-                            audit(what, content, new_content,
-                                  "kind={}".format(payload["key"])
-                                  if what == "generator"
-                                  else "quest={!r}".format(_text(payload[0], 40)))
-                            continue
-                        new_messages.append(message)
-                    if changed:
-                        messages = new_messages
-        except Exception:
-            # 書き換えに失敗してもプロンプトはそのまま送る。討伐クエストとして
-            # 正しく進むだけなので、ここで止めるほうが損害が大きい。
-            ctx.log_exc("mini quest: rewrite pass failed; sending prompt untouched")
-        return orig(self, model, messages, format, *args, **kwargs)
+        decision = plan("\n".join(texts))
+        if decision is None:
+            return None
+        what, payload = decision
+        result = []
+        changed = False
+        for content in texts:
+            new_content = None
+            if what == "generator":
+                if GEN_KIND_MARK in content:
+                    new_content = rewrite_generator(content, payload)
+            else:
+                new_content = rewrite_referee_text(
+                    content, payload[1], summary=payload[2])
+            if new_content is not None and new_content != content:
+                audit(what, content, new_content,
+                      "kind={}".format(payload["key"]) if what == "generator"
+                      else "quest={!r}".format(_text(payload[0], 40)))
+                result.append(new_content)
+                changed = True
+            else:
+                result.append(content)
+        return result if changed else None
+
+    # 書き換えに失敗しても本文はそのまま送られる（`wrap_outgoing` が握る）。
+    # 討伐クエストとして正しく進むだけなので、止めるほうが損害が大きい。
+    llm.wrap_outgoing(ctx, rewrite_outgoing, label="mini quest")
 
     # ------------------------------------------------- 帰還を撤退にさせない
     def referee_result(orig, args, kwargs, site):

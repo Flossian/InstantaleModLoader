@@ -59,7 +59,6 @@ GAME.md §1.3 の方針どおり、**持っている物**で見分ける。`focu
 束ねた監視も次の注入で付け替わる。
 """
 
-import datetime
 import time
 import weakref
 
@@ -99,19 +98,11 @@ SEND_ATTR = "_instantale_focus_on_send"
 
 
 def apply(ctx):
-    log_path = ctx.out_path(LOG_BASENAME)
     state = {"logged": 0, "attempts": [], "standdown": 0.0, "chosen": None}
     warned = set()
     inputs = weakref.WeakKeyDictionary()      # hud -> 入力欄への弱参照
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            # 記録のせいでゲームを落とさない。
-            ctx.log_exc("input focus: write failed")
+    write = ctx.logger(LOG_BASENAME)
 
     def note(text):
         if state["logged"] < MAX_LOG:

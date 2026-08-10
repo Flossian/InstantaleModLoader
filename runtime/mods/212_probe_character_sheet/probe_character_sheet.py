@@ -53,16 +53,9 @@ def apply(ctx):
         ctx.log("scripts.hud.new_hud not loaded; skipping", level="WARN")
         return
 
-    log_path = ctx.out_path(LOG_BASENAME)
     state = {"dumps": 0}
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write(text.rstrip("\n") + "\n")
-        except Exception:
-            # 記録のせいでゲームを落とさない。
-            ctx.log_exc("character sheet probe: write failed")
+    write = ctx.logger(LOG_BASENAME, stamp=False)
 
     def props(widget, names):
         out = []

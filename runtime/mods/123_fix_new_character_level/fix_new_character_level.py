@@ -64,10 +64,9 @@ instantale.py:885   physical_integrity              = get_max_physical_integrity
 既定では**直さず記録だけ**する ― 見えていない経路を推測で書き換えないため。
 """
 
-import datetime
 import sys
 
-from instantale_modloader import frames, ui
+from instantale_modloader import frames, patch, ui
 
 LOG_BASENAME = "new_character_level.log"
 
@@ -85,36 +84,31 @@ MAX_LINES = 200
 
 
 def _bare(func):
-    """包まれる前の素の関数を返す（`__original__` を最下層までたどる）。
+    """包まれる前の素の関数を返す。剥がし方はローダの語彙（`patch.unwrap`）。
 
     他の mod や `214_probe_new_character` が同じ関数を包んでいることがある。
     包まれたものを掴むと、こちらの判定のたびに向こうのログが増える
     （`101_` が同じ理由で剥がしている）。
     """
-    for _ in range(32):
-        deeper = getattr(func, "__original__", None)
-        if deeper is None:
-            return func
-        func = deeper
-    return func
+    return patch.original_of(func)
 
 
 def apply(ctx):
-    log_path = ctx.out_path(LOG_BASENAME)
     state = {"lines": 0, "fixed": 0, "warned_positional": False}
+    append = ctx.logger(LOG_BASENAME)
 
     def write(text):
+        """行数に上限を付けた記録。**上限だけがこの MOD の都合。**
+
+        書き方そのもの（時刻・追記・落としても止めない）はローダに任せる
+        （`ctx.logger`）。上限が要るのは、この MOD がキャラクタ1体ごとに
+        判定を記録するため ― 上限を外すと、大量の NPC を抱えたセーブで
+        ログが埋まる。
+        """
         if state["lines"] >= MAX_LINES:
             return
         state["lines"] += 1
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"),
-                    text.rstrip("\n")))
-        except Exception:
-            # 記録のせいでゲームを落とさない。
-            ctx.log_exc("new character level: write failed")
+        append(text)
 
     functions = sys.modules.get(FUNCTIONS_MODULE)
     if functions is None:

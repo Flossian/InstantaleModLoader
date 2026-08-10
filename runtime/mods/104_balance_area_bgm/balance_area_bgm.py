@@ -67,10 +67,11 @@ mod が最初にワールドを見た時点で既にあったエリアは、集�
 out/bgm.log を見れば分かる。
 """
 
-import datetime
 import os
 import random
 import sys
+
+from instantale_modloader.state import world_key_of_dict
 
 MUSIC_MARKER = "assets/sounds/musics"
 AUDIO_EXT = (".mp3", ".wav", ".ogg", ".flac", ".opus", ".m4a")
@@ -400,25 +401,18 @@ def apply(ctx):
         ctx.log("bgm: no mood folders under {}; skipping".format(root), level="WARN")
         return
 
-    log_path = ctx.out_path("bgm.log")
-
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            ctx.log_exc("bgm: write failed")
+    write = ctx.logger("bgm.log")
 
     def world_key(container):
-        """ワールドを見分けるためのキー。名前が取れなければオブジェクト id で代用する。"""
-        try:
-            name = (container.get("world_data") or {}).get("name")
-            if isinstance(name, str) and name:
-                return name
-        except Exception:
-            pass
-        return "id:{}".format(id(container))
+        """ワールドを見分けるためのキー。名前が取れなければオブジェクト id で代用する。
+
+        **鍵の見方はローダの語彙**（`state.world_key_of_dict`）。ここに写した版は
+        `world_data["name"]` の1鍵しか見ておらず、`world_name` / `title` で
+        名前を持つ世界では毎回 id に落ちていた ― そうなると辞書が作り直される
+        たびに「初見」に戻り、既存エリアの除外がやり直しになる（集計が分断
+        されるだけで書き換えはしないので、壊れる方向ではない）。
+        """
+        return world_key_of_dict(container, "id:{}".format(id(container)))
 
     def areas_of(container):
         """渡されたデータから areas を取り出す。想定した形でなければ None。"""

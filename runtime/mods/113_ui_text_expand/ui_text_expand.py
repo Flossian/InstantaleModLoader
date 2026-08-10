@@ -149,7 +149,6 @@ canvas に線で描く。0〜1 の座標で形を持つので、どの解像度�
 そのときボタンは最後に注入された版の切り替えを呼び続けるので、押しても壊れはしない。
 """
 
-import datetime
 import weakref
 
 from instantale_modloader import frames, ui
@@ -187,13 +186,9 @@ START_EXPANDED = False
 # 広げた枠が窓に占めてよい割合。窓の縁まで詰めない（縁の UI を完全には隠さない）。
 MAX_FILL = 0.98
 
-# 隅と `pos_hint` の対応。縁からわずかに内側へ入れる。
-CORNERS = {
-    "右上": {"right": 0.995, "top": 0.995},
-    "左上": {"x": 0.005, "top": 0.995},
-    "右下": {"right": 0.995, "y": 0.005},
-    "左下": {"x": 0.005, "y": 0.005},
-}
+# 隅と `pos_hint` の対応。ボタンの作り方ごとローダに集約してある
+# （`116_` / `122_` と共有。TECH.md §3.2.3）。
+CORNERS = ui.CORNERS
 
 # 隅ではない置き場所（こちらが座標を入れるもの）と、その余白（px）。
 ON_PORTRAIT = "キャラの上"
@@ -203,7 +198,7 @@ PORTRAIT_GAP = 4.0
 FRAME_INSET = 8.0
 
 # 絵柄に「文字」を選んだときの呼び名。
-AS_TEXT = "文字"
+AS_TEXT = ui.AS_TEXT
 
 # 立ち絵を探すのに木を何段まで降りるか。本文のラベルより深いところに居る
 # （画面下の帯 → 右の入れ物 → その中）。
@@ -245,7 +240,8 @@ ICON_ATTR = "_instantale_expand_icon"
 
 
 def apply(ctx):
-    log_path = ctx.out_path(LOG_BASENAME)
+    upx = ui.upx
+    window_size = ui.window_size
     # 利用者の意思（広げたいか）。画面を作り直されても引き継ぐので、
     # 入れ物ではなくこちらに持つ。入れ物側にあるのは「今その枠が広いか」。
     state = {"expanded": bool(START_EXPANDED), "logged": 0, "ask_game": True,
@@ -254,14 +250,7 @@ def apply(ctx):
     warned = set()
     labels = weakref.WeakKeyDictionary()
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            # 記録のせいでゲームを落とさない。
-            ctx.log_exc("text expand: write failed")
+    write = ctx.logger(LOG_BASENAME)
 
     def note(text):
         if state["logged"] < MAX_LOG:
@@ -538,13 +527,6 @@ def apply(ctx):
                          for c in children[:MAX_MEMBERS])))
             node = parent
         return " ".join(lines)
-
-    def window_size():
-        try:
-            from kivy.core.window import Window
-            return float(Window.width), float(Window.height)
-        except Exception:
-            return 0.0, 0.0
 
     # -- 広げる / 戻す --------------------------------------------------------
     def wanted_size(design):
@@ -863,18 +845,6 @@ def apply(ctx):
             collapse(hud, box, label)
 
     # -- ボタン --------------------------------------------------------------
-    def upx(value):
-        """ゲームの拡縮（`scripts.hud.new_hud:upx`）に合わせる。無ければ素の値。"""
-        import sys
-        module = sys.modules.get("scripts.hud.new_hud")
-        scale = getattr(module, "upx", None) if module is not None else None
-        if callable(scale):
-            try:
-                return float(scale(value))
-            except Exception:
-                pass
-        return float(value)
-
     def button_text():
         if ICON != AS_TEXT:
             return ""         # アイコンで示すので文字は出さない
@@ -1064,14 +1034,6 @@ def apply(ctx):
         def line(*points):
             return [(x, flip(y)) for x, y in points]
 
-        if ICON == "二重山形":
-            return [line((0.22, 0.40), (0.50, 0.66), (0.78, 0.40)),
-                    line((0.22, 0.20), (0.50, 0.46), (0.78, 0.20))]
-        if ICON == "山形":
-            return [line((0.20, 0.34), (0.50, 0.66), (0.80, 0.34))]
-        if ICON == "矢印":
-            return [line((0.50, 0.18), (0.50, 0.82)),
-                    line((0.28, 0.60), (0.50, 0.82), (0.72, 0.60))]
         if ICON == "伸縮":
             # 広げる前は外向き（↕）、広がっているときは内向き。上下反転では
             # 同じ形になるので、こちらは向きを明示して描く。
@@ -1082,83 +1044,31 @@ def apply(ctx):
             return [line((0.50, 0.20), (0.50, 0.80)),
                     line((0.30, 0.62), (0.50, 0.80), (0.70, 0.62)),
                     line((0.30, 0.38), (0.50, 0.20), (0.70, 0.38))]
-        if ICON == "枠":
-            # 四隅のかぎ括弧。広げる前は外を向き、広がっているときは内を向く。
-            if expanded:
-                return [line((0.20, 0.42), (0.42, 0.42), (0.42, 0.20)),
-                        line((0.80, 0.42), (0.58, 0.42), (0.58, 0.20)),
-                        line((0.20, 0.58), (0.42, 0.58), (0.42, 0.80)),
-                        line((0.80, 0.58), (0.58, 0.58), (0.58, 0.80))]
-            return [line((0.20, 0.42), (0.20, 0.20), (0.42, 0.20)),
-                    line((0.80, 0.42), (0.80, 0.20), (0.58, 0.20)),
-                    line((0.20, 0.58), (0.20, 0.80), (0.42, 0.80)),
-                    line((0.80, 0.58), (0.80, 0.80), (0.58, 0.80))]
-        return []
+        # 共有の絵柄（二重山形・山形・矢印・枠）はローダが持つ。
+        return ui.icon_strokes(ICON, expanded)
 
     def paint_icon(button):
         """ボタンにアイコンを描き直す。**変わったときだけ**（毎フレーム描かない）。
 
-        本文は1文字ずつ増えるので塗り直しは何十回も来る。位置・大きさ・向き・
-        絵柄のどれも変わっていなければ、線を引き直す必要は無い。
+        本文は1文字ずつ増えるので塗り直しは何十回も来る。同じ絵なら引き直さない
+        判定はローダ側（`ui.paint_icon`）に集約してある（`116_` / `122_` と共有）。
         """
         if ICON == AS_TEXT:
             return
-        signature = (ICON, state["expanded"], ICON_WIDTH, ICON_ALPHA,
-                     tuple(frames.attr(button, "pos", ()) or ()),
-                     tuple(frames.attr(button, "size", ()) or ()))
-        if frames.attr(button, ICON_ATTR, None) == signature:
-            return
-        try:
-            from kivy.graphics import Color, Line
-        except Exception:
-            # 線が引けない環境（オフライン検証）では文字のままにする。
-            return
-        try:
-            group = button.canvas.after
-            group.clear()
-            x, y = float(button.x), float(button.y)
-            width, height = float(button.width), float(button.height)
-            group.add(Color(1, 1, 1, float(ICON_ALPHA)))
-            for points in strokes(state["expanded"]):
-                flat = []
-                for fx, fy in points:
-                    flat.extend((x + fx * width, y + fy * height))
-                group.add(Line(points=flat, width=upx(ICON_WIDTH),
-                               cap="round", joint="round"))
-            setattr(button, ICON_ATTR, signature)
-        except Exception:
-            ctx.log_exc("text expand: could not draw the icon")
+        ui.paint_icon(button, strokes(state["expanded"]), attr=ICON_ATTR,
+                      key=(ICON, bool(state["expanded"])),
+                      width=ICON_WIDTH, alpha=ICON_ALPHA,
+                      log_exc=lambda msg: ctx.log_exc("text expand: " + msg))
 
     def make_button(hud, label):
-        try:
-            from kivy.uix.button import Button
-        except Exception:
+        """ボタンを1枚作る（背景消し・フォント写し・大きさはローダの作法）。"""
+        button = ui.make_icon_button(
+            text=button_text(), size=BUTTON_SIZE, square=(ICON != AS_TEXT),
+            font_name=frames.text_of(label, "font_name"),
+            pos_hint=(dict(CORNERS.get(BUTTON_CORNER, CORNERS["右上"]))
+                      if BUTTON_CORNER not in PLACEMENTS else {}))
+        if button is None:
             warn_once("button", "kivy Button unavailable; no toggle will be shown")
-            return None
-        height = upx(BUTTON_SIZE)
-        # 文字は横長、アイコンは正方形。
-        width = height if ICON != AS_TEXT else height * 2.0
-        button = Button(text=button_text(), size_hint=(None, None),
-                        size=(width, height),
-                        pos_hint=dict(CORNERS.get(BUTTON_CORNER, CORNERS["右上"]))
-                        if BUTTON_CORNER not in PLACEMENTS else {})
-        # 日本語を出すのでフォントは本文から写す。Kivy の既定（Roboto）には
-        # 日本語が無く、写さないとボタンの文字が豆腐になる。
-        font = frames.attr(label, "font_name")
-        if isinstance(font, str) and font:
-            button.font_name = font
-        button.font_size = height * 0.45
-        if ICON != AS_TEXT:
-            # 背景を消す。`background_normal` を空にしないと、色を透明にしても
-            # ttk 風の既定テクスチャがうっすら残る。
-            for name, value in (("background_normal", ""), ("background_down", ""),
-                                ("background_disabled_normal", ""),
-                                ("background_color", (0, 0, 0, 0)),
-                                ("border", (0, 0, 0, 0))):
-                try:
-                    setattr(button, name, value)
-                except Exception:
-                    pass      # そのプロパティを持たないビルドでも描画は成り立つ
         return button
 
     def host_of(hud):

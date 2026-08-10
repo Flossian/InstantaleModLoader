@@ -196,6 +196,15 @@ class FakeCtx:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
+    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
+    _mod = None
+
+    def logger(self, name, *, tag=None, stamp=True, label=None):
+        import instantale_modloader as _ml
+        return _ml.ModContext.logger(self, name, tag=tag, stamp=stamp,
+                                     label=label)
+
     def state_path(self, *parts):
         path = os.path.join(self.state_dir, *parts)
         os.makedirs(os.path.dirname(path) if os.path.splitext(path)[1]

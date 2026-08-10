@@ -252,8 +252,13 @@ def apply(ctx):
         boxes["wanted"].text = wanted_text(app, character)
         boxes["skills"].text = sheet.list_text(
             sheet.SKILLS_HEADING, sheet.names_of(frames.attr(character, "skills")))
-        traits_box = frames.attr(hud, sheet.TRAITS_BOX)
-        if traits_box is not frames.MISSING:
+        # 既定を None にして「無い」も「None が入っている」も1つの判定で弾く。
+        # 番人だけを見ていた版は、ゲームが箱を作る前（`character_sheet_empty`
+        # が None）に `None.text = ...` を踏んでいた ― `safe=True` がゲームを
+        # 守るので落ちはしないが、そこで降りるため**この後の塗りが全部飛ぶ**。
+        # 同じ関数の他の2箇所は最初から両方見ている（下の `place` / `copy_style`）。
+        traits_box = frames.attr(hud, sheet.TRAITS_BOX, None)
+        if traits_box is not None:
             traits_box.text = sheet.list_text(
                 sheet.TRAITS_HEADING, sheet.names_of(frames.attr(character, "traits")))
 

@@ -54,7 +54,6 @@
 片方だけが残ることはない。
 """
 
-import datetime
 
 from instantale_modloader import ui
 
@@ -115,9 +114,8 @@ FAILED_TEXT = "（帳面は書き換えられなかった）"
 
 #: ここが真の間はボタンを出さない ― 戦闘中・会話中など。「手が空いているか」
 #: （テキストの流し込み中・ポップアップが開いている）は `ui.busy_signals` 側。
-BUSY_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle",
-              "in_conversation", "in_free_input", "in_action_in_conversation",
-              "in_shopping")
+# ここが真の間は選択肢を足さない。表はローダが持つ（`902_` と共有）。
+BUSY_FLAGS = ui.BUSY_FLAGS
 
 #: 施設の選択肢だと見なす目印。**文字列ではなく spec のクラス名で見る。**
 #: 施設には必ず出口（`MovePhaseManager`）があるので、これが1つも無い画面は
@@ -125,12 +123,7 @@ BUSY_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle",
 FACILITY_MARK = "MovePhaseManager"
 
 
-def money(value):
-    """金額の表示。3桁ごとに区切る。"""
-    try:
-        return "{:,}".format(int(value))
-    except (TypeError, ValueError):
-        return str(value)
+money = ui.money          # 金額の表示（`902_` と共有）
 
 
 def price_for(wanted):
@@ -142,14 +135,7 @@ def price_for(wanted):
 
 def apply(ctx):
     log_path = ctx.out_path(LOG_BASENAME)
-
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            ctx.log_exc("office pardon: write failed")
+    write = ctx.logger(LOG_BASENAME)
 
     screen = ui.Screen(ctx, write, tag="office pardon", mark=MARK)
 

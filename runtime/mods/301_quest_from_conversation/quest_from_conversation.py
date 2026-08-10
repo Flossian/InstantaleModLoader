@@ -62,10 +62,7 @@ GAME.md §3「ゲーム自身のヘルパを探す」と同じ手口。
 繋がるのは同じファイルを読むことによってで、ファイルが無ければ何も添えない。
 """
 
-import datetime
-import json
 import os
-import re
 import sys
 import time
 
@@ -188,10 +185,10 @@ NPC_MEMORY_CHARS = 800
 # 自前ボタンに持たせる無害な spec は `ui.SAFE_CLS`
 # （`JustSetButtonToNormalPhase`）。mod 無しで押されても選択肢が戻るだけ。
 
-
-# ファイル名に使えない文字（Windows 禁則＋制御文字）。
-# **`311_` の `safe_world_filename` と同じ規則でなければ引けない。**
-_UNSAFE_FILENAME = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
+# 世界ごとのファイル名は `instantale_modloader.state.world_filename` が作る。
+# ここに同じ規則を写さないこと ― `311_` と1文字でも違うと**同じファイルを
+# 指せなくなる**（読む側と書く側で別の名前になる）。写した版が実際にずれた
+# 経緯は state.py の docstring と TECH.md §3.2.3 にある。
 
 
 def _text(value, limit=200):
@@ -222,13 +219,7 @@ def apply(ctx):
     }
     INJECT_TTL = 300.0
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            ctx.log_exc("quest offer: write failed")
+    write = ctx.logger(LOG_BASENAME)
 
     # 選択肢・spec の読み取り・画面の塗り替え・会話の閉じ方は
     # `instantale_modloader.ui` に集約してある（`300_` / `302_` と共有）。
@@ -448,11 +439,13 @@ def apply(ctx):
             return ""
         path = os.path.join(ctx.state_dir, NPC_MEMORY_DIRNAME,
                             world_filename(world_key(app)))
-        try:
-            with open(path, "r", encoding="utf-8") as fh:
-                data = json.load(fh)
-        except Exception:
-            return ""       # 無い・読めない・壊れている。どれも「添えない」
+        # 読みは `ctx.read_json` を通す。結果はどちらも「添えない」で同じだが、
+        # 「無い（`311_` を入れていない・初対面）」は黙って、「**在るのに
+        # 読めない**」は記録してから倒れる ― 人物像が添わらない原因が
+        # 「記録がまだ無い」のか「読めなかった」のかを後から見分けられる
+        # （`ctx.read_json` はディレクトリを作らないので、相手を切っている人の
+        # `state/` に空のフォルダを置く心配もない）。
+        data = ctx.read_json(path, None)
         record = data.get(str(npc_id)) if isinstance(data, dict) else None
         if not isinstance(record, dict):
             return ""
@@ -477,14 +470,17 @@ def apply(ctx):
         bucket = data.setdefault(world_key(app), {})
         bucket[str(quest_id)] = {"npc_id": str(npc_id) if npc_id else "",
                                  "npc_name": npc_name or ""}
-        try:
-            # 途中で落ちても控えが壊れない書き方（`ctx.write_json`）。素朴に
-            # open(..., "w") で書くと、依頼の出所が丸ごと読めなくなる。
-            ctx.write_json(clients_path, data)
+        # 途中で落ちても控えが壊れない書き方（`ctx.write_json`）。素朴に
+        # open(..., "w") で書くと、依頼の出所が丸ごと読めなくなる。
+        # **失敗は例外ではなく戻り値で返る**（TECH.md §3.11.1）ので、try で
+        # 囲っても何も捕まらない ― 囲っていた版は、書けなかった回にも
+        # `remembered client` の成功ログを出していた。
+        if ctx.write_json(clients_path, data):
             write("remembered client: quest {!r} <- {!r} ({})".format(
                 quest_id, npc_name, npc_id))
-        except Exception:
-            ctx.log_exc("quest offer: cannot write {}".format(clients_path))
+        else:
+            write("WARN could not remember the client of quest {!r} "
+                  "(the offer will look like nobody's)".format(quest_id))
 
     def quest_belongs_to(app, quest_id, npc_id, npc_name):
         """この依頼はこの NPC のものか。
@@ -737,7 +733,9 @@ def apply(ctx):
             ctx.log_exc("quest offer: generate_random_quest failed")
             finish(None)
             return
-        added = sorted(set(quest_ids(app)) - before)
+        # **数として並べる。** 素の sorted は辞書順なので "10" < "9" になり、
+        # 1回の生成で複数増えた回だけ「いちばん新しい id」を取り違える。
+        added = sorted(set(quest_ids(app)) - before, key=ui.id_sort_key)
         write("generate: took {:.1f}s; new quest ids={}".format(
             time.monotonic() - started, added))
         finish(added[-1] if added else None)
@@ -828,54 +826,17 @@ def apply(ctx):
         return result
 
     # ---------------------------------------------- quests へのアクセス（両形式）
-    # クエストは2箇所にある（206_ の計測）:
-    #   app.world.quests        {id: Quest インスタンス}   ゲームが遊ぶときに読む
-    #   app.world_dict['quests'] {id: dict}                セーブに出るのはこちら
-    # 読むのはどちらでもよいが、**書くときは必ず両方**。片方だけ直すと
-    # 画面の表示と保存内容がずれる。
-    def quest_stores(app):
-        stores = []
-        quests = getattr(getattr(app, "world", None), "quests", None)
-        if isinstance(quests, dict):
-            stores.append(quests)
-        world_dict = getattr(app, "world_dict", None)
-        if isinstance(world_dict, dict) and isinstance(world_dict.get("quests"), dict):
-            stores.append(world_dict["quests"])
-        return stores
-
-    def quest_ids(app):
-        """両方の合併。どちらに登録されるか決め打ちしないため。"""
-        seen = []
-        for store in quest_stores(app):
-            for qid in store:
-                if str(qid) not in seen:
-                    seen.append(str(qid))
-        return seen
-
-    def quest_of(app, quest_id):
-        for store in quest_stores(app):
-            if quest_id in store:
-                return store[quest_id]
-        return None
-
-    def quest_value(quest, name, default=None):
-        if isinstance(quest, dict):
-            return quest.get(name, default)
-        return getattr(quest, name, default)
+    # クエストは2箇所にある（`206_` の計測）。読むのはどちらでもよいが、
+    # **書くときは必ず両方**。その作法はローダに集約してある
+    # （`ui.quest_stores` ほか。`305_` / `307_` と共有。TECH.md §3.2.3）。
+    quest_stores = ui.quest_stores
+    quest_ids = ui.quest_ids
+    quest_of = ui.quest_of
+    quest_value = ui.quest_value
 
     def set_quest_value(app, quest_id, name, value):
-        """Quest インスタンスと world_dict の dict、両方に書く。"""
-        for store in quest_stores(app):
-            target = store.get(quest_id)
-            if target is None:
-                continue
-            try:
-                if isinstance(target, dict):
-                    target[name] = value
-                else:
-                    setattr(target, name, value)
-            except Exception:
-                ctx.log_exc("quest offer: cannot set {} on {!r}".format(name, quest_id))
+        ui.set_quest_value(app, quest_id, name, value,
+                           on_error=lambda msg: ctx.log_exc("quest offer: " + msg))
 
     # ================================================================ フック
     def has_offer_button(buttons):
@@ -1089,7 +1050,7 @@ def apply(ctx):
                         quest_difficulty, *args, **kwargs)
 
         addition = (
-            "\n\n【この依頼の発端 — 最優先で反映すること】\n"
+            "\n\n【この依頼の発端 ― 最優先で反映すること】\n"
             "以下は依頼人「{npc}」が冒険者に持ちかけた会話の記録である。\n"
             "この会話で持ち出された困り事・頼み事をそのまま依頼の中身にすること。\n"
             "会話に出てこない別件を新たに作ってはならない。\n"

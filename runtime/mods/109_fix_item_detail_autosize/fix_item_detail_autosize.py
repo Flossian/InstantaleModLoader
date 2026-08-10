@@ -68,11 +68,10 @@
 この場合だけは今までどおり末尾が切れるが、**窓に入る限りは全部出る**。
 """
 
-import datetime
 import sys
 import weakref
 
-from instantale_modloader import frames
+from instantale_modloader import frames, ui
 
 LOG_BASENAME = "item_detail_autosize.log"
 
@@ -92,6 +91,10 @@ RATIO_SLACK = 1.0
 # 上から並ぶ順。実測の top（1105 > 1055 > 830）がこの順だった。
 LABEL_NAMES = ("name_label", "attributes_label", "desc_label")
 
+# 測った高さの控えの上限。アイテムを見て回ると増えるので、際限なく持たない
+# （溢れたら丸ごと捨てて測り直す。控えは速さのためだけで、正しさには要らない）。
+MEASURE_CACHE_MAX = 256
+
 
 def apply(ctx):
     new_hud = sys.modules.get("scripts.hud.new_hud")
@@ -102,19 +105,11 @@ def apply(ctx):
         ctx.log("ItemDetailBox not found; skipping", level="WARN")
         return
 
-    log_path = ctx.out_path(LOG_BASENAME)
     # 箱ごとの設計値。箱が捨てられたら一緒に消えるよう弱参照で持つ。
     designs = weakref.WeakKeyDictionary()
     logged = set()
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            # 記録のせいでゲームを落とさない。
-            ctx.log_exc("item detail autosize: write failed")
+    write = ctx.logger(LOG_BASENAME)
 
     # -- 対象の取り出し ----------------------------------------------------
     def labels_of(box):
@@ -131,8 +126,14 @@ def apply(ctx):
         return out
 
     def text_width(label):
-        """ラベルの折り返し幅。ここはゲームが決めた値をそのまま使う。"""
-        size = frames.attr(label, "text_size")
+        """ラベルの折り返し幅。ここはゲームが決めた値をそのまま使う。
+
+        既定を None にするのは、`frames.attr` の番人が**文字列**だから ―
+        `text_size` を持たない相手では `"<missing>"[0]` が `"<"` になり、
+        幅として通ってしまう（呼び側の `float()` が ValueError で落ち、
+        広い except に吸われて MOD が黙って何もしなくなる）。
+        """
+        size = frames.attr(label, "text_size", None)
         try:
             width = size[0]
         except Exception:
@@ -201,25 +202,37 @@ def apply(ctx):
         return fresh
 
     # -- 文字が要求する高さ ------------------------------------------------
+    #: 測った結果の控え。`(本文, 幅, 書体の大きさ) -> 高さ`。
+    measured = {}
+
     def needed_height(label, width):
         """`(幅, None)` で折り返させて、出来上がったテクスチャの高さを読む。
 
         測り終えたら `text_size` は呼び出し側が入れ直す。ここでは戻さない
         （どのみち直後に確定値を入れるので、二度手間になる）。
+
+        **同じ本文を同じ幅で測り直さない。** `update_content` はマウスが動く
+        たびに走り、そのたびにラベル3枚 × 幅の候補ぶん `texture_update()` を
+        呼ぶことになる。テクスチャの作り直しはフレーム時間に乗るので、
+        フックの中で測っている限り見えない（`112_` / `117_` が同じ形で
+        打ち出しを 1.6 倍遅くしていた。VERIFICATION.md §2.34）。
         """
+        key = (frames.text_of(label), round(float(width), 1),
+               frames.attr(label, "font_size", None))
+        if key in measured:
+            return measured[key]
         label.text_size = (width, None)
         label.texture_update()
         try:
-            return float(label.texture_size[1])
+            height = float(label.texture_size[1])
         except Exception:
             return 0.0
+        if len(measured) > MEASURE_CACHE_MAX:
+            measured.clear()
+        measured[key] = height
+        return height
 
-    def window_size():
-        try:
-            from kivy.core.window import Window
-            return float(Window.width), float(Window.height)
-        except Exception:
-            return 0.0, 0.0
+    window_size = ui.window_size
 
     # -- 当てる --------------------------------------------------------------
     def measure(design, labels, box_width):

@@ -37,10 +37,9 @@
 残っていたフラグだけが効いている状態なので、これは残骸の後始末にあたる。
 """
 
-import datetime
 import sys
 
-from instantale_modloader import frames
+from instantale_modloader import frames, ui
 
 LOG_BASENAME = "battle_bgm.log"   # 106_ / 207_ と同じ時系列で読めるようにする
 
@@ -61,30 +60,9 @@ CLEAR_ON_BOOT = True
 
 def apply(ctx):
     log_path = ctx.out_path(LOG_BASENAME)
+    write = ctx.logger(LOG_BASENAME, tag="[FLAGFIX]")
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] [FLAGFIX] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            ctx.log_exc("battle flag: write failed")
-
-    def find_app():
-        main = sys.modules.get("__main__")
-        cls = getattr(main, "InstantaleApp", None)
-        try:
-            from kivy.app import App
-            app = App.get_running_app()
-            if app is not None and (cls is None or isinstance(app, cls)):
-                return app
-        except Exception:
-            pass
-        if main is not None and isinstance(cls, type):
-            for value in vars(main).values():
-                if isinstance(value, cls):
-                    return value
-        return None
+    find_app = ui.find_app     # 走っている app の探し方はローダの語彙
 
     def clear_stale(app, where):
         """立ったままのフラグを下ろす。ゲームが既に下ろしていれば何もしない。"""

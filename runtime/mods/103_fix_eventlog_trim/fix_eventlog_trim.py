@@ -21,7 +21,6 @@
 しかもターン数が KEEP_TURNS を超えているときだけ。
 """
 
-import datetime
 
 SEPARATOR = "〈プレイヤーの入力〉"
 KEEP_TURNS = 3            # フィールドイベントは仕様上3ターンで決着する
@@ -62,18 +61,11 @@ def apply(ctx):
         ctx.log("scripts.llm.llm_manager not loaded; skipping", level="WARN")
         return
 
-    log_path = ctx.out_path("prompt_bloat.log")
     state = {"trims": 0}
 
-    def write(text: str) -> None:
-        # 102_fix_prompt_dedup.py と同じファイルに書く。
-        # プロンプトが膨らむ原因は複数あるので、1本にまとめた方が読みやすい。
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            ctx.log_exc("eventlog: write failed")
+    # 102_fix_prompt_dedup.py と同じファイルに書く。
+    # プロンプトが膨らむ原因は複数あるので、1本にまとめた方が読みやすい。
+    write = ctx.logger(LOG_BASENAME)
 
     installed = 0
     for fn_name in TARGETS:

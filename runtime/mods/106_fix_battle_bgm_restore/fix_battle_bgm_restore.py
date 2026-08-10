@@ -44,9 +44,10 @@ BGM は pygame の `Sound` オブジェクトで、`play_music_from_src(app, src
 走る。GAME.md §2.1）。
 """
 
-import datetime
 import sys
 import time
+
+from instantale_modloader import ui
 
 LOG_BASENAME = "battle_bgm.log"      # 207_ の計測と同じログに時系列で並べる
 
@@ -88,13 +89,7 @@ def apply(ctx):
         "mixer_absent_logged": False,
     }
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] [BGMFIX] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            ctx.log_exc("bgm restore: write failed")
+    write = ctx.logger(LOG_BASENAME, tag="[BGMFIX]")
 
     def short(value):
         if not isinstance(value, str) or not value:
@@ -114,21 +109,7 @@ def apply(ctx):
         except Exception:
             return False
 
-    def find_app():
-        main = sys.modules.get("__main__")
-        cls = getattr(main, "InstantaleApp", None)
-        try:
-            from kivy.app import App
-            app = App.get_running_app()
-            if app is not None and (cls is None or isinstance(app, cls)):
-                return app
-        except Exception:
-            pass
-        if main is not None and isinstance(cls, type):
-            for value in vars(main).values():
-                if isinstance(value, cls):
-                    return value
-        return None
+    find_app = ui.find_app     # 走っている app の探し方はローダの語彙
 
     def in_battle(app):
         return any(getattr(app, flag, False) for flag in BATTLE_FLAGS)

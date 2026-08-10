@@ -57,7 +57,11 @@ SDK の更新で取りこぼすので、1本に絞ってある。`body` は送�
 SOURCE_MODEL = "gpt-5.5"
 
 # 実際に送る名前。空にするか SOURCE_MODEL と同じにすると何もしない。
-TARGET_MODEL = "gpt-5.6-terra"
+# **`mod.json` の "default" と揃えること**（`tools/check_mods.py` が AST で
+# 突き合わせる。TECH.md §3.8.3）。宣言のある設定は `config.resolve()` が
+# mod.json 側から組み立ててモジュールへ書き込むので、ここがずれていると
+# **GUI に出る値とコードを読んで分かる値が食い違う**（効くのは mod.json の側）。
+TARGET_MODEL = "gpt-5.6-luna"
 
 # 差し替えをログに出す回数。毎回出すとログが埋まるので先頭だけ。
 LOG_LIMIT = 3

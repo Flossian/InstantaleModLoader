@@ -67,7 +67,6 @@ TECH.md §3.2.3「写して回るものが出たら、それはローダの語�
 """
 
 import collections
-import datetime
 import hashlib
 import os
 import random
@@ -613,15 +612,7 @@ def apply(ctx):
     mod_dir = ctx.mod_dir
     seen = Seen()
 
-    def write(text):
-        # DEDUP / EVENTLOG / COMPACT と同じファイルに出す。置換と圧縮のどちらが
-        # 先に効いたのかを時系列で読めるようにするため。
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            ctx.log_exc("replace: write failed")
+    write = ctx.logger("prompt_bloat.log")
 
     def report(line, force=False):
         if force or LOG_RULES:

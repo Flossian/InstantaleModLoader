@@ -173,7 +173,6 @@ id の列が同じなら何もしない。
 ゲームのプロセスに残る（TECH.md §3.10 の「戻らないもの」）。
 """
 
-import datetime
 import weakref
 
 from instantale_modloader import frames, ui
@@ -262,7 +261,6 @@ WINDOW_ATTR = "_instantale_party_on_resize"
 
 
 def apply(ctx):
-    log_path = ctx.out_path(LOG_BASENAME)
     # 利用者の意思（広げたいか）。画面を作り直されても引き継ぐので、
     # 帯ではなくこちらに持つ。帯側にあるのは「今その帯が何行か」。
     state = {"expanded": bool(START_EXPANDED), "logged": 0, "synced": False,
@@ -271,13 +269,7 @@ def apply(ctx):
              "hud": None, "fields": None, "anchor": None}
     warned = set()
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            ctx.log_exc("party expand: write failed")   # 記録でゲームを落とさない
+    write = ctx.logger(LOG_BASENAME)
 
     def note(text):
         if state["logged"] < MAX_LOG:
@@ -1026,10 +1018,15 @@ def apply(ctx):
             note("button placed by the panel at {}".format(where))
 
     def font_of(hud):
-        """ボタンの文字に使うフォント。**本文のラベルから写す**（豆腐にしない）。"""
-        label = frames.attr(hud, "text_display")
-        name = frames.attr(label, "font_name") if label is not frames.MISSING else None
-        return name if isinstance(name, str) and name else None
+        """ボタンの文字に使うフォント。**本文のラベルから写す**（豆腐にしない）。
+
+        `frames.text_of` で受けるのは、`hud.text_display` が **None** のとき
+        `frames.attr(None, "font_name")` が文字列の番人（`"<missing>"`）を
+        返し、`isinstance(str)` を素通りして**フォント名として代入されて
+        しまう**ため（TECH.md §5.2）。取れなければ Kivy の既定に任せる。
+        """
+        name = frames.text_of(frames.attr(hud, "text_display", None), "font_name")
+        return name or None
 
     def ensure_button(hud):
         """ボタンを1枚だけ足す。既にあれば押下先だけ今の注入へ付け替える。"""

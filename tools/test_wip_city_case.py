@@ -383,6 +383,15 @@ class FakeCtx:
         os.makedirs(OUT_DIR, exist_ok=True)
         return os.path.join(OUT_DIR, name)
 
+    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
+    _mod = None
+
+    def logger(self, name, *, tag=None, stamp=True, label=None):
+        import instantale_modloader as _ml
+        return _ml.ModContext.logger(self, name, tag=tag, stamp=stamp,
+                                     label=label)
+
     def state_path(self, name):
         """永続データの置き場。本番と同じく out/ とは**別のフォルダ**にする。"""
         os.makedirs(STATE_DIR, exist_ok=True)
@@ -395,6 +404,13 @@ class FakeCtx:
         return decorator
 
     patch = wrap
+
+    #: 注入し直されたか。検証では常に「今の世代が現役」。真を入れると、
+    #: 書き上がった素材を捨てて降りる側（`compose`）を通せる。
+    superseded_now = False
+
+    def superseded(self):
+        return self.superseded_now
 
     def log(self, *args, **kwargs):
         return None
@@ -2004,11 +2020,25 @@ sent = {}
 
 def capture(manager_name, message, structure, **kwargs):
     sent["manager"], sent["message"] = manager_name, message
+    sent["timeout"] = kwargs.get("timeout")
     return None
 
 
-writer.ask(types.SimpleNamespace(create_model=lambda *a, **k: None,
-                                 send_request=capture), "頼み文", None)
+# 送信口はローダ（`llm.ask`）が `llm_manager` の別名から引く。プロバイダを
+# 名指ししないので、ここでもその別名を置いて確かめる（TECH.md §5.3）。
+_manager_name = "scripts.llm.llm_manager"
+_saved_manager = sys.modules.get(_manager_name)
+_manager = types.ModuleType(_manager_name)
+_manager.send_request = capture
+_manager.create_model = lambda *a, **k: None
+sys.modules[_manager_name] = _manager
+try:
+    writer.ask(ctx, "頼み文", object(), timeout=12.0)
+finally:
+    if _saved_manager is None:
+        sys.modules.pop(_manager_name, None)
+    else:
+        sys.modules[_manager_name] = _saved_manager
 check("**messages はリストで渡す**（文字列を渡すとゲーム内で TypeError）",
       isinstance(sent.get("message"), list), type(sent.get("message")).__name__)
 check("中身は role/content の形",
@@ -2016,6 +2046,8 @@ check("中身は role/content の形",
       and sent["message"][0].get("role") == "user"
       and sent["message"][0].get("content") == "頼み文",
       sent.get("message"))
+check("timeout を必ず渡す（返らない推論で止まらないため）",
+      sent.get("timeout") == 12.0, sent.get("timeout"))
 check("既にリストならそのまま通す",
       writer.as_messages([{"role": "user", "content": "x"}])
       == [{"role": "user", "content": "x"}])
@@ -2282,6 +2314,29 @@ try:
           case_mod.is_active(casea), casea.get("stage"))
     check("**返ってきたらボタンが戻る**",
           appa.is_button_enabled is True, appa.is_button_enabled)
+
+    # --- **注入し直されたら書き上がった素材を捨てる** ---
+    # 書き手のスレッドは LLM を待つあいだ最長 `LLM_TIMEOUT + BUSY_GRACE`
+    # 生き残る。その間に注入し直されると、**古い世代の続き**が新しい世代と
+    # 同じ `state/city_case.json` に書き込んでしまう（TECH.md §3.6.1）。
+    ctxo = FakeCtx()
+    clean_record(ctxo)
+    mod.apply(ctxo)
+    appo, _po = fresh_world()
+    refresho = install(ctxo, appo)
+    appo.facility_screen()
+    refresho()
+    appo.is_button_enabled = True
+    ctxo.superseded_now = True          # 押した後に新しい注入が来た体
+    press(ctxo, appo, mod.START_LABEL)
+    for _ in range(6):
+        time.sleep(0.05)
+        clock.run_due(upto=0)
+    caseo = case_mod.load(ctxo.state_path(mod.RECORD_BASENAME))
+    check("**古い世代は控えに書かない**（新しい注入の側を上書きしない）",
+          not case_mod.is_active(caseo), caseo.get("stage"))
+    ctxo.superseded_now = False
+
 
     # --- **返ってこなくても操作を返す** ---
     # `send_request` が固まったときに押せない画面のまま放置しないための網。
@@ -2816,6 +2871,24 @@ for key, spec in manifest.get("settings", {}).items():
     check("既定値が一致: {}".format(key),
           getattr(fresh, key, object()) == spec.get("default"),
           (getattr(fresh, key, None), spec.get("default")))
+
+print("\n[世界の鍵] ロード直後でも引ける")
+# **ロード直後は `app.world` がまだ組み上がっていない**（世界名はセーブ側の
+# `world_dict["world_data"]` にしかない）。`app.world` の属性しか見ない版は
+# ここで空文字を返し、控えの世界照合と後始末が黙って素通りしていた。
+_loading = types.SimpleNamespace(
+    world=None, world_dict={"world_data": {"world_name": "灰の街"}})
+check("`app.world` がまだ無くてもセーブ側から引ける",
+      world_mod.world_name(_loading) == "灰の街",
+      world_mod.world_name(_loading))
+_running = types.SimpleNamespace(
+    world=types.SimpleNamespace(name="鉄錆の town"), world_dict={})
+check("走っている世界は今までどおり `app.world` から引ける",
+      world_mod.world_name(_running) == "鉄錆の town",
+      world_mod.world_name(_running))
+check("どちらからも引けなければ空文字（＝紐付けない）",
+      world_mod.world_name(types.SimpleNamespace(world=None, world_dict={})) == "",
+      world_mod.world_name(types.SimpleNamespace(world=None, world_dict={})))
 
 print("\n[ログ] 何が起きたか残る")
 log_path = ctx.out_path(mod.LOG_BASENAME)

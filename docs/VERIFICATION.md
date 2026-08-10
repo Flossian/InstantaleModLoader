@@ -473,7 +473,7 @@ python tools/test_npc_profile_memory.py        # 311_  220件
 python tools/test_shop_restock.py              # 312_  26件
 python tools/test_event_ability_check.py       # 313_  65件
 python tools/test_patch_registry.py            # ローダ本体（世代・設定・デバッグモード）  154件
-python tools/test_state.py                     # state/ の住所と壊れない書き込み          51件
+python tools/test_state.py                     # state/ の保存先の決め方と壊れない書き込み 51件
 python tools/test_recon_archive.py             # 000_ リコンの退避                        34件
 ```
 

@@ -14,7 +14,6 @@ llm_manager はサマライザ5種とファシリテータ4種を公開して
 浮かび上がる。
 """
 
-import datetime
 import sys
 
 from instantale_modloader.frames import format_locals, repr_value
@@ -35,20 +34,13 @@ TARGETS = (
 
 
 def apply(ctx):
-    module = sys.modules.get(MODULE)
-    if module is None:
-        ctx.log("{} not loaded; skipping".format(MODULE), level="WARN")
-        return
+    # **未 import でも降りない。** `scripts.llm.llm_manager` は最初の LLM
+    # リクエストまで import されない（TECH.md §3.4）。ここで早期 return すると
+    # フックが1本も登録されず、**保留の見張りが立たない** ― 動くかどうかが
+    # 「他の MOD が同じモジュールを保留してくれるか」に依存する。`required=False`
+    # で先に登録しておけば、現れた時点でローダが当て直す（`209_` の形）。
 
-    log_path = ctx.out_path("probes.log")
-
-    def write(text: str) -> None:
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            ctx.log_exc("summarizer probe: write failed")
+    write = ctx.logger("probes.log")
 
     def describe_args(name, args, kwargs):
         """シーケンス系の引数だけを拾い、型と長さを記録する。

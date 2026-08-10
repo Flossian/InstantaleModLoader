@@ -58,7 +58,7 @@ import sys
 import threading
 import time
 
-from instantale_modloader import frames, ui
+from instantale_modloader import frames, llm, ui
 from instantale_modloader.state import world_key
 
 LOG_BASENAME = "npc_memory.log"
@@ -78,8 +78,7 @@ SEND_TARGETS = (
     "scripts.llm.llm_manager:send_request",
     "scripts.llm.llm_manager:send_request_with_no_structure",
 )
-ALIAS_POLL_SECONDS = 5.0      # 別名の見張りの間隔（`111_` v5 と同じ）
-ALIAS_WATCH_SECONDS = 3600.0  # 1時間で諦める（同上）
+# 別名の見張りの間隔と諦める時刻はローダが持つ（`llm.ALIAS_*`）。
 
 # NPC 側で写す項目。前5つが「会話で増えるかもしれない」側、後2つは
 # 「世界生成で決まり増えない」とされる側（311_ の前提の裏取り）。
@@ -158,7 +157,9 @@ def one_line(text, limit=160):
     """抜粋を1行に畳む。改行は見た目で分かる形に置き換える。"""
     if not isinstance(text, str):
         text = str(text)
-    text = text.replace("\r", "").replace("\n", "⏎")
+    # 改行は見える印に置き換える（1レコード1行を保つため）。**cp932 に入る
+    # 文字を使う** ― ログを cp932 の端末やエディタで開く人が居る（§6.2）。
+    text = text.replace("\r", "").replace("\n", "\n")
     return text if len(text) <= limit else text[:limit] + "…"
 
 
@@ -243,8 +244,7 @@ def duplicated_lines(joined):
 
 
 def apply(ctx):
-    log_path = ctx.out_path(LOG_BASENAME)
-    log_lock = threading.Lock()
+    # 錠は `ctx.logger` が中に持っている（この計測は別スレッドからも書く）。
 
     #: `npc` は "世界名:npc_id" -> {"name", "fields": {...}}。**鍵に世界名を
     #: 含める。** id だけで引くと、セーブを切り替えたときに別世界の別人を
@@ -260,13 +260,7 @@ def apply(ctx):
     state = {"npc": {}, "by_thread": {}, "in_conv": None, "sends": 0,
              "last_conv_call": None, "last_resolver": None, "last_world": None}
 
-    def write(text):
-        try:
-            with log_lock:
-                with open(log_path, "a", encoding="utf-8") as fh:
-                    fh.write(text.rstrip("\n") + "\n")
-        except Exception:
-            ctx.log_exc("npc memory probe: write failed")
+    write = ctx.logger(LOG_BASENAME, stamp=False)
 
     def stamp():
         return datetime.datetime.now().isoformat(timespec="milliseconds")
@@ -514,45 +508,11 @@ def apply(ctx):
             return orig(*args, **kwargs)
         return send_probe
 
-    def resolvable(target):
-        try:
-            return ctx.resolve(target)[2] is not None
-        except Exception:
-            return False
-
-    # 居る別名は今すぐ包む。まだ生えていない別名は見張りに回す（`111_` v5 と
-    # 同じ。起動直後の注入では llm_manager に send_request がまだ無い）。
-    unarmed = []
-    for _target in SEND_TARGETS:
-        if resolvable(_target):
-            hook_send(_target)
-        else:
-            unarmed.append(_target)
-
-    if unarmed:
-        def watch_send_alias():
-            deadline = time.monotonic() + ALIAS_WATCH_SECONDS
-            remaining = list(unarmed)
-            while remaining and not ctx.superseded():
-                for target in list(remaining):
-                    if not resolvable(target):
-                        continue
-                    hook_send(target)
-                    remaining.remove(target)
-                    write("[{}] 遅れて仕掛けた: {}（別名が生えた）".format(
-                        stamp(), target))
-                if not remaining:
-                    return
-                if time.monotonic() > deadline:
-                    write("[{}] {} を待つのを諦めた（{}秒）".format(
-                        stamp(), ", ".join(remaining),
-                        int(ALIAS_WATCH_SECONDS)))
-                    return
-                time.sleep(ALIAS_POLL_SECONDS)
-
-        threading.Thread(target=watch_send_alias,
-                         name="213_probe_npcmem_alias_watch",
-                         daemon=True).start()
+    # 別名は初期化時に後から生える。**見張りはローダの語彙**
+    # （`llm.watch_aliases`。`111_` / `119_` が使うのと同じ仕組み）。当て方だけは
+    # こちらが持つ ― あちらは書き換えで、こちらはローカル実行でも生の引数を
+    # 観測したいので、`wrap_outgoing` には乗せられない（TECH.md §5.3）。
+    llm.watch_aliases(ctx, SEND_TARGETS, hook_send, label="npc memory probe")
 
     # ------------------------------------------------------------ 会話の終了
     def after_close(npc_id):

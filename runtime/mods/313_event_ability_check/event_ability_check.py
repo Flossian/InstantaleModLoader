@@ -110,11 +110,10 @@ VERIFICATION.md §2.37。
 見分けられないため。実際に書き込まれた確率は probe 側の `percent` に出る。
 """
 
-import datetime
 import math
 import time
 
-from instantale_modloader import ui
+from instantale_modloader import llm, ui
 
 LOG_BASENAME = "event_roll.log"
 
@@ -391,30 +390,6 @@ def infer_by_keywords(text):
     return ranked[0][0]
 
 
-def as_dict(raw):
-    """返ってきたものを辞書にする。形を決めつけない（`311_` と同じ）。"""
-    if isinstance(raw, dict):
-        return raw
-    for name in ("model_dump", "dict"):
-        method = getattr(raw, name, None)
-        if callable(method):
-            try:
-                got = method()
-            except Exception:
-                continue
-            if isinstance(got, dict):
-                return got
-    if isinstance(raw, str):
-        import json
-        try:
-            got = json.loads(raw)
-        except Exception:
-            return None
-        if isinstance(got, dict):
-            return got
-    return None
-
-
 def clamp_percent(value):
     """確率を 1〜100 に収める。0 と 100 超は渡さない。"""
     return int(max(1, min(100, round(value))))
@@ -429,22 +404,17 @@ def percent_of(credibility):
 def apply(ctx):
     import sys
 
-    module = sys.modules.get("scripts.llm.llm_manager")
-    if module is None:
-        ctx.log("scripts.llm.llm_manager not loaded; skipping", level="WARN")
-        return
+    # **未 import でも降りない。** `scripts.llm.llm_manager` は最初の LLM
+    # リクエストまで import されない（TECH.md §3.4）。ここで早期 return すると
+    # フックが1本も登録されず、**保留の見張りが立たない** ― 動くかどうかが
+    # 「他の MOD が同じモジュールを保留してくれるか」に依存する。`required=False`
+    # で先に登録しておけば、現れた時点でローダが当て直す（`209_` の形）。
 
     log_path = ctx.out_path(LOG_BASENAME)
     state = {"rolls": 0, "unreadable": 0, "coarse": False,
              "free_rolls": 0, "inferred": {}, "no_llm": False}
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            ctx.log_exc("ability check: write failed")
+    write = ctx.logger(LOG_BASENAME)
 
     def install(result_type, value, credibility):
         """説得力を書き込む。端数が通らなければ整数に丸めて入れ直す。
@@ -468,37 +438,28 @@ def apply(ctx):
     def ask_llm(text):
         """6能力値のどれかを1問だけ聞く。使えない・読めないなら None。
 
-        `send_request` は返らないことがある（GAME.md §2.12）。`timeout` を
-        必ず渡し、落ちたら黙って語句の表へ降りる ― マスターAI の応答を
-        止めるほうが害が大きい。
+        呼び方（プロバイダを名指ししない・`timeout` を必ず渡す・返却を辞書に
+        均す）はローダに集約してある（`llm.ask`。`311_` / `902_` と共有。
+        TECH.md §5.3）。ここが持つのは**何を聞くか**だけ。落ちたら黙って
+        語句の表へ降りる ― マスターAI の応答を止めるほうが害が大きい。
         """
-        if not callable(getattr(module, "send_request", None)) or \
-                not callable(getattr(module, "create_model", None)):
+        structure = llm.create_structure(ctx, "ModAbilityForAction",
+                                         {"attribute": (str, ...)},
+                                         label="ability check")
+        if structure is None:
             if not state["no_llm"]:
                 state["no_llm"] = True
                 write("推定を頼む部品が無い（send_request / create_model）。"
                       "語句の表で決める")
             return None
-        try:
-            structure = module.create_model("ModAbilityForAction",
-                                            attribute=(str, ...))
-        except Exception:
-            ctx.log_exc("ability check: cannot build the inference structure")
-            return None
         message = [{"role": "user",
                     "content": INFER_PROMPT.format(text=text[:INFER_TEXT_MAX])}]
-        started = time.monotonic()
-        try:
-            raw = module.send_request(MANAGER_INFER, message, structure,
-                                      max_tokens=32, timeout=INFER_TIMEOUT)
-        except Exception:
-            ctx.log_exc("ability check: {} failed".format(MANAGER_INFER))
-            return None
-        data = as_dict(raw) or {}
+        data = llm.ask(ctx, MANAGER_INFER, message, timeout=INFER_TIMEOUT,
+                       structure=structure, max_tokens=32,
+                       label="ability check", write=write) or {}
         found = normalize_attribute(data.get("attribute"))
-        write("{}: {:.1f}s -> {!r} ({})".format(
-            MANAGER_INFER, time.monotonic() - started,
-            data.get("attribute"), found or "読めず"))
+        write("{}: -> {!r} ({})".format(
+            MANAGER_INFER, data.get("attribute"), found or "読めず"))
         return found
 
     def infer_attribute(text, key=None):

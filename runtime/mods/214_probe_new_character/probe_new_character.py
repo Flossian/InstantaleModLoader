@@ -56,7 +56,7 @@ import os
 import sys
 import time
 
-from instantale_modloader import frames, ui
+from instantale_modloader import frames, patch, ui
 
 LOG_BASENAME = "new_character.log"
 
@@ -79,14 +79,7 @@ def bare(func):
     `__original__` の連鎖を最下層までたどる（連鎖が壊れていても止まるよう上限つき）。
     底に着いたかを推論で決めず、ローダの印が残っていないかで確かめる。
     """
-    depth = 0
-    for _ in range(32):
-        deeper = getattr(func, "__original__", None)
-        if deeper is None:
-            break
-        func, depth = deeper, depth + 1
-    still_ours = any(hasattr(func, mark) for mark in LOADER_MARKS)
-    return func, depth, still_ours
+    return patch.unwrap(func)
 
 # 開始処理の入口。どれかに入ったら「窓」を開け、その間だけ細かく記録する。
 # `load_game_new` が新規で `start_game` が続きから ― とは名前だけでは決められない
@@ -142,7 +135,6 @@ POLL_SECONDS = 2.0
 
 
 def apply(ctx):
-    log_path = ctx.out_path(LOG_BASENAME)
     state = {
         # 窓（開始処理の最中か）。閉じる時刻と、開けた対象の名前。
         "window_until": 0.0,
@@ -156,13 +148,7 @@ def apply(ctx):
         "last": None,
     }
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write(text.rstrip("\n") + "\n")
-        except Exception:
-            # 記録のせいでゲームを落とさない。ここは常に握り潰す。
-            ctx.log_exc("new character probe: write failed")
+    write = ctx.logger(LOG_BASENAME, stamp=False)
 
     def stamp():
         return datetime.datetime.now().isoformat(timespec="milliseconds")

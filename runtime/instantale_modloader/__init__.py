@@ -523,6 +523,61 @@ class ModContext:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
+    def logger(self, name: str, *, tag: str = None, stamp: bool = True,
+               label: str = None):
+        """この MOD 専用のログ関数を作る。`out/<name>` に1行ずつ追記する。
+
+            write = ctx.logger("quest_offer.log")
+            write("offered 3 quest(s)")     # -> [2026-08-10T12:34:56.789] offered ...
+
+        **MOD のログはローダのログ（`ctx.log`）と分ける。** 何が起きたかは
+        その MOD の記録に残したいが、`modloader.log` は全 MOD の共用なので、
+        混ぜると1本を追うのに他の全部を読むことになる。
+
+        | 引数 | |
+        |---|---|
+        | `tag` | 時刻と本文の間に**そのまま**挟む印（区切りの記号も込みで渡す）。`"[FLAGFIX]"` なら `[時刻] [FLAGFIX] 本文`、`"quest-end:"` なら `[時刻] quest-end: 本文` |
+        | `stamp` | 時刻を付けるか。既定 True。自分で時刻を組み立てて渡す記録では False |
+        | `label` | 書けなかったときに `modloader.log` へ出す名前。既定は MOD のフォルダ名 |
+
+        `tag` を逐語にしてあるのは、**既にあるログの見た目を変えないため**。
+        角括弧の形（`[BGMFIX]`）と区切りの形（`quest-end:`）が両方使われていて、
+        どちらも実機の記録として GAME.md / VERIFICATION.md に引用されている。
+        ここで体裁を揃えると、その引用が次のプレイのログと一致しなくなる。
+
+        書けなくても**例外にしない**（`ctx.log_exc` に残して素通り）。呼ぶのは
+        ゲームのスレッドの中で、記録が取れないことよりゲームを巻き込むことの
+        方が困る。ログの追記なので `write_text()` の tmp→replace は通さない
+        （1行ずつ足すだけで、壊れても捨てられる。TECH.md §3.11.1 の表）。
+
+        **`out/` へ書くこと自体に意味がある。** 注入のたびに
+        `tools/logrotate.py` が1世代送るので、1回のプレイぶんだけが残る。
+
+        以前はこの7行が**42本の MOD に写されていた**（時刻付き・印付き・
+        時刻なし・錠付きの4通りに枝分かれした状態で）。写して回るものは
+        ローダの語彙（TECH.md §3.2.3）。
+        """
+        path = self.out_path(name)
+        whose = label or (self._mod or "mod")
+        lock = threading.Lock()
+
+        def write(text):
+            try:
+                line = str(text).rstrip("\n")
+                if tag:
+                    line = "{} {}".format(tag, line)
+                if stamp:
+                    line = "[{}] {}".format(
+                        datetime.datetime.now().isoformat(timespec="milliseconds"),
+                        line)
+                with lock:
+                    with open(path, "a", encoding="utf-8") as fh:
+                        fh.write(line + "\n")
+            except Exception:
+                self.log_exc("{}: write failed".format(whose))
+
+        return write
+
     def state_path(self, *parts: str) -> str:
         """state/ 以下のパスを返す。親ディレクトリは先に作っておく。
 

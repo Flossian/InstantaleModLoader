@@ -16,20 +16,19 @@ BGM を鳴らす口はプロセス内に1つしかない。
 **戦闘曲を鳴らすときに `app.music` を更新し忘れている**だけで症状が説明できる。
 そこで前後の `app.music` を必ず記録する。
 
-呼び出し元は `traceback.extract_stack()` で取る。Nuitka でコンパイルされていても
-フレームは通常どおり積まれる（crash_log.txt が `instantale.py:4033` の形で
-行番号まで出しているのがその証拠）。どの戦闘終了マネージャが曲を戻していて、
-会話経由ではどれが走っていないのかが、そのまま読める。
+呼び出し元は `frames.caller` で取る（**段数では数えない**。TECH.md §6.3）。
+Nuitka でコンパイルされていてもフレームは通常どおり積まれる（crash_log.txt が
+`instantale.py:4033` の形で行番号まで出しているのがその証拠）。どの戦闘終了
+マネージャが曲を戻していて、会話経由ではどれが走っていないのかが、そのまま読める。
 
 この mod は**観測しかしない**。値は変えず、記録に失敗しても本体は必ず呼ぶ。
 """
 
-import datetime
 import os
 import sys
 import threading
-import traceback
 
+from instantale_modloader import frames, ui
 from instantale_modloader.frames import repr_value
 
 LOG_BASENAME = "battle_bgm.log"
@@ -53,34 +52,14 @@ def apply(ctx):
     log_path = ctx.out_path(LOG_BASENAME)
     counts = {}
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            ctx.log_exc("battle bgm probe: write failed")
+    write = ctx.logger(LOG_BASENAME)
 
     def sample(key):
         n = counts.get(key, 0)
         counts[key] = n + 1
         return n < MAX_SAMPLES
 
-    def find_app():
-        main = sys.modules.get("__main__")
-        cls = getattr(main, "InstantaleApp", None)
-        try:
-            from kivy.app import App
-            app = App.get_running_app()
-            if app is not None and (cls is None or isinstance(app, cls)):
-                return app
-        except Exception:
-            pass
-        if main is not None and isinstance(cls, type):
-            for value in vars(main).values():
-                if isinstance(value, cls):
-                    return value
-        return None
+    find_app = ui.find_app     # 走っている app の探し方はローダの語彙
 
     def short_src(value):
         """曲のパスは長いので、末尾2階層だけにして読めるようにする。"""
@@ -130,21 +109,20 @@ def apply(ctx):
             return repr(sound)
 
     def callers():
-        """自分のラッパより手前のフレームを、ファイル名:行 関数名 の形で返す。"""
-        try:
-            stack = traceback.extract_stack()
-        except Exception:
-            return "<stack unavailable>"
-        frames = []
-        # 末尾はこの関数自身とラッパなので落とす。
-        for frame in reversed(stack[:-2]):
-            name = os.path.basename(frame.filename or "?")
-            if name.startswith("207_probe") or name == "patch.py":
-                continue
-            frames.append("{}:{} {}".format(name, frame.lineno, frame.name))
-            if len(frames) >= STACK_DEPTH:
-                break
-        return " <- ".join(frames) if frames else "<no frames>"
+        """自分のラッパより手前のフレームを並べる。
+
+        **段数で数えないこと**（TECH.md §6.3）。この MOD は
+        `BattleEndManager.execute` なども包んでいるので、そこから
+        `play_music_from_src` に到達した呼び出しでは自分のラッパが
+        スタックに載る。以前は末尾2段の決め打ちで落としていて、
+        ファイル名での除外（`startswith("207_probe")`）は**実際のファイル名が
+        `probe_battle_bgm.py`** なので一度も一致していなかった ―
+        つまり効いていたのは段数の決め打ちだけだった。
+
+        `frames.caller` はローダと MOD のフレームを**置き場所**で飛ばすので、
+        何段挟まっても正しい呼び出し元から並ぶ。
+        """
+        return frames.caller(depth=STACK_DEPTH)
 
     # ------------------------------------------------------- 起動時の一発計測
     def snapshot():

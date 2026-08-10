@@ -35,16 +35,7 @@ def apply(ctx):
         ctx.log("__main__ not available; skipping", level="WARN")
         return
 
-    log_path = ctx.out_path("probes.log")
-
-    def write(text: str) -> None:
-        try:
-            import datetime
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            ctx.log_exc("tripwire: write failed")
+    write = ctx.logger("probes.log")
 
     for class_name in WATCH_CLASSES:
         cls = getattr(main, class_name, None)

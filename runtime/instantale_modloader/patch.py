@@ -142,6 +142,45 @@ def unwrap_ours(value: Any) -> Any:
     return value
 
 
+def unwrap(func, *, limit: int = 32):
+    """包む前の**素の関数**まで `__original__` をたどる。
+
+        raw, depth, still_ours = unwrap(functions.get_npc_employ_price)
+
+    | 戻り値 | |
+    |---|---|
+    | `raw` | 最下層の関数 |
+    | `depth` | 剥がした段数（0 なら最初から素） |
+    | `still_ours` | **まだローダの印が残っているか。** 真なら底に着いていない |
+
+    MOD が「本体がまだ壊れているか」を測るときに要る。包まれた関数を総当たり
+    しても確かめられるのは「自分の修正が効いていること」だけで、**修正が
+    もう要らないかは分からない**（`101_` / `123_` / `214_` が同じ理由で剥がす）。
+
+    **1段だけ剥がして済ませないこと。** 同じ対象を2つ以上の MOD が包むのは
+    このローダでは正常な使い方（TECH.md §3.7）なので、層は1枚とは限らない。
+    `still_ours` を見るのは、底に着いたかを推論で決めないため ― ローダは
+    自分が被せたものに必ず印を付ける。
+
+    `limit` は連鎖が壊れていたときに止まるための上限で、剥がし切れなければ
+    `still_ours` が真のまま返る（黙って底だと言わない）。
+    """
+    depth = 0
+    for _ in range(limit):
+        deeper = getattr(func, "__original__", None)
+        if deeper is None:
+            break
+        func, depth = deeper, depth + 1
+    still_ours = any(getattr(func, mark, None) is not None
+                     for mark in _LEGACY_MARKS)
+    return func, depth, still_ours
+
+
+def original_of(func, *, limit: int = 32):
+    """`unwrap()` の関数だけを返す短い形。"""
+    return unwrap(func, limit=limit)[0]
+
+
 # --------------------------------------------------------------------------
 # 対象の解決
 # --------------------------------------------------------------------------

@@ -196,6 +196,15 @@ class FakeCtx:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
+    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
+    _mod = None
+
+    def logger(self, name, *, tag=None, stamp=True, label=None):
+        import instantale_modloader as _ml
+        return _ml.ModContext.logger(self, name, tag=tag, stamp=stamp,
+                                     label=label)
+
     def log(self, msg):
         pass
 
@@ -586,6 +595,56 @@ sys.modules[any_name] = any_mod
 out17 = do_move(hooks)
 check("any_server 経由でセリフが足される", "「奥からどうぞ」" in out17, out17)
 check("any_server が呼ばれる", len(any_calls) == 1, any_calls)
+
+print("18. 名前を知らないプロバイダでもセリフが作れる")
+# Gemini / OpenAI / Claude は `llama_cpp` / `any_server` の2名リストに無い。
+# 名指しの一覧を持っていた版は、これらの環境で毎回空振りしていた。
+clock = install_fake_kivy()
+for stale in list(sys.modules):
+    if stale.startswith("scripts.llm.request_llm_inference_"):
+        sys.modules.pop(stale, None)
+gemini_name = "scripts.llm.request_llm_inference_gemini_test_streaming"
+gemini_mod = types.ModuleType(gemini_name)
+gemini_calls = []
+
+
+def gemini_send(manager_name, message, max_tokens=None, timeout=None):
+    gemini_calls.append((manager_name, message, max_tokens, timeout))
+    return "「ようこそ、旅の方」"
+
+
+gemini_mod.send_request_with_no_structure = gemini_send
+sys.modules[gemini_name] = gemini_mod
+mod, ctx, calls, hooks = setup(mode="narration")
+sys.modules.pop("scripts.llm.request_llm_inference_llama_cpp_completion", None)
+sys.modules[gemini_name] = gemini_mod
+out18 = do_move(hooks)
+check("知らないプロバイダ経由でもセリフが足される",
+      "「ようこそ、旅の方」" in out18, out18)
+check("そのプロバイダが呼ばれる", len(gemini_calls) == 1, gemini_calls)
+check("timeout を必ず渡している",
+      bool(gemini_calls) and gemini_calls[0][3] == mod.LINE_TIMEOUT, gemini_calls)
+
+print("19. llm_manager の別名があればそちらを先に使う")
+# 送信モジュールを名指しせずに済む本筋の経路（GAME.md §2.12）。
+clock = install_fake_kivy()
+manager_name_mod = "scripts.llm.llm_manager"
+manager_mod = types.ModuleType(manager_name_mod)
+manager_calls = []
+
+
+def manager_send(manager_name, message, max_tokens=None, timeout=None):
+    manager_calls.append((manager_name, message, max_tokens, timeout))
+    return "「いらっしゃい」"
+
+
+manager_mod.send_request_with_no_structure = manager_send
+mod, ctx, calls, hooks = setup(mode="narration")
+sys.modules[manager_name_mod] = manager_mod
+out19 = do_move(hooks)
+check("別名経由でセリフが足される", "「いらっしゃい」" in out19, out19)
+check("別名が呼ばれ、送信モジュールは呼ばれない", len(manager_calls) == 1, manager_calls)
+sys.modules.pop(manager_name_mod, None)
 
 print()
 if failures:

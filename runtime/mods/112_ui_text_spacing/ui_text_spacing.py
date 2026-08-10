@@ -63,7 +63,6 @@
 に1回だけ書く。**倍率を決め直すときの根拠がそこにしか無い**ため。
 """
 
-import datetime
 import re
 import weakref
 
@@ -110,7 +109,6 @@ DESIGN_ATTR = "_instantale_line_height"
 def apply(ctx):
     # `scripts.hud.new_hud` が未 import でも自分では降りない。`ctx.wrap` が
     # 保留に積み、モジュールが現れた時点でローダが当て直す（TECH.md §3.5）。
-    log_path = ctx.out_path(LOG_BASENAME)
     # 設計値の控え（ラベルが捨てられたら一緒に消えるよう弱参照で持つ）。
     # 本命はラベル自身に付ける DESIGN_ATTR で、こちらはそれが書けなかったとき用。
     designs = weakref.WeakKeyDictionary()
@@ -120,14 +118,7 @@ def apply(ctx):
     labels = weakref.WeakKeyDictionary()
     state = {"tries": 0, "logged": 0, "warned": False, "pending": False}
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"), text))
-        except Exception:
-            # 記録のせいでゲームを落とさない。
-            ctx.log_exc("text spacing: write failed")
+    write = ctx.logger(LOG_BASENAME)
 
     # -- ラベルかどうか ------------------------------------------------------
     def is_label(widget):

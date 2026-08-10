@@ -67,7 +67,6 @@
 （パーティの増減・解散・引き留めが**1つの時系列で読める**方が切り分けが速い）。
 """
 
-import datetime
 import time
 
 from instantale_modloader import frames
@@ -128,14 +127,7 @@ def apply(ctx):
         "kept": {},
     }
 
-    def write(text):
-        try:
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write("[{}] {}: {}\n".format(
-                    datetime.datetime.now().isoformat(timespec="milliseconds"),
-                    LOG_TAG, text))
-        except Exception:
-            ctx.log_exc("quest-end keep: write failed")
+    write = ctx.logger(LOG_BASENAME, tag=LOG_TAG + ":")
 
     # -------------------------------------------------- 解散の中かどうかを見る
     def watched_managers():
@@ -178,7 +170,7 @@ def apply(ctx):
         if entry is None:
             entry = {"name": name_of(app, member_id), "source": source}
             state["kept"][member_id] = entry
-            write("{!r} ({}) stays in the party — {} {}".format(
+            write("{!r} ({}) stays in the party ― {} {}".format(
                 entry["name"], member_id, source, reason))
         entry["at"] = time.monotonic()
         return entry
