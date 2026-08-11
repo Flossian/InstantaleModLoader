@@ -20,7 +20,7 @@
 # あった main_023 → main_024 では 68 ターゲット増を出せて、退避が無かった
 # main_024 → main_025 では出せなかった、という記録がそのまま残っている）。
 #
-# 退避先は `out/recon_snapshots/main_025_20260809.zip` の形で、走るのは
+# 退避先は `out/recon_snapshots/<版>_YYYYMMDD.zip` の形で、走るのは
 # **ビルドが変わったときだけ**（同じ版を何度走らせても増えない）。見分け方と
 # 「中身の差を引き金にしない」理由は `instantale_modloader/recon.py` の「退避」の節にある。
 BACKUP_PREVIOUS = True

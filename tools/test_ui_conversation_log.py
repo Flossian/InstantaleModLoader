@@ -823,7 +823,7 @@ def run():
 
     # -- 長いログを1枚に入れない ---------------------------------------------
     # Kivy の Label は中身を1枚のテクスチャに焼くので、GPU の上限を超えると
-    # **何も描かれない**（実機で 500 件の窓が空になった。2026-08-10）。
+    # **何も描かれない**（実機で踏んでいる。VERIFICATION.md §3.21）。
     long_app = InstantaleApp(world="ノルン")
     running(long_app)
     forget_store(mod)

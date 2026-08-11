@@ -43,7 +43,7 @@ OUTPUT_FILES = ("summary.txt", "modules.json", "game_modules.txt",
 #: （zip 自身が何の版のものか、開ければ分かる）。
 BUILD_NAME = "build.json"
 
-#: 退避先。`out/recon_snapshots/main_025_20260809.zip` の形で溜まる。
+#: 退避先。`out/recon_snapshots/<版>_YYYYMMDD.zip` の形で溜まる。
 SNAPSHOT_DIR_NAME = "recon_snapshots"
 
 
@@ -432,11 +432,12 @@ def _digest(path: str) -> str | None:
 
 
 def _snapshot_name(recon_dir: str, old: dict) -> str:
-    """退避の名前。`main_025_20260809` の形。
+    """退避の名前。`<版>_YYYYMMDD` の形。
 
-    日付は**退避するリコンを取った日**で、今日ではない。8/05 に取ったものを
-    8/09 の更新で退避するなら `..._20260805` でなければ、後から並べたときに
-    「いつのゲームを見たダンプなのか」が分からなくなる。
+    日付は**退避するリコンを取った日**で、今日ではない。更新前に取ったダンプを
+    更新後に退避するなら、名前に入るのは取った日のほうでなければならない。
+    そうしないと、後から並べたときに「いつのゲームを見たダンプなのか」が
+    分からなくなる。
 
     版が読めない（この仕組みが入る前のダンプ）ときは `unknown` にする。
     当て推量の版を付けるくらいなら、分からないと書いてあるほうが後で困らない。

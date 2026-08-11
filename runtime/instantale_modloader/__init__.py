@@ -528,7 +528,7 @@ class ModContext:
         """この MOD 専用のログ関数を作る。`out/<name>` に1行ずつ追記する。
 
             write = ctx.logger("quest_offer.log")
-            write("offered 3 quest(s)")     # -> [2026-08-10T12:34:56.789] offered ...
+            write("offered 3 quest(s)")     # -> [YYYY-MM-DDThh:mm:ss.mmm] offered ...
 
         **MOD のログはローダのログ（`ctx.log`）と分ける。** 何が起きたかは
         その MOD の記録に残したいが、`modloader.log` は全 MOD の共用なので、
