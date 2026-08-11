@@ -76,14 +76,14 @@ save_area_json, save_world_json, api_key_manager, build_type, sdcpp_cuda
 `AppVersion` だけで、値は `%PROGRAMDATA%\Epic\EpicGamesLauncher\Data\Manifests\*.item` の
 `AppVersionString` から読める（ゲームを起動しなくても分かる。§1.4 の「別系統」の実体）。
 
-**新規キャラのレベル60が直った**（§2.36）。`InstantaleApp.start_game` の
+**新規キャラのレベル60が直った**（VERIFICATION.md §2.36）。`InstantaleApp.start_game` の
 **同じ 876 行**が `experience_level=60` → `1` になっただけで、体力上限を組む
 883〜885 行（`get_max_physical_integrity(1) -> 10`）は変わっていない。
 こちらが「876 行だけが食い違っている」と読んだとおりの直し方。
 
 | MOD | 対応する修正 | 印 | 判定 |
 |---|---|---|---|
-| `123_fix_new_character_level` | 新規キャラがレベル60で始まる | `experience_level 60 -> 1` 0 件（`fixed 0`） | 本体が直した（§2.36） |
+| `123_fix_new_character_level` | 新規キャラがレベル60で始まる | `experience_level 60 -> 1` 0 件（`fixed 0`） | 本体が直した（VERIFICATION.md §2.36） |
 
 > **リコンは上書きされる。** `out/recon/` は注入のたびに同じ名前で書き直されるので、
 > 更新前に退避していないと main_024 との差分が取れない（main_023 → main_024 では
@@ -200,7 +200,7 @@ BattleEndInFreeAction.end_phase done         in_battle=0  app.music = 'None'
 > リコンの差分が独立に裏付けている。 main_024 の `scripts.functions` には
 > `clamp_character_level` / `clamp_quest_difficulty_value` / `clamp_quest_scaling_value`
 > が新規に増えている（`sanitize_path_name` も同じ並び）。`clamp_npc_difficulty_value`
-> 自体は main_023 から在った ― つまりヘルパはあったのに雇用価格の経路だけ通して
+> 自体は main_023 から在った。つまりヘルパはあったのに雇用価格の経路だけ通して
 > いなかったわけで、`101_` が塞いだのと同じ穴を本体が同じ方法で塞いだことになる。
 >
 > `101_` は残してよい。 クランプは冪等なので、本体が先に抑えていれば何もしない。
@@ -211,7 +211,7 @@ BattleEndInFreeAction.end_phase done         in_battle=0  app.music = 'None'
 > `functions.get_npc_employ_price` をそのまま控えていたため、再注入では前回の
 > ラッパを測っていた（層を剥がすのは `ctx.wrap` の中＝この控えより後。
 > `patch.py:unwrap_ours`）。clamp 済みの関数はどの入力でも落ちないので、本体が
-> 直っていなくても「もう要らない」と出る ― 実際に一度そう誤判定した。いまは
+> 直っていなくても「もう要らない」と出る。実際に一度そう誤判定した。いまは
 > `__original__` を最下層までたどり、剥がした層数（`unwrapped=`）と、底に
 > ローダの印（`__instantale_patch__` / `__wrapper_of__`）が残っていないかを
 > 併せて記録し、残っていれば測定結果を捨てる。
@@ -351,7 +351,7 @@ main_024 のアナウンスには入っていない＝直っていない。ど�
   同様）。消さずに伏せるのは検出器として残すためで、デバッグモードで入れ直せば
   再び発火したときにゲーム側の修正に穴があったと分かる。§2.12 でプロキシのログを
   取りこぼしの検出に使っているのと同じ考え方。降ろす直前の裏付けは 08-05〜08-10 の
-  `prompt_bloat.log` ― 同じ `LlamaCppClient` 経路に仕掛かる `[COMPACT]` が 349 件
+  `prompt_bloat.log`。同じ `LlamaCppClient` 経路に仕掛かる `[COMPACT]` が 349 件
   出ているのに `[DEDUP]` は 0 件で、ローカルの局面を通した上で出番が無かったことになる
   （クラウド実行では両方とも素通りなので、この突き合わせはローカルの記録でしか成立しない）
 - `105_` は引き続き効いている。こちらが削るのは
@@ -501,7 +501,7 @@ MOD の掃除は画面が何であれ走るので、他の MOD が今その場�
 役場の罰金の確認画面からキャンセルが最初から消えていた。復元された残骸は印を
 1つも持たないので、判定は「`mod_` で始まるキーが1つも無い」で行う
 （`ui.MARK_PREFIX` / `ui.Screen.marked_by_a_mod`）。掃除に使うラベルも、
-その MOD にしか無い文言だけにすること ― ゲーム自身が同じ文言のボタンを出して
+その MOD にしか無い文言だけにすること。ゲーム自身が同じ文言のボタンを出して
 いた場合、印では見分けようがない。
 
 ### 2.3 選択肢を変える手順
@@ -534,7 +534,7 @@ InstanTaleHUD.update_party_display(self, *args)  HUD 側
 ```
 
 `ui.Screen.paint_party(app)` がこの2手を通す。パーティを増減させた MOD は最後にこれを
-呼ぶこと（`302_` は別れの文が流れ終わってから呼んでいる ― 文より先に消えると、
+呼ぶこと（`302_` は別れの文が流れ終わってから呼んでいる。文より先に消えると、
 まだ別れていないうちに居なくなったように見えるため）。
 
 画面に実際に出ている文字は `hud.buttons[i].text`（`app.to_display_buttons` とは別物）:
@@ -575,7 +575,7 @@ hud={'buttons': ['テスト討伐依頼A', 'クエストを探す', 'やめる',
 | 言語 `ja` の既定 | 0.07（`scripts.functions:get_default_text_speed_for_language`）|
 
 間隔はフレーム境界に丸められる。 60fps ＝ 16.7ms 刻みなので、0.04 は 3 フレーム
-（50.0ms）、0.08 は 5 フレーム（83.3ms）に乗る ― 実測の 49.4ms / 83.3ms と一致する。
+（50.0ms）、0.08 は 5 フレーム（83.3ms）に乗る。実測の 49.4ms / 83.3ms と一致する。
 つまりどれだけ小さい `text_speed` を入れても最速は「1フレーム1文字」＝ 60 文字/秒
 で、そこが下限になる。
 
@@ -743,7 +743,7 @@ app.world.characters     -> {id: Character}    Facility.owner はこの id（str
   `facility_type_of` に直接渡すと空文字が返る
 
   > **「新しい世界では動くのに、セーブをロードすると動かない」の正体はこれ。**
-  > 施設の種類で出し分けるボタンが、ロード直後だけ出ない ― どこかへ移動して
+  > 施設の種類で出し分けるボタンが、ロード直後だけ出ない。どこかへ移動して
   > 入り直すと直るので、原因が掴みにくい（2026-08-05 に実機で踏んだ）。
   > `309_` は先に踏んで両対応にしていたが、その知見が横に伝わっていなかった。
   > 施設を引くときは `player.location` を直接使わず、id でも引き当てる関数を通すこと。
@@ -846,7 +846,7 @@ InstantaleApp.move_npc_to_facility(character_id, character_instance,
 
   だから **NPC を動かす MOD は、戻す責任も持つ。** 動かす前の `location` と
   `current_node` を控え、役目が終わったら帰す。控えずに動かすと、その移動は
-  世界のどこからも取り消せなくなる ― MOD を無効化しても、フォルダごと消しても、
+  世界のどこからも取り消せなくなる。MOD を無効化しても、フォルダごと消しても、
   NPC はそこに残る。パーティ由来の移送（`302_` / `303_` / `304_`）が問題に
   ならないのは、**動かす主体がゲームで、MOD は置き先を差し替えているだけ**だから。
   ゲームが動かすつもりの無い NPC を MOD の都合で動かすのは、これとは別の話になる。
@@ -1036,7 +1036,7 @@ QuestEventManager(app, event_name, enemies_info, event_turn)
 `215_probe_event_roll` がその計測（`Character.calculate_attribute` が判定の窓の間に
 呼ばれるかを、呼び出し元ごと控える）。
 
-プロンプトの側も見ておくこと ― `field_event_evaluator` に渡る
+プロンプトの側も見ておくこと。`field_event_evaluator` に渡る
 【プレイヤーのパーティ】にはプロフィール・人格・特質・装備しか入っておらず、
 **能力値は1つも書かれていない**。LLM は能力値を知らないまま
 `reference_attribute` を選んでいる。
@@ -1208,9 +1208,9 @@ scripts.llm.llm_manager:*                                                    マ
   名指しせず、`scripts.llm.llm_manager:send_request` /
   `:send_request_with_no_structure` を包む。この2つは**使われる送信モジュールから
   from-import した別名**（Gemini セッションの recon で `__module__` が gemini 側を
-  指すことを確認）なので、alias_scan（既定有効）が同じ関数を持つ全モジュール
-  （送信モジュール本体・`llm_manager_battle` などの別名）を張り替え、どの
-  プロバイダでも1箇所で効く。プロバイダ名はラップした元関数の `__module__` から
+  指すことを確認）。alias_scan（既定有効）が同じ関数を持つ全モジュール
+  （送信モジュール本体・`llm_manager_battle` などの別名）を張り替えるので、
+  どのプロバイダでも1箇所で効く。プロバイダ名はラップした元関数の `__module__` から
   採れる。**ただしローカル実行では、この地点で本文を触ってはならない**。
   `send_request` は内部で別スレッド（`send_request_on_id`）に降りてから
   `LlamaCppClient` を呼ぶため、スレッド頼みの一回制御が効かず、`chat` 側の
@@ -1378,7 +1378,7 @@ __main__:InstantaleApp.normalize_shop_inventory_prices(shop_obtainer, player_obt
   ゲームが `set_item_from_world_data` に渡す値をそのまま使い回すこと
   （`312_shop_restock` はこの形で、値は解釈しない）
 - 主の持ち物を空にしてから売買を始めると、ゲームが初回と同じ経路で品揃えを
-  作り直す ― という前提で `312_` は書かれているが、**実機では未確認**。
+  作り直す、という前提で `312_` は書かれているが、**実機では未確認**。
   外れたときのために、空にした後で補充されたかを見て、駄目なら控えを戻す
   （VERIFICATION.md §3 の該当項）
 
@@ -1405,7 +1405,7 @@ scripts.items:Item.__init__(self, name, item_type, attributes, description,
 
 `sub_type` と `item_detail` は綴りが揃っていない（`weapon/small` は
 `small_weapon`、`herb` は `plant` になる）。**表の鍵にするなら `item_detail` の
-ほうを取る** ― アイテムに実際に書かれているのはこちら。
+ほうを取る**。アイテムに実際に書かれているのはこちら。
 
 `value` はその品が出たクエストの難易度と一致する。実セーブでは 21 種類の値が
 出たが、そのすべてがその世界の `quests[*].difficulty`（3〜53）か、より深い
@@ -1730,7 +1730,7 @@ process_choice(AreaMoveManager,       choice_text='馬車(1000G)')       [MainTh
 - `exhausted`（bool）は 50/100 の時点で既に `True`。どの閾値で立つかは未特定。
   減る量・回復量は未確認
 - **上限はレベルで伸びる**（`get_max_physical_integrity(level)`）。同一プレイヤーを
-  追ったセーブの実測 ― レベル 1→10 / 5→11 / 8→12 / 15→15 / 22→19 / 25→22 /
+  追ったセーブの実測: レベル 1→10 / 5→11 / 8→12 / 15→15 / 22→19 / 25→22 /
   30→26 / 41→34 / 49→39 / 50→40 / 55→42 / 58→43 / 73→50。式は未特定だが、
   **`100` は既定値（`__init__`）で、実際に遊んで到達する値ではない**。
   レベルに対して上限が合っていないセーブは、どこかが壊れている合図になる
@@ -2044,7 +2044,7 @@ app.move_npc_to_facility(npc_id, character, 施設, ノード)
 > `dict.update` は既にある鍵の位置を動かさないので、ひな型が33項目を漏らさず
 > 持っている限り並びは保たれる。逆に1つでも欠けていると、その項目だけが
 > 末尾に足されて並びが壊れる。項目を足すときは必ず表の正しい位置へ差し込む
-> こと ― 末尾に足さない。
+> こと。末尾に足さない。
 >
 > セーブに NPC を足す MOD は、33項目を揃えたひな型を定数で持ち、並び順が崩れて
 > いないかをオフライン検証で見ること。
@@ -2170,7 +2170,7 @@ llm_manager:conversation_facilitator_after_retrieval(..., retrieved_knowledge)
   プロンプト（実測6,200〜8,100字）は、NPC のプロフィール行と性格行を
   **4回ずつ**、プレイヤーへの感情行を2回含む（行単位の完全一致で損262字。
   `102_` は `messages` の隣接重複しか見ないのでこれは畳めない）。この
-  経路は会話5関数を通らないため `311_` の注入も届かない ― 重複はゲーム
+  経路は会話5関数を通らないため `311_` の注入も届かない。重複はゲーム
   自身のプロンプト組み立てによるもの
 
 `memory` はセーブ表（§2.23）の顔ぶれに反して**この時点では動かない**。
