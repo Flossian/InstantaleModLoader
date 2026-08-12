@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """302_leave_party_in_conversation.py をゲーム抜きで通す。
 
-    python tools/test_party_leave.py
+    python tools/tests/test_party_leave.py
 
 偽の app / Character / Facility / PhaseSpec / ConversationEndManager / Clock を
 差し込み、次を確認する。
@@ -25,7 +25,7 @@ import sys
 import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, "runtime"))
+RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 
 # mod は `instantale_modloader.frames` を使う（ゲームの中では runtime/ が
@@ -405,7 +405,7 @@ def setup(party=("player", "63"), partner="63", shape="shared"):
     sys.modules["__main__"].InstantaleApp = app_cls
 
     mod = load_mod()
-    ctx = FakeCtx(os.path.join(HERE, os.pardir, "out", "test"))
+    ctx = FakeCtx(os.path.join(HERE, os.pardir, os.pardir, "out", "test"))
     mod.apply(ctx)
     install(ctx.hooks, app_cls)
 
@@ -518,7 +518,7 @@ check("original_party が食い違っても出す（判定に使わない）",
 mod, ctx, app = setup()
 app.original_party = ["player"]
 app.refresh_choice_buttons()
-log_text = open(os.path.join(HERE, os.pardir, "out", "test", mod.LOG_BASENAME),
+log_text = open(os.path.join(HERE, os.pardir, os.pardir, "out", "test", mod.LOG_BASENAME),
                 encoding="utf-8").read()
 check("original_party の値は記録だけ続ける", "original_party=['player']" in log_text)
 
@@ -633,7 +633,7 @@ app.on_button_press(index_of(app, "leave"))
 clock.tick()
 clock.run_onces()
 check("名簿に残ったらこちらで落とす", app.party == ["player"], app.party)
-log_text = open(os.path.join(HERE, os.pardir, "out", "test", mod.LOG_BASENAME),
+log_text = open(os.path.join(HERE, os.pardir, os.pardir, "out", "test", mod.LOG_BASENAME),
                 encoding="utf-8").read()
 check("その旨をログに残す", "WARN remove_party_member left" in log_text)
 
@@ -763,7 +763,7 @@ check("辞書の名簿からも外れる", list(app.roster) == ["player"], app.r
 
 mod, ctx, app = setup(shape="bare")
 app.refresh_choice_buttons()
-log_text = open(os.path.join(HERE, os.pardir, "out", "test", mod.LOG_BASENAME),
+log_text = open(os.path.join(HERE, os.pardir, os.pardir, "out", "test", mod.LOG_BASENAME),
                 encoding="utf-8").read()
 check("名簿が1つも見つからなければ持ち物を書き出す", "census: app is" in log_text)
 check("その中に属性名の一覧が入る", "census: names = " in log_text)
@@ -776,7 +776,7 @@ check("party 以外の配列を名簿と間違えない", index_of(app, "confirm
 
 mod, ctx, app = setup(party=("player",), partner="63")
 app.refresh_choice_buttons()
-log_text = open(os.path.join(HERE, os.pardir, "out", "test", mod.LOG_BASENAME),
+log_text = open(os.path.join(HERE, os.pardir, os.pardir, "out", "test", mod.LOG_BASENAME),
                 encoding="utf-8").read()
 check("出なかったときは会話画面の顔ぶれを残す",
       "screen: partner='63' member=False" in log_text)
@@ -792,7 +792,7 @@ print("=== ゲーム本来の解散 ===")
 
 mod, ctx, app = setup()
 app.remove_party_member("63")          # ゲーム側から外された、の再現
-log_text = open(os.path.join(HERE, os.pardir, "out", "test", mod.LOG_BASENAME),
+log_text = open(os.path.join(HERE, os.pardir, os.pardir, "out", "test", mod.LOG_BASENAME),
                 encoding="utf-8").read()
 check("ゲーム側の解散を記録する", "remove_party_member('63'" in log_text)
 check("名簿の変化も残す", "remove_party_member: party ['player', '63'] -> ['player']"

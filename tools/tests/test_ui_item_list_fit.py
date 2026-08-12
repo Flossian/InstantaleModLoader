@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """115_ui_item_list_fit.py をゲーム抜きで通す。
 
-    python tools/test_ui_item_list_fit.py
+    python tools/tests/test_ui_item_list_fit.py
 
 偽の `scripts.hud.new_hud` / `InstanTaleHUD` / Kivy（Clock・Window）と、実測に
 合わせた偽の一覧（`GridLayout` 相当）を差し込んで、次を確認する。
@@ -35,7 +35,7 @@ import sys
 import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, "runtime"))
+RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 
 if RUNTIME_DIR not in sys.path:
@@ -478,7 +478,7 @@ def run():
     sys.modules["scripts.hud.new_hud"] = module
 
     mod = load_mod()
-    ctx = FakeCtx(os.path.normpath(os.path.join(HERE, os.pardir, "out", "test")))
+    ctx = FakeCtx(os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "out", "test")))
 
     # -- 収まっている一覧には触らない ---------------------------------------
     print("\n[収まる] 10件（1列で窓に入る）")

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """109_fix_item_detail_autosize.py をゲーム抜きで通す。
 
-    python tools/test_item_detail_autosize.py
+    python tools/tests/test_item_detail_autosize.py
 
 偽の `scripts.hud.new_hud` / `ItemDetailBox` / Kivy の Label・Clock・Window を
 差し込んで、次を確認する。
@@ -34,7 +34,7 @@ import sys
 import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, "runtime"))
+RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 
 if RUNTIME_DIR not in sys.path:
@@ -295,7 +295,7 @@ def run():
     hud.ItemDetailBox = FakeBox
     sys.modules["scripts.hud.new_hud"] = hud
 
-    ctx = FakeCtx(os.path.join(HERE, os.pardir, "out", "test", "item_detail"))
+    ctx = FakeCtx(os.path.join(HERE, os.pardir, os.pardir, "out", "test", "item_detail"))
     mod = load_mod()
     mod.apply(ctx)
     check("hooked update_content",

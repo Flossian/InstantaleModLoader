@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """301_quest_from_conversation.py をゲーム抜きで通す。
 
-    python tools/test_quest_offer.py
+    python tools/tests/test_quest_offer.py
 
 偽の app / PhaseSpec / DisplayQuestChoice / ConversationEndManager / HUD / Clock を
 差し込み、次を確認する。
@@ -27,7 +27,7 @@ import sys
 import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, "runtime"))
+RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 
 # mod は `instantale_modloader.ui` を使う（ゲームの中では runtime/ が
@@ -429,7 +429,7 @@ def setup(history=None, partner="62", in_conversation=True):
     main.PhaseSpec = PhaseSpec
 
     mod = load_mod()
-    ctx = FakeCtx(os.path.join(HERE, os.pardir, "out", "test"))
+    ctx = FakeCtx(os.path.join(HERE, os.pardir, os.pardir, "out", "test"))
     mod.apply(ctx)
     install(ctx.hooks, (
         ("__main__:InstantaleApp.refresh_choice_buttons", app_cls,

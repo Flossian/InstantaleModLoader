@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """120_fix_npc_name_collision.py をゲーム抜きで通す。
 
-    python tools/test_npc_name_dedup.py
+    python tools/tests/test_npc_name_dedup.py
 
 偽の `World` / `Character` / `InstantaleApp` を差し込み、次を確認する。
 
@@ -25,7 +25,7 @@ import tempfile
 import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, "runtime"))
+RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 
 if RUNTIME_DIR not in sys.path:
@@ -195,7 +195,7 @@ def setup(settings=None, mod_dir=MOD_DIR):
     mod = load_mod()
     for key, value in (settings or {}).items():
         setattr(mod, key, value)
-    ctx = FakeCtx(os.path.join(HERE, os.pardir, "out", "test"), mod_dir)
+    ctx = FakeCtx(os.path.join(HERE, os.pardir, os.pardir, "out", "test"), mod_dir)
     mod.apply(ctx)
     install(ctx.hooks, char_cls, world_cls, app_cls)
     return mod, ctx, app

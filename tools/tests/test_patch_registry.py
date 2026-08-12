@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """パッチ台帳・on_ready・マニフェストをゲーム抜きで通す。
 
-    python tools/test_patch_registry.py
+    python tools/tests/test_patch_registry.py
 
 偽のモジュール（`fakegame`）を `sys.modules` に差し込み、そこへ MOD を模した
 パッチを当てて次を確認する。ゲームも Kivy も要らない。
@@ -30,7 +30,7 @@ import os
 import sys
 import types
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(_ROOT, "runtime"))
 
 import instantale_modloader as ml                      # noqa: E402

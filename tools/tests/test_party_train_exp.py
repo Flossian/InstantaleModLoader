@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """306_party_train_exp.py をゲーム抜きで通す。
 
-    python tools/test_party_train_exp.py
+    python tools/tests/test_party_train_exp.py
 
 偽の app / Character / 訓練マネージャ / Clock を差し込み、次を確認する。
 
@@ -34,7 +34,7 @@ import sys
 import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, "runtime"))
+RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 
 if RUNTIME_DIR not in sys.path:

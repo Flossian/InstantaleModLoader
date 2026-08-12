@@ -347,36 +347,36 @@ mod は実行時にもこの照合をして、食い違ったら `quest_offer.lo
 ### 2.11 オフライン検証（ゲーム不要）
 
 ```powershell
-python tools/test_arrival_event.py    # 300_  55件
-python tools/test_quest_offer.py      # 301_  49件
-python tools/test_party_leave.py      # 302_  78件
-python tools/test_quest_end_guild.py  # 303_  45件
-python tools/test_quest_end_keep.py   # 304_  50件
-python tools/test_party_train_exp.py  # 306_  59件
-python tools/test_area_move_dungeon.py # 307_  130件
-python tools/test_battle_damage_display.py # 308_  72件
-python tools/test_office_pardon.py    # 309_  73件
-python tools/test_item_detail_autosize.py      # 109_  25件
-python tools/test_character_name_sanitize.py   # 110_  36件
-python tools/test_llm_prompt_replace.py        # 111_  76件（うち3件は output_data/ の実プロンプトと突き合わせ）
-python tools/test_ui_text_spacing.py           # 112_  23件
-python tools/test_ui_text_expand.py            # 113_  76件
-python tools/test_ui_input_focus.py            # 114_  24件
-python tools/test_ui_item_list_fit.py          # 115_  54件
-python tools/test_ui_party_expand.py           # 116_  88件
-python tools/test_message_text_integrity.py    # 117_  12件
-python tools/test_batch_message_render.py      # 118_  74件
-python tools/test_crime_attribution.py         # 119_  9件
-python tools/test_npc_name_dedup.py            # 120_  93件
-python tools/test_ui_character_sheet.py        # 121_  82件
-python tools/test_ui_conversation_log.py       # 122_  43件
-python tools/test_new_character_level.py       # 123_  27件
-python tools/test_npc_profile_memory.py        # 311_  220件
-python tools/test_shop_restock.py              # 312_  26件
-python tools/test_event_ability_check.py       # 313_  65件
-python tools/test_patch_registry.py            # ローダ本体（世代・設定・デバッグモード・共通部品）  190件
-python tools/test_state.py                     # state/ の保存先の決め方と壊れない書き込み 58件
-python tools/test_recon_archive.py             # 000_ リコンの退避                        34件
+python tools/tests/test_arrival_event.py    # 300_  55件
+python tools/tests/test_quest_offer.py      # 301_  49件
+python tools/tests/test_party_leave.py      # 302_  78件
+python tools/tests/test_quest_end_guild.py  # 303_  45件
+python tools/tests/test_quest_end_keep.py   # 304_  50件
+python tools/tests/test_party_train_exp.py  # 306_  59件
+python tools/tests/test_area_move_dungeon.py # 307_  130件
+python tools/tests/test_battle_damage_display.py # 308_  72件
+python tools/tests/test_office_pardon.py    # 309_  73件
+python tools/tests/test_item_detail_autosize.py      # 109_  25件
+python tools/tests/test_character_name_sanitize.py   # 110_  36件
+python tools/tests/test_llm_prompt_replace.py        # 111_  76件（うち3件は output_data/ の実プロンプトと突き合わせ）
+python tools/tests/test_ui_text_spacing.py           # 112_  23件
+python tools/tests/test_ui_text_expand.py            # 113_  76件
+python tools/tests/test_ui_input_focus.py            # 114_  24件
+python tools/tests/test_ui_item_list_fit.py          # 115_  54件
+python tools/tests/test_ui_party_expand.py           # 116_  88件
+python tools/tests/test_message_text_integrity.py    # 117_  12件
+python tools/tests/test_batch_message_render.py      # 118_  74件
+python tools/tests/test_crime_attribution.py         # 119_  9件
+python tools/tests/test_npc_name_dedup.py            # 120_  93件
+python tools/tests/test_ui_character_sheet.py        # 121_  82件
+python tools/tests/test_ui_conversation_log.py       # 122_  43件
+python tools/tests/test_new_character_level.py       # 123_  27件
+python tools/tests/test_npc_profile_memory.py        # 311_  220件
+python tools/tests/test_shop_restock.py              # 312_  26件
+python tools/tests/test_event_ability_check.py       # 313_  65件
+python tools/tests/test_patch_registry.py            # ローダ本体（世代・設定・デバッグモード・共通部品）  190件
+python tools/tests/test_state.py                     # state/ の保存先の決め方と壊れない書き込み 58件
+python tools/tests/test_recon_archive.py             # 000_ リコンの退避                        34件
 ```
 
 各本が何を通すかは、その本の docstring の冒頭にまとまっている（`tools\test_*.py` を
@@ -514,7 +514,7 @@ ASCII の `"` で閉じている。`"` は Windows のパス構成要素に使�
 | 既存の救済 | 注入直後・`load_game_new`・`start_game` の3か所で `app.world.characters` と `app.player` を掃く（`id='101'` はこれで直る）。保存はこちらから起こさず、ゲームが次に保存するときに入る |
 | ログ | `out/character_name.log` に `[NAMEFIX] <場面>: id=... '旧名' -> '新名'`。旧名を必ず残す（上の「残る懸念」のため）。名前と同じ生文字列を持つ他の属性があれば、書き換えずに併記する |
 
-オフライン検証は `python tools/test_character_name_sanitize.py`（36件全通）。
+オフライン検証は `python tools/tests/test_character_name_sanitize.py`（36件全通）。
 最後の2件は実地で、§2.14 で落ちた名前そのものを使いこの OS 上で
 `os.makedirs` を叩いている。直した名前ではディレクトリが作れ、生の名前では
 今でも `winerror == 123` で落ちることを確認済み。実機での結果は §2.15。
@@ -1025,7 +1025,7 @@ label Label at hud.text_display (match=2) line_height=1.44 design=1.8
 | 戻すのは次のフレーム（`REFOCUS_DELAY` 0.05秒後） | ゲーム側の「外す」処理がまだ途中のことがある。Kivy の焦点は触った側の後始末で最後にもう一度動く |
 | 短い間に戻しすぎたら手を引く（2秒に12回で5秒休む） | ゲーム側が毎フレーム外すビルドがあれば取り合いになり、画面が固まったように見える。手を引けば最悪でも「今までどおり毎回クリックする」に戻るだけ |
 
-オフライン検証 24件全通（`tools/test_ui_input_focus.py`）。実機では未確認で、
+オフライン検証 24件全通（`tools/tests/test_ui_input_focus.py`）。実機では未確認で、
 次の2点はどちらも実測していない仮定:
 
 * 入力欄が `focus` / `insert_text` を持つウィジェットとして HUD の木から見つかること
@@ -1126,7 +1126,7 @@ popup ToolListPopup cols=1 rows=None spacing=[0,0] padding=[0,0,0,0]
 | 高さは入れ物自身の `minimum_height` を優先。かけ離れた値は使わない | まだ組み直されていない（前の列数のままの）値を掴まないため |
 | 列数には上限（既定 4）と、窓の幅から入る数の頭打ちを置く | 横に長い一覧は読みにくい。上限でまだはみ出すならログに出して利用者に上げてもらう |
 
-オフライン検証 54件全通（`tools/test_ui_item_list_fit.py`）。偽の一覧は実測値
+オフライン検証 54件全通（`tools/tests/test_ui_item_list_fit.py`）。偽の一覧は実測値
 （`GridLayout` 相当・幅 926.64・行 175x57・窓 1876x1000）に合わせてあり、
 吹き出し（列を持てない・ボタンの中・中身が空）を触らないことも検査に入れてある。
 
@@ -1357,10 +1357,10 @@ MOD を外しても消えない（ゲーム自身の項目と同じ形なので�
 
 | 追加した検査 | どこ |
 |---|---|
-| 他の MOD の印が付いたボタンを落とさない／`marked_by_a_mod` の真偽 | `tools/test_quest_offer.py` |
-| `302_` が `309_` の確認画面から1枚も消さない／汎用語を掃除に使っていない | `tools/test_party_leave.py` |
-| 復元された残骸を差し直す（二重にならない・残る1枚は印を持つ）／他 MOD・ゲームのボタンを消さない | `tools/test_office_pardon.py` |
-| 残骸を掴む・掃除が仕掛けてある・他 MOD のボタンを落とさない | `tools/test_area_move_dungeon.py` |
+| 他の MOD の印が付いたボタンを落とさない／`marked_by_a_mod` の真偽 | `tools/tests/test_quest_offer.py` |
+| `302_` が `309_` の確認画面から1枚も消さない／汎用語を掃除に使っていない | `tools/tests/test_party_leave.py` |
+| 復元された残骸を差し直す（二重にならない・残る1枚は印を持つ）／他 MOD・ゲームのボタンを消さない | `tools/tests/test_office_pardon.py` |
+| 残骸を掴む・掃除が仕掛けてある・他 MOD のボタンを落とさない | `tools/tests/test_area_move_dungeon.py` |
 
 3つの修正はそれぞれ、戻すと対応する検査が落ちることを確認済み（`ui.py` の1行を
 外すと `test_quest_offer` が、`309_` の掃除を外すと `test_office_pardon` が、
@@ -1482,7 +1482,7 @@ for child in frames.attr(hud, "children"):      # ← Kivy の children は新�
 
 | 追加した検査 | どこ |
 |---|---|
-| 他の MOD のウィジェットを置き場所にしない／その中に入り込まない | `tools/test_ui_text_expand.py` / `tools/test_ui_party_expand.py` |
+| 他の MOD のウィジェットを置き場所にしない／その中に入り込まない | `tools/tests/test_ui_text_expand.py` / `tools/tests/test_ui_party_expand.py` |
 | ゲームの一時的な窓を置き場所にしない／その窓が消えてもボタンが残る | 同上 |
 
 `ui.overlay_host` を先頭走査に戻すと、両方の検査が落ちることを確認済み
@@ -1924,7 +1924,7 @@ experience_point=0 max_hp=56 max_physical_integrity=10 (fixed 0 so far)`）。
 （`levelup()` が「HP・能力値の更新まで持つ」という GAME.md §2.17 の記述は
 関数名からの推測で、実測はこの表が初めて。§2.17 に追記済み）
 
-オフライン 65 件全通（`tools/test_event_ability_check.py`）。
+オフライン 65 件全通（`tools/tests/test_event_ability_check.py`）。
 自由入力側は**実機で経路が成立**（2026-08-09・§3.18）。加点が実際に乗る場面と、
 フィールドイベント側は未確認。
 
@@ -1973,7 +1973,7 @@ experience_point=0 max_hp=56 max_physical_integrity=10 (fixed 0 so far)`）。
 - **`311_` v4**: 記録済みの `facts` を抽出プロンプトに差し戻す。人物像は毎回
   まるごと書き直されるので、確定した事実でも数ターン後には本文から消える。
   差し戻すと、落ちた事実が戻り、同じ事実を毎ターン報告し直すのも止まる。
-  オフライン 220 件全通（`tools/test_npc_profile_memory.py`）
+  オフライン 220 件全通（`tools/tests/test_npc_profile_memory.py`）
 - **`111_` の置換ルール1行**: `resolver` の「一切情報を損なわないが簡潔に」を、
   削ってよい対象を描写・情感に限る形へ書き換える。実物のプロンプトに当たることは
   `output_data` のダンプで確認済みだが、**要約が実際に濃くなるかは実機で未検証**
@@ -2149,7 +2149,7 @@ TECH.md §5.3）。写せばその場は直るが、ドリフトは予告され�
 印が届かない別スレッド経路の受け皿は MOD 側に残した。`111_` は自分の出力の
 ハッシュ（`Seen`）、`119_` は本文に自分の目印があるかで見る（＝冪等なので受け皿が要らない）。
 
-オフラインは `tools/test_crime_attribution.py` が9件全通（4件から増やした。
+オフラインは `tools/tests/test_crime_attribution.py` が9件全通（4件から増やした。
 足したのは**経路**の5件: ローカルの chat、クラウドの `send_request` /
 `send_request_with_no_structure` / `message=` のキーワード渡し、ローカル実行時に
 クラウド境界へ触らないこと、置換→マーカー→評判低下の取り消しまでの一周）。
@@ -2320,4 +2320,4 @@ MOD で塞ぐなら `update_character_image` を包んで `image_src` が None �
 下の情報欄や本文へ食い込む。四辺を窓に対する割合で持つ形に直した。
 
 残るのは窓の大きさを変えたときの追従と、プレイヤー以外の人物欄を開いた場合。
-オフライン82件全通（`tools/test_ui_character_sheet.py`）。
+オフライン82件全通（`tools/tests/test_ui_character_sheet.py`）。

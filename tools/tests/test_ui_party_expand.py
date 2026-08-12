@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """116_ui_party_expand をゲーム抜きで通す。
 
-    python tools/test_ui_party_expand.py
+    python tools/tests/test_ui_party_expand.py
 
 偽の `scripts.hud.new_hud` / `InstanTaleHUD` / Kivy（Button・Clock・Window・App）を
 差し込んで、次を確認する。
@@ -43,7 +43,7 @@ import sys
 import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, "runtime"))
+RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 
 if RUNTIME_DIR not in sys.path:
@@ -652,7 +652,7 @@ def run():
     # 名簿が動く2箇所は `__main__.InstantaleApp` に居る（GAME.md §2.8）。
     sys.modules["__main__"].InstantaleApp = FakeApp
 
-    ctx = FakeCtx(os.path.join(HERE, os.pardir, "out", "test", "party_expand"))
+    ctx = FakeCtx(os.path.join(HERE, os.pardir, os.pardir, "out", "test", "party_expand"))
     mod = load_mod()
     install(mod, ctx)
     for target in ("update_party_display", "update_display_text", "update_button_texts"):

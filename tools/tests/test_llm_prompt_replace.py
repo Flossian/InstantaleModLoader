@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """111_llm_prompt_replace.py をゲーム抜きで通す。
 
-    python tools/test_llm_prompt_replace.py
+    python tools/tests/test_llm_prompt_replace.py
 
 偽の `LlamaCppClient` と偽の `ctx` を差し込み、次を確認する。
 
@@ -34,7 +34,7 @@ import threading
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.normpath(os.path.join(HERE, os.pardir))
+ROOT = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir))
 RUNTIME_DIR = os.path.join(ROOT, "runtime")
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 

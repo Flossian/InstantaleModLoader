@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """122_ui_conversation_log をゲーム抜きで通す。
 
-    python tools/test_ui_conversation_log.py
+    python tools/tests/test_ui_conversation_log.py
 
 偽の `__main__.InstantaleApp` / `scripts.hud.new_hud` / Kivy（Button・Label・
 ScrollView・ModalView・Clock・Window）を差し込んで、次を確認する。
@@ -32,7 +32,7 @@ import sys
 import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, "runtime"))
+RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 
 if RUNTIME_DIR not in sys.path:
@@ -598,7 +598,7 @@ def run():
     # `__main__:InstantaleApp` を wrap の対象にする（本物と同じ在り処）。
     setattr(sys.modules["__main__"], "InstantaleApp", InstantaleApp)
 
-    out_dir = os.path.join(HERE, os.pardir, "out", "test", "conversation_log")
+    out_dir = os.path.join(HERE, os.pardir, os.pardir, "out", "test", "conversation_log")
     state_dir = os.path.join(out_dir, "state")
     if os.path.isdir(state_dir):
         shutil.rmtree(state_dir)

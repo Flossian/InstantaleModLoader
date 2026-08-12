@@ -1,0 +1,58 @@
+{
+  "entry": "llm_context_size.py",
+  "api": 1,
+  "name": {
+    "en": "Local LLM context size",
+    "ja": "ローカルLLMのコンテキスト長"
+  },
+  "description": {
+    "en": "Rewrites the llama-server launch arguments so one request gets a wider context window than the game's fixed 16384",
+    "ja": "llama-server の起動引数を書き換えて、1リクエストが使える窓をゲーム固定の 16384 より広げる"
+  },
+  "version": "1",
+  "author": "flossian",
+  "settings": {
+    "CTX_SIZE": {
+      "type": "int",
+      "default": 32768,
+      "min": 0,
+      "max": 262144,
+      "label": {
+        "ja": "1リクエストが使えるトークン",
+        "en": "Context window per request (tokens)"
+      },
+      "note": {
+        "ja": "0 にすると書き換えず、起動引数をログに出すだけになる。日本語はおよそ1トークン=1.6文字",
+        "en": "0 = observe only (log the arguments, change nothing). Japanese runs about 1.6 chars per token"
+      }
+    },
+    "SLOTS": {
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 8,
+      "label": {
+        "ja": "同時に持つスロット数",
+        "en": "Number of slots"
+      },
+      "note": {
+        "ja": "1 が既定で最も VRAM が軽い。0 にすると4本で1つの KV を共有する（ゲーム既定の持ち方）。2 以上はトークン × スロット数ぶんの KV を確保するので、VRAM に余裕が要る。適正値は tools\\llm_ctx_probe.bat が実測して出す",
+        "en": "1 (default) uses the least VRAM. 0 shares one KV cache across 4 slots (what the game does). 2+ reserves window x slots of KV and needs VRAM to spare. Run tools\\llm_ctx_probe.bat to measure what fits"
+      }
+    },
+    "LOG_LIMIT": {
+      "type": "int",
+      "default": 5,
+      "min": 0,
+      "max": 999,
+      "label": {
+        "ja": "起動引数をログに出す回数",
+        "en": "How many launches to log"
+      },
+      "note": {
+        "ja": "0 にすると何も出さない。書き換えの前後が out/llm_context.log に残る",
+        "en": "0 = log nothing. Before/after argument lists go to out/llm_context.log"
+      }
+    }
+  }
+}

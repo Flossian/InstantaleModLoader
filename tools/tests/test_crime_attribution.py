@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """`119_fix_crime_attribution` をゲーム抜きで通す。
 
-    python tools/test_crime_attribution.py
+    python tools/tests/test_crime_attribution.py
 
 見ているのは3つ。
 
@@ -27,7 +27,7 @@ import types
 
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(HERE)
+ROOT = os.path.dirname(os.path.dirname(HERE))
 RUNTIME_DIR = os.path.join(ROOT, "runtime")
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 
@@ -73,7 +73,7 @@ def check(condition, message):
 
 
 # --------------------------------------------------------------------------
-# 偽のゲーム側（`tools/test_llm_prompt_replace.py` と同じ形）
+# 偽のゲーム側（`tools/tests/test_llm_prompt_replace.py` と同じ形）
 # --------------------------------------------------------------------------
 class FakeClient(object):
     """`LlamaCppClient` の3つの地点だけを持つ偽物。本物と同じ入れ子。"""

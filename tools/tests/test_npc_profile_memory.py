@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """`311_npc_profile_memory` の検証。ゲーム不要。
 
-    python tools/test_npc_profile_memory.py
+    python tools/tests/test_npc_profile_memory.py
 
 **偽のゲームを1つ組んで、本物と同じ形で会話を1ターン流す。** ターンは
 `ConversationPhaseManager.conversation_continued` が
@@ -31,7 +31,7 @@ import tempfile
 import time
 import types
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(_ROOT, "runtime"))
 
 import instantale_modloader as ml                      # noqa: E402
@@ -1367,7 +1367,7 @@ def test_a_failed_write_keeps_the_previous_file():
 
     **落ちても壊れない書き方そのもの**（隣に書いてから差し替える）は
     `instantale_modloader.write_text` に一本化されていて、その仕組みは
-    `tools/test_patch_registry.py` が見ている。ここで確かめるのは
+    `tools/tests/test_patch_registry.py` が見ている。ここで確かめるのは
     **この mod 側の約束**の方 ―
 
       * 書けなかったとき、前の控えがそのまま残る（`{}` に倒れない）

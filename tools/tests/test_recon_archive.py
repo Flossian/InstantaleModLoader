@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """リコンの退避（`out/recon/` を上書きする前に zip で残す）を通す。ゲーム不要。
 
-    python tools/test_recon_archive.py
+    python tools/tests/test_recon_archive.py
 
 見ているのは3つ。
 
@@ -22,7 +22,7 @@ import sys
 import tempfile
 import zipfile
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(_ROOT, "runtime"))
 
 from instantale_modloader import recon                 # noqa: E402

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """312_shop_restock をゲーム抜きで通す。
 
-    python tools/test_shop_restock.py
+    python tools/tests/test_shop_restock.py
 
 偽の app / World / Facility / Character / ShoppingStartManagerRemake / Clock を
 差し込み、次を確認する。
@@ -26,9 +26,9 @@ import sys
 import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, "runtime"))
+RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
-OUT_DIR = os.path.normpath(os.path.join(HERE, os.pardir, "out", "test"))
+OUT_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "out", "test"))
 STATE_DIR = os.path.join(OUT_DIR, "state_shop_restock")
 
 if RUNTIME_DIR not in sys.path:

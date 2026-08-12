@@ -161,7 +161,7 @@ BGM が正常に聞こえること自体は合格条件にならない（一度�
 > 未実測のまま残っているのは末尾の「ついでに片付くもの」のうち選択肢のページ送りと
 > `generate_random_quest()` の副作用の2点。
 
-先に `python tools/test_quest_offer.py`（49件）を通しておくこと。実機で見るのは
+先に `python tools/tests/test_quest_offer.py`（49件）を通しておくこと。実機で見るのは
 「オフラインでは確かめられないもの」だけになった: HUD が本物でも塗り替わるか・掲示板の
 絞り込みが実データで妥当か・生成された依頼が会話の内容になっているか。
 
@@ -198,10 +198,10 @@ BGM が正常に聞こえること自体は合格条件にならない（一度�
   いない（TECH.md §8）
 - `generate_random_quest()` を掲示板の外から呼んで副作用が無いか
 
-#### 3.2.1 `tools/test_quest_offer.py` の赤1件は、製品ではなくテストハーネスの人工物（2026-07-28、決着）
+#### 3.2.1 `tools/tests/test_quest_offer.py` の赤1件は、製品ではなくテストハーネスの人工物（2026-07-28、決着）
 
 ```
-python tools/test_quest_offer.py
+python tools/tests/test_quest_offer.py
   FAIL 閉じた後で掲示板が開く            (app.opened_board == 0)
 ```
 
@@ -279,7 +279,7 @@ not offering the farewell to 'テスト仲間B': party is swapped (original_part
 `303_` は全体が未確認。仲間を連れてクエストに行く必要があり、かつ差し替えが目に
 見えるのは雇った町とは別の町でクエストを終えたとき（同じ町なら元から同じ場所に
 置かれる。§2.9 の実測がまさにそれ）。先に
-`python tools/test_quest_end_guild.py`（45件）を通しておくこと。
+`python tools/tests/test_quest_end_guild.py`（45件）を通しておくこと。
 
 1. A の町で NPC を雇う → B の町へ移動 → B のクエストを受けてクリアする
 2. `party_leave.log` に `quest-end: '<名前>' (<id>) left the party in <B> via
@@ -293,7 +293,7 @@ not offering the farewell to 'テスト仲間B': party is swapped (original_part
    こちらの前提と違う。その行が出た状況を残すこと
 
 `304_` も全体が未確認。こちらは同じ町でクエストを終えても目に見える（そもそも
-外れない）ので、`303_` より確かめやすい。先に `python tools/test_quest_end_keep.py`
+外れない）ので、`303_` より確かめやすい。先に `python tools/tests/test_quest_end_keep.py`
 （50件）を通しておくこと。
 
 1. NPC を雇う → クエストを受ける → クリアして「帰還する」
@@ -394,7 +394,7 @@ boot complete: 27/27 mod(s) applied
 11. `108_` の救済経路（§3.8）。はみ出しが再現していないので待つしかない。
     2026-08-09 に `superseded` で降ろしたので、確かめるならデバッグモードを
     入れること（§3.8.1）
-12. `tools/test_quest_offer.py` の赤1件（§3.2.1）。切り分け済み。製品側では
+12. `tools/tests/test_quest_offer.py` の赤1件（§3.2.1）。切り分け済み。製品側では
     なくテストハーネスの偽 Clock を直す。製品側に手を入れないこと
 13. 多重起動抑止 / `--parallel 1`（後日対応。GAME.md §2.12）
 14. ネイティブクラッシュダンプ 7件（未着手領域。TECH.md §8）
@@ -1111,7 +1111,7 @@ master_ai_facilitator: 能力値補正 dexterity=25 -> +16%(能力値) +10%(底�
 | `skip …（value も能力値も読めない）` | その品は価値段階も能力値も持っていない。値段は素のまま |
 | `reconcile buy … shown=403 moved=72 gold …` | **決済が表示を読んでいない**。差を直した。この行が続くなら報告してほしい |
 
-オフライン検証は 45 件全通（`tools/test_wip_item_price.py`）。値付けの水準そのものも
+オフライン検証は 45 件全通（`tools/tests/test_wip_item_price.py`）。値付けの水準そのものも
 検査に入れてあるので、`RATES` を触って目安（短剣 common で 350G ほど、mythic の
 財宝で売価 15,000G ほど）から3割以上外れると落ちる。
 
@@ -1162,7 +1162,7 @@ master_ai_facilitator: 能力値補正 dexterity=25 -> +16%(能力値) +10%(底�
 
 #### 再現と検査
 
-`tools/test_batch_message_render.py` に入れた。偽ゲームを2点だけ実機に寄せてある ―
+`tools/tests/test_batch_message_render.py` に入れた。偽ゲームを2点だけ実機に寄せてある ―
 **空の行列を pop したら例外**（それまでは黙って見逃していた）、**終端はその場で
 次の本文を始める**。修正前のコードを置くと、実機と同じ場所で落ちる:
 
@@ -1216,7 +1216,7 @@ GPU の上限（多くの環境で 16384px）を超えると生成に失敗し�
 
 #### 検査
 
-`tools/test_ui_conversation_log.py` に入れた。120件（各400字超）を控えてから窓を
+`tools/tests/test_ui_conversation_log.py` に入れた。120件（各400字超）を控えてから窓を
 開き、**複数枚に割れていること**・**1枚も上限を超えないこと**・**古い順に
 並ぶこと**を見る。1枚に戻すと最初の項目で落ちる。
 
@@ -1329,7 +1329,7 @@ MOD は固定値を持たず、画面を開いた時点で測って動かす。
 **設計の要点。** 段の文言を mod 側に1つも持っていない（起動時にゲームから読む）。
 言語設定で文言が変わっても、ゲームの更新で段が増減しても追従するため。並びが
 読めない・魅力で動く位置が2つある等の場合は**何もしない**（推測した並びで
-書き換えない）。オフライン30件全通・`tools/test_charisma_impression.py`。
+書き換えない）。オフライン30件全通・`tools/tests/test_charisma_impression.py`。
 
 ---
 
@@ -1364,9 +1364,9 @@ UTF-8 モードの有無、25 回の連続実行、いずれでも1度も落ち�
 | 直したもの | 何のため |
 |---|---|
 | `.github/workflows/ci.yml` の `offline tests` | 出力を控えておき、**落ちた本のぶんだけ折り畳みで吐く**。通った本は今までどおり1行。次に同じことが起きたら、どの筋書きのどの `check` かがログに残る |
-| `tools/test_npc_profile_memory.py` の `WAIT_SECONDS`（2.0 → 15.0） | 背景スレッドの完了待ちの上限。**最も疑わしい一点**。手元では1件 1ms 未満で終わる待ちに 2 秒を割り当てていたが、ランナーはディスクもスレッドの立ち上がりも遅い。時間切れは `ctx.errors` に積まれ「例外が記録された」として落ちるので、症状の見え方とも合う |
+| `tools/tests/test_npc_profile_memory.py` の `WAIT_SECONDS`（2.0 → 15.0） | 背景スレッドの完了待ちの上限。**最も疑わしい一点**。手元では1件 1ms 未満で終わる待ちに 2 秒を割り当てていたが、ランナーはディスクもスレッドの立ち上がりも遅い。時間切れは `ctx.errors` に積まれ「例外が記録された」として落ちるので、症状の見え方とも合う |
 
-`tools/test_llm_prompt_replace.py` の後生え待ち（同じ 2.0 秒）も 15.0 に揃えた。
+`tools/tests/test_llm_prompt_replace.py` の後生え待ち（同じ 2.0 秒）も 15.0 に揃えた。
 同じ形の待ちが他に無いことは `grep "monotonic() +\|deadline"` で確認済み。
 
 > **上限を伸ばすことに実害は無い。** どちらの待ちも「揃ったら即座に抜ける」

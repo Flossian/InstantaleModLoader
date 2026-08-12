@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """125_balance_charisma_impression をゲーム抜きで通す。
 
-    python tools/test_charisma_impression.py
+    python tools/tests/test_charisma_impression.py
 
 偽の `scripts.functions:document_emotion_scores_new`（魅力6段・好感度13段の
 はしご）と、`character_instance` を持つ偽の呼び出し元を組んで、次を確認する。
@@ -35,7 +35,7 @@ import sys
 import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, "runtime"))
+RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 
 # 失敗したときは記録の中身をそのまま出す。cp932 のコンソールに出せない文字が
@@ -207,7 +207,7 @@ def load_mod():
 
 
 LOG_NAME = "charisma_impression.log"
-OUT_DIR = os.path.join(HERE, os.pardir, "out", "test")
+OUT_DIR = os.path.join(HERE, os.pardir, os.pardir, "out", "test")
 
 
 def setup(charm_table=CHARM_RUNGS, broken=None, spread=1, steps=4,

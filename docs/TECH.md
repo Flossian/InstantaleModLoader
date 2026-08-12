@@ -75,6 +75,9 @@ tools/watch.bat, watcher.py  ゲームの起動を監視して自動注入（GUI
 tools/injector.py         PE解析 → x64スタブ → CreateRemoteThread（--unload で剥がす）
 tools/logrotate.py        out/*.log の世代管理（注入 = 1世代の境目）
 tools/check_mods.py       静的検査（デコレータ・宣言と実体のずれ）
+tools/llm_ctx_probe.bat, llm_ctx_probe.py
+                          ローカルLLMの窓を実測して最適値を出す（904_ 用）
+tools/tests/test_*.py     ゲーム抜きで走る検査。開発用で配布物には入らない
 runtime/instantale_modloader/
     __init__.py   boot() / discover() / ログ / 世代発行 / 遅延設置の監視 / on_ready
                   / API 契約 / status.json の書き出し / unload()
@@ -185,21 +188,21 @@ python -m compileall -q runtime tools
 python tools/check_mods.py
 
 # 2. オフライン検証（ゲーム不要）。CI と同じく全件を走らせる
-Get-ChildItem tools/test_*.py | Sort-Object Name | ForEach-Object {
+Get-ChildItem tools/tests/test_*.py | Sort-Object Name | ForEach-Object {
   python $_.FullName > $null 2>&1
   if ($LASTEXITCODE -ne 0) { Write-Host "  FAIL  $($_.BaseName)" }
   else                     { Write-Host "  ok    $($_.BaseName)" }
 }
 
 # 直している最中は、触った MOD のものだけを直接叩けばよい（落ちた内容が読める）
-python tools/test_patch_registry.py           # ローダ本体（台帳 / on_ready / 名乗り）
-python tools/test_state.py                    # state/ の保存先の決め方と壊れない書き込み
-python tools/test_recon_archive.py            # 000_（リコンの退避が走る条件と名前）
-python tools/test_llm_prompt_replace.py       # 111_
-python tools/test_ui_conversation_log.py      # 122_（113_ との並びの取り決めもここで見る）
-python tools/test_new_character_level.py      # 123_
-python tools/test_npc_profile_memory.py       # 311_（301_ との取り決めもここで見る）
-python tools/test_event_ability_check.py      # 313_
+python tools/tests/test_patch_registry.py           # ローダ本体（台帳 / on_ready / 名乗り）
+python tools/tests/test_state.py                    # state/ の保存先の決め方と壊れない書き込み
+python tools/tests/test_recon_archive.py            # 000_（リコンの退避が走る条件と名前）
+python tools/tests/test_llm_prompt_replace.py       # 111_
+python tools/tests/test_ui_conversation_log.py      # 122_（113_ との並びの取り決めもここで見る）
+python tools/tests/test_new_character_level.py      # 123_
+python tools/tests/test_npc_profile_memory.py       # 311_（301_ との取り決めもここで見る）
+python tools/tests/test_event_ability_check.py      # 313_
 
 # 3. ローダ全体が読めるかの確認（フックは大半が保留になるが、import と apply() の失敗が出る）
 python -c "import sys; sys.path.insert(0,'runtime'); import instantale_modloader as l; print(l.boot('out/test/bootcheck'))"
@@ -258,13 +261,13 @@ Windows 専用（注入が Win32 API を直接叩く）で、Linux では実際�
 | ジョブ | Python | 見るもの |
 |---|---|---|
 | `game-python` | 3.10 | `compileall runtime`。本物の 3.10 で、ゲームの中に入るコードが通るか |
-| `checks` | 3.13 | `compileall` / `check_mods.py` / `tools/test_*.py` 全件 |
+| `checks` | 3.13 | `compileall` / `check_mods.py` / `tools/tests/test_*.py` 全件 |
 | `packaging` | 3.13 | `make_dist.bat` が通ること、zip に `LICENSE` / `NOTICE` が入っていること |
 
 `game-python` が `runtime/` だけを見るのは、`tools/` が利用者の Python（3.13）で動く
 もので、ゲームの中には入らないから。
 
-除外一覧は置いていない。`tools/test_*.py` は1本でも落ちたら CI が失敗する。
+除外一覧は置いていない。`tools/tests/test_*.py` は1本でも落ちたら CI が失敗する。
 「既知の失敗」の枠を作ると、そこに積まれたものが直ったかどうか誰も見なくなるため。
 
 **落ちた本は出力をそのまま吐く**（折り畳み1つ）。通った本は1行だけ。名前しか
@@ -291,14 +294,14 @@ Windows 専用（注入が Win32 API を直接叩く）で、Linux では実際�
 | `load_order.local.json`（手元） | ○ ここに書けば手元では動く（§1.3） | |
 | `load_order.json`（配布の適用順） | | × |
 | 配布物（`make_dist.bat`） | | × `load_order.json` に無いものは staging から落ちる |
-| CI | | × `compileall` の `-x`、`check_mods.py` は `note` 扱い、`tools/test_wip_*.py` は走らせない |
+| CI | | × `compileall` の `-x`、`check_mods.py` は `note` 扱い、`tools/tests/test_wip_*.py` は走らせない |
 | `docs/MODS.md` | | × 同梱している MOD の一覧なので、載せると利用者が探して見つからない |
 
 **文書は MOD のフォルダに `DOC.md` として置く。** 遊び方も検証の記録も、`docs/` の
 5冊に書かずにそこへ書く。9xx は配布物に入らないので、その1枚も外へ出て行かない。
 リリースのときに各節を元の場所（`MODS.md` / `VERIFICATION.md` /
 `VERIFICATION_LOG.md` / `GAME.md` / `TECH.md`）へ戻す。どの節をどこへ戻すかは `DOC.md` の先頭に表として持たせておく。
-検査は `tools/test_wip_<名前>.py` に置き、同じタイミングで `tools/test_<名前>.py`
+検査は `tools/tests/test_wip_<名前>.py` に置き、同じタイミングで `tools/tests/test_<名前>.py`
 へ改名する。
 
 ローダ側の扱いは `is_wip()` の1箇所（`instantale_modloader/__init__.py`）。
@@ -477,7 +480,7 @@ runtime/mods/
 | 分けた側からゲームを触るなら、方針は持たせない | `world.py` は「どこに何があるか」だけ。断る条件・確率・文言は入口 |
 | ログ関数（`write`）は引数で渡す | `ctx` を配らない。分けた側が勝手にログの体裁を決めない |
 
-`tools/test_*.py` が mod を読み込む部分もローダと同じ形にすること
+`tools/tests/test_*.py` が mod を読み込む部分もローダと同じ形にすること
 （`sys.modules` への登録を忘れると `from . import ...` が落ちる）。
 
 > MOD 単体の部品は MOD のフォルダの中で完結させる。出ていってよいのは
@@ -635,7 +638,7 @@ def paint(orig, self, instance, value):
 置き、設計判断は入口ファイルの docstring に書く。目安は日本語で全角12文字ぶん、
 英語で半角30文字ぶん。名前列の既定幅（200px）に収まる量。
 
-**これは書き方の約束で、検査はしない。** 以前は `tools/test_patch_registry.py` が
+**これは書き方の約束で、検査はしない。** 以前は `tools/tests/test_patch_registry.py` が
 長さを落としていたが、外した:
 
 - 名前列は伸縮する（`gui.py` の `COLUMNS` は `stretch=True`）。固定幅で切り落とされる
@@ -813,7 +816,7 @@ MOD から import された時点で、ここは `API = 1` と同格の約束に
 > **世界名が中身のキー**になっているため（`data[world_key(app)]`）。世界ごとに
 > ファイルを分ける形（`311_` / `312_` / `122_`）が、名前の一意性に頼っている。
 
-検査は `tools/test_state.py`。
+検査は `tools/tests/test_state.py`。
 
 #### 3.2.4 順序の前提は MOD 自身に宣言させる
 
@@ -1838,7 +1841,7 @@ data = llm.ask(ctx, "mod_my_question", message, timeout=30, structure=structure)
 | UI と pygame は Clock（メインスレッド）から触る | `execute` は別スレッドで走る |
 | 寸法・座標を発明しない | グリッドの実寸もレイアウトの仕様も読めない。ゲームが決めた値を最低値にして、足りないぶんだけ動かす |
 | レイアウト前の絶対座標から設計を読まない | 作り直された直後のウィジェットは子がまだ配置されていない。`pos_hint` の分数と親のサイズから求める |
-| 画面に出す文字列に環境依存文字を使わない | cp932 の外（`▶` U+25B6・`»` U+00BB）と NEC/IBM 拡張（`①` U+2460）は、フォントや端末によって出ない・化ける・`print` した時点で `UnicodeEncodeError`（`308_` のテストが実際に落ちた）。判定は「cp932 に入り、かつ先頭バイトが 0x87 / 0xED-0xEE / 0xFA-0xFC でない」＝ JIS X 0208 の範囲。`tools/test_battle_damage_display.py` の `charset_verdict()` がそのまま使える |
+| 画面に出す文字列に環境依存文字を使わない | cp932 の外（`▶` U+25B6・`»` U+00BB）と NEC/IBM 拡張（`①` U+2460）は、フォントや端末によって出ない・化ける・`print` した時点で `UnicodeEncodeError`（`308_` のテストが実際に落ちた）。判定は「cp932 に入り、かつ先頭バイトが 0x87 / 0xED-0xEE / 0xFA-0xFC でない」＝ JIS X 0208 の範囲。`tools/tests/test_battle_damage_display.py` の `charset_verdict()` がそのまま使える |
 | `"choice"` の候補に空文字・空白だけの値を入れない | GUI は空欄を「未指定」（`None`）として扱うので、`allow_null` でない設定では選んだ瞬間に弾かれる（`tools/gui.py` の `_ok`）。一覧は読み取り専用なので戻すこともできない。「無し」を選ばせたいなら `"なし"` のような名前を値にして、コード側で空文字に読み替える（`308_` の `NO_PREFIX`） |
 | 選択肢の値の末尾に空白を持たせない | JSON でも GUI の一覧でも見えず、消えたことに気付けない。記号と本文の区切りはコード側の定数で足す（`308_` の `PREFIX_SEPARATOR`） |
 | 他人のボタンを消す判定に、自分の印が無いことだけを使わない | `refresh_choice_buttons` を包む掃除は画面が何であれ走るので、他の MOD が今その場に出しているボタンも「自分の印が無い」に見える。`302_` が `309_` の確認画面から `やめておく` を消していた（2026-08-03）。判定は `ui.Screen.marked_by_a_mod`（`mod_` で始まるキーが1つも無いこと）で行う |
@@ -1852,7 +1855,7 @@ data = llm.ask(ctx, "mod_my_question", message, timeout=30, structure=structure)
 | ルール | 理由 |
 |---|---|
 | 非同期に渡される処理を呼び出しの前後で測らない | `process_choice` は即座に返る。状態を継続監視するか内側で測る |
-| 呼び出し元の `f_locals` を dict と決めつけない | Python 3.13 以降は書き戻し用のプロキシ（PEP 667）で、`isinstance(..., dict)` で弾くと**関数のフレームが1つも読めない**。ゲームは 3.10 だが `tools/test_*.py` は手元の Python で走るので、そこで初めて出る。`dict(frame.f_locals)` で写す（`125_` がオフライン検証で踏んだ） |
+| 呼び出し元の `f_locals` を dict と決めつけない | Python 3.13 以降は書き戻し用のプロキシ（PEP 667）で、`isinstance(..., dict)` で弾くと**関数のフレームが1つも読めない**。ゲームは 3.10 だが `tools/tests/test_*.py` は手元の Python で走るので、そこで初めて出る。`dict(frame.f_locals)` で写す（`125_` がオフライン検証で踏んだ） |
 | モジュール直下のフレームからオブジェクトを拾わない | そこの `f_locals` はモジュールのグローバル。呼び出しの文脈ではないので、たまたま置かれている同型のオブジェクトを掴む（`125_`） |
 | 呼び出し元を段数で数えない | `@ctx.wrap` の層が挟まる。ファイル名で飛ばし、`frames.owner_of` で持ち主クラスを名指しする |
 | 自分で包んだメソッドを `MethodWatch` で見張らない | 表に入るのはローダのラッパのコードオブジェクトで、`patch.py` の全パッチが共有している。包まれた関数が1つでもスタックに載れば「その中」と答える（`306_` がオフライン検証で踏んだ）。包む対象と見張る対象が重なるなら、自分のラッパでスレッドごとの印を立てる |

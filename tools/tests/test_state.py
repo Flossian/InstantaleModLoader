@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """`state/` の保存先の決め方と、壊れない書き込みを通す。ゲーム不要。
 
-    python tools/test_state.py
+    python tools/tests/test_state.py
 
 見ているのは2つ。どちらも**ローダの語彙**で、MOD 側に写すとドリフトする
 （TECH.md §3.2.3）。
@@ -21,7 +21,7 @@ import shutil
 import sys
 import tempfile
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(_ROOT, "runtime"))
 
 import instantale_modloader as ml                      # noqa: E402

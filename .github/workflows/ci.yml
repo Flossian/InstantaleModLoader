@@ -76,7 +76,7 @@ jobs:
       - name: check_mods
         run: python tools/check_mods.py
 
-      # tools/test_*.py は全てゲーム不要（偽のゲームを差し込んで走る）。
+      # tools/tests/test_*.py は全てゲーム不要（偽のゲームを差し込んで走る）。
       # **1本でも落ちたら失敗**。除外一覧は置かない ― 一度置くと、そこに
       # 積まれたものが直ったかどうか誰も見なくなる。
       #
@@ -90,12 +90,12 @@ jobs:
           # `test_wip_*.py` は開発中の mod（9xx。TECH.md §2.6）の検査。CI では
           # 走らせないが、**外したことは必ず出す** ― 黙って減らすと「全部通った」
           # と読めてしまう。
-          $wip = Get-ChildItem tools/test_wip_*.py -ErrorAction SilentlyContinue |
+          $wip = Get-ChildItem tools/tests/test_wip_*.py -ErrorAction SilentlyContinue |
                  Sort-Object Name
           foreach ($w in $wip) { Write-Host "  skip  $($w.BaseName)  (開発中)" }
 
           $failed = @()
-          foreach ($f in Get-ChildItem tools/test_*.py |
+          foreach ($f in Get-ChildItem tools/tests/test_*.py |
                          Where-Object { $_.Name -notlike 'test_wip_*' } |
                          Sort-Object Name) {
             $out = & python $f.FullName 2>&1

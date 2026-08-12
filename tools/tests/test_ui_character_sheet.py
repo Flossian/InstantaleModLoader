@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """121_ui_character_sheet をゲーム抜きで通す。
 
-    python tools/test_ui_character_sheet.py
+    python tools/tests/test_ui_character_sheet.py
 
 偽の `scripts.hud.new_hud` / `InstanTaleHUD` / Kivy の Label と、実測に
 合わせた偽のセーブ（エリア表・手配度・スキル・特性）を差し込んで、次を確認する。
@@ -39,7 +39,7 @@ import sys
 import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, "runtime"))
+RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 
 if RUNTIME_DIR not in sys.path:

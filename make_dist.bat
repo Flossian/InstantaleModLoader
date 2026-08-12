@@ -35,7 +35,7 @@ rem  without them is not a lawful redistribution. NOTICE states what the grant
 rem  does and does not cover (game-derived strings, GAME.md, the EULA question).
 rem
 rem  Never shipped: out\, state\ and settings\ (all three made at
-rem  runtime), __pycache__ / *.pyc, tools\test_*.py and the one-off save fixers, and
+rem  runtime), __pycache__ / *.pyc, tools\tests\test_*.py and the one-off save fixers, and
 rem  llm_replacements.txt / npc.json -- those last two are the player's own copy
 rem  of a mod's data file, so only the shipped *.default.* versions go in.
 rem
@@ -142,7 +142,7 @@ if errorlevel 8 (
   goto :fail
 )
 
-rem  The GUI, the injector and the console watcher. test_*.py and the one-off
+rem  The GUI, the injector and the console watcher. tools\tests\ and the one-off
 rem  save fixers are development harnesses and stay out.
 echo   [loader] tools ...
 md "%LOADER%\tools" 2>nul

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """118_batch_message_render をゲーム抜きで通す。
 
-    python tools/test_batch_message_render.py
+    python tools/tests/test_batch_message_render.py
 """
 
 import importlib.util
@@ -14,7 +14,7 @@ import sys
 import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, "runtime"))
+RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)

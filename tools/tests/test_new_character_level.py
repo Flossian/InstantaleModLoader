@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """123_fix_new_character_level をゲーム抜きで通す。
 
-    python tools/test_new_character_level.py
+    python tools/tests/test_new_character_level.py
 
 偽の `scripts.characters.Character`（レベルから HP を決める）と偽の
 `scripts.functions`（本体と同じレベル→体力上限）を差し込んで、次を確認する。
@@ -31,7 +31,7 @@ import sys
 import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, "runtime"))
+RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 
 # 失敗したときは記録の中身をそのまま出す。cp932 のコンソールに出せない文字が
@@ -219,7 +219,7 @@ def setup(with_functions=True, repair_loaded=False):
     sys.modules["__main__"].InstantaleApp = app_cls
     mod = load_mod()
     mod.REPAIR_LOADED = repair_loaded
-    ctx = FakeCtx(os.path.join(HERE, os.pardir, "out", "test"))
+    ctx = FakeCtx(os.path.join(HERE, os.pardir, os.pardir, "out", "test"))
     mod.apply(ctx)
     install(ctx.hooks, char_cls, app_cls)
     return mod, ctx, char_cls, app_cls
@@ -234,7 +234,7 @@ def log_text(ctx):
 
 
 # 前回の実行のログを持ち越さない（含有判定に混ざる）。
-_log = os.path.join(HERE, os.pardir, "out", "test", "new_character_level.log")
+_log = os.path.join(HERE, os.pardir, os.pardir, "out", "test", "new_character_level.log")
 if os.path.exists(_log):
     os.remove(_log)
 

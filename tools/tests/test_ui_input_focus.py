@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """114_ui_input_focus をゲーム抜きで通す。
 
-    python tools/test_ui_input_focus.py
+    python tools/tests/test_ui_input_focus.py
 
 偽の `scripts.hud.new_hud` / `InstanTaleHUD` / Kivy（Clock）と、焦点を本物と
 同じように配る `FakeTextInput` を差し込んで、次を確認する。
@@ -25,7 +25,7 @@ import sys
 import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, "runtime"))
+RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 
 if RUNTIME_DIR not in sys.path:
@@ -336,7 +336,7 @@ def run():
     # `__main__` に `InstantaleApp` が居ないと `ui.find_app()` は Kivy 側を見る。
     sys.modules["__main__"].InstantaleApp = FakeApp
 
-    out_dir = os.path.join(HERE, os.pardir, "out", "_test_input_focus")
+    out_dir = os.path.join(HERE, os.pardir, os.pardir, "out", "_test_input_focus")
     ctx = FakeCtx(os.path.normpath(out_dir))
     mod = load_mod()
     reset(mod)

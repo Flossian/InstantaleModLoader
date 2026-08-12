@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """300_event_facility_arrival.py をゲーム抜きで通す。
 
-    python tools/test_arrival_event.py
+    python tools/tests/test_arrival_event.py
 
 偽の app / Facility / Character / Clock / LLM を差し込み、次を確認する。
 
@@ -19,7 +19,7 @@ import sys
 import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, "runtime"))
+RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 
 # mod は `instantale_modloader.ui` を使う（ゲームの中では runtime/ が
@@ -240,7 +240,7 @@ def setup(mode="conversation", override=1.0, reply="「いらっしゃい」", *
     for name, value in settings.items():
         assert hasattr(mod, name), name      # 打ち間違いを黙って通さない
         setattr(mod, name, value)
-    ctx = FakeCtx(os.path.join(HERE, os.pardir, "out", "test"))
+    ctx = FakeCtx(os.path.join(HERE, os.pardir, os.pardir, "out", "test"))
     calls = install_fake_llm(reply)
     mod.apply(ctx)
     hooks = {

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """902_city_case をゲーム抜きで通す。
 
-    python tools/test_city_case.py
+    python tools/tests/test_city_case.py
 
 `305_` は実機4回かけて直している（VERIFICATION_LOG.md §2.19〜§2.22）。実機の1周は
 時間がかかるうえ、外したときに原因の切り分けが難しい。**実機でしか分からない
@@ -35,9 +35,9 @@ import time
 import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, "runtime"))
+RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
-OUT_DIR = os.path.normpath(os.path.join(HERE, os.pardir, "out", "test"))
+OUT_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "out", "test"))
 #: 控えと台帳の置き場（本番は配布フォルダ直下の `state/`）。
 STATE_DIR = os.path.join(OUT_DIR, "state")
 

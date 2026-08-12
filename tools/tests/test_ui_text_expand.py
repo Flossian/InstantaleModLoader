@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """113_ui_text_expand.py をゲーム抜きで通す。
 
-    python tools/test_ui_text_expand.py
+    python tools/tests/test_ui_text_expand.py
 
 偽の `scripts.hud.new_hud` / `InstanTaleHUD` / Kivy（Button・Clock・Window）を
 差し込んで、次を確認する。
@@ -36,7 +36,7 @@ import sys
 import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, "runtime"))
+RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 
 if RUNTIME_DIR not in sys.path:
@@ -501,7 +501,7 @@ def run():
     module.upx = lambda value: value        # 拡縮しないビルドとして扱う
     sys.modules["scripts.hud.new_hud"] = module
 
-    ctx = FakeCtx(os.path.join(HERE, os.pardir, "out", "test", "text_expand"))
+    ctx = FakeCtx(os.path.join(HERE, os.pardir, os.pardir, "out", "test", "text_expand"))
     mod = load_mod()
     install(mod, ctx)
     check("hooked update_display_text",

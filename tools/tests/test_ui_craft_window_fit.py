@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """124_ui_craft_window_fit.py をゲーム抜きで通す。
 
-    python tools/test_ui_craft_window_fit.py
+    python tools/tests/test_ui_craft_window_fit.py
 
 偽の `scripts.hud.new_hud` / `InstanTaleHUD` / Kivy（Clock・Window）と、
 クラフト画面と同じ並び（所持品・クラフト・生成先の3つのグリッド＋矢印＋
@@ -33,7 +33,7 @@ import sys
 import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, "runtime"))
+RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 
 if RUNTIME_DIR not in sys.path:
@@ -453,7 +453,7 @@ def run():
     sys.modules["scripts.hud.new_hud"] = module
 
     mod = load_mod()
-    ctx = FakeCtx(os.path.normpath(os.path.join(HERE, os.pardir, "out", "test")))
+    ctx = FakeCtx(os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "out", "test")))
 
     print("\n[前提] 画面から起こした配置で、隙間よりボタンのほうが広い")
     check("隙間 {:.0f} < ボタン {:.0f}".format(GAP, BUTTON[2]), GAP < BUTTON[2])

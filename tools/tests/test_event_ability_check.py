@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """313_event_ability_check をゲーム抜きで通す。
 
-    python tools/test_event_ability_check.py
+    python tools/tests/test_event_ability_check.py
 
 偽の `player` と偽の評価結果（`roll_required` / `certain_success`）、および偽の
 マスターAI（`roll_the_dice` を含む `process`）を差し込み、次を確認する。
@@ -42,9 +42,9 @@ import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, "runtime"))
+RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
-OUT_DIR = os.path.normpath(os.path.join(HERE, os.pardir, "out", "test"))
+OUT_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "out", "test"))
 
 if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
