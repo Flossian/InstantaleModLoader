@@ -173,6 +173,14 @@ class DisplayQuestChoice:
                                                           ["*unknown*", "39"])},
             {"text": "【43】霧の追跡", "spec": PhaseSpec("QuestChoiceManager",
                                                         ["*unknown*", "43"])},
+            # ゲーム自身の通常ボタン。会話から開いたときは出したくない側。
+            {"text": "クエストを探す", "spec": PhaseSpec("QuestSearchManager", [])},
+            # 他の MOD が掲示板に足したボタン。自前ボタンは申し合わせでどれも
+            # 無害な spec を持つので、**spec では見分けられない**。見分けるのは
+            # 「余分なキーがある」こと。
+            {"text": "掲示板メモ",
+             "spec": PhaseSpec("JustSetButtonToNormalPhase", []),
+             "other_mod_mark": "note"},
             {"text": "戻る", "spec": PhaseSpec("JustSetButtonToNormalPhase", [])},
         ]
         self.app.refresh_choice_buttons(reset_page=True)
@@ -588,6 +596,26 @@ check("掲示板には「この話から依頼を作る」を出さない",
       [b["text"] for b in app.buttons])
 check("掲示板をいじった後も HUD を塗り直す", app.hud.painted, app.hud.painted)
 
+texts = [b["text"] for b in app.buttons]
+check("ゲームの「クエストを探す」は出さない", "クエストを探す" not in texts, texts)
+check("他の MOD が掲示板に足したボタンも出さない", "掲示板メモ" not in texts, texts)
+check("戻り道は残る",
+      any(b["spec"].cls_name == "JustSetButtonToNormalPhase" for b in app.buttons),
+      texts)
+check("戻り道はゲーム自身のものをそのまま使う", "戻る" in texts, texts)
+
+# **読み込み順が後ろの MOD ほど外側**なので、その追加はこちらの間引きより
+# 後に起きる。次のフレームの掛け直しで落ちること。
+app.buttons.append({"text": "後から足されたボタン",
+                    "spec": PhaseSpec("JustSetButtonToNormalPhase", []),
+                    "late_mod_mark": "x"})
+# ボタンを出したい MOD は必ず描画経路を通る。そこで掛け直す。
+app.refresh_choice_buttons(reset_page=True)
+clock.settle()
+texts = [b["text"] for b in app.buttons]
+check("後から足されたボタンも次のフレームで落ちる",
+      "後から足されたボタン" not in texts, texts)
+
 # 会話が無ければ「作る」は出さない（押した先で失敗するボタンを見せない）。
 clock = install_fake_kivy()
 mod, ctx, app = setup(history=[])
@@ -606,6 +634,10 @@ app.on_button_press(0)
 clock.settle()
 kept = [b for b in app.buttons if b["spec"].cls_name == "QuestChoiceManager"]
 check("ゲーム本来の掲示板は全件のまま", len(kept) == 2, [b["text"] for b in app.buttons])
+texts = [b["text"] for b in app.buttons]
+check("ゲーム本来の掲示板では「クエストを探す」も残る",
+      "クエストを探す" in texts, texts)
+check("ゲーム本来の掲示板では他 MOD のボタンも残る", "掲示板メモ" in texts, texts)
 
 # ============================================================ 依頼 id の読み取り
 print("=== spec からの読み取り（語彙を知らずに済ませる） ===")
@@ -662,7 +694,7 @@ check("印を持たない Screen では何も落とさない",
 # セーブに焼かれるのは text と spec だけ ＝ 復元された残骸は印を1つも持たない。
 # 逆に印があれば、いま誰かが挿した生きているボタンなので触ってはいけない。
 # ここを見ないと、`302_` が `309_`（役場の罰金）の確認画面からキャンセルを
-# 消すことになる（同じ文言・違う印のキー。VERIFICATION.md §2.31）。
+# 消すことになる（同じ文言・違う印のキー。VERIFICATION_LOG.md §2.31）。
 foreign = {"text": "依頼を受ける（話を切り上げる）", "mod_pardon_action": "cancel",
            "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}
 other = [dict(foreign)]

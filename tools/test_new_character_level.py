@@ -20,7 +20,7 @@
   二段目    … `__init__` の後でレベルが戻された場合に警告が出る
   無事故    … どの経路でも ctx.log_exc が呼ばれない
 
-根拠は VERIFICATION.md §2.36。`instantale.py:876` が `experience_level=60` を
+根拠は VERIFICATION_LOG.md §2.36。`instantale.py:876` が `experience_level=60` を
 渡し、883〜885 行が `get_max_physical_integrity(1) -> 10` を渡している。
 """
 import importlib.util
@@ -73,7 +73,7 @@ def check(name, cond, detail=""):
 
 
 # ---------------------------------------------------------------- 偽ゲーム
-# レベル→体力上限。実測（VERIFICATION.md §2.36 / `214_` の総当たり）の一部。
+# レベル→体力上限。実測（VERIFICATION_LOG.md §2.36 / `214_` の総当たり）の一部。
 STAMINA_BY_LEVEL = {1: 10, 15: 15, 30: 26, 49: 39, 60: 45, 73: 50}
 
 

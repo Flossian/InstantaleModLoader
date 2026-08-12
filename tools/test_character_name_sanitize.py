@@ -12,7 +12,7 @@
   自制   … 予約デバイス名・空になる名前は**触らずに記録だけ**
   実地   … 直した名前で実際に `os.makedirs` が通る（生の名前では WinError 123）
 
-最後の1つが本命。VERIFICATION.md §2.14 の落ちた名前そのもので、**この OS 上で**確かめる。
+最後の1つが本命。VERIFICATION_LOG.md §2.14 の落ちた名前そのもので、**この OS 上で**確かめる。
 """
 import importlib.util
 import io
@@ -48,7 +48,7 @@ def find_mod(suffix):
 
 MOD = find_mod("_fix_character_name_path")
 
-# 実機で落ちた名前そのもの（VERIFICATION.md §2.14）。
+# 実機で落ちた名前そのもの（VERIFICATION_LOG.md §2.14）。
 CRASHED = '試験人形「テストダミー"'
 
 failures = []
@@ -200,7 +200,7 @@ for raw, want in ((r'a<b>c:d"e/f\g|h?i*j', "a＜b＞c：d”e／f＼g｜h？i＊
                   ("制御\x01文字", "制御文字")):
     check("変換 {!r}".format(raw), mod.sanitize(raw)[0] == want, mod.sanitize(raw))
 
-# 実データにある正しい名前（VERIFICATION.md §2.14 で確認済みのディレクトリ名）。
+# 実データにある正しい名前（VERIFICATION_LOG.md §2.14 で確認済みのディレクトリ名）。
 for good in ("「試作」のテストA", "テスト・ネーム (Test Name)", "テストプレイヤー",
              "試験人形「テストダミー」"):
     check("素通り {!r}".format(good), mod.sanitize(good) == (None, None),

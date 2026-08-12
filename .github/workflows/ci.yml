@@ -167,4 +167,16 @@ jobs:
             }
             Write-Host "  ok    $want"
           }
+
+          # docs\ に在るものは全部配布物に入る。名前を並べて写していた頃、
+          # 足した文書が並びから漏れても誰も気付かなかった（VERIFICATION_LOG.md）。
+          # 読む人には「README が挙げている文書が入っていない」としてだけ見える
+          # ので、ここで数え合わせる。
+          foreach ($doc in Get-ChildItem docs/*.md | Sort-Object Name) {
+            if ($leaves -notcontains $doc.Name) {
+              Write-Host "docs\$($doc.Name) が配布物に入っていない"
+              exit 1
+            }
+            Write-Host "  ok    docs\$($doc.Name)"
+          }
           Write-Host "  $($leaves.Count) ファイル / $([math]::Round($zip.Length/1KB)) KB"

@@ -17,7 +17,7 @@ MOD が「送る前の本文を書き換える」ためには、まず**どこ�
 messages の dict を組み直す・元のリストを壊さない・例外を握って素通しする、
 といった後始末はこちらで行う。
 
-## どこに仕掛けるか（経路の実測と経緯は GAME.md §2.12 / VERIFICATION.md §2.24）
+## どこに仕掛けるか（経路の実測と経緯は GAME.md §2.12 / VERIFICATION_LOG.md §2.24）
 
   * ローカル（llama.cpp）: `LlamaCppClient` の chat / _apply_chat_template /
     _post_with_model_loading_retry の3点。どれが通るかはビルドと経路で変わる

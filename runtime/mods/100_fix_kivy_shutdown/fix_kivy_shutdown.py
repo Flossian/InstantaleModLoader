@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """ゲーム終了時に Kivy が落ちる問題を直す。
 
-出ていたエラー（VERIFICATION.md §2.1）:
+出ていたエラー（VERIFICATION_LOG.md §2.1）:
 
     File "...\\kivy\\input\\providers\\wm_pen.py", line 119, in stop
     File "...\\kivy\\input\\providers\\wm_common.py", line 115, in _closure
@@ -82,7 +82,7 @@ def apply(ctx):
         # 修正を入れた後の最初の終了はきれいに終わったのに何も記録が残らず、
         # 「ガードが効いた」のか「今回はたまたま出なかった」のか区別できなかった。
         # 記録に残る 47 件も日を跨いでばらけていて、毎回出るわけではない
-        # （VERIFICATION.md §2.1）。
+        # （VERIFICATION_LOG.md §2.1）。
         # なおこの関数が呼ばれるのは入力プロバイダの開始・終了時だけなので、
         # 毎回ログしても1セッションで数行にしかならない。
         ctx.log("SetWindowLong_WndProc_wrapper called: hWnd={!r} ({}) wndProc={!r} ({})".format(

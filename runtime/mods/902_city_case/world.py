@@ -79,7 +79,7 @@ def facility_name(app, limit=40):
 def owner_ids(app, max_areas=40):
     """施設の主を務めている character の id。**この人たちは使わない。**
 
-    実測した世界では 35 人中 24 人が主だった（VERIFICATION.md §2.29）。
+    実測した世界では 35 人中 24 人が主だった（VERIFICATION_LOG.md §2.29）。
     消すと店に話せる相手が居なくなるので、事件のキャストからは外す。
     """
     owners = set()
@@ -311,7 +311,7 @@ def is_dead(character):
 def set_dead(app, npc_id, value=True):
     """退場させる。**名簿からは外さない**（外すと参照が切れる）。
 
-    実測（VERIFICATION.md §2.29 / §2.30）: 印を立てても施設の名簿には残り、
+    実測（VERIFICATION_LOG.md §2.29 / §2.30）: 印を立てても施設の名簿には残り、
     それでもゲーム内では会話にも呼び出しにも出てこない。読む側が飛ばして
     いるので、こちらは印だけ立てればよい。戻すこともできる。
     """

@@ -5,7 +5,8 @@ MOD を書くときに必要な、Instantaleそのものの構造・語彙・作
 
 - ローダの仕組みと MOD の書き方は [TECH.md](TECH.md)
 - 遊ぶだけなら [README.md](README.md)（ローダと GUI）と [MODS.md](MODS.md)（同梱 MOD の一覧）
-- 各 MOD の検証状況・未確認項目・実測ログは [VERIFICATION.md](VERIFICATION.md)
+- 各 MOD の検証状況と未確認項目は [VERIFICATION.md](VERIFICATION.md)、
+  実機・実データで何を見たかの記録は [VERIFICATION_LOG.md](VERIFICATION_LOG.md)
 
 TECH.md と分けているのは、読む理由が違うから。あちらはこのローダで MOD をどう書くか
 （他のゲームにも通じる話）で、こちらは Instantale が何をしているか（このゲーム限定の
@@ -76,14 +77,14 @@ save_area_json, save_world_json, api_key_manager, build_type, sdcpp_cuda
 `AppVersion` だけで、値は `%PROGRAMDATA%\Epic\EpicGamesLauncher\Data\Manifests\*.item` の
 `AppVersionString` から読める（ゲームを起動しなくても分かる。§1.4 の「別系統」の実体）。
 
-**新規キャラのレベル60が直った**（VERIFICATION.md §2.36）。`InstantaleApp.start_game` の
+**新規キャラのレベル60が直った**（VERIFICATION_LOG.md §2.36）。`InstantaleApp.start_game` の
 **同じ 876 行**が `experience_level=60` → `1` になっただけで、体力上限を組む
 883〜885 行（`get_max_physical_integrity(1) -> 10`）は変わっていない。
 こちらが「876 行だけが食い違っている」と読んだとおりの直し方。
 
 | MOD | 対応する修正 | 印 | 判定 |
 |---|---|---|---|
-| `123_fix_new_character_level` | 新規キャラがレベル60で始まる | `experience_level 60 -> 1` 0 件（`fixed 0`） | 本体が直した（VERIFICATION.md §2.36） |
+| `123_fix_new_character_level` | 新規キャラがレベル60で始まる | `experience_level 60 -> 1` 0 件（`fixed 0`） | 本体が直した（VERIFICATION_LOG.md §2.36） |
 
 > **リコンは上書きされる。** `out/recon/` は注入のたびに同じ名前で書き直されるので、
 > 更新前に退避していないと main_024 との差分が取れない（main_023 → main_024 では
@@ -1474,7 +1475,7 @@ __main__:InstantaleApp.buy_item(item_instance) / sell_item(item_instance)
 ```
 
 比較用の他の値: NPC の雇用は難易度 76 で 5,045G（`get_npc_employ_price` の上端。
-VERIFICATION.md §2.2）。実セーブのプレイヤー所持金は 1,116,472G。**ゲームで一番高いアイテム
+VERIFICATION_LOG.md §2.2）。実セーブのプレイヤー所持金は 1,116,472G。**ゲームで一番高いアイテム
 （2,342G）より、宿の高級個室2部屋ぶんのほうが近い**という開きがある。
 
 ### 2.14 アイテム詳細ボックス
@@ -1538,6 +1539,48 @@ minimum_height=1026                                 ← 中身が要求する高
   という瞬間がある（2026-08-02 実測）。組み上がったかどうかは行の位置と高さで
   判断すること。入れ物の矩形を条件にすると永久に成立しない。§2.14 の
   `ItemDetailBox` と同じ注意がここにも要る
+
+### 2.14.2 クラフト画面（`craft_inventory_*`）
+
+所持品・材料・生成先の3つのグリッドと、そのあいだの矢印・「作成」ボタンで
+できている。HUD の属性名は実行時のダンプから（`out/quest_flow.log` の
+`attrs(90)`、2026-08-05）:
+
+```
+hud.craft_inventory_layout                  窓ぜんたい（開閉はここの表示切り替え）
+hud.craft_inventory_generate_button         「作成」。枠線を持つ
+hud.craft_inventory_generate_arrow_label    「→」
+```
+
+出入口とグリッドの作り（`out/recon/targets.txt` / `modules.json`）:
+
+| | |
+|---|---|
+| 開閉 | `InstanTaleHUD.toggle_craft_inventory_visibility(self, *args)` / `InstantaleApp.toggle_craft_inventory_window(self, *args)` |
+| 押下の紐付け | `InstanTaleHUD.set_craft_generate_button_callback(self, callback_function)` |
+| 生成 | `InstantaleApp.craft_generate_item` → `ItemCraftManager` → `llm_manager:item_craft_generator(material_list, prompt='特になし')` |
+| 後始末 | `InstanTaleHUD.place_crafted_item(self, generated_item, generated_item_id)` / `remove_craft_materials(self, material_list)` |
+| 進行中の旗 | `app.is_crafting_item` / `app.item_craft_lock` |
+| グリッド | `scripts.hud.new_hud:InventoryGrid(cols, rows, item_dict, obtainer, place_item_callback=None, situation=None)`。`GridLayout` 派生・`SLOT_SIZE=64` |
+
+グリッドは名前ではなく**アイテムを置く能力**で見分けられる（`place_new_item` /
+`try_place_item` / `occupy_slots` / `find_placement_position` /
+`is_valid_placement` / `place_existing_item` / `get_unique_items`）。売買・強化の
+グリッドも同じ HUD にぶら下がったまま `opacity=0` で残るので、**見えている
+ものだけを数えること**（`124_ui_craft_window_fit` が親をたどって確かめている）。
+
+矩形（位置・大きさ）は未採寸。窓の大きさで変わるうえ、2560x1440 では
+
+- 「作成」ボタンの枠が生成先グリッドの枠と交差する（2026-08-11 の画面）
+- 矢印が生成先グリッドの**裏に埋もれる**（2026-08-12 の画面。`124_` でボタンを
+  隙間へ移した後も残っていた ＝ 矢印の定位置がもともとグリッドの中）
+
+実測値は次に画面を開いたときに `out/craft_window.log` へ出る
+（VERIFICATION.md §3.22）。
+
+> 矢印は `Label` なので、**ウィジェットの矩形と見えている文字の箱は別物**。
+> Kivy の `Label` は `text_size` を持たなければ、文字のテクスチャを矩形の
+> 中心に描く。重なりを矩形で測ると、ラベルが大きいビルドで破綻する。
 
 ### 2.15 キャラクタ名はそのままファイルパスになる
 
@@ -1620,7 +1663,7 @@ Character.calculate_current_gained_exp_on_display(gained)  表示用
   `get_training_price(attribute_average, experience_level)`）だけで、**作成時に
   振った値がほぼそのまま最後まで続く**。能力値を基準にした調整を書くなら、
   「レベルで伸びる」前提を置かないこと（`313_event_ability_check` が最初にこれを
-  外した。VERIFICATION.md §2.37）
+  外した。VERIFICATION_LOG.md §2.37）
 - **作成時の値は才能点（`point_use`）で決まり、既定はかなり低い。**
   `characters/<名前>/character_sheet.json` の実測:
 
@@ -1635,7 +1678,7 @@ Character.calculate_current_gained_exp_on_display(gained)  表示用
   積んだキャラのもので、既定の姿ではない。セーブで見た上端は 30
   （`original_ability_scores` の最大値。上限かどうかは未確認）。
   能力値に閾値を置く調整は、9〜16 の側を基準にしないと**新規キャラで一度も
-  発火しない**（`313_` が実機1回目でこれを踏んだ。VERIFICATION.md §2.37）
+  発火しない**（`313_` が実機1回目でこれを踏んだ。VERIFICATION_LOG.md §2.37）
 - `gain_exp` が内部でレベルまで上げるのか、呼び出し元が `check_levelup` →
   `levelup` を回すのかは読めない。両方に耐える書き方（レベルが動いていなければ
   `check_levelup` を聞く）にすること
@@ -1643,7 +1686,7 @@ Character.calculate_current_gained_exp_on_display(gained)  表示用
   `get_training_experience_point(cleared_quest_difficulty)` /
   `get_days_elapsed_experience_point(experience_level)`（**点数ではなく率**。
   総当たりの実測でレベル1→0.011・レベル13→0.174 と 1 未満の float を返す。
-  VERIFICATION.md §2.36 の `214_` のログ） /
+  VERIFICATION_LOG.md §2.36 の `214_` のログ） /
   `get_enemy_exp_lvl(enemy_tier, quest_difficulty)` /
   `training_efficiency_ratio(alpha, beta, A, base=1.265)`。
   式を再現するより、支給された点数を写すほうが確実（`306_`）
@@ -1734,7 +1777,7 @@ process_choice(AreaMoveManager,       choice_text='馬車(1000G)')       [MainTh
   30→26 / 41→34 / 49→39 / 50→40 / 55→42 / 58→43 / 73→50。式は未特定だが、
   **`100` は既定値（`__init__`）で、実際に遊んで到達する値ではない**。
   レベルに対して上限が合っていないセーブは、どこかが壊れている合図になる
-  （VERIFICATION.md §2.36 でこれを使って新規キャラのレベル60を切り分けた）
+  （VERIFICATION_LOG.md §2.36 でこれを使って新規キャラのレベル60を切り分けた）
 - `current_hp` が `max_hp` を超えている状態を観測している（2591 > 1560）。
   戦闘に入る時点で丸めていると思われるが未確認。HP を条件に使うなら
   `current_hp <= max_hp` を前提にしないこと
@@ -1814,7 +1857,7 @@ world_dict["free_facility_enabled"]      # 世界生成時のオプション
 > **ただしエンジン自身は施設の種類を見ていない。** MOD から
 > `FreeFacilityManager(app, program_id)` を組んで `process_choice` に渡せば、
 > 宿屋でもギルドでも同じように走る（2026-08-02 に実機で確認。
-> VERIFICATION.md §2.30）。`free` 施設が3つしか無いことは制約にならない。
+> VERIFICATION_LOG.md §2.30）。`free` 施設が3つしか無いことは制約にならない。
 
 ```python
 facility.facility_type = 'free'
@@ -2199,6 +2242,48 @@ llm_manager:conversation_facilitator_after_retrieval(..., retrieved_knowledge)
 関数ごとに違う（`conversation_starter` は `args[4]='NPC'` の文字列が挟まり、
 worldview 以降が1つ後ろへずれる）。5番目以降を読む MOD は位置を決め打ち
 しないこと。
+
+#### 2.25.1 プレイヤーへの感情の文（`affinity_text`）は2本立て
+
+`relationship["player"]["affinity_text"]` は文の列で、実データでは常に2つ入って
+いる（`out/character_state.log`）。決めているのは1本の関数だけ:
+
+```
+scripts.functions:document_emotion_scores_new(affinity, player_charisma)
+```
+
+| 位置 | 何の段か | 材料 |
+|---|---|---|
+| 0 | 好感度 | `affinity`（その NPC がプレイヤーに対して持っている値） |
+| 1 | 見た目の魅力 | `player_charisma`（プレイヤーの能力値。§2.17） |
+
+段の文言は **exe の定数表から読み出せる**。Nuitka はコードを機械語にするが、
+文字列定数はそのまま並んでいて（`instantale.exe` を UTF-8 で走査すれば出る）、
+ja / en / zh-Hant の3言語ぶんが対応表として入っている。**並び順と閾値は
+そこからは確定しない**（同じ数値の定数は畳まれるため）ので、順番だけを写す:
+
+- 好感度（13段。悪いほうから）… 深く憎悪している / 憎悪している /
+  強い嫌悪感を抱いている / 嫌悪している / 多少嫌悪している / **警戒心がある** /
+  好きでも嫌いでもない / 嫌いではない / 興味がある / 多少の好意がある /
+  仲間だと感じている / 盟友だと思っている / 家族同然に感じている
+- 魅力（5段。低いほうから）… ひどく醜く思っている / あまり好みではない /
+  魅力を感じている / 強い魅力を感じている / 耐え難いほど魅力的に見えている
+
+太字が `affinity` 0（＝初対面）の段。英訳が `Wary` /
+`Not really their type` / `Finds you irresistibly attractive` なので、
+ゲーム自身はこれを**相手の好みの問題**として書いている。
+
+> **魅力の側は引数が1つしかない。** 相手も関係の深さも入らないので、同じ
+> プレイヤーなら**世界の全員が同じ段**になり、会話を重ねても動かない。実データ
+> （`out/character_state.log` / `out/npc_memory.log`）でも、記録に残っている
+> NPC は全員が最上段「耐え難いほど魅力的に見えている」だった。この文は
+> 保存され、以後その相手との会話プロンプトに毎回・全文載る（上の「読む側」）
+> ので、応答が無条件に友好的になる。閾値は未確認（VERIFICATION.md §3.23）
+
+段を作る場所がこの1本しかないことには利点もある。**会話系5関数を通らない
+経路**（`master_ai_facilitator_from_conversation` など）にも同じ保存済みの文が
+載るので、ここを直せば全経路に届く。`125_balance_charisma_impression` が
+ここに乗っている。
 
 ---
 

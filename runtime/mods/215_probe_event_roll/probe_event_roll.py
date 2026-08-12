@@ -6,7 +6,7 @@
 ミニイベントの判定は「機械的で、能力値が効いていないように見え、成功率が低い」
 という体感がある。`output_data/` に残った記録を突き合わせて、ここまでは
 分かっている（GAME.md §2.9「フィールドイベントの成否判定」・
-VERIFICATION.md §2.37）:
+VERIFICATION_LOG.md §2.37）:
 
 - `field_event_evaluator` が `credibility`(1-10) と `reference_attribute`
   （6能力値のどれか）を返し、ゲームがそれを確率に変えて `quest_event_log` に

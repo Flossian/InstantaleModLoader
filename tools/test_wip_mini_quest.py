@@ -523,7 +523,7 @@ check("生成: 討伐を達成条件にしない指示が入っている",
 check("生成: 達成条件を判定可能な形で書かせる",
       "誰が読んでも判定できる形" in brief, brief)
 
-# ---- 実機で壊れていた3点の回帰（VERIFICATION.md §2.19）
+# ---- 実機で壊れていた3点の回帰（VERIFICATION_LOG.md §2.19）
 print()
 print("=== 実機で壊れていた3点（回帰） ===")
 check("進行: 達成条件（request_summary）が本文に入る",
@@ -539,7 +539,7 @@ check("進行: 進展が無いなら帰還を選ばせる",
 check("進行: ダンジョン要素（在庫の実数）は書き換えない",
       "- 残りラスボス戦闘: **['テストボスB']**" in body, body)
 
-# ---- 達成したのに「撤退」になった件の回帰（VERIFICATION.md §2.20）
+# ---- 達成したのに「撤退」になった件の回帰（VERIFICATION_LOG.md §2.20）
 check("進行: 達成済みなら帰還を撤退にしない（retire の説明を上書き）",
       "その場合は必ず return_after_completion を選ぶこと" in body, body)
 check("進行: 撤退は「目的を果たせないまま」に限定される",
@@ -555,7 +555,7 @@ check("撤退そのものは残す（達成できない依頼で詰ませない�
 
 # retire の行は**行頭だけ**で当てる。ゲームの原文には誤植（「しかし具体的が
 # 無いならば」）があり、`111_llm_prompt_replace` の同梱ルールがそれを直すので、
-# 送信される文の末尾は 111_ を入れているかどうかで変わる（VERIFICATION.md §2.43）。
+# 送信される文の末尾は 111_ を入れているかどうかで変わる（VERIFICATION_LOG.md §2.43）。
 # 末尾まで含めた完全一致にしていたときは、直された側で当たらなくなっていた。
 FIXED_TYPO = MOD_MODULE.SAMPLE_REFEREE_USER.replace(
     "しかし具体的が無いならば", "しかし具体的な理由が無いならば")
@@ -573,7 +573,7 @@ check("進行: 末尾が変わっていても説明ごと差し替わる",
 check("進行: 差し替えた行にゲームの原文が残らない",
       "さっさと撤退させること" not in (fixed_body or ""), fixed_body)
 
-# ---- 在庫が尽きた終盤にラスボス戦へ流れた件の回帰（VERIFICATION.md §2.21）
+# ---- 在庫が尽きた終盤にラスボス戦へ流れた件の回帰（VERIFICATION_LOG.md §2.21）
 check("進行: battle 行に「ラスボスを含めるな」を書き足す",
       "ラスボスを enemies に含めてはならない" in body, body)
 check("進行: 残りラスボス戦闘の行に「戦わない」と注記する",
@@ -587,7 +587,7 @@ check("進行: 在庫の実数そのものは書き換えない（追記のみ�
 check("書き換えは冪等（同じ行に二度足さない）",
       MOD_MODULE.rewrite_referee_text(body, "お題。", None, "見本。") is None)
 
-# ---- 達成しても撤退になる件（文面では直らない。VERIFICATION.md §2.22）
+# ---- 達成しても撤退になる件（文面では直らない。VERIFICATION_LOG.md §2.22）
 print()
 print("=== 撤退を達成に差し替える（戻り値の側） ===")
 
@@ -910,7 +910,7 @@ check("関係の無いプロンプトは触らない",
 # **版4までは `LlamaCppClient.chat` の1点にしか仕掛けていなかった。** クラウドは
 # chat を一度も通らないので、討伐前提を外す書き換えが丸ごと落ち、しかも
 # `plan()` が呼ばれないため `missed:` すら出ない ＝ 無音で普通の討伐になっていた
-# （`119_` v1 と同じ死角。TECH.md §5.3 / VERIFICATION.md §2.41）。
+# （`119_` v1 と同じ死角。TECH.md §5.3 / VERIFICATION_LOG.md §2.41）。
 mod, ctx, app, board_cls, client = setup(RECORDS)
 send_hook = ctx.hooks.get("scripts.llm.llm_manager:send_request")
 check("クラウドの送信口にも仕掛かっている", send_hook is not None,

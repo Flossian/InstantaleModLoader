@@ -242,7 +242,7 @@ class FakeButton(FakeWidget):
 class FakeBorder(FakeWidget):
     """本文の枠と同じ場所に置かれた枠線（`add_border` が描いている相手）。
 
-    これが付いてこないと、増えた本文が枠の外へはみ出す（VERIFICATION.md §2.26）。
+    これが付いてこないと、増えた本文が枠の外へはみ出す（VERIFICATION_LOG.md §2.26）。
     ぴったり同じ矩形ではなく、数 px 大きく置く。
     """
 
@@ -522,7 +522,7 @@ def run():
           sum(1 for c in hud.root.children if isinstance(c, FakeButton)) == 1,
           [type(c).__name__ for c in hud.root.children])
     # 素の HUD の子は FloatLayout 1枚だけ。そこへ足すと「画面の最初の子」を取る
-    # 側から見える相手が変わり、アイテムの移動・装備が壊れる（VERIFICATION.md §2.33）。
+    # 側から見える相手が変わり、アイテムの移動・装備が壊れる（VERIFICATION_LOG.md §2.33）。
     check("the HUD's own child list is left exactly as the game built it",
           hud.children == [hud.root] and hud.screen_root() is hud.root,
           [type(c).__name__ for c in hud.children])
@@ -791,7 +791,7 @@ def run():
     # -- 他の MOD が HUD 直下に置いたウィジェット ------------------------------
     # `children` の**先頭**（＝いちばん新しい子）を置き場所に採り、除外を自分の
     # ボタンだけにすると、HUD へウィジェットを足す MOD が2本になった時点で
-    # 相手のボタンの中へ入り込む（VERIFICATION.md §2.33）。
+    # 相手のボタンの中へ入り込む（VERIFICATION_LOG.md §2.33）。
     install(mod, ctx)
     hud = FakeHUD()
     other = FakeButton(text="パーティ", size=(30.0, 30.0))
@@ -826,7 +826,7 @@ def run():
 
     # -- 窓の大きさが変わったとき --------------------------------------------
     # 塗り直しは来ないので、窓の `on_resize` を拾えていないと、ボタンは古い座標に
-    # 取り残され、枠の控えも古い窓の値のまま残る（VERIFICATION.md §2.26）。
+    # 取り残され、枠の控えも古い窓の値のまま残る（VERIFICATION_LOG.md §2.26）。
     install(mod, ctx)
     hud = FakeHUD()
     hud.show()
@@ -870,7 +870,7 @@ def run():
     # -- 立ち絵を `source` で見つけられないビルド ----------------------------
     # `frames.MISSING` は文字列（"<missing>"）なので、既定値のまま照合すると
     # **`source` を持たないウィジェットが全部一致**する。これでボタンが画面の
-    # 一番上に貼り付く（VERIFICATION.md §2.26）。
+    # 一番上に貼り付く（VERIFICATION_LOG.md §2.26）。
     install(mod, ctx)
     hud = FakeHUD(with_portrait=True, with_panel=False)
     hud.show()

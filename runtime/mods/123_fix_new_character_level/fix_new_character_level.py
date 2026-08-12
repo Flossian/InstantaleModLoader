@@ -25,7 +25,7 @@ instantale.py:885   physical_integrity              = get_max_physical_integrity
 
 **同じ関数の中で、レベルが 60 と 1 の2通りに使われている。** 体力上限はレベル1で
 計算され、`max_hp` はレベル60で計算される（`耐久 × 52`）。876 行が本来 1 を渡す
-ところだと読める。経緯と根拠は VERIFICATION.md §2.36。
+ところだと読める。経緯と根拠は VERIFICATION_LOG.md §2.36。
 
 ##### 直し方
 

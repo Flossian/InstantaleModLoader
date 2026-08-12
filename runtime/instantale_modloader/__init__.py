@@ -61,7 +61,7 @@ import time
 import traceback
 import uuid
 
-__version__ = "1.5.0"
+__version__ = "1.6.0"
 
 # mod との契約。`mod.json` の "api" がこれと突き合わされる。
 #
@@ -542,7 +542,7 @@ class ModContext:
 
         `tag` を逐語にしてあるのは、**既にあるログの見た目を変えないため**。
         角括弧の形（`[BGMFIX]`）と区切りの形（`quest-end:`）が両方使われていて、
-        どちらも実機の記録として GAME.md / VERIFICATION.md に引用されている。
+        どちらも実機の記録として GAME.md / VERIFICATION_LOG.md に引用されている。
         ここで体裁を揃えると、その引用が次のプレイのログと一致しなくなる。
 
         書けなくても**例外にしない**（`ctx.log_exc` に残して素通り）。呼ぶのは

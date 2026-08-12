@@ -1,0 +1,56 @@
+{
+  "entry": "ui_craft_window_fit.py",
+  "api": 1,
+  "name": {
+    "en": "Unstack the craft window",
+    "ja": "クラフト画面の枠の重なりを直す"
+  },
+  "description": {
+    "en": "Moves the craft window's generate button and arrow out of the item grids so nothing is crossed or buried. The grids are never moved; both are shifted only as far as they must",
+    "ja": "クラフト画面の「作成」ボタンと矢印をグリッドから出して、枠の交差と埋もれを直す。グリッドは動かさない。どちらも重なっているぶんだけ動かす"
+  },
+  "version": "2",
+  "author": "R01/Flossian",
+  "settings": {
+    "MARGIN": {
+      "type": "float",
+      "default": 6.0,
+      "min": 0.0,
+      "max": 64.0,
+      "label": {
+        "ja": "枠と枠の間に残す隙間（px）",
+        "en": "Gap to keep between frames (px)"
+      },
+      "note": {
+        "ja": "既定 6。0 にすると枠線どうしが接する。大きくするとボタンが遠くへ動く",
+        "en": "Default 6. 0 lets the frames touch. Larger values push the button further away"
+      }
+    },
+    "MIN_WIDTH_RATIO": {
+      "type": "float",
+      "default": 0.6,
+      "min": 0.2,
+      "max": 1.0,
+      "label": {
+        "ja": "ボタンを詰めてよい下限（元の幅に対する割合）",
+        "en": "How narrow the button may be made (share of its original width)"
+      },
+      "note": {
+        "ja": "隙間に入らないときだけ詰める。1.0 にすると幅を変えず、代わりにグリッドの下へ逃がす",
+        "en": "Only used when the button does not fit the gap. Set to 1.0 to keep the width and move the button below the grids instead"
+      }
+    },
+    "FIX_ARROW": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "矢印も動かす",
+        "en": "Move the arrow as well"
+      },
+      "note": {
+        "ja": "既定 ON。矢印は生成先グリッドの裏に埋もれる。OFF にすると矢印は動かさず、「ボタンが避ける相手」としてだけ数える",
+        "en": "Default ON: the arrow is otherwise buried behind the output grid. Turn it OFF to leave the arrow alone; it then only counts as something the button keeps clear of"
+      }
+    }
+  }
+}

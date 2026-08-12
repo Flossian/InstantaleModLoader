@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """修正: 戦闘が終わっても `in_battle` が 1 のまま残るのを直す。
 
-## 原因（GAME.md §2.10 / VERIFICATION.md §2.6）
+## 原因（GAME.md §2.10 / VERIFICATION_LOG.md §2.6）
 
 戦闘終了マネージャは2つあり、**フラグを下ろすのは片方だけ**。
 

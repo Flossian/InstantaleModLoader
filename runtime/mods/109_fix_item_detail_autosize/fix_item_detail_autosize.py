@@ -215,7 +215,7 @@ def apply(ctx):
         たびに走り、そのたびにラベル3枚 × 幅の候補ぶん `texture_update()` を
         呼ぶことになる。テクスチャの作り直しはフレーム時間に乗るので、
         フックの中で測っている限り見えない（`112_` / `117_` が同じ形で
-        打ち出しを 1.6 倍遅くしていた。VERIFICATION.md §2.34）。
+        打ち出しを 1.6 倍遅くしていた。VERIFICATION_LOG.md §2.34）。
         """
         key = (frames.text_of(label), round(float(width), 1),
                frames.attr(label, "font_size", None))

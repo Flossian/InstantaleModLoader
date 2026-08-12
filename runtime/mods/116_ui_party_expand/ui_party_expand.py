@@ -312,7 +312,7 @@ def apply(ctx):
 
         既定値を必ず渡す ― `frames.attr` の既定は**文字列**（`"<missing>"`）なので、
         そのまま真偽で見ると「属性を持たない帯」が全部「広がっている」側に倒れる
-        （`113_` が立ち絵探しで踏んだのと同じ罠。VERIFICATION.md §2.26）。
+        （`113_` が立ち絵探しで踏んだのと同じ罠。VERIFICATION_LOG.md §2.26）。
         """
         value = frames.attr(box, EXPANDED_ATTR, None)
         return value if isinstance(value, int) else None
@@ -968,7 +968,7 @@ def apply(ctx):
         2箇所に書かない。TECH.md §6.1）。素の HUD の子は `FloatLayout` 1枚だけで、
         そこへ直接足すと子が2つになり、「画面の最初の子」を取る側から見える相手が
         変わる（`scripts.hud.new_hud:get_current_screen_root`）。ここを外すと
-        アイテムの移動・装備が効かなくなる（VERIFICATION.md §2.33）。
+        アイテムの移動・装備が効かなくなる（VERIFICATION_LOG.md §2.33）。
 
         選ぶのは**いちばん古い子**。先頭（＝いちばん新しい子）を採ると、
         他の MOD が HUD 直下に残したウィジェットの**中**へ入り込みうる ―

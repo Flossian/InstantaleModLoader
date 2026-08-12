@@ -49,7 +49,7 @@
 ## 何もしてはいけない相手
 
 「縦に積まれた文字のあるウィジェット」を一覧とみなすと、**アイテムの説明の吹き出し
-（`ItemDetailBox`）まで掴んで**画面が崩れる（VERIFICATION.md §2.28）。見分け方は
+（`ItemDetailBox`）まで掴んで**画面が崩れる（VERIFICATION_LOG.md §2.28）。見分け方は
 3つで、どれも型名ではなく**持ち物と置かれ方**で見る（GAME.md §1.3）:
 
 | 条件 | 落ちる相手 |
@@ -229,7 +229,7 @@ def apply(ctx):
 
         **この直し方が成り立つ相手かどうか**そのもの。列を持てない入れ物は列に
         できないので、掴んでも何もできない（この条件が無いと `ItemDetailBox` を
-        掴んで画面が崩れる。VERIFICATION.md §2.28）。
+        掴んで画面が崩れる。VERIFICATION_LOG.md §2.28）。
         """
         for name in ("cols", "minimum_height"):
             if frames.attr(widget, name) is frames.MISSING:

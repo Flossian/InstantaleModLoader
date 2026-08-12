@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """NPC の雇用価格を引くときに出る KeyError: 80 を直す。
 
-## 何が起きているか（VERIFICATION.md §2.2）
+## 何が起きているか（VERIFICATION_LOG.md §2.2）
 
     get_npc_employ_price(level)     価格表。0〜76 のみ有効で、77 以上は KeyError
     clamp_npc_difficulty_value(v)   ゲーム自身のクランプ。[0, 76] に収める

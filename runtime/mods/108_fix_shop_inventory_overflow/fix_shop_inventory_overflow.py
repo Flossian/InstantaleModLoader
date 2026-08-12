@@ -12,7 +12,7 @@ main_024 の表）。救済経路も `out/inventory.log` の正常サンプル 1
 `mod.json` に `superseded` を入れてデバッグモード限定にしてある。コードは
 そのままなので、デバッグモードを入れれば一覧の元の位置に戻る。以下は当時の記録。
 
-## 原因（GAME.md §2.13 / VERIFICATION.md §2.16）
+## 原因（GAME.md §2.13 / VERIFICATION_LOG.md §2.16）
 
 会話から売買に入った瞬間、`InventoryGrid.occupy_slots` が
 `IndexError: list index out of range` で落ちる。

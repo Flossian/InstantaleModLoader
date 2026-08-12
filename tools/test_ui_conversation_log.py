@@ -644,7 +644,7 @@ def run():
               if isinstance(c, FakeButton) and c is not hud.expand_button) == 1,
           [type(c).__name__ for c in hud.root.children])
     # 素の HUD の子は FloatLayout 1枚だけ。増やすと「画面の最初の子」を取る側から
-    # 見える相手が変わり、アイテムの移動・装備が壊れる（VERIFICATION.md §2.33）。
+    # 見える相手が変わり、アイテムの移動・装備が壊れる（VERIFICATION_LOG.md §2.33）。
     check("the HUD's own child list is left exactly as the game built it",
           hud.children == [hud.root] and hud.screen_root() is hud.root,
           [type(c).__name__ for c in hud.children])

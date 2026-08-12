@@ -1,0 +1,56 @@
+{
+  "entry": "balance_charisma_impression.py",
+  "api": 1,
+  "name": {
+    "en": "Charm is read per NPC and per acquaintance",
+    "ja": "魅力の見え方に相手ごとの好みと親しさを入れる"
+  },
+  "description": {
+    "en": "The line an NPC carries about how attractive you look is decided from your charisma alone, so a charm-focused character is seen at the top rung (\"Finds you irresistibly attractive\") by every NPC in the world, from the first meeting onward, and every answer comes back unconditionally friendly. Keeps the game's own rungs but picks one from two more things: a fixed per-NPC taste, and how far the relationship has come. The top rung only appears once the NPC already feels some affection. The rungs and their thresholds are read out of the game at runtime, so no wording is hardcoded and other languages work too",
+    "ja": "NPC が持つ「プレイヤーがどう見えているか」の文はプレイヤーの魅力だけで決まるため、魅力に振ったキャラは初対面から世界の全員に最上段「耐え難いほど魅力的に見えている」で見られ、応答が無条件に友好的になる（交渉も説得も勝手に通る）。段はゲームのものを使ったまま、どの段になるかを「相手ごとに固定の好み」と「どこまで打ち解けたか」の2つで決め直す。最上段は好意を持たれている相手にしか出ない。段の並びと閾値は実行時にゲームから読むので、文言は1つも持たず、日本語以外でも効く"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "settings": {
+    "TASTE_SPREAD": {
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 3,
+      "label": {
+        "ja": "相手ごとの好みの幅（段）",
+        "en": "How far each NPC's taste can shift the rung"
+      },
+      "note": {
+        "ja": "同じ魅力でも相手によって何段まで散るか。0 にすると誰から見ても同じ段になる（親しさだけが効く）。相手ごとの値は固定で、会話のたびには揺れない",
+        "en": "How many rungs apart two NPCs can read the same charisma. 0 makes everyone agree again (only acquaintance is left). Each NPC's value is fixed, not re-rolled per conversation"
+      }
+    },
+    "ACQUAINTANCE_STEPS": {
+      "type": "int",
+      "default": 4,
+      "min": 0,
+      "max": 8,
+      "label": {
+        "ja": "魅力が満額で効くまでに要る好感度の段数",
+        "en": "Affection rungs needed before charm counts in full"
+      },
+      "note": {
+        "ja": "初対面の「警戒心がある」から何段上で満額になるか。既定の 4 は「多少の好意がある」。最上段が出るのもここに届いてから。0 にすると親しさを見ない（好みの差だけ）",
+        "en": "How far above the first-meeting rung the affection has to be. The default 4 is \"Feels some affection\"; the top rung also waits for it. 0 ignores acquaintance and leaves only taste"
+      }
+    },
+    "ALLOW_TOP_RUNG": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "最上段「耐え難いほど魅力的に見えている」を残す",
+        "en": "Keep the top rung (\"irresistibly attractive\")"
+      },
+      "note": {
+        "ja": "既定は入。打ち解けた相手にだけ出る。切ると上限が1つ下の段（「強い魅力を感じている」）になり、無条件に折れる文言が世界から消える",
+        "en": "On by default, and only for NPCs you are close to. Off caps everyone one rung lower"
+      }
+    }
+  }
+}

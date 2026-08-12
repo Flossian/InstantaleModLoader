@@ -216,6 +216,10 @@ def apply(ctx):
         # ゲーム本来の「クエスト掲示板」から開いたときは None のままにして
         # 一切手を触れない。
         "filter_npc": None,
+        # 会話から開いた掲示板を表示している間だけ True。依頼が0件だと
+        # 依頼ボタンの有無では掲示板だと判定できないので、印で持つ。
+        # 何か押されたら降りる（押せばその画面からは離れる）。
+        "board_open": False,
     }
     INJECT_TTL = 300.0
 
@@ -586,6 +590,7 @@ def apply(ctx):
         # 塗り直さない」＝ NPC 一覧を出さないため。
         if screen.is_busy():
             clear_busy(app, restore=False)
+        state["board_open"] = state["filter_npc"] is not None
         write("open board: process_choice(DisplayQuestChoice, {!r})".format(choice_text))
         try:
             app.process_choice(display_cls(app), choice_text)
@@ -764,6 +769,81 @@ def apply(ctx):
             return None
         return str(args[1])
 
+    def is_native_button(entry):
+        """ゲーム自身が組んだボタンか。**MOD が足したものは余分なキーを持つ。**
+
+        ゲームがボタンに入れるのは `text` と `spec` だけ（`PhaseSpec.to_dict()`
+        がその2つしか書かないことからも分かる）。こちらの `mod_action` も
+        `302_` の印も `member_id` も、全部あとから足した余分なキー。
+        だから**キーの集合**を見れば、MOD が足したものかどうかが分かる。
+        spec のクラス名では見分けられない ― 自前ボタンは MOD 間の申し合わせで
+        どれも無害な `JustSetButtonToNormalPhase` を持つため。
+        """
+        return isinstance(entry, dict) and set(entry) <= {"text", "spec"}
+
+    def restrict_board(app, buttons):
+        """会話から開いた掲示板を「その NPC の依頼 ＋ やめる」だけにする。
+
+        会話の流れで受注する画面なので、**通常のクエスト画面のボタンは出さない**
+        （ユーザー指示・2026-08-02）。落ちるのは:
+
+          * ゲーム自身の「クエストを探す」（`QuestSearchManager`）― ここで
+            土地の依頼を新規生成されると、会話から来た文脈と噛み合わない
+          * 他の MOD が掲示板に足したボタン（`is_native_button` が False）
+
+        残すのは依頼ボタンと戻り道だけ。戻り道は**ゲーム自身の「やめる」**を
+        そのまま使う（`JustSetButtonToNormalPhase`）。見つからないときだけ
+        同じ spec で作る ― 押した先の動きはゲームのものと同一になる。
+
+        ゲーム本来の「クエスト掲示板」から開いたとき（`filter_npc` が None）は
+        **何もしない**。そちらは全件・全ボタンのままでよい。
+        """
+        target = state["filter_npc"] if FILTER_BY_NPC else None
+        if target is None or not isinstance(buttons, list):
+            return False
+        npc_id = target.get("npc_id")
+        npc_name = target.get("npc_name")
+
+        quests, dropped, back = [], [], None
+        for entry in buttons:
+            quest_id = quest_id_of_button(entry)
+            if quest_id is not None:
+                if quest_belongs_to(app, quest_id, npc_id, npc_name):
+                    quests.append(entry)
+                else:
+                    dropped.append(entry.get("text"))
+                continue
+            if back is None and is_native_button(entry)                     and spec_cls_name(entry) == ui.SAFE_CLS:
+                back = entry               # ゲーム自身の「やめる」
+                continue
+            dropped.append(entry.get("text") if isinstance(entry, dict) else entry)
+
+        if back is None:
+            back = button(CANCEL_LABEL)    # 印は付けない＝ゲームと同じ挙動
+        wanted = quests + ([back] if back is not None else [])
+        if [id(b) for b in buttons] == [id(b) for b in wanted]:
+            return False
+        buttons[:] = wanted
+        write("quest board: restricted to {!r} -> {} quest(s), dropped {}".format(
+            npc_name, len(quests), dropped))
+        return True
+
+    def recheck_board(app):
+        """次のフレームでもう一度間引く。
+
+        他の MOD が同じ `update_button_display` を包んでいる場合、**読み込み順が
+        後ろの MOD ほど外側**なので、その追加はこちらの間引きより後に起きる。
+        次のフレームまで待てば、同じ押下で足されたものは出揃っている。
+        """
+        buttons = getattr(app, "buttons", None)
+        if not isinstance(buttons, list):
+            return
+        # 掲示板を離れていたら触らない（受注画面・施設メニュー等）。
+        if not any(quest_id_of_button(b) is not None for b in buttons):
+            return
+        if restrict_board(app, buttons):
+            apply_buttons(app, None, "quest board recheck")
+
     # ------------------- ゲームの掲示板を、その NPC 発の依頼だけに絞る＋生成を足す
     @ctx.wrap("__main__:DisplayQuestChoice.update_button_display", required=False)
     def quest_board_buttons(orig, self, *args, **kwargs):
@@ -788,30 +868,17 @@ def apply(ctx):
                     type(buttons).__name__))
                 return result
 
-            changed = False
-            target = state["filter_npc"] if FILTER_BY_NPC else None
-            if target is not None:
-                npc_id = target.get("npc_id")
-                npc_name = target.get("npc_name")
-                kept, dropped = [], []
-                for entry in buttons:
-                    quest_id = quest_id_of_button(entry)
-                    if quest_id is None:
-                        kept.append(entry)          # 戻る等。依頼ボタン以外は残す
-                        continue
-                    if quest_belongs_to(app, quest_id, npc_id, npc_name):
-                        kept.append(entry)
-                    else:
-                        dropped.append(quest_id)
-                if dropped:
-                    buttons[:] = kept
-                    changed = True
-                write("quest board: filtered for {!r} -> kept {}, dropped {}".format(
-                    npc_name, sum(1 for b in kept if quest_id_of_button(b)), dropped))
-
             # **掲示板には「この話から依頼を作る」を出さない。** 会話画面に
             # 直接置いてあり、そちらなら会話を閉じずに生成できる。掲示板は
             # 「既にある依頼を選ぶ場所」に徹する。
+            changed = restrict_board(app, buttons)
+
+            # 他の MOD が同じ `update_button_display` を包んで**こちらより外側**で
+            # ボタンを足す場合（読み込み順が後ろの MOD ほど外側）、ここでの
+            # 間引きはその追加より先に終わってしまう。次のフレームでもう一度
+            # 掛け直して、後から足されたものも落とす。
+            if state["filter_npc"] is not None:
+                screen.schedule(lambda: recheck_board(app), 0)
 
             if changed:
                 # **`refresh` だけでは画面が塗り替わらない**（GAME.md §2.3）。
@@ -906,6 +973,18 @@ def apply(ctx):
         """
         try:
             buttons = getattr(self, "buttons", None)
+            # 会話から開いた掲示板なら、ここでも間引きを掛け直す。
+            # **ボタンを出したい MOD は必ず描画経路を通る**ので、読み込み順が
+            # 後ろで（＝こちらより外側で）足されたものもここで落ちる。
+            # 掲示板かどうかは依頼ボタンの有無で見る ― 受注画面（受ける/やめとく）
+            # には依頼ボタンが無いので、そちらは巻き込まない。
+            on_board = state["board_open"] or (
+                isinstance(buttons, list)
+                and any(quest_id_of_button(b) is not None for b in buttons))
+            if isinstance(buttons, list) and state["filter_npc"] is not None                     and on_board:
+                if restrict_board(self, buttons):
+                    screen.schedule(lambda: apply_buttons(self, None,
+                                                          "quest board recheck"), 0)
             if isinstance(buttons, list) and not state["generating"]:
                 # **印を失った自前ボタンの残骸を先に落とす。**
                 # セーブに焼かれるのは text と spec だけで印は落ちるので、
@@ -938,6 +1017,9 @@ def apply(ctx):
         判定に使うのは文字列ではなくボタン辞書に付けた印。同じ文字列の
         ゲーム側ボタンを巻き込まないため。印が無ければ必ず素通しする。
         """
+        # 何を押してもその画面からは離れる。掲示板の印はここで降ろす
+        # （受注画面まで間引きを持ち込まないため）。
+        state["board_open"] = False
         entry = pressed_entry(self, button_index)
         action = entry.get(MARK) if isinstance(entry, dict) else None
         if action is None:

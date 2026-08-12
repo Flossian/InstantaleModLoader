@@ -1129,7 +1129,7 @@ def run():
     # 「`children` の先頭を採る」形で除外を自分のボタンだけにすると、他の MOD が
     # HUD 直下へ足したウィジェットの**中**へ入り込む。Kivy の `children` は
     # 新しい順なので、ゲームの `FloatLayout` は最後尾から探すのが正しい
-    # （VERIFICATION.md §2.33）。
+    # （VERIFICATION_LOG.md §2.33）。
     install(mod, ctx)
     hud = FakeHUD(members=4)
     other = FakeWidget()
@@ -1146,7 +1146,7 @@ def run():
           other.children == [], [type(c).__name__ for c in other.children])
 
     # -- ゲームが一時的に出している窓 ------------------------------------------
-    # 掴むとその窓が消えるときにボタンも道連れになる（VERIFICATION.md §2.31）。
+    # 掴むとその窓が消えるときにボタンも道連れになる（VERIFICATION_LOG.md §2.31）。
     install(mod, ctx)
     hud = FakeHUD(members=4)
     popup = FakeWidget()

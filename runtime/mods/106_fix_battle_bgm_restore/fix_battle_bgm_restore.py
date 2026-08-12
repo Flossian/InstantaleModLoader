@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """修正: 戦闘が終わったのに戦闘 BGM が鳴り続ける／曲が重なるのを直す。
 
-## 原因（GAME.md §2.11 / VERIFICATION.md §2.5）
+## 原因（GAME.md §2.11 / VERIFICATION_LOG.md §2.5）
 
 BGM は pygame の `Sound` オブジェクトで、`play_music_from_src(app, src)` が
 **`app.music` に差し替えて再生**し、`stop_music(app)` が **`app.music` を止める**。
@@ -36,7 +36,7 @@ BGM は pygame の `Sound` オブジェクトで、`play_music_from_src(app, src
 
 **チャンネルを直接見るので、注入より前に迷子になった曲も拾える。** 迷子は
 プロセスが終わるまで鳴り続け、チャンネルは8本しかないので、埋まると効果音も
-鳴らせなくなる（VERIFICATION.md §2.5）。
+鳴らせなくなる（VERIFICATION_LOG.md §2.5）。
 
 判定は戦闘終了マネージャ（3種）と、選択肢が普通の状態に戻ったところの2つから
 起こす。どちらも `RESTORE_DELAY` 秒の猶予を置くので、ゲーム側の処理と競争しない。

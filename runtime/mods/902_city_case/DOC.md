@@ -1,7 +1,7 @@
 # `902_city_case`: 街の事件を調べる（分離した記録）
 
 この MOD は**開発中（9xx）**。git には入れるが、CI・配布物・`load_order.json`・
-`docs\` の4冊には入らない（TECH.md §2.6）。そのため遊び方も検証の記録も、
+`docs\` の5冊には入らない（TECH.md §2.6）。そのため遊び方も検証の記録も、
 この1枚にまとめてある。リリースで正式な番号へ振り直すとき、ここの各節を
 元の場所へ戻す。
 
@@ -9,7 +9,7 @@
 |---|---|
 | 1. 遊び方・設定・困ったとき | `docs\MODS.md`（`3xx` の並びの `309_` の次） |
 | 2. 検証の一覧に載せる行 | `docs\VERIFICATION.md` §1 の表 |
-| 3. 検証の記録 | `docs\VERIFICATION.md` §2 の末尾（節番号は振り直す） |
+| 3. 検証の記録 | `docs\VERIFICATION_LOG.md` §2 の末尾（節番号は振り直す） |
 | 4. ゲーム構造・作り方の知見 | `docs\GAME.md` / `docs\TECH.md` の該当箇所 |
 
 `tools\test_wip_city_case.py`（367件）も同じ理由で管理外。
@@ -145,7 +145,7 @@ MOD が作った NPC の控えは `state\city_case_cast.json` にある（セー
 
 ---
 
-## 3. 検証の記録（`docs\VERIFICATION.md` §2 相当）
+## 3. 検証の記録（`docs\VERIFICATION_LOG.md` §2 相当）
 
 ### 2.31 `902_city_case` 街の事件（2026-08-02〜04、実機で成立）
 
@@ -1047,5 +1047,5 @@ writer: fact 2 does not mention '黒髪':   '暗闇の中で、黒い髪が揺�
 | `GAME.md` §2.9「ロード直後は文字列のまま」 | 施設を引くときは `player.location` を直接使わず、id でも引き当てる関数を通す | セーブをロードした直後にギルドの選択肢が出なかった（2026-08-05）。`309_` は先に踏んで両対応にしていたが、知見が横に伝わっていなかった |
 | `GAME.md` §2.23「セーブの項目の並び順」 | 全項目を持ったひな型を先に作り、`dict.update` で上書きだけする | `world.NEW_NPC_TEMPLATE` がこの形。検査は `tools/test_wip_city_case.py` の「セーブの項目の並び順を崩さない」 |
 | `TECH.md` §7.2 の表（LLM への渡し方） | 既にある値の一覧を渡すと、避ける相手であると同時に作風の見本にもなる | 町に実在する場所を並べて渡す。架空の宿屋を書かれるより、いま歩いている町の宿屋の名前が出るほうがよい |
-| `VERIFICATION.md` §2.30 | シーン記述エンジンは普通の施設でも走る | 使い捨ての実験 mod（`310_scene_engine_test`、確認後に削除）で確かめた |
-| `VERIFICATION.md` §2.33 の突き合わせ | `prune_stale` を持つ MOD の `OUR_LABELS` に重複が無いこと | この MOD も対象（`301_` / `302_` / `305_` / `307_` / `309_` と併せて確認済み） |
+| `VERIFICATION_LOG.md` §2.30 | シーン記述エンジンは普通の施設でも走る | 使い捨ての実験 mod（`310_scene_engine_test`、確認後に削除）で確かめた |
+| `VERIFICATION_LOG.md` §2.33 の突き合わせ | `prune_stale` を持つ MOD の `OUR_LABELS` に重複が無いこと | この MOD も対象（`301_` / `302_` / `305_` / `307_` / `309_` と併せて確認済み） |

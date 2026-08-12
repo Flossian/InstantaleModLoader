@@ -57,7 +57,7 @@ common でも mythic でもほぼ同じ額になり、店への売値はさら�
 （`calculate_modification(item_type, item_price)`）や、価格から段階を逆算する
 `get_equipment_level_from_price` の入口でもある。値段だけ膨らませると逆算側が
 定義域から外れて `KeyError` を出しうる（`get_npc_employ_price` の前例。
-VERIFICATION.md §2.2）。売買の値段はこの mod、内部の段階計算はゲーム自身、と分ける。
+VERIFICATION_LOG.md §2.2）。売買の値段はこの mod、内部の段階計算はゲーム自身、と分ける。
 """
 
 import sys

@@ -15,7 +15,8 @@ Instantale（Epic版）にゲームのファイルを一切書き換えずに MO
 
 - [TECH.md](TECH.md)：ローダの仕組みと MOD の書き方
 - [GAME.md](GAME.md)：ゲーム自身の構造（MOD を作る人向け）
-- [VERIFICATION.md](VERIFICATION.md)：どこまで確かめてあるかの記録（MOD を作る人向け）
+- [VERIFICATION.md](VERIFICATION.md)：どこまで確かめてあるかの一覧と、未確認項目の確認手順（MOD を作る人向け）
+- [VERIFICATION_LOG.md](VERIFICATION_LOG.md)：実機・実データで何を見たかの記録（MOD を作る人向け）
 
 ---
 
@@ -124,7 +125,7 @@ MOD が入る。
 `out\modloader.log` の末尾に、こう出ていれば入っている:
 
 ```
-boot complete: 30/30 mod(s) applied
+boot complete: 32/32 mod(s) applied
 ```
 
 数が足りなくても失敗とは限らない。AI関連の MOD は最初の会話まで待ってから入る
@@ -306,7 +307,8 @@ MOD ごとの症状は [MODS.md](MODS.md) の各 MOD の「困ったとき」に
 | `docs\MODS.md` | 同梱している MOD の一覧（何が直るか・何が増えるか・設定） |
 | `docs\TECH.md` | MOD を作る人向けのリファレンス（ローダの仕組みと書き方） |
 | `docs\GAME.md` | Instantale 自身の内部リファレンス（MOD を作る人向け） |
-| `docs\VERIFICATION.md` | どこまで確かめてあるかの記録（MOD を作る人向け） |
+| `docs\VERIFICATION.md` | どこまで確かめてあるかの一覧と、未確認項目の確認手順（MOD を作る人向け） |
+| `docs\VERIFICATION_LOG.md` | 実機・実データで何を見たかの記録（MOD を作る人向け） |
 
 書き込み先が3つに分かれているのは、消していいものと消してはいけないものを
 一目で分けるため。`settings\` は自分で決めたこと、`out\` は記録、`state\` は

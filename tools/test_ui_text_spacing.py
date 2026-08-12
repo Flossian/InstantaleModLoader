@@ -17,7 +17,7 @@
   無効     … 設定を空欄（null）にすると、その項目には触らない
   無傷     … ラベルが見つからないビルドでは何もしない
 
-値は**実機の実測**（GAME.md §2.3 / VERIFICATION.md §2.25）から取ってある:
+値は**実機の実測**（GAME.md §2.3 / VERIFICATION_LOG.md §2.25）から取ってある:
 本文のラベルは `hud.text_display`、`font_size=27`、**`line_height=1.8`**
 （Kivy の既定は 1.0）。画面の採寸（行の間隔 70px・段落の間隔 138px ＝ちょうど
 2行分）と合わせると1行の送りは `27 × 1.44 × 1.8 ≒ 70px` で、偽ラベルはこの3つで作る。
@@ -337,7 +337,7 @@ def run():
           close(hud.choice_button.line_height, LINE_HEIGHT), hud.choice_button.line_height)
 
     # -- 本文を載せ替える MOD が先に走っていても外さない ----------------------
-    # 実機で起きた退行の回帰（VERIFICATION.md §2.32）。`117_message_text_integrity`
+    # 実機で起きた退行の回帰（VERIFICATION_LOG.md §2.32）。`117_message_text_integrity`
     # が長い本文を「前置き + 省略通知 + 末尾 1000 文字」に載せ替えるので、
     # ラベルの text は value と一致も包含もしなくなる。名前で引いていれば効く。
     def truncating(value):
@@ -359,7 +359,7 @@ def run():
     # -- 1フレームぶんの仕事は1回だけ ----------------------------------------
     # ここが表示速度に直結する。実機ではラベル1枚の作り直しが 15ms かかっており
     # （テクスチャ 1340x3549）、1文字ごとに余計に1回呼ぶだけで打ち出しが目に見えて
-    # 遅くなる（VERIFICATION.md §2.34）。
+    # 遅くなる（VERIFICATION_LOG.md §2.34）。
     CLOCK.tick()                             # ここまでの予約を流してから数える
     before = CLOCK.scheduled
     hud = FakeHUD()
