@@ -2,6 +2,7 @@
   "order": [
     "000_recon",
     "001_crash_recorder",
+    "126_ui_title_version",
     "100_fix_kivy_shutdown",
     "101_fix_npc_employ_price",
     "102_fix_prompt_dedup",
