@@ -7,7 +7,7 @@ llama-server を候補の `--ctx-size` で順に起こし、同じプロンプ�
 
 使い方は `llm_ctx_probe.bat` から。ゲームは終了しておくこと（VRAM と
 ポートを取り合うため）。測定の背景と実測値は
-`runtime\\mods\\904_llm_context_size\\DOC.md` を参照。
+`docs\\VERIFICATION_LOG.md` §2.48 を参照。
 """
 
 from __future__ import annotations
@@ -341,7 +341,7 @@ def main() -> int:
             % (total, best["vram_mib"], args.reserve,
                total - best["vram_mib"] - args.reserve))
     log()
-    log("  904_llm_context_size の設定:")
+    log("  127_llm_response_speed の設定:")
     log("      1リクエストが使えるトークン : %d" % (best["n_ctx_seq"] or best["ctx"]))
     log("      同時に持つスロット数        : %s" % (parallel or 4))
     log()

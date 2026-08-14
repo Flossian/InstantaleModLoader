@@ -1,0 +1,15 @@
+{
+  "entry": "probe_llm_overlap.py",
+  "api": 1,
+  "name": {
+    "en": "LLM request overlap probe",
+    "ja": "LLMリクエストの重なりの計測"
+  },
+  "description": {
+    "en": "Counts overlapping LLM requests during real play from inside the process (local llama.cpp path only)",
+    "ja": "実プレイ中のLLMリクエストの多重送信をプロセス内で数える（ローカル llama.cpp 経路のみ）"
+  },
+  "version": "1",
+  "author": "flossian",
+  "debug": true
+}

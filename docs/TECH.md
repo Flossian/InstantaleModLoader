@@ -76,7 +76,7 @@ tools/injector.py         PE解析 → x64スタブ → CreateRemoteThread（--u
 tools/logrotate.py        out/*.log の世代管理（注入 = 1世代の境目）
 tools/check_mods.py       静的検査（デコレータ・宣言と実体のずれ）
 tools/llm_ctx_probe.bat, llm_ctx_probe.py
-                          ローカルLLMの窓を実測して最適値を出す（904_ 用）
+                          ローカル LLM の窓を実測して最適値を出す（904_ 用）
 tools/tests/test_*.py     ゲーム抜きで走る検査。開発用で配布物には入らない
 runtime/instantale_modloader/
     __init__.py   boot() / discover() / ログ / 世代発行 / 遅延設置の監視 / on_ready

@@ -262,8 +262,8 @@ SAVE_OBFUSCATION_KEY = b'Instantale_Save_Key_2026'              （§2.16）
 | サウンドの設定 | `scripts.sounds:SoundManager.apply_music_volume(self, app)`（`106_` が包んでいる 4 メソッドとは別の新メソッド） |
 | ワールドエディタ機能のための処理部品 | `scripts.save_codec`（`xor_with_key` / `read_obfuscated_json_file` / `write_obfuscated_json_file` / `read_json_with_obfuscation_fallback`） |
 | 四体以上の敵で表示が壊れる／進行不可 | 戦闘側。未検証（更新後まだ戦闘していない） |
-| スキーマの重複・増幅（ローカルLLM） | `105_` の COMPACT とは別物。§1.6 |
-| サーバーの多重起動（ローカルLLM） | `LlamaCppSidecar`。§2.12 の所有者調停と関わる。未検証 |
+| スキーマの重複・増幅（ローカル LLM） | `105_` の COMPACT とは別物。§1.6 |
+| サーバーの多重起動（ローカル LLM） | `LlamaCppSidecar`。§2.12 の所有者調停と関わる。未検証 |
 | コンテキスト長限界の超過 | `102_` / `103_` と重なる。§1.6 |
 | 味方が敵になる／世界生成の無限テキスト | 対応する対象を特定していない |
 
@@ -272,7 +272,7 @@ SAVE_OBFUSCATION_KEY = b'Instantale_Save_Key_2026'              （§2.16）
 | | |
 |---|---|
 | `scripts.steam.server_process` | Steam 認証と課金。`auth_steam_and_get_jwt` / `get_ticket_hex` / `get_entitlement` / `subscription_start` / `subscription_wait` / `cancel_contract` / `upgrade_start` |
-| クラウドLLMのサブスクリプション | `hud_auto_configuration:AutoConfigurationScreen.use_cloud_subscription_process` / `hud_option:OptionAIScreen.show_subscription_screen` / `OptionLLMScreen.get_cloud_llm_list(cloud_billing_type=None)` / `check_device_info:get_setting_for_cloud_llm`。**サブスクはゲーム側が未実装**（2026-08-08 時点。画面と関数はあるが生きているのは APIキー方式だけ。クラウド経路の検証は APIキーで行えば足りる） |
+| クラウド LLM のサブスクリプション | `hud_auto_configuration:AutoConfigurationScreen.use_cloud_subscription_process` / `hud_option:OptionAIScreen.show_subscription_screen` / `OptionLLMScreen.get_cloud_llm_list(cloud_billing_type=None)` / `check_device_info:get_setting_for_cloud_llm`。**サブスクはゲーム側が未実装**（2026-08-08 時点。画面と関数はあるが生きているのは APIキー方式だけ。クラウド経路の検証は APIキーで行えば足りる） |
 | 装備の強化 | `__main__:EquipmentReinforcementStart` / `EquipmentReinforcementManager`（`calculate_modification(item_type, item_price)`）/ `InstantaleApp.reinforce_equipment` / `get_upgrade_equipment_price` / `toggle_reinforcement_inventory_window`、HUD 側は `set_reinforce_equipment_button_callback` / `toggle_reinforcement_inventory_visibility` |
 | `Item` に `upgrade_level` | `Item.__init__(..., grid_pos=None, upgrade_level=0)` |
 
@@ -359,7 +359,7 @@ main_024 のアナウンスには入っていない＝直っていない。ど�
   プロンプト本文に埋め込まれたスキーマの repr（§2.12）で、ゲームが直した
   「再生成時にスキーマが重複・増幅する」とは別物。プロンプト全体も小さくなっていて
   （`total_chars` が 580〜2164）、両方が効いた状態に見える
-- クラウドLLM経路は素通りが確定し、`111_` は v4 で対処済み（§1.8・§2.12）
+- クラウド LLM 経路は素通りが確定し、`111_` は v4 で対処済み（§1.8・§2.12）
 
 > 0 件だけでは「不要になった」ことの証拠にならない。その操作を通していなければ、
 > 出番が来ていないのと区別が付かない。`102_` は発火していた操作を実際に通し、
@@ -388,7 +388,7 @@ main_024 のアナウンスには入っていない＝直っていない。ど�
 
 ### 1.8 影響を確かめていないこと（main_023）
 
-- クラウドLLM経路はプロンプト系 MOD が**素通りになることが確定した**
+- クラウド LLM 経路はプロンプト系 MOD が**素通りになることが確定した**
   （2026-08-08・APIキー利用者から「`111_` の置換が効かない」との報告。同日、
   無料 Gemini の実機で経路を実測）。経路はプロバイダごとの
   `request_llm_inference_*`（Gemini は `_gemini_test_streaming`）で、
@@ -401,7 +401,7 @@ main_024 のアナウンスには入っていない＝直っていない。ど�
   （Gemini なら `_schema_instruction` のスキーマ文）には当たらない**。
   `102_` / `103_` / `105_` はクラウドでは素通りだが、**実害があるのは `103_` だけ**:
   `102_` の対象バグはゲーム本体（main_023）で発生源から修正済み（§1.6。公式文言も
-  「ローカルLLM使用時」で、Gemini の再生成は壊れた部分木だけ修復する別実装なので
+  「ローカル LLM 使用時」で、Gemini の再生成は壊れた部分木だけ修復する別実装なので
   重複の仕組み自体が無いとみられる）。`105_` が削るスキーマ repr の埋め込みは
   ローカル送信モジュール側の行いで、Gemini は `_schema_instruction` という別実装
   （§2.12）＝対象がクラウドの本文に無いとみられる。`103_` の対象
@@ -1321,6 +1321,56 @@ scripts.llm.llm_manager:*                                                    マ
 EVENTLOG は二重に適用しても結果が変わらないので併用してよく、プロキシ側のログに出たら
 MOD の取りこぼしという検出器になる。
 
+#### 2.12.1 起動引数は設定欄から全部は届かない（実測・2026-08-12）
+
+設定画面の「サーバーパラメータ」欄は `config.json` の
+`ai_setting.server_parameters.<バックエンド名>` に入り、`llama-server` の
+コマンドラインへ繋がれる。**ただし `--ctx-size` だけが取り除かれる。**
+
+```
+欄に書いた値
+    --n-gpu-layers 999 --parallel 2 --ctx-size 32768 --cache-reuse 256
+実際のコマンドライン
+    ... --ctx-size 16384 ... --n-gpu-layers 999 --parallel 2 --cache-reuse 256
+                  ^^^^^ ゲームの値が残る          ^^^^^^^^^^ 他はそのまま渡る
+```
+
+`--parallel` も `--cache-reuse` もサンプリングも渡るので、欄自体は効いている。
+ゲームが自前の `--ctx-size 16384` と衝突する指定を落としていると読める。
+
+**書く欄を間違えやすい。** 2次元（バックエンド × 種別）で、効くのは1つ。
+
+- 行 = いま選んでいるバックエンド（`ai_setting.local_model_setting.llm_backend`。
+  実機では `llama-cpp-completion-cuda`）。`self_server` は「任意 OpenAI 互換
+  サーバー」用で、ローカル実行では読まれない
+- 列 = `server_parameters`（起動引数）。`environment_setting` は環境変数なので
+  引数を書いても渡らない
+
+**ファイルも2つある。** ゲームが読み書きするのは
+`%LOCALAPPDATA%\Darmabeko\Instantale\config.json`。インストール先にも同じ形の
+ものがあるが、そちらは初期テンプレートで書き換えても効かない。
+
+#### 2.12.2 `--parallel` は KV の持ち方を変える（実測・2026-08-12）
+
+`--parallel` を書くかどうかで、llama-server の KV の確保のしかたが変わる。
+書かなければ `n_parallel=auto` が選ばれ、**統合 KV**（4スロットが1つのプールを
+共有）になる。明示すると統合が外れ、スロットごとに専用のプールを取る。起動ログの
+`kv_unified` に出る。
+
+| 起動引数 | `kv_unified` | `n_ctx` | `n_ctx_seq`（1リクエストの窓） |
+|---|---|---|---|
+| `--ctx-size 16384`（ゲームの既定） | true | 16384 | 16384 |
+| `--ctx-size 16384 --parallel 1` | false | 16384 | 16384 |
+| `--ctx-size 65536 --parallel 4` | false | 65536 | 16384 |
+| `--ctx-size 32768`（`--parallel` なし） | true | 32768 | 32768 |
+
+**`--parallel` を書かなければ窓は縮まない。** 指定値がそのままスロットごとの窓に
+なるので、掛け算で埋め合わせる必要は無い。明示したときだけ `n_ctx ÷ parallel` に
+割られる。
+
+確保量への影響は VERIFICATION_LOG.md §2.48。統合に戻すには旗が**無い**必要がある
+ので、設定欄から `--parallel` が渡っている場合は消さないと統合にならない。
+
 ### 2.13 インベントリのグリッド
 
 所持品・売買画面（twin inventory）は `scripts.hud.new_hud:InventoryGrid`。
@@ -1598,7 +1648,7 @@ LLM が生成した名前に引用符が混じる経路が実在する（`試験
   `generate_character_image` / `generate_character_image_from_enemy` /
   `generate_enemy_image_from_character` / `delete_world_character_images`）。個別に消毒すると
   書き込みと削除でずれて別の不整合を生む
-- 名前の唯一の入口は `scripts.characters:Character.__init__`（LLM生成・プリセット・
+- 名前の唯一の入口は `scripts.characters:Character.__init__`（LLM 生成・プリセット・
   プレイヤー・セーブからのロードが全部ここを通る）。ここで名前そのものを正せば5箇所は
   手を入れずに一致する。引数ではなく `self.name`（`__init__` を抜けた後）を正すと、
   名前をどの引数から組み立てているかを知らずに済む

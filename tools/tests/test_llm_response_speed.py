@@ -1,16 +1,17 @@
 # -*- coding: utf-8 -*-
-"""904_llm_context_size をゲーム抜きで通す。
+"""127_llm_response_speed をゲーム抜きで通す。
 
-    python tools/tests/test_wip_llm_context_size.py
+    python tools/tests/test_llm_response_speed.py
 
 偽の `popen_sidecar` を差し込み、次を確認する。
 
   選り分け … llama-server の起動だけを掴む。背景除去のサイドカーは触らない
-  合計     … 渡すのは「窓 × スロット数」。--parallel も必ず明示する
+  既定     … --ctx-size は触らず、--parallel 1 だけを立てる
+  合計     … CTX_SIZE を上げたときは「窓 × スロット数」を渡す
   上書き   … 既にある旗は書き換える。無い旗だけ末尾に足す
   渡し方   … 位置引数でもキーワード `args` でも、受け取った形のまま返す
   非破壊   … 呼び出し側のリストを書き換えない
-  観測のみ … CTX_SIZE=0 では argv が1文字も変わらない
+  観測のみ … OBSERVE_ONLY では argv が1文字も変わらない
 """
 import importlib.util
 import io
@@ -44,8 +45,8 @@ def find_mod(suffix):
     return folder, os.path.join(folder, entry)
 
 
-MOD_DIR, MOD = find_mod("_llm_context_size")
-MOD_NAME = "llm_context_size_mod"
+MOD_DIR, MOD = find_mod("_llm_response_speed")
+MOD_NAME = "llm_response_speed_mod"
 
 failures = []
 
@@ -229,10 +230,53 @@ check("外した値は道連れにしない", "1" not in argv[len(GAME_ARGV):], 
 check("他の引数は落ちない",
       all(item in argv for item in ("--cache-reuse", "256", "--top-k", "64")))
 
-print("観測のみ")
-module, ctx = fresh_mod(CTX_SIZE=0)
+print("既定（速度だけ変える）")
+module, ctx = fresh_mod()
 argv = passed_argv(launch(ctx, list(GAME_ARGV)))
-check("CTX_SIZE=0 では1文字も変えない", argv == GAME_ARGV, argv)
+check("--ctx-size はゲームの値のまま", flag_value(argv, "--ctx-size") == "16384",
+      flag_value(argv, "--ctx-size"))
+check("--parallel 1 を立てる", flag_value(argv, "--parallel") == "1",
+      flag_value(argv, "--parallel"))
+check("--ctx-size を1つも増やさない", argv.count("--ctx-size") == 1)
+bare = [r"C:in\llama-server.exe", "-m", "x.gguf"]
+argv = passed_argv(launch(ctx, list(bare)))
+check("旗が無いなら --ctx-size は足さない", "--ctx-size" not in argv, argv)
+check("旗が無くても --parallel は足す", flag_value(argv, "--parallel") == "1", argv)
+
+print("チェックポイント（--parallel 1 の副作用打ち消し）")
+module, ctx = fresh_mod()
+argv = passed_argv(launch(ctx, list(GAME_ARGV)))
+check("既定で -cpent を足す",
+      flag_value(argv, "--checkpoint-every-n-tokens") == "256",
+      flag_value(argv, "--checkpoint-every-n-tokens"))
+argv = passed_argv(launch(ctx, GAME_ARGV + ["--checkpoint-every-n-tokens", "512"]))
+check("欄で指定済みなら上書きしない",
+      flag_value(argv, "--checkpoint-every-n-tokens") == "512",
+      flag_value(argv, "--checkpoint-every-n-tokens"))
+check("二重に足さない", argv.count("--checkpoint-every-n-tokens") == 1)
+module, ctx = fresh_mod(SLOTS=0)
+argv = passed_argv(launch(ctx, list(GAME_ARGV)))
+check("統合に戻すときは足さない", "--checkpoint-every-n-tokens" not in argv, argv)
+
+print("窓を黙って縮めない")
+module, ctx = fresh_mod(CTX_SIZE=0, SLOTS=2)
+argv = passed_argv(launch(ctx, list(GAME_ARGV)))
+check("SLOTS=2 は合計を倍にして窓を保つ",
+      flag_value(argv, "--ctx-size") == "32768", flag_value(argv, "--ctx-size"))
+check("--parallel も合わせる", flag_value(argv, "--parallel") == "2")
+module, ctx = fresh_mod(CTX_SIZE=0, SLOTS=4)
+argv = passed_argv(launch(ctx, list(GAME_ARGV)))
+check("SLOTS=4 なら4倍", flag_value(argv, "--ctx-size") == "65536",
+      flag_value(argv, "--ctx-size"))
+module, ctx = fresh_mod(CTX_SIZE=0, SLOTS=1)
+argv = passed_argv(launch(ctx, list(GAME_ARGV)))
+check("SLOTS=1 では触らない", flag_value(argv, "--ctx-size") == "16384",
+      flag_value(argv, "--ctx-size"))
+
+print("観測のみ")
+module, ctx = fresh_mod(OBSERVE_ONLY=True)
+argv = passed_argv(launch(ctx, list(GAME_ARGV)))
+check("OBSERVE_ONLY では1文字も変えない", argv == GAME_ARGV, argv)
 
 print("設定の宣言")
 with io.open(os.path.join(MOD_DIR, "mod.json"), encoding="utf-8") as fh:

@@ -1,15 +1,34 @@
 # -*- coding: utf-8 -*-
-"""ローカルLLMの窓を広げる。**サーバを起こす直前に起動引数を書き換える。**
+r"""ローカルLLMを速くする。**サーバを起こす直前に起動引数を書き換える。**
 
-ゲームは `llama-server` を必ず `--ctx-size 16384` で起こす。日本語でおよそ
-26,000字ぶんで、普段の会話プロンプト（実測 6,600 トークン前後）には足りるが、
-`life_log` が育った NPC との会話はこれを超える。超えた要求はエラーになり、
-ゲームは『リクエストを再実行』を出す。押しても**同じプロンプトを送り直すだけ**
-なので必ず同じ所で落ちる ― 詰まって見えるのはこのため（DOC.md §1）。
+ゲームは `llama-server` をスロット4本の**統合 KV** で起こす（`--parallel` を
+渡さないと llama.cpp が `auto` を選ぶ）。だがこのゲームは並列でほとんど走らない
+― 実測でリクエストの94%が逐次、同時に走ったのは最大2本だった（VERIFICATION_LOG.md §2.48）。
+4本ぶんの KV を抱えたまま1本しか使っていない。
 
-設定画面の「サーバーパラメータ」欄からは直せない。**ゲームは追加パラメータを
-繋ぐ前に `--ctx-size` を取り除く**（実測・DOC.md §2）。`--parallel` も
-`--cache-reuse` もサンプリングもそのまま渡るのに、この1つだけが消える。
+`--parallel 1` を渡すと統合が外れて専用の1本になり、KV が減って速くなる。
+同じ窓 16384 での実測（VERIFICATION_LOG.md §2.48）:
+
+    統合4スロット（素のゲーム）   KV 1220 MiB   生成 94 / 96 t/s
+    --parallel 1                  KV  620 MiB   生成 133 / 127 t/s
+
+**この MOD の本体はこれ。** `--ctx-size` には既定では触らない。窓を広げるのは
+任意の追加機能で、KV が増えるぶん VRAM の余裕が要る（GAME.md §2.12.2 と VERIFICATION_LOG.md §2.48）。
+
+## 1本にすると再計算が増える。ので同時に打ち消す
+
+SWA 層は古いトークンを捨てるため、途中から再開するにはその時点のスナップショット
+（コンテキストチェックポイント）が要る。スロットを1本に絞ると、種類の違う
+プロンプトが同じスロットを奪い合い、**復元に失敗してフル再計算に落ちる回が出る**
+（実測で4件に1件、プロンプト処理が +20%）。
+
+`--checkpoint-every-n-tokens 256` を足すとスナップショットが密になり、この失敗が
+消える。**VRAM は1バイトも増えない**（ホスト側に載る。実測で 9054 MiB のまま）。
+そのため既定で必ず付ける。設定欄で明示されている場合だけ、そちらを尊重する。
+
+設定画面の「サーバーパラメータ」欄からでは窓を変えられない。**ゲームは追加
+パラメータを繋ぐ前に `--ctx-size` を取り除く**（実測・GAME.md §2.12.1）。`--parallel`
+も `--cache-reuse` もサンプリングもそのまま渡るのに、この1つだけが消える。
 
 ```
 config.json の欄  --parallel 2 --ctx-size 32768 --cache-reuse 256
@@ -39,7 +58,7 @@ config.json の欄  --parallel 2 --ctx-size 32768 --cache-reuse 256
 ## 窓とスロットは必ず一緒に決める
 
 `--parallel` を書くかどうかで、llama-server の KV の持ち方そのものが変わる
-（実測・DOC.md §3）:
+（実測・GAME.md §2.12.2）:
 
 ```
 --ctx-size 16384                → kv_unified=true。4スロットが 16384 の
@@ -48,49 +67,61 @@ config.json の欄  --parallel 2 --ctx-size 32768 --cache-reuse 256
                                   プールを取り、窓は 16384÷2 = 8192
 ```
 
-明示すると統合が外れ、確保量がスロット数倍になる。同じ窓・同じスロット数でも
-KV が変わるので、`SLOTS` は3通りの意味を持たせてある:
+明示すると統合が外れ、SWA 側の確保量が減る（実測で3分の1）。同じ窓でも
+KV が変わるので、設定は2つに分けてある:
 
-    SLOTS = 0   --ctx-size CTX_SIZE                    統合。窓=CTX_SIZE、4本で共有
-    SLOTS = 1   --ctx-size CTX_SIZE --parallel 1       専用1本。KV が最小
-    SLOTS >= 2  --ctx-size (CTX_SIZE*SLOTS) --parallel SLOTS   専用 SLOTS 本
+    SLOTS = 0        --parallel を外す（統合に戻す）
+    SLOTS = 1        --parallel 1。専用1本で KV 最小 ← 既定
+    SLOTS >= 2       --parallel SLOTS。窓 × スロット数ぶんの KV を取る
 
-既定は 32768 × 1 本。**スロットを増やすのはこのゲームでは損**で、実測では
-llama-server 宛のリクエストの94%が逐次、同時に走ったのは最大2本だった
-（DOC.md §7）。1本にすると KV が最小になり、その余りを窓に回せる。
+    CTX_SIZE = 0     --ctx-size に触らない（ゲームの値のまま） ← 既定
+    CTX_SIZE > 0     その値を窓にする。SLOTS>=2 なら合計＝窓×スロット数
 
-適正値はマシンごとに違う。`tools\llm_ctx_probe.bat` が実測して出す。
+**既定（CTX_SIZE=0 / SLOTS=1）は KV がどのモデルでも増えない。** 窓を据え置いた
+まま持ち方だけを変えるので、素のゲームに対して確保量は同じか減る。速度だけが
+変わるので、環境を選ばない。
+
+`CTX_SIZE` を上げると KV は窓に比例して増える。**単価はモデルの構造で決まる**
+（SWA を持つ gemma-4-26B は 20 KiB/token、持たない Qwen3.5-9B は 32 KiB/token）
+ので、安全な値はマシンとモデルの組でしか決まらない。`tools\llm_ctx_probe.bat`
+が実測して出す。溢れてもエラーにはならず「異様に遅い」になるだけなので、
+勘で上げないこと。
 
 ## 割り切り
 
 - **効くのは次にサーバが起きるときから。** 既に走っているサーバの引数は
   変えられない。注入がサーバ起動より後なら、ゲーム側で LLM を開き直す
   （設定画面でモデルを選び直す）か、注入してからゲームを起動し直す。
-  `apply()` の時点で走っているサーバがあれば、その `--ctx-size` を読んで
-  ログに出す ― 効いているかを目で確かめるため
-- **窓を広げても `life_log` は増え続ける。** これは時間稼ぎで、根治は
-  プロンプト側の刈り込み（DOC.md §5）
-- **VRAM を見ること。** 溢れても Windows は失敗せず共有メモリへ退避するので、
-  症状は「エラー」ではなく「異様に遅い」になる。増やしたあとは
-  `nvidia-smi` の空きを1度見る
+  `apply()` の時点で走っているサーバがあれば、その持ち方を読んでログに出す
+  ― 効いているかを目で確かめるため
+- **窓の拡張は詰まりの根治ではない。** `life_log` が膨らんでプロンプトが窓を
+  超える問題は、プロンプト側で外科的に直す（MODS.md）。ここで `CTX_SIZE` を
+  上げるのは時間稼ぎでしかないので、既定では触らない
+- **`CTX_SIZE` を上げたら VRAM を見ること。** 溢れても Windows は失敗せず
+  共有メモリへ退避するので、症状は「エラー」ではなく「異様に遅い」になる。
+  `tools\llm_ctx_probe.bat` が安全な上限を実測で出す
 """
 
 import os
 
-# 1リクエストが使える窓（トークン）。0 で書き換えを止め、観測だけにする。
+# 1リクエストが使える窓（トークン）。0 は `--ctx-size` に触らない。
 # **`mod.json` の "default" と揃えること**（`tools/check_mods.py` が AST で
 # 突き合わせる。TECH.md §3.8.3）。
-CTX_SIZE = 32768
+CTX_SIZE = 0
 
-# 同時に持つスロット数。0 は `--parallel` を渡さない（統合 KV）。
+# 同時に持つスロット数。0 は `--parallel` を外す（統合 KV に戻す）。
 # 1 以上はスロットごとに専用の KV を確保する（docstring の表を参照）。
 # **`mod.json` の "default" と揃えること。**
 SLOTS = 1
 
+# 何も書き換えず、実際の起動引数を記録するだけにする。
+# **`mod.json` の "default" と揃えること。**
+OBSERVE_ONLY = False
+
 # 起動引数をログに出す回数。
 LOG_LIMIT = 5
 
-LOG_BASENAME = "llm_context.log"
+LOG_BASENAME = "llm_speed.log"
 
 #: サイドカーの起動が必ず通る1点。
 TARGET = "sidecar_process:popen_sidecar"
@@ -100,6 +131,14 @@ EXE_MARK = "llama-server"
 
 CTX_FLAG = "--ctx-size"
 PARALLEL_FLAG = "--parallel"
+
+#: チェックポイントを取る間隔（トークン）。`--parallel 1` の副作用を打ち消す。
+#: 詳しくは docstring の「1本にすると再計算が増える」。
+CHECKPOINT_FLAG = "--checkpoint-every-n-tokens"
+CHECKPOINT_EVERY = 256
+
+#: ゲームが必ず渡してくる `--ctx-size`。`SLOTS>=2` で窓を保つ計算に使う。
+GAME_CTX_SIZE = 16384
 
 
 def is_llama_server(argv):
@@ -145,12 +184,17 @@ def set_flag(argv, flag, value):
     return out, None
 
 
+def has_flag(argv, flag):
+    """`flag` が既に argv にあるか。設定欄からの指定を上書きしないための確認。"""
+    return any(str(item) == flag for item in argv)
+
+
 def drop_flag(argv, flag):
     """`flag` とその値を取り除く。戻り値は (新しい列, 取り除いた値)。
 
     統合 KV にするには `--parallel` が**無い**必要がある。設定画面の
     「サーバーパラメータ」欄から `--parallel 1` が渡ってくる実例があるので
-    （実測・DOC.md §2）、足すだけでなく消せないと `SLOTS=0` が効かない。
+    （実測・GAME.md §2.12.1）、足すだけでなく消せないと `SLOTS=0` が効かない。
     """
     out = []
     removed = None
@@ -171,13 +215,20 @@ def drop_flag(argv, flag):
 def plan_flags(ctx_size, slots):
     """設定から実際に渡す値を決める。戻り値は (--ctx-size の値, --parallel の値)。
 
-    `--parallel` が None なら「渡さない」。統合 KV になり、窓は指定値がその
-    ままスロットごとの窓になる（docstring の表を参照）。
+    どちらも None は「その旗に触らない」。`--ctx-size` の None はゲームの値を
+    そのまま通す、`--parallel` の None は旗を外す（統合 KV に戻す）。
     """
     slots = max(0, int(slots))
-    if slots == 0:
-        return ctx_size, None
-    return ctx_size * slots, slots
+    parallel = slots if slots >= 1 else None
+    if ctx_size <= 0:
+        # `--ctx-size` は合計なので、2本以上でそのまま渡すと窓が黙って
+        # スロット数ぶん縮む（実測・VERIFICATION_LOG.md §2.48）。ゲームの値を
+        # 引き伸ばして窓を保つ。
+        if slots >= 2:
+            return GAME_CTX_SIZE * slots, parallel
+        return None, parallel
+    # スロットごとに専用の窓を持たせるときだけ、合計へ引き伸ばす。
+    return ctx_size * max(1, slots), parallel
 
 
 def rewrite_argv(argv, ctx_size=None, slots=None):
@@ -191,14 +242,16 @@ def rewrite_argv(argv, ctx_size=None, slots=None):
 
     if not is_llama_server(argv):
         return argv, []
-    # 0 以下は「観測だけ」。設定で切った状態を、フックを外さずに作れるようにする。
-    if ctx_size <= 0:
+    # 設定で切った状態を、フックを外さずに作れるようにする。
+    if OBSERVE_ONLY:
         return argv, []
 
     total, parallel = plan_flags(ctx_size, slots)
+    new_argv = argv
     changes = []
-    new_argv, before = set_flag(argv, CTX_FLAG, total)
-    changes.append((CTX_FLAG, before, str(total)))
+    if total is not None:
+        new_argv, before = set_flag(new_argv, CTX_FLAG, total)
+        changes.append((CTX_FLAG, before, str(total)))
     if parallel is None:
         # 統合 KV は `--parallel` が無いことが条件。既にあれば消す。
         new_argv, before = drop_flag(new_argv, PARALLEL_FLAG)
@@ -207,6 +260,13 @@ def rewrite_argv(argv, ctx_size=None, slots=None):
     else:
         new_argv, before = set_flag(new_argv, PARALLEL_FLAG, parallel)
         changes.append((PARALLEL_FLAG, before, str(parallel)))
+        # スロットを絞ると SWA のチェックポイント復元に失敗してフル再計算が
+        # 混ざる。密に取らせると消える（VRAM は増えない。ホスト側に載る）。
+        if CHECKPOINT_EVERY > 0 and not has_flag(argv, CHECKPOINT_FLAG):
+            new_argv, before = set_flag(new_argv, CHECKPOINT_FLAG, CHECKPOINT_EVERY)
+            changes.append((CHECKPOINT_FLAG, before, str(CHECKPOINT_EVERY)))
+    if not changes:
+        return argv, []
     return new_argv, changes
 
 
@@ -221,8 +281,8 @@ def describe(argv):
     return " ".join(parts)
 
 
-def running_context_size():
-    """既に走っている llama-server の `--ctx-size` を読む。読めなければ None。
+def running_flags():
+    """既に走っている llama-server の (ctx, parallel) を読む。読めなければ None。
 
     注入がサーバ起動より後だと、この MOD は次の起動まで効かない。それを
     「効いていない」と誤読しないための材料をログに出す。
@@ -231,17 +291,20 @@ def running_context_size():
         import psutil
     except Exception:
         return None
+
+    def value_of(cmdline, flag):
+        for i, item in enumerate(cmdline):
+            if str(item) == flag and i + 1 < len(cmdline):
+                return str(cmdline[i + 1])
+        return None
+
     try:
         for proc in psutil.process_iter(["name", "cmdline"]):
             info = proc.info or {}
-            name = (info.get("name") or "").lower()
-            if EXE_MARK not in name:
+            if EXE_MARK not in (info.get("name") or "").lower():
                 continue
             cmdline = info.get("cmdline") or []
-            for i, item in enumerate(cmdline):
-                if str(item) == CTX_FLAG and i + 1 < len(cmdline):
-                    return str(cmdline[i + 1])
-            return "?"
+            return value_of(cmdline, CTX_FLAG), value_of(cmdline, PARALLEL_FLAG)
     except Exception:
         return None
     return None
@@ -285,27 +348,33 @@ def apply(ctx):
         return orig(*args, **kwargs)
 
     def report():
-        """既に走っているサーバの窓をログに出す（プロセスにつき1回）。"""
-        current = running_context_size()
+        """既に走っているサーバの持ち方をログに出す（プロセスにつき1回）。"""
+        current = running_flags()
         if current is None:
             return
-        want = str(plan_flags(CTX_SIZE, SLOTS)[0])
-        if current == want:
-            ctx.log("llm context size: 稼働中のサーバは既に {}={}".format(
-                CTX_FLAG, current))
+        ctx_now, par_now = current
+        want_ctx, want_par = plan_flags(CTX_SIZE, SLOTS)
+        ok = ((want_ctx is None or ctx_now == str(want_ctx))
+              and (str(want_par) if want_par else None) == par_now)
+        shown = "{}={} {}={}".format(CTX_FLAG, ctx_now, PARALLEL_FLAG,
+                                     par_now if par_now else "(無し)")
+        if ok:
+            ctx.log("llm context size: 稼働中のサーバは既に " + shown)
         else:
-            ctx.log("llm context size: 稼働中のサーバは {}={}（狙いは {}）。"
-                    "次にサーバが起きるときから効く".format(CTX_FLAG, current, want),
-                    level="WARN")
+            ctx.log("llm context size: 稼働中のサーバは {}。次にサーバが起きる"
+                    "ときから効く".format(shown), level="WARN")
 
     ctx.on_ready(report)
 
-    if CTX_SIZE <= 0:
-        ctx.log("llm context size: 観測のみ（CTX_SIZE=0）")
+    if OBSERVE_ONLY:
+        ctx.log("llm context size: 観測のみ（OBSERVE_ONLY）")
     else:
         total, parallel = plan_flags(CTX_SIZE, SLOTS)
-        ctx.log("llm context size: installed (window {} x {} -> {} {}{})".format(
-            CTX_SIZE,
-            "{} slot(s)".format(parallel) if parallel else "shared 4 slot(s)",
-            CTX_FLAG, total,
-            " {} {}".format(PARALLEL_FLAG, parallel) if parallel else ""))
+        plan = []
+        if total is not None:
+            plan.append("{} {}".format(CTX_FLAG, total))
+        plan.append("{} {}".format(PARALLEL_FLAG, parallel) if parallel
+                    else "{} を外す".format(PARALLEL_FLAG))
+        ctx.log("llm context size: installed ({}{})".format(
+            " ".join(plan),
+            "" if CTX_SIZE > 0 else "。窓はゲームの値のまま"))

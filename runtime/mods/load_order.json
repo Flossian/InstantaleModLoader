@@ -19,6 +19,7 @@
     "125_balance_charisma_impression",
     "111_llm_prompt_replace",
     "117_message_text_integrity",
+    "127_llm_response_speed",
     "112_ui_text_spacing",
     "113_ui_text_expand",
     "114_ui_input_focus",
@@ -53,7 +54,8 @@
     "313_event_ability_check",
     "215_probe_event_roll",
     "213_probe_npc_memory",
-    "214_probe_new_character"
+    "214_probe_new_character",
+    "216_probe_llm_overlap"
   ],
   "disabled": []
 }

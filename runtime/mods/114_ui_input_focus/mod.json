@@ -32,7 +32,7 @@
         "en": "Restore focus when the reply arrives"
       },
       "note": {
-        "ja": "既定 ON。AI の応答を待つ間ゲームは入力を塞ぐので、その間は戻さず、解けた瞬間に戻す",
+        "ja": "既定 ON。LLM の応答を待つ間ゲームは入力を塞ぐので、その間は戻さず、解けた瞬間に戻す",
         "en": "Default ON. The game blocks input while waiting for the reply; focus returns the moment it is unblocked"
       }
     },

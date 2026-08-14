@@ -78,8 +78,8 @@
       "type": "bool",
       "default": true,
       "label": {
-        "ja": "事件の文章を AI に書かせる",
-        "en": "Let the AI write the case"
+        "ja": "事件の文章を LLM に書かせる",
+        "en": "Let the LLM write the case"
       },
       "note": {
         "ja": "切ると同梱の8人から選び、文章も定型になる。謎の作りは変わらない",
@@ -92,8 +92,8 @@
       "min": 10,
       "max": 600,
       "label": {
-        "ja": "AI の返事を待つ秒数",
-        "en": "Seconds to wait for the AI"
+        "ja": "LLM の返事を待つ秒数",
+        "en": "Seconds to wait for the LLM"
       },
       "note": {
         "ja": "超えたら定型で事件を始める",

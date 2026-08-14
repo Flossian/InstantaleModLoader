@@ -3,7 +3,7 @@ rem ---------------------------------------------------------------------------
 rem  Instantale local-LLM context probe -- launcher
 rem
 rem  Measures how wide a context window this machine can actually run, then
-rem  prints the settings to put into the 904_llm_context_size mod.
+rem  prints the settings to put into the 127_llm_response_speed mod.
 rem
 rem  Close the game first. The probe starts llama-server itself and needs the
 rem  VRAM and the port to be free.
@@ -22,7 +22,7 @@ rem  then whatever "python" is on PATH.
 rem
 rem  ASCII only on purpose: a .bat is read using the current console code page,
 rem  so non-ASCII text here would break parsing on some machines.
-rem  Japanese notes live in runtime\mods\904_llm_context_size\DOC.md.
+rem  Japanese notes live in docs\MODS.md and docs\VERIFICATION_LOG.md.
 rem ---------------------------------------------------------------------------
 setlocal
 cd /d "%~dp0"

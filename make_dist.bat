@@ -142,11 +142,13 @@ if errorlevel 8 (
   goto :fail
 )
 
-rem  The GUI, the injector and the console watcher. tools\tests\ and the one-off
+rem  The GUI, the injector, the console watcher and the context probe (the
+rem  127_ mod needs it to pick a safe window). tools\tests\ and the one-off
 rem  save fixers are development harnesses and stay out.
 echo   [loader] tools ...
 md "%LOADER%\tools" 2>nul
-for %%f in (gui.py injector.py watcher.py logrotate.py watch.bat check_mods.py) do (
+for %%f in (gui.py injector.py watcher.py logrotate.py watch.bat check_mods.py
+           llm_ctx_probe.py llm_ctx_probe.bat) do (
   if not exist "tools\%%f" (
     echo   ERROR: tools\%%f is missing.
     goto :fail

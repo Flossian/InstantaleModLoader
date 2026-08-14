@@ -121,7 +121,7 @@
         "en": "Also apply to free actions"
       },
       "note": {
-        "ja": "どの能力値の判定かをゲームが言わないので行動文から推定する。llm=6択を1問だけ AI に聞く(推論が1回増える) / keywords=語句の表だけで決める(追加の推論なし・判別できるのは半分ほど) / off=この経路には触らない",
+        "ja": "どの能力値の判定かをゲームが言わないので行動文から推定する。llm=6択を1問だけ LLM に聞く(推論が1回増える) / keywords=語句の表だけで決める(追加の推論なし・判別できるのは半分ほど) / off=この経路には触らない",
         "en": "llm asks the model once which of the six abilities applies; keywords uses a word table only"
       }
     },

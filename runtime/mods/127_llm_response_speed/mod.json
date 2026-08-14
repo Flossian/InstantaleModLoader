@@ -1,0 +1,70 @@
+{
+  "entry": "llm_response_speed.py",
+  "api": 1,
+  "name": {
+    "en": "Faster local LLM responses",
+    "ja": "ローカルLLMの応答を速くする"
+  },
+  "description": {
+    "en": "Starts llama-server with one dedicated slot instead of four shared ones. Same window, less KV memory, faster responses. Can also widen the window",
+    "ja": "llama-server を共有4スロットではなく専用1スロットで起こす。窓は同じままKVが減って応答が速くなる。窓を広げることもできる"
+  },
+  "version": "2",
+  "author": "flossian",
+  "settings": {
+    "CTX_SIZE": {
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 262144,
+      "label": {
+        "ja": "1リクエストが使えるトークン",
+        "en": "Context window per request (tokens)"
+      },
+      "note": {
+        "ja": "0 が既定で、ゲームの値（16384）のまま触らない。増やすとVRAMを余分に使い、溢れるとエラーにならず異様に遅くなる。安全な値は tools\\llm_ctx_probe.bat が実測して出す。日本語はおよそ1トークン=1.6文字",
+        "en": "0 (default) leaves the game's value (16384) alone. Raising it costs VRAM, and overflowing does not error: it just gets very slow. Run tools\\llm_ctx_probe.bat to measure a safe value. Japanese runs about 1.6 chars per token"
+      }
+    },
+    "SLOTS": {
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 8,
+      "label": {
+        "ja": "同時に持つスロット数",
+        "en": "Number of slots"
+      },
+      "note": {
+        "ja": "1 が既定。専用1本になりKVが最小で最も速い。0 にすると素のゲームと同じ共有4本に戻す。2 以上は窓 × スロット数ぶんのKVを確保するのでVRAMの余裕が要る",
+        "en": "1 (default) gives one dedicated slot: least KV, fastest. 0 restores the game's shared four. 2+ reserves window x slots of KV and needs VRAM to spare"
+      }
+    },
+    "OBSERVE_ONLY": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "書き換えず記録だけする",
+        "en": "Observe only"
+      },
+      "note": {
+        "ja": "実際の起動引数を out\\llm_speed.log に残すだけで、何も変えない",
+        "en": "Logs the real launch arguments to out\\llm_speed.log and changes nothing"
+      }
+    },
+    "LOG_LIMIT": {
+      "type": "int",
+      "default": 5,
+      "min": 0,
+      "max": 999,
+      "label": {
+        "ja": "起動引数をログに出す回数",
+        "en": "How many launches to log"
+      },
+      "note": {
+        "ja": "0 にすると何も出さない。書き換えの前後が out/llm_speed.log に残る",
+        "en": "0 = log nothing. Before/after argument lists go to out/llm_speed.log"
+      }
+    }
+  }
+}

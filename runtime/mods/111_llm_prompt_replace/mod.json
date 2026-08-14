@@ -3,7 +3,7 @@
   "api": 1,
   "name": {
     "en": "Prompt replacement rules",
-    "ja": "AIへの指示文を置換"
+    "ja": "LLM への指示文を置換"
   },
   "description": {
     "en": "Rewrites the text sent to the LLM with the user's replacement rules; reads the same llm_replacements.txt as InstantaleLlmProxy",
