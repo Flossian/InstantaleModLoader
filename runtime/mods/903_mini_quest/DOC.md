@@ -56,7 +56,7 @@
 ## 3. オフライン検証（`VERIFICATION_LOG.md` §2.11 の一覧に戻す）
 
 ```powershell
-python tools/test_wip_mini_quest.py    # 903_  119件（うち4件は output_data/ の実プロンプトと突き合わせ）
+python tools/tests/test_wip_mini_quest.py    # 903_  119件（うち4件は output_data/ の実プロンプトと突き合わせ）
 ```
 
 **`output_data/` の記録は `111_` 適用後**である点に注意（VERIFICATION_LOG.md §2.43）。
@@ -283,7 +283,7 @@ referee 自身が「目標の数に達している」と描写しながら撤退
 > に差し替える」修正は**まだ一度も実機で走っていない**（§2.22）。
 > 次に試すなら、注入し直してから下の 4 を1回踏むだけで結論が出る。
 
-先に `python tools/test_wip_mini_quest.py`（119件）を通しておくこと。設置・押下・生成・
+先に `python tools/tests/test_wip_mini_quest.py`（119件）を通しておくこと。設置・押下・生成・
 控え・書き換え・素通し・目印切れはそこで済むので、実機で見るのはオフラインでは
 確かめられないものだけになる。「LLM が実際に討伐でない依頼を作るか」「進行が戦闘に
 ならないか」「達成で帰還できるか」の3点で、判定は全部 `out/mini_quest.log` で付く。

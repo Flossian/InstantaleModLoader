@@ -3,7 +3,7 @@
 
 ここに在るのは「何を出すか」だけで、「どう描くか」は入口の
 `ui_character_sheet.py` にある。分けてあるのは、この部分がゲームを
-起動せずに確かめられるようにするため（`tools/test_ui_character_sheet.py`）。
+起動せずに確かめられるようにするため（`tools/tests/test_ui_character_sheet.py`）。
 
 ゲーム側の作り（`212_probe_character_sheet` で採寸。窓 1920x1000）:
 
