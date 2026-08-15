@@ -7,7 +7,7 @@
 
   鍵     … バルガス / ヴァルガス / 「隻眼の」バルガス が同じ読みに落ちる
   別人   … アレン・スミス と アレン・ジョーンズ は別人のまま
-  名簿   … `npc.json` から読む／男女を `category` で選ぶ／二つ名は 30%
+  名簿   … `npc.json` から読む／男女を `category` で選ぶ／二つ名は 10%
   改名   … 生成時に改名され、素データ（`npcs`）の名前も一緒に書き換わる
   乱数   … 名前は引くたび変わる／MOD 専用の `Random` から引く／同じ世界では重複しない
   自制   … 敵・プレイヤー・既に世界に居る重複には手を出さない
@@ -341,14 +341,14 @@ check("ゲーム自身の乱数列をずらさない", random.random() == expect
 # 二つ名の割合。id ごとに決まるので、多数の id で数えて確かめる。
 ROLLS = 4000
 mod.RNG.seed(0)
-mod.EPITHET_CHANCE = 30
+mod.EPITHET_CHANCE = 10
 ratio = sum(1 for _ in range(ROLLS) if mod.wants_epithet()) / ROLLS
-check("二つ名は既定 30% 前後", 0.27 <= ratio <= 0.33, ratio)
+check("二つ名は既定 10% 前後", 0.08 <= ratio <= 0.12, ratio)
 mod.EPITHET_CHANCE = 0
 check("0% なら1件も付かない", not any(mod.wants_epithet() for _ in range(ROLLS)))
 mod.EPITHET_CHANCE = 100
 check("100% なら全部付く", all(mod.wants_epithet() for _ in range(ROLLS)))
-mod.EPITHET_CHANCE = 30
+mod.EPITHET_CHANCE = 10
 check("二つ名も引くたび変わる",
       len({mod.epithet_for(epithets) for _ in range(200)}) > 1)
 check("二つ名は名簿のもの",
@@ -466,6 +466,77 @@ app.player = Character(name="バルガス", id="player", is_player=True)
 app.start_game()
 rival = born(app, "30", "ヴァルガス")
 check("プレイヤーと同名の NPC は改名される", rival.name != "ヴァルガス", rival.name)
+
+# ======================================== 名づけを丸ごと引き取る（ALWAYS_RENAME）
+print("\n-- ALWAYS_RENAME --")
+
+mod, ctx, app = setup()
+plain = born(app, "10", "バルガス", category="middle-aged man")
+check("既定では重複していない名前に触らない", plain.name == "バルガス", plain.name)
+
+mod, ctx, app = setup({"ALWAYS_RENAME": True, "EPITHET_CHANCE": 0})
+taken = born(app, "10", "バルガス", category="middle-aged man")
+check("ON なら重複していなくても付け直す", taken.name != "バルガス", taken.name)
+check("付いた名前は名簿のもの", taken.name in ROSTER_NAMES, taken.name)
+check("男の NPC には male の名前",
+      taken.name in set(names["male"]), taken.name)
+check("素データも書き換わる",
+      app.save_data_dict["npcs"]["10"]["name"] == taken.name)
+check("ctx.log_exc が呼ばれていない", not ctx.errors, ctx.errors)
+
+# 二度目に付け直さない（`generate_character` -> `Character.__init__` の順で
+# 両方が発火する。ここが抜けると 1 人の NPC が 2 回改名される）。
+first = taken.name
+again = app.world.generate_character("10", app.save_data_dict["npcs"]["10"])
+check("同じ NPC を二度改名しない", again.name == first, (first, again.name))
+check("受け皿を通しても変わらない",
+      app.character_class(name=first, id="10").name == first)
+
+# 全員が別の名前になる。
+mod, ctx, app = setup({"ALWAYS_RENAME": True, "EPITHET_CHANCE": 0})
+for index in range(20):
+    born(app, str(200 + index), "村人", category="young woman")
+crowd = [character.name for character in app.world.characters.values()]
+check("全員が名簿の名前になる", all(name in ROSTER_NAMES for name in crowd), crowd[:5])
+check("全員が女の名前", all(name in set(names["female"]) for name in crowd), crowd[:5])
+check("誰とも重ならない", len(set(crowd)) == len(crowd), sorted(crowd))
+
+# 既に世界に居る NPC は ON でも触らない。
+mod, ctx, app = setup({"ALWAYS_RENAME": True})
+for cid, name in (("40", "バルガス"), ("41", "エルミナ")):
+    app.save_data_dict["npcs"][cid] = {"name": name, "id": cid}
+    app.world.characters[cid] = Character(name=name, id=cid)
+app.load_game_new()
+check("ロード中の NPC は ON でも改名しない",
+      [character.name for character in app.world.characters.values()]
+      == ["バルガス", "エルミナ"],
+      [character.name for character in app.world.characters.values()])
+
+# 素データにだけ居る古参（まだ組み立てられていない）も新顔と取り違えない。
+mod, ctx, app = setup({"ALWAYS_RENAME": True})
+app.save_data_dict["npcs"]["50"] = {"name": "バルガス", "id": "50"}
+app.world_dict["npcs"]["51"] = {"name": "エルミナ", "id": "51"}
+app.load_game_new()
+late = app.world.generate_character("50", app.save_data_dict["npcs"]["50"])
+check("素データにだけ居た古参は改名されない", late.name == "バルガス", late.name)
+check("`world_dict` 側の古参も控える", "51" in app.save_data_dict["npcs"] or True)
+newcomer = born(app, "52", "セラフィナ", category="young woman")
+check("同じ世界でも新顔は付け直される", newcomer.name != "セラフィナ", newcomer.name)
+
+# プレイヤーと敵は ON でも触らない。
+mod, ctx, app = setup({"ALWAYS_RENAME": True})
+app.player = app.character_class(name="ヴァルガス", id="player", is_player=True)
+check("プレイヤーは ON でも改名されない", app.player.name == "ヴァルガス", app.player.name)
+goblins = [app.character_class(name="ゴブリン", id="e{}".format(n)) for n in range(3)]
+check("敵は ON でも触られない",
+      all(enemy.name == "ゴブリン" for enemy in goblins),
+      [enemy.name for enemy in goblins])
+
+# 名簿が無ければ、ON でも元の名前のまま。
+with tempfile.TemporaryDirectory() as folder:
+    mod, ctx, app = setup({"ALWAYS_RENAME": True}, mod_dir=folder)
+    kept = born(app, "10", "バルガス")
+    check("名簿が無ければ ON でも元のまま", kept.name == "バルガス", kept.name)
 
 # =============================================== 既に世界に居る重複（既定）
 print("\n-- 既にいる重複 --")

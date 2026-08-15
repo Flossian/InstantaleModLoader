@@ -6,15 +6,27 @@
     "ja": "NPC名の重複防止"
   },
   "description": {
-    "en": "Renames a newly generated NPC whose name reads the same as someone already in the world (Vargas / Varugasu / \"One-eyed\" Vargas). The replacement is picked from a bundled name roster, with an epithet some of the time",
-    "ja": "生成された NPC の名前が世界に居る誰かと同じに読めるとき（バルガス／ヴァルガス／「隻眼の」バルガス）、同梱の名簿から空いている名前を選んで付け直す。一定の割合で二つ名も付く"
+    "en": "Renames a newly generated NPC whose name reads the same as someone already in the world (Vargas / Varugasu / \"One-eyed\" Vargas). The replacement is picked from a bundled name roster, with an epithet some of the time. Optionally names every new NPC, not just the clashing ones",
+    "ja": "生成された NPC の名前が世界に居る誰かと同じに読めるとき（バルガス／ヴァルガス／「隻眼の」バルガス）、同梱の名簿から空いている名前を選んで付け直す。一定の割合で二つ名も付く。設定で、重複していなくても新しい NPC の名前を全部こちらで付けられる"
   },
-  "version": "3",
+  "version": "5",
   "author": "R01/Flossian",
   "settings": {
+    "ALWAYS_RENAME": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "新しい NPC の名前を必ず MOD が付ける",
+        "en": "Name every new NPC from the roster"
+      },
+      "note": {
+        "ja": "既定 OFF（重複したときだけ付け直す）。ON にすると AI が付けた名前を捨てて名簿から付ける。既に世界に居る NPC は変わらない",
+        "en": "Off by default (only clashes are renamed). On discards the name the AI wrote. NPCs already in the world are left alone"
+      }
+    },
     "EPITHET_CHANCE": {
       "type": "int",
-      "default": 30,
+      "default": 10,
       "min": 0,
       "max": 100,
       "label": {
@@ -28,7 +40,11 @@
     },
     "SIMILARITY": {
       "type": "choice",
-      "values": ["strict", "normal", "loose"],
+      "values": [
+        "strict",
+        "normal",
+        "loose"
+      ],
       "default": "normal",
       "label": {
         "ja": "どこまで近ければ重複とみなすか",

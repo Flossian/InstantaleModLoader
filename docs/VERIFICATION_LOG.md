@@ -367,7 +367,7 @@ python tools/tests/test_ui_party_expand.py           # 116_  88件
 python tools/tests/test_message_text_integrity.py    # 117_  12件
 python tools/tests/test_batch_message_render.py      # 118_  74件
 python tools/tests/test_crime_attribution.py         # 119_  9件
-python tools/tests/test_npc_name_dedup.py            # 120_  93件
+python tools/tests/test_npc_name_dedup.py            # 120_  111件
 python tools/tests/test_ui_character_sheet.py        # 121_  82件
 python tools/tests/test_ui_conversation_log.py       # 122_  43件
 python tools/tests/test_new_character_level.py       # 123_  27件
@@ -1624,6 +1624,19 @@ tick x60  interval avg=40.2ms  repaint avg=0.2ms  render x0.98/tick avg=6.5ms  t
 
 `120_fix_npc_name_collision` はこれを鍵の一致・包含・編集距離の3つで判定して改名する。
 
+#### 名づけを丸ごと引き取る（`ALWAYS_RENAME`、2026-08-15）
+
+重複したときだけでなく、**これから生まれる NPC の名前を全部こちらで付ける**側を
+設定で足した。既定は切（素のゲームが付けた名前を勝手に捨てるのは直しではないため）。
+
+作るときに要ったのは、`resolve` の頭に置いた**同じ NPC を二度裁かない番人**と、
+控えを作るときに**素データの `npcs` も全部登録する**ことの2つ。
+
+| 何が起きるか | なぜ |
+|---|---|
+| 1人の NPC が2回改名される | `generate_character` で付けた名前を、受け皿の `Character.__init__` がもう一度付け直す。重複を見て動く既定の側では「衝突していない ＝ 何もしない」が歯止めになっていたが、こちらは名前では見分けられない |
+| 昔からの知り合いが突然改名する | `world.characters` と `npcs` は件数が違う（GAME.md §2.23）。控えを `world.characters` だけから作ると、後から組み立てられた古参が新顔に見える |
+
 #### 付け直す名前は名簿から選ぶ（2026-08-05、2度の作り直しを経て）
 
 | 版 | 付け直し方 | なぜ捨てたか |
@@ -1639,7 +1652,7 @@ tick x60  interval avg=40.2ms  repaint avg=0.2ms  render x0.98/tick avg=6.5ms  t
 男女はセーブの `category` で決める。実データは8種（`young` / `middle-aged` / `old` /
 `teenage` × 男女）で、`woman` は `man` を含むので女性を先に見ないと全員が男になる。
 
-#### 確かめたこと（オフライン 83件）
+#### 確かめたこと（オフライン 111件）
 
 - 上の3形が同じ鍵に落ちること、および別人を巻き込まないこと。後者のほうが
   重要で、`アレン・スミス` と `アレン・ジョーンズ`（姓名の片方だけ一致）、
@@ -1659,6 +1672,10 @@ tick x60  interval avg=40.2ms  repaint avg=0.2ms  render x0.98/tick avg=6.5ms  t
 - 名簿が読めないとき・使い切ったときに名前を発明せず元のまま通すこと。
   名簿が無いことは `WARN` で名指しする（黙って何もしない MOD が一番分かりにくい）
 - 利用者の `npc.json` が同梱の `npc.default.json` より優先されること（TECH.md §3.1.1）
+- `ALWAYS_RENAME`（名づけを丸ごと引き取る。既定 切）: ON で新顔が全員名簿の名前になり、
+  同じ NPC を二度改名しないこと（`generate_character` と `Character.__init__` の両方が発火する）。
+  ロード中の NPC・素データにだけ居る古参（`save_data_dict` 側も `world_dict` 側も）・
+  プレイヤー・敵は ON でも触らないこと。名簿が無ければ ON でも元のまま通すこと
 
 #### 実機で最初に見るところ
 

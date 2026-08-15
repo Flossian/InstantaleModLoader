@@ -49,6 +49,32 @@ NPC の名前は LLM が生成する。小さいモデル（Gemma 系）ほど**
 **記録だけ**して名簿に載せる。載せておけば「後から作られる NPC がそれと衝突する」
 判定には効く。設定で `FIX_EXISTING` を立てると、既にいる重複も改名する。
 
+## 名づけを丸ごと引き取る（`ALWAYS_RENAME`。既定は切）
+
+重複しているかに関わらず、**これから生まれる NPC の名前を全部こちらで付ける。**
+LLM が書いた名前は捨てて名簿から引く。重複が消えるだけでなく、名前の傾向そのものが
+名簿で決まる（`npc.json` を入れ替えれば世界の空気が変わる）。
+
+**既定は切。**素のゲームが付けた名前を勝手に捨てるのは、直しではなく作り替えなので、
+利用者が選んだときだけにする。
+
+| | 既定（切） | `ALWAYS_RENAME` |
+|---|---|---|
+| これから生まれる NPC | 重複したときだけ付け直す | **全員**こちらで付ける |
+| 既に世界に居る NPC | 触らない（`FIX_EXISTING` で重複だけ） | 同じ。触らない |
+| プレイヤー・敵・魔物 | 触らない | 同じ。触らない |
+
+**「既に居る人」を取り違えないことが要点。**`world.characters` と `npcs` は件数が
+違う（GAME.md §2.23）ので、名簿を控えるときに**素データの `npcs` も全部控える**。
+これを怠ると、後から組み立てられただけの古参が新顔に見え、**昔からの知り合いが
+突然改名する**。同じ NPC を二度裁かない歯止めも要る（`resolve` の頭の番人）。
+重複を見て動く既定の側では「衝突していない ＝ 何もしない」が歯止めになっていたが、
+`ALWAYS_RENAME` では名前だけでは見分けられない。
+
+> **LLM に名前を作らせるのをやめるわけではない。**止められるのは**結果**だけで、
+> 生成そのものはゲームのプロンプトの中にある（そこは未調査）。推論の費用は変わらず、
+> 出てきた名前を捨てている。
+
 ## 近さの測り方（`SIMILARITY` / `FOLD_VOICING`）
 
 名前を**読みの骨だけに削った鍵**へ写して比べる。
@@ -91,8 +117,8 @@ NPC の名前は LLM が生成する。小さいモデル（Gemma 系）ほど**
 
 | 鍵 | 中身 |
 |---|---|
-| `male` / `female` | 名前（同梱はそれぞれ 400 件） |
-| `epithets` | 二つ名（同梱 200 件）。`「死神」` `沈黙の` `死を運ぶ` の3つの形 |
+| `male` / `female` | 名前（同梱はそれぞれ 600 件） |
+| `epithets` | 二つ名（同梱 300 件）。`「死神」` `沈黙の` `死を運ぶ` の3つの形 |
 
 **読むのはこの3つだけで、知らない鍵は在っても黙って無視する。**利用者が別の道具で
 作った名簿を持ってくることがあるので、知らない鍵で撥ねない。撥ねてよいのは
@@ -104,7 +130,12 @@ NPC の名前は LLM が生成する。小さいモデル（Gemma 系）ほど**
 `teenage girl` / `old man` の8種）。**`woman` は `man` を含む**ので、女性を先に見る。
 どちらとも読めなければ引く（名簿を分けている以上、どちらかに倒すしかない）。
 
-### 二つ名は `EPITHET_CHANCE`（既定 30%）
+### 二つ名は `EPITHET_CHANCE`（既定 10%）
+
+既定を 30% から 10% に下げた（v5）。`ALWAYS_RENAME` で全員を名簿から命名する
+遊び方だと、30% では10人に3人が異名持ちになり「特別な人の印」が薄まる。10% なら
+NPC 20人の世界に1人くらいは居て、居れば目立つ。重複時のみ改名する既定の遊び方では
+そもそも改名が稀なので、見せたければ設定で上げる。
 
 名簿の二つ名は3つの形とも**そのまま名前の前に付く**（`「死神」ドルレイン` /
 `沈黙のドルレイン` / `死を運ぶドルレイン`）。
@@ -154,8 +185,11 @@ SIMILARITY = "normal"
 FOLD_VOICING = True
 # 既に世界に居る重複も改名する。既定では記録だけ（画像のディレクトリが在るため）。
 FIX_EXISTING = False
+# 重複していなくても、これから生まれる NPC の名前は全部こちらで付ける。
+# **既定は切**（素のゲームの名前を勝手に捨てないため）。
+ALWAYS_RENAME = False
 # 二つ名を付ける割合（%）。0 で付けない。
-EPITHET_CHANCE = 30
+EPITHET_CHANCE = 10
 
 # 名簿。利用者のものが在ればそちら、無ければ同梱を読む（TECH.md §3.1.1）。
 NAMES_FILE_NAME = "npc.json"
@@ -549,28 +583,39 @@ def apply(ctx):
     def resolve(cid, name, where, app=None, context=None):
         """名前を1つ裁く。改名したときだけ新しい名前を返す。
 
-        名簿への登録はここで必ず行う（改名しなかった重複も相手として残す）。
+        控えへの登録はここで必ず行う（改名しなかった重複も相手として残す）。
         """
+        kept = known.get(str(cid))
+        if kept is not None and kept[1] == name:
+            # この NPC はもう裁いた。`generate_character` で付けた名前を
+            # 受け皿の `Character.__init__` がもう一度付け直さないための番人で、
+            # `ALWAYS_RENAME` のときは**これが唯一の歯止め**になる
+            # （衝突していなくても改名する経路なので、名前で見分けられない）。
+            return None
         key = canonical(name)
         if not key:
             return None
-        found = clash_with(key, cid)
-        if found is None:
-            remember(cid, key, name)
-            return None
 
-        other_id, other_name = found
+        found = clash_with(key, cid)
         mark = (str(cid), name)
-        existing = loading["depth"] > 0 and not FIX_EXISTING
-        fresh = None if existing else rename_to(name, cid, context)
+        if loading["depth"] > 0:
+            # 既に世界に居る人。重複だけを、しかも許しがあるときだけ直す。
+            wanted = found is not None and FIX_EXISTING
+            why = "already in the world"
+        else:
+            # これから生まれる人。`ALWAYS_RENAME` なら重複していなくても付け直す。
+            wanted = ALWAYS_RENAME or found is not None
+            why = "no free name in the roster"
+
+        fresh = rename_to(name, cid, context) if wanted else None
         if fresh is None:
             # 直せなくても控えには載せる。3人目が来たときの相手になる。
             remember(cid, key, name)
-            if mark not in seen:
+            if found is not None and mark not in seen:
                 seen.add(mark)
                 write("{}: id={!r} {!r} clashes with id={!r} {!r} -- left as it is ({})"
-                      .format(where, cid, name, other_id, other_name,
-                              "already in the world" if existing
+                      .format(where, cid, name, found[0], found[1],
+                              why if wanted or loading["depth"] > 0
                               else "no free name in the roster"))
             return None
 
@@ -578,8 +623,10 @@ def apply(ctx):
         touched = rewrite_raw(app, cid, name, fresh) if app is not None else 0
         if mark not in seen:
             seen.add(mark)
-            write("{}: id={!r} {!r} -> {!r}  (clashed with id={!r} {!r}; {} raw table(s))"
-                  .format(where, cid, name, fresh, other_id, other_name, touched))
+            write("{}: id={!r} {!r} -> {!r}  ({}; {} raw table(s))".format(
+                where, cid, name, fresh,
+                "clashed with id={!r} {!r}".format(*found) if found is not None
+                else "always renaming", touched))
         return fresh
 
     def seed(app, where):
@@ -620,6 +667,20 @@ def apply(ctx):
                     fixed += 1
                 except Exception:
                     ctx.log_exc("npc name: could not rename {!r}".format(name))
+
+        # まだ組み立てられていないが、セーブの素データには居る人も控える。
+        # `world.characters` と `npcs` は**件数が違う**（GAME.md §2.23）ので、
+        # ここを控えないと、後から組み立てられた古参を新顔と取り違える。
+        # `ALWAYS_RENAME` のときはそれがそのまま「昔からの知り合いが突然改名する」
+        # になるので、この控えがその歯止めになっている。
+        for npcs in npc_tables(app):
+            for cid, entry in npcs.items():
+                if str(cid) in known or not isinstance(entry, dict):
+                    continue
+                raw = entry.get("name")
+                key = canonical(raw) if isinstance(raw, str) else ()
+                if key:
+                    remember(cid, key, raw)
         return fixed
 
     # -------------------------------------------------- 本命: 素データを直す
