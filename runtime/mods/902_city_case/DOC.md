@@ -12,7 +12,7 @@
 | 3. 検証の記録 | `docs\VERIFICATION_LOG.md` §2 の末尾（節番号は振り直す） |
 | 4. ゲーム構造・作り方の知見 | `docs\GAME.md` / `docs\TECH.md` の該当箇所 |
 
-`tools\test_wip_city_case.py`（367件）も同じ理由で管理外。
+`tools\tests\test_wip_city_case.py`（367件）も同じ理由で管理外。
 
 ---
 
@@ -1001,7 +1001,7 @@ writer: fact 2 does not mention '黒髪':   '暗闇の中で、黒い髪が揺�
 | 材料 | `patterns/*.json` から1件ごとに抽選（題材・特徴の軸・言い分・下地の顔ぶれ）。読めなければ同梱に戻る |
 | セーブ | 事件の控えも NPC の台帳も `out/` だけ。`flag_set` も `free_facility_programs` も使わない。生成した NPC は事件のあいだだけセーブに載り、決着すると消える |
 
-オフライン検証は `tools/test_wip_city_case.py`（367件）。上の失敗はすべて
+オフライン検証は `tools/tests/test_wip_city_case.py`（367件）。上の失敗はすべて
 再現する形で入れてある（辞書を1つに賭ける実装、ボタン経由でしか効かない
 実装、証言者を持たない控え、採番が進まない実装、群衆、詰んだ事件、
 実機で出た「重複した手がかり」の配り方そのもの、
@@ -1045,7 +1045,7 @@ writer: fact 2 does not mention '黒髪':   '暗闇の中で、黒い髪が揺�
 | 元の場所 | 知見 | この MOD での実物 |
 |---|---|---|
 | `GAME.md` §2.9「ロード直後は文字列のまま」 | 施設を引くときは `player.location` を直接使わず、id でも引き当てる関数を通す | セーブをロードした直後にギルドの選択肢が出なかった（2026-08-05）。`309_` は先に踏んで両対応にしていたが、知見が横に伝わっていなかった |
-| `GAME.md` §2.23「セーブの項目の並び順」 | 全項目を持ったひな型を先に作り、`dict.update` で上書きだけする | `world.NEW_NPC_TEMPLATE` がこの形。検査は `tools/test_wip_city_case.py` の「セーブの項目の並び順を崩さない」 |
+| `GAME.md` §2.23「セーブの項目の並び順」 | 全項目を持ったひな型を先に作り、`dict.update` で上書きだけする | `world.NEW_NPC_TEMPLATE` がこの形。検査は `tools/tests/test_wip_city_case.py` の「セーブの項目の並び順を崩さない」 |
 | `TECH.md` §7.2 の表（LLM への渡し方） | 既にある値の一覧を渡すと、避ける相手であると同時に作風の見本にもなる | 町に実在する場所を並べて渡す。架空の宿屋を書かれるより、いま歩いている町の宿屋の名前が出るほうがよい |
 | `VERIFICATION_LOG.md` §2.30 | シーン記述エンジンは普通の施設でも走る | 使い捨ての実験 mod（`310_scene_engine_test`、確認後に削除）で確かめた |
 | `VERIFICATION_LOG.md` §2.33 の突き合わせ | `prune_stale` を持つ MOD の `OUR_LABELS` に重複が無いこと | この MOD も対象（`301_` / `302_` / `305_` / `307_` / `309_` と併せて確認済み） |

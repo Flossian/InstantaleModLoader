@@ -121,7 +121,7 @@ Python はどこに入れてあってもよい。場所は自動検知する。
 `out\modloader.log` の末尾に、こう出ていれば入っている:
 
 ```
-boot complete: 33/33 mod(s) applied
+boot complete: 34/34 mod(s) applied
 ```
 
 数が足りなくても失敗とは限らない。LLM 関連の MOD は LLM が起動するまで待ってから入る

@@ -1388,7 +1388,7 @@ class Screen(object):
         NPC 一覧が一瞬見えるのを隠すため `busy_on` してから
         `end_conversation` を呼ぶ。その中の `when_idle` がこの印を見て待ち続け、
         掲示板が開くのが `proceed_on_timeout` の分だけ遅れていた
-        （`tools/test_quest_offer.py` が捕まえていた失敗）。
+        （`tools/tests/test_quest_offer.py` が捕まえていた失敗）。
 
         他の2つ（`is_adding_text` / `is_popup_window_opened`）はゲーム側が
         立てるものなので、そのまま数える。
