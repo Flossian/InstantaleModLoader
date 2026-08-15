@@ -2,8 +2,8 @@
   "entry": "balance_charisma_impression.py",
   "api": 1,
   "name": {
-    "en": "Charm is read per NPC and per acquaintance",
-    "ja": "魅力の見え方に相手ごとの好みと親しさを入れる"
+    "en": "Charm should not win over everyone at first sight",
+    "ja": "魅力が高いと初対面から全員に好かれるのを直す"
   },
   "description": {
     "en": "The line an NPC carries about how attractive you look is decided from your charisma alone, so a charm-focused character is seen at the top rung (\"Finds you irresistibly attractive\") by every NPC in the world, from the first meeting onward, and every answer comes back unconditionally friendly. Keeps the game's own rungs but picks one from two more things: a fixed per-NPC taste, and how far the relationship has come. The top rung only appears once the NPC already feels some affection. The rungs and their thresholds are read out of the game at runtime, so no wording is hardcoded and other languages work too",
