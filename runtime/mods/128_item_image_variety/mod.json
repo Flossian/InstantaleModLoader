@@ -1,0 +1,70 @@
+{
+  "entry": "item_image_variety.py",
+  "api": 1,
+  "name": {
+    "en": "Item image variety",
+    "ja": "アイテム画像の均し"
+  },
+  "description": {
+    "en": "Spreads item icons across similar candidates instead of always picking the single best match, and adds 305 images missing from the embedding dictionaries",
+    "ja": "アイテム画像を「最も似た1枚」固定でなく似た候補の中で使用回数最少から選び、埋め込み辞書に無かった305枚も選択肢に加える"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "settings": {
+    "TOP_K": {
+      "type": "int",
+      "default": 10,
+      "min": 1,
+      "max": 50,
+      "label": {
+        "ja": "候補にする枚数の上限",
+        "en": "Max candidate images"
+      },
+      "note": {
+        "ja": "1 にすると素のゲームと同じ（最も似た1枚に固定）",
+        "en": "1 = same as vanilla (always the single best match)"
+      }
+    },
+    "SIM_FLOOR": {
+      "type": "float",
+      "default": 0.8,
+      "min": 0.0,
+      "max": 1.0,
+      "label": {
+        "ja": "候補にする類似度の下限（top1比）",
+        "en": "Similarity floor (relative to top1)"
+      },
+      "note": {
+        "ja": "上げるほど見た目に忠実、下げるほど多様。0.8 で clothing のような急落する品種は自動的に絞られる",
+        "en": "Higher = closer look, lower = more variety. 0.8 auto-narrows folders where similarity falls off fast"
+      }
+    },
+    "USE_EXTRA_DICT": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "同梱の追加辞書を使う",
+        "en": "Use bundled extra dictionaries"
+      },
+      "note": {
+        "ja": "document/creature_part/mushroom/accessory の、素の辞書に無い305枚を選択肢に加える",
+        "en": "Adds 305 images (document/creature_part/mushroom/accessory) absent from the stock dictionaries"
+      }
+    },
+    "LOG_LIMIT": {
+      "type": "int",
+      "default": 200,
+      "min": 0,
+      "max": 100000,
+      "label": {
+        "ja": "選択ログの行数上限",
+        "en": "Selection log line limit"
+      },
+      "note": {
+        "ja": "out/item_image.log に1選択1行。0 で無効",
+        "en": "One line per selection in out/item_image.log. 0 = off"
+      }
+    }
+  }
+}
