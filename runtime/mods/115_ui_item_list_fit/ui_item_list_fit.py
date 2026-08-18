@@ -112,7 +112,7 @@
 
 import math
 
-from instantale_modloader import frames
+from instantale_modloader import frames, ui
 
 LOG_BASENAME = "item_list.log"
 
@@ -173,15 +173,10 @@ BOX_ATTR = "_instantale_itemfit_box"
 
 
 def apply(ctx):
-    state = {"logged": 0, "shape": None, "boxes": []}
+    state = {"shape": None, "boxes": []}
     warned = set()
 
-    write = ctx.logger(LOG_BASENAME)
-
-    def note(text):
-        if state["logged"] < MAX_LOG:
-            state["logged"] += 1
-            write(text)
+    note = ctx.logger(LOG_BASENAME, cap=MAX_LOG)
 
     # -- 寸法の読み書き ------------------------------------------------------
     def number(value, default=None):
@@ -207,16 +202,7 @@ def apply(ctx):
         except Exception:
             return 0.0, 0.0
 
-    def schedule(fn, delay=0.0):
-        try:
-            from kivy.clock import Clock
-        except Exception:
-            fn()              # ゲームの外（オフライン検証）ではその場で
-            return
-        try:
-            Clock.schedule_once(lambda _dt: fn(), delay)
-        except Exception:
-            ctx.log_exc("item list: could not schedule the fit")
+    schedule = ui.scheduler(ctx, "item list")
 
     def children_of(widget):
         children = frames.attr(widget, "children")

@@ -305,20 +305,16 @@ def apply(ctx):
             "anchor": None,
         }
         setattr(sys, STATE_STORE_ATTR, store)
-    warned = set()
-
     write = ctx.logger(LOG_BASENAME)
+    warn_once = ctx.warner("conversation log")
 
+    # `cap` 付きの `ctx.logger` に寄せない。
+    # 数える器（`store["logged"]`）を sys に置き、再注入しても上限が
+    # 戻らないようにしてある（この mod は apply() が世代を跨いで何度も走る）。
     def note(text):
         if store["logged"] < MAX_LOG:
             store["logged"] += 1
             write(text)
-
-    def warn_once(key, message):
-        if key in warned:
-            return
-        warned.add(key)
-        ctx.log("conversation log: " + message, level="WARN")
 
     def guarded(fn):
         """ボタン・フックから呼ばれる処理。ここで投げるとゲームを巻き込む。"""
@@ -328,16 +324,7 @@ def apply(ctx):
             ctx.log_exc("conversation log: failed")
             return None
 
-    def schedule(fn, delay=0.0):
-        try:
-            from kivy.clock import Clock
-        except Exception:
-            fn()              # ゲームの外（オフライン検証）ではその場で
-            return
-        try:
-            Clock.schedule_once(lambda _dt: fn(), delay)
-        except Exception:
-            ctx.log_exc("conversation log: could not schedule")
+    schedule = ui.scheduler(ctx, "conversation log")
 
     # -- 世界と控えの読み書き ------------------------------------------------
 

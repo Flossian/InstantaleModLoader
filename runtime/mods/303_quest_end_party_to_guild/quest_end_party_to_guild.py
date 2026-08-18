@@ -120,15 +120,6 @@ ANNOUNCE_TEXT = "{name}は{place}に留まることになった。"
 SAVE_AFTER_LATE_PLACE = True
 
 
-def _text(value, limit=40):
-    if value is None:
-        return ""
-    if not isinstance(value, str):
-        value = str(value)
-    value = value.strip()
-    return value if len(value) <= limit else value[:limit] + "…"
-
-
 def apply(ctx):
     log_path = ctx.out_path(LOG_BASENAME)
     state = {
@@ -175,16 +166,6 @@ def apply(ctx):
         facility, node = ui.find_guild(area, GUILD_FACILITY_TYPE)
         return facility, node, area
 
-    def character_of(app, character_id):
-        characters = getattr(getattr(app, "world", None), "characters", None)
-        if isinstance(characters, dict) and character_id is not None:
-            return characters.get(str(character_id))
-        return None
-
-    def name_of(app, character_id):
-        name = _text(getattr(character_of(app, character_id), "name", ""))
-        return name or str(character_id)
-
     def describe_answer(app, value):
         """ゲームが返した置き先を、ログに読める形にする。読むだけ。
 
@@ -196,7 +177,7 @@ def apply(ctx):
         return ui.facility_name(app, first) or type(first).__name__
 
     def where_label(area):
-        name = _text(getattr(area, "name", ""))
+        name = frames.short(getattr(area, "name", ""), 40)
         return name or ui.area_id_of(area) or "?"
 
     def register(app, member_id, source):
@@ -207,7 +188,7 @@ def apply(ctx):
         後から引き直すと、待っている間にプレイヤーが移動した町を拾ってしまう。
         """
         facility, node, area = guild_here(app)
-        name = name_of(app, member_id)
+        name = ui.character_name(app, member_id)
         if facility is None:
             # ダンジョンで解散した・その町にギルドが無い。
             # 黙って降りるとゲーム本来の置き先（雇った町）になる。
@@ -220,7 +201,7 @@ def apply(ctx):
         state["pending"][member_id] = {
             "facility": facility,
             "node": node,
-            "character": character_of(app, member_id),
+            "character": ui.character_of(app, member_id),
             "name": name,
             "source": source,
             "done": None,

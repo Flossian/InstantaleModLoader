@@ -185,15 +185,6 @@ MARK = "mod_party_action"
 # mod 無しで押されても選択肢が戻るだけ。
 
 
-def _text(value, limit=200):
-    if value is None:
-        return ""
-    if not isinstance(value, str):
-        value = str(value)
-    value = value.strip()
-    return value if len(value) <= limit else value[:limit] + "…"
-
-
 def apply(ctx):
     log_path = ctx.out_path(LOG_BASENAME)
     state = {
@@ -326,9 +317,8 @@ def apply(ctx):
     character_of = ui.character_of
 
     def name_of(app, character_id):
-        character = character_of(app, character_id)
-        name = _text(getattr(character, "name", ""), 40)
-        return name or "その仲間"
+        # 文言に混ぜるので、引けないときは id ではなく「その仲間」。
+        return ui.character_name(app, character_id, fallback="その仲間")
 
     # ------------------------------------------------------- 出してよい場面か
     def blocking_reason(app, member_id):

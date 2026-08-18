@@ -507,10 +507,13 @@ class FakeCtx(object):
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
 
-    def logger(self, name, *, tag=None, stamp=True, label=None):
+    def logger(self, name, **kw):
         import instantale_modloader as _ml
-        return _ml.ModContext.logger(self, name, tag=tag, stamp=stamp,
-                                     label=label)
+        return _ml.ModContext.logger(self, name, **kw)
+
+    def warner(self, tag):
+        import instantale_modloader as _ml
+        return _ml.ModContext.warner(self, tag)
 
     def state_path(self, *parts):
         path = os.path.join(self.state_dir, *parts)

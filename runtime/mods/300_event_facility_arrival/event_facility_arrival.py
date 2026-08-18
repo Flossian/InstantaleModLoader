@@ -75,7 +75,7 @@ import random
 import sys
 import time
 
-from instantale_modloader import llm, ui
+from instantale_modloader import frames, llm, ui
 
 LOG_BASENAME = "player_events.log"
 
@@ -164,16 +164,6 @@ LANGUAGE_NAMES = {"japanese": "日本語", "english": "英語"}
 # 注入した瞬間に、今いる施設で narration モードのセリフを1本作ってログにだけ出す。
 # 画面には出さないし状態も変えない（会話フェーズは開始しない）。
 SELFTEST_ON_BOOT = False
-
-
-def _text_of(value, limit=400):
-    """LLM に渡す値を安全に文字列化する。None や非文字列でも落ちないように。"""
-    if value is None:
-        return ""
-    if not isinstance(value, str):
-        value = str(value)
-    value = value.strip()
-    return value if len(value) <= limit else value[:limit] + "…"
 
 
 def apply(ctx):
@@ -396,14 +386,14 @@ def apply(ctx):
         area_overview = ""
         descriptions = getattr(area, "descriptions", None)
         if isinstance(descriptions, dict):
-            area_overview = _text_of(descriptions.get("overview"), 600)
+            area_overview = frames.short(descriptions.get("overview"), 600)
 
         recent = ""
         log = getattr(app, "current_narration_log", None)
         if isinstance(log, list) and log:
             last = log[-1]
             if isinstance(last, dict):
-                recent = _text_of(last.get("narration"), 300)
+                recent = frames.short(last.get("narration"), 300)
 
         instruction = (
             "あなたはダークファンタジーRPGの登場人物を演じます。\n"
@@ -415,9 +405,9 @@ def apply(ctx):
             "- その場の役割（宿の主人なら宿の主人）として自然な、日常的な一言にすること。\n"
             "- 物語を勝手に進めないこと。依頼・事件・重大な報せを持ち出さないこと。\n"
             "- personality と speech_style の記述には強く従うこと。"
-        ).format(player_name=_text_of(getattr(player, "name", "冒険者"), 60),
-                 facility_name=_text_of(getattr(facility, "name", ""), 80),
-                 npc_name=_text_of(getattr(npc, "name", ""), 60),
+        ).format(player_name=frames.short(getattr(player, "name", "冒険者"), 60),
+                 facility_name=frames.short(getattr(facility, "name", ""), 80),
+                 npc_name=frames.short(getattr(npc, "name", ""), 60),
                  language=language)
 
         context = (
@@ -429,20 +419,20 @@ def apply(ctx):
             "- {player_name}との関係: {relationship}\n\n"
             "【{player_name}の情報】\n- プロフィール: {player_profile}\n\n"
             "【直前の情景】\n{recent}"
-        ).format(worldview=_text_of(getattr(world, "worldview", ""), 600),
-                 area_name=_text_of(getattr(area, "name", ""), 60),
+        ).format(worldview=frames.short(getattr(world, "worldview", ""), 600),
+                 area_name=frames.short(getattr(area, "name", ""), 60),
                  area_overview=area_overview,
-                 facility_name=_text_of(getattr(facility, "name", ""), 80),
-                 facility_type=_text_of(getattr(facility, "facility_type", ""), 40),
-                 facility_desc=_text_of(getattr(facility, "description", ""), 400),
-                 npc_name=_text_of(getattr(npc, "name", ""), 60),
-                 npc_profile=_text_of(getattr(npc, "profile", ""), 400),
-                 npc_personality=_text_of(getattr(npc, "personality", ""), 300),
-                 npc_speech=_text_of(getattr(npc, "speech_style", ""), 200),
-                 npc_job=_text_of(getattr(npc, "job", ""), 60),
-                 relationship=_text_of(_relationship_of(npc, player), 200),
-                 player_name=_text_of(getattr(player, "name", "冒険者"), 60),
-                 player_profile=_text_of(getattr(player, "profile", ""), 400),
+                 facility_name=frames.short(getattr(facility, "name", ""), 80),
+                 facility_type=frames.short(getattr(facility, "facility_type", ""), 40),
+                 facility_desc=frames.short(getattr(facility, "description", ""), 400),
+                 npc_name=frames.short(getattr(npc, "name", ""), 60),
+                 npc_profile=frames.short(getattr(npc, "profile", ""), 400),
+                 npc_personality=frames.short(getattr(npc, "personality", ""), 300),
+                 npc_speech=frames.short(getattr(npc, "speech_style", ""), 200),
+                 npc_job=frames.short(getattr(npc, "job", ""), 60),
+                 relationship=frames.short(_relationship_of(npc, player), 200),
+                 player_name=frames.short(getattr(player, "name", "冒険者"), 60),
+                 player_profile=frames.short(getattr(player, "profile", ""), 400),
                  recent=recent)
 
         return [{"role": "user", "content": instruction + "\n\n" + context},
@@ -588,10 +578,10 @@ def apply(ctx):
             "<状況: {facility}に入ってきた{player}に、あなたの方から声をかけた。"
             "呼び止める第一声を述べよ>"
         ).format(facility=mark["facility"] or "この場所",
-                 player=_text_of(getattr(getattr(find_app(), "player", None),
+                 player=frames.short(getattr(getattr(find_app(), "player", None),
                                          "name", "旅人"), 40))
         write("rephrase: {!r} -> {!r}".format(
-            _text_of(last.get("content"), 60), replacement["content"]))
+            frames.short(last.get("content"), 60), replacement["content"]))
         return orig(messages[:-1] + [replacement], *args, **kwargs)
 
     # ------------------------------- ゲーム自身が使う character_id の形を控える

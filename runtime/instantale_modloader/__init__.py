@@ -559,7 +559,7 @@ class ModContext:
         return path
 
     def logger(self, name: str, *, tag: str = None, stamp: bool = True,
-               label: str = None):
+               label: str = None, cap: int = None):
         """この MOD 専用のログ関数を作る。`out/<name>` に1行ずつ追記する。
 
             write = ctx.logger("quest_offer.log")
@@ -575,6 +575,7 @@ class ModContext:
         | `tag` | 時刻と本文の間に**そのまま**挟む印（区切りの記号も込みで渡す）。`"[FLAGFIX]"` なら `[時刻] [FLAGFIX] 本文`、`"quest-end:"` なら `[時刻] quest-end: 本文` |
         | `stamp` | 時刻を付けるか。既定 True。自分で時刻を組み立てて渡す記録では False |
         | `label` | 書けなかったときに `modloader.log` へ出す名前。既定は MOD のフォルダ名 |
+        | `cap` | この関数からの書き込みをこの行数で打ち切る。毎フレーム呼ばれる場所からの記録用（`note = ctx.logger(名前, cap=N)` の形で、無制限の `write` と併用する）。既定は無制限 |
 
         `tag` を逐語にしてあるのは、**既にあるログの見た目を変えないため**。
         角括弧の形（`[BGMFIX]`）と区切りの形（`quest-end:`）が両方使われていて、
@@ -599,9 +600,14 @@ class ModContext:
         path = self.out_path(name)
         whose = label or (self._mod or "mod")
         lock = threading.Lock()
+        left = [cap]                     # None なら無制限
 
         def write(text):
             try:
+                if left[0] is not None:
+                    if left[0] <= 0:
+                        return
+                    left[0] -= 1
                 line = str(text).rstrip("\n")
                 if tag:
                     line = "{} {}".format(tag, line)
@@ -616,6 +622,27 @@ class ModContext:
                 self.log_exc("{}: write failed".format(whose))
 
         return write
+
+    def warner(self, tag: str):
+        """同じ警告を一度しか出さない関数を作る。
+
+            warn_once = ctx.warner("party expand")
+            warn_once("no_hud", "HUD が見つからない")   # -> WARN party expand: ...
+
+        毎フレーム呼ばれる場所からの「見つからない」系の警告用。
+        同じ `key` の2回目からは何もしない。
+        警告の行き先は `modloader.log`（起きているのは MOD の異常ではなく
+        ゲーム側の形が想定と違うことなので、共用のログでよい）。
+        """
+        warned = set()
+
+        def warn_once(key, message):
+            if key in warned:
+                return
+            warned.add(key)
+            self.log("{}: {}".format(tag, message), level="WARN")
+
+        return warn_once
 
     def state_path(self, *parts: str) -> str:
         """state/ 以下のパスを返す。親ディレクトリは先に作っておく。

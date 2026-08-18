@@ -286,24 +286,13 @@ def apply(ctx):
     # 利用者の意思（広げたいか）。
     # 画面を作り直されても引き継ぐので、入れ物ではなくこちらに持つ。
     # 入れ物側にあるのは「今その枠が広いか」。
-    state = {"expanded": bool(START_EXPANDED), "logged": 0, "ask_game": True,
+    state = {"expanded": bool(START_EXPANDED), "ask_game": True,
              "synced": False, "anchor": None, "no_portrait": False,
              "watching": False, "hud": None, "stale": False}
-    warned = set()
     labels = weakref.WeakKeyDictionary()
 
-    write = ctx.logger(LOG_BASENAME)
-
-    def note(text):
-        if state["logged"] < MAX_LOG:
-            state["logged"] += 1
-            write(text)
-
-    def warn_once(key, message):
-        if key in warned:
-            return
-        warned.add(key)
-        ctx.log("text expand: " + message, level="WARN")
+    note = ctx.logger(LOG_BASENAME, cap=MAX_LOG)
+    warn_once = ctx.warner("text expand")
 
     # -- 本文のラベルを探す --------------------------------------------------
     def is_label(widget):
@@ -672,16 +661,7 @@ def apply(ctx):
             except Exception:
                 ctx.log_exc("text expand: could not move a frame widget")
 
-    def schedule(fn, delay=0.0):
-        try:
-            from kivy.clock import Clock
-        except Exception:
-            fn()              # ゲームの外（オフライン検証）ではその場で
-            return
-        try:
-            Clock.schedule_once(lambda _dt: fn(), delay)
-        except Exception:
-            ctx.log_exc("text expand: could not schedule the clamp")
+    schedule = ui.scheduler(ctx, "text expand")
 
     def hint_x_of(member):
         """設計の `size_hint` の横だけ。縦は必ず外すので、残すのはこちらだけ。"""

@@ -82,7 +82,7 @@
 
 import time
 
-from instantale_modloader import frames
+from instantale_modloader import frames, ui
 
 # `302_` / `303_` と同じログに書く（パーティの増減を1つの時系列で読むため）。
 LOG_BASENAME = "party_leave.log"
@@ -129,15 +129,6 @@ LEAVE_TEXT_HINTS = ("パーティから離脱", "left the party")
 KEEP_TEXT = "{name}はパーティに残り、引き続き行動を共にすることになった。"
 
 
-def _text(value, limit=40):
-    if value is None:
-        return ""
-    if not isinstance(value, str):
-        value = str(value)
-    value = value.strip()
-    return value if len(value) <= limit else value[:limit] + "…"
-
-
 def apply(ctx):
     log_path = ctx.out_path(LOG_BASENAME)
     state = {
@@ -167,16 +158,6 @@ def apply(ctx):
         return disband.current()
 
     # ------------------------------------------------------------------ 控え
-    def character_of(app, character_id):
-        characters = getattr(getattr(app, "world", None), "characters", None)
-        if isinstance(characters, dict) and character_id is not None:
-            return characters.get(str(character_id))
-        return None
-
-    def name_of(app, character_id):
-        name = _text(getattr(character_of(app, character_id), "name", ""))
-        return name or str(character_id)
-
     def id_of(character):
         """Character から id を読む。読めなければ空文字（控えない）。"""
         for attr in ("id", "character_id", "npc_id"):
@@ -189,7 +170,7 @@ def apply(ctx):
         """引き留めた相手を控える。既に控えてあれば時刻だけ延ばす。"""
         entry = state["kept"].get(member_id)
         if entry is None:
-            entry = {"name": name_of(app, member_id), "source": source}
+            entry = {"name": ui.character_name(app, member_id), "source": source}
             state["kept"][member_id] = entry
             write("{!r} ({}) stays in the party ― {} {}".format(
                 entry["name"], member_id, source, reason))
@@ -299,8 +280,8 @@ def apply(ctx):
             try:
                 replaced = keep_text_for(context)
                 if replaced is not None:
-                    write("text: {!r} -> {!r}".format(_text(context, 60),
-                                                      _text(replaced, 60)))
+                    write("text: {!r} -> {!r}".format(frames.short(context, 60),
+                                                      frames.short(replaced, 60)))
                     context = replaced
             except Exception:
                 ctx.log_exc("quest-end keep: cannot rewrite the farewell line")

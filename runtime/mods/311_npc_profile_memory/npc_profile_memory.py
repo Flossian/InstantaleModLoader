@@ -126,7 +126,7 @@ import sys
 import threading
 import time
 
-from instantale_modloader import llm, ui
+from instantale_modloader import frames, llm, ui
 from instantale_modloader.state import world_filename, world_key
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
@@ -235,15 +235,6 @@ CONVERSATION_CHARS = 2000
 # 注入し直すとこのモジュール自体が読み込み直されるため、モジュール変数では足りない。
 # `sys` に置けば世代をまたいで同じ1組を共有できる（`118_` と同じ手）。
 STATE_STORE_ATTR = "__instantale_npc_profile_memory_store__"
-
-
-def _text(value, limit=200):
-    if value is None:
-        return ""
-    if not isinstance(value, str):
-        value = str(value)
-    value = value.strip()
-    return value if len(value) <= limit else value[:limit] + "…"
 
 
 def ordered_record(record):
@@ -471,14 +462,11 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 世界と人物
 
-    def character_of(app, npc_id):
-        characters = getattr(getattr(app, "world", None), "characters", None)
-        if isinstance(characters, dict) and npc_id:
-            return characters.get(str(npc_id))
-        return None
+    character_of = ui.character_of
 
     def name_of(app, npc_id):
-        return _text(getattr(character_of(app, npc_id), "name", ""), 40) or "その相手"
+        # 文言に混ぜるので、引けないときは id ではなく「その相手」。
+        return ui.character_name(app, npc_id, fallback="その相手")
 
     def npc_id_of(app, character_instance):
         """相手の id。`world.characters` の鍵から引く。`.id` には頼らない。
@@ -715,7 +703,7 @@ def apply(ctx):
 
     def player_name_of(app):
         name = getattr(getattr(app, "player", None), "name", None)
-        return _text(name, 40) or "冒険者"
+        return frames.short(name, 40) or "冒険者"
 
     def game_day(app):
         """いまのゲーム内日数。読めなければ `None`（そのときは何も言わない）。
@@ -917,7 +905,7 @@ def apply(ctx):
             if not isinstance(turn, dict):
                 continue
             lines.append("{}: {}".format(turn.get("role", "?"),
-                                         _text(turn.get("content"), 300)))
+                                         frames.short(turn.get("content"), 300)))
         return "\n".join(lines)[-CONVERSATION_CHARS:]
 
     def snapshot_of(app, npc_id):
@@ -944,9 +932,9 @@ def apply(ctx):
             "npc_id": str(npc_id),
             "npc_name": name_of(app, npc_id),
             "player_name": player_name_of(app),
-            "game_profile": _text(getattr(npc, "profile", ""), 400),
-            "personality": _text(getattr(npc, "personality", ""), 300),
-            "job": _text(getattr(npc, "job", ""), 60),
+            "game_profile": frames.short(getattr(npc, "profile", ""), 400),
+            "personality": frames.short(getattr(npc, "personality", ""), 300),
+            "job": frames.short(getattr(npc, "job", ""), 60),
             "transcript": transcript,
             # ゲーム内の日付もここで採る。
             # ワーカーは `app` を触らないので、

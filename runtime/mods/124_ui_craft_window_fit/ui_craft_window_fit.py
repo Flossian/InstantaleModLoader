@@ -178,14 +178,9 @@ Y_KEYS = ("y", "top", "center_y")
 
 
 def apply(ctx):
-    state = {"logged": 0, "sig": None}
+    state = {"sig": None}
 
-    write = ctx.logger(LOG_BASENAME)
-
-    def note(text):
-        if state["logged"] < MAX_LOG:
-            state["logged"] += 1
-            write(text)
+    note = ctx.logger(LOG_BASENAME, cap=MAX_LOG)
 
     # ------------------------------------------------------------ 読み取り
     def num(value, default=None):

@@ -776,10 +776,10 @@ def facility_name(app, facility, limit=40):
         return ""
     name = getattr(facility, "name", None)
     if isinstance(name, str) and name.strip():
-        return _short(name, limit)
+        return frames.short(name, limit)
     if isinstance(facility, dict):
         value = facility.get("name")
-        return _short(value, limit) if isinstance(value, str) else ""
+        return frames.short(value, limit) if isinstance(value, str) else ""
     world = getattr(app, "world", None)
     for attr in ("facilities", "locations"):
         table = getattr(world, attr, None)
@@ -788,11 +788,6 @@ def facility_name(app, facility, limit=40):
             if found is not None:
                 return facility_name(app, found, limit)
     return ""
-
-
-def _short(value, limit):
-    value = value.strip()
-    return value if len(value) <= limit else value[:limit] + "…"
 
 
 # --------------------------------------------------------------------------
@@ -959,17 +954,47 @@ def character_of(app, character_id):
     return None
 
 
-def character_name(app, character_id, limit=40):
-    """表示に使う名前。引けなければ id をそのまま返す（空にはしない）。"""
+def character_name(app, character_id, limit=40, fallback=None):
+    """表示に使う名前。引けなければ `fallback`、無指定なら id をそのまま返す（空にはしない）。
+
+    `fallback` は文言に混ぜる mod 向け（`302_` の「その仲間」、`311_` の
+    「その相手」）。ログ向けには id が残る既定のままがよい。
+    """
     name = getattr(character_of(app, character_id), "name", None)
     if isinstance(name, str) and name.strip():
-        return _short(name, limit)
-    return str(character_id)
+        return frames.short(name, limit)
+    return str(character_id) if fallback is None else fallback
 
 
 # --------------------------------------------------------------------------
 # 画面を触る側（ログと例外処理が要るので ctx を握る）
 # --------------------------------------------------------------------------
+def scheduler(ctx, tag="mod"):
+    """「次のフレーム・メインスレッドで走らせる」関数を1つ作る。
+
+        schedule = ui.scheduler(ctx, "party expand")
+        schedule(fn)            # 次のフレームで
+        schedule(fn, delay=0.5) # 0.5秒後に
+
+    `Screen.schedule` との違いは **Kivy が無ければその場で実行する**こと。
+    UI を整える 1xx 系の mod はオフライン検証（tools/tests/）でも
+    同じ経路を通したいので、ゲームの外では即時実行に落ちる。
+    ボタンを挿す mod は `Screen` の方を使うこと（あちらは
+    Clock が無い＝画面が無いので、実行せず諦めるのが正しい）。
+    """
+    def schedule(fn, delay=0.0):
+        try:
+            from kivy.clock import Clock
+        except Exception:
+            fn()              # ゲームの外（オフライン検証）ではその場で
+            return
+        try:
+            Clock.schedule_once(lambda _dt: fn(), delay)
+        except Exception:
+            ctx.log_exc("{}: could not schedule".format(tag))
+    return schedule
+
+
 class Screen(object):
     """1つの mod から見た「選択肢と画面」。
 

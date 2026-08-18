@@ -73,9 +73,8 @@ import os
 import sys
 import time
 
-from instantale_modloader import ui
+from instantale_modloader import frames, ui
 from instantale_modloader.state import world_filename, world_key
-from instantale_modloader.frames import repr_value
 
 LOG_BASENAME = "quest_offer.log"
 
@@ -206,15 +205,6 @@ NPC_MEMORY_CHARS = 800
 # ここに同じ規則を写さないこと。
 # `311_` と1文字でも違うと**同じファイルを指せなくなる**（読む側と書く側で別の名前になる）。
 # 写した版が実際にずれた経緯は state.py の docstring と TECH.md §3.2.3 にある。
-
-
-def _text(value, limit=200):
-    if value is None:
-        return ""
-    if not isinstance(value, str):
-        value = str(value)
-    value = value.strip()
-    return value if len(value) <= limit else value[:limit] + "…"
 
 
 def apply(ctx):
@@ -370,7 +360,7 @@ def apply(ctx):
 
     def quest_label(quest):
         return "【{}】{}".format(_difficulty_of(quest),
-                                 _text(getattr(quest, "quest_title", "依頼"), 40))
+                                 frames.short(getattr(quest, "quest_title", "依頼"), 40))
 
     # ------------------------------------------------- 会話の書き起こし
     def transcribe(app, npc_id):
@@ -397,14 +387,14 @@ def apply(ctx):
             except Exception as exc:
                 write("conversation_history_to_text failed: {}: {}".format(
                     type(exc).__name__, exc))
-        player_name = _text(getattr(player, "name", "プレイヤー"), 40)
-        npc_name = _text(getattr(npc, "name", "NPC"), 40)
+        player_name = frames.short(getattr(player, "name", "プレイヤー"), 40)
+        npc_name = frames.short(getattr(npc, "name", "NPC"), 40)
         lines = []
         for message in recent:
             if not isinstance(message, dict):
                 continue
             speaker = player_name if message.get("role") == "user" else npc_name
-            lines.append("{}: {}".format(speaker, _text(message.get("content"), 400)))
+            lines.append("{}: {}".format(speaker, frames.short(message.get("content"), 400)))
         return "\n".join(lines)[:CONVERSATION_CHARS]
 
     def current_talk(app):
@@ -418,7 +408,7 @@ def apply(ctx):
             text = transcribe(app, state["npc_id"])
             if text:
                 npc = npc_of(app, state["npc_id"])
-                return text, state["npc_id"], _text(getattr(npc, "name", ""), 40)
+                return text, state["npc_id"], frames.short(getattr(npc, "name", ""), 40)
         last = state["last_talk"]
         if last is not None and last.get("moves", 0) > 0:
             return last["text"], last["npc_id"], last["npc_name"]
@@ -441,17 +431,13 @@ def apply(ctx):
         state["last_talk"] = {
             "text": text,
             "npc_id": npc_id,
-            "npc_name": _text(getattr(npc, "name", ""), 40),
+            "npc_name": frames.short(getattr(npc, "name", ""), 40),
             "moves": KEEP_TRANSCRIPT_MOVES,
         }
         write("remembered talk with {!r} ({} chars, valid for {} moves)".format(
             state["last_talk"]["npc_name"], len(text), KEEP_TRANSCRIPT_MOVES))
 
-    def npc_of(app, npc_id):
-        characters = getattr(getattr(app, "world", None), "characters", None)
-        if isinstance(characters, dict) and npc_id is not None:
-            return characters.get(str(npc_id))
-        return None
+    npc_of = ui.character_of
 
     # ------------------------------------ どの依頼がどの NPC 発かの控え
 
@@ -486,7 +472,7 @@ def apply(ctx):
             value = record.get(key)
             if isinstance(value, str) and value.strip():
                 lines.append("{}: {}".format(label, value.strip()))
-        return _text("\n".join(lines), NPC_MEMORY_CHARS)
+        return frames.short("\n".join(lines), NPC_MEMORY_CHARS)
 
     def load_clients():
         # このファイルは全世界ぶんが1つなので、読めない1回を黙って {} に倒すと、
@@ -1222,7 +1208,7 @@ def apply(ctx):
             write("inject: generated {!r} client={!r}".format(
                 result.get("quest_title"), result.get("client_name")))
         else:
-            write("inject: generator returned {}".format(repr_value(result)))
+            write("inject: generator returned {}".format(frames.repr_value(result)))
         return result
 
     ctx.log("quest from conversation: sites={} list={} generation={} log={}".format(

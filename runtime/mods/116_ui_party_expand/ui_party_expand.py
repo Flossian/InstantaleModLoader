@@ -302,24 +302,13 @@ def apply(ctx):
     # 利用者の意思（広げたいか）。
     # 画面を作り直されても引き継ぐので、帯ではなくこちらに持つ。
     # 帯側にあるのは「今その帯が何行か」。
-    state = {"expanded": bool(START_EXPANDED), "logged": 0, "synced": False,
+    state = {"expanded": bool(START_EXPANDED), "synced": False,
              "ask_game": True, "busy": False, "stale": False, "watching": False,
              "healed": False, "game_paints": False,
              "hud": None, "fields": None, "anchor": None}
-    warned = set()
 
-    write = ctx.logger(LOG_BASENAME)
-
-    def note(text):
-        if state["logged"] < MAX_LOG:
-            state["logged"] += 1
-            write(text)
-
-    def warn_once(key, message):
-        if key in warned:
-            return
-        warned.add(key)
-        ctx.log("party expand: " + message, level="WARN")
+    note = ctx.logger(LOG_BASENAME, cap=MAX_LOG)
+    warn_once = ctx.warner("party expand")
 
     def guarded(fn):
         """ボタンから呼ばれる処理。ここで投げるとゲームを巻き込む。"""
@@ -329,16 +318,7 @@ def apply(ctx):
             ctx.log_exc("party expand: toggle failed")
             return None
 
-    def schedule(fn, delay=0.0):
-        try:
-            from kivy.clock import Clock
-        except Exception:
-            fn()              # ゲームの外（オフライン検証）ではその場で
-            return
-        try:
-            Clock.schedule_once(lambda _dt: fn(), delay)
-        except Exception:
-            ctx.log_exc("party expand: could not schedule")
+    schedule = ui.scheduler(ctx, "party expand")
 
     def close_enough(value, wanted):
         try:

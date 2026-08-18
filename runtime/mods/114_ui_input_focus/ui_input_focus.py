@@ -113,22 +113,11 @@ SEND_ATTR = "_instantale_focus_on_send"
 
 
 def apply(ctx):
-    state = {"logged": 0, "attempts": [], "standdown": 0.0, "chosen": None}
-    warned = set()
+    state = {"attempts": [], "standdown": 0.0, "chosen": None}
     inputs = weakref.WeakKeyDictionary()      # hud -> 入力欄への弱参照
 
-    write = ctx.logger(LOG_BASENAME)
-
-    def note(text):
-        if state["logged"] < MAX_LOG:
-            state["logged"] += 1
-            write(text)
-
-    def warn_once(key, message):
-        if key in warned:
-            return
-        warned.add(key)
-        ctx.log("input focus: " + message, level="WARN")
+    note = ctx.logger(LOG_BASENAME, cap=MAX_LOG)
+    warn_once = ctx.warner("input focus")
 
     def guarded(fn):
         """監視から呼ばれる処理。ここで投げるとゲームを巻き込む。"""
@@ -138,16 +127,7 @@ def apply(ctx):
             ctx.log_exc("input focus: refocus failed")
             return None
 
-    def schedule(fn, delay=0.0):
-        try:
-            from kivy.clock import Clock
-        except Exception:
-            fn()              # ゲームの外（オフライン検証）ではその場で
-            return
-        try:
-            Clock.schedule_once(lambda _dt: fn(), delay)
-        except Exception:
-            ctx.log_exc("input focus: could not schedule the refocus")
+    schedule = ui.scheduler(ctx, "input focus")
 
     # -- 入力欄を探す --------------------------------------------------------
     def is_input(widget):

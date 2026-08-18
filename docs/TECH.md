@@ -632,7 +632,8 @@ def apply(ctx):
 | `ctx.resolve(target)` | `(owner, name, value)` を返す。調査用 |
 | `ctx.log(...)` / `ctx.log_exc(...)` | `out/modloader.log` へ |
 | `ctx.out_path(name)` | `out/<name>` の絶対パス。MOD 専用ログはここへ（§3.11） |
-| `ctx.logger(name)` | その MOD 専用のログ関数（`out/<name>` に1行ずつ追記）。**自分で `open` を書かない**（§3.11.2） |
+| `ctx.logger(name)` | その MOD 専用のログ関数（`out/<name>` に1行ずつ追記）。**自分で `open` を書かない**。`cap=N` で行数を打ち切れる（§3.11.2） |
+| `ctx.warner(tag)` | 同じ鍵の警告を一度しか出さない関数を作る（§3.11.2） |
 | `ctx.state_path(name)` | `state/<name>` の絶対パス。遊びの続きに要るデータはここへ（§3.11） |
 | `ctx.read_json(path, default)` | JSON を読む。無ければ `default`、在るのに読めなければ記録してから `default`（§3.11.1） |
 | `ctx.write_json(path, data)` | 落ちても壊れないように書く。成否を返す（§3.11.1）。残すデータは必ずこれ |
@@ -889,6 +890,10 @@ MOD どうしが繋がるのは同じファイルを読むことによってで�
 | 包む前の素の関数まで剥がす | `patch.unwrap` / `original_of`（§3.7） | 4本（うち2本は1段しか剥がしていなかった） |
 | 壊れない書き込み・読み込み | `ctx.write_json` / `read_json`（§3.11.1） | 3本 |
 | HUD への置き場所 | `ui.overlay_host`（§5.1.3） | 2本 |
+| 表示・ログ用の切り詰め | `frames.short` | 6本（`_text` / `_text_of` の名で `300_`〜`311_`） |
+| 人物の引き方と表示名 | `ui.character_of` / `character_name` | 5本（`302_`〜`311_` ほか。`fallback=` で「その仲間」等も吸収） |
+| 上限付きの記録・一度きりの警告 | `ctx.logger(cap=)` / `ctx.warner`（§3.11.2） | 5本 / 4本（`113_`〜`124_`） |
+| 次のフレームで走らせる（ゲームの外では即時） | `ui.scheduler` | 5本（`113_`〜`122_`。ボタンを挿す側は従来どおり `Screen.schedule`） |
 
 代表的な2つの書き方。
 世界ごとの保存先（`state`）と、LLM へ出ていく文章が通る場所（`llm`。§5.3）:
@@ -1607,6 +1612,16 @@ write = ctx.logger("item_detail.log", stamp=False)   # 本文だけ
 | `tag` | 時刻と本文の間にそのまま挟む（区切りの記号も込みで渡す）。角括弧の形（`"[BGMFIX]"`）と区切りの形（`LOG_TAG + ":"`）が両方使われていて、どちらも実機の記録として GAME.md / VERIFICATION_LOG.md に引用されている。体裁を揃えると、その引用が次のプレイのログと一致しなくなる |
 | `stamp` | 時刻を付けるか（既定 True）。自分で時刻を組み立てて渡す記録では False |
 | `label` | 書けなかったときに `modloader.log` へ出す名前。既定は MOD のフォルダ名 |
+| `cap` | この関数からの書き込みをこの行数で打ち切る（既定は無制限）。毎フレーム呼ばれる場所からの記録用。無制限の関数と併用するなら同じ `name` でもう1本作れるが、**上限だけで足りるなら1本にする**（同じファイルへの書き手を増やさない）。数える器は関数の中なので、注入し直すと上限は戻る。**世代を跨いで数え続けたいもの（`122_` / `129_`）はこれに寄せない** |
+
+一度しか出さない警告は `ctx.warner()` で作る。
+こちらの行き先は `modloader.log`（起きているのは MOD の異常ではなく、
+ゲーム側の形が想定と違うことなので、共用のログでよい）:
+
+```python
+warn_once = ctx.warner("party expand")
+warn_once("no_hud", "HUD が見つからない")   # 同じ鍵の2回目からは何もしない
+```
 
 書けなくても例外にしない（`ctx.log_exc` に残して素通り）。
 呼ぶのはゲームのスレッドの中で、
@@ -1819,6 +1834,16 @@ ui.find_guild(area) / ui.find_facility(area, id) / ui.facility_name(app, facilit
 ui.facility_type_of(...) / ui.GUILD_FACILITY_TYPE
 ```
 
+ボタンを出さない MOD が「次のフレーム・メインスレッド」だけ要るときは、
+`Screen` を組まずに `ui.scheduler` を使う（Kivy が無ければその場で実行するので、
+オフライン検証でも同じ経路を通る。`113_`〜`122_` が共有）:
+
+```python
+schedule = ui.scheduler(ctx, "text expand")
+schedule(fn)             # 次のフレームで
+schedule(fn, delay=0.5)  # 0.5 秒後に
+```
+
 クエストの格納先（`301_` / `307_` が共有。GAME.md §2.9）:
 
 ```python
@@ -1899,13 +1924,17 @@ ui.party_ids(app)           # プレイヤーを含む id
 ui.party_member_ids(app)    # 同行者だけ（プレイヤーを除く）
 ui.party_stores(app) / ui.store_ids(store) / ui.drop_from_store(store, id)
 ui.element_id(value) / ui.describe_stores(app)
-ui.character_of(app, id) / ui.character_name(app, id)
+ui.character_of(app, id) / ui.character_name(app, id, fallback="その仲間")
 ```
+
+`character_name` は引けないとき、既定では id をそのまま返す（ログ向け。空にはしない）。
+文言に混ぜるときだけ `fallback=` で「その仲間」等に差し替える（`302_` / `311_`）。
 
 ### 5.2 `instantale_modloader.frames`
 
 ```python
 frames.text_of(obj, name)  # 文字列を期待する読み方。文字列でなければ None（下記）
+frames.short(value, limit) # 表示・ログ用の切り詰め。None は空文字（調査用の repr_value と役割が別）
 frames.caller()            # 呼び出し元の連鎖。段数では数えない（wrap の層が挟まる）
 frames.owner_of(code)      # method_1 / execute の持ち主クラスを名指しする
 frames.attr(obj, name)     # hasattr を使わない存在確認
