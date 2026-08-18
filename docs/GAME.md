@@ -1631,10 +1631,11 @@ __main__:InstantaleApp.normalize_shop_inventory_prices(shop_obtainer, player_obt
   値の意味と決め方は未特定。
   ゲームが `set_item_from_world_data` に渡す値をそのまま使い回すこと（`312_shop_restock` はこの形で、
   値は解釈しない）
-- 主の持ち物を空にしてから売買を始めると、ゲームが初回と同じ経路で品揃えを作り直す、
-  という前提で `312_` は書かれているが、実機では未確認。
+- 主の持ち物を空にしてから売買を始めると、ゲームが初回と同じ経路で品揃えを作り直す。
+  この前提は実機で成立している（`cleared` → `restocked` が 4店舗・6回、
+  `WARN not refilled` は0件。VERIFICATION.md §2.39 / §2.49）。
   外れたときのために、空にした後で補充されたかを見て、
-  駄目なら控えを戻す（VERIFICATION.md §3 の該当項）
+  駄目なら控えを戻す作りは残してある（VERIFICATION.md §3.16）
 
 日付は世界に1つ（`world.days_elapsed`。セーブでは `world_data.days_elapsed`。
 実セーブで `3651` を確認）。

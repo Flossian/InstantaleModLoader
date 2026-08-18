@@ -105,6 +105,8 @@ settings/         利用者が変えたものだけ（無くてよい）
                   loader.json … デバッグモード（GUI とローダの両方が読む。§3.2.5）
 out/              ログ・リコン成果物・status.json（最後の boot の結果）。消してよい
 state/            MOD が持つ永続データ（§3.11）。消すと遊びが巻き戻る
+discontinued/     開発を終了した MOD（§2.6.1）。git には残るが、ローダ・配布物・
+                  CI のどれからも見えない
 tools/            上記に加え、オフライン検証・セーブ操作（ゲーム不要）
 docs/             README.md / MODS.md / TECH.md / GAME.md / VERIFICATION.md
                   VERIFICATION_LOG.md
@@ -326,6 +328,7 @@ MIT は著作権表示が複製に付いて回ることを要求する。
 | 配布物（`make_dist.bat`） | | × `load_order.json` に無いものは staging から落ちる |
 | CI | | × `compileall` の `-x`、`check_mods.py` は `note` 扱い、`tools/tests/test_wip_*.py` は走らせない |
 | `docs/MODS.md` | | × 同梱している MOD の一覧なので、載せると利用者が探して見つからない |
+| 開発を終了したら | `discontinued/` へ移す（§2.6.1） | |
 
 文書は MOD のフォルダに `DOC.md` として置く。
 遊び方も検証の記録も、`docs/` の 5冊ではなくそこへ書く。
@@ -348,6 +351,36 @@ MIT は著作権表示が複製に付いて回ることを要求する。
 > 旗だと消し忘れたまま配ってしまうが、番号は変えない限り配布物に入らないので、
 > 消し忘れが事故にならない。
 > フォルダ一覧を見ただけで「これは配らない」と分かる利点もある。
+
+#### 2.6.1 開発を終了した MOD（`discontinued/`）
+
+作るのをやめた MOD は、消さずに `discontinued/<元のフォルダ名>/` へ移す。
+消さないのは、**そこまでに分かったこと（DOC.md の検証記録）がいちばんの資産**だから。
+番号は 9xx のまま変えない ― DOC.md・検査・過去のログ・git の履歴が、
+その番号で互いを指しているため。
+
+移す先が `runtime/` の外なのは、外すための旗を新しく増やさずに済むから。
+MOD を探している4者は全員 `runtime` の下しか見ない:
+
+| | 見ている場所 | 結果 |
+|---|---|---|
+| ローダの `discover()` | `runtime/mods` | 読み込まない |
+| `make_dist.bat` | `runtime\mods` を robocopy | 配布物に入らない |
+| CI の `compileall` | `runtime tools` | 構文検査もされない |
+| `tools/check_mods.py` | `runtime/mods` | 検査対象外 |
+
+`.gitignore` には当たらないので**追跡は続く**。
+検査（`tools/tests/test_wip_<名前>.py`）も一緒に移し、フォルダを自己完結させる
+（`runtime/mods` を走査して自分を探す作りなら、そこだけ直す）。
+
+**CI が一切見ない ＝ 構文エラーも検出されない**点は承知して置くこと。
+動かしたくなったら `runtime/mods/` へ戻し、`load_order.local.json` に名前を書く。
+戻すまでのあいだ、そのフォルダは**読み物**であって動くコードではない。
+
+終了の経緯は DOC.md の先頭に節を1つ作って書く（`903_mini_quest` が実例）。
+書くのは「なぜ終了したか / どこまで動いていたか / 残っている症状 /
+再開するなら何から」の4点。
+どれか1つでも欠けると、半年後に読んだ人が同じ調査をやり直すことになる。
 
 ---
 

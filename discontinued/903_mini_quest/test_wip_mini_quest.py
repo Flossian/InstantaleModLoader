@@ -1,7 +1,11 @@
 # -*- coding: utf-8 -*-
-"""305_mini_quest.py をゲーム抜きで通す。
+"""903_mini_quest.py をゲーム抜きで通す（開発終了。DOC.md 冒頭を見ること）。
 
-    python tools/tests/test_mini_quest.py
+    python discontinued/903_mini_quest/test_wip_mini_quest.py
+
+CI では走らない（`discontinued/` は検査もビルドも通らない。TECH.md §2.6）。
+`301_` / `302_` との共存だけは `runtime/mods` の実体を見るので、
+向こうが動いているあいだはこの検査も通り続ける。
 
 偽の app / PhaseSpec / DisplayQuestChoice / HUD / Clock /
 LlamaCppClient を差し込み、次を確認する。
@@ -42,6 +46,17 @@ if RUNTIME_DIR not in sys.path:
 import instantale_modloader as ml                      # noqa: E402
 
 
+def local_mod():
+    """この検査と同じフォルダに置いてある mod の入口。
+
+    `903_mini_quest` は開発終了で `discontinued/` へ出したので、
+    `runtime/mods` を探しても見つからない（TECH.md §2.6）。
+    共存の相手（`301_` / `302_`）だけは runtime に居るので `find_mod` で引く。
+    """
+    with io.open(os.path.join(HERE, "mod.json"), encoding="utf-8") as fh:
+        return os.path.join(HERE, json.load(fh)["entry"])
+
+
 def find_mod(suffix):
     """mod を **番号を除いた名前** で探す（番号は振り直されることがある）。"""
     matches = sorted(name for name in os.listdir(MODS_DIR)
@@ -57,7 +72,7 @@ def find_mod(suffix):
     return os.path.join(folder, entry)
 
 
-MOD = find_mod("_mini_quest")
+MOD = local_mod()
 OFFER_MOD = find_mod("_quest_from_conversation")
 PARTY_MOD = find_mod("_leave_party_in_conversation")
 

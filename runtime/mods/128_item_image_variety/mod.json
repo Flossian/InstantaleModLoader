@@ -10,7 +10,7 @@
     "en": "Spreads item icons across similar candidates instead of always picking the single best match, and adds 305 images missing from the embedding dictionaries",
     "ja": "アイテム画像を「最も似た1枚」固定でなく似た候補の中で使用回数最少から選び、埋め込み辞書に無かった305枚も選択肢に加える"
   },
-  "version": "1",
+  "version": "3",
   "author": "R01/Flossian",
   "settings": {
     "TOP_K": {
