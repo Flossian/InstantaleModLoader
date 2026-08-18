@@ -83,6 +83,7 @@ tools/watch.bat, watcher.py  ゲームの起動を監視して自動注入（GUI
 tools/injector.py         PE解析 → x64スタブ → CreateRemoteThread（--unload で剥がす）
 tools/logrotate.py        out/*.log の世代管理（注入 = 1世代の境目）
 tools/check_mods.py       静的検査（デコレータ・宣言と実体のずれ）
+tools/list_mods.py        docs/MODLIST.md を mod.json から組む（--check で照合）
 tools/llm_ctx_probe.bat, llm_ctx_probe.py
                           ローカル LLM の窓を実測して最適値を出す（127_ 用）
 tools/tests/test_*.py     ゲーム抜きで走る検査。開発用で配布物には入らない
