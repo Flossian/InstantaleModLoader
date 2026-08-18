@@ -1,0 +1,94 @@
+{
+  "entry": "probe_text_speed.py",
+  "api": 1,
+  "name": {
+    "en": "Text speed probe",
+    "ja": "本文の表示速度の計測"
+  },
+  "description": {
+    "en": "Measures the typewriter tick against app.text_speed, the frame rate, and the cost of rebuilding the label texture",
+    "ja": "本文の1文字ごとの間隔・`app.text_speed`・フレームレート・ラベルのテクスチャ作り直しの重さを測る"
+  },
+  "version": "4",
+  "author": "R01/Flossian",
+  "debug": true,
+  "after": [
+    "117_message_text_integrity",
+    "112_ui_text_spacing",
+    "113_ui_text_expand",
+    "114_ui_input_focus",
+    "116_ui_party_expand"
+  ],
+  "settings": {
+    "DETAIL_TICKS": {
+      "type": "int",
+      "default": 40,
+      "min": 0,
+      "max": 500,
+      "label": {
+        "ja": "最初に1行ずつ出すティック数",
+        "en": "Ticks logged one line each at the start"
+      }
+    },
+    "SUMMARY_EVERY": {
+      "type": "int",
+      "default": 60,
+      "min": 10,
+      "max": 5000,
+      "label": {
+        "ja": "要約を書く間隔（ティック数）",
+        "en": "Ticks between summary lines"
+      }
+    },
+    "POLL_SECONDS": {
+      "type": "float",
+      "default": 1.0,
+      "min": 0.1,
+      "max": 60.0,
+      "label": {
+        "ja": "`app.text_speed` を見張る間隔（秒）",
+        "en": "How often to poll app.text_speed (seconds)"
+      }
+    },
+    "SLOW_MS": {
+      "type": "float",
+      "default": 20.0,
+      "min": 1.0,
+      "max": 1000.0,
+      "label": {
+        "ja": "「遅い」として個別に残す1文字あたりのミリ秒",
+        "en": "Milliseconds per character that counts as slow"
+      }
+    },
+    "FPS_DELTA": {
+      "type": "float",
+      "default": 3.0,
+      "min": 0.0,
+      "max": 60.0,
+      "label": {
+        "ja": "フレームレートが動いたと見なす差",
+        "en": "FPS change worth logging"
+      }
+    },
+    "LEN_DELTA": {
+      "type": "int",
+      "default": 500,
+      "min": 0,
+      "max": 100000,
+      "label": {
+        "ja": "本文の長さが動いたと見なす差（文字）",
+        "en": "Text length change worth logging"
+      }
+    },
+    "HEARTBEAT_SECONDS": {
+      "type": "float",
+      "default": 30.0,
+      "min": 1.0,
+      "max": 600.0,
+      "label": {
+        "ja": "変化が無くても1行残す間隔（秒）",
+        "en": "Seconds between heartbeat lines"
+      }
+    }
+  }
+}

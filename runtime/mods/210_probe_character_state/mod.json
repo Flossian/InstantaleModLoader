@@ -1,0 +1,15 @@
+{
+  "entry": "probe_character_state.py",
+  "api": 1,
+  "name": {
+    "en": "Character state probe",
+    "ja": "NPC状態の計測"
+  },
+  "description": {
+    "en": "Finds the death marker on characters and counts who still references each NPC, to see whether the flag alone retires them safely",
+    "ja": "NPCの死亡の印を特定し、誰がそのNPCを参照しているかを数えて、印だけで安全に退場させられるかを測る"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "debug": true
+}
