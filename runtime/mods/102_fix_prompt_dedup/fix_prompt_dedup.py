@@ -25,6 +25,7 @@ import hashlib
 
 MIN_BLOCK_CHARS = 1000   # プロキシ側と同じ閾値
 AUDIT_FIRST_N = 5        # 最初の数回だけ、残った内容を詳しくログに出す
+LOG_BASENAME = "prompt_bloat.log"   # 103_ / 105_ と同じログに時系列で並べる
 
 
 def _content(message):

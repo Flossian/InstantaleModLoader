@@ -42,6 +42,10 @@ def apply(ctx):
 
     write = ctx.logger("probes.log")
 
+    # 未 import なら None のまま進む（上の理由で降りない）。None のときは
+    # 存在確認ができないだけなので、全対象を required=False で登録しておく。
+    module = sys.modules.get(MODULE)
+
     def describe_args(name, args, kwargs):
         """シーケンス系の引数だけを拾い、型と長さを記録する。
 
@@ -78,7 +82,7 @@ def apply(ctx):
     installed = 0
     for name in TARGETS:
         # 存在確認は既定値付き getattr で行う（TECH.md §6 の hasattr 禁止）。
-        if getattr(module, name, None) is None:
+        if module is not None and getattr(module, name, None) is None:
             ctx.log("  {} not present; skipped".format(name), level="WARN")
             continue
 

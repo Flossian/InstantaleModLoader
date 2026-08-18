@@ -125,6 +125,10 @@ PALETTE = {
     "check_edge": "#9aa2ad",   # 入っていないチェックの枠
     "danger":     "#b3261e",   # 前回の注入で入らなかった mod
     "warn":       "#9a5b00",   # 警告の行
+    # デバッグモードでだけ一覧に出る行（計測・取込済）の地。文字色は
+    # 無効=灰・失敗=赤で使い切っているので、こちらは背景で分ける。選択色
+    # （#dce7fb）とも見分けが付くように、青ではなく暖色に振る。
+    "dev_bg":     "#fdf3df",
 }
 
 # 日本語と英語が同じ列に並ぶので、両方が同じ太さで出る書体を選ぶ。上から順に
@@ -433,6 +437,38 @@ def _read_json(path: str):
 # --------------------------------------------------------------------------
 # mod の一覧・順序・設定
 # --------------------------------------------------------------------------
+# フォルダ名の番号帯（TECH.md §3.2.2）から種別のラベルを引く。mod.json に
+# 種別の欄を足せば帯に頼らずに済むが、それは全 MOD の一括書き換えになる ―
+# 表示のためだけの情報なので、GUI 側で導く。
+KIND_BY_BAND = {
+    "0": "基盤",       # リコン・クラッシュ記録。他が触る前の素の状態を押さえる
+    "1": "修正",       # 既にある動作を直す・調整する
+    "2": "計測",       # 読み取り専用。値を変えない
+    "3": "追加",       # 元々無かったものを足す
+    "9": "開発中",     # 未公開（§2.6）。順序ファイルに書いた手元でだけ並ぶ
+}
+
+
+def mod_kind(name: str, manifest: dict) -> str:
+    """一覧の「種別」列に出す文字。
+
+    帯より **manifest の旗を先に**見る。§3.2.2 自身が「帯は帯であって分類の
+    軸ではない」と言っており（機能追加でも挙動を変えるなら 100番台に置く）、
+    番号は当てにならないことがある。`debug` と `superseded` はローダが実際の
+    読み込みに使う値なので、こちらは嘘をつかない。
+
+    番号を持たない mod（利用者が入れた外部の mod）は空 ― 無理に当てはめる
+    より、規約の外に居ることがそのまま見える方が良い。
+    """
+    if manifest.get("superseded"):
+        return "取込済"
+    if manifest.get("debug"):
+        return "計測"
+    if name[:3].isdigit():
+        return KIND_BY_BAND.get(name[0], "")
+    return ""
+
+
 def read_mods() -> dict:
     """一覧に出すものを揃えて返す。判定はローダの `discover()` に任せる。
 
@@ -452,6 +488,7 @@ def read_mods() -> dict:
         manifest = found["manifests"].get(name) or {}
         mods.append({
             "dir": name,
+            "kind": mod_kind(name, manifest),
             "name_ja": (manifest.get("name") or {}).get("ja") or name,
             "name_en": (manifest.get("name") or {}).get("en") or name,
             "desc_ja": (manifest.get("description") or {}).get("ja") or "",
@@ -808,7 +845,8 @@ class SettingsDialog(tk.Toplevel):
             box = ttk.Combobox(parent, textvariable=var, state="readonly",
                                values=[str(v) for v in decl["values"]])
             return box, var
-        # int / float / str。空欄は allow_null の設定で「未指定」を表す。
+        # int / float / str。int / float の空欄は「未指定」（allow_null の設定で
+        # 許される）。str の空欄は**空文字列という値**（`_ok` を参照）。
         var = tk.StringVar(value="" if value is None else str(value))
         return ttk.Entry(parent, textvariable=var), var
 
@@ -824,8 +862,13 @@ class SettingsDialog(tk.Toplevel):
         chosen, bad = {}, []
         for name, (decl, var) in self.vars.items():
             raw = var.get()
-            if isinstance(raw, str) and raw.strip() == "":
-                raw = None      # 空欄 = 未指定
+            if isinstance(raw, str) and raw.strip() == "" \
+                    and decl["type"] != "str":
+                # 空欄 = 未指定。ただし str では**空文字列そのものが値**
+                # （「空でゲームのまま」のような設定がある。`314_` の文言）。
+                # None に変えると coerce が「null は許されていない」で弾き、
+                # 既定が空の欄は未編集で OK を押しただけでエラーになる。
+                raw = None
             ok, value, why = C.coerce(decl, raw)
             if not ok:
                 bad.append("{}: {}".format(decl["label"]["ja"], why))
@@ -919,6 +962,7 @@ class App(ttk.Frame):
     # （一番左の #0）に入れる。
     COLUMNS = (
         ("order", "順", 40, "center", False),
+        ("kind", "種別", 56, "center", False),
         ("name_ja", "Name（日本語）", 200, "w", True),
         ("name_en", "Name (English)", 200, "w", True),
         ("cfg", "設定", 44, "center", False),
@@ -932,6 +976,9 @@ class App(ttk.Frame):
     COLUMN_HELP = {
         "on": "この MOD を適用するかどうか。クリックで切り替え（Space キーでも同じ）",
         "order": "上から適用される順番。無効なものには番号を振りません",
+        "kind": "修正 = 本体の挙動を直す ／ 計測 = 読み取り専用の記録（開発者向け）\n"
+                "追加 = 新しい機能 ／ 取込済 = 本体が同じ修正を取り込んだもの\n"
+                "基盤 = 他より先に動く土台 ／ 開発中 = 未公開（手元だけ）",
         "name_ja": "行をドラッグすると適用順を変えられます",
         "name_en": "行をドラッグすると適用順を変えられます",
         "cfg": "● = 既定から変更あり ／ ○ = 既定のまま。クリックで設定を開きます\n"
@@ -1051,6 +1098,11 @@ class App(ttk.Frame):
         # 混ざるため、こちらだけ色を変える（無効な行の灰色とも別にする ―
         # 切ってあるのではなく、要らなくなったので降ろした、という違いがある）。
         self.tree.tag_configure("superseded", foreground=PALETTE["text_sub"])
+        # デバッグモードでだけ出てくる行（計測・取込済）は背景でまとめて示す。
+        # 文字色の3色（無効・失敗・取込済）とは**別の軸**なので、同じ行に重なる
+        # （無効にした計測 MOD は灰字＋この背景）。選択中は style.map の選択色が
+        # 勝つ ― off / bad の文字色が選択で消えるのと同じ振る舞いに揃う。
+        self.tree.tag_configure("dev", background=PALETTE["dev_bg"])
         self.tree.pack(side="left", fill="both", expand=True)
         self.tree.bind("<<TreeviewSelect>>", lambda _e: self._show_detail())
         self.tree.bind("<Button-1>", self._on_press)
@@ -1439,13 +1491,17 @@ class App(ttk.Frame):
                 continue
             shown += 1
             result = results.get(name, "")
-            tags = ()
+            tags = []
             if not on:
-                tags = ("off",)
+                tags.append("off")
             elif result and result != "ok":
-                tags = ("bad",)
+                tags.append("bad")
             elif mod.get("superseded"):
-                tags = ("superseded",)
+                tags.append("superseded")
+            # 背景は文字色と独立に付ける。デバッグモードが切なら `_matches` が
+            # 既に落としているので、ここで改めてモードを見る必要は無い。
+            if mod["debug"] or mod.get("superseded"):
+                tags.append("dev")
             # 設定を持つ mod だけ印を出す。持たない mod で「設定…」を押しても
             # 何も無いことが、一覧の時点で分かるように。
             changed = bool(self.settings.get(name))
@@ -1457,9 +1513,9 @@ class App(ttk.Frame):
             label_ja = mod["name_ja"]
             if mod.get("superseded"):
                 label_ja += "　〔{} で本体が取込〕".format(mod["superseded"])
-            self.tree.insert("", "end", iid=name, tags=tags,
+            self.tree.insert("", "end", iid=name, tags=tuple(tags),
                              image=self.check_on if on else self.check_off,
-                             values=(n if on else "-",
+                             values=(n if on else "-", mod["kind"] or "-",
                                      label_ja, mod["name_en"], cfg,
                                      mod["version"] or "-", mod["author"] or "-",
                                      RESULT_TEXT.get(result, result or "-")))

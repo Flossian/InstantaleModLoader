@@ -1746,9 +1746,12 @@ Character.calculate_current_gained_exp_on_display(gained)  表示用
 
 | クラス | `__init__` | 何か |
 |---|---|---|
-| `DisplayVacationChoice` | - | 宿屋の休暇の選択肢（`free_facility` の `CALL_PHASE_ALLOWED` に入っている） |
+| `DisplayVacationChoice` | `(app, period_months)` | 宿屋の休暇の選択肢＝部屋選び（`free_facility` の `CALL_PHASE_ALLOWED` に入っている） |
+| `VacationStartManager` | `(app, months, quality)` | 部屋を決めて宿泊を始める。連泊の `まだ宿泊する` もこのクラス（実測） |
 | `VacationTrainManager` | `(app, months, quality)` | 宿屋で月日を訓練に充てる。`quality` は宿の等級 |
 | `VacationRestManager` | `(app, months, quality)` | 宿屋での休養 |
+| `VacationLaborManager` / `VacationSocializeManager` / `VacationBeggingManager` | `(app, months, quality)` | 労働・社交・物乞い（targets.txt。社交には `VacationSocializeResolveManager` も居る） |
+| `VacationEndManager` | `(app)` | 宿泊を終える |
 | `DisplayTrainingChoice` | `(app, training_type)` | 施設での訓練の選択肢 |
 | `TrainingStartManager` | `(app, training_years, training_price)` | 施設の主に年月と代金を払って教わる |
 | `TrainingPhaseManager` | `(app, training_type, remaining_years, training_log)` | その各段（`simple_training` / `fundamental_training` / `enhance_skill` / `learn_new_skill`） |
@@ -1757,6 +1760,53 @@ Character.calculate_current_gained_exp_on_display(gained)  表示用
 `app.vacation_hobby_log` / LLM 側は `scripts.llm.llm_manager` の
 `vacation_rest_overview_generator` / `fundamental_training_manager` /
 `skill_train_manager` / `free_input_training_manager` / `training_conversation_starter`。
+
+宿泊の実際の流れ（`out/events.log` 2026-08-06〜08-14 の6回と、
+`out/vacation.log` 2026-08-18 の `218_probe_vacation` の実測）:
+
+```
+process_choice(DisplayVacationChoice, choice_text='宿泊する(4ヵ月)')   [MainThread]
+    DisplayVacationChoice(app, period_months)      period_months は int（実測 4）
+process_choice(VacationStartManager,  choice_text='個室(100G)')
+    VacationStartManager(app, months, quality)     args=[1, 'private_room']
+    「4ヵ月泊まることにした。」
+    change_background_image_to_inn_room(quality)   ← ここまでが execute の中
+    elapse_days(months * 30)                       ← **日数はここで1回**
+    宿代の引き落とし                                ← **金もここで1回**
+    「何をして過ごす？」
+process_choice(VacationRestManager,   choice_text='休養をとる')        ← 訓練する なども同列
+    描写が出るだけ。**日数も金も動かない**
+process_choice(VacationStartManager,  choice_text='まだ宿泊する')      ← 連泊はここから2周目
+    **宿代も日数ももう1回**（実測: 100G と elapse_days(30) が再度）
+process_choice(VacationEndManager,    choice_text='宿泊を終える')      ← 「宿泊を終えた。」
+```
+
+- **部屋は4つ**。ボタンの実測ラベルと `quality` の実値（2026-08-18）:
+
+  | ラベル | `quality` |
+  |---|---|
+  | `犬小屋(0G)` | `'kennel'` |
+  | `簡易寝台(10G)` | `'bunk'` |
+  | `個室(100G)` | `'private_room'` |
+  | `高級個室(1000G)` | `'luxury_suite'` |
+
+  犬小屋は宿の主が会話で言及するだけかと思われていたが、**本当に選択肢に並ぶ**
+  （しかもタダ。§2.13.2 の物価の実プレイログ）。月数が 3 でも 4 でも同じ料金
+  （主の台詞も「三ヵ月ごとの前払い」と言っている）
+- `宿泊する(Nヵ月)` の月数は**プレイヤーの年齢の変動式**: 若いと 3ヵ月、
+  年を取るにつれて最長 6ヵ月（仕様情報、2026-08-18）。実測は **20代=3・31歳=4**
+  の2点だけ。年齢ごとの境目は未実測で、`218_probe_vacation` が `period_months` と
+  `app.player.age`（int。実測 31）を対で録り続ける
+- **日数も宿代も `VacationStartManager.execute` の中で1回ずつ**。日数は
+  `elapse_days(months * 30)`（実測 `elapse_days(30)`）で、`307_` が踏んだような
+  「`elapse_days` を通らない」経路ではない。**宿泊の開始時点で全期間ぶんが
+  一度に進む**ので、途中の活動を何回挟んでも暦は動かない
+- `execute` の本体はワーカースレッドで走る（`change_background_image_to_inn_room`
+  の呼び出し元が `threading.run`）。`process_choice` 自体は MainThread
+- LLM の描写のプロンプトは**「このエリアで数ヵ月の宿泊をし」と月数を焼き込んで
+  いる**（実測）。宿泊の長さを変える MOD から見ると、ゲームの文言（`Nヵ月泊まる
+  ことにした。`）は月数を持つのに、LLM 側は「数ヵ月」で固定 ― 短い滞在にすると
+  描写だけが「数ヶ月にわたる滞在」と言い続ける
 
 「いま訓練の中か」を `frames.MethodWatch` で見るときは、その `execute` を自分で
 包んでいないことを確かめる。包んでいると、表に入るのはローダのラッパのコード
@@ -1796,11 +1846,23 @@ process_choice(AreaMoveManager,       choice_text='馬車(1000G)')       [MainTh
   `ElapseDays: type:="elapse_days", days` というモデルがある（`out/prompt_bloat.log`）
 - 移動中の表示は `徒歩で目指す。長旅だ...` → `.` `..` `...` → `辿り着いた。`
   （すべて `InstantaleApp.add_text(context)` を通る。点は
-  `AreaMoveManager.show_loading_text`）。馬車の側の文言は未実測
+  `AreaMoveManager.show_loading_text`）。馬車の側は
+  `1000ゴールドを支払った。快適な旅だ...` → 点 → `辿り着いた。`
+  （2026-08-17、`217_probe_area_move` で実測。**金額は文に焼き込み**で、
+  MOD が実際の引き落としを変えても文中の 1000 は動かない）
 - `AreaMoveManager.show_loading_text` は `__main__` にある数少ない
   「ゲーム native の待機表示」の入口（`206_` が発火を確認済み）
 - LLM 側に `llm_manager:area_move_rejector(character_life_log, player,
   character_instance, worldview)` がある。同行者が移動を拒む経路と思われるが未検証
+- 馬車の実測（2026-08-17、`217_probe_area_move`、往復4移動）: 日数は
+  `elapse_days(14)`、運賃 1000G の徴収は **`AreaMoveManager.execute` の中**
+  （移動の窓の前後の所持金の差で観測。`314_area_move_custom` の料金差し替えの
+  前提はこれで成立）
+- 手持ちが運賃に満たないときも実測（2026-08-18、所持金 0 で馬車を押下）:
+  **確認画面に馬車のボタンは普通に並ぶ**。押すと `execute` が走り、
+  `金が足りない...` の一言だけで中断する（`elapse_days` も所持金もエリアも
+  動かない。`AreaMoveRestriction` は通らない）。つまり**残高チェックも
+  `execute` の中**にある
 
 ### 2.19 体力（スタミナ）は `physical_integrity`
 

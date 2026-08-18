@@ -1,0 +1,18 @@
+{
+  "entry": "probe_vacation.py",
+  "api": 1,
+  "name": {
+    "en": "Probe: inn stays",
+    "ja": "計測: 宿の宿泊"
+  },
+  "description": {
+    "en": "Records when the room price is charged, the quality values, period_months, and how the months elapse. Read-only",
+    "ja": "宿代の徴収の時機・quality の実値・宿泊期間の決まり方・日数送りの経路を録る。ゲームは変えない"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "after": [
+    "315_vacation_custom"
+  ],
+  "debug": true
+}

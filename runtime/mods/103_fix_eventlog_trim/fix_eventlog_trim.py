@@ -27,6 +27,7 @@ KEEP_TURNS = 3            # フィールドイベントは仕様上3ターンで
 EVENT_LOG_INDEX = 2       # 対象3関数とも quest_event_log は3番目の引数
 EVENT_LOG_KEYWORD = "quest_event_log"
 AUDIT_FIRST_N = 3         # 最初の数回だけ、刈り込み前後をログに出す
+LOG_BASENAME = "prompt_bloat.log"   # 102_ / 105_ と同じログに時系列で並べる
 
 TARGETS = (
     "quest_referee_event_evaluate_new",

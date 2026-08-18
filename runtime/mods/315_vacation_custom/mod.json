@@ -1,0 +1,202 @@
+{
+  "entry": "vacation_custom.py",
+  "api": 1,
+  "name": {
+    "en": "Customize inn stays",
+    "ja": "宿泊のカスタマイズ"
+  },
+  "description": {
+    "en": "Choose how long a stay lasts (1-2 weeks or 1-6 months, optionally scaled by the player's age), and change the names and prices of all four rooms at inns. Defaults are the game's own values; behavior is untouched until you edit them",
+    "ja": "宿の宿泊期間を選択式で変えられる（1〜2週間・1〜6ヵ月。年齢による加算のON/OFF付き）。部屋4つの名前と宿代も変更できる。既定は素のゲームの値のままで、変えた項目だけが効く"
+  },
+  "version": "4",
+  "author": "R01/Flossian",
+  "settings": {
+    "STAY_LENGTH": {
+      "type": "choice",
+      "values": [
+        "デフォルト",
+        "1週間",
+        "2週間",
+        "1ヵ月",
+        "2ヵ月",
+        "3ヵ月",
+        "4ヵ月",
+        "6ヵ月"
+      ],
+      "default": "デフォルト",
+      "label": {
+        "ja": "宿泊期間",
+        "en": "Stay length"
+      },
+      "note": {
+        "ja": "「デフォルト」でゲームのまま（素のゲームは年齢で3〜6ヵ月に変わる変動式）。週単位は部屋代1回ぶんの短期滞在になる。年齢による加算がONだと、選んだ期間に30代+1・40代+2・50代以上+3（週/月）が足される",
+        "en": "デフォルト keeps the game's own period (the game varies it from 3 to 6 months by age). Week-length stays cost one room fee. With the age bonus on, the chosen length grows by +1/+2/+3 (weeks or months) in your 30s/40s/50s+"
+      }
+    },
+    "AGE_SCALING": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "年齢による期間の加算",
+        "en": "Age-based length bonus"
+      },
+      "note": {
+        "ja": "ONだと、選んだ期間に年齢の加算が乗る（20代まで無し・30代+1・40代+2・50代以上+3。上限は4週間/6ヵ月）。ゲーム自身の期間が年齢の変動式なのに合わせた仕様。「デフォルト」では意味を持たない",
+        "en": "Adds +1/+2/+3 weeks or months in your 30s/40s/50s+ (capped at 4 weeks / 6 months), mirroring how the game itself lengthens stays with age. Ignored when the stay length is デフォルト"
+      }
+    },
+    "KENNEL_NAME": {
+      "type": "str",
+      "default": "犬小屋",
+      "label": {
+        "ja": "一番安い部屋の名前",
+        "en": "Name of the free room"
+      },
+      "note": {
+        "ja": "素のゲームは「犬小屋」（0G）。宿の主が話に出す通り、本当に選択肢にある",
+        "en": "The game's own name is 犬小屋, and it really is free (0G)"
+      }
+    },
+    "KENNEL_PRICE": {
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 1000000,
+      "label": {
+        "ja": "一番安い部屋の宿代",
+        "en": "Price of the free room"
+      },
+      "note": {
+        "ja": "素のゲームは0G（タダ）。0のままなら触らない",
+        "en": "The game's own price is 0G. Left at 0, nothing is touched"
+      }
+    },
+    "SIMPLE_NAME": {
+      "type": "str",
+      "default": "簡易寝台",
+      "label": {
+        "ja": "安い部屋の名前",
+        "en": "Name of the cheap room"
+      },
+      "note": {
+        "ja": "素のゲームは「簡易寝台」。名前を変えても部屋の中身（休まり方・背景）は元のまま",
+        "en": "The game's own name is 簡易寝台. Renaming does not change what the room does"
+      }
+    },
+    "SIMPLE_PRICE": {
+      "type": "int",
+      "default": 10,
+      "min": 0,
+      "max": 1000000,
+      "label": {
+        "ja": "安い部屋の宿代",
+        "en": "Price of the cheap room"
+      },
+      "note": {
+        "ja": "素のゲームは10G。10のままなら触らない。0でタダ。手持ちがこの額に満たないと泊まれない",
+        "en": "The game's own price is 10G. Left at 10, nothing is touched. 0 makes it free"
+      }
+    },
+    "PRIVATE_NAME": {
+      "type": "str",
+      "default": "個室",
+      "label": {
+        "ja": "中の部屋の名前",
+        "en": "Name of the middle room"
+      },
+      "note": {
+        "ja": "素のゲームは「個室」",
+        "en": "The game's own name is 個室"
+      }
+    },
+    "PRIVATE_PRICE": {
+      "type": "int",
+      "default": 100,
+      "min": 0,
+      "max": 1000000,
+      "label": {
+        "ja": "中の部屋の宿代",
+        "en": "Price of the middle room"
+      },
+      "note": {
+        "ja": "素のゲームは100G。100のままなら触らない",
+        "en": "The game's own price is 100G. Left at 100, nothing is touched"
+      }
+    },
+    "LUXURY_NAME": {
+      "type": "str",
+      "default": "高級個室",
+      "label": {
+        "ja": "高い部屋の名前",
+        "en": "Name of the fine room"
+      },
+      "note": {
+        "ja": "素のゲームは「高級個室」",
+        "en": "The game's own name is 高級個室"
+      }
+    },
+    "LUXURY_PRICE": {
+      "type": "int",
+      "default": 1000,
+      "min": 0,
+      "max": 1000000,
+      "label": {
+        "ja": "高い部屋の宿代",
+        "en": "Price of the fine room"
+      },
+      "note": {
+        "ja": "素のゲームは1000G。1000のままなら触らない",
+        "en": "The game's own price is 1000G. Left at 1000, nothing is touched"
+      }
+    },
+    "ROOM_BUTTON": {
+      "type": "str",
+      "default": "{name}({price}G)",
+      "label": {
+        "ja": "部屋のボタンの表示",
+        "en": "Room button label"
+      },
+      "note": {
+        "ja": "使える変数: {name} {price}。名前か宿代を変えた部屋だけこの形で表示し直す",
+        "en": "Variables: {name} {price}. Used only for rooms you changed"
+      }
+    },
+    "STAY_BUTTON": {
+      "type": "str",
+      "default": "宿泊する({length})",
+      "label": {
+        "ja": "宿泊のボタンの表示",
+        "en": "Stay button label"
+      },
+      "note": {
+        "ja": "使える変数: {length}（加算後の期間。「2週間」「4ヵ月」）{months}。宿泊期間がデフォルト以外のときだけこの形で表示し直す",
+        "en": "Variables: {length} (the effective length, e.g. 2週間) and {months}. Used only when the stay length is overridden"
+      }
+    },
+    "STAY_TEXT": {
+      "type": "str",
+      "default": "{length}泊まることにした。",
+      "label": {
+        "ja": "宿泊開始の文言（週単位のとき）",
+        "en": "Stay-start line (week stays)"
+      },
+      "note": {
+        "ja": "週単位のとき、ゲームの「1ヵ月泊まることにした。」をこの形に置き換える。空でゲームのまま（文言と実際の日数が食い違う）。月単位はゲームが正しい月数を言うので触らない",
+        "en": "For week-length stays, replaces the game's 1ヵ月 line. Empty keeps the game's line (which would disagree with the real days). Month stays already show the right number"
+      }
+    },
+    "LLM_STAY_WORDING": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "週単位のときAIの描写も揃える",
+        "en": "Fix the AI narration for week stays"
+      },
+      "note": {
+        "ja": "ONだと、週単位の宿泊のあいだAIに渡す文の「数ヵ月の宿泊」を実際の期間に直す。切ると描写だけが「数ヶ月にわたる滞在」と言い続ける（ゲームが月数を文に焼き込んでいるため）。月単位の宿泊では何もしない",
+        "en": "While a week-length stay is running, rewrites 数ヵ月の宿泊 in the text sent to the AI so the narration matches. Off keeps the game's wording, which says 'several months' even for a two-week stay. Month stays are untouched"
+      }
+    }
+  }
+}

@@ -39,6 +39,9 @@
     "206_probe_quest_flow",
     "207_probe_battle_bgm",
     "208_probe_item_detail",
+    "209_probe_free_facility",
+    "210_probe_character_state",
+    "211_probe_text_speed",
     "212_probe_character_sheet",
     "300_event_facility_arrival",
     "301_quest_from_conversation",
@@ -47,16 +50,20 @@
     "304_quest_end_keep_party",
     "119_fix_crime_attribution",
     "306_party_train_exp",
+    "314_area_move_custom",
     "307_area_move_dungeon",
     "308_battle_damage_display",
     "309_office_pardon",
     "311_npc_profile_memory",
     "312_shop_restock",
     "313_event_ability_check",
+    "315_vacation_custom",
     "215_probe_event_roll",
     "213_probe_npc_memory",
     "214_probe_new_character",
-    "216_probe_llm_overlap"
+    "216_probe_llm_overlap",
+    "217_probe_area_move",
+    "218_probe_vacation"
   ],
   "disabled": []
 }

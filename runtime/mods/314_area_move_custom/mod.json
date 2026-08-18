@@ -1,0 +1,145 @@
+{
+  "entry": "area_move_custom.py",
+  "api": 1,
+  "name": {
+    "en": "Customize area travel",
+    "ja": "街移動のカスタマイズ"
+  },
+  "description": {
+    "en": "Change how long walking and the coach take, the coach fare, and the travel wording. Defaults are the game's own values (behavior is untouched until you edit them); the coach button always shows the travel days, which the game itself never displays",
+    "ja": "徒歩・馬車の日数と馬車の料金、移動中の文言を変えられる。既定は素のゲームの値のままで挙動は変わらないが、素のゲームでは分からない馬車の所要日数を既定でもボタンに表示する"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "before": [
+    "307_area_move_dungeon"
+  ],
+  "settings": {
+    "WALK_DAYS": {
+      "type": "int",
+      "default": 90,
+      "min": 0,
+      "max": 365,
+      "label": {
+        "ja": "徒歩の日数",
+        "en": "Days on foot"
+      },
+      "note": {
+        "ja": "素のゲームは90日(3ヵ月)。90のままなら日数もボタンの表示も変えない",
+        "en": "The game's own value is 90 days. Left at 90, nothing is touched"
+      }
+    },
+    "COACH_DAYS": {
+      "type": "int",
+      "default": 14,
+      "min": 0,
+      "max": 365,
+      "label": {
+        "ja": "馬車の日数",
+        "en": "Days by coach"
+      },
+      "note": {
+        "ja": "素のゲームは14日。14のままなら実際の日数には触らない（ボタンには既定でも日数が出る）",
+        "en": "The game's own value is 14 days. Left at 14 the elapsed days are untouched; the button shows the days either way"
+      }
+    },
+    "COACH_PRICE": {
+      "type": "int",
+      "default": 1000,
+      "min": 0,
+      "max": 1000000,
+      "label": {
+        "ja": "馬車の料金",
+        "en": "Coach fare"
+      },
+      "note": {
+        "ja": "素のゲームは1000G。1000のままなら料金には触らない。0でタダ。手持ちがこの額に満たないと乗れない",
+        "en": "The game's own fare is 1000G. Left at 1000, nothing is touched. 0 makes it free"
+      }
+    },
+    "WALK_NAME": {
+      "type": "str",
+      "default": "徒歩",
+      "label": {
+        "ja": "徒歩の呼び名",
+        "en": "Name for walking"
+      },
+      "note": {
+        "ja": "ボタンと文言の {name} に入る",
+        "en": "Fills {name} on the button and in the wording"
+      }
+    },
+    "COACH_NAME": {
+      "type": "str",
+      "default": "馬車",
+      "label": {
+        "ja": "馬車の呼び名",
+        "en": "Name for the coach"
+      },
+      "note": {
+        "ja": "「竜車」「乗合馬車」など。ボタンと文言の {name} に入る",
+        "en": "Fills {name} on the button and in the wording"
+      }
+    },
+    "WALK_BUTTON": {
+      "type": "str",
+      "default": "{name}({days}日)",
+      "label": {
+        "ja": "徒歩のボタンの表示",
+        "en": "Walk button label"
+      },
+      "note": {
+        "ja": "使える変数: {name} {days}。日数を変えたときだけ使われる",
+        "en": "Variables: {name} {days}. Used only when the days are overridden"
+      }
+    },
+    "COACH_BUTTON": {
+      "type": "str",
+      "default": "{name}({price}G・{days}日)",
+      "label": {
+        "ja": "馬車のボタンの表示",
+        "en": "Coach button label"
+      },
+      "note": {
+        "ja": "使える変数: {name} {price} {days}。馬車のボタンは常にこの表示（素のゲームは日数を出さないため、既定でも足す）",
+        "en": "Variables: {name} {price} {days}. The coach button always uses this (the game itself never shows the days)"
+      }
+    },
+    "WALK_DEPART_TEXT": {
+      "type": "str",
+      "default": "{name}で目指す。長旅だ...",
+      "label": {
+        "ja": "徒歩の出発の文言",
+        "en": "Departure line on foot"
+      },
+      "note": {
+        "ja": "空でゲームのまま。使える変数: {name} {target} {origin} {days} {price}",
+        "en": "Empty keeps the game's line. Variables: {name} {target} {origin} {days} {price}"
+      }
+    },
+    "COACH_DEPART_TEXT": {
+      "type": "str",
+      "default": "{price}ゴールドを支払った。快適な旅だ...",
+      "label": {
+        "ja": "馬車の出発の文言",
+        "en": "Departure line by coach"
+      },
+      "note": {
+        "ja": "既定は素のゲームと同じ文。料金を変えると文中の金額も追随する（ゲーム自身は1000と言い続けるため）。空でゲームのまま。使える変数は徒歩と同じ",
+        "en": "Default matches the game's own line; {price} follows the configured fare. Empty keeps the game's line"
+      }
+    },
+    "ARRIVE_TEXT": {
+      "type": "str",
+      "default": "",
+      "label": {
+        "ja": "到着の文言",
+        "en": "Arrival line"
+      },
+      "note": {
+        "ja": "素のゲームは「辿り着いた。」。空でゲームのまま。使える変数は出発と同じ",
+        "en": "The game's line is 辿り着いた。 Empty keeps it. Same variables"
+      }
+    }
+  }
+}

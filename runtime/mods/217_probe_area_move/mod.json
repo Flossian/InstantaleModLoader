@@ -1,0 +1,19 @@
+{
+  "entry": "probe_area_move.py",
+  "api": 1,
+  "name": {
+    "en": "Probe: area travel",
+    "ja": "計測: エリア移動"
+  },
+  "description": {
+    "en": "Records the coach's wording, days, and when the fare is charged. Read-only",
+    "ja": "馬車の文言・日数・料金の徴収の時機を録る。ゲームは変えない"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "after": [
+    "314_area_move_custom",
+    "307_area_move_dungeon"
+  ],
+  "debug": true
+}
