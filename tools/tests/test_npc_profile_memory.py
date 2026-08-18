@@ -3,15 +3,17 @@
 
     python tools/tests/test_npc_profile_memory.py
 
-**偽のゲームを1つ組んで、本物と同じ形で会話を1ターン流す。** ターンは
-`ConversationPhaseManager.conversation_continued` が
-`llm_manager.conversation_facilitator` を呼び、返答を履歴に足して `add_text` する
-という実測どおりの並びにしてある。この形を守っているので、「NPC の浅い複製の
+**偽のゲームを1つ組んで、本物と同じ形で会話を1ターン流す。**
+ターンは `ConversationPhaseManager.conversation_continued` が
+`llm_manager.conversation_facilitator` を呼び、
+返答を履歴に足して `add_text` するという実測どおりの並びにしてある。
+この形を守っているので、「NPC の浅い複製の
 `profile` にだけ足される」「抽出が返答の**後**に回る」を確かめられる。
 
 見ているのは振る舞いだけ:
 
-- 1ターン終わると抽出が走り、更新後のプロフィール全文が `state/npc_profiles/<世界名>.json` に残る
+- 1ターン終わると抽出が走り、更新後のプロフィール全文が
+  `state/npc_profiles/<世界名>.json` に残る
 - **変更なし・空・読めない返答では既存プロフィールを維持する**
 - 旧版の分類別 `slots` は情報を落とさず `profile` へ自動移行する
 - 控えは次の会話で、浅く複製した NPC の `profile` に足される
@@ -57,9 +59,10 @@ def find_mod(suffix):
 def load_neighbour(suffix):
     """他の mod を番号を除いた名前で読む（取り決めの突き合わせ用）。
 
-    **これが許されるのは `tools/` の検証だけ**（TECH.md §2.4）。mod どうしは
-    実行時に互いを import しない ― ローダは mod を `instantale_mod_<フォルダ名>`
-    で登録するので、番号を振り直した瞬間に名前で掴む側が壊れる。
+    **これが許されるのは `tools/` の検証だけ**（TECH.md §2.4）。
+    mod どうしは実行時に互いを import しない ― ローダは mod を
+    `instantale_mod_<フォルダ名>` で登録するので、
+    番号を振り直した瞬間に名前で掴む側が壊れる。
     """
     path = find_mod(suffix)
     folder = os.path.dirname(path)
@@ -94,7 +97,8 @@ class World(object):
         self.name = name
         self.worldview = "灰の空の下"
         self.characters = {c.id: c for c in characters}
-        # 日付は世界に1つ（GAME.md §2.16）。宿泊で大きく飛ぶ。
+        # 日付は世界に1つ（GAME.md §2.16）。
+        # 宿泊で大きく飛ぶ。
         self.days_elapsed = days_elapsed
 
 
@@ -117,8 +121,9 @@ class InstantaleApp(object):
 class ConversationPhaseManager(object):
     """自由入力の1ターン。**実測どおり、返答は関数を抜ける前に足される。**
 
-    `conversation_facilitator` を呼ぶ引数の並びは本物と同じにしてある
-    （`out/recon/targets.txt` L1354）。注入が第4引数に当たるかはここで決まる。
+    `conversation_facilitator` を呼ぶ引数の並びは本物と同じにしてある（`out/recon/targets.txt`
+    L1354）。
+    注入が第4引数に当たるかはここで決まる。
     """
 
     def __init__(self, app, instruction, retrieved_knowledge=None,
@@ -207,10 +212,11 @@ class Llm(object):
 class Structured(object):
     """`send_request` + `create_model`（構造化出力）の代わり。
 
-    この2つが `llm_manager` に載っている版を再現する。**載っていない版もある**
-    ので既定では外しておき、`Run(structured=...)` のときだけ載せる。そうすると
-    「構造化が使える版では使う」「使えない版では頼み文だけの JSON に降りる」の
-    両方を、同じ筋書きの並びで確かめられる。
+    この2つが `llm_manager` に載っている版を再現する。
+    **載っていない版もある** ので既定では外しておき、
+    `Run(structured=...)` のときだけ載せる。
+    そうすると「構造化が使える版では使う」「使えない版では頼み文だけの
+    JSON に降りる」の両方を、同じ筋書きの並びで確かめられる。
     """
 
     payloads = {}
@@ -330,8 +336,9 @@ class Ctx(object):
 
     def __init__(self, out_dir):
         self.out_dir = out_dir
-        # 永続データの置き場は out/ と別（ローダの `state_dir`）。ここでも
-        # **別のフォルダ**にしておかないと、状態を out/ に書く mod が素通りする。
+        # 永続データの置き場は out/ と別（ローダの `state_dir`）。
+        # ここでも **別のフォルダ**にしておかないと、
+        # 状態を out/ に書く mod が素通りする。
         self.state_dir = os.path.join(out_dir, "state")
         self.hooks = {}
         self.errors = []
@@ -339,7 +346,8 @@ class Ctx(object):
     def out_path(self, *parts):
         return self._under(self.out_dir, parts)
 
-    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # ログは本物の `ctx.logger` をそのまま借りる。
+    # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
 
@@ -365,8 +373,9 @@ class Ctx(object):
     def log_exc(self, message):
         self.errors.append(message)
 
-    # 本物の `ctx.write_json` と同じものを使う。ここを自前の open(..., "w") に
-    # すると、テストだけが「壊れない書き方」を通らなくなる。
+    # 本物の `ctx.write_json` と同じものを使う。
+    # ここを自前の open(..., "w") にすると、
+    # テストだけが「壊れない書き方」を通らなくなる。
     def write_json(self, path, data, *, indent=1):
         return ml.write_json(path, data, indent=indent, report=self.log_exc)
 
@@ -398,8 +407,8 @@ FACILITATOR = "scripts.llm.llm_manager:conversation_facilitator"
 STARTER = "scripts.llm.llm_manager:conversation_starter"
 
 # 筋書きごとに `apply` をやり直すので、**掛ける前に必ず素の実装へ戻す**。
-# 戻さないと前の筋書きのフック（既に消えた一時フォルダを指す控えを掴んでいる）が
-# 内側に残り、後の筋書きの控えを勝手に書き足す。
+# 戻さないと前の筋書きのフック（既に消えた一時フォルダを指す控えを掴んでいる）が内側に残り、
+# 後の筋書きの控えを勝手に書き足す。
 ORIGINAL_TURN = ConversationPhaseManager.conversation_continued
 ORIGINAL_FUNCS = {"conversation_facilitator": _conversation_facilitator,
                   "conversation_starter": _conversation_starter}
@@ -440,11 +449,13 @@ def bind_function(ctx, target, module, name):
 # ==========================================================================
 # 検査の土台
 # ==========================================================================
-# 背景の抽出が終わるのを待つ上限。手元では1件あたり 1ms 未満で終わるので、
-# この数字は**壊れたときに永久に止まらない**ためだけにあり、通る回には
-# 1度も効かない。2 秒にしていたときに CI だけが落ちている
-# （VERIFICATION.md §4「CI だけで落ちるもの」）。待ち切れなかったときに
-# 待った秒数と件数を残すのは、時間切れと本当の不発をログだけで分けるため。
+# 背景の抽出が終わるのを待つ上限。
+# 手元では1件あたり 1ms 未満で終わるので、
+# この数字は**壊れたとき永久に止まらない**ためだけにあり、通る回は1度も効かない。
+# 2 秒にしていたときに CI だけが落ちている（VERIFICATION.md
+# §4「CI だけで落ちるもの」）。
+# 待ち切れなかったときに待った秒数と件数を残すのは、
+# 時間切れと本当の不発をログだけで分けるため。
 WAIT_SECONDS = 15.0
 
 
@@ -462,10 +473,11 @@ class Run(object):
                  structured_raises=False, seed_record=None):
         self.tmp = tempfile.mkdtemp(prefix="npc_profile_test_")
         unbind_all()
-        # mod は控えとワーカーを `sys` に置いて**世代をまたいで共有する**
-        # （再注入で `apply()` が何度も走っても2本目のワーカーを立てないため）。
-        # 筋書きごとに新しいプロセスにはできないので、ここで落として1件ずつ
-        # 独立させる。落とさないと前の筋書きのワーカーが今回の仕事を拾い、
+        # mod は控えとワーカーを `sys` に置いて**世代をまたいで共有する**（再注入で
+        # `apply()` が何度も走っても2本目のワーカーを立てないため）。
+        # 筋書きごとに新しいプロセスにはできないので、
+        # ここで落として1件ずつ独立させる。
+        # 落とさないと前の筋書きのワーカーが今回の仕事を拾い、
         # 古い `out/` へ書いてしまう（実際に 20 件が時間切れで落ちた）。
         reset_mod_store()
         Clock.reset()
@@ -757,8 +769,8 @@ def test_extraction_prompt_forbids_event_narration():
     """抽出LLMには出来事のあらすじを書かせない（GAME.md §2.25 の棲み分け）
 
     会話のあらすじはゲーム自身が `current_log` に覚えて次の会話にも載せる。
-    この mod まで語り直すと同じ事実が1つのプロンプトに3回並ぶ（213_ の実測）
-    ので、頼み文に禁止の決まりが入っていることを確かめる。
+    この mod まで語り直すと同じ事実が1つのプロンプトに3回並ぶ（213_ の実測）ので、
+    頼み文に禁止の決まりが入っていることを確かめる。
     """
     run = Run(answers=FOUND)
     run.turn()
@@ -789,8 +801,8 @@ def test_recorded_facts_are_shown_to_the_extractor():
                   {"at": "2026-08-08T00:00:01", "text": "妹が北方の村に居る"}]})
     run.turn()
     prompt = Llm.last_prompt(MOD.MANAGER_EXTRACT)
-    # 見出しの語そのものは【決まり】の中にも出るので、**箇条書きが続く形**で
-    # 探す。これが本文に差し戻された欄の目印。
+    # 見出しの語そのものは【決まり】の中にも出るので、**箇条書きが続く形**で探す。
+    # これが本文に差し戻された欄の目印。
     check(MOD.FACTS_HEADING + "\n- " in prompt,
           "事実の欄が本文に無い: {}".format(prompt[:400]))
     for fact in ("報酬は倍増の約束だった", "妹が北方の村に居る"):
@@ -854,9 +866,10 @@ def test_recalled_facts_survive_a_broken_record():
 def test_v1_record_still_works():
     """配布済み v1 の控えをそのまま読める（`about_player` も `facts` も無い形）
 
-    v1（ローダ 1.3.0 同梱）の控えは `name` / `updated` / `profile` / `slots`
-    だけで、v2 で足した2欄が無い。差し戻し（v4）が**欄の存在を前提にして
-    いない**ことを、実際に1ターン回して確かめる。
+    v1（ローダ 1.3.0 同梱）の控えは `name` / `updated` / `profile` /
+    `slots` だけで、v2 で足した2欄が無い。
+    差し戻し（v4）が**欄の存在を前提にしていない**ことを、
+    実際に1ターン回して確かめる。
     """
     run = Run(answers=FOUND, seed_record={
         "name": "傭兵ガロ", "updated": "2026-07-30T00:00:00",
@@ -1027,7 +1040,8 @@ def test_messages_are_not_touched():
     run.turn()
     passed = Facilitator.calls[-1]["messages"]
     check(passed is history, "履歴が別物に差し替わった")
-    # ターンで増えるのは入力の1行だけ。注入の分が混ざっていないこと。
+    # ターンで増えるのは入力の1行だけ。
+    # 注入の分が混ざっていないこと。
     check(passed[:len(before)] == before, "履歴が書き換わった: {}".format(passed))
     check(not any("北方の村の生まれ" in turn.get("content", "") for turn in passed),
           "控えが履歴に漏れた: {}".format(passed))
@@ -1060,7 +1074,8 @@ def test_worlds_do_not_mix():
 def test_id_comes_from_the_world_index():
     """`.id` を持たない相手でも控えを引ける"""
     run = Run(seed="北方の村の生まれ。")
-    # `Character.id` が実在するかは実測できていない。無くても引けること。
+    # `Character.id` が実在するかは実測できていない。
+    # 無くても引けること。
     del run.npc.id
     run.facilitate()
     passed = Facilitator.calls[-1]["npc"]
@@ -1100,9 +1115,10 @@ def test_reapply_shares_one_worker_and_one_lock():
 
     `apply()` は再注入と遅延当て直しで最大8回走る（TECH.md §3.4）。
     以前は `state` / `jobs` / `data_lock` を `apply()` の中で作っていたため、
-    走るたびに `state["worker"]` が `None` に戻り、前の世代のワーカーが
-    生きている間に2本目が起動した。しかも `data_lock` が別インスタンスに
-    なるので、2本が同じ `state/npc_profiles/<世界>.json` を排他なしで
+    走るたびに `state["worker"]` が `None` へ戻り、
+    前の世代のワーカーが生きたまま2本目まで起動した。
+    しかも `data_lock` が別インスタンスになるので、
+    2本が同じ `state/npc_profiles/<世界>.json` を排他なしで
     read-modify-write できた（人物像の更新が消える経路）。
     """
     run = Run(seed="北方の村の生まれ。")
@@ -1172,8 +1188,8 @@ def test_structured_call_follows_the_house_rules():
                           MOD.KEY_ABOUT_PLAYER: "", MOD.KEY_NEW_FACTS: []})
     run.turn()
     call = Structured.calls[-1]
-    # 文字列を渡すとゲームの内部スレッドで落ち、**呼び出しが永久に返らない**
-    # （GAME.md §2.12・実機で実測）。
+    # 文字列を渡すとゲームの内部スレッドで落ち、**呼び出しが永久に返らない**（GAME.md
+    # §2.12・実機で実測）。
     check(isinstance(call["message"], list),
           "message がリストでない: {}".format(type(call["message"])))
     check(all(isinstance(item, dict) and "role" in item and "content" in item
@@ -1205,7 +1221,8 @@ def test_structured_failure_falls_back_to_text():
     check(run.profile() == FOUND, "降りた先で保存されない: {!r}".format(run.profile()))
     check(run.about_player() == "借りがあると思っている。",
           "降りた先でプレイヤーの記録が残らない: {!r}".format(run.about_player()))
-    # 落ちたことは握り潰さず記録する。ここだけは errors が空でないのが正しい。
+    # 落ちたことは握り潰さず記録する。
+    # ここだけは errors が空でないのが正しい。
     check(any("mod_npc_profile_extract" in message for message in run.ctx.errors),
           "落ちたのに記録が無い: {}".format(run.ctx.errors))
     run.ctx.errors = []
@@ -1247,8 +1264,9 @@ def test_json_in_plain_text_is_read():
 def test_broken_json_changes_nothing():
     """JSONのつもりで壊れた返却では控えを変えない
 
-    丸ごと人物像として保存すると、壊れた JSON がそのままプロフィールになって
-    以後の会話に注入される。**安全側は「変更しない」。**
+    丸ごと人物像として保存すると、壊れた
+    JSON がそのままプロフィールになって以後の会話に注入される。
+    **安全側は「変更しない」。**
     """
     run = Run(seed="古い剣を好む無口な傭兵。",
               answers='{"changed": "true", "profile": "北方の村の生ま')
@@ -1366,16 +1384,16 @@ def test_a_failed_write_keeps_the_previous_file():
     """書き込みが途中で落ちても前の控えは残る
 
     **落ちても壊れない書き方そのもの**（隣に書いてから差し替える）は
-    `instantale_modloader.write_text` に一本化されていて、その仕組みは
-    `tools/tests/test_patch_registry.py` が見ている。ここで確かめるのは
-    **この mod 側の約束**の方 ―
+    `instantale_modloader.write_text` に一本化されていて、
+    その仕組みは `tools/tests/test_patch_registry.py` が見ている。
+    ここで確かめるのは **この mod 側の約束**の方 ―
 
       * 書けなかったとき、前の控えがそのまま残る（`{}` に倒れない）
       * 書けなかったことを握り潰さず記録する
 
     書き込みを失敗させるには、`os.replace`（＝差し替えの瞬間）を落とす。
-    仮ファイルまでは書けていて本体だけが古いまま、という**いちばん危ない窓**を
-    再現できる。
+    仮ファイルまでは書けていて本体だけが古いまま、
+    という**いちばん危ない窓**を再現できる。
     """
     run = Run(seed_record={"name": "傭兵ガロ", "profile": "先に覚えていた人物像。"},
               structured={MOD.KEY_CHANGED: "true", MOD.KEY_PROFILE: FOUND,
@@ -1404,7 +1422,8 @@ def test_a_failed_write_keeps_the_previous_file():
     leftovers = [name for name in os.listdir(os.path.dirname(path))
                  if name.endswith(ml.TEMP_SUFFIX)]
     check(not leftovers, "書きかけが残った: {}".format(leftovers))
-    # 落ちたことは握り潰さず記録する。ここだけは errors が空でないのが正しい。
+    # 落ちたことは握り潰さず記録する。
+    # ここだけは errors が空でないのが正しい。
     check(any("cannot write" in message for message in run.ctx.errors),
           "落ちたのに記録が無い: {}".format(run.ctx.errors))
     run.ctx.errors = []
@@ -1444,9 +1463,10 @@ def test_settings_match_the_manifest():
 def test_the_quest_mod_reads_the_same_file():
     """`301_` が同じ世界ファイルを同じ規則で引ける
 
-    mod どうしはコードを共有せず**同じ場所を読む**ことで繋がっている
-    （TECH.md §3.2.3）。ファイル名の規則がずれた時点で、依頼の生成に
-    人物像が載らなくなる。そのずれをここで捕まえる。
+    mod どうしはコードを共有せず**同じ場所を読む**ことで繋がっている（TECH.md
+    §3.2.3）。
+    ファイル名の規則がずれた時点で、依頼の生成に人物像が載らなくなる。
+    そのずれをここで捕まえる。
     """
     offer = load_neighbour("_quest_from_conversation")
     for world in ("灰都", "a/b:c", "  ", "." , "長" * 200):
@@ -1477,7 +1497,8 @@ def test_turn_survives_a_failing_extraction():
     check(run.app.texts[-1].startswith("傭兵ガロ: "),
           "返答が出ていない: {}".format(run.app.texts))
     check(run.profiles() == {}, "何かが残った: {}".format(run.profiles()))
-    # 握り潰さずに記録していること。ここだけは errors が空でないのが正しい。
+    # 握り潰さずに記録していること。
+    # ここだけは errors が空でないのが正しい。
     check(any("mod_npc_profile_extract" in message for message in run.ctx.errors),
           "落ちたのに記録が無い: {}".format(run.ctx.errors))
     run.cleanup()

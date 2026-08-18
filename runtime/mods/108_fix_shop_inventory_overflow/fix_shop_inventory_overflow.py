@@ -3,14 +3,16 @@
 
 ## main_024 で本体が取り込んだ扱いにして降ろした（VERIFICATION.md §3.8.1）
 
-main_024 のアナウンスにこの件（売買画面）が挙がっている。ただし他の5本と違い、
-**印での判定は付いていない** ― このクラッシュは能動的に起こせないので、
-本体が直したのか、この MOD が防いでいるのかを区別できない（GAME.md の
-main_024 の表）。救済経路も `out/inventory.log` の正常サンプル 192 件の間で
-一度も走っていない（VERIFICATION.md §3.8）。
+main_024 のアナウンスにこの件（売買画面）が挙がっている。
+ただし他の5本と違い、印での判定は付いていない。
+このクラッシュは能動的に起こせないので、本体が直したのか、
+この MOD が防いでいるのかを区別できない（GAME.md の main_024 の表）。
+救済経路も `out/inventory.log` の正常サンプル
+192 件の間で一度も走っていない（VERIFICATION.md §3.8）。
 
-`mod.json` に `superseded` を入れてデバッグモード限定にしてある。コードは
-そのままなので、デバッグモードを入れれば一覧の元の位置に戻る。以下は当時の記録。
+`mod.json` に `superseded` を入れてデバッグモード限定にしてある。
+コードはそのままなので、デバッグモードを入れれば一覧の元の位置に戻る。
+以下は当時の記録。
 
 ## 原因（GAME.md §2.13 / VERIFICATION_LOG.md §2.16）
 
@@ -20,10 +22,10 @@ main_024 の表）。救済経路も `out/inventory.log` の正常サンプル 1
 * `occupy_slots` は `grid_x/grid_y` から始めてアイテムの占有マスを走査する。
   **縦2マス以上のアイテムが最下段に置かれ、1マスはみ出した**ときに範囲外へ出る。
 * つまり `place_existing_item` は**置ける場所かどうかを確かめずに**
-  `occupy_slots` を呼んでいる。クラスには `is_valid_placement()` があるのに、
-  この経路だけ通っていない。
-* `place_existing_item` が受け取るのはピクセル座標。「既存の位置をそのまま
-  復元する」経路なので、**元いたグリッドと売買画面のグリッドで寸法が違う**と、
+  `occupy_slots` を呼んでいる。
+  クラスには `is_valid_placement()` があるのに、この経路だけ通っていない。
+* `place_existing_item` が受け取るのはピクセル座標。
+  「既存の位置をそのまま復元する」経路なので、**元いたグリッドと売買画面のグリッドで寸法が違う**と、
   そのままでは収まらない位置になり得る。
 
 `toggle_twin_inventory_visibility` は所持品を順に並べている最中で、
@@ -32,26 +34,28 @@ main_024 の表）。救済経路も `out/inventory.log` の正常サンプル 1
 
 ## 直し方
 
-**座標をこちらで計算し直さない。** グリッドの寸法もマスのサイズも実測していない
-以上、位置を発明すればレイアウトの仕様をこちらで勝手に決めることになる。
+座標をこちらで計算し直さない。
+グリッドの寸法もマスのサイズも実測していない以上、
+位置を発明すればレイアウトの仕様をこちらで勝手に決めることになる。
 
 代わりに、はみ出したときは**ゲーム自身の「新しく置く」経路に流す**。
 `InventoryGrid` は `find_placement_position(w, h)` で空きを探し、
-`place_new_item(item)` で置く手段を持っている。店の在庫を初めて並べるときに
-ゲーム自身が使っている道具。復元位置が使えないアイテムを、そこへ渡すだけ。
+`place_new_item(item)` で置く手段を持っている。
+店の在庫を初めて並べるときにゲーム自身が使っている道具。
+復元位置が使えないアイテムを、そこへ渡すだけ。
 （`101_` で `clamp_npc_difficulty_value` を当てたのと同じ形）
 
 途中まで書き込まれた占有マスは `item.clear_current_slots()` で片付ける。
-これもゲーム自身の後始末 API で、`occupy_slots` が最初の範囲外インデックスで
-落ちる前に埋めたマスが残るのを防ぐ。
+これもゲーム自身の後始末 API で、
+`occupy_slots` が最初の範囲外インデックスで落ちる前に埋めたマスが残るのを防ぐ。
 
 ## 記録
 
 落ちた時のグリッドとアイテムの実寸を `out/inventory.log` に出す。
-ここが埋まれば「そもそもなぜ復元位置がはみ出すのか」（グリッドの列数が
-画面ごとに違うのか、ピクセル→マスの変換が別スケールなのか）を、
-座標を推測せずに次の段で詰められる。成功した呼び出しも最初の
-`SAMPLE_OK` 件だけ同じ形式で残す。正常時の寸法が無いと異常の判定ができない。
+ここが埋まれば「そもそもなぜ復元位置がはみ出すのか」（グリッドの列数が画面ごとに違うのか、
+ピクセル→マスの変換が別スケールなのか）を、座標を推測せずに次の段で詰められる。
+成功した呼び出しも最初の `SAMPLE_OK` 件だけ同じ形式で残す。
+正常時の寸法が無いと異常の判定ができない。
 """
 
 import sys
@@ -60,11 +64,13 @@ from instantale_modloader import frames
 
 LOG_BASENAME = "inventory.log"
 
-# 正常に置けた呼び出しを何件記録するか。比較用の下地なので少しでいい。
+# 正常に置けた呼び出しを何件記録するか。
+# 比較用の下地なので少しでいい。
 SAMPLE_OK = 30
 
-# グリッド／アイテムから読む属性。dir() を全部舐めると Kivy の property を
-# 大量に評価することになるので、寸法に関係するものだけ明示する。
+# グリッド／アイテムから読む属性。
+# dir() を全部舐めると Kivy の property を大量に評価することになるので、
+# 寸法に関係するものだけ明示する。
 # 名前が違って空振りしても、下の _unknown_dims() が dir() で拾い直す。
 GRID_ATTRS = ("cols", "rows", "situation", "slot_size", "spacing", "size", "pos")
 ITEM_ATTRS = ("item_id", "width_slots", "height_slots", "grid_x", "grid_y",
@@ -115,7 +121,8 @@ def apply(ctx):
             with open(log_path, "a", encoding="utf-8") as fh:
                 fh.write(line)
         except Exception:
-            # 記録のせいでゲームを落とさない。ここは常に握り潰す。
+            # 記録のせいでゲームを落とさない。
+            # ここは常に握り潰す。
             ctx.log_exc("inventory log write failed")
 
     @ctx.wrap("scripts.hud.new_hud:InventoryGrid.place_existing_item")
@@ -123,7 +130,8 @@ def apply(ctx):
         try:
             result = orig(self, item, *args, **kwargs)
         except IndexError as exc:
-            # 報告されたクラッシュそのもの。ここから先は回復処理。
+            # 報告されたクラッシュそのもの。
+            # ここから先は回復処理。
             state["recovered"] += 1
             write("OVERFLOW", self, item, note=repr(str(exc)))
             ctx.log("place_existing_item overflowed the grid ({}); "

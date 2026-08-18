@@ -108,7 +108,8 @@ class FakeCtx:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
-    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # ログは本物の `ctx.logger` をそのまま借りる。
+    # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
 

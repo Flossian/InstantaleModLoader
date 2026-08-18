@@ -1,27 +1,27 @@
 # -*- coding: utf-8 -*-
 """既にセーブに書き込まれている BGM を、後からまとめて均し直す。
 
-mod（runtime/mods/104_balance_area_bgm.py）が書き換えるのは、注入した後に
-新しく作られたエリアだけ。このスクリプトは、既にあるワールドに対して
-同じことをする。
+mod（runtime/mods/104_balance_area_bgm.py）が書き換えるのは、
+注入した後に新しく作られたエリアだけ。
+このスクリプトは、既にあるワールドに対して同じことをする。
 
 選び方のルールは mod ファイルをそのまま import して使っているので、
 両者の挙動がずれることはない。
 
 セーブの形式
 ------------
-worlds/<ワールド名>/world_data.json は、JSON を固定の鍵で XOR した
-だけのファイルになっている。
+worlds/<ワールド名>/world_data.json は、
+JSON を固定の鍵で XOR しただけのファイルになっている。
 
     平文 = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
                .encode("utf-8")
     暗号文[i] = 平文[i] ^ KEY[i % len(KEY)]
 
-手元の3ワールドで確認したところ、読み込んだデータを再度エンコードすると
-元のファイルとバイト単位で完全に一致した。
---apply を付けたときはこの検査をファイルごとに毎回やり直し、一度でも
-一致しなければ書き込みを中止する。JSON の書き出し方が少しでも違っていれば
-そこで止まるので、セーブが壊れることはない。
+手元の3ワールドで確認したところ、
+読み込んだデータを再度エンコードすると元のファイルとバイト単位で完全に一致した。
+--apply を付けたときはこの検査をファイルごとに毎回やり直し、
+一度でも一致しなければ書き込みを中止する。
+JSON の書き出し方が少しでも違っていればそこで止まるので、セーブが壊れることはない。
 
 使い方
 ------
@@ -54,9 +54,9 @@ MODS_DIR = os.path.normpath(os.path.join(HERE, os.pardir, "runtime", "mods"))
 def find_mod(suffix: str) -> str:
     """mod を **番号を除いた名前** で探す。
 
-    mod ファイルの番号は適用順を表すだけの通し番号で、分類を見直すたびに
-    振り直される（実際に 14_ -> 104_ と変わった）。番号ごと書くとその都度
-    ここが壊れるので、末尾で引く。
+    mod ファイルの番号は適用順を表すだけの通し番号で、
+    分類を見直すたびに振り直される（実際に 14_ -> 104_ と変わった）。
+    番号ごと書くとその都度ここが壊れるので、末尾で引く。
     """
     matches = sorted(name for name in os.listdir(MODS_DIR)
                      if name.endswith(suffix) and name[:1].isdigit())
@@ -100,8 +100,8 @@ def xor(blob: bytes) -> bytes:
 
 def encode(data) -> bytes:
     # separators はゲーム側と完全に同じにする必要がある。
-    # ここが違うと、下のラウンドトリップ検査で必ず引っかかる
-    # （つまり、壊れたセーブを書く手前で止まる）。
+    # ここが違うと、下のラウンドトリップ検査で必ず引っかかる（つまり、
+    # 壊れたセーブを書く手前で止まる）。
     text = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
     return xor(text.encode("utf-8"))
 
@@ -177,8 +177,9 @@ def process(path, policy, pool, apply_changes):
     print("    format: %s" % ("obfuscated (XOR)" if obfuscated else "plain JSON"))
     if obfuscated:
         # ここが一番重要な安全装置。
-        # 再エンコードが元と一致しないということは、こちらが理解している
-        # 書式とゲームの書式が違うということで、書き込めばセーブを壊す。
+        # 再エンコードが元と一致しないということは、
+        # こちらが理解している書式とゲームの書式が違うということで、
+        # 書き込めばセーブを壊す。
         if round_trip:
             print("    round-trip check: OK (re-encode reproduces the file exactly)")
         else:
@@ -188,7 +189,8 @@ def process(path, policy, pool, apply_changes):
     before_moods, before_tracks = snapshot(areas, policy)
     describe("before:", before_moods, before_tracks, pool)
 
-    # mod と同じ関数を呼ぶ。only を指定しないので全エリアが対象になる。
+    # mod と同じ関数を呼ぶ。
+    # only を指定しないので全エリアが対象になる。
     changes = policy.balance_world(areas, pool)
 
     after_moods, after_tracks = snapshot(areas, policy)
@@ -199,7 +201,8 @@ def process(path, policy, pool, apply_changes):
         len(changes), len(areas), len(before_tracks), len(after_tracks)))
 
     for aid, old, new in changes:
-        # 表示は末尾2階層（mood/曲名）だけにする。フルパスは長くて比較しづらい。
+        # 表示は末尾2階層（mood/曲名）だけにする。
+        # フルパスは長くて比較しづらい。
         short_old = "/".join(old.replace("\\", "/").split("/")[-2:])
         short_new = "/".join(new.replace("\\", "/").split("/")[-2:])
         print("      area %-4s %-50s -> %s" % (aid, short_old, short_new))
@@ -243,8 +246,8 @@ def main(argv=None):
                         help="actually write (default is a dry run)")
     args = parser.parse_args(argv)
 
-    # ワールド名や曲名に日本語が入るので、cp932 のコンソールでも
-    # 文字化けやエラーで止まらないようにしておく。
+    # ワールド名や曲名に日本語が入るので、
+    # cp932 のコンソールでも文字化けやエラーで止まらないようにしておく。
     try:
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     except Exception:
@@ -252,7 +255,8 @@ def main(argv=None):
 
     policy = load_policy()
 
-    # 曲の一覧はゲームのインストール先から読む。セーブ側には曲の一覧が無い。
+    # 曲の一覧はゲームのインストール先から読む。
+    # セーブ側には曲の一覧が無い。
     root = os.path.join(args.game, "Assets", "sounds", "musics")
     if not os.path.isdir(root):
         raise SystemExit("music assets not found: {}".format(root))

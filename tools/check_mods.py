@@ -3,8 +3,8 @@
 
     python tools/check_mods.py
 
-`python -m compileall` は**構文しか見ない**。実際にゲームを落としたのは
-どれも構文としては正しいコードだった:
+`python -m compileall` は**構文しか見ない**。
+実際にゲームを落としたのはどれも構文としては正しいコードだった:
 
   * `@ctx.wrap("...InstantaleApp.process_choice")` が、コード移動の巻き添えで
     **別の関数（`snapshot()`）に付く**。`process_choice` が `snapshot` に
@@ -13,8 +13,8 @@
   * `@ctx.wrap` が飾る関数の第1引数は `orig`、メソッド対象なら第2引数は `self`。
     ここがずれると引数が1つずつ食い違ったまま本体が呼ばれる
 
-どちらも「デコレータの対象名」と「関数の引数の並び」を突き合わせれば静的に
-捕まる。ソースが読めない環境では、こういう機械的な検査ほど効く。
+どちらも「デコレータの対象名」と「関数の引数の並び」を突き合わせれば静的に捕まる。
+ソースが読めない環境では、こういう機械的な検査ほど効く。
 
 同じ考えで、**宣言と実体のずれ**も注入前に捕まえる。
 
@@ -23,8 +23,8 @@
   * `load_order.json` と実体の食い違い、`"after"` / `"before"` の循環
   * `"settings"` の宣言と、コード側の定数のずれ（**既定値が2箇所にある**ため）
 
-探索と適用順の判定は**ローダ本体の `discover()` を呼ぶ**。以前はここに同じ規則を
-書き写していたので、片方だけ直すと検査と実際の適用順がずれた。
+探索と適用順の判定は**ローダ本体の `discover()` を呼ぶ**。
+以前はここに同じ規則を書き写していたので、片方だけ直すと検査と実際の適用順がずれた。
 """
 
 import ast
@@ -64,13 +64,14 @@ def _decorators(node):
     return found
 
 
-# ゲームに埋まっている CPython の版。MOD はこのインタプリタの中で動くので、
+# ゲームに埋まっている CPython の版。
+# MOD はこのインタプリタの中で動くので、
 # ここより新しい構文を書くと**注入した瞬間に SyntaxError で落ちる**。
 # 手元の python は 3.13 しか無く、`compileall` は 3.13 として通してしまうため、
 # パーサに版を指定して 3.11 以降の構文を弾く。
-#
-# 捕まるのは**構文だけ**。3.11 以降で追加された標準ライブラリの関数を使った場合は
-# ここでは分からない（CI で実際に 3.10 を動かす方でしか捕まらない）。
+# 捕まるのは**構文だけ**。
+# 3.11 以降で追加された標準ライブラリの関数を使った場合はここでは分からない（CI で実際に
+# 3.10 を動かす方でしか捕まらない）。
 GAME_PYTHON = (3, 10)
 
 
@@ -111,7 +112,8 @@ def check_file(path):
             if target is None:
                 continue                      # 動的な対象は検査しない
             if kind == "wrap":
-                # 第1引数は必ず元の関数。ここが違えば別の関数に付いている。
+                # 第1引数は必ず元の関数。
+                # ここが違えば別の関数に付いている。
                 if not args or args[0] != "orig":
                     problems.append((path, node.name,
                                      "wrap({!r}) の第1引数は 'orig' のはずが {}"
@@ -130,9 +132,9 @@ def _mod_files(name):
     """mod フォルダの中の .py を全て返す（入口 + 分割した中身）。
 
     ローダは入口しか呼ばないが、検査は**フォルダの中身を全部**見る。
-    `@ctx.wrap` は入口以外のファイルにも書けるので、そこだけ検査から漏れると
-    この検査の意味（デコレータの対象と引数の食い違いを注入前に捕まえる）が
-    無くなる。`data/` のようなサブフォルダも辿る。
+    `@ctx.wrap` は入口以外のファイルにも書けるので、
+    そこだけ検査から漏れるとこの検査の意味（デコレータの対象と引数の食い違いを注入前に捕まえる）が無くなる。
+    `data/` のようなサブフォルダも辿る。
     """
     root = os.path.join(MODS_DIR, name)
     found = []
@@ -147,8 +149,8 @@ def _module_constants(path):
     """モジュール直下の `NAME = 定数` を `{名前: 値}` で返す。
 
     設定の宣言（`mod.json`）と実体（コードの定数）を突き合わせるために使う。
-    リテラルとして読めない代入（式・関数呼び出し）は入れない ― そこは
-    「宣言された既定値と比べられない」であって、間違いではない。
+    リテラルとして読めない代入（式・関数呼び出し）は入れない
+    ― そこは「宣言された既定値と比べられない」であって、間違いではない。
     """
     tree, _broken = _parse(path)
     if tree is None:
@@ -171,14 +173,14 @@ def _module_constants(path):
 def check_manifest(name, manifest):
     """`mod.json` の中身を見る。
 
-    フォルダ名も入口のファイル名も自由なので、**入口がどれかは mod.json だけが
-    知っている**。ここが食い違うと mod が黙って読み込まれないので、注入前に
-    静的に捕まえる。
+    フォルダ名も入口のファイル名も自由なので、**入口がどれかは
+    mod.json だけが知っている**。
+    ここが食い違うと mod が黙って読み込まれないので、注入前に静的に捕まえる。
 
     名乗り（name / description / version / author）は**仕様では任意**なので、
-    欠けていても「問題」にはしない（外部の mod が任意の項目で検査に落ちるのは
-    筋が通らない）。同梱 mod は全部揃えておきたいので、`--strict` のときだけ
-    見落としとして数える。
+    欠けていても「問題」にはしない（外部の
+    mod が任意の項目で検査に落ちるのは筋が通らない）。
+    同梱 mod は全部揃えておきたいので、`--strict` のときだけ見落としとして数える。
     """
     problems, notes = [], []
     path = os.path.join(MODS_DIR, name, MANIFEST_NAME)
@@ -197,7 +199,8 @@ def check_manifest(name, manifest):
         problems.append((path, MANIFEST_NAME,
                          '"entry" が指す {!r} が無い'.format(entry)))
 
-    # ローダ API。ここで撥ねられる mod は注入しても読み込まれない。
+    # ローダ API。
+    # ここで撥ねられる mod は注入しても読み込まれない。
     verdict, reason = ml.api_status(manifest)
     if verdict:
         problems.append((path, MANIFEST_NAME,
@@ -206,7 +209,8 @@ def check_manifest(name, manifest):
         notes.append((path, MANIFEST_NAME,
                       '"api" が無い（{} として扱う）'.format(ml.DEFAULT_API)))
 
-    # 表示用の項目。無くても動くので、報告はするが問題として数えない。
+    # 表示用の項目。
+    # 無くても動くので、報告はするが問題として数えない。
     for key in ("name", "description", "version", "author"):
         if not data.get(key):
             notes.append((path, MANIFEST_NAME, "{!r} が空（表示だけの項目）".format(key)))
@@ -225,10 +229,11 @@ def check_manifest(name, manifest):
 def check_settings(name, raw, manifest, entry_path):
     """`"settings"` の宣言を見る。
 
-    **既定値が2箇所に書かれている**のがこの検査の存在理由。実際に使われるのは
-    コードの定数で、GUI が表示に使うのは `mod.json` の `"default"`（GUI は mod の
-    コードを import しない決まりなので定数を読めない）。ずれると「GUI では
-    既定 3 と出るのに実際は 5 で動く」という、最も気付きにくい形になる。
+    **既定値が2箇所に書かれている**のがこの検査の存在理由。
+    実際に使われるのはコードの定数で、GUI が表示に使うのは `mod.json` の `"default"`（GUI は mod のコードを
+    import しない決まりなので定数を読めない）。
+    ずれると「GUI では既定 3 と出るのに実際は 5 で動く」という、
+    最も気付きにくい形になる。
     """
     problems = []
     path = os.path.join(MODS_DIR, name, MANIFEST_NAME)
@@ -274,24 +279,26 @@ def check_order(found):
     """`load_order.json` と実体、`after` / `before` の突き合わせ。
 
     判定そのものはローダの `discover()` が持っている（同じ規則を2箇所に書かない）。
-    ここはその報告を検査の書式に移し替えるだけ。適用順は動作の前提なので、
-    **宣言と実体のずれは黙って通さない**。
+    ここはその報告を検査の書式に移し替えるだけ。
+    適用順は動作の前提なので、**宣言と実体のずれは黙って通さない**。
     """
     path = ml.order_path(MODS_DIR)
     name = os.path.basename(path)
     problems = [(path, name, line) for line in found["problems"]]
     # `notes` は「直すべきずれではない知らせ」（手元用の順序ファイルを使っている、
-    # など）。**問題として数えない** ― 数えると、未公開の MOD を手元で動かして
-    # いる間ずっと赤が出ることになり、本当のずれが埋もれる。`--strict` では
-    # 呼び出し側が問題に格上げする。
+    # など）。
+    # **問題として数えない** ― 数えると、未公開の MOD を手元で動かしている間ずっと赤が出ることになり、
+    # 本当のずれが埋もれる。
+    # `--strict` では呼び出し側が問題に格上げする。
     notes = [(path, name, line) for line in found.get("notes", [])]
     return problems, notes
 
 
 def main():
     strict = "--strict" in sys.argv
-    # デバッグモードの設定に関わらず、入っている mod を全部見る。切っている間だけ
-    # 計測 mod の `after` が誰にも確かめられない、という穴を作らないため。
+    # デバッグモードの設定に関わらず、入っている mod を全部見る。
+    # 切っている間だけ計測 mod の `after` が誰にも確かめられない、
+    # という穴を作らないため。
     found = ml.discover(MODS_DIR, debug=True)
     mods = found["installed"]
 
@@ -301,9 +308,10 @@ def main():
         for path in _mod_files(name):
             mod_problems += check_file(path)
         # 開発中の mod（9xx。TECH.md §2.6）は**見るが、赤にはしない**。
-        # 配布物にも `load_order.json` にも入らないものなので、書きかけの一本で
-        # CI が止まると、リリースする側の検査が使えなくなる。検査そのものを
-        # 飛ばさないのは、直しどきに手掛かりが無くなるため ― `note` として出す。
+        # 配布物にも `load_order.json` にも入らないものなので、
+        # 書きかけの一本で CI が止まると、リリースする側の検査が使えなくなる。
+        # 検査そのものを飛ばさないのは、直しどきに手掛かりが無くなるため ―
+        # `note` として出す。
         # `--strict` は今までどおり note も問題に格上げする。
         if ml.is_wip(name):
             notes += mod_problems + mod_notes
@@ -320,7 +328,8 @@ def main():
 
     def show(entries, head):
         for path, func, message in entries:
-            # フォルダ名を残す。ファイル名だけだと、どの mod の話か分からなくなる。
+            # フォルダ名を残す。
+            # ファイル名だけだと、どの mod の話か分からなくなる。
             label = os.path.relpath(path, MODS_DIR).replace(os.sep, "/")
             print("{} {} :: {}\n    {}".format(head, label, func, message))
 

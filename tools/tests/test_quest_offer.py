@@ -3,8 +3,8 @@
 
     python tools/tests/test_quest_offer.py
 
-偽の app / PhaseSpec / DisplayQuestChoice / ConversationEndManager / HUD / Clock を
-差し込み、次を確認する。
+偽の app / PhaseSpec / DisplayQuestChoice / ConversationEndManager / HUD /
+Clock を差し込み、次を確認する。
 
   設置   … 会話画面の「会話を終了する」の手前に「依頼を受ける」が出る。
            依頼一覧そのものには出ない（入れ子にならない）
@@ -31,7 +31,8 @@ RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 
 # mod は `instantale_modloader.ui` を使う（ゲームの中では runtime/ が
-# sys.path に入っている）。オフラインでも同じように見えるようにする。
+# sys.path に入っている）。
+# オフラインでも同じように見えるようにする。
 if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
@@ -144,8 +145,9 @@ class ConversationEndManager:
         self.end_text = end_text
 
     def execute(self, choice_text):
-        # 本物と同じく終了処理を通す。mod はこの **前** に書き起こしを控える
-        # （後では current_conversation_history が片付けられている）。
+        # 本物と同じく終了処理を通す。
+        # mod はこの **前** に書き起こしを控える（後では
+        # current_conversation_history が片付けられている）。
         self.finish_conversation()
         return None
 
@@ -173,11 +175,13 @@ class DisplayQuestChoice:
                                                           ["*unknown*", "39"])},
             {"text": "【43】霧の追跡", "spec": PhaseSpec("QuestChoiceManager",
                                                         ["*unknown*", "43"])},
-            # ゲーム自身の通常ボタン。会話から開いたときは出したくない側。
+            # ゲーム自身の通常ボタン。
+            # 会話から開いたときは出したくない側。
             {"text": "クエストを探す", "spec": PhaseSpec("QuestSearchManager", [])},
-            # 他の MOD が掲示板に足したボタン。自前ボタンは申し合わせでどれも
-            # 無害な spec を持つので、**spec では見分けられない**。見分けるのは
-            # 「余分なキーがある」こと。
+            # 他の MOD が掲示板に足したボタン。
+            # 自前ボタンは申し合わせでどれも無害な
+            # spec を持つので、**spec では見分けられない**。
+            # 見分けるのは「余分なキーがある」こと。
             {"text": "掲示板メモ",
              "spec": PhaseSpec("JustSetButtonToNormalPhase", []),
              "other_mod_mark": "note"},
@@ -186,7 +190,8 @@ class DisplayQuestChoice:
         self.app.refresh_choice_buttons(reset_page=True)
 
     def generate_random_quest(self):
-        # ゲーム自身の生成経路。id を採番して両方の格納先に登録する。
+        # ゲーム自身の生成経路。
+        # id を採番して両方の格納先に登録する。
         new_id = str(max(int(k) for k in self.app.world.quests) + 1)
         quest = Quest(id=new_id, quest_title="こぼれ話の依頼",
                       client_name="テスト依頼人A", difficulty=41,
@@ -226,7 +231,8 @@ class InstantaleApp:
         return function.execute(choice_text)
 
     def refresh_choice_buttons(self, reset_page=False):
-        # 本物は to_display_buttons を組み直すところまで。画面は塗らない。
+        # 本物は to_display_buttons を組み直すところまで。
+        # 画面は塗らない。
         self.refreshes += 1
         self.to_display_buttons = [entry["text"] for entry in self.buttons]
 
@@ -236,9 +242,11 @@ class InstantaleApp:
     def on_button_press(self, button_index):
         """ゲーム本来の押下処理。**spec からマネージャを組んで process_choice に渡す。**
 
-        `getattr(__main__, cls_name)(app, *args)` という形は 206_ の計測で
-        確定している。自前ボタンに無害な spec を持たせておく意味は、mod 無しで
-        押されたときここが害の無いクラスを起こすからなので、そこも再現する。
+        `getattr(__main__, cls_name)(app, *args)` という形は
+        206_ の計測で確定している。
+        自前ボタンに無害な spec を持たせておく意味は、
+        mod 無しで押されたときここが害の無いクラスを起こすからなので、
+        そこも再現する。
         """
         entry = self.buttons[button_index]
         text = entry.get("text")
@@ -250,11 +258,12 @@ class InstantaleApp:
         return self.process_choice(cls(self, *data["args"]), text)
 
 
-# 派生元は名前ではなくこの表から引く。**`sys.modules['__main__']` は直接実行時
-# にはこのテスト自身**なので、`main.InstantaleApp = app_cls` がここのグローバル名を
-# 書き換えてしまう。素朴に `type("InstantaleApp", (InstantaleApp,), {})` と書くと
-# 2回目以降は「前回の派生クラス」から派生し、フックの層が積み上がって
-# 同じ処理が何度も走る。
+# 派生元は名前ではなくこの表から引く。
+# **`sys.modules['__main__']` は直接実行時にはこのテスト自身**なので、
+# `main.InstantaleApp = app_cls` がここのグローバル名を書き換えてしまう。
+# 素朴に `type("InstantaleApp", (InstantaleApp,), {})` と書くと
+# 2回目以降は「前回の派生クラス」から派生し、
+# フックの層が積み上がって同じ処理が何度も走る。
 BASES = {"app": InstantaleApp, "board": DisplayQuestChoice,
          "start": ConversationStartManager, "end": ConversationEndManager}
 
@@ -322,8 +331,8 @@ def install_fake_kivy():
 class FakeCtx:
     def __init__(self, out_dir):
         self.out_dir = out_dir
-        # 本番と同じく**別のフォルダ**にする（ローダの `state_dir`）。同じ場所を
-        # 指すと、状態を out/ に書く mod が検証を素通りする。
+        # 本番と同じく**別のフォルダ**にする（ローダの `state_dir`）。
+        # 同じ場所を指すと、状態を out/ に書く mod が検証を素通りする。
         self.state_dir = os.path.join(out_dir, "state")
         self.hooks = {}
         self.errors = []
@@ -333,7 +342,8 @@ class FakeCtx:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
-    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # ログは本物の `ctx.logger` をそのまま借りる。
+    # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
 
@@ -353,8 +363,9 @@ class FakeCtx:
     def log_exc(self, msg):
         self.errors.append(msg)
 
-    # 本物の `ctx.write_json` / `write_text` と同じものを使う。ここを自前の
-    # open(..., "w") にすると、テストだけが「壊れない書き方」を通らなくなる。
+    # 本物の `ctx.write_json` / `write_text` と同じものを使う。
+    # ここを自前の open(..., "w") にすると、
+    # テストだけが「壊れない書き方」を通らなくなる。
     def write_json(self, path, data, *, indent=1):
         return ml.write_json(path, data, indent=indent, report=self.log_exc)
 
@@ -382,8 +393,8 @@ def load_mod(path=MOD, name="quest_offer_mod"):
 def install(hooks, targets):
     """フックを本番と同じ形（メソッドの差し替え）でクラスに載せる。
 
-    `targets` は `(フック名, 載せる先のクラス, メソッド名)`。**載せる先は毎回
-    作り直した派生クラス**にする（前のテストで差し替えたものを持ち越さない）。
+    `targets` は `(フック名, 載せる先のクラス, メソッド名)`。
+    **載せる先は毎回作り直した派生クラス**にする（前のテストで差し替えたものを持ち越さない）。
     """
     for target, owner, name in targets:
         hook = hooks.get(target)
@@ -413,7 +424,8 @@ def facility_buttons():
 
 def setup(history=None, partner="62", in_conversation=True):
     """mod を適用し、NPC 62 と会話している状態の app を返す。"""
-    # クラスは毎回作り直す。`__main__` に載せるのは mod が
+    # クラスは毎回作り直す。
+    # `__main__` に載せるのは mod が
     # `getattr(__main__, 名前)` で引くため（本番と同じ形）。
     app_cls = type("InstantaleApp", (BASES["app"],), {})
     board_cls = type("DisplayQuestChoice", (BASES["board"],), {})
@@ -449,13 +461,14 @@ def setup(history=None, partner="62", in_conversation=True):
     characters = {"62": Character(id="62", name="テストNPC D")}
     areas = {"7": Area("7", "テストの町A")}
     app = app_cls(World(characters, quests, areas))
-    # 現在地は **id の文字列**で持たせる（`302_` の実測。エリアの
-    # オブジェクトを直接持っているとは限らない）。
+    # 現在地は **id の文字列**で持たせる（`302_` の実測。
+    # エリアのオブジェクトを直接持っているとは限らない）。
     app.player = Character(id="player", name="テストプレイヤー", current_area="7")
     # 会話の書き起こし（「この話から依頼を作る」の材料）。
     app.current_conversation_history = history if history is not None else []
     if in_conversation:
-        # ゲームと同じ経路で会話に入る。ここで mod が相手を控える。
+        # ゲームと同じ経路で会話に入る。
+        # ここで mod が相手を控える。
         app.process_choice(start_cls(app, partner), "テストNPC D")
         app.buttons = talk_buttons(partner)
     return mod, ctx, app
@@ -575,9 +588,9 @@ clock = install_fake_kivy()
 mod, ctx, app = setup(history=history)
 app.refresh_choice_buttons()
 
-# 「この話から依頼を作る」が出るのは**会話画面**。掲示板ではない
-# 会話画面に置けば会話を閉じずに生成でき、掲示板は
-# 「既にある依頼を選ぶ場所」に徹せる。
+# 「この話から依頼を作る」が出るのは**会話画面**。
+# 掲示板ではない会話画面に置けば会話を閉じずに生成でき、
+# 掲示板は「既にある依頼を選ぶ場所」に徹せる。
 generate = [b for b in app.buttons if b.get(MARK) == "generate"]
 check("会話メニューに「この話から依頼を作る」が出る", generate,
       [b["text"] for b in app.buttons])
@@ -604,12 +617,14 @@ check("戻り道は残る",
       texts)
 check("戻り道はゲーム自身のものをそのまま使う", "戻る" in texts, texts)
 
-# **読み込み順が後ろの MOD ほど外側**なので、その追加はこちらの間引きより
-# 後に起きる。次のフレームの掛け直しで落ちること。
+# **読み込み順が後ろの MOD ほど外側**なので、
+# その追加はこちらの間引きより後に起きる。
+# 次のフレームの掛け直しで落ちること。
 app.buttons.append({"text": "後から足されたボタン",
                     "spec": PhaseSpec("JustSetButtonToNormalPhase", []),
                     "late_mod_mark": "x"})
-# ボタンを出したい MOD は必ず描画経路を通る。そこで掛け直す。
+# ボタンを出したい MOD は必ず描画経路を通る。
+# そこで掛け直す。
 app.refresh_choice_buttons(reset_page=True)
 clock.settle()
 texts = [b["text"] for b in app.buttons]
@@ -655,10 +670,10 @@ check("自前で QuestChoiceManager を組む既定にはなっていない",
 # ================================================ セーブから戻った残骸との二重化
 print("=== タイトル戻り・再注入後の残骸 ===")
 
-# `PhaseSpec.to_dict()` がセーブに書くのは text と spec だけで、**印は落ちる**
-# （実セーブ8件で確認。GAME.md §2.2）。タイトルへ戻る・ロード・再注入のあとは
-# 「印の無い自分のボタン」が復元されているので、印だけで重複を見ていると
-# 同じボタンが2つ並ぶ。
+# `PhaseSpec.to_dict()` がセーブに書くのは text と
+# spec だけで、**印は落ちる**（実セーブ8件で確認。GAME.md §2.2）。
+# タイトルへ戻る・ロード・再注入のあとは「印の無い自分のボタン」が復元されているので、
+# 印だけで重複を見ていると同じボタンが2つ並ぶ。
 def stale(text):
     """セーブから復元された自前ボタン（印が落ちている）。"""
     return {"text": text, "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}
@@ -677,7 +692,8 @@ check("残った方は印がある（押せば効く）",
           if b["text"].startswith(("依頼を受ける", "この話から依頼を作る"))), texts)
 check("会話を終了するは残る", "会話を終了する" in texts, texts)
 
-# ゲーム側の同名ボタンを巻き込まないこと。spec が違えば別物。
+# ゲーム側の同名ボタンを巻き込まないこと。
+# spec が違えば別物。
 from instantale_modloader import ui as _ui
 screen = _ui.Screen(ctx, lambda m: None, tag="t", mark=mod.MARK)
 game = [{"text": "依頼を受ける", "spec": PhaseSpec("DisplayQuestChoice", [])}]
@@ -693,8 +709,8 @@ check("印を持たない Screen では何も落とさない",
 # **他の MOD の印が付いていたら残骸ではない。**
 # セーブに焼かれるのは text と spec だけ ＝ 復元された残骸は印を1つも持たない。
 # 逆に印があれば、いま誰かが挿した生きているボタンなので触ってはいけない。
-# ここを見ないと、`302_` が `309_`（役場の罰金）の確認画面からキャンセルを
-# 消すことになる（同じ文言・違う印のキー。VERIFICATION_LOG.md §2.31）。
+# ここを見ないと、`302_` が `309_`（役場の罰金）の確認画面からキャンセルを消すことになる（同じ文言・違う印のキー。
+# VERIFICATION_LOG.md §2.31）。
 foreign = {"text": "依頼を受ける（話を切り上げる）", "mod_pardon_action": "cancel",
            "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}
 other = [dict(foreign)]
@@ -730,9 +746,11 @@ GEN_TARGET = "scripts.llm.llm_manager_world_generate:random_quest_generator"
 def press_generate(ctx_obj, app_obj):
     """「この話から依頼を作る」を押し、生成側へ渡った `area_description` を返す。
 
-    **本物と同じ入れ子にする。** `random_quest_generator` はゲーム自身の
-    `generate_random_quest()` の内側で走るので、その外から呼んでも遅い ―
-    生成が終わった時点で mod は印を使い切って `None` に戻している。
+    **本物と同じ入れ子にする。**
+    `random_quest_generator` はゲーム自身の
+    `generate_random_quest()` の内側で走るので、
+    その外から呼んでも遅い ― 生成が終わった時点で mod は印を使い切って
+    `None` に戻している。
     """
     seen = {}
     board_cls = sys.modules["__main__"].DisplayQuestChoice

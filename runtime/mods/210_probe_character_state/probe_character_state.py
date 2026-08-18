@@ -3,30 +3,32 @@
 
 ##### 何を決めるための計測か
 
-事件ものの MOD では、犯人役の NPC を最後に世界から退場させたい。既存の NPC を
-使うと**店の主や住人が消えて世界が壊れる**ので、案は2つある。
+事件ものの MOD では、犯人役の NPC を最後に世界から退場させたい。
+既存の NPC を使うと**店の主や住人が消えて世界が壊れる**ので、案は2つある。
 
 1. 自前で NPC を生成して使い、終わったら退場させる
-2. 死亡の印（`is_dead` に相当するもの）を立てれば参照されなくなる、という
-   性質に乗る
+2. 死亡の印（`is_dead` に相当するもの）を立てれば参照されなくなる、という性質に乗る
 
-2が本当なら1より遥かに安い。**だが `is_dead` という属性はリコンに出ていない。**
-リコンが拾うのは関数・クラス・モジュール定数だけで、インスタンス属性は写らない
-（`Character.__init__` の引数には `state` / `status` / `config` があり、死亡の印は
-この中のどれかに入っている可能性が高い）。名前を推測して探すと空振りするので
-（GAME.md §1.3 の実例）、**実物を開いて確かめる**。
+2が本当なら1より遥かに安い。
+だが `is_dead` という属性はリコンに出ていない。
+リコンが拾うのは関数・クラス・モジュール定数だけで、
+インスタンス属性は写らない（`Character.__init__` の引数には `state` / `status` /
+`config` があり、死亡の印はこの中のどれかに入っている可能性が高い）。
+名前を推測して探すと空振りするので（GAME.md §1.3 の実例）、実物を開いて確かめる。
 
 ##### 3つの問いに答える
 
 | 問い | 見るところ |
 |---|---|
-| 死亡の印はどの項目か | `check_character_death` の前後で**何が変わったか**の差分 |
+| 死亡の印はどの項目か | `check_character_death` の前後で何が変わったかの差分 |
 | セーブに残る形は | `World.generate_character` の `character_value`（保存された辞書そのもの） |
 | 印を立てると参照されなくなるのか | 世界の全 NPC を舐めて、誰がどこから参照されているかの表 |
 
-3つ目が要点。**印は「参照されなくなる」ことの原因ではなく、結果かもしれない。**
-つまりゲームが死亡時に施設の名簿からも外している可能性がある。その場合、印だけ
-立てても名簿には残り続ける。だから印の有無ではなく**実際の参照の有無**を数える。
+3つ目が要点。
+印は「参照されなくなる」ことの原因ではなく、結果かもしれない。
+つまりゲームが死亡時に施設の名簿からも外している可能性がある。
+その場合、印だけ立てても名簿には残り続ける。
+だから印の有無ではなく実際の参照の有無を数える。
 
 既に死んだ NPC が世界に居れば、生きている NPC との差分がそのまま答えになる。
 居なければ「生きている NPC はこう参照されている」という基準表が残るので、
@@ -34,15 +36,16 @@
 
 ##### 消すと壊れる NPC の一覧も出す
 
-`Facility.owner` に載っている NPC は、消えると店に主が居なくなる。この表は
-「どの NPC なら退場させても安全か」を選ぶのにそのまま使える。依頼の
-`client_name` は実在 NPC と紐付いていない（GAME.md §2.9）ので、依頼の側は
-気にしなくてよい。
+`Facility.owner` に載っている NPC は、消えると店に主が居なくなる。
+この表は「どの NPC なら退場させても安全か」を選ぶのにそのまま使える。
+依頼の `client_name` は実在 NPC と紐付いていない（GAME.md §2.9）ので、
+依頼の側は気にしなくてよい。
 
 ##### ゲームは変更しない
 
-200番台の約束どおり読み取りだけ。値は書かず、記録に失敗しても本体は必ず呼ぶ。
-`check_character_death` の差分を取るために対象の属性を**読む**が、書かない。
+200番台の約束どおり読み取りだけ。
+値は書かず、記録に失敗しても本体は必ず呼ぶ。
+`check_character_death` の差分を取るために対象の属性を読むが、書かない。
 """
 
 import datetime
@@ -56,21 +59,23 @@ LOG_BASENAME = "character_state.log"
 # 1プロセスに1回だけにするための印（`sys` に置く。TECH.md §3.6）。
 CENSUS_MARK = "_instantale_probe_charstate_census"
 
-# 死亡の印が入っていそうな項目。**ここに無くても構わない** ―
+# 死亡の印が入っていそうな項目。
+# ここに無くても構わない。
 # 下の `interesting_keys` が実物の属性名から候補を拾い直す。
-#
-# 1回目の実機で、セーブ側の項目は 33 個と分かった（`generate_character` の
-# ダンプ）。**`is_dead` は無く**、状態らしきものは `state`（生きている NPC では
-# 空文字）と HP 3種だけ。だから死亡の印は `state` の中身である可能性が高い。
-#
-#: `category` と `job` は状態ではないが、**個人か群衆かの見分け**に要る
-#: （実機に `混乱する村人たち` のような群衆の登場人物が居る）。
+# 1回目の実機で、セーブ側の項目は 33 個と分かった（`generate_character` のダンプ）。
+# **`is_dead` は無く**、状態らしきものは `state`（生きている NPC では空文字）と HP
+# 3種だけ。
+# だから死亡の印は `state` の中身である可能性が高い。
+#: `category` と `job` は状態ではないが、
+#: 個人か群衆かの見分けに要る（実機に
+#: `混乱する村人たち` のような群衆の登場人物が居る）。
 #: 事件の犯人役を選ぶ MOD が、何を手掛かりに弾けばよいかをここで見る。
 STATE_ATTRS = ("state", "status", "config", "current_hp", "max_hp",
                "original_max_hp", "physical_integrity", "age", "days",
                "story_achievements", "category", "job")
 
-# 属性名に含まれていたら「状態っぽい」と見なす語。名前を決め打ちしないための網。
+# 属性名に含まれていたら「状態っぽい」と見なす語。
+# 名前を決め打ちしないための網。
 STATE_HINTS = ("dead", "death", "alive", "live", "state", "status", "hp",
                "integrity", "retire", "gone", "remove", "leave")
 
@@ -78,18 +83,21 @@ STATE_HINTS = ("dead", "death", "alive", "live", "state", "status", "hp",
 MAX_CHARACTERS = 400
 MAX_AREAS = 40
 
-# 死亡判定の記録の上限。1回の戦闘ぶん追えれば十分。
+# 死亡判定の記録の上限。
+# 1回の戦闘ぶん追えれば十分。
 MAX_DEATH_EVENTS = 60
 
-# この件数までの辞書は**値ごと**出す（`config` を読むため。上の `snapshot`）。
+# この件数までの辞書は値ごと出す（`config` を読むため。上の `snapshot`）。
 MAX_INLINE_DICT = 8
 
-# 死亡の印。1回目の実機で `config` の中に在ることが分かった
-# （`config` = level_of_detail / is_player / **is_dead** / difficulty_level）。
+# 死亡の印。
+# 1回目の実機で `config` の中に在ることが分かった（`config` = level_of_detail /
+# is_player / is_dead / difficulty_level）。
 # 名前が変わっても census は動く（`interesting_keys` が拾い直す）。
 DEAD_FLAG = "is_dead"
 
-# セーブ辞書のダンプ件数。数体ぶんあれば項目の一覧は分かる。
+# セーブ辞書のダンプ件数。
+# 数体ぶんあれば項目の一覧は分かる。
 MAX_SAVE_DUMPS = 4
 
 
@@ -112,7 +120,7 @@ def apply(ctx):
             return repr(value)
 
     def interesting_keys(sample):
-        """実物の属性名から「状態っぽいもの」を拾う。**名前を決め打ちしない。**"""
+        """実物の属性名から「状態っぽいもの」を拾う。名前を決め打ちしない。"""
         keys = set(STATE_ATTRS)
         for key in own_dict(sample):
             low = str(key).lower()
@@ -121,16 +129,16 @@ def apply(ctx):
         return sorted(keys)
 
     def snapshot(character, keys):
-        """比較のために状態だけ写す。**読むだけで書かない。**"""
+        """比較のために状態だけ写す。読むだけで書かない。"""
         out = {}
         for key in keys:
             value = frames.attr(character, key)
             if value is frames.MISSING:
                 continue
-            # `config` は**中身が本体**。1回目の実機では
-            # `frames.repr_value` が辞書をキーだけに畳んでしまい、
-            # `is_dead` という項目が在ることは分かっても
-            # **真偽が読めなかった**。小さい辞書は値ごと出す。
+            # `config` は中身が本体。
+            # 1回目の実機では `frames.repr_value` が辞書をキーだけに畳んでしまい、
+            # `is_dead` という項目が在ることは分かっても真偽が読めなかった。
+            # 小さい辞書は値ごと出す。
             if isinstance(value, dict) and len(value) <= MAX_INLINE_DICT:
                 out[key] = "{" + ", ".join(
                     "{}={}".format(k, frames.repr_value(v))
@@ -227,11 +235,11 @@ def apply(ctx):
     # ------------------------------------------------------------------
     @ctx.wrap("save_area_json:generate_npc", required=False)
     def generate_npc(orig, *args, **kwargs):
-        """**MOD が NPC を作るときに真似る相手。**
+        """MOD が NPC を作るときに真似る相手。
 
         `World.generate_character` は「辞書を受け取って Character にする」側で、
-        その辞書を**誰がどう組んだか**は見えない。こちらは
-        `(npc_data, world_dict, area_id, facility_id, job)` を受け取るので、
+        その辞書を誰がどう組んだかは見えない。
+        こちらは `(npc_data, world_dict, area_id, facility_id, job)` を受け取るので、
         置き場所の決まり方まで分かる。
 
         遊んでいて発火しない可能性もある（世界生成でしか呼ばれないなら）。
@@ -265,8 +273,9 @@ def apply(ctx):
             return
         world = getattr(app, "world", None)
         characters = getattr(world, "characters", None)
-        # **世界が載るまで黙って諦める。** `on_ready` は全 MOD の適用直後＝
-        # まだタイトル画面のことがあり、1回目の実機はここで
+        # 世界が載るまで黙って諦める。
+        # `on_ready` は全 MOD の適用直後＝まだタイトル画面のことがあり、
+        # 1回目の実機はここで
         # `world.characters is NoneType` と1行書いて終わっていた。
         # プレイヤーが何か押したときに `retry_census` がもう一度呼ぶ。
         if not isinstance(characters, dict) or not characters:
@@ -274,7 +283,8 @@ def apply(ctx):
         setattr(sys, CENSUS_MARK, True)
         state["counted"] = len(characters)
 
-        # 参照元を集める。**誰がどこから指されているか**が本題。
+        # 参照元を集める。
+        # **誰がどこから指されているか**が本題。
         owners = {}        # character_id -> [施設の説明]
         rosters = {}       # character_id -> [施設の説明]
         residents = {}     # character_id -> [エリア名]
@@ -355,7 +365,7 @@ def apply(ctx):
         # 「印を立てれば参照されなくなる」は2通りに読める。
         #   (a) 印を立てるとゲームが名簿からも外す   → 参照が消える
         #   (b) 名簿には残るが、読む側が印を見て飛ばす → 参照は残る
-        # census が数えるのは**実際の参照**なので、死んだ NPC が名簿に
+        # census が数えるのは実際の参照なので、死んだ NPC が名簿に
         # 残っていれば (a) は否定される。そのとき (b) かどうかは、その施設で
         # 話しかけられる相手にその NPC が出るかを目で見て確かめること
         # （名簿に居るのに選択肢に出なければ (b)）。
@@ -390,9 +400,9 @@ def apply(ctx):
             write("  -> nobody is flagged dead yet; re-run this census after")
             write("     one dies to get the comparison.")
 
-    # 世界が載るのはタイトルで「つづきから」を押した後。`on_ready` の時点では
-    # まだ無いことがあるので、**プレイヤーが何か押すたびに試す**。印が立った
-    # 後は数を1つ比べるだけなので、押下の経路を重くしない。
+    # 世界が載るのはタイトルで「つづきから」を押した後。
+    # `on_ready` の時点ではまだ無いことがあるので、**プレイヤーが何か押すたびに試す**。
+    # 印が立った後は数を1つ比べるだけなので、押下の経路を重くしない。
     @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False)
     def retry_census(orig, self, *args, **kwargs):
         result = orig(self, *args, **kwargs)
@@ -400,9 +410,9 @@ def apply(ctx):
             if not getattr(sys, CENSUS_MARK, False):
                 census()
             else:
-                # **NPC が増えたら取り直す。**新しく生えた NPC が施設の名簿に
-                # 載るのか（`initial_location` を書いただけなのか）は、
-                # 生えた後の census でしか分からない。
+                # NPC が増えたら取り直す。
+                # 新しく生えた NPC が施設の名簿に載るのか（`initial_location` を書いただけなのか）は、生えた後の
+                # census でしか分からない。
                 characters = getattr(getattr(self, "world", None),
                                      "characters", None)
                 if (isinstance(characters, dict)

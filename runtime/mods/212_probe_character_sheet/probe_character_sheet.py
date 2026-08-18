@@ -1,22 +1,28 @@
 # -*- coding: utf-8 -*-
 """計測: プレイヤーの人物欄（プロフィール画面）を写し取る（読み取り専用）。
 
-人物欄を広げて手配度・スキル・特性を載せたい。そのために先に決めておくことが
-3つあり、どれも推測してはいけない。
+人物欄を広げて手配度・スキル・特性を載せたい。
+先に決めておくことが3つある。
+どれも推測してはいけない。
 
-1. **画面の組み立て**: 人物欄は誰が持っているのか（`InstanTaleHUD` の属性か、
-   開くたびに作られるのか）。枠・立ち絵・出自・健康状態がそれぞれどのウィジェットで、
-   `size_hint` / `pos_hint` のどちらで置かれているのか。立ち絵の位置を動かさずに
-   左の欄だけ広げられるかは、この形で決まる。
-2. **文字の入り方**: 出自や健康状態は `text` の差し替えなのか、開くたびに作り直しなのか。
-   `update_status_texts` / `toggle_character_sheet_window` のどちらが中身を入れているのか。
+1. 画面の組み立て: 人物欄は誰が持っているのか（`InstanTaleHUD` の属性か、
+   開くたびに作られるのか）。
+   枠・立ち絵・出自・健康状態がそれぞれどのウィジェットで、
+   `size_hint` / `pos_hint` のどちらで置かれているのか。
+   立ち絵の位置を動かさずに左の欄だけ広げられるかは、この形で決まる。
+2. 文字の入り方: 出自や健康状態は `text` の差し替えなのか、
+   開くたびに作り直しなのか。
+   `update_status_texts` /
+   `toggle_character_sheet_window` のどちらが中身を入れているのか。
    作り直しなら、足したウィジェットは毎回消える前提で書く必要がある。
-3. **載せる値の在り処**: 手配度は `player.area_history[エリアid]['lawfulness']`
-   （`309_office_pardon` が実セーブで確認済み）。**エリアの名前と `size`** も要る
-   （`size` が `dungeon` のエリアは出さない）。スキルと特性は `player.skills` /
-   `player.traits` に何の形で入っているのか（文字列か、辞書か、オブジェクトか）。
+3. 載せる値の在り処: 手配度は
+   `player.area_history[エリアid]['lawfulness']`（`309_office_pardon` が実セーブで確認済み）。
+   **エリアの名前と `size`** も要る（`size` が `dungeon` のエリアは出さない）。
+   スキルと特性は `player.skills` / `player.traits` に何の形で入っているのか（文字列か、辞書か、
+   オブジェクトか）。
 
-この mod は**観測しかしない**。値は変えず、記録に失敗しても本体は必ず呼ぶ。
+この mod は観測しかしない。
+値は変えず、記録に失敗しても本体は必ず呼ぶ。
 """
 
 import datetime
@@ -26,10 +32,12 @@ from instantale_modloader import frames, ui
 
 LOG_BASENAME = "character_sheet.log"
 
-# 何回ぶん書き出すか。開閉のたびに1件出るので、開く→閉じるを数回で足りる。
+# 何回ぶん書き出すか。
+# 開閉のたびに1件出るので、開く→閉じるを数回で足りる。
 MAX_DUMPS = 6
 
-# ウィジェットを何段まで潜るか。人物欄は箱の入れ子が深いので item 欄より多く取る。
+# ウィジェットを何段まで潜るか。
+# 人物欄は箱の入れ子が深いので item 欄より多く取る。
 MAX_DEPTH = 8
 
 WIDGET_ATTRS = ("size", "size_hint", "pos", "pos_hint", "height", "width",
@@ -37,11 +45,12 @@ WIDGET_ATTRS = ("size", "size_hint", "pos", "pos_hint", "height", "width",
 LABEL_ATTRS = ("font_size", "text_size", "texture_size", "halign", "valign",
                "max_lines", "line_height", "markup", "color")
 
-# hud / app の属性のうち、人物欄に関係しそうな名前。**推測で1つに絞らない**
-# ので、引っ掛かった名前を全部出して本物をこちらで選ぶ。
+# hud / app の属性のうち、人物欄に関係しそうな名前。
+# 推測で1つに絞らないので、引っ掛かった名前を全部出して本物をこちらで選ぶ。
 NAME_HINTS = ("sheet", "profile", "status", "character", "player", "portrait")
 
-# プレイヤーから読む値。形が分からないので repr_value に任せる。
+# プレイヤーから読む値。
+# 形が分からないので repr_value に任せる。
 PLAYER_ATTRS = ("name", "age", "gender", "experience_level", "skills", "traits",
                 "ability_scores", "original_ability_scores", "profile", "state",
                 "status", "area_history", "current_area", "story_achievements")
@@ -64,8 +73,8 @@ def apply(ctx):
             if value is frames.MISSING:
                 continue
             if name in ("pos_hint", "size_hint", "pos", "size"):
-                # 置き方そのものを写す欄なので、要約ではなく生の値を出す
-                # （`pos_hint` はキーだけ出ても寸法が決められない）。
+                # 置き方そのものを写す欄なので、
+                # 要約ではなく生の値を出す（`pos_hint` はキーだけ出ても寸法が決められない）。
                 out.append("{}={}".format(name, _plain(value)))
                 continue
             out.append("{}={}".format(name, frames.repr_value(value)))
@@ -114,7 +123,8 @@ def apply(ctx):
         if depth < MAX_DEPTH:
             children = frames.attr(widget, "children")
             if isinstance(children, (list, tuple)):
-                # Kivy の children は後ろが先頭。見た目の並び順に直して出す。
+                # Kivy の children は後ろが先頭。
+                # 見た目の並び順に直して出す。
                 for child in reversed(list(children)):
                     lines += describe(child, depth + 1)
         return lines
@@ -144,7 +154,8 @@ def apply(ctx):
             lines.append("    {:<26} = {}".format(
                 name, frames.repr_value(frames.attr(player, name))))
 
-        # スキルと特性は「1件が何の形か」が要る。中身を1件だけ開いて見る。
+        # スキルと特性は「1件が何の形か」が要る。
+        # 中身を1件だけ開いて見る。
         for name in ("skills", "traits"):
             value = frames.attr(player, name)
             items = None
@@ -167,10 +178,10 @@ def apply(ctx):
                         "{}={}".format(k, frames.repr_value(v))
                         for k, v in sorted(own.items())))
 
-        # 手配度の対象は「size が dungeon 以外」のエリア。ところが実行中の
-        # Area には `size` が無かった（`getattr` が `<missing>`）。セーブの
-        # `areas[id]["size"]` に当たるものが実行時に何という名前なのかを、
-        # **推測せず**エリアの持ち物を全部並べて決める。
+        # 手配度の対象は「size が dungeon 以外」のエリア。
+        # ところが実行中の Area には `size` が無かった（`getattr` が `<missing>`）。
+        # セーブの `areas[id]["size"]` に当たるものが実行時に何という名前なのかを、
+        # 推測せずエリアの持ち物を全部並べて決める。
         lines.append("  areas: vars() of the first few")
         try:
             for area_id, area in list((ui.world_areas(app) or {}).items())[:3]:
@@ -183,7 +194,8 @@ def apply(ctx):
                 for key in sorted(own):
                     lines.append("      {:<24} = {}".format(
                         key, frames.repr_value(own[key])))
-                # 辞書のように引けるビルドもありうる。両方試して結果を残す。
+                # 辞書のように引けるビルドもありうる。
+                # 両方試して結果を残す。
                 try:
                     lines.append("      area['size'] -> {!r}".format(area["size"]))
                 except Exception as exc:
@@ -192,8 +204,9 @@ def apply(ctx):
             ctx.log_exc("character sheet probe: area dump failed")
 
         # 実行中の Area は `size` を持っていなかった（上のダンプで確定）。
-        # セーブでは `areas[id]["size"]` に在るので、**生の辞書がどこかに
-        # 残っていないか**を app / world の持ち物から探す。見つからなければ
+        # セーブでは `areas[id]["size"]` に在るので、**生の辞書がどこかに残っていないか**を app /
+        # world の持ち物から探す。
+        # 見つからなければ
         # bgm のパス（`musics/<size>/<mood>/曲`）から逆算するしかない。
         lines.append("  where is the raw world dict?")
         world = frames.attr(app, "world")
@@ -254,7 +267,8 @@ def apply(ctx):
         if hud is not None:
             lines.append("  visible_character_sheet_data = " + frames.repr_value(
                 frames.attr(hud, "visible_character_sheet_data")))
-            # 人物欄の根と、動かしてはいけない立ち絵。名前は dump #1 で確定済み。
+            # 人物欄の根と、動かしてはいけない立ち絵。
+            # 名前は dump #1 で確定済み。
             for name in ("character_sheet_layout", "character_image",
                          "character_image_right"):
                 widget = frames.attr(hud, name)
@@ -264,7 +278,8 @@ def apply(ctx):
                 lines += describe(widget, 0, label=name)
                 lines += canvas_of(widget)
         if app is not None and state["dumps"] == 1:
-            # 値の在り処は1回取れば足りる。開閉のたびに繰り返さない。
+            # 値の在り処は1回取れば足りる。
+            # 開閉のたびに繰り返さない。
             lines += player_values(app)
         write("\n".join(lines))
 

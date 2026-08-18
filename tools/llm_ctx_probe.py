@@ -1,13 +1,14 @@
 """ローカル LLM のコンテキスト長を実測して、このマシンでの最適値を出す。
 
-llama-server を候補の `--ctx-size` で順に起こし、同じプロンプトを投げて
-生成速度と VRAM を測る。VRAM から溢れると Windows は失敗せず共有メモリへ
-退避するため、症状は「エラー」ではなく「異様に遅い」になる。速度が崩れた
-一段手前が、そのマシンで使える上限になる。
+llama-server を候補の `--ctx-size` で順に起こし、
+同じプロンプトを投げて生成速度と VRAM を測る。
+VRAM から溢れると Windows は失敗せず共有メモリへ退避するため、
+症状は「エラー」ではなく「異様に遅い」になる。
+速度が崩れる一段手前を、そのマシンで使える上限とする。
 
-使い方は `llm_ctx_probe.bat` から。ゲームは終了しておくこと（VRAM と
-ポートを取り合うため）。測定の背景と実測値は
-`docs\\VERIFICATION_LOG.md` §2.48 を参照。
+使い方は `llm_ctx_probe.bat` から。
+ゲームは終了しておくこと（VRAM とポートを取り合うため）。
+測定の背景と実測値は `docs\\VERIFICATION_LOG.md` §2.48 を参照。
 """
 
 from __future__ import annotations
@@ -22,11 +23,13 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-# 1リクエストぶんのプロンプト。全構成で同じものを使う（比較のため）。
+# 1リクエストぶんのプロンプト。
+# 全構成で同じものを使う（比較のため）。
 FILLER = "the adventurer walked into the tavern and ordered a drink. "
 PROMPT_TOKENS = 4000
 
-# 既定の候補。ゲームの既定 16384 から上へ辿る。
+# 既定の候補。
+# ゲームの既定 16384 から上へ辿る。
 DEFAULT_LADDER = [16384, 24576, 32768, 49152, 65536]
 
 # 速度がこの割合を下回ったら「崩壊」とみなし、そこで打ち切る。
@@ -132,7 +135,8 @@ def running(*names: str) -> list[str]:
 # --- 1構成を測る ----------------------------------------------------------
 
 def make_prompt() -> str:
-    # 1トークン ≒ 3語弱。多めに作っても構わない（窓には収まる）。
+    # 1トークン ≒ 3語弱。
+    # 多めに作っても構わない（窓には収まる）。
     repeats = max(1, PROMPT_TOKENS // 12)
     return FILLER * repeats
 
@@ -294,7 +298,8 @@ def main() -> int:
         log("  一度も測れなかった。")
         return 1
 
-    # 推奨値。速度が最速比 KEEP_RATIO 以上で、余白が足りる中の最大。
+    # 推奨値。
+    # 速度が最速比 KEEP_RATIO 以上で、余白が足りる中の最大。
     best = None
     slow_only = False   # 速度で落ちたものがあるか
     tight_only = False  # 余白で落ちたものがあるか

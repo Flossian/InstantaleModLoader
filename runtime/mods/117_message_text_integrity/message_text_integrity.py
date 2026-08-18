@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """ゲーム本体が早く切る長い本文を、表示ラベルでは末尾まで多く見せる。
 
-保持している本文（display_text / 履歴 / セーブ）は触らない。画面の
-`hud.text_display` だけを、省略通知付きで末尾 DISPLAY_CHARS 文字へ載せ直す。
+保持している本文（display_text / 履歴 / セーブ）は触らない。
+画面の `hud.text_display` だけを、省略通知付きで末尾 DISPLAY_CHARS 文字へ載せ直す。
 """
 
 import weakref
@@ -10,13 +10,14 @@ import weakref
 from instantale_modloader import frames
 
 # 表示ラベルに載せる末尾の文字数。
-#
-# **上げすぎると何も描かれなくなる。** Kivy の Label は中身を1枚のテクスチャに
-# 焼くので、GPU の上限（多くの環境で 16384px）を超えると**例外も出さずに空
-# になる**（`122_` が実機で踏んだ。VERIFICATION.md §3.21）。既定の 1000 文字は
-# およそ 1,500px で十分安全だが、`mod.json` の上限（10000）まで上げたうえに
-# 高解像度で書体が大きいと、理屈のうえでは届きうる。本文が丸ごと消えたら
-# まずここを下げること。
+# 上げすぎると何も描かれなくなる。
+# Kivy の Label は中身を1枚のテクスチャに焼くので、
+# GPU の上限（多くの環境で 16384px）を超えると**例外も出さずに空になる**（`122_` が実機で踏んだ。VERIFICATION.md
+# §3.21）。
+# 既定の 1000 文字はおよそ 1,500px で十分安全だが、
+# `mod.json` の上限（10000）まで上げたうえに高解像度で書体が大きいと、
+# 理屈のうえでは届きうる。
+# 本文が丸ごと消えたらまずここを下げること。
 DISPLAY_CHARS = 1000
 TRUNCATED_NOTICE = "［表示負荷を抑えるため、前の本文は省略］\n"
 
@@ -52,10 +53,11 @@ def apply(ctx):
         def run(_dt=None, hud=hud, label=label, state=state):
             state["pending"] = False
             try:
-                # **`texture_update()` は呼ばない。** これを呼ぶと、本文が1文字
-                # 進むたびにラベルを余計に作り直すことになる（1回 15ms ＝ ティックの
-                # 間隔の 3分の2。VERIFICATION_LOG.md §2.34）。Kivy の作り直しはこの予約
-                # より先に走るので、高さを出す時点の `texture_size` は既に新しい。
+                # `texture_update()` は呼ばない。
+                # これを呼ぶと、本文が1文字進むたびにラベルを余計に作り直すことになる（1回 15ms ＝ ティックの間隔の 3分の2。VERIFICATION_LOG.md
+                # §2.34）。
+                # Kivy の作り直しはこの予約より先に走るので、
+                # 高さを出す時点の `texture_size` は既に新しい。
                 update_height = frames.attr(hud, "update_label_height")
                 if callable(update_height):
                     update_height()

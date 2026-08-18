@@ -3,7 +3,8 @@
 
     python tools/tests/test_ui_text_spacing.py
 
-偽の `scripts.hud.new_hud` / `InstanTaleHUD` / Kivy の Clock を差し込んで、次を確認する。
+偽の `scripts.hud.new_hud` / `InstanTaleHUD` / Kivy の Clock を差し込んで、
+次を確認する。
 
   探索     … 本文のラベルを `vars(hud)` から見つける（属性名を知らなくても届く）
   木       … 属性として持たれていないビルドでも、ウィジェット木を降りて見つける
@@ -17,14 +18,17 @@
   無効     … 設定を空欄（null）にすると、その項目には触らない
   無傷     … ラベルが見つからないビルドでは何もしない
 
-値は**実機の実測**（GAME.md §2.3 / VERIFICATION_LOG.md §2.25）から取ってある:
-本文のラベルは `hud.text_display`、`font_size=27`、**`line_height=1.8`**
-（Kivy の既定は 1.0）。画面の採寸（行の間隔 70px・段落の間隔 138px ＝ちょうど
-2行分）と合わせると1行の送りは `27 × 1.44 × 1.8 ≒ 70px` で、偽ラベルはこの3つで作る。
+値は**実機の実測**（GAME.md §2.3 / VERIFICATION_LOG.md
+§2.25）から取ってある: 本文のラベルは `hud.text_display`、
+`font_size=27`、**`line_height=1.8`**（Kivy の既定は 1.0）。
+画面の採寸（行の間隔 70px・段落の間隔 138px ＝ちょうど
+2行分）と合わせると1行の送りは `27 × 1.44 × 1.8 ≒ 70px` で、
+偽ラベルはこの3つで作る。
 
-**ラベルの `text` は `display_text` と完全一致しない**（塗るときにゲームが末尾を
-足すか削るかしている ― ログの `match=2` がそれ）。偽 HUD も同じように塗る:
-完全一致を条件にしていると実機ではラベルが1回も見つからないので、ここが一番効く。
+**ラベルの `text` は `display_text` と完全一致しない**（塗るときにゲームが末尾を足すか削るかしている ― ログの
+`match=2` がそれ）。
+偽 HUD も同じように塗る: 完全一致を条件にしていると実機ではラベルが1回も見つからないので、
+ここが一番効く。
 """
 import importlib.util
 import io
@@ -73,8 +77,8 @@ FONT_SIZE = 27            # out/text_spacing.log（hud.text_display）
 LINE_HEIGHT = 1.8         # 同上。Kivy の既定は 1.0
 GLYPH_TO_LINE = 1.44      # 画面採寸の行の間隔 70px から逆算（70 / (27 × 1.8)）
 
-# ゲームがラベルに塗るときに**前へ**足しているもの。中身は分かっていないが、
-# 実測の `match=2` は「ラベルの text が display_text で終わる」なので、
+# ゲームがラベルへ塗るとき、**前へ**足しているもの。
+# 中身は分かっていないが、実測の `match=2` は「ラベルの text が display_text で終わる」なので、
 # 足しているのは前側だと決まる（後ろに足すなら末尾は一致しない）。
 PAINT_PREFIX = "（前の本文）\n\n"
 
@@ -99,8 +103,9 @@ class FakeLabel(object):
 
     # `text` と `line_height` は Kivy と同じく**代入でテクスチャが汚れる**。
     # 汚れたら次のフレームに作り直しが1回予約される（Kivy の
-    # `_trigger_texture_update`）。この予約こそが実機で効いていて、MOD 側が
-    # 自分でも `texture_update()` を呼ぶと**二度手間**になる（実測 3回/文字）。
+    # `_trigger_texture_update`）。
+    # この予約こそが実機で効いていて、MOD 側が自分でも `texture_update()` を呼ぶと**二度手間**になる（実測
+    # 3回/文字）。
     @property
     def text(self):
         return self._text
@@ -148,11 +153,12 @@ class FakeLayout(object):
 class FakeHUD(object):
     """本物の `InstanTaleHUD` のうち、この mod から見える部分だけ。
 
-    `nested=True` にすると本文のラベルを `hud.text_display` に持たせず、木の奥に
-    だけ置く（名前で引けないビルドで予備の探索に落ちることを確かめるため）。
+    `nested=True` にすると本文のラベルを `hud.text_display` に持たせず、
+    木の奥にだけ置く（名前で引けないビルドで予備の探索に落ちることを確かめるため）。
 
-    `paint` を渡すと**ラベルに何を塗るか**を変えられる。他の MOD が本文を
-    載せ替えた状態（`117_message_text_integrity` など）を作るのに使う。
+    `paint` を渡すと**ラベルに何を塗るか**を変えられる。
+    他の
+    MOD が本文を載せ替えた状態（`117_message_text_integrity` など）を作るのに使う。
     """
 
     def __init__(self, nested=False, paint=None):
@@ -160,9 +166,9 @@ class FakeHUD(object):
         self.height_updates = 0
         self.paint = paint or (lambda value: PAINT_PREFIX + value)
         label = FakeLabel(parent=self)
-        # 本文と紛らわしいラベルを2枚混ぜておく。状態表示（画面左下）と、
-        # **本文に出てくる語と同じ文字列を持つ選択肢のボタン**（Kivy の Button も
-        # Label なので、短い「含まれる」を許すとこれを掴みうる）。
+        # 本文と紛らわしいラベルを2枚混ぜておく。
+        # 状態表示（画面左下）と、**本文に出てくる語と同じ文字列を持つ選択肢のボタン**（Kivy の Button も Label なので、
+        # 短い「含まれる」を許すとこれを掴みうる）。
         self.status_label = FakeLabel("Atk:330(+500)\nDef:0(+500)", parent=self)
         self.choice_button = FakeLabel("金は持って", parent=self)
         if nested:
@@ -171,7 +177,8 @@ class FakeHUD(object):
             self.children = [FakeLayout([inner]), self.status_label,
                              self.choice_button]
         else:
-            # 実測の属性名（GAME.md §2.3）。MOD はまずここを引く。
+            # 実測の属性名（GAME.md §2.3）。
+            # MOD はまずここを引く。
             self.text_display = label
             self.children = [label, self.status_label, self.choice_button]
         self._label = label
@@ -179,7 +186,8 @@ class FakeHUD(object):
     def update_display_text(self, instance, value):
         """本物と同じく、ラベルに本文を入れるところまで。
 
-        **完全一致では塗らない**（実測。GAME.md §2.3）。前に何かを足した形にする。
+        **完全一致では塗らない**（実測。GAME.md §2.3）。
+        前に何かを足した形にする。
         """
         self._label.text = self.paint(value)
 
@@ -261,7 +269,8 @@ class FakeCtx(object):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
-    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # ログは本物の `ctx.logger` をそのまま借りる。
+    # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
 
@@ -337,9 +346,10 @@ def run():
           close(hud.choice_button.line_height, LINE_HEIGHT), hud.choice_button.line_height)
 
     # -- 本文を載せ替える MOD が先に走っていても外さない ----------------------
-    # 実機で起きた退行の回帰（VERIFICATION_LOG.md §2.32）。`117_message_text_integrity`
-    # が長い本文を「前置き + 省略通知 + 末尾 1000 文字」に載せ替えるので、
-    # ラベルの text は value と一致も包含もしなくなる。名前で引いていれば効く。
+    # 実機で起きた退行の回帰（VERIFICATION_LOG.md §2.32）。
+    # `117_message_text_integrity` が長い本文を「前置き + 省略通知 + 末尾
+    # 1000 文字」に載せ替えるので、ラベルの text は value と一致も包含もしなくなる。
+    # 名前で引いていれば効く。
     def truncating(value):
         return PAINT_PREFIX + "［表示負荷を抑えるため、前の本文は省略］\n" + value[-20:]
 
@@ -357,9 +367,10 @@ def run():
           close(hud._label.line_height, LINE_HEIGHT * scale), hud._label.line_height)
 
     # -- 1フレームぶんの仕事は1回だけ ----------------------------------------
-    # ここが表示速度に直結する。実機ではラベル1枚の作り直しが 15ms かかっており
-    # （テクスチャ 1340x3549）、1文字ごとに余計に1回呼ぶだけで打ち出しが目に見えて
-    # 遅くなる（VERIFICATION_LOG.md §2.34）。
+    # ここが表示速度に直結する。
+    # 実機ではラベル1枚の作り直しが 15ms かかっており（テクスチャ 1340x3549）、
+    # 1文字ごとに余計に1回呼ぶだけで打ち出しが目に見えて遅くなる（VERIFICATION_LOG.md
+    # §2.34）。
     CLOCK.tick()                             # ここまでの予約を流してから数える
     before = CLOCK.scheduled
     hud = FakeHUD()

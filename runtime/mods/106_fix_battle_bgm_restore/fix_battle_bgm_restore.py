@@ -1,30 +1,33 @@
 # -*- coding: utf-8 -*-
-"""修正: 戦闘が終わったのに戦闘 BGM が鳴り続ける／曲が重なるのを直す。
+"""修正: 戦闘の後も戦闘 BGM が鳴り続ける／曲が重なるのを直す。
 
 ## 原因（GAME.md §2.11 / VERIFICATION_LOG.md §2.5）
 
-BGM は pygame の `Sound` オブジェクトで、`play_music_from_src(app, src)` が
-**`app.music` に差し替えて再生**し、`stop_music(app)` が **`app.music` を止める**。
-つまり `app.music` が「今鳴っている曲」の唯一の取っ手で、ここを失った曲は
-**誰にも止められなくなる**。
+BGM は pygame の `Sound` オブジェクトで、
+`play_music_from_src(app, src)` が **`app.music` に差し替えて再生**し、
+`stop_music(app)` が `app.music` を止める。
+つまり `app.music` が「今鳴っている曲」の唯一の取っ手で、
+ここを失った曲は誰にも止められなくなる。
 
-戦闘終了時、ゲームは確かに元の曲へ戻す呼び出しをしている。ところが**その復帰
-呼び出しだけは app ではない別のオブジェクトを渡している**（`app.music` が
-`None` ではなく `<missing>` ＝ 属性そのものが無い。使い捨てのインスタンス ＝
-マネージャ自身の `self` とみられる）。このため:
+戦闘終了時、ゲームは確かに元の曲へ戻す呼び出しをしている。
+ところが**その復帰呼び出しだけは app ではない別のオブジェクトを渡している**（`app.music` が `None` ではなく
+`<missing>` ＝ 属性そのものが無い。使い捨てのインスタンス ＝マネージャ自身の
+`self` とみられる）。
+このため:
 
-1. 復帰呼び出しは `app.music` を止められない。**戦闘曲が鳴ったまま**その上に
-   エリア曲が重なる
-2. 鳴り始めたエリア曲は使い捨てオブジェクトにぶら下がる。**迷子**になり、
-   以後どの `stop_music` でも止まらない
-3. 次の戦闘では `app.music`（＝戦闘曲）だけが止められ、迷子のエリア曲は
-   鳴り続ける。戦闘中もエリア曲が重なる
+1. 復帰呼び出しは `app.music` を止められない。
+   戦闘曲が鳴ったままその上にエリア曲が重なる
+2. 鳴り始めたエリア曲は使い捨てオブジェクトにぶら下がる。
+   迷子になり、以後どの `stop_music` でも止まらない
+3. 次の戦闘では `app.music`（＝戦闘曲）だけが止められ、迷子のエリア曲は鳴り続ける。
+   戦闘中もエリア曲が重なる
 
 ## 直し方
 
-**pygame に直接聞く。** `Sound.get_num_channels()` は「その曲が今いくつの
-チャンネルで鳴っているか」を返すので、自前の帳簿ではなく**実際に鳴っているか**で
-判定できる。`play_music_from_src` を包んで、鳴らされた `Sound` を全部控えておき、
+pygame に直接聞く。
+`Sound.get_num_channels()` は「その曲が今いくつのチャンネルで鳴っているか」を返すので、
+自前の帳簿ではなく実際に鳴っているかで判定できる。
+`play_music_from_src` を包んで、鳴らされた `Sound` を全部控えておき、
 戦闘が終わったところで:
 
     戦闘中でないのに戦闘曲が鳴っていれば止める
@@ -34,14 +37,14 @@ BGM は pygame の `Sound` オブジェクトで、`play_music_from_src(app, src
     それでも重なっているぶんと、正体不明の音は止める
     何も鳴らなくなったら、戦闘前に鳴っていた曲を app 経由で鳴らし直す
 
-**チャンネルを直接見るので、注入より前に迷子になった曲も拾える。** 迷子は
-プロセスが終わるまで鳴り続け、チャンネルは8本しかないので、埋まると効果音も
-鳴らせなくなる（VERIFICATION_LOG.md §2.5）。
+チャンネルを直接見るので、注入より前から迷子になっていた曲も拾える。
+迷子はプロセスが終わるまで鳴り続け、チャンネルは8本しかないので、
+埋まると効果音も鳴らせなくなる（VERIFICATION_LOG.md §2.5）。
 
-判定は戦闘終了マネージャ（3種）と、選択肢が普通の状態に戻ったところの2つから
-起こす。どちらも `RESTORE_DELAY` 秒の猶予を置くので、ゲーム側の処理と競争しない。
-**pygame を触るのは Kivy の Clock（メインスレッド）から**（戦闘処理は別スレッドで
-走る。GAME.md §2.1）。
+判定は戦闘終了マネージャ（3種）と、選択肢が普通の状態に戻ったところの2つから起こす。
+どちらも `RESTORE_DELAY` 秒の猶予を置くので、ゲーム側の処理と競争しない。
+**pygame を触るのは Kivy の Clock（メインスレッド）から**（戦闘処理は別スレッドで走る。GAME.md
+§2.1）。
 """
 
 import sys
@@ -51,16 +54,19 @@ from instantale_modloader import ui
 
 LOG_BASENAME = "battle_bgm.log"      # 207_ の計測と同じログに時系列で並べる
 
-# 戦闘曲かどうかの判定。Assets/sounds/musics/battle/ 配下だけが戦闘曲。
+# 戦闘曲かどうかの判定。
+# Assets/sounds/musics/battle/ 配下だけが戦闘曲。
 BATTLE_DIR_MARK = "/musics/battle/"
 
 # 戦闘終了を検知してから実際に見に行くまでの猶予（秒）。
 RESTORE_DELAY = 2.5
 
-# 判定を予約する間隔の下限（秒）。ボタンの張り替えは頻繁に起きる。
+# 判定を予約する間隔の下限（秒）。
+# ボタンの張り替えは頻繁に起きる。
 ARM_INTERVAL = 2.0
 
-# 控えておく Sound の数。迷子は最大でも戦闘の回数ぶんしか増えない。
+# 控えておく Sound の数。
+# 迷子は最大でも戦闘の回数ぶんしか増えない。
 MAX_TRACKED = 12
 
 # この3つが1つでも立っていれば戦闘中とみなし、何もしない。
@@ -81,8 +87,10 @@ def apply(ctx):
         "sfx": [],           # 効果音の Sound の id（掃除の除外用）
         "armed_at": 0.0,
         "battle_started_at": 0.0,
-        # 「本当に戦闘が走っているか」。フラグ（`in_battle`）は戦闘が終わっても
-        # 1 のまま残るので使えない（GAME.md §2.10 / `107_`）。開始と終了のフックで持つ。
+        # 「本当に戦闘が走っているか」。
+        # フラグ（`in_battle`）は戦闘が終わっても 1 のまま残るので使えない（GAME.md
+        # §2.10 / `107_`）。
+        # 開始と終了のフックで持つ。
         "battle_active": False,
         # ミキサーがまだ無いことを一度知らせたか（`stray_channels`）。
         # 掃除は何度も走るので、毎回出すとログが同じ行で埋まる。
@@ -115,15 +123,16 @@ def apply(ctx):
         return any(getattr(app, flag, False) for flag in BATTLE_FLAGS)
 
     def battle_running(app):
-        """本当に戦闘中か。**フラグだけを信じてはいけない。**
+        """本当に戦闘中か。フラグだけを信じてはいけない。
 
-        `in_battle` は戦闘が終わっても 1 のまま残る（GAME.md §2.10）。フラグを
-        鵜呑みにすると、戦闘後の後始末が永久に走らない。`in_shopping` が常時
-        True になるのと同じ性質の罠（GAME.md §2.6）。
+        `in_battle` は戦闘が終わっても 1 のまま残る（GAME.md §2.10）。
+        フラグを鵜呑みにすると、戦闘後の後始末が永久に走らない。
+        `in_shopping` が常時 True になるのと同じ性質の罠（GAME.md §2.6）。
 
-        そこで**フラグが立っていて、かつ実際に戦闘曲らしき音が鳴っている**
-        ときだけ戦闘中とみなす。正体不明の音を含めるのは、注入より前に
-        始まった戦闘（＝こちらが src を知らない戦闘曲）を巻き込まないため。
+        そこで**フラグが立っていて、
+        かつ実際に戦闘曲らしき音が鳴っている** ときだけ戦闘中とみなす。
+        正体不明の音を含めるのは、注入より前に始まった戦闘（＝こちらが
+        src を知らない戦闘曲）を巻き込まないため。
         """
         if not in_battle(app):
             return False
@@ -152,13 +161,15 @@ def apply(ctx):
         return bgm if isinstance(bgm, str) and bgm else None
 
     # ------------------------------------------------------------- 曲の追跡
-    # 値は一切変えない。鳴らされた Sound を控えるだけ。
+    # 値は一切変えない。
+    # 鳴らされた Sound を控えるだけ。
     @ctx.wrap("scripts.sounds:SoundManager.play_music_from_src")
     def play_music_from_src(orig, self, app, music_src, *args, **kwargs):
         result = orig(self, app, music_src, *args, **kwargs)
         try:
             state["manager"] = self
-            # play_music_from_src は渡されたオブジェクトの .music に Sound を入れる。
+            # play_music_from_src は渡されたオブジェクトの .music に
+            # Sound を入れる。
             # つまりここで取れるのが「今鳴り始めた曲」そのもの。
             sound = getattr(app, "music", None)
             owned = app is find_app()
@@ -168,12 +179,12 @@ def apply(ctx):
                 # 予約した後で新しい戦闘が始まったかどうかの判定に使う。
                 state["battle_started_at"] = time.monotonic()
                 if not state["battle_active"]:
-                    # 戦闘が走っていないのに戦闘曲が鳴った。実測ではロード直後に
-                    # 起きる ― ゲームのロード処理が `in_battle` を見て曲を選んで
-                    # おり（`instantale.py:1458`＝戦闘 / `:1460`＝エリア）、下ろし
-                    # 忘れたフラグがセーブに焼かれていると戦闘曲の枝を引く
-                    # （`107_` がフラグ側を直すが、既に保存されたセーブには
-                    #  焼き込まれているので、鳴ってしまった側もここで直す）。
+                    # 戦闘が走っていないのに戦闘曲が鳴った。
+                    # 実測ではロード直後に起きる。
+                    # ゲームのロード処理が `in_battle` を見て曲を選んでおり（`instantale.py:1458`＝戦闘 / `:1460`＝エリア）、
+                    # 下ろし忘れたフラグがセーブに焼かれていると戦闘曲の枝を引く（`107_` がフラグ側を直すが、
+                    # 既に保存されたセーブには焼き込まれているので、
+                    # 鳴ってしまった側もここで直す）。
                     write("battle track outside a battle: {} -- "
                           "no battle has started in this process".format(
                               short(music_src)))
@@ -182,7 +193,8 @@ def apply(ctx):
             else:
                 state["restore"] = music_src
             if not owned:
-                # ★ 原因そのもの。ゲームはここで app ではないものを渡している。
+                # ★ 原因そのもの。
+                # ゲームはここで app ではないものを渡している。
                 write("orphan: {} was attached to {} instead of the app "
                       "-- nothing can stop it now".format(
                           short(music_src), type(app).__name__))
@@ -198,9 +210,9 @@ def apply(ctx):
             pass
         return orig(self, app, *args, **kwargs)
 
-    # 効果音も控えておく。掃除は「app.music でも効果音でもない音」を狙うので、
-    # その場で作られた効果音（`SoundManager.sounds` に無いもの）を巻き込まない
-    # ようにするための除外リスト。
+    # 効果音も控えておく。
+    # 掃除は「app.music でも効果音でもない音」を狙うので、
+    # その場で作られた効果音（`SoundManager.sounds` に無いもの）を巻き込まないようにするための除外リスト。
     def track_sfx(target):
         @ctx.wrap(target, required=False)
         def _sfx(orig, self, app, *args, **kwargs):
@@ -231,8 +243,9 @@ def apply(ctx):
     def sfx_sounds(manager, app):
         """効果音の Sound 一式。掃除で巻き込まないための「触ってはいけない」集合。
 
-        `SoundManager.sounds` は起動時に読み込んだ効果音15種の辞書
-        （'斬撃' / 'ダメージ1' / '接敵（通常）' ...）。曲は再生のたびに
+        `SoundManager.sounds` は起動時に読み込んだ効果音15種の辞書（'斬撃' /
+        'ダメージ1' / '接敵（通常）' ...）。
+        曲は再生のたびに
         `Sound(パス)` で作られるので、**この辞書に居ないループ音は曲**と言える。
         """
         keep = set()
@@ -248,21 +261,21 @@ def apply(ctx):
     def stray_channels(app, manager):
         """`app.music` でも効果音でもないのに鳴っている音 ＝ 迷子の曲。
 
-        自前の帳簿（`tracks`）は注入以降のぶんしか無いが、チャンネルを直接見れば
-        **注入より前に迷子になった曲も拾える**（迷子が溜まると 8/8 チャンネルが
-        埋まる。GAME.md §2.11）。
+        自前の帳簿（`tracks`）は注入以降のぶんしか無いが、
+        チャンネルを直接見れば **注入より前に迷子になった曲も拾える**（迷子が溜まると 8/8 チャンネルが埋まる。
+        GAME.md §2.11）。
         """
         found = []
         try:
             import pygame
-            # ゲームの音声が立ち上がる前に注入すると、ここは必ず失敗する
-            # （`pygame.error: mixer not initialized`）。**走査できないだけで
-            # 異常ではない** ― ミキサーが無いなら鳴っている音も無く、迷子の曲は
-            # 存在し得ない。例外にすると想定内の状態が毎回 ERROR とトレースバックで
-            # 出て、本物の失敗が埋もれる。
-            #
-            # `get_init()` で先に聞くのは、例外を握り潰すのと違って
-            # 「ミキサーが無い」と「走査が壊れた」を取り違えないため。
+            # ゲームの音声が立ち上がる前に注入すると、
+            # ここは必ず失敗する（`pygame.error: mixer not initialized`）。
+            # **走査できないだけで異常ではない**。
+            # ミキサーが無いなら鳴っている音も無く、迷子の曲は存在し得ない。
+            # 例外にすると想定内の状態が毎回 ERROR とトレースバックで出て、
+            # 本物の失敗が埋もれる。
+            # `get_init()` で先に聞くのは、
+            # 例外を握り潰すのと違って「ミキサーが無い」と「走査が壊れた」を取り違えないため。
             if pygame.mixer.get_init() is None:
                 if not state.get("mixer_absent_logged"):
                     state["mixer_absent_logged"] = True
@@ -286,9 +299,9 @@ def apply(ctx):
     def sweep(reason, trust_end=False, armed_at=0.0, prefer_area=False):
         """後始末。`trust_end` は「戦闘終了マネージャを抜けた直後」という意味。
 
-        フラグが当てにならない（`battle_running` 参照）ので、**戦闘が終わった
-        という事実はフックそのものから取る**。予約してから実際に見に行くまでの
-        間に次の戦闘が始まっていないかだけ、別途確かめる。
+        フラグが当てにならない（`battle_running` 参照）ので、**戦闘が終わったという事実はフックそのものから取る**。
+        予約してから実際に見に行くまでの間に次の戦闘が始まっていないかだけ、
+        別途確かめる。
         """
         app = find_app()
         if app is None:
@@ -300,13 +313,14 @@ def apply(ctx):
             return
         manager = state.get("manager") or getattr(app, "sound_manager", None)
         if getattr(manager, "is_fading", False):
-            # フェード中に切ると不自然に途切れる。少し待ってからやり直す。
+            # フェード中に切ると不自然に途切れる。
+            # 少し待ってからやり直す。
             arm(reason + " (retry after fade)", force=True, trust_end=trust_end,
                 prefer_area=prefer_area)
             return
 
-        # 注入以降に鳴らした曲は Sound から src を引ける。迷子が「戦闘曲」なのか
-        # 「戻すはずだったエリア曲」なのかは、これで見分ける。
+        # 注入以降に鳴らした曲は Sound から src を引ける。
+        # 迷子が「戦闘曲」なのか「戻すはずだったエリア曲」なのかは、これで見分ける。
         src_of = dict((id(e["sound"]), e["src"]) for e in state["tracks"]
                       if e["sound"] is not None)
         done = []
@@ -363,10 +377,11 @@ def apply(ctx):
                 except Exception:
                     ctx.log_exc("bgm restore: adoption failed")
 
-        # 4. 何も鳴らなくなったら、戦闘前の曲を **app 経由で** 鳴らし直す。
+        # 4. 何も鳴らなくなったら、戦闘前の曲を app 経由で 鳴らし直す。
         if done and not audible(getattr(app, "music", None)):
-            # 普段は「戦闘直前に鳴っていた曲」が正解。ただしロード直後は控えが
-            # 前のセッションのものなので、いま居るエリアの曲を優先する。
+            # 普段は「戦闘直前に鳴っていた曲」が正解。
+            # ただしロード直後は控えが前のセッションのものなので、
+            # いま居るエリアの曲を優先する。
             target = ((area_bgm(app) or state.get("restore")) if prefer_area
                       else (state.get("restore") or area_bgm(app)))
             if target and manager is not None:
@@ -391,7 +406,8 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("bgm restore: kivy Clock unavailable")
             return
-        # pygame を触るのはメインスレッドに寄せる。戦闘処理は別スレッドで走る。
+        # pygame を触るのはメインスレッドに寄せる。
+        # 戦闘処理は別スレッドで走る。
         Clock.schedule_once(
             lambda _dt: _guarded(reason, trust_end, now, prefer_area), RESTORE_DELAY)
 
@@ -406,7 +422,7 @@ def apply(ctx):
     # 他の2つも同じ後始末で構わないので、まとめて仕掛ける。
     # 戦闘が始まった／終わったという事実を、フックそのもので持つ。
     # 曲が鳴るのは `start_battle` を抜けた約1秒後（Clock 経由）なので、
-    # 開始は**入る前**に立てておかないと「戦闘外の戦闘曲」と誤判定する。
+    # 開始は入る前に立てておかないと「戦闘外の戦闘曲」と誤判定する。
     @ctx.wrap("__main__:BattleStartManager.start_battle", required=False)
     def start_battle(orig, self, *args, **kwargs):
         try:
@@ -421,8 +437,9 @@ def apply(ctx):
             result = orig(self, *args, **kwargs)
             try:
                 state["battle_active"] = False
-                # ここを抜けた ＝ 戦闘は終わった。フラグより確かな合図なので
-                # trust_end で渡し、`in_battle` の居残りに邪魔させない。
+                # ここを抜けた ＝ 戦闘は終わった。
+                # フラグより確かな合図なので trust_end で渡し、
+                # `in_battle` の居残りに邪魔させない。
                 arm(label, force=True, trust_end=True)
             except Exception:
                 ctx.log_exc("bgm restore: arm failed")
@@ -457,11 +474,11 @@ def apply(ctx):
     def heal_after_load(reason):
         """「フラグは戦闘中・敵は居ない」状態で鳴っている曲を、エリア曲に置き換える。
 
-        注入より前に鳴り始めた曲は src の控えが無く、正体が分からない。だが
-        ロード処理は `in_battle` を見て曲を選ぶ（`instantale.py:1458`＝戦闘 /
-        `:1460`＝エリア）ので、**残骸フラグのまま読み込まれたセーブでは戦闘曲が
-        鳴っている**。エリア曲で確実に置き換える。元から正しい曲だった場合は
-        同じ曲が鳴り直るだけで実害が無い。
+        注入より前に鳴り始めた曲は src の控えが無く、正体が分からない。
+        だがロード処理は `in_battle` を見て曲を選ぶ（`instantale.py:1458`＝戦闘 /
+        `:1460`＝エリア）ので、**残骸フラグのまま読み込まれたセーブでは戦闘曲が鳴っている**。
+        エリア曲で確実に置き換える。
+        元から正しい曲だった場合は同じ曲が鳴り直るだけで実害が無い。
         """
         app = find_app()
         enemies = getattr(app, "current_enemy_dict", None) if app is not None else None
@@ -493,13 +510,14 @@ def apply(ctx):
 
     # --------------------------------------------------------- 注入時の後始末
     # 迷子の曲はプロセスが終わるまで鳴り続ける（タイトルに戻っても残っていた）。
-    # 注入した時点で既に溜まっているぶんも掃除する ― 実際、最初の計測では
-    # 町に立っているだけで 8/8 チャンネルが埋まっていた。
+    # 注入した時点で既に溜まっているぶんも掃除する。
+    # 実際、最初の計測では町に立っているだけで 8/8 チャンネルが埋まっていた。
     if SWEEP_ON_BOOT:
         try:
             arm("injection", force=True)
-            # 残骸フラグの判定は**今この場で**行う。`107_` が後から適用されて
-            # フラグを下ろすので、2.5秒後に見に行くと判定できなくなる。
+            # 残骸フラグの判定は今この場で行う。
+            # `107_` が後から適用されてフラグを下ろすので、
+            # 2.5秒後に見に行くと判定できなくなる。
             boot_app = find_app()
             if boot_app is not None and stale_battle_flag(boot_app):
                 from kivy.clock import Clock

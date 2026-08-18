@@ -12,9 +12,10 @@
   名簿     … `app.party` が空でも `game_variables['party']` から読む
   見えない … `gain_exp` を通らない支給は WARN として必ず記録に残す
 
-**訓練の検出は `execute` を包んで立てる印で行う**ので、テストも
-`VacationTrainManager.execute` の**中から**経験値を入れる形にしてある
-（`player.gain_exp` を直接叩くと本番と違う経路になり、検出そのものを検証できない）。
+**訓練の検出は `execute` を包んで立てる印で行う**ので、
+テストも
+`VacationTrainManager.execute` の**中から**経験値を入れる形にしてある（`player.gain_exp` を直接叩くと本番と違う経路になり、
+検出そのものを検証できない）。
 
 このハーネスが最初に捕まえたのは mod 側の実バグ2件:
 
@@ -69,11 +70,11 @@ def check(name, cond, detail=""):
 
 
 # ---------------------------------------------------------------- 偽ゲーム
-# ここで定義したクラスは __main__ の属性になる。mod は
-# `getattr(sys.modules['__main__'], 名前)` で引くので、これで本番と同じ形になる。
-#
-# レベルの必要経験値は「レベル × 100」。実物の式は読めないが、この mod は式を
-# 使わない（`gain_exp` / `check_levelup` / `levelup` を呼ぶだけ）ので、
+# ここで定義したクラスは __main__ の属性になる。
+# mod は `getattr(sys.modules['__main__'], 名前)` で引くので、
+# これで本番と同じ形になる。
+# レベルの必要経験値は「レベル × 100」。
+# 実物の式は読めないが、この mod は式を使わない（`gain_exp` / `check_levelup` / `levelup` を呼ぶだけ）ので、
 # 単調に増える表なら何でも検証になる。
 EXP_PER_LEVEL = 100
 
@@ -81,8 +82,7 @@ EXP_PER_LEVEL = 100
 class Character:
     """`experience_level` / `experience_point` と経験値の3メソッドを持つ。
 
-    `self_leveling` を立てると **`gain_exp` の中でレベルまで上げる**ビルドを真似る
-    （mod がその上からさらに上げてしまわないことの検証用）。
+    `self_leveling` を立てると **`gain_exp` の中でレベルまで上げる**ビルドを真似る（mod がその上からさらに上げてしまわないことの検証用）。
     """
 
     def __init__(self, **kw):
@@ -135,8 +135,8 @@ class InstantaleApp:
 
 
 # 実機で観測した訓練1回の並び（GAME.md §2.17）。
-# **`gain_exp` はこの2行の間に来る** ― mod の文言がプレイヤーの獲得経験値より
-# 先に出ないことを、この順序で検証する。
+# **`gain_exp` はこの2行の間に来る** ―
+# mod の文言がプレイヤーの獲得経験値より先に出ないことを、この順序で検証する。
 NARRATION_TEXT = "テストプレイヤーはしばらくの期間を訓練に費やした..."
 EXP_TEXT = "156の経験値を得た。"
 
@@ -144,9 +144,10 @@ EXP_TEXT = "156の経験値を得た。"
 class VacationTrainManager:
     """宿屋で月日を訓練に充てる。**本命の経路。**
 
-    `give_to` に id を並べると、プレイヤーより先に**ゲーム自身が**その仲間へ
-    配ったことになる（二重取りを避けられるかの検証）。`direct` を立てると
-    `gain_exp` を通さず `experience_point` を直に書く（見えない支給の検証）。
+    `give_to` に id を並べると、
+    プレイヤーより先に**ゲーム自身が**その仲間へ配ったことになる（二重取りを避けられるかの検証）。
+    `direct` を立てると `gain_exp` を通さず
+    `experience_point` を直に書く（見えない支給の検証）。
     `silent` を立てると支給の後に1行も出さない（＝流す機会が来ないビルド）。
     """
 
@@ -222,10 +223,10 @@ class BattleEndManager:
         self.app.player.gain_exp(30)
 
 
-# **派生元は表に控える**（TECH.md §4.3）。`main.Character = 派生クラス` は
-# **このモジュールのグローバル名を書き換える** ― `__main__` はテスト自身なので、
-# 次の setup で `globals()["Character"]` から派生すると前のテストのフックが
-# 積み上がり、古い設定のまま動く mod が混ざる（実際にこれで6件赤くなった）。
+# **派生元は表に控える**（TECH.md §4.3）。
+# `main.Character = 派生クラス` は **このモジュールのグローバル名を書き換える** ―
+# `__main__` はテスト自身なので、次の setup で `globals()["Character"]` から派生すると前のテストのフックが積み上がり、
+# 古い設定のまま動く mod が混ざる（実際にこれで6件赤くなった）。
 BASES = {
     "app": InstantaleApp,
     "Character": Character,
@@ -283,7 +284,8 @@ class FakeCtx:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
-    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # ログは本物の `ctx.logger` をそのまま借りる。
+    # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
 
@@ -358,8 +360,8 @@ def setup(members=("71",), party=None, in_world=True, configure=None,
           self_leveling=False):
     """mod を適用し、仲間 `members` を連れた状態の app を返す。
 
-    設定は `configure` で **`apply()` の前に**入れること。見張る相手は `apply()`
-    の時点で決まる（本番でも設定の変更は再注入で効く）。
+    設定は `configure` で **`apply()` の前に**入れること。
+    見張る相手は `apply()` の時点で決まる（本番でも設定の変更は再注入で効く）。
     """
     clock = install_fake_kivy()
     main = sys.modules["__main__"]
@@ -377,8 +379,9 @@ def setup(members=("71",), party=None, in_world=True, configure=None,
     for name in MANAGER_NAMES:
         setattr(main, name, type(name, (BASES[name],), {}))
 
-    # `gain_exp` を包む対象は `scripts.characters:Character`。ゲームでは
-    # `__main__.Character` も同じクラスオブジェクトなので、偽の側も1つで通す。
+    # `gain_exp` を包む対象は `scripts.characters:Character`。
+    # ゲームでは `__main__.Character` も同じクラスオブジェクトなので、
+    # 偽の側も1つで通す。
     characters_module = types.ModuleType("scripts.characters")
     characters_module.Character = character_cls
     sys.modules["scripts.characters"] = characters_module

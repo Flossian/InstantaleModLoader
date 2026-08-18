@@ -1,19 +1,21 @@
 # -*- coding: utf-8 -*-
-"""ゲームのデータを読む部品。**この MOD の方針は持たない。**
+"""ゲームのデータを読む部品。この MOD の方針は持たない。
 
 ここに置いてあるのは「Instantale がどこに何を持っているか」だけで、
-どう使うか（難易度の決め方・断る条件・文言）は入口の
-`area_move_dungeon.py` にある。設定（`mod.json` から変えられる値）も
-入口の定数なので、ここでは読まない。必要な値は引数で受け取る。
+どう使うか（難易度の決め方・断る条件・文言）は入口の `area_move_dungeon.py` にある。
+設定（`mod.json` から変えられる値）も入口の定数なので、ここでは読まない。
+必要な値は引数で受け取る。
 
-根拠は全て実測。詳細は GAME.md（§2.7 世界のデータ / §2.9 クエスト /
-§2.18 エリア移動 / §2.19 体力）。
+根拠は全て実測。
+詳細は GAME.md（§2.7 世界のデータ / §2.9 クエスト / §2.18 エリア移動 /
+§2.19 体力）。
 """
 
 import sys
 
 from instantale_modloader import ui
-# 世界の見分け方はローダの語彙。ここで再輸出して `world.world_key(app)` を保つ。
+# 世界の見分け方はローダの語彙。
+# ここで再輸出して `world.world_key(app)` を保つ。
 from instantale_modloader.state import world_key
 
 
@@ -34,10 +36,11 @@ id_sort = ui.id_sort_key
 def current_quest_id(app):
     """ゲームがいま進めているクエストの id。無ければ None。
 
-    **これがゲーム自身の答え。** `QuestStartManager` を捕まえられなくても
-    （注入し直しをまたいだ場合など）、これを見れば道中のクエストの最中か
-    どうかが分かる。`app.current_quest_data` はクエスト中だけ `Quest` が
-    入り、それ以外は None（`206_` の記録で確認済み）。
+    これがゲーム自身の答え。
+    `QuestStartManager` を捕まえられなくても（注入し直しをまたいだ場合など）、
+    これを見れば道中のクエストの最中かどうかが分かる。
+    `app.current_quest_data` はクエスト中だけ `Quest` が入り、
+    それ以外は None（`206_` の記録で確認済み）。
     """
     quest = getattr(app, "current_quest_data", None) if app is not None else None
     if quest is None:
@@ -57,11 +60,11 @@ def area_name(area, fallback="", limit=40):
 
 
 def area_level(app, area, write, label, minimum=1):
-    """その土地の難易度。**ゲーム自身のヘルパに聞く。**
+    """その土地の難易度。ゲーム自身のヘルパに聞く。
 
     引けなかったときは依頼の難易度の平均へ、それも無ければ `minimum` へ落ちる。
-    落ちたことは必ず残す（黙って 1 になると「妙に楽な道」になるだけで
-    原因が分からない）。
+    落ちたことは必ず残す（黙って
+    1 になると「妙に楽な道」になるだけで原因が分からない）。
     """
     world = getattr(app, "world", None)
     functions = sys.modules.get("scripts.functions")
@@ -95,10 +98,12 @@ def area_level(app, area, write, label, minimum=1):
 
 
 # --------------------------------------------------------------- クエスト
-# クエストは2箇所にある。**書くときは必ず両方**（GAME.md §2.9）。
-# クエストは2箇所にある（`206_` の計測）。読むのはどちらでもよいが、
-# **書くときは必ず両方**。その作法はローダに集約してある（`301_` / `305_` と
-# 共有。TECH.md §3.2.3）。ここで再輸出して `world.quest_ids(app)` の書き方を保つ。
+# クエストは2箇所にある。
+# 書くときは必ず両方（GAME.md §2.9）。
+# クエストは2箇所にある（`206_` の計測）。
+# 読むのはどちらでもよいが、書くときは必ず両方。
+# その作法はローダに集約してある（`301_` / `305_` と共有。TECH.md §3.2.3）。
+# ここで再輸出して `world.quest_ids(app)` の書き方を保つ。
 quest_stores = ui.quest_stores
 quest_ids = ui.quest_ids
 quest_of = ui.quest_of
@@ -106,11 +111,12 @@ quest_value = ui.quest_value
 
 
 def append_quest_value(app, quest_id, name, suffix, mark=None, on_error=None):
-    """各格納先の文字列の**末尾に足す**。書けた数を返す。
+    """各格納先の文字列の末尾に足す。書けた数を返す。
 
-    `mark` を含んでいる格納先は飛ばすので、何度呼んでも二重に足さない
-    （生成の直後は片方の格納先にしか居ないことがあり、受注の時点でもう一度
-    呼ぶため。GAME.md §2.9）。文字列でない値には触らない。
+    `mark` を含んでいる格納先は飛ばすので、
+    何度呼んでも二重に足さない（生成の直後は片方の格納先にしか居ないことがあり、
+    受注の時点でもう一度呼ぶため。GAME.md §2.9）。
+    文字列でない値には触らない。
     """
     written = 0
     for store in quest_stores(app):
@@ -140,7 +146,7 @@ def append_quest_value(app, quest_id, name, suffix, mark=None, on_error=None):
 
 
 def strip_quest_value(app, quest_id, name, mark, on_error=None):
-    """`append_quest_value` で足した末尾を**取り除く**。消した数を返す。
+    """`append_quest_value` で足した末尾を取り除く。消した数を返す。
 
     足すのは必ず末尾なので、目印から後ろを丸ごと落とせば元の文に戻る。
     目印を含まない格納先は飛ばすので、何度呼んでも安全。
@@ -189,8 +195,9 @@ def set_quest_value(app, quest_id, name, value, on_error=None):
 def move_options(buttons):
     """確認画面に並ぶ `AreaMoveManager` のボタンを `(entry, args)` で返す。
 
-    **`args` は読むだけ**。`[target_area_id, mode]` という並びは
-    `targets.txt` のシグネチャそのもので、値の意味は解釈しない。
+    `args` は読むだけ。
+    `[target_area_id, mode]` という並びは `targets.txt` のシグネチャそのもので、
+    値の意味は解釈しない。
     """
     found = []
     if not isinstance(buttons, (list, tuple)):
@@ -224,7 +231,7 @@ def pick_option(options, known_modes, words, first):
 
 
 # --------------------------------------------------------------- 体力
-# `Character.physical_integrity` / `max_physical_integrity`。**実測で確定**
+# `Character.physical_integrity` / `max_physical_integrity`。実測で確定
 # （GAME.md §2.19）:
 #
 #   physical_integrity  100 -> 50 -> 0        道を行くたびに減る

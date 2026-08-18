@@ -2,19 +2,22 @@
 """pydantic モデルが組み立てられる、まさにその瞬間に空 `Literal[]` を捕らえる。
 
 scripts.llm.llm_manager は `Literal = typing.Literal` と pydantic の
-`create_model` の両方を import している。つまり構造化出力のスキーマは、呼び出し
-側がたまたま持っていたリストから実行時に組み立てられる。そして
+`create_model` の両方を import している。
+つまり構造化出力のスキーマは、
+呼び出し側がたまたま持っていたリストから実行時に組み立てられる。
+そして
 
     AssertionError: literal "expected" cannot be empty, obj=typing.Literal[]
 
-は、選択肢のない `Literal` を pydantic が拒否したものである。元のトレースバックは
-`_literal_schema` の前に `_list_schema` を通っていたので、問題のアノテーションは
-入れ子（`List[Literal[...]]` のような形）だと分かる。下の走査が最上位だけを見ず
-`__args__` を再帰するのはこのためである。
+は、選択肢のない `Literal` を pydantic が拒否したものである。
+元のトレースバックは `_literal_schema` の前に `_list_schema` を通っていたので、
+問題のアノテーションは入れ子（`List[Literal[...]]` のような形）だと分かる。
+下の走査が最上位だけを見ず `__args__` を再帰するのはこのためである。
 
-create_model を包むと、検出器が障害地点そのものに置かれる: pydantic 内部の
-トレースバックだけが残ってゲーム側の文脈が失われる代わりに、モデル名・フィー
-ルド名・呼び出し元フレームが名指しされる。成功した呼び出しも記録するので、
+create_model を包むと、検出器が障害地点そのものに置かれる:
+pydantic 内部のトレースバックだけが残ってゲーム側の文脈が失われる代わりに、
+モデル名・フィールド名・呼び出し元フレームが名指しされる。
+成功した呼び出しも記録するので、
 クラッシュしていないときの正常なスキーマの形も記録に残る。
 
 読み取り専用: アノテーションは検査するだけで一切変更せず、例外はそのまま再送出する。
@@ -110,10 +113,10 @@ def apply(ctx):
                     break     # スタックの底に到達
                 code = frame.f_code
                 if "llm_manager" in code.co_filename or "instantale.py" in code.co_filename:
-                    # **関数名だけでは足りない。** `method_1` / `execute` のような
-                    # 名前は多くのマネージャが共有しているので、同じコード
-                    # オブジェクトを持つクラスを探して持ち主まで名指しする
-                    # （`302_` で確立。ここへ反映した）。
+                    # 関数名だけでは足りない。
+                    # `method_1` / `execute` のような名前は多くのマネージャが共有しているので、
+                    # 同じコードオブジェクトを持つクラスを探して持ち主まで名指しする（`302_` で確立。
+                    # ここへ反映した）。
                     write("    built by {}:{} in {}".format(
                         code.co_filename, frame.f_lineno,
                         owner_of(code) or code.co_name))
@@ -121,7 +124,8 @@ def apply(ctx):
                         write("      {:<22} = {}".format(key, repr_value(value)))
                     break
         else:
-            # 正常時の形も記録する。異常時に比較する基準が無いと判断できない。
+            # 正常時の形も記録する。
+            # 異常時に比較する基準が無いと判断できない。
             write("create_model({!r}): {}".format(model_name, "; ".join(summary) or "no fields"))
 
         return orig(model_name, *args, **field_definitions)

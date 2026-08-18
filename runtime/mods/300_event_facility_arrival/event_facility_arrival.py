@@ -9,9 +9,10 @@
     EVENT_MODE = "conversation"   ゲーム本来の会話フェーズを開始する（既定）
     EVENT_MODE = "narration"      情景描写に NPC のセリフを1行足すだけ
 
-**conversation** は、プレイヤーが「会話する」→ NPC を選んだときと**同じ経路**を
-こちらから起こす。したがって立ち絵の表示・会話履歴・関係値の更新・会話の終了処理は
-全てゲーム本来の実装がそのまま動く。ゲーム本来の経路（GAME.md §2.5）:
+conversation は、プレイヤーが「会話する」→
+NPC を選んだときと同じ経路をこちらから起こす。
+したがって立ち絵の表示・会話履歴・関係値の更新・会話の終了処理は全てゲーム本来の実装がそのまま動く。
+ゲーム本来の経路（GAME.md §2.5）:
 
 ```
 process_choice(DisplayTalkChoice,        choice_text='会話する')
@@ -19,16 +20,19 @@ process_choice(ConversationStartManager, choice_text='マナ')      ← NPC を�
 process_choice(ConversationEndManager,   choice_text='会話を終了する')
 ```
 
-つまり `app.process_choice(ConversationStartManager(app, npc_id), npc_name)` が
-「その NPC のボタンを押した」に相当する。`DisplayTalkChoice`（NPC 一覧の表示）は
-挟まない。こちらが相手を決めているため。
+つまり `app.process_choice(ConversationStartManager(app, npc_id), npc_name)` が「その
+NPC のボタンを押した」に相当する。
+`DisplayTalkChoice`（NPC 一覧の表示）は挟まない。
+こちらが相手を決めているため。
 
-**narration** は自前で LLM を1回呼んで情景描写に1行足すだけの軽い方。立ち絵も
-会話モードも無いが LLM 1回で済む。conversation が合わない場面用に用意してある。
+narration は自前で LLM を1回呼んで情景描写に1行足すだけの軽い方。
+立ち絵も会話モードも無いが LLM 1回で済む。
+conversation が合わない場面用に用意してある。
 
 ## いつ発火させるか
 
-`__main__:MovePhaseManager.move_phase` の**復帰後**。この関数の構造（GAME.md §2.6）:
+`__main__:MovePhaseManager.move_phase` の復帰後。
+この関数の構造（GAME.md §2.6）:
 
 ```
 process_choice(MovePhaseManager, ...)    ボタン押下
@@ -37,13 +41,14 @@ process_choice(MovePhaseManager, ...)    ボタン押下
   move_phase 復帰                        ← ここで到着が確定している
 ```
 
-narrator が **`move_phase` の内側**にあるので、印を復帰後に置くと**1手ずれる**
-（回収するのは次の移動の narrator になる）。narration モードでは印を `orig` の
-**前**に置いて、入れ子の narrator に回収させる。
+narrator が **`move_phase` の内側**にあるので、
+印を復帰後に置くと1手ずれる（回収するのは次の移動の narrator になる）。
+narration モードでは印を `orig` の前に置いて、入れ子の narrator に回収させる。
 
-会話フェーズの開始は、移動の後始末（テキストの流し込み・ボタンの張り替え）が
-終わってからでないと噛み合わない。そこで Kivy の Clock で
-`is_adding_text` / `is_button_enabled` を見張り、**手が空いた時点で**押す。
+会話フェーズの開始は、
+移動の後始末（テキストの流し込み・ボタンの張り替え）が終わってからでないと噛み合わない。
+そこで Kivy の Clock で `is_adding_text` / `is_button_enabled` を見張り、
+手が空いた時点で押す。
 これは「テキストが出終わってからプレイヤーがボタンを押す」のと同じ状況になる。
 
 ## その時点で読める情報（GAME.md §2.7）
@@ -54,14 +59,16 @@ narrator が **`move_phase` の内側**にあるので、印を復帰後に置�
 
 ## 発生率
 
-施設種別ごとに `CHANCE_INN` / `CHANCE_GUILD` / … があり、**0 にすればその種別では
-出なくなる**。`CHANCE_OVERRIDE` が None でなければそちらを全施設に使う（動作確認用）。
-どれも `mod.json` から変えられる。乱数はこの mod 専用の
-`random.Random` を使う。グローバルから引くとゲーム自身の乱数列がずれるため
-（104_balance_area_bgm.py と同じ方針）。
+施設種別ごとに `CHANCE_INN` / `CHANCE_GUILD` /
+… があり、**0 にすればその種別では出なくなる**。
+`CHANCE_OVERRIDE` が None でなければそちらを全施設に使う（動作確認用）。
+どれも `mod.json` から変えられる。
+乱数はこの mod 専用の `random.Random` を使う。
+グローバルから引くとゲーム自身の乱数列がずれるため（104_balance_area_bgm.py と同じ方針）。
 
-**この % は「その施設に入った1回あたり」**の値。同じ施設で続けて出ないように、
-発火した施設は `COOLDOWN_VISITS` 回ぶん訪問を挟むまで抽選しない。
+**この % は「その施設に入った1回あたり」**の値。
+同じ施設で続けて出ないように、発火した施設は
+`COOLDOWN_VISITS` 回ぶん訪問を挟むまで抽選しない。
 """
 
 import random
@@ -75,15 +82,17 @@ LOG_BASENAME = "player_events.log"
 # "conversation"（立ち絵つきの会話フェーズ） / "narration"（1行だけ足す）
 EVENT_MODE = "conversation"
 
-# 施設種別ごとの発生率。**0 にするとその種別では出なくなる。**
-# ここに項目が無い種別（'ward' / 'location' / 'entrance' / 'exit' ＝ 主のいない
-# 通路）では発生しない。
-#
-# 表（dict）ではなく **1種別1定数** にしてあるのは、`mod.json` の "settings" で
-# 宣言できる型が bool/int/float/str/choice だけだから（config.py）。辞書のままだと
-# GUI から触れず、「プレイヤーの体験に関わる設定は mod.json に置く」方針から外れる。
-# 施設種別はセーブの `facility_type` そのもので、ゲーム側で閉じた集合なので
-# 1つずつ並べても増えない。
+# 施設種別ごとの発生率。
+# 0 にするとその種別では出なくなる。
+# ここに項目が無い種別（'ward' / 'location' / 'entrance' /
+# 'exit' ＝ 主のいない通路）では発生しない。
+# 表（dict）ではなく 1種別1定数 にしてあるのは、
+# `mod.json` の "settings" で宣言できる型が
+# bool/int/float/str/choice だけだから（config.py）。
+# 辞書のままだと GUI から触れず、「プレイヤーの体験に関わる設定は
+# mod.json に置く」方針から外れる。
+# 施設種別はセーブの `facility_type` そのもので、
+# ゲーム側で閉じた集合なので 1つずつ並べても増えない。
 CHANCE_INN = 0.50
 CHANCE_GUILD = 0.30
 CHANCE_GENERAL_STORE = 0.25
@@ -93,19 +102,21 @@ CHANCE_MEDICAL_FACILITY = 0.20
 CHANCE_ADMINISTRATIVE_OFFICE = 0.25
 CHANCE_UNDERWORLD_OFFICE = 0.20
 
-# None なら上の表を使う。数値ならその確率を全施設種別に適用する（動作確認用）。
-# **確認が済んだら None に戻すこと。**
-#CHANCE_OVERRIDE = 1.0
+# None なら上の表を使う。
+# 数値ならその確率を全施設種別に適用する（動作確認用）。
+# 確認が済んだら None に戻すこと。
+# CHANCE_OVERRIDE = 1.0
 CHANCE_OVERRIDE = None
 
-# 同じ施設で続けて出さない間隔。**その施設に入った回数**で数える。
+# 同じ施設で続けて出さない間隔。
+# その施設に入った回数で数える。
 # 2 なら「出た後、その施設に2回入るまでは出さない」（＝ 3回に1回まで）。
-#
-# 元は移動回数で数えていたが（`COOLDOWN_MOVES = 3`）、それだと出入りするだけで
-# 抜けてしまい、**同じ施設で繰り返し出る**という体感になっていた。実際、同じ宿の
-# 同じ NPC が1日に3回発火していた（ログの `roll 0.23 / 0.02 / 0.17`）。
+# 元は移動回数で数えていたが（`COOLDOWN_MOVES = 3`）、
+# それだと出入りするだけで抜けてしまい、
+# 同じ施設で繰り返し出るという体感になっていた。
+# 実際、同じ宿の同じ NPC が1日に3回発火していた（ログの
+# `roll 0.23 / 0.02 / 0.17`）。
 # 数える単位を「その施設への訪問」に変えると、間隔がそのまま訪問回数で決まる。
-#
 # 0 にすると間引かない（入るたびに抽選する）。
 COOLDOWN_VISITS = 2
 
@@ -126,23 +137,27 @@ MAX_TOKENS = 256
 MAX_CHARS = 300
 PENDING_TTL = 90.0
 
-# セリフ1本にかける上限（秒）。**必ず渡す。** ゲーム側の既定は無期限で、
-# ここは narrator の中＝情景描写のスレッドなので、返らないと画面ごと止まる。
+# セリフ1本にかける上限（秒）。
+# 必ず渡す。
+# ゲーム側の既定は無期限で、ここは narrator の中＝情景描写のスレッドなので、
+# 返らないと画面ごと止まる。
 LINE_TIMEOUT = 30.0
 
-# ここが真の間はイベントを出さない ― 戦闘中・会話中など。
-# 「手が空いているか」（テキストの流し込み中・操作を受け付けていない・
-# ポップアップが開いている）の判定は `ui.IDLE_SIGNALS` 側にあり、そちらは
-# `301_` / `302_` も使う。ここは**イベントを出す前提が崩れている状態**の一覧。
+# ここが真の間はイベントを出さない。
+# 戦闘中・会話中など。
+# 「手が空いているか」（テキストの流し込み中・操作を受け付けていない・ポップアップが開いている）の判定は `ui.IDLE_SIGNALS` 側にあり、
+# そちらは `301_` / `302_` も使う。
+# ここは**イベントを出す前提が崩れている状態**の一覧。
 BUSY_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle",
               "in_conversation", "in_free_input",
               "in_action_in_conversation")
 
-# `in_shopping` はここに**入れない**。店の外をただ往復しているだけの移動でも
-# True のままなので、「買い物中か」の信号としては当てにならない ― これを見ていると
-# 店系の施設でイベントがほとんど出なくなる。買い物窓が開いている状態は
-# `is_popup_window_opened`
-# （会話を始める直前に見る）で弾ける。
+# `in_shopping` はここに入れない。
+# 店の外をただ往復しているだけの移動でも True のままなので、
+# 「買い物中か」の信号としては当てにならない。
+# これを見ていると店系の施設でイベントがほとんど出なくなる。
+# 買い物窓が開いている状態は
+# `is_popup_window_opened`（会話を始める直前に見る）で弾ける。
 
 LANGUAGE_NAMES = {"japanese": "日本語", "english": "英語"}
 
@@ -163,7 +178,8 @@ def _text_of(value, limit=400):
 
 def apply(ctx):
     log_path = ctx.out_path(LOG_BASENAME)
-    # この mod 専用の乱数源。ゲーム自身の乱数列に影響を与えないため。
+    # この mod 専用の乱数源。
+    # ゲーム自身の乱数列に影響を与えないため。
     rng = random.Random()
     state = {
         "pending": None,      # narration モード: 入れ子の narrator が回収する印
@@ -176,17 +192,18 @@ def apply(ctx):
 
     write = ctx.logger(LOG_BASENAME)
 
-    # 選択肢まわりと「手が空くのを待つ」は `instantale_modloader.ui` に集約
-    # してある（`301_` / `302_` と共有）。この mod で確立した
-    # 「移動の後始末が終わってから押す」も、会話の終了処理の後始末に同じ形で
-    # 効くので、そちらから使えるようにそこへ移した。
+    # 選択肢まわりと「手が空くのを待つ」は
+    # `instantale_modloader.ui` に集約してある（`301_` / `302_` と共有）。
+    # この mod で確立した「移動の後始末が終わってから押す」も、
+    # 会話の終了処理の後始末に同じ形で効くので、そちらから使えるようにそこへ移した。
     screen = ui.Screen(ctx, write, tag="arrival event")
     find_app = ui.find_app
 
-    # 施設種別ごとの発生率を表に組み直す。**ここ（apply の中）で組むこと** ―
-    # 設定の反映はモジュールのグローバルへの書き込みで、それが済むのは
-    # apply() を呼ぶ直前だから（config.apply_to_module）。モジュールの
-    # トップレベルで組むと、利用者が選んだ値ではなく既定値の表になる。
+    # 施設種別ごとの発生率を表に組み直す。
+    # **ここ（apply の中）で組むこと**。
+    # 設定の反映はモジュールのグローバルへの書き込みで、
+    # それが済むのは apply() を呼ぶ直前だから（config.apply_to_module）。
+    # モジュールのトップレベルで組むと、利用者が選んだ値ではなく既定値の表になる。
     chance_table = {
         "inn": CHANCE_INN,
         "guild": CHANCE_GUILD,
@@ -208,9 +225,9 @@ def apply(ctx):
     def is_at(character, facility):
         """NPC の現在地が対象施設なら True を返す。
 
-        現在地を読めない相手は施設の名簿を信じて True に倒す。名簿にしか
-        居場所が無い NPC を弾くと、話者が一人も選ばれずイベント自体が
-        出なくなる。
+        現在地を読めない相手は施設の名簿を信じて True に倒す。
+        名簿にしか居場所が無い NPC を弾くと、
+        話者が一人も選ばれずイベント自体が出なくなる。
         """
         here = getattr(character, "location", None)
         if here is None:
@@ -251,8 +268,9 @@ def apply(ctx):
         if app is None:
             return None
 
-        # 「そもそも出しうる場所か」を先に見る。通路（対象外）での不発まで
-        # 記録するとログが読めなくなるので、ここまでは黙って落とす。
+        # 「そもそも出しうる場所か」を先に見る。
+        # 通路（対象外）での不発まで記録するとログが読めなくなるので、
+        # ここまでは黙って落とす。
         facility = getattr(getattr(app, "player", None), "location", None)
         if facility is None:
             return None
@@ -263,7 +281,8 @@ def apply(ctx):
             return None
         where = "{} ({})".format(getattr(facility, "name", ""), facility_type)
 
-        # ここまで来た＝この施設に入った。間引きはこの回数で数える。
+        # ここまで来た＝この施設に入った。
+        # 間引きはこの回数で数える。
         visits = state["visits"].get(facility_id, 0) + 1
         state["visits"][facility_id] = visits
 
@@ -273,7 +292,8 @@ def apply(ctx):
                 where, visits - last, COOLDOWN_VISITS))
             return None
 
-        # 状態の判定は施設が決まってから。どこで何に邪魔されたのかが分かる。
+        # 状態の判定は施設が決まってから。
+        # どこで何に邪魔されたのかが分かる。
         busy = [flag for flag in BUSY_FLAGS if getattr(app, flag, False)]
         if busy:
             write("skip: {} busy {}".format(where, busy))
@@ -306,9 +326,11 @@ def apply(ctx):
     def launch_conversation(app, facility, npc_id, npc):
         """「その NPC のボタンを押した」のと同じことをする。
 
-        押すのは *今すぐ* ではない。移動の後始末（テキストの流し込み・ボタンの
-        張り替え）の最中に割り込むと噛み合わないので、手が空くまで待つ。
-        待ち合わせは Kivy の Clock で行う。ゲーム自身が UI を触るのと同じ土俵。
+        押すのは *今すぐ* ではない。
+        移動の後始末（テキストの流し込み・ボタンの張り替え）の最中に割り込むと噛み合わないので、
+        手が空くまで待つ。
+        待ち合わせは Kivy の Clock で行う。
+        ゲーム自身が UI を触るのと同じ土俵。
         """
         main = sys.modules.get("__main__")
         manager_cls = getattr(main, "ConversationStartManager", None) if main else None
@@ -353,11 +375,11 @@ def apply(ctx):
                 ctx.log_exc("launch: process_choice failed")
                 state["rephrase"] = None
 
-        # 手が空くまで待ってから押す。ここで確立した「移動の後始末
-        # （テキストの流し込み・ボタンの張り替え）の最中に割り込むと噛み合わない」
-        # は `ui.Screen.when_idle` に移してあり、会話の終了処理の後始末でも
-        # 同じものが使われている。**待ちきれなければ諦める**のがこちらの流儀
-        # （イベントは出さなくてよいもので、遅れて出すと場面が変わっている）。
+        # 手が空くまで待ってから押す。
+        # ここで確立した「移動の後始末（テキストの流し込み・ボタンの張り替え）の最中に割り込むと噛み合わない」は `ui.Screen.when_idle` に移してあり、
+        # 会話の終了処理の後始末でも同じものが使われている。
+        # 待ちきれなければ諦めるのがこちらの流儀（イベントは出さなくてよいもので、
+        # 遅れて出すと場面が変わっている）。
         screen.when_idle(app, start, timeout=IDLE_TIMEOUT, settle=IDLE_SETTLE,
                          poll=IDLE_POLL, cancel_if=gone, tag="launch")
 
@@ -440,10 +462,10 @@ def apply(ctx):
     def generate_line(app, facility, npc):
         """セリフを1本作る。作れなければ None（＝情景描写に何も足さない）。
 
-        送信モジュールは名指ししない ― プロバイダごとに違ううえ、名前を並べた
-        一覧は増えた時点で古くなる（`llama_cpp` と `any_server` しか知らないまま、
-        Gemini / OpenAI / Claude では毎回空振りしていた）。`llm.ask` が
-        `llm_manager` の別名から引く（TECH.md §5.3）。
+        送信モジュールは名指ししない。
+        プロバイダごとに違ううえ、名前を並べた一覧は増えた時点で古くなる（`llama_cpp` と `any_server` しか知らないまま、Gemini /
+        OpenAI / Claude では毎回空振りしていた）。
+        `llm.ask` が `llm_manager` の別名から引く（TECH.md §5.3）。
         """
         result = llm.ask(ctx, MANAGER_NAME, build_messages(app, facility, npc),
                          timeout=LINE_TIMEOUT, max_tokens=MAX_TOKENS,
@@ -458,8 +480,8 @@ def apply(ctx):
         """戻り値からセリフ1つを取り出す。
 
         `send_request_with_no_structure` は str を返す（実機で確認済み）。
-        それでも型を決め打ちしないのは、モデルが地の文を足してくることが
-        あるため。最初の非空行だけを採り、鉤括弧が無ければ付ける。
+        それでも型を決め打ちしないのは、モデルが地の文を足してくることがあるため。
+        最初の非空行だけを採り、鉤括弧が無ければ付ける。
         """
         if not isinstance(result, str):
             result = "" if result is None else str(result)
@@ -499,7 +521,8 @@ def apply(ctx):
     def move_phase(orig, self, *args, **kwargs):
         state["move_count"] += 1
         if EVENT_MODE == "narration":
-            # 情景描写は move_phase の *内側* で呼ばれる。だから印は先に置く。
+            # 情景描写は move_phase の *内側* で呼ばれる。
+            # だから印は先に置く。
             state["pending"] = {"at": time.monotonic(), "move_no": state["move_count"]}
         result = orig(self, *args, **kwargs)
         state["pending"] = None
@@ -603,9 +626,10 @@ def apply(ctx):
             except Exception:
                 ctx.log_exc("arrival event: selftest failed")
 
-        # **`on_ready` に預ける**（TECH.md §3.6）。`apply()` は再注入と遅延
-        # 当て直しで最大8回走るので、ここで直に起こすと**そのたびに LLM を
-        # 1回呼ぶ**。1回きりの副作用は印を付けて1回に畳む。
+        # **`on_ready` に預ける**（TECH.md §3.6）。
+        # `apply()` は再注入と遅延当て直しで最大8回走るので、
+        # ここで直に起こすと**そのたびに LLM を 1回呼ぶ**。
+        # 1回きりの副作用は印を付けて1回に畳む。
         ctx.on_ready(lambda: threading.Thread(
             target=_run, name="instantale_mod.arrival_selftest",
             daemon=True).start(), key="300_event_facility_arrival:selftest")

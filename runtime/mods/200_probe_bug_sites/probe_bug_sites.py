@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 """未解決の4つのクラッシュ地点を、失敗時だけでなく毎回計測する。
 
-**再現を待つのは筋が悪い。** これらは数回しか発火しない稀なクラッシュで、
-何セッション遊んでも起きないことがある。そこで各地点をラップし、*成功した*
-呼び出しの時点で既にデータの形が分かるようにする。4つのうち2つは、二度と
-クラッシュを見ないまま決着できる見込みが高い:
+再現を待つのは筋が悪い。
+これらは数回しか発火しない稀なクラッシュで、何セッション遊んでも起きないことがある。
+そこで各地点をラップし、
+*成功した* 呼び出しの時点で既にデータの形が分かるようにする。
+4つのうち2つは、二度とクラッシュを見ないまま決着できる見込みが高い:
 
   get_npc_employ_price(npc_difficulty_level) -> KeyError: 80
       引数は難易度レベルで、失敗したキーは int。つまりティア表にエントリが
@@ -18,11 +19,13 @@
       len(npc_list) を記録すれば1セッションで確認も否定もできる。
 
 残り2つは失敗した呼び出しそのものが要る: `generate_npc_detail`（KeyError '52'、
-*文字列* キー。`get_npc_employ_price` の int と対照的）と
-`FreeInputStart.method`（facility_move_to への AttributeError）。どちらも例外時に
-状態を全部ダンプする。
+*文字列* キー。`get_npc_employ_price` の int と対照的）と `FreeInputStart.method`（facility_move_to への
+AttributeError）。
+どちらも例外時に状態を全部ダンプする。
 
-何も握り潰さない。例外はログしてから再送出する。この mod は観測するだけ。
+何も握り潰さない。
+例外はログしてから再送出する。
+この mod は観測するだけ。
 """
 
 import sys
@@ -73,11 +76,11 @@ def apply(ctx):
 
     # ---------------------------------------------------------------------
     # 一発計測: get_npc_employ_price の有効な定義域を割り出す。
-    #
     # この関数は int の難易度レベルを取って int の価格を返し、self を取らず、
-    # 観測できる副作用も無い（実際に 45 を渡したら 1974 が返った）。範囲を
-    # 総当たりで走査すれば「KeyError: 80」は推測ではなく、表が実際にカバーして
-    # いるレベルの正確な集合に変わる ― 再現を待つ必要が無い。
+    # 観測できる副作用も無い（実際に 45 を渡したら 1974 が返った）。
+    # 範囲を総当たりで走査すれば「KeyError: 80」は推測ではなく、
+    # 表が実際にカバーしているレベルの正確な集合に変わる。
+    # 再現を待つ必要が無い。
     # ---------------------------------------------------------------------
     def sweep_employ_price():
         functions = sys.modules.get("scripts.functions")
@@ -101,7 +104,8 @@ def apply(ctx):
             len(ok), len(failed)))
         if ok:
             levels = sorted(ok)
-            # 連続かどうかが重要 ― 飛び飛びなら「表の穴」、連続なら「上限」。
+            # 連続かどうかが重要。
+            # 飛び飛びなら「表の穴」、連続なら「上限」。
             write("  valid levels   : {}..{} (contiguous={})".format(
                 levels[0], levels[-1], levels == list(range(levels[0], levels[-1] + 1))))
             sample = {lv: ok[lv] for lv in levels[:8] + levels[-8:]}
@@ -117,9 +121,10 @@ def apply(ctx):
     def sweep_clamp():
         """ゲーム自身のクランプは、どこまでを正当な難易度とみなしているか?
 
-        scripts.functions は clamp_npc_difficulty_value() を公開している。その
-        上限が価格表の最終ティア（76）と一致するなら、価格参照は他のコードが
-        既に適用しているクランプを単に通していないだけ、ということになる。
+        scripts.functions は clamp_npc_difficulty_value() を公開している。
+        その上限が価格表の最終ティア（76）と一致するなら、
+        価格参照は他のコードが既に適用しているクランプを単に通していないだけ、
+        ということになる。
         つまり修正はゲーム自身のルールであって、こちらの発明ではなくなる。
         """
         functions = sys.modules.get("scripts.functions")
@@ -168,7 +173,8 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("probe: constants dump failed for {}".format(mod_name))
 
-    # 一発計測: 参照表はモジュールのグローバルにあり、どのフレームのローカルにも無い。
+    # 一発計測: 参照表はモジュールのグローバルにあり、
+    # どのフレームのローカルにも無い。
     dump_module_dicts("scripts.functions", "startup snapshot:")
     dump_module_dicts("scripts.data_tables", "startup snapshot:")
 
@@ -178,7 +184,8 @@ def apply(ctx):
         try:
             result = orig(npc_difficulty_level, *args, **kwargs)
         except Exception as exc:
-            # 失敗時は引数の値と *型* を残す。'52'(str) と 80(int) の区別が争点。
+            # 失敗時は引数の値と *型* を残す。'
+            # 52'(str) と 80(int) の区別が争点。
             write("get_npc_employ_price(npc_difficulty_level={!r} [{}]) FAILED".format(
                 npc_difficulty_level, type(npc_difficulty_level).__name__))
             on_error("get_npc_employ_price", exc)
@@ -195,7 +202,8 @@ def apply(ctx):
     def summarizer(orig, player, player_life_log, worldview, npc_list, *args, **kwargs):
         write("master_ai_process_summarizer_in_conversation: npc_list={}".format(
             repr_value(npc_list)))
-        # 空なら成功していても警告する ― これが Literal[] を生む条件だから。
+        # 空なら成功していても警告する。
+        # これが Literal[] を生む条件だから。
         if not npc_list:
             write("   ^^ npc_list is EMPTY -- this is the Literal[] condition")
         try:
@@ -218,7 +226,8 @@ def apply(ctx):
     @ctx.wrap("__main__:ConversationStartManager.generate_npc_detail_and_ready",
               required=False)
     def generate_npc_detail_and_ready(orig, self, *args, **kwargs):
-        # 呼び出し元側。トレースバックの上段を押さえるためだけに包む。
+        # 呼び出し元側。
+        # トレースバックの上段を押さえるためだけに包む。
         try:
             return orig(self, *args, **kwargs)
         except Exception as exc:
@@ -229,13 +238,13 @@ def apply(ctx):
     @ctx.wrap("__main__:FreeInputStart.method", required=False)
     def free_input_method(orig, self, choice_text, *args, **kwargs):
         # ここで hasattr() を使わないこと: 201_probe_missing_attr がこのクラスに
-        # __getattr__ トリップワイヤを仕掛けており、hasattr は呼び出しのたびに
-        # それを自己発火させてしまう。
+        # __getattr__ トリップワイヤを仕掛けており、
+        # hasattr は呼び出しのたびにそれを自己発火させてしまう。
         write("FreeInputStart.method(choice_text={})".format(repr_value(choice_text)))
         try:
             return orig(self, choice_text, *args, **kwargs)
         except Exception as exc:
-            # 失敗時はインスタンスが実際に持っている属性を列挙する ―
+            # 失敗時はインスタンスが実際に持っている属性を列挙する。
             # 「何が無いのか」ではなく「何があるのか」が手がかりになる。
             try:
                 attrs = sorted(vars(self))

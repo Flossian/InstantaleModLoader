@@ -3,8 +3,8 @@
 
     python tools/tests/test_quest_end_guild.py
 
-偽の app / QuestEndManager / QuestRetireManager / Area / Facility / Clock を
-差し込み、次を確認する。
+偽の app / QuestEndManager / QuestRetireManager / Area / Facility /
+Clock を差し込み、次を確認する。
 
   検出   … クエストクリアの解散だけを捕まえる（死別・放棄・普段の移動は素通り）
   置き先 … `get_party_leave_facility` がいまの町のギルドを**元の形のまま**返す
@@ -14,9 +14,9 @@
   画面   … 行き先が `add_text` に出る（要約の流し込み中は割り込まない）
   共存   … `302_` のフックと重ねても両方効く
 
-**解散の検出はスタックのコードオブジェクトで行う**ので、テストも
-`QuestEndManager.method_1` の**中から**呼ぶ形にしてある（app のメソッドを直接
-叩くと本番と違う経路になり、検出そのものを検証できない）。
+**解散の検出はスタックのコードオブジェクトで行う**ので、
+テストも `QuestEndManager.method_1` の**中から**呼ぶ形にしてある（app のメソッドを直接叩くと本番と違う経路になり、
+検出そのものを検証できない）。
 
 ゲームが起動していなくても走るので、mod を編集したらまずこれを通すこと。
 """
@@ -69,8 +69,9 @@ def names_of(moves):
 
 
 # ---------------------------------------------------------------- 偽ゲーム
-# ここで定義したクラスは __main__ の属性になる。mod は
-# `getattr(sys.modules['__main__'], 名前)` で引くので、これで本番と同じ形になる。
+# ここで定義したクラスは __main__ の属性になる。
+# mod は `getattr(sys.modules['__main__'], 名前)` で引くので、
+# これで本番と同じ形になる。
 class Character:
     def __init__(self, **kw):
         self.current_location = None
@@ -100,8 +101,8 @@ class Area:
 
 
 def build_area(area_id, name, guild=True):
-    # ギルドを**末尾**に置くのは、順番で当たってしまう実装を弾くため
-    # （`facility_type` を見ずに先頭を拾うと宿になる）。
+    # ギルドを**末尾**に置くのは、
+    # 順番で当たってしまう実装を弾くため（`facility_type` を見ずに先頭を拾うと宿になる）。
     facilities = [Facility(id=area_id + "1", name=name + "の宿", facility_type="inn"),
                   Facility(id=area_id + "2", name=name + "の店",
                            facility_type="general_store")]
@@ -134,9 +135,9 @@ class World:
 def unpack(answer):
     """`get_party_leave_facility` の戻り値をほどく。
 
-    実機は `(施設, ノード)` のタプルを返し、`move_npc_to_facility` は施設と
-    ノードを**別々に**取る（`302_` がタプルのまま渡して落ちた）。呼び出し元の
-    ゲームは必ずここを通っているはずなので、偽ゲームも同じ形にする。
+    実機は `(施設, ノード)` のタプルを返し、
+    `move_npc_to_facility` は施設とノードを**別々に**取る（`302_` がタプルのまま渡して落ちた）。
+    呼び出し元のゲームは必ずここを通っているはずなので、偽ゲームも同じ形にする。
     """
     if isinstance(answer, (tuple, list)):
         if len(answer) >= 2:
@@ -201,8 +202,8 @@ class QuestEndManager:
 
         帰還 → 報酬 → `remove_party_member` → **呼び出し元が**置き直す
 
-    置き直しが `remove_party_member` の後に来ることと、置き先を
-    `get_party_leave_facility` に聞くことが、この mod の前提。
+    置き直しが `remove_party_member` の後に来ることと、
+    置き先を `get_party_leave_facility` に聞くことが、この mod の前提。
     """
 
     def __init__(self, app):
@@ -220,7 +221,8 @@ class QuestEndManager:
             app.leave_answer = app.get_party_leave_facility(character)
             facility, node = unpack(app.leave_answer)
         else:
-            # 聞かずに自分で決めるビルド。差し替えの第2層だけが頼りになる。
+            # 聞かずに自分で決めるビルド。
+            # 差し替えの第2層だけが頼りになる。
             facility, node = app.leave_facility
         app.move_npc_to_facility(member_id, character, facility, node)
 
@@ -232,8 +234,8 @@ class QuestRetireManager(QuestEndManager):
     """クエスト放棄。既定では捕まえない側（`ALSO_ON_QUEST_RETIRE`）。
 
     **`method_1` を上書きする**こと ― 継承したままだとコードオブジェクトが
-    `QuestEndManager.method_1` と同一になり、「別のマネージャなら捕まえない」を
-    検証できない。
+    `QuestEndManager.method_1` と同一になり、
+    「別のマネージャなら捕まえない」を検証できない。
     """
 
     def method_1(self, member_id):
@@ -252,9 +254,9 @@ class DeathManager(QuestRetireManager):
         return QuestRetireManager.method_1(self, member_id)
 
 
-# 派生元は名前ではなくここから引く（`302_` の検証と同じ理由。直接実行時の
-# `sys.modules['__main__']` はこのテスト自身なので、`main.InstantaleApp = cls`
-# がここのグローバル名を書き換えてしまう）。
+# 派生元は名前ではなくここから引く（`302_` の検証と同じ理由。
+# 直接実行時の `sys.modules['__main__']` はこのテスト自身なので、
+# `main.InstantaleApp = cls` がここのグローバル名を書き換えてしまう）。
 BASES = {"app": InstantaleApp}
 
 
@@ -298,8 +300,8 @@ class FakeCtx:
     """`ctx.wrap` の**順番を保つ**。
 
     本番のローダはファイル名順に mod を当て、後から当てたものが**外側**になる。
-    辞書で持つと後から当てた mod が前のものを消してしまい、重ね掛けを検証
-    できない（`302_` と `303_` は3つの対象を共有している）。
+    辞書で持つと後から当てた mod が前のものを消してしまい、
+    重ね掛けを検証できない（`302_` と `303_` は3つの対象を共有している）。
     """
 
     def __init__(self, out_dir):
@@ -313,7 +315,8 @@ class FakeCtx:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
-    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # ログは本物の `ctx.logger` をそのまま借りる。
+    # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
 
@@ -343,8 +346,8 @@ def load_mod(path, name):
     return module
 
 
-# 偽 app が持っているメソッドだけを差し替える（`302_` は会話画面のフックも
-# 当てるが、こちらの偽 app には無いので飛ばす）。
+# 偽 app が持っているメソッドだけを差し替える（`302_` は会話画面のフックも当てるが、
+# こちらの偽 app には無いので飛ばす）。
 HOOK_NAMES = {
     "__main__:InstantaleApp.remove_party_member": "remove_party_member",
     "__main__:InstantaleApp.get_party_leave_facility": "get_party_leave_facility",
@@ -374,8 +377,8 @@ OUT_DIR = os.path.join(os.environ.get("TEMP", HERE), "instantale_test_quest_end"
 def setup(here="9", home="7", guild_here=True, member="71", extra_mods=()):
     """mod を適用し、エリア `here` に居る状態の app を返す。
 
-    `home` は雇った町（ゲーム本来の置き先が指す方）。`here != home` が
-    「土地を跨いだままクエストを終えた」＝この mod が効く状況。
+    `home` は雇った町（ゲーム本来の置き先が指す方）。
+    `here != home` が「土地を跨いだままクエストを終えた」＝この mod が効く状況。
     """
     clock = install_fake_kivy()
     main = sys.modules["__main__"]
@@ -488,7 +491,8 @@ except Exception as exc:
 check("解散の外でのゲームの失敗は握り潰さない", isinstance(raised, RuntimeError), raised)
 
 print("=== 差し替え（move_npc_to_facility） ===")
-# ここが本命の第2層。ゲームが置き先を聞かずに自分で決めているビルドでも、
+# ここが本命の第2層。
+# ゲームが置き先を聞かずに自分で決めているビルドでも、
 # 実際に動かす呼び出しを捕まえて差し替えられなければならない。
 app, ctx, clock, mod, areas = setup()
 app.game_asks_leave_facility = False

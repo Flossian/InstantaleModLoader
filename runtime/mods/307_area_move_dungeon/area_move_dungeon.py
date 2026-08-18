@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 """機能追加: エリア移動の第3の手段「危険な道を行く」。
 
-土地から土地へ移る確認画面（`AreaMoveCofirmation`。徒歩と馬車が並ぶところ）に
-**「危険な道を行く」** を1つ足す。押すと、その2つの土地を繋ぐ道中を舞台にした
-クエストが1件その場で作られ、受注画面に入る。**踏破すれば目的地に着く**。
+土地から土地へ移る確認画面（`AreaMoveCofirmation`。
+徒歩と馬車が並ぶところ）に「危険な道を行く」 を1つ足す。
+押すと、その2つの土地を繋ぐ道中を舞台にしたクエストが1件その場で作られ、
+受注画面に入る。
+踏破すれば目的地に着く。
 
     [確認画面]  徒歩(3ヵ月) / 馬車(1000G) / 危険な道を行く
                                               ↓
@@ -19,17 +21,18 @@
 | `journey.py` | 道中の控え（段階・保存・日数の予算）。ゲームには触らない |
 | `world.py` | ゲームのデータの読み書き。この MOD の方針は持たない |
 
-設定（`mod.json` から変えられる値）は**必ずこのファイルの定数**にすること。
-ローダは入口モジュールのグローバルへ書き込むので、他のファイルへ移すと
-GUI から変えても効かなくなる（TECH.md §3.8）。
+設定（`mod.json` から変えられる値）は必ずこのファイルの定数にすること。
+ローダは入口モジュールのグローバルへ書き込むので、
+他のファイルへ移すと GUI から変えても効かなくなる（TECH.md §3.8）。
 
 ## 難易度は移動元と移動先の間から選ぶ
 
     scripts.functions:get_area_average_difficulty(area, world, ...)
 
-ゲーム自身が持っている「その土地の依頼はどのくらいの難易度か」を移動元と移動先の
-両方に聞き、**その間から1つ選ぶ**（`DIFFICULTY_MODE`）。式を発明しないで済むうえ、
-世界の作り方が変わっても追随する。引けなかったときの落とし方は `world.area_level`。
+ゲーム自身が持っている「その土地の依頼はどのくらいの難易度か」を移動元と移動先の両方に聞き、
+その間から1つ選ぶ（`DIFFICULTY_MODE`）。
+式を発明しないで済むうえ、世界の作り方が変わっても追随する。
+引けなかったときの落とし方は `world.area_level`。
 
 ## 値の語彙を推測しない（`mode` を発明しない）
 
@@ -37,53 +40,60 @@ GUI から変えても効かなくなる（TECH.md §3.8）。
 
 `mode` の実値は `'on_foot'` / `'coach'`（実測）だが、組み立てには使わない。
 **確認画面に既に並んでいるゲーム自身のボタンから `args` をそのまま写す**。
-値の意味を知らなくても正しく起こせる（TECH.md §6.2）。実測値は「どれが徒歩か」の
-照合にだけ使い、当たらなければ文字列 → 並び順の順に下がる（`world.pick_option`）。
+値の意味を知らなくても正しく起こせる（TECH.md §6.2）。
+実測値は「どれが徒歩か」の照合にだけ使い、
+当たらなければ文字列 → 並び順の順に下がる（`world.pick_option`）。
 
 ## 自前のクラス名を `PhaseSpec` に書かない
 
-ボタンはセーブに焼かれうる（`PhaseSpec.to_dict()`）。無害な既存クラスを持たせ、
-押下は `on_button_press` を包んでボタン辞書の印で横取りする。印のキーは他の MOD と
-別にすること（`301_`=mod_action / `302_`=mod_party_action / `305_`=mod_mini_action /
-ここ=mod_road_action）。
+ボタンはセーブに焼かれうる（`PhaseSpec.to_dict()`）。
+無害な既存クラスを持たせ、押下は
+`on_button_press` を包んでボタン辞書の印で横取りする。
+印のキーは他の MOD と別にすること（`301_`=mod_action / `302_`=mod_party_action /
+`305_`=mod_mini_action / ここ=mod_road_action）。
 
 ## 移動を起こすのは帰還処理が済んだ直後
 
 **戦利品（`LootPhaseManager`）はクエスト完了より前**にあるので（GAME.md §2.9）、
-`QuestEndManager.execute` が返った時点で取りこぼすものは無い。手が空くのを待って
-（報酬のテキストを流している最中に割り込まない）すぐ移動する。
+`QuestEndManager.execute` が返った時点で取りこぼすものは無い。
+手が空くのを待って（報酬のテキストを流している最中に割り込まない）すぐ移動する。
 
-**「選択肢が集落のものに戻ってから」では遅い。** 帰還先はエリアの**入口**で、
-そこの選択肢は隣の施設への `MovePhaseManager` だけなので、**一度元の街に戻され、
-出口まで歩いて初めて移動する**ことになる。集落の画面を見る経路は保険として残して
-ある（完了の瞬間を捉えられなかったときの受け皿。目印に `MovePhaseManager` も
-入れたので入口でも拾える）。
+「選択肢が集落のものに戻ってから」では遅い。
+帰還先はエリアの入口で、そこの選択肢は隣の施設への `MovePhaseManager` だけなので、**一度元の街に戻され、
+出口まで歩いて初めて移動する**ことになる。
+集落の画面を見る経路は保険として残してある（完了の瞬間を捉えられなかったときの受け皿。
+目印に `MovePhaseManager` も入れたので入口でも拾える）。
 
 ## 状態はゲーム自身に聞く（一瞬の合図に頼らない）
 
-道と受注を `QuestStartManager.__init__` だけで結び付けると、**その一瞬に
-注入し直されたとき永久に結び付かない**。判定の根拠は `app.current_quest_data` の
-id。いつ見ても答えが返る。`QuestStartManager` の経路も残してあるが、もう必須では
-ない。控えが注入をまたぐ仕組みは `journey.py`。
+道と受注を
+`QuestStartManager.__init__` だけで結び付けると、**その一瞬で注入し直されたとき永久に結び付かない**。
+判定の根拠は `app.current_quest_data` の id。
+いつ見ても答えが返る。
+`QuestStartManager` の経路も残してあるが、もう必須ではない。
+控えが注入をまたぐ仕組みは `journey.py`。
 
-## 危険だが**早い**（日数の上限を持つ）
+## 危険だが早い（日数の上限を持つ）
 
     __main__:InstantaleApp.elapse_days(self, days)
 
-`__main__` にある唯一の日数送りの入口。危険な道を行っている間だけこれを包み、
-**道中と最後の移動を合わせて `TRAVEL_DAYS` 日（既定14＝馬車と同じ）を超えないよう
-渡す数を減らす**。`orig` は必ず呼ぶので、暦の進め方も日次処理もゲームのまま。
+`__main__` にある唯一の日数送りの入口。
+危険な道を行っている間だけこれを包み、**道中と最後の移動を合わせて
+`TRAVEL_DAYS` 日（既定14＝馬車と同じ）を超えないよう渡す数を減らす**。
+`orig` は必ず呼ぶので、暦の進め方も日次処理もゲームのまま。
 
-これが無いと、道中のクエストで日数が進んだうえに最後の移動で徒歩ぶん（実測3ヵ月）が
-乗り、**徒歩より遅くて危険なだけの道**になる。切り詰めるのは道を行っている間だけで、
+これが無いと、
+道中のクエストで日数が進んだうえに最後の移動で徒歩ぶん（実測3ヵ月）が乗り、**徒歩より遅くて危険なだけの道**になる。
+切り詰めるのは道を行っている間だけで、
 訓練・休養・他の依頼の日数送りには一切触らない。
 
 ## 体力（スタミナ）が3分の1を切っていたら断る
 
-`Character.physical_integrity` / `max_physical_integrity`（実測。`world.stamina_of`
-と GAME.md §2.19）。`STAMINA_MIN_PERCENT` を下回っていたら**押された時点で断る**。
-クエストの生成にも世界のデータにも一切触らない。読めなかったときは通す
-（値が読めないことを理由に遊びを止めない。WARN は残す）。
+`Character.physical_integrity` / `max_physical_integrity`（実測。
+`world.stamina_of` と GAME.md §2.19）。
+`STAMINA_MIN_PERCENT` を下回っていたら押された時点で断る。
+クエストの生成にも世界のデータにも一切触らない。
+読めなかったときは通す（値が読めないことを理由に遊びを止めない。WARN は残す）。
 """
 
 import random
@@ -97,27 +107,31 @@ from .journey import Journey
 
 LOG_BASENAME = "road_travel.log"
 
-# 進行中の道中の控え。**セーブには書かない。**置き場は `state/`
-# （`ctx.state_path`）。道中の途中で消えると、着くはずの街へ着けなくなる。
+# 進行中の道中の控え。
+# セーブには書かない。
+# 置き場は `state/`（`ctx.state_path`）。
+# 道中の途中で消えると、着くはずの街へ着けなくなる。
 STATE_BASENAME = "road_travel.json"
 
 # 確認画面に足すボタンの文字列。
 ROAD_LABEL = "危険な道を行く"
 
-# セーブから復元された残骸を見分けるための、こちらのラベル一覧
-# （`ui.Screen.prune_stale`）。`PhaseSpec.to_dict()` は text と spec しか書か
-# ないので**印は落ちる**。落ちたものは下の印による重複判定をすり抜け、同じ
-# ボタンが2つ並んで復元された方は押しても無反応になる（`301_` で実際に起きた）。
-#
-# **ここは実機で観測した症状ではなく、保険。** `301_` / `309_` が
-# 踏んだのは `refresh_choice_buttons`（ゲームが組んだ一覧を塗り直すだけ）で、
-# こちらは徒歩・馬車が並び終えた後 ― 確認画面がそのつど一覧を組み直すビルド
-# なら残骸はゲーム自身が消している。組み直さないビルドがあっても壊れないよう、
-# 同じ掃除を通しておく。掃除に使う文言は**こちらにしか無いもの**だけ
-# （汎用語を入れると他 MOD やゲームのボタンを巻き込む。`302_` の項を参照）。
+# セーブから復元された残骸を見分けるための、
+# こちらのラベル一覧（`ui.Screen.prune_stale`）。
+# `PhaseSpec.to_dict()` は text と spec しか書かないので印は落ちる。
+# 落ちたものは下の印による重複判定をすり抜け、
+# 同じボタンが2つ並んで復元された方は押しても無反応になる（`301_` で実際に起きた）。
+# ここは実機で観測した症状ではなく、保険。
+# `301_` / `309_` が踏んだのは `refresh_choice_buttons`（ゲームが組んだ一覧を塗り直すだけ）で、
+# こちらは徒歩・馬車が並び終えた後。
+# 確認画面がそのつど一覧を組み直すビルドなら残骸はゲーム自身が消している。
+# 組み直さないビルドがあっても壊れないよう、同じ掃除を通しておく。
+# 掃除に使う文言はこちらにしか無いものだけ（汎用語を入れると他
+# MOD やゲームのボタンを巻き込む。`302_` の項を参照）。
 OUR_LABELS = (ROAD_LABEL,)
 
-# 押下を横取りするための印。**他の MOD と別のキーにすること。**
+# 押下を横取りするための印。
+# 他の MOD と別のキーにすること。
 MARK = "mod_road_action"
 
 # ---------------------------------------------------------------- 設定（mod.json）
@@ -130,12 +144,15 @@ MARK = "mod_road_action"
 #   "harder"      高いほうに合わせる
 DIFFICULTY_MODE = "between"
 
-# 選んだ難易度に足す下駄。危険な道を素の依頼より重くしたいときに使う。
+# 選んだ難易度に足す下駄。
+# 危険な道を素の依頼より重くしたいときに使う。
 DIFFICULTY_OFFSET = 0
 
-# 危険な道1回にかける日数の上限。**道中のクエストと最後の移動の合計。**
+# 危険な道1回にかける日数の上限。
+# 道中のクエストと最後の移動の合計。
 # 既定 14 は馬車と同じ（実測の確認画面が `馬車(1000G)`＝14日）。
-# 0 なら日数を1日も進めない。365 にすれば実質「上限なし」。
+# 0 なら日数を1日も進めない。
+# 365 にすれば実質「上限なし」。
 TRAVEL_DAYS = 14
 
 # 踏破した後、実際の移動に**どのボタンの `args` を借りるか**。
@@ -143,7 +160,8 @@ TRAVEL_DAYS = 14
 #   "carriage" 馬車（所持金が要る。足りないときの挙動は未確認）
 ARRIVAL_MODE = "walk"
 
-# 体力（スタミナ）がこの割合を下回っていたら道を断る。既定 33 ＝ 3分の1。
+# 体力（スタミナ）がこの割合を下回っていたら道を断る。
+# 既定 33 ＝ 3分の1。
 # 0 にすると体力を見ない（いつでも行ける）。
 STAMINA_MIN_PERCENT = 33
 
@@ -158,10 +176,10 @@ ANNOUNCE_DIFFICULTY = True
 NOTE_IN_SUMMARY = True
 
 # ---------------------------------------------------------------- コード側の設定
-# `AreaMoveManager` の `mode` の実測値。**実機で観測できたものだけ書くこと**
-# （GAME.md §2.18）。空にしてもボタンの文字列 → 並び順、の順で下がるので動く。
-# 観測した対は毎回
-# ログに出るので、ゲームの更新で変わったらここを書き直す。
+# `AreaMoveManager` の `mode` の実測値。
+# **実機で観測できたものだけ書くこと**（GAME.md §2.18）。
+# 空にしてもボタンの文字列 → 並び順、の順で下がるので動く。
+# 観測した対は毎回ログに出るので、ゲームの更新で変わったらここを書き直す。
 WALK_MODES = ("on_foot",)
 CARRIAGE_MODES = ("coach",)
 
@@ -170,11 +188,10 @@ WALK_WORDS = ("徒歩", "歩")
 CARRIAGE_WORDS = ("馬車", "馬")
 
 # 到着の移動中だけ伏せる文言（`HIDE_TRAVEL_TEXT`）。
-#
-# `徒歩で目指す。長旅だ...` は実測値。馬車側の文言は未実測なので、当たらなければ
-# 何も起きないというだけの当て。
-# **伏せるのはこちらが起こした移動の最中だけ**で、普通の徒歩・馬車の移動や
-# 到着の合図（`辿り着いた。`）・待機表示の点には触らない。
+# `徒歩で目指す。長旅だ...` は実測値。
+# 馬車側の文言は未実測なので、当たらなければ何も起きないというだけの当て。
+# **伏せるのはこちらが起こした移動の最中だけ**で、
+# 普通の徒歩・馬車の移動や到着の合図（`辿り着いた。`）・待機表示の点には触らない。
 MUTED_MOVE_TEXTS = ("徒歩で目指す", "長旅だ", "馬車で目指す")
 
 # 画面に出す文言。
@@ -188,32 +205,36 @@ RETIRE_TEXT = "危険な道を引き返した。{origin}に留まっている。
 NO_ROAD_TEXT = "（その道は今は見つからない）"
 NO_QUEST_TEXT = "（道の話はまとまらなかった）"
 
-# 依頼概要に書き足す一文（`NOTE_IN_SUMMARY`）。**LLM が書いた文の末尾に足す**
-# だけで、生成された本文には手を入れない。
-#
-# `ARRIVAL_NOTE_MARK` は「もう足してある」の目印。生成の直後は片方の格納先に
-# しか居ないことがあるので受注の時点でもう一度足しに行く（GAME.md §2.9）。
-# 目印で見るので、何度呼んでも二重にならない。**紐付けが切れたら消す**
-# （`drop_road`）― もう移動しない依頼が「移動します」と言い続けないように。
+# 依頼概要に書き足す一文（`NOTE_IN_SUMMARY`）。
+# **LLM が書いた文の末尾に足す** だけで、生成された本文には手を入れない。
+# `ARRIVAL_NOTE_MARK` は「もう足してある」の目印。
+# 生成の直後は片方の格納先にしか居ないことがあるので受注の時点でもう一度足しに行く（GAME.md
+# §2.9）。
+# 目印で見るので、何度呼んでも二重にならない。
+# 紐付けが切れたら消す（`drop_road`）。
+# もう移動しない依頼が「移動します」と言い続けないように。
 ARRIVAL_NOTE = "\n\n※このクエストをクリアすると「{target}」に移動します。"
 ARRIVAL_NOTE_MARK = "※このクエストをクリアすると"
 
 # `QuestChoiceManager(app, quest_type, quest_id)` の `quest_type`。
 # **`world.quests` に対して通るのはこれだけ**（`206_` の総当たりで確定。
-# GAME.md §2.9）。他の値は `story_quests` 側の分岐に落ちて `KeyError` になる。
+# GAME.md §2.9）。
+# 他の値は `story_quests` 側の分岐に落ちて `KeyError` になる。
 QUEST_TYPE = "settlement_quest"
 
-# 生成の印の寿命（秒）。押してから生成が始まるまでの間に別の生成が割り込んだ
-# 場合に、そちらへ付いてしまうのを防ぐ。
+# 生成の印の寿命（秒）。
+# 押してから生成が始まるまでの間に別の生成が割り込んだ場合に、
+# そちらへ付いてしまうのを防ぐ。
 INJECT_TTL = 300.0
 
-# 控えの寿命（秒）。これを過ぎた道中は忘れる（7日）。
+# 控えの寿命（秒）。
+# これを過ぎた道中は忘れる（7日）。
 PENDING_TTL = 7 * 24 * 3600.0
 
 # 最後の移動を起こしてから控えを外すまでの実時間（秒）。
-#
-# 移動は `process_choice` に渡した先の別スレッドで走るので、**渡した直後に
-# 控えを消すと日数の切り詰めが間に合わない**。かといって残したままにすると、
+# 移動は
+# `process_choice` に渡した先の別スレッドで走るので、**渡した直後に控えを消すと日数の切り詰めが間に合わない**。
+# かといって残したままにすると、
 # 移動が失敗したときに無関係な日数送り（訓練・休養）まで切り詰め続ける。
 # 目的地に着いたことが確認できたらすぐ外し、確認できなくてもここで必ず外す。
 MOVE_TIMEOUT = 300.0
@@ -221,25 +242,26 @@ MOVE_TIMEOUT = 300.0
 # 生成・完了の後、画面を触るまでの落ち着き待ち。
 SETTLE = 0.4
 
-# 難易度の下限。ゲーム側の上限は分からないので、上は抑えない。
+# 難易度の下限。
+# ゲーム側の上限は分からないので、上は抑えない。
 MIN_DIFFICULTY = 1
 
-# 集落の画面と見なす目印。**文字列ではなく spec のクラス名で見る。**
-#
-# `MovePhaseManager` が要る。帰還先はエリアの**入口**で、そこの選択肢は
-# 隣の施設への移動だけ。
+# 集落の画面と見なす目印。
+# 文字列ではなく spec のクラス名で見る。
+# `MovePhaseManager` が要る。
+# 帰還先はエリアの入口で、そこの選択肢は隣の施設への移動だけ。
 SETTLEMENT_MARKS = ("MovePhaseManager", "DisplayTalkChoice", "DisplayAreaMoveChoice")
 
-# 乱数は MOD 専用のものを使う。グローバルの `random` から引くとゲーム自身の
-# 乱数列がずれる（TECH.md §6.1）。
+# 乱数は MOD 専用のものを使う。
+# グローバルの `random` から引くとゲーム自身の乱数列がずれる（TECH.md §6.1）。
 _RNG = random.Random()
 
 
 def road_brief(origin_name, target_name, difficulty):
     """生成プロンプトの `area_description` に足す文。
 
-    引数を足すのではなく既存の自由記述欄に載せるだけなので、出力スキーマ
-    （`QuestStructure`）にも呼び出し側にも影響しない（`301_` と同じ手口）。
+    引数を足すのではなく既存の自由記述欄に載せるだけなので、
+    出力スキーマ（`QuestStructure`）にも呼び出し側にも影響しない（`301_` と同じ手口）。
     """
     origin = origin_name or "出発地"
     target = target_name or "目的地"
@@ -280,7 +302,8 @@ def apply(ctx):
 
     screen = ui.Screen(ctx, write, tag="road travel", mark=MARK)
 
-    # 道中の控え。注入し直しても前の層が書いたものを引き継ぐ（`journey.py`）。
+    # 道中の控え。
+    # 注入し直しても前の層が書いたものを引き継ぐ（`journey.py`）。
     journey = Journey(ctx.state_path(STATE_BASENAME), write,
                       ttl=PENDING_TTL, move_timeout=MOVE_TIMEOUT)
     journey.reload()
@@ -291,7 +314,8 @@ def apply(ctx):
         "generating": False,
         "departing": False,  # 自分が起こした AreaMoveManager かどうかの印
         # 確認画面で読み取ったゲーム自身の移動ボタン（`(entry, args)` の一覧）。
-        # 押下の処理はここから `args` を写す ― 値を発明しないため。
+        # 押下の処理はここから `args` を写す。
+        # 値を発明しないため。
         "options": None,
     }
 
@@ -301,16 +325,17 @@ def apply(ctx):
                                stages)
 
     def drop_road(app, why, clear_note=True):
-        """道の紐付けを外す。**依頼概要に足した一文もここで消す。**
+        """道の紐付けを外す。依頼概要に足した一文もここで消す。
 
-        紐付けが切れた依頼は普通の討伐依頼として終わるので、「クリアすると
-        移動します」が残っていると嘘になる。踏破して着いた後（`arrived`）だけは
-        消さない。あの一文はその時点では本当だったから。
+        紐付けが切れた依頼は普通の討伐依頼として終わるので、
+        「クリアすると移動します」が残っていると嘘になる。
+        踏破して着いた後（`arrived`）だけは消さない。
+        あの一文はその時点では本当だったから。
 
         取りこぼす場合が1つある: 控えの寿命（`PENDING_TTL`、7日）で消えたとき。
         その経路は控えを読む前に落とすので、どのクエストの話だったか分からない。
-        7日のあいだ別の依頼も移動も1度もしなければ、という条件なので実際には
-        起きにくい。
+        7日のあいだ別の依頼も移動も1度もしなければ、
+        という条件なので実際には起きにくい。
         """
         record = journey.record
         if record is None:
@@ -333,8 +358,9 @@ def apply(ctx):
     def stamina_refusal(app):
         """体力が足りずに道を断るなら出す文言。行けるなら None。
 
-        **読めなかったときは通す。** 値を読めないことを理由に遊びを止めない
-        （そのときは WARN を残すので、原因は後から追える）。
+        読めなかったときは通す。
+        値を読めないことを理由に遊びを止めない（そのときは WARN を残すので、
+        原因は後から追える）。
         """
         percent = max(0, min(100, int(STAMINA_MIN_PERCENT)))
         if percent <= 0:
@@ -357,14 +383,15 @@ def apply(ctx):
         if state["generating"]:
             screen.say(app, "……いま道の話を聞いているところだ。")
             return
-        # 体力が足りないなら**ここで断る**。生成（LLM で数十秒〜数分）にも
-        # 世界のクエスト一覧にも一切触らない。
+        # 体力が足りないならここで断る。
+        # 生成（LLM で数十秒〜数分）にも世界のクエスト一覧にも一切触らない。
         refusal = stamina_refusal(app)
         if refusal is not None:
             write("refused: not enough stamina {}".format(refusal))
             screen.say(app, REFUSE_TEXT)
             screen.say(app, refusal)
-            # 確認画面はそのまま残っている。塗り直して徒歩・馬車を選べる状態に戻す。
+            # 確認画面はそのまま残っている。
+            # 塗り直して徒歩・馬車を選べる状態に戻す。
             screen.apply_buttons(app, None, "refused")
             return
 
@@ -407,7 +434,8 @@ def apply(ctx):
         if quest_id is None:
             return
 
-        # 前の道が残っていたら、ここで紐付けと一文を外す。上書きするだけだと、
+        # 前の道が残っていたら、ここで紐付けと一文を外す。
+        # 上書きするだけだと、
         # もう移動しない依頼が「移動します」と言い続けることになる。
         if journey.record is not None:
             drop_road(app, "replaced by a new road")
@@ -431,8 +459,9 @@ def apply(ctx):
         })
 
         title = world.short(world.quest_value(quest, "quest_title", ""), 40)
-        # `restore=False` ＝ この後すぐ受注画面を開くので、元の選択肢は塗り直さない
-        # （塗ると一瞬だけ古い画面が見える。`301_` の教訓）。
+        # `restore=False` ＝ この後すぐ受注画面を開くので、
+        # 元の選択肢は塗り直さない（塗ると一瞬だけ古い画面が見える。
+        # `301_` の教訓）。
         screen.busy_off(app, restore=False)
         settle(app, lambda: open_acceptance(app, quest_id, title, target_name,
                                             difficulty))
@@ -486,8 +515,9 @@ def apply(ctx):
     def note_arrival(app, quest_id, target_name):
         """依頼概要の末尾に「クリアすると移動する」を足す。
 
-        **LLM が書いた文には手を入れず、後ろに1行足すだけ。** 掲示板に残った
-        道を後から受けたときにも、それが移動の依頼だと分かるようにするため。
+        LLM が書いた文には手を入れず、後ろに1行足すだけ。
+        掲示板に残った道を後から受けたときにも、
+        それが移動の依頼だと分かるようにするため。
         目印で見るので何度呼んでも二重にならない（`world.append_quest_value`）。
         """
         if not NOTE_IN_SUMMARY or not target_name:
@@ -502,7 +532,7 @@ def apply(ctx):
         return written
 
     def write_difficulty(app, quest_id, difficulty, first=False):
-        """選んだ難易度を**両方の格納先**へ書く（片方だけだと表示と保存がずれる）。
+        """選んだ難易度を両方の格納先へ書く（片方だけだと表示と保存がずれる）。
 
         生成した直後は `world_dict['quests']` にまだ現れていないことがある。
         だから受注の時点でもう一度書く。
@@ -542,8 +572,8 @@ def apply(ctx):
             try:
                 manager = choice_cls(app, QUEST_TYPE, str(quest_id))
             except Exception:
-                # `quest_type` の語彙が変わったときはここに来る（`301_` が
-                # 一度これでゲームを落としている）。掲示板なら語彙を知らずに済む。
+                # `quest_type` の語彙が変わったときはここに来る（`301_` が一度これでゲームを落としている）。
+                # 掲示板なら語彙を知らずに済む。
                 ctx.log_exc("road travel: QuestChoiceManager({!r}, {!r}) failed"
                             .format(QUEST_TYPE, quest_id))
                 manager = None
@@ -575,10 +605,10 @@ def apply(ctx):
     def observe_quest(app):
         """ゲームが道中のクエストを進めているなら、控えを本決まりにする。
 
-        受注を `QuestStartManager` で捕まえる経路の**取りこぼしを埋める**。
+        受注を `QuestStartManager` で捕まえる経路の取りこぼしを埋める。
         あちらは一瞬しか来ないので、その瞬間に注入し直されていると永久に
-        armed にならない。こちらは画面が組み直されるたびに
-        見るので、いつ入ってきても拾える。
+        armed にならない。
+        こちらは画面が組み直されるたびに見るので、いつ入ってきても拾える。
         """
         record = road_of(app, "offered")
         if record is None or world.current_quest_id(app) != record.get("quest_id"):
@@ -598,15 +628,17 @@ def apply(ctx):
         write("arrived: {!r} reached; {} day(s) spent of {} allowed".format(
             record.get("target_area_name"), journey.days_spent(), TRAVEL_DAYS))
         if not journey.days_spent():
-            # 上限が効いていない可能性そのもの。ここは黙って通さない。
+            # 上限が効いていない可能性そのもの。
+            # ここは黙って通さない。
             write("WARN arrived: elapse_days was never seen; "
                   "the {}-day limit did not apply to this build".format(TRAVEL_DAYS))
-        # 着いた後は消さない ― あの一文はその時点では本当だったから。
+        # 着いた後は消さない。
+        # あの一文はその時点では本当だったから。
         drop_road(app, "arrived", clear_note=False)
         return True
 
     def in_settlement(buttons):
-        """いま集落の選択肢が出ているか。**文字列ではなく spec で見る。**"""
+        """いま集落の選択肢が出ているか。文字列ではなく spec で見る。"""
         if not isinstance(buttons, (list, tuple)):
             return False
         return any(ui.spec_cls_name(entry) in SETTLEMENT_MARKS for entry in buttons)
@@ -644,17 +676,20 @@ def apply(ctx):
             screen.start_phase(app, manager, record.get("label") or ROAD_LABEL)
         finally:
             state["departing"] = False
-        # **ここで控えを消さない。** 移動は `process_choice` の先の別スレッドで
-        # 走ることがあるので、消すと日数の切り詰めが間に合わない。目的地に
-        # 着いたのを見てから外す（`arrived_check`。見えなくても `MOVE_TIMEOUT`）。
+        # ここで控えを消さない。
+        # 移動は `process_choice` の先の別スレッドで走ることがあるので、
+        # 消すと日数の切り詰めが間に合わない。
+        # 目的地に着いたのを見てから外す（`arrived_check`。
+        # 見えなくても `MOVE_TIMEOUT`）。
         arrived_check(app)
 
     # ================================================================ フック
     @ctx.wrap("__main__:AreaMoveCofirmation.update_button_display", required=False)
     def confirmation_buttons(orig, self, *args, **kwargs):
-        """徒歩・馬車が並び終えた**後**に「危険な道を行く」を1つ足す。
+        """徒歩・馬車が並び終えた後に「危険な道を行く」を1つ足す。
 
-        ゲームが作った移動のボタンには一切触らない。読むだけ（`args` を控える）。
+        ゲームが作った移動のボタンには一切触らない。
+        読むだけ（`args` を控える）。
         """
         result = orig(self, *args, **kwargs)
         try:
@@ -681,15 +716,17 @@ def apply(ctx):
             if entry is None:
                 write("confirm: cannot build the button (PhaseSpec unavailable)")
                 return result
-            # 「やめる」の手前。無ければ末尾。
+            # 「やめる」の手前。
+            # 無ければ末尾。
             at = len(buttons)
             for index, item in enumerate(buttons):
                 if ui.spec_cls_name(item) == ui.SAFE_CLS:
                     at = index
                     break
             buttons.insert(at, entry)
-            # ここはゲームが並べ終えた直後 ― 描画はもう済んでいるので、次の
-            # フレームで塗り直す（`app.buttons` は直接いじったので entries=None）。
+            # ここはゲームが並べ終えた直後。
+            # 描画はもう済んでいるので、次のフレームで塗り直す（`app.buttons` は直接いじったので
+            # entries=None）。
             screen.apply_buttons(app, None, "confirm")
         except Exception:
             ctx.log_exc("road travel: cannot add the road button")
@@ -710,10 +747,11 @@ def apply(ctx):
 
     @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False)
     def refresh_choice_buttons(orig, self, reset_page=False, *args, **kwargs):
-        """集落の選択肢に戻ったら、待っている移動を起こす（**保険の経路**）。
+        """集落の選択肢に戻ったら、待っている移動を起こす（保険の経路）。
 
-        本来は完了した瞬間に動く（`quest_end`）。ここが働くのは、完了の瞬間を
-        捉えられなかったとき。ゲームを再起動して控えだけが残っている場合や、
+        本来は完了した瞬間に動く（`quest_end`）。
+        ここが働くのは、完了の瞬間を捉えられなかったとき。
+        ゲームを再起動して控えだけが残っている場合や、
         `when_idle` が待ちきれずに取り消された場合。
         """
         try:
@@ -744,12 +782,12 @@ def apply(ctx):
     def quest_start(orig, self, app, quest_type, quest_id, *args, **kwargs):
         """道中のクエストが実際に始まったら控えを本決まりにする。
 
-        受注しなかった（「やめる」を押した）道は、ここに来ないので `offered` の
-        まま残り、別のクエストが始まった時点で落ちる。
+        受注しなかった（「やめる」を押した）道は、
+        ここに来ないので `offered` のまま残り、別のクエストが始まった時点で落ちる。
 
-        **この経路だけに頼らない。** 受注の瞬間に注入し直されていると、この層は
-        まだ控えを読めていない。`observe_quest` が
-        `app.current_quest_data` を見て後から埋める。
+        この経路だけに頼らない。
+        受注の瞬間に注入し直されていると、この層はまだ控えを読めていない。
+        `observe_quest` が `app.current_quest_data` を見て後から埋める。
         """
         try:
             journey.sync()
@@ -772,11 +810,12 @@ def apply(ctx):
 
     @ctx.wrap("__main__:QuestEndManager.execute", required=False)
     def quest_end(orig, self, *args, **kwargs):
-        """踏破。帰還処理が済んだ**その場で**移動する。
+        """踏破。帰還処理が済んだその場で移動する。
 
-        戦利品（`LootPhaseManager`）はこれより前なので、ここで動かしても
-        取りこぼすものは無い（GAME.md §2.9）。報酬・才能の
-        テキストを流している最中には割り込まないよう `when_idle` を通す。
+        戦利品（`LootPhaseManager`）はこれより前なので、
+        ここで動かしても取りこぼすものは無い（GAME.md §2.9）。
+        報酬・才能のテキストを流している最中には割り込まないよう
+        `when_idle` を通す。
         """
         app = getattr(self, "app", None) or ui.find_app()
         # **どのクエストが終わるのかは `orig` を呼ぶ前に読む**（終わった後では
@@ -790,7 +829,8 @@ def apply(ctx):
         result = orig(self, *args, **kwargs)
         try:
             record = road_of(app, "offered", "armed")
-            # id で一致したなら段階は問わない。`armed` を取りこぼしていても、
+            # id で一致したなら段階は問わない。
+            # `armed` を取りこぼしていても、
             # 終わったのが道中のクエストであることはゲーム自身が言っている。
             if record is not None and (ended == record.get("quest_id")
                                        or (ended is None
@@ -809,7 +849,7 @@ def apply(ctx):
 
     @ctx.wrap("__main__:QuestRetireManager.execute", required=False)
     def quest_retire(orig, self, *args, **kwargs):
-        """放棄。**移動しない**。危険な道を引き返した、が正しい。"""
+        """放棄。移動しない。危険な道を引き返した、が正しい。"""
         app = getattr(self, "app", None) or ui.find_app()
         ended = None
         try:
@@ -839,12 +879,13 @@ def apply(ctx):
     def add_text(orig, self, context, *args, **kwargs):
         """到着の移動中だけ、ゲームの「徒歩で目指す。長旅だ...」を伏せる。
 
-        危険な道は道中をクエストとして踏破しているので、そこから改めて
-        長旅だと言われると筋が合わない（出発の一言はこちらが出している）。
+        危険な道は道中をクエストとして踏破しているので、
+        そこから改めて長旅だと言われると筋が合わない（出発の一言はこちらが出している）。
 
-        **伏せる窓は自分が起こした移動の最中（`moving`）だけ**で、しかも
-        名指しした文言に限る。普通の徒歩・馬車の移動、到着の合図
-        （`辿り着いた。`）、待機表示の点はそのまま通す。
+        **伏せる窓は自分が起こした移動の最中（`moving`）だけ**で、
+        しかも名指しした文言に限る。
+        普通の徒歩・馬車の移動、到着の合図（`辿り着いた。`）、
+        待機表示の点はそのまま通す。
         """
         try:
             record = journey.record
@@ -862,8 +903,8 @@ def apply(ctx):
     def elapse_days(orig, self, days, *args, **kwargs):
         """危険な道を行っている間だけ、日数の合計を `TRAVEL_DAYS` で頭打ちにする。
 
-        **渡す数を減らすだけ**で、暦の進め方も日次処理もゲームのまま
-        （`orig` は必ず呼ぶ。呼ばずに戻ると、日数以外の後始末まで落とすことになる）。
+        渡す数を減らすだけで、暦の進め方も日次処理もゲームのまま（`orig` は必ず呼ぶ。呼ばずに戻ると、
+        日数以外の後始末まで落とすことになる）。
         道を行っていないときは1バイトも触らない。
         """
         try:

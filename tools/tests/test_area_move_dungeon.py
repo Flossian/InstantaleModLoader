@@ -70,7 +70,8 @@ def check(name, cond, detail=""):
 
 
 # ---------------------------------------------------------------- 偽ゲーム
-#: 移動元と移動先の難易度。`get_area_average_difficulty` の代わり。
+#: 移動元と移動先の難易度。
+#: `get_area_average_difficulty` の代わり。
 AREA_LEVELS = {"7": 3, "9": 9}
 
 #: 確認画面に並ぶゲーム自身のボタン（実測の形。GAME.md §2.18）。
@@ -103,8 +104,8 @@ class World:
 class Player:
     """体力（スタミナ）は `physical_integrity` / `max_physical_integrity`。
 
-    道を行くたびに減り、最大HPもそれに連動して下がる。`current_hp` は戦闘の
-    HP で別物（GAME.md §2.19）。
+    道を行くたびに減り、最大HPもそれに連動して下がる。
+    `current_hp` は戦闘の HP で別物（GAME.md §2.19）。
     """
 
     def __init__(self, area):
@@ -230,8 +231,8 @@ class QuestEndManager:
     """クエスト完了。**引数ゼロ**（GAME.md §2.9）。「帰還する」で起きる。
 
     実機ではこの中で帰還・報酬・才能まで済み、抜けた先はエリアの**入口**。
-    入口の選択肢は隣の施設への `MovePhaseManager` だけで、会話相手も
-    「他の土地へ行く」も無い。
+    入口の選択肢は隣の施設への `MovePhaseManager` だけで、
+    会話相手も「他の土地へ行く」も無い。
     """
 
     def __init__(self, app):
@@ -265,7 +266,8 @@ class DisplayQuestChoice:
 
     next_title = "涸れ谷の隘路"
     next_summary = "涸れ谷を抜けて隣の土地へ至る。"
-    #: ゲーム自身が付ける難易度。mod がこれを自分の値で上書きする。
+    #: ゲーム自身が付ける難易度。
+    #: mod がこれを自分の値で上書きする。
     game_difficulty = 4
     #: 生成の直後に `world_dict['quests']` にも現れるか。
     #: **実機では現れなかった**（`1 store(s)`）ので、既定は False。
@@ -469,7 +471,8 @@ class FakeCtx:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
-    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # ログは本物の `ctx.logger` をそのまま借りる。
+    # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
 
@@ -490,8 +493,9 @@ class FakeCtx:
     def log_exc(self, msg):
         self.errors.append(msg)
 
-    # 本物の `ctx.write_json` / `write_text` と同じものを使う。ここを自前の
-    # open(..., "w") にすると、テストだけが「壊れない書き方」を通らなくなる。
+    # 本物の `ctx.write_json` / `write_text` と同じものを使う。
+    # ここを自前の open(..., "w") にすると、
+    # テストだけが「壊れない書き方」を通らなくなる。
     def write_json(self, path, data, *, indent=1):
         return ml.write_json(path, data, indent=indent, report=self.log_exc)
 
@@ -508,9 +512,10 @@ class FakeCtx:
 def load_mod(path=MOD, name="area_move_dungeon_mod"):
     """本番と同じ形（**パッケージとして**）読み込む。
 
-    `submodule_search_locations` を渡すのも、`exec_module` の**前に**
-    `sys.modules` へ登録するのもローダと同じ（`_load_mod_file`）。これが
-    無いと mod の中の `from . import world` が「親パッケージが無い」で落ちる。
+    `submodule_search_locations` を渡すのも、
+    `exec_module` の**前に**
+    `sys.modules` へ登録するのもローダと同じ（`_load_mod_file`）。
+    これが無いと mod の中の `from . import world` が「親パッケージが無い」で落ちる。
     """
     spec = importlib.util.spec_from_file_location(
         name, path, submodule_search_locations=[os.path.dirname(path)])
@@ -557,8 +562,9 @@ def read_log():
 def setup(configure=None, levels=None, keep_state=False, mod=None):
     """mod を適用し、移動の確認画面の手前に立っている app を返す。
 
-    クラスは毎回作り直す（前のテストで載せたフックを持ち越さない。派生元は
-    `BASES` から引く ― `sys.modules['__main__']` は直接実行時にはこのテスト自身）。
+    クラスは毎回作り直す（前のテストで載せたフックを持ち越さない。
+    派生元は `BASES` から引く ―
+    `sys.modules['__main__']` は直接実行時にはこのテスト自身）。
     `keep_state=True` は控えのファイルを残す（注入し直しの検証用）。
     """
     app_cls = type("InstantaleApp", (BASES["app"],), {})
@@ -664,8 +670,8 @@ def road_entry(app):
 def enter_settlement(app, entrance=False):
     """集落の選択肢が出ている状態にする。
 
-    `entrance=True` は帰還先の**入口**（実機ではここに戻される）。隣の施設への
-    移動しか無く、会話相手も「他の土地へ行く」も無い。
+    `entrance=True` は帰還先の**入口**（実機ではここに戻される）。
+    隣の施設への移動しか無く、会話相手も「他の土地へ行く」も無い。
     """
     if entrance:
         app.buttons = [
@@ -734,9 +740,9 @@ check("開き直しても二重にならない",
       [e.get("text") for e in app.buttons])
 check("例外を1つも出していない", not ctx.errors, ctx.errors)
 
-# セーブから復元された残骸（印が落ちている）を掴めること。確認画面が一覧を
-# 組み直すビルドではゲーム自身が消しているので**保険**だが、組み直さない
-# ビルドで二重化しないことをここで担保する。
+# セーブから復元された残骸（印が落ちている）を掴めること。
+# 確認画面が一覧を組み直すビルドではゲーム自身が消しているので**保険**だが、
+# 組み直さないビルドで二重化しないことをここで担保する。
 from instantale_modloader import ui as _ui
 screen = _ui.Screen(ctx, lambda m: None, tag="t", mark=mod.MARK)
 restored = [{"text": mod.ROAD_LABEL,
@@ -861,7 +867,8 @@ check("ゲーム自身の値（4）を上書きしている",
 check("生成直後は片方の格納先にしか居ないことを記録する",
       "only 1 of 1 store(s)" in read_log() or "only 1 of 2" in read_log()
       or "(1 store(s))" in read_log(), read_log()[-500:])
-# 実機と同じ並び: セーブ側の辞書には後から現れる。受注の時点で揃える。
+# 実機と同じ並び: セーブ側の辞書には後から現れる。
+# 受注の時点で揃える。
 classes[1](app).register_in_save(quest_id)
 classes[4](app, "settlement_quest", quest_id).execute("受ける")
 CLOCK.settle()
@@ -1060,9 +1067,10 @@ check("**帰還先の入口でも拾える**（MovePhaseManager しか無い画�
 check("例外も出ない", not ctx3.errors, ctx3.errors)
 
 print("=== 注入し直しをまたいでも道が切れない ===")
-# 実機で起きた並びの回帰。道中クエストの生成の最中に注入が入ると、生成を終えた
-# **古い層**が控えを書き、**新しい層**はそれを持っていない ― 受注しても踏破しても
-# 移動しなくなる（VERIFICATION.md §3.13）。
+# 実機で起きた並びの回帰。
+# 道中クエストの生成の最中に注入が入ると、
+# 生成を終えた **古い層**が控えを書き、**新しい層**はそれを持っていない
+# ― 受注しても踏破しても移動しなくなる（VERIFICATION.md §3.13）。
 mod, ctx, app, classes = setup()
 show_confirmation(app, classes[0])
 press(app, "危険な道を行く")

@@ -3,8 +3,8 @@
 
     python tools/tests/test_office_pardon.py
 
-偽の app / Player / Area / Facility / PhaseSpec / MovePhaseManager / HUD / Clock を
-差し込み、次を確認する。
+偽の app / Player / Area / Facility / PhaseSpec / MovePhaseManager / HUD /
+Clock を差し込み、次を確認する。
 
   設置   … 役場で手配されているときだけ「罰金を納めて手配を解く」が出る。
            「出る」の手前に入り、塗り直しても二重にならない。
@@ -291,7 +291,8 @@ class FakeCtx:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
-    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # ログは本物の `ctx.logger` をそのまま借りる。
+    # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
 
@@ -316,9 +317,10 @@ class FakeCtx:
 def load_mod(path=MOD, name="office_pardon_mod"):
     """本番と同じ形（**パッケージとして**）読み込む。
 
-    `submodule_search_locations` を渡すのも、`exec_module` の**前に**
-    `sys.modules` へ登録するのもローダと同じ（`_load_mod_file`）。これが
-    無いと mod の中の `from . import record` が落ちる。
+    `submodule_search_locations` を渡すのも、
+    `exec_module` の**前に**
+    `sys.modules` へ登録するのもローダと同じ（`_load_mod_file`）。
+    これが無いと mod の中の `from . import record` が落ちる。
     """
     spec = importlib.util.spec_from_file_location(
         name, path, submodule_search_locations=[os.path.dirname(path)])
@@ -661,10 +663,11 @@ module, ctx, app = setup(history={0: {"lawfulness": -1}})
 check("id が数値でも引き当てる", pardon_label(app) is not None, app.labels())
 
 # ================================================================== 残骸
-# `PhaseSpec.to_dict()` は text と spec しか書かない ＝ **セーブに焼かれた
-# 自前ボタンは印を失って戻ってくる**。印による重複判定はそれをすり抜けるので、
-# 役場でセーブ → タイトル → ロードのあと同じボタンが2つ並び、復元された方は
-# 押しても無反応になる（`301_` で実際に起きた壊れ方）。
+# `PhaseSpec.to_dict()` は text と
+# spec しか書かない ＝ **セーブに焼かれた自前ボタンは印を失って戻ってくる**。
+# 印による重複判定はそれをすり抜けるので、
+# 役場でセーブ → タイトル → ロードのあと同じボタンが2つ並び、
+# 復元された方は押しても無反応になる（`301_` で実際に起きた壊れ方）。
 print("\n[残骸] セーブから戻ってきた印無しの自前ボタンを差し直す")
 
 
@@ -689,10 +692,11 @@ check("ゲーム側のボタンは1枚も減っていない",
       == len([e for e in before if e.get("text") != label]),
       (app.labels(), [e.get("text") for e in before]))
 
-# **他の mod の生きているボタンには触らない。** `302_` の確認画面の
-# 「やめておく」はこちらの `CANCEL_LABEL` と同じ文字列で、印のキーだけが違う。
-# ラベルと無害 spec だけで残骸と判定すると、他の mod の画面からキャンセルが
-# 消える（VERIFICATION_LOG.md §2.31）。
+# **他の mod の生きているボタンには触らない。**
+# `302_` の確認画面の「やめておく」はこちらの `CANCEL_LABEL` と同じ文字列で、
+# 印のキーだけが違う。
+# ラベルと無害 spec だけで残骸と判定すると、
+# 他の mod の画面からキャンセルが消える（VERIFICATION_LOG.md §2.31）。
 module, ctx, app = setup()
 foreign = {"text": "やめておく", "mod_party_action": "cancel",
            "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}

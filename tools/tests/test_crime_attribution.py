@@ -12,8 +12,8 @@
   経路     … **ローカル（chat）でもクラウド（`llm_manager` の別名）でも**
              書き換わること。v1 は前者だけで、クラウドでは何もしていなかった
 
-経路の口は `instantale_modloader.llm` にあるので、偽の `LlamaCppClient` と
-偽の `llm_manager` を立てて `apply(ctx)` をそのまま通す。
+経路の口は `instantale_modloader.llm` にあるので、
+偽の `LlamaCppClient` と偽の `llm_manager` を立てて `apply(ctx)` をそのまま通す。
 """
 
 import importlib.util
@@ -107,8 +107,9 @@ def revert_client():
 class FakeManager(object):
     """`llm_manager` の別名と `master_ai_*` の偽物。
 
-    本物はモジュール関数なので **self が無い**。`__module__` は from-import 元
-    （＝プロバイダの送信モジュール）になるので、偽物にもそれを付ける。
+    本物はモジュール関数なので **self が無い**。
+    `__module__` は from-import 元（＝プロバイダの送信モジュール）になるので、
+    偽物にもそれを付ける。
     """
 
     BACKEND = "scripts.llm.request_llm_inference_gemini_test_streaming"
@@ -163,7 +164,8 @@ class FakeCtx(object):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
-    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # ログは本物の `ctx.logger` をそのまま借りる。
+    # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
 
@@ -247,7 +249,8 @@ def test_prompt_rewrite():
     result, kind, reason = M.rewrite_texts(untouched)
     check(result is untouched and kind is None and reason == "not_target", "non-target")
 
-    # 目印が両方あるものは知らない形。素通しして理由を残す。
+    # 目印が両方あるものは知らない形。
+    # 素通しして理由を残す。
     _result, kind, reason = M.rewrite_texts([M.LAW_ANCHOR, M.ARREST_ANCHOR])
     check(kind is None and reason == "ambiguous_anchor", "ambiguous anchors")
 

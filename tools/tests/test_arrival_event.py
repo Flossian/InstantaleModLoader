@@ -23,7 +23,8 @@ RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 
 # mod は `instantale_modloader.ui` を使う（ゲームの中では runtime/ が
-# sys.path に入っている）。オフラインでも同じように見えるようにする。
+# sys.path に入っている）。
+# オフラインでも同じように見えるようにする。
 if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
@@ -32,9 +33,11 @@ def find_mod(suffix):
     """mod を **番号を除いた名前** で探し、入口ファイルのパスを返す。
 
     mod の入口はトップレベルでは何もしない（処理は全て apply() の中）ので、
-    ゲームの外から読み込んでも安全。フォルダ名の番号は自分用の通し番号で、
+    ゲームの外から読み込んでも安全。
+    フォルダ名の番号は自分用の通し番号で、
     分類を見直すたびに振り直される（実際に 40_ -> 300_ と変わった）ので、
-    番号ごと書かずに末尾で引く。入口のファイル名は `mod.json` が名指しする。
+    番号ごと書かずに末尾で引く。
+    入口のファイル名は `mod.json` が名指しする。
     """
     matches = sorted(name for name in os.listdir(MODS_DIR)
                      if name.endswith(suffix)
@@ -196,7 +199,8 @@ class FakeCtx:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
-    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # ログは本物の `ctx.logger` をそのまま借りる。
+    # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
 
@@ -229,10 +233,11 @@ def load_mod():
 def setup(mode="conversation", override=1.0, reply="「いらっしゃい」", **settings):
     """mod を読み込んで apply() する。
 
-    `settings` はローダの `config.apply_to_module` と同じ扱い ―
-    **apply() を呼ぶ前に**モジュールのグローバルへ書き込む。`mod.json` で
-    宣言した設定が実際に効くかは、この順序でしか確かめられない
-    （施設別の発生率は apply() の中で表に組み直しているため）。
+    `settings` はローダの `config.apply_to_module` と同じ扱い
+    ― **apply() を呼ぶ前に**モジュールのグローバルへ書き込む。
+    `mod.json` で宣言した設定が実際に効くかは、
+    この順序でしか確かめられない（施設別の発生率は
+    apply() の中で表に組み直しているため）。
     """
     mod = load_mod()
     mod.EVENT_MODE = mode

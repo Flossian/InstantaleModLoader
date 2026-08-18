@@ -4,8 +4,8 @@
     python tools/tests/test_ui_craft_window_fit.py
 
 偽の `scripts.hud.new_hud` / `InstanTaleHUD` / Kivy（Clock・Window）と、
-クラフト画面と同じ並び（所持品・クラフト・生成先の3つのグリッド＋矢印＋
-「作成」ボタン）を組んで、次を確認する。
+クラフト画面と同じ並び（所持品・クラフト・生成先の3つのグリッド＋矢印＋「作成」ボタン）を組んで、
+次を確認する。
 
   無干渉 … 隙間が足りている配置では1ドットも動かさない
   不重複 … 重なる配置では、当てた後どのグリッドとも重ならない
@@ -22,8 +22,8 @@
   別物   … ボタンを持たないビルドでは何もしない（例外も出さない）
 
 寸法は 2026-08-11 の画面（2560x1440）から起こした概寸で、実測ではない。
-数値そのものではなく**隙間とボタンの幅の大小関係**を再現するために置いてある
-（mod は固定値を持たず、その場で測って動かす）。
+数値そのものではなく**隙間とボタンの幅の大小関係**を再現するために置いてある（mod は固定値を持たず、
+その場で測って動かす）。
 """
 import importlib.util
 import io
@@ -70,7 +70,8 @@ def check(name, cond, detail=""):
 # ------------------------------------------------------------------ 概寸
 WIN_WIDTH, WIN_HEIGHT = 2560.0, 1440.0
 
-# (x, y, 幅, 高さ)。画面から起こした概寸。
+# (x, y, 幅, 高さ)。
+# 画面から起こした概寸。
 BAG_GRID = (804.0, 768.0, 256.0, 390.0)        # 所持品
 CRAFT_GRID = (1079.0, 828.0, 256.0, 269.0)     # クラフト（材料）
 OUT_GRID = (1504.0, 772.0, 230.0, 384.0)       # 生成先
@@ -78,7 +79,8 @@ BUTTON = (1425.0, 881.0, 175.0, 56.0)          # 「作成」
 ARROW = (1508.0, 1046.0, 22.0, 19.0)           # 「→」（矩形＝文字）
 ARROW_TEXTURE = (22.0, 19.0)                   # 文字の箱
 
-# 矢印のラベルがグリッドと同じくらい大きいビルド。見えているのは中心の文字だけ。
+# 矢印のラベルがグリッドと同じくらい大きいビルド。
+# 見えているのは中心の文字だけ。
 WIDE_ARROW = (1420.0, 950.0, 320.0, 220.0)
 
 # 生成先グリッドとクラフトグリッドの隙間（169）より、ボタン（175）のほうが広い。
@@ -161,8 +163,8 @@ class FakeWidget(object):
     def layout(self):
         """Kivy の `FloatLayout` が次のフレームでやること。
 
-        `pos_hint` を持つ子は、毎回ここで位置を入れ直される。mod が `x` に
-        しか書かなければ、この1回で元の場所へ戻る。
+        `pos_hint` を持つ子は、毎回ここで位置を入れ直される。
+        mod が `x` にしか書かなければ、この1回で元の場所へ戻る。
         """
         for child in self.children:
             hint = child.pos_hint or {}
@@ -186,8 +188,8 @@ class FakeWidget(object):
 class FakeGrid(FakeWidget):
     """アイテムを置くグリッド（`InventoryGrid` 相当）。
 
-    mod はこれを**型名ではなく持ち物**で見分ける。ここに並べたメソッド名が
-    その手掛かりそのもの。
+    mod はこれを**型名ではなく持ち物**で見分ける。
+    ここに並べたメソッド名がその手掛かりそのもの。
     """
 
     def __init__(self, rect):
@@ -212,10 +214,11 @@ class FakeGrid(FakeWidget):
 class FakeLabel(FakeWidget):
     """矢印のラベル。
 
-    Kivy の `Label` は `text_size` を持たなければ、文字のテクスチャを
-    **ウィジェットの中心に**描く。`texture_size` がその文字の大きさで、
-    ウィジェットの矩形とは別物（`window_rect` ではなく `glyph_rect` が
-    見えている枠）。
+    Kivy の `Label` は `text_size` を持たなければ、
+    文字のテクスチャを **ウィジェットの中心に**描く。
+    `texture_size` がその文字の大きさで、
+    ウィジェットの矩形とは別物（`window_rect` ではなく
+    `glyph_rect` が見えている枠）。
     """
 
     def __init__(self, rect, text="", texture=None):
@@ -239,8 +242,9 @@ class FakeButton(FakeWidget):
     def __init__(self, rect, parent_size):
         FakeWidget.__init__(self, rect)
         self.text = "作成"
-        # 押せる ＝ 枠を自分で描く。文字（`texture_size`）より枠のほうが
-        # 大きいが、見えているのは枠なので mod は矩形で測らなければならない。
+        # 押せる ＝ 枠を自分で描く。
+        # 文字（`texture_size`）より枠のほうが大きいが、
+        # 見えているのは枠なので mod は矩形で測らなければならない。
         self.on_press = lambda *args: None
         self.texture_size = [48.0, 30.0]
         self.pos_hint = {
@@ -266,7 +270,8 @@ class FakeHUD(FakeWidget):
         self.craft_grid = layout.add_widget(FakeGrid(CRAFT_GRID))
         self.out_grid = layout.add_widget(FakeGrid(out_grid))
         if hidden_over_button:
-            # 売買・強化のグリッド。クラフト画面が開いている間も居るが透明。
+            # 売買・強化のグリッド。
+            # クラフト画面が開いている間も居るが透明。
             self.hidden_grid = layout.add_widget(FakeGrid(
                 (BUTTON[0] - 20.0, BUTTON[1] - 20.0, 400.0, 200.0)))
             self.hidden_grid.opacity = 0.0
@@ -352,8 +357,8 @@ class FakeCtx(object):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
-    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
-    # 検査だけが別のログ処理を通ることになる。
+    # ログは本物の `ctx.logger` をそのまま借りる。
+    # ここを自前で書くと、検査だけが別のログ処理を通ることになる。
     _mod = None
 
     def logger(self, name, *, tag=None, stamp=True, label=None):
@@ -405,8 +410,9 @@ def overlaps(one, other):
 def rescale(hud, factor):
     """窓の大きさが変わったときの再レイアウト。
 
-    グリッドは窓に追従して伸び縮みし、ボタンは固定幅（`size_hint_x=None`）の
-    まま `pos_hint` で置き直される。実機で窓の大きさを変えたときと同じ形。
+    グリッドは窓に追従して伸び縮みし、ボタンは固定幅（`size_hint_x=None`）のまま
+    `pos_hint` で置き直される。
+    実機で窓の大きさを変えたときと同じ形。
     """
     FakeWindow.width *= factor
     FakeWindow.height *= factor

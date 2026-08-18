@@ -12,7 +12,8 @@
   自制   … 予約デバイス名・空になる名前は**触らずに記録だけ**
   実地   … 直した名前で実際に `os.makedirs` が通る（生の名前では WinError 123）
 
-最後の1つが本命。VERIFICATION_LOG.md §2.14 の落ちた名前そのもので、**この OS 上で**確かめる。
+最後の1つが本命。
+VERIFICATION_LOG.md §2.14 の落ちた名前そのもので、**この OS 上で**確かめる。
 """
 import importlib.util
 import io
@@ -117,7 +118,8 @@ class FakeCtx:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
-    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # ログは本物の `ctx.logger` をそのまま借りる。
+    # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
 
@@ -173,8 +175,8 @@ def setup(characters=None, player=None):
     sys.modules["__main__"].InstantaleApp = app_cls
 
     # 注入時の掃除を見るため、app は mod.apply の**前**に組み立てておく。
-    # 名前は `Character.__init__` がまだ包まれていないので生のまま入る
-    # （＝ この mod を入れる前に作られた既存キャラクタと同じ状態）。
+    # 名前は `Character.__init__` がまだ包まれていないので生のまま入る（＝ この
+    # mod を入れる前に作られた既存キャラクタと同じ状態）。
     world = World(dict(characters or {}))
     app = app_cls(world, player)
     sys.modules["__main__"].__dict__["_test_app"] = app

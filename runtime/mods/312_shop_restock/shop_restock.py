@@ -3,34 +3,38 @@
 
 ## 何が困るのか
 
-売買画面に並ぶのは、その施設の主（`Facility.owner`）の持ち物そのもの
-（`InstantaleApp.toggle_twin_inventory_window` の obtainer が主の Character）。
-ゲームは初めてその店を開いたときに品物を作って主へ持たせるが、**入れ替える
-仕組みが無い**。プレイヤーが売った品はそのまま主の持ち物に積まれるので、
-同じ店で何度か売っているとグリッド（4x6 = 24マス）が埋まり切り、それ以上
-売れなくなる。品揃えも初回のまま変わらない。
+売買画面に並ぶのは、その施設の主（`Facility.owner`）の持ち物そのもの（`InstantaleApp.toggle_twin_inventory_window` の
+obtainer が主の Character）。
+ゲームは初めてその店を開いたときに品物を作って主へ持たせるが、
+入れ替える仕組みが無い。
+プレイヤーが売った品はそのまま主の持ち物に積まれるので、
+同じ店で何度か売っているとグリッド（4x6 = 24マス）が埋まり切り、
+それ以上売れなくなる。
+品揃えも初回のまま変わらない。
 
-## 直し方 ―「消して、ゲーム自身に作らせる」
+## 直し方。「消して、ゲーム自身に作らせる」
 
-品物をこちらで作らない。アイテムの値付け（`set_shop_price_for_owner` /
-`normalize_shop_inventory_prices`）も、世界データからの選び方
-（`set_item_from_world_data(shop_owner_instance, next_tier)`）も、難度に応じた
-段（tier）の決め方も、全部ゲームが持っている。こちらが写し取って再現すれば、
-その瞬間からゲームの更新に付いていけなくなる。
+品物をこちらで作らない。
+アイテムの値付け（`set_shop_price_for_owner` /
+`normalize_shop_inventory_prices`）も、
+世界データからの選び方（`set_item_from_world_data(shop_owner_instance, next_tier)`）も、
+難度に応じた段（tier）の決め方も、全部ゲームが持っている。
+こちらが写し取って再現すれば、その瞬間からゲームの更新に付いていけなくなる。
 
 やることは1つだけ:
 
     売買を始める前に、入れ替え日が来ていれば主の持ち物を空にする
 
-初めてその店を開いたときの状態（＝空）に戻すだけなので、その後はゲーム自身が
-いつもの経路で品揃えを作る。プレイヤーが売った品もここで流れる ― 店主が
-仕入れを入れ替えた、という筋になる。
+初めてその店を開いたときの状態（＝空）に戻すだけなので、
+その後はゲーム自身がいつもの経路で品揃えを作る。
+プレイヤーが売った品もここで流れる。
+店主が仕入れを入れ替えた、という筋になる。
 
 ## 空にしたまま補充されなかったときの逃げ道
 
-「空なら作る」がゲームの実際の作りかどうかは、こちらからは確かめられない
-（本体は凍結されていてソースが読めない）。そこで**空にした後、必ず結果を
-見る**:
+「空なら作る」がゲームの実際の作りかどうかは、
+こちらからは確かめられない（本体は凍結されていてソースが読めない）。
+そこで**空にした後、必ず結果を見る**:
 
 ```
 入れ替え日が来た
@@ -44,30 +48,29 @@
 ```
 
 最悪でも「1回だけ空の店を見て、次の来店から元の品揃えが戻る」で止まる。
-店が永久に空になることはない。段(tier)はゲームが
-`set_item_from_world_data` に渡す値をそのまま覚えて使う ― 値の意味は解釈しない
-（`307_` が移動確認画面の `args` をそのまま写すのと同じ形）。
+店が永久に空になることはない。
+段(tier)はゲームが `set_item_from_world_data` に渡す値をそのまま覚えて使う。
+値の意味は解釈しない（`307_` が移動確認画面の `args` をそのまま写すのと同じ形）。
 
-待ってから見るのは、生成が Clock コールバックへ回される版でも取りこぼさない
-ため。`orig` の直後に見ると「まだ作っていないだけ」を「補充されなかった」と
-読み違える。
+待ってから見るのは、生成が Clock コールバックへ回される版でも取りこぼさないため。
+`orig` の直後に見ると「まだ作っていないだけ」を「補充されなかった」と読み違える。
 
 ## 日数と控え
 
 ゲーム内の日付は `app.world.days_elapsed`（世界に1つ。`elapse_days` が進める。
-実セーブでは `world_data.days_elapsed`）。店ごとの最後の入れ替え日は
-`state/shop_restock/<世界名>.json` に置く:
+実セーブでは `world_data.days_elapsed`）。
+店ごとの最後の入れ替え日は `state/shop_restock/<世界名>.json` に置く:
 
     {"<主の id>": {"day": 3651, "facility": "30", "count": 8, "tier": 2}}
 
-**セーブには独自の項目を足さない**（TECH.md §6）。ゲームが自分で持っている
-のは「主の持ち物」だけで、そこはゲームの形のまま入れ替わる。この mod を
-外しても、残るのは普通の品揃えを持った店だけになる。
+**セーブには独自の項目を足さない**（TECH.md §6）。
+ゲームが自分で持っているのは「主の持ち物」だけで、そこはゲームの形のまま入れ替わる。
+この mod を外しても、残るのは普通の品揃えを持った店だけになる。
 
-古いセーブをロードして日付が巻き戻ったときは、控えをその日に付け直して
-入れ替えない（次の来店から数え直す）。控えより先に進んだ日数だけで判断する
-ので、複数の世界・複数のセーブを行き来しても混ざらない（世界ごとにファイルを
-分けてある）。
+古いセーブをロードして日付が巻き戻ったときは、
+控えをその日に付け直して入れ替えない（次の来店から数え直す）。
+控えより先に進んだ日数だけで判断するので、
+複数の世界・複数のセーブを行き来しても混ざらない（世界ごとにファイルを分けてある）。
 """
 
 import os
@@ -83,14 +86,16 @@ RESTOCK_ON_FIRST_SHOP = False  # 初めて開いた店をその場で入れ替�
 
 LOG_BASENAME = "shop_restock.log"
 
-# 世界ごとの控えの置き場。`state/` の下（消すと入れ替えの間隔が巻き戻る）。
+# 世界ごとの控えの置き場。
+# `state/` の下（消すと入れ替えの間隔が巻き戻る）。
 STATE_DIRNAME = "shop_restock"
 
-# 空にした後、補充されたかを見るまでの待ち（秒）。生成が次のフレームへ
-# 回される版でも取りこぼさないだけの間を取る。
+# 空にした後、補充されたかを見るまでの待ち（秒）。
+# 生成が次のフレームへ回される版でも取りこぼさないだけの間を取る。
 VERIFY_DELAY = 1.0
 
-# 控えの鍵の並び。読む側（人間・別 mod）のために固定する。
+# 控えの鍵の並び。
+# 読む側（人間・別 mod）のために固定する。
 RECORD_KEYS = ("day", "facility", "count", "tier")
 
 # 再注入しても1組だけ持つ（世代をまたいで覚えていたい: 段(tier)と、
@@ -113,7 +118,8 @@ def apply(ctx):
 
     write = ctx.logger(LOG_BASENAME, stamp=False)
 
-    # ボタンは出さないので `mark` は要らない。`schedule` と例外の握りだけ借りる。
+    # ボタンは出さないので `mark` は要らない。
+    # `schedule` と例外の握りだけ借りる。
     screen = ui.Screen(ctx, write, tag="shop restock")
 
     # ------------------------------------------------------------ 世界と控え
@@ -123,9 +129,10 @@ def apply(ctx):
         bucket = store["buckets"].get(key)
         if bucket is None:
             path = os.path.join(state_dir, world_filename(key))
-            # 「無い（初回）」と「在るのに読めない（ロック・破損）」を同じ {} に
-            # 倒さない。後者を黙って倒すと、次の save_bucket が空に近い正本を
-            # **無傷で**作る ― 記録だけは必ず残す（ctx.read_json）。
+            # 「無い（初回）」と「在るのに読めない（ロック・破損）」を同じ
+            # {} に倒さない。
+            # 後者を黙って倒すと、次の save_bucket が空に近い正本を無傷で作る。
+            # 記録だけは必ず残す（ctx.read_json）。
             data = ctx.read_json(path, {})
             bucket = data if isinstance(data, dict) else {}
             store["buckets"][key] = bucket
@@ -165,14 +172,16 @@ def apply(ctx):
             return None
         if not isinstance(location, str):
             return location
-        # `find_facility` は `(施設, ノード)` を返す。施設だけを取る。
+        # `find_facility` は `(施設, ノード)` を返す。
+        # 施設だけを取る。
         return ui.find_facility(ui.current_area(app), location)[0]
 
     def inventory_of(character):
-        """持ち物の実体（`{item_id: アイテム}`）。**毎回引き直すこと。**
+        """持ち物の実体（`{item_id: アイテム}`）。毎回引き直すこと。
 
-        ゲームが新しい辞書を割り当て直す作りだった場合、掴んだままの参照は
-        古い辞書を指す（空にしたはずが元の辞書、という壊れ方になる）。
+        ゲームが新しい辞書を割り当て直す作りだった場合、
+        掴んだままの参照は古い辞書を指す（空にしたはずが元の辞書、
+        という壊れ方になる）。
         """
         if character is None:
             return None
@@ -235,8 +244,10 @@ def apply(ctx):
         last = last if isinstance(last, int) and not isinstance(last, bool) else None
 
         if last is None:
-            # 初めて開いた店。ここを基準の日にする。素の品揃えを1度も見ずに
-            # 入れ替えるのは、店を1軒も見ていない人から初回の面白みを奪う。
+            # 初めて開いた店。
+            # ここを基準の日にする。
+            # 素の品揃えを1度も見ずに入れ替えるのは、
+            # 店を1軒も見ていない人から初回の面白みを奪う。
             if not RESTOCK_ON_FIRST_SHOP:
                 bucket[owner_id] = ordered_record(day, facility, len(inventory), None)
                 save_bucket(key, bucket)
@@ -244,7 +255,8 @@ def apply(ctx):
                     label(app, owner_id, facility), day, len(inventory)))
                 return
         elif day < last:
-            # 古いセーブをロードした。控えを今日に付け直して数え直す。
+            # 古いセーブをロードした。
+            # 控えを今日に付け直して数え直す。
             bucket[owner_id] = ordered_record(day, facility, len(inventory),
                                               record.get("tier") if record else None)
             save_bucket(key, bucket)
@@ -295,7 +307,8 @@ def apply(ctx):
             return
 
         if not inventory:
-            # ゲームは空のままにした。段(tier)を見たことがあれば自分で呼ぶ。
+            # ゲームは空のままにした。
+            # 段(tier)を見たことがあれば自分で呼ぶ。
             tier = store["tiers"].get(owner_id)
             if tier is not None:
                 filled = regenerate(pending, tier)
@@ -317,7 +330,8 @@ def apply(ctx):
                 who, pending["day"], len(inventory)))
             return
 
-        # 補充されなかった。控えを戻して、以後この版では空にしない。
+        # 補充されなかった。
+        # 控えを戻して、以後この版では空にしない。
         store["auto_refill"] = False
         try:
             inventory.update(pending["snapshot"])
@@ -357,9 +371,10 @@ def apply(ctx):
         pending = store["pending"]
         store["pending"] = None
         if pending is not None:
-            # **必ず決着を付ける。** Clock が使えない場面で予約が取れないまま
-            # 抜けると、空にした店の控えが更新されないまま残り、次の来店でも
-            # また空にすることになる（毎回まっさらな店になる）。
+            # 必ず決着を付ける。
+            # Clock が使えない場面で予約が取れないまま抜けると、
+            # 空にした店の控えが更新されないまま残り、
+            # 次の来店でもまた空にすることになる（毎回まっさらな店になる）。
             if not screen.schedule(lambda: verify(pending), VERIFY_DELAY):
                 screen.guarded(lambda: verify(pending))
         return result

@@ -14,19 +14,22 @@
     mods/300_event/event.py         `EVENT_MODE = "conversation"` ← 既定値。そのまま残す
     settings/mod_settings.json      利用者が選んだ値だけ
 
-ローダは mod を読み込んだ**後・apply() を呼ぶ前**に、選ばれた値をモジュールの
-グローバルへ書き込む（`apply_to_module`）。mod のコードは何も変えなくてよく、
+ローダは mod を読み込んだ**後・apply() を呼ぶ前**に、
+選ばれた値をモジュールのグローバルへ書き込む（`apply_to_module`）。
+mod のコードは何も変えなくてよく、
 入れ子の関数がグローバルとして定数を読んでいてもそのまま新しい値を見る。
 
-`mod_settings.json` を `mods/` の中に置かないのは、そこが配布物そのものだから
-（TECH.md: mods/ は読む専用、書くのは out/）。mod のフォルダを丸ごと差し替えても
-利用者の設定は残る。置き場所は配布フォルダ直下の `settings/` で、**利用者が
-選んだものは全部ここに集める**（GUI のウィンドウ位置なども同じ場所）。
+`mod_settings.json` を `mods/` の中に置かないのは、
+そこが配布物そのものだから（TECH.md: mods/ は読む専用、書くのは out/）。
+mod のフォルダを丸ごと差し替えても利用者の設定は残る。
+置き場所は配布フォルダ直下の
+`settings/` で、**利用者が選んだものは全部ここに集める**（GUI のウィンドウ位置なども同じ場所）。
 
-**既定値が2箇所に書かれる**ことは認めている。コードの定数（実際に使われる値）と
-`mod.json` の `"default"`（GUI が表示に使う値）で、GUI は mod のコードを import
-しない決まりなので前者を読めない。ずれは `tools/check_mods.py` が AST で静的に
-突き合わせて報告する。
+**既定値が2箇所に書かれる**ことは認めている。
+コードの定数（実際に使われる値）と `mod.json` の
+`"default"`（GUI が表示に使う値）で、GUI は mod のコードを
+import しない決まりなので前者を読めない。
+ずれは `tools/check_mods.py` が AST で静的に突き合わせて報告する。
 
 宣言の形:
 
@@ -40,14 +43,16 @@
       "CHANCE_OVERRIDE": {"type": "float", "default": null, "allow_null": true}
     }
 
-扱う型は `bool` / `int` / `float` / `str` / `choice` だけ。辞書やタプルの設定
-（`KINDS` など）は宣言しない。GUI の1行で編集できる形に収まらず、無理に載せると
-「JSON を手で書く欄」になって、コードを直接編むより分かりにくい。そういう設定は
-コード側に置いたままにする。
+扱う型は `bool` / `int` / `float` / `str` / `choice` だけ。
+辞書やタプルの設定（`KINDS` など）は宣言しない。
+GUI の1行で編集できる形に収まらず、無理に載せると「JSON を手で書く欄」になって、
+コードを直接編むより分かりにくい。
+そういう設定はコード側へ置いたままにする。
 
-ただし**プレイヤーの体験に関わる設定なら、宣言できる形に割るほうを選ぶ**。施設別の
-発生率は元々 `CHANCE_BY_TYPE` という辞書1つだったが、`CHANCE_INN` / `CHANCE_GUILD`
-… と種別ごとの `float` に割ってある（施設種別はゲーム側で閉じた集合なので、
+ただし**プレイヤーの体験に関わる設定なら、宣言できる形に割るほうを選ぶ**。
+施設別の発生率は元々 `CHANCE_BY_TYPE` という辞書1つだったが、
+`CHANCE_INN` / `CHANCE_GUILD` … と種別ごとの
+`float` に割ってある（施設種別はゲーム側で閉じた集合なので、
 1つずつ並べても項目が際限なく増えない）。
 """
 
@@ -58,17 +63,20 @@ import os
 
 from . import log, log_exc, write_json
 
-# 利用者が選んだ値の置き場所。配布フォルダ直下の settings/（runtime/ の1つ上）。
+# 利用者が選んだ値の置き場所。
+# 配布フォルダ直下の settings/（runtime/ の1つ上）。
 STORE_NAME = "mod_settings.json"
 SETTINGS_DIR_NAME = "settings"
 
-#: ローダ自身の切り替え。**mod ごとの設定とは別ファイル**にしてある。
-#: `mod_settings.json` の中身は「mod フォルダ名 -> 値」で、ここに mod ではない
-#: キーを混ぜると `load_store()` の形が崩れる。
-#:
-#: GUI の `gui.json` にも置けない。あれは GUI しか読まない覚え書き（窓の位置など）
-#: だが、こちらは**ゲームの中で `discover()` が読む**。両者が同じファイルを指せる
-#: 場所は `settings/` だけで、GUI もローダもここの `settings_dir()` を通っている。
+#: ローダ自身の切り替え。
+#: **mod ごとの設定とは別ファイル**にしてある。
+#: `mod_settings.json` の中身は「mod フォルダ名 -> 値」で、
+#: ここに mod ではないキーを混ぜると `load_store()` の形が崩れる。
+#: GUI の `gui.json` にも置けない。
+#: あれは GUI しか読まない覚え書き（窓の位置など）だが、
+#: こちらは**ゲームの中で `discover()` が読む**。
+#: 両者が同じファイルを指せる場所は `settings/` だけで、
+#: GUI もローダもここの `settings_dir()` を通っている。
 FLAGS_NAME = "loader.json"
 
 TYPES = ("bool", "int", "float", "str", "choice")
@@ -103,9 +111,9 @@ def _label(value, fallback: str) -> dict:
 def normalize_decls(raw) -> dict:
     """`mod.json` の "settings" を扱いやすい形に均す。壊れた宣言は落とす。
 
-    ここで例外にしないのは名乗りと同じ理由で、**設定の書き方を間違えた mod が
-    読み込まれなくなるのは行き過ぎ**だから。落とした宣言はログに残り、
-    `tools/check_mods.py` が注入前に報告する。
+    ここで例外にしないのは名乗りと同じ理由で、**設定の書き方を間違えた
+    mod が読み込まれなくなるのは行き過ぎ**だから。
+    落とした宣言はログに残り、`tools/check_mods.py` が注入前に報告する。
     """
     if not isinstance(raw, dict):
         return {}
@@ -198,9 +206,11 @@ def coerce(decl: dict, value):
 def resolve(decls: dict, chosen) -> dict:
     """宣言の既定値に、利用者が選んだ有効な値を重ねた結果を返す。
 
-    読めない値は**黙って捨てて既定に倒す**。設定ファイルが壊れているせいで mod が
-    1つも動かないのは割に合わない（`load_order.json` が壊れていても必ず何らかの順で
-    動かす、という判断と同じ）。捨てたことはログに残す。
+    読めない値は**黙って捨てて既定に倒す**。
+    設定ファイルが壊れているせいで mod が
+    1つも動かないのは割に合わない（`load_order.json` が壊れていても必ず何らかの順で動かす、
+    という判断と同じ）。
+    捨てたことはログに残す。
     """
     values = {name: decl["default"] for name, decl in decls.items()}
     if not isinstance(chosen, dict):
@@ -243,7 +253,8 @@ def load_store(runtime_dir: str) -> dict:
 def load_flags(runtime_dir: str) -> dict:
     """`loader.json` を読む。無ければ `{}`（＝全て既定＝切）。
 
-    このファイルは**配布物に入っていない**。利用者が何か切り替えて初めてできるので、
+    このファイルは**配布物に入っていない**。
+    利用者が何か切り替えて初めてできるので、
     「無い＝デバッグモードは切」が自然に成り立つ。
     """
     path = flags_path(runtime_dir)
@@ -267,8 +278,8 @@ def debug_mode(runtime_dir: str) -> bool:
     入れると `"debug": true` の mod（計測系）が読み込まれ、GUI の一覧にも出る。
     切っている間は**一覧にも出ないし読み込まれもしない**（`discover()`）。
 
-    切り替えが効くのは `discover()` を通る時＝次の注入から。動いているゲームには
-    届かない（既に当たっているパッチをファイル1つで剥がす経路は無い）。
+    切り替えが効くのは `discover()` を通る時＝次の注入から。
+    動いているゲームには届かない（既に当たっているパッチをファイル1つで剥がす経路は無い）。
     """
     return bool(load_flags(runtime_dir).get("debug"))
 
@@ -279,9 +290,9 @@ def _save_settings_json(runtime_dir: str, path: str, data: dict) -> None:
     書き方（隣に書いてから差し替える）は `write_json()` に一本化してある。
     ここだけ戻り値ではなく例外にしているのは、**呼び出し元が GUI だから**。
     MOD の書き込みはゲームのスレッドで走るので黙って False を返すのが正しいが、
-    こちらは利用者が「保存」を押した結果で、失敗したら画面に出す必要がある
-    （`gui.py` が捕まえてダイアログにする）。黙って False を返すと、
-    設定が保存されていないのに保存されたように見える。
+    こちらは利用者が「保存」を押した結果で、
+    失敗したら画面に出す必要がある（`gui.py` が捕まえてダイアログにする）。
+    黙って False を返すと、設定が保存されていないのに保存されたように見える。
     """
     # settings/ は配布物に入っていない（利用者が何か変えて初めてできる）。
     os.makedirs(settings_dir(runtime_dir), exist_ok=True)
@@ -297,8 +308,9 @@ def save_flags(runtime_dir: str, data: dict) -> None:
 def save_store(runtime_dir: str, data: dict) -> None:
     """`mod_settings.json` を書く。**既定と同じ値は書かない**のは呼び出し側の責任。
 
-    空の mod は落としてから書く。設定を既定に戻したときに `{"300_x": {}}` が
-    溜まっていくと、差分を見たときに何を変えたのか分からなくなる。
+    空の mod は落としてから書く。
+    設定を既定に戻したときに `{"300_x": {}}` が溜まっていくと、
+    差分を見たときに何を変えたのか分からなくなる。
     """
     trimmed = {mod: dict(values) for mod, values in sorted(data.items()) if values}
     _save_settings_json(runtime_dir, store_path(runtime_dir), trimmed)
@@ -310,13 +322,14 @@ def save_store(runtime_dir: str, data: dict) -> None:
 def apply_to_module(module, decls: dict, chosen) -> dict:
     """解決した値をモジュールのグローバルへ書き込み、実際に効いた値を返す。
 
-    **apply() を呼ぶ前に**通すこと。apply() の中で作られる入れ子の関数は、定数を
-    自分のクロージャではなくモジュールのグローバルとして読むので、ここで書き換えて
-    おけば mod のコードに手を入れずに設定が効く。
+    **apply() を呼ぶ前に**通すこと。
+    apply() の中で作られる入れ子の関数は、
+    定数を自分のクロージャではなくモジュールのグローバルとして読むので、
+    ここで書き換えておけば mod のコードに手を入れずに設定が効く。
 
-    宣言されているのにモジュールに無い名前は書き込まずに警告する。`@patch` が
-    「属性が無ければ撥ねる」のと同じ理由で、設定名の打ち間違いが「効いているように
-    見える」のを防ぐため（`setattr` は黙って新しい名前を作ってしまう）。
+    宣言されているのにモジュールに無い名前は書き込まずに警告する。
+    `@patch` が「属性が無ければ撥ねる」のと同じ理由で、
+    設定名の打ち間違いが「効いているように見える」のを防ぐため（`setattr` は黙って新しい名前を作ってしまう）。
     """
     values = resolve(decls, chosen)
     effective: dict = {}

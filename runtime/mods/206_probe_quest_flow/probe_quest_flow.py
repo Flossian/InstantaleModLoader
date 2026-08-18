@@ -1,17 +1,18 @@
 # -*- coding: utf-8 -*-
 """計測: クエストの受注経路と、選択肢ボタンの登録方法を特定する。
 
-やりたいこと（機能追加）は「NPC との会話中に依頼を受注する」で、そのために
-必要な情報は3つある。どれもソースが読めない以上、実行中のプロセスに聞くしかない。
+やりたいこと（機能追加）は「NPC との会話中に依頼を受注する」で、
+そのために必要な情報は3つある。
+どれもソースが読めない以上、実行中のプロセスに聞くしかない。
 
-  1. **選択肢ボタンをどう出すか**。`Display*Choice.update_button_display()` が
+  1. 選択肢ボタンをどう出すか。`Display*Choice.update_button_display()` が
      何を触っているのか。`app` には `buttons` / `to_display_buttons` /
      `display_button_map` / `function_correspond_to_input` / `choice_button_page`
      の5つがあり、どれが「押されたときに呼ぶマネージャ」の対応表なのかが不明。
      これが分からないと「依頼を受ける」ボタンも「個別依頼の一覧」も出せない。
      **`update_button_display` の前後で差分を取る**ことで確定させる。
 
-  2. **どうやって受注するか**。`QuestChoiceManager(app, quest_type, quest_id)` と
+  2. どうやって受注するか。`QuestChoiceManager(app, quest_type, quest_id)` と
      `QuestStartManager(app, quest_type, quest_id)` がある。`quest_type` に何が
      入るのか（セーブ上は 'normal_quest'）、`quest_id` は str か int か、
      受注確定はどちらのどのメソッドか。300_ で確立した
@@ -25,8 +26,8 @@
      `World.generate_quests` と `DisplayQuestChoice.generate_random_quest` の
      どちらが「1件を世界に登録する」入口なのかを見る。
 
-この mod は**観測しかしない**。値は変えず、例外も握り潰さない（wrap の中で
-記録に失敗しても本体は必ず呼ぶ）。
+この mod は観測しかしない。
+値は変えず、例外も握り潰さない（wrap の中で記録に失敗しても本体は必ず呼ぶ）。
 """
 
 import sys
@@ -45,12 +46,14 @@ BUTTON_ATTRS = ("buttons", "buttons_backup", "to_display_buttons",
                 "display_button_map", "function_correspond_to_input",
                 "choice_button_page")
 
-# クエスト dict の中身を全部出すと敵データで数千行になる。上位だけ出す。
+# クエスト dict の中身を全部出すと敵データで数千行になる。
+# 上位だけ出す。
 QUEST_TOP_KEYS = ("quest_title", "client_name", "request_summary", "difficulty",
                   "id", "quest_type", "config", "quest_area_id",
                   "neighboring_settlement_id")
 
-# 1つの wrap あたり何回まで記録するか。会話中に何度も走るものがあるため。
+# 1つの wrap あたり何回まで記録するか。
+# 会話中に何度も走るものがあるため。
 MAX_SAMPLES = 6
 
 
@@ -100,8 +103,8 @@ def apply(ctx):
                 data = dict(vars(spec))
             except Exception as exc:
                 return "<PhaseSpec unreadable: {}>".format(type(exc).__name__)
-        # repr_value は dict をキー一覧に畳んでしまう。ここで欲しいのは
-        # cls_name と args の**中身**なので、自前で組み立てる。
+        # repr_value は dict をキー一覧に畳んでしまう。
+        # ここで欲しいのは cls_name と args の中身なので、自前で組み立てる。
         return "{}(app, *{!r})".format(
             data.get("cls_name"), data.get("args"))[:300]
 
@@ -131,8 +134,8 @@ def apply(ctx):
                 state[attr] = "{}(len={}) {!r}".format(
                     type(value).__name__, len(value), entries)
             elif attr == "function_correspond_to_input":
-                # 名前に反して対応表ではなく PhaseSpec 1個。「今テキスト入力を
-                # 受けたら何を呼ぶか」を保持しているとみられる。
+                # 名前に反して対応表ではなく PhaseSpec 1個。
+                # 「今テキスト入力を受けたら何を呼ぶか」を保持しているとみられる。
                 state[attr] = describe_spec(value)
             else:
                 state[attr] = repr_value(value)
@@ -141,8 +144,9 @@ def apply(ctx):
     def diff_buttons(app, label, before):
         """update_button_display の前後で何が変わったかだけを出す。
 
-        全属性を毎回書くとログが読めなくなる。変わったものだけ before/after で
-        並べれば、「選択肢を出すには何を書けばよいか」がそのまま読める。
+        全属性を毎回書くとログが読めなくなる。
+        変わったものだけ before/after で並べれば、
+        「選択肢を出すには何を書けばよいか」がそのまま読める。
         """
         after = button_state(app)
         changed = [k for k in after if before.get(k) != after[k]]
@@ -180,8 +184,9 @@ def apply(ctx):
     def dump_class(name, module_name="__main__"):
         """クラスが持つメソッド一覧と __init__ の形。
 
-        targets.txt はモジュールレベルのスキャンなので、ネストした関数や
-        後から生えたメソッドが漏れることがある（TECH.md §4.1 の罠）。
+        targets.txt はモジュールレベルのスキャンなので、
+        ネストした関数や後から生えたメソッドが漏れることがある（TECH.md
+        §4.1 の罠）。
         受注経路を辿るには実物の vars(cls) を見る必要がある。
         """
         module = sys.modules.get(module_name)
@@ -195,10 +200,11 @@ def apply(ctx):
         if init is not None:
             write("      __init__{}".format(_sig_of(init)))
 
-    # **画面を塗っているのは HUD 側**（GAME.md §2.3）。`app.to_display_buttons`
-    # は監視対象ではないので、「…」が HUD の中だけで起きているならこちらを
-    # 見ないと捕まらない。**画面に出ている文字は `hud.buttons` の各ウィジェットの
-    # `.text`** で、`app.to_display_buttons` とは別物。
+    # **画面を塗っているのは HUD 側**（GAME.md §2.3）。
+    # `app.to_display_buttons` は監視対象ではないので、
+    # 「…」が HUD の中だけで起きているならこちらを見ないと捕まらない。
+    # **画面に出ている文字は `hud.buttons` の各ウィジェットの `.text`** で、
+    # `app.to_display_buttons` とは別物。
     def hud_texts(app):
         hud = ui_find_hud(app)
         if hud is None:
@@ -239,7 +245,7 @@ def apply(ctx):
     def dump_hud(app):
         """HUD が持っている属性を一度だけ全部出す。
 
-        ラベルを保持しているプロパティの**名前**が分からないと監視できない。
+        ラベルを保持しているプロパティの名前が分からないと監視できない。
         推測で当てずに、実物の `vars(hud)` を見る。
         """
         hud = ui_find_hud(app)
@@ -268,11 +274,13 @@ def apply(ctx):
             write("  InstantaleApp instance not found (not in a game yet?)")
             return
 
-        # --- 1. ボタン関係の今の姿。ここが「選択肢の出し方」の出発点。
+        # --- 1. ボタン関係の今の姿。
+        # ここが「選択肢の出し方」の出発点。
         write("  -- button/choice state --")
         for key, value in sorted(button_state(app).items()):
             write("    app.{:<28} = {}".format(key, value))
-        # 画面を塗っている HUD の実体。待機表示（「…」）を探す手掛かり。
+        # 画面を塗っている HUD の実体。
+        # 待機表示（「…」）を探す手掛かり。
         dump_hud(app)
         # 会話中の選択肢は下の choice ボタンではなく HUD 上部に出ているらしい。
         # その文字列はここにある。
@@ -323,7 +331,8 @@ def apply(ctx):
             first = next(iter(wquests))
             dump_quest(wquests[first], "app.world.quests[{!r}]".format(first))
 
-        # --- 4. 現在地とプレイヤーの進捗。受注可能な難易度の判定に要る。
+        # --- 4. 現在地とプレイヤーの進捗。
+        # 受注可能な難易度の判定に要る。
         write("  -- player / location --")
         player = getattr(app, "player", None)
         area = getattr(player, "current_area", None)
@@ -374,8 +383,9 @@ def apply(ctx):
     # ==================================================================
     # 1. 選択肢ボタンの登録方法
     # ==================================================================
-    # 「会話する」を押すと DisplayTalkChoice が NPC の一覧を出す。これが
-    # 作りたい「個別依頼の一覧」と同じ構造なので、その前後の差分が設計図になる。
+    # 「会話する」を押すと DisplayTalkChoice が NPC の一覧を出す。
+    # これが作りたい「個別依頼の一覧」と同じ構造なので、
+    # その前後の差分が設計図になる。
     def wrap_button_display(target, label):
         @ctx.wrap(target, required=False)
         def _display(orig, self, *args, **kwargs):
@@ -404,10 +414,11 @@ def apply(ctx):
 
     # ------------------------------------------- 待機表示（ボタンが「…」になる）
     # ゲーム自身の長い処理は、その間ボタンを「…」にしてプレイヤーを待たせる。
-    # それを**どこで立てているのか**を突き止める。`on_button_press` の中なのか
-    # `process_choice` の中なのかで、自前のフェーズを起こすときに素通しすべき
-    # 経路が変わる（301_ は on_button_press を横取りして process_choice を
-    # 直接呼んでいるので、前者だと待機表示が出ない）。
+    # それをどこで立てているのかを突き止める。
+    # `on_button_press` の中なのか `process_choice` の中なのかで、
+    # 自前のフェーズを起こすときに素通しすべき経路が変わる（301_ は
+    # on_button_press を横取りして process_choice を直接呼んでいるので、
+    # 前者だと待機表示が出ない）。
     @ctx.wrap("__main__:InstantaleApp.process_choice", required=False)
     def process_choice_waitstate(orig, self, function, choice_text="", *args, **kwargs):
         if sample("process_choice.waitstate"):
@@ -420,14 +431,14 @@ def apply(ctx):
         return orig(self, function, choice_text, *args, **kwargs)
 
     # ---- ゲーム自身の待機表示を捕まえる -----------------------------------
-    # 「…」がどこで立つのか、**前後の標本では捕まらない**。`process_choice` は
+    # 「…」がどこで立つのか、前後の標本では捕まらない。`process_choice` は
     # `execute` をスレッドに渡して即座に返るので、「after」は「最中」ではない。
     # そこで2本立てで観測する:
     #
     #   1. 状態の変化そのものを監視する（下の watcher）。誰が立てたかは
     #      分からないが、**立つかどうか・どんな見た目か**は確実に分かる
-    #   2. `AreaMoveManager.show_loading_text` ― `__main__` にある唯一の
-    #      「待機表示」らしきメソッド。**移動のたびに走る**ので、特別な操作を
+    #   2. `AreaMoveManager.show_loading_text`。`__main__` にある唯一の
+    #      「待機表示」らしきメソッド。移動のたびに走るので、特別な操作を
     #      頼まなくても普段のプレイで捕まる。ゲーム native の待機表示の
     #      実例として、その前後の差分がそのまま答えになる
     WATCH_WAIT_STATE = True
@@ -445,15 +456,15 @@ def apply(ctx):
             write("    after  -> {}".format(wait_state(app) if app else "<no app>"))
         return result
 
-    # 再注入のたびにスレッドが積み上がらないようにする。判定はローダが持って
-    # いる（`ctx.superseded()`）ので、合言葉を自前で置かない ― 置き場所と
-    # 判定が MOD ごとにばらつくうえ、「ローダごと読み込み直された」の判定が
-    # 抜けやすい（TECH.md §3.6.1）。
+    # 再注入のたびにスレッドが積み上がらないようにする。
+    # 判定はローダが持っている（`ctx.superseded()`）ので、合言葉を自前で置かない。
+    # 置き場所と判定が MOD ごとにばらつくうえ、
+    # 「ローダごと読み込み直された」の判定が抜けやすい（TECH.md §3.6.1）。
     def watch_wait_state():
         """待機表示に関わる状態が変わった瞬間だけを記録する。
 
-        誰が立てたかまでは分からない（属性への代入は追えない）。だが
-        **そもそも立つのか・立つならどんな見た目なのか**が分かれば、
+        誰が立てたかまでは分からない（属性への代入は追えない）。
+        だが **そもそも立つのか・立つならどんな見た目なのか**が分かれば、
         自前で出すべきか乗れるのかを判断できる。
         """
         last = None
@@ -573,10 +584,12 @@ def apply(ctx):
     def _quest_of(app, qid):
         return _quests_of(app).get(qid)
 
-    # --- 受注そのもの。300_ の process_choice 経由で起こせる形かを確かめる。
+    # --- 受注そのもの。
+    # 300_ の process_choice 経由で起こせる形かを確かめる。
     @ctx.wrap("__main__:QuestChoiceManager.__init__", required=False)
     def quest_choice_init(orig, self, app, quest_type, quest_id, *args, **kwargs):
-        # 例外も記録する。301_ がここで2回落ちた（`quest_type` の語彙違い）ので、
+        # 例外も記録する。
+        # 301_ がここで2回落ちた（`quest_type` の語彙違い）ので、
         # 誰がどんな値で呼んだのかが最も重要な記録になった。
         try:
             result = orig(self, app, quest_type, quest_id, *args, **kwargs)
@@ -589,15 +602,15 @@ def apply(ctx):
         return result
 
     # ------------------------------------ quest_type の語彙を総当たりで割り出す
-    # `QuestChoiceManager(app, quest_type, quest_id)` の `quest_type` は、クエスト
-    # 辞書の `quest_type` フィールド（'normal_quest' / 'random_quest'）**とは
-    # 別の語彙**（どちらを渡しても KeyError になる ＝ ストーリー側の分岐に落ちる。
-    # GAME.md §2.2）。
-    #
-    # 引数で分岐して辞書を引くだけの処理なので総当たりが効く
-    # （GAME.md §3「純粋関数は総当たりで定義域を割り出す」）。**実在する
-    # quest_id を渡し、例外が出ないものを探す。** 作ったインスタンスは捨てる
-    # ― `execute` を呼ばないので画面も状態も動かない。
+    # `QuestChoiceManager(app, quest_type, quest_id)` の `quest_type` は、
+    # クエスト辞書の `quest_type` フィールド（'normal_quest' /
+    # 'random_quest'）**とは別の語彙**（どちらを渡しても
+    # KeyError になる ＝ ストーリー側の分岐に落ちる。GAME.md §2.2）。
+    # 引数で分岐して辞書を引くだけの処理なので総当たりが効く（GAME.md
+    # §3「純粋関数は総当たりで定義域を割り出す」）。
+    # **実在する quest_id を渡し、例外が出ないものを探す。**
+    # 作ったインスタンスは捨てる。
+    # `execute` を呼ばないので画面も状態も動かない。
     PROBE_QUEST_TYPES = True
 
     QUEST_TYPE_CANDIDATES = (
@@ -607,19 +620,21 @@ def apply(ctx):
         "normal_quests", "quests", "world_quest",
     )
 
-    # 世界がロードされるまで待つ。注入はタイトル画面でも起きるので、素朴に
-    # 走らせると `world.quests unavailable` で空振りして終わる（実際に踏んだ）。
+    # 世界がロードされるまで待つ。
+    # 注入はタイトル画面でも起きるので、素朴に走らせると
+    # `world.quests unavailable` で空振りして終わる（実際に踏んだ）。
     PROBE_WAIT_POLL = 10.0
     PROBE_WAIT_LIMIT = 360      # 10秒 x 360 = 1時間
 
     def wait_for_world():
         """世界がロードされるまで待つ。降りたら None。
 
-        **`ctx.superseded()` を毎周見る**（TECH.md §3.6.1）。この待ちは最長
-        1時間で、その間に注入し直されると古い版が回り続ける ― 上の
-        `watch_wait_state` と同じ理由・同じ形。降りる側の合図が無いと、
-        世界がロードされた瞬間に**古い世代と新しい世代の総当たりが同時に走る**
-        （`QuestChoiceManager` を候補ぶん組む処理なので、重なるほど濃くなる）。
+        **`ctx.superseded()` を毎周見る**（TECH.md §3.6.1）。
+        この待ちは最長 1時間で、その間に注入し直されると古い版が回り続ける。
+        上の `watch_wait_state` と同じ理由・同じ形。
+        降りる側の合図が無いと、
+        世界がロードされた瞬間に**古い世代と新しい世代の総当たりが同時に走る**（`QuestChoiceManager` を候補ぶん組む処理なので、
+        重なるほど濃くなる）。
         """
         for _ in range(PROBE_WAIT_LIMIT):
             if ctx.superseded():
@@ -769,7 +784,8 @@ def apply(ctx):
         return result
 
     # ==================================================================
-    # 4. 会話側。どこに割り込めば選択肢を足せるか。
+    # 4. 会話側。
+    # どこに割り込めば選択肢を足せるか。
     # ==================================================================
     @ctx.wrap("__main__:ConversationPhaseManager.__init__", required=False)
     def conversation_phase_init(orig, self, app, instruction, *args, **kwargs):
@@ -795,9 +811,10 @@ def apply(ctx):
     def conversation_start_execute(orig, self, choice_text, *args, **kwargs):
         """会話が始まった直後のボタンの姿。ここが「依頼を受ける」を足す場所。
 
-        会話中は自由入力が主で、`function_correspond_to_input` が
-        「入力を送ったら何を呼ぶか」を持っている（PhaseSpec）。選択肢ボタンが
-        同時に生きているのか、生きているなら何が並んでいるのかを確かめる。
+        会話中は自由入力が主で、
+        `function_correspond_to_input` が「入力を送ったら何を呼ぶか」を持っている（PhaseSpec）。
+        選択肢ボタンが同時に生きているのか、
+        生きているなら何が並んでいるのかを確かめる。
         """
         app = getattr(self, "app", None) or find_app()
         result = orig(self, choice_text, *args, **kwargs)
@@ -863,15 +880,18 @@ def apply(ctx):
 
     @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.update_top_info_texts", required=False)
     def update_top_info_texts(orig, self, instance, value, *args, **kwargs):
-        # 上部ボタンの文字列が変わるたびに記録する。会話に入った瞬間に
-        # 何が並ぶかが分かれば、利用者に「この文字のボタン」と言える。
+        # 上部ボタンの文字列が変わるたびに記録する。
+        # 会話に入った瞬間に何が並ぶかが分かれば、
+        # 利用者に「この文字のボタン」と言える。
         if sample("update_top_info_texts"):
             write("hud top info texts -> {}".format(repr_value(value)))
         return orig(self, instance, value, *args, **kwargs)
 
-    # 会話中の「行動」メニュー。`app.in_action_in_conversation` を立てて
-    # 自由入力から選択肢に切り替える経路で、雇用・戦闘・買い物がここに並ぶ。
-    # 「依頼を受ける」を足すならここが本来の居場所。並んでいる spec を見る。
+    # 会話中の「行動」メニュー。
+    # `app.in_action_in_conversation` を立てて自由入力から選択肢に切り替える経路で、
+    # 雇用・戦闘・買い物がここに並ぶ。
+    # 「依頼を受ける」を足すならここが本来の居場所。
+    # 並んでいる spec を見る。
     def wrap_action_toggle(target, label):
         @ctx.wrap(target, required=False)
         def _toggle(orig, self, *args, **kwargs):
@@ -901,7 +921,8 @@ def apply(ctx):
                                         repr_value(end_text)))
         return orig(self, app, in_conversation_id, finisher, end_text, *args, **kwargs)
 
-    # NPC が「この土地の依頼」を語るときに使う知識。会話から依頼を作るとき、
+    # NPC が「この土地の依頼」を語るときに使う知識。
+    # 会話から依頼を作るとき、
     # ゲーム自身が何をクエスト情報として渡しているかがそのまま雛形になる。
     @ctx.wrap("scripts.llm.context_manager:get_quest_data_for_conversation",
               required=False)

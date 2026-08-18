@@ -1,87 +1,101 @@
 # -*- coding: utf-8 -*-
 """プロンプトに埋め込まれたスキーマ説明文を、簡潔な一覧表記に置き換える。
 
-ゲームは llama-server に `json_schema` パラメータ（grammar の実体）を送ると
-同時に、**同じスキーマを Python dict の repr としてプロンプト本文にも埋め込んで**
-いる。構造の正しさは `json_schema` 側がトークン単位で強制するので、プロンプト側の
-説明文に必要なのは「フィールドの意味の手がかり」だけで、全フィールドに付いてくる
+ゲームは llama-server に `json_schema` パラメータ（grammar の実体）を送ると同時に、**同じスキーマを Python dict の
+repr としてプロンプト本文にも埋め込んで** いる。
+構造の正しさは `json_schema` 側がトークン単位で強制するので、
+プロンプト側の説明文に必要なのは「フィールドの意味の手がかり」だけで、
+全フィールドに付いてくる
 `{'title': 'Name', 'type': 'string'}` のような定型句は落としても構造は壊れない。
 
     元:   {'$defs': {'Location': {'properties': {'name': {'title': 'Name', ...
     後:   Location: name, kind:∈{shop,inn}
           Area: name, locations:Location[], atomosphere:∈{tense,normal}, note?
 
-外部プロキシ（InstantaleLLMProxy）の `Proxy.SchemaFix.cs` にある COMPACT と
-同じ処理をプロセス内でやる。判定と出力の書式はプロキシ側に揃えてあるので、
-同じスキーマからは同じ一覧が出る。両方を同時に動かしても、先に圧縮した方で
-マーカー（`{'$defs':` 等）が消えるため、もう片方は何もしない（二重適用にならない）。
+外部プロキシ（InstantaleLLMProxy）の `Proxy.SchemaFix.cs` にある
+COMPACT と同じ処理をプロセス内でやる。
+判定と出力の書式はプロキシ側に揃えてあるので、同じスキーマからは同じ一覧が出る。
+両方を同時に動かしても、先に圧縮した方でマーカー（`{'$defs':` 等）が消えるため、
+もう片方は何もしない（二重適用にならない）。
 
-検証は実データ（ゲーム自身が `output_data/` に保存した messages 12,067 件）と実機の
-両方で済んでいる。誤爆・欠落とも 0 件、削減率は 72〜73%（VERIFICATION_LOG.md §2.3）。
+検証は実データ（ゲーム自身が `output_data/` に保存した messages
+12,067 件）と実機の両方で済んでいる。
+誤爆・欠落とも 0 件、削減率は 72〜73%（VERIFICATION_LOG.md §2.3）。
 
 ## どこに仕掛けるか
 
-プロキシは HTTP ボディを見るので `prompt` と `json_schema` が同じ dict に揃って
-いる。「json_schema か grammar が既にある時だけ圧縮する」という安全条件は、この
-1箇所で判定できていた。プロセス内で同じものが揃っているのは:
+プロキシは HTTP ボディを見るので `prompt` と `json_schema` が同じ
+dict に揃っている。
+「json_schema か grammar が既にある時だけ圧縮する」という安全条件は、
+この 1箇所で判定できていた。
+プロセス内で同じものが揃っているのは:
 
     LlamaCppClient._post_with_model_loading_retry(url, payload)   payload に両方ある
 
-ただし `chat(..., stream=True)` の経路がこのヘルパを通るとは限らない。通らなかった
-場合に何も起きないのを避けるため、上流の
+ただし `chat(..., stream=True)` の経路がこのヘルパを通るとは限らない。
+通らなかった場合に何も起きないのを避けるため、上流の
 
     LlamaCppClient.chat(model, messages, format=...)              format がスキーマ
 
-にも同じ処理を掛ける。`format` が **dict の時だけ** 対象にする。`"json"` のような
-汎用 JSON 指定はフィールド単位の強制をしないので、説明文を削ると手がかりが消える。
+にも同じ処理を掛ける。
+`format` が dict の時だけ 対象にする。
+`"json"` のような汎用 JSON 指定はフィールド単位の強制をしないので、
+説明文を削ると手がかりが消える。
 
 どちらが実際に発火したかは `out/prompt_bloat.log` の `[COMPACT] <site>` で分かる。
 両方 0 件なら、そもそもこの2つを通っていないということ。
 
 ## 割り切り（プロキシと同じ）
 
-- 圧縮するのは **最初に見つかったスキーマ1個だけ**。2個目を含むメッセージは
-  実データに 0 件なので、実運用では制約になっていない
+- 圧縮するのは **最初に見つかったスキーマ1個だけ**。
+  2個目を含むメッセージは実データに 0 件なので、実運用では制約になっていない
 - `$defs` の中でも `properties` を持たない定義（Enum クラス単体など）は行を出さず、
-  参照側に `$ref` の型名だけが残る。pydantic は `Literal` を参照先ではなく
-  プロパティ側に展開するため、これで enum 値は落ちない
+  参照側に `$ref` の型名だけが残る。
+  pydantic は `Literal` を参照先ではなくプロパティ側に展開するため、
+  これで enum 値は落ちない
 - 置換後の方が長くなる場合は何もしない
 
 一時的に止めたいときはファイル名の先頭に `_` を付ける（ローダが読み込まなくなる）。
 
-## クラウド（APIキー）では動かない。**それでよい**
+## クラウド（APIキー）では動かない。それでよい
 
-仕掛けているのは `LlamaCppClient` の2点だけで、`llm.wrap_outgoing`（プロバイダ
-非依存の口）には載せていない。理由は2つあり、どちらも載せても意味が無い:
+仕掛けているのは `LlamaCppClient` の2点だけで、
+`llm.wrap_outgoing`（プロバイダ非依存の口）には載せていない。
+理由は2つあり、どちらも載せても意味が無い:
 
-* 圧縮してよいかの判定が `json_schema` / `grammar` の有無で、これは llama.cpp の
-  payload と format にしか無い。境界の `message` からは分からない
-* そもそもクラウドではスキーマ文が**プロンプトに埋まっていない**。Gemini は
-  `send_request` の中で足すので境界の外、OpenAI / Claude は API 側に任せていて
-  埋め込み自体が無い（GAME.md §2.12）
+* 圧縮してよいかの判定が `json_schema` / `grammar` の有無で、
+  これは llama.cpp の payload と format にしか無い。
+  境界の `message` からは分からない
+* そもそもクラウドではスキーマ文が**プロンプトに埋まっていない**。
+  Gemini は `send_request` の中で足すので境界の外、
+  OpenAI / Claude は API 側に任せていて埋め込み自体が無い（GAME.md §2.12）
 
-つまり圧縮する対象がクラウド経路には存在しない。`119_` / `305_` が
-「ローカルにしか仕掛けていない」ことで**取りこぼしていた**のとは事情が違う。
+つまり圧縮する対象がクラウド経路には存在しない。
+`119_` /
+`305_` が「ローカルにしか仕掛けていない」ことで取りこぼしていたのとは事情が違う。
 """
 
 
-# Python 表記／JSON 表記のどちらでも拾う。プロキシの SchemaMarkers と同じ。
+# Python 表記／JSON 表記のどちらでも拾う。
+# プロキシの SchemaMarkers と同じ。
 SCHEMA_MARKERS = ("{'$defs':", "{'properties':", '{"$defs":', '{"properties":')
 
 AUDIT_FIRST_N = 5        # 最初の数回だけ、圧縮後の一覧を全文ログに残す
 
 # payload に prompt と json_schema が揃う地点（プロキシと同じ判定ができる）。
 POST_TARGET = "llama_cpp_runtime_completion:LlamaCppClient._post_with_model_loading_retry"
-# 上流の保険。stream 経路が上を通らなかった場合はこちらが効く。
+# 上流の保険。
+# stream 経路が上を通らなかった場合はこちらが効く。
 CHAT_TARGET = "llama_cpp_runtime_completion:LlamaCppClient.chat"
 
 
 # --------------------------------------------------------------------------
 # Python リテラル／JSON の共通パーサ
 # --------------------------------------------------------------------------
-# ast.literal_eval は「式ちょうど1個」しか受け取れないので、プロンプトの途中から
-# 読み始めて「どこで終わったか」を返すことができない。終端位置が分からないと
-# 置換範囲を決められないため、プロキシ側と同じ再帰下降パーサを持つ。
+# ast.literal_eval は「式ちょうど1個」しか受け取れないので、
+# プロンプトの途中から読み始めて「どこで終わったか」を返すことができない。
+# 終端位置が分からないと置換範囲を決められないため、
+# プロキシ側と同じ再帰下降パーサを持つ。
 # True/False/None と true/false/null、シングル／ダブルクォート、末尾カンマ、
 # タプル表記まで受ける（＝両表記のスーパーセット）。
 
@@ -147,7 +161,8 @@ def _parse_string(text, i):
             out.append(chr(int(text[i + 2:i + 6], 16)))
             i += 6
         else:
-            # \' \" \\ \/ など。エスケープを外した文字そのもの。
+            # \' \" \\ \/ など。
+            # エスケープを外した文字そのもの。
             out.append(escaped)
             i += 2
 
@@ -183,7 +198,8 @@ def parse_literal(text, i):
     char = text[i]
 
     if char == "{":
-        # dict は挿入順を保つ（3.7 以降）。スキーマの定義順がそのまま一覧の順になる。
+        # dict は挿入順を保つ（3.7 以降）。
+        # スキーマの定義順がそのまま一覧の順になる。
         mapping = {}
         i = _skip_ws(text, i + 1)
         if i < length and text[i] == "}":
@@ -263,8 +279,9 @@ def _text_of(value):
 def describe_field(field):
     """フィールド1つ分の「意味の手がかり」だけを短く書き出す。
 
-    素の string / integer / boolean / number には何も付けない。既定の型として
-    扱われるので、書いても手がかりが増えないため。enum・$ref・配列・共用体だけ残す。
+    素の string / integer / boolean / number には何も付けない。
+    既定の型として扱われるので、書いても手がかりが増えないため。
+    enum・$ref・配列・共用体だけ残す。
     """
     if not isinstance(field, dict):
         return ""
@@ -306,7 +323,8 @@ def describe_field(field):
         items = field["items"]
         inner = describe_field(items)
         if not inner and isinstance(items, dict):
-            # 要素が素の型なら、その型名だけは残す（string[] と list の区別が付く）。
+            # 要素が素の型なら、その型名だけは残す（string[] と
+            # list の区別が付く）。
             item_type = items.get("type")
             inner = item_type if isinstance(item_type, str) else ""
         return inner + "[]"
@@ -328,8 +346,8 @@ def type_line(type_name, type_schema):
     fields = []
     for name, schema in properties.items():
         described = describe_field(schema)
-        # 必須でないものだけ末尾に ? を付ける。required の方が多数派なので、
-        # 印を付けるのは任意側にした方が短くなる。
+        # 必須でないものだけ末尾に ? を付ける。
+        # required の方が多数派なので、印を付けるのは任意側にした方が短くなる。
         fields.append("{}{}{}".format(name,
                                       ":" + described if described else "",
                                       "" if name in required else "?"))
@@ -355,8 +373,8 @@ def compact_schema_text(root):
 def compact_embedded_schema(prompt):
     """プロンプト内の埋め込みスキーマを一覧表記に置き換える。
 
-    戻り値は (置き換え後のプロンプト, 差し込んだ一覧) の組。対象が無い・
-    解析できない・圧縮にならない場合は None（＝無加工）。
+    戻り値は (置き換え後のプロンプト, 差し込んだ一覧) の組。
+    対象が無い・解析できない・圧縮にならない場合は None（＝無加工）。
     """
     start = find_schema_start(prompt)
     if start < 0:
@@ -413,7 +431,8 @@ def apply(ctx):
     def post_with_retry(orig, self, url, payload, timeout=None, *args, **kwargs):
         try:
             # json_schema / grammar が付いている＝構造は grammar が強制する。
-            # プロキシの安全条件と同じ。付いていないリクエストは触らない。
+            # プロキシの安全条件と同じ。
+            # 付いていないリクエストは触らない。
             if isinstance(payload, dict) and ("json_schema" in payload or "grammar" in payload):
                 prompt = payload.get("prompt")
                 if isinstance(prompt, str):
@@ -426,8 +445,8 @@ def apply(ctx):
                         payload["prompt"] = new_prompt
                         report("payload " + str(url), prompt, new_prompt, compact)
         except Exception:
-            # 圧縮に失敗してもプロンプトはそのまま送る。長いだけなら推論は通るので、
-            # ここで止める方が損害が大きい。
+            # 圧縮に失敗してもプロンプトはそのまま送る。
+            # 長いだけなら推論は通るので、ここで止める方が損害が大きい。
             ctx.log_exc("compact: payload pass failed; sending prompt untouched")
         return orig(self, url, payload, timeout, *args, **kwargs)
 
@@ -435,9 +454,10 @@ def apply(ctx):
     @ctx.wrap(CHAT_TARGET, required=False)
     def chat(orig, self, model, messages, format=None, *args, **kwargs):
         try:
-            # format が dict のときだけ＝実体のあるスキーマが渡っているとき。
-            # "json" のような汎用指定はフィールド単位の強制をしないので対象外。
-            # messages の型もここで確かめる。想定外の型は「触らない」が正しく、
+            # format が dict のときだけ＝実体のあるスキーマが渡っているとき。"
+            # json" のような汎用指定はフィールド単位の強制をしないので対象外。
+            # messages の型もここで確かめる。
+            # 想定外の型は「触らない」が正しく、
             # 下の except に落とすと呼び出しのたびにトレースバックでログが埋まる。
             if isinstance(format, dict) and format and isinstance(messages, list):
                 new_messages = []
@@ -448,8 +468,9 @@ def apply(ctx):
                         result = compact_embedded_schema(content)
                         if result is not None:
                             new_content, compact = result
-                            # message そのものは書き換えない。会話履歴として
-                            # ゲーム側が同じ dict を保持している可能性があるため。
+                            # message そのものは書き換えない。
+                            # 会話履歴としてゲーム側が同じ
+                            # dict を保持している可能性があるため。
                             replacement = dict(message)
                             replacement["content"] = new_content
                             new_messages.append(replacement)
@@ -464,8 +485,8 @@ def apply(ctx):
         return orig(self, model, messages, format, *args, **kwargs)
 
     # 注入した時点で、作ったデータを使って正しさを確かめておく。
-    # 実経路はゲームが構造付きリクエストを出したときにしか通らず、起動直後に
-    # 通る保証が無いため（102_ と同じ方針）。
+    # 実経路はゲームが構造付きリクエストを出したときにしか通らず、
+    # 起動直後に通る保証が無いため（102_ と同じ方針）。
     _verify(ctx)
 
     # required=False なので、対象が無くても警告だけ出て先へ進む。
@@ -485,7 +506,8 @@ def apply(ctx):
 # --------------------------------------------------------------------------
 # 自己検証
 # --------------------------------------------------------------------------
-# pydantic が吐く形をそのまま縮めたもの。$defs / $ref / enum / 配列 / Optional と、
+# pydantic が吐く形をそのまま縮めたもの。
+# $defs / $ref / enum / 配列 / Optional と、
 # 全フィールドに付く title・type の定型句を1つずつ含めてある。
 _SAMPLE_SCHEMA = (
     "{'$defs': {'Location': {'properties': "
@@ -527,7 +549,8 @@ def _verify(ctx):
         ctx.log("VERIFY FAILED: compacted a prompt with no embedded schema", level="ERROR")
         return
 
-    # 2回目は何も残っていない。プロキシと同時に動かしても二重適用にならない根拠。
+    # 2回目は何も残っていない。
+    # プロキシと同時に動かしても二重適用にならない根拠。
     if compact_embedded_schema(compacted) is not None:
         ctx.log("VERIFY FAILED: compaction is not idempotent", level="ERROR")
         return

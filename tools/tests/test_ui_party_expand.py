@@ -3,8 +3,8 @@
 
     python tools/tests/test_ui_party_expand.py
 
-偽の `scripts.hud.new_hud` / `InstanTaleHUD` / Kivy（Button・Clock・Window・App）を
-差し込んで、次を確認する。
+偽の `scripts.hud.new_hud` / `InstanTaleHUD` /
+Kivy（Button・Clock・Window・App）を差し込んで、次を確認する。
 
   ボタン   … 4人目が居るときだけ出る。塗り直しのたびに増えない
   子の並び … **HUD 自身の子は増やさない**（ゲームの「画面の最初の子」を変えない）
@@ -153,8 +153,9 @@ class FakeWidget(object):
             widget.parent = None
 
 
-# 立ち絵ごとの幅（絵の縦横比で決まる）。絵を差し替えると幅が変わり、複製した枠
-# では `StencilFloatLayout` の切り取りが効かないので枠の外へはみ出す。
+# 立ち絵ごとの幅（絵の縦横比で決まる）。
+# 絵を差し替えると幅が変わり、複製した枠では
+# `StencilFloatLayout` の切り取りが効かないので枠の外へはみ出す。
 PORTRAIT_WIDTH = {"portraits/player.png": 67.0, "portraits/leon.png": 67.0,
                   "portraits/mina.png": 67.0, "portraits/kai.png": 125.0}
 
@@ -351,8 +352,9 @@ class FakeApp(object):
     def process_party_member_choice(self, character_id):
         self.pressed.append(("id", character_id, character_id))
 
-    # 名簿が動く2箇所。**画面（`party_members`）はこの時点ではまだ古い** ―
-    # 本物は `update_party_member` が 0.1 秒ごとに入れ直す。
+    # 名簿が動く2箇所。
+    # **画面（`party_members`）はこの時点ではまだ古い** ― 本物は
+    # `update_party_member` が 0.1 秒ごとに入れ直す。
     def add_party_member(self, character_id):
         self.hud.roster.append(character_id)
 
@@ -395,8 +397,9 @@ class FakeHUD(FakeWidget):
             self.root.children.append(self.panel)
             self.party_cells = [FakeCell(row, absolute) for row in range(BASE_ROWS)]
             for index, cell in enumerate(self.party_cells):
-                # 本物と同じく `add_widget` で足す（`children` は足した順の逆に
-                # 並ぶ）。ゲームはこの並びを逆順にたどって塗る。
+                # 本物と同じく
+                # `add_widget` で足す（`children` は足した順の逆に並ぶ）。
+                # ゲームはこの並びを逆順にたどって塗る。
                 self.panel.add_widget(cell)
                 # ゲームの `set_party_member_callback(member_index, callback)`。
                 # 押下先はこの属性に入っている。
@@ -405,7 +408,8 @@ class FakeHUD(FakeWidget):
         else:
             self.panel = None
             self.party_cells = []
-        # ゲーム自身の選択肢ボタン。**入れ物の中**に居る（HUD 直下ではない）。
+        # ゲーム自身の選択肢ボタン。
+        # **入れ物の中**に居る（HUD 直下ではない）。
         # 帯が伸びると重なる位置に置いてある ― それでも触ってはいけない相手。
         self.right_button_layout = FakeWidget()
         self.right_button_layout.size_hint = (None, None)
@@ -455,8 +459,9 @@ class FakeHUD(FakeWidget):
         self.update_party_display(self, self.party_members)
 
     def paint_cell(self, cell, member_id):
-        # ゲームは枠の中身を直に触る。**枠でないものが混じるとここで落ちる**
-        # （実機のクラッシュはこの形。GAME.md §2.8）。
+        # ゲームは枠の中身を直に触る。
+        # **枠でないものが混じるとここで落ちる**（実機のクラッシュはこの形。
+        # GAME.md §2.8）。
         image, label = cell.image(), cell.label()
         cell.member_id = member_id
         data = self.party_members.get(member_id)
@@ -597,7 +602,8 @@ class FakeCtx(object):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
-    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # ログは本物の `ctx.logger` をそのまま借りる。
+    # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
 
@@ -687,8 +693,9 @@ def run():
           sum(1 for c in hud.root.children if isinstance(c, FakeButton)
               and c is not hud.stray) == 1,
           [type(c).__name__ for c in hud.root.children])
-    # 素の HUD の子は FloatLayout 1枚だけ。そこへ足すと「画面の最初の子」を取る
-    # 側から見える相手が変わり、アイテムの移動・装備が壊れる（`113_` の実例）。
+    # 素の HUD の子は FloatLayout 1枚だけ。
+    # そこへ足すと「画面の最初の子」を取る側から見える相手が変わり、
+    # アイテムの移動・装備が壊れる（`113_` の実例）。
     check("the HUD's own child list is left exactly as the game built it",
           hud.children == [hud.root] and hud.screen_root() is hud.root,
           [type(c).__name__ for c in hud.children])
@@ -773,13 +780,14 @@ def run():
     check("this mod's own button stays visible and pressable",
           button.opacity == 1 and button.disabled is False,
           (button.opacity, button.disabled))
-    # 木を降りて `disabled` を持つものを全部拾う作りだと、ゲームの選択肢まで
-    # 掴んで、畳んだ後も押せなくなる（GAME.md §2.8）。
+    # 木を降りて `disabled` を持つものを全部拾う作りだと、ゲームの選択肢まで掴んで、
+    # 畳んだ後も押せなくなる（GAME.md §2.8）。
     check("the game's own choice buttons are never touched, even when covered",
           all(c.opacity == 1 and c.disabled is False for c in hud.right_buttons),
           [(c.opacity, c.disabled) for c in hud.right_buttons])
-    # 足した枠は背景を持たないので、下のゲームの選択肢が透けて見え、押せてしまう
-    # （下の「会話する」の文字が枠に重なって出る）。黒い板1枚で塞ぐ。
+    # 足した枠は背景を持たないので、下のゲームの選択肢が透けて見え、
+    # 押せてしまう（下の「会話する」の文字が枠に重なって出る）。
+    # 黒い板1枚で塞ぐ。
     blockers = [c for c in hud.root.children if isinstance(c, FakeBlocker)]
     blocker = blockers[0] if blockers else None
     gained = (PANEL_POS[0], PANEL_POS[1] + PANEL_SIZE[1], PANEL_SIZE[0], ROW_PITCH)
@@ -794,12 +802,14 @@ def run():
     check("the blocker swallows touches (it is disabled)",
           blocker is not None and blocker.disabled is True,
           blocker and blocker.disabled)
-    # **帯の中に入れてはいけない。** ゲームは帯の子を1つずつ「パーティの枠」と
-    # して塗るので、枠の形をしていない板が混じるとそこで落ちる（GAME.md §2.8）。
+    # **帯の中に入れてはいけない。**
+    # ゲームは帯の子を1つずつ「パーティの枠」として塗るので、
+    # 枠の形をしていない板が混じるとそこで落ちる（GAME.md §2.8）。
     check("the blocker is not a child of the party panel",
           not [c for c in hud.panel.children if isinstance(c, FakeBlocker)],
           [type(c).__name__ for c in hud.panel.children])
-    # 帯のすぐ後ろ＝描画は帯より下・触りの判定は帯より後。枠の押下は枠に届く。
+    # 帯のすぐ後ろ＝描画は帯より下・触りの判定は帯より後。
+    # 枠の押下は枠に届く。
     check("the blocker sits directly behind the panel",
           blocker is not None
           and hud.root.children.index(blocker)
@@ -1042,8 +1052,8 @@ def run():
     CLOCK.tick()
     check("a member leaving takes the row away on the spot",
           len(hud.extras()) == 1, len(hud.extras()))
-    # 人数が同じままでも顔ぶれは入れ替わる。行数の変化だけを合図にすると、
-    # ここで**古い顔が残る**。
+    # 人数が同じままでも顔ぶれは入れ替わる。
+    # 行数の変化だけを合図にすると、ここで**古い顔が残る**。
     app.remove_party_member("20")
     app.add_party_member("36")
     hud.tick_party()
@@ -1054,8 +1064,8 @@ def run():
           (hud.extras()[0].member_id, hud.extras()[0].image().source))
 
     # -- 別れた仲間を雇い直す（実機で落ちた場面） ----------------------------
-    # ゲームはパーティ欄の子を1つずつ「枠」として塗るので、枠でないものを
-    # 帯に置くとその瞬間に落ちる（`paint_cell` が中身を直に触る）。
+    # ゲームはパーティ欄の子を1つずつ「枠」として塗るので、
+    # 枠でないものを帯に置くとその瞬間に落ちる（`paint_cell` が中身を直に触る）。
     install(mod, ctx)
     hud = FakeHUD(members=5, paints="cells")
     hud.show()
@@ -1086,7 +1096,8 @@ def run():
           stranded.opacity == 1.0 and stranded.disabled is False,
           (stranded.opacity, stranded.disabled))
 
-    # 置き去りの黒い板も同じ。残るとそこの触りを止め続ける。
+    # 置き去りの黒い板も同じ。
+    # 残るとそこの触りを止め続ける。
     install(mod, ctx)
     hud = FakeHUD(members=4)
     hud.show()
@@ -1126,10 +1137,11 @@ def run():
     mod.PORTRAIT_FIT = mod.FIT_INSIDE
 
     # -- 他の MOD が HUD 直下に置いたウィジェット ------------------------------
-    # 「`children` の先頭を採る」形で除外を自分のボタンだけにすると、他の MOD が
-    # HUD 直下へ足したウィジェットの**中**へ入り込む。Kivy の `children` は
-    # 新しい順なので、ゲームの `FloatLayout` は最後尾から探すのが正しい
-    # （VERIFICATION_LOG.md §2.33）。
+    # 「`children` の先頭を採る」形で除外を自分のボタンだけにすると、
+    # 他の MOD が HUD 直下へ足したウィジェットの**中**へ入り込む。
+    # Kivy の `children` は新しい順なので、
+    # ゲームの `FloatLayout` は最後尾から探すのが正しい（VERIFICATION_LOG.md
+    # §2.33）。
     install(mod, ctx)
     hud = FakeHUD(members=4)
     other = FakeWidget()

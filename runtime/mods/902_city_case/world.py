@@ -1,16 +1,19 @@
 # -*- coding: utf-8 -*-
-"""ゲームのどこに何があるか。**この MOD の方針は持たない。**
+"""ゲームのどこに何があるか。この MOD の方針は持たない。
 
-「誰を犯人にするか」「いくら払うか」は入口が決める。ここは引き当てと書き込みの
-手順だけを知っている。`307_` の `world.py` と同じ立場（TECH.md §3.1.1.1）。
+「誰を犯人にするか」「いくら払うか」は入口が決める。
+ここは引き当てと書き込みの手順だけを知っている。
+`307_` の `world.py` と同じ立場（TECH.md §3.1.1.1）。
 
 ##### 実測に基づく前提（GAME.md §2.7 / §2.22）
 
 - 施設は `areas[id].nodes[nid].facilities[fid]` の入れ子
-- `Facility.owner` は character の id（str）。**主を消すと店が壊れる**
-- `Facility.characters` は id の配列。重複が入ることがある
-- 死亡の印は `Character.config['is_dead']`。立てても名簿からは外れない
-  （読む側が飛ばす）
+- `Facility.owner` は character の id（str）。
+  主を消すと店が壊れる
+- `Facility.characters` は id の配列。
+  重複が入りうる
+- 死亡の印は `Character.config['is_dead']`。
+  立てても名簿からは外れない（読む側が飛ばす）
 """
 
 import sys
@@ -22,30 +25,26 @@ from instantale_modloader.state import UNKNOWN_WORLD, world_key
 def world_name(app):
     """控えを紐付ける鍵。引けなければ空文字（そのときは紐付けない）。
 
-    **見分け方はローダの語彙**（`state.world_key`）。ここに写した版は
-    `app.world` の属性しか見ておらず、**ロード直後は必ず空文字**になっていた
-    ― そのとき `app.world` はまだ組み上がっておらず、世界名はセーブ側
-    （`world_dict["world_data"]`）にしか無い。空文字は呼び側で「どの世界か
-    分からない」の合図なので、控えの世界照合（`current`）と後始末（`sweep`）が
-    **ロードした直後だけ黙って素通り**していた（TECH.md §3.2.3・`state.py`）。
+    見分け方はローダの語彙（`state.world_key`）。
+    ここに写した版は `app.world` の属性しか見ておらず、ロード直後は必ず空文字になっていた。
+    そのとき `app.world` はまだ組み上がっておらず、世界名はセーブ側（`world_dict["world_data"]`）にしか無い。
+    空文字は呼び側で「どの世界か分からない」の合図なので、控えの世界照合（`current`）と後始末（`sweep`）が **ロードした直後だけ黙って素通り**していた（TECH.md §3.2.3・`state.py`）。
 
-    空文字の契約はそのまま保つ。ローダは読めないとき `"_"` を返すので、
-    ここで戻し直す ― この MOD は「分からないなら紐付けない」に倒す作りで、
-    知らない世界の控えを1つの鍵にまとめてしまうより安全側。
+    空文字の契約はそのまま保つ。
+    ローダは読めないとき `"_"` を返すので、ここで戻し直す。
+    この MOD は「分からないなら紐付けない」に倒す作りで、知らない世界の控えを1つの鍵にまとめてしまうより安全側。
     """
     key = world_key(app)
     return "" if key == UNKNOWN_WORLD else key
 
 
 def current_facility(app):
-    """いま居る施設。**id で持っている場合も引き当てる。**
+    """いま居る施設。id で持っている場合も引き当てる。
 
-    `player.location` は施設のオブジェクトとは限らない。セーブでは
-    **施設 id の文字列**（`'106'`）で、遊んでいる最中にその施設へ入ると
-    Facility そのものに置き換わる。
+    `player.location` は施設のオブジェクトとは限らない。
+    セーブでは施設 id の文字列（`'106'`）で、遊んでいる最中にその施設へ入ると Facility そのものに置き換わる。
 
-    ロード直後は前者のままなので、`facility_type_of` が空文字を返し、
-    **ギルドに立っているのにボタンが出なかった**（実機）。
+    ロード直後は前者のままなので、`facility_type_of` が空文字を返し、**ギルドに立っているのにボタンが出なかった**（実機）。
     「新しい世界では動くのに、セーブをロードすると動かない」の正体。
 
     `ui.current_area` は同じ理由で既に両方を引き当てている（そちらの註）。
@@ -77,7 +76,7 @@ def facility_name(app, limit=40):
 
 
 def owner_ids(app, max_areas=40):
-    """施設の主を務めている character の id。**この人たちは使わない。**
+    """施設の主を務めている character の id。この人たちは使わない。
 
     実測した世界では 35 人中 24 人が主だった（VERIFICATION_LOG.md §2.29）。
     消すと店に話せる相手が居なくなるので、事件のキャストからは外す。
@@ -99,9 +98,9 @@ def owner_ids(app, max_areas=40):
 def facility_types_in(app, target_area_id):
     """その土地に実在する `facility_type` の集合。
 
-    **手がかりの置き場所はここから選ぶ。**町の構成は世界ごとに違い、
-    闇市や診療所が無い町もある（利用者の報告）。無い施設に
-    手がかりを置くと、その事件は永久に解けなくなる。
+    手がかりの置き場所はここから選ぶ。
+    町の構成は世界ごとに違い、闇市や診療所が無い町もある（利用者の報告）。
+    無い施設に手がかりを置くと、その事件は永久に解けなくなる。
     """
     area = ui.world_areas(app).get(str(target_area_id))
     if area is None:
@@ -118,8 +117,8 @@ def facility_types_in(app, target_area_id):
 def facilities_in(app, target_area_id):
     """その土地の `(facility_id, facility_type)` の一覧。
 
-    生成した NPC を町に散らすのに使う。全員が同じ場所に立っていると、
-    その施設だけ不自然に人が増える。
+    生成した NPC を町へ散らすのに使う。
+    全員が同じ場所に立っていると、その施設だけ不自然に人が増える。
     """
     area = ui.world_areas(app).get(str(target_area_id))
     if area is None:
@@ -132,11 +131,11 @@ def facilities_in(app, target_area_id):
 
 
 def owner_in(app, target_area_id, facility_type):
-    """その土地の、その種類の施設の**主の id**。無ければ空文字。
+    """その土地の、その種類の施設の主の id。無ければ空文字。
 
-    手がかりの証言者はこの人物。**事件を組むときに控えておく** ―
-    そうすれば「誰が何を知っているか」が id の突き合わせだけで決まり、
-    どう話しかけられたかに依存しなくなる。
+    手がかりの証言者はこの人物。
+    **事件を組むときに控えておく**。
+    そうすれば「誰が何を知っているか」が id の突き合わせだけで決まり、どう話しかけられたかに依存しなくなる。
     """
     area = ui.world_areas(app).get(str(target_area_id))
     if area is None:
@@ -152,11 +151,10 @@ def owner_in(app, target_area_id, facility_type):
 
 
 def _short(value, limit):
-    """文字列として取り出して詰める。**取れなければ空文字。**
+    """文字列として取り出して詰める。取れなければ空文字。
 
-    渡ってくるのはセーブから読んだ値なので、`MISSING`・`None`・辞書・
-    リストのどれでもありうる。ここで受け止めておかないと、頼み文を組む
-    途中で落ちて**事件が始まらなくなる**（描写の都合で遊びが止まる）。
+    渡ってくるのはセーブから読んだ値なので、`MISSING`・`None`・辞書・リストのどれでもありうる。
+    ここで受け止めておかないと、頼み文を組む途中で落ちて事件が始まらなくなる（描写の都合で遊びが止まる）。
     """
     if not isinstance(value, str) or value == frames.MISSING:
         return ""
@@ -165,10 +163,11 @@ def _short(value, limit):
 
 
 def area_name(app, target_area_id, limit=40):
-    """**町の名前。**施設の名前ではない。
+    """町の名前。施設の名前ではない。
 
-    以前は「町」として `place_name(..., 'guild')` を渡していた ― それは
-    ギルドの名前で、実機の頼み文に `【町】鉄錆の徴収所` と出ていた。町の名前は `Area.name` にある。
+    以前は「町」として `place_name(..., 'guild')` を渡していた。
+    それはギルドの名前で、実機の頼み文に `【町】鉄錆の徴収所` と出ていた。
+    町の名前は `Area.name` にある。
     """
     area = ui.world_areas(app).get(str(target_area_id))
     value = frames.attr(area, "name") if area is not None else None
@@ -176,11 +175,11 @@ def area_name(app, target_area_id, limit=40):
 
 
 def area_notes(app, target_area_id, limit=240):
-    """その町の説明。**AI に「どこの話か」を教えるために渡す。**
+    """その町の説明。AI に「どこの話か」を教えるために渡す。
 
-    `Area.descriptions` は `overview` / `facilities` を持つ辞書（実セーブで
-    確認）。長いので頭だけ使う ― 事件の文章を書かせるのに要るのは
-    「どういう町か」であって、町の全部ではない。
+    `Area.descriptions` は `overview` / `facilities` を持つ辞書（実セーブで確認）。
+    長いので頭だけ使う。
+    事件の文章を書かせるのに要るのは「どういう町か」であって、町の全部ではない。
     """
     area = ui.world_areas(app).get(str(target_area_id))
     notes = frames.attr(area, "descriptions") if area is not None else None
@@ -211,8 +210,9 @@ def world_notes(app, limit=240):
 def facility_notes(app, target_area_id, limit=12):
     """その町に実在する施設の `(名前, 種類, 主の名前)`。
 
-    **実在の場所を渡すと「その町の事件」になる。**架空の宿屋の名前を
-    書かれるより、いま歩いている町の宿屋の名前が出るほうが地に足が付く。
+    実在の場所を渡すと「その町の事件」になる。
+    架空の宿屋を書かれるより、いま歩いている町の宿屋の名前を出したい。
+    そのほうが地に足が付く。
     """
     area = ui.world_areas(app).get(str(target_area_id))
     if area is None:
@@ -234,11 +234,12 @@ def facility_notes(app, target_area_id, limit=12):
 
 
 def facility_of(app, target_area_id, npc_id, limit=40):
-    """その人物が**いま居る施設の名前**。分からなければ空文字。
+    """その人物がいま居る施設の名前。分からなければ空文字。
 
-    施設の名簿を舐めて探す。**置いたときの id を控えるのではなく、今を見る** ―
-    ゲームは NPC を動かすことがあるので、控えは古くなりうる。名簿は
-    `Facility.characters` に居る（`move_npc_to_facility` が入れる先）。
+    施設の名簿を舐めて探す。
+    **置いたときの id を控えるのではなく、今を見る**。
+    ゲームは NPC を動かすことがあるので、控えは古くなりうる。
+    名簿は `Facility.characters` に居る（`move_npc_to_facility` が入れる先）。
     """
     area = ui.world_areas(app).get(str(target_area_id))
     if area is None or not npc_id:
@@ -254,7 +255,7 @@ def facility_of(app, target_area_id, npc_id, limit=40):
 
 
 def resident_names(app, target_area_id, limit=12):
-    """その町に居る人物の名前。**同じ名前を作らせないために渡す。**"""
+    """その町に居る人物の名前。同じ名前を作らせないために渡す。"""
     area = ui.world_areas(app).get(str(target_area_id))
     if area is None:
         return []
@@ -272,10 +273,10 @@ def resident_names(app, target_area_id, limit=12):
 
 
 def place_name(app, target_area_id, facility_type, limit=40):
-    """その土地でその種類の施設の**名前**。無ければ None。
+    """その土地でその種類の施設の名前。無ければ None。
 
-    案内に使う。「宿屋へ行け」ではなく「『欠けた月亭』へ行け」と言えると、
-    プレイヤーは画面の移動先の文字列とそのまま突き合わせられる。
+    案内に使う。
+    「宿屋へ行け」ではなく「『欠けた月亭』へ行け」と言えると、プレイヤーは画面の移動先の文字列とそのまま突き合わせられる。
     種類の名前しか出せないと、施設が複数ある町で結局迷う。
     """
     area = ui.world_areas(app).get(str(target_area_id))
@@ -309,11 +310,11 @@ def is_dead(character):
 
 
 def set_dead(app, npc_id, value=True):
-    """退場させる。**名簿からは外さない**（外すと参照が切れる）。
+    """退場させる。名簿からは外さない（外すと参照が切れる）。
 
-    実測（VERIFICATION_LOG.md §2.29 / §2.30）: 印を立てても施設の名簿には残り、
-    それでもゲーム内では会話にも呼び出しにも出てこない。読む側が飛ばして
-    いるので、こちらは印だけ立てればよい。戻すこともできる。
+    実測（VERIFICATION_LOG.md §2.29 / §2.30）: 印を立てても施設の名簿には残り、それでもゲーム内では会話にも呼び出しにも出てこない。
+    読む側が飛ばしているので、こちらは印だけ立てればよい。
+    戻すこともできる。
     """
     character = character_of(app, npc_id)
     config = config_of(character)
@@ -324,36 +325,37 @@ def set_dead(app, npc_id, value=True):
 
 
 def remove_npc(app, npc_id, write=None):
-    """**NPC を世界から完全に消す。**`set_dead` と違い、痕跡を残さない。
+    """NPC を世界から完全に消す。`set_dead` と違い、痕跡を残さない。
 
     ##### なぜ印を立てるだけでは足りないのか
 
-    `set_dead` は名簿に残す（上）。事件が1件で終わるならそれでよかったが、
-    **繰り返し遊ぶとセーブが太り続ける。**実測（利用者の指摘）:
+    `set_dead` は名簿に残す（上）。
+    事件が1件で終わるならそれでよかったが、繰り返し遊ぶとセーブが太り続ける。
+    実測（利用者の指摘）:
 
     - 生成直後の NPC が約 1.4KB、ゲームが中身を埋めると 3〜8KB
     - `npcs` はセーブ全体の約2割（実セーブ 790KB / 51体で計測）
-    - 1件につき4体。10件遊べば 40体増える
+    - 1件につき4体。
+      10件遊べば 40体増える
 
-    害はバイト数より**町が見知らぬ人で埋まる**ことのほうが大きい。人数は
-    土地の人物一覧にも、ゲームが組む文脈にも効く。
+    害はバイト数より町が見知らぬ人で埋まることのほうが大きい。
+    人数は土地の人物一覧にも、ゲームが組む文脈にも効く。
 
     ##### 消せる根拠
 
-    **セーブの施設は名簿を持っていない。**実セーブを見ると `facility` の項目は
-    `name` / `id` / `description` / `facility_type` / `owner` / `connections` /
-    `config` だけで、誰が居るかは NPC 側の `location` から実行時に組み直されて
-    いる。だから `npcs` から消せば、次に読み込んだ世界には現れない。
+    セーブの施設は名簿を持っていない。
+    実セーブを見ると `facility` の項目は `name` / `id` / `description` / `facility_type` / `owner` / `connections` / `config` だけで、誰が居るかは NPC 側の `location` から実行時に組み直されている。
+    だから `npcs` から消せば、次に読み込んだ世界には現れない。
     クエストも `client_name`（名前の文字列）で持っていて id では参照しない。
 
-    実行時のぶん（`world.characters` と、施設に組まれた名簿）も同時に外す ―
+    実行時のぶん（`world.characters` と、施設に組まれた名簿）も同時に外す。
     こちらを残すと、そのセッションの間だけ幽霊が立ち続ける。
 
     ##### 消さない場合
 
-    **パーティーに居る者は消さない。**プレイヤーが連れ歩いている相手を
-    消すと、パーティーの参照が切れて何が起きるか分からない。事件の容疑者が
-    仲間になる経路は用意していないが、他の MOD やゲーム側の都合で入りうる。
+    パーティーに居る者は消さない。
+    プレイヤーが連れ歩いている相手を消すと、パーティーの参照が切れて何が起きるか分からない。
+    事件の容疑者が仲間になる経路は用意していないが、他の MOD やゲーム側の都合で入りうる。
     """
     npc_id = str(npc_id)
     if npc_id in {str(i) for i in (ui.party_ids(app) or [])}:
@@ -395,8 +397,8 @@ def int_key(store, npc_id):
 def _drop_from_rosters(app, npc_id):
     """施設に組まれた実行時の名簿から外す。戻り値は外した箇所の数。
 
-    セーブには無い構造なので、消し忘れてもファイルは汚れない。ただし
-    そのセッションの間だけ、消したはずの人物が施設に立ち続ける。
+    セーブには無い構造なので、消し忘れてもファイルは汚れない。
+    ただしそのセッションの間だけ、消したはずの人物が施設に立ち続ける。
     """
     dropped = 0
     for _area_id, area in (ui.world_areas(app) or {}).items():
@@ -414,17 +416,17 @@ def _drop_from_rosters(app, npc_id):
 
 
 # 所持金の読み書きはローダの語彙（`309_` / `901_` と共有。TECH.md §3.2.3）。
-# ローダ版は `bool` も弾く ― `True` は `int` なので、素朴な判定だと
-# `gold = True` を所持金 1 として通してしまう。
+# ローダ版は `bool` も弾く。
+# `True` は `int` なので、素朴な判定だと `gold = True` を所持金 1 として通してしまう。
 gold_of = ui.gold_of
 
 
 def add_gold(app, amount):
-    """報酬を渡す。**DSL の `gold_add` ではなくこちらで払う。**
+    """報酬を渡す。DSL の `gold_add` ではなくこちらで払う。
 
-    DSL 側で払うと `prices` / `payouts` の宣言と経済の規則
-    （仕様書 DESIGN RULES 3）に従うことになり、事件の報酬という
-    一度きりの支払いには噛み合わない。`309_` が実証した経路で直接渡す。
+    DSL 側で払うと、`prices` / `payouts` の宣言と経済の規則（仕様書 DESIGN RULES 3）へ従うことになる。
+    事件の報酬は一度きりの支払いなので、そこへは噛み合わない。
+    `309_` が実証した経路で直接渡す。
     """
     return ui.add_gold(app, amount)
 
@@ -434,29 +436,38 @@ def add_gold(app, amount):
 # --------------------------------------------------------------------------
 #: 生成直後の NPC が実際に持っていた形（実機で観測。
 #: `out/character_state.log` の `generate_character('35')`）。
-#: **HP・スキル・装備・画像は空でよい** ― ゲームが会話や戦闘の直前に
-#: `ensure_npc_detail_generated` で埋める。だから MOD は軽く作れる。
+#: **HP・スキル・装備・画像は空でよい**。
+#: ゲームが会話や戦闘の直前に
+#: `ensure_npc_detail_generated` で埋める。
+#: だから MOD は軽く作れる。
 #:
-#: ##### 並び順は「合っていればよい」ではなく、**この順でなければならない**
+#: ##### 並び順は「合っていればよい」ではなく、この順でなければならない
 #:
 #: セーブは辞書をそのまま JSON に落とすので、**ここに書いた順がそのまま
-#: ファイルの行順になる。**そしてセーブを読む側には、項目を上から順に並べて
-#: 見せる道具がある（別途あるセーブエディタ）。順番が変わると、項目は全部
-#: 揃っているのに**表示が崩れる。**
+#: ファイルの行順になる。**
+#: そしてセーブを読む側には、項目を上から順に並べて
+#: 見せる道具がある（別途あるセーブエディタ）。
+#: 順番が変わると、項目は全部
+#: 揃っているのに表示が崩れる。
 #:
-#: だから項目は「揃えた」だけでは足りない。**ゲーム自身が書く順と1つずつ
-#: 一致させる。**下の並びは実際のセーブから起こしたもの:
+#: だから項目は「揃えた」だけでは足りない。
+#: **ゲーム自身が書く順と1つずつ
+#: 一致させる。**
+#: 下の並びは実際のセーブから起こしたもの:
 #:
-#:     saves/<世界名>/savedata_plain.json の npcs
-#:     51体中50体がこの33項目・この順（残る1体は speech_style が無いだけで
-#:     順番は同じ）。プリセットの world_data は先頭29項目までで、後ろの4つ
-#:     （current_area / current_location / knowledge /
-#:     display_position_in_battle）は遊び始めてから増える。
+#: saves/<世界名>/savedata_plain.json の npcs
+#: 51体中50体がこの33項目・この順（残る1体は speech_style が無いだけで
+#: 順番は同じ）。
+#: プリセットの world_data は先頭29項目までで、後ろの4つ
+#: （current_area / current_location / knowledge /
+#: display_position_in_battle）は遊び始めてから増える。
 #:
-#: **`make_npc` はこの並びを崩さない。**`dict.update` は既にある鍵の位置を
+#: `make_npc` はこの並びを崩さない。
+#: `dict.update` は既にある鍵の位置を
 #: 動かさないので、**33項目を漏らさず先に持っている**限り順番は保たれる。
 #: 逆に1つでも欠けていると、その項目だけが末尾に足されて並びが壊れる。
-#: 項目を足すときは必ずこの表の正しい位置へ差し込むこと ― 末尾に足さない。
+#: 項目を足すときは必ずこの表の正しい位置へ差し込むこと。
+#: 末尾に足さない。
 NEW_NPC_TEMPLATE = {
     "name": None,
     "id": None,
@@ -491,12 +502,14 @@ NEW_NPC_TEMPLATE = {
     "config": {},
     "current_area": None,
     "current_location": None,
-    # **リストであってディクショナリではない。**実際のセーブでは `[]`。
+    # リストであってディクショナリではない。
+    # 実際のセーブでは `[]`。
     "knowledge": [],
     "display_position_in_battle": None,
 }
 
-#: セーブに書くときの項目の並び。`NEW_NPC_TEMPLATE` の定義順がそのまま
+#: セーブに書くときの項目の並び。
+#: `NEW_NPC_TEMPLATE` の定義順がそのまま
 #: 正解なので、そこから起こす（二重に持つと必ず片方が古くなる）。
 NPC_FIELD_ORDER = tuple(NEW_NPC_TEMPLATE)
 
@@ -508,22 +521,19 @@ def character_ids(app):
 
 
 def npc_stores(app, max_depth=2):
-    """NPC の素データが入っていそうな辞書を**全部**集める。
+    """NPC の素データが入っていそうな辞書を全部集める。
 
     `[(どこにあるか, 辞書), ...]`。
 
     ##### なぜ探すのか
 
-    `World.generate_character(id, value)` は id で素データを引くが、
-    **どこから引くのかが分からない。**`app.world_dict['npcs']` に書いてから
-    呼んでも `KeyError` のままだった（実測）。`World.__init__` は
-    `save_data_dict` を受け取っているので、`app.world_dict` とは別の辞書を
-    握っている可能性が高い。
+    `World.generate_character(id, value)` は id で素データを引くが、どこから引くのかが分からない。
+    `app.world_dict['npcs']` に書いてから呼んでも `KeyError` のままだった（実測）。
+    `World.__init__` は `save_data_dict` を受け取っているので、`app.world_dict` とは別の辞書を握っている可能性が高い。
 
-    2回続けて「ここだろう」と決め打って外しているので、**決め打ちをやめる。**
-    `302_` がパーティ名簿でやっているのと同じ手（`ui.party_stores`）で、
-    心当たりを全部集めて全部に書く。余分に書いても、同じ id に同じ値が
-    入るだけで害が無い。
+    2回続けて「ここだろう」と決め打って外しているので、決め打ちをやめる。
+    `302_` がパーティ名簿でやっているのと同じ手（`ui.party_stores`）で、心当たりを全部集めて全部に書く。
+    余分に書いても、同じ id に同じ値が入るだけで害が無い。
     """
     seen, out = set(), []
     known = character_ids(app)
@@ -565,9 +575,9 @@ def npc_stores(app, max_depth=2):
 def save_npcs(app):
     """素データの辞書を1つにまとめて返す（読む用）。
 
-    置き場所は1つではない（`npc_stores`）ので、掃除の対象を探すときは
-    全部を重ねて見る。**書くのには使わない** ― 書くほうは
-    `npc_stores` を回して全部に書く。
+    置き場所は1つではない（`npc_stores`）ので、掃除の対象を探すときは全部を重ねて見る。
+    書くのには使わない。
+    書くほうは `npc_stores` を回して全部に書く。
     """
     merged = {}
     for where, store in npc_stores(app):
@@ -580,10 +590,10 @@ def save_npcs(app):
 
 
 def free_id(app, npcs):
-    """まだ使われていない id。**セーブと実行時の両方を見る。**
+    """まだ使われていない id。セーブと実行時の両方を見る。
 
-    ゲームは遊んでいる最中にも NPC を作る（新しい町の生成で 37〜46 が
-    生えた。実測）。片方だけ見ると、その採番と衝突する。
+    ゲームは遊んでいる最中にも NPC を作る（新しい町の生成で 37〜46 が生えた。実測）。
+    片方だけ見ると、その採番と衝突する。
     """
     largest = -1
     for key in list(character_ids(app)) + list(npcs or {}):
@@ -606,12 +616,12 @@ def make_npc(app, spec, area, facility, write=None):
     | `World.generate_character(id, value)` | `KeyError: '<id>'`。**セーブの `npcs` を id で引く側**で、無い id は引けない |
     | `save_area_json:generate_npc(...)` | 例外は出ないが、**`world_dict` にも `world.characters` にも何も現れない**。返るのは `world_dict` そのもの |
 
-    後者を「作れた」と読んでいたのは誤りで、同じ瞬間にゲームが別の NPC を
-    作っていたのを拾っていた。世界丸ごとのダンプを検索しても、渡した名前は
-    1件も入っていない。
+    後者を「作れた」と読んでいたのは誤りで、同じ瞬間にゲームが別の NPC を作っていたのを拾っていた。
+    世界丸ごとのダンプを検索しても、渡した名前は 1件も入っていない。
 
-    `KeyError` の出方が答えを教えている ― **`generate_character` は
-    `world_dict['npcs'][id]` を読む。**ならば先にそこへ書けばよい。
+    `KeyError` の出方が答えを教えている。
+    `generate_character` は `world_dict['npcs'][id]` を読む。
+    ならば先にそこへ書けばよい。
 
       1. 空いている id を取る（ゲームの採番と衝突しないよう両方を見る）
       2. `world_dict['npcs'][id]` にセーブの形で書く
@@ -622,10 +632,10 @@ def make_npc(app, spec, area, facility, write=None):
 
     ##### セーブに残る
 
-    NPC は独自キーではなくゲーム自身の項目なので壊れないが、MOD を外しても
-    世界に残る。README の「MOD を消せば完全に元通り」からは外れる性質。
+    NPC は独自キーではなくゲーム自身の項目なので壊れないが、MOD を外しても世界に残る。
+    README の「MOD を消せば完全に元通り」からは外れる性質。
 
-    失敗しても壊れないように、途中で落ちたら**書いた分を取り消す**。
+    失敗しても壊れないように、途中で落ちたら書いた分を取り消す。
     """
     world_dict = getattr(app, "world_dict", None)
     if not isinstance(world_dict, dict):
@@ -645,11 +655,10 @@ def make_npc(app, spec, area, facility, write=None):
         world_dict["npcs"] = npcs
 
     npc_id = free_id(app, npcs)
-    # **並び順を崩さない。**テンプレートが33項目を全部持っているので、
-    # 上書きだけしている限り位置は動かない（`dict.update` は既存の鍵を
-    # 動かさない）。テンプレートに無い鍵だけが末尾に足されて並びを壊すので、
-    # そうなったら記録に残す ― 黙って通すと、セーブを上から順に見せる道具の
-    # 表示が崩れてから気づくことになる。
+    # 並び順を崩さない。
+    # テンプレートが33項目を全部持っているので、上書きだけしている限り位置は動かない（`dict.update` は既存の鍵を動かさない）。
+    # テンプレートに無い鍵だけが末尾に足されて並びを壊すので、そうなったら記録に残す。
+    # 黙って通すと、セーブを上から順に見せる道具の表示が崩れてから気づくことになる。
     data = dict(NEW_NPC_TEMPLATE)
     fields = {key: value for key, value in spec.items()
               if key not in ("traits", "tell")}
@@ -666,9 +675,9 @@ def make_npc(app, spec, area, facility, write=None):
                            "is_dead": False, "difficulty_level": 4},
                           **dict(spec.get("config") or {}))
 
-    # **心当たりの辞書すべてに書く。**どこから引かれるか分からないので、
-    # 1箇所に賭けない。同じ id に同じ値が入るだけなので、
-    # 余分に書いても害は無い。
+    # 心当たりの辞書すべてに書く。
+    # どこから引かれるか分からないので、1箇所に賭けない。
+    # 同じ id に同じ値が入るだけなので、余分に書いても害は無い。
     stores = npc_stores(app)
     wrote = []
     for where, store in stores:
@@ -692,10 +701,9 @@ def make_npc(app, spec, area, facility, write=None):
     if character is None:
         character = character_of(app, npc_id)
     if character is None:
-        # **最後の手段: `Character` を直に組む。**コンストラクタは
-        # `scripts.characters` に完全な署名で露出している（リコンより）。
-        # ゲームの登録処理を経ないぶん行儀は悪いが、`generate_character` が
-        # どこを読んでいるか分からない以上、これが確実に通る唯一の道。
+        # 最後の手段: `Character` を直に組む。
+        # コンストラクタは `scripts.characters` に完全な署名で露出している（リコンより）。
+        # ゲームの登録処理を経ないぶん行儀は悪いが、`generate_character` がどこを読んでいるか分からない以上、これが確実に通る唯一の道。
         character = _build_character(app, npc_id, data, write)
         if character is None:
             for where, store in stores:
@@ -716,9 +724,10 @@ def make_npc(app, spec, area, facility, write=None):
 
 
 #: `Character.__init__` に実在する引数だけ（リコンの署名より）。
-#: **セーブの項目名とは違うものがある** ― `ability_scores` は
+#: **セーブの項目名とは違うものがある**。
+#: `ability_scores` は
 #: `original_ability_scores`、`knowledge` は `knowledges`。
-#: `traits` は Character 側にもあるが**意味が違う**（こちらの推理用の
+#: `traits` は Character 側にもあるが意味が違う（こちらの推理用の
 #: 特徴は渡さない。`make_npc` が spec から外している）。
 CHARACTER_KWARGS = (
     "name", "id", "category", "profile", "personality", "job",
@@ -754,8 +763,8 @@ def _build_character(app, npc_id, data, write=None):
 def _place(app, npc_id, character, area, facility, write=None):
     """施設の名簿に載せる。`302_` が実証した経路を通す。
 
-    載らなくても事件は成立する（告発は一覧から選ぶ）ので、失敗しても
-    NPC は捨てない。ただし会話には出てこなくなるので記録は残す。
+    載らなくても事件は成立する（告発は一覧から選ぶ）ので、失敗しても NPC は捨てない。
+    ただし会話には出てこなくなるので記録は残す。
     """
     move = getattr(app, "move_npc_to_facility", None)
     area_obj = ui.world_areas(app).get(str(area))

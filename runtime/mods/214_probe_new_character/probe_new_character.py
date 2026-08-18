@@ -3,18 +3,21 @@
 
 ##### 何を決めるための計測か
 
-新規作成したキャラクタが **経験値0のままレベル60** で始まる。セーブから読み取れる
-ことと、それをバグと判断した根拠は VERIFICATION_LOG.md §2.36 にある。要点だけ:
+新規作成したキャラクタが 経験値0のままレベル60 で始まる。
+セーブから読み取れることと、それをバグと判断した根拠は VERIFICATION_LOG.md
+§2.36 にある。
+要点だけ:
 
 - 1手も進んでいないセーブ（経過日0・経験値0・未クリア・持ち物空）でレベル60。
   始まりの町の冒険者は 8〜9、依頼の難易度は 2〜5 で、世界と釣り合っていない
-- **同じセーブの中で辻褄が合っていない。** 体力上限はレベル1の値、`max_hp` は
-  レベル60ぶん ― 「世界に合わせて強く始める」設計ではなく、どこかで 60 が
-  紛れ込んでいる
-- 以前の新規開始は **レベル1** から始まっていた。後から生えた壊れ方
+- 同じセーブの中で辻褄が合っていない。
+  体力上限はレベル1の値、`max_hp` はレベル60ぶん。
+  「世界に合わせて強く始める」設計ではなく、どこかで 60 が紛れ込んでいる
+- 以前の新規開始は レベル1 から始まっていた。
+  後から生えた壊れ方
 
-セーブから分かるのはここまで。**どこで 60 になるのかはセーブに残らない**ので、
-作成から最初の1手までを実機で写す。
+セーブから分かるのはここまで。
+**どこで 60 になるのかはセーブに残らない**ので、作成から最初の1手までを実機で写す。
 
 ##### 4つの問いに答える
 
@@ -22,33 +25,36 @@
 |---|---|
 | 作成画面はレベルを渡しているのか | `CharacterVM.to_dict()` の中身（属性と `point_use` だけで、レベルの欄は無いはず） |
 | プレイヤーの `Character` は何を受け取って生まれるか | `Character.__init__` の直後の `experience_level`（60 で生まれるのか、0 で生まれて後から上がるのか） |
-| 60 を返しているのは誰か | 開始処理の窓の間だけ `scripts.functions` を包み、引数→戻り値と**呼び出し元**を記録 |
+| 60 を返しているのは誰か | 開始処理の窓の間だけ `scripts.functions` を包み、引数→戻り値と呼び出し元を記録 |
 | 犯人はゲームか MOD か | 記録した呼び出し元にこちら側のファイルが居るか（`frames.is_ours`）。居なければゲーム側 |
 
-最後の1つがこの計測の主目的。ローダは 50 本ほどの MOD を当てているので、
-「ゲームのバグ」と断じる前に、こちらが犯人でないことを同じログの中で示す。
+最後の1つがこの計測の主目的。
+ローダは 50 本ほどの MOD を当てているので、「ゲームのバグ」と断じる前に、
+こちらが犯人でないことを同じログの中で示す。
 
 ##### 表を総当たりして控える
 
 `get_npc_exp_level` / `clamp_character_level` / `get_max_physical_integrity` /
-`get_days_elapsed_experience_point` を注入時に総当たりして書き出す（`101_` の
-上流プローブと同じ手）。目的は2つ:
+`get_days_elapsed_experience_point` を注入時に総当たりして書き出す（`101_` の上流プローブと同じ手）。
+目的は2つ:
 
-- 60 がどれかの表の出力なのかが分かる。`clamp_character_level` の上限は
-  `CHARACTER_LEVEL_MAX = 100` なのでクランプの結果ではないが、
-  `get_npc_exp_level(76)`（NPC 難易度の上限）が 60 前後なら、
-  **プレイヤーに NPC の経路が使われている**線が濃くなる
-- レベル→体力上限の対応が、セーブから読んだ値（VERIFICATION_LOG.md §2.36 の表）と
-  合うかを確かめられる。合えば「体力上限 10 はレベル1の値」の裏取りになる
+- 60 がどれかの表の出力なのかが分かる。
+  `clamp_character_level` の上限は `CHARACTER_LEVEL_MAX = 100` なのでクランプの結果ではないが、
+  `get_npc_exp_level(76)`（NPC 難易度の上限）が 60 前後なら、**プレイヤーに
+  NPC の経路が使われている**線が濃くなる
+- レベル→体力上限の対応が、セーブから読んだ値（VERIFICATION_LOG.md
+  §2.36 の表）と合うかを確かめられる。
+  合えば「体力上限 10 はレベル1の値」の裏取りになる
 
-総当たりの呼び出しは自分の記録から外す（`state["probing"]`）。外さないと自分の
-測定で窓のログが埋まる ― `101_` が踏んだのと同じ穴。
+総当たりの呼び出しは自分の記録から外す（`state["probing"]`）。
+外さないと自分の測定で窓のログが埋まる。
+`101_` が踏んだのと同じ穴。
 
 ##### ゲームは変更しない
 
-200番台の約束どおり読み取りだけ。値は書かず、記録に失敗しても本体は必ず呼ぶ
-（`safe=True` と、書き込みの握り潰し）。総当たりで呼ぶ4つは引数から戻り値を
-決めるだけの関数で、ゲームの状態を触らない。
+200番台の約束どおり読み取りだけ。
+値は書かず、記録に失敗しても本体は必ず呼ぶ（`safe=True` と、書き込みの握り潰し）。
+総当たりで呼ぶ4つは引数から戻り値を決めるだけの関数で、ゲームの状態を触らない。
 """
 
 import datetime
@@ -61,13 +67,16 @@ from instantale_modloader import frames, patch, ui
 LOG_BASENAME = "new_character.log"
 
 # ローダが自分の被せたものに付ける印（`patch.py` の PATCH_MARK / __wrapper_of__）。
-# 「底まで剥がせたか」の判定に使う ― 推論で済ませない（`101_` の教訓）。
+# 「底まで剥がせたか」の判定に使う。
+# 推論で済ませない（`101_` の教訓）。
 LOADER_MARKS = ("__instantale_patch__", "__wrapper_of__")
 
-# 「MOD のフレームか」を自分で判定するための足場。`frames.is_ours` は
-# ローダの置き場との文字列比較なので、区切り文字の揺れに弱い（オフライン検証で
-# 実際に外した）。犯人がゲームかこちらかを分ける判定でそれに頼りたくないので、
-# 正規化した実パスで比べる。自分自身とローダ本体は「MOD」に数えない。
+# 「MOD のフレームか」を自分で判定するための足場。
+# `frames.is_ours` はローダの置き場との文字列比較なので、
+# 区切り文字の揺れに弱い（オフライン検証で実際に外した）。
+# 犯人がゲームかこちらかを分ける判定でそれに頼りたくないので、
+# 正規化した実パスで比べる。
+# 自分自身とローダ本体は「MOD」に数えない。
 MY_FILE = os.path.normcase(os.path.abspath(__file__))
 MODS_ROOT = os.path.normcase(os.path.dirname(os.path.dirname(MY_FILE)))
 LOADER_MARK = os.path.normcase("instantale_modloader")
@@ -81,17 +90,19 @@ def bare(func):
     """
     return patch.unwrap(func)
 
-# 開始処理の入口。どれかに入ったら「窓」を開け、その間だけ細かく記録する。
-# `load_game_new` が新規で `start_game` が続きから ― とは名前だけでは決められない
-# ので**両方**包み、ログで見分ける（GAME.md §1.3）。
+# 開始処理の入口。
+# どれかに入ったら「窓」を開け、その間だけ細かく記録する。
+# `load_game_new` が新規で `start_game` が続きから。
+# とは名前だけでは決められないので両方包み、ログで見分ける（GAME.md §1.3）。
 START_TARGETS = (
     "__main__:InstantaleApp.load_game_new",
     "__main__:InstantaleApp.start_game",
     "__main__:InstantaleApp.get_character_data",
 )
 
-# 窓が開いている間だけ写す `scripts.functions` の関数。レベル・属性・体力上限を
-# 決めていそうなものを、1つに絞らず並べる（推測で絞ると空振りする）。
+# 窓が開いている間だけ写す `scripts.functions` の関数。
+# レベル・属性・体力上限を決めていそうなものを、
+# 1つに絞らず並べる（推測で絞ると空振りする）。
 FUNCTIONS_MODULE = "scripts.functions"
 WATCHED_FUNCTIONS = (
     "get_npc_exp_level",
@@ -113,30 +124,35 @@ TABLE_TARGETS = (
     ("get_days_elapsed_experience_point", 1, 80),
 )
 
-# プレイヤーから写す項目。レベルと、レベルから決まるはずの値を並べて置く
-# （辻褄が合っているかを1行で読めるようにする）。
+# プレイヤーから写す項目。
+# レベルと、
+# レベルから決まるはずの値を並べて置く（辻褄が合っているかを1行で読めるようにする）。
 PLAYER_FIELDS = ("experience_level", "experience_point",
                  "current_hp", "max_hp", "original_max_hp",
                  "physical_integrity", "max_physical_integrity",
                  "original_max_physical_integrity",
                  "age", "gold", "original_ability_scores")
 
-# 窓を開けておく秒数。開始処理は画像生成などで非同期に伸びるので長めに取る。
+# 窓を開けておく秒数。
+# 開始処理は画像生成などで非同期に伸びるので長めに取る。
 WINDOW_SECONDS = 300.0
 
-# 記録の上限。世界の NPC も同じ `Character.__init__` を通る（1回の開始で 100 体
-# ほど生まれる）ので、窓の中でも打ち止めを置く。
+# 記録の上限。
+# 世界の NPC も同じ `Character.__init__` を通る（1回の開始で
+# 100 体ほど生まれる）ので、窓の中でも打ち止めを置く。
 MAX_INIT_LINES = 300
 MAX_CALL_LINES = 500
 MAX_LEVEL_EVENTS = 80
 
-# プレイヤーの値の見張り。作成の後で誰かが書き換えるなら、この差分に出る。
+# プレイヤーの値の見張り。
+# 作成の後で誰かが書き換えるなら、この差分に出る。
 POLL_SECONDS = 2.0
 
 
 def apply(ctx):
     state = {
-        # 窓（開始処理の最中か）。閉じる時刻と、開けた対象の名前。
+        # 窓（開始処理の最中か）。
+        # 閉じる時刻と、開けた対象の名前。
         "window_until": 0.0,
         "window_by": None,
         "inits": 0,
@@ -163,10 +179,11 @@ def apply(ctx):
     def caller_line():
         """呼び出し元の連鎖と、そこにこちら側のファイルが居るかどうか。
 
-        `frames.caller` はローダと mod のフレームを**飛ばす**ので、連鎖だけでは
-        「MOD が呼んだ」ことが見えない。そこで生のスタックも別に走査して、
-        こちら側のファイル（ローダ自身は除く）が居れば併記する。これが
-        「ゲームのバグか、こちらのバグか」を分ける唯一の手掛かりになる。
+        `frames.caller` はローダと mod のフレームを飛ばすので、
+        連鎖だけでは「MOD が呼んだ」ことが見えない。
+        そこで生のスタックも別に走査して、
+        こちら側のファイル（ローダ自身は除く）が居れば併記する。
+        これが「ゲームのバグか、こちらのバグか」を分ける唯一の手掛かりになる。
         """
         chain = frames.caller(depth=5)
         ours = []
@@ -222,7 +239,8 @@ def apply(ctx):
             level = snap.get("experience_level")
             point = snap.get("experience_point")
             if isinstance(level, int) and level > 1 and point in (0, None):
-                # 再現の合図。1行で目に付くようにしておく。
+                # 再現の合図。
+                # 1行で目に付くようにしておく。
                 write("    ^^^ MISMATCH experience_level={} with experience_point={} "
                       "(a fresh character should be level 1)".format(level, point))
         return snap
@@ -382,18 +400,19 @@ def apply(ctx):
     def dump_tables():
         """引数から戻り値を決めるだけの関数を総当たりして控える。
 
-        `101_` の上流プローブと同じ。ゲームの状態を触らないので、開始処理を
-        待たずに注入時に取れる。ただし同じ mod が2つ、あちらの教訓を守る:
+        `101_` の上流プローブと同じ。
+        ゲームの状態を触らないので、開始処理を待たずに注入時に取れる。
+        ただし同じ mod が2つ、あちらの教訓を守る:
 
-        - **包む前の素の関数を測る**（`__original__` を最下層までたどる）。
-          自分のラッパを測ると、`safe=True` のガードが例外を「フックの失敗」
-          として拾い、`modloader.log` に総当たりぶんのトレースバックが並ぶ
-          （`get_npc_employ_price` は 77 以上で KeyError を投げた ― VERIFICATION.md
-          §2.2。同じ形の表なら、ここでも必ず投げる）。
-          `patch.unwrap_ours` では剥がれない ― あちらは**今回の注入で付けた層は
-          残す**（それが仕事）ので、剥がしたいこの用途には使えない
-        - 落ち始めたらそこで止め、**どこから落ちるか**を書く。表の上限は
-          それ自体が知りたい事実（`PRICE_TABLE_MAX = 76` と同じ）
+        - 包む前の素の関数を測る（`__original__` を最下層までたどる）。
+          自分のラッパを測ると、`safe=True` のガードが例外を「フックの失敗」として拾い、
+          `modloader.log` に総当たりぶんのトレースバックが並ぶ（`get_npc_employ_price` は 77 以上で KeyError を投げた。
+          VERIFICATION.md §2.2。同じ形の表なら、ここでも必ず投げる）。
+          `patch.unwrap_ours` では剥がれない。
+          あちらは**今回の注入で付けた層は残す**（それが仕事）ので、
+          剥がしたいこの用途には使えない
+        - 落ち始めたらそこで止め、どこから落ちるかを書く。
+          表の上限はそれ自体が知りたい事実（`PRICE_TABLE_MAX = 76` と同じ）
         """
         functions = sys.modules.get(FUNCTIONS_MODULE)
         if functions is None:
@@ -407,7 +426,8 @@ def apply(ctx):
                     write("[{}] table {}: missing".format(stamp(), name))
                     continue
                 if still_ours:
-                    # 底に着いていない。この表は自分たちの層を測っているので、
+                    # 底に着いていない。
+                    # この表は自分たちの層を測っているので、
                     # 読み方を間違えないように結果ではなく事実だけ書く（101_ の教訓）。
                     write("[{}] table {}: still wrapped after {} layer(s); "
                           "not measuring".format(stamp(), name, depth))
@@ -431,9 +451,9 @@ def apply(ctx):
     def start_poll():
         """プレイヤーの値を見張る。作成の後で書き換わるならここに出る。
 
-        メインスレッドで回すため `on_ready` 経由（`boot()` は注入したリモート
-        スレッドの上に居る）。注入し直したら古い見張りは自分から降りる
-        （TECH.md §3.6.1・`211_` の教訓）。
+        メインスレッドで回すため
+        `on_ready` 経由（`boot()` は注入したリモートスレッドの上に居る）。
+        注入し直したら古い見張りは自分から降りる（TECH.md §3.6.1・`211_` の教訓）。
         """
         try:
             from kivy.clock import Clock
@@ -472,7 +492,8 @@ def apply(ctx):
         dump_tables()
         start_poll()
 
-    # キーに世代を混ぜる ― 混ぜないと2回目以降の注入で積まれず、古い見張りが
-    # 回り続ける（TECH.md §3.6・`211_` と同じ）。
+    # キーに世代を混ぜる。
+    # 混ぜないと2回目以降の注入で積まれず、
+    # 古い見張りが回り続ける（TECH.md §3.6・`211_` と同じ）。
     ctx.on_ready(on_ready,
                  key="214_probe_new_character:ready:{}".format(ctx.generation))

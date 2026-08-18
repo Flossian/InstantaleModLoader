@@ -3,38 +3,42 @@
 
 ##### 何を決めるための計測か
 
-`315_vacation_custom` が宿泊の期間・部屋の名前・宿代を差し替える。その前提は
-**2026-08-18 の実機で全部確定した**（GAME.md §2.17 / VERIFICATION.md §3.28）:
+`315_vacation_custom` が宿泊の期間・部屋の名前・宿代を差し替える。
+その前提は **2026-08-18 の実機で全部確定した**（GAME.md §2.17 / VERIFICATION.md
+§3.28）:
 
 | 項目 | 実測の結果 |
 |---|---|
 | 宿代の徴収 | `VacationStartManager.execute` の中で1回（窓の前後で `gold 19288 -> 19188`） |
-| `quality` の実値 | `'kennel'`(0G) / `'bunk'`(10G) / `'private_room'`(100G) / `'luxury_suite'`(1000G)。**部屋は4つ**（犬小屋はここで見つかった） |
+| `quality` の実値 | `'kennel'`(0G) / `'bunk'`(10G) / `'private_room'`(100G) / `'luxury_suite'`(1000G)。部屋は4つ（犬小屋はここで見つかった） |
 | 日数送り | 同じ `execute` の中で `elapse_days(months * 30)` が1回。活動マネージャでは動かない |
-| 連泊 | `まだ宿泊する` は**宿代も日数ももう1回** |
+| 連泊 | `まだ宿泊する` は宿代も日数ももう1回 |
 | `period_months` / `age` | int / int（実測 4 と 31） |
 
-**それでもこの計測は置き続ける。** 残っている問いが1つあるため:
+それでもこの計測は置き続ける。
+残っている問いが1つあるため:
 
-- **`period_months` の年齢ごとの境目**。仕様は「若いと3ヵ月・年を取ると最長
-  6ヵ月」で、実測は 20代=3・31歳=4 の2点だけ。`display_vacation_choice` の行は
-  `period_months` と `player.age` を毎回対で残すので、遊ぶほど表が埋まる
+- **`period_months` の年齢ごとの境目**。
+  仕様は「若いと3ヵ月・年を取ると最長 6ヵ月」で、実測は 20代=3・31歳=4 の2点だけ。
+  `display_vacation_choice` の行は `period_months` と
+  `player.age` を毎回対で残すので、遊ぶほど表が埋まる
 
-加えて、ゲームの更新でこの前提が崩れたときに**気づくための見張り**になる
-（徴収の額・日数・語彙が変わればログの形が変わる）。
+加えて、
+ゲームの更新でこの前提が崩れたときに気づくための見張りになる（徴収の額・日数・語彙が変わればログの形が変わる）。
 
 ##### ゲームは変更しない
 
-200番台の約束どおり読み取りだけ。`safe=True` と握り潰しで、記録に失敗しても
-本体は必ず呼ぶ。
+200番台の約束どおり読み取りだけ。
+`safe=True` と握り潰しで、記録に失敗しても本体は必ず呼ぶ。
 
 ##### 適用順とラベルの見え方
 
-この計測は `315_` より後（外側）に置くので、`elapse_days` と所持金は
-**MOD が差し替える前のゲームの生の値**が録れる（TECH.md §3.2.2 の「計測は
-修正より後」）。一方ボタンのラベルは描かれる直前に `315_` が書き換えるため、
-ここで写る `text` は書き換え**後**の姿になることがある。生のラベルが要る
-ときは `315_` を切って録る（spec の `args` はどちらでも生のまま）。
+この計測は `315_` より後（外側）に置くので、
+`elapse_days` と所持金は **MOD が差し替える前のゲームの生の値**が録れる（TECH.md
+§3.2.2 の「計測は修正より後」）。
+一方ボタンのラベルは描かれる直前に `315_` が書き換えるため、
+ここで写る `text` は書き換え後の姿になることがある。
+生のラベルが要るときは `315_` を切って録る（spec の `args` はどちらでも生のまま）。
 
 ##### 出力
 
@@ -51,13 +55,15 @@ from instantale_modloader import frames, ui
 LOG_BASENAME = "vacation.log"
 RECORD_BASENAME = "vacation.jsonl"
 
-# 窓の間に写す文言の上限。宿泊の1段は数行のはずで、これを超えるなら想定して
-# いない経路（会話など）が窓に混ざっている。超えたことも記録する。
+# 窓の間に写す文言の上限。
+# 宿泊の1段は数行のはずで、
+# これを超えるなら想定していない経路（会話など）が窓に混ざっている。
+# 超えたことも記録する。
 TEXT_LIMIT = 30
 
-# 窓を開けるマネージャ。すべて targets.txt の実在クラス
-# （`__init__(self, app, months, quality)`。End だけ `(self, app)`、
-# SocializeResolve は引数が多い）。
+# 窓を開けるマネージャ。
+# すべて targets.txt の実在クラス（`__init__(self, app, months, quality)`。
+# End だけ `(self, app)`、SocializeResolve は引数が多い）。
 MANAGERS = (
     "VacationStartManager",
     "VacationRestManager",
@@ -158,8 +164,8 @@ def apply(ctx):
         def manager_init(orig, self, *args, **kwargs):
             result = orig(self, *args, **kwargs)
             try:
-                # 引数の並びを決め打ちしない（`209_` と同じ受け方）。app を
-                # 除いた位置引数をそのまま控える。
+                # 引数の並びを決め打ちしない（`209_` と同じ受け方）。
+                # app を除いた位置引数をそのまま控える。
                 self._probe_vacation = [frames.repr_value(a) for a in args[1:]]
             except Exception:
                 pass

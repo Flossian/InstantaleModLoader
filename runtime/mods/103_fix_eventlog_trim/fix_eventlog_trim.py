@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """クエスト中に膨れ上がる【今回のイベント内ログ】を、直近3ターンぶんに刈り込む。
 
-このブロックは名前に反して、今回のイベントだけでなくクエスト全体の
-フィールドイベントを持ち続ける。フィールドイベントは仕様上3ターン以内に
-決着するので、それ以前の履歴は判定に影響しないまま溜まっていく一方になる。
-外部プロキシ側の計測では 29 ターン / 8,300 文字を超え、プロンプト全体の
-6割以上を占めていた。
+このブロックは名前に反して、
+今回のイベントだけでなくクエスト全体のフィールドイベントを持ち続ける。
+フィールドイベントは仕様上3ターン以内に決着するので、
+それ以前の履歴は判定に影響しないまま溜まっていく一方になる。
+外部プロキシ側の計測では 29 ターン / 8,300 文字を超え、
+プロンプト全体の 6割以上を占めていた。
 
 本ビルドでもクエストの序盤で既に溜まり始めている（VERIFICATION_LOG.md §2.3）。
 
@@ -13,8 +14,9 @@
 そのためこの修正でも、プロキシと同じく「〈プレイヤーの入力〉」で分割するしかなく、
 区切り文字に依存する点は解消できていない。
 
-それでも中で直す価値はある。プロキシは組み上がったプロンプト全体を書き換える
-ので、他の部分がたまたま同じ文字列を含んでいると巻き込む可能性がある。
+それでも中で直す価値はある。
+プロキシは組み上がったプロンプト全体を書き換えるので、
+他の部分がたまたま同じ文字列を含んでいると巻き込む可能性がある。
 こちらは該当する引数1つしか触らないので、その心配が無い。
 
 最初の区切りより前の前置きは必ず残し、落とすのは丸ごと1ターン単位。
@@ -42,7 +44,8 @@ def trim_event_log(text, keep=KEEP_TURNS):
     if not isinstance(text, str) or SEPARATOR not in text:
         return text, 0
 
-    # split の先頭要素は最初の区切りより前の前置き。それ以降が各ターン。
+    # split の先頭要素は最初の区切りより前の前置き。
+    # それ以降が各ターン。
     parts = text.split(SEPARATOR)
     preamble, turns = parts[0], parts[1:]
     if len(turns) <= keep:
@@ -76,14 +79,14 @@ def apply(ctx):
             continue
 
         # ループ変数を閉じ込めるために関数で包んでいる。
-        # これをやらないと、Python のクロージャの性質上、作られた全ラッパが
-        # ループ終了後の fn_name（＝最後の1つ）を参照してしまう。
+        # これをやらないと、Python のクロージャの性質上、
+        # 作られた全ラッパがループ終了後の fn_name（＝最後の1つ）を参照してしまう。
         def make(name):
             @ctx.wrap("scripts.llm.llm_manager:{}".format(name), required=False)
             def fix(orig, *args, **kwargs):
                 # 呼び出し側がキーワード引数で渡すか位置引数で渡すかは、
-                # コンパイル済みなので読めない。両方を見て、どちらでも無ければ
-                # 何もせずに素通しする。
+                # コンパイル済みなので読めない。
+                # 両方を見て、どちらでも無ければ何もせずに素通しする。
                 original = kwargs.get(EVENT_LOG_KEYWORD)
                 from_kwargs = original is not None
                 if not from_kwargs and len(args) > EVENT_LOG_INDEX:
@@ -95,7 +98,8 @@ def apply(ctx):
                 try:
                     trimmed, dropped = trim_event_log(original)
                 except Exception:
-                    # 刈り込みに失敗しても呼び出しは通す。推論を止めない。
+                    # 刈り込みに失敗しても呼び出しは通す。
+                    # 推論を止めない。
                     ctx.log_exc("eventlog: trim failed in {}; passing through".format(name))
                     return orig(*args, **kwargs)
 

@@ -2,24 +2,25 @@
 """計測: プレイヤーの行動をトリガーにしたイベントを差し込む場所を特定する。
 
 やりたいこと（機能追加）は「宿屋に着いたら主人が話しかけてくる」の類で、
-そのために必要な情報は3つある。どれもソースが読めない以上、実行中の
-プロセスに聞くしかない。
+そのために必要な情報は3つある。
+どれもソースが読めない以上、実行中のプロセスに聞くしかない。
 
-  1. **いつ発火させるか**。移動が完了した瞬間はどこか。候補は
+  1. いつ発火させるか。移動が完了した瞬間はどこか。候補は
      `MovePhaseManager.move_phase`（移動先の facility_id を持つ）と
      `llm_manager:narrator`（移動後の情景描写。current_location を受け取る）。
 
-  2. **その時点で何が分かるか**。現在地の施設オブジェクト、その
+  2. その時点で何が分かるか。現在地の施設オブジェクト、その
      `facility_type`（セーブ上は 'inn'/'guild'/... ）と `owner`（NPC id）。
      セーブファイルの形は判明済みだが、**実行時のオブジェクトが同じ属性名を
      持っているとは限らない**（Facility.__init__ が何を self に置くかは不明）。
 
-  3. **どうやって出すか**。テキストの表示経路（`InstantaleApp.add_text`）と、
+  3. どうやって出すか。テキストの表示経路（`InstantaleApp.add_text`）と、
      自前の LLM 呼び出し（`send_request_with_no_structure`）の戻り値の形。
      `output_data/` の記録では応答は {"text": ...} だが、Python 側で何の型で
      返ってくるかは分からない。
 
-この mod は**観測しかしない**。値は変えず、例外も握り潰さない。
+この mod は観測しかしない。
+値は変えず、例外も握り潰さない。
 """
 
 import sys
@@ -37,11 +38,12 @@ INTERESTING = ("facility", "node", "area", "location", "player", "npc",
 # 1マネージャあたり何回まで LLM 呼び出しの中身を記録するか。
 MAX_LLM_SAMPLES = 3
 
-# 自前で LLM を1回だけ呼んで**戻り値の型**を確かめる。
-# 自分でイベント文を生成する以上ここが分からないと書けないが、プレイヤーの
-# 行動を待つ必要は無い（`output_data/` の記録は {"text": ...} だが、それが
-# dict なのか属性を持つオブジェクトなのかは保存形式からは分からない）。
-# 確認が済んだら False に戻すこと。ゲーム側スレッドを止めないよう別スレッドで走る。
+# 自前で LLM を1回だけ呼んで戻り値の型を確かめる。
+# 自分でイベント文を生成する以上ここが分からないと書けないが、
+# プレイヤーの行動を待つ必要は無い（`output_data/` の記録は {"text": ...} だが、
+# それが dict なのか属性を持つオブジェクトなのかは保存形式からは分からない）。
+# 確認が済んだら False に戻すこと。
+# ゲーム側スレッドを止めないよう別スレッドで走る。
 RUN_LLM_SHAPE_PROBE = False
 
 
@@ -84,9 +86,9 @@ def apply(ctx):
     def snapshot():
         """今この瞬間のゲーム状態を写し取る。
 
-        再現待ちが要らない部分はここで全部片付ける。プレイヤーが今どこかの
-        施設に立っているなら、その施設オブジェクトの属性名がそのまま
-        「イベント側が読める情報」になる。
+        再現待ちが要らない部分はここで全部片付ける。
+        プレイヤーが今どこかの施設に立っているなら、
+        その施設オブジェクトの属性名がそのまま「イベント側が読める情報」になる。
         """
         write("=" * 78)
         write("snapshot (pid {})".format(__import__("os").getpid()))
@@ -96,8 +98,9 @@ def apply(ctx):
             return
         dump_obj(app, "app")
 
-        # app が抱えている主要オブジェクトを、名前で当てずっぽうに掘らず
-        # 「型が Facility/Node/Area/World/Character のもの」で拾う。
+        # app が抱えている主要オブジェクトを、
+        # 名前で当てずっぽうに掘らず「型が
+        # Facility/Node/Area/World/Character のもの」で拾う。
         main = sys.modules.get("__main__")
         characters = sys.modules.get("scripts.characters")
         types_of_interest = {}
@@ -120,7 +123,7 @@ def apply(ctx):
                              indent="    ", full=True)
                     break
 
-        # 現在地は app ではなく **プレイヤーのキャラクタ**にぶら下がっている
+        # 現在地は app ではなく プレイヤーのキャラクタにぶら下がっている
         #   app.player.location      -> Facility（今いる施設そのもの）
         #   app.player.current_node  -> Node
         #   app.player.current_area  -> Area
@@ -190,9 +193,10 @@ def apply(ctx):
     if RUN_LLM_SHAPE_PROBE:
         import threading
 
-        # **`on_ready` に預ける**（TECH.md §3.6）。`apply()` は再注入と遅延
-        # 当て直しで最大8回走るので、ここで直に起こすと**実 LLM リクエストが
-        # 最大8回重なる**。1回きりの計測は印を付けて1回に畳む。
+        # **`on_ready` に預ける**（TECH.md §3.6）。
+        # `apply()` は再注入と遅延当て直しで最大8回走るので、
+        # ここで直に起こすと**実 LLM リクエストが最大8回重なる**。
+        # 1回きりの計測は印を付けて1回に畳む。
         ctx.on_ready(lambda: threading.Thread(
             target=lambda: _guarded(ctx, llm_shape_probe),
             name="instantale_mod.llm_shape_probe", daemon=True).start(),
@@ -228,10 +232,11 @@ def apply(ctx):
     # ------------------------------------------------ 行動のたびに走る中枢
     @ctx.wrap("__main__:InstantaleApp.process_choice", required=False)
     def process_choice(orig, self, function, choice_text="", *args, **kwargs):
-        # function はフェーズ管理オブジェクト。どのクラスが選ばれたかで
-        # 「プレイヤーが何をしたか」が分かる。
-        # スレッド名も出す ― 自前でフェーズを起こすとき、メインスレッドから
-        # 呼んでよいのか（＝ゲーム側が内部で別スレッドに渡しているのか）の判断に要る。
+        # function はフェーズ管理オブジェクト。
+        # どのクラスが選ばれたかで「プレイヤーが何をしたか」が分かる。
+        # スレッド名も出す。
+        # 自前でフェーズを起こすとき、
+        # メインスレッドから呼んでよいのか（＝ゲーム側が内部で別スレッドに渡しているのか）の判断に要る。
         import threading
         write("process_choice({}, choice_text={!r}) [{}]".format(
             type(function).__name__, choice_text,
@@ -271,7 +276,8 @@ def apply(ctx):
     def send_no_structure(orig, manager_name, message, *args, **kwargs):
         count = llm_samples.get(manager_name, 0)
         result = orig(manager_name, message, *args, **kwargs)
-        # マネージャごとに数回だけ記録する。会話のたびに全文を残すと読めなくなる。
+        # マネージャごとに数回だけ記録する。
+        # 会話のたびに全文を残すと読めなくなる。
         if count < MAX_LLM_SAMPLES:
             llm_samples[manager_name] = count + 1
             write("send_request_with_no_structure({!r}) message={}".format(

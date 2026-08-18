@@ -3,7 +3,8 @@
 
     python tools/tests/test_battle_damage_display.py
 
-偽の app / Character / BattlePhaseManager / BattleStartManager を差し込み、次を確認する。
+偽の app / Character / BattlePhaseManager / BattleStartManager を差し込み、
+次を確認する。
 
   与えた   … 味方が敵に与えたダメージが、地の文の**後ろ**に数字で出る
   受けた   … 敵が自分や味方に与えたダメージも同じように出る
@@ -13,9 +14,9 @@
   設定     … 敵側・味方側・回復・残量・下限のそれぞれで出し分けられる
   無害     … HP を1点も書き換えない。差が無ければ1行も出さない
 
-**HP の差を測る mod なので、テストも「HP を動かす偽の1手」を通す**
-（`handle_battle_situation` の中で HP を書き、地の文も出す）。ダメージの式は
-mod もテストも一切持たない。
+**HP の差を測る mod なので、テストも「HP を動かす偽の1手」を通す**（`handle_battle_situation` の中で HP を書き、
+地の文も出す）。
+ダメージの式は mod もテストも一切持たない。
 
 ゲームが起動していなくても走るので、mod を編集したらまずこれを通すこと。
 """
@@ -61,9 +62,11 @@ def manifest():
 def charset_verdict(text):
     """その字が**環境依存文字**かどうか。`ok` か、外れた理由を返す。
 
-    cp932 に入っていても、NEC 特殊（先頭 0x87）・NEC 選定 IBM 拡張（0xED-0xEE）・
-    IBM 拡張（0xFA-0xFC）は機種依存。`①` や `㈱` がここに居る。素の JIS X 0208
-    （0x81-0x84 の記号・仮名と 0x88-0xEA の漢字）と ASCII だけを通す。
+    cp932 に入っていても、NEC 特殊（先頭 0x87）・NEC 選定
+    IBM 拡張（0xED-0xEE）・IBM 拡張（0xFA-0xFC）は機種依存。
+    `①` や `㈱` がここに居る。
+    素の JIS X 0208（0x81-0x84 の記号・仮名と 0x88-0xEA の漢字）と
+    ASCII だけを通す。
     """
     for ch in text:
         try:
@@ -126,8 +129,8 @@ class InstantaleApp:
         self.texts.append(context)
 
 
-# 実機の並びに合わせた地の文（`process_battle_text` が出す側）。mod の数字は
-# **必ずこれより後**に出なければならない。
+# 実機の並びに合わせた地の文（`process_battle_text` が出す側）。
+# mod の数字は **必ずこれより後**に出なければならない。
 NARRATION_TEXT = "テストプレイヤーは剣を振り抜いた。"
 
 
@@ -135,12 +138,13 @@ class BattlePhaseManager:
     """1手ぶんを回す。`plan` に「誰の HP をいくつにするか」を積んで使う。
 
     本物では `handle_battle_situation` の中で `calculate_battle_effect` →
-    `resolve_battle_effect`（HP を動かす）→ `process_battle_text`（地の文）が
-    回る。ここではその順序だけを真似る（式は持たない）。
+    `resolve_battle_effect`（HP を動かす）→ `process_battle_text`（地の文）が回る。
+    ここではその順序だけを真似る（式は持たない）。
 
-    `finish` に敵の鍵を並べると、**その手の中で `current_enemy_dict` から抜ける**
-    ＝ とどめの一撃。これを拾わないと「倒した敵のダメージだけ出ない」になるので
-    （GAME.md §2.10）、テストからも同じ形で踏めるようにしてある。
+    `finish` に敵の鍵を並べると、**その手の中で
+    `current_enemy_dict` から抜ける** ＝ とどめの一撃。
+    これを拾わないと「倒した敵のダメージだけ出ない」になるので（GAME.md §2.10）、
+    テストからも同じ形で踏めるようにしてある。
     """
 
     def __init__(self, app, command=None):
@@ -225,7 +229,8 @@ class FakeCtx:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
-    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # ログは本物の `ctx.logger` をそのまま借りる。
+    # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
 
@@ -297,8 +302,8 @@ def setup(members=("71",), enemies=None, configure=None, enemy_as_dict=False,
           drop_max_hp=False):
     """mod を適用し、戦闘の最中の app を返す。
 
-    設定は `configure` で **`apply()` の前に**入れる（本番でも設定の反映は
-    再注入で効く）。
+    設定は
+    `configure` で **`apply()` の前に**入れる（本番でも設定の反映は再注入で効く）。
     """
     install_fake_kivy()
     main = sys.modules["__main__"]
@@ -501,7 +506,8 @@ print("=== 戦闘の境目 ===")
 app, ctx, mod = setup()
 strike(app, (enemy(app), 11))
 lines_before = len(mod_lines(app))
-# 同じ鍵で別の敵が入る＝次の戦闘。満タンの HP を「回復」と誤報してはいけない。
+# 同じ鍵で別の敵が入る＝次の戦闘。
+# 満タンの HP を「回復」と誤報してはいけない。
 app.current_enemy_dict["0"] = sys.modules["__main__"].Character(
     id="0", name="オークの兵", current_hp=50, max_hp=50)
 sys.modules["__main__"].BattleStartManager(app).start_battle()
@@ -524,8 +530,8 @@ check("current_enemy_dict の差し替えでも捨てる", len(mod_lines(app)) =
       mod_lines(app))
 
 print("=== とどめの一撃（消えた敵から測る経路）===")
-# 倒した敵は報告より先に `current_enemy_dict` から抜ける。それでも
-# **最後のダメージが出る**こと ― 台帳に控えた持ち主から測るため。
+# 倒した敵は報告より先に `current_enemy_dict` から抜ける。
+# それでも **最後のダメージが出る**こと ― 台帳に控えた持ち主から測るため。
 app, ctx, mod = setup()
 strike(app, (enemy(app), 11))
 lines_before = len(mod_lines(app))
@@ -610,7 +616,8 @@ strike(app, (enemy(app), 11))
 check("NO_PREFIX を選べば付かない", mod_lines(app)[0].startswith("ゴブリン"),
       mod_lines(app))
 
-# 宣言の側（GUI に出る一覧）。既定・選択肢・文字集合をここで縛る。
+# 宣言の側（GUI に出る一覧）。
+# 既定・選択肢・文字集合をここで縛る。
 decl = (manifest().get("settings") or {}).get("LINE_PREFIX") or {}
 values = decl.get("values") or []
 check("GUI から選べる設定として宣言されている", decl.get("type") == "choice", decl)
@@ -624,8 +631,9 @@ check("  → 候補に空白を持たせない（GUI で見えないため）",
 check("  → 空文字を選択肢にしない（GUI が「未指定」として弾くため）",
       all(v.strip() != "" for v in values), values)
 # 最初の版で使っていた記号がこの判定で落ちることを見せる（判定が効いている証拠）。
-# **この行に字そのものを書かない。** cp932 のコンソールでは `print` した時点で
-# UnicodeEncodeError になる ― 環境依存文字を候補から外す理由の実演でもある。
+# **この行に字そのものを書かない。**
+# cp932 のコンソールでは `print` した時点で UnicodeEncodeError になる
+# ― 環境依存文字を候補から外す理由の実演でもある。
 check("判定そのものが効いている（U+25B6 は環境依存として落ちる）",
       charset_verdict("▶") != "ok", "U+25B6 が ok になっている")
 check("  → U+00BB も落ちる", charset_verdict("»") != "ok",

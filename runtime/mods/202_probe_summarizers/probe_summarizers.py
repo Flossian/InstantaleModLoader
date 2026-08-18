@@ -1,17 +1,19 @@
 # -*- coding: utf-8 -*-
 """空 Literal バグのため、サマライザ/ファシリテータ一族を丸ごと計測する。
 
-トレースバックは master_ai_process_summarizer_in_conversation を名指ししている
-が、会話を一通り行ってもこの関数は呼ばれない。実行は兄弟の別変種を通っている。
-llm_manager はサマライザ5種とファシリテータ4種を公開して
-おり、いずれも生成される pydantic モデルの `Literal[...]` に流し込まれ得る
-リスト引数（npc_list, facility_list, ...）を取る。
+トレースバックは master_ai_process_summarizer_in_conversation を名指ししているが、
+会話を一通り行ってもこの関数は呼ばれない。
+実行は兄弟の別変種を通っている。
+llm_manager はサマライザ5種とファシリテータ4種を公開しており、
+いずれも生成される pydantic モデルの `Literal[...]` に流し込まれ得るリスト引数（npc_list, facility_list,
+...）を取る。
 
 `AssertionError: literal "expected" cannot be empty, obj=typing.Literal[]` は、
-モデル構築時にそれらのリストのどれかが空だったことを意味する。どの入口が該当
-するかを当てるより、全部包んでシーケンス引数の長さを片端から記録する方が早い。
-空であれば呼び出しが成功していても印を付けるので、次にクラッシュする前に犯人が
-浮かび上がる。
+モデル構築時にそれらのリストのどれかが空だったことを意味する。
+どの入口が該当するかを当てるより、
+全部包んでシーケンス引数の長さを片端から記録する方が早い。
+空であれば呼び出しが成功していても印を付けるので、
+次にクラッシュする前に犯人が浮かび上がる。
 """
 
 import sys
@@ -34,22 +36,26 @@ TARGETS = (
 
 
 def apply(ctx):
-    # **未 import でも降りない。** `scripts.llm.llm_manager` は最初の LLM
-    # リクエストまで import されない（TECH.md §3.4）。ここで早期 return すると
-    # フックが1本も登録されず、**保留の見張りが立たない** ― 動くかどうかが
-    # 「他の MOD が同じモジュールを保留してくれるか」に依存する。`required=False`
-    # で先に登録しておけば、現れた時点でローダが当て直す（`209_` の形）。
+    # 未 import でも降りない。
+    # `scripts.llm.llm_manager` は最初の LLM リクエストまで
+    # import されない（TECH.md §3.4）。
+    # ここで早期 return するとフックが1本も登録されず、保留の見張りが立たない。
+    # 動くかどうかが「他の MOD が同じモジュールを保留してくれるか」に依存する。
+    # `required=False` で先に登録しておけば、
+    # 現れた時点でローダが当て直す（`209_` の形）。
 
     write = ctx.logger("probes.log")
 
-    # 未 import なら None のまま進む（上の理由で降りない）。None のときは
-    # 存在確認ができないだけなので、全対象を required=False で登録しておく。
+    # 未 import なら None のまま進む（上の理由で降りない）。
+    # None のときは存在確認ができないだけなので、
+    # 全対象を required=False で登録しておく。
     module = sys.modules.get(MODULE)
 
     def describe_args(name, args, kwargs):
         """シーケンス系の引数だけを拾い、型と長さを記録する。
 
-        中身は出さない（プロンプト全文がログに溢れる）。空かどうかだけが争点。
+        中身は出さない（プロンプト全文がログに溢れる）。
+        空かどうかだけが争点。
         """
         parts = []
         empties = []
@@ -72,9 +78,10 @@ def apply(ctx):
                 if size == 0:
                     empties.append(key)
         # 空であること自体は証拠に *ならない*: master_ai_facilitator の arg9
-        # (master_process_log) は成功した呼び出しでも毎回空で来ていた。ここでは
-        # 文脈として記録するに留める ― 空 Literal を実際に同定するのは、モデルが
-        # 組み立てられる瞬間を押さえる 203_probe_create_model の方である。
+        # (master_process_log) は成功した呼び出しでも毎回空で来ていた。
+        # ここでは文脈として記録するに留める。
+        # 空 Literal を実際に同定するのは、モデルが組み立てられる瞬間を押さえる
+        # 203_probe_create_model の方である。
         write("{}({}){}".format(
             name, ", ".join(parts) if parts else "no sequence args",
             "  [empty: {}]".format(", ".join(empties)) if empties else ""))
@@ -86,7 +93,8 @@ def apply(ctx):
             ctx.log("  {} not present; skipped".format(name), level="WARN")
             continue
 
-        # ループ変数を閉じ込める工場関数。これが無いと全ラッパが最後の name を見る。
+        # ループ変数を閉じ込める工場関数。
+        # これが無いと全ラッパが最後の name を見る。
         def make_probe(fn_name):
             @ctx.wrap("{}:{}".format(MODULE, fn_name), required=False)
             def probe(orig, *args, **kwargs):

@@ -3,8 +3,8 @@
 
     python tools/tests/test_charisma_impression.py
 
-偽の `scripts.functions:document_emotion_scores_new`（魅力6段・好感度13段の
-はしご）と、`character_instance` を持つ偽の呼び出し元を組んで、次を確認する。
+偽の `scripts.functions:document_emotion_scores_new`（魅力6段・好感度13段のはしご）と、
+`character_instance` を持つ偽の呼び出し元を組んで、次を確認する。
 
   学習    … 段の並び・位置・初対面の段をゲームから読み取る（文言は持たない）
   一律解消 … 同じ魅力・同じ好感度でも、相手によって段が散る
@@ -21,10 +21,11 @@
   別物    … 段が単調でない・動く位置が2つあるゲームでは何もしない
   無事故  … どの経路でも ctx.log_exc が呼ばれない
 
-はしごの形（魅力5段＋文の付かない帯1つ・好感度13段）は exe の定数の並びから
-起こしたもので、**実測ではない**（VERIFICATION.md §3.23）。閾値はここで置いた
-適当な値で、実機の値と揃える意味も無い ― この試験に要るのは数値ではなく
-「段が単調に並んでいる関数」で、mod は閾値を持たずその場で読むため。
+はしごの形（魅力5段＋文の付かない帯1つ・好感度13段）は
+exe の定数の並びから起こしたもので、**実測ではない**（VERIFICATION.md §3.23）。
+閾値はここで置いた適当な値であり、実機の値と揃える意味も無い。
+この試験に要るのは数値ではなく「段が単調に並んでいる関数」だから。
+mod は閾値を持たず、その場で読む。
 """
 import ast
 import importlib.util
@@ -38,8 +39,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 
-# 失敗したときは記録の中身をそのまま出す。cp932 のコンソールに出せない文字が
-# 混ざっていても試験自体は落とさない。
+# 失敗したときは記録の中身をそのまま出す。
+# cp932 のコンソールに出せない文字が混ざっていても試験自体は落とさない。
 try:
     sys.stdout.reconfigure(errors="replace")
 except Exception:
@@ -86,7 +87,8 @@ AFFINITY_RUNGS = [
     (150, "家族同然に感じている"),
 ]
 
-# 魅力の段。3段目は「文が付かない」帯（戻り値が1要素になる）。
+# 魅力の段。
+# 3段目は「文が付かない」帯（戻り値が1要素になる）。
 CHARM_RUNGS = [
     (0, "ひどく醜く思っている"), (7, "あまり好みではない"), (9, None),
     (12, "魅力を感じている"), (15, "強い魅力を感じている"),
@@ -99,7 +101,8 @@ CHARM_RUNGS_EN = [
     (18, "Finds you irresistibly attractive"),
 ]
 
-# 段が無い版（全部の帯に文言がある）。列の長さが常に2になる。
+# 段が無い版（全部の帯に文言がある）。
+# 列の長さが常に2になる。
 CHARM_RUNGS_FULL = [
     (0, "ひどく醜く思っている"), (7, "あまり好みではない"), (9, "気にならない"),
     (12, "魅力を感じている"), (15, "強い魅力を感じている"),

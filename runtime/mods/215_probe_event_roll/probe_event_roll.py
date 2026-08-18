@@ -3,22 +3,25 @@
 
 ##### 何を決めるための計測か
 
-ミニイベントの判定は「機械的で、能力値が効いていないように見え、成功率が低い」
-という体感がある。`output_data/` に残った記録を突き合わせて、ここまでは
-分かっている（GAME.md §2.9「フィールドイベントの成否判定」・
-VERIFICATION_LOG.md §2.37）:
+ミニイベントの判定は「機械的で、能力値が効いていないように見え、
+成功率が低い」という体感がある。
+`output_data/` に残った記録を突き合わせて、
+ここまでは分かっている（GAME.md §2.9「フィールドイベントの成否判定」・VERIFICATION_LOG.md
+§2.37）:
 
-- `field_event_evaluator` が `credibility`(1-10) と `reference_attribute`
-  （6能力値のどれか）を返し、ゲームがそれを確率に変えて `quest_event_log` に
-  `<確率N%: 成功>` と書き込む。`quest_referee_event_resolve` は結果だけを受け取る
-- 確率は **`credibility*10 + 20` を超えない**。半数はちょうどこの値で、
-  残りは**負の差**だけが付く
+- `field_event_evaluator` が `credibility`(1-10) と
+  `reference_attribute`（6能力値のどれか）を返し、
+  ゲームがそれを確率に変えて `quest_event_log` に `<確率N%: 成功>` と書き込む。
+  `quest_referee_event_resolve` は結果だけを受け取る
+- 確率は **`credibility*10 + 20` を超えない**。
+  半数はちょうどこの値で、残りは負の差だけが付く
 - 同じ時刻の別々の判定で、参照能力値が違っても差は同じ値だったことがある。
   一方で同じキャラ・同じ能力値でも時刻が違えば差は動く
 
-つまり差を作っているのは「そのときの状態」に見えるが、**セーブと LLM の記録
-だけでは正体が決まらない**。HP・体力(physical_integrity)・負傷・レベルの
-どれとも、手元のデータでは合わない組み合わせが残る。
+つまり差を作っているのは「そのときの状態」に見えるが、**セーブと
+LLM の記録だけでは正体が決まらない**。
+HP・体力(physical_integrity)・負傷・レベルのどれとも、
+手元のデータでは合わない組み合わせが残る。
 
 判定そのものはコンパイル済みの `QuestEventManager` の中で起きるので読めない。
 **判定の瞬間に立ち会って、その場の値を全部写す**しかない。
@@ -28,22 +31,24 @@ VERIFICATION_LOG.md §2.37）:
 | 問い | 見るところ |
 |---|---|
 | 確率は何から作られているか | 判定の直前直後のプレイヤーの値を全部控え、`credibility*10+20` との差と突き合わせる |
-| 能力値は使われているか | `Character.calculate_attribute` が判定の窓の間に呼ばれるか、呼ばれたなら引数と戻り値と**呼び出し元** |
+| 能力値は使われているか | `Character.calculate_attribute` が判定の窓の間に呼ばれるか、呼ばれたなら引数と戻り値と呼び出し元 |
 | 参照能力値は効いているか | `reference_attribute` の値を変えずに、6能力値すべての生値と換算値を毎回控える |
 | 差は状態のどれに連動するか | HP・体力・負傷・レベルを1行に並べて、複数回ぶんを並べて見る |
 
 ##### ゲームは変更しない
 
-200番台の約束どおり読み取りだけ。`safe=True` と書き込みの握り潰しで、
-記録に失敗しても本体は必ず呼ぶ。`calculate_attribute` は引数から戻り値を
-決めるだけに見えるが、こちらから新しい値では**呼ばない**（既にキャラクタが
-持っている能力値をそのまま渡すだけにして、ゲームの状態を触る余地を残さない）。
+200番台の約束どおり読み取りだけ。
+`safe=True` と書き込みの握り潰しで、記録に失敗しても本体は必ず呼ぶ。
+`calculate_attribute` は引数から戻り値を決めるだけに見えるが、
+こちらから新しい値では呼ばない（既にキャラクタが持っている能力値をそのまま渡すだけにして、
+ゲームの状態を触る余地を残さない）。
 
 ##### 出力
 
 `out/event_roll.log`（読む用）と `out/event_roll.jsonl`（並べて突き合わせる用）。
-どちらも `313_event_ability_check` と同じ場所に書く ― 判定を触る MOD と計測が
-別々の時系列になると、差が MOD のせいか元からかを見分けられないため。
+どちらも `313_event_ability_check` と同じ場所に書く。
+判定を触る MOD と計測が別々の時系列になると、
+差が MOD のせいか元からかを見分けられないため。
 """
 
 import datetime
@@ -71,15 +76,19 @@ RESOLVE_ARGS = ("quest_data", "quest_log", "quest_event_log", "enemies_info",
 ABILITIES = ("strength", "constitution", "dexterity",
              "intelligence", "wisdom", "charisma")
 
-# ゲームが quest_event_log に書き込む判定の印。日本語では `<確率70%: 失敗>`。
-# 言語が変わると文言も変わる（ゲームは tr() を通す）ので、数字と % だけを
-# 頼りに拾う。最後の1つが今回の判定。
+# ゲームが quest_event_log に書き込む判定の印。
+# 日本語では `<確率70%: 失敗>`。
+# 言語が変わると文言も変わる（ゲームは tr() を通す）ので、
+# 数字と % だけを頼りに拾う。
+# 最後の1つが今回の判定。
 MARK_RE = re.compile(r"<[^<>]{0,24}?(\d{1,3})\s*%\s*[:：]?\s*([^<>]{0,16})>")
 
-# 判定の窓に限って calculate_attribute を記録する（窓の外は戦闘でも画面表示でも
-# 呼ばれうる）。窓は `evaluate` の入口から **`resolve` の入口**まで ―
-# `resolve` は元の関数を呼ぶ**前**に窓を閉じるので、`resolve` の本体の中の
-# 呼び出しは数えない。確率は resolve に入る時点で既に決まっているので、
+# 判定の窓に限って
+# calculate_attribute を記録する（窓の外は戦闘でも画面表示でも呼ばれうる）。
+# 窓は `evaluate` の入口から **`resolve` の入口**まで。
+# `resolve` は元の関数を呼ぶ前に窓を閉じるので、
+# `resolve` の本体の中の呼び出しは数えない。
+# 確率は resolve に入る時点で既に決まっているので、
 # 見たいものは窓の中に収まっている。
 CALC_LOG_LIMIT = 40
 
@@ -87,8 +96,9 @@ CALC_LOG_LIMIT = 40
 def _get(container, name, default=None):
     """dict でも属性でも読む。`305_mini_quest` の `_get` と同じ方針。
 
-    `quest_referee*` の戻り値の形は特定できていない（`output_data/` に残るのは
-    保存側が整えた形であって、関数が返したそのものではない）。両方で通す。
+    `quest_referee*` の戻り値の形は特定できていない（`output_data/` に残るのは保存側が整えた形であって、
+    関数が返したそのものではない）。
+    両方で通す。
     """
     if container is None:
         return default
@@ -114,8 +124,8 @@ def shape_of(value):
 def arg_of(args, kwargs, names, name):
     """位置引数・キーワード引数のどちらで来ても読む。無ければ None。
 
-    呼び出し側はコンパイル済みで読めないので、どちらの渡し方かを決め打ちできない
-    （`103_fix_eventlog_trim` と同じ理由）。
+    呼び出し側はコンパイル済みで読めないので、
+    どちらの渡し方かを決め打ちできない（`103_fix_eventlog_trim` と同じ理由）。
     """
     if name in kwargs:
         return kwargs[name]
@@ -143,9 +153,10 @@ def last_mark(text):
 def ability_scores(character):
     """生の能力値を dict で。読めた経路も一緒に返す。
 
-    セーブでは `original_ability_scores`、実行時には `update_ability_scores()` が
-    作る別名がありうる。名前を推測して外すと「能力値が読めない」と「能力値が 0」を
-    見分けられなくなるので、見つけた経路そのものを記録に残す。
+    セーブでは `original_ability_scores`、
+    実行時には `update_ability_scores()` が作る別名がありうる。
+    名前を推測して外すと「能力値が読めない」と「能力値が
+    0」を見分けられなくなるので、見つけた経路そのものを記録に残す。
     """
     for name in ("ability_scores", "original_ability_scores"):
         table = getattr(character, name, None)
@@ -186,8 +197,8 @@ def snapshot(character):
             for part, info in body_parts.items()
             if _get(info, "injury") or _get(info, "stage", "intact") != "intact"
         }
-    # 換算値は「能力値を渡すと何が返るか」の対応表そのもの。ゲームの
-    # calculate_attribute を、そのキャラクタが既に持っている値だけで引く。
+    # 換算値は「能力値を渡すと何が返るか」の対応表そのもの。
+    # ゲームの calculate_attribute を、そのキャラクタが既に持っている値だけで引く。
     calculate = getattr(character, "calculate_attribute", None)
     if callable(calculate) and scores:
         table = {}
@@ -211,11 +222,13 @@ def snapshot(character):
 def apply(ctx):
     import sys
 
-    # **未 import でも降りない。** `scripts.llm.llm_manager` は最初の LLM
-    # リクエストまで import されない（TECH.md §3.4）。ここで早期 return すると
-    # フックが1本も登録されず、**保留の見張りが立たない** ― 動くかどうかが
-    # 「他の MOD が同じモジュールを保留してくれるか」に依存する。`required=False`
-    # で先に登録しておけば、現れた時点でローダが当て直す（`209_` の形）。
+    # 未 import でも降りない。
+    # `scripts.llm.llm_manager` は最初の LLM リクエストまで
+    # import されない（TECH.md §3.4）。
+    # ここで早期 return するとフックが1本も登録されず、保留の見張りが立たない。
+    # 動くかどうかが「他の MOD が同じモジュールを保留してくれるか」に依存する。
+    # `required=False` で先に登録しておけば、
+    # 現れた時点でローダが当て直す（`209_` の形）。
 
     log_path = ctx.out_path(LOG_BASENAME)
     record_path = ctx.out_path(RECORD_BASENAME)
@@ -234,9 +247,10 @@ def apply(ctx):
     def snap(character):
         """`snapshot` を自分の記録から外して呼ぶ。
 
-        `snapshot` は換算表を作るために `calculate_attribute` を6回呼ぶ。窓が
-        開いている間の呼び出しは全部数える作りなので、外さないと**自分の計測で
-        自分のログが埋まる** ― `101_` / `214_` が踏んだのと同じ穴。
+        `snapshot` は換算表を作るために `calculate_attribute` を6回呼ぶ。
+        窓が開いている間の呼び出しは全部数える作りなので、
+        外さないと**自分の計測で自分のログが埋まる**。
+        `101_` / `214_` が踏んだのと同じ穴。
         """
         state["probing"] = True
         try:
@@ -256,7 +270,8 @@ def apply(ctx):
     @ctx.wrap("scripts.llm.llm_manager:quest_referee_event_evaluate_new",
               required=False, safe=True)
     def evaluate(orig, *args, **kwargs):
-        # 窓を開ける。ここから resolve までの calculate_attribute を数える。
+        # 窓を開ける。
+        # ここから resolve までの calculate_attribute を数える。
         state["open"] = True
         state["calc"] = []
         result = orig(*args, **kwargs)
@@ -290,7 +305,8 @@ def apply(ctx):
                           (credibility * 10 + 20) if isinstance(credibility, int) else "?",
                           row["event"], row["event_turn"]))
             else:
-                # 確定成功・確定失敗はサイコロを振らない。窓を閉じておく。
+                # 確定成功・確定失敗はサイコロを振らない。
+                # 窓を閉じておく。
                 state["open"] = False
                 write("evaluate: {} (判定なし) event={}".format(kind, row["event"]))
             record(row)
@@ -334,7 +350,8 @@ def apply(ctx):
                       row["reference_attribute"], ceiling, row["gap"],
                       len(row["calculate_attribute_calls"])))
             if row["gap"] not in (None, 0):
-                # 差が付いた回。何に連動しているかはこの1行の中にしか無い。
+                # 差が付いた回。
+                # 何に連動しているかはこの1行の中にしか無い。
                 write("    差の手掛かり: {}".format(json.dumps(
                     {"before": row["player_before"], "now": row["player_now"]},
                     ensure_ascii=False, default=str)[:1200]))
@@ -355,10 +372,12 @@ def apply(ctx):
     def calculate_attribute(orig, self, attribute_score, *args, **kwargs):
         result = orig(self, attribute_score, *args, **kwargs)
         try:
-            # 窓の外（戦闘・訓練・画面表示）でも呼ばれる。判定と無関係な呼び出しで
-            # ログを埋めないよう、evaluate から resolve までの間だけ数える。
-            # この MOD 自身の snapshot() は state["probing"] で外してある
-            # （snap() を参照）。残るのはゲームが呼んだぶんだけ。
+            # 窓の外（戦闘・訓練・画面表示）でも呼ばれる。
+            # 判定と無関係な呼び出しでログを埋めないよう、
+            # evaluate から resolve までの間だけ数える。
+            # この MOD 自身の snapshot() は
+            # state["probing"] で外してある（snap() を参照）。
+            # 残るのはゲームが呼んだぶんだけ。
             if (state["open"] and not state["probing"]
                     and len(state["calc"]) < CALC_LOG_LIMIT):
                 state["calc"].append({
@@ -372,8 +391,8 @@ def apply(ctx):
         return result
 
     # ------------------------------------------------------------ 自己検証
-    # 実経路はクエストでイベントを1回引くまで通らない。印を読む部分だけは
-    # 作ったデータで先に確かめておく（`103_` と同じ方針）。
+    # 実経路はクエストでイベントを1回引くまで通らない。
+    # 印を読む部分だけは作ったデータで先に確かめておく（`103_` と同じ方針）。
     sample = ("〈プレイヤーの入力〉A\n描写\n<確率70%: 失敗>\n"
               "〈プレイヤーの入力〉B\n描写\n<確率80%: 成功>")
     parsed = last_mark(sample)

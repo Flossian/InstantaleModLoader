@@ -3,8 +3,8 @@
 
     python tools/tests/test_shop_restock.py
 
-偽の app / World / Facility / Character / ShoppingStartManagerRemake / Clock を
-差し込み、次を確認する。
+偽の app / World / Facility / Character / ShoppingStartManagerRemake /
+Clock を差し込み、次を確認する。
 
   初回     … 初めて開いた店は入れ替えない。その日を基準として控えるだけ
   未到来   … 日数が足りなければ持ち物に触らない
@@ -196,7 +196,8 @@ class FakeCtx:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
-    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # ログは本物の `ctx.logger` をそのまま借りる。
+    # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
 
@@ -217,8 +218,9 @@ class FakeCtx:
     def log_exc(self, msg):
         self.errors.append(msg)
 
-    # 本物の `ctx.write_json` / `write_text` と同じものを使う。ここを自前の
-    # open(..., "w") にすると、テストだけが「壊れない書き方」を通らなくなる。
+    # 本物の `ctx.write_json` / `write_text` と同じものを使う。
+    # ここを自前の open(..., "w") にすると、
+    # テストだけが「壊れない書き方」を通らなくなる。
     def write_json(self, path, data, *, indent=1):
         return ml.write_json(path, data, indent=indent, report=self.log_exc)
 
@@ -460,8 +462,8 @@ def main():
     check("例外を握り潰していない", not ctx.errors, ctx.errors)
 
     # -- Clock が使えない（予約が取れない）------------------------------
-    # 予約できないまま抜けると、空にした店の控えが更新されず毎回まっさらに
-    # なる。その場で決着を付けること。
+    # 予約できないまま抜けると、空にした店の控えが更新されず毎回まっさらになる。
+    # その場で決着を付けること。
     reset_state()
     module, ctx = fresh_mod()
     app, owner, facility = make_world(days=100, stock={"item_1": {}})

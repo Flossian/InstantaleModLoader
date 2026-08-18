@@ -1,36 +1,40 @@
 # -*- coding: utf-8 -*-
 """NPC の犯罪をプレイヤーへ帰属する誤判定を防ぐ。
 
-ゲームの自由行動は facilitator が処理を決め、その結果を summarizer が記憶と
-`lawfulness_loss` にまとめる。実測では facilitator が「プレイヤーは介入して
-いない」と判断して `process=[]` を返した直後、summarizer だけが
-`lawfulness_loss=10` を返し、プレイヤーが犯罪者になった。
+ゲームの自由行動は facilitator が処理を決め、
+その結果を summarizer が記憶と `lawfulness_loss` にまとめる。
+実測では facilitator が「プレイヤーは介入していない」と判断して
+`process=[]` を返した直後、summarizer だけが `lawfulness_loss=10` を返し、
+プレイヤーが犯罪者になった。
 
 この MOD は二段で防ぐ。
 
 1. 実測済み system 文を置換し、行為主体を明示的に判定させる。
-2. LLM が出した機械可読マーカーが `other_or_none` の場合だけ、manager の
-   戻り値から評判低下と逮捕を除く。
+2. LLM が出した機械可読マーカーが `other_or_none` の場合だけ、
+   manager の戻り値から評判低下と逮捕を除く。
 
-マーカー欠落・未知の戻り値・書換失敗では従来結果を維持する。本物の犯罪を
-推測で消すより、誤判定を残して監査ログに出す方を選ぶ。
+マーカー欠落・未知の戻り値・書換失敗では従来結果を維持する。
+本物の犯罪を推測で消すより、誤判定を残して監査ログに出す方を選ぶ。
 
 ## 二段のうち、どちらがどの経路で効くか
 
-戻り値を直す2段目は `llm_manager` の `master_ai_*` を包む＝プロバイダに依存
-しないので、ローカルでもクラウドでも同じように効く。**効かなかったのは1段目**
-（プロンプトの置換）で、v1 は `LlamaCppClient.chat` しか包んでいなかった。
-クラウド（APIキー）ではそこを通らないので system 文が書き換わらず、LLM は
-マーカーを出さない。マーカーが無ければ2段目は既定の素通しに倒れる ―
+戻り値を直す2段目は `llm_manager` の `master_ai_*` を包む＝プロバイダに依存しないので、
+ローカルでもクラウドでも同じように効く。
+効かなかったのは1段目（プロンプトの置換）で、
+v1 は `LlamaCppClient.chat` しか包んでいなかった。
+クラウド（APIキー）ではそこを通らないので system 文が書き換わらず、
+LLM はマーカーを出さない。
+マーカーが無ければ2段目は既定の素通しに倒れる。
 **クラウドでは MOD 全体が何もしていなかった**（v2 で修正）。
 
-仕掛ける場所は `instantale_modloader.llm` が持っている（TECH.md §3.2.3 の
-「写して回るものが出たら、それはローダの語彙」）。ローカルの3点とクラウドの
-`llm_manager` 別名、別名の後生えの見張りまでそちらの担当で、この MOD が持つ
-のは**どう書き換えるか**だけ。`111_llm_prompt_replace` も同じ口を使う。
+仕掛ける場所は `instantale_modloader.llm` が持っている（TECH.md
+§3.2.3 の「写して回るものが出たら、それはローダの語彙」）。
+ローカルの3点とクラウドの `llm_manager` 別名、
+別名の後生えの見張りまでそちらの担当で、この MOD が持つのはどう書き換えるかだけ。
+`111_llm_prompt_replace` も同じ口を使う。
 
-二度当たっても壊れない（`INJECT_MARKER` が本文にあれば `already_injected` で
-何もしない）ので、印が届かない別スレッド経路でも安全。
+二度当たっても壊れない（`INJECT_MARKER` が本文にあれば
+`already_injected` で何もしない）ので、印が届かない別スレッド経路でも安全。
 """
 
 
@@ -200,13 +204,14 @@ def postprocess_summarizer(result):
 def rewrite_texts(texts):
     """出ていく文章の並びのうち、対象 system 文だけを置換する。
 
-    `(新しい並び, kind, reason)`。書き換えないときは**渡された並びをそのまま**
-    返す（`kind` は None）。messages の組み直しはローダ側（`instantale_modloader.llm`）
-    の担当なので、ここは文字列の並びしか見ない。
+    `(新しい並び, kind, reason)`。
+    書き換えないときは渡された並びをそのまま返す（`kind` は None）。
+    messages の組み直しはローダ側（`instantale_modloader.llm`）の担当なので、
+    ここは文字列の並びしか見ない。
 
-    どちらの目印が何個あるかで facilitator / summarizer を見分ける。片方が
-    ちょうど1つ、もう片方が0のときだけ書き換える ― 数が合わないものは
-    知らない形なので、素通しして理由を残す。
+    どちらの目印が何個あるかで facilitator / summarizer を見分ける。
+    片方がちょうど1つ、もう片方が0のときだけ書き換える。
+    数が合わないものは知らない形なので、素通しして理由を残す。
     """
     if not isinstance(texts, (list, tuple)):
         return texts, None, "not_list"

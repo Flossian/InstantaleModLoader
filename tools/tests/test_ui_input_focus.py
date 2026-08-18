@@ -3,8 +3,8 @@
 
     python tools/tests/test_ui_input_focus.py
 
-偽の `scripts.hud.new_hud` / `InstanTaleHUD` / Kivy（Clock）と、焦点を本物と
-同じように配る `FakeTextInput` を差し込んで、次を確認する。
+偽の `scripts.hud.new_hud` / `InstanTaleHUD` / Kivy（Clock）と、
+焦点を本物と同じように配る `FakeTextInput` を差し込んで、次を確認する。
 
   発見     … 入力欄を**型名でも属性名でもなく**持ち物（focus/insert_text）で見つける
   選別     … 欄が複数あるビルドでは、送信ボタンと同じ親に居るものを選ぶ
@@ -283,7 +283,8 @@ class FakeCtx(object):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
-    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # ログは本物の `ctx.logger` をそのまま借りる。
+    # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
 
@@ -449,7 +450,8 @@ def run():
     print("\n[歯止め]")
     ring = FakeHUD()
     ring.show()
-    # ゲーム側が「外す」を繰り返すビルド（取り合い）。戻すたびに外し返す。
+    # ゲーム側が「外す」を繰り返すビルド（取り合い）。
+    # 戻すたびに外し返す。
     ring.text_input.focus = True
     for _round in range(mod.GUARD_LIMIT + 6):
         ring.text_input.blur()

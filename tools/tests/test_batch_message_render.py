@@ -41,8 +41,8 @@ FAILURES = []
 COLORS = []
 RECTANGLES = []
 # 色の指定が付いたままの文字列を、markup を切った状態で描いた回数。
-# **1回でもあれば、その瞬間 `[color=#808080]` が文字として画面に出ている**
-# （実機で見えた ― 場面転換のときに一瞬タグが出る）。
+# **1回でもあれば、その瞬間 `[color=#808080]` が文字として画面に出ている**（実機で見えた
+# ― 場面転換のときに一瞬タグが出る）。
 TAG_LEAKS = []
 
 
@@ -126,8 +126,9 @@ class FakeAnimation(object):
         cls.cancelled.append(label)
 
     def start(self, label):
-        # 開始時点の opacity を控えてから動かす。どこから明るくなるかが
-        # 「本文全体が一度消えるか否か」を決めるので、そこを検査したい。
+        # 開始時点の opacity を控えてから動かす。
+        # どこから明るくなるかが「本文全体が一度消えるか否か」を決めるので、
+        # そこを検査したい。
         self.starts.append((label, self.duration, label.opacity))
         label.opacity = self.opacity
 
@@ -183,8 +184,8 @@ class CoreLabel(object):
 class FakeWindow(object):
     """クリックの見張りの結び先。
 
-    **結び直しで手が積み重ならないこと**を検査するために、外した手が
-    ちゃんと消えるところまで写している（注入し直すたびに1本増えると、
+    **結び直しで手が積み重ならないこと**を検査するために、
+    外した手がちゃんと消えるところまで写している（注入し直すたびに1本増えると、
     1クリックで複数の本文が打ち切られる）。
     """
 
@@ -267,11 +268,13 @@ class Label(object):
         self.text_size = (40, None)
         self.texture_size = (40, 10)
         self.height = 10
-        # 寸法を計算し直した回数。**Kivy はテクスチャの作り直しを次のフレーム
-        # へ回す**ので、1文字ずつなら1フレームの遅れは見えないが、まとめて
-        # 足したときは高さが古いままになり、増えた行が枠から切り落とされる
-        # （実機で踏んだ ― 本文もラベルも正しいのに「クリックした時点で
-        # 打ち切られる」）。飛ばした後に計算し直したかをここで数える。
+        # 寸法を計算し直した回数。
+        # **Kivy はテクスチャの作り直しを次のフレームへ回す**ので、
+        # 1文字ずつなら1フレームの遅れは見えないが、
+        # まとめて足したときは高さが古いままになり、
+        # 増えた行が枠から切り落とされる（実機で踏んだ
+        # ― 本文もラベルも正しいのに「クリックした時点で打ち切られる」）。
+        # 飛ばした後に計算し直したかをここで数える。
         self.texture_updates = 0
 
     @property
@@ -280,9 +283,10 @@ class Label(object):
 
     @markup.setter
     def markup(self, value):
-        # **色を外すなら、素の本文に戻してから。** タグの付いた文字列を
-        # 残したまま markup を切ると、その状態で描かれた瞬間にタグが文字として
-        # 出る。順序の間違いはここでしか捕まらない（描く側は次のフレーム）。
+        # **色を外すなら、素の本文に戻してから。**
+        # タグの付いた文字列を残したまま markup を切ると、
+        # その状態で描かれた瞬間にタグが文字として出る。
+        # 順序の間違いはここでしか捕まらない（描く側は次のフレーム）。
         if not value and "[color=" in self.text:
             TAG_LEAKS.append(self.text[:40])
         self._markup = value
@@ -333,29 +337,31 @@ class ScrollView(object):
         self.scroll_history.append(value)
 
 
-# 正本へ書いたとき、ゲームが画面を塗り直すか。**実機では塗り直さなかった**
-# （`out/modloader.log`: 正本は 57552 → 57569 に伸びたのに、画面は打ちかけの
-# 7文字のまま ＝ NPC の名前だけが残った）。どちらでも本文が出ることを求める。
+# 正本へ書いたとき、ゲームが画面を塗り直すか。
+# **実機では塗り直さなかった**（`out/modloader.log`: 正本は 57552 →
+# 57569 に伸びたのに、画面は打ちかけの 7文字のまま ＝ NPC の名前だけが残った）。
+# どちらでも本文が出ることを求める。
 REPAINT_ON_WRITE = [True]
 
-# 打ち出しの最中に、ゲームが本文どおりでない文字を混ぜる版か。**実機がこれ
-# だった**（正本の末尾が本文の先頭からの切り出しと文字単位で一致しない ―
-# `out/modloader.log` の `tail=` に本文には無い改行が混ざっていた）。位置合わせを
-# 「本文が始まった時点の長さ」に置き換える動機そのものなので、写しておく。
+# 打ち出しの最中に、ゲームが本文どおりでない文字を混ぜる版か。
+# **実機がこれだった**（正本の末尾が本文の先頭からの切り出しと文字単位で一致しない
+# ― `out/modloader.log` の `tail=` に本文には無い改行が混ざっていた）。
+# 位置合わせを「本文が始まった時点の長さ」に置き換える動機そのものなので、
+# 写しておく。
 INSERT_BREAKS = [False]
 
-# 塗り直しが「渡された値」ではなくゲーム自身の控えを見る版か。ここまで外れて
-# いても、最後にラベルへ足して見た目だけは揃える（`ensure_shown`）。
+# 塗り直しが「渡された値」ではなくゲーム自身の控えを見る版か。
+# ここまで外れていても、最後にラベルへ足して見た目だけは揃える（`ensure_shown`）。
 IGNORE_VALUE = [False]
 
 
 class HUD(object):
     """本文の正本（`display_text`）を持っているのは HUD 側。
 
-    `117_message_text_integrity` が実機で通している経路がこれ（あちらは塗り直し
-    の中で `self.display_text` を読んでいる）。**app 側にこの名前は無い**ので、
-    app から読もうとする MOD はここで落ちる ― 実際に落ちていた（クリックでの
-    打ち切りが毎回見送られていた）。
+    `117_message_text_integrity` が実機で通している経路がこれ（あちらは塗り直しの中で
+    `self.display_text` を読んでいる）。
+    **app 側にこの名前は無い**ので、app から読もうとする MOD はここで落ちる
+    ― 実際に落ちていた（クリックでの打ち切りが毎回見送られていた）。
     """
 
     def __init__(self):
@@ -381,9 +387,9 @@ class HUD(object):
     def update_display_text(self, _instance=None, value=None):
         """本文が変わるたびにゲームがラベルを塗り直す経路。
 
-        Kivy のプロパティ監視で呼ばれるので、**1文字進むたびに生の本文が
-        ラベルへ入り直す** ＝ MOD が付けた色はそのたびに消える。逐次表示の
-        色付けはここを包んで直しているので、その形を写しておく。
+        Kivy のプロパティ監視で呼ばれるので、**1文字進むたびに生の本文がラベルへ入り直す** ＝
+        MOD が付けた色はそのたびに消える。
+        逐次表示の色付けはここを包んで直しているので、その形を写しておく。
 
         `IGNORE_VALUE` は「ゲームが渡された値ではなく自分の控えから塗る」版。
         そこまで外れていても本文が画面に出ることを求める（最後の砦の検査）。
@@ -396,10 +402,10 @@ class HUD(object):
 class InstantaleApp(object):
     """本物の流し込みの骨格を写す（`out/text_viewport.log` の実測に基づく）。
 
-    肝は **待ち行列から取り除くのは鎖の最後の呼び出しだ** という点。実機のログでは
-    `to_add_text_list` が 1 のまま流し込みが続き、0 に減るのは `index == len(context)`
-    の呼び出しと同時だった。ここを写しておかないと、行列を放置する MOD でも
-    このテストを全通してしまう。
+    肝は **待ち行列から取り除くのは鎖の最後の呼び出しだ** という点。
+    実機のログでは `to_add_text_list` が 1 のまま流し込みが続き、
+    0 に減るのは `index == len(context)` の呼び出しと同時だった。
+    ここを写しておかないと、行列を放置する MOD でもこのテストを全通してしまう。
 
     1文字ぶんの続きは `add_text_display` 自身が次を予約する（実機と同じ）。
     予約を写しておかないと、鎖を止める側（クリックでの打ち切り）が検査できない。
@@ -454,16 +460,18 @@ class InstantaleApp(object):
             return
         if REBUILD_ON_FINISH[0]:
             # 終端の呼び出しが、ゲーム自身の控えから本文を組み直す版。
-            # **終端より先に本文を書く MOD は、ここで書いた分を失う**
-            # （クリックした瞬間に本文が縮んで見える）。実機で何が起きるかは
-            # 分からないので、どちらでも結果が同じになることを求める。
+            # **終端より先に本文を書く MOD は、
+            # ここで書いた分を失う**（クリックした瞬間に本文が縮んで見える）。
+            # 実機で何が起きるかは分からないので、
+            # どちらでも結果が同じになることを求める。
             self.hud.display_text = self.base_text + context[:self.typed]
         # **行列から取り除くのは終端の仕事**で、空なら例外になる（実機と同じ）。
         # 終端を二度踏む MOD はここで落ちる ― 実機では
         # `IndexError: pop from empty list` でゲームごと落ちた。
         self.to_add_text_list.pop(0)
         self.is_adding_text = False
-        # 次の本文はその場で始まる。**打ち切りの最中にも入ってくる**ので、
+        # 次の本文はその場で始まる。
+        # **打ち切りの最中にも入ってくる**ので、
         # 前の本文の後始末が新しい本文に踏み潰されないかがここで出る。
         self.process_text_queue(_dt)
 
@@ -479,8 +487,8 @@ PRISTINE_UPDATE = HUD.update_display_text
 
 
 class FakeCtx(object):
-    # 包む相手は1つではないので、対象名から持ち主を引く（対象名の綴りを
-    # 間違えた MOD がテストを全通しないように、知らない名前は落とす）。
+    # 包む相手は1つではないので、対象名から持ち主を引く（対象名の綴りを間違えた MOD がテストを全通しないように、
+    # 知らない名前は落とす）。
     TARGETS = {
         "__main__:InstantaleApp.add_text_display":
             (lambda: InstantaleApp, "add_text_display"),
@@ -536,11 +544,12 @@ def install(module, ctx, batch_mode="click", fresh_mode="seconds"):
 def install_fake_hud_module():
     """`ui.find_hud` は型で HUD を見分けるので、その型を置いておく。
 
-    **ここを `ui` のモックで済ませてはいけない。** 以前は
-    `module.ui.hud_of = lambda app: app.hud` と書いてあり、`ui` に存在しない
-    関数を偽物で埋めていたため、実機で `AttributeError` を出して落ちるコードが
-    このテストを全通していた（`out/live_crashes.log`）。本物の `find_hud` を
-    通せば、同じ種類の取り違えはここで捕まる。
+    **ここを `ui` のモックで済ませてはいけない。**
+    以前は `module.ui.hud_of = lambda app: app.hud` と書いてあり、
+    `ui` に存在しない関数を偽物で埋めていたため、
+    実機で
+    `AttributeError` を出して落ちるコードがこのテストを全通していた（`out/live_crashes.log`）。
+    本物の `find_hud` を通せば、同じ種類の取り違えはここで捕まる。
     """
     module = types.ModuleType("scripts.hud.new_hud")
     module.InstanTaleHUD = HUD
@@ -625,22 +634,23 @@ def run():
           and app.is_adding_text is False,
           (app.shown_text, app.to_add_text_list, app.is_adding_text))
 
-    # 打ち切りは1通ぶん。次の本文はまた最初から逐次で流れる。
+    # 打ち切りは1通ぶん。
+    # 次の本文はまた最初から逐次で流れる。
     app.add_text("次の本文")
     app.process_text_queue(0)
     check("the next message starts typing again",
           app.hud.text_display.text == text + "次", app.hud.text_display.text)
     CLOCK.drain()
 
-    # 打ち出しの最中に改行を足すゲームでの色。控えた本文をそのまま探すと、
-    # 見つかる本文と見つからない本文が混ざり、白・灰・白・灰と交互になる
-    # （実機で出た症状そのもの）。
+    # 打ち出しの最中に改行を足すゲームでの色。
+    # 控えた本文をそのまま探すと、見つかる本文と見つからない本文が混ざり、
+    # 白・灰・白・灰と交互になる（実機で出た症状そのもの）。
     INSERT_BREAKS[0] = True
     install(mod, ctx, "click", "sessions")
     mod.FRESH_SESSIONS = 1
     app = InstantaleApp()
-    # 本文そのものが改行を含み、そのうえゲームが別の場所へ改行を足す ＝
-    # 控えたままの本文では見つからない（実機で出た症状の再現条件）。
+    # 本文そのものが改行を含み、
+    # そのうえゲームが別の場所へ改行を足す ＝控えたままの本文では見つからない（実機で出た症状の再現条件）。
     br = chr(10)
     for message in ("朝の話。" + br + "晴れた。", "昼の話。" + br + "曇った。",
                     "夜の話。" + br + "雨だ。"):
@@ -656,8 +666,9 @@ def run():
     INSERT_BREAKS[0] = False
     install(mod, ctx)
 
-    # 打ち出しの最中に改行を足すゲーム（実機がこれだった）。本文の先頭からの
-    # 切り出しと文字単位で一致しないので、`endswith` での当てずっぽうは効かない。
+    # 打ち出しの最中に改行を足すゲーム（実機がこれだった）。
+    # 本文の先頭からの切り出しと文字単位で一致しないので、
+    # `endswith` での当てずっぽうは効かない。
     INSERT_BREAKS[0] = True
     app = InstantaleApp()
     app.add_text("前の本文。")
@@ -695,8 +706,9 @@ def run():
 
     REPAINT_ON_WRITE[0] = True
 
-    # 終端の呼び出しが本文を組み直すゲームでも、結果は同じでなければならない
-    # （先に書いてから終端を渡すと、ここで書いた分が消える）。
+    # 終端の呼び出しが本文を組み直すゲームでも、
+    # 結果は同じでなければならない（先に書いてから終端を渡すと、
+    # ここで書いた分が消える）。
     REBUILD_ON_FINISH[0] = True
     app = InstantaleApp()
     app.add_text("先に出ていた本文")
@@ -759,10 +771,11 @@ def run():
           (app.original_calls, app.is_adding_text))
     CLOCK.pending = []
 
-    # 打ち切りの残骸は、**次の本文が始まった後**に飛んでくる。終端がその場で
-    # 次の本文を始めるので、捨てる印を1枠で持っていると、いま捨てたい印が新しい
-    # 本文に消される ― 残骸がゲームへ渡って終端をもう一度踏み、空の行列を
-    # pop した（実機のクラッシュ。docs/VERIFICATION.md）。
+    # 打ち切りの残骸は、**次の本文が始まった後**に飛んでくる。
+    # 終端がその場で次の本文を始めるので、捨てる印を1枠で持っていると、
+    # いま捨てたい印が新しい本文に消される
+    # ― 残骸がゲームへ渡って終端をもう一度踏み、
+    # 空の行列を pop した（実機のクラッシュ。docs/VERIFICATION.md）。
     app = InstantaleApp()
     app.add_text("全ての敵を倒した")
     app.add_text("次の本文がすぐ後ろに控えている")
@@ -830,8 +843,8 @@ def run():
     check("two sessions of white keep the last two messages white",
           app.hud.text_display.text == "[color=#808080]一つ目[/color]二つ目三つ目",
           app.hud.text_display.text)
-    # 秒数で見ていたら、この短さでは1つも灰色にならない ＝ セッション数で
-    # 決めていることの裏取り。
+    # 秒数で見ていたら、
+    # この短さでは1つも灰色にならない ＝ セッション数で決めていることの裏取り。
     check("sessions do not wait for the clock",
           CLOCK.now - started_at < mod.FRESH_SECONDS,
           CLOCK.now - started_at)
@@ -902,8 +915,9 @@ def run():
     CLOCK.drain()
 
     # 本文が流れている最中に注入し直すと、こちらが始めていない鎖の続きが飛んでくる。
-    # 続きは `add_text_display` 自身が次を積んでいるので、捨てると鎖が途切れて
-    # `is_adding_text` が True のまま残り、ゲームが操作を受け付けなくなる。
+    # 続きは `add_text_display` 自身が次を積んでいるので、
+    # 捨てると鎖が途切れて `is_adding_text` が True のまま残り、
+    # ゲームが操作を受け付けなくなる。
     app = InstantaleApp()
     app.is_adding_text = True
     app.to_add_text_list = ["注入前から流れていた本文"]
@@ -914,8 +928,9 @@ def run():
     check("the game is still allowed to finish it",
           app.is_adding_text is True, app.is_adding_text)
 
-    # 実機で踏んだ不具合そのもの。行列の先頭が取り除かれないと、二通目が永久に
-    # 出ないまま一通目が何度も再表示される（`out/text_viewport.log`）。
+    # 実機で踏んだ不具合そのもの。
+    # 行列の先頭が取り除かれないと、
+    # 二通目が永久に出ないまま一通目が何度も再表示される（`out/text_viewport.log`）。
     app = InstantaleApp()
     app.add_text("一つ目")
     app.process_text_queue(0)
@@ -934,8 +949,9 @@ def run():
           and app.hud.text_display.text == "一つ目二つ目",
           app.hud.text_display.text)
 
-    # 長文保護の末尾表示では、追跡済みの主人公文の後ろにNPC応答だけが
-    # 対応付け不能な末尾として残ることがある。その末尾も追加直後は白くする。
+    # 長文保護の末尾表示では、
+    # 追跡済みの主人公文の後ろにNPC応答だけが対応付け不能な末尾として残ることがある。
+    # その末尾も追加直後は白くする。
     recent_app = app
     app = InstantaleApp()
 
@@ -953,9 +969,9 @@ def run():
           and app.hud.text_display.text == "主人公の発言\nNPCの返答",
           app.hud.text_display.text)
 
-    # 主人公の入力は、表示上はNPC応答より前でも、内部では後から本文ラベルへ
-    # 差し込まれることがある。追加順で照合するとNPC応答を既存本文と誤認し、
-    # 直後なのに灰色化してしまう。
+    # 主人公の入力は、表示上はNPC応答より前でも、
+    # 内部では後から本文ラベルへ差し込まれることがある。
+    # 追加順で照合するとNPC応答を既存本文と誤認し、直後なのに灰色化してしまう。
     app = InstantaleApp()
 
     def reordered_immediate(content):
@@ -971,8 +987,8 @@ def run():
     app.add_text("主人公の発言")
     app.process_text_queue(0)
     CLOCK.drain()
-    # 灰色にするものが1つも無いので、ラベルには手を触れない（本文と本文の間の
-    # 改行だけを灰色にしても何も見えないのに、組み直しの代金だけ掛かる）。
+    # 灰色にするものが1つも無いので、ラベルには手を触れない（本文と本文の間の改行だけを灰色にしても何も見えないのに、
+    # 組み直しの代金だけ掛かる）。
     check("display-order insertion keeps both new messages white",
           app.hud.text_display.markup is False
           and app.hud.text_display.text == "主人公の発言\nNPCの返答",
@@ -1073,9 +1089,10 @@ def run():
     check("no exception was swallowed", not ctx.errors, ctx.errors)
     check("no color tag is ever drawn as text", not TAG_LEAKS, TAG_LEAKS[:3])
 
-    # リビールは `Clock.schedule_once` で後のフレームへ渡す ＝ `ctx.wrap(safe=True)`
-    # の守備範囲の外。ここで投げるとゲームごと落ちるので、コールバック自身が
-    # 例外を止め、従来の短いフェードへ落ちることを確かめる。
+    # リビールは `Clock.schedule_once` で後のフレームへ渡す ＝
+    # `ctx.wrap(safe=True)` の守備範囲の外。
+    # ここで投げるとゲームごと落ちるので、コールバック自身が例外を止め、
+    # 従来の短いフェードへ落ちることを確かめる。
     app = InstantaleApp()
     original_find_hud = mod.ui.find_hud
 

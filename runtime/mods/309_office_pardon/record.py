@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""ゲームのデータを読み書きする部品。**この MOD の方針は持たない。**
+"""ゲームのデータを読み書きする部品。この MOD の方針は持たない。
 
 ここに置いてあるのは「Instantale が手配度と所持金をどこに持っているか」だけで、
 いくら取るか・いつ差し出すか・何と表示するかは入口の `office_pardon.py` にある。
@@ -10,19 +10,20 @@
 
     player_data.area_history = {
         "0": {"residency": {...}, "achievements": [...], "lawfulness": 10},
-        "1": {...}, ...                 ← **エリア id ごと**に1件
+        "1": {...}, ...                 ← エリア id ごとに1件
     }
     player_data.gold          = 270975
     player_data.current_area  = "0"
 
 `area_history` は実行時もこの形（セーブはそのまま json 化したもの）だが、
-辞書とは限らないという前提で書いてある。読めなければ `None` を返し、
-呼ぶ側がそこで諦める。
+辞書とは限らないという前提で書いてある。
+読めなければ `None` を返し、呼ぶ側がそこで諦める。
 """
 
 from instantale_modloader import ui
 
-#: 手配度の実体。**負の値ほど重い**（0 未満で犯罪者、既定の平常値は 10）。
+#: 手配度の実体。
+#: 負の値ほど重い（0 未満で犯罪者、既定の平常値は 10）。
 LAWFULNESS_KEY = "lawfulness"
 
 
@@ -35,8 +36,9 @@ def area_history_of(player):
 def history_entry(player, area_id):
     """そのエリアの記録。無ければ `None`（＝一度も訪れていない）。
 
-    id は保存されるときに文字列になるが、実行中に int で入っていることも
-    ありうるので、素の引きが外れたら文字列に均して引き直す。
+    id は保存されるときに文字列になるが、
+    実行中に int で入っていることもありうるので、
+    素の引きが外れたら文字列に均して引き直す。
     """
     history = area_history_of(player)
     if history is None or area_id in (None, ""):
@@ -68,9 +70,10 @@ def lawfulness_of(entry):
 def set_lawfulness(entry, value):
     """手配度を書き戻す。書けたら `True`。
 
-    **項目を新設しない**のは呼ぶ側の責任（先に `lawfulness_of` で読めた記録に
-    しか渡さない）。ここで無条件に作ると、手配度を持たないビルドに
-    それらしい項目が生えて、以後どちらが本物か分からなくなる。
+    項目を新設しないのは呼ぶ側の責任（先に
+    `lawfulness_of` で読めた記録にしか渡さない）。
+    ここで無条件に作ると、手配度を持たないビルドにそれらしい項目が生えて、
+    以後どちらが本物か分からなくなる。
     """
     if entry is None:
         return False
@@ -104,8 +107,9 @@ def set_gold(player, value):
 def current_facility(app):
     """いま居る施設。引き当てられなければ `None`。
 
-    `player.location` は施設のオブジェクトとは限らない。セーブでは `"0"` と
-    いう id の文字列だった（`ui.current_area` が同じ理由で両対応になっている）。
+    `player.location` は施設のオブジェクトとは限らない。
+    セーブでは `"0"` という
+    id の文字列だった（`ui.current_area` が同じ理由で両対応になっている）。
     """
     player = getattr(app, "player", None)
     if player is None:
@@ -120,9 +124,8 @@ def current_facility(app):
 def refresh_status(app):
     """所持金の表示を今の値に合わせる。効かなくても処理は続ける。
 
-    `InstantaleApp.update_ui(self, *args)` はゲーム自身が画面上部の情報を
-    塗り直すのに使っている入口。無ければ何もしない（次にゲームが塗った
-    ときに合う）。
+    `InstantaleApp.update_ui(self, *args)` はゲーム自身が画面上部の情報を塗り直すのに使っている入口。
+    無ければ何もしない（次にゲームが塗ったときに合う）。
     """
     updater = getattr(app, "update_ui", None)
     if not callable(updater):

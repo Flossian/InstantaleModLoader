@@ -1,10 +1,9 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+# !/usr/bin/env python3 -*- coding: utf-8 -*-
 """Instantale の起動を監視して、自動で mod ローダを注入する。
 
 mod はゲームのインタプリタの中で動いているので、ゲームを終了すると一緒に消える。
-つまり起動するたびに注入し直す必要がある。これを忘れると、素のゲームが動いて
-何も記録されないまま、そのプレイ時間が無駄になる。
+つまり起動するたびに注入し直す必要がある。
+これを忘れると、素のゲームが動いて何も記録されないまま、そのプレイ時間が無駄になる。
 このスクリプトはその取りこぼしを防ぐためのもの。
 
 新しいプロセスを見つけたら、注入する前に2つの条件が揃うのを待つ。
@@ -14,8 +13,8 @@ mod はゲームのインタプリタの中で動いているので、ゲーム�
   2. 目に見えるウィンドウが存在すること
 
 2 は「Kivy が立ち上がって __main__ の実行が終わった」ことの実用的な目安。
-mod は __main__ や kivy.input.providers にパッチを当てるので、これより早く
-注入しても対象がまだ存在しない。
+mod は __main__ や kivy.input.providers にパッチを当てるので、
+これより早く注入しても対象がまだ存在しない。
 
 使い方:
     python watcher.py                # Ctrl-C で終了するまで監視し続ける
@@ -89,7 +88,8 @@ def wait_until_ready(pid: int, timeout: float = READY_TIMEOUT) -> bool:
         if not injector.find_processes(injector.TARGET_EXE):
             return False  # 待っている間にゲームが終了した
         if injector.interpreter_ready(pid):
-            # 段階が進んだことは1回だけ知らせる。毎秒出すと読めなくなる。
+            # 段階が進んだことは1回だけ知らせる。
+            # 毎秒出すと読めなくなる。
             if not reported_interp:
                 log(f"  pid {pid}: interpreter initialised, waiting for a window")
                 reported_interp = True
@@ -138,12 +138,14 @@ def main() -> int:
             alive = {pid for pid, _ in injector.find_processes(injector.TARGET_EXE)}
             # 終了した pid を記録から外す。
             # これでゲームを再起動したときに、改めて注入されるようになる。
-            # （pid は使い回されることがあるので、外しておかないと取り違えの元にもなる）
+            # （pid は使い回されることがあるので、
+            # 外しておかないと取り違えの元にもなる）
             handled &= alive
 
             fresh = sorted(alive - handled)
             if fresh:
-                # ゲームが起動した時点が1世代の境目。ここで前回のログを退避して、
+                # ゲームが起動した時点が1世代の境目。
+                # ここで前回のログを退避して、
                 # この起動の記録が空のファイルから始まるようにする。
                 # 同時に2つ見つけた場合でも入れ替えは1回だけ（ログは共用のため）。
                 injector.rotate_logs(args.log_rotate, log=log)

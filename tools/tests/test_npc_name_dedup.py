@@ -12,7 +12,8 @@
   乱数   … 名前は引くたび変わる／MOD 専用の `Random` から引く／同じ世界では重複しない
   自制   … 敵・プレイヤー・既に世界に居る重複には手を出さない
 
-名前は**発明しない**。名簿に空きが無ければ元の名前のまま通す。
+名前は**発明しない**。
+名簿に空きが無ければ元の名前のまま通す。
 乱数を使う検査は `mod.RNG.seed(...)` で固定する。
 """
 import importlib.util
@@ -98,9 +99,9 @@ class InstantaleApp:
         self.loads += 1
 
 
-# `setup()` は `__main__` の `InstantaleApp` / `World` を差し替える。素のクラスを
-# ここに控えておかないと、2回目の `setup()` が**前回フックを載せたクラス**を継承して
-# しまい、古い mod の判断が残ったまま重なる（`110_` の検査と同じ理由）。
+# `setup()` は `__main__` の `InstantaleApp` / `World` を差し替える。
+# 素のクラスをここに控えておかないと、2回目の `setup()` が**前回フックを載せたクラス**を継承してしまい、古い
+# mod の判断が残ったまま重なる（`110_` の検査と同じ理由）。
 BASES = {"app": InstantaleApp, "world": World}
 
 
@@ -129,7 +130,8 @@ class FakeCtx:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
-    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # ログは本物の `ctx.logger` をそのまま借りる。
+    # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
 
@@ -306,7 +308,8 @@ with tempfile.TemporaryDirectory() as folder:
           mod.pick_path(folder))
 check("mod_dir が None でも落ちない", mod.pick_path(None) is None)
 
-# 男女はセーブの `category` から。**`woman` は `man` を含む。**
+# 男女はセーブの `category` から。
+# **`woman` は `man` を含む。**
 for category, want in (("young man", "male"), ("middle-aged man", "male"),
                        ("old man", "male"), ("teenage boy", "male"),
                        ("young woman", "female"), ("middle-aged woman", "female"),
@@ -318,7 +321,8 @@ check("category が読めなければ引く（落ちない）",
       all(mod.gender_of(context) in ("male", "female")
           for context in (None, {}, {"category": "unknown"}, {"category": 5})))
 
-# 選び方は乱数。**名簿は全部混ぜる**（前の方だけが使われないように）。
+# 選び方は乱数。
+# **名簿は全部混ぜる**（前の方だけが使われないように）。
 pool = ["ア", "イ", "ウ", "エ", "オ"]
 check("名簿を1件も落とさず並べ替える",
       sorted(mod.candidates(pool)) == sorted(pool)
@@ -338,7 +342,8 @@ random.seed(1234)
 mod.candidates(pool * 20)
 check("ゲーム自身の乱数列をずらさない", random.random() == expected)
 
-# 二つ名の割合。id ごとに決まるので、多数の id で数えて確かめる。
+# 二つ名の割合。
+# id ごとに決まるので、多数の id で数えて確かめる。
 ROLLS = 4000
 mod.RNG.seed(0)
 mod.EPITHET_CHANCE = 10
@@ -449,7 +454,8 @@ print("\n-- 触らないもの --")
 mod, ctx, app = setup()
 born(app, "10", "バルガス")
 
-# 敵は素データの `npcs` に載らない。同じ名前が3体並んでよい。
+# 敵は素データの `npcs` に載らない。
+# 同じ名前が3体並んでよい。
 enemies = [app.character_class(name="ゴブリン", id="e{}".format(n)) for n in range(3)]
 check("敵は同名でも触られない",
       all(enemy.name == "ゴブリン" for enemy in enemies),
@@ -484,8 +490,9 @@ check("素データも書き換わる",
       app.save_data_dict["npcs"]["10"]["name"] == taken.name)
 check("ctx.log_exc が呼ばれていない", not ctx.errors, ctx.errors)
 
-# 二度目に付け直さない（`generate_character` -> `Character.__init__` の順で
-# 両方が発火する。ここが抜けると 1 人の NPC が 2 回改名される）。
+# 二度目に付け直さない（`generate_character` ->
+# `Character.__init__` の順で両方が発火する。
+# ここが抜けると 1 人の NPC が 2 回改名される）。
 first = taken.name
 again = app.world.generate_character("10", app.save_data_dict["npcs"]["10"])
 check("同じ NPC を二度改名しない", again.name == first, (first, again.name))
@@ -578,8 +585,9 @@ for _ in range(12):
 check("同じ id でも引くたび違う名前になる", len(set(picked)) > 1, picked)
 check("どれも名簿の名前", all(name in ROSTER_NAMES for name in picked), picked)
 
-# **一度付いた名前は変わらない。**改名は素データにも書くので、次に同じ NPC を
-# 通しても衝突が無く、二度目の改名は起きない（乱数でも名前は落ち着く）。
+# **一度付いた名前は変わらない。**
+# 改名は素データにも書くので、次に同じ NPC を通しても衝突が無く、
+# 二度目の改名は起きない（乱数でも名前は落ち着く）。
 mod, ctx, app = setup()
 born(app, "10", "バルガス")
 renamed = born(app, "11", "ヴァルガス").name
@@ -596,7 +604,8 @@ for index in range(30):
 final = [character.name for character in app.world.characters.values()]
 check("30人が同じ名前で来ても全員が別の名前になる",
       len(set(final)) == len(final), sorted(final))
-# 1人目は衝突相手が居ないのでそのまま。改名された 29 人が名簿から出ている。
+# 1人目は衝突相手が居ないのでそのまま。
+# 改名された 29 人が名簿から出ている。
 check("1人目はそのまま、残りは名簿の名前",
       final[0] == "バルガス"
       and all(name in ROSTER_NAMES for name in final[1:]), sorted(final))

@@ -3,8 +3,9 @@
 
     python tools/tests/test_ui_conversation_log.py
 
-偽の `__main__.InstantaleApp` / `scripts.hud.new_hud` / Kivy（Button・Label・
-ScrollView・ModalView・Clock・Window）を差し込んで、次を確認する。
+偽の `__main__.InstantaleApp` / `scripts.hud.new_hud` /
+Kivy（Button・Label・ScrollView・ModalView・Clock・Window）を差し込んで、
+次を確認する。
 
   合図     … 本文の始まり（`index == -1`）だけを1件として控える。続きでは増えない
   重複     … 同じ本文が続けて来ても2件にならない
@@ -109,9 +110,9 @@ class FakeWindow(object):
             callback(cls, width, height)
 
 
-#: いま `with canvas.xxx:` の中に居る描画先。本物の Kivy は with の中で作られた
-#: 命令を自動でその canvas に積むので、偽物でも同じにしておく（`add()` を明示的に
-#: 呼ぶ経路（アイコンの描き直し）とどちらも通す）。
+#: いま `with canvas.xxx:` の中に居る描画先。
+#: 本物の Kivy は with の中で作られた命令を自動でその canvas に積むので、
+#: 偽物でも同じにしておく（`add()` を明示的に呼ぶ経路（アイコンの描き直し）とどちらも通す）。
 ACTIVE = []
 
 
@@ -185,8 +186,9 @@ class FakeRectangle(FakeInstruction):
 class FakeWidget(object):
     """Kivy のプロパティのうち、この mod が頼っている振る舞いだけ写したもの。
 
-    `size` / `pos` が `width` などと繋がっていること、`bind()` した相手に
-    変化が配られること（mod は 113 のボタンの `pos` に束ねて追従する）。
+    `size` / `pos` が `width` などと繋がっていること、
+    `bind()` した相手に変化が配られること（mod は 113 のボタンの
+    `pos` に束ねて追従する）。
     """
 
     def __init__(self, **kwargs):
@@ -500,7 +502,8 @@ class FakeCtx(object):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
-    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # ログは本物の `ctx.logger` をそのまま借りる。
+    # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
 
@@ -522,8 +525,9 @@ class FakeCtx(object):
         import traceback
         self.errors.append(msg + "\n" + traceback.format_exc())
 
-    # 本物の `ctx.write_json` / `write_text` と同じものを使う。ここを自前の
-    # open(..., "w") にすると、テストだけが「壊れない書き方」を通らなくなる。
+    # 本物の `ctx.write_json` / `write_text` と同じものを使う。
+    # ここを自前の open(..., "w") にすると、
+    # テストだけが「壊れない書き方」を通らなくなる。
     def write_json(self, path, data, *, indent=1):
         return ml.write_json(path, data, indent=indent, report=self.log_exc)
 
@@ -643,8 +647,9 @@ def run():
           sum(1 for c in hud.root.children
               if isinstance(c, FakeButton) and c is not hud.expand_button) == 1,
           [type(c).__name__ for c in hud.root.children])
-    # 素の HUD の子は FloatLayout 1枚だけ。増やすと「画面の最初の子」を取る側から
-    # 見える相手が変わり、アイテムの移動・装備が壊れる（VERIFICATION_LOG.md §2.33）。
+    # 素の HUD の子は FloatLayout 1枚だけ。
+    # 増やすと「画面の最初の子」を取る側から見える相手が変わり、
+    # アイテムの移動・装備が壊れる（VERIFICATION_LOG.md §2.33）。
     check("the HUD's own child list is left exactly as the game built it",
           hud.children == [hud.root] and hud.screen_root() is hud.root,
           [type(c).__name__ for c in hud.children])
@@ -658,7 +663,8 @@ def run():
           close(button.height, EXPAND_BUTTON_SIZE) and close(button.width, button.height),
           (button.size, other.size))
 
-    # 113 のボタンは枠が伸びると動く。塗り直しを待たずに付いていく。
+    # 113 のボタンは枠が伸びると動く。
+    # 塗り直しを待たずに付いていく。
     other.pos = (1200.0, 900.0)
     check("the button follows 113's when it moves",
           close(button.x, 1200.0 - button.width - mod.BUTTON_GAP)
@@ -733,7 +739,8 @@ def run():
           root is not None
           and [c.rgba[:3] for c in root.canvas.after.colors()] == [(1, 1, 1)],
           None if root is None else [c.rgba for c in root.canvas.after.colors()])
-    # 窓の寸法が決まるのは中身が並んだ後。線はそこへ付いていく。
+    # 窓の寸法が決まるのは中身が並んだ後。
+    # 線はそこへ付いていく。
     root.size = (900.0, 700.0)
     check("the outline follows the window's size",
           border and [round(v) for v in border[0].rectangle][2:] == [900, 700],
@@ -751,8 +758,9 @@ def run():
           FakeModalView.opened)
 
     # -- 注入し直し / 読み直し ------------------------------------------------
-    # ゲームを起動し直した状態。まだ1件も控えていないので、窓に出す世界は
-    # 走っているアプリから引く（`ui.find_app` は `__main__` を見る）。
+    # ゲームを起動し直した状態。
+    # まだ1件も控えていないので、窓に出す世界は走っているアプリから引く（`ui.find_app` は
+    # `__main__` を見る）。
     running(app)
     forget_store(mod)
     install(mod, ctx)
@@ -784,8 +792,8 @@ def run():
     broken_button.press()
 
     # -- 上限と畳み直し -------------------------------------------------------
-    # 設定はローダがモジュールのグローバルへ書き込む（TECH.md §3.8）。同じ形で
-    # 上限を下げて、古いものが落ちること・ファイルが伸び続けないことを見る。
+    # 設定はローダがモジュールのグローバルへ書き込む（TECH.md §3.8）。
+    # 同じ形で上限を下げて、古いものが落ちること・ファイルが伸び続けないことを見る。
     mod.MAX_ENTRIES, mod.COMPACT_RATIO = 5, 2
     forget_store(mod)
     install(mod, ctx)
@@ -822,8 +830,9 @@ def run():
           and close(button.y, 500.0), (button.pos, hud.expand_button.pos))
 
     # -- 長いログを1枚に入れない ---------------------------------------------
-    # Kivy の Label は中身を1枚のテクスチャに焼くので、GPU の上限を超えると
-    # **何も描かれない**（実機で踏んでいる。VERIFICATION.md §3.21）。
+    # Kivy の Label は中身を1枚のテクスチャに焼くので、
+    # GPU の上限を超えると **何も描かれない**（実機で踏んでいる。
+    # VERIFICATION.md §3.21）。
     long_app = InstantaleApp(world="ノルン")
     running(long_app)
     forget_store(mod)

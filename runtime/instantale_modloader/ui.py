@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """選択肢ボタンと画面描画の共通部品。
 
-ここに置いてあるのは **実機で確かめた事実だけ**。同じ知見を mod ごとに書き写すと
-「片方に入って片方に入っていない」状態になるので、選択肢まわりの発見は全てここへ
-集め、どの mod もここを使う。
+ここに置いてあるのは **実機で確かめた事実だけ**。
+同じ知見を mod ごとに書き写すと「片方に入って片方に入っていない」状態になるので、
+選択肢まわりの発見は全てここへ集め、どの mod もここを使う。
 
 ## 分かっている事実
 
@@ -47,22 +47,26 @@ from . import frames
 HUD_MODULE = "scripts.hud.new_hud"
 HUD_CLASS = "InstanTaleHUD"
 
-# MOD が自分のウィジェットに付ける控えの接頭辞。どの MOD も
-# `_instantale_<mod>_<用途>` の形で印を持たせている（`113_` の
+# MOD が自分のウィジェットに付ける控えの接頭辞。
+# どの MOD も `_instantale_<mod>_<用途>` の形で印を持たせている（`113_` の
 # `_instantale_expand_callback`、`116_` の `_instantale_party_icon`）。
-# `overlay_host` が「他の MOD が足したウィジェット」を置き場所の候補から
-# 外すのに使う。ボタン辞書の印（`MARK_PREFIX`）とは別物で、こちらは
-# **ウィジェット**の印。新しい MOD もこの接頭辞に揃えること。
+# `overlay_host` が「他の
+# MOD が足したウィジェット」を置き場所の候補から外すのに使う。
+# ボタン辞書の印（`MARK_PREFIX`）とは別物で、こちらは **ウィジェット**の印。
+# 新しい MOD もこの接頭辞に揃えること。
 MOD_WIDGET_PREFIX = "_instantale_"
 
-# 自前ボタンに持たせる無害な既存クラス。mod 無しで押されても選択肢が戻るだけ。
+# 自前ボタンに持たせる無害な既存クラス。
+# mod 無しで押されても選択肢が戻るだけ。
 SAFE_CLS = "JustSetButtonToNormalPhase"
 
 # 自前ボタンに足す印のキーは、**すべてこの接頭辞で始める**（`mod_action` /
-# `mod_party_action` / `mod_pardon_action` …）。`prune_stale` が「他の MOD の
-# 生きているボタン」と「セーブから復元された自分の残骸」を見分けるのに使う。
-# セーブに焼かれるのは text と spec だけなので、**印が1つでも残っている＝
-# いま誰かが挿したもの＝残骸ではない**。新しい MOD の印もこれに揃えること。
+# `mod_party_action` / `mod_pardon_action` …）。
+# `prune_stale` が「他の
+# MOD の生きているボタン」と「セーブから復元された自分の残骸」を見分けるのに使う。
+# セーブに焼かれるのは text と
+# spec だけなので、**印が1つでも残っている＝いま誰かが挿したもの＝残骸ではない**。
+# 新しい MOD の印もこれに揃えること。
 MARK_PREFIX = "mod_"
 
 # 会話の終了処理は要約で LLM を回すことがあるので、待ちは長めに取る。
@@ -82,7 +86,8 @@ IDLE_SETTLE = 0.6
 #
 # **`in_shopping` は入れない。** 店の外を往復しているだけの 38 回の移動すべてで
 # True のままだった（`300_` の実測）。フラグ名が意味するとおりに動いているとは
-# 限らないので、状態の判定に使う前に必ず実測で裏を取ること。
+# 限らない。
+# 状態の判定へ使う前に、必ず実測で裏を取ること。
 IDLE_SIGNALS = ("is_adding_text", "is_button_enabled", "is_popup_window_opened")
 
 
@@ -156,8 +161,8 @@ def spec_data(spec):
 def spec_cls_name(entry):
     """ボタンが呼ぶクラス名。**画面の見分けは文字列ではなくこれで行う。**
 
-    表記や言語設定に依存しないし、依頼一覧そのもの（`QuestChoiceManager` が
-    並ぶ）には会話・施設の目印が無いので入れ子にならない。
+    表記や言語設定に依存しないし、
+    依頼一覧そのもの（`QuestChoiceManager` が並ぶ）には会話・施設の目印が無いので入れ子にならない。
     """
     data = spec_data(spec_of(entry))
     name = data.get("cls_name") if isinstance(data, dict) else None
@@ -167,8 +172,9 @@ def spec_cls_name(entry):
 def spec_args(entry):
     """ボタンの spec の args。**読むだけ**。値の意味は解釈しない。
 
-    セーブのフィールド値をそのまま引数の語彙だと決めつけてゲームを落とした
-    ことがある（GAME.md §2.2）。ボタンに載っている args をそのまま使えば、
+    セーブのフィールド値をそのまま引数の語彙だと決めつけてゲームを落としたことがある（GAME.md
+    §2.2）。
+    ボタンに載っている args をそのまま使えば、
     値が何を意味するのか知らなくても正しく起こせる。
     """
     data = spec_data(spec_of(entry))
@@ -189,10 +195,9 @@ def find_spec_button(buttons, cls_name):
 def conversation_partner(buttons):
     """会話画面なら `(相手の id, 「会話を終了する」ボタン)` を返す。
 
-    `ConversationEndManager.__init__(self, app, in_conversation_id, finisher,
-    end_text)` なので **`args[0]` がいま話している相手**（実セーブで確認)。
-    `ConversationStartManager.__init__` を追跡しなくても、ボタンを**読むだけ**で
-    相手が分かる。
+    `ConversationEndManager.__init__(self, app, in_conversation_id, finisher, end_text)` なので **`args[0]` がいま話している相手**（実セーブで確認)。
+    `ConversationStartManager.__init__` を追跡しなくても、
+    ボタンを**読むだけ**で相手が分かる。
     """
     entry = find_spec_button(buttons, "ConversationEndManager")
     if entry is None:
@@ -204,10 +209,11 @@ def conversation_partner(buttons):
 def pressed_entry(app, button_index):
     """押された添字から `app.buttons` の要素を引く。
 
-    **地図があるなら地図を使う。** ゲーム自身が
-    `display_button_map[button_index]` で添字を引き直していることは、事故時の
-    フレームローカルに `mapped_button = 1` が残っていたことで確定した
-    （GAME.md §2.2）。恒等写像なら結果は同じ、恒等でなければこちらが正しい。
+    **地図があるなら地図を使う。**
+    ゲーム自身が `display_button_map[button_index]` で添字を引き直していることは、
+    事故時のフレームローカルに `mapped_button = 1` が残っていたことで確定した（GAME.md
+    §2.2）。
+    恒等写像なら結果は同じ、恒等でなければこちらが正しい。
     """
     buttons = getattr(app, "buttons", None)
     if not isinstance(buttons, (list, tuple)) or not isinstance(button_index, int):
@@ -248,19 +254,22 @@ def find_hud(app):
 def added_by_a_mod(widget):
     """MOD が足したウィジェットか。印は `MOD_WIDGET_PREFIX` で始まる属性。
 
-    Kivy のプロパティは class 側にあるので `vars()` には出ず、ここに現れるのは
-    インスタンスに直接足したものだけ ＝ MOD の印。
+    Kivy のプロパティは class 側にあるので `vars()` には出ず、
+    ここに現れるのはインスタンスに直接足したものだけ ＝ MOD の印。
 
-    **「MOD が作ったか」ではなく「MOD が触ったか」を見ている。** ゲーム自身の
-    ウィジェットにもこの接頭辞は付く ― `112_` は本文のラベルに設計値を、
-    `113_` は本文の枠に、`114_` は入力欄に、`115_` は一覧に、`116_` は
-    パーティの帯に、`121_` は人物欄に、それぞれ控えを刻む（元に戻せるように
-    するには、ウィジェット自身に持たせるのがいちばん確実だから。§7.4）。
+    **「MOD が作ったか」ではなく「MOD が触ったか」を見ている。**
+    ゲーム自身のウィジェットにもこの接頭辞は付く ― `112_` は本文のラベルに設計値を、
+    `113_` は本文の枠に、`114_` は入力欄に、`115_` は一覧に、
+    `116_` はパーティの帯に、`121_` は人物欄に、
+    それぞれ控えを刻む（元に戻せるようにするには、
+    ウィジェット自身に持たせるのがいちばん確実だから。§7.4）。
 
-    いま唯一の呼び出し元は `overlay_host` で、見るのは **HUD の直下**
-    （素のゲームでは `FloatLayout` 1枚）だけなので取り違えは起きない。
-    **より深くまで走査する用途に広げるときは、この関数では足りない** ―
-    「MOD が作った」を知りたいなら、作った側が別の印を1つ足すこと。
+    いま唯一の呼び出し元は `overlay_host` で、
+    見るのは **HUD の直下**（素のゲームでは `FloatLayout`
+    1枚）だけなので取り違えは起きない。
+    **より深くまで走査する用途に広げるときは、
+    この関数では足りない** ―「MOD が作った」を知りたいなら、
+    作った側が別の印を1つ足すこと。
     """
     try:
         names = list(vars(widget))
@@ -273,21 +282,25 @@ def added_by_a_mod(widget):
 def overlay_host(hud):
     """HUD へ自前のウィジェットを1枚足すときの置き場所。
 
-    **HUD 自身の子の並びは変えない。** 素の HUD の子は `FloatLayout` 1枚だけで、
-    そこへ直接足すと子が2つになる。すると「画面の最初の子」を取る側
-    （`scripts.hud.new_hud:get_current_screen_root`）から見える相手が変わり、
-    アイテムを持ち物へ移す・装備する操作が効かなくなる（VERIFICATION_LOG.md §2.33）。
-    だから足すのはその `FloatLayout` の**中**。ゲーム自身もこの中へ効果や窓を出し入れしている。
+    **HUD 自身の子の並びは変えない。**
+    素の HUD の子は `FloatLayout` 1枚だけで、そこへ直接足すと子が2つになる。
+    すると「画面の最初の子」を取る側（`scripts.hud.new_hud:get_current_screen_root`）から見える相手が変わり、
+    アイテムを持ち物へ移す・装備する操作が効かなくなる（VERIFICATION_LOG.md
+    §2.33）。
+    だから足すのはその `FloatLayout` の**中**。
+    ゲーム自身もこの中へ効果や窓を出し入れしている。
 
-    **どれを選ぶかは「いちばん古い子」で決める。** Kivy の `children` は新しい順
-    なので、先頭を採ると
+    **どれを選ぶかは「いちばん古い子」で決める。**
+    Kivy の `children` は新しい順なので、先頭を採ると
 
       * ゲームが一時的に出している窓（消えるときにこちらのボタンも道連れになる）
       * 他の MOD が HUD 直下に残したウィジェット（その**中**へ入り込む）
 
-    のほうを掴む。除外を「自分のボタンだけ」にしていると、HUD へウィジェットを
-    足す MOD が2本になった時点で成立してしまう。ゲームの `FloatLayout` は画面が
-    組まれた時点で居る ＝ `children` の**最後尾**なので、そこから探せば両方避けられる。
+    のほうを掴む。
+    除外を「自分のボタンだけ」にしていると、
+    HUD へウィジェットを足す MOD が2本になった時点で成立してしまう。
+    ゲームの `FloatLayout` は画面が組まれた時点で居る ＝
+    `children` の**最後尾**なので、そこから探せば両方避けられる。
     """
     children = frames.attr(hud, "children")
     if not isinstance(children, (list, tuple)):
@@ -304,10 +317,11 @@ def overlay_host(hud):
 # --------------------------------------------------------------------------
 # プレイヤーの所持金と、画面を出してはいけない状態
 # --------------------------------------------------------------------------
-#: ゲームが「別のこと」をしている最中を表す旗。ここが真の間は施設の選択肢を
-#: 足さない（`309_` / `902_` が共有）。`300_` は **`in_shopping` を外した**
-#: ものを使う ― 店の外を往復しているだけでも真のままなので、イベントの
-#: 抑止条件に使うと店系の施設でほとんど出なくなる（あちらの註を参照）。
+#: ゲームが「別のこと」をしている最中を表す旗。
+#: ここが真の間は施設の選択肢を足さない（`309_` / `902_` が共有）。
+#: `300_` は **`in_shopping` を外した** ものを使う
+#: ― 店の外を往復しているだけでも真のままなので、
+#: イベントの抑止条件に使うと店系の施設でほとんど出なくなる（あちらの註を参照）。
 BUSY_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle",
               "in_conversation", "in_free_input", "in_action_in_conversation",
               "in_shopping")
@@ -324,8 +338,9 @@ def money(value):
 def gold_of(app):
     """プレイヤーの所持金。読めなければ `None`。
 
-    **`bool` を弾く。** Python では `True` は `int` なので、`isinstance` の
-    素朴な判定だと `gold = True` を所持金 1 として通してしまう。
+    **`bool` を弾く。**
+    Python では `True` は `int` なので、
+    `isinstance` の素朴な判定だと `gold = True` を所持金 1 として通してしまう。
     """
     value = frames.attr(frames.attr(app, "player", None), "gold", None)
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -336,8 +351,8 @@ def gold_of(app):
 def add_gold(app, amount, on_error=None):
     """所持金を増減する。書けたら新しい額、書けなければ `None`。
 
-    ゲーム自身の支払い経路を通さずに直接触るので、**呼ぶ側が理由を記録する**
-    こと（報酬・罰金など）。読めない所持金には書き込まない。
+    ゲーム自身の支払い経路を通さずに直接触るので、**呼ぶ側が理由を記録する** こと（報酬・罰金など）。
+    読めない所持金には書き込まない。
     """
     current = gold_of(app)
     if current is None:
@@ -361,12 +376,12 @@ def quest_stores(app):
         app.world.quests          {id: Quest インスタンス}  ゲームが遊ぶときに読む
         app.world_dict['quests']  {id: dict}                セーブに出るのはこちら
 
-    **読むのはどちらでもよいが、書くときは必ず両方。** 片方だけ直すと画面の
-    表示と保存内容がずれる。どちらに登録されるかを決め打ちしないので、
-    無い側は黙って落ちる。
+    **読むのはどちらでもよいが、書くときは必ず両方。**
+    片方だけ直すと画面の表示と保存内容がずれる。
+    どちらに登録されるかを決め打ちしないので、無い側は黙って落ちる。
 
-    この4つは `301_` / `305_` / `307_` に1字違わず写されていた。写して回る
-    ものはローダの語彙（TECH.md §3.2.3）。
+    この4つは `301_` / `305_` / `307_` に1字違わず写されていた。
+    写して回るものはローダの語彙（TECH.md §3.2.3）。
     """
     stores = []
     quests = frames.attr(frames.attr(app, "world", None), "quests", None)
@@ -399,9 +414,10 @@ def quest_of(app, quest_id):
 def id_sort_key(value):
     """id を**数として**並べるための鍵。数にできないものは後ろへ。
 
-    ゲームの id は文字列で採番順（`"9"` の次が `"10"`）。素の `sorted()` は
-    辞書順なので `"10" < "9"` になり、「いちばん新しい id」を採ると
-    **1回の生成で複数増えた回だけ取り違える**（`301_` が実際にそうなっていた）。
+    ゲームの id は文字列で採番順（`"9"` の次が `"10"`）。
+    素の `sorted()` は辞書順なので `"10" < "9"` になり、
+    「いちばん新しい
+    id」を採ると **1回の生成で複数増えた回だけ取り違える**（`301_` が実際にそうなっていた）。
     """
     try:
         return (0, int(value))
@@ -445,7 +461,8 @@ def set_quest_value(app, quest_id, name, value, on_error=None):
 #: 絵柄に「文字」を選んだときの呼び名（アイコンではなく文字ボタンになる）。
 AS_TEXT = "文字"
 
-#: 隅と `pos_hint` の対応。縁からわずかに内側へ入れる。
+#: 隅と `pos_hint` の対応。
+#: 縁からわずかに内側へ入れる。
 CORNERS = {
     "右上": {"right": 0.995, "top": 0.995},
     "左上": {"x": 0.005, "top": 0.995},
@@ -497,13 +514,14 @@ def clamp_into_window(widget):
 def icon_strokes(icon, flipped=False):
     """共有の絵柄を **0〜1 の座標**で返す。知らない名前なら空。
 
-    画像ファイルを持たないのは、線で描けばどの解像度でも滲まず、色も透過も
-    こちらで決められるため（配布物にバイナリが増えないのも利点）。
+    画像ファイルを持たないのは、線で描けばどの解像度でも滲まず、
+    色も透過もこちらで決められるため（配布物にバイナリが増えないのも利点）。
 
-    `flipped` は「押すと**戻る**状態」＝上下を反転して、次に何が起きるかを
-    そのまま形にする。**MOD 固有の絵柄はここに足さない** ― `113_` の「伸縮」、
-    `116_` の「人」、`122_` の本や吹き出しは、その MOD だけの語彙なので
-    MOD のフォルダに置く（TECH.md §3.2.3 の表でいう MOD 側）。
+    `flipped` は「押すと**戻る**状態」＝上下を反転して、
+    次に何が起きるかをそのまま形にする。
+    **MOD 固有の絵柄はここに足さない** ― `113_` の「伸縮」、`116_` の「人」、
+    `122_` の本や吹き出しは、その MOD だけの語彙なので MOD のフォルダに置く（TECH.md §3.2.3 の表でいう
+    MOD 側）。
     """
     flip = (lambda y: 1.0 - y) if flipped else (lambda y: y)
 
@@ -519,7 +537,8 @@ def icon_strokes(icon, flipped=False):
         return [line((0.50, 0.18), (0.50, 0.82)),
                 line((0.28, 0.60), (0.50, 0.82), (0.72, 0.60))]
     if icon == "枠":
-        # 四隅のかぎ括弧。広げる前は外を向き、広がっているときは内を向く。
+        # 四隅のかぎ括弧。
+        # 広げる前は外を向き、広がっているときは内を向く。
         if flipped:
             return [line((0.20, 0.42), (0.42, 0.42), (0.42, 0.20)),
                     line((0.80, 0.42), (0.58, 0.42), (0.58, 0.20)),
@@ -542,8 +561,8 @@ def make_icon_button(*, text="", size=32.0, square=True, font_name=None,
     | フォントを本文のラベルから写す | Kivy の既定（Roboto）に日本語が無く、写さないと豆腐になる |
     | 背景を5つとも消す | `background_normal` を空にしないと、色を透明にしても既定のテクスチャがうっすら残る |
 
-    `font_name` は `frames.text_of(label, "font_name")` で採ったものを渡す
-    （`"<missing>"` を掴まないため。TECH.md §5.2）。
+    `font_name` は `frames.text_of(label, "font_name")` で採ったものを渡す（`"<missing>"` を掴まないため。TECH.md
+    §5.2）。
     """
     try:
         from kivy.uix.button import Button
@@ -573,10 +592,11 @@ def paint_icon(button, strokes, *, attr, key=(), width=2.0, alpha=0.85,
     """線を引き直す。**変わったときだけ**（毎フレーム描かない）。
 
     本文は1文字ずつ増え、パーティ欄は相手の HP が動くたびに塗り直されるので、
-    塗り直しの呼び出しは何十回も来る。位置・大きさ・太さ・濃さと `key`
-    （MOD 側の「どの絵柄か・どちら向きか」）が同じなら引き直す必要は無い。
-    控えは `attr` に置く ― **`MOD_WIDGET_PREFIX` で始める名前にすること**
-    （`overlay_host` が「他の MOD が足したもの」の見分けに使う）。
+    塗り直しの呼び出しは何十回も来る。
+    位置・大きさ・太さ・濃さと
+    `key`（MOD 側の「どの絵柄か・どちら向きか」）が同じなら引き直す必要は無い。
+    控えは `attr` に置く ― **`MOD_WIDGET_PREFIX` で始める名前にすること**（`overlay_host` が「他の
+    MOD が足したもの」の見分けに使う）。
     """
     signature = (tuple(key) if isinstance(key, (list, tuple)) else (key,),
                  width, alpha,
@@ -658,8 +678,9 @@ def world_areas(app):
 def current_area(app):
     """いまプレイヤーが居るエリア。**id で持っている場合も引き当てる。**
 
-    `player.current_area` はエリアのオブジェクトとは限らない。NPC 側のセーブでは
-    `"7"` という id の文字列。持ち方は決めつけず、どちらでも引き当てる。
+    `player.current_area` はエリアのオブジェクトとは限らない。
+    NPC 側のセーブでは `"7"` という id の文字列。
+    持ち方は決めつけず、どちらでも引き当てる。
     """
     value = getattr(getattr(app, "player", None), "current_area", None)
     if isinstance(value, (str, int)):
@@ -716,9 +737,8 @@ def facility_type_of(facility):
 def find_facility(area, facility_id):
     """エリアの中から id で施設を引く。`(施設, ノード)`。
 
-    ノードも一緒に返すのは `move_npc_to_facility(character_id,
-    character_instance, target_facility, target_node=None, ...)` が施設とノードを
-    **別々に**取るため。
+    ノードも一緒に返すのは
+    `move_npc_to_facility(character_id, character_instance, target_facility, target_node=None, ...)` が施設とノードを **別々に**取るため。
     """
     if area is None or not facility_id:
         return None, None
@@ -733,8 +753,9 @@ def find_facility(area, facility_id):
 def find_guild(area, facility_type=GUILD_FACILITY_TYPE):
     """そのエリアのギルド。`(施設, ノード)`。無ければ `(None, None)`。
 
-    ダンジョンや野外のエリアにはギルドが無い。**見つからないことが正常な答え**
-    なので、呼ぶ側はそこで別の置き場所へ下がること。
+    ダンジョンや野外のエリアにはギルドが無い。
+    **見つからないことが正常な答え** なので、
+    呼ぶ側はそこで別の置き場所へ下がること。
     """
     if area is None:
         return None, None
@@ -748,8 +769,8 @@ def find_guild(area, facility_type=GUILD_FACILITY_TYPE):
 def facility_name(app, facility, limit=40):
     """施設の名前。取れなければ空文字（呼ぶ側は場所抜きの文言に切り替える）。
 
-    施設そのものが渡ってくるとは限らない。id の文字列で持っていることがあるので、
-    そのときは世界の施設表から引き直す。
+    施設そのものが渡ってくるとは限らない。
+    id の文字列で持っていることがあるので、そのときは世界の施設表から引き直す。
     """
     if facility is None:
         return ""
@@ -777,15 +798,14 @@ def _short(value, limit):
 # --------------------------------------------------------------------------
 # パーティの名簿（GAME.md §2.8）
 # --------------------------------------------------------------------------
-# **在り処も形も決めつけない。** セーブに出るのは `game_variables['party']` の
-# `['player', '63', ...]` という id の配列だが、実行時に `app.party` から同じものが
-# 読めるとは限らず（仲間を入れた直後でも空だった）、`list` とも限らない
-# （`{id: Character}` の辞書のこともある）。だから候補を全部集め、**中身を見て**
-# 本物を選ぶ。
-#
-# ここに置いてあるのは読み取りと1人落とすところまで。**名簿に誰を足す/落とすかを
-# 決めるのは mod 側の判断**で、外す処理そのものはゲーム自身の
-# `remove_party_member` を通すこと（GAME.md §2.8）。
+# **在り処も形も決めつけない。**
+# セーブに出るのは `game_variables['party']` の `['player', '63', ...]` という
+# id の配列だが、実行時に `app.party` から同じものが読めるとは限らず（仲間を入れた直後でも空だった）、
+# `list` とも限らない（`{id: Character}` の辞書のこともある）。
+# だから候補を全部集め、**中身を見て** 本物を選ぶ。
+# ここに置いてあるのは読み取りと1人落とすところまで。
+# **名簿に誰を足す/落とすかを決めるのは mod 側の判断**で、
+# 外す処理そのものはゲーム自身の `remove_party_member` を通すこと（GAME.md §2.8）。
 PLAYER_ID = "player"
 
 # 名簿の要素から id を読むときに見る属性・キー（文字列でも Character でも読む）。
@@ -795,9 +815,10 @@ ID_ATTRS = ("id", "character_id", "npc_id")
 def element_id(value):
     """名簿の要素を id の文字列にする。
 
-    セーブでは `['player', '83']` の文字列だが、実行時に Character の
-    インスタンスが並んでいる可能性もある。**どちらの形でも読めるように**して
-    ある（形を決めつけて空振りしたのが `302_` の最初の失敗）。
+    セーブでは `['player', '83']` の文字列だが、
+    実行時に Character のインスタンスが並んでいる可能性もある。
+    **どちらの形でも読めるように**してある（形を決めつけて空振りしたのが
+    `302_` の最初の失敗）。
     """
     if value is None:
         return ""
@@ -817,8 +838,9 @@ def element_id(value):
 def party_stores(app):
     """メンバーの名簿になりうる入れ物を、心当たりのある場所から全部集める。
 
-    `(どこから取ったか, その入れ物)` の一覧で返す。書くときは同じ id を持つ
-    入れ物**すべて**を直す（片方だけ直すと画面とセーブがずれる）。
+    `(どこから取ったか, その入れ物)` の一覧で返す。
+    書くときは同じ
+    id を持つ入れ物**すべて**を直す（片方だけ直すと画面とセーブがずれる）。
     """
     stores, seen = [], set()
 
@@ -845,11 +867,12 @@ def party_stores(app):
     if player is not None:
         add("player.party", getattr(player, "party", None))
 
-    # 心当たりが全部空振りしたときの最後の網。**名前に party が入っている
-    # 属性・キーだけ**を見る。何でも拾うと `escaped_member_in_battle` や
-    # `surrendered_characters` のような「'player' が入りうる別の配列」を名簿と
-    # 誤認する。`original_party`（差し替えの控え）と `accompany`（クエスト
-    # 同行者）は名簿ではないので外す。
+    # 心当たりが全部空振りしたときの最後の網。
+    # **名前に party が入っている属性・キーだけ**を見る。
+    # 何でも拾うと `escaped_member_in_battle` や
+    # `surrendered_characters` のような「'player' が入りうる別の配列」を名簿と誤認する。
+    # `original_party`（差し替えの控え）と
+    # `accompany`（クエスト同行者）は名簿ではないので外す。
     def sweep(container, label_for):
         if not isinstance(container, dict):
             return
@@ -869,8 +892,8 @@ def party_stores(app):
 def store_ids(store):
     """名簿の中身を id の一覧にする。配列でも辞書でも同じ形で返す。
 
-    辞書のときは**キー**が id（`{id: Character}` の形を想定）。キーが id に
-    見えないときだけ値から引く。
+    辞書のときは**キー**が id（`{id: Character}` の形を想定）。
+    キーが id に見えないときだけ値から引く。
     """
     if isinstance(store, dict):
         ids = []
@@ -895,9 +918,9 @@ def drop_from_store(store, member_id):
 def pick_store(app):
     """本物の名簿を選ぶ。`(どこから, id の一覧)`。無ければ `(None, [])`。
 
-    セーブの `party` は必ず `'player'` を含む `['player', '83']` の形なので、
-    **`'player'` を含む入れ物を本物とみなす**。それが無ければ中身のある入れ物、
-    それも無ければ空を返す。
+    セーブの `party` は必ず `'player'` を含む
+    `['player', '83']` の形なので、**`'player'` を含む入れ物を本物とみなす**。
+    それが無ければ中身のある入れ物、それも無ければ空を返す。
     """
     candidates = party_stores(app)
     for label, store in candidates:
@@ -952,9 +975,10 @@ class Screen(object):
 
         screen = ui.Screen(ctx, write, tag="quest offer", mark=MARK)
 
-    `write` は mod 自身のログ関数。何が起きたかは mod のログに残したいので、
-    ローダのログ（`ctx.log`）とは分けてある。`mark` はボタン辞書に付ける印の
-    キーで、**mod ごとに別の文字列**にすること。
+    `write` は mod 自身のログ関数。
+    何が起きたかは mod のログに残したいので、
+    ローダのログ（`ctx.log`）とは分けてある。
+    `mark` はボタン辞書に付ける印のキーで、**mod ごとに別の文字列**にすること。
     """
 
     def __init__(self, ctx, write, tag="mod", mark=None, safe_cls=SAFE_CLS):
@@ -1014,9 +1038,9 @@ class Screen(object):
     def button(self, text, mark=None, cls_name=None, args=(), extra=None):
         """自前のボタンを1つ作る。作れなければ None（呼び出し側が諦める）。
 
-        `cls_name` を省略すると無害な `JustSetButtonToNormalPhase` になる
-        （自前クラス名を spec に書かない、の実装）。`mark` は
-        `on_button_press` での横取りに使う印。
+        `cls_name` を省略すると無害な `JustSetButtonToNormalPhase` になる（自前クラス名を spec に書かない、
+        の実装）。
+        `mark` は `on_button_press` での横取りに使う印。
         """
         spec = self.make_spec(cls_name or self.safe_cls, args)
         if spec is None:
@@ -1031,7 +1055,8 @@ class Screen(object):
     def mark_of(self, entry):
         """このボタンが自分のものならその action、違えば None。
 
-        判定は文字列ではなく印。同じ文字列のゲーム側ボタンを巻き込まないため。
+        判定は文字列ではなく印。
+        同じ文字列のゲーム側ボタンを巻き込まないため。
         """
         if not self.mark or not isinstance(entry, dict):
             return None
@@ -1040,40 +1065,39 @@ class Screen(object):
     def prune_stale(self, buttons, labels):
         """**印を失った自前ボタンの残骸**を取り除く。差し込む前に必ず通すこと。
 
-        `PhaseSpec.to_dict()` がボタンをセーブに焼くとき、**書かれるのは
-        `text` と `spec` だけで、こちらが足した印（`mod_action` 等）は落ちる**
-        （実セーブで確認。GAME.md §2.16 ― `'依頼を受ける'` は入っているのに
-        `'mod_action'` は無い）。
+        `PhaseSpec.to_dict()` がボタンをセーブに焼くとき、**書かれるのは `text` と
+        `spec` だけで、こちらが足した印（`mod_action` 等）は落ちる**（実セーブで確認。GAME.md §2.16 ―
+        `'依頼を受ける'` は入っているのに `'mod_action'` は無い）。
 
-        するとタイトルへ戻る・ロード・再注入のあと、**印の無い自分のボタンが
-        復元されている**。`mark_of()` はそれを自分のものと見なせないので
-        重複判定をすり抜け、同じボタンが2つ並ぶ。
-        しかも復元された方は spec が `JustSetButtonToNormalPhase` なので
-        押しても無反応 ― 見た目は同じなのに片方だけ効かない、という
-        最も分かりにくい壊れ方になる。
+        するとタイトルへ戻る・ロード・再注入のあと、**印の無い自分のボタンが復元されている**。
+        `mark_of()` はそれを自分のものと見なせないので重複判定をすり抜け、
+        同じボタンが2つ並ぶ。
+        しかも復元された方は spec が `JustSetButtonToNormalPhase` なので押しても無反応 ― 見た目は同じなのに片方だけ効かない、
+        という最も分かりにくい壊れ方になる。
 
         取り除く条件は **「自分のラベル」かつ「印がどれも無い」かつ「無害
-        spec」** の3つ揃ったときだけ。ゲーム側・他 MOD の同名ボタンを巻き
-        込まないための保険で、`labels` は完全一致か前後の括弧付き
-        （`'この話から依頼を作る（誰か）'`）を見るため**前方一致**で照合する。
+        spec」** の3つ揃ったときだけ。
+        ゲーム側・他 MOD の同名ボタンを巻き込まないための保険で、
+        `labels` は完全一致か前後の括弧付き（`'この話から依頼を作る（誰か）'`）を見るため**前方一致**で照合する。
 
-        「印がどれも無い」の判定に**自分の印だけを見てはいけない**。`302_` の
-        `やめておく` と `309_` の `やめておく` のように、別々の MOD が同じ文言の
-        ボタンを出すことがある ― `mark_of()` は自分の印しか見ないので、他 MOD の
-        生きているボタンが「印が無い」に見えて消える（VERIFICATION_LOG.md §2.31。
-        `309_` の確認画面からキャンセルが最初から消える壊れ方をする）。
-        セーブから復元された残骸は印を1つも持たないので、`MARK_PREFIX` で始まる
-        キーが1つでもあれば残骸ではないと分かる。
+        「印がどれも無い」の判定に**自分の印だけを見てはいけない**。
+        `302_` の `やめておく` と `309_` の `やめておく` のように、
+        別々の MOD が同じ文言のボタンを出すことがある ―
+        `mark_of()` は自分の印しか見ないので、
+        他 MOD の生きているボタンが「印が無い」に見えて消える（VERIFICATION_LOG.md
+        §2.31。`309_` の確認画面からキャンセルが最初から消える壊れ方をする）。
+        セーブから復元された残骸は印を1つも持たないので、
+        `MARK_PREFIX` で始まるキーが1つでもあれば残骸ではないと分かる。
 
-        取り除いた分は呼び出し側が新しい印つきで差し直すので、残骸は
-        「消える」のではなく「生き返る」。
+        取り除いた分は呼び出し側が新しい印つきで差し直すので、
+        残骸は「消える」のではなく「生き返る」。
         """
         if not isinstance(buttons, list) or not labels:
             return []
         if not self.mark:
-            # 印を持たない Screen（`300_` のようにボタンを作らない MOD）では
-            # 「自分のもの」を見分けられない。ラベルだけで消すとゲーム側の
-            # 同名ボタンまで巻き込むので、**何もしない**のが正しい。
+            # 印を持たない Screen（`300_` のようにボタンを作らない
+            # MOD）では「自分のもの」を見分けられない。
+            # ラベルだけで消すとゲーム側の同名ボタンまで巻き込むので、**何もしない**のが正しい。
             self.write("{}: prune_stale skipped (this Screen has no mark)"
                        .format(self.tag))
             return []
@@ -1106,8 +1130,9 @@ class Screen(object):
         """どれかの MOD の印が付いているか（自分のものとは限らない）。
 
         セーブに焼かれるのは text と spec だけ ＝ **復元された残骸に印は
-        1つも残らない**。逆に印があれば、いまこの場で誰かが挿したものなので
-        触ってはいけない。`MARK_PREFIX` の約束が効くのはここ。
+        1つも残らない**。
+        逆に印があれば、いまこの場で誰かが挿したものなので触ってはいけない。
+        `MARK_PREFIX` の約束が効くのはここ。
         """
         if not isinstance(entry, dict):
             return False
@@ -1117,8 +1142,9 @@ class Screen(object):
     def instantiate_spec(self, app, entry_or_spec):
         """ボタンの `PhaseSpec` から、それが呼ぶはずのマネージャを組み立てる。
 
-        **引数を自分で考えない**のが要点。`QuestChoiceManager` の `quest_type` は
-        推測して組み立てるとゲームが落ちる（GAME.md §2.2）。
+        **引数を自分で考えない**のが要点。
+        `QuestChoiceManager` の `quest_type` は推測して組み立てるとゲームが落ちる（GAME.md
+        §2.2）。
         ゲームが既にボタンへ載せている `cls_name` と `args` をそのまま使えば、
         値の意味を知らなくても正しく起こせる。
         """
@@ -1155,13 +1181,15 @@ class Screen(object):
     def paint(self, app, texts):
         """選択肢の文字列を実際に画面へ塗る。効いた手段の一覧を返す。
 
-        `refresh_choice_buttons` は `to_display_buttons` と `display_button_map`
-        を組み直すところまでで、**そこまで正しくても画面は塗り替わらない**。
+        `refresh_choice_buttons` は `to_display_buttons` と
+        `display_button_map` を組み直すところまでで、**そこまで正しくても画面は塗り替わらない**。
 
-        塗っているのは HUD 側の `InstanTaleHUD.update_button_texts(self,
-        instance, value)`。**監視されているプロパティは HUD 側にあり、
-        `app.to_display_buttons` は監視対象ではない**ので、そこをどう触っても
-        画面は変わらない。この関数を直接呼ぶのが正解（GAME.md §2.3）。
+        塗っているのは HUD 側の
+        `InstanTaleHUD.update_button_texts(self, instance, value)`。
+        **監視されているプロパティは HUD 側にあり、
+        `app.to_display_buttons` は監視対象ではない**ので、
+        そこをどう触っても画面は変わらない。
+        この関数を直接呼ぶのが正解（GAME.md §2.3）。
 
         ついでに `display_button_load(self, dt)`（ゲーム自身のボタン読み込み。
         Clock コールバックの形なので `dt` を渡せば直接呼べる）も通す。
@@ -1186,8 +1214,9 @@ class Screen(object):
             except Exception:
                 self._oops("hud.update_button_texts failed")
         elif hud is None:
-            # ここが出たら画面は塗り替わらない。型で探して見つからない＝
-            # HUD の構成が変わったということなので、その合図として残す。
+            # ここが出たら画面は塗り替わらない。
+            # 型で探して見つからない＝ HUD の構成が変わったということなので、
+            # その合図として残す。
             done.append("hud not found")
 
         return done
@@ -1195,15 +1224,17 @@ class Screen(object):
     def paint_party(self, app):
         """HUD の仲間欄を塗り直す。効いた手段の一覧を返す。
 
-        パーティの増減は `app.party` を書き換えるだけでは画面に出ない ―
-        選択肢ボタンと同じ構図で、塗るのは別の関数。ゲーム自身が持っている
+        パーティの増減は `app.party` を書き換えるだけでは画面に出ない
+        ― 選択肢ボタンと同じ構図で、塗るのは別の関数。
+        ゲーム自身が持っている
         2つをそのまま通す（引数を作らずに済む形になっている）:
 
             InstantaleApp.update_party_member(self, dt)   Clock コールバックの形
             InstanTaleHUD.update_party_display(self, *args)
 
-        `dt` は Clock が渡す経過秒なので `0` でよい。HUD は属性名ではなく
-        **型**で探す。例外はどれも外へ出さない。
+        `dt` は Clock が渡す経過秒なので `0` でよい。
+        HUD は属性名ではなく **型**で探す。
+        例外はどれも外へ出さない。
         """
         done = []
 
@@ -1274,8 +1305,8 @@ class Screen(object):
     def busy_on(self, app):
         """待機表示を出す。ゲーム自身と同じ見た目・同じ止め方。
 
-        LLM を待つ間これを出さないと、**画面が固まったように見える**
-        （GAME.md §2.4）。
+        LLM を待つ間これを出さないと、**画面が固まったように見える**（GAME.md
+        §2.4）。
         """
         busy = self._busy
         busy["enabled"] = getattr(app, "is_button_enabled", None)
@@ -1311,8 +1342,9 @@ class Screen(object):
     def busy_off(self, app, restore=True):
         """待機表示を解く。
 
-        `restore=False` は「この後すぐ別の画面を出すので、選択肢は塗らない」
-        （掲示板を開き直す経路。ここで元に戻すと一瞬だけ古い画面が見える）。
+        `restore=False` は「この後すぐ別の画面を出すので、
+        選択肢は塗らない」（掲示板を開き直す経路。
+        ここで元に戻すと一瞬だけ古い画面が見える）。
         """
         busy = self._busy
         busy["on"] = False
@@ -1330,17 +1362,20 @@ class Screen(object):
     def apply_buttons(self, app, entries, tag):
         """選択肢を差し替えて画面に反映する。**必ず次のフレーム**で行う。
 
-        押下と同じ流れの中で差し替えると `app.buttons` は変わるのに**画面は
-        古いまま**になる。見えているものと押されるものが食い違うので、確認画面が
-        出ていないように見えて裏では新しい選択肢が押せてしまう。
+        押下と同じ流れの中で差し替えると
+        `app.buttons` は変わるのに**画面は古いまま**になる。
+        見えているものと押されるものが食い違うので、
+        確認画面が出ていないように見えて裏では新しい選択肢が押せてしまう。
 
-        ゲーム自身は押下の処理の中で描画しているので、こちらの差し替えはその
-        **後**に置く必要がある。`Clock.schedule_once(..., 0)` なら次のフレーム、
-        かつメインスレッドなので順序とスレッドが同時に片付く
-        （選択肢を組むゲーム側の `execute` は別スレッドで走ることがある）。
+        ゲーム自身は押下の処理の中で描画しているので、
+        こちらの差し替えはその **後**に置く必要がある。
+        `Clock.schedule_once(..., 0)` なら次のフレーム、
+        かつメインスレッドなので順序とスレッドが同時に片付く（選択肢を組むゲーム側の
+        `execute` は別スレッドで走ることがある）。
 
-        `entries` に None を渡すと差し替えはせず、いま `app.buttons` に入って
-        いるものを塗り直すだけ（ゲームが組んだ一覧に手を入れた場合用）。
+        `entries` に None を渡すと差し替えはせず、
+        いま
+        `app.buttons` に入っているものを塗り直すだけ（ゲームが組んだ一覧に手を入れた場合用）。
         """
         def commit():
             before = list(getattr(app, "to_display_buttons", []) or [])
@@ -1358,10 +1393,12 @@ class Screen(object):
     def start_phase(self, app, phase, choice_text, fallback=None):
         """`app.process_choice` に自前のフェーズを渡す。
 
-        ゲーム自身は選択肢を変えるとき必ず `process_choice(マネージャ, 文字列)`
-        を通し、その中で `execute` が別スレッドへ渡される。描画の面倒はその経路が
-        見ているので、同じ経路に乗せる。フェーズは `execute(choice_text)` だけを
-        持つ自前クラスでよい。**`PhaseSpec` には決して載せない。**
+        ゲーム自身は選択肢を変えるとき必ず
+        `process_choice(マネージャ, 文字列)` を通し、
+        その中で `execute` が別スレッドへ渡される。
+        描画の面倒はその経路が見ているので、同じ経路に乗せる。
+        フェーズは `execute(choice_text)` だけを持つ自前クラスでよい。
+        **`PhaseSpec` には決して載せない。**
         """
         try:
             app.process_choice(phase, choice_text)
@@ -1379,19 +1416,21 @@ class Screen(object):
     def _others_busy(self, app):
         """手が空いていない理由。ただし**自分が出している待機表示は数えない。**
 
-        `busy_on` は `is_button_enabled=False` にする。これは「ゲームが忙しい」
-        印ではなく「こちらが待たせている」印なので、そのまま `busy_signals` に
-        通すと**自分の出した印が消えるのを自分で待つ**ことになる。誰も消さない
-        ので必ずタイムアウトまで進まない。
+        `busy_on` は `is_button_enabled=False` にする。
+        これは「ゲームが忙しい」印ではなく「こちらが待たせている」印なので、
+        そのまま
+        `busy_signals` に通すと**自分の出した印が消えるのを自分で待つ**ことになる。
+        誰も消さないので必ずタイムアウトまで進まない。
 
         実際に踏んだ: `301_` の「会話を閉じてから掲示板を開く」経路は、
         NPC 一覧が一瞬見えるのを隠すため `busy_on` してから
-        `end_conversation` を呼ぶ。その中の `when_idle` がこの印を見て待ち続け、
-        掲示板が開くのが `proceed_on_timeout` の分だけ遅れていた
-        （`tools/tests/test_quest_offer.py` が捕まえていた失敗）。
+        `end_conversation` を呼ぶ。
+        その中の `when_idle` がこの印を見て待ち続け、
+        掲示板が開くのが
+        `proceed_on_timeout` の分だけ遅れていた（`tools/tests/test_quest_offer.py` が捕まえていた失敗）。
 
-        他の2つ（`is_adding_text` / `is_popup_window_opened`）はゲーム側が
-        立てるものなので、そのまま数える。
+        他の2つ（`is_adding_text` / `is_popup_window_opened`）はゲーム側が立てるものなので、
+        そのまま数える。
         """
         reasons = busy_signals(app)
         if self.is_busy():
@@ -1403,18 +1442,17 @@ class Screen(object):
                   tag="idle"):
         """手が空いてから `then` を走らせる。
 
-        移動の後始末（テキストの流し込み・ボタンの張り替え）の最中に割り込むと
-        噛み合わない（`300_` の実測）。**会話の終了処理も同じ**で、要約の
-        流し込みが続いている間に掲示板を開いたり `add_text` したりすると、
+        移動の後始末（テキストの流し込み・ボタンの張り替え）の最中に割り込むと噛み合わない（`300_` の実測）。
+        **会話の終了処理も同じ**で、要約の流し込みが続いている間に掲示板を開いたり `add_text` したりすると、
         こちらの出力が押し流される。
 
-        `cancel_if` は理由の文字列（または None）を返す関数。前提が崩れたら
-        取り消す（待っている間に施設を出た、戦闘に入った等）。
-        `proceed_on_timeout` は「待ちきれなくても実行する」。既に確定した
-        行動の後始末では、遅れても実行する方が正しい。
+        `cancel_if` は理由の文字列（または None）を返す関数。
+        前提が崩れたら取り消す（待っている間に施設を出た、戦闘に入った等）。
+        `proceed_on_timeout` は「待ちきれなくても実行する」。
+        既に確定した行動の後始末では、遅れても実行する方が正しい。
 
-        既に手が空いているなら見張りは立てず、その場で予約する（無駄に
-        1ポーリング分待たないため）。
+        既に手が空いているなら見張りは立てず、
+        その場で予約する（無駄に 1ポーリング分待たないため）。
         """
         deadline = time.monotonic() + timeout
 
@@ -1443,8 +1481,9 @@ class Screen(object):
                 self._oops("{}: idle watch failed".format(tag))
                 return False
 
-        # 1回目はその場で見る。False が返ったなら片が付いている
-        # （実行を予約した、または取り消した）ので見張りは要らない。
+        # 1回目はその場で見る。
+        # False が返ったなら片が付いている（実行を予約した、
+        # または取り消した）ので見張りは要らない。
         if tick(0.0) is False:
             return True
         return self._interval(tick, poll)
@@ -1455,22 +1494,24 @@ class Screen(object):
                          tag="end conversation"):
         """会話をゲーム自身の経路で閉じてから `follow_up(app)` を走らせる。
 
-        閉じずに画面を変えると **NPC の立ち絵が消えずに移動しても付いてくる**
-        （`301_` で実際に起きた）。会話は「状態」であって画面ではない。
+        閉じずに画面を変えると **NPC の立ち絵が消えずに移動しても付いてくる**（`301_` で実際に起きた）。
+        会話は「状態」であって画面ではない。
         立ち絵の片付けも関係値の更新も会話の要約も終了処理の中にある。
 
-        起こし方は「画面にある『会話を終了する』ボタンの spec をそのまま使い、
-        **`end_text` だけ差し替える**」。`end_text` は
-        `'<行動: 会話を終了する>'` という自由記述なので、そこに事情を書いておけば
-        会話の要約とライフログにその通り残る。引数の意味を推測せずに済むうえ、
-        記録も正しくなる（`302_` で確立）。
+        起こし方は「画面にある『会話を終了する』ボタンの
+        spec をそのまま使い、**`end_text` だけ差し替える**」。
+        `end_text` は `'<行動: 会話を終了する>'` という自由記述なので、
+        そこに事情を書いておけば会話の要約とライフログにその通り残る。
+        引数の意味を推測せずに済むうえ、記録も正しくなる（`302_` で確立）。
 
-        終了処理は要約で LLM を回すことがあるので、`in_conversation` が落ちるのを
-        見張り、落ちてから**手が空くのを待って** `follow_up` を呼ぶ。
+        終了処理は要約で LLM を回すことがあるので、
+        `in_conversation` が落ちるのを見張り、
+        落ちてから**手が空くのを待って** `follow_up` を呼ぶ。
 
-        `on_abort(理由)` は閉じられなかったときに呼ばれる。**待ちが打ち切られる
-        経路が必ずあるので、呼び出し側は「実行中」の印をここで戻すこと**
-        （でないと以後ずっとボタンが効かなくなる）。戻り値は同期的に失敗しなかったか。
+        `on_abort(理由)` は閉じられなかったときに呼ばれる。
+        **待ちが打ち切られる経路が必ずあるので、
+        呼び出し側は「実行中」の印をここで戻すこと**（でないと以後ずっとボタンが効かなくなる）。
+        戻り値は同期的に失敗しなかったか。
         """
         def abort(reason):
             self.write("{}: aborted ({})".format(tag, reason))
@@ -1481,7 +1522,8 @@ class Screen(object):
                     self._oops("{}: on_abort failed".format(tag))
 
         if not getattr(app, "in_conversation", False):
-            # もう会話が終わっている（施設側から入った等）。そのまま進む。
+            # もう会話が終わっている（施設側から入った等）。
+            # そのまま進む。
             self.write("{}: not in a conversation; continuing".format(tag))
             return self.when_idle(app, lambda: follow_up(app),
                                   proceed_on_timeout=True, tag=tag)
@@ -1521,8 +1563,8 @@ class Screen(object):
                 return False
 
         if not self._interval(wait_for_end, poll):
-            # 見張りを立てられなかった（Clock が無い）。閉じる指示は既に出して
-            # いるので、呼び出し側の「実行中」の印は必ず戻す。
+            # 見張りを立てられなかった（Clock が無い）。
+            # 閉じる指示は既に出しているので、呼び出し側の「実行中」の印は必ず戻す。
             abort("cannot watch for the conversation to close")
             return False
         return True

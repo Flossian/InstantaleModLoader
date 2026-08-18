@@ -18,8 +18,9 @@
   再読込   … ファイルを書き換えると次のリクエストから効くこと
   壊さない … ルールが無い・読めない・例外が出た場合に文章をそのまま送ること
 
-**確率の抽選は `roll` を差し替えて固定する**（乱数のままでは「1回だけ抽選している」
-ことを確かめられない）。実経路の検証は偽クライアントの `chat` を呼んで行うので、
+**確率の抽選は
+`roll` を差し替えて固定する**（乱数のままでは「1回だけ抽選している」ことを確かめられない）。
+実経路の検証は偽クライアントの `chat` を呼んで行うので、
 `wrap` した層の引数の受け渡しまで一緒に通る。
 """
 import glob
@@ -59,11 +60,13 @@ def find_mod(suffix):
 
 MOD_DIR, MOD_PATH = find_mod("_llm_prompt_replace")
 
-# 仕掛ける場所はローダの語彙（`instantale_modloader.llm`）。経路の定数と見張りの
-# 間隔はそちらにあるので、テストからもそちらを触る（TECH.md §3.2.3）。
+# 仕掛ける場所はローダの語彙（`instantale_modloader.llm`）。
+# 経路の定数と見張りの間隔はそちらにあるので、
+# テストからもそちらを触る（TECH.md §3.2.3）。
 from instantale_modloader import llm as ml_llm          # noqa: E402
 
-# ゲームが自分で保存した実プロンプト。無ければ実データの照合だけ飛ばす。
+# ゲームが自分で保存した実プロンプト。
+# 無ければ実データの照合だけ飛ばす。
 GAME_DIR = r"C:\Program Files\Epic Games\Instantaleq6Ve7"
 REAL_FILE_SAMPLE = 1200          # 実データは間引いて読む（全件は1万件を超える）
 
@@ -126,10 +129,12 @@ class FakeClient(object):
 class FakeLlmManager(object):
     """`llm_manager` が持つ `send_request*` の別名の偽物。
 
-    本物はモジュール関数なので **self が無い**。インスタンス属性の関数として
-    持たせて、`FakeCtx.wrap` もこちらには self を差し込まない。
+    本物はモジュール関数なので **self が無い**。
+    インスタンス属性の関数として持たせて、
+    `FakeCtx.wrap` もこちらには self を差し込まない。
     `__module__` は from-import 元（＝送信モジュール）の名前になるので、
-    偽物にもそれを付ける。MOD はここから site（プロバイダ名）を採る。
+    偽物にもそれを付ける。
+    MOD はここから site（プロバイダ名）を採る。
     """
 
     BACKEND = "scripts.llm.request_llm_inference_gemini_test_streaming"
@@ -157,8 +162,9 @@ class FakeLlmManager(object):
 class FakeCtx(object):
     """`apply(ctx)` が使うぶんだけの ctx。`wrap` は偽クライアントに当てる。
 
-    `mod_dir` は**本物の MOD フォルダを指さない**。ルールは MOD フォルダの中の
-    `llm_replacements.txt` だけを読むので、本物を渡すと同梱のルールで動いてしまい、
+    `mod_dir` は**本物の MOD フォルダを指さない**。
+    ルールは MOD フォルダの中の `llm_replacements.txt` だけを読むので、
+    本物を渡すと同梱のルールで動いてしまい、
     テストがその中身に左右される（同梱ルールは `test_real_prompts` で当てる）。
     """
 
@@ -186,7 +192,8 @@ class FakeCtx(object):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
-    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # ログは本物の `ctx.logger` をそのまま借りる。
+    # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
 
@@ -251,7 +258,8 @@ for _name in ("chat", "_apply_chat_template", "_post_with_model_loading_retry"):
 def arm(rules_text, out_dir, roll=None, settings=None):
     """偽 MOD フォルダにルールを置いて `apply(ctx)` を通す。
 
-    `(client, ctx, rules_path)` を返す。`roll` を渡すと抽選を固定する。
+    `(client, ctx, rules_path)` を返す。
+    `roll` を渡すと抽選を固定する。
     """
     revert_client()
     mod.LOG_REPLACE = True
@@ -261,8 +269,8 @@ def arm(rules_text, out_dir, roll=None, settings=None):
     if roll is not None:
         mod._roll = roll
 
-    # 既定側（`llm_replacements.default.txt`）に置く。利用者のファイルが優先される
-    # ことは `test_self_contained` で別に見る。
+    # 既定側（`llm_replacements.default.txt`）に置く。
+    # 利用者のファイルが優先されることは `test_self_contained` で別に見る。
     mod_dir = os.path.join(out_dir, "mod")
     os.makedirs(mod_dir, exist_ok=True)
     rules_path = os.path.join(mod_dir, "llm_replacements.default.txt")
@@ -428,7 +436,8 @@ def test_probability():
     check("確率: 0% は抽選せず見送る",
           not chosen and "確率0" in skipped[0][3], (chosen, skipped))
 
-    # 抽選はグループごとに1回。当たった置換前が本文に2箇所あっても両方替わる。
+    # 抽選はグループごとに1回。
+    # 当たった置換前が本文に2箇所あっても両方替わる。
     one, _warnings = mod.parse_rules(["猫=>犬=>50"])
     chosen, _skipped = mod.decide(mod.group_rules(one), "猫と猫", roll=lambda d: 0)
     text, hits = mod.apply_chosen("猫と猫", chosen)
@@ -473,10 +482,12 @@ def test_paths(tmp):
 def test_cloud_path(tmp):
     """外部APIキー経路でも置換されること。
 
-    クラウドは LlamaCppClient を通らず、送信モジュールもプロバイダごとに違う
-    （v1 で素通りの報告 → v3 の Gemini 実測を経て、v4 からプロバイダに依存しない
-    `llm_manager:send_request*` の別名を包む）。境界で見えるのは第2引数の
-    message だけ。site はラップした元関数の `__module__` から採る。
+    クラウドは LlamaCppClient を通らず、
+    送信モジュールもプロバイダごとに違う（v1 で素通りの報告 → v3 の
+    Gemini 実測を経て、v4 からプロバイダに依存しない
+    `llm_manager:send_request*` の別名を包む）。
+    境界で見えるのは第2引数の message だけ。
+    site はラップした元関数の `__module__` から採る。
     """
     out_dir = os.path.join(tmp, "cloud")
     os.makedirs(out_dir, exist_ok=True)
@@ -502,8 +513,8 @@ def test_cloud_path(tmp):
           "[REPLACE] gemini_test_streaming " in log
           and "[REPLACE] gemini_test_streaming_ns " in log, log)
 
-    # message= のキーワード渡しでも同じ（未実測のモジュールに備えて、位置に
-    # 決め打ちしていないことを固定する）。
+    # message= のキーワード渡しでも同じ（未実測のモジュールに備えて、
+    # 位置に決め打ちしていないことを固定する）。
     _client2, ctx2, _path = arm(RULES, out_dir, roll=lambda d: 0)
     ctx2.manager.send_request("quest_referee",
                               message=[{"role": "user", "content": "古い言い方"}],
@@ -526,8 +537,9 @@ def test_cloud_path(tmp):
     check("クラウド: 置換は1度だけ当たる",
           ctx3.manager.sent == [["替わったの話"]], ctx3.manager.sent)
 
-    # ローカル実行（llama.cpp の送信モジュールが import されている）では、この
-    # 地点では何もしない。send_request は内部で別スレッドに降りるため印が届かず、
+    # ローカル実行（llama.cpp の送信モジュールが import されている）では、
+    # この地点では何もしない。
+    # send_request は内部で別スレッドに降りるため印が届かず、
     # LlamaCppClient 側の3点と二重に抽選してしまうから。
     del draws[:]
     _client4, ctx4, _path = arm("#tab:t\n半分=>替わった=>50\n", out_dir,
@@ -546,9 +558,9 @@ def test_cloud_path(tmp):
 def test_alias_appears_late(tmp):
     """`llm_manager` の別名が注入の後から生えても包まれること。
 
-    起動直後の注入では llm_manager に send_request がまだ無い（プロバイダの
-    初期化時に生える）。無かったぶんは
-    見張りが5秒ごとに（テストでは短縮）当て直す。
+    起動直後の注入では llm_manager に
+    send_request がまだ無い（プロバイダの初期化時に生える）。
+    無かったぶんは見張りが5秒ごとに（テストでは短縮）当て直す。
     """
     out_dir = os.path.join(tmp, "late")
     mod_dir = os.path.join(out_dir, "mod")
@@ -574,12 +586,13 @@ def test_alias_appears_late(tmp):
         check("後生え: 無い間は属性を作らない",
               not hasattr(ctx.manager, "send_request"), vars(ctx.manager).keys())
 
-        # プロバイダの初期化に相当。生えたら見張りが包む。
+        # プロバイダの初期化に相当。
+        # 生えたら見張りが包む。
         ctx.manager.send_request = send
         ctx.manager.send_request_with_no_structure = send_ns
-        # 15 秒は「壊れたときに止まらない」ためだけの上限。見張りは 0.02 秒
-        # ごとに回るので通る回は一瞬で抜ける（VERIFICATION.md §4「CI だけで
-        # 落ちるもの」）。
+        # 15 秒は「壊れたときに止まらない」ためだけの上限。
+        # 見張りは 0.02 秒ごとに回るので通る回は一瞬で抜ける（VERIFICATION.md
+        # §4「CI だけで落ちるもの」）。
         deadline = time.time() + 15.0
         while time.time() < deadline and (
                 ctx.manager.send_request is send
@@ -604,7 +617,8 @@ def test_single_pass(tmp):
     """入れ子の経路で抽選が2回起きないこと。
 
     `chat` → `_apply_chat_template` → `_post_...` と3段とも仕掛かっているので、
-    歯止めが無ければ 50% のルールが3回抽選される。抽選の回数をそのまま数える。
+    歯止めが無ければ 50% のルールが3回抽選される。
+    抽選の回数をそのまま数える。
     """
     out_dir = os.path.join(tmp, "single")
     os.makedirs(out_dir, exist_ok=True)
@@ -619,8 +633,8 @@ def test_single_pass(tmp):
     check("1回だけ: 入れ子の3経路で抽選は1回", len(draws) == 1, draws)
     check("1回だけ: 置換は1度だけ当たる", client.sent == ["替わったの話"], client.sent)
 
-    # 同じ文章をもう一度渡すと、こちらが作ったものとして素通しになる
-    # （印が届かない経路＝別スレッドで送られた場合の歯止め）。
+    # 同じ文章をもう一度渡すと、
+    # こちらが作ったものとして素通しになる（印が届かない経路＝別スレッドで送られた場合の歯止め）。
     del draws[:]
     done = []
 
@@ -646,9 +660,9 @@ def test_single_pass(tmp):
 def test_self_contained(tmp):
     """読むのは **MOD フォルダの中の1ファイルだけ**。探索も外部参照もしない。
 
-    以前は `settings\\` と既存プロキシの置き場所も探していた。MOD 単体の部品は
-    MOD のフォルダで完結させる決まりにしたので（外に出るのは `out\\` のログだけ）、
-    その両方を見ないことをここで固定する。
+    以前は `settings\\` と既存プロキシの置き場所も探していた。
+    MOD 単体の部品は MOD のフォルダで完結させる決まりにしたので（外に出るのは
+    `out\\` のログだけ）、その両方を見ないことをここで固定する。
     """
     mod_dir = os.path.join(tmp, "contained", "mod")
     os.makedirs(mod_dir, exist_ok=True)
@@ -678,7 +692,8 @@ def test_self_contained(tmp):
     with io.open(os.path.join(out_dir, "llm_proxy_dir.txt"), "w", encoding="utf-8") as fh:
         fh.write(os.path.join(tmp, "InstantaleLlmProxy"))
 
-    # 外のルールはどれも「外」を置換する。効いていなければ「外」が残る。
+    # 外のルールはどれも「外」を置換する。
+    # 効いていなければ「外」が残る。
     client, ctx, _path = arm("#tab:t\n中=>MOD の中が効いた\n", out_dir, roll=lambda d: 0)
     client.chat("model", [{"role": "user", "content": "中と外"}])
     check("置き場所: MOD の中のルールが効く",
@@ -687,8 +702,8 @@ def test_self_contained(tmp):
           "が効いた" not in client.sent[-1].replace("MOD の中が効いた", ""),
           client.sent)
 
-    # 利用者のファイルを後から置くと、次のリクエストでそちらに切り替わる
-    # （MOD を更新しても残るのはこちら側。`.default.txt` は上書きされる）。
+    # 利用者のファイルを後から置くと、次のリクエストでそちらに切り替わる（MOD を更新しても残るのはこちら側。
+    # `.default.txt` は上書きされる）。
     user_file = os.path.join(out_dir, "mod", "llm_replacements.txt")
     with io.open(user_file, "w", encoding="utf-8") as fh:
         fh.write("#tab:t\n中=>利用者のファイルが効いた\n")
@@ -715,8 +730,8 @@ def test_self_contained(tmp):
 def test_not_shipped():
     """**利用者のルールは配布物に入らない。** これが「更新で消えない」の根拠。
 
-    `make_dist.bat` が `llm_replacements.txt` を除外していることを見る（配布物に
-    入ってしまうと、次の利用者の更新でその人のルールを上書きしてしまう）。
+    `make_dist.bat` が `llm_replacements.txt` を除外していることを見る（配布物に入ってしまうと、
+    次の利用者の更新でその人のルールを上書きしてしまう）。
     """
     with io.open(os.path.join(ROOT, "make_dist.bat"), encoding="utf-8",
                  errors="replace") as fh:
@@ -730,8 +745,8 @@ def test_not_shipped():
 def test_bundled_rules():
     """同梱の既定（`llm_replacements.default.txt`）が警告なしで読めること。
 
-    ルールを書き換えたときにここが落ちる（＝書式を間違えた）。利用者のファイルを
-    置いている環境ではそちらを読む（`rules_path` と同じ判定）。
+    ルールを書き換えたときにここが落ちる（＝書式を間違えた）。
+    利用者のファイルを置いている環境ではそちらを読む（`rules_path` と同じ判定）。
     """
     path = mod.rules_path(MOD_DIR)
     if not os.path.isfile(path):
@@ -742,7 +757,8 @@ def test_bundled_rules():
     groups = mod.group_rules(rules)
     check("同梱: 警告なしで読める（{}行 / {}グループ）".format(len(rules), len(groups)),
           not warnings, warnings)
-    # 当ててみる。当たらないルールがあってもよいが、**例外は許さない**。
+    # 当ててみる。
+    # 当たらないルールがあってもよいが、**例外は許さない**。
     sample = "\n".join(rule.from_text for rule in rules)
     chosen, _skipped = mod.decide(groups, sample, roll=lambda d: 0)
     text, hits = mod.apply_chosen(sample, chosen)
@@ -753,8 +769,8 @@ def test_bundled_rules():
 def test_real_prompts():
     """記録済みの実プロンプトに、同梱のルールをそのまま当ててみる。
 
-    見るのは2つ。**当たること**（書式の取り違えがあれば1件も当たらない）と、
-    **`105_` の後段が壊れないこと** ― この MOD は `105_` より外側に居るので、
+    見るのは2つ。
+    **当たること**（書式の取り違えがあれば1件も当たらない）と、**`105_` の後段が壊れないこと** ― この MOD は `105_` より外側に居るので、
     置換した本文をあちらのスキーマ解析が読むことになる（`mod.json` の `after`）。
     `output_data/` が無い環境では飛ばす。
     """
@@ -816,7 +832,8 @@ def test_reload(tmp):
     client.chat("model", [{"role": "user", "content": "前の話"}])
     first = client.sent[-1]
 
-    # ルールを書き換える。ゲームを再起動せずに次のリクエストから効くこと。
+    # ルールを書き換える。
+    # ゲームを再起動せずに次のリクエストから効くこと。
     with io.open(path, "w", encoding="utf-8") as fh:
         fh.write("#tab:t\n前=>もっと後\n")
     os.utime(path, (os.path.getmtime(path) + 2, os.path.getmtime(path) + 2))

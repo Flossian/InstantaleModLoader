@@ -3,8 +3,8 @@
 
     python tools/tests/test_item_detail_autosize.py
 
-偽の `scripts.hud.new_hud` / `ItemDetailBox` / Kivy の Label・Clock・Window を
-差し込んで、次を確認する。
+偽の `scripts.hud.new_hud` / `ItemDetailBox` / Kivy の
+Label・Clock・Window を差し込んで、次を確認する。
 
   未配置   … 箱はホバーのたびに作り直され、子はまだレイアウトされていない
              （`pos` が箱の左下原点のまま）。この状態でも設計を読み違えない
@@ -21,9 +21,10 @@
   無傷     … ラベルが1つでも欠けていたら何もしない（ゲームの箱をそのまま返す）
 
 寸法はすべて `out/item_detail.log`（`208_probe_item_detail` の実測、
-window=2560x1387）から取っている。折り返しの計算だけは Kivy の代わりに
-「幅 ÷ 半角1文字」で行う ― 実測が 300px 幅で半角24文字/行だったので、
-半角1文字 = 12.5px、1行 = 50px（150px で3行）とすると実機と一致する。
+window=2560x1387）から取っている。
+折り返しの計算だけは Kivy の代わりに「幅 ÷ 半角1文字」で行う ― 実測が
+300px 幅で半角24文字/行だったので、半角1文字 = 12.5px、
+1行 = 50px（150px で3行）とすると実機と一致する。
 """
 import importlib.util
 import math
@@ -94,8 +95,9 @@ class FakeLabel(object):
         self.texture_size = [text_width, height]
         self.pos_hint = {"center_x": 0.5, "top": top}
         self.font_size = 27
-        # **作られた直後はレイアウトされていない**（実測）。座標は箱の左下原点の
-        # まま ＝ 絶対座標から設計を読むと嘘の余白が出る。ここを再現しておく。
+        # **作られた直後はレイアウトされていない**（実測）。
+        # 座標は箱の左下原点のまま ＝ 絶対座標から設計を読むと嘘の余白が出る。
+        # ここを再現しておく。
         self.x = 0
         self.y = BOX_SIZE[1] * top - height
 
@@ -104,8 +106,9 @@ class FakeLabel(object):
         per_line = max(1, int(width // CHAR_W))
         lines = sum(max(1, math.ceil(len(part) / per_line))
                     for part in self.text.split("\n"))
-        # 高さを指定されていれば Kivy はそこに切り揃える（実測でも
-        # texture_size == text_size だった）。None のときだけ本当の高さが出る。
+        # 高さを指定されていれば Kivy はそこに切り揃える（実測でも texture_size ==
+        # text_size だった）。
+        # None のときだけ本当の高さが出る。
         self.texture_size = [width, height if height is not None else lines * LINE_H]
 
     def wants(self):
@@ -144,8 +147,8 @@ class FakeBox(object):
     def lay_out(self):
         """FloatLayout.do_layout と同じ計算で子を置く（`c.top = y + 分数 * h`）。
 
-        ゲームは箱を作った直後に `update_content` を呼ぶので本番ではまだ走って
-        いないが、**走った後の箱**でも同じ結果になることを確かめるために使う。
+        ゲームは箱を作った直後に
+        `update_content` を呼ぶので本番ではまだ走っていないが、**走った後の箱**でも同じ結果になることを確かめるために使う。
         """
         for label in self.labels():
             label.y = self.y + self.height * label.pos_hint["top"] - label.height
@@ -155,8 +158,7 @@ class FakeBox(object):
         """本物と同じく、ラベルの text を入れ直すだけ（寸法は触らない）。
 
         ラベルを1つ落とした状態も試すので、**無い相手には何もしない**。
-        本物がその形でも落ちないかどうかはここでは問題にしていない
-        （mod が触らないことだけを見る）。
+        本物がその形でも落ちないかどうかはここでは問題にしていない（mod が触らないことだけを見る）。
         """
         for attr, text in zip((name for name, _, _, _ in DESIGN),
                               (item["name"], item["attributes"], item["description"])):
@@ -231,7 +233,8 @@ class FakeCtx(object):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
-    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # ログは本物の `ctx.logger` をそのまま借りる。
+    # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
 
@@ -269,8 +272,8 @@ def close(value, expected, tolerance=0.01):
     """1px 未満の差は不問。
 
     設計値は「実際に置かれている座標を引き算して求める」ので、
-    実機でも 25.000000000000057 のような値になる。丸めて誤魔化すより、
-    見た目に出ない差として扱うほうが実態に合う。
+    実機でも 25.000000000000057 のような値になる。
+    丸めて誤魔化すより、見た目に出ない差として扱うほうが実態に合う。
     """
     return abs(value - expected) < tolerance
 
@@ -331,8 +334,9 @@ def run():
     check("the box keeps its left edge (the game anchors it there)",
           close(box.x, BOX_POS[0]), box.x)
 
-    # 縦横比: 設計（500:333 ＝ 1.50）より縦長のままなら、まだ広げる余地が
-    # あったということ。上限（窓の右端 / 設計の3倍）に当たった場合だけ許す。
+    # 縦横比: 設計（500:333 ＝ 1.50）より縦長のままなら、
+    # まだ広げる余地があったということ。
+    # 上限（窓の右端 / 設計の3倍）に当たった場合だけ許す。
     ratio = 500 / 333.0
     room = min(333 * mod.WIDEST, WINDOW[0] - box.x)
     check("the box is not left taller than the design's proportions",
@@ -373,9 +377,9 @@ def run():
           "{} {}".format(box.height, box.desc_label.height))
 
     # -- レイアウト済みの箱でも同じ結果になる -------------------------------
-    # 本番で来るのは未配置の箱（上のケース）。こちらは「座標を読んでいたら
-    # 結果が変わる」ことを示す対照で、2つが一致することが設計を pos_hint から
-    # 読んでいる証拠になる。
+    # 本番で来るのは未配置の箱（上のケース）。
+    # こちらは「座標を読んでいたら結果が変わる」ことを示す対照で、
+    # 2つが一致することが設計を pos_hint から読んでいる証拠になる。
     fresh = FakeBox()
     fresh.update_content(item(description=long_desc))
     CLOCK.tick()

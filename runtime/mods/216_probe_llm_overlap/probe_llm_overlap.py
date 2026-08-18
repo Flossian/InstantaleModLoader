@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 r"""LLM リクエストの重なり（多重送信）を実プレイで数える。
 
-`127_llm_response_speed` は llama-server を `--parallel 1`（専用1スロット）で
-起こす。同時に2本来ると2本目はキューで待つ。この「同時に2本」が実プレイで
-どれだけ起こるかが、待ちの実害を決める（VERIFICATION_LOG.md §2.48）。
+`127_llm_response_speed` は llama-server を
+`--parallel 1`（専用1スロット）で起こす。
+同時に2本来ると2本目はキューで待つ。
+この「同時に2本」が実プレイでどれだけ起こるかが、
+待ちの実害を決める（VERIFICATION_LOG.md §2.48）。
 
 外から `/slots` をポーリングする測り方は、分解能より短い間隔を見分けられず、
 「先行の完了直後に次が来た連鎖」と「本当に同時に居た」を区別できない。
@@ -18,10 +20,10 @@ r"""LLM リクエストの重なり（多重送信）を実プレイで数える
     llama_cpp_runtime_completion:LlamaCppClient._post_with_model_loading_retry
 
 どれが通るかはビルドと経路で変わり、1リクエストの中で入れ子にも通るので、
-スレッド印で**外側の1回だけ**を数える（`llm.py` の「1回の推論で1回だけ」と
-同じ手）。`llm_manager:send_request*` を包まないのも同じ理由。ローカル実行では
-内部で別スレッドへ降りるため印が届かず、二重に数えてしまう。したがって
-**この probe が数えるのはローカル実行だけ**（クラウド経路は対象外）。
+スレッド印で外側の1回だけを数える（`llm.py` の「1回の推論で1回だけ」と同じ手）。
+`llm_manager:send_request*` を包まないのも同じ理由。
+ローカル実行では内部で別スレッドへ降りるため印が届かず、二重に数えてしまう。
+したがって **この probe が数えるのはローカル実行だけ**（クラウド経路は対象外）。
 
 ## ログの読み方（`out\llm_overlap.log`）
 
@@ -29,15 +31,16 @@ r"""LLM リクエストの重なり（多重送信）を実プレイで数える
     END <関数> <秒>                 終了と所要時間（キュー待ちを含む壁時計）
     OVERLAP in_flight=<本数>        開始時点で先行が走っていた＝真の多重送信
 
-OVERLAP が1行も無ければ、その区間のリクエストは完全に逐次だった。ゲームを
-起動するたびに勝手に録れるので、合間合間に遊ぶスタイルでも母数が貯まる。
+OVERLAP が1行も無ければ、その区間のリクエストは完全に逐次だった。
+ゲームを起動するたびに勝手に録れるので、合間合間に遊ぶスタイルでも母数が貯まる。
 集計は行数を数えるだけ（END の行数＝リクエスト数、OVERLAP の行数＝重なり）。
 """
 
 import threading
 import time
 
-#: ローカルで本文が通る3点。`instantale_modloader/llm.py` の定数と揃えてある。
+#: ローカルで本文が通る3点。
+#: `instantale_modloader/llm.py` の定数と揃えてある。
 TARGETS = (
     "llama_cpp_runtime_completion:LlamaCppClient.chat",
     "llama_cpp_runtime_completion:LlamaCppClient._apply_chat_template",

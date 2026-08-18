@@ -3,8 +3,8 @@
 
     python tools/tests/test_ui_item_list_fit.py
 
-偽の `scripts.hud.new_hud` / `InstanTaleHUD` / Kivy（Clock・Window）と、実測に
-合わせた偽の一覧（`GridLayout` 相当）を差し込んで、次を確認する。
+偽の `scripts.hud.new_hud` / `InstanTaleHUD` / Kivy（Clock・Window）と、
+実測に合わせた偽の一覧（`GridLayout` 相当）を差し込んで、次を確認する。
 
   無干渉   … 収まっている一覧には触らない（`cols` も寸法も）
   2列      … はみ出す件数では列が増え、窓の内側に収まる
@@ -23,8 +23,8 @@
 
 寸法は実測（GAME.md §2.14.1）に合わせてある: 窓 1000 高、
 一覧は `ToolListPopup`（`GridLayout` 派生）幅 926.64・18行、行の高さ 57、
-アイテム説明の箱は `ItemDetailBox`（`FloatLayout` 派生・`parent=Button`・
-中身は `['', '', 'item_detail:']`）。
+アイテム説明の箱は `ItemDetailBox`（`FloatLayout` 派生・`parent=Button`・中身は
+`['', '', 'item_detail:']`）。
 """
 import importlib.util
 import io
@@ -151,8 +151,8 @@ class FakeButton(FakeWidget):
 class FakeGrid(FakeWidget):
     """一覧（`ToolListPopup` ＝ `GridLayout` 派生）のうち mod から見える部分。
 
-    `anchor="bottom"` … 高さを変えても下端が動かない
-    `anchor="top"`    … 上端が固定で、高さを変えると下端が動く（列数が行ったり
+    `anchor="bottom"` … 高さを変えても下端が動かない `anchor="top"` … 上端が固定で、
+    高さを変えると下端が動く（列数が行ったり
                         来たりしないかを見るため）
     """
 
@@ -170,15 +170,17 @@ class FakeGrid(FakeWidget):
         self.minimum_height = 0.0
         self.anchor = anchor
         self.lazy = lazy
-        # 実機で観測した状態: 行は並び終わっているのに、入れ物の矩形だけが
-        # `(0, 0, 926, 78.75)` のまま（GAME.md §2.14.1）。ここを条件にすると
-        # 一覧を1つも掴めない。
+        # 実機で観測した状態: 行は並び終わっているのに、
+        # 入れ物の矩形だけが `(0, 0, 926, 78.75)` のまま（GAME.md §2.14.1）。
+        # ここを条件にすると一覧を1つも掴めない。
         self.stale_height = stale_height
         # obeys_cols=False … `cols` を変えても行の位置が変わらないビルド。
         # 実機の `ToolListPopup` はこう見えている（箱の高さ 78.75 に対して行は
-        # 0〜1026 に並ぶ）。この場合 mod が自分で行を置く。
+        # 0〜1026 に並ぶ）。
+        # この場合 mod が自分で行を置く。
         self.obeys_cols = obeys_cols
-        # `rows` は `GridLayout` の**個数のプロパティ**（mod はここを None にする）。
+        # `rows` は `GridLayout` の**個数のプロパティ**（mod はここを
+        # None にする）。
         # 行のウィジェットは `row_widgets()` で返す。
         self.rows = None
 
@@ -194,7 +196,8 @@ class FakeGrid(FakeWidget):
         if not rows:
             return
         if not self.obeys_cols:
-            # 行の位置を格子が決めていないビルド。1列のまま置き直すだけ。
+            # 行の位置を格子が決めていないビルド。
+            # 1列のまま置き直すだけ。
             self.minimum_height = len(rows) * (ROW_HEIGHT + SPACING) - SPACING
             return
         cols = max(1, int(self.cols or 1))
@@ -214,8 +217,8 @@ class FakeGrid(FakeWidget):
     def place_one_column(self):
         """格子が並べてくれないビルドで、行が実際に置かれている形。
 
-        実機の見え方（下端から上へ1列）に合わせる。入れ物の高さ（入力欄の帯）
-        とはまるで噛み合っていない。
+        実機の見え方（下端から上へ1列）に合わせる。
+        入れ物の高さ（入力欄の帯）とはまるで噛み合っていない。
         """
         rows = self.row_widgets()
         for index, row in enumerate(rows):
@@ -347,8 +350,8 @@ class FakeHUD(FakeWidget):
     def settle(self, rounds=8):
         """押下のあとの「次のフレーム」を1回ずつ回す。
 
-        **1フレームに1つずつ**走らせ、間にレイアウトを挟む。本物もそうなって
-        いるので、まだ組み上がっていない寸法を mod が控えてしまわないかが、
+        **1フレームに1つずつ**走らせ、間にレイアウトを挟む。
+        本物もそうなっているので、まだ組み上がっていない寸法を mod が控えてしまわないかが、
         ここで初めて見える。
         """
         for _round in range(rounds):
@@ -401,7 +404,8 @@ class FakeCtx(object):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
-    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # ログは本物の `ctx.logger` をそのまま借りる。
+    # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
 
@@ -431,8 +435,8 @@ def load_mod():
 def install(mod, ctx, **settings):
     """注入をやり直す。**ラッパを重ねない**（本物は世代管理で置き換える）。
 
-    `settings` はローダが `apply()` の前にモジュールのグローバルへ書く値
-    （TECH.md §3.8）と同じ形で当てる。
+    `settings` はローダが `apply()` の前にモジュールのグローバルへ書く値（TECH.md
+    §3.8）と同じ形で当てる。
     """
     for name, func in PRISTINE.items():
         setattr(FakeHUD, name, func)
@@ -630,11 +634,12 @@ def run():
 
     print("\n[飾り] `text` を持たないウィジェットを行に数えない")
     # `frames.attr` の既定は**文字列**の番人（`"<missing>"`）なので、
-    # `isinstance(値, str)` で受けると背景・枠線・画像まで「行」になる
-    # （`118_` が同じ罠を踏んでいる。TECH.md §5.2）。飾りが本物の行と同じ
-    # 高さに居ると「横並び＝一覧ではない」に掛かり、**一覧が丸ごと棄却される**。
-    # 手で並べるビルド（`ToolListPopup` の形）で見る。格子が自力で折り返す側だと
-    # mod は行に触らないので、飾りを行と取り違えても表に出ない。
+    # `isinstance(値, str)` で受けると背景・枠線・画像まで「行」になる（`118_` が同じ罠を踏んでいる。
+    # TECH.md §5.2）。
+    # 飾りが本物の行と同じ高さに居ると「横並び＝一覧ではない」に掛かり、**一覧が丸ごと棄却される**。
+    # 手で並べるビルド（`ToolListPopup` の形）で見る。
+    # 格子が自力で折り返す側だと mod は行に触らないので、
+    # 飾りを行と取り違えても表に出ない。
     install(mod, ctx)
     hud = FakeHUD(count=18, obeys_cols=False)
     hud.press_item_icon()

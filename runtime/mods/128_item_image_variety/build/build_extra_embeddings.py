@@ -2,12 +2,12 @@
 """キャプション → 追加埋め込み辞書のビルドと検証。
 
 - 入力: scratchpad/captions_*.json（{stem: 英語キャプション}）
-- 出力: runtime/mods/128_item_image_variety/data/<folder>.json
-  （素の辞書と同形式: {stem: [384 floats]}）
-- 検証:
-  1) 欠落一覧（missing_images.json）と完全一致すること
-  2) 自己検索: 各キャプションで合成辞書を検索し、自分が top1 に来る率
-     （キャプション同士が似すぎていないか＝新規画像が実際に選ばれ得るかの目安）
+- 出力: runtime/mods/128_item_image_variety/data/<folder>.json（素の辞書と同形式:
+  {stem: [384 floats]}）
+- 検証: 1) 欠落一覧（missing_images.json）と完全一致すること
+  2) 自己検索: 各キャプションで合成辞書を検索し、
+  自分が
+  top1 に来る率（キャプション同士が似すぎていないか＝新規画像が実際に選ばれ得るかの目安）
 """
 import glob
 import io

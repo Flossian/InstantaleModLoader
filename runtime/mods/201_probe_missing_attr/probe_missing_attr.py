@@ -1,21 +1,23 @@
 # -*- coding: utf-8 -*-
 """FreeInputStart.facility_move_to を *読んでいる箇所* を特定する。
 
-FreeInputStart.method の実呼び出しはいずれも属性が無いまま正常に戻る。つまり
-属性はそもそも設定されておらず、特定の分岐でのみ *読まれる* ということ。
-したがってメソッドをラップしても読み取り箇所は分からない。「宿に行く」
-「ギルドに行く」等の施設移動は正常に動くので、条件はそれより稀なもの。
+FreeInputStart.method の実呼び出しはいずれも属性が無いまま正常に戻る。
+つまり属性はそもそも設定されておらず、特定の分岐でのみ *読まれる* ということ。
+したがってメソッドをラップしても読み取り箇所は分からない。
+「宿に行く」「ギルドに行く」等の施設移動は正常に動くので、条件はそれより稀なもの。
 
-__getattr__ トリップワイヤなら分かる。Python は通常のルックアップが失敗した
-*後にのみ* __getattr__ を呼ぶので、それはまさにクラッシュの瞬間そのものである。
-クラスに仕掛ければ、クラッシュが完全に記述されたイベントに変わる: 読んでいる
-フレーム、その行番号、そのローカル変数。つまり分岐が何をしていて LLM が直前に
-何を決めたのかが取れる。
+__getattr__ トリップワイヤなら分かる。
+Python は通常のルックアップが失敗した *後にのみ* __getattr__ を呼ぶので、
+それはまさにクラッシュの瞬間そのものである。
+クラスに仕掛ければ、クラッシュが完全に記述されたイベントに変わる: 読んでいるフレーム、その行番号、
+そのローカル変数。
+つまり分岐が何をしていて LLM が直前に何を決めたのかが取れる。
 
-挙動は保存される: トリップワイヤは常に標準メッセージで AttributeError を送出
-するので、hasattr() は従来どおり False を返し、既存のコード経路は以前と全く
-同じものを見る。このクラスは自前の __getattr__ を持っていない（リコンダンプで
-確認済み）。将来それが変わった場合に備え、元のものへ委譲する経路も用意してある。
+挙動は変わらない。
+トリップワイヤは常に標準のメッセージで AttributeError を送出するので、
+hasattr() は従来どおり False を返し、既存のコード経路は以前と全く同じものを見る。
+このクラスは自前の __getattr__ を持っていない（リコンダンプで確認済み）。
+将来それが変わった場合に備え、元のものへ委譲する経路も用意してある。
 """
 
 import sys
@@ -25,7 +27,8 @@ from instantale_modloader.frames import repr_value
 WATCH_CLASSES = ("FreeInputStart",)
 HIGHLIGHT = "facility_move_to"
 
-# Python 自身が投機的に探す属性名。記録してもノイズにしかならない。
+# Python 自身が投機的に探す属性名。
+# 記録してもノイズにしかならない。
 DUNDER_NOISE_PREFIX = "__"
 
 
@@ -43,7 +46,8 @@ def apply(ctx):
             ctx.log("{} not found in __main__; skipping".format(class_name), level="WARN")
             continue
 
-        # クラス属性の設定は patch.py を通さないので、二重に付かないようにするのは自前で行う。
+        # クラス属性の設定は patch.py を通さないので、
+        # 二重に付かないようにするのは自前で行う。
         # 自前の印が付いていれば、前回注入で仕掛けたものなので二重にしない。
         previous = cls.__dict__.get("__getattr__")
         if getattr(previous, "__instantale_tripwire__", False):
@@ -76,8 +80,8 @@ def apply(ctx):
                     except Exception:
                         pass
 
-                # 挙動は不変に保つ: 元の __getattr__ があれば委譲し、無ければ
-                # Python 標準と同一メッセージの AttributeError を送出する。
+                # 挙動は不変に保つ: 元の __getattr__ があれば委譲し、
+                # 無ければ Python 標準と同一メッセージの AttributeError を送出する。
                 if chained is not None:
                     return chained(self, name)
                 raise AttributeError("{!r} object has no attribute {!r}".format(

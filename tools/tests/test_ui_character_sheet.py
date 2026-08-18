@@ -3,8 +3,9 @@
 
     python tools/tests/test_ui_character_sheet.py
 
-偽の `scripts.hud.new_hud` / `InstanTaleHUD` / Kivy の Label と、実測に
-合わせた偽のセーブ（エリア表・手配度・スキル・特性）を差し込んで、次を確認する。
+偽の `scripts.hud.new_hud` / `InstanTaleHUD` / Kivy の Label と、
+実測に合わせた偽のセーブ（エリア表・手配度・スキル・特性）を差し込んで、
+次を確認する。
 
   寸法     … 枠が窓に対する割合（PANEL_*）どおりに置かれる
   不変     … 何度開いても同じ寸法（開くたびに当て直しても膨らまない）
@@ -25,11 +26,11 @@
   特性      … ゲームが空のまま置いている箱に入る（元は中央寄せ・広い余白）
   別人      … 人物欄に出ている名前が別人なら、その相手の値を出す
 
-ゲーム側の作り（`212_probe_character_sheet` で採寸。窓 1920x1000）:
-枠 810x497 `pos_hint {center_x:0.37, center_y:0.68}`、
-`character_sheet_empty` は毎回 `text=''`、
-`player.skills` は `{名前: {...}}`、`player.traits` は `[{'name':...}]`、
-`player.area_history` は `{エリアid: {'lawfulness': 10, ...}}`。
+ゲーム側の作り（`212_probe_character_sheet` で採寸。
+窓 1920x1000）: 枠 810x497 `pos_hint {center_x:0.37, center_y:0.68}`、
+`character_sheet_empty` は毎回 `text=''`、`player.skills` は `{名前: {...}}`、
+`player.traits` は `[{'name':...}]`、`player.area_history` は
+`{エリアid: {'lawfulness': 10, ...}}`。
 """
 import importlib.util
 import io

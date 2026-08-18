@@ -7,19 +7,23 @@
     File "...\\kivy\\input\\providers\\wm_common.py", line 115, in _closure
     ctypes.ArgumentError: argument 3: TypeError: wrong type
 
-Kivy は終了処理の中で、乗っ取っていたウィンドウプロシージャ（WndProc）を
-元に戻そうとする。そのとき保存しておいたハンドラを ctypes が受け付けずに
-落ちている。
+Kivy は終了処理の中で、
+乗っ取っていたウィンドウプロシージャ（WndProc）を元に戻そうとする。
+そのとき保存しておいたハンドラを ctypes が受け付けずに落ちている。
 
 これを他より先に直す理由は2つ。
 
-1つ目。これは stopTouchApp() から呼ばれる ＝「本当に落ちた原因」の後始末をして
-いる最中に発生するので、本来知りたかった原因がこのエラーで上書きされてしまう
-（該当箇所は例外なく "During handling of the above exception, another exception
-occurred" で始まる）。先にこれを潰さないと、他のバグの調査が進まない。
+1つ目。
+これは stopTouchApp() から呼ばれる ＝「本当に落ちた原因」の後始末をしている最中に発生するので、
+本来知りたかった原因がこのエラーで上書きされてしまう（該当箇所は例外なく "During
+handling of the above exception, another exception occurred" で始まる）。
+先にこれを潰さないと、他のバグの調査が進まない。
 
-2つ目。この処理は実質的に無意味である。直後に破棄されるウィンドウの WndProc を
-戻しているだけなので、失敗しても目に見える影響はない。つまり握り潰しても安全。
+2つ目。
+この処理は実質的に無意味である。
+直後に破棄されるウィンドウの WndProc を戻しているだけなので、
+失敗しても目に見える影響はない。
+つまり握り潰しても安全。
 
 パッチの中身は、元の処理をそのまま呼び、失敗したときだけ以下を行う。
 
@@ -42,9 +46,10 @@ from ctypes import wintypes
 GWL_WNDPROC_DEFAULT = -4
 
 # user32 を自前で読み込み直している。
-# ctypes の windll.user32 はプロセス全体で共有されていて、Kivy はそこの
-# SetWindowLongPtrW に argtypes/restype を設定済み。同じオブジェクトを触ると
-# Kivy 自身の呼び出しを壊してしまうので、別のハンドルを取って独立させている。
+# ctypes の windll.user32 はプロセス全体で共有されていて、
+# Kivy はそこの SetWindowLongPtrW に argtypes/restype を設定済み。
+# 同じオブジェクトを触ると Kivy 自身の呼び出しを壊してしまうので、
+# 別のハンドルを取って独立させている。
 _user32 = ctypes.WinDLL("user32", use_last_error=True)
 _raw_set = getattr(_user32, "SetWindowLongPtrW", None) or _user32.SetWindowLongW
 _raw_set.restype = ctypes.c_ssize_t
@@ -73,7 +78,8 @@ def apply(ctx):
         ctx.log("kivy.input.providers.wm_common not loaded; nothing to patch", level="WARN")
         return
 
-    # 本来は wm_common が持っている定数。念のため無い場合の既定値も用意しておく。
+    # 本来は wm_common が持っている定数。
+    # 念のため無い場合の既定値も用意しておく。
     gwl_wndproc = getattr(wm_common, "GWL_WNDPROC", GWL_WNDPROC_DEFAULT)
 
     @ctx.wrap("kivy.input.providers.wm_common:SetWindowLong_WndProc_wrapper")
@@ -81,8 +87,8 @@ def apply(ctx):
         # 失敗したときだけでなく、呼ばれるたびにログを出している。
         # 修正を入れた後の最初の終了はきれいに終わったのに何も記録が残らず、
         # 「ガードが効いた」のか「今回はたまたま出なかった」のか区別できなかった。
-        # 記録に残る 47 件も日を跨いでばらけていて、毎回出るわけではない
-        # （VERIFICATION_LOG.md §2.1）。
+        # 記録に残る 47 件も日を跨いでばらけていて、
+        # 毎回出るわけではない（VERIFICATION_LOG.md §2.1）。
         # なおこの関数が呼ばれるのは入力プロバイダの開始・終了時だけなので、
         # 毎回ログしても1セッションで数行にしかならない。
         ctx.log("SetWindowLong_WndProc_wrapper called: hWnd={!r} ({}) wndProc={!r} ({})".format(
@@ -90,7 +96,8 @@ def apply(ctx):
         try:
             result = orig(hWnd, wndProc)
         except Exception as exc:
-            # 失敗したときは引数の値と型を残す。これが原因特定の材料になる。
+            # 失敗したときは引数の値と型を残す。
+            # これが原因特定の材料になる。
             ctx.log(
                 "SetWindowLong_WndProc_wrapper failed: {}: {} | "
                 "hWnd={!r} ({}) wndProc={!r} ({})".format(
@@ -122,7 +129,8 @@ def apply(ctx):
 
     # エイリアス走査がどこまで届いたかを確認しておく。
     # ここが False なら wm_pen / wm_touch は元の関数を呼び続けていて、
-    # このパッチは効いていない。黙って外れているのが一番困るので明示的に出す。
+    # このパッチは効いていない。
+    # 黙って外れているのが一番困るので明示的に出す。
     for name in ("wm_pen", "wm_touch"):
         module = sys.modules.get("kivy.input.providers." + name)
         if module is None:

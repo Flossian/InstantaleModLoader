@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-"""機能追加: 訓練で得た経験値を、**同行中の仲間にも**入れる。
+"""機能追加: 訓練で得た経験値を、同行中の仲間にも入れる。
 
-宿屋で月日を訓練に充てるとプレイヤーは経験値を得てレベルが上がるが、隣で同じ
-時間を過ごしている仲間は何も変わらない。この mod は**プレイヤーが訓練で経験値を
-得た瞬間に、同じぶんを同行者にも入れてレベルアップまで通す**。
+宿屋で月日を訓練に充てるとプレイヤーは経験値を得てレベルが上がるが、
+隣で同じ時間を過ごしている仲間は何も変わらない。
+この mod は**プレイヤーが訓練で経験値を得た瞬間に、
+同じぶんを同行者にも入れてレベルアップまで通す**。
 
 ## 経験値の計算式は読まない。プレイヤーへの支給を横取りする
 
@@ -14,42 +15,49 @@
     Character.levelup()         上げる（HP・能力値の更新まで持っている）
 
 訓練で何点入るのかは `scripts.functions.get_training_experience_point()` /
-`get_days_elapsed_experience_point()` が決めているが、**こちらでその式を再現する
-必要は無い。** `gain_exp` を包み、**プレイヤーに入った点数をそのまま仲間に渡す**。
-式・宿の等級・月数・才能の扱いが将来変わっても、支給される点数を写すだけなので
-ずれない（TECH.md §6.2「語彙を推測するくらいなら、語彙を知らずに済む経路を探す」）。
+`get_days_elapsed_experience_point()` が決めているが、
+こちらでその式を再現する必要は無い。
+`gain_exp` を包み、**プレイヤーに入った点数をそのまま仲間に渡す**。
+式・宿の等級・月数・才能の扱いが将来変わっても、
+支給される点数を写すだけなのでずれない（TECH.md §6.2「語彙を推測するくらいなら、
+語彙を知らずに済む経路を探す」）。
 
-レベルアップも自分では計算しない。`gain_exp` が内部で上げてしまうビルドと、
-呼び出し元が `check_levelup` → `levelup` を回すビルドの**どちらでも**辻褄が合うよう、
-**レベルが動いていなければ `check_levelup` を聞いてから `levelup`** を呼ぶ形にして
-ある。上がらなければ何も起きない。
+レベルアップも自分では計算しない。
+`gain_exp` が内部で上げてしまうビルドと、
+呼び出し元が `check_levelup` → `levelup` を回すビルドのどちらでも辻褄が合うよう、**レベルが動いていなければ
+`check_levelup` を聞いてから `levelup`** を呼ぶ形にしてある。
+上がらなければ何も起きない。
 
 ## 「訓練の中か」は自分の包みで印を立てる（戦闘の経験値には触らない）
 
-`gain_exp` は戦闘でも通る。**訓練の場面だけ**に効かせたいので、訓練マネージャの
-`execute` を包み、その中だけ**スレッドごとの印**を立てる:
+`gain_exp` は戦闘でも通る。
+訓練の場面だけに効かせたいので、訓練マネージャの `execute` を包み、
+その中だけスレッドごとの印を立てる:
 
     VacationTrainManager                宿屋で月日を訓練に充てる（`quality` は宿の等級）
     TrainingStartManager                施設の主に年月と代金を払って教わる
     TrainingPhaseManager                その訓練の各段（技能の習得・強化）
-    VacationRestManager                 宿屋での休養（**既定では対象外**）
+    VacationRestManager                 宿屋での休養（既定では対象外）
 
-**宿屋の訓練（`VacationTrainManager`）が本命**だが、施設での訓練も同じ「訓練」なので
-既定で両方入れてある。どちらがどの画面なのかは設定で切れる。休養は「訓練した際に」
-という依頼の趣旨から外れるので既定オフ。
+**宿屋の訓練（`VacationTrainManager`）が本命**だが、
+施設での訓練も同じ「訓練」なので既定で両方入れてある。
+どちらがどの画面なのかは設定で切れる。
+休養は「訓練した際に」という依頼の趣旨から外れるので既定オフ。
 
-印がスレッドごとなのは、訓練が別スレッドで走る（`execute` は `threading.run` の上）
-一方で、判定するのは同じスレッドで同期的に呼ばれる `gain_exp` だから。別スレッドの
-戦闘の支給と混ざらない。
+印がスレッドごとなのは、訓練が別スレッドで走る（`execute` は `threading.run` の上）一方で、
+判定するのは同じスレッドで同期的に呼ばれる `gain_exp` だから。
+別スレッドの戦闘の支給と混ざらない。
 
-### ここで `frames.MethodWatch` を使うと**必ず誤爆する**
+### ここで `frames.MethodWatch` を使うと必ず誤爆する
 
-`304_` のようにスタックを見る手も考えたが、この mod は**見張りたい `execute` を
-自分で包む**ので成立しない。`MethodWatch` は最初に呼ばれた時点で
-`getattr(cls, "execute").__code__` を表にする。そのときそこに載っているのは
-**ローダのラッパのコードオブジェクト**で、これは `patch.py` の全パッチが共有している
-（ラッパは関数として別物でも `__code__` は同一）。つまり「包まれた関数が1つでも
-スタックに載っていれば訓練の中」になり、戦闘の経験値まで写してしまう。
+`304_` のようにスタックを見る手も考えたが、
+この mod は**見張りたい `execute` を自分で包む**ので成立しない。
+`MethodWatch` は最初に呼ばれた時点で `getattr(cls, "execute").__code__` を表にする。
+そのときそこに載っているのは **ローダのラッパのコードオブジェクト**で、
+これは `patch.py` の全パッチが共有している（ラッパは関数として別物でも
+`__code__` は同一）。
+つまり「包まれた関数が1つでもスタックに載っていれば訓練の中」になり、
+戦闘の経験値まで写してしまう。
 `frames.MethodWatch` の docstring にも同じ注意を書いた。
 
 ## 出すのは「プレイヤーの獲得経験値」の後
@@ -60,35 +68,37 @@
     player.gain_exp(686852)              ← こちらが割り込む位置
     add_text('156の経験値を得た。')        ← プレイヤーの獲得経験値（表示は156）
 
-**`gain_exp` の中で出すと、プレイヤーの獲得経験値より先に仲間の話が出る。** そこで
-文言はいったん溜め、**ゲームが次の行を出した後**に流す（`add_text` を包む）。
-「経験値を得た」という文面では見分けない。表示の言い回しに寄りかからずに済み、
-言語が変わっても順序は変わらないため。1行も出さずに訓練が終わるビルドのために、
+`gain_exp` の中で出すと、プレイヤーの獲得経験値より先に仲間の話が出る。
+そこで文言はいったん溜め、ゲームが次の行を出した後に流す（`add_text` を包む）。
+「経験値を得た」という文面では見分けない。
+表示の言い回しへ寄りかからずに済み、言語が変わっても順序は変わらないため。
+1行も出さずに訓練が終わるビルドのために、
 セッションの終わりで必ず流す受け皿を置いてある。
 
-**支給の点数と表示の数字は別物**（686852 を写して、画面には 156 と出る）。だから
-こちらの文言に数値は入れない。`calculate_current_gained_exp_on_display()` の
-換算を再現することになるため。
+**支給の点数と表示の数字は別物**（686852 を写して、画面には 156 と出る）。
+だからこちらの文言に数値は入れない。
+`calculate_current_gained_exp_on_display()` の換算を再現することになるため。
 
 ## ゲームが自分で仲間に配っていたら、その相手には渡さない
 
-同じ訓練の中でゲーム自身が仲間の `gain_exp` を呼んだら、その id を控えて**以後
-こちらからは渡さない**（二重取りになる）。将来ゲーム側が仲間にも配るようになったら、
-この mod は黙って何もしなくなる。
+同じ訓練の中でゲーム自身が仲間の `gain_exp` を呼んだら、
+その id を控えて**以後こちらからは渡さない**（二重取りになる）。
+将来ゲーム側が仲間にも配るようになったら、この mod は黙って何もしなくなる。
 
 ## 見えなかったときに黙って終わらない
 
-`gain_exp` を通らない支給（`experience_point` を直接書く経路）があると、写すものが
-無いまま終わる。それを黙って見過ごさないよう、訓練の `execute` を包んで
-**前後のレベルと経験値を必ず1行残す**。写せなかったのに数値が動いていたら `WARN` で
-書くので、`out/party_train_exp.log` を見れば「効いていない」と「支給が無かった」が
-区別できる。
+`gain_exp` を通らない支給（`experience_point` を直接書く経路）があると、
+写すものが無いまま終わる。
+それを黙って見過ごさないよう、訓練の
+`execute` を包んで **前後のレベルと経験値を必ず1行残す**。
+写せなかったのに数値が動いていたら `WARN` で書くので、
+`out/party_train_exp.log` を見れば「効いていない」と「支給が無かった」が区別できる。
 
 ## セーブはしない
 
-仲間の経験値は `world.characters` の上なので、ゲームが次に保存した時点で一緒に
-残る。訓練は月日が進む処理（＝ゲーム自身が保存する場面）なので、こちらから
-`save_game()` を呼んで割り込むことはしない。
+仲間の経験値は `world.characters` の上なので、ゲームが次に保存した時点で一緒に残る。
+訓練は月日が進む処理（＝ゲーム自身が保存する場面）なので、
+こちらから `save_game()` を呼んで割り込むことはしない。
 """
 
 import threading
@@ -99,19 +109,22 @@ LOG_BASENAME = "party_train_exp.log"
 LOG_TAG = "train exp"
 
 # ---------------------------------------------------------------- 何を捕まえるか
-# 宿屋で月日を訓練に充てる経路。**これが本命**（`__init__(self, app, months,
-# quality)` / `change_background_image_to_inn_room(quality)` から宿屋と判断）。
+# 宿屋で月日を訓練に充てる経路。
+# これが本命（`__init__(self, app, months, quality)` /
+# `change_background_image_to_inn_room(quality)` から宿屋と判断）。
 INN_TRAINING_MANAGERS = ("VacationTrainManager",)
 
-# 施設の主に年月と代金を払って教わる経路（`__init__(self, app, training_years,
-# training_price)`）と、その各段。
+# 施設の主に年月と代金を払って教わる経路（`__init__(self, app, training_years, training_price)`）と、
+# その各段。
 FACILITY_TRAINING_MANAGERS = ("TrainingStartManager", "TrainingPhaseManager")
 
-# 宿屋での休養。訓練ではないので既定では対象にしない。
+# 宿屋での休養。
+# 訓練ではないので既定では対象にしない。
 REST_MANAGERS = ("VacationRestManager",)
 
-# 印を立てる入口。マネージャは `process_choice` から `execute` で起こされる
-# （GAME.md §2.2）ので、ここを包めば訓練1回がまるごと挟まる。
+# 印を立てる入口。
+# マネージャは `process_choice` から `execute` で起こされる（GAME.md §2.2）ので、
+# ここを包めば訓練1回がまるごと挟まる。
 SESSION_METHOD = "execute"
 
 # ---------------------------------------------------------------- 動作（設定）
@@ -121,10 +134,13 @@ SHARE_INN_TRAINING = True
 # 施設での訓練（`TrainingStartManager` / `TrainingPhaseManager`）でも入れるか。
 SHARE_FACILITY_TRAINING = True
 
-# 宿屋での休養でも入れるか。**訓練ではない**ので既定オフ。
+# 宿屋での休養でも入れるか。
+# 訓練ではないので既定オフ。
 SHARE_REST = False
 
-# 仲間に渡す割合。1.0 でプレイヤーと同じ点数。0.5 なら半分。
+# 仲間に渡す割合。
+# 1.0 でプレイヤーと同じ点数。
+# 0.5 なら半分。
 # 0 より大きい支給が 0 点に丸まるときは 1 点にする（何も起きないより分かりやすい）。
 SHARE_RATIO = 1.0
 
@@ -132,8 +148,9 @@ SHARE_RATIO = 1.0
 ANNOUNCE_LEVELUP = True
 
 # 経験値が入ったことも画面に出すか（レベルが上がらなくても1行出る）。
-# **既定 ON。** 高レベルでは1回の訓練ではレベルが上がらないので、これが無いと
-# 画面上は何も起きていないように見える。
+# 既定 ON。
+# 高レベルでは1回の訓練ではレベルが上がらないので、
+# これが無いと画面上は何も起きていないように見える。
 ANNOUNCE_GAIN = True
 
 # ---------------------------------------------------------------- 文言
@@ -145,17 +162,19 @@ NAME_SEPARATOR = "、"
 # 1回の支給で回すレベルアップの上限（`check_levelup` が下がらないビルドでの保険）。
 MAX_LEVELUPS = 20
 
-# 訓練の外での支給（＝戦闘など）を記録する本数の上限。**触らないが、経験値の
-# 経路がどこを通っているかはこれで分かる。** 0 にすると記録しない。
+# 訓練の外での支給（＝戦闘など）を記録する本数の上限。
+# **触らないが、経験値の経路がどこを通っているかはこれで分かる。**
+# 0 にすると記録しない。
 TRACE_OTHER_GAINS = 20
 
 
 def apply(ctx):
     log_path = ctx.out_path(LOG_BASENAME)
 
-    # 訓練は別スレッドで走る（`execute` は `threading.run` の上）。印と控えは
-    # **スレッドごと**に持つ ― プロセス全体で共有すると、訓練中に別スレッドで
-    # 起きた戦闘の経験値まで「訓練の中」に見えてしまう。
+    # 訓練は別スレッドで走る（`execute` は `threading.run` の上）。
+    # 印と控えはスレッドごとに持つ。
+    # プロセス全体で共有すると、
+    # 訓練中に別スレッドで起きた戦闘の経験値まで「訓練の中」に見えてしまう。
     local = threading.local()
 
     state = {
@@ -192,7 +211,7 @@ def apply(ctx):
         return value if isinstance(value, (int, float)) else None
 
     def is_player(app, character):
-        """その Character がプレイヤーか。**同一性を先に見る。**"""
+        """その Character がプレイヤーか。同一性を先に見る。"""
         player = getattr(app, "player", None)
         if player is not None and character is player:
             return True
@@ -206,8 +225,8 @@ def apply(ctx):
         if isinstance(exp, int) and not isinstance(exp, bool):
             value = int(round(value))
             if value <= 0:
-                # 端数で消えるくらいなら1点入れる（0 だと何も起きず、設定が
-                # 効いていないのと区別が付かない）。
+                # 端数で消えるくらいなら1点入れる（0 だと何も起きず、
+                # 設定が効いていないのと区別が付かない）。
                 value = 1
         return value
 
@@ -271,10 +290,10 @@ def apply(ctx):
             local.mirroring = False
 
     def level_up(member, before_level):
-        """上がるぶんだけレベルを上げる。**上がらなければ何もしない。**
+        """上がるぶんだけレベルを上げる。上がらなければ何もしない。
 
-        `gain_exp` が内部で上げてしまうビルドでは `check_levelup` が False を返す
-        ので、ここは素通りになる（二重に上げない）。
+        `gain_exp` が内部で上げてしまうビルドでは `check_levelup` が
+        False を返すので、ここは素通りになる（二重に上げない）。
         """
         gained = []
         for _ in range(MAX_LEVELUPS):
@@ -292,7 +311,8 @@ def apply(ctx):
             level = level_of(member)
             gained.append(level)
             if level is not None and before_level is not None and level <= before_level:
-                # 上げたのに数値が動いていない＝この先も止まらない。打ち切る。
+                # 上げたのに数値が動いていない＝この先も止まらない。
+                # 打ち切る。
                 write("WARN levelup did not raise experience_level ({}); stopping"
                       .format(level))
                 break
@@ -300,15 +320,15 @@ def apply(ctx):
         return gained
 
     # ------------------------------------------------------------ 画面に出す
-    # **その場では出さない。** 訓練1回の並びはこうなっている（GAME.md §2.17）:
+    # その場では出さない。訓練1回の並びはこうなっている（GAME.md §2.17）:
     #
     #     add_text('…はしばらくの期間を訓練に費やした...')
     #     player.gain_exp(N)                     ← こちらが割り込む位置
     #     add_text('156の経験値を得た。')          ← プレイヤーの獲得経験値
     #
     # ここで出すと**プレイヤーの獲得経験値より先**に仲間の話が出てしまう。文言は
-    # 溜めておき、**ゲームが次の行を出した後**に流す（`add_text` を包む）。
-    # 「経験値を得た」という文面では見分けない ― 表示の言い回しに寄りかからずに
+    # 溜めておき、ゲームが次の行を出した後に流す（`add_text` を包む）。
+    # 「経験値を得た」という文面では見分けない。表示の言い回しに寄りかからずに
     # 済むし、言語が変わっても順序は変わらないため。
     def queue_messages(gained, leveled):
         """出す文言を溜める（この時点では画面に出さない）。"""
@@ -327,7 +347,7 @@ def apply(ctx):
         pending.extend(messages)
 
     def flush(app, why):
-        """溜めた文言を流す。**流している間は自分の add_text で再入しない。**"""
+        """溜めた文言を流す。流している間は自分の add_text で再入しない。"""
         messages = getattr(local, "pending", None)
         if not messages or app is None:
             return
@@ -343,7 +363,7 @@ def apply(ctx):
             local.flushing = False
 
     def trace_other_gain(app, character, exp):
-        """訓練の外での支給を、上限つきで記録する（**何もしない**）。"""
+        """訓練の外での支給を、上限つきで記録する（何もしない）。"""
         if TRACE_OTHER_GAINS <= 0 or state["traced"] >= TRACE_OTHER_GAINS:
             return
         state["traced"] += 1
@@ -355,8 +375,8 @@ def apply(ctx):
     def gain_exp(orig, self, exp=0, *args, **kwargs):
         """プレイヤーが訓練で経験値を得たら、同じぶんを同行者にも入れる。
 
-        **元の処理を先に通す**（プレイヤーの支給はゲームの仕事のまま）。写すのは
-        その後で、こちらが失敗してもプレイヤー側の結果は返る。
+        元の処理を先に通す（プレイヤーの支給はゲームの仕事のまま）。
+        写すのはその後で、こちらが失敗してもプレイヤー側の結果は返る。
         """
         result = orig(self, exp, *args, **kwargs)
         try:
@@ -370,7 +390,8 @@ def apply(ctx):
             source = in_training()
             if not is_player(app, self):
                 if source is not None:
-                    # ゲーム自身が仲間に配った。二重取りを避けるため控える。
+                    # ゲーム自身が仲間に配った。
+                    # 二重取りを避けるため控える。
                     member_id = ui.element_id(self)
                     given_ids().add(member_id)
                     write("{}: the game gave {} exp to {!r} itself".format(
@@ -386,7 +407,7 @@ def apply(ctx):
 
     @ctx.wrap("__main__:InstantaleApp.add_text", required=False)
     def add_text(orig, self, context=None, *args, **kwargs):
-        """ゲームが1行出したら、溜めてある仲間の話をその**後ろ**に流す。
+        """ゲームが1行出したら、溜めてある仲間の話をその後ろに流す。
 
         溜まっているときしか何もしないので、普段の描画には触らない。
         """
@@ -399,9 +420,10 @@ def apply(ctx):
         return result
 
     # -------------------------------------------------- 訓練1回ぶんの記録
-    # `execute` を包んで、前後のレベルと経験値を必ず1行残す。**写せなかったのに
-    # 数値が動いていたら WARN** ― 「mod が効いていない」と「そもそも支給が
-    # 無かった」を、ログだけで区別できるようにするため。
+    # `execute` を包んで、前後のレベルと経験値を必ず1行残す。
+    # **写せなかったのに数値が動いていたら WARN**。
+    # 「mod が効いていない」と「そもそも支給が無かった」を、
+    # ログだけで区別できるようにするため。
     def watch_session(cls_name):
         label = "{}.{}".format(cls_name, SESSION_METHOD)
         shared = cls_name in shared_managers()
@@ -412,8 +434,8 @@ def apply(ctx):
             player = getattr(app, "player", None) if app is not None else None
             before = (level_of(player), point_of(player)) if player is not None else None
             mirrored_before = state["mirrored"]
-            # 入れ子（`TrainingStartManager` から `TrainingPhaseManager`）でも
-            # 辻褄が合うよう、前の印は控えて必ず戻す。
+            # 入れ子（`TrainingStartManager` から
+            # `TrainingPhaseManager`）でも辻褄が合うよう、前の印は控えて必ず戻す。
             outer_sharing = getattr(local, "sharing", None)
             outer_given = getattr(local, "given", None)
             local.sharing = label if shared else outer_sharing
@@ -425,9 +447,9 @@ def apply(ctx):
                 local.sharing = outer_sharing
                 local.given = outer_given
                 try:
-                    # ゲームがこの後1行も出さなかったときの受け皿。**訓練が
-                    # 終わってもまだ溜まっているなら、ここで必ず流す**
-                    # （出さずに終わると、次の訓練の途中で混ざる）。
+                    # ゲームがこの後1行も出さなかったときの受け皿。
+                    # **訓練が終わってもまだ溜まっているなら、
+                    # ここで必ず流す**（出さずに終わると、次の訓練の途中で混ざる）。
                     flush(app, "at the end of the training")
                 except Exception:
                     ctx.log_exc("train exp: cannot say the companions' lines")

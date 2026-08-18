@@ -11,10 +11,12 @@ BGM はエリアが作られたときに一度だけ決まり、そのままセ�
 size はエリアの種類（town / village / city / dungeons / battle）、
 mood は雰囲気（calm, eerie, solemn ...）を表す。
 
-実セーブ（3ワールド・107 エリア）を調べると、偏っていたのは曲の選択ではなく
-**mood の選択**だった。集落系は 9 種類ある mood のうち 5 種類しか使われず、
-mood フォルダにある 97 曲のうち 50 曲が一度も選ばれていない。calm フォルダだけで
-12 曲あるが、そのどれにも到達できない状態になっていた（VERIFICATION_LOG.md §2.4）。
+実セーブ（3ワールド・107 エリア）を調べると、
+偏っていたのは曲の選択ではなく mood の選択だった。
+集落系は 9 種類ある mood のうち 5 種類しか使われず、
+mood フォルダにある 97 曲のうち 50 曲が一度も選ばれていない。
+calm フォルダだけで 12 曲あるが、そのどれにも到達できない状態になっていた（VERIFICATION_LOG.md
+§2.4）。
 
 何をするか
 ----------
@@ -26,34 +28,39 @@ size はエリアの種類という事実であって、好みの問題ではな
 mood 単位ではなく曲単位で均しているのは意図的。
 「いつも同じ曲が流れる」という印象を決めるのは実際に耳にする曲の種類数なので、
 6 曲を持つ mood が 1 曲しか持たない mood より多くのエリアを引き受けるのは、
-むしろ自然な結果と考えている。もちろん、どの mood も使われないままにはならない。
+むしろ自然な結果と考えている。
+もちろん、どの mood も使われないままにはならない。
 
 最少優先に加えてもう1つルールがある。
 そのエリアの今の曲が既に最少グループに入っているなら、変更せずそのままにする。
 この結果、同じデータに対して何度実行しても結果が変わらない。
 フックが何回発火しても壊れないので、どのフックを使うかを厳密に決めなくて済む。
 
-**「生成側が選んだ mood を優先する」ルールは入れない。** その mood に未使用の曲が
-残っている限り選ばれ続けるので、取り除きたい偏りがそのまま復活する（実データで確認）。
+「生成側が選んだ mood を優先する」ルールは入れない。
+その mood に未使用の曲が残っている限り選ばれ続けるので、
+取り除きたい偏りがそのまま復活する（実データで確認）。
 同率最少の曲は一様に選び、結果として mood の使われ方は各 mood の曲数に比例する。
 
 どこまで触るか
 --------------
 書き換えるのは、注入した後に新しく現れたエリアだけ。
-mod が最初にワールドを見た時点で既にあったエリアは、集計には数えるが
-書き換えはしない（数えるのは、新しいエリアが「使われすぎている曲」を
-避けられるようにするため）。プレイヤーが既に知っている場所の音楽を
-後から変えるのは、この mod の役目ではないと考えている。
+mod が最初にワールドを見た時点で既にあったエリアは、
+集計には数えるが書き換えはしない（数えるのは、
+新しいエリアが「使われすぎている曲」を避けられるようにするため）。
+プレイヤーが既に知っている場所の音楽を後から変えるのは、
+この mod の役目ではないと考えている。
 既存ワールドをまとめて均したい場合は tools/rebalance_saved_bgm.py を使う。
 
-もう1つ触らないものがある。musics/ の直下に置かれた曲
-（それ以外.mp3 や JDSherbert のアンビエント）を指しているエリア。
-これらは mood のセットではなく単発の曲なので、そこを指しているのは
-偏りではなく意図的な指定と解釈している。
+もう1つ触らないものがある。
+musics/ の直下に置かれた曲（それ以外.mp3 や
+JDSherbert のアンビエント）を指しているエリア。
+これらは mood のセットではなく単発の曲なので、
+そこを指しているのは偏りではなく意図的な指定と解釈している。
 
 フックについて
 --------------
-以下の3つを対象にしている。いずれも out/recon/targets.txt に実在を確認済み。
+以下の3つを対象にしている。
+いずれも out/recon/targets.txt に実在を確認済み。
 
     save_area_json:write_area_data_to_world_dict(world_dict, area_id)
     save_area_json:generate_quest_area(world_dict, quest_value, next_area_id)
@@ -62,9 +69,9 @@ mod が最初にワールドを見た時点で既にあったエリアは、集�
 確認できていないのは、bgm の値が実際にどこで決まっているのか。
 ソースがコンパイル済みなので、これは調べようがない。
 上2つは対象のエリア id を引数で受け取るのでピンポイントに均せる。
-最後の1つはセーブがディスクに書かれる際に必ず通る、取りこぼし防止用。
-どれが発火しても結果は同じになるようにしてあり、実際にどれだったかは
-out/bgm.log を見れば分かる。
+最後の1つはセーブがディスクへ書かれる際に必ず通る、取りこぼし防止用。
+どれが発火しても結果は同じにしてある。
+実際にどれだったかは out/bgm.log を見れば分かる。
 """
 
 import os
@@ -86,7 +93,8 @@ DEFAULT_PREFIX = "Assets/sounds/musics"
 DEFAULT_SEP = "/"
 
 # 実データでは 6 エリアが bgm "" を持っていた（Astergrave の 2/3/5/6/8、dos の 3）。
-# つまり無音の町や都市。size さえ分かれば曲を選べるので、これらにも曲を入れている。
+# つまり無音の町や都市。
+# size さえ分かれば曲を選べるので、これらにも曲を入れている。
 # 無音のままにしたい場合は False にする。
 FILL_MISSING = True
 
@@ -101,11 +109,12 @@ _seen = {}                      # ワールド -> 最初に見たときに存在
 def parse_bgm(src):
     """bgm のパスを (prefix, size, mood, 曲名, 区切り文字) に分解する。
 
-    prefix は ".../musics" までの前半部分。ここをそのまま残して使い回すので、
+    prefix は ".../musics" までの前半部分。
+    ここをそのまま残して使い回すので、
     書き換えた値がゲーム自身の書く値と同じ見た目になる。
 
-    mood フォルダ内の曲でないものには None を返す。具体的には、
-    空文字列、musics/ 直下のファイル、音声以外の拡張子。
+    mood フォルダ内の曲でないものには None を返す。
+    具体的には、空文字列、musics/ 直下のファイル、音声以外の拡張子。
     """
     if not isinstance(src, str) or not src.strip():
         return None
@@ -137,10 +146,10 @@ def build_bgm(prefix, size, mood, track, sep):
 def size_folder(area, pool):
     """このエリアがどのフォルダから曲を引くかを決める。基準は area["size"]。
 
-    今入っている bgm のパスから逆算する方法も考えられるが、それだと
-    誤ったフォルダに入っているエリアが永久に直らない。たとえば size が
-    dungeon なのにパスが town/ を指しているエリアは、以後もずっと town/ の
-    中で選び直されてしまう。
+    今入っている bgm のパスから逆算する方法も考えられるが、
+    それだと誤ったフォルダに入っているエリアが永久に直らない。
+    たとえば size が dungeon なのにパスが town/ を指しているエリアは、
+    以後もずっと town/ の中で選び直されてしまう。
     パスを見るのは、使える size を持たないエリアに対する保険としてだけ。
     """
     size = area.get("size") if isinstance(area, dict) else None
@@ -157,7 +166,8 @@ def size_folder(area, pool):
 
 def path_style(areas):
     """このワールドが実際に使っている (prefix, 区切り文字) を借りてくる。"""
-    # 1件でも解析できるパスがあれば、その書式に合わせる。無ければ既定値。
+    # 1件でも解析できるパスがあれば、その書式に合わせる。
+    # 無ければ既定値。
     for aid in area_order(areas):
         parsed = parse_bgm((areas.get(aid) or {}).get("bgm"))
         if parsed is not None:
@@ -169,7 +179,8 @@ def current_choice(area, folder):
     """このエリアが今持っている (mood, 曲名)。使えない場合は (None, None)。
 
     (None, None) は「尊重すべき現在の選択が無い」という意味。
-    bgm が空のときと、入っていても size が示すフォルダの外を指しているときが該当する。
+    bgm が空のときと、入っていても
+    size が示すフォルダの外を指しているときが該当する。
     """
     parsed = parse_bgm((area or {}).get("bgm"))
     if parsed is None or parsed[1] != folder:
@@ -181,8 +192,8 @@ def is_special(area):
     """mood フォルダの外を指している bgm かどうか。該当するものは一切触らない。
 
     musics/ の直下に置かれた曲（それ以外.mp3 や JDSherbert のアンビエント）は
-    mood のセットではなく単発の曲。エリアがそこを指しているなら、それは
-    均すべき偏りではなく意図的な指定と見なす。
+    mood のセットではなく単発の曲。
+    エリアがそこを指しているなら、それは均すべき偏りではなく意図的な指定と見なす。
     """
     raw = (area or {}).get("bgm")
     return bool(raw) and isinstance(raw, str) and raw.strip() != "" \
@@ -195,8 +206,8 @@ def is_special(area):
 def music_root():
     """Assets/sounds/musics の場所を探す。
 
-    リコンの結果ではゲームプロセスのカレントディレクトリがゲーム本体の
-    フォルダになっていたので、まずそこを見る。
+    リコンの結果ではゲームプロセスのカレントディレクトリがゲーム本体のフォルダになっていたので、
+    まずそこを見る。
     """
     seen = []
     # カレントディレクトリ → 実行ファイルのある場所 → sys.prefix の順で試す。
@@ -240,8 +251,9 @@ def scan_pool(root):
         for mood in moods:
             mood_dir = os.path.join(size_dir, mood)
             if not os.path.isdir(mood_dir):
-                # musics/battle/*.mp3 のように、mood フォルダを挟まず
-                # 直接曲が置かれている場所がある。ここは対象外。
+                # musics/battle/*.mp3 のように、
+                # mood フォルダを挟まず直接曲が置かれている場所がある。
+                # ここは対象外。
                 continue
             try:
                 names = sorted(os.listdir(mood_dir))
@@ -265,8 +277,9 @@ def scan_pool(root):
 def area_order(areas):
     """エリア id を数値順に並べる。
 
-    辞書順のままだと "10" が "2" より前に来てしまい、同じデータでも
-    処理の順番が直感と合わなくなる。数値にできない id は後ろにまとめる。
+    辞書順のままだと "10" が "2" より前に来てしまい、
+    同じデータでも処理の順番が直感と合わなくなる。
+    数値にできない id は後ろにまとめる。
     """
     def key(aid):
         try:
@@ -280,8 +293,9 @@ def count_usage(areas, pool, skip_id=None):
     """曲ごとの使用回数を数える。{フォルダ: {(mood, 曲名): 回数}}。"""
     counts = {}
     for aid in areas:
-        # skip_id はこれから選び直すエリア。自分自身を数えてしまうと、
-        # 今の曲の回数が 1 多く見えて、最少グループから外れてしまう。
+        # skip_id はこれから選び直すエリア。
+        # 自分自身を数えてしまうと、今の曲の回数が 1 多く見えて、
+        # 最少グループから外れてしまう。
         if skip_id is not None and aid == skip_id:
             continue
         area = areas[aid]
@@ -305,7 +319,8 @@ def choose(tracks, counts, current_mood, current_track):
     lowest = min(counts.get(t, 0) for t in tracks)
     candidates = [t for t in tracks if counts.get(t, 0) == lowest]
 
-    # 既に十分ばらけているなら触らない。何度実行しても結果が変わらないのはこの分岐のおかげ。
+    # 既に十分ばらけているなら触らない。
+    # 何度実行しても結果が変わらないのはこの分岐のおかげ。
     if (current_mood, current_track) in candidates:
         return (current_mood, current_track)
     return _rng.choice(candidates)
@@ -347,8 +362,8 @@ def balance_world(areas, pool, only=None):
     """ワールド内のエリアを id 順に選び直す。
 
     only に id の集合を渡すと、書き換え対象をそこだけに限定できる。
-    同じデータに何度実行しても結果は変わらない（自分の順番が来た時点で
-    既に最少なら、そのまま維持されるため）。
+    同じデータに何度実行しても結果は変わらない（自分の順番が来た時点で既に最少なら、
+    そのまま維持されるため）。
     """
     prefix, sep = path_style(areas)
     counts = {}
@@ -406,11 +421,12 @@ def apply(ctx):
     def world_key(container):
         """ワールドを見分けるためのキー。名前が取れなければオブジェクト id で代用する。
 
-        **鍵の見方はローダの語彙**（`state.world_key_of_dict`）。ここに写した版は
-        `world_data["name"]` の1鍵しか見ておらず、`world_name` / `title` で
-        名前を持つ世界では毎回 id に落ちていた ― そうなると辞書が作り直される
-        たびに「初見」に戻り、既存エリアの除外がやり直しになる（集計が分断
-        されるだけで書き換えはしないので、壊れる方向ではない）。
+        鍵の見方はローダの語彙（`state.world_key_of_dict`）。
+        ここに写した版は `world_data["name"]` の1鍵しか見ておらず、
+        `world_name` / `title` で名前を持つ世界では毎回 id に落ちていた。
+        そうなると辞書が作り直されるたびに「初見」に戻り、
+        既存エリアの除外がやり直しになる（集計が分断されるだけで書き換えはしないので、
+        壊れる方向ではない）。
         """
         return world_key_of_dict(container, "id:{}".format(id(container)))
 
@@ -441,8 +457,8 @@ def apply(ctx):
         key = area_id if area_id in areas else str(area_id)
         if key not in areas:
             return
-        # このエリアは今この瞬間に存在している。後から「既存エリア」として
-        # 除外されないよう、ここで記録しておく。
+        # このエリアは今この瞬間に存在している。
+        # 後から「既存エリア」として除外されないよう、ここで記録しておく。
         _seen.setdefault(world_key(world_dict), set()).add(key)
         result = balance_area(areas, key, pool)
         if result:
@@ -456,7 +472,8 @@ def apply(ctx):
         key = world_key(container)
         known = _seen.get(key)
         if known is None:
-            # このワールドを見るのが初めて。今あるエリアは全て対象外として記録し、
+            # このワールドを見るのが初めて。
+            # 今あるエリアは全て対象外として記録し、
             # 次回以降に増えた分だけを新しいエリアとして扱う。
             _seen[key] = set(areas)
             write("[BALANCE] {} first sight of {!r}: {} existing area(s) "
@@ -471,10 +488,11 @@ def apply(ctx):
 
     installed = []
 
-    # 呼び出し側はコンパイル済みなので、引数が位置で渡されるのかキーワードで
-    # 渡されるのかを知る方法が無い。そこで各ラッパは *args/**kwargs をそのまま
-    # 元の関数へ渡し、自分に必要な値だけを「名前か位置」で取り出す。
-    # 見つからなければ何もせず、呼び出し自体は通常どおり通す。
+    # 呼び出し側はコンパイル済みなので、
+    # 引数が位置で渡されるのかキーワードで渡されるのかを知る方法が無い。
+    # そこで各ラッパは *args/**kwargs をそのまま元の関数へ渡し、
+    # 自分に必要な値だけを「名前か位置」で取り出す。見つからなければ何もせず、
+    # 呼び出し自体は通常どおり通す。
     def arg_at(args, kwargs, index, name):
         if name in kwargs:
             return kwargs[name]
@@ -484,7 +502,8 @@ def apply(ctx):
 
     @ctx.wrap("save_area_json:write_area_data_to_world_dict", required=False)
     def write_area_data_to_world_dict(orig, *args, **kwargs):
-        # 先に元の処理を実行する。bgm が書き込まれた後でないと選び直せない。
+        # 先に元の処理を実行する。
+        # bgm が書き込まれた後でないと選び直せない。
         result = orig(*args, **kwargs)
         try:
             world_dict = arg_at(args, kwargs, 0, "world_dict")
@@ -512,7 +531,8 @@ def apply(ctx):
 
     @ctx.wrap("save_world_json:write_obfuscated_json_file", required=False)
     def write_obfuscated_json_file(orig, *args, **kwargs):
-        # こちらは書き込みの前に選び直す。ディスクに出る内容そのものを直したいため。
+        # こちらは書き込みの前に選び直す。
+        # ディスクに出る内容そのものを直したいため。
         try:
             data = arg_at(args, kwargs, 1, "data")
             if data is not None:
@@ -572,8 +592,7 @@ def _self_test(ctx, pool):
     checks.append(("None ignored", parse_bgm(None) is None))
     checks.append(("round trip", build_bgm(*parse_bgm(real)[:4], sep="/") == real))
 
-    # --- 選び方のルール ---
-    # 3曲に対して6エリアなら、2/2/2 に分かれるはず。
+    # --- 選び方のルール --- 3曲に対して6エリアなら、2/2/2 に分かれるはず。
     fake = {"town": [("a", "1.mp3"), ("a", "2.mp3"), ("b", "3.mp3")]}
     areas = dict((str(i), {"bgm": "Assets/sounds/musics/town/a/1.mp3"}) for i in range(6))
     balance_world(areas, fake)

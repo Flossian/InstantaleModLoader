@@ -3,16 +3,17 @@
 
 ##### 何が起きているか
 
-フィールドイベント中にプレイヤーが行動を入力すると、`field_event_evaluator`
-（`quest_referee_event_evaluate_new`）が2つの値を返す:
+フィールドイベント中にプレイヤーが行動を入力すると、
+`field_event_evaluator`（`quest_referee_event_evaluate_new`）が2つの値を返す:
 
 - `credibility` … その行動が成功することの説得力を 1〜10 で採点したもの
 - `reference_attribute` … 判定に最も関わる能力値（6種のどれか）
 
-ゲームはこのうち **`credibility` だけを確率に変えている**。`quest_event_log` に
-書き込まれる `<確率N%: …>` は `credibility*10 + 20` を超えず、半数はちょうど
-その値、残りは負の差が付くだけになる。つまり `reference_attribute` は選ばれる
-だけで、**その能力値がいくつであっても確率は上がらない**。
+ゲームはこのうち **`credibility` だけを確率に変えている**。
+`quest_event_log` に書き込まれる `<確率N%: …>` は `credibility*10 + 20` を超えず、
+半数はちょうどその値、残りは負の差が付くだけになる。
+つまり
+`reference_attribute` は選ばれるだけで、**その能力値がいくつであっても確率は上がらない**。
 
 素早さに振ったキャラでも、力に振ったキャラでも、同じ入力なら同じ確率になる。
 「判定が機械的で、能力値が効いていないように見える」という体感の実体はここ。
@@ -21,8 +22,9 @@ VERIFICATION_LOG.md §2.37。
 
 ##### どこを触るか
 
-判定そのものは `QuestEventManager`（コンパイル済み）の中で、上の戻り値を
-受け取ってから行われる。ゲームのコードは読めないので、**判定に入る前の
+判定そのものは `QuestEventManager`（コンパイル済み）の中で、
+上の戻り値を受け取ってから行われる。
+ゲームのコードは読めないので、**判定に入る前の
 `credibility` を能力値に応じて上げる**。
 
     確率 = (credibility + (能力値の加点% + 底上げ%) / 10) * 10 + 20
@@ -38,45 +40,53 @@ VERIFICATION_LOG.md §2.37。
 | 25〜27 | +16% |
 | 28〜30 | +20% |
 
-基準が平均より下にあるのは、**能力値がレベルでは伸びない**から。動くのは宿の
-訓練だけで、作成時に振った値がほぼそのまま最後まで続く。平均を基準にすると
-「素早さに振ったのに補正0」が普通になってしまう（VERIFICATION_LOG.md §2.37）。
+基準が平均より下にあるのは、**能力値がレベルでは伸びない**から。
+動くのは宿の訓練だけで、作成時に振った値がほぼそのまま最後まで続く。
+平均を基準にすると「素早さに振ったのに補正0」が普通になってしまう（VERIFICATION_LOG.md
+§2.37）。
 
-下側は既定で減点しない ― 低い能力値の判定が素のゲームより不利になるのは
-理不尽なので、**素の水準を下回らせない**（`MAX_PENALTY=0`）。
+下側は既定で減点しない。
+低い能力値の判定が素のゲームより不利になるのは理不尽なので、
+素の水準を下回らせない（`MAX_PENALTY=0`）。
 
 ##### 10% 未満の刻みについて（`FINE_STEPS`）
 
-説得力1段は確率10%にあたる。4% のような刻みを出すには **`credibility` に端数を
-渡す**しかない（`5.4` → 74%）。スキーマ上は整数だが、代入時に検証が走らない型
-なら通る。**実機では未確認**なので、次のように守ってある:
+説得力1段は確率10%にあたる。
+4% のような刻みを出すには **`credibility` に端数を渡す**しかない（`5.4` → 74%）。
+スキーマ上は整数だが、代入時に検証が走らない型なら通る。
+実機では未確認なので、次のように守ってある:
 
 - 書いた後に読み直して、端数がそのまま入ったかを確かめる
-- 入らなければ**整数に丸めて入れ直す**（刻みは 10% に落ちるが、加点は効く）
-- 落ちたことは1度だけ記録に出す。`FINE_STEPS` を切れば最初から整数で動く
+- 入らなければ整数に丸めて入れ直す（刻みは 10% に落ちるが、加点は効く）
+- 落ちたことは1度だけ記録に出す。
+  `FINE_STEPS` を切れば最初から整数で動く
 
-ゲーム側の式がどうであれ、`credibility` が上がって確率が下がることはない ―
+ゲーム側の式がどうであれ、`credibility` が上がって確率が下がることはない。
 式を推測せずに済む形を選んでいる。
 
 ##### 何を触らないか
 
-- LLM のプロンプトには手を入れない。説得力の採点は「その行動がもっともらしいか」
-  の判断で、そこはモデルに任せたままにする。**キャラクタの強さは能力値から
-  こちらで足す**。TRPG でいえば、難易度は GM が決め、修正値はシートから引く
+- LLM のプロンプトには手を入れない。
+  説得力の採点は「その行動がもっともらしいか」の判断で、
+  そこはモデルへ任せたままにする。
+  **キャラクタの強さは能力値からこちらで足す**。
+  TRPG でいえば、難易度は GM が決め、修正値はシートから引く
 - 確定成功・確定失敗（`certain_success` / `certain_failure`）には触らない。
   サイコロを振らない結果を能力値でひっくり返すと、行動入力の意味が壊れる
 
 ##### もう1つの経路: クエスト外の自由入力（マスターAI）
 
-街・施設・会話中の自由入力は `master_ai_facilitator` 系が処理する。こちらは
-**確率を LLM 自身が出す**（`process` の `roll_the_dice.chance_percent`）別系統で、
+街・施設・会話中の自由入力は `master_ai_facilitator` 系が処理する。
+こちらは **確率を LLM 自身が出す**（`process` の
+`roll_the_dice.chance_percent`）別系統で、
 やはりプロンプトに能力値は1つも載っていない（GAME.md §2.26）。
 
 こちらは確率がそのまま数字で出てくるので、**`chance_percent` に加点を足す**だけ。
 説得力の端数の話は関係しない。
 
 問題は「どの能力値の判定か」を誰も言っていないこと（フィールドイベントの
-`reference_attribute` に当たる出力が無い）。そこで**行動文から推定する**:
+`reference_attribute` に当たる出力が無い）。
+そこで行動文から推定する:
 
 | `FREE_ACTION_MODE` | やり方 |
 |---|---|
@@ -89,25 +99,29 @@ VERIFICATION_LOG.md §2.37。
 返らない場合に備えて `timeout` を必ず渡し、失敗したら `keywords` に降りる。
 同じ行動文には何度も聞かない（マスターAI は1つの入力で何ターンも回るため）。
 
-語句の表だけで参照能力値が決まるのは、行動文だけなら 32%、`think` を足しても
-56% にとどまる。残りは語句が拾えず補正なしになるので、**既定は `llm`**
-（VERIFICATION_LOG.md §2.37）。
+語句の表だけで参照能力値が決まるのは、行動文だけなら 32%、
+`think` を足しても 56% にとどまる。
+残りは語句が拾えず補正なしになるので、既定は `llm`（VERIFICATION_LOG.md §2.37）。
 
 ##### 既定は「能力値の差だけ」
 
-`FLAT_BONUS` の既定は 0 ― 素のゲームの成功率をそのままにして、能力値の差だけを
-足す。つまり**能力値が 15 以下の判定では何も起きない**。作成直後のキャラは
-才能点が既定なら各値 9〜16 なので（GAME.md §2.17）、**訓練で伸ばすまで
-ほとんど発火しない**のが正しい姿。全体を底上げしたいなら `FLAT_BONUS` を上げる。
+`FLAT_BONUS` の既定は 0。
+素のゲームの成功率をそのままにして、能力値の差だけを足す。
+つまり**能力値が 15 以下の判定では何も起きない**。
+作成直後のキャラは才能点が既定なら各値 9〜16 なので（GAME.md
+§2.17）、**訓練で伸ばすまでほとんど発火しない**のが正しい姿。
+全体を底上げしたいなら `FLAT_BONUS` を上げる。
 
 加点が 0 だった回も `補正なし: dexterity=12 (基準 15 以下)` の形で記録に残す。
 残さないと「MOD が動いていない」のと見分けが付かない。
 
 ##### 記録
 
-`out/event_roll.log`。`215_probe_event_roll` と同じファイルに書く ―
-判定を触る側と計測が別々の時系列になると、差がこの MOD のせいか元からかを
-見分けられないため。実際に書き込まれた確率は probe 側の `percent` に出る。
+`out/event_roll.log`。
+`215_probe_event_roll` と同じファイルに書く。
+判定を触る側と計測が別々の時系列になると、
+差がこの MOD のせいか元からかを見分けられないため。
+実際に書き込まれた確率は probe 側の `percent` に出る。
 """
 
 import math
@@ -119,7 +133,7 @@ LOG_BASENAME = "event_roll.log"
 
 # quest_referee_event_evaluate_new(quest_data, quest_log, quest_event_log,
 #     enemies_info, player, skill_dict, item_dict, player_action,
-#     triggered_event, event_turn)                     ― out/recon/targets.txt
+#     triggered_event, event_turn)。out/recon/targets.txt
 EVAL_ARGS = ("quest_data", "quest_log", "quest_event_log", "enemies_info",
              "player", "skill_dict", "item_dict", "player_action",
              "triggered_event", "event_turn")
@@ -128,7 +142,8 @@ ABILITIES = ("strength", "constitution", "dexterity",
              "intelligence", "wisdom", "charisma")
 
 # クエスト外（と、クエスト中の自由入力）を処理するマスターAI。
-# 引数の並びは out/recon/targets.txt より。`faciltiator` の綴りはゲーム側のまま。
+# 引数の並びは out/recon/targets.txt より。
+# `faciltiator` の綴りはゲーム側のまま。
 FREE_ACTION_TARGETS = {
     "master_ai_facilitator": (
         "player", "player_life_log", "worldview", "facility_list", "npc_list",
@@ -146,7 +161,8 @@ FREE_ACTION_TARGETS = {
         "npc_list_text", "conversation_log", "master_process_log"),
 }
 
-# 推定を頼むときの自前の manager 名。output_data に問いと答えが残る。
+# 推定を頼むときの自前の manager 名。
+# output_data に問いと答えが残る。
 MANAGER_INFER = "mod_ability_for_action"
 INFER_TIMEOUT = 30          # 返らない場合に備える（GAME.md §2.12）
 INFER_CACHE_MAX = 64        # マスターAI は1入力で何ターンも回る。同じ文は聞き直さない
@@ -166,8 +182,9 @@ INFER_PROMPT = (
 )
 
 # `FREE_ACTION_MODE=keywords` と、推論が使えないときの受け皿。
-# `roll_the_dice` の記録に当てて選んだ語。行動文だけでは 32%、マスターAI の
-# think を足して 56% が決まる。決まらない回は補正しない。
+# `roll_the_dice` の記録に当てて選んだ語。
+# 行動文だけでは 32%、マスターAI の think を足して 56% が決まる。
+# 決まらない回は補正しない。
 INFER_KEYWORDS = {
     "strength": (
         "持ち上げ", "押し破", "押し開", "引きずり", "殴", "叩き", "打ち砕",
@@ -227,7 +244,8 @@ SCORE_SOURCE = "raw"
 def _get(container, name, default=None):
     """dict でも属性でも読む。`305_mini_quest` の `_get` と同じ方針。
 
-    `quest_referee*` の戻り値の形は特定できていない。両方で通し、
+    `quest_referee*` の戻り値の形は特定できていない。
+    両方で通し、
     どちらでもなければ何もしない（推測して壊すより素通しするほうがよい）。
     """
     if container is None:
@@ -241,8 +259,8 @@ def _get(container, name, default=None):
 def _set(container, name, value):
     """`_get` と対。**入れた値がそのまま読み返せたときだけ** True。
 
-    pydantic のモデルなら代入で検証や型変換が走ることがある。端数を渡して
-    整数に丸められた場合も「書けなかった」として扱いたいので、
+    pydantic のモデルなら代入で検証や型変換が走ることがある。
+    端数を渡して整数に丸められた場合も「書けなかった」として扱いたいので、
     等値だけでなく型も見る（`5 == 5.0` は True になってしまう）。
     """
     try:
@@ -259,8 +277,8 @@ def _set(container, name, value):
 def arg_of(args, kwargs, names, name):
     """位置引数・キーワード引数のどちらで来ても読む。無ければ None。
 
-    呼び出し側はコンパイル済みで読めないので、どちらの渡し方かを決め打ちできない
-    （`103_fix_eventlog_trim` と同じ理由）。
+    呼び出し側はコンパイル済みで読めないので、
+    どちらの渡し方かを決め打ちできない（`103_fix_eventlog_trim` と同じ理由）。
     """
     if name in kwargs:
         return kwargs[name]
@@ -275,8 +293,9 @@ def score_of(character, attribute, source=None):
     """そのキャラクタの `attribute` の能力値。読めなければ None。
 
     実行時の持ち方は1つに決まっていない（セーブは `original_ability_scores`、
-    キャラクタシートは `attribute_<名前>`）。名前を推測して1つだけ見ると、
-    読めなかったのか 0 だったのかが区別できなくなるので、順に当たる。
+    キャラクタシートは `attribute_<名前>`）。
+    名前を推測して1つだけ見ると、読めなかったのか 0 だったのかが区別できなくなるので、
+    順に当たる。
     """
     if character is None or attribute not in ABILITIES:
         return None
@@ -292,7 +311,8 @@ def score_of(character, attribute, source=None):
         return None
     if (source or SCORE_SOURCE) != "condition":
         return raw
-    # 負傷や体力で目減りした換算値。ゲーム自身の計算をそのまま借りる。
+    # 負傷や体力で目減りした換算値。
+    # ゲーム自身の計算をそのまま借りる。
     calculate = getattr(character, "calculate_attribute", None)
     if not callable(calculate):
         return raw
@@ -307,8 +327,9 @@ def ability_percent(score, pivot=None, step=None, per_step=None,
                     bonus_cap=None, penalty_cap=None):
     """能力値を確率の加点(%)に直す。読めなければ 0。
 
-    基準（既定 15）ちょうどまでは 0。**1点でも超えれば1段目**、そこから
-    `STEP` 点ごとにもう1段。既定（15 / 3点 / 1段4% / 上限20%）で
+    基準（既定 15）ちょうどまでは 0。
+    1点でも超えれば1段目、そこから `STEP` 点ごとにもう1段。
+    既定（15 / 3点 / 1段4% / 上限20%）で
 
         〜15 → 0 ／ 16-18 → +4 ／ 19-21 → +8 ／ 22-24 → +12
         25-27 → +16 ／ 28以上 → +20（上限）
@@ -325,7 +346,8 @@ def ability_percent(score, pivot=None, step=None, per_step=None,
     if step <= 0:
         return 0
     over = score - pivot
-    # 切り上げ。基準を1点でも超えた時点で1段目に入る。
+    # 切り上げ。
+    # 基準を1点でも超えた時点で1段目に入る。
     if over > 0:
         return min(bonus_cap, int(math.ceil(over / float(step))) * per_step)
     if over < 0:
@@ -337,8 +359,8 @@ def adjusted(credibility, score, flat=None, fine=None, **kw):
     """`(新しい説得力, 能力値の加点%, 底上げ%)`。範囲外には出さない。
 
     端数を許さない場合（`fine=False`）は説得力の整数へ丸める。
-    丸めで加点が消えることはあるが、**確率が素より下がることはない**
-    （`MAX_PENALTY=0` のとき加点は必ず 0 以上で、`round` は下限が元の値）。
+    丸めで加点が消えることはあるが、**確率が素より下がることはない**（`MAX_PENALTY=0` のとき加点は必ず 0 以上で、
+    `round` は下限が元の値）。
     """
     flat = FLAT_BONUS if flat is None else flat
     fine = FINE_STEPS if fine is None else fine
@@ -370,8 +392,9 @@ def normalize_attribute(value):
 def infer_by_keywords(text):
     """語句の表で能力値を1つ選ぶ。決め手が無ければ None。
 
-    同点は「決まらなかった」として扱う。無理に片方へ倒すと、当たっている
-    ように見えて中身は coin flip になる。補正しないほうが正直。
+    同点は「決まらなかった」として扱う。
+    無理に片方へ倒すと、当たっているように見えて中身は coin flip になる。
+    補正しないほうが正直。
     """
     if not isinstance(text, str) or not text:
         return None
@@ -404,11 +427,13 @@ def percent_of(credibility):
 def apply(ctx):
     import sys
 
-    # **未 import でも降りない。** `scripts.llm.llm_manager` は最初の LLM
-    # リクエストまで import されない（TECH.md §3.4）。ここで早期 return すると
-    # フックが1本も登録されず、**保留の見張りが立たない** ― 動くかどうかが
-    # 「他の MOD が同じモジュールを保留してくれるか」に依存する。`required=False`
-    # で先に登録しておけば、現れた時点でローダが当て直す（`209_` の形）。
+    # 未 import でも降りない。
+    # `scripts.llm.llm_manager` は最初の LLM リクエストまで
+    # import されない（TECH.md §3.4）。
+    # ここで早期 return するとフックが1本も登録されず、保留の見張りが立たない。
+    # 動くかどうかが「他の MOD が同じモジュールを保留してくれるか」に依存する。
+    # `required=False` で先に登録しておけば、
+    # 現れた時点でローダが当て直す（`209_` の形）。
 
     log_path = ctx.out_path(LOG_BASENAME)
     state = {"rolls": 0, "unreadable": 0, "coarse": False,
@@ -419,7 +444,8 @@ def apply(ctx):
     def install(result_type, value, credibility):
         """説得力を書き込む。端数が通らなければ整数に丸めて入れ直す。
 
-        戻り値は実際に入った値。1つも入らなければ `None`。
+        戻り値は実際に入った値。
+        1つも入らなければ `None`。
         """
         if _set(result_type, "credibility", value):
             return value
@@ -438,10 +464,11 @@ def apply(ctx):
     def ask_llm(text):
         """6能力値のどれかを1問だけ聞く。使えない・読めないなら None。
 
-        呼び方（プロバイダを名指ししない・`timeout` を必ず渡す・返却を辞書に
-        均す）はローダに集約してある（`llm.ask`。`311_` / `902_` と共有。
-        TECH.md §5.3）。ここが持つのは**何を聞くか**だけ。落ちたら黙って
-        語句の表へ降りる ― マスターAI の応答を止めるほうが害が大きい。
+        呼び方（プロバイダを名指ししない・`timeout` を必ず渡す・返却を辞書に均す）はローダに集約してある（`llm.ask`。
+        `311_` / `902_` と共有。TECH.md §5.3）。
+        ここが持つのは何を聞くかだけ。
+        落ちたら黙って語句の表へ降りる。
+        マスターAI の応答を止めるほうが害が大きい。
         """
         structure = llm.create_structure(ctx, "ModAbilityForAction",
                                          {"attribute": (str, ...)},
@@ -465,9 +492,10 @@ def apply(ctx):
     def infer_attribute(text, key=None):
         """行動文から参照能力値を決める。決まらなければ None。
 
-        控えの鍵は**プレイヤーの入力文だけ**にする。マスターAI は1つの入力で
-        何ターンも回り、そのたびに `think` と `narration` が変わる。全部を鍵に
-        すると、同じ行動を続けているだけで毎ターン聞き直すことになる。
+        控えの鍵はプレイヤーの入力文だけにする。
+        マスターAI は1つの入力で何ターンも回り、
+        そのたびに `think` と `narration` が変わる。
+        全部を鍵にすると、同じ行動を続けているだけで毎ターン聞き直すことになる。
         同じ行動文なら同じ能力値でよい。
         """
         if FREE_ACTION_MODE == "off" or not text:
@@ -502,7 +530,8 @@ def apply(ctx):
         bonus = ability_percent(score) if score is not None else 0
         total = bonus + FLAT_BONUS
         if not total:
-            # 同上。何もしない回こそ、何もしなかった理由を残す。
+            # 同上。
+            # 何もしない回こそ、何もしなかった理由を残す。
             write("{}: 補正なし {}={} (基準 {} 以下) 確率 {}% のまま".format(
                 site, attribute or "推定できず", score, PIVOT,
                 _get(rolls[0], "chance_percent")))
@@ -533,7 +562,8 @@ def apply(ctx):
                     player = getattr(ui.find_app(), "player", None)
                 action = arg_of(args, kwargs, names, "choice_text")
                 if not isinstance(action, str):
-                    # 会話からの経路には行動文が無い。会話ログの末尾を使う。
+                    # 会話からの経路には行動文が無い。
+                    # 会話ログの末尾を使う。
                     log = arg_of(args, kwargs, names, "conversation_log")
                     action = log[-INFER_TEXT_MAX:] if isinstance(log, str) else ""
                 adjust_rolls(name, result, player, action)
@@ -563,7 +593,8 @@ def apply(ctx):
                 player = getattr(ui.find_app(), "player", None)
             score = score_of(player, attribute)
             if score is None:
-                # 能力値が読めない回。底上げだけは効かせる（能力値の加点は 0）。
+                # 能力値が読めない回。
+                # 底上げだけは効かせる（能力値の加点は 0）。
                 state["unreadable"] += 1
                 if state["unreadable"] <= 3:
                     write("能力値を読めなかった: attribute={!r} player={!r}。"
@@ -572,9 +603,9 @@ def apply(ctx):
 
             value, bonus, flat = adjusted(credibility, score)
             if value == credibility:
-                # 加点が付かない回も残す。既定は底上げ0で、能力値が基準以下だと
-                # 何も起きない ― そのとき記録まで空だと「MOD が動いていない」のと
-                # 見分けが付かない。
+                # 加点が付かない回も残す。
+                # 既定は底上げ0で、能力値が基準以下だと何も起きない。
+                # そのとき記録まで空だと「MOD が動いていない」のと見分けが付かない。
                 write("補正なし: {}={} (基準 {} 以下) 確率 {}% のまま".format(
                     attribute, score, PIVOT, percent_of(credibility)))
                 return result
@@ -591,7 +622,8 @@ def apply(ctx):
                       attribute, score, bonus, flat, credibility, installed,
                       percent_of(credibility), percent_of(installed)))
         except Exception:
-            # 補正に失敗してもゲームの判定はそのまま通す。イベントを止めない。
+            # 補正に失敗してもゲームの判定はそのまま通す。
+            # イベントを止めない。
             ctx.log_exc("ability check: could not adjust the credibility")
         return result
 
@@ -601,7 +633,8 @@ def apply(ctx):
              for score in (PIVOT, PIVOT + 1, PIVOT + STEP,
                            PIVOT + STEP + 1, 28, 30)]
     cases = (
-        # (能力値, 説得力, 期待する新しい説得力)  既定 15 / 3点 / 1段4% / 上限20% / 底上げ10%
+        # (能力値, 説得力, 期待する新しい説得力)  既定 15 / 3点 / 1段4% / 上限20%
+        # / 底上げ10%
         (15, 5, 5 + (0 + FLAT_BONUS) / 10.0),
         (16, 5, 5 + (BONUS_PER_STEP + FLAT_BONUS) / 10.0),
         (1, 5, 5 + FLAT_BONUS / 10.0),      # 低くても減点しない（MAX_PENALTY=0）

@@ -70,8 +70,8 @@ GAME_ARGV = [
     "--temp", "1.0", "--top-p", "0.95", "--top-k", "64",
 ]
 
-# 背景除去のサイドカー（`request_remove_background:popen_sidecar` の別名から
-# 同じ関数へ来る）。ここに `--ctx-size` を足したら事故なので、必ず素通しさせる。
+# 背景除去のサイドカー（`request_remove_background:popen_sidecar` の別名から同じ関数へ来る）。
+# ここに `--ctx-size` を足したら事故なので、必ず素通しさせる。
 REMBG_ARGV = [r"C:\game\bin\rembg\rembg.exe", "--model", "u2net", "--port", "1234"]
 
 
@@ -88,7 +88,8 @@ class FakeCtx:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
-    # ログは本物の `ctx.logger` をそのまま借りる（検査だけが別経路を通らないように）。
+    # ログは本物の
+    # `ctx.logger` をそのまま借りる（検査だけが別経路を通らないように）。
     _mod = None
 
     def logger(self, name, *, tag=None, stamp=True, label=None):

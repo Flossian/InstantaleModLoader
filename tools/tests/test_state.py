@@ -3,16 +3,16 @@
 
     python tools/tests/test_state.py
 
-見ているのは2つ。どちらも**ローダの語彙**で、MOD 側に写すとドリフトする
-（TECH.md §3.2.3）。
+見ているのは2つ。
+どちらも**ローダの語彙**で、MOD 側に写すとドリフトする（TECH.md §3.2.3）。
 
   保存先 … `world_key(app)` と `world_filename(key)`
   書込   … `write_json` / `write_text`（隣に書いてから差し替える）
 
 保存先の検査が厚いのは、ここが**複数の MOD にまたがる取り決め**だから。
-`301_` は `311_` が書いた `state/npc_profiles/<世界>.json` を読む ― 名前の
-作り方が1文字でも違えば「相手のデータが無い」ことになる。以前は MOD ごとに
-写していて、実際に `312_` がずれた。
+`301_` は `311_` が書いた `state/npc_profiles/<世界>.json` を読む
+― 名前の作り方が1文字でも違えば「相手のデータが無い」ことになる。
+以前は MOD ごとに写していて、実際に `312_` がずれた。
 """
 
 import json
@@ -57,8 +57,8 @@ def test_world_key():
           "world_data の world_name を最優先で読む")
     check(st.world_key(_App({"world_data": {"title": "題名だけ"}})) == "題名だけ",
           "world_name が無ければ name / title の順に落ちる")
-    # セーブ側を先に見るのは、ロード直後に app.world がまだ組み上がっていない
-    # 場合があるため。
+    # セーブ側を先に見るのは、ロード直後に
+    # app.world がまだ組み上がっていない場合があるため。
     check(st.world_key(_App({"world_data": {"world_name": "セーブ側"}},
                             _World("実行時側"))) == "セーブ側",
           "両方あればセーブ側を採る")
@@ -96,8 +96,9 @@ def test_world_filename_is_stable():
           "長すぎる鍵は上限に収める: {}".format(len(long_name) - len(".json")))
 
     print("=== world_filename: 予約デバイス名 ===")
-    # 不正な文字が1つも無いのに作れない別種。素通しすると open() が失敗し、
-    # 広い except に吸われて控えが黙って空に倒れる（知識は 110_ から）。
+    # 不正な文字が1つも無いのに作れない別種。
+    # 素通しすると open() が失敗し、広い except に吸われて控えが黙って空に倒れる（知識は
+    # 110_ から）。
     for reserved in ("CON", "nul", "COM3", "LPT9"):
         made = st.world_filename(reserved)
         stem = made.split(".")[0]
@@ -112,8 +113,8 @@ def test_world_filename_is_stable():
 def test_world_filename_is_injective():
     """**違う鍵からは違う名前。** 別の世界の控えを自分のものとして読まないため。
 
-    使える文字に均すだけでは単射にならない。均した結果が元と違うときだけ、
-    鍵そのものから作った印を後ろに付けて分ける。
+    使える文字に均すだけでは単射にならない。
+    均した結果が元と違うときだけ、鍵そのものから作った印を後ろに付けて分ける。
     """
     print("=== world_filename: 違う鍵は必ず違う名前 ===")
     pairs = [
@@ -158,13 +159,14 @@ def test_safe_writes():
         with open(target, encoding="utf-8") as fh:
             check(json.load(fh) == {"a": 1}, "書いた内容がそのまま読める")
 
-        # 素直に書けない値でも default=str が文字列にして通す。**書けないより、
-        # 文字列になってでも残る方がよい**という判断なので、成功が正しい。
+        # 素直に書けない値でも default=str が文字列にして通す。
+        # **書けないより、文字列になってでも残る方がよい**という判断なので、
+        # 成功が正しい。
         check(ctx.write_json(target, {"odd": {1, 2}}) is True,
               "JSON にできない値も文字列にして書く（default=str）")
 
-        # 循環参照は default でも救えない。直列化の時点で失敗し、書き込みまで
-        # 到達しない ＝ 本体は無傷のまま。
+        # 循環参照は default でも救えない。
+        # 直列化の時点で失敗し、書き込みまで到達しない ＝ 本体は無傷のまま。
         loop = {}
         loop["self"] = loop
         before = open(target, encoding="utf-8").read()

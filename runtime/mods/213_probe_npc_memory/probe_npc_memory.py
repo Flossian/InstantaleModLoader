@@ -4,15 +4,18 @@
 ##### 何を決めるための計測か
 
 `311_npc_profile_memory` は会話から人物像を抽出して `profile` に注入するが、
-ゲーム自身にも会話を覚える仕組みがある。会話の終了時にはゲームが要約 LLM を
-回し（GAME.md §2.5）、その結果は後の会話に影響する ―「同じ相手が前の話を
-引きずる」のは確認済みで、`conversation_facilitator_after_retrieval` という
-取り出しの経路まである（GAME.md §2.24）。NPC のセーブ項目にも `memory` /
-`life_log` / `relationship` / `knowledge` が並ぶ（GAME.md §2.23）。
+ゲーム自身にも会話を覚える仕組みがある。
+会話の終了時にはゲームが要約 LLM を回し（GAME.md §2.5）、
+その結果は後の会話に影響する。
+「同じ相手が前の話を引きずる」のは確認済みで、
+`conversation_facilitator_after_retrieval` という取り出しの経路まである（GAME.md
+§2.24）。
+NPC のセーブ項目にも `memory` / `life_log` / `relationship` /
+`knowledge` が並ぶ（GAME.md §2.23）。
 
 つまり同じ会話が「本体の要約 → memory」と「311_ の抽出 → profile 注入」の
-2系統で覚えられている可能性があるが、**本体側の実体は分かっていない**。311_ の
-重複対応（棲み分け・抽出タイミングの変更）は、この実体を見てから決める。
+2系統で覚えられている可能性があるが、**本体側の実体は分かっていない**。
+311_ の重複対応（棲み分け・抽出タイミングの変更）は、この実体を見てから決める。
 
 ##### 3つの問いに答える
 
@@ -25,30 +28,32 @@
 ##### どこで測るか
 
 - 会話系5関数（`conversation_starter` / `conversation_facilitator` ほか。
-  先頭4引数は `messages, character_life_log, player, character_instance` で
-  共通 ― 311_ と同じ前提）を包み、**素の NPC** の記憶系項目を写す。
-  この mod は 311_ より後に読み込む（外側で包む）ので、ここで見えるのは
-  311_ が複製へ注入する**前**のゲーム自身の値。
-- 完成したプロンプトは会話関数の中では見えない（あちらの `messages` は
-  会話履歴で、profile や memory はゲームがその先で組み込む）。だから
-  `llm_manager:send_request` / `send_request_with_no_structure` も包む。
-  この2つは**プロバイダ初期化時に生える別名**なので、起動時に無ければ
-  5秒ごとの見張りで生えた時点で包む（GAME.md §2.12・`111_` v5 と同じ手）。
-- 会話の終了は `app.in_conversation` が落ちるのを Clock で見張る
-  （GAME.md §2.5。落ちるのは要約が終わった後なので、その直後の差分に
-  要約の書き込みが写る）。見張りは世代を鍵に登録し、注入し直されたら
-  `ctx.superseded()` で止まる（TECH.md §3.6.1・`211_` の教訓）。
-- 閉じるたびに **`conversation_resolver` が発火したか不発だったか**を
-  その場で判定して書く（最終ターンより後に resolver の send が在ったか）。
-  要約は必ずしも走らない（GAME.md §2.25）ので、どの抜け方で不発になるかを
-  この行で特定する。resolver の呼び出し元も記録する ― 取りこぼしを MOD
-  から回す修正を書くときの recon。
+  先頭4引数は `messages, character_life_log, player, character_instance` で共通。
+  311_ と同じ前提）を包み、素の NPC の記憶系項目を写す。
+  この mod は 311_ より後に読み込む（外側で包む）ので、
+  ここで見えるのは 311_ が複製へ注入する前のゲーム自身の値。
+- 完成したプロンプトは会話関数の中では見えない（あちらの `messages` は会話履歴で、
+  profile や memory はゲームがその先で組み込む）。
+  だから `llm_manager:send_request` / `send_request_with_no_structure` も包む。
+  この2つは**プロバイダ初期化時に生える別名**なので、起動時に無ければ、
+  5秒ごとの見張りが見つけた時点で包む（GAME.md §2.12・`111_` v5 と同じ手）。
+- 会話の終了は `app.in_conversation` が落ちるのを Clock で見張る（GAME.md §2.5。
+  落ちるのは要約が終わった後なので、その直後の差分に要約の書き込みが写る）。
+  見張りは世代を鍵に登録し、注入し直されたら `ctx.superseded()` で止まる（TECH.md
+  §3.6.1・`211_` の教訓）。
+- 閉じるたびに **`conversation_resolver` が発火したか不発だったか**をその場で判定して書く（最終ターンより後に
+  resolver の send が在ったか）。
+  要約は必ずしも走らない（GAME.md §2.25）ので、
+  どの抜け方で不発になるかをこの行で特定する。
+  resolver の呼び出し元も記録する。
+  取りこぼしを MOD から回す修正を書くときの recon。
 
 ##### ゲームは変更しない
 
-200番台の約束どおり読み取りだけ。値は書かず、記録に失敗しても本体は必ず呼ぶ。
-`311_` の抽出呼び出し（`manager_name` が `mod_` で始まるもの）は測らない ―
-このプローブの対象は**ゲーム自身**の経路。
+200番台の約束どおり読み取りだけ。
+値は書かず、記録に失敗しても本体は必ず呼ぶ。
+`311_` の抽出呼び出し（`manager_name` が `mod_` で始まるもの）は測らない。
+このプローブの対象はゲーム自身の経路。
 """
 
 import datetime
@@ -63,7 +68,8 @@ from instantale_modloader.state import world_key
 
 LOG_BASENAME = "npc_memory.log"
 
-# 会話系の入口。5関数とも先頭4引数の並びが同じ（GAME.md §2.24・311_ の前提）。
+# 会話系の入口。
+# 5関数とも先頭4引数の並びが同じ（GAME.md §2.24・311_ の前提）。
 CONV_MODULE = "scripts.llm.llm_manager"
 CONV_TARGETS = (
     "conversation_starter",
@@ -73,15 +79,17 @@ CONV_TARGETS = (
     "conversation_facilitator_in_quest",
 )
 
-# 完成したプロンプトが通る送信境界。起動直後は別名がまだ無いことがある。
+# 完成したプロンプトが通る送信境界。
+# 起動直後、別名はまだ無いことがある。
 SEND_TARGETS = (
     "scripts.llm.llm_manager:send_request",
     "scripts.llm.llm_manager:send_request_with_no_structure",
 )
 # 別名の見張りの間隔と諦める時刻はローダが持つ（`llm.ALIAS_*`）。
 
-# NPC 側で写す項目。前5つが「会話で増えるかもしれない」側、後2つは
-# 「世界生成で決まり増えない」とされる側（311_ の前提の裏取り）。
+# NPC 側で写す項目。
+# 前5つが「会話で増えるかもしれない」側、
+# 後2つは「世界生成で決まり増えない」とされる側（311_ の前提の裏取り）。
 WATCHED_FIELDS = ("memory", "life_log", "current_log", "relationship",
                   "knowledge", "profile", "personality")
 
@@ -92,19 +100,22 @@ DUMP_CHARS = 1500
 CHANGE_TAIL_CHARS = 400
 # 含有判定に使う、項目1つあたりの控えの上限。
 KEEP_CHARS = 6000
-# 含有判定の抜き取り1つの長さ。先頭・中央・末尾寄りの3箇所を照合する。
+# 含有判定の抜き取り1つの長さ。
+# 先頭・中央・末尾寄りの3箇所を照合する。
 PROBE_CHUNK = 60
 # 照合に使う文字列の葉の最短の長さと、項目1つから集める葉の上限。
 MIN_LEAF_CHARS = 6
 MAX_LEAVES = 24
-# 重複と数える行の最短の長さ。短い行（「はい」等）は言い回しの偶然で重なる。
+# 重複と数える行の最短の長さ。
+# 短い行（「はい」等）は言い回しの偶然で重なる。
 DUP_MIN_LINE = 30
 # 重複行の内訳を書く件数。
 DUP_TOP = 3
 # 控えを持つ NPC の上限（会話した相手だけなので普通は数人）。
 MAX_TRACKED_NPCS = 30
 
-# 会話の終了の見張り。落ちた直後は後始末の最中なので、少し置いてから写す。
+# 会話の終了の見張り。
+# 落ちた直後は後始末の最中なので、少し置いてから写す。
 CLOSE_POLL_SECONDS = 2.0
 CLOSE_DELAY_SECONDS = 2.0
 
@@ -122,8 +133,9 @@ def _digest(text):
 def flat(value, limit=None):
     """どんな型でも1本のテキストにする。含有判定と指紋の共通の入口。
 
-    list / dict は JSON にする（`life_log` や `knowledge` がどちらで来ても
-    同じ照合が効く）。読めない型は repr に倒す。
+    list / dict は JSON にする（`life_log` や
+    `knowledge` がどちらで来ても同じ照合が効く）。
+    読めない型は repr に倒す。
     """
     if value is None:
         return ""
@@ -157,21 +169,22 @@ def one_line(text, limit=160):
     """抜粋を1行に畳む。改行は見た目で分かる形に置き換える。"""
     if not isinstance(text, str):
         text = str(text)
-    # 改行は見える印に置き換える（1レコード1行を保つため）。**cp932 に入る
-    # 文字を使う** ― ログを cp932 の端末やエディタで開く人が居る（§6.2）。
+    # 改行は見える印に置き換える（1レコード1行を保つため）。
+    # **cp932 に入る文字を使う**。
+    # ログを cp932 の端末やエディタで開く人が居る（§6.2）。
     text = text.replace("\r", "").replace("\n", "\n")
     return text if len(text) <= limit else text[:limit] + "…"
 
 
 def leaf_texts(value, out=None):
-    """dict / list の中の**文字列の葉**だけを集める。
+    """dict / list の中の文字列の葉だけを集める。
 
-    JSON の器のまま抜き取って照合すると2通りに誤る: 空の `[]` はプロンプトの
-    どこにでも在るので「全文相当」に化け（偽陽性）、逆に中身のある dict は
-    鍵や括弧を含む断片がプロンプトの**描画済み**の文には無いので「無し」に
-    倒れる（偽陰性の疑い）。ゲームがプロンプトに埋めるとすれば葉の
-    文なので、照合は葉で行う。`MIN_LEAF_CHARS` 未満の葉は数えない
-    （「初対面」程度の短さは言い回しの偶然で当たる）。
+    JSON の器のまま抜き取って照合すると2通りに誤る: 空の
+    `[]` はプロンプトのどこにでも在るので「全文相当」に化け（偽陽性）、
+    逆に中身のある
+    dict は鍵や括弧を含む断片がプロンプトの描画済みの文には無いので「無し」に倒れる（偽陰性の疑い）。
+    ゲームがプロンプトに埋めるとすれば葉の文なので、照合は葉で行う。
+    `MIN_LEAF_CHARS` 未満の葉は数えない（「初対面」程度の短さは言い回しの偶然で当たる）。
     """
     if out is None:
         out = []
@@ -193,10 +206,11 @@ def leaf_texts(value, out=None):
 def containment(needle, haystack):
     """`needle` が `haystack` にどれだけ入っているか。
 
-    戻り値は (当たった数, 試した数)。短い項目は丸ごと1回、長い項目は
-    先頭・中央・末尾寄りの3箇所から `PROBE_CHUNK` 字ずつ抜いて照合する。
-    全文一致を試さないのは、途中で改行や整形を挟んで埋め込まれても
-    「載っている」と読めるようにするため。
+    戻り値は (当たった数, 試した数)。
+    短い項目は丸ごと1回、長い項目は先頭・中央・末尾寄りの3箇所から
+    `PROBE_CHUNK` 字ずつ抜いて照合する。
+    全文一致を試さないのは、
+    途中で改行や整形を挟んで埋め込まれても「載っている」と読めるようにするため。
     """
     if not needle:
         return (0, 0)
@@ -228,8 +242,8 @@ def duplicated_lines(joined):
     """同一行（`DUP_MIN_LINE` 字以上）の重複を数える。
 
     戻り値は (重複している行の種類数, 損している字数, 内訳上位)。
-    「損」は2回目以降の出現ぶんの合計。302_ 等の言い回しの偶然を拾わない
-    よう、短い行は数えない。
+    「損」は2回目以降の出現ぶんの合計。
+    302_ 等の言い回しの偶然を拾わないよう、短い行は数えない。
     """
     counts = {}
     for line in joined.split("\n"):
@@ -246,17 +260,17 @@ def duplicated_lines(joined):
 def apply(ctx):
     # 錠は `ctx.logger` が中に持っている（この計測は別スレッドからも書く）。
 
-    #: `npc` は "世界名:npc_id" -> {"name", "fields": {...}}。**鍵に世界名を
-    #: 含める。** id だけで引くと、セーブを切り替えたときに別世界の別人を
-    #: 同一人物として diff してしまう（別世界で同じ id が振られるため。
+    #: `npc` は "世界名:npc_id" -> {"name", "fields": {...}}。
+    #: **鍵に世界名を含める。**
+    #: id だけで引くと、セーブを切り替えたときに別世界の別人を同一人物として diff してしまう（別世界で同じ id が振られるため。:
     #: 311_ が `world_key` で分けているのと同じ理由）。
-    #: `by_thread` は会話関数の中で send_request が呼ばれたときに、どの NPC の
-    #: 会話かを送信境界へ伝える（同じスレッドで降りてくる）。
+    #: `by_thread` は会話関数の中で send_request が呼ばれたときに、
+    #: どの NPC の会話かを送信境界へ伝える（同じスレッドで降りてくる）。
     #: `in_conv` は前回見た `app.in_conversation`（落ちた瞬間の検出用）。
-    #: `last_conv_call` / `last_resolver` は「この会話に要約が走ったか」の判定用
-    #: （最終ターンの後に resolver が発火していれば要約された）。
-    #: `last_world` は最後に会話ターンを見た世界。閉じの検出時に世界が
-    #: 変わっていれば「放置されたままロードで消えた会話」と読める。
+    #: `last_conv_call` / `last_resolver` は「この会話に要約が走ったか」の判定用（最終ターンの後に
+    #: resolver が発火していれば要約された）。
+    #: `last_world` は最後に会話ターンを見た世界。
+    #: 閉じの検出時に世界が変わっていれば「放置されたままロードで消えた会話」と読める。
     state = {"npc": {}, "by_thread": {}, "in_conv": None, "sends": 0,
              "last_conv_call": None, "last_resolver": None, "last_world": None}
 
@@ -265,7 +279,8 @@ def apply(ctx):
     def stamp():
         return datetime.datetime.now().isoformat(timespec="milliseconds")
 
-    # ボタンは出さない。Clock の `schedule` / `_interval` と例外の握りだけ借りる。
+    # ボタンは出さない。
+    # Clock の `schedule` / `_interval` と例外の握りだけ借りる。
     screen = ui.Screen(ctx, write, tag="npc memory probe")
 
     # ------------------------------------------------------------ NPC の項目
@@ -282,7 +297,7 @@ def apply(ctx):
         return str(value) if value is not None else "?"
 
     def capture_fields(npc):
-        """記憶系項目を写す。**読むだけで書かない。**
+        """記憶系項目を写す。読むだけで書かない。
 
         `leaves` は含有判定用の文字列の葉（`leaf_texts` の説明を参照）。
         """
@@ -308,7 +323,7 @@ def apply(ctx):
                     write("      | …（あと{}字）".format(len(text) - DUMP_CHARS))
 
     def note_changes(old_fields, new_fields, reason):
-        """指紋が動いた項目だけを書く。**何も動かなくても、その事実を残す。**
+        """指紋が動いた項目だけを書く。何も動かなくても、その事実を残す。
 
         「会話しても memory が変わらない」は「変わる」と同じ重さの答え。
         """
@@ -381,8 +396,8 @@ def apply(ctx):
         else:
             write("  messages: {}".format(kind_of(messages)))
 
-        # 第2引数のライフログは**誰のものか**を突き合わせる。NPC の
-        # `life_log` と一致するのか、プレイヤー側なのかで読み方が変わる。
+        # 第2引数のライフログは誰のものかを突き合わせる。
+        # NPC の `life_log` と一致するのか、プレイヤー側なのかで読み方が変わる。
         if len(args) >= 3:
             life_log = args[1]
             log_digest = _digest(flat(life_log))
@@ -395,8 +410,8 @@ def apply(ctx):
             write("  character_life_log: {} [{}]".format(
                 kind_of(life_log), " / ".join(owners) or "どちらとも不一致"))
 
-        # 5番目以降は版で動きうるので、名前を決め打ちせず全部書く
-        # （`retrieved_knowledge` / `job_knowledge` の実体と位置がここで分かる）。
+        # 5番目以降は版で動きうるので、名前を決め打ちせず全部書く（`retrieved_knowledge` /
+        # `job_knowledge` の実体と位置がここで分かる）。
         for index, value in enumerate(args[4:], start=4):
             write("  args[{}]: {} {!r}".format(
                 index, kind_of(value), one_line(flat(value, 200), 120)))
@@ -462,9 +477,9 @@ def apply(ctx):
             stamp(), state["sends"], manager,
             target.rpartition(":")[2], len(messages), len(joined)))
 
-        # resolver の発火時刻と呼び出し元。前者は会話の閉じ方ごとの
-        # 発火/不発の判定（`after_close`）、後者は「取りこぼしを MOD から
-        # 回す」修正（方向1）のための recon。
+        # resolver の発火時刻と呼び出し元。
+        # 前者は会話の閉じ方ごとの発火/不発の判定（`after_close`）、
+        # 後者は「取りこぼしを MOD から回す」修正（方向1）のための recon。
         if manager == "conversation_resolver":
             state["last_resolver"] = time.monotonic()
             write("  呼び出し元: {}".format(frames.caller(depth=10)))
@@ -482,7 +497,7 @@ def apply(ctx):
                 count, len(line), one_line(line, 70)))
 
         if context is not None:
-            # ★ ここが2つ目の問いの答えの出る場所。会話関数で写した**素の**
+            # ★ ここが2つ目の問いの答えの出る場所。会話関数で写した素の
             #   項目が、完成したプロンプトのどこまで載っているか。照合は
             #   JSON の器ではなく文字列の葉で行う（`leaf_texts` の説明）。
             parts = []
@@ -508,10 +523,12 @@ def apply(ctx):
             return orig(*args, **kwargs)
         return send_probe
 
-    # 別名は初期化時に後から生える。**見張りはローダの語彙**
-    # （`llm.watch_aliases`。`111_` / `119_` が使うのと同じ仕組み）。当て方だけは
-    # こちらが持つ ― あちらは書き換えで、こちらはローカル実行でも生の引数を
-    # 観測したいので、`wrap_outgoing` には乗せられない（TECH.md §5.3）。
+    # 別名は初期化時に後から生える。
+    # 見張りはローダの語彙（`llm.watch_aliases`。
+    # `111_` / `119_` が使うのと同じ仕組み）。
+    # 当て方だけはこちらが持つ。
+    # あちらは書き換えで、こちらはローカル実行でも生の引数を観測したいので、
+    # `wrap_outgoing` には乗せられない（TECH.md §5.3）。
     llm.watch_aliases(ctx, SEND_TARGETS, hook_send, label="npc memory probe")
 
     # ------------------------------------------------------------ 会話の終了
@@ -533,9 +550,9 @@ def apply(ctx):
         last_call = state["last_conv_call"]
         last_resolver = state["last_resolver"]
         if state["last_world"] is not None and state["last_world"] != wkey:
-            # 会話ターンを見た世界と違う世界で「閉じ」を検出した。会話を
-            # 閉じずにタイトル/ロードへ抜けた形で、その会話は要約されて
-            # いない。
+            # 会話ターンを見た世界と違う世界で「閉じ」を検出した。
+            # 会話を閉じずにタイトル/ロードへ抜けた形で、
+            # その会話は要約されていない。
             write("[{}] resolver: ★不発★ 会話を閉じないまま世界が変わった"
                   "（{} での会話は要約されずに消えた）".format(
                       stamp(), state["last_world"]))

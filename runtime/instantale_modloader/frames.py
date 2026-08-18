@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """実行中の状態を読みやすい文字列にするための補助関数。
 
-ゲームはコンパイル済みでソースが読めないので、何かが失敗したときに
-状況を知る手段は「その瞬間の変数の中身を写し取る」ことしかない。
+ゲームはコンパイル済みでソースが読めないので、
+何かが失敗したときに状況を知る手段は「その瞬間の変数の中身を写し取る」ことしかない。
 クラッシュ記録（001_crash_recorder.py）などがここの関数を使っている。
 """
 
@@ -24,12 +24,13 @@ GAME_FILE_HINTS = ("instantale.py", "\\scripts\\", "/scripts/",
                    "save_area_json.py", "save_world_json.py")
 
 # このファイルは runtime/instantale_modloader/ にあるので、2つ上が runtime/。
-# 「こちら側のフレーム」（ローダと mod）を見分けるのに使う。caller() を参照。
+# 「こちら側のフレーム」（ローダと mod）を見分けるのに使う。
+# caller() を参照。
 RUNTIME_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # 「属性が無い」と「値が None」を区別するための番人。
-# 戦闘BGMの原因特定では、`app.music` が **None ではなく存在しない** ことが
-# 決め手になった（渡されたオブジェクトが app ではなかった）。
+# 戦闘BGMの原因特定では、`app.music` が **None ではなく存在しない** ことが決め手になった（渡されたオブジェクトが
+# app ではなかった）。
 # getattr(x, k, MISSING) の形で使い、ログには "<missing>" と出す。
 MISSING = "<missing>"
 
@@ -37,10 +38,12 @@ MISSING = "<missing>"
 def attr(obj, name, default=MISSING):
     """属性を読む。**`hasattr` を使わないこと。**
 
-    `hasattr` は失敗するルックアップを1回起こすので、`__getattr__` トリップワイヤ
-    （`201_probe_missing_attr`）を自己発火させる。実際に踏んだ（TECH.md §6）。
-    既定値付きの `getattr` なら、探索は同じ1回でもトリップワイヤ側から見れば
-    「本当に読まれた」1回と区別が付かない。つまり計測が計測を汚さない。
+    `hasattr` は失敗するルックアップを1回起こすので、
+    `__getattr__` トリップワイヤ（`201_probe_missing_attr`）を自己発火させる。
+    実際に踏んだ（TECH.md §6）。
+    既定値付きの `getattr` なら、
+    探索は同じ1回でもトリップワイヤ側から見れば「本当に読まれた」1回と区別が付かない。
+    つまり計測が計測を汚さない。
     """
     try:
         return getattr(obj, name, default)
@@ -65,8 +68,8 @@ def text_of(obj, name: str = "text"):
       * `116_` … 本文ラベルが None のとき `"<missing>"` をフォント名として
         ボタンに代入していた
 
-    ここは番人を作らずに読む ― 「無い」も「読めない」も呼ぶ側にとっては
-    同じ「文字列が取れなかった」なので、区別が要るときだけ `attr()` を使う。
+    ここは番人を作らずに読む ― 「無い」も「読めない」も呼ぶ側にとっては同じ「文字列が取れなかった」なので、区別が要るときだけ
+    `attr()` を使う。
     """
     try:
         value = getattr(obj, name, None)
@@ -85,7 +88,8 @@ def repr_value(value) -> str:
     try:
         if isinstance(value, dict):
             keys = list(value)[:MAX_DICT_KEYS]
-            # 型の調査は先頭 200 件まで。巨大な表でも一瞬で終わるようにする。
+            # 型の調査は先頭 200 件まで。
+            # 巨大な表でも一瞬で終わるようにする。
             types = sorted({type(k).__name__ for k in list(value)[:200]})
             more = "" if len(value) <= MAX_DICT_KEYS else " ...+{}".format(
                 len(value) - MAX_DICT_KEYS)
@@ -119,12 +123,13 @@ def is_ours(filename: str) -> bool:
 def owner_of(code):
     """このコードを持っているクラスとメソッドの名前。分からなければ None。
 
-    `method_1` / `execute` / `end_phase` のような名前は多くのマネージャが
-    共有しているので、**関数名だけでは経路が特定できない**（クエストクリアの
-    解散はトレースに `method_1 (instantale.py:6602)` としか出ない。GAME.md §2.8）。
+    `method_1` / `execute` /
+    `end_phase` のような名前は多くのマネージャが共有しているので、**関数名だけでは経路が特定できない**（クエストクリアの解散はトレースに `method_1 (instantale.py:6602)` としか出ない。
+    GAME.md §2.8）。
 
-    `__main__` のクラスを舐めて**同じコードオブジェクト**を探せば、推測なしに
-    持ち主が決まる。稀にしか呼ばれない場所で使う前提なので総当たりでよい。
+    `__main__` のクラスを舐めて**同じコードオブジェクト**を探せば、
+    推測なしに持ち主が決まる。
+    稀にしか呼ばれない場所で使う前提なので総当たりでよい。
     """
     module = sys.modules.get("__main__")
     if module is None or code is None:
@@ -153,27 +158,32 @@ class MethodWatch(object):
         watch = frames.MethodWatch(("QuestEndManager",))
         label = watch.current()      # 'QuestEndManager.method_1' か None
 
-    `owner_of` と根拠は同じ（Nuitka でも `__code__` は引ける）だが、あちらの
-    「全クラス総当たり」と違って**先に表を作っておく**ので、毎回の判定は辞書引き
-    1回で済む。フックの中から呼ぶ前提なので、この差が効く。
+    `owner_of` と根拠は同じ（Nuitka でも `__code__` は引ける）だが、
+    あちらの「全クラス総当たり」と違って**先に表を作っておく**ので、
+    毎回の判定は辞書引き 1回で済む。
+    フックの中から呼ぶ前提なので、この差が効く。
 
     3つとも決めつけないのが要点:
 
-    * **段数で数えない**。`@ctx.wrap` の層が1段挟まる（`302_` が実際に踏んだ。
-      GAME.md §2.6）。スタックを上から順に見て、知っているコードに出会うまで遡る
-    * **関数名で決めない**。`method_1` / `execute` は12個のマネージャが持つ
-    * **コードオブジェクトが引けないビルドもありうる**。そのときだけ名前で拾い、
+    * **段数で数えない**。
+      `@ctx.wrap` の層が1段挟まる（`302_` が実際に踏んだ。GAME.md §2.6）。
+      スタックを上から順に見て、知っているコードに出会うまで遡る
+    * **関数名で決めない**。
+      `method_1` / `execute` は12個のマネージャが持つ
+    * **コードオブジェクトが引けないビルドもありうる**。
+      そのときだけ名前で拾い、
       `owner_of` で持ち主クラスまで確かめる（重いので予備に限る）
 
     `on_warn` を渡すと、見張る相手が `__main__` に居ないときに mod のログへ書ける。
 
-    **見張る相手を自分で包んではいけない**（`306_` がオフライン検証で踏んだ）。表を
-    作るのは最初に呼ばれた時点なので、そこに載っているのは既に**ローダのラッパの
-    コードオブジェクト**で、これは `patch.py` の全パッチが共有している（ラッパは
-    関数として別物でも `__code__` は同一）。結果、包まれた関数が1つでもスタックに
-    載っていれば「その中」と答えるようになる。包む対象と見張る対象が重なるなら、
-    スタックを見るのをやめて**自分のラッパでスレッドごとの印を立てる**方が正確で
-    速い（`306_party_train_exp` がその形）。
+    **見張る相手を自分で包んではいけない**（`306_` がオフライン検証で踏んだ）。
+    表を作るのは最初に呼ばれた時点なので、
+    そこに載っているのは既に**ローダのラッパのコードオブジェクト**で、
+    これは `patch.py` の全パッチが共有している（ラッパは関数として別物でも
+    `__code__` は同一）。
+    結果、包まれた関数が1つでもスタックに載っていれば「その中」と答えるようになる。
+    包む対象と見張る対象が重なるなら、
+    スタックを見るのをやめて**自分のラッパでスレッドごとの印を立てる**方が正確で速い（`306_party_train_exp` がその形）。
     """
 
     def __init__(self, class_names, method_names=("method_1", "execute"),
@@ -218,7 +228,8 @@ class MethodWatch(object):
         if found:
             self._warn("watching {}".format(", ".join(sorted(set(found.values())))))
         else:
-            # ここが出たら本命の判定は効かない。名前で見る予備に落ちる。
+            # ここが出たら本命の判定は効かない。
+            # 名前で見る予備に落ちる。
             self._warn("WARN no code object resolved for {}; falling back to frame names"
                        .format(", ".join(self.class_names) or "(nothing)"))
         return found
@@ -246,13 +257,14 @@ class MethodWatch(object):
 def caller(depth: int = 4, skip_hints=()) -> str:
     """呼び出し元の連鎖を「こちら側のフレームを飛ばして」返す。
 
-    **段数を数えてはいけない。** `@ctx.wrap` の層が1段挟まるので、`sys._getframe(2)`
-    のように数えた段数は合わず、呼び出し元が `wrapper (…/patch.py)` になる。
-    段数ではなく**ファイル名**で判定し、ローダと mod 自身のフレームを飛ばして
-    最初のゲーム側フレームから数段ぶん並べる。
+    **段数を数えてはいけない。**
+    `@ctx.wrap` の層が1段挟まるので、`sys._getframe(2)` のように数えた段数は合わず、
+    呼び出し元が `wrapper (…/patch.py)` になる。
+    段数ではなく**ファイル名**で判定し、
+    ローダと mod 自身のフレームを飛ばして最初のゲーム側フレームから数段ぶん並べる。
 
-    `skip_hints` に部分文字列を渡すと、そのファイルも飛ばす（pydantic の
-    内部を越えてゲーム側まで遡りたいときなど）。
+    `skip_hints` に部分文字列を渡すと、
+    そのファイルも飛ばす（pydantic の内部を越えてゲーム側まで遡りたいときなど）。
     """
     chain, index = [], 1
     while len(chain) < depth and index < 40:
@@ -274,7 +286,8 @@ def caller(depth: int = 4, skip_hints=()) -> str:
 
 def format_locals(exc_traceback, depth: int = DEFAULT_FRAME_DEPTH) -> str:
     """トレースバックのうち、ゲーム側のフレームのローカル変数を書き出す。"""
-    # まずトレースバックをリストにする。tb_next は一方向にしかたどれないため。
+    # まずトレースバックをリストにする。
+    # tb_next は一方向にしかたどれないため。
     frames = []
     tb = exc_traceback
     while tb is not None:
@@ -285,7 +298,8 @@ def format_locals(exc_traceback, depth: int = DEFAULT_FRAME_DEPTH) -> str:
 
     parts: list[str] = []
     shown = 0
-    # 内側（失敗した場所に近い方）から見ていく。原因に近いほど情報量が多い。
+    # 内側（失敗した場所に近い方）から見ていく。
+    # 原因に近いほど情報量が多い。
     for tb in reversed(frames):
         if shown >= depth:
             break
@@ -294,8 +308,9 @@ def format_locals(exc_traceback, depth: int = DEFAULT_FRAME_DEPTH) -> str:
         if not is_game_frame(code.co_filename):
             continue      # ライブラリ側のフレームは飛ばす
         shown += 1
-        # 関数名だけでは足りない。`method_1` / `execute` は多くのマネージャが
-        # 持っているので、持ち主のクラスまで名指しする（owner_of の説明）。
+        # 関数名だけでは足りない。
+        # `method_1` / `execute` は多くのマネージャが持っているので、
+        # 持ち主のクラスまで名指しする（owner_of の説明）。
         parts.append("  frame: {}:{} in {}".format(
             code.co_filename, tb.tb_lineno, owner_of(code) or code.co_name))
         try:
@@ -316,16 +331,19 @@ def describe_instance(obj, attrs=("id", "npc_id", "name", "npc_name", "character
     ソースが読めないので、どの属性が実在するかは事前に分からない。
     そのため候補を並べておき、実際に持っているものだけを拾う形にしている。
 
-    **`hasattr` は使わない**（`attr()` の説明）。トリップワイヤを仕掛けた
-    クラスが渡ってくると、計測しただけで「属性が無い」の記録が量産される。
-    `200_probe_bug_sites` にはその注意書きがあるのに、そこから呼ばれている
-    この関数が `hasattr` を使っていた。同じ知見の反映漏れ。
+    **`hasattr` は使わない**（`attr()` の説明）。
+    トリップワイヤを仕掛けたクラスが渡ってくると、
+    計測しただけで「属性が無い」の記録が量産される。
+    `200_probe_bug_sites` にはその注意書きがあるのに、
+    そこから呼ばれているこの関数が `hasattr` を使っていた。
+    同じ知見の反映漏れ。
     """
     bits = ["{}".format(type(obj).__name__)]
     for name in attrs:
         value = attr(obj, name)
         if value is MISSING:
             continue
-        # 値だけでなく型も出す。キーの型が問題になるバグがあったため。
+        # 値だけでなく型も出す。
+        # キーの型が問題になるバグがあったため。
         bits.append("{}={!r}({})".format(name, value, type(value).__name__))
     return " ".join(bits)

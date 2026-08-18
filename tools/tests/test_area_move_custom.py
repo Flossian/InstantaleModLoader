@@ -3,7 +3,8 @@
 
     python tools/tests/test_area_move_custom.py
 
-偽の app / PhaseSpec / AreaMoveCofirmation / AreaMoveManager を差し込み、次を確認する。
+偽の app / PhaseSpec / AreaMoveCofirmation / AreaMoveManager を差し込み、
+次を確認する。
 
   ラベル … 日数を設定した手段はテンプレートで表示し直す（`徒歩(14日)`）。
            馬車は**既定でも**日数を足す（`馬車(1000G・14日)`。素のゲームは
@@ -21,10 +22,10 @@
   語彙   … `mode` が実測値に当たらないときは表示・日数・料金・文言の
            **すべて**がゲームのまま（表示だけ変わる食い違いを作らない）
 
-馬車の偽物は「運賃 1000G を `execute` の中で引き、足りなければ乗せない」という
-**仮定**で作ってある。実機の徴収箇所と時機は `217_probe_area_move` の実測待ち
-（GAME.md §2.18）。仮定が外れていた場合に直すのは mod 側で、このテストの偽物は
-実測に合わせて書き直す。
+馬車の偽物は「運賃 1000G を `execute` の中で引き、
+足りなければ乗せない」という **仮定**で作ってある。
+実機の徴収箇所と時機は `217_probe_area_move` の実測待ち（GAME.md §2.18）。
+仮定が外れていた場合に直すのは mod 側で、このテストの偽物は実測に合わせて書き直す。
 """
 import importlib.util
 import io
@@ -71,7 +72,8 @@ def check(name, cond, detail=""):
 
 
 # ---------------------------------------------------------------- 偽ゲーム
-#: 確認画面の実測の形（GAME.md §2.18）。mode の実値も実測どおり。
+#: 確認画面の実測の形（GAME.md §2.18）。
+#: mode の実値も実測どおり。
 WALK_TEXT = "徒歩(3ヵ月)"
 CARRIAGE_TEXT = "馬車(1000G)"
 WALK_MODE = "on_foot"
@@ -138,11 +140,13 @@ class AreaMoveManager:
             self.app.player.gold -= GAME_FARE
         self.app.moved.append((self.target_area_id, self.mode, choice_text))
         if self.mode == CARRIAGE_MODE:
-            # 実測の文言（2026-08-17、217_）。**金額はゲームの運賃で焼き込まれ、
+            # 実測の文言（2026-08-17、217_）。
+            # **金額はゲームの運賃で焼き込まれ、
             # mod が料金をいくらに直しても 1000 のまま**という実挙動を真似る。
             self.app.add_text("{}ゴールドを支払った。快適な旅だ...".format(GAME_FARE))
-            # 支払い直後にゲームが所持金の表示を描き直す瞬間の値。**ここが
-            # 既に差し引き後の正しい値**でないと、「文言は500なのに画面は
+            # 支払い直後にゲームが所持金の表示を描き直す瞬間の値。
+            # **ここが既に差し引き後の正しい値**でないと、
+            # 「文言は500なのに画面は
             # 1000減っている」に見える（実機で利用者が踏んだ）。
             self.app.gold_after_payment = self.app.player.gold
             # 手掛かり（DEPART/ARRIVE_MARKS）のどれにも当たらない文言。

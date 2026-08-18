@@ -9,9 +9,9 @@
   名前     … `<版>_<退避するダンプを取った日>`。今日の日付ではない
   中身     … 5つの成果物と `build.json` が全部入っていて、上書き前の内容である
 
-引き金の検査が厚いのは、ここを間違えた側の壊れ方が正反対だから ― 緩すぎると
-同じ版の zip が毎回増えて肝心の1回が埋もれ、厳しすぎると**更新の瞬間に前の版が
-黙って消える**（この仕組みを作った理由そのもの。GAME.md §1.5）。
+引き金の検査が厚いのは、ここを間違えた側の壊れ方が正反対だから ― 緩すぎると同じ版の zip が毎回増えて肝心の1回が埋もれ、
+厳しすぎると**更新の瞬間に前の版が黙って消える**（この仕組みを作った理由そのもの。
+GAME.md §1.5）。
 """
 
 import io
@@ -127,19 +127,22 @@ def test_archive_previous():
         new = {"app_version": "main_025", "game_version": "014",
                "exe_size": 716076544}
 
-        # 初回。out/recon/ が空なら残すものが無い。
+        # 初回。
+        # out/recon/ が空なら残すものが無い。
         os.makedirs(recon_dir, exist_ok=True)
         check(recon.archive_previous(recon_dir, dict(new)) is None,
               "初回（成果物が1つも無い）は退避しない")
         check(_zips(snap_dir) == [], "  zip も作らない")
 
-        # 同じビルド。何度走らせても増えない。
+        # 同じビルド。
+        # 何度走らせても増えない。
         _plant(recon_dir, "main_025 の1回目", build=dict(new, written="2026-08-09T13:53:21"))
         check(recon.archive_previous(recon_dir, dict(new)) is None,
               "同じビルドなら退避しない（同じ版の zip が毎回増えない）")
         check(_zips(snap_dir) == [], "  zip も作らない")
 
-        # ビルドが変わった。ここが本命。
+        # ビルドが変わった。
+        # ここが本命。
         _plant(recon_dir, "main_024 の最後の1回", build=old)
         path = recon.archive_previous(recon_dir, dict(new))
         check(path is not None and os.path.isfile(path), "ビルドが変われば退避する")
@@ -157,13 +160,15 @@ def test_archive_previous():
                   == "main_024",
                   "  zip 自身に「どの版のものか」が入っている")
 
-        # 同じ版・同じ日にもう一度。滅多に無いが、黙って上書きしてはいけない。
+        # 同じ版・同じ日にもう一度。
+        # 滅多に無いが、黙って上書きしてはいけない。
         _plant(recon_dir, "main_024 のもう1回", build=old)
         recon.archive_previous(recon_dir, dict(new))
         check(_zips(snap_dir) == ["main_024_20260805.zip", "main_024_20260805_2.zip"],
               "名前が埋まっていれば _2 を足す（先の退避を消さない）")
 
-        # 控えの無い（この仕組みが入る前の）ダンプ。確かめられない＝残す。
+        # 控えの無い（この仕組みが入る前の）ダンプ。
+        # 確かめられない＝残す。
         shutil.rmtree(snap_dir, ignore_errors=True)
         _plant(recon_dir, "build.json の無い頃のダンプ", build=None)
         path = recon.archive_previous(recon_dir, dict(new))
@@ -191,7 +196,8 @@ def test_dump_end_to_end():
               "build.json に各ファイルの sha256 が入る")
         check(record.get("written", "")[:2] == "20", "いつ書いたかが入る")
 
-        # 2回目。同じビルドなので退避は走らない。
+        # 2回目。
+        # 同じビルドなので退避は走らない。
         recon.dump(sandbox)
         check(_zips(snap_dir) == [], "同じビルドで走らせ直しても zip は増えない")
 

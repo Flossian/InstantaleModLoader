@@ -4,8 +4,9 @@
     python tools/tests/test_vacation_custom.py
 
 偽の app / PhaseSpec / DisplayVacationChoice / VacationStartManager /
-VacationRestManager / VacationEndManager を差し込む。**偽ゲームは実機の実測に
-合わせてある**（2026-08-18、`out/vacation.log`。GAME.md §2.17）:
+VacationRestManager / VacationEndManager を差し込む。
+**偽ゲームは実機の実測に合わせてある**（2026-08-18、`out/vacation.log`。
+GAME.md §2.17）:
 
   部屋は4つ  犬小屋(0G)=kennel / 簡易寝台(10G)=bunk /
              個室(100G)=private_room / 高級個室(1000G)=luxury_suite
@@ -87,7 +88,8 @@ def check(name, cond, detail=""):
 
 
 # ---------------------------------------------------------------- 偽ゲーム
-#: 実測の部屋（2026-08-18）。ラベルと quality の対まで実機どおり。
+#: 実測の部屋（2026-08-18）。
+#: ラベルと quality の対まで実機どおり。
 ROOMS = (("犬小屋(0G)", "kennel", 0),
          ("簡易寝台(10G)", "bunk", 10),
          ("個室(100G)", "private_room", 100),
@@ -95,7 +97,8 @@ ROOMS = (("犬小屋(0G)", "kennel", 0),
 ROOM_TEXTS = tuple(text for text, _q, _p in ROOMS)
 GAME_PRICES = {quality: price for _t, quality, price in ROOMS}
 
-#: 実測のプロンプト（`out/events.log`）。ゲームが月数を文に焼き込んでいる。
+#: 実測のプロンプト（`out/events.log`）。
+#: ゲームが月数を文に焼き込んでいる。
 REST_PROMPT = ("今プレイヤーキャラのエリスはこのエリアで数ヵ月の宿泊をし、"
                "疲労を回復した。労働、訓練、アイテム作成、研究などの行為はせず、"
                "社交もほどほどに、ただ穏やかに心身を休めることに努めた。")
@@ -106,7 +109,8 @@ UNKNOWN_PROMPT = "エリスはこの宿で長い休息をとった。その滞�
 #: LLM へ出ていく本文が通るローダの仕掛け先（ローカル経路の入口）。
 CHAT_TARGET = "llama_cpp_runtime_completion:LlamaCppClient.chat"
 
-#: 素の宿泊期間（実測: 20代=3ヵ月・31歳=4ヵ月）。既定の偽プレイヤーは25歳。
+#: 素の宿泊期間（実測: 20代=3ヵ月・31歳=4ヵ月）。
+#: 既定の偽プレイヤーは25歳。
 GAME_MONTHS = 3
 STAY_TEXT = "宿泊する({}ヵ月)".format(GAME_MONTHS)
 
@@ -169,8 +173,8 @@ class VacationStartManager:
                 self.app.add_text("宿代が足りない。")
                 return None
             self.app.player.gold -= price
-            # 支払い直後にゲームが所持金の表示を描き直す瞬間の値（`314_` の
-            # テストと同じ検証点 ― ここが既に差し引き後の正しい値であること）。
+            # 支払い直後にゲームが所持金の表示を描き直す瞬間の値（`314_` のテストと同じ検証点
+            # ― ここが既に差し引き後の正しい値であること）。
             self.app.gold_after_payment = self.app.player.gold
         self.app.stays.append((self.months, self.quality, choice_text))
         self.app.add_text("{}ヵ月泊まることにした。".format(self.months))
@@ -203,8 +207,8 @@ class VacationRestManager:
         self.quality = quality
 
     def execute(self, choice_text):
-        # 実測では描写の LLM 呼び出しが `execute` の中で起きる
-        # （応答が窓の texts に入っていた）。
+        # 実測では描写の LLM 呼び出しが `execute` の中で起きる（応答が窓の
+        # texts に入っていた）。
         self.app.send_prompt(REST_PROMPT)
         for prompt in type(self).extra_prompts:
             self.app.send_prompt(prompt)
@@ -248,8 +252,8 @@ class InstantaleApp:
     def send_prompt(self, prompt):
         """LLM へ本文を送る（`LlamaCppClient.chat` の経路を偽物で再現）。
 
-        ローダの `llm.wrap_outgoing` が仕掛けたフックを通す。**送られた
-        messages をそのまま控える**ので、書き換えの有無が読める。
+        ローダの `llm.wrap_outgoing` が仕掛けたフックを通す。
+        **送られた messages をそのまま控える**ので、書き換えの有無が読める。
         """
         messages = [{"role": "system", "content": "あなたはゲームマスターである。"},
                     {"role": "user", "content": prompt}]
@@ -371,10 +375,10 @@ class FakeCtx:
             return func
         return decorator
 
-    # `llm.wrap_outgoing` はクラウド（APIキー）側の別名も包む。**その別名が
-    # 引ければ見張りスレッドは立たない**ので、偽の `llm_manager` を返して
-    # その場で当てさせる（立たせると、テストの間ポーリングし続けたうえ
-    # `superseded()` が無くて log_exc に落ちる）。
+    # `llm.wrap_outgoing` はクラウド（APIキー）側の別名も包む。
+    # **その別名が引ければ見張りスレッドは立たない**ので、
+    # 偽の `llm_manager` を返してその場で当てさせる（立たせると、
+    # テストの間ポーリングし続けたうえ `superseded()` が無くて log_exc に落ちる）。
     manager = types.SimpleNamespace(
         send_request=lambda *a, **k: None,
         send_request_with_no_structure=lambda *a, **k: None)

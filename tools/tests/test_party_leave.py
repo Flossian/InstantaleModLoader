@@ -3,8 +3,8 @@
 
     python tools/tests/test_party_leave.py
 
-偽の app / Character / Facility / PhaseSpec / ConversationEndManager / Clock を
-差し込み、次を確認する。
+偽の app / Character / Facility / PhaseSpec / ConversationEndManager /
+Clock を差し込み、次を確認する。
 
   設置   … 仲間との会話にだけ「ここで別れる」が出る（他人・戦闘中・クエスト中は出ない）
   確認   … 押すと確認の選択肢になり、やめると元のボタンに戻る
@@ -29,7 +29,8 @@ RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 
 # mod は `instantale_modloader.frames` を使う（ゲームの中では runtime/ が
-# sys.path に入っている）。オフラインでも同じように見えるようにする。
+# sys.path に入っている）。
+# オフラインでも同じように見えるようにする。
 if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
@@ -63,8 +64,9 @@ def check(name, cond, detail=""):
 
 
 # ---------------------------------------------------------------- 偽ゲーム
-# ここで定義したクラスは __main__ の属性になる。mod は
-# `getattr(sys.modules['__main__'], 名前)` で引くので、これで本番と同じ形になる。
+# ここで定義したクラスは __main__ の属性になる。
+# mod は `getattr(sys.modules['__main__'], 名前)` で引くので、
+# これで本番と同じ形になる。
 class Character:
     def __init__(self, **kw):
         self.display_position_in_battle = None
@@ -152,8 +154,9 @@ class ConversationEndManager:
 class InstantaleApp:
     def __init__(self, world, party, decoy=None):
         self.world = world
-        # セーブでは game_variables['party']。`app.party` が空のままのことが
-        # あるので、名簿の在り処は形で決めつけない（GAME.md §2.8）。
+        # セーブでは game_variables['party']。
+        # `app.party` が空のままのことがあるので、
+        # 名簿の在り処は形で決めつけない（GAME.md §2.8）。
         # decoy を渡すと「app.party は別物」の状況を再現できる。
         self.party = party if decoy is None else decoy
         self.game_variables = {"party": party}
@@ -200,7 +203,8 @@ class InstantaleApp:
         self.party_updates += 1
 
     def display_button_load(self, dt):
-        # ゲーム自身のボタン読み込み。呼ばれたことを控える。
+        # ゲーム自身のボタン読み込み。
+        # 呼ばれたことを控える。
         self.loaded.append(list(self.to_display_buttons))
 
     def on_button_press(self, button_index):
@@ -245,12 +249,12 @@ class InstantaleApp:
         self.saves += 1
 
 
-# 派生元は名前ではなくここから引く。**直接実行時の `sys.modules['__main__']` は
-# このテスト自身**なので、`main.InstantaleApp = app_cls` がここのグローバル名
-# `InstantaleApp` を書き換えてしまう。素朴に `type("InstantaleApp",
-# (InstantaleApp,), {})` と書くと2回目以降は「前回の派生クラス」から派生し、
-# 前のテストで載せたフックの層が積み上がって同じ処理が何度も走る
-# （`301_` の検証を書いていて実際に踏んだ）。
+# 派生元は名前ではなくここから引く。
+# **直接実行時の `sys.modules['__main__']` はこのテスト自身**なので、
+# `main.InstantaleApp = app_cls` がここのグローバル名
+# `InstantaleApp` を書き換えてしまう。
+# 素朴に `type("InstantaleApp", (InstantaleApp,), {})` と書くと2回目以降は「前回の派生クラス」から派生し、
+# 前のテストで載せたフックの層が積み上がって同じ処理が何度も走る（`301_` の検証を書いていて実際に踏んだ）。
 BASES = {"app": InstantaleApp}
 
 
@@ -296,7 +300,8 @@ def install_fake_hud():
             self.painted.append(list(value))
 
         def update_party_display(self, *args):
-            # 仲間欄を塗る側。呼ばれた回数を控える。
+            # 仲間欄を塗る側。
+            # 呼ばれた回数を控える。
             self.party_painted += 1
 
     module.InstanTaleHUD = InstanTaleHUD
@@ -326,7 +331,8 @@ class FakeCtx:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
-    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # ログは本物の `ctx.logger` をそのまま借りる。
+    # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
 
@@ -391,7 +397,8 @@ def talk_buttons(partner_id, extra=None):
 def setup(party=("player", "63"), partner="63", shape="shared"):
     """mod を適用し、仲間 63 と会話している状態の app を返す。
 
-    `shape` は名簿の載り方。実行時にどれになるかは決めつけられない:
+    `shape` は名簿の載り方。
+    実行時にどれになるかは決めつけられない:
 
       shared    `app.party` と `game_variables['party']` が同じ配列
       split     `app.party` は空の別物で、本物は `game_variables['party']`
@@ -409,7 +416,8 @@ def setup(party=("player", "63"), partner="63", shape="shared"):
     mod.apply(ctx)
     install(ctx.hooks, app_cls)
 
-    # 7 = 雇用された町（初期位置）、9 = 別の町。どちらにもギルドがある。
+    # 7 = 雇用された町（初期位置）、9 = 別の町。
+    # どちらにもギルドがある。
     areas = {"7": build_area("7", "テストの町A"), "9": build_area("9", "テストの町B")}
     characters = {
         "63": Character(name="「試作」のテストB", id="63",
@@ -431,7 +439,8 @@ def setup(party=("player", "63"), partner="63", shape="shared"):
     if shape == "dict":
         app.party = members
     if shape == "bare":
-        # 名簿がどこにも無い状態。心当たりを全部空にする。
+        # 名簿がどこにも無い状態。
+        # 心当たりを全部空にする。
         app.party = None
         app.game_variables = {}
     app.buttons = talk_buttons(partner)
@@ -493,10 +502,10 @@ app.current_quest_data = {"quest_title": "瘴霧の夜警"}
 app.refresh_choice_buttons()
 check("クエスト中は出ない", index_of(app, "confirm") < 0)
 
-# `original_party` は**判定に使わない**（GAME.md §2.8）。平常時も名簿と同じ内容で
-# 入っており、雇用直後は控えが古いだけで食い違うので、どちらの読み方でも
-# 「差し替え中」は判定できない。クエスト中は
-# `current_quest_data` で断っているので、守りたい場面はそちらで足りる。
+# `original_party` は**判定に使わない**（GAME.md §2.8）。
+# 平常時も名簿と同じ内容で入っており、雇用直後は控えが古いだけで食い違うので、
+# どちらの読み方でも「差し替え中」は判定できない。
+# クエスト中は `current_quest_data` で断っているので、守りたい場面はそちらで足りる。
 mod, ctx, app = setup()
 app.original_party = ["player", "63"]          # 名簿と同じ
 app.refresh_choice_buttons()
@@ -541,13 +550,15 @@ check("押すと確認の選択肢になる",
 check("確認文が出る", any("別れる" in t for t in app.texts), app.texts)
 check("この時点ではまだ外していない", app.removed == [] and "63" in app.party)
 
-# 差し替えは「次のフレーム・メインスレッド」で行う。押下と同じ流れの中で差し替えると
-# app.buttons だけ変わって画面が古いまま残る（GAME.md §2.3）。
+# 差し替えは「次のフレーム・メインスレッド」で行う。
+# 押下と同じ流れの中で差し替えると app.buttons だけ変わって画面が古いまま残る（GAME.md
+# §2.3）。
 check("画面に出る文字列も入れ替わる",
       app.to_display_buttons == [mod.CONFIRM_LABEL, mod.CANCEL_LABEL],
       app.to_display_buttons)
-# 塗るのは HUD 側の update_button_texts（GAME.md §2.3）。app.to_display_buttons を
-# どう触っても画面は変わらないので、ここが呼ばれることが表示更新の条件になる。
+# 塗るのは HUD 側の update_button_texts（GAME.md §2.3）。
+# app.to_display_buttons をどう触っても画面は変わらないので、
+# ここが呼ばれてはじめて表示が変わる。
 check("ゲーム自身のボタン読み込みを呼ぶ",
       app.loaded and app.loaded[-1] == [mod.CONFIRM_LABEL, mod.CANCEL_LABEL],
       app.loaded)
@@ -585,13 +596,15 @@ check("ノードも一緒に渡す",
       app.moved and app.moved[0][2] is node_of(app, "7"), app.moved)
 check("別れの文が出る", any("パーティを離れ" in t for t in app.texts), app.texts)
 check("保存した", app.saves == 1, app.saves)
-# 仲間欄は名簿を書き換えただけでは変わらない。ゲーム自身の2つを通して塗り直す。
+# 仲間欄は名簿を書き換えただけでは変わらない。
+# ゲーム自身の2つを通して塗り直す。
 check("仲間欄を塗り直す（app 側）", app.party_updates > 0, app.party_updates)
 check("仲間欄を塗り直す（HUD 側）", app.hud.party_painted > 0, app.hud.party_painted)
 check("例外は出ていない", ctx.errors == [], ctx.errors)
 
-# 別れの文が流れている最中は塗らない（先に消えると、まだ別れていないうちに
-# 居なくなったように見える）。テキストが終わってから塗る。
+# 別れの文が流れている最中は塗らない（先に消えると、
+# まだ別れていないうちに居なくなったように見える）。
+# テキストが終わってから塗る。
 mod, ctx, app = setup()
 app.refresh_choice_buttons()
 app.on_button_press(index_of(app, "confirm"))
@@ -665,8 +678,8 @@ clock.run_onces()
 check("会話が閉じていてもそのまま外せる", app.party == ["player"], app.party)
 
 # ============================================================ 置き場所の決め方
-# 初期位置（雇用された場所）へ戻す。ただし土地を跨いで別れた場合は、
-# いまの町のギルドへ。
+# 初期位置（雇用された場所）へ戻す。
+# ただし土地を跨いで別れた場合は、いまの町のギルドへ。
 print("=== 置き場所 ===")
 
 
@@ -739,8 +752,8 @@ clock.run_onces()
 check("インスタンスの名簿からも外れる",
       [member_key(v) for v in app.roster] == ["player"], app.roster)
 
-# 名前の違う属性に載っていても拾えること。ただし「'player' が入りうる別の配列」
-# （逃走メンバー等）を名簿と間違えないこと。
+# 名前の違う属性に載っていても拾えること。
+# ただし「'player' が入りうる別の配列」（逃走メンバー等）を名簿と間違えないこと。
 mod, ctx, app = setup(shape="split")
 app.party_members = app.roster            # 心当たりのどれでもない名前
 app.game_variables["party"] = []              # 既知の在り処は空
@@ -784,10 +797,10 @@ check("その行に名簿の在り処が入る", "ConversationEndManager" in log
       and "app.party=" in log_text)
 
 # ================================================ ゲーム本来の解散を記録できるか
-# 死別・クエストクリアの解散は `remove_party_member` を通るはず。そこを読み取り
-# 専用で記録しておけば、起きたときに経路が確定する。**呼び出し元の特定を
-# 段数で数えてはいけない**（@ctx.wrap の層が1段挟まるので、自分のラッパを
-# 指してしまう）。
+# 死別・クエストクリアの解散は `remove_party_member` を通るはず。
+# そこを読み取り専用で記録しておけば、起きたときに経路が確定する。
+# **呼び出し元の特定を段数で数えてはいけない**（@ctx.wrap の層が1段挟まるので、
+# 自分のラッパを指してしまう）。
 print("=== ゲーム本来の解散 ===")
 
 mod, ctx, app = setup()
@@ -815,8 +828,8 @@ check("印のキーが 301_ と違う", quest_mark is not None and quest_mark !=
 
 mod, ctx, app = setup()
 app.refresh_choice_buttons()
-# 301_ の押下ハンドラは「自分の印が無ければ素通し」。こちらのボタンが
-# そのまま通ることを、同じ判定で確かめる。
+# 301_ の押下ハンドラは「自分の印が無ければ素通し」。
+# こちらのボタンがそのまま通ることを、同じ判定で確かめる。
 entry = app.buttons[index_of(app, "confirm")]
 check("301_ の判定ではこちらのボタンは素通しになる", entry.get(quest_mark) is None)
 
@@ -834,14 +847,14 @@ check("display_button_map があればそれで引く",
       [b["text"] for b in app.buttons])
 
 # ============================================================ 他 mod のボタン
-# `prune_stale`（残骸の掃除）は `refresh_choice_buttons` のたびに、**画面が
-# 何であれ**走る。判定が「こちらのラベル ＋ 無害 spec ＋ こちらの印が無い」
-# だけだと、**他の mod が今この場で出しているボタン**が3条件すべてに当たる。
-#
-# 実例（VERIFICATION_LOG.md §2.31）: `309_`（役場で罰金を納める）の確認画面の
-# キャンセルは「やめておく」で、こちらの `CANCEL_LABEL` と同じ文字列。
-# `309_` が `apply_buttons` を呼ぶと、その中の `refresh_choice_buttons` で
-# こちらのフックが走り、**確認画面からキャンセルが最初から消える**。
+# `prune_stale`（残骸の掃除）は
+# `refresh_choice_buttons` のたびに、**画面が何であれ**走る。
+# 判定が「こちらのラベル ＋ 無害 spec ＋ こちらの印が無い」だけだと、**他の
+# mod が今この場で出しているボタン**が3条件すべてに当たる。
+# 実例（VERIFICATION_LOG.md §2.31）: `309_`（役場で罰金を納める）の確認画面のキャンセルは「やめておく」で、こちらの
+# `CANCEL_LABEL` と同じ文字列。
+# `309_` が `apply_buttons` を呼ぶと、その中の
+# `refresh_choice_buttons` でこちらのフックが走り、**確認画面からキャンセルが最初から消える**。
 print("=== 他の mod のボタンを消さない ===")
 
 FOREIGN_MARK = "mod_pardon_action"          # 309_ の印
@@ -862,8 +875,8 @@ check("他の mod の確認画面からボタンを1枚も消さない",
       [b["text"] for b in app.buttons] == ["1000ゴールドを納める", "やめておく"],
       [b["text"] for b in app.buttons])
 
-# 汎用の文言はそもそも掃除の対象にしない（ゲーム自身が同じ文言を出していても
-# 巻き込まないため）。印を持たない「やめておく」でも消えてはいけない。
+# 汎用の文言はそもそも掃除の対象にしない（ゲーム自身が同じ文言を出していても巻き込まないため）。
+# 印を持たない「やめておく」でも消えてはいけない。
 mod, ctx, app = setup()
 app.buttons = [{"text": "やめておく",
                 "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}]

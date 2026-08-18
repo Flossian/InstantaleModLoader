@@ -1,23 +1,24 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+# !/usr/bin/env python3 -*- coding: utf-8 -*-
 """
 動いている Instantale に mod ローダを注入する。
 
-Instantale は Nuitka の standalone ビルドで、Python コードは全て
-instantale.exe の中にネイティブコードとして取り込まれている。
+Instantale は Nuitka の standalone ビルドで、
+Python コードは全て instantale.exe の中にネイティブコードとして取り込まれている。
 そのためディスク上に書き換えられる .pyc は存在しない。
 
 一方で CPython 本体は python310.dll として動的リンクされたまま残っていて、
-C API がそのままエクスポートされている。そこで、ゲームの中で既に動いている
-インタプリタを借りて、こちらの Python コードを流し込む。やっているのは
-実質的にこれだけ。
+C API がそのままエクスポートされている。
+そこで、ゲームの中で既に動いているインタプリタを借りて、
+こちらの Python コードを流し込む。
+やっているのは実質的にこれだけ。
 
     PyGILState_STATE s = PyGILState_Ensure();
     PyRun_SimpleString(<ブートストラップのコード>);
     PyGILState_Release(s);
 
 この3行ぶんの機械語（74 バイト）を対象プロセスのメモリに書き込み、
-CreateRemoteThread で実行する。この方式には次の利点がある。
+CreateRemoteThread で実行する。
+この方式には次の利点がある。
 
   * C コンパイラが要らない（機械語をバイト列として直接組み立てる）
   * 管理者権限が要らない（同じユーザーの同じ整合性レベルのプロセスなので）
@@ -59,10 +60,11 @@ NEEDED_EXPORTS = ("PyGILState_Ensure", "PyRun_SimpleString", "PyGILState_Release
 def use_utf8_console() -> None:
     """コンソールへの出力で UnicodeEncodeError が出ないようにする。
 
-    このツールはフォルダのパスをそのまま画面に出す。日本語版 Windows の
-    既定のコードページ（cp932）では表せない文字がパスに入っていると、
-    print() が例外を投げて処理そのものが止まってしまう。表示が多少崩れても
-    処理は続く方が良いので、UTF-8 と errors="replace" に切り替える。
+    このツールはフォルダのパスをそのまま画面に出す。
+    日本語版 Windows の既定のコードページ（cp932）では表せない文字がパスに入っていると、
+    print() が例外を投げて処理そのものが止まってしまう。
+    表示が多少崩れても処理は続く方が良いので、
+    UTF-8 と errors="replace" に切り替える。
 
     pythonw.exe（GUI）では stdout が無いことがあるので、その場合は何もしない。
     """
@@ -93,21 +95,22 @@ def export_rvas(dll_path: str, wanted: tuple[str, ...]) -> dict[str, int]:
     with open(dll_path, "rb") as fh:
         buf = fh.read()
 
-    # PE ファイルの先頭は DOS ヘッダ。その 0x3C の位置に、本体である
-    # PE ヘッダへのオフセットが入っている。
+    # PE ファイルの先頭は DOS ヘッダ。
+    # その 0x3C の位置に、本体である PE ヘッダへのオフセットが入っている。
     pe = struct.unpack_from("<I", buf, 0x3C)[0]
     if buf[pe:pe + 4] != b"PE\0\0":
         raise RuntimeError(f"not a PE file: {dll_path}")
 
-    # 0x20B は 64bit（PE32+）を表す。32bit の DLL を掴んでいたらここで止める。
+    # 0x20B は 64bit（PE32+）を表す。
+    # 32bit の DLL を掴んでいたらここで止める。
     magic = struct.unpack_from("<H", buf, pe + 24)[0]
     if magic != 0x20B:
         raise RuntimeError(f"expected PE32+ (x64), got magic 0x{magic:X}")
 
     n_sections = struct.unpack_from("<H", buf, pe + 6)[0]
     opt_size = struct.unpack_from("<H", buf, pe + 20)[0]
-    # オプショナルヘッダの先頭から 112 バイト目が、最初のデータディレクトリ
-    # （＝エクスポートテーブル）の位置。
+    # オプショナルヘッダの先頭から 112 バイト目が、
+    # 最初のデータディレクトリ（＝エクスポートテーブル）の位置。
     export_rva = struct.unpack_from("<I", buf, pe + 24 + 112)[0]
 
     # ファイル上の位置と RVA は一致しないので、変換用にセクション表を読む。
@@ -255,7 +258,8 @@ def find_processes(exe_name: str) -> list[tuple[int, str]]:
     _check(snap != INVALID_HANDLE_VALUE, "CreateToolhelp32Snapshot(process)")
     try:
         entry = PROCESSENTRY32W()
-        # dwSize の設定は必須。設定し忘れると API が失敗する。
+        # dwSize の設定は必須。
+        # 設定し忘れると API が失敗する。
         entry.dwSize = ctypes.sizeof(entry)
         out = []
         ok = kernel32.Process32FirstW(snap, ctypes.byref(entry))
@@ -292,9 +296,9 @@ def find_module(pid: int, module_name: str) -> tuple[int, str]:
 def build_stub(ensure: int, run: int, release: int, code_addr: int) -> bytes:
     """リモートスレッドとして実行する機械語を組み立てる。
 
-    スレッドの開始位置には call で入ってくるので、入った直後のスタックは
-    16 バイト境界から 8 ずれている。sub rsp, 0x38 で境界に揃えつつ、
-    Windows x64 の呼び出し規約が要求する 0x20 バイトの領域（シャドウスペース）と、
+    スレッドの開始位置には call で入ってくるので、
+    入った直後のスタックは 16 バイト境界から 8 ずれている。
+    sub rsp, 0x38 で境界に揃えつつ、Windows x64 の呼び出し規約が要求する 0x20 バイトの領域（シャドウスペース）と、
     値を一時的に置くための 2 スロットをまとめて確保している。
     """
     def mov_rax(v: int) -> bytes:
@@ -319,12 +323,11 @@ def build_stub(ensure: int, run: int, release: int, code_addr: int) -> bytes:
 
 
 # --------------------------------------------------------------------------
-# 流し込む Python コード
-#
-# 【注意】この文字列は C の文字列としてリモートプロセスへ渡すため、
-# ASCII だけで書く必要がある。make_bootstrap() が isascii() で検査していて、
-# 違反すると注入を中止する。そのためこのテンプレートの中のコメントだけは
-# 日本語にできない。埋め込むパスの方は ascii() が \uXXXX に直すので、
+# 流し込む Python コード【注意】この文字列は
+# C の文字列としてリモートプロセスへ渡すため、ASCII だけで書く必要がある。
+# make_bootstrap() が isascii() で検査していて、違反すると注入を中止する。
+# そのためこのテンプレートの中のコメントだけは日本語にできない。
+# 埋め込むパスの方は ascii() が \uXXXX に直すので、
 # 日本語を含むフォルダに置いても問題ない。
 # --------------------------------------------------------------------------
 BOOTSTRAP_TEMPLATE = r'''
@@ -355,11 +358,11 @@ except BaseException:
     _w("bootstrap FAILED\n" + traceback.format_exc())
 '''
 
-# 流し込むコードの最後の1行。注入の目的はこれだけが違う。
-#
-# unload 側も同じ経路（モジュールを落として再 import）を通る。パッチを剥がすための
-# 記録は sys に置いてあるので（patch.py の _undo_log）、ローダを読み直しても
-# 前回の注入で当てた分を剥がせる。
+# 流し込むコードの最後の1行。
+# 注入の目的はこれだけが違う。
+# unload 側も同じ経路（モジュールを落として再 import）を通る。
+# パッチを剥がすための記録は sys に置いてあるので（patch.py の _undo_log）、
+# ローダを読み直しても前回の注入で当てた分を剥がせる。
 CALLS = {
     "boot": "instantale_modloader.boot(__OUT__)",
     "unload": "instantale_modloader.unload(__OUT__)",
@@ -370,9 +373,9 @@ def make_bootstrap(runtime_dir: str, out_dir: str, log_path: str,
                    action: str = "boot") -> bytes:
     """テンプレートにパスを埋め込み、NUL 終端付きのバイト列にする。"""
     # ascii() を使うのは、クォートとバックスラッシュのエスケープに加えて、
-    # ASCII 以外の文字を \uXXXX に置き換えてくれるため。repr() だと
-    # 「C:\ゲーム\...」のような日本語のパスがそのまま残り、下の isascii()
-    # 検査に落ちて注入できなくなる（日本語環境では珍しくない）。
+    # ASCII 以外の文字を \uXXXX に置き換えてくれるため。
+    # repr() だと「C:\ゲーム\...」のような日本語のパスがそのまま残り、
+    # 下の isascii() 検査に落ちて注入できなくなる（日本語環境では珍しくない）。
     # \uXXXX はゲーム側の Python が文字列リテラルとして元の文字に戻すので、
     # 埋め込んだパスの意味は変わらない。
     src = (BOOTSTRAP_TEMPLATE
@@ -446,9 +449,9 @@ def inject(pid: int, payload: bytes, dry_run: bool = False) -> int:
         _check(thread, "CreateRemoteThread")
         try:
             if kernel32.WaitForSingleObject(thread, 30000) == WAIT_TIMEOUT:
-                # AI の推論が長く走っていると、GIL が握られたままになって
-                # ここまで到達しないことがある。放っておけば後から完走するので、
-                # メモリは解放せずに残す。
+                # AI の推論が長く走っていると、
+                # GIL が握られたままになってここまで到達しないことがある。
+                # 放っておけば後から完走するので、メモリは解放せずに残す。
                 # 解放してしまうと、実行中のコードそのものを消すことになり、
                 # ゲームが落ちる。
                 print("  WARNING: stub still running after 30s (GIL contention?)")
@@ -474,9 +477,10 @@ def inject(pid: int, payload: bytes, dry_run: bool = False) -> int:
 def interpreter_ready(pid: int) -> bool:
     """対象プロセスで Python の初期化が終わっていれば True。
 
-    Py_IsInitialized はグローバルなフラグを読むだけなので、GIL を持たない
-    リモートスレッドから呼んでも安全。しかも引数なしで int を返すという形が
-    スレッド関数とほぼ同じなので、そのままスレッドの開始位置として起動でき、
+    Py_IsInitialized はグローバルなフラグを読むだけなので、
+    GIL を持たないリモートスレッドから呼んでも安全。
+    しかも引数なしで int を返すという形がスレッド関数とほぼ同じなので、
+    そのままスレッドの開始位置として起動でき、
     結果はスレッドの終了コードとして受け取れる。
     """
     try:
@@ -493,7 +497,8 @@ def interpreter_ready(pid: int) -> bool:
     if not handle:
         return False
     try:
-        # メモリの確保も書き込みも要らない。DLL にある関数を直接起点にする。
+        # メモリの確保も書き込みも要らない。
+        # DLL にある関数を直接起点にする。
         thread = kernel32.CreateRemoteThread(handle, None, 0, base + rva, None, 0, None)
         if not thread:
             return False
@@ -557,7 +562,8 @@ def main() -> int:
     print(f"out dir             : {OUT_DIR}")
 
     action = "unload" if args.unload else "boot"
-    # 注入 = 1世代の境目。書き込みが始まる前にここで入れ替える。
+    # 注入 = 1世代の境目。
+    # 書き込みが始まる前にここで入れ替える。
     # --dry-run は「何も書かない」ための指定なので、ログにも触らない。
     # --unload はこのプレイの続きなので**入れ替えない**（剥がした記録を、
     # そのとき当てた記録と同じファイルに残したい）。
@@ -575,7 +581,8 @@ def main() -> int:
             print("mods reverted; on_ready side effects and game-state writes remain.")
         print(f"See {BOOT_LOG} and {os.path.join(OUT_DIR, 'modloader.log')}")
     elif rc == -2:
-        # 上の GIL 待ちで時間切れになったケース。失敗ではなく保留。
+        # 上の GIL 待ちで時間切れになったケース。
+        # 失敗ではなく保留。
         print("\nPENDING: see the logs once the game becomes idle.")
     else:
         print(f"\nFAILED: PyRun_SimpleString returned {rc} "

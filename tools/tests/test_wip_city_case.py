@@ -3,9 +3,9 @@
 
     python tools/tests/test_city_case.py
 
-`305_` は実機4回かけて直している（VERIFICATION_LOG.md §2.19〜§2.22）。実機の1周は
-時間がかかるうえ、外したときに原因の切り分けが難しい。**実機でしか分からない
-こと以外は全部ここで潰す。**
+`305_` は実機4回かけて直している（VERIFICATION_LOG.md §2.19〜§2.22）。
+実機の1周は時間がかかるうえ、外したときに原因の切り分けが難しい。
+**実機でしか分からないこと以外は全部ここで潰す。**
 
   事件     … 真相が最初に固定される／段階が手がかりの数で進む／
               前提の揃わない手がかりは拾えない／別の世界の控えは捨てる
@@ -84,7 +84,8 @@ class PhaseSpec:
         self.args = list(args)
 
     def to_dict(self):
-        # **印は書かれない。**これが残骸の重複を生む（`ui.Screen.prune_stale`）。
+        # **印は書かれない。**
+        # これが残骸の重複を生む（`ui.Screen.prune_stale`）。
         return {"cls_name": self.cls_name, "args": list(self.args)}
 
 
@@ -166,8 +167,8 @@ class Character:
 def crowd(character_id, name="混乱する村人たち"):
     """個人ではない登場人物。**犯人に選んではいけない。**
 
-    実機で `混乱する村人たち` が犯人に選ばれた。世界には
-    群衆や戦闘から生えた相手が混ざる。
+    実機で `混乱する村人たち` が犯人に選ばれた。
+    世界には群衆や戦闘から生えた相手が混ざる。
     """
     return Character(character_id, name, category="crowd of villagers",
                      profile="", personality="")
@@ -179,7 +180,8 @@ class World:
         self.areas = areas
         self.characters = characters
         self.generated = []
-        #: 既存 NPC の素データ。**MOD はここを見つけて書けなければならない。**
+        #: 既存 NPC の素データ。
+        #: **MOD はここを見つけて書けなければならない。**
         self.npcs = {cid: {"name": c.name, "id": cid} for cid, c in characters.items()}
 
     #: World 自身が握る素データ（`save_data_dict` 相当）。
@@ -205,8 +207,9 @@ class World:
         self.generated.append((character_id, data))
         GENERATED.append(data)
         if COLLIDING_IDS["on"]:
-            # **実行時の名簿に載らない実装**の再現。載らないと次の採番が
-            # 進まず、2人目が1人目を上書きする（実機で3人とも 47 になった）。
+            # **実行時の名簿に載らない実装**の再現。
+            # 載らないと次の採番が進まず、2人目が1人目を上書きする（実機で3人とも
+            # 47 になった）。
             return None
         self.characters[character_id] = Character(
             character_id, data.get("name", "?"),
@@ -228,8 +231,9 @@ class InstantaleApp:
     def __init__(self, world, player):
         self.world = world
         self.player = player
-        # セーブそのもの。**NPC を作る経路がここへ書く**（実セーブのキーに
-        # 合わせてある。`209_` の world survey より）。
+        # セーブそのもの。
+        # **NPC を作る経路がここへ書く**（実セーブのキーに合わせてある。
+        # `209_` の world survey より）。
         self.world_dict = {"npcs": {}, "areas": {}, "quests": {}}
         world.save = self.world_dict
         self.moved = []
@@ -297,8 +301,8 @@ def install_save_area_json():
     """`save_area_json.generate_npc` は**作る側ではなかった**（実測）。
 
     呼んでも `world_dict` にも `world.characters` にも何も現れない。
-    MOD が誤ってこちらへ戻らないよう、呼ばれたら記録だけして何もしない
-    ものを置いておく（世界丸ごとを返すところまで本物どおり）。
+    MOD が誤ってこちらへ戻らないよう、
+    呼ばれたら記録だけして何もしないものを置いておく（世界丸ごとを返すところまで本物どおり）。
     """
     module = types.ModuleType("save_area_json")
     calls = []
@@ -337,9 +341,9 @@ install_fake_hud()
 def load_mod(name="city_case_mod"):
     """本番と同じ形（**パッケージとして**）読み込む（`_load_mod_file` と同じ）。
 
-    `submodule_search_locations` を渡すのも、`exec_module` の**前に**
-    `sys.modules` へ登録するのもローダと同じ。これが無いと mod の中の
-    `from . import case` が落ちる。
+    `submodule_search_locations` を渡すのも、
+    `exec_module` の**前に** `sys.modules` へ登録するのもローダと同じ。
+    これが無いと mod の中の `from . import case` が落ちる。
     """
     spec = importlib.util.spec_from_file_location(
         name, MOD, submodule_search_locations=[os.path.dirname(MOD)])
@@ -359,7 +363,8 @@ ledger_mod = sys.modules["city_case_mod.ledger"]
 world_mod = sys.modules["city_case_mod.world"]
 patterns_mod = sys.modules["city_case_mod.patterns"]
 
-#: 事件の材料。**本番と同じ経路で読む**（`patterns/*.json` → 足りない束は同梱）。
+#: 事件の材料。
+#: **本番と同じ経路で読む**（`patterns/*.json` → 足りない束は同梱）。
 BOOK = patterns_mod.load(MOD_DIR, defaults=mod.BUILT_IN)
 CAST_POOL = BOOK["cast"]
 #: 検証で使う固定の2軸（`fake_case` は特徴の割り当てを自分で決めるため）。
@@ -383,7 +388,8 @@ class FakeCtx:
         os.makedirs(OUT_DIR, exist_ok=True)
         return os.path.join(OUT_DIR, name)
 
-    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # ログは本物の `ctx.logger` をそのまま借りる。
+    # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
 
@@ -405,8 +411,9 @@ class FakeCtx:
 
     patch = wrap
 
-    #: 注入し直されたか。検証では常に「今の世代が現役」。真を入れると、
-    #: 書き上がった素材を捨てて降りる側（`compose`）を通せる。
+    #: 注入し直されたか。
+    #: 検証では常に「今の世代が現役」。
+    #: 真を入れると、書き上がった素材を捨てて降りる側（`compose`）を通せる。
     superseded_now = False
 
     def superseded(self):
@@ -418,8 +425,8 @@ class FakeCtx:
     def log_exc(self, *args, **kwargs):
         """**握り潰さない。**
 
-        本番の `ctx.log_exc` はゲームを落とさないために例外を飲むが、検証で
-        同じことをすると「何も起きない」だけが見えて原因が分からなくなる。
+        本番の `ctx.log_exc` はゲームを落とさないために例外を飲むが、
+        検証で同じことをすると「何も起きない」だけが見えて原因が分からなくなる。
         ここでは必ず出す。
         """
         self.errors.append(args[0] if args else "")
@@ -483,8 +490,8 @@ def talk_to(ctx, app, npc_id):
 def greet(ctx, app, npc_id):
     """会話に**入るだけ**（第一声）。プレイヤーはまだ何も尋ねていない。
 
-    実機ではこの後すぐ抜けられる。そのとき何も手に入らないことが要点
-    （利用者の指摘）。
+    実機ではこの後すぐ抜けられる。
+    そのとき何も手に入らないことが要点（利用者の指摘）。
     """
     hook = ctx.hooks["scripts.llm.llm_manager:conversation_starter"]
     character = app.world.characters[npc_id]
@@ -512,9 +519,9 @@ def end_conversation(ctx, app):
 def end_conversation_with(ctx, app, npc_id):
     """**誰との**会話が閉じたのかが分かる版。
 
-    実機の `ConversationEndManager.__init__(self, app, in_conversation_id, ...)`
-    に合わせる。これがあると、印を付けた相手と閉じた会話が同じかを
-    突き合わせられる。
+    実機の
+    `ConversationEndManager.__init__(self, app, in_conversation_id, ...)` に合わせる。
+    これがあると、印を付けた相手と閉じた会話が同じかを突き合わせられる。
     """
     hook = ctx.hooks["__main__:ConversationEndManager.execute"]
     manager = ConversationEndManager(app)
@@ -526,14 +533,17 @@ def accuse(ctx, app, npc_id):
     """告発する。**自前のボタンを2回押すだけ**（ゲームの場面を使わない）。
 
     「犯人を告発する」で容疑者が並び、その1人を押すと決着する。
-    以前はゲームの自由施設に場面を組ませていたが、`scripts.free_facility` が
-    まだ import されていないと押しても詰む作りだった（利用者の指摘）。判定は元から id の突き合わせだけなので、経路だけ変えた。
+    以前はゲームの自由施設に場面を組ませていたが、
+    `scripts.free_facility` がまだ
+    import されていないと押しても詰む作りだった（利用者の指摘）。
+    判定は元から id の突き合わせだけなので、経路だけ変えた。
     """
     app.facility_screen()
     refresh_for(ctx, app)
     press(ctx, app, mod.ACCUSE_LABEL)
-    # 実機では `screen.refresh` が**フック済みの** `refresh_choice_buttons` を
-    # 呼ぶので並びが組み直される。検証では素のメソッドなので、ここで通す。
+    # 実機では `screen.refresh` が**フック済みの**
+    # `refresh_choice_buttons` を呼ぶので並びが組み直される。
+    # 検証では素のメソッドなので、ここで通す。
     refresh_for(ctx, app)
     label = [t for t in app.labels()
              if str(t).startswith(mod.ACCUSE_ONE_PREFIX)
@@ -553,8 +563,9 @@ def refresh_for(ctx, app):
 def clean_record(ctx):
     """控えと台帳の両方を消す。**節どうしを独立させる。**
 
-    台帳（`city_case_cast.json`）も消さないと、前の節が作って決着させずに
-    放り出したキャストが残り、後の節の検査に混ざる。実際に混ざった。
+    台帳（`city_case_cast.json`）も消さないと、
+    前の節が作って決着させずに放り出したキャストが残り、後の節の検査に混ざる。
+    実際に混ざった。
     """
     for basename in (mod.RECORD_BASENAME, mod.LEDGER_BASENAME):
         path = ctx.state_path(basename)
@@ -566,8 +577,8 @@ def clean_record(ctx):
 def solvable_when_complete(case):
     """**真の話を全部集めれば1人に絞れるか。**詰んだ事件を出していないか。
 
-    思い違いの証言（`wrong`）は**信じない前提**で数える。それを信じると
-    誰も残らないのが正しい挙動なので、ここで一緒に立てると常に落ちる。
+    思い違いの証言（`wrong`）は**信じない前提**で数える。
+    それを信じると誰も残らないのが正しい挙動なので、ここで一緒に立てると常に落ちる。
     """
     probe = json.loads(json.dumps(case))
     for clue in probe["clues"]:
@@ -608,12 +619,12 @@ def tell_of(traits):
 def fake_case(culprit=0, n=4):
     """`plan_facts` と同じ規則で組んだ事件（`open_case` を通さずに調べる）。"""
     cast = [dict(spec, npc_id=str(100 + i)) for i, spec in enumerate(CAST[:n])]
-    # **裏取りの経路を通すための仕掛け。**特徴が犯人と完全に一致する者を
-    # 1人置くと、その人は特徴では消せないので裏取りの事実が生まれる。
-    #
+    # **裏取りの経路を通すための仕掛け。**
+    # 特徴が犯人と完全に一致する者を 1人置くと、
+    # その人は特徴では消せないので裏取りの事実が生まれる。
     # MOD 本体はこういう置き方を**していない**（かつては「双子」として必ず
-    # 1人置いていたが、面白さに寄与しないので外した）。ここは
-    # `case.py` の裏取りまわりを調べるための作り物。
+    # 1人置いていたが、面白さに寄与しないので外した）。
+    # ここは `case.py` の裏取りまわりを調べるための作り物。
     if len(cast) > 1:
         cast[1]["traits"] = dict(cast[culprit]["traits"])
     facts = []
@@ -698,7 +709,8 @@ ctx = FakeCtx()
 clean_record(ctx)
 mod.apply(ctx)
 app, places = fresh_world()
-#: 事件が始まる前から居た NPC。**この人たちは誰も退場してはいけない。**
+#: 事件が始まる前から居た NPC。
+#: **この人たちは誰も退場してはいけない。**
 existing_ids = sorted(app.world.characters)
 refresh = install(ctx, app)
 
@@ -790,9 +802,9 @@ seen = talk_to(ctx, app, places["inn"].owner)
 inn_fact = [c["fact"] for c in found["clues"] if c["at_type"] == INN][0]
 check("**知っている人物には事実が渡る**",
       inn_fact in str(seen["args"][11]), seen["args"][11])
-# **「尋ねられたら」にしない。**手がかりは「会話した」という行動で立つので、
-# 条件付きの指示だと、尋ねなかったときに何も言われないまま手がかりだけ出る
-# （利用者の指摘）。
+# **「尋ねられたら」にしない。**
+# 手がかりは「会話した」という行動で立つので、条件付きの指示だと、
+# 尋ねなかったときに何も言われないまま手がかりだけ出る（利用者の指摘）。
 check("**必ず自分から言う指示になっている**（条件付きにしない）",
       "必ず" in str(seen["args"][11])
       and "尋ねられたら" not in str(seen["args"][11]),
@@ -809,8 +821,8 @@ check("画面に分かったことが出た",
 check("**手がかりを得た直後に次の行き先が出る**",
       any(places["market"].name in t for t in gained), gained)
 
-# **知らない印のボタンは素通しする。**ゲームや他の MOD のボタンを
-# 横取りしないための最低条件。
+# **知らない印のボタンは素通しする。**
+# ゲームや他の MOD のボタンを横取りしないための最低条件。
 passed_through = {"n": 0}
 
 
@@ -875,9 +887,10 @@ refresh()
 check("ギルドで「犯人を告発する」が出る",
       mod.ACCUSE_LABEL in app.labels(), app.labels())
 
-# 押すと容疑者が並ぶ。以前はここでゲームの自由施設に場面を組ませていたが、
-# `scripts.free_facility` がまだ import されていないと「調べていることは無い」
-# と出て詰む作りだった（利用者の指摘）。
+# 押すと容疑者が並ぶ。
+# 以前はここでゲームの自由施設に場面を組ませていたが、
+# `scripts.free_facility` がまだ
+# import されていないと「調べていることは無い」と出て詰む作りだった（利用者の指摘）。
 press(ctx, app, mod.ACCUSE_LABEL)
 refresh()
 one = [t for t in app.labels() if str(t).startswith(mod.ACCUSE_ONE_PREFIX)]
@@ -889,9 +902,9 @@ check("やめるボタンがある", mod.LEAVE_LABEL in app.labels(), app.labels
 check("諦めるボタンがある", mod.GIVE_UP_LABEL in app.labels(), app.labels())
 check("容疑者を並べている間は「犯人を告発する」を重ねて出さない",
       mod.ACCUSE_LABEL not in app.labels(), app.labels())
-# **告発は専用の画面にする。**施設の選択肢に混ぜると、誰を告発するかを
-# 選ぶ場面なのに「出る」や「会話する」が並んで、何をする画面なのか分から
-# なくなる（利用者の指摘）。
+# **告発は専用の画面にする。**
+# 施設の選択肢に混ぜると、誰を告発するかを選ぶ場面なのに「出る」や「会話する」が並んで、
+# 何をする画面なのか分からなくなる（利用者の指摘）。
 check("**ゲームの選択肢は出さない（この画面はこちらのものだけ）**",
       all(str(t).startswith(mod.ACCUSE_ONE_PREFIX)
           or t in (mod.LEAVE_LABEL, mod.GIVE_UP_LABEL)
@@ -1046,15 +1059,16 @@ check("生成物は生きている",
 check("**空いている id を使う**（ゲームの採番と衝突させない）",
       all(data["id"] not in existing for data in GENERATED),
       [data.get("id") for data in GENERATED])
-# 実測: `generate_npc` はセーブに入る名前とは違う呼び方で
-# いくつかの項目を読む。埋めないと説明も立ち絵も空になる。
+# 実測: `generate_npc` はセーブに入る名前とは違う呼び方でいくつかの項目を読む。
+# 埋めないと説明も立ち絵も空になる。
 check("**立ち絵の元（look）を持たせている**",
       all(data.get("look") for data in GENERATED),
       [data.get("look") for data in GENERATED])
 check("**推理用の項目はセーブに書かない**（traits / tell は MOD の都合）",
       all("traits" not in data and "tell" not in data for data in GENERATED),
       [sorted(data) for data in GENERATED][:1])
-# 実測: 戻り値は `world_dict` そのもの。id は返らないので名前で引き当てる。
+# 実測: 戻り値は `world_dict` そのもの。
+# id は返らないので名前で引き当てる。
 check("**戻り値から id を取ろうとしない**（名前で引き当てる）",
       all(str(npc_id) in appg.world_dict["npcs"]
           for npc_id in case_mod.suspect_ids(caseg)),
@@ -1105,12 +1119,14 @@ check("**作った NPC もその並びで書かれている**",
       all(tuple(data) == SAVE_NPC_FIELDS for data in GENERATED),
       [[(i, a, b) for i, (a, b) in enumerate(zip(SAVE_NPC_FIELDS, tuple(data)))
         if a != b] for data in GENERATED][:1])
-# `knowledge` は実際のセーブでは `[]`。`{}` だと型が違う。
+# `knowledge` は実際のセーブでは `[]`。
+# `{}` だと型が違う。
 check("knowledge はリスト（辞書ではない）",
       all(isinstance(data.get("knowledge"), list) for data in GENERATED),
       [type(data.get("knowledge")).__name__ for data in GENERATED][:1])
 # 並びを保っているのは「テンプレートが全項目を持っているから」であって、
-# `update` が賢いからではない。1つ抜いたら本当に崩れることを確かめておく。
+# `update` が賢いからではない。
+# 1つ抜いたら本当に崩れることを確かめておく。
 short = dict(world_mod.NEW_NPC_TEMPLATE)
 del short["name"]
 short.update({"name": "後から足した"})
@@ -1179,8 +1195,8 @@ refresh4()
 press(ctx4, app4, mod.START_LABEL)
 case4 = case_mod.load(ctx4.state_path(mod.RECORD_BASENAME))
 # キャストは必ず生成するので、**元から居た者は誰も巻き込まれない。**
-# 群衆（`混乱する村人たち`）が犯人に選ばれた件は、既存 NPC から選ぶ設計を
-# やめたことで根本から無くなった（利用者の指摘）。
+# 群衆（`混乱する村人たち`）が犯人に選ばれた件は、
+# 既存 NPC から選ぶ設計をやめたことで根本から無くなった（利用者の指摘）。
 check("**群衆は犯人にならない**", case4.get("culprit") != "33", case4.get("culprit"))
 check("群衆は容疑者にも並ばない", "33" not in case_mod.suspect_ids(case4),
       case4.get("suspects"))
@@ -1189,8 +1205,9 @@ check("**元から居た NPC は1人も容疑者にならない**",
       (case_mod.suspect_ids(case4), before4))
 
 print("\n[深化] **事件ごとに顔ぶれと特徴が変わる**")
-# 下地に特徴を焼き付けていないので、同じ人物でも回によって片腕だったり
-# 大柄だったりする。2件目が同じ事件にならないための作り。
+# 下地に特徴を焼き付けていないので、
+# 同じ人物でも回によって片腕だったり大柄だったりする。
+# 2件目が同じ事件にならないための作り。
 layouts = set()
 tells = set()
 for _round in range(12):
@@ -1257,8 +1274,9 @@ for _round in range(30):
     if len(casen["clues"]) < 2:
         thin.append(len(casen["clues"]))
     dup.extend(redundant_pairs(casen))
-    # **思い違いが混じる事件では話が変わる。**嘘を1本外せば解けるのが正しい
-    # 挙動なので、「どれも抜けない」は真の話だけの事件に対して見る。
+    # **思い違いが混じる事件では話が変わる。**
+    # 嘘を1本外せば解けるのが正しい挙動なので、
+    # 「どれも抜けない」は真の話だけの事件に対して見る。
     droppable = [clue["id"] for clue in casen["clues"]
                  if without(casen, clue["id"])]
     if has_mistake(casen):
@@ -1279,7 +1297,8 @@ check("思い違いの事件も出る", mistaken > 0, (mistaken, rounds))
 check("**思い違いは1本に決まる**（外し方が一意）", not muddled, muddled[:1])
 check("手がかりが1本だけの事件を出さない", not thin, thin)
 
-# 上の失敗を**再現する形**で持っておく。実機で出た配り方をそのまま組むと、
+# 上の失敗を**再現する形**で持っておく。
+# 実機で出た配り方をそのまま組むと、
 # 判定が「重複あり」「抜いても解ける」を確かに掴まえること。
 broken = case_mod.build("W", "0", "76",
                         [{"id": i, "tell": "", "claim": ""}
@@ -1341,8 +1360,9 @@ check("画面にも出る",
 
 print("\n[控え] **古い控えに証言者を埋める**")
 # 控えは注入をまたいで残るので、進行中の事件は古い版が作ったものでありうる。
-# 証言者（`witness`）を後から足したとき、進行中の事件は `None` のままで
-# 照合が永久に外れた（実機）。捨てずに埋めて続けられるようにする。
+# 証言者（`witness`）を後から足したとき、
+# 進行中の事件は `None` のままで照合が永久に外れた（実機）。
+# 捨てずに埋めて続けられるようにする。
 ctx6 = FakeCtx()
 old_case = case_mod.build(
     "テスト世界", "0", "20", [{"id": "20", "tell": "t"}],
@@ -1388,8 +1408,8 @@ check("捨てた後は新しい事件を受けられる",
 
 print("\n[材料] **事件のパターンを JSON から引いて組み合わせる**")
 # 材料がコードに焼き付いていると、何度遊んでも同じ形の事件になる。
-# `patterns/*.json` に出して、**1件ごとに抽選して組み合わせる**（利用者の
-# 要望）。ファイルを足せば幅が増え、コードは触らなくてよい。
+# `patterns/*.json` に出して、**1件ごとに抽選して組み合わせる**（利用者の要望）。
+# ファイルを足せば幅が増え、コードは触らなくてよい。
 check("同梱の JSON が全部読める",
       all(BOOK.get(key) for key in ("incidents", "axes", "whereabouts", "cast")),
       {k: bool(BOOK.get(k)) for k in ("incidents", "axes", "whereabouts", "cast")})
@@ -1407,8 +1427,9 @@ for axis in BOOK["axes"]:
     for value in axis["values"]:
         check("  {}.{} に語・文・言い換えが揃っている".format(axis["id"], value["id"]),
               value["word"] and value["fact"] and value["hints"], value)
-# **言い換えの語が軸をまたいで衝突していないか。**衝突していると、その語を
-# 使った正しい文が「他の特徴に触れた」と誤判定されて捨てられる。
+# **言い換えの語が軸をまたいで衝突していないか。**
+# 衝突していると、
+# その語を使った正しい文が「他の特徴に触れた」と誤判定されて捨てられる。
 seen_hints = {}
 clashes = []
 for axis in BOOK["axes"]:
@@ -1444,11 +1465,10 @@ check("引く本数は決めた数まで",
 nouns = {patterns_mod.draw_incident(BOOK, random)["noun"] for _ in range(40)}
 check("**引くたびに題材も変わる**", len(nouns) > 1, sorted(nouns))
 
-# --- 壊れていても止まらない ---
-# **受け皿に落ちたときこそ確かめる。**実機で `KeyError: 'short'` を踏んだ。
-# 既定値を素通しで使っていたので、読み方の側にしか無い項目が
-# 抜けていた。しかも普段はファイルが読めるので、**受け皿の道だけが壊れて
-# いる**という見つけにくい形だった。
+# --- 壊れていても止まらない --- **受け皿に落ちたときこそ確かめる。**
+# 実機で `KeyError: 'short'` を踏んだ。
+# 既定値を素通しで使っていたので、読み方の側にしか無い項目が抜けていた。
+# しかも普段はファイルが読めるので、**受け皿の道だけが壊れている**という見つけにくい形だった。
 fallback = patterns_mod.load(os.path.join(OUT_DIR, "no_such_dir"),
                              defaults=mod.BUILT_IN)
 check("ファイルが無ければ同梱に戻る", fallback["axes"], fallback.get("axes"))
@@ -1463,16 +1483,19 @@ check("受け皿の言い分・題材・顔ぶれも揃う",
       fallback.get("whereabouts", {}).get("public")
       and fallback.get("incidents") and fallback.get("cast"),
       {k: bool(fallback.get(k)) for k in ("whereabouts", "incidents", "cast")})
-# **`mod_dir` が None でも落ちない。**`ctx.mod_dir` は apply() の外で None に
-# なる。控え忘れるとここに来る（実機で踏んだ）。
+# **`mod_dir` が None でも落ちない。**
+# `ctx.mod_dir` は apply() の外で None になる。
+# 控え忘れるとここに来る（実機で踏んだ）。
 none_dir = patterns_mod.load(None, defaults=mod.BUILT_IN)
 check("**mod_dir が None でも受け皿で組める**",
       len(patterns_mod.tables_for(none_dir["axes"])) == 5, none_dir["axes"][:1])
 
-# --- **受け皿だけで通しで解けるか。** ---
-# ここが今回の抜けだった。検証の `FakeCtx` は常に `mod_dir` を持っていたので、
-# 受け皿の道が**一度も通しで走っていなかった**。実機は `mod_dir` が None に
-# なってそこへ落ち、`KeyError: 'short'` で事件が始まらなかった。
+# --- **受け皿だけで通しで解けるか。**
+# --- ここが今回の抜けだった。
+# 検証の `FakeCtx` は常に `mod_dir` を持っていたので、
+# 受け皿の道が**一度も通しで走っていなかった**。
+# 実機は `mod_dir` が None になってそこへ落ち、
+# `KeyError: 'short'` で事件が始まらなかった。
 
 
 class BareCtx(FakeCtx):
@@ -1535,7 +1558,8 @@ check("多くても上限で頭打ち",
       patterns_mod.axes_wanted(12) == patterns_mod.AXES_PER_CASE,
       patterns_mod.axes_wanted(12))
 
-# **一覧に「全員同じ語」が並ばないこと。**これが利用者から見た症状そのもの。
+# **一覧に「全員同じ語」が並ばないこと。**
+# これが利用者から見た症状そのもの。
 ctxv = FakeCtx()
 clean_record(ctxv)
 mod.apply(ctxv)
@@ -1570,12 +1594,12 @@ check("**全員に共通する語が一覧に出ない**（意味の無い語を
       not flat, flat[:2])
 
 print("\n[設置] **セーブをロードした直後でも出る**")
-# 実機で「新しい世界では動くのに、既存のセーブをロードすると機能しない」
-# （利用者の指摘）。
-#
-# `player.location` は施設のオブジェクトとは限らない。**セーブでは施設 id の
-# 文字列**（'106'）で、遊んでいる最中にその施設へ入ると Facility に置き換わる。
-# ロード直後は前者のままなので、施設の種類が引けずボタンが出なかった。
+# 実機で「新しい世界では動くのに、
+# 既存のセーブをロードすると機能しない」（利用者の指摘）。
+# `player.location` は施設のオブジェクトとは限らない。
+# **セーブでは施設 id の文字列**（'106'）で、
+# 遊んでいる最中にその施設へ入ると Facility に置き換わる。
+# ロード直後は前者のままなので、施設の種類を引けずボタンが出なかった。
 ctxl2 = FakeCtx()
 clean_record(ctxl2)
 mod.apply(ctxl2)
@@ -1611,8 +1635,8 @@ check("引き当てられなくても落ちない",
       world_mod.facility_type(appl2) == "", world_mod.facility_type(appl2))
 
 print("\n[案内] **容疑者がどこに居るかを一覧に出す**")
-# 名前と特徴だけだと、聞き込みに回る前に町を端から探すことになる
-# （利用者の指摘）。絞り込みは推理でも、**人を見つけるのは作業**。
+# 名前と特徴だけだと、聞き込みへ回る前に町を端から探すことになる（利用者の指摘）。
+# 絞り込みは推理でも、**人を見つけるのは作業**。
 ctxr2 = FakeCtx()
 clean_record(ctxr2)
 mod.apply(ctxr2)
@@ -1706,10 +1730,11 @@ appf.in_shopping = False
 print("\n[事件] **思い違いの証言**")
 # 真の事実だけだと、遊びは最後まで「当てはまらない者を消す」で終わる。
 # 属性の語彙を増やしても操作は同じなので、そこが天井だった（利用者の指摘）。
-# 1本を間違いにすると、**すべて信じたときに誰も残らない** ―
-# そこで「どれが嘘か」を探すことになり、消し込みが推論に変わる。
+# 1本を間違いにすると、**すべて信じたときに誰も残らない**
+# ― そこで「どれが嘘か」を探すことになり、消し込みが推論に変わる。
 
-# 犯人 '0'、他は3人。c1/c2 が真、c3 が思い違い（犯人まで消してしまう）。
+# 犯人 '0'、他は3人。
+# c1/c2 が真、c3 が思い違い（犯人まで消してしまう）。
 liar = case_mod.build("W", "0", "0",
                       [{"id": str(i), "tell": "", "claim": ""} for i in range(4)],
                       [{"id": "c1", "label": "l1", "at_type": INN, "kind": "trait",
@@ -1718,9 +1743,9 @@ liar = case_mod.build("W", "0", "0",
                         "fact": "犯人は袋を提げていた", "eliminates": ["3"]},
                        {"id": "c3", "label": "l3", "at_type": INN, "kind": "trait",
                         "fact": "犯人の髪は黒かった", "wrong": True,
-                        # 嘘は犯人を消す。ただし**真の話が単独で消す者を
-                        # 巻き込むと一意に決まらなくなる**（c1 だけが消す
-                        # '1'/'2' を残すと、c1 を外しても1人になってしまう）。
+                        # 嘘は犯人を消す。
+                        # ただし**真の話が単独で消す者を巻き込むと一意に決まらなくなる**（c1 だけが消す '1'/'2' を残すと、
+                        # c1 を外しても1人になってしまう）。
                         "eliminates": ["0", "3"]}], 500)
 for clue in liar["clues"]:
     clue["found"] = True
@@ -1788,8 +1813,9 @@ check("事件を続けて受けられる", rounds3 >= 10, rounds3)
 check("**思い違いの事件が出る**", mixed > 0, (mixed, rounds3))
 check("**どの事件も外し方が一意**（当てずっぽうにならない）", not bad2, bad2[:1])
 
-# **食い違ったら画面で知らせる。**控えを置いてから読み直させる
-# （`current` は控えをファイルから読むので、実機と同じ経路を通る）。
+# **食い違ったら画面で知らせる。**
+# 控えを置いてから読み直させる（`current` は控えをファイルから読むので、
+# 実機と同じ経路を通る）。
 if sample is not None:
     ctxm3 = FakeCtx()
     case_mod.save(ctxm3.state_path(mod.RECORD_BASENAME), sample)
@@ -1863,12 +1889,13 @@ check("**「どの軸でも多数派」で犯人が割れない**", not obvious,
 check("手がかりは2本以上", not thin, (thin, rounds2))
 
 print("\n[描写] **LLM に書かせる ― ただし論理は渡さない**")
-# ゲームの `send_request(manager_name, message, structure)` は名前・頼み文・
-# 応答の型を全部こちらで決められる汎用の入口（リコンの署名より）。既存の
-# プロンプトを流用せず、この MOD 専用の頼み文を投げる。
-#
-# **境界はここ。**渡すのは「見た目の指定」と「触れてほしくない語」だけで、
-# 犯人も手がかりの効き先も1文字も渡さない。だから何が返っても事件は壊れない。
+# ゲームの
+# `send_request(manager_name, message, structure)` は名前・頼み文・応答の型を全部こちらで決められる汎用の入口（リコンの署名より）。
+# 既存のプロンプトを流用せず、この MOD 専用の頼み文を投げる。
+# **境界はここ。**
+# 渡すのは「見た目の指定」と「触れてほしくない語」だけで、
+# 犯人と手がかりの効き先は1文字も渡さない。
+# だから何が返っても事件は壊れない。
 writer = sys.modules["city_case_mod.writer"]
 
 PEOPLE = [{"sex": "woman", "hair": "dark", "build": "large",
@@ -1887,8 +1914,9 @@ check("見た目の指定は渡している",
       all(p["words"] in prompt for p in PEOPLE), prompt[:200])
 check("**触れてほしくない語を渡している**",
       all(w in prompt for w in ORDERS[0]["avoid"]), prompt)
-# **その町の実データを渡す。**架空の宿屋を書かれるより、いま歩いている町の
-# 宿屋の名前が出るほうが「その町の事件」になる（利用者の判断）。
+# **その町の実データを渡す。**
+# 架空の宿屋を書かれるより、いま歩いている町の宿屋の名前を出したい。
+# そのほうが「その町の事件」になる（利用者の判断）。
 PLACE = {"world_notes": "霧に沈んだ辺境の世界。",
          "area_notes": "錆びた配管が突き出す停滞した町。",
          "facilities": [("錆びた錨亭", "inn", "隻眼のバルド"),
@@ -1919,7 +1947,8 @@ check("独自の名前で呼ぶ（ゲームのマネージャ名を使わない�
       and writer.MANAGER_NAME not in ("conversation_starter", "narrator"),
       writer.MANAGER_NAME)
 
-# --- 返事の読み取り。**形を決めつけない** ---
+# --- 返事の読み取り。
+# **形を決めつけない** ---
 GOOD = {"premise": "宿場町で夜ごと荷が消えている。",
         "people": [{"name": "石工のハルカ", "job": "石工",
                     "profile": "石を刻んで暮らす女。", "personality": "無駄口を叩かない。",
@@ -1948,14 +1977,16 @@ people = writer.read_people(GOOD, 2)
 check("人物を読み取れる", people and len(people) == 2, people)
 check("premise を読み取れる", writer.read_premise(GOOD), writer.read_premise(GOOD))
 
-# --- 検算。**落ちたら下地に戻る** ---
+# --- 検算。
+# **落ちたら下地に戻る** ---
 check("人数が足りなければ捨てる",
       writer.read_people(GOOD, 4) is None)
 check("項目が欠けていたら捨てる",
       writer.read_people(
           {"people": [dict(GOOD["people"][0], name=""), GOOD["people"][1]]},
           2) is None)
-# `110_fix_character_name_path` の対象。立ち絵だけが無言で作られなくなる。
+# `110_fix_character_name_path` の対象。
+# 立ち絵だけが無言で作られなくなる。
 check("**名前に禁止文字が入っていたら捨てる**（立ち絵が作られなくなる）",
       writer.read_people(
           {"people": [dict(GOOD["people"][0], name='石工の"ハルカ'),
@@ -1970,7 +2001,8 @@ check("長すぎる文は切る",
                       GOOD["people"][1]]}, 2)[0]["profile"])
       <= writer.LIMITS["profile"], writer.LIMITS)
 
-# 目撃情報の検算は**1本ずつ**。1本の失敗で他まで捨てない。
+# 目撃情報の検算は**1本ずつ**。
+# 1本の失敗で他まで捨てない。
 check("頼んだ語が入っていれば通る",
       writer.read_facts(GOOD, ORDERS) == ["見たのは黒髪の者だったよ。"])
 check("頼んだ語が無ければその1本だけ捨てる",
@@ -1992,15 +2024,15 @@ BIG = [{"word": "大柄", "accept": ["大柄", "大きな", "大男"],
 check("**言い換えでも通す**（大柄な → 大きな）",
       writer.read_facts({"facts": ["夜中に、大きな影が路地を通り過ぎるのを見た。"]},
                         BIG) == ["夜中に、大きな影が路地を通り過ぎるのを見た。"])
-# **緩めた側と締めた側は同じ語彙を見る。**言い換えを広く認めても、
-# 他の特徴に触れた文は落ちる。
+# **緩めた側と締めた側は同じ語彙を見る。**
+# 言い換えを広く認めても、他の特徴に触れた文は落ちる。
 check("言い換えを認めても、他の特徴に触れたら落ちる",
       writer.read_facts({"facts": ["黒い髪の大きな影を見た。"]}, LOOSE) == [None])
 check("認める語を頼み文にも書く（検算と同じ表を見せる）",
       "黒い髪" in writer.build_prompt("w", "a", PEOPLE, LOOSE, 2),
       writer.build_prompt("w", "a", PEOPLE, LOOSE, 2)[-300:])
-# **これがいちばん効く検算。**渡していない特徴まで書かれると、その1文で
-# 犯人が決まってしまい推理が消える。
+# **これがいちばん効く検算。**
+# 渡していない特徴まで書かれると、その1文で犯人が決まってしまい推理が消える。
 check("**他の特徴が漏れていたらその1本を捨てる**",
       writer.read_facts({"facts": ["黒髪の大柄な男を見た。"]}, ORDERS) == [None])
 two = [ORDERS[0], {"word": "小柄", "avoid": ["黒髪", "男", "女"]}]
@@ -2024,8 +2056,8 @@ def capture(manager_name, message, structure, **kwargs):
     return None
 
 
-# 送信口はローダ（`llm.ask`）が `llm_manager` の別名から引く。プロバイダを
-# 名指ししないので、ここでもその別名を置いて確かめる（TECH.md §5.3）。
+# 送信口はローダ（`llm.ask`）が `llm_manager` の別名から引く。
+# プロバイダを名指ししないので、ここでもその別名を置いて確かめる（TECH.md §5.3）。
 _manager_name = "scripts.llm.llm_manager"
 _saved_manager = sys.modules.get(_manager_name)
 _manager = types.ModuleType(_manager_name)
@@ -2109,8 +2141,8 @@ WRITTEN = {
 def reply_to(seen):
     """**頼み文を読んで**それに沿った目撃情報を返す偽の LLM。
 
-    どの軸（髪/体格/性別）が頼まれるかは事件ごとに変わるので、決め打ちの
-    文を返す偽物では検算を通ったり通らなかったりする（実際に不安定になった）。
+    どの軸（髪/体格/性別）が頼まれるかは事件ごとに変わるので、
+    決め打ちの文を返す偽物では検算を通ったり通らなかったりする（実際に不安定になった）。
     頼み文から「『◯◯』ということだけを伝える文」を拾って組み立てる。
     """
     def build():
@@ -2124,8 +2156,8 @@ def reply_to(seen):
 def prompt_aware(message):
     """**頼み文を読んで**それに沿った目撃情報を返す偽の LLM。
 
-    どの軸（髪/体格/性別）が頼まれるかは事件ごとに変わるので、決め打ちの文を
-    返す偽物では検算を通ったり通らなかったりする（実際に不安定になった）。
+    どの軸（髪/体格/性別）が頼まれるかは事件ごとに変わるので、
+    決め打ちの文を返す偽物では検算を通ったり通らなかったりする（実際に不安定になった）。
     頼み文から「『◯◯』ということだけを伝える文」を拾って組み立てる。
     """
     wanted = re.findall(r"件目: 「(.+?)」ということだけ", str(message or ""))
@@ -2168,11 +2200,13 @@ try:
           any(WRITTEN["premise"] in str(t) for t in appw.texts),
           [str(t) for t in appw.texts][:4])
     facts_now = [c["fact"] for c in casew["clues"]]
-    # 特徴の手がかりには書かせた文が載る。**どの軸が頼まれるかは事件ごとに
-    # 変わる**ので、偽の LLM は頼み文を読んでそれに沿った文を返している。
+    # 特徴の手がかりには書かせた文が載る。
+    # **どの軸が頼まれるかは事件ごとに変わる**ので、
+    # 偽の LLM は頼み文を読んでそれに沿った文を返している。
     check("検算に通った文はそのまま使われる",
           any(t.endswith("の者を見かけた。") for t in facts_now), facts_now)
-    # **一般の不変条件。**1つの手がかりが2つ以上の軸に触れていたら、
+    # **一般の不変条件。**
+    # 1つの手がかりが2つ以上の軸に触れていたら、
     # その1文で犯人が決まってしまい推理が消える。
     axes = {}
     for (axis, _value), word in TRAIT_WORDS.items():
@@ -2182,12 +2216,14 @@ try:
                    if any(w in text for w in words)]
         check("  手がかりが触れる特徴は1つまで: {!r}".format(text[:24]),
               len(touched) <= 1, touched)
-    # **裏取りは書かせない。**名前を挙げてその人物を消す文なのに、名前は
-    # 同じ応答で作らせている最中でまだ無い（`writer.wanted_facts`）。
+    # **裏取りは書かせない。**
+    # 名前を挙げてその人物を消す文なのに、
+    # 名前は同じ応答で作らせている最中でまだ無い（`writer.wanted_facts`）。
     alibi = [c["fact"] for c in casew["clues"] if c["kind"] == "alibi"]
     check("**裏取りの文は書かせず、名前を挙げた定型のまま**",
           all(any(n in text for n in names) for text in alibi), alibi)
-    # **ここが要点。**他の特徴を漏らした文は捨てて定型に戻る。
+    # **ここが要点。**
+    # 他の特徴を漏らした文は捨てて定型に戻る。
     # 通してしまうと、その1文で犯人が決まって推理が消える。
     check("**特徴が漏れた文は捨てて定型に戻る**",
           "あれは黒髪の大柄な女だったよ。" not in facts_now, facts_now)
@@ -2227,21 +2263,20 @@ finally:
         sys.modules.pop(name, None)
 
 print("\n[描写] **書かせている間はボタンをロックする**")
-# 「噂の出どころを当たっている……」の最中に選択肢が押せると、書いている途中で
-# 町を出たり別の依頼を受けたりできてしまう（利用者の指摘）。
-# ゲーム自身と同じ待機表示（`.` → `..` → `...`）を出し、`is_button_enabled` を
-# 落とす（`ui.Screen.busy_on`）。
-#
-# この節だけ**偽の Clock を入れて非同期の経路を通す。**入れないと
-# `has_clock()` が偽になり、その場で待つ同期の道を通ってしまってロックを
-# 一度も踏まない。
+# 「噂の出どころを当たっている……」の最中に選択肢が押せると、
+# 書いている途中で町を出たり別の依頼を受けたりできてしまう（利用者の指摘）。
+# ゲーム自身と同じ待機表示（`.` → `..` → `...`）を出し、
+# `is_button_enabled` を落とす（`ui.Screen.busy_on`）。
+# この節だけ**偽の Clock を入れて非同期の経路を通す。**
+# 入れないと `has_clock()` が偽になり、
+# その場で待つ同期の道を通ってしまってロックを一度も踏まない。
 
 
 class FakeClock:
     """`Clock.schedule_once` を**手で進められる**形にする。
 
-    すぐ走らせてしまうと「待っている状態」が再現できないので、溜めておいて
-    テスト側から `run_due()` で進める。
+    すぐ走らせてしまうと「待っている状態」が再現できないので、
+    溜めておいてテスト側から `run_due()` で進める。
     """
 
     def __init__(self):
@@ -2297,8 +2332,8 @@ try:
     case_now = case_mod.load(ctxa.state_path(mod.RECORD_BASENAME))
     check("まだ事件は始まっていない",
           not case_mod.is_active(case_now), case_now.get("stage"))
-    # **押しても何も起きない。**印のあるボタンは組み替えていないので、
-    # そもそも並びが変わらない。
+    # **押しても何も起きない。**
+    # 印のあるボタンは組み替えていないので、そもそも並びが変わらない。
     refresha()
     check("待っている間は選択肢を組み替えない",
           mod.START_LABEL in appa.labels() or not appa.labels(), appa.labels())
@@ -2315,10 +2350,10 @@ try:
     check("**返ってきたらボタンが戻る**",
           appa.is_button_enabled is True, appa.is_button_enabled)
 
-    # --- **注入し直されたら書き上がった素材を捨てる** ---
-    # 書き手のスレッドは LLM を待つあいだ最長 `LLM_TIMEOUT + BUSY_GRACE`
-    # 生き残る。その間に注入し直されると、**古い世代の続き**が新しい世代と
-    # 同じ `state/city_case.json` に書き込んでしまう（TECH.md §3.6.1）。
+    # --- **注入し直されたら書き上がった素材を捨てる** --- 書き手のスレッドは
+    # LLM を待つあいだ最長 `LLM_TIMEOUT + BUSY_GRACE` 生き残る。
+    # その間に注入し直されると、**古い世代の続き**が新しい世代と同じ
+    # `state/city_case.json` に書き込んでしまう（TECH.md §3.6.1）。
     ctxo = FakeCtx()
     clean_record(ctxo)
     mod.apply(ctxo)
@@ -2397,9 +2432,9 @@ try:
           appd.is_button_enabled is True, appd.is_button_enabled)
     stuck2.set()
 finally:
-    # **止めた偽物のスレッドが戻り切るのを待つ。**先に Clock を外すと、
-    # 戻ってきたスレッドが `schedule` に失敗して検証の出力にトレースバックが
-    # 流れる（失敗ではないが、本物の異常と紛らわしい）。
+    # **止めた偽物のスレッドが戻り切るのを待つ。**
+    # 先に Clock を外すと、戻ってきたスレッドが `schedule` に失敗して検証の出力にトレースバックが流れる（失敗ではないが、
+    # 本物の異常と紛らわしい）。
     for _ in range(40):
         if not [t for t in threading.enumerate()
                 if t.name == "city_case_writer"]:
@@ -2413,7 +2448,8 @@ finally:
 check("後始末: Clock を外した（他の節は同期の道を通る）", not mod.has_clock())
 
 print("\n[会話] **話した相手と、得た手がかりが噛み合う**")
-# 実機で「会話内容と得られたヒントが全くかみ合わない」（利用者の指摘）。原因は2つあった。
+# 実機で「会話内容と得られたヒントが全くかみ合わない」（利用者の指摘）。
+# 原因は2つあった。
 # どちらも再現する形で持っておく。
 ctxm = FakeCtx()
 clean_record(ctxm)
@@ -2426,8 +2462,9 @@ press(ctxm, appm, mod.START_LABEL)
 casem = case_mod.load(ctxm.state_path(mod.RECORD_BASENAME))
 
 # ① **印が残ったまま、別人との会話で発火する。**
-# 印は LLM の呼び出しで立ち、会話終了で消える。会話が閉じられずに終わると
-# 印が残り、次に誰かとの会話を閉じた瞬間に前の相手の手がかりが出ていた。
+# 印は LLM の呼び出しで立ち、会話終了で消える。
+# 会話が閉じられずに終わると印が残り、
+# 次に誰かとの会話を閉じた瞬間に前の相手の手がかりが出ていた。
 witness = [c["witness"] for c in casem["clues"]][0]
 other = [i for i in case_mod.suspect_ids(casem)][0]
 talk_to(ctxm, appm, witness)             # 証言者と話し始める（印が立つ）
@@ -2446,7 +2483,8 @@ check("**相手のところへ戻れば立つ**（印を捨ててしまわない
       any(c["found"] for c in back["clues"]),
       [(c["id"], c["found"]) for c in back["clues"]])
 
-# ② **古い印は捨てる。**相手の id が取れない版でも効く最後の網。
+# ② **古い印は捨てる。**
+# 相手の id が取れない版でも効く最後の網。
 ctxt = FakeCtx()
 clean_record(ctxt)
 mod.apply(ctxt)
@@ -2468,9 +2506,10 @@ check("**古くなった印では手がかりが立たない**",
       not any(c["found"] for c in stale["clues"]),
       [(c["id"], c["found"]) for c in stale["clues"]])
 
-# ③ **相手が分からない版でも壊れない。**`frames.attr` は属性が無いと
-# `'<missing>'` という**文字列**を返す。これを id として扱うと
-# 「相手は居るが誰とも一致しない」になり、手がかりが永久に立たなくなる。
+# ③ **相手が分からない版でも壊れない。**
+# `frames.attr` は属性が無いと `'<missing>'` という**文字列**を返す。
+# これを id として扱うと「相手は居るが誰とも一致しない」になり、
+# 手がかりが永久に立たなくなる。
 ctxu = FakeCtx()
 clean_record(ctxu)
 mod.apply(ctxu)
@@ -2488,7 +2527,8 @@ check("**相手が分からなくても手がかりは立つ**（MISSING を id 
       [(c["id"], c["found"]) for c in plain["clues"]])
 
 print("\n[判定] **諦める（調べを打ち切る）**")
-# 「やめる」との違いは戻れるかどうか。こちらは事件そのものが消える。
+# 「やめる」との違いは戻れるかどうか。
+# こちらは事件そのものが消える。
 ctxx = FakeCtx()
 clean_record(ctxx)
 mod.apply(ctxx)
@@ -2520,8 +2560,9 @@ check("元から居た NPC は巻き添えにならない",
       [cid for cid in existing_x if cid not in appx.world.characters])
 check("報酬は出ない", appx.player.gold == gold_x,
       (gold_x, appx.player.gold))
-# **真相は明かさない。**告発すれば当たっても外れても分かるので、
-# そこまで踏み込まずに降りたなら答えは持ち帰れないほうが筋が通る。
+# **真相は明かさない。**
+# 告発すれば当たり外れは分かる。
+# そこまで踏み込まずに降りたなら、答えは持ち帰れないほうが筋に合う。
 said = " ".join(str(t) for t in appx.texts)
 check("**真相は明かさない**（犯人の名を出さない）",
       mod.game.name_of(appx, culprit_x) not in said, said[:160])
@@ -2566,8 +2607,9 @@ check("ギルドへ戻れば告発からやり直せる",
       mod.ACCUSE_LABEL in appy.labels(), appy.labels())
 
 print("\n[会話] **入って即抜けても何も手に入らない**")
-# 実機で踏んだ。会話に入って即抜けるだけで手がかりも言い分も
-# 手に入った。とくに言い分は**犯人だけ裏の取れない場所**を言うので、
+# 実機で踏んだ。
+# 会話に入って即抜けるだけで手がかりも言い分も手に入った。
+# とくに言い分は**犯人だけ裏の取れない場所**を言うので、
 # 4人を出入りするだけで聞き込みを一切せずに犯人が割れた。
 ctxq = FakeCtx()
 clean_record(ctxq)
@@ -2592,7 +2634,8 @@ check("**尋ねずに抜けたら手がかりは立たない**",
 check("画面にも「分かったこと」は出ない",
       not [t for t in appq.texts if "分かったこと" in str(t)],
       [str(t) for t in appq.texts])
-# **匂わせはする。**誰に聞けばよいか分からないまま歩かせない。
+# **匂わせはする。**
+# 誰に聞けばよいか分からないまま歩かせない。
 greeted = str(seen_greet.get("messages"))
 check("第一声では「何か知っていそう」だけ伝える",
       "尋ねられるまでは自分から詳しく話さない" in greeted, greeted[-200:])
@@ -2627,10 +2670,11 @@ check("**尋ねれば言い分が聞ける**", case_mod.heard_claims(heard_q),
       [s for s in heard_q["suspects"] if s.get("heard")])
 
 print("\n[後始末] **繰り返してもセーブが太らない**")
-# 以前は犯人に印を立て、無実の者は町に残していた。1件につき3体ずつ増え続け、
-# 繰り返し遊ぶとセーブが太る（1体 1.4〜8KB、`npcs` はセーブの約2割。
-# 利用者の指摘）。害はバイト数より、町が見知らぬ人で埋まって
-# 土地の人物一覧やゲームの組む文脈に効いてくることのほう。
+# 以前は犯人に印を立て、無実の者は町に残していた。
+# 1件につき3体ずつ増え続け、繰り返し遊ぶとセーブが太る（1体 1.4〜8KB、
+# `npcs` はセーブの約2割。利用者の指摘）。
+# 害はバイト数より、
+# 町が見知らぬ人で埋まって土地の人物一覧やゲームの組む文脈に効いてくることのほう。
 ctxr = FakeCtx()
 clean_record(ctxr)
 mod.apply(ctxr)
@@ -2663,9 +2707,9 @@ check("台帳も溜まらない",
       ledger_mod.load(ctxr.state_path(mod.LEDGER_BASENAME)))
 
 print("\n[後始末] **置き去りを起動時に掃除する**")
-# 台帳が無い時代に作られた NPC が既にセーブに居る（利用者の環境で4体）。
-# 印を NPC 自身に持たせられない（項目を足すと33項目の並びが壊れる）ので、
-# **下地の名前と完全一致**するものを拾う。
+# 台帳の無かったころに作られた NPC が、既にセーブへ残っている（利用者の環境で4体）。
+# 印を
+# NPC 自身に持たせられない（項目を足すと33項目の並びが壊れる）ので、**下地の名前と完全一致**するものを拾う。
 ctxl = FakeCtx()
 clean_record(ctxl)
 mod.apply(ctxl)
@@ -2710,8 +2754,8 @@ check("**進行中の事件のキャストは掃除されない**",
       [i for i in alive if i not in appk.world_dict["npcs"]])
 
 print("\n[後始末] パーティーに居る者は消さない")
-# 容疑者が仲間になる経路は用意していないが、他の MOD やゲーム側の都合で
-# 入りうる。連れ歩いている相手を消すと参照が切れて何が起きるか分からない。
+# 容疑者が仲間になる経路は用意していないが、他の MOD やゲーム側の都合で入りうる。
+# 連れ歩いている相手を消すと参照が切れて何が起きるか分からない。
 ctxp = FakeCtx()
 clean_record(ctxp)
 mod.apply(ctxp)
@@ -2747,8 +2791,9 @@ existing2 = sorted(set(app2.world.characters) - set(cast2))
 gold2 = app2.player.gold
 accuse(ctx2, app2, innocent)
 check("外したら報酬は出ない", app2.player.gold == gold2)
-# **外しても決着は決着。**当てたときと同じくキャストは引き上げる ―
-# 残すと、二度と使わない人物が町に溜まっていく（利用者の指摘）。
+# **外しても決着は決着。**
+# 当てたときと同じくキャストは引き上げる ― 残すと、
+# 二度と使わない人物が町に溜まっていく（利用者の指摘）。
 check("**外したときもキャストは世界から消える**",
       not [i for i in cast2 if i in app2.world.characters],
       [i for i in cast2 if i in app2.world.characters])
@@ -2761,10 +2806,11 @@ check("**元から居た NPC は巻き添えにならない**",
 
 # ================================================================== 安全
 print("\n[安全] ゲームのものに触らない")
-# **自由施設にはもう一切手を出さない。**告発の場面をやめた時点で、
-# ゲームの `free_*` を横取りする理由が無くなった（利用者の判断）。
-# 横取りしていた頃は、`scripts.free_facility` がまだ import されていないと
-# 告発ボタンを押しても「調べていることは無い」と出て詰む作りでもあった。
+# **自由施設にはもう一切手を出さない。**
+# 告発の場面をやめた時点で、ゲームの
+# `free_*` を横取りする理由が無くなった（利用者の判断）。
+# 横取りしていた頃は、`scripts.free_facility` がまだ
+# import されていないと告発ボタンを押しても「調べていることは無い」と出て詰む作りでもあった。
 check("**自由施設のフックを1つも持たない**",
       not [t for t in ctx.hooks if "free_facility" in t],
       [t for t in ctx.hooks if "free_facility" in t])
@@ -2781,8 +2827,9 @@ check("**`scripts.free_facility` が無い環境で全部通っている**",
 def live_strings(path):
     """**実際に使われる文字列だけ**を集める（docstring と註釈は数えない）。
 
-    素朴に本文を検索すると、「ここへは書かない」と説明した docstring まで
-    引っかかる（最初の版がそれで誤検知した）。見たいのはコードの中身。
+    素朴に本文を検索すると、「ここへは書かない」と説明した
+    docstring まで引っかかる（最初の版がそれで誤検知した）。
+    見たいのはコードの中身。
     """
     with io.open(path, encoding="utf-8") as fh:
         tree = ast.parse(fh.read(), feature_version=(3, 10))
@@ -2814,13 +2861,15 @@ for path in SOURCES:
 check("**flag_set を使わない**（施設の config に残るため）",
       "flag_set" not in used_strings, sorted(s for s in used_strings
                                              if "flag" in s))
-# `world_dict` そのものは触ってよい ― NPC を作る経路（`generate_npc`）が
-# それを引数に取るため。**禁じたいのはシーンのプログラムを焼き付けること。**
+# `world_dict` そのものは触ってよい ―
+# NPC を作る経路（`generate_npc`）がそれを引数に取るため。
+# **禁じたいのはシーンのプログラムを焼き付けること。**
 check("**free_facility_programs へ書き込まない**（セーブに残るため）",
       "free_facility_programs" not in used_strings,
       sorted(s for s in used_strings if "free_facility" in s))
-# **自由施設そのものに触らない。**告発を自前のボタンへ移したので、
-# ゲームの `free_*` を引く経路は1つも要らなくなった。
+# **自由施設そのものに触らない。**
+# 告発を自前のボタンへ移したので、ゲームの
+# `free_*` を引く経路は1つも要らなくなった。
 check("**`free_facility` の名前がコードに出てこない**",
       not [s for s in used_strings if "free_facility" in s],
       sorted(s for s in used_strings if "free_facility" in s))
@@ -2874,8 +2923,9 @@ for key, spec in manifest.get("settings", {}).items():
 
 print("\n[世界の鍵] ロード直後でも引ける")
 # **ロード直後は `app.world` がまだ組み上がっていない**（世界名はセーブ側の
-# `world_dict["world_data"]` にしかない）。`app.world` の属性しか見ない版は
-# ここで空文字を返し、控えの世界照合と後始末が黙って素通りしていた。
+# `world_dict["world_data"]` にしかない）。
+# `app.world` の属性しか見ない版はここで空文字を返し、
+# 控えの世界照合と後始末が黙って素通りしていた。
 _loading = types.SimpleNamespace(
     world=None, world_dict={"world_data": {"world_name": "灰の街"}})
 check("`app.world` がまだ無くてもセーブ側から引ける",

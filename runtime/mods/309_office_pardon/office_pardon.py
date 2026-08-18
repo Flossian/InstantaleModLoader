@@ -2,8 +2,8 @@
 """機能追加: 役場で罰金を納めて、その土地の手配を帳消しにする。
 
 手配度（`player.area_history[エリアid]['lawfulness']`）が 0 未満だと、
-プレイヤーはその土地では犯罪者として扱われる。素のゲームにはこれを戻す手段が
-無いので、**役場（`administrative_office`）の選択肢に「罰金を納める」を1つ足す**。
+プレイヤーはその土地では犯罪者として扱われる。
+素のゲームにはこれを戻す手段が無いので、**役場（`administrative_office`）の選択肢に「罰金を納める」を1つ足す**。
 
     [役場]  会話する / 罰金を納めて手配を解く(3,000G) / 出る
                               ↓
@@ -11,10 +11,11 @@
                               ↓
             所持金 -3,000 ／ 手配度 -3 → 10
 
-## 扱うのは**今いるエリアの手配度だけ**
+## 扱うのは今いるエリアの手配度だけ
 
-`area_history` はエリア id ごとに1件ある。他の土地の手配はその土地の役場でしか
-解けない。「よその役場に金を積めば全部消える」は世界の作りとして通らないし、
+`area_history` はエリア id ごとに1件ある。
+他の土地の手配はその土地の役場でしか解けない。
+「よその役場に金を積めば全部消える」は世界の作りとして通らないし、
 どの土地の分をいくら払ったのかも画面に出せなくなる。
 
 ## 値段
@@ -22,34 +23,35 @@
     手配度 = WANTED_THRESHOLD - 手配度の実値      （既定の閾値 0。lawfulness=-3 なら 3）
     罰金   = PRICE_PER_POINT × 手配度              （既定 1000G/点 なので 3,000G）
 
-払うと手配度は `RESTORE_TO`（既定 10 ＝ 素の平常値）に戻る。**下げる方向には
-決して動かさない**（設定を触って `RESTORE_TO` を今の値より低くしても、そのときは
-今の値のまま）。
+払うと手配度は `RESTORE_TO`（既定 10 ＝ 素の平常値）に戻る。
+**下げる方向には決して動かさない**（設定を触って
+`RESTORE_TO` を今の値より低くしても、そのときは今の値のまま）。
 
 ## ボタンの出し方
 
-`InstantaleApp.refresh_choice_buttons` を包み、**ゲームが選択肢を組み終える前に**
-自前のボタンを1つ差し込む。役場の選択肢そのものはゲームが持っているので、
-こちらは足すだけで組み直さない。差し込む条件は全部揃ったときだけ:
+`InstantaleApp.refresh_choice_buttons` を包み、**ゲームが選択肢を組み終える前に** 自前のボタンを1つ差し込む。
+役場の選択肢そのものはゲームが持っているので、こちらは足すだけで組み直さない。
+差し込む条件は全部揃ったときだけ:
 
     いま居る施設が administrative_office／その土地の手配度が閾値未満／
     その画面に移動（`MovePhaseManager`）のボタンがある＝施設の選択肢である／
     戦闘・会話・ポップアップの最中ではない／まだ足していない
 
-最後の「まだ足していない」は**文字列ではなく印**（`MARK`）で見る。これが無いと、
-こちらが塗り直すたびにボタンが増えていく。
+最後の「まだ足していない」は文字列ではなく印（`MARK`）で見る。
+これが無いと、こちらが塗り直すたびにボタンが増えていく。
 
 ## 自前のクラス名を `PhaseSpec` に書かない
 
-ボタンはセーブに焼かれうる（`PhaseSpec.to_dict()`）。無害な既存クラスを持たせ、
-押下は `on_button_press` を包んで印で横取りする。印のキーは他の MOD と別にすること
-（`301_`=mod_action / `302_`=mod_party_action / `305_`=mod_mini_action /
-`307_`=mod_road_action / ここ=mod_pardon_action）。
+ボタンはセーブに焼かれうる（`PhaseSpec.to_dict()`）。
+無害な既存クラスを持たせ、押下は `on_button_press` を包んで印で横取りする。
+印のキーは他の MOD と別にすること（`301_`=mod_action / `302_`=mod_party_action /
+`305_`=mod_mini_action / `307_`=mod_road_action / ここ=mod_pardon_action）。
 
 ## セーブはこちらから書かない
 
 書き換えるのは実行中の `player.gold` と `player.area_history` だけで、
-`save_game` は呼ばない。ゲームが次にセーブしたときに両方まとめて保存される。
+`save_game` は呼ばない。
+ゲームが次にセーブしたときに両方まとめて保存される。
 セーブされる前に落ちれば**罰金も手配の帳消しも両方が無かったこと**になるので、
 片方だけが残ることはない。
 """
@@ -65,20 +67,25 @@ LOG_BASENAME = "office_pardon.log"
 #: 役場の `facility_type`（実セーブで確認。GAME.md §2.7）。
 OFFICE_FACILITY_TYPE = "administrative_office"
 
-#: 押下を横取りするための印。**他の MOD と別のキーにすること。**
+#: 押下を横取りするための印。
+#: 他の MOD と別のキーにすること。
 MARK = "mod_pardon_action"
 
 # ---------------------------------------------------------------- 設定（mod.json）
-# ここの定数だけが GUI から変えられる（ローダは入口モジュールのグローバルへ
-# 書き込む）。`record.py` へ移さないこと（TECH.md §3.8）。
+# ここの定数だけが
+# GUI から変えられる（ローダは入口モジュールのグローバルへ書き込む）。
+# `record.py` へ移さないこと（TECH.md §3.8）。
 
-#: 手配度1点あたりの罰金。0 にすると無料で解ける。
+#: 手配度1点あたりの罰金。
+#: 0 にすると無料で解ける。
 PRICE_PER_POINT = 1000
 
-#: これ未満の手配度を「手配されている」と見なす。既定 0 ＝ 負なら犯罪者。
+#: これ未満の手配度を「手配されている」と見なす。
+#: 既定 0 ＝ 負なら犯罪者。
 WANTED_THRESHOLD = 0
 
-#: 罰金を納めた後の手配度。既定 10 ＝ 素の平常値。
+#: 罰金を納めた後の手配度。
+#: 既定 10 ＝ 素の平常値。
 RESTORE_TO = 10
 
 #: 手配されている状態で役場に入ったとき、その旨を1行出すか。
@@ -99,27 +106,32 @@ CLEARED_TEXT = "{area}での手配は取り消された。"
 BROKE_TEXT = "「その額を持たない者に、書き換える帳面はありません」"
 BROKE_DETAIL = "（罰金 {price}ゴールド ／ 手持ち {gold}ゴールド）"
 
-# セーブから復元された残骸を見分けるための、こちらのラベル一覧
-# （`ui.Screen.prune_stale`）。`PhaseSpec.to_dict()` は text と spec しか書か
-# ないので**印は落ちる**。落ちたものは `insert_button()` の印による重複判定を
-# すり抜けるので、役場でセーブ → タイトル → ロードのあと同じボタンが2つ並び、
+# セーブから復元された残骸を見分けるための、
+# こちらのラベル一覧（`ui.Screen.prune_stale`）。
+# `PhaseSpec.to_dict()` は text と spec しか書かないので印は落ちる。
+# 落ちたものは `insert_button()` の印による重複判定をすり抜けるので、
+# 役場でセーブ → タイトル → ロードのあと同じボタンが2つ並び、
 # 復元された方は押しても無反応になる（`301_` で実際に起きた壊れ方）。
-#
-# 金額つきのラベルは `{price}` の手前までを見る（照合は**前方一致**）。
-# `PAY_LABEL` / `CANCEL_LABEL` は入れない ― 確認画面は一瞬しか出ないうえ、
-# 「やめておく」は `302_` も出す文言で、こちらのものだと言い切れない。
+# 金額つきのラベルは `{price}` の手前までを見る（照合は前方一致）。
+# `PAY_LABEL` / `CANCEL_LABEL` は入れない。
+# 確認画面は一瞬しか出ないうえ、「やめておく」は `302_` も出す文言で、
+# こちらのものだと言い切れない。
 OUR_LABELS = (BUTTON_LABEL.split("(")[0], BUTTON_LABEL_FREE)
 GONE_TEXT = "（手配はもう残っていない）"
 FAILED_TEXT = "（帳面は書き換えられなかった）"
 
-#: ここが真の間はボタンを出さない ― 戦闘中・会話中など。「手が空いているか」
-#: （テキストの流し込み中・ポップアップが開いている）は `ui.busy_signals` 側。
-# ここが真の間は選択肢を足さない。表はローダが持つ（`902_` と共有）。
+#: ここが真の間はボタンを出さない。
+#: 戦闘中・会話中など。
+#: 「手が空いているか」（テキストの流し込み中・ポップアップが開いている）は
+#: `ui.busy_signals` 側。
+# ここが真の間は選択肢を足さない。
+#: 表はローダが持つ（`902_` と共有）。
 BUSY_FLAGS = ui.BUSY_FLAGS
 
-#: 施設の選択肢だと見なす目印。**文字列ではなく spec のクラス名で見る。**
-#: 施設には必ず出口（`MovePhaseManager`）があるので、これが1つも無い画面は
-#: 施設の選択肢ではない（会話中・確認画面・掲示板など）。
+#: 施設の選択肢だと見なす目印。
+#: 文字列ではなく spec のクラス名で見る。
+#: 施設には必ず出口（`MovePhaseManager`）があるので、
+#: これが1つも無い画面は施設の選択肢ではない（会話中・確認画面・掲示板など）。
 FACILITY_MARK = "MovePhaseManager"
 
 
@@ -140,9 +152,11 @@ def apply(ctx):
     screen = ui.Screen(ctx, write, tag="office pardon", mark=MARK)
 
     state = {
-        # 確認画面を出す前の選択肢。「やめておく」で元に戻すために控える。
+        # 確認画面を出す前の選択肢。
+        # 「やめておく」で元に戻すために控える。
         "saved": None,
-        # 手配を知らせた場所（エリア id, 施設 id）。同じ場所で言い直さないため。
+        # 手配を知らせた場所（エリア id, 施設 id）。
+        # 同じ場所で言い直さないため。
         "announced": None,
     }
 
@@ -150,8 +164,8 @@ def apply(ctx):
     def wanted_here(app):
         """今いる土地の手配。`(エリア名, 記録, 手配度, 罰金)`。無ければ `None`。
 
-        **読めなかったものは「手配されていない」に倒す。** 値が読めないことを
-        理由に、ありもしない罰金を請求しない。
+        読めなかったものは「手配されていない」に倒す。
+        値が読めないことを理由に、ありもしない罰金を請求しない。
         """
         player = getattr(app, "player", None)
         if player is None:
@@ -181,7 +195,7 @@ def apply(ctx):
         return [flag for flag in BUSY_FLAGS if getattr(app, flag, False)]
 
     def is_facility_screen(buttons):
-        """いま施設の選択肢が出ているか。**文字列ではなく spec で見る。**"""
+        """いま施設の選択肢が出ているか。文字列ではなく spec で見る。"""
         if not isinstance(buttons, (list, tuple)):
             return False
         return any(ui.spec_cls_name(entry) == FACILITY_MARK for entry in buttons)
@@ -195,9 +209,10 @@ def apply(ctx):
     def insert_button(app):
         """役場の選択肢に「罰金を納める」を1つ足す。足したら `True`。
 
-        **ゲームが組んだ一覧に挿すだけ**で、組み直さない。呼ばれるのは
-        `refresh_choice_buttons` の中（`orig` の前）なので、ここで挿せば
-        ゲーム自身がそのまま画面まで運ぶ。こちらから塗り直す必要がない。
+        **ゲームが組んだ一覧に挿すだけ**で、組み直さない。
+        呼ばれるのは `refresh_choice_buttons` の中（`orig` の前）なので、
+        ここで挿せばゲーム自身がそのまま画面まで運ぶ。
+        こちらから塗り直す必要がない。
         """
         buttons = getattr(app, "buttons", None)
         if not isinstance(buttons, list) or not buttons:
@@ -206,8 +221,8 @@ def apply(ctx):
             return False
         # **印を失った自前ボタンの残骸を先に落とす**（`ui.Screen.prune_stale`）。
         # 施設の選択肢だと分かってから呼ぶので、他の画面には手を出さない。
-        # 落とした分は下で新しい印つきに差し直されるため、残骸は「消える」の
-        # ではなく「生き返る」。
+        # 落とした分は下で新しい印つきに差し直されるため、
+        # 残骸は「消える」のではなく「生き返る」。
         screen.prune_stale(buttons, OUR_LABELS)
         if any(screen.mark_of(entry) for entry in buttons):
             return False        # 既に在る（塗り直しで増やさない）
@@ -228,8 +243,9 @@ def apply(ctx):
             write("cannot build the button (PhaseSpec unavailable)")
             return False
 
-        # 移動（出口）の手前に置く。役場でできることを先に、その場を離れる
-        # 選択肢を後に、という並びはゲーム自身の施設の選択肢と同じ。
+        # 移動（出口）の手前に置く。
+        # 役場でできることを先に、その場を離れる選択肢を後に、
+        # という並びはゲーム自身の施設の選択肢と同じ。
         at = len(buttons)
         for index, item in enumerate(buttons):
             if ui.spec_cls_name(item) == FACILITY_MARK:
@@ -278,9 +294,9 @@ def apply(ctx):
     def restore(app, why):
         """役場の選択肢に戻す。
 
-        控えからは自前のボタンを外してある。まだ手配が残っていれば
-        `refresh_choice_buttons` のフックが足し直すので、ここで足さない
-        （「今どうなっているか」の判断を1箇所に閉じておく）。
+        控えからは自前のボタンを外してある。
+        まだ手配が残っていれば `refresh_choice_buttons` のフックが足し直すので、
+        ここで足さない（「今どうなっているか」の判断を1箇所に閉じておく）。
         """
         saved, state["saved"] = state["saved"], None
         write("restore: {} ({} entries)".format(
@@ -289,7 +305,7 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 支払う
     def pay(app):
-        """罰金を納めて手配度を戻す。**金と手配度は同じ流れの中で動かす。**"""
+        """罰金を納めて手配度を戻す。金と手配度は同じ流れの中で動かす。"""
         found = wanted_here(app)
         if found is None:
             write("pay: nothing is pending any more")
@@ -301,8 +317,9 @@ def apply(ctx):
         gold = record.gold_of(player)
 
         if gold is None:
-            # 所持金が読めないなら**払わせない**。手配だけ消して金を取らない
-            # （あるいはその逆）にならないよう、ここで降りる。
+            # 所持金が読めないなら払わせない。
+            # 手配だけ消して金を取らない（あるいはその逆）にならないよう、
+            # ここで降りる。
             write("WARN pay: cannot read player.gold; refusing")
             screen.say(app, FAILED_TEXT)
             restore(app, "no gold field")
@@ -324,7 +341,8 @@ def apply(ctx):
             restore(app, "cannot write lawfulness")
             return
         if price > 0 and not record.set_gold(player, gold - price):
-            # 金を取れなかったので手配度も戻す。**片方だけ通さない。**
+            # 金を取れなかったので手配度も戻す。
+            # 片方だけ通さない。
             record.set_lawfulness(entry, before)
             write("WARN pay: cannot write gold; lawfulness rolled back")
             screen.say(app, FAILED_TEXT)
@@ -365,10 +383,10 @@ def apply(ctx):
     def refresh_choice_buttons(orig, self, reset_page=False, *args, **kwargs):
         """役場の選択肢が組まれるたびに、条件が揃っていればボタンを1つ足す。
 
-        `orig` の**前**に挿すので、ゲーム自身がそのまま `to_display_buttons` を
-        組んで画面まで運ぶ。こちらから塗り直さないぶん、押下と同じ流れの中で
-        差し替えたときの「見えているものと押されるものが食い違う」（TECH.md §5）
-        も起きない。
+        `orig` の前に挿すので、ゲーム自身がそのまま
+        `to_display_buttons` を組んで画面まで運ぶ。
+        こちらから塗り直さないぶん、押下と同じ流れの中で差し替えたときの「見えているものと押されるものが食い違う」（TECH.md
+        §5）も起きない。
 
         **自分が挿したものは印で見分ける**ので、何度呼ばれても増えない。
         """

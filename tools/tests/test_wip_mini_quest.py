@@ -3,8 +3,8 @@
 
     python tools/tests/test_mini_quest.py
 
-偽の app / PhaseSpec / DisplayQuestChoice / HUD / Clock / LlamaCppClient を差し込み、
-次を確認する。
+偽の app / PhaseSpec / DisplayQuestChoice / HUD / Clock /
+LlamaCppClient を差し込み、次を確認する。
 
   設置     … 掲示板の「やめる」の手前に「軽い頼まれごとを探す」が出る。
              開き直しても二重にならない。ゲームが並べた依頼ボタンには触らない
@@ -117,7 +117,8 @@ class QuestChoiceManager:
 class DisplayQuestChoice:
     """ゲーム自身のクエスト掲示板。依頼ボタンを並べるところまでを真似る。"""
 
-    #: 生成させる依頼の題名と依頼文。テストから差し替える。
+    #: 生成させる依頼の題名と依頼文。
+    #: テストから差し替える。
     next_title = "谷底の薬草採り"
     next_summary = "谷底に自生する月光草を5株、採ってきてほしい。"
 
@@ -142,9 +143,9 @@ class DisplayQuestChoice:
     def generate_random_quest(self):
         """ゲーム自身の生成経路。
 
-        本物は内側で `random_quest_generator` を呼び、その中で LLM
-        （`LlamaCppClient.chat`）が回る。mod のフックが**その順で**効くことを
-        確かめたいので、ここでも同じ順に呼ぶ。
+        本物は内側で `random_quest_generator` を呼び、
+        その中で LLM（`LlamaCppClient.chat`）が回る。
+        mod のフックが**その順で**効くことを確かめたいので、ここでも同じ順に呼ぶ。
         """
         if self.app.generator_hook is not None:
             self.app.generator_hook("世界の概要", "風鳴りの村", "静かな農村",
@@ -292,7 +293,8 @@ class FakeCtx:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
-    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # ログは本物の `ctx.logger` をそのまま借りる。
+    # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
 
@@ -314,8 +316,8 @@ class FakeCtx:
         self.errors.append(msg)
 
     # 本物の `ctx.write_json` / `write_text` / `read_json` と同じものを使う。
-    # ここを自前の open にすると、テストだけが「壊れない書き方」「読めなかった
-    # ことを記録する読み方」を通らなくなる。
+    # ここを自前の open にすると、
+    # テストだけが「壊れない書き方」「読めなかったことを記録する読み方」を通らなくなる。
     def read_json(self, path, default=None):
         return ml.read_json(path, default, report=self.log_exc)
 
@@ -331,9 +333,8 @@ class FakeCtx:
             return func
         return decorator
 
-    # `llm.wrap_outgoing` はここを見て「今その名前が在るか」を決める。返さないと
-    # クラウド側の別名が全部「後生え待ち」に回り、**この検査でクラウド経路が
-    # 一度も通らなくなる**（版4がクラウドで無音だったのと同じ死角をテストに作る）。
+    # `llm.wrap_outgoing` はここを見て「今その名前が在るか」を決める。
+    # 返さないとクラウド側の別名が全部「後生え待ち」に回り、**この検査でクラウド経路が一度も通らなくなる**（版4がクラウドで無音だったのと同じ死角をテストに作る）。
     def resolve(self, target):
         return (None, target.rpartition(":")[2], object())
 
@@ -371,9 +372,9 @@ CLOCK = install_fake_kivy()
 def setup(records=None):
     """mod を適用し、掲示板の前に立っている app を返す。
 
-    クラスは毎回作り直す（前のテストで載せたフックを持ち越さない。派生元は
-    `BASES` から引く ― `sys.modules['__main__']` は直接実行時にはこのテスト自身
-    なので、名前から派生させると層が積み上がる）。
+    クラスは毎回作り直す（前のテストで載せたフックを持ち越さない。
+    派生元は `BASES` から引く ― `sys.modules['__main__']` は直接実行時にはこのテスト自身なので、
+    名前から派生させると層が積み上がる）。
     """
     app_cls = type("InstantaleApp", (BASES["app"],), {})
     board_cls = type("DisplayQuestChoice", (BASES["board"],), {})
@@ -388,8 +389,8 @@ def setup(records=None):
 
     record_path = os.path.join(OUT_DIR, "state", "mini_quests.json")
     os.makedirs(OUT_DIR, exist_ok=True)
-    # ログは追記なので、消しておかないと**前回の実行の行を数えてしまう**
-    # （「1度だけ記録する」の判定が実行のたびに増えて落ちた）。
+    # ログは追記なので、
+    # 消しておかないと**前回の実行の行を数えてしまう**（「1度だけ記録する」の判定が実行のたびに増えて落ちた）。
     log_path = os.path.join(OUT_DIR, "mini_quest.log")
     if os.path.exists(log_path):
         os.remove(log_path)
@@ -415,8 +416,8 @@ def setup(records=None):
     app = app_cls(world)
     app.world_dict["quests"] = {"39": {"id": "39"}, "43": {"id": "43"}}
 
-    # `random_quest_generator` のフックは `(orig, ...)` を取るので、素の生成側を
-    # `orig` として渡す形にしておく（本番と同じ呼ばれ方）。
+    # `random_quest_generator` のフックは `(orig, ...)` を取るので、
+    # 素の生成側を `orig` として渡す形にしておく（本番と同じ呼ばれ方）。
     raw = ctx.hooks.get(
         "scripts.llm.llm_manager_world_generate:random_quest_generator")
 
@@ -553,9 +554,11 @@ check("進行: 1文目でも帰還の解釈を示す",
 check("撤退そのものは残す（達成できない依頼で詰ませない）",
       "retire_from_the_quest" in body, body)
 
-# retire の行は**行頭だけ**で当てる。ゲームの原文には誤植（「しかし具体的が
-# 無いならば」）があり、`111_llm_prompt_replace` の同梱ルールがそれを直すので、
-# 送信される文の末尾は 111_ を入れているかどうかで変わる（VERIFICATION_LOG.md §2.43）。
+# retire の行は**行頭だけ**で当てる。
+# ゲームの原文には誤植（「しかし具体的が無いならば」）があり、
+# `111_llm_prompt_replace` の同梱ルールがそれを直すので、
+# 送信される文の末尾は 111_ を入れているかどうかで変わる（VERIFICATION_LOG.md
+# §2.43）。
 # 末尾まで含めた完全一致にしていたときは、直された側で当たらなくなっていた。
 FIXED_TYPO = MOD_MODULE.SAMPLE_REFEREE_USER.replace(
     "しかし具体的が無いならば", "しかし具体的な理由が無いならば")
@@ -627,7 +630,8 @@ check("形が読めなければ素通し（None も落ちない）",
 check("既定で有効（文面での説得は効かないので戻り値で持つ）",
       MOD_MODULE.RETURN_INSTEAD_OF_RETIRE is True)
 
-# 実際のフック経由。控えに在る依頼のときだけ差し替わること。
+# 実際のフック経由。
+# 控えに在る依頼のときだけ差し替わること。
 _RETIRE_RECORDS = {"テスト世界": {"44": {"kind": "gather", "label": "採集",
                                          "title": "谷底の薬草採り",
                                          "summary": "月光草を5株、採ってきてほしい。",
@@ -687,9 +691,9 @@ CLOCK.settle()
 texts = [entry["text"] for entry in app.buttons]
 check("開き直しても二重にならない", texts.count(mod.BOARD_LABEL) == 1, texts)
 
-# セーブから復元された残骸（印が落ちている）を掴めること。掲示板が一覧を
-# 組み直すビルドではゲーム自身が消しているので**保険**だが、組み直さない
-# ビルドで二重化しないことをここで担保する。
+# セーブから復元された残骸（印が落ちている）を掴めること。
+# 掲示板が一覧を組み直すビルドではゲーム自身が消しているので**保険**だが、
+# 組み直さないビルドで二重化しないことをここで担保する。
 from instantale_modloader import ui as _ui
 screen = _ui.Screen(ctx, lambda m: None, tag="t", mark=mod.MARK)
 restored = [{"text": mod.BOARD_LABEL,
@@ -726,7 +730,8 @@ check("無害な spec のクラスは起こされない（横取りできてい�
 check("依頼が1件増えた", "44" in app.world.quests, list(app.world.quests))
 check("生成後は掲示板を開き直す", app.opened_board >= 1, app.opened_board)
 
-# ---- 待機表示（「...」）。生成は数十秒〜数分かかるので、無いと固まって見える
+# ---- 待機表示（「...」）。
+# 生成は数十秒〜数分かかるので、無いと固まって見える
 with open(os.path.join(OUT_DIR, "mini_quest.log"), encoding="utf-8") as _fh:
     _busy_lines = _fh.read().splitlines()
 check("生成中は待機表示を出す",
@@ -742,8 +747,8 @@ check("app.buttons（spec の一覧）には触らない",
       app.buttons)
 
 # 点のアニメーションそのものは共通部品（ui.Screen）の担当なので直接確かめる。
-# 本物では `generate_random_quest()` が別スレッドで止まっている間に Clock が
-# 回るが、この偽ゲームは同期なので、生成の流れでは1コマも進まない。
+# 本物では `generate_random_quest()` が別スレッドで止まっている間に Clock が回るが、
+# この偽ゲームは同期なので、生成の流れでは1コマも進まない。
 import instantale_modloader.ui as _ui
 
 _busy_app = BASES["app"](World({"1": Quest(id="1")}))
@@ -907,10 +912,10 @@ check("関係の無いプロンプトは触らない",
       blob_of(sent["messages"]) == blob_of(plain))
 
 # ---------------------------------------------------------- クラウド（APIキー）
-# **版4までは `LlamaCppClient.chat` の1点にしか仕掛けていなかった。** クラウドは
-# chat を一度も通らないので、討伐前提を外す書き換えが丸ごと落ち、しかも
-# `plan()` が呼ばれないため `missed:` すら出ない ＝ 無音で普通の討伐になっていた
-# （`119_` v1 と同じ死角。TECH.md §5.3 / VERIFICATION_LOG.md §2.41）。
+# **版4までは `LlamaCppClient.chat` の1点にしか仕掛けていなかった。**
+# クラウドは chat を一度も通らないので、討伐前提を外す書き換えが丸ごと落ち、
+# しかも `plan()` が呼ばれないため `missed:` すら出ない ＝ 無音で普通の討伐になっていた（`119_` v1 と同じ死角。TECH.md §5.3 /
+# VERIFICATION_LOG.md §2.41）。
 mod, ctx, app, board_cls, client = setup(RECORDS)
 send_hook = ctx.hooks.get("scripts.llm.llm_manager:send_request")
 check("クラウドの送信口にも仕掛かっている", send_hook is not None,
@@ -925,8 +930,9 @@ def cloud_orig(manager_name, message, structure=None, **kw):
 
 
 if send_hook is not None:
-    # ローカル（llama.cpp）が載っていないクラウド実行を装う。載っていると
-    # ローダは `llm_manager` 境界を意図的に素通しする（二重に当たるため）。
+    # ローカル（llama.cpp）が載っていないクラウド実行を装う。
+    # 載っているとローダは
+    # `llm_manager` 境界を意図的に素通しする（二重に当たるため）。
     saved = sys.modules.pop(
         "scripts.llm.request_llm_inference_llama_cpp_completion", None)
     gemini = "scripts.llm.request_llm_inference_gemini_test_streaming"

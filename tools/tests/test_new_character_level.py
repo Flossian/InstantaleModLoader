@@ -20,8 +20,9 @@
   二段目    … `__init__` の後でレベルが戻された場合に警告が出る
   無事故    … どの経路でも ctx.log_exc が呼ばれない
 
-根拠は VERIFICATION_LOG.md §2.36。`instantale.py:876` が `experience_level=60` を
-渡し、883〜885 行が `get_max_physical_integrity(1) -> 10` を渡している。
+根拠は VERIFICATION_LOG.md §2.36。
+`instantale.py:876` が `experience_level=60` を渡し、
+883〜885 行が `get_max_physical_integrity(1) -> 10` を渡している。
 """
 import importlib.util
 import io
@@ -34,8 +35,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 
-# 失敗したときは記録の中身をそのまま出す。cp932 のコンソールに出せない文字が
-# 混ざっていても試験自体は落とさない（落とすと本当の失敗が読めなくなる）。
+# 失敗したときは記録の中身をそのまま出す。
+# cp932 のコンソールに出せない文字が混ざっていても試験自体は落とさない（落とすと本当の失敗が読めなくなる）。
 try:
     sys.stdout.reconfigure(errors="replace")
 except Exception:
@@ -73,7 +74,8 @@ def check(name, cond, detail=""):
 
 
 # ---------------------------------------------------------------- 偽ゲーム
-# レベル→体力上限。実測（VERIFICATION_LOG.md §2.36 / `214_` の総当たり）の一部。
+# レベル→体力上限。
+# 実測（VERIFICATION_LOG.md §2.36 / `214_` の総当たり）の一部。
 STAMINA_BY_LEVEL = {1: 10, 15: 15, 30: 26, 49: 39, 60: 45, 73: 50}
 
 
@@ -87,9 +89,9 @@ def get_max_physical_integrity(level):
 class Character:
     """本物と同じく、HP は `__init__` の中でレベルから決まる。
 
-    式そのものは特定していない。実測の2点（レベル1で `耐久 × 4.8`、
-    レベル60・耐久15 で 780）を通る形にしてある ― この試験に必要なのは
-    「HP がレベルに従って決まる」ことだけ。
+    式そのものは特定していない。
+    実測の2点（レベル1で `耐久 × 4.8`、レベル60・耐久15 で 780）を通る形にしてある
+    ― この試験に必要なのは「HP がレベルに従って決まる」ことだけ。
     """
 
     def __init__(self, name=None, experience_level=0, experience_point=0,
@@ -163,7 +165,8 @@ class FakeCtx:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
-    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # ログは本物の `ctx.logger` をそのまま借りる。
+    # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
 
@@ -311,8 +314,8 @@ check("直した理由が記録に出る", "REPAIR_LOADED is on" in log_text(ctx
 
 print("\n-- 判定できない形 --")
 mod, ctx, Char, App = setup()
-# レベルだけ位置引数で来た形（`is_player` は引数名で来ているので**プレイヤーだと
-# 分かるのに**レベルが読めない、という一番厄介な組み合わせ）。
+# レベルだけ位置引数で来た形（`is_player` は引数名で来ているので**プレイヤーだと分かるのに**レベルが読めない、
+# という一番厄介な組み合わせ）。
 positional = Char("位置引数", 60, is_player=True,
                   original_ability_scores={"constitution": 15},
                   max_physical_integrity=10)

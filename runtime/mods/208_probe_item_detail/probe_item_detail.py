@@ -1,29 +1,34 @@
 # -*- coding: utf-8 -*-
 """計測: アイテム説明欄（ItemDetailBox）の実寸と中身を写し取る（読み取り専用）。
 
-症状: 説明文が途中で切れる。100 文字を超える説明を入れても、画面には
-**24文字 × 3行 = 72文字** しか出ない。名前・種別・攻撃力・売価は出ているので、
-**箱の大きさが固定で、説明のラベルがそこに収まる分しか描かれない**という読みになる。
+症状: 説明文が途中で切れる。
+100 文字を超える説明を入れても、画面には **24文字 × 3行 = 72文字** しか出ない。
+名前・種別・攻撃力・売価は出ているので、**箱の大きさが固定で、
+説明のラベルがそこに収まる分しか描かれない**という読みになる。
 
-直すには次の3つが要る。どれも推測せず実測で決める（`108_` と同じ立場:
-寸法を発明すればレイアウトの仕様をこちらで勝手に決めることになる）:
+直すには次の3つが要る。
+どれも推測せず実測で決める（`108_` と同じ立場: 寸法を発明すればレイアウトの仕様をこちらで勝手に決めることになる）:
 
-1. **箱と中のラベルの持ち方**: `ItemDetailBox` が何のレイアウトで、子が何個で、
+1. 箱と中のラベルの持ち方: `ItemDetailBox` が何のレイアウトで、子が何個で、
    説明は専用のラベルなのか名前と同じラベルに繋げて入れているのか。
    `update_content` が毎回作り直すのか、既にあるラベルの `text` を差し替えるのか。
-2. **なぜ72文字で止まるのか**。候補は3つあり、対策が別々になる。
-   `text_size` の高さが固定（超過分は描かれない）／`max_lines` が 3 ／
-   ラベル自体の `size` が固定でクリップされている。`texture_size` と `size` を
-   並べて記録すれば、**文字が要求している高さ**と**与えられている高さ**の差で分かる。
-3. **箱を伸ばしてよい余地**: 箱は誰が位置を決めているのか（親、それとも
-   マウス位置から直接）。画面のどこに出ていて、下や右にどれだけ空きがあるか。
+2. なぜ72文字で止まるのか。
+   候補は3つあり、対策が別々になる。
+   `text_size` の高さが固定（超過分は描かれない）／`max_lines` が 3 ／ラベル自体の
+   `size` が固定でクリップされている。
+   `texture_size` と `size` を並べて記録すれば、
+   文字が要求している高さと与えられている高さの差で分かる。
+3. 箱を伸ばしてよい余地: 箱は誰が位置を決めているのか（親、
+   それともマウス位置から直接）。
+   画面のどこに出ていて、下や右にどれだけ空きがあるか。
    伸ばした結果が画面外にはみ出すなら、伸ばすだけでは足りない。
 
-`update_content` はマウス移動（`InventoryItem.on_mouse_pos`）から呼ばれるので
-**毎フレーム走りうる**。同じ内容を何度も書くとログが読めなくなるうえ描画も重く
-なるので、`(item_id, 説明文の長さ)` が変わったときだけ1回書く。
+`update_content` はマウス移動（`InventoryItem.on_mouse_pos`）から呼ばれるので毎フレーム走りうる。
+同じ内容を何度も書くとログが読めなくなるうえ描画も重くなるので、
+`(item_id, 説明文の長さ)` が変わったときだけ1回書く。
 
-この mod は**観測しかしない**。値は変えず、記録に失敗しても本体は必ず呼ぶ。
+この mod は観測しかしない。
+値は変えず、記録に失敗しても本体は必ず呼ぶ。
 """
 
 import datetime
@@ -33,25 +38,29 @@ from instantale_modloader import frames
 
 LOG_BASENAME = "item_detail.log"
 
-# 書き出す組み合わせの上限。1つのアイテムにつき1件なので少しでいい。
+# 書き出す組み合わせの上限。
+# 1つのアイテムにつき1件なので少しでいい。
 MAX_SAMPLES = 40
 
-# 子ウィジェットを何段まで潜るか。BoxLayout の中に BoxLayout があっても届く程度。
+# 子ウィジェットを何段まで潜るか。
+# BoxLayout の中に BoxLayout があっても届く程度。
 MAX_DEPTH = 4
 
-# ラベルの折り返しに効く property。名前が違って空振りしても、
-# 下の vars() ダンプが本当の属性名を教えてくれる。
+# ラベルの折り返しに効く property。
+# 名前が違って空振りしても、下の vars() ダンプが本当の属性名を教えてくれる。
 WIDGET_ATTRS = ("size", "size_hint", "pos", "pos_hint", "height", "width",
                 "padding", "spacing", "orientation", "opacity")
 LABEL_ATTRS = ("font_size", "font_name", "text_size", "texture_size", "halign",
                "valign", "shorten", "shorten_from", "max_lines", "line_height",
                "markup", "strip", "bold", "color")
 
-# `opacity` の上げ下げを何件まで残すか。所持品を開くたびに数件出るので、
+# `opacity` の上げ下げを何件まで残すか。
+# 所持品を開くたびに数件出るので、
 # 「閉じたのに残った」1回分を含む前後が読めれば十分。
 MAX_OPACITY_EVENTS = 200
 
-# アイテム側から読む値。説明文の**本当の長さ**が要る（画面に出た分ではなく）。
+# アイテム側から読む値。
+# 説明文の本当の長さが要る（画面に出た分ではなく）。
 ITEM_ATTRS = ("item_id", "text", "rarity", "width_slots", "height_slots")
 
 
@@ -93,7 +102,8 @@ def apply(ctx):
         if depth < MAX_DEPTH:
             children = frames.attr(widget, "children")
             if isinstance(children, (list, tuple)):
-                # Kivy の children は後ろが先頭。見た目の並び順に直して出す。
+                # Kivy の children は後ろが先頭。
+                # 見た目の並び順に直して出す。
                 for child in reversed(list(children)):
                     lines += describe(child, depth + 1)
         return lines
@@ -121,14 +131,15 @@ def apply(ctx):
     @ctx.wrap("scripts.hud.new_hud:ItemDetailBox.update_content")
     def update_content(orig, self, item, *args, **kwargs):
         result = orig(self, item, *args, **kwargs)
-        # 箱はホバーのたびに作り直されるので、見張りもそのたびに掛け直す
-        # （同じ箱には二度掛からないよう印を持たせてある）。
+        # 箱はホバーのたびに作り直されるので、
+        # 見張りもそのたびに掛け直す（同じ箱には二度掛からないよう印を持たせてある）。
         watch_opacity(self)
         try:
             text = frames.attr(item, "text")
             key = (frames.attr(item, "item_id"),
                    len(text) if isinstance(text, str) else -1)
-            # マウスが乗っている間ずっと呼ばれる。中身が変わったときだけ書く。
+            # マウスが乗っている間ずっと呼ばれる。
+            # 中身が変わったときだけ書く。
             if key in seen or len(seen) >= MAX_SAMPLES:
                 return result
             seen.add(key)
@@ -141,14 +152,16 @@ def apply(ctx):
                          "{}={}".format(name, frames.repr_value(frames.attr(item, name)))
                          for name in ITEM_ATTRS)]
 
-            # 属性名は推測しない。box が自分で持っているものを全部出す
-            # （どれが説明のラベルなのかは、ここに出る名前で決める）。
+            # 属性名は推測しない。
+            # box が自分で持っているものを全部出す（どれが説明のラベルなのかは、
+            # ここに出る名前で決める）。
             try:
                 own = vars(self)
             except Exception:
                 own = {}
-            # `+` は `or` より先に評価されるので、`"..." + x or y` の y は
-            # 決して使われない（左辺が必ず真になる）。組んでから判定する。
+            # `+` は `or` より先に評価されるので、
+            # `"..." + x or y` の y は決して使われない（左辺が必ず真になる）。
+            # 組んでから判定する。
             names = ", ".join(sorted(own))
             lines.append("  vars(box): " + (names or "<none>"))
             for name in sorted(own):
@@ -164,17 +177,16 @@ def apply(ctx):
         return result
 
     # ------------------------------------------------------------------
-    # 説明欄が閉じたはずなのに残る（VERIFICATION.md §3.11）。所持品を閉じても、
-    # 戦闘画面の上に説明の箱が浮いたままになる。
-    #
-    # **表示・非表示は `opacity` で行われている**（上のダンプで確定 ―
-    # `update_content` の時点で箱は `opacity=0`、子は 1）。つまり症状は
-    # 「1 に上げた誰かが 0 に戻していない」。誰が上げ下げしているのかは
-    # コンパイル済みで読めないので、**プロパティの変化そのものを見張る**。
-    #
-    # 読み取り専用。値は一切変えない。`opacity` は Kivy の property なので
-    # `bind` で変化を拾える（`109_` は size/pos しか触らないので、この計測に
-    # `109_` の書き込みが混ざることは無い）。
+    # 説明欄が閉じたはずなのに残る（VERIFICATION.md §3.11）。
+    # 所持品を閉じても、戦闘画面の上に説明の箱が浮いたままになる。
+    # **表示・非表示は `opacity` で行われている**（上のダンプで確定。
+    # `update_content` の時点で箱は `opacity=0`、子は 1）。
+    # つまり症状は「1 に上げた誰かが 0 に戻していない」。
+    # 誰が上げ下げしているのかはコンパイル済みで読めないので、**プロパティの変化そのものを見張る**。
+    # 読み取り専用。
+    # 値は一切変えない。
+    # `opacity` は Kivy の property なので `bind` で変化を拾える（`109_` は
+    # size/pos しか触らないので、この計測に `109_` の書き込みが混ざることは無い）。
     # ------------------------------------------------------------------
     def watch_opacity(box):
         if getattr(box, "_mod_opacity_watched", False):

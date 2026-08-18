@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """InstantaleLLMProxy が回避している3つのプロンプト肥大化挙動を実測する。
 
-InstantaleLLMProxy/TECH.md は3つの暫定対策を記録しているが、いずれも HTTP
-プロキシを通過する *描画済み* プロンプトを書き換えることで実現されている:
+InstantaleLLMProxy/TECH.md は3つの暫定対策を記録しているが、
+いずれも HTTP プロキシを通過する
+*描画済み* プロンプトを書き換えることで実現されている:
 
   EVENTLOG  【今回のイベント内ログ】 ブロックが、今回のではなくクエスト全体の
             フィールドイベントを蓄積する。実測 29 ターン / 8,300 文字超、
@@ -17,12 +18,14 @@ InstantaleLLMProxy/TECH.md は3つの暫定対策を記録しているが、い�
             選び --parallel 1 を強制する（リクエストを直列化し、分割スロット
             ではなく毎回 16384 の全コンテキストを使わせる）。
 
-プロセス内部では、これらはそもそもテキストではない。`quest_event_log` 引数、
-`messages` リスト、サイドカー起動処理である。そこに手を入れれば文字列マッチも、
+プロセス内部では、これらはそもそもテキストではない。
+`quest_event_log` 引数、`messages` リスト、サイドカー起動処理である。
+そこに手を入れれば文字列マッチも、
 ロケールや言い回しで変わり得る区切り文字も不要になる。
 
-この mod は計測しかしない。数値を TECH.md のものと突き合わせてから修正を書く
-ためのものである。何も変更せず、何も握り潰さない。
+この mod は計測しかしない。
+数値を TECH.md のものと突き合わせてから修正を書くためのものである。
+何も変更せず、何も握り潰さない。
 """
 
 import hashlib
@@ -56,8 +59,8 @@ def apply(ctx):
     def describe_event_log(fn_name, args, kwargs):
         """quest_event_log の実体（型・文字数・ターン数）を記録する。
 
-        リストなのか文字列なのかは、修正方法を左右する決定的な違いである
-        （文字列なら区切り文字での分割が避けられない）。
+        リストなのか文字列なのかは、
+        修正方法を左右する決定的な違いである（文字列なら区切り文字での分割が避けられない）。
         """
         # 位置引数・キーワード引数のどちらで来るか読めないので両方見る。
         value = kwargs.get("quest_event_log")
@@ -67,7 +70,8 @@ def apply(ctx):
             write("{}: quest_event_log not found in call".format(fn_name))
             return
         if isinstance(value, str):
-            # 実測ではこちら。区切りの出現回数がそのままターン数になる。
+            # 実測ではこちら。
+            # 区切りの出現回数がそのままターン数になる。
             turns = value.count(TURN_SEPARATOR)
             write("{}: quest_event_log str chars={} turns={} (separator {!r})".format(
                 fn_name, len(value), turns, TURN_SEPARATOR))
@@ -100,9 +104,10 @@ def apply(ctx):
                     pass      # 計測の失敗で本体を止めない
                 return orig(*args, **kwargs)
             return probe
-        # **存在確認をしてから登録しない。** `scripts.llm.llm_manager` は最初の
-        # LLM リクエストまで import されないので、ここで確認すると常に「無い」に
-        # なり、**フックが1本も登録されないまま保留の見張りも立たない**。
+        # 存在確認をしてから登録しない。
+        # `scripts.llm.llm_manager` は最初の LLM リクエストまで
+        # import されないので、
+        # ここで確認すると常に「無い」になり、**フックが1本も登録されないまま保留の見張りも立たない**。
         # `required=False` に任せれば、モジュールが未 import なら保留し、
         # 在るのに属性が無ければ黙って降りる（TECH.md §3.4 の表）。
         make(fn_name)
@@ -114,8 +119,8 @@ def apply(ctx):
               required=False)
     def apply_chat_template(orig, self, model, messages, timeout=None, *args, **kwargs):
         try:
-            # 各メッセージを (role, 文字数, 指紋) に潰す。この3つ組が一致すれば
-            # 内容がバイト単位で同一ということ。
+            # 各メッセージを (role, 文字数, 指紋) に潰す。
+            # この3つ組が一致すれば内容がバイト単位で同一ということ。
             blocks = []
             total = 0
             for message in messages or ():
@@ -128,7 +133,8 @@ def apply(ctx):
                 total += len(content)
                 blocks.append((role, len(content), _digest(content)))
 
-            # 隣接かつ同一かつ閾値以上 ― プロキシの DEDUP 条件と同じ判定。
+            # 隣接かつ同一かつ閾値以上。
+            # プロキシの DEDUP 条件と同じ判定。
             repeats = [i for i in range(1, len(blocks))
                        if blocks[i] == blocks[i - 1] and blocks[i][1] >= DEDUP_MIN_BLOCK]
             write("_apply_chat_template: {} message(s), total_chars={} layout={}".format(
@@ -145,7 +151,8 @@ def apply(ctx):
     # ------------------------------------------------------------ SIDECAR
     @ctx.wrap("llama_cpp_runtime_completion:LlamaCppSidecar.__init__", required=False)
     def sidecar_init(orig, self, *args, **kwargs):
-        # 起動のたびに1行残す。多重起動しているかどうかは行数で分かる。
+        # 起動のたびに1行残す。
+        # 多重起動しているかどうかは行数で分かる。
         write("LlamaCppSidecar.__init__ args={} kwargs={}".format(
             [repr(a)[:80] for a in args], {k: repr(v)[:80] for k, v in kwargs.items()}))
         return orig(self, *args, **kwargs)
@@ -163,7 +170,8 @@ def apply(ctx):
         try:
             return orig(self, on_cpu, additional_env, additional_params, *args, **kwargs)
         except Exception as exc:
-            # 起動失敗は crash_log.txt で 35 件を占める症状。記録して再送出する。
+            # 起動失敗は crash_log.txt で 35 件を占める症状。
+            # 記録して再送出する。
             write("!! LlamaCppSidecar.start raised {}: {}".format(type(exc).__name__, exc))
             raise
 

@@ -3,8 +3,8 @@
 
     python tools/tests/test_quest_end_keep.py
 
-偽の app / QuestEndManager / QuestRetireManager / Area / Facility / Clock を
-差し込み、次を確認する。
+偽の app / QuestEndManager / QuestRetireManager / Area / Facility /
+Clock を差し込み、次を確認する。
 
   引き留め … クエストクリアの解散だけを止める（名簿は元のまま・置き直しも起きない）
   文言     … 「…はパーティから離脱した。」を残った旨に差し替える
@@ -13,9 +13,9 @@
   順序     … 置き先を聞いてから外すビルドでも取りこぼさない
   共存     … `303_` と重ねると `304_` が勝つ（誰も外れないので置き直しも走らない）
 
-**解散の検出はスタックのコードオブジェクトで行う**ので、テストも
-`QuestEndManager.method_1` の**中から**呼ぶ形にしてある（app のメソッドを直接
-叩くと本番と違う経路になり、検出そのものを検証できない）。
+**解散の検出はスタックのコードオブジェクトで行う**ので、
+テストも `QuestEndManager.method_1` の**中から**呼ぶ形にしてある（app のメソッドを直接叩くと本番と違う経路になり、
+検出そのものを検証できない）。
 
 ゲームが起動していなくても走るので、mod を編集したらまずこれを通すこと。
 """
@@ -70,8 +70,9 @@ def names_of(moves):
 
 
 # ---------------------------------------------------------------- 偽ゲーム
-# ここで定義したクラスは __main__ の属性になる。mod は
-# `getattr(sys.modules['__main__'], 名前)` で引くので、これで本番と同じ形になる。
+# ここで定義したクラスは __main__ の属性になる。
+# mod は `getattr(sys.modules['__main__'], 名前)` で引くので、
+# これで本番と同じ形になる。
 class Character:
     def __init__(self, **kw):
         self.current_location = None
@@ -152,7 +153,8 @@ class InstantaleApp:
         self.leave_answer = None
         self.game_places_after_remove = True
         self.game_asks_leave_facility = True
-        # 置き直しが removal より**先**に来るビルド（未観測。取りこぼし防止の検証用）。
+        # 置き直しが removal より**先**に来るビルド（未観測。
+        # 取りこぼし防止の検証用）。
         self.places_before_remove = False
 
     def add_text(self, context):
@@ -206,7 +208,8 @@ class QuestEndManager:
         app.add_text("パーティは帰還した...")
         app.add_text("9475ゴールドの報酬を受け取った。")
         if app.places_before_remove:
-            # 置き先を決めてから外すビルド。実測のものとは順序が逆。
+            # 置き先を決めてから外すビルド。
+            # 実測のものとは順序が逆。
             self.place(member_id, character)
             app.remove_party_member(member_id)
             app.add_text("{}はパーティから離脱した。".format(
@@ -224,8 +227,8 @@ class QuestRetireManager(QuestEndManager):
     """クエスト放棄。既定では捕まえない側（`ALSO_ON_QUEST_RETIRE`）。
 
     **`method_1` を上書きする**こと ― 継承したままだとコードオブジェクトが
-    `QuestEndManager.method_1` と同一になり、「別のマネージャなら捕まえない」を
-    検証できない。
+    `QuestEndManager.method_1` と同一になり、
+    「別のマネージャなら捕まえない」を検証できない。
     """
 
     def method_1(self, member_id):
@@ -302,7 +305,8 @@ class FakeCtx:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
-    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # ログは本物の `ctx.logger` をそのまま借りる。
+    # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
 
@@ -372,8 +376,9 @@ def setup(here="9", home="7", member="71", with_guild_mod=False, extra_mods=(),
           configure=None, configure_guild=None):
     """mod を適用し、エリア `here` に居る状態の app を返す。
 
-    `with_guild_mod` は `303_` を**先に**当てる（本番の適用順と同じ ＝ `304_` が
-    外側）。共存の検証はこの順序でしか意味を持たない。
+    `with_guild_mod` は `303_` を**先に**当てる（本番の適用順と同じ ＝
+    `304_` が外側）。
+    共存の検証はこの順序でしか意味を持たない。
 
     設定は `configure` / `configure_guild` で **`apply()` の前に**入れること。
     見張る相手は `apply()` の時点で決まる（本番でも設定の変更は再注入で効く）。
@@ -555,9 +560,9 @@ check("行き先の案内も出ない",
       not any("留まることになった" in text for text in app.texts), app.texts)
 check("残った旨は出る", any("パーティに残り" in text for text in app.texts), app.texts)
 
-# `304_` が降りた場面では `303_` が本来どおり働かなければならない。クエスト**放棄**を
-# `303_` にだけ見せる（`304_` は既定のまま ＝ 放棄には手を出さない）と、
-# 「外れるが、置き先はいまの町のギルド」という `303_` 単体の挙動になる。
+# `304_` が降りた場面では `303_` が本来どおり働かなければならない。
+# クエスト**放棄**を `303_` にだけ見せる（`304_` は既定のまま ＝ 放棄には手を出さない）と、「外れるが、
+# 置き先はいまの町のギルド」という `303_` 単体の挙動になる。
 app, ctx, clock, mod, areas = setup(with_guild_mod=True,
                                     configure_guild=enable_retire)
 QuestRetireManager(app).method_1("71")

@@ -3,8 +3,8 @@
 
     python tools/tests/test_event_ability_check.py
 
-偽の `player` と偽の評価結果（`roll_required` / `certain_success`）、および偽の
-マスターAI（`roll_the_dice` を含む `process`）を差し込み、次を確認する。
+偽の `player` と偽の評価結果（`roll_required` / `certain_success`）、
+および偽のマスターAI（`roll_the_dice` を含む `process`）を差し込み、次を確認する。
 
   刻み     … 基準(15)までは補正なし。1点でも超えれば1段目で、3点ごとにもう1段。
              16-18 +4% / 19-21 +8% / 22-24 +12% / 25-27 +16% / 28以上 +20%。
@@ -153,7 +153,8 @@ class FakeCtx(object):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
-    # ログは本物の `ctx.logger` をそのまま借りる。ここを自前で書くと、
+    # ログは本物の `ctx.logger` をそのまま借りる。
+    # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
 

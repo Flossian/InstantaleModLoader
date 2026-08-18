@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """LLM へ出ていく文章が通る**場所**。
 
-MOD が「送る前の本文を書き換える」ためには、まず**どこで捕まえるか**を知って
-いなければならない。それは MOD 固有の判断ではなく、このゲームの読み方
-（TECH.md §3.2.3 の表でいう**ローダ側**）なので、ここに1つだけ置く。
+MOD が「送る前の本文を書き換える」ためには、
+まず**どこで捕まえるか**を知っていなければならない。
+それは MOD 固有の判断ではなく、このゲームの読み方（TECH.md §3.2.3 の表でいう**ローダ側**）なので、
+ここに1つだけ置く。
 
     from instantale_modloader.llm import wrap_outgoing
 
@@ -12,8 +13,9 @@ MOD が「送る前の本文を書き換える」ためには、まず**どこ�
 
     hooks = wrap_outgoing(ctx, rewrite, label="crime attribution fix")
 
-`rewrite` が受け取るのは**この1回の推論で出ていく文字列の並び**（messages の
-本文、または templating 後の prompt 1本）。戻り値は同じ長さの並びか None。
+`rewrite` が受け取るのは**この1回の推論で出ていく文字列の並び**（messages の本文、
+または templating 後の prompt 1本）。
+戻り値は同じ長さの並びか None。
 messages の dict を組み直す・元のリストを壊さない・例外を握って素通しする、
 といった後始末はこちらで行う。
 
@@ -38,33 +40,36 @@ messages の dict を組み直す・元のリストを壊さない・例外を�
     単位で、属性の後生えは拾わない。無かったぶんは見張って当てる
     （`ALIAS_POLL_SECONDS` ごと・`ALIAS_WATCH_SECONDS` で諦める・注入し直しで降りる）
 
-クラウド境界で見えるのは呼び出し側が渡した `message` だけで、send_request の中で
-足される部分（Gemini のスキーマ文など）には当たらない（GAME.md §1.8）。
+クラウド境界で見えるのは呼び出し側が渡した `message` だけで、
+send_request の中で足される部分（Gemini のスキーマ文など）には当たらない（GAME.md
+§1.8）。
 
 ## MOD から LLM に1問だけ聞く（`ask`）
 
-書き換えではなく**自分から聞く**側の口。こちらも「どこから呼ぶか」がゲームの
-読み方なので、ここに置く。
+書き換えではなく**自分から聞く**側の口。
+こちらも「どこから呼ぶか」がゲームの読み方なので、ここに置く。
 
     from instantale_modloader import llm
 
     text = llm.ask(ctx, "mod_my_question", [{"role": "user", "content": "..."}],
                    timeout=30, label="my mod")
 
-`timeout` は**キーワードで必ず渡す**（既定値を置いていない）。ゲーム側の既定は
-`timeout=None` ＝ 無期限で、1回返らないと呼んだ側が永久に止まる ―
+`timeout` は**キーワードで必ず渡す**（既定値を置いていない）。
+ゲーム側の既定は `timeout=None` ＝ 無期限で、
+1回返らないと呼んだ側が永久に止まる ―
 `311_` は抽出を1本のワーカーで直列に回しているので以後の抽出が全部止まり、
 `300_` は情景描写のスレッドを巻き込む（GAME.md §2.12）。
 
-**送信モジュールを名指ししないこと。** プロバイダごとに違ううえ、名指しの
-一覧は必ず古くなる（`300_` / `311_` が `llama_cpp` と `any_server` の2つしか
-知らないまま、Gemini / OpenAI / Claude で毎回空振りしていた）。`resolve_send()`
-は `llm_manager` の別名を先に見て、無ければ**前置きで**送信モジュールを走査する。
+**送信モジュールを名指ししないこと。**
+プロバイダごとに違ううえ、名指しの一覧は必ず古くなる（`300_` / `311_` が `llama_cpp` と `any_server` の2つしか知らないまま、
+Gemini / OpenAI / Claude で毎回空振りしていた）。
+`resolve_send()` は `llm_manager` の別名を先に見て、
+無ければ**前置きで**送信モジュールを走査する。
 
 ## 印だけでは足りない場合は MOD 側で止める
 
-印はスレッドに立つので、`chat` が返った後に**別のスレッド**が送る経路には
-届かない。同じ文章に二度当たって困るかどうかは書き換えの中身しだいなので、
+印はスレッドに立つので、`chat` が返った後に**別のスレッド**が送る経路には届かない。
+同じ文章に二度当たって困るかどうかは書き換えの中身しだいなので、
 ここでは面倒を見ない:
 
   * `119_` … 当てた印（`【犯罪帰属MOD】`）が本文にあれば何もしない＝冪等
@@ -73,9 +78,10 @@ messages の dict を組み直す・元のリストを壊さない・例外を�
 
 ## 適用順は約束しない
 
-複数の MOD がここを使うと、同じ対象に層が重なる。ローカルの3点は
-`mod.json` の `after` / `before` どおりに重なるが、**クラウドの別名は
-「見張りが先に当てた方が内側」**になる（後生えを待つ時刻が MOD ごとに違う）。
+複数の MOD がここを使うと、同じ対象に層が重なる。
+ローカルの3点は `mod.json` の `after` /
+`before` どおりに重なるが、**クラウドの別名は「見張りが先に当てた方が内側」**になる（後生えを待つ時刻が
+MOD ごとに違う）。
 互いの書き換えが相手の目印を壊さない前提で書くこと。
 """
 
@@ -85,31 +91,36 @@ import sys
 import threading
 import time
 
-#: ローカル（llama.cpp）で本文が通る3点。どれが通るかはビルドと経路で変わる。
+#: ローカル（llama.cpp）で本文が通る3点。
+#: どれが通るかはビルドと経路で変わる。
 CHAT_TARGET = "llama_cpp_runtime_completion:LlamaCppClient.chat"
 TEMPLATE_TARGET = "llama_cpp_runtime_completion:LlamaCppClient._apply_chat_template"
 POST_TARGET = "llama_cpp_runtime_completion:LlamaCppClient._post_with_model_loading_retry"
 
-#: クラウド（APIキー）経路。第2要素は `send_request_with_no_structure` か
-#: （site 名に `_ns` を付けて見分ける）。
+#: クラウド（APIキー）経路。
+#: 第2要素は `send_request_with_no_structure` か（site 名に
+#: `_ns` を付けて見分ける）。
 MANAGER_SEND_TARGETS = (
     ("scripts.llm.llm_manager:send_request", False),
     ("scripts.llm.llm_manager:send_request_with_no_structure", True),
 )
 
-#: 送信の別名が集まる場所。プロバイダを問わずここを通る（GAME.md §2.12）。
+#: 送信の別名が集まる場所。
+#: プロバイダを問わずここを通る（GAME.md §2.12）。
 MANAGER_MODULE = "scripts.llm.llm_manager"
 
 #: これが import されていたらローカル実行（クラウドとどちらか片方しか載らない）。
 LOCAL_REQUEST_MODULE = "scripts.llm.request_llm_inference_llama_cpp_completion"
 
-#: 送信モジュールの名前空間。プロバイダごとに1つだけ import される（GAME.md §2.12）。
-#: 名前を全部並べないのは、Alibaba のモジュール名が未実測だから ― 前置きで拾えば
-#: 知らないプロバイダでも「llama.cpp ではない」ことは言える。
+#: 送信モジュールの名前空間。
+#: プロバイダごとに1つだけ import される（GAME.md §2.12）。
+#: 名前を全部並べないのは、Alibaba のモジュール名が未実測だから
+#: ― 前置きで拾えば知らないプロバイダでも「llama.cpp ではない」ことは言える。
 REQUEST_MODULE_PREFIX = "scripts.llm.request_llm_inference_"
 
-#: ローカル（llama.cpp）でしか import されないモジュール。クラウドで動いていると
-#: 分かった時点で、ここ宛ての保留は待っても無駄になる（`_arm_deferred`）。
+#: ローカル（llama.cpp）でしか import されないモジュール。
+#: クラウドで動いていると分かった時点で、
+#: ここ宛ての保留は待っても無駄になる（`_arm_deferred`）。
 LOCAL_ONLY_MODULES = ("llama_cpp_runtime_completion", LOCAL_REQUEST_MODULE)
 
 #: 「別名の後生え」の見張り。
@@ -136,13 +147,14 @@ def request_modules() -> list[str]:
 def is_cloud_runtime() -> bool:
     """llama.cpp 以外の送信モジュールが読み込まれているか。
 
-    `is_local_runtime()` の否定ではない。**起動直後はどちらも False** ―
-    まだ1度も LLM を呼んでいなければプロバイダは決まっておらず、そこで
-    「クラウドだ」と決めつけると、ローカル実行の保留を取り下げてしまう。
+    `is_local_runtime()` の否定ではない。
+    **起動直後はどちらも False** ― まだ1度も
+    LLM を呼んでいなければプロバイダは決まっておらず、
+    そこで「クラウドだ」と決めつけると、ローカル実行の保留を取り下げてしまう。
 
-    `any_server`（任意の OpenAI 互換サーバー）は手元のサーバーを指すことも
-    あるので、厳密には「クラウド」ではなく**プロセス内の `LlamaCppClient` を
-    通らない経路**。保留を取り下げてよいかの判定としてはこれで正しい。
+    `any_server`（任意の OpenAI 互換サーバー）は手元のサーバーを指すこともあるので、
+    厳密には「クラウド」ではなく**プロセス内の `LlamaCppClient` を通らない経路**。
+    保留を取り下げてよいかの判定としてはこれで正しい。
     """
     return any(name != LOCAL_REQUEST_MODULE for name in request_modules())
 
@@ -175,10 +187,11 @@ def manager():
 def resolve_send(name: str = "send_request_with_no_structure"):
     """送信関数を `(関数, どこから引いたか)` で返す。無ければ `(None, None)`。
 
-    **`llm_manager` の別名を先に見る。** どのプロバイダでもここを通るので、
-    送信モジュールを名指しせずに済む（GAME.md §2.12）。別名は初期化時に
-    後から生えるので、まだ無いときだけ送信モジュール側を**前置きで**走査する
-    ― 名前を並べた一覧は、プロバイダが増えた時点で黙って古くなる。
+    **`llm_manager` の別名を先に見る。**
+    どのプロバイダでもここを通るので、送信モジュールを名指しせずに済む（GAME.md
+    §2.12）。
+    別名は初期化時に後から生えるので、まだ無いときだけ送信モジュール側を**前置きで**走査する ― 名前を並べた一覧は、
+    プロバイダが増えた時点で黙って古くなる。
     """
     module = manager()
     if module is not None:
@@ -195,10 +208,10 @@ def resolve_send(name: str = "send_request_with_no_structure"):
 def create_structure(ctx, name: str, fields: dict, *, label: str = "llm"):
     """`create_model` で構造化出力の返却型を作る。作れなければ None。
 
-    `fields` は `{"項目名": (型, ...)}`。**`Literal` を使わないこと** ―
-    候補が空の `Literal[]` は pydantic が拒否してゲームごと落ちる
-    （`203_probe_create_model` が実際の落ち方を押さえている）。真偽も
-    `bool` ではなく `str` で受けて、読み取りは呼び側で行う。
+    `fields` は `{"項目名": (型, ...)}`。
+    **`Literal` を使わないこと** ― 候補が空の `Literal[]` は
+    pydantic が拒否してゲームごと落ちる（`203_probe_create_model` が実際の落ち方を押さえている）。
+    真偽も `bool` ではなく `str` で受けて、読み取りは呼び側で行う。
     """
     module = manager()
     factory = getattr(module, "create_model", None) if module is not None else None
@@ -214,8 +227,8 @@ def create_structure(ctx, name: str, fields: dict, *, label: str = "llm"):
 def as_dict(raw):
     """返ってきたものを辞書にする。**形を決めつけない。**
 
-    pydantic のモデル・素の辞書・JSON 文字列のどれで返るかはプロバイダと
-    版で変わる。読めなければ None（呼び側が降りる）。
+    pydantic のモデル・素の辞書・JSON 文字列のどれで返るかはプロバイダと版で変わる。
+    読めなければ None（呼び側が降りる）。
     """
     if isinstance(raw, dict):
         return raw
@@ -255,8 +268,8 @@ def ask(ctx, manager_name: str, message, *, timeout, structure=None,
     | `write` | MOD 自身のログ関数（かかった秒数と結果を1行）。無くてよい |
 
     `timeout` を受け付けない未実測のプロバイダでは `TypeError` で失敗して
-    None を返す（呼び側は LLM を使わない道へ降りる）。渡さずに呼び直さない
-    のは、**止まらないことのほうが大事**だから。
+    None を返す（呼び側は LLM を使わない道へ降りる）。
+    渡さずに呼び直さないのは、**止まらないことのほうが大事**だから。
     """
     name = "send_request" if structure is not None else "send_request_with_no_structure"
     send, where = resolve_send(name)
@@ -291,18 +304,19 @@ def watch_aliases(ctx, targets, install, *, label="llm", on_arm=None):
 
         watch_aliases(ctx, targets, hook_it, label="my probe")
 
-    `llm_manager` の `send_request*` は初期化時に後から生える。ローダの保留は
-    モジュール単位なので**属性の後生えは拾わない**（TECH.md §3.4）。今在るぶんは
-    その場で当て、無いぶんだけ見張りに回す。
+    `llm_manager` の `send_request*` は初期化時に後から生える。
+    ローダの保留はモジュール単位なので**属性の後生えは拾わない**（TECH.md §3.4）。
+    今在るぶんはその場で当て、無いぶんだけ見張りに回す。
 
     `install(target)` は当て方そのもの ― 何を仕掛けるかは呼ぶ側が決める。
-    `wrap_outgoing` は書き換えを、`213_` は観測を仕掛けるので、**当て方までは
-    共有しない**（あちらはローカル実行でも生の引数を見たいが、`wrap_outgoing`
-    はローカルでは `llm_manager` 境界を意図的に素通しする）。
+    `wrap_outgoing` は書き換えを、
+    `213_` は観測を仕掛けるので、**当て方までは共有しない**（あちらはローカル実行でも生の引数を見たいが、
+    `wrap_outgoing` はローカルでは `llm_manager` 境界を意図的に素通しする）。
 
-    見張りは `ALIAS_POLL_SECONDS` ごと・`ALIAS_WATCH_SECONDS` で諦め・
-    注入し直されたら `ctx.superseded()` で降りる。**降りるときは必ず何か残す**
-    （黙って死ぬと、残りが一生当たらないのに追う手がかりが1つも無い）。
+    見張りは `ALIAS_POLL_SECONDS` ごと・`ALIAS_WATCH_SECONDS` で諦め・注入し直されたら
+    `ctx.superseded()` で降りる。
+    **降りるときは必ず何か残す**（黙って死ぬと、
+    残りが一生当たらないのに追う手がかりが1つも無い）。
 
     戻り値は「見張りに回した対象」の並び（すぐ当たったものは入らない）。
     """
@@ -386,17 +400,19 @@ def wrap_outgoing(ctx, rewrite, *, label="llm", local=True, cloud=True,
 
         rewrite(texts, site) -> 同じ長さの並び / None（変えない）
 
-    `texts` は**空でない str だけ**。`site` はログ用の短い名前
-    （`chat` / `template` / `payload` / プロバイダ名 / プロバイダ名 + `_ns`）。
+    `texts` は**空でない str だけ**。
+    `site` はログ用の短い名前（`chat` / `template` / `payload` / プロバイダ名
+    / プロバイダ名 + `_ns`）。
 
-    `rewrite` が投げた例外は握り、**本文をそのまま送る**。ここで止める方が
-    損害が大きい（`ctx.log_exc` に残す）。
+    `rewrite` が投げた例外は握り、**本文をそのまま送る**。
+    ここで止める方が損害が大きい（`ctx.log_exc` に残す）。
 
-    `local` / `cloud` で経路を絞れる。`on_arm(target)` は別名を遅れて当てた
-    ときに呼ばれる（ログ用）。
+    `local` / `cloud` で経路を絞れる。
+    `on_arm(target)` は別名を遅れて当てたときに呼ばれる（ログ用）。
     """
     hooks = Hooks(ctx, label)
-    # 印は**この登録ごと**。共有すると、先に通った MOD が後の MOD を塞ぐ。
+    # 印は**この登録ごと**。
+    # 共有すると、先に通った MOD が後の MOD を塞ぐ。
     pass_local = threading.local()
 
     def begin_pass():
@@ -511,8 +527,8 @@ def wrap_outgoing(ctx, rewrite, *, label="llm", local=True, cloud=True,
     def rewrite_message_arg(site, args, kwargs):
         """呼び出しの (args, kwargs) の中の message を書き換える。
 
-        並びが `send_request(manager_name, message, structure, ...)` でない
-        プロバイダもありうるので、位置に決め打ちせず両方を見る。
+        並びが `send_request(manager_name, message, structure, ...)` でないプロバイダもありうるので、
+        位置に決め打ちせず両方を見る。
         """
         if len(args) >= 2 and isinstance(args[1], list):
             replaced = rewrite_messages(args[1], site)
@@ -527,8 +543,9 @@ def wrap_outgoing(ctx, rewrite, *, label="llm", local=True, cloud=True,
     def hook_manager_send(target, ns):
         @ctx.wrap(target, required=False)
         def manager_send(orig, *args, **kwargs):
-            # ローカル実行ではここでは触らない。send_request は内部で別スレッドに
-            # 降りるため印が届かず、LlamaCppClient 側の3点と二重に当たる。
+            # ローカル実行ではここでは触らない。
+            # send_request は内部で別スレッドに降りるため印が届かず、
+            # LlamaCppClient 側の3点と二重に当たる。
             if is_local_runtime():
                 return orig(*args, **kwargs)
             previous = begin_pass()
@@ -542,8 +559,8 @@ def wrap_outgoing(ctx, rewrite, *, label="llm", local=True, cloud=True,
             finally:
                 end_pass(previous)
 
-    # 居る別名は今すぐ、まだ生えていない別名は見張って当てる。仕組みは
-    # `watch_aliases` に切り出してある（`213_` も同じ見張りを要る）。
+    # 居る別名は今すぐ、まだ生えていない別名は見張って当てる。
+    # 仕組みは `watch_aliases` に切り出してある（`213_` も同じ見張りを要る）。
     ns_of = dict(MANAGER_SEND_TARGETS)
     watch_aliases(ctx, [target for target, _ns in MANAGER_SEND_TARGETS],
                   lambda target: hook_manager_send(target, ns_of[target]),
