@@ -1,6 +1,7 @@
 {
   "entry": "fix_crime_attribution.py",
   "api": 1,
+  "kind": "fix",
   "name": {
     "en": "Crime attribution fix",
     "ja": "犯罪主体の誤帰属修正"

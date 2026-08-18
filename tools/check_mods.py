@@ -215,6 +215,19 @@ def check_manifest(name, manifest):
         if not data.get(key):
             notes.append((path, MANIFEST_NAME, "{!r} が空（表示だけの項目）".format(key)))
 
+    # 種別の名乗り（"kind"）。GUI の「種別」列がこれを読む。
+    # 無いのは他の表示項目と同じく note（外部の mod が任意の項目で落ちない）。
+    # **書いてあるのに語彙の外**は問題 ― ローダが無指定に均すので、
+    # 書いた本人の意図と違って「-」が出続けることになる。
+    kind = data.get("kind")
+    if kind is None:
+        notes.append((path, MANIFEST_NAME,
+                      '"kind" が無い（種別の列に「-」が出る）'))
+    elif str(kind).strip().lower() not in ml.KINDS:
+        problems.append((path, MANIFEST_NAME,
+                         '"kind" が語彙に無い: {!r}（使えるのは {}）'
+                         .format(kind, " / ".join(ml.KINDS))))
+
     # 依存の宣言が自分自身を指していないか（循環は discover() が見る）
     for key in ("after", "before", "conflicts"):
         for other in manifest.get(key) or []:

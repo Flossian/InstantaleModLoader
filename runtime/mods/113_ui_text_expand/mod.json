@@ -1,6 +1,7 @@
 {
   "entry": "ui_text_expand.py",
   "api": 1,
+  "kind": "fix",
   "name": {
     "en": "Expandable text area",
     "ja": "本文の表示域を広げる"

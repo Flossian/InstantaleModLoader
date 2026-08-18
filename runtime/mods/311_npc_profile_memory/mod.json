@@ -1,6 +1,7 @@
 {
   "entry": "npc_profile_memory.py",
   "api": 1,
+  "kind": "feature",
   "name": {
     "en": "NPC conversation memory",
     "ja": "NPCが会話を覚える"

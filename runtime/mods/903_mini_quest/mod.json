@@ -1,6 +1,7 @@
 {
   "entry": "mini_quest.py",
   "api": 1,
+  "kind": "feature",
   "name": {
     "en": "Non-combat mini quests",
     "ja": "戦闘なしミニクエスト"

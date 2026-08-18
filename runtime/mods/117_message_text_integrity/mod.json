@@ -1,6 +1,7 @@
 {
   "entry": "message_text_integrity.py",
   "api": 1,
+  "kind": "fix",
   "name": {
     "en": "Show more of long messages",
     "ja": "長い本文をより多く見せる"

@@ -25,14 +25,17 @@ mod は1フォルダで、名乗りは `mod.json`、中身は入口の `.py`:
             return orig(*args, **kwargs)
 
 `mod.json` は `entry` 以外すべて任意。
-名乗り（name / description / version / author）は書いてあればログと
-status() に出るだけだが、次の5つは動作に関わる:
+名乗り（name / description / version / author / kind）は書いてあればログや
+GUI に出るだけだが、次の5つは動作に関わる:
 
     "api": 1                        前提にしているローダ API（下の API を参照）
     "after": ["101_fix_..."]         適用順の制約（_sort_dependencies）
     "settings": {...}               利用者が変えられる設定の宣言（config.py）
     "debug": true                   開発者向け。デバッグモードのときだけ動く（discover）
     "superseded": "main_024"        本体がその版で同じ修正を取り込んだので降ろした
+
+`kind` は mod 自身が名乗る種別（`KINDS` の1つ。GUI の「種別」列に出る。表示だけで
+読み込みの扱いは変えない）。
 
 `debug` と`superseded` は**読み込みの扱いが同じ**（どちらもデバッグモードのときだけ動く）。
 分けてあるのは伏せた理由が違うからで、GUI が表示で見分ける。
@@ -745,6 +748,12 @@ def _mods_dir() -> str:
 MANIFEST_NAME = "mod.json"
 ORDER_NAME = "load_order.json"
 
+#: mod.json の "kind" に書ける語彙。mod 自身が名乗る種別で、GUI の「種別」列が
+#: 表示に使う（読み込みの扱いは変えない）。表示名: core=基盤 / fix=修正 /
+#: probe=計測 / feature=追加。番号帯（TECH.md §3.2.2）は置き場の整理であって
+#: 分類の軸ではないので、種別は帯から導かずこの宣言で持つ。
+KINDS = ("core", "fix", "probe", "feature")
+
 #: 手元だけの順序ファイル。
 #: **在ればこちらが `load_order.json` に優先する。**
 #: `.gitignore` に入れてあるので配布物にもコミットにも入らない。
@@ -1134,6 +1143,12 @@ def _manifest(mods_dir: str, name: str) -> dict:
                 name, api, DEFAULT_API), level="WARN")
         api = DEFAULT_API
 
+    kind = text(data.get("kind")).lower()
+    if kind and kind not in KINDS:
+        log("{}: \"kind\" が語彙に無い（{!r}）。無指定として扱う".format(
+            name, data.get("kind")), level="WARN")
+        kind = ""
+
     return {
         "dir": name,
         # 入口の既定。
@@ -1159,6 +1174,11 @@ def _manifest(mods_dir: str, name: str) -> dict:
         # 判定はここ＝**コードを読み込む前**に済む。
         # 名乗りと同じ理由で、外すために他人の mod を import することにならない。
         "debug": bool(data.get("debug")),
+        # mod 自身が名乗る種別（`KINDS` の1つ）。GUI の「種別」列がこれを読む。
+        # フォルダ名の番号帯から**導かない** ― 帯は帯であって分類の軸ではない
+        # （TECH.md §3.2.2。挙動を変えるなら機能追加でも 1xx に置いてよい）ので、
+        # どれに属するかは mod 自身に言わせる。無指定・語彙の外は ""。
+        "kind": kind,
         # ゲーム本体が同じ修正を取り込んだので降ろした mod。
         # 値はその版（例 "main_024"）。
         # **読み込みの扱いは "debug" と同じ**で、

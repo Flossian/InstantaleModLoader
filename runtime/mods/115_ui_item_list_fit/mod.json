@@ -1,6 +1,7 @@
 {
   "entry": "ui_item_list_fit.py",
   "api": 1,
+  "kind": "fix",
   "name": {
     "en": "Fit the item list",
     "ja": "アイテム一覧を収める"

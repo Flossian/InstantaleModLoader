@@ -1,6 +1,7 @@
 {
   "entry": "probe_npc_memory.py",
   "api": 1,
+  "kind": "probe",
   "name": {
     "en": "NPC memory probe",
     "ja": "NPC記憶とプロンプト重複の計測"

@@ -1,6 +1,7 @@
 {
   "entry": "balance_area_bgm.py",
   "api": 1,
+  "kind": "fix",
   "name": {
     "en": "Area BGM balance",
     "ja": "エリアBGMの均し"

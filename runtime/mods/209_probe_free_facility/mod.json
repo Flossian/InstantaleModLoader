@@ -1,6 +1,7 @@
 {
   "entry": "probe_free_facility.py",
   "api": 1,
+  "kind": "probe",
   "name": {
     "en": "Free facility probe",
     "ja": "自由施設の計測"

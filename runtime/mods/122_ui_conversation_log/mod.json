@@ -1,6 +1,7 @@
 {
   "entry": "ui_conversation_log.py",
   "api": 1,
+  "kind": "fix",
   "name": {
     "en": "Conversation log viewer",
     "ja": "会話ログのビューア"

@@ -1,6 +1,7 @@
 {
   "entry": "area_move_custom.py",
   "api": 1,
+  "kind": "feature",
   "name": {
     "en": "Customize area travel",
     "ja": "街移動のカスタマイズ"

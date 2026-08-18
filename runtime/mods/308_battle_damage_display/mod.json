@@ -1,6 +1,7 @@
 {
   "entry": "battle_damage_display.py",
   "api": 1,
+  "kind": "feature",
   "name": {
     "en": "Battle damage numbers",
     "ja": "戦闘のダメージ表示"

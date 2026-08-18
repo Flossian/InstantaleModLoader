@@ -1,6 +1,7 @@
 {
   "entry": "probe_new_character.py",
   "api": 1,
+  "kind": "probe",
   "name": {
     "en": "New character level probe",
     "ja": "新規キャラのレベル60の計測"

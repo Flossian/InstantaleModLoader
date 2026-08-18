@@ -1,6 +1,7 @@
 {
   "entry": "llm_response_speed.py",
   "api": 1,
+  "kind": "fix",
   "name": {
     "en": "Faster local LLM responses",
     "ja": "ローカルLLMの応答を速くする"

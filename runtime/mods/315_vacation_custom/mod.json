@@ -1,6 +1,7 @@
 {
   "entry": "vacation_custom.py",
   "api": 1,
+  "kind": "feature",
   "name": {
     "en": "Customize inn stays",
     "ja": "宿泊のカスタマイズ"

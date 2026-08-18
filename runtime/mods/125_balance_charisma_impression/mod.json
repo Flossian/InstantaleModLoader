@@ -1,6 +1,7 @@
 {
   "entry": "balance_charisma_impression.py",
   "api": 1,
+  "kind": "fix",
   "name": {
     "en": "Charm should not win over everyone at first sight",
     "ja": "魅力が高いと初対面から全員に好かれるのを直す"

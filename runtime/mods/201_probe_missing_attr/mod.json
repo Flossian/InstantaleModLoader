@@ -1,6 +1,7 @@
 {
   "entry": "probe_missing_attr.py",
   "api": 1,
+  "kind": "probe",
   "name": {
     "en": "Missing attribute probe",
     "ja": "欠落属性の計測"

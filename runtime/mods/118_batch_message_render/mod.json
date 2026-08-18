@@ -1,6 +1,7 @@
 {
   "entry": "batch_message_render.py",
   "api": 1,
+  "kind": "fix",
   "after": [
     "117_message_text_integrity",
     "112_ui_text_spacing",

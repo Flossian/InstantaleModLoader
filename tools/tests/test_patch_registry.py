@@ -592,6 +592,18 @@ def main():
                                                           "ja": "Plain string"},
               "name は文字列1つでも書ける")
 
+        # 種別の名乗り（"kind"）。mod 自身がどれに属するかを言う ― フォルダ名の
+        # 番号帯からは導かない（GUI の種別列はこの値を読む）。
+        put_json("kinded/mod.json", {"entry": "m.py", "kind": " Fix "})
+        check(ml._manifest(tmp_mods, "kinded")["kind"] == "fix",
+              "kind は空白を落として小文字に均す")
+        put_json("kinded/mod.json", {"entry": "m.py", "kind": "banana"})
+        check(ml._manifest(tmp_mods, "kinded")["kind"] == "",
+              "語彙（{}）の外は無指定に倒す".format("/".join(ml.KINDS)))
+        put_json("kinded/mod.json", {"entry": "m.py"})
+        check(ml._manifest(tmp_mods, "kinded")["kind"] == "",
+              "書いていなければ空（帯からは補完しない）")
+
         bare = ml._manifest(tmp_mods, "nothing_here")
         check(bare["name"] == {"en": "nothing_here", "ja": "nothing_here"},
               "mod.json が読めなければフォルダ名にフォールバック: {}".format(bare["name"]))

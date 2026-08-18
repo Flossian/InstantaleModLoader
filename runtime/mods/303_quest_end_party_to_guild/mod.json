@@ -1,6 +1,7 @@
 {
   "entry": "quest_end_party_to_guild.py",
   "api": 1,
+  "kind": "feature",
   "name": {
     "en": "Disband at local guild",
     "ja": "解散先をいまの町に"

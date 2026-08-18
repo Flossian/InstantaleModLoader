@@ -1,6 +1,7 @@
 {
   "entry": "area_move_dungeon.py",
   "api": 1,
+  "kind": "feature",
   "name": {
     "en": "Travel the dangerous road",
     "ja": "危険な道を行く"

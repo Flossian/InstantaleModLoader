@@ -1,6 +1,7 @@
 {
   "entry": "ui_party_expand.py",
   "api": 1,
+  "kind": "fix",
   "name": {
     "en": "Show 4th party member",
     "ja": "4人目以降を表示"

@@ -1,6 +1,7 @@
 {
   "entry": "item_image_variety.py",
   "api": 1,
+  "kind": "fix",
   "name": {
     "en": "Item image variety",
     "ja": "アイテム画像の均し"

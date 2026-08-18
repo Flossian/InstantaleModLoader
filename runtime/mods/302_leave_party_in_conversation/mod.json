@@ -1,6 +1,7 @@
 {
   "entry": "leave_party_in_conversation.py",
   "api": 1,
+  "kind": "feature",
   "name": {
     "en": "Part ways in conversation",
     "ja": "会話で仲間と別れる"

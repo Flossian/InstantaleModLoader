@@ -1,6 +1,7 @@
 {
   "entry": "cloud_model_override.py",
   "api": 1,
+  "kind": "fix",
   "name": {
     "en": "Cloud model override",
     "ja": "クラウドモデルの差し替え"

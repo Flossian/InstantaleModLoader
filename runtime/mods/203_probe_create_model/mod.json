@@ -1,6 +1,7 @@
 {
   "entry": "probe_create_model.py",
   "api": 1,
+  "kind": "probe",
   "name": {
     "en": "Model build probe",
     "ja": "モデル生成の計測"

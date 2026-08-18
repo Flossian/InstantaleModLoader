@@ -1,6 +1,7 @@
 {
   "entry": "llm_prompt_replace.py",
   "api": 1,
+  "kind": "fix",
   "name": {
     "en": "Prompt replacement rules",
     "ja": "LLM への指示文を置換"

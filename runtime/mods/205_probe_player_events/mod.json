@@ -1,6 +1,7 @@
 {
   "entry": "probe_player_events.py",
   "api": 1,
+  "kind": "probe",
   "name": {
     "en": "Player event probe",
     "ja": "行動イベントの計測"

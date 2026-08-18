@@ -1,6 +1,7 @@
 {
   "entry": "probe_character_state.py",
   "api": 1,
+  "kind": "probe",
   "name": {
     "en": "Character state probe",
     "ja": "NPC状態の計測"

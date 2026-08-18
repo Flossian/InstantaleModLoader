@@ -1,6 +1,7 @@
 {
   "entry": "ui_text_spacing.py",
   "api": 1,
+  "kind": "fix",
   "name": {
     "en": "Tighter text spacing",
     "ja": "本文の行間を詰める"

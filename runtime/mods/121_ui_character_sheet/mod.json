@@ -1,6 +1,7 @@
 {
   "entry": "ui_character_sheet.py",
   "api": 1,
+  "kind": "fix",
   "name": {
     "en": "Wider character sheet",
     "ja": "人物欄を広げて手配度・スキル・特性を出す"

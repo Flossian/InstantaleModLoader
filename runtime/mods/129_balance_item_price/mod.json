@@ -1,6 +1,7 @@
 {
   "entry": "balance_item_price.py",
   "api": 1,
+  "kind": "fix",
   "name": {
     "en": "Item price rebalance",
     "ja": "アイテムの値付けの調整"

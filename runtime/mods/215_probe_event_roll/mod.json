@@ -1,6 +1,7 @@
 {
   "entry": "probe_event_roll.py",
   "api": 1,
+  "kind": "probe",
   "name": {
     "en": "Field event roll probe",
     "ja": "フィールドイベントの判定の計測"

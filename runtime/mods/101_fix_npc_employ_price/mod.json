@@ -1,6 +1,7 @@
 {
   "entry": "fix_npc_employ_price.py",
   "api": 1,
+  "kind": "fix",
   "name": {
     "en": "NPC hire price fix",
     "ja": "NPC雇用価格の修正"

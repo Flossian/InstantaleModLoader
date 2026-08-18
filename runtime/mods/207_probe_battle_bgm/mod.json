@@ -1,6 +1,7 @@
 {
   "entry": "probe_battle_bgm.py",
   "api": 1,
+  "kind": "probe",
   "name": {
     "en": "Battle BGM probe",
     "ja": "戦闘BGMの計測"

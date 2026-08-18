@@ -1,6 +1,7 @@
 {
   "entry": "probe_text_speed.py",
   "api": 1,
+  "kind": "probe",
   "name": {
     "en": "Text speed probe",
     "ja": "本文の表示速度の計測"

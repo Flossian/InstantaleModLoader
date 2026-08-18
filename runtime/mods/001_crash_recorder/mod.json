@@ -1,6 +1,7 @@
 {
   "entry": "crash_recorder.py",
   "api": 1,
+  "kind": "core",
   "name": {
     "en": "Crash recorder",
     "ja": "クラッシュ記録"

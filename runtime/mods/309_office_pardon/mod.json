@@ -1,6 +1,7 @@
 {
   "entry": "office_pardon.py",
   "api": 1,
+  "kind": "feature",
   "name": {
     "en": "Pay off your bounty",
     "ja": "役場で手配を解く"

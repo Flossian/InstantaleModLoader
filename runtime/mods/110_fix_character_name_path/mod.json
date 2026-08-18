@@ -1,6 +1,7 @@
 {
   "entry": "fix_character_name_path.py",
   "api": 1,
+  "kind": "fix",
   "name": {
     "en": "Character name sanitize",
     "ja": "キャラクタ名の正規化"

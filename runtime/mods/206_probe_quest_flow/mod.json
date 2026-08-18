@@ -1,6 +1,7 @@
 {
   "entry": "probe_quest_flow.py",
   "api": 1,
+  "kind": "probe",
   "name": {
     "en": "Quest flow probe",
     "ja": "クエスト経路の計測"

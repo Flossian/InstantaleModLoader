@@ -1,6 +1,7 @@
 {
   "entry": "shop_restock.py",
   "api": 1,
+  "kind": "feature",
   "name": {
     "en": "Shop restock",
     "ja": "店の品揃えの入れ替え"

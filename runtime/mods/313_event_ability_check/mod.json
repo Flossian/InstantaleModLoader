@@ -1,6 +1,7 @@
 {
   "entry": "event_ability_check.py",
   "api": 1,
+  "kind": "feature",
   "name": {
     "en": "Ability scores in action rolls",
     "ja": "行動判定に能力値を効かせる"

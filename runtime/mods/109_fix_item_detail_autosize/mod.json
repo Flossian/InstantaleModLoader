@@ -1,6 +1,7 @@
 {
   "entry": "fix_item_detail_autosize.py",
   "api": 1,
+  "kind": "fix",
   "name": {
     "en": "Item detail autosize",
     "ja": "アイテム説明欄の拡張"

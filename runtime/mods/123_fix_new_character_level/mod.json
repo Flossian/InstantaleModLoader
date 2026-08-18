@@ -1,6 +1,7 @@
 {
   "entry": "fix_new_character_level.py",
   "api": 1,
+  "kind": "fix",
   "name": {
     "en": "New character starts at level 1",
     "ja": "新規キャラをレベル1で始める"

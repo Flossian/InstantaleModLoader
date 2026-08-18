@@ -1,6 +1,7 @@
 {
   "entry": "ui_craft_window_fit.py",
   "api": 1,
+  "kind": "fix",
   "name": {
     "en": "Unstack the craft window",
     "ja": "クラフト画面の枠の重なりを直す"

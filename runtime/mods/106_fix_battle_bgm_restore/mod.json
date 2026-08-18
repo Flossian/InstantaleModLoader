@@ -1,6 +1,7 @@
 {
   "entry": "fix_battle_bgm_restore.py",
   "api": 1,
+  "kind": "fix",
   "name": {
     "en": "Battle BGM restore",
     "ja": "戦闘BGMの復帰"

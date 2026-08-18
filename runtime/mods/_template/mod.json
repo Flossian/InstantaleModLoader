@@ -1,6 +1,7 @@
 {
   "entry": "template.py",
   "api": 1,
+  "kind": "feature",
   "name": {
     "en": "Template",
     "ja": "テンプレート"

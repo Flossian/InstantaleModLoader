@@ -1,6 +1,7 @@
 {
   "entry": "ui_title_version.py",
   "api": 1,
+  "kind": "fix",
   "name": {
     "en": "Show the loader version on the title screen",
     "ja": "タイトル画面にローダの版を出す"

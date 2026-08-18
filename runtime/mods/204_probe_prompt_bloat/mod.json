@@ -1,6 +1,7 @@
 {
   "entry": "probe_prompt_bloat.py",
   "api": 1,
+  "kind": "probe",
   "name": {
     "en": "Prompt bloat probe",
     "ja": "プロンプト肥大の計測"

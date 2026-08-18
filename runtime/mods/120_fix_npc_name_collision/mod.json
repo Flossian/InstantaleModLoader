@@ -1,6 +1,7 @@
 {
   "entry": "fix_npc_name_collision.py",
   "api": 1,
+  "kind": "fix",
   "name": {
     "en": "NPC name dedup",
     "ja": "NPC名の重複防止"

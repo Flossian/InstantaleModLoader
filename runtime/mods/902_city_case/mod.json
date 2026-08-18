@@ -1,6 +1,7 @@
 {
   "entry": "city_case.py",
   "api": 1,
+  "kind": "feature",
   "name": {
     "en": "City case",
     "ja": "街の事件"

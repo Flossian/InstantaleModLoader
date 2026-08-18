@@ -1,6 +1,7 @@
 {
   "entry": "probe_vacation.py",
   "api": 1,
+  "kind": "probe",
   "name": {
     "en": "Probe: inn stays",
     "ja": "計測: 宿の宿泊"

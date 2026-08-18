@@ -1,6 +1,7 @@
 {
   "entry": "party_train_exp.py",
   "api": 1,
+  "kind": "feature",
   "name": {
     "en": "Party trains too",
     "ja": "仲間も訓練で育つ"

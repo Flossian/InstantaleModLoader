@@ -1,6 +1,7 @@
 {
   "entry": "probe_llm_overlap.py",
   "api": 1,
+  "kind": "probe",
   "name": {
     "en": "LLM request overlap probe",
     "ja": "LLMリクエストの重なりの計測"

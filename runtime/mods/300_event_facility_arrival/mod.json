@@ -1,6 +1,7 @@
 {
   "entry": "event_facility_arrival.py",
   "api": 1,
+  "kind": "feature",
   "name": {
     "en": "NPC greets on arrival",
     "ja": "施設でNPCが話しかける"

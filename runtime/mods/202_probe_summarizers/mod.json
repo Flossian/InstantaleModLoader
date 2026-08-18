@@ -1,6 +1,7 @@
 {
   "entry": "probe_summarizers.py",
   "api": 1,
+  "kind": "probe",
   "name": {
     "en": "Summarizer probe",
     "ja": "サマライザの計測"

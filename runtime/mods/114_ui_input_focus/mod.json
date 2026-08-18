@@ -1,6 +1,7 @@
 {
   "entry": "ui_input_focus.py",
   "api": 1,
+  "kind": "fix",
   "name": {
     "en": "Keep the input box focused",
     "ja": "入力欄のフォーカスを保つ"

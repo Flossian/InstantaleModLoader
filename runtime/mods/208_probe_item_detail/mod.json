@@ -1,6 +1,7 @@
 {
   "entry": "probe_item_detail.py",
   "api": 1,
+  "kind": "probe",
   "name": {
     "en": "Item detail probe",
     "ja": "アイテム説明欄の計測"
