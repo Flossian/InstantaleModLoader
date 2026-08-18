@@ -49,11 +49,14 @@
 払わせてから見る:
 
     売買の前後で所持金を測る
-      └ 動いた額が表示と違えば、その差だけ直して WARN に残す
-           └ 所持金が負にならない範囲で（払えないほど高い品を買えた場合）
+      ├ 動いた額が表示と違えば、その差だけ直して WARN に残す
+      │    └ 所持金が負にならない範囲で（払えないほど高い品を買えた場合）
+      └ 合っていれば何もしない（1回目だけ「表示どおり」と記録に残す）
 
-差が出ないなら決済はこちらの値段を読んでいる。
-そのときこの補正は何もしない。
+**合っていた回も1度は書く**のが要点。
+ずれた回しか書かないと、ログの上では「合っていた」と
+「一度も売買していない」が区別できず、
+決済がこちらの値段を読んでいるのかを後から確かめようがない。
 
 ## 触らないもの
 
@@ -74,12 +77,15 @@ from instantale_modloader import ui
 PRICE_SCALE = 1.0          # 最後に全体へ掛かる倍率
 SELL_RATE = 0.4            # 店に売るときの割合（買価に対して）
 
-MULT_WEAPON = 1.0          # item_type ごとの倍率
-MULT_WEARABLE = 1.0
+# item_type ごとの倍率。1.0 が「上の式そのまま」で、装備を下げ素材を上げてある
+# のは実プレイで詰めた結果 ― 装備は店で買うより拾うほうが早く、素材と財宝は
+# 売り先がそこしかないので、同じ額なら素材側を厚くしたほうが釣り合う。
+MULT_WEAPON = 0.7
+MULT_WEARABLE = 0.7
 MULT_HEALING_ITEM = 1.0
 MULT_CONSUMABLE = 1.0
-MULT_UTILITY = 1.0
-MULT_MATERIAL = 1.0
+MULT_UTILITY = 0.8
+MULT_MATERIAL = 1.5
 
 RARITY_RARE = 1.4          # common は常に 1.0（基準）
 RARITY_MAGICAL = 2.0
@@ -236,7 +242,7 @@ def apply(ctx):
     store = getattr(sys, STORE_ATTR, None)
     if not isinstance(store, dict):
         store = {"logged": 0, "repriced": 0, "reconciled": 0, "skipped": 0,
-                 "gold_before": None}
+                 "gold_before": None, "settled": False}
         setattr(sys, STORE_ATTR, store)
 
     write = ctx.logger(LOG_BASENAME, stamp=False)
@@ -439,7 +445,15 @@ def apply(ctx):
             return                              # 取引が成立していない
         gap = expected - moved
         if abs(gap) < 0.5:
-            return                              # 表示どおりに決済されている
+            # 表示どおりに決済されている。**1回目だけ記録に残す** ―
+            # ずれた回しか書かないと「合っていた」と「一度も売買していない」が
+            # ログの上で同じ（どちらも `reconcile` が0行）になり、
+            # 決済がこちらの値段を読んでいるかを後から確かめられない。
+            if not store["settled"]:
+                store["settled"] = True
+                write("settled {} {} shown={:g}（表示どおり。以後この行は出さない）"
+                      .format(label, name_of(item), expected))
+            return
         corrected = max(after + gap * sign, 0.0)
         player = getattr(app, "player", None)
         try:
@@ -469,8 +483,9 @@ def apply(ctx):
             settle(self, item_instance, SELL_KEY, +1, "sell")
             return result
 
-    write("---- installed  scale={:g} sell_rate={:g} rarity={} ----".format(
+    write("---- installed  scale={:g} sell_rate={:g} type={} rarity={} ----".format(
         float(PRICE_SCALE), float(SELL_RATE),
+        {key: round(value, 3) for key, value in sorted(type_mult.items())},
         {key: round(value, 3) for key, value in sorted(rarity_mult.items())}))
     ctx.log("item price: installed (scale={:g}, sell_rate={:g}, on_sight={}, "
             "reconcile={})".format(float(PRICE_SCALE), float(SELL_RATE),

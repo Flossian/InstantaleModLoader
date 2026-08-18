@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""314_balance_item_price をゲーム抜きで通す。
+"""129_balance_item_price をゲーム抜きで通す。
 
     python tools/tests/test_item_price.py
 
@@ -282,18 +282,18 @@ def main():
     # 目安を外れたら、表を直したのか事故なのかをここで気付けるようにする。
     module, ctx = fresh_mod()
     targets = [
-        ("短剣 common v3 atk23", buy_price(ctx, weapon(23, value=3)), 350),
-        ("短剣 common v20 atk96", buy_price(ctx, weapon(96, value=20)), 3000),
+        ("短剣 common v3 atk23", buy_price(ctx, weapon(23, value=3)), 280),
+        ("短剣 common v20 atk96", buy_price(ctx, weapon(96, value=20)), 2100),
         ("短剣 magical v48 atk245",
-         buy_price(ctx, weapon(245, "magical", value=48)), 20000),
-        ("薬草 common v3 回復8", buy_price(ctx, herb(8, value=3)), 60),
+         buy_price(ctx, weapon(245, "magical", value=48)), 15500),
+        ("薬草 common v3 回復8", buy_price(ctx, herb(8, value=3)), 50),
         ("薬 magical v48 回復198",
-         buy_price(ctx, herb(198, "magical", value=48, detail="potion")), 2500),
-        ("魔法素材 magical v24 買", buy_price(ctx, material(24, "magical")), 800),
+         buy_price(ctx, herb(198, "magical", value=48, detail="potion")), 3000),
+        ("魔法素材 magical v24 買", buy_price(ctx, material(24, "magical")), 1200),
         ("魔法素材 magical v24 売",
-         sell_price(ctx, material(24, "magical", key="売価")), 320),
+         sell_price(ctx, material(24, "magical", key="売価")), 480),
         ("財宝 mythic v66 売",
-         sell_price(ctx, material(66, "mythic", "treasure", key="売価")), 15000),
+         sell_price(ctx, material(66, "mythic", "treasure", key="売価")), 22000),
     ]
     for label, got, want in targets:
         check("目安の3割以内: {}（目安 {:,}）".format(label, want),
@@ -319,13 +319,16 @@ def main():
     check("全体倍率が効く", abs(buy_price(ctx, weapon(96)) / float(plain) - 2.0) < 0.02,
           buy_price(ctx, weapon(96)))
 
-    module, ctx = fresh_mod(MULT_WEAPON=0.5)
+    # 倍率を**既定の半分**にする。`0.5` と直に書くと、既定が 1.0 でなくなった
+    # 途端に「半分になったか」ではなく「既定がいくつか」を測る検査になる。
+    module, ctx = fresh_mod()
+    plain_armour = buy_price(ctx, armour(96))
+    module, ctx = fresh_mod(MULT_WEAPON=module.MULT_WEAPON / 2.0)
     scaled = buy_price(ctx, weapon(96))
     same = buy_price(ctx, armour(96))
-    module, ctx = fresh_mod()
     check("種別の倍率は、その種別にだけ効く",
-          abs(scaled / float(plain) - 0.5) < 0.02 and same == buy_price(ctx, armour(96)),
-          (scaled, plain, same))
+          abs(scaled / float(plain) - 0.5) < 0.02 and same == plain_armour,
+          (scaled, plain, same, plain_armour))
 
     module, ctx = fresh_mod()
     check("強化した装備は高い",
