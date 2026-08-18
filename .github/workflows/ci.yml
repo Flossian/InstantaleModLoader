@@ -37,8 +37,14 @@ jobs:
     name: 3.10 (ゲーム内で動く部分)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      # actions/* は Node 24 で走る版に揃えてある。古い版（checkout@v4 /
+      # setup-python@v5）は Node 20 を指しており、ランナーが Node 24 へ
+      # 読み替えたうえで非推奨の警告を出す。使っているのは checkout が引数
+      # 無し、setup-python が python-version だけなので、上げても呼び方は
+      # 変わらない（v7 の非互換は checkout が pull_request_target の fork
+      # 取得、setup-python が pip-install の廃止。どちらもここでは使わない）。
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.10"
 
@@ -61,8 +67,8 @@ jobs:
     name: 3.13 (静的検査とオフライン検証)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
 
@@ -123,8 +129,8 @@ jobs:
     name: 配布物のビルド
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
 
