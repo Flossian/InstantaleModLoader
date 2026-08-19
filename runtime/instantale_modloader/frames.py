@@ -68,7 +68,7 @@ def text_of(obj, name: str = "text"):
       * `116_` … 本文ラベルが None のとき `"<missing>"` をフォント名として
         ボタンに代入していた
 
-    ここは番人を作らずに読む ― 「無い」も「読めない」も呼ぶ側にとっては同じ「文字列が取れなかった」なので、区別が要るときだけ
+    ここは番人を作らずに読む。「無い」も「読めない」も呼ぶ側にとっては同じ「文字列が取れなかった」なので、区別が要るときだけ
     `attr()` を使う。
     """
     try:
@@ -84,7 +84,7 @@ def short(value, limit: int = 200) -> str:
     名前やログの1項目を切り詰めるための共通形。
     `_text` の名で 300 番台の mod に写しが増えていたのでここへ集めた
     （写して回るものはローダの語彙。TECH.md §3.2.3）。
-    `repr_value()` とは役割が別 ― あちらは調査用に「形」を写し取る、
+    `repr_value()` とは役割が別。あちらは調査用に「形」を写し取る、
     こちらは表示用に「そのままの文字」を整える。
     """
     if value is None:
@@ -137,6 +137,30 @@ def is_ours(filename: str) -> bool:
         return False
 
 
+def _layers(member):
+    """メソッドの実体を、包まれている層ごとに外側から並べて返す。
+
+    ローダは `@ctx.wrap` で元の関数を包み、`__original__` に元を控える。
+    包まれたメソッドを `vars(cls)[attr].__code__` だけで見ると
+    **ラッパのコード**しか出てこないので、素の関数まで剥がして比べる必要がある。
+    どの層のコードでも持ち主が引けるよう、途中も全部返す。
+
+    `patch.unwrap` と同じ形だが、このモジュールは os / sys しか import しない。
+    スタックを読むだけの道具なので、ローダの仕掛けの側へ依存を張らない。
+    上限 32 の意味も `patch.unwrap` と同じで、`__original__` の連鎖が
+    壊れていたときに止まるため。
+    """
+    func = getattr(member, "__func__", member)
+    chain = [func]
+    for _ in range(32):
+        original = getattr(func, "__original__", None)
+        if original is None:
+            break
+        func = original
+        chain.append(func)
+    return chain
+
+
 def owner_of(code):
     """このコードを持っているクラスとメソッドの名前。分からなければ None。
 
@@ -163,9 +187,13 @@ def owner_of(code):
         except Exception:
             continue
         for attr_name, member in members:
-            func = getattr(member, "__func__", member)
-            if getattr(func, "__code__", None) is code:
-                return "{}.{}".format(cls_name, attr_name)
+            # 包まれていたら素の関数まで剥がして比べる。
+            # ラッパのコードとしか比べないと、`307_` が包んだメソッドを
+            # `303_` / `304_` が名前で見張る場面で持ち主が引けず、
+            # `MethodWatch` の予備判定がそのまま空振りする。
+            for func in _layers(member):
+                if getattr(func, "__code__", None) is code:
+                    return "{}.{}".format(cls_name, attr_name)
     return None
 
 
@@ -188,19 +216,33 @@ class MethodWatch(object):
     * **関数名で決めない**。
       `method_1` / `execute` は12個のマネージャが持つ
     * **コードオブジェクトが引けないビルドもありうる**。
-      そのときだけ名前で拾い、
+      そのメソッドだけ名前で拾い、
       `owner_of` で持ち主クラスまで確かめる（重いので予備に限る）
 
     `on_warn` を渡すと、見張る相手が `__main__` に居ないときに mod のログへ書ける。
 
-    **見張る相手を自分で包んではいけない**（`306_` がオフライン検証で踏んだ）。
-    表を作るのは最初に呼ばれた時点なので、
-    そこに載っているのは既に**ローダのラッパのコードオブジェクト**で、
-    これは `patch.py` の全パッチが共有している（ラッパは関数として別物でも
-    `__code__` は同一）。
-    結果、包まれた関数が1つでもスタックに載っていれば「その中」と答えるようになる。
-    包む対象と見張る対象が重なるなら、
-    スタックを見るのをやめて**自分のラッパでスレッドごとの印を立てる**方が正確で速い（`306_party_train_exp` がその形）。
+    包まれた相手について
+    --------------------
+    見張る相手が**ローダに包まれている**ことがある。
+    自分で包む場合だけでなく、**別の mod が包む場合もある**
+    （`307_` が `QuestEndManager.execute` を包み、それを見張る `303_` /
+    `304_` が道連れになっていた）。
+    そのまま `__code__` を採ると、それはローダのラッパのもので、
+    これは非 safe な `ctx.wrap` の全パッチが共有している（ラッパは関数として
+    別物でも `__code__` は同一）。
+    表に入れてしまうと、包まれた関数が1つでもスタックに載っているだけで
+    「その中」と答えるようになる。
+
+    そこで `codes()` が `__original__` を最下層まで剥がしてから採り、
+    剥がしてもローダ側のコードなら表に入れず、その**メソッドだけ**を
+    名前で見る予備へ回す（`owner_of` が持ち主クラスまで確かめるので、
+    名前が被っていても誤判定しない）。
+    包まれていても答えは正しい。
+
+    ただし予備は毎回 `__main__` の全クラスを舐めるので**重い**。
+    包む対象と見張る対象が自分の中で重なるなら、スタックを見るのをやめて
+    **自分のラッパでスレッドごとの印を立てる**方が速い（`306_party_train_exp`
+    がその形）。
     """
 
     def __init__(self, class_names, method_names=("method_1", "execute"),
@@ -210,6 +252,9 @@ class MethodWatch(object):
         self.max_stack = max_stack
         self.on_warn = on_warn
         self._codes = None
+        # コードで引けなかったメソッド名。`current` がこの名前のときだけ
+        # `owner_of` で持ち主を確かめる予備に落ちる。
+        self._unresolved = set()
 
     def _warn(self, message):
         if self.on_warn is None:
@@ -236,9 +281,20 @@ class MethodWatch(object):
                 continue
             for attr_name in self.method_names:
                 member = getattr(cls, attr_name, None)
-                func = getattr(member, "__func__", member)
+                # **包まれていたら素の関数まで剥がす**（理由は docstring の
+                # 「包まれた相手について」）。
+                func = _layers(member)[-1]
                 code = getattr(func, "__code__", None)
                 if code is None:
+                    self._unresolved.add(attr_name)
+                    continue
+                if is_ours(getattr(code, "co_filename", "")):
+                    self._unresolved.add(attr_name)
+                    # 剥がしきってもローダ側のコードなら、それは共有のラッパ。
+                    # 表に入れず、名前で見る予備に任せる（`owner_of` が
+                    # 持ち主クラスまで確かめるので誤判定しない）。
+                    self._warn("WARN {}.{} is wrapped by the loader; "
+                               "watching it by name instead".format(cls_name, attr_name))
                     continue
                 found[code] = "{}.{}".format(cls_name, attr_name)
         self._codes = found
@@ -254,17 +310,20 @@ class MethodWatch(object):
     def current(self):
         """いま見張っているメソッドの中なら `'クラス名.メソッド名'`、外なら None。"""
         codes = self.codes()
+        # 表が空（何も引けなかった）ときは全メソッド名を、
+        # 一部だけ引けなかったときはその名前だけを、名前で見る。
+        by_name = self.method_names if not codes else self._unresolved
         for index in range(1, self.max_stack):
             try:
                 frame = sys._getframe(index)
             except Exception:
                 break
             code = frame.f_code
-            if codes:
-                label = codes.get(code)
-                if label is not None:
-                    return label
-            elif code.co_name in self.method_names:
+            label = codes.get(code) if codes else None
+            if label is not None:
+                return label
+            if by_name and code.co_name in by_name:
+                # 名前だけでは経路が特定できないので、必ず持ち主まで確かめる。
                 owner = owner_of(code)
                 if owner and owner.split(".")[0] in self.class_names:
                     return owner

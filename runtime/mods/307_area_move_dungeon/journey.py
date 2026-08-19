@@ -17,10 +17,11 @@
 読む前に更新時刻を見て読み直す（`sync`）。
 これが無いと、注入し直しをまたいだ時点で道が切れる。
 
-日数の予算（`spend`）もここが持つ。
-危険な道は「危険だが早い」ことが値打ちで、
-道中と最後の移動を合わせた日数に上限がある。
-使った日数は控えに積むので、再起動をまたいでも上限が守られる。
+ゲームへ渡した日数（`days_spent`）もここが持つ。
+危険な道は「危険だが早い」ことが値打ちで、最後のエリア移動が
+`TRAVEL_DAYS` 日で済む（道中のクエストは日数を進めない。GAME.md §2.18）。
+控えに書くのは記録のためで、0 のまま着いたら
+`elapse_days` を通らなかった合図になる。
 """
 
 import os
@@ -148,22 +149,16 @@ class Journey(object):
             return None
         return record
 
-    # -- 日数の予算 ---------------------------------------------------------
-    def spend(self, days, budget):
-        """予算の残りぶんだけ日数を使い、実際に使える日数を返す。
-
-        予算を使い切っていれば 0。
-        **呼ぶ側は必ずこの数をゲームへ渡す**（呼ばないのではなく、減らして渡す）。
-        """
-        if self.record is None:
-            return days
-        spent = int(self.record.get("days_spent") or 0)
-        granted = max(0, min(int(days), int(budget) - spent))
-        self.record["days_spent"] = spent + granted
-        self.save()
-        return granted
-
+    # -- 日数 ---------------------------------------------------------------
     def days_spent(self):
+        """この道でゲームへ渡した日数（`advance("moving", days_spent=N)` で書く）。
+
+        0 のまま着いた ＝ **`elapse_days` を一度も通らなかった**の合図で、
+        `arrived_check` がそれを WARN に出す。
+        以前はここに予算の積み上げ（`spend`）があったが、
+        道中が日数を進めないことが分かったので数える相手が無くなった
+        （経緯は VERIFICATION.md §3.13）。
+        """
         if self.record is None:
             return 0
         return int(self.record.get("days_spent") or 0)

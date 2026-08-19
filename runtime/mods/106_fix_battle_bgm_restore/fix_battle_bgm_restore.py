@@ -513,17 +513,35 @@ def apply(ctx):
     # 注入した時点で既に溜まっているぶんも掃除する。
     # 実際、最初の計測では町に立っているだけで 8/8 チャンネルが埋まっていた。
     if SWEEP_ON_BOOT:
+        def boot_sweep():
+            try:
+                arm("injection", force=True)
+            except Exception:
+                ctx.log_exc("bgm restore: boot sweep failed")
+
+        # 掃除は **`ctx.on_ready` を通す（プロセスで1回だけ）**。
+        # `apply()` の中で直に走らせると、注入し直しのたびに繰り返される。
+        # そのとき `state` は作り直されて空なので、掃除の2周目は
+        # 迷子の曲を「引き取る」のではなく **止めて**、エリア曲を頭から
+        # 鳴らし直す。再適用のたびに音楽が途切れて聞こえる。
+        # `state["battle_active"]` も False に戻るため、戦闘中に再適用が
+        # 挟まると戦闘曲を止めてしまう窓もできる。
+        ctx.on_ready(boot_sweep, key="106_bgm_boot_sweep")
+
+        # **残骸フラグの判定だけは、この `apply()` の中で今すぐ行う。**
+        # `107_` が後から適用されてフラグを下ろすので、
+        # 次のフレームまで待つと判定できなくなる。
+        # 判定ごと on_ready へ預けてもいけない。注入は「インタプリタ初期化」と
+        # 「ウィンドウ表示」の2回あり、`app` が生えているのは後者だけなので、
+        # 1回目に app=None のまま印だけ付いて2回目の機会が消える。
+        # 置き換え自体はメインスレッドで1回だけ（`on_ready`）。
+        # **見つけたときにだけ積む**ので、印が空振りで消費されることもない。
         try:
-            arm("injection", force=True)
-            # 残骸フラグの判定は今この場で行う。
-            # `107_` が後から適用されてフラグを下ろすので、
-            # 2.5秒後に見に行くと判定できなくなる。
             boot_app = find_app()
             if boot_app is not None and stale_battle_flag(boot_app):
-                from kivy.clock import Clock
-                Clock.schedule_once(
-                    lambda _dt: _guarded_heal("injection"), RESTORE_DELAY)
+                ctx.on_ready(lambda: _guarded_heal("injection"),
+                             key="106_bgm_boot_heal", delay=RESTORE_DELAY)
         except Exception:
-            ctx.log_exc("bgm restore: boot sweep failed")
+            ctx.log_exc("bgm restore: stale flag check failed")
 
     ctx.log("battle bgm fix: delay={:.1f}s log={}".format(RESTORE_DELAY, log_path))

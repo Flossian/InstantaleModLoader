@@ -103,6 +103,9 @@ MAX_SAVE_DUMPS = 4
 
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME, stamp=False)
+    # 上限つきの器。`counted` だけは None で始める。
+    # 人数を一度も数えられていないときは、次の機会に数え直したい。
+    state = {"deaths": 0, "saves": 0, "save_keys": None, "counted": None}
 
     def stamp():
         return datetime.datetime.now().isoformat(timespec="milliseconds")

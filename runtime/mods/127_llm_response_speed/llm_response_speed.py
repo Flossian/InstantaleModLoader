@@ -210,6 +210,30 @@ def has_flag(argv, flag):
     return any(str(item) == flag for item in argv)
 
 
+def flag_value(argv, flag):
+    """`flag` に付いている値を数で返す。無ければ None。
+
+    `--ctx-size` を引き伸ばすときの**土台**にする。
+    定数（`GAME_CTX_SIZE`）を土台にすると、ゲームが別の窓を渡してきた場合
+    （更新や、設定欄の server-params に手が入っている場合）に、
+    こちらが書き戻す値が実際の窓と食い違う。
+    高く外すと VRAM から溢れ、エラーは出ないまま桁で遅くなる。
+    """
+    items = [str(item) for item in argv]
+    for index, item in enumerate(items):
+        if item == flag and index + 1 < len(items):
+            try:
+                return int(items[index + 1])
+            except (TypeError, ValueError):
+                return None
+        if item.startswith(flag + "="):
+            try:
+                return int(item.split("=", 1)[1])
+            except (TypeError, ValueError):
+                return None
+    return None
+
+
 def drop_flag(argv, flag):
     """`flag` とその値を取り除く。戻り値は (新しい列, 取り除いた値)。
 
@@ -234,7 +258,7 @@ def drop_flag(argv, flag):
     return out, removed
 
 
-def plan_flags(ctx_size, slots):
+def plan_flags(ctx_size, slots, game_ctx=None):
     """設定から実際に渡す値を決める。戻り値は (--ctx-size の値, --parallel の値)。
 
     どちらも None は「その旗に触らない」。
@@ -248,7 +272,9 @@ def plan_flags(ctx_size, slots):
         # §2.48）。
         # ゲームの値を引き伸ばして窓を保つ。
         if slots >= 2:
-            return GAME_CTX_SIZE * slots, parallel
+            # 土台はいま渡されている値。読めなければ既知の既定値に落とす。
+            base = GAME_CTX_SIZE if game_ctx is None else game_ctx
+            return base * slots, parallel
         return None, parallel
     # スロットごとに専用の窓を持たせるときだけ、合計へ引き伸ばす。
     return ctx_size * max(1, slots), parallel
@@ -269,7 +295,8 @@ def rewrite_argv(argv, ctx_size=None, slots=None):
     if OBSERVE_ONLY:
         return argv, []
 
-    total, parallel = plan_flags(ctx_size, slots)
+    total, parallel = plan_flags(ctx_size, slots,
+                                 flag_value(argv, CTX_FLAG))
     new_argv = argv
     changes = []
     if total is not None:

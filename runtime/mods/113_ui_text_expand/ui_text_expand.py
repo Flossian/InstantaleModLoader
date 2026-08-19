@@ -389,20 +389,32 @@ def apply(ctx):
         return True
 
     def container_of(hud, label):
-        """本文のラベルを載せている枠。HUD 自身は返さない（画面全部が動く）。"""
+        """本文のラベルを載せている枠。見つからなければ None。
+
+        **HUD 自身も、その直下の子も返さない。**
+        HUD の直下は素のゲームでは `FloatLayout` 1枚 ＝ 画面レイヤ全体で、
+        本文の枠ではない。ここを返すと2つ壊れる:
+
+          * 画面レイヤ全部が本文枠として引き伸ばされる
+          * そこへ控えを刻むと `ui.added_by_a_mod` が「他の MOD のもの」と
+            見なし、`ui.overlay_host` が HUD 自身を返す。ボタンが HUD 直下に
+            挿さって子が2つになり、アイテムの移動・装備が効かなくなる
+            （VERIFICATION_LOG.md §2.33。v1.2.1 で直したもの）
+
+        枠と呼べるのはスクロールできる祖先だけ。無ければ何もしない。
+        """
         widget = frames.attr(label, "parent")
-        below_hud = None
         for _step in range(MAX_UP):
             if widget in (None, frames.MISSING) or widget is hud:
                 break
-            below_hud = widget
             if is_scroller(widget):
-                return widget
+                return widget   # スクロールできる ＝ 本文の枠。位置は問わない
+            if frames.attr(widget, "parent") is hud:
+                break           # HUD の直下の非スクローラ ＝ 画面レイヤ。枠ではない
             widget = frames.attr(widget, "parent")
-        if below_hud is None:
-            warn_once("container", "the narration label sits directly on the HUD; "
-                                   "there is no frame to grow")
-        return below_hud
+        warn_once("container", "no scrollable frame around the narration label; "
+                               "there is no frame to grow")
+        return None
 
     # -- 設計値（こちらが触る前の寸法） --------------------------------------
     def numbers(value, count):

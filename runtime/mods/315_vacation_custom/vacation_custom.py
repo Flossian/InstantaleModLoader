@@ -64,11 +64,15 @@
 利用者向けの説明は MODS.md の `315_` の項、検証の経過は VERIFICATION.md §3.28。
 """
 
+import sys
 import re
 
 from instantale_modloader import llm, ui
 
 LOG_BASENAME = "vacation_custom.log"
+
+#: 控えの置き場（`sys` の属性名）。注入し直しをまたいで残す。
+STATE_STORE_ATTR = "__instantale_vacation_custom_store__"
 
 # ボタンには何も足さないが、`ui.Screen` の道具（say）を使うので印のキーは他の MOD と別にして持つ（TECH.md
 # §3.3）。
@@ -301,31 +305,41 @@ def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
     screen = ui.Screen(ctx, write, tag="vacation custom", mark=MARK)
 
-    state = {
-        # いま `VacationStartManager.execute` の中に居るかの窓（宿代）。
-        "window": None,
-        # 週単位の宿泊の、いまの1泊ぶんの日数の予算。
-        # {"left": 残り日数, "spent": 消費, "length": "2週間"}。
-        # 月単位・デフォルトでは None。
-        # `VacationStartManager.execute` ごとに積み直す。
-        "block": None,
-        # 宿泊のマネージャの `execute` の中に居る深さ。
-        # 予算と文言の置き換えはこの窓の中でしか使わない（窓の外の日数送り・文言には
-        # 1バイトも触らない）。
-        "depth": 0,
-        # 画面で観測した「quality → ラベルの素の料金」の対。
-        # 部屋の見分けはこの対だけで行う（モジュール docstring を参照）。
-        "price_by_quality": {},
-        # 自分が書いたラベル。
-        # 組み直さない画面でもう一度来たとき、
-        # 設定後の料金を素の料金として読み込まないための目印（`314_` と同じ）。
-        "our_labels": set(),
-        # 一度ログに残した印（毎フレーム書かないため）。
-        "logged_unknown": set(),
-        "age_warned": False,
-        # 宿泊の話に見えるのに手掛かりへ当たらなかった本文を残した数。
-        "prompt_misses": 0,
-    }
+    # **置き場は `sys`。** `apply()` は1プロセスで何度も走り、
+    # 当て直しは背景スレッドの `boot()` から来る（未 import のモジュールが
+    # 現れた時＝最初の LLM リクエストの時）。移動や滞在の最中にそれが挟まると、
+    # ここで作り直した空の器を新しいラッパが握り、窓や予算が None のまま
+    # 日数の頭打ちが効かなくなる。「2週間」の滞在が素の30日を、
+    # 調整した徒歩が素の90日を消費する。
+    # `311_` / `312_` が控えを `sys` に置いているのと同じ理由。
+    state = getattr(sys, STATE_STORE_ATTR, None)
+    if state is None:
+        state = {
+            # いま `VacationStartManager.execute` の中に居るかの窓（宿代）。
+            "window": None,
+            # 週単位の宿泊の、いまの1泊ぶんの日数の予算。
+            # {"left": 残り日数, "spent": 消費, "length": "2週間"}。
+            # 月単位・デフォルトでは None。
+            # `VacationStartManager.execute` ごとに積み直す。
+            "block": None,
+            # 宿泊のマネージャの `execute` の中に居る深さ。
+            # 予算と文言の置き換えはこの窓の中でしか使わない（窓の外の日数送り・文言には
+            # 1バイトも触らない）。
+            "depth": 0,
+            # 画面で観測した「quality → ラベルの素の料金」の対。
+            # 部屋の見分けはこの対だけで行う（モジュール docstring を参照）。
+            "price_by_quality": {},
+            # 自分が書いたラベル。
+            # 組み直さない画面でもう一度来たとき、
+            # 設定後の料金を素の料金として読み込まないための目印（`314_` と同じ）。
+            "our_labels": set(),
+            # 一度ログに残した印（毎フレーム書かないため）。
+            "logged_unknown": set(),
+            "age_warned": False,
+            # 宿泊の話に見えるのに手掛かりへ当たらなかった本文を残した数。
+            "prompt_misses": 0,
+        }
+        setattr(sys, STATE_STORE_ATTR, state)
 
     def slot_of_quality(quality):
         """部屋を見分ける。当たらなければ None（＝何も触らない）。

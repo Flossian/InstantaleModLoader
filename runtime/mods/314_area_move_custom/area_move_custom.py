@@ -57,11 +57,15 @@
 利用者向けの説明は MODS.md の `314_` の項、検証の経過は VERIFICATION.md §3.27。
 """
 
+import sys
 import re
 
 from instantale_modloader import ui
 
 LOG_BASENAME = "area_move_custom.log"
+
+#: 控えの置き場（`sys` の属性名）。注入し直しをまたいで残す。
+STATE_STORE_ATTR = "__instantale_area_move_custom_store__"
 
 # ボタンには何も足さないが、`ui.Screen` の道具（say / apply_buttons）を使うので印のキーは他の MOD と別にして持つ（TECH.md
 # §3.3）。
@@ -216,18 +220,28 @@ def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
     screen = ui.Screen(ctx, write, tag="area move custom", mark=MARK)
 
-    state = {
-        # いま `AreaMoveManager.execute` の中に居るかの窓。
-        # 中身は _open_window。
-        "window": None,
-        # 確認画面のラベルから読み取った素の運賃（読めた最新の値）。
-        "game_price": None,
-        # 自分が最後に書いた馬車のラベル。
-        # 画面がラベルを組み直さないビルドで
-        # update_button_display がもう一度来たとき、**自分の書いた
-        # 300G を素の運賃として読み込まない**ための目印。
-        "our_coach_label": None,
-    }
+    # **置き場は `sys`。** `apply()` は1プロセスで何度も走り、
+    # 当て直しは背景スレッドの `boot()` から来る（未 import のモジュールが
+    # 現れた時＝最初の LLM リクエストの時）。移動や滞在の最中にそれが挟まると、
+    # ここで作り直した空の器を新しいラッパが握り、窓や予算が None のまま
+    # 日数の頭打ちが効かなくなる。「2週間」の滞在が素の30日を、
+    # 調整した徒歩が素の90日を消費する。
+    # `311_` / `312_` が控えを `sys` に置いているのと同じ理由。
+    state = getattr(sys, STATE_STORE_ATTR, None)
+    if state is None:
+        state = {
+            # いま `AreaMoveManager.execute` の中に居るかの窓。
+            # 中身は _open_window。
+            "window": None,
+            # 確認画面のラベルから読み取った素の運賃（読めた最新の値）。
+            "game_price": None,
+            # 自分が最後に書いた馬車のラベル。
+            # 画面がラベルを組み直さないビルドで
+            # update_button_display がもう一度来たとき、**自分の書いた
+            # 300G を素の運賃として読み込まない**ための目印。
+            "our_coach_label": None,
+        }
+        setattr(sys, STATE_STORE_ATTR, state)
 
     def days_limit(kind):
         """その手段に設定で変えられた日数。素の値のまま（触らない）なら None。"""

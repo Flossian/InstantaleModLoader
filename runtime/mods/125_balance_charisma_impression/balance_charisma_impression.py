@@ -151,6 +151,10 @@ AFFINITY_PROBE = tuple(range(-200, 201))
 # 好感度の側を総当たりするときに固定する魅力（普通のキャラの中央付近）。
 CHARISMA_FIXED = 12
 
+#: 総当たりで最低限引けていてほしい点の数。
+#: ゲームは定義域の外で例外を出すので、全点は引けない前提で数える。
+MIN_PROBE_ROWS = 10
+
 # 呼び出し元をどこまで遡って NPC を探すか。
 FRAME_DEPTH_MAX = 24
 
@@ -241,17 +245,35 @@ def apply(ctx):
         素の関数まで剥がさないのは、実際に効いている振る舞いの段を覚えたいため。
         剥がすと、他の MOD の書き換えを知らないまま段を数えることになる。
         """
+        def probe(affinity, charisma):
+            """1点だけ引く。**ゲームが受け付けない組み合わせは飛ばす。**
+
+            素の `document_emotion_scores_new` は定義域の外で例外を出す
+            （実測: `charisma=0` で `ValueError: max() arg is an empty sequence`。
+            `out/modloader.log` に 08-12 以降ずっと出ていた）。
+            1点でも投げたら総当たり全体を諦める作りだったため、
+            **この MOD は一度も段を覚えられていなかった**
+            （`out/charisma_impression.log` が 0 バイトのままだった）。
+            段の並びは動く位置さえ分かればよく、全点は要らない。
+            """
+            try:
+                return _as_tuple(orig(affinity, charisma))
+            except Exception:
+                return None
+
         charm_rows, affinity_rows = [], []
         for value in CHARISMA_PROBE:
-            row = _as_tuple(orig(0, value))
-            if row is None:
-                return None, "戻り値がリストでもタプルでもない"
-            charm_rows.append(row)
+            row = probe(0, value)
+            if row is not None:
+                charm_rows.append(row)
         for value in AFFINITY_PROBE:
-            row = _as_tuple(orig(value, CHARISMA_FIXED))
-            if row is None:
-                return None, "戻り値がリストでもタプルでもない"
-            affinity_rows.append(row)
+            row = probe(value, CHARISMA_FIXED)
+            if row is not None:
+                affinity_rows.append(row)
+        # 段の並びを見分けるには、動く位置が分かるだけの点数が要る。
+        if len(charm_rows) < MIN_PROBE_ROWS or len(affinity_rows) < MIN_PROBE_ROWS:
+            return None, "総当たりで引けた点が少なすぎる（魅力 {} 点 / 好感度 {} 点）".format(
+                len(charm_rows), len(affinity_rows))
 
         charm_moving = _moving_positions(charm_rows)
         affinity_moving = _moving_positions(affinity_rows)
@@ -430,66 +452,80 @@ def apply(ctx):
     def emotion_scores(orig, *args, **kwargs):
         result = orig(*args, **kwargs)
 
-        if state["ladders"] is False:
-            # 最初の1回で段の並びを覚える。
-            # 覚えられなければ二度と試さない。
-            # 会話の要約は別スレッドで回る（GAME.md §2.25）ので、
-            # 2つのスレッドがここへ同時に入りうる。
-            # 錠は掛けない。
-            # 総当たりは元の関数を読むだけで副作用が無く、
-            # 二重に走っても結果は同じ（記録が1組増えるだけ）。
-            try:
-                ladders, why = learn(orig)
-            except Exception:
-                ctx.log_exc("charisma impression: 段の総当たりが失敗した; 素通しにする")
-                state["ladders"] = None
-                return result
-            state["ladders"] = ladders
-            if ladders is None:
-                ctx.log("charisma impression: 段の並びが読めない（{}）; "
-                        "何もしない".format(why), level="WARN")
-                write("段の並びが読めないので何もしない: {}".format(why))
-                return result
-            report(ladders)
-            ctx.log("charisma impression: 魅力 {} 段 / 好感度 {} 段を覚えた".format(
-                len(ladders["charm"]), len(ladders["affinity"])))
-
-        ladders = state["ladders"]
-        if ladders is None:
-            return result
-        row = _as_tuple(result)
-        if row is None:
-            return result
-
+        # ここから先は**必ず飲む**。
+        # `safe=True` のとき渡される `orig` は `_guard` の記録係で、
+        # 呼ぶたびに「素の答え」を覚え直す。`learn()` は段を覚えるために
+        # その `orig` を合成引数で何度も呼ぶので、覚えられているのは
+        # **探りの答え**になっている。
+        # この後ろで投げると `_guard` は「orig は既に走った」と見なして
+        # その探りの答えをゲームへ返す。それが `affinity_text` に書かれ、
+        # 以後その NPC の会話プロンプトに乗り、セーブされる。
+        # 落とす先は自分で持つ。
         try:
-            player = player_of()
-            npc = npc_in_frames(player)
-            key = key_of(npc, player) if npc is not None else None
-            if key is None and not state["no_npc_warned"]:
-                # 1度だけ記録する。
-                # 毎回出すと、効いている行が埋まる。
-                state["no_npc_warned"] = True
-                write("{}。好みの差は付かない（親しさだけ効く）。呼び出し元: {}".format(
-                    "呼び出し元から NPC を拾えない" if npc is None
-                    else "相手は拾えたが id も名前も読めない", frames.caller()))
-            taste = state["taste"].get(key)
-            if taste is None:
-                taste = _taste_of(key, TASTE_SPREAD)
-                if key is not None:
-                    state["taste"][key] = taste
-            picked, note = decide(ladders, row, taste)
+
+            if state["ladders"] is False:
+                # 最初の1回で段の並びを覚える。
+                # 覚えられなければ二度と試さない。
+                # 会話の要約は別スレッドで回る（GAME.md §2.25）ので、
+                # 2つのスレッドがここへ同時に入りうる。
+                # 錠は掛けない。
+                # 総当たりは元の関数を読むだけで副作用が無く、
+                # 二重に走っても結果は同じ（記録が1組増えるだけ）。
+                try:
+                    ladders, why = learn(orig)
+                except Exception:
+                    ctx.log_exc("charisma impression: 段の総当たりが失敗した; 素通しにする")
+                    state["ladders"] = None
+                    return result
+                state["ladders"] = ladders
+                if ladders is None:
+                    ctx.log("charisma impression: 段の並びが読めない（{}）; "
+                            "何もしない".format(why), level="WARN")
+                    write("段の並びが読めないので何もしない: {}".format(why))
+                    return result
+                report(ladders)
+                ctx.log("charisma impression: 魅力 {} 段 / 好感度 {} 段を覚えた".format(
+                    len(ladders["charm"]), len(ladders["affinity"])))
+
+            ladders = state["ladders"]
+            if ladders is None:
+                return result
+            row = _as_tuple(result)
+            if row is None:
+                return result
+
+            try:
+                player = player_of()
+                npc = npc_in_frames(player)
+                key = key_of(npc, player) if npc is not None else None
+                if key is None and not state["no_npc_warned"]:
+                    # 1度だけ記録する。
+                    # 毎回出すと、効いている行が埋まる。
+                    state["no_npc_warned"] = True
+                    write("{}。好みの差は付かない（親しさだけ効く）。呼び出し元: {}".format(
+                        "呼び出し元から NPC を拾えない" if npc is None
+                        else "相手は拾えたが id も名前も読めない", frames.caller()))
+                taste = state["taste"].get(key)
+                if taste is None:
+                    taste = _taste_of(key, TASTE_SPREAD)
+                    if key is not None:
+                        state["taste"][key] = taste
+                picked, note = decide(ladders, row, taste)
+            except Exception:
+                ctx.log_exc("charisma impression: 段の決定が失敗した; 素通しにする")
+                return result
+
+            name = frames.text_of(npc, "name") if npc is not None else None
+            before = row[ladders["charm_index"]] \
+                if ladders["charm_index"] < len(row) else None
+            if picked is None:
+                write("{}: {}（そのまま）".format(name or "?", note))
+                return result
+
+            write("{}: {} {!r} → {!r}".format(
+                name or "?", note, before, ladders["charm"][picked]))
+            return rebuild(row, ladders["charm_index"],
+                           ladders["charm"][picked], result)
         except Exception:
-            ctx.log_exc("charisma impression: 段の決定が失敗した; 素通しにする")
+            ctx.log_exc("charisma impression: 調整に失敗した; 素通しにする")
             return result
-
-        name = frames.text_of(npc, "name") if npc is not None else None
-        before = row[ladders["charm_index"]] \
-            if ladders["charm_index"] < len(row) else None
-        if picked is None:
-            write("{}: {}（そのまま）".format(name or "?", note))
-            return result
-
-        write("{}: {} {!r} → {!r}".format(
-            name or "?", note, before, ladders["charm"][picked]))
-        return rebuild(row, ladders["charm_index"],
-                       ladders["charm"][picked], result)

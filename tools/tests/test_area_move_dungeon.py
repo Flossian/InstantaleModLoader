@@ -16,8 +16,10 @@ QuestStart・End・RetireManager / HUD / Clock を差し込み、次を確認す
   受注   … ゲーム本来の受注画面（`QuestChoiceManager`）へ渡す
   踏破   … クリアしただけでは動かず、**集落の画面に戻ってから**移動が起きる
            （帰還直後に動くと「漁る」を取り上げてしまう）
-  日数   … 道中と最後の移動の合計が `TRAVEL_DAYS`（既定14）を超えない。
-           道の外の日数送り（訓練・休養）には触らない。着いたら切り詰めも終わる
+  日数   … 最後のエリア移動が `TRAVEL_DAYS`（既定14）日になる。上限ではなく
+           **この日数にする**。道中のクエストと道の外の日数送り（訓練・休養）には
+           触らない。着いたら差し替えも終わる。
+           受注中の控えが残っても日数送りは素通し（暦が止まらない）
   放棄   … 移動しない。出発地に留まる
   語彙   … `AreaMoveManager` の `mode` を発明せず、ゲームのボタンの args を写す
   控え   … `out/test/road_travel.json` に残り、**セーブには触らない**。
@@ -563,7 +565,7 @@ def setup(configure=None, levels=None, keep_state=False, mod=None):
     """mod を適用し、移動の確認画面の手前に立っている app を返す。
 
     クラスは毎回作り直す（前のテストで載せたフックを持ち越さない。
-    派生元は `BASES` から引く ―
+    派生元は `BASES` から引く。
     `sys.modules['__main__']` は直接実行時にはこのテスト自身）。
     `keep_state=True` は控えのファイルを残す（注入し直しの検証用）。
     """
@@ -695,7 +697,12 @@ def new_quest_id(app):
 def run_road(app, classes, clear=True, quest_days=0):
     """出発 → 受注 → 開始 → 完了/放棄 → 集落へ戻る、を通す。
 
-    `quest_days` は道中のクエストが進める日数（本物はイベントや戦闘で進む）。
+    `quest_days` は道中のクエストが進める日数。
+
+    **本物は0日**（`output_data` のクエスト側 2,021 件で `elapse_days` の実行が
+    0件・実機でも確認済み。GAME.md §2.18）。
+    ここで日数を渡すのは、そうでない版に当たったときに
+    こちらが素通しすることを見るため。
     """
     confirm_cls, board_cls, end_cls, retire_cls, start_cls, _move_cls = classes
     show_confirmation(app, confirm_cls)
@@ -1069,8 +1076,8 @@ check("例外も出ない", not ctx3.errors, ctx3.errors)
 print("=== 注入し直しをまたいでも道が切れない ===")
 # 実機で起きた並びの回帰。
 # 道中クエストの生成の最中に注入が入ると、
-# 生成を終えた **古い層**が控えを書き、**新しい層**はそれを持っていない
-# ― 受注しても踏破しても移動しなくなる（VERIFICATION.md §3.13）。
+# 生成を終えた **古い層**が控えを書き、**新しい層**はそれを持っていない。
+# 受注しても踏破しても移動しなくなる（VERIFICATION.md §3.13）。
 mod, ctx, app, classes = setup()
 show_confirmation(app, classes[0])
 press(app, "危険な道を行く")
@@ -1119,34 +1126,79 @@ CLOCK.settle()
 check("別のクエストを進めていたなら拾わない", app.moved == [], app.moved)
 check("  → その旨を残す", "not moving" in read_log(), read_log()[-400:])
 
-print("=== 危険だが早い（日数の上限）===")
+print("=== 危険だが早い（移動にかかる日数）===")
 mod, ctx, app, classes = setup()
 run_road(app, classes)
 check("徒歩の3ヵ月がそのまま乗らない", app.day <= 14, app.elapsed)
-check("上限ぶんは進む（14日）", app.day == 14, app.elapsed)
-check("ゲームには減らした数を渡す（呼ばないのではなく）",
+check("設定した日数で着く（14日）", app.day == 14, app.elapsed)
+check("ゲームには差し替えた数を渡す（呼ばないのではなく）",
       app.elapsed == [14], app.elapsed)
 check("移動そのものは起きている", app.moved and app.moved[0][0] == "9", app.moved)
 
+# 道中のクエストは日数を進めない（`output_data` のクエスト側 2,021 件で
+# `elapse_days` の実行が0件・実機でも確認済み。GAME.md §2.18）。
+# それでも進む版に当たった場合に、こちらが素通しすることを見ておく。
 mod, ctx, app, classes = setup()
 run_road(app, classes, quest_days=4)
-check("道中で使ったぶんも予算から引く", app.day == 14, app.elapsed)
-check("  → 内訳は 4 + 10", app.elapsed == [4, 10], app.elapsed)
-check("  → 切り詰めた記録が残る", "days: 90 -> 10" in read_log(), read_log()[-600:])
+check("道中の日数はそのまま通す（上限に入れない）",
+      app.elapsed == [4, 14], app.elapsed)
+check("  → 合計は 4 + 14", app.day == 18, app.elapsed)
+check("  → 差し替えた記録が残る", "days: 90 -> 14" in read_log(), read_log()[-600:])
 
 mod, ctx, app, classes = setup()
 run_road(app, classes, quest_days=20)
-check("道中だけで使い切ったら移動は0日", app.day == 14, app.elapsed)
-check("  → 予算を超えた要求は 0 になる", app.elapsed == [14, 0], app.elapsed)
+check("道中が何日でも移動は設定どおり", app.elapsed == [20, 14], app.elapsed)
+check("  → 移動が 0 日になることは無い", app.elapsed[-1] != 0, app.elapsed)
 
 mod, ctx, app, classes = setup(configure=lambda m: setattr(m, "TRAVEL_DAYS", 0))
 run_road(app, classes, quest_days=5)
-check("上限 0 なら1日も進まない", app.day == 0, app.elapsed)
+check("0 なら移動では1日も進まない", app.elapsed == [5, 0], app.elapsed)
+check("  → 道中のぶんは残る", app.day == 5, app.elapsed)
 check("  → それでも着く", app.moved and app.moved[0][0] == "9", app.moved)
 
 mod, ctx, app, classes = setup(configure=lambda m: setattr(m, "TRAVEL_DAYS", 365))
 run_road(app, classes)
-check("上限を上げれば素のまま通る", app.day == 90, app.elapsed)
+check("設定を上げれば渡された日数より長くなる（上限ではない）",
+      app.elapsed == [365], app.elapsed)
+
+print("=== 控えが残っても暦は止まらない ===")
+# 以前は控えが在る全段階を予算で切り詰めていたので、使い切ると以後の
+# 日数送りに 0 が渡り続け、控えが外れないと暦が止まっていた。
+mod, ctx, app, classes = setup()
+show_confirmation(app, classes[0])
+press(app, "危険な道を行く")
+quest_id = new_quest_id(app)
+classes[4](app, "settlement_quest", quest_id).execute("受ける")
+CLOCK.settle()
+app.elapsed.clear()
+for _ in range(3):
+    app.elapse_days(90)
+check("受注中（armed）の控えは日数に触らない",
+      app.elapsed == [90, 90, 90], app.elapsed)
+
+print("=== 到着を見失っても日数は1回だけ ===")
+# 到着の検出が外れると控えは `MOVE_TIMEOUT`（300秒）まで残る。
+# その間の日数送りを見境なく差し替えると、宿泊も休暇も1回ごとに
+# `TRAVEL_DAYS` を課すことになる（暦が1回の移動で何ヵ月も飛ぶ）。
+mod, ctx, app, classes = setup()
+move_cls = classes[5]
+
+
+def stuck_execute(self, choice_text):
+    """移動はするが、目的地に立たないまま日数送りが続く場合。"""
+    self.app.moved.append((self.target_area_id, self.mode, choice_text))
+    self.app.elapse_days(MOVE_DAYS.get(self.mode, 90))
+    self.app.elapse_days(30)          # 宿泊など、道とは関係のない日数送り
+    return None
+
+
+move_cls.execute = stuck_execute
+run_road(app, classes)
+check("差し替えるのは最初の1回だけ",
+      app.elapsed == [mod.TRAVEL_DAYS, 30], app.elapsed)
+check("  → 素通しした回を記録に残す", "left alone" in read_log(),
+      read_log()[-400:])
+check("例外も出ない", not ctx.errors, ctx.errors)
 
 print("=== 到着の文言 ===")
 mod, ctx, app, classes = setup()

@@ -53,12 +53,12 @@
       "min": 0,
       "max": 365,
       "label": {
-        "ja": "道にかける日数の上限",
-        "en": "Day limit for the road"
+        "ja": "道にかかる日数",
+        "en": "Days the road takes"
       },
       "note": {
-        "ja": "道中のクエストと最後の移動の合計。既定14は馬車と同じ。365で実質上限なし",
-        "en": "Quest plus the final move. 14 = the same as the coach"
+        "ja": "エリア移動にかかる日数。道中のクエストは日数を進めない。既定14は馬車と同じ",
+        "en": "The area move itself. The quest costs no days. 14 = the same as the coach"
       }
     },
     "ARRIVAL_MODE": {
@@ -73,8 +73,8 @@
         "en": "How the last leg is travelled"
       },
       "note": {
-        "ja": "walk=所持金が要らない（日数は上の上限で切り詰める） / carriage=馬車と同じ（所持金が要る）",
-        "en": "walk = free (days are capped above) / carriage = the coach (costs gold)"
+        "ja": "walk=所持金が要らない（日数は上の設定になる） / carriage=馬車と同じ（所持金が要る）",
+        "en": "walk = free (days come from the setting above) / carriage = the coach (costs gold)"
       }
     },
     "STAMINA_MIN_PERCENT": {

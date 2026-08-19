@@ -81,6 +81,17 @@ _generation: str | None = None
 # ローダ側（__init__.py）がここを見て、モジュールが現れたときに mod を当て直す。
 _pending_modules: set[str] = set()
 
+# 持ち主のクラスがまだ生えていなかった対象（`__main__:World.generate_character` の
+# `World` が無い、など）。
+#
+# `__main__` は**実行中でも `sys.modules` に居る**唯一のモジュールで、
+# ゲーム（約1万行の `instantale.py`）はそれを上から順に組み立てていく。
+# インタプリタ初期化の時点で注入すると、モジュールは在るのにクラスはまだ無い。
+# これは「対象が無い」ではなく「まだ来ていない」なので、上の
+# `_pending_modules` と同じ扱いにする。違うのは**来たかどうかの見方**だけで、
+# あちらは `sys.modules` を、こちらは `resolve()` が通るかを見る。
+_pending_owners: set[str] = set()
+
 
 def set_generation(generation: str) -> None:
     global _generation
@@ -89,6 +100,7 @@ def set_generation(generation: str) -> None:
     # 前回の注入で保留だったものが今回は載っている、
     # という場合に古い名前が残っていると見張りが終わらない。
     _pending_modules.clear()
+    _pending_owners.clear()
     # 台帳も同じ寿命。
     # 世代が変われば前回の帰属は無効になる。
     _registry.reset()
@@ -97,6 +109,27 @@ def set_generation(generation: str) -> None:
 def pending_modules() -> list[str]:
     """この boot で「まだ import されていない」として見送った対象のモジュール名。"""
     return sorted(_pending_modules)
+
+
+def pending_owners() -> list[str]:
+    """この boot で「持ち主のクラスがまだ無い」として見送った対象。"""
+    return sorted(_pending_owners)
+
+
+def owners_ready() -> list[str]:
+    """`pending_owners()` のうち、いま解決できるようになったもの。
+
+    見張り（`__init__._deferred_loop`）から呼ぶ。
+    `sys.modules` を見るだけでは分からないので、実際に引いて確かめる。
+    """
+    ready = []
+    for target in sorted(_pending_owners):
+        try:
+            resolve(target)
+        except Exception:
+            continue
+        ready.append(target)
+    return ready
 
 
 def _defer_if_not_imported(target: str, kind: str) -> bool:
@@ -119,6 +152,83 @@ def _defer_if_not_imported(target: str, kind: str) -> bool:
     _pending_modules.add(mod_name)
     _registry.record(_registry.DEFERRED, target, detail=mod_name)
     log("defer {} {} ({} is not imported yet)".format(kind, target, mod_name))
+    return True
+
+
+def _still_loading(mod_name: str) -> bool:
+    """そのモジュールは `sys.modules` に居ながら、まだ本体を実行中か。
+
+    import は「先に `sys.modules` へ登録してから本体を走らせる」ので、
+    **載っていることと、中身が揃っていることは別**。
+    走っている間 importlib は `__spec__._initializing` を True にしているので、
+    それを見れば「打ち間違い」と「まだ来ていない」を推測なしに分けられる。
+
+    実測（`Embedding.get_similar_id:get_similar_embedding_id`）:
+    初回ブートでは `attribute not found`、5秒後の2回目では普通に包めた。
+    """
+    module = sys.modules.get(mod_name)
+    if module is None:
+        return False
+    spec = getattr(module, "__spec__", None)
+    return bool(getattr(spec, "_initializing", False))
+
+
+def _defer_if_still_loading(target: str, kind: str, why: str) -> bool:
+    """モジュールが実行途中なら保留に積んで True を返す。
+
+    `_defer_if_owner_not_ready` の姉妹。あちらは `__main__` を名前で特別扱いするが
+    （`__main__` は `__spec__` を持たないので実行中かを聞けない）、
+    こちらは**聞いて答えが返る**ぶん確かで、どのモジュールにも効く。
+    葉が無い場合も対象にしてよいのは、実行途中だと分かっているため。
+    「まだ定義されていない」以外の説明が要らない。
+    """
+    try:
+        mod_name, _qual = split_target(target)
+    except LookupError:
+        return False
+    if not _still_loading(mod_name):
+        return False
+    _pending_owners.add(target)
+    _registry.record(_registry.DEFERRED, target, detail=mod_name)
+    log("defer {} {} ({}; {} is still being imported)".format(
+        kind, target, why, mod_name))
+    return True
+
+
+def _defer_if_owner_not_ready(target: str, kind: str, exc: BaseException) -> bool:
+    """持ち主のクラスがまだ生えていないだけなら保留に積んで True を返す。
+
+    `_defer_if_not_imported` の docstring は「モジュールは在るが属性が無い」を
+    本物の問題として `required` に従わせると書いていた。
+    普通のモジュールならそのとおりで、import は最後まで走り切ってから
+    `sys.modules` に載るので、途中の状態は見えない。
+
+    **`__main__` だけは違う。**
+    最初の1行から `sys.modules` に居て、そこから約1万行かけて
+    クラスを組み立てていく。
+    インタプリタ初期化の時点で注入すると、`__main__` は在るのに
+    `World` も `InstantaleApp` もまだ無い。これは打ち間違いではなく順番の問題で、
+    待てば必ず来る（実測: 2026-08-15 以降、初回ブートで
+    `120_` / `128_` / `129_` / `212_` / `312_` の5本が
+    `AttributeError: module '__main__' has no attribute 'World'` で
+    `apply()` ごと落ち、6秒後の2回目のブートで全部載っていた）。
+
+    見るのは**持ち主**が欠けている場合だけ。
+    葉（`World.generate_character` の `generate_character`）が無いのは、
+    打ち間違いかゲーム更新で消えたかの本物の問題なので `required` に従う。
+    """
+    if not isinstance(exc, AttributeError):
+        return False
+    try:
+        mod_name, qual = split_target(target)
+    except LookupError:
+        return False
+    if mod_name != "__main__" or "." not in qual:
+        return False        # 実行中に見えるのは `__main__` だけ／葉は対象外
+    _pending_owners.add(target)
+    _registry.record(_registry.DEFERRED, target, detail=mod_name)
+    log("defer {} {} ({}; the game is still building __main__)".format(
+        kind, target, exc))
     return True
 
 
@@ -167,8 +277,8 @@ def unwrap(func, *, limit: int = 32):
     **1段だけ剥がして済ませないこと。**
     同じ対象を2つ以上の MOD が包むのはこのローダでは正常な使い方（TECH.md
     §3.7）なので、層は1枚とは限らない。
-    `still_ours` を見るのは、底に着いたかを推論で決めないため
-    ― ローダは自分が被せたものに必ず印を付ける。
+    `still_ours` を見るのは、底に着いたかを推論で決めないため。
+    ローダは自分が被せたものに必ず印を付ける。
 
     `limit` は連鎖が壊れていたときに止まるための上限で、
     剥がし切れなければ `still_ours` が真のまま返る（黙って底だと言わない）。
@@ -358,6 +468,9 @@ def patch(target: str, *, alias_scan: Any = True, required: bool = True,
         try:
             owner, name, old = resolve(target)
         except (LookupError, AttributeError) as exc:
+            if (_defer_if_owner_not_ready(target, "patch", exc)
+                    or _defer_if_still_loading(target, "patch", str(exc))):
+                return func
             # required=True でも記録してから投げる。
             # ここで投げると boot() がこの mod を apply-error にして次へ進むので、
             # 記録を先にしておかないと「何が見つからなかったのか」が最後の報告に出ない。
@@ -418,6 +531,20 @@ def _guard(func: Callable, old: Callable, target: str) -> Callable:
     `wrap` では第1引数として渡す `orig` がこの記録を兼ねる。
     `patch` では元の関数を呼ぶかどうかが差し替え側の自由なので、
     記録は取らず「まだ走っていない」扱いにする。
+
+    **記録は `orig` を呼ぶたび上書きされる。**
+    覚えているのは「最後に呼んだ答え」であって「本番の答え」ではない。
+    普通のフックは `orig` を1回しか呼ばないので差は出ないが、
+    本番の呼び出しの後に**捨て玉の呼び出し**（合成引数でゲーム側の振る舞いを
+    探る等）を挟むフックでは、記録がその探りの答えに化ける。
+    そこで投げると、`safe=True` は探りの答えをゲームへ返す。
+    素の動作に落ちたつもりで、**素でもフックでもない値**が流れる。
+
+    こういうフックは `safe=True` を当てにせず、自分で全体を `try` で囲んで
+    本番の答えを返すこと（`125_balance_charisma_impression` が実際に踏んだ。
+    段の総当たりで `orig` を約 460 回呼んでいた）。
+    ゲーム側の素の関数を探るだけなら、`orig` ではなく `unwrap()` で
+    剥がした素の関数を呼ぶ手もある（そちらは記録に触らない）。
     """
     is_wrap = getattr(func, "__instantale_wrap__", False)
 
@@ -437,7 +564,7 @@ def _guard(func: Callable, old: Callable, target: str) -> Callable:
                 return box["result"]
             if old is None:
                 # `required=False` で**属性を新設**した patch。
-                # 元の実装が無いので落とす先も無い ― ここで `None(...)` を呼ぶと
+                # 元の実装が無いので落とす先も無い。ここで `None(...)` を呼ぶと
                 # TypeError がゲームへ抜けて、
                 # safe の約束（例外を流さない）が破れる。
                 return None
@@ -471,6 +598,9 @@ def wrap(target: str, *, alias_scan: Any = True, required: bool = True,
         try:
             owner, name, old = resolve(target)
         except (LookupError, AttributeError) as exc:
+            if (_defer_if_owner_not_ready(target, "wrap", exc)
+                    or _defer_if_still_loading(target, "wrap", str(exc))):
+                return func
             _registry.record(_registry.UNRESOLVED, target, detail=str(exc))
             if required:
                 raise
@@ -482,8 +612,12 @@ def wrap(target: str, *, alias_scan: Any = True, required: bool = True,
             # 理由は2つあり、報告では区別する。
             # 「名前ごと無い」＝ゲーム更新で関数が消えた可能性が高い。
             # 「名前はあるが None」＝そういう値が入っている（別の話）。
+            missing = not hasattr(owner, name)
+            if missing and _defer_if_still_loading(
+                    target, "wrap", "attribute not found"):
+                return func
             _registry.record(_registry.UNRESOLVED, target,
-                             detail="attribute not found" if not hasattr(owner, name)
+                             detail="attribute not found" if missing
                              else "resolved to None")
             if required:
                 raise LookupError(f"{target} resolved to None")

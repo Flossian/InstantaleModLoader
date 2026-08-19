@@ -86,6 +86,9 @@ from instantale_modloader import frames, ui
 
 LOG_BASENAME = "item_detail_autosize.log"
 
+#: 設計値の置き場（`sys` の属性名）。注入し直しをまたいで残す。
+DESIGN_STORE_ATTR = "__instantale_item_detail_designs__"
+
 # ログに残す組み合わせの上限。
 # 1アイテムにつき1件なので少しでいい。
 MAX_LOG = 60
@@ -122,7 +125,16 @@ def apply(ctx):
 
     # 箱ごとの設計値。
     # 箱が捨てられたら一緒に消えるよう弱参照で持つ。
-    designs = weakref.WeakKeyDictionary()
+    #
+    # **置き場は `sys`。** `apply()` は1プロセスで何度も走るので、
+    # ここで作り直すと2回目の注入が「1回目に広げた箱」を測り直して
+    # それを設計として覚える。`design["heights"]` は下限に使うので、
+    # 以後その箱は二度と縮まなくなる（`112_` / `113_` が設計を
+    # ウィジェット側に貼っているのと同じ理由）。
+    designs = getattr(sys, DESIGN_STORE_ATTR, None)
+    if designs is None:
+        designs = weakref.WeakKeyDictionary()
+        setattr(sys, DESIGN_STORE_ATTR, designs)
     logged = set()
 
     write = ctx.logger(LOG_BASENAME)
@@ -221,6 +233,16 @@ def apply(ctx):
                 fresh["heights"] = [old if now == was else now
                                     for now, was, old
                                     in zip(fresh["heights"], applied, design["heights"])]
+            # 余白も測り直せない。
+            # `margins` は「箱の幅 − 折り返し幅」で採るが、折り返し幅は
+            # こちらが `resize()` で書いた値なので、箱だけが別の幅に
+            # 組み直されると**負の余白**になり、本文が箱より広く折り返される。
+            # 余白は幅ではなく設計の側の値なので、前のを引き継ぐ。
+            if any(value < 0 for value in fresh["margins"]):
+                write("margins looked wrong ({}); keeping the design's {}".format(
+                    [round(v, 1) for v in fresh["margins"]],
+                    [round(v, 1) for v in design["margins"]]))
+                fresh["margins"] = list(design["margins"])
         designs[box] = fresh
         return fresh
 

@@ -50,7 +50,7 @@ def check(cond, msg):
 def survey(mods_dir):
     """同梱 mod の一覧と適用順を取り出す。discover() はローダ・GUI・静的検査の共通の入口。
 
-    `debug=True` で呼ぶのは `check_mods.py` と同じ理由 ― 検査は**入っている
+    `debug=True` で呼ぶのは `check_mods.py` と同じ理由。検査は**入っている
     MOD を全部見る**のが仕事で、デバッグモードの入切で範囲が変わってはいけない。
     切のまま呼ぶと、計測 MOD（`"debug": true`）が `order` に居ないぶん「同梱
     mod は全て名乗っている」が素の配布物でも赤くなる。
@@ -144,6 +144,116 @@ def main():
     check(R.unresolved()[-1][3] == "resolved to None",
           "『名前はあるが None』は別の理由として出る: {}".format(R.unresolved()[-1][3]))
 
+    print("=== __main__ の組み立て待ち ===")
+    # ゲームは `__main__`（約1万行）を上から組み立てていく。
+    # インタプリタ初期化の時点で注入すると、モジュールは在るのにクラスがまだ無い。
+    # これは打ち間違いではなく順番の問題なので、`required=True` でも投げずに保留へ。
+    real_main = sys.modules.get("__main__")
+    fake_main = types.ModuleType("__main__")
+    sys.modules["__main__"] = fake_main
+    try:
+        R.begin_mod("300_late.py")
+        try:
+            @ctx.wrap("__main__:World.generate_character")   # required=True（既定）
+            def _late(orig, self, cid):
+                return orig(self, cid)
+        except Exception as exc:
+            check(False, "持ち主待ちで投げてはいけない: {}".format(exc))
+        finally:
+            R.end_mod()
+        check(P.pending_owners() == ["__main__:World.generate_character"],
+              "持ち主待ちとして積まれる: {}".format(P.pending_owners()))
+        check(P.owners_ready() == [], "クラスが生える前は解決できない")
+
+        # 葉が無いだけなら本物の問題（打ち間違い / ゲーム更新で消えた）。
+        # ここは従来どおり投げる。待っても来ないものを待たない。
+        class _World(object):
+            pass
+        fake_main.World = _World
+        threw = False
+        R.begin_mod("300_late.py")
+        try:
+            @ctx.wrap("__main__:World.typo_name")
+            def _typo(orig, *a):
+                return None
+        except Exception:
+            threw = True
+        finally:
+            R.end_mod()
+        check(threw, "葉が無いだけなら従来どおり投げる（打ち間違いを保留にしない）")
+        check(P.pending_owners() == ["__main__:World.generate_character"],
+              "葉の失敗は持ち主待ちに積まない: {}".format(P.pending_owners()))
+
+        # クラスが生えたら見張りが気付く（`sys.modules` を見ても分からない）。
+        _World.generate_character = lambda self, cid: cid
+        check(P.owners_ready() == ["__main__:World.generate_character"],
+              "生えたら解決できるようになる: {}".format(P.owners_ready()))
+    finally:
+        if real_main is None:
+            sys.modules.pop("__main__", None)
+        else:
+            sys.modules["__main__"] = real_main
+
+    print("=== import 実行途中のモジュール ===")
+    # import は「先に sys.modules へ登録してから本体を走らせる」ので、
+    # 載っていることと中身が揃っていることは別。
+    # 走っている間だけ `__spec__._initializing` が True になる。
+    import importlib.machinery
+    loading = types.ModuleType("halfbaked")
+    loading.__spec__ = importlib.machinery.ModuleSpec("halfbaked", None)
+    loading.__spec__._initializing = True
+    sys.modules["halfbaked"] = loading
+    try:
+        R.begin_mod("300_late.py")
+        try:
+            @ctx.wrap("halfbaked:not_defined_yet")       # required=True（既定）
+            def _half(orig, *a):
+                return None
+        except Exception as exc:
+            check(False, "実行途中なら投げてはいけない: {}".format(exc))
+        finally:
+            R.end_mod()
+        check("halfbaked:not_defined_yet" in P.pending_owners(),
+              "実行途中は保留に積む: {}".format(P.pending_owners()))
+
+        # 走り終わったのに無ければ、それは本物の間違い。
+        loading.__spec__._initializing = False
+        threw = False
+        R.begin_mod("300_late.py")
+        try:
+            @ctx.wrap("halfbaked:never_comes")
+            def _never(orig, *a):
+                return None
+        except Exception:
+            threw = True
+        finally:
+            R.end_mod()
+        check(threw, "import が終わっていれば従来どおり投げる")
+
+        # 定義が現れたら見張りが気付く。
+        loading.not_defined_yet = lambda: None
+        check("halfbaked:not_defined_yet" in P.owners_ready(),
+              "定義が現れたら解決できる: {}".format(P.owners_ready()))
+
+        # 見張りが降りるときの後始末。
+        # 保留に積むのは**対象**（`halfbaked:not_defined_yet`）だが、
+        # 台帳を引く鍵は**モジュール名**（`detail`）。
+        # ここを `"__main__"` 決め打ちにすると、`__main__` 以外を待っていた
+        # 保留が降りず、status.json が「まだ待っている」と言い続ける。
+        check(ml._owner_modules(P.pending_owners()) == ["__main__", "halfbaked"],
+              "持ち主待ちは `__main__` だけではない: {}".format(
+                  ml._owner_modules(P.pending_owners())))
+        names = ml._owner_modules(
+            [t for t in P.pending_owners() if t.startswith("halfbaked:")])
+        check(names == ["halfbaked"],
+              "対象からモジュール名（台帳の鍵）を引ける: {}".format(names))
+        check(R.settle_deferred(names, "gave up") == 1,
+              "見張りが降りたら __main__ 以外の保留も降ろせる")
+        check(not [e for e in R.entries(R.DEFERRED) if e[3] == "halfbaked"],
+              "  → deferred のまま残らない: {}".format(R.entries(R.DEFERRED)))
+    finally:
+        sys.modules.pop("halfbaked", None)
+
     print("=== 投げる前に記録する ===")
     before = len(R.unresolved())
     try:
@@ -190,7 +300,7 @@ def main():
     # ゲームは選ばれたプロバイダの送信モジュールを1つだけ import する（GAME.md
     # §2.12）。
     # ローカル（llama.cpp）専用のモジュール宛ての保留は、
-    # クラウドと分かった時点で「当たらない」が確定する ― 待ち続けると
+    # クラウドと分かった時点で「当たらない」が確定する。待ち続けると
     # GUI が「段階適用の途中」と言い続ける。
     from instantale_modloader import llm as LLM              # noqa: E402
 
@@ -251,8 +361,8 @@ def main():
           "渡された末尾の改行で空行を作らない: {!r}".format(body))
 
     # 印は**逐語**で挟む。
-    # 既にあるログの見た目（角括弧の形と区切りの形の2通り）を変えないため
-    # ― どちらも実機の記録として docs に引用されている。
+    # 既にあるログの見た目（角括弧の形と区切りの形の2通り）を変えないため。
+    # どちらも実機の記録として docs に引用されている。
     tagged = ctx.logger("logger_tagged.log", tag="[FLAGFIX]")
     tagged("戦闘中の印を下ろした")
     colon = ctx.logger("logger_tagged.log", tag="quest-end:")
@@ -305,7 +415,7 @@ def main():
     numeric.text = 42
     check(F.text_of(numeric) is None, "文字列でない値は None")
     check(isinstance(F.attr(Bare(), "text"), str),
-          "（前提）`attr` の番人は文字列 ― だから `isinstance(str)` では弾けない")
+          "（前提）`attr` の番人は文字列。だから `isinstance(str)` では弾けない")
 
     print("=== MOD から1問だけ聞く（llm.ask）===")
     # 送信モジュールを名指しした MOD は、知らないプロバイダで黙って空振りする（`300_` / `311_` が `llama_cpp` と
@@ -592,7 +702,7 @@ def main():
                                                           "ja": "Plain string"},
               "name は文字列1つでも書ける")
 
-        # 種別の名乗り（"kind"）。mod 自身がどれに属するかを言う ― フォルダ名の
+        # 種別の名乗り（"kind"）。mod 自身がどれに属するかを言う。フォルダ名の
         # 番号帯からは導かない（GUI の種別列はこの値を読む）。
         put_json("kinded/mod.json", {"entry": "m.py", "kind": " Fix "})
         check(ml._manifest(tmp_mods, "kinded")["kind"] == "fix",
@@ -905,7 +1015,7 @@ def main():
           "メソッド対象でも self を保ったまま元に落ちる")
 
     # `required=False` で**属性を新設**した patch が safe=True で壊れた場合。
-    # 元の実装が無い（old=None）ので、落とす先も無い ― ここで `None(...)` を呼ぶと TypeError がゲームへ抜けて、
+    # 元の実装が無い（old=None）ので、落とす先も無い。ここで `None(...)` を呼ぶと TypeError がゲームへ抜けて、
     # safe の約束が破れる（踏む前に塞いだ）。
     P.set_generation("gen_safe_new")
 
@@ -988,7 +1098,7 @@ def main():
                      if not d.startswith(("_", "."))
                      and os.path.isfile(os.path.join(mods_dir, d, "mod.json")))
     # 「全部見つかるか」は `installed`（在るもの全部）で見る。
-    # `listed` は一覧に出す順で、宣言に無い開発中の mod（9xx）はそこから外れている ― GUI の保存で
+    # `listed` は一覧に出す順で、宣言に無い開発中の mod（9xx）はそこから外れている。GUI の保存で
     # `load_order.json` に混ざらないようにするため（§2.6）。
     installed = survey_result["installed"]
     check(sorted(installed) == on_disk,
@@ -997,8 +1107,8 @@ def main():
           "見つかるのは全てフォルダ（単一ファイルの mod は残っていない）")
 
     # 開発中の mod（9xx。TECH.md §2.6）は `load_order.json` にも配布物にも入らない。
-    # 以下の「同梱 mod として揃っているか」の検査からは外す
-    # ― 書きかけの一本でリリースする側の検査が止まらないようにするため。
+    # 以下の「同梱 mod として揃っているか」の検査からは外す。
+    # 書きかけの一本でリリースする側の検査が止まらないようにするため。
     # **外した名前は必ず出す。**
     # 黙って減らすと、宣言の抜けを見逃す検査になる。
     wip = [f for f in found if ml.is_wip(f)]
@@ -1148,7 +1258,7 @@ def main():
         # -- 壊れない書き方 ------------------------------------------------
         # 残すデータは全てここを通す（`ctx.write_json` / `write_text`）。
         # 素朴な open(..., "w") は開いた時点で切り詰めるので、
-        # 途中で落ちると中身が消える ― 読む側は壊れた JSON を {} に倒すため、
+        # 途中で落ちると中身が消える。読む側は壊れた JSON を {} に倒すため、
         # 消えたことに気付けないまま次の更新で上書きされる。
         print("=== 壊れない書き方（write_json / write_text） ===")
         target = sctx.state_path("atomic.json")
@@ -1227,7 +1337,7 @@ def main():
         check(ml.read_json(fresh, {}, report=told.append) == {},
               "壊れていても default に倒す（mod は止めない）")
         check(told and "cannot read" in told[0],
-              "ただし黙らない ― 消えたことが後から追える")
+              "ただし黙らない。消えたことが後から追える")
 
     finally:
         shutil.rmtree(sandbox, ignore_errors=True)

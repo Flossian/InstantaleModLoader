@@ -547,13 +547,20 @@ def apply(ctx):
                                     "ConversationEndManager")
         if entry is None:
             write("end conversation: no ConversationEndManager button; aborting")
+            # 待機表示は必ず解く。
+            # ここは `show_busy` を出したまま呼ばれる経路（`open_quest_board`）が
+            # あり、解かずに降りると点のアニメーションが 0.3 秒ごとに描き直され、
+            # 送信ボタンも `is_button_enabled` も落ちたまま戻らない。
+            # 再起動以外に抜ける手が無くなる。
+            clear_busy(app)
             say(app, "（今は依頼の話を切り出せない）")
             return
         # 会話が閉じるので、会話中のボタンへ戻る道は捨てる。
         state["saved_buttons"] = None
         screen.end_conversation(
             app, entry, follow_up, end_text=END_TEXT,
-            on_abort=lambda _reason: say(app, "（今は依頼の話を切り出せない）"),
+            on_abort=lambda _reason: (clear_busy(app),
+                                      say(app, "（今は依頼の話を切り出せない）")),
             poll=END_POLL, timeout=END_TIMEOUT)
 
     def open_quest_board(app, choice_text=OFFER_LABEL):

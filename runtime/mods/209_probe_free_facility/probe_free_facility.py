@@ -145,6 +145,13 @@ MAX_FREE_DUMPS = 3
 
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME, stamp=False)
+    # 上限つきの器。
+    # `flags` だけは集合（同じ鍵を二度数えないため。`MAX_FLAG_SAMPLES` は種類数の上限）。
+    state = {
+        "steps": 0,        # MAX_STEP_EVENTS
+        "programs": 0,     # MAX_PROGRAM_DUMPS
+        "flags": set(),    # MAX_FLAG_SAMPLES（種類）
+    }
 
     def stamp():
         return datetime.datetime.now().isoformat(timespec="milliseconds")

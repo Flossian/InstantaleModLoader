@@ -457,9 +457,28 @@ def apply(ctx):
         key = area_id if area_id in areas else str(area_id)
         if key not in areas:
             return
-        # このエリアは今この瞬間に存在している。
+        world = world_key(world_dict)
+        known = _seen.get(world)
+        if known is None:
+            # **このワールドを見るのが初めて。**
+            # 今あるエリアは対象外として記録するが、**いま生まれたこのエリアだけは
+            # 除く**。呼び元は2つとも「エリアを書き出す／生成する」フックなので、
+            # `areas` には既にこのエリアが入っている。一緒に既存扱いにすると
+            # 素の曲のまま二度と選び直されない。
+            # かといって `{このエリア}` だけを記録して先へ進むのも誤りで、次の
+            # `handle_world` が「初めてではない」と判断して保護を飛ばし、
+            # **残り全エリアを新しいエリアとして選び直す**（既存の町の曲が
+            # まとめて変わり、`area["bgm"]` はその場で書き換わるのでセーブに残る）。
+            known = set(areas) - {key}
+            _seen[world] = known
+            write("[BALANCE] {} first sight of {!r}: {} existing area(s) "
+                  "grandfathered".format(hook, world, len(known)))
+            # このエリアは下へ落として選び直す。
+        if key in known:
+            return                      # 注入より前からあるエリア。触らない
+        # このエリアは今この瞬間に現れた。
         # 後から「既存エリア」として除外されないよう、ここで記録しておく。
-        _seen.setdefault(world_key(world_dict), set()).add(key)
+        known.add(key)
         result = balance_area(areas, key, pool)
         if result:
             note(hook, [(key, result[0], result[1])])

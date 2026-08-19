@@ -78,7 +78,7 @@ PRICE_SCALE = 1.0          # 最後に全体へ掛かる倍率
 SELL_RATE = 0.4            # 店に売るときの割合（買価に対して）
 
 # item_type ごとの倍率。1.0 が「上の式そのまま」で、装備を下げ素材を上げてある
-# のは実プレイで詰めた結果 ― 装備は店で買うより拾うほうが早く、素材と財宝は
+# のは実プレイで詰めた結果。装備は店で買うより拾うほうが早く、素材と財宝は
 # 売り先がそこしかないので、同じ額なら素材側を厚くしたほうが釣り合う。
 MULT_WEAPON = 0.7
 MULT_WEARABLE = 0.7
@@ -239,11 +239,26 @@ def read_item(item):
 
 def apply(ctx):
 
+    # 再注入しても1組だけ持つ器。
+    # **鍵の型まで確かめる。**
+    # `isinstance(store, dict)` だけを見ると、版の違う器をそのまま握る。
+    # `settled` は旗（bool）から集合へ変えたので、旧版が走ったプロセスへ
+    # 注入し直すと `label not in False` で TypeError になり、
+    # 決済の検算だけが黙って死ぬ（`safe=True` なので画面には出ない）。
+    # 手での注入し直しはこのプロジェクトの通常の操作なので、実際に踏む。
+    blanks = {"logged": 0, "repriced": 0, "reconciled": 0, "skipped": 0,
+              "gold_before": None, "settled": set()}
     store = getattr(sys, STORE_ATTR, None)
     if not isinstance(store, dict):
-        store = {"logged": 0, "repriced": 0, "reconciled": 0, "skipped": 0,
-                 "gold_before": None, "settled": False}
+        store = dict(blanks)
         setattr(sys, STORE_ATTR, store)
+    else:
+        # 足りない鍵と、型の変わった鍵だけを入れ替える（件数は残したい）。
+        # `gold_before` は None で始まって数が入るので、型では見ない。
+        for name, blank in blanks.items():
+            if name not in store or (blank is not None
+                                     and not isinstance(store[name], type(blank))):
+                store[name] = set() if isinstance(blank, set) else blank
 
     write = ctx.logger(LOG_BASENAME, stamp=False)
 
@@ -428,14 +443,26 @@ def apply(ctx):
     # 所持金の読み方はローダの語彙（`309_` / `902_` と共有）。
     gold_of = ui.gold_of
 
-    def settle(app, item, key, sign, label):
+    def price_on_show(item, key):
+        """表示されていた値段。**`orig` を呼ぶ前に読むこと。**
+
+        ゲームは値段を持ち主で決めており（買価は店主側、売価は持ち主側）、
+        `buy_item` / `sell_item` はまさにその持ち主を移す処理なので、
+        呼んだ後では鍵が入れ替わっている。読もうとした鍵が消えていて
+        `None` になり、検算が黙って降りる。
+        """
+        _field, attributes = read_item(item)
+        return _num(attributes.get(key))
+
+    def settle(app, item, key, sign, label, expected=None):
         """`orig` の前後で所持金を測り、表示との差を直す。
 
         `sign` は所持金が動く向き（買うと -1、売ると +1）。
         **動いていなければ取引そのものが成立していない**（買えなかった等）ので何もしない。
+        `expected` は `orig` を呼ぶ前に読んだ表示値（`price_on_show`）。
         """
-        _field, attributes = read_item(item)
-        expected = _num(attributes.get(key))
+        if expected is None:
+            expected = price_on_show(item, key)
         before = store["gold_before"]
         after = gold_of(app)
         if expected is None or before is None or after is None:
@@ -445,12 +472,16 @@ def apply(ctx):
             return                              # 取引が成立していない
         gap = expected - moved
         if abs(gap) < 0.5:
-            # 表示どおりに決済されている。**1回目だけ記録に残す** ―
+            # 表示どおりに決済されている。**1回目だけ記録に残す**。
             # ずれた回しか書かないと「合っていた」と「一度も売買していない」が
             # ログの上で同じ（どちらも `reconcile` が0行）になり、
             # 決済がこちらの値段を読んでいるかを後から確かめられない。
-            if not store["settled"]:
-                store["settled"] = True
+            if label not in store["settled"]:
+                # 売りと買いで別に数える。
+                # 1つの旗を共有すると、片方が確かめられた時点でもう片方の
+                # 検算行が永久に出なくなり、「合っていた」のか
+                # 「一度も売買していない」のかが分からなくなる。
+                store["settled"].add(label)
                 write("settled {} {} shown={:g}（表示どおり。以後この行は出さない）"
                       .format(label, name_of(item), expected))
             return
@@ -472,15 +503,17 @@ def apply(ctx):
         @ctx.wrap("__main__:InstantaleApp.buy_item", safe=True)
         def buy_item(orig, self, item_instance=None, *args, **kwargs):
             store["gold_before"] = gold_of(self)
+            shown = price_on_show(item_instance, BUY_KEY)
             result = orig(self, item_instance, *args, **kwargs)
-            settle(self, item_instance, BUY_KEY, -1, "buy")
+            settle(self, item_instance, BUY_KEY, -1, "buy", shown)
             return result
 
         @ctx.wrap("__main__:InstantaleApp.sell_item", safe=True)
         def sell_item(orig, self, item_instance=None, *args, **kwargs):
             store["gold_before"] = gold_of(self)
+            shown = price_on_show(item_instance, SELL_KEY)
             result = orig(self, item_instance, *args, **kwargs)
-            settle(self, item_instance, SELL_KEY, +1, "sell")
+            settle(self, item_instance, SELL_KEY, +1, "sell", shown)
             return result
 
     write("---- installed  scale={:g} sell_rate={:g} type={} rarity={} ----".format(

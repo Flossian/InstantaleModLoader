@@ -30,7 +30,7 @@
 MOD 導入前から世界に在る絵や、控えを消した／失った場合の取りこぼしがここで埋まる。
 合算にしないのは、控えはその絵を選んだ時点で既に数えているため（二重数えになる）。
 
-セーブには何も足さない ― 選ばれた image_src がアイテムに書かれるのは素のゲームと同じ。
+セーブには何も足さない。選ばれた image_src がアイテムに書かれるのは素のゲームと同じ。
 履歴を消してやり直したいときは該当世界の`state/item_image/<世界>.json` を消せばよい（次の選定で世界の中身から数え直す）。
 
 対象はゲーム側の関数1つだけ。
@@ -41,8 +41,10 @@ MOD 導入前から世界に在る絵や、控えを消した／失った場合�
 
 import os
 import sys
+import threading
 
-from instantale_modloader.state import world_filename, world_key
+from instantale_modloader.state import (UNKNOWN_WORLD, world_filename,
+                                        world_key)
 
 # 候補を類似度上位から最大何件まで広げるか。
 TOP_K = 10
@@ -73,6 +75,12 @@ def apply(ctx):
     # ctx.mod_dir / ctx.state_path は apply() の外を当てにしない。ここで控える。
     mod_dir = ctx.mod_dir
     state_dir = ctx.state_path("item_image")
+    # 品物の生成は LLM のワーカースレッドから来る（同時に2本まで観測済み）。
+    # `counts` の読み書きも控えの書き出しもここで直列化する。
+    # `ctx.write_json` は隣に `<名前>.tmp` を書いてから差し替える形なので、
+    # 2本が同時に通ると **片方が書きかけの tmp をもう片方が置き換える**。
+    # 控えが壊れ、次の `read_json` で丸ごと失われる。
+    lock = threading.Lock()
     state = {
         "world": None,  # counts を数えた世界（world_key）。替わったら読み直す
         "file": None,   # その世界の控え（state/item_image/<世界>.json）
@@ -116,8 +124,18 @@ def apply(ctx):
     def ensure_world_counts():
         """世界が替わっていたら、その世界の履歴（控え + 世界の中身）を読み直す。"""
         app = getattr(sys.modules.get("__main__"), "instantale_app", None)
-        world = world_key(app) if app is not None else "_"
+        world = world_key(app) if app is not None else UNKNOWN_WORLD
         if world == state["world"]:
+            return
+        if world == UNKNOWN_WORLD:
+            # 世界名が読めない窓（読み込み中・新規作成中）。
+            # ここを実在の世界として扱うと、**通った全ての世界の履歴が
+            # 1つのファイルに混ざり**、次の世界の下限として効いてしまう。
+            # 控えを持たずにその場をしのぐ（`902_city_case` と同じ判断）。
+            state["world"] = world
+            state["file"] = None
+            state["counts"] = {}
+            log("seed: the world name is unreadable; not keeping counts for now")
             return
         path = os.path.join(state_dir, world_filename(world, ".json"))
 
@@ -223,9 +241,10 @@ def apply(ctx):
                 qualified,
                 key=lambda i: state["counts"].get((item_sub_type, keys[i]), 0))
         key = keys[chosen]
-        state["counts"][(item_sub_type, key)] = \
-            state["counts"].get((item_sub_type, key), 0) + 1
-        persist_counts()
+        with lock:
+            state["counts"][(item_sub_type, key)] = \
+                state["counts"].get((item_sub_type, key), 0) + 1
+            persist_counts()
 
         if state["logged"] < LOG_LIMIT:
             state["logged"] += 1

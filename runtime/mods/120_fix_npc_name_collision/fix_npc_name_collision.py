@@ -302,13 +302,42 @@ def _strip_brackets(text):
     return text
 
 
-def _strip_epithet(text):
-    """先頭の修飾語（`隻眼の…`）を落とす。
+#: この MOD が配る二つ名。長いものから順に見る（`remember_epithets`）。
+#: 名簿を読んだ時点で埋まる。読む前は空で、その場合は下の助詞の判定だけが効く。
+_KNOWN_EPITHETS = []
 
+
+def remember_epithets(epithets):
+    """配る二つ名を覚える。`canonical` が読みの骨を採るときに剥がすため。
+
+    **助詞の判定だけでは足りない。**
+    同梱 300 件の内訳は括弧型 126・`〜の` 型 120・動詞句型 54 で、
+    動詞句型（`波を裂く…`）には `の` が無いので下の判定では落ちない。
+    落ちないまま読みの骨に混ざると、`波を裂くカトリーヌ` と `カトリーヌ` が
+    別人と判定され、**衝突を直すはずの MOD が同名を1組作る**。
+    配った側は何を足したかを知っているので、ここで覚えておく。
+    """
+    global _KNOWN_EPITHETS
+    known = {row for row in epithets if isinstance(row, str) and row.strip()}
+    # 長いものから当てる（短いものが先に当たると途中で切れる）。
+    _KNOWN_EPITHETS = sorted(known, key=len, reverse=True)
+    return len(_KNOWN_EPITHETS)
+
+
+def _strip_epithet(text):
+    """先頭の修飾語（`隻眼の…` / `波を裂く…`）を落とす。
+
+    まず**配ったことのある二つ名**をそのまま当てる（`remember_epithets`）。
+    当たらなければ助詞で見る:
     `の` は助詞。
     片仮名の `ノ`（`ミノル`）は名前の一部なので見ない。
     落とした残りが2文字未満になるなら、修飾語ではなく名前そのもの。
     """
+    for epithet in _KNOWN_EPITHETS:
+        if text.startswith(epithet):
+            rest = text[len(epithet):]
+            if len(rest) >= 2:
+                return rest
     index = text.rfind("の")
     if index <= 0:
         return text
@@ -492,6 +521,8 @@ def read_roster(path):
             names[key] = picked
     epithets = [row.strip() for row in data.get(EPITHET_KEY, [])
                 if usable(row)] if isinstance(data.get(EPITHET_KEY), list) else []
+    # 読みの骨を採るときに剥がせるよう、配る二つ名を覚えておく。
+    remember_epithets(epithets)
     return names, epithets
 
 

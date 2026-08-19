@@ -454,10 +454,16 @@ def apply(ctx):
         # 確認画面に切り替えた時点で「会話を終了する」ボタンは画面から消えている。
         # だから押された時に控えておいたものを使う。
         end_entry = state["end_button"]
+        # 押す前の選択肢は手元に控えてから外す。
+        # 会話を閉じられなかったとき（終了ボタンを組めない・要約が返らない）に
+        # 戻す先がここにしか無い。先に捨てると、画面にはこの MOD の
+        # 2つのボタンだけが残り、「やめておく」も効かなくなる。
+        saved = state["saved_buttons"]
         state["saved_buttons"] = None
         end_conversation_then(
             app, end_entry, name,
-            lambda a: finish_leave(a, member_id, character, facility, node, name))
+            lambda a: finish_leave(a, member_id, character, facility, node, name),
+            saved=saved)
 
     # ------------------------------------------------ どこへ置くか（配置ルール）
     def choose_destination(app, character):
@@ -560,7 +566,7 @@ def apply(ctx):
             return None, None
         return value, None
 
-    def end_conversation_then(app, end_entry, name, follow_up):
+    def end_conversation_then(app, end_entry, name, follow_up, saved=None):
         """会話をゲーム自身の経路で閉じてから `follow_up` を走らせる。
 
         閉じ方そのものは `ui.Screen.end_conversation` に移した（`301_` と共有）。
@@ -576,6 +582,14 @@ def apply(ctx):
             # 打ち切られたら「実行中」の印を必ず戻す。
             # でないと以後ずっと別れられなくなる。
             state["leaving"] = False
+            # 画面も戻す。
+            # 会話が閉じなかった場合ゲームは組み直さないので、
+            # 押す前の選択肢を自分で描き直さないと確認画面から出られない。
+            if saved is not None:
+                try:
+                    apply_buttons(app, saved, "restore after abort")
+                except Exception:
+                    ctx.log_exc("leave party: cannot restore the buttons")
 
         screen.end_conversation(app, end_entry, follow_up,
                                 end_text=END_TEXT_TEMPLATE.format(name=name),

@@ -51,6 +51,14 @@ BUILD_NAME = "build.json"
 #: `out/recon_snapshots/<版>_YYYYMMDD.zip` の形で溜まる。
 SNAPSHOT_DIR_NAME = "recon_snapshots"
 
+#: 退避を残す本数の上限。古いものから消す。
+#: 版の判定は**安全側に倒してある**（読めない版は「別のビルド」。
+#: `_same_build` と tools/tests/test_recon_archive.py を参照）ので、
+#: 素性が読めるようになる前後で1回の起動から2つ以上できることがある。
+#: 実測では同じ版のまま 109 個 / 23MB まで溜まっていた。
+#: `tools/logrotate.py` は `out/*.log` しか回さないので、ここで刈る。
+SNAPSHOT_KEEP = 20
+
 
 # --------------------------------------------------------------------------
 # 分類
@@ -307,7 +315,7 @@ def probe_bug_sites() -> list[str]:
 # という記録がそのまま残っている。ここはその退避を自動でやる。
 #
 # **退避の引き金は「ビルドが変わったこと」で、出力の中身の差ではない。**
-# 中身は同じビルドでも走らせるたびに変わる ― リコンは `sys.modules` を見るので、
+# 中身は同じビルドでも走らせるたびに変わる。リコンは `sys.modules` を見るので、
 # 起動直後なら 3452 モジュール、長時間プレイ後なら 4235 モジュールになる
 # （同 §1.5）。中身の差を引き金にすると、同じ版のまま zip が毎回増えていき、
 # 肝心の「版が変わった1回」が埋もれる。
@@ -528,6 +536,7 @@ def archive_previous(recon_dir: str, identity: dict) -> str | None:
                 if os.path.isfile(source):
                     archive.write(source, name)
         os.replace(tmp, path)
+        _prune_snapshots(snap_dir)
     except Exception:
         log_exc("recon: cannot archive the previous dump")
         if tmp:
@@ -537,6 +546,37 @@ def archive_previous(recon_dir: str, identity: dict) -> str | None:
                 pass
         return None
     return path
+
+
+def _prune_snapshots(snap_dir: str, keep: int = None) -> int:
+    """古い退避を落とす。落とした数を返す。**例外は投げない。**
+
+    退避は調査のための控えなので、消せなくても支障は無い。
+    ここで投げると、書けたばかりの退避を「失敗」に見せてしまう。
+    """
+    keep = SNAPSHOT_KEEP if keep is None else keep
+    try:
+        if keep <= 0:
+            return 0
+        entries = [os.path.join(snap_dir, name)
+                   for name in os.listdir(snap_dir)
+                   if name.endswith(".zip")]
+        if len(entries) <= keep:
+            return 0
+        entries.sort(key=lambda path: (os.path.getmtime(path), path))
+        dropped = 0
+        for path in entries[:len(entries) - keep]:
+            try:
+                os.remove(path)
+                dropped += 1
+            except Exception:
+                pass
+        if dropped:
+            log("recon: pruned {} old snapshot(s); keeping {}".format(dropped, keep))
+        return dropped
+    except Exception:
+        log_exc("recon: cannot prune the snapshots")
+        return 0
 
 
 def _write_build(recon_dir: str, identity: dict, counts: dict) -> None:

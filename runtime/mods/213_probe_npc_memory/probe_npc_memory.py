@@ -446,7 +446,18 @@ def apply(ctx):
         make_conv_probe(_fn_name)
 
     # ------------------------------------------------------------ 送信境界
+    #: 1件の記録が 8〜12 行に分かれているので、行ごとの錠では足りない。
+    #: LLM の経路は同時に2本走ることがあり（それを測るのが `216_`）、
+    #: 錠が無いと**別の NPC の見出しの下に判定が並ぶ**。
+    #: 記録が汚いのではなく、測定として誤った答えになる。
+    record_lock = threading.Lock()
+
     def inspect_send(target, args, kwargs):
+        """1件ぶんの記録をまとめて書く（途中に他のスレッドを挟ませない）。"""
+        with record_lock:
+            return _inspect_send(target, args, kwargs)
+
+    def _inspect_send(target, args, kwargs):
         manager = args[0] if args else kwargs.get("manager_name")
         manager = manager if isinstance(manager, str) else repr(manager)
         # 311_ など MOD 自前の呼び出しは測らない（docstring のとおり）。

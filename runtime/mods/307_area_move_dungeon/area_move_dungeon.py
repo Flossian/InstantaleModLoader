@@ -18,7 +18,7 @@
 | ファイル | 中身 |
 |---|---|
 | `area_move_dungeon.py`（ここ） | 設定・文言・この MOD の方針・フックの設置 |
-| `journey.py` | 道中の控え（段階・保存・日数の予算）。ゲームには触らない |
+| `journey.py` | 道中の控え（段階・保存・渡した日数の記録）。ゲームには触らない |
 | `world.py` | ゲームのデータの読み書き。この MOD の方針は持たない |
 
 設定（`mod.json` から変えられる値）は必ずこのファイルの定数にすること。
@@ -73,19 +73,23 @@
 `QuestStartManager` の経路も残してあるが、もう必須ではない。
 控えが注入をまたぐ仕組みは `journey.py`。
 
-## 危険だが早い（日数の上限を持つ）
+## 危険だが早い（移動にかかる日数を決める）
 
     __main__:InstantaleApp.elapse_days(self, days)
 
 `__main__` にある唯一の日数送りの入口。
-危険な道を行っている間だけこれを包み、**道中と最後の移動を合わせて
-`TRAVEL_DAYS` 日（既定14＝馬車と同じ）を超えないよう渡す数を減らす**。
+最後のエリア移動のときだけこれを包み、**渡す数を `TRAVEL_DAYS` 日
+（既定14＝馬車と同じ）に差し替える**。上限ではなく、この日数になる。
 `orig` は必ず呼ぶので、暦の進め方も日次処理もゲームのまま。
 
-これが無いと、
-道中のクエストで日数が進んだうえに最後の移動で徒歩ぶん（実測3ヵ月）が乗り、**徒歩より遅くて危険なだけの道**になる。
-切り詰めるのは道を行っている間だけで、
-訓練・休養・他の依頼の日数送りには一切触らない。
+道中のクエストは日数を進めない（GAME.md §2.18）ので、触る相手はこの1回だけ。
+以前は「道中と移動の合計」を予算として全段階を切り詰めていたが、
+使い切ると以後の日数送りに 0 が渡り続け、控えが外れないと
+**その世界の暦が止まっていた**（VERIFICATION.md §3.13）。
+
+これが無いと最後の移動で徒歩ぶん（実測3ヵ月）が乗り、**徒歩より遅くて危険なだけの道**になる。
+差し替えるのは最後の移動の1回だけで、
+道中のクエスト・訓練・休養・他の依頼の日数送りには一切触らない。
 
 ## 体力（スタミナ）が3分の1を切っていたら断る
 
@@ -148,15 +152,14 @@ DIFFICULTY_MODE = "between"
 # 危険な道を素の依頼より重くしたいときに使う。
 DIFFICULTY_OFFSET = 0
 
-# 危険な道1回にかける日数の上限。
-# 道中のクエストと最後の移動の合計。
+# 危険な道の**エリア移動**にかかる日数。上限ではなく、この日数になる。
+# 道中のクエストは日数を進めない（GAME.md §2.18）ので、日数が動くのはここだけ。
 # 既定 14 は馬車と同じ（実測の確認画面が `馬車(1000G)`＝14日）。
 # 0 なら日数を1日も進めない。
-# 365 にすれば実質「上限なし」。
 TRAVEL_DAYS = 14
 
 # 踏破した後、実際の移動に**どのボタンの `args` を借りるか**。
-#   "walk"     徒歩（既定。所持金が要らない。日数は上の上限で切り詰める）
+#   "walk"     徒歩（既定。所持金が要らない。日数は上の設定になる）
 #   "carriage" 馬車（所持金が要る。足りないときの挙動は未確認）
 ARRIVAL_MODE = "walk"
 
@@ -199,7 +202,7 @@ REFUSE_TEXT = "この道を行くには、今は体力が無い。"
 REFUSE_DETAIL = "（体力 {value}/{limit} ― 休むか、医者にかかるかだ）"
 LOOKING_TEXT = "――{target}へ抜ける道の話を聞いている……"
 FOUND_TEXT = "「{title}」――{target}へ抜ける道は、そう呼ばれている。"
-DANGER_TEXT = "（この道のりの危険度: {difficulty} ／ かかる日数: 最大{days}日）"
+DANGER_TEXT = "（この道のりの危険度: {difficulty} ／ かかる日数: {days}日）"
 ARRIVE_TEXT = "――道は抜けた。{target}が見えてくる。"
 RETIRE_TEXT = "危険な道を引き返した。{origin}に留まっている。"
 NO_ROAD_TEXT = "（その道は今は見つからない）"
@@ -453,7 +456,8 @@ def apply(ctx):
             "difficulty": difficulty,
             "world": world.world_key(app),
             "at": time.time(),
-            # 道中と最後の移動で使った日数の合計（`TRAVEL_DAYS` の予算）。
+            # 最後の移動でゲームへ渡した日数。0 のまま着いたら
+            # `elapse_days` を通らなかった合図（`arrived_check` が WARN に出す）。
             "days_spent": 0,
             "moving_at": 0.0,
         })
@@ -625,13 +629,13 @@ def apply(ctx):
             return False
         if ui.area_id_of(ui.current_area(app)) != record.get("target_area_id"):
             return False
-        write("arrived: {!r} reached; {} day(s) spent of {} allowed".format(
+        write("arrived: {!r} reached; the road took {} day(s) (set to {})".format(
             record.get("target_area_name"), journey.days_spent(), TRAVEL_DAYS))
         if not journey.days_spent():
-            # 上限が効いていない可能性そのもの。
+            # 日数の差し替えが効いていない可能性そのもの。
             # ここは黙って通さない。
             write("WARN arrived: elapse_days was never seen; "
-                  "the {}-day limit did not apply to this build".format(TRAVEL_DAYS))
+                  "the {}-day setting did not apply to this build".format(TRAVEL_DAYS))
         # 着いた後は消さない。
         # あの一文はその時点では本当だったから。
         drop_road(app, "arrived", clear_note=False)
@@ -901,30 +905,48 @@ def apply(ctx):
 
     @ctx.wrap("__main__:InstantaleApp.elapse_days", required=False)
     def elapse_days(orig, self, days, *args, **kwargs):
-        """危険な道を行っている間だけ、日数の合計を `TRAVEL_DAYS` で頭打ちにする。
+        """危険な道の**エリア移動**にかかる日数を `TRAVEL_DAYS` にする。
 
-        渡す数を減らすだけで、暦の進め方も日次処理もゲームのまま（`orig` は必ず呼ぶ。呼ばずに戻ると、
+        渡す数を差し替えるだけで、暦の進め方も日次処理もゲームのまま（`orig` は必ず呼ぶ。呼ばずに戻ると、
         日数以外の後始末まで落とすことになる）。
         道を行っていないときは1バイトも触らない。
+
+        **触るのは段階 `moving`（最後のエリア移動）の、しかも最初の1回だけ。**
+        道中のクエストは日数を進めない（GAME.md §2.18）ので、
+        切り詰める相手はこの1回しか無い。
+        2回目以降を素通しするのは、到着の検出が外れたときの保険。
+        控えは `MOVE_TIMEOUT` まで残るので、その間の日数送りを見境なく
+        差し替えると、宿泊も休暇も1回ごとに `TRAVEL_DAYS` を課すことになる。
+
+        以前は「道中と移動の合計」を予算として全段階を切り詰めていた。
+        予算を使い切ると以後の日数送りに **0** が渡り続け、
+        `elapse_days` は宿泊も徒歩も休暇も通るので、控えが外れないと
+        **その世界の暦が止まっていた**（画面には何も出ない）。
+        道中が0日である以上、積み上げる意味は無かった。
         """
         try:
             journey.sync()
             observe_quest(self)
-            record = road_of(self, "armed", "ready", "arriving", "moving")
+            record = road_of(self, "moving")
             if record is not None and isinstance(days, (int, float)) \
                     and not isinstance(days, bool) and days > 0:
-                budget = max(0, int(TRAVEL_DAYS))
-                granted = journey.spend(days, budget)
-                if granted != days:
-                    write("days: {} -> {} (spent {}/{} on the road to {!r})".format(
-                        days, granted, journey.days_spent(), budget,
-                        record.get("target_area_name")))
-                else:
-                    write("days: +{} (spent {}/{})".format(
-                        granted, journey.days_spent(), budget))
+                spent = journey.days_spent()
+                if spent > 0:
+                    # この道ではもう渡している
+                    # ＝これはエリア移動の日数送りではない。素通しする。
+                    write("days: {} left alone (the road to {!r} already took "
+                          "{} day(s))".format(
+                              days, record.get("target_area_name"), spent))
+                    return orig(self, days, *args, **kwargs)
+                # 渡された日数は見ない。道にかかる日数はこちらが決める。
+                # `days > 0` の門は残す。ゲームが0を渡した回に日数を作らない。
+                granted = max(0, int(TRAVEL_DAYS))
+                journey.advance("moving", days_spent=granted)
+                write("days: {} -> {} (the road to {!r} takes {} day(s))".format(
+                    days, granted, record.get("target_area_name"), granted))
                 return orig(self, granted, *args, **kwargs)
         except Exception:
-            ctx.log_exc("road travel: cannot cap the days")
+            ctx.log_exc("road travel: cannot set the days")
         return orig(self, days, *args, **kwargs)
 
     @ctx.wrap("__main__:AreaMoveManager.__init__", required=False)

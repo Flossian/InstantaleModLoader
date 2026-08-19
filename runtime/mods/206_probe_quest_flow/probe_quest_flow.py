@@ -56,6 +56,11 @@ QUEST_TOP_KEYS = ("quest_title", "client_name", "request_summary", "difficulty",
 # 会話中に何度も走るものがあるため。
 MAX_SAMPLES = 6
 
+#: 20Hz の見張りが `quest_flow.log` へ書ける行数の上限。
+#: 見張りは状態が変わるたびに書くので、放っておくとログを埋める
+#: （実測 9.2MB / 42,498行のうち 27,724行がこの1行だった）。
+WAITSTATE_LOG_LIMIT = 400
+
 
 def _sig_of(func):
     """コンパイル済み関数でも読める範囲で引数の形を出す。"""
@@ -71,6 +76,10 @@ def apply(ctx):
     counts = {}
 
     write = ctx.logger(LOG_BASENAME)
+    # 20Hz の見張りからの記録だけは上限を掛ける。
+    # 上限が無いと `quest_flow.log` の3分の2がこの1行で埋まる
+    # （実測 9.2MB / 42,498行のうち 27,724行）。
+    note_wait = ctx.logger(LOG_BASENAME, cap=WAITSTATE_LOG_LIMIT)
 
     def sample(key):
         """記録回数の上限管理。True の間だけ書く。"""
@@ -480,7 +489,7 @@ def apply(ctx):
                            repr(hud_texts(app)))
                     if key != last:
                         last = key
-                        write("waitstate -> {}".format(wait_state(app)))
+                        note_wait("waitstate -> {}".format(wait_state(app)))
             except Exception:
                 pass        # 監視で本体を巻き込まない
             time.sleep(WATCH_POLL)
@@ -648,9 +657,21 @@ def apply(ctx):
         return None
 
     def probe_quest_types():
+        """世界が載るのを待ってから、総当たりを**メインスレッドで**走らせる。
+
+        待つのはこのスレッドでよい（待つだけなので何にも触らない）。
+        総当たりのほうは `QuestChoiceManager` をプレイヤーの生きた
+        `world.quests` に対して実際に組むので、ゲームのスレッドで行う。
+        ここは「読むだけ」の probe の中で唯一ゲーム側の
+        コンストラクタを呼ぶ場所で、別スレッドから触れてよい保証が無い。
+        """
         app = wait_for_world()
         if app is None:
             return
+        ui.scheduler(ctx, "quest probe")(lambda: _guarded_probe(
+            lambda: run_quest_type_probe(app)))
+
+    def run_quest_type_probe(app):
         main = sys.modules.get("__main__")
         cls = getattr(main, "QuestChoiceManager", None) if main else None
         if not isinstance(cls, type):
