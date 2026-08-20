@@ -88,13 +88,45 @@ NPC の応答が無条件に友好的になる ＝ 交渉も説得も勝手に�
 ここが実機での確認箇所（exe の定数からは閾値が 6/8/11/14/17 と読めるが、
 そちらは根拠にしていない。VERIFICATION.md §3.23）。
 
-##### 相手が誰かは呼び出し元のフレームから拾う
+##### 相手が誰かは、会話のマネージャを包んで拾う
 
 `document_emotion_scores_new` の引数に NPC は居ない。
-呼び出し元のフレームを遡り、`relationship` に `"player"` を持つ
-`Character`（プレイヤー自身を除く）を探す。
-見つからなければ好みの増減を 0 にする（親しさのぶんだけが効く）。
-拾えなかった回は記録に1度だけ出る。
+そして**呼び出し元のフレームからも拾えない** ―
+ゲームの生きたフレームは `f_locals` が空で
+（Nuitka はトレースバックに載るときしか中身を作らない。
+実測: 会話終了の3フレームすべて「ローカル 0件」。VERIFICATION.md §3.23）、
+フレームを遡る手はこのゲームでは何も返さない。
+
+**相手が引数として届く場所を包む**しかない。呼ばれているのは2経路:
+
+```
+会話の開始 ConversationStartManager.execute -> ..._method_0 -> _1
+           __init__(self, app, character_id) が相手を抱えている
+会話の終了 ConversationEndManager.execute -> finish_conversation
+           -> resolve_conversation(self, character_id)   ← 引数に相手の id
+```
+
+どちらも、通っている間だけ相手の id をスレッドごとに控える
+（要約は別スレッドで回る。GAME.md §2.25）。
+**終了側を落とすと、会話のたびに好みが 0 の値で上書きされる**
+（初版がこれで、開始時に付けた差が会話の終わりに消えていた）。
+
+id は**世界の名簿（`world.characters`）で引けたものだけ**を採る。
+`in_conversation_id` のような「相手の id とは限らない値」を鍵にすると、
+会話ごとに違う鍵になって好みが「気まぐれ」に化けるため。
+
+フレームを遡る側も残してある（ローカルそのもの → ローカルが抱えている Character
+→ ローカルが持っている id → ローカル名が id の4通り）。
+実機では空振りするが、`f_locals` が読める環境ではこちらが先に当たる。
+Character かどうかは**持ち物で見分ける**（`relationship` が dict で、
+`profile` / `personality` / `life_log` などが2つ以上ある）。
+`relationship` に `"player"` の欄が在ることは条件にしない ―
+初めて会う相手にはまだ無い可能性があり、
+そこを条件にすると**いちばん効かせたい相手だけ外れる**。
+
+どちらでも決まらなければ好みの増減を 0 にし（親しさのぶんだけが効く）、
+**その場のローカルと `self` の中身を、呼び出し元ごとに1度だけ記録に写す** ―
+次に外れたとき、相手がどこに居るのかがログだけで分かるようにするため。
 
 好みの増減は「世界名:NPC の id:プレイヤー名」の md5 から決める決定的な値で、
 遊び直しても同じ相手なら同じになる。
@@ -117,6 +149,7 @@ NPC の応答が無条件に友好的になる ＝ 交渉も説得も勝手に�
 
 import hashlib
 import sys
+import threading
 
 from instantale_modloader import frames, ui
 
@@ -157,6 +190,33 @@ MIN_PROBE_ROWS = 10
 
 # 呼び出し元をどこまで遡って NPC を探すか。
 FRAME_DEPTH_MAX = 24
+
+# 呼び出し元のフレームで、オブジェクトの属性として見る名前。
+ATTR_HINTS = ("character_instance", "character", "npc", "npc_instance",
+              "target_character", "conversation_character")
+
+# 相手の id が入っている名前。
+# `ConversationStartManager.__init__(self, app, character_id)` ―
+# 実機で通っているのはここ（`out/recon/targets.txt`）。
+ID_HINTS = ("character_id", "npc_id", "target_character_id",
+            "in_conversation_id", "character_key")
+
+# Character らしさの目印。
+# 2つ以上あれば Character とみなす（型名ではなく持ち物で見分ける）。
+CHARACTER_MARKS = ("profile", "personality", "life_log", "current_log",
+                   "speech_style", "ability_scores", "look_description")
+
+# 属性を覗きに行かない型（覗いても意味が無く、手間だけ増える）。
+PLAIN_TYPES = (str, bytes, int, float, bool, list, tuple, dict, set, frozenset)
+
+# 1フレームあたり見るローカルの数。
+MAX_LOCALS_PER_FRAME = 40
+
+# 相手が拾えなかったときに中身を写すフレームの数と、写す呼び出し元の数。
+# 呼び出し元ごとに1度写すのは、経路が1つとは限らないため
+# （実機では会話の開始と終了の2経路から呼ばれていた）。
+BLIND_FRAMES = 3
+BLIND_SITES = 4
 
 # 呼び出し元のフレームで先に見る変数名（会話系5関数の並びより。GAME.md §2.24）。
 PREFERRED_LOCALS = ("character_instance", "npc", "npc_instance",
@@ -215,12 +275,23 @@ def _ladder_of(rows, index):
     return ladder
 
 
-def _edges_of(values, rows, index):
-    """`値 -> 段` の並びが変わった境目。閾値を記録に残すためだけのもの。"""
-    edges, previous = [], None
-    for value, row in zip(values, rows):
+#: 「まだ始まっていない」の番人。
+#: `None` は段の値としても使う（文の付かない帯）ので、混ぜられない。
+_UNSET = object()
+
+
+def _edges_of(pairs, index):
+    """`値 -> 段` の並びが変わった境目。閾値を記録に残すためだけのもの。
+
+    `(引いた値, 戻り値)` の組で受け取る。**値と行を別々に渡さない** ―
+    ゲームが受け付けない点は飛ばすので、引いた値の列と行の列は長さが揃わず、
+    別々に渡すと閾値が丸ごとずれる（実機のログで好感度の閾値が -180 から
+    始まっていた）。
+    """
+    edges, previous = [], _UNSET
+    for value, row in pairs:
         rung = row[index] if index < len(row) else None
-        if previous is not None and rung != previous:
+        if previous is not _UNSET and rung != previous:
             edges.append("{}から{!r}".format(value, rung))
         previous = rung
     return edges
@@ -229,7 +300,7 @@ def _edges_of(values, rows, index):
 def apply(ctx):
     append = ctx.logger(LOG_BASENAME)
     state = {"lines": 0, "ladders": False, "taste": {},
-             "no_npc_warned": False}
+             "blind": set(), "talking": {}, "pending": {}}
 
     def write(text):
         if state["lines"] >= MAX_LINES:
@@ -261,15 +332,17 @@ def apply(ctx):
             except Exception:
                 return None
 
-        charm_rows, affinity_rows = [], []
+        charm_pairs, affinity_pairs = [], []
         for value in CHARISMA_PROBE:
             row = probe(0, value)
             if row is not None:
-                charm_rows.append(row)
+                charm_pairs.append((value, row))
         for value in AFFINITY_PROBE:
             row = probe(value, CHARISMA_FIXED)
             if row is not None:
-                affinity_rows.append(row)
+                affinity_pairs.append((value, row))
+        charm_rows = [row for _, row in charm_pairs]
+        affinity_rows = [row for _, row in affinity_pairs]
         # 段の並びを見分けるには、動く位置が分かるだけの点数が要る。
         if len(charm_rows) < MIN_PROBE_ROWS or len(affinity_rows) < MIN_PROBE_ROWS:
             return None, "総当たりで引けた点が少なすぎる（魅力 {} 点 / 好感度 {} 点）".format(
@@ -301,8 +374,8 @@ def apply(ctx):
         return {"charm_index": charm_index, "charm": charm,
                 "affinity_index": affinity_index, "affinity": affinity,
                 "neutral": affinity.index(neutral_text),
-                "charm_edges": _edges_of(CHARISMA_PROBE, charm_rows, charm_index),
-                "affinity_edges": _edges_of(AFFINITY_PROBE, affinity_rows,
+                "charm_edges": _edges_of(charm_pairs, charm_index),
+                "affinity_edges": _edges_of(affinity_pairs,
                                             affinity_index)}, None
 
     def report(ladders):
@@ -331,11 +404,34 @@ def apply(ctx):
         player = frames.attr(app, "player", None)
         return player if player not in (None, frames.MISSING) else None
 
-    def looks_like_npc(value, player):
+    def world_of():
+        app = ui.find_app()
+        return frames.attr(app, "world", None) if app is not None else None
+
+    def usable_id(value):
+        """id として使える値か。`frames.attr` の番人（角括弧の印）を弾く。"""
+        if isinstance(value, bool):
+            return False
+        if isinstance(value, int):
+            return True
+        return isinstance(value, str) and bool(value) and not value.startswith("<")
+
+    def npc_like(value, player):
+        """Character らしいか。**型名ではなく持ち物で見分ける**（TECH.md §7.1）。
+
+        `relationship` に `"player"` が在ることは条件にしない。初対面の NPC は
+        まだその欄を持っていない可能性があり、そこを条件にすると
+        **いちばん効かせたい相手**（初めて会う人）だけ外れる。
+        """
         if value is None or value is player:
             return None
-        relationship = frames.attr(value, "relationship", None)
-        if not isinstance(relationship, dict) or "player" not in relationship:
+        if not isinstance(frames.attr(value, "relationship", None), dict):
+            return None
+        marks = 0
+        for name in CHARACTER_MARKS:
+            if frames.attr(value, name, frames.MISSING) is not frames.MISSING:
+                marks += 1
+        if marks < 2:
             return None
         if frames.attr(value, "is_player", None) is True:
             return None
@@ -344,9 +440,38 @@ def apply(ctx):
             return None
         return value
 
-    def npc_in_frames(player):
-        """呼び出し元を遡って NPC を探す。段数は数えない（TECH.md §5.2）。"""
-        index = 1
+    def probe_targets(local_vars):
+        """属性を覗いてよいものだけ返す（ゲームのオブジェクト）。"""
+        out = []
+        for value in list(local_vars.values())[:MAX_LOCALS_PER_FRAME]:
+            if value is None or isinstance(value, PLAIN_TYPES):
+                continue
+            out.append(value)
+        return out
+
+    def scan_frames(player):
+        """呼び出し元を遡って `(NPC, その id, 見たフレーム)` を返す。
+
+        段数は数えない（TECH.md §5.2）。1つのフレームにつき順に4通り試す:
+
+        1. ローカルそのものが Character（会話系5関数の `character_instance`）
+        2. ローカルが抱えている Character（マネージャの `self.character_instance`）
+        3. ローカルが持っている id（`ConversationStartManager` は
+           `__init__(self, app, character_id)`。**実機で通っているのはここ**）
+        4. ローカルの名前が id そのもの
+
+        3と4の id は、**世界の名簿（`world.characters`）で引けたものを優先する**。
+        会話の通し番号のような「相手ではない id」を掴むと、全員が同じ鍵になって
+        好みが一律に戻ってしまうため。
+
+        1つ目だけで足りると思っていたのが初版で、実機の呼び出し元
+        （`ConversationStartManager.conversation_start_method_1(self)`）には
+        マネージャしか居ないため何も拾えなかった（VERIFICATION.md §3.23）。
+        """
+        # `weak` は「id らしいが世界の名簿に無い値」。会話の通し番号のような
+        # **相手ではない id** を掴むと、全員が同じ鍵になって好みが一律に戻る。
+        # 名簿で引ける id を優先し、これは最後まで何も無かったときだけ使う。
+        index, seen, weak = 1, [], None
         while index < FRAME_DEPTH_MAX:
             try:
                 frame = sys._getframe(index)
@@ -357,51 +482,219 @@ def apply(ctx):
             if frames.is_ours(code.co_filename):
                 continue                      # ローダと mod 自身のフレーム
             if code.co_name == "<module>":
-                # モジュール直下のフレームの中身はグローバル。
-                # 呼び出しの文脈ではないので、たまたま置かれている
-                # Character を掴まない。
+                # モジュール直下の中身はグローバル。
+                # 呼び出しの文脈ではないので、
+                # たまたま置かれている Character を掴まない。
                 continue
             try:
                 # `dict()` で写す。
                 # Python 3.13 以降の `f_locals` は
                 # dict ではなく書き戻し用のプロキシで、
-                # `isinstance(..., dict)` で弾くと関数のフレームが1つも読めなくなる（ゲームは 3.10 だが、
+                # `isinstance(..., dict)` で弾くと関数のフレームが
+                # 1つも読めなくなる（ゲームは 3.10 だが、
                 # オフラインの試験は手元の Python で走る）。
                 local_vars = dict(frame.f_locals)
             except Exception:
                 continue
-            for name in PREFERRED_LOCALS:
-                found = looks_like_npc(local_vars.get(name), player)
+            seen.append((code, local_vars))
+            for name in PREFERRED_LOCALS:                          # 1
+                found = npc_like(local_vars.get(name), player)
                 if found is not None:
-                    return found
-            for value in list(local_vars.values()):
-                found = looks_like_npc(value, player)
+                    return found, None, seen
+            for value in probe_targets(local_vars):
+                found = npc_like(value, player)
                 if found is not None:
-                    return found
-        return None
+                    return found, None, seen
+            for value in probe_targets(local_vars):                # 2
+                for name in ATTR_HINTS:
+                    found = npc_like(frames.attr(value, name, None), player)
+                    if found is not None:
+                        return found, None, seen
+            for value in probe_targets(local_vars):                # 3
+                for name in ID_HINTS:
+                    raw = frames.attr(value, name, None)
+                    if not usable_id(raw):
+                        continue
+                    if character_of(str(raw)) is not None:
+                        return None, str(raw), seen
+                    if weak is None:
+                        weak = str(raw)        # 名簿に無い。最後の手段に取っておく
+            for name in ID_HINTS:                                  # 4
+                raw = local_vars.get(name)
+                if not usable_id(raw):
+                    continue
+                if character_of(str(raw)) is not None:
+                    return None, str(raw), seen
+                if weak is None:
+                    weak = str(raw)
+        return None, weak, seen
 
-    def key_of(npc, player):
-        """「世界名:NPC の id:プレイヤー名」。id は `world.characters` の鍵が本命。"""
-        app = ui.find_app()
-        world = frames.attr(app, "world", None) if app is not None else None
-        world_name = frames.text_of(world, "name") or "?"
-        npc_id = None
-        characters = frames.attr(world, "characters", None)
+    def character_of(npc_id):
+        characters = frames.attr(world_of(), "characters", None)
+        if not isinstance(characters, dict):
+            return None
+        return characters.get(npc_id, characters.get(str(npc_id)))
+
+    def id_of(npc):
+        """`world.characters` の鍵が本命。無ければ `.id`（`213_` と同じ順）。"""
+        characters = frames.attr(world_of(), "characters", None)
         if isinstance(characters, dict):
             for key, value in characters.items():
                 if value is npc:
-                    npc_id = str(key)
-                    break
+                    return str(key)
+        value = frames.attr(npc, "id", None)
+        if usable_id(value):
+            return str(value)
+        return frames.text_of(npc, "name")
+
+    def report_blind(seen):
+        """相手が拾えなかったときに、**その場に何が居たか**を1度だけ残す。
+
+        推測で拾い方を足すより、実機のフレームの中身を1回写すほうが速い
+        （初版はこれを持たず、拾えないことしか分からないまま実機を1往復した）。
+        """
+        site = seen[0][0].co_name if seen else "?"
+        if site in state["blind"] or len(state["blind"]) >= BLIND_SITES:
+            return
+        state["blind"].add(site)
+        write("相手が拾えない。好みの差は付かない（親しさだけ効く）。"
+              "呼び出し元: {}".format(frames.caller()))
+        holder = state["pending"].get(threading.get_ident())
+        if holder is not None:
+            # 会話のマネージャは通ったのに相手が決まらなかった場合。
+            # **属性は名前で推測せず全部出す**（TECH.md §6.3）。ここに相手が
+            # 居るはずなので、次の版で見る名前はこの一覧から選ぶ。
+            try:
+                items = sorted(vars(holder).items())
+            except Exception:
+                items = []
+            write("    {} の中身 {}件（ここに相手が居るはず）".format(
+                type(holder).__name__, len(items)))
+            for name, value in items[:MAX_LOCALS_PER_FRAME]:
+                write("      {:<24} = {}".format(name, frames.repr_value(value)))
+        for code, local_vars in seen[:BLIND_FRAMES]:
+            write("    {} ({}:{}) ローカル {}件".format(
+                frames.owner_of(code) or code.co_name, code.co_filename,
+                code.co_firstlineno, len(local_vars)))
+            for name, value in list(local_vars.items())[:MAX_LOCALS_PER_FRAME]:
+                write("      {:<24} = {}".format(name, frames.repr_value(value)))
+            # 属性は名前で推測せず全部出す（TECH.md §6.3）。
+            # 相手を抱えているのはたいてい `self` のほう。
+            holder = local_vars.get("self")
+            if holder is None or isinstance(holder, PLAIN_TYPES):
+                continue
+            try:
+                keys = sorted(vars(holder))
+            except Exception:
+                keys = []
+            if keys:
+                write("      self の属性: {}".format(
+                    ", ".join(keys[:MAX_LOCALS_PER_FRAME])))
+
+    def find_target(player):
+        """`(NPC, 好みの鍵)`。鍵が None なら好みの差は付かない。"""
+        npc, npc_id, seen = scan_frames(player)
+        if npc is not None and npc_id is None:
+            npc_id = id_of(npc)
         if npc_id is None:
-            value = frames.attr(npc, "id", None)
-            if value not in (None, frames.MISSING):
-                npc_id = str(value)
+            # フレームから拾えないときの受け皿。
+            # 会話の入口を通っている間だけ控えてある相手（`conversation_phase`）。
+            npc_id = state["talking"].get(threading.get_ident())
         if npc_id is None:
-            npc_id = frames.text_of(npc, "name")
-        if npc_id is None:
-            return None
-        return "{}:{}:{}".format(world_name, npc_id,
-                                 frames.text_of(player, "name") or "?")
+            report_blind(seen)
+            return None, None
+        if npc is None:
+            npc = character_of(npc_id)
+        return npc, "{}:{}:{}".format(
+            frames.text_of(world_of(), "name") or "?", npc_id,
+            frames.text_of(player, "name") or "?")
+
+    # -- いま誰と話しているか -----------------------------------------------
+    #
+    # **実機ではこちらが本命。** ゲームのフレームは `f_locals` が**空**で
+    # （Nuitka はトレースバックに載るときしか中身を作らない。実測: 会話終了の
+    # 3フレームすべて「ローカル 0件」。VERIFICATION.md §3.23）、上のフレーム
+    # 走査は実機では何も拾えない。**引数として受け取れる場所を包む**しかない。
+    #
+    # 呼ばれているのは2経路（実機のログ）:
+    #
+    #   会話の開始 ConversationStartManager.execute -> ..._method_0 -> _1
+    #              `__init__(self, app, character_id)` が相手を抱えている
+    #   会話の終了 ConversationEndManager.execute -> finish_conversation
+    #              -> resolve_conversation(self, character_id)
+    #              **引数に相手の id がそのまま来る**
+    #
+    # 通っている間だけ相手を控える。スレッドごとに持つのは、会話の要約が別の
+    # スレッドで回るため（GAME.md §2.25）。
+    #
+    # `safe=True` は付けない。この包みは**元を呼んだ後にも後始末をする**ので、
+    # そこで投げると `_guard` が「元は既に走った」と見なして**もう一度**呼ぶ。
+    # 代わりに、後始末まで含めて自分で握り潰す。
+    def phase_target(holder, args, kwargs):
+        """包んだメソッドの引数と `self` から相手の id を決める。
+
+        id は**世界の名簿で引けたものだけ**を採る。`in_conversation_id` の
+        ような「相手の id とは限らない値」を鍵にすると、会話ごとに違う鍵に
+        なって好みが「気まぐれ」に化けるため。決められなければ何も控えない。
+        """
+        player = player_of()
+        values = list(args) + list(kwargs.values())
+        for value in values:                       # 引数に相手そのもの
+            found = npc_like(value, player)
+            if found is not None:
+                return id_of(found)
+        for value in values:                       # 引数に相手の id
+            if usable_id(value) and character_of(str(value)) is not None:
+                return str(value)
+        for name in ATTR_HINTS:                    # self が抱えている相手
+            found = npc_like(frames.attr(holder, name, None), player)
+            if found is not None:
+                return id_of(found)
+        for name in ID_HINTS:                      # self が持っている id
+            raw = frames.attr(holder, name, None)
+            if usable_id(raw) and character_of(str(raw)) is not None:
+                return str(raw)
+        return None
+
+    @ctx.wrap("__main__:ConversationStartManager.execute", required=False)
+    @ctx.wrap("__main__:ConversationStartManager.conversation_start_method_0",
+              required=False)
+    @ctx.wrap("__main__:ConversationStartManager.conversation_start_method_1",
+              required=False)
+    @ctx.wrap("__main__:ConversationStartManager.conversation_start_method_3",
+              required=False)
+    @ctx.wrap("__main__:ConversationEndManager.execute", required=False)
+    @ctx.wrap("__main__:ConversationEndManager.finish_conversation",
+              required=False)
+    @ctx.wrap("__main__:ConversationEndManager.resolve_conversation",
+              required=False)
+    def conversation_phase(orig, self, *args, **kwargs):
+        thread, before, store, marked = None, None, None, False
+        try:
+            thread = threading.get_ident()
+            npc_id = phase_target(self, args, kwargs)
+            # 相手が決まらなかったマネージャは**その場では書かない**。
+            # 外側のメソッド（`execute` など）は相手を持っていないことがあり、
+            # 内側（`resolve_conversation`）で決まる。ここで書くと「決まらない」
+            # という行が、実際には決まっている会話にも出てしまう。
+            # 控えておいて、段を決める側が本当に外したときに一緒に写す。
+            store = state["talking"] if npc_id is not None else state["pending"]
+            before = store.get(thread)
+            store[thread] = npc_id if npc_id is not None else self
+            marked = True
+        except Exception:
+            marked = False
+        try:
+            return orig(self, *args, **kwargs)
+        finally:
+            try:
+                if marked:
+                    if before is None:
+                        store.pop(thread, None)
+                    else:
+                        store[thread] = before
+            except Exception:
+                pass
 
     # ------------------------------------------------------------ 段を決める
     def decide(ladders, row, taste):
@@ -496,15 +789,7 @@ def apply(ctx):
 
             try:
                 player = player_of()
-                npc = npc_in_frames(player)
-                key = key_of(npc, player) if npc is not None else None
-                if key is None and not state["no_npc_warned"]:
-                    # 1度だけ記録する。
-                    # 毎回出すと、効いている行が埋まる。
-                    state["no_npc_warned"] = True
-                    write("{}。好みの差は付かない（親しさだけ効く）。呼び出し元: {}".format(
-                        "呼び出し元から NPC を拾えない" if npc is None
-                        else "相手は拾えたが id も名前も読めない", frames.caller()))
+                npc, key = find_target(player)
                 taste = state["taste"].get(key)
                 if taste is None:
                     taste = _taste_of(key, TASTE_SPREAD)

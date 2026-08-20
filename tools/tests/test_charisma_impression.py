@@ -16,8 +16,16 @@
   決定的  … 同じ相手・同じ条件なら何度呼んでも同じ段
   設定    … 好みの幅0 / 最上段を切る / 親しさを見ない、の3つが効く
   相手なし … 呼び出し元に NPC が居なくても落ちず、親しさだけが効く
+  マネージャ … `self.character_id` しか無いフレームからでも相手が決まる
+  抱え込み … `self.character_instance` に相手を持っているフレームでも決まる
+  初対面  … `relationship` が空の NPC でも相手として認める
+  名簿優先 … 相手ではない id（会話の通し番号）より、外側の相手を採る
+  受け皿  … フレームが読めなくても、会話の入口で控えた相手で決まる
+  終了経路 … 会話の終了（`resolve_conversation` の引数）からも相手が決まる
+  診断    … 拾えないときは、その場のローカルと `self` の属性を記録に残す
   空段    … 段が「無い」帯（戻り値が1要素）でも列を壊さない
   言語    … 文言が英語でも同じ結果（段は位置で扱う）
+  閾値    … 引けない点を飛ばしても、記録に残る閾値がずれない
   別物    … 段が単調でない・動く位置が2つあるゲームでは何もしない
   無事故  … どの経路でも ctx.log_exc が呼ばれない
 
@@ -129,6 +137,9 @@ def make_game(charm_table=CHARM_RUNGS, broken=None):
         charm = rung_at(charm_table, player_charisma)
         if charm is not None:
             row.append(charm)
+        if broken == "picky" and (player_charisma < 4 or affinity < -100):
+            # 素の関数は定義域の外で投げる（実測: `charisma=0` で ValueError）。
+            raise ValueError("max() arg is an empty sequence")
         if broken == "two_moving":
             # 魅力で動く位置が2つあるゲーム。
             row.append("x" if player_charisma < 10 else "y")
@@ -141,13 +152,141 @@ def make_game(charm_table=CHARM_RUNGS, broken=None):
 
 
 class Character(object):
+    """`scripts.characters.Character` 相当。
+
+    mod は Character を**型名ではなく持ち物**で見分けるので、`__init__` が
+    持っている項目（`out/recon/targets.txt` の 639 行）を並べておく。
+    ここを削ると、実機では通る判定がオフラインだけ落ちる。
+    """
+
     def __init__(self, name, is_player=False):
         self.name = name
+        self.profile = "{}の来歴".format(name)
+        self.personality = "穏やか"
+        self.speech_style = "丁寧"
+        self.look_description = "旅装"
+        self.life_log = []
+        self.current_log = []
         self.relationship = {"player": {"affinity": 0, "affinity_text": [],
                                         "relationship": [],
                                         "conversation_count": 0}}
         self.config = {"is_player": is_player}
         self.is_player = is_player
+
+
+class Manager(object):
+    """`ConversationStartManager` 相当。
+
+    実機の呼び出し元がこれ。`__init__(self, app, character_id)` で、
+    `conversation_start_method_1(self)` の中には **self しか居ない**
+    （VERIFICATION.md §3.23）。
+    """
+
+    def __init__(self, character_id, affinity, charisma):
+        self.app = None
+        self.character_id = character_id
+        self.text_store = {}
+        self._affinity = affinity
+        self._charisma = charisma
+
+    def execute(self, choice_text=None):
+        return self.conversation_start_method_0()
+
+    def conversation_start_method_0(self):
+        return self.conversation_start_method_1()
+
+    def conversation_start_method_1(self):
+        return sys.modules["scripts.functions"].document_emotion_scores_new(
+            self._affinity, self._charisma)
+
+    def conversation_start_method_3(self):
+        return None
+
+
+class EndManager(object):
+    """`ConversationEndManager` 相当。
+
+    `__init__(self, app, in_conversation_id, finisher, end_text)` /
+    `resolve_conversation(self, character_id)`（`out/recon/targets.txt`）。
+    **相手の id は引数で来る**。`in_conversation_id` は相手の id とは限らないので、
+    ここでは名簿に無い値を入れてある（掴んだら好みが会話ごとに変わってしまう）。
+    """
+
+    def __init__(self, in_conversation_id, character_id, affinity, charisma):
+        self.in_conversation_id = in_conversation_id
+        self.end_text = "会話を終了する"
+        self._real = character_id
+        self._affinity = affinity
+        self._charisma = charisma
+
+    def execute(self, choice_text=None):
+        return self.finish_conversation()
+
+    def finish_conversation(self):
+        return self.resolve_conversation(self._real)
+
+    def resolve_conversation(self, character_id):
+        return sys.modules["scripts.functions"].document_emotion_scores_new(
+            self._affinity, self._charisma)
+
+
+class EndManagerBare(object):
+    """相手の id を引数で受け取らないまま終了処理へ入るマネージャ。
+
+    持っているのは `in_conversation_id` だけ ― **相手の id とは限らない値**。
+    これを鍵にすると好みが会話ごとに変わるので、mod は採ってはいけない。
+    """
+
+    def __init__(self, in_conversation_id, affinity, charisma):
+        self.in_conversation_id = in_conversation_id
+        self.end_text = "会話を終了する"
+        self._affinity = affinity
+        self._charisma = charisma
+
+    def execute(self, choice_text=None):
+        return sys.modules["scripts.functions"].document_emotion_scores_new(
+            self._affinity, self._charisma)
+
+
+class Holder(object):
+    """相手を id ではなく実体で抱えているマネージャ。"""
+
+    def __init__(self, character_instance, affinity, charisma):
+        self.character_instance = character_instance
+        self._affinity = affinity
+        self._charisma = charisma
+
+    def run(self):
+        return sys.modules["scripts.functions"].document_emotion_scores_new(
+            self._affinity, self._charisma)
+
+
+class Session(object):
+    """相手ではない id（会話の通し番号）を持つ内側の呼び出し元。
+
+    こういう id を掴むと**全員が同じ鍵**になり、好みが一律に戻る。
+    """
+
+    def __init__(self, affinity, charisma):
+        self.character_id = "session-1"          # 世界の名簿には無い
+        self._affinity = affinity
+        self._charisma = charisma
+
+    def run(self):
+        return sys.modules["scripts.functions"].document_emotion_scores_new(
+            self._affinity, self._charisma)
+
+
+class Bare(object):
+    """相手の手掛かりを何も持っていない呼び出し元。"""
+
+    def __init__(self):
+        self.phase = "start"
+        self.text_store = {}
+
+    def run(self, affinity, charisma):
+        return sys.modules["scripts.functions"].document_emotion_scores_new(
+            affinity, charisma)
 
 
 class World(object):
@@ -212,6 +351,31 @@ def load_mod():
 LOG_NAME = "charisma_impression.log"
 OUT_DIR = os.path.join(HERE, os.pardir, os.pardir, "out", "test")
 
+#: 直前の setup() が組んだ世界（相手の拾い方の検査で使う）。
+LAST = {}
+
+# `ConversationStartManager` の4メソッド。mod はここを包んで
+# 「いま誰と話しているか」を控える（フレームが読めないときの受け皿）。
+MANAGER_TARGETS = (
+    ("__main__:ConversationStartManager.execute", "execute"),
+    ("__main__:ConversationStartManager.conversation_start_method_0",
+     "conversation_start_method_0"),
+    ("__main__:ConversationStartManager.conversation_start_method_1",
+     "conversation_start_method_1"),
+    ("__main__:ConversationStartManager.conversation_start_method_3",
+     "conversation_start_method_3"),
+)
+
+END_BARE_TARGETS = (("__main__:ConversationEndManager.execute", "execute"),)
+
+END_TARGETS = (
+    ("__main__:ConversationEndManager.execute", "execute"),
+    ("__main__:ConversationEndManager.finish_conversation",
+     "finish_conversation"),
+    ("__main__:ConversationEndManager.resolve_conversation",
+     "resolve_conversation"),
+)
+
 
 def setup(charm_table=CHARM_RUNGS, broken=None, spread=1, steps=4,
           allow_top=True, npc_names=("エルドラ",), fresh_log=True):
@@ -238,6 +402,8 @@ def setup(charm_table=CHARM_RUNGS, broken=None, spread=1, steps=4,
     main.InstantaleApp = app_cls
     main._test_app = app_cls(world, player)
 
+    LAST.update(world=world, player=player, npcs=npcs)
+
     mod = load_mod()
     mod.TASTE_SPREAD = spread
     mod.ACQUAINTANCE_STEPS = steps
@@ -261,6 +427,45 @@ def setup(charm_table=CHARM_RUNGS, broken=None, spread=1, steps=4,
             affinity, charisma)
 
     return mod, ctx, call, npcs
+
+
+def install_manager_hooks(ctx, base=Manager, targets=MANAGER_TARGETS,
+                          cls_name="ConversationStartManager"):
+    """会話の入口・出口のフックを、偽のマネージャへ本番と同じ形で載せる。"""
+    cls = type(cls_name, (base,), {})
+    for target, name in targets:
+        hook = ctx.hooks.get(target)
+        if hook is None:
+            continue
+        original = getattr(base, name)
+
+        def make(hook=hook, original=original):
+            def method(self, *args, **kwargs):
+                return hook(original, self, *args, **kwargs)
+            return method
+
+        setattr(cls, name, make())
+    return cls
+
+
+def npc_id_of(npc):
+    """`world.characters` の鍵（setup が振った id）。"""
+    for key, value in LAST["world"].characters.items():
+        if value is npc:
+            return key
+    raise AssertionError("npc not in world")
+
+
+def call_via_manager(npc, affinity, charisma, cls=Manager):
+    """id しか持たないマネージャからの呼び出し（実機と同じ形）。"""
+    return cls(npc_id_of(npc), affinity, charisma).conversation_start_method_1()
+
+
+def call_via_session(npc, affinity, charisma):
+    """内側に「相手ではない id」、外側に相手が居る呼び出し。"""
+    character_instance = npc
+    assert character_instance is not None
+    return Session(affinity, charisma).run()
 
 
 def call_without_npc(affinity, charisma):
@@ -390,8 +595,86 @@ check("相手なし: 落ちずに段が返る", isinstance(alone, list) and alon
 check("相手なし: 親しさだけが効く（最上段は出ない）",
       charm_of(alone) != "耐え難いほど魅力的に見えている", alone)
 check("相手なし: 拾えなかったことが記録に1度だけ出る",
-      log_text(ctx).count("呼び出し元から NPC を拾えない") == 1,
-      log_text(ctx)[-400:])
+      log_text(ctx).count("相手が拾えない") == 1, log_text(ctx)[-400:])
+
+# ------------------------------------------------------------ 相手の拾い方
+print("\n-- 相手の拾い方")
+mod, ctx, call, npcs = setup(npc_names=NAMES)
+by_manager = {npc.name: charm_of(call_via_manager(npc, 0, TOP_CHARM))
+              for npc in npcs}
+check("マネージャ: self.character_id しか無くても相手が決まる",
+      len(set(by_manager.values())) >= 2, by_manager)
+check("マネージャ: 引数から相手を渡したときと同じ段になる",
+      by_manager == {npc.name: charm_of(call(npc, 0, TOP_CHARM)) for npc in npcs},
+      by_manager)
+check("マネージャ: 相手の名前も記録に残る",
+      all(npc.name in log_text(ctx) for npc in npcs))
+
+mod, ctx, call, npcs = setup(npc_names=NAMES)
+by_holder = {npc.name: charm_of(Holder(npc, 0, TOP_CHARM).run()) for npc in npcs}
+check("抱え込み: self.character_instance からでも相手が決まる",
+      len(set(by_holder.values())) >= 2, by_holder)
+
+mod, ctx, call, npcs = setup(npc_names=NAMES)
+for npc in npcs:
+    npc.relationship = {}          # 初対面（まだ player の欄が無い）
+first_time = {npc.name: charm_of(call(npc, 0, TOP_CHARM)) for npc in npcs}
+check("初対面: relationship が空でも相手として認める",
+      len(set(first_time.values())) >= 2, first_time)
+
+mod, ctx, call, npcs = setup(npc_names=NAMES)
+by_session = {npc.name: charm_of(call_via_session(npc, 0, TOP_CHARM))
+              for npc in npcs}
+check("名簿優先: 相手ではない id より、外側の相手を採る",
+      by_session == {npc.name: charm_of(call(npc, 0, TOP_CHARM)) for npc in npcs}
+      and len(set(by_session.values())) >= 2, by_session)
+
+# 受け皿。フレームがまったく読めない環境（FRAME_DEPTH_MAX=1）でも、
+# 会話の入口を通っていれば相手が分かる。
+mod, ctx, call, npcs = setup(npc_names=NAMES)
+mod.FRAME_DEPTH_MAX = 1
+manager_cls = install_manager_hooks(ctx)
+by_phase = {npc.name: charm_of(call_via_manager(npc, 0, TOP_CHARM, manager_cls))
+            for npc in npcs}
+check("受け皿: 会話の入口で控えた相手で決まる", len(set(by_phase.values())) >= 2,
+      by_phase)
+call_without_npc(0, TOP_CHARM)
+tail = log_text(ctx).strip().splitlines()[-1]
+check("受け皿: 会話を抜けた後は控えが残らない", "好み=+0" in tail, tail)
+check("受け皿: 引数から渡したときと同じ段になる",
+      by_phase == by_manager, (by_phase, by_manager))
+
+# 会話の終了側。相手の id は `resolve_conversation` の**引数**で来る。
+# 実機のフレームは `f_locals` が空なので、ここを包めるかどうかが全て。
+mod, ctx, call, npcs = setup(npc_names=NAMES)
+mod.FRAME_DEPTH_MAX = 1                      # 実機と同じくフレームは読めない
+end_cls = install_manager_hooks(ctx, EndManager, END_TARGETS,
+                                "ConversationEndManager")
+by_end = {npc.name: charm_of(
+    end_cls("conv-7", npc_id_of(npc), 0, TOP_CHARM).execute()) for npc in npcs}
+check("終了経路: 引数の id からでも相手ごとに散る",
+      len(set(by_end.values())) >= 2, by_end)
+check("終了経路: 開始側と同じ段になる（会話の後に上書きされない）",
+      by_end == by_manager, (by_end, by_manager))
+mod, ctx, call, npcs = setup(npc_names=NAMES)
+mod.FRAME_DEPTH_MAX = 1
+bare_cls = install_manager_hooks(ctx, EndManagerBare, END_BARE_TARGETS,
+                                 "ConversationEndManager")
+bare = {npc.name: charm_of(bare_cls("conv-7", 0, TOP_CHARM).execute())
+        for npc in npcs}
+check("終了経路: 相手の id とは限らない値は鍵にしない", len(set(bare.values())) == 1,
+      bare)
+check("終了経路: 決まらなかったマネージャの中身が記録に残る",
+      "in_conversation_id" in log_text(ctx) and "conv-7" in log_text(ctx),
+      log_text(ctx)[-700:])
+
+# 診断。拾えないときは、その場に何が居たかを記録に残す。
+mod, ctx, call, npcs = setup()
+Bare().run(0, TOP_CHARM)
+blind = log_text(ctx)
+check("診断: 拾えないときにローカルの中身が残る", "ローカル " in blind, blind[-500:])
+check("診断: self の属性も残る", "self の属性" in blind, blind[-500:])
+check("診断: 記録は1度だけ", blind.count("相手が拾えない") == 1)
 
 # ------------------------------------------------------------------ 空段
 print("\n-- 空段と言語")
@@ -413,6 +696,19 @@ same = all((english[name] is None) == (first_meeting[name] is None)
                     first_meeting[name])][1] == english[name])
            for name in english)
 check("言語: 文言が英語でも同じ段を選ぶ", same, (english, first_meeting))
+
+# ------------------------------------------------------------------ 閾値
+print("\n-- 閾値")
+mod, ctx, call, npcs = setup(broken="picky")
+call(npcs[0], 0, TOP_CHARM)
+edges = log_text(ctx)
+check("閾値: 引けなかった点があってもずれない",
+      "7から'あまり好みではない'" in edges
+      and "18から'耐え難いほど魅力的に見えている'" in edges, edges[:900])
+check("閾値: 文の付かない帯へ入る境目が出る", "9からNone" in edges, edges[:900])
+check("閾値: 文の付かない帯から出る境目も出る", "12から'魅力を感じている'" in edges,
+      edges[:900])
+check("閾値: 好感度側もずれない", "-40から'憎悪している'" in edges, edges[:1200])
 
 # ------------------------------------------------------------------ 別物
 print("\n-- 別物")
