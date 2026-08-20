@@ -78,7 +78,7 @@ STATUS_PATH = os.path.join(OUT_DIR, ml.STATUS_NAME)
 # GUI で開く側とで同じ場所を組み立てる規則を2箇所に書かないため。
 STATE_DIR = ml.state_dir(RUNTIME_DIR)
 
-# 利用者が選んだものは全部 settings/ に集める（mod ごとの設定は
+# 選んだ値は全部 settings/ に集める（mod ごとの設定は
 # instantale_modloader.config が同じフォルダへ mod_settings.json を書く）。
 # ここに入るのは「このウィンドウの覚えていること」＝ゲームの場所と窓の大きさ。
 SETTINGS_DIR = C.settings_dir(RUNTIME_DIR)
@@ -555,7 +555,7 @@ def write_order(names: list[str], disabled: set[str]) -> None:
     # ここは MOD の構成そのもの（適用順と有効/無効）なので、
     # 壊れると一覧が組み直せない。
     # 失敗は例外にする ― `save()` が捕まえてダイアログに出す（config.py の
-    # `_save_settings_json` と同じ理由で、利用者の操作の結果だから）。
+    # `_save_settings_json` と同じ理由で、GUI の操作の結果だから）。
     path = ml.order_path(MODS_DIR)
     if not ml.write_json(path, {"order": names, "disabled": off}, indent=2):
         raise OSError("cannot write {}".format(path))
@@ -641,7 +641,7 @@ def read_status() -> dict:
     これがこのウィンドウと「実際に動いたゲーム」の唯一の接点。
     ローダが boot の最後に書き出す（`instantale_modloader.write_status`）。
     注入が成功したかどうかと **mod が入ったかどうかは別の話**なので、
-    ここを読まないと「28個中3個が失敗」を利用者に出せない。
+    ここを読まないと「28個中3個が失敗」を画面に出せない。
     """
     data = _read_json(STATUS_PATH)
     return data if isinstance(data, dict) else {}
@@ -727,7 +727,7 @@ class SettingsDialog(tk.Toplevel):
     """1つの mod の設定を編集する。宣言（`mod.json` の "settings"）に従って組む。
 
     既定と同じ値は**書かない**。
-    `mod_settings.json` に残すのは利用者が変えたものだけで、
+    `mod_settings.json` に残すのは変えた値だけで、
     そうしておくと mod の既定値が新しい版で変わったときにその変更が届く（全部書き出すと、
     既定を上書きし続ける形になって永久に古い値で動く）。
 
@@ -1254,7 +1254,7 @@ class App(ttk.Frame):
         """デバッグモードが切のあいだ伏せる mod か。
 
         絞り込み（`_matches`）とは別物として扱う。
-        絞り込みは利用者が今かけている条件で、解除すれば戻る。
+        絞り込みは今かけている条件で、解除すれば戻る。
         こちらは**存在しないものとして扱う**もので、件数の分母にも入れない。
 
         伏せる理由は3つあり、扱いは同じ（`discover()` の `hide`）:
@@ -1271,13 +1271,13 @@ class App(ttk.Frame):
             and not self.debug_mode
 
     def _known_mods(self) -> list[dict]:
-        """利用者から見て「入っている」mod。件数の分母はこちら。"""
+        """画面から見て「入っている」mod。件数の分母はこちら。"""
         return [m for m in self.mods if not self._hidden(m)]
 
     def _off_known(self) -> set[str]:
         """切られている mod のうち、一覧に出ているものだけ。
 
-        伏せている mod の有効/無効は**利用者に見えないので触らない**。
+        伏せている mod の有効/無効は**画面に見えないので触らない**。
         まとめて有効にする操作がここを通ることで、見えないものまで巻き込まずに済む。
         """
         return self.disabled & {m["dir"] for m in self._known_mods()}
@@ -1811,7 +1811,7 @@ class App(ttk.Frame):
         """デバッグモードの入切。`settings/loader.json` に書いて一覧を作り直す。
 
         書き先が `load_order.json` ではないのは、
-        これが**構成ではなく利用者の切り替え**だから。
+        これが**構成ではなく手元の切り替え**だから。
         伏せている MOD は順序ファイルに載ったまま動かないだけで、
         入れ直せば宣言された位置に戻る。
 

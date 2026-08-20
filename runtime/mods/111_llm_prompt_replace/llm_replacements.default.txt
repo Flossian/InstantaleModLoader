@@ -24,7 +24,7 @@
 # ・変更を保存すると次のLLMリクエストから自動反映 (ゲーム再起動不要)
 # ------------------------------------------------------------
 # ・読まれるのは MOD フォルダの中の次の2つだけ (探索はしない)
-#     llm_replacements.txt          利用者のルール (あればこちら)
+#     llm_replacements.txt          手元のルール (あればこちら)
 #     llm_replacements.default.txt  このファイル (無いときの既定)
 #   置いた・消したは次のLLMリクエストで反映される
 # ・InstantaleLlmProxy の llm_replacements.txt と書式が同じなので、

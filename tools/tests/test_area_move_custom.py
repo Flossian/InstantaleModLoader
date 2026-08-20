@@ -147,7 +147,7 @@ class AreaMoveManager:
             # 支払い直後にゲームが所持金の表示を描き直す瞬間の値。
             # **ここが既に差し引き後の正しい値**でないと、
             # 「文言は500なのに画面は
-            # 1000減っている」に見える（実機で利用者が踏んだ）。
+            # 1000減っている」に見える（実機で踏んだ）。
             self.app.gold_after_payment = self.app.player.gold
             # 手掛かり（DEPART/ARRIVE_MARKS）のどれにも当たらない文言。
             self.app.add_text("並んで座る客たちの話を聞いた。")

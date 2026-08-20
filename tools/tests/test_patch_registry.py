@@ -57,7 +57,7 @@ def survey(mods_dir):
 
     突き合わせに `order` ではなく `listed` を使う。
     `order` は**切られている mod が落ちた後**の並びなので、
-    利用者が GUI で1本切っただけでこの検査が赤くなる（手元で未公開の mod を
+    GUI で1本切っただけでこの検査が赤くなる（手元で未公開の mod を
     `disabled` に置いている間もずっと赤い）。
     `listed` は無効な mod も宣言された位置に残すので、
     切った・切らないに左右されずに「宣言と実体が一致しているか」だけを見られる。
@@ -747,7 +747,7 @@ def main():
         check(order.index("late") < order.index("early"),
               "after は逆向きに効く: {}".format(order))
         # 制約に触れない mod の相対順は
-        # load_order のまま（利用者の意図を壊さない）。
+        # load_order のまま（並べた意図を壊さない）。
         # zebra / apple はフォルダ名順とは逆に宣言しておく。
         put_json("load_order.json", {"order": ["late", "zebra", "apple"]})
         base = [n for n in order_of(tmp_mods) if n in ("apple", "zebra")]
@@ -828,10 +828,10 @@ def main():
               "どれを伏せたかは debug で分かる: {}".format(off["debug"]))
         check(off["manifests"].get("200_probe"),
               "名乗りは残す（GUI が「消えた」ように見せない）")
-        # 伏せたのは利用者ではないので、**報告に出してはいけない**。
+        # 伏せたのは設定ではなくローダなので、**報告に出してはいけない**。
         # 「無効化されています」「記載の無い MOD」「無効な
         # MOD を指している」のどれで出ても、
-        # 利用者から見れば身に覚えのない警告になる。
+        # 画面から見れば身に覚えのない警告になる。
         noisy = [line for line in off["problems"] + off["notes"] if "200_probe" in line]
         check(not noisy, "伏せた MOD は報告に出さない: {}".format(noisy or "出ていない"))
         check("300_feature" in off["order"],
@@ -848,7 +848,7 @@ def main():
         check(ml.discover(dist_mods)["order"] == ["100_fix", "300_feature"],
               "切れば元に戻る")
         # 静的検査（check_mods.py / この検査自身）が使う逃げ道。
-        # 利用者が今どちらに倒しているかで検査の範囲が変わってはいけない。
+        # デバッグモードを今どちらに倒しているかで検査の範囲が変わってはいけない。
         check(ml.discover(dist_mods, debug=True)["order"] ==
               ["100_fix", "200_probe", "300_feature"],
               "debug=True は設定を無視して全部見る（静的検査はこちら）")
@@ -866,7 +866,7 @@ def main():
         check("100_fix" in both["disabled"] and "100_fix" not in both["order"],
               "切ったものは disabled に出る（伏せたものとは別扱い）")
         check(any("100_fix" in line for line in both["problems"] + both["notes"]),
-              "切ったことは報告する（利用者が切ったので見せる）")
+              "切ったことは報告する（`disabled` で切ったので見せる）")
 
         # -- 開発中の MOD（9xx）。読む条件は「順序ファイルに名前がある」かつ
         #    「デバッグモード」の2つ（TECH.md §2.6）。
@@ -895,7 +895,7 @@ def main():
     finally:
         shutil.rmtree(dist, ignore_errors=True)
 
-    print("=== 設定（mod.json の宣言 + 利用者の選択）===")
+    print("=== 設定（mod.json の宣言 + 選んだ値）===")
     from instantale_modloader import config as C
     decls = C.normalize_decls({
         "MODE": {"type": "choice", "values": ["a", "b"], "default": "a"},
@@ -944,7 +944,7 @@ def main():
               "空の mod は書かない（既定に戻した記述を溜めない）")
         # 置き場所は配布フォルダ直下の settings/。
         # mods/ の中ではない（mods/ は読む専用で、
-        # 丸ごと差し替えても利用者の設定が消えないため）。
+        # 丸ごと差し替えても設定が消えないため）。
         check(os.path.isfile(os.path.join(tmp_store, C.SETTINGS_DIR_NAME, C.STORE_NAME)),
               "置き場所は配布フォルダ直下の settings/（mods/ の中ではない）")
     finally:

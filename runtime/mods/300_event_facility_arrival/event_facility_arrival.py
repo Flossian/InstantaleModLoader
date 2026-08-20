@@ -193,7 +193,7 @@ def apply(ctx):
     # **ここ（apply の中）で組むこと**。
     # 設定の反映はモジュールのグローバルへの書き込みで、
     # それが済むのは apply() を呼ぶ直前だから（config.apply_to_module）。
-    # モジュールのトップレベルで組むと、利用者が選んだ値ではなく既定値の表になる。
+    # モジュールのトップレベルで組むと、選んだ値ではなく既定値の表になる。
     chance_table = {
         "inn": CHANCE_INN,
         "guild": CHANCE_GUILD,

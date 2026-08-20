@@ -302,7 +302,7 @@ with tempfile.TemporaryDirectory() as folder:
           mod.pick_path(folder).endswith(mod.DEFAULT_NAMES_FILE_NAME))
     io.open(os.path.join(folder, mod.NAMES_FILE_NAME), "w",
             encoding="utf-8").write('{"male": ["ウ"], "female": ["エ"]}')
-    check("利用者の名簿が優先される",
+    check("手元の名簿が優先される",
           mod.pick_path(folder).endswith("/" + mod.NAMES_FILE_NAME)
           or mod.pick_path(folder).endswith("\\" + mod.NAMES_FILE_NAME),
           mod.pick_path(folder))

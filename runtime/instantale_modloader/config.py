@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
-"""mod ごとの設定値。宣言は `mod.json`、利用者が選んだ値は `mod_settings.json`。
+"""mod ごとの設定値。宣言は `mod.json`、選んだ値は `mod_settings.json`。
 
 この仕組みが入る前、設定は「mod の .py を開いて先頭の定数を書き換える」だった。
 動きはするが、フレームワークとしては2つ困ることがある。
 
   * **GUI から見えない。** 一覧に出るのは名乗りだけで、何が変えられるか分からない
   * **mod を更新すると設定が消える。** 値がコードの中にあるので、新しい版で
-    ファイルを差し替えた瞬間に利用者の選択が上書きされる
+    ファイルを差し替えた瞬間に選んだ値が上書きされる
 
 そこで、値の置き場所をコードの外へ出す。
 
     mods/300_event/mod.json         "settings" に**何が変えられるか**を宣言する
     mods/300_event/event.py         `EVENT_MODE = "conversation"` ← 既定値。そのまま残す
-    settings/mod_settings.json      利用者が選んだ値だけ
+    settings/mod_settings.json      選んだ値だけ
 
 ローダは mod を読み込んだ**後・apply() を呼ぶ前**に、
 選ばれた値をモジュールのグローバルへ書き込む（`apply_to_module`）。
@@ -21,9 +21,9 @@ mod のコードは何も変えなくてよく、
 
 `mod_settings.json` を `mods/` の中に置かないのは、
 そこが配布物そのものだから（TECH.md: mods/ は読む専用、書くのは out/）。
-mod のフォルダを丸ごと差し替えても利用者の設定は残る。
+mod のフォルダを丸ごと差し替えても設定は残る。
 置き場所は配布フォルダ直下の
-`settings/` で、**利用者が選んだものは全部ここに集める**（GUI のウィンドウ位置なども同じ場所）。
+`settings/` で、**選んだ値は全部ここに集める**（GUI のウィンドウ位置なども同じ場所）。
 
 **既定値が2箇所に書かれる**ことは認めている。
 コードの定数（実際に使われる値）と `mod.json` の
@@ -63,7 +63,7 @@ import os
 
 from . import log, log_exc, write_json
 
-# 利用者が選んだ値の置き場所。
+# 選んだ値の置き場所。
 # 配布フォルダ直下の settings/（runtime/ の1つ上）。
 STORE_NAME = "mod_settings.json"
 SETTINGS_DIR_NAME = "settings"
@@ -204,7 +204,7 @@ def coerce(decl: dict, value):
 
 
 def resolve(decls: dict, chosen) -> dict:
-    """宣言の既定値に、利用者が選んだ有効な値を重ねた結果を返す。
+    """宣言の既定値に、選ばれた有効な値を重ねた結果を返す。
 
     読めない値は**黙って捨てて既定に倒す**。
     設定ファイルが壊れているせいで mod が
@@ -254,7 +254,7 @@ def load_flags(runtime_dir: str) -> dict:
     """`loader.json` を読む。無ければ `{}`（＝全て既定＝切）。
 
     このファイルは**配布物に入っていない**。
-    利用者が何か切り替えて初めてできるので、
+    GUI で何か切り替えて初めてできるので、
     「無い＝デバッグモードは切」が自然に成り立つ。
     """
     path = flags_path(runtime_dir)
@@ -290,11 +290,11 @@ def _save_settings_json(runtime_dir: str, path: str, data: dict) -> None:
     書き方（隣に書いてから差し替える）は `write_json()` に一本化してある。
     ここだけ戻り値ではなく例外にしているのは、**呼び出し元が GUI だから**。
     MOD の書き込みはゲームのスレッドで走るので黙って False を返すのが正しいが、
-    こちらは利用者が「保存」を押した結果で、
+    こちらは GUI で「保存」を押した結果で、
     失敗したら画面に出す必要がある（`gui.py` が捕まえてダイアログにする）。
     黙って False を返すと、設定が保存されていないのに保存されたように見える。
     """
-    # settings/ は配布物に入っていない（利用者が何か変えて初めてできる）。
+    # settings/ は配布物に入っていない（何か変えて初めてできる）。
     os.makedirs(settings_dir(runtime_dir), exist_ok=True)
     if not write_json(path, data, indent=2, sort_keys=True):
         raise OSError("cannot write {}".format(path))

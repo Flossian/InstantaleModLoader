@@ -299,7 +299,7 @@ WINDOW_ATTR = "_instantale_party_on_resize"
 
 
 def apply(ctx):
-    # 利用者の意思（広げたいか）。
+    # 設定の意思（広げたいか）。
     # 画面を作り直されても引き継ぐので、帯ではなくこちらに持つ。
     # 帯側にあるのは「今その帯が何行か」。
     state = {"expanded": bool(START_EXPANDED), "synced": False,

@@ -61,7 +61,7 @@
   `306_party_train_exp` も `VacationTrainManager.execute` を包むが、
   こちらは外側から重なるだけ
 
-利用者向けの説明は MODS.md の `315_` の項、検証の経過は VERIFICATION.md §3.28。
+遊び方の説明は MODS.md の `315_` の項、検証の経過は VERIFICATION.md §3.28。
 """
 
 import sys

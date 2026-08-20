@@ -422,7 +422,7 @@ check("買い物フラグが立っていても発火する", len(app.process_cho
 app.in_shopping = False
 
 print("7c. mod.json の施設別発生率が効く")
-# 宿だけ 0 にする（利用者が「宿では出さない」を選んだ状態）。
+# 宿だけ 0 にする（「宿では出さない」を選んだ状態）。
 clock = install_fake_kivy()
 mod, ctx, calls, hooks = setup(override=None, CHANCE_INN=0.0, CHANCE_GENERAL_STORE=1.0)
 app.process_choice_calls = []

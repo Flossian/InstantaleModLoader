@@ -98,7 +98,7 @@ import weakref
 from instantale_modloader import frames, ui
 from instantale_modloader.state import world_filename, world_key
 
-# ---------------------------------------------------------------- 利用者設定
+# ---------------------------------------------------------------- 設定
 # ここの定数は `mod.json` の "settings" と対で持つ（既定値が2箇所にある。
 # `tools/check_mods.py` が AST で突き合わせる）。
 
@@ -556,7 +556,7 @@ def apply(ctx):
 
         113 のボタンの大きさは向こうの設定で決まる。
         こちらが自分の設定で描くと、
-        利用者が向こうを大きくした瞬間に2つの高さが食い違う。
+        向こうを大きくした瞬間に2つの高さが食い違う。
         """
         size = frames.attr(other, "size")
         try:

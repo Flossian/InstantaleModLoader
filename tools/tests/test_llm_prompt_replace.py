@@ -12,9 +12,9 @@
   確率     … グループごとに1回だけ抽選すること・合計 100 超・0%
   経路     … chat / _apply_chat_template / payload のどこでも当たること
   1回だけ  … 入れ子の経路で二重に抽選しないこと（スレッドの印と、出力の記憶）
-  置き場所 … **MOD フォルダの中だけ**を読み、外は一切見ないこと。利用者の
+  置き場所 … **MOD フォルダの中だけ**を読み、外は一切見ないこと。手元の
              `llm_replacements.txt` が同梱の `.default.txt` に優先すること
-  配布     … 利用者のファイルが配布物に入らないこと（＝更新で消えない根拠）
+  配布     … 手元のファイルが配布物に入らないこと（＝更新で消えない根拠）
   再読込   … ファイルを書き換えると次のリクエストから効くこと
   壊さない … ルールが無い・読めない・例外が出た場合に文章をそのまま送ること
 
@@ -270,7 +270,7 @@ def arm(rules_text, out_dir, roll=None, settings=None):
         mod._roll = roll
 
     # 既定側（`llm_replacements.default.txt`）に置く。
-    # 利用者のファイルが優先されることは `test_self_contained` で別に見る。
+    # 手元のファイルが優先されることは `test_self_contained` で別に見る。
     mod_dir = os.path.join(out_dir, "mod")
     os.makedirs(mod_dir, exist_ok=True)
     rules_path = os.path.join(mod_dir, "llm_replacements.default.txt")
@@ -668,11 +668,11 @@ def test_self_contained(tmp):
     os.makedirs(mod_dir, exist_ok=True)
     default_path = os.path.join(mod_dir, "llm_replacements.default.txt")
     user_path = os.path.join(mod_dir, "llm_replacements.txt")
-    check("置き場所: 利用者のファイルが無ければ同梱の既定",
+    check("置き場所: 手元のファイルが無ければ同梱の既定",
           mod.rules_path(mod_dir) == default_path, mod.rules_path(mod_dir))
     with io.open(user_path, "w", encoding="utf-8") as fh:
-        fh.write("#tab:t\n中=>利用者のファイルが効いた\n")
-    check("置き場所: 利用者のファイルがあればそちら",
+        fh.write("#tab:t\n中=>手元のファイルが効いた\n")
+    check("置き場所: 手元のファイルがあればそちら",
           mod.rules_path(mod_dir) == user_path, mod.rules_path(mod_dir))
     os.remove(user_path)
     check("置き場所: mod_dir が無ければ None（apply() の外）",
@@ -702,14 +702,14 @@ def test_self_contained(tmp):
           "が効いた" not in client.sent[-1].replace("MOD の中が効いた", ""),
           client.sent)
 
-    # 利用者のファイルを後から置くと、次のリクエストでそちらに切り替わる（MOD を更新しても残るのはこちら側。
+    # 手元のファイルを後から置くと、次のリクエストでそちらに切り替わる（MOD を更新しても残るのはこちら側。
     # `.default.txt` は上書きされる）。
     user_file = os.path.join(out_dir, "mod", "llm_replacements.txt")
     with io.open(user_file, "w", encoding="utf-8") as fh:
-        fh.write("#tab:t\n中=>利用者のファイルが効いた\n")
+        fh.write("#tab:t\n中=>手元のファイルが効いた\n")
     client.chat("model", [{"role": "user", "content": "中と外"}])
-    check("置き場所: 利用者のファイルを置くと次のリクエストで切り替わる",
-          client.sent[-1] == "利用者のファイルが効いたと外", client.sent)
+    check("置き場所: 手元のファイルを置くと次のリクエストで切り替わる",
+          client.sent[-1] == "手元のファイルが効いたと外", client.sent)
     log = read_log(out_dir)
     check("置き場所: 切り替えを [RULES] に残す",
           "[RULES] 読む先を切り替えた" in log, log)
@@ -717,7 +717,7 @@ def test_self_contained(tmp):
     # 消せば既定に戻る。
     os.remove(user_file)
     client.chat("model", [{"role": "user", "content": "中と外"}])
-    check("置き場所: 利用者のファイルを消すと既定に戻る",
+    check("置き場所: 手元のファイルを消すと既定に戻る",
           client.sent[-1] == "MOD の中が効いたと外", client.sent)
 
     # 設定に場所も流用の切り替えも残っていないこと（宣言を消したので、
@@ -728,10 +728,10 @@ def test_self_contained(tmp):
 
 
 def test_not_shipped():
-    """**利用者のルールは配布物に入らない。** これが「更新で消えない」の根拠。
+    """**手元のルールは配布物に入らない。** これが「更新で消えない」の根拠。
 
     `make_dist.bat` が `llm_replacements.txt` を除外していることを見る（配布物に入ってしまうと、
-    次の利用者の更新でその人のルールを上書きしてしまう）。
+    次の更新でそのルールを上書きしてしまう）。
     """
     with io.open(os.path.join(ROOT, "make_dist.bat"), encoding="utf-8",
                  errors="replace") as fh:
@@ -746,7 +746,7 @@ def test_bundled_rules():
     """同梱の既定（`llm_replacements.default.txt`）が警告なしで読めること。
 
     ルールを書き換えたときにここが落ちる（＝書式を間違えた）。
-    利用者のファイルを置いている環境ではそちらを読む（`rules_path` と同じ判定）。
+    手元のファイルを置いている環境ではそちらを読む（`rules_path` と同じ判定）。
     """
     path = mod.rules_path(MOD_DIR)
     if not os.path.isfile(path):

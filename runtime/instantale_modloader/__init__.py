@@ -30,7 +30,7 @@ GUI に出るだけだが、次の5つは動作に関わる:
 
     "api": 1                        前提にしているローダ API（下の API を参照）
     "after": ["101_fix_..."]         適用順の制約（_sort_dependencies）
-    "settings": {...}               利用者が変えられる設定の宣言（config.py）
+    "settings": {...}               GUI から変えられる設定の宣言（config.py）
     "debug": true                   開発者向け。デバッグモードのときだけ動く（discover）
     "superseded": "main_024"        本体がその版で同じ修正を取り込んだので降ろした
 
@@ -129,7 +129,7 @@ def is_game_module(name: str) -> bool:
 
 # 配布フォルダ直下の書き込み先は3つある。**役割で分けてあり、混ぜない。**
 #
-#     settings/   利用者が決めたこと（mod の設定・GUI の覚え書き・デバッグモード）
+#     settings/   設定したこと（mod の設定・GUI の覚え書き・デバッグモード）
 #     out/        mod が吐いたもの（ログ・リコン成果物・status.json）
 #     state/      mod が持つ永続データ（進行中の道中、依頼の出所、NPC の控え）
 #
@@ -140,7 +140,7 @@ def is_game_module(name: str) -> bool:
 #   * 不具合報告で「out/ を消してから再現してください」と言えない
 #     （消すと進行中の依頼や NPC の記憶まで飛ぶ）
 #   * 世代管理の対象が「*.log だけ」という但し書きでしか守られない
-#   * 利用者が掃除のつもりで消したものが、遊びの続きだった
+#   * 掃除のつもりで消したものが、遊びの続きだった
 #
 # 置き場所を分ければ、どちらも説明が1行で済む。out/ は捨ててよい。state/ は
 # セーブと同じ重みで残す。
@@ -382,7 +382,7 @@ class ModContext:
 
     設定とローダの版:
 
-        ctx.config          この mod に効いている設定値（mod.json の宣言 + 利用者の選択）
+        ctx.config          この mod に効いている設定値（mod.json の宣言 + 選んだ値）
         ctx.setting(名前)   その1件だけ引く
         ctx.api             ローダ API の番号（下位互換の分岐が要るとき用）
     """
@@ -803,7 +803,7 @@ KINDS = ("core", "fix", "probe", "feature")
 #: `load_order.json` は配布する構成そのものなので、
 #: 開発中の MOD を書くと配った先で「実体の無い記述」になり、
 #: GUI で保存するたびに書き戻されて毎回コミットに紛れ込む。
-#: 利用者のファイルが同梱ぶんに優先する形は `111_` の置換ルールと同じ（TECH.md
+#: 手元のファイルが同梱ぶんに優先する形は `111_` の置換ルールと同じ（TECH.md
 #: §3.1.1）。
 ORDER_LOCAL_NAME = "load_order.local.json"
 
@@ -897,7 +897,7 @@ def discover(mods_dir: str | None = None, *, debug: bool | None = None) -> dict:
     `order` と `listed` を分けているのは、無効な mod には適用順が無い一方で、
     一覧では**宣言された位置に置いたままにしたい**から。
     表示順を「有効なものの後」にすると、
-    GUI で切って保存するたびにその mod が末尾へ移動してしまう（利用者は順序を触っていないのに
+    GUI で切って保存するたびにその mod が末尾へ移動してしまう（順序は触っていないのに
     `load_order.json` が書き換わる）。
 
     ゲームの中でも外でも同じ結果になる（ファイルを読むだけで、
@@ -905,7 +905,7 @@ def discover(mods_dir: str | None = None, *, debug: bool | None = None) -> dict:
 
     `debug` を渡すとデバッグモードの設定（`settings/loader.json`）を無視してそちらに従う。
     `tools/check_mods.py` が `True` で呼ぶためにある。静的検査は **入っている
-    mod を全部見る**のが仕事で、利用者が今どちらに倒しているかで検査の範囲が変わってはいけない（切っている間だけ計測 mod の
+    mod を全部見る**のが仕事で、デバッグモードを今どちらに倒しているかで検査の範囲が変わってはいけない（切っている間だけ計測 mod の
     `after` が誰にも確かめられない、という穴を作らない）。
     """
     mods_dir = mods_dir or _mods_dir()
@@ -921,7 +921,7 @@ def discover(mods_dir: str | None = None, *, debug: bool | None = None) -> dict:
     # 開発者向けの mod（計測系）は、デバッグモードを入れている間だけ動く。
     # 伏せるのは `order` からだけで、`listed`（GUI の一覧）には残す。一覧の並びは保存時にそのまま
     # `order` へ書き戻されるので（gui.py の `save`）、
-    # ここで落とすと利用者が保存した瞬間に順序ファイルから記述ごと消える。
+    # ここで落とすと GUI で保存した瞬間に順序ファイルから記述ごと消える。
     debug_mode = (_config_module().debug_mode(os.path.dirname(mods_dir))
                   if debug is None else bool(debug))
     marked = {name for name in installed if (manifests[name] or {}).get("debug")}
@@ -996,7 +996,7 @@ def _order(mods_dir: str, found: list[str],
 
     `hide` に挙げた mod は適用順から外す（デバッグモードが切のときの計測 mod。
     `discover()` が渡す）。
-    `disabled` と違って**報告もしない**。切ったのは利用者ではないので、
+    `disabled` と違って**報告もしない**。切ったのは設定ではなくローダなので、
     「無効化されています」「記載の無い MOD」を出すと、
     伏せたはずのものが警告として画面に出てくる。
     切られていることを必ず見せる `disabled` とは目的が逆なので、
@@ -1028,7 +1028,7 @@ def _order(mods_dir: str, found: list[str],
 
     # 開発中の mod（9xx）は、この順序ファイルが名指ししているものだけ読み込む。
     # 名前が無いものは `hide` と同じ扱いにする。適用もしないし報告もしない。
-    # 配布物には入らないので、利用者の画面に「記載の無い
+    # 配布物には入らないので、配った先の画面に「記載の無い
     # MOD」として出しても直しようが無い（`is_wip` の説明を参照）。
     named = {name for name in order if isinstance(name, str)}
     undeclared_wip = {name for name in found
@@ -1040,8 +1040,8 @@ def _order(mods_dir: str, found: list[str],
         disabled = []
     off = {name for name in disabled if isinstance(name, str)}
     skipped = sorted(off & set(found))
-    # 報告するのは利用者が切ったものだけ。
-    # 伏せている mod は `skipped` に残す（利用者の「切る」選択そのものは消さない。
+    # 報告するのは `disabled` で切ったものだけ。
+    # 伏せている mod は `skipped` に残す（「切る」選択そのものは消さない。
     # GUI が保存で書き戻すため）が、警告としては出さない。
     told = [name for name in skipped if name not in hide]
     if told:
@@ -1228,7 +1228,7 @@ def _manifest(mods_dir: str, name: str) -> dict:
         # 要らなくなった修正とを一覧で見分けられないと、
         # 次にゲームが更新されたとき「どれを試しに戻すか」が分からなくなる。
         "superseded": text(data.get("superseded")),
-        # 利用者が変えられる設定の宣言（config.py）。
+        # GUI から変えられる設定の宣言（config.py）。
         "settings": _config_module().normalize_decls(data.get("settings")),
     }
 
@@ -1265,7 +1265,7 @@ def _sort_dependencies(order: list[str], manifests: dict,
                        silent: frozenset = frozenset()) -> tuple[list[str], list[str]]:
     """`after` / `before` を満たす並びに直す。`(並び, 報告)` を返す。
 
-    `load_order.json` の並びは利用者が触るもので、**動作の前提を知らない**。
+    `load_order.json` の並びは手で触るもので、**動作の前提を知らない**。
     「計測は修正より外側」「305_ は 105_ より先」といった関係は、
     これまでドキュメントにしか無く、GUI で行を動かせば無警告で壊せた。
     それを mod 自身に宣言させて、ここで満たす。
@@ -1275,11 +1275,11 @@ def _sort_dependencies(order: list[str], manifests: dict,
 
     やっているのは安定なトポロジカルソート。
     **基準の並びは `load_order.json`** で、制約に触れない mod の相対順は動かさない。
-    利用者が並べ替えた意図を、制約を満たす範囲でそのまま残すため。
+    並べ替えた意図を、制約を満たす範囲でそのまま残すため。
 
     存在しない mod や無効な mod を指した制約は黙って捨てる（消した
     mod の記述が残っていても壊れないように。順序ファイルの扱いと同じ）。
-    ただし**報告は残す**。利用者が切った相手を指していることは、
+    ただし**報告は残す**。切った相手を指していることは、
     順序が変わる理由として見えていてよい。
 
     `silent` に挙げた相手を指した制約は、報告もしない。
@@ -1287,7 +1287,7 @@ def _sort_dependencies(order: list[str], manifests: dict,
     これを報告すると `300_event_facility_arrival` の
     `"after": ["205_probe_player_events"]` が「無効な
     mod を指している」として毎回警告に出る。
-    利用者から見れば存在しないはずの mod の名前が出てくることになる。
+    画面から見れば存在しないはずの mod の名前が出てくることになる。
 
     循環していたら**基準の並びをそのまま返す**。
     ここで例外にすると mod が全滅する。
@@ -1363,7 +1363,7 @@ def _check_conflicts(order: list[str], manifests: dict) -> list[str]:
     このローダは同じ対象に複数の mod を重ねるのが正常な使い方で（patch_registry.py）、
     どちらを外すべきかはローダには決められない。
     片方を黙って落とすより、両方動かして名指しする方が筋が通る。
-    外すのは利用者の判断（`load_order.json` の "disabled"）。
+    外すのは `load_order.json` の "disabled"。
     """
     notes: list[str] = []
     active = set(order)
@@ -1667,7 +1667,7 @@ def boot(out_dir: str) -> dict:
     if not os.path.isdir(mods_dir):
         log("no mods dir at {}".format(mods_dir), level="WARN")
     else:
-        # 利用者が選んだ設定値。
+        # 選んだ設定値。
         # 全 mod ぶんまとめて1回読む。
         chosen = _config.load_store(runtime_dir)
         log("{} mod(s) in {}".format(len(names), mods_dir))
@@ -1677,7 +1677,7 @@ def boot(out_dir: str) -> dict:
             # ローダ API の可否を**コードを読み込む前に**判定する。
             # 名乗りが JSON にあるからここで撥ねられる。
             # 扱えない mod を import してから AttributeError で落ちるのに比べ、
-            # 利用者に読める形で止まる。
+            # 画面に読める形で止まる。
             verdict, reason = api_status(manifest)
             if verdict:
                 log("{}: {}".format(fname, reason), level="WARN")
@@ -1784,7 +1784,7 @@ def write_status(out_dir: str | None = None) -> str | None:
     台帳も適用結果も、これまでプロセスの中にしか無かった。
     `status()` は用意されていたが**呼ぶ側が存在せず**、
     GUI は注入が成功したかどうかしか出せていなかった（「28個中3個が
-    apply-error」は利用者がログを自力で開かないと分からない）。
+    apply-error」はログを自力で開かないと分からない）。
 
     ゲームの中から問い合わせる経路を作るには注入をもう1本増やすことになるので、
     boot の最後に**こちらから書き出す**。

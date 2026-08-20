@@ -283,7 +283,7 @@ ICON_ATTR = "_instantale_expand_icon"
 def apply(ctx):
     upx = ui.upx
     window_size = ui.window_size
-    # 利用者の意思（広げたいか）。
+    # 設定の意思（広げたいか）。
     # 画面を作り直されても引き継ぐので、入れ物ではなくこちらに持つ。
     # 入れ物側にあるのは「今その枠が広いか」。
     state = {"expanded": bool(START_EXPANDED), "ask_game": True,
