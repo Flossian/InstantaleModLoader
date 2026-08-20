@@ -10,7 +10,7 @@
     "en": "Spreads item icons across similar candidates instead of always picking the single best match, and adds 305 images missing from the embedding dictionaries",
     "ja": "アイテム画像を「最も似た1枚」固定でなく似た候補の中で使用回数最少から選び、埋め込み辞書に無かった305枚も選択肢に加える"
   },
-  "version": "3",
+  "version": "4",
   "author": "R01/Flossian",
   "settings": {
     "TOP_K": {
@@ -51,6 +51,18 @@
       "note": {
         "ja": "document/creature_part/mushroom/accessory の、素の辞書に無い305枚を選択肢に加える",
         "en": "Adds 305 images (document/creature_part/mushroom/accessory) absent from the stock dictionaries"
+      }
+    },
+    "KEEP_SAME_NAME": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "同じ名前のアイテムは同じ絵を使い続ける",
+        "en": "Keep the same image for same-named items"
+      },
+      "note": {
+        "ja": "同じ品の再入手（同じ敵のドロップ・再入荷）は同じ絵が正しい。切ると名前を見ず、常に均しだけで選ぶ",
+        "en": "Re-acquiring the same item keeps its look. Off = always diversify regardless of name"
       }
     },
     "LOG_LIMIT": {

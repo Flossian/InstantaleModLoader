@@ -33,16 +33,30 @@ MOD 導入前から世界に在る絵や、控えを消した／失った場合�
 セーブには何も足さない。選ばれた image_src がアイテムに書かれるのは素のゲームと同じ。
 履歴を消してやり直したいときは該当世界の`state/item_image/<世界>.json` を消せばよい（次の選定で世界の中身から数え直す）。
 
-対象はゲーム側の関数1つだけ。
-`__main__` に別名があるので張り替えはローダに任せる:
+**同じ名前のアイテムは同じ絵を使い続ける**（版4）。避けたいのは「別の名前なのに
+同じ絵」であって、同じ品の再入手（同じ敵の同じドロップ・同じ品の再入荷）が
+同じ絵なのはむしろ正しい（利用者指摘）。選定フックには名前が届かず、フレーム
+遡りも使えない（Nuitka の生きたフレームは f_locals が空。125_ の実測）ので、
+アイテムを生む manager 4つを包んで応答から item_name と item_appearance の
+対応を控え、選定時に外見文から名前を引く。名前が分かった品は、初回は均しで
+選んで世界の割当（assigned。控えに同居）へ記録し、2回目からはその絵を
+そのまま返す（ログは chose でなく kept）。名前が引けない経路では均しに落ちる。
+世界替わりの走査ではアイテムの name → image_src からも割当を取り込むので、
+MOD 導入前からの品も次の入手から絵が安定する（控えの割当が世界より優先）。
+
+対象は選定関数1つと、観測だけの manager 4つ（戻り値は変更しない）。
+`__main__` への別名の張り替えはローダに任せる:
 
     Embedding.get_similar_id:get_similar_embedding_id(query_text, item_sub_type)
+    scripts.llm.llm_manager:shop_item_generator_ordinary / shop_additional_item_generator_ordinary
+                            / item_craft_generator / master_ai_item_generate
 """
 
 import os
 import sys
 import threading
 
+from instantale_modloader import llm
 from instantale_modloader.state import (UNKNOWN_WORLD, world_filename,
                                         world_key)
 
@@ -58,11 +72,28 @@ SIM_FLOOR = 0.8
 # 切ると素の辞書だけで均しをかける（切り分け用）。
 USE_EXTRA_DICT = True
 
+# 同じ名前のアイテムに同じ絵を使い続けるか。
+# 切ると名前を見ず、常に均しだけで選ぶ（版3の挙動）。
+KEEP_SAME_NAME = True
+
 # 選択のたびに1行残すログの上限。
 # 0 で無効。
 LOG_LIMIT = 200
 
 EMBEDDING_MODULE = "Embedding.get_similar_id"
+
+# アイテムを生む manager（応答に item_name と item_appearance が揃っている4つ。
+# item_skill_generator は外見文を持たないので対象外）。観測だけで戻り値は触らない。
+ITEM_MANAGER_TARGETS = (
+    "scripts.llm.llm_manager:shop_item_generator_ordinary",
+    "scripts.llm.llm_manager:shop_additional_item_generator_ordinary",
+    "scripts.llm.llm_manager:item_craft_generator",
+    "scripts.llm.llm_manager:master_ai_item_generate",
+)
+
+# 「外見文 -> 名前」の控えの上限。応答が来てから選定が走るまでの橋渡しなので、
+# 直近の生成ぶんが残っていれば足りる。
+RECENT_LIMIT = 300
 
 
 def apply(ctx):
@@ -85,7 +116,9 @@ def apply(ctx):
         "world": None,  # counts を数えた世界（world_key）。替わったら読み直す
         "file": None,   # その世界の控え（state/item_image/<世界>.json）
         "counts": {},   # (sub_type, key) -> 過去に見せた累計（下限は世界の中身）
-        "pools": {},    # sub_type -> (keys, 正規化済み行列) のキャッシュ
+        "assigned": {},  # (sub_type, 名前) -> その品に定着した絵（控えに同居）
+        "recent": {},   # 外見文 -> 名前（manager の応答から。プロセス内のみ）
+        "pools": {},    # sub_type -> (keys, 正規化済み行列, キー集合) のキャッシュ
         "logged": 0,
         "extra_total": 0,
     }
@@ -135,26 +168,36 @@ def apply(ctx):
             state["world"] = world
             state["file"] = None
             state["counts"] = {}
+            state["assigned"] = {}
             log("seed: the world name is unreadable; not keeping counts for now")
             return
         path = os.path.join(state_dir, world_filename(world, ".json"))
 
-        # 過去に見せた累計の控え。
+        # 過去に見せた累計と、品ごとの絵の割当の控え。
         counts = {}
+        assigned = {}
         stored = ctx.read_json(path, default=None)
         if isinstance(stored, dict) and isinstance(stored.get("counts"), dict):
             for name, n in stored["counts"].items():
                 folder, _, stem = name.partition("/")
                 if folder and stem and isinstance(n, int) and n > 0:
                     counts[(folder, stem)] = n
+        if isinstance(stored, dict) and isinstance(stored.get("assigned"), dict):
+            for label, stem in stored["assigned"].items():
+                folder, _, item_name = label.partition("/")
+                if folder and item_name and isinstance(stem, str) and stem:
+                    assigned[(folder, item_name)] = stem
         kinds = len(counts)
 
         # 世界に既に居る絵を下限として合成する（合算すると二重数えになる）。
         # MOD 導入前から居る絵と、控えを消した／失った場合の取りこぼしがここで埋まる。
+        # 併せて name -> 絵 も拾い、割当の無い品に取り込む（同名複数絵なら最多。
+        # 控えの割当が優先 ― こちらが選んで記録した絵のほうが確かなため）。
         seen = 0
         world_dict = getattr(app, "world_dict", None)
         if isinstance(world_dict, dict):
             snapshot = {}
+            by_name = {}
             for item in iter_world_items(world_dict):
                 src = item.get("image_src") if isinstance(item, dict) else None
                 if not isinstance(src, str) or "item_candidates" not in src:
@@ -165,23 +208,36 @@ def apply(ctx):
                 spot = (parts[-2], os.path.splitext(parts[-1])[0])
                 snapshot[spot] = snapshot.get(spot, 0) + 1
                 seen += 1
+                item_name = item.get("name")
+                if isinstance(item_name, str) and item_name:
+                    stems = by_name.setdefault((spot[0], item_name), {})
+                    stems[spot[1]] = stems.get(spot[1], 0) + 1
             for spot, n in snapshot.items():
                 if counts.get(spot, 0) < n:
                     counts[spot] = n
-            log("seed {!r}: stored {} kinds + world {} items -> {} kinds".format(
-                world, kinds, seen, len(counts)))
+            for pair, stems in by_name.items():
+                if pair not in assigned:
+                    assigned[pair] = sorted(
+                        stems.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
+            log("seed {!r}: stored {} kinds + world {} items -> {} kinds, "
+                "{} named assignments".format(
+                    world, kinds, seen, len(counts), len(assigned)))
         else:
             log("seed {!r}: stored {} kinds; world_dict unavailable".format(world, kinds))
         state["world"] = world
         state["file"] = path
         state["counts"] = counts
+        state["assigned"] = assigned
 
     def persist_counts():
         """控えを書く。失敗はローダが記録する（ゲームには流れない）。"""
         if not state["file"]:
             return
         data = {"counts": {"{}/{}".format(folder, stem): n
-                           for (folder, stem), n in sorted(state["counts"].items())}}
+                           for (folder, stem), n in sorted(state["counts"].items())},
+                "assigned": {"{}/{}".format(folder, item_name): stem
+                             for (folder, item_name), stem
+                             in sorted(state["assigned"].items())}}
         ctx.write_json(state["file"], data)
 
     def load_pool(sub_type):
@@ -209,7 +265,7 @@ def apply(ctx):
         keys = list(table)
         matrix = torch.tensor([table[k] for k in keys], dtype=torch.float32)
         matrix = matrix / matrix.norm(dim=1, keepdim=True).clamp_min(1e-12)
-        pool = (keys, matrix)
+        pool = (keys, matrix, frozenset(keys))
         state["pools"][sub_type] = pool
         state["extra_total"] += len(keys) - n_base
         log("pool {}: base={} merged={}".format(sub_type, n_base, len(keys)))
@@ -220,8 +276,26 @@ def apply(ctx):
         pool = load_pool(item_sub_type)
         if pool is None:
             return orig(query_text, item_sub_type, *args, **kwargs)
-        keys, matrix = pool
+        keys, matrix, key_set = pool
         ensure_world_counts()
+
+        # 同じ名前の品には定着した絵を使い続ける。名前は manager の応答から
+        # 控えた「外見文 -> 名前」で引く（引けない経路は均しへ）。
+        item_name = None
+        if KEEP_SAME_NAME:
+            with lock:
+                item_name = state["recent"].get(query_text)
+                if item_name is not None:
+                    kept = state["assigned"].get((item_sub_type, item_name))
+                    if kept is not None and kept in key_set:
+                        state["counts"][(item_sub_type, kept)] = \
+                            state["counts"].get((item_sub_type, kept), 0) + 1
+                        persist_counts()
+                        if state["logged"] < LOG_LIMIT:
+                            state["logged"] += 1
+                            log("{}: kept {} for {!r}".format(
+                                item_sub_type, kept, item_name))
+                        return kept
 
         query = emb_mod.text_to_embedding(query_text)
         query = query.detach().reshape(-1).to(dtype=matrix.dtype)
@@ -244,18 +318,63 @@ def apply(ctx):
         with lock:
             state["counts"][(item_sub_type, key)] = \
                 state["counts"].get((item_sub_type, key), 0) + 1
+            if KEEP_SAME_NAME and item_name is not None:
+                state["assigned"][(item_sub_type, item_name)] = key
             persist_counts()
 
         if state["logged"] < LOG_LIMIT:
             state["logged"] += 1
             rank = 0 if top_sim <= 0 else qualified.index(chosen)
-            log("{}: chose {} (rank {} of {} qualified, sim {:.3f}, top1 {} {:.3f}) "
-                "for {!r}".format(
+            log("{}: chose {} (rank {} of {} qualified, sim {:.3f}, top1 {} {:.3f}, "
+                "name {}) for {!r}".format(
                     item_sub_type, key, rank,
                     1 if top_sim <= 0 else len(qualified),
                     float(sims[chosen]), keys[int(top_idx)], top_sim,
+                    repr(item_name) if item_name is not None else "?",
                     query_text[:80]))
         return key
 
-    ctx.log("item_image_variety: installed (TOP_K={}, SIM_FLOOR={}, extra dict={})".format(
-        TOP_K, SIM_FLOOR, "on" if USE_EXTRA_DICT else "off"))
+    def harvest(result):
+        """manager の応答から item_name と item_appearance の対応を控える。"""
+        data = llm.as_dict(result)
+        if data is None:
+            return 0
+        found = 0
+        stack = [data]
+        while stack:
+            obj = stack.pop()
+            if isinstance(obj, dict):
+                item_name = obj.get("item_name")
+                appearance = obj.get("item_appearance")
+                if (isinstance(item_name, str) and item_name
+                        and isinstance(appearance, str) and appearance):
+                    with lock:
+                        # 入れ直して挿入順を最新にする（古い順に落とすため）。
+                        state["recent"].pop(appearance, None)
+                        state["recent"][appearance] = item_name
+                        while len(state["recent"]) > RECENT_LIMIT:
+                            state["recent"].pop(next(iter(state["recent"])))
+                    found += 1
+                stack.extend(obj.values())
+            elif isinstance(obj, list):
+                stack.extend(obj)
+        return found
+
+    def wrap_item_manager(target):
+        # 観測だけで戻り値は触らない。safe=True なので、ここが壊れても
+        # ゲームには orig の結果がそのまま渡る。
+        @ctx.wrap(target, required=False, safe=True)
+        def watcher(orig, *args, **kwargs):
+            result = orig(*args, **kwargs)
+            if KEEP_SAME_NAME:
+                harvest(result)
+            return result
+        return watcher
+
+    for target in ITEM_MANAGER_TARGETS:
+        wrap_item_manager(target)
+
+    ctx.log("item_image_variety: installed (TOP_K={}, SIM_FLOOR={}, extra dict={}, "
+            "keep same name={})".format(
+                TOP_K, SIM_FLOOR, "on" if USE_EXTRA_DICT else "off",
+                "on" if KEEP_SAME_NAME else "off"))
