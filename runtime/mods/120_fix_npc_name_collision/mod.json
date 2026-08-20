@@ -64,8 +64,8 @@
         "en": "Treat voiced and unvoiced kana as the same sound"
       },
       "note": {
-        "ja": "バルガスとバルカスを重複にする。小さいモデルほどここが揺れる",
-        "en": "Makes Barugasu and Barukasu duplicates. Smaller models waver here the most"
+        "ja": "バルガスとバルカスを重複にする。小さいモデルほどここが揺れる。濁点を落として完全に一致したときだけで、上の許容とは足し合わせない",
+        "en": "Makes Barugasu and Barukasu duplicates. Smaller models waver here the most. Only on an exact match after folding; this does not stack with the tolerance above"
       }
     },
     "FIX_EXISTING": {

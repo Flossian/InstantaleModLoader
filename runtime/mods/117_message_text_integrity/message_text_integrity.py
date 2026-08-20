@@ -77,6 +77,15 @@ def apply(ctx):
             ctx.log_exc("message text integrity: could not schedule height update")
 
     def limit_display(hud, value):
+        """ラベルを「前置き + 省略通知 + 末尾 DISPLAY_CHARS 文字」へ載せ替える。
+
+        前置き（`state["prefix"]`）を控える理由と、それが貼り付いたままになる
+        未検証の穴は VERIFICATION.md §3.29 にまとめてある。
+        要点だけ: 塗る相手は `display_text` ではなく画面の
+        `text_display.text` で、この2つは一致しない（GAME.md §2.3）。
+        載せ替えた後は `endswith` が二度と成立しないので、
+        切り出せる機会は1回しかなく、持ち越すしかない。
+        """
         state = state_for(hud)
         if not value:
             state["prefix"] = ""

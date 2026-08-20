@@ -215,11 +215,26 @@ def born(app, character_id, name, **extra):
 print("\n-- 読みの骨 --")
 mod = load_mod()
 
-VARGAS = ("バルガス", "ヴァルガス", "ばるがす", "バルカス",
+VARGAS = ("バルガス", "ヴァルガス", "ばるがす",
           "「隻眼の」バルガス", "隻眼のバルガス", "バルガス2")
 keys = {name: mod.canonical(name) for name in VARGAS}
 check("バルガスの揺れが全部同じ鍵になる",
       len(set(keys.values())) == 1, keys)
+
+# 濁点は鍵に残す。落とすのは比べるときだけ（`_near`）。
+check("濁点の違いは鍵に残る",
+      mod.canonical("バルガス") != mod.canonical("バルカス"),
+      (mod.canonical("バルガス"), mod.canonical("バルカス")))
+check("濁点だけが違う名前は重複とみなす",
+      mod.too_close(mod.canonical("バルガス"), mod.canonical("バルカス")))
+
+# 助詞の `の` は、手前が仮名だけなら切らない（切ると名前が壊れる）。
+check("たけのうち の鍵が壊れない",
+      mod.canonical("たけのうち") == ("タケノウチ",), mod.canonical("たけのうち"))
+check("漢字を含む二つ名は切る",
+      mod.canonical("隻眼のバルガス") == mod.canonical("バルガス")
+      and mod.canonical("重鉄のバルカス") == mod.canonical("バルカス"),
+      (mod.canonical("隻眼のバルガス"), mod.canonical("重鉄のバルカス")))
 
 check("姓名は分けたまま持つ",
       mod.canonical("バルガス・ドレイク") == mod.canonical("バルガス") +
@@ -249,6 +264,29 @@ for left, right in (("アレン・スミス", "アレン・ジョーンズ"),
 
 check("名前が無ければ鍵も無い",
       mod.canonical(None) == () and mod.canonical("  ") == ())
+
+# ------------------------------------------------------------ 実機の回帰
+# `out/npc_name.log` に実際に出た判定。
+# 上の 9 件は捕まえたいもの、下の 3 件は**別人を改名していた誤検出**
+# （濁点落としと編集距離が二重に効いていた。2026-08-20 に判定を2段へ分けた）。
+print("")
+print("-- 実機の判定（out/npc_name.log の回帰） --")
+for left, right, same in (
+        ("セレスティアル", "セレスティア", True),
+        ("ルナリア", "リナリア", True),
+        ("バルド・ストーン", "バルト", True),
+        ("セレスティナ", "セレスティア", True),
+        ("バルド", "バルト", True),
+        ("ルナリエ", "ルナリス", True),
+        ("カイル", "カイル", True),
+        ("重鉄のバルカス", "元傭兵のバルガス", True),
+        ("隻眼のバルガス", "バルガス", True),
+        ("バルガス・グラトル", "“黒蜥蜴”アルカス", False),
+        ("“黒蜥蜴”アルカス", "ヴァルガス・ヴォルフレイン", False),
+        ("“黒蜥蜴”アルカス", "ヴァルガス・グレイヴ", False)):
+    got = mod.too_close(mod.canonical(left), mod.canonical(right))
+    check("{} {} / {}".format("重複" if same else "別人", left, right),
+          got == same, (mod.canonical(left), mod.canonical(right)))
 
 # `SIMILARITY` の段。
 mod.SIMILARITY = "strict"

@@ -102,6 +102,10 @@ class FakeLabel(object):
         self.y = BOX_SIZE[1] * top - height
 
     def texture_update(self):
+        # 何回焼き直されたかを数える。
+        # この MOD は**測定に表示中のラベルを使わない**ので、
+        # `update_content` を通しても増えないのが正しい（`_probe_height`）。
+        self.texture_updates = getattr(self, "texture_updates", 0) + 1
         width, height = self.text_size[0], self.text_size[1]
         per_line = max(1, int(width // CHAR_W))
         lines = sum(max(1, math.ceil(len(part) / per_line))
@@ -187,6 +191,30 @@ class FakeWindow(object):
 CLOCK = FakeClock()
 
 
+def wrapped_height(text, width):
+    """その幅で折り返したときの高さ。`FakeLabel.texture_update` と同じ式。"""
+    per_line = max(1, int(width // CHAR_W))
+    lines = sum(max(1, math.ceil(len(part) / per_line))
+                for part in (text or "").split(chr(10)))
+    return lines * LINE_H
+
+
+class FakeCoreLabel(object):
+    """`kivy.core.text.Label`（画面に出ない複製）のうち mod が触るところだけ。
+
+    **表示中のラベルを測定器にしていないこと**を、ここで検査できるようにする。
+    mod がうっかり `FakeLabel.texture_update()` を測定に使うと、
+    下の `texture_updates` が増えるので分かる。
+    """
+
+    def __init__(self, text, font_size, text_size, line_height, **_kwargs):
+        self.texture = types.SimpleNamespace(
+            size=(text_size[0], wrapped_height(text, text_size[0])))
+
+    def refresh(self):
+        pass
+
+
 def install_fake_kivy():
     """mod は kivy を関数の中で遅延 import する。sys.modules に偽物を置く。"""
     kivy = types.ModuleType("kivy")
@@ -195,8 +223,11 @@ def install_fake_kivy():
     core = types.ModuleType("kivy.core")
     window_mod = types.ModuleType("kivy.core.window")
     window_mod.Window = FakeWindow
+    text_mod = types.ModuleType("kivy.core.text")
+    text_mod.Label = FakeCoreLabel
     for name, module in (("kivy", kivy), ("kivy.clock", clock_mod),
-                         ("kivy.core", core), ("kivy.core.window", window_mod)):
+                         ("kivy.core", core), ("kivy.core.window", window_mod),
+                         ("kivy.core.text", text_mod)):
         sys.modules[name] = module
 
 
@@ -417,6 +448,20 @@ def run():
           0 <= box.y and box.y + box.height <= WINDOW[1]
           and 0 <= box.x and box.x + box.width <= WINDOW[0],
           "pos=({}, {}) size={}".format(box.x, box.y, box.size))
+
+    # -- 表示中のラベルを測定器にしない -------------------------------------
+    # 幅の候補を試すループは1回のホバーでラベル3枚 x 最大6周ぶん測る。
+    # そこで表示中のラベルを焼き直していると、ホバーのたびに18回焼くことになる
+    # （`112_` / `117_` が同じ形で打ち出しを 1.6 倍遅くしていた。§2.34）。
+    box = FakeBox()
+    for label in (box.name_label, box.attributes_label, box.desc_label):
+        label.texture_updates = 0
+    box.update_content(item(description=long_desc))
+    CLOCK.tick()
+    burned = [getattr(label, "texture_updates", 0)
+              for label in (box.name_label, box.attributes_label, box.desc_label)]
+    check("measuring does not re-bake the on-screen labels",
+          burned == [0, 0, 0], burned)
 
     # -- ラベルが欠けているビルドでは何もしない ------------------------------
     box = FakeBox()
