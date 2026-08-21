@@ -40,13 +40,30 @@ MOD を作るときの下調べ用。
 省略なしで `out\live_crashes.log` に残す。
 不具合を報告するときはこのファイルを見る。
 
+本体自身のクラッシュ記録（`<ゲームdir>\crash_log.txt`）も、今までどおり書かれる。
+
+#### 作者のサーバへの送信は止める
+
+本体にはクラッシュの記録を外へ送る段があるが、**注入している間はこれを止める**。
+MOD を入れて遊んでいる間の記録にはローダと MOD の枠が混ざっていて、
+素のゲームで起きたことの記録にはならないため。
+止めたことは `out\modloader.log` に1行残る。
+
+```
+[...] crash recorder: not sending the crash log to the server (1635 chars);
+      mods are loaded, so it would not be a report about the plain game
+```
+
+MOD 無しで起きた不具合を作者へ報告したいときは、
+`MOD を外す`（または MOD を入れずに起動）してから再現すれば、本体の送信がそのまま働く。
+
 ---
 
 ## 修正（1xx）
 
 ### `126_ui_title_version`: タイトル画面にローダの版を出す
 
-タイトル画面の右上に `modloader v1.7.1` の1行が出る。
+タイトル画面の右上に `modloader v1.7.2` の1行が出る。
 出るのはタイトル画面だけで、「開始する」を押せば消える。
 遊びには何も影響しない。
 
@@ -931,6 +948,7 @@ v2 で、`111_llm_prompt_replace` が使っているのと同じ仕掛け口を�
 | `216_probe_llm_overlap` | LLM リクエストの多重送信をプロセス内で数える（`127_` の `--parallel 1` によるキュー待ちが実プレイでどれだけ起こるか）。ローカル llama.cpp 経路のみ |
 | `217_probe_area_move` | エリア移動の未実測部分を録る。馬車の移動中の文言・馬車の日数（徒歩の90に対する実値）・馬車代の徴収の時機（移動の中で所持金が動くか）・手持ちが運賃に満たないときの挙動。`314_` の料金差し替えの前提の検証用 |
 | `218_probe_vacation` | 宿の宿泊の未実測部分を録る。宿代の徴収の時機（`VacationStartManager.execute` の前後で所持金が動くか）・部屋の `quality` の実値・`period_months`（`宿泊する(3ヵ月)` の月数）の決まり方・連泊の再徴収・日数送りの経路。`315_` の料金差し替えの前提の検証用 |
+| `219_probe_crash_log` | 本体のクラッシュ記録が落ちる呼び出しを見分ける。`make_crash_log` が `AttributeError: module 'datetime' has no attribute 'now'` で落ちると `crash_log.txt` も送信も走らない。呼ばれたスレッド・`title`・例外の連鎖の数・そのときの `__main__.datetime`・呼び出し元の経路（MOD の枠が挟まっているか）と、`datetime` を差し替えてもう一度組ませた結果を1件ずつ控える。やり直しの結果は捨てて元の例外を投げ直すので、ゲームの挙動は変わらない。`131_` の前提の検証用 |
 
 ---
 

@@ -64,7 +64,8 @@
     "214_probe_new_character",
     "216_probe_llm_overlap",
     "217_probe_area_move",
-    "218_probe_vacation"
+    "218_probe_vacation",
+    "219_probe_crash_log"
   ],
   "disabled": []
 }

@@ -1,0 +1,16 @@
+{
+  "entry": "probe_crash_log.py",
+  "api": 1,
+  "kind": "probe",
+  "name": {
+    "en": "Probe: the built-in crash log",
+    "ja": "計測: 本体のクラッシュ記録"
+  },
+  "description": {
+    "en": "The game's own make_crash_log dies with AttributeError: module 'datetime' has no attribute 'now', so crash_log.txt is not written and the crash is not sent. Records which calls take that branch, and whether swapping the name would have produced a log. Read-only: the original error is re-raised, so the game behaves exactly as it does now",
+    "ja": "本体の make_crash_log が AttributeError: module 'datetime' has no attribute 'now' で落ち、crash_log.txt が書かれず送信も走らない。どの呼び出しがその枝を通るのかと、名前を差し替えれば記録が出来たのかを録る。読むだけで、元の例外はそのまま投げ直すのでゲームの挙動は今と変わらない"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "debug": true
+}

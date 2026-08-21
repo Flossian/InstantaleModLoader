@@ -1,0 +1,16 @@
+{
+  "entry": "fix_new_shop_data.py",
+  "api": 1,
+  "kind": "fix",
+  "name": {
+    "en": "Open shops that were built while playing",
+    "ja": "遊んでいる最中に生まれた店で売買できるようにする"
+  },
+  "description": {
+    "en": "Shops that came into being after the world was generated cannot be opened: picking 'trade' raises KeyError on the facility id and the thread dies. The game keeps two tables of raw data and only one of them receives what is created during play, while the id counter advances in both. Copies the missing rung of areas/nodes/facilities, plus the shop owner, from the table that has it, right before the game looks it up. Nothing is copied if it is already there, and nothing but the game's own values is written",
+    "ja": "世界を作った後に生まれた施設は売買が開けない。「売買する」を選ぶと施設 id の KeyError でスレッドが落ちる。ゲームは素データの辞書を2つ持っていて、遊んでいる最中に作られたものが片方にしか足されないのに、採番だけは両方で進んでいる。ゲームが引きに行く直前に、経路（エリア・ノード・施設）の欠けている段と店の主を、持っているほうの辞書から写す。既に在れば何もせず、ゲーム自身の値以外は1つも書かない"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "settings": {}
+}

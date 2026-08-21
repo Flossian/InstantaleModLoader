@@ -21,9 +21,36 @@
     （`100_fix_kivy_shutdown` の後始末クラッシュがまさにこの形）。
   * 各記録にスレッド名・ゲームバージョン・時刻を付ける。
 
-ゲームの挙動は変えない。
-元のクラッシュ処理もそのまま呼ぶので、
-ゲーム側のログ出力やクラッシュ送信は今までどおり動く。
+記録を取ったら元のクラッシュ処理をそのまま呼ぶので、
+本体の `crash_log.txt` は今までどおり書かれる。
+
+##### 送信だけは止める
+
+本体は `report_crash` の中で、組んだ記録を
+
+    write_crash_log_to_file -> should_skip_crash_log_server_send -> send_crash_log_to_server
+
+の順に渡す（実機で確認。VERIFICATION.md §3.33）。
+最後の関数の中身は読めていない。
+名前と `CRASH_REPORT_URL` からして外へ出す口で、
+渡っているのは `crash_log.txt` に書かれるのと同じ文字列。
+
+MOD を入れて遊んでいる間の記録には、ローダと MOD の枠が混ざる。
+外へ出すかどうかはこちらで決めることなので、**入っている間は出さない**ことにした。
+`crash_log.txt` は書かれるので手元には残るし、
+素のゲームで起きたものを報告したいときは MOD を外して再現すればよい。
+
+止めるのは `send_crash_log_to_server` そのもの。
+`should_skip_crash_log_server_send` を True にする形は、
+本体がその判断を通る経路でしか効かない。
+出したくないのは送信という行為の方なので、そちらを直接止める。
+
+> 2026-08-21 まで、**注入している間はこの後段が丸ごと走っていなかった**。
+> 注入で流し込むコードがモジュール階層で `import datetime` していて、
+> 本体が `from datetime import datetime` で持っていた束縛を上書きしていたため、
+> `make_crash_log` が `AttributeError` で落ちていた
+> （`tools/injector.py` の `BOOTSTRAP_TEMPLATE` の注記）。
+> あちらを直したので `crash_log.txt` は戻る。送信はここで意図して止める。
 """
 
 import datetime
@@ -122,9 +149,20 @@ def apply(ctx):
         @ctx.wrap("__main__:report_crash")
         def report_crash(orig, exc_type, exc_value, exc_traceback, title="CRASH"):
             # 自前の記録を取ってから、必ず元の処理を呼ぶ。
-            # ゲームの挙動は変えない。
+            # 本体の crash_log.txt はそのまま書かれる。
             record(exc_type, exc_value, exc_traceback, title)
             return orig(exc_type, exc_value, exc_traceback, title)
+
+        @ctx.wrap("__main__:send_crash_log_to_server", required=False)
+        def send_crash_log_to_server(orig, *args, **kwargs):
+            # **元の関数は呼ばない。**
+            # ここを通るトレースバックにはローダと MOD の枠が混ざっているので、
+            # 素のゲームの不具合報告としては送らない（上の「送信だけは止める」）。
+            size = len(args[0]) if args and isinstance(args[0], str) else -1
+            ctx.log("crash recorder: not sending the crash log to the server "
+                    "({} chars); mods are loaded, so it would not be a report "
+                    "about the plain game".format(size))
+            return None
 
         ctx.log("live crash log: {}".format(log_path))
         # ゲームが excepthook を差し替えているかどうかを記録しておく。

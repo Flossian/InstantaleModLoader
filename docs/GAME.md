@@ -28,7 +28,7 @@ TECH.md と分けているのは読む理由が違うから。
 `000_recon` が注入のたびに書き出す。
 
 | ファイル | 内容 |
-|---|---|
+| --- | --- |
 | `targets.txt` | `module:qualname(signature)` 形式。`@ctx.wrap` にそのまま貼れる（1,585件） |
 | `game_modules.txt` | ゲーム自身のモジュールの全属性ダンプ（擬似ソース） |
 | `modules.json` | 全モジュールの機械可読インベントリ（`bases` / `mro`） |
@@ -42,7 +42,7 @@ TECH.md と分けているのは読む理由が違うから。
 
 ### 1.2 ゲーム自身のモジュール
 
-```
+```python
 __main__                       instantale.py、516ターゲット
 scripts                        scripts.hud.* / scripts.llm.* / items / functions ほか
                                scripts.save_codec, scripts.steam.server_process
@@ -57,7 +57,7 @@ save_area_json, save_world_json, api_key_manager, build_type, sdcpp_cuda
 ### 1.3 スキャンで見つからないもの
 
 | 見つからないもの | 見る先 |
-|---|---|
+| --- | --- |
 | ネスト関数（`send_request_on_id` はトレースバックに62回出るが `vars(module)` に無い） | 外側の関数（`send_request` / `send_request_with_no_structure`） |
 | クラスのメソッド（`set_ai_models` / `show_world_choice` はモジュールレベルのキーワードスキャンで0件） | `game_modules.txt` |
 | 属性名を推測して探したもの | `vars(obj)` を一度全部出す。HUD の描画先を `texts` / `labels` で探して見つからなかった実例がある（正解は `hud.buttons[i].text`。§2.3） |
@@ -65,7 +65,7 @@ save_area_json, save_world_json, api_key_manager, build_type, sdcpp_cuda
 ### 1.4 環境の基本値
 
 | 項目 | 値 |
-|---|---|
+| --- | --- |
 | ゲーム本体 | `C:\Program Files\Epic Games\Instantaleq6Ve7\instantale.exe` |
 | ランタイム | CPython 3.10.11 / Kivy / SDL2 |
 | `game_version` | `014`（`__main__.get_game_version()`）。Epic の `AppVersion`（`main_025`）は別系統 |
@@ -86,7 +86,7 @@ Epic の `AppVersion` は
 `python310.dll` は 2026-06-03 のままなので**注入基盤は無傷**。
 
 | 版 | ゲーム側の変化 | MOD 側 |
-|---|---|---|
+| --- | --- | --- |
 | main_022 → 023（2026-07-30） | `targets.txt` 1466 → 1585。自由生成施設（§2.21）・`scripts.save_codec`・Steam 認証・装備強化が増えた | 対応不要。28/28 適用、警告0 |
 | main_023 → 024（2026-08-05） | 賭博2種（ハイアンドロー / ロシアンルーレット）で 68 ターゲット増。起動処理の変更で満額到達が 80秒 → 41秒 | 6件が「Reported by ModLoader」として取り込まれた（下記） |
 | main_024 → 025（2026-08-09） | `InstantaleApp.start_game` の 876 行が `experience_level=60` → `1` | `123_` が何もしなくなった（VERIFICATION_LOG.md §2.36） |
@@ -97,7 +97,7 @@ Epic の `AppVersion` は
 判定はその MOD 自身の印で行う。
 
 | MOD | 印 | 判定 |
-|---|---|---|
+| --- | --- | --- |
 | `107_fix_battle_flag_stuck` | `[FLAGFIX]` 0件で `in_battle` が落ちている | 本体が直した |
 | `106_fix_battle_bgm_restore` | `[BGMFIX]` 0件 | 本体が直した（但し書きあり） |
 | `101_fix_npc_employ_price` | 上流プローブ＋リコン差分 | 本体が直した |
@@ -148,7 +148,7 @@ Epic の `AppVersion` は
 `out/prompt_bloat.log` が世代交代していない区間で前後を比べられた。
 
 | MOD | タグ | 更新前 | 更新後 | 判定 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `102_fix_prompt_dedup` | `[DEDUP]` | 3 | 0 | 不要（同じ操作を通して確認） |
 | `103_fix_eventlog_trim` | `[EVENTLOG]` | 49 | 発火 | 引き続き必要 |
 | `105_fix_schema_compact` | `[COMPACT]` | 359 | 継続 | 引き続き必要 |
@@ -174,7 +174,7 @@ Epic の `AppVersion` は
 段階適用の途中経過が WARN として大量に出るので、更新で壊れたように見える。
 
 | 起動からの時間 | patches | 中身 |
-|---|---|---|
+| --- | --- | --- |
 | 3秒 | 11 / 9 target / 9 mod | `__main__` がまだ空。`has no attribute 'InstantaleApp'` が大量に出る |
 | 9秒 | 47 / 35 / 20 | 一部のモジュールが import され、再適用 |
 | 85秒 | 137 / 93 / 26 | 満額 |
@@ -302,7 +302,7 @@ app.refresh_choice_buttons(reset_page=True)
 #### 画面に実際に出ているもの
 
 | 何 | どこ |
-|---|---|
+| --- | --- |
 | 選択肢の文字 | `hud.buttons[i].text`（`app.to_display_buttons` とは別物）。枠数は 4 で固定 |
 | 自由入力の可否 | `hud.text_send_button.disabled` |
 | 本文（情景描写・LLM の応答） | `hud.text_display`（`kivy.uix.label.Label`） |
@@ -321,7 +321,7 @@ app.refresh_choice_buttons(reset_page=True)
 実測（2026-08-03、`211_probe_text_speed`）:
 
 | | 実測 |
-|---|---|
+| --- | --- |
 | 1ティックで進む文字数 | 1文字（平均 1.03〜1.11。まれに 2〜3） |
 | ティックの間隔 | `app.text_speed` 秒。設定を変えると即座に変わる（再起動不要） |
 | `text_speed=0.04` / `0.08` | 48〜50ms ＝ 20文字/秒 / 80〜83ms ＝ 12文字/秒 |
@@ -338,7 +338,7 @@ app.refresh_choice_buttons(reset_page=True)
 ゲームが長い処理の間に操作を止める形。
 
 | 要素 | 値 |
-|---|---|
+| --- | --- |
 | `app.is_button_enabled` | `False` |
 | `hud.buttons[i].text` | `.` → `..` → `...`（約 0.3 秒周期）。全枠に出る |
 | `hud.text_send_button.disabled` | `True` |
@@ -379,7 +379,7 @@ app.refresh_choice_buttons(reset_page=True)
 #### 画面の見分けは文字列ではなく spec のクラス名で
 
 | 目印 | 意味 |
-|---|---|
+| --- | --- |
 | `ConversationEndManager` がある | 会話画面 |
 | `DisplayTalkChoice` がある | 会話相手を選べる ＝ 施設のルートメニュー |
 
@@ -453,7 +453,7 @@ app.world.characters     -> {id: Character}    Facility.owner はこの id（str
 #### セーブの形＝実行時の形ではない
 
 | 項目 | ロード直後 | 遊んでいる最中 |
-|---|---|---|
+| --- | --- | --- |
 | `player.current_area` | エリア id の文字列（`"7"`） | `Area` オブジェクト |
 | `player.location` | 施設 id の文字列（`'106'`） | `Facility` オブジェクト |
 
@@ -687,7 +687,7 @@ QuestEventManager(app, event_name, enemies_info, event_turn)
 戦闘終了マネージャは3つあり、経路によって挙動が違う。
 
 | マネージャ | 入口 | `end_phase` 完了時の `in_battle` |
-|---|---|---|
+| --- | --- | --- |
 | `BattleEndManager` | 通常の戦闘 | 0（ゲーム自身が下ろす） |
 | `BattleEndInFreeAction` | 自由入力・会話から入った戦闘 | 1（下ろし忘れ。main_024 で解消） |
 | `BattleEndInColosseum` | コロシアム | - |
@@ -730,7 +730,7 @@ check_battle_end / enemy_delete_animation / convert_llm_output_to_instruction_di
 数字が欲しいだけなら HP の前後を比べるほうが確実。
 
 | 誰 | HP の在り処 |
-|---|---|
+| --- | --- |
 | 敵 | `app.current_enemy_dict`（鍵 → その敵。戦闘の実体の有無もここで見る） |
 | プレイヤー | `app.player` |
 | 同行者 | 名簿の id から `world.characters`（§2.8） |
@@ -810,7 +810,7 @@ scripts.llm.llm_manager:*                                                    マ
 プロバイダごとの内部（実測・2026-08-08）:
 
 | | Gemini | OpenAI / Claude |
-|---|---|---|
+| --- | --- | --- |
 | 境界 | `send_request(manager_name, message, structure, model=None, max_tokens=30000, timeout=None)` | 同形 |
 | クライアント | `google.genai` の `Client` 直 | `openai.OpenAI` / `anthropic.Anthropic` 直 |
 | 既定モデル | `gemini-3.5-flash` | `gpt-5.4-nano` / `claude-sonnet-5` |
@@ -875,13 +875,14 @@ alias_scan が同じ関数を持つ全モジュールを張り替え、どのプ
   後:   Location: name, kind:∈{shop,inn}
         Area: name, locations:Location[], atomosphere:∈{tense,normal}, note?
   ```
+
 - `ast.literal_eval` は使えない（式1個しか受け取れず終端位置を返さないので、
   プロンプトの途中から読み始めて置換範囲を決められない）。再帰下降パーサが要る
 
 #### クエスト1件に関わるマネージャ
 
 | マネージャ | 役割 | 討伐固定の文言 |
-|---|---|---|
+| --- | --- | --- |
 | `random_quest_generator` / `settlement_quest_generator` | クエスト構造の生成 | **有** |
 | `quest_starter` / `_with_party` | 開始ナレーション＋初期選択肢 | 無 |
 | `quest_referee_with_free_action` / `quest_referee` | 毎ターンの進行判定 | **有** |
@@ -929,7 +930,7 @@ DEDUP / COMPACT / EVENTLOG は二重に適用しても結果が変わらない�
 明示すると統合が外れ、スロットごとに専用のプールを取る（起動ログの `kv_unified` に出る）。
 
 | 起動引数 | `kv_unified` | `n_ctx` | `n_ctx_seq`（1リクエストの窓） |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `--ctx-size 16384`（ゲームの既定） | true | 16384 | 16384 |
 | `--ctx-size 16384 --parallel 1` | false | 16384 | 16384 |
 | `--ctx-size 65536 --parallel 4` | false | 65536 | 16384 |
@@ -991,6 +992,29 @@ InstantaleApp.normalize_shop_inventory_prices(shop_obtainer, player_obtainer)
 - **主の持ち物を空にしてから売買を始めると、ゲームが初回と同じ経路で品揃えを作り直す**
   （実機で成立。`cleared` → `restocked` が4店舗6回、`WARN not refilled` は0件）
 
+#### 店の主は `job` が施設の種類と一致している
+
+実セーブで、主の居る施設67件を全部突き合わせた結果:
+
+| | |
+| --- | --- |
+| `job` が `facility_type` と一致 | 66件 |
+| 食い違い | 1件だけ（`general_store` の主が `job='other'`） |
+
+食い違っていた1件はセーブエディタで足した店だった。
+**ただし売買が開けなかった原因ではない。**
+`general_store` へ直しただけでは症状が変わらず、
+開いたのは素データを揃えてからだった（§2.28）。
+`job` を `other` に戻したまま素データだけ揃える形は試していないので、
+「無関係」とまでは言えない。
+`job` の値は `facility_type` と同じ語彙を使う
+（`inn` / `general_store` / `specialty_shop` / `blacksmith` /
+`medical_facility` / `administrative_office` / `underworld_office` / `guild`）。
+
+> NPC を店の主にする MOD は `job` を施設の種類に合わせておくこと。
+> 揃えない理由が無く、ゲームが作る形が66件そう揃っている。
+> 品揃えを持っていた13人（＝店として開いたことがある NPC）も全員 `job` が店系だった。
+
 日付は世界に1つ（`world.days_elapsed`。セーブでは `world_data.days_elapsed`）。
 進めているのは `InstantaleApp.elapse_days(days)`（§2.18）。
 
@@ -1005,7 +1029,7 @@ scripts.items:Item.__init__(self, name, item_type, attributes, description,
 ```
 
 | 段 | 値 | どこから分かるか |
-|---|---|---|
+| --- | --- | --- |
 | `item_type` | `weapon` / `wearable` / `healing_item` / `consumable` / `utility` / `material` の6種 | 店の品揃え生成の構造化出力スキーマ |
 | `attributes["item_detail"]` | `small_weapon` `body_armor` `magical_material` … 32種 | 同スキーマの `sub_type` と `Assets\images\item_candidates_dark\` のフォルダ名 |
 | `rarity` | `common` / `rare` / `magical` / `epic` / `legendary` / `mythic` の6段 | 同スキーマ |
@@ -1035,7 +1059,7 @@ gold に直すのは `get_item_base_price` と `get_randomized_item_price`。
 実セーブ（`ヴェスティア`、Lv31 / 3651日）から拾った実額:
 
 | 品 | `value` | 能力値 | 買価 | 売価 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | 短剣 common | 3 | 攻撃力 23 | 72 | - |
 | 短剣 common | 20 | 攻撃力 96 | 463 | - |
 | 短剣 magical | 48 | 攻撃力 245 | 1,831 | - |
@@ -1120,7 +1144,7 @@ hud.craft_inventory_generate_arrow_label    「→」
 ```
 
 | | |
-|---|---|
+| --- | --- |
 | 開閉 | `InstanTaleHUD.toggle_craft_inventory_visibility` / `InstantaleApp.toggle_craft_inventory_window` |
 | 押下の紐付け | `InstanTaleHUD.set_craft_generate_button_callback(callback_function)` |
 | 生成 | `craft_generate_item` → `ItemCraftManager` → `llm_manager:item_craft_generator(material_list, prompt)` |
@@ -1199,7 +1223,7 @@ Character.calculate_current_required_exp_on_display() / _gained_exp_on_display(g
 （`levelup()` が「能力値の更新まで持つ」というのは関数名からの推測で、実際には動かない）:
 
 | レベル | `original_ability_scores`（筋・耐・敏・知・賢・魅） | 合計 |
-|---|---|---|
+| --- | --- | --- |
 | 3〜33 | 24・18・26・25・25・24 | 142 |
 | 41〜73 | 26・22・26・26・25・24 | 149 |
 
@@ -1209,7 +1233,7 @@ Character.calculate_current_required_exp_on_display() / _gained_exp_on_display(g
 #### 作成時の値は才能点（`point_use`）で決まり、既定はかなり低い
 
 | キャラ | `point_use` | 合計 | 各値の幅 |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | テスト女性 / テスト男性 | 16 | 66 | 11 一律 |
 | ヴァルカ・ヴォルガド | 31 | 71 | 9〜15 |
 | アーリ | 300 | 142 | 18〜26 |
@@ -1233,7 +1257,7 @@ Character.calculate_current_required_exp_on_display() / _gained_exp_on_display(g
 #### 訓練・休暇のマネージャ（すべて `__main__`）
 
 | クラス | `__init__` | 何か |
-|---|---|---|
+| --- | --- | --- |
 | `DisplayVacationChoice` | `(app, period_months)` | 宿屋の休暇の選択肢＝部屋選び |
 | `VacationStartManager` | `(app, months, quality)` | 部屋を決めて宿泊を始める。連泊の `まだ宿泊する` も同じクラス |
 | `VacationTrainManager` / `VacationRestManager` | `(app, months, quality)` | 訓練 / 休養 |
@@ -1282,7 +1306,7 @@ process_choice(AreaMoveManager,       '馬車(1000G)' / '徒歩(3ヵ月)')
 ```
 
 | クラス | `__init__` | 何か |
-|---|---|---|
+| --- | --- | --- |
 | `DisplayAreaMoveChoice` | `(app)` | 行き先の一覧 |
 | `AreaMoveCofirmation` | `(app, target_area_id)` | 手段の確認。綴りは `Cofirmation` |
 | `AreaMoveManager` | `(app, target_area_id, mode)` | 実際の移動。`method_1` / `show_loading_text` |
@@ -1311,7 +1335,7 @@ process_choice(AreaMoveManager,       '馬車(1000G)' / '徒歩(3ヵ月)')
 `{"type": "elapse_days", "days": N}` が入っている件数を全件数えた。
 
 | manager | 使った / 総数 |
-|---|---|
+| --- | --- |
 | `master_ai_facilitator`（自由行動） | **128** / 1004 |
 | `master_ai_facilitator_from_conversation` | **17** / 161 |
 | クエスト側 8 manager（`quest_referee_*` / `*_summarizer` ほか） | **0** / 2029 |
@@ -1336,7 +1360,7 @@ process_choice(AreaMoveManager,       '馬車(1000G)' / '徒歩(3ヵ月)')
 同じプレイヤーを1晩追った実測:
 
 | `physical_integrity` | `max_hp` | `exhausted` |
-|---|---|---|
+| --- | --- | --- |
 | 100 | 1560（`original_max_hp` と同じ） | `False` |
 | 50 | 1365 | `True` |
 | 0 | 1170 | `True` |
@@ -1366,7 +1390,7 @@ player_data["area_history"] = {
 ```
 
 | 項目 | 分かっていること |
-|---|---|
+| --- | --- |
 | 在り処 | `Character.__init__` の引数（`area_history=None`）。プレイヤーもNPCも同じ `Character` |
 | 鍵 | エリア id（`player.current_area` と同じ語彙。文字列） |
 | `lawfulness` | 素の平常値は `10`（40エリア全てが 10 の実セーブで確認）。小さいほど手配が重く、0 未満で犯罪者。実プレイで `-40` を観測。上限は未特定 |
@@ -1435,7 +1459,7 @@ facility.config = {"level_of_detail": 0, "concept": "…",
 実機へ入れる前にプログラムの正しさを確かめられる（戻り値は指摘の `list`。空なら合格）。
 
 | 分類 | ステップ |
-|---|---|
+| --- | --- |
 | 制御 | `label` / `goto` / `if` / `end` / `random` / `calc` / `var_set` |
 | 表示と入力 | `text` / `choice` / `input` |
 | 状態 | `flag_set` / `flag_get` / `memory` / `history_clear` |
@@ -1476,7 +1500,7 @@ facility.config = {"level_of_detail": 0, "concept": "…",
 跨ぎたい MOD は状態を自分で持ち、渡すプログラムをその都度組む。
 
 | 渡し方 | 痕跡 |
-|---|---|
+| --- | --- |
 | `world_dict['free_facility_programs']` に足す | セーブに残る。MOD を外しても id が残る |
 | **`_lookup_program` を包んで自前のものを返す** | **何も残らない**（こちらを使う） |
 
@@ -1496,7 +1520,7 @@ def lookup_program(orig, self, *args, **kwargs):
 #### 2.21.4 上限と禁止事項
 
 | | |
-|---|---|
+| --- | --- |
 | `MAX_STEPS_PER_EXECUTE` | 300 |
 | LLM 呼び出し | 既定 20、生成物は 12。1本 2〜6 ステップが指針 |
 | プログラムの大きさ | 15〜45 ステップ |
@@ -1547,7 +1571,7 @@ app.move_npc_to_facility(npc_id, character, 施設, ノード)
 ```
 
 | 関数 | 役割 |
-|---|---|
+| --- | --- |
 | `World.generate_character(id, value)` | **作る側ではない。**`save_data_dict['npcs'][id]` を id で引いて `Character` を組む。無い id は `KeyError` |
 | `save_area_json:generate_npc(...)` | 呼んでも何も作られない（返るのは `world_dict` そのもの） |
 | `scripts.characters:Character(...)` | コンストラクタが完全な署名で露出。最後の手段として直に組める |
@@ -1575,7 +1599,7 @@ app.move_npc_to_facility(npc_id, character, 施設, ノード)
 順番が変わると、項目は全部揃っているのに表示が崩れる。
 
 | # | 項目 | | # | 項目 | | # | 項目 |
-|---|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `name` | | 12 | `experience_point` | | 23 | `look` |
 | 2 | `id` | | 13 | `original_max_hp` | | 24 | `memory` |
 | 3 | `category` | | 14 | `max_hp` | | 25 | `life_log` |
@@ -1695,7 +1719,7 @@ retrieval を待たず第一声から載る。
 `scripts.functions:document_emotion_scores_new(affinity, player_charisma)`。
 
 | 位置 | 何の段か | 材料 |
-|---|---|---|
+| --- | --- | --- |
 | 0 | 好感度 | `affinity`（その NPC がプレイヤーに対して持っている値） |
 | 1 | 見た目の魅力 | `player_charisma`（プレイヤーの能力値。§2.17） |
 
@@ -1715,7 +1739,7 @@ retrieval を待たず第一声から載る。
 ゲーム自身を引いて読み直すので、その記録がそのまま答えになる）:
 
 | 魅力 | 段 | | 好感度 | 段 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | 〜7 | ひどく醜く思っている | | 〜-41 | 深く憎悪している |
 | 8〜10 | あまり好みではない | | -40〜 | 憎悪している |
 | 11〜13 | **文が付かない**（`None`） | | -30〜 | 強い嫌悪感を抱いている |
@@ -1788,7 +1812,7 @@ retrieval を待たず第一声から載る。
 結果まで対応の取れたものが168回）:
 
 | LLM が指定した確率 | 回数 | 実測の成功率 |
-|---|---|---|
+| --- | --- | --- |
 | 30% 以下 | 10 | 10% |
 | 35〜45% | 18 | 44% |
 | 50% | 36 | 47% |
@@ -1808,6 +1832,137 @@ retrieval を待たず第一声から載る。
 `master_ai_faciltiator_from_conversation_in_quest`（綴りはゲーム側のまま）もあるが、
 `output_data/` には出ていない（回る条件は未確認）。
 4つとも同じ形の応答なので、**この経路を触る MOD は4つとも見ること**（`313_`）。
+
+### 2.27 世界生成（入力した概要はそのまま保存されない）
+
+「世界を生成する」画面で入れた名前と概要は、そのまま世界のデータになるわけではない。
+
+```
+scripts.hud.hud_world_generate:WorldGenerateScreen
+  world_name_input.text / world_overview_input.text
+    ├ 概要が空でなければ llm_manager_world_generate:check_world_content_violation(name, overview)
+    └ save_world_json:generate_new_world(world_name, world_overview, free_facility_enabled)
+         ├ 概要あり → llm_manager_world_generate:create_world_overview_from_plot(world_name, world_overview)
+         ├ 概要なし → llm_manager_world_generate:create_world_overview()
+         │              どちらも World(world_name, overview, structure_description, structure)
+         ├ create_story(world_base, area_name_list)              物語・噂・ストーリークエスト5本
+         ├ create_settlement_detail(world_overview=..., ...)     9エリアの施設と NPC
+         └ world_data.json を書く
+```
+
+入力した概要が渡るのは、1回目のプロンプトの中だけ:
+
+```
+【予め指定済みの設定】- 世界の名前: {world_name}
+- 世界の概要: {world_overview}
+```
+
+`world_data["overview"]` になるのは応答の `World.overview`、
+つまり **LLM がそれを読んで書き直した文章**の方。
+以後の生成は全部そちらを読み、遊んでいる間に出る依頼
+（`random_quest_generator(world_overview, ...)`）も同じ値を受け取る。
+
+| `World` の項目 | 何が入るか |
+| --- | --- |
+| `world_name` | LLM が書いた世界の名前。`world_data["name"]` がこれと入力した名前のどちらから来ているかは未確定（実セーブでは同じ文字列になっていて見分けられない） |
+| `overview` | LLM が書いた世界観。**`world_data["overview"]` はこれ** |
+| `structure_description` | 地理・各地の名称の説明文（500文字程度） |
+| `structure` | 3層9エリアの入れ子（`StartingArea` → `connected_settlement_1..3` → `MidArea` → `LateArea`） |
+
+層と規模はプロンプトで固定されている。
+序盤3エリア（Town 1 + Village 2、うち1つが開始地点）→ 中盤3エリア（Town 2 + City 1）→
+終盤3エリア（Village / Town / City 各1）が、中心から放射状に外へ広がる。
+
+保存される `world_data` は5項目で、書かれる順はこう（順序が表示に効く理由は §2.23）:
+
+```
+name / overview / structure_description / story / days_elapsed
+story = {world_situation, story_flow, current_rumor, current_story_phase}
+```
+
+> 呼び出しの並びと項目名は exe の定数表から読んだ（§2.25 と同じ手）。
+> **並びは読めるが分岐の条件までは読めない**ので、
+> 「概要が空なら `create_world_overview`」は分岐が在ることまでが定数から言えることで、
+> 条件そのものは HUD 側の `内容ある` / `内容ない` の分岐から採った推定。
+> 「保存されるのは書き直しの方」は実セーブで見える
+> （`テストワールド` の `world_data["overview"]` は1段落の要約文）。
+
+### 2.28 素データの辞書は2つあり、遊んでいる最中の追加は片方に届かない
+
+```
+app.world_dict       worlds\<世界>\world_data.json
+app.save_data_dict   saves\<世界>\savedata.json
+```
+
+実セーブを復号して突き合わせた（ヴェスティア、2026-08-21）:
+
+| | world 側 | save 側 |
+| --- | --- | --- |
+| 施設（ユニークな id） | 228 | 230 |
+| NPC | 92 | 100 |
+| エリア | 40 | 53 |
+| `index` | facility 230 / npc 100 / area 53 | 同じ |
+
+- save 側は world 側の**厳密な上位集合**。world 側にだけ在るものは施設も NPC も0件
+- 足りないのは遊んでいる最中に生まれた分だけ（施設2件・NPC 8人・エリア13個）
+- 欠けているエリア13個は全部 `size=dungeon` の `dungeon_location`（依頼で生成されるダンジョン）。
+  こちらは**仕様**で、そのセーブ限りのエリアは savedata にだけ入る。
+  world 側に無くても正常に機能している（移動できる）ので、
+  **「savedata にしか無い」こと自体は不具合ではない**
+- `index`（採番）は両方とも同じところまで進んでいる
+
+採番だけが両方に届いていて、実体が片方にしか足されていない。
+
+トップレベルの鍵は
+`areas` / `index` / `language` / `npcs` / `quests` / `story_quests` / `version` /
+`world_data` が共通で、save 側だけが `game_variables` と `player_data` を持つ。
+`free_facility_enabled` と `free_facility_programs` は、その旗を立てた世界にだけ在る。
+
+#### 項目の形は同じだが、ゲーム自身が不揃いを持っている
+
+写す処理も比べる処理も、項目が揃っている前提を置かないこと（実測）:
+
+| | 揃っているもの | 欠けているもの |
+| --- | --- | --- |
+| 施設 | 8項目 284件 | `tier` を欠く7項目 18件 |
+| NPC（save） | 33項目 92人 | `speech_style` を欠く32項目 8人（全員が遊んでいる最中に生まれた分） |
+| NPC（world） | 33項目 81人 | 29項目 11人（生成時のまま一度も更新されていない分） |
+| エリア | 13項目 | 項目の並びが2通り（44件と9件）。`guard_npc` は world 側にしか無い個体がある |
+| ノード | 7項目 | 揃っている |
+
+world 側の NPC にも33項目のものが81人居る。
+`world_data.json` は生成時の雛形のまま固定されるのではなく、遊んでいる間も更新されている
+（後ろの4項目は savedata 化された形。§2.23）。
+更新は届いているのに、追加だけが届いていない。
+
+#### 症状
+
+遊んでいる最中に生まれた施設で「売買する」を選ぶとスレッドが落ちる。
+
+```
+File "instantale.py", line 3080, in shopping_start_method_1
+KeyError: '229'
+  area_id = '8'   node_id = '32'   facility_id = '229'
+```
+
+3つの id は**ローカル変数で、引数ではない**。
+`shopping_start_method_1` は `self` 以外の引数を取らない
+（引数から拾おうとした MOD が `args=() kwargs=[]` を記録した）。
+どこから求めているのかは読めないので、**この3つを外から再現しようとしないこと**。
+プレイヤーはその施設に立ってボタンを押せているので、
+組み上がった `Area` / `Node` / `Facility` の側には施設が在る。
+
+> **引き先は `app.world_dict`**（2026-08-21 に実機で確定）。
+> `app.save_data_dict` からそこへ施設1件と主1人を写したところ、
+> 同じ店がその場で開いた。写した内容は保存され、`world_data.json` の施設が 228→229 に増えた。
+>
+> ただし引き**方**は読めないまま。
+> 直す側は経路を再現しにいかず、`KeyError` のキーを起点にすること
+> （何を引き損なったかは例外自身が持っている）。
+> キーが何の id かも決めつけない。
+> 採番は種類ごとに分かれていて（`index` が `area` / `node` / `facility` /
+> `npc` / `item` / `quest` の6本）、同じ番号が別の種類に居るため
+> （ノードごと欠けている店ではノード id で落ちる。オフラインで再現）。
 
 ---
 

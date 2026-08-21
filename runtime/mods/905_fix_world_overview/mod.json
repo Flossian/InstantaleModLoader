@@ -1,0 +1,29 @@
+{
+  "entry": "fix_world_overview.py",
+  "api": 1,
+  "kind": "fix",
+  "name": {
+    "en": "Keep the world overview you wrote",
+    "ja": "入力した世界の概要をそのまま使う"
+  },
+  "description": {
+    "en": "When a world is generated, the overview typed in is only handed to the LLM as a hint; what gets saved as world_data['overview'] is the LLM's own rewrite, and everything after that (story, settlements, quests) is built from the rewrite instead of what was written. Puts the text back verbatim right after the first response, before the story is generated. The geography and the nine-area structure are still the ones the LLM wrote",
+    "ja": "世界生成で入力した概要は最初のプロンプトに渡るだけで、world_data['overview'] に保存されるのは LLM が書き直した文章。以後の生成（物語・集落・依頼）は書き直しの方を読むため、入力した設定が落ちたり書いていないものが混ざったりする。最初の応答が返った直後、物語の生成より前に、入力した文章そのものへ戻す。地理の説明と3層9エリアの構造は LLM が書いたものを使う"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "settings": {
+    "KEEP_GENERATED": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "本体が書いた世界観も後ろに残す",
+        "en": "Keep the generated overview after your own text"
+      },
+      "note": {
+        "ja": "既定は切（入力した文章だけが世界の概要になる）。入れると入力した文章の後ろに本体が書いた文章が続くので、膨らませてほしい場合はこちら",
+        "en": "Off by default, so only what you wrote becomes the overview. Turn it on to keep the generated text after yours, for when you want your seed expanded"
+      }
+    }
+  }
+}

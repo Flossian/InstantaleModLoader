@@ -40,6 +40,7 @@ import ctypes
 import os
 import struct
 import sys
+import time
 from ctypes import wintypes
 
 import logrotate
@@ -252,10 +253,37 @@ def _check(ok, what: str):
     return ok
 
 
+#: `CreateToolhelp32Snapshot` は、対象の DLL 一覧が動いている最中だと
+#: `ERROR_BAD_LENGTH` で失敗する。MSDN が明示的に「成功するまで再試行せよ」と
+#: 書いている種類の失敗で、こちらの権限の問題ではない
+#: （`PermissionError: [WinError 24]` と出るので紛らわしい）。
+#:
+#: このゲームは起動直後に torch / arrow / onnx などを大量に読むので、
+#: 一覧が落ち着くまでの窓が実際に当たる（2026-08-21、pid 21260 で発生）。
+ERROR_BAD_LENGTH = 24
+SNAPSHOT_ATTEMPTS = 20
+SNAPSHOT_WAIT = 0.1
+
+
+def _snapshot(flags: int, pid: int, what: str):
+    """`CreateToolhelp32Snapshot` を、一覧が落ち着くまで粘って取る。
+
+    再試行するのは `ERROR_BAD_LENGTH` だけ。
+    権限やプロセス不在の失敗は1回目でそのまま投げる（待っても変わらないため）。
+    """
+    for attempt in range(SNAPSHOT_ATTEMPTS):
+        snap = kernel32.CreateToolhelp32Snapshot(flags, pid)
+        if snap != INVALID_HANDLE_VALUE:
+            return snap
+        err = ctypes.get_last_error()
+        if err != ERROR_BAD_LENGTH or attempt == SNAPSHOT_ATTEMPTS - 1:
+            raise ctypes.WinError(err, f"{what} failed")
+        time.sleep(SNAPSHOT_WAIT)
+
+
 def find_processes(exe_name: str) -> list[tuple[int, str]]:
     """指定した実行ファイル名で動いているプロセスを全て返す。"""
-    snap = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
-    _check(snap != INVALID_HANDLE_VALUE, "CreateToolhelp32Snapshot(process)")
+    snap = _snapshot(TH32CS_SNAPPROCESS, 0, "CreateToolhelp32Snapshot(process)")
     try:
         entry = PROCESSENTRY32W()
         # dwSize の設定は必須。
@@ -274,8 +302,8 @@ def find_processes(exe_name: str) -> list[tuple[int, str]]:
 
 def find_module(pid: int, module_name: str) -> tuple[int, str]:
     """対象プロセスの中のモジュールについて (ロード先アドレス, フルパス) を返す。"""
-    snap = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid)
-    _check(snap != INVALID_HANDLE_VALUE, f"CreateToolhelp32Snapshot(module, pid={pid})")
+    snap = _snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid,
+                     f"CreateToolhelp32Snapshot(module, pid={pid})")
     try:
         entry = MODULEENTRY32W()
         entry.dwSize = ctypes.sizeof(entry)
@@ -329,33 +357,57 @@ def build_stub(ensure: int, run: int, release: int, code_addr: int) -> bytes:
 # そのためこのテンプレートの中のコメントだけは日本語にできない。
 # 埋め込むパスの方は ascii() が \uXXXX に直すので、
 # 日本語を含むフォルダに置いても問題ない。
+#
+# 【重要】ここは**関数の中だけで完結させること**。
+# `PyRun_SimpleString` はゲームの `__main__` の辞書でこの文字列を実行する。
+# モジュール階層に `import` や代入を書くと、
+# **ゲーム本体がその名前に束縛していたものを上書きする**。
+#
+# 実際に踏んだ（docs/VERIFICATION.md §3.33）:
+# 本体は `from datetime import datetime`（クラス束縛）で持っているのに、
+# ここの `import sys, os, datetime, traceback` がモジュールを被せていた。
+# そのせいで本体の `make_crash_log` が
+# `AttributeError: module 'datetime' has no attribute 'now'` で落ち、
+# 注入したセッションでは `crash_log.txt` も送信も丸ごと止まっていた。
+# 素のゲームでは何も壊れていない。
+#
+# 平らに書き直したくなったら、先に `tools/tests/test_injector_bootstrap.py` を見ること。
+# あの検査は「モジュール階層に名前を残さない」ことだけを見ている。
 # --------------------------------------------------------------------------
 BOOTSTRAP_TEMPLATE = r'''
-import sys, os, datetime, traceback
+def _instantale_modloader_bootstrap():
+    # Every name here is function-local on purpose. See the note above:
+    # module level would overwrite the game's own __main__ bindings.
+    import sys, os, datetime, traceback
 
-_LOG = __LOG__
+    _LOG = __LOG__
 
-def _w(msg):
+    def _w(msg):
+        try:
+            os.makedirs(os.path.dirname(_LOG), exist_ok=True)
+            with open(_LOG, "a", encoding="utf-8") as fh:
+                fh.write("[" + datetime.datetime.now().isoformat() + "] " + msg + "\n")
+        except Exception:
+            pass
+
     try:
-        os.makedirs(os.path.dirname(_LOG), exist_ok=True)
-        with open(_LOG, "a", encoding="utf-8") as fh:
-            fh.write("[" + datetime.datetime.now().isoformat() + "] " + msg + "\n")
-    except Exception:
-        pass
+        _rt = __RUNTIME__
+        if _rt not in sys.path:
+            sys.path.insert(0, _rt)
+        # drop any previous copy so re-injection picks up edited sources
+        for _name in [k for k in list(sys.modules)
+                      if k == "instantale_modloader" or k.startswith("instantale_modloader.")]:
+            del sys.modules[_name]
+        import instantale_modloader
+        __CALL__
+        _w("bootstrap ok")
+    except BaseException:
+        _w("bootstrap FAILED\n" + traceback.format_exc())
 
 try:
-    _rt = __RUNTIME__
-    if _rt not in sys.path:
-        sys.path.insert(0, _rt)
-    # drop any previous copy so re-injection picks up edited sources
-    for _name in [k for k in list(sys.modules)
-                  if k == "instantale_modloader" or k.startswith("instantale_modloader.")]:
-        del sys.modules[_name]
-    import instantale_modloader
-    __CALL__
-    _w("bootstrap ok")
-except BaseException:
-    _w("bootstrap FAILED\n" + traceback.format_exc())
+    _instantale_modloader_bootstrap()
+finally:
+    del _instantale_modloader_bootstrap
 '''
 
 # 流し込むコードの最後の1行。
