@@ -1,0 +1,214 @@
+{
+  "entry": "bounty_hunter.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Bounty hunters",
+    "ja": "賞金首狩り"
+  },
+  "description": {
+    "en": "While the player is wanted, hunters come after them across land borders. They are the game's own guard encounter (BattleStartManager with enemy_type 'guard'), started by this mod at the moment you choose - arriving in a land, arriving at a facility, days passing, or a free action - with the difficulty scaled to how heavily you are wanted. Two conditions start it: the wanted level in the land you are in, and the total of every land's wanted level, so hunters keep coming even where you are clean",
+    "ja": "手配されている間、土地を跨いで追手が来る。追手はゲーム自身の衛兵の戦闘（`enemy_type='guard'`）そのもので、それを設定した場面（土地への到着・施設への到着・日数の経過・自由行動）でこの MOD が起こす。強さは手配の重さに合わせて渡す。始まる条件は2つあり、今いる土地の手配度と、全ての土地の手配度の合計。合計の側があるので、手配されていない土地へ逃げても追ってくる"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "after": [
+    "309_office_pardon"
+  ],
+  "settings": {
+    "START_WANTED": {
+      "type": "int",
+      "default": 20,
+      "min": 1,
+      "max": 999,
+      "label": {
+        "ja": "追手が来る手配の重さ（今いる土地）",
+        "en": "Wanted weight in the current land that starts the hunt"
+      },
+      "note": {
+        "ja": "既定 20 ＝ 今いる土地の手配度が -20 以下。NPC 1名の殺害で手配度は -10 動くので、既定は「2名以上でお尋ね者」の線。重さは手配度が 0 からどれだけ下かで数える（309_ の罰金と同じ数え方）",
+        "en": "Default 20 = lawfulness -20 or lower in the land you are in. Killing one NPC moves lawfulness by 10, so the default draws the line at two or more. Weight counts how far below 0 the lawfulness is, the same way 309_ prices its fine"
+      }
+    },
+    "START_TOTAL": {
+      "type": "int",
+      "default": 40,
+      "min": 1,
+      "max": 9999,
+      "label": {
+        "ja": "追手が来る手配の重さの合計（全ての土地）",
+        "en": "Total wanted weight across all lands that starts the hunt"
+      },
+      "note": {
+        "ja": "既定 40。手配されていない土地に居ても、合計がこれ以上なら追ってくる。手配度が平常（10）の土地は合計に入らない",
+        "en": "Default 40. Hunters come even in a land where you are clean, once the total reaches this. Lands at the normal 10 do not add to the total"
+      }
+    },
+    "CHANCE_PERCENT": {
+      "type": "int",
+      "default": 30,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "1回あたりの発生率（％）",
+        "en": "Chance per opportunity (%)"
+      },
+      "note": {
+        "ja": "条件を満たした場面1回あたりの抽選。100にすると必ず来る（動作確認用）。0にすると来ない",
+        "en": "Rolled once per qualifying moment. 100 always sends them (for testing), 0 never does"
+      }
+    },
+    "COOLDOWN_DAYS": {
+      "type": "int",
+      "default": 10,
+      "min": 0,
+      "max": 999,
+      "label": {
+        "ja": "次の追手までに空ける日数",
+        "en": "Days to wait before the next hunt"
+      },
+      "note": {
+        "ja": "一度追手が来たら、ゲーム内でこの日数が過ぎるまで次は来ない。0 にすると毎回抽選する",
+        "en": "After a hunt, no more until this many in-game days have passed. 0 rolls every time"
+      }
+    },
+    "DIFFICULTY_BASE": {
+      "type": "int",
+      "default": 20,
+      "min": 1,
+      "max": 999,
+      "label": {
+        "ja": "追手の難易度の下限",
+        "en": "Lowest difficulty of the hunters"
+      },
+      "note": {
+        "ja": "既定 20 は、ゲーム自身の衛兵で実測した値と同じ（そのとき敵はレベル21だった）",
+        "en": "Default 20 is the value measured from the game's own guards, who came out at level 21"
+      }
+    },
+    "DIFFICULTY_PER_WANTED": {
+      "type": "float",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 20.0,
+      "label": {
+        "ja": "手配の重さ1あたりの難易度",
+        "en": "Difficulty added per point of wanted weight"
+      },
+      "note": {
+        "ja": "難易度 = 下限 + この値 × 手配の重さの合計。難易度は敵のレベルと能力値の両方を決める（レベルはおよそ 難易度+1）",
+        "en": "Difficulty = base + this * total wanted weight. Difficulty decides both the level and the attributes of the enemies (level lands around difficulty+1)"
+      }
+    },
+    "DIFFICULTY_MAX": {
+      "type": "int",
+      "default": 75,
+      "min": 1,
+      "max": 999,
+      "label": {
+        "ja": "追手の難易度の上限",
+        "en": "Highest difficulty of the hunters"
+      },
+      "note": {
+        "ja": "既定 75。手配を重ねても、これ以上は強くならない（既定の下限20・重さ1あたり1.0なら、重さの合計55で頭打ち）",
+        "en": "Default 75. However heavily you are wanted, the hunters stop here (with the default base 20 and 1.0 per point, the cap lands at a total weight of 55)"
+      }
+    },
+    "ON_AREA_ARRIVAL": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "土地に着いたときに来る",
+        "en": "Come when you arrive in a land"
+      },
+      "note": {
+        "ja": "土地から土地へ移った直後。既定 ON",
+        "en": "Right after moving from one land to another. Default ON"
+      }
+    },
+    "ON_FACILITY_ARRIVAL": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "施設に入ったときに来る",
+        "en": "Come when you arrive at a facility"
+      },
+      "note": {
+        "ja": "宿や店に入った直後。町を歩くだけで抽選が回るので、発生率は低めにすること",
+        "en": "Right after entering an inn or a shop. This rolls every time you walk around a town, so keep the chance low"
+      }
+    },
+    "ON_DAYS": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "日数が進んだときに来る",
+        "en": "Come when days pass"
+      },
+      "note": {
+        "ja": "訓練・休養・移動などで暦が動いた後。留まっていても追手が来る。既定 ON",
+        "en": "After training, resting or travelling moves the calendar. Hunters find you even if you stay put. Default ON"
+      }
+    },
+    "ON_FREE_ACTION": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "自由行動のときに来る",
+        "en": "Come during a free action"
+      },
+      "note": {
+        "ja": "自由入力の行動を解決した後。この場面は手が空くまで待ってから起こす",
+        "en": "After a free-input action resolves. Here the mod waits until the screen is free before starting anything"
+      }
+    },
+    "HUNTER_NAME": {
+      "type": "str",
+      "default": "賞金稼ぎ",
+      "label": {
+        "ja": "追手の名前",
+        "en": "What the hunters are called"
+      },
+      "note": {
+        "ja": "既定「賞金稼ぎ」。戦闘では連番が付く（賞金稼ぎ1／賞金稼ぎ2…）。「賞金首狩り」なども入れられる。空にするとゲームのまま（衛兵）",
+        "en": "Default 賞金稼ぎ. A number is appended in battle. Leave it empty to keep the game's own name (衛兵)"
+      }
+    },
+    "KEEP_WANTED": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "追手を倒しても手配度を増やさない",
+        "en": "Killing the hunters does not make you more wanted"
+      },
+      "note": {
+        "ja": "既定 ON。ゲームは衛兵との戦闘で手配度を下げる（実測 -10）ので、追手を出した土地の手配度を控えておき、戦闘後に下がっていたら戻す。切ると追手を倒すたびに手配が重くなる",
+        "en": "Default ON. The game lowers lawfulness after a guard battle (measured -10), so the mod remembers the value and puts it back afterwards. Turn it off and every hunt makes you more wanted"
+      }
+    },
+    "YIELD_TO_GUARDS": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "ゲーム自身の衛兵に先を譲る",
+        "en": "Give way to the game's own guards"
+      },
+      "note": {
+        "ja": "既定 ON。ゲームにも手配された者へ衛兵を差し向ける仕掛けがあり、続けて起きるとゲーム側のイベントが潰れる。ONだと、ゲームが衛兵を出した回も1回の遭遇として数え、次の追手まで「次の追手までに空ける日数」を空ける",
+        "en": "Default ON. The game has its own way of sending guards after a wanted player, and firing both back to back swallows the game's event. With this on, a guard fight counts as an encounter, so the usual cooldown in days applies before the next hunt"
+      }
+    },
+    "ANNOUNCE": {
+      "type": "str",
+      "default": "首にかけられた賞金を目当てに、追手が行く手を塞いだ。",
+      "label": {
+        "ja": "追手が来たときの1行",
+        "en": "The line shown when the hunters arrive"
+      },
+      "note": {
+        "ja": "空にすると何も出さずに戦闘が始まる",
+        "en": "Leave it empty to go straight into the battle"
+      }
+    }
+  }
+}

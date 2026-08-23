@@ -1419,6 +1419,72 @@ app.buttons      = ['労働の募集をみる', '市民権の発行', '出る', 
 - 会話を挟むと抜けた後に施設の選択肢が組み直されるので、
   足した自前のボタンは組み直しのたびに入れ直す必要がある
 
+#### 衛兵との戦闘（`enemy_type='guard'`。2026-08-21 に実機で全段を実測）
+
+手配された土地でゲーム自身の衛兵を出し、`220_probe_bounty_hunter` で全段を録った
+（VERIFICATION_LOG.md §2.51）。
+
+```
+BattleStartManager(app, enemy_type='guard', enemy_content=None)
+  .execute -> .start_battle -> sb_1 -> create_guard_enemies      (instantale.py:6895)
+      guard_npc_generator(area, world, 20)              -> EnemyData 1件
+      generate_enemy_instance_from_quest_dict(
+          {'type': 'normal', 'data': ...},
+          base_image, pixelated_image, pos_prompt, neg_prompt, 20)   × 3体
+        get_enemy_exp_lvl('normal', 20)                 -> 21
+        get_enemy_attributes_base_point('normal', 20)   -> 11.37
+  -> app.current_enemy_dict = {'衛兵1': …, '衛兵2': …, '衛兵3': …}（レベル21、HP 228〜248）
+  -> BattleEndManager.end_phase -> guard_battle_summarizer(area, world, player, combat_log)
+```
+
+| 項目 | 分かっていること |
+| --- | --- |
+| `enemy_type` | 衛兵の経路では `'guard'`。コロシアム・クエストの語は未採取 |
+| `enemy_content` | 衛兵の経路では `None`。中身はマネージャ側が作る |
+| 難易度 | **数値1つ**。敵のレベルも能力値もこれ1つから決まる（`get_enemy_*` の第2引数） |
+| `enemy_tier` | `'normal'`（`get_enemy_*` の第1引数） |
+| 敵の数 | 3体。`get_enemy_count_in_quest` はこの経路では呼ばれない |
+| 敵の名前 | `衛兵`。`EnemyData` に名前の項目は無く、マネージャ側が付けている |
+| 敵の返り方 | `generate_enemy_instance_from_quest_dict` は `None` を返す。敵は `app.current_enemy_dict` に入る |
+
+`guard_npc_generator` が返す `EnemyData`（`output_data/…/guard_npc_generator/` にも残る）:
+
+| 項目 | 実値 |
+| --- | --- |
+| `description` | その衛兵の説明文（日本語。数百文字） |
+| `look` | `category`（`monster` / `human_female` / `human_male`）と `image_generation_prompt`（英語の語の配列） |
+| `race` | 自由文字列（`Human`） |
+| `size` | `tiny` / `small` / `medium` / `large` / `huge` |
+| `archetype` | `balanced` 固定（`const`） |
+
+- **難易度の出どころは未特定**。実測は `20` で、そのときプレイヤーはレベル 60、
+  その土地の手配度は `-10`。どちらとも一致しないので、
+  プレイヤーにも手配度にも連動していない（残る候補は土地の平均難易度）
+- **難易度と敵の対応は実測2点**（`316_` が 75 を渡した回を含む。VERIFICATION_LOG.md §2.52）
+
+  | 難易度 | レベル | 能力値の基準点 | 敵の数 | HP |
+  | --- | --- | --- | --- | --- |
+  | 20 | 21 | 11.37 | 3 | 228〜248 |
+  | 75 | 76 | 12.62 | 3 | 776〜908 |
+
+  **レベルは難易度+1**、**敵の数は難易度で動かない**。
+  基準点はほとんど動かず、強さの差はレベルと HP の側から来ている
+- **衛兵と戦うと、その土地の手配度が 10 下がる**。
+  手配の有無に関わらず一律で、**手配されていない土地（平常10）でも `0` になる**
+  （実測2回。`-10` → `-20` と `10` → `0`）
+- **外から難易度を差し替えられる**（`316_bounty_hunter` が実機で成立）。
+  `guard_npc_generator` の第3引数と
+  `generate_enemy_instance_from_quest_dict` の最後の引数の両方を差し替えれば、
+  姿と説明も敵の実体も差し替え後の値で作られる
+- **敵の名前は後から付け替えられる**。`start_battle` が返った直後に
+  `current_enemy_dict` の鍵と `Character.name` を書き換えても、
+  戦闘は最後まで通る（実測2回。入れ物は作り直さず中身だけ入れ替えた場合）
+- MOD からこの戦闘を起こすなら、作る側を発明せずに
+  `BattleStartManager(app, 'guard', None)` を組んで `execute` を呼べばよい。
+  強さを変えたいときは、`create_guard_enemies` の中から呼ばれる2箇所
+  （`guard_npc_generator` の第3引数と `generate_enemy_instance_from_quest_dict` の
+  最後の引数）に渡る難易度を差し替える
+
 ### 2.21 自由生成施設のシーン記述エンジン（`scripts.free_facility`）
 
 main_023 で入ったイベント記述用の実行エンジン。JSON のステップ列を解釈してシーンを走らせる。
@@ -1807,6 +1873,12 @@ retrieval を待たず第一声から載る。
   `npc_say` / `start_battle` / `arrest_player` / `generate_npc` ほか）。
   「時系列があるものは1段階目だけ実行して次のターンに回せ」と指示されているので、
   ダイスを振った回は必ず `finished=false` で戻ってくる
+- `start_battle` の形は
+  `{"type": "start_battle", "player_opponents": [<NPC名>], "player_allies": [<NPC名>]}`
+  （敵は最大3・味方は最大2。スキーマの `maxItems`）。
+  名前の候補は Literal で、元は同じ呼び出しに渡る `npc_list`。
+  **同行中の仲間も候補に入る**ので、LLM が仲間を敵の欄に書くことがある。
+  実形は `output_data/` の `master_ai_facilitator_from_conversation` の記録から読んだ
 
 実測（`output_data/` の `master_ai_*` 2,021件。`roll_the_dice` は191回で、
 結果まで対応の取れたものが168回）:

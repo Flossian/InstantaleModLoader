@@ -1,0 +1,60 @@
+{
+  "entry": "probe_bounty_hunter.py",
+  "api": 1,
+  "kind": "probe",
+  "name": {
+    "en": "Bounty hunter probe",
+    "ja": "賞金首狩りの下調べ"
+  },
+  "description": {
+    "en": "Records what a mod would need in order to send bounty hunters after a wanted player: the real arguments of every route that starts a battle (BattleStartManager / execute_battle_process / the conversation route), what the game's own guard encounter passes to guard_npc_generator, the game's own enemy strength table, and the player's wanted level at each of the four places an encounter could be triggered (area arrival, facility arrival, day elapse, free action). It also records the signals that the game is back at its normal choices (set_buttons_to_normal / refresh_choice_buttons) and the four exits of free input, to find out whether the mod can hook an event instead of polling",
+    "ja": "手配されたプレイヤーに賞金首狩りを差し向ける MOD を書くために要る値を記録する。戦闘を起こす経路すべての実引数（BattleStartManager / execute_battle_process / 会話からの経路）、ゲーム自身の衛兵が guard_npc_generator へ渡している難易度、ゲーム自身の敵の強さの表、そして遭遇を起こしうる4箇所（エリア到着・施設到着・日数経過・自由行動）でのプレイヤーの手配度。あわせて、割り込む先をポーリングからイベントへ移せるかの下調べとして、画面が普通の選択肢に戻る合図（set_buttons_to_normal / refresh_choice_buttons）と自由入力の4つの出口も録る"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "debug": true,
+  "settings": {
+    "WANTED_THRESHOLD": {
+      "type": "int",
+      "default": 0,
+      "min": -100,
+      "max": 100,
+      "label": {
+        "ja": "手配とみなす手配度",
+        "en": "Lawfulness at or below which the player counts as wanted"
+      },
+      "note": {
+        "ja": "既定 0（309_ と同じ）。要約の行の数え方にだけ効く。ゲームは変えない",
+        "en": "Default 0, same as 309_. Only affects how the summary line counts. Changes nothing in the game"
+      }
+    },
+    "SCREEN_SAMPLES": {
+      "type": "int",
+      "default": 300,
+      "min": 0,
+      "max": 9999,
+      "label": {
+        "ja": "画面が戻る合図を写す件数",
+        "en": "How many screen-ready signals to record"
+      },
+      "note": {
+        "ja": "set_buttons_to_normal / refresh_choice_buttons が呼ばれるたびに1行。数が多くなりうるのでここで打ち切る。0 にすると録らない",
+        "en": "One line per set_buttons_to_normal / refresh_choice_buttons call. These can be frequent, so recording stops here. 0 = do not record"
+      }
+    },
+    "SCALING_SAMPLES": {
+      "type": "int",
+      "default": 60,
+      "min": 0,
+      "max": 999,
+      "label": {
+        "ja": "敵の強さの式を写す通り数",
+        "en": "How many distinct enemy-strength calls to record"
+      },
+      "note": {
+        "ja": "同じ引数の組は1度しか書かない。0 にすると強さの式は録らない",
+        "en": "Each distinct set of arguments is written once. 0 = do not record the strength table"
+      }
+    }
+  }
+}

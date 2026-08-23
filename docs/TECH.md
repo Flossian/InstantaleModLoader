@@ -1459,6 +1459,25 @@ ui.BUSY_FLAGS            # 戦闘中・会話中など
 `gold_of` は `bool` を弾く（Python では `True` が `int` なので、
 素朴な `isinstance` だと `gold = True` を所持金1として通してしまう）。
 
+**手配度**（GAME.md §2.20。読み方だけを共有する）:
+
+```python
+ui.area_history_of(character) / ui.area_record(character, area_id)
+ui.lawfulness_of(entry) / ui.lawfulness_by_area(character)
+ui.set_lawfulness(entry, value) / ui.LAWFULNESS_KEY
+```
+
+`lawfulness_by_area` は `{エリアid(str): 手配度}` を返し、読めなかった土地は入れない。
+`gold_of` と同じ理由で `bool` を弾く（`True` を手配度1と読むと、
+そこから罰金や敵の強さまで計算してしまう）。
+
+**いくつから手配とみなすかは各 MOD の判断**で、ここには置かない
+（`309_` は罰金の基準に、`316_` は追手の条件に、`220_` は下調べの要約に、
+同じ読み方から別の数え方をする）。
+
+`set_lawfulness` は**読めた記録にしか渡さない**（項目を新設しない）のが呼ぶ側の約束。
+書き戻す MOD は2本ある（`309_` が罰金で平常値へ戻す、`316_` が追手を倒したぶんを戻す）。
+
 **HUD に足す自前のボタン**:
 
 ```python

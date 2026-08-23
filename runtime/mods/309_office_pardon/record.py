@@ -18,73 +18,24 @@
 `area_history` は実行時もこの形（セーブはそのまま json 化したもの）だが、
 辞書とは限らないという前提で書いてある。
 読めなければ `None` を返し、呼ぶ側がそこで諦める。
+
+手配度の**読み方**はローダ（`instantale_modloader.ui`）に移した。
+同じ読み方を要る MOD が3本になったため（TECH.md §3.2.3）。
+ここに残っているのは書き戻す側と所持金。
 """
 
 from instantale_modloader import ui
 
 #: 手配度の実体。
 #: 負の値ほど重い（0 未満で犯罪者、既定の平常値は 10）。
-LAWFULNESS_KEY = "lawfulness"
+#: **読み書きはローダの語彙**（`ui.lawfulness_by_area` ほか。TECH.md §3.2.3）。
+LAWFULNESS_KEY = ui.LAWFULNESS_KEY
 
-
-def area_history_of(player):
-    """エリアごとの記録 `{area_id: 記録}`。読めなければ `None`。"""
-    value = getattr(player, "area_history", None)
-    return value if isinstance(value, dict) else None
-
-
-def history_entry(player, area_id):
-    """そのエリアの記録。無ければ `None`（＝一度も訪れていない）。
-
-    id は保存されるときに文字列になるが、
-    実行中に int で入っていることもありうるので、
-    素の引きが外れたら文字列に均して引き直す。
-    """
-    history = area_history_of(player)
-    if history is None or area_id in (None, ""):
-        return None
-    if area_id in history:
-        return history[area_id]
-    wanted = str(area_id)
-    for key, value in history.items():
-        if str(key) == wanted:
-            return value
-    return None
-
-
-def lawfulness_of(entry):
-    """記録の手配度。読めなければ `None`。
-
-    `bool` を弾いているのは `isinstance(True, int)` が真だから。
-    True を手配度 1 と読むと、そこから金額まで計算してしまう。
-    """
-    if entry is None:
-        return None
-    value = entry.get(LAWFULNESS_KEY) if isinstance(entry, dict) \
-        else getattr(entry, LAWFULNESS_KEY, None)
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    return int(value)
-
-
-def set_lawfulness(entry, value):
-    """手配度を書き戻す。書けたら `True`。
-
-    項目を新設しないのは呼ぶ側の責任（先に
-    `lawfulness_of` で読めた記録にしか渡さない）。
-    ここで無条件に作ると、手配度を持たないビルドにそれらしい項目が生えて、
-    以後どちらが本物か分からなくなる。
-    """
-    if entry is None:
-        return False
-    try:
-        if isinstance(entry, dict):
-            entry[LAWFULNESS_KEY] = int(value)
-        else:
-            setattr(entry, LAWFULNESS_KEY, int(value))
-    except Exception:
-        return False
-    return True
+#: 名前をここに残しているのは呼び出し側の見た目のため。中身はローダと同じ。
+area_history_of = ui.area_history_of
+history_entry = ui.area_record
+lawfulness_of = ui.lawfulness_of
+set_lawfulness = ui.set_lawfulness
 
 
 def gold_of(player):

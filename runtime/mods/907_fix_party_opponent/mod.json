@@ -1,0 +1,16 @@
+{
+  "entry": "fix_party_opponent.py",
+  "api": 1,
+  "kind": "fix",
+  "name": {
+    "en": "Keep party members off the enemy side",
+    "ja": "仲間を敵に選ばせない"
+  },
+  "description": {
+    "en": "Battles that start from conversation or free input sometimes pick a party member as an enemy. The master AI chooses opponents by name from a list that includes everyone present, party members included. Removes party members from the chosen opponents right after the response arrives; if nobody is left, the battle simply does not start. Both edits stay within what the schema already allows",
+    "ja": "会話や自由入力から戦闘に入ると、パーティの仲間が敵として選出されることがある。マスターAIは、その場に居る全員（同行中の仲間を含む）の名簿から敵を名前で選んでいる。応答が返った直後に、選ばれた敵から名簿に居る仲間を外す。誰も残らなければ戦闘そのものを起こさない。どちらの編集もスキーマが元々許す形に収まる"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "settings": {}
+}

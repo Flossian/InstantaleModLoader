@@ -693,6 +693,94 @@ def area_id_of(area):
 
 
 # --------------------------------------------------------------------------
+# 手配度（GAME.md §2.20）
+# --------------------------------------------------------------------------
+# 治安上の立場は土地ごとに `Character.area_history` へ入っている:
+#
+#     area_history = {"0": {"residency": {...}, "achievements": [...],
+#                           "lawfulness": 10}, ...}
+#
+# 平常値は 10 で、小さいほど手配が重く、0 未満で犯罪者（実プレイで -40 を観測）。
+# ゲーム側に読み書きのヘルパは無いので値を直に触る。
+# ここに置いてあるのは読み方だけで、**いくつから手配とみなすかは MOD の判断**。
+LAWFULNESS_KEY = "lawfulness"
+
+
+def area_history_of(character):
+    """エリアごとの記録 `{area_id: 記録}`。読めなければ `None`。"""
+    value = getattr(character, "area_history", None)
+    return value if isinstance(value, dict) else None
+
+
+def area_record(character, area_id):
+    """そのエリアの記録。無ければ `None`（＝一度も訪れていない）。
+
+    id は保存されるときに文字列になるが、実行中に int で入っていることも
+    ありうるので、素の引きが外れたら文字列に均して引き直す。
+    """
+    history = area_history_of(character)
+    if history is None or area_id in (None, ""):
+        return None
+    if area_id in history:
+        return history[area_id]
+    wanted = str(area_id)
+    for key, value in history.items():
+        if str(key) == wanted:
+            return value
+    return None
+
+
+def lawfulness_of(entry):
+    """記録の手配度。読めなければ `None`。
+
+    `bool` を弾いているのは `isinstance(True, int)` が真だから。
+    True を手配度 1 と読むと、そこから金額や敵の強さまで計算してしまう。
+    """
+    if entry is None:
+        return None
+    value = entry.get(LAWFULNESS_KEY) if isinstance(entry, dict)         else getattr(entry, LAWFULNESS_KEY, None)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return int(value)
+
+
+def set_lawfulness(entry, value):
+    """記録の手配度を書き戻す。書けたら `True`。
+
+    **項目を新設しないのは呼ぶ側の責任**（先に `lawfulness_of` で読めた記録にしか
+    渡さない）。ここで無条件に作ると、手配度を持たないビルドにそれらしい項目が
+    生えて、以後どちらが本物か分からなくなる。
+    """
+    if entry is None:
+        return False
+    try:
+        if isinstance(entry, dict):
+            entry[LAWFULNESS_KEY] = int(value)
+        else:
+            setattr(entry, LAWFULNESS_KEY, int(value))
+    except Exception:
+        return False
+    return True
+
+
+def lawfulness_by_area(character):
+    """`{area_id(str): 手配度}`。読めなかったエリアは入れない。
+
+    エリア id を文字列に均すのは、セーブと実行中で型が違いうるから
+    （`area_record` と同じ理由）。
+    """
+    history = area_history_of(character)
+    if not history:
+        return {}
+    values = {}
+    for key, entry in history.items():
+        value = lawfulness_of(entry)
+        if value is not None:
+            values[str(key)] = value
+    return values
+
+
+# --------------------------------------------------------------------------
 # 施設の引き当て（GAME.md §2.7）
 # --------------------------------------------------------------------------
 # 施設はエリアの直下ではなく**ノードの下**にぶら下がっている（実セーブ）:
