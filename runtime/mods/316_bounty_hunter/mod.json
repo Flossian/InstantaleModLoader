@@ -4,7 +4,7 @@
   "kind": "feature",
   "name": {
     "en": "Bounty hunters",
-    "ja": "賞金首狩り"
+    "ja": "賞金稼ぎが襲ってくる"
   },
   "description": {
     "en": "While the player is wanted, hunters come after them across land borders. They are the game's own guard encounter (BattleStartManager with enemy_type 'guard'), started by this mod at the moment you choose - arriving in a land, arriving at a facility, days passing, or a free action - with the difficulty scaled to how heavily you are wanted. Two conditions start it: the wanted level in the land you are in, and the total of every land's wanted level, so hunters keep coming even where you are clean",
