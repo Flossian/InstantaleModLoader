@@ -12,6 +12,7 @@ Instantale（Epic版 / Nuitka standalone / CPython 3.10）に外部から Python
 | [GAME.md](GAME.md) | Instantale が何をしているか。このゲーム限定の事実 |
 | [README.md](README.md) | 遊ぶだけの人向け。ローダと GUI の使い方 |
 | [MODS.md](MODS.md) | 同梱している MOD 一本ずつの説明・設定・困ったとき |
+| [MODLIST.md](MODLIST.md) | 同梱 MOD の早見表。`tools/list_mods.py` が `mod.json` から組む |
 | [VERIFICATION.md](VERIFICATION.md) | 検証状況・未確認項目・その確認手順（§1 / §3 / §4） |
 | [VERIFICATION_LOG.md](VERIFICATION_LOG.md) | 実機・実データでの検証記録（§2） |
 
@@ -96,6 +97,8 @@ tools/logrotate.py        out/*.log の世代管理（注入 = 1世代の境目�
 tools/check_mods.py       静的検査（デコレータ・宣言と実体のずれ）
 tools/list_mods.py        docs/MODLIST.md を mod.json から組む（--check で照合）
 tools/llm_ctx_probe.py    ローカル LLM の窓を実測して最適値を出す（127_ 用）
+tools/epithet_probe.py    ローカル LLM で二つ名を引いて偏りを測る（317_ 用）
+tools/rebalance_saved_bgm.py  既存セーブの BGM を後からまとめて均す（104_ 用）
 tools/tests/test_*.py     ゲーム抜きで走る検査。開発用で配布物には入らない
 runtime/instantale_modloader/
     __init__.py   boot() / discover() / ログ / 世代発行 / 遅延設置の監視 / on_ready
@@ -117,7 +120,8 @@ out/              ログ・リコン成果物・status.json（最後の boot の
 state/            MOD が持つ永続データ（§3.11）。消すと遊びが巻き戻る
 discontinued/     開発を終了した MOD（§2.6.1）。git には残るが、ローダ・配布物・
                   CI のどれからも見えない
-docs/             README.md / MODS.md / TECH.md / GAME.md / VERIFICATION*.md
+docs/             README.md / MODS.md / MODLIST.md / TECH.md / GAME.md
+                  / VERIFICATION*.md
 ```
 
 ### 1.3 探索と適用順は `discover()` が1箇所で決める
@@ -314,10 +318,10 @@ Windows で動かすのは、このプロジェクトが Windows 専用だから
 |---|---|---|
 | Git | ○ 普通にコミットする | |
 | `load_order.local.json`（手元） | ○ ここに書けば手元では動く | |
-| `load_order.json` / 配布物 / CI / `docs/` の6冊 | | × |
+| `load_order.json` / 配布物 / CI / `docs/` の7冊 | | × |
 | 開発を終了したら | `discontinued/` へ移す（§2.6.1） | |
 
-文書は MOD のフォルダに `DOC.md` として置く（遊び方も検証の記録も、`docs/` の6冊ではなくそこへ）。
+文書は MOD のフォルダに `DOC.md` として置く（遊び方も検証の記録も、`docs/` の7冊ではなくそこへ）。
 9xx は配布物に入らないので、その1枚も外へ出て行かない。
 リリースのときに各節を元の場所へ戻す。
 どの節をどこへ戻すかは `DOC.md` の先頭に表として持たせておく。

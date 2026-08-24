@@ -407,7 +407,7 @@ def apply(ctx):
         - 包む前の素の関数を測る（`__original__` を最下層までたどる）。
           自分のラッパを測ると、`safe=True` のガードが例外を「フックの失敗」として拾い、
           `modloader.log` に総当たりぶんのトレースバックが並ぶ（`get_npc_employ_price` は 77 以上で KeyError を投げた。
-          VERIFICATION.md §2.2。同じ形の表なら、ここでも必ず投げる）。
+          VERIFICATION_LOG.md §2.2。同じ形の表なら、ここでも必ず投げる）。
           `patch.unwrap_ours` では剥がれない。
           あちらは**今回の注入で付けた層は残す**（それが仕事）ので、
           剥がしたいこの用途には使えない
