@@ -7,10 +7,10 @@
     "ja": "会話から依頼を受ける"
   },
   "description": {
-    "en": "Accept quests from conversation, or generate one from what you just talked about",
-    "ja": "会話から依頼を受注できる。いま話した内容から依頼を1件生成することもできる"
+    "en": "Accept quests from conversation, or generate one from what you just talked about. Finished quests are told to the NPC who asked for them",
+    "ja": "会話から依頼を受注できる。いま話した内容から依頼を1件生成することもできる。片付けた依頼はその依頼人との会話にも伝わる"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "settings": {
     "FILTER_BY_NPC": {
@@ -87,6 +87,32 @@
       "note": {
         "ja": "「NPCが会話を覚える」が覚えた人物像を添える。その MOD を入れていなければ何も起きない",
         "en": "Adds the persona built by \"NPC conversation memory\". Does nothing without that MOD"
+      }
+    },
+    "TELL_COMPLETED_QUESTS": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "片付いた依頼を依頼人との会話に伝える",
+        "en": "Tell the client their quest is done"
+      },
+      "note": {
+        "ja": "その相手に出してもらった依頼を片付けていると、会話にその事実が伝わる。切ると、クリア済みでも「まだ出発していないのか」と言われる",
+        "en": "Adds the completion to the conversation prompt as a fact. Off: the NPC never learns the quest is done"
+      }
+    },
+    "MAX_COMPLETED_TOLD": {
+      "type": "int",
+      "default": 3,
+      "min": 0,
+      "max": 10,
+      "label": {
+        "ja": "会話に伝える依頼の件数",
+        "en": "Completed quests mentioned"
+      },
+      "note": {
+        "ja": "新しいものから数える。増やすほど会話のプロンプトが伸びる。0 でも伝わらなくなる",
+        "en": "Newest first. More means a longer conversation prompt. 0 also disables it"
       }
     }
   }

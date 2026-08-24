@@ -442,6 +442,12 @@ app.world.characters     -> {id: Character}    Facility.owner はこの id（str
 
 - 施設は `areas[id].nodes[nid].facilities[fid]` の入れ子。
   `initial_location` の `node` は null のことがあるので、ノードを総当たりして探す（`ui.find_facility`）
+- `Character` は自分でも `id` を持つ（`210_` の55属性ダンプ。
+  `world.characters` の先頭の1体で鍵と同じ `'0'` だった）。
+  **全件で鍵と一致するかは確かめていない**。
+  浅い複製にも写るので、複製を渡されうる場所で相手を見分けるならこれを使う
+  （同一性で `world.characters` を走査する引き方は複製に対して必ず空振りする）。
+  当てにするなら、同一性で引いた答えと突き合わせて食い違いを記録すること
 - `Facility.characters` には重複の入ることがある（`['69', '69']`）。話者を選ぶときは一意化する
 - ギルドは `facility_type == 'guild'`（`ui.find_guild`）
 - 実在する `facility_type`: `entrance` / `exit` / `ward` / `guild` / `inn` /
@@ -595,6 +601,11 @@ app.world_dict['quests']  {id: dict}                 セーブに出るのはこ
 - 受注できる依頼の絞り込みは `neighboring_settlement_id == 現在エリアの id` かつ
   `config['status'] == 'incomplete'`。
   ゲーム自身の `get_quest_difficulties(area, world)` と突き合わせられる
+- `config` の鍵は `status` と `level_of_detail` の2つ。
+  `status` で観測できている値は `'incomplete'` と `'completed'` の2つだけ
+  （`206_` の census。実データで `{'incomplete': 18, 'completed': 9}`）。
+  **放棄したときにどちらになるかは未実測**。
+  片付いた依頼はセーブから消えず、`world.quests` に残る
 - `QuestStructure`（生成の出力）は `quest_title` / `client_name` / `request_summary` /
   `client_statement` / `area` / `events` / `enemies` / `boss`。
   ゲームがこれに `difficulty` / `neighboring_settlement_id` / `id` / `quest_type` /

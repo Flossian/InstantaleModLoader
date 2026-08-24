@@ -19,6 +19,7 @@ Clock を差し込み、次を確認する。
 
 ゲームが起動していなくても走るので、mod を編集したらまずこれを通すこと。
 """
+import copy
 import importlib.util
 import io
 import json
@@ -336,6 +337,9 @@ class FakeCtx:
         self.state_dir = os.path.join(out_dir, "state")
         self.hooks = {}
         self.errors = []
+        # 読んだファイル名。
+        # 会話のたびに控えを読み直していないかを数えるのに使う。
+        self.reads = []
 
     def out_path(self, *parts):
         path = os.path.join(self.out_dir, *parts)
@@ -373,6 +377,7 @@ class FakeCtx:
         return ml.write_text(path, text, report=self.log_exc)
 
     def read_json(self, path, default=None):
+        self.reads.append(os.path.basename(path))
         return ml.read_json(path, default, report=self.log_exc)
 
     def wrap(self, target, **kw):
@@ -458,7 +463,13 @@ def setup(history=None, partner="62", in_conversation=True):
                           client_name="名も無い誰か", neighboring_settlement_id="7"),
               "43": Quest(id="43", quest_title="霧の追跡", difficulty=43,
                           client_name="名も無い誰か", neighboring_settlement_id="7")}
-    characters = {"62": Character(id="62", name="テストNPC D")}
+    # `profile` を持たせる。
+    # 片付いた依頼の注入は、この素のプロフィールの後ろへ足す形になる。
+    characters = {"62": Character(id="62", name="テストNPC D",
+                                  profile="堅実な町の事務官。"),
+                  # 別の相手。片付いた依頼の持ち主を取り違えないかを見る。
+                  "63": Character(id="63", name="テストNPC E",
+                                  profile="無口な鍛冶屋。")}
     areas = {"7": Area("7", "テストの町A")}
     app = app_cls(World(characters, quests, areas))
     # 現在地は **id の文字列**で持たせる（`302_` の実測。
@@ -812,6 +823,220 @@ area = press_generate(ctx, app)
 check("311_ が無ければ会話の記録だけを添える", "会話の記録" in area, area[-300:])
 check("311_ が無くても人物像の節は足さない",
       "過去の会話から分かっていること" not in area, area[-300:])
+
+# ================================== 片付いた依頼を依頼人との会話に伝える
+# 会話のプロンプトには依頼の結末が入る欄が無い（GAME.md §2.25）ので、
+# `character_instance` の複製の `profile` に添える。
+# ここで見るのは「載る条件」「載せない条件」「世界を書き換えないこと」の3つ。
+print("=== 片付いた依頼を会話に伝える ===")
+
+CONV_TARGETS = (
+    "scripts.llm.llm_manager:conversation_facilitator",
+    "scripts.llm.llm_manager:conversation_facilitator_after_retrieval",
+    "scripts.llm.llm_manager:conversation_facilitator_in_quest",
+    "scripts.llm.llm_manager:conversation_starter",
+    "scripts.llm.llm_manager:conversation_starter_in_quest")
+
+
+def clients_path(ctx_obj):
+    return os.path.join(ctx_obj.state_dir, mod.CLIENTS_BASENAME)
+
+
+def clear_clients(ctx_obj):
+    """前の回の控えを消す。残すと他の節の絞り込みが変わる。"""
+    path = clients_path(ctx_obj)
+    if os.path.isfile(path):
+        os.remove(path)
+
+
+def seed_client(ctx_obj, app_obj, quest_id, npc_id, npc_name):
+    """`301_` 自身が書くのと同じ形で「この依頼はこの NPC 発」を置く。
+
+    **`load_clients` は最初の1回で写しを持つ**ので、
+    置くのは会話を1回も通す前にすること。
+    """
+    path = clients_path(ctx_obj)
+    data = {}
+    if os.path.isfile(path):
+        with io.open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    data.setdefault(ml.state.world_key(app_obj), {})[str(quest_id)] = {
+        "npc_id": str(npc_id), "npc_name": npc_name}
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with io.open(path, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(data, ensure_ascii=False))
+
+
+def add_quest(app_obj, quest_id, title, status, client_name="名も無い誰か"):
+    app_obj.world.quests[str(quest_id)] = Quest(
+        id=str(quest_id), quest_title=title, difficulty=10,
+        client_name=client_name, neighboring_settlement_id="7",
+        config={"status": status})
+
+
+def talk_once(ctx_obj, app_obj, npc, target=CONV_TARGETS[0], as_kwarg=False):
+    """会話5関数の1本を mod のフック越しに1回呼ぶ。
+
+    先頭4引数の並びは5本とも同じ（GAME.md §2.25）。
+    返すのは「元の関数に何が渡ったか」と「何回呼ばれたか」。
+    """
+    seen = {"npc": None, "calls": 0}
+
+    def orig(messages, character_life_log, player, character_instance,
+             *args, **kwargs):
+        seen["calls"] += 1
+        seen["npc"] = character_instance
+        return "返答"
+
+    hook = ctx_obj.hooks[target]
+    if as_kwarg:
+        hook(orig, [], [], app_obj.player, character_instance=npc)
+    else:
+        hook(orig, [], [], app_obj.player, npc)
+    return seen
+
+
+def profile_seen(seen):
+    return getattr(seen["npc"], "profile", "") or ""
+
+
+check("会話5関数すべてを包む",
+      all(target in ctx.hooks for target in CONV_TARGETS),
+      [t for t in CONV_TARGETS if t not in ctx.hooks])
+
+# -- 片付いた依頼が載る。未完了と、別の相手の依頼は載らない。
+mod, ctx, app = setup()
+clear_clients(ctx)
+add_quest(app, "50", "瘴霧の夜警", "completed")
+add_quest(app, "51", "水路の見張り", "incomplete")
+add_quest(app, "52", "鍛冶場の火事", "completed")
+seed_client(ctx, app, "50", "62", "テストNPC D")
+seed_client(ctx, app, "51", "62", "テストNPC D")
+seed_client(ctx, app, "52", "63", "テストNPC E")   # 別の相手の依頼
+try:
+    npc = app.world.characters["62"]
+    seen = talk_once(ctx, app, npc)
+    body = profile_seen(seen)
+    check("片付いた依頼が会話のプロフィールに載る",
+          mod.COMPLETED_HEADING in body and "瘴霧の夜警" in body, body)
+    check("未完了の依頼は載せない", "水路の見張り" not in body, body)
+    check("別の相手が出した依頼は載せない", "鍛冶場の火事" not in body, body)
+    check("元のプロフィールを残す", "堅実な町の事務官。" in body, body)
+    check("元の関数は1回だけ呼ぶ", seen["calls"] == 1, seen["calls"])
+    check("渡すのは複製で、世界の人物そのものではない",
+          seen["npc"] is not npc)
+    check("世界の人物そのものは書き換えない",
+          npc.profile == "堅実な町の事務官。", npc.profile)
+    check("完了しているという事実として書く", "完了済み" in body, body[-200:])
+    check("記憶と食い違ったらこちらを取れと言う", "食い違" in body, body[-200:])
+    check("話題を切り出せとは指示しない",
+          "切り出す必要は無い" in body and "切り出すこと" not in body, body[-200:])
+
+    # 会話は1ターンに何度も回る。そのたびに控えを読み直さないこと。
+    before = ctx.reads.count(mod.CLIENTS_BASENAME)
+    for _ in range(4):
+        talk_once(ctx, app, npc)
+    check("会話のたびに控えを読み直さない",
+          ctx.reads.count(mod.CLIENTS_BASENAME) == before,
+          ctx.reads.count(mod.CLIENTS_BASENAME))
+
+    # `character_instance` が kwargs で来る経路。
+    seen = talk_once(ctx, app, npc, as_kwarg=True)
+    check("character_instance が kwargs でも差し替える",
+          mod.COMPLETED_HEADING in profile_seen(seen), profile_seen(seen))
+
+    # 外側の mod（`311_`）が既に複製へ足している場合。
+    # **受け取ったものを複製する**ので、あちらの層が残る。
+    outer = copy.copy(npc)
+    outer.profile = npc.profile + "\n\n【会話から形成された追加プロフィール】\n慎重。"
+    body = profile_seen(talk_once(ctx, app, outer))
+    check("外側の mod が足したプロフィールを消さない",
+          "【会話から形成された追加プロフィール】" in body
+          and mod.COMPLETED_HEADING in body
+          and body.index("追加プロフィール") < body.index(mod.COMPLETED_HEADING),
+          body)
+
+    # 相手を変えると、その相手の依頼だけになる（取り違えの裏返し）。
+    body = profile_seen(talk_once(ctx, app, app.world.characters["63"]))
+    check("相手が変わればその相手の依頼だけが載る",
+          "鍛冶場の火事" in body and "瘴霧の夜警" not in body, body)
+
+    # 依頼をひとつも出していない相手。
+    stranger = Character(id="64", name="通りすがり", profile="旅の商人。")
+    app.world.characters["64"] = stranger
+    seen = talk_once(ctx, app, stranger)
+    check("依頼を出していない相手には何も足さない",
+          mod.COMPLETED_HEADING not in profile_seen(seen)
+          and seen["npc"] is stranger, profile_seen(seen))
+    check("エラーを出していない", not ctx.errors, ctx.errors)
+finally:
+    clear_clients(ctx)
+
+# -- `.id` が `world.characters` の鍵と食い違う世界。
+# 鍵と同じ値かは先頭の1体でしか確かめられていない（GAME.md §2.7）ので、
+# 素のオブジェクトが届いた回は同一性で引いた答えを採る。
+mod, ctx, app = setup()
+clear_clients(ctx)
+add_quest(app, "55", "灯台の点検", "completed")
+seed_client(ctx, app, "55", "62", "テストNPC D")
+try:
+    liar = app.world.characters["62"]
+    liar.id = "999"          # 鍵は "62" のまま
+    body = profile_seen(talk_once(ctx, app, liar))
+    check("id が鍵と食い違うなら同一性で引いた方を採る", "灯台の点検" in body, body)
+finally:
+    app.world.characters["62"].id = "62"
+    clear_clients(ctx)
+
+# -- 依頼人の名前が一致するだけでも拾う（掲示板の絞り込みと同じ規則）。
+mod, ctx, app = setup()
+clear_clients(ctx)
+add_quest(app, "53", "橋の修繕", "completed", client_name="テストNPC D")
+try:
+    body = profile_seen(talk_once(ctx, app, app.world.characters["62"]))
+    check("控えが無くても依頼人名の一致で拾う", "橋の修繕" in body, body)
+finally:
+    clear_clients(ctx)
+
+# -- 件数の上限。
+mod, ctx, app = setup()
+clear_clients(ctx)
+for number in range(5):
+    add_quest(app, 60 + number, "片付いた依頼{}".format(number), "completed",
+              client_name="テストNPC D")
+told = mod.MAX_COMPLETED_TOLD
+try:
+    mod.MAX_COMPLETED_TOLD = 2
+    body = profile_seen(talk_once(ctx, app, app.world.characters["62"]))
+    check("件数の上限を超えて並べない", body.count("・") == 2, body)
+    # 残すのは id の大きい方＝後に作られた依頼。
+    # 辞書順だと "10" < "9" になるので、数として並べていることも見る。
+    check("残すのは新しい方", "片付いた依頼3" in body and "片付いた依頼4" in body
+          and "片付いた依頼0" not in body, body)
+    mod.MAX_COMPLETED_TOLD = 0
+    seen = talk_once(ctx, app, app.world.characters["62"])
+    check("0 件にすると何も足さない",
+          mod.COMPLETED_HEADING not in profile_seen(seen), profile_seen(seen))
+finally:
+    mod.MAX_COMPLETED_TOLD = told
+    clear_clients(ctx)
+
+# -- 設定で切る。
+mod, ctx, app = setup()
+clear_clients(ctx)
+add_quest(app, "54", "水門の点検", "completed", client_name="テストNPC D")
+tell = mod.TELL_COMPLETED_QUESTS
+try:
+    mod.TELL_COMPLETED_QUESTS = False
+    npc = app.world.characters["62"]
+    seen = talk_once(ctx, app, npc)
+    check("設定を切ると素通しする",
+          seen["npc"] is npc and mod.COMPLETED_HEADING not in profile_seen(seen),
+          profile_seen(seen))
+    check("切っても元の関数は1回だけ呼ぶ", seen["calls"] == 1, seen["calls"])
+finally:
+    mod.TELL_COMPLETED_QUESTS = tell
+    clear_clients(ctx)
 
 print()
 if failures:
