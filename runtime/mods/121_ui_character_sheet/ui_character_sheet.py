@@ -10,7 +10,7 @@
 1. 枠を広げる。
    `hud.character_sheet_layout` の四辺を窓に対する割合で置き直す（`PANEL_LEFT` ほか）。
    立ち絵（`character_image_right`）はこのレイアウトの外なので動かない。
-   広げるぶんは左と下へ出す（右は立ち絵に被る）。
+   広げるぶんは左・上・下へ出す（右は立ち絵に被る）。
 2. 中身を並べ直し、3つ足す。
    手配度・スキル・特性。
    特性はゲームが作って一度も使っていない箱（`character_sheet_empty`）を借り、
@@ -50,9 +50,11 @@
 TECH.md §3.10 の「完全に元通りにはならないもの」に当たる。
 """
 
+import os
 import sys
 
 from instantale_modloader import frames, ui
+from instantale_modloader.state import world_filename, world_key
 
 from . import sheet
 
@@ -64,9 +66,15 @@ from . import sheet
 #: 倍率で持つと、小さい窓では下の情報欄や本文に食い込む。
 #: 既定値は実測に基づく（窓 1920x1000）。
 #: 右端 0.645 は立ち絵の手前で、下端 0.65 は画面下の情報欄（上端 0.69）の手前。
-PANEL_LEFT = 0.05
+#: 上端 0.03 は素の位置（0.055 相当）より上。
+#: 能力値の箱が書体によってはぎりぎりだったので、上へ広げて縦の余裕に充てている。
+#: 左端 0.02 は画面下のステータス欄（Atk/Def の箱）の左端。
+#: 箱は `size_hint 0.2, center_x 0.12` で置かれていて、左端は 0.12 - 0.2/2 = 0.02
+#: （212 のプローブで実測。`out/character_sheet.log` の `status_label^1`）。
+#: 広げたぶんは手配度の箱の幅に充てている（`sheet.BOXES`）。
+PANEL_LEFT = 0.02
 PANEL_RIGHT = 0.645
-PANEL_TOP = 0.055
+PANEL_TOP = 0.03
 PANEL_BOTTOM = 0.65
 
 #: 手配度に出す行数の上限。
@@ -217,6 +225,52 @@ def apply(ctx):
         setattr(layout, MARK + "_boxes", boxes)
         return boxes
 
+    def ensure_reroll(layout):
+        """二つ名の引き直しボタンを1度だけ作る。作れない環境では None。
+
+        押すと評判 MOD への頼みのファイルを書く（`request_reroll`）。
+        絵柄は円弧＋矢尻。文字ではないので書体は要らない。
+        """
+        button = getattr(layout, MARK + "_reroll", None)
+        if button is not None and frames.attr(button, "parent") is layout:
+            return button
+        # 大きさは正方形の固定値（ゲームの upx で拡縮）。
+        # `place()` で箱の割合を与えない ― 割合だと窓の形に引きずられて横長に潰れ、
+        # 絵柄（円弧）が楕円になる（実機で確認）。
+        button = ui.make_icon_button(size=24.0,
+                                     pos_hint=dict(sheet.REROLL_POS))
+        if button is None:
+            return None       # kivy Button の無い環境（オフライン検証）ではボタンなし
+        setattr(button, MARK, True)
+        button.bind(on_release=lambda *_args: request_reroll(button))
+
+        def repaint(*_args):
+            ui.paint_icon(button, sheet.REROLL_STROKES, attr=MARK + "_icon",
+                          key=("reroll",), log_exc=ctx.log_exc)
+
+        button.bind(pos=repaint, size=repaint)
+        repaint()
+        layout.add_widget(button)
+        setattr(layout, MARK + "_reroll", button)
+        return button
+
+    def request_reroll(button):
+        """二つ名の引き直しを評判 MOD に頼む。
+
+        MOD どうしは呼び合わない（TECH.md §3.2.3）ので、頼みはファイルで渡す。
+        評判 MOD は次の照合（移動・日送り・人物欄の開閉）でファイルを消し、
+        いまの名を除いて編み直す。押した合図としてボタンは隠す
+        （次に人物欄を開いたとき、名が変わっていればまた出る）。
+        """
+        app = ui.find_app()
+        if app is None:
+            return
+        path = os.path.join(ctx.state_dir, sheet.REPUTATION_DIRNAME,
+                            world_filename(world_key(app), sheet.REROLL_SUFFIX))
+        if ctx.write_json(path, {"reroll": True}):
+            ctx.log("character sheet: 二つ名の引き直しを頼んだ")
+        ui.show_widget(button, False)
+
     # ------------------------------------------------------------ 中身
     def sheet_character(app, hud):
         """人物欄に出ている相手。プレイヤーと決めつけない。
@@ -257,11 +311,53 @@ def apply(ctx):
                 len(entries)))
         return sheet.wanted_text(entries)
 
-    def paint(app, hud, boxes):
+    def epithet_text(app, character):
+        """世界の二つ名。評判 MOD の控えがあれば出す。無ければ空。
+
+        MOD どうしは import しない（TECH.md §3.2.3）。控えのファイルを読む。
+        置き場所は `os.path.join` で組む。`ctx.state_path()` は親フォルダを作るので、
+        評判 MOD を使っていない `state/` に空のフォルダを置いてしまう（TECH.md §3.11）。
+        二つ名はプレイヤーのものなので、別人の人物欄には出さない。
+        """
+        player = frames.attr(app, "player")
+        if player is frames.MISSING or player is None or character is not player:
+            return ""
+        path = os.path.join(ctx.state_dir, sheet.REPUTATION_DIRNAME,
+                            world_filename(world_key(app)))
+        return sheet.epithet_text(
+            sheet.reputation_epithet(ctx.read_json(path, None)))
+
+    def write_epithet(hud, epithet):
+        """レベル行の続きに二つ名を書く。無ければ素の行に戻す。
+
+        ゲームはこの欄を開くたびに書き直すが、書き直さないまま
+        こちらの塗りだけが2度走ることもある（窓の大きさの変更など）。
+        前に足したぶんが残っていたら剥がしてから足す ＝ 何度呼んでも二重にならない。
+        """
+        info = frames.attr(hud, "character_sheet_basic_info")
+        if info is frames.MISSING or info is None:
+            return
+        base = frames.text_of(info, "text")
+        written = getattr(info, MARK + "_written", None)
+        if isinstance(written, dict) and base == written.get("full"):
+            base = written.get("base", base)
+        full = base + "　" + epithet if epithet else base
+        try:
+            info.text = full
+        except Exception:
+            return
+        setattr(info, MARK + "_written", {"base": base, "full": full})
+
+    def paint(app, hud, boxes, reroll=None):
         character = sheet_character(app, hud)
         if character is None:
             return
         boxes["wanted"].text = wanted_text(app, character)
+        epithet = epithet_text(app, character)
+        write_epithet(hud, epithet)
+        if reroll is not None:
+            # 二つ名が出ているときだけ押せる（無い名は引き直せない）。
+            ui.show_widget(reroll, bool(epithet))
         boxes["skills"].text = sheet.list_text(
             sheet.SKILLS_HEADING, sheet.names_of(frames.attr(character, "skills")))
         # 既定を None にして「無い」も「None が入っている」も1つの判定で弾く。
@@ -294,6 +390,7 @@ def apply(ctx):
         if style is frames.MISSING:
             style = None
         boxes = ensure_boxes(layout, style)
+        reroll = ensure_reroll(layout)
 
         # ゲーム自身の箱も置き直す。
         # 広げた枠の中で列に並べ替える。
@@ -306,17 +403,37 @@ def apply(ctx):
 
         # 文字の大きさは窓に合わせてゲームが変える。
         # こちらが中身を書く箱には毎回写し直す。
-        # 借りている特性の箱も同じ扱い（元は能力値と同じ中央寄せ・大きな余白なので、
-        # そのままでは中央に寄って見える）。
-        for box in list(boxes.values()) + [frames.attr(hud, sheet.TRAITS_BOX)]:
+        # 借りている特性の箱と能力値の箱も同じ扱い（元は中央寄せ・大きな余白なので、
+        # そのままでは中央に寄って見え、書体によっては右端が欠ける）。
+        for box in (list(boxes.values())
+                    + [frames.attr(hud, name) for name in sheet.RESTYLED]):
             if box is not frames.MISSING and box is not None:
                 copy_style(box, style)
+
+        # レベル行（basic_info）は素のゲームでは `text_size` を持たず、
+        # 文字の塊が箱の中央に置かれる（`halign` は効いていない。212 の実測）。
+        # 素の短い行では左に居るように見えるだけで、二つ名を続けて書いて
+        # 箱を広げると中央へ寄ってしまう。寸法に束ねて `halign`（ゲーム自身の
+        # left）を効かせる。束ねは1度だけ（開くたびに重ねない）。
+        info = frames.attr(hud, "character_sheet_basic_info")
+        if info is not frames.MISSING and info is not None:
+            if not getattr(info, MARK + "_wrap", False):
+                try:
+                    info.bind(size=lambda instance, value: setattr(
+                        instance, "text_size", value))
+                    setattr(info, MARK + "_wrap", True)
+                except Exception:
+                    pass
+            try:
+                info.text_size = info.size
+            except Exception:
+                pass
 
         if not repaint:
             return
         app = ui.find_app()
         if app is not None:
-            paint(app, hud, boxes)
+            paint(app, hud, boxes, reroll)
 
     def watch_window():
         """窓の大きさが変わったら置き直す。掛け直しても重ならない。

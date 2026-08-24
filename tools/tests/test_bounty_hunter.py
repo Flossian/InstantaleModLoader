@@ -597,29 +597,41 @@ def main():
           sorted(app.current_enemy_dict) == ["衛兵1"], app.current_enemy_dict)
 
     print("押されていないぶんを補う")
-    app = App({"0": -25})
+    app = App({"0": -25}, buttons=["MovePhaseManager", "DisplayTalkChoice"])
     module, ctx = fresh_mod(app, CHANCE_PERCENT=100)
     arrive(ctx, app)
     app.current_enemy_dict.update({"衛兵1": types.SimpleNamespace(name="衛兵")})
     ctx.hooks["__main__:BattleStartManager.start_battle"](
         counting(None)[0], BattleStartManager.last)
-    check("敵が揃ったら選択肢を塗り直す", app.painted == [0], app.painted)
+    check("敵が揃っただけでは塗り直さない", app.painted == [], app.painted)
+    ready_screen(ctx, app)
+    check("選択肢がまだ戦闘のものでなければ塗り直さない（読み込みが延びた回）",
+          app.painted == [], app.painted)
+    app.buttons = App({"0": -25}, buttons=["BattlePhaseManager",
+                                           "SkillChoicePhaseManager"]).buttons
+    ready_screen(ctx, app)
+    check("戦闘の選択肢が並んだら塗り直す", app.painted == [0], app.painted)
     check("塗り直したことが記録に残る",
           any("塗り直した" in line for line in read_log()), read_log()[-2:])
+    ready_screen(ctx, app)
+    check("塗り直すのは1回だけ", app.painted == [0], app.painted)
 
-    before = list(app.painted)
+    app = App({"0": -25}, buttons=["BattlePhaseManager"])
+    module, ctx = fresh_mod(app, CHANCE_PERCENT=100)
     ctx.hooks["__main__:BattleStartManager.start_battle"](
         counting(None)[0], types.SimpleNamespace(app=app))
-    check("ゲームが起こした戦闘では塗り直さない",
-          app.painted == before, app.painted)
+    ready_screen(ctx, app)
+    check("ゲームが起こした戦闘では塗り直さない", app.painted == [], app.painted)
 
-    app = App({"0": -25})
+    app = App({"0": -25}, buttons=["MovePhaseManager"])
     del App.display_button_load                       # 無いビルドの想定
     try:
         module, ctx = fresh_mod(app, CHANCE_PERCENT=100)
         arrive(ctx, app)
         ctx.hooks["__main__:BattleStartManager.start_battle"](
             counting(None)[0], BattleStartManager.last)
+        app.buttons = App({"0": -25}, buttons=["BattlePhaseManager"]).buttons
+        ready_screen(ctx, app)
         check("塗り直せなくても落ちない（記録だけ残す）",
               any("塗り直しはできない" in line for line in read_log()),
               read_log()[-2:])

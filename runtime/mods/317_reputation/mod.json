@@ -1,0 +1,121 @@
+{
+  "entry": "reputation.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Reputation and epithets",
+    "ja": "評判と二つ名"
+  },
+  "description": {
+    "en": "Builds a reputation for each land out of what the player actually did there - the deeds the game already writes into area_history, the wanted level, the quests finished, the days stayed - and hands it to the NPCs you talk to. First meetings start from 'I have heard of you'. The epithet is one per world and is only re-coined on qualitative shifts: the set of lands with a reputation changes, a wanted state flips, or total deeds double. Compilation runs in the background only when the material changes, so conversations are never slowed down. Nothing is written to the save; the compiled text lives in state/",
+    "ja": "その土地で実際にやったことから土地ごとの評判を編み、会話する NPC に渡す。素材はゲーム自身が area_history に書いている成した事・手配度・完了した依頼・滞在日数で、この MOD が新しく記録を始めるものは無い。初対面の NPC が「噂は聞いている」から入る。二つ名は世界に1つで、評判の立つ土地の増減・手配の反転・行いの倍増という質的な変化のときだけ編み直す。編纂は素材が変わったときだけ別スレッドで LLM を回すので、会話は遅くならない。セーブには書かず、編纂した文は state\\ に置く"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "settings": {
+    "IN_CONVERSATION": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "会話に効かせる",
+        "en": "Affect conversations"
+      },
+      "note": {
+        "ja": "会話5関数（第一声・自由入力・依頼中）で、話し相手の複製の profile に評判を足す。ゲーム世界の NPC 本体には触らない",
+        "en": "Adds the reputation to a copy of the character the game passes to its five conversation functions. The NPC in the world itself is never touched"
+      }
+    },
+    "IN_NARRATION": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "情景描写に効かせる",
+        "en": "Affect narration"
+      },
+      "note": {
+        "ja": "narrator に渡る player_profile に評判を足す。到着した土地での周囲の反応に出る。既定は OFF（情景描写は毎回本文が出る場所なので、まず会話だけで様子を見る）",
+        "en": "Adds the reputation to the player_profile the narrator receives. Off by default: narration prints on every move, so try conversations first"
+      }
+    },
+    "USE_EPITHET": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "二つ名を使う",
+        "en": "Use epithets"
+      },
+      "note": {
+        "ja": "二つ名は世界に1つ。各地の評判文から編み、質的な変化（評判の立つ土地の増減・手配の反転・行いの倍増）のときだけ編み直す。頼み文にいままでの名を渡すので、覆す材料が無ければ同じ名が続く。OFF にすると評判文だけを注入し、二つ名の編纂も止まる",
+        "en": "One epithet per world, coined from the per-land reputations and re-coined only on qualitative shifts (lands gained or lost, a wanted flip, deeds doubling). The prompt carries the current name, so it stays unless clearly overturned. Off injects reputations only and stops epithet compilation"
+      }
+    },
+    "EPITHET_CHARS": {
+      "type": "int",
+      "default": 8,
+      "min": 3,
+      "max": 30,
+      "label": {
+        "ja": "二つ名の文字数の上限",
+        "en": "Epithet length cap (characters)"
+      },
+      "note": {
+        "ja": "全角で数える。超えた名は切り詰めずに捨てて前の名を残す。既定の8は、モデルによって12だと冗長な名になりがちだったため。人物欄のレベル行に続けて1行で収まる範囲は12程度まで",
+        "en": "Counted in full-width characters. Names over the cap are discarded, not truncated. The default 8 keeps names from turning long-winded on some models; up to about 12 still fits the level line in the character sheet"
+      }
+    },
+    "EPITHET_RANDOM_LENGTH": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "二つ名の長さを揺らす",
+        "en": "Randomize epithet length"
+      },
+      "note": {
+        "ja": "編纂のたびに狙う長さを3字から上限までの間で引き、頼み文に「〜字くらい」と載せる。上限は毎回守らせる。OFF なら毎回「上限以内」だけを頼む（同じ長さ帯に寄りやすい）",
+        "en": "Each compile draws a target between 3 and the cap and asks for roughly that many characters; the cap itself always holds. Off asks only for the cap, which tends to converge on similar lengths"
+      }
+    },
+    "MIN_DEEDS": {
+      "type": "int",
+      "default": 2,
+      "min": 1,
+      "max": 99,
+      "label": {
+        "ja": "評判が立つ最低件数",
+        "en": "Deeds needed before a reputation forms"
+      },
+      "note": {
+        "ja": "その土地で成した事と片付けた依頼の合計。これに満たない土地では何も注入しない（素のゲームと同じ挙動になる）。手配されている土地では件数に関わらず評判が立つ",
+        "en": "Deeds recorded plus quests finished in that land. Below this the mod injects nothing at all. A land where you are wanted always forms a reputation regardless of the count"
+      }
+    },
+    "INJECT_DETAIL": {
+      "type": "choice",
+      "values": [
+        "brief",
+        "detailed"
+      ],
+      "default": "brief",
+      "label": {
+        "ja": "注入の長さ",
+        "en": "Length of the injection"
+      },
+      "note": {
+        "ja": "brief は1文120字まで、detailed は3文300字まで。プロンプトは毎回全文が載るので、短い方が他の内容を押し出さない",
+        "en": "brief = one sentence up to 120 characters, detailed = three sentences up to 300. The whole prompt is resent every turn, so shorter crowds out less"
+      }
+    },
+    "LOG_MATERIAL": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "素材の形をログに残す",
+        "en": "Log the shape of the material"
+      },
+      "note": {
+        "ja": "area_history の実行時の形と、ゲームが会話に渡している area_achievements の形を、起動ごとに1回だけ out\\reputation.log に出す。開発中の確認用",
+        "en": "Writes the runtime shape of area_history, and of the area_achievements the game itself passes to conversations, once per launch to out\\reputation.log"
+      }
+    }
+  }
+}

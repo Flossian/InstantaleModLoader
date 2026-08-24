@@ -1408,6 +1408,8 @@ player_data["area_history"] = {
 | `residency` | その土地に滞在した日数の累計と、最後に発った日 |
 | `achievements` | その土地で成した事の文章（LLM が書いたもの）の配列 |
 
+- `achievements` と `residency` は**会話にもそのまま渡っている**。
+  会話5関数のうち3つが `area_residency` / `area_achievements` を引数で受け取る（§2.24）
 - **読み書きするヘルパは無い**（`lawfulness` を名前に含む関数が存在しない）。値を直接触るしかない
 - 減らしているのは LLM の判定側（プロンプトのスキーマに `lawfulness_loss` がある）。
   どの行為でいくつ減るかは未特定
@@ -1719,6 +1721,14 @@ llm_manager:conversation_facilitator_after_retrieval(..., retrieved_knowledge)
 会話の履歴・記憶はゲーム自身が持っているので、差し込んだ知識はその会話の要約として記憶に残る
 （同じ相手が前の話を引きずる）。
 1回きりにしたいなら、差し込む条件の側で絞る。
+
+> なお `conversation_starter` / `conversation_facilitator` /
+> `..._after_retrieval` の3つは、いま居る土地の `area_residency` と
+> `area_achievements`（§2.20）を引数で直接受け取っている（`targets.txt` の実シグネチャ。
+> `*_in_quest` の2つには無い）。
+> 成した事の素の文章は既にプロンプトへ載っている見込みが高いので、
+> 知識を差し込む MOD が同じ素材を言い換えて足すと二重になる（`317_` はこの理由で、
+> 素材の要約ではなく編纂の結果だけを注入している）。
 
 ### 2.25 会話の記憶の実体（`current_log` / `relationship` / `conversation_resolver`）
 

@@ -264,6 +264,19 @@ def apply(ctx):
         except Exception:
             pass
 
+        if hud is not None and state["dumps"] == 1:
+            # 画面下のステータス欄（Atk/Def の箱）。
+            # 人物欄の左端をここに揃えるので、置き方を一緒に写す。
+            # 箱の枠線は Label ではなく親のどれかに描かれているはずなので、
+            # 親を数段さかのぼって出す（子へは潜らない。潜ると HUD 全体が出てしまう）。
+            widget = frames.attr(hud, "status_label")
+            level = 0
+            while widget not in (None, frames.MISSING) and level < 4:
+                lines.append("  status_label^{}: {} {}".format(
+                    level, type(widget).__name__,
+                    " ".join(props(widget, WIDGET_ATTRS))))
+                widget = frames.attr(widget, "parent")
+                level += 1
         if hud is not None:
             lines.append("  visible_character_sheet_data = " + frames.repr_value(
                 frames.attr(hud, "visible_character_sheet_data")))

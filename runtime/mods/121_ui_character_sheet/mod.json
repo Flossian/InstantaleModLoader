@@ -7,15 +7,15 @@
     "ja": "人物欄を広げて手配度・スキル・特性を出す"
   },
   "description": {
-    "en": "Grows the player's character sheet to the left and adds wanted level (per non-dungeon area), skills and traits. The portrait does not move",
-    "ja": "プレイヤーの人物欄を左と下へ広げ、手配度（ダンジョン以外の土地ごと）・スキル・特性を足す。立ち絵の位置は変わらない"
+    "en": "Grows the player's character sheet to the left, up and down and adds wanted level (per non-dungeon area), skills and traits. The portrait does not move",
+    "ja": "プレイヤーの人物欄を左・上・下へ広げ、手配度（ダンジョン以外の土地ごと）・スキル・特性を足す。立ち絵の位置は変わらない"
   },
   "version": "1",
   "author": "R01/Flossian",
   "settings": {
     "PANEL_LEFT": {
       "type": "float",
-      "default": 0.05,
+      "default": 0.02,
       "min": 0.0,
       "max": 1.0,
       "label": {
@@ -23,8 +23,8 @@
         "en": "Panel left edge (fraction of the window width)"
       },
       "note": {
-        "ja": "小さくすると左へ広がる。0 で画面の左端",
-        "en": "Lower values reach further left; 0 is the window edge"
+        "ja": "既定は画面下のステータス欄の左端に揃えた値。0 で画面の左端",
+        "en": "The default lines up with the bottom status box; 0 is the window edge"
       }
     },
     "PANEL_RIGHT": {
@@ -43,12 +43,16 @@
     },
     "PANEL_TOP": {
       "type": "float",
-      "default": 0.055,
+      "default": 0.03,
       "min": 0.0,
       "max": 1.0,
       "label": {
         "ja": "枠の上端（画面高さに対する割合・上から）",
         "en": "Panel top edge (fraction of the window height, from the top)"
+      },
+      "note": {
+        "ja": "素の位置は 0.055 相当。上げたぶんは能力値など縦の余裕になる",
+        "en": "The vanilla sheet sits at about 0.055; the extra height goes to the columns"
       }
     },
     "PANEL_BOTTOM": {

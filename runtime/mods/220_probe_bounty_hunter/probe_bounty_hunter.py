@@ -1,60 +1,26 @@
 # -*- coding: utf-8 -*-
-"""計測: 賞金首狩り（手配度に応じて追手が来る）を書くために要る値を録る。
+"""計測: 賞金首狩り（`316_`）を書くために要る値を録る。ゲームは変えない。
 
-##### 何を決めるための計測か
+MOD からゲームの戦闘を起こした前例が無かったので、その道を測るために作った。
+録れたことは GAME.md §2.20 と VERIFICATION_LOG.md §2.51 / §2.56 / §2.59 / §2.60。
 
-手配度そのものは分かっている（`area_history[エリアid]['lawfulness']`。
-平常 10、0 未満で犯罪者、実プレイで -40 を観測。GAME.md §2.20）。
-分かっていないのは**追手をどう出すか**で、
-MOD からゲームの戦闘を起こした前例がまだ1本も無い。
-
-| 未実測 | この計測での見どころ |
+| 何を録るか | 見どころ |
 | --- | --- |
-| 戦闘の起こし方 | `BattleStartManager(app, enemy_type, enemy_content)` の2引数の実値。`enemy_type` の語彙と `enemy_content` の形 |
-| 敵の渡し方 | `InstantaleApp.execute_battle_process(enemies)` の `enemies` の形と、呼び出し元（どの経路がここを通るか） |
-| 衛兵の道 | ゲーム自身が `guard_npc_generator(area, world, npc_difficulty_level)` へ渡す難易度の実値と、それを呼んでいる関数の名前 |
-| 敵の強さの決め方 | `scripts.functions:get_enemy_exp_lvl` / `get_enemy_attributes_base_point` の引数と戻り値 |
-| どこで割り込むか | 遭遇を起こしうる4箇所（エリア到着・施設到着・日数経過・自由行動）で、そのとき手が空いているか |
-| **戦闘に入ったときの画面の配置** | 戦闘の選択肢と敵の表示が重なる回がある（実機で `right_button_layout` と `top_info_layout_battle` が同じ矩形で両方 opacity 1）。ゲームが起こした戦闘と MOD が起こした戦闘で HUD の各枠を突き合わせ、枠を畳んでいる段（`update_enemy_display` / `turnoff_window_visibility` / `update_enemy_info`）の前後も写す |
-| **割り込む先をイベントにできるか** | `set_buttons_to_normal` / `refresh_choice_buttons` がいつ何回呼ばれるか。自由入力の4つの出口（`FreeInputStart.end_process*`）から、普通の選択肢に戻るまでに何が挟まるか |
+| 戦闘の起こし方 | `BattleStartManager(app, enemy_type, enemy_content)` の実値と呼び出し元 |
+| 敵の作られ方 | `guard_npc_generator` に渡る難易度、`generate_enemy_instance_from_quest_dict` の引数、揃った敵のレベルとHP |
+| 敵の強さの表 | `scripts.functions` の3関数の引数と戻り値（同じ組は1度だけ） |
+| 割り込む場所 | 遭遇を起こしうる4箇所での手配度と、そのとき手が空いているか |
+| 割り込む先 | 画面が普通の選択肢に戻る合図（`refresh_choice_buttons` ほか）と自由入力の4つの出口 |
+| 戦闘の画面 | 戦闘に入ったときの HUD の各枠の実寸。枠を出し入れする段の前後 |
 
-**衛兵の道が本命**。
-`guard_npc_generator` と `guard_battle_summarizer` はゲームに元から在り、
-記録も残っている（`output_data/…/guard_npc_generator/`。返るのは
-`EnemyData` ＝ description / look / race / size / archetype）。
-つまり「敵を1体その場で作って戦闘にする」道はゲーム自身が既に通していて、
-賞金首狩りはその道を借りるのが一番短い。
-借りるには**衛兵を呼んでいる関数の名前**が要る。それを `frames.caller()` で採る。
+200番台の約束どおり読み取りだけ。`safe=True` と握り潰しで、
+記録に失敗しても本体は必ず1回呼ぶ。
 
-##### ゲームは変更しない
-
-200番台の約束どおり読み取りだけ。
-`safe=True` と握り潰しで、記録に失敗しても本体は必ず呼ぶ。
-`orig` は1回だけ呼ぶ（TECH.md §6.1）。
-
-##### 手配度は毎回まとめて写す
-
-追手の条件は「1つの土地の手配度」と「マイナスの合計」の両方になる予定なので、
-**土地ごとの値と、その2つの要約**を同じ行に残す。
-どちらの閾値が遊べる値なのかは、実プレイの数字を並べてからでないと決められない。
-
-読み方はローダの語彙（`ui.lawfulness_by_area`。`309_` と共有）。
+手配度の読み方はローダの語彙（`ui.lawfulness_by_area`）。
 数え方（何を手配とみなすか）だけがこの MOD の側にある。
 
-##### 適用順
-
-計測は修正より後（TECH.md §3.2.2）。
-`308_` が `BattleStartManager.start_battle` を、
-`130_` がマスターAI の4関数を包んでいるので、この計測はその外側に入る。
-`enemy_type` / `enemy_content` はゲームが組み立てたまま渡ってくる
-（どちらの MOD も引数を書き換えない）。
-
-##### 出力
-
-`out/bounty_hunter.log`（読む用）と `out/bounty_hunter.jsonl`（1件1行、突き合わせる用）。
-
-画面の合図は数が多くなりうるので `SCREEN_SAMPLES` 件で打ち切る。
-打ち切られたかは記録の件数で分かる。
+出力は `out/bounty_hunter.log`（読む用）と `out/bounty_hunter.jsonl`（1件1行）。
+合図と枠の記録は件数が多くなりうるので `SCREEN_SAMPLES` で打ち切る。
 """
 
 import datetime

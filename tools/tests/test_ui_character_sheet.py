@@ -164,11 +164,40 @@ class FakeLayout(FakeLabel):
         self.opacity = 0
 
 
+class FakeButton(object):
+    """`ui.make_icon_button` が作る Button の代わり。押下は `press()` で起こす。"""
+
+    def __init__(self, text="", size_hint=None, size=None, pos_hint=None):
+        self.text = text
+        self.size_hint = size_hint
+        self.size = size or (0.0, 0.0)
+        self.width, self.height = self.size
+        self.pos = (0.0, 0.0)
+        self.pos_hint = dict(pos_hint or {})
+        self.parent = None
+        self.opacity = 1.0
+        self.disabled = False
+        self.font_size = 0
+        self.released = []
+
+    def bind(self, **kwargs):
+        for event, callback in kwargs.items():
+            if event == "on_release":
+                self.released.append(callback)
+
+    def press(self):
+        for callback in list(self.released):
+            callback(self)
+
+
 def install_fake_kivy():
     kivy = types.ModuleType("kivy")
     uix = types.ModuleType("kivy.uix")
     label_mod = types.ModuleType("kivy.uix.label")
     label_mod.Label = FakeLabel
+    button_mod = types.ModuleType("kivy.uix.button")
+    button_mod.Button = FakeButton
+    sys.modules["kivy.uix.button"] = button_mod
     core = types.ModuleType("kivy.core")
     window_mod = types.ModuleType("kivy.core.window")
     window_mod.Window = FakeWindow
@@ -243,10 +272,24 @@ class FakeApp(object):
 
 
 class FakeCtx(object):
+    #: 控えの置き場（本番は配布フォルダ直下の `state/`）。
+    STATE_DIR = os.path.normpath(
+        os.path.join(HERE, os.pardir, os.pardir, "out", "test", "state"))
+
     def __init__(self):
         self.hooks = {}
         self.messages = []
         self.errors = []
+        self.state_dir = self.STATE_DIR
+
+    # 読み書きは本物を借りる（評判 MOD の控えを実ファイルで扱う経路の検査のため）。
+    def read_json(self, path, default=None):
+        import instantale_modloader as ml
+        return ml.read_json(path, default, report=self.log_exc)
+
+    def write_json(self, path, data):
+        import instantale_modloader as ml
+        return ml.write_json(path, data, report=self.log_exc)
 
     def wrap(self, target, **kwargs):
         def decorate(fn):
@@ -399,7 +442,8 @@ def run():
     check("寸法が変わらない",
           close(layout.size[0], want[0]) and close(layout.size[1], want[1]),
           layout.size)
-    check("足した箱は増えない", len(layout.children) == len(sheet.ADDED),
+    check("足した箱は増えない（ボタン込み）",
+          len(layout.children) == len(sheet.ADDED) + 1,
           len(layout.children))
     check("枠線は一度だけ引く", len(borders) == len(sheet.ADDED), len(borders))
 
@@ -451,6 +495,8 @@ def run():
 
     print("\n[書体] 足した箱は隣から写す")
     for box in layout.children:
+        if isinstance(box, FakeButton):
+            continue      # 引き直しボタンは絵柄だけ（文字が無いので書体も写さない）
         check("書体を写している ({})".format(box.text.splitlines()[0] if box.text else "?"),
               box.font_name == FONT_NAME and box.font_size == FONT_SIZE,
               (box.font_name, box.font_size))
@@ -480,6 +526,81 @@ def run():
                       if box.text.startswith("スキル"))
     check("その相手の手配度を出す", "始まりの泥濘：-3" in text3, text3)
     check("その相手のスキルを出す", "影抜き" in skills3, skills3)
+
+    print("\n[二つ名] 評判 MOD の控えがあればレベル行に続けて出す")
+    from instantale_modloader.state import world_filename, world_key
+    info = hud.character_sheet_basic_info
+    plain = info.text
+    epi_path = os.path.join(FakeCtx.STATE_DIR, sheet.REPUTATION_DIRNAME,
+                            world_filename(world_key(app)))
+    os.makedirs(os.path.dirname(epi_path), exist_ok=True)
+    with io.open(epi_path, "w", encoding="utf-8") as fh:
+        json.dump({"areas": {}, "epithet": {"epithet": "灰の街の盾"}}, fh,
+                  ensure_ascii=False)
+    hud.visible_character_sheet_data = {"name": "エリス"}   # プレイヤーに戻す
+    toggle()                                   # 閉じる
+    toggle()                                   # 開き直す
+    check("控えがあればレベル行の続きに出る",
+          info.text == plain + "　「灰の街の盾」", info.text)
+    check("レベル行は寸法に束ねてある（中央寄りにならない土台）",
+          "size" in info.bound, info.bound)
+    toggle()
+    toggle()
+    check("開き直しても二重にならない",
+          info.text == plain + "　「灰の街の盾」", info.text)
+    hud.visible_character_sheet_data = {"name": "カイル"}   # 別人の欄
+    toggle()
+    toggle()
+    check("別人の人物欄には出さない（素の行に戻る）", info.text == plain,
+          info.text)
+    hud.visible_character_sheet_data = {"name": "エリス"}
+    toggle()
+    toggle()
+    os.remove(epi_path)
+    toggle()
+    toggle()
+    check("控えが消えれば素の行に戻る", info.text == plain, info.text)
+    check("控えを読む経路で例外を出していない", not ctx.errors, ctx.errors[:2])
+    check("形を決めつけずに読む",
+          sheet.reputation_epithet({"epithet": {"epithet": " 影 "}}) == "影"
+          and sheet.reputation_epithet({"epithet": "文字列"}) == ""
+          and sheet.reputation_epithet(None) == ""
+          and sheet.reputation_epithet({}) == "")
+    check("二つ名が空なら文も空",
+          sheet.epithet_text("") == "" and sheet.epithet_text(None) == ""
+          and sheet.epithet_text("竜追い") == "「竜追い」")
+
+    buttons = [child for child in layout.children
+               if isinstance(child, FakeButton)]
+    check("引き直しボタンが1つ在る", len(buttons) == 1,
+          [type(child).__name__ for child in layout.children])
+    if buttons:
+        check("ボタンは固定の正方形（割合で潰さない）",
+              buttons[0].size_hint == (None, None)
+              and buttons[0].width == buttons[0].height > 0,
+              (buttons[0].size_hint, buttons[0].size))
+    button = buttons[0] if buttons else FakeButton()
+    check("二つ名が無い間は隠れて押せない",
+          button.opacity == 0.0 and button.disabled, vars(button))
+    with io.open(epi_path, "w", encoding="utf-8") as fh:
+        json.dump({"areas": {}, "epithet": {"epithet": "灰の街の盾"}}, fh,
+                  ensure_ascii=False)
+    toggle()
+    toggle()
+    check("二つ名が出ている間は押せる",
+          button.opacity == 1.0 and not button.disabled, vars(button))
+    reroll_path = os.path.join(FakeCtx.STATE_DIR, sheet.REPUTATION_DIRNAME,
+                               world_filename(world_key(app),
+                                              sheet.REROLL_SUFFIX))
+    if os.path.exists(reroll_path):
+        os.remove(reroll_path)
+    button.press()
+    check("押すと頼みのファイルが書かれる", os.path.exists(reroll_path),
+          reroll_path)
+    check("押した後はボタンが隠れる（合図）",
+          button.opacity == 0.0 and button.disabled, vars(button))
+    os.remove(reroll_path)
+    os.remove(epi_path)
 
     print("\n[表] 箱同士が重ならない")
     boxes = []
