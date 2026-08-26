@@ -576,14 +576,49 @@ add_text('…はパーティから離脱した。')
 
 ### 2.9 クエスト
 
-格納場所は2つある。書くときは必ず両方。
+格納場所は2つある。**役割が違うので、書く前にどちらかを選ぶ**（§2.9.1）。
 
 ```
-app.world.quests          {id: Quest インスタンス}   ゲームが遊ぶときに読む
-app.world_dict['quests']  {id: dict}                 セーブに出るのはこちら
+app.world.quests          {id: Quest インスタンス}   遊んでいるあいだの一覧
+app.world_dict['quests']  {id: dict}                 世界の雛形
 ```
 
-片方だけ直すと画面の表示と保存内容がずれる。新規 id の検出も両者の合併を取る。
+新規 id の検出は両者の合併を取る（どちらに登録されるかを決め打ちしない）。
+
+#### 2.9.1 `world_dict` はセーブの中身ではなく世界の雛形（2026-08-26 に訂正）
+
+以前ここには「`world_dict['quests']` がセーブに出るほう」「書くときは必ず両方」と
+書いてあった。**どちらも実測に反する。**
+
+| | 中身 | 書き出し先 |
+| --- | --- | --- |
+| `app.world.quests` | その周回の全依頼（実測 22件） | `saves/<世界名>/savedata.json` |
+| `app.world_dict['quests']` | 世界を作った時点の依頼（実測 12件） | `worlds/<世界名>/world_data.json` |
+
+同じ瞬間の実測（`206_` の記録と、両ファイルの復号。VERIFICATION_LOG.md §2.66）:
+
+- `app.world_dict['quests']` は 12件、`savedata.json` は 22件。
+  掲示板で作られた依頼（id 13 / 19 / 20 / 21）は**雛形の側に現れない**
+- 状態も食い違う。同じ依頼が雛形では `incomplete`、セーブでは `completed`
+- 雛形へ書いた難易度は `world_data.json` に焼かれる。
+  **その世界で新しく始めた別のキャラクタにまで乗る**
+- 生きた一覧（`app.world.quests`）へ書いた難易度は、画面には出るが
+  `savedata.json` には出ない。
+  **セーブがどこから依頼を組んでいるかは未特定**（VERIFICATION.md §3.38 の残り）
+- **`get_quest_difficulties(area, world)` は生きた一覧のほうを読む。**
+  ある土地で 5件返したとき、雛形にはその土地の依頼が 3件しか無かった
+  （返った5件に、雛形に現れない id が2つ入っていた）。
+  この関数は店の品揃え・値付け・敵の強さの源（§2.13.1.1）なので、
+  **生きた一覧に書けばゲーム自身の計算に届く**
+
+MOD からの書き方はこうなる。
+
+- **遊びを変えたいだけなら `app.world.quests` にだけ書く。**
+  セーブに残らないので、MOD を外せば素のまま。
+  残らないぶんは、次に読む場面で書き直す（`318_` がこの形）
+- **雛形（`world_dict`）へは書かない。** 世界のファイルに焼かれる
+- ローダの `ui.set_quest_value` / `ui.quest_stores` は**両方**へ書く。
+  雛形に触れたくない MOD は使わないこと
 
 掲示板（`DisplayQuestChoice`）のボタン:
 `PhaseSpec('QuestChoiceManager', ('settlement_quest', '2'))` /
@@ -1000,8 +1035,11 @@ InstantaleApp.normalize_shop_inventory_prices(shop_obtainer, player_obtainer)
   入れ替える仕組みは見当たらない。
   プレイヤーが売った品も `sell_item` で主の持ち物に積まれるので、
   24マスが埋まると売却そのものができなくなる
-- `next_tier` / `item_stock_tier` は品物の段。**値の意味と決め方は未特定**なので、
-  ゲームが渡す値をそのまま使い回す（`312_` はこの形で、値は解釈しない）
+- `next_tier` / `item_stock_tier` は品物の段。**整数**で、
+  `get_area_quest_difficulty_for_tier(area, world, tier)` に渡って
+  その土地の依頼の難易度に変わる（§2.13.1.2）。
+  **どう決まるかはまだ出ていない**（実測1点）ので、
+  `312_` はゲームが渡す値をそのまま使い回して解釈しない
 - **主の持ち物を空にしてから売買を始めると、ゲームが初回と同じ経路で品揃えを作り直す**
   （実機で成立。`cleared` → `restocked` が4店舗6回、`WARN not refilled` は0件）
 
@@ -1033,8 +1071,33 @@ InstantaleApp.normalize_shop_inventory_prices(shop_obtainer, player_obtainer)
   6世界の施設 1,244件を数えて他は出ていない
   （`entrance` / `ward` / `dungeon_location` など主の居ない施設は `None`）
 - ゲーム側の入口は `get_area_quest_difficulty_for_tier(area, world, tier)` と
-  `get_quest_difficulties(area, world, include_completed=True)`。
-  **`tier` に何が渡っているかは未実測**（`221_probe_item_level` が録る）
+  `get_quest_difficulties(area, world, include_completed=True)`
+
+#### 2.13.1.2 品揃えを作る経路（実測。VERIFICATION_LOG.md §2.67）
+
+主の持ち物が空の店を開いたときに走る:
+
+```
+generate_item_in_shopping(item_data, shop_owner_instance, item_stock_tier=2)
+  get_area_quest_difficulty_for_tier(area, world, 2) -> 33
+  get_weapon_spec(33) -> 145
+  get_equipment_price(33) -> 1021
+  get_item_skill_usefulness(33, 'common') -> 10
+```
+
+- **`tier` は整数**（実測 2）。施設の `basic` / `standard` / `advanced` ではない。
+  返った 33 は `get_quest_difficulties` の並び `[35,34,33,…]` の3番目と一致するが、
+  **実測1点なので式は確定していない**
+- 品揃えを作っているのは `set_item_from_world_data` ではなく
+  **`generate_item_in_shopping`**。
+  `312_` が `set_item_from_world_data` の `tier` を控えようとして
+  ずっと `null` だったのはこのため
+- `generate_item_in_shopping` は `None` を返す。
+  作った品はそこから受け取るのではなく主の持ち物へ入る
+  （`generate_enemy_instance_from_quest_dict` と同じ形。§2.20）
+- ここへ渡る難易度は `get_quest_difficulties` の答えそのものなので、
+  **生きた一覧（`app.world.quests`）を書き換えれば品揃えの段が動く**（§2.9.1）。
+  `318_area_difficulty_growth` がこれで街を育てている
 
 > つまり**その土地の物価と品揃えを動かす道は、依頼の難易度1つ**。
 > `318_area_difficulty_growth` はこれを使って、在庫にもクラフトにも触らずに街を育てる。
@@ -1200,22 +1263,32 @@ hud.craft_inventory_generate_arrow_label    「→」
 | 進行中の旗 | `app.is_crafting_item` / `app.item_craft_lock` |
 | グリッド | `InventoryGrid(cols, rows, item_dict, obtainer, place_item_callback=None, situation=None)` |
 
-#### 成果物の性能を決める式は未実測
+#### 成果物の性能は素材の値段で決まる（実測。VERIFICATION_LOG.md §2.67）
+
+`ItemCraftManager.calculate_modification(item_type, item_price)` は
+**float の倍率**を返す。成果物の値段は素材の合計値段にそれを掛けた値:
 
 ```
-ItemCraftManager.calculate_modification(self, item_type, item_price)
-scripts.functions:get_equipment_level_from_price(item_price)     ← 値段 → レベル
-scripts.functions:get_heal_item_level_from_price(item_price)
-scripts.functions:get_other_item_level_from_price(item_price)
+素材 value 2 + 8（合計の値段 30.75）
+  get_equipment_level_from_price(30.75) -> 2
+  calculate_modification("weapon", 30.75) -> 24.375
+  30.75 × 24.375 = 749.53125
+  get_equipment_level_from_price(749.53125) -> 27
+  成果物: value 27 / 攻撃力 116
 ```
 
-引数の名前は「種別と値段から決める」と言っており、
-`get_*_price(quest_difficulty)`（§2.13.2）の逆関数が3本揃っている。
-素材が高いほど成果物が良くなる、という形に読める。
+- 値段 → レベルは `get_equipment_level_from_price` /
+  `get_heal_item_level_from_price` / `get_other_item_level_from_price` の3本。
+  `get_*_price(quest_difficulty)`（§2.13.2）の逆関数
+- **副産物（`material`）はその 1/5**。実測2例とも合う
+  （`30.75 × 9.5122 = 292.5 → 58.5 → value 14` /
+  `1.25 × 24.375 = 30.46875 → 6.09375 → value 2`）
+- 倍率は**種別と値段の両方で変わる**（`weapon@30.75` は 24.375、
+  `material@30.75` は 9.5122）。**式の形は実測2点では出ない**
 
-**ただし読めているのは名前だけで、`calculate_modification` の実引数も戻り値の型も採れていない**
-（素材の合計が渡るのか1つぶんなのか、返るのが数なのか辞書なのかも未確認）。
-`221_probe_item_level` がこの1本を録る。VERIFICATION.md §3.38。
+つまり素材が高いほど成果物が良い。
+店の品揃えは土地の依頼の難易度で決まる（§2.13.1.1）ので、
+**土地が育てばクラフトの成果物も自動で追随する**。
 
 グリッドは名前ではなく、アイテムを置く能力で見分ける
 （`place_new_item` / `try_place_item` / `occupy_slots` / `find_placement_position` ほか）。

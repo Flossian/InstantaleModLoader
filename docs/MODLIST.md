@@ -97,7 +97,7 @@
 | [`315_vacation_custom`](MODS.md#315_vacation_custom-宿の宿泊期間部屋宿代を変える) | 宿泊のカスタマイズ | 宿の宿泊期間・部屋・宿代を変える | 14 |  |
 | [`316_bounty_hunter`](MODS.md#316_bounty_hunter-手配されていると追手が来る) | 賞金稼ぎが襲ってくる | 手配されていると追手が来る | 15 |  |
 | [`317_reputation`](MODS.md#317_reputation-評判と二つ名) | 評判と二つ名 | 評判と二つ名 | 8 |  |
-| [`318_area_difficulty_growth`](MODS.md#318_area_difficulty_growth-土地が育つ依頼の難易度が上がる) | 土地が育つ（依頼の難易度が上がる） | 土地が育つ（依頼の難易度が上がる） | 7 |  |
+| [`318_area_difficulty_growth`](MODS.md#318_area_difficulty_growth-土地が育つ依頼の難易度が上がる) | 依頼クリアで難易度上昇 | 土地が育つ（依頼の難易度が上がる） | 7 |  |
 
 ---
 

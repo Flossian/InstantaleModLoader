@@ -7,6 +7,8 @@
 次を確認する。
 
   数える     … クリアの回数はその依頼の**出所の土地**に付く。段に足りなければ上げない
+  ロード     … セーブを読み込んだ直後に、世界じゅうの土地をまとめて寄せ直す
+  生成       … 新しい依頼は素の帯で生まれるので、作らせたその場で上げ直す
   上げる     … 段が上がると、その土地の依頼が素の値 + 上昇量になる。両方の格納先に書かれる
   他の土地   … 数えた土地以外は動かない
   二重掛け   … 上がった帯の中で生まれた依頼に、上昇量が二度乗らない
@@ -295,12 +297,65 @@ def open_board(ctx, app):
 
 
 def difficulties(app, area_id):
-    """`(インスタンス側, セーブ側)` の難易度を id 順で。"""
+    """`(生きた一覧, 世界の雛形)` の難易度を id 順で。
+
+    雛形（`world_dict['quests']`）は**触られてはいけない**側。
+    書くと世界のファイルに焼かれて、同じ世界の別のキャラクタにまで乗る。
+    """
     ids = sorted((qid for qid, quest in app.world.quests.items()
                   if quest.neighboring_settlement_id == area_id),
                  key=lambda value: int(value))
     return ([app.world.quests[qid].difficulty for qid in ids],
-            [app.world_dict["quests"][qid]["difficulty"] for qid in ids])
+            [app.world_dict["quests"][qid]["difficulty"]
+             for qid in ids if qid in app.world_dict["quests"]])
+
+
+def search_quest(ctx, app, born_id, born_area, born_difficulty):
+    """依頼を1件作らせる（生成はゲームの側の仕事なので偽物で演じる）。
+
+    **素の帯で生まれる**のが実機で測れた挙動（VERIFICATION_LOG.md §2.66）。
+    生成の中で `random_quest_generator` も1度呼ばれる。
+    """
+    calls = []
+
+    def generate(self, *args, **kwargs):
+        gen = ctx.hooks.get(
+            "scripts.llm.llm_manager_world_generate:random_quest_generator")
+        if gen is not None:
+            gen(lambda *a, **kw: calls.append(a[5]) or {"quest_title": "作られた依頼"},
+                "世界", "町", "概要", "構造", "土地の説明", born_difficulty)
+        quest = Quest(born_id, born_area, born_difficulty)
+        app.world.quests[quest.id] = quest
+        return quest
+
+    hook = ctx.hooks["__main__:DisplayQuestChoice.generate_random_quest"]
+    hook(generate, DisplayQuestChoice.__new__(DisplayQuestChoice))
+    return calls
+
+
+def load_world(ctx, app):
+    """セーブを読み込む（`World.__init__` を通す）。
+
+    実機では難易度がセーブに残らないので、ここは**素へ戻った状態**から始まる。
+    """
+    save_data_dict = {"world_data": {"name": app.world.name},
+                      "quests": {}}
+    hook = ctx.hooks["__main__:World.__init__"]
+    hook(lambda self, *a, **kw: None, app.world, save_data_dict, app)
+    return app
+
+
+def accept_quest(ctx, app, quest_id):
+    """受注の入口（`QuestChoiceManager.__init__`）を通す。"""
+    hook = ctx.hooks["__main__:QuestChoiceManager.__init__"]
+    seen = {}
+
+    def init(self, app_, quest_type, qid, *args, **kwargs):
+        seen["difficulty"] = app_.world.quests[qid].difficulty
+        return None
+
+    hook(init, object(), app, "settlement_quest", str(quest_id))
+    return seen.get("difficulty")
 
 
 def state_file(world_name="試しの世界"):
@@ -337,9 +392,9 @@ check("回数は控えに残る", (state_file() or {}).get("0", {}).get("cleared
 
 end_quest(ctx, app, "2")
 end_quest(ctx, app, "3")
-raised, saved = difficulties(app, "0")
+raised, template = difficulties(app, "0")
 check("3回で1段上がる", raised == [6, 7, 8], raised)
-check("セーブ側にも同じ値が入る", saved == raised, saved)
+check("世界の雛形には書かない", template == [3, 4, 5], template)
 check("段と上昇量が控えに残る",
       (state_file() or {}).get("0", {}).get("step") == 1
       and state_file()["0"].get("bonus") == 3, state_file())
@@ -350,16 +405,14 @@ check("他の土地は動かない", difficulties(app, "1")[0] == [50],
       difficulties(app, "1"))
 check("例外を出していない", not ctx.errors, ctx.errors)
 
-# -- 二重掛け -------------------------------------------------------------
-# 上がった帯（6,7,8）の中でゲームが新しい依頼を作る。
-# 生まれた時点で上昇量を含んでいるので、次の寄せ直しで二度乗ってはいけない。
-born = Quest("9", "0", 7)
-app.world.quests["9"] = born
-app.world_dict["quests"]["9"] = quest_dict(born)
-open_board(ctx, app)
-check("生まれたての依頼に二度乗らない",
+# -- 生成 -----------------------------------------------------------------
+# 新しい依頼は**素の帯で生まれる**（実機。VERIFICATION_LOG.md §2.66）。
+# 生成のその場で上げないと、いま作らせた依頼だけ素の難易度で差し出される。
+passed = search_quest(ctx, app, born_id="9", born_area="0", born_difficulty=4)
+check("生まれた依頼をその場で上げる",
       app.world.quests["9"].difficulty == 7, app.world.quests["9"].difficulty)
-check("素の値は上昇量を引いた値で控える",
+check("頼み文へ渡す難易度も上げる", passed == [7], passed)
+check("素の値はそのまま控える",
       state_file()["0"]["base"].get("9") == 4, state_file()["0"].get("base"))
 
 # もう1段上がると、生まれた依頼も一緒に上がる。
@@ -368,6 +421,43 @@ end_quest(ctx, app, "1")
 end_quest(ctx, app, "2")
 check("次の段では新旧そろって上がる",
       difficulties(app, "0")[0] == [9, 10, 11, 10], difficulties(app, "0")[0])
+
+# -- 受注 -----------------------------------------------------------------
+# ロードすると難易度は素へ戻る（セーブに残らない）。受注の入口で書き直す。
+for quest in app.world.quests.values():
+    if quest.neighboring_settlement_id == "0":
+        quest.difficulty = state_file()["0"]["base"][quest.id]
+check("ロード直後は素の難易度", difficulties(app, "0")[0] == [3, 4, 5, 4],
+      difficulties(app, "0")[0])
+check("受注の直前に書き直す", accept_quest(ctx, app, "1") == 9,
+      accept_quest(ctx, app, "1"))
+
+# -- ロード ---------------------------------------------------------------
+# 掲示板を通らない読み手（店の品揃えが筆頭）が素の値を見ないよう、
+# ロードの1回で世界ぜんぶを寄せ直す。
+reset()
+module, ctx = fresh({"CLEARS_PER_STEP": 1, "STEP_SIZE": 5, "ANNOUNCE": ""})
+app = make_world(BAND)
+end_quest(ctx, app, "1")
+end_quest(ctx, app, "4")
+check("2つの土地が上がっている",
+      (difficulties(app, "0")[0], difficulties(app, "1")[0]) == ([8, 9, 10], [55]),
+      (difficulties(app, "0")[0], difficulties(app, "1")[0]))
+
+for quest in app.world.quests.values():
+    quest.difficulty = state_file()[quest.neighboring_settlement_id]["base"][quest.id]
+check("ロード直前は素の難易度",
+      (difficulties(app, "0")[0], difficulties(app, "1")[0]) == ([3, 4, 5], [50]),
+      (difficulties(app, "0")[0], difficulties(app, "1")[0]))
+
+load_world(ctx, app)
+check("ロードで世界ぜんぶが戻る",
+      (difficulties(app, "0")[0], difficulties(app, "1")[0]) == ([8, 9, 10], [55]),
+      (difficulties(app, "0")[0], difficulties(app, "1")[0]))
+check("行ったことのない土地も寄る（店の品揃えが読む先）",
+      difficulties(app, "1")[0] == [55], difficulties(app, "1")[0])
+check("雛形はロードでも触らない", difficulties(app, "0")[1] == [3, 4, 5],
+      difficulties(app, "0")[1])
 
 # -- 上限 -----------------------------------------------------------------
 reset()
@@ -434,8 +524,6 @@ module, ctx = fresh({"CLEARS_PER_STEP": 1, "STEP_SIZE": 4, "ROLLBACK": True,
 open_board(ctx, app)
 check("ROLLBACK で素の値へ戻る", difficulties(app, "0")[0] == [3, 4, 5],
       difficulties(app, "0")[0])
-check("セーブ側も戻る", difficulties(app, "0")[1] == [3, 4, 5],
-      difficulties(app, "0")[1])
 check("控えが消える", "0" not in (state_file() or {}), state_file())
 
 # 範囲を絞っていても、上げた後に片付いた依頼は戻る（範囲の外へ出ても取り残さない）。
@@ -500,6 +588,20 @@ check("難易度が数でない依頼は素通し",
       app.world.quests["8"].difficulty is None, app.world.quests["8"].difficulty)
 check("残りは上がる", difficulties(app, "0")[0][:3] == [8, 9, 10],
       difficulties(app, "0")[0])
+
+# 生きた一覧が引けない版では何もしない（雛形へ書かない）。
+reset()
+module, ctx = fresh({"CLEARS_PER_STEP": 1, "STEP_SIZE": 5, "ANNOUNCE": ""})
+app = make_world(BAND)
+app.world.quests = None
+app.current_quest_data = Quest("1", "0", 3)
+manager = QuestEndManager(app)
+ctx.hooks["__main__:QuestEndManager.execute"](
+    lambda self, *a, **kw: "ended", manager, "帰還する")
+CLOCK.run_onces()
+check("生きた一覧が無ければ雛形へ書かない",
+      [q["difficulty"] for q in app.world_dict["quests"].values()] == [3, 4, 5, 50],
+      [q["difficulty"] for q in app.world_dict["quests"].values()])
 check("例外を出していない（安全側）", not ctx.errors, ctx.errors)
 
 reset()
