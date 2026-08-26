@@ -69,6 +69,21 @@ narration モードでは印を `orig` の前に置いて、入れ子の narrato
 **この % は「その施設に入った1回あたり」**の値。
 同じ施設で続けて出ないように、発火した施設は
 `COOLDOWN_VISITS` 回ぶん訪問を挟むまで抽選しない。
+
+## 応答されない相手は黙る
+
+こちらから始めた会話で、**プレイヤーが一言も返さないまま終わった**回数を
+NPC ごとに数える。
+`IGNORE_LIMIT` に達した相手は、その世界では二度と声をかけてこない。
+途中で一言でも返せば控えは 0 に戻る。
+
+    ConversationPhaseManager.conversation_continued   1ターン進んだ＝返事があった
+    ConversationEndManager.finish_conversation        会話の終わり。ここで数える
+
+止めるのは「NPC の方から声をかける」イベントだけで、
+プレイヤーが自分から話しかける分には何も変わらない。
+数えた結果は `state/` に世界ごと置く
+（`out/` はログで消してよいもの、`state/` は遊びの続き）。
 """
 
 import random
@@ -76,6 +91,7 @@ import sys
 import time
 
 from instantale_modloader import frames, llm, ui
+from instantale_modloader.state import world_filename, world_key
 
 LOG_BASENAME = "player_events.log"
 
@@ -161,6 +177,24 @@ BUSY_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle",
 
 LANGUAGE_NAMES = {"japanese": "日本語", "english": "英語"}
 
+# 応答されなかった回数の上限。
+# この回数に達した NPC からは、もう話しかけない。
+# こちらから始めた会話で、プレイヤーが一言も返さないまま終わったら1回と数える。
+# 返事をすればその NPC の控えは 0 に戻る。
+# 上限に達した相手はその世界では二度と声をかけてこない。
+# 止めるのは「NPC の方から声をかける」イベントだけで、
+# プレイヤーが自分から話しかける分には何も変わらない。
+# 0 にすると数えるだけで止めない。
+IGNORE_LIMIT = 2
+
+# 数えた結果の置き場所（`state/<ここ>/<世界>.json`）。
+# ログ（`out/`）ではなく `state/` なのは、消すと遊びの続きが巻き戻るため。
+STATE_DIRNAME = "arrival_event"
+
+# 会話の終わりを見届けられなかったときに、見届けの控えを捨てるまでの時間（秒）。
+# 途中でゲームを閉じた場合などに、次の会話へ持ち越さないための保険。
+WATCH_TTL = 1800.0
+
 # 注入した瞬間に、今いる施設で narration モードのセリフを1本作ってログにだけ出す。
 # 画面には出さないし状態も変えない（会話フェーズは開始しない）。
 SELFTEST_ON_BOOT = False
@@ -178,6 +212,9 @@ def apply(ctx):
         "fired_at": {},       # 施設 id -> 発火したときの訪問回数
         "rephrase": None,     # conversation モード: 第一声の読み替え待ち
         "npc_id_kind": None,  # ゲーム自身が character_id に何を渡しているか
+        "ignored": {},        # NPC id -> {"count": n, "name": ...}（世界ごと）
+        "ignored_key": None,  # 上の控えがどの世界のものか
+        "watching": None,     # こちらが始めた会話の見届け
     }
 
     write = ctx.logger(LOG_BASENAME)
@@ -230,8 +267,50 @@ def apply(ctx):
             return True
         return here_id == facility_id
 
+    # ------------------------------- 応答されなかった相手を覚えておく（世界ごと）
+    def ignores(app):
+        """この世界の控えを返す。世界が変わったら読み直す。
+
+        `state/` に置く（`out/` はログで、消してよいもの）。
+        世界の見分けとファイル名は `instantale_modloader.state` に1つだけある
+        ものを使う。MOD ごとに写すとずれるため。
+        """
+        key = world_key(app)
+        if key is None:
+            return {}
+        if state["ignored_key"] != key:
+            path = ctx.state_path(STATE_DIRNAME, world_filename(key))
+            loaded = ctx.read_json(path, {})
+            state["ignored"] = loaded if isinstance(loaded, dict) else {}
+            state["ignored_key"] = key
+        return state["ignored"]
+
+    def save_ignores():
+        key = state["ignored_key"]
+        if key is None:
+            return
+        ctx.write_json(ctx.state_path(STATE_DIRNAME, world_filename(key)),
+                       state["ignored"])
+
+    def ignored_count(app, npc_id):
+        entry = ignores(app).get(str(npc_id))
+        if isinstance(entry, dict):
+            try:
+                return int(entry.get("count", 0))
+            except (TypeError, ValueError):
+                return 0
+        return 0
+
+    def is_muted(app, npc_id):
+        """応答されなかった回数が上限に達した相手か。"""
+        return bool(IGNORE_LIMIT) and ignored_count(app, npc_id) >= IGNORE_LIMIT
+
     def pick_speaker(app, facility):
-        """施設に現在居る話者を (id, インスタンス) で返す。主がいれば主。"""
+        """施設に現在居る話者を (id, インスタンス) で返す。主がいれば主。
+
+        応答されなかった回数が上限に達した相手は候補から外す。
+        主が黙ったなら、その場に居る別の NPC が声をかける。
+        """
         characters = getattr(getattr(app, "world", None), "characters", None)
         if not isinstance(characters, dict):
             return None, None
@@ -239,7 +318,7 @@ def apply(ctx):
         if owner is not None:
             npc_id = str(owner)
             npc = characters.get(npc_id)
-            if npc is not None and is_at(npc, facility):
+            if npc is not None and is_at(npc, facility) and not is_muted(app, npc_id):
                 return npc_id, npc
         # 施設に居合わせた NPC（重複することがあるので一意化してから選ぶ）。
         present = getattr(facility, "characters", None)
@@ -247,6 +326,7 @@ def apply(ctx):
             ids = sorted({
                 str(cid) for cid in present
                 if str(cid) in characters and is_at(characters[str(cid)], facility)
+                and not is_muted(app, str(cid))
             })
             if ids:
                 npc_id = rng.choice(ids)
@@ -364,6 +444,11 @@ def apply(ctx):
             except Exception:
                 ctx.log_exc("launch: process_choice failed")
                 state["rephrase"] = None
+                return
+            # ここから会話の終わりまでを見届ける。
+            # 返事が1つも無いまま終わったら、その相手の控えを1つ進める。
+            state["watching"] = {"npc_id": str(npc_id), "name": npc_name,
+                                 "responded": False, "at": time.monotonic()}
 
         # 手が空くまで待ってから押す。
         # ここで確立した「移動の後始末（テキストの流し込み・ボタンの張り替え）の最中に割り込むと噛み合わない」は `ui.Screen.when_idle` に移してあり、
@@ -583,6 +668,76 @@ def apply(ctx):
         write("rephrase: {!r} -> {!r}".format(
             frames.short(last.get("content"), 60), replacement["content"]))
         return orig(messages[:-1] + [replacement], *args, **kwargs)
+
+    # ================================================================
+    # 応答されずに終わった回数を数える
+    # ================================================================
+    def watching_now():
+        """見届け中の控え。古くなっていたら捨てる。"""
+        mark = state["watching"]
+        if mark is None:
+            return None
+        if time.monotonic() - mark["at"] > WATCH_TTL:
+            write("watch: {!r} timed out; forgotten".format(mark["name"]))
+            state["watching"] = None
+            return None
+        return mark
+
+    def note_response(npc_id=None):
+        """プレイヤーが何か返した。会話が終わるまで覚えておく。"""
+        mark = watching_now()
+        if mark is None or mark["responded"]:
+            return
+        # 相手が分かるなら突き合わせる。分からなければ見届け中の相手とみなす。
+        # **文字列の id のときだけ**突き合わせること。`app.in_conversation` は
+        # 会話中の NPC id が入る（GAME.md）が、真偽値で来る経路に当たった場合に
+        # `str(True)` と比べると必ず食い違い、返事を取りこぼす。
+        if isinstance(npc_id, str) and npc_id and npc_id != mark["npc_id"]:
+            return
+        mark["responded"] = True
+
+    def settle_watch(app):
+        """会話が終わった。返事の有無で控えを進めるか、0 に戻す。"""
+        mark = watching_now()
+        if mark is None:
+            return
+        state["watching"] = None
+        npc_id, name = mark["npc_id"], mark["name"]
+        store = ignores(app)
+        if mark["responded"]:
+            if store.pop(npc_id, None) is not None:
+                write("watch: {!r} responded; ignore count reset".format(name))
+                save_ignores()
+            return
+        entry = store.get(npc_id)
+        count = (entry.get("count", 0) if isinstance(entry, dict) else 0) + 1
+        store[npc_id] = {"count": count, "name": name}
+        save_ignores()
+        if IGNORE_LIMIT and count >= IGNORE_LIMIT:
+            write("watch: {!r} ignored {} time(s); will not speak first again"
+                  .format(name, count))
+        else:
+            write("watch: {!r} ignored {} time(s)".format(name, count))
+
+    @ctx.wrap("__main__:ConversationPhaseManager.conversation_continued",
+              required=False)
+    def conversation_continued(orig, self, choice_text, *args, **kwargs):
+        """1ターン進んだ＝プレイヤーが返事をした。値には触らない。"""
+        try:
+            note_response(getattr(getattr(self, "app", None), "in_conversation", None))
+        except Exception:
+            ctx.log_exc("watch: cannot note the response")
+        return orig(self, choice_text, *args, **kwargs)
+
+    @ctx.wrap("__main__:ConversationEndManager.finish_conversation", required=False)
+    def finish_conversation(orig, self, *args, **kwargs):
+        """会話の終わり。ここで数える。"""
+        result = orig(self, *args, **kwargs)
+        try:
+            settle_watch(getattr(self, "app", None) or find_app())
+        except Exception:
+            ctx.log_exc("watch: cannot settle")
+        return result
 
     # ------------------------------- ゲーム自身が使う character_id の形を控える
     @ctx.wrap("__main__:ConversationStartManager.__init__", required=False)

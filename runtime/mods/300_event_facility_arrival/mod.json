@@ -173,6 +173,20 @@
         "en": "2 = the next two visits stay quiet. 0 = roll every visit"
       }
     },
+    "IGNORE_LIMIT": {
+      "type": "int",
+      "default": 2,
+      "min": 0,
+      "max": 20,
+      "label": {
+        "ja": "無視された相手が黙るまでの回数",
+        "en": "Ignored times before an NPC stops approaching"
+      },
+      "note": {
+        "ja": "こちらから始めた会話に一言も返さないまま終えた回数。達した相手はもう声をかけてこない（自分から話しかける分には変わらない）。0 で止めない",
+        "en": "Counts conversations you ended without replying. 0 = never stop"
+      }
+    },
     "REPHRASE_OPENING": {
       "type": "bool",
       "default": true,

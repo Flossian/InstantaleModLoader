@@ -114,7 +114,8 @@ def build_world():
                        location=inn, current_area=area)
     app = InstantaleApp()
     app.player = player
-    app.world = World(worldview="快楽を求める世界。", characters={"64": owner})
+    app.world = World(worldview="快楽を求める世界。", characters={"64": owner},
+                      name="テスト世界")
     app.current_narration_log = [{"action": "移動した", "narration": "静かな入口。"}]
     app.language = "japanese"
     app.is_adding_text = False
@@ -221,6 +222,22 @@ class FakeCtx:
             return func
         return decorator
 
+    # `state/` まわりも本物をそのまま借りる。
+    # 控えの読み書きは「壊れた JSON を黙って {} に倒さない」ことが要なので、
+    # 検査だけ自前の open で通すと、その肝心なところを試さずに済ませてしまう。
+    def state_path(self, *parts):
+        path = os.path.join(self.out_dir, "state", *parts)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        return path
+
+    def read_json(self, path, default=None):
+        import instantale_modloader as _ml
+        return _ml.read_json(path, default)
+
+    def write_json(self, path, data, *, indent=1):
+        import instantale_modloader as _ml
+        return _ml.write_json(path, data, indent=indent)
+
 
 def load_mod():
     spec = importlib.util.spec_from_file_location("arrival_mod", MOD,
@@ -252,6 +269,9 @@ def setup(mode="conversation", override=1.0, reply="「いらっしゃい」", *
         "move": ctx.hooks["__main__:MovePhaseManager.move_phase"],
         "narrate": ctx.hooks["scripts.llm.llm_manager:narrator"],
         "starter": ctx.hooks["scripts.llm.llm_manager:conversation_starter"],
+        "continued": ctx.hooks[
+            "__main__:ConversationPhaseManager.conversation_continued"],
+        "finish": ctx.hooks["__main__:ConversationEndManager.finish_conversation"],
     }
     return mod, ctx, calls, hooks
 
@@ -439,6 +459,94 @@ clock.run_onces()
 check("1.0 にした種別では発火する", len(app.process_choice_calls) == 1,
       app.process_choice_calls)
 app.player.location = inn
+
+print("7e. 返事をされないまま2回終わった相手は、もう話しかけてこない")
+
+
+class FakeConversation:
+    """`self.app` だけ持つ、会話フェーズの器。"""
+
+    def __init__(self, app):
+        self.app = app
+
+
+def enter_facility(hooks, clock, facility):
+    app.player.location = facility
+    do_move(hooks)
+    clock.tick()
+    clock.run_onces()
+
+
+def end_conversation(hooks, replied):
+    """会話を終わらせる。replied=True なら途中で一言返したことにする。"""
+    app.in_conversation = "64"                     # 会話中は相手の id が入る
+    if replied:
+        hooks["continued"](lambda self, text, *a, **k: None,
+                           FakeConversation(app), "やあ")
+    app.in_conversation = False
+    hooks["finish"](lambda self, *a, **k: None, FakeConversation(app))
+
+
+clock = install_fake_kivy()
+mod, ctx, calls, hooks = setup(override=1.0, IGNORE_LIMIT=2, COOLDOWN_VISITS=0)
+app.process_choice_calls = []
+enter_facility(hooks, clock, inn)
+check("1回目は話しかけてくる", len(app.process_choice_calls) == 1,
+      app.process_choice_calls)
+end_conversation(hooks, replied=False)
+
+enter_facility(hooks, clock, inn)
+check("2回目も話しかけてくる", len(app.process_choice_calls) == 2,
+      app.process_choice_calls)
+end_conversation(hooks, replied=False)
+
+enter_facility(hooks, clock, inn)
+check("2回無視した相手は、もう話しかけてこない",
+      len(app.process_choice_calls) == 2, app.process_choice_calls)
+
+# 控えは state/ に残る（次に注入し直しても効く）。
+store_path = ctx.state_path(mod.STATE_DIRNAME,
+                            __import__("instantale_modloader.state",
+                                       fromlist=["state"]).world_filename("テスト世界"))
+saved = ctx.read_json(store_path, {})
+check("控えが state/ に残る", saved.get("64", {}).get("count") == 2, saved)
+
+# 読み直しても（＝ゲームを起動し直しても）黙ったまま。
+clock = install_fake_kivy()
+mod, ctx2, calls, hooks = setup(override=1.0, IGNORE_LIMIT=2, COOLDOWN_VISITS=0)
+app.process_choice_calls = []
+enter_facility(hooks, clock, inn)
+check("起動し直しても黙ったまま", not app.process_choice_calls,
+      app.process_choice_calls)
+
+print("7f. 一言でも返せば控えは 0 に戻る")
+import shutil
+shutil.rmtree(os.path.join(HERE, os.pardir, os.pardir, "out", "test", "state"),
+              ignore_errors=True)
+clock = install_fake_kivy()
+mod, ctx, calls, hooks = setup(override=1.0, IGNORE_LIMIT=2, COOLDOWN_VISITS=0)
+app.process_choice_calls = []
+enter_facility(hooks, clock, inn)
+end_conversation(hooks, replied=False)          # 1回目は無視
+enter_facility(hooks, clock, inn)
+end_conversation(hooks, replied=True)           # 2回目は返事した
+enter_facility(hooks, clock, inn)
+check("返事をした後は、また話しかけてくる", len(app.process_choice_calls) == 3,
+      app.process_choice_calls)
+
+print("7g. 0 にすると止めない")
+shutil.rmtree(os.path.join(HERE, os.pardir, os.pardir, "out", "test", "state"),
+              ignore_errors=True)
+clock = install_fake_kivy()
+mod, ctx, calls, hooks = setup(override=1.0, IGNORE_LIMIT=0, COOLDOWN_VISITS=0)
+app.process_choice_calls = []
+for _ in range(3):
+    enter_facility(hooks, clock, inn)
+    end_conversation(hooks, replied=False)
+check("何度無視しても話しかけてくる", len(app.process_choice_calls) == 3,
+      app.process_choice_calls)
+shutil.rmtree(os.path.join(HERE, os.pardir, os.pardir, "out", "test", "state"),
+              ignore_errors=True)
 
 print("8. 確率0なら発火しない")
 clock = install_fake_kivy()

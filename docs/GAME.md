@@ -785,6 +785,105 @@ check_battle_end / enemy_delete_animation / convert_llm_output_to_instruction_di
 `Character` 側は `current_hp` / `physical_integrity` / `max_physical_integrity`（実測）。
 最大 HP は `update_max_hp()` があることから `max_hp` と推測しているだけで未実測。
 
+### 2.10.1 戦闘の審判 LLM の語彙（output_data の実記録より）
+
+1手の中身を決めているのは `scripts.llm.llm_manager_battle` の審判たち。
+入出力は `output_data/<世界>/<PC>/<関数名>/N.json` に残る（§1.4）ので、
+プロンプトもスキーマも遊んだ後から読める（2026-08-26 に実記録で確認）。
+
+```
+referee_player_attack_new_new(combat_log, actor, party, current_enemy_dict)   通常攻撃
+referee_player_skill_new_new(..., skill, ...)                                 スキル
+referee_player_any_input_new_new(..., command, ...)                           自由入力
+referee_player_any_input_new_new_with_skill(..., command, skill, ...)         自由入力＋スキル
+referee_enemy_new / referee_npc / referee_npc_rewrite                         敵と同行者の手
+```
+
+**自由入力の手にも専用の審判が居る**＝戦闘中のロールプレイの受け口は素のゲームにある。
+
+スキーマ（`referee_player_attack_new_new` の実記録）の語彙は、殴る以外を最初から持っている:
+
+| 型 | 中身 |
+| --- | --- |
+| `SkillEffect` | `effect_id` / `targets`（名前の Literal）/ `modifications` |
+| `PowerModification` | `power_increase` か `power_decrease` × `small` / `medium` / `large` |
+| `InstantDamage` / `InstantHeal` | `target` / `power`＝`weak` / `normal` / `strong` / `very_strong` / `extreme` |
+| `TextStatusEffect` | 名前付きの状態異常。`duration` 3〜5・`intensity` 1〜5・`effects_per_turn`（毎ターンの damage / heal） |
+| `RemoveTextStatusEffect` | 名前を指した解除 |
+| `AttributeEffect` | `enhancement` / `reduction` × 6能力値（str/dex/con/wis/int/cha）× power 5段 |
+
+戻りの根は `narration` / `skill_effects` / `additional_effects` / `vfx`（8種の Literal）。
+審判は頼まれなくても状態異常を出す
+（通常攻撃の記録で、敵の反撃として `TextStatusEffect`（泥濘の拘束、duration 3、
+毎ターン weak damage）がプレイヤーに付いた実例）。
+
+システムプロンプトは「TRPGの戦闘のダメージ計算を中立の立場で管理する役。
+場の状況で同じ技でも結果が変わる」という建て付けで、
+プレイヤー情報（HP・profile・traits・武器・防具）と敵の情報・戦闘ログが user 側に載る。
+
+語彙 → 数の変換は §2.10.2。
+
+### 2.10.2 語彙 → 数の変換（2026-08-26 に `222_` で実測。1クエスト・戦闘6回）
+
+生ログと数表は VERIFICATION_LOG.md §2.68。1手の数の流れは3段:
+
+```
+convert_llm_output_to_instruction_dict     審判の戻りを平らにする
+calculate_battle_effect(battle_action)     素点を作る（instantale.py:7057）
+resolve_battle_effect                      防御を引いて HP に当てる
+  resolve_allies    (instantale.py:7126)   味方被弾: get_instant_damage(素点, 500)
+  resolve_opponents (instantale.py:7262-4) 敵被弾:   get_instant_damage(素点, get_npc_defense())
+```
+
+変換後の `battle_action` は審判のスキーマより平らで、鍵は
+`actor` / `narration` / `vfx` / `instant_damage` / `instant_heal` /
+`text_status` / `escape_from_battle` / `other_action`。
+`instant_damage` の1件は `{target, category(physical|magical), power, multiplier}`
+（`multiplier` は 0.67 / 1 / 1.5 を観測。審判の `modifications` がここに畳まれる）。
+`TextStatusEffect` の `intensity` と `effects_per_turn` は**変換後には現れなかった**。
+
+#### 素点（`calculate_battle_effect`）
+
+- 基礎値 = **2 × 幾何平均(character_attack, weapon_attack)**。
+  `get_base_damage_value` が `statistics.geometric_mean` を呼ぶ
+  （0 を渡すと StatisticsError。実測 390・500 → 883.176 = 2×√(390×500) が一致）
+- プレイヤー（能力値オール30・武器500）の実引数は毎手 (390, 500) で不動。
+  390 = 13×30 と読めるが、このキャラは全能力30なので**どの能力かは切り分け不能**
+- power × multiplier は基礎値に対し weak×1.5 で ×0.92〜1.08、normal×1 で ×1.24 を観測。
+  同じ組でも ±10% ほど散る（素点側に乱数がある）。表を出すには通り数が足りない
+
+#### 防御（`get_instant_damage(attack, defense)`）
+
+**決定的**（グリッド168点×3回、全て同値。乱数ゼロ）。形は引き算:
+
+| | defense ≤ attack/2 | それより深い防御 |
+| --- | --- | --- |
+| ダメージ | **attack − defense**（正確に一致） | 緩い曲線で 1 まで落ちる。attack=defense で ≈0.29×attack |
+
+- 敵の防御は `get_npc_defense()`（レベル36で 96〜139。能力値との式は未特定）
+- 味方の防御に渡った実値は 500 ＝ 防具の`防御力`と読める
+  （`get_npc_defense(プレイヤー)` は 390 で、使われたのは 500 のほう。
+  装備を変えた切り分けは未実測）
+
+#### 大味さの実体（この帯の実測）
+
+レベル60・試験装備のプレイヤーで、素点 816〜1105 − 敵防御 ~100 ＝ **701〜1002**、
+敵 HP は 428〜788 なので毎回一撃。
+逆に敵の weak は素点 163 − 防具 500 ＝ **1**（雑魚は無傷）、
+ボスの extreme だけ素点 850〜1027 − 500 ＝ 389〜527 が通る。
+つまり大味の実体は**引き算の防御**と、素点・防御・HP の帯の食い違い。
+LLM の power の選択は extreme の端でしか意味を持たない。
+
+#### 効かないもの（実測）
+
+- **`text_status` は文章だけ**。「泥濘の拘束」（duration 3）は
+  `Character.status` 辞書に `{status_name, description, duration}` で書かれたが、
+  直後の自陣の素点は不動・毎ターンのダメージも無し（観測1件）
+- **自由入力の防御姿勢は数に落ちない**。narration は防御の描写になるが
+  効果リストは全部空（観測1件）。被弾を減らしたのは防具の500だけ
+- 敵はデバフ持ち（灰の霧=dex低下、忘却の歌=wis低下）だが、
+  1手目で倒れるので**使う暇が無い**。`AttributeEffect` の実効は未観測のまま
+
 ### 2.11 BGM
 
 ```

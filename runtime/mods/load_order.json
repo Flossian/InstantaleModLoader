@@ -71,7 +71,8 @@
     "218_probe_vacation",
     "219_probe_crash_log",
     "220_probe_bounty_hunter",
-    "221_probe_item_level"
+    "221_probe_item_level",
+    "222_probe_battle_mechanics"
   ],
   "disabled": []
 }
