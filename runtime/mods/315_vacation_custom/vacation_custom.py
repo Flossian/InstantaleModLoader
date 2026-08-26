@@ -171,10 +171,11 @@ GAME_NAMES = {"kennel": "犬小屋", "simple": "簡易寝台", "private": "個�
               "luxury": "高級個室"}
 GAME_PRICES = {"kennel": 0, "simple": 10, "private": 100, "luxury": 1000}
 
-# ラベルから料金と月数を読む形。
-# `個室(100G)` → 100。
+# ラベルから月数を読む形。
 # `宿泊する(3ヵ月)` → 3。
-PRICE_RE = re.compile(r"(\d[\d,]*)\s*G")
+# 料金を読むのはローダの語彙（`ui.parse_coin`。`314_` と共有）。
+# `個室(100G)` → 100。通貨の表記が差し替えられていれば
+# （`130_`）`個室(100円)` も読む。
 MONTHS_RE = re.compile(r"(\d+)\s*ヵ月")
 
 # 「Nヵ月泊まることにした。」を見分ける手掛かり（実測の文言）。
@@ -219,22 +220,17 @@ class _SafeDict(dict):
 
 
 def fmt(template, **values):
-    """設定のテンプレートを埋める。壊れたテンプレートでも素の文字列で返す。"""
+    """設定のテンプレートを埋める。壊れたテンプレートでも素の文字列で返す。
+
+    埋めた後に通貨の表記を今の表記へ直す（`130_` が差し替えていれば
+    `個室(100G)` → `個室(100円)`）。
+    設定のテンプレートは素のゲームの言い方（`G`）のままでよい。
+    """
     try:
-        return str(template).format_map(_SafeDict(values))
+        filled = str(template).format_map(_SafeDict(values))
     except Exception:
-        return str(template)
-
-
-def parse_price(text):
-    """ラベルから料金を読む。読めなければ None。"""
-    match = PRICE_RE.search(text or "")
-    if match is None:
-        return None
-    try:
-        return int(match.group(1).replace(",", ""))
-    except ValueError:
-        return None
+        filled = str(template)
+    return ui.rewrite_coins(filled)
 
 
 def parse_age(value):
@@ -389,7 +385,7 @@ def apply(ctx):
         quality = str(argv[1])
         old = entry.get("text") or ""
         if old not in state["our_labels"]:
-            price = parse_price(old)
+            price = ui.parse_coin(old)
             if price is None:
                 return                      # 料金の無いラベル（まだ宿泊する 等）
             # 素の料金はここで控える（前払い調整の基準）。
@@ -772,8 +768,11 @@ def apply(ctx):
     # ------------------------------------------------------------ 自己検証
     # 実経路は宿に泊まるまで通らない。
     # ラベルの読み書きと期間の計算だけは作ったデータで先に確かめておく（`314_` と同じ方針）。
-    parsed = parse_price("個室(1,000G)")
+    # 通貨の表記は `130_` が差し替えていることがあるので、
+    # 見本のほうも同じ表記へ通してから突き合わせる。
+    parsed = ui.parse_coin(ui.rewrite_coins("個室(1,000G)"))
     sample = fmt(ROOM_BUTTON, name="大部屋", price=30)
+    room_label = ui.rewrite_coins("大部屋(30G)")
     survives = fmt("{name}と{typo}", name="個室")
     def stay_field(choice, age, scaling, key):
         stay = compute_stay(choice, age, scaling)
@@ -794,7 +793,7 @@ def apply(ctx):
         stay_field("1週間", None, True, "days") == 7,     # 年齢が読めない
         parse_age("28歳") == 28 and parse_age(None) is None,
     )
-    if parsed == 1000 and sample == "大部屋(30G)" \
+    if parsed == 1000 and sample == room_label \
             and survives == "個室と{typo}" and all(stays):
         ctx.log("verified: reads prices from labels, formats templates, and "
                 "computes the stay lengths with the age bonus")

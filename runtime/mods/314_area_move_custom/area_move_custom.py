@@ -58,7 +58,6 @@
 """
 
 import sys
-import re
 
 from instantale_modloader import ui
 
@@ -126,8 +125,9 @@ COACH_MODES = ("coach",)
 # 移動中の文言をどれと見なすかの手掛かり。
 # どれも実測の文言に当たる形（徒歩 `徒歩で目指す。長旅だ...` ／ 馬車
 # `1000ゴールドを支払った。快適な旅だ...`。2026-08-17、`217_probe_area_move`）。
+# 通貨の語そのものは手掛かりにしない（`130_` が表記を差し替えると外れるため）。
 # 窓の中でしか見ないので短くてよい。
-DEPART_MARKS = ("で目指す", "長旅だ", "ゴールドを支払った", "快適な旅")
+DEPART_MARKS = ("で目指す", "長旅だ", "を支払った", "快適な旅")
 ARRIVE_MARKS = ("辿り着いた",)
 
 # 素のゲームの値。
@@ -140,10 +140,9 @@ GAME_WALK_DAYS = 90
 GAME_COACH_DAYS = 14
 GAME_COACH_PRICE = 1000
 
-# ラベルから料金を読む形。
-# `馬車(1000G)` → 1000。
-# 桁区切りが入っても読める。
-PRICE_RE = re.compile(r"(\d[\d,]*)\s*G")
+# ラベルから料金を読むのはローダの語彙（`ui.parse_coin`。`315_` と共有）。
+# `馬車(1000G)` → 1000。桁区切りが入っても読める。
+# 通貨の表記が差し替えられていれば（`130_`）`馬車(1000円)` も読む。
 
 # 手持ちが設定した運賃に足りないときの一言。
 REFUSE_TEXT = "（{name}代{price}Gに足りない ― 手持ち{gold}G）"
@@ -160,11 +159,17 @@ class _SafeDict(dict):
 
 
 def fmt(template, **values):
-    """設定のテンプレートを埋める。壊れたテンプレートでも素の文字列で返す。"""
+    """設定のテンプレートを埋める。壊れたテンプレートでも素の文字列で返す。
+
+    埋めた後に通貨の表記を今の表記へ直す（`130_` が差し替えていれば
+    `馬車(1000G・14日)` → `馬車(1000円・14日)`）。
+    設定のテンプレートは素のゲームの言い方（`G`）のままでよい。
+    """
     try:
-        return str(template).format_map(_SafeDict(values))
+        filled = str(template).format_map(_SafeDict(values))
     except Exception:
-        return str(template)
+        filled = str(template)
+    return ui.rewrite_coins(filled)
 
 
 def kind_of_mode(mode):
@@ -202,17 +207,6 @@ def move_options(buttons):
         if args and len(args) >= 2:
             found.append((entry, list(args)))
     return found
-
-
-def parse_price(text):
-    """ラベルから素の運賃を読む。読めなければ None。"""
-    match = PRICE_RE.search(text or "")
-    if match is None:
-        return None
-    try:
-        return int(match.group(1).replace(",", ""))
-    except ValueError:
-        return None
 
 
 def apply(ctx):
@@ -305,7 +299,7 @@ def apply(ctx):
             days = days_limit("coach")
             if days is None:
                 days = GAME_COACH_DAYS
-            parsed = parse_price(old)
+            parsed = ui.parse_coin(old)
             shown_price = int(COACH_PRICE) if fare_changed() else \
                 (parsed if parsed is not None else GAME_COACH_PRICE)
             new = fmt(COACH_BUTTON, name=COACH_NAME, price=shown_price,
@@ -343,7 +337,7 @@ def apply(ctx):
                               argv[1], old))
                     continue
                 if kind == "coach" and old != state["our_coach_label"]:
-                    price = parse_price(old)
+                    price = ui.parse_coin(old)
                     if price is not None:
                         state["game_price"] = price
                 new = relabel(kind, old)
@@ -578,10 +572,13 @@ def apply(ctx):
     # 実経路はエリア移動を1回するまで通らない。
     # ラベルの読み書きだけは作ったデータで先に確かめておく（`103_` /
     # `215_` と同じ方針）。
-    parsed = parse_price("馬車(1,000G)")
+    # 通貨の表記は `130_` が差し替えていることがあるので、
+    # 見本のほうも同じ表記へ通してから突き合わせる。
+    parsed = ui.parse_coin(ui.rewrite_coins("馬車(1,000G)"))
     sample = fmt(COACH_BUTTON, name="馬車", price=1000, days=7)
     survives = fmt("{name}と{typo}", name="徒歩")
-    if parsed == 1000 and sample == "馬車(1000G・7日)" and survives == "徒歩と{typo}":
+    expected = ui.rewrite_coins("馬車(1000G・7日)")
+    if parsed == 1000 and sample == expected and survives == "徒歩と{typo}":
         ctx.log("verified: reads the fare from a label and formats templates")
     else:
         ctx.log("VERIFY FAILED: parsed={!r} sample={!r} survives={!r}".format(

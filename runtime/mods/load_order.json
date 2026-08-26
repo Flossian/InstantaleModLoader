@@ -19,6 +19,7 @@
     "125_balance_charisma_impression",
     "128_item_image_variety",
     "129_balance_item_price",
+    "130_currency_unit",
     "111_llm_prompt_replace",
     "117_message_text_integrity",
     "127_llm_response_speed",

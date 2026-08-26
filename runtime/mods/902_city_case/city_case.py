@@ -396,6 +396,7 @@ def has_clock():
 
 
 money = ui.money          # 金額の表示（`309_` と共有）
+coins = ui.rewrite_coins  # 通貨の表記を今の表記へ（`130_`。`309_` と共有）
 
 
 def apply(ctx):
@@ -1578,7 +1579,8 @@ def apply(ctx):
             after = game.add_gold(app, REWARD_GOLD)
             write("    gold -> {}".format(after))
             if after is not None:
-                screen.say(app, REWARD_TEXT.format(gold=money(REWARD_GOLD)))
+                screen.say(app,
+                           coins(REWARD_TEXT.format(gold=money(REWARD_GOLD))))
         close_cast(app, found)
 
     def close_cast(app, found):

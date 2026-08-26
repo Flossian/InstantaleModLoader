@@ -1,0 +1,79 @@
+{
+  "entry": "currency_unit.py",
+  "api": 1,
+  "kind": "fix",
+  "name": {
+    "en": "Change the currency format",
+    "ja": "通貨の表記を変更する"
+  },
+  "description": {
+    "en": "Renames the game's currency (ゴールド / G) to anything you like -- 円, シルバー, ドル -- and lets you restate the Gold: line at the top of the screen. The wording and what the game sends to the LLM change together",
+    "ja": "通貨の呼び名（ゴールド / G）を好きな表記に変える。画面上部の `Gold:` の欄も自分の書式にできる。文中の表記とゲームが LLM へ送る文章は同時に変わる"
+  },
+  "version": "3",
+  "author": "Flossian",
+  "settings": {
+    "UNIT_LONG": {
+      "type": "str",
+      "default": "ゴールド",
+      "label": {
+        "ja": "長い表記",
+        "en": "Long form"
+      },
+      "note": {
+        "ja": "文中で使われる形。「円」「シルバー」「ドル」など。素のゲームは「ゴールド」",
+        "en": "The form used inside sentences. The game's own is ゴールド"
+      }
+    },
+    "UNIT_SHORT": {
+      "type": "str",
+      "default": "G",
+      "label": {
+        "ja": "短い表記",
+        "en": "Short form"
+      },
+      "note": {
+        "ja": "数のすぐ後ろに付く形（馬車(1000G) の G）。素のゲームは「G」。数の前に付ける記号（$1000）にはできない",
+        "en": "The form right after a number, as in 馬車(1000G). The game's own is G. A symbol placed before the number ($1000) is not supported"
+      }
+    },
+    "HUD_GOLD_FORMAT": {
+      "type": "str",
+      "default": "Gold:{amount}",
+      "label": {
+        "ja": "画面上部の所持金の表示",
+        "en": "Top-of-screen amount"
+      },
+      "note": {
+        "ja": "素のゲームは Gold:{amount}。見出しの Gold は呼び名を変えるだけで付け替わる（シルバーなら シルバー:13184）。自分で書くなら {amount}（ゲームが書いた数字）／{money}（3桁区切り）／{long}／{short}（通貨の表記）。例: 所持金:{money}{short}",
+        "en": "The game's own is Gold:{amount}. The Gold heading follows the currency wording on its own. To write your own: {amount} (as the game wrote it) / {money} (grouped) / {long} / {short} (the currency wording)"
+      }
+    },
+    "REWRITE_PROMPTS": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "LLM へ送る文章も直す",
+        "en": "Rewrite what is sent to the LLM"
+      },
+      "note": {
+        "ja": "既定 ON。表記を変える前に貯まった人生ログや世界観の中の「ゴールド」も、送る直前に直す",
+        "en": "Default ON. Also fixes ゴールド left in life logs and worldview text written before the change"
+      }
+    },
+    "LOG_LIMIT": {
+      "type": "int",
+      "default": 20,
+      "min": 0,
+      "max": 999,
+      "label": {
+        "ja": "記録する置換の件数",
+        "en": "How many rewrites to log"
+      },
+      "note": {
+        "ja": "out\\currency_unit.log に残す例の数。効いているかの確認用。0 で何も残さない",
+        "en": "Examples kept in out\\currency_unit.log, to confirm it works. 0 = log nothing"
+      }
+    }
+  }
+}

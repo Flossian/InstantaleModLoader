@@ -136,6 +136,11 @@ FACILITY_MARK = "MovePhaseManager"
 
 
 money = ui.money          # 金額の表示（`902_` と共有）
+coins = ui.rewrite_coins  # 通貨の表記を今の表記へ（`130_`。`902_` と共有）
+
+# 上の文言は素のゲームの言い方（`ゴールド` / `G`）で書いてある。
+# 画面へ出す直前に `coins()` を通すので、`130_` が表記を差し替えていれば
+# そちらに揃う。入っていなければ何も変わらない。
 
 
 def price_for(wanted):
@@ -236,7 +241,7 @@ def apply(ctx):
             return False
         area_name, _entry, wanted, price = found
 
-        label = (BUTTON_LABEL.format(price=money(price)) if price > 0
+        label = (coins(BUTTON_LABEL.format(price=money(price))) if price > 0
                  else BUTTON_LABEL_FREE)
         entry = screen.button(label, mark="open")
         if entry is None:
@@ -277,11 +282,13 @@ def apply(ctx):
 
         state["saved"] = [item for item in (getattr(app, "buttons", None) or [])
                           if not screen.mark_of(item)]
-        screen.say(app, CONFIRM_TEXT.format(area=area_name, price=money(price)))
-        screen.say(app, CONFIRM_DETAIL.format(
-            wanted=wanted, gold=money(gold) if gold is not None else "?"))
+        screen.say(app, coins(CONFIRM_TEXT.format(
+            area=area_name, price=money(price))))
+        screen.say(app, coins(CONFIRM_DETAIL.format(
+            wanted=wanted, gold=money(gold) if gold is not None else "?")))
 
-        pay = screen.button(PAY_LABEL.format(price=money(price)), mark="pay")
+        pay = screen.button(coins(PAY_LABEL.format(price=money(price))),
+                            mark="pay")
         cancel = screen.button(CANCEL_LABEL, mark="cancel")
         if pay is None or cancel is None:
             write("confirm: cannot build the confirmation buttons")
@@ -327,8 +334,8 @@ def apply(ctx):
         if gold < price:
             write("pay: refused; price={} gold={}".format(price, gold))
             screen.say(app, BROKE_TEXT)
-            screen.say(app, BROKE_DETAIL.format(price=money(price),
-                                                gold=money(gold)))
+            screen.say(app, coins(BROKE_DETAIL.format(price=money(price),
+                                                      gold=money(gold))))
             restore(app, "not enough gold")
             return
 
@@ -354,7 +361,7 @@ def apply(ctx):
         write("paid: {!r} price={} gold {} -> {} lawfulness {} -> {} (wanted {})"
               .format(area_name, price, gold, gold - price, before, after, wanted))
         if price > 0:
-            screen.say(app, PAID_TEXT.format(price=money(price)))
+            screen.say(app, coins(PAID_TEXT.format(price=money(price))))
         screen.say(app, CLEARED_TEXT.format(area=area_name))
         restore(app, "paid")
 
