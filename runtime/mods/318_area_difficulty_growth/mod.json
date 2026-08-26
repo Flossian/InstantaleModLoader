@@ -1,0 +1,117 @@
+{
+  "entry": "area_difficulty_growth.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Quest grows harder",
+    "ja": "依頼クリアで難易度上昇"
+  },
+  "description": {
+    "en": "Clearing quests raises the difficulty of the quests that land offers. Count the clears per land, turn them into steps, and add the step to the difficulty the world was built with. Nothing else is touched: the game already derives the shop stock, the item prices, the enemies, the rewards and the talent points from that one number, so they all follow. Measured on three real saves: every item in a shop carries a value that is one of that land's quest difficulties, completed quests included",
+    "ja": "依頼を片付けるたび、その土地で受けられる依頼の難易度が上がっていく。土地ごとにクリア回数を数え、段数に直して素の難易度へ乗せる。触るのはその1つの数だけで、店の在庫・値段・敵・報酬・才能はゲーム自身がそこから決めているので後から付いてくる。実セーブ3世界・店23軒で確かめた根拠は、店に並ぶ品の value がその土地の依頼の難易度以外の数を取らないこと（完了済みの依頼も母数に入る）"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "after": [
+    "307_area_move_dungeon",
+    "312_shop_restock"
+  ],
+  "settings": {
+    "CLEARS_PER_STEP": {
+      "type": "int",
+      "default": 3,
+      "min": 1,
+      "max": 99,
+      "label": {
+        "ja": "何回クリアしたら1段上がるか",
+        "en": "Clears needed for one step"
+      },
+      "note": {
+        "ja": "既定 3。その土地で受けた依頼を片付けた回数で数える。受けた場所ではなく依頼の出所の土地に付くので、道中で受けた依頼を別の町で終わらせても出所の土地が育つ",
+        "en": "Default 3. Counts quests cleared for that land. A quest belongs to the land that posted it, so finishing it elsewhere still credits the land it came from"
+      }
+    },
+    "STEP_SIZE": {
+      "type": "int",
+      "default": 3,
+      "min": 0,
+      "max": 76,
+      "label": {
+        "ja": "1段あたりの上昇量",
+        "en": "Difficulty added per step"
+      },
+      "note": {
+        "ja": "既定 3。難易度は敵のレベル（およそ 難易度+1）と能力値の両方を決めるので、+3 はレベル3ぶん。0 にすると上がらない",
+        "en": "Default 3. Difficulty sets both the level of the enemies (about difficulty+1) and their attributes, so +3 is three levels. 0 = no growth"
+      }
+    },
+    "MAX_BONUS": {
+      "type": "int",
+      "default": 30,
+      "min": 0,
+      "max": 76,
+      "label": {
+        "ja": "1つの土地で上がる上限",
+        "en": "Most a single land can grow"
+      },
+      "note": {
+        "ja": "既定 30。素の難易度にこれ以上は乗らない（既定の3回ごと+3なら、30回のクリアで頭打ち）。最初の町（難易度3〜5）が最果ての土地（67〜73）を追い越さないための歯止め",
+        "en": "Default 30. The bonus stops here (with the default 3 per 3 clears, that is 30 clears). It keeps the starting town, built at difficulty 3-5, from overtaking the far lands at 67-73"
+      }
+    },
+    "DIFFICULTY_LIMIT": {
+      "type": "int",
+      "default": 76,
+      "min": 1,
+      "max": 76,
+      "label": {
+        "ja": "難易度の上限",
+        "en": "Difficulty ceiling"
+      },
+      "note": {
+        "ja": "既定 76 はゲーム自身の上限（scripts.functions.QUEST_DIFFICULTY_VALUE_MAX）。下げると世界全体の天井が下がる。上げることはできない",
+        "en": "Default 76 is the game's own ceiling (scripts.functions.QUEST_DIFFICULTY_VALUE_MAX). Lower it to cap the whole world; it cannot go higher"
+      }
+    },
+    "SCOPE": {
+      "type": "choice",
+      "values": [
+        "all",
+        "incomplete"
+      ],
+      "default": "all",
+      "label": {
+        "ja": "引き上げる依頼の範囲",
+        "en": "Which quests are raised"
+      },
+      "note": {
+        "ja": "all（既定）＝その土地の依頼すべて。incomplete ＝まだ受けられる依頼だけ。店の在庫は完了済みの依頼の難易度も母数に入れるので、incomplete にすると掲示板だけが上がって品揃えは元のままに近くなる",
+        "en": "all (default) = every quest of the land. incomplete = only the ones still on the board. Shop stock draws on completed quests too, so incomplete raises the board while leaving the shelves near where they were"
+      }
+    },
+    "ROLLBACK": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "上げた分を元に戻す",
+        "en": "Put the difficulties back"
+      },
+      "note": {
+        "ja": "入れると、次にその土地の掲示板を開いた時点で控えてある素の難易度へ戻し、控えも消す。全部の土地を戻すには、それぞれの掲示板を一度ずつ開くこと。MOD を消すだけでは上がった難易度がセーブに残る",
+        "en": "Restores the difficulty this mod recorded the first time it touched each land, the next time you open that land's quest board, and drops the record. Visit every board once to undo the whole world. Simply deleting the mod leaves the raised difficulties in the save"
+      }
+    },
+    "ANNOUNCE": {
+      "type": "str",
+      "default": "この地に貼り出される依頼は、以前より歯応えのあるものになっている。",
+      "label": {
+        "ja": "段が上がったときの1行",
+        "en": "The line shown when a land grows"
+      },
+      "note": {
+        "ja": "依頼を片付けて段が上がった回にだけ出る。報酬と才能の文章が流れ切ってから出す。空にすると何も出さない",
+        "en": "Shown only on the clear that raises a step, after the reward and talent text has finished. Leave it empty for no line"
+      }
+    }
+  }
+}

@@ -1014,7 +1014,11 @@ class App(ttk.Frame):
         ("order", "順", 40, "center", False),
         ("kind", "種別", 56, "center", False),
         ("name_ja", "Name（日本語）", 200, "w", True),
-        ("name_en", "Name (English)", 200, "w", True),
+        # 英名（mod.json の name.en）ではなくフォルダ名を出す。ログ・
+        # load_order.json・`after` の宣言はどれもフォルダ名で書かれるので、
+        # 一覧と突き合わせるときはこちらのほうが役に立つ。英名は検索
+        # （`_matches`）と mod.json には残っている。
+        ("dir", "フォルダ名", 200, "w", True),
         ("cfg", "設定", 44, "center", False),
         ("version", "Ver", 46, "center", False),
         ("author", "Author", 120, "w", False),
@@ -1031,7 +1035,8 @@ class App(ttk.Frame):
                 "追加 = 新しい機能 ／ 取込済 = 本体が同じ修正を取り込んだもの\n"
                 "基盤 = 他より先に動く土台 ／ 開発中 = 未公開（手元だけ）",
         "name_ja": "行をドラッグすると適用順を変えられます",
-        "name_en": "行をドラッグすると適用順を変えられます",
+        "dir": "MOD の実体（runtime\\mods\\ のフォルダ名）。ログや load_order.json は\n"
+               "この名前で書かれます。行をドラッグすると適用順を変えられます",
         "cfg": "● = 既定から変更あり ／ ○ = 既定のまま。クリックで設定を開きます\n"
                "（印が無い MOD は、変更できる設定を持っていません）",
         "version": "mod.json に書かれた版",
@@ -1610,7 +1615,7 @@ class App(ttk.Frame):
             self.tree.insert("", "end", iid=name, tags=tuple(tags),
                              image=self.check_on if on else self.check_off,
                              values=(n if on else "-", mod["kind"] or "-",
-                                     label_ja, mod["name_en"], cfg,
+                                     label_ja, mod["dir"], cfg,
                                      mod["version"] or "-", mod["author"] or "-",
                                      RESULT_TEXT.get(result, result or "-")))
         self.shown_count = shown

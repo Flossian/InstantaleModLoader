@@ -1,0 +1,46 @@
+{
+  "entry": "probe_item_level.py",
+  "api": 1,
+  "kind": "probe",
+  "name": {
+    "en": "Item level probe",
+    "ja": "品物のレベルの決まり方"
+  },
+  "description": {
+    "en": "Records who decides how good an item is. The four functions that return a land's quest difficulties, with the real arguments each caller passes for `tier`; the six that convert difficulty to price and price back to level; the shop restock, with the tier it is given and the values the owner ends up holding; and the craft path, above all the real arguments and the return type of ItemCraftManager.calculate_modification, which is the one link in the chain that has never been measured. Reading only",
+    "ja": "品物のレベルを誰が決めているかを録る。土地の依頼の難易度を返す4関数と、呼び出し側が `tier` に渡している実値。難易度→値段と値段→レベルの変換6本。店の品揃えの生成に渡る段と、生成後に主が持っている品の value。そしてクラフトの経路、とりわけ ItemCraftManager.calculate_modification の実引数と戻り値の型（この鎖で一度も測れていない1箇所）。読み取りだけでゲームは変えない"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "debug": true,
+  "settings": {
+    "TABLE_SAMPLES": {
+      "type": "int",
+      "default": 120,
+      "min": 0,
+      "max": 9999,
+      "label": {
+        "ja": "変換表を写す通り数",
+        "en": "How many distinct calls to record"
+      },
+      "note": {
+        "ja": "同じ引数の組は1度しか書かない。難易度・値段・レベルの変換はどれも純関数なので、通り数さえ集まれば表になる。0 にすると録らない",
+        "en": "Each distinct set of arguments is written once. The difficulty / price / level conversions are pure, so a few distinct calls are enough to build the table. 0 = do not record"
+      }
+    },
+    "ITEM_SAMPLES": {
+      "type": "int",
+      "default": 200,
+      "min": 0,
+      "max": 9999,
+      "label": {
+        "ja": "写す品物の件数",
+        "en": "How many items to record"
+      },
+      "note": {
+        "ja": "店の品揃えの生成とクラフトを合わせた件数。1軒の店で20件ほど流れるのでここで打ち切る。0 にすると録らない",
+        "en": "Shop restocks and crafts share this budget. One shop can produce about twenty, so recording stops here. 0 = do not record"
+      }
+    }
+  }
+}

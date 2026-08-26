@@ -1,0 +1,510 @@
+# -*- coding: utf-8 -*-
+"""318_area_difficulty_growth をゲーム抜きで通す。
+
+    python tools/tests/test_area_difficulty_growth.py
+
+偽の app / World / Quest / QuestEndManager / DisplayQuestChoice / Clock を差し込み、
+次を確認する。
+
+  数える     … クリアの回数はその依頼の**出所の土地**に付く。段に足りなければ上げない
+  上げる     … 段が上がると、その土地の依頼が素の値 + 上昇量になる。両方の格納先に書かれる
+  他の土地   … 数えた土地以外は動かない
+  二重掛け   … 上がった帯の中で生まれた依頼に、上昇量が二度乗らない
+  上限       … MAX_BONUS と難易度の上限を超えない
+  範囲       … SCOPE=incomplete では完了済みの依頼を動かさない
+  戻す       … ROLLBACK を入れると素の値へ戻り、控えごと消える
+  控え       … `state/area_difficulty/<世界名>.json` に世界ごとに分かれて残る
+  知らせ     … 段が上がった回だけ1行出る（報酬の文章が流れ切ってから）
+  安全       … 依頼の土地が読めない場面では何もしない
+"""
+import importlib.util
+import io
+import json
+import os
+import shutil
+import sys
+import types
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
+MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
+OUT_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "out", "test"))
+STATE_DIR = os.path.join(OUT_DIR, "state_area_difficulty")
+
+if RUNTIME_DIR not in sys.path:
+    sys.path.insert(0, RUNTIME_DIR)
+
+import instantale_modloader as ml                      # noqa: E402
+
+
+def find_mod(suffix):
+    """mod を **番号を除いた名前** で探す（番号は振り直されることがある）。"""
+    matches = sorted(name for name in os.listdir(MODS_DIR)
+                     if name.endswith(suffix)
+                     and os.path.isfile(os.path.join(MODS_DIR, name, "mod.json")))
+    if not matches:
+        raise SystemExit("cannot find *{} in {}".format(suffix, MODS_DIR))
+    if len(matches) > 1:
+        raise SystemExit("ambiguous: {} in {}".format(matches, MODS_DIR))
+    folder = os.path.join(MODS_DIR, matches[0])
+    with io.open(os.path.join(folder, "mod.json"), encoding="utf-8") as fh:
+        entry = json.load(fh)["entry"]
+    return folder, os.path.join(folder, entry)
+
+
+MOD_DIR, MOD = find_mod("_area_difficulty_growth")
+
+failures = []
+
+
+def check(name, cond, detail=""):
+    print(("  ok   " if cond else "  FAIL ") + name
+          + ((" -- " + str(detail)) if detail and not cond else ""))
+    if not cond:
+        failures.append(name)
+
+
+# ---------------------------------------------------------------- 偽ゲーム
+class Quest:
+    """`world.quests` に入っている側（インスタンス）。"""
+
+    def __init__(self, quest_id, area_id, difficulty, status="incomplete"):
+        self.id = quest_id
+        self.neighboring_settlement_id = area_id
+        self.difficulty = difficulty
+        self.quest_type = "normal_quest"
+        self.config = {"status": status, "level_of_detail": 0}
+
+
+def quest_dict(quest):
+    """`world_dict['quests']` に入っている側（セーブに出るほう）。"""
+    return {"quest_title": "試しの依頼" + quest.id,
+            "difficulty": quest.difficulty,
+            "neighboring_settlement_id": quest.neighboring_settlement_id,
+            "id": quest.id,
+            "quest_type": quest.quest_type,
+            "config": dict(quest.config)}
+
+
+class Area:
+    def __init__(self, area_id, name):
+        self.id = area_id
+        self.name = name
+        self.nodes = {}
+
+
+class World:
+    def __init__(self, name, areas, quests, days_elapsed):
+        self.name = name
+        self.areas = areas
+        self.quests = quests
+        self.days_elapsed = days_elapsed
+
+
+class Player:
+    def __init__(self, area_id):
+        self.name = "試しのプレイヤー"
+        self.current_area = area_id
+
+
+class InstantaleApp:
+    def __init__(self, world, world_dict, player):
+        self.world = world
+        self.world_dict = world_dict
+        self.player = player
+        self.texts = []
+
+    def add_text(self, text):
+        self.texts.append(text)
+
+
+class QuestEndManager:
+    """`execute` が「依頼が片付いた」印を立てるだけの入れ物。"""
+
+    def __init__(self, app):
+        self.app = app
+
+    def execute(self, choice_text):
+        quest = getattr(self.app, "current_quest_data", None)
+        if quest is not None:
+            quest.config["status"] = "completed"
+            store = self.app.world_dict["quests"].get(quest.id)
+            if store is not None:
+                store["config"]["status"] = "completed"
+        self.app.current_quest_data = None
+        return "ended"
+
+
+class DisplayQuestChoice:
+    def __init__(self, app):
+        self.app = app
+
+
+class FakeClock:
+    def __init__(self):
+        self.onces = []
+
+    def schedule_once(self, callback, timeout=0):
+        self.onces.append(callback)
+
+    def schedule_interval(self, callback, timeout=0):
+        self.onces.append(callback)
+
+    def unschedule(self, callback):
+        self.onces = [entry for entry in self.onces if entry is not callback]
+
+    def run_onces(self):
+        for _ in range(8):
+            pending, self.onces = self.onces, []
+            if not pending:
+                return
+            for callback in pending:
+                callback(0.0)
+
+
+CLOCK = FakeClock()
+
+
+def install_fake_kivy():
+    kivy = types.ModuleType("kivy")
+    kivy_clock = types.ModuleType("kivy.clock")
+    kivy_clock.Clock = CLOCK
+    sys.modules["kivy"] = kivy
+    sys.modules["kivy.clock"] = kivy_clock
+    sys.modules.pop("kivy.app", None)
+
+
+def install_fake_functions(minimum=0, maximum=76):
+    """`scripts.functions` の上限・下限。MOD はこちらを先に見る。"""
+    module = types.ModuleType("scripts.functions")
+    module.QUEST_DIFFICULTY_VALUE_MIN = minimum
+    module.QUEST_DIFFICULTY_VALUE_MAX = maximum
+    scripts = sys.modules.get("scripts") or types.ModuleType("scripts")
+    scripts.functions = module
+    sys.modules["scripts"] = scripts
+    sys.modules["scripts.functions"] = module
+
+
+class FakeCtx:
+    def __init__(self, out_dir, state_dir):
+        self.out_dir = out_dir
+        self.state_dir = state_dir
+        self.hooks = {}
+        self.errors = []
+        self.logs = []
+
+    def out_path(self, *parts):
+        path = os.path.join(self.out_dir, *parts)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        return path
+
+    # ログは本物の `ctx.logger` をそのまま借りる。
+    # ここを自前で書くと、検査だけが別のログ処理を通ることになる。
+    _mod = None
+
+    def logger(self, name, *, tag=None, stamp=True, label=None, cap=None):
+        return ml.ModContext.logger(self, name, tag=tag, stamp=stamp, label=label)
+
+    def state_path(self, *parts):
+        path = os.path.join(self.state_dir, *parts)
+        os.makedirs(os.path.dirname(path) if os.path.splitext(path)[1]
+                    else path, exist_ok=True)
+        return path
+
+    def log(self, msg, level="INFO"):
+        self.logs.append((level, msg))
+
+    def log_exc(self, msg):
+        self.errors.append(msg)
+
+    # 本物の `ctx.write_json` / `read_json` と同じものを使う。
+    def write_json(self, path, data, *, indent=1):
+        return ml.write_json(path, data, indent=indent, report=self.log_exc)
+
+    def write_text(self, path, text):
+        return ml.write_text(path, text, report=self.log_exc)
+
+    def read_json(self, path, default=None):
+        return ml.read_json(path, default, report=self.log_exc)
+
+    def wrap(self, target, **kw):
+        def decorator(func):
+            self.hooks[target] = func
+            return func
+        return decorator
+
+
+def load_mod(path=MOD, name="area_difficulty_growth_mod"):
+    spec = importlib.util.spec_from_file_location(
+        name, path, submodule_search_locations=[os.path.dirname(path)])
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        sys.modules.pop(name, None)
+        raise
+    return module
+
+
+# ---------------------------------------------------------------- 舞台作り
+def make_world(quests, world_name="試しの世界", area_id="0", days=100):
+    """`quests` は `[(id, 土地id, 難易度, 状態)]`。"""
+    made = [Quest(qid, aid, difficulty, status)
+            for qid, aid, difficulty, status in quests]
+    by_id = {quest.id: quest for quest in made}
+    areas = {}
+    for quest in made:
+        areas.setdefault(quest.neighboring_settlement_id,
+                         Area(quest.neighboring_settlement_id,
+                              "土地" + quest.neighboring_settlement_id))
+    areas.setdefault(area_id, Area(area_id, "土地" + area_id))
+    world = World(world_name, areas, by_id, days)
+    world_dict = {"world_data": {"name": world_name, "days_elapsed": days},
+                  "quests": {quest.id: quest_dict(quest) for quest in made}}
+    return InstantaleApp(world, world_dict, Player(area_id))
+
+
+def fresh(settings=None):
+    """設定を差し替えて MOD を読み直し、フックを取り付ける。"""
+    install_fake_kivy()
+    install_fake_functions()
+    module = load_mod()
+    for name, value in (settings or {}).items():
+        setattr(module, name, value)
+    ctx = FakeCtx(OUT_DIR, STATE_DIR)
+    module.apply(ctx)
+    return module, ctx
+
+
+def end_quest(ctx, app, quest_id):
+    """依頼を片付ける（MOD のフック越しに `QuestEndManager.execute` を呼ぶ）。"""
+    app.current_quest_data = app.world.quests.get(quest_id)
+    manager = QuestEndManager(app)
+    hook = ctx.hooks["__main__:QuestEndManager.execute"]
+    result = hook(lambda self, *a, **kw: QuestEndManager.execute(self, *a, **kw),
+                  manager, "帰還する")
+    CLOCK.run_onces()
+    return result
+
+
+def open_board(ctx, app):
+    hook = ctx.hooks["__main__:DisplayQuestChoice.__init__"]
+    return hook(lambda self, app_, *a, **kw: DisplayQuestChoice.__init__(self, app_),
+                DisplayQuestChoice.__new__(DisplayQuestChoice), app)
+
+
+def difficulties(app, area_id):
+    """`(インスタンス側, セーブ側)` の難易度を id 順で。"""
+    ids = sorted((qid for qid, quest in app.world.quests.items()
+                  if quest.neighboring_settlement_id == area_id),
+                 key=lambda value: int(value))
+    return ([app.world.quests[qid].difficulty for qid in ids],
+            [app.world_dict["quests"][qid]["difficulty"] for qid in ids])
+
+
+def state_file(world_name="試しの世界"):
+    from instantale_modloader.state import world_filename
+    path = os.path.join(STATE_DIR, "area_difficulty", world_filename(world_name))
+    if not os.path.exists(path):
+        return None
+    with io.open(path, encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+BAND = [("1", "0", 3, "incomplete"),
+        ("2", "0", 4, "incomplete"),
+        ("3", "0", 5, "incomplete"),
+        ("4", "1", 50, "incomplete")]
+
+
+def reset():
+    shutil.rmtree(STATE_DIR, ignore_errors=True)
+
+
+# ---------------------------------------------------------------- 検査
+print("318_area_difficulty_growth")
+
+# -- 数える ---------------------------------------------------------------
+reset()
+module, ctx = fresh({"CLEARS_PER_STEP": 3, "STEP_SIZE": 3, "ANNOUNCE": ""})
+app = make_world(BAND)
+end_quest(ctx, app, "1")
+check("1回では上がらない", difficulties(app, "0")[0] == [3, 4, 5],
+      difficulties(app, "0"))
+check("回数は控えに残る", (state_file() or {}).get("0", {}).get("cleared") == 1,
+      state_file())
+
+end_quest(ctx, app, "2")
+end_quest(ctx, app, "3")
+raised, saved = difficulties(app, "0")
+check("3回で1段上がる", raised == [6, 7, 8], raised)
+check("セーブ側にも同じ値が入る", saved == raised, saved)
+check("段と上昇量が控えに残る",
+      (state_file() or {}).get("0", {}).get("step") == 1
+      and state_file()["0"].get("bonus") == 3, state_file())
+check("素の難易度を控えている",
+      state_file()["0"].get("base") == {"1": 3, "2": 4, "3": 5},
+      state_file()["0"].get("base"))
+check("他の土地は動かない", difficulties(app, "1")[0] == [50],
+      difficulties(app, "1"))
+check("例外を出していない", not ctx.errors, ctx.errors)
+
+# -- 二重掛け -------------------------------------------------------------
+# 上がった帯（6,7,8）の中でゲームが新しい依頼を作る。
+# 生まれた時点で上昇量を含んでいるので、次の寄せ直しで二度乗ってはいけない。
+born = Quest("9", "0", 7)
+app.world.quests["9"] = born
+app.world_dict["quests"]["9"] = quest_dict(born)
+open_board(ctx, app)
+check("生まれたての依頼に二度乗らない",
+      app.world.quests["9"].difficulty == 7, app.world.quests["9"].difficulty)
+check("素の値は上昇量を引いた値で控える",
+      state_file()["0"]["base"].get("9") == 4, state_file()["0"].get("base"))
+
+# もう1段上がると、生まれた依頼も一緒に上がる。
+end_quest(ctx, app, "9")
+end_quest(ctx, app, "1")
+end_quest(ctx, app, "2")
+check("次の段では新旧そろって上がる",
+      difficulties(app, "0")[0] == [9, 10, 11, 10], difficulties(app, "0")[0])
+
+# -- 上限 -----------------------------------------------------------------
+reset()
+module, ctx = fresh({"CLEARS_PER_STEP": 1, "STEP_SIZE": 10, "MAX_BONUS": 20,
+                     "ANNOUNCE": ""})
+app = make_world(BAND)
+for _ in range(5):
+    end_quest(ctx, app, "1")
+check("MAX_BONUS で頭打ちになる", difficulties(app, "0")[0] == [23, 24, 25],
+      difficulties(app, "0")[0])
+
+reset()
+module, ctx = fresh({"CLEARS_PER_STEP": 1, "STEP_SIZE": 10, "MAX_BONUS": 76,
+                     "ANNOUNCE": ""})
+app = make_world([("1", "0", 70, "incomplete"), ("2", "0", 74, "incomplete")])
+for _ in range(4):
+    end_quest(ctx, app, "1")
+check("難易度の上限を超えない", difficulties(app, "0")[0] == [76, 76],
+      difficulties(app, "0")[0])
+
+reset()
+module, ctx = fresh({"CLEARS_PER_STEP": 1, "STEP_SIZE": 10, "MAX_BONUS": 76,
+                     "DIFFICULTY_LIMIT": 30, "ANNOUNCE": ""})
+app = make_world(BAND)
+for _ in range(5):
+    end_quest(ctx, app, "1")
+check("DIFFICULTY_LIMIT が天井になる", difficulties(app, "0")[0] == [30, 30, 30],
+      difficulties(app, "0")[0])
+
+# -- 範囲 -----------------------------------------------------------------
+reset()
+module, ctx = fresh({"CLEARS_PER_STEP": 1, "STEP_SIZE": 5, "SCOPE": "incomplete",
+                     "ANNOUNCE": ""})
+app = make_world([("1", "0", 3, "completed"),
+                  ("2", "0", 4, "incomplete"),
+                  ("3", "0", 5, "incomplete")])
+end_quest(ctx, app, "2")
+# 片付けた依頼はゲーム自身が `completed` にするので、
+# incomplete のときは**いま終わらせた依頼も**動かない（残るのは 3 だけ）。
+check("incomplete では完了済みを動かさない",
+      difficulties(app, "0")[0] == [3, 4, 10], difficulties(app, "0")[0])
+
+reset()
+module, ctx = fresh({"CLEARS_PER_STEP": 1, "STEP_SIZE": 5, "SCOPE": "all",
+                     "ANNOUNCE": ""})
+app = make_world([("1", "0", 3, "completed"),
+                  ("2", "0", 4, "incomplete"),
+                  ("3", "0", 5, "incomplete")])
+end_quest(ctx, app, "2")
+check("all では完了済みも上がる（在庫の母数）",
+      difficulties(app, "0")[0] == [8, 9, 10], difficulties(app, "0")[0])
+
+# -- 戻す -----------------------------------------------------------------
+reset()
+module, ctx = fresh({"CLEARS_PER_STEP": 1, "STEP_SIZE": 4, "ANNOUNCE": ""})
+app = make_world(BAND)
+end_quest(ctx, app, "1")
+end_quest(ctx, app, "2")
+check("戻す前は上がっている", difficulties(app, "0")[0] == [11, 12, 13],
+      difficulties(app, "0")[0])
+
+module, ctx = fresh({"CLEARS_PER_STEP": 1, "STEP_SIZE": 4, "ROLLBACK": True,
+                     "ANNOUNCE": ""})
+open_board(ctx, app)
+check("ROLLBACK で素の値へ戻る", difficulties(app, "0")[0] == [3, 4, 5],
+      difficulties(app, "0")[0])
+check("セーブ側も戻る", difficulties(app, "0")[1] == [3, 4, 5],
+      difficulties(app, "0")[1])
+check("控えが消える", "0" not in (state_file() or {}), state_file())
+
+# 範囲を絞っていても、上げた後に片付いた依頼は戻る（範囲の外へ出ても取り残さない）。
+reset()
+module, ctx = fresh({"CLEARS_PER_STEP": 1, "STEP_SIZE": 5, "SCOPE": "incomplete",
+                     "ANNOUNCE": ""})
+app = make_world([("1", "0", 3, "incomplete"),
+                  ("2", "0", 4, "incomplete"),
+                  ("3", "0", 5, "incomplete")])
+end_quest(ctx, app, "1")
+end_quest(ctx, app, "2")
+check("範囲を絞ると片付いた側は据え置かれる",
+      difficulties(app, "0")[0] == [3, 9, 15], difficulties(app, "0")[0])
+
+module, ctx = fresh({"CLEARS_PER_STEP": 1, "STEP_SIZE": 5, "SCOPE": "incomplete",
+                     "ROLLBACK": True, "ANNOUNCE": ""})
+open_board(ctx, app)
+check("上げた後に片付いた依頼も戻る", difficulties(app, "0")[0] == [3, 4, 5],
+      difficulties(app, "0")[0])
+
+# -- 世界が混ざらない -----------------------------------------------------
+reset()
+module, ctx = fresh({"CLEARS_PER_STEP": 1, "STEP_SIZE": 5, "ANNOUNCE": ""})
+first = make_world(BAND, world_name="第一の世界")
+second = make_world(BAND, world_name="第二の世界")
+end_quest(ctx, first, "1")
+check("別の世界は動かない", difficulties(second, "0")[0] == [3, 4, 5],
+      difficulties(second, "0")[0])
+check("控えは世界ごとに分かれる",
+      state_file("第一の世界") is not None and state_file("第二の世界") is None,
+      [state_file("第一の世界"), state_file("第二の世界")])
+
+# -- 知らせ ---------------------------------------------------------------
+reset()
+module, ctx = fresh({"CLEARS_PER_STEP": 2, "STEP_SIZE": 3,
+                     "ANNOUNCE": "手応えが増している。"})
+app = make_world(BAND)
+end_quest(ctx, app, "1")
+check("段が上がらない回は黙っている", app.texts == [], app.texts)
+end_quest(ctx, app, "2")
+check("段が上がった回に1行出る", app.texts == ["手応えが増している。"], app.texts)
+
+# -- 安全 -----------------------------------------------------------------
+reset()
+module, ctx = fresh({"CLEARS_PER_STEP": 1, "STEP_SIZE": 5, "ANNOUNCE": ""})
+app = make_world(BAND)
+app.current_quest_data = None
+manager = QuestEndManager(app)
+hook = ctx.hooks["__main__:QuestEndManager.execute"]
+hook(lambda self, *a, **kw: QuestEndManager.execute(self, *a, **kw), manager, "帰還する")
+CLOCK.run_onces()
+check("依頼が読めない回は何もしない", difficulties(app, "0")[0] == [3, 4, 5],
+      difficulties(app, "0")[0])
+check("控えも作らない", state_file() is None, state_file())
+
+# 難易度が数でない依頼（壊れたセーブ）を混ぜても落ちない。
+broken = Quest("8", "0", None)
+app.world.quests["8"] = broken
+app.world_dict["quests"]["8"] = quest_dict(broken)
+end_quest(ctx, app, "1")
+check("難易度が数でない依頼は素通し",
+      app.world.quests["8"].difficulty is None, app.world.quests["8"].difficulty)
+check("残りは上がる", difficulties(app, "0")[0][:3] == [8, 9, 10],
+      difficulties(app, "0")[0])
+check("例外を出していない（安全側）", not ctx.errors, ctx.errors)
+
+reset()
+print()
+if failures:
+    print("FAILED: " + ", ".join(failures))
+    raise SystemExit(1)
+print("all ok")

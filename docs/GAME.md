@@ -1005,6 +1005,41 @@ InstantaleApp.normalize_shop_inventory_prices(shop_obtainer, player_obtainer)
 - **主の持ち物を空にしてから売買を始めると、ゲームが初回と同じ経路で品揃えを作り直す**
   （実機で成立。`cleared` → `restocked` が4店舗6回、`WARN not refilled` は0件）
 
+#### 2.13.1.1 品揃えの段はその土地の依頼の難易度（実セーブ3世界・店23軒）
+
+**店に並ぶ品の `value` は、その土地の依頼の難易度以外の数を取らない。**
+`world_data.json` を直に読んで、
+持ち物を持っている主の居る施設を全部突き合わせた結果:
+
+| 世界 / 土地 | その土地の依頼の難易度 | 施設（tier） | 在庫の `value` |
+| --- | --- | --- | --- |
+| ペルディション 2 | 27 / 30 / 31（3件とも完了済み） | general_store（standard） | 5,5,27,27,30,30,31,31,31 |
+| 〃 | 〃 | medical_facility（basic） | 27,27,27,27,27,30,30,31 |
+| 〃 | 〃 | specialty_shop（basic） | 27,27,27,27,30,30,30,30,31 |
+| ペルディション 3 | 48 / 54 / 55（3件とも完了済み） | specialty_shop（advanced） | 48,48,48,54,54,54,54,54,55,55 |
+| 暮影裂界 1 | 5 / 10 / 12（10 だけ完了済み） | general_store（basic） | 5,5,5,10,10,10,10,12 |
+| 暮影裂界 4 | 17 / 18 / 21 | medical_facility（advanced） | 17,17,17,17,18,18,21 |
+| Astergrave 7 | 42 / 44 / 45 | general_store（advanced） | 42,44,44,44,44,44,45,45 |
+
+- 品物 190個のうち 186個が、その土地の3つの難易度の**いずれか**そのもの。
+  外れた4個は2軒に集まっていて（上表の 5,5 を含む）、
+  どれもその土地には無い難易度。プレイヤーが売った品が主の持ち物へ積まれる経路
+  （上の売買の項）で入ったものと読める
+- **完了済みの依頼も母数に入る**。ペルディションのエリア 2 / 3 / 8 は
+  3件とも `config['status'] == 'completed'` だが、在庫はその難易度で並んでいる
+  （`get_quest_difficulties` の `include_completed=True` が既定）
+- **施設の `tier` は在庫の段を1つに絞らない**。`basic` の店にもその土地の最高難度の品が並ぶ。
+  値は `basic`（140）/ `standard`（138）/ `advanced`（36）の3語だけで、
+  6世界の施設 1,244件を数えて他は出ていない
+  （`entrance` / `ward` / `dungeon_location` など主の居ない施設は `None`）
+- ゲーム側の入口は `get_area_quest_difficulty_for_tier(area, world, tier)` と
+  `get_quest_difficulties(area, world, include_completed=True)`。
+  **`tier` に何が渡っているかは未実測**（`221_probe_item_level` が録る）
+
+> つまり**その土地の物価と品揃えを動かす道は、依頼の難易度1つ**。
+> `318_area_difficulty_growth` はこれを使って、在庫にもクラフトにも触らずに街を育てる。
+> 効き始めるのは品揃えが入れ替わってからなので、`312_shop_restock` と組で意味を持つ。
+
 #### 店の主は `job` が施設の種類と一致している
 
 実セーブで、主の居る施設67件を全部突き合わせた結果:
@@ -1164,6 +1199,23 @@ hud.craft_inventory_generate_arrow_label    「→」
 | 後始末 | `place_crafted_item` / `remove_craft_materials` |
 | 進行中の旗 | `app.is_crafting_item` / `app.item_craft_lock` |
 | グリッド | `InventoryGrid(cols, rows, item_dict, obtainer, place_item_callback=None, situation=None)` |
+
+#### 成果物の性能を決める式は未実測
+
+```
+ItemCraftManager.calculate_modification(self, item_type, item_price)
+scripts.functions:get_equipment_level_from_price(item_price)     ← 値段 → レベル
+scripts.functions:get_heal_item_level_from_price(item_price)
+scripts.functions:get_other_item_level_from_price(item_price)
+```
+
+引数の名前は「種別と値段から決める」と言っており、
+`get_*_price(quest_difficulty)`（§2.13.2）の逆関数が3本揃っている。
+素材が高いほど成果物が良くなる、という形に読める。
+
+**ただし読めているのは名前だけで、`calculate_modification` の実引数も戻り値の型も採れていない**
+（素材の合計が渡るのか1つぶんなのか、返るのが数なのか辞書なのかも未確認）。
+`221_probe_item_level` がこの1本を録る。VERIFICATION.md §3.38。
 
 グリッドは名前ではなく、アイテムを置く能力で見分ける
 （`place_new_item` / `try_place_item` / `occupy_slots` / `find_placement_position` ほか）。

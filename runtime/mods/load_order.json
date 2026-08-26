@@ -62,6 +62,7 @@
     "315_vacation_custom",
     "316_bounty_hunter",
     "317_reputation",
+    "318_area_difficulty_growth",
     "215_probe_event_roll",
     "213_probe_npc_memory",
     "214_probe_new_character",
@@ -69,7 +70,8 @@
     "217_probe_area_move",
     "218_probe_vacation",
     "219_probe_crash_log",
-    "220_probe_bounty_hunter"
+    "220_probe_bounty_hunter",
+    "221_probe_item_level"
   ],
   "disabled": []
 }
