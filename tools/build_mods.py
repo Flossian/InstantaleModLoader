@@ -47,7 +47,7 @@ PREAMBLE = r"""# MODS: 同梱している MOD
 | `000`-`0xx` | 調査・記録 | ゲームは変えない。構造の書き出しとクラッシュ記録 |
 | `100`-`1xx` | 修正 | ゲームのバグ・不便の修正 |
 | `200`-`2xx` | 計測 | ゲームは変えない。原因を測るための道具。デバッグモードのときだけ動く |
-| `300`-`3xx` | 追加 | ゲームに無かった遊びの追加 |
+| `300`-`4xx` | 追加 | ゲームに無かった遊びの追加 |
 
 各項の「設定」は GUI の `設定` 列から変えられるもの。
 変え方は [README.md の「設定の変え方」](README.md#設定の変え方)。"""
@@ -102,10 +102,11 @@ BANDS = (
         "119_fix_crime_attribution",
     )),
     ("probe", "## 計測（2xx）", None),
-    ("feature", "## 追加（3xx）", (
+    ("feature", "## 追加（3xx・4xx）", (
         "300_event_facility_arrival",
         "301_quest_from_conversation",
         "302_leave_party_in_conversation",
+        "402_party_inventory_transfer",
         "303_quest_end_party_to_guild",
         "304_quest_end_keep_party",
         "306_party_train_exp",
@@ -113,6 +114,7 @@ BANDS = (
         "308_battle_damage_display",
         "309_office_pardon",
         "311_npc_profile_memory",
+        "403_npc_social_memory",
         "312_shop_restock",
         "313_event_ability_check",
         "314_area_move_custom",
@@ -121,6 +123,7 @@ BANDS = (
         "317_reputation",
         "318_area_difficulty_growth",
         "319_battle_tactics",
+        "401_battle_character_context",
     )),
 )
 

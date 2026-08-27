@@ -48,6 +48,7 @@
     "300_event_facility_arrival",
     "301_quest_from_conversation",
     "302_leave_party_in_conversation",
+    "402_party_inventory_transfer",
     "303_quest_end_party_to_guild",
     "304_quest_end_keep_party",
     "119_fix_crime_attribution",
@@ -57,6 +58,7 @@
     "308_battle_damage_display",
     "309_office_pardon",
     "311_npc_profile_memory",
+    "403_npc_social_memory",
     "312_shop_restock",
     "313_event_ability_check",
     "315_vacation_custom",
@@ -64,6 +66,7 @@
     "317_reputation",
     "318_area_difficulty_growth",
     "319_battle_tactics",
+    "401_battle_character_context",
     "215_probe_event_roll",
     "213_probe_npc_memory",
     "214_probe_new_character",
@@ -73,7 +76,8 @@
     "219_probe_crash_log",
     "220_probe_bounty_hunter",
     "221_probe_item_level",
-    "222_probe_battle_mechanics"
+    "222_probe_battle_mechanics",
+    "223_probe_party_equipment"
   ],
   "disabled": []
 }
