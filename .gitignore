@@ -4,6 +4,7 @@
 /dist/
 /graphify-out/
 /settings/
+/work/
 
 # ---- Python ----
 __pycache__/

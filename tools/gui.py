@@ -120,7 +120,7 @@ PALETTE = {
     "control_edge": "#b0b8c4",
     "text":       "#1f2328",   # 本文
     "text_sub":   "#57606a",   # 補足（説明・状態・見出し）
-    "text_faint": "#8c959f",   # 既定値・無効な行
+    "text_faint": "#646b76",   # 既定値・無効な行・小見出し
     "accent":     "#2f6feb",   # 主操作（注入して起動）
     "accent_lit": "#4681f2",   # 主操作に触れている
     "accent_dim": "#1f57c3",   # 主操作を押している
@@ -207,6 +207,10 @@ def setup_theme(root: tk.Tk) -> ttk.Style:
     # 区切り線だけだと「なぜここで切れているか」が伝わらないので、群の名前を出す。
     style.configure("Group.TLabel", foreground=p["text_faint"],
                     font=(family or "", FONT_SIZE - 1, "bold"))
+    # 右のパネルの見出し（選んでいる mod の名前）。一覧の字より一段大きくして、
+    # 視線を一覧に戻さなくても「いまどれを見ているか」が分かるようにする。
+    style.configure("InfoName.TLabel", foreground=p["text"],
+                    font=(family or "", FONT_SIZE + 2, "bold"))
 
     # -- ボタン。既定は地に沈む見た目にして、主操作だけ色を持たせる
     #    （どれも同じ濃さで並ぶと、押すべきものを毎回探すことになる）。
@@ -1138,7 +1142,17 @@ class App(ttk.Frame):
         # 窓が低いときに**足元のボタンごと消える**（MOD を選んで説明が伸びた瞬間に、
         # 起動ボタンが画面の外に出ていたのはこれ）。
         # 下に付く物を先に確保して、余りを一覧に渡す。
-        body = ttk.Frame(self)
+        # 一覧と MOD 情報を左右に分ける。境目はドラッグで動かせる。
+        # 説明の量は mod によって 3 倍以上ちがう（実測 55〜293px）ので、
+        # どこかに決め打ちの高さを置くより、見る側で配分を決められる方がいい。
+        self.panes = ttk.PanedWindow(self, orient="horizontal")
+        body = ttk.Frame(self.panes, width=self.LIST_MIN)
+        # 中身の大きさを外へ伝えない。Treeview は「いまの列幅の合計」を自分の
+        # 要求幅として出すので、枠が広がって列が伸びると**要求幅まで一緒に
+        # 増える**。PanedWindow は要求幅より狭くは畳まないため、一度広げると
+        # 境目が左へ戻せなくなり、右の枠を広げられなくなる（実測：右が 378px
+        # で頭打ちになった）。ここで切っておけば、幅は境目だけが決める。
+        body.pack_propagate(False)
 
         # `show` に "tree" を含めるのは、#0 の列にチェックの絵を置くため（"headings" だけだと #0 が隠れて、
         # 絵を出す場所が無くなる）。
@@ -1174,7 +1188,6 @@ class App(ttk.Frame):
         # 選択中は style.map の選択色が勝つ ― off /
         # bad の文字色が選択で消えるのと同じ振る舞いに揃う。
         self.tree.tag_configure("dev", background=PALETTE["dev_bg"])
-        self.tree.pack(side="left", fill="both", expand=True)
         self.tree.bind("<<TreeviewSelect>>", lambda _e: self._show_detail())
         self.tree.bind("<Button-1>", self._on_press)
         self.tree.bind("<B1-Motion>", self._on_drag)
@@ -1187,35 +1200,18 @@ class App(ttk.Frame):
         self.tree_tip = Tooltip(self.tree, self._tip_for)
 
         bar = ttk.Scrollbar(body, orient="vertical", command=self.tree.yview)
-        bar.pack(side="left", fill="y")
         self.tree.configure(yscrollcommand=bar.set)
 
-        # 一覧の脇に残すのは**並べ替えだけ**。
-        # ここは「一覧の中の位置を動かす」操作しか無い場所にする
-        # ― 以前は追加・フォルダを開く・保存まで同じ幅で 12 個並んでいて、
-        # 区切り線はあっても群の意味が伝わらず、
-        # よく使うものを毎回探すことになっていた。
-        # 残りはメニューと右クリックに移した。
-        side = ttk.Frame(body, padding=(12, 0, 0, 0))
-        side.pack(side="left", fill="y")
-        ttk.Label(side, text="並べ替え", style="Group.TLabel").pack(
-            anchor="w", pady=(0, 5))
-        for label, command in (
-                ("▲ 上へ", lambda: self._move(-1)),
-                ("▼ 下へ", lambda: self._move(1)),
-                ("⤒ 最上部へ", lambda: self._move_to(0)),
-                ("⤓ 最下部へ", lambda: self._move_to(-1))):
-            ttk.Button(side, text=label, width=12, command=command).pack(
-                fill="x", pady=1)
-        # ボタンを減らした分、他の操作の在り処を書いておく。
-        # 減らしただけだと「できなくなった」ように見える。
-        ttk.Label(side, text="そのほかの操作は\n行を右クリック、\nまたは上のメニュー",
-                  style="Faint.TLabel", justify="left").pack(
-            anchor="w", pady=(14, 0))
+        # 置く順で、幅が足りないときに何を守るかが決まる。スクロールバーを
+        # 先に確保し、残りを一覧に渡す。
+        bar.pack(side="right", fill="y")
+        self.tree.pack(side="left", fill="both", expand=True)
 
-        self.detail = ttk.Label(self, text="", style="Sub.TLabel",
-                                wraplength=860, justify="left")
+        self._build_info(self.panes)
+
         # 宣言と実体のずれ（順序・依存・非互換）。
+        # これは**一覧ぜんぶに関わる**話で、選んだ mod の話ではないので、
+        # 右の MOD 情報ではなく窓の下に置いたままにする。
         # 何も無ければ行ごと出さない。
         self.warn = ttk.Label(self, text="", style="Warn.TLabel",
                               wraplength=860, justify="left")
@@ -1251,8 +1247,181 @@ class App(ttk.Frame):
         # 一覧は縮んでも行が減るだけだが、ボタンは消えると押せなくなる。
         foot.pack(side="bottom", fill="x", pady=(6, 0))
         self.warn.pack(side="bottom", fill="x")
-        self.detail.pack(side="bottom", fill="x", pady=(8, 0))
-        body.pack(side="top", fill="both", expand=True, pady=(8, 0))
+        self.panes.pack(side="top", fill="both", expand=True, pady=(8, 0))
+        self.panes.add(body, weight=3)
+        self.panes.add(self.info, weight=1)
+        # 境目の位置は窓が出来てから入れる。この時点の幅はまだ 1 なので、
+        # いま sashpos を呼んでも捨てられる。
+        self.after_idle(self._restore_sash)
+
+    # -- MOD 情報（右の枠）--------------------------------------------------
+    INFO_WIDTH = 430          # 初めて開いたときの幅
+    INFO_MIN = 260            # これより狭いと中身が読めなくなる
+    LIST_MIN = 420            # 一覧側にも同じだけ最低限を残す
+
+    def _build_info(self, parent) -> None:
+        """選んでいる mod の情報を出す枠。
+
+        以前は窓の下いっぱいに帯で出していた。説明の長さが mod ごとに 3 倍以上
+        ちがう（実測 55〜293px）ので、選び直すたびに一覧の高さが変わり、次に
+        押そうとした行が動いていた。縦に置けば、説明が伸びても一覧は動かない。
+        """
+        self.info = ttk.Frame(parent, padding=(12, 0, 0, 0))
+        info = self.info
+
+        # 一番よく押すものを一番上の一行にまとめる。切り替えと並べ替えは
+        # どちらも「選んでいる MOD をどう扱うか」なので、離して置くと目と
+        # 手が行き来する。
+        top = ttk.Frame(info)
+        top.pack(fill="x")
+        self.info_toggle = ttk.Button(top, text="有効 / 無効", width=11,
+                                      command=self._toggle)
+        self.info_toggle.pack(side="left")
+        ttk.Label(top, text="位置", style="Group.TLabel").pack(
+            side="left", padx=(14, 5))
+        self.info_move = []
+        # 横に並べるので字は矢印だけにする。何をするかは指せば出る
+        # （`Tooltip`）。同じ操作はメニューにも語で載っている。
+        for label, tip, command in (
+                ("▲", "1つ上へ", lambda: self._move(-1)),
+                ("▼", "1つ下へ", lambda: self._move(1)),
+                ("⤒", "一番上へ", lambda: self._move_to(0)),
+                ("⤓", "一番下へ", lambda: self._move_to(-1))):
+            button = ttk.Button(top, text=label, width=3, command=command)
+            button.pack(side="left", padx=1)
+            Tooltip(button, tip)
+            self.info_move.append(button)
+
+        self.info_name = ttk.Label(info, text="", style="InfoName.TLabel",
+                                   justify="left")
+        self.info_name.pack(anchor="w", fill="x", pady=(10, 0))
+        self.info_state = ttk.Label(info, text="", style="Faint.TLabel",
+                                    justify="left")
+        self.info_state.pack(anchor="w", fill="x")
+
+        # フォルダ名は読み取り専用の入力欄にする。ログ・load_order.json・
+        # `after` の宣言はどれもフォルダ名で書かれるので、**選んで写せる**のが
+        # 効く（ラベルだと写せない）。
+        ttk.Label(info, text="フォルダ名", style="Group.TLabel").pack(
+            anchor="w", pady=(12, 2))
+        line = ttk.Frame(info)
+        line.pack(fill="x")
+        self.info_dir = ttk.Entry(line, state="readonly")
+        self.info_dir.pack(side="left", fill="x", expand=True)
+        self.info_open = ttk.Button(line, text="開く", width=5,
+                                    command=self.open_mod_dir)
+        self.info_open.pack(side="left", padx=(6, 0))
+
+        self.info_cfg = ttk.Button(info, text="設定…", width=12,
+                                   command=self._edit_settings)
+        self.info_cfg.pack(anchor="w", pady=(12, 0))
+
+        # 出していない操作の在り処。減らしただけだと「できなくなった」
+        # ように見える。折返し幅は枠に追従させる（`_build_info` の外で
+        # 幅が決まるので、決め打ちにすると狭いときに右端が切れる）。
+        self.info_hint = ttk.Label(
+            info, text="そのほかの操作は、一覧の行を右クリック、または上のメニュー",
+            style="Faint.TLabel", justify="left")
+        self.info_hint.pack(anchor="w", fill="x", pady=(8, 0))
+        info.bind("<Configure>", self._fit_hint)
+
+        meta = ttk.Frame(info)
+        meta.pack(fill="x", pady=(12, 0))
+        meta.columnconfigure(1, weight=1)
+        self.info_meta = {}
+        for row, (key, title) in enumerate((("author", "作者"),
+                                            ("version", "バージョン"))):
+            ttk.Label(meta, text=title, style="Group.TLabel", width=10).grid(
+                row=row, column=0, sticky="w", pady=1)
+            value = ttk.Label(meta, text="", style="Sub.TLabel")
+            value.grid(row=row, column=1, sticky="w", pady=1)
+            self.info_meta[key] = value
+
+        head = ttk.Frame(info)
+        head.pack(fill="x", pady=(14, 3))
+        ttk.Label(head, text="説明", style="Group.TLabel").pack(side="left")
+        # 英文は既定で畳む。説明の総量の 7 割近く（実測 9,774 / 14,273 字）が
+        # 英文で、しかも和文の訳なので、常に出すと読む所を探すことになる。
+        # 検索（`_matches`）の対象には残してあるので、英語の語でも見つかる。
+        self.show_en = tk.BooleanVar(value=bool(read_config().get("show_en")))
+        self.show_en.trace_add("write", self._on_show_en)
+        ttk.Checkbutton(head, text="English", variable=self.show_en).pack(
+            side="right")
+
+        box = ttk.Frame(info)
+        box.pack(fill="both", expand=True)
+        # ラベルではなく Text にする。長い説明を**枠の中で**スクロールさせたい
+        # ので、中身の高さで枠が伸びない入れ物が要る。width/height を 1 にして
+        # おくのは、要求サイズで枠を押し広げさせないため（実寸は pack が決める）。
+        # 書体は明示する。tk.Text の既定は **TkFixedFont**（Windows では
+        # ＭＳ ゴシック）で、窓の他の場所とは別の書体になる ― 一番よく読む
+        # 場所だけ字面が変わって、読みにくさの元になっていた。
+        self.desc = tk.Text(box, wrap="word", relief="flat", bd=0,
+                            width=1, height=1, padx=8, pady=6,
+                            font="TkDefaultFont",
+                            background=PALETTE["surface"],
+                            foreground=PALETTE["text"],
+                            highlightthickness=1,
+                            highlightbackground=PALETTE["control_edge"],
+                            highlightcolor=PALETTE["control_edge"],
+                            cursor="arrow")
+        self.desc.pack(side="left", fill="both", expand=True)
+        scroll = ttk.Scrollbar(box, orient="vertical", command=self.desc.yview)
+        scroll.pack(side="left", fill="y")
+        self.desc.configure(yscrollcommand=scroll.set, state="disabled")
+        # 濃さと間隔で段を分ける。全部同じ見た目だと、どこまでが説明で
+        # どこからが付帯情報なのかが読めない。
+        # spacing2 は「折り返した行どうし」の間。和文は字が詰まるので、
+        # ここを空けると幅を変えずに読む速さが上がる。
+        self.desc.tag_configure("body", spacing2=3, spacing3=8)
+        self.desc.tag_configure("en", foreground=PALETTE["text_sub"],
+                                spacing1=4, spacing2=3, spacing3=8)
+        self.desc.tag_configure("note", foreground=PALETTE["warn"],
+                                spacing2=3, spacing3=10)
+        caption = tkfont.nametofont("TkDefaultFont").copy()
+        caption.configure(weight="bold", size=max(7, FONT_SIZE - 1))
+        self.desc.tag_configure("label", foreground=PALETTE["text_sub"],
+                                font=caption, spacing1=10, spacing3=2)
+        self.desc.tag_configure("meta", foreground=PALETTE["text"],
+                                spacing2=3, lmargin1=10, lmargin2=10)
+
+    def _fit_hint(self, event: tk.Event) -> None:
+        """案内の折返しを枠の幅に合わせる。
+
+        決め打ちにすると、境目を左へ寄せて枠を狭めたときに右端が切れる。
+        """
+        width = max(80, event.width - 24)
+        if self.info_hint.cget("wraplength") != width:
+            self.info_hint.configure(wraplength=width)
+
+    def _on_show_en(self, *_args) -> None:
+        """英文の出し入れ。次に開いたときも同じ状態で出す。"""
+        update_config(show_en=bool(self.show_en.get()))
+        self._show_detail()
+
+    # -- 左右の配分 ----------------------------------------------------------
+    def _info_width(self) -> int:
+        """右の枠の幅。次に開くときに戻す（`_restore_sash`）。"""
+        try:
+            return max(0, self.panes.winfo_width() - self.panes.sashpos(0))
+        except tk.TclError:
+            return self.INFO_WIDTH
+
+    def _restore_sash(self) -> None:
+        """境目を前回の位置に戻す。窓の幅が決まってからでないと効かない。"""
+        total = self.panes.winfo_width()
+        if total <= 1:
+            self.after(50, self._restore_sash)
+            return
+        want = read_config().get("info_width")
+        width = want if isinstance(want, int) and want > 0 else self.INFO_WIDTH
+        # 窓が狭いときは、両側に最低限を残せる範囲に丸める。覚えた幅をそのまま
+        # 入れると、次に小さい画面で開いたときに一覧が潰れる。
+        width = max(self.INFO_MIN, min(width, max(0, total - self.LIST_MIN)))
+        try:
+            self.panes.sashpos(0, max(0, total - width))
+        except tk.TclError:
+            pass
 
     # -- 絞り込み ------------------------------------------------------------
     def _hidden(self, mod: dict) -> bool:
@@ -1629,52 +1798,95 @@ class App(ttk.Frame):
             self.tree.see(keep)
         self._show_detail()
 
+    @staticmethod
+    def _set_entry(entry: ttk.Entry, text: str) -> None:
+        """読み取り専用の欄に文字を入れる。書ける状態に戻してから入れ直す。"""
+        entry.configure(state="normal")
+        entry.delete(0, "end")
+        entry.insert(0, text)
+        entry.configure(state="readonly")
+
+    def _set_desc(self, blocks) -> None:
+        """説明の枠を書き替える。`blocks` は (見た目の種類, 文) の並び。"""
+        self.desc.configure(state="normal")
+        self.desc.delete("1.0", "end")
+        for tag, text in blocks:
+            self.desc.insert("end", text + "\n", tag)
+        self.desc.configure(state="disabled")
+        self.desc.yview_moveto(0.0)      # 選び直したら頭から読む
+
     def _show_detail(self) -> None:
         mod = self._selected()
         if not mod:
-            self.detail.configure(text="")
+            self.info_name.configure(text="MOD を選んでください")
+            self.info_state.configure(text="一覧の行を選ぶと、ここに出ます")
+            self._set_entry(self.info_dir, "")
+            for value in self.info_meta.values():
+                value.configure(text="")
+            for widget in ([self.info_toggle, self.info_open, self.info_cfg]
+                           + self.info_move):
+                widget.state(["disabled"])
+            self._set_desc([])
             return
-        # 押せる/押せないの出し分けはメニューを開くときに行う（`_sync_mod_menu`）。
+
+        for widget in [self.info_toggle, self.info_open] + self.info_move:
+            widget.state(["!disabled"])
+        # 設定を持たない mod で押せてしまうと、「設定がありません」を読むために
+        # 押すことになる。持っているかどうかは一覧の「設定」列と同じ判断。
+        self.info_cfg.state(["!disabled"] if mod["settings"] else ["disabled"])
+
         state = "無効" if mod["dir"] in self.disabled else "有効"
-        bits = ["{}  /  entry: {}  /  API {}  /  {}".format(
-            mod["dir"], mod["entry"], mod["api"], state)]
+        self.info_name.configure(text=mod["name_ja"] or mod["dir"])
+        self.info_state.configure(text="{} ／ {} ／ entry: {}".format(
+            mod["kind"] or "-", state, mod["entry"]))
+        self._set_entry(self.info_dir, mod["dir"])
+        self.info_meta["author"].configure(text=mod["author"] or "-")
+        self.info_meta["version"].configure(
+            text="{}　（API {}）".format(mod["version"] or "-", mod["api"]))
+
+        blocks = []
         # 伏せられている理由は行の色だけでは伝わらないので、選んだら言葉で出す。
         # 「戻すかどうか」を判断する材料なので、取り込まれた版まで書く。
         if mod.get("superseded"):
-            bits.append("ゲーム本体が {} で同じ修正を取り込んだため降ろしています"
-                        "（デバッグモードのときだけ読み込まれます）。"
-                        "その版より古いゲームで遊ぶなら戻してください。"
-                        .format(mod["superseded"]))
+            blocks.append(("note",
+                           "ゲーム本体が {} で同じ修正を取り込んだため降ろして"
+                           "います（デバッグモードのときだけ読み込まれます）。"
+                           "その版より古いゲームで遊ぶなら戻してください。"
+                           .format(mod["superseded"])))
         elif mod["debug"]:
-            bits.append("開発者向けの計測 MOD です"
-                        "（デバッグモードのときだけ読み込まれます）。")
+            blocks.append(("note", "開発者向けの計測 MOD です"
+                                   "（デバッグモードのときだけ読み込まれます）。"))
         elif mod["wip"]:
-            bits.append("開発中の MOD です（デバッグモードのときだけ読み込まれ"
-                        "ます。配布物には入りません。TECH.md §2.6）。")
-        desc = mod["desc_ja"] or "（説明なし）"
-        if mod["desc_en"] and mod["desc_en"] != mod["desc_ja"]:
-            desc += "\n" + mod["desc_en"]
-        bits.append(desc)
+            blocks.append(("note", "開発中の MOD です（デバッグモードのときだけ"
+                                   "読み込まれます。配布物には入りません。"
+                                   "TECH.md §2.6）。"))
+
+        blocks.append(("body", mod["desc_ja"] or "（説明なし）"))
+        if (self.show_en.get() and mod["desc_en"]
+                and mod["desc_en"] != mod["desc_ja"]):
+            blocks.append(("en", mod["desc_en"]))
 
         # 適用順の制約は一覧の並びからは読めないので、選んだときに出す。
-        for key, word in (("after", "これより後に適用"), ("before", "これより先に適用")):
+        for key, word in (("after", "これより後に適用"),
+                          ("before", "これより先に適用")):
             if mod[key]:
-                bits.append("{}: {}".format(word, ", ".join(mod[key])))
+                blocks.append(("label", word))
+                blocks.append(("meta", "、".join(mod[key])))
         chosen = self.settings.get(mod["dir"]) or {}
         if chosen:
-            bits.append("変更済みの設定: " + ", ".join(
-                "{}={!r}".format(k, v) for k, v in sorted(chosen.items())))
-
-        # 前回の注入で当てた対象。
-        # どこを触る mod なのかは、これが一番確か。
+            blocks.append(("label", "変更済みの設定"))
+            blocks.append(("meta", "、".join(
+                "{}={!r}".format(k, v) for k, v in sorted(chosen.items()))))
+        # 前回の注入で当てた対象。どこを触る mod なのかは、これが一番確か。
         by_mod = ((self.status.get("patches") or {}).get("by_mod") or {})
         targets = by_mod.get(mod["dir"]) or []
         if targets:
-            shown = ", ".join(targets[:4])
+            blocks.append(("label", "前回適用した対象"))
+            shown = "、".join(targets[:4])
             if len(targets) > 4:
                 shown += " ほか {} 件".format(len(targets) - 4)
-            bits.append("前回適用した対象: " + shown)
-        self.detail.configure(text="\n".join(bits))
+            blocks.append(("meta", shown))
+        self._set_desc(blocks)
 
     def _selected(self) -> dict | None:
         sel = self.tree.selection()
@@ -2231,7 +2443,8 @@ class App(ttk.Frame):
     def _on_close(self) -> None:
         master = self.winfo_toplevel()
         update_config(window=self.geom,
-                      window_maximized=(master.state() == "zoomed"))
+                      window_maximized=(master.state() == "zoomed"),
+                      info_width=self._info_width())
         if self._tick is not None:
             self.after_cancel(self._tick)
             self._tick = None
