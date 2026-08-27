@@ -8,7 +8,7 @@
 手で書き換えても次の生成で消える。
 直す先は各 MOD の `mod.json` か MODS.md の見出し。
 
-同梱 73 本（基盤 2 / 修正 31 / 追加 17 / 計測 23）。
+同梱 74 本（基盤 2 / 修正 31 / 追加 18 / 計測 23）。
 
 並びはフォルダ名順。
 適用順はこれとは別で、GUI の `順` 列（`load_order.json`）が持つ。
@@ -75,13 +75,13 @@
 
 ---
 
-## 追加（17本）
+## 追加（18本）
 
 ゲームに無かった遊びを足す。
 
 | フォルダ | GUI の名前 | 何をするか | 設定 | 状態 |
 |---|---|---|---|---|
-| [`300_event_facility_arrival`](MODS.md#300_event_facility_arrival-施設でnpcから話しかけてくる) | 施設でNPCが話しかける | 施設でNPCから話しかけてくる | 12 |  |
+| [`300_event_facility_arrival`](MODS.md#300_event_facility_arrival-施設でnpcから話しかけてくる) | 施設でNPCが話しかける | 施設でNPCから話しかけてくる | 13 |  |
 | [`301_quest_from_conversation`](MODS.md#301_quest_from_conversation-会話から依頼を受けられる) | 会話から依頼を受ける | 会話から依頼を受けられる | 9 |  |
 | [`302_leave_party_in_conversation`](MODS.md#302_leave_party_in_conversation-会話から仲間と別れられる) | 会話で仲間と別れる | 会話から仲間と別れられる | 1 |  |
 | [`303_quest_end_party_to_guild`](MODS.md#303_quest_end_party_to_guild-解散した仲間を町のギルドに残す) | 解散先をいまの町に | 解散した仲間を町のギルドに残す | 2 |  |
@@ -98,6 +98,7 @@
 | [`316_bounty_hunter`](MODS.md#316_bounty_hunter-手配されていると追手が来る) | 賞金稼ぎが襲ってくる | 手配されていると追手が来る | 15 |  |
 | [`317_reputation`](MODS.md#317_reputation-評判と二つ名) | 評判と二つ名 | 評判と二つ名 | 8 |  |
 | [`318_area_difficulty_growth`](MODS.md#318_area_difficulty_growth-土地が育つ依頼の難易度が上がる) | 依頼クリアで難易度上昇 | 土地が育つ（依頼の難易度が上がる） | 7 |  |
+| [`319_battle_tactics`](MODS.md#319_battle_tactics-戦闘を複数手の駆け引きにする) | 戦闘の駆け引き | 戦闘を複数手の駆け引きにする | 16 |  |
 
 ---
 

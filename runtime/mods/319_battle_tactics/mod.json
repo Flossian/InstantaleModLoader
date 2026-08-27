@@ -1,0 +1,237 @@
+{
+  "entry": "battle_tactics.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Battle tactics",
+    "ja": "戦闘の駆け引き"
+  },
+  "description": {
+    "en": "Stops evenly-matched battles from ending in one hit. Damage now takes a share of the target's health decided by how heavy the AI referee judged the blow: equals trade five to eight blows and a boss's finisher hurts badly without killing you from full health. One-shots still exist where they should. A legendary hero swats a starter-village slime in one blow, and an overwhelming foe can do the same to a novice; only a real gulf in strength allows it. Weapons matter more than ever: each weapon tier visibly cuts how many blows the same enemy takes (a top blade needs 8 where a starter knife needs 20), and armor still softens what you take. Poison, curses and stat drops the referee describes now actually change the numbers, and a Guard entry in the skill list (or typing something defensive) halves what you take until your next move",
+    "ja": "互角の戦闘が一撃で終わらなくなる。ダメージは「相手の体力を何割削るか」で決まるようになり、その割合は AI の審判が裁いた攻撃の重さで動く。同格とは5〜8回の殴り合いになり、ボスの大技は手痛いが満タンから即死はしない。一撃が出るべき場面では出る。最強の英雄は初期村の魔物を一撃で払い、圧倒的な強敵は駆け出しを一撃で沈める。格がまるごと離れたときだけそうなる。武器はこれまで以上に物を言い、一段いい武器に替えるたびに同じ相手への手数が目に見えて減る（同格相手で、最強の剣なら8手、初期装備級なら20手）。防具は受けるダメージを減らす。審判が語ってくる毒や能力低下がちゃんと数字に効くようになり、スキル一覧に加わる「防御」（自由入力で防御的に動いてもよい）で次の行動まで被ダメージを半分にできる"
+  },
+  "version": "5",
+  "author": "R01/Flossian",
+  "settings": {
+    "BAND_WEAK": {
+      "type": "int",
+      "default": 10,
+      "min": 1,
+      "max": 100,
+      "label": {
+        "ja": "弱い一撃が削る割合（%）",
+        "en": "A weak hit takes (%)"
+      },
+      "note": {
+        "ja": "AIの審判が「弱い」と裁いた攻撃が、相手の体力の何%を削るかの基準。裁きは5段階あり、これはいちばん下",
+        "en": "How much of the target's health a hit the AI referee calls weak takes. The referee grades every blow on five steps; this is the lowest"
+      }
+    },
+    "BAND_NORMAL": {
+      "type": "int",
+      "default": 16,
+      "min": 1,
+      "max": 100,
+      "label": {
+        "ja": "普通の一撃が削る割合（%）",
+        "en": "A normal hit takes (%)"
+      },
+      "note": {
+        "ja": "同じ強さの相手となら5〜8回の殴り合いになる高さにしてある",
+        "en": "Tuned so equals trade five to eight blows"
+      }
+    },
+    "BAND_STRONG": {
+      "type": "int",
+      "default": 25,
+      "min": 1,
+      "max": 100,
+      "label": {
+        "ja": "強い一撃が削る割合（%）",
+        "en": "A strong hit takes (%)"
+      },
+      "note": {
+        "ja": "スキルの一撃はだいたいこの段になる",
+        "en": "Most skill hits land on this step"
+      }
+    },
+    "BAND_VERY_STRONG": {
+      "type": "int",
+      "default": 38,
+      "min": 1,
+      "max": 100,
+      "label": {
+        "ja": "大技が削る割合（%）",
+        "en": "A heavy blow takes (%)"
+      },
+      "note": {
+        "ja": "2発は耐えられるが3発目は無い高さ",
+        "en": "You survive two, not three"
+      }
+    },
+    "BAND_EXTREME": {
+      "type": "int",
+      "default": 55,
+      "min": 1,
+      "max": 100,
+      "label": {
+        "ja": "必殺級が削る割合（%）",
+        "en": "A finisher takes (%)"
+      },
+      "note": {
+        "ja": "ボスの切り札。これが来そうなときが防御の出番",
+        "en": "A boss's trump card; the moment to guard"
+      }
+    },
+    "MAX_FRACTION": {
+      "type": "int",
+      "default": 65,
+      "min": 1,
+      "max": 100,
+      "label": {
+        "ja": "一撃の上限（体力の%）",
+        "en": "Cap per hit (% of health)"
+      },
+      "note": {
+        "ja": "互角〜そこそこの格差で、1発で削れるのはここまで。格がまるごと離れた相手にはこの上限が外れて一撃が出る",
+        "en": "The most one hit can take between roughly matched fighters. Against a vastly weaker foe the cap opens and a single blow can kill"
+      }
+    },
+    "MITIGATION_PIVOT": {
+      "type": "int",
+      "default": 800,
+      "min": 1,
+      "max": 99999,
+      "label": {
+        "ja": "防具の効きにくさ",
+        "en": "How slowly armor ramps up"
+      },
+      "note": {
+        "ja": "小さくすると防具が強く効く。防御力がこの値と同じとき、受けるダメージがほぼ半分になる（軽減の上限は6割）",
+        "en": "Smaller makes armor matter more. When your defense equals this value you take about half damage (reduction caps at 60%)"
+      }
+    },
+    "GUARD_CUT": {
+      "type": "int",
+      "default": 50,
+      "min": 0,
+      "max": 90,
+      "label": {
+        "ja": "防御中のダメージ軽減（%）",
+        "en": "Guarding reduces damage by (%)"
+      },
+      "note": {
+        "ja": "「防御」してから次に自分が動くまで、受けるダメージからこの分を引く",
+        "en": "Applied to everything you take between guarding and your next move"
+      }
+    },
+    "LEVEL_FAIR_GAP": {
+      "type": "int",
+      "default": 10,
+      "min": 0,
+      "max": 99,
+      "label": {
+        "ja": "適正と見なすレベル差",
+        "en": "Level gap counted as fair"
+      },
+      "note": {
+        "ja": "この差までは互角の相手として扱い、レベル差の補正は付かない",
+        "en": "Up to this gap the fight counts as fair; no level bonus either way"
+      }
+    },
+    "LEVEL_ELITE_GAP": {
+      "type": "int",
+      "default": 15,
+      "min": 1,
+      "max": 99,
+      "label": {
+        "ja": "強敵と見なすレベル差",
+        "en": "Level gap of a fearsome foe"
+      },
+      "note": {
+        "ja": "この差で「強敵の倍率」が丸ごと掛かる。適正との間は徐々に効き始める",
+        "en": "At this gap the elite multiplier applies in full; it ramps up gradually from the fair gap"
+      }
+    },
+    "LEVEL_OUTCLASS_GAP": {
+      "type": "int",
+      "default": 20,
+      "min": 1,
+      "max": 99,
+      "label": {
+        "ja": "格が違うと見なすレベル差",
+        "en": "Level gap of a different class"
+      },
+      "note": {
+        "ja": "この差以上は勝負にならない領域。「格が違う倍率」が掛かり、上のレベルの側は一撃で倒すことがある",
+        "en": "Beyond this gap it is no contest: the outclass multiplier applies and the higher side can kill in one blow"
+      }
+    },
+    "LEVEL_ELITE_MULT": {
+      "type": "int",
+      "default": 200,
+      "min": 100,
+      "max": 900,
+      "label": {
+        "ja": "強敵の倍率（%）",
+        "en": "Fearsome-foe multiplier (%)"
+      },
+      "note": {
+        "ja": "レベルが「強敵」の差だけ上の側の与えるダメージに掛かる。下の側の与えるダメージは同じ率で割られる。200 で2倍",
+        "en": "Applied to the higher side's damage at the fearsome gap; the lower side's damage is divided by the same rate. 200 means double"
+      }
+    },
+    "LEVEL_OUTCLASS_MULT": {
+      "type": "int",
+      "default": 300,
+      "min": 100,
+      "max": 900,
+      "label": {
+        "ja": "格が違う倍率（%）",
+        "en": "Different-class multiplier (%)"
+      },
+      "note": {
+        "ja": "レベルが「格が違う」差だけ上の側に掛かる倍率。300 で3倍。合わせて一撃の上限も外れる",
+        "en": "Applied at the outclass gap. 300 means triple, and the one-hit cap opens as well"
+      }
+    },
+    "WEAPON_IMPACT": {
+      "type": "int",
+      "default": 75,
+      "min": 25,
+      "max": 150,
+      "label": {
+        "ja": "武器の効きの強さ",
+        "en": "How much the weapon matters"
+      },
+      "note": {
+        "ja": "大きいほど、武器の良し悪しがダメージに強く出る。75 で、武器を一段いいものに替えるたびに同じ相手への手数がはっきり減る。100 にすると差はさらに急で、最強武器は格下を2手で落とす。50 だと武器差はゆるやか",
+        "en": "Higher makes the weapon's quality show more in your damage. At 75 each better weapon visibly cuts the blows an enemy takes; at 100 the gap is steeper still and a top weapon drops weak foes in two; at 50 weapons matter only mildly"
+      }
+    },
+    "RESTORE_EFFECTS": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "毒や能力低下をちゃんと効かせる",
+        "en": "Make poisons and stat drops real"
+      },
+      "note": {
+        "ja": "AIの審判が語ってくる状態異常（毒・拘束など）や能力の上げ下げに、実際の数字の効果を持たせる。毒はターンごとに体力を削り（それだけでは死なない）、能力低下はダメージの出入りに響く。OFF だと素のゲームと同じで、文章だけ",
+        "en": "Gives real numbers to the status effects (poison, binds) and stat changes the AI referee describes. Poison ticks each turn (never kills on its own), stat drops change damage dealt and taken. OFF leaves them as text, like the vanilla game"
+      }
+    },
+    "GUARD_BUTTON": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "スキル一覧に「防御」を出す",
+        "en": "Add Guard to the skill list"
+      },
+      "note": {
+        "ja": "スキルのボタンが「スキル・防御」になり、開いた一覧の「やめる」の手前に「防御」が並ぶ。押すと1回の行動を使って身を固める。OFF でも、自由入力に「防御する」「盾で受ける」のような言葉があれば同じ構えになる",
+        "en": "The Skill button becomes \"Skill / Guard\" and a Guard entry appears in the list just before Cancel. Guarding spends your turn. Even when OFF, typing something defensive in the free input raises the same stance"
+      }
+    }
+  }
+}

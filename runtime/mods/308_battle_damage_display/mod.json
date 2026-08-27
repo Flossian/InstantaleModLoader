@@ -10,7 +10,7 @@
     "en": "Shows how much HP actually moved each turn: damage your side deals to the enemies and damage the enemies deal to you and your party",
     "ja": "戦闘で自分や味方が敵に与えたダメージ、敵が自分や味方に与えたダメージを数字で表示する"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "settings": {
     "SHOW_DAMAGE_TO_ENEMIES": {
@@ -68,7 +68,19 @@
     "LINE_PREFIX": {
       "type": "choice",
       "default": "なし",
-      "values": ["なし", "-", "*", ">", "・", "→", "※", "●", "◆", "■", "★"],
+      "values": [
+        "なし",
+        "-",
+        "*",
+        ">",
+        "・",
+        "→",
+        "※",
+        "●",
+        "◆",
+        "■",
+        "★"
+      ],
       "label": {
         "ja": "行の頭に付ける記号",
         "en": "Prefix for each line"

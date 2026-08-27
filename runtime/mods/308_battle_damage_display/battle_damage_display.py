@@ -178,6 +178,14 @@ PREFIX_SEPARATOR = " "
 DAMAGE_TO_ENEMY_TEXT = "{name} に {amount} のダメージ"
 DAMAGE_TO_ALLY_TEXT = "{name} は {amount} のダメージを受けた"
 HEAL_TEXT = "{name} は {amount} 回復した"
+
+# 出どころ付きの版。
+# `319_battle_tactics` が状態異常の毎ターンの増減を控えてくる
+# （`ui.take_damage_notes`）ので、合う増減にはこちらを使う。
+# 地の文と切り離れて出る数字に理由が付き、新しいバグに見えなくなる。
+DAMAGE_TO_ENEMY_WITH_CAUSE_TEXT = "{name} に {cause} で {amount} のダメージ"
+DAMAGE_TO_ALLY_WITH_CAUSE_TEXT = "{name} は {cause} で {amount} のダメージを受けた"
+HEAL_WITH_CAUSE_TEXT = "{name} は {cause} で {amount} 回復した"
 INTEGRITY_DAMAGE_TEXT = "{name} の負傷が {amount} 深くなった"
 INTEGRITY_HEAL_TEXT = "{name} の負傷が {amount} 癒えた"
 REMAINING_TEXT = "（残り HP {hp}/{max}）"
@@ -372,13 +380,25 @@ def apply(ctx):
                                      max=amount_text(record["max"]))
 
     def hp_line(side, name, delta, record, gone=False):
+        # 出どころの控え（`319_` の状態異常など）が合えば行に添える。
+        # 合わなければ黙って今までどおり（他人の増減に他人の理由を貼らない）。
+        cause = None
+        try:
+            cause = ui.take_damage_notes(name, abs(delta))
+        except Exception:
+            pass
         if delta > 0:
-            template = (DAMAGE_TO_ENEMY_TEXT if side == ENEMY_SIDE
-                        else DAMAGE_TO_ALLY_TEXT)
+            if cause:
+                template = (DAMAGE_TO_ENEMY_WITH_CAUSE_TEXT if side == ENEMY_SIDE
+                            else DAMAGE_TO_ALLY_WITH_CAUSE_TEXT)
+            else:
+                template = (DAMAGE_TO_ENEMY_TEXT if side == ENEMY_SIDE
+                            else DAMAGE_TO_ALLY_TEXT)
         else:
-            template = HEAL_TEXT
+            template = HEAL_WITH_CAUSE_TEXT if cause else HEAL_TEXT
         return (line_prefix()
-                + template.format(name=name, amount=amount_text(abs(delta)))
+                + template.format(name=name, amount=amount_text(abs(delta)),
+                                  cause=cause)
                 + remaining_text(record, gone, side))
 
     def hp_change(side, name, before, record, gone=False):

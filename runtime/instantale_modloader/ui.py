@@ -1826,3 +1826,60 @@ class Screen(object):
             except Exception:
                 self._oops("ConversationEndManager({!r}) failed".format(args))
         return None
+
+
+# ---------------------------------------------------------------- ダメージの出どころ
+# 戦闘で HP を動かす mod と、その増減を画面に出す mod の受け渡し。
+# `319_battle_tactics` が「この増減は『泥の浸食』のぶん」と控え、
+# `308_battle_damage_display` が行に出どころを添える
+# （毎ターンの継続ダメージは地の文と切り離れて出るので、
+# 出どころが無いと新しいバグに見える。mod どうしは import しない ―
+# 共有の語彙はここへ。TECH.md §3.2.3）。
+
+#: 控えの寿命（秒）。報告点は同じ1手の中にあるので、実際は1秒も生きない。
+#: 表示側が居ない（308_ を切っている）ときに積もらないための時限。
+_DAMAGE_NOTE_TTL = 12.0
+_DAMAGE_NOTE_CAP = 32
+
+_damage_notes = []
+
+
+def note_damage(name, amount, label):
+    """HP をこれから動かす側が、増減の出どころを控える。
+
+    `amount` は実際に動かした量（符号は見ない）。
+    """
+    now = time.monotonic()
+    _damage_notes[:] = [note for note in _damage_notes
+                        if now - note[0] <= _DAMAGE_NOTE_TTL]
+    _damage_notes.append((now, str(name), int(round(abs(amount))), str(label)))
+    del _damage_notes[:-_DAMAGE_NOTE_CAP]
+
+
+def take_damage_notes(name, amount):
+    """`name` の増減 `amount` に合う出どころを取り出して消す。無ければ None。
+
+    1件がぴったり合えばその名前。
+    複数の控えの合計が合えば「・」で繋いだ名前
+    （毒と燃焼が同じ報告に畳まれると、表示側には合計しか見えないため）。
+    どちらでもなければ何も消さない（他人の増減に他人の出どころを貼らない）。
+    """
+    now = time.monotonic()
+    _damage_notes[:] = [note for note in _damage_notes
+                        if now - note[0] <= _DAMAGE_NOTE_TTL]
+    amount = int(round(abs(amount)))
+    mine = [note for note in _damage_notes if note[1] == str(name)]
+    if not mine:
+        return None
+    for note in mine:
+        if note[2] == amount:
+            _damage_notes.remove(note)
+            return note[3]
+    if sum(note[2] for note in mine) == amount:
+        labels = []
+        for note in mine:
+            _damage_notes.remove(note)
+            if note[3] not in labels:
+                labels.append(note[3])
+        return "・".join(labels)
+    return None
