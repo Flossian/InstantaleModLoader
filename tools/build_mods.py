@@ -47,10 +47,24 @@ PREAMBLE = r"""# MODS: 同梱している MOD
 | `000`-`0xx` | 調査・記録 | ゲームは変えない。構造の書き出しとクラッシュ記録 |
 | `100`-`1xx` | 修正 | ゲームのバグ・不便の修正 |
 | `200`-`2xx` | 計測 | ゲームは変えない。原因を測るための道具。デバッグモードのときだけ動く |
-| `300`-`4xx` | 追加 | ゲームに無かった遊びの追加 |
+| `300`-`3xx` | 追加 | ゲームに無かった遊びの追加 |
+| `400`-`4xx` | 提供 | 提供を受けて取り込んだ MOD。この帯だけは中身ではなく出どころを表す |
 
 各項の「設定」は GUI の `設定` 列から変えられるもの。
 変え方は [README.md の「設定の変え方」](README.md#設定の変え方)。"""
+
+#: 提供の帯の導入。番号帯の意味が他と違う（中身ではなく出どころ）ので、
+#: 節の頭で一度だけ言う。提供者の名乗りは各 `mod.json` の `author`。
+CONTRIB_INTRO = r"""ユーザから提供を受けて取り込んだ MOD。
+`4xx` の番号は出どころを表すもので、中身の種別は他の帯と同じく
+`mod.json` の `"kind"` が名乗る（提供された計測 MOD は 2xx に入る。`223_` がそれ）。
+取り込みの際にこちらの環境へ合わせた調整を行っており、経緯は各 MOD の説明にある。
+この節の3本は MoririnJP 様の提供。"""
+
+#: 節の頭に導入を挟む帯。見出しの文字列が鍵。
+INTROS = {
+    "## 提供（4xx）": CONTRIB_INTRO,
+}
 
 #: 計測の帯だけは節を持たないので、導入をここに置く。
 PROBE_INTRO = r"""いずれもゲームは変更しない。
@@ -102,11 +116,10 @@ BANDS = (
         "119_fix_crime_attribution",
     )),
     ("probe", "## 計測（2xx）", None),
-    ("feature", "## 追加（3xx・4xx）", (
+    ("feature", "## 追加（3xx）", (
         "300_event_facility_arrival",
         "301_quest_from_conversation",
         "302_leave_party_in_conversation",
-        "402_party_inventory_transfer",
         "303_quest_end_party_to_guild",
         "304_quest_end_keep_party",
         "306_party_train_exp",
@@ -114,7 +127,6 @@ BANDS = (
         "308_battle_damage_display",
         "309_office_pardon",
         "311_npc_profile_memory",
-        "403_npc_social_memory",
         "312_shop_restock",
         "313_event_ability_check",
         "314_area_move_custom",
@@ -123,7 +135,11 @@ BANDS = (
         "317_reputation",
         "318_area_difficulty_growth",
         "319_battle_tactics",
+    )),
+    ("feature", "## 提供（4xx）", (
         "401_battle_character_context",
+        "402_party_inventory_transfer",
+        "403_npc_social_memory",
     )),
 )
 
@@ -236,6 +252,9 @@ def render() -> str:
         if n:
             out += ["", "---"]
         out += ["", head]
+        intro = INTROS.get(head)
+        if intro:
+            out += [""] + intro.split("\n")
         if key == "probe":
             out += [""] + PROBE_INTRO.split("\n") + [""] + probe_rows()
             continue
