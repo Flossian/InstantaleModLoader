@@ -2037,3 +2037,98 @@ Lv76 賞金稼ぎ3体（レベル差の段の検証になった）と、Lv53 の
 
 スキル一覧内の「防御」（版5の置き場所。`guard into the skill list at N:` の行が
 まだ無い ― この回の押下は版5の注入前）と、一撃の解禁域（レベル差20以上）。
+
+### 2.72 320_ の実機1回目。generate_character は ability_scores の鍵を要求する（2026-08-27、`320_`）
+
+ギルドの冒険者の補充（`320_`）の実機1回目。
+ボタンの表示（冒険者0人の一覧で `offered`）・押下・待機表示・
+LLM生成（1.6秒で「泥濘のガラム」、内容も土地に合っていた）までは通ったが、
+NPC は作られず「応じる者は現れなかった」で終わった。
+
+`out\adventurer_recruit.log` の落ち方（2回押して2回とも同じ）:
+
+    make_npc: generate_character(64) failed: KeyError: 'constitution'
+        Character(**[...]) failed: TypeError: 'NoneType' object is not subscriptable
+
+原因はひな型の `ability_scores: {}`。
+`World.generate_character` は6つの能力値の鍵を引き、
+逃げ道の直組み `Character(...)` も `original_ability_scores` を添字で読む
+（空の {} は渡していなかったので None のまま）。どちらも**鍵が無いと**落ちる。
+
+#### 正解の形は実セーブが持っていた
+
+詳細生成前（`level_of_detail=1`）の冒険者
+（`InstantaleWorldVeiwer\assets\savedata_plain.json` の id 41、難易度48）:
+
+- `ability_scores` は6つの鍵に **null**（値は詳細生成で埋まる）
+- `experience_level` は整数（難易度48 → 51）、`age` は 20（実セーブの全NPCが20）
+- `current_area` / `current_location` に置いた先の id が入っている
+- 関係値は `affinity 0`・`警戒心がある`・`初対面`・会話0回
+- `speech_style` は null
+
+#### 対処（版2）
+
+- ローダのひな型（`npcs.NEW_NPC_TEMPLATE`）を6鍵 null に修正。
+  `make_npc` が current_area / current_location も埋める
+- `320_` が experience_level（ゲーム自身の `get_npc_exp_level`。
+  引けなければ実測の対に沿う近似）・age・関係値・category・look を渡す
+- ついでに、ひな型の浅い複製で入れ子の辞書（ability_scores / memory …）が
+  作った NPC 全員で共有される問題を深い複製に直した。
+  浅いままだと、ゲームが1人の能力値を埋めた瞬間に全員が同じ値になる
+- オフラインの偽 `generate_character` にも同じ鍵引きを入れ、
+  退行すれば検査で落ちるようにした
+  （`tools\tests\test_guild_adventurer_recruit.py`、37項目）
+
+ひな型の修正は同じ経路を使う `902_` にも効く
+（あちらの cast も ability_scores を持っていない）。
+版2の実機は未確認。確認手順は VERIFICATION.md §3.39。
+
+### 2.73 320_ 版2が実機で成立。補充した冒険者が一覧に並んだ（2026-08-27、`320_`）
+
+§2.72 の修正（版2）を同じ世界・同じギルド（土地0、冒険者0人）で確認。
+生ログは `out/adventurer_recruit.log` の 21:47 以降。
+
+    recruit: area=0 guild=6 difficulty=38 count=1
+    mod_adventurer_recruit: 2.1s via scripts.llm.llm_manager (structured)
+    make_npc: created 64 '泥濘のニナ' at 0/6 (placed=True npcs=61)
+    enroll: 64 -> adventurer_npcs of area 0 via ['area', 'world_dict']
+    offered '冒険者を募集する' (adventurers listed: 1)
+
+- 生成 2.1秒で「泥濘のニナ」。`generate_character` が通り
+  （`KeyError: 'constitution'` は出ない）、ギルドへの配置も成立
+- **開き直された一覧に新しい名前が並んだ**。次の押下時のボタン列が
+  `['泥濘のニナ', '冒険者を募集する', 'やめる']` ―
+  一覧はこちらが書いた側（実行時の `Area.adventurer_npcs` か
+  `world_dict` の同名リスト。enroll はこの2つに書けた）から組まれている。
+  どちらか片方かまでは絞っていない
+- 1人になっても閾値（既定1名以下）どおりボタンが出て、
+  2人目「錆びた短剣のテオ」（id 65）も同じ経路で成立。
+  2人になった後の開き直しでは `offered` の行が出ていない ＝
+  閾値超えでボタンが引っ込む側も動いている
+- `enroll` の書き先に `save_data_dict` が出てこないのは、
+  実行時の `save_data_dict` が `areas` を持たないため。
+  NPC 本体の素データは `save_data_dict['npcs']` に書けている
+- 21:47 以降、`modloader.log` に ERROR/WARN 無し。クラッシュ無し
+  （21:34 の `safe hook failed on World.generate_character` 2件は
+  版1の失敗を `120_` のフックが拾ったもの）
+
+残るのは、補充した冒険者との会話（詳細生成・立ち絵）・雇用と、
+セーブ・ロードをまたいで一覧に残るか（VERIFICATION.md §3.39）。
+
+### 2.74 320_ の残り3点が実機で決着。会話・雇用・セーブロード（2026-08-27、`320_`）
+
+§2.73 の続き。同じ日の実機で §3.39 の残り3点をすべて確認した。
+
+1. **会話・立ち絵** ― 補充した2人（泥濘のニナ 64・錆びた短剣のテオ 65）の
+   両方と会話が成立。`charisma_impression.log` に両者の初対面の段付けが
+   21:47〜21:54 に4件、`npc_profile.log` では会話からニナの人物像の抽出まで
+   走った（`updated: '泥濘のニナ' (64) profile 0 -> 132 chars`）。
+   他 MOD の経路（125_ / 311_）が素の NPC と同じに扱っている
+2. **雇用** ― `party_leave.log` 21:54:03 に
+   `add_party_member('64' '泥濘のニナ') -> party=['player', '9', '64']`。
+   雇用が通ってパーティに入り、`302_` の「ここで別れる」も並んだ
+3. **セーブ・ロード** ― ロード後も一覧に残ることを遊んで確認
+
+modloader.log にこの区間の ERROR/WARN 無し。クラッシュ無し。
+これで §3.39 は決着。作った冒険者がセーブに残る性質（MOD を外しても
+消えない）は DOC.md に明記のとおり。

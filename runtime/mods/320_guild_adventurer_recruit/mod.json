@@ -1,0 +1,35 @@
+{
+  "entry": "guild_adventurer_recruit.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Guild adventurer recruiting",
+    "ja": "ギルドの冒険者の補充"
+  },
+  "description": {
+    "en": "When few adventurers are left to talk to at the guild, adds a button that recruits a new LLM-written adventurer into the guild",
+    "ja": "ギルドの「冒険者達と話す」で会話できる冒険者が減ったとき、新しい冒険者を生成してギルドに補充するボタンを出す"
+  },
+  "version": "2",
+  "author": "R01/Flossian",
+  "settings": {
+    "RECRUIT_MIN": {
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 9,
+      "label": {"ja": "募集ボタンを出す人数", "en": "Offer recruiting at or below"},
+      "note": {"ja": "一覧で会話できる冒険者がこの人数以下のとき「冒険者を募集する」を出す",
+               "en": "The recruit button appears when this many or fewer adventurers are listed"}
+    },
+    "RECRUIT_COUNT": {
+      "type": "int",
+      "default": 1,
+      "min": 1,
+      "max": 3,
+      "label": {"ja": "一度に補充する人数", "en": "Adventurers per recruit"},
+      "note": {"ja": "1人ごとにLLMの生成を1回待つ。多いほど募集に時間がかかる",
+               "en": "Each adventurer costs one LLM generation, so more means a longer wait"}
+    }
+  }
+}

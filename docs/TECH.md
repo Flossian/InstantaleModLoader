@@ -112,6 +112,7 @@ runtime/instantale_modloader/
     ui.py         選択肢 / 画面の塗り替え / 会話の閉じ方 / idle待ち / 施設の引き当て
     state.py      世界の見分け方と保存先の決め方（§3.2.3）
     llm.py        LLM へ出ていく文章の捕まえ方・1問だけ聞く口（§5.3）
+    npcs.py       NPC の作り方（素データの置き場所・採番・ひな型・配置。GAME.md §2.23）
     recon.py      実行時リコン（モジュール構造ダンプ）
 runtime/mods/     MOD 本体（1バグ・1機能 = 1フォルダ。入口は mod.json が名指し）
     <フォルダ>/DOC.md      遊ぶ側から見た説明（§2.7）。docs/MODS.md へ綴じられる
@@ -794,6 +795,7 @@ MOD どうしが繋がるのは同じファイルを読むことによってで�
 | 所持金と「今は出さない」旗 | `ui.gold_of` / `add_gold` / `money` / `BUSY_FLAGS` | 3本 / 2本 |
 | 包む前の素の関数まで剥がす | `patch.unwrap` / `original_of` | 4本（うち2本は1段しか剥がしていなかった） |
 | 壊れない書き込み・読み込み | `ctx.write_json` / `read_json`（§3.11.1） | 3本 |
+| NPC の作り方（素データ・採番・ひな型・配置） | `npcs.make_npc` ほか（GAME.md §2.23） | 2本（`902_` と `320_`） |
 | HUD への置き場所 | `ui.overlay_host`（§5.1.3） | 2本 |
 | 表示・ログ用の切り詰め | `frames.short` | 6本 |
 | 人物の引き方と表示名 | `ui.character_of` / `character_name` | 5本 |

@@ -1901,6 +1901,20 @@ app.move_npc_to_facility(npc_id, character, 施設, ノード)
 生成した NPC は HP・スキル・装備・立ち絵のいずれも空でよい
 （ゲームが会話や戦闘の直前に `ensure_npc_detail_generated` で埋める）。
 
+> 空でよいのは**値**であって鍵ではない。
+> `ability_scores` は6つの鍵（strength / dexterity / constitution /
+> intelligence / wisdom / charisma）が無いと `generate_character` が
+> `KeyError: 'constitution'` で落ち、直組みの `Character(...)` も
+> `original_ability_scores` を添字で読んで落ちる
+> （2026-08-27 実機。VERIFICATION_LOG.md §2.72）。値は null でよい。
+>
+> 生成直後（`level_of_detail=1`）の実物（実セーブの id 41、難易度48）は、
+> ほかに experience_level（整数。難易度48 → 51）・age（実セーブの全NPCが
+> 20 の定数）・current_area / current_location（置いた先の id）・
+> 関係値（affinity 0・`警戒心がある`・`初対面`）が入っていて、
+> speech_style は null。
+> ひな型はローダの `npcs.NEW_NPC_TEMPLATE`（TECH.md §3.2.3）。
+
 > 名前は `generate_character` の前に決まっている。
 > 素データを先に書く順序なので、`Character` を組んだ後に `self.name` だけ直しても
 > `npcs` には古い名前が残り、次の保存で戻ってくる。
