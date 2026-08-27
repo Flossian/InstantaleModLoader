@@ -779,7 +779,16 @@ def is_idle(app):
 # --------------------------------------------------------------------------
 def world_areas(app):
     """エリア表 `{id: Area}`。**属性名ではなく中身で見分ける。**"""
-    world = getattr(app, "world", None)
+    return areas_of_world(getattr(app, "world", None))
+
+
+def areas_of_world(world):
+    """`World` インスタンスから直接引く側。
+
+    `World.__init__` を包む場面では `app.world` がまだ埋まっていない
+    （いま作っている最中）ので、`app` ではなく world を受ける入口が要る
+    （`318_` の `live_store` と同じ理由）。
+    """
     if world is None:
         return {}
     for name in ("areas", "area_dict", "areas_dict"):

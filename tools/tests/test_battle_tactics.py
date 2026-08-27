@@ -208,6 +208,23 @@ check("ally floor: does not shrink a member already above par",
       mod.hit_fraction([("weak", 1)], 900, 460, 96, ally_floor=True)
       == mod.hit_fraction([("weak", 1)], 900, 460, 96))
 
+# ---------------------------------------------------------------- 過剰殺傷
+check("overkill: a lethal blow shows the uncapped same-formula value",
+      mod.overkill_final(1.0, 5.85, 64, 64) == 374)
+check("overkill: never below the lethal compressed value",
+      mod.overkill_final(1.0, 0.5, 64, 64) == 64
+      and mod.overkill_final(1.0, None, 64, 64) == 64)
+check("overkill: a non-lethal blow stays compressed",
+      mod.overkill_final(0.65, 5.85, 64, 42) == 42)
+# 実測の帯: 英雄(基礎896・Lv62) → スライム(HP64・Lv38)。
+# 普段の 200〜400 と地続きの数字で、相手の HP は大きく超える。
+frac, raw = mod.hit_fraction([("normal", 1)], 1560, 64, 0, base_value=896,
+                             attacker_level=62, defender_level=38,
+                             with_raw=True)
+slime = mod.overkill_final(frac, raw, 64, int(round(64 * frac)))
+check("overkill: the hero's slime one-shot lands in the everyday band",
+      frac == 1.0 and 200 <= slime <= 600, "final={}".format(slime))
+
 # ---------------------------------------------------------------- 出どころの受け渡し
 from instantale_modloader import ui as _ui                     # noqa: E402
 

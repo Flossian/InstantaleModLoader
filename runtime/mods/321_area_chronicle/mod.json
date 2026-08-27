@@ -1,0 +1,67 @@
+{
+  "entry": "area_chronicle.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Area chronicle",
+    "ja": "エリアの状況を更新"
+  },
+  "description": {
+    "en": "Clearing a quest rewrites that land's description: an LLM weaves the recorded outcome (the same achievements the game already writes) into the overview and the facilities text, so NPC talk and quest generation read a land that has actually changed. Once the marsh fog is lifted, the fog leaves the text. The compilation runs in a background thread only when a new achievement appears; nothing is written to the save or to world_data.json, the rewritten text lives in state\\ and is re-applied on load. Removing the mod restores the plain world",
+    "ja": "依頼を片付けると、その土地の案内文が変わる。ゲームが area_history に書いている功績（クリアの結果の要約）を、土地の概要と様子の文へ LLM が織り込んで書き直すので、会話の【土地情報】と依頼の生成が「実際に変わった土地」を読むようになる。湿地の霧を晴らせば、案内文から霧の記述が消える。編纂は新しい功績が現れたときだけ別スレッドで走る。セーブにも world_data.json にも書かず、書き直した文は state\\ に置いてロード時に当て直す。MOD を外せば世界は素のまま"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "settings": {
+    "RECENT_DEEDS": {
+      "type": "int",
+      "default": 5,
+      "min": 1,
+      "max": 20,
+      "label": {
+        "ja": "1回の編纂に渡す功績の数",
+        "en": "Deeds handed to one compilation"
+      },
+      "note": {
+        "ja": "まだ織り込んでいない功績が一度にこれより多く見つかったときは、直近のこの件数だけを渡す（絞ったことはログに残る）。古い功績は前回までの編纂で既に文面へ織り込まれている",
+        "en": "When more unwoven achievements than this are found at once, only the most recent ones are handed over (the log records the cut). Older deeds are already woven into the text by earlier compilations"
+      }
+    },
+    "MENTION_IN_STARTER": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "第一声で近況に触れてよいと断る",
+        "en": "Allow mentions in the opening line"
+      },
+      "note": {
+        "ja": "会話の第一声（conversation_starter）でだけ、話し相手の複製の profile に下の1行を足す。年代記のある土地でしか足さない。既定 OFF ＝ 素の挙動。案内文の差し替えだけで言及が増えるかを見てから入れる保険",
+        "en": "Adds the line below to a copy of the NPC the opening line is generated for, only in lands that have a chronicle. Off by default: try the rewritten descriptions alone first, this is the fallback"
+      }
+    },
+    "MENTION_TEXT": {
+      "type": "str",
+      "default": "この土地の近況は【土地情報】に書かれているとおりで、あなたも見聞きしている。会話の中で自然に触れてよい。",
+      "label": {
+        "ja": "第一声に足す1行",
+        "en": "The line added to the opening"
+      },
+      "note": {
+        "ja": "上の設定を入れたときに足される文。空にすると何も足さない",
+        "en": "The text added when the setting above is on. Leave it empty to add nothing"
+      }
+    },
+    "LOG_MATERIAL": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "実行時の形をログに残す",
+        "en": "Log the runtime shape"
+      },
+      "note": {
+        "ja": "Area.descriptions の実行時の形（鍵と長さ）を起動ごとに1回だけ out\\area_chronicle.log に出す。開発中の確認用",
+        "en": "Writes the runtime shape of Area.descriptions (keys and lengths) once per launch to out\\area_chronicle.log"
+      }
+    }
+  }
+}

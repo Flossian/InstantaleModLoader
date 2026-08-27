@@ -39,6 +39,10 @@
 係数がそれを超えると上限がゆるんで 6.0 で完全に外れる（`oneshot_cap`）。
 **圧倒的な格差だけが一撃を出せる**（最強の英雄 対 初期村の魔物、の側も
 魔王 対 駆け出し、の側も）。互角の殴り合いに一撃は無い。
+一撃の域では**素の計算値（素点 − 防御）をそのまま出す**（`overkill_final`）。
+割合のままだと相手の最大HPきっかりの数字しか出ず、
+強化した火力が見えない（実機の指摘）。相手はどのみち落ちる域なので、
+素の大きさで過剰殺傷を表現しても釣り合いは壊れない。
 攻撃面の成長は実質武器だけなので（GAME.md §2.17）、ここを切ると
 店とクラフトの遊びが死ぬ。
 傾きが設定なのは、基礎値そのものが √武器 でしか伸びないから。
@@ -360,7 +364,8 @@ def mitigation(defense):
 
 def hit_fraction(entries, attacker_max_hp, defender_max_hp, defense,
                  out_mult=1.0, in_mult=1.0, base_value=None,
-                 attacker_level=None, defender_level=None, ally_floor=False):
+                 attacker_level=None, defender_level=None, ally_floor=False,
+                 with_raw=False):
     """1発が受け側の最大HPから持っていく割合。
 
     `entries` はその対象への `[(power, multiplier), ...]`
@@ -387,10 +392,13 @@ def hit_fraction(entries, attacker_max_hp, defender_max_hp, defense,
         if ally_floor:
             factor = max(1.0, factor)
     gap = level_gap(attacker_level, defender_level)
-    fraction = (band_sum * factor * level_multiplier(gap)
-                * (1.0 - mitigation(defense))
-                * out_mult * in_mult)
-    return max(MIN_FRACTION, min(oneshot_cap(factor, gap), fraction))
+    raw = (band_sum * factor * level_multiplier(gap)
+           * (1.0 - mitigation(defense))
+           * out_mult * in_mult)
+    fraction = max(MIN_FRACTION, min(oneshot_cap(factor, gap), raw))
+    if with_raw:
+        return fraction, raw
+    return fraction
 
 
 def per_turn_amount(max_hp, power, intensity):
@@ -401,6 +409,26 @@ def per_turn_amount(max_hp, power, intensity):
     except Exception:
         scale = 1.0
     return max(1, int(round(max_hp * band * scale)))
+
+
+def overkill_final(fraction, raw_fraction, defender_max_hp, compressed):
+    """一撃の域（割合が 1.0 に達した）は、同じ式の上限を外した値で表現する。
+
+    割合で削ると、どれだけ強くても「相手の最大HPきっかり」までしか数字が
+    出ず、強化したキャラで格下を払う爽快感が消える（実機の指摘）。
+    かといって素の計算値（素点 − 防御）を借りると、普段 200〜300 の画面に
+    突然 1000 超が出て**物差しが途切れる**（これも実機の指摘。版6の誤り）。
+    同じ圧縮式の丸める前の値なら、数字は普段の帯と地続きのまま
+    相手の HP を大きく超える ― 例: 英雄(基礎896) → スライム(HP64) の normal は
+    割合 5.85 → 374 のダメージ（撃破）。過剰殺傷が見え、武器とレベルで伸びる。
+    """
+    if fraction >= 1.0 and isinstance(raw_fraction, (int, float)) \
+            and raw_fraction > 1.0:
+        try:
+            return max(compressed, int(round(defender_max_hp * raw_fraction)))
+        except Exception:
+            return compressed
+    return compressed
 
 
 def read_field(holder, name, default=None):
@@ -773,14 +801,16 @@ def apply(ctx):
             # 仲間の手は基礎値が取れない（§2.69）。max_hp の代用を 1.0 で
             # 底上げして、HP の低い仲間が無力に見えないようにする。
             ally_floor = (base_value is None and action["side"] == ALLY_SIDE)
-            fraction = hit_fraction(entries, attacker_max or defender_max,
-                                    defender_max, defense,
-                                    out_mult=out_mult, in_mult=in_mult,
-                                    base_value=base_value,
-                                    attacker_level=attacker_level,
-                                    defender_level=defender_level,
-                                    ally_floor=ally_floor)
+            fraction, raw_fraction = hit_fraction(
+                entries, attacker_max or defender_max,
+                defender_max, defense,
+                out_mult=out_mult, in_mult=in_mult,
+                base_value=base_value,
+                attacker_level=attacker_level,
+                defender_level=defender_level,
+                ally_floor=ally_floor, with_raw=True)
             final = max(1, int(round(defender_max * fraction)))
+            final = overkill_final(fraction, raw_fraction, defender_max, final)
             write("hit: {} -> {} {} raw={} vanilla={} base={} lv={}->{} "
                   "fraction={:.3f} final={}{}{}".format(
                       attacker_name, defender_name,

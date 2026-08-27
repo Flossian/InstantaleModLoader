@@ -1644,7 +1644,12 @@ player_data["area_history"] = {
 | `achievements` | その土地で成した事の文章（LLM が書いたもの）の配列 |
 
 - `achievements` と `residency` は**会話にもそのまま渡っている**。
-  会話5関数のうち3つが `area_residency` / `area_achievements` を引数で受け取る（§2.24）
+  会話5関数のうち3つが `area_residency` / `area_achievements` を引数で受け取る（§2.24）。
+  ただしこの named 引数は実測で**常に None**（`317_` のデバッグログ、13回全部。
+  2026-08-24〜27）。実体は別経路で、system メッセージの【プレイヤーキャラの情報】へ
+  「この土地での活躍: ['傭兵エリスが…']」（Python 配列の repr）の形で直接描画される
+- `achievements` には依頼クリアごとに1〜2文の要約が入り、
+  「湿地の霧は晴れ」の粒度で**土地の状態変化まで**書かれる（復号した実セーブ19件）
 - **読み書きするヘルパは無い**（`lawfulness` を名前に含む関数が存在しない）。値を直接触るしかない
 - 減らしているのは LLM の判定側（プロンプトのスキーマに `lawfulness_loss` がある）。
   どの行為でいくつ減るかは未特定
@@ -1975,9 +1980,20 @@ llm_manager:conversation_facilitator_after_retrieval(..., retrieved_knowledge)
 > `..._after_retrieval` の3つは、いま居る土地の `area_residency` と
 > `area_achievements`（§2.20）を引数で直接受け取っている（`targets.txt` の実シグネチャ。
 > `*_in_quest` の2つには無い）。
-> 成した事の素の文章は既にプロンプトへ載っている見込みが高いので、
-> 知識を差し込む MOD が同じ素材を言い換えて足すと二重になる（`317_` はこの理由で、
+> **成した事の素の文章はプロンプトへ載っている（確定）。**
+> Epic 版 `output_data\` 19,415件（2026-08-27 分まで）の突き合わせで、
+> system メッセージの【プレイヤーキャラの情報】に「この土地での活躍: [...]」の形で
+> 毎回描画されていた（計3,119件: `conversation_facilitator` 1,969 /
+> `conversation_starter` 924 / `conversation_join_message` 114 /
+> `conversation_recruitment_response` 76 / `conversation_facilitator_after_retrieval` 19 /
+> `shopping_negotiator` 17）。named 引数の側は常に None（§2.20）。
+> だから知識を差し込む MOD が同じ素材を言い換えて足すと二重になる（`317_` はこの理由で、
 > 素材の要約ではなく編纂の結果だけを注入している）。
+> **載っていても言及はされない。**
+> 討伐系の活躍ブロック入り会話775件で、応答が功績の語句を自発的に使った回は 0/775
+> （プレイヤーが先に口にした回も 0。言い換えは拾えないので参考値）。
+> `321_area_chronicle` はこの実測を根拠に、素材の載せ方ではなく
+> `Area.descriptions` の原文の側を書き直している。
 
 ### 2.25 会話の記憶の実体（`current_log` / `relationship` / `conversation_resolver`）
 

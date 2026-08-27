@@ -10,7 +10,7 @@
     "en": "Stops evenly-matched battles from ending in one hit. Damage now takes a share of the target's health decided by how heavy the AI referee judged the blow: equals trade five to eight blows and a boss's finisher hurts badly without killing you from full health. One-shots still exist where they should. A legendary hero swats a starter-village slime in one blow, and an overwhelming foe can do the same to a novice; only a real gulf in strength allows it. Weapons matter more than ever: each weapon tier visibly cuts how many blows the same enemy takes (a top blade needs 8 where a starter knife needs 20), and armor still softens what you take. Poison, curses and stat drops the referee describes now actually change the numbers, and a Guard entry in the skill list (or typing something defensive) halves what you take until your next move",
     "ja": "互角の戦闘が一撃で終わらなくなる。ダメージは「相手の体力を何割削るか」で決まるようになり、その割合は AI の審判が裁いた攻撃の重さで動く。同格とは5〜8回の殴り合いになり、ボスの大技は手痛いが満タンから即死はしない。一撃が出るべき場面では出る。最強の英雄は初期村の魔物を一撃で払い、圧倒的な強敵は駆け出しを一撃で沈める。格がまるごと離れたときだけそうなる。武器はこれまで以上に物を言い、一段いい武器に替えるたびに同じ相手への手数が目に見えて減る（同格相手で、最強の剣なら8手、初期装備級なら20手）。防具は受けるダメージを減らす。審判が語ってくる毒や能力低下がちゃんと数字に効くようになり、スキル一覧に加わる「防御」（自由入力で防御的に動いてもよい）で次の行動まで被ダメージを半分にできる"
   },
-  "version": "5",
+  "version": "7",
   "author": "R01/Flossian",
   "settings": {
     "BAND_WEAK": {
