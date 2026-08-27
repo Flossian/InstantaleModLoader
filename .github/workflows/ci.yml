@@ -82,6 +82,15 @@ jobs:
       - name: check_mods
         run: python tools/check_mods.py
 
+      # docs\MODS.md と docs\MODLIST.md は生成物（TECH.md §2.7）。DOC.md や
+      # mod.json を直して生成し忘れると、配布物の中の説明だけが古いまま通る。
+      # 読む人には見分けが付かないので、ここで止める。
+      - name: build_mods --check
+        run: python tools/build_mods.py --check
+
+      - name: list_mods --check
+        run: python tools/list_mods.py --check
+
       # tools/tests/test_*.py は全てゲーム不要（偽のゲームを差し込んで走る）。
       # **1本でも落ちたら失敗**。除外一覧は置かない ― 一度置くと、そこに
       # 積まれたものが直ったかどうか誰も見なくなる。

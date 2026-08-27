@@ -11,7 +11,7 @@ Instantale（Epic版 / Nuitka standalone / CPython 3.10）に外部から Python
 | TECH.md（本書） | このローダで MOD をどう書くか。事実とルール。他のゲームにも通じる話 |
 | [GAME.md](GAME.md) | Instantale が何をしているか。このゲーム限定の事実 |
 | [README.md](README.md) | 遊ぶだけの人向け。ローダと GUI の使い方 |
-| [MODS.md](MODS.md) | 同梱している MOD 一本ずつの説明・設定・困ったとき |
+| [MODS.md](MODS.md) | 同梱している MOD 一本ずつの説明・設定・困ったとき。`tools/build_mods.py` が各 MOD の `DOC.md` から綴じる |
 | [MODLIST.md](MODLIST.md) | 同梱 MOD の早見表。`tools/list_mods.py` が `mod.json` から組む |
 | [VERIFICATION.md](VERIFICATION.md) | 検証状況・未確認項目・その確認手順（§1 / §3 / §4） |
 | [VERIFICATION_LOG.md](VERIFICATION_LOG.md) | 実機・実データでの検証記録（§2） |
@@ -23,6 +23,7 @@ GAME.md と分けているのは、**ゲームが更新されて食い違うの�
 |---|---|
 | 事実とルール（ローダの作法） | 本書 |
 | 実機で確かめた「ゲームがどう動いているか」 | `ui.py` / `frames.py` と GAME.md |
+| 遊ぶ側から見た1本ぶんの説明・設定・困ったとき | その MOD の `DOC.md`（§2.7） |
 | 個々の MOD の設計判断 | その MOD の入口ファイルの docstring |
 
 > 節番号は他の md とソースから参照されている。欠番になっても詰めない。
@@ -32,7 +33,7 @@ GAME.md と分けているのは、**ゲームが更新されて食い違うの�
 | 項目 | 節 |
 |---|---|
 | なぜ注入方式なのか / ファイル構成 / 探索と適用順 / 注入のタイミング / ログの世代管理 | §1 |
-| 検査・オフライン検証・注入のコマンド / CI / 開発中の MOD | §2 |
+| 検査・オフライン検証・注入のコマンド / CI / 開発中の MOD / MOD の文書 | §2 |
 | **初めて MOD を書く**（対象名の入手 → 雛形 → 検査 → 注入 → 確認） | §3.0 |
 | 最小の形（`mod.json` と `ctx`）／`safe=True` | §3.1 |
 | 適用順と依存の宣言／複数 MOD の重なり／伏せ方 | §3.2 / §3.3 |
@@ -95,6 +96,7 @@ tools/watch.bat, watcher.py  ゲームの起動を監視して自動注入（GUI
 tools/injector.py         PE解析 → x64スタブ → CreateRemoteThread（--unload で剥がす）
 tools/logrotate.py        out/*.log の世代管理（注入 = 1世代の境目）
 tools/check_mods.py       静的検査（デコレータ・宣言と実体のずれ）
+tools/build_mods.py       docs/MODS.md を各 MOD の DOC.md から綴じる（--check で照合）
 tools/list_mods.py        docs/MODLIST.md を mod.json から組む（--check で照合）
 tools/llm_ctx_probe.py    ローカル LLM の窓を実測して最適値を出す（127_ 用）
 tools/epithet_probe.py    ローカル LLM で二つ名を引いて偏りを測る（317_ 用）
@@ -112,6 +114,7 @@ runtime/instantale_modloader/
     llm.py        LLM へ出ていく文章の捕まえ方・1問だけ聞く口（§5.3）
     recon.py      実行時リコン（モジュール構造ダンプ）
 runtime/mods/     MOD 本体（1バグ・1機能 = 1フォルダ。入口は mod.json が名指し）
+    <フォルダ>/DOC.md      遊ぶ側から見た説明（§2.7）。docs/MODS.md へ綴じられる
     load_order.json        適用順（"order"）と無効一覧（"disabled"）
     load_order.local.json  手元だけの適用順。在れば上に優先（git 管理外）
 settings/         変えたものだけ（無くてよい）
@@ -217,6 +220,8 @@ MOD が持つ永続データはそもそも `out/` に来ない（`state/`。§3
 # 1. 静的検査（構文だけでなくデコレータと引数の整合も見る）
 python -m compileall -q runtime tools
 python tools/check_mods.py
+python tools/build_mods.py --check   # docs/MODS.md が DOC.md とずれていないか（§2.7）
+python tools/list_mods.py --check    # docs/MODLIST.md が mod.json とずれていないか
 
 # 2. オフライン検証（ゲーム不要）。CI と同じく全件を走らせる
 Get-ChildItem tools/tests/test_*.py | Sort-Object Name | ForEach-Object {
@@ -282,7 +287,7 @@ Windows で動かすのは、このプロジェクトが Windows 専用だから
 | ジョブ | Python | 見るもの |
 |---|---|---|
 | `game-python` | 3.10 | `compileall runtime`。ゲームの中に入るコードが本物の 3.10 で通るか |
-| `checks` | 3.13 | `compileall` / `check_mods.py` / `tools/tests/test_*.py` 全件 |
+| `checks` | 3.13 | `compileall` / `check_mods.py` / 生成物の照合（`build_mods.py --check` / `list_mods.py --check`）/ `tools/tests/test_*.py` 全件 |
 | `packaging` | 3.13 | `make_dist.bat` が通ること、zip に `LICENSE` / `NOTICE` が入っていること |
 
 - 除外一覧は置いていない。1本でも落ちたら CI が失敗する
@@ -321,9 +326,13 @@ Windows で動かすのは、このプロジェクトが Windows 専用だから
 | `load_order.json` / 配布物 / CI / `docs/` の7冊 | | × |
 | 開発を終了したら | `discontinued/` へ移す（§2.6.1） | |
 
-文書は MOD のフォルダに `DOC.md` として置く（遊び方も検証の記録も、`docs/` の7冊ではなくそこへ）。
-9xx は配布物に入らないので、その1枚も外へ出て行かない。
-リリースのときに各節を元の場所へ戻す。
+文書はどの MOD もフォルダの `DOC.md` に置く（§2.7）。
+9xx が他と違うのは、`load_order.json` に載らないので `docs/MODS.md` へ綴じられない点だけ。
+遊び方はその1枚に書いておけば、正式な番号へ振り直して順序ファイルに載せた時点で
+そのまま MODS.md に載る（移し替える作業は要らない）。
+
+`docs/` の7冊へ入れられないぶん — 検証の一覧に載せる行、未確認項目と確認手順 — も
+同じ1枚に書いておき、リリースのときにそこだけ戻す。
 どの節をどこへ戻すかは `DOC.md` の先頭に表として持たせておく。
 
 ローダ側の扱いは `is_wip()` の1箇所で、順序ファイルに名前があれば読み込み、無ければ黙って外す
@@ -351,6 +360,66 @@ MOD を探している4者（`discover()` / `make_dist.bat` / CI の `compileall
 終了の経緯は DOC.md の先頭に節を1つ作って書く（`903_mini_quest` が実例）。
 書くのは「なぜ終了したか / どこまで動いていたか / 残っている症状 / 再開するなら何から」の4点。
 どれか1つでも欠けると、半年後に読んだ人が同じ調査をやり直すことになる。
+
+### 2.7 MOD の文書（`DOC.md`）
+
+遊ぶ側から見た1本ぶんの説明は、その MOD のフォルダの `DOC.md` に置く。
+`docs/MODS.md` はそれを綴じ直したもので、`tools/build_mods.py` が組む。
+
+```
+runtime/mods/316_bounty_hunter/
+    mod.json
+    bounty_hunter.py
+    DOC.md      ← 説明・設定・困ったとき
+```
+
+```powershell
+python tools\build_mods.py            # docs\MODS.md を書き出す
+python tools\build_mods.py --check    # ずれていたら 1 で終わる（CI が呼ぶ）
+```
+
+**`docs/MODS.md` は生成物**。手で書き換えても次の生成で消える（MODLIST.md と同じ）。
+直す先はその MOD の `DOC.md`。
+
+コードの隣に置くのは、MOD を1本足すのに 2000 行の正しい位置を探さずに済ませるため。
+番号を振り直すときも、フォルダごと動かせば文書がついてくる。
+
+#### 書き方
+
+1行目は名乗りで、フォルダ名と一致していないと生成が止まる。
+
+```markdown
+# `316_bounty_hunter`: 手配されていると追手が来る
+
+（本文）
+
+| 設定 | 意味 |
+| --- | --- |
+
+## 困ったとき
+
+| 症状 | やること |
+|---|---|
+```
+
+綴じるときに見出しが2つ下がる（`#` → `###`、`##` → `####`）ので、
+中の小見出しは `##` で書く。コードフェンスの中は触らない。
+
+計測（2xx）だけは節ではなく表の1行になる。見出しに説明を続けず、本文を1行だけ書く。
+
+```markdown
+# `217_probe_area_move`
+
+エリア移動の未実測部分を録る。……
+```
+
+#### 並び
+
+`docs/MODS.md` に綴じる順は `tools/build_mods.py` の `BANDS` が持つ。
+`1xx` はフォルダ名順ではなく読む順に手で並べてあるので、規則では出せない。
+
+MOD を足したら `load_order.json` と `BANDS` の両方に足す。
+片方だけだと `--check` が止める（`load_order.json` を universe として突き合わせる）。
 
 ---
 
@@ -428,10 +497,15 @@ scripts.functions:get_npc_employ_price(npc_difficulty_level)
 ```powershell
 python -m compileall -q runtime
 python tools\check_mods.py
+python tools\build_mods.py --check
+python tools\list_mods.py --check
 ```
 
 `MISMATCH` が出たら直す（`note` は後回しでよい）。
 ここで捕まるのはどれも構文としては正しいので `compileall` では出ない（§2.3）。
+
+後ろの2本は文書のずれを見る。
+`DOC.md` を書いて `BANDS` に足すまでを済ませていれば通る（§2.7）。
 
 #### 手順 4. 注入して確かめる
 
@@ -617,7 +691,7 @@ GUI は MOD の一覧を作るのにコードを1行も走らせずに済む
 `"name": "Some mod"` のように文字列1つでも書ける。
 
 `name` は一覧に並べる名前なので短く保つ（目安は全角12文字／半角30文字）。
-何をする MOD かは `description`、設計判断は入口ファイルの docstring。
+何をする MOD かは `description`、遊び方は `DOC.md`（§2.7）、設計判断は入口ファイルの docstring。
 
 > これは書き方の約束で、検査はしない。
 > 以前は長さを検査していたが外した。
