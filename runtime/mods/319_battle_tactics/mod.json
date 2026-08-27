@@ -3,8 +3,8 @@
   "api": 1,
   "kind": "feature",
   "name": {
-    "en": "Battle tactics",
-    "ja": "戦闘の駆け引き"
+    "en": "Battle rebalance",
+    "ja": "戦闘のバランス調整とバフ・デバフの有効化"
   },
   "description": {
     "en": "Stops evenly-matched battles from ending in one hit. Damage now takes a share of the target's health decided by how heavy the AI referee judged the blow: equals trade five to eight blows and a boss's finisher hurts badly without killing you from full health. One-shots still exist where they should. A legendary hero swats a starter-village slime in one blow, and an overwhelming foe can do the same to a novice; only a real gulf in strength allows it. Weapons matter more than ever: each weapon tier visibly cuts how many blows the same enemy takes (a top blade needs 8 where a starter knife needs 20), and armor still softens what you take. Poison, curses and stat drops the referee describes now actually change the numbers, and a Guard entry in the skill list (or typing something defensive) halves what you take until your next move",

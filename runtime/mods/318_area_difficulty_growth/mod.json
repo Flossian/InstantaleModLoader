@@ -7,47 +7,47 @@
     "ja": "依頼クリアで難易度上昇"
   },
   "description": {
-    "en": "Clearing quests raises the difficulty of the quests that land offers. Count the clears per land, turn them into steps, and add the step to the difficulty the world was built with. Nothing else is touched: the game already derives the shop stock, the item prices, the enemies, the rewards and the talent points from that one number, so they all follow. Measured on three real saves: every item in a shop carries a value that is one of that land's quest difficulties, completed quests included",
-    "ja": "依頼を片付けるたび、その土地で受けられる依頼の難易度が上がっていく。土地ごとにクリア回数を数え、段数に直して素の難易度へ乗せる。触るのはその1つの数だけで、店の在庫・値段・敵・報酬・才能はゲーム自身がそこから決めているので後から付いてくる。実セーブ3世界・店23軒で確かめた根拠は、店に並ぶ品の value がその土地の依頼の難易度以外の数を取らないこと（完了済みの依頼も母数に入る）"
+    "en": "Clearing a quest raises the difficulty of the quests that land offers. Every clear draws a random step and adds it, up to a cap. Nothing else is touched: the game already derives the shop stock, the item prices, the enemies, the rewards and the talent points from that one number, so they all follow. Measured on a live game: a land raised to 23 produced level 24 enemies, and its shop stocked items of a value the plain save cannot produce",
+    "ja": "依頼を1つ片付けるたびに、その土地で受けられる依頼の難易度が上がる。上がる量は毎回ランダムで、上限まで積み上がる。触るのはその1つの数だけで、店の在庫・値段・敵・報酬・才能はゲーム自身がそこから決めているので後から付いてくる。実機で確認済み ― 難易度23 まで上げた土地でレベル24 の敵が出て、その土地の店に素のセーブからは出ない value 33 の品が並んだ"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "after": [
     "307_area_move_dungeon",
     "312_shop_restock"
   ],
   "settings": {
-    "CLEARS_PER_STEP": {
-      "type": "int",
-      "default": 3,
-      "min": 1,
-      "max": 99,
-      "label": {
-        "ja": "何回クリアしたら1段上がるか",
-        "en": "Clears needed for one step"
-      },
-      "note": {
-        "ja": "既定 3。その土地で受けた依頼を片付けた回数で数える。受けた場所ではなく依頼の出所の土地に付くので、道中で受けた依頼を別の町で終わらせても出所の土地が育つ",
-        "en": "Default 3. Counts quests cleared for that land. A quest belongs to the land that posted it, so finishing it elsewhere still credits the land it came from"
-      }
-    },
-    "STEP_SIZE": {
+    "STEP_MIN": {
       "type": "int",
       "default": 3,
       "min": 0,
       "max": 76,
       "label": {
-        "ja": "1段あたりの上昇量",
-        "en": "Difficulty added per step"
+        "ja": "1回のクリアで上がる最小",
+        "en": "Smallest rise per clear"
       },
       "note": {
-        "ja": "既定 3。難易度は敵のレベル（およそ 難易度+1）と能力値の両方を決めるので、+3 はレベル3ぶん。0 にすると上がらない",
-        "en": "Default 3. Difficulty sets both the level of the enemies (about difficulty+1) and their attributes, so +3 is three levels. 0 = no growth"
+        "ja": "既定 3。依頼を1つ片付けるたびに、最小〜最大の間で乱数を引いて積む。難易度は敵のレベル（およそ 難易度+1）と能力値の両方を決めるので、+3 はレベル3ぶん。最大と同じ値にすると乱数を回さず固定になる",
+        "en": "Default 3. Every quest cleared draws a number between this and the maximum and adds it. Difficulty sets both the level of the enemies (about difficulty+1) and their attributes, so +3 is three levels. Set it equal to the maximum for a fixed step"
+      }
+    },
+    "STEP_MAX": {
+      "type": "int",
+      "default": 10,
+      "min": 0,
+      "max": 76,
+      "label": {
+        "ja": "1回のクリアで上がる最大",
+        "en": "Largest rise per clear"
+      },
+      "note": {
+        "ja": "既定 10。最小より小さい値を入れても最小まで引き上げて扱う（幅が逆さまでも壊れない）",
+        "en": "Default 10. A value below the minimum is treated as the minimum, so an inverted range does not break anything"
       }
     },
     "MAX_BONUS": {
       "type": "int",
-      "default": 30,
+      "default": 60,
       "min": 0,
       "max": 76,
       "label": {
@@ -55,8 +55,8 @@
         "en": "Most a single land can grow"
       },
       "note": {
-        "ja": "既定 30。素の難易度にこれ以上は乗らない（既定の3回ごと+3なら、30回のクリアで頭打ち）。最初の町（難易度3〜5）が最果ての土地（67〜73）を追い越さないための歯止め",
-        "en": "Default 30. The bonus stops here (with the default 3 per 3 clears, that is 30 clears). It keeps the starting town, built at difficulty 3-5, from overtaking the far lands at 67-73"
+        "ja": "既定 60。素の難易度にこれ以上は乗らない（1回あたり平均 6.5 なら 9回ほどで頭打ち）。最初の町（難易度3〜5）が最果ての土地（67〜73）を追い越さないための歯止め。0 にすると上がらない",
+        "en": "Default 60. The bonus stops here (averaging 6.5 per clear, that is about nine clears). It keeps the starting town, built at difficulty 3-5, from overtaking the far lands at 67-73. 0 = no growth"
       }
     },
     "DIFFICULTY_LIMIT": {
@@ -109,8 +109,8 @@
         "en": "The line shown when a land grows"
       },
       "note": {
-        "ja": "依頼を片付けて段が上がった回にだけ出る。報酬と才能の文章が流れ切ってから出す。空にすると何も出さない",
-        "en": "Shown only on the clear that raises a step, after the reward and talent text has finished. Leave it empty for no line"
+        "ja": "依頼を片付けて難易度が上がった回に出る（上限に達した後は出ない）。報酬と才能の文章が流れ切ってから出す。空にすると何も出さない",
+        "en": "Shown on every clear that raises the difficulty, and not once the cap is reached, after the reward and talent text has finished. Leave it empty for no line"
       }
     }
   }

@@ -40,21 +40,26 @@
       └ クラフト   在庫と戦利品の value が上がる → 素材の値段が上がる
                      → ItemCraftManager.calculate_modification(item_type, item_price)
 
-いちばん下のクラフトだけ、引数の名前からの読みで実測がまだ無い。
-`221_probe_item_level` がその1本を録る（VERIFICATION.md §3.38）。
+4つとも実機で確かめてある（VERIFICATION_LOG.md §2.67）。
+クラフトは `成果物の値段 = 素材の合計値段 × calculate_modification が返す倍率` で、
+素材が高いほど成果物が良くなる（GAME.md §2.14.2）。
 
 ## 上げ方
 
-土地ごとにクリア回数を数え、段数に直して素の難易度へ乗せる:
+**依頼を1つ片付けるたびに、STEP_MIN〜STEP_MAX の乱数を引いて積む:**
 
-    段     = クリア回数 // CLEARS_PER_STEP
-    上昇量 = min(MAX_BONUS, 段 * STEP_SIZE)
-    難易度 = min(素の難易度 + 上昇量, 上限)
+    クリア1回ごと   上昇量 += randint(STEP_MIN, STEP_MAX)   （上限 MAX_BONUS）
+    難易度          = min(素の難易度 + 上昇量, 上限)
 
-**差分を足していくのではなく、毎回「素の値 + いまの上昇量」を書く。**
+乱数なので**上昇量はクリア回数から計算し直せない**。
+だから上昇量そのものを控えに持つ（`bonus`）。
+ここが固定値だった頃との唯一の構造の違いで、
+控えを失うとその土地の育ちが戻るのはこのため。
+
+**依頼へ書くときは差分を足さず、毎回「素の値 + いまの上昇量」を書く。**
 何度走っても同じ値に落ち着き、途中で設定を変えても
-「そのとき正しい高さ」へ寄る（差分を足す形だと、取りこぼしと二重掛けが
-どちらも黙って積み上がる）。
+「そのとき正しい高さ」へ寄る（依頼の側へ差分を足す形だと、
+取りこぼしと二重掛けがどちらも黙って積み上がる）。
 
 素の値の控え（`base`）は、その依頼を初めて触ったときの難易度そのもの。
 **新しく生まれた依頼も素の帯で生まれる**ので、引き算は要らない
@@ -103,6 +108,7 @@
 `state/` の約束どおり（TECH.md §3.11）。
 """
 
+import random
 import sys
 import threading
 import time
@@ -124,9 +130,9 @@ GAME_DIFFICULTY_MAX = 76
 GAME_DIFFICULTY_MIN = 0
 
 # GUI から変えられる値（同じ名前と既定値が mod.json にもある。TECH.md §3.8）。
-CLEARS_PER_STEP = 3
-STEP_SIZE = 3
-MAX_BONUS = 30
+STEP_MIN = 3
+STEP_MAX = 10
+MAX_BONUS = 60
 DIFFICULTY_LIMIT = 76
 SCOPE = "all"
 ROLLBACK = False
@@ -149,20 +155,28 @@ def apply(ctx):
     }
 
     # ------------------------------------------------------------ 設定の読み
-    def per_step():
-        return max(1, int(CLEARS_PER_STEP))
+    def step_range():
+        """1回のクリアで引く幅。上下が逆に設定されても壊さない。"""
+        low = max(0, int(STEP_MIN))
+        return low, max(low, int(STEP_MAX))
 
-    def step_size():
-        return max(0, int(STEP_SIZE))
+    def draw_step():
+        """1回ぶんの上昇量を引く。幅が無ければ乱数を回さない。"""
+        low, high = step_range()
+        return low if low == high else random.randint(low, high)
 
     def max_bonus():
         return max(0, int(MAX_BONUS))
 
-    def bonus_for(cleared):
-        """クリア回数に見合う上昇量。`ROLLBACK` のときは常に 0。"""
+    def want_of(record):
+        """その土地にいま乗せる上昇量。`ROLLBACK` のときは常に 0。
+
+        **積んだ値を読むだけで、計算し直さない**（乱数なので再現できない）。
+        上限だけはここで当てるので、`MAX_BONUS` を下げれば次の寄せ直しで下がる。
+        """
         if ROLLBACK:
             return 0
-        return min(max_bonus(), (max(0, int(cleared)) // per_step()) * step_size())
+        return max(0, min(max_bonus(), record["bonus"]))
 
     def limits():
         """難易度の下限・上限。ゲームの値と設定の低いほうを採る。"""
@@ -194,7 +208,7 @@ def apply(ctx):
     def ordered(record):
         """並びを固定して書く（差分を読むとき、順が動くと全行が動いて見える）。"""
         out = {}
-        for name in ("cleared", "step", "bonus", "day"):
+        for name in ("cleared", "bonus", "day"):
             if record.get(name) is not None:
                 out[name] = record[name]
         base = record.get("base")
@@ -322,15 +336,15 @@ def apply(ctx):
         with lock:
             existed = isinstance(bucket_of(key).get(str(area_id)), dict)
             record = record_of(key, area_id)
-            want = bonus_for(record["cleared"])
+            want = want_of(record)
             if entries is None:
                 entries = quests_of(world, area_id)
             if not entries:
                 # 生成前の土地。控えだけ進めて次の機会に寄せる。
-                if want != record["bonus"]:
+                if want:
                     write("{}: 土地 {} に依頼がまだ無い（上昇量 {} は次の機会に）"
                           .format(why, area_id, want))
-                return record["bonus"], 0
+                return want, 0
 
             low, high = limits()
             base = record["base"]
@@ -381,8 +395,6 @@ def apply(ctx):
                 # （`state/` に「何も起きていない」行が増えるだけになる）。
                 return 0, 0
 
-            record["step"] = max(0, int(record["cleared"])) // per_step()
-            record["bonus"] = want
             record["base"] = base
             day = day_of(world)
             if day is not None:
@@ -418,20 +430,28 @@ def apply(ctx):
     def bonus_of(key, area_id):
         """その土地にいま乗せる上昇量。控えは書かない（読むだけ）。"""
         with lock:
-            return bonus_for(record_of(key, area_id)["cleared"])
+            return want_of(record_of(key, area_id))
 
     # ------------------------------------------------------------ 数える
     def count_clear(key, area_id):
-        """クリアを1回数える。段が上がったなら True を返す。"""
+        """クリアを1回数え、乱数を引いて積む。上がったなら True を返す。
+
+        `ROLLBACK` のあいだは数えない
+        （戻している最中に積むと、戻し終わらない）。
+        """
+        if ROLLBACK:
+            return False
         with lock:
             record = record_of(key, area_id)
-            before = bonus_for(record["cleared"])
+            before = want_of(record)
+            drawn = draw_step()
             record["cleared"] += 1
-            record["step"] = record["cleared"] // per_step()
-            after = bonus_for(record["cleared"])
+            record["bonus"] = min(max_bonus(), max(0, record["bonus"]) + drawn)
+            after = want_of(record)
             save(key, area_id, record)
-            write("clear: 土地 {} は {} 回目（{}回ごとに +{}、いま +{}）"
-                  .format(area_id, record["cleared"], per_step(), step_size(), after))
+            low, high = step_range()
+            write("clear: 土地 {} は {} 回目（{}〜{} から +{} を引いて、いま +{}）"
+                  .format(area_id, record["cleared"], low, high, drawn, after))
             return after > before
 
     # ------------------------------------------------------------ フック
@@ -592,10 +612,11 @@ def apply(ctx):
                     settlement_structure_description, area_description,
                     raised, *args, **kwargs)
 
-    ctx.log("area difficulty growth: {} clear(s) per +{}, up to +{} (limit {}), "
+    ctx.log("area difficulty growth: +{}..{} per clear, up to +{} (limit {}), "
             "scope={}{}; log goes to out/{}".format(
-                per_step(), step_size(), max_bonus(), int(DIFFICULTY_LIMIT),
-                SCOPE, ", ROLLBACK" if ROLLBACK else "", LOG_BASENAME))
+                step_range()[0], step_range()[1], max_bonus(),
+                int(DIFFICULTY_LIMIT), SCOPE,
+                ", ROLLBACK" if ROLLBACK else "", LOG_BASENAME))
 
 
 def _int(value, fallback):

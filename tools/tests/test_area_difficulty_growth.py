@@ -6,17 +6,17 @@
 偽の app / World / Quest / QuestEndManager / DisplayQuestChoice / Clock を差し込み、
 次を確認する。
 
-  数える     … クリアの回数はその依頼の**出所の土地**に付く。段に足りなければ上げない
+  数える     … クリア1回ごとに STEP_MIN〜STEP_MAX の乱数を積む。出所の土地に付く
+  幅         … 引く値は必ず最小〜最大の中。上下を逆に設定しても壊れない
   ロード     … セーブを読み込んだ直後に、世界じゅうの土地をまとめて寄せ直す
   生成       … 新しい依頼は素の帯で生まれるので、作らせたその場で上げ直す
-  上げる     … 段が上がると、その土地の依頼が素の値 + 上昇量になる。両方の格納先に書かれる
+  上げる     … その土地の依頼が「素の値 + 積んだ上昇量」になる。世界の雛形には書かない
   他の土地   … 数えた土地以外は動かない
-  二重掛け   … 上がった帯の中で生まれた依頼に、上昇量が二度乗らない
   上限       … MAX_BONUS と難易度の上限を超えない
   範囲       … SCOPE=incomplete では完了済みの依頼を動かさない
   戻す       … ROLLBACK を入れると素の値へ戻り、控えごと消える
   控え       … `state/area_difficulty/<世界名>.json` に世界ごとに分かれて残る
-  知らせ     … 段が上がった回だけ1行出る（報酬の文章が流れ切ってから）
+  知らせ     … 上がった回に1行ずつ出る。上限に達したら黙る
   安全       … 依頼の土地が読めない場面では何もしない
 """
 import importlib.util
@@ -236,6 +236,13 @@ class FakeCtx:
         return decorator
 
 
+def fixed(step, **rest):
+    """1回ぶんの上昇量を `step` に固定した設定。乱数を回さずに測るため。"""
+    settings = {"STEP_MIN": step, "STEP_MAX": step, "ANNOUNCE": ""}
+    settings.update(rest)
+    return settings
+
+
 def load_mod(path=MOD, name="area_difficulty_growth_mod"):
     spec = importlib.util.spec_from_file_location(
         name, path, submodule_search_locations=[os.path.dirname(path)])
@@ -382,22 +389,21 @@ print("318_area_difficulty_growth")
 
 # -- 数える ---------------------------------------------------------------
 reset()
-module, ctx = fresh({"CLEARS_PER_STEP": 3, "STEP_SIZE": 3, "ANNOUNCE": ""})
+module, ctx = fresh(fixed(3))
 app = make_world(BAND)
 end_quest(ctx, app, "1")
-check("1回では上がらない", difficulties(app, "0")[0] == [3, 4, 5],
-      difficulties(app, "0"))
+check("1回のクリアで上がる", difficulties(app, "0")[0] == [6, 7, 8],
+      difficulties(app, "0")[0])
 check("回数は控えに残る", (state_file() or {}).get("0", {}).get("cleared") == 1,
       state_file())
 
 end_quest(ctx, app, "2")
 end_quest(ctx, app, "3")
 raised, template = difficulties(app, "0")
-check("3回で1段上がる", raised == [6, 7, 8], raised)
+check("クリアのたびに積む", raised == [12, 13, 14], raised)
 check("世界の雛形には書かない", template == [3, 4, 5], template)
-check("段と上昇量が控えに残る",
-      (state_file() or {}).get("0", {}).get("step") == 1
-      and state_file()["0"].get("bonus") == 3, state_file())
+check("積んだ上昇量が控えに残る",
+      (state_file() or {}).get("0", {}).get("bonus") == 9, state_file())
 check("素の難易度を控えている",
       state_file()["0"].get("base") == {"1": 3, "2": 4, "3": 5},
       state_file()["0"].get("base"))
@@ -410,17 +416,15 @@ check("例外を出していない", not ctx.errors, ctx.errors)
 # 生成のその場で上げないと、いま作らせた依頼だけ素の難易度で差し出される。
 passed = search_quest(ctx, app, born_id="9", born_area="0", born_difficulty=4)
 check("生まれた依頼をその場で上げる",
-      app.world.quests["9"].difficulty == 7, app.world.quests["9"].difficulty)
-check("頼み文へ渡す難易度も上げる", passed == [7], passed)
+      app.world.quests["9"].difficulty == 13, app.world.quests["9"].difficulty)
+check("頼み文へ渡す難易度も上げる", passed == [13], passed)
 check("素の値はそのまま控える",
       state_file()["0"]["base"].get("9") == 4, state_file()["0"].get("base"))
 
-# もう1段上がると、生まれた依頼も一緒に上がる。
+# 次のクリアでは、生まれた依頼も一緒に上がる。
 end_quest(ctx, app, "9")
-end_quest(ctx, app, "1")
-end_quest(ctx, app, "2")
-check("次の段では新旧そろって上がる",
-      difficulties(app, "0")[0] == [9, 10, 11, 10], difficulties(app, "0")[0])
+check("次のクリアでは新旧そろって上がる",
+      difficulties(app, "0")[0] == [15, 16, 17, 16], difficulties(app, "0")[0])
 
 # -- 受注 -----------------------------------------------------------------
 # ロードすると難易度は素へ戻る（セーブに残らない）。受注の入口で書き直す。
@@ -429,14 +433,46 @@ for quest in app.world.quests.values():
         quest.difficulty = state_file()["0"]["base"][quest.id]
 check("ロード直後は素の難易度", difficulties(app, "0")[0] == [3, 4, 5, 4],
       difficulties(app, "0")[0])
-check("受注の直前に書き直す", accept_quest(ctx, app, "1") == 9,
+check("受注の直前に書き直す", accept_quest(ctx, app, "1") == 15,
       accept_quest(ctx, app, "1"))
+
+# -- 幅 -------------------------------------------------------------------
+# 引く値は必ず最小〜最大の中。乱数そのものは信用してよいので、
+# 見るのは「幅から出ないこと」と「幅が逆でも壊れないこと」だけ。
+reset()
+module, ctx = fresh({"STEP_MIN": 3, "STEP_MAX": 10, "ANNOUNCE": ""})
+app = make_world(BAND)
+steps = []
+for _ in range(40):
+    before = (state_file() or {}).get("0", {}).get("bonus", 0)
+    end_quest(ctx, app, "1")
+    steps.append(state_file()["0"]["bonus"] - before)
+check("引いた値が 3〜10 に収まる",
+      all(3 <= s <= 10 for s in steps[:8]), steps[:8])
+check("同じ値ばかりにならない", len(set(steps[:8])) > 1, steps[:8])
+check("上限（既定60）で止まる", state_file()["0"]["bonus"] == 60,
+      state_file()["0"]["bonus"])
+check("上限に達したら以後は積まない", steps[-1] == 0, steps[-3:])
+
+reset()
+module, ctx = fresh({"STEP_MIN": 10, "STEP_MAX": 3, "ANNOUNCE": ""})
+app = make_world(BAND)
+end_quest(ctx, app, "1")
+check("幅が逆でも最小に倒す", state_file()["0"]["bonus"] == 10,
+      state_file()["0"]["bonus"])
+
+reset()
+module, ctx = fresh({"STEP_MIN": 0, "STEP_MAX": 0, "ANNOUNCE": ""})
+app = make_world(BAND)
+end_quest(ctx, app, "1")
+check("0〜0 なら上がらない", difficulties(app, "0")[0] == [3, 4, 5],
+      difficulties(app, "0")[0])
 
 # -- ロード ---------------------------------------------------------------
 # 掲示板を通らない読み手（店の品揃えが筆頭）が素の値を見ないよう、
 # ロードの1回で世界ぜんぶを寄せ直す。
 reset()
-module, ctx = fresh({"CLEARS_PER_STEP": 1, "STEP_SIZE": 5, "ANNOUNCE": ""})
+module, ctx = fresh(fixed(5))
 app = make_world(BAND)
 end_quest(ctx, app, "1")
 end_quest(ctx, app, "4")
@@ -461,8 +497,7 @@ check("雛形はロードでも触らない", difficulties(app, "0")[1] == [3, 4
 
 # -- 上限 -----------------------------------------------------------------
 reset()
-module, ctx = fresh({"CLEARS_PER_STEP": 1, "STEP_SIZE": 10, "MAX_BONUS": 20,
-                     "ANNOUNCE": ""})
+module, ctx = fresh(fixed(10, MAX_BONUS=20))
 app = make_world(BAND)
 for _ in range(5):
     end_quest(ctx, app, "1")
@@ -470,8 +505,7 @@ check("MAX_BONUS で頭打ちになる", difficulties(app, "0")[0] == [23, 24, 2
       difficulties(app, "0")[0])
 
 reset()
-module, ctx = fresh({"CLEARS_PER_STEP": 1, "STEP_SIZE": 10, "MAX_BONUS": 76,
-                     "ANNOUNCE": ""})
+module, ctx = fresh(fixed(10, MAX_BONUS=76))
 app = make_world([("1", "0", 70, "incomplete"), ("2", "0", 74, "incomplete")])
 for _ in range(4):
     end_quest(ctx, app, "1")
@@ -479,8 +513,7 @@ check("難易度の上限を超えない", difficulties(app, "0")[0] == [76, 76]
       difficulties(app, "0")[0])
 
 reset()
-module, ctx = fresh({"CLEARS_PER_STEP": 1, "STEP_SIZE": 10, "MAX_BONUS": 76,
-                     "DIFFICULTY_LIMIT": 30, "ANNOUNCE": ""})
+module, ctx = fresh(fixed(10, MAX_BONUS=76, DIFFICULTY_LIMIT=30))
 app = make_world(BAND)
 for _ in range(5):
     end_quest(ctx, app, "1")
@@ -489,8 +522,7 @@ check("DIFFICULTY_LIMIT が天井になる", difficulties(app, "0")[0] == [30, 3
 
 # -- 範囲 -----------------------------------------------------------------
 reset()
-module, ctx = fresh({"CLEARS_PER_STEP": 1, "STEP_SIZE": 5, "SCOPE": "incomplete",
-                     "ANNOUNCE": ""})
+module, ctx = fresh(fixed(5, SCOPE="incomplete"))
 app = make_world([("1", "0", 3, "completed"),
                   ("2", "0", 4, "incomplete"),
                   ("3", "0", 5, "incomplete")])
@@ -501,8 +533,7 @@ check("incomplete では完了済みを動かさない",
       difficulties(app, "0")[0] == [3, 4, 10], difficulties(app, "0")[0])
 
 reset()
-module, ctx = fresh({"CLEARS_PER_STEP": 1, "STEP_SIZE": 5, "SCOPE": "all",
-                     "ANNOUNCE": ""})
+module, ctx = fresh(fixed(5, SCOPE="all"))
 app = make_world([("1", "0", 3, "completed"),
                   ("2", "0", 4, "incomplete"),
                   ("3", "0", 5, "incomplete")])
@@ -512,15 +543,14 @@ check("all では完了済みも上がる（在庫の母数）",
 
 # -- 戻す -----------------------------------------------------------------
 reset()
-module, ctx = fresh({"CLEARS_PER_STEP": 1, "STEP_SIZE": 4, "ANNOUNCE": ""})
+module, ctx = fresh(fixed(4))
 app = make_world(BAND)
 end_quest(ctx, app, "1")
 end_quest(ctx, app, "2")
 check("戻す前は上がっている", difficulties(app, "0")[0] == [11, 12, 13],
       difficulties(app, "0")[0])
 
-module, ctx = fresh({"CLEARS_PER_STEP": 1, "STEP_SIZE": 4, "ROLLBACK": True,
-                     "ANNOUNCE": ""})
+module, ctx = fresh(fixed(4, ROLLBACK=True))
 open_board(ctx, app)
 check("ROLLBACK で素の値へ戻る", difficulties(app, "0")[0] == [3, 4, 5],
       difficulties(app, "0")[0])
@@ -528,8 +558,7 @@ check("控えが消える", "0" not in (state_file() or {}), state_file())
 
 # 範囲を絞っていても、上げた後に片付いた依頼は戻る（範囲の外へ出ても取り残さない）。
 reset()
-module, ctx = fresh({"CLEARS_PER_STEP": 1, "STEP_SIZE": 5, "SCOPE": "incomplete",
-                     "ANNOUNCE": ""})
+module, ctx = fresh(fixed(5, SCOPE="incomplete"))
 app = make_world([("1", "0", 3, "incomplete"),
                   ("2", "0", 4, "incomplete"),
                   ("3", "0", 5, "incomplete")])
@@ -538,15 +567,14 @@ end_quest(ctx, app, "2")
 check("範囲を絞ると片付いた側は据え置かれる",
       difficulties(app, "0")[0] == [3, 9, 15], difficulties(app, "0")[0])
 
-module, ctx = fresh({"CLEARS_PER_STEP": 1, "STEP_SIZE": 5, "SCOPE": "incomplete",
-                     "ROLLBACK": True, "ANNOUNCE": ""})
+module, ctx = fresh(fixed(5, SCOPE="incomplete", ROLLBACK=True))
 open_board(ctx, app)
 check("上げた後に片付いた依頼も戻る", difficulties(app, "0")[0] == [3, 4, 5],
       difficulties(app, "0")[0])
 
 # -- 世界が混ざらない -----------------------------------------------------
 reset()
-module, ctx = fresh({"CLEARS_PER_STEP": 1, "STEP_SIZE": 5, "ANNOUNCE": ""})
+module, ctx = fresh(fixed(5))
 first = make_world(BAND, world_name="第一の世界")
 second = make_world(BAND, world_name="第二の世界")
 end_quest(ctx, first, "1")
@@ -558,17 +586,18 @@ check("控えは世界ごとに分かれる",
 
 # -- 知らせ ---------------------------------------------------------------
 reset()
-module, ctx = fresh({"CLEARS_PER_STEP": 2, "STEP_SIZE": 3,
-                     "ANNOUNCE": "手応えが増している。"})
+module, ctx = fresh(fixed(3, MAX_BONUS=6, ANNOUNCE="手応えが増している。"))
 app = make_world(BAND)
 end_quest(ctx, app, "1")
-check("段が上がらない回は黙っている", app.texts == [], app.texts)
 end_quest(ctx, app, "2")
-check("段が上がった回に1行出る", app.texts == ["手応えが増している。"], app.texts)
+check("上がった回に1行ずつ出る",
+      app.texts == ["手応えが増している。"] * 2, app.texts)
+end_quest(ctx, app, "3")
+check("上限に達したら黙る", len(app.texts) == 2, app.texts)
 
 # -- 安全 -----------------------------------------------------------------
 reset()
-module, ctx = fresh({"CLEARS_PER_STEP": 1, "STEP_SIZE": 5, "ANNOUNCE": ""})
+module, ctx = fresh(fixed(5))
 app = make_world(BAND)
 app.current_quest_data = None
 manager = QuestEndManager(app)
@@ -591,7 +620,7 @@ check("残りは上がる", difficulties(app, "0")[0][:3] == [8, 9, 10],
 
 # 生きた一覧が引けない版では何もしない（雛形へ書かない）。
 reset()
-module, ctx = fresh({"CLEARS_PER_STEP": 1, "STEP_SIZE": 5, "ANNOUNCE": ""})
+module, ctx = fresh(fixed(5))
 app = make_world(BAND)
 app.world.quests = None
 app.current_quest_data = Quest("1", "0", 3)
