@@ -99,6 +99,12 @@ class Item(object):
         self.item_type = item_type
         self.id = None
         self.obtainer = None
+        self.unequip_calls = 0
+
+    def unequip(self):
+        # 本体 items.py:54 と同じ形。辞書に slot が無ければ KeyError で落ちる。
+        self.unequip_calls += 1
+        del self.obtainer.equipments[self.item_type]
 
 
 class Character(object):
@@ -259,6 +265,7 @@ check("元の inventory からは消える", "item_0" not in npc.inventory, npc.
 check("obtainer が移った先になる", sword.obtainer is player, sword.obtainer)
 check("装備欄は slot キーごと落ちる（None を残さない）",
       "weapon" not in npc.equipments, npc.equipments)
+check("解除は本体の unequip を通す", sword.unequip_calls == 1, sword.unequip_calls)
 check("関係の無い slot は触らない", npc.equipments.get("wearable") == "item_9",
       npc.equipments)
 check("渡した widget の装備印を落とす", widget.is_equipped is False,
@@ -314,12 +321,58 @@ move(ctx, app, widget, Grid(npc))
 
 check("オブジェクト参照でも slot キーごと落ちる",
       "weapon" not in player.equipments, player.equipments)
+check("オブジェクト参照でも本体の unequip を通す",
+      blade.unequip_calls == 1, blade.unequip_calls)
 check("id 文字列の他 slot は触らない",
       player.equipments.get("wearable") == "item_9", player.equipments)
 check("相手側へ移っている", blade in npc.inventory.values(), npc.inventory)
 check("obtainer が相手になる", blade.obtainer is npc, blade.obtainer)
 check("装備印を持ち越さない", widget.is_equipped is False, widget.is_equipped)
 FakeClock.run_all()
+check("例外を残さない", ctx.errors == [], ctx.errors)
+shutil.rmtree(out_dir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------- unequip の番人
+# 実体が別の場所へ移った後、古い「装備中」表示から本体popupの「外す」が飛ぶと、
+# 本体 unequip は空の equipments を引いて KeyError で落ちる（実測）。
+# 番人は equipments がその品を指している解除だけ本体へ通す。
+print("unequip の番人")
+ctx, app, out_dir = open_window()
+GUARD = "scripts.items:Item.unequip"
+npc = app.world.characters["80"]
+
+def native_unequip(self):
+    return self.unequip()
+
+fresh_item = Item("儀礼剣")
+fresh_item.id = "item_5"
+fresh_item.obtainer = npc
+npc.inventory["item_5"] = fresh_item
+npc.equipments["weapon"] = fresh_item          # 同一instance参照＝正常
+ctx.hooks[GUARD](native_unequip, fresh_item)
+check("正常な解除は本体へ通す", fresh_item.unequip_calls == 1, fresh_item.unequip_calls)
+check("通した結果 slot が落ちる", "weapon" not in npc.equipments, npc.equipments)
+
+stale_item = Item("移された剣")
+stale_item.id = "item_6"
+stale_item.obtainer = npc                       # equipments は空＝食い違い
+result = ctx.hooks[GUARD](native_unequip, stale_item)
+check("食い違う解除は本体へ通さない", stale_item.unequip_calls == 0,
+      stale_item.unequip_calls)
+check("落ちずに None を返す", result is None, result)
+check("無視した記録を残す",
+      any("stale unequip ignored" in note for note in ctx.notes),
+      [n for n in ctx.notes if "unequip" in n])
+
+string_item = Item("符呪の剣")
+string_item.id = "item_7"
+string_item.obtainer = npc
+npc.inventory["item_7"] = string_item
+npc.equipments["weapon"] = "item_7"             # id文字列参照（402の装備ボタンの形）
+ctx.hooks[GUARD](native_unequip, string_item)
+check("id文字列の参照も正常として通す", string_item.unequip_calls == 1,
+      string_item.unequip_calls)
 check("例外を残さない", ctx.errors == [], ctx.errors)
 shutil.rmtree(out_dir, ignore_errors=True)
 

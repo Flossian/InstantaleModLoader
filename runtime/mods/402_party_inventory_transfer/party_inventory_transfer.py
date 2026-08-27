@@ -1,5 +1,13 @@
 # -*- coding: utf-8 -*-
-"""会話中のパーティーメンバーへアイテムを受け渡し、NPC装備も変更する統合MOD v17。
+"""会話中のパーティーメンバーへアイテムを受け渡し、NPC装備も変更する統合MOD v18。
+
+v18:
+- 受け渡しで装備を外すとき、equipments の辞書手術より先に本体の Item.unequip() を呼ぶ。
+  辞書だけ直すと本体の解除時の後始末（表示更新）が走らず、「装備中」の表示が残り、
+  その残骸から本体popupの「外す」を押すと items.py:54 が KeyError で落ちていた（実測）。
+- Item.unequip に番人を立てた。equipments がその品を指していない解除は
+  本体へ通さず、1行記録して無視する（本体は無条件に辞書を引くため、
+  食い違い状態では必ず落ちる）。
 
 v17:
 - 装備したままの受け渡しで装備参照が外れず、後からその装備欄に触ると
@@ -177,6 +185,19 @@ def apply(ctx):
                 return candidate
             n += 1
 
+    def is_referenced_in_equipments(owner, item_instance, candidate_ids):
+        """持ち主の equipments がこの品を指しているか（同一instance / id文字列の両対応）。"""
+        equipments = getattr(owner, "equipments", None)
+        if not isinstance(equipments, dict):
+            return False
+        wanted = {str(x) for x in candidate_ids if x is not None}
+        for ref in equipments.values():
+            if ref is None:
+                continue
+            if ref is item_instance or str(ref) in wanted:
+                return True
+        return False
+
     def remove_equipped_reference(owner, item_instance, candidate_ids):
         """渡した品への装備参照を、持ち主の equipments から全て落とす。
 
@@ -299,6 +320,21 @@ def apply(ctx):
         old_key = key_for_instance(old_inv, item_instance, old_widget_id)
         native_new_key = key_for_instance(new_inv, item_instance, old_widget_id)
         original_item_id = getattr(item_instance, "id", None)
+
+        # 装備中なら、obtainer も equipments もまだ揃っているこの時点で
+        # 本体の Item.unequip() に外させる。辞書だけ直すと、本体が解除時に行う
+        # 後始末（set_callback 経由の表示更新など）が走らず、「装備中」の表示が
+        # 画面に残る。その残骸を右クリックして本体popupの「外す」を押すと、
+        # 空の equipments を引いた items.py:54 が KeyError でゲームごと落ちる（実測2件）。
+        # 後続の remove_equipped_reference は、この呼び出しで取り切れなかった
+        # 残骸の掃除として残す。
+        if is_referenced_in_equipments(old_owner, item_instance,
+                                       [old_key, old_widget_id, original_item_id]):
+            try:
+                item_instance.unequip()
+            except Exception:
+                ctx.log_exc(
+                    "party inventory/equipment: native unequip during transfer failed")
 
         # 同一instanceの参照はどちらからも一度消し、新owner側だけに置く。
         # 旧owner側から消した鍵は、装備参照を外す時の照合候補として控える。
@@ -809,6 +845,34 @@ def apply(ctx):
             ctx.log_exc("party inventory/equipment: cannot schedule npc equipment button")
         return result
 
+    @ctx.wrap("scripts.items:Item.unequip", required=False, safe=True)
+    def guard_unequip(orig, self, *args, **kwargs):
+        """equipments と食い違う解除を、クラッシュではなく記録つきの何もしないに変える。
+
+        本体の unequip は self.obtainer.equipments[self.item_type] を無条件に引く。
+        装備の実体が別の場所へ移った後に古い「装備中」表示から解除が飛ぶと、
+        そこで KeyError になりゲームごと落ちる（実測2件。どちらもこのMODの
+        受け渡し・装備替えが作った表示の残骸が引き金）。
+        持ち主の equipments がこの品を指している正常な解除だけ本体へ通す。
+        """
+        equipments = getattr(getattr(self, "obtainer", None), "equipments", None)
+        slot = getattr(self, "item_type", None)
+        ref = equipments.get(slot) if isinstance(equipments, dict) else None
+        item_id = getattr(self, "id", None)
+        if ref is not None and (
+            ref is self or (item_id is not None and str(ref) == str(item_id))
+        ):
+            return orig(self, *args, **kwargs)
+        write(
+            "stale unequip ignored: item={!r} slot={} owner={} ref={!r}".format(
+                frames.short(getattr(self, "name", "?"), 80),
+                slot,
+                character_name(getattr(self, "obtainer", None), "?"),
+                frames.short(ref, 80),
+            )
+        )
+        return None
+
     @ctx.wrap("__main__:InstantaleApp.return_to_title", required=False)
     def return_to_title(orig, self, *args, **kwargs):
         # 保存済みボタンはゲーム側に任せる。MODの一時参照だけ捨て、
@@ -822,6 +886,6 @@ def apply(ctx):
         return orig(self, *args, **kwargs)
 
     ctx.log(
-        "party inventory transfer/equipment v17: after-301 conversation insert installed; "
+        "party inventory transfer/equipment v18: after-301 conversation insert installed; "
         "routine operation logs disabled; warnings/errors -> modloader.log"
     )

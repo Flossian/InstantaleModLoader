@@ -102,7 +102,7 @@
 | [`320_guild_adventurer_recruit`](MODS.md#320_guild_adventurer_recruit-ギルドの冒険者の補充) | ギルドの冒険者の補充 | ギルドの冒険者の補充 | 2 |  |
 | [`321_area_chronicle`](MODS.md#321_area_chronicle-エリアの状況を更新依頼クリアで案内文が変わる) | エリアの状況を更新 | エリアの状況を更新（依頼クリアで案内文が変わる） | 4 |  |
 | [`401_battle_character_context`](MODS.md#401_battle_character_context-戦闘の審判へ同行者の人物と装備を見せる) | 戦闘キャラクター情報補完 | 戦闘の審判へ同行者の人物と装備を見せる | - |  |
-| [`402_party_inventory_transfer`](MODS.md#402_party_inventory_transfer-仲間とアイテムを受け渡し仲間に装備を持たせる) | パーティーメンバー：アイテム受け渡し・装備 | 仲間とアイテムを受け渡し、仲間に装備を持たせる | - |  |
+| [`402_party_inventory_transfer`](MODS.md#402_party_inventory_transfer-仲間とアイテムを受け渡しできる) | パーティーメンバー：アイテム受け渡し | 仲間とアイテムを受け渡しできる | - |  |
 | [`403_npc_social_memory`](MODS.md#403_npc_social_memory-npc同士がお互いを認知し関係を覚える) | NPC同士の認知と関係記憶 | NPC同士がお互いを認知し、関係を覚える | 5 |  |
 
 ---
