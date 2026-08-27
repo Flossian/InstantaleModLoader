@@ -1,0 +1,19 @@
+{
+  "entry": "party_inventory_transfer.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "ja": "パーティーメンバー：アイテム受け渡し・装備",
+    "en": "Party Member Item Transfer & Equipment"
+  },
+  "description": {
+    "ja": "会話中の相手が現在のパーティーメンバーの時だけ「＜アイテムの受け渡し＞」を追加します。301_quest_from_conversation の後に読み込み、「会話を終了する」の直前へ挿入します。受け渡しとNPC装備変更は一本化済みで、NPC側weapon/wearableを右クリックすると「装備する／外す」を表示し、NPC自身のequipmentsを更新して保存します。通常の成功ログは専用ログへ出さず、警告・失敗・例外のみmodloader.logへ記録します。観測専用のフックは223_probe_party_equipmentへ分離しました。",
+    "en": "Unified party-member item transfer and NPC equipment mod. Loads after 301_quest_from_conversation and inserts the transfer choice immediately before conversation end. NPC-owned weapons/wearables expose Equip/Unequip and update/save the NPC's own equipments. Routine success logs are suppressed; warnings/failures/exceptions go to modloader.log. Observation-only hooks live in 223_probe_party_equipment."
+  },
+  "version": "17",
+  "author": "MoririnJP",
+  "after": [
+    "301_quest_from_conversation",
+    "302_leave_party_in_conversation"
+  ]
+}

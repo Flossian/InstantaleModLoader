@@ -1,0 +1,19 @@
+{
+  "entry": "probe_party_equipment.py",
+  "api": 1,
+  "kind": "probe",
+  "name": {
+    "en": "Party equipment probe",
+    "ja": "本体の装備経路が誰を触るかの計測"
+  },
+  "description": {
+    "en": "Observes the native item popup and the ItemEquipManager / ItemUnequipManager entry points to record whose equipments the base game actually changes. Material for deciding whether 402_party_inventory_transfer can stop writing NPC equipments directly.",
+    "ja": "本体のアイテムpopupと ItemEquipManager / ItemUnequipManager の入口を観測し、素のゲームが実際に誰の equipments を書き換えるかを記録する。402_party_inventory_transfer が NPC の equipments を直書きするのをやめられるかを決めるための材料。"
+  },
+  "version": "3",
+  "author": "MoririnJP",
+  "debug": true,
+  "after": [
+    "402_party_inventory_transfer"
+  ]
+}

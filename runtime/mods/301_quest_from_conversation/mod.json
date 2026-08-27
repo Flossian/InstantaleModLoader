@@ -77,6 +77,18 @@
         "en": "0 = only usable during the conversation"
       }
     },
+    "EXCLUDE_PARTY_MEMBERS": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "仲間になっている NPC は依頼人にしない",
+        "en": "Party members cannot give quests"
+      },
+      "note": {
+        "ja": "同行中の相手との会話には「依頼を受ける」も「この話から依頼を作る」も出さない。受注した時点で依頼人が隣に居ることになるため。切ると仲間からも依頼を受けられる",
+        "en": "Hides both offer buttons while talking to someone in your party, since accepting would put the client right next to you. Off: companions can commission quests"
+      }
+    },
     "USE_NPC_MEMORY": {
       "type": "bool",
       "default": true,

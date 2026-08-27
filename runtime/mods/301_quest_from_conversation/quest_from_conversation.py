@@ -202,6 +202,16 @@ SETTLE = 0.4
 # 向こうの `on_button_press` がこちらの action を知らずに握り潰す）。
 MARK = "mod_action"
 
+# 仲間になっている NPC を依頼人から外すか。
+# 外すと、パーティに居る相手との会話には
+# 「依頼を受ける」も「この話から依頼を作る」も出ない。
+#
+# 同行している相手に依頼を出してもらうと、
+# 受注した時点でその相手はもう隣に居る。
+# 依頼人が現地へ付いて来ている形になり、依頼として成り立たない。
+# 名簿の読み方はローダに寄せてある（`ui.party_ids`。`302_` と共有。GAME.md §2.8）。
+EXCLUDE_PARTY_MEMBERS = True
+
 # 依頼人の人物像を、生成のプロンプトに添えるか。
 USE_NPC_MEMORY = True
 
@@ -285,6 +295,9 @@ def apply(ctx):
         # 会話の LLM は1ターンに何度も回るので、
         # 毎回書くとこのログが会話で埋まる（`311_` の `note_inject` と同じ手）。
         "last_inject": None,
+        # ボタンを出さなかった理由。こちらも同じ理由が続く間は書かない。
+        # `refresh_choice_buttons` は並べ直しのたびに走る。
+        "last_skip": None,
     }
     INJECT_TTL = 300.0
 
@@ -482,6 +495,14 @@ def apply(ctx):
         npc_id = state["npc_id"]
         if npc_id is None:
             return
+        # 同行している相手の話は控えない。
+        # 控えると、会話を出た後に施設側から「この話から依頼を作る」で
+        # 拾えてしまう（`OFFER_SITES` に "facility" を入れている場合）。
+        if is_party_member(app, npc_id):
+            note_skip("party member {!r} ({}): talk not remembered".format(
+                frames.short(getattr(npc_of(app, npc_id), "name", ""), 40),
+                npc_id))
+            return
         text = transcribe(app, npc_id)
         if not text:
             return
@@ -496,6 +517,29 @@ def apply(ctx):
             state["last_talk"]["npc_name"], len(text), KEEP_TRANSCRIPT_MOVES))
 
     npc_of = ui.character_of
+
+    # 名簿の読み方はローダに寄せてある（`302_` と共有。GAME.md §2.8）。
+    # `app.party` が list とも dict とも限らず、
+    # 実行時とセーブで形が違うので、自前で読まない。
+    party_ids = ui.party_ids
+
+    def is_party_member(app, npc_id):
+        """その相手はいま同行しているか。設定が切なら常に False。
+
+        同行している相手に依頼を出してもらうと、
+        受注した時点でその相手はもう隣に居る。
+        依頼人が現地へ付いて来ている形になるので、既定では依頼人から外す。
+        """
+        if not EXCLUDE_PARTY_MEMBERS or not npc_id:
+            return False
+        try:
+            return str(npc_id) in party_ids(app)
+        except Exception:
+            # 名簿が読めないことを理由にボタンを消さない。
+            # 消す側に倒すと、名簿の形が変わった版で機能が丸ごと出なくなる。
+            ctx.log_exc("quest offer: cannot read the party roster")
+            return False
+
 
     # ------------------------------------ どの依頼がどの NPC 発かの控え
 
@@ -1133,6 +1177,13 @@ def apply(ctx):
         state["last_inject"] = message
         write(message)
 
+    def note_skip(message):
+        """ボタンを出さなかった理由を残す。同じ理由が続く間は書かない。"""
+        if state["last_skip"] == message:
+            return
+        state["last_skip"] = message
+        write("no offer: " + message)
+
     def with_quest_facts(label, args, kwargs):
         """NPC の浅い複製の `profile` に、片付いた依頼の事実を足した引数を組み直す。
 
@@ -1295,6 +1346,16 @@ def apply(ctx):
                 # 二重化も「押しても無反応」も同時に消える。
                 screen.prune_stale(buttons, OUR_LABELS)
                 at, where = offer_slot(buttons)
+                # 同行している相手には出さない。
+                # 相手は画面の「会話を終了する」から読む（`302_` の手。`ui.conversation_partner`）。
+                # `state["npc_id"]` でも引けるが、
+                # いま並んでいるボタンから読む方が画面と食い違わない。
+                if where == "conversation":
+                    partner, _entry = ui.conversation_partner(buttons)
+                    if is_party_member(self, partner):
+                        note_skip("party member {!r} ({}): not a client".format(
+                            ui.character_name(self, partner), partner))
+                        at = None
                 if at is not None:
                     # 会話画面には「この話から依頼を作る」も置く。
                     # 掲示板を経由しないので会話を閉じずに生成できる。
@@ -1365,6 +1426,11 @@ def apply(ctx):
                     type(buttons).__name__))
                 return result
             if has_offer_button(buttons):
+                return result
+            partner, _entry = ui.conversation_partner(buttons)
+            if is_party_member(self, partner):
+                note_skip("party member {!r} ({}): not a client".format(
+                    ui.character_name(self, partner), partner))
                 return result
             if insert_offer_button(buttons, len(buttons) - 1, "conversation"):
                 refresh(self)

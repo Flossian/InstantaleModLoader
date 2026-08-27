@@ -1,0 +1,18 @@
+{
+  "entry": "battle_character_context.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Battle character context",
+    "ja": "戦闘キャラクター情報補完"
+  },
+  "description": {
+    "en": "Adds party-member NPC character, speech-style, and equipment context to battle referee LLM requests. Player context is left to the base game. Equipment is rendered close to the base-game form as 'weapon/wearable: name(description)', with attributes separated into dedicated fields. Uses instantale_modloader.ui shared APIs for party lookup and instantale_modloader.llm shared alias watching for late-bound send_request. Uses in_battle normalized by 107_fix_battle_flag_stuck; NPC speech_style/personality/job/equipment prefer runtime values and fall back to the saved character dictionary observed at World.generate_character load time. v6 also caches saved speech/profile data for NPCs without equipment/inventory and clears the cache on return to title. v7 caps each field and the combined party block so the battle prompt cannot grow without bound.",
+    "ja": "戦闘refereeのLLM送信へ同行NPCの人物・口調・装備情報を補足します。プレイヤー情報は本体側に任せ、パーティーメンバーについてはこの補足を優先参照するよう明示します。装備は本体に近い「weapon/wearable: 名前(説明)」形式で記述し、攻撃力・防御力等のattributesは別フィールドに分離します。同行者取得にはinstantale_modloader.uiの共通APIを使い、send_requestの後生え・別名対策はinstantale_modloader.llmの共通部品に任せます。107_fix_battle_flag_stuckが正常化したin_battleを戦闘中判定に利用し、NPCのspeech_style・personality・job・装備等はruntimeを優先、欠ける場合だけWorld.generate_characterへ渡されたロード時保存辞書をfallbackとして参照します。 v6では、装備や所持品を持たないNPCでも保存辞書の人物・口調情報を控え、タイトルへ戻る際に控えを破棄して別セーブへの持ち越しを防ぎます。 v7では、1項目ずつの上限と同行者全員ぶんの合計上限を設け、戦闘プロンプトが際限なく伸びないようにしました。"
+  },
+  "version": "7",
+  "author": "MoririnJP",
+  "after": [
+    "107_fix_battle_flag_stuck"
+  ]
+}

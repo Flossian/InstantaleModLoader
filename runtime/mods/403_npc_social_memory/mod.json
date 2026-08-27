@@ -1,0 +1,88 @@
+{
+  "entry": "npc_social_memory.py",
+  "api": 1,
+  "kind": "feature",
+  "version": "7",
+  "author": "MoririnJP",
+  "name": {
+    "en": "NPC social memory",
+    "ja": "NPC同士の認知と関係記憶"
+  },
+  "description": {
+    "en": "Keeps directional NPC-to-NPC recognition/relationship memories separately and injects party-member context into one-on-one conversations. Does not modify 311.",
+    "ja": "NPC同士の認知・関係を有向で保持する。311の記憶形式と共有部品に従い、本体生情報と311のprofile/about_playerは抽出材料として短く読み取り専用で参照する。会話への注入は関係記録を中心にしてプロンプトの肥大を抑える。最新版ローダーの構造化LLM共通部品を優先利用する。"
+  },
+  "after": [
+    "311_npc_profile_memory"
+  ],
+  "settings": {
+    "CONVERSATION_TURNS": {
+      "type": "int",
+      "default": 10,
+      "min": 2,
+      "max": 30,
+      "label": {
+        "ja": "関係抽出に載せる直近のやり取りの数",
+        "en": "Recent exchanges for social extraction"
+      },
+      "note": {
+        "ja": "増やすと関係変化の取りこぼしが減るが、抽出LLMへの入力が増える",
+        "en": "More context catches more changes but increases input"
+      }
+    },
+    "RELATION_CHARS": {
+      "type": "int",
+      "default": 600,
+      "min": 100,
+      "max": 3000,
+      "label": {
+        "ja": "NPC→NPC関係記録の目標長",
+        "en": "Target relationship length"
+      },
+      "note": {
+        "ja": "各方向の認識・関係を要約する目安。保存や注入では機械的に切らない",
+        "en": "Soft target; not hard-truncated on save/inject"
+      }
+    },
+    "FACT_LOG_LIMIT": {
+      "type": "int",
+      "default": 10,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "NPC間で判明した事実を残す件数",
+        "en": "Social facts kept per directed pair"
+      },
+      "note": {
+        "ja": "要約で落ちた認識を次回抽出へ戻す追記控え。311と違い方向ごとに持つので件数は控えめ。0で残さない",
+        "en": "Append-only recall, kept per direction rather than per person; 0 disables it"
+      }
+    },
+    "INJECT_PARTY_PROFILE": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "会話相手へ同行NPCの人物情報も見せる",
+        "en": "Show party-member identity context"
+      },
+      "note": {
+        "ja": "初対面でも同行者を認知できるよう、名前に加えて人物情報の短い抜粋を渡す",
+        "en": "Adds short identity context for present companions"
+      }
+    },
+    "MAX_PARTICIPANTS": {
+      "type": "int",
+      "default": 6,
+      "min": 2,
+      "max": 12,
+      "label": {
+        "ja": "1回の関係抽出で扱うNPC上限",
+        "en": "Maximum NPC participants"
+      },
+      "note": {
+        "ja": "会話相手＋同行NPC。大人数時のプロンプト肥大を防ぐ",
+        "en": "Conversation target plus party NPCs"
+      }
+    }
+  }
+}

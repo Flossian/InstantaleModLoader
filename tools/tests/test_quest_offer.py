@@ -38,6 +38,7 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml                      # noqa: E402
+from instantale_modloader import ui as mlui            # noqa: E402
 
 
 def find_mod(suffix):
@@ -209,6 +210,9 @@ class InstantaleApp:
         self.world = world
         self.world_dict = {"world_data": {"world_name": "テスト世界"},
                            "quests": {}}
+        # 名簿。セーブでは game_variables['party'] で、必ず 'player' を含む
+        # （GAME.md §2.8）。同行者を足すときはここへ id を入れる。
+        self.game_variables = {"party": ["player"]}
         self.buttons = []
         self.display_button_map = None
         self.to_display_buttons = []
@@ -427,7 +431,8 @@ def facility_buttons():
             {"text": "出る", "spec": PhaseSpec("MovePhaseManager", ["20", "134", "7"])}]
 
 
-def setup(history=None, partner="62", in_conversation=True):
+def setup(history=None, partner="62", in_conversation=True,
+          party=()):
     """mod を適用し、NPC 62 と会話している状態の app を返す。"""
     # クラスは毎回作り直す。
     # `__main__` に載せるのは mod が
@@ -472,6 +477,7 @@ def setup(history=None, partner="62", in_conversation=True):
                                   profile="無口な鍛冶屋。")}
     areas = {"7": Area("7", "テストの町A")}
     app = app_cls(World(characters, quests, areas))
+    app.game_variables["party"] = ["player"] + [str(m) for m in party]
     # 現在地は **id の文字列**で持たせる（`302_` の実測。
     # エリアのオブジェクトを直接持っているとは限らない）。
     app.player = Character(id="player", name="テストプレイヤー", current_area="7")
@@ -1037,6 +1043,75 @@ try:
 finally:
     mod.TELL_COMPLETED_QUESTS = tell
     clear_clients(ctx)
+
+# ============================== 仲間になっている NPC は依頼人にしない
+# 同行している相手に依頼を出してもらうと、
+# 受注した時点でその相手はもう隣に居る（依頼人が現地へ付いて来る形になる）。
+# 名簿の読み方はローダ任せ（`ui.party_ids`。GAME.md §2.8）。
+print("=== 仲間は依頼人にしない ===")
+
+
+def log_since(ctx_obj, mark):
+    """`quest_offer.log` に mark 以降で書かれた分。書かなかったことも見たい。"""
+    path = os.path.join(ctx_obj.out_dir, mod.LOG_BASENAME)
+    if not os.path.isfile(path):
+        return ""
+    with io.open(path, encoding="utf-8", errors="replace") as fh:
+        fh.seek(mark)
+        return fh.read()
+
+
+def log_mark(ctx_obj):
+    path = os.path.join(ctx_obj.out_dir, mod.LOG_BASENAME)
+    return os.path.getsize(path) if os.path.isfile(path) else 0
+
+
+# 同行している相手との会話。
+mod, ctx, app = setup(history=history, party=["62"])
+app.refresh_choice_buttons()
+check("同行者には「依頼を受ける」を出さない", index_of(app, "offer") < 0,
+      [b.get("text") for b in app.buttons])
+check("同行者には「この話から依頼を作る」も出さない",
+      index_of(app, "generate") < 0, [b.get("text") for b in app.buttons])
+check("会話を終了するは残る",
+      any(mlui.spec_cls_name(b) == "ConversationEndManager" for b in app.buttons),
+      [b.get("text") for b in app.buttons])
+
+# 同行していない相手なら今までどおり。
+mod, ctx, app = setup(history=history, party=["63"])
+app.refresh_choice_buttons()
+check("同行していない相手には今までどおり出す", index_of(app, "offer") >= 0,
+      [b.get("text") for b in app.buttons])
+
+# 会話を閉じても書き起こしを控えない（施設側から拾えないようにする）。
+mod, ctx, app = setup(history=history, party=["62"])
+app.refresh_choice_buttons()
+mark = log_mark(ctx)
+end = mlui.find_spec_button(app.buttons, "ConversationEndManager")
+app.on_button_press(app.buttons.index(end))
+clock.settle()
+written = log_since(ctx, mark)
+check("同行者の会話は控えない", "remembered talk" not in written, written[-200:])
+check("控えなかった理由が残る", "party member" in written, written[-200:])
+
+# 設定を切れば仲間からも受けられる。
+mod, ctx, app = setup(history=history, party=["62"])
+excluded = mod.EXCLUDE_PARTY_MEMBERS
+try:
+    mod.EXCLUDE_PARTY_MEMBERS = False
+    app.refresh_choice_buttons()
+    check("設定を切ると仲間にも出す", index_of(app, "offer") >= 0,
+          [b.get("text") for b in app.buttons])
+finally:
+    mod.EXCLUDE_PARTY_MEMBERS = excluded
+
+# 名簿がどこにも無い世界。**消す側に倒さない**。
+mod, ctx, app = setup(history=history)
+del app.game_variables
+app.refresh_choice_buttons()
+check("名簿が読めなくてもボタンは消さない", index_of(app, "offer") >= 0,
+      [b.get("text") for b in app.buttons])
+check("名簿が読めなくてもエラーにしない", not ctx.errors, ctx.errors)
 
 print()
 if failures:
