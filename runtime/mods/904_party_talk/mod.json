@@ -1,0 +1,69 @@
+{
+  "entry": "party_talk.py",
+  "api": 1,
+  "kind": "feature",
+  "version": "8",
+  "name": {
+    "ja": "パーティーメンバーと話す",
+    "en": "Party Talk"
+  },
+  "description": {
+    "ja": "平時の選択肢に「パーティーメンバーと話す」を足す。仲間から1人を選んで本体の会話に入り、その間だけ会話のLLMを差し替えて仲間全員が順に反応する。プレイヤーの1発言につき各NPCは最大1回。311/403 の記録は読むだけ",
+    "en": "Adds a 'talk with the party' choice outside battle. Enters the game's own conversation with one random member and, for that conversation only, swaps the conversation LLM so every member can react in turn (at most once per player line). Reads 311/403 state without writing it"
+  },
+  "author": "MoririnJP, R01/Flossian",
+  "after": [
+    "311_npc_profile_memory",
+    "403_npc_social_memory"
+  ],
+  "settings": {
+    "START_LABEL": {
+      "type": "str",
+      "default": "パーティーメンバーと話す",
+      "label": {
+        "ja": "会話開始の選択肢",
+        "en": "Start label"
+      }
+    },
+    "END_LABEL": {
+      "type": "str",
+      "default": "話し合いを終了する",
+      "label": {
+        "ja": "会話終了の選択肢",
+        "en": "End label"
+      }
+    },
+    "MAX_PARTICIPANTS": {
+      "type": "int",
+      "default": 6,
+      "min": 1,
+      "max": 12,
+      "label": {
+        "ja": "参加NPC上限",
+        "en": "Max participants"
+      }
+    },
+    "HISTORY_TURNS": {
+      "type": "int",
+      "default": 12,
+      "min": 2,
+      "max": 40,
+      "label": {
+        "ja": "LLMへ渡す直近の会話数",
+        "en": "History turns"
+      }
+    },
+    "SIDE_BY_SIDE": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "仲間の立ち絵を並べる",
+        "en": "Show every member's portrait side by side"
+      },
+      "note": {
+        "ja": "既定は入。参加者全員の立ち絵を横に等間隔で並べる。切ると、喋った人物へ立ち絵を切り替えて終わるとアンカーへ戻す",
+        "en": "On by default: every participant's portrait is laid out across the screen. Off: the portrait switches to whoever speaks and returns to the anchor"
+      }
+    }
+  }
+}

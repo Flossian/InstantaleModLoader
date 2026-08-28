@@ -112,7 +112,8 @@ runtime/instantale_modloader/
     ui.py         選択肢 / 画面の塗り替え / 会話の閉じ方 / idle待ち / 施設の引き当て
     state.py      世界の見分け方と保存先の決め方（§3.2.3）
     llm.py        LLM へ出ていく文章の捕まえ方・1問だけ聞く口（§5.3）
-    npcs.py       NPC の作り方（素データの置き場所・採番・ひな型・配置。GAME.md §2.23）
+    npcs.py       NPC の作り方（素データの置き場所・ひな型・配置。GAME.md §2.23）
+    ids.py        ゲームの採番台帳（`index`）を通した id の採り方（§3.2.3）
     recon.py      実行時リコン（モジュール構造ダンプ）
 runtime/mods/     MOD 本体（1バグ・1機能 = 1フォルダ。入口は mod.json が名指し）
     <フォルダ>/DOC.md      遊ぶ側から見た説明（§2.7）。docs/MODS.md へ綴じられる
@@ -795,7 +796,8 @@ MOD どうしが繋がるのは同じファイルを読むことによってで�
 | 所持金と「今は出さない」旗 | `ui.gold_of` / `add_gold` / `money` / `BUSY_FLAGS` | 3本 / 2本 |
 | 包む前の素の関数まで剥がす | `patch.unwrap` / `original_of` | 4本（うち2本は1段しか剥がしていなかった） |
 | 壊れない書き込み・読み込み | `ctx.write_json` / `read_json`（§3.11.1） | 3本 |
-| NPC の作り方（素データ・採番・ひな型・配置） | `npcs.make_npc` ほか（GAME.md §2.23） | 2本（`902_` と `320_`） |
+| NPC の作り方（素データ・ひな型・配置） | `npcs.make_npc` ほか（GAME.md §2.23） | 2本（`902_` と `320_`） |
+| ゲームの採番台帳を通した id の採り方 | `ids.claim` / `next_id` / `advance` / `audit` | 2本（`npcs` と `402_`）。`npcs` は `max + 1` で台帳を進めず、次の町の生成でゲームに踏まれた（VERIFICATION_LOG.md §2.77） |
 | HUD への置き場所 | `ui.overlay_host`（§5.1.3） | 2本 |
 | 表示・ログ用の切り詰め | `frames.short` | 6本 |
 | 人物の引き方と表示名 | `ui.character_of` / `character_name` | 5本 |
@@ -809,6 +811,25 @@ path = ctx.state_path("npc_profiles", world_filename(world_key(app)))
 from instantale_modloader.llm import wrap_outgoing
 wrap_outgoing(ctx, rewrite, label="my mod")     # rewrite(texts, site) -> 並び / None
 ```
+
+##### id は `ids.claim` で採る。自分で決めない
+
+ゲームは `area` / `node` / `facility` / `npc` / `item` / `quest` の id を
+セーブの `index` から連番で振り、既に同じ id が居ても上書きする（GAME.md §2.23）。
+MOD が `max + 1` や `0` からの空き探しで id を決めると、台帳が追いつかないまま
+次の生成でゲームが同じ番号を踏む。実際に店主の素データが差し替わった
+（VERIFICATION_LOG.md §2.77）。
+
+```python
+from instantale_modloader.ids import claim
+npc_id = claim(app, "npc", write=write)        # 台帳と実在の大きいほうを採り、台帳を進める
+item_key = claim(app, "item", write=write)     # "item_<n>" の書式で返る
+```
+
+`ids.audit(app)` は台帳が実在に追いついていない種類を並べる（`make_npc` が
+採番の前に呼び、ログに `ids: index behind existing ids:` を残す）。
+セーブエディタで足した施設も台帳を進めていない（ヴェスティアで facility が
+台帳 230 に対し実在 234。2026-08-29）。
 
 > `import state` ではなく関数を直に import する。
 > `301_` は `apply()` の中に `state = {...}` というローカル変数を持っている。

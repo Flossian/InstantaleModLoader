@@ -18,7 +18,8 @@
 `KeyError` の出方が答えを教えている。
 `generate_character` は素データを id で引く。ならば先にそこへ書けばよい:
 
-  1. 空いている id を取る（ゲームの採番と衝突しないよう両方を見る）
+  1. 空いている id を取る（実在する id とゲームの採番台帳 `index['npc']` の
+     大きいほう。取ったら台帳を進める。片方だけ見ると次の町の生成で衝突する）
   2. 素データの辞書すべてにセーブの形で書く（決め打ちすると外す）
   3. `World.generate_character(id, data)` で実行時の `Character` を組む
   4. `move_npc_to_facility` で施設に置く（`302_` が実証済みの経路）
@@ -37,7 +38,7 @@ README の「MOD を消せば完全に元通り」からは外れる性質なの
 import copy
 import sys
 
-from . import ui
+from . import ids, ui
 
 #: 生成直後の NPC の素データのひな型。
 #:
@@ -208,21 +209,35 @@ def save_npcs(app):
     return merged
 
 
-def free_id(app, npcs=None):
-    """まだ使われていない id。セーブと実行時の両方を見る。
+def index_stores(app):
+    """採番台帳を持つ辞書を全部集める。本体は `ids.stores`。"""
+    return ids.stores(app)
 
-    ゲームは遊んでいる最中にも NPC を作る（新しい町の生成で 37〜46 が生えた。
-    実測）。片方だけ見ると、その採番と衝突する。
+
+def next_game_id(app):
+    """ゲーム自身が次に振る NPC の id（`index['npc']`）。本体は `ids.counter`。"""
+    return ids.counter(app, "npc")
+
+
+def free_id(app, npcs=None):
+    """まだ使われていない id。台帳は進めない（進めるのは `make_npc`）。
+
+    本体は `ids.next_id`。実在 id の最大値+1 と台帳 `index['npc']` の
+    大きいほうを採る。実在 id だけを見て `max + 1` で採ると、次の町の生成で
+    ゲームが同じ番号を踏む（`ids` の冒頭。VERIFICATION_LOG.md §2.77）。
     """
-    largest = -1
     if npcs is None:
         npcs = save_npcs(app)
-    for key in list(character_ids(app)) + list(npcs or {}):
-        try:
-            largest = max(largest, int(str(key)))
-        except (TypeError, ValueError):
-            continue
-    return str(largest + 1)
+    return ids.next_id(app, "npc", used=list(npcs or {}))
+
+
+def advance_index(app, npc_id, write=None):
+    """採番台帳の `npc` を `npc_id + 1` まで進める。本体は `ids.advance`。"""
+    moved = ids.advance(app, "npc", npc_id)
+    if write and moved:
+        write("make_npc: index['npc'] -> {} via {}".format(
+            int(str(npc_id)) + 1, moved))
+    return moved
 
 
 def make_npc(app, fields, area, facility, config=None, write=None):
@@ -257,6 +272,8 @@ def make_npc(app, fields, area, facility, config=None, write=None):
         npcs = {}
         world_dict["npcs"] = npcs
 
+    # 台帳が実在に追いついていなければ記録に残す（ゲームが踏む前に気づくため）。
+    ids.audit(app, write)
     npc_id = free_id(app, npcs)
     # 並び順を崩さない。
     # テンプレートが33項目を全部持っているので、上書きだけしている限り
@@ -328,6 +345,10 @@ def make_npc(app, fields, area, facility, config=None, write=None):
         characters = getattr(getattr(app, "world", None), "characters", None)
         if isinstance(characters, dict):
             characters[npc_id] = character
+
+    # ゲームの採番台帳を進める。ここを忘れると次の町の生成で
+    # ゲームがこの番号を踏み、店主の素データが差し替わる（`free_id`）。
+    advance_index(app, npc_id, write)
 
     placed = _place(app, npc_id, character, area, facility, write)
     if write:

@@ -1883,11 +1883,24 @@ HP は `current_hp` / `max_hp` / `original_max_hp` で、`physical_integrity`（
 
 ```python
 npcs = app.save_data_dict["npcs"]          # ★ ここが本体
-npc_id = str(max(int(k) for k in 名簿) + 1)
+npc_id = str(max(max(int(k) for k in 名簿) + 1,
+                 app.save_data_dict["index"]["npc"]))   # 台帳も見る
 npcs[npc_id] = データ                       # セーブの形（下の33項目）
+for d in (app.save_data_dict, app.world_dict):
+    d["index"]["npc"] = int(npc_id) + 1     # 台帳を進める
 character = app.world.generate_character(npc_id, データ)
 app.move_npc_to_facility(npc_id, character, 施設, ノード)
 ```
+
+> **採番は `index['npc']` で決まる。実在する id の最大値ではない。**
+> ゲームが新しい町を生成するとき、店主・ギルド員の id は `index['npc']` から
+> 連番で振られ、既に同じ id の NPC が居ても構わず上書きする。
+> MOD が `max + 1` だけで採ると台帳が追いつかず、次の町の生成でゲームが
+> 同じ番号を踏む。テストワールドの灰の交易都市（area 2）では店主 50〜57 の
+> 素データが `902_` の登場人物（始まりの泥濘の冒険者）に差し替わり、
+> `world_data.json` 側にだけ正しい店主が残った（2026-08-29。
+> VERIFICATION_LOG.md §2.77）。ローダの `ids.claim`（TECH.md §3.2.3）が
+> 台帳を読んで進める。MOD は id を自分で決めない。
 
 | 関数 | 役割 |
 | --- | --- |
@@ -1902,6 +1915,7 @@ app.move_npc_to_facility(npc_id, character, 施設, ノード)
 >
 > 採番も決め打たない。
 > ゲームは遊んでいる最中にも NPC を作る（新しい町の生成で10体が一度に増えた）。
+> その番号は `index['npc']` から来る（上の枠）。
 
 生成した NPC は HP・スキル・装備・立ち絵のいずれも空でよい
 （ゲームが会話や戦闘の直前に `ensure_npc_detail_generated` で埋める）。
