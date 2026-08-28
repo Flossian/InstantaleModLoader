@@ -743,22 +743,28 @@ def apply(ctx):
                 ctx.log_exc("party talk: cannot remove a portrait frame")
 
     def remove_portraits(app):
-        """自前の枠を外し、相手枠の位置を戻す。メインスレッドから呼ぶ。"""
-        for cid in list(st["frames"]):
+        """自前の枠を外し、相手枠の位置を戻す。メインスレッドから呼ぶ。
+
+        終了ボタンと `finish_conversation` の両方から来る（片付けを先に、状態の畳みを後に）ので、
+        2度目は何もせず記録も残さない。
+        """
+        removed = [cid for cid in list(st["frames"])]
+        for cid in removed:
             detach(st["frames"].pop(cid))
-        if app is None:
-            return
-        _hud, base = anchor_frame(app)
+        restored = False
+        base = anchor_frame(app)[1] if app is not None else None
         if base is not None and hasattr(base, ORIGIN_ATTR):
             origin = getattr(base, ORIGIN_ATTR)
             try:
                 if isinstance(origin, dict):
                     base.pos_hint = dict(origin)
                 delattr(base, ORIGIN_ATTR)
+                restored = True
             except Exception:
                 ctx.log_exc("party talk: cannot restore the portrait frame")
         st["geometry_logged"] = False
-        write("portraits removed")
+        if removed or restored:
+            write("portraits removed: frames={} anchor_restored={}".format(removed, restored))
 
     def schedule_layout(app):
         if SIDE_BY_SIDE and st["active"]:
