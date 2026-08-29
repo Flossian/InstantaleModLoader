@@ -20,16 +20,40 @@ import weakref
 
 from instantale_modloader import frames, ui
 
+# 出し方と、古さの数え方。
+# これと `FRESH_SECONDS` / `FRESH_SESSIONS` は mod.json の "settings" にも載っている。
+# 既定値を両方で一致させること（`tools/check_mods.py` が AST で突き合わせる）。
 BATCH_MODE = "click"
 FRESH_MODE = "seconds"
+
+# 行ごとに現す道が使えなかったときの引き返し先（`fade`）。
+# 新着が来たことが分かる程度の合図に留める。
 FADE_SECONDS = 0.2
+
+# 覆いを1行ぶん外す間隔（`reveal`）。
 REVEAL_LINE_SECONDS = 0.04
+
+# 覆いの色。
+# 本文の上へ置く黒い板で、外した分だけ下の本文が見える。
 OVERLAY_RGBA = (0, 0, 0, 1)
+
+# 読み終わった本文の色。
 OLD_TEXT_COLOR = "#808080"
+
+# 白のまま残す長さ。
+# `FRESH_MODE` が選んだ方だけを使う。
 FRESH_SECONDS = 10.0
 FRESH_SESSIONS = 1
+
+# 新着の頭出しをするとき、その上へ何行ぶん残して止めるか。
+# 0 行だと新着が画面の最上段に来て、前の本文との繋がりが切れる。
 CONTEXT_LINES = 3
+
 monotonic_time = time.monotonic
+
+# 控えの置き場。
+# `sys` に付けるのは注入し直しても控えを引き継ぐため。
+# `apply()` の局所変数だと、注入し直すたびに打ち出し中の帳簿ごと空になる。
 STATE_STORE_ATTR = "__instantale_batch_message_render_states__"
 
 # 窓に結んだクリックの見張りを控えておく印。
@@ -102,14 +126,16 @@ def apply(ctx):
 
     def new_state():
         return {
+            # 走っている一括表示を降ろすための世代番号。
+            # 新しい本文が始まるたびに進め、予約は自分の番号と違えば何もせず戻る。
             "generation": 0,
-            "overlay": None,
-            "markup_label": None,
-            "tagged": None,
-            "plain": None,
-            "segments": [],
-            "session": 0,
-            "stream_cache": None,
+            "overlay": None,        # 覆いの Color と Rectangle（`set_cover` が作る）
+            "markup_label": None,   # こちらが色を書いたラベル（`drop_markup` で戻す相手）
+            "tagged": None,         # そのとき書いた色付きの文字列
+            "plain": None,          # その素の形
+            "segments": [],         # 本文ごとの (本文, 追加時刻, セッション番号)
+            "session": 0,           # 本文が何回追加されたか
+            "stream_cache": None,   # 逐次表示で使い回す、打っている本文より前の色
         }
 
     def state_for(app):
@@ -126,17 +152,21 @@ def apply(ctx):
         return state
 
     def note_segment(state, context):
+        """本文を1つ控える。色を付けるときの照合の元になる。"""
         state["session"] += 1
         state["segments"].append((context, monotonic_time(), state["session"]))
         if len(state["segments"]) > MAX_SEGMENTS:
             del state["segments"][:-MAX_SEGMENTS]
 
     def is_old(state, added_at, session):
+        """この本文をもう灰色にしてよいか。数え方は `FRESH_MODE` が決める。"""
         if FRESH_MODE == "sessions":
             return state["session"] - session >= FRESH_SESSIONS
         return monotonic_time() - added_at >= FRESH_SECONDS
 
+    # -- 覆いと寸法 ----------------------------------------------------------
     def hide_overlay(state):
+        """覆いを消す。作り直しはしない（次の `set_cover` が使い回す）。"""
         overlay = state.get("overlay")
         if not isinstance(overlay, dict):
             return
@@ -147,6 +177,13 @@ def apply(ctx):
             state["overlay"] = None
 
     def set_cover(state, scroll, height):
+        """本文の上へ、下から `height` の高さだけ黒い板を置く。
+
+        板は `scroll.canvas.after` に描く。
+        本文より後に描かれるので、本文を消さずに隠せる。
+        高さが 0 なら何も隠さない。
+        相手の `scroll` が入れ替わっていたら板を作り直す。
+        """
         overlay = state.get("overlay")
         if not isinstance(overlay, dict) or overlay.get("scroll") is not scroll:
             hide_overlay(state)
@@ -175,6 +212,11 @@ def apply(ctx):
             return False
 
     def snapshot(app, state):
+        """本文を一括で入れる直前の画面を控え、先に全面を覆う。
+
+        入れ替えの瞬間を見せないための覆いなので、本文を書く前に掛ける。
+        覆えなかったときは None を返し、呼び出し側はフェードへ引き返す。
+        """
         try:
             hud = ui.find_hud(app)
             label = frames.attr(hud, "text_display")
@@ -189,13 +231,14 @@ def apply(ctx):
                 "hud": hud,
                 "label": label,
                 "scroll": scroll,
-                "before_height": before_height,
+                "before_height": before_height,  # 控えるだけ（いまは読んでいない）
             }
         except Exception:
             hide_overlay(state)
             return None
 
     def line_height_of(label):
+        """1行ぶんの高さ。覆いを外す刻みに使う。"""
         try:
             return max(
                 1.0,
@@ -205,6 +248,12 @@ def apply(ctx):
             return 1.0
 
     def measured_height(label, text):
+        """`text` をそのラベルの書式で組んだときの高さを実測する。
+
+        画面のラベルには触らない。
+        同じ書式の使い捨てを1枚焼いて寸法だけ取る。
+        書体と折り返し幅を写し損ねると値がずれるので、あるものはすべて渡す。
+        """
         try:
             from kivy.core.text import Label as CoreLabel
             text_size = frames.attr(label, "text_size", (None, None))
@@ -228,6 +277,11 @@ def apply(ctx):
             return None
 
     def estimate_height(label, text, line_height):
+        """実測できなかったときの見積り。
+
+        折り返し幅を1文字ぶんの大きさで割って桁数を出し、行数を数える。
+        全角と半角を区別しないので粗いが、外れても覆いの高さがずれるだけで済む。
+        """
         try:
             text_size = frames.attr(label, "text_size", (None, None))
             width = float(text_size[0])
@@ -241,6 +295,11 @@ def apply(ctx):
         return max(line_height, lines * line_height)
 
     def region_height_from(label, shown, start):
+        """`shown` の `start` 以降が画面で何ピクセルぶんになるか。
+
+        `start` は行の先頭でなければ受けない（途中からだと折り返しが変わる）。
+        全体の高さから前半の実測を引くのが確かで、引けないときだけ見積りへ落とす。
+        """
         if type(start) is not int or start < 0 or start > len(shown):
             return None
         prefix = shown[:start]
@@ -456,6 +515,10 @@ def apply(ctx):
 
     # -- 一括表示 ------------------------------------------------------------
     def schedule(callback, delay=0):
+        """次のフレーム（または `delay` 秒後）へ回す。
+
+        Kivy が居ない場所（オフライン検証）ではその場で呼ぶ。
+        """
         try:
             from kivy.clock import Clock
             Clock.schedule_once(callback, delay)
@@ -463,6 +526,11 @@ def apply(ctx):
             callback()
 
     def fade(app, state):
+        """行ごとに現す道が使えないときの引き返し先。
+
+        ラベル全体を薄くしてから戻す。
+        新着だけを狙えないので、読んでいる途中の本文も一緒に薄くなる（`FADE_FROM`）。
+        """
         generation = state["generation"]
 
         def run(_dt=None):
@@ -492,6 +560,12 @@ def apply(ctx):
         schedule(run)
 
     def reveal(app, state, context, captured):
+        """一括で入れた本文のうち、新着の部分を上から順に見せる。
+
+        新着の頭が見えるところまでスクロールし、そこから下を覆い、
+        覆いを1行ずつ外して末尾まで出す。
+        新着の位置が分からない、寸法が測れない、覆えないのどれかなら `fade` へ引き返す。
+        """
         generation = state["generation"]
 
         def begin(_dt=None):
@@ -527,12 +601,17 @@ def apply(ctx):
                     max(0.0, content_height - region_height))
 
                 def position_for(remaining):
+                    """下から `remaining` の高さぶんが残る位置の `scroll_y`。"""
                     if overflow <= 0:
                         return 0.0
                     return max(0.0, min(
                         1.0, (remaining - viewport_height) / overflow))
 
+                # 新着の頭が画面の上の方へ来るところで止める。
+                # `context_height` のぶんだけ前の本文を残し、繋がりを切らない。
                 scroll.scroll_y = position_for(region_height + context_height)
+                # 覆うのは1画面ぶんまで。
+                # 新着が画面より長ければ、見えている範囲だけを順に外す。
                 page_height = min(viewport_height, region_height)
                 page = {"revealed": 0.0}
                 if not set_cover(state, scroll, page_height):
@@ -566,6 +645,11 @@ def apply(ctx):
         schedule(begin)
 
     def show_at_once(orig, app, dt, context, state):
+        """本文を一度に入れる（`BATCH_MODE` が `always`）。
+
+        入れるのはゲームの `add_text_immediately`。
+        覆いを先に掛けてから入れ、入れ終わってから `reveal` で行ごとに見せる。
+        """
         immediate = frames.attr(app, "add_text_immediately")
         state["generation"] += 1
         captured = snapshot(app, state)
@@ -846,6 +930,7 @@ def apply(ctx):
         return None
 
     def continue_stream(orig, app, dt, context, index):
+        """1文字ぶんの続きの呼び出し。捨てる・そのまま通す・打ち切る、の三択。"""
         if is_dropped(app, context):
             # 打ち切りで自分で回した鎖の残り。
             # ゲームへ渡すと終端を二度踏む。
@@ -886,6 +971,12 @@ def apply(ctx):
             ctx.log_exc("batch message render: could not accept the click")
 
     def watch_touch():
+        """クリックの見張りを窓へ結び直す。結べたら True。
+
+        先に古い版の手を外す。
+        注入し直したとき、消えた版の関数が窓に残ったままになる。
+        `BATCH_MODE` が `click` でなければ、外すだけで結ばない。
+        """
         try:
             from kivy.core.window import Window
         except Exception:
@@ -913,6 +1004,8 @@ def apply(ctx):
     # -- 差し込み ------------------------------------------------------------
     @ctx.wrap("__main__:InstantaleApp.add_text_display", required=False, safe=True)
     def add_text_display(orig, self, dt, context, index=-1):
+        # `index == -1` が新しい本文の始まりで、全文がここへ渡ってくる。
+        # それ以外は1文字ずつの続きなので、鎖の側へ回す。
         if index != -1 or not isinstance(context, str):
             return continue_stream(orig, self, dt, context, index)
 

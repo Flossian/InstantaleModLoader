@@ -2,6 +2,7 @@
 """mod の静的検査。ゲーム不要。注入する前に必ず通すこと。
 
     python tools/check_mods.py
+    python tools/check_mods.py --only 404     名前に 404 を含む mod だけを見る
 
 `python -m compileall` は**構文しか見ない**。
 実際にゲームを落としたのはどれも構文としては正しいコードだった:
@@ -22,6 +23,10 @@
   * `"api"` がこのローダで扱えない
   * `load_order.json` と実体の食い違い、`"after"` / `"before"` の循環
   * `"settings"` の宣言と、コード側の定数のずれ（**既定値が2箇所にある**ため）
+  * 提供を受けた MOD の作者が `NOTICE` に載っていない（**配ると表示が欠けたまま
+    再配布される**。MIT は著作権表示が複製に付いて回ることを要求する）
+  * MOD どうしで名前がぶつかっている（ボタンの印・ウィジェットの属性・`state/` の
+    フォルダ名。**例外は出ず、片方の機能が黙って効かなくなる**）
 
 探索と適用順の判定は**ローダ本体の `discover()` を呼ぶ**。
 以前はここに同じ規則を書き写していたので、片方だけ直すと検査と実際の適用順がずれた。
@@ -38,6 +43,8 @@ sys.path.insert(0, os.path.join(_ROOT, "runtime"))
 
 import instantale_modloader as ml            # noqa: E402
 from instantale_modloader import config as C  # noqa: E402
+
+import mods_meta                              # noqa: E402
 
 MODS_DIR = os.path.join(_ROOT, "runtime", "mods")
 MANIFEST_NAME = "mod.json"
@@ -307,13 +314,182 @@ def check_order(found):
     return problems, notes
 
 
+#: 名前がぶつかると静かに壊れるもの。値の先頭で見分ける。
+#:
+#:   mod_          自前ボタンの印（`ui.MARK_PREFIX`）と LLM の `manager_name`
+#:   _instantale   ウィジェットや `sys` に付ける属性
+NAMESPACE_PREFIXES = ("mod_", "_instantale")
+
+#: 値では見分けられないので**定数の名前**で拾うもの。
+#: `state/` のフォルダ名は `"npc_profiles"` のような普通の語なので、
+#: 値だけを見ても他の文字列と区別が付かない。
+NAMESPACE_SUFFIXES = ("STATE_DIRNAME", "_DIRNAME")
+
+#: 「この名前は自分のものではない」と `mod.json` で断る鍵。
+SHARES_KEY = "shares"
+
+
+def _module_names(path):
+    """1ファイルのモジュール直下の文字列定数を `{値: [定数名, ...]}` で返す。
+
+    見るのはモジュール直下だけ。
+    関数の中で組み立てる名前（`404_` の読み取り先など）は追わない ―
+    **見えるものだけを確かめる**のがこの検査の立場で、
+    見えないものまで拾おうとすると誤検知でこの検査自体が信用されなくなる。
+    """
+    out = {}
+    tree, _problem = _parse(path)
+    if tree is None:
+        return out
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        if not (isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, str)):
+            continue
+        names = [t.id for t in node.targets if isinstance(t, ast.Name)]
+        value = node.value.value
+        wanted = value.startswith(NAMESPACE_PREFIXES) or any(
+            n == NAMESPACE_SUFFIXES[0] or n.endswith(NAMESPACE_SUFFIXES[1])
+            for n in names)
+        if wanted and value:
+            out.setdefault(value, []).extend(names)
+    return out
+
+
+def check_namespaces(found):
+    """MOD どうしで名前がぶつかっていないか。
+
+    ぶつかると**例外は出ない**。
+    ボタンの印を共有すれば相手の `on_button_press` が自分のボタンを握り潰し、
+    `state/` のフォルダ名を共有すれば2本が同じ控えを書き合う。
+    どちらも「なぜか効かない」としてしか現れないので、静的に捕まえる。
+
+    **共有そのものは禁じない。**
+    他の MOD の控えを読む・相手が置いた印を見る、はこのローダの正しい繋がり方で
+    （MOD どうしは import しない。TECH.md §3.2.3）、実際に4本がそうしている。
+    区別するのは**断ってあるかどうか**だけ:
+
+        "shares": ["npc_profiles"]      この名前は自分のものではない、の意思表示
+
+    同じ名前を使う MOD のうち、断っていないものが**ちょうど1本**なら持ち主が
+    決まっていて正常。0本（誰も名乗らない）と2本以上（取り合い）は問題。
+    """
+    installed = found["installed"]
+    owners, users = {}, {}
+    for name in installed:
+        # ローダの `_manifest()` は知っている鍵だけを写すので、`shares` は
+        # 素の `mod.json` から読む。
+        declared = mods_meta.manifest(name, MODS_DIR).get(SHARES_KEY)
+        declared = set(declared) if isinstance(declared, (list, tuple)) else set()
+        for path in _mod_files(name):
+            for value, consts in _module_names(path).items():
+                users.setdefault(value, {})[name] = consts
+                if value not in declared:
+                    owners.setdefault(value, set()).add(name)
+
+    problems, notes = [], []
+    for value, mods in sorted(users.items()):
+        if len(mods) < 2:
+            continue
+        holders = sorted(owners.get(value, ()))
+        if len(holders) == 1:
+            continue
+        where = ", ".join("{}（{}）".format(m, "/".join(sorted(set(c))))
+                          for m, c in sorted(mods.items()))
+        if not holders:
+            message = ('名前 {!r} を持つ MOD が居ない（{}）。'
+                       '全部が "{}" で断っている'.format(value, where, SHARES_KEY))
+        else:
+            message = ('名前 {!r} を {} 本が取り合っている（{}）。'
+                       '持ち主以外は mod.json の "{}" に書くこと'
+                       .format(value, len(holders), where, SHARES_KEY))
+        entry = (os.path.join(MODS_DIR, holders[0] if holders else
+                              sorted(mods)[0], MANIFEST_NAME),
+                 MANIFEST_NAME, message)
+        # 開発中の mod（9xx）が絡むものは note。理由は `main` の分岐と同じ。
+        (notes if any(ml.is_wip(m) for m in mods) else problems).append(entry)
+    return problems, notes
+
+
+def check_notice(found):
+    """提供を受けた MOD の作者が `NOTICE` に載っているか。
+
+    `LICENSE` は MIT の原文で、著作権表示は「複製に付いて回る」ことを要求する。
+    同梱物の一部が他者の著作物なら、その旨が配布物の中に無ければならない。
+    `mod.json` の `author` は名乗りであって権利の表示ではないので、
+    そこに書いてあることは根拠にならない。
+
+    ここで見るのは**名前が NOTICE の本文に在るか**だけ。
+    文面の良し悪しは機械では見られないが、
+    「新しい提供者が増えたのに NOTICE を直し忘れた」は必ず捕まる
+    ― 実際 `404_party_talk` が入ったとき、NOTICE は
+    「同梱 MOD はすべて本プロジェクトの著作物」と言ったままだった。
+
+    開発中の MOD（9xx）は配布物に入らないので見ない（TECH.md §2.6）。
+    """
+    path = os.path.join(_ROOT, "NOTICE")
+    name = "NOTICE"
+    try:
+        with io.open(path, encoding="utf-8") as fh:
+            body = fh.read()
+    except OSError:
+        return [(path, name, "NOTICE が読めない")], []
+
+    shipped = [n for n in found["installed"] if not ml.is_wip(n)]
+    rows = mods_meta.contributed(shipped, MODS_DIR)
+    problems, notes = [], []
+    # 雛形の見本の名前（`your name here`）を消し忘れたまま取り込むと、
+    # `contributed()` がそれを作者として数えないので、
+    # **提供なのに提供として現れない**。名前が要ることだけ知らせる。
+    for name in shipped:
+        data = mods_meta.manifest(name, MODS_DIR)
+        left = [who for who in mods_meta.authors(data)
+                if who in mods_meta.PLACEHOLDER_AUTHORS]
+        if left:
+            notes.append((os.path.join(MODS_DIR, name, "mod.json"), "mod.json",
+                          '"author" が雛形のまま（{}）。'
+                          "誰の著作物かが決まらない".format(", ".join(left))))
+    for who in mods_meta.names_of(rows):
+        if who in body:
+            continue
+        where = [folder for folder, names, _shared in rows if who in names]
+        problems.append((path, name,
+                         '提供者 "{}" が NOTICE に載っていない（{}）。'
+                         "同梱物の一部が他者の著作物であることは"
+                         "配布物の中に書いてあること".format(
+                             who, ", ".join(where))))
+    return problems, notes
+
+
+def _only(argv):
+    """`--only <文字列>` / `--only=<文字列>`。フォルダ名の部分一致。
+
+    提供を受けた1本を見るときに、87本ぶんの出力を読まずに済ませるためのもの。
+    **全体の検査（並び・NOTICE・名前の取り合い）は同時に外れる** ―
+    どれも「他の mod との関係」を見るもので、1本だけ見ても答えが出ないため。
+    """
+    for n, arg in enumerate(argv):
+        if arg.startswith("--only="):
+            return arg.split("=", 1)[1]
+        if arg == "--only" and n + 1 < len(argv):
+            return argv[n + 1]
+    return None
+
+
 def main():
     strict = "--strict" in sys.argv
+    only = _only(sys.argv[1:])
     # デバッグモードの設定に関わらず、入っている mod を全部見る。
     # 切っている間だけ計測 mod の `after` が誰にも確かめられない、
     # という穴を作らないため。
     found = ml.discover(MODS_DIR, debug=True)
     mods = found["installed"]
+    if only:
+        mods = [name for name in mods if only in name]
+        if not mods:
+            print("--only {!r} に当たる mod が無い。".format(only))
+            return 1
 
     problems, notes = [], []
     for name in mods:
@@ -331,9 +507,13 @@ def main():
         else:
             problems += mod_problems
             notes += mod_notes
-    order_problems, order_notes = check_order(found)
-    problems += order_problems
-    notes += order_notes
+    if not only:
+        # ここから下は**全体を見る検査**。`--only` のときは走らせない
+        # （1本だけ見ても答えが出ない。`_only` の説明を参照）。
+        for check in (check_order, check_notice, check_namespaces):
+            got_problems, got_notes = check(found)
+            problems += got_problems
+            notes += got_notes
 
     if strict:
         problems += notes
@@ -348,8 +528,9 @@ def main():
 
     show(problems, "MISMATCH")
     show(notes, "note    ")
-    print("checked {} mod(s); problems: {}{}".format(
-        len(mods), len(problems),
+    print("checked {} mod(s){}; problems: {}{}".format(
+        len(mods), "（--only {}。全体の検査は外れている）".format(only) if only else "",
+        len(problems),
         "; notes: {}".format(len(notes)) if notes else ""))
     return 1 if problems else 0
 

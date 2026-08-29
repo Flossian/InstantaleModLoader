@@ -11,6 +11,11 @@
 「何をするか」の1行は MODS.md の見出しから採る。
 2箇所に同じ文を置かずに済み、詳細への行き先もその見出しへ張れる。
 見出しの無い MOD（計測のほとんど）は `mod.json` の説明の1文目に落ちる。
+
+作者は `mod.json` の `author`。**外部から提供を受けた MOD だけ**を末尾の節に出す
+（欄にすると 8 割が空になるうえ、`author` はほとんどの MOD で同じ1名になる）。
+誰の著作物かは NOTICE が持つ ― こちらはその索引で、
+`tools/check_mods.py` が両者の食い違いを見る。
 """
 from __future__ import annotations
 
@@ -19,6 +24,8 @@ import json
 import os
 import re
 import sys
+
+import mods_meta
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODS_DIR = os.path.join(ROOT, "runtime", "mods")
@@ -100,6 +107,9 @@ def collect() -> list:
             "debug": bool(data.get("debug")),
             "superseded": data.get("superseded") or "",
             "link": link,
+            # 提供者（`SELF` 以外の作者）。自分の MOD では空。
+            "contributors": mods_meta.contributors(data),
+            "shared": mods_meta.is_shared(data),
         })
     return out
 
@@ -129,6 +139,10 @@ def render(mods: list) -> str:
     add("直す先は各 MOD の `mod.json` か MODS.md の見出し。")
     add("")
     add("同梱 %d 本（%s）。" % (len(mods), tally))
+    given = [m for m in mods if m["contributors"]]
+    if given:
+        add("うち %d 本は外部の MOD 作者からの提供（下の「提供を受けた MOD」）。"
+            % len(given))
     add("")
     add("並びはフォルダ名順。")
     add("適用順はこれとは別で、GUI の `順` 列（`load_order.json`）が持つ。")
@@ -169,6 +183,36 @@ def render(mods: list) -> str:
                 add("| %s | %s | %s | %s | %s |" % (
                     folder, cell(m["name"]), cell(m["what"]),
                     m["settings"] or "-", state))
+        add("")
+
+    if given:
+        add("---")
+        add("")
+        # 見出しに本数を入れない。ここは MODS.md から名指しで張られる節で、
+        # 本数を入れると**提供が1本増えるたびに行き先が変わる**。
+        # 他の節（種別ごと）が本数を持っているのは、張られていないため。
+        add("## 提供を受けた MOD")
+        add("")
+        add("外部の MOD 作者から提供を受けて同梱している %d 本。" % len(given))
+        add("")
+        add("**番号の帯では数えられない。**")
+        add("いま提供を取り込む先は出どころの帯（`4xx`）だが、")
+        add("その帯が出来る前に取り込んだものは種別どおりの帯に入っており、")
+        add(r"番号を振り直すと遊んでいる人の `state\` と設定が"
+            r"行方不明になるので動かしていない。")
+        add("数える先は `mod.json` の `author` で、この表もそこから組む。")
+        add("")
+        add("権利の所在は [NOTICE](../NOTICE) が持つ。")
+        add("提供者がここに居て NOTICE に居なければ `tools/check_mods.py` が止める。")
+        add("")
+        add("| フォルダ | 提供 | 取り込み |")
+        add("|---|---|---|")
+        for m in sorted(given, key=lambda m: m["folder"]):
+            folder = ("[`%s`](MODS.md#%s)" % (m["folder"], m["link"])
+                      if m["link"] else "`%s`" % m["folder"])
+            note = "提供者と共同" if m["shared"] else "そのまま取り込み"
+            add("| %s | %s | %s |" % (
+                folder, cell(mods_meta.credit(m["contributors"])), note))
         add("")
     return "\n".join(L)
 

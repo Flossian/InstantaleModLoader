@@ -41,8 +41,14 @@ LLM はマーカーを出さない。
 from instantale_modloader.llm import wrap_outgoing
 
 
+# 監査ログ。
+# 何を書き換え、どの戻り値をどう直したかはこちらへ残す。
+# 素通しした理由もここに出るので、効いていないときはまずこれを見る。
 LOG_BASENAME = "crime_attribution_fix.log"
 
+# 戻り値を直す相手。
+# 同じ facilitator でも、会話中・クエスト中と場面ごとに入口が分かれている。
+# 名前を並べて同じ包みを掛ける（無い名前は `required=False` で見送る）。
 FACILITATOR_TARGETS = (
     "master_ai_facilitator",
     "master_ai_facilitator_from_conversation",
@@ -50,6 +56,8 @@ FACILITATOR_TARGETS = (
     "master_ai_faciltiator_from_conversation_in_quest",  # ゲーム側の綴り
 )
 
+# `lawfulness_loss` を返す側。
+# 誤帰属がエリア内の評判低下として残るのはこちら。
 SUMMARIZER_TARGETS = (
     "master_ai_process_summarizer",
     "master_ai_process_summarizer_in_conversation",
@@ -58,10 +66,19 @@ SUMMARIZER_TARGETS = (
     "master_ai_process_summarizer_with_no_recipients",
 )
 
+# LLM に付けさせる機械可読マーカー。
+# 判定を運ぶためだけのものなので、読み取った時点で本文から外す（`actor_and_clean`）。
 MARK_PLAYER = "【crime_actor:player】"
 MARK_OTHER = "【crime_actor:other_or_none】"
+
+# 書き換え済みのプロンプトに置く印。
+# 同じ並びへ二度当たっても壊れないのは、これを見て何もしないから（`rewrite_texts`）。
 INJECT_MARKER = "【犯罪帰属MOD】"
 
+# 置換の目印。
+# ゲーム側の system 文から1字も違わず写したもの。
+# facilitator と summarizer のどちらの並びかも、この2つが何個あるかで見分ける。
+# ゲームがこの文を変えると数が合わなくなり、素通し（`not_target`）へ倒れる。
 ARREST_ANCHOR = (
     "- arrest_player: プレイヤーを逮捕する。懲役刑を受けることになる。"
 )
@@ -74,6 +91,9 @@ LAW_ANCHOR = (
     "0と指定すること。"
 )
 
+# 目印を置き換える本文。
+# 元の指示（逮捕、評判低下の説明）はそのまま残し、
+# 行為主体の判定と、判定結果をマーカーで出させる指示を足す。
 ATTRIBUTION_RULES = (
     "\n{marker}\n"
     "【犯罪主体の判定 ― 最優先】\n"
@@ -113,12 +133,22 @@ SUMMARIZER_REPLACEMENT = (
 
 
 def _get(container, name):
+    """戻り値から項目を1つ読む。
+
+    LLM 処理の戻り値が dict なのか属性を持つオブジェクトなのかは決めつけない。
+    """
     if isinstance(container, dict):
         return container.get(name)
     return getattr(container, name, None)
 
 
 def _set(container, name, value):
+    """戻り値の項目を書き換える。書けたときだけ True。
+
+    読み取り専用の形へ当たることがあるので、書けたかどうかを読み返して確かめる。
+    呼び出し側はこれが False なら素通しへ倒れる。
+    書けていないのに直したことにしないため。
+    """
     try:
         if isinstance(container, dict):
             container[name] = value
@@ -130,6 +160,11 @@ def _set(container, name, value):
 
 
 def shape_of(value):
+    """監査ログ用に、戻り値の形だけを短く書き出す。
+
+    中身は書かない（会話の本文がそのままログへ流れる）。
+    知らない形が来たときに、次にどこを見ればよいかが分かる程度に留める。
+    """
     if isinstance(value, dict):
         return "dict{" + ", ".join(sorted(str(k) for k in value)[:8]) + "}"
     if isinstance(value, (list, tuple)):
@@ -142,7 +177,12 @@ def shape_of(value):
 
 
 def actor_and_clean(text):
-    """先頭マーカーを `(actor, マーカー除去後)` にする。無ければ `(None, text)`。"""
+    """先頭マーカーを `(actor, マーカー除去後)` にする。無ければ `(None, text)`。
+
+    マーカーは判定を運ぶだけのものなので、読み取ったら本文から外す。
+    残すと think や summary に混ざったまま記憶へ入る。
+    先頭の空白は元の位置に戻し、本文の見た目は変えない。
+    """
     if not isinstance(text, str):
         return None, text
     stripped = text.lstrip()
@@ -155,11 +195,17 @@ def actor_and_clean(text):
 
 
 def process_type(item):
+    """処理1件の種類。並びの中身も dict とは限らないので `_get` 越しに引く。"""
     return _get(item, "type")
 
 
 def postprocess_facilitator(result):
-    """明示的に他者犯罪と判定された場合だけ `arrest_player` を除く。"""
+    """明示的に他者犯罪と判定された場合だけ `arrest_player` を除く。
+
+    戻り値は `(結果, 理由, 除いた件数)` で、理由はそのまま監査ログの語彙になる。
+    マーカーが無い・書き戻せない・`process` が知らない形、
+    のどれに当たっても従来の結果をそのまま返す。
+    """
     actor, cleaned = actor_and_clean(_get(result, "think"))
     if actor is None:
         return result, "marker_missing", 0
@@ -182,7 +228,11 @@ def postprocess_facilitator(result):
 
 
 def postprocess_summarizer(result):
-    """明示的に他者犯罪と判定された場合だけ `lawfulness_loss` を 0 にする。"""
+    """明示的に他者犯罪と判定された場合だけ `lawfulness_loss` を 0 にする。
+
+    戻り値は `(結果, 理由, 直す前の値)`。
+    真偽値を先に弾いてから数として見る（True は 1 として通ってしまう）。
+    """
     actor, cleaned = actor_and_clean(_get(result, "summary"))
     if actor is None:
         return result, "marker_missing", None
@@ -246,6 +296,12 @@ def rewrite_texts(texts):
 
 def apply(ctx):
     log_path = ctx.out_path(LOG_BASENAME)
+    # 起動時の自己検査。
+    # 目印を1つだけ置いた並びを自分で書き換えてみて、
+    # summarizer として当たること、印が入ること、二度目が素通しになることを確かめる。
+    # 目印はゲームの system 文の写しなので、ゲーム側が文を変えるとここで落ちる。
+    # 落ちたら MOD ごと止める。
+    # プロンプトだけ書き換わってマーカーが出ない、という中途半端に効いた状態を作らないため。
     rewritten, check_kind, check_reason = rewrite_texts([LAW_ANCHOR])
     verified = (
         check_kind == "summarizer"
@@ -253,12 +309,20 @@ def apply(ctx):
         and INJECT_MARKER in rewritten[0]
         and rewrite_texts(rewritten)[2] == "already_injected"
     )
-    state = {"enabled": verified, "missing": set(), "rewrites": 0}
+    state = {
+        "enabled": verified,    # 自己検査に通ったか。落ちていれば何もしない
+        "missing": set(),       # 素通しの理由を残した場所（同じものは二度書かない）
+        "rewrites": 0,          # 書き換えた回数（ログの通し番号）
+    }
 
     write = ctx.logger(LOG_BASENAME)
 
     def rewrite(texts, site):
-        """ローダから呼ばれる。書き換えないときは None。"""
+        """ローダから呼ばれる。書き換えないときは None。
+
+        `site` はどの送り口を通ったか。
+        ローカルの3点とクラウドの別名を見分けるためにログへそのまま出す。
+        """
         if not state["enabled"]:
             return None
         new_texts, kind, reason = rewrite_texts(texts)
@@ -275,11 +339,19 @@ def apply(ctx):
                 write("prompt unchanged at {}: {}".format(site, reason))
         return None
 
+    # プロンプトを書き換える口はローダが持っている。
+    # ローカルの3点もクラウドの別名も、別名が後から生えたときの掛け直しもそちらの担当。
+    # `on_arm` はその掛け直しが起きた時点を残すため（起動ログには間に合わない）。
     hooks = wrap_outgoing(
         ctx, rewrite, label="crime attribution fix",
         on_arm=lambda target: write("late-armed on {}".format(target)))
 
     def wrap_facilitator(name):
+        """`name` の戻り値を後から直す包みを1つ掛ける。
+
+        素の処理はそのまま呼ぶ。
+        直すのは戻ってきた後だけなので、マーカーが無ければ結果は素のままになる。
+        """
         @ctx.wrap("scripts.llm.llm_manager:{}".format(name), required=False)
         def facilitator(orig, *args, **kwargs):
             result = orig(*args, **kwargs)
@@ -287,6 +359,8 @@ def apply(ctx):
                 return result
             try:
                 result, reason, removed = postprocess_facilitator(result)
+                # ログは動きがあったときだけ。
+                # この2つは毎回の推論で出るので、逮捕を除いたときにしか残さない。
                 if removed or reason not in ("player_keep", "other_no_arrest"):
                     write("{}: {} removed={} shape={}".format(
                         name, reason, removed, shape_of(result)))
@@ -296,6 +370,7 @@ def apply(ctx):
         return facilitator
 
     def wrap_summarizer(name):
+        """`name` の戻り値を後から直す包みを1つ掛ける（`lawfulness_loss` の側）。"""
         @ctx.wrap("scripts.llm.llm_manager:{}".format(name), required=False)
         def summarizer(orig, *args, **kwargs):
             result = orig(*args, **kwargs)
@@ -303,6 +378,8 @@ def apply(ctx):
                 return result
             try:
                 result, reason, previous = postprocess_summarizer(result)
+                # `player_keep` は毎回の推論で出るので、
+                # 評判低下が実際に付いた回だけ残す。
                 if reason != "player_keep" or previous:
                     write("{}: {} previous_loss={!r} shape={}".format(
                         name, reason, previous, shape_of(result)))
@@ -317,6 +394,8 @@ def apply(ctx):
         wrap_summarizer(target_name)
 
     if verified:
+        # 掛かった送り口を起動ログに出す。
+        # クラウドの別名は起動の時点ではまだ無いことがあり、そのときは後から掛かる。
         armed = hooks.armed()
         ctx.log("crime attribution fix installed; prompt sites {}; log {}".format(
             ", ".join(armed) if armed else "none yet (waiting for the alias)",

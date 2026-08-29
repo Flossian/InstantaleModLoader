@@ -9,6 +9,7 @@
 直す先は各 MOD の `mod.json` か MODS.md の見出し。
 
 同梱 82 本（基盤 2 / 修正 31 / 追加 25 / 計測 24）。
+うち 9 本は外部の MOD 作者からの提供（下の「提供を受けた MOD」）。
 
 並びはフォルダ名順。
 適用順はこれとは別で、GUI の `順` 列（`load_order.json`）が持つ。
@@ -139,3 +140,30 @@
 | `221_probe_item_level` | 品物のレベルを誰が決めているかを録る |
 | `222_probe_battle_mechanics` | 戦闘の数の作られ方を録る |
 | `223_probe_party_equipment` | 本体のアイテム popup と `ItemEquipManager` / `ItemUnequipManager` の入口を観測し、素のゲームが実際に誰の `equipments` を書き換えるかを測る（`402_party_inventory_transfer` が NPC の装備を直書きし続けるかを決める材料） |
+
+---
+
+## 提供を受けた MOD
+
+外部の MOD 作者から提供を受けて同梱している 9 本。
+
+**番号の帯では数えられない。**
+いま提供を取り込む先は出どころの帯（`4xx`）だが、
+その帯が出来る前に取り込んだものは種別どおりの帯に入っており、
+番号を振り直すと遊んでいる人の `state\` と設定が行方不明になるので動かしていない。
+数える先は `mod.json` の `author` で、この表もそこから組む。
+
+権利の所在は [NOTICE](../NOTICE) が持つ。
+提供者がここに居て NOTICE に居なければ `tools/check_mods.py` が止める。
+
+| フォルダ | 提供 | 取り込み |
+|---|---|---|
+| [`117_message_text_integrity`](MODS.md#117_message_text_integrity-長い応答が途中で切れるのを直す) | yoshinari/tomotomo-y 様 | そのまま取り込み |
+| [`118_batch_message_render`](MODS.md#118_batch_message_render-本文の出し方逐次一括と既読の色を選ぶ) | yoshinari/tomotomo-y 様 | 提供者と共同 |
+| [`119_fix_crime_attribution`](MODS.md#119_fix_crime_attribution-他人の犯罪が主人公のものになるのを直す) | yoshinari/tomotomo-y 様 | そのまま取り込み |
+| `223_probe_party_equipment` | MoririnJP 様 | そのまま取り込み |
+| [`311_npc_profile_memory`](MODS.md#311_npc_profile_memory-npcが会話の内容を覚える) | yoshinari/tomotomo-y 様 | 提供者と共同 |
+| [`401_battle_character_context`](MODS.md#401_battle_character_context-戦闘の審判へ同行者の人物と装備を見せる) | MoririnJP 様 | そのまま取り込み |
+| [`402_party_inventory_transfer`](MODS.md#402_party_inventory_transfer-仲間とアイテムを受け渡しできる) | MoririnJP 様 | そのまま取り込み |
+| [`403_npc_social_memory`](MODS.md#403_npc_social_memory-npc同士がお互いを認知し関係を覚える) | MoririnJP 様 | そのまま取り込み |
+| [`404_party_talk`](MODS.md#404_party_talk-パーティーメンバー全員と話す) | MoririnJP 様 | 提供者と共同 |

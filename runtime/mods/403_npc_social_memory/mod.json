@@ -4,6 +4,7 @@
   "kind": "feature",
   "version": "7",
   "author": "MoririnJP",
+  "shares": ["npc_profiles"],
   "name": {
     "en": "NPC social memory",
     "ja": "NPC同士の認知と関係記憶"

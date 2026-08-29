@@ -18,7 +18,7 @@
     "ja": "表示中に画面をクリックすると残りを一括表示する（常時一括にもできる）。古い本文は灰色にする"
   },
   "version": "3",
-  "author": "yoshinari/tomotomo-y",
+  "author": "yoshinari/tomotomo-y, R01/Flossian",
   "settings": {
     "BATCH_MODE": {
       "type": "choice",

@@ -6,7 +6,7 @@ InstantaleModLoader — 権利関係についての補足
 ここには「MIT が何に及び、何に及ばないか」だけを書いてある。
 
 --------------------------------------------------------------------------
-MIT が及ぶもの（すべて本プロジェクトの著作物）
+MIT が及ぶもの
 --------------------------------------------------------------------------
 
   * ローダ本体          runtime/instantale_modloader/
@@ -14,6 +14,57 @@ MIT が及ぶもの（すべて本プロジェクトの著作物）
   * ツール類            tools/
   * ランチャー          InstantaleModLoader.bat, make_dist.bat
   * ドキュメント        docs/
+
+いずれも MIT で配っている。ただし**すべてが同じ著作者のものではない。**
+
+--------------------------------------------------------------------------
+同梱 MOD の著作者
+--------------------------------------------------------------------------
+
+同梱 MOD の大半は R01/Flossian の著作物だが、**一部は外部の MOD 作者から
+提供を受けたもの**で、その著作権は各作者に帰属する。提供を受けたものも含めて
+MIT で配っているが、著作権表示（LICENSE の Copyright 行）は提供者にも及ぶ。
+
+  * yoshinari/tomotomo-y 様
+        117_message_text_integrity
+        118_batch_message_render    （提供を受けたものを共同で仕上げた）
+        119_fix_crime_attribution
+        311_npc_profile_memory      （提供を受けたものを共同で仕上げた）
+
+  * MoririnJP 様
+        223_probe_party_equipment
+        401_battle_character_context
+        402_party_inventory_transfer
+        403_npc_social_memory
+        404_party_talk          （提供を受けたものを共同で仕上げた）
+
+いずれも取り込みにあたってこちらで調整を加えている。経緯は docs/MODS.md の
+各 MOD の説明にある。作者は各 MOD の mod.json の "author" が名乗り、
+一覧は docs/MODLIST.md の「提供を受けた MOD」にある。
+
+**この節は tools/check_mods.py が検算する。** 提供を受けた MOD の作者が
+ここに載っていなければ検査が止まるので、名前だけの取りこぼしは起こらない。
+
+--------------------------------------------------------------------------
+提供を受けるときのライセンス
+--------------------------------------------------------------------------
+
+**MOD の提供は MIT で受ける。** 出ていくものと同じライセンスで、
+特別な取り決めは置かない。具体的には次の3つである。
+
+  * **著作権は提供者に残る。** こちらへ譲り渡してもらうことはしない。
+    上の「同梱 MOD の著作者」がその表示にあたる
+
+  * **同梱したものは MIT で配る。** 提供者を含む全員が、再配布・改変・
+    商用利用を MIT の条件どおりに行える
+
+  * **取り込み後の調整と保守はこちらで行う。** ゲーム本体の更新への追随、
+    他の MOD との衝突の解消、ローダの API 変更への追随が含まれる。
+    提供者に継続の義務は無い
+
+提供する側がライセンスを明示していない場合は、取り込む前にこの条件でよいかを
+確かめる。**確かめられないものは同梱しない**（配った後では直せないため）。
+手順は docs/CONTRIBUTING.md にある。
 
 --------------------------------------------------------------------------
 MIT が及ばないもの
@@ -70,7 +121,47 @@ This NOTICE supplements, and does not modify, the MIT License in `LICENSE`.
 COVERED BY THE MIT LICENSE
   The loader (runtime/instantale_modloader/), the bundled mods
   (runtime/mods/), the tools (tools/), the launchers, and the documentation
-  (docs/). All of these are original works of this project.
+  (docs/). All of these are distributed under the MIT License, but they are
+  not all the work of the same author.
+
+AUTHORS OF THE BUNDLED MODS
+  Most of the bundled mods are the work of R01/Flossian. Some were
+  contributed by outside mod authors and remain their copyright; they are
+  distributed under the MIT License with the rest, and the copyright notice
+  in LICENSE covers them as well.
+
+    yoshinari/tomotomo-y     117_message_text_integrity,
+                             118_batch_message_render (finished jointly),
+                             119_fix_crime_attribution,
+                             311_npc_profile_memory (finished jointly)
+
+    MoririnJP                223_probe_party_equipment,
+                             401_battle_character_context,
+                             402_party_inventory_transfer,
+                             403_npc_social_memory,
+                             404_party_talk (finished jointly)
+
+  Each was adjusted on intake; see docs/MODS.md. The author of record for
+  each mod is the "author" field of its mod.json, and the full list is in
+  docs/MODLIST.md. tools/check_mods.py fails if a contributor named there is
+  missing from this file.
+
+INBOUND LICENSE FOR CONTRIBUTIONS
+  Contributed mods are accepted under the MIT License -- the same license
+  this project ships under, with no separate agreement. In practice:
+
+    * Contributors keep their copyright. No assignment is asked for; the
+      section above is the notice that records it.
+    * Once bundled, the mod ships under the MIT License like everything
+      else, so anyone (the contributor included) may redistribute, modify
+      and use it commercially on MIT's terms.
+    * Adjustment and upkeep after intake are done by this project: keeping
+      up with game updates, resolving clashes with other mods, and
+      following loader API changes. Contributors take on no ongoing duty.
+
+  If a contribution arrives without a stated license, that is settled before
+  it is bundled. Anything that cannot be settled is not bundled, because it
+  cannot be undone once shipped. See docs/CONTRIBUTING.md.
 
 NOT COVERED
   Instantale itself, its executables, its assets (images, audio, text), and

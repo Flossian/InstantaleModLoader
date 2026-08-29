@@ -20,6 +20,7 @@ MOD 一本ずつの説明・設定・困ったとき。
 技術的な中身は別のドキュメントを参照。
 
 - [TECH.md](TECH.md)：ローダの仕組みと MOD の書き方
+- [CONTRIBUTING.md](CONTRIBUTING.md)：作った MOD を同梱に入れてほしいとき
 - [GAME.md](GAME.md)：ゲーム自身の構造（MOD を作る人向け）
 - [VERIFICATION.md](VERIFICATION.md)：どこまで確かめてあるかの一覧と、
   未確認項目の確認手順（MOD を作る人向け）

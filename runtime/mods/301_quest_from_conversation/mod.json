@@ -12,6 +12,7 @@
   },
   "version": "2",
   "author": "R01/Flossian",
+  "shares": ["npc_profiles"],
   "settings": {
     "FILTER_BY_NPC": {
       "type": "bool",

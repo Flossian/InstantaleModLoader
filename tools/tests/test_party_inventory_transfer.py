@@ -170,7 +170,13 @@ class Ctx(object):
         return path
 
     def logger(self, name, *, tag=None, stamp=True, label=None):
-        return ml.ModContext.logger(self, name, tag=tag, stamp=stamp, label=label)
+        real = ml.ModContext.logger(self, name, tag=tag, stamp=stamp, label=label)
+
+        def write(message):
+            # mod のログも notes に写し、文言を検査できるようにする。
+            self.notes.append(str(message))
+            return real(message)
+        return write
 
     def log(self, message, level="INFO"):
         self.notes.append(str(message))

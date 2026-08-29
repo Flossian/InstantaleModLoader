@@ -76,10 +76,14 @@ FIELD_CHARS = (
     ("traits", 300),
     ("status", 300),
 )
-ITEM_NAME_CHARS = 120           # 装備品の名前
-ITEM_DESCRIPTION_CHARS = 400    # 装備品の説明（`名前(説明)` の括弧の中）
-ITEM_ATTRIBUTES_CHARS = 300     # 装備品の内部属性（`weapon_attributes` の行）
-ITEM_FALLBACK_CHARS = 400       # 名前も説明も無い品を文字列表現のまま載せるときの上限
+# 装備品の名前。
+ITEM_NAME_CHARS = 120
+# 装備品の説明（`名前(説明)` の括弧の中）。
+ITEM_DESCRIPTION_CHARS = 400
+# 装備品の内部属性（`weapon_attributes` の行）。
+ITEM_ATTRIBUTES_CHARS = 300
+# 名前も説明も無い品を文字列表現のまま載せるときの上限。
+ITEM_FALLBACK_CHARS = 400
 #: 同行NPC全員ぶんの合計の目安。1人あたりへ割り、溢れた分は末尾の項目から落とす。
 BLOCK_TOTAL_CHARS = 6000
 #: 何人居ても1人ぶんはこれだけ確保する（名前とHPだけになるのを避ける）。
@@ -103,16 +107,10 @@ BATTLE_MANAGERS = {
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME, tag="battle context:")
 
-    # apply() の外へ持ち出さない控え。
-    #   saved_character: ロード時にゲームが NPC を組み立てるのに使った保存辞書を
-    #                    character_id ごとに写したもの。runtime の Character に
-    #                    項目が欠けているときの拠り所（`remember_saved_character`）。
-    #   noted_flags:     `in_battle` 以外の戦闘フラグを記録済みか。同じ NOTE を
-    #                    毎手書かないための印（`note_other_battle_flags`）。
-    # どちらもタイトルへ戻るときに空にする（`clear_saved_character_cache`）。
+    # apply() の外へ持ち出さない控え。どちらもタイトルへ戻るときに空にする。
     state = {
-        "saved_character": {},
-        "noted_flags": set(),
+        "saved_character": {},   # character_id -> ロード時の保存辞書の写し（runtime に欠ける項目の拠り所）
+        "noted_flags": set(),    # `in_battle` 以外の戦闘フラグを記録済みか（同じ NOTE を毎手書かない）
     }
 
     def note_other_battle_flags(app):
@@ -152,16 +150,6 @@ def apply(ctx):
     def present(value):
         """「値が入っている」の判定。None と空の入れ物だけを不在とみなす（0 や False は在る）。"""
         return value not in (None, "", [], {}, ())
-
-    def short(value, limit=1800):
-        """何でも文字列にして `limit` 文字で切る。str() が失敗する値は空文字にして先へ進める。"""
-        if value is None:
-            return ""
-        try:
-            text = str(value)
-        except Exception:
-            return ""
-        return frames.short(text, limit)
 
     def inventory_of(character):
         """持ち物の実体 `{item_id: item}`。312_shop_restock と同じ読み方。
@@ -224,16 +212,16 @@ def apply(ctx):
         attributes = value_of(item, "attributes")
 
         if name and description:
-            main = "{}({})".format(
-                short(name, ITEM_NAME_CHARS), short(description, ITEM_DESCRIPTION_CHARS))
+            main = "{}({})".format(frames.short(name, ITEM_NAME_CHARS),
+                                   frames.short(description, ITEM_DESCRIPTION_CHARS))
         elif name:
-            main = short(name, ITEM_NAME_CHARS)
+            main = frames.short(name, ITEM_NAME_CHARS)
         elif description:
-            main = short(description, ITEM_DESCRIPTION_CHARS)
+            main = frames.short(description, ITEM_DESCRIPTION_CHARS)
         else:
-            main = short(item, ITEM_FALLBACK_CHARS)
+            main = frames.short(item, ITEM_FALLBACK_CHARS)
 
-        attrs = short(attributes, ITEM_ATTRIBUTES_CHARS) if present(attributes) else None
+        attrs = frames.short(attributes, ITEM_ATTRIBUTES_CHARS) if present(attributes) else None
         return main, attrs
 
     def equipment_summary(character, slot):
@@ -285,10 +273,10 @@ def apply(ctx):
                 if source == "saved" or inv_source == "saved":
                     write("equipment fallback: character={!r} slot={} ref={} via {}+{}".format(
                         text_of(character, "name") or value_of(character, "id"),
-                        slot, short(ref, 120), source, inv_source))
+                        slot, frames.short(ref, 120), source, inv_source))
                 return item_summary(item)
 
-        return "item_id=" + short(ref, 200), None
+        return "item_id=" + frames.short(ref, 200), None
 
 
     # ------------------------------------------------------------ 同行NPC1人ぶんの本文
@@ -341,12 +329,12 @@ def apply(ctx):
             return None
 
         # 先頭行は「- party_member: 名前」。以降は2字下げの「  項目: 値」が続く。
-        lines = ["- {}: {}".format(role, short(name, 300))]
+        lines = ["- {}: {}".format(role, frames.short(name, 300))]
 
         # 名前と HP は上限に関係なく載せる。
         hp = hp_of(character)
         if hp:
-            lines.append("  HP: " + short(hp, 100))
+            lines.append("  HP: " + frames.short(hp, 100))
 
         def add(label, text):
             """入るなら足す。入らなければ False（呼び側はそこで打ち切る）。
@@ -382,7 +370,7 @@ def apply(ctx):
             value = field_with_saved_fallback(character, attr)
             if not present(value):
                 continue
-            if not add(attr, short(value, limit)):
+            if not add(attr, frames.short(value, limit)):
                 break
 
         return "\n".join(lines)

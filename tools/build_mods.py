@@ -24,6 +24,8 @@ import os
 import re
 import sys
 
+import mods_meta
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODS_DIR = os.path.join(ROOT, "runtime", "mods")
 DOCS_DIR = os.path.join(ROOT, "docs")
@@ -50,21 +52,28 @@ PREAMBLE = r"""# MODS: 同梱している MOD
 | `300`-`3xx` | 追加 | ゲームに無かった遊びの追加 |
 | `400`-`4xx` | 提供 | 提供を受けて取り込んだ MOD。この帯だけは中身ではなく出どころを表す |
 
+提供を受けた MOD は `4xx` だけではない。
+この帯が出来る前に取り込んだものは種別どおりの帯に入っている
+（番号を振り直すと、遊んでいる人の `state\` と設定が行方不明になるため動かしていない）。
+どの節にも、提供があればその名乗りを節の頭に置いてある。
+一覧は [MODLIST.md の「提供を受けた MOD」](MODLIST.md#提供を受けた-mod)、
+権利の所在は [NOTICE](../NOTICE)。
+
 各項の「設定」は GUI の `設定` 列から変えられるもの。
 変え方は [README.md の「設定の変え方」](README.md#設定の変え方)。"""
 
+#: 提供の帯の見出し。`render` が導入を差し込む目印にする。
+CONTRIB_HEAD = "## 提供（4xx）"
+
 #: 提供の帯の導入。番号帯の意味が他と違う（中身ではなく出どころ）ので、
-#: 節の頭で一度だけ言う。提供者の名乗りは各 `mod.json` の `author`。
+#: 節の頭で一度だけ言う。
+#: **末尾の名乗りは `mod.json` の `author` から組む**（`contrib_credit`）。
+#: 以前ここは「この節の3本は MoririnJP 様の提供」という固定の文字列で、
+#: 4本目（`404_party_talk`）が入った時点で嘘になっていた。
 CONTRIB_INTRO = r"""ユーザから提供を受けて取り込んだ MOD。
 `4xx` の番号は出どころを表すもので、中身の種別は他の帯と同じく
 `mod.json` の `"kind"` が名乗る（提供された計測 MOD は 2xx に入る。`223_` がそれ）。
-取り込みの際にこちらの環境へ合わせた調整を行っており、経緯は各 MOD の説明にある。
-この節の3本は MoririnJP 様の提供。"""
-
-#: 節の頭に導入を挟む帯。見出しの文字列が鍵。
-INTROS = {
-    "## 提供（4xx）": CONTRIB_INTRO,
-}
+取り込みの際にこちらの環境へ合わせた調整を行っており、経緯は各 MOD の説明にある。"""
 
 #: 計測の帯だけは節を持たないので、導入をここに置く。
 PROBE_INTRO = r"""いずれもゲームは変更しない。
@@ -139,7 +148,7 @@ BANDS = (
         "321_area_chronicle",
         "322_battle_bgm",
     )),
-    ("feature", "## 提供（4xx）", (
+    ("feature", CONTRIB_HEAD, (
         "401_battle_character_context",
         "402_party_inventory_transfer",
         "403_npc_social_memory",
@@ -151,6 +160,61 @@ BANDS = (
 def cell(s: str) -> str:
     """表の中で `|` が列の区切りに化けないようにする。"""
     return s.replace("|", r"\|")
+
+
+def band_credit(folders) -> str:
+    """その節の名乗り。`mod.json` の `author` から**数えて**組む。
+
+    帯ごとに出すのは、**提供が `4xx` の帯だけに居るわけではない**ため。
+    `4xx` は出どころを表す帯だが、それが出来る前に取り込んだものは種別どおりの帯に
+    入っていて（`117_` / `118_` / `119_` は修正、`311_` は追加、`223_` は計測）、
+    「提供」節を読んだだけでは見つからない。
+
+    節の全部が提供なら本数で、一部なら名指しで言う。
+    提供者ごとに1文に分ける（誰が何を出したかを混ぜない）。
+    提供が1本も無い節は空文字（そのときは何も足さない）。
+    """
+    folders = list(folders)
+    rows = mods_meta.contributed(folders)
+    if not rows:
+        return ""
+    groups = []
+    for folder, names, is_shared in rows:
+        key = tuple(names)
+        for got in groups:
+            if got[0] == key:
+                got[1].append((folder, is_shared))
+                break
+        else:
+            groups.append((key, [(folder, is_shared)]))
+
+    lines = []
+    for names, items in groups:
+        if len(items) == len(folders):
+            who = "この節の{}本".format(len(items))
+        else:
+            # 名指しのときは末尾がバッククォートなので、後ろにも空白を置く
+            # （docs の他の箇所と同じ、欧文・コードは前後を空ける書き方）。
+            who = ("この節の "
+                   + "・".join("`%s`" % f for f, _s in items) + " ")
+        shared = [f for f, is_shared in items if is_shared]
+        if shared and len(shared) == len(items):
+            # 全部が共同なら、名指しを繰り返さずに1文へ畳む
+            # （1本しかない節で「`311_` は提供。うち `311_` は共同」になる）。
+            line = "{}は {}の提供（こちらとの共同）。".format(
+                who, mods_meta.credit(names))
+        else:
+            line = "{}は {}の提供。".format(who, mods_meta.credit(names))
+            if shared:
+                line += "うち {} はこちらとの共同。".format(
+                    "・".join("`%s`" % f for f in shared))
+        lines.append(line)
+    return " ".join(lines)
+
+
+def probe_folders() -> list:
+    """計測の帯に入る MOD。この帯だけ `BANDS` が並びを持たない（表を組む）。"""
+    return sorted(f for f in load_order() if kind_of(f) == "probe")
 
 
 def mod_json(folder: str) -> dict:
@@ -198,7 +262,7 @@ def section(folder: str) -> list:
 def probe_rows() -> list:
     """計測の表。並びはフォルダ名順（MODLIST.md と同じ）。"""
     rows = ["| フォルダ | 何を測るか |", "| --- | --- |"]
-    for f in sorted(f for f in load_order() if kind_of(f) == "probe"):
+    for f in probe_folders():
         body = [l for l in doc(f)[1:] if l != ""]
         if len(body) != 1:
             raise SystemExit("%s は表の1セルになるので説明は1行で書く（今 %d行）。"
@@ -256,11 +320,16 @@ def render() -> str:
         if n:
             out += ["", "---"]
         out += ["", head]
-        intro = INTROS.get(head)
-        if intro:
-            out += [""] + intro.split("\n")
+        if head == CONTRIB_HEAD:
+            out += [""] + CONTRIB_INTRO.split("\n")
+        elif key == "probe":
+            out += [""] + PROBE_INTRO.split("\n")
+        # 提供の名乗りは**どの節にも**出す（`band_credit` の説明を参照）。
+        credit = band_credit(probe_folders() if key == "probe" else folders)
+        if credit:
+            out += ["", credit]
         if key == "probe":
-            out += [""] + PROBE_INTRO.split("\n") + [""] + probe_rows()
+            out += [""] + probe_rows()
             continue
         for f in folders:
             out += [""] + section(f)

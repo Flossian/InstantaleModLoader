@@ -12,6 +12,7 @@
   },
   "version": "1",
   "author": "R01/Flossian",
+  "shares": ["reputation"],
   "settings": {
     "PANEL_LEFT": {
       "type": "float",

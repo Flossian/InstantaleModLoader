@@ -45,8 +45,9 @@ MOD 専用の「装備する／外す」ボタンを足し、その NPC 自身�
 
 ## ログ
 
-通常の成功は記録せず、警告・失敗・例外だけ `modloader.log` へ集約する。
-経過の観測は `223_probe_party_equipment` に分けてある。
+移動・保存・装備の書き換えは `out/party_inventory_transfer.log` に1件ずつ残る。
+例外だけはローダの `modloader.log`。
+popup と装備欄の中身まで写す観測は `223_probe_party_equipment` に分けてある。
 """
 
 from instantale_modloader import frames, ui
@@ -61,46 +62,25 @@ OUR_LABELS = (LABEL, "アイテムを受け渡す", "装備を変更する")
 #: 404_party_talk はこのキーを見て、パーティー会話の間だけこのボタンを隠す。
 MARK = "mod_party_inventory_transfer_equipment"
 
+#: `out/` に置くこの MOD のログ。移動・保存・装備の書き換えが1件ずつ残る。
+#: 例外だけはローダの `modloader.log`（`ctx.log_exc`）。
+LOG_BASENAME = "party_inventory_transfer.log"
+
 
 def apply(ctx):
-    def write(message):
-        """通常動作は記録せず、異常・警告だけローダー標準ログへ送る。
-
-        この MOD は専用ログを持たない。`write` は至る所から呼ばれるが、
-        先頭が WARN か、cannot / failed / ignored を含む行だけが `modloader.log` に
-        残り、それ以外（transfer synced / saving transfer など）は捨てられる。
-        通常の経過を見たいときは 223_probe_party_equipment を使う。
-        """
-        try:
-            text = str(message)
-        except Exception:
-            return
-        lowered = text.lower()
-        if (
-            text.startswith("WARN")
-            or "cannot" in lowered
-            or "failed" in lowered
-            or "ignored" in lowered
-        ):
-            ctx.log("party inventory/equipment: " + text)
+    write = ctx.logger(LOG_BASENAME)
 
     # ローダ共通の画面部品。選択肢の生成（`button`）・印の読み取り（`mark_of`）・
     # 残骸掃除（`prune_stale`）・Clock への予約（`schedule`）・描き直し（`refresh`）を担う。
     screen = ui.Screen(ctx, write, tag="party inventory transfer", mark=MARK)
 
     # apply() の外へ持ち出さない控え。
-    #   npc_id:  今の会話相手の id。会話開始で控え、終了で消す
-    #   player / npc:  受け渡しの窓を開いている2人。ドラッグの同期で
-    #                  「この2人の間の移動だけ」を見分ける鍵（店の売買には触らない）
-    #   save_generation / equipment_save_generation:
-    #                  遅延保存の世代番号。予約のたびに増やし、走るときに
-    #                  番号が変わっていれば古い予約として何もしない
     state = {
-        "npc_id": None,
-        "player": None,
-        "npc": None,
-        "save_generation": 0,
-        "equipment_save_generation": 0,
+        "npc_id": None,                  # 今の会話相手の id。会話開始で控え、終了で消す
+        "player": None,                  # 受け渡しの窓の左側（同一instanceで見分ける）
+        "npc": None,                     # 同じく右側。この2人の間の移動だけ同期する（店の売買には触らない）
+        "save_generation": 0,            # 遅延保存の世代番号。予約のたびに増やし、古い予約は走らない
+        "equipment_save_generation": 0,  # 同じく装備の書き換え後の保存
     }
 
     # 選択肢の dict から spec のクラス名を読む／押された index の dict を引く（ローダ共通）。
@@ -110,11 +90,8 @@ def apply(ctx):
     # ------------------------------------------------------------ 補助
 
     def character_name(character, fallback=""):
-        """ログ用の名前。無ければ `fallback`。"""
-        name = getattr(character, "name", None)
-        if isinstance(name, str) and name.strip():
-            return name.strip()
-        return fallback
+        """ログ用の名前。無ければ `fallback`（id ではなく Character を持っている場面用）。"""
+        return frames.short(frames.text_of(character, "name"), 80) or fallback
 
     def inventory_dict(owner):
         """持ち物の実体 `{item_id: Item}`。
@@ -1011,4 +988,5 @@ def apply(ctx):
         write("return_to_title: transient transfer/equipment state cleared")
         return orig(self, *args, **kwargs)
 
-    ctx.log("party inventory transfer: installed (after 301; warnings only -> modloader.log)")
+    ctx.log("party inventory transfer: installed (after 301); log -> {}".format(
+        ctx.out_path(LOG_BASENAME)))

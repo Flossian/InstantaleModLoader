@@ -38,11 +38,20 @@ from instantale_modloader.state import WorldStore, world_key
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
 #      `tools/check_mods.py` が AST で突き合わせる）------------------------
-CONVERSATION_TURNS = 10       # 関係抽出に載せる直近のやり取りの数
-RELATION_CHARS = 600          # NPC→NPC関係記録の目標長（保存・注入では切らない）
-FACT_LOG_LIMIT = 10           # 方向ごとに残す事実の件数（0 で記録しない）
-INJECT_PARTY_PROFILE = True   # 会話相手へ同行NPCの人物情報も見せるか
-MAX_PARTICIPANTS = 6          # 1回の関係抽出で扱うNPCの上限
+# 関係抽出に載せる直近のやり取りの数
+CONVERSATION_TURNS = 10
+
+# NPC→NPC関係記録の目標長（保存・注入では切らない）
+RELATION_CHARS = 600
+
+# 方向ごとに残す事実の件数（0 で記録しない）
+FACT_LOG_LIMIT = 10
+
+# 会話相手へ同行NPCの人物情報も見せるか
+INJECT_PARTY_PROFILE = True
+
+# 1回の関係抽出で扱うNPCの上限
+MAX_PARTICIPANTS = 6
 
 LOG_BASENAME = "npc_social_memory.log"
 
@@ -218,18 +227,16 @@ def apply(ctx):
     screen = ui.Screen(ctx, write, tag="npc social memory")
 
     # プロセスに1つだけ置く共有の棚（apply() が何度走っても同じものを使う）。
-    #   worlds:       世界ごとの 403 の控え（`state.WorldStore`。錠もこれが持つ）
-    #   profiles:     311 の控えを読むだけの窓（`own=False`。フォルダは作らない）
-    #   worker:       抽出の背景スレッドと待ち行列（`jobs.Worker`）
-    #   last_inject / last_skip:  同じログを続けて書かないための直前の文言
     store = getattr(sys, STORE_ATTR, None)
     if not isinstance(store, dict):
         store = {
+            # 世界ごとの 403 の控え。出し入れと錠はローダの語彙（`state.WorldStore`）
             "worlds": WorldStore(ctx, STATE_DIRNAME, normalize=normalize_bucket),
+            # 311 の控えを読むだけの窓（`own=False`。フォルダは作らない）
             "profiles": WorldStore(ctx, PROFILE_STATE_DIRNAME, own=False),
-            "worker": None,          # 作るのは `extract` が出来てから
-            "last_inject": None,
-            "last_skip": None,
+            "worker": None,          # 抽出の背景スレッド（`jobs.Worker`）。作るのは `extract` が出来てから
+            "last_inject": None,     # 直前に書いた注入の結末（同じ文言を繰り返さない）
+            "last_skip": None,       # 抽出を見送った直前の理由（同上）
         }
         setattr(sys, STORE_ATTR, store)
 
@@ -278,7 +285,7 @@ def apply(ctx):
 
         1ターンに会話系フックが何本も走るので、動いていない間まで読み直さない
         （見張りは `WorldStore.load(fresh=True)`）。
-        読むだけの窓なので `own=False` ―
+        読むだけの窓なので `own=False`。
         311 を切っている人の `state/` に空のフォルダを作らない（TECH.md §3.11）。
         """
         return profiles.load(key, fresh=True)
