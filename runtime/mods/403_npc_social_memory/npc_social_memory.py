@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
 """NPC同士の認知・関係記憶。311は変更しない。
 
-v7: 応答の検証を normalize_result 1本にまとめ、構造化・非構造化の両経路が同じ道を通る。
-残す事実の件数はプロンプトも設定（FACT_LOG_LIMIT）から出す。
-構造化経路を一度使えなかったproviderでは、以後その経路を試さない
-（試すたびに EXTRACT_TIMEOUT を2本ぶん待つため）。
-311のstateは mtime を見て、動いたときだけ読み直す。
-`;` 連結と1行複文をほどき、他のMODと同じ書き方に揃えた。
-
-v6: 311と共有UI部品に合わせ、会話参加者だけをその場で読み取る。
-全NPCの character_value は捕捉・保持しない。
+方針:
+- 311 と共有UI部品に合わせ、会話参加者だけをその場で読み取る。
+  全NPCの character_value は捕捉・保持しない。
+- 311 の state は読むだけ。mtime とサイズを見て、動いたときだけ読み直す。
+  書くのは自分の state（state/npc_social_memory/<世界>.json）だけ。
+- 応答の検証は normalize_result 1本にまとめ、構造化・非構造化の両経路が同じ道を通る。
+- 残す事実の件数はプロンプトも設定（FACT_LOG_LIMIT）から出す。
+- 構造化経路を一度使えなかった provider では、以後その経路を試さない
+  （試すたびに EXTRACT_TIMEOUT を2本ぶん待つため）。
+- 書き方は他の MOD と同じ1文1行に揃える。
 """
 import copy
 import datetime

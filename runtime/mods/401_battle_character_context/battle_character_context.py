@@ -5,21 +5,19 @@
 - 本体の referee_* や戦闘計算を再実装しない。
 - `instantale_modloader.ui` の共通APIから現在の同行NPCだけを引く。
 - `instantale_modloader.llm.watch_aliases` に send_request の後生え・別名対策を任せる。
+  見張る送り口は `send_request` と `send_request_with_no_structure` の両方。
+  どの referee がどちらを通るかは manager_name では決まらない
+  （足す条件は BATTLE_MANAGERS と in_battle で絞る）。
 - 戦闘中判定は 107_fix_battle_flag_stuck が正常化した `app.in_battle` を参照する。
+  `in_battle` が落ちている時に `in_boss_battle` / `in_colosseum_battle` が立っていたら
+  1度だけ記録する。判定を広げるかはその記録が出てから決める（ボス戦は出ない＝拾えている）。
 - プレイヤー情報は本体に任せ、本体が作った prompt は消さず、user message の末尾へ同行NPC情報を足すだけ。
+- referee は1手ごとに呼ばれるので、項目ごとの上限と同行者全員ぶんの合計上限を置く。
+  効きは追記時のログの文字数で数える。
 - equipments があれば inventory から weapon / wearable を解決し、`weapon: 名前(説明)` の本体寄り表記と attributes を分離して渡す。
 - NPCはロード時の `World.generate_character(character_value)` に渡されたゲーム自身の保存辞書も控え、runtime側で人物・口調・装備参照が欠ける場合だけ同じ保存形式をfallbackとして使う。
 - 保存辞書は装備/所持品の有無にかかわらずNPCごとに控える。タイトルへ戻る時は控えを破棄し、別ワールド/別セーブへの持ち越しを防ぐ。
 - 攻撃力・防御力をゲーム内部のdamageへ直接加算はしない。
-
-v7:
-- 1項目ずつの上限を用途で分け、同行者全員ぶんの合計にも蓋をした
-  （referee は1手ごとに呼ばれるので、素の 2,400 文字 × 7項目 × 人数がそのまま毎ターン載っていた）。
-- 追記したログに文字数を出す。上限の効きは `out/battle_character_context.log` で数える。
-- `in_battle` が落ちている時に `in_boss_battle` / `in_colosseum_battle` が
-  立っていたら1度だけ記録する。判定を広げるかはその記録が出てから決める。
-- `send_request_with_no_structure` も見張る。どの referee がどちらの送り口を通るかは
-  manager_name では決まらないため（足す条件は今までどおり BATTLE_MANAGERS と in_battle）。
 """
 
 from instantale_modloader import frames, llm, ui

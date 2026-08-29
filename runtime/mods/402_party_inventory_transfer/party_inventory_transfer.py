@@ -1,57 +1,32 @@
 # -*- coding: utf-8 -*-
-"""会話中のパーティーメンバーへアイテムを受け渡し、NPC装備も変更する統合MOD v18。
+"""会話中のパーティーメンバーへアイテムを受け渡し、仲間の装備欄も書き換える統合MOD。
 
-v18:
-- 受け渡しで装備を外すとき、equipments の辞書手術より先に本体の Item.unequip() を呼ぶ。
-  辞書だけ直すと本体の解除時の後始末（表示更新）が走らず、「装備中」の表示が残り、
-  その残骸から本体popupの「外す」を押すと items.py:54 が KeyError で落ちていた（実測）。
-- Item.unequip に番人を立てた。equipments がその品を指していない解除は
-  本体へ通さず、1行記録して無視する（本体は無条件に辞書を引くため、
-  食い違い状態では必ず落ちる）。
-
-v17:
-- 装備したままの受け渡しで装備参照が外れず、後からその装備欄に触ると
-  本体 items.py:54 unequip が KeyError: 'weapon' で落ちていた（実機）。
-  実行時の equipments の値は id 文字列とは限らないため、
-  同一instanceでも照合して外すようにした。
-- 渡した品の widget.is_equipped も落とす。装備印を持ち越すと
-  本体popupが相手側で「外す」を出し、同じ unequip の経路で落ちる。
-- 副産物の実測: items.py の unequip は app.player 固定ではなく
-  self.obtainer 基準で動く。ただし素のゲームでは装備品の obtainer は常に
-  プレイヤーなので両者は区別がつかず、NPC装備対応の証拠ではない
-  （NPC の装備装着は素のゲームに存在しない。319 DOC の公式回答）。
-
-v16:
-- 観測専用フックを 223_probe_party_equipment へ移し、この本体は機能だけにする。
-- Screen.schedule() は Clock から呼ぶ時に自分で guarded で包む。
-  screen.guarded(fn) を渡していた2箇所を素の関数へ直した
-  （渡すとその場で実行され、戻り値 None が予約されて毎回例外になっていた）。
-- 装備解除の保存形を pop へ統一。セーブ上に None 残りとキー無しの2通りを作らない。
-
-v14:
-- v1.8共通部品（ui.Screen / party_member_ids / character_of / find_spec_button /
-  spec_args / pressed_entry / clamp_into_window / frames.short / frames.repr_value）を継続利用。
-- NPC装備の既存直書き経路は壊さず維持。
-
-v13:
-- 専用の party_inventory_transfer.log を廃止。
-- 通常の成功ログは出さず、警告・失敗・例外だけ modloader.log へ集約。
-- UI・受け渡し・装備処理そのものは v12 から変更しない。
-
-v10:
-- 402 v9 の受け渡し・所有権同期・save_game処理を維持。
-- 403 の役割を統合し、同じ twin inventory のNPC側 weapon / wearable に
-  MOD専用の「装備する / 外す」ボタンを出す。
-- NPC装備は本体の player 固定 ItemEquipManager を呼ばず、
-  そのNPC自身の equipments[weapon|wearable] を item_id で更新して save_game する。
-- 会話選択肢は「＜アイテムの受け渡し＞」1本だけ。
-- mod.json の after で 301_quest_from_conversation より後に読み込み、ゲーム/301が会話選択肢を組んだ後に ConversationEndManager の直前へ挿入する。
+方針:
+- 会話選択肢は「＜アイテムの受け渡し＞」1本だけ。mod.json の after で
+  301_quest_from_conversation より後に読み込み、ゲーム/301 が会話選択肢を組んだ後に
+  ConversationEndManager の直前へ挿入する。
 - quest_from_conversation と同じ safe spec + MOD印 + prune_stale 方式。
-- タイトル→ロードでMOD印が落ちても、ConversationEndManager spec から会話相手を復元し、
-  現在もparty memberなら同じ位置へ差し直す。
-- 旧402/403の保存済み残骸ラベルも掃除する。
-
-本体のドラッグ・配置UI・本体ファイルは変更しない。
+  タイトル→ロードでMOD印が落ちても、ConversationEndManager spec から会話相手を復元し、
+  現在も party member なら同じ位置へ差し直す。旧版の残骸ラベルも掃除する。
+- 受け渡しの窓は本体の twin inventory（売買UI）を場面名 party_transfer で借りる。
+  本体のドラッグ・配置UI・本体ファイルは変更しない。
+- 受け渡しは所有権（inventory の実体・item.id・obtainer）を同期し、
+  少し待ってからゲーム自身の save_game で保存する。連続移動は最後の1回だけ保存する。
+  Screen.schedule() は Clock から呼ぶ時に自分で guarded を掛けるので、素の関数を渡す
+  （guarded(fn) を渡すとその場で走り、戻り値 None が予約されて毎回例外になる）。
+- 装備中の品を渡すときは、obtainer も equipments も揃っている時点で本体の
+  Item.unequip() に外させる。辞書だけ直すと本体の解除時の後始末（表示更新）が走らず、
+  「装備中」の表示が残ってそこからの解除で本体が落ちる。辞書手術は残骸掃除として残す。
+  照合は同一instanceと id 文字列の両方で行う（実行時の equipments の値は
+  id 文字列とは限らない。セーブに焼く時だけ id になる）。
+- Item.unequip に番人を立てる。equipments がその品を指していない解除は本体へ通さず、
+  1行記録して無視する（本体は無条件に辞書を引くため、食い違い状態では必ず落ちる）。
+- 仲間の装備は本体の player 固定 ItemEquipManager を呼ばず、その NPC 自身の
+  equipments[weapon|wearable] を item_id で更新して save_game する。
+  NPC の装備装着は素のゲームに存在しない（319 DOC の公式回答）ので、これは MOD が
+  作る記録であり、読むのは 401 だけ。解除時は slot キーごと落とす。
+- 通常の成功ログは出さず、警告・失敗・例外だけ modloader.log へ集約する。
+  観測専用のフックは 223_probe_party_equipment に分けてある。
 """
 
 from instantale_modloader import frames, ui

@@ -142,6 +142,7 @@ BANDS = (
         "401_battle_character_context",
         "402_party_inventory_transfer",
         "403_npc_social_memory",
+        "404_party_talk",
     )),
 )
 

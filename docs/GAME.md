@@ -407,6 +407,17 @@ app.process_choice(ConversationStartManager(app, npc_id), npc_name)
 会話開始の合図は `<行動: 話しかける>` で、
 向きを変えたいときは `llm_manager:conversation_starter` に渡す messages のコピーだけを差し替える。
 
+会話の LLM（`conversation_facilitator` / `_after_retrieval`）を**まるごと差し替えて**
+複数人に喋らせるには `404_party_talk`。
+本体が読むのは戻り値の `content_violation` と `action.type` / `action.statement` /
+`action.call_free_action` だけなので、`llm.create_structure` で同じ項目を持つ型を作って返せば
+本体の表示・履歴・終了処理はそのまま動く。
+`call_free_action=False` を返す限り自由行動 GM（`master_ai_facilitator_from_conversation`）には入らない。
+会話中に見えている立ち絵は `hud.character_image` 1枚（`center_x` 0.5 / `center_y` 0.43、
+`size_hint=(1, None)`、クラス `NearestNeighborImage`。`212_` の実測）。
+`hud.character_image_right` はキャラクターシートを開いたときだけ出る自分の立ち絵で、会話の要素ではない。
+絵は各 NPC の `image_src["fullbody"]`。相手枠の canvas（切り抜きと絵の Rectangle）はウィジェットに追従して動く。
+
 ### 2.6 割り込みのタイミング
 
 移動・クエスト終了・会話終了の後始末（テキストの流し込み・ボタンの張り替え・要約）の

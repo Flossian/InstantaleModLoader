@@ -13,6 +13,8 @@
   },
   "author": "MoririnJP, R01/Flossian",
   "after": [
+    "302_leave_party_in_conversation",
+    "402_party_inventory_transfer",
     "311_npc_profile_memory",
     "403_npc_social_memory"
   ],
@@ -63,6 +65,34 @@
       "note": {
         "ja": "既定は入。参加者全員の立ち絵を横に等間隔で並べる。切ると、喋った人物へ立ち絵を切り替えて終わるとアンカーへ戻す",
         "en": "On by default: every participant's portrait is laid out across the screen. Off: the portrait switches to whoever speaks and returns to the anchor"
+      }
+    },
+    "PORTRAIT_LEFT": {
+      "type": "float",
+      "default": 0.32,
+      "min": 0.1,
+      "max": 0.5,
+      "label": {
+        "ja": "立ち絵の左端の位置",
+        "en": "Leftmost portrait position"
+      },
+      "note": {
+        "ja": "画面幅に対する比。いちばん左の仲間の中心。既定 0.32 は左の選択肢の列に掛からない値",
+        "en": "Fraction of the screen width for the leftmost member's centre. 0.32 keeps clear of the choice buttons"
+      }
+    },
+    "PORTRAIT_RIGHT": {
+      "type": "float",
+      "default": 0.68,
+      "min": 0.5,
+      "max": 0.9,
+      "label": {
+        "ja": "立ち絵の右端の位置",
+        "en": "Rightmost portrait position"
+      },
+      "note": {
+        "ja": "画面幅に対する比。いちばん右の仲間の中心。既定 0.68 は右の仲間欄に掛からない値",
+        "en": "Fraction of the screen width for the rightmost member's centre. 0.68 keeps clear of the party panel"
       }
     }
   }

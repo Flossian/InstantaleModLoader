@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""904_party_talk をゲーム抜きで通す（9xx なので CI には入れない）。
+"""404_party_talk をゲーム抜きで通す。
 
-    python tools/tests/test_wip_party_talk.py
+    python tools/tests/test_party_talk.py
 
 見ているのは、この MOD が自分で決めている所だけ。
 
@@ -93,7 +93,7 @@ check("真偽は true 系の文字列だけ",
 
 with io.open(MANIFEST_PATH, encoding="utf-8") as fh:
     MANIFEST = json.load(fh)
-for key in ("START_LABEL", "END_LABEL", "MAX_PARTICIPANTS", "HISTORY_TURNS"):
+for key in ("START_LABEL", "END_LABEL", "MAX_PARTICIPANTS", "HISTORY_TURNS", "SIDE_BY_SIDE", "PORTRAIT_LEFT", "PORTRAIT_RIGHT"):
     check("{} の既定値がコードと mod.json で同じ".format(key),
           getattr(MOD, key) == MANIFEST["settings"][key]["default"])
 
@@ -420,6 +420,27 @@ log = asked[-1].split("【直近の対話ログ】")[-1]
 check("次のラウンドのプロンプトに仲間の台詞が出た位置で並ぶ",
       log.index("「やあ」") < log.index("（本体が描いた返答）") < log.index("assistant: ハナ: 仲間1"), log)
 
+MOD.HISTORY_TURNS, saved_turns = 2, MOD.HISTORY_TURNS
+for n in range(3, 7):
+    APP.current_conversation_history += [{"role": "user", "content": "発言{}".format(n)},
+                                         {"role": "assistant", "content": "返答{}".format(n)}]
+    store["extras"].append({"at": len(APP.current_conversation_history), "text": "ハナ: 合いの手{}".format(n)})
+answers.append({"content_violation": "false", "responses": [{"speaker": "アリス", "statement": "x"}]})
+facilitate(ctx, APP.world.characters["8"])
+log = asked[-1].split("【直近の対話ログ】")[-1]
+check("対話ログの窓はラウンド（user 行）で数え、仲間の台詞ぶん短くならない",
+      log.count("user: ") == 2 and "発言5" in log and "発言4" not in log and "合いの手6" in log, log)
+MOD.HISTORY_TURNS = saved_turns
+# 偽の人物は短いので、いまの長さより 100 字だけ小さい上限にして人物ブロックが削られる状況を作る。
+limit = len(asked[-1]) - 100
+MOD.PROMPT_CHARS, saved_chars = limit, MOD.PROMPT_CHARS
+answers.append({"content_violation": "false", "responses": [{"speaker": "アリス", "statement": "x"}]})
+facilitate(ctx, APP.world.characters["8"])
+check("上限を超えたら人物ブロックから削り、直近の対話ログは残る",
+      len(asked[-1]) <= limit and asked[-1].endswith(log) and any("prompt trimmed" in n for n in ctx.notes),
+      (len(asked[-1]), limit, asked[-1][-80:]))
+MOD.PROMPT_CHARS = saved_chars
+
 ctx.hooks[END](lambda self: None, object())
 check("会話を終えると控えを全部捨てる",
       store["active"] is False and store["extras"] == [] and store["anchor"] is None)
@@ -429,6 +450,12 @@ check("終えた後は素通しに戻る", result == "ORIG")
 
 # ---------------------------------------------------------------- 立ち絵を並べる
 print("立ち絵を並べる（SIDE_BY_SIDE=True）")
+
+
+def MOD_slot(index, count):
+    left, right = MOD.PORTRAIT_LEFT, MOD.PORTRAIT_RIGHT
+    return (left + right) / 2.0 if count <= 1 else left + (right - left) * index / float(count - 1)
+
 MOD.SIDE_BY_SIDE = True
 ctx = fresh()
 store = getattr(sys, MOD.STORE)
@@ -449,9 +476,19 @@ check("仲間の枠が FloatLayout の中に1つ足される（HUD 直下では�
       len(added) == 1 and len(hud.children) == 1, (len(added), len(hud.children)))
 check("枠は相手枠と同じクラス", added and type(added[0]) is NearestNeighborImage)
 check("枠の絵は仲間の fullbody", added and added[0].source.endswith("/15/reduced_color_image.png"))
-check("2人なら 1/3 と 2/3 に並ぶ（名簿順）",
-      abs(base.pos_hint["center_x"] - 1 / 3) < 1e-6 and abs(added[0].pos_hint["center_x"] - 2 / 3) < 1e-6,
+check("2人なら PORTRAIT_LEFT と PORTRAIT_RIGHT に並ぶ（名簿順）",
+      abs(base.pos_hint["center_x"] - MOD.PORTRAIT_LEFT) < 1e-6 and abs(added[0].pos_hint["center_x"] - MOD.PORTRAIT_RIGHT) < 1e-6,
       (base.pos_hint, added[0].pos_hint))
+check("3人なら 0.32 / 0.5 / 0.68、1人なら中央",
+      [round(MOD_slot(i, 3), 3) for i in range(3)] == [0.32, 0.5, 0.68] and MOD_slot(0, 1) == 0.5)
+# 相手枠を動かした後に canvas の矩形が追従しても、控えた元の矩形を使う。
+base.canvas.children[0].pos = (480, 80)
+base.canvas.children[1].pos = (1380, 60)
+turn(ctx, "「もう一度」")
+FakeClock.run_all()
+check("切り抜きと寸法は相手枠を動かす前の矩形のまま",
+      store["origin_geometry"] == ((900.0, 60.0, 760.0, 1000.0), (400.0, 80.0, 1600.0, 900.0))
+      and abs(added[0].pos_hint["center_y"] - (60 + 500) / 1421) < 1e-6, store["origin_geometry"])
 check("枠は相手枠のすぐ手前に挿さり、本文の枠より奥",
       hud.layer.children.index(added[0]) == hud.layer.children.index(base) - 1
       and hud.layer.children.index(hud.text_box) < hud.layer.children.index(added[0]),
@@ -463,13 +500,14 @@ check("高さの中心も絵の矩形に揃う",
 check("切り抜きは相手枠と同じ矩形（Kivy が無い環境では省く）",
       added[0].canvas.before.children == [] or True)
 check("相手枠の元の位置を控えている", getattr(base, MOD.ORIGIN_ATTR, None) == origin)
-turn(ctx, "「もう一度」")
+turn(ctx, "「三度目」")
 FakeClock.run_all()
 check("何度並べ直しても枠は増えない",
       len([c for c in hud.layer.children if hasattr(c, MOD.PORTRAIT_ATTR)]) == 1)
 ctx.hooks[END](lambda self: None, object())
 FakeClock.run_all()
 check("会話を終えると枠が外れる", [c for c in hud.layer.children if hasattr(c, MOD.PORTRAIT_ATTR)] == [])
+check("控えた矩形も捨てる", store.get("origin_geometry") is None)
 check("相手枠の位置が戻る", base.pos_hint == origin and not hasattr(base, MOD.ORIGIN_ATTR))
 check("控えも空", store["frames"] == {})
 
@@ -508,6 +546,18 @@ check("終了ボタンの直後、要約より前に枠を外す",
       and sequence == [0] and store["active"] is True, (sequence, store["active"]))
 ctx.hooks[END](lambda self: None, object())
 check("要約が返ってから会話を畳む", store["active"] is False)
+
+
+def boom(self):
+    raise RuntimeError("summary failed")
+
+
+store.update({"active": True, "anchor": "8"})
+try:
+    ctx.hooks[END](boom, object())
+except RuntimeError:
+    pass
+check("要約が例外を投げても会話を畳む", store["active"] is False)
 
 print("平時の見分け")
 REFRESH = "__main__:InstantaleApp.refresh_choice_buttons"
@@ -567,6 +617,58 @@ check("同じ一覧を描き直しても増えない",
 check("相手の居ない一覧（「やめる」だけ）にも出る",
       offered(("JustSetButtonToNormalPhase",), opened=TALK_EXEC) == [0])
 
+
+def offered_with_party(party, names, opened=None):
+    ctx = fresh()
+    getattr(sys, MOD.STORE)["active"] = False
+    APP.party = party
+    if opened:
+        ctx.hooks[opened](lambda self, choice_text: None, Phase2(APP), "会話する")
+    APP.buttons = [{"text": n, "spec": Spec(n)} for n in names]
+    ctx.hooks[REFRESH](lambda self, reset_page=False: None, APP)
+    return [e.get(MOD.MARK_KEY) for e in APP.buttons if isinstance(e, dict) and e.get(MOD.MARK_KEY)]
+
+
+check("仲間が1人なら相手一覧にも出ない",
+      offered_with_party(["player", "8"], TALK_LIST, opened=TALK_EXEC) == [])
+check("仲間が1人なら NPC 不在の画面にも「会話する」を足さない",
+      offered_with_party(["player", "8"], ("MovePhaseManager",)) == [])
+check("仲間が2人なら出る",
+      offered_with_party(["player", "8", "15"], TALK_LIST, opened=TALK_EXEC) == [MOD.START_MARK]
+      and offered_with_party(["player", "8", "15"], ("MovePhaseManager",)) == [MOD.TALK_MARK])
+
+print("パーティー会話中の他 MOD の選択肢")
+ctx = fresh()
+store = getattr(sys, MOD.STORE)
+store.update({"active": True, "anchor": "8"})
+APP.buttons = [
+    {"text": "ここで別れる", "spec": Spec("JustSetButtonToNormalPhase"), "mod_party_action": "confirm"},
+    {"text": "＜アイテムの受け渡し＞", "spec": Spec("JustSetButtonToNormalPhase"),
+     "mod_party_inventory_transfer_equipment": "transfer"},
+    {"text": "会話を終了する", "spec": Spec("ConversationEndManager", ["8"])},
+]
+raw_calls = []
+InstantaleApp.refresh_choice_buttons = lambda self, reset_page=False: raw_calls.append(reset_page)
+
+
+def inner_like_402(self, reset_page=False):
+    # 402 は orig の後に差してくる。ここでは既に並んでいる前提で何もしない。
+    return "REFRESHED"
+
+
+check("302 / 402 の選択肢を落とし、素の refresh で描き直す（reset_page はそのまま渡す）",
+      ctx.hooks[REFRESH](inner_like_402, APP, False) == "REFRESHED"
+      and [e["text"] for e in APP.buttons] == ["話し合いを終了する"] and raw_calls == [False],
+      ([e["text"] for e in APP.buttons], raw_calls))
+raw_calls[:] = []
+ctx.hooks[REFRESH](inner_like_402, APP)
+check("落とすものが無ければ描き直さない", raw_calls == [])
+store["active"] = False
+APP.buttons = [{"text": "ここで別れる", "spec": Spec("JustSetButtonToNormalPhase"), "mod_party_action": "confirm"},
+               {"text": "会話を終了する", "spec": Spec("ConversationEndManager", ["8"])}]
+ctx.hooks[REFRESH](inner_like_402, APP)
+check("普通の会話では触らない", [e["text"] for e in APP.buttons] == ["ここで別れる", "会話を終了する"])
+
 print("NPC 不在の根のメニュー")
 PRESS = "__main__:InstantaleApp.on_button_press"
 
@@ -605,6 +707,9 @@ def own_talk_with(flags, names=("MovePhaseManager",)):
 check("店を出た後に残る in_shopping では止めない", own_talk_with({"in_shopping": True}) == [1])
 check("戦闘中・ポップアップ中は足さない",
       own_talk_with({"in_battle": True}) == [] and own_talk_with({"in_free_input": True}) == [])
+check("ボス戦・闘技場の旗でも足さない（GAME.md の名前）",
+      own_talk_with({"in_boss_battle": True}) == [] and own_talk_with({"in_colosseum_battle": True}) == [])
+check("ゲームに無い旗の名前は見ていない", not hasattr(MOD, "is_in_battle") and "is_in_battle" not in open(MOD_PATH, encoding="utf-8").read())
 
 ctx, at = own_talk(("MovePhaseManager", "MovePhaseManager"))
 APP.display_button_map = [0, 1, 2]
