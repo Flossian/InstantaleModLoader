@@ -11,7 +11,7 @@
     "ja": "通貨の呼び名（ゴールド / G）を好きな表記に変える。画面上部の `Gold:` の欄も自分の書式にできる。文中の表記とゲームが LLM へ送る文章は同時に変わる"
   },
   "version": "3",
-  "author": "Flossian",
+  "author": "R01/Flossian",
   "settings": {
     "UNIT_LONG": {
       "type": "str",

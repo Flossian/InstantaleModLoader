@@ -11,7 +11,7 @@
     "ja": "ゲームの選択肢に無い OpenAI のモデルを、送信直前に名前だけ差し替えて使う"
   },
   "version": "1",
-  "author": "flossian",
+  "author": "R01/Flossian",
   "settings": {
     "SOURCE_MODEL": {
       "type": "str",

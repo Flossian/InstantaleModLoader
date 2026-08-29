@@ -11,6 +11,6 @@
     "ja": "実プレイ中のLLMリクエストの多重送信をプロセス内で数える（ローカル llama.cpp 経路のみ）"
   },
   "version": "1",
-  "author": "flossian",
+  "author": "R01/Flossian",
   "debug": true
 }

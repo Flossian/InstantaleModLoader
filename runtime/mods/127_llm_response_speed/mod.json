@@ -11,7 +11,7 @@
     "ja": "llama-server を共有4スロットではなく専用1スロットで起こす。窓は同じままKVが減って応答が速くなる。窓を広げることもできる"
   },
   "version": "2",
-  "author": "flossian",
+  "author": "R01/Flossian",
   "settings": {
     "CTX_SIZE": {
       "type": "int",
