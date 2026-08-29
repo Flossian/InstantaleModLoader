@@ -137,6 +137,7 @@ BANDS = (
         "319_battle_tactics",
         "320_guild_adventurer_recruit",
         "321_area_chronicle",
+        "322_battle_bgm",
     )),
     ("feature", "## 提供（4xx）", (
         "401_battle_character_context",

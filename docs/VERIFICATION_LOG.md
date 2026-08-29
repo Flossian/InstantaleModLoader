@@ -2281,3 +2281,25 @@ id+1 へ進める（戻しはしない）。`tools/tests/test_npc_make.py`（17�
 原因がスレッドである点は仮説のままだが、区別のつく状態を作る手（ワーカースレッドから直接呼ぶ版で再現させる）は取っていない。
 
 6回とも注入後の `modloader.log` に `party talk:` の例外なし。
+
+### 2.79 戦闘BGMの選曲。実機7戦で3種類の判定と絶対パスが決着（2026-08-29、`322_`）
+
+`out/battle_bgm.log` の `[BGMPICK]` の行（20:53〜21:07、1プロセス）。曲は `state/musics/battle/` に3曲、素の1曲と合わせて `pool: 4`。
+
+| 時刻 | 種類 | 決め手 | フラグ | `enemy_type` | 鳴った曲 |
+|---|---|---|---|---|---|
+| 20:55 | normal | default | `in_battle=1` | `'in_quest'` | 素の曲（same as the game's） |
+| 20:56 | normal | default | 同上 | `'in_quest'` | `state/` の曲（replaced） |
+| 20:56 | normal | default | 同上 | `'in_quest'` | `state/` の曲（replaced） |
+| 20:57 | normal | default | 同上 | `'in_quest'` | 素の曲 |
+| 20:57 | boss | `flag in_boss_battle`（印 `pending=boss` も同時） | `in_battle=1 in_boss_battle=1` | `'in_quest'` | 指定なし → `no candidate ... pool=0` → 素の曲 |
+| 21:07 | colosseum | `flag in_colosseum_battle`（印 `pending=colosseum` も同時） | `in_battle=1 in_colosseum_battle=1`、`in_boss_battle=0` | `'colosseum'` | 素の曲 |
+| 21:07 | colosseum | 同上 | 同上 | `'colosseum'` | `state/` の曲（replaced） |
+
+読めること:
+
+- `play_music_from_src` は絶対パスをそのまま受ける（`FAILED` 無し）。ゲームのフォルダを触らずに曲を足せる
+- 3種類とも、フラグ・印・`enemy_type` の3つの合図が同じ答えを出した。どれか1つが欠けても判定は変わらない
+- `enemy_type` は依頼中なら通常もボスも `'in_quest'`。種類の見分けには使えない語
+- ボス戦（20:57）の後の闘技場で `in_boss_battle=0`。1→0 を初めて観測した（GAME.md §2.10 を更新）
+- 指定していない種類は素の曲に落ちる。同じ曲が続いた回は無い（`AVOID_REPEAT` と矛盾しない）

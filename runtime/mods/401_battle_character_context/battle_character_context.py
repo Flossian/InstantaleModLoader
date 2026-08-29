@@ -1,29 +1,54 @@
 # -*- coding: utf-8 -*-
-"""戦闘LLMへ渡す同行NPC情報を、本体の表記に寄せた形式で補う。
+"""戦闘の審判 LLM に、同行している仲間の人物と装備を本体の表記に寄せて添える。
 
-方針:
-- 本体の referee_* や戦闘計算を再実装しない。
-- `instantale_modloader.ui` の共通APIから現在の同行NPCだけを引く。
-- `instantale_modloader.llm.watch_aliases` に send_request の後生え・別名対策を任せる。
-  見張る送り口は `send_request` と `send_request_with_no_structure` の両方。
-  どの referee がどちらを通るかは manager_name では決まらない
-  （足す条件は BATTLE_MANAGERS と in_battle で絞る）。
-- 戦闘中判定は 107_fix_battle_flag_stuck が正常化した `app.in_battle` を参照する。
-  `in_battle` が落ちている時に `in_boss_battle` / `in_colosseum_battle` が立っていたら
-  1度だけ記録する。判定を広げるかはその記録が出てから決める（ボス戦は出ない＝拾えている）。
-- プレイヤー情報は本体に任せ、本体が作った prompt は消さず、user message の末尾へ同行NPC情報を足すだけ。
-- referee は1手ごとに呼ばれるので、項目ごとの上限と同行者全員ぶんの合計上限を置く。
-  効きは追記時のログの文字数で数える。
-- equipments があれば inventory から weapon / wearable を解決し、`weapon: 名前(説明)` の本体寄り表記と attributes を分離して渡す。
-- NPCはロード時の `World.generate_character(character_value)` に渡されたゲーム自身の保存辞書も控え、runtime側で人物・口調・装備参照が欠ける場合だけ同じ保存形式をfallbackとして使う。
-- 保存辞書は装備/所持品の有無にかかわらずNPCごとに控える。タイトルへ戻る時は控えを破棄し、別ワールド/別セーブへの持ち越しを防ぐ。
-- 攻撃力・防御力をゲーム内部のdamageへ直接加算はしない。
+素の戦闘の審判（`referee_*`）が読むのはプレイヤーの情報だけで、
+仲間が居ても、どんな人物で何を装備しているかは審判が知らないまま手が裁かれる。
+この MOD は審判への送り口を見張り、戦闘中だけ user message の末尾に
+「【パーティーメンバー戦闘情報】」の塊を足す。
+本体が組んだ prompt は消さず、プレイヤーの情報も本体に任せる。
+戦闘の計算そのもの（攻撃力・防御力の加算）には触らない。
+
+## どこに差すか
+
+referee は `scripts.llm.llm_manager_battle` の `send_request` と
+`send_request_with_no_structure` のどちらかを通る。
+どの referee がどちらを通るかは manager_name では決まらないので両方を見張り、
+足すかどうかは manager_name（`BATTLE_MANAGERS`）と `app.in_battle` で決める。
+`send_request` はプロバイダ初期化後に生えるので、後生え・別名の対策は
+ローダの `llm.watch_aliases` に任せる（TECH.md §3.4）。
+
+戦闘中の判定は `107_fix_battle_flag_stuck` が正常化した `in_battle` だけ。
+`in_boss_battle` / `in_colosseum_battle` は、`in_battle` が落ちているのに
+立っていたら1度だけ記録する。判定を広げるかはその記録が出てから決める
+（ボス戦では出ておらず、`in_battle` で拾えている）。
+
+## 何を載せるか
+
+名前と HP、装備（weapon / wearable）、人物（profile・personality・speech_style・
+job・tactics・traits・status）の順。
+装備は本体がプレイヤーの装備を書くときの `名前(説明)` の形に寄せ、
+内部属性（attributes）は別の行に分ける。`equipments` の値が id なら持ち物から実体を引く。
+
+referee は1手ごとに呼ばれるので、項目ごとの上限（`FIELD_CHARS`）と
+同行者全員ぶんの合計（`BLOCK_TOTAL_CHARS`）を置く。
+合計は人数で割って1人ぶんの予算にし、溢れた分は末尾の項目から落とす。
+効きは追記時のログの文字数で数える。
+
+## 保存辞書の控え
+
+NPC の runtime の Character には口調などが載らないことがある。
+ロード時に `World.generate_character(character_id, character_value)` へ渡される
+保存辞書を NPC ごとに控え、runtime 側に欠ける項目だけそこから補う。
+装備・持ち物の有無では絞らない。
+タイトルへ戻るときに控えを捨て、別ワールド・別セーブへの持ち越しを防ぐ。
 """
 
 from instantale_modloader import frames, llm, ui
 
 
+#: 追記する塊の見出し。同じ message に2度足さないための印でもある（`append_block`）。
 MARKER = "【パーティーメンバー戦闘情報】"
+#: `out\` に置くこの MOD のログ。何人ぶん・何文字を足したかが1手ごとに1行残る。
 LOG_BASENAME = "battle_character_context.log"
 
 # referee がどちらの送り口を通るかは manager_name では決まらない
@@ -51,10 +76,10 @@ FIELD_CHARS = (
     ("traits", 300),
     ("status", 300),
 )
-ITEM_NAME_CHARS = 120
-ITEM_DESCRIPTION_CHARS = 400
-ITEM_ATTRIBUTES_CHARS = 300
-ITEM_FALLBACK_CHARS = 400
+ITEM_NAME_CHARS = 120           # 装備品の名前
+ITEM_DESCRIPTION_CHARS = 400    # 装備品の説明（`名前(説明)` の括弧の中）
+ITEM_ATTRIBUTES_CHARS = 300     # 装備品の内部属性（`weapon_attributes` の行）
+ITEM_FALLBACK_CHARS = 400       # 名前も説明も無い品を文字列表現のまま載せるときの上限
 #: 同行NPC全員ぶんの合計の目安。1人あたりへ割り、溢れた分は末尾の項目から落とす。
 BLOCK_TOTAL_CHARS = 6000
 #: 何人居ても1人ぶんはこれだけ確保する（名前とHPだけになるのを避ける）。
@@ -78,6 +103,13 @@ BATTLE_MANAGERS = {
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME, tag="battle context:")
 
+    # apply() の外へ持ち出さない控え。
+    #   saved_character: ロード時にゲームが NPC を組み立てるのに使った保存辞書を
+    #                    character_id ごとに写したもの。runtime の Character に
+    #                    項目が欠けているときの拠り所（`remember_saved_character`）。
+    #   noted_flags:     `in_battle` 以外の戦闘フラグを記録済みか。同じ NOTE を
+    #                    毎手書かないための印（`note_other_battle_flags`）。
+    # どちらもタイトルへ戻るときに空にする（`clear_saved_character_cache`）。
     state = {
         "saved_character": {},
         "noted_flags": set(),
@@ -118,9 +150,11 @@ def apply(ctx):
         return frames.text_of(obj, name)
 
     def present(value):
+        """「値が入っている」の判定。None と空の入れ物だけを不在とみなす（0 や False は在る）。"""
         return value not in (None, "", [], {}, ())
 
     def short(value, limit=1800):
+        """何でも文字列にして `limit` 文字で切る。str() が失敗する値は空文字にして先へ進める。"""
         if value is None:
             return ""
         try:
@@ -130,7 +164,12 @@ def apply(ctx):
         return frames.short(text, limit)
 
     def inventory_of(character):
-        """持ち物の実体 `{item_id: item}`。312_shop_restock と同じ読み方。"""
+        """持ち物の実体 `{item_id: item}`。312_shop_restock と同じ読み方。
+
+        runtime の Character では `inventory` が Inventory オブジェクトで、
+        その中の `.inventory` が辞書。保存辞書（ロード時の写し）では
+        `inventory` がそのまま辞書。どちらの形でも辞書を返す。
+        """
         if character is None:
             return None
         inventory = value_of(character, "inventory")
@@ -149,7 +188,11 @@ def apply(ctx):
         return state["saved_character"].get(str(character_id))
 
     def equipment_sources(character):
-        """新しいruntime状態を優先し、ロード時保存辞書をfallbackにする。"""
+        """装備の参照元を4つ揃えて返す: (runtime装備, runtime持ち物, 保存装備, 保存持ち物)。
+
+        新しい runtime 状態を優先し、ロード時の保存辞書は fallback。
+        辞書でなかったものは None にして、読む側の isinstance を減らす。
+        """
         runtime_eq = value_of(character, "equipments")
         runtime_inv = inventory_of(character)
         saved = saved_character_of(character) or {}
@@ -165,7 +208,14 @@ def apply(ctx):
     # ------------------------------------------------------------ 装備
 
     def item_summary(item):
-        """本体の weapon: 名前(説明) に寄せ、内部属性だけ別フィールドへ分ける。"""
+        """アイテム1つを (本文, 属性) の2本に分ける。
+
+        本文は本体がプレイヤーの装備を書くときの `名前(説明)` の形に寄せる
+        （審判 LLM が既に読み慣れている表記）。`attributes`（攻撃力などの内部値）は
+        本文に混ぜず `weapon_attributes` として別行にする。名前も説明も無い品は
+        オブジェクトの文字列表現をそのまま短く載せる（何も出さないよりは材料になる）。
+        `item` は runtime の Item でも保存辞書でもよい（`text_of` / `value_of` が吸収）。
+        """
         if item is None:
             return None, None
 
@@ -187,8 +237,21 @@ def apply(ctx):
         return main, attrs
 
     def equipment_summary(character, slot):
+        """`slot`（"weapon" / "wearable"）に装備している品を (本文, 属性) で返す。無ければ (None, None)。
+
+        `equipments[slot]` の値は場面で形が違う:
+          - runtime では Item オブジェクトそのもの（402 が装備を書き換えた直後など）
+          - セーブから読んだ直後や保存辞書ではアイテム id の文字列
+          - 保存辞書の中に Item の辞書がそのまま入っている場合
+        オブジェクト／辞書ならそのまま `item_summary` へ。id 文字列なら持ち物から
+        実体を引く。runtime の持ち物に無ければ保存辞書の持ち物も見る（そのときは
+        どの経路で解決したかをログに1行残す）。どこにも無ければ id だけを載せて、
+        「何かを装備している」ことだけは審判へ伝える。
+        """
         runtime_eq, runtime_inv, saved_eq, saved_inv = equipment_sources(character)
 
+        # 参照はまず runtime。空なら保存辞書。どちらから取ったかは
+        # fallback のログのために覚えておく。
         ref = runtime_eq.get(slot) if isinstance(runtime_eq, dict) else None
         source = "runtime"
         if not present(ref) and isinstance(saved_eq, dict):
@@ -199,19 +262,22 @@ def apply(ctx):
         if not present(ref):
             return None, None
 
+        # 参照が実体（辞書 or 名前を持つオブジェクト）ならそのまま要約できる。
         if isinstance(ref, dict):
             return item_summary(ref)
         if not isinstance(ref, (str, bytes, int, float, bool)):
             if text_of(ref, "name") or text_of(ref, "item_name"):
                 return item_summary(ref)
 
-        inventories=[]
+        # ここへ来るのは参照が id（文字列など）のとき。持ち物から実体を探す。
+        inventories = []
         if isinstance(runtime_inv, dict):
             inventories.append(("runtime", runtime_inv))
         if isinstance(saved_inv, dict) and saved_inv is not runtime_inv:
             inventories.append(("saved", saved_inv))
 
         for inv_source, inventory in inventories:
+            # 鍵の型が揃っていない場合に備え、そのまま と str() の両方で引く。
             item = inventory.get(ref)
             if item is None:
                 item = inventory.get(str(ref))
@@ -225,9 +291,14 @@ def apply(ctx):
         return "item_id=" + short(ref, 200), None
 
 
-    # ------------------------------------------------------------ Character -> 同行NPC戦闘表示
+    # ------------------------------------------------------------ 同行NPC1人ぶんの本文
 
     def hp_of(character):
+        """HP を `現在/最大` の文字列で返す。読める項目が無ければ None。
+
+        runtime の Character は `current_hp` / `max_hp`（無ければ `original_max_hp`）、
+        dict 化済みのデータは `"HP": "132/132"` の形で持つことがあるので両方を受ける。
+        """
         current = value_of(character, "current_hp")
         maximum = value_of(character, "max_hp")
         if maximum is None:
@@ -269,14 +340,20 @@ def apply(ctx):
         if not name:
             return None
 
+        # 先頭行は「- party_member: 名前」。以降は2字下げの「  項目: 値」が続く。
         lines = ["- {}: {}".format(role, short(name, 300))]
 
+        # 名前と HP は上限に関係なく載せる。
         hp = hp_of(character)
         if hp:
             lines.append("  HP: " + short(hp, 100))
 
         def add(label, text):
-            """入るなら足す。入らなければ False（呼び側はそこで打ち切る）。"""
+            """入るなら足す。入らなければ False（呼び側はそこで打ち切る）。
+
+            `used` は改行ぶんも含めた今の文字数。1項目でも溢れたら以後の項目は
+            見ない（並びが優先順位なので、後ろの項目を詰めて入れる意味は無い）。
+            """
             if not text:
                 return True
             line = "  {}: {}".format(label, text)
@@ -286,6 +363,7 @@ def apply(ctx):
             lines.append(line)
             return True
 
+        # 装備は戦闘の材料なので人物より先。属性は本文の直後に置く。
         weapon, weapon_attributes = equipment_summary(character, "weapon")
         wearable, wearable_attributes = equipment_summary(character, "wearable")
         for label, text in (
@@ -298,6 +376,8 @@ def apply(ctx):
                 break
 
         # 戦闘時に意味があり、Characterが元から持つ情報だけ。
+        # runtime に無い項目は保存辞書から補う（NPC は speech_style などが
+        # Character に載らないことがある。方針の fallback がこれ）。
         for attr, limit in FIELD_CHARS:
             value = field_with_saved_fallback(character, attr)
             if not present(value):
@@ -308,7 +388,13 @@ def apply(ctx):
         return "\n".join(lines)
 
     def current_party(app):
-        """ローダ共通APIだけで現在の同行NPCを引く。プレイヤーは本体情報に任せる。"""
+        """ローダ共通APIだけで現在の同行NPCを引く。プレイヤーは本体情報に任せる。
+
+        返すのは `[("party_member", Character), ...]`。役割名は今のところ1種だけで、
+        `character_block` の先頭行の見出しになる。同じ実体が2つの id から引けても
+        1度しか載せない（`seen` は id() で見る。Character は hash を持つとは限らない）。
+        id から実体を引けなかった仲間は WARN を残して飛ばす。
+        """
         if app is None:
             return []
 
@@ -334,6 +420,9 @@ def apply(ctx):
         人数はログ用。ここで返さないと、同行者の解決が1手につき2回走る。
         """
         members = current_party(app)
+        # 合計上限を人数で割って1人ぶんの予算にする。人数が多くて割った値が
+        # MEMBER_MIN_CHARS を切るときは下限を優先する（合計は上限を超えるが、
+        # 名前と HP だけの仲間を作るよりよい）。
         budget = (
             max(MEMBER_MIN_CHARS, BLOCK_TOTAL_CHARS // len(members))
             if members else BLOCK_TOTAL_CHARS
@@ -345,6 +434,8 @@ def apply(ctx):
             if rendered:
                 blocks.append(rendered)
 
+        # 仲間が居なくても見出しだけは足す。「情報が無い」と「MOD が動かなかった」を
+        # プロンプトの側で区別できるようにするため。
         if not blocks:
             return (
                 "\n\n" + MARKER + "\n"
@@ -357,14 +448,20 @@ def apply(ctx):
             + "\n".join(blocks)
         ), len(blocks)
 
-    # ------------------------------------------------------------ message
+    # ------------------------------------------------------------ 送り口の引数
+    # 見張る2つの送り口はどちらも先頭が (manager_name, message, ...) で、
+    # message は `[{"role": ..., "content": ...}, ...]` の list。
+    # 呼び側が位置引数で渡すか keyword で渡すかは決め打ちできないので、
+    # 読むときにどちらだったかを控え、書き戻すときに同じ形へ戻す。
 
     def manager_name_of(args, kwargs):
+        """第1引数の manager_name。位置でも keyword でも読む。"""
         if args:
             return args[0]
         return kwargs.get("manager_name")
 
     def message_of(args, kwargs):
+        """message の list と、それが "args" / "kwargs" のどちらに在ったかを返す。"""
         if len(args) >= 2 and isinstance(args[1], list):
             return args[1], "args"
         message = kwargs.get("message")
@@ -373,6 +470,7 @@ def apply(ctx):
         return None, None
 
     def replace_message(args, kwargs, message, where):
+        """`message_of` が見つけた位置へ差し替え後の message を戻す。元の tuple / dict は触らない。"""
         if where == "args":
             return args[:1] + (message,) + args[2:], kwargs
         if where == "kwargs":
@@ -382,10 +480,16 @@ def apply(ctx):
         return args, kwargs
 
     def append_block(message, block):
-        """最後の user message に追記。呼び出し元のlist/dictは壊さない。"""
+        """最後の user message に追記。呼び出し元のlist/dictは壊さない。
+
+        戻り値が引数の `message` と同一なら「足さなかった」の意味
+        （呼び側は `is` で見て、書き戻しとログを省く）。
+        """
         if not block:
             return message
 
+        # 既に MARKER が入っていれば2度足さない。同じ message が
+        # 再送（リトライ）で通る場合や、2つの送り口が同じ list を回す場合の保険。
         for item in message:
             if not isinstance(item, dict):
                 continue
@@ -395,6 +499,8 @@ def apply(ctx):
 
         rewritten = list(message)
 
+        # 末尾に近い user message ほど「今の手」の指示。そこへ足すと
+        # 審判がプレイヤー情報の直後に仲間の情報を読む。
         for index in range(len(rewritten) - 1, -1, -1):
             item = rewritten[index]
             if not isinstance(item, dict) or item.get("role") != "user":
@@ -413,8 +519,18 @@ def apply(ctx):
         return rewritten
 
     # ------------------------------------------------------------ ロード時のNPC保存形
+
     @ctx.wrap("__main__:World.generate_character", required=False, safe=True)
     def remember_saved_character(orig, self, character_id, character_value, *args, **kwargs):
+        """ゲームがセーブから NPC を組み立てる入口で、渡された保存辞書を写しておく。
+
+        `World.generate_character(character_id, character_value)` はロード時に
+        NPC ごとに呼ばれ、`character_value` がセーブ上のその人物の辞書。
+        runtime の Character には載らない項目（口調など）があるので、
+        必要な欄だけを `state["saved_character"]` へ控え、`field_with_saved_fallback` /
+        `equipment_sources` が runtime に無いときの拠り所にする。
+        本体の処理は一切変えない（控えたあと `orig` をそのまま呼ぶ）。
+        """
         try:
             if isinstance(character_value, dict) and character_id is not None:
                 equipments = character_value.get("equipments")
@@ -437,15 +553,29 @@ def apply(ctx):
 
     # ------------------------------------------------------------ フック
 
-
     @ctx.wrap("__main__:InstantaleApp.return_to_title", required=False, safe=True)
     def clear_saved_character_cache(orig, self, *args, **kwargs):
-        # runtimeを跨いで古いcharacter_idの保存辞書をfallbackしない。
+        """タイトルへ戻るときに控えを全部捨てる。
+
+        別のワールドや別のセーブをロードすると character_id が同じでも別人になり得る。
+        古い保存辞書を fallback に使うと他所の人物像が混ざるので、境目で空にする。
+        NOTE の印も一緒に戻し、次の遊びでまた1度だけ記録できるようにする。
+        """
         state["saved_character"].clear()
         state["noted_flags"].clear()
         return orig(self, *args, **kwargs)
 
     def install_send(target):
+        """送り口1つに包みを掛ける。`llm.watch_aliases` が対象ごとに呼ぶ。
+
+        包みの中の流れ:
+          1. manager_name が戦闘の審判でなければ素通し（会話や生成には触らない）
+          2. message の list が読めなければ WARN を残して素通し
+          3. `app.in_battle` が立っていなければ素通し
+             （他の戦闘フラグだけ立っていたら NOTE を1度だけ残す）
+          4. 仲間の塊を組み、最後の user message の末尾へ足して本体へ渡す
+        失敗はどの段でも本体の呼び出しを止めない（元の引数で `orig` を呼ぶ）。
+        """
         @ctx.wrap(target, required=False, safe=True)
         def battle_send(orig, *args, **kwargs):
             manager_name = manager_name_of(args, kwargs)
@@ -485,8 +615,9 @@ def apply(ctx):
 
             return orig(*args, **kwargs)
 
-    # send_request はプロバイダ初期化後に生える。
-    # 後生え・別名対策はローダの共有部品へ任せる。
+    # send_request はプロバイダ初期化後に生える（apply() の時点では無いことがある）。
+    # 後生え・別名（他 MOD が包んだ後の関数名違い）の対策はローダの共有部品へ任せる。
+    # 対象が現れた時点で `install_send(target)` が呼ばれ、包みが掛かる。
     llm.watch_aliases(
         ctx,
         list(BATTLE_SEND_TARGETS),
@@ -494,5 +625,5 @@ def apply(ctx):
         label="battle character context",
     )
 
-    ctx.log("battle character context v7: party-member-only context + base-style equipment text + separated attributes + unconditional saved NPC speech/style/equipment fallback + title cache clear + 107 battle flag gate armed + per-field and total prompt caps; log -> {}".format(
-        ctx.out_path(LOG_BASENAME)))
+    ctx.log("battle character context: installed (total {} chars, {} per member at least); log -> {}".format(
+        BLOCK_TOTAL_CHARS, MEMBER_MIN_CHARS, ctx.out_path(LOG_BASENAME)))

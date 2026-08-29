@@ -542,6 +542,8 @@ def read_mods() -> dict:
             # 判定はローダの語彙（`is_wip`）を借りる ― 番号帯の規則をここに写すと、
             # 片方だけ直したとき読み込みと表示がずれる。
             "wip": ml.is_wip(name),
+            # MOD 同梱の道具（`908_` §4）。GUI はボタンを出して別プロセスで開くだけ。
+            "tool": manifest.get("tool"),
         })
     return {"mods": mods, "disabled": disabled, "problems": found["problems"],
             "debug_mode": bool(found.get("debug_mode"))}
@@ -1312,6 +1314,8 @@ class App(ttk.Frame):
                                     command=self.open_mod_dir)
         self.info_open.pack(side="left", padx=(6, 0))
 
+        # 「設定…」は1つ。`mod.json` に "tool" を宣言した MOD では、
+        # 宣言の設定ダイアログではなく同梱の設定画面を開く（`_edit_settings`）。
         self.info_cfg = ttk.Button(info, text="設定…", width=12,
                                    command=self._edit_settings)
         self.info_cfg.pack(anchor="w", pady=(12, 0))
@@ -1772,7 +1776,7 @@ class App(ttk.Frame):
             # 持たない mod で「設定…」を押しても何も無いことが、
             # 一覧の時点で分かるように。
             changed = bool(self.settings.get(name))
-            cfg = ("●" if changed else "○") if mod["settings"] else ""
+            cfg = ("●" if changed else "○") if (mod["settings"] or mod.get("tool")) else ""
             # 色だけでは「なぜ並んでいるのか」が伝わらないので、
             # 名前の後ろに取り込まれた版を出す。
             # 行そのものに書くのは、
@@ -1833,7 +1837,9 @@ class App(ttk.Frame):
             widget.state(["!disabled"])
         # 設定を持たない mod で押せてしまうと、「設定がありません」を読むために
         # 押すことになる。持っているかどうかは一覧の「設定」列と同じ判断。
-        self.info_cfg.state(["!disabled"] if mod["settings"] else ["disabled"])
+        # 同梱の設定画面（"tool"）を持つ mod も「設定がある」側。
+        self.info_cfg.state(["!disabled"] if (mod["settings"] or mod.get("tool"))
+                            else ["disabled"])
 
         state = "無効" if mod["dir"] in self.disabled else "有効"
         self.info_name.configure(text=mod["name_ja"] or mod["dir"])
@@ -2122,10 +2128,47 @@ class App(ttk.Frame):
         self._set_status("load_order.json に保存しました"
                          f"（有効 {known - off} / 無効 {off}）")
 
+    # -- MOD 同梱の道具 ----------------------------------------------------
+    def _open_tool(self) -> None:
+        """`mod.json` の "tool" を別プロセスで開く（`908_` §4 の契約）。
+
+        MOD のコードをこのプロセスに import しない、という原則を守るため
+        サブプロセスにする。場所は引数ではなく環境変数で渡す
+        （引数だと道具側の書式を縛る）。
+        """
+        mod = self._selected()
+        if not mod or not mod.get("tool"):
+            return
+        tool = mod["tool"]
+        mod_dir = os.path.join(MODS_DIR, mod["dir"])
+        entry = os.path.join(mod_dir, tool["entry"])
+        if not os.path.isfile(entry):
+            messagebox.showerror("道具が見つかりません",
+                                 "{} が無い。\n{}".format(tool["entry"], mod_dir))
+            return
+        env = dict(os.environ)
+        env["IML_ROOT"] = ROOT
+        env["IML_STATE_DIR"] = STATE_DIR
+        env["IML_GAME_DIR"] = os.path.dirname(read_config().get("game_path", "") or "")
+        env["IML_MOD_SETTINGS"] = C.store_path(RUNTIME_DIR)
+        try:
+            subprocess.Popen([sys.executable, entry], cwd=mod_dir, env=env)
+        except Exception as exc:
+            messagebox.showerror("開けませんでした", f"{type(exc).__name__}: {exc}")
+            return
+        self._set_status("{} の設定画面を開きました（{}）".format(
+            mod["name_ja"], tool["label"]["ja"]))
+
     # -- 設定 --------------------------------------------------------------
     def _edit_settings(self) -> None:
         mod = self._selected()
         if not mod:
+            return
+        # 同梱の設定画面を持つ mod は、そちらを開く。
+        # 宣言の設定（"settings"）もその画面が引き受ける約束
+        # （`908_` §4。設定の入口が2つあると、どちらに何があるか覚えることになる）。
+        if mod.get("tool"):
+            self._open_tool()
             return
         if not mod["settings"]:
             messagebox.showinfo(

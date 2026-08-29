@@ -39,6 +39,7 @@ GAME.md と分けているのは、**ゲームが更新されて食い違うの�
 | 適用順と依存の宣言／複数 MOD の重なり／伏せ方 | §3.2 / §3.3 |
 | `apply()` が何度も呼ばれる理由と書き方（保留・世代・`on_ready`） | §3.4 / §3.5 / §3.6 |
 | 台帳／設定／API 番号／剥がし方／`out/` と `state/` | §3.7 〜 §3.11 |
+| MOD 同梱の設定画面（`"tool"`。設定ダイアログに収まらない設定） | §3.12 |
 | Nuitka で効くもの・効かないもの | §4 |
 | 画面・選択肢・会話・LLM を扱う既製部品 | §5 |
 | **踏んだ罠の一覧（守るべきルール）** | §6 |
@@ -680,8 +681,9 @@ def apply(ctx):
 #### 3.1.6 名乗り（`mod.json`）
 
 `entry` 以外は任意。
-うち `api` / `after` / `before` / `conflicts` / `kind` / `settings` は動作に関わり、
+うち `api` / `after` / `before` / `conflicts` / `kind` / `settings` / `tool` は動作に関わり、
 `name` / `description` / `version` / `author` は表示専用。
+`tool` は MOD 同梱の設定画面の宣言（§3.12）。
 
 名乗りを Python ではなく JSON に置いているのが要点。
 GUI は MOD の一覧を作るのにコードを1行も走らせずに済む
@@ -1377,6 +1379,39 @@ MOD のログはローダのログ（`ctx.log`）と分ける
 
 > この7行は**42本の MOD に写されていた**（時刻付き・印付き・時刻なし・錠付きの4通りに枝分かれした状態で）。
 > 写して回るものはローダの語彙（§3.2.3）。
+
+### 3.12 MOD 同梱の設定画面（`"tool"`）
+
+§3.8 の設定は「1行に収まる値」しか宣言できない（§3.8.2）。
+曲の一覧から選ぶ・他のセーブを読んで NPC を選ぶ、のような設定は、
+MOD が自分の画面を持つほうが分かりやすい。
+`mod.json` に `"tool"` を宣言すると、ローダの設定画面の「設定…」がその MOD では
+宣言の設定ダイアログの代わりに同梱の画面を開く。
+
+```json
+"tool": {"entry": "tool.py",
+         "label": {"ja": "戦闘BGMを選ぶ", "en": "Choose battle BGM"},
+         "note":  {"ja": "…", "en": "…"}}
+```
+
+| 項目 | 内容 |
+|---|---|
+| `entry` | MOD フォルダからの相対パス。必須（無ければ宣言ごと無視して WARN） |
+| `label` / `note` | 表示用。片方の言語しか無ければもう片方で埋める（`name` と同じ） |
+| 開き方 | `gui.py` が `[sys.executable, <MOD>/tool.py]` を**別プロセス**で起動する。`cwd` は MOD のフォルダ |
+| 渡すもの | 引数ではなく環境変数。`IML_ROOT`（配布フォルダの根）/ `IML_STATE_DIR` / `IML_GAME_DIR`（未設定なら空）/ `IML_MOD_SETTINGS`（`mod_settings.json` のパス） |
+| `"settings"` との関係 | 両方宣言してよい。ただし「設定…」は道具を開くので、**宣言の設定もその画面で引き受ける**（`322_` が `instantale_modloader.config` の `load_store` / `save_store` で同じ `mod_settings.json` に書いている） |
+| 一覧の「設定」列 | `settings` か `tool` があれば ○/● が付く |
+
+別プロセスにするのは、GUI が「MOD のコードを一切 import しない」（`gui.py` 冒頭）を守るため。
+引数ではなく環境変数で渡すのは、道具側の引数の書式を縛らないため。
+道具は普通の tkinter スクリプトでよく、`IML_ROOT/runtime` を `sys.path` に足せばローダの語彙
+（`write_json` / `config`）をそのまま使える。配色と書体は `tools/gui.py` の `setup_theme()` を借りる。
+
+直接起動（`python runtime/mods/322_battle_bgm/tool.py`）もできるようにしておく。
+環境変数が無いときは自分の位置と `settings/gui.json` から場所を組む（`322_` の `locate()`）。
+
+> 元は `908_npc_carryover` の設計（DOC.md §4）。先に `322_battle_bgm` で実装した。
 
 ---
 

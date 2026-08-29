@@ -1230,7 +1230,37 @@ def _manifest(mods_dir: str, name: str) -> dict:
         "superseded": text(data.get("superseded")),
         # GUI から変えられる設定の宣言（config.py）。
         "settings": _config_module().normalize_decls(data.get("settings")),
+        # MOD 同梱の道具（設定画面から別プロセスで開く。`908_` §4 の契約）。
+        # {"entry": "tool.py", "label": {...}, "note": {...}}。無ければ None。
+        # GUI が起動するだけで、ローダ本体は読まない。
+        "tool": _tool_decl(name, data.get("tool")),
     }
+
+
+def _tool_decl(name: str, raw) -> dict | None:
+    """`"tool"` の宣言を均す。壊れていれば None（GUI にボタンを出さない）。"""
+    if not isinstance(raw, dict):
+        if raw is not None:
+            log("{}: \"tool\" がオブジェクトではない。無視する".format(name), level="WARN")
+        return None
+    entry = raw.get("entry")
+    if not isinstance(entry, str) or not entry.strip():
+        log("{}: \"tool\" に \"entry\" が無い。無視する".format(name), level="WARN")
+        return None
+
+    def localized(key, fallback):
+        value = raw.get(key)
+        if isinstance(value, str):
+            return {"ja": value, "en": value}
+        if isinstance(value, dict):
+            ja = value.get("ja") or value.get("en") or fallback
+            en = value.get("en") or value.get("ja") or fallback
+            return {"ja": str(ja), "en": str(en)}
+        return {"ja": fallback, "en": fallback}
+
+    return {"entry": entry.strip(),
+            "label": localized("label", "道具を開く"),
+            "note": localized("note", "")}
 
 
 def api_status(manifest: dict) -> tuple[str | None, str]:

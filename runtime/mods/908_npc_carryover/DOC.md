@@ -72,6 +72,10 @@ SaveEditor の NPC 移植（`Tools/NpcPortability.cs`、format = `instantale_npc
 
 ## 4. ローダ基盤: MOD が設定画面から自分の道具を開く
 
+> **2026-08-29 に実装済み**（`322_battle_bgm` で先に入れた。TECH.md §3.12）。
+> 違いは1つ: 「道具を開く」の別ボタンではなく、**「設定…」がその MOD では道具を開く**。
+> `mod.json` の `"settings"` もその画面が引き受ける約束。以下は設計時の文のまま。
+
 `gui.py` は「MOD のコードを一切 import しない」（`gui.py` 冒頭の原則）。
 これを守ったまま MOD に GUI を持たせるため、宣言＋サブプロセスにする。
 

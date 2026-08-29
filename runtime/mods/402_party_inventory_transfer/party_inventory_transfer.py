@@ -1,45 +1,76 @@
 # -*- coding: utf-8 -*-
-"""会話中のパーティーメンバーへアイテムを受け渡し、仲間の装備欄も書き換える統合MOD。
+"""機能追加: 会話中の仲間へアイテムを渡し、仲間から受け取る。
 
-方針:
-- 会話選択肢は「＜アイテムの受け渡し＞」1本だけ。mod.json の after で
-  301_quest_from_conversation より後に読み込み、ゲーム/301 が会話選択肢を組んだ後に
-  ConversationEndManager の直前へ挿入する。
-- quest_from_conversation と同じ safe spec + MOD印 + prune_stale 方式。
-  タイトル→ロードでMOD印が落ちても、ConversationEndManager spec から会話相手を復元し、
-  現在も party member なら同じ位置へ差し直す。旧版の残骸ラベルも掃除する。
-- 受け渡しの窓は本体の twin inventory（売買UI）を場面名 party_transfer で借りる。
-  本体のドラッグ・配置UI・本体ファイルは変更しない。
-- 受け渡しは所有権（inventory の実体・item.id・obtainer）を同期し、
-  少し待ってからゲーム自身の save_game で保存する。連続移動は最後の1回だけ保存する。
-  Screen.schedule() は Clock から呼ぶ時に自分で guarded を掛けるので、素の関数を渡す
-  （guarded(fn) を渡すとその場で走り、戻り値 None が予約されて毎回例外になる）。
-- 装備中の品を渡すときは、obtainer も equipments も揃っている時点で本体の
-  Item.unequip() に外させる。辞書だけ直すと本体の解除時の後始末（表示更新）が走らず、
-  「装備中」の表示が残ってそこからの解除で本体が落ちる。辞書手術は残骸掃除として残す。
-  照合は同一instanceと id 文字列の両方で行う（実行時の equipments の値は
-  id 文字列とは限らない。セーブに焼く時だけ id になる）。
-- Item.unequip に番人を立てる。equipments がその品を指していない解除は本体へ通さず、
-  1行記録して無視する（本体は無条件に辞書を引くため、食い違い状態では必ず落ちる）。
-- 仲間の装備は本体の player 固定 ItemEquipManager を呼ばず、その NPC 自身の
-  equipments[weapon|wearable] を item_id で更新して save_game する。
-  NPC の装備装着は素のゲームに存在しない（319 DOC の公式回答）ので、これは MOD が
-  作る記録であり、読むのは 401 だけ。解除時は slot キーごと落とす。
-- 通常の成功ログは出さず、警告・失敗・例外だけ modloader.log へ集約する。
-  観測専用のフックは 223_probe_party_equipment に分けてある。
+素のゲームには、同行している仲間へアイテムを渡す手段が無い
+（自由入力で頼む以外に無く、帰ってくる保証も無い）。
+この MOD は仲間との会話に「＜アイテムの受け渡し＞」を1つ足し、
+押すと店の売買と同じ2枚並びの窓（`toggle_twin_inventory_window`）を
+場面名 `party_transfer` で開く。左が自分、右がその仲間。
+ドラッグで移した品は持ち主ごと移り、ゲーム自身の `save_game` で保存される。
+本体のドラッグ・配置 UI・本体ファイルは変更しない。
+
+## 選択肢
+
+`301_quest_from_conversation` と同じ safe spec ＋ MOD 印 ＋ prune_stale 方式。
+mod.json の `after` で 301 より後に読み込み、ゲームと 301 が選択肢を組んだ後に
+「会話を終了する」（`ConversationEndManager`）の直前へ差す。
+タイトル→ロードで印が落ちても、`ConversationEndManager` の spec から会話相手を復元し、
+今も仲間なら同じ位置へ差し直す。旧版の文言の残骸も掃除する。
+
+## 受け渡しの同期
+
+本体の `InventoryItem.change_inventory` は画面側の登録を動かすだけなので、
+その直後に持ち物の実体（`inventory` の辞書）・`Item.id`・`Item.obtainer` を
+新しい持ち主へ揃え、少し待ってから保存する。連続で動かしたときは最後の1回だけ保存する。
+`Screen.schedule()` は Clock から呼ぶときに自分で guarded を掛けるので、素の関数を渡す
+（`guarded(fn)` を渡すとその場で走り、戻り値 None が予約されて毎回例外になる）。
+
+装備中の品を渡すときは、obtainer も equipments も揃っている時点で本体の
+`Item.unequip()` に外させる。辞書だけ直すと本体の解除時の後始末（表示更新）が走らず、
+「装備中」の表示が残ってそこからの解除で本体が落ちる。辞書手術は残骸掃除として残す。
+照合は同一 instance と id 文字列の両方で行う
+（実行時の equipments の値は id 文字列とは限らない。セーブに焼く時だけ id になる）。
+
+`Item.unequip` には番人を立てる。equipments がその品を指していない解除は本体へ通さず、
+1行記録して無視する（本体は無条件に辞書を引くため、食い違い状態では必ず落ちる）。
+
+## 仲間の装備
+
+NPC の装備装着は素のゲームに存在しない（`319_` の DOC にある公式回答）。
+本体の `ItemEquipManager` はプレイヤー固定なので呼ばず、窓の右側の武器・防具に
+MOD 専用の「装備する／外す」ボタンを足し、その NPC 自身の
+`equipments[weapon|wearable]` を id で書いて `save_game` する。
+これは MOD が作る記録で、読むのは `401_` だけ。
+解除時は slot キーごと落とす（本体がプレイヤーの装備を外した後と同じ形）。
+
+## ログ
+
+通常の成功は記録せず、警告・失敗・例外だけ `modloader.log` へ集約する。
+経過の観測は `223_probe_party_equipment` に分けてある。
 """
 
 from instantale_modloader import frames, ui
 
 
+#: 会話に足す選択肢の文言。
 LABEL = "＜アイテムの受け渡し＞"
+#: この MOD（と旧版）が作った選択肢の文言。印を失った残骸を文言で見分けて掃除する
+#: （`screen.prune_stale`）。旧版の2つは今は作らないが、古いセーブに残り得る。
 OUR_LABELS = (LABEL, "アイテムを受け渡す", "装備を変更する")
+#: 選択肢の dict に付ける印のキー。値が "transfer" なら受け渡しボタン。
+#: 404_party_talk はこのキーを見て、パーティー会話の間だけこのボタンを隠す。
 MARK = "mod_party_inventory_transfer_equipment"
 
 
 def apply(ctx):
     def write(message):
-        """通常動作は記録せず、異常・警告だけローダー標準ログへ送る。"""
+        """通常動作は記録せず、異常・警告だけローダー標準ログへ送る。
+
+        この MOD は専用ログを持たない。`write` は至る所から呼ばれるが、
+        先頭が WARN か、cannot / failed / ignored を含む行だけが `modloader.log` に
+        残り、それ以外（transfer synced / saving transfer など）は捨てられる。
+        通常の経過を見たいときは 223_probe_party_equipment を使う。
+        """
         try:
             text = str(message)
         except Exception:
@@ -53,8 +84,17 @@ def apply(ctx):
         ):
             ctx.log("party inventory/equipment: " + text)
 
+    # ローダ共通の画面部品。選択肢の生成（`button`）・印の読み取り（`mark_of`）・
+    # 残骸掃除（`prune_stale`）・Clock への予約（`schedule`）・描き直し（`refresh`）を担う。
     screen = ui.Screen(ctx, write, tag="party inventory transfer", mark=MARK)
 
+    # apply() の外へ持ち出さない控え。
+    #   npc_id:  今の会話相手の id。会話開始で控え、終了で消す
+    #   player / npc:  受け渡しの窓を開いている2人。ドラッグの同期で
+    #                  「この2人の間の移動だけ」を見分ける鍵（店の売買には触らない）
+    #   save_generation / equipment_save_generation:
+    #                  遅延保存の世代番号。予約のたびに増やし、走るときに
+    #                  番号が変わっていれば古い予約として何もしない
     state = {
         "npc_id": None,
         "player": None,
@@ -63,18 +103,25 @@ def apply(ctx):
         "equipment_save_generation": 0,
     }
 
+    # 選択肢の dict から spec のクラス名を読む／押された index の dict を引く（ローダ共通）。
     spec_cls_name = ui.spec_cls_name
     pressed_entry = ui.pressed_entry
 
-    # ------------------------------------------------------------ helpers
+    # ------------------------------------------------------------ 補助
 
     def character_name(character, fallback=""):
+        """ログ用の名前。無ければ `fallback`。"""
         name = getattr(character, "name", None)
         if isinstance(name, str) and name.strip():
             return name.strip()
         return fallback
 
     def inventory_dict(owner):
+        """持ち物の実体 `{item_id: Item}`。
+
+        Character の `inventory` は Inventory オブジェクトで、その `.inventory` が辞書。
+        辞書を直接持つ形にも備える。読めなければ None。
+        """
         if owner is None:
             return None
         inv = getattr(owner, "inventory", None)
@@ -113,6 +160,7 @@ def apply(ctx):
         return recovered
 
     def current_party_npc(app):
+        """会話相手が今のパーティーメンバーなら、その Character。違えば None。"""
         npc_id = conversation_npc_id(app)
         if npc_id is None:
             return None
@@ -122,14 +170,25 @@ def apply(ctx):
         return ui.character_of(app, npc_id)
 
     def grid_owner(grid):
+        """2枚並びの窓の片側（Inventory）の持ち主 Character。"""
         return getattr(grid, "obtainer", None)
 
     def belongs_to_transfer_pair(owner):
+        """受け渡しの窓を開いている2人のどちらかか（同一instanceで見る）。"""
         return owner is state.get("player") or owner is state.get("npc")
 
-    # ------------------------------------------------------------ id / ownership
+    # ------------------------------------------------------------ id と持ち主
+    # 持ち物は `{item_id: Item}`。Item 自身も `id` と `obtainer`（持ち主）を持つ。
+    # 本体のドラッグ処理は画面側の登録を動かすだけで、渡した先の持ち物の辞書・
+    # Item.id・Item.obtainer までは揃えない。ここから下がその同期。
 
     def key_for_instance(inv, item_instance, preferred=None):
+        """持ち物の辞書の中でこの Item を指している鍵。無ければ None。
+
+        `preferred`（画面のボタンが覚えている id）が合っていればそれを返し、
+        違っていれば全件を同一instanceで走査する。文字列比較はしない
+        （同じ id の別の Item が両側に居ることがある）。
+        """
         if not isinstance(inv, dict):
             return None
 
@@ -146,6 +205,11 @@ def apply(ctx):
         return None
 
     def next_item_id(inv, preferred=None, item_instance=None):
+        """渡した先の持ち物で使う鍵を決める。
+
+        元の id（`preferred`）が空いているか、既にこの Item 自身を指していればそのまま。
+        相手側に同じ id の別の品が居るときだけ `item_N` の空き番号を振る。
+        """
         if preferred is not None:
             preferred_s = str(preferred)
             existing = inv.get(preferred_s)
@@ -161,7 +225,11 @@ def apply(ctx):
             n += 1
 
     def is_referenced_in_equipments(owner, item_instance, candidate_ids):
-        """持ち主の equipments がこの品を指しているか（同一instance / id文字列の両対応）。"""
+        """持ち主の equipments がこの品を指しているか（同一instance / id文字列の両対応）。
+
+        `equipments` は `{"weapon": 参照, "wearable": 参照}`。参照は実行時には
+        Item オブジェクト、セーブから読んだ直後は id の文字列。
+        """
         equipments = getattr(owner, "equipments", None)
         if not isinstance(equipments, dict):
             return False
@@ -176,10 +244,11 @@ def apply(ctx):
     def remove_equipped_reference(owner, item_instance, candidate_ids):
         """渡した品への装備参照を、持ち主の equipments から全て落とす。
 
-        実行時の equipments の値は id 文字列とは限らない。エリスの装備武器を
-        渡した実機で、id 文字列との比較は何も外せず、残った参照が
-        items.py:54 unequip の KeyError: 'weapon' でゲームを落とした
-        （unequip は self.obtainer 基準。obtainer は先に相手側へ書き換わっている）。
+        `sync_transfer` で本体の `Item.unequip()` に外させた後の残骸掃除。
+        実行時の equipments の値は id 文字列とは限らないので、id 文字列との比較
+        だけでは装備中の武器を取りこぼす。そのまま残ると、本体の `unequip` が
+        `self.obtainer.equipments[self.item_type]` を引いたときに KeyError で落ちる
+        （`obtainer` は先に相手側へ書き換わっている。DOC.md「困ったとき」）。
         だから同一instance（`ref is item_instance`）でも照合する。
         """
         equipments = getattr(owner, "equipments", None)
@@ -205,12 +274,17 @@ def apply(ctx):
                 )
             )
 
-    # ------------------------------------------------------------ persistence
+    # ------------------------------------------------------------ 保存
 
     def save_after_transfer(app, expected_owner, item_instance, expected_id):
         """UIのdrag/drop処理が完了した後に保存する。
 
-        連続移動時は最後の予約だけを有効にする。
+        連続移動時は最後の予約だけを有効にする（世代番号 `save_generation`）。
+        走るときに Item がまだ `expected_owner` の持ち物に居るかを確かめ、
+        居なければ保存せず WARN だけ残す（次の移動の保存が後から走る）。
+        保存の直前に Item.id / obtainer を鍵と持ち主へもう一度合わせるのは、
+        予約から実行までの間に本体側が触っている可能性への備え。
+        保存はゲーム自身の `app.save_game()`。セーブの形式には触らない。
         """
         state["save_generation"] += 1
         generation = state["save_generation"]
@@ -266,9 +340,21 @@ def apply(ctx):
         # 戻り値 None が予約され、遅延後に NoneType is not callable になる。
         screen.schedule(do_save, 0.15)
 
-    # ------------------------------------------------------------ transfer sync
+    # ------------------------------------------------------------ 受け渡しの同期
 
     def sync_transfer(widget, old_grid, new_grid):
+        """ドラッグで片側から片側へ移った直後に、持ち物の実体を持ち主に合わせる。
+
+        `InventoryItem.change_inventory` の包みから呼ばれる。`widget` が画面の
+        ボタン（`item_instance` と `item_id` を持つ）、`old_grid` / `new_grid` が
+        移動前後の Inventory。手順:
+          1. 受け渡しの窓の2人の間の移動でなければ何もしない（店の売買は素通し）
+          2. 装備中なら本体の `Item.unequip()` に外させる
+          3. 同じ Item を指す鍵を両側から全部消し、新しい側に1つだけ置く
+          4. Item.id / Item.obtainer / widget.item_id を新しい側に合わせる
+          5. 旧持ち主の equipments に残った参照を掃除し、装備印を落とす
+          6. 少し待ってから保存を予約する
+        """
         old_owner = grid_owner(old_grid)
         new_owner = grid_owner(new_grid)
 
@@ -292,6 +378,8 @@ def apply(ctx):
             write("WARN transfer sync: InventoryItem has no item_instance")
             return
 
+        # 本体の change_inventory が既に新しい側へ登録している場合があるので、
+        # 旧側・新側の両方で鍵を探しておく（どちらが見つかるかは本体の実装次第）。
         old_key = key_for_instance(old_inv, item_instance, old_widget_id)
         native_new_key = key_for_instance(new_inv, item_instance, old_widget_id)
         original_item_id = getattr(item_instance, "id", None)
@@ -300,9 +388,9 @@ def apply(ctx):
         # 本体の Item.unequip() に外させる。辞書だけ直すと、本体が解除時に行う
         # 後始末（set_callback 経由の表示更新など）が走らず、「装備中」の表示が
         # 画面に残る。その残骸を右クリックして本体popupの「外す」を押すと、
-        # 空の equipments を引いた items.py:54 が KeyError でゲームごと落ちる（実測2件）。
-        # 後続の remove_equipped_reference は、この呼び出しで取り切れなかった
-        # 残骸の掃除として残す。
+        # 空の equipments を引いた本体の unequip が KeyError でゲームごと落ちる
+        # （DOC.md「困ったとき」）。後続の remove_equipped_reference は、
+        # この呼び出しで取り切れなかった残骸の掃除として残す。
         if is_referenced_in_equipments(old_owner, item_instance,
                                        [old_key, old_widget_id, original_item_id]):
             try:
@@ -322,6 +410,8 @@ def apply(ctx):
             if value is item_instance:
                 new_inv.pop(key, None)
 
+        # 新しい側で使いたい id。旧側の鍵 → 本体が新側に付けた鍵 → ボタンの id →
+        # Item.id の順で、最初に読めたもの。
         base_id = (
             old_key if old_key is not None
             else native_new_key if native_new_key is not None
@@ -349,9 +439,9 @@ def apply(ctx):
             old_owner, item_instance,
             old_keys + [old_widget_id, original_item_id, base_id])
 
-        # 装備印は旧ownerの状態。実測のクラッシュは装備欄の残存参照経由
-        # （上の記録）で、この印の経路は未測だが、持ち越すと本体popupの
-        # 文言判定が狂い、同じ unequip に届き得るので塞いでおく。
+        # ボタンの `is_equipped` は旧持ち主のときの状態。持ち越すと本体popupの
+        # 「装備する／外す」の文言判定が狂い、同じ unequip に届き得るので塞いでおく
+        # （この印だけが引き金になった例は無い。念のための処置）。
         try:
             widget.is_equipped = False
         except Exception:
@@ -373,19 +463,24 @@ def apply(ctx):
         else:
             write("WARN cannot schedule save: app not found")
 
-    # ------------------------------------------------------------ NPC equipment
-    # 本体の ItemPopupMenu -> ItemEquipManager は実機観測で player.equipments を
-    # 先に変更するため、NPC側ではその経路を使わない。
-    # twin inventory のNPC側だけ、MOD専用ボタンでNPC.equipmentsを直接更新する。
+    # ------------------------------------------------------------ 仲間の装備
+    # 本体の ItemPopupMenu -> ItemEquipManager はプレイヤー固定で、NPC の品で押すと
+    # player.equipments を書き換える。だから NPC 側ではその経路を使わず、
+    # twin inventory の NPC 側だけ、MOD専用ボタンで NPC.equipments を直接更新する。
+    # これは MOD が作る記録で、素のゲームは読まない（DOC.md「装備する」の節）。
 
+    #: 装備できる item_type。本体の equipments のキー（slot 名）と同じ文字列。
     EQUIP_TYPES = ("weapon", "wearable")
+    #: MOD が足したボタンに付ける印（属性名）。同じ popup へ二重に足さないため。
     EQUIP_BUTTON_MARK = "_mod_party_npc_equip_button"
 
     def item_id_in(owner, item_instance, preferred=None):
+        """持ち主の持ち物の中でのこの Item の鍵。"""
         inv = inventory_dict(owner)
         return key_for_instance(inv, item_instance, preferred)
 
     def equipment_dict(owner, create=False):
+        """`owner.equipments`。無い／辞書でないときは `create=True` なら空の辞書を作って付ける。"""
         if owner is None:
             return None
         eq = getattr(owner, "equipments", None)
@@ -400,6 +495,7 @@ def apply(ctx):
             return None
 
     def is_equipped_by(owner, item_instance, preferred=None):
+        """MOD の記録上、この持ち主がこの品を装備しているか（ボタンの文言を決める）。"""
         item_id = item_id_in(owner, item_instance, preferred)
         eq = equipment_dict(owner, create=False)
         if item_id is None or not isinstance(eq, dict):
@@ -407,6 +503,7 @@ def apply(ctx):
         return any(ref is not None and str(ref) == str(item_id) for ref in eq.values())
 
     def save_after_equipment(app, npc, item_instance, action):
+        """装備の記録を書き換えた後の保存。`save_after_transfer` と同じ世代番号方式。"""
         state["equipment_save_generation"] += 1
         generation = state["equipment_save_generation"]
 
@@ -432,6 +529,12 @@ def apply(ctx):
         screen.schedule(do_save, 0.10)
 
     def apply_npc_equipment(app, npc, widget, item_instance):
+        """MOD専用ボタンを押したときの処理。装備していれば外し、していなければ装備する。
+
+        書くのは `npc.equipments[item_type]` に id 文字列を入れる／slot ごと消す、だけ。
+        本体の ItemEquipManager は呼ばない（プレイヤー固定のため）。
+        popup は閉じ、次に右クリックしたときに現在の記録から文言を決め直す。
+        """
         if app is None or npc is None or item_instance is None:
             return
 
@@ -509,7 +612,13 @@ def apply(ctx):
         save_after_equipment(app, npc, item_instance, action)
 
     def add_npc_equipment_button(widget):
-        """NPC側InventoryItemのpopupへ、確実に見えるMOD専用ボタンを1つ足す。"""
+        """NPC側InventoryItemのpopupへ、確実に見えるMOD専用ボタンを1つ足す。
+
+        `show_popup_menu` の直後（同フレームの末尾）に Clock から呼ばれる。
+        足す条件は、受け渡しの窓の NPC 側の品で、item_type が weapon / wearable のとき。
+        本体の popup は固定サイズの枠なので、枠を1段ぶん広げて（下へ伸ばせなければ
+        上へ）その段にボタンを置く。見た目は popup 内の既存ボタンから寸法とフォントを写す。
+        """
         app = ui.find_app()
         npc = state.get("npc")
         if app is None or npc is None:
@@ -629,21 +738,30 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("party inventory/equipment: cannot add npc equipment button")
 
-    # ------------------------------------------------------------ conversation choice
+    # ------------------------------------------------------------ 会話の選択肢
+    # 会話の選択肢は `app.buttons` の list（1件が dict。`spec` に押したときの処理）。
+    # 本体の「会話を終了する」は spec が ConversationEndManager。その直前へ差す。
 
     def has_transfer_button(buttons):
+        """受け渡しボタンが既に並んでいるか（印で見る）。"""
         return any(
             isinstance(entry, dict) and screen.mark_of(entry) == "transfer"
             for entry in buttons
         )
 
     def conversation_slot(buttons):
+        """差し込む位置 = 「会話を終了する」の index。会話画面でなければ None。"""
         for index, entry in enumerate(buttons):
             if spec_cls_name(entry) == "ConversationEndManager":
                 return index
         return None
 
     def insert_transfer_button(app, buttons):
+        """条件が揃っていれば受け渡しボタンを差す。差したら True。
+
+        残骸掃除 → 既に在れば何もしない → 相手が仲間でなければ出さない →
+        会話画面でなければ出さない、の順に見る。
+        """
         if not isinstance(buttons, list):
             return False
 
@@ -670,9 +788,10 @@ def apply(ctx):
         ))
         return True
 
-    # ------------------------------------------------------------ labels
+    # ------------------------------------------------------------ 見出しの描き替え
 
     def walk_widgets(root):
+        """Kivy のウィジェット木を深さ優先で辿る。同じものは1度だけ。"""
         if root is None:
             return
         seen = set()
@@ -689,6 +808,12 @@ def apply(ctx):
                 stack.extend(children)
 
     def rename_right_header(app, npc_name):
+        """2枚並びの窓の右側の見出しを仲間の名前にする。
+
+        借りているのは店の売買UIなので、右の見出しは「所持品」で固定。
+        HUD の中から文言「所持品」のウィジェットを探し、最初の1つだけ書き換える。
+        窓を開いた次のフレームに呼ぶ（開いた直後はまだ組み上がっていない）。
+        """
         hud = ui.find_hud(app)
         if hud is None:
             return
@@ -705,9 +830,16 @@ def apply(ctx):
 
         write("WARN right header label not found")
 
-    # ------------------------------------------------------------ open window
+    # ------------------------------------------------------------ 窓を開く
 
     def open_transfer(app):
+        """受け渡しの窓を開く。選択肢を押したときの処理。
+
+        `app.toggle_twin_inventory_window(左の持ち主, 右の持ち主, 左の見出し, 場面名)`
+        は本体が店の売買に使っている窓。場面名 `party_transfer` は本体に無い名前で、
+        本体の売買処理（値段・所持金）がこの窓に掛からないようにしている。
+        開いた2人を state に控え、以後のドラッグの同期はこの2人の間だけを見る。
+        """
         npc = current_party_npc(app)
         player = getattr(app, "player", None)
 
@@ -735,20 +867,28 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("party inventory transfer: toggle_twin_inventory_window failed")
 
-    # ================================================================ hooks
+    # ================================================================ フック
 
     @ctx.wrap("__main__:ConversationStartManager.__init__", required=False)
     def conversation_start(orig, self, app, character_id, *args, **kwargs):
+        """会話の入口。相手の id を控える（誰との会話かはここでしか分からない）。"""
         state["npc_id"] = str(character_id) if character_id is not None else None
         return orig(self, app, character_id, *args, **kwargs)
 
     @ctx.wrap("__main__:ConversationEndManager.finish_conversation", required=False)
     def finish_conversation(orig, self, *args, **kwargs):
+        """会話の出口。相手の控えを消す。窓の2人（player / npc）は次に開くまで残してよい。"""
         state["npc_id"] = None
         return orig(self, *args, **kwargs)
 
     @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False)
     def refresh_choice_buttons(orig, self, reset_page=False, *args, **kwargs):
+        """選択肢を描き直すたびに呼ばれる本体の関数。ここで受け渡しボタンを維持する。
+
+        本体は `app.buttons` を組んでからこの関数で画面に並べる。ロード直後・
+        選択肢を押した後・ページ送りなど、描き直しのたびに通るので、
+        毎回「在るべきなら在る、無いべきなら無い」に揃える。
+        """
         # ゲーム本体＋このhookより内側のMODに先に一覧を組ませる。
         # mod.json の after=["301_quest_from_conversation"] により、
         # 301の会話選択肢が先に存在する状態を狙う。
@@ -778,6 +918,7 @@ def apply(ctx):
 
     @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False)
     def on_button_press(orig, self, button_index, *args, **kwargs):
+        """選択肢が押されたとき。押されたのが受け渡しボタンなら本体へ渡さず窓を開く。"""
         try:
             entry = pressed_entry(self, button_index)
             action = screen.mark_of(entry)
@@ -796,6 +937,11 @@ def apply(ctx):
         safe=True,
     )
     def change_inventory(orig, self, new_inventory, *args, **kwargs):
+        """ドラッグで品が別の側へ落ちたときに本体が呼ぶ。`self` は画面のボタン（InventoryItem）。
+
+        本体に先に処理させてから、移動前後の Inventory を `sync_transfer` へ渡す。
+        同期の失敗はログに残すだけで、本体の戻り値はそのまま返す。
+        """
         old_inventory = getattr(self, "inventory", None)
         result = orig(self, new_inventory, *args, **kwargs)
 
@@ -812,6 +958,7 @@ def apply(ctx):
         safe=True,
     )
     def show_popup_menu(orig, self, pos, *args, **kwargs):
+        """品を右クリックしたときの本体の popup。開いた後で MOD のボタンを足す。"""
         result = orig(self, pos, *args, **kwargs)
         try:
             # popup生成後、同フレーム末尾で本体の配置が終わってから足す。
@@ -826,9 +973,11 @@ def apply(ctx):
 
         本体の unequip は self.obtainer.equipments[self.item_type] を無条件に引く。
         装備の実体が別の場所へ移った後に古い「装備中」表示から解除が飛ぶと、
-        そこで KeyError になりゲームごと落ちる（実測2件。どちらもこのMODの
-        受け渡し・装備替えが作った表示の残骸が引き金）。
+        そこで KeyError になりゲームごと落ちる（このMODの受け渡し・装備替えが
+        作った表示の残骸が引き金になった。DOC.md「困ったとき」）。
         持ち主の equipments がこの品を指している正常な解除だけ本体へ通す。
+        プレイヤー自身の通常の装備解除もここを通るが、その場合は参照が
+        一致するので素通し。
         """
         equipments = getattr(getattr(self, "obtainer", None), "equipments", None)
         slot = getattr(self, "item_type", None)
@@ -850,8 +999,10 @@ def apply(ctx):
 
     @ctx.wrap("__main__:InstantaleApp.return_to_title", required=False)
     def return_to_title(orig, self, *args, **kwargs):
+        """タイトルへ戻るとき。控えを全部捨て、走っていない遅延保存も無効にする。"""
         # 保存済みボタンはゲーム側に任せる。MODの一時参照だけ捨て、
         # ロード後はConversationEndManager specから復元する。
+        # 世代番号を進めるのは、予約済みの保存が別のセーブへ走らないようにするため。
         state["npc_id"] = None
         state["player"] = None
         state["npc"] = None
@@ -860,7 +1011,4 @@ def apply(ctx):
         write("return_to_title: transient transfer/equipment state cleared")
         return orig(self, *args, **kwargs)
 
-    ctx.log(
-        "party inventory transfer/equipment v18: after-301 conversation insert installed; "
-        "routine operation logs disabled; warnings/errors -> modloader.log"
-    )
+    ctx.log("party inventory transfer: installed (after 301; warnings only -> modloader.log)")

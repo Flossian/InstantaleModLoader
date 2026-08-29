@@ -55,30 +55,32 @@ import typing
 from instantale_modloader import frames, llm, ui
 from instantale_modloader.state import world_filename, world_key
 
-START_LABEL = "パーティーメンバーと話す"
-END_LABEL = "話し合いを終了する"
-MAX_PARTICIPANTS = 6
-MIN_MEMBERS = 2                     # 仲間がこの人数未満なら選択肢を出さない（1人なら普通の会話で足りる）
-HISTORY_TURNS = 12
-SIDE_BY_SIDE = True
+# ---- 設定（既定値は mod.json の "settings" と一致させること。
+#      `tools/check_mods.py` が AST で突き合わせる）------------------------
+START_LABEL = "パーティーメンバーと話す"   # 相手一覧に足す選択肢
+END_LABEL = "話し合いを終了する"           # パーティー会話の間だけ「会話を終了する」をこう描く
+MAX_PARTICIPANTS = 6        # 名簿の先頭から数えて何人まで載せるか
+HISTORY_TURNS = 12          # プロンプトに載せる直近のラウンド数（プレイヤーの発言で数える）
+SIDE_BY_SIDE = True         # 参加者全員の立ち絵を横に並べるか。切ると喋った人物へ切り替える
+PORTRAIT_LEFT = 0.32        # 立ち絵を並べる範囲の左端（画面幅に対する比。いちばん左の仲間の中心）
+PORTRAIT_RIGHT = 0.68       # 同じく右端。両端を空けるのは、左の選択肢の列（〜0.2）と右の仲間欄（0.78〜）に
+                            # 人物（幅およそ 0.2）が掛からないため。2人なら 0.32 / 0.68、3人なら 0.32 / 0.5 / 0.68
 
-MARK_KEY = "mod_party_talk_action"
+# ---- 設定にしない定数 ----------------------------------------------------
+MIN_MEMBERS = 2                     # 仲間がこの人数未満なら選択肢を出さない（1人なら普通の会話で足りる）
+MARK_KEY = "mod_party_talk_action"  # 選択肢の dict に付ける印のキー。値は START_MARK / TALK_MARK
+START_MARK = "start"                # 「パーティーメンバーと話す」の印
+TALK_MARK = "talk"                  # NPC 不在で本体の「会話する」が無いときに足す、自前の「会話する」の印
+TALK_LABEL = "会話する"             # 自前の「会話する」の文言（本体と同じ）
+BACK_LABEL = "やめる"               # 自前の一覧の戻る選択肢（本体と同じ文言・同じ無害 spec）
+# この MOD（と旧版）が作った選択肢の文言。印を失った残骸を文言で見分けて掃除する（`screen.prune_stale`）。
+OUR_LABELS = (START_LABEL, "＜パーティーメンバーと話す＞", TALK_LABEL)
 # 自前の立ち絵の枠に付ける印と、本体の相手枠に控える元の位置（ui.added_by_a_mod の接頭辞）。
 PORTRAIT_ATTR = ui.MOD_WIDGET_PREFIX + "party_talk_portrait"
 ORIGIN_ATTR = ui.MOD_WIDGET_PREFIX + "party_talk_origin"
-# 相手枠から写す属性。位置（pos_hint）と絵（source）はこちらで決める。
+# 相手枠から写す属性。位置（pos_hint）と絵（source）はこちらで決める。寸法は fit_frame が決める。
 PORTRAIT_COPY_ATTRS = ("size_hint", "size_hint_x", "size_hint_y",
-                       "allow_stretch", "keep_ratio", "fit_mode", "color")   # 寸法は fit_frame が決める
-# 立ち絵を並べる横位置の範囲（画面幅に対する比）。両端を空けるのは、左の選択肢の列（〜0.2）と
-# 右の仲間欄（0.78〜）に人物（幅およそ 0.2）が掛からないため。2人なら 0.32 / 0.68、3人なら 0.32 / 0.5 / 0.68。
-# 設定で動かせる（mod.json の PORTRAIT_LEFT / PORTRAIT_RIGHT）。
-PORTRAIT_LEFT = 0.32
-PORTRAIT_RIGHT = 0.68
-START_MARK = "start"
-TALK_MARK = "talk"                  # NPC 不在で本体の「会話する」が無いときに足す、自前の「会話する」
-TALK_LABEL = "会話する"
-BACK_LABEL = "やめる"
-OUR_LABELS = (START_LABEL, "＜パーティーメンバーと話す＞", TALK_LABEL)
+                       "allow_stretch", "keep_ratio", "fit_mode", "color")
 # 施設・街路の根のメニューの目印。出口（`MovePhaseManager`）は必ず並ぶ（`309_` と同じ）。
 ROOT_MENU_SPEC = "MovePhaseManager"
 # 選択肢を足さない状態。`ui.BUSY_FLAGS` から `in_shopping` を外したもの。
@@ -86,7 +88,9 @@ ROOT_MENU_SPEC = "MovePhaseManager"
 BUSY_FLAGS = tuple(flag for flag in ui.BUSY_FLAGS if flag != "in_shopping")
 # そのうち戦闘の旗（GAME.md §2.6）。`safe_normal` はこれと会話中・クエスト中だけを見る。
 BATTLE_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle")
+# 会話の状態を置く `sys` の属性名（TECH.md §3.4。apply() が走り直しても続きが分かる）。
 STORE = "__instantale_party_talk__"
+# プロンプトの上限。全体 → 人物1人ぶん・対話ログ → 属性1項目の順に細かい。
 PROMPT_CHARS = 30000
 SECTION_CHARS = 7000
 FIELD_CHARS = 2200
@@ -152,6 +156,7 @@ JSONオブジェクト1つだけ。説明・コードフェンス禁止。
 
 
 def _field(record, key):
+    """dict の1項目を、前後の空白を落とした文字列で返す。無ければ空文字。"""
     value = record.get(key) if isinstance(record, dict) else None
     return value.strip() if isinstance(value, str) and value.strip() else ""
 
@@ -214,9 +219,15 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 構造化応答
     # create_model は llm_manager が読み込まれてからでないと作れないので、要る時に作って控える。
+    # 型は3組:
+    #   PartyTalkAction / PartyTalkConversationResponse  本体の facilitator が返す形。
+    #       横取りした呼び出しの戻り値として本体へ返す（本体はこの形しか読まない）
+    #   PartyTalkLLMItem / PartyTalkLLMResponse  LLM に要求する形。
+    #       speaker と statement の列で、参加者全員ぶんの反応を1回で受け取る
     structures = {}
 
     def structure(name, fields):
+        """名前で控えた型を返す。無ければ作る。作れなければ None（控えない）。"""
         cached = structures.get(name)
         if cached is not None:
             return cached
@@ -226,6 +237,7 @@ def apply(ctx):
         return made
 
     def action_structure():
+        """本体の `action`（種別・可否・台詞・自由行動 GM へ回すか）。"""
         return structure("PartyTalkAction", {
             "type": (str, ...),
             "accepted": (typing.Optional[bool], ...),
@@ -258,6 +270,7 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 参加者
     def party_ids(app):
+        """同行している仲間の id（名簿順、実体が引けるものだけ、上限 MAX_PARTICIPANTS）。"""
         out = []
         for member in ui.party_member_ids(app):
             cid = str(member)
@@ -266,6 +279,7 @@ def apply(ctx):
         return out[:max(1, int(MAX_PARTICIPANTS))]
 
     def player_name(app):
+        """プレイヤーの名前。属性名が版で揺れるので候補を順に見る。"""
         player = getattr(app, "player", None)
         for owner in (player, app):
             if owner is None:
@@ -277,6 +291,7 @@ def apply(ctx):
         return "プレイヤーキャラクター"
 
     def base_info(npc):
+        """ゲーム側の人物設定を「項目: 値」で並べる。1項目 FIELD_CHARS、合計 SECTION_CHARS まで。"""
         lines = []
         total = 0
         for field in RAW_FIELDS:
@@ -317,6 +332,12 @@ def apply(ctx):
         return _field(record, "relationship"), " / ".join(facts)
 
     def sections(app):
+        """参加者1人ごとのプロンプトの塊。403 の `build_messages` と同じ見出しで組む。
+
+        1人ぶん = ゲーム側の基本情報 ＋ 311 の人物像 ＋ 311 のプレイヤー観 ＋
+        他の参加者それぞれへの 403 の関係。返すのは (id の列, id→名前, 塊の列)。
+        311 / 403 の控えはここで世界ごとに1回だけ読む。
+        """
         ids = party_ids(app)
         key = world_key(app)
         pn = player_name(app)
@@ -379,6 +400,12 @@ def apply(ctx):
         return "\n".join(lines)[-SECTION_CHARS:]
 
     def prompt(app, worldview, anchor_id):
+        """LLM へ渡す本文を1本にする。
+
+        並びは RULES → 世界観（本体が facilitator に渡すもの）→ プレイヤー名 →
+        参加NPCの一覧とアンカー → 人物の塊 → 直近の対話ログ。
+        `worldview` は本体の facilitator の引数をそのまま流用する。
+        """
         ids, names, blocks = sections(app)
         anchor_name = names.get(anchor_id, "")
         index = "\n".join("- id={} / 名前={}".format(i, names[i]) for i in ids)
@@ -402,6 +429,15 @@ def apply(ctx):
 
         アンカーの台詞だけを本体の通常返答に載せ、残りは `st['pending']` に積む。
         `casual_response` / `call_free_action=False` なので自由行動 GM には入らない。
+
+        流れ:
+          1. プロンプトを組み、構造化出力で1回呼ぶ。使えなければ素の JSON で呼び直す。
+             それも読めなければ「誰も反応しない」として先へ進む（本体を止めない）
+          2. content_violation なら本体と同じく空の返答を返す
+          3. responses を検分する。参加者に居ない名前と同じ人物の2回目は落とす（ログの dropped）
+          4. アンカーの台詞を本体へ返す形に載せ、残りを pending に積む。
+             アンカーが黙っていたら行動描写1つを補う（本体は空の台詞を表示できない）
+        戻り値 None は「横取りをやめて本体に任せる」の意味（`intercept` が見る）。
         """
         text, ids, names, anchor_name = prompt(app, worldview, anchor_id)
         allowed = {names[i] for i in ids}
@@ -491,6 +527,7 @@ def apply(ctx):
                                           statement=anchor_statement, call_free_action=False))
 
     # facilitator の引数。character_instance / worldview は両関数とも同じ位置（GAME.md §2.24）。
+    # index 3 が会話相手の Character、index 4 が worldview。keyword で来ることもある。
     def facilitator_anchor(args, kwargs):
         character = kwargs.get("character_instance")
         if character is None and len(args) > 3:
@@ -504,10 +541,17 @@ def apply(ctx):
         return args[4] if len(args) > 4 else None
 
     def same_anchor(args, kwargs):
+        """この facilitator 呼び出しがパーティー会話のアンカー宛てか。"""
         cid = facilitator_anchor(args, kwargs)
         return bool(cid and cid == str(st.get("anchor") or ""))
 
     def intercept(orig, label, args, kwargs):
+        """facilitator の包みの共通部。
+
+        パーティー会話の最中で、相手がアンカーのときだけ `party_round` に置き換える。
+        それ以外（普通の会話、403 が差し替えた複製で相手が違って見える場合など）は本体へ。
+        `party_round` が None を返すか例外を投げたら本体を呼ぶ（会話を止めない）。
+        """
         if not st["active"] or not same_anchor(args, kwargs):
             return orig(*args, **kwargs)
         app = ui.find_app()
@@ -544,14 +588,18 @@ def apply(ctx):
 
         def show_portrait(cid):
             # 並べているときは全員出ているので切り替えない。
+            # 切り替え方式のときだけ、本体の `update_character_image(id)` を Clock に載せる。
             if cid and callable(image) and not SIDE_BY_SIDE:
                 screen.schedule(lambda: image(cid), 0)
 
+        # アンカーの台詞の描画が終わるのを待ってから仲間の台詞を出す
+        # （`wait_for_add_text` は本体が add_text の完了を待つのに使っている関数）。
         if callable(wait):
             try:
                 wait()
             except Exception:
                 ctx.log_exc("party talk: wait_for_add_text before extras failed")
+        # `at` は「本体の履歴の何件目の後に出たか」。`history()` が同じ位置へ合流させる。
         at = len(hist) if isinstance(hist, list) else -1
         for item in pending:
             cid = str(item.get("id") or "")
@@ -573,13 +621,20 @@ def apply(ctx):
         show_portrait(str(st.get("anchor") or ""))
 
     # ------------------------------------------------------------ 立ち絵を並べる
+    # 本体の会話画面には相手1人ぶんの枠（`hud.character_image`）しか無い。
+    # 並べる方式では、その枠をアンカー用に横へずらし、他の仲間ぶんは同じクラスの枠を
+    # 作って相手枠の隣に挿す。枠の寸法と切り抜きは相手枠の canvas から写す。
+    # 会話が終わったら自前の枠を外し、相手枠を元の位置へ戻す。
+
     def portrait_src(app, cid):
+        """立ち絵の画像パス。Character の `image_src` は dict（"fullbody" 等）か文字列。無ければ None。"""
         npc = ui.character_of(app, cid)
         src = getattr(npc, "image_src", None)
         path = src.get("fullbody") if isinstance(src, dict) else src
         return path if isinstance(path, str) and path.strip() else None
 
     def anchor_frame(app):
+        """(HUD, 本体の相手枠)。相手枠が引けなければ (HUD, None)。"""
         hud = ui.find_hud(app)
         base = frames.attr(hud, "character_image", None) if hud is not None else None
         return hud, (base if base not in (None, frames.MISSING) else None)
@@ -625,6 +680,7 @@ def apply(ctx):
         return to_rect(drawn), (to_rect(clip) if clip else None)
 
     def place(widget, x, center_y=None):
+        """横位置（画面幅に対する比）で置く。`pos_hint` の x 系の指定は消して center_x だけにする。"""
         hint = getattr(widget, "pos_hint", None)
         hint = dict(hint) if isinstance(hint, dict) else {"center_y": 0.43}
         for key in ("x", "right", "y", "top"):
@@ -705,7 +761,12 @@ def apply(ctx):
             return parent, None
 
     def layout_portraits(app):
-        """参加者を横に等間隔で並べる。メインスレッド（Clock）から呼ぶ。何度呼んでも同じ結果。"""
+        """参加者を横に等間隔で並べる。メインスレッド（Clock）から呼ぶ。何度呼んでも同じ結果。
+
+        会話画面が組まれるたび（`refresh`）と仲間の台詞を出した後（`continued`）に呼ばれる。
+        初回だけ相手枠の元の位置と描画の矩形を控え、以後はそれを基準に置き直す。
+        既に作った枠は使い回し、親から外れていれば作り直す。並べない仲間の枠は外す。
+        """
         if not SIDE_BY_SIDE or not st["active"] or app is None:
             return
         hud, base = anchor_frame(app)
@@ -759,6 +820,7 @@ def apply(ctx):
             detach(st["frames"].pop(cid))
 
     def detach(widget):
+        """自前の枠を親から外す。"""
         parent = getattr(widget, "parent", None)
         if parent is not None:
             try:
@@ -792,11 +854,13 @@ def apply(ctx):
             write("portraits removed: frames={} anchor_restored={}".format(removed, restored))
 
     def schedule_layout(app):
+        """並べ直しを次のフレームに予約する（UI はメインスレッドからしか触らない）。"""
         if SIDE_BY_SIDE and st["active"]:
             screen.schedule(lambda: layout_portraits(app), 0)
 
     # ------------------------------------------------------------ 開始と終了
     def clear(reason):
+        """パーティー会話の状態を畳む。枠の片付けも予約する。何度呼んでも害は無い。"""
         if st["active"]:
             write("party talk end: " + reason)
         st["active"] = False
@@ -809,6 +873,7 @@ def apply(ctx):
             screen.schedule(lambda: remove_portraits(app), 0)
 
     def safe_normal(app):
+        """選択肢を出してよい平時か。会話中・依頼中・戦闘中・パーティー会話中は False。"""
         if st["active"] or getattr(app, "in_conversation", None) or getattr(app, "current_quest_data", None):
             return False
         return not any(getattr(app, flag, False) for flag in BATTLE_FLAGS)
@@ -874,6 +939,12 @@ def apply(ctx):
         screen.apply_buttons(app, [start, back], "party talk list")
 
     def open_talk(app):
+        """「パーティーメンバーと話す」を押した後。アンカーを選び、本体の会話に入る。
+
+        本体の `ConversationStartManager(app, 相手id)` をそのまま使うので、
+        会話画面・履歴・終了処理は普通の会話と同じ。`st["active"]` を立てるのは
+        その前で、以後 facilitator の横取りと選択肢の差し替えが効く。
+        """
         ids = party_ids(app)
         if not ids:
             return
@@ -898,8 +969,17 @@ def apply(ctx):
             ctx.log_exc("party talk: ConversationStartManager start_phase failed")
 
     # ------------------------------------------------------------ フック
+    # 役割ごとに:
+    #   DisplayTalkChoice / DisplayAdventurerTalkChoice.execute  相手一覧を開いた合図（旗）
+    #   refresh_choice_buttons   選択肢を差す／終了の文言を変える／立ち絵を並べる
+    #   on_button_press          自前の選択肢が押されたとき
+    #   conversation_facilitator（2本）  NPC の返答を作る LLM 呼び出しの横取り
+    #   conversation_continued   アンカーの返答が出た後に仲間の台詞を出す
+    #   start_battle_with_in_conversation / ConversationEndManager / return_to_title  終わり
+
     @ctx.wrap("__main__:DisplayTalkChoice.execute", required=False, safe=True)
     def talk_list_execute(orig, self, choice_text, *args, **kwargs):
+        """本体の「会話する」が押された。次の描き直しは相手一覧だと分かる。"""
         st["talk_list"] = True
         return orig(self, choice_text, *args, **kwargs)
 
@@ -911,7 +991,13 @@ def apply(ctx):
 
     @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False, safe=True)
     def refresh(orig, self, reset_page=False, *args, **kwargs):
-        """ゲームが並べ終えたボタンを、描く前に整える（`320_` と同じ順）。"""
+        """ゲームが並べ終えたボタンを、描く前に整える（`320_` と同じ順）。
+
+        パーティー会話の最中: 「会話を終了する」を END_LABEL に描き替え、立ち絵の並べ直しを予約。
+        それ以外: 残骸を掃除し、相手一覧なら「やめる」の手前に START_LABEL を差す。
+        相手一覧でない根のメニューで、NPC が居なくて本体の「会話する」が無ければ自前の
+        「会話する」を末尾に足す。本体が描いた後、302 / 402 の選択肢を落とす。
+        """
         try:
             buttons = getattr(self, "buttons", None)
             if isinstance(buttons, list):
@@ -973,6 +1059,11 @@ def apply(ctx):
 
     @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False, safe=True)
     def press(orig, self, index, *args, **kwargs):
+        """自前の選択肢だけ横取りする。他は本体へ。
+
+        会話の開始は次のフレームへ予約する（押下の処理の中で phase を切り替えると
+        本体が同じ押下の後始末で上書きするため）。
+        """
         try:
             action = screen.mark_of(ui.pressed_entry(self, index))
         except Exception:
@@ -997,6 +1088,12 @@ def apply(ctx):
 
     @ctx.wrap("__main__:ConversationPhaseManager.conversation_continued", required=False, safe=True)
     def continued(orig, self, choice_text, *args, **kwargs):
+        """プレイヤーの1手の処理（ワーカースレッド）。本体がアンカーの返答を表示した後に仲間の台詞を出す。
+
+        `orig` の中で facilitator（横取り済み）が呼ばれ、pending が積まれる。
+        戻ってから `flush_extras` で順に表示し、立ち絵の並べ直しを予約する。
+        `orig` の中で会話が終わった（active が落ちた）なら出さない。
+        """
         active = bool(st["active"])
         result = orig(self, choice_text, *args, **kwargs)
         if active and st["active"]:
@@ -1009,6 +1106,7 @@ def apply(ctx):
 
     @ctx.wrap("__main__:InstantaleApp.start_battle_with_in_conversation", required=False, safe=True)
     def battle(orig, self, *args, **kwargs):
+        """会話中に戦闘へ入る本体の入口。パーティー会話はここで終わり（戦闘の LLM には触らない）。"""
         clear("start_battle_with_in_conversation")
         return orig(self, *args, **kwargs)
 
@@ -1027,6 +1125,7 @@ def apply(ctx):
 
     @ctx.wrap("__main__:ConversationEndManager.finish_conversation", required=False)
     def finish(orig, self, *args, **kwargs):
+        """会話の終了処理（要約・ライフログ）が終わったら状態を畳む。"""
         # 要約の LLM が例外を投げても畳む。畳み損ねると次の会話も横取りし続ける。
         was = st["active"]
         try:
@@ -1037,8 +1136,9 @@ def apply(ctx):
 
     @ctx.wrap("__main__:InstantaleApp.return_to_title", required=False)
     def title(orig, self, *args, **kwargs):
+        """タイトルへ戻るとき。会話の途中でも畳む。"""
         clear("return_to_title")
         return orig(self, *args, **kwargs)
 
-    ctx.log("party talk v8: normal conversation lifecycle; side_by_side={} start={!r} end={!r} log -> {}".format(
-        SIDE_BY_SIDE, START_LABEL, END_LABEL, "out/party_talk.log"))
+    ctx.log("party talk: installed (side_by_side={} start={!r} end={!r}); log -> {}".format(
+        SIDE_BY_SIDE, START_LABEL, END_LABEL, ctx.out_path("party_talk.log")))

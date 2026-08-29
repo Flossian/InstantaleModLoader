@@ -1,16 +1,32 @@
 # -*- coding: utf-8 -*-
-"""NPC同士の認知・関係記憶。311は変更しない。
+"""NPC 同士の認知と関係を覚える。`311_` の記録は読むだけで、変更しない。
 
-方針:
-- 311 と共有UI部品に合わせ、会話参加者だけをその場で読み取る。
-  全NPCの character_value は捕捉・保持しない。
-- 311 の state は読むだけ。mtime とサイズを見て、動いたときだけ読み直す。
-  書くのは自分の state（state/npc_social_memory/<世界>.json）だけ。
-- 応答の検証は normalize_result 1本にまとめ、構造化・非構造化の両経路が同じ道を通る。
-- 残す事実の件数はプロンプトも設定（FACT_LOG_LIMIT）から出す。
-- 構造化経路を一度使えなかった provider では、以後その経路を試さない
-  （試すたびに EXTRACT_TIMEOUT を2本ぶん待つため）。
-- 書き方は他の MOD と同じ1文1行に揃える。
+`311_npc_profile_memory` が覚えるのは「その人物」と「その人物から見たプレイヤー」で、
+仲間同士がお互いをどう見ているかはどこにも残らない。
+この MOD は会話が1手進むたびに、会話相手と同行の仲間の間の関係
+（A から見た B、B から見た A。対称にしない）を LLM に抽出させ、
+`state/npc_social_memory/<世界>.json` に控える。
+次の会話では、会話相手の profile の末尾に同行者の情報とその関係を足して渡す
+（本体の NPC には書かない。浅い複製に足す）。
+
+## 読むもの
+
+311 と共有 UI 部品に合わせ、会話参加者だけをその場で読み取る。
+全 NPC の character_value は捕捉・保持しない。
+311 の state は mtime とサイズを見て、動いたときだけ読み直す。
+書くのは自分の state だけ。
+
+## 抽出
+
+会話の写し（参加者・書き起こし・既存の記録）をメインスレッドで取り、
+1本のワーカーで直列に LLM を呼ぶ（ワーカーは app を触らない）。
+応答の検証は `normalize_result` 1本にまとめ、構造化・非構造化の両経路が同じ道を通る。
+構造化経路を一度使えなかった provider では以後その経路を試さない
+（試すたびに `EXTRACT_TIMEOUT` を2本ぶん待つため）。
+残す事実の件数はプロンプトも設定（`FACT_LOG_LIMIT`）から出す。
+
+自前の manager_name（`MANAGER_EXTRACT`）を付けるので、
+抽出のプロンプトも `output_data/` に残る（GAME.md §2.12）。
 """
 import copy
 import datetime
@@ -81,9 +97,10 @@ MAX_PENDING = 8
 # `sys` に置けば世代をまたいで同じ1組を共有できる。
 STORE_ATTR = "__instantale_npc_social_memory_store__"
 
+#: 会話相手の profile の末尾へ足す塊の見出し。
 HEADING = "【現在この場に同行している人物】"
 
-# 抽出LLMへ渡す JSON が読めなかったと見なす語。
+#: 抽出の応答の `changed` を「変更なし」と読む語。真偽値でなく文字列で返る provider があるため。
 FALSE_WORDS = ("false", "no", "0", "", "なし", "変更なし")
 
 
@@ -178,8 +195,16 @@ def parse_result(result, allowed_ids):
 def apply(ctx):
     state_dir = ctx.state_path(STATE_DIRNAME)
     write = ctx.logger(LOG_BASENAME)
+    # ここでは Clock への予約（`screen.schedule`）にだけ使う。選択肢は作らない。
     screen = ui.Screen(ctx, write, tag="npc social memory")
 
+    # プロセスに1つだけ置く共有の棚（apply() が何度走っても同じものを使う）。
+    #   cache:        世界ごとの 403 の控え（読んだ／書いた JSON をそのまま持つ）
+    #   jobs:         抽出の待ち行列。会話の写し（snapshot）を積む
+    #   data_lock:    cache と 311 の読み取り控えを守る（再入可）
+    #   worker_lock:  ワーカーの起動・終了と待ち行列の出し入れを守る
+    #   worker:       走っている抽出スレッド。居なければ None
+    #   last_inject / last_skip:  同じログを続けて書かないための直前の文言
     store = getattr(sys, STORE_ATTR, None)
     if not isinstance(store, dict):
         store = {
@@ -203,12 +228,32 @@ def apply(ctx):
     worker_lock = store["worker_lock"]
 
     # ------------------------------------------------------------ 403 の控え
+    # `state/npc_social_memory/<世界>.json` の形:
+    #   {
+    #     "<observer_id>": {
+    #       "name": "見る側の名前",
+    #       "relations": {
+    #         "<target_id>": {
+    #           "name": "見られる側の名前",
+    #           "relationship": "observer から見た target の現在の要約（毎回書き直し）",
+    #           "facts": [{"at": "YYYY-MM-DDThh:mm:ss", "text": "確定した事実"}, ...],
+    #           "updated": "YYYY-MM-DDThh:mm:ss"
+    #         }
+    #       }
+    #     }
+    #   }
+    # A→B と B→A は別の記録。`facts` は追記専用で FACT_LOG_LIMIT 件まで。
 
     def path_for(key):
+        """世界の鍵（`world_key`）から控えのファイルの場所。"""
         return ctx.state_path(STATE_DIRNAME, world_filename(key))
 
     def bounded_facts(items):
-        """事実を重複除去し、各 observer->target につき FACT_LOG_LIMIT 件までにする。"""
+        """事実を重複除去し、各 observer->target につき FACT_LOG_LIMIT 件までにする。
+
+        入力は `{"at", "text"}` の dict でも素の文字列でもよく、出力は必ず dict。
+        古い形の控えを読むときの正規化も兼ねる。残すのは新しい側（末尾）。
+        """
         if not isinstance(items, list):
             return []
 
@@ -257,6 +302,11 @@ def apply(ctx):
         return bucket, changed
 
     def load_bucket(key):
+        """世界1つぶんの控えを返す。最初の1回だけファイルを読み、以後は cache。
+
+        読んだときに形が古ければ整えて書き戻す（403 自身の控えだけ）。
+        返す dict は cache と同一なので、書き換えたら `save_bucket` で保存する。
+        """
         with data_lock:
             if key not in cache:
                 data = ctx.read_json(path_for(key), {})
@@ -268,6 +318,7 @@ def apply(ctx):
             return cache[key]
 
     def save_bucket(key, bucket):
+        """控えを書く。`ctx.write_json` の戻り値（書けたか）をそのまま返す。"""
         with data_lock:
             cache[key] = bucket
             return ctx.write_json(path_for(key), bucket)
@@ -299,6 +350,11 @@ def apply(ctx):
         return bucket
 
     def memory_311(key, npc_id):
+        """311 が育てた人物像と、その人物から見たプレイヤー。無ければ空文字。
+
+        311 の控えは `{npc_id: {"profile": ..., "about_player": ..., "facts": ...}}`。
+        ここで読むのは2欄だけで、長さも上限で切る。
+        """
         record = profile_bucket_311(key).get(str(npc_id))
         if not isinstance(record, dict):
             return {"profile": "", "about_player": ""}
@@ -338,7 +394,12 @@ def apply(ctx):
         return "\n".join(blocks)
 
     def npc_id_of(app, npc):
-        """現在の会話相手を共有UI部品で特定する。全NPC走査はしない。"""
+        """会話関数に渡された Character（`npc`）の id を、共有UI部品で特定する。全NPC走査はしない。
+
+        `app.in_conversation` が今の会話相手の id。渡された `npc` がその実体なら即決。
+        実体が違っていても（他の MOD が浅い複製を渡してくる場合）、会話相手の id が
+        引けるならそれを正本にする。どちらでもなければ仲間の中から同一instanceを探す。
+        """
         current = getattr(app, "in_conversation", None)
         if current is not None and ui.character_of(app, current) is npc:
             return str(current)
@@ -351,6 +412,7 @@ def apply(ctx):
         return ""
 
     def participant_ids(app, conversation_id):
+        """抽出に載せる NPC の id。会話相手を先頭に、同行の仲間を続ける。上限 MAX_PARTICIPANTS（最低2）。"""
         ids = [str(conversation_id)] if conversation_id else []
         for member_id in ui.party_member_ids(app):
             member_id = str(member_id)
@@ -359,6 +421,7 @@ def apply(ctx):
         return ids[:max(2, int(MAX_PARTICIPANTS))]
 
     def people_of(app, ids):
+        """抽出に渡す1人ぶんの材料（id・名前・ゲーム側の項目・311 の2欄）を id ごとに組む。"""
         key = world_key(app)
         out = []
         for npc_id in ids:
@@ -376,6 +439,7 @@ def apply(ctx):
         return out
 
     def player_name_of(app):
+        """プレイヤーの名前。属性名が版で揺れるので候補を順に見る。"""
         player = getattr(app, "player", None)
         for attr in ("name", "character_name", "player_name"):
             value = getattr(player, attr, None) if player is not None else None
@@ -390,6 +454,7 @@ def apply(ctx):
     # ------------------------------------------------------------ 関係の読み書き
 
     def relation_record(key, observer_id, target_id):
+        """observer → target の記録（上の形の一番内側の dict）。無ければ空の dict。"""
         observer = load_bucket(key).get(str(observer_id), {})
         relations = observer.get("relations", {}) if isinstance(observer, dict) else {}
         record = relations.get(str(target_id), {}) if isinstance(relations, dict) else {}
@@ -416,6 +481,11 @@ def apply(ctx):
 
     def update_relation(key, observer_id, observer_name,
                         target_id, target_name, summary, new_facts):
+        """抽出の結果1方向ぶんを控えへ書く。ワーカースレッドから呼ばれる。
+
+        `relationship` は `summary` で丸ごと置き換え、`new_facts` は既知と重複しない
+        ものだけ末尾に追記する。要約も事実も変わっていなければファイルは書かない。
+        """
         with data_lock:
             bucket = load_bucket(key)
 
@@ -478,11 +548,18 @@ def apply(ctx):
             write(message)
 
     def note_skip(message):
+        """抽出を見送った理由。同じ理由が続く間は1度だけ書く。"""
         if store["last_skip"] != message:
             store["last_skip"] = message
             write("extract skipped: " + message)
 
     def social_block(app, observer_id):
+        """会話相手（observer）の profile の末尾へ足す文。同行者が居なければ空文字。
+
+        同行者1人につき: 名前と id、（設定が入なら）ゲーム側の基本情報と 311 の2欄、
+        そして 403 が記録した「observer から見たその同行者」。記録が無い相手には
+        「捏造せず現在の会話から判断せよ」と書いて、初対面か既知かを LLM に決めさせない。
+        """
         key = world_key(app)
         blocks = []
         for target_id in ui.party_member_ids(app):
@@ -530,6 +607,9 @@ def apply(ctx):
         """会話関数に渡すNPCを、社会記録を足した**浅い複製**に差し替える。
 
         本体のNPCには書かない。書くと世界の人物像そのものが伸び続ける。
+        会話関数（conversation_facilitator など）は第4引数（index 3）または
+        keyword `character_instance` で会話相手の Character を受け取る。
+        その `profile` の末尾に `social_block` を足した複製を同じ位置へ戻す。
         """
         npc = kwargs.get("character_instance")
         if npc is None and len(args) >= 4:
@@ -569,6 +649,7 @@ def apply(ctx):
         return tuple(new_args), kwargs
 
     def inject(orig, label, args, kwargs):
+        """会話系の包みの共通部。差し替えに失敗しても本体は元の引数で必ず呼ぶ。"""
         try:
             args, kwargs = with_context(label, args, kwargs)
         except Exception:
@@ -578,7 +659,13 @@ def apply(ctx):
     # ------------------------------------------------------------ 抽出の材料
 
     def transcribe(app, conversation_id):
-        """直近のやり取りを1本の文字列にする。ゲーム自身の整形をまず使う。"""
+        """直近のやり取りを1本の文字列にする。ゲーム自身の整形をまず使う。
+
+        `app.current_conversation_history` は `[{"role": "user"|"assistant", "content": ...}]`。
+        本体の `conversation_history_to_text` が使えれば、本体と同じ「名前: 台詞」の形になる
+        （assistant を会話相手の名で描く）。使えなければ role のまま並べる。
+        末尾 CONVERSATION_CHARS 文字だけ残す。
+        """
         history = getattr(app, "current_conversation_history", None)
         if not isinstance(history, list) or not history:
             return ""
@@ -602,7 +689,12 @@ def apply(ctx):
         return "\n".join(lines)[-CONVERSATION_CHARS:]
 
     def snapshot(app, conversation_id):
-        """抽出に必要なものだけを、その場で写し取る（ワーカーは app を触らない）。"""
+        """抽出に必要なものだけを、その場で写し取る（ワーカーは app を触らない）。
+
+        メインスレッドで呼ぶ。参加者・書き起こし・既存の記録を素の dict / str に
+        写しておけば、ワーカーは Kivy のオブジェクトに触らずに済む。
+        参加 NPC が2人未満（会話相手だけ）なら関係は生まれないので見送る。
+        """
         ids = participant_ids(app, conversation_id)
         people = people_of(app, ids)
         if len(people) < 2:
@@ -627,6 +719,11 @@ def apply(ctx):
                 "transcript": transcript, "existing": existing}
 
     def build_messages(snap):
+        """抽出 LLM へ渡す messages と、許す id の一覧を返す。
+
+        1通目に指示・参加者一覧・人ごとの材料・新しい会話を全部載せ、
+        2通目は本体の行動指定と同じ形の短い1行。
+        """
         people = snap["people"]
         ids = [person["id"] for person in people]
         app = ui.find_app()
@@ -704,10 +801,15 @@ changed=falseならrelations=[]。""".format(player_name=player_name,
     # ------------------------------------------------------------ 抽出
 
     def max_tokens_for(ids):
+        """応答の上限トークン。方向の数 × 要約の長さの目安で、最低 1200。"""
         return max(1200, RELATION_CHARS * max(2, len(ids)))
 
     def ask_structured(messages, ids):
-        """最新版llm共通部品の構造化出力を優先する。使えなければNone。"""
+        """最新版llm共通部品の構造化出力を優先する。使えなければNone。
+
+        応答の型を2段（relations の1行 → 全体）で作り、`llm.ask` に渡す。
+        `create_structure` が None を返すのは本体の create_model がまだ無いとき。
+        """
         relation = llm.create_structure(
             ctx, "NpcSocialRelationUpdate",
             {"observer_id": (str, ...), "target_id": (str, ...),
@@ -728,6 +830,11 @@ changed=falseならrelations=[]。""".format(player_name=player_name,
                        label="npc social memory", write=write)
 
     def extract(snap):
+        """抽出1回ぶん。ワーカースレッドで走る。
+
+        構造化経路 → 使えなければ素の JSON 経路の順に試し、`normalize_result` が
+        返した方向ごとの行を `update_relation` で控えへ書く。
+        """
         messages, ids = build_messages(snap)
 
         rows = None
@@ -766,6 +873,12 @@ changed=falseならrelations=[]。""".format(player_name=player_name,
     # ------------------------------------------------------------ ワーカー
 
     def worker_loop():
+        """待ち行列の仕事を直列にこなす。30秒空いたら自分で終わる。
+
+        終わる判断は worker_lock の中で待ち行列をもう一度見てから行う
+        （`enqueue` が同じ lock の中で「生きているか」を見るので、
+        積んだ直後に終わって仕事が取り残されることがない）。
+        """
         while True:
             try:
                 snap = jobs.get(timeout=30.0)
@@ -784,6 +897,10 @@ changed=falseならrelations=[]。""".format(player_name=player_name,
                 jobs.task_done()
 
     def enqueue(app, conversation_id):
+        """会話を写して待ち行列に積み、ワーカーが居なければ起こす。メインスレッドで呼ぶ。
+
+        溢れたら古い仕事から捨てる（新しい会話ほど関係に効く）。
+        """
         snap = snapshot(app, conversation_id)
         if snap is None:
             return
@@ -817,6 +934,11 @@ changed=falseならrelations=[]。""".format(player_name=player_name,
             worker.start()
 
     def schedule_extract(app):
+        """会話が1手進んだときの入口。次のフレームに `enqueue` を予約する。
+
+        フックの戻り時点ではなく次のフレームで写すのは、本体が同じ手の処理
+        （履歴への追記など）を終えてから読むため。
+        """
         app = app or ui.find_app()
         if app is None:
             note_skip("no running app")
@@ -828,7 +950,12 @@ changed=falseならrelations=[]。""".format(player_name=player_name,
         if not screen.schedule(lambda: enqueue(app, conversation_id)):
             note_skip("could not schedule next-frame snapshot")
 
-    # ================================================================ hooks
+    # ================================================================ フック
+    # 2種類ある。
+    #   conversation_continued（通常／依頼中）: プレイヤーが1手入力した後。抽出の予約。
+    #   conversation_facilitator / starter（5本）: NPC の返答を作る LLM 呼び出し。
+    #       渡される Character を差し替えて同行者の情報を読ませる（注入）。
+    # どれも本体の戻り値はそのまま返す。
 
     @ctx.wrap("__main__:ConversationPhaseManager.conversation_continued",
               required=False)
@@ -873,5 +1000,4 @@ changed=falseならrelations=[]。""".format(player_name=player_name,
     def starter_in_quest(orig, *args, **kwargs):
         return inject(orig, "starter[quest]", args, kwargs)
 
-    ctx.log("npc social memory v7: state={}/; participant-only capture; "
-            "game data untouched; 311 state READ ONLY".format(state_dir))
+    ctx.log("npc social memory: state={}/ (311 state read only)".format(state_dir))

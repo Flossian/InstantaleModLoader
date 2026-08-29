@@ -1,0 +1,58 @@
+{
+  "entry": "battle_bgm.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Battle BGM playlist",
+    "ja": "戦闘BGMの選曲"
+  },
+  "description": {
+    "en": "Plays a battle track chosen from Assets/sounds/musics/battle and state/musics/battle by weighted random, with separate weights for normal, boss and colosseum battles (state/musics/battle/playlist.json)",
+    "ja": "Assets/sounds/musics/battle と state/musics/battle にある曲から、通常・ボス・闘技場ごとの重みで戦闘 BGM を選んで鳴らす。重みは state/musics/battle/playlist.json で指定する"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "tool": {
+    "entry": "tool.py",
+    "label": {
+      "ja": "戦闘BGMを選ぶ",
+      "en": "Choose battle BGM"
+    },
+    "note": {
+      "ja": "3つの戦闘（通常・ボス・闘技場）ごとに、鳴らす曲と重みを決める画面。state/musics/battle/playlist.json に保存する",
+      "en": "Pick tracks and weights per battle kind (normal, boss, colosseum); saves state/musics/battle/playlist.json"
+    }
+  },
+  "after": [
+    "106_fix_battle_bgm_restore",
+    "207_probe_battle_bgm"
+  ],
+  "settings": {
+    "DEFAULT_WEIGHT": {
+      "type": "int",
+      "default": 100,
+      "min": 0,
+      "max": 1000,
+      "label": {
+        "ja": "「使う」に入れたときの重み",
+        "en": "Weight given when a track is put in use"
+      },
+      "note": {
+        "ja": "設定画面で曲を「使う」に入れたときの初期値。置いただけの曲は 0 で載り、入れるまで鳴らない",
+        "en": "Initial weight when a track is put in use from the settings screen. Tracks merely placed in the folder are listed at 0 and never play until chosen"
+      }
+    },
+    "AVOID_REPEAT": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "前回と同じ曲を続けて選ばない",
+        "en": "Do not pick the same track twice in a row"
+      },
+      "note": {
+        "ja": "候補が2曲以上あるときだけ効く",
+        "en": "Only when two or more tracks are eligible"
+      }
+    }
+  }
+}

@@ -756,7 +756,8 @@ QuestEventManager(app, event_name, enemies_info, event_turn)
 MOD 側でも「戦闘中は出さない」条件に使われるので、残骸があるとイベントが出なくなる。
 残骸かどうかは `app.current_enemy_dict` が空かで見分ける。
 
-`in_boss_battle` / `in_colosseum_battle` は 1→0 の遷移を観測できていない。
+`in_boss_battle` はボス戦の後の戦闘（闘技場）で 0 に戻っていた（2026-08-29 に1回観測。`322_` のログ）。
+`in_colosseum_battle` の 1→0 は未観測。
 
 #### 1手ぶんの内訳（`BattlePhaseManager`）
 
@@ -947,6 +948,25 @@ apply_music_volume(app)         main_023 で追加
   （実測では `save_world_json:write_obfuscated_json_file` だけが発火した。VERIFICATION.md §3.4）
 
 **乱数は MOD 専用の `random.Random` を使う**（グローバルから引くとゲーム自身の乱数列がずれる）。
+
+#### 戦闘BGM
+
+戦闘曲は `instantale.py:6995` の lambda（`Clock` 経由、MainThread）が `play_music_from_src` に
+`Assets/sounds/musics/battle/1. Echoes of Valhalla.mp3` を固定で渡して鳴らす
+（2026-08-21〜22 の実機ログ 13 回、全て同一）。
+戦闘の種類はパスには現れず、曲が鳴る時点のフラグでだけ見える:
+
+| 種類 | 曲が鳴る時点のフラグ | `BattleStartManager(app, enemy_type, ...)` の `enemy_type` |
+|---|---|---|
+| 通常（依頼中の遭遇） | `in_battle=1` | `'in_quest'` |
+| ボス（`QuestEncounterFinalBoss`） | `in_battle=1 in_boss_battle=1` | `'in_quest'`（通常と同じ語） |
+| 闘技場（`ColosseumMatchStart`） | `in_battle=1 in_colosseum_battle=1` | `'colosseum'` |
+| 衛兵 | `in_battle=1` | `'guard'`（§2.20） |
+
+（2026-08-08 に2戦、2026-08-29 に7戦。`322_battle_bgm` の `[BGMPICK]` の行）
+
+`play_music_from_src` は絶対パスをそのまま受け付ける（ゲームのフォルダの外に置いた曲が鳴った）。
+`106_` の戦闘曲判定は `/musics/battle/` の部分一致なので、外に置く曲もそのフォルダ名の下に置けば戦闘曲として扱われる。
 
 ### 2.12 LLM 経路とプロンプト
 
