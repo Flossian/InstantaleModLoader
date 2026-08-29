@@ -1114,12 +1114,15 @@ def test_reapply_shares_one_worker_and_one_lock():
     """当て直しても控え・待ち行列・錠は1組のまま
 
     `apply()` は再注入と遅延当て直しで最大8回走る（TECH.md §3.4）。
-    以前は `state` / `jobs` / `data_lock` を `apply()` の中で作っていたため、
-    走るたびに `state["worker"]` が `None` へ戻り、
+    以前は控えと待ち行列と錠を `apply()` の中で作っていたため、
+    走るたびにワーカーの控えが `None` へ戻り、
     前の世代のワーカーが生きたまま2本目まで起動した。
-    しかも `data_lock` が別インスタンスになるので、
+    しかも錠が別インスタンスになるので、
     2本が同じ `state/npc_profiles/<世界>.json` を排他なしで
     read-modify-write できた（人物像の更新が消える経路）。
+
+    いまは控えが `state.WorldStore`、ワーカーが `jobs.Worker` で、
+    どちらもプロセス側（`STATE_STORE_ATTR`）に1つずつ置いてある。
     """
     run = Run(seed="北方の村の生まれ。")
     first = getattr(sys, MOD.STATE_STORE_ATTR)
@@ -1128,8 +1131,11 @@ def test_reapply_shares_one_worker_and_one_lock():
 
     second = getattr(sys, MOD.STATE_STORE_ATTR)
     check(second is first, "当て直しで控え一式が作り直された")
-    for key in ("state", "cache", "jobs", "data_lock", "worker_lock", "log_lock"):
+    for key in ("state", "worlds", "worker", "log_lock"):
         check(second[key] is first[key], "{} が別物になった".format(key))
+    # 中身も見る（`rebind` は ctx を差し替えるだけで、錠と待ち行列は据え置き）。
+    check(second["worlds"].lock is first["worlds"].lock, "控えの錠が別物になった")
+    check(second["worker"].jobs is first["worker"].jobs, "待ち行列が別物になった")
     return run
 
 

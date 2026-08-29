@@ -65,14 +65,11 @@
 
 import copy
 import datetime
-import json
-import queue
 import sys
-import threading
 import time
 
-from instantale_modloader import frames, llm, ui
-from instantale_modloader.state import (world_filename, world_key,
+from instantale_modloader import frames, jobs, llm, ui
+from instantale_modloader.state import (WorldStore, world_key,
                                         world_key_of_dict)
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
@@ -178,19 +175,6 @@ def acceptable(new, old, floor):
     return len(new) <= 2 * max(len(old), floor)
 
 
-def strip_code_fence(text):
-    """``` で囲まれた返答から中身だけを取り出す。囲みが無ければそのまま。"""
-    body = text.strip()
-    if not body.startswith("```"):
-        return body
-    lines = body.splitlines()
-    if lines and lines[0].startswith("```"):
-        lines = lines[1:]
-    if lines and lines[-1].strip().startswith("```"):
-        lines = lines[:-1]
-    return "\n".join(lines).strip()
-
-
 def parse_result(raw):
     """編纂の返答を `{"overview": 文, "facilities": 文}` に直す。読めなければ `None`。
 
@@ -199,28 +183,25 @@ def parse_result(raw):
     ローカルのモデルは `json_schema` を黙って守らないことがある。GAME.md §2.12）。
     2欄あるので、`317_` の評判文と違って素の文章の受け皿は持たない
     （どちらの欄か決められない文章を勝手に振り分けない）。
+    囲みを剥がして JSON を1つ取り出すところは `llm.parse_json`（ローダの語彙）。
     片方の欄しか無い返答は、在る方だけを受ける（呼び側が欠けを前の文面で埋める）。
     """
-    if isinstance(raw, dict):
-        data = raw
-    elif isinstance(raw, str):
-        body = strip_code_fence(raw)
-        start, end = body.find("{"), body.rfind("}")
-        data = None
-        if 0 <= start < end:
-            try:
-                data = json.loads(body[start:end + 1])
-            except Exception:
-                data = None
-        if not isinstance(data, dict):
-            return None
-    else:
+    data = llm.parse_json(raw)
+    if data is None:
         return None
     overview = clean_text(data.get(OVERVIEW_KEY))
     facilities = clean_text(data.get(FACILITIES_KEY))
     if not overview and not facilities:
         return None
     return {OVERVIEW_KEY: overview, FACILITIES_KEY: facilities}
+
+
+def by_area_id(bucket):
+    """控えを書く前にエリア id で並べ直す。
+
+    順が動くと `state/` の差分を読んだときに全行が動いて見える。
+    """
+    return {aid: bucket[aid] for aid in sorted(bucket, key=ui.id_sort_key)}
 
 
 def ordered_record(record):
@@ -287,22 +268,20 @@ def apply(ctx):
                 "noted": set(),        # 1回だけ出す知らせの鍵
                 "last_inject": None,   # 同じ結末が続く間はログに書かない
                 "last_check": 0.0,     # 照合した時刻（間引き用）
-                "worker": None,
-                "pending": set(),      # 編纂を待っている (世界, エリア)
             },
-            "cache": {"buckets": {}},  # 世界名 -> 控え（書くのはこの MOD だけ）
-            "jobs": queue.Queue(),
-            "data_lock": threading.RLock(),
-            "worker_lock": threading.Lock(),
+            # 世界名 -> 控え（書くのはこの MOD だけ）。出し入れと錠は
+            # ローダの語彙（`state.WorldStore`）。世代をまたいで持つ。
+            "worlds": WorldStore(ctx, STATE_DIRNAME, order=by_area_id),
+            # 編纂を回す背景スレッド。作るのは `compile_area` が出来てから
+            # （下の「予約と照合」）。世代をまたいで1本だけ持つ。
+            "worker": None,
         }
         setattr(sys, STATE_STORE_ATTR, store)
     state = store["state"]
-    cache = store["cache"]
-    jobs = store["jobs"]
-    data_lock = store["data_lock"]
-    worker_lock = store["worker_lock"]
 
     write = ctx.logger(LOG_BASENAME)
+    worlds = store["worlds"].rebind(ctx, write)
+    data_lock = worlds.lock
 
     def note_once(key, message):
         if key in state["noted"]:
@@ -318,20 +297,12 @@ def apply(ctx):
         write(message)
 
     # ------------------------------------------------------------------ 控え
-    def path_for(key):
-        # フォルダを作るのはここ（`ctx.state_path` が親を作る）。
-        # `apply()` では作らない。一度も編纂していない `state/` に
-        # 空のフォルダを置かないため（TECH.md §3.11）。
-        return ctx.state_path(STATE_DIRNAME, world_filename(key))
-
+    # 出し入れ（場所・読み・キャッシュ・書き・錠）は `state.WorldStore` に1つだけある。
+    # フォルダを作るのは最初に触ったときで、`apply()` では作らない
+    # （一度も編纂していない `state/` に空のフォルダを置かないため。TECH.md §3.11）。
     def bucket_of(key):
         """その世界の控え `{エリアid: 記録}`。無ければ読み込む。錠は呼び側が持つ。"""
-        found = cache["buckets"].get(key)
-        if found is None:
-            data = ctx.read_json(path_for(key), {})
-            found = data if isinstance(data, dict) else {}
-            cache["buckets"][key] = found
-        return found
+        return worlds.load(key)
 
     def record_of(key, area_id):
         with data_lock:
@@ -345,23 +316,13 @@ def apply(ctx):
 
     def save_record(key, area_id, record):
         with data_lock:
-            bucket = dict(bucket_of(key))
-            bucket[str(area_id)] = ordered_record(record)
-            cache["buckets"][key] = {aid: bucket[aid]
-                                     for aid in sorted(bucket, key=ui.id_sort_key)}
-            if not ctx.write_json(path_for(key), cache["buckets"][key]):
-                write("控えを書けなかった: {}".format(path_for(key)))
-                return False
-            return True
+            bucket_of(key)[str(area_id)] = ordered_record(record)
+            return worlds.save(key)      # 並びは `by_area_id` が固定する
 
     # ------------------------------------------------------------ ゲームを読む
     def area_of_quest(quest):
         value = ui.quest_value(quest, "neighboring_settlement_id", None)
         return str(value) if value is not None else None
-
-    def day_of(app):
-        value = getattr(getattr(app, "world", None), "days_elapsed", None)
-        return value if isinstance(value, int) and not isinstance(value, bool) else None
 
     def descriptions_of(area):
         """実行時の `Area.descriptions`。dict でなければ `None`（触らない）。
@@ -439,33 +400,22 @@ def apply(ctx):
         return applied
 
     # ------------------------------------------------------------ 予約と照合
+    #
+    # 待ち行列・直列のスレッド・溢れたら古い方から捨てる・同じ土地を二度積まない
+    # ・仕事が無ければ畳む、はローダの語彙（`jobs.Worker`）。
+    # ここに残すのは**何をログに出すか**だけ。
+    def job_key(job):
+        return (job["world"], job["area_id"])
+
+    def note_dropped(job):
+        write("編纂: 古い仕事を捨てた（{} / {}）".format(
+            job["world"], job["area_id"]))
+
     def enqueue(job):
         """編纂の仕事を積む。ワーカーが居なければ起こす。"""
-        key = (job["world"], job["area_id"])
-        with worker_lock:
-            if key in state["pending"]:
-                return
-            while jobs.qsize() >= MAX_PENDING:
-                try:
-                    dropped = jobs.get_nowait()
-                except queue.Empty:
-                    break
-                jobs.task_done()
-                state["pending"].discard((dropped["world"], dropped["area_id"]))
-                write("編纂: 古い仕事を捨てた（{} / {}）".format(
-                    dropped["world"], dropped["area_id"]))
-            state["pending"].add(key)
-            jobs.put(job)
+        if worker.enqueue(job):
             write("編纂を予約: {} / {}（契機 {}）".format(
                 job["world"], job["area_id"], job["why"]))
-            worker = state["worker"]
-            if worker is not None and worker.is_alive():
-                return
-            worker = threading.Thread(target=worker_loop,
-                                      name="instantale_mod.area_chronicle",
-                                      daemon=True)
-            state["worker"] = worker
-            worker.start()
 
     def check(app, why):
         """いま居る土地に、まだ織り込んでいない功績があれば編纂を予約する。
@@ -575,7 +525,7 @@ def apply(ctx):
         if save_record(key, area_id, {
                 "area": str(area_id),
                 "name": name,
-                "day": day_of(app),
+                "day": ui.game_day(app),
                 "updated": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "done": total,
                 OVERVIEW_KEY: final_overview,
@@ -585,25 +535,14 @@ def apply(ctx):
                   .format(key, area_id, frames.short(final_overview, 60),
                           len(final_facilities), total))
 
-    def worker_loop():
-        """仕事を順番に処理する。30秒空けば再注入時の残骸を残さず終了する。"""
-        while True:
-            try:
-                job = jobs.get(timeout=30.0)
-            except queue.Empty:
-                with worker_lock:
-                    if not jobs.empty():
-                        continue
-                    state["worker"] = None
-                return
-            try:
-                compile_area(job)
-            except Exception:
-                ctx.log_exc("area chronicle: 編纂に失敗した")
-            finally:
-                with worker_lock:
-                    state["pending"].discard((job["world"], job["area_id"]))
-                jobs.task_done()
+    # 編纂は背景で1件ずつ（LLM を待つのでゲームのスレッドでは回せない）。
+    # `compile_area` が出来た後でないと組めないのでここで組む。
+    worker = store["worker"] = (
+        store["worker"]
+        or jobs.Worker(ctx, compile_area, name="area_chronicle",
+                       label="area chronicle", key=job_key,
+                       max_pending=MAX_PENDING, on_drop=note_dropped)
+    ).rebind(ctx, compile_area, write)
 
     # ---------------------------------------------------- 第一声への差し込み
     def with_mention(args, kwargs):

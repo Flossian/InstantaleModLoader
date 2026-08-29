@@ -87,9 +87,12 @@ check("素の JSON", MOD.parse_unstructured(json.dumps(plain, ensure_ascii=False
 check("フェンス付き", MOD.parse_unstructured("```json\n" + json.dumps(plain) + "\n```") == plain)
 check("説明混じり", MOD.parse_unstructured("結果:\n" + json.dumps(plain) + "\n以上") == plain)
 check("読めなければ None", MOD.parse_unstructured("いいえ") is None)
+# `content_violation` は判らない語を False へ倒す（`llm.truthy(unknown=False)`）。
 check("真偽は true 系の文字列だけ",
-      MOD._truthy("true") and MOD._truthy("1")
-      and not MOD._truthy("none") and not MOD._truthy("false"))
+      MOD.llm.truthy("true", unknown=False) and MOD.llm.truthy("1", unknown=False)
+      and not MOD.llm.truthy("none", unknown=False)
+      and not MOD.llm.truthy("false", unknown=False)
+      and not MOD.llm.truthy("よく分からない語", unknown=False))
 
 with io.open(MANIFEST_PATH, encoding="utf-8") as fh:
     MANIFEST = json.load(fh)

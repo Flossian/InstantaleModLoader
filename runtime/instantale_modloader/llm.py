@@ -87,6 +87,7 @@ MOD ごとに違う）。
 
 from __future__ import annotations
 
+import json
 import sys
 import threading
 import time
@@ -251,6 +252,113 @@ def as_dict(raw):
         if isinstance(got, dict):
             return got
     return None
+
+
+#: 「変更なし」と読む語。**大文字小文字と前後の空白は問わない。**
+#: 素の文字列で返るのは、構造化出力を通さない経路と、
+#: `create_structure` が bool を str で受けている項目（共通 API の規約）。
+FALSE_WORDS = ("false", "no", "0", "", "なし", "無し", "変更なし", "none")
+
+#: 「そうだ」と読む語。
+TRUE_WORDS = ("true", "yes", "on", "1", "はい", "あり")
+
+
+def truthy(value, *, unknown: bool = True) -> bool:
+    """モデルが返した真偽を読む。`"false"` と書いてくる相手にも耐える。
+
+    どちらの語にも当たらない文字列を True と False のどちらに倒すかは、
+    **項目の意味で決まる**ので `unknown` で受ける:
+
+    | 項目 | 倒す先 | なぜ |
+    |---|---|---|
+    | `changed`（`311_` / `403_`） | `unknown=True`（既定） | 読めない返答で「変更なし」に倒すと、抽出した内容を黙って捨てる |
+    | `content_violation`（`404_`） | `unknown=False` | 読めない返答で「違反あり」に倒すと、普通の台詞が消える |
+
+    文字列でも真偽でもないものは `bool()` に任せる（`None` は False、`0` は False）。
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        word = value.strip().lower()
+        if word in FALSE_WORDS:
+            return False
+        if word in TRUE_WORDS:
+            return True
+        return unknown
+    return bool(value)
+
+
+def strip_fence(text) -> str:
+    """```` ```json … ``` ```` で包まれていたら中身だけにする。包みが無ければそのまま。
+
+    包むなとプロンプトで頼んでも、モデルは包む。
+    5本の MOD（`311_` / `317_` / `321_` / `403_` / `404_`）が各自で剥がしていて、
+    **剥がし方が3通りに枝分かれしていた**
+    （行で切るもの、言語の札を決め打ちで並べたもの、正規表現で一度に取るもの）。
+    札の並びに無い言語名（```` ```JSON5 ````）を書かれると、
+    決め打ちの側だけが札を本文として残して JSON を壊す。
+    """
+    if not isinstance(text, str):
+        return ""
+    body = text.strip()
+    if not body.startswith("```"):
+        return body
+    body = body[3:]
+    end = body.rfind("```")
+    if end >= 0:
+        body = body[:end]
+    body = body.strip()
+    # 残った先頭行が言語の札（`json` / `JSON5` / `text`）なら落とす。
+    # 短い ASCII の1語だけを札と見なす ― 本文の1行目を札と読み違えないため。
+    head, sep, rest = body.partition('\n')
+    head = head.strip()
+    if sep and head and len(head) <= 12 and head.isascii() and head.isalnum():
+        return rest.strip()
+    return body
+
+
+def parse_json(raw):
+    """モデルの返却から辞書を1つ取り出す。読めなければ `None`。
+
+    `as_dict` が「返ってきた**物**の形」（pydantic のモデル・辞書・素の JSON 文字列）
+    を均すのに対し、こちらは「返ってきた**文章**」を相手にする。
+    構造化出力を使わない経路では、頼んでいなくても前置きと囲みが付く:
+
+        こちらが人物像です。
+        ```json
+        {"changed": true, "profile": "..."}
+        ```
+        以上です。
+
+    包みを剥がし、それでも読めなければ**最初の `{` から最後の `}` まで**を試す。
+    `[` で始まる配列は読まない（1つの辞書を返す約束の関数なので、
+    受けたところで呼び側が扱えない）。
+
+    構造化経路と非構造化経路の**出口を1つにする**ために使う。
+    2つの経路それぞれに検証を書くと、片方だけ直したときに黙ってすり抜ける。
+    """
+    got = as_dict(raw)
+    if got is not None:
+        return got
+    if not isinstance(raw, str):
+        return None
+    body = strip_fence(raw)
+    if not body:
+        return None
+    try:
+        got = json.loads(body)
+    except Exception:
+        got = None
+    if isinstance(got, dict):
+        return got
+    start, end = body.find("{"), body.rfind("}")
+    if not (0 <= start < end):
+        return None
+    try:
+        got = json.loads(body[start:end + 1])
+    except Exception:
+        return None
+    return got if isinstance(got, dict) else None
 
 
 def ask(ctx, manager_name: str, message, *, timeout, structure=None,

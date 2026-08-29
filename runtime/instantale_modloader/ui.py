@@ -775,6 +775,41 @@ def is_idle(app):
 
 
 # --------------------------------------------------------------------------
+# ゲーム内の日付（GAME.md §2.16）
+# --------------------------------------------------------------------------
+def game_day(app):
+    """いまのゲーム内日数。読めなければ `None`。
+
+    日付は**世界に1つ**（`world.days_elapsed`）で、
+    進めるのは `InstantaleApp.elapse_days`（宿泊と移動はここを大きく飛ばす）。
+
+    `app` でも `World` インスタンスでも受ける。
+    `World.__init__` を包む場面では `app.world` がまだ埋まっていないため
+    （`areas_of_world` と同じ理由）。
+
+    実行時の世界がまだ無いとき（ロードの途中）は `world_dict["world_data"]`
+    から拾う。5本の MOD が各自でこれを読んでいて、
+    **その受け皿を持っていたのは `312_` だけ**だった
+    ― 他の4本はロード中に呼ぶと `None` に倒れる。
+
+    `float` で入っていても `int` にして返す（日数として使う側は整数を期待する）。
+    `True` は `int` の仲間だが日数ではないので弾く。
+    """
+    for holder in (getattr(app, "world", None), app):
+        value = getattr(holder, "days_elapsed", None)
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, (int, float)):
+            return int(value)
+    world_dict = getattr(app, "world_dict", None)
+    data = world_dict.get("world_data") if isinstance(world_dict, dict) else None
+    value = data.get("days_elapsed") if isinstance(data, dict) else None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return int(value)
+
+
+# --------------------------------------------------------------------------
 # エリアの引き当て（GAME.md §2.7）
 # --------------------------------------------------------------------------
 def world_areas(app):

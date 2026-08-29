@@ -36,6 +36,7 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml                                   # noqa: E402
+from instantale_modloader import llm as llm_module                  # noqa: E402
 from instantale_modloader import ui as ui_module                    # noqa: E402
 
 QUEST_END = "__main__:QuestEndManager.execute"
@@ -117,6 +118,16 @@ def make_app(achievements=("霧の主を討ち、湿地の霧は晴れた",), ar
 
 
 class FakeLLM(object):
+    """`ask` だけを差し替える。
+
+    他の名前は本物の `instantale_modloader.llm` へ渡す
+    （`parse_json` のような素の関数までここに写すと、
+    本物を直したときにこちらだけ古くなる）。
+    """
+
+    def __getattr__(self, name):
+        return getattr(llm_module, name)
+
     def __init__(self, replies):
         self.replies = list(replies)
         self.asked = []
@@ -208,11 +219,7 @@ def store_of(module):
 
 
 def drain(module, timeout=10.0):
-    jobs = store_of(module)["jobs"]
-    deadline = time.monotonic() + timeout
-    while jobs.unfinished_tasks and time.monotonic() < deadline:
-        time.sleep(0.01)
-    return not jobs.unfinished_tasks
+    return store_of(module)["worker"].drain(timeout)
 
 
 def clear_quest(app, area_id="3"):

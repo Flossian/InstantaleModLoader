@@ -91,7 +91,7 @@ import sys
 import time
 
 from instantale_modloader import frames, llm, ui
-from instantale_modloader.state import world_filename, world_key
+from instantale_modloader.state import WorldStore, world_key
 
 LOG_BASENAME = "player_events.log"
 
@@ -212,8 +212,7 @@ def apply(ctx):
         "fired_at": {},       # 施設 id -> 発火したときの訪問回数
         "rephrase": None,     # conversation モード: 第一声の読み替え待ち
         "npc_id_kind": None,  # ゲーム自身が character_id に何を渡しているか
-        "ignored": {},        # NPC id -> {"count": n, "name": ...}（世界ごと）
-        "ignored_key": None,  # 上の控えがどの世界のものか
+        "ignored_key": None,  # いま控えを持っている世界（`ignored_store`）
         "watching": None,     # こちらが始めた会話の見届け
     }
 
@@ -268,29 +267,27 @@ def apply(ctx):
         return here_id == facility_id
 
     # ------------------------------- 応答されなかった相手を覚えておく（世界ごと）
+    #
+    # 控えの出し入れ（場所・読み・キャッシュ・書き）は `state.WorldStore` に
+    # 1つだけある。MOD ごとに写すとずれるため。
+    ignored_store = WorldStore(ctx, STATE_DIRNAME, write=write)
+
     def ignores(app):
         """この世界の控えを返す。世界が変わったら読み直す。
 
         `state/` に置く（`out/` はログで、消してよいもの）。
-        世界の見分けとファイル名は `instantale_modloader.state` に1つだけある
-        ものを使う。MOD ごとに写すとずれるため。
         """
         key = world_key(app)
         if key is None:
             return {}
-        if state["ignored_key"] != key:
-            path = ctx.state_path(STATE_DIRNAME, world_filename(key))
-            loaded = ctx.read_json(path, {})
-            state["ignored"] = loaded if isinstance(loaded, dict) else {}
-            state["ignored_key"] = key
-        return state["ignored"]
+        state["ignored_key"] = key
+        return ignored_store.load(key)
 
     def save_ignores():
         key = state["ignored_key"]
         if key is None:
             return
-        ctx.write_json(ctx.state_path(STATE_DIRNAME, world_filename(key)),
-                       state["ignored"])
+        ignored_store.save(key)
 
     def ignored_count(app, npc_id):
         entry = ignores(app).get(str(npc_id))

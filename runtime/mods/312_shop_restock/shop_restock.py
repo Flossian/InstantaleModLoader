@@ -73,11 +73,10 @@ obtainer が主の Character）。
 複数の世界・複数のセーブを行き来しても混ざらない（世界ごとにファイルを分けてある）。
 """
 
-import os
 import sys
 
 from instantale_modloader import frames, ui
-from instantale_modloader.state import world_filename, world_key
+from instantale_modloader.state import WorldStore, world_key
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
 #      `tools/check_mods.py` が AST で突き合わせる）------------------------
@@ -98,25 +97,38 @@ VERIFY_DELAY = 1.0
 # 読む側（人間・別 mod）のために固定する。
 RECORD_KEYS = ("day", "facility", "count", "tier")
 
+
+def ordered_bucket(bucket):
+    """控えを書く前に並びを固定する（`RECORD_KEYS` の順。知らない鍵は落とす）。
+
+    順が動くと `state/` の差分を読んだときに全行が動いて見える。
+    """
+    out = {}
+    for owner_id, record in bucket.items():
+        if isinstance(record, dict):
+            out[owner_id] = {k: record[k] for k in RECORD_KEYS if k in record}
+    return out
+
 # 再注入しても1組だけ持つ（世代をまたいで覚えていたい: 段(tier)と、
 # 「この版は空にしても補充しない」の判定）。
 STORE_ATTR = "_instantale_shop_restock_store"
 
 
 def apply(ctx):
-    state_dir = ctx.state_path(STATE_DIRNAME)
-
     store = getattr(sys, STORE_ATTR, None)
     if not isinstance(store, dict):
         store = {
             "tiers": {},        # 主の id -> ゲームが渡した段(tier)
-            "buckets": {},      # 世界名 -> 控え
+            # 世界ごとの控え。出し入れはローダの語彙（`state.WorldStore`）で、
+            # 世代をまたいで持つのでプロセス側に置く（`rebind` で繋ぎ替える）。
+            "worlds": WorldStore(ctx, STATE_DIRNAME, order=ordered_bucket),
             "pending": None,    # 空にして結果待ちの1件
             "auto_refill": None,  # None=未確認 / True=補充される / False=されない
         }
         setattr(sys, STORE_ATTR, store)
 
     write = ctx.logger(LOG_BASENAME, stamp=False)
+    worlds = store["worlds"].rebind(ctx, write)
 
     # ボタンは出さないので `mark` は要らない。
     # `schedule` と例外の握りだけ借りる。
@@ -125,45 +137,16 @@ def apply(ctx):
     # ------------------------------------------------------------ 世界と控え
 
     def bucket_of(app):
-        key = world_key(app)
-        bucket = store["buckets"].get(key)
-        if bucket is None:
-            path = os.path.join(state_dir, world_filename(key))
-            # 「無い（初回）」と「在るのに読めない（ロック・破損）」を同じ
-            # {} に倒さない。
-            # 後者を黙って倒すと、次の save_bucket が空に近い正本を無傷で作る。
-            # 記録だけは必ず残す（ctx.read_json）。
-            data = ctx.read_json(path, {})
-            bucket = data if isinstance(data, dict) else {}
-            store["buckets"][key] = bucket
-        return key, bucket
+        return worlds.of(app)
 
     def save_bucket(key, bucket):
-        """1世界分を書き出す。落ちても壊れない書き方は `ctx.write_json()` 側。"""
-        path = ctx.state_path(STATE_DIRNAME, world_filename(key))
-        ordered = {}
-        for owner_id, record in bucket.items():
-            if not isinstance(record, dict):
-                continue
-            ordered[owner_id] = {k: record[k] for k in RECORD_KEYS
-                                 if k in record}
-        return ctx.write_json(path, ordered)
+        """1世界分を書き出す。並びは `ordered_bucket`、書き方は `ctx.write_json()`。"""
+        return worlds.save(key, bucket)
 
     # ------------------------------------------------------------ ゲームを読む
     def app_of(manager):
         app = getattr(manager, "app", None)
         return app if app is not None else ui.find_app()
-
-    def days_elapsed(app):
-        """世界の経過日数。読めなければ None（読めないなら何もしない）。"""
-        value = getattr(getattr(app, "world", None), "days_elapsed", None)
-        if not isinstance(value, int) or isinstance(value, bool):
-            world_dict = getattr(app, "world_dict", None)
-            data = world_dict.get("world_data") if isinstance(world_dict, dict) else None
-            value = data.get("days_elapsed") if isinstance(data, dict) else None
-        if isinstance(value, bool) or not isinstance(value, int):
-            return None
-        return value
 
     def facility_of(app):
         """プレイヤーが今いる施設。ロード直後は id の文字列なので引き当て直す。"""
@@ -226,7 +209,7 @@ def apply(ctx):
                   "(facility={})".format(getattr(facility, "id", None)))
             return
 
-        day = days_elapsed(app)
+        day = ui.game_day(app)
         if day is None:
             write("skip: world.days_elapsed is unreadable")
             return

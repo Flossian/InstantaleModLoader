@@ -114,7 +114,7 @@ import threading
 import time
 
 from instantale_modloader import ui
-from instantale_modloader.state import (UNKNOWN_WORLD, world_filename,
+from instantale_modloader.state import (UNKNOWN_WORLD, WorldStore,
                                         world_key, world_key_of_dict)
 
 LOG_BASENAME = "area_difficulty.log"
@@ -139,13 +139,20 @@ ROLLBACK = False
 ANNOUNCE = "この地に貼り出される依頼は、以前より歯応えのあるものになっている。"
 
 
+def by_area_id(bucket):
+    """控えを書く前に土地 id で並べ直す。
+
+    順が動くと `state/` の差分を読んだときに全行が動いて見える。
+    """
+    return {aid: bucket[aid] for aid in sorted(bucket, key=ui.id_sort_key)}
+
+
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
     screen = ui.Screen(ctx, write, tag="area difficulty")
 
     # 控えはゲームのスレッドと Clock コールバックの両方から触る。
     lock = threading.RLock()
-    cache = {"buckets": {}}
     # 上限で頭打ちになった土地は一度だけ知らせる（毎回の掲示板で出さない）。
     capped = set()
     state = {
@@ -190,20 +197,15 @@ def apply(ctx):
         return low, min(high, max(low, int(DIFFICULTY_LIMIT)))
 
     # ------------------------------------------------------------ 控え
-    def path_for(key):
-        # フォルダを作るのはここ（`ctx.state_path` が親を作る）。
-        # `apply()` では作らない。一度も上がっていない `state/` に
-        # 空のフォルダを置かないため（TECH.md §3.11）。
-        return ctx.state_path(STATE_DIRNAME, world_filename(key))
+    #
+    # 出し入れ（場所・読み・キャッシュ・書き）は `state.WorldStore` に1つだけある。
+    # フォルダを作るのは最初に触ったときで、`apply()` では作らない
+    # （一度も上がっていない `state/` に空のフォルダを置かないため。TECH.md §3.11）。
+    worlds = WorldStore(ctx, STATE_DIRNAME, order=by_area_id, write=write)
 
     def bucket_of(key):
         """その世界の控え `{土地id: 記録}`。無ければ読み込む。錠は呼び側が持つ。"""
-        found = cache["buckets"].get(key)
-        if found is None:
-            data = ctx.read_json(path_for(key), {})
-            found = data if isinstance(data, dict) else {}
-            cache["buckets"][key] = found
-        return found
+        return worlds.load(key)
 
     def ordered(record):
         """並びを固定して書く（差分を読むとき、順が動くと全行が動いて見える）。"""
@@ -228,16 +230,11 @@ def apply(ctx):
             bucket.pop(str(area_id), None)
         else:
             bucket[str(area_id)] = ordered(record)
-        cache["buckets"][key] = {aid: bucket[aid]
-                                 for aid in sorted(bucket, key=ui.id_sort_key)}
         return flush_bucket(key) if flush else True
 
     def flush_bucket(key):
-        """控えをファイルへ。錠の中で呼ぶ。"""
-        if not ctx.write_json(path_for(key), bucket_of(key)):
-            write("控えを書けなかった: {}".format(path_for(key)))
-            return False
-        return True
+        """控えをファイルへ。錠の中で呼ぶ。並びは `by_area_id` が固定する。"""
+        return worlds.save(key)
 
     def record_of(key, area_id):
         found = bucket_of(key).get(str(area_id))
@@ -318,10 +315,6 @@ def apply(ctx):
     def in_scope(quest):
         return True if SCOPE == "all" else is_incomplete(quest)
 
-    def day_of(world):
-        value = getattr(world, "days_elapsed", None)
-        return value if isinstance(value, int) and not isinstance(value, bool) else None
-
     # ------------------------------------------------------------ 寄せ直し
     def reconcile(world, key, area_id, why, entries=None, flush=True):
         """その土地の依頼の難易度を「素の値 + いまの上昇量」へ寄せる。
@@ -396,7 +389,7 @@ def apply(ctx):
                 return 0, 0
 
             record["base"] = base
-            day = day_of(world)
+            day = ui.game_day(world)
             if day is not None:
                 record["day"] = day
             save(key, area_id, record, flush=flush)

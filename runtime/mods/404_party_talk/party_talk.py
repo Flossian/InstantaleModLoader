@@ -46,14 +46,12 @@ MOD 専用プロンプトで LLM を1回だけ呼ぶ。返答のうちアンカ�
 
 もとは MoririnJP 氏の `404_party_talk` v6（提供元の README.txt は work フォルダ）。
 """
-import json
 import random
-import re
 import sys
 import typing
 
 from instantale_modloader import frames, llm, ui
-from instantale_modloader.state import world_filename, world_key
+from instantale_modloader.state import WorldStore, world_key
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
 #      `tools/check_mods.py` が AST で突き合わせる）------------------------
@@ -161,42 +159,12 @@ def _field(record, key):
     return value.strip() if isinstance(value, str) and value.strip() else ""
 
 
-def _truthy(value):
-    """`content_violation` は共通 API の規約どおり str で受ける（llm.create_structure）。"""
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return value != 0
-    if isinstance(value, str):
-        return value.strip().lower() in ("1", "true", "yes", "on")
-    return False
-
-
 def parse_unstructured(raw):
-    """no-structure の応答を構造化応答と同じ dict に均す。読めなければ None。"""
-    if isinstance(raw, dict):
-        return raw
-    if not isinstance(raw, str):
-        return None
-    text = raw.strip()
-    fenced = re.match(r"^```(?:json)?\s*(.*?)\s*```$", text, re.I | re.S)
-    if fenced:
-        text = fenced.group(1).strip()
-    try:
-        got = json.loads(text)
-        return got if isinstance(got, dict) else None
-    except Exception:
-        pass
-    # 前後に説明が混ざったときは、最外の JSON object だけ1度拾う。
-    a = text.find("{")
-    b = text.rfind("}")
-    if a >= 0 and b > a:
-        try:
-            got = json.loads(text[a:b + 1])
-            return got if isinstance(got, dict) else None
-        except Exception:
-            return None
-    return None
+    """no-structure の応答を構造化応答と同じ dict に均す。読めなければ None。
+
+    囲みを剥がして JSON を1つ取り出すところはローダの語彙（`llm.parse_json`）。
+    """
+    return llm.parse_json(raw)
 
 
 def apply(ctx):
@@ -305,10 +273,15 @@ def apply(ctx):
             total += len(line) + 1
         return "\n".join(lines)
 
+    # 311 / 403 の控えを読むだけの窓。`own=False` なので**フォルダを作らない**
+    # （相手を切っている人の `state/` に空のフォルダを置かない。TECH.md §3.11）。
+    # 相手はワーカーで書き換えるので、更新時刻が動いたときだけ読み直す。
+    foreign = {name: WorldStore(ctx, name, own=False)
+               for name in ("npc_profiles", "npc_social_memory")}
+
     def load_state(name, key):
-        """311 / 403 の state を1回だけ読む（参加者の組ごとに読み直さない）。読むだけで書かない。"""
-        data = ctx.read_json(ctx.state_path(name, world_filename(key)), {})
-        return data if isinstance(data, dict) else {}
+        """311 / 403 の state を読む（参加者の組ごとに読み直さない）。読むだけで書かない。"""
+        return foreign[name].load(key, fresh=True)
 
     def read_311(data, npc_id):
         """311 の人物像とプレイヤー観。"""
@@ -475,7 +448,10 @@ def apply(ctx):
             write("WARN normal conversation response structure unavailable")
             return None
 
-        if _truthy(data.get("content_violation")):
+        # `content_violation` は共通 API の規約どおり str で受ける
+        # （`llm.create_structure`）。読めない返答を「違反あり」に倒すと
+        # 普通の台詞が消えるので、判らない語は False へ（`unknown=False`）。
+        if llm.truthy(data.get("content_violation"), unknown=False):
             st["pending"] = []
             write("party-talk response marked content_violation")
             return conv_cls(content_violation=True,

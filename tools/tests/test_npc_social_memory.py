@@ -295,7 +295,7 @@ def run_turn(ctx, app, fake):
                         types.SimpleNamespace(app=app), "ガルドをどう思う？")
         FakeClock.run_all()          # enqueue を捌く
         store = getattr(sys, MOD.STORE_ATTR)
-        store["jobs"].join()         # ワーカーが片付けるまで待つ
+        store["worker"].jobs.join()  # ワーカーが片付けるまで待つ
     finally:
         llm.ask, llm.create_structure = original_ask, original_create
 

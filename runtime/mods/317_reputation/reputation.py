@@ -81,16 +81,13 @@ NPC がどう感じるかは NPC の側（性格・手配度との関係）が�
 
 import copy
 import datetime
-import json
 import os
-import queue
 import random
 import sys
-import threading
 import time
 
-from instantale_modloader import frames, llm, ui
-from instantale_modloader.state import world_filename, world_key
+from instantale_modloader import frames, jobs, llm, ui
+from instantale_modloader.state import WorldStore, world_filename, world_key
 
 from . import material
 
@@ -244,19 +241,6 @@ def qualifies(item):
     return deeds_count(item) >= MIN_DEEDS or is_wanted(item)
 
 
-def strip_code_fence(text):
-    """``` で囲まれた返答から中身だけを取り出す。囲みが無ければそのまま。"""
-    body = text.strip()
-    if not body.startswith("```"):
-        return body
-    lines = body.splitlines()
-    if lines and lines[0].startswith("```"):
-        lines = lines[1:]
-    if lines and lines[-1].strip().startswith("```"):
-        lines = lines[:-1]
-    return "\n".join(lines).strip()
-
-
 def trim_sentences(text, limit):
     """文の数で切る。句点で数え、最後の句点までを返す。
 
@@ -377,15 +361,11 @@ def parse_result(raw):
     if isinstance(raw, dict):
         data = raw
     elif isinstance(raw, str):
-        body = strip_code_fence(raw)
-        start, end = body.find("{"), body.rfind("}")
-        data = None
-        if 0 <= start < end:
-            try:
-                data = json.loads(body[start:end + 1])
-            except Exception:
-                data = None
-        if not isinstance(data, dict):
+        # 囲みを剥がして JSON を1つ取り出すところはローダの語彙（`llm`）。
+        # 素の文章の受け皿がここに在るので、剥がした本文も手元に要る。
+        body = llm.strip_fence(raw)
+        data = llm.parse_json(body)
+        if data is None:
             if looks_like_json_attempt(body):
                 return None
             text = clean_reputation(body)
@@ -396,6 +376,29 @@ def parse_result(raw):
     if not reputation:
         return None
     return {KEY_REPUTATION: reputation}
+
+
+def as_bucket(data):
+    """読んだものを `{"areas": 土地別, "epithet": 世界に1つ}` に均す。
+
+    旧版のファイル（土地の控えに "epithet" が混ざっている）もこの形に収まる
+    （読み側がもう見ないだけで、鍵は `ordered_record` が後ろへ回して残す）。
+    形を均すだけで書き戻しはしないので、2つ目は常に False。
+    """
+    if not isinstance(data, dict):
+        data = {}
+    areas = data.get("areas")
+    epithet = data.get("epithet")
+    return {"areas": areas if isinstance(areas, dict) else {},
+            "epithet": epithet if isinstance(epithet, dict) else {}}, False
+
+
+def stored_bucket(bucket):
+    """書く形。二つ名がまだ無い世界のファイルに空の欄を作らない。"""
+    data = {"areas": bucket["areas"]}
+    if bucket["epithet"]:
+        data["epithet"] = bucket["epithet"]
+    return data
 
 
 def ordered_record(record):
@@ -635,15 +638,10 @@ def parse_epithet(raw):
         return epithet_result(raw)
     if not isinstance(raw, str):
         return None
-    body = strip_code_fence(raw)
-    start, end = body.find("{"), body.rfind("}")
-    if 0 <= start < end:
-        try:
-            data = json.loads(body[start:end + 1])
-        except Exception:
-            data = None
-        if isinstance(data, dict):
-            return epithet_result(data)
+    body = llm.strip_fence(raw)
+    data = llm.parse_json(body)
+    if data is not None:
+        return epithet_result(data)
     if looks_like_json_attempt(body):
         return None
     cleaned = clean_epithet(body)
@@ -659,22 +657,20 @@ def apply(ctx):
                 "last_inject": None,   # 同じ結末が続く間はログに書かない
                 "last_check": 0.0,     # 素材を照合した時刻（間引き用）
                 "noted": set(),        # 1回だけ出す知らせの鍵
-                "worker": None,
-                "pending": set(),      # 編纂を待っている (種類, 世界, エリア)
             },
-            "cache": {"buckets": {}},  # 世界名 -> キャッシュ（書くのはこの MOD だけ）
-            "jobs": queue.Queue(),
-            "data_lock": threading.RLock(),
-            "worker_lock": threading.Lock(),
+            # 世界名 -> キャッシュ（書くのはこの MOD だけ）。
+            # 出し入れと錠はローダの語彙（`state.WorldStore`）。
+            "worlds": WorldStore(ctx, STATE_DIRNAME,
+                                 normalize=as_bucket, order=stored_bucket),
+            # 編纂を回す背景スレッド。作るのは `compile_area` が出来てから。
+            "worker": None,
         }
         setattr(sys, STATE_STORE_ATTR, store)
     state = store["state"]
-    cache = store["cache"]
-    jobs = store["jobs"]
-    data_lock = store["data_lock"]
-    worker_lock = store["worker_lock"]
 
     write = ctx.logger(LOG_BASENAME)
+    worlds = store["worlds"].rebind(ctx, write)
+    data_lock = worlds.lock
 
     def note_once(key, message):
         """同じ鍵の知らせを1回だけ残す。
@@ -698,12 +694,9 @@ def apply(ctx):
         write(message)
 
     # ------------------------------------------------------------ キャッシュ
-    def path_for(key):
-        # フォルダを作るのはここ（`ctx.state_path` が親を作る）。
-        # `apply()` では作らない。
-        # 一度も評判が立っていない `state/` に空のフォルダを置かないため（TECH.md §3.11）。
-        return ctx.state_path(STATE_DIRNAME, world_filename(key))
-
+    # 場所・読み・キャッシュ・書き・錠は `worlds`（`state.WorldStore`）が持つ。
+    # フォルダを作るのは最初に触ったときで、`apply()` では作らない
+    # （一度も評判が立っていない `state/` に空のフォルダを置かないため。TECH.md §3.11）。
     def reroll_path(key):
         # `121_` が書く「引き直しの頼み」。読む側なのでフォルダは作らない
         # （`ctx.state_path` は親を作る。TECH.md §3.11）。
@@ -726,32 +719,13 @@ def apply(ctx):
         """その世界のキャッシュ `{"areas": 土地別, "epithet": 世界に1つ}`。
 
         無ければ読み込む。錠は呼び側が持つ。
-        旧版のファイル（土地の控えに "epithet" が混ざっている）もこの形に収まる
-        （読み側がもう見ないだけで、鍵は `ordered_record` が後ろへ回して残す）。
+        読んだものをこの形へ均すのは `as_bucket`、書くときの形は `stored_bucket`。
         """
-        found = cache["buckets"].get(key)
-        if found is None:
-            data = ctx.read_json(path_for(key), {})
-            if not isinstance(data, dict):
-                data = {}
-            areas = data.get("areas")
-            epithet = data.get("epithet")
-            found = {
-                "areas": areas if isinstance(areas, dict) else {},
-                "epithet": epithet if isinstance(epithet, dict) else {},
-            }
-            cache["buckets"][key] = found
-        return found
+        return worlds.load(key)
 
     def flush(key, bucket):
         """控えをファイルへ。錠の中で呼ぶ。"""
-        data = {"areas": bucket["areas"]}
-        if bucket["epithet"]:
-            data["epithet"] = bucket["epithet"]
-        if not ctx.write_json(path_for(key), data):
-            write("控えを書けなかった: {}".format(path_for(key)))
-            return False
-        return True
+        return worlds.save(key, bucket)
 
     def record_of(key, area_id):
         with data_lock:
@@ -800,37 +774,25 @@ def apply(ctx):
     def job_key(job):
         return (job.get("kind", "area"), job["world"], job.get("area_id", ""))
 
+    def note_dropped(job):
+        write("編纂: 古い仕事を捨てた（{}）".format(job_key(job)))
+
     def enqueue(job):
-        """編纂の仕事を積む。ワーカーが居なければ起こす。"""
-        key = job_key(job)
-        with worker_lock:
-            if key in state["pending"]:
-                return
-            while jobs.qsize() >= MAX_PENDING:
-                try:
-                    dropped = jobs.get_nowait()
-                except queue.Empty:
-                    break
-                jobs.task_done()
-                state["pending"].discard(job_key(dropped))
-                write("編纂: 古い仕事を捨てた（{}）".format(job_key(dropped)))
-            state["pending"].add(key)
-            jobs.put(job)
-            if job.get("kind") == "epithet":
-                write("二つ名の編纂を予約: {}（評判の立つ土地 {}、契機 {}）".format(
-                    job["world"], len(job["mark"]["qualifying"]), job["why"]))
-            else:
-                write("編纂を予約: {} / {}（{}件の記録、印 {}、契機 {}）".format(
-                    job["world"], job["area_id"], deeds_count(job["material"]),
-                    job["fingerprint"], job["why"]))
-            worker = state["worker"]
-            if worker is not None and worker.is_alive():
-                return
-            worker = threading.Thread(target=worker_loop,
-                                      name="instantale_mod.reputation",
-                                      daemon=True)
-            state["worker"] = worker
-            worker.start()
+        """編纂の仕事を積む。ワーカーが居なければ起こす。
+
+        待ち行列・直列のスレッド・溢れたら古い方から捨てる・同じ鍵を二度積まない
+        ・仕事が無ければ畳む、はローダの語彙（`jobs.Worker`）。
+        ここに残すのは**何をログに出すか**だけ。
+        """
+        if not worker.enqueue(job):
+            return
+        if job.get("kind") == "epithet":
+            write("二つ名の編纂を予約: {}（評判の立つ土地 {}、契機 {}）".format(
+                job["world"], len(job["mark"]["qualifying"]), job["why"]))
+        else:
+            write("編纂を予約: {} / {}（{}件の記録、印 {}、契機 {}）".format(
+                job["world"], job["area_id"], deeds_count(job["material"]),
+                job["fingerprint"], job["why"]))
 
     def check(app, why):
         """素材が変わっていれば編纂を予約する。**呼ばれても大半は何もしない。**
@@ -997,28 +959,21 @@ def apply(ctx):
         }):
             write("二つ名: {}（{}）二つ名={!r}".format(note, world, epithet))
 
-    def worker_loop():
-        """仕事を順番に処理する。30秒空けば再注入時の残骸を残さず終了する。"""
-        while True:
-            try:
-                job = jobs.get(timeout=30.0)
-            except queue.Empty:
-                with worker_lock:
-                    if not jobs.empty():
-                        continue
-                    state["worker"] = None
-                return
-            try:
-                if job.get("kind") == "epithet":
-                    compile_epithet(job)
-                else:
-                    compile_area(job)
-            except Exception:
-                ctx.log_exc("reputation: 編纂に失敗した")
-            finally:
-                with worker_lock:
-                    state["pending"].discard(job_key(job))
-                jobs.task_done()
+    def compile_job(job):
+        """仕事1件。土地の評判と二つ名で行き先が違うだけ。"""
+        if job.get("kind") == "epithet":
+            compile_epithet(job)
+        else:
+            compile_area(job)
+
+    # 編纂は背景で1件ずつ（LLM を待つのでゲームのスレッドでは回せない）。
+    # 土地の仕事が先に並ぶので、直列のワーカーが評判を編んでから二つ名がそれを読める。
+    worker = store["worker"] = (
+        store["worker"]
+        or jobs.Worker(ctx, compile_job, name="reputation", label="reputation",
+                       key=job_key, max_pending=MAX_PENDING,
+                       on_drop=note_dropped)
+    ).rebind(ctx, compile_job, write)
 
     # ------------------------------------------------------------------ 注入
     def block_for(app):

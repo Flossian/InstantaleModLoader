@@ -30,15 +30,11 @@
 """
 import copy
 import datetime
-import json
-import os
-import queue
 import sys
-import threading
 import typing
 
-from instantale_modloader import frames, llm, ui
-from instantale_modloader.state import world_filename, world_key
+from instantale_modloader import frames, jobs, llm, ui
+from instantale_modloader.state import WorldStore, world_key
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
 #      `tools/check_mods.py` が AST で突き合わせる）------------------------
@@ -100,41 +96,12 @@ STORE_ATTR = "__instantale_npc_social_memory_store__"
 #: 会話相手の profile の末尾へ足す塊の見出し。
 HEADING = "【現在この場に同行している人物】"
 
-#: 抽出の応答の `changed` を「変更なし」と読む語。真偽値でなく文字列で返る provider があるため。
-FALSE_WORDS = ("false", "no", "0", "", "なし", "変更なし")
-
-
 def _field(record, key):
     """控えの1項目を、前後の空白を落とした文字列で返す。無ければ空文字。"""
     value = record.get(key) if isinstance(record, dict) else None
     if isinstance(value, str) and value.strip():
         return value.strip()
     return ""
-
-
-def _truthy(value):
-    """`changed` の真偽。真偽値でも文字列でも読む（型を決めつけない）。"""
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        return value.strip().lower() not in FALSE_WORDS
-    return bool(value)
-
-
-def _strip_fence(text):
-    """```json … ``` で包まれていたら中身だけにする。"""
-    text = text.strip()
-    if not text.startswith("```"):
-        return text
-    text = text[3:]
-    end = text.rfind("```")
-    if end >= 0:
-        text = text[:end]
-    text = text.strip()
-    for tag in ("json\n", "JSON\n", "text\n", "markdown\n"):
-        if text.startswith(tag):
-            return text[len(tag):].strip()
-    return text
 
 
 def normalize_result(data, allowed_ids):
@@ -145,7 +112,7 @@ def normalize_result(data, allowed_ids):
     """
     if not isinstance(data, dict):
         return None
-    if not _truthy(data.get("changed", True)):
+    if not llm.truthy(data.get("changed", True)):
         return []
     rows = data.get("relations")
     if not isinstance(rows, list):
@@ -177,17 +144,69 @@ def normalize_result(data, allowed_ids):
     return out
 
 
+def bounded_facts(items):
+    """事実を重複除去し、各 observer->target につき FACT_LOG_LIMIT 件までにする。
+
+    入力は `{"at", "text"}` の dict でも素の文字列でもよく、出力は必ず dict。
+    古い形の控えを読むときの正規化も兼ねる。残すのは新しい側（末尾）。
+    """
+    if not isinstance(items, list):
+        return []
+
+    out = []
+    seen = set()
+    for item in items:
+        if isinstance(item, dict):
+            text = item.get("text")
+            entry = dict(item)
+        else:
+            text = item
+            entry = {}
+        if not isinstance(text, str) or not text.strip():
+            continue
+        text = text.strip()
+        if text in seen:
+            continue
+        seen.add(text)
+        entry["text"] = text
+        out.append(entry)
+
+    if FACT_LOG_LIMIT <= 0:
+        return []
+    return out[-FACT_LOG_LIMIT:]
+
+def normalize_bucket(bucket):
+    """旧403 stateも読み込み時に311のような簡潔な形へ整える。"""
+    if not isinstance(bucket, dict):
+        return {}, False
+
+    changed = False
+    for observer in bucket.values():
+        if not isinstance(observer, dict):
+            continue
+        relations = observer.get("relations")
+        if not isinstance(relations, dict):
+            continue
+        for relation in relations.values():
+            if not isinstance(relation, dict) or "facts" not in relation:
+                continue
+            old = relation.get("facts")
+            new = bounded_facts(old)
+            if old != new:
+                relation["facts"] = new
+                changed = True
+    return bucket, changed
+
+
 def parse_result(result, allowed_ids):
-    """非構造化応答からJSONを1つ取り出し、`normalize_result` へ渡す。"""
+    """非構造化応答からJSONを1つ取り出し、`normalize_result` へ渡す。
+
+    囲みを剥がして JSON を拾うところはローダの語彙（`llm.parse_json`）。
+    """
     if not isinstance(result, str):
         return None
-    body = _strip_fence(result)
-    start, end = body.find("{"), body.rfind("}")
-    if not (0 <= start < end):
-        return None
-    try:
-        data = json.loads(body[start:end + 1])
-    except Exception:
+    data = llm.parse_json(result)
+    if data is None:
         return None
     return normalize_result(data, allowed_ids)
 
@@ -199,33 +218,28 @@ def apply(ctx):
     screen = ui.Screen(ctx, write, tag="npc social memory")
 
     # プロセスに1つだけ置く共有の棚（apply() が何度走っても同じものを使う）。
-    #   cache:        世界ごとの 403 の控え（読んだ／書いた JSON をそのまま持つ）
-    #   jobs:         抽出の待ち行列。会話の写し（snapshot）を積む
-    #   data_lock:    cache と 311 の読み取り控えを守る（再入可）
-    #   worker_lock:  ワーカーの起動・終了と待ち行列の出し入れを守る
-    #   worker:       走っている抽出スレッド。居なければ None
+    #   worlds:       世界ごとの 403 の控え（`state.WorldStore`。錠もこれが持つ）
+    #   profiles:     311 の控えを読むだけの窓（`own=False`。フォルダは作らない）
+    #   worker:       抽出の背景スレッドと待ち行列（`jobs.Worker`）
     #   last_inject / last_skip:  同じログを続けて書かないための直前の文言
     store = getattr(sys, STORE_ATTR, None)
     if not isinstance(store, dict):
         store = {
-            "cache": {},
-            "jobs": queue.Queue(),
-            "data_lock": threading.RLock(),
-            "worker_lock": threading.Lock(),
-            "worker": None,
+            "worlds": WorldStore(ctx, STATE_DIRNAME, normalize=normalize_bucket),
+            "profiles": WorldStore(ctx, PROFILE_STATE_DIRNAME, own=False),
+            "worker": None,          # 作るのは `extract` が出来てから
             "last_inject": None,
             "last_skip": None,
         }
         setattr(sys, STORE_ATTR, store)
 
     # 既に在る store（注入し直し）にも、後から足した棚を用意する。
-    store.setdefault("profile_311", {})      # 311 state の読み取り控え（mtime が鍵）
     store.setdefault("no_structure", False)  # 構造化経路を諦めたか
 
-    cache = store["cache"]
-    jobs = store["jobs"]
-    data_lock = store["data_lock"]
-    worker_lock = store["worker_lock"]
+    worlds = store["worlds"].rebind(ctx, write)
+    profiles = store["profiles"].rebind(ctx)
+    # 「読んで、書き換えて、書く」を1つの錠の中で行う（再入可）。
+    data_lock = worlds.lock
 
     # ------------------------------------------------------------ 403 の控え
     # `state/npc_social_memory/<世界>.json` の形:
@@ -244,110 +258,30 @@ def apply(ctx):
     #   }
     # A→B と B→A は別の記録。`facts` は追記専用で FACT_LOG_LIMIT 件まで。
 
-    def path_for(key):
-        """世界の鍵（`world_key`）から控えのファイルの場所。"""
-        return ctx.state_path(STATE_DIRNAME, world_filename(key))
-
-    def bounded_facts(items):
-        """事実を重複除去し、各 observer->target につき FACT_LOG_LIMIT 件までにする。
-
-        入力は `{"at", "text"}` の dict でも素の文字列でもよく、出力は必ず dict。
-        古い形の控えを読むときの正規化も兼ねる。残すのは新しい側（末尾）。
-        """
-        if not isinstance(items, list):
-            return []
-
-        out = []
-        seen = set()
-        for item in items:
-            if isinstance(item, dict):
-                text = item.get("text")
-                entry = dict(item)
-            else:
-                text = item
-                entry = {}
-            if not isinstance(text, str) or not text.strip():
-                continue
-            text = text.strip()
-            if text in seen:
-                continue
-            seen.add(text)
-            entry["text"] = text
-            out.append(entry)
-
-        if FACT_LOG_LIMIT <= 0:
-            return []
-        return out[-FACT_LOG_LIMIT:]
-
-    def normalize_bucket(bucket):
-        """旧403 stateも読み込み時に311のような簡潔な形へ整える。"""
-        if not isinstance(bucket, dict):
-            return {}, False
-
-        changed = False
-        for observer in bucket.values():
-            if not isinstance(observer, dict):
-                continue
-            relations = observer.get("relations")
-            if not isinstance(relations, dict):
-                continue
-            for relation in relations.values():
-                if not isinstance(relation, dict) or "facts" not in relation:
-                    continue
-                old = relation.get("facts")
-                new = bounded_facts(old)
-                if old != new:
-                    relation["facts"] = new
-                    changed = True
-        return bucket, changed
-
     def load_bucket(key):
-        """世界1つぶんの控えを返す。最初の1回だけファイルを読み、以後は cache。
+        """世界1つぶんの控えを返す。最初の1回だけファイルを読み、以後は控え。
 
-        読んだときに形が古ければ整えて書き戻す（403 自身の控えだけ）。
-        返す dict は cache と同一なので、書き換えたら `save_bucket` で保存する。
+        読んだときに形が古ければ整えて書き戻す（`normalize_bucket`。
+        403自身のstateだけを移行する。311や本体データには書かない）。
+        返す dict は控えと同一なので、書き換えたら `save_bucket` で保存する。
         """
-        with data_lock:
-            if key not in cache:
-                data = ctx.read_json(path_for(key), {})
-                bucket, changed = normalize_bucket(data if isinstance(data, dict) else {})
-                cache[key] = bucket
-                if changed:
-                    # 403自身のstateだけを移行する。311や本体データには書かない。
-                    ctx.write_json(path_for(key), bucket)
-            return cache[key]
+        return worlds.load(key)
 
     def save_bucket(key, bucket):
         """控えを書く。`ctx.write_json` の戻り値（書けたか）をそのまま返す。"""
-        with data_lock:
-            cache[key] = bucket
-            return ctx.write_json(path_for(key), bucket)
+        return worlds.save(key, bucket)
 
     # ------------------------------------------------------------ 311 の控え（読むだけ）
 
     def profile_bucket_311(key):
-        """311 の控えを返す。311 はワーカーで書き換えるので mtime/サイズで見張る。
+        """311 の控えを返す。311 はワーカーで書き換えるので更新時刻で見張る。
 
-        1ターンに会話系フックが何本も走るので、動いていない間まで読み直さない。
+        1ターンに会話系フックが何本も走るので、動いていない間まで読み直さない
+        （見張りは `WorldStore.load(fresh=True)`）。
+        読むだけの窓なので `own=False` ―
+        311 を切っている人の `state/` に空のフォルダを作らない（TECH.md §3.11）。
         """
-        path = ctx.state_path(PROFILE_STATE_DIRNAME, world_filename(key))
-        try:
-            stat = os.stat(path)
-            stamp = (stat.st_mtime_ns, stat.st_size)
-        except OSError:
-            # まだ311が書いていない。控えると、後から出来たときに読めなくなる。
-            return {}
-
-        with data_lock:
-            cached = store["profile_311"].get(key)
-            if cached is not None and cached[0] == stamp:
-                return cached[1]
-
-        data = ctx.read_json(path, {})
-        bucket = data if isinstance(data, dict) else {}
-        with data_lock:
-            store["profile_311"][key] = (stamp, bucket)
-        return bucket
+        return profiles.load(key, fresh=True)
 
     def memory_311(key, npc_id):
         """311 が育てた人物像と、その人物から見たプレイヤー。無ければ空文字。
@@ -872,29 +806,15 @@ changed=falseならrelations=[]。""".format(player_name=player_name,
 
     # ------------------------------------------------------------ ワーカー
 
-    def worker_loop():
-        """待ち行列の仕事を直列にこなす。30秒空いたら自分で終わる。
-
-        終わる判断は worker_lock の中で待ち行列をもう一度見てから行う
-        （`enqueue` が同じ lock の中で「生きているか」を見るので、
-        積んだ直後に終わって仕事が取り残されることがない）。
-        """
-        while True:
-            try:
-                snap = jobs.get(timeout=30.0)
-            except queue.Empty:
-                with worker_lock:
-                    if not jobs.empty():
-                        continue
-                    store["worker"] = None
-                return
-
-            try:
-                extract(snap)
-            except Exception:
-                ctx.log_exc("npc social memory: background extraction failed")
-            finally:
-                jobs.task_done()
+    # 抽出は背景で1件ずつ（LLM を待つのでゲームのスレッドでは回せない）。
+    # 待ち行列・直列のスレッド・溢れたら古い方から捨てる・仕事が無ければ畳む、は
+    # ローダの語彙（`jobs.Worker`）。ここに残すのは何をログに出すかだけ。
+    worker = store["worker"] = (
+        store["worker"]
+        or jobs.Worker(ctx, extract, name="npc_social_memory",
+                       label="npc social memory", max_pending=MAX_PENDING,
+                       write=write)
+    ).rebind(ctx, extract, write)
 
     def enqueue(app, conversation_id):
         """会話を写して待ち行列に積み、ワーカーが居なければ起こす。メインスレッドで呼ぶ。
@@ -904,34 +824,16 @@ changed=falseならrelations=[]。""".format(player_name=player_name,
         snap = snapshot(app, conversation_id)
         if snap is None:
             return
-
-        with worker_lock:
-            while jobs.qsize() >= MAX_PENDING:
-                try:
-                    jobs.get_nowait()
-                except queue.Empty:
-                    break
-                jobs.task_done()
-                write("extract: dropped oldest pending job")
-
-            jobs.put(snap)
-            store["last_skip"] = None
-            write("extract queued: participants={} character={} 311profile={} "
-                  "about_player={} transcript={} chars".format(
-                      [p["name"] for p in snap["people"]],
-                      [len(p["character"]) for p in snap["people"]],
-                      [len(p["memory_profile"]) for p in snap["people"]],
-                      [len(p["about_player"]) for p in snap["people"]],
-                      len(snap["transcript"])))
-
-            worker = store.get("worker")
-            if worker is not None and worker.is_alive():
-                return
-            worker = threading.Thread(target=worker_loop,
-                                      name="instantale_mod.npc_social_memory",
-                                      daemon=True)
-            store["worker"] = worker
-            worker.start()
+        if not worker.enqueue(snap):
+            return
+        store["last_skip"] = None
+        write("extract queued: participants={} character={} 311profile={} "
+              "about_player={} transcript={} chars".format(
+                  [p["name"] for p in snap["people"]],
+                  [len(p["character"]) for p in snap["people"]],
+                  [len(p["memory_profile"]) for p in snap["people"]],
+                  [len(p["about_player"]) for p in snap["people"]],
+                  len(snap["transcript"])))
 
     def schedule_extract(app):
         """会話が1手進んだときの入口。次のフレームに `enqueue` を予約する。

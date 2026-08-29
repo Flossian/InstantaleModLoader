@@ -46,7 +46,9 @@ import すると番号を振り直した瞬間に壊れる、という理由で�
 from __future__ import annotations
 
 import hashlib
+import os
 import re
+import threading
 
 #: ファイル名に使えない文字（Windows の禁則＋制御文字）。
 _UNSAFE = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
@@ -203,3 +205,228 @@ def world_filename(key, suffix: str = ".json") -> str:
         stem = "{}-{}".format(stem[:room].rstrip(_TRAILING) or UNKNOWN_WORLD,
                               _digest(key))
     return stem + suffix
+
+
+# ---------------------------------------------------------------------------
+# 世界ごとに1つの JSON を持つ控え
+# ---------------------------------------------------------------------------
+
+class WorldStore(object):
+    """`state/<フォルダ>/<世界>.json` を世界ごとに1つ持つ控え。
+
+    上の `world_key` / `world_filename` が「どのファイルか」だけを決めるのに対し、
+    こちらは**その出し入れ**を持つ。
+    `path_for` → `ctx.read_json` → キャッシュ → `ctx.write_json` の4行は、
+    9本の MOD（`300_` / `311_` / `312_` / `316_` / `317_` / `318_` / `321_` /
+    `403_` / `404_`）に写されていた。
+
+    写した先で既にずれていた。
+    フォルダを作るものと作らないもの、錠を持つものと持たないもの、
+    読めなかったときに `{}` へ倒すものと `None` を返すもの。
+    どれも「そう書いてあるから」以上の理由が無い枝分かれで、
+    **他の MOD の控えを読む側**（`404_` が `311_` を読む）が
+    相手の切られている `state/` に空のフォルダを作る、という実害も出ていた。
+
+    ```python
+    from instantale_modloader import state
+
+    def apply(ctx):
+        store = state.WorldStore(ctx, "npc_profiles", write=write)
+
+        key, bucket = store.of(app)         # いま居る世界の控え
+        bucket[npc_id] = record
+        store.save(key)                     # 書く（並びは order= が決める）
+    ```
+
+    | 引数 | |
+    |---|---|
+    | `dirname` | `state/` 直下のフォルダ名。**MOD 専用の名前にする** |
+    | `suffix` | ファイルの拡張子（既定 `".json"`）。`121_` の引き直しの頼みのような別系統に使う |
+    | `own` | 自分の控えか。`False` は**他の MOD の控えを読むだけ**の意味で、フォルダを作らず、`save()` は拒む |
+    | `default` | 読めなかった／初回のときに返す形を作るもの（既定 `dict`）。**毎回呼ぶ**ので、`{}` ではなく `dict` を渡す |
+    | `normalize` | 読んだ直後に1度だけ通す。`(控え, 直したか)` を返し、直っていれば書き戻す（古い形の移行用） |
+    | `order` | 書く直前に1度だけ通す。並びを固定した控えを返す（`state/` の差分を読めるようにするため） |
+    | `write` | MOD 自身のログ関数。書けなかったときに1行出す。無くてよい |
+
+    錠（`self.lock`）は `RLock` で、**呼び側が跨いで持てる**ように公開してある。
+    「読んで、書き換えて、書く」を1つの錠の中で行いたい MOD（`311_` / `317_` /
+    `318_` / `321_` / `403_`）がそうしている。
+    `load` / `save` は自分でも同じ錠を取るので、外から掛けても二重にならない。
+
+    **このクラスは `apply()` の外に置くこと。**
+    `apply()` は1プロセスで何度も呼ばれる（TECH.md §3.6）ので、
+    中で作ると注入し直すたびにキャッシュと錠が別物になり、
+    前の世代のスレッドが書いた内容が見えなくなる。
+    """
+
+    def __init__(self, ctx, dirname, *, suffix=".json", own=True,
+                 default=dict, normalize=None, order=None, write=None):
+        self.ctx = ctx
+        self.dirname = dirname
+        self.suffix = suffix
+        self.own = own
+        self.default = default
+        self.normalize = normalize
+        self.order = order
+        self.write = write
+        self.lock = threading.RLock()
+        #: 世界の鍵 -> 控え。読んだものをそのまま持つ（呼び側が書き換えてよい）。
+        self._buckets = {}
+        #: 世界の鍵 -> 最後に読んだときの (mtime_ns, size)。`load(fresh=True)` 用。
+        self._stamps = {}
+
+    # -- 場所 ---------------------------------------------------------------
+
+    def path(self, key) -> str:
+        """世界の鍵からファイルの場所。
+
+        自分の控え（`own=True`）は `ctx.state_path()` を通すのでフォルダが出来る。
+        他の MOD の控え（`own=False`）は組み立てるだけで、**フォルダを作らない**
+        （相手を切っている人の `state/` に、使われない空のフォルダを置かないため。
+        TECH.md §3.11）。
+        """
+        name = world_filename(key, self.suffix)
+        if self.own:
+            return self.ctx.state_path(self.dirname, name)
+        return os.path.join(self.ctx.state_dir, self.dirname, name)
+
+    def dir_path(self) -> str:
+        """フォルダそのもの。**作らない**（数えるだけの用）。"""
+        return os.path.join(self.ctx.state_dir, self.dirname)
+
+    def worlds(self) -> list:
+        """フォルダに在る世界の名前（＝ファイル名から拡張子を落としたもの）。
+
+        診断用。控えが空だったときに「他の世界のファイルは在るのか」を見る
+        （`311_` が世界名の書き換えに気付くのに使っている）。
+        """
+        try:
+            names = os.listdir(self.dir_path())
+        except OSError:
+            return []
+        cut = len(self.suffix)
+        return sorted(name[:-cut] for name in names
+                      if name.endswith(self.suffix)
+                      and os.path.isfile(os.path.join(self.dir_path(), name)))
+
+    # -- 世代 ---------------------------------------------------------------
+
+    def rebind(self, ctx, write=None) -> "WorldStore":
+        """注入し直した世代の `ctx` へ繋ぎ替える。自分自身を返す。
+
+        キャッシュを世代をまたいで持ちたい MOD は、この控えを `sys` の属性など
+        プロセス側に置き、`apply()` のたびにこれを呼ぶ（TECH.md §3.5）:
+
+        ```python
+        store = getattr(sys, STORE_ATTR, None)
+        if not isinstance(store, dict):
+            store = {"worlds": state.WorldStore(ctx, STATE_DIRNAME)}
+            setattr(sys, STORE_ATTR, store)
+        worlds = store["worlds"].rebind(ctx, write)
+        ```
+
+        使っているのは場所（`state_path` / `state_dir`）と JSON の出し入れだけで、
+        どれも世代で変わらない。それでも繋ぎ替えるのは、
+        **前の世代の `ctx` を掴んだままにしない**ため
+        （`write` は `ctx.logger()` が作る閉包で、打ち切りの数はその中にある）。
+        """
+        self.ctx = ctx
+        if write is not None:
+            self.write = write
+        return self
+
+    # -- 読み ---------------------------------------------------------------
+
+    def load(self, key, *, fresh=False):
+        """1世界ぶんの控え。一度読んだら覚えておく。
+
+        返すのはキャッシュそのものなので、**書き換えたら `save()` を呼ぶこと**。
+
+        読み直さないのは、注入のフックが会話1手のうちに何度も走るため
+        （そのたびに読むと1ターンでディスクを何度も叩く）。
+        自分しか書かない控えでは、書いた内容をそのまま持てば足りる。
+
+        `fresh=True` は**他の MOD が書く控え**を読むとき用。
+        更新時刻とサイズが変わっていれば読み直す（`403_` が `311_` の控えを
+        こうして見ている）。動いていない間まで読み直すことはない。
+        """
+        with self.lock:
+            if fresh:
+                try:
+                    got = os.stat(self.path(key))
+                    stamp = (got.st_mtime_ns, got.st_size)
+                except OSError:
+                    # まだ相手が書いていない。控えると、後から出来たときに読めない。
+                    stamp = None
+                if stamp is None or self._stamps.get(key) != stamp:
+                    self._buckets.pop(key, None)
+                    self._stamps[key] = stamp
+            bucket = self._buckets.get(key)
+            if bucket is not None:
+                return bucket
+            # 「無い（初回）」と「在るのに読めない（ロック・破損）」を同じ形へ
+            # 倒さない。後者を黙って倒すと、次の `save` が空に近い正本を無傷で
+            # 作る。記録だけは必ず残す（`ctx.read_json`）。
+            data = self.ctx.read_json(self.path(key), None)
+            bucket = data if isinstance(data, type(self.default())) else self.default()
+            if self.normalize is not None:
+                bucket, changed = self.normalize(bucket)
+                if changed and self.own:
+                    # 直した形は1度だけ書き戻す。**自分の控えだけ**。
+                    self.ctx.write_json(self.path(key), bucket)
+            self._buckets[key] = bucket
+            return bucket
+
+    def of(self, app, *, fresh=False):
+        """いま居る世界の `(鍵, 控え)`。鍵は保存のときに要るので一緒に返す。"""
+        key = world_key(app)
+        return key, self.load(key, fresh=fresh)
+
+    def cached(self, key):
+        """読み込みを起こさずにキャッシュだけ見る。無ければ `None`。"""
+        with self.lock:
+            return self._buckets.get(key)
+
+    # -- 書き ---------------------------------------------------------------
+
+    def save(self, key, bucket=None) -> bool:
+        """1世界ぶんを書き出す。書けたかを返す（**例外にしない**）。
+
+        `bucket` を省くとキャッシュにあるものを書く。
+        渡した場合はそれをキャッシュにも据える。
+
+        落ちても壊れない書き方（隣に書いてから差し替える）は `ctx.write_json()`
+        に寄せてある。ここが素の `open(path, "w")` だと、書いている途中で落ちた
+        瞬間に控えが壊れ、次の `load` がそれを黙って空に倒し、
+        **消えたことに気付けないまま**次の更新で1件だけが書かれる。
+        """
+        if not self.own:
+            raise ValueError(
+                "WorldStore(own=False) is for reading another mod's data; "
+                "{} must not be written from here".format(self.dirname))
+        with self.lock:
+            if bucket is None:
+                bucket = self._buckets.get(key)
+                if bucket is None:
+                    bucket = self.default()
+            self._buckets[key] = bucket
+            data = self.order(bucket) if self.order is not None else bucket
+            if self.ctx.write_json(self.path(key), data):
+                return True
+            if self.write is not None:
+                self.write("控えを書けなかった: {}".format(self.path(key)))
+            return False
+
+    def forget(self, key=None) -> None:
+        """キャッシュを捨てる。次の `load` で読み直す。
+
+        世界を跨いだとき（ロード）と、検査でファイルを直接置き換えたときに使う。
+        **ファイルは消さない。**
+        """
+        with self.lock:
+            if key is None:
+                self._buckets.clear()
+                self._stamps.clear()
+            else:
+                self._buckets.pop(key, None)
+                self._stamps.pop(key, None)

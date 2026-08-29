@@ -119,15 +119,11 @@ mod どうしは同じ場所を読むことで繋がる。
 
 import copy
 import datetime
-import json
-import os
-import queue
 import sys
 import threading
-import time
 
-from instantale_modloader import frames, llm, ui
-from instantale_modloader.state import world_filename, world_key
+from instantale_modloader import frames, jobs, llm, ui
+from instantale_modloader.state import WorldStore, world_key
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
 #      `tools/check_mods.py` が AST で突き合わせる）------------------------
@@ -227,14 +223,22 @@ CONVERSATION_CHARS = 2000
 # ワーカーと控えの置き場所。
 # **`apply()` の中で作ってはいけない**（TECH.md §3.4）。
 # `apply()` は再注入と遅延当て直しで最大8回走り、
-# そのたびに `state["worker"]` が `None` に戻る。
+# そのたびにワーカーの控えが `None` に戻る。
 # 前の世代のワーカーがまだ生きている間に2本目が起動し、
-# しかも `data_lock` が別インスタンスになるので、
+# しかも控えの錠が別インスタンスになるので、
 # 2本が同じ `state/npc_profiles/<世界>.json` を排他なしで
 # read-modify-write できてしまう。
 # 注入し直すとこのモジュール自体が読み込み直されるため、モジュール変数では足りない。
 # `sys` に置けば世代をまたいで同じ1組を共有できる（`118_` と同じ手）。
 STATE_STORE_ATTR = "__instantale_npc_profile_memory_store__"
+
+
+def ordered_bucket(bucket):
+    """控えを書く前に、1件ずつ `RECORD_KEYS` の並びへ直す。
+
+    順が動くと `state/` の差分を読んだときに全行が動いて見える。
+    """
+    return {npc_id: ordered_record(record) for npc_id, record in bucket.items()}
 
 
 def ordered_record(record):
@@ -313,21 +317,6 @@ def recent_facts(record):
     return kept
 
 
-def _strip_code_fence(body):
-    """```json … ``` で包まれていたら中身だけにする。"""
-    if not body.startswith("```"):
-        return body
-    body = body[3:]
-    end = body.rfind("```")
-    if end >= 0:
-        body = body[:end]
-    body = body.strip()
-    for tag in ("json\n", "JSON\n", "text\n", "markdown\n"):
-        if body.startswith(tag):
-            return body[len(tag):].strip()
-    return body
-
-
 def _looks_like_json_attempt(body):
     """JSON を書こうとして失敗した返却か。
 
@@ -354,18 +343,14 @@ def parse_result(result):
     """
     if not isinstance(result, str):
         return None
-    body = _strip_code_fence(result.strip())
+    # 囲みを剥がして JSON を1つ取り出すところはローダの語彙（`llm`）。
+    # 素の文章の受け皿がここに在るので、剥がした本文も手元に要る。
+    body = llm.strip_fence(result)
     if not body:
         return None
 
-    start, end = body.find("{"), body.rfind("}")
-    data = None
-    if 0 <= start < end:
-        try:
-            data = json.loads(body[start:end + 1])
-        except Exception:
-            data = None
-    if not isinstance(data, dict):
+    data = llm.parse_json(body)
+    if data is None:
         # JSON のつもりで書かれた壊れた返却は捨てる。
         # 素の文章なら受け皿へ。
         return None if _looks_like_json_attempt(body) else _parse_plain(body)
@@ -380,7 +365,7 @@ def normalize_update(data):
     """
     if not isinstance(data, dict):
         return None
-    if not _truthy(data.get(KEY_CHANGED, True)):
+    if not llm.truthy(data.get(KEY_CHANGED, True)):
         return {}
     update = {}
     for key in (KEY_PROFILE, KEY_ABOUT_PLAYER):
@@ -395,15 +380,6 @@ def normalize_update(data):
     if not update.get(KEY_PROFILE) and not update.get(KEY_ABOUT_PLAYER):
         return {}
     return update
-
-
-def _truthy(value):
-    """`changed` の値。文字列で `"false"` と書いてくるモデルにも耐える。"""
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        return value.strip().lower() not in ("false", "no", "0", "", "なし", NO_CHANGE)
-    return bool(value)
 
 
 def _parse_plain(body):
@@ -438,23 +414,21 @@ def apply(ctx):
                 "warned_world": False,  # 世界名で控えが引けなかったことを1度だけ残す
                 "last_inject": None,    # 直前に書いた注入の結末（同じ理由を繰り返さない）
                 "last_extract_skip": None,  # 抽出を始められない理由の連続重複を抑える
-                "worker": None,         # 抽出専用ワーカー（仕事が無ければ終了する）
             },
-            "cache": {"buckets": {}},   # 世界名 -> 控え（書くのはこの mod だけ）
-            "jobs": queue.Queue(),
-            "data_lock": threading.RLock(),
-            "worker_lock": threading.Lock(),
+            # 世界名 -> 控え（書くのはこの mod だけ）。
+            # 出し入れと錠はローダの語彙（`state.WorldStore`）。
+            "worlds": WorldStore(ctx, STATE_DIRNAME, order=ordered_bucket),
+            # 抽出を回す背景スレッド。作るのは `extract` が出来てから。
+            "worker": None,
             "log_lock": threading.Lock(),
         }
         setattr(sys, STATE_STORE_ATTR, store)
     state = store["state"]
-    cache = store["cache"]
-    jobs = store["jobs"]
-    data_lock = store["data_lock"]
-    worker_lock = store["worker_lock"]
     log_lock = store["log_lock"]
 
     write = ctx.logger(LOG_BASENAME)
+    worlds = store["worlds"].rebind(ctx, write)
+    data_lock = worlds.lock
 
     # ボタンは出さないので `mark` は要らない。
     # `schedule` と例外の握りだけ借りる。
@@ -504,22 +478,12 @@ def apply(ctx):
         write("extract skipped: " + message)
 
     # ------------------------------------------------------------ 控えの読み書き
-    def state_path_for(key):
-        # フォルダを作るのはここ（`ctx.state_path` が親を作る）。
-        # apply() では作らない。
-        # 一度も会話していない人の `state/` に空のフォルダを置かない。
-        return ctx.state_path(STATE_DIRNAME, world_filename(key))
-
+    # 場所・読み・キャッシュ・書き・錠は `worlds`（`state.WorldStore`）が持つ。
+    # フォルダを作るのは最初に触ったときで、`apply()` では作らない
+    # （一度も会話していない人の `state/` に空のフォルダを置かないため）。
     def known_world_files():
         """診断用。ディレクトリにある世界ファイル名（拡張子なし）の一覧。"""
-        try:
-            names = sorted(
-                name[:-5] for name in os.listdir(state_dir)
-                if name.endswith(".json") and os.path.isfile(
-                    os.path.join(state_dir, name)))
-        except Exception:
-            return []
-        return names
+        return worlds.worlds()
 
     def load_bucket(key):
         """1世界分の控え `{npc_id: レコード}`。一度読んだら覚えておく。
@@ -529,36 +493,15 @@ def apply(ctx):
         書くのはこの mod だけなので、
         書いた内容をそのまま控えれば足りる（`306_` と同じ）。
         """
-        with data_lock:
-            bucket = cache["buckets"].get(key)
-            if bucket is not None:
-                return bucket
-            path = state_path_for(key)
-            # 「無い（初回）」と「在るのに読めない（ロック・破損）」を同じ
-            # {} に倒さない。
-            # 後者を黙って倒すと、次の save_bucket が空に近い正本を無傷で作る。
-            # 記録だけは必ず残す（ctx.read_json）。
-            data = ctx.read_json(path, {})
-            bucket = data if isinstance(data, dict) else {}
-            cache["buckets"][key] = bucket
-            return bucket
+        return worlds.load(key)
 
     def save_bucket(key, bucket):
         """1世界分を書き出す。書けたか書けなかったかの2つしか起こさない。
 
-        書き方の理屈（隣に書いてから差し替える／落ちても壊れない）は
-        `ctx.write_json()` に寄せてある。
-        ここが素朴な `open(path, "w")` だと、
-        `json.dump` の途中で落ちた瞬間にその世界の控えが壊れ、
-        `load_bucket` は壊れたものを黙って `{}` に倒すので、
-        次の更新で1人ぶんだけが書かれて **他の人物の記憶が消えたことにも気付けない**。
+        並びは `ordered_bucket`、書き方は `ctx.write_json()`
+        （隣に書いてから差し替えるので、途中で落ちても控えが壊れない）。
         """
-        with data_lock:
-            cache["buckets"][key] = bucket
-            path = state_path_for(key)
-            ordered = {npc_id: ordered_record(record)
-                       for npc_id, record in bucket.items()}
-            return ctx.write_json(path, ordered)
+        return worlds.save(key, bucket)
 
     def bucket_of(app):
         """この世界の控え `{npc_id: レコード}`。
@@ -708,19 +651,10 @@ def apply(ctx):
     def game_day(app):
         """いまのゲーム内日数。読めなければ `None`（そのときは何も言わない）。
 
-        日付は世界に1つ（`world.days_elapsed`。GAME.md §2.16）。
-        進めるのは `InstantaleApp.elapse_days` で、宿泊はここを大きく飛ばす。
+        読むところはローダの語彙（`ui.game_day`）。
+        ここに残すのは「言うかどうか」の設定だけ。
         """
-        if not TELL_ELAPSED_DAYS:
-            return None
-        value = getattr(getattr(app, "world", None), "days_elapsed", None)
-        if isinstance(value, bool):
-            return None
-        if isinstance(value, int):
-            return value
-        if isinstance(value, float):
-            return int(value)
-        return None
+        return ui.game_day(app) if TELL_ELAPSED_DAYS else None
 
     def stamp_day(key, npc_id, day):
         """最後に話したゲーム内日を控える。同じ日なら書かない。
@@ -863,7 +797,7 @@ def apply(ctx):
         pydantic が拒否してゲームごと落ちる。
         `203_probe_create_model` が押さえた実際の落ち方）。
         `changed` も `bool` ではなく `str` にして、
-        真偽の読み取りは `_truthy` で持つ。
+        真偽の読み取りは `llm.truthy` で持つ。
         """
         import typing
 
@@ -1047,54 +981,36 @@ def apply(ctx):
         update_record(snapshot["world"], snapshot["npc_id"],
                       snapshot["npc_name"], update, snapshot.get("day"))
 
-    def worker_loop():
-        """仕事を順番に処理する。30秒空けば再注入時の残骸を残さず終了する。"""
-        while True:
-            try:
-                snapshot = jobs.get(timeout=30.0)
-            except queue.Empty:
-                with worker_lock:
-                    if not jobs.empty():
-                        continue
-                    state["worker"] = None
-                return
-            try:
-                extract(snapshot)
-            except Exception:
-                ctx.log_exc("npc profile: background extraction failed")
-            finally:
-                write("extract: finished {!r} ({})".format(
-                    snapshot["npc_name"], snapshot["npc_id"]))
-                jobs.task_done()
+    def note_finished(snapshot):
+        write("extract: finished {!r} ({})".format(
+            snapshot["npc_name"], snapshot["npc_id"]))
+
+    def note_dropped(snapshot):
+        # ワーカーが（返らない推論などで）止まっている間に会話を続けても際限なく溜めない。
+        # 溢れたぶんは古い方から捨てる（捨てる判断は `jobs.Worker`）。
+        write("extract: dropped the oldest job for {!r} ({}) "
+              "- {} already waiting".format(
+                  snapshot["npc_name"], snapshot["npc_id"], MAX_PENDING))
+
+    # 抽出は背景で1件ずつ（LLM を待つのでゲームのスレッドでは回せない）。
+    # 待ち行列・直列のスレッド・溢れたら古い方から捨てる・仕事が無ければ畳む、は
+    # ローダの語彙（`jobs.Worker`）。ここに残すのは何をログに出すかだけ。
+    worker = store["worker"] = (
+        store["worker"]
+        or jobs.Worker(ctx, extract, name="npc_profile", label="npc profile",
+                       max_pending=MAX_PENDING,
+                       on_drop=note_dropped, on_done=note_finished)
+    ).rebind(ctx, extract, write)
 
     def enqueue_extract(app, npc_id):
         snapshot = snapshot_of(app, npc_id)
         if snapshot is None:
             return
-        with worker_lock:
-            # ワーカーが（返らない推論などで）止まっている間に会話を続けても際限なく溜めない。
-            # 溢れたぶんは古い方から捨てる。
-            while jobs.qsize() >= MAX_PENDING:
-                try:
-                    dropped = jobs.get_nowait()
-                except queue.Empty:
-                    break
-                jobs.task_done()
-                write("extract: dropped the oldest job for {!r} ({}) "
-                      "- {} already waiting".format(
-                          dropped["npc_name"], dropped["npc_id"], MAX_PENDING))
-            jobs.put(snapshot)
+        if worker.enqueue(snapshot):
             state["last_extract_skip"] = None
             write("extract queued: {!r} ({}) {} transcript chars".format(
                 snapshot["npc_name"], snapshot["npc_id"],
                 len(snapshot["transcript"])))
-            worker = state["worker"]
-            if worker is not None and worker.is_alive():
-                return
-            worker = threading.Thread(
-                target=worker_loop, name="instantale_mod.npc_profile", daemon=True)
-            state["worker"] = worker
-            worker.start()
 
     def schedule_extract(app):
         """返答が描画された次のフレームで抽出をキューへ渡す。

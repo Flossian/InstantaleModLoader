@@ -91,7 +91,7 @@
 import random
 
 from instantale_modloader import ui
-from instantale_modloader.state import world_filename, world_key
+from instantale_modloader.state import WorldStore, world_key
 
 from . import hunt
 
@@ -271,15 +271,16 @@ def apply(ctx):
             "repaint": False}
 
     # ------------------------------------------------------------ 控えの出し入れ
-    def store_path(app):
-        return ctx.state_path(STATE_DIRNAME, world_filename(world_key(app), ".json"))
+    # 控えの出し入れ（場所・読み・キャッシュ・書き）は `state.WorldStore` に
+    # 1つだけある。MOD ごとに写すとずれるため。
+    memo_store = WorldStore(ctx, STATE_DIRNAME, write=write)
 
     def load_memo(app):
         """世界が変わっていたら読み直す。読めなければ 0 日から始める。"""
         key = world_key(app)
         if key == memo["world"]:
             return
-        saved = ctx.read_json(store_path(app), {}) or {}
+        saved = memo_store.load(key)
         memo["world"] = key
         memo["days"] = saved.get("days", 0.0) or 0.0
         memo["last"] = saved.get("last")
@@ -287,7 +288,8 @@ def apply(ctx):
             key, memo["days"], memo["last"]))
 
     def save_memo(app):
-        ctx.write_json(store_path(app), {"days": memo["days"], "last": memo["last"]})
+        memo_store.save(world_key(app),
+                        {"days": memo["days"], "last": memo["last"]})
 
     # ------------------------------------------------------ 難易度の差し替え
     def arm(phase, difficulty):

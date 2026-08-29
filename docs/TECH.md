@@ -41,7 +41,7 @@ GAME.md と分けているのは、**ゲームが更新されて食い違うの�
 | 台帳／設定／API 番号／剥がし方／`out/` と `state/` | §3.7 〜 §3.11 |
 | MOD 同梱の設定画面（`"tool"`。設定ダイアログに収まらない設定） | §3.12 |
 | Nuitka で効くもの・効かないもの | §4 |
-| 画面・選択肢・会話・LLM を扱う既製部品 | §5 |
+| 画面・選択肢・会話・LLM・世界ごとの控え・背景ワーカーの既製部品 | §5 |
 | **踏んだ罠の一覧（守るべきルール）** | §6 |
 | 近い手口の既存 MOD を探す | §7 |
 | このローダでできないこと | §8 |
@@ -111,8 +111,9 @@ runtime/instantale_modloader/
     config.py     MOD ごとの設定 / ローダ自身の切り替え（デバッグモード）
     frames.py     フレームローカル採取・値の要約・呼び出し元の特定
     ui.py         選択肢 / 画面の塗り替え / 会話の閉じ方 / idle待ち / 施設の引き当て
-    state.py      世界の見分け方と保存先の決め方（§3.2.3）
-    llm.py        LLM へ出ていく文章の捕まえ方・1問だけ聞く口（§5.3）
+    state.py      世界の見分け方と保存先の決め方・世界ごとの控え（§3.2.3 / §5.4）
+    jobs.py       重い処理を背景で直列にこなすワーカー（§5.5）
+    llm.py        LLM へ出ていく文章の捕まえ方・1問だけ聞く口・返答の読み方（§5.3）
     npcs.py       NPC の作り方（素データの置き場所・ひな型・配置。GAME.md §2.23）
     ids.py        ゲームの採番台帳（`index`）を通した id の採り方（§3.2.3）
     recon.py      実行時リコン（モジュール構造ダンプ）
@@ -805,10 +806,16 @@ MOD どうしが繋がるのは同じファイルを読むことによってで�
 | 人物の引き方と表示名 | `ui.character_of` / `character_name` | 5本 |
 | 上限付きの記録・一度きりの警告 | `ctx.logger(cap=)` / `ctx.warner`（§3.11.2） | 5本 / 4本 |
 | 次のフレームで走らせる | `ui.scheduler` | 5本 |
+| 世界ごとの控えの出し入れ（場所・読み・キャッシュ・書き・錠） | `state.WorldStore`（§5.4） | 9本。フォルダを作る／作らない、錠を持つ／持たない、読めなかったときの倒し先の3つで枝分かれし、他の MOD の控えを読む側が相手のフォルダを作っていた |
+| 重い処理を背景で直列にこなす | `jobs.Worker`（§5.5） | 4本。溢れの捨て方・重複除け・畳み方まで同じものが写っていた |
+| モデルの返答から JSON を拾う | `llm.parse_json` / `strip_fence`（§5.3） | 5本。囲みの剥がし方が3通りに枝分かれしていた |
+| モデルの返した真偽の読み方 | `llm.truthy`（§5.3） | 3本。判らない語をどちらへ倒すかが項目ごとに違うのに、関数の側で決め打ちしていた |
+| ゲーム内の日付 | `ui.game_day`（§5.6） | 5本。ロード中の受け皿を持っていたのは `312_` だけだった |
 
 ```python
-from instantale_modloader.state import world_filename, world_key
-path = ctx.state_path("npc_profiles", world_filename(world_key(app)))
+from instantale_modloader import state
+worlds = state.WorldStore(ctx, "npc_profiles")  # 場所・読み・控え・書きまで（§5.4）
+key, bucket = worlds.of(app)
 
 from instantale_modloader.llm import wrap_outgoing
 wrap_outgoing(ctx, rewrite, label="my mod")     # rewrite(texts, site) -> 並び / None
@@ -1792,6 +1799,120 @@ data = llm.ask(ctx, "mod_my_question", message, timeout=30, structure=structure)
 `timeout` を受け付けない未実測のプロバイダでは `TypeError` で失敗して `None` を返す
 （呼び側は LLM を使わない道へ降りる）。
 渡さずに呼び直さないのは、**止まらないことのほうが大事**だから。
+
+#### 返答を読む（`llm.parse_json` / `llm.strip_fence` / `llm.truthy`）
+
+```python
+data = llm.parse_json(raw)                  # 囲みと前置きを越えて辞書を1つ
+body = llm.strip_fence(raw)                 # 囲みを剥がすだけ（素の文章の受け皿がある MOD 用）
+changed = llm.truthy(data.get("changed", True))                  # 判らない語は True へ
+violation = llm.truthy(data.get("content_violation"), unknown=False)  # 判らない語は False へ
+```
+
+「JSON だけを返せ」と頼んでも、モデルは囲む。前置きも書く。
+`311_` / `317_` / `321_` / `403_` / `404_` の5本が各自で剥がしていて、
+**剥がし方が3通りに枝分かれしていた**（行で切るもの、言語の札を決め打ちで並べたもの、
+正規表現で一度に取るもの）。
+札の並びに無い言語名（```` ```JSON5 ````）を書かれると、決め打ちの側だけが JSON を壊す。
+
+`truthy` の `unknown` は**項目の意味で決まる**ので、既定に任せずに考えること。
+`changed` を False へ倒すと抽出した内容を黙って捨て、
+`content_violation` を True へ倒すと普通の台詞が消える。
+
+`as_dict` との違いは、相手が**物**か**文章**か。
+`as_dict` は返ってきた物（pydantic のモデル・辞書・素の JSON 文字列）を均すもので、
+`parse_json` はその後ろに「文章から JSON を1つ拾う」を足したもの
+（構造化経路と非構造化経路の**出口を1つにする**ために使う。
+2つの経路それぞれに検証を書くと、片方だけ直したときに黙ってすり抜ける）。
+
+### 5.4 `instantale_modloader.state`
+
+世界ごとにデータを分けて持つ MOD が使う。
+`world_key(app)` と `world_filename(key)` が**どのファイルか**を決め、
+`WorldStore` がその**出し入れ**を持つ。
+
+```python
+from instantale_modloader import state
+
+worlds = state.WorldStore(ctx, "npc_profiles", order=ordered_bucket, write=write)
+
+key, bucket = worlds.of(app)      # いま居る世界の (鍵, 控え)
+bucket[npc_id] = record           # 返る dict は控えそのもの
+worlds.save(key)                  # 書く（`order=` が並びを固定する）
+```
+
+| 引数 | |
+|---|---|
+| `dirname` | `state/` 直下のフォルダ名。**MOD 専用の名前にする** |
+| `suffix` | 拡張子（既定 `".json"`） |
+| `own` | 自分の控えか。`False` は**他の MOD の控えを読むだけ**の意味で、フォルダを作らず `save()` を拒む |
+| `normalize` | 読んだ直後に1度だけ通す。`(控え, 直したか)` を返し、直っていれば書き戻す（古い形の移行） |
+| `order` | 書く直前に1度だけ通す。並びを固定する（`state/` の差分が読めるように） |
+| `write` | MOD 自身のログ関数。書けなかったときに1行出す |
+
+錠（`worlds.lock`）は `RLock` で公開してある。
+「読んで、書き換えて、書く」を1つの錠で括りたい MOD は `data_lock = worlds.lock` として使う。
+
+他の MOD の控えを読むときの決まりが2つあり、どちらも `own=False` が引き受ける:
+
+- **フォルダを作らない。** 相手を切っている人の `state/` に空のフォルダを置かない（§3.11）
+- **`load(key, fresh=True)` で読む。** 相手はワーカーで書き換えるので、
+  更新時刻と大きさが動いたときだけ読み直す（動いていない間まで読み直さない）
+
+> 寄せる前は9本（`300_` / `311_` / `312_` / `316_` / `317_` / `318_` / `321_` /
+> `403_` / `404_`）が `path_for` → `read_json` → キャッシュ → `write_json` を写していた。
+> 写した先で既にずれていて、フォルダを作るものと作らないもの、錠を持つものと持たないもの、
+> 読めなかったときに `{}` へ倒すものと `None` を返すものに枝分かれし、
+> **他の MOD の控えを読む側**（`403_` / `404_` が `311_` を読む）が
+> 相手のフォルダを勝手に作っていた。
+
+### 5.5 `instantale_modloader.jobs`
+
+LLM を待つような重い処理を、ゲームのスレッドから外して直列にこなす。
+
+```python
+from instantale_modloader import jobs
+
+worker = store["worker"] = (
+    store["worker"]
+    or jobs.Worker(ctx, compile_area, name="area_chronicle",
+                   label="area chronicle", key=job_key,
+                   max_pending=MAX_PENDING, on_drop=note_dropped)
+).rebind(ctx, compile_area, write)
+
+if worker.enqueue(job):
+    write("編纂を予約: ...")
+```
+
+引き受けているのは5つ。`311_` / `317_` / `321_` / `403_` が同じものを持っていた:
+
+1. **直列にする**（ローカルの推論は1つのモデルを取り合うので、並べても速くならない）
+2. **溢れたら古い方から捨てる**（推論が返らない間に会話を続けても際限なく溜めない）
+3. **同じ鍵の仕事を二度積まない**（`key=` を渡したとき）
+4. **仕事が無ければ自分で畳む**（注入し直したときに前の世代のスレッドを残さない）
+5. **例外を飲む**（1件の失敗で以後が全部止まると、遊んでいる側からは何も起きなくなる）
+
+MOD 側に残るのは**何をログに出すか**だけ（`on_drop` / `on_done` / `enqueue` の戻り値）。
+
+**`Worker` と `WorldStore` はどちらも `apply()` の外に置くこと。**
+`apply()` は1プロセスで何度も呼ばれる（§3.5）ので、
+中で作るとスレッドが増え、錠が別インスタンスになって
+同じファイルを排他なしで read-modify-write できてしまう。
+プロセス側（`sys` の属性）に置き、`apply()` のたびに `rebind(ctx, ...)` で
+今の世代へ繋ぎ替える。
+
+### 5.6 ゲーム内の日付（`ui.game_day`）
+
+```python
+day = ui.game_day(app)      # 読めなければ None
+```
+
+日付は**世界に1つ**（`world.days_elapsed`。GAME.md §2.16）で、
+進めるのは `InstantaleApp.elapse_days`。
+`app` でも `World` インスタンスでも受ける（`World.__init__` を包む場面では
+`app.world` がまだ埋まっていない）。
+実行時の世界がまだ無いとき（ロードの途中）は `world_dict["world_data"]` から拾う ―
+5本が各自でこれを読んでいて、**その受け皿を持っていたのは `312_` だけ**だった。
 
 ---
 
