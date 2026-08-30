@@ -1,0 +1,16 @@
+{
+  "entry": "probe_npc_carryover.py",
+  "api": 1,
+  "kind": "probe",
+  "name": {
+    "en": "Probe: NPC carryover hook point",
+    "ja": "計測: NPC持ち込みのフック地点"
+  },
+  "description": {
+    "en": "Records, at each moment of the load path, whether the pieces make_npc needs are ready - the world key, the raw npc dicts, the id ledger, and a placeable guild or inn. Read-only",
+    "ja": "ロードの道中の各地点で、`make_npc` に要るもの（世界の鍵・素データ・採番台帳・置ける先のギルドか宿）が揃っているかを録る。ゲームは変えない"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "debug": true
+}

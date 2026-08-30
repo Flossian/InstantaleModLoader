@@ -9,6 +9,7 @@
   台帳   … 作ったあと `world_dict` / `save_data_dict` 両方の `index['npc']` が id+1 に進む
   戻さない … 台帳のほうが先に進んでいれば触らない
   並び   … 33項目の並びが崩れない
+  名簿空 … ロード直後で `world.characters` が空でも素データの辞書を見つける
 
 背景: 実在 id だけ見て採ると台帳が追いつかず、次の町の生成でゲームが
 同じ番号を踏む（テストワールドの灰の交易都市、2026-08-29。GAME.md §2.23）。
@@ -110,6 +111,24 @@ def main():
     made = npcs.make_npc(app, {"name": "d", "job": "inn"}, "0", "2")
     ok &= check("33 fields in order",
                 tuple(app.save_data_dict["npcs"][made]) == npcs.NPC_FIELD_ORDER)
+
+    print("実行時の名簿が空のとき（ロードの直後）")
+    # 実機（2026-08-30。`908_` の1回目）: ロード直後の `world.characters` は
+    # 1件しかなく、`npc_stores` が突き合わせる相手を持てずに `<none>` を返した。
+    # `save_data_dict['npcs']` へ何も書かれないまま `generate_character` が
+    # `KeyError` で落ちている。素データは中身の形でも見分ける。
+    app = make_app(range(0, 44), index_npc=44)
+    app.world.characters.clear()
+    where = [name for name, _store in npcs.npc_stores(app)]
+    ok &= check("save_data_dict['npcs'] を見つける",
+                any("save_data_dict" in name for name in where))
+    ok &= check("world_dict['npcs'] も見つける",
+                any("world_dict" in name for name in where))
+    made = npcs.make_npc(app, {"name": "ジョゼット", "job": "adventure"}, "0", "2")
+    ok &= check("素データがセーブ側に入る",
+                made in app.save_data_dict["npcs"])
+    ok &= check("generate_character が通る（最後の手段に落ちない）",
+                made in app.world.built)
 
     print("PASS" if ok else "FAIL")
     return 0 if ok else 1

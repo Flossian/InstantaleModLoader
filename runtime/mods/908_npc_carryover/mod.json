@@ -1,0 +1,61 @@
+{
+  "entry": "npc_carryover.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "NPC carryover between worlds",
+    "ja": "別の世界のNPCを連れてくる"
+  },
+  "description": {
+    "en": "Exports NPCs from another world's save as zip packages and imports them into a chosen world - the NPC arrives at a random town's guild or inn when that world loads, keeping their looks, profile, affinity and (optionally) what they remembered about you",
+    "ja": "別の世界のセーブから NPC を zip に書き出し、選んだ世界へ持ち込む。持ち込んだ NPC はその世界をロードしたときに、どこかの街のギルドか宿に旅の冒険者として現れる。見た目・人物像・好感度に加えて、覚えていたことも引き継げる"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "after": [
+    "120_fix_npc_name_collision",
+    "311_npc_profile_memory",
+    "403_npc_social_memory"
+  ],
+  "tool": {
+    "entry": "tool.py",
+    "label": {
+      "ja": "NPCを出し入れする",
+      "en": "Export and import NPCs"
+    },
+    "note": {
+      "ja": "別の世界のセーブから NPC を選んで書き出し、どの世界へ持ち込むかを予約する画面。書き出したものは state/npc_carryover/ に入る",
+      "en": "Pick NPCs out of another world's save, and reserve which world to bring them into; packages live in state/npc_carryover/"
+    }
+  },
+  "settings": {
+    "INHERIT_MEMORY": {
+      "type": "bool",
+      "default": true,
+      "label": {"ja": "記憶を引き継ぐ", "en": "Carry over what they remember"},
+      "note": {"ja": "311_ の人物像とあなたについての記録、403_ の社会関係を新しい世界へ写す。予約するときの既定値",
+               "en": "Copies 311_'s profile and notes about you, and 403_'s social memory, into the new world. The default when reserving"}
+    },
+    "INHERIT_RELATIONSHIP": {
+      "type": "bool",
+      "default": true,
+      "label": {"ja": "好感度・関係を引き継ぐ", "en": "Carry over affinity"},
+      "note": {"ja": "セーブの relationship。切ると初対面から始まる",
+               "en": "The save's relationship field. Off means they start as a stranger"}
+    },
+    "INHERIT_LIFE_LOG": {
+      "type": "bool",
+      "default": true,
+      "label": {"ja": "経歴を引き継ぐ", "en": "Carry over their life log"},
+      "note": {"ja": "セーブの life_log。切ると空で持ち込む",
+               "en": "The save's life_log field. Off means it arrives empty"}
+    },
+    "ANNOUNCE": {
+      "type": "bool",
+      "default": true,
+      "label": {"ja": "到着を知らせる", "en": "Announce arrivals"},
+      "note": {"ja": "持ち込んだ NPC が現れたとき、どこに現れたかをゲーム内の文で出す。見送ったときの理由も同じように出る",
+               "en": "Says in game where an imported NPC turned up, and why one was skipped"}
+    }
+  }
+}

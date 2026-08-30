@@ -81,7 +81,8 @@
     "220_probe_bounty_hunter",
     "221_probe_item_level",
     "222_probe_battle_mechanics",
-    "223_probe_party_equipment"
+    "223_probe_party_equipment",
+    "224_probe_npc_carryover"
   ],
   "disabled": []
 }

@@ -140,6 +140,7 @@
 | `221_probe_item_level` | 品物のレベルを誰が決めているかを録る |
 | `222_probe_battle_mechanics` | 戦闘の数の作られ方を録る |
 | `223_probe_party_equipment` | 本体のアイテム popup と `ItemEquipManager` / `ItemUnequipManager` の入口を観測し、素のゲームが実際に誰の `equipments` を書き換えるかを測る（`402_party_inventory_transfer` が NPC の装備を直書きし続けるかを決める材料） |
+| `224_probe_npc_carryover` | ロードのどの地点から世界へ NPC を入れられるかを測る |
 
 ---
 

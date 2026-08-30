@@ -1040,6 +1040,7 @@ v2 で、`111_llm_prompt_replace` が使っているのと同じ仕掛け口を�
 | `221_probe_item_level` | 品物のレベルを誰が決めているかを録る。土地の依頼の難易度を返す4関数と、呼び出し側が `tier` に渡している実値。難易度→値段と値段→レベルの変換6本。店の品揃えの生成に渡る段と、生成後に主が持っている品の `value`。そしてクラフトの経路（`ItemCraftManager.calculate_modification` の実引数と戻り値）。1回目の計測で鎖は端まで繋がった（GAME.md §2.13.1.2 / §2.14.2）ので、残るのは `tier` と倍率の**式**を出すための通り数集め |
 | `222_probe_battle_mechanics` | 戦闘の数の作られ方を録る。審判 LLM の語彙（power の列挙・バフ・デバフ・状態異常。GAME.md §2.10.1）が数へ変換されるところが対象。1手を1件にして、`battle_action`・その手の中で走ったダメージと防御の計算（呼び出し元の連鎖つき）・戦闘に居る全員の属性の差分を残す。数値だけを取る2関数（`get_instant_damage` / `get_base_damage_value`）は注入時に代表値の格子でも呼び、攻撃対防御の曲線を写す。戦闘を組み直す MOD（防御・バフの実効化・ダメージの圧縮）の下調べ |
 | `223_probe_party_equipment` | 本体のアイテム popup と `ItemEquipManager` / `ItemUnequipManager` の入口を観測し、素のゲームが実際に誰の `equipments` を書き換えるかを測る（`402_party_inventory_transfer` が NPC の装備を直書きし続けるかを決める材料） |
+| `224_probe_npc_carryover` | ロードのどの地点から世界へ NPC を入れられるかを測る。`load_game_new` / `start_game` の前後・ロード後の最初の選択肢・注入時の4地点で、NPC を作るのに要るもの（世界の鍵・素データの `npcs` 辞書・採番台帳 `index['npc']`・`generate_character`・`move_npc_to_facility`・ダンジョン以外のギルドか宿）が揃っているかを数え、地点ごとに `READY` / `NOT READY` を残す。台帳と実在 id の食い違いも同じ行に控える |
 
 ---
 

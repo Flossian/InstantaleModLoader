@@ -153,16 +153,46 @@ def npc_stores(app, max_depth=2):
     `302_` がパーティ名簿でやっているのと同じ手（`ui.party_stores`）で、
     心当たりを全部集めて全部に書く。
     余分に書いても、同じ id に同じ値が入るだけで害が無い。
+
+    ##### 見分け方は2つ持つ
+
+    もとは「実行時の名簿（`world.characters`）と鍵が重なるか」の1つだった。
+    これは**ロードの直後には効かない** ―
+    その時点の `world.characters` はまだ埋まっておらず、
+    突き合わせる相手が居ないので、素データを1つも見つけられない。
+
+    > 実機（2026-08-30。`908_` の1回目）:
+    > ロード直後に呼んだ `npc_stores` が `<none>` を返し、
+    > `save_data_dict['npcs']`（GAME.md §2.23 が「★ ここが本体」と書いている辞書）へ
+    > 何も書かれないまま `generate_character` が `KeyError` で落ちた。
+    > 直後に測った `224_` の記録では `world.characters` は**1件**だった。
+
+    そこで**中身の形**でも見分ける。
+    値が NPC の素データなら `name` と `ability_scores` を持っている
+    （`ability_scores` の6鍵が無いと `generate_character` が落ちるので、
+    これは「素データである」ことの必要条件そのもの）。
+
+    2つのどちらかに当たれば素データとみなす。
+    名簿が埋まっている場面では前と同じ結果になり、
+    空の場面でだけ余計に見つかる。
     """
     seen, out = set(), []
     known = character_ids(app)
 
     def looks_like_npcs(value):
-        """既存の character id が鍵になっている辞書か。"""
+        """NPC の素データの辞書か。
+
+        既存の character id が鍵になっているか、
+        中身が NPC の形（`name` と `ability_scores` を持つ）か。
+        """
         if not isinstance(value, dict) or not value:
             return False
         keys = {str(key) for key in value}
-        return bool(known & keys)
+        if known & keys:
+            return True
+        sample = next(iter(value.values()), None)
+        return (isinstance(sample, dict) and "name" in sample
+                and "ability_scores" in sample)
 
     def visit(holder, label, depth):
         if depth > max_depth or id(holder) in seen:
