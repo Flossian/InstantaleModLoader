@@ -41,6 +41,12 @@ TARGET = "scripts.llm.llm_manager:master_ai_facilitator_from_conversation"
 
 def find_mod(suffix):
     """mod を **番号を除いた名前** で探す（番号は振り直されることがある）。"""
+    # この検査は mod と同じフォルダに置いてある（`local/` へ移した後の形）。
+    # 隣に `mod.json` が在るならそれが対象。`runtime/mods` は見ない。
+    here_manifest = os.path.join(HERE, "mod.json")
+    if os.path.isfile(here_manifest):
+        with io.open(here_manifest, encoding="utf-8") as fh:
+            return HERE, os.path.join(HERE, json.load(fh)["entry"])
     matches = sorted(name for name in os.listdir(MODS_DIR)
                      if name.endswith(suffix)
                      and os.path.isfile(os.path.join(MODS_DIR, name, "mod.json")))

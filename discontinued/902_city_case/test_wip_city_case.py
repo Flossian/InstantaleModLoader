@@ -46,6 +46,12 @@ if RUNTIME_DIR not in sys.path:
 
 
 def find_mod(suffix):
+    # この検査は mod と同じフォルダに置いてある（`local/` へ移した後の形）。
+    # 隣に `mod.json` が在るならそれが対象。`runtime/mods` は見ない。
+    here_manifest = os.path.join(HERE, "mod.json")
+    if os.path.isfile(here_manifest):
+        with io.open(here_manifest, encoding="utf-8") as fh:
+            return HERE, os.path.join(HERE, json.load(fh)["entry"])
     matches = sorted(name for name in os.listdir(MODS_DIR)
                      if name.endswith(suffix)
                      and os.path.isfile(os.path.join(MODS_DIR, name, "mod.json")))
@@ -2891,20 +2897,27 @@ check("印を失った残骸は1つに戻る",
 # ================================================================== 共存
 print("\n[共存] 印のキーが他の mod と衝突していない")
 marks = {}
-for folder in sorted(os.listdir(MODS_DIR)):
-    path = os.path.join(MODS_DIR, folder, "mod.json")
-    if not os.path.isfile(path):
+# `runtime/mods` と、この mod 自身の置き場の両方を見る。
+# 配る予定の無い mod は `local/` に居る（TECH.md §2.6）ので、
+# `runtime/mods` だけを見ると自分の印が数に入らない。
+for base in dict.fromkeys((MODS_DIR, os.path.dirname(MOD_DIR))):
+    if not os.path.isdir(base):
         continue
-    with io.open(path, encoding="utf-8") as fh:
-        entry = json.load(fh).get("entry")
-    source_path = os.path.join(MODS_DIR, folder, entry or "")
-    if not os.path.isfile(source_path):
-        continue
-    with io.open(source_path, encoding="utf-8") as fh:
-        for line in fh:
-            if line.startswith("MARK = "):
-                marks.setdefault(line.split("=", 1)[1].strip(), []).append(folder)
-                break
+    for folder in sorted(os.listdir(base)):
+        path = os.path.join(base, folder, "mod.json")
+        if not os.path.isfile(path):
+            continue
+        with io.open(path, encoding="utf-8") as fh:
+            entry = json.load(fh).get("entry")
+        source_path = os.path.join(base, folder, entry or "")
+        if not os.path.isfile(source_path):
+            continue
+        with io.open(source_path, encoding="utf-8") as fh:
+            for line in fh:
+                if line.startswith("MARK = "):
+                    marks.setdefault(line.split("=", 1)[1].strip(),
+                                     []).append(folder)
+                    break
 check("どの印も1つの mod しか使っていない",
       all(len(owners) == 1 for owners in marks.values()), marks)
 check("この mod の印が一覧に入っている",

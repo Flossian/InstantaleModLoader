@@ -5,6 +5,9 @@
 /graphify-out/
 /settings/
 /work/
+# 配る予定の無い MOD の置き場（TECH.md §2.6）。`runtime/` の外に在るので、
+# make_dist・CI の compileall・check_mods のどれからも元々見えない。
+/local/
 
 # ---- Python ----
 __pycache__/
