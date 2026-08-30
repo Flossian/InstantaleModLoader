@@ -91,10 +91,6 @@ LOG_BASENAME = "item_detail_autosize.log"
 #: 設計値の置き場（`sys` の属性名）。注入し直しをまたいで残す。
 DESIGN_STORE_ATTR = "__instantale_item_detail_designs__"
 
-# ログに残す組み合わせの上限。
-# 1アイテムにつき1件なので少しでいい。
-MAX_LOG = 60
-
 # 横幅を広げるときの1回ぶんの倍率と、設計幅の何倍までにするか。
 # 窓の右端までという実測の制約が先に効くことが多く、これはその予備の頭打ち。
 WIDEN_STEP = 1.25
@@ -440,7 +436,7 @@ def apply(ctx):
 
             key = (frames.attr(item, "item_id"),
                    tuple(len(frames.attr(lb, "text", "") or "") for lb in labels))
-            if key not in logged and len(logged) < MAX_LOG:
+            if key not in logged:
                 logged.add(key)
                 design = designs[self]
                 write("item={!r} box={:.0f}x{:.0f} (design {:.0f}x{:.0f})  {}".format(

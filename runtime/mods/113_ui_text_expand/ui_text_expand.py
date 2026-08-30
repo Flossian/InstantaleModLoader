@@ -265,9 +265,7 @@ MAX_DEPTH = 6
 # 短い文字列は選択肢のボタン（あれも Label）とも一致しうる（`112_` と同じ理由）。
 MIN_MATCH = 8
 
-# 記録の上限。
 # 本文は1文字ずつ増えるので、書くのは「見つけたとき」と「押されたとき」だけ。
-MAX_LOG = 60
 
 # ウィジェット自身に持たせる控え。
 # 注入し直しても残るので、
@@ -291,7 +289,7 @@ def apply(ctx):
              "watching": False, "hud": None, "stale": False}
     labels = weakref.WeakKeyDictionary()
 
-    note = ctx.logger(LOG_BASENAME, cap=MAX_LOG)
+    note = ctx.logger(LOG_BASENAME)
     warn_once = ctx.warner("text expand")
 
     # -- 本文のラベルを探す --------------------------------------------------

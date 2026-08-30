@@ -52,20 +52,6 @@
         "ja": "実際の起動引数を out\\llm_speed.log に残すだけで、何も変えない",
         "en": "Logs the real launch arguments to out\\llm_speed.log and changes nothing"
       }
-    },
-    "LOG_LIMIT": {
-      "type": "int",
-      "default": 5,
-      "min": 0,
-      "max": 999,
-      "label": {
-        "ja": "起動引数をログに出す回数",
-        "en": "How many launches to log"
-      },
-      "note": {
-        "ja": "0 にすると何も出さない。書き換えの前後が out/llm_speed.log に残る",
-        "en": "0 = log nothing. Before/after argument lists go to out/llm_speed.log"
-      }
     }
   }
 }

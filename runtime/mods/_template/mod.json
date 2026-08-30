@@ -7,25 +7,9 @@
     "ja": "テンプレート"
   },
   "description": {
-    "en": "Copy this folder to start a new mod. Logs the first few add_text calls.",
-    "ja": "新しい MOD を作るときの雛形。add_text の最初の数回をログに出すだけ"
+    "en": "Copy this folder to start a new mod. Logs each add_text call.",
+    "ja": "新しい MOD を作るときの雛形。add_text の呼び出しをログに出すだけ"
   },
   "version": "1",
-  "author": "your name here",
-  "settings": {
-    "LOG_LIMIT": {
-      "type": "int",
-      "default": 5,
-      "min": 0,
-      "max": 999,
-      "label": {
-        "ja": "ログに出す回数",
-        "en": "How many calls to log"
-      },
-      "note": {
-        "ja": "0 にすると何も出さない。フックが効いているかの確認用",
-        "en": "0 = log nothing. Just to confirm the hook is installed"
-      }
-    }
-  }
+  "author": "your name here"
 }

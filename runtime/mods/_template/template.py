@@ -13,13 +13,13 @@
     1. mod.json の "name" / "description" / "author"
     2. mod.json の "entry"（入口のファイル名を変えたなら）
     3. 下の `@ctx.wrap(...)` の対象名（`out/recon/targets.txt` から取る）
-    4. 要らなくなった "settings" と `LOG_LIMIT` の削除
+    4. GUI から変えたい値があれば mod.json の "settings"（§3.8）
 
 そのあと `python tools/check_mods.py` を通してから注入する。
 手順は docs/TECH.md §3.0 に一直線で書いてある。
 
 この雛形が今やっていること: 画面にテキストが足されるたびに呼ばれる
-`InstantaleApp.add_text` を包んで、最初の数回だけ長さをログに出す。
+`InstantaleApp.add_text` を包んで、呼ばれるたびに長さをログに出す。
 ゲームの動作は何も変えない。
 **フックが本当に効いているか**を確かめるための最小の形として選んである。
 
@@ -31,12 +31,12 @@
   * 副作用のある初期化は `ctx.on_ready()` に預ける（§3.6）
 """
 
-# GUI から変えられる値は、モジュール直下の定数として置き、
+# GUI から変えられる値が要るなら、モジュール直下の定数として置き、
 # 同じ名前と同じ既定値を mod.json の "settings" にも書く。
 # ローダが apply() を呼ぶ直前にここへ書き込むので、
 # コードは定数をそのまま読めばよい（§3.8）。
 # 2箇所に書くことになるので、ずれていたら check_mods.py が MISMATCH を出す。
-LOG_LIMIT = 5
+# この雛形には無い。
 
 
 def apply(ctx):
@@ -68,10 +68,9 @@ def apply(ctx):
         # 元の関数を先に呼んでから自分の処理をする。
         # こうしておくと、ここで壊れても safe=True が
         # orig の結果をそのまま返せる（§3.1.5）。
-        if state["seen"] < LOG_LIMIT:
-            state["seen"] += 1
-            ctx.log("template: add_text #{} len={}".format(
-                state["seen"], len(context) if isinstance(context, str) else "?"))
+        state["seen"] += 1
+        ctx.log("template: add_text #{} len={}".format(
+            state["seen"], len(context) if isinstance(context, str) else "?"))
 
         return result
 
@@ -80,4 +79,4 @@ def apply(ctx):
     # MOD 専用のファイルに分ける（`ctx.out_path("template.log")`）。
     # 次に遊ぶときに要るデータは `ctx.state_path("template.json")` へ。
     # out/ は消してよい場所なので、消えると巻き戻るものを置かない（TECH.md §3.11）。
-    ctx.log("template: installed (LOG_LIMIT={})".format(LOG_LIMIT))
+    ctx.log("template: installed")

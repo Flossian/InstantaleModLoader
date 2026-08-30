@@ -96,11 +96,8 @@ LINE_SCALE = 0.8
 # 空欄（null）にすると本文の改行には触らない。
 BLANK_LINES = 0
 
-# 記録の上限。
 # 本文は1文字ずつ増えていくので（`InstantaleApp.add_text_display`）、
-# 毎回書くとログが埋まる。
 # 書くのは「新しいラベルを見つけたとき」だけ。
-MAX_LOG = 40
 
 # ウィジェット木を何段まで降りるか。
 # HUD → レイアウト → ScrollView → ラベル。
@@ -135,7 +132,7 @@ def apply(ctx):
     # 画面を作り直されたときに古い
     # HUD のラベルを塗り続けないようにするため（親が居るかどうかだけでは「まだ生きているが別の画面のもの」を見分けられない）。
     labels = weakref.WeakKeyDictionary()
-    state = {"tries": 0, "logged": 0, "warned": False, "pending": False}
+    state = {"tries": 0, "warned": False, "pending": False}
 
     write = ctx.logger(LOG_BASENAME)
 
@@ -253,17 +250,15 @@ def apply(ctx):
             labels[hud] = weakref.ref(label)
         except TypeError:
             pass      # 弱参照を持てない相手なら、毎回探し直す（動作は変わらない）
-        if state["logged"] < MAX_LOG:
-            state["logged"] += 1
-            write("label {} at {} (match={}) line_height={!r} design={!r} "
-                  "font_size={!r} texture={!r} text_size={!r} len(text)={}".format(
-                      type(label).__name__, path,
-                      "name" if score == 4 else score,
-                      frames.attr(label, "line_height"), design_of(label),
-                      frames.attr(label, "font_size"),
-                      frames.attr(label, "texture_size"),
-                      frames.attr(label, "text_size"),
-                      len(frames.attr(label, "text", ""))))
+        write("label {} at {} (match={}) line_height={!r} design={!r} "
+              "font_size={!r} texture={!r} text_size={!r} len(text)={}".format(
+                  type(label).__name__, path,
+                  "name" if score == 4 else score,
+                  frames.attr(label, "line_height"), design_of(label),
+                  frames.attr(label, "font_size"),
+                  frames.attr(label, "texture_size"),
+                  frames.attr(label, "text_size"),
+                  len(frames.attr(label, "text", ""))))
         return label
 
     # -- 設計値（ゲームが入れている行間） ------------------------------------

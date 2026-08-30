@@ -1,290 +1,289 @@
 # -*- coding: utf-8 -*-
-"""荒くする工程が返す絵を、元の絵から作り直した同じ寸法の絵に差し替える。
+"""立ち絵を荒くする工程を通さず、顔の検出が外れた回はやり直す。
 
-ゲームは Stable Diffusion で描いた絵を、保存する前に**わざと荒くしている**。
-実機で採った経路（2026-08-30。DOC.md §3.2）:
+ゲームは Stable Diffusion で描いた絵を、保存する前に**わざと荒くしている**
+（経路と寸法は GAME.md §2.30）:
 
-    generated_image.png            512x1024   SD の出力
     no_bg_image.png                512x1024   背景を抜いた絵
       pixel_art_process(512x1024) -> (512x1024, 165x330)
     pixelated_image_original.png   165x330    ← 2つ目がそのまま保存される
-      それを2倍にして 330x660
-      reduce_image_colors(330x660) -> 330x660
+      ゲームがそれを2倍に伸ばす                330x660
+      reduce_image_colors(330x660) -> 330x660（16色）
     reduced_color_image.png        330x660    ← 立ち絵。会話中に見えるのはこれ
     face_image.png                            立ち絵から切り出す
 
-**捨てられているのは寸法**。165x330 まで落として2倍に伸ばしているので、
-立ち絵 330x660 の中身は 165x330 ぶんの細かさしか無い。
+## 立ち絵（`SHARP_PORTRAIT`）
 
-## 何を差し替えるか
+2つの工程を包む。
 
-`pixel_art_process` の戻り値は2つ組で、**1つ目は入って来た絵そのもの、
-2つ目が縮めた絵**。ゲームは2つ目しか使わない。
-版2は「入力と同じ寸法の画像」だけを差し替えていたので、
-1つ目（＝捨てられる側）だけを直していて、絵は荒いままだった。
+  * `pixel_art_process`: 元の工程を呼んで**戻り値の形だけ借り**、
+    `(絵, 絵の写し)` を返す。縮めない。入って来た絵をスレッドに控える。
+    元の工程を呼ぶのは形の保険。ゲームの更新で戻り値の形が変われば
+    2つ組の受け取りで投げ、`safe=True` が元の工程の結果（素の荒い絵）に落とす。
+    呼ばずに形を決め打ちしていた版は、形が違ったときに生成スレッドごと死んで
+    「NPC の絵が出ない」になった（VERIFICATION_LOG.md §2.80 の版1）。
+    代償は 256x256 の KMeans 1回（0.3〜0.5秒）
+  * `reduce_image_colors`: **控えた絵を返す**。減色しない。
+    入って来るのはゲームが2倍に伸ばした 1024x2048 で、最近傍の2倍は情報を足さない。
+    2倍の段は包めない位置にあるので、通した後で元の絵に戻す
 
-版3は**戻って来た画像を全部、元の絵から作り直す**。
-`165x330` の枠には元の絵を 165x330 へ縮めたものを入れる（LANCZOS。
-ゲームは最近傍で潰していた）。寸法は1つも変えない。
+立ち絵は `no_bg_image.png` と同じ 512x1024 になる。
 
-減色（`reduce_image_colors`）の段では、入って来るのはもう潰れた 330x660 なので、
-そこから細かさは戻せない。
-**1つ手前の `pixel_art_process` に入って来た元の絵をスレッドごとに控えておき**、
-それを 330x660 へ縮めたものを返す。これで立ち絵 330x660 の中身が
-「元の絵を 330x660 へ縮めたもの」になる。
+顔の検出に失敗すると、ゲームは立ち絵をもう一度 `pixel_art_process` に通して
+小さな全身（16x32 → 2倍で 32x64）を顔の代わりにする。
+そこも素通しにすると立ち絵と同じ大きさの「顔」ができるので、
+**減色を通った後の `pixel_art_process` はゲームのものを呼ぶ**。
+順番はスレッドごとに `縮小 → 減色 → （失敗時）縮小` で、
+生成は1体1スレッド（`Thread-N (generate_images)`）なので控えと旗はスレッドに置く。
 
-    控えは1度きり（使ったら捨てる）。
-    生成は1体につき1スレッド（`Thread-N (generate_images)`）で、
-    控えるのは毎回その回の入力なので、別人の絵が回り込むことはない。
-    控えが無い状態で減色だけが来たら、その回の入力を使う（素より悪くはしない）。
+縮小と減色は別々には切れない。縮めた絵の減色だけ飛ばしても細かさは戻らず、
+縮小だけ飛ばすと 1024x2048 の 16色になる。
 
-## 寸法は変えない
+## 顔を切り直す
 
-立ち絵は 330x660 のまま。
-`165x330 -> 2倍` を決めているのはゲーム側で、そこを動かすと
-顔の切り出しや表示の寸法まで連鎖する。
-細かさの上限が 330x660 になるのはそのため
-（SD が描いた 512x1024 には届かない。DOC.md §3.3）。
+`detect_face_coordinates` が返すのは `(左, 上, 右, 下)` で、一辺は `crop_size`（256）。
+ゲームはこの箱を **330/512 の定数で縮めてから**立ち絵から切る
+（立ち絵が 330x660 だった頃の比。立ち絵の実寸からは求めていない）。
+立ち絵を 512x1024 にすると顔が左上へずれるので、
+`extract_and_save_face(pixelated_image, coordinates, output_path)` を包み、
+ゲームに書かせた後で**同じ場所に切り直して上書きする**。
+`coordinates` の一辺を 256 に戻せば検出した絵の座標系で、立ち絵はその絵と同じ寸法。
+ゲームの側は触らず（戻り値もそのまま）、ファイルだけ差し替える。
+`SHARP_PORTRAIT` が切のときは立ち絵が 330x660 で、ゲームの縮め方がそのまま合うので触らない。
 
-## どこに仕掛けるか
+## 顔の検出をやり直す（`FACE_RETRY`）
 
-    image_generation.sdcppcuda.image_generation_creature:pixel_art_process
-    image_generation.sdcppcuda.image_generation_background:pixel_art_process
-    image_generation.sdcppcuda.image_generation_creature:reduce_image_colors
-    image_generation.sdcppcuda.image_generation_creature:detect_face_coordinates（記録だけ）
+ゲームの検出は手元の 364 体で 58 体（16%）を外していた（VERIFICATION.md §3.43）。
+`detect_face_coordinates` は OpenCV のカスケード
+（`lbpcascade_animeface.xml` → `haarcascade_frontalface_alt.xml` の順に2回呼ばれる。
+手元の再現で 93% 一致）を既定の感度で掛けているだけで、
+暗い絵・コントラストの低い絵で外れる。
 
-実体は `scripts.image_processing.image_to_pixel:pixel_art_process` 1本で、
-上の2つのモジュールが `from ... import` で写しを持っている。
-**元の1本ではなく写しの側に当てる**（`alias_scan=False`）。
-元に当てるとエイリアス張り替えでキャラクタと背景の両方が一度に変わり、
-「キャラクタだけ高画質、背景はゲームのまま」を選べなくなる。
+包んで、**ゲームが `None` を返した回だけ**、前処理を変えた絵で同じ関数を呼び直す。
 
-`detect_face_coordinates` は**何も変えない**。
-顔がどの絵のどこから切られたかを1行ずつ記録するだけ
-（版2の回で顔が 32x64 になった理由がまだ分かっていない。DOC.md §3.3）。
+  * 前処理は座標系を変えないものだけ（均一化 / CLAHE / ガンマ / ぼかし）。
+    ゲームの関数が返した値をそのまま渡せる
+  * 呼び直す前に、同じカスケードでこちらでも検出して**位置で絞る**
+    （全身の立ち絵なので顔は上寄り・程よい幅。一番上の箱を採る）。
+    絞らずに緩めると鎧や靴を顔として拾う。
+    絞りを通った前処理のときだけゲームの関数を呼び直す
+  * カスケードは1回の呼び出しの中で両方試す（anime だけだと拾いが 42 → 24 に落ちる）。
+    渡す形は**ゲームが渡して来た形に合わせる**。ゲームはフォルダ付き
+    （`runtime/models/face_recognition/...`）で渡していて、素のファイル名では
+    ゲームの関数がカスケードを読めず `None` を返す（版7〜9 がこれで拾えなかった）
+  * 検出は縮小の前の絵に対して走るので、`SHARP_PORTRAIT` と独立に効く
+  * 58 体のうち 42 体を拾い、目で見て 4 体が顔ではなかった
 
-## 戻り値の形は決めない
-
-版1は `orig` を呼ばずに画像1枚を返し、実機で生成スレッドを殺した
-（`TypeError: cannot unpack non-iterable Image object`。DOC.md §3.1）。
-以来、**元の工程は必ず呼び、返って来た構造をなぞって中身だけ入れ替える**。
-tuple でも list でも画像1枚でも同じように通る。
-
-縦横の比が元の絵と違う画像は触らない（パレットのような添え物のため）。
-実測では戻って来る画像はどれも縦横比 0.5 で揃っている。
+`cv2` / `numpy` / `PIL` はゲームが同梱しているものを、フックの中で遅延 import する。
+ローダの起動時に読み込まないため。
 
 ## 効く範囲
 
-**これから作られる画像だけ**。
-既にある NPC の絵は荒いまま残る。
-
-## 割り切り
-
-  * 絵の見た目が変わる。ドット絵寄りの画風は、荒くする工程が作っていた
-    ものなので、差し替えると滑らかな絵になる
-  * 立ち絵の細かさの上限は 330x660。SD の 512x1024 には届かない（上記）
-  * 背景は既定で触らない。背景の減色は別経路（`reduce_color` モジュール越し）
-    なので、背景を入れても減色までは追っていない
+**これから作られる画像だけ**。既にある NPC の絵は荒いまま残る。
+背景は触らない（`image_generation_background` が持つ写しには当てない。
+`alias_scan=False` はそのため ― 元の1本に当てると張り替えで両方変わる）。
 """
 
-import sys
+import os
 import threading
 
-# キャラクタ・敵・モンスターの絵を作り直すか。
-# この MOD の本題。
-BYPASS_CHARACTER = True
+# ---- 設定（既定値は mod.json の "settings" と一致させること。
+#      `tools/check_mods.py` が AST で突き合わせる。TECH.md §3.8.3）------------
 
-# 背景の絵も作り直すか。
-# 既定は切（ゲームのまま）。
-BYPASS_BACKGROUND = False
+# 縮小と減色を通さず、背景を抜いた絵をそのまま立ち絵にするか。
+# 切るとゲームのまま（330x660 のドット絵寄り）。
+SHARP_PORTRAIT = True
 
-# 減色の段も作り直すか。
-# **ここが立ち絵の中身を決める**（`pixel_art_process` の側だけでは効かない）。
-BYPASS_COLOR_REDUCE = True
+# 顔の検出が外れた回に、前処理した絵でやり直すか。
+FACE_RETRY = True
 
-# 記録をログに出す回数（工程ごとに数える）。
-# 効いているかの確認用なので数回で足りる。
-# **`mod.json` の "default" と揃えること**（`tools/check_mods.py` が
-# AST で突き合わせる。TECH.md §3.8.3）。
-LOG_LIMIT = 8
+#: 顔の箱の一辺（`detect_face_coordinates` の `crop_size` の既定）。
+#: 受け取った箱の一辺がこれと違えば、ゲームがその比で縮めている。
+FACE_CROP = 256
 
 #: この MOD の記録。
-LOG_BASENAME = "image_no_pixelate.log"
+LOG_BASENAME = "sharp_portrait.log"
 
-#: 荒くする工程を写しで持っている2つのモジュール。
+#: 荒くする工程の写しを持つモジュール（キャラクタ・敵・モンスター）。
 CREATURE = "image_generation.sdcppcuda.image_generation_creature"
-BACKGROUND = "image_generation.sdcppcuda.image_generation_background"
 
-#: 縦横比がこれより離れている画像は差し替えない（添え物とみなす）。
-ASPECT_TOLERANCE = 0.05
-
-#: 生成スレッドごとの控え。工程をまたいで元の絵を渡すために使う。
+#: スレッドごとの控え。`source` は縮小に入って来た絵、`detect_width` はその幅、
+#: `after_reduce` は「次の縮小は顔の代わりを作る回」の旗。
 _LOCAL = threading.local()
 
-#: PIL の縮小フィルタ。1度引いたら覚える（PIL を import しないため）。
-_RESAMPLE = []
+#: 顔の検出をやり直すときの前処理。座標系を変えないものだけ。
+#: 順は手元の 58 体で誤検出の少なかった順。
+FACE_PREPS = ("均一化", "CLAHE", "ガンマ0.6", "ぼかし3")
+
+#: 全身の立ち絵なので、顔は上寄りで程よい幅。
+#: 箱の中心の高さの上限と、幅の範囲（どちらも画像に対する比）。
+FACE_TOP = 0.40
+FACE_WIDTH = (0.08, 0.60)
+
+#: ゲームのカスケードの置き場（ゲームのフォルダからの相対）と、試す順。
+CASCADE_DIR = os.path.join("runtime", "models", "face_recognition")
+CASCADES = ("lbpcascade_animeface.xml", "haarcascade_frontalface_alt.xml")
+
+#: `detect_face_coordinates(image, cascade_path, padding, crop_size)` の引数名。
+#: 位置で来ても名前で来ても同じ形に揃えて、カスケードだけ差し替えて呼び直す。
+ARG_NAMES = ("cascade_path", "padding", "crop_size")
 
 
-def is_image(value):
-    """PIL の Image かどうかを、PIL を import せずに持ち物で見る。
-
-    ゲームの中では `from PIL import Image` が通るが、
-    それだけのために MOD がゲームの同梱ライブラリに依存するのを避ける。
-    `size` と `copy` だけでは numpy の配列も通ってしまうので、
-    PIL にしか無い `mode` と `convert` を一緒に見る。
-    """
-    return all(hasattr(value, name)
-               for name in ("copy", "convert", "resize", "mode", "size"))
+def dims(image):
+    return "{}x{}".format(*image.size)
 
 
-def resample_filter(image):
-    """縮小に使うフィルタ。画像の出どころのモジュールから引く。
-
-    既定（最近傍）で縮めると、ゲームがやっているのと同じ潰し方になる。
-    取れなければ `None` を返し、呼ぶ側は PIL の既定に任せる。
-    """
-    if _RESAMPLE:
-        return _RESAMPLE[0]
-    module = sys.modules.get(type(image).__module__)
-    found = None
-    for name in ("LANCZOS", "ANTIALIAS", "BICUBIC"):
-        found = getattr(module, name, None)
-        if found is not None:
-            break
-    _RESAMPLE.append(found)
-    return found
+def preprocess(gray, name, cv2, np):
+    """座標系を変えない前処理。`gray` は8ビット1チャネル。"""
+    if name == "均一化":
+        return cv2.equalizeHist(gray)
+    if name == "CLAHE":
+        return cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(gray)
+    if name == "ガンマ0.6":
+        table = np.array([((i / 255.0) ** 0.6) * 255 for i in range(256)]).astype(np.uint8)
+        return cv2.LUT(gray, table)
+    if name == "ぼかし3":
+        return cv2.GaussianBlur(gray, (3, 3), 0)
+    raise ValueError(name)
 
 
-def aspect_matches(source, size):
-    """縦横比が元の絵とほぼ同じか。添え物の小さな絵を避けるため。"""
-    try:
-        want = float(source.size[0]) / float(source.size[1])
-        have = float(size[0]) / float(size[1])
-    except (TypeError, ValueError, ZeroDivisionError, IndexError):
-        return False
-    return abs(want - have) <= ASPECT_TOLERANCE * max(want, have)
-
-
-def fit(source, size):
-    """`source` を `size` の写しにする。同じ寸法ならただの写し。"""
-    if tuple(source.size) == tuple(size):
-        return source.copy()
-    found = resample_filter(source)
-    if found is None:
-        return source.resize(tuple(size))
-    return source.resize(tuple(size), found)
-
-
-def rebuild(value, source, swapped):
-    """`value` の中の画像を、`source` から作り直した同じ寸法の絵に差し替える。
-
-    戻り値の形（画像1枚 / tuple / list）を決め打ちしないのが要点。
-    `swapped` は差し替えた枚数を数えるための1要素のリスト。
-    """
-    if is_image(value):
-        if not aspect_matches(source, value.size):
-            return value
-        swapped[0] += 1
-        return fit(source, value.size)
-    if isinstance(value, tuple):
-        return tuple(rebuild(item, source, swapped) for item in value)
-    if isinstance(value, list):
-        return [rebuild(item, source, swapped) for item in value]
-    return value
-
-
-def describe(value):
-    """ログ用に戻り値の形を書く。`(512x1024 RGBA、165x330 RGBA)` のような1行。"""
-    if is_image(value):
-        try:
-            return "{}x{} {}".format(value.size[0], value.size[1], value.mode)
-        except Exception:
-            return "画像"
-    if isinstance(value, (tuple, list)):
-        return "({})".format("、".join(describe(item) for item in value))
-    return type(value).__name__
+def pick_face(gray, cascade):
+    """上寄りで程よい幅の箱のうち、一番上のもの。無ければ None。"""
+    height, width = gray.shape[:2]
+    boxes = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=3)
+    fit = [b for b in boxes
+           if (b[1] + b[3] / 2.0) / height < FACE_TOP
+           and FACE_WIDTH[0] < b[2] / float(width) < FACE_WIDTH[1]]
+    if not fit:
+        return None
+    return tuple(int(v) for v in min(fit, key=lambda b: b[1]))
 
 
 def apply(ctx):
-    write = ctx.logger(LOG_BASENAME)
-    warn_once = ctx.warner("image no pixelate")
-    seen = {}
+    # 打ち切らない。書くのは NPC の生成のたび（1体につき4〜5行）で、毎フレームではない。
+    note = ctx.logger(LOG_BASENAME)
+    # `ctx` の値は `apply()` の間だけ。カスケードの置き場は今のうちに控える。
+    cascade_dir = os.path.join(ctx.game_dir, CASCADE_DIR)
+    cascades = {}
+    seen_args = []          # ゲームの呼び方を1度だけ記録するための印
 
-    def count(label):
-        seen[label] = seen.get(label, 0) + 1
-        return seen[label]
+    @ctx.wrap(CREATURE + ":pixel_art_process", safe=True, alias_scan=False)
+    def pixel_art_process(orig, image, *args, **kwargs):
+        if getattr(_LOCAL, "after_reduce", False):
+            _LOCAL.after_reduce = False
+            note("縮小: {} 顔の代わりを作る回なのでゲームに任せる".format(dims(image)))
+            return orig(image, *args, **kwargs)
+        # 顔の箱は検出した絵の座標系。検出もこの絵（同じ寸法）に対して走る。
+        _LOCAL.detect_width = image.size[0]
+        if not SHARP_PORTRAIT:
+            note("縮小: {} ゲームのまま".format(dims(image)))
+            return orig(image, *args, **kwargs)
+        # 元の工程は形の保険として呼ぶ。形が違えばここで投げ、safe=True が素に落とす。
+        _big, _small = orig(image, *args, **kwargs)
+        _LOCAL.source = image
+        note("縮小: {} をそのまま通す".format(dims(image)))
+        return image, image.copy()
 
-    def redraw(label, orig, image, args, kwargs, source=None):
-        """元の工程を走らせ、返って来た画像を元の絵から作り直したものに替える。"""
-        result = orig(image, *args, **kwargs)
-        src = source if is_image(source) else image
-        if not is_image(src):
-            warn_once(label, "{}: 画像ではない値（{}）が来たので触らない"
-                             .format(label, type(src).__name__))
-            return result
-        swapped = [0]
-        rebuilt = rebuild(result, src, swapped)
-        times = count(label)
-        if swapped[0] == 0:
-            # 差し替えられる画像が1枚も無い＝戻り値の読みが外れている。
-            # ゲームのものをそのまま返す（絵は荒いが、生成は止まらない）。
-            warn_once(label, "{}: 差し替える画像が見つからない（元絵 {} / 戻り {}）"
-                             .format(label, describe(src), describe(result)))
-            return result
-        if times <= LOG_LIMIT:
-            write("{}: {}枚 作り直し 元絵 {} / 入力 {} / 戻り {}（{}回目）".format(
-                label, swapped[0], describe(src), describe(image),
-                describe(result), times))
-        return rebuilt
+    @ctx.wrap(CREATURE + ":reduce_image_colors", safe=True, alias_scan=False)
+    def reduce_image_colors(orig, image, *args, **kwargs):
+        _LOCAL.after_reduce = True
+        source = getattr(_LOCAL, "source", None)
+        _LOCAL.source = None
+        if not SHARP_PORTRAIT:
+            note("減色: {} ゲームのまま".format(dims(image)))
+            return orig(image, *args, **kwargs)
+        if source is None:
+            note("減色: {} 控えが無いのでそのまま通す".format(dims(image)))
+            return image
+        note("減色: {} を控えの {} に戻す".format(dims(image), dims(source)))
+        return source.copy()
 
-    on = []
+    def cascade_for(name):
+        """ゲームと同じカスケードをこちらでも持つ（1度読んだら使い回す）。"""
+        import cv2
+        path = name if os.path.isabs(name) else os.path.join(cascade_dir, os.path.basename(name))
+        if path not in cascades:
+            cascades[path] = cv2.CascadeClassifier(path)
+        return cascades[path]
 
-    if BYPASS_CHARACTER:
-        # safe=True: ここが壊れても荒い絵に落ちるだけで、絵は出る。
-        # alias_scan=False: 背景側の写しを巻き添えにしない（docstring 参照）。
-        @ctx.wrap(CREATURE + ":pixel_art_process", safe=True, alias_scan=False)
-        def creature_pixel(orig, image, *args, **kwargs):
-            # 減色の段へ渡す控え。毎回その回の入力で上書きする。
-            if is_image(image):
-                _LOCAL.source = image
-            return redraw("キャラクタ", orig, image, args, kwargs)
-
-        on.append("キャラクタ")
-
-    if BYPASS_BACKGROUND:
-        # 背景は控えを置かない（キャラクタの減色へ回り込ませない）。
-        @ctx.wrap(BACKGROUND + ":pixel_art_process", safe=True, alias_scan=False)
-        def background_pixel(orig, image, *args, **kwargs):
-            return redraw("背景", orig, image, args, kwargs)
-
-        on.append("背景")
-
-    if BYPASS_COLOR_REDUCE:
-        @ctx.wrap(CREATURE + ":reduce_image_colors", safe=True, alias_scan=False)
-        def creature_colors(orig, image, *args, **kwargs):
-            # 控えは1度きり。使い回すと別人の絵が回り込みうる。
-            source = getattr(_LOCAL, "source", None)
-            _LOCAL.source = None
-            return redraw("減色", orig, image, args, kwargs, source=source)
-
-        on.append("減色")
-
-    # 何も変えない。顔がどの絵のどこから切られたかを控えるだけ。
-    # 版2の回で顔が 32x64 になった理由がまだ分かっていない（DOC.md §3.3）。
     @ctx.wrap(CREATURE + ":detect_face_coordinates",
               required=False, safe=True, alias_scan=False)
-    def face_coordinates(orig, image, *args, **kwargs):
-        result = orig(image, *args, **kwargs)
-        times = count("顔の検出")
-        if times <= LOG_LIMIT:
-            write("顔の検出: 入力 {} / 座標 {}（{}回目）".format(
-                describe(image), result, times))
+    def detect_face_coordinates(orig, image, *args, **kwargs):
+        found = orig(image, *args, **kwargs)
+        if found is not None:
+            note("顔: ゲームが見つけた {}".format(found))
+            return found
+        if not FACE_RETRY:
+            note("顔: ゲームは見つけられず、やり直しは切")
+            return None
+        import cv2
+        import numpy as np
+        import PIL.Image
+        rest = dict(zip(ARG_NAMES, args))
+        rest.update(kwargs)
+        # ゲームがカスケードをどう渡しているか（素の名前か、フォルダ付きか）は
+        # ここでしか分からない。1度だけ記録する。
+        if not seen_args:
+            seen_args.append(True)
+            note("顔: ゲームの呼び方 {}".format(rest or "（引数なし。既定のまま）"))
+        # 呼び直しに渡すカスケードは、ゲームが渡して来た形に合わせる。
+        # フォルダ付きで来ていれば同じフォルダの haar、素の名前なら素の名前。
+        given = str(rest.get("cascade_path") or CASCADES[0])
+        gray = cv2.cvtColor(np.asarray(image.convert("RGB")), cv2.COLOR_RGB2GRAY)
+        tried = []
+        for prep in FACE_PREPS:
+            done = preprocess(gray, prep, cv2, np)
+            prepped = None
+            for name in CASCADES:
+                box = pick_face(done, cascade_for(name))
+                if box is None:
+                    continue
+                if prepped is None:
+                    # 前処理した絵を、入って来たのと同じ形（RGBA なら α も）でゲームに渡す。
+                    prepped = PIL.Image.fromarray(np.dstack([done, done, done]), "RGB")
+                    if "A" in image.getbands():
+                        prepped.putalpha(image.getchannel("A"))
+                path = os.path.join(os.path.dirname(given), name) if os.path.dirname(given) else name
+                again = orig(prepped, **dict(rest, cascade_path=path))
+                short = name.split("cascade")[0]
+                if again is not None:
+                    note("顔: ゲームは見つけられず、{} + {} で拾った {}（箱 {}）".format(
+                        prep, short, again, box))
+                    return again
+                # こちらは見えたのにゲームの関数は None。次の前処理へ。
+                tried.append("{}+{}={}".format(prep, short, box))
+        note("顔: 見つからず（{} 通り試した{}）".format(
+            len(FACE_PREPS),
+            "。こちらは見えたがゲームの関数は None: " + " / ".join(tried) if tried else ""))
+        return None
+
+    @ctx.wrap(CREATURE + ":extract_and_save_face",
+              required=False, safe=True, alias_scan=False)
+    def extract_and_save_face(orig, image, coordinates, output_path, *args, **kwargs):
+        result = orig(image, coordinates, output_path, *args, **kwargs)
+        # 顔が切られた＝見つかった。顔の代わりを作る縮小は来ないので旗を降ろす
+        # （スレッドが使い回されても次の NPC の縮小に旗が残らない）。
+        _LOCAL.after_reduce = False
+        if not SHARP_PORTRAIT:
+            return result          # 立ち絵は 330x660 で、ゲームの縮め方がそのまま合う
+        left, top, right, bottom = (float(v) for v in coordinates)
+        side = max(right - left, 1.0)
+        # ゲームが縮めた箱を検出した絵の座標系（一辺 256）に戻し、
+        # 立ち絵が検出した絵と寸法が違えばその比で合わせる。
+        # 縮めた箱は整数に丸まっている（165 と 166 が混ざる）ので、
+        # 四隅を戻すのではなく中心を戻して一辺 256 の正方形に組み直す。
+        ratio = image.size[0] / float(getattr(_LOCAL, "detect_width", None) or image.size[0])
+        scale = (FACE_CROP / side) * ratio          # 縮めた座標 → 立ち絵の座標
+        half = int(round(FACE_CROP * ratio / 2.0))
+        cx = int(round((left + right) / 2.0 * scale))
+        cy = int(round((top + bottom) / 2.0 * scale))
+        box = (cx - half, cy - half, cx + half, cy + half)
+        if box[2] > image.size[0] or box[3] > image.size[1] or box[0] < 0 or box[1] < 0:
+            note("顔: 箱 {} が立ち絵 {} からはみ出すので切り直さない".format(box, dims(image)))
+            return result
+        image.crop(box).save(output_path)
+        note("顔: {} を {} に戻して切り直した".format(
+            tuple(int(v) for v in (left, top, right, bottom)), box))
         return result
 
-    if on:
-        write("作り直しを仕掛けた: {}".format(" / ".join(on)))
-    else:
-        # 何も入っていない状態で包みだけ残さない（TECH.md §3.1 の 900_ と同じ）。
-        write("全て切になっている。顔の検出の記録だけ残す")
-    ctx.log("image no pixelate: installed ({})".format(
-        " / ".join(on) if on else "off"))
+    ctx.log("sharp portrait: installed")

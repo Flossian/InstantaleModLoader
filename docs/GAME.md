@@ -2468,6 +2468,44 @@ Atk:432(+500)\nDef:0(+500)\nExp:1675/3237\nGold:1116472\nAge:31\nSta:…\nLocati
 
 ---
 
+### 2.30 NPC の絵の作られ方（2026-08-30〜31 に `131_` で実測）
+
+`image_generation.sdcppcuda.image_generation_creature` がキャラクタ・敵・モンスターの絵を
+1本の経路で作る。NPC ごとのフォルダ
+（`%LOCALAPPDATA%\Darmabeko\Instantale\worlds\<世界>\characters\<名前>\`）に残る5枚が、
+そのまま工程の順:
+
+| ファイル | 寸法 | 工程 |
+| --- | --- | --- |
+| `generated_image.png` | 512x1024 | SD の出力。`detect_face_coordinates` はこれに対して走る |
+| `no_bg_image.png` | 512x1024 | 背景を抜いた絵（`remove_background`。rembg のサイドカー） |
+| `pixelated_image_original.png` | 165x330 | `pixel_art_process(絵)` の戻り値 `(入力そのまま, 縮めた絵)` の2つ目 |
+| `reduced_color_image.png` | 330x660 | 上を2倍に伸ばし、`reduce_image_colors` で 16色にしたもの。**立ち絵**。会話中に見えるのはこれ |
+| `face_image.png` | 165x165 | 立ち絵から切り出した顔 |
+
+- **描いた細かさは `pixel_art_process` で捨てられる**。165x330 に落として2倍に伸ばすので、
+  立ち絵の中身は 165x330 ぶん。ドット絵寄りの画風はこの工程が作っている
+- 2倍に伸ばす段は `pixel_art_process` と `reduce_image_colors` の間のコンパイル済みの中にあり、包めない
+- `pixel_art_process` / `reduce_image_colors` は `scripts.image_processing` の関数を
+  `image_generation_creature` と `image_generation_background` が別々に `from ... import` で持つ。
+  片方だけに当てるなら写しの側へ `alias_scan=False` で
+- SD の段の設定（`character_generation_quality` の `highres_upscale` / `highres`）はここへ来る寸法を変えない。
+  プロキシ MOD が 640x1216 で描いていても、この経路へ渡るのは 512x1024
+
+#### 顔
+
+- `detect_face_coordinates(image, cascade_path, padding=0.25, crop_size=256)` は
+  `(左, 上, 右, 下)` の一辺 256 の箱を返す。見つからなければ `None`
+- 1体につき2回呼ばれる。`lbpcascade_animeface.xml` → `haarcascade_frontalface_alt.xml` の順で、
+  `cascade_path` は `runtime/models/face_recognition/<名前>` と**フォルダ付き**で渡る。
+  素のファイル名で呼ぶとカスケードが読めず `None` になる
+- 感度は OpenCV の既定（`scaleFactor 1.1` / `minNeighbors 3`）。手元の 364 体で 16% が外れ、
+  世界（画風）で 2%〜35% の差がある。暗い絵・コントラストの低い絵で外れる
+- `extract_and_save_face(pixelated_image, coordinates, output_path)` は箱を **330/512 の定数**で縮めてから
+  立ち絵から切る。立ち絵の実寸からは求めていないので、立ち絵の寸法を変えると顔がずれる
+- 見つからなかった回は、立ち絵をもう一度 `pixel_art_process` に通した 16x32 を2倍にした
+  32x64 の全身が顔の代わりになる
+
 ## 3. 調査手法
 
 純粋関数は総当たりで定義域を割り出す。

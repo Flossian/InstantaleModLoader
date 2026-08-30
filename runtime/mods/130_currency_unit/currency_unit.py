@@ -150,7 +150,6 @@ UNIT_LONG = "ゴールド"            # 文中で使う形
 UNIT_SHORT = "G"                 # 数のすぐ後ろに付く形
 HUD_GOLD_FORMAT = "Gold:{amount}"  # 画面上部の所持金の欄
 REWRITE_PROMPTS = True           # LLM へ出ていく本文にも同じ置換を当てる
-LOG_LIMIT = 20                   # 記録に残す置換の件数
 
 
 class _SafeDict(dict):
@@ -254,20 +253,16 @@ def apply(ctx):
 
     write = ctx.logger(LOG_BASENAME)
     warn = ctx.warner("currency unit")
-    state = {"logged": 0, "once": set(), "hud_hit": False, "hud_miss": 0}
+    state = {"once": set(), "hud_hit": False, "hud_miss": 0}
 
     def note(site, before, after):
-        """効いていることを確かめるための例。件数で打ち切る。"""
-        if state["logged"] >= LOG_LIMIT:
-            return
-        state["logged"] += 1
+        """効いていることを確かめるための記録。"""
         write("{}: {!r} -> {!r}".format(site, snip(before), snip(after)))
 
     def note_once(key, site, before, after):
         """毎フレーム来る所からの記録。鍵ごとに1回だけ。
 
-        能力欄は HP や経験値が動くたびに塗り直されるので、
-        件数の打ち切りだけだと `tr` や LLM の例が押し出される。
+        能力欄は HP や経験値が動くたびに塗り直される。
         """
         if key in state["once"]:
             return

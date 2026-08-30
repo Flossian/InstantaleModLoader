@@ -161,11 +161,7 @@ PASS_DELAYS = (0.0, 0.05, 0.25)
 # 最後の当て直しより後。
 VERIFY_DELAY = 0.4
 
-# 記録の上限。
 # 一覧は開くたびに来るので、書くのは形が変わったときだけ。
-# ここに当たると**見届けの行（`after:`）が落ちて**何が起きたか読めなくなるので、
-# 同じ形の一覧は1回しか書かないようにしたうえで、上限にも余裕を持たせている。
-MAX_LOG = 200
 
 # 控え（触る前の寸法）。
 # ウィジェット自身に持たせる。
@@ -176,7 +172,7 @@ def apply(ctx):
     state = {"shape": None, "boxes": []}
     warned = set()
 
-    note = ctx.logger(LOG_BASENAME, cap=MAX_LOG)
+    note = ctx.logger(LOG_BASENAME)
 
     # -- 寸法の読み書き ------------------------------------------------------
     def number(value, default=None):
@@ -430,8 +426,7 @@ def apply(ctx):
         except Exception:
             pass              # 控えを持てない相手でも1回は正しく列にできる
         sample = rows[0]
-        # 同じ形の一覧を開くたびに書かない（開閉のたびに新しい入れ物が来るので、
-        # そのまま書くと数十行で記録の上限に当たり、後の行が落ちる）。
+        # 同じ形の一覧を開くたびに書かない（開閉のたびに新しい入れ物が来る）。
         signature = ("popup", type(box).__name__, len(rows),
                      round(size_of(box, "width", 0.0) or 0.0),
                      round(size_of(box, "height", 0.0) or 0.0),

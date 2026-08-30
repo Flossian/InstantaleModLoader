@@ -1,66 +1,40 @@
 {
-  "entry": "image_no_pixelate.py",
+  "entry": "sharp_portrait.py",
   "api": 1,
   "kind": "fix",
   "name": {
-    "en": "Keep generated images sharp",
-    "ja": "画像を荒くしない"
+    "en": "Sharper portraits and better face detection",
+    "ja": "立ち絵の高画質化と顔認識精度の向上"
   },
   "description": {
-    "en": "Before saving a generated picture the game shrinks it to a third of its size, doubles it back and cuts the colours down; the face is then cropped out of that. Rebuilds every picture the roughening steps hand back from the original drawing at the same size, so the standing portrait and the face keep the detail Stable Diffusion produced. No size anywhere changes",
-    "ja": "ゲームは生成した絵を保存する前に3分の1へ縮め、2倍に伸ばし直して減色している。顔画像もその絵から切り出している。荒くする工程が返す絵を、元の絵から作り直した同じ寸法の絵に差し替えて、立ち絵も顔も Stable Diffusion が描いた細かさのまま残す。寸法はどこも変えない"
+    "en": "Before saving a generated picture the game shrinks it to a third of its size, doubles it back and cuts the colours down; the face is then cropped out of that. Skips both steps, so the background-removed drawing (512x1024) becomes the standing portrait as it is, and the face is re-cropped from it at 256x256. The 2x stretch the game applies in between is undone too. When the game fails to find the face, retries the detection on a preprocessed copy",
+    "ja": "ゲームは生成した絵を保存する前に3分の1へ縮め、2倍に伸ばし直して減色している。顔画像もその絵から切り出している。その2つの工程を通さず、背景を抜いた絵（512x1024）をそのまま立ち絵にし、顔もそこから 256x256 で切り直す。ゲームが途中で2倍に伸ばすぶんも戻す。顔の検出が外れた回は、前処理した絵で検出をやり直す"
   },
-  "version": "3",
+  "version": "11",
   "author": "R01/Flossian",
   "settings": {
-    "BYPASS_CHARACTER": {
+    "SHARP_PORTRAIT": {
       "type": "bool",
       "default": true,
       "label": {
-        "ja": "キャラクタの絵を作り直す",
-        "en": "Rebuild character images"
+        "ja": "立ち絵を荒くしない",
+        "en": "Keep the standing portrait sharp"
       },
       "note": {
-        "ja": "NPC・敵・モンスターの立ち絵。顔画像と戦闘用の絵もここから作られるので一緒に高画質になる",
-        "en": "NPCs, enemies and monsters. The face crop and the battle sprite come from the same picture, so they follow"
+        "ja": "縮小と減色を通さず、背景を抜いた絵（512x1024）をそのまま立ち絵にする。顔もそこから 256x256 で切り直す。切るとゲームのまま（330x660 のドット絵寄り）。縮小と減色は別々には切れない（片方だけ飛ばしても細かさは戻らない）",
+        "en": "Skips the shrink and colour-reduction steps so the background-removed 512x1024 drawing becomes the standing portrait, and the face is re-cropped from it at 256x256. Off = the game's own 330x660 pixel-art look. The two steps cannot be toggled separately; skipping only one does not restore any detail"
       }
     },
-    "BYPASS_BACKGROUND": {
-      "type": "bool",
-      "default": false,
-      "label": {
-        "ja": "背景の絵も作り直す",
-        "en": "Rebuild background images too"
-      },
-      "note": {
-        "ja": "既定は切（ゲームのまま）。背景は1枚が広いので画風の変化が最も目に付く。背景の減色は別経路なので追っていない",
-        "en": "Off by default. Backgrounds fill the screen, so the change of style shows most there. The background colour reduction goes through another path and is not covered"
-      }
-    },
-    "BYPASS_COLOR_REDUCE": {
+    "FACE_RETRY": {
       "type": "bool",
       "default": true,
       "label": {
-        "ja": "減色の段も作り直す",
-        "en": "Rebuild the colour reduction step too"
+        "ja": "顔の検出をやり直す",
+        "en": "Retry face detection"
       },
       "note": {
-        "ja": "**立ち絵の中身を決めるのはここ**。切ると縮めた絵を2倍に伸ばしたものが立ち絵になり、この MOD はほとんど効かない",
-        "en": "This is the step that decides what the standing image contains. Turn it off and the standing image goes back to a doubled-up shrunken picture, leaving this mod with almost no effect"
-      }
-    },
-    "LOG_LIMIT": {
-      "type": "int",
-      "default": 8,
-      "min": 0,
-      "max": 999,
-      "label": {
-        "ja": "記録をログに出す回数",
-        "en": "How many lines to log"
-      },
-      "note": {
-        "ja": "0 にすると何も出さない。工程ごとに数える。顔の検出の座標もここに含まれる",
-        "en": "0 = log nothing. Counted per step. The detected face coordinates are logged under the same limit"
+        "ja": "ゲームが顔を見つけられなかった回だけ、前処理した絵で検出をやり直す。検出は縮小の前の絵に対して走るので、立ち絵の設定と関係なく効く。手元の 364 体では外れが 58 体あり、そのうち 42 体を拾う（4 体は顔でないものを拾う）",
+        "en": "Only when the game fails to find a face, retries the detection on a preprocessed copy. Detection runs on the pre-shrink drawing, so this works regardless of the portrait setting. Of 58 misses among 364 local NPCs it recovers 42 (4 of them are not faces)"
       }
     }
   }

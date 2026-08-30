@@ -52,20 +52,6 @@
         "ja": "document/creature_part/mushroom/accessory の、素の辞書に無い305枚を選択肢に加える",
         "en": "Adds 305 images (document/creature_part/mushroom/accessory) absent from the stock dictionaries"
       }
-    },
-    "LOG_LIMIT": {
-      "type": "int",
-      "default": 200,
-      "min": 0,
-      "max": 100000,
-      "label": {
-        "ja": "選択ログの行数上限",
-        "en": "Selection log line limit"
-      },
-      "note": {
-        "ja": "out/item_image.log に1選択1行。0 で無効",
-        "en": "One line per selection in out/item_image.log. 0 = off"
-      }
     }
   }
 }

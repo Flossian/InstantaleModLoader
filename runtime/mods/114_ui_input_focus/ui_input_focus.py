@@ -98,10 +98,8 @@ GUARD_PAUSE = 5.0
 # 本文の枠と同じ深さ）。
 MAX_DEPTH = 10
 
-# 記録の上限。
 # 焦点は何度も出入りするので、
 # 書くのは「見つけたとき」と「手を引いたとき」だけに絞る。
-MAX_LOG = 40
 
 # 束ねた監視の控え。
 # ウィジェット自身に持たせる。
@@ -116,7 +114,7 @@ def apply(ctx):
     state = {"attempts": [], "standdown": 0.0, "chosen": None}
     inputs = weakref.WeakKeyDictionary()      # hud -> 入力欄への弱参照
 
-    note = ctx.logger(LOG_BASENAME, cap=MAX_LOG)
+    note = ctx.logger(LOG_BASENAME)
     warn_once = ctx.warner("input focus")
 
     def guarded(fn):

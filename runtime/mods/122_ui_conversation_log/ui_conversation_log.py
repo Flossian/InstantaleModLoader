@@ -207,10 +207,9 @@ VIEW_GAP = 8
 # あふれるのは古いほう。
 VIEW_MAX_CHARS = 200000
 
-# 記録の上限（`out/conversation_log.log` に出す診断の行数）。
+# `out/conversation_log.log` に出す診断。
 # 本文そのものは `state/` の側に残るので、
 # こちらは「どこへ置いたか」「拾えたか」だけ。
-MAX_LOG = 40
 
 # `113_ui_text_expand` が HUD に控えているボタン。
 # 名指しで引くのはここだけで、見つからなければ
@@ -299,22 +298,13 @@ def apply(ctx):
             "lines": {},      # 世界名 -> ファイルに在る行数（畳み直しの判断に使う）
             "view": None,     # 開いている窓（Kivy のウィジェット一式）
             "world": None,    # 直前に本文を控えた世界（窓に出す相手）
-            "logged": 0,
             "hud": None,
             "watching": False,
             "anchor": None,
         }
         setattr(sys, STATE_STORE_ATTR, store)
-    write = ctx.logger(LOG_BASENAME)
+    note = ctx.logger(LOG_BASENAME)
     warn_once = ctx.warner("conversation log")
-
-    # `cap` 付きの `ctx.logger` に寄せない。
-    # 数える器（`store["logged"]`）を sys に置き、再注入しても上限が
-    # 戻らないようにしてある（この mod は apply() が世代を跨いで何度も走る）。
-    def note(text):
-        if store["logged"] < MAX_LOG:
-            store["logged"] += 1
-            write(text)
 
     def guarded(fn):
         """ボタン・フックから呼ばれる処理。ここで投げるとゲームを巻き込む。"""

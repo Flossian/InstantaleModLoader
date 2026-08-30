@@ -279,9 +279,7 @@ RESETTLE_DELAY = 0.3
 # その周期をまたぐだけの間を置く。
 REFRESH_DELAY = 0.2
 
-# 記録の上限。
 # 塗り直しは何度も来るので、書くのは節目だけ。
-MAX_LOG = 80
 
 # ウィジェット自身に持たせる控え。
 # 注入し直しても残るので、
@@ -307,7 +305,7 @@ def apply(ctx):
              "healed": False, "game_paints": False,
              "hud": None, "fields": None, "anchor": None}
 
-    note = ctx.logger(LOG_BASENAME, cap=MAX_LOG)
+    note = ctx.logger(LOG_BASENAME)
     warn_once = ctx.warner("party expand")
 
     def guarded(fn):

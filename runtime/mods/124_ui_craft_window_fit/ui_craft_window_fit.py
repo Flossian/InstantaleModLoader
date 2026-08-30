@@ -147,9 +147,7 @@ FIX_ARROW = True
 # `fit` は何度呼んでも同じ結果になる。
 PASS_DELAYS = (0.0, 0.05, 0.25, 0.6)
 
-# 記録の上限。
 # 画面は開くたびに来るので、書くのは形が変わったときだけ。
-MAX_LOG = 120
 
 # ウィジェット木を何段まで降りてグリッドを探すか。
 MAX_DEPTH = 14
@@ -180,7 +178,7 @@ Y_KEYS = ("y", "top", "center_y")
 def apply(ctx):
     state = {"sig": None}
 
-    note = ctx.logger(LOG_BASENAME, cap=MAX_LOG)
+    note = ctx.logger(LOG_BASENAME)
 
     # ------------------------------------------------------------ 読み取り
     def num(value, default=None):

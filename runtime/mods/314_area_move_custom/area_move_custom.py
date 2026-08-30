@@ -147,9 +147,6 @@ GAME_COACH_PRICE = 1000
 # 手持ちが設定した運賃に足りないときの一言。
 REFUSE_TEXT = "（{name}代{price}Gに足りない ― 手持ち{gold}G）"
 
-# 手掛かりに当たらなかった移動中の文言をログに残す上限（1回の移動あたり）。
-UNMATCHED_LOG_LIMIT = 8
-
 
 class _SafeDict(dict):
     """テンプレートに無い変数名が来ても落とさない（`{typo}` はそのまま残る）。"""
@@ -412,7 +409,6 @@ def apply(ctx):
             "gold_before": None,
             "prepaid": None,     # 前払い調整の後の所持金（調整したときだけ入る）
             "game_price": GAME_COACH_PRICE,
-            "unmatched": 0,
         }
 
     def settle_fare(app, window):
@@ -550,9 +546,7 @@ def apply(ctx):
             if ARRIVE_TEXT:
                 return fmt(ARRIVE_TEXT, **values_for(window))
             return None
-        if window["unmatched"] < UNMATCHED_LOG_LIMIT:
-            window["unmatched"] += 1
-            write("text passing through (no mark matched): {!r}".format(text))
+        write("text passing through (no mark matched): {!r}".format(text))
         return None
 
     @ctx.wrap("__main__:InstantaleApp.add_text", required=False)

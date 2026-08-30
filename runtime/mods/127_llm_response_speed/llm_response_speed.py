@@ -134,9 +134,6 @@ SLOTS = 1
 # `mod.json` の "default" と揃えること。
 OBSERVE_ONLY = False
 
-# 起動引数をログに出す回数。
-LOG_LIMIT = 5
-
 LOG_BASENAME = "llm_speed.log"
 
 #: サイドカーの起動が必ず通る1点。
@@ -362,7 +359,6 @@ def running_flags():
 
 
 def apply(ctx):
-    state = {"seen": 0}
     write = ctx.logger(LOG_BASENAME)
 
     @ctx.wrap(TARGET, required=False, safe=True)
@@ -376,22 +372,17 @@ def apply(ctx):
         if not is_llama_server(argv):
             return orig(*args, **kwargs)
 
-        state["seen"] += 1
-        loud = state["seen"] <= LOG_LIMIT
-        if loud:
-            write("[LAUNCH] {}".format(describe(argv)))
+        write("[LAUNCH] {}".format(describe(argv)))
 
         new_argv, changes = rewrite_argv(argv)
         if not changes:
-            if loud:
-                write("    観測のみ（CTX_SIZE={}）".format(CTX_SIZE))
+            write("    観測のみ（CTX_SIZE={}）".format(CTX_SIZE))
             return orig(*args, **kwargs)
 
-        if loud:
-            for flag, before, after in changes:
-                write("    {} {} -> {}".format(
-                    flag, before if before is not None else "(無し)", after))
-            write("[REWRITE] {}".format(describe(new_argv)))
+        for flag, before, after in changes:
+            write("    {} {} -> {}".format(
+                flag, before if before is not None else "(無し)", after))
+        write("[REWRITE] {}".format(describe(new_argv)))
 
         if from_kwargs:
             kwargs = dict(kwargs, args=new_argv)

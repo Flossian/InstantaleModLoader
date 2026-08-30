@@ -189,12 +189,11 @@ STAY_TEXT_MARK = "泊まることにした"
 PROMPT_MONTHS_RE = re.compile(
     r"(?:数|[0-9０-９]+)[ヵヶカか]月(?=の(?:宿泊|滞在))")
 
-# 宿泊の話に見えるのに手掛かりへ当たらなかった本文をログに残す上限。
+# 宿泊の話に見えるのに手掛かりへ当たらなかった本文の印。
 # 活動ごとのプロンプトの実文言は、
 # まだ全部を読めていない（`out/events.log` は長い行を途中で切る）。
 # だから**当たらなかった側を実機から拾う**ための口を置く。
 PROMPT_MISS_MARKS = ("の宿泊", "の滞在")
-PROMPT_MISS_LOG_LIMIT = 4
 
 # 週単位の日数の予算を数える宿泊のマネージャ（すべて targets.txt の実在クラス）。
 # `VacationStartManager` は自前の窓（宿代）で数えるのでここには入れない。
@@ -332,8 +331,6 @@ def apply(ctx):
             # 一度ログに残した印（毎フレーム書かないため）。
             "logged_unknown": set(),
             "age_warned": False,
-            # 宿泊の話に見えるのに手掛かりへ当たらなかった本文を残した数。
-            "prompt_misses": 0,
         }
         setattr(sys, STATE_STORE_ATTR, state)
 
@@ -745,11 +742,10 @@ def apply(ctx):
             if new != content:
                 changed = True
                 write("prompt at {}: months -> {}".format(site, block["length"]))
-            elif any(mark in content for mark in PROMPT_MISS_MARKS)                     and state["prompt_misses"] < PROMPT_MISS_LOG_LIMIT:
+            elif any(mark in content for mark in PROMPT_MISS_MARKS):
                 # 活動ごとの実文言はまだ全部読めていない。
                 # 当たらなかった側を実機から拾えるよう、
                 # その一節だけ残す（前後 40 字）。
-                state["prompt_misses"] += 1
                 for mark in PROMPT_MISS_MARKS:
                     at = content.find(mark)
                     if at >= 0:

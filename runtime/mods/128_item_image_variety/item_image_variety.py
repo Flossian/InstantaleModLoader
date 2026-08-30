@@ -58,10 +58,6 @@ SIM_FLOOR = 0.8
 # 切ると素の辞書だけで均しをかける（切り分け用）。
 USE_EXTRA_DICT = True
 
-# 選択のたびに1行残すログの上限。
-# 0 で無効。
-LOG_LIMIT = 200
-
 EMBEDDING_MODULE = "Embedding.get_similar_id"
 
 
@@ -88,7 +84,6 @@ def apply(ctx):
         "legacy": {},    # (sub_type, 絵) -> 旧版が数えた累計。使用数の下駄
         "usage": {},     # (sub_type, 絵) -> 使用数（images の値 + legacy から導出）
         "pools": {},     # sub_type -> (keys, 正規化済み行列, キー集合) のキャッシュ
-        "logged": 0,
     }
 
     def ensure_world():
@@ -181,10 +176,8 @@ def apply(ctx):
         with lock:
             kept = state["images"].get((item_sub_type, query_text))
             if kept is not None and kept in key_set:
-                if state["logged"] < LOG_LIMIT:
-                    state["logged"] += 1
-                    log("{}: kept {} for {!r}".format(
-                        item_sub_type, kept, query_text[:80]))
+                log("{}: kept {} for {!r}".format(
+                    item_sub_type, kept, query_text[:80]))
                 return kept
 
         query = emb_mod.text_to_embedding(query_text)
@@ -211,15 +204,13 @@ def apply(ctx):
             state["usage"][spot] = state["usage"].get(spot, 0) + 1
             persist()
 
-        if state["logged"] < LOG_LIMIT:
-            state["logged"] += 1
-            rank = 0 if top_sim <= 0 else qualified.index(chosen)
-            log("{}: chose {} (rank {} of {} qualified, sim {:.3f}, top1 {} {:.3f}) "
-                "for {!r}".format(
-                    item_sub_type, key, rank,
-                    1 if top_sim <= 0 else len(qualified),
-                    float(sims[chosen]), keys[int(top_idx)], top_sim,
-                    query_text[:80]))
+        rank = 0 if top_sim <= 0 else qualified.index(chosen)
+        log("{}: chose {} (rank {} of {} qualified, sim {:.3f}, top1 {} {:.3f}) "
+            "for {!r}".format(
+                item_sub_type, key, rank,
+                1 if top_sim <= 0 else len(qualified),
+                float(sims[chosen]), keys[int(top_idx)], top_sim,
+                query_text[:80]))
         return key
 
     ctx.log("item_image_variety: installed (TOP_K={}, SIM_FLOOR={}, extra dict={})".format(

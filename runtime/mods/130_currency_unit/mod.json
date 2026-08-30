@@ -60,20 +60,6 @@
         "ja": "既定 ON。表記を変える前に貯まった人生ログや世界観の中の「ゴールド」も、送る直前に直す",
         "en": "Default ON. Also fixes ゴールド left in life logs and worldview text written before the change"
       }
-    },
-    "LOG_LIMIT": {
-      "type": "int",
-      "default": 20,
-      "min": 0,
-      "max": 999,
-      "label": {
-        "ja": "記録する置換の件数",
-        "en": "How many rewrites to log"
-      },
-      "note": {
-        "ja": "out\\currency_unit.log に残す例の数。効いているかの確認用。0 で何も残さない",
-        "en": "Examples kept in out\\currency_unit.log, to confirm it works. 0 = log nothing"
-      }
     }
   }
 }
