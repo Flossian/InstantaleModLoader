@@ -392,6 +392,23 @@ def at_least(value, floor):
         return True
 
 
+def sort_value(text):
+    """見出しで並べ替えるときの鍵。
+
+    数字で始まる欄（レベル・親密度 `42 仲間だと感じている`）は数で、それ以外は文字列で並べる。
+    空欄は昇順でも降順でも**末尾**に置く（空を先頭に集めると、見たい行が画面の外へ行く）。
+    戻り値は (空か, 数の欄でないか, 数, 文字列) の組。
+    """
+    text = "" if text is None else str(text).strip()
+    if not text:
+        return (1, 1, 0.0, "")
+    head = text.split(" ", 1)[0]
+    try:
+        return (0, 0, float(head), text)
+    except ValueError:
+        return (0, 1, 0.0, text)
+
+
 def same(value, chosen):
     return chosen in (ANY, "", None) or value == chosen
 
@@ -489,6 +506,46 @@ def build_window(model):
     shown = ttk.Label(bar, style="Faint.TLabel")
     shown.pack(side="right")
 
+    def sortable(tree, columns):
+        """一覧の見出しを押すと、その欄で昇順、もう一度押すと降順に並べ替える。
+
+        並べ替えは既にある行を `move` で並べ直すだけなので、印（チェック）も選択も保たれる。
+        一覧を作り直したあとは `apply()` を呼ぶと同じ並びに戻る。
+        空欄は末尾（`sort_value`）。
+        """
+        state = {"column": None, "reverse": False}
+        titles = {col: tree.heading(col, "text") for col in columns}
+
+        def apply():
+            column = state["column"]
+            if column is None:
+                return
+            items = list(tree.get_children(""))
+            items.sort(key=lambda iid: sort_value(tree.set(iid, column)))
+            if state["reverse"]:
+                # 降順でも空欄は末尾のまま。
+                filled = [i for i in items if sort_value(tree.set(i, column))[0] == 0]
+                empty = [i for i in items if sort_value(tree.set(i, column))[0] == 1]
+                items = list(reversed(filled)) + empty
+            for index, iid in enumerate(items):
+                tree.move(iid, "", index)
+            for col in columns:
+                mark = ""
+                if col == column:
+                    mark = " ▼" if state["reverse"] else " ▲"
+                tree.heading(col, text=titles[col] + mark)
+
+        def click(column):
+            if state["column"] == column:
+                state["reverse"] = not state["reverse"]
+            else:
+                state["column"], state["reverse"] = column, False
+            apply()
+
+        for col in columns:
+            tree.heading(col, command=lambda c=col: click(c))
+        return apply
+
     body = ttk.Frame(export_tab)
     body.pack(fill="both", expand=True)
 
@@ -507,6 +564,7 @@ def build_window(model):
             ("affinity", "親密度", 150, "w", False)):
         tree.heading(col, text=head)
         tree.column(col, width=width, anchor=anchor, stretch=stretch)
+    resort_list = sortable(tree, columns)
     scroll = ttk.Scrollbar(body, orient="vertical", command=tree.yview)
     tree.configure(yscrollcommand=scroll.set)
 
@@ -516,32 +574,41 @@ def build_window(model):
     scroll.pack(side="right", fill="y")
     tree.pack(side="left", fill="both", expand=True)
 
-    # 顔画像。Tk 8.6 は PNG をそのまま読めるので画像の部品は要らない。
-    # `PhotoImage` は参照を持っていないと捨てられるので、ラベル自身に括り付ける。
-    #
-    # 下敷きに空の画像を敷いたままにするのは、枠の大きさを画素で決めるため。
-    # 画像を外すと `width` / `height` は**文字数**として読まれるので、
-    # 同じ数字が別の大きさになる（165 が 165文字ぶんの幅になる）。
-    # `compound="center"` で、絵が無いときだけ文字が下敷きの上に出る。
-    blank_face = tk.PhotoImage(width=FACE_BOX, height=FACE_BOX)
-    face_box = tk.Label(side, borderwidth=1, relief="solid", anchor="center",
-                        compound="center", foreground="#646b76",
-                        image=blank_face, text=FACE_EMPTY)
-    face_box.pack(pady=(0, 8))
-    face_box.blank = blank_face
-    face_box.image = None
+    def info_panel(parent):
+        """NPC 1人の欄。エクスポートとインポートで同じ並び（顔 → 名前 → 情報 → 本文 → 同梱物）。
 
-    preview_name = ttk.Label(side, style="InfoName.TLabel", anchor="w")
-    preview_name.pack(fill="x")
-    preview_meta = ttk.Label(side, style="Sub.TLabel", anchor="w", justify="left")
-    preview_meta.pack(fill="x", pady=(2, 6))
-    preview_text = tk.Text(side, height=8, wrap="word", relief="flat",
-                           borderwidth=0, highlightthickness=0)
-    preview_text.pack(fill="both", expand=True)
-    preview_text.configure(state="disabled")
-    ttk.Separator(side).pack(fill="x", pady=6)
-    preview_bundle = ttk.Label(side, style="Sub.TLabel", anchor="w", justify="left")
-    preview_bundle.pack(fill="x")
+        顔画像は Tk 8.6 が PNG をそのまま読めるので画像の部品は要らない。
+        `PhotoImage` は参照を持っていないと捨てられるので、ラベル自身に括り付ける。
+        下敷きに空の画像を敷いたままにするのは、枠の大きさを画素で決めるため。
+        画像を外すと `width` / `height` は**文字数**として読まれるので、
+        同じ数字が別の大きさになる（165 が 165文字ぶんの幅になる）。
+        `compound="center"` で、絵が無いときだけ文字が下敷きの上に出る。
+
+        伸び縮みするのは本文だけ。窓が低いときに欠けるのも本文で、
+        同梱物の行は本文の後に置くが `pack` の順は本文より先（下端側から詰める）。
+        戻り値は (顔, 名前, 情報, 本文, 同梱物) のウィジェット。
+        """
+        blank = tk.PhotoImage(width=FACE_BOX, height=FACE_BOX)
+        face = tk.Label(parent, borderwidth=1, relief="solid", anchor="center",
+                        compound="center", foreground="#646b76",
+                        image=blank, text=FACE_EMPTY)
+        face.pack(pady=(0, 8))
+        face.blank = blank
+        face.image = None
+        name = ttk.Label(parent, style="InfoName.TLabel", anchor="w")
+        name.pack(fill="x")
+        meta = ttk.Label(parent, style="Sub.TLabel", anchor="w", justify="left")
+        meta.pack(fill="x", pady=(2, 6))
+        bundle = ttk.Label(parent, style="Sub.TLabel", anchor="w", justify="left")
+        bundle.pack(side="bottom", fill="x")
+        ttk.Separator(parent).pack(side="bottom", fill="x", pady=6)
+        text = tk.Text(parent, height=2, wrap="word", relief="flat",
+                       borderwidth=0, highlightthickness=0)
+        text.pack(fill="both", expand=True)
+        text.configure(state="disabled")
+        return face, name, meta, text, bundle
+
+    face_box, preview_name, preview_meta, preview_text, preview_bundle = info_panel(side)
 
     bottom = ttk.Frame(export_tab)
     bottom.pack(fill="x", pady=(8, 0))
@@ -588,6 +655,7 @@ def build_window(model):
                                 "" if level is None else level,
                                 affinity_label(value, text)),
                         **check_cell(npc_id in checked))
+        resort_list()
         total = len(model.C.npcs_of(model.save))
         shown.configure(text="{}/{}人を表示・{}人にチェック".format(
             len(visible), total, len(checked)))
@@ -820,78 +888,29 @@ def build_window(model):
             ("affinity", "親密度", 150, "w", False)):
         ptree.heading(col, text=head)
         ptree.column(col, width=width, anchor=anchor, stretch=stretch)
+    resort_packages = sortable(ptree, pcolumns)
     pscroll = ttk.Scrollbar(plist, orient="vertical", command=ptree.yview)
     ptree.configure(yscrollcommand=pscroll.set)
     pscroll.pack(side="right", fill="y")
     ptree.pack(side="left", fill="both", expand=True)
 
-    right = ttk.Frame(pane, width=380)
-    right.pack(side="right", fill="y", padx=(10, 0))
-    right.pack_propagate(False)
-
-    # 選んだ NPC の中身。エクスポート側と同じものを、zip から出す。
-    ttk.Label(right, text="選んでいるNPC", style="Group.TLabel").pack(anchor="w")
-    head = ttk.Frame(right)
-    head.pack(fill="x", pady=(2, 4))
-    pkg_blank = tk.PhotoImage(width=FACE_BOX, height=FACE_BOX)
-    pkg_face = tk.Label(head, borderwidth=1, relief="solid", anchor="center",
-                        compound="center", foreground="#646b76",
-                        image=pkg_blank, text=FACE_EMPTY)
-    pkg_face.pack(side="left")
-    pkg_face.blank = pkg_blank
-    pkg_face.image = None
-    facts = ttk.Frame(head)
-    facts.pack(side="left", fill="both", expand=True, padx=(8, 0))
-    pkg_name = ttk.Label(facts, style="InfoName.TLabel", anchor="w")
-    pkg_name.pack(fill="x")
-    pkg_meta = ttk.Label(facts, style="Sub.TLabel", anchor="w", justify="left")
-    pkg_meta.pack(fill="x", pady=(2, 0))
-    pkg_text = tk.Text(right, height=5, wrap="word", relief="flat",
-                       borderwidth=0, highlightthickness=0)
-    pkg_text.pack(fill="x")
-    pkg_text.configure(state="disabled")
-    pkg_bundle = ttk.Label(right, style="Sub.TLabel", anchor="w", justify="left")
-    pkg_bundle.pack(fill="x", pady=(4, 0))
-
-    ttk.Separator(right).pack(fill="x", pady=8)
-    ttk.Label(right, text="予約の内容", style="Group.TLabel").pack(anchor="w")
-
-    target_row = ttk.Frame(right)
-    target_row.pack(fill="x", pady=(6, 6))
-    ttk.Label(target_row, text="置き先の世界").pack(side="left")
-    target_var = tk.StringVar(value=model.worlds[0] if model.worlds else "")
-    target_box = ttk.Combobox(target_row, textvariable=target_var,
-                              values=model.worlds, state="readonly", width=20)
-    target_box.pack(side="left", padx=(6, 0))
-
-    verdict = ttk.Label(right, anchor="w", justify="left", style="Sub.TLabel")
-    verdict.pack(fill="x", pady=(0, 8))
-
-    ttk.Label(right, text="引き継ぐもの", style="Group.TLabel").pack(anchor="w")
-    inherit_vars = {}
-    for key, label, setting in INHERIT_ROWS:
-        var = tk.BooleanVar(value=bool(model.settings.get(setting, True)))
-        ttk.Checkbutton(right, text=label, variable=var).pack(anchor="w")
-        inherit_vars[key] = var
-
-    reserve_button = ttk.Button(right, text="インポートを予約する",
-                                style="Accent.TButton")
-    reserve_button.pack(anchor="e", pady=(10, 0))
-
-    ttk.Separator(import_tab).pack(fill="x", pady=8)
-    ttk.Label(import_tab, text="予約の一覧（世界をロードしたときに配置される）",
+    # 予約の一覧は左の列の下。右の列（NPC の欄と予約の操作）を全高にするため、
+    # 横幅いっぱいには広げない。
+    ttk.Separator(left).pack(fill="x", pady=8)
+    ttk.Label(left, text="予約の一覧（世界をロードしたときに配置される）",
               style="Group.TLabel").pack(anchor="w")
-    plan = ttk.Frame(import_tab)
-    plan.pack(fill="both", expand=True)
+    plan = ttk.Frame(left)
+    plan.pack(fill="x")          # 高さは rtree の行数ぶん。余りは上の一覧へ
     rcolumns = ("name", "source", "target", "inherit", "status")
     rtree = ttk.Treeview(plan, columns=rcolumns, show="headings", height=6,
                          selectmode="browse")
     for col, head, width, stretch in (
-            ("name", "NPC", 170, False), ("source", "元の世界", 140, False),
-            ("target", "置き先", 150, False), ("inherit", "引き継ぎ", 220, True),
-            ("status", "状態", 180, False)):
+            ("name", "NPC", 150, False), ("source", "元の世界", 120, False),
+            ("target", "置き先", 130, False), ("inherit", "引き継ぎ", 190, True),
+            ("status", "状態", 160, False)):
         rtree.heading(col, text=head)
         rtree.column(col, width=width, stretch=stretch)
+    resort_plan = sortable(rtree, rcolumns)
     rscroll = ttk.Scrollbar(plan, orient="vertical", command=rtree.yview)
     rtree.configure(yscrollcommand=rscroll.set)
     rscroll.pack(side="right", fill="y")
@@ -899,7 +918,7 @@ def build_window(model):
     rtree.tag_configure("warn", foreground="#9a5b00")
     rtree.tag_configure("done", foreground="#646b76")
 
-    plan_bar = ttk.Frame(import_tab)
+    plan_bar = ttk.Frame(left)
     plan_bar.pack(fill="x", pady=(6, 0))
     drop_button = ttk.Button(plan_bar, text="一覧から消す")
     drop_button.pack(side="left")
@@ -907,6 +926,43 @@ def build_window(model):
     recheck_button.pack(side="left", padx=(6, 0))
     plan_note = ttk.Label(plan_bar, style="Warn.TLabel", anchor="e")
     plan_note.pack(side="right", fill="x", expand=True)
+
+    right = ttk.Frame(pane, width=330)
+    right.pack(side="right", fill="y", padx=(10, 0))
+    right.pack_propagate(False)
+
+    # 予約の操作は欄の**下端に先に**据える。pack は並べた順に場所を取るので、
+    # 上から順に置くと窓が低いときに末尾（引き継ぐもの・予約ボタン）から欠ける。
+    reserve = ttk.Frame(right)
+    reserve.pack(side="bottom", fill="x")
+    ttk.Separator(reserve).pack(fill="x", pady=4)
+    ttk.Label(reserve, text="予約の内容", style="Group.TLabel").pack(anchor="w")
+
+    target_row = ttk.Frame(reserve)
+    target_row.pack(fill="x", pady=(4, 4))
+    ttk.Label(target_row, text="置き先の世界").pack(side="left")
+    target_var = tk.StringVar(value=model.worlds[0] if model.worlds else "")
+    target_box = ttk.Combobox(target_row, textvariable=target_var,
+                              values=model.worlds, state="readonly", width=20)
+    target_box.pack(side="left", padx=(6, 0))
+
+    verdict = ttk.Label(reserve, anchor="w", justify="left", style="Sub.TLabel")
+    verdict.pack(fill="x", pady=(0, 4))
+
+    ttk.Label(reserve, text="引き継ぐもの", style="Group.TLabel").pack(anchor="w")
+    inherit_vars = {}
+    for key, label, setting in INHERIT_ROWS:
+        var = tk.BooleanVar(value=bool(model.settings.get(setting, True)))
+        ttk.Checkbutton(reserve, text=label, variable=var).pack(anchor="w")
+        inherit_vars[key] = var
+
+    reserve_button = ttk.Button(reserve, text="インポートを予約する",
+                                style="Accent.TButton")
+    reserve_button.pack(anchor="e", pady=(6, 0))
+
+    # 選んだ NPC の中身。エクスポート側と同じ部品で、zip から出す。
+    ttk.Label(right, text="選んでいるNPC", style="Group.TLabel").pack(anchor="w", pady=(0, 4))
+    pkg_face, pkg_name, pkg_meta, pkg_text, pkg_bundle = info_panel(right)
 
     pvisible = []       # いま出ている zip の場所（行の iid）
 
@@ -946,6 +1002,7 @@ def build_window(model):
                          values=(package.name, package.source_world, package.job,
                                  "" if package.level is None else package.level,
                                  affinity_label(affinity, text)))
+        resort_packages()
         pshown.configure(text="{}/{}件を表示".format(len(pvisible), len(model.packages)))
         check_collision()
 
@@ -978,6 +1035,7 @@ def build_window(model):
                          values=(row.get("name") or "", row.get("source_world") or "",
                                  row.get("target_world") or "", inherit_label(row), text),
                          tags=(tag,) if tag else ())
+        resort_plan()
         plan_note.configure(
             text="{}件が同名で見送りになる。先住側をセーブエディタで改名するか、"
                  "置き先を変えると予約できる".format(warned) if warned else "")
@@ -1011,7 +1069,6 @@ def build_window(model):
                                     affinity_label(affinity, text) or "（記録なし）"))
         pkg_text.insert("1.0", package.npc.get("profile") or "")
         pkg_text.configure(state="disabled")
-        images = [name for name in package.images if name != model.C.FACE_IMAGE]
         memories = [key for key in ("profile", "social") if package.extra.get(key)]
         pkg_bundle.configure(
             text="この zip に入っているもの\n画像 {}枚\n記憶: {}".format(

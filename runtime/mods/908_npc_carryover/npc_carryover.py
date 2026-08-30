@@ -61,7 +61,7 @@ import os
 import random
 import sys
 
-from instantale_modloader import frames, ids, state as loader_state, ui
+from instantale_modloader import frames, state as loader_state, ui
 from instantale_modloader.npcs import make_npc
 
 from . import carryover
@@ -190,29 +190,30 @@ def apply(ctx):
         return "{}の{}".format(where, spot)
 
     # ================================================== 項目を整える
-    def reassign_items(app, fields):
-        """持ち物の id を置き先の台帳で採り直し、装備の参照も付け替える。
+    def drop_belongings(fields):
+        """持ち物と装備は持ち込まない。落とした数を返す。
 
-        元の世界の id のままだと、ゲームが `index['item']` から配り直す id と
-        衝突して上書きで消える（セーブエディタが `ReassignItemIds` で
-        同じことをしている）。
+        ##### なぜ持ち込まないのか
+
+        アイテムの id は世界ごとの台帳（`index['item']`）で振られる。
+        持ち込むなら置き先の台帳で採り直さないと、ゲームが次に配る id と
+        衝突して上書きで消える。
+        採り直し自体はできる（`ids.claim`）が、**持ち込む価値に対して
+        管理が重い** ― 品物は世界の経済（§2.13）に紐づいた値段を持っていて、
+        別の世界へ移すと釣り合いの根拠が無くなる。
+
+        持ってこないと決めれば、台帳を触る必要そのものが消える。
+
+        ##### 装備はそもそも空
+
+        実データ5世界 369体の `equipments` は**全て空**だった（2026-08-30）。
+        素のゲームは NPC に装備を持たせない。
+        持ち物のほうは 28体（7.6%）が持っている。
         """
-        inventory = fields.get("inventory")
-        if not isinstance(inventory, dict) or not inventory:
-            return 0
-        moved = {}
-        fresh = {}
-        for old_key, item in inventory.items():
-            new_key = ids.claim(app, "item")
-            moved[str(old_key)] = new_key
-            fresh[new_key] = item
-        fields["inventory"] = fresh
-        equipments = fields.get("equipments")
-        if isinstance(equipments, dict):
-            for slot, value in list(equipments.items()):
-                if isinstance(value, str) and value in moved:
-                    equipments[slot] = moved[value]
-        return len(moved)
+        dropped = len(fields.get("inventory") or {})
+        fields["inventory"] = {}
+        fields["equipments"] = {}
+        return dropped
 
     def place_images(package, world, name):
         """zip の画像を置き先の世界へ展開する。`{鍵: 新しいパス}` を返す。
@@ -281,10 +282,11 @@ def apply(ctx):
             fields["relationship"] = json.loads(json.dumps(FRESH_RELATIONSHIP))
         if not inherit.get("life_log", INHERIT_LIFE_LOG):
             fields["life_log"] = []
-        moved = reassign_items(app, fields)
+        dropped = drop_belongings(fields)
         written = place_images(package, world, fields.get("name") or "")
         rewrite_image_src(fields, written)
-        write("    prepared: items={} images={}".format(moved, len(written)))
+        write("    prepared: dropped {} item(s), images={}".format(
+            dropped, len(written)))
         return fields, config if isinstance(config, dict) else {}
 
     # ================================================== 名簿へ載せる
@@ -355,6 +357,13 @@ def apply(ctx):
         return done
 
     # ================================================== 予約を果たす
+    def placed_name(app, npc_id):
+        """置いた後の名前。読めなければ空文字。"""
+        from instantale_modloader.npcs import save_npcs
+        record = save_npcs(app).get(str(npc_id))
+        name = record.get("name") if isinstance(record, dict) else None
+        return name if isinstance(name, str) else ""
+
     def landed(app, npc_id):
         """作った NPC がゲームの保存する辞書に入ったか。
 
@@ -404,6 +413,20 @@ def apply(ctx):
         if npc_id is None:
             write("  {}: make_npc failed".format(name))
             return False, ""
+        renamed = placed_name(app, npc_id)
+        if renamed and renamed != name:
+            # `make_npc` は `World.generate_character` を通る。
+            # `120_fix_npc_name_collision` はそこを包んでいて、
+            # **似た名前**（表記ゆれ・修飾語付き・姓名の片方一致）なら改名する。
+            # 完全一致はこちらが先に見送るので当たらないが、似た名前は通る。
+            # 勝手に直しはしない（あちらの判断には根拠がある）が、
+            # 別名で現れたことは必ず残す ― 黙っていると別人が来たように見える。
+            write("  {} arrived as {!r}; another mod renamed them "
+                  "(120_ renames names that look like an existing one)"
+                  .format(name, renamed))
+            ctx.log("npc carryover: {} was renamed to {} on arrival"
+                    .format(name, renamed), level="WARN")
+            name = renamed
         if not landed(app, npc_id):
             # ここに落ちたら、世界には居るのにセーブされない
             # （`save_data_dict['npcs']` がゲームの保存する側。GAME.md §2.23）。

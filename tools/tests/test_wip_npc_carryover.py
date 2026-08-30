@@ -15,6 +15,7 @@
             `%LOCALAPPDATA%` から繋ぎ直して見つける
   居場所  … エクスポートの一覧は名前の隣に滞在中のエリア名と施設名を出す。
             同じものが zip にも入る（zip だけで誰だったか分かる）
+  持ち物  … 持ち込まない（inventory / equipments は空で入る）
   取込    … ロードのフック（実行時の名簿がまだ空の状態）で NPC が
             **ゲームの保存する辞書へ**入り、adventurer_npcs に載り、
             持ち物の id が置き先の台帳で採り直され、記憶が写り、`status` が
@@ -402,6 +403,10 @@ try:
           len([r for r in rows if tool.same(r[3], "泥濘のギルド")]) == 1)
     check("名前は部分一致", tool.matches("重装のハンス", "ハンス")
           and not tool.matches("重装のハンス", "リリア"))
+    keys = sorted(["64", "7", "", "100 盟友だと思っている", "40 多少の好意がある", "adventure"],
+                  key=tool.sort_value)
+    check("見出しの並べ替えは数字で始まる欄を数で、空欄を末尾に",
+          keys == ["7", "40 多少の好意がある", "64", "100 盟友だと思っている", "adventure", ""], keys)
     check("職は選択", tool.same("adventure", "adventure")
           and tool.same("adventure", tool.ANY) and not tool.same("inn", "adventure"))
     check("レベルは下限", tool.at_least(30, "30") and not tool.at_least(12, "30")
@@ -474,12 +479,10 @@ try:
           app.save_data_dict["index"]["npc"] == int(hans_id) + 1
           or app.world_dict["index"]["npc"] == int(hans_id) + 1,
           (app.save_data_dict["index"], app.world_dict["index"]))
-    check("持ち物の id を採り直す",
-          list(record["inventory"]) != ["item_27", "item_28"]
-          and len(record["inventory"]) == 2, list(record["inventory"]))
-    check("装備の参照も付け替える",
-          record["equipments"]["weapon"] in record["inventory"],
-          record["equipments"])
+    # 持ち物と装備は持ち込まない（アイテムの id は世界ごとの台帳で振られる。
+    # 実データ369体の `equipments` は全て空だった）。
+    check("持ち物は持ち込まない", record["inventory"] == {}, record["inventory"])
+    check("装備も持ち込まない", record["equipments"] == {}, record["equipments"])
     check("好感度を引き継ぐ", record["relationship"]["player"]["affinity"] == 40)
     check("経歴を引き継ぐ", record["life_log"] == ["旅に出た"])
     lilia_id = brought["星読みのリリア"]
