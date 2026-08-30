@@ -484,6 +484,15 @@ def main():
     # 切っている間だけ計測 mod の `after` が誰にも確かめられない、
     # という穴を作らないため。
     found = ml.discover(MODS_DIR, debug=True)
+    # `local/` の mod は検査しない（TECH.md §2.6）。
+    # 配布物にも CI にも入らないもので、この検査が見ているのは
+    # 「配る形になっているか」だから、当てる意味が無い。
+    # `installed` から先に落とすので、以降の全体検査（NOTICE・名前空間・順序）
+    # にも現れない。
+    local = found.get("local") or set()
+    if local:
+        found = dict(found, installed=[n for n in found["installed"]
+                                       if n not in local])
     mods = found["installed"]
     if only:
         mods = [name for name in mods if only in name]

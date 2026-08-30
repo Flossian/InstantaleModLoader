@@ -474,18 +474,26 @@ KIND_LABELS = {
 }
 
 
-def mod_kind(name: str, manifest: dict) -> str:
+def mod_kind(name: str, manifest: dict, local: bool = False) -> str:
     """一覧の「種別」列に出す文字。
 
     種別そのもの（`kind`）より、**状態を表す印を先に**見る。取込済と開発中は
     「本来の種別が何であれ、いまは普段の遊びから外れている」ことのほうが
     一覧では大事なため。`kind` はローダが語彙を検めた値（`_manifest`）。
 
+    「ローカル」は `local/` に在る mod（配る予定が無い。TECH.md §2.6）。
+    開発中と分けるのは、伏せ方が違うから ―
+    あちらはデバッグモードのときだけ動くが、こちらは普段の遊びで動く。
+
     どれも名乗っていない mod は空 ― 無理に当てはめるより、
     規約の外に居ることがそのまま見える方が良い。
     """
     if manifest.get("superseded"):
         return "取込済"
+    # 在り処が番号に勝つ。`local/` へ移した mod は 9xx の番号を残したままなので
+    # （`is_wip` が真になる）、先に見ないと全部「開発中」になる。
+    if local:
+        return "ローカル"
     if ml.is_wip(name):
         return "開発中"
     label = KIND_LABELS.get(manifest.get("kind") or "")
@@ -514,12 +522,18 @@ def read_mods() -> dict:
     found = ml.discover(MODS_DIR)
     disabled = set(found["disabled"])
 
+    local = found.get("local") or set()
+    dirs = found.get("dirs") or {}
+
     mods = []
     for name in found["listed"]:
         manifest = found["manifests"].get(name) or {}
         mods.append({
             "dir": name,
-            "kind": mod_kind(name, manifest),
+            # フォルダを開くのも道具を起動するのも、この実在パスから引く。
+            # `MODS_DIR` を決め打つと `local/` の mod だけ見つからない。
+            "path": os.path.join(dirs.get(name) or MODS_DIR, name),
+            "kind": mod_kind(name, manifest, name in local),
             "name_ja": (manifest.get("name") or {}).get("ja") or name,
             "name_en": (manifest.get("name") or {}).get("en") or name,
             "desc_ja": (manifest.get("description") or {}).get("ja") or "",
@@ -542,6 +556,9 @@ def read_mods() -> dict:
             # 判定はローダの語彙（`is_wip`）を借りる ― 番号帯の規則をここに写すと、
             # 片方だけ直したとき読み込みと表示がずれる。
             "wip": ml.is_wip(name),
+            # `local/` に在る（配る予定が無い）。読み込みの条件は順序ファイルの
+            # 記載だけで、デバッグモードは要らない。
+            "local": name in local,
             # MOD 同梱の道具（`908_` §4）。GUI はボタンを出して別プロセスで開くだけ。
             "tool": manifest.get("tool"),
         })
@@ -2140,7 +2157,8 @@ class App(ttk.Frame):
         if not mod or not mod.get("tool"):
             return
         tool = mod["tool"]
-        mod_dir = os.path.join(MODS_DIR, mod["dir"])
+        # 在り処は一覧の行が持っている（`local/` の mod も同じ形で開ける）。
+        mod_dir = mod.get("path") or os.path.join(MODS_DIR, mod["dir"])
         entry = os.path.join(mod_dir, tool["entry"])
         if not os.path.isfile(entry):
             messagebox.showerror("道具が見つかりません",
@@ -2234,7 +2252,7 @@ class App(ttk.Frame):
         if not mod:
             self._set_status("一覧から MOD を選択してください")
             return
-        self._open(os.path.join(MODS_DIR, mod["dir"]))
+        self._open(mod.get("path") or os.path.join(MODS_DIR, mod["dir"]))
 
     def open_mods_dir(self) -> None:
         self._open(MODS_DIR)

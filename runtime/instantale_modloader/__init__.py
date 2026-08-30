@@ -787,6 +787,26 @@ def _mods_dir() -> str:
     return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "mods")
 
 
+#: 配る予定の無い mod の置き場。`runtime/` の**外**（配布フォルダの根の直下）。
+#: 場所そのものが印で、番号帯も旗も要らない（TECH.md §2.6）。
+LOCAL_DIRNAME = "local"
+
+
+def _local_mods_dir(mods_dir: str) -> str:
+    """配る予定の無い mod の置き場（`<根>/local/`）。
+
+    **`runtime/` の外に置くことに意味がある。**
+    mod を探す4者のうち3者 ― `make_dist.bat` の robocopy・CI の
+    `compileall -q runtime tools`・`tools/check_mods.py` ― は `runtime/` の下しか
+    見ないので、置き場所を変えるだけで配布物・CI・静的検査の全部から外れる。
+    除外の記述も `.gitignore` の個別管理も要らない
+    （`discontinued/` が「外すための旗を増やさずに済む」のと同じ形。§2.6.1）。
+
+    配布物にはこのフォルダが無いので、`os.path.isdir` が偽になって黙って飛ぶ。
+    """
+    return os.path.join(os.path.dirname(os.path.dirname(mods_dir)), LOCAL_DIRNAME)
+
+
 MANIFEST_NAME = "mod.json"
 ORDER_NAME = "load_order.json"
 
@@ -866,6 +886,10 @@ def is_wip(name: str) -> bool:
     `superseded` と同じ伏せ方）。
     順序ファイルに名前が無ければ黙って外す。配布物に入らないものなので、
     「記載の無い MOD」として報告しても直しようが無い。
+
+    **配らない mod がこの帯だけとは限らない。**
+    配る予定が最初から無いものは `local/`（`_local_mods_dir`）に置く。
+    9xx は「いずれ配るが、まだ配れない」ものの帯。
     """
     return len(name) >= 3 and name[:3].isdigit() and name[0] == "9"
 
@@ -880,6 +904,8 @@ def discover(mods_dir: str | None = None, *, debug: bool | None = None) -> dict:
     片方だけ直すと GUI の一覧と実際の適用順がずれる状態だった。
 
         {"mods_dir":  "...\\runtime\\mods",
+         "dirs":      {"000_recon": "...\\runtime\\mods"},  その mod が在るフォルダ
+         "local":     {"902_..."},              `local/` に在るもの（配る予定が無い）
          "order":     ["000_recon", ...],       有効な mod。**適用順**
          "listed":    ["000_recon", ...],       一覧に出す順（無効なものも宣言位置に）
          "installed": ["000_recon", ...],       在るもの全部（フォルダ名順）
@@ -910,13 +936,32 @@ def discover(mods_dir: str | None = None, *, debug: bool | None = None) -> dict:
     """
     mods_dir = mods_dir or _mods_dir()
     if not os.path.isdir(mods_dir):
-        return {"mods_dir": mods_dir, "order": [], "listed": [], "installed": [],
+        return {"mods_dir": mods_dir, "dirs": {}, "local": set(),
+                "order": [], "listed": [], "installed": [],
                 "disabled": [], "debug": set(), "debug_mode": False,
                 "superseded": {}, "wip": set(), "manifests": {}, "notes": [],
                 "problems": ["mods ディレクトリが無い: {}".format(mods_dir)]}
 
-    installed = _installed(mods_dir)
-    manifests = {name: _manifest(mods_dir, name) for name in installed}
+    problems: list[str] = []
+    dirs = {name: mods_dir for name in _installed(mods_dir)}
+    # 配る予定の無い mod（`local/`。無ければ何も起きない）。
+    # 同じ規則（`mod.json` を持つフォルダだけ・`_` と `.` で始まるものを除く）で
+    # 拾い、以降は在り処の違いを `dirs` だけが持つ。
+    local_dir = _local_mods_dir(mods_dir)
+    local = set()
+    if os.path.isdir(local_dir):
+        for name in _installed(local_dir):
+            if name in dirs:
+                # 同じ名前が両方に在る。**配る側を勝ちにする** ―
+                # 配布物に入るのはそちらで、手元だけ別物が動くと再現しなくなる。
+                problems.append(
+                    "{} と {} に同じ名前の MOD が在ります（前者を読み込みます）: {}"
+                    .format(mods_dir, local_dir, name))
+                continue
+            dirs[name] = local_dir
+            local.add(name)
+    installed = sorted(dirs)
+    manifests = {name: _manifest(dirs[name], name) for name in installed}
 
     # 開発者向けの mod（計測系）は、デバッグモードを入れている間だけ動く。
     # 伏せるのは `order` からだけで、`listed`（GUI の一覧）には残す。一覧の並びは保存時にそのまま
@@ -936,11 +981,21 @@ def discover(mods_dir: str | None = None, *, debug: bool | None = None) -> dict:
     #      置いただけのものを勝手に動かさない）
     #   2. デバッグモードが入っている（`debug` / `superseded` と同じ扱い。
     #      作りかけの mod が普段の遊びに紛れ込まない）
-    wip = {name for name in installed if is_wip(name)}
+    # `local/` に居るものは数に入れない。
+    # **9xx は `runtime/mods` の中でだけ「開発中」を意味する。**
+    # `local/` へ移したものは番号をそのまま残してあるので（`DOC.md`・過去のログ・
+    # git の履歴がその番号で互いを指している。TECH.md §2.6.1 と同じ理屈）、
+    # 番号で判定すると場所を移した意味が消える。印は在り処の方。
+    wip = {name for name in installed if is_wip(name) and name not in local}
     hide = (frozenset() if debug_mode
             else frozenset(marked) | frozenset(superseded) | frozenset(wip))
+    # `local/` の mod にデバッグモードを要求しないのは、**作りかけではない**から。
+    # 配る予定が無いだけで、普段の遊びで動かすために置いてある。
+    # 条件は順序ファイルの記載だけ（`_order` の `undeclared`）。
 
-    order, listed, disabled, problems, notes = _order(mods_dir, installed, hide)
+    order, listed, disabled, order_problems, notes = _order(
+        mods_dir, installed, hide, local=frozenset(local))
+    problems += order_problems
 
     order, dep_notes = _sort_dependencies(order, manifests, silent=hide)
     problems += dep_notes
@@ -954,7 +1009,8 @@ def discover(mods_dir: str | None = None, *, debug: bool | None = None) -> dict:
         fresh = iter(order)
         listed = [next(fresh) if n in enabled else n for n in listed]
 
-    return {"mods_dir": mods_dir, "order": order, "listed": listed,
+    return {"mods_dir": mods_dir, "dirs": dirs, "local": local,
+            "order": order, "listed": listed,
             "installed": installed, "disabled": disabled,
             "debug": marked, "debug_mode": debug_mode,
             "superseded": superseded, "wip": wip,
@@ -962,8 +1018,9 @@ def discover(mods_dir: str | None = None, *, debug: bool | None = None) -> dict:
 
 
 def _order(mods_dir: str, found: list[str],
-           hide: frozenset = frozenset()) -> tuple[list[str], list[str],
-                                                   list[str], list[str], list[str]]:
+           hide: frozenset = frozenset(),
+           local: frozenset = frozenset()) -> tuple[list[str], list[str],
+                                                    list[str], list[str], list[str]]:
     """mod を**適用順に**並べて返す。
 
     このローダでは適用順が動作の前提になっている（TECH.md
@@ -1026,14 +1083,15 @@ def _order(mods_dir: str, found: list[str],
                         "フォルダ名順で読み込みます".format(order_file))
         order = []
 
-    # 開発中の mod（9xx）は、この順序ファイルが名指ししているものだけ読み込む。
+    # 配布物に入らない mod ― 開発中（9xx）と `local/` の中身 ― は、
+    # この順序ファイルが名指ししているものだけ読み込む。
     # 名前が無いものは `hide` と同じ扱いにする。適用もしないし報告もしない。
     # 配布物には入らないので、配った先の画面に「記載の無い
     # MOD」として出しても直しようが無い（`is_wip` の説明を参照）。
     named = {name for name in order if isinstance(name, str)}
-    undeclared_wip = {name for name in found
-                      if is_wip(name) and name not in named}
-    hide = frozenset(hide) | undeclared_wip
+    undeclared = {name for name in found
+                  if (is_wip(name) or name in local) and name not in named}
+    hide = frozenset(hide) | undeclared
 
     disabled = data.get("disabled") if isinstance(data, dict) else None
     if not isinstance(disabled, list):
@@ -1057,13 +1115,13 @@ def _order(mods_dir: str, found: list[str],
         if isinstance(name, str) and name in found and name not in listed:
             listed.append(name)
     listed += [name for name in found if name not in listed]
-    # 伏せた計測 mod（`hide`）は一覧に残すが、**宣言に無い開発中の mod は外す**。
+    # 伏せた計測 mod（`hide`）は一覧に残すが、**宣言に無い配布外の mod は外す**。
     # GUI の保存は `listed` をそのまま `order` へ書き戻すので（gui.py の `save`）、
     # 残しておくと、順序ファイルを開いて保存しただけで
     # `load_order.json` に開発中の名前が入ってしまう。
     # 残す理由（保存で記述ごと消えるのを防ぐ）もこちらには無い。
     # まだどこにも書かれていない mod なので、消える記述が無い。
-    listed = [name for name in listed if name not in undeclared_wip]
+    listed = [name for name in listed if name not in undeclared]
 
     known = set(found) - off - hide
     ordered = []
@@ -1680,6 +1738,7 @@ def boot(out_dir: str) -> dict:
 
     found = discover()
     mods_dir = found["mods_dir"]
+    dirs = found.get("dirs") or {}
     manifests = found["manifests"]
     names = found["order"]
     _state["manifests"] = manifests
@@ -1701,6 +1760,12 @@ def boot(out_dir: str) -> dict:
         # 全 mod ぶんまとめて1回読む。
         chosen = _config.load_store(runtime_dir)
         log("{} mod(s) in {}".format(len(names), mods_dir))
+        # `local/` から読んだものは在り処ごと残す。
+        # 配布物には無いフォルダなので、ログだけ見て構成を追えるようにしておく。
+        from_local = [n for n in names if n in (found.get("local") or set())]
+        if from_local:
+            log("{} of them from {}: {}".format(
+                len(from_local), _local_mods_dir(mods_dir), ", ".join(from_local)))
         for fname in names:
             manifest = manifests[fname]
 
@@ -1714,7 +1779,10 @@ def boot(out_dir: str) -> dict:
                 results[fname] = verdict
                 continue
 
-            path = os.path.join(mods_dir, fname, manifest["entry"])
+            # 在り処は `dirs` が持つ（`runtime/mods` か `local/`）。
+            # ここで `mods_dir` を決め打つと、`local/` の mod だけ入口が見つからない。
+            path = os.path.join(dirs.get(fname, mods_dir), fname,
+                                manifest["entry"])
 
             # 読み込みでも apply() でも、失敗したらログに残して次の mod へ進む。
             # 1つの mod が壊れているせいで残り全部が動かないのを防ぐため。

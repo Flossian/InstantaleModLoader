@@ -1101,6 +1101,14 @@ def main():
     # `listed` は一覧に出す順で、宣言に無い開発中の mod（9xx）はそこから外れている。GUI の保存で
     # `load_order.json` に混ざらないようにするため（§2.6）。
     installed = survey_result["installed"]
+    # 配る予定の無い mod は `local/` に居る（TECH.md §2.6）。
+    # `discover()` はそこも読むが、突き合わせる相手は `runtime/mods` の中身なので、
+    # ここでは外して数える。
+    local = set(survey_result.get("local") or ())
+    if local:
+        print("  note local/ から読んだため同梱の検査から外す: {}"
+              .format(", ".join(sorted(local))))
+    installed = [n for n in installed if n not in local]
     check(sorted(installed) == on_disk,
           "mod.json を持つフォルダが全て見つかる（{} 個）".format(len(on_disk)))
     check(all(os.path.isdir(os.path.join(mods_dir, f)) for f in installed),
@@ -1111,10 +1119,10 @@ def main():
     # 書きかけの一本でリリースする側の検査が止まらないようにするため。
     # **外した名前は必ず出す。**
     # 黙って減らすと、宣言の抜けを見逃す検査になる。
-    wip = [f for f in found if ml.is_wip(f)]
+    wip = [f for f in found if ml.is_wip(f) and f not in local]
     if wip:
         print("  note 開発中のため同梱の検査から外す: {}".format(", ".join(wip)))
-    found = [f for f in found if f not in wip]
+    found = [f for f in found if f not in wip and f not in local]
 
     # 名乗りは mod.json から読む＝**mod のコードを1行も走らせずに**一覧が作れる。
     # GUI が他人の mod を並べるときに import せずに済む、という性質の確認。
@@ -1155,8 +1163,9 @@ def main():
     # 宣言の側からも開発中の mod を抜く。
     # 手元の `load_order.local.json` は 9xx を名指ししている（そうしないと動かない）ので、
     # 片側だけ抜くと今度は手元でだけ赤くなる。
-    check(found == [n for n in declared if not ml.is_wip(n)],
-          "並びが {} の宣言どおり（開発中を除く）"
+    check(found == [n for n in declared
+                    if not ml.is_wip(n) and n not in local],
+          "並びが {} の宣言どおり（開発中と local/ を除く）"
           .format(os.path.basename(order_file)))
 
     # 適用順は「宣言の並びから、切られているものを抜いたもの」。
