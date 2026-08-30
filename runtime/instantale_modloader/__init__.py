@@ -1101,7 +1101,14 @@ def _order(mods_dir: str, found: list[str],
     # 報告するのは `disabled` で切ったものだけ。
     # 伏せている mod は `skipped` に残す（「切る」選択そのものは消さない。
     # GUI が保存で書き戻すため）が、警告としては出さない。
-    told = [name for name in skipped if name not in hide]
+    #
+    # `local/` の mod も報告しない。
+    # この行の目的は「入れたのに効かない」を配った先で気付かせることだが、
+    # `local/` は配布物に入らないので知らせる相手が居ない
+    # （手元で切ってあるだけの状態が、静的検査でずっと赤になる）。
+    # 切られていること自体は `skipped` に残るので、GUI のチェックは外れたまま。
+    told = [name for name in skipped
+            if name not in hide and name not in local]
     if told:
         # 「入れたのに効かない」を黙って起こさない。
         # 切ったことは必ず残す。

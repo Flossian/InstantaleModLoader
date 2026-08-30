@@ -136,6 +136,10 @@ PALETTE = {
     # 文字色は無効=灰・失敗=赤で使い切っているので、こちらは背景で分ける。
     # 選択色（#dce7fb）とも見分けが付くように、青ではなく暖色に振る。
     "dev_bg":     "#fdf3df",
+    # `local/` から読んだ行の地（配る予定が無い MOD。TECH.md §2.6.2）。
+    # 選択色も薄い青なので、そちらを青寄り・こちらをシアン寄りに離してある
+    # （同じ青みだと、選んでいるのか `local/` なのかが読めない）。
+    "local_bg":   "#dbf1f6",
 }
 
 # 日本語と英語が同じ列に並ぶので、両方が同じ太さで出る書体を選ぶ。
@@ -555,7 +559,11 @@ def read_mods() -> dict:
             # 読み込みの扱いは debug と同じ（デバッグモードのみ）。
             # 判定はローダの語彙（`is_wip`）を借りる ― 番号帯の規則をここに写すと、
             # 片方だけ直したとき読み込みと表示がずれる。
-            "wip": ml.is_wip(name),
+            # `local/` に居るものは開発中に数えない。
+            # 移した MOD は 9xx の番号を残したままなので（TECH.md §2.6.2）、
+            # 番号だけで見ると `_hidden()` がデバッグモードを要求してしまい、
+            # 普段の遊びの一覧から消える。`discover()` の `wip` と同じ扱いに揃える。
+            "wip": ml.is_wip(name) and name not in local,
             # `local/` に在る（配る予定が無い）。読み込みの条件は順序ファイルの
             # 記載だけで、デバッグモードは要らない。
             "local": name in local,
@@ -1207,6 +1215,10 @@ class App(ttk.Frame):
         # 選択中は style.map の選択色が勝つ ― off /
         # bad の文字色が選択で消えるのと同じ振る舞いに揃う。
         self.tree.tag_configure("dev", background=PALETTE["dev_bg"])
+        # `local/` から読んだ行（配る予定が無い MOD。TECH.md §2.6.2）。
+        # `dev` と同じ「背景の軸」だが、こちらは**デバッグモードに関係なく常に並ぶ**。
+        # 普段の遊びの一覧に混ざるので、配布物に入るものと地の色で分かれている必要がある。
+        self.tree.tag_configure("local", background=PALETTE["local_bg"])
         self.tree.bind("<<TreeviewSelect>>", lambda _e: self._show_detail())
         self.tree.bind("<Button-1>", self._on_press)
         self.tree.bind("<B1-Motion>", self._on_drag)
@@ -1457,6 +1469,10 @@ class App(ttk.Frame):
           debug       計測用。開発者以外には意味が無い
           superseded  ゲーム本体が同じ修正を取り込んだので降ろした
           wip         開発中（9xx）。まだ配る形が決まっていない
+
+        `local/` の mod はここに**入らない**（TECH.md §2.6.2）。
+        配る予定が無いだけで作りかけではなく、普段の遊びで動かすために置いてある。
+        番号が 9xx のままのものが在るので、`wip` の側で先に除いてある（`read_mods`）。
 
         どれもデバッグモードを入れれば出てくる。
         **表示だけは分ける**ので、
@@ -1787,7 +1803,11 @@ class App(ttk.Frame):
             # 背景は文字色と独立に付ける。
             # デバッグモードが切なら `_matches` が既に落としているので、
             # ここで改めてモードを見る必要は無い。
-            if mod["debug"] or mod.get("superseded") or mod["wip"]:
+            # `local/` を先に見るのは、背景を2つ付けても片方しか出ないため
+            # （どちらが勝つかは Tk の tag の並び次第で、読んで分かる形にならない）。
+            if mod.get("local"):
+                tags.append("local")
+            elif mod["debug"] or mod.get("superseded") or mod["wip"]:
                 tags.append("dev")
             # 設定を持つ mod だけ印を出す。
             # 持たない mod で「設定…」を押しても何も無いことが、
