@@ -76,6 +76,8 @@
 
 `cv2` / `numpy` / `PIL` はゲームが同梱しているものを、フックの中で遅延 import する。
 ローダの起動時に読み込まないため。
+検出の中身（前処理・位置の絞り・カスケードの順）は `faces.py` にあり、
+既存の NPC を一括で直す道具（`tool.py`。DOC.md）と共有する。
 
 ## 効く範囲
 
@@ -87,6 +89,8 @@
 import os
 import threading
 
+from . import faces
+
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
 #      `tools/check_mods.py` が AST で突き合わせる。TECH.md §3.8.3）------------
 
@@ -96,10 +100,6 @@ SHARP_PORTRAIT = True
 
 # 顔の検出が外れた回に、前処理した絵でやり直すか。
 FACE_RETRY = True
-
-#: 顔の箱の一辺（`detect_face_coordinates` の `crop_size` の既定）。
-#: 受け取った箱の一辺がこれと違えば、ゲームがその比で縮めている。
-FACE_CROP = 256
 
 #: この MOD の記録。
 LOG_BASENAME = "sharp_portrait.log"
@@ -111,19 +111,6 @@ CREATURE = "image_generation.sdcppcuda.image_generation_creature"
 #: `after_reduce` は「次の縮小は顔の代わりを作る回」の旗。
 _LOCAL = threading.local()
 
-#: 顔の検出をやり直すときの前処理。座標系を変えないものだけ。
-#: 順は手元の 58 体で誤検出の少なかった順。
-FACE_PREPS = ("均一化", "CLAHE", "ガンマ0.6", "ぼかし3")
-
-#: 全身の立ち絵なので、顔は上寄りで程よい幅。
-#: 箱の中心の高さの上限と、幅の範囲（どちらも画像に対する比）。
-FACE_TOP = 0.40
-FACE_WIDTH = (0.08, 0.60)
-
-#: ゲームのカスケードの置き場（ゲームのフォルダからの相対）と、試す順。
-CASCADE_DIR = os.path.join("runtime", "models", "face_recognition")
-CASCADES = ("lbpcascade_animeface.xml", "haarcascade_frontalface_alt.xml")
-
 #: `detect_face_coordinates(image, cascade_path, padding, crop_size)` の引数名。
 #: 位置で来ても名前で来ても同じ形に揃えて、カスケードだけ差し替えて呼び直す。
 ARG_NAMES = ("cascade_path", "padding", "crop_size")
@@ -133,37 +120,11 @@ def dims(image):
     return "{}x{}".format(*image.size)
 
 
-def preprocess(gray, name, cv2, np):
-    """座標系を変えない前処理。`gray` は8ビット1チャネル。"""
-    if name == "均一化":
-        return cv2.equalizeHist(gray)
-    if name == "CLAHE":
-        return cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(gray)
-    if name == "ガンマ0.6":
-        table = np.array([((i / 255.0) ** 0.6) * 255 for i in range(256)]).astype(np.uint8)
-        return cv2.LUT(gray, table)
-    if name == "ぼかし3":
-        return cv2.GaussianBlur(gray, (3, 3), 0)
-    raise ValueError(name)
-
-
-def pick_face(gray, cascade):
-    """上寄りで程よい幅の箱のうち、一番上のもの。無ければ None。"""
-    height, width = gray.shape[:2]
-    boxes = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=3)
-    fit = [b for b in boxes
-           if (b[1] + b[3] / 2.0) / height < FACE_TOP
-           and FACE_WIDTH[0] < b[2] / float(width) < FACE_WIDTH[1]]
-    if not fit:
-        return None
-    return tuple(int(v) for v in min(fit, key=lambda b: b[1]))
-
-
 def apply(ctx):
     # 打ち切らない。書くのは NPC の生成のたび（1体につき4〜5行）で、毎フレームではない。
     note = ctx.logger(LOG_BASENAME)
     # `ctx` の値は `apply()` の間だけ。カスケードの置き場は今のうちに控える。
-    cascade_dir = os.path.join(ctx.game_dir, CASCADE_DIR)
+    cascade_dir = os.path.join(ctx.game_dir, faces.CASCADE_DIR)
     cascades = {}
     seen_args = []          # ゲームの呼び方を1度だけ記録するための印
 
@@ -228,14 +189,14 @@ def apply(ctx):
             note("顔: ゲームの呼び方 {}".format(rest or "（引数なし。既定のまま）"))
         # 呼び直しに渡すカスケードは、ゲームが渡して来た形に合わせる。
         # フォルダ付きで来ていれば同じフォルダの haar、素の名前なら素の名前。
-        given = str(rest.get("cascade_path") or CASCADES[0])
+        given = str(rest.get("cascade_path") or faces.CASCADES[0])
         gray = cv2.cvtColor(np.asarray(image.convert("RGB")), cv2.COLOR_RGB2GRAY)
         tried = []
-        for prep in FACE_PREPS:
-            done = preprocess(gray, prep, cv2, np)
+        for prep in faces.FACE_PREPS:
+            done = faces.preprocess(gray, prep, cv2, np)
             prepped = None
-            for name in CASCADES:
-                box = pick_face(done, cascade_for(name))
+            for name in faces.CASCADES:
+                box = faces.pick_face(done, cascade_for(name))
                 if box is None:
                     continue
                 if prepped is None:
@@ -245,7 +206,7 @@ def apply(ctx):
                         prepped.putalpha(image.getchannel("A"))
                 path = os.path.join(os.path.dirname(given), name) if os.path.dirname(given) else name
                 again = orig(prepped, **dict(rest, cascade_path=path))
-                short = name.split("cascade")[0]
+                short = faces.short_name(name)
                 if again is not None:
                     note("顔: ゲームは見つけられず、{} + {} で拾った {}（箱 {}）".format(
                         prep, short, again, box))
@@ -253,7 +214,7 @@ def apply(ctx):
                 # こちらは見えたのにゲームの関数は None。次の前処理へ。
                 tried.append("{}+{}={}".format(prep, short, box))
         note("顔: 見つからず（{} 通り試した{}）".format(
-            len(FACE_PREPS),
+            len(faces.FACE_PREPS),
             "。こちらは見えたがゲームの関数は None: " + " / ".join(tried) if tried else ""))
         return None
 
@@ -273,8 +234,8 @@ def apply(ctx):
         # 縮めた箱は整数に丸まっている（165 と 166 が混ざる）ので、
         # 四隅を戻すのではなく中心を戻して一辺 256 の正方形に組み直す。
         ratio = image.size[0] / float(getattr(_LOCAL, "detect_width", None) or image.size[0])
-        scale = (FACE_CROP / side) * ratio          # 縮めた座標 → 立ち絵の座標
-        half = int(round(FACE_CROP * ratio / 2.0))
+        scale = (faces.FACE_CROP / side) * ratio          # 縮めた座標 → 立ち絵の座標
+        half = int(round(faces.FACE_CROP * ratio / 2.0))
         cx = int(round((left + right) / 2.0 * scale))
         cy = int(round((top + bottom) / 2.0 * scale))
         box = (cx - half, cy - half, cx + half, cy + half)

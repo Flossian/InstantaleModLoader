@@ -211,17 +211,17 @@ def main():
     cascade_dir = os.path.join(GAME_DIR, "runtime", "models", "face_recognition")
     samples = {}
     if cv2 is not None and os.path.isdir(cascade_dir) and os.path.isdir(WORLDS):
-        loaded = {name: cv2.CascadeClassifier(os.path.join(cascade_dir, name)) for name in module.CASCADES}
+        loaded = {name: cv2.CascadeClassifier(os.path.join(cascade_dir, name)) for name in module.faces.CASCADES}
 
         def missed_by_game(gray):
-            return all(module.pick_face(gray, c) is None for c in loaded.values())
+            return all(module.faces.pick_face(gray, c) is None for c in loaded.values())
 
         def recovered_with(gray, want):
             """前処理を順に掛け、最初に拾えたカスケードが `want` なら真。"""
-            for prep in module.FACE_PREPS:
-                done = module.preprocess(gray, prep, cv2, np)
-                for name in module.CASCADES:
-                    if module.pick_face(done, loaded[name]) is not None:
+            for prep in module.faces.FACE_PREPS:
+                done = module.faces.preprocess(gray, prep, cv2, np)
+                for name in module.faces.CASCADES:
+                    if module.faces.pick_face(done, loaded[name]) is not None:
                         return name == want
             return False
 
@@ -237,7 +237,7 @@ def main():
                 gray = cv2.cvtColor(np.asarray(PIL.Image.open(path).convert("RGB")), cv2.COLOR_RGB2GRAY)
                 if not missed_by_game(gray):
                     continue
-                for want in module.CASCADES:
+                for want in module.faces.CASCADES:
                     if want not in samples and recovered_with(gray, want):
                         samples[want] = path
     if len(samples) < 2:
@@ -252,9 +252,9 @@ def main():
             """
             calls.append((image, cascade_path, padding, crop_size))
             gray = cv2.cvtColor(np.asarray(image.convert("RGB")), cv2.COLOR_RGB2GRAY)
-            return module.pick_face(gray, loaded[os.path.basename(cascade_path)])
+            return module.faces.pick_face(gray, loaded[os.path.basename(cascade_path)])
 
-        for want in module.CASCADES:
+        for want in module.faces.CASCADES:
             label = want.split("cascade")[0]
             path = samples[want]
             print("  --   {}: {}".format(label, os.path.relpath(path, WORLDS)))
@@ -265,7 +265,7 @@ def main():
             got = face(game_like, picture, "lbpcascade_animeface.xml", 0.25, 256)
             check(label + ": 外れた絵でも前処理で拾える", got is not None, got)
             check(label + ": 拾った箱は上寄り",
-                  got is not None and (got[1] + got[3] / 2.0) / picture.size[1] < module.FACE_TOP, got)
+                  got is not None and (got[1] + got[3] / 2.0) / picture.size[1] < module.faces.FACE_TOP, got)
             check(label + ": 呼び直す絵は元と同じ形（RGBA）で、padding / crop_size はそのまま",
                   len(calls) >= 2 and calls[-1][0].mode == "RGBA" and calls[-1][0].size == picture.size
                   and calls[-1][2:] == (0.25, 256), calls[-1][1:])

@@ -2495,7 +2495,8 @@ Atk:432(+500)\nDef:0(+500)\nExp:1675/3237\nGold:1116472\nAge:31\nSta:…\nLocati
 #### 顔
 
 - `detect_face_coordinates(image, cascade_path, padding=0.25, crop_size=256)` は
-  `(左, 上, 右, 下)` の一辺 256 の箱を返す。見つからなければ `None`
+  `(左, 上, 右, 下)` の一辺 256 の箱を返す。見つからなければ `None`。
+  箱は検出した顔の中心から 128 を引いた位置（端数は切り捨て）で、絵の縁で止まる
 - 1体につき2回呼ばれる。`lbpcascade_animeface.xml` → `haarcascade_frontalface_alt.xml` の順で、
   `cascade_path` は `runtime/models/face_recognition/<名前>` と**フォルダ付き**で渡る。
   素のファイル名で呼ぶとカスケードが読めず `None` になる
