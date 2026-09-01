@@ -84,6 +84,13 @@
 **これから作られる画像だけ**。既にある NPC の絵は荒いまま残る。
 背景は触らない（`image_generation_background` が持つ写しには当てない。
 `alias_scan=False` はそのため ― 元の1本に当てると張り替えで両方変わる）。
+
+**敵・モンスターも触らない。** 荒くする工程は NPC と敵が同じ関数を通るので、
+工程の側では見分けられない。入口の `generate_enemy_image`（モンスター・衛兵）と
+`generate_enemy_image_from_character`（NPC の戦闘用の絵）を包み、
+その中に居る間はスレッドに旗を立てて、4つの包みを全部ゲームのままにする。
+入口の包みは旗を立てるだけなので `safe=True` にしない
+（元の工程が投げたときに `safe=True` が呼び直すと、敵の絵を2度描く）。
 """
 
 import os
@@ -111,6 +118,9 @@ CREATURE = "image_generation.sdcppcuda.image_generation_creature"
 #: `after_reduce` は「次の縮小は顔の代わりを作る回」の旗。
 _LOCAL = threading.local()
 
+#: 敵の絵の入口。この中に居る間は何も変えない（モンスター・衛兵と、NPC の戦闘用の絵）。
+ENEMY_ENTRIES = ("generate_enemy_image", "generate_enemy_image_from_character")
+
 #: `detect_face_coordinates(image, cascade_path, padding, crop_size)` の引数名。
 #: 位置で来ても名前で来ても同じ形に揃えて、カスケードだけ差し替えて呼び直す。
 ARG_NAMES = ("cascade_path", "padding", "crop_size")
@@ -128,8 +138,27 @@ def apply(ctx):
     cascades = {}
     seen_args = []          # ゲームの呼び方を1度だけ記録するための印
 
+    def enemy():
+        return getattr(_LOCAL, "enemy", False)
+
+    def make_enemy_entry(name):
+        @ctx.wrap(CREATURE + ":" + name, required=False)
+        def enemy_entry(orig, *args, **kwargs):
+            _LOCAL.enemy = True
+            try:
+                return orig(*args, **kwargs)
+            finally:
+                _LOCAL.enemy = False
+
+        return enemy_entry
+
+    for entry in ENEMY_ENTRIES:
+        make_enemy_entry(entry)
+
     @ctx.wrap(CREATURE + ":pixel_art_process", safe=True, alias_scan=False)
     def pixel_art_process(orig, image, *args, **kwargs):
+        if enemy():
+            return orig(image, *args, **kwargs)
         if getattr(_LOCAL, "after_reduce", False):
             _LOCAL.after_reduce = False
             note("縮小: {} 顔の代わりを作る回なのでゲームに任せる".format(dims(image)))
@@ -147,6 +176,8 @@ def apply(ctx):
 
     @ctx.wrap(CREATURE + ":reduce_image_colors", safe=True, alias_scan=False)
     def reduce_image_colors(orig, image, *args, **kwargs):
+        if enemy():
+            return orig(image, *args, **kwargs)
         _LOCAL.after_reduce = True
         source = getattr(_LOCAL, "source", None)
         _LOCAL.source = None
@@ -171,6 +202,8 @@ def apply(ctx):
               required=False, safe=True, alias_scan=False)
     def detect_face_coordinates(orig, image, *args, **kwargs):
         found = orig(image, *args, **kwargs)
+        if enemy():
+            return found
         if found is not None:
             note("顔: ゲームが見つけた {}".format(found))
             return found
@@ -222,6 +255,8 @@ def apply(ctx):
               required=False, safe=True, alias_scan=False)
     def extract_and_save_face(orig, image, coordinates, output_path, *args, **kwargs):
         result = orig(image, coordinates, output_path, *args, **kwargs)
+        if enemy():
+            return result
         # 顔が切られた＝見つかった。顔の代わりを作る縮小は来ないので旗を降ろす
         # （スレッドが使い回されても次の NPC の縮小に旗が残らない）。
         _LOCAL.after_reduce = False
