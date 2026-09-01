@@ -10,7 +10,7 @@
     "en": "Before saving a generated picture the game shrinks it to a third of its size, doubles it back and cuts the colours down; the face is then cropped out of that. Skips both steps, so the background-removed drawing (512x1024) becomes the standing portrait as it is, and the face is re-cropped from it at 256x256. The 2x stretch the game applies in between is undone too. When the game fails to find the face, retries the detection on a preprocessed copy. Enemies, monsters and backgrounds are left alone",
     "ja": "ゲームは生成した絵を保存する前に3分の1へ縮め、2倍に伸ばし直して減色している。顔画像もその絵から切り出している。その2つの工程を通さず、背景を抜いた絵（512x1024）をそのまま立ち絵にし、顔もそこから 256x256 で切り直す。ゲームが途中で2倍に伸ばすぶんも戻す。顔の検出が外れた回は、前処理した絵で検出をやり直す。敵・モンスターと背景は触らない"
   },
-  "version": "14",
+  "version": "15",
   "author": "R01/Flossian",
   "tool": {
     "entry": "tool.py",
@@ -26,7 +26,7 @@
   "settings": {
     "SHARP_PORTRAIT": {
       "type": "bool",
-      "default": true,
+      "default": false,
       "label": {
         "ja": "立ち絵を荒くしない",
         "en": "Keep the standing portrait sharp"

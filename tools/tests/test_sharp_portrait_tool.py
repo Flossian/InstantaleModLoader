@@ -99,8 +99,8 @@ try:
     os.environ["IML_ROOT"] = tmp
     os.makedirs(os.path.join(tmp, "settings"), exist_ok=True)
     check("読めなければ既定", tool.load_settings(tmp) == tool.SETTING_DEFAULTS)
-    check("保存できる", tool.save_settings(tmp, {"SHARP_PORTRAIT": False, "FACE_RETRY": True}))
-    check("既定と違う値だけ残り、読み返せる", tool.load_settings(tmp) == {"SHARP_PORTRAIT": False, "FACE_RETRY": True})
+    check("保存できる", tool.save_settings(tmp, {"SHARP_PORTRAIT": True, "FACE_RETRY": True}))
+    check("既定と違う値だけ残り、読み返せる", tool.load_settings(tmp) == {"SHARP_PORTRAIT": True, "FACE_RETRY": True})
 
     print("切り直し")
     cv2, np = tool.load_cv2()

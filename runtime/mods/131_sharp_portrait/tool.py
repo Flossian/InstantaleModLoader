@@ -55,7 +55,7 @@ if MOD_DIR not in sys.path:
 import faces  # noqa: E402  自分の隣
 
 #: `mod.json` の "settings" と同じ名前・同じ既定値（`sharp_portrait.py` の定数と同じ）。
-SETTING_DEFAULTS = {"SHARP_PORTRAIT": True, "FACE_RETRY": True}
+SETTING_DEFAULTS = {"SHARP_PORTRAIT": False, "FACE_RETRY": True}
 
 #: セーブと世界の置き場（`%LOCALAPPDATA%\Darmabeko\Instantale`。`323_` と同じ）。
 DATA_VENDOR = ("Darmabeko", "Instantale")

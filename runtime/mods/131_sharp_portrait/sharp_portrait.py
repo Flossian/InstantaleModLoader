@@ -102,8 +102,8 @@ from . import faces
 #      `tools/check_mods.py` が AST で突き合わせる。TECH.md §3.8.3）------------
 
 # 縮小と減色を通さず、背景を抜いた絵をそのまま立ち絵にするか。
-# 切るとゲームのまま（330x660 のドット絵寄り）。
-SHARP_PORTRAIT = True
+# 既定は切（ゲームのまま。330x660 のドット絵寄り）。画風が変わるので、入れるのは選んだ人だけ。
+SHARP_PORTRAIT = False
 
 # 顔の検出が外れた回に、前処理した絵でやり直すか。
 FACE_RETRY = True

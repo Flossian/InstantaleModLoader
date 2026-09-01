@@ -120,6 +120,8 @@ class FakeCtx(object):
 
 
 def fresh_mod(**overrides):
+    # 既定は「立ち絵を荒くしない」が切（版15）。検査は入れた側で通し、切は明示して確かめる。
+    overrides.setdefault("SHARP_PORTRAIT", True)
     spec = importlib.util.spec_from_file_location(
         "mod_sharp_portrait", MOD, submodule_search_locations=[MOD_DIR])
     module = importlib.util.module_from_spec(spec)
