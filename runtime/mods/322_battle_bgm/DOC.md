@@ -1,6 +1,6 @@
 # `322_battle_bgm`: 戦闘BGMを置いた曲から選んで鳴らす
 
-素のゲームは戦闘 BGM が `Assets\sounds\musics\battle\1. Echoes of Valhalla.mp3` の1曲に固定で、
+素のゲームの戦闘 BGM は `Assets\sounds\musics\battle\1. Echoes of Valhalla.mp3` の1曲に固定。
 変えるには同名のファイルで上書きするしかない。
 
 この MOD を入れると、次の2箇所にある曲から戦闘のたびに1曲を選んで鳴らす。

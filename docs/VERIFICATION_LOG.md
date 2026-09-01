@@ -1465,7 +1465,7 @@ update_button_texts           caller: update_ui <- display_button_load
 - モデル: gemma-4-26B-A4B-it-qat-uncensored-heretic-UDmerge-Q4_K_XXL
 - サンプリングは config.json の `llama-cpp-completion-cuda` と同じ
   （temp 1.0 / top-p 0.95 / top-k 64。seed 無し）
-- **思考を吐くモデルは `--reasoning-budget 0` で切る。**
+- 思考を吐くモデルは `--reasoning-budget 0` で切る。
   切らないと返答上限を全部思考に使い切り、本文が HTTP 200 のまま空になる
 
 | 120回中 | 対策前 | 対策後 |
@@ -1485,7 +1485,7 @@ update_button_texts           caller: update_ui <- display_button_load
 
 副次的に分かったこと2つ。
 
-- **頼み文に載る名前が二つ名の語彙へ漏れる。**
+- 頼み文に載る名前が二つ名の語彙へ漏れる。
   プレイヤー名「旅人リン」だと末尾「旅人」が 32/120。
   名前を「リン」へ変えたら 4/119 に落ち、異なりも広がった
 - 素の it-qat 版でも向きは同じ（異なり 5〜13種、最頻の寄りは緩い）。
@@ -1550,7 +1550,7 @@ update_button_texts           caller: update_ui <- display_button_load
 `ui.parse_coin` で 10 を読み、`ui.rewrite_coins` を通して
 `相部屋(10Slv)` を組み直している。
 宿代も 13184 → 13174 と 10 だけ動いていて、額はずれていない。
-**ローダへ寄せた2つ（`parse_coin` / `rewrite_coins`）が実データで噛み合った。**
+ローダへ寄せた2つ（`parse_coin` / `rewrite_coins`）が実データで噛み合った。
 
 #### LLM 側の行は出ていない（想定どおり）
 
@@ -1573,7 +1573,7 @@ update_button_texts           caller: update_ui <- display_button_load
 対象は `%LOCALAPPDATA%\Darmabeko\Instantale\worlds\` の6世界。
 持ち物を持っている主の居る施設は23軒、品物は190個。
 
-**190個のうち 186個が、その土地の依頼の難易度そのものだった。**
+190個のうち 186個が、その土地の依頼の難易度そのものだった。
 
 | 世界 / 土地 | 依頼の難易度 | 施設（tier） | 在庫の `value` |
 | --- | --- | --- | --- |
@@ -1700,7 +1700,7 @@ get_quest_difficulties(area, world) -> list(len=5) [5, 4, 3, 4, 5]
 
 生きた一覧へ書いた難易度は `savedata.json` には出ていない
 （依頼 21 は画面で 20、セーブで 3）。
-**セーブが依頼をどこから組んでいるかは未特定。**
+セーブが依頼をどこから組んでいるかは未特定。
 `318_` は残らない前提で作ったので遊びは成り立つが、
 「MOD が書いた値がセーブに残るのはどの経路か」は他の MOD にも効く問いとして残る。
 入口は `scripts.save_codec:write_obfuscated_json_file(file_path, data)` の1点
