@@ -131,7 +131,7 @@
 | `210_probe_character_state` | NPC の死亡の印を特定し、誰がその NPC を参照しているかを数えて、印だけで安全に退場させられるかを測る |
 | `211_probe_text_speed` | 本文の1文字ごとの間隔・`app.text_speed`・フレームレート・ラベルのテクスチャ作り直しの重さを測る |
 | `212_probe_character_sheet` | プレイヤーの人物欄の実寸と組み立てを写し取り、載せられる値（手配度・スキル・特性）の在り処を確かめる |
-| `213_probe_npc_memory` | ゲーム自身が NPC ごとに覚えるもの（`memory`・`life_log`・`relationship`・`knowledge`）の実体と、それが会話プロンプトへどう載るか、プロンプト内の重複量（`311_` の注入分も含む）を測る |
+| `213_probe_npc_memory` | ゲーム自身が NPC ごとに覚えるもの（`memory`・`life_log`・`relationship`・`knowledge`）の実体を測る |
 | `214_probe_new_character` | 新規作成したキャラクタが経験値0のままレベル60で始まる経路を写す |
 | `215_probe_event_roll` | クエスト中のミニイベントの成否判定を写す |
 | `216_probe_llm_overlap` | LLM リクエストの多重送信をプロセス内で数える（`127_` の `--parallel 1` によるキュー待ちが実プレイでどれだけ起こるか） |
@@ -141,7 +141,7 @@
 | `220_probe_bounty_hunter` | 手配度に応じて追手を出す MOD（`316_`）を書くための下調べ |
 | `221_probe_item_level` | 品物のレベルを誰が決めているかを録る |
 | `222_probe_battle_mechanics` | 戦闘の数の作られ方を録る |
-| `223_probe_party_equipment` | 本体のアイテム popup と `ItemEquipManager` / `ItemUnequipManager` の入口を観測し、素のゲームが実際に誰の `equipments` を書き換えるかを測る（`402_party_inventory_transfer` が NPC の装備を直書きし続けるかを決める材料） |
+| `223_probe_party_equipment` | 本体のアイテム popup と `ItemEquipManager` / `ItemUnequipManager` の入口を観測し、素のゲームが実際に誰の `equipments` を書き換えるかを測る |
 | `224_probe_npc_carryover` | ロードのどの地点から世界へ NPC を入れられるかを測る |
 
 ---

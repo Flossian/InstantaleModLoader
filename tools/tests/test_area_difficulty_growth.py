@@ -446,13 +446,18 @@ steps = []
 for _ in range(40):
     before = (state_file() or {}).get("0", {}).get("bonus", 0)
     end_quest(ctx, app, "1")
-    steps.append(state_file()["0"]["bonus"] - before)
-check("引いた値が 3〜10 に収まる",
-      all(3 <= s <= 10 for s in steps[:8]), steps[:8])
-check("同じ値ばかりにならない", len(set(steps[:8])) > 1, steps[:8])
+    steps.append((before, state_file()["0"]["bonus"] - before))
+# 積むのは `min(MAX_BONUS, bonus + 引いた値)` なので、上限（60）に届く回は
+# 差分が頭を削られて幅の外へ出る。先頭の8回で数えると、引きが強い回
+# （先頭7回の合計が 57 を超える回。40回に1回ほど出る）で落ちた。
+# 見るのは削られようのない回、つまり `bonus` が 60-10 以下だったときだけ。
+drawn = [s for before, s in steps if before <= 60 - 10]
+check("引いた値が 3〜10 に収まる", all(3 <= s <= 10 for s in drawn), drawn)
+check("同じ値ばかりにならない", len(set(drawn)) > 1, drawn)
 check("上限（既定60）で止まる", state_file()["0"]["bonus"] == 60,
       state_file()["0"]["bonus"])
-check("上限に達したら以後は積まない", steps[-1] == 0, steps[-3:])
+check("上限に達したら以後は積まない", steps[-1][1] == 0,
+      [s for _, s in steps[-3:]])
 
 reset()
 module, ctx = fresh({"STEP_MIN": 10, "STEP_MAX": 3, "ANNOUNCE": ""})
