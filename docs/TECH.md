@@ -1521,7 +1521,7 @@ MOD が自分の画面を持つほうが分かりやすい。
 直接起動（`python runtime/mods/322_battle_bgm/tool.py`）もできるようにしておく。
 環境変数が無いときは自分の位置と `settings/gui.json` から場所を組む（`322_` の `locate()`）。
 
-> 元は `908_npc_carryover` の設計（DOC.md §4）。先に `322_battle_bgm` で実装した。
+> 元は `323_npc_carryover` の設計（DOC.md §4）。先に `322_battle_bgm` で実装した。
 
 ---
 

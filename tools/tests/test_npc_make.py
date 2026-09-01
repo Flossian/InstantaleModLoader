@@ -113,7 +113,7 @@ def main():
                 tuple(app.save_data_dict["npcs"][made]) == npcs.NPC_FIELD_ORDER)
 
     print("実行時の名簿が空のとき（ロードの直後）")
-    # 実機（2026-08-30。`908_` の1回目）: ロード直後の `world.characters` は
+    # 実機（2026-08-30。`323_` の1回目）: ロード直後の `world.characters` は
     # 1件しかなく、`npc_stores` が突き合わせる相手を持てずに `<none>` を返した。
     # `save_data_dict['npcs']` へ何も書かれないまま `generate_character` が
     # `KeyError` で落ちている。素データは中身の形でも見分ける。

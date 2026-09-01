@@ -57,7 +57,7 @@ import faces  # noqa: E402  自分の隣
 #: `mod.json` の "settings" と同じ名前・同じ既定値（`sharp_portrait.py` の定数と同じ）。
 SETTING_DEFAULTS = {"SHARP_PORTRAIT": True, "FACE_RETRY": True}
 
-#: セーブと世界の置き場（`%LOCALAPPDATA%\Darmabeko\Instantale`。`908_` と同じ）。
+#: セーブと世界の置き場（`%LOCALAPPDATA%\Darmabeko\Instantale`。`323_` と同じ）。
 DATA_VENDOR = ("Darmabeko", "Instantale")
 
 #: NPC のフォルダにある絵。
@@ -76,7 +76,7 @@ MISSING = "無し"        # face_image.png が無い
 SOURCE_STANDING = "standing"
 SOURCE_NO_BG = "no_bg"
 
-#: プレビューの一辺（px）。Tk の `PhotoImage` は整数倍しか持てない（`908_` の道具と同じ）。
+#: プレビューの一辺（px）。Tk の `PhotoImage` は整数倍しか持てない（`323_` の道具と同じ）。
 FACE_BOX = 128
 
 

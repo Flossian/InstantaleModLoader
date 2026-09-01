@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 r"""NPC のエクスポートとインポートの画面。
 
-    python runtime/mods/908_npc_carryover/tool.py           窓を開く
-    python runtime/mods/908_npc_carryover/tool.py --dump    窓を開かず、いま読めるものを標準出力に出す
+    python runtime/mods/323_npc_carryover/tool.py           窓を開く
+    python runtime/mods/323_npc_carryover/tool.py --dump    窓を開かず、いま読めるものを標準出力に出す
 
 DOC.md §4 が決めた契約で動く（`322_battle_bgm` の道具と同じ）。
 ローダの設定画面（`tools/gui.py`）が `mod.json` の `"tool"` を見てこのファイルを

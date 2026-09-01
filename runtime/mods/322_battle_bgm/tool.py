@@ -4,7 +4,7 @@
     python runtime/mods/322_battle_bgm/tool.py           窓を開く
     python runtime/mods/322_battle_bgm/tool.py --dump    窓を開かず、いま読める一覧を標準出力に出す
 
-`908_` の §4 が決めた契約で動く。
+`323_` の §4 が決めた契約で動く。
 ローダの設定画面（`tools/gui.py`）が `mod.json` の `"tool"` を見てこのファイルを
 サブプロセスで起動し、場所は環境変数で渡す。直接起動したときは自分で探す（`locate()`）。
 

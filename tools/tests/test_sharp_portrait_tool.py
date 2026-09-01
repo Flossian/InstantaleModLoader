@@ -125,6 +125,9 @@ try:
     else:
         folder = os.path.join(worlds, "C", "characters", "借りた")
         shutil.copytree(sample, folder)
+        # 実機で道具を通した個体は控えを持っている。持ち込むと「書かない」「戻せる」の前提が崩れるので、写しの側だけ消す。
+        if os.path.isfile(os.path.join(folder, tool.FACE_BACKUP)):
+            os.remove(os.path.join(folder, tool.FACE_BACKUP))
         npc = tool.Npc("C", "借りた", folder)
         before = tool.png_size(npc.path(tool.FACE))
         text, wrote = tool.apply_face(cv2, np, cascades, npc, tool.SOURCE_NO_BG, dry_run=True)

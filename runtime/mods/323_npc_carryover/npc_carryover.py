@@ -35,8 +35,9 @@ r"""別の世界から書き出した NPC を、この世界のロード時に1�
 
 置き先はダンジョン以外のエリアから引く（実セーブの `size` は
 `town` / `village` / `city` / `dungeon` で、ヴェスティアでは 54個中 45個がダンジョン）。
-その中にギルドがあればギルド、無ければ宿。
-旅の者が流れて来た、という位置づけなので `adventurer_npcs` に載せる。
+土地を引いてから、その土地の**ギルドか宿を半々で**引く。
+旅の者が流れて来た、という位置づけなので、宿に居ても不自然ではない。
+どちらも `adventurer_npcs` に載せる（宿でも会話の一覧に出ることは実機で確認済み）。
 
 ##### 名前がぶつかったら見送る
 
@@ -92,6 +93,9 @@ FRESH_RELATIONSHIP = {"player": {"affinity": 0,
 #: 記憶の置き場（`311_` と `403_` の `state/` のフォルダ名）と zip の中の鍵。
 MEMORY_STORES = (("npc_profiles", "profile"),
                  ("npc_social_memory", "social"))
+
+#: `MEMORY_STORES` のうち、相手の id を鍵に持つほう（付け替えが要る）。
+SOCIAL_KEY = "social"
 
 #: ゲームの保存。ここを通ったら、置いた NPC はファイルにも残る。
 SAVE_TARGET = "__main__:InstantaleApp.save_game"
@@ -186,7 +190,7 @@ def apply(ctx):
         where = frames.attr(area, "name", "") or "どこかの町"
         spot = frames.attr(facility, "name", "")
         if not isinstance(spot, str) or not spot.strip():
-            spot = "ギルド" if kind == carryover.PLACEABLE_TYPES[0] else "宿"
+            spot = KIND_WORDS.get(kind, "宿")
         return "{}の{}".format(where, spot)
 
     # ================================================== 項目を整える
@@ -321,7 +325,53 @@ def apply(ctx):
         return bool(wrote)
 
     # ================================================== 記憶を写す
-    def carry_memories(package, world, npc_id):
+    def relink_social(app, record):
+        """`403_` の社会関係を置き先の世界向けに直す。`(記録, 落とした件数)`。
+
+        ##### なぜ付け替えが要るのか
+
+        `403_` の記録は**相手の id を鍵にしている**:
+
+            {"name": "泥濘のニナ",
+             "relations": {"9": {"name": "重装のハンス", "relationship": ...}}}
+
+        この `"9"` は元の世界の id で、置き先では別人か、誰も居ない。
+        そのまま写すと、赤の他人についての記憶を持ったことになる。
+
+        ##### 相手は名前で引き直す
+
+        世界をまたいで同じ人を指せるのは名前だけ
+        （id は世界ごとの台帳で振られる）。
+        置き先に同じ名前の人物が居ればその id へ付け替え、
+        居なければその項は落とす。
+
+        名前で引くのはこの MOD 全体の前提と同じ ―
+        取り込みの可否も名前の一致で決めている（§5・§6 手順1）。
+        置き先に同名の別人が居る場合は、その別人に関係が付く。
+        名前より確かな手がかりがセーブに無いので、ここは割り切る。
+        """
+        relations = record.get("relations")
+        if not isinstance(relations, dict) or not relations:
+            return record, 0
+        from instantale_modloader.npcs import save_npcs
+        by_name = {}
+        for other_id, other in save_npcs(app).items():
+            name = other.get("name") if isinstance(other, dict) else None
+            if isinstance(name, str) and name:
+                by_name.setdefault(name, str(other_id))
+        kept, dropped = {}, 0
+        for relation in relations.values():
+            name = relation.get("name") if isinstance(relation, dict) else None
+            found = by_name.get(name) if isinstance(name, str) else None
+            if found is None:
+                dropped += 1
+                continue
+            kept[found] = relation
+        fresh = dict(record)
+        fresh["relations"] = kept
+        return fresh, dropped
+
+    def carry_memories(app, package, world, npc_id):
         """`311_` / `403_` の記録を、置き先の世界のファイルへ新しい id で書く。
 
         書き方は相手と同じ「隣に作ってから差し替える」。
@@ -332,6 +382,11 @@ def apply(ctx):
             record = package.extra.get(key)
             if not isinstance(record, dict):
                 continue
+            if key == SOCIAL_KEY:
+                record, dropped = relink_social(app, record)
+                if dropped:
+                    write("    memory: dropped {} relation(s) whose other "
+                          "side is not in this world".format(dropped))
             folder = os.path.join(state_dir, dirname)
             if not os.path.isdir(folder):
                 continue                # その MOD を入れていない
@@ -437,7 +492,7 @@ def apply(ctx):
                     "data; see out/{}".format(name, LOG_BASENAME), level="WARN")
         enroll(app, area, area_id, npc_id)
         if inherit.get("memory", INHERIT_MEMORY):
-            carry_memories(package, world, npc_id)
+            carry_memories(app, package, world, npc_id)
 
         row["status"] = carryover.PLACED
         row["npc_id"] = npc_id

@@ -161,7 +161,7 @@ def npc_stores(app, max_depth=2):
     その時点の `world.characters` はまだ埋まっておらず、
     突き合わせる相手が居ないので、素データを1つも見つけられない。
 
-    > 実機（2026-08-30。`908_` の1回目）:
+    > 実機（2026-08-30。`323_` の1回目）:
     > ロード直後に呼んだ `npc_stores` が `<none>` を返し、
     > `save_data_dict['npcs']`（GAME.md §2.23 が「★ ここが本体」と書いている辞書）へ
     > 何も書かれないまま `generate_character` が `KeyError` で落ちた。

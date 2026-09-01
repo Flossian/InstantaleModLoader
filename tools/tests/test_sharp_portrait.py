@@ -360,11 +360,46 @@ def main():
     check("縮小・減色はやり直しの設定と独立に残る",
           pixel(Original(), FakeImage(512, 1024, "元絵"), 165, 330)[1].who == "元絵")
 
+    print("敵")
+    module, ctx, pixel, reduce_ = fresh_mod()
+    entries = {name: ctx.hooks.get(module.CREATURE + ":" + name) for name in module.ENEMY_ENTRIES}
+    check("敵の入口2つに当たる（無くても撥ねない）",
+          all(entries.values()) and all(ctx.kwargs[module.CREATURE + ":" + n].get("required") is False
+                                         for n in module.ENEMY_ENTRIES), sorted(ctx.hooks))
+    check("入口の包みは safe=True にしない（投げたときに2度描かない）",
+          all(not ctx.kwargs[module.CREATURE + ":" + n].get("safe") for n in module.ENEMY_ENTRIES))
+    inside = {}
+
+    def game_enemy(world, race, name, appearance, size):
+        orig = Original()
+        out = pixel(orig, FakeImage(512, 512, "敵の絵"), 100, 100)
+        inside["pixel"] = (orig.calls, out[1].who)
+        red = reduce_(lambda image, *a, **k: FakeImage(200, 200, "ゲームが減色した絵"),
+                      FakeImage(200, 200, "敵の2倍"), 16)
+        inside["reduce"] = red.who
+        return "enemy-image"
+
+    got = entries["generate_enemy_image"](game_enemy, "世界", "orc", "オーク", "big", "large")
+    check("敵の入口の中では縮小も減色もゲームのもの",
+          got == "enemy-image" and inside["pixel"] == (1, "ゲーム") and inside["reduce"] == "ゲームが減色した絵", inside)
+    after = pixel(Original(), FakeImage(512, 1024, "元絵"), 165, 330)
+    check("入口を抜ければ NPC は素通しに戻る", after[1].who == "元絵", after[1].who)
+
+    def game_enemy_boom(*a, **k):
+        raise RuntimeError("boom")
+
+    try:
+        entries["generate_enemy_image_from_character"](game_enemy_boom, "世界", "名前", "path", "large")
+    except RuntimeError:
+        pass
+    check("入口が投げても旗は降りる", pixel(Original(), FakeImage(512, 1024, "元絵"), 165, 330)[1].who == "元絵")
+
     print("設置")
     module, ctx, pixel, reduce_ = fresh_mod()
-    check("全て safe=True", all(kw.get("safe") for kw in ctx.kwargs.values()), ctx.kwargs)
-    check("全て alias_scan=False",
-          all(kw.get("alias_scan") is False for kw in ctx.kwargs.values()), ctx.kwargs)
+    hooks_of_steps = {t: kw for t, kw in ctx.kwargs.items() if t.rsplit(":", 1)[1] not in module.ENEMY_ENTRIES}
+    check("工程の包みは全て safe=True", all(kw.get("safe") for kw in hooks_of_steps.values()), hooks_of_steps)
+    check("工程の包みは全て alias_scan=False",
+          all(kw.get("alias_scan") is False for kw in hooks_of_steps.values()), hooks_of_steps)
     check("背景には当たらない", not any("background" in t for t in ctx.hooks), sorted(ctx.hooks))
     if os.path.exists(RECON):
         with io.open(RECON, encoding="utf-8") as fh:

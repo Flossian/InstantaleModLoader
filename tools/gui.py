@@ -571,7 +571,7 @@ def read_mods() -> dict:
             # `local/` に在る（配る予定が無い）。読み込みの条件は順序ファイルの
             # 記載だけで、デバッグモードは要らない。
             "local": name in local,
-            # MOD 同梱の道具（`908_` §4）。GUI はボタンを出して別プロセスで開くだけ。
+            # MOD 同梱の道具（`323_` §4）。GUI はボタンを出して別プロセスで開くだけ。
             "tool": manifest.get("tool"),
         })
     return {"mods": mods, "disabled": disabled, "problems": found["problems"],
@@ -2183,7 +2183,7 @@ class App(ttk.Frame):
 
     # -- MOD 同梱の道具 ----------------------------------------------------
     def _open_tool(self) -> None:
-        """`mod.json` の "tool" を別プロセスで開く（`908_` §4 の契約）。
+        """`mod.json` の "tool" を別プロセスで開く（`323_` §4 の契約）。
 
         MOD のコードをこのプロセスに import しない、という原則を守るため
         サブプロセスにする。場所は引数ではなく環境変数で渡す
@@ -2220,7 +2220,7 @@ class App(ttk.Frame):
             return
         # 同梱の設定画面を持つ mod は、そちらを開く。
         # 宣言の設定（"settings"）もその画面が引き受ける約束
-        # （`908_` §4。設定の入口が2つあると、どちらに何があるか覚えることになる）。
+        # （`323_` §4。設定の入口が2つあると、どちらに何があるか覚えることになる）。
         if mod.get("tool"):
             self._open_tool()
             return

@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
-"""908_npc_carryover を窓抜き・ゲーム抜きで通す。
+"""323_npc_carryover を窓抜き・ゲーム抜きで通す。
 
     python tools/tests/test_wip_npc_carryover.py
-
-9xx なので CI は走らせない（`test_wip_*`）。
 
   復号    … 素の JSON も XOR も読める。読めないものは None（例外にしない）
   名前    … 使えない字は潰す。世界の控えと違って**短い印は付けない**（ゲームの
@@ -16,6 +14,11 @@
   居場所  … エクスポートの一覧は名前の隣に滞在中のエリア名と施設名を出す。
             同じものが zip にも入る（zip だけで誰だったか分かる）
   持ち物  … 持ち込まない（inventory / equipments は空で入る）
+  改名    … 他の MOD（`120_`）に改名されたら、記録に残して実際の名前で知らせる
+  社会関係… `403_` の相手の id を、置き先の世界の id へ名前で引き直す。
+            置き先に居ない相手の項は落とす。
+            書いたものは **403 自身のコード**（`normalize_bucket` と
+            同じ引き方）で読み返せることまで見る
   取込    … ロードのフック（実行時の名簿がまだ空の状態）で NPC が
             **ゲームの保存する辞書へ**入り、adventurer_npcs に載り、
             持ち物の id が置き先の台帳で採り直され、記憶が写り、`status` が
@@ -38,7 +41,7 @@ import traceback
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir))
 RUNTIME_DIR = os.path.join(ROOT, "runtime")
-MOD_DIR = os.path.join(RUNTIME_DIR, "mods", "908_npc_carryover")
+MOD_DIR = os.path.join(RUNTIME_DIR, "mods", "323_npc_carryover")
 sys.path.insert(0, RUNTIME_DIR)
 
 from instantale_modloader import npcs as npc_tools          # noqa: E402
@@ -529,6 +532,130 @@ try:
           all(row["status"] == carryover.PLACED for row in rows),
           [row["status"] for row in rows])
 
+    print("-- 他の MOD に改名されたとき")
+    # `120_fix_npc_name_collision` は `World.generate_character` を包んで、
+    # **似た名前**（表記ゆれ・修飾語付き）なら改名する。
+    # 完全一致はこちらが先に見送るので当たらないが、修飾語付きは通る
+    # （実データ5世界で、完全一致ではないが 120_ が同一視する組は 384組）。
+    #
+    # 改名するかどうかは 120_ の管轄で、こちらが決めることではない。
+    # 323 の担当は**気づいて知らせる**ところだけなので、そこを見る。
+    renaming = build_app({"0": npc_record("先住のバルガス", 0)},
+                         index={"npc": 1, "item": 5})
+    renaming.world_dict["world_data"] = {"world_name": "アルカディア"}
+    renaming.save_data_dict["world_data"] = {"world_name": "アルカディア"}
+    renaming.world.characters.clear()
+
+    def rename_on_build(character_id, character_value, _orig=renaming.world.generate_character):
+        # 120_ と同じ形: `orig` の前に素データの名前を書き換える。
+        record = renaming.save_data_dict["npcs"].get(str(character_id))
+        if isinstance(record, dict) and record.get("name") == "星読みのリリア":
+            record["name"] = "アドリアナ"
+        return _orig(character_id, character_value)
+
+    renaming.world.generate_character = rename_on_build
+    # この節は予約を1件足す。前の節から在る行まで消さないよう、
+    # 中身を控えておいて最後にそのまま戻す。
+    kept_rows = json.loads(json.dumps(carryover.load_pending(state_dir)))
+    model.pending = carryover.load_pending(state_dir)
+    model.reserve(lilia, "アルカディア", {"memory": False})
+    del ctx.logs[:]
+    hook(lambda _self, *a, **k: None, renaming)
+    names = {n.get("name") for n in renaming.save_data_dict["npcs"].values()}
+    check("改名されても置くことは置く", "アドリアナ" in names, sorted(names))
+    check("改名されたことを記録に残す",
+          any("renamed" in line for line in
+              io.open(os.path.join(out_dir, "npc_carryover.log"),
+                      encoding="utf-8").read().splitlines()),
+          "log")
+    check("ローダのログにも出す",
+          any(level == "WARN" and "renamed" in text for level, text in ctx.logs),
+          ctx.logs)
+    ctx.hooks["__main__:InstantaleApp.refresh_choice_buttons"](
+        lambda _self, *a, **k: None, renaming)
+    check("到着の知らせは実際の名前で出す",
+          any("アドリアナ" in (text or "") for text in renaming.said),
+          renaming.said)
+    carryover.save_pending(state_dir, kept_rows)
+    model.pending = kept_rows
+    del mod._store()["words"][:]
+
+    print("-- 社会関係の付け替え")
+    # `403_` の記録は相手の id を鍵に持つ。元の世界の id のまま写すと、
+    # 置き先では別人（か不在）を指す。名前で引き直して付け替える。
+    social_app = build_app({"0": npc_record("先住のバルガス", 0),
+                            "7": npc_record("重装のハンス", 7)},
+                           index={"npc": 8, "item": 5})
+    social_app.world_dict["world_data"] = {"world_name": "アルカディア"}
+    social_app.save_data_dict["world_data"] = {"world_name": "アルカディア"}
+    social_app.world.characters.clear()
+    os.makedirs(os.path.join(state_dir, "npc_social_memory"), exist_ok=True)
+    io.open(os.path.join(state_dir, "npc_social_memory", "アルカディア.json"),
+            "w", encoding="utf-8").write("{}")
+    # 元の世界での関係: id 9 = 重装のハンス（置き先では 7）、
+    #                   id 3 = 誰それ（置き先に居ない）。
+    social_zip = carryover.free_path(
+        os.path.join(carryover.carryover_dir(state_dir), "ヴェスティア"),
+        "社交のリナ")
+    carryover.export(
+        npc_record("社交のリナ", 5), "ヴェスティア", "5", social_zip,
+        extra={"social": {"name": "社交のリナ", "relations": {
+            "9": {"name": "重装のハンス", "relationship": "同行した"},
+            "3": {"name": "居ないはずの誰か", "relationship": "見かけた"}}}})
+    model.reload_packages()
+    rina = next(p for p in model.packages if p.name == "社交のリナ")
+    model.reserve(rina, "アルカディア", {"memory": True})
+    hook(lambda _self, *a, **k: None, social_app)
+    social = json.load(io.open(
+        os.path.join(state_dir, "npc_social_memory", "アルカディア.json"),
+        encoding="utf-8"))
+    rina_id = next((i for i, n in social_app.save_data_dict["npcs"].items()
+                    if n.get("name") == "社交のリナ"), None)
+    carried = social.get(str(rina_id)) or {}
+    check("社会関係を写す", carried.get("name") == "社交のリナ", social)
+    check("相手の id を置き先のものへ付け替える",
+          list(carried.get("relations") or {}) == ["7"],
+          carried.get("relations"))
+    check("居ない相手の項は落とす",
+          len(carried.get("relations") or {}) == 1,
+          carried.get("relations"))
+    check("落としたことを記録に残す",
+          any("dropped 1 relation" in line for line in
+              io.open(os.path.join(out_dir, "npc_carryover.log"),
+                      encoding="utf-8").read().splitlines()),
+          "log")
+    # ここまでは「323 が何を書いたか」。
+    # 相手（`403_`）がそれを読めるかは別の話なので、**403 自身のコードで**引く。
+    # 書式を外すと 403 は黙って無視するので、書く側の責任として見ておく。
+    social_mod = load(
+        "social_memory_reader",
+        os.path.join(RUNTIME_DIR, "mods", "403_npc_social_memory",
+                     "npc_social_memory.py"))
+    bucket, _changed = social_mod.normalize_bucket(
+        json.load(io.open(os.path.join(state_dir, "npc_social_memory",
+                                       "アルカディア.json"), encoding="utf-8")))
+    hans_id = next((i for i, n in social_app.save_data_dict["npcs"].items()
+                    if n.get("name") == "重装のハンス"), None)
+
+    def relation_record(observer_id, target_id):
+        """`403_` の `relation_record` と同じ引き方。"""
+        observer = bucket.get(str(observer_id), {})
+        relations = observer.get("relations", {}) if isinstance(observer, dict) else {}
+        record = relations.get(str(target_id), {}) if isinstance(relations, dict) else {}
+        return record if isinstance(record, dict) else {}
+
+    found = relation_record(rina_id, hans_id)
+    check("403 の引き方で新しい id から引ける",
+          found.get("relationship") == "同行した", found)
+    check("403 の正規化を通しても消えない", bucket.get(str(rina_id)) is not None,
+          sorted(bucket))
+
+    # この節で足した予約は片付ける。残すと後の節の人数と件数が変わる。
+    rest = [row for row in carryover.load_pending(state_dir)
+            if row.get("name") != "社交のリナ"]
+    carryover.save_pending(state_dir, rest)
+    model.pending = rest
+
     print("-- 置き先の引き方")
     # 代役の世界: area 0 にギルド(1)と宿(2)、area 2 に宿(4)だけ、area 1 はダンジョン。
     spread = collections.Counter()
@@ -551,6 +678,9 @@ try:
     check("ダンジョンには置かない", spread["3"] == 0, dict(spread))
     check("同じ土地のギルドと宿がほぼ半々（宿の数に引きずられない）",
           0.7 < spread["1"] / max(spread["2"], 1) < 1.4, dict(spread))
+    # この節は 300回ぶんの到着の知らせを積む。言付けはプロセスに置いてあるので
+    # （世代を跨ぐため）、片付けないと後の節の画面へ溢れる。
+    del mod._store()["words"][:]
 
     print("-- 保存されるまでは果たされていない")
     rows = carryover.load_pending(state_dir)

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-r"""計測: ロードのどの地点から NPC を世界へ入れられるか（`908_` §9 の 1）。
+r"""計測: ロードのどの地点から NPC を世界へ入れられるか（`323_` §9 の 1）。
 
-`908_npc_carryover` は「予約された世界のロードが済んだとき」に NPC を
+`323_npc_carryover` は「予約された世界のロードが済んだとき」に NPC を
 1体入れる。その**「済んだとき」がどこか**が決まっていない。
 
 早すぎれば素データも施設も揃っておらず、`make_npc` は書く先を見つけられない
@@ -21,7 +21,7 @@ r"""計測: ロードのどの地点から NPC を世界へ入れられるか（
 | `World.generate_character` | `Character` を組めない |
 | `move_npc_to_facility` と置ける施設 | 世界には居るが誰とも会えない |
 
-置ける施設は `guild` と `inn` の両方を数える（`908_` §6 手順6 の
+置ける施設は `guild` と `inn` の両方を数える（`323_` §6 手順6 の
 「ギルド、無ければ宿」がその世界で成り立つかは、実際に数えないと分からない）。
 
 ## どこで数えるか
@@ -54,7 +54,7 @@ from instantale_modloader import ids, npcs as npc_tools, state, ui
 
 LOG_BASENAME = "npc_carryover_probe.log"
 
-#: 置き先として数える施設。`908_` §6 手順6 の「ギルド、無ければ宿」。
+#: 置き先として数える施設。`323_` §6 手順6 の「ギルド、無ければ宿」。
 PLACEABLE = ("guild", "inn")
 
 #: ロードの入口。新規と続きの両方（名前では決められない。GAME.md §1.3）。
@@ -134,7 +134,7 @@ def apply(ctx):
         write("    npc stores: {}".format(
             ", ".join("{}={}".format(where, size) for where, size in stores)
             or "<none>"))
-        # 台帳と実在の食い違いはそのまま `908_` §9 の 2 の裏取りになる
+        # 台帳と実在の食い違いはそのまま `323_` §9 の 2 の裏取りになる
         # （ローダは `ids.claim` で台帳を読むが、その台帳が
         #  この地点で既に進んでいるかはここでしか見えない）。
         largest = -1

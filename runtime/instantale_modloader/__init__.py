@@ -1295,7 +1295,7 @@ def _manifest(mods_dir: str, name: str) -> dict:
         "superseded": text(data.get("superseded")),
         # GUI から変えられる設定の宣言（config.py）。
         "settings": _config_module().normalize_decls(data.get("settings")),
-        # MOD 同梱の道具（設定画面から別プロセスで開く。`908_` §4 の契約）。
+        # MOD 同梱の道具（設定画面から別プロセスで開く。`323_` §4 の契約）。
         # {"entry": "tool.py", "label": {...}, "note": {...}}。無ければ None。
         # GUI が起動するだけで、ローダ本体は読まない。
         "tool": _tool_decl(name, data.get("tool")),
