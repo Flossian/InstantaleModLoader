@@ -371,19 +371,24 @@ def build_window(model):
     places.pack(fill="x")
 
     def place_row(label, path, ok):
+        # 「開く」はボタンではなくリンク風のラベル（行の高さを文字1行分に抑える）。
+        # パスより先に詰める。後に詰めるとパスの長さに押し出されて、窓が狭いとき見えなくなる。
         row = ttk.Frame(places)
-        row.pack(fill="x", pady=1)
+        row.pack(fill="x", pady=0)
         ttk.Label(row, text=label, width=14, style="Group.TLabel").pack(side="left")
+        link = ttk.Label(row, text="開く", style="Sub.TLabel", cursor="hand2")
+        link.pack(side="right", padx=(8, 0))
         ttk.Label(row, text=path or "（未設定）",
                   style="TLabel" if ok else "Warn.TLabel").pack(side="left", fill="x", expand=True)
 
-        def open_folder():
-            if path and os.path.isdir(path):
-                os.startfile(path)
-        ttk.Button(row, text="開く", command=open_folder, width=6).pack(side="right")
+        def open_folder(_event=None):
+            target = path if os.path.isdir(path) else os.path.dirname(path)
+            if target and os.path.isdir(target):
+                os.startfile(target)
+        link.bind("<Button-1>", open_folder)
 
-    place_row("ゲームの曲", model.asset_dir, os.path.isdir(model.asset_dir))
-    place_row("足した曲", model.state_dir, os.path.isdir(model.state_dir))
+    place_row("ゲームBGM", model.asset_dir, os.path.isdir(model.asset_dir))
+    place_row("追加BGM", model.state_dir, os.path.isdir(model.state_dir))
     place_row("設定ファイル", model.playlist_path, os.path.isfile(model.playlist_path))
 
     # --- MOD の設定（mod.json の "settings"）。
@@ -448,22 +453,25 @@ def build_window(model):
 
         def make_list(parent, columns, headings, widths, with_weight):
             box = ttk.Frame(parent)
-            # 絞り込みの欄。列ごとに1つ。
+            # 絞り込みの欄。列ごとに1つ。2行に分けるのは、1行に並べると窓が狭いとき
+            # 右の欄（置き場・重み）が切れるため。
             bar = ttk.Frame(box)
-            bar.pack(fill="x", pady=(0, 4))
+            bar.pack(fill="x", pady=(0, 2))
             ttk.Label(bar, text="曲名", style="Group.TLabel").pack(side="left")
             name_var = tk.StringVar()
-            ttk.Entry(bar, textvariable=name_var, width=18).pack(side="left", padx=(4, 10))
-            ttk.Label(bar, text="置き場", style="Group.TLabel").pack(side="left")
+            ttk.Entry(bar, textvariable=name_var, width=18).pack(side="left", padx=(4, 0))
+            bar2 = ttk.Frame(box)
+            bar2.pack(fill="x", pady=(0, 4))
+            ttk.Label(bar2, text="置き場", style="Group.TLabel").pack(side="left")
             where_var = tk.StringVar(value=WHERE_ANY)
-            ttk.Combobox(bar, textvariable=where_var, values=where_choices,
+            ttk.Combobox(bar2, textvariable=where_var, values=where_choices,
                          state="readonly", width=13).pack(side="left", padx=(4, 10))
             min_var = tk.StringVar()
             if with_weight:
-                ttk.Label(bar, text="重み ≧", style="Group.TLabel").pack(side="left")
-                ttk.Spinbox(bar, from_=0, to=1000, width=5, textvariable=min_var).pack(
+                ttk.Label(bar2, text="重み ≧", style="Group.TLabel").pack(side="left")
+                ttk.Spinbox(bar2, from_=0, to=1000, width=5, textvariable=min_var).pack(
                     side="left", padx=(4, 10))
-            shown = ttk.Label(bar, style="Faint.TLabel")
+            shown = ttk.Label(bar2, style="Faint.TLabel")
             shown.pack(side="right")
 
             tree = ttk.Treeview(box, columns=columns, show="headings", selectmode="browse")

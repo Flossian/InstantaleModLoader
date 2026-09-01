@@ -187,7 +187,7 @@ def weight_of(entry, category):
 def sync_playlist(playlist, names, default_weight):
     """見つかった曲を playlist に足す。既にある行は触らない。
 
-    戻りは (playlist, 足した曲名のリスト)。`playlist` は壊れていれば作り直す。
+    戻りは (playlist, 追加BGMのリスト)。`playlist` は壊れていれば作り直す。
     """
     if not isinstance(playlist, dict):
         playlist = {}
