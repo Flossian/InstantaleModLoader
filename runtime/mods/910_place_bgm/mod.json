@@ -1,0 +1,83 @@
+{
+  "entry": "place_bgm.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Place BGM playlist",
+    "ja": "場所BGMの選曲"
+  },
+  "description": {
+    "en": "Plays facility and area BGM chosen by weighted random from Assets/sounds/musics and state/musics/place, with a playlist per facility type (inn, guild, shops...) and per area size (town, village, city, dungeon). Weights live in state/musics/place/playlist.json",
+    "ja": "宿屋・ギルド・店などの施設の種類ごと、町・村・都市・ダンジョンの土地の種類ごとに、Assets/sounds/musics と state/musics/place にある曲から重みで BGM を選んで鳴らす。重みは state/musics/place/playlist.json で指定する"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "tool": {
+    "entry": "tool.py",
+    "label": {
+      "ja": "場所のBGMを選ぶ",
+      "en": "Choose place BGM"
+    },
+    "note": {
+      "ja": "施設の種類と土地の種類ごとに、鳴らす曲と重みを決める画面。state/musics/place/playlist.json に保存する",
+      "en": "Pick tracks and weights per facility type and per area size; saves state/musics/place/playlist.json"
+    }
+  },
+  "after": [
+    "106_fix_battle_bgm_restore",
+    "207_probe_battle_bgm",
+    "322_battle_bgm"
+  ],
+  "settings": {
+    "DEFAULT_WEIGHT": {
+      "type": "int",
+      "default": 100,
+      "min": 0,
+      "max": 1000,
+      "label": {
+        "ja": "「使う」に入れたときの重み",
+        "en": "Weight given when a track is put in use"
+      },
+      "note": {
+        "ja": "設定画面で曲を「使う」に入れたときの初期値。置いただけの曲は一覧に出るだけで、入れるまで鳴らない",
+        "en": "Initial weight when a track is put in use from the settings screen. Tracks merely placed in the folder are listed and never play until chosen"
+      }
+    },
+    "AVOID_REPEAT": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "前回と同じ曲を続けて選ばない",
+        "en": "Do not pick the same track twice in a row"
+      },
+      "note": {
+        "ja": "同じ種類の場所で候補が2曲以上あるときだけ効く。覚えている場所（下の2つ）には効かない",
+        "en": "Only when two or more tracks are eligible for the same kind of place. Does not apply to remembered places"
+      }
+    },
+    "AREA_STICKY": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "土地の曲は一度決めたら覚える",
+        "en": "Remember the track chosen for each area"
+      },
+      "note": {
+        "ja": "入。土地ごとに最初に選んだ曲を state/musics/place/worlds/<世界>.json に覚え、次からも同じ曲を鳴らす（素のゲームと同じく土地に曲が付く）。切ると入るたびに選び直す",
+        "en": "On: the first track chosen for an area is remembered in state/musics/place/worlds/<world>.json and played again next time (an area keeps its music, as in the game). Off: re-rolled on every visit"
+      }
+    },
+    "FACILITY_STICKY": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "施設の曲は一度決めたら覚える",
+        "en": "Remember the track chosen for each facility"
+      },
+      "note": {
+        "ja": "切。入れると施設ごとに最初に選んだ曲を覚え、その宿・その店ではいつも同じ曲が鳴る",
+        "en": "Off. On: the first track chosen for a facility is remembered, so that inn or shop always plays the same track"
+      }
+    }
+  }
+}
