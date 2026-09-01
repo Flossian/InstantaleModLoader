@@ -76,7 +76,7 @@ PENDING = "pending"
 PLACED = "placed"
 SKIPPED = "skipped"
 
-#: 置ける施設（DOC.md §6 手順6。実セーブに出る `facility_type`）。
+#: 置ける施設（`npc_carryover.py` の「誰をどこへ」。実セーブに出る `facility_type`）。
 PLACEABLE_TYPES = ("guild", "inn")
 
 #: 画像として持ち出す拡張子。

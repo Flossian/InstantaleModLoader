@@ -4,7 +4,7 @@ r"""NPC のエクスポートとインポートの画面。
     python runtime/mods/323_npc_carryover/tool.py           窓を開く
     python runtime/mods/323_npc_carryover/tool.py --dump    窓を開かず、いま読めるものを標準出力に出す
 
-DOC.md §4 が決めた契約で動く（`322_battle_bgm` の道具と同じ）。
+TECH.md §3.12 の契約で動く（`322_battle_bgm` の道具と同じ）。
 ローダの設定画面（`tools/gui.py`）が `mod.json` の `"tool"` を見てこのファイルを
 サブプロセスで起動し、場所は環境変数で渡す。直接起動したときは自分で探す（`locate()`）。
 
@@ -278,7 +278,7 @@ class Model(object):
         """`311_` と `403_` がその NPC について持っている記録。無ければ空。
 
         書き出す時点で同梱するのは、後から元の世界の `state/` が消えても
-        zip だけで済むようにするため（DOC.md §7）。
+        zip だけで済むようにするため（`npc_carryover.py` の「決めたこと」）。
         """
         extra = {}
         for dirname, key in (("npc_profiles", "profile"),

@@ -29,7 +29,7 @@ TECH.md と分けているのは読む理由が違うから。
 
 | ファイル | 内容 |
 | --- | --- |
-| `targets.txt` | `module:qualname(signature)` 形式。`@ctx.wrap` にそのまま貼れる（1,585件） |
+| `targets.txt` | `module:qualname(signature)` 形式。`@ctx.wrap` にそのまま貼れる（1,635件。main_025、2026-09-01 のダンプ） |
 | `game_modules.txt` | ゲーム自身のモジュールの全属性ダンプ（擬似ソース） |
 | `modules.json` | 全モジュールの機械可読インベントリ（`bases` / `mro`） |
 | `build.json` | このダンプがどのビルドを見たものか（版と sha256） |
@@ -37,13 +37,16 @@ TECH.md と分けているのは読む理由が違うから。
 | `bug_sites.txt` | crash_log.txt の各クラッシュ地点のプローブ |
 
 `out/recon/` は毎回上書きされるが、`build.json` と突き合わせて
-**版が変わっていれば上書き前に `out/recon_snapshots/<版>_<日付>.zip` へ退避される**。
+**`IDENTITY_KEYS`（`app_version` / `game_version` / `exe_size`）が1つでも違えば
+上書き前に `out/recon_snapshots/<版>_<日付>.zip` へ退避される**
+（控えが無いときも「別のビルド」扱い。退避は `SNAPSHOT_KEEP = 20` 本まで残し、古いものから消す。
+`recon.py` の `_same_build`）。
 更新の前後で `targets.txt` を突き合わせれば、増えた対象・消えた対象がそのまま出る。
 
 ### 1.2 ゲーム自身のモジュール
 
 ```python
-__main__                       instantale.py、516ターゲット
+__main__                       instantale.py、575ターゲット（main_025、2026-09-01 のダンプ）
 scripts                        scripts.hud.* / scripts.llm.* / items / functions ほか
                                scripts.save_codec, scripts.steam.server_process
 Embedding, image_generation, llama_cpp_runtime_completion, sidecar_process
@@ -69,7 +72,7 @@ save_area_json, save_world_json, api_key_manager, build_type, sdcpp_cuda
 | ゲーム本体 | `C:\Program Files\Epic Games\Instantaleq6Ve7\instantale.exe` |
 | ランタイム | CPython 3.10.11 / Kivy / SDL2 |
 | `game_version` | `014`（`__main__.get_game_version()`）。Epic の `AppVersion`（`main_025`）は別系統 |
-| ロード済みモジュール | 4208（うち 3243 が Nuitka コンパイル済み）／ゲーム自身は 72 |
+| ロード済みモジュール | 4226（うち 3212 が Nuitka コンパイル済み）／ゲーム自身は 67（main_025、2026-09-01 のダンプ） |
 | セーブ | `%LOCALAPPDATA%\Darmabeko\Instantale\` |
 | クラッシュログ | `<ゲームdir>\crash_log.txt`。更新で消えることがある |
 | LLM 入出力の記録 | `<ゲームdir>\output_data\<世界>\<PC>\<manager>\N.json` |
@@ -474,6 +477,7 @@ app.world.characters     -> {id: Character}    Facility.owner はこの id（str
 | --- | --- | --- |
 | `player.current_area` | エリア id の文字列（`"7"`） | `Area` オブジェクト |
 | `player.location` | 施設 id の文字列（`'106'`） | `Facility` オブジェクト |
+| `app.world.characters`（実行時の名簿） | ほぼ空（`224_` の記録で1件。VERIFICATION_LOG.md §2.81） | `{id: Character}` |
 
 > 「新しい世界では動くのに、セーブをロードすると動かない」の正体はこれ。
 > 施設の種類で出し分けるボタンがロード直後だけ出ず、
@@ -599,7 +603,7 @@ app.world_dict['quests']  {id: dict}                 世界の雛形
 #### 2.9.1 `world_dict` はセーブの中身ではなく世界の雛形（2026-08-26 に訂正）
 
 以前ここには「`world_dict['quests']` がセーブに出るほう」「書くときは必ず両方」と
-書いてあった。**どちらも実測に反する。**
+書いてあった。どちらも実測に反する。
 
 | | 中身 | 書き出し先 |
 | --- | --- | --- |
@@ -616,7 +620,7 @@ app.world_dict['quests']  {id: dict}                 世界の雛形
 - 生きた一覧（`app.world.quests`）へ書いた難易度は、画面には出るが
   `savedata.json` には出ない。
   **セーブがどこから依頼を組んでいるかは未特定**（VERIFICATION.md §3.38 の残り）
-- **`get_quest_difficulties(area, world)` は生きた一覧のほうを読む。**
+- `get_quest_difficulties(area, world)` は生きた一覧のほうを読む。
   ある土地で 5件返したとき、雛形にはその土地の依頼が 3件しか無かった
   （返った5件に、雛形に現れない id が2つ入っていた）。
   この関数は店の品揃え・値付け・敵の強さの源（§2.13.1.1）なので、
@@ -624,10 +628,11 @@ app.world_dict['quests']  {id: dict}                 世界の雛形
 
 MOD からの書き方はこうなる。
 
-- **遊びを変えたいだけなら `app.world.quests` にだけ書く。**
+- 遊びを変えたいだけなら `app.world.quests` にだけ書く。
   セーブに残らないので、MOD を外せば素のまま。
   残らないぶんは、次に読む場面で書き直す（`318_` がこの形）
-- **雛形（`world_dict`）へは書かない。** 世界のファイルに焼かれる
+- 依頼と難易度は雛形（`world_dict`）へは書かない。世界のファイルに焼かれる
+  （NPC の採番台帳と施設は別で、`world_dict` へ書く手順が決まっている。§2.23 / §2.28）
 - ローダの `ui.set_quest_value` / `ui.quest_stores` は**両方**へ書く。
   雛形に触れたくない MOD は使わないこと
 
@@ -862,7 +867,7 @@ resolve_battle_effect                      防御を引いて HP に当てる
 - プレイヤー（能力値オール30・武器500）の実引数は毎手 (390, 500) で不動。
   390 = 13×30 と読めるが、このキャラは全能力30なので**どの能力かは切り分け不能**
 - **`get_base_damage_value` を通るのはプレイヤーの手だけ**。
-  敵も同行の仲間も通らない（§2.68 / §2.69。仲間の全手が `base=-`）。
+  敵も同行の仲間も通らない（VERIFICATION_LOG.md §2.68 / §2.69。仲間の全手が `base=-`）。
   これは仕様。**NPC は武器を参照しない旨、公式の回答がある**
   （過去の問い合わせへの返答。実測と一致するのでここに残す。
   この文書で実測でない出どころはこの1件）。
@@ -902,7 +907,7 @@ LLM の power の選択は extreme の端でしか意味を持たない。
 - 敵はデバフ持ち（灰の霧=dex低下、忘却の歌=wis低下）だが、
   素の戦闘では1手目で倒れるので**使う暇が無い**。
   戦闘が複数手になった環境（`319_`）では審判が `AttributeEffect` を
-  実際に出した（2026-08-27、耐久低下。§2.71）。
+  実際に出した（2026-08-27、耐久低下。VERIFICATION_LOG.md §2.71）。
   **素のゲームで捨てられる**こと自体は変わらない
 
 ### 2.11 BGM
@@ -1184,7 +1189,7 @@ InstantaleApp.normalize_shop_inventory_prices(shop_obtainer, player_obtainer)
 
 #### 2.13.1.1 品揃えの段はその土地の依頼の難易度（実セーブ3世界・店23軒）
 
-**店に並ぶ品の `value` は、その土地の依頼の難易度以外の数を取らない。**
+店に並ぶ品の `value` は、その土地の依頼の難易度以外の数を取らない。
 `world_data.json` を直に読んで、
 持ち物を持っている主の居る施設を全部突き合わせた結果:
 
@@ -1252,7 +1257,7 @@ generate_item_in_shopping(item_data, shop_owner_instance, item_stock_tier=2)
 | 食い違い | 1件だけ（`general_store` の主が `job='other'`） |
 
 食い違っていた1件はセーブエディタで足した店だった。
-**ただし売買が開けなかった原因ではない。**
+ただし売買が開けなかった原因ではない。
 `general_store` へ直しただけでは症状が変わらず、
 開いたのは素データを揃えてからだった（§2.28）。
 `job` を `other` に戻したまま素データだけ揃える形は試していないので、
@@ -1923,19 +1928,19 @@ character = app.world.generate_character(npc_id, データ)
 app.move_npc_to_facility(npc_id, character, 施設, ノード)
 ```
 
-> **採番は `index['npc']` で決まる。実在する id の最大値ではない。**
+> 採番は `index['npc']` で決まる。実在する id の最大値ではない。
 > ゲームが新しい町を生成するとき、店主・ギルド員の id は `index['npc']` から
 > 連番で振られ、既に同じ id の NPC が居ても構わず上書きする。
 > MOD が `max + 1` だけで採ると台帳が追いつかず、次の町の生成でゲームが
 > 同じ番号を踏む。テストワールドの灰の交易都市（area 2）では店主 50〜57 の
-> 素データが `902_` の登場人物（始まりの泥濘の冒険者）に差し替わり、
+> 素データが `local/` の MOD が作った登場人物に差し替わり、
 > `world_data.json` 側にだけ正しい店主が残った（2026-08-29。
 > VERIFICATION_LOG.md §2.77）。ローダの `ids.claim`（TECH.md §3.2.3）が
 > 台帳を読んで進める。MOD は id を自分で決めない。
 
 | 関数 | 役割 |
 | --- | --- |
-| `World.generate_character(id, value)` | **作る側ではない。**`save_data_dict['npcs'][id]` を id で引いて `Character` を組む。無い id は `KeyError` |
+| `World.generate_character(id, value)` | 作る側ではない。`save_data_dict['npcs'][id]` を id で引いて `Character` を組む。無い id は `KeyError` |
 | `save_area_json:generate_npc(...)` | 呼んでも何も作られない（返るのは `world_dict` そのもの） |
 | `scripts.characters:Character(...)` | コンストラクタが完全な署名で露出。最後の手段として直に組める |
 
@@ -2025,7 +2030,7 @@ llm_manager:conversation_facilitator_after_retrieval(..., retrieved_knowledge)
 > `..._after_retrieval` の3つは、いま居る土地の `area_residency` と
 > `area_achievements`（§2.20）を引数で直接受け取っている（`targets.txt` の実シグネチャ。
 > `*_in_quest` の2つには無い）。
-> **成した事の素の文章はプロンプトへ載っている（確定）。**
+> 成した事の素の文章はプロンプトへ載っている（確定）。
 > Epic 版 `output_data\` 19,415件（2026-08-27 分まで）の突き合わせで、
 > system メッセージの【プレイヤーキャラの情報】に「この土地での活躍: [...]」の形で
 > 毎回描画されていた（計3,119件: `conversation_facilitator` 1,969 /
@@ -2034,7 +2039,7 @@ llm_manager:conversation_facilitator_after_retrieval(..., retrieved_knowledge)
 > `shopping_negotiator` 17）。named 引数の側は常に None（§2.20）。
 > だから知識を差し込む MOD が同じ素材を言い換えて足すと二重になる（`317_` はこの理由で、
 > 素材の要約ではなく編纂の結果だけを注入している）。
-> **載っていても言及はされない。**
+> 載っていても言及はされない。
 > 討伐系の活躍ブロック入り会話775件で、応答が功績の語句を自発的に使った回は 0/775
 > （プレイヤーが先に口にした回も 0。言い換えは拾えないので参考値）。
 > `321_area_chronicle` はこの実測を根拠に、素材の載せ方ではなく
@@ -2111,7 +2116,10 @@ retrieval を待たず第一声から載る。
 
 #### 2.25.1 プレイヤーへの感情の文（`affinity_text`）は2本立て
 
-`relationship["player"]["affinity_text"]` は文の列で、実データでは常に2つ入っている。
+`relationship["player"]["affinity_text"]` は文字列のことも文の配列のこともある
+（実セーブで両方あった。ヴェスティア 103人で str 57 / list 46。`323_` の `affinity_of`）。
+配列のときの先頭が好感度の段、2つ目以降が魅力の段。
+魅力には文が付かない帯がある（下の表）ので、2つ揃うとは限らない。
 決めているのは1本の関数だけ:
 `scripts.functions:document_emotion_scores_new(affinity, player_charisma)`。
 
@@ -2393,7 +2401,7 @@ scripts.languages:language          今の言語（実測 `'ja'`）
 
 数を埋めるのは `tr` より**前**。
 `pattern_dict` の引数側が `(\d+)ゴールドを稼いだ。`、
-戻り側が `ゴールドを稼いだ。` という形なので、
+戻り側が `\1ゴールドを稼いだ。` という形なので、
 `tr` が受け取るのは既に数の入った文で、返すのも完成した文。
 
 #### 通貨の表記は2つある
@@ -2448,7 +2456,7 @@ Atk:432(+500)\nDef:0(+500)\nExp:1675/3237\nGold:1116472\nAge:31\nSta:…\nLocati
 実機の画面でも `Gold:13184` と出ていた（2026-08-26）。
 **桁区切りの無い整数**で、単位も付かない。
 
-> **通貨の呼び名は3通りに綴られている。**
+> 通貨の呼び名は3通りに綴られている。
 > 文中の `ゴールド`、英語表示の ` gold`、そして画面上部の `Gold`。
 > 呼び名を差し替える側は3つとも拾うこと
 > （`130_` は最初これを2つだと思っていて、画面上部だけ英語で残った）。
@@ -2465,8 +2473,6 @@ Atk:432(+500)\nDef:0(+500)\nExp:1675/3237\nGold:1116472\nAge:31\nSta:…\nLocati
 > これは実装を読んだのではなく**塗り終えたラベルを見て**確かめたもの
 > （`130_` の保険の経路が1度も走らなかった）。
 > ビルドが変われば逆に振れる側なので、書き換える側は保険を残しておくこと。
-
----
 
 ### 2.30 NPC の絵の作られ方（2026-08-30〜31 に `131_` で実測）
 
@@ -2488,7 +2494,16 @@ Atk:432(+500)\nDef:0(+500)\nExp:1675/3237\nGold:1116472\nAge:31\nSta:…\nLocati
 - 2倍に伸ばす段は `pixel_art_process` と `reduce_image_colors` の間のコンパイル済みの中にあり、包めない
 - `pixel_art_process` / `reduce_image_colors` は `scripts.image_processing` の関数を
   `image_generation_creature` と `image_generation_background` が別々に `from ... import` で持つ。
-  片方だけに当てるなら写しの側へ `alias_scan=False` で
+  片方だけに当てるなら写しの側へ `alias_scan=False` で。
+  顔の2関数（`detect_face_coordinates` / `extract_and_save_face`）も同じ関係で、
+  `scripts.image_processing.face_crop` の写しを `image_generation_creature` が持つ
+- 縮小・減色・顔の検出・顔の切り出しは NPC と敵が同じ関数を通るので、工程の側では見分けられない。
+  切り分けられるのは入口の2つだけ:
+  `generate_enemy_image(world_name, race, name, appearance, size, positive_prompt=None)`
+  （モンスター・衛兵）と
+  `generate_enemy_image_from_character(world_name, name, fullbody_path, size)`
+  （NPC の戦闘用の絵）。`131_` はここを包んでスレッドに旗を立て、
+  その中に居る間は工程の包みを全部ゲームのままにする
 - SD の段の設定（`character_generation_quality` の `highres_upscale` / `highres`）はここへ来る寸法を変えない。
   プロキシ MOD が 640x1216 で描いていても、この経路へ渡るのは 512x1024
 
@@ -2516,7 +2531,7 @@ Atk:432(+500)\nDef:0(+500)\nExp:1675/3237\nGold:1116472\nAge:31\nSta:…\nLocati
 └─ worlds\<世界名>\characters\<名前>\    立ち絵
 ```
 
-**インストール先には無い。**
+インストール先には無い。
 Epic 版の `instantale.exe` の隣に `saves` も `worlds` も無かった。
 
 `image_src` は**書いた機械の絶対パス**で入っている。

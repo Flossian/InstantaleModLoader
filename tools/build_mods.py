@@ -42,6 +42,10 @@ PREAMBLE = r"""# MODS: 同梱している MOD
 1行ずつ見渡したいときは [MODLIST.md](MODLIST.md)。
 ローダと GUI の使い方は [README.md](README.md)。
 
+**この文書は `tools/build_mods.py` が各 MOD の `DOC.md` を綴じたもの。**
+手で書き換えても次の生成で消える。
+直す先はその MOD のフォルダの `DOC.md`。
+
 フォルダ名の先頭の番号が種類と適用順を表す。
 
 | 番号帯 | 種類 | 中身 |
@@ -148,6 +152,7 @@ BANDS = (
         "320_guild_adventurer_recruit",
         "321_area_chronicle",
         "322_battle_bgm",
+        "323_npc_carryover",
     )),
     ("feature", CONTRIB_HEAD, (
         "401_battle_character_context",

@@ -134,7 +134,9 @@ GitHub の Issue か Pull Request で受ける。
    帯の意味は [TECH.md §3.2.2](TECH.md#322-同梱-mod-の番号帯)
 2. **こちらの環境へ合わせる。**
    他の MOD との適用順（`mod.json` の `after` / `before`）、重なる機能の調整、
-   ローダの共通部品への寄せ（[TECH.md §5](TECH.md#5-共通部品)）
+   ローダの共通部品への寄せ（[TECH.md §5](TECH.md#5-共通部品)）。
+   `runtime\mods\load_order.json` に名前を載せる（載せないと `docs/MODLIST.md` に出ず、
+   `tools/build_mods.py --check` が止まる）
 3. **オフライン検証を1本書く。**
    `tools/tests/test_*.py`。ゲーム無しで走り、CI が全件を回す
 4. **`DOC.md` を用意する。**
