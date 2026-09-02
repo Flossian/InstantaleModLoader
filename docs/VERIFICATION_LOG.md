@@ -2901,3 +2901,27 @@ LLM も画像生成も描き分けられないので外した）、性格6軸・
 
 付随して直した: `epithet_probe.py` は config.json の `ai_setting` の下を見ておらず、サンプリングと backend が既定値に落ちていた。
 実値と既定が一致していたので §2.63 の結果は変わらない。
+
+
+### 2.83 街・施設BGMの選曲。実機で一部成立（2026-09-02、`324_`）
+
+開発中の `910_place_bgm` として同日7回注入（プロセス4つ）。
+`out\place_bgm.log` 44行、決定38回で全部 `by game`。`FAILED`・ERROR・`safe hook failed` は 0。
+
+- 段の勝ち: 設定画面「ワールド個別設定」で5土地に指定した直後の決定で、個別指定の土地の段が素の曲を差し替えた:
+
+```
+[2026-09-02T21:01:14.795] [PLACEBGM] place/古き剣.mp3 <- world:area:2 | picked 古き剣.mp3 of 1
+    | area 2 アイアン・ゲート (city by save) fac 49 アイアン・ゲート - 入口 (entrance)
+    | by game (replaced majestic/5. Whisperwind.mp3)
+```
+
+- `state\musics\place\古き剣.mp3` が絶対パスで鳴った。起動時は `pool: state 0` で、
+  ゲームを起動したまま置いた曲が次の決定で拾われた（`of 1`）＝走査も設定もその場で効く
+- 覚えた曲が `worlds\ヴェスティア.json` に書かれた（`"chosen": {"level": "world:area:2", "track": "古き剣.mp3"}`）
+- 土地の種類は 38/38 が `by save`。実行時の `Area.size` は読めない（GAME.md §2.7 に反映。`207_` の 2026-08-21 の `size=None` と一致）
+- ロード直後の決定でも施設が引けた（`fac 81 霧の休息所 (inn)` / `fac 210 白雲の宿 (inn)`）
+
+施設の段（`by move_phase`）はこの日はまだ一度も発火していない（施設に曲を入れていないため）。
+残りは §3.48。同日 `324_place_bgm` として正式化した
+（`state\musics\place\` は MOD 名を含まないのでそのまま。`mod_settings.json` と `gui.json` の鍵は改名時に書き換えた）。

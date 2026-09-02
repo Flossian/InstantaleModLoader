@@ -470,6 +470,11 @@ app.world.characters     -> {id: Character}    Facility.owner はこの id（str
   `administrative_office` / `underworld_office` / `colosseum` / `slave_market` /
   `location` / `dungeon_location`。
   うち `ward` / `location` / `entrance` / `exit` は主のいない通路
+  （実セーブ3世界には `training_facility` も1件ずつある。`free` は §2.21）
+- 施設 id は**土地の中でしか一意でない**（実セーブ3世界とも、世界の中では別の土地に同じ id がある。
+  世界単位で施設を指すなら `土地id/施設id` の組で持つ。`324_` の `worlds\<世界>.json` がその形）
+- 実行時の `Area.size` は読めない（`207_` の記録と `324_` の実機 38/38 がともに取れず。
+  土地の種類は `save_data_dict["areas"][id]["size"]` から取る。`324_` の `size_of`）
 
 #### セーブの形＝実行時の形ではない
 
@@ -951,6 +956,21 @@ apply_music_volume(app)         main_023 で追加
 - どのフックで `bgm` が確定するかは特定できないので、
   どれが何回発火しても結果が変わらない書き方にして全部に仕掛ける
   （実測では `save_world_json:write_obfuscated_json_file` だけが発火した。VERIFICATION.md §3.4）
+
+土地の曲が `play_music_from_src` へ来る経路（2026-08-21〜09-01 の実測 357 回。`207_` の `out\battle_bgm.log` 2世代）:
+
+| 呼び出し元（`instantale.py` の lambda） | 場面 | 回数 |
+|---|---|---|
+| `:1464` | ロード直後・題名から入ったとき | 100 |
+| `:10440` | 土地の移動 | 55 |
+| `:8000` | 戦闘の終わり | 154 |
+| `:6656` | 依頼の終わり（`QuestEndManager`） | 19 |
+| `:6168` | 依頼の始まり（`QuestStartManager`。ダンジョンの曲） | 19 |
+| `:1027` / `:8038` / `:8102` | 場面は特定していない | 4 / 3 / 3 |
+
+この範囲では渡してくる物は全部 app だった（本節冒頭の「app でない物」はこの2世代のログには現れていない）。
+`MovePhaseManager` からは 0 件 ＝ **施設の出入りではゲームは曲を鳴らし直さない**
+（`324_` はそのために `move_phase` の復帰後に自分で鳴らし直す）。
 
 **乱数は MOD 専用の `random.Random` を使う**（グローバルから引くとゲーム自身の乱数列がずれる）。
 

@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""910_place_bgm をゲーム抜きで通す。
+"""324_place_bgm をゲーム抜きで通す。
 
-    python tools/tests/test_wip_place_bgm.py
+    python tools/tests/test_place_bgm.py
 
-9xx なので CI は走らせない（`test_wip_*`）。正式な番号へ振り直すときに名前も直す。
+（開発中は `910_place_bgm` / `test_wip_place_bgm.py` だった。2026-09-02 に正式化。）
 
   走査    … 2つのフォルダを再帰で1つのプールにする。鍵は相対パス。battle/ は除く。同じ鍵は state 側
   重み    … 文字列の数字も読む。負・読めない・無い項目は 0

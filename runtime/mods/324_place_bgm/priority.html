@@ -1,0 +1,297 @@
+<title>場所BGMの優先順位</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=M+PLUS+1+Code:wght@400;600&display=swap">
+<style>
+  :root {
+    --bg: #f3f5f7;
+    --panel: #ffffff;
+    --ink: #24313d;
+    --sub: #5c6d7c;
+    --line: #d3dce3;
+    --code-bg: #e9eef2;
+    /* ワールド個別設定（琥珀） */
+    --ind: #9a6317;
+    --ind-bg: #f6ead3;
+    --ind-line: #d3a75c;
+    /* 一括設定（鋼青） */
+    --blk: #2f6187;
+    --blk-bg: #dfeaf2;
+    --blk-line: #86aecb;
+    /* 素の曲 */
+    --game: #6d7a86;
+    --win: #2e7d4f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #131a21;
+      --panel: #1a232c;
+      --ink: #dde6ed;
+      --sub: #97a7b5;
+      --line: #33414e;
+      --code-bg: #243039;
+      --ind: #e3ae57;
+      --ind-bg: #3a3021;
+      --ind-line: #8a6d33;
+      --blk: #85b4d6;
+      --blk-bg: #20313f;
+      --blk-line: #46708f;
+      --game: #8b99a6;
+      --win: #6dbb8f;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #131a21;
+    --panel: #1a232c;
+    --ink: #dde6ed;
+    --sub: #97a7b5;
+    --line: #33414e;
+    --code-bg: #243039;
+    --ind: #e3ae57;
+    --ind-bg: #3a3021;
+    --ind-line: #8a6d33;
+    --blk: #85b4d6;
+    --blk-bg: #20313f;
+    --blk-line: #46708f;
+    --game: #8b99a6;
+    --win: #6dbb8f;
+  }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Zen Kaku Gothic New", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+    font-size: 15px;
+    line-height: 1.9;
+    margin: 0;
+  }
+  main { max-width: 880px; margin: 0 auto; padding: 40px 20px 72px; }
+  h1 { font-size: 26px; font-weight: 700; letter-spacing: .02em; margin: 0 0 4px; text-wrap: balance; }
+  .lede { color: var(--sub); margin: 0 0 8px; }
+  h2 { font-size: 17px; font-weight: 700; margin: 44px 0 8px; padding-top: 18px; border-top: 1px solid var(--line); }
+  p { white-space: pre-line; margin: 8px 0; }
+  code, .k {
+    font-family: "M PLUS 1 Code", ui-monospace, Consolas, monospace;
+    font-size: 12.5px;
+    background: var(--code-bg);
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
+  figure { margin: 16px 0 4px; }
+  .scroller { overflow-x: auto; }
+  figure svg { display: block; max-width: 100%; height: auto; min-width: 620px; }
+  figcaption { color: var(--sub); font-size: 13px; margin-top: 6px; }
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; margin: 14px 0 2px; font-size: 13px; }
+  .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .sw-ind { background: var(--ind-bg); border: 1.5px solid var(--ind); }
+  .sw-blk { background: var(--blk-bg); border: 1.5px solid var(--blk); }
+  .sw-game { background: transparent; border: 1.5px dashed var(--game); }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 14px; }
+  th, td { border: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--panel); font-weight: 700; white-space: nowrap; }
+  .note { color: var(--sub); font-size: 13px; }
+</style>
+<main>
+  <h1>場所BGMの優先順位</h1>
+  <p class="lede">324_place_bgm が「どの設定の曲を鳴らすか」を決める仕組み。ワールド個別設定と一括設定は混ざらず、勝った段だけが使われる。</p>
+
+  <div class="legend">
+    <span><span class="swatch sw-ind"></span>ワールド個別設定（worlds\&lt;世界&gt;.json）</span>
+    <span><span class="swatch sw-blk"></span>一括設定（playlist.json）</span>
+    <span><span class="swatch sw-game"></span>素の曲（セーブの bgm）</span>
+  </div>
+
+  <h2>1. 決め方の梯子</h2>
+  <p>いま居る場所から上の段へ順に見る。
+使う曲が1曲でもある最初の段で止まり、その段の重みだけで抽選する。
+使う曲が無い段（0曲・重みが全部0・曲がディスクに無い）は素通りして下へ落ちる。</p>
+  <figure>
+    <div class="scroller">
+    <svg viewBox="0 0 720 400" role="img" aria-label="4つの段を上から順に見て、使う曲がある最初の段で抽選する梯子。どの段にも無ければ素の曲。">
+      <defs>
+        <marker id="ar" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0,0 L8,4 L0,8 z" fill="currentColor"/>
+        </marker>
+        <marker id="arw" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0,0 L8,4 L0,8 z" fill="var(--win)"/>
+        </marker>
+      </defs>
+      <g font-size="12.5" fill="currentColor">
+        <!-- 段の箱 x=60 w=380, y: 16, 96, 176, 256 (h=56), 段5 y=336 -->
+        <!-- 段1 -->
+        <rect x="60" y="16" width="380" height="56" rx="6" fill="var(--ind-bg)" stroke="var(--ind)" stroke-width="1.5"/>
+        <circle cx="88" cy="44" r="13" fill="var(--ind)"/>
+        <text x="88" y="48.5" text-anchor="middle" fill="var(--panel)" font-weight="700">1</text>
+        <text x="112" y="39" font-weight="700">その施設</text>
+        <text x="112" y="58" fill="var(--sub)">個別設定 facilities["7/106"]</text>
+        <!-- 段2 -->
+        <rect x="60" y="96" width="380" height="56" rx="6" fill="var(--blk-bg)" stroke="var(--blk)" stroke-width="1.5"/>
+        <circle cx="88" cy="124" r="13" fill="var(--blk)"/>
+        <text x="88" y="128.5" text-anchor="middle" fill="var(--panel)" font-weight="700">2</text>
+        <text x="112" y="119" font-weight="700">施設の種類（宿屋・ギルド …）</text>
+        <text x="112" y="138" fill="var(--sub)">一括設定 inn / guild / …</text>
+        <!-- 段3 -->
+        <rect x="60" y="176" width="380" height="56" rx="6" fill="var(--ind-bg)" stroke="var(--ind)" stroke-width="1.5"/>
+        <circle cx="88" cy="204" r="13" fill="var(--ind)"/>
+        <text x="88" y="208.5" text-anchor="middle" fill="var(--panel)" font-weight="700">3</text>
+        <text x="112" y="199" font-weight="700">その土地</text>
+        <text x="112" y="218" fill="var(--sub)">個別設定 areas["7"]</text>
+        <!-- 段4 -->
+        <rect x="60" y="256" width="380" height="56" rx="6" fill="var(--blk-bg)" stroke="var(--blk)" stroke-width="1.5"/>
+        <circle cx="88" cy="284" r="13" fill="var(--blk)"/>
+        <text x="88" y="288.5" text-anchor="middle" fill="var(--panel)" font-weight="700">4</text>
+        <text x="112" y="279" font-weight="700">土地の種類（町・村・都市・ダンジョン）</text>
+        <text x="112" y="298" fill="var(--sub)">一括設定 area:town / …</text>
+        <!-- 段5 -->
+        <rect x="60" y="336" width="380" height="48" rx="6" fill="none" stroke="var(--game)" stroke-width="1.5" stroke-dasharray="5 4"/>
+        <text x="112" y="356" font-weight="700">素の曲</text>
+        <text x="112" y="374" fill="var(--sub)">セーブの areas[id].bgm をそのまま</text>
+        <!-- 落ちる矢印（左側） -->
+        <g stroke="currentColor" fill="none">
+          <line x1="40" y1="44" x2="40" y2="356" />
+          <line x1="40" y1="44" x2="58" y2="44"/>
+          <line x1="40" y1="124" x2="58" y2="124" marker-end="url(#ar)"/>
+          <line x1="40" y1="204" x2="58" y2="204" marker-end="url(#ar)"/>
+          <line x1="40" y1="284" x2="58" y2="284" marker-end="url(#ar)"/>
+          <line x1="40" y1="356" x2="58" y2="356" marker-end="url(#ar)"/>
+        </g>
+        <text x="30" y="208" transform="rotate(-90 30 208)" text-anchor="middle" fill="var(--sub)">使う曲が無ければ下の段へ</text>
+        <!-- 勝ち抜け矢印（右側） -->
+        <g stroke="var(--win)" fill="none" stroke-width="1.5">
+          <line x1="442" y1="44" x2="520" y2="44" marker-end="url(#arw)"/>
+          <line x1="442" y1="124" x2="520" y2="124" marker-end="url(#arw)"/>
+          <line x1="442" y1="204" x2="520" y2="204" marker-end="url(#arw)"/>
+          <line x1="442" y1="284" x2="520" y2="284" marker-end="url(#arw)"/>
+          <line x1="442" y1="360" x2="520" y2="360" marker-end="url(#arw)"/>
+        </g>
+        <rect x="524" y="150" width="176" height="104" rx="6" fill="var(--panel)" stroke="var(--win)" stroke-width="1.5"/>
+        <text x="612" y="186" text-anchor="middle" font-weight="700" fill="var(--win)">この段だけで</text>
+        <text x="612" y="206" text-anchor="middle" font-weight="700" fill="var(--win)">重みの抽選</text>
+        <text x="612" y="230" text-anchor="middle" fill="var(--sub)">下の段の曲は混ざらない</text>
+        <text x="612" y="140" text-anchor="middle" fill="var(--sub)">使う曲が1曲でもあれば</text>
+        <text x="612" y="352" text-anchor="middle" fill="var(--sub)">段5はそのまま鳴らす</text>
+      </g>
+    </svg>
+    </div>
+    <figcaption>図1: 上から順に見て、使う曲がある最初の段で決まる。段はどれか1つだけが使われる。</figcaption>
+  </figure>
+
+  <h2>2. なぜこの順か（2つの軸の積）</h2>
+  <p>軸は2つあり、強さが違う。
+場所の軸（施設が土地より先）が強く、指定の軸（個別が一括より先）は同じ場所の中でだけ効く。
+だから「狭い範囲が常に勝つ」のではなく、施設の列を上から使い切ってから土地の列へ移る。</p>
+  <figure>
+    <div class="scroller">
+    <svg viewBox="0 0 640 330" role="img" aria-label="施設と土地の2列、個別と一括の2行の表。順位は施設の列を上から、次に土地の列を上から辿る。">
+      <defs>
+        <marker id="ar2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0,0 L8,4 L0,8 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <g font-size="12.5" fill="currentColor">
+        <!-- 軸見出し -->
+        <text x="330" y="24" text-anchor="middle" font-weight="700">場所の軸（強い）　施設 → 土地</text>
+        <line x1="180" y1="36" x2="480" y2="36" stroke="currentColor" marker-end="url(#ar2)"/>
+        <text x="40" y="180" transform="rotate(-90 40 180)" text-anchor="middle" font-weight="700">指定の軸　個別 → 一括</text>
+        <line x1="56" y1="90" x2="56" y2="270" stroke="currentColor" marker-end="url(#ar2)"/>
+        <!-- 列見出し -->
+        <text x="240" y="66" text-anchor="middle" font-weight="700">施設に居る</text>
+        <text x="470" y="66" text-anchor="middle" font-weight="700">土地（通り）</text>
+        <text x="86" y="120" text-anchor="end" fill="var(--sub)">個別</text>
+        <text x="86" y="230" text-anchor="end" fill="var(--sub)">一括</text>
+        <!-- セル: 列1 x=130 w=220, 列2 x=360 w=220 / 行1 y=80 h=90, 行2 y=190 h=90 -->
+        <rect x="130" y="80" width="220" height="90" rx="6" fill="var(--ind-bg)" stroke="var(--ind)" stroke-width="1.5"/>
+        <text x="152" y="112" font-weight="700" font-size="20">1</text>
+        <text x="172" y="112">その施設</text>
+        <text x="152" y="140" fill="var(--sub)">facilities["7/106"]</text>
+        <rect x="130" y="190" width="220" height="90" rx="6" fill="var(--blk-bg)" stroke="var(--blk)" stroke-width="1.5"/>
+        <text x="152" y="222" font-weight="700" font-size="20">2</text>
+        <text x="172" y="222">施設の種類</text>
+        <text x="152" y="250" fill="var(--sub)">inn / guild / …</text>
+        <rect x="360" y="80" width="220" height="90" rx="6" fill="var(--ind-bg)" stroke="var(--ind)" stroke-width="1.5"/>
+        <text x="382" y="112" font-weight="700" font-size="20">3</text>
+        <text x="402" y="112">その土地</text>
+        <text x="382" y="140" fill="var(--sub)">areas["7"]</text>
+        <rect x="360" y="190" width="220" height="90" rx="6" fill="var(--blk-bg)" stroke="var(--blk)" stroke-width="1.5"/>
+        <text x="382" y="222" font-weight="700" font-size="20">4</text>
+        <text x="402" y="222">土地の種類</text>
+        <text x="382" y="250" fill="var(--sub)">area:town / …</text>
+        <!-- 辿る順の蛇行矢印 1→2→3→4 -->
+        <path d="M 240 172 L 240 188" stroke="var(--win)" stroke-width="2" fill="none" marker-end="url(#ar2)"/>
+        <path d="M 352 235 C 400 235 310 125 358 125" stroke="var(--win)" stroke-width="2" fill="none" marker-end="url(#ar2)"/>
+        <path d="M 470 172 L 470 188" stroke="var(--win)" stroke-width="2" fill="none" marker-end="url(#ar2)"/>
+        <text x="330" y="315" text-anchor="middle" fill="var(--sub)">緑の線が見る順。施設の列（1→2）を先に使い切り、それから土地の列（3→4）</text>
+      </g>
+    </svg>
+    </div>
+    <figcaption>図2: 順位は「場所の軸」を先に消費する。範囲の狭さ（個別か一括か）は同じ列の中の順でしかない。</figcaption>
+  </figure>
+
+  <h2>3. 実例: 宿屋を一括設定して、この街だけ個別設定したとき</h2>
+  <p>一括設定の「宿屋」に曲を入れ、ワールド個別設定でこの街（土地 id 7）の曲を決めてある。
+ギルドには何も入れていない。
+この街を歩くと、勝つ段はこう切り替わる。</p>
+  <figure>
+    <div class="scroller">
+    <svg viewBox="0 0 720 260" role="img" aria-label="通りでは段3の街の個別の曲、宿屋に入ると段2の一括の宿屋の曲、ギルドでは段が素通りして段3の街の曲に戻る。">
+      <defs>
+        <marker id="ar3" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0,0 L8,4 L0,8 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <g font-size="12.5" fill="currentColor">
+        <!-- 場所の箱: 4つ x=20,200,380,560 w=140 y=40 h=52 -->
+        <rect x="20" y="40" width="140" height="52" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+        <text x="90" y="62" text-anchor="middle" font-weight="700">通り（区画）</text>
+        <text x="90" y="80" text-anchor="middle" fill="var(--sub)">施設の段なし</text>
+        <rect x="200" y="40" width="140" height="52" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+        <text x="270" y="62" text-anchor="middle" font-weight="700">宿屋</text>
+        <text x="270" y="80" text-anchor="middle" fill="var(--sub)">一括設定に曲あり</text>
+        <rect x="380" y="40" width="140" height="52" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+        <text x="450" y="62" text-anchor="middle" font-weight="700">ギルド</text>
+        <text x="450" y="80" text-anchor="middle" fill="var(--sub)">どこにも曲なし</text>
+        <rect x="560" y="40" width="140" height="52" rx="6" fill="var(--panel)" stroke="var(--line)"/>
+        <text x="630" y="62" text-anchor="middle" font-weight="700">通りへ戻る</text>
+        <text x="630" y="80" text-anchor="middle" fill="var(--sub)">施設の段なし</text>
+        <!-- 移動矢印 -->
+        <g stroke="currentColor" fill="none">
+          <line x1="162" y1="66" x2="196" y2="66" marker-end="url(#ar3)"/>
+          <line x1="342" y1="66" x2="376" y2="66" marker-end="url(#ar3)"/>
+          <line x1="522" y1="66" x2="556" y2="66" marker-end="url(#ar3)"/>
+        </g>
+        <!-- 鳴る曲のタグ -->
+        <g>
+          <line x1="90" y1="94" x2="90" y2="118" stroke="currentColor" marker-end="url(#ar3)"/>
+          <line x1="270" y1="94" x2="270" y2="118" stroke="currentColor" marker-end="url(#ar3)"/>
+          <line x1="450" y1="94" x2="450" y2="118" stroke="currentColor" marker-end="url(#ar3)"/>
+          <line x1="630" y1="94" x2="630" y2="118" stroke="currentColor" marker-end="url(#ar3)"/>
+        </g>
+        <rect x="20" y="122" width="140" height="58" rx="6" fill="var(--ind-bg)" stroke="var(--ind)" stroke-width="1.5"/>
+        <text x="90" y="146" text-anchor="middle" font-weight="700" fill="var(--ind)">段3 この街の曲</text>
+        <text x="90" y="166" text-anchor="middle" fill="var(--sub)">world:area:7</text>
+        <rect x="200" y="122" width="140" height="58" rx="6" fill="var(--blk-bg)" stroke="var(--blk)" stroke-width="1.5"/>
+        <text x="270" y="146" text-anchor="middle" font-weight="700" fill="var(--blk)">段2 宿屋の曲</text>
+        <text x="270" y="166" text-anchor="middle" fill="var(--sub)">facility:inn</text>
+        <rect x="380" y="122" width="140" height="58" rx="6" fill="var(--ind-bg)" stroke="var(--ind)" stroke-width="1.5"/>
+        <text x="450" y="146" text-anchor="middle" font-weight="700" fill="var(--ind)">段3 この街の曲</text>
+        <text x="450" y="166" text-anchor="middle" fill="var(--sub)">world:area:7</text>
+        <rect x="560" y="122" width="140" height="58" rx="6" fill="var(--ind-bg)" stroke="var(--ind)" stroke-width="1.5"/>
+        <text x="630" y="146" text-anchor="middle" font-weight="700" fill="var(--ind)">段3 この街の曲</text>
+        <text x="630" y="166" text-anchor="middle" fill="var(--sub)">world:area:7</text>
+        <!-- 注釈 -->
+        <text x="270" y="206" text-anchor="middle" fill="var(--sub)">施設の段（2）が街の個別（3）より先</text>
+        <text x="450" y="228" text-anchor="middle" fill="var(--sub)">ギルドは段1・2が空なので素通りし、街の曲が続く（鳴らし直しもしない）</text>
+      </g>
+    </svg>
+    </div>
+    <figcaption>図3: 宿の中だけ一括設定の宿屋の曲。それ以外はこの街の個別の曲。ギルドと通りの間では曲は切れずに続く。</figcaption>
+  </figure>
+  <p>この街でも宿の中を街の曲で通したいなら、ワールド個別設定でその宿に曲を入れる（段1になり、宿屋の一括設定より先に見る）。
+他の街では、通りは一括設定の「町」（無ければ素の曲）、宿は同じ宿屋の曲が鳴る。</p>
+
+  <h2>4. 細則</h2>
+  <table>
+    <tr><th>段が「ある」の条件</th><td>使う曲が1曲以上（重みが正で、曲がディスクに実在する）。指定が在っても曲が消えていれば素通り</td></tr>
+    <tr><th>混ざるか</th><td>混ざらない。勝った段の重みだけで抽選し、下の段の曲は候補に入らない</td></tr>
+    <tr><th>覚えた曲（chosen）</th><td>段ごとに別。段4で覚えた曲は、後から段3の指定を足すと使われず、段3で選び直して覚え直す</td></tr>
+    <tr><th>実機での確かめ方</th><td>ログ <code>out\place_bgm.log</code> の各行に勝った段が出る（<code>&lt;- world:facility:7/106</code> / <code>&lt;- facility:inn</code> / <code>&lt;- world:area:7</code> / <code>&lt;- area:town</code>）</td></tr>
+  </table>
+  <p class="note">出典: 910_place_bgm の place_bgm.py（level_keys / resolve）と DOC.md §1「どの曲が鳴るか」。</p>
+</main>

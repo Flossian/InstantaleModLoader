@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""910_place_bgm の選曲画面（tool.py）を窓抜きで通す。
+"""324_place_bgm の選曲画面（tool.py）を窓抜きで通す。
 
-    python tools/tests/test_wip_place_bgm_tool.py
+    python tools/tests/test_place_bgm_tool.py
 
-9xx なので CI は走らせない（`test_wip_*`）。
+（開発中は `910_place_bgm` / `test_wip_place_bgm_tool.py` だった。2026-09-02 に正式化。）
 
   場所    … 環境変数が無ければ settings/gui.json と MOD の位置から組む
   一覧    … 2つのフォルダを再帰で合算。playlist.json に無い曲は 0（使うに入れるまで鳴らない）

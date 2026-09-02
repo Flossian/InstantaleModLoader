@@ -4,7 +4,7 @@
   "kind": "feature",
   "name": {
     "en": "Place BGM playlist",
-    "ja": "場所BGMの選曲"
+    "ja": "街・施設BGMの選曲"
   },
   "description": {
     "en": "Plays facility and area BGM chosen by weighted random from Assets/sounds/musics and state/musics/place, with a playlist per facility type (inn, guild, shops...) and per area size (town, village, city, dungeon). Weights live in state/musics/place/playlist.json",

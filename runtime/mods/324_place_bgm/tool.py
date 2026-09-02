@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """場所の BGM の選曲画面。`state/musics/place/playlist.json` と `worlds/<世界>.json` を編集する。
 
-    python runtime/mods/910_place_bgm/tool.py           窓を開く
-    python runtime/mods/910_place_bgm/tool.py --dump    窓を開かず、いま読める一覧を標準出力に出す
+    python runtime/mods/324_place_bgm/tool.py           窓を開く
+    python runtime/mods/324_place_bgm/tool.py --dump    窓を開かず、いま読める一覧を標準出力に出す
 
 TECH.md §3.12 の契約で動く（`322_battle_bgm` の道具と同じ）。
 ローダの設定画面（`tools/gui.py`）が `mod.json` の `"tool"` を見てこのファイルを
@@ -36,7 +36,7 @@ TECH.md §3.12 の契約で動く（`322_battle_bgm` の道具と同じ）。
 （「町の calm を全部使う」がフォルダで絞って「全て使う」の2手で済む）。
 
 ワールド個別設定は `savedata.json` を読んで場所を並べる（復号は GAME.md §2.16。**読むだけで書かない**）。
-施設 id は土地の中でしか一意でないので、施設は `土地id/施設id` で持つ（DOC.md §5）。
+施設 id は土地の中でしか一意でないので、施設は `土地id/施設id` で持つ（GAME.md §2.7）。
 本体が覚えた曲（`chosen`）は右の見出しに出し、「覚えた曲を消す」で次に入ったとき選び直させる。
 `worlds/<世界>.json` は本体も書く（`chosen`）ので、保存の直前に読み直して `playlist` だけを差し替える。
 
@@ -52,7 +52,7 @@ MOD 本体は import しない。
 ここはゲームの外で走る別プロセスで、本体はゲームの中で走る。
 共有したい定数（フォルダ名・拡張子・種類）はこのファイルに写してある。
 セーブの復号（`decode`）は `323_npc_carryover/carryover.py` と同じ物の写し。
-MOD どうしは import しないので（TECH.md §3.2.3）、正式化するときにローダの語彙へ寄せる（DOC.md §5）。
+MOD どうしは import しないので（TECH.md §3.2.3）、ローダの語彙（`instantale_modloader.saves` 案)へ寄せるのが筋。`323_` と同時に行う。
 """
 
 import io
@@ -83,7 +83,7 @@ PLAYLIST_HELP = [
     "鍵は musics/ からの相対パス（town/calm/曲.mp3）。同じ鍵なら state 側",
     "重みは比率。同じ種類の合計に対する割合が確率になる（合計 100 なら数字がそのままパーセント）",
     "0 か無ければその種類では鳴らない。どの段にも無ければゲームの曲",
-    "土地・施設ごとの個別指定と覚えた曲は worlds/<世界>.json（DOC.md §5）",
+    "土地・施設ごとの個別指定と覚えた曲は worlds/<世界>.json（DOC.md）",
 ]
 
 # セーブの置き場と復号（`323_` の carryover.py と同じ）。
@@ -685,7 +685,7 @@ def build_window(model):
     from tkinter import messagebox, ttk
 
     root = tk.Tk()
-    root.title("場所BGMの選曲")
+    root.title("街・施設BGMの選曲")
     root.minsize(1000, 640)
     remembered = load_window(model.root)
     root.geometry(remembered.get("geometry") or "1380x860")
@@ -707,7 +707,7 @@ def build_window(model):
     outer.pack(fill="both", expand=True)
 
     # --- 見出しと置き場
-    ttk.Label(outer, text="場所BGMの選曲", style="Title.TLabel").pack(anchor="w")
+    ttk.Label(outer, text="街・施設BGMの選曲", style="Title.TLabel").pack(anchor="w")
     ttk.Label(outer, style="Sub.TLabel",
               text="施設の種類と土地の種類ごとに、鳴らす曲と重みを決める。重みは比率で、"
                    "同じ種類の合計に対する割合が確率になる。施設に候補が無ければ土地の曲、"
@@ -776,7 +776,7 @@ def build_window(model):
     ttk.Separator(outer).pack(side="bottom", fill="x", pady=8)
 
     def update_title():
-        root.title("場所BGMの選曲" + ("（未保存）" if model.dirty() else ""))
+        root.title("街・施設BGMの選曲" + ("（未保存）" if model.dirty() else ""))
 
     # --- 左: タブ（一括設定 / ワールド個別設定）、右: 選んだ場所の選曲
     main = ttk.PanedWindow(outer, orient="horizontal")
@@ -1231,7 +1231,7 @@ def build_window(model):
     sash["id"] = main.bind("<Configure>", place_sash, add="+")
 
     if not model.pool:
-        messagebox.showinfo("場所BGMの選曲",
+        messagebox.showinfo("街・施設BGMの選曲",
                             "曲が1つも見つからない。\n\n{}\n{}\n\nに .mp3 / .ogg / .wav を置いて「再走査」".format(
                                 model.asset_dir or "（ゲームの場所が未設定）", model.state_dir),
                             parent=root)
