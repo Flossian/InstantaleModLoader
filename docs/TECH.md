@@ -1058,6 +1058,39 @@ GUI の `gui.json` ではない（あれは GUI しか読まないが、この�
 
 **印のキーは MOD ごとで変える**（同じキーだと押下が食い合う。§5.1.1）。
 
+#### 3.3.1 同じ値を2つの MOD が書くなら、勝敗は `orig` の前か後かで決まる
+
+適用順では決まらない。**後から書いたほうが勝つ**ので、
+「外側＝勝ち」ではなく「`orig` を呼んだ後に書くほうが勝ち」になる。
+
+| 外側の書く時点 | 内側の書く時点 | 最後に書くのは |
+|---|---|---|
+| `orig` の後 | `orig` の後 | 外側 |
+| `orig` の**前** | `orig` の後 | 内側 |
+
+**同じ MOD の中で時点が揃っていないと、相手はどちらの層に居ても負ける。**
+`129_balance_item_price` は画面へ出す2箇所だけ描く前に書き（`orig` の前）、
+残り8箇所は `orig` の後に書く。
+`405_regional_economy` を内側に置くと画面の2箇所では乗るのに、
+`set_shop_price_for_owner` では9回とも消えた（VERIFICATION.md §3.19.1）。
+
+層を置き直しても解けないので、**書く側が後処理の口を持つ**:
+
+```python
+POST_ATTR = "_instantale_item_price_post"   # sys に置いた (名乗り, 関数) のリスト
+
+hooks = getattr(sys, POST_ATTR, None)       # 相手が先に作っていることがある
+if not isinstance(hooks, list):
+    hooks = []
+    setattr(sys, POST_ATTR, hooks)
+hooks[:] = [e for e in hooks if e[0] != 自分の名乗り]   # 再注入で重ねない
+hooks.append((自分の名乗り, fn))                        # 中身を書き換える。差し替えない
+```
+
+書く側は値を書いた**直後**にこれを回す。
+どの地点で書いても同じ呼吸で後処理が乗るので、適用順にも経路にも依存しなくなる。
+借りる側は `mod.json` の `"shares"` にこの名前を書く（§3.2.3 の名前の断り）。
+
 ### 3.4 まだ現れていない対象を狙う（保留と当て直し）
 
 ゲームは `llama_cpp_runtime_completion` と `scripts.llm.llm_manager` を

@@ -58,6 +58,16 @@
 「一度も売買していない」が区別できず、
 決済がこちらの値段を読んでいるのかを後から確かめようがない。
 
+## 値付けの後に他の MOD を通す
+
+値段を書く地点が10箇所あり、**書く時点が地点ごとに違う**（画面の2箇所は
+描く前なので `orig` の前、残りは `orig` の後）。
+包みの勝敗は適用順ではなく `orig` の前に書くか後に書くかで決まるので、
+値段へ何かを乗せたい MOD は、外側に居ても内側に居ても半分の地点で負ける。
+そこで**書いた直後に呼ぶ口**を1つ持たせてある（`POST_ATTR`）。
+こちらがどこで書いても、同じ呼吸で後処理が乗る。
+実例は `405_regional_economy` の地域倍率。
+
 ## 触らないもの
 
 `get_item_base_price` は包まない。
@@ -191,6 +201,32 @@ SKILL_KEY = "スキル"
 # 再注入しても1組だけ持つ（件数と、決済のずれの記録）。
 STORE_ATTR = "_instantale_item_price_store"
 
+# ---- 値付けの後に割り込む口（他の MOD 向け）-------------------------------
+#
+# `sys` に置いた**素のリスト**で、中身は `(名乗り, 関数)` の組。
+# この MOD が値段を書いた**直後**に、登録された順で呼ぶ。
+#
+#     fn(item, attributes, why)      # 戻り値は見ない。例外は握って記録する
+#
+# 使う側（`405_regional_economy` がこの形）:
+#
+#     hooks = getattr(sys, "_instantale_item_price_post", None)
+#     if not isinstance(hooks, list):
+#         hooks = []
+#         setattr(sys, "_instantale_item_price_post", hooks)
+#     hooks[:] = [e for e in hooks if e[0] != 私の名乗り]   # 再注入で重ねない
+#     hooks.append((私の名乗り, fn))
+#
+# **なぜ包み直しではなくこの形なのか。** この MOD は10箇所で値段を書くが、
+# 書く時点が地点ごとに違う ― 画面の2箇所（`toggle_twin_inventory_window` /
+# `ItemDetailBox.update_content`）は描く前なので `orig` の**前**、残りは
+# `orig` の**後**。包みの勝敗は適用順ではなく「`orig` の前に書くか後に書くか」で
+# 決まるので、相手がどちらの層に居ても必ず半分の地点で負ける
+# （実測: 地域倍率が `shop_owner` / `normalize_shop_inventory_prices` で
+# 9回とも消えていた。VERIFICATION.md §3.19）。
+# ここを通せば、こちらがどこで書いても同じ呼吸で後処理が乗る。
+POST_ATTR = "_instantale_item_price_post"
+
 
 def _num(value):
     """数として読めれば float、読めなければ None（文字列で入ることがある）。"""
@@ -270,6 +306,29 @@ def apply(ctx):
         elif store["logged"] == LOG_LIMIT + 1:
             write("... 以降は件数だけ数える（LOG_LIMIT={}）".format(LOG_LIMIT))
 
+    # 値段の後に割り込む口（宣言は POST_ATTR の説明を参照）。
+    # **リストは相手が先に作っていることがある**（適用順はどちらが先とも限らない）
+    # ので、無ければ作る・在ればそれを使う、で揃える。
+    post_hooks = getattr(sys, POST_ATTR, None)
+    if not isinstance(post_hooks, list):
+        post_hooks = []
+        setattr(sys, POST_ATTR, post_hooks)
+
+    def run_post(item, attributes, why):
+        """値段を書いた直後に、登録された後処理を順に通す。
+
+        壊れた後処理でこちらの値付けまで巻き添えにしない。
+        1つが投げても残りは通し、記録だけ残す（`safe=True` と同じ考え方）。
+        """
+        if not post_hooks:
+            return
+        for entry in list(post_hooks):
+            try:
+                entry[1](item, attributes, why)
+            except Exception:
+                ctx.log_exc("item price: post hook {!r} failed".format(
+                    entry[0] if isinstance(entry, tuple) and entry else entry))
+
     # 表は apply() の中で組む。
     # 設定はモジュールのグローバルへ書き込まれるので、
     # トップレベルで組むと既定値のまま固まる（TECH.md §3.8.2）。
@@ -344,6 +403,9 @@ def apply(ctx):
         if price is None:
             store["skipped"] += 1
             note("skip {} ({})".format(name_of(item), axis))
+            # 値段を組めなかった品でも後処理は通す。
+            # 素の値段のまま残る品にも、相手の倍率は乗ってよい。
+            run_post(item, attributes, why)
             return False
 
         changed = False
@@ -362,6 +424,11 @@ def apply(ctx):
                 why, key, name_of(item), old, new, axis))
         if changed:
             store["repriced"] += 1
+        # **書かなかったときも通す。**
+        # 相手が「まだ乗せていない倍率」を持っていることがあり
+        # （その土地のプロフィールが後から出来る）、
+        # こちらが書いた回だけ呼ぶと、値段が同じ品にいつまでも乗らない。
+        run_post(item, attributes, why)
         return changed
 
     def reprice_inventory(obtainer, why):
@@ -516,10 +583,12 @@ def apply(ctx):
             settle(self, item_instance, SELL_KEY, +1, "sell", shown)
             return result
 
-    write("---- installed  scale={:g} sell_rate={:g} type={} rarity={} ----".format(
-        float(PRICE_SCALE), float(SELL_RATE),
-        {key: round(value, 3) for key, value in sorted(type_mult.items())},
-        {key: round(value, 3) for key, value in sorted(rarity_mult.items())}))
+    write("---- installed  scale={:g} sell_rate={:g} type={} rarity={} post={} ----"
+          .format(float(PRICE_SCALE), float(SELL_RATE),
+                  {key: round(value, 3) for key, value in sorted(type_mult.items())},
+                  {key: round(value, 3) for key, value in sorted(rarity_mult.items())},
+                  [entry[0] for entry in post_hooks
+                   if isinstance(entry, tuple) and entry] or "-"))
     ctx.log("item price: installed (scale={:g}, sell_rate={:g}, on_sight={}, "
             "reconcile={})".format(float(PRICE_SCALE), float(SELL_RATE),
                                    bool(REPRICE_ON_SIGHT), bool(RECONCILE_GOLD)))

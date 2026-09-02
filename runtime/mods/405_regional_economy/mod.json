@@ -5,13 +5,16 @@
   "version": "1",
   "author": "MoririnJP, R01/Flossian",
   "name": {
-    "ja": "地域経済プロフィール",
+    "ja": "地域毎に物価が変動する",
     "en": "Regional economy profile"
   },
   "description": {
     "ja": "都市ごとの地域経済プロフィールを一度だけ作り、ジャンル別の需給倍率を売買の値段へ乗せる。129が値付けした直後に掛けるので、売買画面ではLLMを呼ばず待ち時間が出ない",
     "en": "Builds a one-time regional economy profile per city and applies per-genre supply and demand multipliers to buy and sell prices, right after 129 prices them. No LLM call and no wait when the trade window opens."
   },
+  "shares": [
+    "_instantale_item_price_post"
+  ],
   "before": [
     "129_balance_item_price"
   ],

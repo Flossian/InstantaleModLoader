@@ -29,14 +29,26 @@ sub_type 専用の綴りは持たない。外部ツールが作ったデータ�
 文字列の照合だけなのでLLMは要らない。`major_products` では値段を動かさない
 （特産品は関連の強さであって、需要・供給の方向を持たないため）。
 
-## 129 との層
+## 129 との層 ― 包み直しではなく、129の後処理の口へ登録する
 
-`mod.json` の `"before"` で129の**内側**に入る。
-同じ関数を両方が包むと後から適用したほうが外側になる。129は売買画面
-（`toggle_twin_inventory_window`）でも品物欄（`ItemDetailBox.update_content`）でも
-元の関数を呼ぶ**前**に値段を素から組み直すので、外側に居ると405の倍率は
-必ず129に上書きされて画面に出ない。内側なら129の直後に掛かる。
-129は同じ品を何度でも組み直すので、405も同じ2地点で掛け直す。
+**層の置き場所では解けない。** 129は10箇所で値段を書くが、書く時点が地点ごとに
+違う ― 画面の2箇所（`toggle_twin_inventory_window` /
+`ItemDetailBox.update_content`）は描く前なので元の関数の**前**、
+`set_shop_price_for_*` や `normalize_shop_inventory_prices` は**後**。
+包みの勝敗は適用順ではなく「元の関数の前に書くか後に書くか」で決まるので、
+外側でも内側でも必ず半分の地点で負ける
+（実測: 内側に置いていた版で、地域倍率が `shop_owner` /
+`normalize_shop_inventory_prices` で9回とも消えていた。買値にだけ乗らない状態）。
+
+そこで129が持っている**値付け直後の口**（`sys._instantale_item_price_post`）へ
+登録する。129がどこで書いてもその場で倍率が乗るので、
+適用順にも、129がどの経路を通るかにも依存しない。
+
+自前の2フックは残してある。129を切っている構成では素の値段に倍率が掛かるだけの
+MODとして動く必要があり、そこは口が存在しないため。
+価格印が二重掛けを防ぐので、両方通っても倍率は積み上がらない。
+`mod.json` の `"before"` も残す。口が無い版の129と組んだときに、
+画面の2箇所だけは内側に居れば従来どおり掛かるため（保険であって、前提ではない）。
 
 ## スレッド
 
@@ -104,6 +116,18 @@ TRADE_SITUATION = "shop"
 BUY_KEY = "買価"
 SELL_KEY = "売価"
 PRICE_KEYS = (BUY_KEY, SELL_KEY)
+
+# 129 が値段を書いた直後に呼んでもらう口（`sys` の素のリスト。
+# 中身は `(名乗り, 関数)`。宣言は 129 の `POST_ATTR` の説明にある）。
+# 129 は10箇所で値段を書き、そのうち画面の2箇所しかこちらの層では取れない。
+# ここへ登録すれば、129 がどこで書いてもその場で倍率が乗る。
+POST_ATTR = "_instantale_item_price_post"
+POST_TAG = "405_regional_economy"
+
+# 後処理から記録を出す経路。
+# 画面の2箇所（`detail` / `window/*`）はこの MOD 自身のフックが既に通っていて
+# 同じ行が出るので、**新しく拾えるようになった経路だけ**を残す。
+POST_NOTED = ("shop_owner", "shop_player", "normalize", "generated")
 
 # 品の細分（`attributes["item_detail"]`）を item_type ごとに並べたもの。
 #
@@ -1100,6 +1124,35 @@ def apply(ctx):
         record = _record_of(bucket, scope[1])
         return scope, (record if _record_ready(record) else None)
 
+    def regional_post(item, attributes, why):
+        """129 が値段を書いた**直後**に呼ばれる。その値へ土地の倍率を掛け直す。
+
+        129 は書く時点が地点ごとに違う（画面の2箇所は `orig` の前、
+        `set_shop_price_for_*` や `normalize_shop_inventory_prices` は後）。
+        包みの層をどちらに置いても半分の地点で負けるので、
+        129 が用意した後処理の口を通す。ここなら10箇所すべてに乗る。
+
+        `_apply_one_price` は価格印で二重掛けを避けるので、
+        この MOD 自身のフックと重なっても倍率は積み上がらない。
+        """
+        scope, record = profile_for(ui.find_app())
+        if record is None:
+            return
+        told = note if str(why).split("/")[0] in POST_NOTED else None
+        _overlay_item(state, told, scope, record, item)
+
+    # 129 が先か後かは順序で決まらないので、リストは在ればそれを使う。
+    # **入れ替えるのではなく中身を書き換える**（129 が握っているのは
+    # このリストそのもの。差し替えると向こうから見えなくなる）。
+    post_hooks = getattr(sys, POST_ATTR, None)
+    if not isinstance(post_hooks, list):
+        post_hooks = []
+        setattr(sys, POST_ATTR, post_hooks)
+    post_hooks[:] = [entry for entry in post_hooks
+                     if not (isinstance(entry, tuple) and entry
+                             and entry[0] == POST_TAG)]
+    post_hooks.append((POST_TAG, regional_post))
+
     @ctx.wrap("__main__:InstantaleApp.save_game",
               required=False, safe=True)
     def save_game(orig, self, *args, **kwargs):
@@ -1191,6 +1244,8 @@ def apply(ctx):
 
     ctx.log("regional economy: installed genre-based regional price overlay")
     write("installed: profile with {} genre scores + price overlay"
-          " (strong={:g} weak={:g})".format(
+          " (strong={:g} weak={:g}) post-hook on {}".format(
               len(GENRES), float(STRONG_FLUCTUATION_MULTIPLIER),
-              float(WEAK_FLUCTUATION_MULTIPLIER)))
+              float(WEAK_FLUCTUATION_MULTIPLIER),
+              ", ".join(entry[0] for entry in post_hooks
+                        if isinstance(entry, tuple) and entry) or "-"))

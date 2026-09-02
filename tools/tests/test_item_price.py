@@ -140,6 +140,27 @@ class FakeCtx:
         return decorator
 
 
+def _module_constant(path, name):
+    """他の mod のモジュール直下の定数を、読み込まずに取る（AST だけ見る）。
+
+    相手を import すると、その mod が引いている物まで全部要る。
+    ここで要るのは名前1つなので、構文木から拾う。
+    """
+    import ast
+    if not os.path.isfile(path):
+        return None
+    tree = ast.parse(io.open(path, encoding="utf-8").read())
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == name:
+                    try:
+                        return ast.literal_eval(node.value)
+                    except Exception:
+                        return None
+    return None
+
+
 def load_mod(path=MOD, name="balance_item_price_mod"):
     spec = importlib.util.spec_from_file_location(
         name, path, submodule_search_locations=[os.path.dirname(path)])
@@ -153,8 +174,12 @@ def load_mod(path=MOD, name="balance_item_price_mod"):
     return module
 
 
-def fresh_mod(**settings):
-    """mod を読み直して当て直す（設定は既定に戻してから上書きする）。"""
+def fresh_mod(keep_post=False, **settings):
+    """mod を読み直して当て直す（設定は既定に戻してから上書きする）。
+
+    `keep_post=True` のときだけ、登録済みの後処理を残したまま当て直す
+    （再注入で後処理が重ならないことを見るため）。
+    """
     sys.modules.pop("balance_item_price_mod", None)
     module = load_mod()
     for key, value in settings.items():
@@ -163,6 +188,8 @@ def fresh_mod(**settings):
         setattr(module, key, value)
     if hasattr(sys, module.STORE_ATTR):
         delattr(sys, module.STORE_ATTR)
+    if not keep_post and hasattr(sys, module.POST_ATTR):
+        delattr(sys, module.POST_ATTR)
     ctx = FakeCtx(OUT_DIR)
     module.apply(ctx)
     return module, ctx
@@ -448,6 +475,131 @@ def main():
     again = buy_price(ctx, weapon(96, "magical"))
     check("当て直しても同じ値段", again == first, (first, again))
 
+    # -- 値付けの後に割り込む口（`405_regional_economy` が使う）---------------
+    # この mod は書く時点が地点ごとに違う（画面の2箇所は orig の前、残りは後）
+    # ので、包み直しでは相手がどちらの層に居ても半分の地点で負ける。
+    # 口を通せば、**どの地点で書いても**後処理が最後に乗る。
+    MARK = 777
+
+    def post_mod():
+        """後処理を1つ登録した状態の mod と、呼ばれた経路の控えを返す。"""
+        module, ctx = fresh_mod()
+        seen = []
+
+        def stamp(item, attributes, why):
+            seen.append(why)
+            for key in module.PRICE_KEYS:
+                if key in attributes:
+                    attributes[key] = MARK
+
+        getattr(sys, module.POST_ATTR).append(("test", stamp))
+        return module, ctx, seen
+
+    module, ctx, seen = post_mod()
+    check("後処理が値段の最後の書き手になる",
+          buy_price(ctx, weapon(96)) == MARK, weapon(96).attributes)
+
+    # 経路を1つずつ通す。**壊れていたのは `shop_owner` / `normalize` の2つ。**
+    module, ctx, seen = post_mod()
+    app = InstantaleApp(Character("勇者", gold=0))
+    paths = {}
+
+    shop_item = weapon(96)
+    ctx.hooks["__main__:InstantaleApp.set_shop_price_for_owner"](
+        lambda *a, **k: None, app, shop_item)
+    paths["shop_owner"] = shop_item.attributes["買価"]
+
+    mine = material(24, "magical", key="売価")
+    ctx.hooks["__main__:InstantaleApp.set_shop_price_for_player"](
+        lambda *a, **k: None, app, mine)
+    paths["shop_player"] = mine.attributes["売価"]
+
+    left, right = weapon(96), weapon(96)
+    shop, player = Character("店主", {"a": left}), Character("勇者", {"b": right})
+    ctx.hooks["__main__:InstantaleApp.normalize_shop_inventory_prices"](
+        lambda *a, **k: None, app, shop, player)
+    paths["normalize"] = left.attributes["買価"]
+
+    made = weapon(96)
+    ctx.hooks["__main__:InstantaleApp.generate_item_from_item_data"](
+        lambda _self, *a, **k: made, app)
+    paths["generated"] = made.attributes["買価"]
+
+    opened = weapon(96)
+    ctx.hooks["__main__:InstantaleApp.toggle_twin_inventory_window"](
+        lambda *a, **k: "opened", app, Character("店主", {"a": opened}),
+        Character("勇者", {}), "店", "shop")
+    paths["window"] = opened.attributes["買価"]
+
+    hovered = weapon(96)
+    ctx.hooks["scripts.hud.new_hud:ItemDetailBox.update_content"](
+        lambda *a, **k: None, None, InventoryItem(hovered))
+    paths["detail"] = hovered.attributes["買価"]
+
+    for name, got in sorted(paths.items()):
+        check("{} でも後処理が最後に乗る".format(name), got == MARK, got)
+
+    # 書かなかった回・組めなかった回も通すこと。
+    # 相手の倍率は「値段が変わったか」とは無関係に乗る必要がある
+    # （その土地のプロフィールが後から出来ることがある）。
+    module, ctx, seen = post_mod()
+    settled = weapon(96)
+    buy_price(ctx, settled)                 # 1回目。ここで MARK が入る
+    before = len(seen)
+    ctx.hooks["__main__:InstantaleApp.set_shop_price_for_owner"](
+        lambda *a, **k: None, app, settled)
+    check("値段を書かなかった回も後処理は通る", len(seen) == before + 1,
+          (before, len(seen)))
+
+    nameless = Item("謎の品", "weapon", {"item_detail": "small_weapon", "買価": 3},
+                    None, "common")
+    before = len(seen)
+    ctx.hooks["__main__:InstantaleApp.set_shop_price_for_owner"](
+        lambda *a, **k: None, app, nameless)
+    check("値段を組めなかった品でも後処理は通る", len(seen) == before + 1,
+          (before, len(seen)))
+
+    # 壊れた後処理でこちらの値付けまで巻き添えにしない。
+    # 後ろに並んだ無事な後処理も、1つ落ちたくらいでは飛ばさない。
+    module, ctx = fresh_mod()
+    alone = buy_price(ctx, weapon(96))       # 後処理なしのときの値段
+
+    module, ctx = fresh_mod()
+    reached = []
+
+    def broken(item, attributes, why):
+        raise RuntimeError("post hook is broken")
+
+    getattr(sys, module.POST_ATTR).append(("broken", broken))
+    getattr(sys, module.POST_ATTR).append(
+        ("after", lambda item, attributes, why: reached.append(why)))
+    priced = buy_price(ctx, weapon(96))
+    check("壊れた後処理があっても値段はこちらのまま", priced == alone, (priced, alone))
+    check("壊れた後処理の後ろも呼ばれる", reached == ["shop_owner"], reached)
+    check("壊れた後処理は記録に残る",
+          any("post hook" in message for message in ctx.errors), ctx.errors)
+
+    # 再注入で口が作り直されない（登録した側の控えが消えない・重ならない）。
+    module, ctx, seen = post_mod()
+    buy_price(ctx, weapon(96))
+    once = len(seen)
+    module, ctx2 = fresh_mod(keep_post=True)
+    buy_price(ctx2, weapon(96))
+    check("当て直しても後処理は1回だけ呼ばれる", len(seen) == once * 2,
+          (once, len(seen)))
+
+    # 口の名前は2つの mod にまたがる約束で、片方を改名すると**黙って**
+    # 繋がらなくなる（例外も警告も出ず、地域倍率が乗らないだけ）。
+    # 相手が居るときだけ、名前が一致していることを見る。
+    others = [name for name in os.listdir(MODS_DIR)
+              if name.endswith("_regional_economy")]
+    for other in others:
+        source = os.path.join(MODS_DIR, other, "regional_economy.py")
+        theirs = _module_constant(source, "POST_ATTR")
+        check("{} と口の名前が一致している".format(other),
+              theirs == module.POST_ATTR, (theirs, module.POST_ATTR))
+
+    module, ctx = fresh_mod()
     check("例外を握り潰していない", not ctx.errors, ctx.errors)
 
     print("")
