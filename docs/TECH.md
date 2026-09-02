@@ -102,6 +102,7 @@ tools/build_mods.py       docs/MODS.md を各 MOD の DOC.md から綴じる（-
 tools/list_mods.py        docs/MODLIST.md を mod.json から組む（--check で照合）
 tools/llm_ctx_probe.py    ローカル LLM の窓を実測して最適値を出す（127_ 用）
 tools/epithet_probe.py    ローカル LLM で二つ名を引いて偏りを測る（317_ 用）
+tools/npc_variety_probe.py  ローカル LLM で NPC を生成させ、外見・性格・経歴の偏りを測る（頼み文の写しは npc_variety_prompts.json）
 tools/rebalance_saved_bgm.py  既存セーブの BGM を後からまとめて均す（104_ 用）
 tools/tests/test_*.py     ゲーム抜きで走る検査。開発用で配布物には入らない
 runtime/instantale_modloader/

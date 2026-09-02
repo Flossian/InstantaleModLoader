@@ -282,7 +282,8 @@ def main():
 
     module = load_mod()
     game_dir = find_game_dir(args.game_dir)
-    sampling = read_sampling(read_live_config(game_dir))
+    # config.json は `ai_setting` の下に起動引数を持つ（無ければ既定へ落ちる）。
+    sampling = read_sampling(read_live_config(game_dir).get("ai_setting") or {})
 
     os.makedirs(OUT_DIR, exist_ok=True)
     stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -317,7 +318,7 @@ def main():
                     print("  --model-pattern を狭めるか --model で名指しすること。")
                     return 2
                 model = os.path.join(models_dir, found[0])
-            config = read_live_config(game_dir)
+            config = read_live_config(game_dir).get("ai_setting") or {}
             backend = (config.get("local_model_setting") or {}).get(
                 "llm_backend", "llama-cpp-completion-cuda")
             server = pick_build_dir(game_dir, backend) / "llama-server.exe"

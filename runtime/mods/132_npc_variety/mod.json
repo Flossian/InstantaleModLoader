@@ -1,0 +1,113 @@
+{
+  "entry": "npc_variety.py",
+  "api": 1,
+  "kind": "fix",
+  "name": {
+    "en": "NPC variety seeds",
+    "ja": "NPC の外見・性格・経歴の多様化"
+  },
+  "description": {
+    "en": "Adds concrete, randomly drawn traits (hair, eyes, skin, build, age, a distinguishing mark, clothes, a few personality axes and a past) to the prompts that generate NPCs, so the LLM stops filling every innkeeper with the same grey robe and sharp eyes",
+    "ja": "NPC を生成する頼み文に、表から引いた具体の特徴（髪・瞳・肌・体格・年齢・目立つ特徴・服、性格の軸、来歴）を足す。役職の型（宿屋の主人＝皺と灰色のローブ）で埋まるのを止め、人ごとに見分けがつくようにする"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "settings": {
+    "SEED_CHANCE": {
+      "type": "int",
+      "default": 100,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "種を付ける割合（%）",
+        "en": "Chance of seeding a character (%)"
+      },
+      "note": {
+        "ja": "人物ごとに引く。0 で素のゲームと同じ",
+        "en": "Rolled per character. 0 = vanilla"
+      }
+    },
+    "LOOK_AXES": {
+      "type": "int",
+      "default": 9,
+      "min": 0,
+      "max": 9,
+      "label": {
+        "ja": "外見の軸をいくつ渡すか",
+        "en": "Number of look axes"
+      },
+      "note": {
+        "ja": "髪色・髪の長さ・髪型・瞳・肌・体格・年齢の見え方・目立つ特徴・服の9つから、順を混ぜて選ぶ。目立つ特徴は表の側で 25% にしてある",
+        "en": "Out of hair colour, hair length, hairstyle, eyes, skin, build, apparent age, distinguishing mark (25% in the bundled table), clothes"
+      }
+    },
+    "PERSONALITY_AXES": {
+      "type": "int",
+      "default": 3,
+      "min": 0,
+      "max": 6,
+      "label": {
+        "ja": "性格の軸をいくつ渡すか",
+        "en": "Number of personality axes"
+      },
+      "note": {
+        "ja": "口数・人との距離・大事にするもの・弱み・癖・気分の傾向の6つから。全部渡すと書き出しが表の語に寄る",
+        "en": "Out of talkativeness, distance, what matters most, weakness, habit, mood. Passing all six makes openings converge"
+      }
+    },
+    "DESCRIPTION_AXES": {
+      "type": "int",
+      "default": 3,
+      "min": 0,
+      "max": 9,
+      "label": {
+        "ja": "来歴の種をいくつ渡すか",
+        "en": "Number of background seeds"
+      },
+      "note": {
+        "ja": "出自・過去の一件・ここにいる理由・隠し事・家族・前の生業・今の悩み・恩と恨み・町での評判の9つから",
+        "en": "Out of origin, a past event, why they are here, a secret, family, former trade, current worry, debts and grudges, local reputation"
+      }
+    },
+    "TOWN_RESIDENTS": {
+      "type": "int",
+      "default": 4,
+      "min": 0,
+      "max": 8,
+      "label": {
+        "ja": "町生成で種を付ける住民の人数",
+        "en": "Residents seeded per town"
+      },
+      "note": {
+        "ja": "必須施設の主5人と冒険者は別に付く。生成される人数がこれより少なければ余りは捨てられる",
+        "en": "Owners of the five required facilities and adventurers are seeded separately"
+      }
+    },
+    "TOWN_ADVENTURERS": {
+      "type": "int",
+      "default": 3,
+      "min": 0,
+      "max": 6,
+      "label": {
+        "ja": "町生成で種を付ける冒険者の人数",
+        "en": "Adventurers seeded per town"
+      },
+      "note": {
+        "ja": "素のゲームは3人ほど作る",
+        "en": "Vanilla makes about three"
+      }
+    },
+    "LOG_SEEDS": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "付けた種を記録する",
+        "en": "Log the seeds"
+      },
+      "note": {
+        "ja": "out\\npc_variety.log の [SEED]。セーブの look_description と突き合わせるのに使う",
+        "en": "[SEED] lines in out\\npc_variety.log"
+      }
+    }
+  }
+}

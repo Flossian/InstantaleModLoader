@@ -115,6 +115,7 @@ BANDS = (
         "129_balance_item_price",
         "130_currency_unit",
         "131_sharp_portrait",
+        "132_npc_variety",
         "111_llm_prompt_replace",
         "117_message_text_integrity",
         "127_llm_response_speed",

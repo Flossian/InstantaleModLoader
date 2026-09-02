@@ -1,0 +1,669 @@
+{
+ "_note": "ゲームが送る頼み文の写し。output_data の master_ai_npc_generater/50.json と create_settlement_detail/83.json（2026-08-21 / 2026-09-02、ローカル経路）から取った。system は2通（型定義の埋め込み・指示）。single の user は tools/npc_variety_probe.py の場面が組む。",
+ "single": {
+  "system": [
+   "必ず日本語で、以下のjson形式で出力すること: {'$defs': {'BuffEffect': {'properties': {'type': {'const': 'buff', 'title': 'Type', 'type': 'string'}, 'target_type': {'enum': ['single_enemy', 'all_enemies', 'single_ally', 'all_allies', 'self', 'everyone'], 'title': 'Target Type', 'type': 'string'}, 'attribute_type': {'enum': ['str', 'dex', 'con', 'wis', 'int', 'cha'], 'title': 'Attribute Type', 'type': 'string'}, 'power': {'enum': ['weak', 'normal', 'strong', 'very_strong', 'extreme'], 'title': 'Power', 'type': 'string'}, 'duration': {'maximum': 5, 'minimum': 2, 'title': 'Duration', 'type': 'integer'}}, 'required': ['type', 'target_type', 'attribute_type', 'power', 'duration'], 'title': 'BuffEffect', 'type': 'object'}, 'DebuffEffect': {'properties': {'type': {'const': 'debuff', 'title': 'Type', 'type': 'string'}, 'target_type': {'enum': ['single_enemy', 'all_enemies', 'single_ally', 'all_allies', 'self', 'everyone'], 'title': 'Target Type', 'type': 'string'}, 'attribute_type': {'enum': ['str', 'dex', 'con', 'wis', 'int', 'cha'], 'title': 'Attribute Type', 'type': 'string'}, 'power': {'enum': ['weak', 'normal', 'strong', 'very_strong', 'extreme'], 'title': 'Power', 'type': 'string'}, 'duration': {'maximum': 5, 'minimum': 2, 'title': 'Duration', 'type': 'integer'}}, 'required': ['type', 'target_type', 'attribute_type', 'power', 'duration'], 'title': 'DebuffEffect', 'type': 'object'}, 'InstantDamage': {'properties': {'type': {'const': 'instant_damage', 'title': 'Type', 'type': 'string'}, 'target_type': {'enum': ['single_enemy', 'all_enemies', 'single_ally', 'all_allies', 'self', 'everyone'], 'title': 'Target Type', 'type': 'string'}, 'power': {'enum': ['weak', 'normal', 'strong', 'very_strong', 'extreme'], 'title': 'Power', 'type': 'string'}}, 'required': ['type', 'target_type', 'power'], 'title': 'InstantDamage', 'type': 'object'}, 'InstantHeal': {'properties': {'type': {'const': 'instant_heal', 'title': 'Type', 'type': 'string'}, 'target_type': {'enum': ['single_enemy', 'all_enemies', 'single_ally', 'all_allies', 'self', 'everyone'], 'title': 'Target Type', 'type': 'string'}, 'power': {'enum': ['weak', 'normal', 'strong', 'very_strong', 'extreme'], 'title': 'Power', 'type': 'string'}}, 'required': ['type', 'target_type', 'power'], 'title': 'InstantHeal', 'type': 'object'}, 'Skill': {'properties': {'name': {'title': 'Name', 'type': 'string'}, 'description': {'title': 'Description', 'type': 'string'}, 'element': {'example': '火', 'title': 'Element', 'type': 'string'}, 'skill_type': {'enum': ['physical', 'magical', 'hybrid', 'other'], 'title': 'Skill Type', 'type': 'string'}, 'effects': {'items': {'anyOf': [{'$ref': '#/$defs/InstantDamage'}, {'$ref': '#/$defs/InstantHeal'}, {'$ref': '#/$defs/TextStatusEffect'}, {'$ref': '#/$defs/BuffEffect'}, {'$ref': '#/$defs/DebuffEffect'}]}, 'title': 'Effects', 'type': 'array'}, 'max_uses': {'maximum': 10, 'minimum': 1, 'title': 'Max Uses', 'type': 'integer'}}, 'required': ['name', 'description', 'element', 'skill_type', 'effects', 'max_uses'], 'title': 'Skill', 'type': 'object'}, 'TextStatusEffect': {'properties': {'type': {'const': 'text_status', 'title': 'Type', 'type': 'string'}, 'target_type': {'enum': ['single_enemy', 'all_enemies', 'single_ally', 'all_allies', 'self', 'everyone'], 'title': 'Target Type', 'type': 'string'}, 'status_name': {'title': 'Status Name', 'type': 'string'}, 'description': {'title': 'Description', 'type': 'string'}, 'duration': {'maximum': 5, 'minimum': 3, 'title': 'Duration', 'type': 'integer'}, 'effects_per_turn': {'items': {'anyOf': [{'$ref': '#/$defs/InstantDamage'}, {'$ref': '#/$defs/InstantHeal'}]}, 'title': 'Effects Per Turn', 'type': 'array'}, 'intensity': {'maximum': 5, 'minimum': 1, 'title': 'Intensity', 'type': 'integer'}}, 'required': ['type', 'target_type', 'status_name', 'description', 'duration', 'effects_per_turn', 'intensity'], 'title': 'TextStatusEffect', 'type': 'object'}}, 'properties': {'category': {'enum': ['young girl', 'young boy', 'teenage girl', 'teenage boy', 'young man', 'young woman', 'middle-aged man', 'middle-aged woman', 'old man', 'old woman'], 'title': 'Category', 'type': 'string'}, 'description': {'title': 'Description', 'type': 'string'}, 'personality': {'title': 'Personality', 'type': 'string'}, 'look_description': {'title': 'Look Description', 'type': 'string'}, 'image_generation_prompt': {'items': {'type': 'string'}, 'title': 'Image Generation Prompt', 'type': 'array'}, 'job': {'enum': ['adventure', 'other'], 'title': 'Job', 'type': 'string'}, 'archetype': {'enum': ['balanced', 'striker', 'tank', 'scout', 'mage', 'sage', 'charmer', 'blitzer', 'juggernaut', 'battlemage', 'enchanter', 'berserker', 'fortress', 'pure_mage'], 'title': 'Archetype', 'type': 'string'}, 'skills': {'items': {'$ref': '#/$defs/Skill'}, 'title': 'Skills', 'type': 'array'}}, 'required': ['category', 'description', 'personality', 'look_description', 'image_generation_prompt', 'job', 'archetype', 'skills'], 'title': 'Structure', 'type': 'object'}",
+   "あなたはダークファンタジーRPGのキャラクター生成AIだ。\n与えられたキャラクター名と概要、以下の仕様に基づいてキャラ詳細を設定しろ。\n出力形式は、別途渡される型定義に完全に準拠する構造で生成しろ。\n【出力要素】\n- category: 老若男女のカテゴリ。- description: そのキャラクターの大まかな説明。\n- personality: どういう性格か、哲学、好き嫌いといった何らかの内面的な個性。\n- look_description: そのキャラクターの外見、特徴、服装などを自然言語で記述。\n- image_generation_prompt: そのキャラクターの立ち絵のStable Diffusion 1.5スタイルの画像生成プロンプトとして、単語や非常に短い文のリストで外見を**英語**で説明。\n- job: 現時点では、現役の冒険者か否かのみ。\n- archetype: キャラクター能力値のアーキタイプ。\n- skills: キャラクターの持つアクティブスキル。\n\n【スキル生成要素】\n- name: 戦闘時に用いる技や呪文などの名前。明快で戦闘スキルらしさのある安直な名付けが望ましい。イメージ例(これらを直接使うのは禁止): ['炎斬', 'フロストエッジ', '呪代の癒し', 'エウロギア']\n- element: スキルの属性（例：火、水、毒、闇など）\n- skill_type: 物理または魔法または併用またはどれでもない。\n- max_uses: 使用可能回数（1～10）。1なら必殺技的に、10なら基本技のように。\n- description: スキルの効果を自然言語で説明。\n- effects: ダメージ、回復、状態異常、バフ/デバフなどを指定し、モデル準拠した構造で記述。\n- usefulness: スキルの総合的な有用性を1～30で評価。\n\n【その他】\n- キャラクターに一貫性のある設定を持たせること。\n- 強さのランクに準拠した性能のスキルを用意すること。ランク1が凡人で、ランク70が伝説の勇者や魔王に値する。\n- ランク30以上でのみスキルを2つ設定できる。1つでも良い。どんなにランクが高くても最大2つである。ランク29以下の場合は空のリストを返す。\n"
+  ],
+  "schema": {
+   "$defs": {
+    "BuffEffect": {
+     "properties": {
+      "type": {
+       "const": "buff",
+       "title": "Type",
+       "type": "string"
+      },
+      "target_type": {
+       "enum": [
+        "single_enemy",
+        "all_enemies",
+        "single_ally",
+        "all_allies",
+        "self",
+        "everyone"
+       ],
+       "title": "Target Type",
+       "type": "string"
+      },
+      "attribute_type": {
+       "enum": [
+        "str",
+        "dex",
+        "con",
+        "wis",
+        "int",
+        "cha"
+       ],
+       "title": "Attribute Type",
+       "type": "string"
+      },
+      "power": {
+       "enum": [
+        "weak",
+        "normal",
+        "strong",
+        "very_strong",
+        "extreme"
+       ],
+       "title": "Power",
+       "type": "string"
+      },
+      "duration": {
+       "maximum": 5,
+       "minimum": 2,
+       "title": "Duration",
+       "type": "integer"
+      }
+     },
+     "required": [
+      "type",
+      "target_type",
+      "attribute_type",
+      "power",
+      "duration"
+     ],
+     "title": "BuffEffect",
+     "type": "object"
+    },
+    "DebuffEffect": {
+     "properties": {
+      "type": {
+       "const": "debuff",
+       "title": "Type",
+       "type": "string"
+      },
+      "target_type": {
+       "enum": [
+        "single_enemy",
+        "all_enemies",
+        "single_ally",
+        "all_allies",
+        "self",
+        "everyone"
+       ],
+       "title": "Target Type",
+       "type": "string"
+      },
+      "attribute_type": {
+       "enum": [
+        "str",
+        "dex",
+        "con",
+        "wis",
+        "int",
+        "cha"
+       ],
+       "title": "Attribute Type",
+       "type": "string"
+      },
+      "power": {
+       "enum": [
+        "weak",
+        "normal",
+        "strong",
+        "very_strong",
+        "extreme"
+       ],
+       "title": "Power",
+       "type": "string"
+      },
+      "duration": {
+       "maximum": 5,
+       "minimum": 2,
+       "title": "Duration",
+       "type": "integer"
+      }
+     },
+     "required": [
+      "type",
+      "target_type",
+      "attribute_type",
+      "power",
+      "duration"
+     ],
+     "title": "DebuffEffect",
+     "type": "object"
+    },
+    "InstantDamage": {
+     "properties": {
+      "type": {
+       "const": "instant_damage",
+       "title": "Type",
+       "type": "string"
+      },
+      "target_type": {
+       "enum": [
+        "single_enemy",
+        "all_enemies",
+        "single_ally",
+        "all_allies",
+        "self",
+        "everyone"
+       ],
+       "title": "Target Type",
+       "type": "string"
+      },
+      "power": {
+       "enum": [
+        "weak",
+        "normal",
+        "strong",
+        "very_strong",
+        "extreme"
+       ],
+       "title": "Power",
+       "type": "string"
+      }
+     },
+     "required": [
+      "type",
+      "target_type",
+      "power"
+     ],
+     "title": "InstantDamage",
+     "type": "object"
+    },
+    "InstantHeal": {
+     "properties": {
+      "type": {
+       "const": "instant_heal",
+       "title": "Type",
+       "type": "string"
+      },
+      "target_type": {
+       "enum": [
+        "single_enemy",
+        "all_enemies",
+        "single_ally",
+        "all_allies",
+        "self",
+        "everyone"
+       ],
+       "title": "Target Type",
+       "type": "string"
+      },
+      "power": {
+       "enum": [
+        "weak",
+        "normal",
+        "strong",
+        "very_strong",
+        "extreme"
+       ],
+       "title": "Power",
+       "type": "string"
+      }
+     },
+     "required": [
+      "type",
+      "target_type",
+      "power"
+     ],
+     "title": "InstantHeal",
+     "type": "object"
+    },
+    "Skill": {
+     "properties": {
+      "name": {
+       "title": "Name",
+       "type": "string"
+      },
+      "description": {
+       "title": "Description",
+       "type": "string"
+      },
+      "element": {
+       "example": "火",
+       "title": "Element",
+       "type": "string"
+      },
+      "skill_type": {
+       "enum": [
+        "physical",
+        "magical",
+        "hybrid",
+        "other"
+       ],
+       "title": "Skill Type",
+       "type": "string"
+      },
+      "effects": {
+       "items": {
+        "anyOf": [
+         {
+          "$ref": "#/$defs/InstantDamage"
+         },
+         {
+          "$ref": "#/$defs/InstantHeal"
+         },
+         {
+          "$ref": "#/$defs/TextStatusEffect"
+         },
+         {
+          "$ref": "#/$defs/BuffEffect"
+         },
+         {
+          "$ref": "#/$defs/DebuffEffect"
+         }
+        ]
+       },
+       "title": "Effects",
+       "type": "array"
+      },
+      "max_uses": {
+       "maximum": 10,
+       "minimum": 1,
+       "title": "Max Uses",
+       "type": "integer"
+      }
+     },
+     "required": [
+      "name",
+      "description",
+      "element",
+      "skill_type",
+      "effects",
+      "max_uses"
+     ],
+     "title": "Skill",
+     "type": "object"
+    },
+    "TextStatusEffect": {
+     "properties": {
+      "type": {
+       "const": "text_status",
+       "title": "Type",
+       "type": "string"
+      },
+      "target_type": {
+       "enum": [
+        "single_enemy",
+        "all_enemies",
+        "single_ally",
+        "all_allies",
+        "self",
+        "everyone"
+       ],
+       "title": "Target Type",
+       "type": "string"
+      },
+      "status_name": {
+       "title": "Status Name",
+       "type": "string"
+      },
+      "description": {
+       "title": "Description",
+       "type": "string"
+      },
+      "duration": {
+       "maximum": 5,
+       "minimum": 3,
+       "title": "Duration",
+       "type": "integer"
+      },
+      "effects_per_turn": {
+       "items": {
+        "anyOf": [
+         {
+          "$ref": "#/$defs/InstantDamage"
+         },
+         {
+          "$ref": "#/$defs/InstantHeal"
+         }
+        ]
+       },
+       "title": "Effects Per Turn",
+       "type": "array"
+      },
+      "intensity": {
+       "maximum": 5,
+       "minimum": 1,
+       "title": "Intensity",
+       "type": "integer"
+      }
+     },
+     "required": [
+      "type",
+      "target_type",
+      "status_name",
+      "description",
+      "duration",
+      "effects_per_turn",
+      "intensity"
+     ],
+     "title": "TextStatusEffect",
+     "type": "object"
+    }
+   },
+   "properties": {
+    "category": {
+     "enum": [
+      "young girl",
+      "young boy",
+      "teenage girl",
+      "teenage boy",
+      "young man",
+      "young woman",
+      "middle-aged man",
+      "middle-aged woman",
+      "old man",
+      "old woman"
+     ],
+     "title": "Category",
+     "type": "string"
+    },
+    "description": {
+     "title": "Description",
+     "type": "string"
+    },
+    "personality": {
+     "title": "Personality",
+     "type": "string"
+    },
+    "look_description": {
+     "title": "Look Description",
+     "type": "string"
+    },
+    "image_generation_prompt": {
+     "items": {
+      "type": "string"
+     },
+     "title": "Image Generation Prompt",
+     "type": "array"
+    },
+    "job": {
+     "enum": [
+      "adventure",
+      "other"
+     ],
+     "title": "Job",
+     "type": "string"
+    },
+    "archetype": {
+     "enum": [
+      "balanced",
+      "striker",
+      "tank",
+      "scout",
+      "mage",
+      "sage",
+      "charmer",
+      "blitzer",
+      "juggernaut",
+      "battlemage",
+      "enchanter",
+      "berserker",
+      "fortress",
+      "pure_mage"
+     ],
+     "title": "Archetype",
+     "type": "string"
+    },
+    "skills": {
+     "items": {
+      "$ref": "#/$defs/Skill"
+     },
+     "title": "Skills",
+     "type": "array"
+    }
+   },
+   "required": [
+    "category",
+    "description",
+    "personality",
+    "look_description",
+    "image_generation_prompt",
+    "job",
+    "archetype",
+    "skills"
+   ],
+   "title": "Structure",
+   "type": "object"
+  }
+ },
+ "town": {
+  "system": [
+   "必ず日本語で、以下のjson形式で出力すること: {'$defs': {'Facility': {'properties': {'type': {'enum': ['inn', 'guild', 'administrative_office', 'medical_facility', 'general_store', 'blacksmith', 'specialty_shop', 'training_facility', 'underworld_office', 'slave_market', 'colosseum', 'free'], 'title': 'Type', 'type': 'string'}, 'tier': {'enum': ['basic', 'standard', 'advanced'], 'title': 'Tier', 'type': 'string'}, 'name': {'title': 'Name', 'type': 'string'}, 'description': {'title': 'Description', 'type': 'string'}, 'concept': {'title': 'Concept', 'type': 'string'}, 'owner': {'$ref': '#/$defs/NPC'}}, 'required': ['type', 'tier', 'name', 'description', 'concept', 'owner'], 'title': 'Facility', 'type': 'object'}, 'NPC': {'properties': {'name': {'title': 'Name', 'type': 'string'}, 'category': {'enum': ['young girl', 'young boy', 'teenage girl', 'teenage boy', 'young man', 'young woman', 'middle-aged man', 'middle-aged woman', 'old man', 'old woman'], 'title': 'Category', 'type': 'string'}, 'description': {'title': 'Description', 'type': 'string'}, 'personality': {'title': 'Personality', 'type': 'string'}, 'look_description': {'title': 'Look Description', 'type': 'string'}, 'image_generation_prompt': {'items': {'type': 'string'}, 'title': 'Image Generation Prompt', 'type': 'array'}}, 'required': ['name', 'category', 'description', 'personality', 'look_description', 'image_generation_prompt'], 'title': 'NPC', 'type': 'object'}, 'NonFunctionalLocation': {'properties': {'type': {'const': 'location', 'title': 'Type', 'type': 'string'}, 'name': {'title': 'Name', 'type': 'string'}, 'description': {'title': 'Description', 'type': 'string'}}, 'required': ['type', 'name', 'description'], 'title': 'NonFunctionalLocation', 'type': 'object'}, 'Ward': {'properties': {'type': {'const': 'ward', 'title': 'Type', 'type': 'string'}, 'name': {'title': 'Name', 'type': 'string'}, 'description': {'title': 'Description', 'type': 'string'}, 'locations': {'items': {'anyOf': [{'$ref': '#/$defs/Facility'}, {'$ref': '#/$defs/NonFunctionalLocation'}]}, 'title': 'Locations', 'type': 'array'}}, 'required': ['type', 'name', 'description', 'locations'], 'title': 'Ward', 'type': 'object'}}, 'properties': {'settlement_structure_description': {'title': 'Settlement Structure Description', 'type': 'string'}, 'atomosphere': {'enum': ['calm', 'heroic', 'lively', 'desolate', 'majestic', 'mystic', 'solemn', 'scary', 'eerie'], 'title': 'Atomosphere', 'type': 'string'}, 'settlement_structure': {'items': {'anyOf': [{'$ref': '#/$defs/Ward'}, {'$ref': '#/$defs/Facility'}, {'$ref': '#/$defs/NonFunctionalLocation'}]}, 'title': 'Settlement Structure', 'type': 'array'}, 'residents': {'items': {'$ref': '#/$defs/NPC'}, 'title': 'Residents', 'type': 'array'}, 'adventurers': {'items': {'$ref': '#/$defs/NPC'}, 'title': 'Adventurers', 'type': 'array'}}, 'required': ['settlement_structure_description', 'atomosphere', 'settlement_structure', 'residents', 'adventurers'], 'title': 'Area', 'type': 'object'}",
+   "あなたはダークファンタジーRPGのワールドマップジェネレーターです。与えられた世界の概要と指定に従って、一つのエリアの詳細情報を生成してください。"
+  ],
+  "user": "エリアの詳細を生成してください。\n【共通世界観】- 冒険者: この世界にはギルドとそれに属する職業冒険者たちがいるが、夢のある仕事ではない。社会的立場は低いし、殆どが日雇い労働とあわせてぎりぎり日々の暮らしを維持している。彼らは様々な理由で命がけのこの仕事に就く。宗教的な理由や信念、野心に基づくもの、故郷を追われた犯罪者、市民権とひきかえの元奴隷。そして多くは大した戦果も挙げられずに死ぬか、何らかの後遺を負って引退する。わずかに成功を得た者たちも生きる道を他に作って引退していくのが普通だ。- エリア: 世界はいくつかのエリアに分かれている。各エリアには人の生活圏となる村、街、都市などの'拠点'が一つ存在し、その周辺に冒険の舞台となる地域やダンジョンがある。\n【手順】\n1. 指定されたエリアの拠点の一般的情報、雰囲気(bgmの設定に使用するだけ)、存在する施設や有名人などの情報をできるだけ詳細に記述する。\n2. 実際に拠点の構造と各施設情報、施設のオーナーNPC、施設以外のロケーションを作成する。\n3. 拠点内の他の住民NPCを何人か作成する。\n4. 拠点に滞在する冒険者NPCを3名ほど作成する。\n\n【構造の生成要素】\n- ロケーション種別: ロケーションには[ward, facility, location]の3つの大枠がある。facilityは宿屋や店など何らか機能を持つ施設であり、locationは「緑道」「廃墟」など機能を持たないストーリーや雰囲気要素としての場所。wardはこれらのロケーション自体を格納するフォルダ的なもの。\n- 必須facility: [inn, guild, administrative_office, medical_facility, general_store]の6種は、必ずそれぞれ一つずつが存在する。\n- 選択的facility: [blacksmith, specialty_shop, training_facility, underworld_office, slave_market, colosseum]は拠点の特色に合わせて追加的に選択できる。村なら1つ、街なら2つ、都市なら3つ。種別の重複可能。\n- 特殊facility \"free\": 上記のどの種別にも当てはまらない独自の名物施設(例: 占いの館、大衆浴場、人形師の工房、風変わりな食堂など)。拠点の個性を出すため0〜1個追加してよい。typeは\"free\"とし、conceptに「プレイヤーがそこで何をできるか」を1〜2文で書くこと。free以外の施設はconceptを空文字列にする。\n- ただのlocation: [location]は特別な効果を持たない。適当に好きなだけ追加できる。\n【NPCの生成要素】\n- 名前: NPCの名前を記入。フルネームか、役職名や異名+下の名前など。\n- 説明: そのキャラクターの大まかな説明。\n- personality: どういう性格か、哲学、好き嫌いといった何らかの内面的な個性。\n- 外見の説明: そのキャラクターの外見、特徴、服装などを自然言語で記述。\n- image_generation_prompt: そのキャラクターのStable Diffusion 1.5スタイルの画像生成プロンプトとして、単語や非常に短い文のリストで外見を**英語**で説明。\n【生成ルール】\n- ロケーション数が少ない場合、settlement_structureにそのまま全てを記入する。\n- ロケーション数が多い(7つ以上)場合、wardを用いて2~4つ程度をまとめながら記入する。いくつかあるロケーションの内一部だけを1つのwardにまとめるのも、全てを複数のwardに分けるのも自由。\n\n【世界のデータ】\n- 世界の概要: 陽光が降り注ぎ、色彩豊かな花々が咲き乱れる輝かしい世界。しかしその光の強さは、影をより深く、濃く、残酷なものに変えていた。人々は常に幸福を求め、活気ある笑い声を響かせているが、その裏では生存のための凄惨な競争が繰り広げられている。\n- 世界のエリア構造: 世界は中心から外側へと同心円状に広がる三層構造を持っている。中心に近い序盤エリアからは放射状に道が伸び、中盤エリア、そして最外周の終盤エリアへと繋がっていく。各エリアは独自の地形を持ち、移動には険しい山脈や広大な湿地、深い森を越える必要がある。中盤エリアは各地に独立した拠点を形成し、終盤エリアへと至る関門としての役割を果たしている。冒険者たちは、この輝かしい世界の輝きの影に潜む、命を削るような過酷な労働に従事している。\n\n【生成対象エリアのデータ】\n- settlement_name: 雲上神殿\n- settlement_overview: 雲上の要塞の奥地にある秘密の神殿\n- settlement_size: village\n- area_description: 雲上の要塞の奥地にある秘密の神殿\n",
+  "schema": {
+   "$defs": {
+    "Facility": {
+     "properties": {
+      "type": {
+       "enum": [
+        "inn",
+        "guild",
+        "administrative_office",
+        "medical_facility",
+        "general_store",
+        "blacksmith",
+        "specialty_shop",
+        "training_facility",
+        "underworld_office",
+        "slave_market",
+        "colosseum",
+        "free"
+       ],
+       "title": "Type",
+       "type": "string"
+      },
+      "tier": {
+       "enum": [
+        "basic",
+        "standard",
+        "advanced"
+       ],
+       "title": "Tier",
+       "type": "string"
+      },
+      "name": {
+       "title": "Name",
+       "type": "string"
+      },
+      "description": {
+       "title": "Description",
+       "type": "string"
+      },
+      "concept": {
+       "title": "Concept",
+       "type": "string"
+      },
+      "owner": {
+       "$ref": "#/$defs/NPC"
+      }
+     },
+     "required": [
+      "type",
+      "tier",
+      "name",
+      "description",
+      "concept",
+      "owner"
+     ],
+     "title": "Facility",
+     "type": "object"
+    },
+    "NPC": {
+     "properties": {
+      "name": {
+       "title": "Name",
+       "type": "string"
+      },
+      "category": {
+       "enum": [
+        "young girl",
+        "young boy",
+        "teenage girl",
+        "teenage boy",
+        "young man",
+        "young woman",
+        "middle-aged man",
+        "middle-aged woman",
+        "old man",
+        "old woman"
+       ],
+       "title": "Category",
+       "type": "string"
+      },
+      "description": {
+       "title": "Description",
+       "type": "string"
+      },
+      "personality": {
+       "title": "Personality",
+       "type": "string"
+      },
+      "look_description": {
+       "title": "Look Description",
+       "type": "string"
+      },
+      "image_generation_prompt": {
+       "items": {
+        "type": "string"
+       },
+       "title": "Image Generation Prompt",
+       "type": "array"
+      }
+     },
+     "required": [
+      "name",
+      "category",
+      "description",
+      "personality",
+      "look_description",
+      "image_generation_prompt"
+     ],
+     "title": "NPC",
+     "type": "object"
+    },
+    "NonFunctionalLocation": {
+     "properties": {
+      "type": {
+       "const": "location",
+       "title": "Type",
+       "type": "string"
+      },
+      "name": {
+       "title": "Name",
+       "type": "string"
+      },
+      "description": {
+       "title": "Description",
+       "type": "string"
+      }
+     },
+     "required": [
+      "type",
+      "name",
+      "description"
+     ],
+     "title": "NonFunctionalLocation",
+     "type": "object"
+    },
+    "Ward": {
+     "properties": {
+      "type": {
+       "const": "ward",
+       "title": "Type",
+       "type": "string"
+      },
+      "name": {
+       "title": "Name",
+       "type": "string"
+      },
+      "description": {
+       "title": "Description",
+       "type": "string"
+      },
+      "locations": {
+       "items": {
+        "anyOf": [
+         {
+          "$ref": "#/$defs/Facility"
+         },
+         {
+          "$ref": "#/$defs/NonFunctionalLocation"
+         }
+        ]
+       },
+       "title": "Locations",
+       "type": "array"
+      }
+     },
+     "required": [
+      "type",
+      "name",
+      "description",
+      "locations"
+     ],
+     "title": "Ward",
+     "type": "object"
+    }
+   },
+   "properties": {
+    "settlement_structure_description": {
+     "title": "Settlement Structure Description",
+     "type": "string"
+    },
+    "atomosphere": {
+     "enum": [
+      "calm",
+      "heroic",
+      "lively",
+      "desolate",
+      "majestic",
+      "mystic",
+      "solemn",
+      "scary",
+      "eerie"
+     ],
+     "title": "Atomosphere",
+     "type": "string"
+    },
+    "settlement_structure": {
+     "items": {
+      "anyOf": [
+       {
+        "$ref": "#/$defs/Ward"
+       },
+       {
+        "$ref": "#/$defs/Facility"
+       },
+       {
+        "$ref": "#/$defs/NonFunctionalLocation"
+       }
+      ]
+     },
+     "title": "Settlement Structure",
+     "type": "array"
+    },
+    "residents": {
+     "items": {
+      "$ref": "#/$defs/NPC"
+     },
+     "title": "Residents",
+     "type": "array"
+    },
+    "adventurers": {
+     "items": {
+      "$ref": "#/$defs/NPC"
+     },
+     "title": "Adventurers",
+     "type": "array"
+    }
+   },
+   "required": [
+    "settlement_structure_description",
+    "atomosphere",
+    "settlement_structure",
+    "residents",
+    "adventurers"
+   ],
+   "title": "Area",
+   "type": "object"
+  }
+ }
+}
