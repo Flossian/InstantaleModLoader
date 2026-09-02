@@ -74,7 +74,7 @@
 | [`129_balance_item_price`](MODS.md#129_balance_item_price-アイテムの値段を付け直す) | アイテムの値付けの調整 | アイテムの値段を付け直す | 19 |  |
 | [`130_currency_unit`](MODS.md#130_currency_unit-通貨の呼び名と所持金の表示を変える) | 通貨の表記を変更する | 通貨の呼び名と所持金の表示を変える | 4 |  |
 | [`131_sharp_portrait`](MODS.md#131_sharp_portrait-立ち絵の縮小減色を通さず顔の検出をやり直す) | 立ち絵の高画質化と顔認識精度の向上 | 立ち絵の縮小・減色を通さず、顔の検出をやり直す | 2 |  |
-| [`132_npc_variety`](MODS.md#132_npc_variety-npc-の外見性格経歴に種を渡す) | NPC の外見・性格・経歴の種 | NPC の外見・性格・経歴に種を渡す | 7 |  |
+| [`132_npc_variety`](MODS.md#132_npc_variety-npc-の外見性格経歴に種を渡す) | NPC の外見・性格・経歴の多様化 | NPC の外見・性格・経歴に種を渡す | 7 |  |
 
 ---
 
