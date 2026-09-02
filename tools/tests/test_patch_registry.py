@@ -1030,6 +1030,100 @@ def main():
     except BaseException as exc:
         check(False, "新設＋safe の例外がゲームへ抜けた: {!r}".format(exc))
 
+    # 素の関数**自身**が投げた場合。フックの失敗ではないので、呼び直さずそのまま通す。
+    # 呼び直すと素の関数の副作用が重なる（VERIFICATION.md §3.46: 4層で16回走った）。
+    P.set_generation("gen_safe_game_raises")
+    calls.clear()
+
+    class GameFailure(KeyError):
+        pass
+
+    def game_side(x):
+        calls.append(("orig", x))
+        raise GameFailure("21")
+
+    victim.risky = game_side
+
+    @P.wrap("fakegame:risky", safe=True)
+    def pass_through(orig, x):
+        return orig(x)
+
+    try:
+        victim.risky(6)
+        check(False, "素の関数の例外が握り潰された")
+    except GameFailure:
+        check(True, "素の関数が投げた例外はそのまま外へ出る")
+    check(len(calls) == 1,
+          "素の関数が投げても**呼び直さない**: {}".format(calls))
+
+    # 同じ対象に safe=True の層を重ねても1回。以前は層の数だけ倍々になった。
+    P.set_generation("gen_safe_game_raises_2")
+
+    @P.wrap("fakegame:risky", safe=True)
+    def pass_through_2(orig, x):
+        return orig(x)
+
+    P.set_generation("gen_safe_game_raises_3")
+
+    @P.wrap("fakegame:risky", safe=True)
+    def pass_through_3(orig, x):
+        return orig(x)
+
+    calls.clear()
+    try:
+        victim.risky(7)
+        check(False, "素の関数の例外が握り潰された（3層）")
+    except GameFailure:
+        pass
+    check(len(calls) == 1,
+          "safe=True を3層重ねても素の関数は1回: {}".format(calls))
+
+    # フックが orig の例外を握って別の例外を投げた場合も呼び直さない。
+    # 素の関数の副作用はもう起きているかもしれない。素の例外のほうを投げ直す。
+    P.set_generation("gen_safe_game_raises_4")
+
+    @P.wrap("fakegame:risky", safe=True)
+    def swallow_and_raise(orig, x):
+        try:
+            return orig(x)
+        except GameFailure:
+            raise RuntimeError("フック側の後始末が壊れた")
+
+    calls.clear()
+    try:
+        victim.risky(8)
+        check(False, "素の関数の例外が握り潰された（フックが握った後）")
+    except GameFailure:
+        check(True, "フックが握って別の例外を投げても、素の例外のほうが外へ出る")
+    except RuntimeError:
+        check(False, "フック側の例外がゲームへ抜けた")
+    check(len(calls) == 1,
+          "フックが握った後でも呼び直さない: {}".format(calls))
+
+    # `raise ... from e` で包んだ場合は連鎖として扱う（素の例外の続き）。
+    P.set_generation("gen_safe_game_raises_5")
+
+    @P.wrap("fakegame:risky", safe=True)
+    def wrap_and_raise(orig, x):
+        try:
+            return orig(x)
+        except GameFailure as e:
+            raise ValueError("包み直した") from e
+
+    calls.clear()
+    try:
+        victim.risky(9)
+        check(False, "素の関数の例外が握り潰された（包み直し）")
+    except GameFailure:
+        check(True, "包み直しても素の例外のほうが外へ出る")
+    except ValueError:
+        check(False, "包み直した例外がゲームへ抜けた")
+    check(len(calls) == 1,
+          "包み直しでも呼び直さない: {}".format(calls))
+
+    # 元に戻す（後の節が risky を使う場合に備えて、投げない実装へ）。
+    victim.risky = lambda x: calls.append(("orig", x)) or ("orig", x)
+
     print("=== revert（注入をまたいで剥がせる）===")
     # 前の節に触られていない対象を使う。
     # target_a には gen1 の層が乗っている。

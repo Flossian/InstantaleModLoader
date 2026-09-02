@@ -518,15 +518,25 @@ def patch(target: str, *, alias_scan: Any = True, required: bool = True,
 def _guard(func: Callable, old: Callable, target: str) -> Callable:
     """`safe=True` の中身。フックの例外をゲームへ流さず、素の動作に落とす。
 
-    「落とす」の意味が2つに分かれるので、元の関数が**もう走ったかどうか**で決める。
+    「落とす」の意味が3つに分かれるので、元の関数が**どこまで走ったか**で決める。
 
-        まだ走っていない  → 元の関数を呼んでその結果を返す（素のゲームと同じ挙動）
-        もう走った        → その結果をそのまま返す（後処理だけが失敗した）
+        まだ走っていない      → 元の関数を呼んでその結果を返す（素のゲームと同じ挙動）
+        走って答えを返した    → その答えをそのまま返す（後処理だけが失敗した）
+        走って自分から投げた  → その例外をそのまま通す（フックの失敗ではない）
 
-    2つ目が要点で、単純に「失敗したら元を呼び直す」と書くと、
+    2つ目と3つ目が要点で、単純に「失敗したら元を呼び直す」と書くと、
     元の関数が持つ副作用（テキストの追加・セーブ・状態の更新）が2回起きる。
     フックが `orig` を呼んだ後に壊れるのはよくある形（返り値を加工していて型を間違えた等）なので、ここを間違えると
     `safe=True` が事故の原因になる。
+
+    3つ目は、同じ対象に `safe=True` の層が重なると倍々になる形で踏んだ。
+    素の関数が投げた例外を各層が「フックの失敗」と読んで呼び直すので、
+    N 層で 2^N 回走る（`AreaMoveManager.execute` に4層で16回。
+    運賃と日数が16回ぶん減った。VERIFICATION.md §3.46）。
+    素の関数が投げたときは、その例外を**そのまま外へ出す**。
+    `safe=True` が守るのはフックの失敗であって、ゲーム自身の失敗ではない。
+    フックが `orig` の例外を握って別の例外を投げた場合も呼び直さず、
+    素の例外のほうを投げ直す（フック側の失敗はログに残す）。
 
     `wrap` では第1引数として渡す `orig` がこの記録を兼ねる。
     `patch` では元の関数を呼ぶかどうかが差し替え側の自由なので、
@@ -553,15 +563,38 @@ def _guard(func: Callable, old: Callable, target: str) -> Callable:
         box: dict = {}
 
         def orig(*a, **kw):
-            box["result"] = old(*a, **kw)
+            try:
+                box["result"] = old(*a, **kw)
+            except BaseException as exc:
+                # 素の関数が投げた。フックの失敗ではないので、外側で呼び直さない。
+                box["raised"] = exc
+                raise
             return box["result"]
 
         try:
             return func(orig, *args, **kwargs) if is_wrap else func(*args, **kwargs)
-        except BaseException:
-            log_exc("safe hook failed on {}; falling back to the original".format(target))
+        except BaseException as exc:
             if "result" in box:
+                log_exc("safe hook failed on {} after the original returned; "
+                        "returning the original's result".format(target))
                 return box["result"]
+            if "raised" in box:
+                game_exc = box["raised"]
+                if exc is game_exc:
+                    # 素の関数の例外がそのまま上がってきた。
+                    # 呼び直すと素の関数の副作用が重なるので、そのまま通す。
+                    # 落ちた記録は crash_recorder が取る。ここは1行だけ残す。
+                    log("safe hook on {}: the original raised {}; passing it through"
+                        .format(target, _short_exc(game_exc)), level="WARN")
+                    raise
+                # フックが素の例外を握って別の例外を投げた（`raise ... from e` も含む）。
+                # 素の関数の副作用はもう起きているかもしれないので呼び直さず、
+                # ゲームが素で受け取るはずだった例外のほうを投げ直す。
+                # フック側の失敗はここでトレースバック付きで残す。
+                log_exc("safe hook failed on {} after the original raised; "
+                        "re-raising the original's exception".format(target))
+                raise game_exc
+            log_exc("safe hook failed on {}; falling back to the original".format(target))
             if old is None:
                 # `required=False` で**属性を新設**した patch。
                 # 元の実装が無いので落とす先も無い。ここで `None(...)` を呼ぶと
@@ -571,6 +604,11 @@ def _guard(func: Callable, old: Callable, target: str) -> Callable:
             return old(*args, **kwargs)
 
     return guarded
+
+
+def _short_exc(exc: BaseException, limit: int = 160) -> str:
+    text = "{}: {}".format(type(exc).__name__, exc)
+    return text if len(text) <= limit else text[:limit] + "..."
 
 
 def wrap(target: str, *, alias_scan: Any = True, required: bool = True,
