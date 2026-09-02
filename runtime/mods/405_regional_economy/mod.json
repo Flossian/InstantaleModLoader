@@ -1,0 +1,90 @@
+{
+  "entry": "regional_economy.py",
+  "api": 1,
+  "kind": "feature",
+  "version": "1",
+  "author": "MoririnJP, R01/Flossian",
+  "name": {
+    "ja": "地域経済プロフィール",
+    "en": "Regional economy profile"
+  },
+  "description": {
+    "ja": "都市ごとの地域経済プロフィールを一度だけ作り、ジャンル別の需給倍率を売買の値段へ乗せる。129が値付けした直後に掛けるので、売買画面ではLLMを呼ばず待ち時間が出ない",
+    "en": "Builds a one-time regional economy profile per city and applies per-genre supply and demand multipliers to buy and sell prices, right after 129 prices them. No LLM call and no wait when the trade window opens."
+  },
+  "before": [
+    "129_balance_item_price"
+  ],
+  "settings": {
+    "REGIONAL_ECONOMY_SUMMARY_CHARS": {
+      "type": "int",
+      "default": 300,
+      "min": 100,
+      "max": 1200,
+      "label": {
+        "ja": "エリアの産業や経済の要約文字数",
+        "en": "Area industry and economy summary characters"
+      },
+      "note": {
+        "ja": "regional_economy_summaryとして要約保存される目安",
+        "en": "Approximate length saved as regional_economy_summary."
+      }
+    },
+    "REGIONAL_ECONOMY_ITEM_COUNT": {
+      "type": "int",
+      "default": 3,
+      "min": 1,
+      "max": 10,
+      "label": {
+        "ja": "エリア産業の項目数",
+        "en": "Area industry item count"
+      },
+      "note": {
+        "ja": "エリアの主要産業/特産品/需要過多の物品/供給過多の物品を指定された分作ります",
+        "en": "Creates the specified number of major industries, products, demand-heavy goods, and supply-heavy goods for the area."
+      }
+    },
+    "REGIONAL_ECONOMY_PROCESSING_STAGES": {
+      "type": "int",
+      "default": 2,
+      "min": 1,
+      "max": 5,
+      "label": {
+        "ja": "未知の産出物が製品になる段階数",
+        "en": "Processing stages until an unknown output becomes a product"
+      },
+      "note": {
+        "ja": "現実に存在しない物質が、使い物になるまでに有する採取と加工回数（ドラゴンストーン→ドラゴンランプ）で2回。産業として成り立つ程度には採取ができることが前提です。このMODでのみ参照し、世界観全体には影響しません。",
+        "en": "The number of extraction and processing steps for a fictional material to become usable (for example, dragon stone to dragon lamp is two). Used only by this mod; it does not alter the overall world setting."
+      }
+    },
+    "STRONG_FLUCTUATION_MULTIPLIER": {
+      "type": "float",
+      "default": 1.5,
+      "min": 1.0,
+      "max": 10.0,
+      "label": {
+        "ja": "強い変動",
+        "en": "Strong fluctuation"
+      },
+      "note": {
+        "ja": "エリアで需要/供給に大きく変動がある物品の売買金額へ補正される倍率(倍)",
+        "en": "Multiplier applied to the buy and sell amounts of goods with strong area supply or demand changes."
+      }
+    },
+    "WEAK_FLUCTUATION_MULTIPLIER": {
+      "type": "float",
+      "default": 1.2,
+      "min": 1.0,
+      "max": 10.0,
+      "label": {
+        "ja": "弱い変動",
+        "en": "Weak fluctuation"
+      },
+      "note": {
+        "ja": "エリアで需要/供給に変動がある物品の売買金額へ補正される倍率(倍)",
+        "en": "Multiplier applied to the buy and sell amounts of goods with weaker area supply or demand changes."
+      }
+    }
+  }
+}

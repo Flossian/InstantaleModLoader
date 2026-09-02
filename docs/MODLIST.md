@@ -8,8 +8,8 @@
 手で書き換えても次の生成で消える。
 直す先は各 MOD の `mod.json` か MODS.md の見出し。
 
-同梱 86 本（基盤 2 / 修正 33 / 追加 26 / 計測 25）。
-うち 9 本は外部の MOD 作者からの提供（下の「提供を受けた MOD」）。
+同梱 87 本（基盤 2 / 修正 33 / 追加 27 / 計測 25）。
+うち 10 本は外部の MOD 作者からの提供（下の「提供を受けた MOD」）。
 
 並びはフォルダ名順。
 適用順はこれとは別で、GUI の `順` 列（`load_order.json`）が持つ。
@@ -78,7 +78,7 @@
 
 ---
 
-## 追加（26本）
+## 追加（27本）
 
 ゲームに無かった遊びを足す。
 
@@ -110,6 +110,7 @@
 | [`402_party_inventory_transfer`](MODS.md#402_party_inventory_transfer-仲間とアイテムを受け渡しできる) | パーティーメンバー：アイテム受け渡し | 仲間とアイテムを受け渡しできる | - |  |
 | [`403_npc_social_memory`](MODS.md#403_npc_social_memory-npc同士がお互いを認知し関係を覚える) | NPC同士の認知と関係記憶 | NPC同士がお互いを認知し、関係を覚える | 5 |  |
 | [`404_party_talk`](MODS.md#404_party_talk-パーティーメンバー全員と話す) | パーティーメンバーと話す | パーティーメンバー全員と話す | 7 |  |
+| [`405_regional_economy`](MODS.md#405_regional_economy-街ごとの需給で売買の値段が変わる) | 地域経済プロフィール | 街ごとの需給で売買の値段が変わる | 5 |  |
 
 ---
 
@@ -149,7 +150,7 @@
 
 ## 提供を受けた MOD
 
-外部の MOD 作者から提供を受けて同梱している 9 本。
+外部の MOD 作者から提供を受けて同梱している 10 本。
 
 **番号の帯では数えられない。**
 いま提供を取り込む先は出どころの帯（`4xx`）だが、
@@ -171,3 +172,4 @@
 | [`402_party_inventory_transfer`](MODS.md#402_party_inventory_transfer-仲間とアイテムを受け渡しできる) | MoririnJP 様 | そのまま取り込み |
 | [`403_npc_social_memory`](MODS.md#403_npc_social_memory-npc同士がお互いを認知し関係を覚える) | MoririnJP 様 | そのまま取り込み |
 | [`404_party_talk`](MODS.md#404_party_talk-パーティーメンバー全員と話す) | MoririnJP 様 | 提供者と共同 |
+| [`405_regional_economy`](MODS.md#405_regional_economy-街ごとの需給で売買の値段が変わる) | MoririnJP 様 | そのまま取り込み |
