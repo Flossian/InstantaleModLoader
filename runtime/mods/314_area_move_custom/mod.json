@@ -12,6 +12,9 @@
   },
   "version": "1",
   "author": "R01/Flossian",
+  "shares": [
+    "road_opening"
+  ],
   "before": [
     "307_area_move_dungeon"
   ],
@@ -140,6 +143,93 @@
       "note": {
         "ja": "素のゲームは「辿り着いた。」。空でゲームのまま。使える変数は出発と同じ",
         "en": "The game's line is 辿り着いた。 Empty keeps it. Same variables"
+      }
+    },
+    "HOP_SCALING": {
+      "type": "choice",
+      "values": [
+        "off",
+        "add",
+        "multiply"
+      ],
+      "default": "multiply",
+      "label": {
+        "ja": "離れた街への距離補正",
+        "en": "Distance scaling for far towns"
+      },
+      "note": {
+        "ja": "「新たな道を探す」(325)が開いた道だけに効く。素のゲームは遠くても徒歩90日・馬車1000Gのまま。off=補正なし / add=1街ごとに日数と料金を加算 / multiply=(1+倍率×挟む街の数)倍。ボタンにも補正後の値が出る",
+        "en": "Applies only to roads opened by 325. off / add per settlement / multiply by (1 + factor x settlements between)"
+      }
+    },
+    "HOP_FACTOR": {
+      "type": "float",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 10.0,
+      "label": {
+        "ja": "倍加の倍率（1街ごと）",
+        "en": "Multiply factor per settlement"
+      },
+      "note": {
+        "ja": "multiply のとき。1.0なら2つ先(挟む街1)で2倍、3つ先で3倍",
+        "en": "With multiply: 1.0 doubles at one settlement in between, triples at two"
+      }
+    },
+    "HOP_ADD_DAYS": {
+      "type": "int",
+      "default": 7,
+      "min": 0,
+      "max": 90,
+      "label": {
+        "ja": "加算の日数（1街ごと）",
+        "en": "Days added per settlement"
+      },
+      "note": {
+        "ja": "add のとき。挟む街1つごとに徒歩・馬車の日数へ足す",
+        "en": "With add: added to the days per settlement in between"
+      }
+    },
+    "HOP_ADD_FARE": {
+      "type": "int",
+      "default": 500,
+      "min": 0,
+      "max": 100000,
+      "label": {
+        "ja": "加算の料金（1街ごと）",
+        "en": "Fare added per settlement"
+      },
+      "note": {
+        "ja": "add のとき。挟む街1つごとに馬車の料金へ足す",
+        "en": "With add: added to the coach fare per settlement in between"
+      }
+    },
+    "WALK_DAYS_MAX": {
+      "type": "int",
+      "default": 90,
+      "min": 1,
+      "max": 365,
+      "label": {
+        "ja": "徒歩の日数の上限",
+        "en": "Cap on days on foot"
+      },
+      "note": {
+        "ja": "距離補正で増えた日数をここで頭打ちにする。素のゲームの移動は一律3ヵ月(90日)なので既定90。ボタンにも上限後の値が出る",
+        "en": "Caps the days after distance scaling. The game's own trips are all 90 days, hence 90"
+      }
+    },
+    "COACH_DAYS_MAX": {
+      "type": "int",
+      "default": 30,
+      "min": 1,
+      "max": 365,
+      "label": {
+        "ja": "馬車の日数の上限",
+        "en": "Cap on days by coach"
+      },
+      "note": {
+        "ja": "距離補正で増えた日数をここで頭打ちにする。既定30",
+        "en": "Caps the coach days after distance scaling. Default 30"
       }
     }
   }

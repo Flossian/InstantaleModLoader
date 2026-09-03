@@ -215,6 +215,15 @@ def pressed_entry(app, button_index):
     事故時のフレームローカルに `mapped_button = 1` が残っていたことで確定した（GAME.md
     §2.2）。
     恒等写像なら結果は同じ、恒等でなければこちらが正しい。
+
+    **地図の枠が整数でなければ、その枠はボタンではない。**
+    選択肢が1ページに収まらないとき、ゲームは最後の枠に `次` を出し、
+    地図のその枠には添字ではなく文字列 `'next'` を入れる（`206_` の記録。GAME.md §2.2）。
+    以前は「整数でなければ添字そのまま」に落としていたので、`次` を押すと
+    `buttons[7]`（8つ目の候補）が押されたことになり、
+    自前の一覧を出している MOD がページ送りを横取りしていた（`325_` で実際に起きた。
+    VERIFICATION.md §3.50）。
+    None を返せば呼び側は `orig` へ素通しし、ページ送りはゲームが行う。
     """
     buttons = getattr(app, "buttons", None)
     if not isinstance(buttons, (list, tuple)) or not isinstance(button_index, int):
@@ -223,8 +232,9 @@ def pressed_entry(app, button_index):
     mapping = getattr(app, "display_button_map", None)
     if isinstance(mapping, (list, tuple)) and 0 <= button_index < len(mapping):
         mapped = mapping[button_index]
-        if isinstance(mapped, int):
-            index = mapped
+        if isinstance(mapped, bool) or not isinstance(mapped, int):
+            return None         # ページ送り（'next' など）。ボタンではない
+        index = mapped
     if 0 <= index < len(buttons):
         return buttons[index]
     return None

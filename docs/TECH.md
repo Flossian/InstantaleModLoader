@@ -2261,7 +2261,6 @@ day = ui.game_day(app)      # 読めなければ None
   （30秒でタイムアウト表示になるが、スタブ自体はその後完走する）
 - 自前の選択肢ボタンはセーブに残骸として焼かれうる。
   無害な既存クラスを spec に持たせてあるので壊れないが、MOD 無しで押すと何も起きない
-- 選択肢のページ送りは1ページに収まる場合しか実測できていない
-  （`ui.pressed_entry` は `display_button_map` があればそれを使う形にしてある）
+- 選択肢のページ送りは `次` の枠（地図の値 `'next'`）まで実測済み。`ui.pressed_entry` は整数でない枠を None にして `orig` へ素通しさせる（GAME.md §2.2）。2ページ目以降の戻る側の枠は未実測
 - ネイティブクラッシュ（`%LOCALAPPDATA%\CrashDumps\instantale.exe.*.dmp`）は Python 例外ではない。
   `crash_log.txt` と `001_` のどちらにも残らず、解析には cdb/WinDbg が要る

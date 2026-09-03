@@ -242,6 +242,7 @@ app.refresh_choice_buttons(reset_page=True)
 押されると `getattr(__main__, cls_name)(app, *args)` が組み立てられ
 `app.process_choice(それ, 文字列)` に渡る。
 押された添字は `display_button_map` で引き直される（`ui.pressed_entry` が同じことをする）。
+選択肢が1ページ（8枠）に収まらないときは最後の枠が `次` になり、`display_button_map` のその枠には添字ではなく文字列 `'next'` が入る（`206_` の記録、2026-08-17: `['<int>'×7, 'next']`。`choice_button_page` は 0）。整数でない枠はボタンではないので、`ui.pressed_entry` は None を返す（2026-09-03 に直し、同日の実機で確認。それまでは添字そのままに落ちて `buttons[7]` を引き、自前の一覧を出す MOD がページ送りを横取りしていた。VERIFICATION.md §3.50）。**直した後は `次` の押下がどの MOD のログにも出ない**（素通しするため）。2ページ目以降の枠の文字列（戻る側）は未実測。
 
 > `app.function_correspond_to_input` は名前に反して対応表ではなく `PhaseSpec` 1個。
 > 「いま自由入力を送ったら何を呼ぶか」を保持している。

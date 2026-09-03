@@ -15,6 +15,7 @@
 | `llm.parse_json` が囲みと前置きを越える | 5本が各自で剥がしていて、3通りに枝分かれしていた |
 | `llm.truthy` が両方の倒し方を持つ | `changed` は True へ、`content_violation` は False へ |
 | `ui.game_day` がロード中も読める | 受け皿を持っていたのは `312_` だけだった |
+| `ui.pressed_entry` がページ送りの枠を None にする | 地図の値が `'next'` の枠を添字に落とすと、自前の一覧を出す MOD が「次」を横取りする（`325_` で実際に起きた） |
 
 ゲームは要らない（偽の `ctx` を渡す）。
 """
@@ -314,6 +315,23 @@ def test_game_day():
     check("読めなければ None", ui.game_day(object()) is None)
 
 
+def test_pressed_entry():
+    print("ui.pressed_entry")
+    buttons = [{"text": "a"}, {"text": "b"}, {"text": "c"}]
+    plain = types.SimpleNamespace(buttons=buttons)
+    check("地図が無ければ添字そのまま", ui.pressed_entry(plain, 1) is buttons[1])
+    mapped = types.SimpleNamespace(buttons=buttons, display_button_map=[2, 0])
+    check("地図があれば地図で引き直す", ui.pressed_entry(mapped, 0) is buttons[2])
+    # 1ページに収まらないとき、最後の枠は `次` で地図の値は 'next'（`206_` の記録。GAME.md §2.2）。
+    paged = types.SimpleNamespace(buttons=buttons, display_button_map=[0, "next"])
+    check("ページ送りの枠（整数でない）は None ＝ ボタンではない",
+          ui.pressed_entry(paged, 1) is None)
+    check("地図が bool でも None", ui.pressed_entry(
+        types.SimpleNamespace(buttons=buttons, display_button_map=[True]), 0) is None)
+    check("地図より外の添字は添字そのまま", ui.pressed_entry(mapped, 2) is buttons[2])
+    check("範囲外は None", ui.pressed_entry(plain, 9) is None)
+
+
 def main():
     root = tempfile.mkdtemp(prefix="instantale_common_")
     try:
@@ -322,6 +340,7 @@ def main():
         test_worker(root)
         test_llm_reading()
         test_game_day()
+        test_pressed_entry()
     finally:
         shutil.rmtree(root, ignore_errors=True)
     if FAILURES:

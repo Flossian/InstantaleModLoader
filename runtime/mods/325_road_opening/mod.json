@@ -1,0 +1,242 @@
+{
+  "entry": "road_opening.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Open new roads between towns",
+    "ja": "新たな道を探す"
+  },
+  "description": {
+    "en": "Adds 'search for a new road' to the area move list. Pick a town that is not yet connected, then either pay for the road or clear a dungeon on the way; the road opens for good (both directions) and the town joins the normal move list. Price and difficulty grow with the number of towns in between",
+    "ja": "「他の土地へ行く」に「新たな道を探す」を足す。まだ繋がっていない街を選び、お金を支払うか道中のダンジョンを踏破すると道が開き、以後は普通の移動先に並ぶ。金額と難易度は間に挟む街の数で上がる"
+  },
+  "version": "2",
+  "author": "R01/Flossian",
+  "settings": {
+    "SEARCH_LABEL": {
+      "type": "str",
+      "default": "新たな道を探す",
+      "label": {
+        "ja": "一覧に足すボタンの文字",
+        "en": "Label of the added button"
+      }
+    },
+    "PRICE_BASE": {
+      "type": "int",
+      "default": 2000,
+      "min": 0,
+      "max": 1000000,
+      "label": {
+        "ja": "お金で開くときの基本額",
+        "en": "Base price of a road"
+      },
+      "note": {
+        "ja": "馬車の運賃が 1000G。道は一度開けばずっと使える",
+        "en": "The coach costs 1000G. A road stays open"
+      }
+    },
+    "PRICE_PER_HOP": {
+      "type": "int",
+      "default": 1000,
+      "min": 0,
+      "max": 1000000,
+      "label": {
+        "ja": "挟む街1つあたりの加算額",
+        "en": "Added per town in between"
+      },
+      "note": {
+        "ja": "いまの繋がりで最短の道筋に挟まる街の数ぶん足す。隣の隣なら 1 つ",
+        "en": "Counted on the shortest path through the current connections"
+      }
+    },
+    "DIFFICULTY_MODE": {
+      "type": "choice",
+      "values": [
+        "between",
+        "destination",
+        "harder"
+      ],
+      "default": "between",
+      "label": {
+        "ja": "道の難易度の基準",
+        "en": "How the base difficulty is picked"
+      },
+      "note": {
+        "ja": "between=現在地と対象の間から抽選 / destination=対象に合わせる / harder=高いほう。対象が未訪問で読めないときは読めた側で決める",
+        "en": "between = rolled between both towns / destination / harder. Unvisited towns fall back to the known side"
+      }
+    },
+    "DIFFICULTY_PER_HOP": {
+      "type": "int",
+      "default": 2,
+      "min": 0,
+      "max": 20,
+      "label": {
+        "ja": "挟む街1つあたりの難易度の下駄",
+        "en": "Difficulty added per town in between"
+      }
+    },
+    "DIFFICULTY_OFFSET": {
+      "type": "int",
+      "default": 0,
+      "min": -5,
+      "max": 20,
+      "label": {
+        "ja": "難易度に足す下駄（一律）",
+        "en": "Flat difficulty offset"
+      }
+    },
+    "ISOLATED_HOPS": {
+      "type": "int",
+      "default": 5,
+      "min": 0,
+      "max": 20,
+      "label": {
+        "ja": "孤立した街の「挟む街の数」",
+        "en": "Hops assumed for an isolated town"
+      },
+      "note": {
+        "ja": "移動網から切り離された街（エディタで足した直後など）には道筋が無いので、この数を使う。既定 5 は 9 街の木で最も遠い2つの街の間の数",
+        "en": "A town no path reaches (e.g. just added by the editor) uses this count. 5 = the farthest pair in the stock 9-town tree"
+      }
+    },
+    "ARRIVAL_DAYS": {
+      "type": "int",
+      "default": 14,
+      "min": 0,
+      "max": 365,
+      "label": {
+        "ja": "踏破した後の到着にかかる日数",
+        "en": "Days the arrival takes after clearing"
+      },
+      "note": {
+        "ja": "道中のクエストは日数を進めない。既定 14 は馬車と同じ。0 で進めない",
+        "en": "The quest itself costs no days. 14 = the coach. 0 = none"
+      }
+    },
+    "STAMINA_MIN_PERCENT": {
+      "type": "int",
+      "default": 33,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "体力がこの割合を切ったら踏破を断る",
+        "en": "Refuse the dungeon below this much stamina"
+      },
+      "note": {
+        "ja": "既定 33 ＝ 3分の1。0 で体力を見ない。お金で開くほうは見ない",
+        "en": "33 = a third. 0 disables. Paying is never refused for stamina"
+      }
+    },
+    "OPEN_TEXT": {
+      "type": "str",
+      "default": "{a}と{b}を結ぶ道が開かれた。",
+      "label": {
+        "ja": "開通のときに出す1行",
+        "en": "Line shown when a road opens"
+      },
+      "note": {
+        "ja": "空で出さない。{a} {b} は両側の街の名前",
+        "en": "Empty disables. {a} {b} are the two towns"
+      }
+    },
+    "ACHIEVEMENT_TEXT": {
+      "type": "str",
+      "default": "{a}と{b}を結ぶ新しい道が開かれた。",
+      "label": {
+        "ja": "お金で開いたとき功績に書く1件",
+        "en": "Achievement written when paying"
+      },
+      "note": {
+        "ja": "その土地での活躍（会話にも載る）に1件足す。空で書かない。踏破のときは依頼クリアそのものが功績になるので書かない",
+        "en": "Appended to the area's achievements (seen in conversations). Empty disables. The dungeon route relies on the quest clear itself"
+      }
+    },
+    "HIDE_TRAVEL_TEXT": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "「長旅だ…」を出さない",
+        "en": "Hide the long-journey line"
+      },
+      "note": {
+        "ja": "踏破した後の到着の移動中だけ。普通の徒歩・馬車には触らない",
+        "en": "Only while arriving after the dungeon"
+      }
+    },
+    "TOWN_SIZES": {
+      "type": "str",
+      "default": "village,town,city",
+      "label": {
+        "ja": "街とみなす size",
+        "en": "Area sizes treated as towns"
+      },
+      "note": {
+        "ja": "カンマ区切り。冒険エリアは dungeon なので入らない",
+        "en": "Comma separated. Dungeons are 'dungeon' and stay out"
+      }
+    },
+    "CANDIDATE_LABEL": {
+      "type": "str",
+      "default": "{name}（{price}G／難易度 {difficulty}）",
+      "label": {
+        "ja": "候補の1行の表示",
+        "en": "Label of each candidate"
+      },
+      "note": {
+        "ja": "使える変数: {name} {price} {difficulty} {hops}",
+        "en": "Variables: {name} {price} {difficulty} {hops}"
+      }
+    },
+    "PAY_LABEL": {
+      "type": "str",
+      "default": "お金を支払い委託する（{price}G／{days}日）",
+      "label": {
+        "ja": "委託のボタンの表示",
+        "en": "Label of the commission button"
+      },
+      "note": {
+        "ja": "使える変数: {price} {days}。日数が 0 のときは「お金を支払い委託する（{price}G）」",
+        "en": "Variables: {price} {days}"
+      }
+    },
+    "DUNGEON_LABEL": {
+      "type": "str",
+      "default": "自ら切り拓く（難易度 {difficulty}）",
+      "label": {
+        "ja": "切り拓くのボタンの表示",
+        "en": "Label of the dungeon button"
+      },
+      "note": {
+        "ja": "使える変数: {difficulty}",
+        "en": "Variables: {difficulty}"
+      }
+    },
+    "PAY_DAYS": {
+      "type": "int",
+      "default": 14,
+      "min": 0,
+      "max": 365,
+      "label": {
+        "ja": "委託してから開通するまでの日数",
+        "en": "Days until a commissioned road opens"
+      },
+      "note": {
+        "ja": "7=1週間 / 14=2週間 / 30=1ヵ月。0 で支払った場で開通する。日数が進んだとき（移動・宿泊）に開き、開通の1行が出る",
+        "en": "7 / 14 / 30. 0 opens the road at once. Opens when days pass (travel, inn)"
+      }
+    },
+    "COMMISSION_TEXT": {
+      "type": "str",
+      "default": "{price}G を支払い、{target}への道の開削を委託した。開通まで {days}日。",
+      "label": {
+        "ja": "委託したときに出す1行",
+        "en": "Line shown when commissioning"
+      },
+      "note": {
+        "ja": "空で出さない。使える変数: {price} {target} {days}",
+        "en": "Empty disables. Variables: {price} {target} {days}"
+      }
+    }
+  }
+}

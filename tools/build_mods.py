@@ -156,6 +156,7 @@ BANDS = (
         "322_battle_bgm",
         "323_npc_carryover",
         "324_place_bgm",
+        "325_road_opening",
     )),
     ("feature", CONTRIB_HEAD, (
         "401_battle_character_context",

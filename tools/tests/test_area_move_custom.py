@@ -43,6 +43,7 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml                      # noqa: E402
+from instantale_modloader import state as mstate       # noqa: E402
 
 
 def find_mod(suffix):
@@ -174,6 +175,21 @@ class DoubleElapseMoveManager(AreaMoveManager):
         return None
 
 
+class CappedElapseMoveManager(AreaMoveManager):
+    """外側（`307_` の予算）が素の 90 を減らした後の数が来る想定。
+
+    素の値と違う数を距離補正で**増やしてはいけない**（307_ の上限を破る）。
+    """
+
+    def execute(self, choice_text):
+        self.app.moved.append((self.target_area_id, self.mode, choice_text))
+        self.app.add_text("徒歩で目指す。長旅だ...")
+        self.app.elapse_days(14)
+        self.app.add_text("辿り着いた。")
+        self.app.player.current_area = self.app.world.areas[str(self.target_area_id)]
+        return None
+
+
 class AreaMoveCofirmation:
     """徒歩と馬車が並ぶ確認画面。"""
 
@@ -249,7 +265,8 @@ class InstantaleApp:
 
 
 BASES = {"app": InstantaleApp, "confirm": AreaMoveCofirmation,
-         "move": AreaMoveManager, "move2": DoubleElapseMoveManager}
+         "move": AreaMoveManager, "move2": DoubleElapseMoveManager,
+         "move3": CappedElapseMoveManager}
 
 
 class FakeClock:
@@ -285,6 +302,9 @@ def install_fake_kivy():
 class FakeCtx:
     def __init__(self, out_dir):
         self.out_dir = out_dir
+        # `WorldStore(own=False)` が他 MOD の控えを組み立てるときに読む
+        # （本物の ModContext と同じ属性名。TECH.md §3.11）。
+        self.state_dir = os.path.join(out_dir, "state")
         self.hooks = {}
         self.errors = []
         self.logs = []
@@ -307,6 +327,10 @@ class FakeCtx:
 
     def log_exc(self, msg):
         self.errors.append(msg)
+
+    # 読みは本物の `read_json` をそのまま借りる（`write_json` と同じ理由）。
+    def read_json(self, path, default=None):
+        return ml.read_json(path, default, report=self.log_exc)
 
     def wrap(self, target, **kw):
         def decorator(func):
@@ -346,6 +370,24 @@ def install(hooks, targets):
 CLOCK = install_fake_kivy()
 LOG_PATH = os.path.join(OUT_DIR, "area_move_custom.log")
 
+# 325_road_opening の控え（`state/road_opening/<世界>.json`）。距離補正はこれを
+# **読むだけ**なので、テストは本物と同じ場所に同じ形で置く。ファイル名の作り方は
+# ローダの語彙（`state.world_filename`。揺れると「読めない」＝道が無い扱いになる）。
+ROADS_DIR = os.path.join(OUT_DIR, "state", "road_opening")
+ROADS_PATH = os.path.join(ROADS_DIR, mstate.world_filename("テスト世界"))
+
+
+def write_roads(records):
+    """325_ が開いた道の控えを作る。None で消す（＝325_ を入れていない状態）。"""
+    if records is None:
+        if os.path.exists(ROADS_PATH):
+            os.remove(ROADS_PATH)
+        return
+    os.makedirs(ROADS_DIR, exist_ok=True)
+    with open(ROADS_PATH, "w", encoding="utf-8") as fh:
+        json.dump({"roads": records, "commissions": [], "pending": None},
+                  fh, ensure_ascii=False)
+
 
 def read_log():
     try:
@@ -355,12 +397,18 @@ def read_log():
         return ""
 
 
-def setup(configure=None, double_elapse=False):
-    """mod を適用し、移動の確認画面が開いた状態の app を返す。"""
+def setup(configure=None, double_elapse=False, roads=None):
+    """mod を適用し、移動の確認画面が開いた状態の app を返す。
+
+    `roads` は 325_ が開いた道の控え（無ければファイルごと消す＝素の状態）。
+    """
+    write_roads(roads)
     app_cls = type("InstantaleApp", (BASES["app"],), {})
     confirm_cls = type("AreaMoveCofirmation", (BASES["confirm"],), {})
     move_cls = type("AreaMoveManager",
-                    (BASES["move2" if double_elapse else "move"],), {})
+                    (BASES["move2" if double_elapse == True else
+                           "move3" if double_elapse == "capped" else "move"],),
+                    {})
 
     main = sys.modules["__main__"]
     main.InstantaleApp = app_cls
@@ -633,6 +681,104 @@ print("[文言] 窓の外の add_text には触らない")
 module, ctx, app, confirm_cls, move_cls = setup(configure=wording)
 app.add_text("船で目指す話をしている。")
 check("窓の外は素通し", app.texts[-1] == "船で目指す話をしている。", app.texts)
+
+# ================================================================ 距離補正
+#: 325_ が「7 と 9 の間に挟む街2つ」の道を開いた控え（実物と同じ形）。
+FAR_ROAD = [{"from": "7", "to": "9", "hops": 2, "via": "pay",
+             "from_name": "風鳴りの村", "to_name": "陽光の砦"}]
+
+print("[距離] 倍加（既定）: 挟む街2つで3倍。日数は上限（徒歩90・馬車30）で頭打ち")
+module, ctx, app, confirm_cls, move_cls = setup(roads=FAR_ROAD)
+check("徒歩は 270 が上限90に削られ、素の値と同じなので表示も素のまま",
+      texts_of(app)[0] == WALK_TEXT, texts_of(app))
+check("馬車は料金3倍・日数は 42 が上限30", texts_of(app)[1] == "馬車(3000G・30日)",
+      texts_of(app))
+press(app, WALK_TEXT)
+check("徒歩の日数は素の 90 のまま（上限＝素の値）", app.elapsed == [90], app.elapsed)
+check("エラーなし", not ctx.errors, ctx.errors)
+
+print("[距離] 上限を上げれば増える方向が効く（徒歩120・馬車60）")
+
+
+def high_caps(module):
+    module.WALK_DAYS_MAX = 120
+    module.COACH_DAYS_MAX = 60
+
+
+module, ctx, app, confirm_cls, move_cls = setup(configure=high_caps, roads=FAR_ROAD)
+check("徒歩 270 -> 上限120", texts_of(app)[0] == "徒歩(120日)", texts_of(app))
+check("馬車 42 は上限60の内側", texts_of(app)[1] == "馬車(3000G・42日)",
+      texts_of(app))
+press(app, "徒歩(120日)")
+check("elapse_days が 90 -> 120 に増える", app.elapsed == [120], app.elapsed)
+check("暦も120日進む", app.day == 120, app.day)
+check("エラーなし", not ctx.errors, ctx.errors)
+
+print("[距離] 倍加の馬車: 引き落としは1回で3000、日数は上限30")
+module, ctx, app, confirm_cls, move_cls = setup(roads=FAR_ROAD)
+press(app, "馬車(3000G・30日)")
+check("移動が成立する", app.player.current_area.id == "9")
+check("3000だけ引かれる", app.player.gold == 2000, app.player.gold)
+check("支払いの瞬間から差し引き後の値", app.gold_after_payment == 2000,
+      app.gold_after_payment)
+check("日数は上限の30日", app.elapsed == [30] and app.day == 30,
+      (app.elapsed, app.day))
+check("文言の金額も3000",
+      "3000ゴールドを支払った。快適な旅だ..." in app.texts, app.texts)
+check("エラーなし", not ctx.errors, ctx.errors)
+
+print("[距離] 手持ちが実効額に満たないと断る（3000 > 2500）")
+module, ctx, app, confirm_cls, move_cls = setup(roads=FAR_ROAD)
+app.player.gold = 2500
+press(app, "馬車(3000G・30日)")
+check("移動を起こさない", not app.moved, app.moved)
+check("所持金はそのまま", app.player.gold == 2500, app.player.gold)
+check("断りの一言に実効額が出る", any("3000" in t for t in app.texts), app.texts)
+
+print("[距離] 加算: 1街ごとに7日・500G")
+
+
+def hop_add(module):
+    module.HOP_SCALING = "add"
+
+
+module, ctx, app, confirm_cls, move_cls = setup(configure=hop_add, roads=FAR_ROAD)
+check("徒歩 90+14=104 は上限90で素のまま", texts_of(app)[0] == WALK_TEXT,
+      texts_of(app))
+check("馬車 2000G・28日（上限30の内側）", texts_of(app)[1] == "馬車(2000G・28日)",
+      texts_of(app))
+press(app, "馬車(2000G・28日)")
+check("elapse_days が 28", app.elapsed == [28], app.elapsed)
+
+print("[距離] off にすれば補正なし")
+
+
+def hop_off(module):
+    module.HOP_SCALING = "off"
+
+
+module, ctx, app, confirm_cls, move_cls = setup(configure=hop_off, roads=FAR_ROAD)
+check("徒歩は素のまま", texts_of(app)[0] == WALK_TEXT, texts_of(app))
+check("馬車は素の表示のまま", texts_of(app)[1] == CARRIAGE_SHOWN, texts_of(app))
+press(app, WALK_TEXT)
+check("日数も素のまま", app.elapsed == [90], app.elapsed)
+
+print("[距離] 開いた道でなければ補正なし（控えはあるが別の区間）")
+module, ctx, app, confirm_cls, move_cls = setup(
+    roads=[{"from": "7", "to": "8", "hops": 3, "via": "pay"}])
+check("徒歩は素のまま", texts_of(app)[0] == WALK_TEXT, texts_of(app))
+check("馬車も素の表示のまま", texts_of(app)[1] == CARRIAGE_SHOWN, texts_of(app))
+press(app, WALK_TEXT)
+check("日数も素のまま", app.elapsed == [90], app.elapsed)
+check("エラーなし", not ctx.errors, ctx.errors)
+
+print("[距離] 外側(307_)が減らした日数は増やさない")
+module, ctx, app, confirm_cls, move_cls = setup(configure=high_caps,
+                                                roads=FAR_ROAD,
+                                                double_elapse="capped")
+press(app, "徒歩(120日)")
+check("14 のまま通す（120 に膨らませない）", app.elapsed == [14], app.elapsed)
+check("暦も14日だけ進む", app.day == 14, app.day)
 
 # ================================================================ まとめ
 print()
