@@ -209,7 +209,7 @@ def _defer_if_owner_not_ready(target: str, kind: str, exc: BaseException) -> boo
     クラスを組み立てていく。
     インタプリタ初期化の時点で注入すると、`__main__` は在るのに
     `World` も `InstantaleApp` もまだ無い。これは打ち間違いではなく順番の問題で、
-    待てば必ず来る（実測: 2026-08-15 以降、初回ブートで
+    待てば必ず来る（実測: 初回ブートで
     `120_` / `128_` / `129_` / `212_` / `312_` の5本が
     `AttributeError: module '__main__' has no attribute 'World'` で
     `apply()` ごと落ち、6秒後の2回目のブートで全部載っていた）。

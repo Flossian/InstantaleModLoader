@@ -265,7 +265,7 @@ npc = Char(name="ヘルデ", experience_level=8, experience_point=0,
            max_physical_integrity=100)
 check("NPC は触らない", npc.experience_level == 8, npc.experience_level)
 
-loaded = Char(name="アーリ", experience_level=49, experience_point=2118280,
+loaded = Char(name="旅人", experience_level=49, experience_point=2118280,
               original_ability_scores={"constitution": 26},
               max_physical_integrity=39, is_player=True)
 check("普通の読み込みは触らない", loaded.experience_level == 49,

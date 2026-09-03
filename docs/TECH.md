@@ -946,7 +946,7 @@ item_key = claim(app, "item", write=write)     # "item_<n>" の書式で返る
 
 `ids.audit(app)` は台帳が実在に追いついていない種類を並べる（`make_npc` が
 採番の前に呼び、ログに `ids: index behind existing ids:` を残す）。
-セーブエディタで足した施設も台帳を進めていない（ヴェスティアで facility が
+セーブエディタで足した施設も台帳を進めていない（実セーブで facility が
 台帳 230 に対し実在 234。2026-08-29）。
 
 > `import state` ではなく関数を直に import する。

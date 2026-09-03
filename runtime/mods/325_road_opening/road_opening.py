@@ -43,7 +43,7 @@ id 0〜8 の決め打ちではなく `size` が village / town / city のエリ�
 **実行時の `Area.size` は読めない**（`207_` と `324_` の実機で取れず。GAME.md §2.7）。
 `324_` の `size_of` と同じ順で、実行時の属性 → `app.save_data_dict["areas"][id]["size"]`
 → `app.world_dict["areas"][id]["size"]` と落ちる。初版は属性しか見ておらず、
-実機で候補が 0 件のまま「新たな道を探す」が出なかった（2026-09-03）。
+実機で候補が 0 件のまま「新たな道を探す」が出なかった。
 
 ## world_data.json には書かない（不可侵の原本）
 
@@ -446,7 +446,7 @@ def apply(ctx):
                 "departing": False,  # 自分が起こした AreaMoveManager かどうかの印
                 # 自前のフェーズが動いている間の旗。押下はここが立っている間は無視する。
                 # 押してから次のフレームで選択肢が差し替わるまでの間に同じボタンをもう一度
-                # 押せてしまい、支払いが二重に起きた（実機 2026-09-03。VERIFICATION.md §3.50）。
+                # 押せてしまい、支払いが二重に起きた（実機。VERIFICATION.md §3.50）。
                 "acting": False,
                 "scan_warned": False,
                 "unsized_noted": False,

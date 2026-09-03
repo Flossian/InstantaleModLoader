@@ -26,7 +26,7 @@ JSON の書き出し方が少しでも違っていればそこで止まるので
 使い方
 ------
     python tools/rebalance_saved_bgm.py                 # 全ワールドを確認だけする
-    python tools/rebalance_saved_bgm.py --world ヴェスティア
+    python tools/rebalance_saved_bgm.py --world <世界名>
     python tools/rebalance_saved_bgm.py --plain path/to/world_data_plain_x.json
     python tools/rebalance_saved_bgm.py --apply         # 実際に書き込む（バックアップあり）
 

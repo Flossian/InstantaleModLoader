@@ -731,7 +731,7 @@ def apply(ctx):
         """自前の枠の置き場所。相手枠と同じ親の、相手枠のすぐ上（描画順）に挿す。
 
         `overlay_host` の FloatLayout に足すと本文の枠より手前に描かれ、
-        仲間が文章の上に飛び出す（実機 2026-08-28）。相手枠の隣なら重なり順も本体と同じになる。
+        仲間が文章の上に飛び出す（実機で確認）。相手枠の隣なら重なり順も本体と同じになる。
         相手枠が HUD 直下に居る場合だけは HUD の子を増やせないので `overlay_host` へ落とす。
         """
         parent = getattr(base, "parent", None)
@@ -764,7 +764,7 @@ def apply(ctx):
         if not hasattr(base, ORIGIN_ATTR):
             # 相手枠を動かす前に、位置と描画の矩形を控える。
             # 相手枠の canvas の矩形はウィジェットに追従して動くので、動かした後に読むと
-            # 切り抜きが相手枠の新しい位置になり、他の仲間がそこで切れる（実機 2026-08-29、3人）。
+            # 切り抜きが相手枠の新しい位置になり、他の仲間がそこで切れる（実機、3人で確認）。
             hint = getattr(base, "pos_hint", None)
             setattr(base, ORIGIN_ATTR, dict(hint) if isinstance(hint, dict) else None)
             st["origin_geometry"] = base_geometry(base)
@@ -882,7 +882,7 @@ def apply(ctx):
         if any(name in OTHER_SCREEN_SPECS for name in names):
             st["talk_list"] = False
             return None
-        # 相手が居なければ一覧は「やめる」1つだけ（ギルドの「会話する」など。実機 2026-08-29）。
+        # 相手が居なければ一覧は「やめる」1つだけ（ギルドの「会話する」など。実機で確認）。
         # 人数は問わず、「やめる」が在れば一覧とみなす。
         return back_button_index(buttons)
 
@@ -1097,7 +1097,7 @@ def apply(ctx):
         """「話し合いを終了する」を押した直後。
 
         枠の片付けはここで先に予約する。`finish_conversation` の中で要約の LLM が回り
-        （GAME.md §2.5。最大120秒）、その後に片付けると仲間の絵だけ残る（実機 2026-08-28）。
+        （GAME.md §2.5。最大120秒）、その後に片付けると仲間の絵だけ残る（実機で確認）。
         会話の状態そのものは `finish_conversation` が返ってから畳む。
         """
         if st["active"]:

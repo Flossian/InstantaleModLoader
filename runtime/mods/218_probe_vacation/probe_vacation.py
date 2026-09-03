@@ -4,12 +4,12 @@
 ##### 何を決めるための計測か
 
 `315_vacation_custom` が宿泊の期間・部屋の名前・宿代を差し替える。
-その前提は **2026-08-18 の実機で全部確定した**（GAME.md §2.17 / VERIFICATION.md
+その前提は **実機で全部確定した**（GAME.md §2.17 / VERIFICATION.md
 §3.28）:
 
 | 項目 | 実測の結果 |
 |---|---|
-| 宿代の徴収 | `VacationStartManager.execute` の中で1回（窓の前後で `gold 19288 -> 19188`） |
+| 宿代の徴収 | `VacationStartManager.execute` の中で1回（窓の前後で `gold` が宿代のぶんだけ減る） |
 | `quality` の実値 | `'kennel'`(0G) / `'bunk'`(10G) / `'private_room'`(100G) / `'luxury_suite'`(1000G)。部屋は4つ（犬小屋はここで見つかった） |
 | 日数送り | 同じ `execute` の中で `elapse_days(months * 30)` が1回。活動マネージャでは動かない |
 | 連泊 | `まだ宿泊する` は宿代も日数ももう1回 |

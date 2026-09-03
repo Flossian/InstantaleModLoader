@@ -353,7 +353,7 @@ try:
           carryover.image_dir_of(source["0"], "ヴェスティア") == hans_folder,
           carryover.image_dir_of(source["0"], "ヴェスティア"))
     # 別の機械で作られた世界を持ってきた形（`image_src` が他人のユーザー名を指す）。
-    # 実データのペルディションがこの形で、95人中 93人が `C:\Users\Owner\...` だった。
+    # 実データがこの形で、ある世界では 95人中 93人が別の機械のユーザーフォルダを指していた。
     foreign = json.loads(json.dumps(source["0"]))
     foreign["image_src"] = {
         key: (value.replace(data_root, r"C:\Users\Owner\AppData\Local\Darmabeko\Instantale")

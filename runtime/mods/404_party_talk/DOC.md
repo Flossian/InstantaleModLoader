@@ -83,6 +83,6 @@
 
 ## 出どころ
 
-MoririnJP 氏の試作（`404_party_talk` v6、2026-08-25）を提供してもらい、
+MoririnJP 氏の試作（`404_party_talk` v6）を提供してもらい、
 立ち絵の切り替えと会話履歴の扱いを直したうえで、立ち絵を並べる方式と選択肢の出し方を足した。
 実機での確認の記録は VERIFICATION_LOG.md §2.78、残る確認項目は VERIFICATION.md §3.41。

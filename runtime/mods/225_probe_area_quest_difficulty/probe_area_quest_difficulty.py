@@ -26,7 +26,7 @@ id6≈62 / id7≈43 / id8≈70）なので、決め方はゲームのコード�
 
 出力は `out/area_quest_difficulty.log`（読む用）と `out/area_quest_difficulty.jsonl`（1件1行）。
 
-1回目（2026-09-03、新テストワールドの id 2 へ馬車で移動。VERIFICATION_LOG.md §2.84）で分かったこと:
+1回目（未訪問の id 2 へ馬車で移動。VERIFICATION_LOG.md §2.84）で分かったこと:
 
 - 街は `AreaMoveManager.method_1` → `save_area_json:write_area_data_to_world_dict(world_dict, area_id)`
   の中で作られる（`create_settlement_detail` が :80、`settlement_quest_generator` が :335）。
@@ -37,7 +37,7 @@ id6≈62 / id7≈43 / id8≈70）なので、決め方はゲームのコード�
   難易度はそれ以外の何かで決まっている。版2は `random` の全関数と `Random` のメソッド、
   numpy.random、`scripts.functions` の全関数（画面用を除く）を移動の窓の間だけ写す
 
-2回目（同日、id 3 へ。難易度 `[52, 47, 51]`）: `scripts.functions` は :80〜:335 の間に1本も呼ばれない。
+2回目（id 3 へ。難易度 `[52, 47, 51]`）: `scripts.functions` は :80〜:335 の間に1本も呼ばれない。
 乱数は上限300件が窓の開始から2秒で尽きた（`132_` の種の抽選 72 件と、その内側の
 `getrandbits` 228 件）ので、肝心の場面は写っていない。版3で MOD 自身の抽選と
 `random` の内側を数えないようにし、上限を 1000 にした。

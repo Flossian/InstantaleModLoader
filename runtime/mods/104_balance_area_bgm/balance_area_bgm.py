@@ -92,7 +92,7 @@ SIZE_ALIAS = {"dungeon": "dungeons"}
 DEFAULT_PREFIX = "Assets/sounds/musics"
 DEFAULT_SEP = "/"
 
-# 実データでは 6 エリアが bgm "" を持っていた（Astergrave の 2/3/5/6/8、dos の 3）。
+# 実データでは 2世界の 6 エリアが bgm "" を持っていた（片方に5つ、もう片方に1つ）。
 # つまり無音の町や都市。
 # size さえ分かれば曲を選べるので、これらにも曲を入れている。
 # 無音のままにしたい場合は False にする。

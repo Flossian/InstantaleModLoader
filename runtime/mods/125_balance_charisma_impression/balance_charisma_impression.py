@@ -321,7 +321,7 @@ def apply(ctx):
 
             素の `document_emotion_scores_new` は定義域の外で例外を出す
             （実測: `charisma=0` で `ValueError: max() arg is an empty sequence`。
-            `out/modloader.log` に 08-12 以降ずっと出ていた）。
+            `out/modloader.log` にずっと出ていた）。
             1点でも投げたら総当たり全体を諦める作りだったため、
             **この MOD は一度も段を覚えられていなかった**
             （`out/charisma_impression.log` が 0 バイトのままだった）。

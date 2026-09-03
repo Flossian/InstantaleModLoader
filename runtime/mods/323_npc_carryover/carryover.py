@@ -15,7 +15,7 @@ r"""NPC のエクスポートとインポートの土台。**画面もフック�
 
 `IML_GAME_DIR`（設定画面が渡すゲーム本体の場所）はインストール先＝
 `instantale.exe` の隣で、**セーブはそこには無い**
-（2026-08-30 実機。Epic 版のインストール先の下に `saves` も `worlds` も無かった）。
+（実機で確認。Epic 版のインストール先の下に `saves` も `worlds` も無かった）。
 だから場所は別に探す。
 
 ##### セーブは XOR で難読化されている（GAME.md §2.16）
@@ -172,8 +172,8 @@ def local_path(recorded: str, base: str = "") -> str:
 
     `image_src` は**書いた機械の絶対パス**で入っている。
 
-        C:\Users\Owner\AppData\Local\Darmabeko\Instantale\worlds\X\characters\Y\face_image.png
-        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ここは機械ごとの事情
+        C:\Users\<ユーザー名>\AppData\Local\Darmabeko\Instantale\worlds\X\characters\Y\face_image.png
+        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ここは機械ごとの事情
                                                           ~~~~~~~~~~~~~~~~~~~~ ここが中の位置
 
     別の機械で作られた世界を持ってくると、前半が他人のユーザー名を指したまま
@@ -181,8 +181,8 @@ def local_path(recorded: str, base: str = "") -> str:
     後半（`worlds\` から先）は同じなので、前半を落として
     こちらの `data_dir()` に繋ぎ直せば当たる。
 
-    > 実データ（2026-08-30）: ペルディションは 95人中 93人の `image_src` が
-    > `C:\Users\Owner\...` を指していた。繋ぎ直すと 92人ぶんの顔が見つかる。
+    > 実データ: ある世界では 95人中 93人の `image_src` が
+    > 別の機械のユーザーフォルダを指していた。繋ぎ直すと 92人ぶんの顔が見つかる。
 
     目印が見つからないパス（形が違う）はそのまま返す。
     """
@@ -284,7 +284,7 @@ def affinity_of(npc) -> tuple:
     """`(好感度, 関係を表す言葉)`。読めなければ `(None, "")`。
 
     `affinity_text` は**文字列のことも配列のこともある**
-    （実セーブで両方あった。ヴェスティア 103人で str 57 / list 46）。
+    （実セーブで両方あった。103人の世界で str 57 / list 46）。
     配列のときの先頭が関係の側で、2つ目以降は魅力の話なので採らない。
     """
     player = ((npc or {}).get("relationship") or {}).get("player")
@@ -334,7 +334,7 @@ def location_of(save, npc) -> tuple:
 
     見るのは `current_area` / `current_location`、欠けていれば
     `initial_location`（生成直後の個体はそちらにしか入っていないことがある）。
-    実セーブのヴェスティアでは 103人全員がこの順で解決できた。
+    実セーブの 103人はこの順で全員解決できた。
     """
     if not isinstance(npc, dict):
         return "", ""

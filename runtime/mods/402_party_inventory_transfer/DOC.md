@@ -56,7 +56,7 @@ MOD を外しても受け渡し済みのアイテムはそのまま相手の持�
 | --- | --- |
 | 選択肢が出ない | 会話相手が現在のパーティーメンバーか確認。仲間なのに出ないなら `out\party_inventory_transfer.log` に `added` の行があるか |
 | 移したのに保存されていない気がする | `out\party_inventory_transfer.log` に `transfer synced` と `save_game complete` が並んでいれば保存は走っている。`WARN save skipped` なら移した品を見失っている |
-| 装備したまま渡したら装備が残った | v18 で本体の解除処理ごと外れる。外れていなければ `out\party_inventory_transfer.log` を添えて報告。過去のセーブに残った宙ぶらりんは 2026-08-27 に修復済み |
+| 装備したまま渡したら装備が残った | v18 で本体の解除処理ごと外れる。外れていなければ `out\party_inventory_transfer.log` を添えて報告 |
 | `stale unequip ignored` が出た | 古い「装備中」表示から外す操作が飛んだのを無視した記録。素通しすると本体が落ちるため。頻発するなら報告の材料になる |
 | 「装備する」ボタンが見えない | 画面の右上・上端で右クリックした場合、本体popupの枠外に出る可能性が未確認のまま残っている。位置を変えて出るならその報告が材料になる |
 | 装備の実際の動きを記録したい | デバッグモードで `223_probe_party_equipment` を有効にすると、popup と装備欄の中身が `out\party_equipment_probe.log` に写る |

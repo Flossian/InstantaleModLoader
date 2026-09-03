@@ -82,7 +82,7 @@ NEW_NPC_TEMPLATE = {
     "job": None,
     "state": "",
     # 6つの鍵は必須。空の {} だと `World.generate_character` が
-    # `KeyError: 'constitution'` で落ちる（2026-08-27 実機。
+    # `KeyError: 'constitution'` で落ちる（実機。
     # VERIFICATION_LOG.md §2.72）。値は None でよい ―
     # 詳細生成前（level_of_detail=1）の実物がこの形（GAME.md §2.23）。
     "ability_scores": {"strength": None, "dexterity": None,
@@ -161,7 +161,7 @@ def npc_stores(app, max_depth=2):
     その時点の `world.characters` はまだ埋まっておらず、
     突き合わせる相手が居ないので、素データを1つも見つけられない。
 
-    > 実機（2026-08-30。`323_` の1回目）:
+    > 実機（`323_` の作業で踏んだ）:
     > ロード直後に呼んだ `npc_stores` が `<none>` を返し、
     > `save_data_dict['npcs']`（GAME.md §2.23 が「★ ここが本体」と書いている辞書）へ
     > 何も書かれないまま `generate_character` が `KeyError` で落ちた。
