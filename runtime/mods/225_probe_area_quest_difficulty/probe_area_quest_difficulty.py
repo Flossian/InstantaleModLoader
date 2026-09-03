@@ -45,6 +45,7 @@ id6≈62 / id7≈43 / id8≈70）なので、決め方はゲームのコード�
 
 import datetime
 import json
+import random
 import sys
 import time
 
@@ -110,9 +111,14 @@ RANDOM_NAMES = ("betavariate", "binomialvariate", "choice", "choices", "expovari
 # `getrandbits` と `Random.random` は他の乱数の内側で呼ばれる部品（`choice` 1回で
 # `getrandbits` が1〜2回）。2回目の計測で上限300件のうち228件がこれで埋まり、
 # 肝心の場面に届く前に打ち切られた。外側の呼び出しを写せば足りるので外す。
-RANDOM_TARGETS = tuple("random:{}".format(name) for name in RANDOM_NAMES) \
+# 一覧は「写したい乱数」のまま置き、包むのは素の `random` に在る名前だけにする。
+# ゲームは Python 3.10 で動く（`python310.dll`）ので、3.12 で足された `binomialvariate` は無い。
+# 版4は絞らずに並べていたので、対象の無いフック2件が status.json の `patches.unresolved` に
+# 残り続け、一覧が「ゲームが更新された可能性があります」と警告していた。
+RANDOM_TARGETS = tuple("random:{}".format(name) for name in RANDOM_NAMES
+                       if hasattr(random, name)) \
     + tuple("random:Random.{}".format(name) for name in RANDOM_NAMES
-            if name != "random") \
+            if name != "random" and hasattr(random.Random, name)) \
     + ("random:Random.seed", "random:Random.__init__")
 # numpy が読まれていれば（画像生成で使う）そちらの乱数も。無ければ黙って降りる。
 NUMPY_TARGETS = tuple("numpy.random:{}".format(name) for name in (
@@ -428,6 +434,6 @@ def apply(ctx):
     for target in RANDOM_TARGETS + NUMPY_TARGETS:
         watch_random(target)
 
-    ctx.log("area quest difficulty probe v2: {} function(s), {} random target(s), log={}".format(
+    ctx.log("area quest difficulty probe: {} function(s), {} random target(s), log={}".format(
         len(PURE_TARGETS), len(RANDOM_TARGETS) + len(NUMPY_TARGETS),
         ctx.out_path(LOG_BASENAME)))
