@@ -1,0 +1,127 @@
+{
+  "entry": "ui_area_difficulty.py",
+  "api": 1,
+  "kind": "fix",
+  "name": {
+    "en": "Show the level band of each destination",
+    "ja": "エリア毎に適正レベル帯の表示"
+  },
+  "description": {
+    "en": "The area move list only names the destinations, so you cannot tell which one fits your level until you get there. Appends the destination's quest difficulty band to each button (read from the game's own quest list; grows with 318). Towns not yet visited get a band estimated from their slot, marked as such",
+    "ja": "「他の土地へ行く」の一覧は土地の名前だけで、レベル適正は行ってみるまで分からない。各ボタンにその土地の依頼の難易度帯を添える（ゲーム自身の依頼一覧から読む。318 で育てば追随する）。まだ訪ねていない街は、街の枠から見積もった帯を「推定」付きで出す"
+  },
+  "version": "2",
+  "author": "R01/Flossian",
+  "settings": {
+    "SHOW": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "帯を出す",
+        "en": "Show the band"
+      },
+      "note": {
+        "ja": "切ると一覧も確認画面も素のまま",
+        "en": "Off leaves the list and the confirmation untouched"
+      }
+    },
+    "LEVEL_OFFSET": {
+      "type": "int",
+      "default": 1,
+      "min": -10,
+      "max": 10,
+      "label": {
+        "ja": "難易度に足してレベルにする数",
+        "en": "Added to the difficulty to make a level"
+      },
+      "note": {
+        "ja": "敵のレベルは難易度+1（実測）なので既定 1。0 で難易度そのものを出す",
+        "en": "Enemy level is difficulty+1, hence 1. 0 shows the raw difficulty"
+      }
+    },
+    "LABEL": {
+      "type": "str",
+      "default": "{name}（適正Lv {band}）",
+      "label": {
+        "ja": "ボタンの表示",
+        "en": "Button label"
+      },
+      "note": {
+        "ja": "使える変数: {name} {band}",
+        "en": "Variables: {name} {band}"
+      }
+    },
+    "BAND": {
+      "type": "str",
+      "default": "{lv_min}〜{lv_max}",
+      "label": {
+        "ja": "帯の表記",
+        "en": "Band format"
+      },
+      "note": {
+        "ja": "使える変数: {lv_min} {lv_max}（レベル）{min} {max}（難易度）{count}（依頼の数）",
+        "en": "Variables: {lv_min} {lv_max} (levels) {min} {max} (difficulties) {count} (quests)"
+      }
+    },
+    "BAND_SINGLE": {
+      "type": "str",
+      "default": "{lv_min}",
+      "label": {
+        "ja": "帯の表記（最小と最大が同じとき）",
+        "en": "Band format when min equals max"
+      },
+      "note": {
+        "ja": "変数は上と同じ",
+        "en": "Same variables"
+      }
+    },
+    "BAND_UNKNOWN": {
+      "type": "str",
+      "default": "不明",
+      "label": {
+        "ja": "帯の表記（依頼が無くて引けないとき）",
+        "en": "Band text when the area has no quests"
+      },
+      "note": {
+        "ja": "空にすると、その土地は名前のまま",
+        "en": "Empty leaves that destination's name alone"
+      }
+    },
+    "ESTIMATE": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "未訪問の街は枠から見積もる",
+        "en": "Estimate unvisited towns from their slot"
+      },
+      "note": {
+        "ja": "街の依頼は初訪問で作られる。訪ねる前は街の枠（id）で決まる範囲から見積もって出す。切ると未訪問の街は「不明」",
+        "en": "A town's quests are created on the first visit. Before that the band is estimated from the range the game uses for that slot. Off shows the unknown text instead"
+      }
+    },
+    "BAND_ESTIMATE": {
+      "type": "str",
+      "default": "推定 {lv_min}〜{lv_max}",
+      "label": {
+        "ja": "帯の表記（未訪問の見積もり）",
+        "en": "Band format for estimates"
+      },
+      "note": {
+        "ja": "変数は「帯の表記」と同じ",
+        "en": "Same variables as the band format"
+      }
+    },
+    "CONFIRM_TEXT": {
+      "type": "str",
+      "default": "（{name}の適正Lv: {band}）",
+      "label": {
+        "ja": "確認画面に足す1行",
+        "en": "Line added on the confirmation screen"
+      },
+      "note": {
+        "ja": "徒歩・馬車を選ぶ画面に出す。ゲームの文言に土地の名前があればそこへ帯を添え、この1行は出さない。空で出さない。使える変数: {name} {band} {label}",
+        "en": "Shown on the walk/coach screen unless the game's own line already names the area (then the band is appended there). Empty disables. Variables: {name} {band} {label}"
+      }
+    }
+  }
+}

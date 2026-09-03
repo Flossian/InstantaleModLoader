@@ -1,0 +1,32 @@
+{
+  "entry": "probe_area_quest_difficulty.py",
+  "api": 1,
+  "kind": "probe",
+  "name": {
+    "en": "Area quest difficulty probe",
+    "ja": "街の依頼の難易度の決まり方"
+  },
+  "description": {
+    "en": "Records who decides a settlement's quest difficulties when it is first visited: the real `quest_difficulties` handed to settlement_quest_generator and its caller chain, the order of the build path (Area.update / write_area_data_to_world_dict) with level_of_detail before and after, and every scripts.functions and random.* / Random.* / numpy.random call during the arrival move. Reading only",
+    "ja": "街を初めて訪ねたとき、その街の依頼の難易度を誰がどう決めているかを録る。settlement_quest_generator に渡る `quest_difficulties` の実値と呼び出し元、街が作られる経路の順番と前後の level_of_detail、到着の移動の間に呼ばれた scripts.functions の全関数と random.* / Random.* / numpy.random の全呼び出し。読み取りだけでゲームは変えない"
+  },
+  "version": "4",
+  "author": "R01/Flossian",
+  "debug": true,
+  "settings": {
+    "RANDOM_SAMPLES": {
+      "type": "int",
+      "default": 1000,
+      "min": 0,
+      "max": 9999,
+      "label": {
+        "ja": "写す乱数の呼び出しの上限",
+        "en": "How many random.* calls to record"
+      },
+      "note": {
+        "ja": "到着の移動1回ごとに数え直す。MOD 自身の抽選と random の内側は数えない。0 にすると録らない",
+        "en": "Counted per arrival move; a mod's own rolls and random's internals are not counted. 0 = do not record"
+      }
+    }
+  }
+}

@@ -128,6 +128,7 @@ BANDS = (
         "121_ui_character_sheet",
         "118_batch_message_render",
         "122_ui_conversation_log",
+        "133_ui_area_difficulty",
         "119_fix_crime_attribution",
     )),
     ("probe", "## 計測（2xx）", None),
