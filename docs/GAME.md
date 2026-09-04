@@ -1294,6 +1294,45 @@ generate_item_in_shopping(item_data, shop_owner_instance, item_stock_tier=2)
 > `318_area_difficulty_growth` はこれを使って、在庫にもクラフトにも触らずに街を育てる。
 > 効き始めるのは品揃えが入れ替わってからなので、`312_shop_restock` と組で意味を持つ。
 
+#### 2.13.1.3 店を開くたびに、売れた品が作り直される（実測。VERIFICATION.md §3.52）
+
+施設は品揃えの雛形を `Facility.config['goods']` に持っている
+（`stock_tier` と `stock_update_date` も同じ `config`。セーブ側にしか無い項目がある）。
+**店を開くと、雛形にあって主が持っていない品が1つ作り直されて棚へ入る。**
+
+```
+品の誕生: id=59 'ハルマンの予備のランプ' 主=ハルマン(118) {'item_detail': 'tool', '買価': 368}
+  呼び出し元: ShoppingStartManagerRemake.shopping_start_method_1 (instantale.py:3159)
+           <- ShoppingStartManagerRemake.execute (instantale.py:3281)
+           <- run (threading.py:953)
+```
+
+- 作るのはゲーム自身（`instantale.py:3159`）。採番もゲームの台帳
+  （`index['item']` が進む）。鍵は `item_` の付かない**裸の数字**になる
+- 走るのは**開いたとき**。買う操作そのものは
+  `InventoryItem.change_inventory` が売り手から外して買い手へ入れるだけで、
+  品は1つも生まれない
+- 雛形は買っても減らず、`stock_update_date` も動かない
+- **装備は作り直されない。** 実測7品:
+
+| `item_type` / `item_detail` | 作り直し |
+| --- | --- |
+| `weapon` / `small_weapon` | されない |
+| `wearable` / `body_armor` | されない |
+| `wearable` / `accessory` | されない（4回の来店を跨いで欠けたまま） |
+| `healing_item` / `food`・`drink`・`potion`・`medicine` | される |
+| `utility` / `tool` | される |
+
+  `material` と `utility` / `document` は未測定。
+- 作り直された品は素の値のまま棚に並ぶ。`129_` / `134_` / `405_` は
+  生成の入口を包んでいるが**戻り値しか見ていない**ので、
+  品を持ち物へ直に入れるこの経路では素通りする
+  （次に開いたときの on-sight で付け直される）
+
+> つまり回復アイテムだけは同じ品を何度でも買えて、在庫が尽きない。
+> `312_shop_restock` の「買った品を作り直させない」（既定 ON）が、
+> その来店で増えたぶんを窓が組み上がる前に外す。
+
 #### 店の主は `job` が施設の種類と一致している
 
 実セーブで、主の居る施設67件を全部突き合わせた結果:
@@ -1355,6 +1394,43 @@ gold に直すのは `get_item_base_price` と `get_randomized_item_price`。
 `attributes` の並びは `item_detail` → 能力値 → 値段。
 能力値は種別ごとに違う（`weapon`＝`攻撃力` / `wearable`＝`防御力` /
 `healing_item`＝`回復` と `疲労負荷` / それ以外は無し）。
+
+#### 回復アイテムの数値は `value` だけで決まる
+
+`回復` は `get_heal_spec(value)`（`221_` の対応表。2026-08-26〜09-02）:
+
+| `value` | 3 | 6 | 18 | 26 | 48 | 49 | 50 | 52 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `回復` | 9 | 13 | 59 | 115 | 204 | 211 | 237 | 237 |
+
+`疲労負荷` は `get_heal_physical_integrity_barden(value)` と読めるが未計測。
+実物の品では `value` 3〜52 の全域で **9〜11** しか観測していない（`208_` のログ 20 件）。
+スタミナの上限はレベル1で 10（§2.19）なので、
+**序盤は回復アイテム1つでスタミナが尽きる**（回復 9 のために 11 を払う）。
+`healing_item` の細分は `food` / `drink` / `herb` / `medicine` / `potion` の5つ
+（店の品揃え生成のスキーマ。`consumable` はこれに `scroll` が足される。
+品に書かれる `item_detail` では `herb` が `plant`）。
+
+#### 使うと何が起きるか（2026-09-04 に `226_` で実測。使用5回）
+
+```
+ItemPopupMenu.on_consume_item          右クリックの「消費」
+  Item.consume                         品の側の入口
+    (本体が usable を決める)            physical_integrity >= 疲労負荷
+    ItemConsumeManager.consume_item(item_instance, usable)   別スレッドで走る
+```
+
+- `usable` が真: `physical_integrity` が `疲労負荷` ぶん減る → HP に `回復` を足す →
+  持ち物から1つ減る → `add_text("…を消費した。HPを N だけ回復した。")`。
+  N は**使う時に** `attributes["回復"]` を読んだ値（生成時に固めていない）
+- `usable` が偽: `add_text("駄目だ...体がもたない。")` だけ。品は減らない
+- 文は `consume_item` の**ワーカースレッドの先頭**で出る（その後 1 秒ほど待って品を外す）。
+  呼び出し元のメインスレッドの `ItemConsumeManager.execute` はその間まだ戻っていない
+  （2026-09-04 の `226_`。スレッドを分けずに数えると `execute` の側の文に見える）
+- `max_hp` / `update_max_hp` / `update_max_physical_integrity` はこの間に走らない
+  （スタミナが減っても最大 HP はここでは動かない。動くのは別の地点）
+- `on_use_item` / `ItemUseManager` は回復アイテムでは通らない（別の種別の入口）
+- `usable` は popup の項目には無い（`ItemPopupMenu` が持つのは `item` とボタン2つと `canvas`）
 
 #### レア度が値段に効いていない
 

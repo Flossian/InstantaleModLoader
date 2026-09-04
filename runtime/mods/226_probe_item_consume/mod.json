@@ -1,0 +1,60 @@
+{
+  "entry": "probe_item_consume.py",
+  "api": 1,
+  "kind": "probe",
+  "name": {
+    "en": "Item consume probe",
+    "ja": "回復アイテムの効き方"
+  },
+  "description": {
+    "en": "Records what actually happens when a healing item is used: which popup entry was pressed and what the popup holds (the `usable` flag), the real `usable` handed to ItemConsumeManager.consume_item, the before/after of HP, stamina, their caps and status on the player and on the item's owner, the text lines added meanwhile, who calls Item.consume, the pure functions get_heal_spec / get_heal_physical_integrity_barden / get_max_physical_integrity, and the cap updates. Reading only",
+    "ja": "回復アイテムを使ったとき実際に何が起きるかを録る。右クリックのどの項目が押されたかと popup の中身（`usable` 相当）、ItemConsumeManager.consume_item に渡る `usable` の実値、プレイヤーと品の持ち主の HP・スタミナ・上限・status の前後、その間に足された文、Item.consume を誰が呼ぶか、純関数 get_heal_spec / get_heal_physical_integrity_barden / get_max_physical_integrity の対応表、上限の更新。読み取りだけでゲームは変えない"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "debug": true,
+  "settings": {
+    "CONSUME_SAMPLES": {
+      "type": "int",
+      "default": 100,
+      "min": 0,
+      "max": 9999,
+      "label": {
+        "ja": "写す使用の件数",
+        "en": "How many uses to record"
+      },
+      "note": {
+        "ja": "右クリックの押下と、使用の前後の差分。0 にすると録らない",
+        "en": "Popup presses and before/after diffs of a use. 0 = do not record"
+      }
+    },
+    "TABLE_SAMPLES": {
+      "type": "int",
+      "default": 120,
+      "min": 0,
+      "max": 9999,
+      "label": {
+        "ja": "対応表を写す通り数",
+        "en": "How many distinct pure calls to record"
+      },
+      "note": {
+        "ja": "同じ引数の組は1度しか書かない。0 にすると録らない",
+        "en": "Each distinct set of arguments is written once. 0 = do not record"
+      }
+    },
+    "UPDATE_SAMPLES": {
+      "type": "int",
+      "default": 40,
+      "min": 0,
+      "max": 9999,
+      "label": {
+        "ja": "使用の外の上限更新を写す件数",
+        "en": "Cap updates to record outside a use"
+      },
+      "note": {
+        "ja": "レベルアップや日送りで走る update_max_hp / update_max_physical_integrity。使用の間は数に入れず毎回書く",
+        "en": "update_max_hp / update_max_physical_integrity fired by level-ups or day passing. Calls during a use are always written and not counted"
+      }
+    }
+  }
+}

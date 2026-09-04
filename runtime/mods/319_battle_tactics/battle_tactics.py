@@ -16,74 +16,51 @@
 発案）はそのまま使い、**捨てられているものを拾って効かせる**。
 新しい判定は発明しない。
 
-## 1. ダメージの圧縮（引き算 → 相手の最大HPの割合）
+## 1. ダメージの作り直し（引き算 → 攻め手の火力）
 
 `resolve_*` が呼ぶ `get_instant_damage(素点, 防御)` を包み、
 1手の文脈（誰が誰へ・power・倍率）が揃っているときだけ結果を置き換える:
 
-    割合 = Σ band(power) × multiplier      その手の各エントリの和
-         × 格差の係数                      下記。[0.4, 16] に収める
-         × レベル差の倍率                  下記。高い側が伸び、低い側は割られる
-         × (1 − 軽減)                      軽減 = 防御 ÷ (防御 + PIVOT)、上限 60%
+    1発 = 火力 × band(power) × multiplier   火力はその手の攻め手に固有
+         × レベル差の倍率                    高い側が伸び、低い側は割られる
+         × (1 − 軽減)                        軽減 = 防御 ÷ (防御 + PIVOT)、上限 60%
          × 防御の構え・状態異常の倍率
-    最終 = 受け側 max_hp × 割合            下限 1%。上限は互角なら MAX_FRACTION%、
-                                           格差が開くほどゆるみ、圧倒的なら一撃
+    下限は受け側 max_hp の 1%（格上も削れなくはならない）。
+    上限は互角なら受け側 max_hp の MAX_FRACTION%。
+    レベル差か火力差が開くと上限が外れ、相手の体力を超える数字（過剰殺傷）が出る
 
-格差の係数は、その手の**基礎値**（2×√(能力側×武器攻撃力)。ゲーム自身の
-`get_base_damage_value` が同じ手の中で計算する値を控えて使う）が取れたら
+**火力**はプレイヤーなら**基礎値**（2×√(能力側×武器攻撃力)。ゲーム自身の
+`get_base_damage_value` が同じ手の中で計算する値を控えて使う）。
+基礎値が取れない手（敵と仲間は `get_base_damage_value` を通らない。
+仕様: NPC は武器を参照しない。§2.68 / §2.69）は**本人の max_hp** で代える。
+仲間だけは受け側 max_hp を下限にする（HP の低い仲間が無力に見えないための
+底上げ。仲間の成長はレベル差の側で受ける）。
 
-    (基礎値 ÷ (受け側 max_hp × 0.5))^(WEAPON_IMPACT÷100)    [0.4, 16] に留める
+一撃の大きさが**攻め手に固有**なのが要点。
+受け側の max_hp 比で削る旧版（〜版7）は、HP600 の雑魚に 150・HP1500 の
+ボスに 400 と「大きい相手ほど大きい数字」が出て、仕組みを知らないと
+説明が付かない（実機の指摘）。この形なら同じ一振りはどの相手にも同じ帯の
+数字で、硬い相手・格上に通りが悪くなる向きだけが残る。
+**手数は相手の体力から自然に生まれる**:
 
-＝ **武器と能力の伸びがそのまま与ダメの伸びになる**。
-互角の戦い（係数 3.5 まで）では1発の上限 MAX_FRACTION が効き、
-係数がそれを超えると上限がゆるんで 6.0 で完全に外れる（`oneshot_cap`）。
-**圧倒的な格差だけが一撃を出せる**（最強の英雄 対 初期村の魔物、の側も
-魔王 対 駆け出し、の側も）。互角の殴り合いに一撃は無い。
-一撃の域では**素の計算値（素点 − 防御）をそのまま出す**（`overkill_final`）。
-割合のままだと相手の最大HPきっかりの数字しか出ず、
-強化した火力が見えない（実機の指摘）。相手はどのみち落ちる域なので、
-素の大きさで過剰殺傷を表現しても釣り合いは壊れない。
-攻撃面の成長は実質武器だけなので（GAME.md §2.17）、ここを切ると
-店とクラフトの遊びが死ぬ。
-傾きが設定なのは、基礎値そのものが √武器 でしか伸びないから。
-指数 0.5 だと武器 23 → 500 の全幅でも与ダメ 2.2倍と平坦で、強化の実感が薄い
-（初版で踏んだ）。既定 0.75 の手数は下の表、1.0 に上げると
-武器差はさらに急になり最強武器は格下を2手で落とす。
-受け側 max_hp を物差しにするのは、ゲーム自身が難易度で HP と武器の値段を
-一緒に伸ばしているから（GAME.md §2.13.1 / §2.20）。
-**適正装備で適正な相手なら係数 ≈ 1** になり、
-武器を更新すれば同じ相手が柔らかくなり、格上の土地へ行けばまた硬くなる。
+    実測の帯（エリス: 基礎値896・Lv62、normal どうし）:
+      雑魚   HP460  def96   → 240/発 → 2手。被弾は 41/発（ENEMY_POWER 50%）
+      同格   HP1560 def150  → 226/発 → 7手
+      ボス   HP1500〜3000   → 7〜16手（体力なりに長持ちする）
+      スライム HP64（格が違う）→ 806/発（撃破）… 過剰殺傷が同じ物差しで出る
+    雑魚3体の1戦で減るHPは2割前後 ＝ 回復なしの連戦が成り立つ
+    （敵の錨を素のまま使う版8は1戦で4割消えた。ENEMY_POWER の説明）
 
-基礎値が取れない手は max_hp の比 `(攻撃側 ÷ 受け側)^0.7` で代用する。
-`get_base_damage_value` を通るのは**プレイヤーの手だけ**で、
-敵も同行の仲間も通らない（実測 §2.68 / §2.69）。
-**仲間の代用だけは 1.0 で底上げする**（`ally_floor`）。
-仲間は max_hp が低いことが多く（実測で 132 の仲間が居た）、比のままだと係数 0.4 に
-張り付いて無力に見える。その場に立てている以上、敵と対等の一員として数え、
-仲間の成長はレベル差の倍率の側で受ける（レベルは `306_` の訓練で上がる）。
-仲間に武器が乗らないのは**素のゲームの仕様**
-（NPC は武器を参照しない旨の公式回答。GAME.md §2.10.2）。
-この MOD もそれに合わせ、仲間の強さは本人のレベルと立ち位置で見る。
+武器は基礎値を通して直に効く（√武器なので、23 → 500 の全幅で与ダメ約4.7倍。
+一段ごとの手数の変わり方は下の表）。引き算と違って
+「素点が HP の帯を追い越して全員一撃」には戻らない ―
+band が火力の一部しか1発に乗せないため。
 
-レベル差は格差の係数とは独立の倍率。
-差が `LEVEL_FAIR_GAP`（既定10）までは適正で倍率なし、
-`LEVEL_ELITE_GAP`（15）で強敵の域（既定 ×2）、
-`LEVEL_OUTCLASS_GAP`（20）以上は格が違う（既定 ×3 ＋一撃の解禁）。
-間は直線でつなぎ、低い側から高い側への手は同じ率で割られる
-（＝格上は痛く硬く、格下は柔らかく無害に、が1つの倍率で両方出る）。
-
-実測の帯（エリス、normal どうし）の手数。武器の一段が同格相手で 2〜6手動く:
-
-    武器の攻撃力    格下460   同格1560   HP2倍ボス3120
-    500 (基礎883)     3手       8手        14手
-    245 (基礎618)     4手      10手        18手
-     96 (基礎387)     5手      14手        22手
-     23 (基礎189)     9手      20手        22手
-
-ボスの extreme は4割を持っていく（防御を固める理由が生まれる）。
-
-文脈が揃わない呼び出し（1手の外・照合できない素点）は**素通し**する。
-効かなかったことはログに残る。
+    武器の攻撃力    雑魚460   同格1560
+    500 (基礎896)     2手       7手
+    245 (基礎618)     3手      10手
+     96 (基礎387)     5手      15手
+     23 (基礎189)     9手      （挑む装備ではない）
 
 ## 2. 捨てられた効果の復元
 
@@ -140,16 +117,19 @@ ALLY_SIDE = "ally"
 # ---------------------------------------------------------------- 設定
 # GUI から変えられる値（同じ名前と既定値が mod.json にもある。TECH.md §3.8）。
 
-# power 1段ごとの基準割合（受け側の最大HPに対する %）。
-BAND_WEAK = 10
-BAND_NORMAL = 16
-BAND_STRONG = 25
-BAND_VERY_STRONG = 38
-BAND_EXTREME = 55
+# power 1段ごとに、攻め手の火力の何%を1発に乗せるか。
+# 火力 ＝ プレイヤーは基礎値（2×√(能力×武器)）、敵と仲間は本人の max_hp
+# （敵はさらに ENEMY_POWER が掛かる）。
+# normal 30% は、実測の帯（基礎値896）で 雑魚2手・同格7手前後 にする高さ。
+BAND_WEAK = 18
+BAND_NORMAL = 30
+BAND_STRONG = 45
+BAND_VERY_STRONG = 65
+BAND_EXTREME = 90
 
-# 互角の戦いで1発が持っていける割合の上限（%）。
+# 互角の戦いで1発が持っていける割合の上限（受け側の最大HPの %）。
 # extreme+強化が重なっても、互角の相手からの即死は無い。
-# 格差の係数が ONESHOT_START を超えるとこの上限はゆるむ（`oneshot_cap`）。
+# レベル差か火力差が開くと外れる（`cap_fraction`）。
 MAX_FRACTION = 65
 
 # 防御の効き。軽減 = 防御 ÷ (防御 + この値)。
@@ -172,11 +152,12 @@ LEVEL_OUTCLASS_GAP = 20
 LEVEL_ELITE_MULT = 200
 LEVEL_OUTCLASS_MULT = 300
 
-# 武器の効きの強さ（%）。格差の係数の指数 = この値 ÷ 100。
-# 75 で、武器のランクが一段上がるごとに同格相手の手数が目に見えて減る
-# （実測の武器帯で 20 → 14 → 10 → 8手）。
-# 100 に上げると武器差はさらに急になり、最強武器は格下を2手で落とす。
-WEAPON_IMPACT = 75
+# 敵の火力（%）。敵の一撃だけに掛かる（仲間には掛からない）。
+# 敵の錨は本人の max_hp で、素のままだとプレイヤーの錨（基礎値 ≈ max_hp の
+# 6割）より強く出る。雑魚3体と1戦するとHPの4割が消え、
+# ダンジョンの回復なしの連戦が成立しない（実機の指摘）。
+# 50 で、雑魚の群れ1戦の消耗が2割前後・同格やボスは変わらず脅威、に収まる。
+ENEMY_POWER = 50
 
 # 審判が付けた状態異常の中身（毎ターンの効果・能力の増減）を復元して効かせる。
 RESTORE_EFFECTS = True
@@ -185,29 +166,13 @@ RESTORE_EFFECTS = True
 GUARD_BUTTON = True
 
 # ---------------------------------------------------------------- 定数
-# 格差の係数の留め。
-# 下は 0.4 で止める（どんな格上相手でも削れなくはならない）。
-# 上は 16 まで伸ばしてある。互角の戦いでは係数はそもそも 1 前後にしかならず、
-# ここまで開くのは「最強の英雄 対 初期村の魔物」級の圧倒的な格差だけ。
-STRENGTH_MIN = 0.4
-STRENGTH_MAX = 16.0
-
-# 一撃の解禁。1発の上限（MAX_FRACTION）は互角の戦いを守るためのもので、
-# 格差の係数が ONESHOT_START を超えると上限がゆるみ始め、
-# ONESHOT_FULL で完全に外れる（＝満タンからの一撃が出る）。
+# 一撃の解禁（火力差の側）。dominance ＝ 攻め手の火力 ÷ 受け側 max_hp。
+# START で上限（MAX_FRACTION）がゆるみ始め、FULL で外れる。
 # 最強の英雄が初期村の魔物を一撃で払えないのは不自然だし、
-# 魔王の一撃が駆け出しを即死させても違和感は無い。互角の相手には出ない。
-ONESHOT_START = 3.5
-ONESHOT_FULL = 6.0
-
-# 基礎値（2×√(能力×武器)）から見る格差。
-# 係数 = (基礎値 ÷ (受け側 max_hp × GEAR_PIVOT))^(WEAPON_IMPACT÷100)。
-# GEAR_PIVOT 0.5 は「基礎値 ≈ 受け側 max_hp の半分」を等倍とする物差しで、
-# 実測の帯（基礎値883・同格 HP 1560）がほぼ係数1に乗る。
-GEAR_PIVOT = 0.5
-
-# 基礎値が取れない手（敵の攻撃）の代用: max_hp の比のカーブ。
-STRENGTH_EXPONENT = 0.7
+# 魔王の一撃が駆け出しを即死させても違和感は無い。互角の相手には出ない
+# （レベル差の側の解禁は LEVEL_ELITE_GAP〜LEVEL_OUTCLASS_GAP）。
+DOMINANCE_START = 1.5
+DOMINANCE_FULL = 3.0
 
 # 軽減の上限。防御をどれだけ積んでも被ダメは4割残る。
 MITIGATION_MAX = 0.60
@@ -271,32 +236,15 @@ def band_of(power):
     return table.get(power, BAND_NORMAL) / 100.0
 
 
-def strength_ratio(attacker_max_hp, defender_max_hp):
-    """格差の係数（代用側）。max_hp の比を緩めて [MIN, MAX] に収める。"""
+def mitigation(defense):
+    """防御 → 軽減率 [0, MITIGATION_MAX]。引き算ではなく飽和曲線。"""
     try:
-        ratio = float(attacker_max_hp) / float(defender_max_hp)
+        defense = float(defense)
     except Exception:
-        return 1.0
-    if ratio <= 0:
-        return 1.0
-    return max(STRENGTH_MIN, min(STRENGTH_MAX, ratio ** STRENGTH_EXPONENT))
-
-
-def gear_factor(base_value, defender_max_hp):
-    """格差の係数（本命側）。武器と能力の伸びを与ダメに戻す項。
-
-    `base_value` はその手でゲーム自身が計算した基礎値（2×√(能力×武器)）。
-    受け側 max_hp を物差しに取り、[STRENGTH_MIN, GEAR_MAX] に収める。
-    傾きは `WEAPON_IMPACT`（設定）。読めない値なら 1.0（係数で事故らせない）。
-    """
-    try:
-        ratio = float(base_value) / (float(defender_max_hp) * GEAR_PIVOT)
-    except Exception:
-        return 1.0
-    if ratio <= 0:
-        return 1.0
-    exponent = max(1, WEAPON_IMPACT) / 100.0
-    return max(STRENGTH_MIN, min(STRENGTH_MAX, ratio ** exponent))
+        return 0.0
+    if defense <= 0:
+        return 0.0
+    return min(MITIGATION_MAX, defense / (defense + float(MITIGATION_PIVOT)))
 
 
 def _ramp(value, low, high, at_low, at_high):
@@ -335,48 +283,39 @@ def level_multiplier(gap):
     return mult if gap >= 0 else 1.0 / mult
 
 
-def oneshot_cap(factor, gap=0):
-    """その格差での1発の上限（割合）。
+def cap_fraction(gap, dominance):
+    """その格差での1発の上限（受け側 max_hp 比）。開き切ったら None（上限なし）。
 
-    互角〜そこそこの格差では `MAX_FRACTION`。
-    格差の係数（ONESHOT_START〜ONESHOT_FULL）か、攻める側が上のレベル差
-    （ELITE〜OUTCLASS）のどちらかが開くと上限がゆるみ、振り切れば 1.0
-    （＝満タンからの一撃）。圧倒的な格差だけが一撃を出せて、互角では出ない。
+    互角では `MAX_FRACTION`。
+    攻める側のレベル差（ELITE〜OUTCLASS）か火力差
+    （dominance = 火力 ÷ 受け側 max_hp が DOMINANCE_START〜FULL）の
+    どちらかが開くと上限がゆるみ、振り切れば外れる ＝ 相手の max_hp を超える
+    数字（過剰殺傷）がそのまま出る。圧倒的な格差だけが一撃を出せる。
     """
     top = MAX_FRACTION / 100.0
     if top >= 1.0:
-        return top
-    by_factor = _ramp(factor, ONESHOT_START, ONESHOT_FULL, top, 1.0)
-    by_level = _ramp(gap, LEVEL_ELITE_GAP, LEVEL_OUTCLASS_GAP, top, 1.0)
-    return max(by_factor, by_level)
-
-
-def mitigation(defense):
-    """防御 → 軽減率 [0, MITIGATION_MAX]。引き算ではなく飽和曲線。"""
+        return None
     try:
-        defense = float(defense)
+        dominance = float(dominance)
     except Exception:
-        return 0.0
-    if defense <= 0:
-        return 0.0
-    return min(MITIGATION_MAX, defense / (defense + float(MITIGATION_PIVOT)))
+        dominance = 0.0
+    by_level = _ramp(gap, LEVEL_ELITE_GAP, LEVEL_OUTCLASS_GAP, top, 1.0)
+    by_power = _ramp(dominance, DOMINANCE_START, DOMINANCE_FULL, top, 1.0)
+    opened = max(by_level, by_power)
+    return None if opened >= 1.0 else opened
 
 
-def hit_fraction(entries, attacker_max_hp, defender_max_hp, defense,
-                 out_mult=1.0, in_mult=1.0, base_value=None,
-                 attacker_level=None, defender_level=None, ally_floor=False,
-                 with_raw=False):
-    """1発が受け側の最大HPから持っていく割合。
+def hit_damage(entries, anchor, defender_max_hp, defense,
+               out_mult=1.0, in_mult=1.0,
+               attacker_level=None, defender_level=None):
+    """1発の最終ダメージ。錨は**攻め手の火力**（`anchor`）。
 
     `entries` はその対象への `[(power, multiplier), ...]`
     （1手で同じ相手に複数のエントリが乗ることがある。実測 §2.68）。
-    `base_value` はその手の基礎値（2×√(能力×武器)）。
-    取れた手は武器と能力が格差の係数として効き、
-    取れない手（敵と仲間。§2.69）は max_hp の比で代用する。
-    `ally_floor` は仲間の代用に限って係数を 1.0 で底上げする印
-    （仲間は max_hp が低くても「その場に立てている」以上、
-    敵と対等の一員として数える。武器が乗らないぶんの弱体化をここで受け止める）。
-    レベル差は独立の倍率で、高い側の与ダメが伸び、低い側は同じ率で割られる。
+    `anchor` はプレイヤーなら基礎値（2×√(能力×武器)）、
+    敵・仲間なら本人の max_hp（呼び出し側が選ぶ）。
+    受け側で決まるのは 軽減（防御）・レベル差の向き・上限と下限だけ。
+    「大きい相手ほど大きい数字」は出ない（版7までの割合式の不自然さ。実機の指摘）。
     """
     band_sum = 0.0
     for power, multiplier in entries:
@@ -385,20 +324,24 @@ def hit_fraction(entries, attacker_max_hp, defender_max_hp, defense,
         except Exception:
             multiplier = 1.0
         band_sum += band_of(power) * multiplier
-    if base_value is not None:
-        factor = gear_factor(base_value, defender_max_hp)
-    else:
-        factor = strength_ratio(attacker_max_hp, defender_max_hp)
-        if ally_floor:
-            factor = max(1.0, factor)
+    try:
+        anchor = float(anchor)
+    except Exception:
+        anchor = 0.0
     gap = level_gap(attacker_level, defender_level)
-    raw = (band_sum * factor * level_multiplier(gap)
-           * (1.0 - mitigation(defense))
-           * out_mult * in_mult)
-    fraction = max(MIN_FRACTION, min(oneshot_cap(factor, gap), raw))
-    if with_raw:
-        return fraction, raw
-    return fraction
+    damage = (band_sum * anchor * level_multiplier(gap)
+              * (1.0 - mitigation(defense))
+              * out_mult * in_mult)
+    try:
+        defender_max_hp = float(defender_max_hp)
+    except Exception:
+        defender_max_hp = 0.0
+    if defender_max_hp > 0:
+        cap = cap_fraction(gap, anchor / defender_max_hp)
+        if cap is not None:
+            damage = min(damage, cap * defender_max_hp)
+        damage = max(damage, defender_max_hp * MIN_FRACTION)
+    return max(1, int(round(damage)))
 
 
 def per_turn_amount(max_hp, power, intensity):
@@ -409,26 +352,6 @@ def per_turn_amount(max_hp, power, intensity):
     except Exception:
         scale = 1.0
     return max(1, int(round(max_hp * band * scale)))
-
-
-def overkill_final(fraction, raw_fraction, defender_max_hp, compressed):
-    """一撃の域（割合が 1.0 に達した）は、同じ式の上限を外した値で表現する。
-
-    割合で削ると、どれだけ強くても「相手の最大HPきっかり」までしか数字が
-    出ず、強化したキャラで格下を払う爽快感が消える（実機の指摘）。
-    かといって素の計算値（素点 − 防御）を借りると、普段 200〜300 の画面に
-    突然 1000 超が出て**物差しが途切れる**（これも実機の指摘。版6の誤り）。
-    同じ圧縮式の丸める前の値なら、数字は普段の帯と地続きのまま
-    相手の HP を大きく超える ― 例: 英雄(基礎896) → スライム(HP64) の normal は
-    割合 5.85 → 374 のダメージ（撃破）。過剰殺傷が見え、武器とレベルで伸びる。
-    """
-    if fraction >= 1.0 and isinstance(raw_fraction, (int, float)) \
-            and raw_fraction > 1.0:
-        try:
-            return max(compressed, int(round(defender_max_hp * raw_fraction)))
-        except Exception:
-            return compressed
-    return compressed
 
 
 def read_field(holder, name, default=None):
@@ -798,28 +721,30 @@ def apply(ctx):
             attacker_level = frames.attr(action["attacker"],
                                          "experience_level", None)
             defender_level = frames.attr(holder, "experience_level", None)
-            # 仲間の手は基礎値が取れない（§2.69）。max_hp の代用を 1.0 で
-            # 底上げして、HP の低い仲間が無力に見えないようにする。
-            ally_floor = (base_value is None and action["side"] == ALLY_SIDE)
-            fraction, raw_fraction = hit_fraction(
-                entries, attacker_max or defender_max,
-                defender_max, defense,
-                out_mult=out_mult, in_mult=in_mult,
-                base_value=base_value,
-                attacker_level=attacker_level,
-                defender_level=defender_level,
-                ally_floor=ally_floor, with_raw=True)
-            final = max(1, int(round(defender_max * fraction)))
-            final = overkill_final(fraction, raw_fraction, defender_max, final)
-            write("hit: {} -> {} {} raw={} vanilla={} base={} lv={}->{} "
-                  "fraction={:.3f} final={}{}{}".format(
+            # 火力の錨。プレイヤーは基礎値（武器×能力）、
+            # 基礎値の取れない敵・仲間は本人の max_hp。
+            # 仲間だけは受け側 max_hp を下限にする（HP の低い仲間が
+            # 無力に見えないための底上げ。§2.69 の版2から引き継ぎ）。
+            if base_value is not None:
+                anchor = base_value
+            elif action["side"] == ALLY_SIDE:
+                anchor = max(attacker_max or 0, defender_max)
+            else:
+                # 敵の錨（本人の max_hp）は素だと強く出過ぎる（ENEMY_POWER の
+                # 説明）。仲間とプレイヤーには掛けない。
+                anchor = (attacker_max or defender_max) * ENEMY_POWER / 100.0
+            final = hit_damage(entries, anchor, defender_max, defense,
+                               out_mult=out_mult, in_mult=in_mult,
+                               attacker_level=attacker_level,
+                               defender_level=defender_level)
+            write("hit: {} -> {} {} raw={} vanilla={} anchor={} lv={}->{} "
+                  "final={} ({:.0%} of {}){}{}".format(
                       attacker_name, defender_name,
                       "+".join("{}x{}".format(p, m) for p, m in entries),
-                      attack, result,
-                      int(base_value) if base_value else "-",
+                      attack, result, int(anchor),
                       attacker_level if attacker_level is not None else "?",
                       defender_level if defender_level is not None else "?",
-                      fraction, final,
+                      final, final / defender_max, int(defender_max),
                       " guard" if guard else "",
                       "" if out_mult == 1.0 and in_mult == 1.0 else
                       " mults=({:.2f},{:.2f})".format(out_mult, in_mult)))

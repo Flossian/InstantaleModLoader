@@ -1,0 +1,60 @@
+{
+  "entry": "probe_shop_stock.py",
+  "api": 1,
+  "kind": "probe",
+  "name": {
+    "en": "Shop stock probe",
+    "ja": "買った品が棚に戻る道"
+  },
+  "description": {
+    "en": "Records where a bought item comes back onto the shop's shelf. Every Item.__init__ with its id, obtainer, attributes and the game-side caller chain; the shop path boundaries (ShoppingStartManagerRemake.execute / shopping_start_method_1 / toggle_twin_inventory_window / buy_item / sell_item / close_shopping_window_process / the generators) with the keys added to and removed from both inventories; the facility's goods template with stock_tier and stock_update_date; and index['item']. Reading only",
+    "ja": "買った品が店の棚へ戻るのがどこかを録る。Item.__init__ ごとの id・持ち主・attributes とゲーム側の呼び出し元の連鎖、店の経路の境目（ShoppingStartManagerRemake.execute / shopping_start_method_1 / toggle_twin_inventory_window / buy_item / sell_item / close_shopping_window_process / 生成の3入口）ごとの主と手持ちの鍵の増減、施設の品揃えの雛形（goods・stock_tier・stock_update_date）、採番台帳 index['item']。読み取りだけでゲームは変えない"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "debug": true,
+  "settings": {
+    "ITEM_SAMPLES": {
+      "type": "int",
+      "default": 200,
+      "min": 0,
+      "max": 9999,
+      "label": {
+        "ja": "店の外で写す品の誕生の件数",
+        "en": "New items to record outside a shop"
+      },
+      "note": {
+        "ja": "店の場面の中は枠に関わらず全部写す。ロードのたびに何百も生まれるのはここで抑える",
+        "en": "Items born during a shop scene are always recorded; this caps the rest (a load creates hundreds)"
+      }
+    },
+    "BOUNDARY_SAMPLES": {
+      "type": "int",
+      "default": 400,
+      "min": 0,
+      "max": 99999,
+      "label": {
+        "ja": "写す境目の件数",
+        "en": "Boundaries to record"
+      },
+      "note": {
+        "ja": "持ち物・採番台帳・品揃えの雛形のどれかが動いた呼び出しだけ数える。動いていない呼び出しは書かない",
+        "en": "Only calls that moved an inventory, the id ledger or the goods template are counted"
+      }
+    },
+    "CALLER_DEPTH": {
+      "type": "int",
+      "default": 8,
+      "min": 1,
+      "max": 40,
+      "label": {
+        "ja": "呼び出し元を遡る段数",
+        "en": "How far back to walk the caller chain"
+      },
+      "note": {
+        "ja": "ローダと MOD のフレームは飛ばして、ゲーム側だけを数える",
+        "en": "Loader and mod frames are skipped; only game frames are counted"
+      }
+    }
+  }
+}

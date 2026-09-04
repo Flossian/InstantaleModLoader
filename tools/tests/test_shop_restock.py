@@ -124,12 +124,14 @@ class ShoppingStartManagerRemake:
 
     counter = [0]
 
-    def __init__(self, app, refills=True, defer=False, tier=2):
+    def __init__(self, app, refills=True, defer=False, tier=2, tops_up=False):
         self.app = app
         self.refills = refills
         self.defer = defer
         self.tier = tier
+        self.tops_up = tops_up
         self.generated = []
+        self.topped_up = []
 
     def execute(self, choice_text):
         location = self.app.player.location
@@ -142,6 +144,13 @@ class ShoppingStartManagerRemake:
                     lambda dt: self.set_item_from_world_data(owner, self.tier), 0)
             else:
                 self.set_item_from_world_data(owner, self.tier)
+        elif owner is not None and owner.inventory and self.tops_up:
+            # 素のゲームの作り直し（実測。VERIFICATION.md §3.52）。
+            # 開くたびに雛形から1つ作って棚へ入れる。鍵は `item_` の付かない裸の数字。
+            self.counter[0] += 1
+            key = str(50 + self.counter[0])
+            owner.inventory[key] = {"name": "作り直された薬"}
+            self.topped_up.append(key)
         return "shopping"
 
     def set_item_from_world_data(self, shop_owner_instance, next_tier):
@@ -265,8 +274,13 @@ def make_world(days, stock, world_name="テスト世界", location_as_id=False):
     return app, owner, facility
 
 
-def fresh_mod(restock_days=30, first_visit=False, keep_state=False):
-    """mod を読み直して当て直す。**世代をまたぐ控えは毎回捨てる。**"""
+def fresh_mod(restock_days=30, first_visit=False, keep_state=False,
+              keep_sold_out=True):
+    """mod を読み直して当て直す。**世代をまたぐ控えは毎回捨てる。**
+
+    ログも捨てる（`ctx.logger` は追記なので、
+    残すと前の場面の行を今の場面の記録として読んでしまう）。
+    """
     sys.modules.pop("shop_restock_mod", None)
     module = load_mod()
     if not keep_state:
@@ -275,9 +289,21 @@ def fresh_mod(restock_days=30, first_visit=False, keep_state=False):
                 delattr(sys, attr)
     module.RESTOCK_DAYS = restock_days
     module.RESTOCK_ON_FIRST_SHOP = first_visit
+    module.KEEP_SOLD_OUT = keep_sold_out
+    log_path = os.path.join(OUT_DIR, module.LOG_BASENAME)
+    if os.path.exists(log_path):
+        os.remove(log_path)
     ctx = FakeCtx(OUT_DIR, STATE_DIR)
     module.apply(ctx)
     return module, ctx
+
+
+def read_log(module):
+    path = os.path.join(OUT_DIR, module.LOG_BASENAME)
+    if not os.path.isfile(path):
+        return ""
+    with io.open(path, encoding="utf-8") as fh:
+        return fh.read()
 
 
 def shop(ctx, manager, choice_text="商品を見せてもらう"):
@@ -413,6 +439,55 @@ def main():
           (owner.inventory, manager.generated))
     check("直呼び: 控えの日も進む",
           (state_file() or {}).get(OWNER_ID, {}).get("day") == 400, state_file())
+
+    # -- 買った品の作り直しを止める（KEEP_SOLD_OUT）----------------------
+    reset_state()
+    module, ctx = fresh_mod()
+    app, owner, facility = make_world(days=100, stock={"item_1": {"name": "薬"}})
+    manager = ShoppingStartManagerRemake(app, tops_up=True)
+    shop(ctx, manager)
+    check("補充止め: ゲームが作り直したぶんを外す",
+          list(owner.inventory) == ["item_1"], owner.inventory)
+    check("補充止め: ゲーム自身は作っている（止めたのはこちら）",
+          manager.topped_up, manager.topped_up)
+    check("補充止め: 記録に残る", "kept sold out" in read_log(module),
+          read_log(module))
+    shop(ctx, manager)
+    check("補充止め: 何度開いても増えない",
+          list(owner.inventory) == ["item_1"], owner.inventory)
+
+    # 切れば素のゲームのまま。
+    module, ctx = fresh_mod(keep_sold_out=False)
+    shop(ctx, manager)
+    check("補充止め: 切ると素のまま増える",
+          len(owner.inventory) == 2, owner.inventory)
+    check("補充止め: 切ったときは記録も出ない",
+          "kept sold out" not in read_log(module), read_log(module))
+
+    # -- 止めても初回の品揃えは作らせる ----------------------------------
+    reset_state()
+    module, ctx = fresh_mod()
+    app, owner, facility = make_world(days=100, stock={})
+    manager = ShoppingStartManagerRemake(app)
+    shop(ctx, manager)
+    check("初回の空の店: 品揃えを作らせる", len(owner.inventory) == 3,
+          owner.inventory)
+    check("初回の空の店: 外した記録は出ない",
+          "kept sold out" not in read_log(module), read_log(module))
+
+    # -- 一度開いた店を買い占めたら空のまま ------------------------------
+    reset_state()
+    module, ctx = fresh_mod()
+    app, owner, facility = make_world(days=100, stock={"item_1": {"name": "薬"}})
+    manager = ShoppingStartManagerRemake(app)
+    shop(ctx, manager)                      # 初回（控えを作る）
+    owner.inventory.clear()                 # 買い占めた
+    shop(ctx, manager)
+    check("買い占め: 品揃えは戻らない", owner.inventory == {}, owner.inventory)
+    app.world.days_elapsed = 200
+    shop(ctx, manager)
+    check("買い占め: 入れ替えの日には作り直す（止めない）",
+          len(owner.inventory) == 3, owner.inventory)
 
     # -- 世界が違えば混ざらない ------------------------------------------
     reset_state()

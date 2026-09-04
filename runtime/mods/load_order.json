@@ -36,6 +36,7 @@
     "118_batch_message_render",
     "122_ui_conversation_log",
     "133_ui_area_difficulty",
+    "134_balance_item_effects",
     "200_probe_bug_sites",
     "201_probe_missing_attr",
     "202_probe_summarizers",
@@ -60,6 +61,7 @@
     "314_area_move_custom",
     "307_area_move_dungeon",
     "325_road_opening",
+    "326_npc_travel",
     "308_battle_damage_display",
     "309_office_pardon",
     "311_npc_profile_memory",
@@ -90,7 +92,9 @@
     "222_probe_battle_mechanics",
     "223_probe_party_equipment",
     "224_probe_npc_carryover",
-    "225_probe_area_quest_difficulty"
+    "225_probe_area_quest_difficulty",
+    "226_probe_item_consume",
+    "227_probe_shop_stock"
   ],
   "disabled": []
 }

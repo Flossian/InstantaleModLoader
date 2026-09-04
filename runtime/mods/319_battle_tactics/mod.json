@@ -7,48 +7,48 @@
     "ja": "戦闘のバランス調整とバフ・デバフの有効化"
   },
   "description": {
-    "en": "Stops evenly-matched battles from ending in one hit. Damage now takes a share of the target's health decided by how heavy the AI referee judged the blow: equals trade five to eight blows and a boss's finisher hurts badly without killing you from full health. One-shots still exist where they should. A legendary hero swats a starter-village slime in one blow, and an overwhelming foe can do the same to a novice; only a real gulf in strength allows it. Weapons matter more than ever: each weapon tier visibly cuts how many blows the same enemy takes (a top blade needs 8 where a starter knife needs 20), and armor still softens what you take. Poison, curses and stat drops the referee describes now actually change the numbers, and a Guard entry in the skill list (or typing something defensive) halves what you take until your next move",
-    "ja": "互角の戦闘が一撃で終わらなくなる。ダメージは「相手の体力を何割削るか」で決まるようになり、その割合は AI の審判が裁いた攻撃の重さで動く。同格とは5〜8回の殴り合いになり、ボスの大技は手痛いが満タンから即死はしない。一撃が出るべき場面では出る。最強の英雄は初期村の魔物を一撃で払い、圧倒的な強敵は駆け出しを一撃で沈める。格がまるごと離れたときだけそうなる。武器はこれまで以上に物を言い、一段いい武器に替えるたびに同じ相手への手数が目に見えて減る（同格相手で、最強の剣なら8手、初期装備級なら20手）。防具は受けるダメージを減らす。審判が語ってくる毒や能力低下がちゃんと数字に効くようになり、スキル一覧に加わる「防御」（自由入力で防御的に動いてもよい）で次の行動まで被ダメージを半分にできる"
+    "en": "Stops evenly-matched battles from ending in one hit. The size of a blow comes from your own weapon and abilities (and how heavy the AI referee judged it), so the number stays in the same band whether you hit a mook or a boss; tough or higher-level foes just take less, and fights last as long as the target's health deserves. Equals trade about eight blows, a boss's finisher hurts badly without killing you from full health, and one-shots still exist where they should: a legendary hero swats a starter-village slime, an overwhelming foe fells a novice. Poison, curses and stat drops the referee describes now actually change the numbers, and a Guard entry in the skill list (or typing something defensive) halves what you take until your next move",
+    "ja": "互角の戦闘が一撃で終わらなくなる。一撃の大きさは自分の武器と能力（と AI の審判が裁いた攻撃の重さ）で決まり、相手が雑魚でもボスでも同じ帯の数字が出る。硬い相手・格上には通りが悪くなり、決着の手数は相手の体力なりに伸びる。同格とは8回前後の殴り合いになり、ボスの大技は手痛いが満タンから即死はしない。一撃が出るべき場面では出る。最強の英雄は初期村の魔物を一撃で払い、圧倒的な強敵は駆け出しを一撃で沈める。審判が語ってくる毒や能力低下がちゃんと数字に効くようになり、スキル一覧に加わる「防御」（自由入力で防御的に動いてもよい）で次の行動まで被ダメージを半分にできる"
   },
-  "version": "7",
+  "version": "9",
   "author": "R01/Flossian",
   "settings": {
     "BAND_WEAK": {
       "type": "int",
-      "default": 10,
+      "default": 18,
       "min": 1,
       "max": 100,
       "label": {
-        "ja": "弱い一撃が削る割合（%）",
-        "en": "A weak hit takes (%)"
+        "ja": "弱い一撃の強さ（火力の%）",
+        "en": "A weak hit carries (% of power)"
       },
       "note": {
-        "ja": "AIの審判が「弱い」と裁いた攻撃が、相手の体力の何%を削るかの基準。裁きは5段階あり、これはいちばん下",
-        "en": "How much of the target's health a hit the AI referee calls weak takes. The referee grades every blow on five steps; this is the lowest"
+        "ja": "AIの審判が「弱い」と裁いた一撃が、自分の火力の何%か。火力は武器と能力から決まり、相手が誰でも同じ帯の数字が出る",
+        "en": "How much of your own power a hit judged weak carries. Power comes from your weapon and abilities, so the number stays in the same band whoever you hit"
       }
     },
     "BAND_NORMAL": {
       "type": "int",
-      "default": 16,
+      "default": 30,
       "min": 1,
       "max": 100,
       "label": {
-        "ja": "普通の一撃が削る割合（%）",
-        "en": "A normal hit takes (%)"
+        "ja": "普通の一撃の強さ（火力の%）",
+        "en": "A normal hit carries (% of power)"
       },
       "note": {
-        "ja": "同じ強さの相手となら5〜8回の殴り合いになる高さにしてある",
-        "en": "Tuned so equals trade five to eight blows"
+        "ja": "同じ強さの相手となら7回前後の殴り合いになる高さにしてある",
+        "en": "Tuned so equals trade about seven blows"
       }
     },
     "BAND_STRONG": {
       "type": "int",
-      "default": 25,
+      "default": 45,
       "min": 1,
       "max": 100,
       "label": {
-        "ja": "強い一撃が削る割合（%）",
-        "en": "A strong hit takes (%)"
+        "ja": "強い一撃の強さ（火力の%）",
+        "en": "A strong hit carries (% of power)"
       },
       "note": {
         "ja": "スキルの一撃はだいたいこの段になる",
@@ -57,12 +57,12 @@
     },
     "BAND_VERY_STRONG": {
       "type": "int",
-      "default": 38,
+      "default": 65,
       "min": 1,
       "max": 100,
       "label": {
-        "ja": "大技が削る割合（%）",
-        "en": "A heavy blow takes (%)"
+        "ja": "大技の強さ（火力の%）",
+        "en": "A heavy blow carries (% of power)"
       },
       "note": {
         "ja": "2発は耐えられるが3発目は無い高さ",
@@ -71,12 +71,12 @@
     },
     "BAND_EXTREME": {
       "type": "int",
-      "default": 55,
+      "default": 90,
       "min": 1,
       "max": 100,
       "label": {
-        "ja": "必殺級が削る割合（%）",
-        "en": "A finisher takes (%)"
+        "ja": "必殺級の強さ（火力の%）",
+        "en": "A finisher carries (% of power)"
       },
       "note": {
         "ja": "ボスの切り札。これが来そうなときが防御の出番",
@@ -123,6 +123,20 @@
       "note": {
         "ja": "「防御」してから次に自分が動くまで、受けるダメージからこの分を引く",
         "en": "Applied to everything you take between guarding and your next move"
+      }
+    },
+    "ENEMY_POWER": {
+      "type": "int",
+      "default": 50,
+      "min": 10,
+      "max": 200,
+      "label": {
+        "ja": "敵の火力（%）",
+        "en": "Enemy power (%)"
+      },
+      "note": {
+        "ja": "敵の一撃の強さ。仲間には掛からない。50 で、雑魚の群れとの1戦で減る体力が2割前後になり、回復なしの連戦が成り立つ。上げるほど歯応えが増す",
+        "en": "Scales every enemy blow (allies are untouched). At 50 a pack of mooks costs about a fifth of your health, so chained dungeon fights without healing stay possible. Raise it for a harder game"
       }
     },
     "LEVEL_FAIR_GAP": {
@@ -193,20 +207,6 @@
       "note": {
         "ja": "レベルが「格が違う」差だけ上の側に掛かる倍率。300 で3倍。合わせて一撃の上限も外れる",
         "en": "Applied at the outclass gap. 300 means triple, and the one-hit cap opens as well"
-      }
-    },
-    "WEAPON_IMPACT": {
-      "type": "int",
-      "default": 75,
-      "min": 25,
-      "max": 150,
-      "label": {
-        "ja": "武器の効きの強さ",
-        "en": "How much the weapon matters"
-      },
-      "note": {
-        "ja": "大きいほど、武器の良し悪しがダメージに強く出る。75 で、武器を一段いいものに替えるたびに同じ相手への手数がはっきり減る。100 にすると差はさらに急で、最強武器は格下を2手で落とす。50 だと武器差はゆるやか",
-        "en": "Higher makes the weapon's quality show more in your damage. At 75 each better weapon visibly cuts the blows an enemy takes; at 100 the gap is steeper still and a top weapon drops weak foes in two; at 50 weapons matter only mildly"
       }
     },
     "RESTORE_EFFECTS": {

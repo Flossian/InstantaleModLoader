@@ -113,6 +113,7 @@ BANDS = (
         "125_balance_charisma_impression",
         "128_item_image_variety",
         "129_balance_item_price",
+        "134_balance_item_effects",
         "130_currency_unit",
         "131_sharp_portrait",
         "132_npc_variety",
@@ -157,6 +158,7 @@ BANDS = (
         "323_npc_carryover",
         "324_place_bgm",
         "325_road_opening",
+        "326_npc_travel",
     )),
     ("feature", CONTRIB_HEAD, (
         "401_battle_character_context",

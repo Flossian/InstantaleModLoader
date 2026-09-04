@@ -1,0 +1,106 @@
+{
+  "entry": "npc_travel.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "NPC travel",
+    "ja": "NPCの街移動"
+  },
+  "description": {
+    "en": "Guild adventurers you know leave on trips: to another town's guild or inn for 1-3 months, or to another facility in the same town for a week. Every town keeps at least two. They come back on their own",
+    "ja": "友好度の高いギルドの冒険者が旅に出る。別の街のギルドか宿に1〜3ヶ月、または同じ街の別の施設に7日。各街に必ず2人は残り、期限が来れば帰ってくる"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "settings": {
+    "DEPART_CHANCE_PERCENT": {
+      "type": "int",
+      "default": 30,
+      "min": 0,
+      "max": 100,
+      "label": {"ja": "月あたりの出発確率（%）", "en": "Departure chance per month (%)"},
+      "note": {"ja": "冒険者1人あたり。日が進むたびに日数ぶんだけ引く。0 で誰も出ない",
+               "en": "Per adventurer. Rolled over the days that pass. 0 disables"}
+    },
+    "LOCAL_CHANCE_PERCENT": {
+      "type": "int",
+      "default": 50,
+      "min": 0,
+      "max": 100,
+      "label": {"ja": "同じ街の中へ向かう割合（%）", "en": "Share of trips inside the same town (%)"},
+      "note": {"ja": "残りは別の街へ。行き先の無いほうへは行かない",
+               "en": "The rest go to another town. A side with no candidate is never picked"}
+    },
+    "STAY_MIN": {
+      "type": "int",
+      "default": 2,
+      "min": 0,
+      "max": 9,
+      "label": {"ja": "各街に残す人数", "en": "Adventurers kept in each town"},
+      "note": {"ja": "ギルドの一覧に出る人がこの人数を切るような出発はしない",
+               "en": "Nobody leaves if the guild list would drop below this"}
+    },
+    "AFFINITY_MIN": {
+      "type": "int",
+      "default": 20,
+      "min": -100,
+      "max": 200,
+      "label": {"ja": "出発できる友好度", "en": "Affinity needed to travel"},
+      "note": {"ja": "会ったことのある冒険者だけが動く。出発の瞬間だけ見る",
+               "en": "Only adventurers you have met move. Checked at departure"}
+    },
+    "AWAY_DAYS_MIN": {
+      "type": "int",
+      "default": 30,
+      "min": 1,
+      "max": 365,
+      "label": {"ja": "別の街への滞在（下限・日）", "en": "Stay in another town (min days)"}
+    },
+    "AWAY_DAYS_MAX": {
+      "type": "int",
+      "default": 90,
+      "min": 1,
+      "max": 365,
+      "label": {"ja": "別の街への滞在（上限・日）", "en": "Stay in another town (max days)"},
+      "note": {"ja": "下限と上限の間で日単位に引く。既定 30〜90 ＝ 1〜3ヶ月",
+               "en": "Uniform in days between min and max. 30..90 = 1..3 months"}
+    },
+    "LOCAL_DAYS": {
+      "type": "int",
+      "default": 7,
+      "min": 1,
+      "max": 365,
+      "label": {"ja": "同じ街の中の滞在（日）", "en": "Stay inside the same town (days)"}
+    },
+    "CAPACITY_PER_FACILITY": {
+      "type": "int",
+      "default": 2,
+      "min": 0,
+      "max": 20,
+      "label": {"ja": "1施設に来られる人数", "en": "Travelers per facility"},
+      "note": {"ja": "旅で来ている人がこの人数の施設へはもう行かない。0 で上限なし",
+               "en": "A facility already holding this many travelers takes no more. 0 = unlimited"}
+    },
+    "RETURN_ALL_ON_LOAD": {
+      "type": "bool",
+      "default": false,
+      "label": {"ja": "ロード時に全員を帰す", "en": "Return everyone on load"},
+      "note": {"ja": "MODを外す前の片付け。入れてロードし、セーブしてから外す",
+               "en": "Cleanup before removing the mod: enable, load, save, then remove"}
+    },
+    "AWAY_CONTEXT": {
+      "type": "str",
+      "default": "{name}は{origin}から旅をして来て、いまは{where}に滞在している（あと{days}日ほど）。",
+      "label": {"ja": "別の街で話すときに足す1文", "en": "Line added when met in another town"},
+      "note": {"ja": "会話の文脈にだけ入る（画面には出ない）。空で足さない。使える変数: {name} {origin} {where} {days}",
+               "en": "Goes into the conversation context only. Empty disables. Variables: {name} {origin} {where} {days}"}
+    },
+    "LOCAL_CONTEXT": {
+      "type": "str",
+      "default": "{name}はいつものギルドを離れ、いまは{where}に来ている（あと{days}日ほど）。",
+      "label": {"ja": "同じ街の施設で話すときに足す1文", "en": "Line added when met elsewhere in town"},
+      "note": {"ja": "同上。使える変数: {name} {origin} {where} {days}",
+               "en": "Same. Variables: {name} {origin} {where} {days}"}
+    }
+  }
+}

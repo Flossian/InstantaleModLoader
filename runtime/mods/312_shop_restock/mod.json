@@ -7,10 +7,10 @@
     "ja": "店の品揃えの入れ替え"
   },
   "description": {
-    "en": "Regenerates a shop owner's stock after a number of in-game days, so the shop never stays clogged with what the player sold",
-    "ja": "ゲーム内で一定の日数が経った店の品揃えを入れ替える。売った品で埋まって売却できなくなるのを防ぐ"
+    "en": "Regenerates a shop owner's stock after a number of in-game days, and keeps the game from re-creating an item the moment it is bought",
+    "ja": "ゲーム内で一定の日数が経った店の品揃えを入れ替える。買った品がその場で作り直されて棚に戻るのも止める"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "settings": {
     "RESTOCK_DAYS": {
@@ -28,6 +28,13 @@
       "label": {"ja": "初回の来店でも入れ替える", "en": "Restock on the first visit"},
       "note": {"ja": "切っていると、初めて開いた店はその日を基準にするだけで素の品揃えのまま",
                "en": "When off, the first visit only records the day and leaves the original stock alone"}
+    },
+    "KEEP_SOLD_OUT": {
+      "type": "bool",
+      "default": true,
+      "label": {"ja": "買った品を作り直させない", "en": "Keep sold-out goods sold out"},
+      "note": {"ja": "素のゲームは店を開くたび、売れた装備以外（食料・薬・道具）を1つ作り直して棚へ戻す。切ると素のまま（同じ回復アイテムを何度でも買える）",
+               "en": "The unmodded game re-creates a sold item (anything but weapons and wearables) each time the shop is opened. When off, that stands"}
     }
   }
 }

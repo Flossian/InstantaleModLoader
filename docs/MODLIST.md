@@ -8,7 +8,7 @@
 手で書き換えても次の生成で消える。
 直す先は各 MOD の `mod.json` か MODS.md の見出し。
 
-同梱 91 本（基盤 2 / 修正 34 / 追加 29 / 計測 26）。
+同梱 95 本（基盤 2 / 修正 35 / 追加 30 / 計測 28）。
 うち 10 本は外部の MOD 作者からの提供（下の「提供を受けた MOD」）。
 
 並びはフォルダ名順。
@@ -36,7 +36,7 @@
 
 ---
 
-## 修正（34本）
+## 修正（35本）
 
 ゲームのバグ・不便を直す。
 
@@ -76,10 +76,11 @@
 | [`131_sharp_portrait`](MODS.md#131_sharp_portrait-立ち絵の縮小減色を通さず顔の検出をやり直す) | 立ち絵の高画質化と顔認識精度の向上 | 立ち絵の縮小・減色を通さず、顔の検出をやり直す | 2 |  |
 | [`132_npc_variety`](MODS.md#132_npc_variety-npc-の外見性格経歴に種を渡す) | NPC の外見・性格・経歴の多様化 | NPC の外見・性格・経歴に種を渡す | 7 |  |
 | [`133_ui_area_difficulty`](MODS.md#133_ui_area_difficulty-移動先に適正レベル帯を出す) | エリア毎に適正レベル帯の表示 | 移動先に適正レベル帯を出す | 9 |  |
+| [`134_balance_item_effects`](MODS.md#134_balance_item_effects-アイテムの効果を分類ごとに作り直す) | アイテム効果の調整 | アイテムの効果を分類ごとに作り直す | 18 |  |
 
 ---
 
-## 追加（29本）
+## 追加（30本）
 
 ゲームに無かった遊びを足す。
 
@@ -95,7 +96,7 @@
 | [`308_battle_damage_display`](MODS.md#308_battle_damage_display-戦闘のダメージ表示) | 戦闘のダメージ表示 | 戦闘のダメージ表示 | 7 |  |
 | [`309_office_pardon`](MODS.md#309_office_pardon-役場で罰金を納めて手配を解く) | 役場で手配を解く | 役場で罰金を納めて手配を解く | 4 |  |
 | [`311_npc_profile_memory`](MODS.md#311_npc_profile_memory-npcが会話の内容を覚える) | NPCが会話を覚える | NPCが会話の内容を覚える | 5 |  |
-| [`312_shop_restock`](MODS.md#312_shop_restock-日数経過で店の在庫を更新) | 店の品揃えの入れ替え | 日数経過で店の在庫を更新 | 2 |  |
+| [`312_shop_restock`](MODS.md#312_shop_restock-日数経過で店の在庫を更新) | 店の品揃えの入れ替え | 日数経過で店の在庫を更新 | 3 |  |
 | [`313_event_ability_check`](MODS.md#313_event_ability_check-行動の成否判定に能力値を効かせる) | 行動判定に能力値を効かせる | 行動の成否判定に能力値を効かせる | 9 |  |
 | [`314_area_move_custom`](MODS.md#314_area_move_custom-エリア移動の日数料金文言を変える) | 街移動のカスタマイズ | エリア移動の日数・料金・文言を変える | 16 |  |
 | [`315_vacation_custom`](MODS.md#315_vacation_custom-宿の宿泊期間部屋宿代を変える) | 宿泊のカスタマイズ | 宿の宿泊期間・部屋・宿代を変える | 14 |  |
@@ -109,6 +110,7 @@
 | [`323_npc_carryover`](MODS.md#323_npc_carryover-別の世界のnpcを連れてくる) | 別の世界のNPCを連れてくる | 別の世界のNPCを連れてくる | 4 |  |
 | [`324_place_bgm`](MODS.md#324_place_bgm-施設と土地のbgmを置いた曲から選んで鳴らす) | 街・施設BGMの選曲 | 施設と土地のBGMを置いた曲から選んで鳴らす | 4 |  |
 | [`325_road_opening`](MODS.md#325_road_opening-街と街を結ぶ新しい道を切り開く) | 新たな道を探す | 街と街を結ぶ新しい道を切り開く | 18 |  |
+| [`326_npc_travel`](MODS.md#326_npc_travel-npcの街移動) | NPCの街移動 | NPCの街移動 | 11 |  |
 | [`401_battle_character_context`](MODS.md#401_battle_character_context-戦闘の審判へ同行者の人物と装備を見せる) | 戦闘キャラクター情報補完 | 戦闘の審判へ同行者の人物と装備を見せる | - |  |
 | [`402_party_inventory_transfer`](MODS.md#402_party_inventory_transfer-仲間とアイテムを受け渡しできる) | パーティーメンバー：アイテム受け渡し | 仲間とアイテムを受け渡しできる | - |  |
 | [`403_npc_social_memory`](MODS.md#403_npc_social_memory-npc同士がお互いを認知し関係を覚える) | NPC同士の認知と関係記憶 | NPC同士がお互いを認知し、関係を覚える | 5 |  |
@@ -117,7 +119,7 @@
 
 ---
 
-## 計測（26本）
+## 計測（28本）
 
 ゲームは変えない。`out\` にログを残すだけ。デバッグモードのときだけ読み込まれる。
 
@@ -149,6 +151,8 @@
 | `223_probe_party_equipment` | 本体のアイテム popup と `ItemEquipManager` / `ItemUnequipManager` の入口を観測し、素のゲームが実際に誰の `equipments` を書き換えるかを測る |
 | `224_probe_npc_carryover` | ロードのどの地点から世界へ NPC を入れられるかを測る |
 | `225_probe_area_quest_difficulty` | 街を初めて訪ねたとき、その街の依頼の難易度を誰がどう決めているかを録る |
+| `226_probe_item_consume` | 回復アイテムを使ったとき実際に何が起きるかを録る |
+| `227_probe_shop_stock` | 買った品が店の棚へ戻るのはどこかを録る |
 
 ---
 

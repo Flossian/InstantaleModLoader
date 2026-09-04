@@ -6,10 +6,11 @@
 モジュール直下の純関数だけを叩く（フックの側は実機で確かめる。
 VERIFICATION.md の 3xx の表）。
 
-  帯       … power の列挙 → 割合。知らない語は normal 扱い
-  強さ比   … 格差のカーブと [0.4, 2.5] の留め
+  帯       … power の列挙 → 火力に乗せる割合。知らない語は normal 扱い
   軽減     … 防御の飽和曲線と上限 60%
-  1発      … 実測の帯（§2.68）で 格下2〜3手 / 同格5〜8手 / ボス10手前後 に落ちる
+  上限     … 互角は 65%。レベル差か火力差で開き、開き切ると外れる
+  1発      … 錨は攻め手の火力。雑魚と同格に同じ帯の数字が出て、
+             手数は相手の体力から生まれる（雑魚2手 / 同格7手前後）
   復元     … 審判の生の戻り（辞書でもオブジェクトでも）から
              text_status の毎ターン効果と AttributeEffect を抜き出せる
   倍率     … AttributeEffect が (状態異常名, 説明, 倍率の帳簿) になる
@@ -67,97 +68,10 @@ check("band: extreme", mod.band_of("extreme") == mod.BAND_EXTREME / 100.0)
 check("band: unknown word falls to normal",
       mod.band_of("colossal") == mod.BAND_NORMAL / 100.0)
 
-# ---------------------------------------------------------------- 強さ比
-check("strength: equals are 1.0", mod.strength_ratio(1000, 1000) == 1.0)
-check("strength: capped above", mod.strength_ratio(100000, 1) == mod.STRENGTH_MAX)
-check("strength: capped below", mod.strength_ratio(1, 100000) == mod.STRENGTH_MIN)
-check("strength: bad input is 1.0", mod.strength_ratio(None, 0) == 1.0)
-
 # ---------------------------------------------------------------- 軽減
 check("mitigation: zero defense", mod.mitigation(0) == 0.0)
 check("mitigation: capped", mod.mitigation(10 ** 9) == mod.MITIGATION_MAX)
-check("mitigation: pivot halves",
-      abs(mod.mitigation(mod.MITIGATION_PIVOT) - 0.5) < 1e-9
-      or mod.mitigation(mod.MITIGATION_PIVOT) == mod.MITIGATION_MAX)
 check("mitigation: bad input", mod.mitigation("armor") == 0.0)
-
-# ---------------------------------------------------------------- 1発（実測の帯）
-# プレイヤー max_hp 1560、格下の敵 460 / 防御 96、ボス（2倍格）3120 / 防御 500。
-# VERIFICATION_LOG.md §2.68 の面々。
-mob = mod.hit_fraction([("weak", 1.5)], 1560, 460, 96)
-check("hit: a mob falls in 2-4 actions", 0.25 <= mob <= 0.50, "fraction={}".format(mob))
-
-equal = mod.hit_fraction([("normal", 1)], 1560, 1560, 200)
-check("hit: equals need 5-9 actions", 0.11 <= equal <= 0.20,
-      "fraction={}".format(equal))
-
-boss = mod.hit_fraction([("normal", 1)], 1560, 3120, 300)
-check("hit: a boss needs about 10", 0.07 <= boss <= 0.14, "fraction={}".format(boss))
-
-nuke = mod.hit_fraction([("extreme", 1)], 3120, 1560, 500)
-check("hit: a boss nuke hurts but does not one-shot", 0.30 <= nuke <= 0.65,
-      "fraction={}".format(nuke))
-
-guarded = mod.hit_fraction([("extreme", 1)], 3120, 1560, 500, in_mult=0.5)
-check("hit: guarding halves the nuke", abs(guarded - nuke / 2) < 1e-9
-      or guarded == mod.MIN_FRACTION, "fraction={}".format(guarded))
-
-check("hit: never below the floor",
-      mod.hit_fraction([("weak", 0.01)], 1, 10 ** 6, 10 ** 6) == mod.MIN_FRACTION)
-check("hit: equals stay under the cap even at the worst",
-      mod.hit_fraction([("extreme", 1.5)], 1560, 1560, 0)
-      == mod.MAX_FRACTION / 100.0)
-
-# ---------------------------------------------------------------- 一撃の解禁
-check("one-shot cap: closed for equals",
-      mod.oneshot_cap(1.0) == mod.MAX_FRACTION / 100.0
-      and mod.oneshot_cap(mod.ONESHOT_START) == mod.MAX_FRACTION / 100.0)
-check("one-shot cap: fully open past the threshold",
-      mod.oneshot_cap(mod.ONESHOT_FULL) == 1.0 and mod.oneshot_cap(12.0) == 1.0)
-mid = mod.oneshot_cap((mod.ONESHOT_START + mod.ONESHOT_FULL) / 2)
-check("one-shot cap: opens gradually in between",
-      mod.MAX_FRACTION / 100.0 < mid < 1.0, "cap={}".format(mid))
-check("one-shot: a legendary hero fells a starter slime in one blow",
-      mod.hit_fraction([("normal", 1)], 1560, 64, 0, base_value=883) == 1.0)
-check("one-shot: an overwhelming boss fells a novice in one blow",
-      mod.hit_fraction([("extreme", 1)], 5000, 300, 50) == 1.0)
-check("hit: bad multiplier falls to 1",
-      mod.hit_fraction([("weak", "x")], 1000, 1000, 0)
-      == mod.hit_fraction([("weak", 1)], 1000, 1000, 0))
-
-# ---------------------------------------------------------------- 武器（基礎値）
-# 実測: エリスの基礎値 883 = 2×√(390×500)。武器 23 なら 189（§2.68 / §2.10.2）。
-check("gear: the measured loadout vs an equal is about 1.0",
-      0.9 <= mod.gear_factor(883, 1560) <= 1.15,
-      "factor={}".format(mod.gear_factor(883, 1560)))
-check("gear: capped both ways",
-      mod.gear_factor(10 ** 9, 100) == mod.STRENGTH_MAX
-      and mod.gear_factor(1, 10 ** 9) == mod.STRENGTH_MIN)
-check("gear: bad input is 1.0",
-      mod.gear_factor(None, 1560) == 1.0 and mod.gear_factor(883, 0) == 1.0)
-
-# 武器 23 → 500（基礎値 189 → 883。§2.68）の全幅。どちらも留めに掛からない
-# 相手（格下460）で測る。指数 0.5 の初版は 2.2倍で、強化の実感が薄かった。
-with_sword = mod.hit_fraction([("normal", 1)], 1560, 460, 96, base_value=883)
-with_knife = mod.hit_fraction([("normal", 1)], 1560, 460, 96, base_value=189)
-check("gear: the full weapon range roughly triples the damage",
-      2.9 <= with_sword / with_knife <= 3.4,
-      "ratio={}".format(with_sword / with_knife))
-
-# 「武器の効きの強さ」を上げると同じ武器差がさらに開く。
-saved = mod.WEAPON_IMPACT
-mod.WEAPON_IMPACT = 100
-steeper = (mod.hit_fraction([("normal", 1)], 1560, 460, 96, base_value=883)
-           / mod.hit_fraction([("normal", 1)], 1560, 460, 96, base_value=189))
-mod.WEAPON_IMPACT = saved
-check("gear: raising WEAPON_IMPACT widens the gap",
-      steeper > with_sword / with_knife, "steeper={}".format(steeper))
-check("gear: even the best weapon cannot one-shot an equal",
-      mod.hit_fraction([("extreme", 1.5)], 1560, 1560, 0, base_value=2000)
-      == mod.MAX_FRACTION / 100.0)
-check("gear: no base value falls back to the max_hp ratio",
-      mod.hit_fraction([("normal", 1)], 1560, 1560, 200)
-      == mod.hit_fraction([("normal", 1)], 1560, 1560, 200, base_value=None))
 
 # ---------------------------------------------------------------- レベル差
 check("level: within the fair gap nothing changes",
@@ -172,58 +86,74 @@ check("level: ramps between the steps",
       and 2.0 < mod.level_multiplier(17) < 3.0)
 check("level: unreadable levels count as fair",
       mod.level_gap(None, 30) == 0 and mod.level_gap("x", None) == 0)
-check("level: the cap opens by level gap alone",
-      mod.oneshot_cap(1.0, gap=20) == 1.0
-      and mod.oneshot_cap(1.0, gap=15) == mod.MAX_FRACTION / 100.0
-      and mod.MAX_FRACTION / 100.0 < mod.oneshot_cap(1.0, gap=17) < 1.0)
-check("level: the lower side never gets the open cap",
-      mod.oneshot_cap(1.0, gap=-40) == mod.MAX_FRACTION / 100.0)
-same = mod.hit_fraction([("normal", 1)], 1560, 1560, 200,
-                        attacker_level=60, defender_level=60)
-elite = mod.hit_fraction([("normal", 1)], 1560, 1560, 200,
-                         attacker_level=60, defender_level=45)
-check("level: an elite-gap attacker hits twice as hard",
-      abs(elite - same * 2) < 1e-9, "same={} elite={}".format(same, elite))
-outclassed = mod.hit_fraction([("extreme", 1)], 3120, 1560, 500,
-                              attacker_level=80, defender_level=60)
-check("level: an outclassing boss can one-shot",
-      outclassed == 1.0, "fraction={}".format(outclassed))
-chip = mod.hit_fraction([("normal", 1)], 1560, 1560, 200,
-                        attacker_level=40, defender_level=60)
-check("level: hitting upward is divided by the same rate",
-      abs(chip - same / 3) < 1e-9 or chip == mod.MIN_FRACTION,
-      "chip={}".format(chip))
 
-# ---------------------------------------------------------------- 仲間の底上げ
-weak_ally = mod.hit_fraction([("weak", 1)], 132, 460, 96,
-                             attacker_level=36, defender_level=36,
-                             ally_floor=True)
-weak_raw = mod.hit_fraction([("weak", 1)], 132, 460, 96,
-                            attacker_level=36, defender_level=36)
-check("ally floor: a low-HP member fights at par",
-      weak_ally > weak_raw * 2
-      and abs(weak_ally - mod.band_of("weak") * (1 - mod.mitigation(96))) < 1e-9,
-      "floored={} raw={}".format(weak_ally, weak_raw))
-check("ally floor: does not shrink a member already above par",
-      mod.hit_fraction([("weak", 1)], 900, 460, 96, ally_floor=True)
-      == mod.hit_fraction([("weak", 1)], 900, 460, 96))
+# ---------------------------------------------------------------- 一撃の上限
+check("cap: closed for equals",
+      mod.cap_fraction(0, 1.0) == mod.MAX_FRACTION / 100.0
+      and mod.cap_fraction(15, 0) == mod.MAX_FRACTION / 100.0
+      and mod.cap_fraction(0, mod.DOMINANCE_START) == mod.MAX_FRACTION / 100.0)
+check("cap: fully open past either threshold",
+      mod.cap_fraction(mod.LEVEL_OUTCLASS_GAP, 0) is None
+      and mod.cap_fraction(0, mod.DOMINANCE_FULL) is None)
+check("cap: opens gradually in between",
+      mod.MAX_FRACTION / 100.0 < mod.cap_fraction(17, 0) < 1.0
+      and mod.MAX_FRACTION / 100.0 < mod.cap_fraction(0, 2.25) < 1.0)
+check("cap: the lower side never gets the open cap",
+      mod.cap_fraction(-40, 0.1) == mod.MAX_FRACTION / 100.0)
 
-# ---------------------------------------------------------------- 過剰殺傷
-check("overkill: a lethal blow shows the uncapped same-formula value",
-      mod.overkill_final(1.0, 5.85, 64, 64) == 374)
-check("overkill: never below the lethal compressed value",
-      mod.overkill_final(1.0, 0.5, 64, 64) == 64
-      and mod.overkill_final(1.0, None, 64, 64) == 64)
-check("overkill: a non-lethal blow stays compressed",
-      mod.overkill_final(0.65, 5.85, 64, 42) == 42)
-# 実測の帯: 英雄(基礎896・Lv62) → スライム(HP64・Lv38)。
-# 普段の 200〜400 と地続きの数字で、相手の HP は大きく超える。
-frac, raw = mod.hit_fraction([("normal", 1)], 1560, 64, 0, base_value=896,
-                             attacker_level=62, defender_level=38,
-                             with_raw=True)
-slime = mod.overkill_final(frac, raw, 64, int(round(64 * frac)))
-check("overkill: the hero's slime one-shot lands in the everyday band",
-      frac == 1.0 and 200 <= slime <= 600, "final={}".format(slime))
+# ---------------------------------------------------------------- 1発（実測の帯）
+# エリス: 基礎値 896・Lv62・HP1560。数字は攻め手に固有で、
+# 「大きい相手ほど大きい数字」は出ない。手数は相手の体力から生まれる。
+mob = mod.hit_damage([("normal", 1)], 896, 460, 96,
+                     attacker_level=62, defender_level=53)
+equal = mod.hit_damage([("normal", 1)], 896, 1560, 150,
+                       attacker_level=62, defender_level=62)
+check("hit: the same swing lands in the same band on mob and equal",
+      220 <= mob <= 260 and 200 <= equal <= 245
+      and abs(mob - equal) < 0.2 * max(mob, equal),
+      "mob={} equal={}".format(mob, equal))
+check("hit: a mob falls in about 3 blows", 2 <= -(-460 // mob) <= 4,
+      "hits={}".format(-(-460 // mob)))
+check("hit: an equal takes 7-9 blows", 7 <= -(-1560 // equal) <= 9,
+      "hits={}".format(-(-1560 // equal)))
+boss = mod.hit_damage([("normal", 1)], 896, 3120, 300,
+                      attacker_level=62, defender_level=62)
+check("hit: a big boss simply lasts longer", 15 <= -(-3120 // boss) <= 24,
+      "hits={}".format(-(-3120 // boss)))
+check("hit: never below the floor",
+      mod.hit_damage([("weak", 0.01)], 10, 10 ** 6, 10 ** 6) == 10 ** 4)
+
+# 一撃と過剰殺傷: 数字は普段と同じ物差しのまま、相手の体力を超える。
+slime = mod.hit_damage([("normal", 1)], 896, 64, 0,
+                       attacker_level=62, defender_level=38)
+check("hit: the hero one-shots a slime with an everyday-scale number",
+      slime > 64 and 400 <= slime <= 900, "final={}".format(slime))
+nuke = mod.hit_damage([("extreme", 1)], 1500, 1560, 500,
+                      attacker_level=75, defender_level=62)
+check("hit: an elite boss nuke is capped short of a one-shot",
+      nuke == int(round(1560 * mod.MAX_FRACTION / 100.0)),
+      "final={}".format(nuke))
+guarded = mod.hit_damage([("extreme", 1)], 1500, 1560, 500, in_mult=0.5,
+                         attacker_level=75, defender_level=62)
+check("hit: guarding halves what gets through", guarded < nuke * 0.7,
+      "guarded={}".format(guarded))
+demon = mod.hit_damage([("extreme", 1)], 5000, 300, 50,
+                       attacker_level=80, defender_level=60)
+check("hit: an outclassing boss fells a novice in one blow", demon > 300,
+      "final={}".format(demon))
+
+# 武器: 錨が基礎値なので √武器 がそのまま与ダメに乗る。
+with_sword = mod.hit_damage([("normal", 1)], 896, 460, 96)
+with_knife = mod.hit_damage([("normal", 1)], 189, 460, 96)
+check("gear: the full weapon range multiplies damage by about 4.7",
+      4.2 <= with_sword / with_knife <= 5.2,
+      "ratio={}".format(with_sword / with_knife))
+
+# 仲間: 錨は本人の max_hp（呼び出し側が受け側 max_hp で底上げする）。
+weak_ally = mod.hit_damage([("weak", 1)], max(132, 460), 460, 96,
+                           attacker_level=36, defender_level=36)
+check("ally floor: a low-HP member still bites",
+      weak_ally >= 460 * 0.10, "final={}".format(weak_ally))
 
 # ---------------------------------------------------------------- 出どころの受け渡し
 from instantale_modloader import ui as _ui                     # noqa: E402

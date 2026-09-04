@@ -1,0 +1,268 @@
+{
+  "entry": "balance_item_effects.py",
+  "api": 1,
+  "kind": "fix",
+  "name": {
+    "en": "Item effect rebalance",
+    "ja": "アイテム効果の調整"
+  },
+  "description": {
+    "en": "Reworks what items do, one category at a time. This version covers healing items: food and drink restore stamina, medicine restores a share of max HP, potions restore a quarter of that and cure ailments, herbs and mushrooms shift HP and stamina by amounts rolled when the item is made. No stamina cost",
+    "ja": "アイテムの効果を分類ごとに作り直す。この版は回復アイテム。食料・飲み物はスタミナ回復、医薬品は最大 HP の割合で回復、ポーションはその 1/4 と状態異常の解除、薬草・きのこは生成時に決まった幅で HP とスタミナが増減。スタミナ消費は無し"
+  },
+  "version": "3",
+  "author": "R01/Flossian",
+  "after": [
+    "129_balance_item_price"
+  ],
+  "settings": {
+    "STAMINA_BASE": {
+      "type": "float",
+      "default": 3.0,
+      "min": 0.0,
+      "max": 100.0,
+      "label": {
+        "ja": "食料のスタミナ回復の底",
+        "en": "Food stamina floor"
+      },
+      "note": {
+        "ja": "食料のスタミナ回復 = 底 + 価値段階 × 上乗せ。Lv1 のスタミナ上限は 10",
+        "en": "Food stamina = floor + value * per-value. Stamina cap at level 1 is 10"
+      }
+    },
+    "STAMINA_PER_VALUE": {
+      "type": "float",
+      "default": 0.35,
+      "min": 0.0,
+      "max": 10.0,
+      "label": {
+        "ja": "価値段階 1 あたりの上乗せ",
+        "en": "Stamina per value point"
+      },
+      "note": {
+        "ja": "価値段階はその土地の依頼の難易度と同じ（1〜70）。スタミナの上限はレベルとほぼ同じ速さで伸びる",
+        "en": "Value tracks the land's quest difficulty (1-70); the stamina cap grows about as fast as level"
+      }
+    },
+    "DRINK_RATE": {
+      "type": "float",
+      "default": 0.7,
+      "min": 0.05,
+      "max": 5.0,
+      "label": {
+        "ja": "飲み物の割合",
+        "en": "Drink rate"
+      },
+      "note": {
+        "ja": "飲み物は食料のこの割合だけ回復する",
+        "en": "Drinks restore this fraction of what food does"
+      }
+    },
+    "STAMINA_VARIANCE": {
+      "type": "float",
+      "default": 0.1,
+      "min": 0.0,
+      "max": 1.0,
+      "label": {
+        "ja": "スタミナ回復の幅",
+        "en": "Stamina variance"
+      },
+      "note": {
+        "ja": "食料・飲み物の回復量に ±この割合の乱数を掛ける。品を作った時点で1回引く",
+        "en": "Food and drink recovery is multiplied by a random factor within +- this fraction, rolled once when the item is made"
+      }
+    },
+    "HP_BASE_PCT": {
+      "type": "float",
+      "default": 20.0,
+      "min": 0.0,
+      "max": 100.0,
+      "label": {
+        "ja": "医薬品の HP 回復の底（%）",
+        "en": "Medicine HP floor (%)"
+      },
+      "note": {
+        "ja": "医薬品の回復 = (底 + 価値段階 × 上乗せ)% × レア度。最大 HP に対する割合",
+        "en": "Medicine heals (floor + value * per-value)% of max HP, times rarity"
+      }
+    },
+    "HP_PCT_PER_VALUE": {
+      "type": "float",
+      "default": 0.3,
+      "min": 0.0,
+      "max": 10.0,
+      "label": {
+        "ja": "価値段階 1 あたりの上乗せ（%）",
+        "en": "HP % per value point"
+      },
+      "note": {
+        "ja": "価値段階 70 なら 20 + 21 = 41%",
+        "en": "At value 70 that is 20 + 21 = 41%"
+      }
+    },
+    "HP_VARIANCE": {
+      "type": "float",
+      "default": 0.1,
+      "min": 0.0,
+      "max": 1.0,
+      "label": {
+        "ja": "HP 回復の幅",
+        "en": "HP variance"
+      },
+      "note": {
+        "ja": "医薬品・ポーションの回復量に ±この割合の乱数を掛ける。品を作った時点で1回引く",
+        "en": "Medicine and potion recovery is multiplied by a random factor within +- this fraction, rolled once when the item is made"
+      }
+    },
+    "POTION_HP_RATE": {
+      "type": "float",
+      "default": 0.25,
+      "min": 0.0,
+      "max": 1.0,
+      "label": {
+        "ja": "ポーションの HP 回復の割合",
+        "en": "Potion HP rate"
+      },
+      "note": {
+        "ja": "医薬品と同じ品なら、ポーションはこの割合だけ回復する。ポーションの本分は状態異常の解除",
+        "en": "A potion heals this fraction of what medicine of the same value would; curing ailments is its main job"
+      }
+    },
+    "RARITY_COMMON": {
+      "type": "float",
+      "default": 0.8,
+      "min": 0.05,
+      "max": 20.0,
+      "label": {
+        "ja": "レア度倍率: common",
+        "en": "Rarity multiplier: common"
+      },
+      "note": {
+        "ja": "スタミナ回復と HP 回復の両方に掛かる",
+        "en": "Applies to both stamina and HP recovery"
+      }
+    },
+    "RARITY_RARE": {
+      "type": "float",
+      "default": 0.9,
+      "min": 0.05,
+      "max": 20.0,
+      "label": {
+        "ja": "レア度倍率: rare",
+        "en": "Rarity multiplier: rare"
+      },
+      "note": {
+        "ja": "スタミナ回復と HP 回復の両方に掛かる",
+        "en": "Applies to both stamina and HP recovery"
+      }
+    },
+    "RARITY_MAGICAL": {
+      "type": "float",
+      "default": 1.0,
+      "min": 0.05,
+      "max": 20.0,
+      "label": {
+        "ja": "レア度倍率: magical",
+        "en": "Rarity multiplier: magical"
+      },
+      "note": {
+        "ja": "スタミナ回復と HP 回復の両方に掛かる",
+        "en": "Applies to both stamina and HP recovery"
+      }
+    },
+    "RARITY_EPIC": {
+      "type": "float",
+      "default": 1.1,
+      "min": 0.05,
+      "max": 20.0,
+      "label": {
+        "ja": "レア度倍率: epic",
+        "en": "Rarity multiplier: epic"
+      },
+      "note": {
+        "ja": "スタミナ回復と HP 回復の両方に掛かる",
+        "en": "Applies to both stamina and HP recovery"
+      }
+    },
+    "RARITY_LEGENDARY": {
+      "type": "float",
+      "default": 1.25,
+      "min": 0.05,
+      "max": 20.0,
+      "label": {
+        "ja": "レア度倍率: legendary",
+        "en": "Rarity multiplier: legendary"
+      },
+      "note": {
+        "ja": "スタミナ回復と HP 回復の両方に掛かる",
+        "en": "Applies to both stamina and HP recovery"
+      }
+    },
+    "RARITY_MYTHIC": {
+      "type": "float",
+      "default": 1.5,
+      "min": 0.05,
+      "max": 20.0,
+      "label": {
+        "ja": "レア度倍率: mythic",
+        "en": "Rarity multiplier: mythic"
+      },
+      "note": {
+        "ja": "スタミナ回復と HP 回復の両方に掛かる",
+        "en": "Applies to both stamina and HP recovery"
+      }
+    },
+    "HERB_GOOD_CHANCE": {
+      "type": "float",
+      "default": 0.7,
+      "min": 0.0,
+      "max": 1.0,
+      "label": {
+        "ja": "薬草・きのこが「増」になる確率",
+        "en": "Herb: chance of a gain"
+      },
+      "note": {
+        "ja": "HP とスタミナで別々に引く。品を作った時点で決まり、説明欄に出る",
+        "en": "Rolled separately for HP and stamina when the item is made; shown in the item's detail"
+      }
+    },
+    "HERB_MIN_RATE": {
+      "type": "float",
+      "default": 0.5,
+      "min": 0.0,
+      "max": 1.0,
+      "label": {
+        "ja": "薬草・きのこの増減の下限",
+        "en": "Herb: minimum size"
+      },
+      "note": {
+        "ja": "増減の大きさは、同じ価値段階の食料・医薬品の量のこの割合〜1.0 倍",
+        "en": "Size ranges from this fraction to 1.0 of what food / medicine of the same value would do"
+      }
+    },
+    "POTION_CLEARS_STATUS": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "ポーションで状態異常を消す",
+        "en": "Potions cure ailments"
+      },
+      "note": {
+        "ja": "戦闘で付いた状態異常（Character.status）を空にする",
+        "en": "Empties the status effects picked up in battle (Character.status)"
+      }
+    },
+    "REWORK_ON_SIGHT": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "手持ちの品も開いたときに作り直す",
+        "en": "Rework items when they are shown"
+      },
+      "note": {
+        "ja": "切ると、これから作られる品だけが新しい効き方になる（古いセーブの品は使う時に作り直す）",
+        "en": "When off, only newly generated items get the new effects (old items are reworked when used)"
+      }
+    }
+  }
+}

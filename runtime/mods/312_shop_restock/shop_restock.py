@@ -55,6 +55,46 @@ obtainer が主の Character）。
 待ってから見るのは、生成が Clock コールバックへ回される版でも取りこぼさないため。
 `orig` の直後に見ると「まだ作っていないだけ」を「補充されなかった」と読み違える。
 
+## 買った品がその場で作り直されるのを止める（`KEEP_SOLD_OUT`）
+
+**ゲームは店を開くたびに、売れた品を作り直して棚へ戻す**
+（2026-09-04 に `227_probe_shop_stock` で実測。GAME.md §2.13.1.3）。
+
+```
+15:58:18 買 ハルマンの予備のランプ (utility/tool)
+15:58:27 開き直し → 品の誕生: id=59 'ハルマンの予備のランプ' 主=ハルマン(118)
+         呼び出し元: ShoppingStartManagerRemake.shopping_start_method_1
+                     (instantale.py:3159) <- .execute (instantale.py:3281)
+```
+
+作っているのはゲーム自身で、採番もゲームの台帳（`index['item']`）。
+元にするのは施設の品揃えの雛形（`Facility.config['goods']`）で、
+雛形は買っても減らず `stock_update_date` も動かない。
+**装備（`weapon` / `wearable`）は作り直されず、それ以外（`healing_item` / `utility`）は
+雛形1件につき現物1つまで戻る**（実測7品）。
+つまり回復アイテムだけが無限に買える。
+`134_balance_item_effects` で回復量を上げていると、そのまま不死身になる。
+
+止め方は、**その来店で増えたぶんをその場で外す**の1つだけ:
+
+    prepare（入れ替え日なら空にする）
+      └ 開く前の主の持ち物の鍵を控える
+           └ ゲームの売買開始処理（orig。ここで作り直しが起きる）
+                └ 控えに無い鍵を外す
+
+雛形（`config['goods']`）には触らない。
+あれはゲームが世界を作ったときの骨格で、書き換えると
+この MOD を外したときに戻せない（TECH.md §6.4 / world_data の扱い）。
+外すのは窓が組み上がる前（`execute` が戻るより先）なので、
+作り直された品は画面に一度も出ない。
+
+**この MOD 自身の入れ替えは止めない。** 空にした回（`pending` が立っている回）は
+素通しする。止めると入れ替えそのものが働かなくなる。
+初めて開いた店（控えがまだ無くて持ち物も空）も素通しする。
+止めると品揃えが1つも作られない。
+一度でも開いた店を買い占めた場合は空のままになり、
+戻るのは入れ替えの日が来てからになる。
+
 ## 日数と控え
 
 ゲーム内の日付は `app.world.days_elapsed`（世界に1つ。`elapse_days` が進める。
@@ -82,6 +122,7 @@ from instantale_modloader.state import WorldStore, world_key
 #      `tools/check_mods.py` が AST で突き合わせる）------------------------
 RESTOCK_DAYS = 30            # 何日経ったら品揃えを入れ替えるか
 RESTOCK_ON_FIRST_SHOP = False  # 初めて開いた店をその場で入れ替えるか
+KEEP_SOLD_OUT = True         # 買った品をゲームに作り直させないか
 
 LOG_BASENAME = "shop_restock.log"
 
@@ -124,8 +165,13 @@ def apply(ctx):
             "worlds": WorldStore(ctx, STATE_DIRNAME, order=ordered_bucket),
             "pending": None,    # 空にして結果待ちの1件
             "auto_refill": None,  # None=未確認 / True=補充される / False=されない
+            # 今開いている店の控えがまだ無いか（＝初めて開く店か）。
+            # `prepare` が毎回書き直す。空の店の品揃えを作らせるかの判定に使う。
+            "fresh": True,
         }
         setattr(sys, STORE_ATTR, store)
+    # 前の世代が作った控えには無い鍵を足す（版を上げた直後の1回だけ効く）。
+    store.setdefault("fresh", True)
 
     write = ctx.logger(LOG_BASENAME, stamp=False)
     worlds = store["worlds"].rebind(ctx, write)
@@ -194,8 +240,16 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 入れ替え本体
     def prepare(manager):
-        """入れ替え日が来ていれば主の持ち物を空にする。控えは `pending` に置く。"""
+        """入れ替え日が来ていれば主の持ち物を空にする。控えは `pending` に置く。
+
+        ついでに `fresh`（この店の控えがまだ無い＝初めて開く店か）も書き直す。
+        **控えを書く前の状態で決めること。** ここで基準を書いてから見ると、
+        初めて開いた店も「控えのある店」になり、`KEEP_SOLD_OUT` が
+        初回の品揃えまで外してしまう（店が永久に空になる）。
+        引けなかったときは安全側の True（ゲームに作らせる）。
+        """
         store["pending"] = None
+        store["fresh"] = True
         app = app_of(manager)
         if app is None:
             return
@@ -225,6 +279,7 @@ def apply(ctx):
         record = record if isinstance(record, dict) else None
         last = record.get("day") if record else None
         last = last if isinstance(last, int) and not isinstance(last, bool) else None
+        store["fresh"] = record is None
 
         if last is None:
             # 初めて開いた店。
@@ -275,6 +330,59 @@ def apply(ctx):
     def ordered_record(day, facility, count, tier):
         return {"day": day, "facility": str(getattr(facility, "id", "")),
                 "count": count, "tier": tier}
+
+    # ------------------------------------------------------------ 作り直しを止める
+    def item_name(item):
+        name = getattr(item, "name", None)
+        return name if isinstance(name, str) and name else "?"
+
+    def held_keys(manager):
+        """開く前の主の持ち物の鍵を控える。素通しするときは None。
+
+        素通しするのは1つだけ:
+        **初めて開く店で、持ち物がまだ空のとき**（品揃えを作らせる回）。
+        既に品を持っている店は、控えがあってもなくても止める側に入れる
+        （古いセーブから始めた場合も、増えたぶんだけを外せる）。
+        """
+        if not KEEP_SOLD_OUT:
+            return None
+        app = app_of(manager)
+        if app is None:
+            return None
+        owner_id, owner = shop_owner(app)
+        inventory = inventory_of(owner)
+        if inventory is None:
+            return None
+        if not inventory and store["fresh"]:
+            return None
+        return {"app": app, "owner_id": owner_id, "owner": owner,
+                "facility": facility_of(app), "keys": set(inventory)}
+
+    def drop_refilled(held):
+        """この来店で増えたぶんを外す。ゲームが作り直した品だけがここに来る。
+
+        持ち物は**引き直す**（掴んだ辞書ではなく今の実体を見る）。
+        """
+        if not held:
+            return
+        inventory = inventory_of(held["owner"])
+        if not isinstance(inventory, dict):
+            return
+        added = [key for key in list(inventory) if key not in held["keys"]]
+        if not added:
+            return
+        dropped = []
+        for key in added:
+            item = inventory.get(key)
+            try:
+                del inventory[key]
+                dropped.append("{}={}".format(key, item_name(item)))
+            except Exception:
+                ctx.log_exc("shop restock: cannot drop a refilled item")
+        if dropped:
+            write("kept sold out: {} dropped {} refilled item(s): {}".format(
+                label(held["app"], held["owner_id"], held["facility"]),
+                len(dropped), ", ".join(dropped)))
 
     def verify(pending):
         """空にした後どうなったかを見る。ここで必ず決着を付ける。"""
@@ -363,6 +471,15 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("shop restock: prepare failed")
             store["pending"] = None
+        # 空にした回（入れ替え）は素通しする。
+        # ここで止めると、こちらが空にした店をゲームが埋め直したぶんまで外して
+        # 入れ替えそのものが働かなくなる。
+        held = None
+        if store["pending"] is None:
+            try:
+                held = held_keys(self)
+            except Exception:
+                ctx.log_exc("shop restock: cannot read the stock before opening")
         # 決着は `finally` で付ける。
         # `orig` が投げた場合、`safe=True` は素の動作に落としてくれるが、
         # **この後ろの行は実行されない**。空にした店の控えが更新されないまま残り、
@@ -373,6 +490,13 @@ def apply(ctx):
         finally:
             pending = store["pending"]
             store["pending"] = None
+            if held is not None:
+                # 窓が組み上がるより先に外す（`execute` はまだ戻っていない）。
+                # ここを遅らせると、作り直された品が一度だけ棚に並ぶ。
+                try:
+                    drop_refilled(held)
+                except Exception:
+                    ctx.log_exc("shop restock: cannot drop the refilled stock")
             if pending is not None:
                 # Clock が使えない場面で予約が取れないときはその場で決着させる。
                 if not screen.schedule(lambda: verify(pending), VERIFY_DELAY):
@@ -392,5 +516,6 @@ def apply(ctx):
             ctx.log_exc("shop restock: cannot record the stock tier")
         return orig(self, shop_owner_instance, next_tier, *args, **kwargs)
 
-    ctx.log("shop restock: every {} in-game day(s); log goes to out/{}".format(
-        RESTOCK_DAYS, LOG_BASENAME))
+    ctx.log("shop restock: every {} in-game day(s), keep_sold_out={}; "
+            "log goes to out/{}".format(
+                RESTOCK_DAYS, bool(KEEP_SOLD_OUT), LOG_BASENAME))

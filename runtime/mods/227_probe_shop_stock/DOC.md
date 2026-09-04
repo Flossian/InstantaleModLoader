@@ -1,0 +1,3 @@
+# `227_probe_shop_stock`
+
+買った品が店の棚へ戻るのはどこかを録る。品が生まれた瞬間（`scripts.items:Item.__init__`）の id・持ち主・`attributes` と**ゲーム側の呼び出し元の連鎖**、店の経路の境目（`ShoppingStartManagerRemake.execute` / `shopping_start_method_1` / `set_item_from_world_data` / `generate_item_in_shopping` / 生成の3入口 / `toggle_twin_inventory_window` / `buy_item` / `sell_item` / `close_shopping_window_process` / `Item.buy` / `Item.sell` / `InventoryItem.change_inventory`）ごとの主と手持ちの鍵の増減、その施設の品揃えの雛形（`config['goods']` の件数・`stock_tier`・`stock_update_date`）と今日の日数、採番台帳 `index['item']`。セーブを復号した突き合わせで「買った品は正しく手持ちへ移り、雛形からもう1つ作られて棚に入る（鍵は `item_` の付かない裸の数字、中身は雛形のまま）」までは出ているので、残るのは**それを作っているのが誰か**の1点。増分が出た一番内側の境目がその場所を指す。出力は `out\shop_stock.log` と `out\shop_stock.jsonl`
