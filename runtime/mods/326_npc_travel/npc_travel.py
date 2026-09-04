@@ -20,8 +20,20 @@
 - 別の街へは 30〜90 日（既定）。行き先は施設が生成済みの街のギルドか宿
 - 同じ街の中なら 7 日（既定）。行き先はギルド以外の施設
   （通路は除く。`travel.PASSAGE_TYPES`）
-- 旅の間は元の街のギルドの一覧（`adventurer_npcs`）から外す。
-  別の街のギルドに着いた者はそこの一覧に載る＝雇える
+- **同じ街の中に居る間はギルドの一覧に残す**（`adventurer_npcs` から外さない）。
+  施設を探し回らずにギルドから話せる。ゲームが居場所で一覧を絞る作りだった場合に備えて、
+  一覧が開かれたときに漏れている者のボタンを足す（`320_` と同じ差し込み方）
+- 別の街へ出た者は元の街の一覧から外す。着いた先がギルドならそこの一覧に載る＝雇える
+- **同じ街の中の移動は、プレイヤーが居る街でだけ、その街に着いた時に引く**
+  （日が進んだときにも引く）。前に引いてからの日数ぶんをまとめて引くので、
+  宿に泊まっても、旅から戻っても、着いた街が動いている。
+  街の間は徒歩でも馬車でも 14 日かかる（`314_` の既定）ので、
+  他の街の 7 日の移動は着く前に必ず終わっていて一度も見えない
+  （実プレイ 2026-09-04 の 30 件中 16 件がこれだった）。
+  別の街への旅は全部の街で、日が進んだときに引く ― 次にその街へ着いたときの
+  「1人欠けている」「知らない冒険者が来ている」を作っているのがそれなので。
+  月あたりの出発確率は「同じ街へ向かう割合」で2つに割り当て、
+  それぞれの契機で引く
 - 帰ってきた人は `REST_DAYS`（既定 90）の間は次の旅に出ない
   （実機で同じ人が続けて引かれたので足した。旅先で雇われて解散した人も同じ）
 - 出発も帰還も、プレイヤーがその施設に居る間は次の機会まで延ばす
@@ -33,7 +45,10 @@
 - 名簿の街と実体の居る街が食い違う人（`303_` が別の街に置いた人）は
   旅に出さない。帰り先が決められないため
 - 旅先で話しかけると、会話の文脈に「〜から来ている」を1文足す。
-  元の街では何も出さない（決めた仕様）
+  元の街では何も出さない（決めた仕様）。
+  まだ細部の生成されていない個体は `profile` が `None` のことがあるので空欄として扱う
+  （生成そのものはゲームが会話の直前に行う。`ensure_npc_detail_generated`。
+  こちらは触らない）
 
 ##### ロードのとき
 
@@ -70,6 +85,8 @@ LOCAL_DAYS = 7               # 同じ街の中の滞在日数
 CAPACITY_PER_FACILITY = 2    # 1施設に旅で来られる人数。0 で上限なし
 REST_DAYS = 90               # 帰ってから次に出るまでの日数
 RETURN_ALL_ON_LOAD = False   # ロードのとき台帳の全員を帰す（片付け）
+LOCAL_LIST_SUFFIX = "（{where}）"   # 同じ街に出ている者の、一覧での居場所の添え字
+LOCAL_ONLY_HERE = True       # 同じ街の中の移動はプレイヤーが居る街でだけ起こす
 AWAY_CONTEXT = "{name}は{origin}から旅をして来て、いまは{where}に滞在している（あと{days}日ほど）。"
 LOCAL_CONTEXT = "{name}はいつものギルドを離れ、いまは{where}に来ている（あと{days}日ほど）。"
 
@@ -78,6 +95,14 @@ LOG_BASENAME = "npc_travel.log"
 STATE_DIRNAME = "npc_travel"          # state\ 直下のフォルダ。MOD専用の名前
 STORE_ATTR = "_instantale_npc_travel"  # 世代をまたぐ入れ物（sys の属性）
 GUILD_TYPE = "guild"
+MARK = "mod_travel_list"              # 自前ボタンの印（MODごとに別の文字列）
+LOCAL_CATCHUP_MAX = 30                # 街中の移動をまとめて引く日数の上限
+CONVERSATION_SPEC = "ConversationStartManager"
+
+#: 冒険者の一覧ではありえない spec。1つでも見えたら別の画面（`320_` と同じ）。
+OTHER_SCREEN_SPECS = ("ConversationEndManager", "MovePhaseManager",
+                      "DisplayTalkChoice", "DisplayQuestChoice",
+                      "QuestChoiceManager")
 
 #: ロードの入口。新規と続きの両方（名前では決められない。GAME.md §1.3）。
 LOAD_TARGETS = ("__main__:InstantaleApp.load_game_new",
@@ -277,6 +302,10 @@ def apply(ctx):
         _key, bucket = worlds.of(app)
         return travel.rest_of(bucket)
 
+    def seen_table(app):
+        _key, bucket = worlds.of(app)
+        return travel.seen_of(bucket)
+
     def start_rest(app, npc_id, name, day):
         """帰ってきた（解散した）日を控える。日が読めないときは休み無し。"""
         if day is None or REST_DAYS <= 0:
@@ -353,9 +382,11 @@ def apply(ctx):
     def guild_members(app, area, area_id, trips, day):
         """`(一覧に出る人数, 出発できる id の並び)`。
 
-        一覧に出る＝名簿に在り、生きていて、同行しておらず、旅に出ていない。
+        一覧に出る＝名簿に在り、生きていて、同行していない。
         `Area.adventurer_npcs` は刈り込まれない（死亡も同行中も残る。`320_`）ので
-        自分で引き直す。休み中の人は一覧には出るが出発の候補にしない。
+        自分で引き直す。
+        同じ街の中に出ている人はギルドから話せるので**居る人として数える**。
+        休み中の人も一覧には出る。どちらも出発の候補にはしない。
         """
         rosters = roster_lists(app, area, area_id)
         roster = rosters[0] if rosters else []
@@ -365,7 +396,10 @@ def apply(ctx):
         present, eligible = [], []
         for raw in roster:
             npc_id = str(raw)
-            if npc_id in trips or npc_id in party or npc_id in hired:
+            if npc_id in party or npc_id in hired:
+                continue
+            trip = trips.get(npc_id)
+            if isinstance(trip, dict) and trip.get("kind") != travel.LOCAL:
                 continue
             character = ui.character_of(app, npc_id)
             if character is None or is_dead(character):
@@ -373,6 +407,8 @@ def apply(ctx):
             if npc_id in present:
                 continue
             present.append(npc_id)
+            if npc_id in trips:
+                continue                # 同じ街に出ている最中。数えるが、また出さない
             affinity = affinity_of(app, npc_id, character)
             if affinity is None or affinity < AFFINITY_MIN:
                 continue
@@ -417,34 +453,42 @@ def apply(ctx):
         return True
 
     def depart(app, key, trips, day, npc_id, area, area_id, kind, spot):
+        """出発させる。`"gone"` / `"waits"`（延期）/ `""`（出せない）を返す。"""
         character = ui.character_of(app, npc_id)
         if character is None:
-            return False
+            return ""
         origin_facility = facility_of_character(character)
         if not origin_facility:
             guild, _node = ui.find_guild(area)
             origin_facility = id_of(guild)
         if not origin_facility:
             write("depart: {} has no facility to come back to; skipped".format(npc_id))
-            return False
+            return ""
         stands_in = area_of_facility(app, origin_facility, area_id)
         if stands_in != str(area_id):
             # 名簿は area_id だが実体は別の街（`303_` が置いた人）。帰り先を決められない。
             write("depart: {} is listed in area {} but stands in area {!r}; skipped"
                   .format(npc_id, area_id, stands_in))
-            return False
+            return ""
         if player_at(app, area_id, origin_facility):
             write("depart: player is at {}/{}; {} waits".format(
                 area_id, origin_facility, npc_id))
-            return False
+            return "waits"
         dest_area_id, dest_facility, dest_kind = spot
+        if player_at(app, dest_area_id, dest_facility):
+            # 目の前に湧かせない（出発を止めるのと同じ扱いで、次の機会に回す）。
+            write("depart: player is at the destination {}/{}; {} waits".format(
+                dest_area_id, dest_facility, npc_id))
+            return "waits"
         dest_area = (ui.world_areas(app) or {}).get(dest_area_id)
         if not move(app, npc_id, character, dest_area, dest_area_id, dest_facility):
-            return False
+            return ""
         days = (travel.pick_duration(rng, AWAY_DAYS_MIN, AWAY_DAYS_MAX)
                 if kind == travel.AWAY else max(1, int(LOCAL_DAYS)))
         enrolled = kind == travel.AWAY and dest_kind == GUILD_TYPE
-        roster_drop(app, area, area_id, npc_id)
+        if kind == travel.AWAY:
+            # 同じ街の中の移動では外さない（ギルドから話せるように残す）。
+            roster_drop(app, area, area_id, npc_id)
         if enrolled:
             roster_add(app, dest_area, dest_area_id, npc_id)
         name = ui.character_name(app, npc_id)
@@ -454,7 +498,7 @@ def apply(ctx):
         write("depart: {} ({}) {} {}/{} -> {}/{} [{}] day {} .. {}".format(
             name, npc_id, kind, area_id, origin_facility, dest_area_id,
             dest_facility, dest_kind, day, day + days))
-        return True
+        return "gone"
 
     def restore_rosters(app, npc_id, trip):
         origin_area = (ui.world_areas(app) or {}).get(trip["origin_area"])
@@ -591,44 +635,100 @@ def apply(ctx):
             worlds.save(key)
         return changed
 
-    def send_off(app, day, days):
-        """各街で出発を引く。変更があれば台帳を書く。"""
+    def local_areas(app, towns):
+        """街中の移動を引く街。既定はプレイヤーが居る街だけ（`LOCAL_ONLY_HERE`）。"""
+        if not LOCAL_ONLY_HERE:
+            return sorted(towns, key=ui.id_sort_key)
+        here = id_of(getattr(getattr(app, "player", None), "current_area", None))
+        return [here] if here in towns else []
+
+    def send_off(app, day, days, kind):
+        """出発を引く。`kind` ごとに契機も窓も違う（変更があれば台帳を書く）。
+
+        `away` … 全部の街。窓はいま進んだ日数
+        `local` … `local_areas` の街。窓はその街で前に引いてからの日数
+                  （`seen`。上限 `LOCAL_CATCHUP_MAX`）＝**着いたときに引く**
+        """
         key, trips = ledger(app)
         towns = known_towns(app)
-        chance = travel.chance_over_days(DEPART_CHANCE_PERCENT, days)
+        seen = seen_table(app)
+        area_ids = (sorted(towns, key=ui.id_sort_key) if kind == travel.AWAY
+                    else local_areas(app, towns))
         changed = False
-        for area_id in sorted(towns, key=ui.id_sort_key):
-            area = towns[area_id]
+        deferred = False
+        for area_id in area_ids:
+            area = towns.get(area_id)
+            if area is None:
+                continue
+            window = (days if kind == travel.AWAY
+                      else travel.catchup_days(seen, area_id, day, LOCAL_CATCHUP_MAX))
+            if window <= 0:
+                continue
+            chance = travel.kind_chance(DEPART_CHANCE_PERCENT, LOCAL_CHANCE_PERCENT,
+                                        kind, window)
+            if chance <= 0.0:
+                if kind == travel.LOCAL:
+                    seen[str(area_id)] = int(day)
+                    changed = True
+                continue
             present, eligible = guild_members(app, area, area_id, trips, day)
             chosen = travel.pick_departures(rng, eligible, len(present), STAY_MIN, chance)
             if not chosen:
+                if kind == travel.LOCAL:
+                    seen[str(area_id)] = int(day)
+                    changed = True
                 continue
-            write("roll: area {} present={} eligible={} chosen={} (chance {:.3f} over {} day(s))"
-                  .format(area_id, len(present), len(eligible), chosen, chance, days))
+            write("roll[{}]: area {} present={} eligible={} chosen={} "
+                  "(chance {:.3f} over {} day(s))".format(
+                      kind, area_id, len(present), len(eligible), chosen, chance, window))
             for npc_id in chosen:
                 character = ui.character_of(app, npc_id)
                 here = facility_of_character(character) if character is not None else ""
-                away = away_spots(app, trips, towns, area_id)
-                local = local_spots(app, trips, area, area_id, here)
-                kind = travel.pick_kind(rng, LOCAL_CHANCE_PERCENT, bool(away), bool(local))
-                if kind is None:
+                if kind == travel.AWAY:
+                    spots = away_spots(app, trips, towns, area_id)
+                    if not spots and area_id in local_areas(app, towns):
+                        # 行ける街が1つも無い世界。せめて街の中で動く。
+                        spots = local_spots(app, trips, area, area_id, here)
+                else:
+                    spots = local_spots(app, trips, area, area_id, here)
+                spot = travel.pick_spot(rng, spots)
+                if spot is None:
                     write("roll: nowhere for {} to go from area {}".format(npc_id, area_id))
                     continue
-                spot = travel.pick_spot(rng, away if kind == travel.AWAY else local)
-                if depart(app, key, trips, day, npc_id, area, area_id, kind, spot):
+                going = travel.AWAY if spot[0] != str(area_id) else travel.LOCAL
+                result = depart(app, key, trips, day, npc_id, area, area_id,
+                                going, spot)
+                if result == "gone":
                     changed = True
+                elif result == "waits":
+                    deferred = True
+        if kind == travel.LOCAL and not deferred:
+            # 引いた窓は消費する（当たり外れに関わらず、同じ日数を二度引かない）。
+            # 延期した人が居る間は消費しない ― プレイヤーがその場を離れたら
+            # 同じ窓でもう一度引けるように。
+            seen[str(area_id)] = int(day)
+            changed = True
         if changed:
             worlds.save(key)
         return changed
 
     def patrol(app, days, reason):
+        """帰還の後始末と出発の抽選。
+
+        日が進んだとき（`days > 0`）は別の街への旅を全部の街で引く。
+        街中の移動は**居る街に着くたび**に、前に引いてからの日数ぶんを引く
+        （移動でも宿泊でも、着いた街で起こる）。
+        """
         if app is None or getattr(app, "world", None) is None:
             return
         day = ui.game_day(app)
         with worlds.lock:
             settle(app, day, reason)
-            if day is not None and days > 0:
-                send_off(app, day, days)
+            if day is None:
+                return
+            if days > 0:
+                send_off(app, day, days, travel.AWAY)
+            send_off(app, day, 0, travel.LOCAL)
 
     # ------------------------------------------------------------ ロードの突き合わせ
     def reconcile(app):
@@ -665,7 +765,10 @@ def apply(ctx):
                     write("reconcile: {} put back at {}/{}".format(
                         npc_id, trip["dest_area"], trip["dest_facility"]))
             origin_area = (ui.world_areas(app) or {}).get(trip["origin_area"])
-            roster_drop(app, origin_area, trip["origin_area"], npc_id)
+            if trip.get("kind") == travel.LOCAL:
+                roster_add(app, origin_area, trip["origin_area"], npc_id)
+            else:
+                roster_drop(app, origin_area, trip["origin_area"], npc_id)
             if trip.get("enrolled"):
                 dest_area = (ui.world_areas(app) or {}).get(trip["dest_area"])
                 roster_add(app, dest_area, trip["dest_area"], npc_id)
@@ -718,8 +821,16 @@ def apply(ctx):
         if not isinstance(trip, dict):
             return args, kwargs
         note = travel_note(app, npc_id, trip)
+        if not note:
+            return args, kwargs
         base = getattr(npc, "profile", "")
-        if not note or not isinstance(base, str):
+        if base is None:
+            # まだ細部の生成されていない個体（`level_of_detail` が低い）。
+            # 空欄と同じに扱う（`None` で切ると、初対面の旅人にだけ文脈が付かない）。
+            base = ""
+        if not isinstance(base, str):
+            write("context[{}]: profile is {}; left alone".format(
+                label, type(base).__name__))
             return args, kwargs
         clone = copy.copy(npc)
         clone.profile = (base.rstrip() + "\n\n" + note) if base.strip() else note
@@ -739,7 +850,104 @@ def apply(ctx):
             ctx.log_exc("npc travel: injection failed")
         return orig(*args, **kwargs)
 
+    # ------------------------------------------------------------ ギルドの一覧
+    # 同じ街の中に出ている人が一覧から漏れていたら足す。
+    # 名簿には残してあるので、ゲームが名簿だけで組むならここは何もしない
+    # （足す前に spec の引数で突き合わせるので二重にならない）。
+    screen = ui.Screen(ctx, write, tag="npc travel", mark=MARK)
+    listing = {"armed": False}
+
+    def local_trips_here(app, area_id):
+        """この街の中に出ている人 `{npc_id: 行}`。"""
+        _key, trips = ledger(app)
+        return {npc_id: trip for npc_id, trip in trips.items()
+                if isinstance(trip, dict) and trip.get("kind") == travel.LOCAL
+                and trip.get("origin_area") == str(area_id)}
+
+    def listed_ids(buttons):
+        """一覧に並んでいる会話相手の id。**spec の引数をそのまま読む**（ui.spec_args）。"""
+        found = set()
+        for entry in buttons:
+            if ui.spec_cls_name(entry) != CONVERSATION_SPEC:
+                continue
+            args = ui.spec_args(entry)
+            if args:
+                found.add(str(args[0]))
+        return found
+
+    def back_button_index(buttons):
+        """ゲーム側の「やめる」の位置。無ければ None（＝一覧ではない）。`320_` と同じ。"""
+        for index, entry in enumerate(buttons):
+            if (ui.spec_cls_name(entry) == ui.SAFE_CLS
+                    and not screen.marked_by_a_mod(entry)):
+                return index
+        return None
+
+    def list_label(app, npc_id, trip):
+        name = ui.character_name(app, npc_id, fallback=trip.get("name") or npc_id)
+        where = where_text(app, trip["dest_area"], trip["dest_facility"])
+        suffix = travel.format_context(LOCAL_LIST_SUFFIX, where=where, name=name)
+        return "{}{}".format(name, suffix) if suffix else name
+
+    def fix_adventurer_list(app, buttons):
+        """冒険者の一覧なら、同じ街に出ている人を並べる（居場所を添える）。"""
+        if not listing["armed"]:
+            return
+        names = [ui.spec_cls_name(entry) for entry in buttons]
+        if any(name in OTHER_SCREEN_SPECS for name in names):
+            listing["armed"] = False
+            return
+        at = back_button_index(buttons)
+        if at is None:
+            return                      # 「やめる」が無い＝一覧が組み上がっていない
+        area = ui.current_area(app)
+        area_id = ui.area_id_of(area)
+        trips = local_trips_here(app, area_id)
+        if not trips:
+            return
+        party = {str(member) for member in ui.party_member_ids(app)}
+        listed = listed_ids(buttons)
+        added = []
+        for npc_id in sorted(trips, key=ui.id_sort_key):
+            trip = trips[npc_id]
+            character = ui.character_of(app, npc_id)
+            if npc_id in party or (character is not None and is_dead(character)):
+                continue
+            label = list_label(app, npc_id, trip)
+            if npc_id in listed:
+                # ゲームが並べている。居場所だけ添える。
+                for entry in buttons:
+                    if (ui.spec_cls_name(entry) == CONVERSATION_SPEC
+                            and (ui.spec_args(entry) or [None])[0] is not None
+                            and str((ui.spec_args(entry) or [""])[0]) == npc_id
+                            and isinstance(entry, dict)
+                            and entry.get("text") != label):
+                        entry["text"] = label
+                continue
+            entry = screen.button(label, mark="talk:" + npc_id,
+                                  cls_name=CONVERSATION_SPEC, args=[npc_id])
+            if entry is None:
+                continue
+            buttons.insert(at, entry)
+            at += 1
+            added.append(label)
+        if added:
+            write("list: added {} to the adventurer list of area {}".format(
+                added, area_id))
+
     # ================================================================ フック
+    @ctx.wrap("__main__:DisplayAdventurerTalkChoice.execute",
+              required=False, safe=True)
+    def adventurer_list_execute(orig, self, choice_text=None, *args, **kwargs):
+        listing["armed"] = True
+        return orig(self, choice_text, *args, **kwargs)
+
+    @ctx.wrap("__main__:DisplayTalkChoice.execute", required=False, safe=True)
+    def talk_list_execute(orig, self, choice_text=None, *args, **kwargs):
+        # 「会話する」の一覧は冒険者の一覧と同じ形なので、明示的に旗を下ろす（`320_`）。
+        listing["armed"] = False
+        return orig(self, choice_text, *args, **kwargs)
+
     @ctx.wrap("__main__:InstantaleApp.elapse_days", required=False, safe=True)
     def elapse_days(orig, self, days, *args, **kwargs):
         """日が進んだ後に見回る。日数の進め方には触らない。"""
@@ -780,7 +988,13 @@ def apply(ctx):
 
     @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False, safe=True)
     def refresh_choice_buttons(orig, self, *args, **kwargs):
-        """ロードの後、最初に画面が組まれたときに突き合わせる（名簿が埋まってから）。"""
+        """ロードの後の突き合わせと、冒険者の一覧の手当て。"""
+        try:
+            buttons = getattr(self, "buttons", None)
+            if isinstance(buttons, list):
+                fix_adventurer_list(self, buttons)
+        except Exception:
+            ctx.log_exc("npc travel: cannot fix the adventurer list")
         if store["reconcile"]:
             characters = getattr(getattr(self, "world", None), "characters", None)
             if isinstance(characters, dict) and len(characters) > 1:

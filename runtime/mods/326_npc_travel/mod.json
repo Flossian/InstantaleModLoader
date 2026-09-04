@@ -28,8 +28,8 @@
       "min": 0,
       "max": 100,
       "label": {"ja": "同じ街の中へ向かう割合（%）", "en": "Share of trips inside the same town (%)"},
-      "note": {"ja": "残りは別の街へ。行き先の無いほうへは行かない",
-               "en": "The rest go to another town. A side with no candidate is never picked"}
+      "note": {"ja": "月あたりの出発確率をこの割合で2つに分ける。残りは別の街へ。街中の移動は着いた街で引く",
+               "en": "Splits the monthly chance. The rest go to another town; in-town trips are rolled where you arrive"}
     },
     "STAY_MIN": {
       "type": "int",
@@ -96,6 +96,20 @@
       "label": {"ja": "ロード時に全員を帰す", "en": "Return everyone on load"},
       "note": {"ja": "MODを外す前の片付け。入れてロードし、セーブしてから外す",
                "en": "Cleanup before removing the mod: enable, load, save, then remove"}
+    },
+    "LOCAL_ONLY_HERE": {
+      "type": "bool",
+      "default": true,
+      "label": {"ja": "同じ街の移動は現在地だけ", "en": "Trips inside a town only where you are"},
+      "note": {"ja": "着いた街で、前に引いてからの日数（最大30日）ぶんを引く。他の街の7日の移動は着く前に終わって見えない。切ると全部の街で起こる",
+               "en": "Rolled where you arrive, over the days since that town was last rolled (max 30). Off = every town"}
+    },
+    "LOCAL_LIST_SUFFIX": {
+      "type": "str",
+      "default": "（{where}）",
+      "label": {"ja": "一覧に添える居場所", "en": "Place shown next to the name"},
+      "note": {"ja": "同じ街に出ている人がギルドの一覧に並ぶときの添え字。空で名前だけ。使える変数: {name} {where}",
+               "en": "Shown after the name in the guild list for someone out in town. Empty = name only"}
     },
     "AWAY_CONTEXT": {
       "type": "str",

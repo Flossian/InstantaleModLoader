@@ -10,7 +10,10 @@
   残す     … 一覧が2人なら誰も出ない。同行中・死亡は数えない
   別の街   … 施設が生成済みの街のギルドか宿だけ。ダンジョンと未生成の街は選ばれない。
              ギルドなら着いた先の一覧に載る（雇える）。日数は 30..90
-  同じ街   … ギルドと通路を除いた施設。日数は 7
+  同じ街   … ギルドと通路を除いた施設。日数は 7。名簿には残す
+  一覧     … ギルドの冒険者一覧に、同じ街に出ている人を居場所付きで並べる（二重にしない）
+  現在地   … 同じ街の中の移動はプレイヤーが居る街だけ。別の街への旅はどの街でも起きる
+  到着     … 街中の移動は着いた街で引く（前に引いてからの日数ぶん。同じ日には引き直さない）
   帰還     … 期限が来たら元の施設へ戻り、一覧も戻り、台帳から消える
   延期     … プレイヤーがその施設に居る間は出発も帰還も待つ。施設を出たら果たす
   雇用     … 旅先で雇われたら動かさずに旅を終える
@@ -68,6 +71,30 @@ def check(name, cond, detail=""):
 
 
 # ---------------------------------------------------------------- 偽ゲーム
+class PhaseSpec:
+    """ゲームのボタン spec。`ui.spec_data` が読む形。"""
+
+    def __init__(self, cls_name, args):
+        self.cls_name = cls_name
+        self.args = list(args)
+
+    def to_dict(self):
+        return {"cls_name": self.cls_name, "args": list(self.args)}
+
+
+class JustSetButtonToNormalPhase:
+    """無害 spec（`ui.SAFE_CLS`）。一覧の「やめる」。"""
+
+    def __init__(self, app, *args):
+        self.app = app
+
+
+class ConversationStartManager:
+    def __init__(self, app, character_id):
+        self.app = app
+        self.character_id = character_id
+
+
 class Facility:
     def __init__(self, facility_id, facility_type, name=None):
         self.id = facility_id
@@ -204,7 +231,7 @@ def load_mod():
 # ---------------------------------------------------------------- 舞台作り
 WORLD_NAME = "旅の検査世界"
 G0, I0, S0, E0 = "100", "101", "102", "103"
-G1, I1 = "200", "201"
+G1, I1, S1, E1 = "200", "201", "202", "203"
 G2 = "300"
 
 
@@ -222,8 +249,10 @@ def make_world(days=10, affinities=(10, 25, 30), party_member=None,
     if extra_towns:
         guild1 = Facility(G1, "guild", "灰の会館")
         inn1 = Facility(I1, "inn", "灰の宿")
-        areas["1"] = Area("1", "灰の交易都市", [guild1, inn1])
-        facilities["1"] = {G1: guild1, I1: inn1}
+        shop1 = Facility(S1, "general_store", "灰の雑貨屋")
+        gate1 = Facility(E1, "entrance", "灰の門")
+        areas["1"] = Area("1", "灰の交易都市", [guild1, inn1, shop1, gate1])
+        facilities["1"] = {G1: guild1, I1: inn1, S1: shop1, E1: gate1}
         sizes["1"] = "city"
     areas["2"] = Area("2", "骸の洞窟", [Facility(G2, "dungeon_location")])
     areas["3"] = Area("3", "未踏の街", [])
@@ -397,8 +426,8 @@ def scene_local():
     check("同じ街", trip["dest_area"] == "0" and trip["kind"] == "local", trip)
     check("ギルドと通路は行き先にしない", trip["dest_facility"] in (I0, S0), trip)
     check("7日", trip["return_day"] - trip["depart_day"] == 7, trip)
-    check("同じ街でも一覧からは外す",
-          next(iter(trips)) not in app.world.areas["0"].adventurer_npcs)
+    check("同じ街なら一覧に残す",
+          next(iter(trips)) in app.world.areas["0"].adventurer_npcs)
 
     module, ctx = fresh_mod(DEPART_CHANCE_PERCENT=100, LOCAL_CHANCE_PERCENT=0)
     app, fac = make_world(affinities=(30, 30, 30), extra_towns=0)
@@ -407,6 +436,199 @@ def scene_local():
     trip = next(iter(read_ledger().values()))
     check("別の街が無ければ同じ街へ（ダンジョン・未生成は選ばない）",
           trip["dest_area"] == "0", trip)
+
+
+def talk_button(npc_id):
+    return {"text": "冒険者{}".format(npc_id),
+            "spec": PhaseSpec("ConversationStartManager", [npc_id])}
+
+
+def quit_button():
+    return {"text": "やめる", "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}
+
+
+def open_adventurer_list(ctx, app, listed):
+    """ギルドの「冒険者達と話す」を開いて、ゲームが並べた一覧を渡す。"""
+    ctx.hooks["__main__:DisplayAdventurerTalkChoice.execute"](
+        lambda self, choice_text=None: None, object(), "冒険者達と話す")
+    app.buttons = [talk_button(npc_id) for npc_id in listed] + [quit_button()]
+    ctx.hooks["__main__:InstantaleApp.refresh_choice_buttons"](lambda self: None, app)
+    return app.buttons
+
+
+def scene_guild_list():
+    print("[ギルドの一覧]")
+    module, ctx = fresh_mod(DEPART_CHANCE_PERCENT=100, LOCAL_CHANCE_PERCENT=100)
+    app, fac = make_world(affinities=(30, 30, 30))
+    use(app)
+    elapse(ctx, app, 30)
+    npc_id, trip = next(iter(read_ledger().items()))
+    check("同じ街なら名簿に残る（実行時）", npc_id in app.world.areas["0"].adventurer_npcs)
+    check("同じ街なら名簿に残る（セーブ側）",
+          npc_id in app.save_data_dict["areas"]["0"]["adventurer_npcs"])
+
+    # ゲームが居場所で絞った一覧（旅の人が漏れている）。
+    others = [cid for cid in ("10", "11", "12") if cid != npc_id]
+    buttons = open_adventurer_list(ctx, app, others)
+    texts = [entry["text"] for entry in buttons]
+    ids = [(entry["spec"].args or [None])[0] for entry in buttons]
+    check("漏れていたら足す", npc_id in ids, texts)
+    check("居場所が付く", any(t.startswith("冒険者{}（".format(npc_id)) for t in texts), texts)
+    check("押すとゲームの会話が始まる形",
+          buttons[ids.index(npc_id)]["spec"].cls_name == "ConversationStartManager")
+    check("「やめる」の手前", ids.index(npc_id) < len(ids) - 1, texts)
+
+    # ゲームが名簿だけで組む場合（旅の人も並んでいる）。
+    buttons = open_adventurer_list(ctx, app, others + [npc_id])
+    ids = [(entry["spec"].args or [None])[0] for entry in buttons]
+    check("二重にしない", ids.count(npc_id) == 1, ids)
+    check("並んでいる側にも居場所を添える",
+          buttons[ids.index(npc_id)]["text"].startswith("冒険者{}（".format(npc_id)),
+          buttons[ids.index(npc_id)]["text"])
+
+    # 「会話する」の一覧では足さない。
+    ctx.hooks["__main__:DisplayTalkChoice.execute"](
+        lambda self, choice_text=None: None, object(), "会話する")
+    app.buttons = [talk_button(cid) for cid in others] + [quit_button()]
+    ctx.hooks["__main__:InstantaleApp.refresh_choice_buttons"](lambda self: None, app)
+    ids = [(entry["spec"].args or [None])[0] for entry in app.buttons]
+    check("「会話する」には足さない", npc_id not in ids, ids)
+
+    # 別の街へ出た人は元の街の一覧に足さない。
+    module, ctx = fresh_mod(DEPART_CHANCE_PERCENT=100, LOCAL_CHANCE_PERCENT=0)
+    app, fac = make_world(affinities=(30, 30, 30))
+    use(app)
+    elapse(ctx, app, 30)
+    away_id = next(iter(read_ledger()))
+    others = [cid for cid in ("10", "11", "12") if cid != away_id]
+    buttons = open_adventurer_list(ctx, app, others)
+    ids = [(entry["spec"].args or [None])[0] for entry in buttons]
+    check("別の街の人は足さない", away_id not in ids, ids)
+    check("落ちていない", not ctx.errors, ctx.errors)
+
+    # 添え字を空にすると名前だけ。
+    module, ctx = fresh_mod(DEPART_CHANCE_PERCENT=100, LOCAL_CHANCE_PERCENT=100,
+                            LOCAL_LIST_SUFFIX="")
+    app, fac = make_world(affinities=(30, 30, 30))
+    use(app)
+    elapse(ctx, app, 30)
+    npc_id = next(iter(read_ledger()))
+    others = [cid for cid in ("10", "11", "12") if cid != npc_id]
+    buttons = open_adventurer_list(ctx, app, others)
+    texts = [entry["text"] for entry in buttons]
+    check("空にすると名前だけ", "冒険者{}".format(npc_id) in texts, texts)
+
+
+def add_adventurers(app, fac, area_id, facility_id, ids, affinity=30):
+    """その街のギルドに冒険者を足す（実行時とセーブ側の両方）。"""
+    area = app.world.areas[area_id]
+    facility = fac[area_id][facility_id]
+    for npc_id in ids:
+        character = Character(npc_id, "冒険者{}".format(npc_id), affinity, facility)
+        app.world.characters[npc_id] = character
+        facility.characters.append(npc_id)
+        area.adventurer_npcs.append(npc_id)
+        app.save_data_dict["areas"][area_id]["adventurer_npcs"].append(npc_id)
+        app.save_data_dict["npcs"][npc_id] = {
+            "name": character.name, "ability_scores": {},
+            "relationship": {"player": {"affinity": affinity}},
+            "current_area": area_id, "current_location": facility_id}
+
+
+def read_seen():
+    path = ledger_path()
+    if not os.path.exists(path):
+        return {}
+    with io.open(path, encoding="utf-8") as fh:
+        return json.load(fh).get("seen", {})
+
+
+def stand_in(app, fac, area_id, facility_id):
+    """プレイヤーをその街のその施設に立たせる。"""
+    app.player.current_area = app.world.areas[area_id]
+    app.player.location = fac[area_id][facility_id]
+
+
+def scene_only_here():
+    print("[現在地だけ（同じ街の移動）]")
+    # プレイヤーは街0。街1にも冒険者3人。
+    module, ctx = fresh_mod(DEPART_CHANCE_PERCENT=100, LOCAL_CHANCE_PERCENT=50,
+                            LOCAL_ONLY_HERE=True)
+    app, fac = make_world(affinities=(30, 30, 30))
+    add_adventurers(app, fac, "1", G1, ["20", "21", "22"])
+    use(app)
+    for _ in range(4):
+        elapse(ctx, app, 30)
+    trips = read_ledger()
+    there = {cid: t for cid, t in trips.items() if t["origin_area"] == "1"}
+    check("居ない街では同じ街の移動が起きない",
+          there and all(t["kind"] == "away" for t in there.values()), there)
+    check("居ない街からも別の街へは出る", there, trips)
+    check("落ちていない", not ctx.errors, ctx.errors)
+
+    # 切れば他の街でも同じ街の中を動く。
+    module, ctx = fresh_mod(DEPART_CHANCE_PERCENT=100, LOCAL_CHANCE_PERCENT=100,
+                            LOCAL_ONLY_HERE=False)
+    app, fac = make_world(affinities=(30, 30, 30))
+    add_adventurers(app, fac, "1", G1, ["20", "21", "22"])
+    use(app)
+    elapse(ctx, app, 30)
+    there = {cid: t for cid, t in read_ledger().items() if t["origin_area"] == "1"}
+    check("設定を切ると居ない街でも同じ街の移動が起きる",
+          any(t["kind"] == "local" for t in there.values()), there)
+
+
+def scene_arrival():
+    print("[到着時の抽選]")
+    module, ctx = fresh_mod(DEPART_CHANCE_PERCENT=100, LOCAL_CHANCE_PERCENT=100)
+    app, fac = make_world(affinities=(30, 30, 30))
+    add_adventurers(app, fac, "1", G1, ["20", "21", "22"])
+    use(app)
+    elapse(ctx, app, 30)                       # 街0で引く
+    seen = read_seen()
+    check("引いた街の日が控えられる", seen.get("0") == 40, seen)
+    check("居ない街は引いていない", "1" not in seen, seen)
+    before = dict(read_ledger())
+
+    # 日を進めずに街1へ着く（移動そのものは move_phase）。門に着く。
+    stand_in(app, fac, "1", E1)
+    moved_player(ctx, app)
+    trips = read_ledger()
+    there = {cid: t for cid, t in trips.items() if t["origin_area"] == "1"}
+    check("着いた街で引く（日は進んでいない）", there, trips)
+    check("引いたのは街中の移動", all(t["kind"] == "local" for t in there.values()), there)
+    check("着いた街の日が控えられる", read_seen().get("1") == 40, read_seen())
+    check("別の街の旅は増えていない",
+          {c for c, t in trips.items() if t["kind"] == "away"}
+          == {c for c, t in before.items() if t["kind"] == "away"})
+
+    # 続けて施設を移っても、同じ日には引き直さない。
+    count = len(read_ledger())
+    stand_in(app, fac, "1", I1)
+    moved_player(ctx, app)
+    moved_player(ctx, app)
+    check("同じ日には引き直さない", len(read_ledger()) == count, read_ledger())
+    check("落ちていない", not ctx.errors, ctx.errors)
+
+
+def scene_in_the_way():
+    print("[目の前では動かさない]")
+    module, ctx = fresh_mod(DEPART_CHANCE_PERCENT=100, LOCAL_CHANCE_PERCENT=100)
+    app, fac = make_world(affinities=(30, 30, 30))
+    add_adventurers(app, fac, "1", G1, ["20", "21", "22"])
+    use(app)
+    stand_in(app, fac, "1", G1)          # 冒険者と同じギルドに立つ
+    moved_player(ctx, app)
+    check("居合わせた相手は出発しない",
+          not [t for t in read_ledger().values() if t["origin_area"] == "1"],
+          read_ledger())
+    check("その街の日は控えない（次の機会に引き直す）", "1" not in read_seen(), read_seen())
+    stand_in(app, fac, "1", E1)          # 門へ移る
+    moved_player(ctx, app)
+    there = [t for t in read_ledger().values() if t["origin_area"] == "1"]
+    check("離れたら同じ窓で出発する", there, read_ledger())
+    check("引き直した後は日を控える", read_seen().get("1") == 10, read_seen())
+    check("落ちていない", not ctx.errors, ctx.errors)
 
 
 def scene_return():
@@ -626,6 +848,17 @@ def scene_context():
     hook(orig, "m", "h", "x", character_instance=npc)
     check("keyword でも足す", seen["npc"] is not npc and "旅をして来て" in seen["npc"].profile)
 
+    # まだ細部の生成されていない個体（profile が None）。
+    npc.profile = None
+    hook(orig, "m", "h", "x", npc)
+    check("profile が None でも足す",
+          seen["npc"] is not npc and seen["npc"].profile.startswith(trip["name"]),
+          seen["npc"].profile)
+    check("本体の profile は None のまま", npc.profile is None)
+    npc.profile = ["読めない形"]
+    hook(orig, "m", "h", "x", npc)
+    check("読めない形の profile は触らない", seen["npc"] is npc)
+
     module, ctx = fresh_mod(DEPART_CHANCE_PERCENT=100, LOCAL_CHANCE_PERCENT=100)
     app, fac = make_world(affinities=(30, 30, 30))
     use(app)
@@ -717,9 +950,19 @@ def scene_pure():
     check("日数0なら0", travel.chance_over_days(50, 0) == 0.0)
     check("期間は範囲内", all(30 <= travel.pick_duration(rng, 30, 90) <= 90 for _ in range(50)))
     check("逆でも動く", 30 <= travel.pick_duration(rng, 90, 30) <= 90)
-    check("候補の無い側は選ばない", travel.pick_kind(rng, 100, True, False) == "away"
-          and travel.pick_kind(rng, 0, False, True) == "local"
-          and travel.pick_kind(rng, 50, False, False) is None)
+    check("月あたりの確率を種類で分ける",
+          abs(travel.kind_chance(30, 50, "local", 30)
+              - travel.chance_over_days(15, 30)) < 1e-9
+          and abs(travel.kind_chance(30, 50, "away", 30)
+                  - travel.chance_over_days(15, 30)) < 1e-9)
+    check("割合0なら街中は起きない", travel.kind_chance(30, 0, "local", 30) == 0.0
+          and travel.kind_chance(30, 100, "away", 30) == 0.0)
+    check("引いてからの日数（記録が無ければ上限）",
+          travel.catchup_days({}, "0", 100, 30) == 30
+          and travel.catchup_days({"0": 90}, "0", 100, 30) == 10
+          and travel.catchup_days({"0": 100}, "0", 100, 30) == 0
+          and travel.catchup_days({"0": 50}, "0", 100, 30) == 30)
+    check("日が読めなければ0", travel.catchup_days({}, "0", None, 30) == 0)
     check("文型の鍵が足りなくても落ちない",
           travel.format_context("{name}が{nothing}に", name="x") == "xがに")
     check("空の文型は空", travel.format_context("", name="x") == "")
@@ -734,6 +977,10 @@ def main():
     scene_depart()
     scene_keep()
     scene_local()
+    scene_guild_list()
+    scene_only_here()
+    scene_arrival()
+    scene_in_the_way()
     scene_return()
     scene_rest()
     scene_defer()

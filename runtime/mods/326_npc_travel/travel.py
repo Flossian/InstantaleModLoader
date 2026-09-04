@@ -32,9 +32,11 @@ def new_bucket():
     """1世界ぶんの台帳の初期形。`WorldStore(default=new_bucket)`。
 
     `trips` は旅の途中の人、`hired` は旅先で雇われて解散待ちの人、
-    `rest` は帰ってきて休んでいる人（次に出られる日）。
+    `rest` は帰ってきて休んでいる人（次に出られる日）、
+    `seen` は街ごとに「街中の移動を最後に引いた日」。
     """
-    return {"version": LEDGER_VERSION, "trips": {}, "hired": {}, "rest": {}}
+    return {"version": LEDGER_VERSION, "trips": {}, "hired": {}, "rest": {},
+            "seen": {}}
 
 
 def table_of(bucket, name) -> dict:
@@ -60,6 +62,10 @@ def rest_of(bucket) -> dict:
     return table_of(bucket, "rest")
 
 
+def seen_of(bucket) -> dict:
+    return table_of(bucket, "seen")
+
+
 def _ordered(table, fields):
     ordered = {}
     for npc_id in sorted(table, key=lambda key: (len(str(key)), str(key))):
@@ -79,7 +85,8 @@ def order_bucket(bucket):
     return {"version": LEDGER_VERSION,
             "trips": _ordered(trips_of(bucket), TRIP_FIELDS),
             "hired": _ordered(hired_of(bucket), HIRED_FIELDS),
-            "rest": _ordered(rest_of(bucket), REST_FIELDS)}
+            "rest": _ordered(rest_of(bucket), REST_FIELDS),
+            "seen": _ordered(seen_of(bucket), ())}
 
 
 #: 旅の1行。並びは書くときの並び。
@@ -222,19 +229,41 @@ def pick_duration(rng, lo, hi) -> int:
     return rng.randint(lo, hi)
 
 
-def pick_kind(rng, local_percent, has_away, has_local):
-    """同じ街か別の街か。候補の無いほうへは行かない。どちらも無ければ None。"""
-    if not has_away and not has_local:
-        return None
-    if not has_away:
-        return LOCAL
-    if not has_local:
-        return AWAY
+def kind_chance(monthly_percent, local_percent, kind, days) -> float:
+    """その種類の出発確率。月あたりの確率を先に2つへ分けてから日数に直す。
+
+    別の街への旅と街中の移動は引く契機が別（前者は日が進んだとき、
+    後者はその街に居るとき）なので、1回の抽選で振り分けずに、
+    **月あたりの確率のほうを割り当てる**。
+    """
     try:
-        local = max(0.0, min(100.0, float(local_percent))) / 100.0
+        share = max(0.0, min(100.0, float(local_percent))) / 100.0
     except (TypeError, ValueError):
-        local = 0.5
-    return LOCAL if rng.random() < local else AWAY
+        share = 0.5
+    weight = share if kind == LOCAL else 1.0 - share
+    try:
+        monthly = max(0.0, min(100.0, float(monthly_percent)))
+    except (TypeError, ValueError):
+        return 0.0
+    return chance_over_days(monthly * weight, days)
+
+
+def catchup_days(seen, area_id, day, cap) -> int:
+    """その街で街中の移動を前に引いてから経った日数（上限つき）。
+
+    記録が無ければ上限そのもの（着いたときに、その街が動いていたことにする）。
+    上限を置くのは、長く訪れていない街で確率が 1 に張り付かないようにするため。
+    """
+    if day is None:
+        return 0
+    try:
+        cap = max(0, int(cap))
+        last = seen.get(str(area_id))
+        if last is None:
+            return cap
+        return max(0, min(cap, int(day) - int(last)))
+    except (TypeError, ValueError):
+        return 0
 
 
 def pick_spot(rng, spots):
