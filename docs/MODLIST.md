@@ -103,7 +103,7 @@
 | [`316_bounty_hunter`](MODS.md#316_bounty_hunter-手配されていると追手が来る) | 賞金稼ぎが襲ってくる | 手配されていると追手が来る | 15 |  |
 | [`317_reputation`](MODS.md#317_reputation-評判と二つ名) | 評判と二つ名 | 評判と二つ名 | 8 |  |
 | [`318_area_difficulty_growth`](MODS.md#318_area_difficulty_growth-土地が育つ依頼の難易度が上がる) | 依頼クリアで難易度上昇 | 土地が育つ（依頼の難易度が上がる） | 7 |  |
-| [`319_battle_tactics`](MODS.md#319_battle_tactics-戦闘を複数手の駆け引きにする) | 戦闘のバランス調整とバフ・デバフの有効化 | 戦闘を複数手の駆け引きにする | 16 |  |
+| [`319_battle_tactics`](MODS.md#319_battle_tactics-戦闘を複数手の駆け引きにする) | 戦闘のバランス調整とバフ・デバフの有効化 | 戦闘を複数手の駆け引きにする | 17 |  |
 | [`320_guild_adventurer_recruit`](MODS.md#320_guild_adventurer_recruit-ギルドの冒険者の補充) | ギルドの冒険者の補充 | ギルドの冒険者の補充 | 2 |  |
 | [`321_area_chronicle`](MODS.md#321_area_chronicle-エリアの状況を更新依頼クリアで案内文が変わる) | エリアの状況を更新 | エリアの状況を更新（依頼クリアで案内文が変わる） | 4 |  |
 | [`322_battle_bgm`](MODS.md#322_battle_bgm-戦闘bgmを置いた曲から選んで鳴らす) | 戦闘BGMの選曲 | 戦闘BGMを置いた曲から選んで鳴らす | 2 |  |

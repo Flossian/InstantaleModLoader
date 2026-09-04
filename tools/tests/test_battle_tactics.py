@@ -135,8 +135,8 @@ check("hit: an elite boss nuke is capped short of a one-shot",
       "final={}".format(nuke))
 guarded = mod.hit_damage([("extreme", 1)], 1500, 1560, 500, in_mult=0.5,
                          attacker_level=75, defender_level=62)
-check("hit: guarding halves what gets through", guarded < nuke * 0.7,
-      "guarded={}".format(guarded))
+check("hit: guarding halves what gets through even at the cap",
+      abs(guarded - nuke * 0.5) <= 1, "nuke={} guarded={}".format(nuke, guarded))
 demon = mod.hit_damage([("extreme", 1)], 5000, 300, 50,
                        attacker_level=80, defender_level=60)
 check("hit: an outclassing boss fells a novice in one blow", demon > 300,
@@ -154,6 +154,33 @@ weak_ally = mod.hit_damage([("weak", 1)], max(132, 460), 460, 96,
                            attacker_level=36, defender_level=36)
 check("ally floor: a low-HP member still bites",
       weak_ally >= 460 * 0.10, "final={}".format(weak_ally))
+
+# ---------------------------------------------------------------- 揺らぎ
+import random as _random                                       # noqa: E402
+
+_rng = _random.Random(20260827)
+_rolls = [mod.damage_wobble(_rng) for _ in range(2000)]
+check("wobble: stays inside the configured band",
+      all(1 - mod.DAMAGE_WOBBLE / 100.0 <= r <= 1 + mod.DAMAGE_WOBBLE / 100.0
+          for r in _rolls))
+check("wobble: actually varies and centres on 1.0",
+      len(set(_rolls)) > 1900 and abs(sum(_rolls) / len(_rolls) - 1.0) < 0.01,
+      "mean={}".format(sum(_rolls) / len(_rolls)))
+_saved = mod.DAMAGE_WOBBLE
+mod.DAMAGE_WOBBLE = 0
+check("wobble: zero means identical numbers every time",
+      mod.damage_wobble(_rng) == 1.0)
+mod.DAMAGE_WOBBLE = _saved
+
+_low = mod.hit_damage([("normal", 1)], 896, 1560, 150, wobble=0.9)
+_high = mod.hit_damage([("normal", 1)], 896, 1560, 150, wobble=1.1)
+check("wobble: a swing swings the final number",
+      _high > _low and abs(_high / _low - 1.22) < 0.05,
+      "low={} high={}".format(_low, _high))
+check("wobble: a high roll still cannot break the cap",
+      mod.hit_damage([("extreme", 1)], 1500, 1560, 500, wobble=1.5,
+                     attacker_level=62, defender_level=62)
+      == int(round(1560 * mod.MAX_FRACTION / 100.0)))
 
 # ---------------------------------------------------------------- 出どころの受け渡し
 from instantale_modloader import ui as _ui                     # noqa: E402

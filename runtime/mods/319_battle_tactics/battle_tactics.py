@@ -25,6 +25,7 @@
          × レベル差の倍率                    高い側が伸び、低い側は割られる
          × (1 − 軽減)                        軽減 = 防御 ÷ (防御 + PIVOT)、上限 60%
          × 防御の構え・状態異常の倍率
+         × 揺らぎ（±DAMAGE_WOBBLE%。素点側の乱数を捨てたぶんを戻す）
     下限は受け側 max_hp の 1%（格上も削れなくはならない）。
     上限は互角なら受け側 max_hp の MAX_FRACTION%。
     レベル差か火力差が開くと上限が外れ、相手の体力を超える数字（過剰殺傷）が出る
@@ -103,6 +104,8 @@ band が火力の一部しか1発に乗せないため。
 セーブに MOD 独自の鍵は増やさない。
 """
 
+import random
+
 from instantale_modloader import frames, ui
 
 LOG_BASENAME = "battle_tactics.log"
@@ -151,6 +154,12 @@ LEVEL_ELITE_GAP = 15
 LEVEL_OUTCLASS_GAP = 20
 LEVEL_ELITE_MULT = 200
 LEVEL_OUTCLASS_MULT = 300
+
+# ダメージの揺らぎ（%）。1発ごとに ±この幅で一様に振れる。
+# 圧縮式は素のゲームの素点側の乱数（±10%。§2.68）を捨てて決定的になっていた。
+# 毎回同じ数字は作り物めくので戻す。上限・下限より前に掛かるため、
+# 揺らいでも互角の即死禁止（MAX_FRACTION）は破らない。
+DAMAGE_WOBBLE = 10
 
 # 敵の火力（%）。敵の一撃だけに掛かる（仲間には掛からない）。
 # 敵の錨は本人の max_hp で、素のままだとプレイヤーの錨（基礎値 ≈ max_hp の
@@ -305,9 +314,17 @@ def cap_fraction(gap, dominance):
     return None if opened >= 1.0 else opened
 
 
+def damage_wobble(rng=random):
+    """1発ごとの揺らぎの倍率。幅は `DAMAGE_WOBBLE`（% の設定、0 で無効）。"""
+    width = max(0, DAMAGE_WOBBLE) / 100.0
+    if width <= 0:
+        return 1.0
+    return 1.0 + rng.uniform(-width, width)
+
+
 def hit_damage(entries, anchor, defender_max_hp, defense,
                out_mult=1.0, in_mult=1.0,
-               attacker_level=None, defender_level=None):
+               attacker_level=None, defender_level=None, wobble=1.0):
     """1発の最終ダメージ。錨は**攻め手の火力**（`anchor`）。
 
     `entries` はその対象への `[(power, multiplier), ...]`
@@ -331,7 +348,7 @@ def hit_damage(entries, anchor, defender_max_hp, defense,
     gap = level_gap(attacker_level, defender_level)
     damage = (band_sum * anchor * level_multiplier(gap)
               * (1.0 - mitigation(defense))
-              * out_mult * in_mult)
+              * out_mult * wobble)
     try:
         defender_max_hp = float(defender_max_hp)
     except Exception:
@@ -340,6 +357,12 @@ def hit_damage(entries, anchor, defender_max_hp, defense,
         cap = cap_fraction(gap, anchor / defender_max_hp)
         if cap is not None:
             damage = min(damage, cap * defender_max_hp)
+    # 受け側の防ぎ（構え・被ダメの状態異常）は**上限の後**に掛ける。
+    # 上限は「1発が持っていける量」で、防いだぶんはそこからさらに引かれる。
+    # 先に掛けると、上限に張り付く一撃（強敵の必殺級）では防御がほとんど
+    # 効かなくなる ― いちばん構える場面で構えが無意味になる。
+    damage *= in_mult
+    if defender_max_hp > 0:
         damage = max(damage, defender_max_hp * MIN_FRACTION)
     return max(1, int(round(damage)))
 
@@ -736,7 +759,8 @@ def apply(ctx):
             final = hit_damage(entries, anchor, defender_max, defense,
                                out_mult=out_mult, in_mult=in_mult,
                                attacker_level=attacker_level,
-                               defender_level=defender_level)
+                               defender_level=defender_level,
+                               wobble=damage_wobble())
             write("hit: {} -> {} {} raw={} vanilla={} anchor={} lv={}->{} "
                   "final={} ({:.0%} of {}){}{}".format(
                       attacker_name, defender_name,
