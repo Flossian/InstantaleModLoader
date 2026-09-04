@@ -239,7 +239,7 @@ check("--ctx-size はゲームの値のまま", flag_value(argv, "--ctx-size") =
 check("--parallel 1 を立てる", flag_value(argv, "--parallel") == "1",
       flag_value(argv, "--parallel"))
 check("--ctx-size を1つも増やさない", argv.count("--ctx-size") == 1)
-bare = [r"C:in\llama-server.exe", "-m", "x.gguf"]
+bare = [r"C:\bin\llama-server.exe", "-m", "x.gguf"]
 argv = passed_argv(launch(ctx, list(bare)))
 check("旗が無いなら --ctx-size は足さない", "--ctx-size" not in argv, argv)
 check("旗が無くても --parallel は足す", flag_value(argv, "--parallel") == "1", argv)

@@ -144,7 +144,7 @@ MOD の一覧が出るので、「Mod を注入してゲームを起動」を押
 `out\modloader.log` の末尾に、こう出ていれば入っている:
 
 ```text
-boot complete: 52/52 mod(s) applied
+boot complete: 59/59 mod(s) applied
 ```
 
 数が足りなくても失敗とは限らない。

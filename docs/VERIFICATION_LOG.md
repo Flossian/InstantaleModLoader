@@ -1,6 +1,6 @@
 # VERIFICATION LOG: 実機・実データでの検証記録
 
-最終更新: 2026-09-02
+最終更新: 2026-09-03
 
 [VERIFICATION.md](VERIFICATION.md) の §2。
 何をどう確かめたのかを1件ずつ、**結論と、根拠になった数字だけ**残してある。
@@ -1926,7 +1926,7 @@ normal×1 ≈ ×1.24。
 同格帯（賞金稼ぎ）の被弾は素とほぼ同じ数字に乗り、
 素では防具に飲まれて 1 だった格下の攻撃が 2.6〜5.3% の削りになった。
 
-#### 仲間の手は `get_base_damage_value` を通らない（§2.10.2 の未計測が決着）
+#### 仲間の手は `get_base_damage_value` を通らない（GAME.md §2.10.2 の未計測が決着）
 
 カイの全4発が `base=-`（敵と同じく代用の max_hp 比に落ちた）。
 実数は weak 1発で敵 HP の 11〜23%（52〜108点）で、頭数としては十分働く。
@@ -2846,7 +2846,7 @@ LLM も画像生成も描き分けられないので外した）、性格6軸・
 |---|---|
 | 仕掛かり | `armed on chat, _apply_chat_template, _post_with_model_loading_retry, llm_manager:send_request, …`（`modloader.log` 15:07:49）。`llm_manager` の別名は遅れて当たった（`[ARM]` 15:07:46） |
 | 表 | `[TABLE] seeds.default.json を読んだ: 20軸 238句` |
-| 種 | `[SEED] chat town | 12人`（15:09:23）。必須施設の主5・住民4・冒険者3 |
+| 種 | `[SEED] chat town \| 12人`（15:09:23）。必須施設の主5・住民4・冒険者3 |
 | 応答（`output_data\…\create_settlement_detail\84.json`） | 13人。種を付けた12人は look_description が種の句をほぼそのまま含む（「紺に近い黒髪を背中まで伸ばし、三つ編みにしている。顔はそばかすだらけで…首には古い縄の痕」）。「=」や見出しの写りは 0 / 13。種の無い free 施設の主は素のまま（「淡い緑色の髪、透き通るような肌」） |
 | セーブ（復号して読んだ） | 書式の写り 0。`look`（画像タグ）も種どおり（`long flaxen hair, slicked back` / `long grey hair, swept to one side` / `long white hair, braided`） |
 | 立ち絵 | 4人ぶん `characters\<名前>\` が生えた（会話に入った分） |
@@ -2868,7 +2868,7 @@ LLM も画像生成も描き分けられないので外した）、性格6軸・
 
 | 観測 | 値 |
 |---|---|
-| 新しいプロセスの最初の LLM リクエスト | `create_world_overview`（15:40:32。対象外なので種なし）→ `create_story` → 町（`[SEED] chat town | 12人` 15:40:37、応答 15:41:03）。仕掛かりは `boot #3` の直後（15:38:38）で間に合っている |
+| 新しいプロセスの最初の LLM リクエスト | `create_world_overview`（15:40:32。対象外なので種なし）→ `create_story` → 町（`[SEED] chat town \| 12人` 15:40:37、応答 15:41:03）。仕掛かりは `boot #3` の直後（15:38:38）で間に合っている |
 | 町「灰の宿場町」（town） | 13人。種の12人は look_description が種どおり、書式の写り 0 / 13。施設の主に子どもは無し（十代の店主は許容） |
 | 物語 NPC「荷運びのガラム」（`master_ai_npc_generater`） | `[SEED] chat single`（15:45:06）。応答は種どおり（「真っ白な長い髪は背中まで届き、厚い前髪が琥珀色の瞳を片方隠している」）、書式の写り 0 |
 | セーブ（復号） | 10人、書式の写り 0、全員 `image_src` あり |
