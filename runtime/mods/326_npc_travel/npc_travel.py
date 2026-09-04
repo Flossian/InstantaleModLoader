@@ -22,6 +22,8 @@
   （通路は除く。`travel.PASSAGE_TYPES`）
 - 旅の間は元の街のギルドの一覧（`adventurer_npcs`）から外す。
   別の街のギルドに着いた者はそこの一覧に載る＝雇える
+- 帰ってきた人は `REST_DAYS`（既定 90）の間は次の旅に出ない
+  （実機で同じ人が続けて引かれたので足した。旅先で雇われて解散した人も同じ）
 - 出発も帰還も、プレイヤーがその施設に居る間は次の機会まで延ばす
   （目の前で消えたり湧いたりしない）
 - 旅先で雇われた者は旅を終える。帰さない。解散のときにゲームが
@@ -66,6 +68,7 @@ AWAY_DAYS_MIN = 30           # 別の街への滞在日数の下限
 AWAY_DAYS_MAX = 90           # 同 上限
 LOCAL_DAYS = 7               # 同じ街の中の滞在日数
 CAPACITY_PER_FACILITY = 2    # 1施設に旅で来られる人数。0 で上限なし
+REST_DAYS = 90               # 帰ってから次に出るまでの日数
 RETURN_ALL_ON_LOAD = False   # ロードのとき台帳の全員を帰す（片付け）
 AWAY_CONTEXT = "{name}は{origin}から旅をして来て、いまは{where}に滞在している（あと{days}日ほど）。"
 LOCAL_CONTEXT = "{name}はいつものギルドを離れ、いまは{where}に来ている（あと{days}日ほど）。"
@@ -270,6 +273,16 @@ def apply(ctx):
         _key, bucket = worlds.of(app)
         return travel.hired_of(bucket)
 
+    def rest_table(app):
+        _key, bucket = worlds.of(app)
+        return travel.rest_of(bucket)
+
+    def start_rest(app, npc_id, name, day):
+        """帰ってきた（解散した）日を控える。日が読めないときは休み無し。"""
+        if day is None or REST_DAYS <= 0:
+            return
+        rest_table(app)[str(npc_id)] = travel.make_rest(name, day, REST_DAYS)
+
     # ------------------------------------------------------------ 街と施設
     def known_towns(app):
         """施設が生成済みの街 `{area_id: Area}`。ダンジョン・未生成は入らない。"""
@@ -337,17 +350,18 @@ def apply(ctx):
                 (save_npcs(app).get(str(npc_id)) or {}).get("relationship"))
         return value
 
-    def guild_members(app, area, area_id, trips):
+    def guild_members(app, area, area_id, trips, day):
         """`(一覧に出る人数, 出発できる id の並び)`。
 
         一覧に出る＝名簿に在り、生きていて、同行しておらず、旅に出ていない。
         `Area.adventurer_npcs` は刈り込まれない（死亡も同行中も残る。`320_`）ので
-        自分で引き直す。
+        自分で引き直す。休み中の人は一覧には出るが出発の候補にしない。
         """
         rosters = roster_lists(app, area, area_id)
         roster = rosters[0] if rosters else []
         party = {str(member) for member in ui.party_member_ids(app)}
         hired = hired_table(app)
+        rest = rest_table(app)
         present, eligible = [], []
         for raw in roster:
             npc_id = str(raw)
@@ -361,6 +375,8 @@ def apply(ctx):
             present.append(npc_id)
             affinity = affinity_of(app, npc_id, character)
             if affinity is None or affinity < AFFINITY_MIN:
+                continue
+            if travel.is_resting(rest, npc_id, day):
                 continue
             here = facility_of_character(character)
             stands_in = area_of_facility(app, here, area_id) if here else str(area_id)
@@ -474,6 +490,7 @@ def apply(ctx):
             facility_drop(dest, npc_id)
         restore_rosters(app, npc_id, trip)
         trips.pop(npc_id, None)
+        start_rest(app, npc_id, trip.get("name"), ui.game_day(app))
         write("return: {} ({}) -> {}/{} ({})".format(
             trip.get("name"), npc_id, trip["origin_area"], facility_id, reason))
         return True
@@ -526,6 +543,7 @@ def apply(ctx):
                     roster_drop(app, areas.get(str(other)), other, npc_id)
             roster_add(app, areas.get(home), home, npc_id)
             hired.pop(npc_id, None)
+            start_rest(app, npc_id, row.get("name"), ui.game_day(app))
             changed = True
             write("hired: {} ({}) left the party; enrolled in area {} (from {})"
                   .format(row.get("name"), npc_id, home, row.get("origin_area")))
@@ -567,6 +585,8 @@ def apply(ctx):
                 changed = True
         if settle_hired(app, party):
             changed = True
+        if travel.prune_rest(rest_table(app), day):
+            changed = True
         if changed:
             worlds.save(key)
         return changed
@@ -579,7 +599,7 @@ def apply(ctx):
         changed = False
         for area_id in sorted(towns, key=ui.id_sort_key):
             area = towns[area_id]
-            present, eligible = guild_members(app, area, area_id, trips)
+            present, eligible = guild_members(app, area, area_id, trips, day)
             chosen = travel.pick_departures(rng, eligible, len(present), STAY_MIN, chance)
             if not chosen:
                 continue
@@ -613,7 +633,7 @@ def apply(ctx):
     # ------------------------------------------------------------ ロードの突き合わせ
     def reconcile(app):
         key, trips = ledger(app)
-        if not trips and not hired_table(app):
+        if not trips and not hired_table(app) and not rest_table(app):
             return
         day = ui.game_day(app)
         write("reconcile: world {!r} day {} trips {}".format(key, day, len(trips)))
@@ -658,6 +678,14 @@ def apply(ctx):
                 changed = True
                 write("reconcile: {} was hired on day {} but the save is on day {}; forgotten"
                       .format(npc_id, row.get("hired_day"), day))
+        rest = rest_table(app)
+        for npc_id in list(rest):
+            row = rest[npc_id]
+            if day is not None and isinstance(row, dict) \
+                    and day < int(row.get("home_day", 0)):
+                # 帰る前のセーブ。休みも始まっていない。
+                rest.pop(npc_id, None)
+                changed = True
         if changed:
             worlds.save(key)
         settle(app, day, "reconcile")
@@ -775,6 +803,6 @@ def apply(ctx):
         make_conversation(target, label)
 
     ctx.log("npc travel: installed (chance {}%/month, stay {}, affinity >= {}, "
-            "away {}..{} days, local {} days, state {})".format(
+            "away {}..{} days, local {} days, rest {} days, state {})".format(
                 DEPART_CHANCE_PERCENT, STAY_MIN, AFFINITY_MIN, AWAY_DAYS_MIN,
-                AWAY_DAYS_MAX, LOCAL_DAYS, worlds.dir_path()))
+                AWAY_DAYS_MAX, LOCAL_DAYS, REST_DAYS, worlds.dir_path()))

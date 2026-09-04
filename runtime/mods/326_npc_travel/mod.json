@@ -81,6 +81,15 @@
       "note": {"ja": "旅で来ている人がこの人数の施設へはもう行かない。0 で上限なし",
                "en": "A facility already holding this many travelers takes no more. 0 = unlimited"}
     },
+    "REST_DAYS": {
+      "type": "int",
+      "default": 90,
+      "min": 0,
+      "max": 365,
+      "label": {"ja": "帰ってから次に出るまでの日数", "en": "Days at home before the next trip"},
+      "note": {"ja": "旅先で雇われて解散した人も同じ。0 で休みなし",
+               "en": "Also after being hired on the road and dismissed. 0 = no rest"}
+    },
     "RETURN_ALL_ON_LOAD": {
       "type": "bool",
       "default": false,

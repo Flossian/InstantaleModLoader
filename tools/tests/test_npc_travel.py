@@ -434,6 +434,53 @@ def scene_return():
     check("落ちていない", not ctx.errors, ctx.errors)
 
 
+def read_rest():
+    path = ledger_path()
+    if not os.path.exists(path):
+        return {}
+    with io.open(path, encoding="utf-8") as fh:
+        return json.load(fh).get("rest", {})
+
+
+def scene_rest():
+    print("[休み]")
+    module, ctx = fresh_mod(DEPART_CHANCE_PERCENT=100, LOCAL_CHANCE_PERCENT=100, REST_DAYS=90)
+    app, fac = make_world(affinities=(30, 30, 30))       # day 10
+    use(app)
+    elapse(ctx, app, 30)                                  # day 40: A が出る（7日）
+    a = next(iter(read_ledger()))
+    elapse(ctx, app, 7)                                   # day 47: A が帰り、B が出る
+    rest = read_rest()
+    check("帰った日が控えられる", a in rest and rest[a]["home_day"] == 47
+          and rest[a]["until_day"] == 137, rest)
+    check("帰った直後の経過では出ない", a not in read_ledger(), read_ledger())
+    module.DEPART_CHANCE_PERCENT = 0
+    elapse(ctx, app, 7)                                   # day 54: B が帰る
+    check("誰も旅に出ていない", not read_ledger())
+    for cid in ("10", "11", "12"):
+        if cid != a:
+            app.world.characters[cid].relationship["player"]["affinity"] = 0
+    module.DEPART_CHANCE_PERCENT = 100
+    elapse(ctx, app, 30)                                  # day 84: A だけ候補だが休み中
+    check("休みの間は出ない", not read_ledger() and a in read_rest())
+    elapse(ctx, app, 30)                                  # day 114: まだ休み
+    check("90日の途中も出ない", not read_ledger())
+    elapse(ctx, app, 30)                                  # day 144: 休み明け（137）
+    check("休みが明けると控えが消える", a not in read_rest(), read_rest())
+    for _ in range(8):                                    # 確率 0.64/30日。8回で外れる確率は 1e-4
+        if a in read_ledger():
+            break
+        elapse(ctx, app, 30)
+    check("休みが明けた後は出られる", a in read_ledger(), read_ledger())
+
+    module, ctx = fresh_mod(DEPART_CHANCE_PERCENT=100, LOCAL_CHANCE_PERCENT=100, REST_DAYS=0)
+    app, fac = make_world(affinities=(30, 30, 30))
+    use(app)
+    elapse(ctx, app, 30)
+    elapse(ctx, app, 7)
+    check("0 なら控えない", not read_rest())
+
+
 def scene_defer():
     print("[延期]")
     module, ctx = fresh_mod(DEPART_CHANCE_PERCENT=100, LOCAL_CHANCE_PERCENT=0)
@@ -688,6 +735,7 @@ def main():
     scene_keep()
     scene_local()
     scene_return()
+    scene_rest()
     scene_defer()
     scene_hired()
     scene_removed()

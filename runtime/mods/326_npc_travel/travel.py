@@ -15,7 +15,9 @@ LOCAL = "local"
 AWAY_TYPES = ("guild", "inn")
 
 #: 主の居ない通路。同じ街の行き先にしない（GAME.md §2.7）。
-PASSAGE_TYPES = ("entrance", "exit", "ward", "location", "dungeon_location")
+#: `free` はシーン記述エンジンが画面を持つ施設（GAME.md §2.21）で、
+#: 置いても会えるか分からないので同じく外す（実機 2026-09-04 で 4 件が引かれて気付いた）。
+PASSAGE_TYPES = ("entrance", "exit", "ward", "location", "dungeon_location", "free")
 
 #: 街とみなす `size`（`325_` の TOWN_SIZES と同じ語彙）。
 TOWN_SIZES = ("village", "town", "city")
@@ -29,9 +31,10 @@ LEDGER_VERSION = 1
 def new_bucket():
     """1世界ぶんの台帳の初期形。`WorldStore(default=new_bucket)`。
 
-    `trips` は旅の途中の人、`hired` は旅先で雇われて解散待ちの人。
+    `trips` は旅の途中の人、`hired` は旅先で雇われて解散待ちの人、
+    `rest` は帰ってきて休んでいる人（次に出られる日）。
     """
-    return {"version": LEDGER_VERSION, "trips": {}, "hired": {}}
+    return {"version": LEDGER_VERSION, "trips": {}, "hired": {}, "rest": {}}
 
 
 def table_of(bucket, name) -> dict:
@@ -53,6 +56,10 @@ def hired_of(bucket) -> dict:
     return table_of(bucket, "hired")
 
 
+def rest_of(bucket) -> dict:
+    return table_of(bucket, "rest")
+
+
 def _ordered(table, fields):
     ordered = {}
     for npc_id in sorted(table, key=lambda key: (len(str(key)), str(key))):
@@ -71,7 +78,8 @@ def order_bucket(bucket):
     """書く直前に並びを固定する（`state/` の差分を読めるように）。"""
     return {"version": LEDGER_VERSION,
             "trips": _ordered(trips_of(bucket), TRIP_FIELDS),
-            "hired": _ordered(hired_of(bucket), HIRED_FIELDS)}
+            "hired": _ordered(hired_of(bucket), HIRED_FIELDS),
+            "rest": _ordered(rest_of(bucket), REST_FIELDS)}
 
 
 #: 旅の1行。並びは書くときの並び。
@@ -82,6 +90,35 @@ TRIP_FIELDS = ("name", "kind", "origin_area", "origin_facility",
 
 #: 旅先で雇われた人の1行。解散したら、実際に置かれた街の名簿へ入れる。
 HIRED_FIELDS = ("name", "origin_area", "dest_area", "hired_day")
+
+
+#: 休んでいる人の1行。`until_day` 未満の日は出発の候補にしない。
+REST_FIELDS = ("name", "home_day", "until_day")
+
+
+def make_rest(name, day, rest_days):
+    return {"name": name, "home_day": int(day), "until_day": int(day) + max(0, int(rest_days))}
+
+
+def is_resting(rest, npc_id, day) -> bool:
+    """休み中か。日が読めなければ休み中とみなさない。"""
+    row = rest.get(str(npc_id))
+    if not isinstance(row, dict) or day is None:
+        return False
+    try:
+        return int(day) < int(row.get("until_day", 0))
+    except (TypeError, ValueError):
+        return False
+
+
+def prune_rest(rest, day) -> bool:
+    """休みの明けた行を落とす。落としたら True。"""
+    if day is None:
+        return False
+    gone = [npc_id for npc_id in rest if not is_resting(rest, npc_id, day)]
+    for npc_id in gone:
+        rest.pop(npc_id, None)
+    return bool(gone)
 
 
 def make_hired(trip, day):
