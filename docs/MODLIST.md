@@ -150,8 +150,8 @@
 | `222_probe_battle_mechanics` | 戦闘の数の作られ方を録る |
 | `223_probe_party_equipment` | 本体のアイテム popup と `ItemEquipManager` / `ItemUnequipManager` の入口を観測し、素のゲームが実際に誰の `equipments` を書き換えるかを測る |
 | `224_probe_npc_carryover` | ロードのどの地点から世界へ NPC を入れられるかを測る |
-| `225_probe_area_quest_difficulty` | 街を初めて訪ねたとき、その街の依頼の難易度を誰がどう決めているかを録る |
-| `226_probe_item_consume` | 回復アイテムを使ったとき実際に何が起きるかを録る |
+| `225_probe_area_quest_difficulty` | 街を初めて訪ねたとき、依頼の難易度を誰がどう決めるかを録る |
+| `226_probe_item_consume` | 回復アイテムを使ったとき何が起きるかを録る |
 | `227_probe_shop_stock` | 買った品が店の棚へ戻るのはどこかを録る |
 
 ---

@@ -242,7 +242,7 @@ app.refresh_choice_buttons(reset_page=True)
 押されると `getattr(__main__, cls_name)(app, *args)` が組み立てられ
 `app.process_choice(それ, 文字列)` に渡る。
 押された添字は `display_button_map` で引き直される（`ui.pressed_entry` が同じことをする）。
-選択肢が1ページ（8枠）に収まらないときは最後の枠が `次` になり、`display_button_map` のその枠には添字ではなく文字列 `'next'` が入る（`206_` の記録、2026-08-17: `['<int>'×7, 'next']`。`choice_button_page` は 0）。整数でない枠はボタンではないので、`ui.pressed_entry` は None を返す（2026-09-03 に直し、同日の実機で確認。それまでは添字そのままに落ちて `buttons[7]` を引き、自前の一覧を出す MOD がページ送りを横取りしていた。VERIFICATION.md §3.50）。**直した後は `次` の押下がどの MOD のログにも出ない**（素通しするため）。2ページ目以降の枠の文字列（戻る側）は未実測。
+選択肢が1ページ（8枠）に収まらないときは最後の枠が `次` になり、`display_button_map` のその枠には添字ではなく文字列 `'next'` が入る（`206_` の記録、2026-08-17: `['<int>'×7, 'next']`。`choice_button_page` は 0）。整数でない枠はボタンではないので `ui.pressed_entry` は None を返し、`次` の押下はどの MOD のログにも出ない（素通し。添字そのままに落ちて `buttons[7]` を引き、自前の一覧を出す MOD がページ送りを横取りしていた不具合は 2026-09-03 に直した。VERIFICATION.md §3.50）。2ページ目以降の枠の文字列（戻る側）は未実測。
 
 > `app.function_correspond_to_input` は名前に反して対応表ではなく `PhaseSpec` 1個。
 > 「いま自由入力を送ったら何を呼ぶか」を保持している。
@@ -472,10 +472,10 @@ app.world.characters     -> {id: Character}    Facility.owner はこの id（str
   `location` / `dungeon_location`。
   うち `ward` / `location` / `entrance` / `exit` は主のいない通路
   （実セーブ3世界には `training_facility` も1件ずつある。`free` は §2.21）
-- 施設 id は**土地の中でしか一意でない**（実セーブ3世界とも、世界の中では別の土地に同じ id がある。
-  世界単位で施設を指すなら `土地id/施設id` の組で持つ。`324_` の `worlds\<世界>.json` がその形）
-- 実行時の `Area.size` は読めない（`207_` の記録と `324_` の実機 38/38 がともに取れず。
-  土地の種類は `save_data_dict["areas"][id]["size"]` から取る。`324_` の `size_of`）
+- 施設 id は**土地の中でしか一意でない**（実セーブ3世界とも別の土地に同じ id がある）。
+  世界単位で施設を指すなら `土地id/施設id` の組で持つ（`324_` の `worlds\<世界>.json` がその形）
+- 実行時の `Area.size` は読めない（`207_` と `324_` の実機 38/38 がともに取れず。VERIFICATION_LOG.md §2.83）。
+  土地の種類は `save_data_dict["areas"][id]["size"]` から取る（`324_` の `size_of`）
 
 #### セーブの形＝実行時の形ではない
 
@@ -675,27 +675,26 @@ MOD からの書き方はこうなる。
 #### 街の中身と初期依頼は初訪問で作られる（2026-09-03、`225_` で実測）
 
 世界生成が作るのは 9 街の名前・概要・接続だけ（`level_of_detail=0`、`nodes` と `quests` は空）。
-街の施設・NPC・初期依頼3件・BGM は、その街へ初めて移動したときに
-`AreaMoveManager.method_1` → `save_area_json:write_area_data_to_world_dict(world_dict, area_id)` が作る
-（`create_settlement_detail` → `settlement_quest_generator` → `generate_quest_area` の順。`level_of_detail` は 1 になる。
-VERIFICATION_LOG.md §2.84）。
+施設・NPC・初期依頼3件・BGM は、その街へ初めて移動したときに
+`AreaMoveManager.method_1` → `save_area_json:write_area_data_to_world_dict(world_dict, area_id)` が
+`create_settlement_detail` → `settlement_quest_generator` → `generate_quest_area` の順で作る（`level_of_detail` は 1 になる）。
 ロード時に全エリアで走る `Area.update` / `generate_nodes` は中身を作らない（0.0s）。
 
-初期依頼3件の難易度は LLM ではなくゲームが先に決め、頼み文に `quest_1:難易度は26/70` と書く。決め方は
+初期依頼3件の難易度は LLM ではなくゲームが先に決め、頼み文に `quest_1:難易度は26/70` と書く:
 
 ```
 random.sample(range(lo, hi), k=3)          save_area_json.py:329
 ```
 
-で、`lo` / `hi` は街の枠（id）で固定。序盤 0・1・4 → 中盤 2・5・7 → 終盤 3・6・8 の順に窓が隣り合う:
+`lo` / `hi` は街の枠（id）で固定。プレイヤーのレベル・物語の段階・その街の物語の依頼には依らない。
+序盤 0・1・4 → 中盤 2・5・7 → 終盤 3・6・8 の順に窓が隣り合う
+（id 2・3・8 は `sample` の実引数、残りは5世界の初期依頼の観測。VERIFICATION_LOG.md §2.84）:
 
 | id | 0 | 1 | 4 | 2 | 5 | 7 | 3 | 6 | 8 |
 |---|---|---|---|---|---|---|---|---|---|
 | `range(lo, hi)` | (1, 6) | (3, 11) | (11, 19) | (19, 28) | (28, 37) | (37, 47) | (47, 57) | (57, 67) | (67, 77) |
 
-id 2・3・8 は `sample` の実引数、残りは5世界の初期依頼の観測から読んだ境界（最も古い世界だけ窓を1つ外れる値があり、
-版の違いと読んでいる）。プレイヤーのレベル・物語の段階・その街の物語の依頼には依らない。
-エディタで後から足した街（id 9 以降）は枠が無く、**全域 `range(1, 77)` から引かれる**（実測: id 33 で `sample(range(1, 77), 3) -> [6, 34, 3]`。id 21 の `[13, 30, 40]` も同じ）。
+エディタで後から足した街（id 9 以降）は枠が無く、全域 `range(1, 77)` から引かれる（id 33 で `[6, 34, 3]`、id 21 で `[13, 30, 40]`）。
 `133_ui_area_difficulty` はこの表で未訪問の街の帯を見積もる。
 
 #### 進行ループ（2026-07-28、1クエストを頭から終わりまで実測）
@@ -984,7 +983,7 @@ apply_music_volume(app)         main_023 で追加
   どれが何回発火しても結果が変わらない書き方にして全部に仕掛ける
   （実測では `save_world_json:write_obfuscated_json_file` だけが発火した。VERIFICATION.md §3.4）
 
-土地の曲が `play_music_from_src` へ来る経路（2026-08-21〜09-01 の実測 357 回。`207_` の `out\battle_bgm.log` 2世代）:
+土地の曲が `play_music_from_src` へ来る経路（`207_` の `out\battle_bgm.log` 2世代、2026-08-21〜09-01 の 357 回）:
 
 | 呼び出し元（`instantale.py` の lambda） | 場面 | 回数 |
 |---|---|---|
@@ -995,9 +994,8 @@ apply_music_volume(app)         main_023 で追加
 | `:6168` | 依頼の始まり（`QuestStartManager`。ダンジョンの曲） | 19 |
 | `:1027` / `:8038` / `:8102` | 場面は特定していない | 4 / 3 / 3 |
 
-この範囲では渡してくる物は全部 app だった（本節冒頭の「app でない物」はこの2世代のログには現れていない）。
-`MovePhaseManager` からは 0 件 ＝ **施設の出入りではゲームは曲を鳴らし直さない**
-（`324_` はそのために `move_phase` の復帰後に自分で鳴らし直す）。
+357 回とも渡してくる物は app（本節冒頭の「app でない物」はこの2世代には無い）。
+`MovePhaseManager` からは 0 件。**施設の出入りではゲームは曲を鳴らし直さない**（`324_` は `move_phase` の復帰後に自分で鳴らし直す）。
 
 **乱数は MOD 専用の `random.Random` を使う**（グローバルから引くとゲーム自身の乱数列がずれる）。
 
@@ -1296,24 +1294,20 @@ generate_item_in_shopping(item_data, shop_owner_instance, item_stock_tier=2)
 
 #### 2.13.1.3 店を開くたびに、売れた品が作り直される（実測。VERIFICATION.md §3.52）
 
-施設は品揃えの雛形を `Facility.config['goods']` に持っている
+施設は品揃えの雛形を `Facility.config['goods']` に持つ
 （`stock_tier` と `stock_update_date` も同じ `config`。セーブ側にしか無い項目がある）。
-**店を開くと、雛形にあって主が持っていない品が1つ作り直されて棚へ入る。**
+店を開くと、**雛形にあって主が持っていない品が1つ作り直されて棚へ入る**:
 
 ```
 品の誕生: id=59 'ハルマンの予備のランプ' 主=ハルマン(118) {'item_detail': 'tool', '買価': 368}
   呼び出し元: ShoppingStartManagerRemake.shopping_start_method_1 (instantale.py:3159)
            <- ShoppingStartManagerRemake.execute (instantale.py:3281)
-           <- run (threading.py:953)
 ```
 
-- 作るのはゲーム自身（`instantale.py:3159`）。採番もゲームの台帳
-  （`index['item']` が進む）。鍵は `item_` の付かない**裸の数字**になる
-- 走るのは**開いたとき**。買う操作そのものは
-  `InventoryItem.change_inventory` が売り手から外して買い手へ入れるだけで、
-  品は1つも生まれない
-- 雛形は買っても減らず、`stock_update_date` も動かない
-- **装備は作り直されない。** 実測7品:
+- 作るのも採番もゲーム自身（`index['item']` が進む）。鍵は `item_` の付かない裸の数字
+- 走るのは開いたとき。買う操作は `InventoryItem.change_inventory` が売り手から買い手へ移すだけで、品は生まれない。
+  雛形は買っても減らず、`stock_update_date` も動かない
+- 装備は作り直されない。実測7品:
 
 | `item_type` / `item_detail` | 作り直し |
 | --- | --- |
@@ -1324,14 +1318,11 @@ generate_item_in_shopping(item_data, shop_owner_instance, item_stock_tier=2)
 | `utility` / `tool` | される |
 
   `material` と `utility` / `document` は未測定。
-- 作り直された品は素の値のまま棚に並ぶ。`129_` / `134_` / `405_` は
-  生成の入口を包んでいるが**戻り値しか見ていない**ので、
-  品を持ち物へ直に入れるこの経路では素通りする
-  （次に開いたときの on-sight で付け直される）
+- 作り直された品は素の値のまま並ぶ。`129_` / `134_` / `405_` は生成の入口の**戻り値しか見ていない**ので、
+  持ち物へ直に入れるこの経路は素通り（次に開いたときの on-sight で付け直される）
 
-> つまり回復アイテムだけは同じ品を何度でも買えて、在庫が尽きない。
-> `312_shop_restock` の「買った品を作り直させない」（既定 ON）が、
-> その来店で増えたぶんを窓が組み上がる前に外す。
+> 回復アイテムだけは同じ品を何度でも買えて、在庫が尽きない。
+> `312_shop_restock` の「買った品を作り直させない」（既定 ON）が、その来店で増えたぶんを窓が組み上がる前に外す。
 
 #### 店の主は `job` が施設の種類と一致している
 
@@ -1404,12 +1395,10 @@ gold に直すのは `get_item_base_price` と `get_randomized_item_price`。
 | `回復` | 9 | 13 | 59 | 115 | 204 | 211 | 237 | 237 |
 
 `疲労負荷` は `get_heal_physical_integrity_barden(value)` と読めるが未計測。
-実物の品では `value` 3〜52 の全域で **9〜11** しか観測していない（`208_` のログ 20 件）。
-スタミナの上限はレベル1で 10（§2.19）なので、
-**序盤は回復アイテム1つでスタミナが尽きる**（回復 9 のために 11 を払う）。
+実物では `value` 3〜52 の全域で **9〜11** しか観測していない（`208_` のログ 20 件）。
+スタミナの上限はレベル1で 10（§2.19）なので、序盤は回復アイテム1つでスタミナが尽きる（回復 9 のために 11 を払う）。
 `healing_item` の細分は `food` / `drink` / `herb` / `medicine` / `potion` の5つ
-（店の品揃え生成のスキーマ。`consumable` はこれに `scroll` が足される。
-品に書かれる `item_detail` では `herb` が `plant`）。
+（店の品揃え生成のスキーマ。`consumable` はこれに `scroll` が足される。品の `item_detail` では `herb` が `plant`）。
 
 #### 使うと何が起きるか（2026-09-04 に `226_` で実測。使用5回）
 
@@ -1422,13 +1411,11 @@ ItemPopupMenu.on_consume_item          右クリックの「消費」
 
 - `usable` が真: `physical_integrity` が `疲労負荷` ぶん減る → HP に `回復` を足す →
   持ち物から1つ減る → `add_text("…を消費した。HPを N だけ回復した。")`。
-  N は**使う時に** `attributes["回復"]` を読んだ値（生成時に固めていない）
+  N は使う時に `attributes["回復"]` を読んだ値（生成時に固めていない）
 - `usable` が偽: `add_text("駄目だ...体がもたない。")` だけ。品は減らない
-- 文は `consume_item` の**ワーカースレッドの先頭**で出る（その後 1 秒ほど待って品を外す）。
-  呼び出し元のメインスレッドの `ItemConsumeManager.execute` はその間まだ戻っていない
-  （2026-09-04 の `226_`。スレッドを分けずに数えると `execute` の側の文に見える）
-- `max_hp` / `update_max_hp` / `update_max_physical_integrity` はこの間に走らない
-  （スタミナが減っても最大 HP はここでは動かない。動くのは別の地点）
+- 文は `consume_item` のワーカースレッドの先頭で出て、1 秒ほど後に品を外す。
+  メインスレッドの `ItemConsumeManager.execute` はその間まだ戻っていない（スレッドを分けずに数えると `execute` の側の文に見える）
+- `max_hp` / `update_max_hp` / `update_max_physical_integrity` はこの間に走らない（最大 HP が動くのは別の地点）
 - `on_use_item` / `ItemUseManager` は回復アイテムでは通らない（別の種別の入口）
 - `usable` は popup の項目には無い（`ItemPopupMenu` が持つのは `item` とボタン2つと `canvas`）
 
