@@ -84,6 +84,60 @@ STATE_DIR = ml.state_dir(RUNTIME_DIR)
 SETTINGS_DIR = C.settings_dir(RUNTIME_DIR)
 CONFIG_PATH = os.path.join(SETTINGS_DIR, "gui.json")
 
+# 更新の確認先。起動のたびに別スレッドで1回だけ見る（`App._check_update`）。
+RELEASE_API = ("https://api.github.com/repos/Flossian/InstantaleModLoader"
+               "/releases/latest")
+# 上書きで消えないもの。確認の文に出す（zip に入らないので展開は触らない）。
+UPDATE_KEEPS = "settings\\・state\\・local\\・手元で足した MOD"
+
+
+def _vtuple(ver: str) -> tuple[int, ...]:
+    return tuple(int(x) for x in ver.lstrip("v").split("."))
+
+
+def newer_release(current: str = ml.__version__) -> tuple[str, str] | None:
+    """GitHub の最新 Release が今より新しければ (版, full zip の URL)。無ければ None。
+
+    ネットが無い・API の形が違う・版が数字でない、はどれも例外のまま返す。
+    呼ぶ側（別スレッド）が握って黙る。
+    """
+    import urllib.request
+    with urllib.request.urlopen(RELEASE_API, timeout=5) as r:
+        data = json.load(r)
+    ver = str(data["tag_name"]).lstrip("v")
+    if _vtuple(ver) <= _vtuple(current):
+        return None
+    for asset in data.get("assets", []):
+        if asset["name"].endswith("-full.zip"):
+            return ver, asset["browser_download_url"]
+    return None
+
+
+def extract_release(zip_path: str, dest: str = ROOT) -> int:
+    """full zip を dest へ上書き展開して、書いたファイルの数を返す。
+
+    zip の頭一段（`InstantaleModLoader-<ver>/`）は剥がす。
+    zip に無いものは消さない ― 手元で作っている MOD を巻き込むので。
+    新しい版で無くなった MOD は、配る側がデバッグモード限定か読み込まない形にして
+    出す約束（消す判断をここでしない）。
+
+    開発の作業ツリーで押すと、配布物の中身で作業中の変更が上書きされる
+    （2026-09-05 に実際に起きた。git で戻せるが、戻す前に何を失ったか見ること）。
+    """
+    count = 0
+    with zipfile.ZipFile(zip_path) as z:
+        for info in z.infolist():
+            parts = info.filename.split("/")[1:]
+            if info.is_dir() or not parts or ".." in parts:
+                continue
+            path = os.path.join(dest, *parts)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with z.open(info) as src, open(path, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+            count += 1
+    return count
+
+
 FIND_POLL = 1.0      # ゲームのプロセスを探す間隔（秒）
 FIND_TRIES = 60      # 何回まで探すか（Epic 経由だと立ち上がりが遅いので長めに）
 
@@ -1095,6 +1149,7 @@ class App(ttk.Frame):
         self.drag: str | None = None      # ドラッグ中の mod のフォルダ名
         self.dirty = False
         self.busy = False
+        self.update: tuple[str, str] | None = None   # 新しい版（版, full zip の URL）
         self._status_text = ""            # 状態表示に今出ている文言
         self.shown_count = 0              # 絞り込みの結果、一覧に出ている数
         # デバッグモード。
@@ -1125,6 +1180,7 @@ class App(ttk.Frame):
 
         self._build()
         self.reload()
+        threading.Thread(target=self._check_update, daemon=True).start()
         # 進捗を拾う繰り返し。
         # 閉じるときに止める（止めないと、消えた widget を相手に1回だけ走って
         # Tk がエラーを吐く）。
@@ -1143,6 +1199,8 @@ class App(ttk.Frame):
                   style="Title.TLabel").pack(side="left")
         ttk.Label(head, text="上から順に適用されます（行をドラッグして並べ替え）",
                   style="Sub.TLabel").pack(side="left", padx=(12, 0))
+        # 新しい版が在るときだけ pack する（`_drain_events` の "update"）。
+        self.update_btn = ttk.Button(head, command=self._update)
 
         # 絞り込み。
         # MOD が 30 個を超えると、上から目で追うしか無くなる。
@@ -2478,6 +2536,11 @@ class App(ttk.Frame):
                 elif kind == "error":
                     self._finish(msg)
                     messagebox.showerror("エラー", msg)
+                elif kind == "update":
+                    self.update_btn.configure(text="更新 (v{})".format(msg))
+                    self.update_btn.pack(side="right")
+                elif kind == "restart":
+                    self._restart()
         except queue.Empty:
             pass
         self._tick = self.after(200, self._drain_events)
@@ -2537,6 +2600,56 @@ class App(ttk.Frame):
         if event.widget is master and master.state() == "normal":
             self.geom = master.geometry()
 
+    # -- 更新 --------------------------------------------------------------
+    def _check_update(self) -> None:
+        """別スレッド。新しい版が在ればボタンを出す。ネットが無い等は黙る。"""
+        try:
+            found = newer_release()
+        except Exception:
+            return
+        if found:
+            self.update = found
+            self.events.put(("update", found[0]))
+
+    def _update(self) -> None:
+        if self.busy or not self.update:
+            return
+        ver, url = self.update
+        if not messagebox.askokcancel(
+                "更新",
+                "v{} をダウンロードしてこのフォルダへ上書きし、\n"
+                "このウィンドウを開き直します。\n\n"
+                "{} は残ります。\n"
+                "新しい版に無くなった MOD のフォルダも消しません。".format(
+                    ver, UPDATE_KEEPS)):
+            return
+        self._start(self._update_worker, url)
+
+    def _update_worker(self, url: str) -> None:
+        """別スレッド。full zip を out\\ へ落として展開し、開き直しを頼む。
+
+        動いている .py を上書きしても平気（Windows は .py をロックしない。
+        読み込み済みのものはメモリの上で動いている）。
+        だから「次回起動時に差し替え」の二段構えは要らない。
+        """
+        import urllib.request
+        path = os.path.join(OUT_DIR, "update.zip")
+        try:
+            self.events.put(("status", "ダウンロード中…"))
+            os.makedirs(OUT_DIR, exist_ok=True)
+            urllib.request.urlretrieve(url, path)
+            self.events.put(("status", "展開中…"))
+            extract_release(path)
+            os.remove(path)
+        except Exception as e:
+            self.events.put(("error", "更新に失敗しました: {}".format(e)))
+            return
+        self.events.put(("restart", ""))
+
+    def _restart(self) -> None:
+        subprocess.Popen([sys.executable, os.path.abspath(__file__)], cwd=ROOT)
+        self._on_close()
+
     def _on_close(self) -> None:
         master = self.winfo_toplevel()
         update_config(window=self.geom,
@@ -2571,7 +2684,7 @@ def main() -> int:
         return 2
 
     root = tk.Tk()
-    root.title("Instantale ModLoader")
+    root.title("Instantale ModLoader  (v{})".format(ml.__version__))
     root.minsize(820, 480)
     # 配色と書体は中身を組む前に決める。
     # 後から差し替えると、既に作られた widget が古い色のまま残る。
