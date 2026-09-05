@@ -1,0 +1,59 @@
+{
+  "entry": "conversation_action.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Actions in conversation",
+    "ja": "会話中の明示行動"
+  },
+  "description": {
+    "en": "Wrap a line in <> (full- or half-width) during a conversation and it is handled as an action by the game's own free-action GM, like free input outside conversation: handing over items, paying, starting a fight. The GM also gets your inventory so it can name the item",
+    "ja": "会話中に ＜＞ か <> で包んだ入力を、会話の外の自由入力と同じようにゲーム自身の自由行動 GM に処理させる。アイテムの受け渡し・支払い・戦闘開始など。GM には所持品の一覧も渡すので、渡す品の名前が通る"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "after": [
+    "301_quest_from_conversation",
+    "311_npc_profile_memory",
+    "404_party_talk"
+  ],
+  "settings": {
+    "ACCEPT_PAREN": {
+      "type": "bool",
+      "default": false,
+      "label": {"ja": "（）も行動として扱う", "en": "Treat () as an action too"},
+      "note": {"ja": "既定は切。（）は台詞に添える所作にも使われるので、入れると雑談のたびに GM が回る",
+               "en": "Off by default: () is also used for gestures next to speech, so the GM would run on chit-chat"}
+    },
+    "SHOW_INVENTORY": {
+      "type": "bool",
+      "default": true,
+      "label": {"ja": "GM に所持品を見せる", "en": "Show the inventory to the GM"},
+      "note": {"ja": "切ると会話の外の自由入力と同じ材料が無くなり、渡す品の名前が創作されることがある",
+               "en": "Off: the GM has no item list and may invent an item name"}
+    },
+    "MAX_ITEMS": {
+      "type": "int",
+      "default": 30,
+      "min": 0,
+      "max": 200,
+      "label": {"ja": "見せる所持品の上限", "en": "Max items shown"},
+      "note": {"ja": "所持品の並び順でここまで。0 で名前だけの一覧も出さない",
+               "en": "In inventory order. 0 sends no list at all"}
+    },
+    "NOTE_ACTION": {
+      "type": "str",
+      "default": "<システム: プレイヤーは会話の中で次の行動をとった。台詞ではなく行動として処理すること: {action}>",
+      "label": {"ja": "GM に渡す行動の1行", "en": "Line handed to the GM for the action"},
+      "note": {"ja": "会話ログの末尾に足す。使える変数: {action}",
+               "en": "Appended to the conversation log. Variable: {action}"}
+    },
+    "NOTE_INVENTORY": {
+      "type": "str",
+      "default": "<システム: プレイヤーの所持品。move_item の item_id にはこの名前をそのまま使うこと: {items}>",
+      "label": {"ja": "GM に渡す所持品の1行", "en": "Line handed to the GM for the inventory"},
+      "note": {"ja": "使える変数: {items}（名前と説明の辞書）",
+               "en": "Variable: {items} (name to description)"}
+    }
+  }
+}
