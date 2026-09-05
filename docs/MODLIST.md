@@ -8,8 +8,8 @@
 手で書き換えても次の生成で消える。
 直す先は各 MOD の `mod.json` か MODS.md の見出し。
 
-同梱 95 本（基盤 2 / 修正 35 / 追加 30 / 計測 28）。
-うち 10 本は外部の MOD 作者からの提供（下の「提供を受けた MOD」）。
+同梱 96 本（基盤 2 / 修正 36 / 追加 30 / 計測 28）。
+うち 11 本は外部の MOD 作者からの提供（下の「提供を受けた MOD」）。
 
 並びはフォルダ名順。
 適用順はこれとは別で、GUI の `順` 列（`load_order.json`）が持つ。
@@ -36,7 +36,7 @@
 
 ---
 
-## 修正（35本）
+## 修正（36本）
 
 ゲームのバグ・不便を直す。
 
@@ -77,6 +77,7 @@
 | [`132_npc_variety`](MODS.md#132_npc_variety-npc-の外見性格経歴に種を渡す) | NPC の外見・性格・経歴の多様化 | NPC の外見・性格・経歴に種を渡す | 7 |  |
 | [`133_ui_area_difficulty`](MODS.md#133_ui_area_difficulty-移動先に適正レベル帯を出す) | エリア毎に適正レベル帯の表示 | 移動先に適正レベル帯を出す | 9 |  |
 | [`134_balance_item_effects`](MODS.md#134_balance_item_effects-アイテムの効果を分類ごとに作り直す) | アイテム効果の調整 | アイテムの効果を分類ごとに作り直す | 18 |  |
+| [`406_gemini_user_role_fix`](MODS.md#406_gemini_user_role_fix-クラウド-api-の-gemini-で-user-role-の無い依頼を補う) | Geminiでのユーザーロール補完 | クラウド API の Gemini で user role の無い依頼を補う | - |  |
 
 ---
 
@@ -158,7 +159,7 @@
 
 ## 提供を受けた MOD
 
-外部の MOD 作者から提供を受けて同梱している 10 本。
+外部の MOD 作者から提供を受けて同梱している 11 本。
 
 **番号の帯では数えられない。**
 いま提供を取り込む先は出どころの帯（`4xx`）だが、
@@ -181,3 +182,4 @@
 | [`403_npc_social_memory`](MODS.md#403_npc_social_memory-npc同士がお互いを認知し関係を覚える) | MoririnJP 様 | そのまま取り込み |
 | [`404_party_talk`](MODS.md#404_party_talk-パーティーメンバー全員と話す) | MoririnJP 様 | 提供者と共同 |
 | [`405_regional_economy`](MODS.md#405_regional_economy-街ごとの需給で売買の値段が変わる) | MoririnJP 様 | 提供者と共同 |
+| [`406_gemini_user_role_fix`](MODS.md#406_gemini_user_role_fix-クラウド-api-の-gemini-で-user-role-の無い依頼を補う) | MoririnJP 様 | そのまま取り込み |

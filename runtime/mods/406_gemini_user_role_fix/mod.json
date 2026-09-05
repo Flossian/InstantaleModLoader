@@ -1,5 +1,5 @@
 {
-  "entry": "Gemini user role fix.py",
+  "entry": "gemini_user_role_fix.py",
   "api": 1,
   "kind": "fix",
   "name": {

@@ -160,12 +160,14 @@ BANDS = (
         "325_road_opening",
         "326_npc_travel",
     )),
-    ("feature", CONTRIB_HEAD, (
+    #: 提供（4xx）は出どころの帯なので kind を固定しない（TECH.md §3.2.2）。
+    (None, CONTRIB_HEAD, (
         "401_battle_character_context",
         "402_party_inventory_transfer",
         "403_npc_social_memory",
         "404_party_talk",
         "405_regional_economy",
+        "406_gemini_user_role_fix",
     )),
 )
 
@@ -306,7 +308,7 @@ def check_order() -> None:
             listed.append(f)
             if not os.path.isdir(os.path.join(MODS_DIR, f)):
                 raise SystemExit("実体が無い: %s" % f)
-            if kind_of(f) != key:
+            if key is not None and kind_of(f) != key:
                 raise SystemExit("%s は %s の帯に居るが kind は %s。"
                                  % (f, key, kind_of(f)))
     dup = [f for f in set(listed) if listed.count(f) > 1]

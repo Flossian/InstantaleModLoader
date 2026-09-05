@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Geminiの売買・エピローグ処理に不足しているuser roleを補う。"""
+"""Geminiの売買・エピローグ・自由施設の要約に不足しているuser roleを補う。"""
 
 from instantale_modloader import llm
 
@@ -9,6 +9,7 @@ USER_TEXTS = {
     "shop_item_generator_ordinary": "＜売買する＞",
     "epilogue_pre_evaluator": "＜エピローグを評価する＞",
     "epilogue_generator": "＜エピローグを生成する＞",
+    "free_facility_summary": "＜行動記録を要約する＞",
 }
 
 
@@ -78,7 +79,7 @@ def apply(ctx):
                     args, kwargs, new_message, where
                 )
                 ctx.log(
-                    "400_user_role_injector: inserted user role for {}".format(
+                    "406_gemini_user_role_fix: inserted user role for {}".format(
                         manager_name
                     )
                 )
@@ -90,5 +91,5 @@ def apply(ctx):
         ctx,
         [MANAGER_TARGET],
         install,
-        label="400_user_role_injector",
+        label="406_gemini_user_role_fix",
     )
