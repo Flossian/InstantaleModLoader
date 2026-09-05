@@ -26,9 +26,8 @@
          × (1 − 軽減)                        軽減 = 防御 ÷ (防御 + PIVOT)、上限 60%
          × 防御の構え・状態異常の倍率
          × 揺らぎ（±DAMAGE_WOBBLE%。素点側の乱数を捨てたぶんを戻す）
-    下限は受け側 max_hp の 1%（格上も削れなくはならない）。
-    上限は互角なら受け側 max_hp の MAX_FRACTION%。
-    レベル差か火力差が開くと上限が外れ、相手の体力を超える数字（過剰殺傷）が出る
+    下限は受け側 max_hp の 1%（格上も削れなくはならない）。上限は無い。
+    相手の体力を超える数字（過剰殺傷）はそのまま出る
 
 **火力**はプレイヤーなら**基礎値**（2×√(能力側×武器攻撃力)。ゲーム自身の
 `get_base_damage_value` が同じ手の中で計算する値を控えて使う）。
@@ -130,11 +129,6 @@ BAND_STRONG = 45
 BAND_VERY_STRONG = 65
 BAND_EXTREME = 90
 
-# 互角の戦いで1発が持っていける割合の上限（受け側の最大HPの %）。
-# extreme+強化が重なっても、互角の相手からの即死は無い。
-# レベル差か火力差が開くと外れる（`cap_fraction`）。
-MAX_FRACTION = 65
-
 # 防御の効き。軽減 = 防御 ÷ (防御 + この値)。
 # 大きいほど防御が効かなくなる。実測の帯（防具500・敵防御100前後）で
 # 800 なら 38% / 11% になる。
@@ -147,7 +141,7 @@ GUARD_CUT = 50
 # （逆向きは同じ倍率で割る ＝ 格上からの被ダメ増・格下への被ダメ減が同時に出る）。
 #     差 ≤ FAIR         適正。倍率なし
 #     差 = ELITE        強敵の域。LEVEL_ELITE_MULT（既定 ×2）
-#     差 ≥ OUTCLASS     格が違う。LEVEL_OUTCLASS_MULT（既定 ×3）＋一撃の解禁
+#     差 ≥ OUTCLASS     格が違う。LEVEL_OUTCLASS_MULT（既定 ×3）
 # 間は直線でつなぐ（1レベルで挙動が跳ねる崖を作らない）。
 LEVEL_FAIR_GAP = 10
 LEVEL_ELITE_GAP = 15
@@ -157,8 +151,7 @@ LEVEL_OUTCLASS_MULT = 300
 
 # ダメージの揺らぎ（%）。1発ごとに ±この幅で一様に振れる。
 # 圧縮式は素のゲームの素点側の乱数（±10%。§2.68）を捨てて決定的になっていた。
-# 毎回同じ数字は作り物めくので戻す。上限・下限より前に掛かるため、
-# 揺らいでも互角の即死禁止（MAX_FRACTION）は破らない。
+# 毎回同じ数字は作り物めくので戻す。
 DAMAGE_WOBBLE = 10
 
 # 敵の火力（%）。敵の一撃だけに掛かる（仲間には掛からない）。
@@ -175,14 +168,6 @@ RESTORE_EFFECTS = True
 GUARD_BUTTON = True
 
 # ---------------------------------------------------------------- 定数
-# 一撃の解禁（火力差の側）。dominance ＝ 攻め手の火力 ÷ 受け側 max_hp。
-# START で上限（MAX_FRACTION）がゆるみ始め、FULL で外れる。
-# 最強の英雄が初期村の魔物を一撃で払えないのは不自然だし、
-# 魔王の一撃が駆け出しを即死させても違和感は無い。互角の相手には出ない
-# （レベル差の側の解禁は LEVEL_ELITE_GAP〜LEVEL_OUTCLASS_GAP）。
-DOMINANCE_START = 1.5
-DOMINANCE_FULL = 3.0
-
 # 軽減の上限。防御をどれだけ積んでも被ダメは4割残る。
 MITIGATION_MAX = 0.60
 
@@ -292,28 +277,6 @@ def level_multiplier(gap):
     return mult if gap >= 0 else 1.0 / mult
 
 
-def cap_fraction(gap, dominance):
-    """その格差での1発の上限（受け側 max_hp 比）。開き切ったら None（上限なし）。
-
-    互角では `MAX_FRACTION`。
-    攻める側のレベル差（ELITE〜OUTCLASS）か火力差
-    （dominance = 火力 ÷ 受け側 max_hp が DOMINANCE_START〜FULL）の
-    どちらかが開くと上限がゆるみ、振り切れば外れる ＝ 相手の max_hp を超える
-    数字（過剰殺傷）がそのまま出る。圧倒的な格差だけが一撃を出せる。
-    """
-    top = MAX_FRACTION / 100.0
-    if top >= 1.0:
-        return None
-    try:
-        dominance = float(dominance)
-    except Exception:
-        dominance = 0.0
-    by_level = _ramp(gap, LEVEL_ELITE_GAP, LEVEL_OUTCLASS_GAP, top, 1.0)
-    by_power = _ramp(dominance, DOMINANCE_START, DOMINANCE_FULL, top, 1.0)
-    opened = max(by_level, by_power)
-    return None if opened >= 1.0 else opened
-
-
 def damage_wobble(rng=random):
     """1発ごとの揺らぎの倍率。幅は `DAMAGE_WOBBLE`（% の設定、0 で無効）。"""
     width = max(0, DAMAGE_WOBBLE) / 100.0
@@ -331,7 +294,11 @@ def hit_damage(entries, anchor, defender_max_hp, defense,
     （1手で同じ相手に複数のエントリが乗ることがある。実測 §2.68）。
     `anchor` はプレイヤーなら基礎値（2×√(能力×武器)）、
     敵・仲間なら本人の max_hp（呼び出し側が選ぶ）。
-    受け側で決まるのは 軽減（防御）・レベル差の向き・上限と下限だけ。
+    受け側で決まるのは 軽減（防御）・レベル差の向き・下限だけ。
+    上限は無い（版12で撤廃）。錨が攻め手の側にあるので、互角への1発は
+    式の時点で体力の一部に収まる（同格へ normal 15%・extreme 58%）。
+    受け側 max_hp 比の上限を残すと、大きい一撃の帯で「大きい相手ほど大きい数字」が
+    復活し（extreme×1.5 が雑魚に 347・同格に 1014）、雑魚への一撃まで邪魔する。
     「大きい相手ほど大きい数字」は出ない（版7までの割合式の不自然さ。実機の指摘）。
     """
     band_sum = 0.0
@@ -353,14 +320,6 @@ def hit_damage(entries, anchor, defender_max_hp, defense,
         defender_max_hp = float(defender_max_hp)
     except Exception:
         defender_max_hp = 0.0
-    if defender_max_hp > 0:
-        cap = cap_fraction(gap, anchor / defender_max_hp)
-        if cap is not None:
-            damage = min(damage, cap * defender_max_hp)
-    # 受け側の防ぎ（構え・被ダメの状態異常）は**上限の後**に掛ける。
-    # 上限は「1発が持っていける量」で、防いだぶんはそこからさらに引かれる。
-    # 先に掛けると、上限に張り付く一撃（強敵の必殺級）では防御がほとんど
-    # 効かなくなる ― いちばん構える場面で構えが無意味になる。
     damage *= in_mult
     if defender_max_hp > 0:
         damage = max(damage, defender_max_hp * MIN_FRACTION)
@@ -1018,8 +977,9 @@ def apply(ctx):
             ctx.log_exc("battle tactics: cannot reset at the battle start")
         return result
 
-    ctx.log("battle tactics: bands={}/{}/{}/{}/{}% cap={}% pivot={} guard_cut={}% "
-            "restore={} button={} (log -> {})".format(
+    ctx.log("battle tactics: bands={}/{}/{}/{}/{}% pivot={} guard_cut={}% "
+            "enemy_power={}% wobble={}% restore={} button={} (log -> {})".format(
                 BAND_WEAK, BAND_NORMAL, BAND_STRONG, BAND_VERY_STRONG,
-                BAND_EXTREME, MAX_FRACTION, MITIGATION_PIVOT, GUARD_CUT,
-                RESTORE_EFFECTS, GUARD_BUTTON, ctx.out_path(LOG_BASENAME)))
+                BAND_EXTREME, MITIGATION_PIVOT, GUARD_CUT, ENEMY_POWER,
+                DAMAGE_WOBBLE, RESTORE_EFFECTS, GUARD_BUTTON,
+                ctx.out_path(LOG_BASENAME)))

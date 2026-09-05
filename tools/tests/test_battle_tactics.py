@@ -8,7 +8,6 @@ VERIFICATION.md の 3xx の表）。
 
   帯       … power の列挙 → 火力に乗せる割合。知らない語は normal 扱い
   軽減     … 防御の飽和曲線と上限 60%
-  上限     … 互角は 65%。レベル差か火力差で開き、開き切ると外れる
   1発      … 錨は攻め手の火力。雑魚と同格に同じ帯の数字が出て、
              手数は相手の体力から生まれる（雑魚2手 / 同格7手前後）
   復元     … 審判の生の戻り（辞書でもオブジェクトでも）から
@@ -87,20 +86,6 @@ check("level: ramps between the steps",
 check("level: unreadable levels count as fair",
       mod.level_gap(None, 30) == 0 and mod.level_gap("x", None) == 0)
 
-# ---------------------------------------------------------------- 一撃の上限
-check("cap: closed for equals",
-      mod.cap_fraction(0, 1.0) == mod.MAX_FRACTION / 100.0
-      and mod.cap_fraction(15, 0) == mod.MAX_FRACTION / 100.0
-      and mod.cap_fraction(0, mod.DOMINANCE_START) == mod.MAX_FRACTION / 100.0)
-check("cap: fully open past either threshold",
-      mod.cap_fraction(mod.LEVEL_OUTCLASS_GAP, 0) is None
-      and mod.cap_fraction(0, mod.DOMINANCE_FULL) is None)
-check("cap: opens gradually in between",
-      mod.MAX_FRACTION / 100.0 < mod.cap_fraction(17, 0) < 1.0
-      and mod.MAX_FRACTION / 100.0 < mod.cap_fraction(0, 2.25) < 1.0)
-check("cap: the lower side never gets the open cap",
-      mod.cap_fraction(-40, 0.1) == mod.MAX_FRACTION / 100.0)
-
 # ---------------------------------------------------------------- 1発（実測の帯）
 # エリス: 基礎値 896・Lv62・HP1560。数字は攻め手に固有で、
 # 「大きい相手ほど大きい数字」は出ない。手数は相手の体力から生まれる。
@@ -128,14 +113,19 @@ slime = mod.hit_damage([("normal", 1)], 896, 64, 0,
                        attacker_level=62, defender_level=38)
 check("hit: the hero one-shots a slime with an everyday-scale number",
       slime > 64 and 400 <= slime <= 900, "final={}".format(slime))
-nuke = mod.hit_damage([("extreme", 1)], 1500, 1560, 500,
-                      attacker_level=75, defender_level=62)
-check("hit: an elite boss nuke is capped short of a one-shot",
-      nuke == int(round(1560 * mod.MAX_FRACTION / 100.0)),
-      "final={}".format(nuke))
-guarded = mod.hit_damage([("extreme", 1)], 1500, 1560, 500, in_mult=0.5,
-                         attacker_level=75, defender_level=62)
-check("hit: guarding halves what gets through even at the cap",
+# 上限は無い（版12で撤廃）。互角への1発は式の時点で体力の一部に収まる。
+equal_extreme = mod.hit_damage([("extreme", 1)], 896, 1560, 150,
+                               attacker_level=62, defender_level=62)
+check("hit: an equal's finisher hurts but does not kill from full",
+      0.35 * 1560 <= equal_extreme <= 0.75 * 1560,
+      "final={}".format(equal_extreme))
+nuke = mod.hit_damage([("extreme", 1)], 1500 * 0.5, 1560, 500,
+                      attacker_level=77, defender_level=62)
+check("hit: an elite boss nuke is brutal but survivable from full",
+      0.4 * 1560 <= nuke < 1560, "final={}".format(nuke))
+guarded = mod.hit_damage([("extreme", 1)], 1500 * 0.5, 1560, 500, in_mult=0.5,
+                         attacker_level=77, defender_level=62)
+check("hit: guarding halves what gets through",
       abs(guarded - nuke * 0.5) <= 1, "nuke={} guarded={}".format(nuke, guarded))
 demon = mod.hit_damage([("extreme", 1)], 5000, 300, 50,
                        attacker_level=80, defender_level=60)
@@ -177,10 +167,6 @@ _high = mod.hit_damage([("normal", 1)], 896, 1560, 150, wobble=1.1)
 check("wobble: a swing swings the final number",
       _high > _low and abs(_high / _low - 1.22) < 0.05,
       "low={} high={}".format(_low, _high))
-check("wobble: a high roll still cannot break the cap",
-      mod.hit_damage([("extreme", 1)], 1500, 1560, 500, wobble=1.5,
-                     attacker_level=62, defender_level=62)
-      == int(round(1560 * mod.MAX_FRACTION / 100.0)))
 
 # ---------------------------------------------------------------- 出どころの受け渡し
 from instantale_modloader import ui as _ui                     # noqa: E402

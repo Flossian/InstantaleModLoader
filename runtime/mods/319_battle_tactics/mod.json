@@ -7,10 +7,10 @@
     "ja": "戦闘のバランス調整とバフ・デバフの有効化"
   },
   "description": {
-    "en": "Stops evenly-matched battles from ending in one hit. The size of a blow comes from your own weapon and abilities (and how heavy the AI referee judged it), so the number stays in the same band whether you hit a mook or a boss; tough or higher-level foes just take less, and fights last as long as the target's health deserves. Equals trade about seven blows, a boss's finisher hurts badly without killing you from full health, and one-shots still exist where they should: a legendary hero swats a starter-village slime, an overwhelming foe fells a novice. Every blow varies a little from the last, and poison, curses and stat drops the referee describes now actually change the numbers, and a Guard entry in the skill list (or typing something defensive) halves what you take until your next move",
-    "ja": "互角の戦闘が一撃で終わらなくなる。一撃の大きさは自分の武器と能力（と AI の審判が裁いた攻撃の重さ）で決まり、相手が雑魚でもボスでも同じ帯の数字が出る。硬い相手・格上には通りが悪くなり、決着の手数は相手の体力なりに伸びる。同格とは7回前後の殴り合いになり、ボスの大技は手痛いが満タンから即死はしない。一撃が出るべき場面では出る。最強の英雄は初期村の魔物を一撃で払い、圧倒的な強敵は駆け出しを一撃で沈める。ダメージは毎回わずかに揺らぎ、審判が語ってくる毒や能力低下がちゃんと数字に効くようになり、スキル一覧に加わる「防御」（自由入力で防御的に動いてもよい）で次の行動まで被ダメージを半分にできる"
+    "en": "Stops evenly-matched battles from ending in one hit. The size of a blow comes from your own weapon and abilities (and how heavy the AI referee judged it), so the number stays in the same band whether you hit a mook or a boss; tough or higher-level foes just take less, and fights last as long as the target's health deserves. Equals trade about seven blows, a boss's finisher hurts badly and is meant to be guarded against, and one-shots still exist where they should: a legendary hero swats a starter-village slime, an overwhelming foe fells a novice. Every blow varies a little from the last, and poison, curses and stat drops the referee describes now actually change the numbers, and a Guard entry in the skill list (or typing something defensive) halves what you take until your next move",
+    "ja": "互角の戦闘が一撃で終わらなくなる。一撃の大きさは自分の武器と能力（と AI の審判が裁いた攻撃の重さ）で決まり、相手が雑魚でもボスでも同じ帯の数字が出る。硬い相手・格上には通りが悪くなり、決着の手数は相手の体力なりに伸びる。同格とは7回前後の殴り合いになり、ボスの大技は手痛く、防御で受けるのが前提。一撃が出るべき場面では出る。最強の英雄は初期村の魔物を一撃で払い、圧倒的な強敵は駆け出しを一撃で沈める。ダメージは毎回わずかに揺らぎ、審判が語ってくる毒や能力低下がちゃんと数字に効くようになり、スキル一覧に加わる「防御」（自由入力で防御的に動いてもよい）で次の行動まで被ダメージを半分にできる"
   },
-  "version": "11",
+  "version": "12",
   "author": "R01/Flossian",
   "settings": {
     "BAND_WEAK": {
@@ -83,20 +83,6 @@
         "en": "A boss's trump card; the moment to guard"
       }
     },
-    "MAX_FRACTION": {
-      "type": "int",
-      "default": 65,
-      "min": 1,
-      "max": 100,
-      "label": {
-        "ja": "一撃の上限（体力の%）",
-        "en": "Cap per hit (% of health)"
-      },
-      "note": {
-        "ja": "互角〜そこそこの格差で、1発で削れるのはここまで。格がまるごと離れた相手にはこの上限が外れて一撃が出る",
-        "en": "The most one hit can take between roughly matched fighters. Against a vastly weaker foe the cap opens and a single blow can kill"
-      }
-    },
     "MITIGATION_PIVOT": {
       "type": "int",
       "default": 800,
@@ -135,8 +121,8 @@
         "en": "Damage variance (+/-%)"
       },
       "note": {
-        "ja": "1発ごとに、この幅でダメージが上下に振れる。0 にすると毎回きっかり同じ数字になる。揺らいでも一撃の上限は超えない",
-        "en": "Each blow lands somewhere within this range above or below its computed value. Set 0 for identical numbers every time; the per-hit cap still holds"
+        "ja": "1発ごとに、この幅でダメージが上下に振れる。0 にすると毎回きっかり同じ数字になる",
+        "en": "Each blow lands somewhere within this range above or below its computed value. Set 0 for identical numbers every time"
       }
     },
     "ENEMY_POWER": {
@@ -191,8 +177,8 @@
         "en": "Level gap of a different class"
       },
       "note": {
-        "ja": "この差以上は勝負にならない領域。「格が違う倍率」が掛かり、上のレベルの側は一撃で倒すことがある",
-        "en": "Beyond this gap it is no contest: the outclass multiplier applies and the higher side can kill in one blow"
+        "ja": "この差以上は勝負にならない領域。「格が違う倍率」が掛かり、上のレベルの側は一撃で倒すことが多い",
+        "en": "Beyond this gap it is no contest: the outclass multiplier applies and the higher side usually kills in one blow"
       }
     },
     "LEVEL_ELITE_MULT": {
@@ -219,8 +205,8 @@
         "en": "Different-class multiplier (%)"
       },
       "note": {
-        "ja": "レベルが「格が違う」差だけ上の側に掛かる倍率。300 で3倍。合わせて一撃の上限も外れる",
-        "en": "Applied at the outclass gap. 300 means triple, and the one-hit cap opens as well"
+        "ja": "レベルが「格が違う」差だけ上の側に掛かる倍率。300 で3倍",
+        "en": "Applied at the outclass gap. 300 means triple"
       }
     },
     "RESTORE_EFFECTS": {
