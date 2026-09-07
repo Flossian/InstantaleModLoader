@@ -833,7 +833,7 @@ check_battle_end / enemy_delete_animation / convert_llm_output_to_instruction_di
 `Character` 側は `current_hp` / `physical_integrity` / `max_physical_integrity`（実測）。
 最大 HP は `update_max_hp()` があることから `max_hp` と推測しているだけで未実測。
 
-### 2.10.1 戦闘の審判 LLM の語彙（output_data の実記録より）
+#### 2.10.1 戦闘の審判 LLM の語彙（output_data の実記録より）
 
 1手の中身を決めているのは `scripts.llm.llm_manager_battle` の審判たち。
 入出力は `output_data/<世界>/<PC>/<関数名>/N.json` に残る（§1.4）ので、
@@ -871,7 +871,7 @@ referee_enemy_new / referee_npc / referee_npc_rewrite                         �
 
 語彙 → 数の変換は §2.10.2。
 
-### 2.10.2 語彙 → 数の変換（2026-08-26 に `222_` で実測。1クエスト・戦闘6回）
+#### 2.10.2 語彙 → 数の変換（2026-08-26 に `222_` で実測。1クエスト・戦闘6回）
 
 生ログと数表は VERIFICATION_LOG.md §2.68。1手の数の流れは3段:
 
@@ -890,7 +890,7 @@ resolve_battle_effect                      防御を引いて HP に当てる
 （`multiplier` は 0.67 / 1 / 1.5 を観測。審判の `modifications` がここに畳まれる）。
 `TextStatusEffect` の `intensity` と `effects_per_turn` は**変換後には現れなかった**。
 
-#### 攻撃（`calculate_battle_effect`）
+##### 攻撃（`calculate_battle_effect`）
 
 - 基礎値 = **2 × 幾何平均(character_attack, weapon_attack)**。
   `get_base_damage_value` が `statistics.geometric_mean` を呼ぶ
@@ -906,7 +906,7 @@ resolve_battle_effect                      防御を引いて HP に当てる
 - power × multiplier は基礎値に対し weak×1.5 で ×0.92〜1.08、normal×1 で ×1.24 を観測。
   同じ組でも ±10% ほど散る（素点側に乱数がある）。表を出すには通り数が足りない
 
-#### 防御（`get_instant_damage(attack, defense)`）
+##### 防御（`get_instant_damage(attack, defense)`）
 
 形は引き算:
 
@@ -919,7 +919,7 @@ resolve_battle_effect                      防御を引いて HP に当てる
   （`get_npc_defense(プレイヤー)` は 390 で、使われたのは 500 のほう。
   装備を変えた切り分けは未実測）
 
-#### 大味さの実体（この帯の実測）
+##### 大味さの実体（この帯の実測）
 
 レベル60・試験装備のプレイヤーで、素点 816〜1105 − 敵防御 ~100 ＝ **ダメージ 701〜1002**、
 敵 HP は 428〜788 なので毎回一撃。
@@ -928,7 +928,7 @@ resolve_battle_effect                      防御を引いて HP に当てる
 つまり大味の実体は**引き算の防御**と、素点・防御・HP の帯の食い違い。
 LLM の power の選択は extreme の端でしか意味を持たない。
 
-#### 効かないもの（実測）
+##### 効かないもの（実測）
 
 - **`text_status` は文章だけ**。「泥濘の拘束」（duration 3）は
   `Character.status` 辞書に `{status_name, description, duration}` で書かれたが、
@@ -1203,7 +1203,7 @@ InventoryGrid   cols=4  rows=6  len(slots)=24  size=[259, 389]  spacing=[1, 1]
 `toggle_twin_inventory_visibility` は Kivy の property dispatch → Clock コールバックの中で走るので、
 ここで例外が出るとアプリのループまで抜けてゲームごと落ちる。
 
-### 2.13.1 店の品揃え（`ShoppingStartManagerRemake`）
+#### 2.13.1 店の品揃え（`ShoppingStartManagerRemake`）
 
 店に並ぶのはその施設の主の持ち物そのもの。
 売買画面は主とプレイヤーの2つの持ち物を左右に並べているだけで、
@@ -1232,7 +1232,7 @@ InstantaleApp.normalize_shop_inventory_prices(shop_obtainer, player_obtainer)
 - **主の持ち物を空にしてから売買を始めると、ゲームが初回と同じ経路で品揃えを作り直す**
   （実機で成立。`cleared` → `restocked` が4店舗6回、`WARN not refilled` は0件）
 
-#### 2.13.1.1 品揃えの段はその土地の依頼の難易度（実セーブ3世界・店23軒）
+##### 2.13.1.1 品揃えの段はその土地の依頼の難易度（実セーブ3世界・店23軒）
 
 店に並ぶ品の `value` は、その土地の依頼の難易度以外の数を取らない。
 `world_data.json` を直に読んで、
@@ -1262,7 +1262,7 @@ InstantaleApp.normalize_shop_inventory_prices(shop_obtainer, player_obtainer)
 - ゲーム側の入口は `get_area_quest_difficulty_for_tier(area, world, tier)` と
   `get_quest_difficulties(area, world, include_completed=True)`
 
-#### 2.13.1.2 品揃えを作る経路（実測。VERIFICATION_LOG.md §2.67）
+##### 2.13.1.2 品揃えを作る経路（実測。VERIFICATION_LOG.md §2.67）
 
 主の持ち物が空の店を開いたときに走る:
 
@@ -1292,7 +1292,7 @@ generate_item_in_shopping(item_data, shop_owner_instance, item_stock_tier=2)
 > `318_area_difficulty_growth` はこれを使って、在庫にもクラフトにも触らずに街を育てる。
 > 効き始めるのは品揃えが入れ替わってからなので、`312_shop_restock` と組で意味を持つ。
 
-#### 2.13.1.3 店を開くたびに、売れた品が作り直される（実測。VERIFICATION.md §3.52）
+##### 2.13.1.3 店を開くたびに、売れた品が作り直される（実測。VERIFICATION.md §3.52）
 
 施設は品揃えの雛形を `Facility.config['goods']` に持つ
 （`stock_tier` と `stock_update_date` も同じ `config`。セーブ側にしか無い項目がある）。
@@ -1324,7 +1324,7 @@ generate_item_in_shopping(item_data, shop_owner_instance, item_stock_tier=2)
 > 回復アイテムだけは同じ品を何度でも買えて、在庫が尽きない。
 > `312_shop_restock` の「買った品を作り直させない」（既定 ON）が、その来店で増えたぶんを窓が組み上がる前に外す。
 
-#### 店の主は `job` が施設の種類と一致している
+##### 店の主は `job` が施設の種類と一致している
 
 実セーブで、主の居る施設67件を全部突き合わせた結果:
 
@@ -1347,10 +1347,7 @@ generate_item_in_shopping(item_data, shop_owner_instance, item_stock_tier=2)
 > 揃えない理由が無く、ゲームが作る形が66件そう揃っている。
 > 品揃えを持っていた13人（＝店として開いたことがある NPC）も全員 `job` が店系だった。
 
-日付は世界に1つ（`world.days_elapsed`。セーブでは `world_data.days_elapsed`）。
-進めているのは `InstantaleApp.elapse_days(days)`（§2.18）。
-
-### 2.13.2 アイテムの値付け
+#### 2.13.2 アイテムの値付け
 
 分類は2段。粗いほうが `item_type`、細かいほうが `attributes` の中の `item_detail`。
 
@@ -1376,7 +1373,7 @@ scripts.items:Item.__init__(self, name, item_type, attributes, description,
 `get_other_item_price` の3つで、**gold ではない**。
 gold に直すのは `get_item_base_price` と `get_randomized_item_price`。
 
-#### 値段は `attributes` に書かれている
+##### 値段は `attributes` に書かれている
 
 **`買価` と `売価` は排他**で、どちらか一方しか書かれない（実セーブ151個で例外なし）。
 店の持ち物には `買価`、売買画面に出したプレイヤーの持ち物には `売価`。
@@ -1386,7 +1383,7 @@ gold に直すのは `get_item_base_price` と `get_randomized_item_price`。
 能力値は種別ごとに違う（`weapon`＝`攻撃力` / `wearable`＝`防御力` /
 `healing_item`＝`回復` と `疲労負荷` / それ以外は無し）。
 
-#### 回復アイテムの数値は `value` だけで決まる
+##### 回復アイテムの数値は `value` だけで決まる
 
 `回復` は `get_heal_spec(value)`（`221_` の対応表。2026-08-26〜09-02）:
 
@@ -1400,7 +1397,7 @@ gold に直すのは `get_item_base_price` と `get_randomized_item_price`。
 `healing_item` の細分は `food` / `drink` / `herb` / `medicine` / `potion` の5つ
 （店の品揃え生成のスキーマ。`consumable` はこれに `scroll` が足される。品の `item_detail` では `herb` が `plant`）。
 
-#### 使うと何が起きるか（2026-09-04 に `226_` で実測。使用5回）
+##### 使うと何が起きるか（2026-09-04 に `226_` で実測。使用5回）
 
 ```
 ItemPopupMenu.on_consume_item          右クリックの「消費」
@@ -1419,7 +1416,7 @@ ItemPopupMenu.on_consume_item          右クリックの「消費」
 - `on_use_item` / `ItemUseManager` は回復アイテムでは通らない（別の種別の入口）
 - `usable` は popup の項目には無い（`ItemPopupMenu` が持つのは `item` とボタン2つと `canvas`）
 
-#### レア度が値段に効いていない
+##### レア度が値段に効いていない
 
 実セーブ（Lv31 / 3651日）から拾った実額:
 
@@ -1436,7 +1433,7 @@ ItemPopupMenu.on_consume_item          右クリックの「消費」
 - **売価は `value` とほぼ同じ数字**（能力値を持たない品では `売価 ≒ value × 0.8〜1.0`）。買価の6分の1ほど
 - 買価は能力値に対して上に反る（攻撃力 23 → 72 で 3.1倍、245 → 1,831 で 7.5倍）
 
-#### 物価の目安
+##### 物価の目安
 
 宿の主の台詞（実プレイのログ）がこの世界の物価をそのまま言っている:
 `簡易寝台なら10G、個室なら100G、…高級個室も1000G`（3ヵ月単位の長期滞在、前払い）。
@@ -1471,7 +1468,7 @@ ItemDetailBox      size=[333, 500]  size_hint=(None, None)      ← 箱ごと固
 **文字が要求する高さの測り方**: `text_size` を `(元の幅, None)` にして `texture_update()` を呼ぶと、
 折り返した結果が `texture_size[1]` に出る。幅はこちらで決めず、ゲームの値のまま使う。
 
-### 2.14.1 自由入力のアイテム一覧（`ToolListPopup`）
+#### 2.14.1 自由入力のアイテム一覧（`ToolListPopup`）
 
 入力欄の左下のアイコン（`press_item_icon` / `press_skill_icon`）で開く一覧。
 選ぶと `select_item_to_action_input(btn)` が入力欄へ差し込む。
@@ -1498,7 +1495,7 @@ minimum_height=1026                                 ← 中身が要求する高
   しかも行が並び終わっているのに入れ物の矩形だけが `(0, 0, 926.6, 78.75)` のままという瞬間がある。
   **組み上がったかどうかは行の位置と高さで判断すること**（入れ物の矩形を条件にすると永久に成立しない）
 
-### 2.14.2 クラフト画面（`craft_inventory_*`）
+#### 2.14.2 クラフト画面（`craft_inventory_*`）
 
 所持品・材料・生成先の3つのグリッドと、そのあいだの矢印・「作成」ボタン。
 
@@ -1517,7 +1514,7 @@ hud.craft_inventory_generate_arrow_label    「→」
 | 進行中の旗 | `app.is_crafting_item` / `app.item_craft_lock` |
 | グリッド | `InventoryGrid(cols, rows, item_dict, obtainer, place_item_callback=None, situation=None)` |
 
-#### 成果物の性能は素材の値段で決まる（実測。VERIFICATION_LOG.md §2.67）
+##### 成果物の性能は素材の値段で決まる（実測。VERIFICATION_LOG.md §2.67）
 
 `ItemCraftManager.calculate_modification(item_type, item_price)` は
 **float の倍率**を返す。成果物の値段は素材の合計値段にそれを掛けた値:
@@ -1600,6 +1597,9 @@ cipher[i]  = plaintext[i] ^ b"Instantale_Save_Key_2026"[i % 24]
 
 > セーブを書き換えるツールは、書き込み前に毎回復号→再暗号化のラウンドトリップを検査し、
 > 一致しなければ拒否すること。
+
+日付は世界に1つ（`world.days_elapsed`。セーブでは `world_data.days_elapsed`）。
+進めているのは `InstantaleApp.elapse_days(days)`（§2.18）。
 
 ### 2.17 経験値・レベル・訓練
 
@@ -2028,15 +2028,18 @@ HP は `current_hp` / `max_hp` / `original_max_hp` で、`physical_integrity`（
 ### 2.23 NPC を作る（`save_data_dict['npcs']` に書いてから組む）
 
 ```python
-npcs = app.save_data_dict["npcs"]          # ★ ここが本体
-npc_id = str(max(max(int(k) for k in 名簿) + 1,
-                 app.save_data_dict["index"]["npc"]))   # 台帳も見る
-npcs[npc_id] = データ                       # セーブの形（下の33項目）
-for d in (app.save_data_dict, app.world_dict):
-    d["index"]["npc"] = int(npc_id) + 1     # 台帳を進める
-character = app.world.generate_character(npc_id, データ)
-app.move_npc_to_facility(npc_id, character, 施設, ノード)
+from instantale_modloader import npcs
+
+npc_id = npcs.make_npc(app, fields, area_id, facility_id, write=write)   # 作れなければ None
 ```
+
+`make_npc` がやっているのは次の順（TECH.md §3.2.3。手で組まない）:
+
+1. `ids.claim(app, "npc")` で台帳（`index['npc']`）から採番し、台帳を進める
+2. `NEW_NPC_TEMPLATE`（下の33項目を正しい順で持つひな型）に `fields` を上書きする
+3. 素データを `save_data_dict['npcs']`（★ ここが本体）と `world_dict['npcs']` の両方へ書く
+4. `World.generate_character(id, データ)` で実行時の `Character` を組む
+5. `move_npc_to_facility` で施設に置く。途中で落ちたら書いた分を取り消す
 
 > 採番は `index['npc']` で決まる。実在する id の最大値ではない。
 > ゲームが新しい町を生成するとき、店主・ギルド員の id は `index['npc']` から

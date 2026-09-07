@@ -93,6 +93,7 @@ C コンパイラと管理者権限は要らない。ゲームフォルダは読
 
 ```
 InstantaleModLoader.bat   GUI を開く（配布物で唯一の入口）
+make_dist.bat             配布物を dist\ に組む（loader / mods / full の3つの zip）
 tools/gui.py              MOD 一覧・適用順・有効/無効・設定・追加・起動と注入・結果表示
 tools/watch.bat, watcher.py  ゲームの起動を監視して自動注入（GUI 無し）
 tools/injector.py         PE解析 → x64スタブ → CreateRemoteThread（--unload で剥がす）
@@ -100,10 +101,11 @@ tools/logrotate.py        out/*.log の世代管理（注入 = 1世代の境目�
 tools/check_mods.py       静的検査（デコレータ・宣言と実体のずれ）
 tools/build_mods.py       docs/MODS.md を各 MOD の DOC.md から綴じる（--check で照合）
 tools/list_mods.py        docs/MODLIST.md を mod.json から組む（--check で照合）
-tools/llm_ctx_probe.py    ローカル LLM の窓を実測して最適値を出す（127_ 用）
+tools/llm_ctx_probe.bat, llm_ctx_probe.py  ローカル LLM の窓を実測して最適値を出す（127_ 用）
 tools/epithet_probe.py    ローカル LLM で二つ名を引いて偏りを測る（317_ 用）
 tools/npc_variety_probe.py  ローカル LLM で NPC を生成させ、外見・性格・経歴の偏りを測る（頼み文の写しは npc_variety_prompts.json）
 tools/rebalance_saved_bgm.py  既存セーブの BGM を後からまとめて均す（104_ 用）
+tools/mods_meta.py        mod.json の author の読み方。build_mods / list_mods / check_mods が共用
 tools/tests/test_*.py     ゲーム抜きで走る検査。開発用で配布物には入らない
 runtime/instantale_modloader/
     __init__.py   boot() / discover() / ログ / 世代発行 / 遅延設置の監視 / on_ready
@@ -153,6 +155,9 @@ found["local"]      # local/ から読んだもの（配る予定が無い。§2
 found["dirs"]       # {MOD 名: 在り処}。runtime/mods か local/。入口はここから組む
 found["problems"]   # 宣言と実体のずれ。人が読む行
 found["notes"]      # 直すべきずれではない知らせ（手元用の順序ファイルを使っている等）
+found["installed"]  # 在るもの全部（フォルダ名順。伏せたものも切ったものも含む）
+found["disabled"]   # 順序ファイルの "disabled"。GUI のチェックの実体
+found["mods_dir"]   # runtime/mods の在り処
 ```
 
 `problems` と `notes` を分けているのは、
@@ -494,7 +499,7 @@ InstantaleModLoader.bat        # GUI からゲームを起動して注入する
 
 | ファイル | 使いどころ |
 |---|---|
-| `out/recon/targets.txt` | これが本命。`module:qualname(signature)` 形式で 1,635件（main_025 時点） |
+| `out/recon/targets.txt` | これが本命。`module:qualname(signature)` 形式で約1,600件（main_025） |
 | `out/recon/game_modules.txt` | ゲーム自身のモジュールの全属性ダンプ。擬似ソースとして読む |
 | `out/recon/modules.json` | 機械可読のインベントリ |
 | `out/recon/build.json` | このダンプがどのビルドを見たものか |
@@ -690,6 +695,7 @@ def apply(ctx):
 | `ctx.mod_dir` | いま apply() 中の MOD のフォルダ。**`apply()` の外では `None`** |
 | `ctx.out_dir` / `ctx.state_dir` | `out/` と `state/` の場所（`out_path` / `state_path` の親。§3.11）。`state/` は `runtime/` の1つ上＝配布フォルダ直下 |
 | `ctx.game_dir` | ゲームの exe（`sys.executable`）の在るフォルダ |
+| `ctx.runtime_dir` | `runtime/` の場所（ローダと MOD の親） |
 | `ctx.on_ready(fn)` | プロセスにつき1回だけメインスレッドで実行（§3.6） |
 | `ctx.superseded()` | 自分より新しい注入が来たか。自前のスレッド・`Clock` の繰り返しはこれで降りる（§3.6.1） |
 | `ctx.refresh_status()` | `out/status.json` を書き直す。`apply()` を抜けた後に設置したときだけ（§3.7.3） |
@@ -697,6 +703,7 @@ def apply(ctx):
 | `ctx.config` / `ctx.setting(名前)` | この MOD に効いている設定値（§3.8） |
 | `ctx.api` / `ctx.version` | ローダの API 番号と版（§3.9） |
 | `ctx.generation` | この注入の世代。`on_ready` のキーに混ぜる用（§3.6.1） |
+| `ctx.describe()` | 環境の要約（Python・exe・モジュール数・書き込み先）を1つの文字列で。ログの先頭に出す用 |
 
 `target` は `module:qualname` 形式
 （`llm_manager:quest_referee_event_resolve` / `llama_cpp_runtime_completion:LlamaCppClient.chat`）。
@@ -998,8 +1005,8 @@ MOD から import された時点で、ここは `API = 1` と同格の約束に
 どちらを外すべきかローダには決められないから。
 
 > `load_order.json` を機械的な番号順に並べ直さないこと。
-> 番号順は `after`/`before` を8箇所で破る（`117`→`112` / `213`→`311` / `215`→`313` /
-> `217`←`314`/`307` / `218`←`315` / `223`←`402` / `314`→`307`）。
+> 番号順は `after`/`before` を10箇所で破る（`117`→`112` / `213`→`311` / `215`→`313` /
+> `217`←`314`/`307` / `218`←`315` / `223`←`402` / `314`→`307` / `323`←`403` / `405`→`129`）。
 > 壊れはしない（ローダが並べ替えて動かす）が宣言と適用がずれ、
 > `check_mods.py` が問題として出す。判定は `python tools/check_mods.py` が問題0になるか。
 
@@ -1660,8 +1667,9 @@ screen.mark_of(entry)        # 'offer'（自分のボタンでなければ None�
 ```
 
 キーを他の MOD と共有すると、相手の `on_button_press` が自分のボタンを握り潰す。
-同梱 MOD が使用中のキーは4つ（`mod_action` / `mod_party_action` /
-`mod_road_action` / `mod_pardon_action`）。
+同梱 MOD が使っているキーの一覧はここには置かない（増えるたびに古くなる）。
+同じ名前を2本が使えば `tools/check_mods.py` が止め、
+わざと共有するなら `mod.json` の `"shares"` で断る（§3.2.3）。
 
 印のキーは必ず `ui.MARK_PREFIX`（`mod_`）で始めること。
 残骸の掃除（`prune_stale`）は「他の MOD が今その場に出しているボタン」を見分けるのに

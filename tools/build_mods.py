@@ -64,7 +64,7 @@ PREAMBLE = r"""# MODS: 同梱している MOD
 権利の所在は [NOTICE](../NOTICE)。
 
 各項の「設定」は GUI の `設定` 列から変えられるもの。
-変え方は [README.md の「設定の変え方」](README.md#設定の変え方)。"""
+変え方は [README.md の「設定の変え方」](README.md#33-設定の変え方)。"""
 
 #: 提供の帯の見出し。`render` が導入を差し込む目印にする。
 CONTRIB_HEAD = "## 提供（4xx）"
