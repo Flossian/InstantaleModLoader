@@ -268,7 +268,9 @@ def apply(ctx):
             # 「出すと決まった」控え。起こすのは画面が整った合図の中。
             "due": None,
             # 戦闘の選択肢が並んだら1回だけ塗り直す、の印。
-            "repaint": False}
+            "repaint": False,
+            # この画面で抽選を1回済ませたか（1つの行動で何度も回さない）。
+            "rolled": False}
 
     # ------------------------------------------------------------ 控えの出し入れ
     # 控えの出し入れ（場所・読み・キャッシュ・書き）は `state.WorldStore` に
@@ -369,7 +371,8 @@ def apply(ctx):
         return False
 
     def count_signal():
-        """合図が来たときに、控えの寿命を1つずつ進める。"""
+        """合図が来たときに、控えの寿命を1つずつ進め、抽選の権利を戻す。"""
+        memo["rolled"] = False
         for key, field in (("due", "signals"), ("protect", "signals")):
             record = memo[key]
             if isinstance(record, dict):
@@ -421,6 +424,12 @@ def apply(ctx):
                 trigger, here, total, memo["days"] - (memo["last"] or 0),
                 COOLDOWN_DAYS))
             return
+        if memo["rolled"]:
+            # 1つの行動で契機が何度も来る（土地の移動は日数送りと到着の2回、
+            # 日数送り自体も複数回来る）。そのたびに回すと実効の発生率が
+            # `1-(1-p)^n` になって設定より高くなる。画面が変わるまで1回だけ。
+            return
+        memo["rolled"] = True
         if random.random() * 100.0 >= CHANCE_PERCENT:
             write("{}: 手配 ここ{} 合計{} で抽選に外れた（発生率{}%）".format(
                 trigger, here, total, CHANCE_PERCENT))

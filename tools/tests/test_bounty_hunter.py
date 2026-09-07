@@ -706,6 +706,20 @@ def main():
     check("見張る合図の回数を過ぎたら戻さない",
           app.lawfulness("0") == -35, app.lawfulness("0"))
 
+    print("抽選は画面ごとに1回")
+    app = App({"0": -25})
+    module, ctx = fresh_mod(app, CHANCE_PERCENT=100)
+    module.random = types.SimpleNamespace(random=lambda: 0.99)
+    module.CHANCE_PERCENT = 30
+    for _ in range(3):        # 1つの行動で契機が3回来る
+        ctx.hooks["__main__:InstantaleApp.elapse_days"](counting(None)[0], app, 1)
+    check("画面が変わるまで抽選は1回だけ",
+          len([l for l in read_log() if "抽選に外れた" in l]) == 1, read_log())
+    ready_screen(ctx, app)
+    ctx.hooks["__main__:InstantaleApp.elapse_days"](counting(None)[0], app, 1)
+    check("画面が変われば また抽選する",
+          len([l for l in read_log() if "抽選に外れた" in l]) == 2, read_log())
+
     print("多段の場面には割り込まない")
     module, ctx = fresh_mod(App({"0": -25}), CHANCE_PERCENT=100)
     check("品書きは場面の最中ではない",
