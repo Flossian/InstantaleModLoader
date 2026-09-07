@@ -90,6 +90,20 @@ HP の持ち主が `Character` インスタンスか辞書かは決めつけな�
 それでも取りこぼしたときに出るのは「1手ぶん数字が出ない」だけで、
 ゲームの側には何も起きない。
 
+## 状態異常（バフ・デバフ）も同じ台帳で出す
+
+状態異常の入れ物はゲーム自身の `Character.status`
+（`{status_name, description, duration}` の辞書。GAME.md §2.10.2）。
+審判が直接付けるもの（泥濘の拘束）も、`319_battle_tactics` が復元して書くもの
+（筋力強化・防御の構え）も、同じ場所に同じ形で入る。
+そこで HP と同じく**1手の前後で名前の集合を比べ**、増えた名前と消えた名前を出す:
+
+    ゴブリンの斥候 に 筋力低下(与えるダメージが減少) が付いた
+    ゴブリンの斥候 の 筋力低下 が切れた
+
+効果の文は `description` をそのまま添える（この mod は効果の意味を知らない）。
+出どころを問わないので、319 を外しても審判由来の状態異常はここで出る。
+
 ## 表示しないもの
 
   * 変化が `MIN_AMOUNT` 未満のもの（既定 1。0 点の行は出さない）
@@ -126,6 +140,10 @@ MAX_INTEGRITY_KEY = "max_physical_integrity"
 # 台帳の鍵が同じでも、これが違えば別人として扱う。
 NAME_KEY = "name"
 
+# 状態異常の入れ物（`Character.status`）と、1件の中の効果の文。
+STATUS_KEY = "status"
+STATUS_DESCRIPTION_KEY = "description"
+
 # ---------------------------------------------------------------- 動作（設定）
 # 味方が敵に与えたダメージを出す。
 SHOW_DAMAGE_TO_ENEMIES = True
@@ -143,6 +161,9 @@ SHOW_REMAINING_HP = True
 # 身体の損耗（`physical_integrity`）の増減も出す。
 # HP とは別の数字なので既定 OFF。
 SHOW_INTEGRITY = False
+
+# 状態異常（バフ・デバフ）の付与と解除も出す。
+SHOW_STATUS = True
 
 # これ未満の増減は出さない。
 # 0 にすると 0 点の行まで出る。
@@ -186,6 +207,10 @@ HEAL_TEXT = "{name} は {amount} 回復した"
 DAMAGE_TO_ENEMY_WITH_CAUSE_TEXT = "{name} に {cause} で {amount} のダメージ"
 DAMAGE_TO_ALLY_WITH_CAUSE_TEXT = "{name} は {cause} で {amount} のダメージを受けた"
 HEAL_WITH_CAUSE_TEXT = "{name} は {cause} で {amount} 回復した"
+# 状態異常の付与と解除。`{status}` は「名前(効果)」（効果が無ければ名前だけ）。
+STATUS_GAINED_TEXT = "{name} に {status} が付いた"
+STATUS_LOST_TEXT = "{name} の {status} が切れた"
+STATUS_WITH_EFFECT_TEXT = "{status}({effect})"
 INTEGRITY_DAMAGE_TEXT = "{name} の負傷が {amount} 深くなった"
 INTEGRITY_HEAL_TEXT = "{name} の負傷が {amount} 癒えた"
 REMAINING_TEXT = "（残り HP {hp}/{max}）"
@@ -248,6 +273,23 @@ def apply(ctx):
                 return value
         return None
 
+    def read_statuses(holder):
+        """`{状態異常の名前: 効果の文}`。入れ物が辞書でなければ空。
+
+        1件は `{status_name, description, duration}` の辞書だが、
+        文字列だけのビルドでも名前は拾えるようにしておく。
+        """
+        statuses = read_value(holder, STATUS_KEY)
+        if not isinstance(statuses, dict):
+            return {}
+        found = {}
+        for key, entry in statuses.items():
+            effect = (read_value(entry, STATUS_DESCRIPTION_KEY)
+                      if isinstance(entry, dict) else entry)
+            found[str(key)] = (effect.strip().rstrip("。")
+                               if isinstance(effect, str) else "")
+        return found
+
     def name_of(holder, fallback):
         name = read_value(holder, NAME_KEY)
         if isinstance(name, str) and name.strip():
@@ -294,6 +336,7 @@ def apply(ctx):
             "max": read_max(holder, MAX_HP_KEYS),
             "integrity": read_number(holder, INTEGRITY_KEY),
             "max_integrity": read_number(holder, MAX_INTEGRITY_KEY),
+            "status": read_statuses(holder),
             # 持ち主そのものを控える。
             # 倒した敵は報告より先に `current_enemy_dict` から抜けるので、
             # これが無いと**とどめの一撃だけ**が丸ごと落ちる（GAME.md §2.10）。
@@ -420,6 +463,23 @@ def apply(ctx):
         return line_prefix() + template.format(name=name,
                                                amount=amount_text(abs(delta)))
 
+    def status_lines(name, before, record):
+        """状態異常の増えたぶんと消えたぶん。`(画面の行, 記録の行)` の列。"""
+        found = []
+        for status, effect in record["status"].items():
+            if status in before["status"]:
+                continue
+            label = (STATUS_WITH_EFFECT_TEXT.format(status=status, effect=effect)
+                     if effect else status)
+            found.append((line_prefix() + STATUS_GAINED_TEXT.format(
+                name=name, status=label), "{} +status {!r}".format(name, status)))
+        for status in before["status"]:
+            if status in record["status"]:
+                continue
+            found.append((line_prefix() + STATUS_LOST_TEXT.format(
+                name=name, status=status), "{} -status {!r}".format(name, status)))
+        return found
+
     def diff_lines(app):
         """台帳と今を比べて出す行を作り、台帳を今の値へ進める。
 
@@ -446,6 +506,10 @@ def apply(ctx):
                     lines.append(integrity_line(name, delta))
                     logged.append("{} {} integrity {} -> {}".format(
                         side, name, before["integrity"], record["integrity"]))
+            if SHOW_STATUS:
+                for line, logline in status_lines(name, before, record):
+                    lines.append(line)
+                    logged.append(logline)
 
         # 場から消えた者（倒れて `current_enemy_dict` から抜けた敵など）。
         # **控えてある持ち主から最後の変化を測ってから**落とす。
@@ -542,6 +606,7 @@ def apply(ctx):
         return result
 
     ctx.log("battle dmg: log -> {} (enemies={} allies={} heal={} remaining={} "
-            "integrity={} min={})".format(
+            "integrity={} status={} min={})".format(
                 log_path, SHOW_DAMAGE_TO_ENEMIES, SHOW_DAMAGE_TO_ALLIES,
-                SHOW_HEALING, SHOW_REMAINING_HP, SHOW_INTEGRITY, MIN_AMOUNT))
+                SHOW_HEALING, SHOW_REMAINING_HP, SHOW_INTEGRITY, SHOW_STATUS,
+                MIN_AMOUNT))

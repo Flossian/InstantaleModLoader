@@ -10,7 +10,7 @@
     "en": "Shows how much HP actually moved each turn: damage your side deals to the enemies and damage the enemies deal to you and your party",
     "ja": "戦闘で自分や味方が敵に与えたダメージ、敵が自分や味方に与えたダメージを数字で表示する"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "settings": {
     "SHOW_DAMAGE_TO_ENEMIES": {
@@ -63,6 +63,18 @@
       "note": {
         "ja": "HP とは別の数字（physical_integrity）。1手では動かない回が多いので既定オフ",
         "en": "physical_integrity, a separate stat from HP. Off by default"
+      }
+    },
+    "SHOW_STATUS": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "バフ・デバフの付与と解除も出す",
+        "en": "Show status effects gained and lost"
+      },
+      "note": {
+        "ja": "「ゴブリンの斥候 に 筋力低下(与えるダメージが減少) が付いた」のように、名前(効果) で出る",
+        "en": "Lines like \"X gained 筋力低下(...)\" with the effect text in parentheses"
       }
     },
     "LINE_PREFIX": {

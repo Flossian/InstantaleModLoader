@@ -29,7 +29,7 @@ TECH.md と分けているのは読む理由が違うから。
 
 | ファイル | 内容 |
 | --- | --- |
-| `targets.txt` | `module:qualname(signature)` 形式。`@ctx.wrap` にそのまま貼れる（1,635件。main_025、2026-09-01 のダンプ） |
+| `targets.txt` | `module:qualname(signature)` 形式。`@ctx.wrap` にそのまま貼れる（1,635件。main_025 のダンプ） |
 | `game_modules.txt` | ゲーム自身のモジュールの全属性ダンプ（擬似ソース） |
 | `modules.json` | 全モジュールの機械可読インベントリ（`bases` / `mro`） |
 | `build.json` | このダンプがどのビルドを見たものか（版と sha256） |
@@ -46,7 +46,7 @@ TECH.md と分けているのは読む理由が違うから。
 ### 1.2 ゲーム自身のモジュール
 
 ```python
-__main__                       instantale.py、575ターゲット（main_025、2026-09-01 のダンプ）
+__main__                       instantale.py、575ターゲット（main_025 のダンプ）
 scripts                        scripts.hud.* / scripts.llm.* / items / functions ほか
                                scripts.save_codec, scripts.steam.server_process
 Embedding, image_generation, llama_cpp_runtime_completion, sidecar_process
@@ -72,7 +72,7 @@ save_area_json, save_world_json, api_key_manager, build_type, sdcpp_cuda
 | ゲーム本体 | `C:\Program Files\Epic Games\Instantaleq6Ve7\instantale.exe` |
 | ランタイム | CPython 3.10.11 / Kivy / SDL2 |
 | `game_version` | `014`（`__main__.get_game_version()`）。Epic の `AppVersion`（`main_025`）は別系統 |
-| ロード済みモジュール | 4226（うち 3212 が Nuitka コンパイル済み）／ゲーム自身は 67（main_025、2026-09-01 のダンプ） |
+| ロード済みモジュール | 4226（うち 3212 が Nuitka コンパイル済み）／ゲーム自身は 67（main_025 のダンプ） |
 | セーブ | `%LOCALAPPDATA%\Darmabeko\Instantale\` |
 | クラッシュログ | `<ゲームdir>\crash_log.txt`。更新で消えることがある |
 | LLM 入出力の記録 | `<ゲームdir>\output_data\<世界>\<PC>\<manager>\N.json` |
@@ -90,9 +90,9 @@ Epic の `AppVersion` は
 
 | 版 | ゲーム側の変化 | MOD 側 |
 | --- | --- | --- |
-| main_022 → 023（2026-07-30） | `targets.txt` 1466 → 1585。自由生成施設（§2.21）・`scripts.save_codec`・Steam 認証・装備強化が増えた | 対応不要。28/28 適用、警告0 |
-| main_023 → 024（2026-08-05） | 賭博2種（ハイアンドロー / ロシアンルーレット）で 68 ターゲット増。起動処理の変更で満額到達が 80秒 → 41秒 | 6件が「Reported by ModLoader」として取り込まれた（下記） |
-| main_024 → 025（2026-08-09） | `InstantaleApp.start_game` の 876 行が `experience_level=60` → `1` | `123_` が何もしなくなった（VERIFICATION_LOG.md §2.36） |
+| main_022 → 023 | `targets.txt` 1466 → 1585。自由生成施設（§2.21）・`scripts.save_codec`・Steam 認証・装備強化が増えた | 対応不要。28/28 適用、警告0 |
+| main_023 → 024 | 賭博2種（ハイアンドロー / ロシアンルーレット）で 68 ターゲット増。起動処理の変更で満額到達が 80秒 → 41秒 | 6件が「Reported by ModLoader」として取り込まれた（下記） |
+| main_024 → 025 | `InstantaleApp.start_game` の 876 行が `experience_level=60` → `1` | `123_` が何もしなくなった（VERIFICATION_LOG.md §2.36） |
 
 #### 本体に取り込まれた修正の判定
 
@@ -164,7 +164,7 @@ Epic の `AppVersion` は
 `105_` が削るのはプロンプト本文に埋め込まれたスキーマの repr（§2.12）で、
 ゲームが直した「再生成時の重複・増幅」とは別物。
 
-`102_` は 2026-08-10 に `superseded: main_023` で降ろした（`103_` は main_024 で同様）。
+`102_` は `superseded: main_023` で降ろした（`103_` は main_024 で同様）。
 消さずに伏せるのは**検出器として残す**ため。
 降ろす直前の裏付けは、同じ `LlamaCppClient` 経路の `[COMPACT]` が349件出ているのに
 `[DEDUP]` は0件だったこと（クラウド実行では両方素通りなので、
@@ -230,7 +230,7 @@ Epic の `AppVersion` は
 
 ```python
 app.buttons = [{'text': '会話する', 'spec': PhaseSpec('DisplayTalkChoice', [])},
-               {'text': 'テストNPC B', 'spec': PhaseSpec('ConversationStartManager', ['73'])},
+               {'text': '<NPC名>', 'spec': PhaseSpec('ConversationStartManager', ['73'])},
                {'text': '出る',     'spec': PhaseSpec('MovePhaseManager', ['20','134','7'])}]
 app.to_display_buttons    # 表示中の文字列のリスト
 app.display_button_map    # 表示位置 -> buttons の添字
@@ -242,7 +242,7 @@ app.refresh_choice_buttons(reset_page=True)
 押されると `getattr(__main__, cls_name)(app, *args)` が組み立てられ
 `app.process_choice(それ, 文字列)` に渡る。
 押された添字は `display_button_map` で引き直される（`ui.pressed_entry` が同じことをする）。
-選択肢が1ページ（8枠）に収まらないときは最後の枠が `次` になり、`display_button_map` のその枠には添字ではなく文字列 `'next'` が入る（`206_` の記録、2026-08-17: `['<int>'×7, 'next']`。`choice_button_page` は 0）。整数でない枠はボタンではないので `ui.pressed_entry` は None を返し、`次` の押下はどの MOD のログにも出ない（素通し。添字そのままに落ちて `buttons[7]` を引き、自前の一覧を出す MOD がページ送りを横取りしていた不具合は 2026-09-03 に直した。VERIFICATION.md §3.50）。2ページ目以降の枠の文字列（戻る側）は未実測。
+選択肢が1ページ（8枠）に収まらないときは最後の枠が `次` になり、`display_button_map` のその枠には添字ではなく文字列 `'next'` が入る（`206_` の記録: `['<int>'×7, 'next']`。`choice_button_page` は 0）。整数でない枠はボタンではないので `ui.pressed_entry` は None を返し、`次` の押下はどの MOD のログにも出ない（素通し。添字そのままに落ちて `buttons[7]` を引き、自前の一覧を出す MOD がページ送りを横取りしていた不具合は 直した。VERIFICATION.md §3.50）。2ページ目以降の枠の文字列（戻る側）は未実測。
 
 > `app.function_correspond_to_input` は名前に反して対応表ではなく `PhaseSpec` 1個。
 > 「いま自由入力を送ったら何を呼ぶか」を保持している。
@@ -275,7 +275,7 @@ app.refresh_choice_buttons(reset_page=True)
 > 「自分の印が無い」では足りない。
 > `refresh_choice_buttons` を包む掃除は画面が何であれ走るので、
 > 他の MOD が今その場に出しているボタンも「自分の印が無い」に見える
-> （`302_` の `やめておく` が `309_` の確認画面のキャンセルを消していた。2026-08-03）。
+> （`302_` の `やめておく` が `309_` の確認画面のキャンセルを消していた）。
 > 判定は「`mod_` で始まるキーが1つも無い」で行う（`ui.MARK_PREFIX` / `marked_by_a_mod`）。
 > 掃除に使うラベルも、その MOD にしか無い文言だけにすること。
 
@@ -312,7 +312,7 @@ app.refresh_choice_buttons(reset_page=True)
 | 自由入力の可否 | `hud.text_send_button.disabled` |
 | 本文（情景描写・LLM の応答） | `hud.text_display`（`kivy.uix.label.Label`） |
 
-本文ラベルの実測（2026-07-31、`112_` が実行時に探し当てた）:
+本文ラベルの実測（`112_` が実行時に探し当てた）:
 `font_size=27` / `line_height=1.8`（Kivy の既定は 1.0 ＝ 行間はゲームが意図的に広げている）/
 `text_size=[1340.8, None]`（幅だけ固定）/ 750文字の本文で `texture_size=[1340, 3738]`。
 
@@ -323,7 +323,7 @@ app.refresh_choice_buttons(reset_page=True)
 #### 本文の打ち出し（タイプライタ）
 
 `InstantaleApp.add_text_display(self, dt, context, index=-1)`。
-実測（2026-08-03、`211_probe_text_speed`）:
+実測（`211_probe_text_speed`）:
 
 | | 実測 |
 | --- | --- |
@@ -487,7 +487,7 @@ app.world.characters     -> {id: Character}    Facility.owner はこの id（str
 
 > 「新しい世界では動くのに、セーブをロードすると動かない」の正体はこれ。
 > 施設の種類で出し分けるボタンがロード直後だけ出ず、
-> どこかへ移動して入り直すと直るので原因が掴みにくい（2026-08-05 に実機で踏んだ）。
+> どこかへ移動して入り直すと直るので原因が掴みにくい（踏んだ）。
 > 施設を引くときは `player.location` を直接使わず、id でも引き当てる関数を通す。
 
 旗も同じで、セーブに焼かれて下りないことがある
@@ -606,7 +606,7 @@ app.world_dict['quests']  {id: dict}                 世界の雛形
 
 新規 id の検出は両者の合併を取る（どちらに登録されるかを決め打ちしない）。
 
-#### 2.9.1 `world_dict` はセーブの中身ではなく世界の雛形（2026-08-26 に訂正）
+#### 2.9.1 `world_dict` はセーブの中身ではなく世界の雛形（訂正）
 
 以前ここには「`world_dict['quests']` がセーブに出るほう」「書くときは必ず両方」と
 書いてあった。どちらも実測に反する。
@@ -672,7 +672,7 @@ MOD からの書き方はこうなる。
 - **クエスト辞書に独自キーを足さない**（セーブに焼かれるうえ、
   再読み込み後に `Quest` インスタンスがそのキーを持つ保証が無い）。控えは `state/` に別ファイルで持つ
 
-#### 街の中身と初期依頼は初訪問で作られる（2026-09-03、`225_` で実測）
+#### 街の中身と初期依頼は初訪問で作られる（`225_` で実測）
 
 世界生成が作るのは 9 街の名前・概要・接続だけ（`level_of_detail=0`、`nodes` と `quests` は空）。
 施設・NPC・初期依頼3件・BGM は、その街へ初めて移動したときに
@@ -697,7 +697,7 @@ random.sample(range(lo, hi), k=3)          save_area_json.py:329
 エディタで後から足した街（id 9 以降）は枠が無く、全域 `range(1, 77)` から引かれる（id 33 で `[6, 34, 3]`、id 21 で `[13, 30, 40]`）。
 `133_ui_area_difficulty` はこの表で未訪問の街の帯を見積もる。
 
-#### 進行ループ（2026-07-28、1クエストを頭から終わりまで実測）
+#### 進行ループ（1クエストを頭から終わりまで実測）
 
 ```
 DisplayQuestChoice
@@ -755,7 +755,7 @@ QuestEventManager(app, event_name, enemies_info, event_turn)
 `resolve` が受け取るのは成功・失敗の結果だけで、確率と能力値は渡らない。
 **サイコロを振っているのは `QuestEventManager` の中**（コンパイル済みで読めない）。
 
-実測（2026-06-06〜08-08、8キャラ、判定121回）:
+実測（8キャラ、判定121回）:
 
 - **確率が `credibility × 10 + 20` を超えたことは一度も無い**（上振れ0回）。
   半数（58回）はちょうどこの値で、残りは -2 〜 -40 の負の差だけが付く ＝ **この式は上限**
@@ -792,7 +792,7 @@ QuestEventManager(app, event_name, enemies_info, event_turn)
 MOD 側でも「戦闘中は出さない」条件に使われるので、残骸があるとイベントが出なくなる。
 残骸かどうかは `app.current_enemy_dict` が空かで見分ける。
 
-`in_boss_battle` はボス戦の後の戦闘（闘技場）で 0 に戻っていた（2026-08-29 に1回観測。`322_` のログ）。
+`in_boss_battle` はボス戦の後の戦闘（闘技場）で 0 に戻っていた（1回観測。`322_` のログ）。
 `in_colosseum_battle` の 1→0 は未観測。
 
 #### 1手ぶんの内訳（`BattlePhaseManager`）
@@ -805,11 +805,11 @@ reduce_status_turns_and_log / check_character_death / check_team_annihilation
 check_battle_end / enemy_delete_animation / convert_llm_output_to_instruction_dict
 ```
 
-実測（2026-08-01、`308_` のログ）:
+実測（`308_` のログ）:
 
 - **1手 = `handle_battle_situation` 1回**（味方の手も敵の手もここを通る）
 - `character_side` は**日本語の文字列**（`'味方陣営'` / `'敵側'`）。列挙値ではない
-- `character_key` は敵だと `'泥濘の亡者1'` のように連番付き。
+- `character_key` は敵だと `'<敵名>1'` のように連番付き。
   `Character.name` の側は連番が付かないので**鍵と表示名は別物**
 - 1手で複数の敵に当たる手がある（スキル）
 - 倒れた敵は1手の中で `current_enemy_dict` から抜ける。
@@ -837,7 +837,7 @@ check_battle_end / enemy_delete_animation / convert_llm_output_to_instruction_di
 
 1手の中身を決めているのは `scripts.llm.llm_manager_battle` の審判たち。
 入出力は `output_data/<世界>/<PC>/<関数名>/N.json` に残る（§1.4）ので、
-プロンプトもスキーマも遊んだ後から読める（2026-08-26 に実記録で確認）。
+プロンプトもスキーマも遊んだ後から読める（実記録で確認）。
 
 ```
 referee_player_attack_new_new(combat_log, actor, party, current_enemy_dict)   通常攻撃
@@ -862,7 +862,7 @@ referee_enemy_new / referee_npc / referee_npc_rewrite                         �
 
 戻りの根は `narration` / `skill_effects` / `additional_effects` / `vfx`（8種の Literal）。
 審判は頼まれなくても状態異常を出す
-（通常攻撃の記録で、敵の反撃として `TextStatusEffect`（泥濘の拘束、duration 3、
+（通常攻撃の記録で、敵の反撃として `TextStatusEffect`（拘束の状態異常、duration 3、
 毎ターン weak damage）がプレイヤーに付いた実例）。
 
 システムプロンプトは「TRPGの戦闘のダメージ計算を中立の立場で管理する役。
@@ -871,7 +871,7 @@ referee_enemy_new / referee_npc / referee_npc_rewrite                         �
 
 語彙 → 数の変換は §2.10.2。
 
-#### 2.10.2 語彙 → 数の変換（2026-08-26 に `222_` で実測。1クエスト・戦闘6回）
+#### 2.10.2 語彙 → 数の変換（ `222_` で実測。1クエスト・戦闘6回）
 
 生ログと数表は VERIFICATION_LOG.md §2.68。1手の数の流れは3段:
 
@@ -930,15 +930,15 @@ LLM の power の選択は extreme の端でしか意味を持たない。
 
 ##### 効かないもの（実測）
 
-- **`text_status` は文章だけ**。「泥濘の拘束」（duration 3）は
+- **`text_status` は文章だけ**。拘束の状態異常（duration 3）は
   `Character.status` 辞書に `{status_name, description, duration}` で書かれたが、
   直後の自陣の素点は不動・毎ターンのダメージも無し（観測1件）
 - **自由入力の防御姿勢は数に落ちない**。narration は防御の描写になるが
   効果リストは全部空（観測1件）。被弾を減らしたのは防具の500だけ
-- 敵はデバフ持ち（灰の霧=dex低下、忘却の歌=wis低下）だが、
+- 敵はデバフのスキル（dex 低下・wis 低下）を持つが、
   素の戦闘では1手目で倒れるので**使う暇が無い**。
   戦闘が複数手になった環境（`319_`）では審判が `AttributeEffect` を
-  実際に出した（2026-08-27、耐久低下。VERIFICATION_LOG.md §2.71）。
+  実際に出した（耐久低下。VERIFICATION_LOG.md §2.71）。
   **素のゲームで捨てられる**こと自体は変わらない
 
 ### 2.11 BGM
@@ -983,7 +983,7 @@ apply_music_volume(app)         main_023 で追加
   どれが何回発火しても結果が変わらない書き方にして全部に仕掛ける
   （実測では `save_world_json:write_obfuscated_json_file` だけが発火した。VERIFICATION.md §3.4）
 
-土地の曲が `play_music_from_src` へ来る経路（`207_` の `out\battle_bgm.log` 2世代、2026-08-21〜09-01 の 357 回）:
+土地の曲が `play_music_from_src` へ来る経路（`207_` の `out\battle_bgm.log` 2世代、357 回）:
 
 | 呼び出し元（`instantale.py` の lambda） | 場面 | 回数 |
 |---|---|---|
@@ -1003,7 +1003,7 @@ apply_music_volume(app)         main_023 で追加
 
 戦闘曲は `instantale.py:6995` の lambda（`Clock` 経由、MainThread）が `play_music_from_src` に
 `Assets/sounds/musics/battle/1. Echoes of Valhalla.mp3` を固定で渡して鳴らす
-（2026-08-21〜22 の実機ログ 13 回、全て同一）。
+（実機ログ 13 回、全て同一）。
 戦闘の種類はパスには現れず、曲が鳴る時点のフラグでだけ見える:
 
 | 種類 | 曲が鳴る時点のフラグ | `BattleStartManager(app, enemy_type, ...)` の `enemy_type` |
@@ -1013,7 +1013,7 @@ apply_music_volume(app)         main_023 で追加
 | 闘技場（`ColosseumMatchStart`） | `in_battle=1 in_colosseum_battle=1` | `'colosseum'` |
 | 衛兵 | `in_battle=1` | `'guard'`（§2.20） |
 
-（2026-08-08 に2戦、2026-08-29 に7戦。`322_battle_bgm` の `[BGMPICK]` の行）
+（2戦＋7戦。`322_battle_bgm` の `[BGMPICK]` の行）
 
 `play_music_from_src` は絶対パスをそのまま受け付ける（ゲームのフォルダの外に置いた曲が鳴った）。
 `106_` の戦闘曲判定は `/musics/battle/` の部分一致なので、外に置く曲もそのフォルダ名の下に置けば戦闘曲として扱われる。
@@ -1043,7 +1043,7 @@ scripts.llm.llm_manager:*                                                    マ
 クラウドと分かった時点でローカル専用の保留を降ろす（`llm.is_cloud_runtime()` / TECH.md §3.4）。
 入れる前は `llama_cpp_runtime_completion` 宛ての保留14件が永久に残っていた。
 
-プロバイダごとの内部（実測・2026-08-08）:
+プロバイダごとの内部（実測）:
 
 | | Gemini | OpenAI / Claude |
 | --- | --- | --- |
@@ -1140,7 +1140,7 @@ InstantaleLLMProxy と併用する場合、多重起動抑止だけは所有者�
 DEDUP / COMPACT / EVENTLOG は二重に適用しても結果が変わらないので併用してよく、
 プロキシ側のログに出たら MOD の取りこぼしという検出器になる。
 
-#### 2.12.1 起動引数は設定欄から全部は届かない（実測・2026-08-12）
+#### 2.12.1 起動引数は設定欄から全部は届かない（実測）
 
 設定画面の「サーバーパラメータ」欄は `config.json` の
 `ai_setting.server_parameters.<バックエンド名>` に入り、`llama-server` のコマンドラインへ繋がれる。
@@ -1161,7 +1161,7 @@ DEDUP / COMPACT / EVENTLOG は二重に適用しても結果が変わらない�
 ファイルも2つあり、ゲームが読み書きするのは
 `%LOCALAPPDATA%\Darmabeko\Instantale\config.json`（インストール先のものは初期テンプレート）。
 
-#### 2.12.2 `--parallel` は KV の持ち方を変える（実測・2026-08-12）
+#### 2.12.2 `--parallel` は KV の持ち方を変える（実測）
 
 書かなければ `n_parallel=auto` が選ばれて**統合 KV**（4スロットが1つのプールを共有）になる。
 明示すると統合が外れ、スロットごとに専用のプールを取る（起動ログの `kv_unified` に出る）。
@@ -1299,7 +1299,7 @@ generate_item_in_shopping(item_data, shop_owner_instance, item_stock_tier=2)
 店を開くと、**雛形にあって主が持っていない品が1つ作り直されて棚へ入る**:
 
 ```
-品の誕生: id=59 'ハルマンの予備のランプ' 主=ハルマン(118) {'item_detail': 'tool', '買価': 368}
+品の誕生: id=<n> '<店主名>の予備のランプ' 主=<店主名>(<id>) {'item_detail': 'tool', '買価': <n>}
   呼び出し元: ShoppingStartManagerRemake.shopping_start_method_1 (instantale.py:3159)
            <- ShoppingStartManagerRemake.execute (instantale.py:3281)
 ```
@@ -1385,7 +1385,7 @@ gold に直すのは `get_item_base_price` と `get_randomized_item_price`。
 
 ##### 回復アイテムの数値は `value` だけで決まる
 
-`回復` は `get_heal_spec(value)`（`221_` の対応表。2026-08-26〜09-02）:
+`回復` は `get_heal_spec(value)`（`221_` の対応表）:
 
 | `value` | 3 | 6 | 18 | 26 | 48 | 49 | 50 | 52 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -1397,7 +1397,7 @@ gold に直すのは `get_item_base_price` と `get_randomized_item_price`。
 `healing_item` の細分は `food` / `drink` / `herb` / `medicine` / `potion` の5つ
 （店の品揃え生成のスキーマ。`consumable` はこれに `scroll` が足される。品の `item_detail` では `herb` が `plant`）。
 
-##### 使うと何が起きるか（2026-09-04 に `226_` で実測。使用5回）
+##### 使うと何が起きるか（ `226_` で実測。使用5回）
 
 ```
 ItemPopupMenu.on_consume_item          右クリックの「消費」
@@ -1418,7 +1418,7 @@ ItemPopupMenu.on_consume_item          右クリックの「消費」
 
 ##### レア度が値段に効いていない
 
-実セーブ（Lv31 / 3651日）から拾った実額:
+実セーブから拾った実額:
 
 | 品 | `value` | 能力値 | 買価 | 売価 |
 | --- | --- | --- | --- | --- |
@@ -1437,8 +1437,8 @@ ItemPopupMenu.on_consume_item          右クリックの「消費」
 
 宿の主の台詞（実プレイのログ）がこの世界の物価をそのまま言っている:
 `簡易寝台なら10G、個室なら100G、…高級個室も1000G`（3ヵ月単位の長期滞在、前払い）。
-比較用に、NPC の雇用は難易度76 で 5,045G、実セーブのプレイヤー所持金は 1,116,472G。
-**ゲームで一番高いアイテム（2,342G）より、宿の高級個室2部屋ぶんのほうが近い**という開きがある。
+比較用に、NPC の雇用は難易度76 で 5,045G。
+**アイテムの買価の上端（2,000G 台）より、宿の高級個室2部屋ぶんのほうが近い**という開きがある。
 
 ### 2.14 アイテム詳細ボックス
 
@@ -1561,7 +1561,7 @@ worlds/<世界>/characters/<キャラクタ名>/
 ```
 
 名前に Windows のパスに使えない文字（`< > : " / \ | ? *`）が入ると `os.makedirs` が落ちる。
-LLM の生成した名前に引用符が混じる経路は実在する（`試験人形「テストダミー"` のような形）。
+LLM の生成した名前に引用符が混じる経路は実在する（名前の末尾に `"` が付いた形）。
 
 - バックグラウンドスレッドで起きるのでゲームは落ちない。
   画像が生成されないまま無言で失敗し、その NPC に関わるたび再発する
@@ -1720,7 +1720,7 @@ process_choice(AreaMoveManager,       '馬車(1000G)' / '徒歩(3ヵ月)')
   ＝ **残高チェックも `execute` の中**
 - `llm_manager:area_move_rejector(...)` がある（同行者が移動を拒む経路と思われるが未検証）
 
-#### クエストは日数を進めない（2026-08-19、実機と全件計数の両方で確認）
+#### クエストは日数を進めない（実機と全件計数の両方で確認）
 
 `elapse_days` は LLM に渡している14種の権限の1つ（§2.26）でもあるので、
 `output_data/<世界>/<PC>/<manager>/N.json` の **`response`** に
@@ -1734,7 +1734,7 @@ process_choice(AreaMoveManager,       '馬車(1000G)' / '徒歩(3ヵ月)')
 | 他 40 manager | 0 |
 
 クエスト側 2,029 件すべてで0件。
-総数は遊ぶたびに増える（この表は 2026-08-19 21:30 時点）ので、
+総数は遊ぶたびに増える（この表はある時点の数）ので、
 **効くのは総数ではなく「クエスト側は0件」の側**。
 数え直したいときは `response`（`messages` ではない）の中の
 `{"type": "elapse_days"}` を manager ごとに数える。
@@ -1791,9 +1791,8 @@ player_data["area_history"] = {
 
 - `achievements` と `residency` は**会話にもそのまま渡っている**。
   会話5関数のうち3つが `area_residency` / `area_achievements` を引数で受け取る（§2.24）。
-  ただしこの named 引数は実測で**常に None**（`317_` のデバッグログ、13回全部。
-  2026-08-24〜27）。実体は別経路で、system メッセージの【プレイヤーキャラの情報】へ
-  「この土地での活躍: ['傭兵エリスが…']」（Python 配列の repr）の形で直接描画される
+  ただしこの named 引数は実測で**常に None**（`317_` のデバッグログ、13回全部）。実体は別経路で、system メッセージの【プレイヤーキャラの情報】へ
+  「この土地での活躍: ['<功績の文>']」（Python 配列の repr）の形で直接描画される
 - `achievements` には依頼クリアごとに1〜2文の要約が入り、
   「湿地の霧は晴れ」の粒度で**土地の状態変化まで**書かれる（復号した実セーブ19件）
 - **読み書きするヘルパは無い**（`lawfulness` を名前に含む関数が存在しない）。値を直接触るしかない
@@ -1818,7 +1817,7 @@ app.buttons      = ['労働の募集をみる', '市民権の発行', '出る', 
 - 会話を挟むと抜けた後に施設の選択肢が組み直されるので、
   足した自前のボタンは組み直しのたびに入れ直す必要がある
 
-#### 衛兵との戦闘（`enemy_type='guard'`。2026-08-21 に実機で全段を実測）
+#### 衛兵との戦闘（`enemy_type='guard'`。全段を実測）
 
 手配された土地でゲーム自身の衛兵を出し、`220_probe_bounty_hunter` で全段を録った
 （VERIFICATION_LOG.md §2.51）。
@@ -2047,7 +2046,7 @@ npc_id = npcs.make_npc(app, fields, area_id, facility_id, write=write)   # 作�
 > MOD が `max + 1` だけで採ると台帳が追いつかず、次の町の生成でゲームが
 > 同じ番号を踏む。ある世界の街（area 2）では店主 50〜57 の
 > 素データが `local/` の MOD が作った登場人物に差し替わり、
-> `world_data.json` 側にだけ正しい店主が残った（2026-08-29。
+> `world_data.json` 側にだけ正しい店主が残った（
 > VERIFICATION_LOG.md §2.77）。ローダの `ids.claim`（TECH.md §3.2.3）が
 > 台帳を読んで進める。MOD は id を自分で決めない。
 
@@ -2074,7 +2073,7 @@ npc_id = npcs.make_npc(app, fields, area_id, facility_id, write=write)   # 作�
 > intelligence / wisdom / charisma）が無いと `generate_character` が
 > `KeyError: 'constitution'` で落ち、直組みの `Character(...)` も
 > `original_ability_scores` を添字で読んで落ちる
-> （2026-08-27 実機。VERIFICATION_LOG.md §2.72）。値は null でよい。
+> （実機。VERIFICATION_LOG.md §2.72）。値は null でよい。
 >
 > 生成直後（`level_of_detail=1`）の実物（実セーブの id 41、難易度48）は、
 > ほかに experience_level（整数。難易度48 → 51）・age（実セーブの全NPCが
@@ -2144,7 +2143,7 @@ llm_manager:conversation_facilitator_after_retrieval(..., retrieved_knowledge)
 > `area_achievements`（§2.20）を引数で直接受け取っている（`targets.txt` の実シグネチャ。
 > `*_in_quest` の2つには無い）。
 > 成した事の素の文章はプロンプトへ載っている（確定）。
-> Epic 版 `output_data\` 19,415件（2026-08-27 分まで）の突き合わせで、
+> Epic 版 `output_data\` 19,415件の突き合わせで、
 > system メッセージの【プレイヤーキャラの情報】に「この土地での活躍: [...]」の形で
 > 毎回描画されていた（計3,119件: `conversation_facilitator` 1,969 /
 > `conversation_starter` 924 / `conversation_join_message` 114 /
@@ -2253,7 +2252,7 @@ retrieval を待たず第一声から載る。
 
 太字が `affinity` 0（＝初対面）の段。
 
-**閾値は実機で総当たりして確定した**（2026-08-20。`125_` が起動のたびに
+**閾値は実機で総当たりして確定した**（`125_` が起動のたびに
 ゲーム自身を引いて読み直すので、その記録がそのまま答えになる）:
 
 | 魅力 | 段 | | 好感度 | 段 |
@@ -2285,7 +2284,7 @@ retrieval を待たず第一声から載る。
 段を作る場所がこの1本しかないことには利点もある。
 **会話系5関数を通らない経路にも同じ保存済みの文が載るので、ここを直せば全経路に届く**（`125_`）。
 
-**書かれるのは会話1回につき2度**（実測2026-08-20。`out/charisma_impression.log`）。
+**書かれるのは会話1回につき2度**（実測。`out/charisma_impression.log`）。
 
 ```
 会話の開始 ConversationStartManager.execute -> ..._method_0 -> _1
@@ -2418,7 +2417,7 @@ app.world_dict       worlds\<世界>\world_data.json
 app.save_data_dict   saves\<世界>\savedata.json
 ```
 
-実セーブを復号して突き合わせた（2026-08-21）:
+実セーブを復号して突き合わせた:
 
 | | world 側 | save 側 |
 | --- | --- | --- |
@@ -2476,7 +2475,7 @@ KeyError: '229'
 プレイヤーはその施設に立ってボタンを押せているので、
 組み上がった `Area` / `Node` / `Facility` の側には施設が在る。
 
-> **引き先は `app.world_dict`**（2026-08-21 に実機で確定）。
+> **引き先は `app.world_dict`**（確定）。
 > `app.save_data_dict` からそこへ施設1件と主1人を写したところ、
 > 同じ店がその場で開いた。写した内容は保存され、`world_data.json` の施設が 228→229 に増えた。
 >
@@ -2556,17 +2555,17 @@ scripts.hud.new_hud:InstanTaleHUD.update_status_texts(self, instance, value)
 ```
 
 `status_texts` は改行区切りの1本の文字列で、塗った結果が `status_label` に入る。
-実測（`206_probe_quest_flow` が先頭 40 文字を記録している。2026-08-21）:
+実測（`206_probe_quest_flow` が先頭 40 文字を記録している）:
 
 ```
-Atk:432(+500)\nDef:0(+500)\nExp:1675/3237\nGold:1116472\nAge:31\nSta:…\nLocation:…
+Atk:<n>(+<n>)\nDef:<n>(+<n>)\nExp:<n>/<n>\nGold:<n>\nAge:<n>\nSta:…\nLocation:…
 ```
 
 見出しの `Atk` `Def` `Exp` `Gold:` `Age:` `Sta` `Location` は
 **ビルド内では素の英語の定数**で、`translate_dict` にも `pattern_dict` にも無い。
 日本語で遊んでいても `Gold:` と出るのはこのため。
 言語を切り替えても変わらない。
-実機の画面でも `Gold:13184` と出ていた（2026-08-26）。
+実機の画面でも `Gold:<数>` と出ていた。
 **桁区切りの無い整数**で、単位も付かない。
 
 > 通貨の呼び名は3通りに綴られている。
@@ -2578,7 +2577,7 @@ Atk:432(+500)\nDef:0(+500)\nExp:1675/3237\nGold:1116472\nAge:31\nSta:…\nLocati
 （`筋力` `器用` `耐久` `知力` `判断` `魅力` `所持金` と並ぶ側。属性は `gol`）。
 こちらは `tr` を通る。
 
-> **見張りは渡された `value` を塗っている**（2026-08-26 に実機で確定。
+> **見張りは渡された `value` を塗っている**（確定。
 > VERIFICATION_LOG.md §2.64）。
 > `value` を差し替えるだけで画面が変わり、
 > `self.status_texts` は読み直されていない。
@@ -2587,7 +2586,7 @@ Atk:432(+500)\nDef:0(+500)\nExp:1675/3237\nGold:1116472\nAge:31\nSta:…\nLocati
 > （`130_` の保険の経路が1度も走らなかった）。
 > ビルドが変われば逆に振れる側なので、書き換える側は保険を残しておくこと。
 
-### 2.30 NPC の絵の作られ方（2026-08-30〜31 に `131_` で実測）
+### 2.30 NPC の絵の作られ方（`131_` で実測）
 
 `image_generation.sdcppcuda.image_generation_creature` がキャラクタ・敵・モンスターの絵を
 1本の経路で作る。NPC ごとのフォルダ
@@ -2635,7 +2634,7 @@ Atk:432(+500)\nDef:0(+500)\nExp:1675/3237\nGold:1116472\nAge:31\nSta:…\nLocati
 - 見つからなかった回は、立ち絵をもう一度 `pixel_art_process` に通した 16x32 を2倍にした
   32x64 の全身が顔の代わりになる
 
-### 2.31 立ち絵のパスとセーブの置き場（2026-08-30 実測、`323_` の作業より）
+### 2.31 立ち絵のパスとセーブの置き場（`323_` の作業より）
 
 ```
 %LOCALAPPDATA%\Darmabeko\Instantale\
@@ -2711,7 +2710,7 @@ Python は通常のルックアップが失敗した後にのみ `__getattr__` �
 プロンプト関係は `output_data/` で実データ検証できる。
 ゲーム自身が LLM へ投げた `messages` をそのまま保存している（12,067件・66マネージャ種）。
 プロンプトを触る MOD は、ゲームを起動せずに全件へオフラインで通してから注入できる。
-ただし**2026-08-09 以降の記録は `111_` 適用後**である点に注意（VERIFICATION_LOG.md §2.43）。
+ただし**`111_` を入れてからの記録はその適用後**である点に注意（VERIFICATION_LOG.md §2.43）。
 
 症状の側から判定条件を書く。
 どの経路が壊しているかを突き止めなくても直せることがある

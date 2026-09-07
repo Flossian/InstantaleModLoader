@@ -387,6 +387,26 @@ def extract_extras(referee_response):
     return found
 
 
+# 継続効果の説明に使う強さの語。画面では `308_` が「泥の浸食(毎ターン小ダメージ)」と添える。
+PER_TURN_LABELS = {"weak": "小", "normal": "中", "strong": "大",
+                   "very_strong": "特大", "extreme": "極大"}
+
+
+def per_turn_description(per_turn):
+    """継続効果の帳簿 `[(種別, power), ...]` → 短い説明文。
+
+    審判の `description` は「泥が足元から這い上がってくる」のような描写で、
+    何が起きるかが読めない。
+    数字は出さず「毎ターン小ダメージ」の粒度に留める（実数は毎巡の行で出る）。
+    """
+    parts = []
+    for tick_kind, power in per_turn:
+        label = PER_TURN_LABELS.get(power, PER_TURN_LABELS["normal"])
+        parts.append("毎ターン{}{}".format(
+            label, "ダメージ" if tick_kind == "instant_damage" else "回復"))
+    return "・".join(parts)
+
+
 def attribute_recipe(kind, attribute_type, power):
     """AttributeEffect 1件 → (状態異常の名前, 説明, 倍率の帳簿)。対象外は None。"""
     side = ATTR_SIDE.get(attribute_type)
@@ -398,14 +418,13 @@ def attribute_recipe(kind, attribute_type, power):
     name = label + ("強化" if helpful else "低下")
     if side == "out":
         mult = 1.0 + amount if helpful else 1.0 - amount
-        note = "与えるダメージが{}がる".format("上" if helpful else "下")
+        description = "与えるダメージが{}".format("増加" if helpful else "減少")
         book = {"out_mult": mult}
     else:
         mult = 1.0 - amount if helpful else 1.0 + amount
-        note = "受けるダメージが{}える".format("減" if helpful else "増")
+        description = "受けるダメージが{}".format("減少" if helpful else "増加")
         book = {"in_mult": mult}
-    description = "{}が{}している（{}）。".format(
-        label, "向上" if helpful else "低下", note)
+    # 説明は短く。画面では `308_` が「筋力低下(与えるダメージが減少)」と添える。
     return name, description, book
 
 
@@ -538,6 +557,22 @@ def apply(ctx):
         for key in dead:
             del state["recipes"][key]
         return found
+
+    def describe_restored_statuses(app):
+        """帳簿にある継続効果の `description` を短い説明文に書き換える。
+
+        `text_status` はゲームが `resolve_battle_effect` の中で `status` へ書く
+        （`convert_...` の時点ではまだ無い）ので、その直後に当てる。
+        `308_` の報告は `handle_battle_situation` の外側なので、書き換え後の文が出る。
+        """
+        for (name, status_name), recipe in list(state["recipes"].items()):
+            if not recipe.get("per_turn"):
+                continue
+            for holder in holders_named(app, name):
+                statuses = status_dict(holder)
+                entry = statuses.get(status_name) if statuses else None
+                if isinstance(entry, dict):
+                    entry["description"] = per_turn_description(recipe["per_turn"])
 
     def say(app, text):
         try:
@@ -773,12 +808,23 @@ def apply(ctx):
                                               ATTR_DURATION):
                                 continue
                             state["recipes"][(name_of(holder, target), name)] = book
+                            # 画面の行は出さない。付与は `308_` が status の差で
+                            # 「名前(効果) が付いた」と出す（審判由来と同じ扱い）。
                             write("restored attribute effect: {!r} on {} ({})"
                                   .format(name, name_of(holder, target), book))
-                            say(app, "（{}: {}）".format(
-                                name_of(holder, target), description))
         except Exception:
             ctx.log_exc("battle tactics: cannot restore the referee's effects")
+        return result
+
+    @ctx.wrap("__main__:BattlePhaseManager.resolve_battle_effect",
+              required=False, safe=True)
+    def resolve_battle_effect(orig, self, *args, **kwargs):
+        result = orig(self, *args, **kwargs)
+        if RESTORE_EFFECTS:
+            try:
+                describe_restored_statuses(getattr(self, "app", None) or ui.find_app())
+            except Exception:
+                ctx.log_exc("battle tactics: cannot describe the restored statuses")
         return result
 
     @ctx.wrap("__main__:BattlePhaseManager.reduce_status_turns_and_log",

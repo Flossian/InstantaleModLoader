@@ -94,7 +94,7 @@
 | [`304_quest_end_keep_party`](MODS.md#304_quest_end_keep_party-クエストをクリアしても解散しない) | クエスト後も解散しない | クエストをクリアしても解散しない | 2 |  |
 | [`306_party_train_exp`](MODS.md#306_party_train_exp-宿屋の訓練で仲間も育つ) | 仲間も訓練で育つ | 宿屋の訓練で仲間も育つ | 6 |  |
 | [`307_area_move_dungeon`](MODS.md#307_area_move_dungeon-第3の移動手段危険な道を行くを足す) | 危険な道を行く | 第3の移動手段「危険な道を行く」を足す | 8 |  |
-| [`308_battle_damage_display`](MODS.md#308_battle_damage_display-戦闘のダメージ表示) | 戦闘のダメージ表示 | 戦闘のダメージ表示 | 7 |  |
+| [`308_battle_damage_display`](MODS.md#308_battle_damage_display-戦闘のダメージ表示) | 戦闘のダメージ表示 | 戦闘のダメージ表示 | 8 |  |
 | [`309_office_pardon`](MODS.md#309_office_pardon-役場で罰金を納めて手配を解く) | 役場で手配を解く | 役場で罰金を納めて手配を解く | 4 |  |
 | [`311_npc_profile_memory`](MODS.md#311_npc_profile_memory-npcが会話の内容を覚える) | NPCが会話を覚える | NPCが会話の内容を覚える | 5 |  |
 | [`312_shop_restock`](MODS.md#312_shop_restock-日数経過で店の在庫を更新) | 店の品揃えの入れ替え | 日数経過で店の在庫を更新 | 3 |  |

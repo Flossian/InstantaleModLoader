@@ -108,6 +108,7 @@ class Character:
         self.max_hp = 30
         self.physical_integrity = 100
         self.max_physical_integrity = 100
+        self.status = {}          # {名前: {status_name, description, duration}}
         self.__dict__.update(kw)
 
 
@@ -152,6 +153,7 @@ class BattlePhaseManager:
         self.plan = []            # [(持ち主, 新しい HP)]
         self.integrity_plan = []  # [(持ち主, 新しい負傷値)]
         self.finish = []          # その手で場から消える敵の鍵
+        self.status_plan = []     # [(持ち主, 状態異常の名前, 1件 or None=解除)]
         self.narrate = True
         self.calls = 0
 
@@ -165,6 +167,11 @@ class BattlePhaseManager:
                 holder.current_hp = value
         for holder, value in self.integrity_plan:
             holder.physical_integrity = value
+        for holder, name, entry in self.status_plan:
+            if entry is None:
+                holder.status.pop(name, None)
+            else:
+                holder.status[name] = entry
         for key in self.finish:
             self.app.current_enemy_dict.pop(key, None)
         if self.narrate:
@@ -643,6 +650,40 @@ check("  → U+2460（丸数字）も落ちる", charset_verdict("①") != "ok",
 check("  → 素の JIS X 0208 は通る",
       all(charset_verdict(ch) == "ok" for ch in "・→※●-*>"),
       "JIS X 0208 の字が落ちている")
+
+print("=== バフ・デバフの付与と解除 ===")
+app, ctx, mod = setup()
+weak = {"status_name": "筋力低下",
+        "description": "与えるダメージが減少", "duration": 3}
+strike(app, (enemy(app), 20),
+       status_plan=[(enemy(app), "筋力低下", weak),
+                    (app.player, "防御の構え", {"status_name": "防御の構え",
+                                             "description": "", "duration": 1})])
+check("付与が 名前(効果) で出る",
+      any("ゴブリンの斥候 に 筋力低下(与えるダメージが減少) が付いた"
+          in t for t in mod_lines(app)), app.texts)
+check("効果の文が無ければ名前だけ",
+      any("テストプレイヤー に 防御の構え が付いた" in t for t in mod_lines(app)),
+      app.texts)
+check("同じ手のダメージも一緒に出る",
+      any("14 のダメージ" in t for t in mod_lines(app)), app.texts)
+check("地の文の後ろに出る",
+      index_of(app, NARRATION_TEXT) < index_of(app, "が付いた"), app.texts)
+strike(app)
+check("残っている間は何も出ない", len(mod_lines(app)) == 1, app.texts)
+strike(app, status_plan=[(enemy(app), "筋力低下", None)])
+check("解除が出る",
+      any("ゴブリンの斥候 の 筋力低下 が切れた" in t for t in mod_lines(app)), app.texts)
+check("記録に残す", "+status '筋力低下'" in read_log() and "-status '筋力低下'" in read_log(),
+      read_log()[-600:])
+check("status を書き換えない", "防御の構え" in app.player.status and not enemy(app).status,
+      (app.player.status, enemy(app).status))
+check("例外を1つも出していない", not ctx.errors, ctx.errors)
+
+app, ctx, mod = setup(configure=lambda m: setattr(m, "SHOW_STATUS", False))
+strike(app, status_plan=[(enemy(app), "筋力低下", weak)])
+check("設定 OFF なら出ない", not mod_lines(app), app.texts)
+check("設定が mod.json にある", "SHOW_STATUS" in (manifest().get("settings") or {}))
 
 print("=== 当てた対象 ===")
 app, ctx, mod = setup()

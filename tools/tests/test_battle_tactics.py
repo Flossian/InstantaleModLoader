@@ -234,6 +234,12 @@ check("extract: object form reads the same",
 check("extract: garbage yields nothing",
       mod.extract_extras(None) == [] and mod.extract_extras({"additional_effects": 3}) == [])
 
+check("per-turn: description says the size, not the number",
+      mod.per_turn_description([("instant_damage", "weak")]) == "毎ターン小ダメージ"
+      and mod.per_turn_description([("instant_damage", "strong"),
+                                    ("instant_heal", "weak")])
+      == "毎ターン大ダメージ・毎ターン小回復")
+
 # ---------------------------------------------------------------- 倍率
 name, description, book = mod.attribute_recipe("reduction", "str", "strong")
 check("attribute: str reduction lowers outgoing damage",

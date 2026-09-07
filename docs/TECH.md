@@ -77,7 +77,7 @@ C コンパイラと管理者権限は要らない。ゲームフォルダは読
 > モジュール階層に `import` や代入を書くと、
 > 本体がその名前に束縛していたものを黙って上書きする。
 >
-> 実際に踏んだ（2026-08-21）。`import sys, os, datetime, traceback` の1行が、
+> 実際に踏んだ。`import sys, os, datetime, traceback` の1行が、
 > 本体の `from datetime import datetime`（クラス束縛）をモジュールで上書きしていた。
 > そのせいで本体の `make_crash_log` が
 > `AttributeError: module 'datetime' has no attribute 'now'` で落ち、
@@ -204,7 +204,7 @@ GUI は保存のたびに順序ファイルを書き戻すので消しても戻�
 > ```
 >
 > Python 側では `PermissionError` として上がるので権限や多重起動を疑いたくなるが、
-> MSDN が「成功するまで再試行せよ」と書いている類の失敗で、待てば通る（2026-08-21）。
+> MSDN が「成功するまで再試行せよ」と書いている類の失敗で、待てば通る。
 > `injector._snapshot()` が `ERROR_BAD_LENGTH` のときだけ 0.1 秒おきに 20 回まで粘る。
 > 権限やプロセス不在は待っても変わらないので、1回目でそのまま投げる。
 > `tools/tests/test_injector_snapshot.py` が両方の振る舞いを見ている。
@@ -952,7 +952,7 @@ item_key = claim(app, "item", write=write)     # "item_<n>" の書式で返る
 `ids.audit(app)` は台帳が実在に追いついていない種類を並べる（`make_npc` が
 採番の前に呼び、ログに `ids: index behind existing ids:` を残す）。
 セーブエディタで足した施設も台帳を進めていない（実セーブで facility が
-台帳 230 に対し実在 234。2026-08-29）。
+台帳 230 に対し実在 234）。
 
 > `import state` ではなく関数を直に import する。
 > `301_` は `apply()` の中に `state = {...}` というローカル変数を持っている。
@@ -1114,7 +1114,7 @@ import は先に `sys.modules` へ登録してから本体を走らせるので�
 3行目が別に要るのは、**`__main__` は `__spec__` を持たない**ため（起動スクリプトなので）。
 `__main__`（約1万行）は最初の1行から載っていて、そこからクラスを組み立てていく。
 インタプリタ初期化の時点で注入すると `World` も `InstantaleApp` もまだ無い。
-これは打ち間違いではなく順番の問題（2026-08-15〜19 に、初回ブートで5本が
+これは打ち間違いではなく順番の問題（初回ブートで5本が
 `AttributeError: module '__main__' has no attribute 'World'` で `apply()` ごと落ちていた）。
 
 > `__main__` の側では持ち主だけを見る。
