@@ -31,7 +31,7 @@
 会話の外の自由入力と同じようにゲーム自身の GM が行動として処理する。
 半角の `<>` でもよく、全角と半角が混ざっていてもよい。
 
-```
+```text
 ＜鞄から薬草を取り出してマーサに渡す＞
 <金貨を50枚カウンターに置く>
 ＜剣を抜いて斬りかかる>
@@ -101,7 +101,7 @@ Epic 版 `output_data\`（全世界、2026-09-05 時点）を数えて確かめ�
 
 **所持品の材料。** 引数の実シグネチャ（`targets.txt`）:
 
-```
+```text
 master_ai_facilitator(..., choice_text, skill_choice_text, item_choice_text, master_process_log)
 master_ai_facilitator_from_conversation(..., conversation_log, master_process_log)
 ```

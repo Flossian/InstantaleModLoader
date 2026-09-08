@@ -91,7 +91,7 @@ C コンパイラと管理者権限は要らない。ゲームフォルダは読
 
 ### 1.2 ファイル構成
 
-```
+```text
 InstantaleModLoader.bat   GUI を開く（配布物で唯一の入口）
 make_dist.bat             配布物を dist\ に組む（loader / mods / full の3つの zip）
 tools/gui.py              MOD 一覧・適用順・有効/無効・設定・追加・起動と注入・結果表示
@@ -424,7 +424,7 @@ GUI は一覧に「ローカル」と出し、入切・設定・同梱の道具�
 遊ぶ側から見た1本ぶんの説明は、その MOD のフォルダの `DOC.md` に置く。
 `docs/MODS.md` はそれを綴じ直したもので、`tools/build_mods.py` が組む。
 
-```
+```text
 runtime/mods/316_bounty_hunter/
     mod.json
     bounty_hunter.py
@@ -537,7 +537,7 @@ findstr /i "employ_price" out\recon\targets.txt
 
 見つけた行をそのまま `@ctx.wrap` に貼る（`(signature)` の部分は貼らない）:
 
-```
+```text
 scripts.functions:get_npc_employ_price(npc_difficulty_level)
         ↓
 @ctx.wrap("scripts.functions:get_npc_employ_price")
@@ -598,7 +598,7 @@ type out\modloader.log         # applied / wrapped の行、失敗のトレー�
 
 1つの MOD = 1つのフォルダで、`mod.json` を持つものが MOD:
 
-```
+```text
 runtime/mods/
     load_order.json
     area_move_dungeon/
@@ -740,7 +740,7 @@ def apply(ctx):
 
 通した `WARN` は例外1つにつき1行（層が重なっても増えない）:
 
-```
+```text
 safe hook on __main__:AreaMoveManager.execute: the original raised KeyError: '37' at <ファイル>:<行> in <関数>; passing it through
 ```
 
@@ -821,7 +821,7 @@ GUI は MOD の一覧を作るのにコードを1行も走らせずに済む
 
 **順序が効くのは同じ対象を2つの MOD が包むときだけ**で、その関係は帯順で決まる:
 
-```
+```text
 204_ が 103_ を包む / 206_ が 104_ を包む / 300_ が 205_ を包む
 304_ が 303_ を包む / 215_ が 313_ を包む（計測は 313_ が動かした後の値を控える）
 111_ が 102_ / 103_ / 105_ を包む（置換は圧縮前の本文を見る）
@@ -1268,7 +1268,7 @@ def apply(ctx):
 
 #### 3.7.1 `boot()` の最後に出る報告
 
-```
+```text
 patches: 61 applied on 54 target(s) by 26 mod(s)
 overlapping targets (5):
   llama_cpp_runtime_completion:LlamaCppClient.chat <- 105_fix_schema_compact/, 111_llm_prompt_replace/
@@ -1333,7 +1333,7 @@ GUI から見えないことと、MOD を更新すると設定が消えること
 
 MOD のコードは何も変えなくてよい。
 
-```
+```text
 mods/300_event/mod.json    "settings" に何が変えられるかを宣言する
 mods/300_event/event.py    EVENT_MODE = "conversation"   ← 既定値。そのまま残す
 settings/mod_settings.json 選んだ値だけ

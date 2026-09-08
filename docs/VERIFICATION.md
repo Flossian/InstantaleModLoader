@@ -96,6 +96,7 @@
 | `324_place_bgm` | 施設の種類（宿屋・ギルドなど13種）と土地の種類（町・村・都市・ダンジョン）ごとの重みで、戦闘以外の BGM を置いた曲から選んで鳴らす。世界ごとの個別指定（その町・その宿）が先に効く。施設の出入りで鳴らし直し、土地の曲は覚える。設定画面（`tool.py`）は一括設定とワールド個別設定の2タブ | 実機で一部成立（2026-09-02、決定38回・ERROR 0。§2.83）。**施設の段の切り替え・見張り・覚えた曲の再訪・戦闘後は未確認**（§3.48） |
 | `325_road_opening` | 「他の土地へ行く」に「新たな道を探す」を足す。まだ繋がっていない街（`size` が village / town / city）を選び、お金を払って開削を委託する（既定 14 日後に開通）か道中のダンジョンを踏破すると、両側の `Area.connections` に対称に道が開く。金額と難易度は BFS で数えた「間に挟む街の数」で上がる。記録は `state\road_opening\<世界名>.json`、ロード時に当て直す | **実機で成立**（2026-09-03、版2。3経路とも通り WARN / ERROR 0件。§3.50）。**連打の門だけ未発火**（§3.50） |
 | `326_npc_travel` | 友好度 20 以上のギルドの冒険者が旅に出る。別の街（施設が生成済み）のギルドか宿に 30〜90 日、または同じ街のギルド以外の施設に 7 日。各街に 2 人は残す。旅先のギルドでは雇える。旅先で話すと会話の文脈に「〜から来ている」を 1 文足す。台帳は `state\npc_travel\<世界名>.json`、ロード時に突き合わせ | **実機で出発・旅先・帰還まで成立**（2026-09-04、版1、1回目。`return:` 13 件が元の施設へ、WARN / ERROR 0。§3.53）。残るは延期・セーブとロード・片付け（#6 #7 #9） |
+| `327_inn_quality` | 部屋の等級で1回の宿泊でできる活動の数が変わる（既定 1/1/2/3）。宿の主が常連を覚え、宿泊のたびに好感度が等級ぶん上がり（累計 +20 で止まる）、宿の主との会話に宿泊の履歴を1行足す。社交で会う相手も部屋で変わる（同行者 → 好感度の高い相手 → ランダム。宿の名簿を窓の間だけ差し替える）。記録は `state\inn_regular\<世界名>.json` | **版1・未実機**（2026-09-08。オフライン `test_inn_quality.py` 32 件）。§3.54 |
 
 ### 提供（400番台）
 
@@ -1279,7 +1280,7 @@ module docstring だけを読むと `label.text = 通知 + value[-N:]` の2行�
 
 `out/npc_name.log` に、**別人どうしを重複と判定して改名していた行が3件**あった。
 
-```
+```text
 'バルガス・グラトル' -> 'トリスタン'  (clashed with id='7' '“黒蜥蜴”アルカス')
 '“黒蜥蜴”アルカス'  -> 'カゲロウ'    (clashed with id='__player__' 'ヴァルガス・ヴォルフレイン')
 '“黒蜥蜴”アルカス'  -> '影を纏うシキ' (clashed with id='__player__' 'ヴァルガス・グレイヴ')
@@ -1336,7 +1337,7 @@ module docstring だけを読むと `label.text = 通知 + value[-N:]` の2行�
 
 本体のクラッシュ記録が、記録を書く前に自分で落ちていた。
 
-```
+```text
 File "instantale.py", line 288, in report_crash
 File "instantale.py", line 200, in make_crash_log
 AttributeError: module 'datetime' has no attribute 'now'
@@ -1369,7 +1370,7 @@ import sys, os, datetime, traceback
 本体は `from datetime import datetime`（クラス束縛）で持っているので、
 この行がモジュールを被せていた。`datetime.now()` はクラスにしか無い。
 
-```
+```text
 素の __main__.datetime = <class 'datetime.datetime'>
 流し込んだ後           = <module 'datetime' ...>
 ```
@@ -1399,7 +1400,7 @@ import sys, os, datetime, traceback
 
 **直った後の実機（2026-08-21 10:46:38、同じ店で1回）**
 
-```
+```text
 datetime = <class 'datetime.datetime'>
 datetime is sys.modules['datetime'] = False | has now = True
 OK       3495 chars
@@ -2116,7 +2117,7 @@ HANDOVER §6 の1と3も決着: **一覧は `Area.connections` を読む**（`WA
 メインスレッドが先に `normalize_shop_inventory_prices`（`instantale.py:2660`。主の持ち物の辞書を直に回す）を走らせ、その最中に `finally` が鍵を消して `RuntimeError: dictionary changed size during iteration`。
 `227_` の境目の記録が順を示している（`toggle_twin_inventory_window('shop')` の境目で `店 -501`。画面を開いている間に消えた）:
 
-```
+```text
 23:55:10.176 品の誕生: id=501 '再生の蒸気ポーション' 主=ハーラン(66)  ← shopping_start_method_1
 23:55:10.347 WARN safe hook on normalize_shop_inventory_prices: RuntimeError: dictionary changed size during iteration
 23:55:10.348 境目 toggle_twin_inventory_window('shop'): 店 -501
@@ -2130,7 +2131,7 @@ HANDOVER §6 の1と3も決着: **一覧は `Area.connections` を読む**（`WA
 
 **2026-09-04 の実機（1回目）で #1 は通った。** `227_` と `312_` の記録が同じ購入（16:25、id=61 '乾いた砂の糧食'）で噛み合っている:
 
-```
+```text
 16:25:17 境目 shopping_start_method_1: 店 +61          ← 内側では生まれている
 16:25:17 境目 ShoppingStartManagerRemake.execute: index のみ  ← 外側では消えている
          kept sold out: ハルマン(118) @ 287 dropped 1 refilled item(s): 61=乾いた砂の糧食
@@ -2172,7 +2173,7 @@ HANDOVER §6 の1と3も決着: **一覧は `Area.connections` を読む**（`WA
 
 **2026-09-04 の実機（1回目、友好度の下限を 0 にして）で #1 #2 #4 #5 #8 が通った。** `out\npc_travel.log`:
 
-```
+```text
 20:50:31 roll: area 6 present=3 eligible=3 chosen=['40'] (chance 0.131 over 14 day(s))
 20:50:31 depart: 鉄錆のカイ (40) away 6/82 -> 2/262 [inn] day 411 .. 473
 20:57:31 context[starter]: 鉄錆のカイ +48 chars
@@ -2199,6 +2200,40 @@ HANDOVER §6 の1と3も決着: **一覧は `Area.connections` を読む**（`WA
 会話中に日は進まず、その施設にプレイヤーが居る間は出発も帰還もしない（`player_at`）ので、生成の最中に相手が動くことはない。
 生成が `current_area` / `current_location` を `initial_location`（元の街）で上書きするなら次のロードで食い違う。`reconcile:` が台帳を正として旅先へ置き直すので壊れないが、#10 はここを見る。
 `generate_npc_detail` は既知の不具合現場（`KeyError: '52'` ＝ *文字列*キー。`200_probe_bug_sites` が張ってある）。旅と関係があるかは不明なので、#10 は `200_` を入れたまま見る。
+
+### 3.54 宿の部屋の等級を効かせる（`327_`）: 版1・未実機（2026-09-08）
+
+決まりと設定は `327_` の DOC.md。
+土台は「1泊＝活動1回」（GAME.md §2.17。`out/vacation.jsonl` の 54 回全件）。
+活動の一覧はゲームが最初に出す画面から `cls` / `args` を写し、活動の後の「まだ宿泊する／宿泊を終える」の画面に残りのぶんだけ並べ直す（`refresh_choice_buttons` の直前。文言も語彙も持たない）。
+数えるのは活動マネージャの `execute` の入口（出口で数えると最後の活動の後にもう1回並ぶ。オフラインで踏んだ）。
+宿泊の成立は窓の中の `elapse_days` で見る。
+宿の主は `app.player.location.owner`、会話相手は `app.in_conversation`。
+好感度は本体の `relationship["player"]["affinity"]` に足し、文は本体に任せる。`"player"` の欄が無い主には足さず記録だけ残す。
+オフラインは `tools\tests\test_inn_quality.py` 32 件。
+
+実機で見るもの:
+
+| # | 何を | どう見るか |
+| --- | --- | --- |
+| 1 | 活動の一覧が写せるか | 高級個室で泊まり、`out\inn_quality.log` に `menu: N activities again (left=2)`。活動の後の画面に活動が並ぶ |
+| 2 | 活動の後の画面の経路 | 並ばないなら、活動の後の画面が `refresh_choice_buttons` を通っていないか、`VacationEndManager` のボタンが無い。`218_` に活動後の choice 画面を1行足して見る |
+| 3 | 3回目の後 | 高級個室で3つ目の活動の後は「まだ宿泊する／宿泊を終える」だけ |
+| 4 | 簡易寝台 | 素のまま（活動の後に活動が並ばない） |
+| 5 | 常連 | `regular: 名前 affinity 0 -> 4 (granted 4/20)`。`state\inn_regular\` に宿の主の記録。5泊で `granted 20/20` |
+| 6 | 初対面の主 | 一度も話していない宿の主で `has no relationship['player']`。話してから泊まると上がる |
+| 7 | 会話の1行 | 泊まった後に宿の主と話し、`prompt at chat:` に1行。返答が宿泊の履歴を踏まえる。`311_` が次の会話で `about_player` に取り込む |
+| 8 | 社交 | 社交（Manager と ResolveManager の対）で残りが 1 だけ減る |
+| 9 | 仲間の訓練 | `306_` と同じ `VacationTrainManager.execute` を包む。2回目の訓練でも仲間に入る |
+| 10 | 社交の相手（差し替えが届くか） | 高級個室で仲間を連れて社交。`social: luxury_suite -> 名前 (id) by party` の後に `social: scene npc_list=[...] -> swap effective`。【参加NPC】がその仲間。`WARN swap ineffective` なら、ゲームが宿の名簿（`Facility.characters`）以外から相手を選んでいる |
+| 11 | 社交の相手（段） | 仲間なしの高級個室で好感度 10 以上の相手（`by friends`）、誰も居ない街で `by random`。個室は `by friends` から、犬小屋は `by random` だけ、簡易寝台は `untouched (game default)` |
+| 12 | 社交の後始末 | 社交の後、宿の「会話する」の一覧が元に戻っている（名簿を窓の間だけ差し替えて `finally` で戻す）。仲間の `location` が宿に残っていない |
+| 13 | 感情の反映 | 差し替えた相手への `emotion_changes` がその相手の好感度に入る（ゲームが名前→id を宿の名簿で引くなら入る。別の表で引くなら入らず、その場合はログに何も出ないので好感度の前後を控える） |
+
+社交の相手の土台: `output_data/<世界>/<PC>/vacation_scene_generator/N.json` の【イベントの場所】が泊まっている宿、【参加NPC】が宿の主（2件とも）。
+宿の名簿から選んでいると読んで、`VacationSocializeManager.execute` の間だけ `Facility.characters` を選んだ1人にし、`location` が宿でない相手は窓の間だけ宿にする。
+`vacation_scene_generator` の `npc_list` を控えて効いたかを見る（引数には触らない。触ると名前→id の対応が崩れる）。
+共有倉庫は別 MOD（宿ごとには持たない）。
 
 ---
 

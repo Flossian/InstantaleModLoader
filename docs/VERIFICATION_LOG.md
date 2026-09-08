@@ -1276,7 +1276,7 @@ import は「先に `sys.modules` へ登録してから本体を走らせる」�
 
 手配された土地でゲーム自身の衛兵を出し、全段を録った。経路は GAME.md §2.20。
 
-```
+```text
 BattleStartManager(app, 'guard', None) -> execute -> start_battle -> sb_1
   -> create_guard_enemies -> guard_npc_generator(area, world, 20) -> EnemyData 1件
      generate_enemy_instance_from_quest_dict({'type':'normal',…}, …, 20) ×3 -> None
@@ -1327,7 +1327,7 @@ BattleStartManager(app, 'guard', None) -> execute -> start_battle -> sb_1
 
 ### 2.55 自由行動からは一度も出ていなかった（2026-08-22、`316_`）
 
-```
+```text
 自由行動: in_free_input なので出さない   ×3
 ```
 
@@ -1374,7 +1374,7 @@ BattleStartManager(app, 'guard', None) -> execute -> start_battle -> sb_1
 
 宿泊の途中で決まった追手が、**宿泊が終わってから**出た（合図5回ぶん持ち越し）。
 
-```
+```text
 10:08:32  日数経過: 追手が決まった          （部屋選びの最中）
 10:08:34〜10:09:04  合図4回とも宿泊の場面 -> 見送り
 10:09:11  合図: MovePhaseManager / DisplayVacationChoice -> ここで出た
@@ -1396,7 +1396,7 @@ MOD が起こしたかゲームが起こしたかでは割れない。
 
 ### 2.60 枠を動かしている段（2026-08-22、`220_` → `316_`）
 
-```
+```text
 display_button_load(選択肢7)  -> right_button_layout opa 1 -> 0
 update_button_texts           caller: update_ui <- display_button_load
 ```
@@ -1501,7 +1501,7 @@ update_button_texts           caller: update_ui <- display_button_load
 `シルバー` / `Slv` に差し替えた状態で、画面上部の欄と宿の部屋選びを実機で確認。
 `out\currency_unit.log` の生ログ:
 
-```
+```text
 16:53:25 hud: 'Atk:390(+500)\nDef:0(+500)\nExp:-94/1661\nGold:13184\nAge:31\nSta...'
               -> '...\nシルバー:13184\nAge:31\nSta...'
 17:09:28 hud: '...\nGold:13184\n...' -> '...\nSilver:13184\n...'
@@ -1535,7 +1535,7 @@ update_button_texts           caller: update_ui <- display_button_load
 
 `out\vacation.log`:
 
-```
+```text
 17:09:30 room choice: gold=13184
              button: '犬小屋(0Slv)'      args=[1, 'kennel']
              button: '相部屋(10Slv)'     args=[1, 'bunk']
@@ -1631,7 +1631,7 @@ update_button_texts           caller: update_ui <- display_button_load
 
 #### 1. 新しい依頼は「いまの帯」ではなく素の帯で生まれる
 
-```
+```text
 18:54:53  board: 土地 0 依頼 0 難易度 5 -> 15 / 依頼 1 4 -> 14 / 依頼 2 3 -> 13
 18:56:21  random_quest_generator(settlement='始まりの泥濘', difficulty=4)   ← 206_
 19:08:09  clear: 土地 0 依頼 0 難易度 15 -> 25 / 依頼 1 14 -> 24 / 依頼 2 13 -> 23
@@ -1680,7 +1680,7 @@ GAME.md §2.9 の「`world_dict['quests']` がセーブに出るほう」「書�
 これが「セーブに残らなくてよい」と決められた根拠。
 同じ 18:54:51 の記録:
 
-```
+```text
 get_quest_difficulties(area, world) -> list(len=5) [5, 4, 3, 4, 5]
 ```
 
@@ -1732,7 +1732,7 @@ get_quest_difficulties(area, world) -> list(len=5) [5, 4, 3, 4, 5]
 
 #### 2. 作りたての依頼がその場で上がる
 
-```
+```text
 19:36:51  search: 頼み文へ渡す難易度 5 -> 25
 19:37:31  search: 土地 0 依頼 22 難易度 5 -> 25（素 5 + 20）
 20:38:17  search: 頼み文へ渡す難易度 3 -> 33
@@ -1744,7 +1744,7 @@ get_quest_difficulties(area, world) -> list(len=5) [5, 4, 3, 4, 5]
 
 #### 3. ロードの1回で世界じゅうが戻る
 
-```
+```text
 20:26:53  load: 世界 'テストワールド' を寄せ直した（8件）
 20:28:14  get_enemy_exp_lvl('normal', 23) -> 24
 ```
@@ -1769,7 +1769,7 @@ get_quest_difficulties(area, world) -> list(len=5) [5, 4, 3, 4, 5]
 セーブ上の土地0 の依頼難易度は `[3,3,3,4,4,4,5,5,5]` なので、
 **33 は素のデータからは出ない数**。
 
-```
+```text
 20:51:31  get_quest_difficulties(土地0) -> [35,34,33,34,35,34,33,35]
 20:54:15  get_area_quest_difficulty_for_tier(土地0, world, 2) -> 33
 20:54:18  get_weapon_spec(33) -> 145
@@ -1793,7 +1793,7 @@ get_quest_difficulties(area, world) -> list(len=5) [5, 4, 3, 4, 5]
 `ItemCraftManager.calculate_modification(item_type, item_price)` は
 **float の倍率**を返す。成果物の値段は素材の合計値段にそれを掛けた値:
 
-```
+```text
 素材 value 2 + 8（合計の値段 30.75）
   get_equipment_level_from_price(30.75) -> 2
   calculate_modification("weapon", 30.75) -> 24.375
@@ -1804,7 +1804,7 @@ get_quest_difficulties(area, world) -> list(len=5) [5, 4, 3, 4, 5]
 
 副産物（`material`）は**その 1/5**。2例とも合う:
 
-```
+```text
   calculate_modification("material", 30.75) -> 9.512195…
   30.75 × 9.512195… = 292.5   →  292.5 / 5 = 58.5
   get_other_item_level_from_price(58.5) -> 14      成果物: 研磨屑 value 14
@@ -2317,7 +2317,7 @@ id+1 へ進める（戻しはしない）。`tools/tests/test_npc_make.py`（17�
 **版1（2026-08-30 16:45）: NPC の生成が止まった。**
 `orig` を呼ばずに、渡された画像の写しを1枚返していた。
 
-```
+```text
 out\image_no_pixelate.log  16:45:22.970  キャラクタ: 素通し 512x1024 RGBA（1回目）
 out\live_crashes.log       16:45:22.972  THREAD CRASH: Thread-88 (generate_images)
   TypeError: cannot unpack non-iterable Image object
@@ -2335,7 +2335,7 @@ out\live_crashes.log       16:45:22.972  THREAD CRASH: Thread-88 (generate_image
 「入力と同じ寸法の画像」だけを差し替える作りにしたところ、
 差し替えていたのは**ゲームが捨てる側**だった。
 
-```
+```text
 16:58:01.026  キャラクタ: 差し替え 1枚 入力 512x1024 / 戻り (512x1024、165x330)
 16:58:01.486  減色:      差し替え 1枚 入力 330x660  / 戻り 330x660
 16:58:01.530  キャラクタ: 差し替え 1枚 入力 330x660  / 戻り (330x660、16x32)
@@ -2386,7 +2386,7 @@ out\live_crashes.log       16:45:22.972  THREAD CRASH: Thread-88 (generate_image
 `out\sharp_portrait.log`（当時の名前は `image_no_pixelate.log`）。4体とも同じ形で通り、
 `out\live_crashes.log` に 17時台のクラッシュは1件も無い。
 
-```
+```text
 17:09:11.391  顔の検出: 入力 512x1024 RGBA / 座標 None（1回目）
 17:09:11.429  顔の検出: 入力 512x1024 RGBA / 座標 None（2回目）
 17:09:12.702  キャラクタ: 2枚 作り直し 元絵 512x1024 / 入力 512x1024 / 戻り (512x1024、165x330)
@@ -2444,7 +2444,7 @@ out\live_crashes.log       16:45:22.972  THREAD CRASH: Thread-88 (generate_image
 `config.json` の `character_generation_quality` を `highres_upscale` から `highres` に
 切り替えた状態（22:46:56 に書き換え）で、グレンを作り直した。
 
-```
+```text
 22:47:45.146  縮小: 512x1024 をそのまま通す
 22:47:45.337  減色: 1024x2048 をそのまま通す
 22:47:45.742  縮小: 1024x2048 顔の代わりを作る回なのでゲームに任せる
@@ -2470,7 +2470,7 @@ out\live_crashes.log       16:45:22.972  THREAD CRASH: Thread-88 (generate_image
 
 ##### 版6（23:01:55。元奴隷のヴォルグ）
 
-```
+```text
 23:01:55.888  縮小: 512x1024 をそのまま通す
 23:01:56.093  減色: 1024x2048 を控えの 512x1024 に戻す
 23:01:56.218  縮小: 512x1024 顔の代わりを作る回なのでゲームに任せる
@@ -2495,7 +2495,7 @@ out\live_crashes.log       16:45:22.972  THREAD CRASH: Thread-88 (generate_image
 
 ##### 版7（23:20〜23:21。元奴隷のヴォルグ・アリエッタ）
 
-```
+```text
 23:20:46.657  顔: 見つからず（4 通り試した）            ← 1回目（anime）。やり直しも外す
 23:20:46.696  顔: ゲームが見つけた (102, 14, 358, 270)   ← 2回目。素の絵で見つけた
 23:20:48.176  縮小: 512x1024 をそのまま通す
@@ -2517,7 +2517,7 @@ out\live_crashes.log       16:45:22.972  THREAD CRASH: Thread-88 (generate_image
 
 ##### 版8（23:27〜23:28。4体）
 
-```
+```text
 23:27:31.589  顔: ゲームが見つけた (146, 33, 402, 289)
 23:27:32.929  縮小: 512x1024 をそのまま通す
 23:27:33.129  減色: 1024x2048 を控えの 512x1024 に戻す
@@ -2536,7 +2536,7 @@ out\live_crashes.log       16:45:22.972  THREAD CRASH: Thread-88 (generate_image
 
 「立ち絵を荒くしない」を切って1体。
 
-```
+```text
 23:39:27.907  顔: ゲームが見つけた (138, 26, 394, 282)
 23:39:29.105  縮小: 512x1024 ゲームのまま
 23:39:29.125  減色: 330x660 ゲームのまま
@@ -2554,7 +2554,7 @@ out\live_crashes.log       16:45:22.972  THREAD CRASH: Thread-88 (generate_image
 
 ##### 版10・やり直しが初めて拾った（2026-08-31 00:01。鉄錆のカイ、立ち絵を荒くする側）
 
-```
+```text
 00:01:18.272  顔: ゲームの呼び方 {'cascade_path': 'runtime/models/face_recognition/lbpcascade_animeface.xml'}
 00:01:18.364  顔: ゲームは見つけられず、均一化 + haar で拾った (113, 48, 369, 304)（箱 (201, 136, 81, 81)）
 00:01:19.564  縮小: 512x1024 ゲームのまま
@@ -2572,7 +2572,7 @@ out\live_crashes.log       16:45:22.972  THREAD CRASH: Thread-88 (generate_image
 
 ##### 版10・立ち絵を荒くしない側でも（00:04〜00:05。2体）
 
-```
+```text
 00:05:04.270  顔: ゲームは見つけられず、均一化 + lbp で拾った (122, 15, 378, 271)（箱 (192, 85, 117, 117)）
 00:05:05.653  縮小: 512x1024 をそのまま通す
 00:05:05.850  減色: 1024x2048 を控えの 512x1024 に戻す
@@ -2867,7 +2867,7 @@ Gemma4-ShadowSiren-26B-A4B、`--reasoning-budget 0`、json_schema で強制。�
 
 決め方（4回目の写し）:
 
-```
+```text
 乱数: sample("range(67, 77, 1)", k=3) -> [74, 69, 76] caller=write_area_data_to_world_dict (save_area_json.py:329)
 頼み文: settlement_quest_generator difficulties=[[74, 69, 76]]                        (save_area_json.py:335)
 ```
@@ -2901,7 +2901,7 @@ probe の側: 2回目は乱数の上限300件が `132_` の種の抽選 72 件�
 
 `133_` の実機（`out\ui_area_difficulty.log`。1回目は新テストワールド、版2は同日 17:11〜17:19 のありきたりなファンタジー世界）。§3.49 の5点は全部通った。
 
-```
+```text
 label: '静寂の森' -> '静寂の森（適正Lv 8〜11）' (difficulty 7..10, 3 quest(s))
 label: '黄金の砂漠' -> '黄金の砂漠（適正Lv 不明）' (difficulty None..None, None quest(s))
 choice text '黄金の砂漠（適正Lv 不明）' -> '黄金の砂漠' (our label, restored)

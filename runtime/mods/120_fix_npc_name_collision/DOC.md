@@ -17,7 +17,7 @@
 用意した名前だけを使う。
 男女はセーブの `category`（`young man` / `teenage girl` など）で選び分ける。
 
-```
+```text
 ヴィクトル（middle-aged man）  ->  ランスロット
 「隻眼の」ビクトル（old man）  ->  エドワード
 ビクトル・ローウェン（young man）->  孤独なアルマン

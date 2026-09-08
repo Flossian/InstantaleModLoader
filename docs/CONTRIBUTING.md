@@ -48,7 +48,7 @@
 1本の MOD は**フォルダ1つ**。
 中身は `mod.json`（名乗り）と入口の `.py` の2つが最低限。
 
-```
+```text
 my_mod/
     mod.json
     my_mod.py       # apply(ctx) を持つ

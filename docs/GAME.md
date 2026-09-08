@@ -357,7 +357,7 @@ app.refresh_choice_buttons(reset_page=True)
 `app.buttons_backup`（会話相手の一覧）を復元するので一瞬それが見える。
 待機表示を出したまま繋げば隠せる:
 
-```
+```text
 押下 → busy_on() → 会話を閉じる → in_conversation が落ちるのを待つ
      → busy_off(restore=False) → 次の画面を開く
 ```
@@ -448,7 +448,7 @@ Clock で見張り、手が空いてから実行する（`ui.Screen.when_idle`�
 現在地は `app` ではなくプレイヤーのキャラクタにぶら下がっている
 （`app` 側の97属性に current_facility の類は無い）。
 
-```
+```text
 app.player.location      -> Facility   app, characters, choices, config, connections,
                                        description, facility_type, id, name, owner, parent_node
 app.player.current_node  -> Node       facilities(dict), entrance_facility, ...
@@ -522,7 +522,7 @@ app.world.characters     -> {id: Character}    Facility.owner はこの id（str
 
 名簿に何人入っていても、HUD が枠を3つしか作らない。
 
-```
+```text
 bottom_info_layout
   party_cells               range(0, 3)  ← ここが 3 で固定
     ClickableFloatLayout    size_hint=(1, 0.33) / member_id を持つ
@@ -550,7 +550,7 @@ InstantaleApp.on_member_label_press(label_index)   -> party_cells[i].member_id
 
 #### 外す処理は書かない。ゲーム自身のものを呼ぶ
 
-```
+```text
 InstantaleApp.remove_party_member(member_id)
 InstantaleApp.get_party_leave_facility(character_instance)      -> (施設, ノード)
 InstantaleApp.move_npc_to_facility(character_id, character_instance,
@@ -576,7 +576,7 @@ InstantaleApp.move_npc_to_facility(character_id, character_instance,
 
 #### クエストクリアの解散
 
-```
+```text
 add_text('パーティは帰還した...') → 報酬・才能
 remove_party_member('71')  from QuestEndManager.method_1 (instantale.py:6602)
                            <- QuestEndManager.execute (:6635) <- run (threading.py:953)
@@ -599,7 +599,7 @@ add_text('…はパーティから離脱した。')
 
 格納場所は2つある。**役割が違うので、書く前にどちらかを選ぶ**（§2.9.1）。
 
-```
+```text
 app.world.quests          {id: Quest インスタンス}   遊んでいるあいだの一覧
 app.world_dict['quests']  {id: dict}                 世界の雛形
 ```
@@ -682,7 +682,7 @@ MOD からの書き方はこうなる。
 
 初期依頼3件の難易度は LLM ではなくゲームが先に決め、頼み文に `quest_1:難易度は26/70` と書く:
 
-```
+```text
 random.sample(range(lo, hi), k=3)          save_area_json.py:329
 ```
 
@@ -699,7 +699,7 @@ random.sample(range(lo, hi), k=3)          save_area_json.py:329
 
 #### 進行ループ（1クエストを頭から終わりまで実測）
 
-```
+```text
 DisplayQuestChoice
   → QuestChoiceManager(app, 'settlement_quest', '28')
   → quest_acceptance_choice   '受ける' = QuestStartManager(app, 'settlement_quest', '28')
@@ -743,7 +743,7 @@ DisplayQuestChoice
 
 #### フィールドイベントの成否判定（`credibility` と `<確率N%>`）
 
-```
+```text
 QuestEventManager(app, event_name, enemies_info, event_turn)
   → quest_referee_event_evaluate_new(...)  = field_event_evaluator
         result_type: certain_success / certain_failure / roll_required
@@ -797,7 +797,7 @@ MOD 側でも「戦闘中は出さない」条件に使われるので、残骸�
 
 #### 1手ぶんの内訳（`BattlePhaseManager`）
 
-```
+```text
 battle(command, choice_text)
 handle_battle_situation(character_key, character_side, battle_action)   1手ぶん
   calculate_battle_effect / resolve_battle_effect / process_battle_text
@@ -839,7 +839,7 @@ check_battle_end / enemy_delete_animation / convert_llm_output_to_instruction_di
 入出力は `output_data/<世界>/<PC>/<関数名>/N.json` に残る（§1.4）ので、
 プロンプトもスキーマも遊んだ後から読める（実記録で確認）。
 
-```
+```text
 referee_player_attack_new_new(combat_log, actor, party, current_enemy_dict)   通常攻撃
 referee_player_skill_new_new(..., skill, ...)                                 スキル
 referee_player_any_input_new_new(..., command, ...)                           自由入力
@@ -875,7 +875,7 @@ referee_enemy_new / referee_npc / referee_npc_rewrite                         �
 
 生ログと数表は VERIFICATION_LOG.md §2.68。1手の数の流れは3段:
 
-```
+```text
 convert_llm_output_to_instruction_dict     審判の戻りを平らにする
 calculate_battle_effect(battle_action)     素点を作る（instantale.py:7057）
 resolve_battle_effect                      防御を引いて HP に当てる
@@ -943,7 +943,7 @@ LLM の power の選択は extreme の端でしか意味を持たない。
 
 ### 2.11 BGM
 
-```
+```text
 play_music_from_src(app, src)   app.music に差し替えて再生
 stop_music(app)                 app.music を止める
 apply_music_volume(app)         main_023 で追加
@@ -1020,7 +1020,7 @@ apply_music_volume(app)         main_023 で追加
 
 ### 2.12 LLM 経路とプロンプト
 
-```
+```text
 llama_cpp_runtime_completion:LlamaCppClient.chat                             上流
 llama_cpp_runtime_completion:LlamaCppClient._apply_chat_template             messages
 llama_cpp_runtime_completion:LlamaCppClient._post_with_model_loading_retry   payload
@@ -1146,7 +1146,7 @@ DEDUP / COMPACT / EVENTLOG は二重に適用しても結果が変わらない�
 `ai_setting.server_parameters.<バックエンド名>` に入り、`llama-server` のコマンドラインへ繋がれる。
 ただし `--ctx-size` だけが取り除かれる:
 
-```
+```text
 欄に書いた値   --n-gpu-layers 999 --parallel 2 --ctx-size 32768 --cache-reuse 256
 実際のCLI      ... --ctx-size 16384 ... --n-gpu-layers 999 --parallel 2 --cache-reuse 256
                             ^^^^^ ゲームの値が残る          ^^^^^^^^^^ 他はそのまま渡る
@@ -1182,7 +1182,7 @@ DEDUP / COMPACT / EVENTLOG は二重に適用しても結果が変わらない�
 
 所持品・売買画面（twin inventory）は `scripts.hud.new_hud:InventoryGrid`。
 
-```
+```text
 InventoryGrid   cols=4  rows=6  len(slots)=24  size=[259, 389]  spacing=[1, 1]
                 situation=None（所持品） / 'shop'（売買）
 アイテム        width_slots / height_slots / size=[64,64]（1マス）/ [129,129]（2x2）
@@ -1209,7 +1209,7 @@ InventoryGrid   cols=4  rows=6  len(slots)=24  size=[259, 389]  spacing=[1, 1]
 売買画面は主とプレイヤーの2つの持ち物を左右に並べているだけで、
 店専用の在庫という入れ物は無い。
 
-```
+```text
 ShoppingStartManagerRemake.execute / .shopping_start_method_1
                           .set_item_from_world_data(shop_owner_instance, next_tier)
                           .generate_item_in_shopping(item_data, shop_owner_instance, item_stock_tier)
@@ -1271,7 +1271,7 @@ InstantaleApp.normalize_shop_inventory_prices(shop_obtainer, player_obtainer)
 
 主の持ち物が空の店を開いたときに走る:
 
-```
+```text
 generate_item_in_shopping(item_data, shop_owner_instance, item_stock_tier=2)
   get_area_quest_difficulty_for_tier(area, world, 2) -> 33
   get_weapon_spec(33) -> 145
@@ -1303,7 +1303,7 @@ generate_item_in_shopping(item_data, shop_owner_instance, item_stock_tier=2)
 （`stock_tier` と `stock_update_date` も同じ `config`。セーブ側にしか無い項目がある）。
 店を開くと、**雛形にあって主が持っていない品が1つ作り直されて棚へ入る**:
 
-```
+```text
 品の誕生: id=<n> '<店主名>の予備のランプ' 主=<店主名>(<id>) {'item_detail': 'tool', '買価': <n>}
   呼び出し元: ShoppingStartManagerRemake.shopping_start_method_1 (instantale.py:3159)
            <- ShoppingStartManagerRemake.execute (instantale.py:3281)
@@ -1356,7 +1356,7 @@ generate_item_in_shopping(item_data, shop_owner_instance, item_stock_tier=2)
 
 分類は2段。粗いほうが `item_type`、細かいほうが `attributes` の中の `item_detail`。
 
-```
+```text
 scripts.items:Item.__init__(self, name, item_type, attributes, description,
                             value, size, image_src, rarity, skill, obtainer,
                             id, grid_pos=None, upgrade_level=0)
@@ -1404,7 +1404,7 @@ gold に直すのは `get_item_base_price` と `get_randomized_item_price`。
 
 ##### 使うと何が起きるか（ `226_` で実測。使用5回）
 
-```
+```text
 ItemPopupMenu.on_consume_item          右クリックの「消費」
   Item.consume                         品の側の入口
     (本体が usable を決める)            physical_integrity >= 疲労負荷
@@ -1449,7 +1449,7 @@ ItemPopupMenu.on_consume_item          右クリックの「消費」
 
 ホバーで出る `ItemDetailBox`（window=2560x1387 のときの実測）:
 
-```
+```text
 ItemDetailBox      size=[333, 500]  size_hint=(None, None)      ← 箱ごと固定
   name_label       height=50   text_size=[316,  50]  pos_hint={'center_x':.5,'top':0.95}
   attributes_label height=225  text_size=[316, 225]  pos_hint={'center_x':.5,'top':0.85}
@@ -1478,7 +1478,7 @@ ItemDetailBox      size=[333, 500]  size_hint=(None, None)      ← 箱ごと固
 入力欄の左下のアイコン（`press_item_icon` / `press_skill_icon`）で開く一覧。
 選ぶと `select_item_to_action_input(btn)` が入力欄へ差し込む。
 
-```
+```text
 scripts.hud.new_hud:ToolListPopup(callback, tool_text_list=[...])
     bases = [GridLayout]                     ← 列を持てる
 
@@ -1504,7 +1504,7 @@ minimum_height=1026                                 ← 中身が要求する高
 
 所持品・材料・生成先の3つのグリッドと、そのあいだの矢印・「作成」ボタン。
 
-```
+```text
 hud.craft_inventory_layout                  窓ぜんたい
 hud.craft_inventory_generate_button         「作成」。枠線を持つ
 hud.craft_inventory_generate_arrow_label    「→」
@@ -1524,7 +1524,7 @@ hud.craft_inventory_generate_arrow_label    「→」
 `ItemCraftManager.calculate_modification(item_type, item_price)` は
 **float の倍率**を返す。成果物の値段は素材の合計値段にそれを掛けた値:
 
-```
+```text
 素材 value 2 + 8（合計の値段 30.75）
   get_equipment_level_from_price(30.75) -> 2
   calculate_modification("weapon", 30.75) -> 24.375
@@ -1561,7 +1561,7 @@ hud.craft_inventory_generate_arrow_label    「→」
 
 ### 2.15 キャラクタ名はそのままファイルパスになる
 
-```
+```text
 worlds/<世界>/characters/<キャラクタ名>/
 ```
 
@@ -1608,7 +1608,7 @@ cipher[i]  = plaintext[i] ^ b"Instantale_Save_Key_2026"[i % 24]
 
 ### 2.17 経験値・レベル・訓練
 
-```
+```text
 Character.experience_level / experience_point        値（既定は 0 / 0）
 Character.gain_exp(exp) / check_levelup() / levelup() / calculate_exp()
 Character.calculate_current_required_exp_on_display() / _gained_exp_on_display(gained)
@@ -1616,16 +1616,9 @@ Character.calculate_current_required_exp_on_display() / _gained_exp_on_display(g
 
 #### 能力値はレベルでは伸びない
 
-セーブのバックアップで同一プレイヤーを追った実測
-（`levelup()` が「能力値の更新まで持つ」というのは関数名からの推測で、実際には動かない）:
-
-| レベル | `original_ability_scores`（筋・耐・敏・知・賢・魅） | 合計 |
-| --- | --- | --- |
-| 3〜33 | 24・18・26・25・25・24 | 142 |
-| 41〜73 | 26・22・26・26・25・24 | 149 |
-
-30レベル進んで合計 +7。動かしているのは宿の訓練だけ（`VacationTrainManager`）。
-作成時に振った値がほぼそのまま最後まで続く。
+セーブのバックアップで同一プレイヤーを追った実測。
+能力値が伸びる経路は今のところ1つも観測されていない。
+作成時に振った値がそのまま最後まで続く。
 
 #### 作成時の値は才能点（`point_use`）で決まり、既定はかなり低い
 
@@ -1666,24 +1659,28 @@ Character.calculate_current_required_exp_on_display() / _gained_exp_on_display(g
 
 #### 宿泊の流れ（実測）
 
-```
+```text
 process_choice(DisplayVacationChoice, '宿泊する(4ヵ月)')   period_months は int
 process_choice(VacationStartManager,  '個室(100G)')        args=[1, 'private_room']
     「4ヵ月泊まることにした。」→ change_background_image_to_inn_room(quality)
     elapse_days(months * 30)   ← 日数はここで1回
     宿代の引き落とし            ← 金もここで1回
-process_choice(VacationRestManager, '休養をとる')   描写が出るだけ。日数も金も動かない
+process_choice(VacationRestManager, '休養をとる')   日数も金も動かない。体力は全快（部屋で差なし）
 process_choice(VacationStartManager, 'まだ宿泊する') 連泊。宿代も日数ももう1回
 process_choice(VacationEndManager,   '宿泊を終える')
 ```
 
 - 部屋は4つ。`犬小屋(0G)`＝`'kennel'` / `簡易寝台(10G)`＝`'bunk'` /
   `個室(100G)`＝`'private_room'` / `高級個室(1000G)`＝`'luxury_suite'`。
-  **犬小屋は本当に選択肢に並ぶ**（しかもタダ）
 - `宿泊する(Nヵ月)` の月数はプレイヤーの年齢の変動式（若いと3ヵ月、最長6ヵ月）。
   実測は 20代=3・31歳=4 の2点だけで、年齢ごとの境目は未実測
 - 日数と宿代は `VacationStartManager.execute` の中で1回ずつ動く。
   宿泊の開始時点で全期間ぶんが一度に進むので、途中の活動を何回挟んでも暦は動かない
+- 1泊＝活動1回。`out/vacation.jsonl` の宿泊 54 回（2026-08-18〜09-05）すべてが
+  `VacationStartManager` → 活動1回 → `VacationEndManager` で、活動2回に見える 5 回は社交
+  （`VacationSocializeManager` と `...ResolveManager` の対）。
+  宿代は活動1回の料金で、同時に暦を 30 日払っている（`327_` の土台）
+- 休養で戻る体力は部屋で差がなく全快。仲間の回復も本体が持つ（実機で確認）
 - `execute` の本体はワーカースレッドで走る（`process_choice` 自体は MainThread）
 - LLM の描写のプロンプトは「このエリアで数ヵ月の宿泊をし」と月数を焼き込んでいる。
   宿泊の長さを変える MOD から見ると、
@@ -1696,7 +1693,7 @@ process_choice(VacationEndManager,   '宿泊を終える')
 
 ### 2.18 エリア移動（土地から土地へ）
 
-```
+```python
 process_choice(DisplayAreaMoveChoice, '他の土地へ行く')
 process_choice(AreaMoveCofirmation,   '陽光の砦')
 process_choice(AreaMoveManager,       '馬車(1000G)' / '徒歩(3ヵ月)')
@@ -1810,7 +1807,7 @@ player_data["area_history"] = {
 
 #### 役場（`administrative_office`）の選択肢（実測）
 
-```
+```text
 Facility.choices = ['労働の募集をみる', '市民権の発行', '出る']
    ↓ ゲームがこれに『会話する』を足して並べる
 app.buttons      = ['労働の募集をみる', '市民権の発行', '出る', '会話する']
@@ -1827,7 +1824,7 @@ app.buttons      = ['労働の募集をみる', '市民権の発行', '出る', 
 手配された土地でゲーム自身の衛兵を出し、`220_probe_bounty_hunter` で全段を録った
 （VERIFICATION_LOG.md §2.51）。
 
-```
+```text
 BattleStartManager(app, enemy_type='guard', enemy_content=None)
   .execute -> .start_battle -> sb_1 -> create_guard_enemies      (instantale.py:6895)
       guard_npc_generator(area, world, 20)              -> EnemyData 1件
@@ -2291,7 +2288,7 @@ retrieval を待たず第一声から載る。
 
 **書かれるのは会話1回につき2度**（実測。`out/charisma_impression.log`）。
 
-```
+```text
 会話の開始 ConversationStartManager.execute -> ..._method_0 -> _1
 会話の終了 ConversationEndManager.execute -> finish_conversation
            -> resolve_conversation(self, character_id)
@@ -2309,7 +2306,7 @@ retrieval を待たず第一声から載る。
 `master_ai_facilitator` と `master_ai_facilitator_from_conversation`。
 フィールドイベント（§2.9）とは別系統で、仕組みも違う。
 
-```
+```text
 プレイヤーの入力
   → master_ai_facilitator          think / narration / process[] / finished
        process の1つが roll_the_dice: {"type": "roll_the_dice", "chance_percent": 70}
@@ -2365,7 +2362,7 @@ retrieval を待たず第一声から載る。
 
 「世界を生成する」画面で入れた名前と概要は、そのまま世界のデータになるわけではない。
 
-```
+```text
 scripts.hud.hud_world_generate:WorldGenerateScreen
   world_name_input.text / world_overview_input.text
     ├ 概要が空でなければ llm_manager_world_generate:check_world_content_violation(name, overview)
@@ -2380,7 +2377,7 @@ scripts.hud.hud_world_generate:WorldGenerateScreen
 
 入力した概要が渡るのは、1回目のプロンプトの中だけ:
 
-```
+```text
 【予め指定済みの設定】- 世界の名前: {world_name}
 - 世界の概要: {world_overview}
 ```
@@ -2403,7 +2400,7 @@ scripts.hud.hud_world_generate:WorldGenerateScreen
 
 保存される `world_data` は5項目で、書かれる順はこう（順序が表示に効く理由は §2.23）:
 
-```
+```text
 name / overview / structure_description / story / days_elapsed
 story = {world_situation, story_flow, current_rumor, current_story_phase}
 ```
@@ -2417,7 +2414,7 @@ story = {world_situation, story_flow, current_rumor, current_story_phase}
 
 ### 2.28 素データの辞書は2つあり、遊んでいる最中の追加は片方に届かない
 
-```
+```text
 app.world_dict       worlds\<世界>\world_data.json
 app.save_data_dict   saves\<世界>\savedata.json
 ```
@@ -2467,7 +2464,7 @@ world 側の NPC にも33項目のものが81人居る。
 
 遊んでいる最中に生まれた施設で「売買する」を選ぶとスレッドが落ちる。
 
-```
+```text
 File "instantale.py", line 3080, in shopping_start_method_1
 KeyError: '229'
   area_id = '8'   node_id = '32'   facility_id = '229'
@@ -2496,7 +2493,7 @@ KeyError: '229'
 
 `scripts.languages` が多言語化の入口。ここで使うのは4つ。
 
-```
+```text
 scripts.languages:tr(text)          日本語の文 → 今の言語の文
 scripts.languages:translate_dict    完全一致の表（{日本語: {'ja':…, 'en':…, 'zh-Hant':…}}）
 scripts.languages:pattern_dict      正規表現の表（[(compiled, {'ja':…, 'en':…, 'zh-Hant':…})]）
@@ -2535,7 +2532,7 @@ scripts.languages:language          今の言語（実測 `'ja'`）
 
 指示文の側にも両方が出る:
 
-```
+```text
 必ず前払いで(数)ゴールドの雇用費を提示する。
 治療依頼の場合: … 前払いで(数)Gの費用を提示する。絶対に値引きはしない。
 前払いで簡易寝台10G、個室100G、高級個室1000Gが必要な事を説明する。
@@ -2554,7 +2551,7 @@ scripts.languages:language          今の言語（実測 `'ja'`）
 
 所持金が画面に出るのはここで、**この欄だけは翻訳の表に載っていない**。
 
-```
+```text
 scripts.hud.new_hud:InstanTaleHUD.status_texts            <StringProperty>
 scripts.hud.new_hud:InstanTaleHUD.update_status_texts(self, instance, value)
 ```
@@ -2562,7 +2559,7 @@ scripts.hud.new_hud:InstanTaleHUD.update_status_texts(self, instance, value)
 `status_texts` は改行区切りの1本の文字列で、塗った結果が `status_label` に入る。
 実測（`206_probe_quest_flow` が先頭 40 文字を記録している）:
 
-```
+```text
 Atk:<n>(+<n>)\nDef:<n>(+<n>)\nExp:<n>/<n>\nGold:<n>\nAge:<n>\nSta:…\nLocation:…
 ```
 
@@ -2641,7 +2638,7 @@ Atk:<n>(+<n>)\nDef:<n>(+<n>)\nExp:<n>/<n>\nGold:<n>\nAge:<n>\nSta:…\nLocation:
 
 ### 2.31 立ち絵のパスとセーブの置き場（`323_` の作業より）
 
-```
+```text
 %LOCALAPPDATA%\Darmabeko\Instantale\
 ├─ saves\<世界名>\savedata.json          遊んでいる世界（`app.save_data_dict`）
 ├─ worlds\<世界名>\world_data.json       世界の骨格（`app.world_dict`）

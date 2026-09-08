@@ -13,7 +13,7 @@ MOD を入れて遊んでいる間の記録にはローダと MOD の枠が混�
 素のゲームで起きたことの記録にはならないため。
 止めたことは `out\modloader.log` に1行残る。
 
-```
+```text
 [...] crash recorder: not sending the crash log to the server (1635 chars);
       mods are loaded, so it would not be a report about the plain game
 ```
