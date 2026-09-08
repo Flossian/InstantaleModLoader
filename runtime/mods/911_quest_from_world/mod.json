@@ -1,0 +1,36 @@
+{
+  "entry": "quest_from_world.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "World-based quests generator",
+    "ja": "世界概要から依頼を生成する"
+  },
+  "description": {
+    "en": "When a quest is generated at the board, with some probability the settlement's overview, structure and area description are withheld and the quest is built from the world overview alone. Breaks the run of near-identical quests that keep reflecting the same town",
+    "ja": "掲示板で依頼を作るとき、一定の確率で街の概要・構造・周辺の描写を渡さず、世界の概要だけから依頼を作らせる。同じ街の描写を毎回読んで似た依頼ばかりになるのを崩す"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "after": [
+    "301_quest_from_conversation"
+  ],
+  "settings": {
+    "CHANCE_PERCENT": {
+      "type": "int",
+      "default": 30,
+      "min": 0,
+      "max": 100,
+      "label": {"ja": "世界だけから作る確率(%)", "en": "Chance of a world-only quest (%)"},
+      "note": {"ja": "0 で何もしない。100 で毎回",
+               "en": "0 does nothing, 100 every time"}
+    },
+    "NOTE_WORLD_ONLY": {
+      "type": "str",
+      "default": "（この街の描写は意図的に伏せてある。世界の概要だけを手掛かりに、この街の特徴に依らない依頼を作ること。依頼人はこの街に居る人物とし、舞台は街の外の別の場所でもよい）",
+      "label": {"ja": "街の描写の代わりに渡す文", "en": "Text handed in place of the settlement descriptions"},
+      "note": {"ja": "概要・構造・周辺の3欄すべてにこの文が入る",
+               "en": "Fills all three fields: overview, structure, area"}
+    }
+  }
+}

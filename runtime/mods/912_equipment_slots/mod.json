@@ -1,0 +1,32 @@
+{
+  "entry": "equipment_slots.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Equipment slots",
+    "ja": "装備欄"
+  },
+  "description": {
+    "en": "Adds an equipment panel (head, left/right hand, body, arms, legs, two accessories) beside the inventory. Weapons and shields go to the hands; other wearables to their body part. The game only reads one weapon and one wearable, so the highest attack among the hands and the highest defense among all slots are handed to it (no summing).",
+    "ja": "所持品の窓の横に装備欄（頭・左手・右手・胴・腕・脚・装飾×2）を足す。武器と盾は手、他の防具は各部位へ。本体が読む装備は武器1つと防具1つだけなので、手の武器で攻撃力が最高のものと、全部位で防御力が最高のものを渡す（合算しない）"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "after": [
+    "402_party_inventory_transfer"
+  ],
+  "settings": {
+    "SCALE_TO_FIT": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "小さい品は部位いっぱいに広げて表示",
+        "en": "Enlarge small items to fill the slot"
+      },
+      "note": {
+        "ja": "1×1 の品を 2×2 の部位に置いたとき 2 倍で描く。切ると本来の大きさのまま",
+        "en": "A 1x1 item in a 2x2 slot is drawn at 2x. Off: items keep their own size"
+      }
+    }
+  }
+}
