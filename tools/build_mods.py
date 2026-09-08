@@ -159,6 +159,7 @@ BANDS = (
         "324_place_bgm",
         "325_road_opening",
         "326_npc_travel",
+        "327_inn_quality",
     )),
     #: 提供（4xx）は出どころの帯なので kind を固定しない（TECH.md §3.2.2）。
     (None, CONTRIB_HEAD, (

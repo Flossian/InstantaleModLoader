@@ -1,0 +1,225 @@
+{
+  "entry": "inn_quality.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Inn room grades matter",
+    "ja": "宿の部屋の等級を効かせる"
+  },
+  "description": {
+    "en": "Better rooms allow more activities per stay (1/1/2/3 by default), innkeepers remember regular guests (small capped affinity gain, conversations know your stay history), and who you meet when socializing depends on the room: companions, then well-liked locals, then anyone",
+    "ja": "高い部屋ほど1回の宿泊でできる活動が増える（既定 1/1/2/3）。宿の主が常連を覚え、宿泊のたびに好感度が少し上がり（上限あり）、会話で宿泊の履歴を知っている。社交で会う相手も部屋で変わる（同行者 → 好感度の高い相手 → 誰でも）"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "settings": {
+    "ACTIONS_KENNEL": {
+      "type": "int",
+      "default": 1,
+      "min": 1,
+      "max": 10,
+      "label": {
+        "ja": "犬小屋の活動の数",
+        "en": "Activities per stay: kennel"
+      },
+      "note": {
+        "ja": "1回の宿泊で過ごせる活動（訓練・休養・労働・社交・物乞い）の数。素のゲームは全部屋 1",
+        "en": "How many activities one stay allows. The game's own value is 1 for every room"
+      }
+    },
+    "ACTIONS_BUNK": {
+      "type": "int",
+      "default": 1,
+      "min": 1,
+      "max": 10,
+      "label": {
+        "ja": "簡易寝台の活動の数",
+        "en": "Activities per stay: bunk"
+      }
+    },
+    "ACTIONS_PRIVATE": {
+      "type": "int",
+      "default": 2,
+      "min": 1,
+      "max": 10,
+      "label": {
+        "ja": "個室の活動の数",
+        "en": "Activities per stay: private room"
+      }
+    },
+    "ACTIONS_LUXURY": {
+      "type": "int",
+      "default": 3,
+      "min": 1,
+      "max": 10,
+      "label": {
+        "ja": "高級個室の活動の数",
+        "en": "Activities per stay: luxury suite"
+      }
+    },
+    "REGULAR_MEMORY": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "宿の主が常連を覚える",
+        "en": "Innkeepers remember regulars"
+      },
+      "note": {
+        "ja": "切ると好感度も会話の1行も動かない。記録は state\\inn_regular\\ に残る",
+        "en": "Off disables both the affinity gain and the conversation line"
+      }
+    },
+    "AFFINITY_KENNEL": {
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 20,
+      "label": {
+        "ja": "犬小屋で上がる好感度",
+        "en": "Affinity per stay: kennel"
+      }
+    },
+    "AFFINITY_BUNK": {
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 20,
+      "label": {
+        "ja": "簡易寝台で上がる好感度",
+        "en": "Affinity per stay: bunk"
+      }
+    },
+    "AFFINITY_PRIVATE": {
+      "type": "int",
+      "default": 2,
+      "min": 0,
+      "max": 20,
+      "label": {
+        "ja": "個室で上がる好感度",
+        "en": "Affinity per stay: private room"
+      }
+    },
+    "AFFINITY_LUXURY": {
+      "type": "int",
+      "default": 4,
+      "min": 0,
+      "max": 20,
+      "label": {
+        "ja": "高級個室で上がる好感度",
+        "en": "Affinity per stay: luxury suite"
+      }
+    },
+    "AFFINITY_CAP": {
+      "type": "int",
+      "default": 20,
+      "min": 0,
+      "max": 200,
+      "label": {
+        "ja": "宿泊で上がる好感度の上限",
+        "en": "Cap on stay-derived affinity"
+      },
+      "note": {
+        "ja": "宿の主ごとの累計。会話で動く分は数えない。好感度の段は 0/10/20/30/40 で、20 なら初対面から「嫌いではない」まで",
+        "en": "Cumulative per innkeeper; affinity from conversations is not counted. 20 reaches the second step above a stranger"
+      }
+    },
+    "REGULAR_LINE": {
+      "type": "str",
+      "default": "【宿の客として】プレイヤーは{name}の宿にこれまで{stays}回泊まっている（{rooms}）。最後の宿泊は{ago}日前。",
+      "label": {
+        "ja": "宿の主との会話に足す1行",
+        "en": "Line added when talking to the innkeeper"
+      },
+      "note": {
+        "ja": "使える変数: {name} {stays} {rooms} {ago}",
+        "en": "Variables: {name} {stays} {rooms} {ago}"
+      }
+    },
+    "SOCIAL_KENNEL": {
+      "type": "choice",
+      "values": [
+        "ゲームのまま",
+        "同行者",
+        "好感度",
+        "ランダム"
+      ],
+      "default": "ランダム",
+      "label": {
+        "ja": "犬小屋で社交する相手",
+        "en": "Socialize partner: kennel"
+      },
+      "note": {
+        "ja": "「同行者」は 同行者 → 好感度の高い相手 → ランダム の順に埋める。「好感度」はその2段目から、「ランダム」はエリアの生成済み NPC から。「ゲームのまま」は宿の名簿からゲームが選ぶ",
+        "en": "同行者 fills from companions, then well-liked locals, then anyone; 好感度 starts at the second tier; ランダム picks any generated NPC in the area; ゲームのまま leaves the game's own pick"
+      }
+    },
+    "SOCIAL_BUNK": {
+      "type": "choice",
+      "values": [
+        "ゲームのまま",
+        "同行者",
+        "好感度",
+        "ランダム"
+      ],
+      "default": "ゲームのまま",
+      "label": {
+        "ja": "簡易寝台で社交する相手",
+        "en": "Socialize partner: bunk"
+      },
+      "note": {
+        "ja": "「同行者」は 同行者 → 好感度の高い相手 → ランダム の順に埋める。「好感度」はその2段目から、「ランダム」はエリアの生成済み NPC から。「ゲームのまま」は宿の名簿からゲームが選ぶ",
+        "en": "同行者 fills from companions, then well-liked locals, then anyone; 好感度 starts at the second tier; ランダム picks any generated NPC in the area; ゲームのまま leaves the game's own pick"
+      }
+    },
+    "SOCIAL_PRIVATE": {
+      "type": "choice",
+      "values": [
+        "ゲームのまま",
+        "同行者",
+        "好感度",
+        "ランダム"
+      ],
+      "default": "好感度",
+      "label": {
+        "ja": "個室で社交する相手",
+        "en": "Socialize partner: private room"
+      },
+      "note": {
+        "ja": "「同行者」は 同行者 → 好感度の高い相手 → ランダム の順に埋める。「好感度」はその2段目から、「ランダム」はエリアの生成済み NPC から。「ゲームのまま」は宿の名簿からゲームが選ぶ",
+        "en": "同行者 fills from companions, then well-liked locals, then anyone; 好感度 starts at the second tier; ランダム picks any generated NPC in the area; ゲームのまま leaves the game's own pick"
+      }
+    },
+    "SOCIAL_LUXURY": {
+      "type": "choice",
+      "values": [
+        "ゲームのまま",
+        "同行者",
+        "好感度",
+        "ランダム"
+      ],
+      "default": "同行者",
+      "label": {
+        "ja": "高級個室で社交する相手",
+        "en": "Socialize partner: luxury suite"
+      },
+      "note": {
+        "ja": "「同行者」は 同行者 → 好感度の高い相手 → ランダム の順に埋める。「好感度」はその2段目から、「ランダム」はエリアの生成済み NPC から。「ゲームのまま」は宿の名簿からゲームが選ぶ",
+        "en": "同行者 fills from companions, then well-liked locals, then anyone; 好感度 starts at the second tier; ランダム picks any generated NPC in the area; ゲームのまま leaves the game's own pick"
+      }
+    },
+    "FRIEND_AFFINITY": {
+      "type": "int",
+      "default": 10,
+      "min": -50,
+      "max": 200,
+      "label": {
+        "ja": "「好感度の高い相手」の下限",
+        "en": "Affinity floor for a well-liked local"
+      },
+      "note": {
+        "ja": "好感度の段は 0/10/20/30/40。10 で「好きでも嫌いでもない」以上",
+        "en": "Affinity steps are 0/10/20/30/40"
+      }
+    }
+  }
+}
