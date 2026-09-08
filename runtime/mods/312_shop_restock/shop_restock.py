@@ -85,7 +85,14 @@ obtainer が主の Character）。
 雛形（`config['goods']`）には触らない。
 あれはゲームが世界を作ったときの骨格で、書き換えると
 この MOD を外したときに戻せない（TECH.md §6.4 / world_data の扱い）。
-外すのは窓が組み上がる前（`execute` が戻るより先）なので、
+
+外すのは**売買画面を開く側**（`toggle_twin_inventory_window` の手前。メインスレッド）。
+`execute` は別スレッドで走り、画面を開く処理を Clock でメインスレッドへ回してから戻る。
+`execute` の戻り際に外すと、メインスレッドが `normalize_shop_inventory_prices` で
+主の持ち物の辞書を回している最中に別スレッドから鍵を消すことになり、
+`RuntimeError: dictionary changed size during iteration` でゲームごと落ちる
+（2026-09-07 に実機。VERIFICATION.md §3.52）。
+画面を開く側の手前なら同じスレッドで、しかも辞書を回す前なので、
 作り直された品は画面に一度も出ない。
 
 **この MOD 自身の入れ替えは止めない。** 空にした回（`pending` が立っている回）は
@@ -164,6 +171,7 @@ def apply(ctx):
             # 世代をまたいで持つのでプロセス側に置く（`rebind` で繋ぎ替える）。
             "worlds": WorldStore(ctx, STATE_DIRNAME, order=ordered_bucket),
             "pending": None,    # 空にして結果待ちの1件
+            "held": None,       # 開く前の鍵の控え。画面を開く側が受け取って消す
             "auto_refill": None,  # None=未確認 / True=補充される / False=されない
             # 今開いている店の控えがまだ無いか（＝初めて開く店か）。
             # `prepare` が毎回書き直す。空の店の品揃えを作らせるかの判定に使う。
@@ -172,6 +180,7 @@ def apply(ctx):
         setattr(sys, STORE_ATTR, store)
     # 前の世代が作った控えには無い鍵を足す（版を上げた直後の1回だけ効く）。
     store.setdefault("fresh", True)
+    store.setdefault("held", None)
 
     write = ctx.logger(LOG_BASENAME, stamp=False)
     worlds = store["worlds"].rebind(ctx, write)
@@ -474,12 +483,15 @@ def apply(ctx):
         # 空にした回（入れ替え）は素通しする。
         # ここで止めると、こちらが空にした店をゲームが埋め直したぶんまで外して
         # 入れ替えそのものが働かなくなる。
-        held = None
+        store["held"] = None
         if store["pending"] is None:
             try:
-                held = held_keys(self)
+                store["held"] = held_keys(self)
             except Exception:
                 ctx.log_exc("shop restock: cannot read the stock before opening")
+        # 控えを外すのは `before_window`（画面を開く側）。
+        # ここ（別スレッド）で外すと、メインスレッドが持ち物の辞書を
+        # 回している最中に鍵が消えてゲームごと落ちる（モジュール冒頭の説明）。
         # 決着は `finally` で付ける。
         # `orig` が投げた場合、`safe=True` は素の動作に落としてくれるが、
         # **この後ろの行は実行されない**。空にした店の控えが更新されないまま残り、
@@ -490,17 +502,32 @@ def apply(ctx):
         finally:
             pending = store["pending"]
             store["pending"] = None
-            if held is not None:
-                # 窓が組み上がるより先に外す（`execute` はまだ戻っていない）。
-                # ここを遅らせると、作り直された品が一度だけ棚に並ぶ。
-                try:
-                    drop_refilled(held)
-                except Exception:
-                    ctx.log_exc("shop restock: cannot drop the refilled stock")
             if pending is not None:
                 # Clock が使えない場面で予約が取れないときはその場で決着させる。
                 if not screen.schedule(lambda: verify(pending), VERIFY_DELAY):
                     screen.guarded(lambda: verify(pending))
+
+    @ctx.wrap("__main__:InstantaleApp.toggle_twin_inventory_window",
+              required=False, safe=True)
+    def before_window(orig, self, left_inventory_obtainer=None, *args, **kwargs):
+        """売買画面が組み上がる手前で、その来店で増えたぶんを外す。
+
+        ここはメインスレッドで、ゲームが持ち物の辞書を回すより前。
+        控えは主が一致したときだけ使う（`402_` の受け渡しの窓は素通し）。
+        """
+        held = store.get("held")
+        if held is not None:
+            owner = held["owner"]
+            same = (left_inventory_obtainer is owner
+                    or (owner is not None and str(getattr(
+                        left_inventory_obtainer, "id", None)) == held["owner_id"]))
+            if same:
+                store["held"] = None
+                try:
+                    drop_refilled(held)
+                except Exception:
+                    ctx.log_exc("shop restock: cannot drop the refilled stock")
+        return orig(self, left_inventory_obtainer, *args, **kwargs)
 
     @ctx.wrap("__main__:ShoppingStartManagerRemake.set_item_from_world_data",
               required=False, safe=True)

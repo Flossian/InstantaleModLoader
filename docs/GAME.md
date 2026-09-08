@@ -1218,6 +1218,11 @@ InstantaleApp.buy_item / sell_item / set_shop_price_for_owner / set_shop_price_f
 InstantaleApp.normalize_shop_inventory_prices(shop_obtainer, player_obtainer)
 ```
 
+- `execute` はワーカースレッドで走り、売買画面を開く `toggle_twin_inventory_window` は Clock でメインスレッドへ回す（`instantale.py:3208` の lambda）。
+  **メインスレッドは `execute` が戻る前にこれを走らせうる。**
+  `execute` の戻り際に主の持ち物の辞書へ触ると、`normalize_shop_inventory_prices`（`instantale.py:2660`。辞書を直に回す）と競合して
+  `RuntimeError: dictionary changed size during iteration` でゲームごと落ちる（2026-09-07 実機。VERIFICATION.md §3.52）。
+  持ち物を触るなら `toggle_twin_inventory_window` の手前（同じスレッド、辞書を回す前）で
 - 主の持ち物はセーブの `npcs[<id>].inventory`。
   実セーブでは51人中8人だけが中身を持っていた（**中身を持っているのは店として開いた施設の主だけ**）
 - つまり品揃えは「初めて開いたときに作られて、そのまま残る」。

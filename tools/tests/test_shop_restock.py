@@ -113,6 +113,16 @@ class InstantaleApp:
     def __init__(self, world, player):
         self.world = world
         self.player = player
+        self.windows = []       # 売買画面に並んだ鍵（開いた回ごと）
+
+    def toggle_twin_inventory_window(self, left, right, left_label_text=None,
+                                     situation=None, *args):
+        """売買画面。素のゲームはここで主の持ち物の辞書を回す
+        （`normalize_shop_inventory_prices`）。回している最中に鍵が消えると落ちる。"""
+        shown = []
+        for key in left.inventory:
+            shown.append(key)
+        self.windows.append(shown)
 
 
 class ShoppingStartManagerRemake:
@@ -151,6 +161,15 @@ class ShoppingStartManagerRemake:
             key = str(50 + self.counter[0])
             owner.inventory[key] = {"name": "作り直された薬"}
             self.topped_up.append(key)
+        # 画面を開くのは Clock 経由でメインスレッド（`instantale.py:3208`）。
+        # `execute` は別スレッドなので、メインスレッドは `execute` が戻る前に
+        # 画面を組み始めうる（2026-09-07 の実機はこの順で落ちた）。
+        # その順を再現する: 予約してから、戻る前に走らせる。
+        if owner is not None:
+            CLOCK.schedule_once(
+                lambda dt: self.app.toggle_twin_inventory_window(
+                    owner, self.app.player, "店", "shop"), 0)
+            CLOCK.run_onces()
         return "shopping"
 
     def set_item_from_world_data(self, shop_owner_instance, next_tier):
@@ -320,11 +339,26 @@ def shop(ctx, manager, choice_text="商品を見せてもらう"):
 
         manager.set_item_from_world_data = wrapped
         manager._tier_hooked = True
+    window_hook = ctx.hooks.get("__main__:InstantaleApp.toggle_twin_inventory_window")
+    app = manager.app
+    if window_hook is not None and not getattr(app, "_window_hooked", False):
+        original_window = app.toggle_twin_inventory_window
+
+        def wrapped_window(left, *args, **kwargs):
+            return window_hook(lambda _self, l, *a, **k: original_window(l, *a, **k),
+                               app, left, *args, **kwargs)
+
+        app.toggle_twin_inventory_window = wrapped_window
+        app._window_hooked = True
     result = hook(lambda _self, text: ShoppingStartManagerRemake.execute(manager, text),
                   manager, choice_text)
     CLOCK.run_onces()      # 生成を Clock へ回す版のため
     CLOCK.run_onces()      # 補充の確認（VERIFY_DELAY のコールバック）
     return result
+
+
+def module_store(module):
+    return getattr(sys, module.STORE_ATTR, {})
 
 
 def state_file(world_name="テスト世界"):
@@ -455,6 +489,14 @@ def main():
     shop(ctx, manager)
     check("補充止め: 何度開いても増えない",
           list(owner.inventory) == ["item_1"], owner.inventory)
+    # 外すのは画面を開く側（メインスレッド）。`execute` の戻り際に外すと、
+    # 先に走り出した画面に作り直された品が並び、辞書を回す最中に消えて落ちる。
+    check("補充止め: 作り直された品は画面に一度も出ない",
+          app.windows and all(key not in shown for shown in app.windows
+                              for key in manager.topped_up),
+          (app.windows, manager.topped_up))
+    check("補充止め: 控えは画面を開いた時点で消えている",
+          module_store(module).get("held") is None, module_store(module))
 
     # 切れば素のゲームのまま。
     module, ctx = fresh_mod(keep_sold_out=False)
