@@ -3,8 +3,8 @@
   "api": 1,
   "kind": "feature",
   "name": {
-    "en": "Equipment slots",
-    "ja": "装備欄"
+    "en": "Add equipment slots to the inventory",
+    "ja": "インベントリに装備枠を追加"
   },
   "description": {
     "en": "Adds an equipment panel (head, left/right hand, body, arms, legs, two accessories) beside the inventory. Weapons and shields go to the hands; other wearables to their body part. The game only reads one weapon and one wearable, so the highest attack among the hands and the highest defense among all slots are handed to it (no summing).",
