@@ -75,12 +75,18 @@ obtainer が主の Character）。
 つまり回復アイテムだけが無限に買える。
 `134_balance_item_effects` で回復量を上げていると、そのまま不死身になる。
 
-止め方は、**その来店で増えたぶんをその場で外す**の1つだけ:
+止め方は、**その来店で増えたぶんのうち雛形にある品だけを外す**:
 
     prepare（入れ替え日なら空にする）
-      └ 開く前の主の持ち物の鍵を控える
+      └ 開く前の主の持ち物の鍵と、雛形の品名を控える
            └ ゲームの売買開始処理（orig。ここで作り直しが起きる）
-                └ 控えに無い鍵を外す
+                └ 控えに無い鍵のうち、**雛形にある品名のものだけ**外す
+
+名前で見分けるのは、ゲームが棚へ足すものが2種類あるため。
+雛形の作り直し（買った品と同じもの）と、
+売買のたびに LLM が作る**新しい品**（`shop_additional_item_generator_ordinary`）。
+鍵が増えたことだけを見て外すと後者まで消え、品揃えが雛形のまま永久に固定される。
+雛形が読めなかったときは増えたぶんを全部外す（売り切れを守る側に倒す）。
 
 雛形（`config['goods']`）には触らない。
 あれはゲームが世界を作ったときの骨格で、書き換えると
@@ -342,7 +348,9 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 作り直しを止める
     def item_name(item):
-        name = getattr(item, "name", None)
+        """品名。実機は `Item`、セーブから直に読んだものは辞書。"""
+        name = (item.get("name") if isinstance(item, dict)
+                else getattr(item, "name", None))
         return name if isinstance(name, str) and name else "?"
 
     def held_keys(manager):
@@ -364,13 +372,32 @@ def apply(ctx):
             return None
         if not inventory and store["fresh"]:
             return None
+        facility = facility_of(app)
         return {"app": app, "owner_id": owner_id, "owner": owner,
-                "facility": facility_of(app), "keys": set(inventory)}
+                "facility": facility, "keys": set(inventory),
+                "goods": goods_names(facility)}
+
+    def goods_names(facility):
+        """その施設の品揃えの雛形にある品名。読めなければ None。
+
+        作り直しかどうかの目印はこれ1つ。
+        ゲームは開くたびに**雛形の品**を作り直すが、それとは別に、売買のたびに
+        新しい品を LLM で作って棚へ足す（`shop_additional_item_generator_ordinary`。
+        GAME.md §2.13.1.3）。
+        名前で見分けないと、その新しい品まで外すことになり、
+        品揃えが雛形のまま永久に固定される。
+        """
+        config = frames.attr(facility, "config", None)
+        goods = config.get("goods") if isinstance(config, dict) else None
+        if not isinstance(goods, list):
+            return None
+        return {entry.get("name") for entry in goods if isinstance(entry, dict)}
 
     def drop_refilled(held):
-        """この来店で増えたぶんを外す。ゲームが作り直した品だけがここに来る。
+        """この来店で増えたぶんのうち、**雛形にある品だけ**を外す。
 
         持ち物は**引き直す**（掴んだ辞書ではなく今の実体を見る）。
+        雛形が読めなかったときは増えたぶんを全部外す（売り切れを守る側に倒す）。
         """
         if not held:
             return
@@ -380,18 +407,27 @@ def apply(ctx):
         added = [key for key in list(inventory) if key not in held["keys"]]
         if not added:
             return
-        dropped = []
+        goods = held.get("goods")
+        dropped, kept = [], []
         for key in added:
             item = inventory.get(key)
+            name = item_name(item)
+            if goods is not None and name not in goods:
+                # 雛形に無い＝買った品の作り直しではない（ゲームが新しく作った品）。
+                kept.append("{}={}".format(key, name))
+                continue
             try:
                 del inventory[key]
-                dropped.append("{}={}".format(key, item_name(item)))
+                dropped.append("{}={}".format(key, name))
             except Exception:
                 ctx.log_exc("shop restock: cannot drop a refilled item")
+        who = label(held["app"], held["owner_id"], held["facility"])
         if dropped:
             write("kept sold out: {} dropped {} refilled item(s): {}".format(
-                label(held["app"], held["owner_id"], held["facility"]),
-                len(dropped), ", ".join(dropped)))
+                who, len(dropped), ", ".join(dropped)))
+        if kept:
+            write("new stock kept: {} left {} new item(s): {}".format(
+                who, len(kept), ", ".join(kept)))
 
     def verify(pending):
         """空にした後どうなったかを見る。ここで必ず決着を付ける。"""

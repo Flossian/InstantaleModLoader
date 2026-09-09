@@ -66,11 +66,14 @@ def check(name, cond, detail=""):
 
 # ---------------------------------------------------------------- 偽ゲーム
 class Facility:
-    def __init__(self, facility_id, facility_type, owner):
+    def __init__(self, facility_id, facility_type, owner, goods=None):
         self.id = facility_id
         self.name = "テスト" + facility_type
         self.facility_type = facility_type
         self.owner = owner
+        # 品揃えの雛形。作り直しかどうかの目印はここの品名だけ。
+        self.config = {"goods": [{"name": name} for name in (goods or [])],
+                       "stock_tier": 1, "stock_update_date": 0}
 
 
 class Node:
@@ -134,12 +137,15 @@ class ShoppingStartManagerRemake:
 
     counter = [0]
 
-    def __init__(self, app, refills=True, defer=False, tier=2, tops_up=False):
+    def __init__(self, app, refills=True, defer=False, tier=2, tops_up=False,
+                 new_name=None):
         self.app = app
         self.refills = refills
         self.defer = defer
         self.tier = tier
         self.tops_up = tops_up
+        # 雛形に無い品（売買のたびに LLM が作る新しい品）を1つ足す名前。
+        self.new_name = new_name
         self.generated = []
         self.topped_up = []
 
@@ -161,6 +167,10 @@ class ShoppingStartManagerRemake:
             key = str(50 + self.counter[0])
             owner.inventory[key] = {"name": "作り直された薬"}
             self.topped_up.append(key)
+            if self.new_name:
+                self.counter[0] += 1
+                owner.inventory[str(50 + self.counter[0])] = {
+                    "name": self.new_name}
         # 画面を開くのは Clock 経由でメインスレッド（`instantale.py:3208`）。
         # `execute` は別スレッドなので、メインスレッドは `execute` が戻る前に
         # 画面を組み始めうる（2026-09-07 の実機はこの順で落ちた）。
@@ -175,11 +185,19 @@ class ShoppingStartManagerRemake:
     def set_item_from_world_data(self, shop_owner_instance, next_tier):
         """ゲーム自身の生成。呼ばれた回数だけ新しい品物を入れる。"""
         self.generated.append((getattr(shop_owner_instance, "id", None), next_tier))
-        for _ in range(3):
+        # 素のゲームは雛形（`config['goods']`）の品を作る。
+        # 名前が雛形と揃っていないと「作り直し」の見分けを検査できない。
+        location = self.app.player.location
+        if isinstance(location, str):
+            location = self.app.world.areas["0"].nodes["0"].facilities.get(location)
+        config = getattr(location, "config", None) or {}
+        goods = [g["name"] for g in (config.get("goods") or [])]
+        for index in range(3):
             self.counter[0] += 1
             item_id = "item_{}".format(1000 + self.counter[0])
-            shop_owner_instance.inventory[item_id] = {
-                "name": "生成品" + str(self.counter[0]), "value": 3}
+            name = (goods[index % len(goods)] if goods
+                    else "生成品" + str(self.counter[0]))
+            shop_owner_instance.inventory[item_id] = {"name": name, "value": 3}
         return None
 
 
@@ -283,8 +301,9 @@ SHOP_ID = "30"
 OWNER_ID = "16"
 
 
-def make_world(days, stock, world_name="テスト世界", location_as_id=False):
-    facility = Facility(SHOP_ID, "general_store", OWNER_ID)
+def make_world(days, stock, world_name="テスト世界", location_as_id=False,
+               goods=("薬", "作り直された薬")):
+    facility = Facility(SHOP_ID, "general_store", OWNER_ID, goods)
     owner = Character(OWNER_ID, "欲深きバルト", stock)
     area = Area("0", [facility])
     world = World(world_name, {"0": area}, {OWNER_ID: owner}, days)
@@ -505,6 +524,28 @@ def main():
           len(owner.inventory) == 2, owner.inventory)
     check("補充止め: 切ったときは記録も出ない",
           "kept sold out" not in read_log(module), read_log(module))
+
+    # -- 雛形に無い新しい品は残す ----------------------------------------
+    reset_state()
+    module, ctx = fresh_mod()
+    app, owner, facility = make_world(days=100, stock={"item_1": {"name": "薬"}})
+    manager = ShoppingStartManagerRemake(app, tops_up=True, new_name="新作の短剣")
+    shop(ctx, manager)
+    names = [v.get("name") for v in owner.inventory.values()]
+    check("新しい品: 雛形に無い品は棚に残る", "新作の短剣" in names, names)
+    check("新しい品: 雛形の作り直しは外す", "作り直された薬" not in names, names)
+    check("新しい品: 記録に残る", "new stock kept" in read_log(module),
+          read_log(module))
+
+    # 雛形が読めなければ、増えたぶんを全部外す（売り切れを守る側）。
+    reset_state()
+    module, ctx = fresh_mod()
+    app, owner, facility = make_world(days=100, stock={"item_1": {"name": "薬"}})
+    facility.config = None
+    manager = ShoppingStartManagerRemake(app, tops_up=True, new_name="新作の短剣")
+    shop(ctx, manager)
+    check("雛形が読めない: 増えたぶんは全部外す",
+          list(owner.inventory) == ["item_1"], owner.inventory)
 
     # -- 止めても初回の品揃えは作らせる ----------------------------------
     reset_state()
