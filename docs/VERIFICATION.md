@@ -137,7 +137,7 @@
 | `214_probe_new_character` | 新規キャラのレベル60の経路 | 決着。`instantale.py:876`。本体が main_025 で直したことの確認にも同じログを使った。§2.36 |
 | `215_probe_event_roll` | 確率に付く負の差（-2〜-40）の正体 | 計測は実施済み（4イベント）。問い2「判定の窓で `calculate_attribute` が呼ばれるか」は **YES**。**負の差の正体だけ未決**で、4件とも `313_` を有効のまま測っているので素の分布が無い。§2.49 / 手順は §3.17 |
 | `221_probe_item_level` | 品物のレベルを誰が決めているか（在庫の段とクラフトの式） | 1回目で鎖が端まで繋がった（§2.67）。`tier` は整数、品揃えは `generate_item_in_shopping` が作る、`calculate_modification` は float の倍率で 成果物の値段 = 素材の合計値段 × 倍率。残るのは `tier` と倍率の式を出すための通り数 |
-| `222_probe_battle_mechanics` | 戦闘の語彙（power・バフ・デバフ）が数になるところ。ダメージ式の形／attack と defense の出どころ／`AttributeEffect`・`TextStatusEffect` がキャラのどこへ書かれ、次の手の数を動かすか | **主要部は1回目（戦闘6回）で決着**（§2.68・GAME.md §2.10.2）。基礎値 = 2×幾何平均(能力側, 武器)、防御は引き算で乱数ゼロ、`text_status` は文章だけ、自由入力の防御は数に落ちない。残るのは (1) `AttributeEffect` の実効（敵のデバフが1手目で死んで撃てない）(2) 味方防御の 500 が防具の値かの切り分け（装備替えで1戦）(3) power→倍率の表の通り数 |
+| `222_probe_battle_mechanics` | 戦闘の語彙（power・バフ・デバフ）が数になるところ。ダメージ式の形／attack と defense の出どころ／`AttributeEffect`・`TextStatusEffect` がキャラのどこへ書かれ、次の手の数を動かすか | **主要部は1回目（戦闘6回）で決着**（§2.68・GAME.md §2.10.2）。基礎値 = 2×幾何平均(能力側, 武器)、防御は引き算で乱数ゼロ、`text_status` は文章だけ、自由入力の防御は数に落ちない。残るのは (1) `AttributeEffect` の実効（敵のデバフが1手目で死んで撃てない）(2) 味方防御の 500 が防具の値かの切り分け（装備替えで1戦）(3) power→倍率の表の通り数 (4) 自由入力の `command` は審判の記録に残らないので、どう書けば強く判定されるかを数えるには `referee_player_any_input_new_new` を包む必要がある（GAME.md §2.10.3 / §2.85） |
 | `224_probe_npc_carryover` | ロードのどの地点から `make_npc` を呼べるか（世界の鍵・素データ・採番台帳・置ける施設が揃う最初の瞬間） | **1回目で決着**（2026-08-30。ロード6回）。注入時と `load_game_new` の前は NOT READY（世界の鍵も素データの辞書も無い）。`load_game_new` から戻った直後が最初の READY で、世界の鍵・`index['npc']`・エリア21件・ギルド4件・宿4件が揃う。ロード直後の `world.characters` は1件しか無く、実行時の名簿との突き合わせでは素データを見つけられないことも同じ行に出た（`npcs.npc_stores` の直し。`out\npc_carryover_probe.log`） |
 | `225_probe_area_quest_difficulty` | 街を初めて訪ねたとき、依頼の難易度を誰がどう決めているか（`133_` が訪問前の街にも帯を出すための材料。§3.49 #5） | **決着**（2026-09-03、5回。§2.84 / GAME.md §2.9.1）。街の初期依頼3件は `random.sample(range(lo, hi), k=3)`（`save_area_json.py:329`）で、`lo` / `hi` は街の枠（id）で決まる。`133_` 版2の `SLOT_RANGES` がその表 |
 | `226_probe_item_consume` | 回復アイテムを使ったとき何が誰にどれだけ効くか（`usable` を誰が決めるか・動く項目と量・使えなかったときの挙動・足される文）。効き方を種別ごとに作り直す MOD が「本体を呼んだ後に戻す」か「本体を呼ばずに全部書く」かを決める材料 | **1回目で決着**（2026-09-04、使用5回。GAME.md §2.13.2）。`usable` は本体が `ItemConsumeManager.consume_item` の間に決め（スタミナ 15 ≥ `疲労負荷` 11 で真）、真なら `physical_integrity` が `疲労負荷` ぶん減って HP が `回復` ぶん戻る。`134_` はこれを受けた形（§3.51） |
@@ -2151,7 +2151,7 @@ HANDOVER §6 の1と3も決着: **一覧は `Area.connections` を読む**（`WA
 プレイヤーが居る施設では出発も帰還も待ち、施設を移った後に果たす。
 同じ街の中に出ている人は `adventurer_npcs` から外さず、一覧が居場所で絞られていた場合に備えて漏れている人のボタンを spec の引数で突き合わせて足す（`320_` と同じ差し込み方）。
 ロード直後は `world.characters` が空なので、最初の `refresh_choice_buttons` で突き合わせる。
-オフラインは `tools\tests\test_npc_travel.py` 133件。
+オフラインは `tools\tests\test_npc_travel.py` 138件。
 
 実機で見るもの（済は 2026-09-04 の1回目）:
 

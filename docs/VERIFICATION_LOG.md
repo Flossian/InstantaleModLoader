@@ -2918,3 +2918,48 @@ label: '滝つぼの村' -> '滝つぼの村（適正Lv 4〜35）' (difficulty 3
   （灰の宿場町 1〜5 → Lv 2〜6 / 錆びた槌の村 4〜10 → 5〜11 / 霧の淀み村 12〜17 → 13〜18 /
   枯れ木の村 37〜42 → 38〜43 / 水鏡の交易都市 29〜36 → 30〜37）
 - `modloader.log` に ERROR・`safe hook failed` は無い
+
+### 2.85 審判が何を出しているかを記録2869件で数えた（2026-09-09、`output_data`）
+
+強度（power）を誰が何を基準に決めているかを、遊んだ後の記録から数えた。
+注入も probe も要らない。
+結論は GAME.md §2.10.3、ここには手順と母数を残す。
+
+#### 数え方
+
+`output_data\<世界>\<PC>\referee*\N.json` を全部読む（§1.4）。
+1ファイルが `messages`（system にスキーマ、user に状況）と `response` の対。
+`response` から power・modifications・追加効果を、
+`user` から HP と戦闘ログの長さを取り、突き合わせた。
+
+| | 件数 |
+| --- | --- |
+| `referee*` の JSON | 3942 |
+| `response` が読めたもの | 2869 |
+| うち `instant_damage` を含む手 | 878 |
+
+内訳は referee_npc_rewrite 946・referee_npc 856・referee_player_attack_new_new 595・
+referee_player_any_input_new_new 355・referee_player_skill_new_new 115・
+referee_player_any_input_new_new_with_skill 2。
+7世界・11人分の記録が混ざっており、キャラの強さも版も揃っていない。
+**分布の話であって、同一条件の比較ではない**。
+
+#### 分かったこと
+
+分布と対応は GAME.md §2.10.3 の表に入れた。
+数字の外で言えることは3つ。
+
+1. 自由入力は通常攻撃より強度が高く出る（strong 以上が 74% 対 32%）。
+   戦闘のロールプレイが数に届く経路は素のゲームに在る
+2. 強度と `PowerModification` は独立ではない。
+   increase の small・medium が付いた手は素より低く、
+   「低い強度 ＋ 増加修正」で中間を作っている。
+   `319_` は変換後の multiplier を使っているので二重には数えていない（§2.68）
+3. 審判は攻め手の意気込みではなく結果を見て強度を決めている。
+   narration に「渾身」がある手は平均1.16 で、全体の1.61 より低い
+
+#### 残った穴
+
+自由入力の入力文は記録に残らない（GAME.md §2.10.3 末尾）。
+「どう書けば強く判定されるか」を語で数えるには `command` を控える probe が要る。
+VERIFICATION.md の `222_` の行に足した。

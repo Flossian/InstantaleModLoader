@@ -66,6 +66,7 @@
 
 import copy
 import random
+import re
 import sys
 
 from instantale_modloader import state as loader_state, ui
@@ -86,6 +87,7 @@ CAPACITY_PER_FACILITY = 2    # 1施設に旅で来られる人数。0 で上限�
 REST_DAYS = 90               # 帰ってから次に出るまでの日数
 RETURN_ALL_ON_LOAD = False   # ロードのとき台帳の全員を帰す（片付け）
 LOCAL_LIST_SUFFIX = "（{where}）"   # 同じ街に出ている者の、一覧での居場所の添え字
+SHOW_LEVEL = True            # 冒険者の一覧に Lv を出す
 LOCAL_ONLY_HERE = True       # 同じ街の中の移動はプレイヤーが居る街でだけ起こす
 AWAY_CONTEXT = "{name}は{origin}から旅をして来て、いまは{where}に滞在している（あと{days}日ほど）。"
 LOCAL_CONTEXT = "{name}はいつものギルドを離れ、いまは{where}に来ている（あと{days}日ほど）。"
@@ -98,6 +100,9 @@ GUILD_TYPE = "guild"
 MARK = "mod_travel_list"              # 自前ボタンの印（MODごとに別の文字列）
 LOCAL_CATCHUP_MAX = 30                # 街中の移動をまとめて引く日数の上限
 CONVERSATION_SPEC = "ConversationStartManager"
+
+#: 一覧の名前の末尾に付けた Lv。付け直す前に剥がす（何度描き直しても増えない）。
+LEVEL_RE = re.compile(r"\s*Lv\d+$")
 
 #: 冒険者の一覧ではありえない spec。1つでも見えたら別の画面（`320_` と同じ）。
 OTHER_SCREEN_SPECS = ("ConversationEndManager", "MovePhaseManager",
@@ -233,6 +238,19 @@ def exists(app, npc_id):
     if ui.character_of(app, npc_id) is not None:
         return True
     return str(npc_id) in save_npcs(app)
+
+
+def level_of(app, npc_id):
+    """その NPC のレベル。読めなければ None。
+
+    実行時の `Character.experience_level`。まだ細部の生成されていない個体でも
+    セーブには入っている（GAME.md §2.23）ので、そちらにも下がる。
+    """
+    for value in (getattr(ui.character_of(app, npc_id), "experience_level", None),
+                  (save_npcs(app).get(str(npc_id)) or {}).get("experience_level")):
+        if isinstance(value, int) and not isinstance(value, bool):
+            return value
+    return None
 
 
 def is_dead(character):
@@ -889,8 +907,23 @@ def apply(ctx):
         suffix = travel.format_context(LOCAL_LIST_SUFFIX, where=where, name=name)
         return "{}{}".format(name, suffix) if suffix else name
 
+    def with_level(app, npc_id, text):
+        """名前の末尾に ` Lv12` を付ける。付いていれば付け直す。"""
+        base = LEVEL_RE.sub("", text or "")
+        level = level_of(app, npc_id)
+        return "{} Lv{}".format(base, level) if level is not None else base
+
+    def show_levels(app, buttons):
+        """一覧に並んだ相手すべてにレベルを添える（こちらが足したボタンも含む）。"""
+        for entry in buttons:
+            if not isinstance(entry, dict) or ui.spec_cls_name(entry) != CONVERSATION_SPEC:
+                continue
+            args = ui.spec_args(entry)
+            if args:
+                entry["text"] = with_level(app, str(args[0]), entry.get("text"))
+
     def fix_adventurer_list(app, buttons):
-        """冒険者の一覧なら、同じ街に出ている人を並べる（居場所を添える）。"""
+        """冒険者の一覧なら、同じ街に出ている人を並べ（居場所を添え）、レベルを出す。"""
         if not listing["armed"]:
             return
         names = [ui.spec_cls_name(entry) for entry in buttons]
@@ -904,6 +937,8 @@ def apply(ctx):
         area_id = ui.area_id_of(area)
         trips = local_trips_here(app, area_id)
         if not trips:
+            if SHOW_LEVEL:
+                show_levels(app, buttons)
             return
         party = {str(member) for member in ui.party_member_ids(app)}
         listed = listed_ids(buttons)
@@ -934,6 +969,8 @@ def apply(ctx):
         if added:
             write("list: added {} to the adventurer list of area {}".format(
                 added, area_id))
+        if SHOW_LEVEL:
+            show_levels(app, buttons)
 
     # ================================================================ フック
     @ctx.wrap("__main__:DisplayAdventurerTalkChoice.execute",

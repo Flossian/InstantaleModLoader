@@ -111,6 +111,13 @@
       "note": {"ja": "同じ街に出ている人がギルドの一覧に並ぶときの添え字。空で名前だけ。使える変数: {name} {where}",
                "en": "Shown after the name in the guild list for someone out in town. Empty = name only"}
     },
+    "SHOW_LEVEL": {
+      "type": "bool",
+      "default": true,
+      "label": {"ja": "一覧にレベルを出す", "en": "Show levels in the guild list"},
+      "note": {"ja": "「冒険者達と話す」の名前の後ろに Lv を足す",
+               "en": "Appends Lv to each name in the guild's adventurer list"}
+    },
     "AWAY_CONTEXT": {
       "type": "str",
       "default": "{name}は{origin}から旅をして来て、いまは{where}に滞在している（あと{days}日ほど）。",

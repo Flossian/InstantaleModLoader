@@ -12,6 +12,7 @@
              ギルドなら着いた先の一覧に載る（雇える）。日数は 30..90
   同じ街   … ギルドと通路を除いた施設。日数は 7。名簿には残す
   一覧     … ギルドの冒険者一覧に、同じ街に出ている人を居場所付きで並べる（二重にしない）
+  レベル   … 一覧の名前に Lv を添える（描き直しても増えない。設定で切れる）
   現在地   … 同じ街の中の移動はプレイヤーが居る街だけ。別の街への旅はどの街でも起きる
   到着     … 街中の移動は着いた街で引く（前に引いてからの日数ぶん。同じ日には引き直さない）
   帰還     … 期限が来たら元の施設へ戻り、一覧も戻り、台帳から消える
@@ -119,9 +120,10 @@ class Area:
 
 
 class Character:
-    def __init__(self, character_id, name, affinity, location=None):
+    def __init__(self, character_id, name, affinity, location=None, level=12):
         self.id = character_id
         self.name = name
+        self.experience_level = level
         self.profile = "{}の経歴。".format(name)
         self.config = {"is_dead": False}
         self.relationship = {"player": {"affinity": affinity}}
@@ -508,7 +510,7 @@ def scene_guild_list():
 
     # 添え字を空にすると名前だけ。
     module, ctx = fresh_mod(DEPART_CHANCE_PERCENT=100, LOCAL_CHANCE_PERCENT=100,
-                            LOCAL_LIST_SUFFIX="")
+                            LOCAL_LIST_SUFFIX="", SHOW_LEVEL=False)
     app, fac = make_world(affinities=(30, 30, 30))
     use(app)
     elapse(ctx, app, 30)
@@ -629,6 +631,41 @@ def scene_in_the_way():
     check("離れたら同じ窓で出発する", there, read_ledger())
     check("引き直した後は日を控える", read_seen().get("1") == 10, read_seen())
     check("落ちていない", not ctx.errors, ctx.errors)
+
+
+def scene_level():
+    print("[レベル表示]")
+    module, ctx = fresh_mod(DEPART_CHANCE_PERCENT=0)
+    app, fac = make_world(affinities=(30, 30, 30))
+    use(app)
+    buttons = open_adventurer_list(ctx, app, ["10", "11", "12"])
+    texts = [e["text"] for e in buttons]
+    check("全員に Lv が付く", all(t.endswith(" Lv12") for t in texts[:3]), texts)
+    check("「やめる」には付かない", texts[-1] == "やめる", texts)
+    buttons = open_adventurer_list(ctx, app, ["10", "11", "12"])
+    ctx.hooks["__main__:InstantaleApp.refresh_choice_buttons"](lambda self: None, app)
+    check("描き直しても増えない",
+          all(t.count("Lv") == 1 for t in [e["text"] for e in buttons][:3]),
+          [e["text"] for e in buttons])
+
+    # 旅に出ている人は居場所の後ろに付く。
+    module, ctx = fresh_mod(DEPART_CHANCE_PERCENT=100, LOCAL_CHANCE_PERCENT=100)
+    app, fac = make_world(affinities=(30, 30, 30))
+    use(app)
+    elapse(ctx, app, 30)
+    npc_id = next(iter(read_ledger()))
+    others = [cid for cid in ("10", "11", "12") if cid != npc_id]
+    buttons = open_adventurer_list(ctx, app, others)
+    ids = [(e["spec"].args or [None])[0] for e in buttons]
+    check("足したボタンにも付く",
+          buttons[ids.index(npc_id)]["text"].endswith("） Lv12"),
+          buttons[ids.index(npc_id)]["text"])
+
+    module, ctx = fresh_mod(DEPART_CHANCE_PERCENT=0, SHOW_LEVEL=False)
+    app, fac = make_world(affinities=(30, 30, 30))
+    use(app)
+    texts = [e["text"] for e in open_adventurer_list(ctx, app, ["10", "11", "12"])]
+    check("切ると出ない", not any("Lv" in t for t in texts), texts)
 
 
 def scene_return():
@@ -978,6 +1015,7 @@ def main():
     scene_keep()
     scene_local()
     scene_guild_list()
+    scene_level()
     scene_only_here()
     scene_arrival()
     scene_in_the_way()
