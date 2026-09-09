@@ -1,78 +1,23 @@
 # -*- coding: utf-8 -*-
 """プロンプトに埋め込まれたスキーマ説明文を、簡潔な一覧表記に置き換える。
 
-ゲームは llama-server に `json_schema` パラメータ（grammar の実体）を送ると同時に、**同じスキーマを Python dict の
-repr としてプロンプト本文にも埋め込んで** いる。
+ゲームは llama-server に `json_schema` パラメータ（grammar の実体）を送ると同時に、
+同じスキーマを Python dict の repr としてプロンプト本文にも埋め込んでいる。
 構造の正しさは `json_schema` 側がトークン単位で強制するので、
-プロンプト側の説明文に必要なのは「フィールドの意味の手がかり」だけで、
-全フィールドに付いてくる
-`{'title': 'Name', 'type': 'string'}` のような定型句は落としても構造は壊れない。
+プロンプト側に必要なのは「フィールドの意味の手がかり」だけで、
+全フィールドに付く `{'title': 'Name', 'type': 'string'}` のような定型句は落としても構造は壊れない。
 
     元:   {'$defs': {'Location': {'properties': {'name': {'title': 'Name', ...
     後:   Location: name, kind:∈{shop,inn}
           Area: name, locations:Location[], atomosphere:∈{tense,normal}, note?
 
-外部プロキシ（InstantaleLLMProxy）の `Proxy.SchemaFix.cs` にある
-COMPACT と同じ処理をプロセス内でやる。
+外部プロキシ（InstantaleLLMProxy）の `Proxy.SchemaFix.cs` にある COMPACT と同じ処理をプロセス内でやる。
 判定と出力の書式はプロキシ側に揃えてあるので、同じスキーマからは同じ一覧が出る。
-両方を同時に動かしても、先に圧縮した方でマーカー（`{'$defs':` 等）が消えるため、
-もう片方は何もしない（二重適用にならない）。
 
-検証は実データ（ゲーム自身が `output_data/` に保存した messages
-12,067 件）と実機の両方で済んでいる。
-誤爆・欠落とも 0 件、削減率は 72〜73%（VERIFICATION_LOG.md §2.3）。
-
-## どこに仕掛けるか
-
-プロキシは HTTP ボディを見るので `prompt` と `json_schema` が同じ
-dict に揃っている。
-「json_schema か grammar が既にある時だけ圧縮する」という安全条件は、
-この 1箇所で判定できていた。
-プロセス内で同じものが揃っているのは:
-
-    LlamaCppClient._post_with_model_loading_retry(url, payload)   payload に両方ある
-
-ただし `chat(..., stream=True)` の経路がこのヘルパを通るとは限らない。
-通らなかった場合に何も起きないのを避けるため、上流の
-
-    LlamaCppClient.chat(model, messages, format=...)              format がスキーマ
-
-にも同じ処理を掛ける。
-`format` が dict の時だけ 対象にする。
-`"json"` のような汎用 JSON 指定はフィールド単位の強制をしないので、
-説明文を削ると手がかりが消える。
-
-どちらが実際に発火したかは `out/prompt_bloat.log` の `[COMPACT] <site>` で分かる。
-両方 0 件なら、そもそもこの2つを通っていないということ。
-
-## 割り切り（プロキシと同じ）
-
-- 圧縮するのは **最初に見つかったスキーマ1個だけ**。
-  2個目を含むメッセージは実データに 0 件なので、実運用では制約になっていない
-- `$defs` の中でも `properties` を持たない定義（Enum クラス単体など）は行を出さず、
-  参照側に `$ref` の型名だけが残る。
-  pydantic は `Literal` を参照先ではなくプロパティ側に展開するため、
-  これで enum 値は落ちない
-- 置換後の方が長くなる場合は何もしない
-
-一時的に止めたいときはファイル名の先頭に `_` を付ける（ローダが読み込まなくなる）。
-
-## クラウド（APIキー）では動かない。それでよい
-
-仕掛けているのは `LlamaCppClient` の2点だけで、
-`llm.wrap_outgoing`（プロバイダ非依存の口）には載せていない。
-理由は2つあり、どちらも載せても意味が無い:
-
-* 圧縮してよいかの判定が `json_schema` / `grammar` の有無で、
-  これは llama.cpp の payload と format にしか無い。
-  境界の `message` からは分からない
-* そもそもクラウドではスキーマ文が**プロンプトに埋まっていない**。
-  Gemini は `send_request` の中で足すので境界の外、
-  OpenAI / Claude は API 側に任せていて埋め込み自体が無い（GAME.md §2.12）
-
-つまり圧縮する対象がクラウド経路には存在しない。
-`119_` /
-`305_` が「ローカルにしか仕掛けていない」ことで取りこぼしていたのとは事情が違う。
+仕掛け先は `LlamaCppClient.chat` の1点。
+`format` が dict のとき（＝実体のあるスキーマが渡っているとき）だけ messages を圧縮する。
+`"json"` のような汎用指定はフィールド単位の強制をしないので触らない。
+割り切り・検証の経過・クラウド経路に無い理由は DOC.md と VERIFICATION_LOG.md §2.3。
 """
 
 
@@ -82,10 +27,9 @@ SCHEMA_MARKERS = ("{'$defs':", "{'properties':", '{"$defs":', '{"properties":')
 
 AUDIT_FIRST_N = 5        # 最初の数回だけ、圧縮後の一覧を全文ログに残す
 
-# payload に prompt と json_schema が揃う地点（プロキシと同じ判定ができる）。
-POST_TARGET = "llama_cpp_runtime_completion:LlamaCppClient._post_with_model_loading_retry"
-# 上流の保険。
-# stream 経路が上を通らなかった場合はこちらが効く。
+# messages と format が揃う地点。
+# 下流の `_post_with_model_loading_retry`（payload）にも仕掛けていたが、
+# ここで圧縮した後はマーカーが残らず一度も発火しなかったので外した（DOC.md）。
 CHAT_TARGET = "llama_cpp_runtime_completion:LlamaCppClient.chat"
 
 
@@ -426,31 +370,6 @@ def apply(ctx):
             for line in compact.split("\n"):
                 write("    {}".format(line))
 
-    # -------------------------------------------------- payload（プロキシと同位置）
-    @ctx.wrap(POST_TARGET, required=False)
-    def post_with_retry(orig, self, url, payload, timeout=None, *args, **kwargs):
-        try:
-            # json_schema / grammar が付いている＝構造は grammar が強制する。
-            # プロキシの安全条件と同じ。
-            # 付いていないリクエストは触らない。
-            if isinstance(payload, dict) and ("json_schema" in payload or "grammar" in payload):
-                prompt = payload.get("prompt")
-                if isinstance(prompt, str):
-                    result = compact_embedded_schema(prompt)
-                    if result is not None:
-                        new_prompt, compact = result
-                        # 呼び出し元の dict は変えず、浅いコピーを渡す。
-                        # payload を組み立てた側が他の用途で持ち続けている可能性があるため。
-                        payload = dict(payload)
-                        payload["prompt"] = new_prompt
-                        report("payload " + str(url), prompt, new_prompt, compact)
-        except Exception:
-            # 圧縮に失敗してもプロンプトはそのまま送る。
-            # 長いだけなら推論は通るので、ここで止める方が損害が大きい。
-            ctx.log_exc("compact: payload pass failed; sending prompt untouched")
-        return orig(self, url, payload, timeout, *args, **kwargs)
-
-    # ------------------------------------------------------ messages（上流の保険）
     @ctx.wrap(CHAT_TARGET, required=False)
     def chat(orig, self, model, messages, format=None, *args, **kwargs):
         try:
@@ -490,17 +409,13 @@ def apply(ctx):
     _verify(ctx)
 
     # required=False なので、対象が無くても警告だけ出て先へ進む。
-    # 実際にどちらへ仕掛かったのかはここで確かめてログに残す。
-    armed = []
-    for target in (POST_TARGET, CHAT_TARGET):
-        try:
-            _owner, _name, value = ctx.resolve(target)
-        except Exception:
-            value = None
-        if value is not None:
-            armed.append(target.rpartition(".")[2])
-    ctx.log("schema compact: armed on {} | log {}".format(
-        ", ".join(armed) if armed else "nothing (both targets missing)", log_path))
+    # 実際に仕掛かったかはここで確かめてログに残す。
+    try:
+        _owner, _name, value = ctx.resolve(CHAT_TARGET)
+    except Exception:
+        value = None
+    ctx.log("schema compact: {} | log {}".format(
+        "armed on chat" if value is not None else "target missing (LlamaCppClient.chat)", log_path))
 
 
 # --------------------------------------------------------------------------
