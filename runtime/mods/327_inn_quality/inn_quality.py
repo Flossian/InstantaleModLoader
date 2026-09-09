@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""機能追加: 宿の部屋の等級を効かせる。
+"""機能追加: 高級宿のメリット追加・改善。
 
 素のゲームでは 10G の部屋と 1000G の部屋で起きることが同じで、
 高い部屋を選ぶ理由が無い（体力の回復・仲間の回復はどの部屋でも全快。実測）。
@@ -16,15 +16,18 @@
    宿泊由来の累計は上限で止まる（泊まり続けて家族同然になるのは不自然）。
    宿の主と話すときは、出ていく本文へ宿泊の履歴を1行足す。
    記録は `state\\inn_regular\\<世界名>.json`。
-3. **社交で会う相手が部屋で変わる**。
-   素のゲームの社交は、泊まっている宿の名簿（`Facility.characters`）から相手を選ぶ
-   （実測: `output_data/.../vacation_scene_generator` の【イベントの場所】が宿、【参加NPC】が宿の主）。
-   この MOD は `VacationSocializeManager.execute` の間だけ宿の名簿を選んだ1人に差し替える。
-   相手の優先は 同行者 → エリア内の好感度の高い NPC → エリア内の生成済み NPC からランダム で、
-   部屋の等級がどこまで上から選べるかを決める（既定: 犬小屋=ランダムだけ / 簡易寝台=ゲームのまま /
-   個室=好感度から / 高級個室=同行者から）。
-   選んだ相手の `location` が宿でなければ窓の間だけ宿にする（名簿の相手を現在地で弾くビルドへの保険）。
-   `vacation_scene_generator` に渡った `npc_list` を控えて、差し替えが効いたかをログに残す。
+3. **社交で会う相手を同行者から選ぶ**。
+   素のゲームの社交は、エリアの施設を1つ選んでそこの主と会う
+   （実測: 【イベントの場所】が宿なら宿の主、ギルドならギルドの主。宿の名簿 `Facility.characters` を
+   差し替えても選ばれる相手は変わらなかった。2026-09-08 の実機2回目）。
+   だから相手は LLM へ渡る直前で差し替える。
+   `vacation_scene_generator` / `vacation_scene_resolver` の `npc_list`（要素は
+   `{'instance': Character, 'life_log_dict': {...}}`。実測）と、
+   `VacationSocializeResolveManager.__init__` の `npc_id_list` の3か所を同じ1人にそろえる
+   （schema の `const` も名前→id の対応も、この3つから組まれる）。
+   `life_log_dict` はゲーム自身の `context_manager.get_life_log_text` で作る（読めなければ空）。
+   相手の優先は部屋を問わず 同行者 → エリア内の好感度の高い NPC → エリア内の生成済み NPC からランダム
+   （実機1回目で「部屋で段を変える」から改めた）。
 
 活動の数の作り:
 
@@ -89,24 +92,18 @@ AFFINITY_CAP = 20
 REGULAR_LINE = ("【宿の客として】プレイヤーは{name}の宿にこれまで{stays}回泊まっている"
                 "（{rooms}）。最後の宿泊は{ago}日前。")
 
-# 社交で会う相手を、どの段から選ぶか（部屋ごと）。
-# 「同行者」→ 同行者 → 好感度の高い NPC → ランダム の順に埋める。
-# 「好感度」→ 好感度の高い NPC → ランダム。「ランダム」→ エリアの生成済み NPC から。
-# 「ゲームのまま」→ 触らない（素のゲームは宿の名簿から選ぶ）。
-SOCIAL_KENNEL = "ランダム"
-SOCIAL_BUNK = "ゲームのまま"
-SOCIAL_PRIVATE = "好感度"
-SOCIAL_LUXURY = "同行者"
+# 社交で会う相手を 同行者 → 好感度の高い NPC → ランダム の順で選ぶ（部屋を問わず）。
+# 切ると素のゲームのまま（宿の名簿から選ぶ）。
+SOCIAL_PRIORITY = True
 
 # 「好感度の高い NPC」とみなす下限（好感度の段は 0/10/20/30/40。10 で「好きでも嫌いでもない」）。
 FRIEND_AFFINITY = 10
 
 # ---------------------------------------------------------------- コード側の設定
-SOCIAL_TIERS = {"同行者": ("party", "friends", "random"),
-                "好感度": ("friends", "random"),
-                "ランダム": ("random",),
-                "ゲームのまま": ()}
+SOCIAL_TIERS = ("party", "friends", "random")
 SOCIALIZE_CLASS = "VacationSocializeManager"
+#: MOD 専用の乱数（ゲーム自身の乱数列をずらさない。TECH.md §6.1）。
+RNG = random.Random()
 
 # `quality` の実値 → 設定名の接尾（実機で観測した4つ。GAME.md §2.17）。
 SLOT_OF_QUALITY = {"kennel": "KENNEL", "bunk": "BUNK",
@@ -199,12 +196,11 @@ def area_npc_ids(app):
     return found
 
 
-def pick_partner(app, quality, rng):
+def pick_partner(app, rng=RNG):
     """社交の相手を1人選ぶ。`(id, 段)`。触らないなら `(None, 理由)`。"""
-    tiers = SOCIAL_TIERS.get(str(globals().get(
-        "SOCIAL_" + SLOT_OF_QUALITY.get(str(quality), ""), "ゲームのまま")), ())
-    if not tiers:
+    if not SOCIAL_PRIORITY:
         return None, "game default"
+    tiers = SOCIAL_TIERS
     party = [m for m in ui.party_member_ids(app) if ui.character_of(app, m) is not None]
     others = [n for n in area_npc_ids(app) if n not in party and n != ui.PLAYER_ID]
     for tier in tiers:
@@ -219,6 +215,30 @@ def pick_partner(app, quality, rng):
         if tier == "random" and others:
             return rng.choice(others), tier
     return None, "no candidate"
+
+
+def replace_arg(args, kwargs, name, index, value):
+    """位置でもキーワードでも渡りうる引数を1つ差し替える。届いていなければ触らない。"""
+    if name in kwargs:
+        kwargs = dict(kwargs)
+        kwargs[name] = value
+    elif len(args) > index:
+        args = list(args)
+        args[index] = value
+    else:
+        return args, kwargs, False
+    return args, kwargs, True
+
+
+def life_log_dict(app, character):
+    """ゲーム自身の作り方で人生ログの辞書を組む。読めなければ空。"""
+    module = sys.modules.get("scripts.llm.context_manager")
+    build = getattr(module, "get_life_log_text", None)
+    try:
+        value = build(app, character) if callable(build) else None
+    except Exception:
+        value = None
+    return value if isinstance(value, dict) else {}
 
 
 def apply(ctx):
@@ -236,10 +256,10 @@ def apply(ctx):
                 "partner": None,  # 社交で差し替えた相手 (id, 名前)
             },
             "worlds": WorldStore(ctx, STATE_DIRNAME, order=ordered),
-            "rng": random.Random(),      # ゲーム自身の乱数列をずらさない（TECH.md §6.1）
         }
         setattr(sys, STORE_ATTR, store)
     state = store["state"]
+    state.setdefault("partner", None)   # 前の版の控えが `sys` に残っていても落ちない
     worlds = store["worlds"].rebind(ctx, write)
 
     # ============================================================ 活動の数
@@ -254,6 +274,7 @@ def apply(ctx):
         quality = getattr(self, "_mod_inn_quality", None)
         state["window"] = {"quality": quality, "elapsed": False}
         state["stay"] = None
+        state["partner"] = None
         try:
             return orig(self, choice_text, *args, **kwargs)
         finally:
@@ -295,62 +316,81 @@ def apply(ctx):
 
     @ctx.wrap("__main__:VacationSocializeManager.execute", required=False)
     def socialize_execute(orig, self, choice_text=None, *args, **kwargs):
-        """数えるのは他の活動と同じ。加えて、窓の間だけ宿の名簿を選んだ相手に差し替える。"""
+        """数えるのは他の活動と同じ。加えて、この社交の相手を決めて控える（差し替えは下の3か所）。"""
         stay = state["stay"]
         if stay is not None:
             stay["left"] -= 1
             write("activity: {} left={}".format(SOCIALIZE_CLASS, stay["left"]))
         app = getattr(self, "app", None) or ui.find_app()
-        facility = getattr(getattr(app, "player", None), "location", None)
-        restore = []
+        state["partner"] = None
         try:
-            quality = stay["quality"] if stay else None
-            partner, tier = pick_partner(app, quality, store["rng"])
-            if partner is not None and facility is not None:
-                character = ui.character_of(app, partner)
-                restore.append((facility, "characters", getattr(facility, "characters", None)))
-                facility.characters = [partner]
-                if getattr(character, "location", None) is not facility:
-                    restore.append((character, "location", getattr(character, "location", None)))
-                    character.location = facility
+            partner, tier = pick_partner(app)
+            if partner is not None:
                 state["partner"] = (partner, ui.character_name(app, partner))
-                write("social: {} -> {} ({}) by {}".format(
-                    quality, state["partner"][1], partner, tier))
+                write("social: -> {} ({}) by {}".format(state["partner"][1], partner, tier))
             else:
-                state["partner"] = None
-                write("social: {} untouched ({})".format(quality, tier))
+                write("social: untouched ({})".format(tier))
         except Exception:
             ctx.log_exc("inn quality: cannot pick the social partner")
-        try:
-            return orig(self, choice_text, *args, **kwargs)
-        finally:
-            for owner, attr, value in reversed(restore):
-                try:
-                    setattr(owner, attr, value)
-                except Exception:
-                    ctx.log_exc("inn quality: cannot restore {}".format(attr))
+        return orig(self, choice_text, *args, **kwargs)
+
+    def swap_npc_list(site, index, args, kwargs):
+        """`npc_list` を選んだ相手1人にする。要素の形は元の1つ目を写す。"""
+        partner = state.get("partner")
+        if partner is None:
+            return args, kwargs
+        app = ui.find_app()
+        character = ui.character_of(app, partner[0])
+        npc_list = kwargs.get("npc_list", args[index] if len(args) > index else None)
+        if character is None or not isinstance(npc_list, (list, tuple)):
+            write("social: {} npc_list not replaced (character {} / list {})".format(
+                site, character is not None, type(npc_list).__name__))
+            return args, kwargs
+        before = [getattr(n.get("instance") if isinstance(n, dict) else n, "name", "?")
+                  for n in npc_list]
+        template = npc_list[0] if npc_list and isinstance(npc_list[0], dict) else {}
+        entry = dict(template)
+        entry["instance"] = character
+        entry["life_log_dict"] = life_log_dict(app, character)
+        args, kwargs, done = replace_arg(args, kwargs, "npc_list", index, [entry])
+        write("social: {} npc_list {} -> [{}]{}".format(
+            site, before, partner[1], "" if done else " (argument not reached)"))
+        return args, kwargs
 
     @ctx.wrap("scripts.llm.llm_manager:vacation_scene_generator", required=False)
     def scene_generator(orig, *args, **kwargs):
-        """差し替えが効いたかを控えるだけ（引数には触らない）。"""
         try:
-            npc_list = kwargs.get("npc_list", args[6] if len(args) > 6 else None)
-            names = [getattr(n, "name", None) or (n.get("name") if isinstance(n, dict) else None)
-                     or str(n) for n in (npc_list if isinstance(npc_list, (list, tuple)) else [])]
+            args, kwargs = swap_npc_list("scene", 6, args, kwargs)
+        except Exception:
+            ctx.log_exc("inn quality: cannot replace npc_list (scene)")
+        return orig(*args, **kwargs)
+
+    @ctx.wrap("scripts.llm.llm_manager:vacation_scene_resolver", required=False)
+    def scene_resolver(orig, *args, **kwargs):
+        try:
+            args, kwargs = swap_npc_list("resolve", 8, args, kwargs)
+        except Exception:
+            ctx.log_exc("inn quality: cannot replace npc_list (resolve)")
+        return orig(*args, **kwargs)
+
+    @ctx.wrap("__main__:VacationSocializeResolveManager.__init__", required=False)
+    def resolve_init(orig, self, app, months=None, quality=None, *args, **kwargs):
+        """感情の反映は `npc_id_list` から引かれるので、ここも同じ1人にする。"""
+        try:
             partner = state.get("partner")
             if partner is not None:
-                hit = any(partner[0] == n or partner[1] == n for n in names)
-                write("social: scene npc_list={} -> {}".format(
-                    names, "swap effective" if hit else "WARN swap ineffective"))
-            else:
-                write("social: scene npc_list={}".format(names))
+                before = kwargs.get("npc_id_list", args[4] if len(args) > 4 else None)
+                args, kwargs, done = replace_arg(args, kwargs, "npc_id_list", 4, [partner[0]])
+                write("social: npc_id_list {} -> [{}]{}".format(
+                    before, partner[0], "" if done else " (argument not reached)"))
         except Exception:
-            ctx.log_exc("inn quality: cannot read npc_list")
-        return orig(*args, **kwargs)
+            ctx.log_exc("inn quality: cannot replace npc_id_list")
+        return orig(self, app, months, quality, *args, **kwargs)
 
     @ctx.wrap("__main__:VacationEndManager.execute", required=False)
     def end_execute(orig, self, choice_text=None, *args, **kwargs):
         state["stay"] = None
+        state["partner"] = None
         return orig(self, choice_text, *args, **kwargs)
 
     @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False,

@@ -14,9 +14,9 @@
   常連     … 宿泊のたびに記録が増え、好感度が等級ぶん上がり、累計 20 で止まる。
              `"player"` の欄が無い主には足さず記録だけ。金が足りない宿泊は数えない
   1行      … 宿の主と話しているときだけ本文の先頭に入り、二度は入らない
-  社交     … 高級個室は同行者、同行者が居なければ好感度の高い相手、居なければランダム。
-             個室は好感度から、犬小屋はランダムだけ、簡易寝台は触らない。
-             窓の間だけ宿の名簿と相手の location を差し替え、終わったら戻す
+  社交     … 部屋を問わず 同行者 → 好感度の高い相手 → ランダム。設定 OFF なら触らない。
+             ゲームは施設の主を選ぶ（実測）ので、LLM へ渡る `npc_list` と
+             `VacationSocializeResolveManager` の `npc_id_list` を同じ1人に差し替える
 """
 import importlib.util
 import io
@@ -158,16 +158,27 @@ class VacationRestManager(Activity):
     pass
 
 
+class VacationSocializeResolveManager:
+    def __init__(self, app, months, quality, narration, choice, scene, location_name, npc_id_list):
+        app.resolved.append(list(npc_id_list))
+
+
 class VacationSocializeManager(Activity):
-    """社交。ゲームは宿の名簿から相手を選ぶ（実測: 参加NPC が宿の主）。"""
+    """社交。ゲームは施設の主を相手にする（実測。宿の名簿は見ない）。"""
 
     def execute(self, choice_text):
-        inn = self.app.player.location
-        self.app.social.append((list(inn.characters),
-                                [self.app.world.characters[i].location is inn
-                                 for i in inn.characters]))
-        self.app.scene_hook(lambda *a, **k: None, None, None, None, None, None, None,
-                            [self.app.world.characters[i] for i in inn.characters])
+        owner = self.app.world.characters[self.app.player.location.owner]
+        seen = []
+
+        def generator(player, life_log, area_data, intro, choice, location, npc_list):
+            seen.append([(n["instance"].name, n.get("life_log_dict")) for n in npc_list])
+
+        self.app.scene_hook(generator, None, None, None, None, None, "宿",
+                            [{"instance": owner, "life_log_dict": {"1日前": "x"}}])
+        self.app.social.append(seen[-1])
+        main = sys.modules["__main__"]
+        main.VacationSocializeResolveManager(self.app, self.months, self.quality,
+                                             "", "", "", "宿", [self.app.player.location.owner])
         return Activity.execute(self, choice_text)
 
 
@@ -196,6 +207,7 @@ class InstantaleApp:
         self.player = Player(inn, Area([Node([inn, shop])]))
         self.party = ["player"]
         self.social = []
+        self.resolved = []
         self.scene_hook = None
         self.buttons = []
         self.display_button_map = None
@@ -312,7 +324,8 @@ def setup():
             delattr(sys, attr)
     classes = {}
     for base in (InstantaleApp, VacationStartManager, VacationTrainManager,
-                 VacationRestManager, VacationSocializeManager, VacationEndManager):
+                 VacationRestManager, VacationSocializeManager,
+                 VacationSocializeResolveManager, VacationEndManager):
         classes[base.__name__] = type(base.__name__, (base,), {})
         setattr(sys.modules["__main__"], base.__name__, classes[base.__name__])
     sys.modules["__main__"].JustSetButtonToNormalPhase = JustSetButtonToNormalPhase
@@ -334,6 +347,8 @@ def setup():
         ("__main__:VacationTrainManager.execute", classes["VacationTrainManager"], "execute"),
         ("__main__:VacationRestManager.execute", classes["VacationRestManager"], "execute"),
         ("__main__:VacationSocializeManager.execute", classes["VacationSocializeManager"], "execute"),
+        ("__main__:VacationSocializeResolveManager.__init__",
+         classes["VacationSocializeResolveManager"], "__init__"),
         ("__main__:VacationEndManager.execute", classes["VacationEndManager"], "execute"),
     ])
     app = app_cls()
@@ -455,33 +470,27 @@ def with_social(self, choice_text):
 
 main.VacationStartManager.execute = with_social
 
-seen = socialize("luxury_suite", ("player", "9"))
-check("social: luxury picks the companion", seen == (["9"], [True]), seen)
-check("social: roster restored", inn.characters == ["7"], inn.characters)
-check("social: companion location restored", app.world.characters["9"].location is None)
+seen = socialize("bunk", ("player", "9"))
+check("social: companion first, any room", seen == [("仲間", {})], seen)
+check("social: npc_id_list follows", app.resolved[-1] == ["9"], app.resolved)
+check("social: roster untouched", inn.characters == ["7"], inn.characters)
 app.press("宿泊を終える")
 
 seen = socialize("luxury_suite")
-check("social: luxury without party picks the best-liked local", seen == (["10"], [True]), seen)
-app.press("宿泊を終える")
-
-seen = socialize("private_room", ("player", "9"))
-check("social: private ignores the companion", seen == (["10"], [True]), seen)
+check("social: no party -> best-liked local", seen == [("友人", {})], seen)
 app.press("宿泊を終える")
 
 app.world.characters["10"].relationship["player"]["affinity"] = 5
-seen = socialize("private_room")
-check("social: private falls back to random", seen[0][0] in ("10", "11", "7") and seen[1] == [True], seen)
+seen = socialize("kennel")
+check("social: nobody liked -> random", seen[0][0] in ("友人", "店主", "エリン"), seen)
 app.press("宿泊を終える")
 
-seen = socialize("bunk", ("player", "9"))
-check("social: bunk untouched", seen == (["7"], [True]), seen)
+module.SOCIAL_PRIORITY = False
+seen = socialize("luxury_suite", ("player", "9"))
+check("social: off -> untouched", seen == [("エリン", {"1日前": "x"})] and app.resolved[-1] == ["7"], (seen, app.resolved[-1]))
 app.press("宿泊を終える")
-
-seen = socialize("kennel", ("player", "9"))
-check("social: kennel never picks the companion", seen[0][0] != "9", seen)
-app.press("宿泊を終える")
-check("social: log says effective", "swap effective" in io.open(
+module.SOCIAL_PRIORITY = True
+check("social: log names the swap", "npc_list ['エリン'] -> [仲間]" in io.open(
     os.path.join(OUT_DIR, "inn_quality.log"), encoding="utf-8").read())
 
 check("no hook errors", not ctx.errors, ctx.errors)

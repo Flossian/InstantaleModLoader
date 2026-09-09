@@ -112,7 +112,7 @@
 | [`324_place_bgm`](MODS.md#324_place_bgm-施設と土地のbgmを置いた曲から選んで鳴らす) | 街・施設BGMの選曲 | 施設と土地のBGMを置いた曲から選んで鳴らす | 4 |  |
 | [`325_road_opening`](MODS.md#325_road_opening-街と街を結ぶ新しい道を切り開く) | 新たな道を探す | 街と街を結ぶ新しい道を切り開く | 18 |  |
 | [`326_npc_travel`](MODS.md#326_npc_travel-npcの街移動) | NPCの街移動 | NPCの街移動 | 14 |  |
-| [`327_inn_quality`](MODS.md#327_inn_quality-宿の部屋の等級を効かせる) | 宿の部屋の等級を効かせる | 宿の部屋の等級を効かせる | 16 |  |
+| [`327_inn_quality`](MODS.md#327_inn_quality-高級宿のメリット追加改善) | 高級宿のメリット追加・改善 | 高級宿のメリット追加・改善 | 13 |  |
 | [`401_battle_character_context`](MODS.md#401_battle_character_context-戦闘の審判へ同行者の人物と装備を見せる) | 戦闘キャラクター情報補完 | 戦闘の審判へ同行者の人物と装備を見せる | - |  |
 | [`402_party_inventory_transfer`](MODS.md#402_party_inventory_transfer-仲間とアイテムを受け渡しできる) | パーティーメンバー：アイテム受け渡し | 仲間とアイテムを受け渡しできる | - |  |
 | [`403_npc_social_memory`](MODS.md#403_npc_social_memory-npc同士がお互いを認知し関係を覚える) | NPC同士の認知と関係記憶 | NPC同士がお互いを認知し、関係を覚える | 5 |  |

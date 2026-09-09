@@ -96,7 +96,7 @@
 | `324_place_bgm` | 施設の種類（宿屋・ギルドなど13種）と土地の種類（町・村・都市・ダンジョン）ごとの重みで、戦闘以外の BGM を置いた曲から選んで鳴らす。世界ごとの個別指定（その町・その宿）が先に効く。施設の出入りで鳴らし直し、土地の曲は覚える。設定画面（`tool.py`）は一括設定とワールド個別設定の2タブ | 実機で一部成立（2026-09-02、決定38回・ERROR 0。§2.83）。**施設の段の切り替え・見張り・覚えた曲の再訪・戦闘後は未確認**（§3.48） |
 | `325_road_opening` | 「他の土地へ行く」に「新たな道を探す」を足す。まだ繋がっていない街（`size` が village / town / city）を選び、お金を払って開削を委託する（既定 14 日後に開通）か道中のダンジョンを踏破すると、両側の `Area.connections` に対称に道が開く。金額と難易度は BFS で数えた「間に挟む街の数」で上がる。記録は `state\road_opening\<世界名>.json`、ロード時に当て直す | **実機で成立**（2026-09-03、版2。3経路とも通り WARN / ERROR 0件。§3.50）。**連打の門だけ未発火**（§3.50） |
 | `326_npc_travel` | 友好度 20 以上のギルドの冒険者が旅に出る。別の街（施設が生成済み）のギルドか宿に 30〜90 日、または同じ街のギルド以外の施設に 7 日。各街に 2 人は残す。旅先のギルドでは雇える。旅先で話すと会話の文脈に「〜から来ている」を 1 文足す。台帳は `state\npc_travel\<世界名>.json`、ロード時に突き合わせ | **実機で出発・旅先・帰還まで成立**（2026-09-04、版1、1回目。`return:` 13 件が元の施設へ、WARN / ERROR 0。§3.53）。残るは延期・セーブとロード・片付け（#6 #7 #9） |
-| `327_inn_quality` | 部屋の等級で1回の宿泊でできる活動の数が変わる（既定 1/1/2/3）。宿の主が常連を覚え、宿泊のたびに好感度が等級ぶん上がり（累計 +20 で止まる）、宿の主との会話に宿泊の履歴を1行足す。社交で会う相手も部屋で変わる（同行者 → 好感度の高い相手 → ランダム。宿の名簿を窓の間だけ差し替える）。記録は `state\inn_regular\<世界名>.json` | **版1・未実機**（2026-09-08。オフライン `test_inn_quality.py` 32 件）。§3.54 |
+| `327_inn_quality` | 部屋の等級で1回の宿泊でできる活動の数が変わる（既定 1/1/2/3）。宿の主が常連を覚え、宿泊のたびに好感度が等級ぶん上がり（累計 +20 で止まる）、宿の主との会話に宿泊の履歴を1行足す。社交の相手を部屋を問わず 同行者 → 好感度の高い相手 → ランダム の順で選ぶ（宿の名簿を窓の間だけ差し替える）。記録は `state\inn_regular\<世界名>.json` | **実機3回で活動の数・常連・社交の相手が成立**（2026-09-08。3回目で同行者シルヴァンが【参加NPC】に。オフライン `test_inn_quality.py` 30 件）。残るは感情の反映・簡易寝台の素の挙動（#4 #13）と #6〜#9。§3.54 |
 
 ### 提供（400番台）
 
@@ -2201,7 +2201,7 @@ HANDOVER §6 の1と3も決着: **一覧は `Area.connections` を読む**（`WA
 生成が `current_area` / `current_location` を `initial_location`（元の街）で上書きするなら次のロードで食い違う。`reconcile:` が台帳を正として旅先へ置き直すので壊れないが、#10 はここを見る。
 `generate_npc_detail` は既知の不具合現場（`KeyError: '52'` ＝ *文字列*キー。`200_probe_bug_sites` が張ってある）。旅と関係があるかは不明なので、#10 は `200_` を入れたまま見る。
 
-### 3.54 宿の部屋の等級を効かせる（`327_`）: 版1・未実機（2026-09-08）
+### 3.54 高級宿のメリット追加・改善（`327_`）: 実機3回で活動の数・常連・社交の相手が成立（2026-09-08）
 
 決まりと設定は `327_` の DOC.md。
 土台は「1泊＝活動1回」（GAME.md §2.17。`out/vacation.jsonl` の 54 回全件）。
@@ -2210,7 +2210,7 @@ HANDOVER §6 の1と3も決着: **一覧は `Area.connections` を読む**（`WA
 宿泊の成立は窓の中の `elapse_days` で見る。
 宿の主は `app.player.location.owner`、会話相手は `app.in_conversation`。
 好感度は本体の `relationship["player"]["affinity"]` に足し、文は本体に任せる。`"player"` の欄が無い主には足さず記録だけ残す。
-オフラインは `tools\tests\test_inn_quality.py` 32 件。
+オフラインは `tools\tests\test_inn_quality.py` 30 件。
 
 実機で見るもの:
 
@@ -2225,15 +2225,53 @@ HANDOVER §6 の1と3も決着: **一覧は `Area.connections` を読む**（`WA
 | 7 | 会話の1行 | 泊まった後に宿の主と話し、`prompt at chat:` に1行。返答が宿泊の履歴を踏まえる。`311_` が次の会話で `about_player` に取り込む |
 | 8 | 社交 | 社交（Manager と ResolveManager の対）で残りが 1 だけ減る |
 | 9 | 仲間の訓練 | `306_` と同じ `VacationTrainManager.execute` を包む。2回目の訓練でも仲間に入る |
-| 10 | 社交の相手（差し替えが届くか） | 高級個室で仲間を連れて社交。`social: luxury_suite -> 名前 (id) by party` の後に `social: scene npc_list=[...] -> swap effective`。【参加NPC】がその仲間。`WARN swap ineffective` なら、ゲームが宿の名簿（`Facility.characters`）以外から相手を選んでいる |
-| 11 | 社交の相手（段） | 仲間なしの高級個室で好感度 10 以上の相手（`by friends`）、誰も居ない街で `by random`。個室は `by friends` から、犬小屋は `by random` だけ、簡易寝台は `untouched (game default)` |
-| 12 | 社交の後始末 | 社交の後、宿の「会話する」の一覧が元に戻っている（名簿を窓の間だけ差し替えて `finally` で戻す）。仲間の `location` が宿に残っていない |
-| 13 | 感情の反映 | 差し替えた相手への `emotion_changes` がその相手の好感度に入る（ゲームが名前→id を宿の名簿で引くなら入る。別の表で引くなら入らず、その場合はログに何も出ないので好感度の前後を控える） |
+| 10 | 社交の相手（差し替えが届くか） | 仲間を連れて社交。`social: -> 名前 (id) by party` の後に `social: scene npc_list ['宿の主'] -> [仲間]` と `social: npc_id_list ['id'] -> ['id']`、応答の後に `social: resolve npc_list ...`。`output_data/.../vacation_scene_generator` の最新の【参加NPC】がその仲間で、schema の `const` も仲間の名前 |
+| 11 | 社交の相手（段） | 仲間なしで好感度 10 以上の相手（`by friends`）、誰も居ない街で `by random`。部屋を問わない（1回目の後に「部屋で段を変える」をやめた） |
+| 12 | 人生ログ | 済。`output_data/unknown/unknown/vacation_scene_generator/56.json` の【参加NPC】シルヴァンに `'70日前-35日前'` / `'35日前'` の人生ログと「プレイヤーとの関係性: ['同行中']」が載り、schema の `const` も `'シルヴァン'`。応答は同行者との対話で `emotion_changes: [{'npc': 'シルヴァン', 'amount': 3}]` |
+| 13 | 感情の反映 | 差し替えた相手への `emotion_changes` がその相手の好感度に入る（`npc_id_list` を同じ1人にしてあるので、名前→id の対応がそこから組まれているなら入る）。社交の前後で仲間の `affinity` を控える |
 
-社交の相手の土台: `output_data/<世界>/<PC>/vacation_scene_generator/N.json` の【イベントの場所】が泊まっている宿、【参加NPC】が宿の主（2件とも）。
-宿の名簿から選んでいると読んで、`VacationSocializeManager.execute` の間だけ `Facility.characters` を選んだ1人にし、`location` が宿でない相手は窓の間だけ宿にする。
-`vacation_scene_generator` の `npc_list` を控えて効いたかを見る（引数には触らない。触ると名前→id の対応が崩れる）。
+社交の相手の土台: 【イベントの場所】は宿ともギルドとも出て（`output_data` と `out/vacation.jsonl` の `location_name`）、【参加NPC】はその施設の主。
+1回目の版は宿の名簿 `Facility.characters` を窓の間だけ差し替えたが、2回目の実機で選ばれる相手が変わらず（`WARN swap ineffective`）、施設の主を直接引いていると分かった。
+そこで LLM へ渡る直前の3か所（`vacation_scene_generator` / `vacation_scene_resolver` の `npc_list`、`VacationSocializeResolveManager.__init__` の `npc_id_list`）を同じ1人にそろえる形に改めた。
+`npc_list` の要素は `{'instance': Character, 'life_log_dict': {...}}`（実測）で、`life_log_dict` はゲーム自身の `scripts.llm.context_manager.get_life_log_text(app, character)` で組む。
 共有倉庫は別 MOD（宿ごとには持たない）。
+
+**2026-09-08 の実機（1回目）で #1 #3 #5 が通った。** `out\inn_quality.log`:
+
+```
+23:00:08 stay: quality='luxury_suite' actions=3
+23:00:08 regular: ヘンリエッタ affinity 0 -> 4 (granted 4/20)
+23:00:10 activity: VacationTrainManager left=2
+23:00:18 menu: 3 activities again (left=2)
+23:00:25 activity: VacationSocializeManager left=1
+23:01:03 menu: 3 activities again (left=1)
+```
+
+高級個室で訓練の後に活動が並び直し、社交の後も並び直した（活動後の画面は `refresh_choice_buttons` を通る。#2 も決着）。
+社交は `KeyError: 'rng'` で相手を選べず素のまま走った（`sys` に残っていた前の版の控えに `rng` が無かった。乱数はモジュール直下へ移し、控えの欠けは `setdefault` で埋める）。
+同じ回で `vacation_scene_generator` の `npc_list` の型が読めた: 要素は `{'instance': Character, 'life_log_dict': {...}}`。
+同行者が居るのに選ばれなかったのは上の例外のため。
+合わせて「部屋で段を変える」をやめ、部屋を問わず 同行者 → 好感度 → ランダム にした（決めた仕様）。
+
+**2回目（同日）**: `social: luxury_suite -> ザーラ (91) by party` は出たが `scene npc_list=['ヘンリエッタ'] -> WARN swap ineffective`。
+宿の名簿を差し替えても相手は宿の主のままで、ゲームは名簿を見ていない。
+差し替えを LLM の直前の3か所へ移した（上の土台）。
+
+**3回目（同日）で #10 が通った。** `out\inn_quality.log`:
+
+```
+23:13:29 social: -> シルヴァン (58) by party
+23:13:32 social: scene npc_list ['ヘンリエッタ'] -> [シルヴァン]
+23:13:57 social: npc_id_list ['61'] -> [58]
+23:13:57 social: resolve npc_list ['シルヴァン'] -> [シルヴァン]
+```
+
+ゲームが選んだのは宿の主（61）だったが、描写の相手は同行者シルヴァンになった。
+`resolve` に渡る `npc_list` は最初から差し替え後の相手で、ゲームは `generator` に渡した要素をそのまま持ち回っている（`resolver` の差し替えは保険として残す）。
+WARN / ERROR 0（1回目の `KeyError` のみ）。
+`output_data` の同じ回のプロンプトで #12 も済（【参加NPC】が同行者で、人生ログと「同行中」の関係が載った。応答の `emotion_changes` も同行者宛て）。
+同じ回の `306_` は2人の同行者に訓練の経験値を渡し（`shared 1 gain(s) with 2 companion`）、他 MOD のログに ERROR / WARN は無い。
+残るのは感情の反映（#13。`amount: 3` が同行者の `affinity` に入ったかは前後を控えていないので未確定）・簡易寝台の素の挙動（#4）と #6〜#9。
 
 ---
 
