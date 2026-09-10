@@ -25,6 +25,11 @@
 一覧は [MODLIST.md の「提供を受けた MOD」](MODLIST.md#提供を受けた-mod)、
 権利の所在は [NOTICE](../NOTICE)。
 
+**提供と提案は分けてある。** MOD そのものを提供されたものが上の「提供」で、
+こちらの MOD へ機能の提案（PR）を取り込んだものは
+[MODLIST.md の「提案を取り込んだ MOD」](MODLIST.md#提案を取り込んだ-mod)。
+節の頭の名乗りも別の文になる。
+
 各項の「設定」は GUI の `設定` 列から変えられるもの。
 変え方は [README.md の「設定の変え方」](README.md#33-設定の変え方)。
 
@@ -73,7 +78,7 @@ MOD 無しで起きた不具合を作者へ報告したいときは、
 
 ## 修正（1xx）
 
-この節の `117_message_text_integrity`・`118_batch_message_render`・`119_fix_crime_attribution` は yoshinari/tomotomo-y 様の提供。うち `118_batch_message_render` はこちらとの共同。
+この節の `130_currency_unit` は自作で、MoririnJP 様の提案（PR）を取り込んでいる。 この節の `117_message_text_integrity`・`118_batch_message_render`・`119_fix_crime_attribution` は yoshinari/tomotomo-y 様の提供。うち `118_batch_message_render` はこちらとの共同。
 
 ### `126_ui_title_version`: タイトル画面にローダの版を出す
 
@@ -696,6 +701,7 @@ NPC はその呼び名で値段を言い、こちらの入力もその呼び名�
 
 #### 設定は2段
 
+ワールド個別設定は MoririnJP 様の提案（PR #11）を取り込んだもの。
 どちらも設定列の「設定…」で開く同梱の画面（`tool.py`）から変える。
 
 | 段 | 効く範囲 | 置き場 |
@@ -1389,7 +1395,7 @@ v2 で、`111_llm_prompt_replace` が使っているのと同じ仕掛け口を�
 
 ## 追加（3xx）
 
-この節の `311_npc_profile_memory` は yoshinari/tomotomo-y 様の提供（こちらとの共同）。
+この節の `311_npc_profile_memory` は yoshinari/tomotomo-y 様の提供（こちらとの共同）。 この節の `314_area_move_custom` は自作で、MoririnJP 様の提案（PR）を取り込んでいる。
 
 ### `300_event_facility_arrival`: 施設でNPCから話しかけてくる
 
@@ -2029,7 +2035,9 @@ LLM が「確実に成功」「確実に失敗」と判断した回（入力全�
 | 加算の日数・料金（1街ごと） | 既定 7日・500G。「加算」のときだけ使われる |
 | 徒歩・馬車の日数の上限 | 既定 90日・30日。距離補正で増えた日数をここで頭打ちにする |
 
-設定は2段ある。どちらも設定列の「設定…」で開く同梱の画面（`tool.py`）から変える。
+設定は2段ある。
+ワールド個別設定は MoririnJP 様の提案（PR #11）を取り込んだもの。
+どちらも設定列の「設定…」で開く同梱の画面（`tool.py`）から変える。
 
 | 段 | 効く範囲 | 置き場 |
 | --- | --- | --- |

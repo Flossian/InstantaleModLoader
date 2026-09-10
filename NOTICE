@@ -37,10 +37,20 @@ MIT で配っているが、著作権表示（LICENSE の Copyright 行）は提
         402_party_inventory_transfer
         403_npc_social_memory
         404_party_talk          （提供を受けたものを共同で仕上げた）
+        405_regional_economy    （提供を受けたものを共同で仕上げた）
+        406_gemini_user_role_fix
+
+**MOD そのものの提供とは別に、既にあるこちらの MOD へ機能の提案（PR）を
+頂いたものがある。** MOD 自体はこちらの著作物だが、取り込んだコードの
+著作権は提案者に残る。
+
+  * MoririnJP 様
+        130_currency_unit       （ワールド別の設定。PR #11）
+        314_area_move_custom    （ワールド別の設定。PR #11）
 
 いずれも取り込みにあたってこちらで調整を加えている。経緯は docs/MODS.md の
 各 MOD の説明にある。作者は各 MOD の mod.json の "author" が名乗り、
-一覧は docs/MODLIST.md の「提供を受けた MOD」にある。
+一覧は docs/MODLIST.md の「提供を受けた MOD」と「提案を取り込んだ MOD」にある。
 
 **この節は tools/check_mods.py が検算する。** 提供を受けた MOD の作者が
 ここに載っていなければ検査が止まるので、名前だけの取りこぼしは起こらない。
@@ -139,11 +149,20 @@ AUTHORS OF THE BUNDLED MODS
                              401_battle_character_context,
                              402_party_inventory_transfer,
                              403_npc_social_memory,
-                             404_party_talk (finished jointly)
+                             404_party_talk (finished jointly),
+                             405_regional_economy (finished jointly),
+                             406_gemini_user_role_fix
+
+  Separately, some mods of this project's own took in a proposed improvement
+  (a pull request) from an outside author. The mod itself is this project's
+  work; the copyright in the contributed code stays with its author.
+
+    MoririnJP                130_currency_unit (per-world settings, PR #11),
+                             314_area_move_custom (per-world settings, PR #11)
 
   Each was adjusted on intake; see docs/MODS.md. The author of record for
-  each mod is the "author" field of its mod.json, and the full list is in
-  docs/MODLIST.md. tools/check_mods.py fails if a contributor named there is
+  each mod is the "author" field of its mod.json, and the full lists are in
+  docs/MODLIST.md ("contributed mods" and "mods that took in a proposal"). tools/check_mods.py fails if a contributor named there is
   missing from this file.
 
 INBOUND LICENSE FOR CONTRIBUTIONS

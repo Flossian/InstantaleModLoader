@@ -12,7 +12,8 @@
 2箇所に同じ文を置かずに済み、詳細への行き先もその見出しへ張れる。
 見出しの無い MOD（計測のほとんど）は `mod.json` の説明の1文目に落ちる。
 
-作者は `mod.json` の `author`。**外部から提供を受けた MOD だけ**を末尾の節に出す
+作者は `mod.json` の `author`。**外部が絡む MOD だけ**を末尾の2節に出す
+（提供を受けた MOD と、こちらの MOD へ提案を取り込んだもの。`mods_meta` の冒頭）
 （欄にすると 8 割が空になるうえ、`author` はほとんどの MOD で同じ1名になる）。
 誰の著作物かは NOTICE が持つ ― こちらはその索引で、
 `tools/check_mods.py` が両者の食い違いを見る。
@@ -109,7 +110,7 @@ def collect() -> list:
             "link": link,
             # 提供者（`SELF` 以外の作者）。自分の MOD では空。
             "contributors": mods_meta.contributors(data),
-            "shared": mods_meta.is_shared(data),
+            "credit": mods_meta.credit_kind(data),
         })
     return out
 
@@ -139,10 +140,14 @@ def render(mods: list) -> str:
     add("直す先は各 MOD の `mod.json` か MODS.md の見出し。")
     add("")
     add("同梱 %d 本（%s）。" % (len(mods), tally))
-    given = [m for m in mods if m["contributors"]]
+    given = [m for m in mods if m["credit"] in (mods_meta.GIVEN, mods_meta.SHARED)]
+    proposed = [m for m in mods if m["credit"] == mods_meta.PROPOSED]
     if given:
         add("うち %d 本は外部の MOD 作者からの提供（下の「提供を受けた MOD」）。"
             % len(given))
+    if proposed:
+        add("ほかに %d 本は自作だが、外部からの提案を取り込んでいる"
+            "（下の「提案を取り込んだ MOD」）。" % len(proposed))
     add("")
     add("並びはフォルダ名順。")
     add("適用順はこれとは別で、GUI の `順` 列（`load_order.json`）が持つ。")
@@ -210,9 +215,30 @@ def render(mods: list) -> str:
         for m in sorted(given, key=lambda m: m["folder"]):
             folder = ("[`%s`](MODS.md#%s)" % (m["folder"], m["link"])
                       if m["link"] else "`%s`" % m["folder"])
-            note = "提供者と共同" if m["shared"] else "そのまま取り込み"
+            note = ("提供者と共同" if m["credit"] == mods_meta.SHARED
+                    else "そのまま取り込み")
             add("| %s | %s | %s |" % (
                 folder, cell(mods_meta.credit(m["contributors"])), note))
+        add("")
+
+    if proposed:
+        add("---")
+        add("")
+        add("## 提案を取り込んだ MOD")
+        add("")
+        add("MOD 自体はこちらの著作物で、機能の一部を外部からの提案（PR）で"
+            "取り込んだ %d 本。" % len(proposed))
+        add("上の「提供を受けた MOD」とは分けてある（出どころが違う）。")
+        add("")
+        add("権利の所在は [NOTICE](../NOTICE) が持つ。")
+        add("")
+        add("| フォルダ | 提案 |")
+        add("|---|---|")
+        for m in sorted(proposed, key=lambda m: m["folder"]):
+            folder = ("[`%s`](MODS.md#%s)" % (m["folder"], m["link"])
+                      if m["link"] else "`%s`" % m["folder"])
+            add("| %s | %s |" % (
+                folder, cell(mods_meta.credit(m["contributors"]))))
         add("")
     return "\n".join(L)
 

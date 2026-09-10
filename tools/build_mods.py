@@ -63,6 +63,11 @@ PREAMBLE = r"""# MODS: 同梱している MOD
 一覧は [MODLIST.md の「提供を受けた MOD」](MODLIST.md#提供を受けた-mod)、
 権利の所在は [NOTICE](../NOTICE)。
 
+**提供と提案は分けてある。** MOD そのものを提供されたものが上の「提供」で、
+こちらの MOD へ機能の提案（PR）を取り込んだものは
+[MODLIST.md の「提案を取り込んだ MOD」](MODLIST.md#提案を取り込んだ-mod)。
+節の頭の名乗りも別の文になる。
+
 各項の「設定」は GUI の `設定` 列から変えられるもの。
 変え方は [README.md の「設定の変え方」](README.md#33-設定の変え方)。"""
 
@@ -188,34 +193,41 @@ def band_credit(folders) -> str:
     入っていて（`117_` / `118_` / `119_` は修正、`311_` は追加、`223_` は計測）、
     「提供」節を読んだだけでは見つからない。
 
-    節の全部が提供なら本数で、一部なら名指しで言う。
-    提供者ごとに1文に分ける（誰が何を出したかを混ぜない）。
-    提供が1本も無い節は空文字（そのときは何も足さない）。
+    節の全部がその種別なら本数で、一部なら名指しで言う。
+    提供者ごと・種別ごとに1文に分ける（誰が何を出したかを混ぜない）。
+    **提供（MOD そのもの）と提案（こちらの MOD への PR）は別の文にする**
+    ― 混ぜると「提供を受けた MOD」の本数が実態と合わなくなる（`mods_meta` の冒頭）。
+    どちらも1本も無い節は空文字（そのときは何も足さない）。
     """
     folders = list(folders)
     rows = mods_meta.contributed(folders)
     if not rows:
         return ""
+    # 提供（`GIVEN` / `SHARED`）は1文に畳み、提案（`PROPOSED`）は別の文にする。
     groups = []
-    for folder, names, is_shared in rows:
-        key = tuple(names)
+    for folder, names, kind in rows:
+        key = (tuple(names), kind == mods_meta.PROPOSED)
         for got in groups:
             if got[0] == key:
-                got[1].append((folder, is_shared))
+                got[1].append((folder, kind))
                 break
         else:
-            groups.append((key, [(folder, is_shared)]))
+            groups.append((key, [(folder, kind)]))
 
     lines = []
-    for names, items in groups:
+    for (names, proposed), items in groups:
         if len(items) == len(folders):
             who = "この節の{}本".format(len(items))
         else:
             # 名指しのときは末尾がバッククォートなので、後ろにも空白を置く
             # （docs の他の箇所と同じ、欧文・コードは前後を空ける書き方）。
             who = ("この節の "
-                   + "・".join("`%s`" % f for f, _s in items) + " ")
-        shared = [f for f, is_shared in items if is_shared]
+                   + "・".join("`%s`" % f for f, _k in items) + " ")
+        if proposed:
+            lines.append("{}は自作で、{}の提案（PR）を取り込んでいる。".format(
+                who, mods_meta.credit(names)))
+            continue
+        shared = [f for f, kind in items if kind == mods_meta.SHARED]
         if shared and len(shared) == len(items):
             # 全部が共同なら、名指しを繰り返さずに1文へ畳む
             # （1本しかない節で「`311_` は提供。うち `311_` は共同」になる）。

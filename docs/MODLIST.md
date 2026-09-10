@@ -10,6 +10,7 @@
 
 同梱 100 本（基盤 2 / 修正 36 / 追加 33 / 計測 29）。
 うち 11 本は外部の MOD 作者からの提供（下の「提供を受けた MOD」）。
+ほかに 2 本は自作だが、外部からの提案を取り込んでいる（下の「提案を取り込んだ MOD」）。
 
 並びはフォルダ名順。
 適用順はこれとは別で、GUI の `順` 列（`load_order.json`）が持つ。
@@ -187,3 +188,17 @@
 | [`404_party_talk`](MODS.md#404_party_talk-パーティーメンバー全員と話す) | MoririnJP 様 | 提供者と共同 |
 | [`405_regional_economy`](MODS.md#405_regional_economy-街ごとの需給で売買の値段が変わる) | MoririnJP 様 | 提供者と共同 |
 | [`406_gemini_user_role_fix`](MODS.md#406_gemini_user_role_fix-クラウド-api-の-gemini-で-user-role-の無い依頼を補う) | MoririnJP 様 | そのまま取り込み |
+
+---
+
+## 提案を取り込んだ MOD
+
+MOD 自体はこちらの著作物で、機能の一部を外部からの提案（PR）で取り込んだ 2 本。
+上の「提供を受けた MOD」とは分けてある（出どころが違う）。
+
+権利の所在は [NOTICE](../NOTICE) が持つ。
+
+| フォルダ | 提案 |
+|---|---|
+| [`130_currency_unit`](MODS.md#130_currency_unit-通貨の呼び名と所持金の表示を変える) | MoririnJP 様 |
+| [`314_area_move_custom`](MODS.md#314_area_move_custom-エリア移動の日数料金文言を変える) | MoririnJP 様 |
