@@ -109,8 +109,10 @@ NPC はその表記で値段を言い、こちらの入力もその表記の世�
 """
 
 import re
+import sys
 
-from instantale_modloader import frames, llm, ui
+from instantale_modloader import frames, llm, state as state_api, ui
+
 
 LOG_BASENAME = "currency_unit.log"
 
@@ -150,6 +152,10 @@ UNIT_LONG = "ゴールド"            # 文中で使う形
 UNIT_SHORT = "G"                 # 数のすぐ後ろに付く形
 HUD_GOLD_FORMAT = "Gold:{amount}"  # 画面上部の所持金の欄
 REWRITE_PROMPTS = True           # LLM へ出ていく本文にも同じ置換を当てる
+
+# ワールドごとの設定を置く場所。設定画面(tool.py)だけが書き、ゲーム中は読む。
+STATE_DIRNAME = "currency_unit"
+STATE_STORE_ATTR = "_instantale_currency_unit_world_store"
 
 
 class _SafeDict(dict):
@@ -233,27 +239,77 @@ def restate(text, template=None):
 
 
 def apply(ctx):
-    # 表記はローダが持つ（他の MOD もここから読む）。
-    # 素へ戻す指定でも必ず1回通す。
-    # 設定を戻して注入し直したとき、前回の表記が残らないようにするため。
-    asked = (UNIT_LONG, UNIT_SHORT)
-    names = ui.set_currency(*asked)
-    if names != asked:
-        ctx.log("currency unit: cannot use {!r}; keeping {!r}".format(
-            asked, names), level="WARN")
+    # MOD専用設定画面が保存した現在の世界の設定を読む。
+    # 記録が無い世界は、ファイル冒頭の既定値をそのまま使う。
+    write = ctx.logger(LOG_BASENAME)
+    store = getattr(sys, STATE_STORE_ATTR, None)
+    if not isinstance(store, state_api.WorldStore):
+        store = state_api.WorldStore(ctx, STATE_DIRNAME, default=dict, write=write)
+        setattr(sys, STATE_STORE_ATTR, store)
+    if store is not None and hasattr(store, "rebind"):
+        store.rebind(ctx, write)
+    active_world: list[str | None] = [None]
+    base_values = (UNIT_LONG, UNIT_SHORT, HUD_GOLD_FORMAT, REWRITE_PROMPTS)
+
+    def refresh_world():
+        """ワールド切替を検知した時に控えを読み直す。"""
+        global UNIT_LONG, UNIT_SHORT, HUD_GOLD_FORMAT, REWRITE_PROMPTS
+        world = None
+        try:
+            app = ui.find_app()
+            if app is not None:
+                world = state_api.world_key(app)
+        except Exception:
+            pass
+        if world == active_world[0]:
+            return False
+        record = (store.load(world, fresh=True) if isinstance(world, str)
+                  and world != state_api.UNKNOWN_WORLD else {})
+        UNIT_LONG = (record.get("UNIT_LONG") if isinstance(record.get("UNIT_LONG"), str)
+                     else base_values[0])
+        UNIT_SHORT = (record.get("UNIT_SHORT") if isinstance(record.get("UNIT_SHORT"), str)
+                      else base_values[1])
+        HUD_GOLD_FORMAT = (record.get("HUD_GOLD_FORMAT")
+                           if isinstance(record.get("HUD_GOLD_FORMAT"), str)
+                           else base_values[2])
+        REWRITE_PROMPTS = (record.get("REWRITE_PROMPTS")
+                           if isinstance(record.get("REWRITE_PROMPTS"), bool)
+                           else base_values[3])
+        active_world[0] = world
+        # 314_area_move_custom を含む他MODは、ここを直接参照せず、
+        # 共有部品の表記だけを見る。ワールド切替時に一度だけ更新する。
+        names = ui.set_currency(UNIT_LONG, UNIT_SHORT)
+        if names != (UNIT_LONG, UNIT_SHORT):
+            write("currency unit: cannot use {!r}; keeping {!r}"
+                  .format((UNIT_LONG, UNIT_SHORT), names))
+        return True
+
+    refresh_world()
+
+    # ワールドを読み込んだ直後にも切り替える。これにより、次に画面や
+    # 314_area_move_custom の料金文が作られる時点で、前のワールドの表記が残らない。
+    @ctx.wrap("__main__:World.__init__", required=False, safe=True)
+    def world_loaded(orig, self, *args, **kwargs):
+        result = orig(self, *args, **kwargs)
+        refresh_world()
+        return result
+
+    # 表記はローダ共有部品へ渡す。他の MOD も同じ値を見る。
+    names = ui.currency_names()
 
     wording = names != (ui.COIN_LONG, ui.COIN_SHORT)
     # 書式を触っていなくても、呼び名を変えたら見出しの `Gold` は付け替える
     # （`effective_template`）。だから条件は「どちらかが動いていれば」。
     hud = wording or HUD_GOLD_FORMAT != GAME_HUD_GOLD
-    if not wording and not hud:
+    # 現在の世界が素でも、別世界の控えがあれば切替フックを残す。
+    world_specific = bool(store.worlds())
+    if not wording and not hud and not world_specific:
         ctx.log("currency unit: left at the game's own wording "
                 "({} / {}) and display; nothing installed".format(*names))
         return
 
-    write = ctx.logger(LOG_BASENAME)
     warn = ctx.warner("currency unit")
-    state = {"once": set(), "hud_hit": False, "hud_miss": 0}
+    runtime_state = {"once": set(), "hud_hit": False, "hud_miss": 0}
 
     def note(site, before, after):
         """効いていることを確かめるための記録。"""
@@ -264,18 +320,19 @@ def apply(ctx):
 
         能力欄は HP や経験値が動くたびに塗り直される。
         """
-        if key in state["once"]:
+        if key in runtime_state["once"]:
             return
-        state["once"].add(key)
+        runtime_state["once"].add(key)
         note(site, before, after)
 
     # ---------------------------------------------------------- 文中の通貨
-    if wording:
+    if wording or world_specific:
         # 画面と、ゲーム自身が組む指示文の両方がここを通る。
         # 元の関数を先に呼んでから直すので、
         # ここで壊れても safe=True が `orig` の結果をそのまま返せる（TECH.md §3.1.5）。
         @ctx.wrap("scripts.languages:tr", safe=True)
         def tr(orig, text=None, *args, **kwargs):
+            refresh_world()
             result = orig(text, *args, **kwargs)
             new = ui.rewrite_coins(result)
             if new != result:
@@ -283,9 +340,12 @@ def apply(ctx):
             return new
 
     hooks = None
-    if wording and REWRITE_PROMPTS:
+    if (wording or world_specific) and (REWRITE_PROMPTS or world_specific):
         def rewrite(texts, site):
             """`tr` を通らずに LLM へ出ていく本文（セーブに貯まった文）を直す。"""
+            refresh_world()
+            if not REWRITE_PROMPTS:
+                return None
             new = [ui.rewrite_coins(text) for text in texts]
             if new == texts:
                 return None
@@ -297,7 +357,7 @@ def apply(ctx):
         hooks = llm.wrap_outgoing(ctx, rewrite, label="currency unit")
 
     # ------------------------------------------------------ 画面上部の欄
-    if hud:
+    if hud or world_specific:
         def repaint(widget_owner):
             """見張りが `value` を見ないビルドへの保険。
 
@@ -323,19 +383,20 @@ def apply(ctx):
                   safe=True)
         def update_status_texts(orig, self, instance=None, value=None,
                                 *args, **kwargs):
+            refresh_world()
             fixed = restate(value)
             if fixed is None:
                 # 組み上がる前は空文字列でも呼ばれる。
                 # 1度も当たらないまま続いたときだけ「形が違う」と言う。
-                state["hud_miss"] += 1
-                if (not state["hud_hit"]
-                        and state["hud_miss"] == HUD_MISS_LIMIT):
+                runtime_state["hud_miss"] += 1
+                if (not runtime_state["hud_hit"]
+                        and runtime_state["hud_miss"] == HUD_MISS_LIMIT):
                     warn("no_mark",
                          "{!r} has not appeared in {} status update(s); the "
                          "top-of-screen amount is left as the game wrote "
                          "it".format(HUD_GOLD_MARK, HUD_MISS_LIMIT))
                 return orig(self, instance, value, *args, **kwargs)
-            state["hud_hit"] = True
+            runtime_state["hud_hit"] = True
             note_once("hud", "hud", value, fixed)
             result = orig(self, instance, fixed, *args, **kwargs)
             repaint(self)
