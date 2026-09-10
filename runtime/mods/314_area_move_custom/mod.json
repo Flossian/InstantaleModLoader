@@ -7,230 +7,27 @@
     "ja": "街移動のカスタマイズ"
   },
   "description": {
-    "en": "Change how long walking and the coach take, the coach fare, and the travel wording. Defaults are the game's own values (behavior is untouched until you edit them); the coach button always shows the travel days, which the game itself never displays",
-    "ja": "徒歩・馬車の日数と馬車の料金、移動中の文言を変えられる。既定は素のゲームの値のままで挙動は変わらないが、素のゲームでは分からない馬車の所要日数を既定でもボタンに表示する"
+    "en": "Configure and save travel days, coach fare, travel wording, and distance scaling with settings stored per world",
+    "ja": "徒歩・馬車の日数、料金、移動文言、距離補正をワールドごとに設定、保存する"
   },
-  "version": "1",
-  "author": "R01/Flossian",
+  "version": "1.1",
+  "author": "R01/Flossian/MoririnJP",
   "shares": [
-    "road_opening"
+    "road_opening",
+    "currency_unit"
   ],
   "before": [
     "307_area_move_dungeon"
   ],
-  "settings": {
-    "WALK_DAYS": {
-      "type": "int",
-      "default": 90,
-      "min": 0,
-      "max": 365,
-      "label": {
-        "ja": "徒歩の日数",
-        "en": "Days on foot"
-      },
-      "note": {
-        "ja": "素のゲームは90日(3ヵ月)。90のままなら日数もボタンの表示も変えない",
-        "en": "The game's own value is 90 days. Left at 90, nothing is touched"
-      }
+  "tool": {
+    "entry": "tool.py",
+    "label": {
+      "ja": "ワールド別のエリア移動設定",
+      "en": "Area travel settings by world"
     },
-    "COACH_DAYS": {
-      "type": "int",
-      "default": 14,
-      "min": 0,
-      "max": 365,
-      "label": {
-        "ja": "馬車の日数",
-        "en": "Days by coach"
-      },
-      "note": {
-        "ja": "素のゲームは14日。14のままなら実際の日数には触らない（ボタンには既定でも日数が出る）",
-        "en": "The game's own value is 14 days. Left at 14 the elapsed days are untouched; the button shows the days either way"
-      }
-    },
-    "COACH_PRICE": {
-      "type": "int",
-      "default": 1000,
-      "min": 0,
-      "max": 1000000,
-      "label": {
-        "ja": "馬車の料金",
-        "en": "Coach fare"
-      },
-      "note": {
-        "ja": "素のゲームは1000G。1000のままなら料金には触らない。0でタダ。手持ちがこの額に満たないと乗れない",
-        "en": "The game's own fare is 1000G. Left at 1000, nothing is touched. 0 makes it free"
-      }
-    },
-    "WALK_NAME": {
-      "type": "str",
-      "default": "徒歩",
-      "label": {
-        "ja": "徒歩の呼び名",
-        "en": "Name for walking"
-      },
-      "note": {
-        "ja": "ボタンと文言の {name} に入る",
-        "en": "Fills {name} on the button and in the wording"
-      }
-    },
-    "COACH_NAME": {
-      "type": "str",
-      "default": "馬車",
-      "label": {
-        "ja": "馬車の呼び名",
-        "en": "Name for the coach"
-      },
-      "note": {
-        "ja": "「竜車」「乗合馬車」など。ボタンと文言の {name} に入る",
-        "en": "Fills {name} on the button and in the wording"
-      }
-    },
-    "WALK_BUTTON": {
-      "type": "str",
-      "default": "{name}({days}日)",
-      "label": {
-        "ja": "徒歩のボタンの表示",
-        "en": "Walk button label"
-      },
-      "note": {
-        "ja": "使える変数: {name} {days}。日数を変えたときだけ使われる",
-        "en": "Variables: {name} {days}. Used only when the days are overridden"
-      }
-    },
-    "COACH_BUTTON": {
-      "type": "str",
-      "default": "{name}({price}G・{days}日)",
-      "label": {
-        "ja": "馬車のボタンの表示",
-        "en": "Coach button label"
-      },
-      "note": {
-        "ja": "使える変数: {name} {price} {days}。馬車のボタンは常にこの表示（素のゲームは日数を出さないため、既定でも足す）",
-        "en": "Variables: {name} {price} {days}. The coach button always uses this (the game itself never shows the days)"
-      }
-    },
-    "WALK_DEPART_TEXT": {
-      "type": "str",
-      "default": "{name}で目指す。長旅だ...",
-      "label": {
-        "ja": "徒歩の出発の文言",
-        "en": "Departure line on foot"
-      },
-      "note": {
-        "ja": "空でゲームのまま。使える変数: {name} {target} {origin} {days} {price}",
-        "en": "Empty keeps the game's line. Variables: {name} {target} {origin} {days} {price}"
-      }
-    },
-    "COACH_DEPART_TEXT": {
-      "type": "str",
-      "default": "{price}ゴールドを支払った。快適な旅だ...",
-      "label": {
-        "ja": "馬車の出発の文言",
-        "en": "Departure line by coach"
-      },
-      "note": {
-        "ja": "既定は素のゲームと同じ文。料金を変えると文中の金額も追随する（ゲーム自身は1000と言い続けるため）。空でゲームのまま。使える変数は徒歩と同じ",
-        "en": "Default matches the game's own line; {price} follows the configured fare. Empty keeps the game's line"
-      }
-    },
-    "ARRIVE_TEXT": {
-      "type": "str",
-      "default": "",
-      "label": {
-        "ja": "到着の文言",
-        "en": "Arrival line"
-      },
-      "note": {
-        "ja": "素のゲームは「辿り着いた。」。空でゲームのまま。使える変数は出発と同じ",
-        "en": "The game's line is 辿り着いた。 Empty keeps it. Same variables"
-      }
-    },
-    "HOP_SCALING": {
-      "type": "choice",
-      "values": [
-        "off",
-        "add",
-        "multiply"
-      ],
-      "default": "multiply",
-      "label": {
-        "ja": "離れた街への距離補正",
-        "en": "Distance scaling for far towns"
-      },
-      "note": {
-        "ja": "「新たな道を探す」(325)が開いた道だけに効く。素のゲームは遠くても徒歩90日・馬車1000Gのまま。off=補正なし / add=1街ごとに日数と料金を加算 / multiply=(1+倍率×挟む街の数)倍。ボタンにも補正後の値が出る",
-        "en": "Applies only to roads opened by 325. off / add per settlement / multiply by (1 + factor x settlements between)"
-      }
-    },
-    "HOP_FACTOR": {
-      "type": "float",
-      "default": 1.0,
-      "min": 0.0,
-      "max": 10.0,
-      "label": {
-        "ja": "倍加の倍率（1街ごと）",
-        "en": "Multiply factor per settlement"
-      },
-      "note": {
-        "ja": "multiply のとき。1.0なら2つ先(挟む街1)で2倍、3つ先で3倍",
-        "en": "With multiply: 1.0 doubles at one settlement in between, triples at two"
-      }
-    },
-    "HOP_ADD_DAYS": {
-      "type": "int",
-      "default": 7,
-      "min": 0,
-      "max": 90,
-      "label": {
-        "ja": "加算の日数（1街ごと）",
-        "en": "Days added per settlement"
-      },
-      "note": {
-        "ja": "add のとき。挟む街1つごとに徒歩・馬車の日数へ足す",
-        "en": "With add: added to the days per settlement in between"
-      }
-    },
-    "HOP_ADD_FARE": {
-      "type": "int",
-      "default": 500,
-      "min": 0,
-      "max": 100000,
-      "label": {
-        "ja": "加算の料金（1街ごと）",
-        "en": "Fare added per settlement"
-      },
-      "note": {
-        "ja": "add のとき。挟む街1つごとに馬車の料金へ足す",
-        "en": "With add: added to the coach fare per settlement in between"
-      }
-    },
-    "WALK_DAYS_MAX": {
-      "type": "int",
-      "default": 90,
-      "min": 1,
-      "max": 365,
-      "label": {
-        "ja": "徒歩の日数の上限",
-        "en": "Cap on days on foot"
-      },
-      "note": {
-        "ja": "距離補正で増えた日数をここで頭打ちにする。素のゲームの移動は一律3ヵ月(90日)なので既定90。ボタンにも上限後の値が出る",
-        "en": "Caps the days after distance scaling. The game's own trips are all 90 days, hence 90"
-      }
-    },
-    "COACH_DAYS_MAX": {
-      "type": "int",
-      "default": 30,
-      "min": 1,
-      "max": 365,
-      "label": {
-        "ja": "馬車の日数の上限",
-        "en": "Cap on days by coach"
-      },
-      "note": {
-        "ja": "距離補正で増えた日数をここで頭打ちにする。既定30",
-        "en": "Caps the coach days after distance scaling. Default 30"
-      }
+    "note": {
+      "ja": "ワールドを選び、その設定を個別に保存する",
+      "en": "Select a world and save its settings individually"
     }
   }
 }
