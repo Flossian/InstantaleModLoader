@@ -648,6 +648,11 @@ runtime/mods/
 > `llm_replacements.default.txt`（配布物の既定。更新で上書きされる）と
 > `llm_replacements.txt`（手元のファイル。あればこちらを読む）。
 > MOD の更新は上書きマージなので、配布物が同じ名前で持たなければ更新を生き残る。
+> `120_` の `npc.default.json` / `npc.json`、`132_` の `seeds.default.json` / `seeds.json` も同じ分け方。
+> default の方を書き換えて使っていた場合は、GUI の更新が上書きの前に
+> 手元の名前へ改名して残す（`tools/gui.py` の `keep_edited_default`。
+> `*.default.*` ごとに配った版の中身を空白抜きの sha1 で持ち、どれとも違えば書き換えられたと見る。
+> default を変えて配るときは `SHIPPED_DEFAULTS` に足す。忘れると `test_update.py` が落ちる）。
 > `make_dist.bat` は手元側の名前を `/XF` で除外している。
 
 入口は `mod.json` が名指しする:

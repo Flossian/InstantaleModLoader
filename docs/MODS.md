@@ -318,7 +318,7 @@ Gemini は `send_request` の中で足すので境界の外、OpenAI / Claude �
 名簿は `runtime\mods\120_fix_npc_name_collision\npc.default.json`（名前 各600・二つ名
 300）。
 差し替えるときは同じフォルダに `npc.json` としてコピーしてから編む（そちらが優先され、
-MOD を新しい版にしても消えない）。
+MOD を新しい版にしても消えない。default の方を編んでいても GUI の更新なら `npc.json` へ改名して残す）。
 書式は `{"male": [...], "female": [...], "epithets": [...]}`。
 読むのはこの3つの鍵だけで、
 他の鍵が入っていても無視する（別の道具で作った名簿もそのまま置ける）。
@@ -815,7 +815,7 @@ LLM が作る NPC は髪も瞳も肌も書かれず、役職の型（宿屋の�
 効くのは新しく生まれる NPC だけ。
 
 表は `runtime\mods\132_npc_variety\seeds.default.json`。
-差し替えは同じフォルダに `seeds.json` としてコピーしてから編む（そちらが優先され、MOD を更新しても消えない。次の生成から効く）。
+差し替えは同じフォルダに `seeds.json` としてコピーしてから編む（そちらが優先され、MOD を更新しても消えない。default の方を編んでいても GUI の更新なら `seeds.json` へ改名して残す。次の生成から効く）。
 書式は `{"look": {"軸": ["句", ...]}, "personality": {...}, "description": {...}}`。軸の名前は自由。
 
 - `{"chance": 25, "rows": ["句", ...]}`: その軸は 25% の人物にしか付かない（同梱の「目立つ特徴」）
@@ -865,6 +865,8 @@ JSON の書き方を直すルールも入っていたが、
 その中の `llm_replacements.default.txt` を、
 同じフォルダに `llm_replacements.txt` としてコピーする。
 編むのはそのコピー（そちらが優先され、MOD を新しい版にしても消えない）。
+コピーせず default の方を編んでいても、GUI の更新なら上書きの前に
+`llm_replacements.txt` へ改名して残す（zip を手で展開する場合は残らない）。
 書き方は「置換前=>置換後=>確率」で1行1ルール。
 保存すると次の応答から効く（ゲーム再起動は不要）。
 `InstantaleLlmProxy` のルールファイルは書式が同じなので、

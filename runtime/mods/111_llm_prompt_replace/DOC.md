@@ -15,6 +15,8 @@ JSON の書き方を直すルールも入っていたが、
 その中の `llm_replacements.default.txt` を、
 同じフォルダに `llm_replacements.txt` としてコピーする。
 編むのはそのコピー（そちらが優先され、MOD を新しい版にしても消えない）。
+コピーせず default の方を編んでいても、GUI の更新なら上書きの前に
+`llm_replacements.txt` へ改名して残す（zip を手で展開する場合は残らない）。
 書き方は「置換前=>置換後=>確率」で1行1ルール。
 保存すると次の応答から効く（ゲーム再起動は不要）。
 `InstantaleLlmProxy` のルールファイルは書式が同じなので、

@@ -37,6 +37,7 @@ GUI 側で条件判定を書き直すと `watch.bat` と挙動がずれるため
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
@@ -88,7 +89,60 @@ CONFIG_PATH = os.path.join(SETTINGS_DIR, "gui.json")
 RELEASE_API = ("https://api.github.com/repos/Flossian/InstantaleModLoader"
                "/releases/latest")
 # 上書きで消えないもの。確認の文に出す（zip に入らないので展開は触らない）。
-UPDATE_KEEPS = "settings\\・state\\・local\\・手元で足した MOD"
+UPDATE_KEEPS = ("settings\\・state\\・local\\・手元で足した MOD\n"
+                "（書き換えた *.default.txt / *.default.json は "
+                "手元の名前に改名して残す）")
+
+# 同梱の既定ファイル（`*.default.<拡張子>`。TECH.md §3.1.1.1）の、配った版の中身（空白を除いた sha1）。
+# 手元の default がこのどれとも違えば、default の方を書き換えて使っていたということなので、
+# 上書きの前に手元の名前（`.default` を抜いた名前）へ改名して残す（`keep_edited_default`）。
+# 新しい zip の中身と比べる形にすると、こちらが default を更新するたびに
+# 手を付けていない人まで旧ルールに固定されるので、履歴で持つ。
+# default を変えて配るときはここへ値を足す（tools/tests/test_update.py が git の履歴と突き合わせる）。
+SHIPPED_DEFAULTS = {
+    "llm_replacements.default.txt": {                   # 111_
+        "ef1b44300f470d97c740fc54a058c878a50d3264",     # v1.1.0
+        "eed09e88fadb113baf3e96b795c53a0b00c1e447",     # v1.4.0
+        "91d670b9ca9f81c0fdd453ba2b1007a1afcca6cb",     # v1.6.0
+        "cab6170e4b537e29014cbe171703bf047c2f9b36",     # v1.7.1
+    },
+    "npc.default.json": {                               # 120_
+        "3986fdec474b1280e5acf34f6727b3706a8ebc71",     # v1.3.1
+        "c4279b19eb4fc6f93919fdc1ff82f2f3e06a2bb6",     # v1.6.0
+    },
+    "seeds.default.json": {                             # 132_
+        "285b98a366715f380345f9de53a9da29357187b0",     # v1.10.0
+    },
+}
+
+
+def default_hash(data: bytes) -> str:
+    """改行の種類（git の LF・手元の CRLF）で別物にしない。"""
+    return hashlib.sha1(b"".join(data.split())).hexdigest()
+
+
+def user_name(default_name: str) -> str | None:
+    """`npc.default.json` → `npc.json`。同梱の既定でなければ None。"""
+    stem, dot, ext = default_name.rpartition(".default.")
+    return stem + "." + ext if dot else None
+
+
+def keep_edited_default(path: str) -> bool:
+    """`path` が書き換えられた同梱の既定なら手元の名前に改名する。上書きの前に呼ぶ。
+
+    手元のファイルが既に在れば触らない（そちらが優先で読まれていて、default は死んでいる）。
+    """
+    name = os.path.basename(path)
+    if name not in SHIPPED_DEFAULTS or not os.path.isfile(path):
+        return False
+    user = os.path.join(os.path.dirname(path), user_name(name))
+    if os.path.exists(user):
+        return False
+    with open(path, "rb") as f:
+        if default_hash(f.read()) in SHIPPED_DEFAULTS[name]:
+            return False
+    os.replace(path, user)
+    return True
 
 
 def _vtuple(ver: str) -> tuple[int, ...]:
@@ -118,6 +172,7 @@ def extract_release(zip_path: str, dest: str = ROOT) -> int:
 
     zip の頭一段（`InstantaleModLoader-<ver>/`）は剥がす。
     zip に無いものは消さない ― 手元で作っている MOD を巻き込むので。
+    書き換えられた `*.default.*` は上書きの前に手元の名前へ改名して残す（`keep_edited_default`）。
     新しい版で無くなった MOD は、配る側がデバッグモード限定か読み込まない形にして
     出す約束（消す判断をここでしない）。
 
@@ -132,6 +187,7 @@ def extract_release(zip_path: str, dest: str = ROOT) -> int:
                 continue
             path = os.path.join(dest, *parts)
             os.makedirs(os.path.dirname(path), exist_ok=True)
+            keep_edited_default(path)
             with z.open(info) as src, open(path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
             count += 1
