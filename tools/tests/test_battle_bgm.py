@@ -172,8 +172,8 @@ try:
 
         _mod = None      # 本物の logger が MOD 名に使う
 
-        def logger(self, name, *, tag=None, stamp=True, label=None, cap=None):
-            return ml.ModContext.logger(self, name, tag=tag, stamp=stamp, label=label)
+        def logger(self, name, **kw):
+            return ml.ModContext.logger(self, name, **kw)
 
         def warner(self, tag):
             seen = set()

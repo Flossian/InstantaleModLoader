@@ -654,7 +654,6 @@ def apply(ctx):
     if store is None:
         store = {
             "state": {
-                "last_inject": None,   # 同じ結末が続く間はログに書かない
                 "last_check": 0.0,     # 素材を照合した時刻（間引き用）
                 "noted": set(),        # 1回だけ出す知らせの鍵
             },
@@ -683,15 +682,8 @@ def apply(ctx):
         state["noted"].add(key)
         write(message)
 
-    def note_inject(message):
-        """注入の結末。同じ結末が続く間は書かない。
-
-        会話の LLM は1ターンに何度も回るので、毎回書くとログが会話で埋まる。
-        """
-        if state["last_inject"] == message:
-            return
-        state["last_inject"] = message
-        write(message)
+    #: 注入の結末。直前と同じ内容なら書かない（会話は1ターンに何度も回る）。
+    note_inject = ctx.logger(LOG_BASENAME, dedup=True)
 
     # ------------------------------------------------------------ キャッシュ
     # 場所・読み・キャッシュ・書き・錠は `worlds`（`state.WorldStore`）が持つ。

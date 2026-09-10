@@ -33,6 +33,9 @@ MOD 本体（`battle_bgm.py`）は毎戦闘このファイルを読むので、�
 MOD 本体は import しない。
 ここはゲームの外で走る別プロセスで、本体はゲームの中で走る。
 共有したい定数（フォルダ名・拡張子・種類）はこのファイルに写してある。
+
+場所の決め方・設定の読み書き・窓の記憶・壊れない書き込み・配色は
+どの道具も同じなので `tools/modtool.py` に在る（TECH.md §3.12）。
 """
 
 import io
@@ -43,12 +46,22 @@ import time
 
 MOD_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# 共有の土台（`tools/modtool.py`）を import できるようにする。
+# `IML_ROOT` が指す先に `tools/` が無いこと（オフラインの検査）と、
+# 環境変数の無い直接起動の両方があるので、3つ上も候補に入れる。
+_IML_ROOT = os.environ.get("IML_ROOT") or ""
+for _tools in ([os.path.join(_IML_ROOT, "tools")] if _IML_ROOT else []) + [
+        os.path.normpath(os.path.join(MOD_DIR, os.pardir, os.pardir, os.pardir, "tools"))]:
+    if os.path.isfile(os.path.join(_tools, "modtool.py")) and _tools not in sys.path:
+        sys.path.insert(0, _tools)
+
+import modtool  # noqa: E402
+
 # battle_bgm.py と同じ値。
 STATE_SUBDIR = ("musics", "battle")
 ASSET_SUBDIR = ("Assets", "sounds", "musics", "battle")
 EXTENSIONS = (".mp3", ".ogg", ".wav")
 PLAYLIST_NAME = "playlist.json"
-DEFAULT_WEIGHT = 100
 PLAYLIST_HELP = [
     "戦闘 BGM の重み。曲名 → {normal: 通常戦闘, boss: ボス戦, colosseum: 闘技場}",
     "重みは比率。同じ種類の合計に対する割合が確率になる（合計 100 なら数字がそのままパーセント）",
@@ -66,77 +79,17 @@ CATEGORIES = (
 WHERE_LABEL = {"assets": "ゲーム (Assets)", "state": "state"}
 WHERE_ANY = "全て"
 
-# mod.json の "settings" と同じ名前・同じ既定値（battle_bgm.py の定数と同じ）。
-MOD_NAME = os.path.basename(MOD_DIR)
-SETTING_DEFAULTS = {"DEFAULT_WEIGHT": DEFAULT_WEIGHT, "AVOID_REPEAT": True}
-
-
-def _add_loader_path(root):
-    """ローダ（`instantale_modloader`）を import できるようにする。
-
-    置き場は `IML_ROOT/runtime`。無ければ自分の位置から（`runtime/mods/<この MOD>/` の2つ上）。
-    後者があるのは、`IML_ROOT` が別の場所を指していても（検証・手元の実験）ローダは同梱のものを使えるようにするため。
-    """
-    for runtime in (os.path.join(root, "runtime") if root else "",
-                    os.path.normpath(os.path.join(MOD_DIR, os.pardir, os.pardir))):
-        if runtime and os.path.isdir(os.path.join(runtime, "instantale_modloader")) \
-                and runtime not in sys.path:
-            sys.path.insert(0, runtime)
-
-
-def _config_module(root):
-    _add_loader_path(root)
-    from instantale_modloader import config
-    return config
-
-
-def load_settings(root):
-    """この MOD に効いている設定。読めなければ既定。"""
-    values = dict(SETTING_DEFAULTS)
-    try:
-        chosen = _config_module(root).load_store(os.path.join(root, "runtime")).get(MOD_NAME) or {}
-    except Exception:
-        chosen = {}
-    if isinstance(chosen.get("DEFAULT_WEIGHT"), (int, float)) and not isinstance(chosen["DEFAULT_WEIGHT"], bool):
-        values["DEFAULT_WEIGHT"] = max(0, int(chosen["DEFAULT_WEIGHT"]))
-    if isinstance(chosen.get("AVOID_REPEAT"), bool):
-        values["AVOID_REPEAT"] = chosen["AVOID_REPEAT"]
-    return values
-
-
-def save_settings(root, values):
-    """既定と違う値だけを `mod_settings.json` に書く。他の MOD の項は触らない。"""
-    try:
-        config = _config_module(root)
-        runtime = os.path.join(root, "runtime")
-        store = config.load_store(runtime)
-        changed = dict((k, v) for k, v in values.items() if v != SETTING_DEFAULTS.get(k))
-        if changed:
-            store[MOD_NAME] = changed
-        else:
-            store.pop(MOD_NAME, None)
-        config.save_store(runtime, store)
-        return True
-    except Exception:
-        return False
+#: 設定の名前と既定値は `mod.json` の "settings" が唯一の出所（写しを持たない）。
+MOD_NAME = modtool.mod_name(MOD_DIR)
+SETTING_DEFAULTS = modtool.defaults(MOD_DIR)
+#: 宣言が読めなかったときの最後の受け（`battle_bgm.py` と同じ値）。
+DEFAULT_WEIGHT = SETTING_DEFAULTS.get("DEFAULT_WEIGHT", 100)
 
 
 # ----------------------------------------------------------------- 場所
 def locate():
     """(root, state_dir, game_dir)。環境変数が無ければ自分で探す。"""
-    root = os.environ.get("IML_ROOT") or os.path.normpath(
-        os.path.join(MOD_DIR, os.pardir, os.pardir, os.pardir))
-    state_dir = os.environ.get("IML_STATE_DIR") or os.path.join(root, "state")
-    game_dir = os.environ.get("IML_GAME_DIR") or ""
-    if not game_dir:
-        try:
-            with io.open(os.path.join(root, "settings", "gui.json"), encoding="utf-8") as fh:
-                game_path = json.load(fh).get("game_path") or ""
-            if game_path:
-                game_dir = os.path.dirname(game_path)
-        except (OSError, ValueError):
-            game_dir = ""
-    return root, state_dir, game_dir
+    return modtool.locate(MOD_DIR)
 
 
 def list_tracks(folder):
@@ -188,72 +141,6 @@ def matches(name, where, weight, name_filter, where_filter, min_weight):
     return True
 
 
-def write_json(root, path, data, indent=1):
-    """ローダの `write_json`（tmp → fsync → replace）で書く。無ければ同じ手順を自前で踏む。"""
-    try:
-        _add_loader_path(root)
-        import instantale_modloader as ml
-        return bool(ml.write_json(path, data, indent=indent))
-    except Exception:
-        pass
-    tmp = path + ".tmp"
-    try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with io.open(tmp, "w", encoding="utf-8", newline="\n") as fh:
-            json.dump(data, fh, ensure_ascii=False, indent=indent)
-            fh.flush()
-            os.fsync(fh.fileno())
-        os.replace(tmp, path)
-        return True
-    except OSError:
-        return False
-
-
-def _gui_config_path(root):
-    return os.path.join(root, "settings", "gui.json")
-
-
-def load_window(root):
-    """前回の窓の大きさと位置。{"geometry": "WxH+X+Y", "maximized": bool}。無ければ空。"""
-    try:
-        with io.open(_gui_config_path(root), encoding="utf-8") as fh:
-            cfg = json.load(fh)
-        entry = (cfg.get("tool_window") or {}).get(MOD_NAME) or {}
-        return entry if isinstance(entry, dict) else {}
-    except (OSError, ValueError, AttributeError):
-        return {}
-
-
-def save_window(root, window):
-    """窓の大きさと位置を `settings/gui.json` の `tool_window[MOD 名]` に残す。
-
-    他の覚え書き（ゲームの場所・ローダの窓）を消さないよう、読んでから書く。
-    残せなくても止めない（窓が使えないことと設定が残らないことは別）。
-    """
-    try:
-        maximized = window.state() == "zoomed"
-        if maximized:
-            window.state("normal")
-            window.update_idletasks()
-        geometry = window.geometry()
-        path = _gui_config_path(root)
-        try:
-            with io.open(path, encoding="utf-8") as fh:
-                cfg = json.load(fh)
-        except (OSError, ValueError):
-            cfg = {}
-        if not isinstance(cfg, dict):
-            cfg = {}
-        windows = cfg.get("tool_window")
-        if not isinstance(windows, dict):
-            windows = {}
-        windows[MOD_NAME] = {"geometry": geometry, "maximized": maximized}
-        cfg["tool_window"] = windows
-        write_json(root, path, cfg, indent=2)     # gui.json は設定画面と同じ体裁
-    except Exception:
-        pass
-
-
 class Model(object):
     """一覧の中身。{曲名: {"where": 置き場, 種類: 重み}}。"""
 
@@ -277,7 +164,7 @@ class Model(object):
         return self.settings.get("DEFAULT_WEIGHT", DEFAULT_WEIGHT)
 
     def reload(self):
-        self.settings = load_settings(self.root)
+        self.settings = modtool.load_settings(self.root, MOD_DIR)
         self.saved_settings = dict(self.settings)
         self.file = load_playlist(self.playlist_path)
         tracks = self.file.get("tracks")
@@ -314,12 +201,12 @@ class Model(object):
     def save(self):
         """playlist.json と mod_settings.json の両方。どちらかが書けなければ False。"""
         data = self.to_json()
-        if not write_json(self.root, self.playlist_path, data):
+        if not modtool.write_json(self.root, self.playlist_path, data):
             return False
         self.file = data
         self.saved = self.to_tracks()
         if self.settings != self.saved_settings:
-            if not save_settings(self.root, self.settings):
+            if not modtool.save_settings(self.root, MOD_DIR, self.settings):
                 return False
             self.saved_settings = dict(self.settings)
         return True
@@ -342,7 +229,7 @@ def build_window(model):
     # 大きさと位置は前回のものを使う（`settings/gui.json` の `tool_window`。
     # ローダの設定画面が自分の窓を覚えるのと同じ場所）。無ければ既定。
     root.minsize(900, 620)
-    remembered = load_window(model.root)
+    remembered = modtool.load_window(model.root, MOD_DIR)
     root.geometry(remembered.get("geometry") or "1280x820")
     if remembered.get("maximized"):
         try:
@@ -351,12 +238,7 @@ def build_window(model):
             pass
 
     # 配色と書体は設定画面のものを借りる。無ければ素の Tk。
-    try:
-        sys.path.insert(0, os.path.join(model.root, "tools"))
-        import gui as loader_gui
-        loader_gui.setup_theme(root)
-    except Exception:
-        pass
+    modtool.setup_theme(root, model.root)
 
     outer = ttk.Frame(root, padding=12)
     outer.pack(fill="both", expand=True)
@@ -659,7 +541,7 @@ def build_window(model):
                                  "{} に書けませんでした。".format(model.playlist_path), parent=root)
 
     def close():
-        save_window(model.root, root)
+        modtool.save_window(model.root, MOD_DIR, root)
         if model.dirty():
             answer = messagebox.askyesnocancel(
                 "未保存の変更", "変更を保存してから閉じますか？", parent=root)

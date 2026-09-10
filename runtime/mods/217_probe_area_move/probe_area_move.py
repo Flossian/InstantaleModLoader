@@ -58,12 +58,8 @@ def apply(ctx):
 
     state = {"window": None}
 
-    def record(row):
-        try:
-            with open(record_path, "a", encoding="utf-8") as fh:
-                fh.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
-        except Exception:
-            ctx.log_exc("area move probe: record failed")
+    #: 1件1行の JSON。後から数えるための表（ローダの語彙）。
+    record = ctx.jsonl(RECORD_BASENAME)
 
     def now():
         return datetime.datetime.now().isoformat(timespec="seconds")

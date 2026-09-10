@@ -98,9 +98,15 @@ try:
     print("設定")
     os.environ["IML_ROOT"] = tmp
     os.makedirs(os.path.join(tmp, "settings"), exist_ok=True)
-    check("読めなければ既定", tool.load_settings(tmp) == tool.SETTING_DEFAULTS)
-    check("保存できる", tool.save_settings(tmp, {"SHARP_PORTRAIT": True, "FACE_RETRY": True}))
-    check("既定と違う値だけ残り、読み返せる", tool.load_settings(tmp) == {"SHARP_PORTRAIT": True, "FACE_RETRY": True})
+    # 設定の読み書きは共有の土台（`tools/modtool.py`）。道具はそれを借りる。
+    check("既定は mod.json の宣言から", tool.SETTING_DEFAULTS == {"SHARP_PORTRAIT": False, "FACE_RETRY": True},
+          tool.SETTING_DEFAULTS)
+    check("読めなければ既定",
+          tool.modtool.load_settings(tmp, tool.MOD_DIR) == tool.SETTING_DEFAULTS)
+    check("保存できる",
+          tool.modtool.save_settings(tmp, tool.MOD_DIR, {"SHARP_PORTRAIT": True, "FACE_RETRY": True}))
+    check("既定と違う値だけ残り、読み返せる",
+          tool.modtool.load_settings(tmp, tool.MOD_DIR) == {"SHARP_PORTRAIT": True, "FACE_RETRY": True})
 
     print("切り直し")
     cv2, np = tool.load_cv2()

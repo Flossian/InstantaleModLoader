@@ -206,6 +206,14 @@ def check_manifest(name, manifest):
         problems.append((path, MANIFEST_NAME,
                          '"entry" が指す {!r} が無い'.format(entry)))
 
+    # 同梱の設定画面（§3.12）。`gui.py` は「設定…」を押した瞬間まで欠落に気付けない。
+    tool = data.get("tool")
+    if isinstance(tool, dict) and tool.get("entry"):
+        tool_path = os.path.join(MODS_DIR, name, tool["entry"])
+        if not os.path.isfile(tool_path):
+            problems.append((path, MANIFEST_NAME,
+                             '"tool.entry" が指す {!r} が無い'.format(tool["entry"])))
+
     # ローダ API。
     # ここで撥ねられる mod は注入しても読み込まれない。
     verdict, reason = ml.api_status(manifest)

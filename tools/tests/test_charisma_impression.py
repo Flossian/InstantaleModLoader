@@ -321,10 +321,9 @@ class FakeCtx(object):
     # ログは本物の `ctx.logger` をそのまま借りる（検査だけ別経路にしない）。
     _mod = None
 
-    def logger(self, name, *, tag=None, stamp=True, label=None):
+    def logger(self, name, **kw):
         import instantale_modloader as _ml
-        return _ml.ModContext.logger(self, name, tag=tag, stamp=stamp,
-                                     label=label)
+        return _ml.ModContext.logger(self, name, **kw)
 
     def log(self, msg, level="INFO"):
         self.notes.append(msg)

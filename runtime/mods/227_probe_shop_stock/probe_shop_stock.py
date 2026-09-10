@@ -91,7 +91,6 @@ def now():
 
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
-    record_path = ctx.out_path(RECORD_BASENAME)
     seen = {"items": 0, "boundaries": 0}
     state = {"in_shop": 0}
 
@@ -102,14 +101,11 @@ def apply(ctx):
                     if not str(key).startswith("_")}
         return value
 
+    _record = ctx.jsonl(RECORD_BASENAME)
+
     def record(row):
         """1件1行の JSON。読む用のログとは別に、後から数えるために残す。"""
-        row = plain(row)
-        try:
-            with open(record_path, "a", encoding="utf-8") as fh:
-                fh.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
-        except Exception:
-            ctx.log_exc("shop stock probe: cannot write the record")
+        _record(plain(row))
 
     def take(bucket, limit):
         if limit <= 0 or seen[bucket] >= limit:

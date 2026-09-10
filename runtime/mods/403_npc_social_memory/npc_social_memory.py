@@ -235,7 +235,6 @@ def apply(ctx):
             # 311 の控えを読むだけの窓（`own=False`。フォルダは作らない）
             "profiles": WorldStore(ctx, PROFILE_STATE_DIRNAME, own=False),
             "worker": None,          # 抽出の背景スレッド（`jobs.Worker`）。作るのは `extract` が出来てから
-            "last_inject": None,     # 直前に書いた注入の結末（同じ文言を繰り返さない）
             "last_skip": None,       # 抽出を見送った直前の理由（同上）
         }
         setattr(sys, STORE_ATTR, store)
@@ -482,11 +481,8 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 会話への注入
 
-    def note_inject(message):
-        """同じ内容を続けて書かない（1ターンに会話系フックが何本も走るため）。"""
-        if store["last_inject"] != message:
-            store["last_inject"] = message
-            write(message)
+    #: 注入の結末。直前と同じ内容なら書かない（1ターンに会話系フックが何本も走る）。
+    note_inject = ctx.logger(LOG_BASENAME, dedup=True)
 
     def note_skip(message):
         """抽出を見送った理由。同じ理由が続く間は1度だけ書く。"""

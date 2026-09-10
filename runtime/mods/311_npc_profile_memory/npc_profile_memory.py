@@ -412,7 +412,6 @@ def apply(ctx):
         store = {
             "state": {
                 "warned_world": False,  # 世界名で控えが引けなかったことを1度だけ残す
-                "last_inject": None,    # 直前に書いた注入の結末（同じ理由を繰り返さない）
                 "last_extract_skip": None,  # 抽出を始められない理由の連続重複を抑える
             },
             # 世界名 -> 控え（書くのはこの mod だけ）。
@@ -459,16 +458,8 @@ def apply(ctx):
         value = getattr(character_instance, "id", None)
         return str(value) if value is not None else ""
 
-    def note_inject(message):
-        """注入の結末を残す。同じ結末が続く間は書かない。
-
-        会話の LLM は1ターンに何度も回るので、
-        毎回書くとログが会話で埋まる（`306_` の `last_skip` と同じ手）。
-        """
-        if state["last_inject"] == message:
-            return
-        state["last_inject"] = message
-        write(message)
+    #: 注入の結末。直前と同じ内容なら書かない（会話は1ターンに何度も回る）。
+    note_inject = ctx.logger(LOG_BASENAME, dedup=True)
 
     def note_extract_skip(message):
         """抽出前の早期終了を1回だけ残す。正常にキューへ積めば次回も記録する。"""

@@ -266,7 +266,6 @@ def apply(ctx):
         store = {
             "state": {
                 "noted": set(),        # 1回だけ出す知らせの鍵
-                "last_inject": None,   # 同じ結末が続く間はログに書かない
                 "last_check": 0.0,     # 照合した時刻（間引き用）
             },
             # 世界名 -> 控え（書くのはこの MOD だけ）。出し入れと錠は
@@ -289,12 +288,8 @@ def apply(ctx):
         state["noted"].add(key)
         write(message)
 
-    def note_inject(message):
-        """注入の結末。同じ結末が続く間は書かない（会話は1ターンに何度も回る）。"""
-        if state["last_inject"] == message:
-            return
-        state["last_inject"] = message
-        write(message)
+    #: 注入の結末。直前と同じ内容なら書かない（会話は1ターンに何度も回る）。
+    note_inject = ctx.logger(LOG_BASENAME, dedup=True)
 
     # ------------------------------------------------------------------ 控え
     # 出し入れ（場所・読み・キャッシュ・書き・錠）は `state.WorldStore` に1つだけある。

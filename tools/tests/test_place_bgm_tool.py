@@ -108,9 +108,15 @@ try:
     os.environ["IML_GAME_DIR"] = game
     check("locate: environment wins", tool.locate() == (tmp, state_root, game))
     check("data dir: default is under LOCALAPPDATA",
-          tool.data_dir().endswith(os.path.join(*tool.DATA_VENDOR)) and tool.data_dir("X") == "X")
+          tool.saves.data_dir().endswith(os.path.join(*tool.saves.DATA_VENDOR)) and tool.saves.data_dir("X") == "X")
     os.environ["IML_INSTANTALE_DATA"] = data_root
-    check("data dir: environment wins", tool.data_dir() == data_root)
+    check("data dir: environment wins", tool.saves.data_dir() == data_root)
+    # セーブの読み方はローダの語彙（`instantale_modloader.saves`）。
+    # 道具が自分の鍵を持っていたら、それは写しが戻ってきた印。
+    check("saves: borrowed from the loader, no copy of the key",
+          tool.saves.__name__ == "instantale_modloader.saves"
+          and not hasattr(tool, "SAVE_KEY") and not hasattr(tool, "DATA_VENDOR"),
+          tool.saves.__name__)
 
     # ------------------------------------------------------------ 一覧
     model = tool.Model()
@@ -184,13 +190,13 @@ try:
                           "1": {"name": "洞窟", "facility_type": "dungeon_location"}}}}},
                       "3": {"name": "霧の村", "size": "village", "nodes": {}}}}
     raw = json.dumps(save, ensure_ascii=False).encode("utf-8")
-    check("decode: plain json", tool.decode(raw) == save)
-    check("decode: xor json", tool.decode(tool.xor(raw)) == save and tool.xor(tool.xor(raw)) == raw)
-    check("decode: garbage -> None", tool.decode(b"\x00\x01\xff") is None and tool.decode(b"[1]") is None)
-    write_raw(tool.save_path("テスト世界", data_root), tool.xor(raw))
-    write_raw(tool.save_path("壊れ", data_root), b"\x00\x01\xff")
+    check("decode: plain json", tool.saves.decode(raw) == save)
+    check("decode: xor json", tool.saves.decode(tool.saves.xor(raw)) == save and tool.saves.xor(tool.saves.xor(raw)) == raw)
+    check("decode: garbage -> None", tool.saves.decode(b"\x00\x01\xff") is None and tool.saves.decode(b"[1]") is None)
+    write_raw(tool.saves.save_path("テスト世界", data_root), tool.saves.xor(raw))
+    write_raw(tool.saves.save_path("壊れ", data_root), b"\x00\x01\xff")
     os.makedirs(os.path.join(data_root, "saves", "空っぽ"))
-    check("list worlds: only folders with savedata.json, sorted", tool.list_worlds(data_root) == ["テスト世界", "壊れ"])
+    check("list worlds: only folders with savedata.json, sorted", tool.saves.list_worlds(data_root) == ["テスト世界", "壊れ"])
     places = tool.places_of(save)
     check("places: world name from world_data", places["name"] == "テスト世界")
     check("places: areas in id order with size", [(a["id"], a["size"]) for a in places["areas"]]

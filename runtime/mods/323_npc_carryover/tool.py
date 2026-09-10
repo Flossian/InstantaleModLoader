@@ -38,7 +38,11 @@ TECH.md §3.12 の契約で動く（`322_battle_bgm` の道具と同じ）。
 
 MOD 本体（`npc_carryover.py`）は import しない。
 ここはゲームの外で走る別プロセスで、本体はゲームの中で走る。
-両方が要るもの（セーブの復号・zip の形・予約の形）は `carryover.py` にある。
+両方が要るもの（zip の形・予約の形）は `carryover.py` にある。
+セーブの復号と置き場はローダの語彙（`instantale_modloader.saves`）。
+
+場所の決め方・設定の読み書き・窓の記憶・壊れない書き込み・配色は
+どの道具も同じなので `tools/modtool.py` に在る（TECH.md §3.12）。
 """
 
 import base64
@@ -48,15 +52,26 @@ import os
 import sys
 
 MOD_DIR = os.path.dirname(os.path.abspath(__file__))
-MOD_NAME = os.path.basename(MOD_DIR)
 
 # 自分の隣（carryover.py）を import できるようにする。
 if MOD_DIR not in sys.path:
     sys.path.insert(0, MOD_DIR)
 
-#: `mod.json` の "settings" と同じ名前・同じ既定値（`npc_carryover.py` の定数と同じ）。
-SETTING_DEFAULTS = {"INHERIT_MEMORY": True, "INHERIT_RELATIONSHIP": True,
-                    "INHERIT_LIFE_LOG": True, "ANNOUNCE": True}
+# 共有の土台（`tools/modtool.py`）を import できるようにする。
+# `IML_ROOT` が指す先に `tools/` が無いこと（オフラインの検査）と、
+# 環境変数の無い直接起動の両方があるので、3つ上も候補に入れる。
+_IML_ROOT = os.environ.get("IML_ROOT") or ""
+for _tools in ([os.path.join(_IML_ROOT, "tools")] if _IML_ROOT else []) + [
+        os.path.normpath(os.path.join(MOD_DIR, os.pardir, os.pardir, os.pardir, "tools"))]:
+    if os.path.isfile(os.path.join(_tools, "modtool.py")) and _tools not in sys.path:
+        sys.path.insert(0, _tools)
+
+import modtool  # noqa: E402
+
+MOD_NAME = modtool.mod_name(MOD_DIR)
+
+#: 設定の名前と既定値は `mod.json` の "settings" が唯一の出所（写しを持たない）。
+SETTING_DEFAULTS = modtool.defaults(MOD_DIR)
 
 #: 引き継ぎの選択（予約に書く鍵 → 画面の文言 → 設定の名前）。
 INHERIT_ROWS = (
@@ -77,104 +92,9 @@ FACE_BOX = 165
 FACE_EMPTY = "顔画像なし"
 
 
-def _add_loader_path(root):
-    """ローダ（`instantale_modloader`）を import できるようにする。
-
-    置き場は `IML_ROOT/runtime`。無ければ自分の位置から（2つ上）。
-    `322_` の道具と同じ探し方。
-    """
-    for runtime in (os.path.join(root, "runtime") if root else "",
-                    os.path.normpath(os.path.join(MOD_DIR, os.pardir, os.pardir))):
-        if runtime and os.path.isdir(os.path.join(runtime, "instantale_modloader")) \
-                and runtime not in sys.path:
-            sys.path.insert(0, runtime)
-
-
 def locate():
     """(root, state_dir, game_dir)。環境変数が無ければ自分で探す。"""
-    root = os.environ.get("IML_ROOT") or os.path.normpath(
-        os.path.join(MOD_DIR, os.pardir, os.pardir, os.pardir))
-    state_dir = os.environ.get("IML_STATE_DIR") or os.path.join(root, "state")
-    game_dir = os.environ.get("IML_GAME_DIR") or ""
-    return root, state_dir, game_dir
-
-
-def load_settings(root):
-    """この MOD に効いている設定。読めなければ既定。"""
-    values = dict(SETTING_DEFAULTS)
-    try:
-        _add_loader_path(root)
-        from instantale_modloader import config
-        chosen = config.load_store(os.path.join(root, "runtime")).get(MOD_NAME) or {}
-    except Exception:
-        chosen = {}
-    for key in values:
-        if isinstance(chosen.get(key), bool):
-            values[key] = chosen[key]
-    return values
-
-
-def save_settings(root, values):
-    """既定と違う値だけを `mod_settings.json` に書く。他の MOD の項は触らない。"""
-    try:
-        _add_loader_path(root)
-        from instantale_modloader import config
-        runtime = os.path.join(root, "runtime")
-        store = config.load_store(runtime)
-        chosen = {key: value for key, value in values.items()
-                  if SETTING_DEFAULTS.get(key) != value}
-        if chosen:
-            store[MOD_NAME] = chosen
-        else:
-            store.pop(MOD_NAME, None)
-        config.save_store(runtime, store)
-        return True
-    except Exception:
-        return False
-
-
-# ---- 窓の大きさと位置（`settings/gui.json` の `tool_window`）---------------
-
-def _gui_config_path(root):
-    return os.path.join(root, "settings", "gui.json")
-
-
-def load_window(root):
-    try:
-        with io.open(_gui_config_path(root), encoding="utf-8") as fh:
-            entry = (json.load(fh).get("tool_window") or {}).get(MOD_NAME) or {}
-        return entry if isinstance(entry, dict) else {}
-    except (OSError, ValueError):
-        return {}
-
-
-def save_window(root, window):
-    """窓の大きさと位置を残す。設定画面が自分の窓を覚えるのと同じ場所。"""
-    path = _gui_config_path(root)
-    try:
-        with io.open(path, encoding="utf-8") as fh:
-            cfg = json.load(fh)
-        if not isinstance(cfg, dict):
-            return
-    except (OSError, ValueError):
-        cfg = {}
-    try:
-        maximized = window.state() == "zoomed"
-    except Exception:
-        maximized = False
-    windows = cfg.get("tool_window")
-    if not isinstance(windows, dict):
-        windows = {}
-    windows[MOD_NAME] = {"geometry": window.geometry(), "maximized": maximized}
-    cfg["tool_window"] = windows
-    try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        tmp = path + ".writing"
-        with io.open(tmp, "w", encoding="utf-8") as fh:
-            json.dump(cfg, fh, ensure_ascii=False, indent=2)
-        os.replace(tmp, path)
-    except OSError:
-        pass
+    return modtool.locate(MOD_DIR)
 
 
 # ---- 中身 -----------------------------------------------------------------
@@ -184,10 +104,10 @@ class Model(object):
 
     def __init__(self):
         self.root, self.state_dir, self.game_dir = locate()
-        _add_loader_path(self.root)
+        modtool.add_loader_path(self.root, MOD_DIR)   # carryover が instantale_modloader を引く
         import carryover
         self.C = carryover
-        self.settings = load_settings(self.root)
+        self.settings = modtool.load_settings(self.root, MOD_DIR)
         self.worlds = carryover.list_worlds()
         self.save = None            # 読んでいる世界のセーブ
         self.world = ""             # その世界名
@@ -429,7 +349,7 @@ def build_window(model):
     window = tk.Tk()
     window.title("NPCのエクスポート / インポート")
     window.minsize(940, 640)
-    remembered = load_window(model.root)
+    remembered = modtool.load_window(model.root, MOD_DIR)
     window.geometry(remembered.get("geometry") or "1180x760")
     if remembered.get("maximized"):
         try:
@@ -438,12 +358,9 @@ def build_window(model):
             pass
 
     # 配色と書体は設定画面のものを借りる。無ければ素の Tk。
-    checks = None
+    loader_gui = modtool.setup_theme(window, model.root)
     try:
-        sys.path.insert(0, os.path.join(model.root, "tools"))
-        import gui as loader_gui
-        loader_gui.setup_theme(window)
-        checks = loader_gui.check_images(window)      # (入, 切)
+        checks = loader_gui.check_images(window) if loader_gui else None   # (入, 切)
     except Exception:
         checks = None
 
@@ -1173,8 +1090,8 @@ def build_window(model):
         values = dict(model.settings)
         for key, _label, setting in INHERIT_ROWS:
             values[setting] = bool(inherit_vars[key].get())
-        save_settings(model.root, values)
-        save_window(model.root, window)
+        modtool.save_settings(model.root, MOD_DIR, values)
+        modtool.save_window(model.root, MOD_DIR, window)
         window.destroy()
 
     window.protocol("WM_DELETE_WINDOW", on_close)

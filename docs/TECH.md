@@ -99,6 +99,8 @@ tools/watch.bat, watcher.py  ゲームの起動を監視して自動注入（GUI
 tools/injector.py         PE解析 → x64スタブ → CreateRemoteThread（--unload で剥がす）
 tools/logrotate.py        out/*.log の世代管理（注入 = 1世代の境目）
 tools/check_mods.py       静的検査（デコレータ・宣言と実体のずれ）
+tools/check_tool_screens.py  同梱の設定画面を実際に開いて撮る（§3.12）。配布物には入らない
+tools/modtool.py          MOD 同梱の設定画面が共有する土台（§3.12）。配布物に入る
 tools/build_mods.py       docs/MODS.md を各 MOD の DOC.md から綴じる（--check で照合）
 tools/list_mods.py        docs/MODLIST.md を mod.json から組む（--check で照合）
 tools/llm_ctx_probe.bat, llm_ctx_probe.py  ローカル LLM の窓を実測して最適値を出す（127_ 用）
@@ -120,6 +122,7 @@ runtime/instantale_modloader/
     llm.py        LLM へ出ていく文章の捕まえ方・1問だけ聞く口・返答の読み方（§5.3）
     npcs.py       NPC の作り方（素データの置き場所・ひな型・配置。GAME.md §2.23）
     ids.py        ゲームの採番台帳（`index`）を通した id の採り方（§3.2.3）
+    saves.py      ディスクのセーブの読み方（置き場・難読化・世界の一覧。§3.2.3）
     recon.py      実行時リコン（モジュール構造ダンプ）
 runtime/mods/     MOD 本体（1バグ・1機能 = 1フォルダ。入口は mod.json が名指し）
     <フォルダ>/DOC.md      遊ぶ側から見た説明（§2.7）。docs/MODS.md へ綴じられる
@@ -867,6 +870,21 @@ MOD どうしが繋がるのは同じファイルを読むことによってで�
 | ローダ（共有する） | ゲームの読み方（`ui` / `frames`）、保存先の決め方（`state`）、壊れない書き込み（`ctx.write_json`） |
 | MOD（共有しない） | その MOD 固有の判断: どの画面に何を出すか、プロンプトをどう書き換えるか |
 
+##### ゲームの外で走るものの共有先は `tools\modtool.py`
+
+MOD 同梱の設定画面（`tool.py`。§3.12）は**ゲームの中では走らない**。
+ローダの設定画面が別プロセスで開く tkinter スクリプトで、共有したいものも
+場所の決め方・窓の記憶・配色といった GUI 側のものになる。
+
+| 走る場所 | 共有先 | なぜ |
+|---|---|---|
+| ゲームの中（フックの側） | `instantale_modloader.*` | 注入したモジュールから引ける唯一の場所 |
+| ゲームの外（`tool.py` / GUI） | `tools\modtool.py` | ローダ package はゲームが boot で読む。**tkinter 依存をそこへ足さない** |
+| 両方で要るもの | `instantale_modloader.*`（例: `saves`） | ゲームの中からも外からも引ける |
+
+裏返しの決まりが1つ増える: **ゲームの中のコードは `tools\` を import しない。**
+配布物ではローダ側のパッケージにしか入っておらず、注入時の `sys.path` にも無い。
+
 **写して回るものが出たら、それはローダの語彙**だと考えること。
 写した時点でドリフトは予告されていて、実際に起きた:
 
@@ -905,6 +923,13 @@ MOD どうしが繋がるのは同じファイルを読むことによってで�
 | モデルの返答から JSON を拾う | `llm.parse_json` / `strip_fence`（§5.3） | 5本。囲みの剥がし方が3通りに枝分かれしていた |
 | モデルの返した真偽の読み方 | `llm.truthy`（§5.3） | 3本。判らない語をどちらへ倒すかが項目ごとに違うのに、関数の側で決め打ちしていた |
 | ゲーム内の日付 | `ui.game_day`（§5.6） | 5本。ロード中の受け皿を持っていたのは `312_` だけだった |
+| 1件1行の JSON（後から数える表） | `ctx.jsonl`（§3.11.2） | 8本。probe を1本書くたびに写しが1つ増える形になっていた |
+| 直前と同じ内容なら書かない記録 | `ctx.logger(dedup=True)`（§3.11.2） | 6本。`cap` と `warner` と同じ族の欠けた1人で、docstring が互いを参照していた |
+| 窓の大きさの変化を見る（注入し直しても手が積もらない） | `ui.window_watcher` | 3本。コメントごと同じものが在った |
+| 冒険者名簿への登録（実行時とセーブの両方） | `npcs.enroll` | 2本。`323_` の docstring が「`320_` の `enroll`」と写しを自認していた |
+| ディスクのセーブの読み方（置き場・難読化・世界の一覧） | `saves.data_dir` / `decode` / `read_save` / `list_worlds` / `world_names` | 5本。鍵（`SAVE_KEY`）が `130_` / `314_` / `324_` の `tool.py`・`323_` の `carryover.py`・`tools\rebalance_saved_bgm.py` に散っていた |
+| 同梱の設定画面のインフラ（場所・設定・窓の記憶・書き込み・配色） | `tools\modtool.py`（§3.12） | 6本。`save_window` が4変種に枝分かれし、**1本は最大化した窓の寸法を壊していた** |
+| 宣言駆動のワールド別設定画面 | `modtool.world_settings_main`（§3.12.1） | 2本が **501行バイト同一**の写しだった |
 
 ```python
 from instantale_modloader import state
@@ -1541,6 +1566,10 @@ write = ctx.logger("item_detail.log", stamp=False)   # 本文だけ
 | `stamp` | 時刻を付けるか（既定 True） |
 | `label` | 書けなかったときに `modloader.log` へ出す名前。既定は MOD のフォルダ名 |
 | `cap` | この関数からの書き込みをこの行数で打ち切る。毎フレーム呼ばれる場所からの記録用。**数える器は関数の中なので、注入し直すと上限は戻る**。世代を跨いで数え続けたいものはこれに寄せない |
+| `dedup` | **直前と同じ本文なら書かない。** 結末が変わったときだけ1行出る。会話の LLM は1ターンに何度も回るので、注入の結末をそのまま書くとログが会話で埋まる。`cap` が「N 行で打ち切る」なのに対し、こちらは「変わるまで黙る」 |
+
+`cap` と `dedup` を両方渡したときは **`dedup` が先**。
+書かなかった行が枠を食わないので、`cap=10, dedup=True` は「変わった行を 10 行」になる。
 
 一度しか出さない警告は `ctx.warner()` で作る
 （行き先は `modloader.log`。起きているのは MOD の異常ではなくゲーム側の形が想定と違うことなので、
@@ -1552,6 +1581,20 @@ warn_once("no_hud", "HUD が見つからない")   # 同じ鍵の2回目から�
 ```
 
 書けなくても例外にしない。錠は中に持っているので、別スレッドから書く MOD も自分で掛けなくてよい。
+
+後から**数える**ための記録は `ctx.jsonl()`。1行1件の JSON を `out/` へ足す:
+
+```python
+record = ctx.jsonl("event_roll.jsonl")
+record({"at": "...", "roll": 12, "target": 15})
+```
+
+`logger()` が**読む文**、`jsonl()` が**数える表**。
+測った結果を機械で読み直すので体裁（時刻・印）は付けない。
+`default=str` を通すので、JSON にできない値が来ても行ごと失われない
+（probe が拾うのはゲームの生の値で、何が来るか決まらない）。
+
+> `jsonl` の5行は**9本の probe に写されていた**。probe を1本書くたびに写しが1つ増える形になっていた。
 
 MOD のログはローダのログ（`ctx.log`）と分ける
 （`modloader.log` は全 MOD の共用なので、混ぜると1本を追うのに他の全部を読むことになる）。
@@ -1584,11 +1627,78 @@ MOD が自分の画面を持つほうが分かりやすい。
 
 別プロセスにするのは、GUI が「MOD のコードを一切 import しない」（`gui.py` 冒頭）を守るため。
 引数ではなく環境変数で渡すのは、道具側の引数の書式を縛らないため。
-道具は普通の tkinter スクリプトでよく、`IML_ROOT/runtime` を `sys.path` に足せばローダの語彙
-（`write_json` / `config`）をそのまま使える。配色と書体は `tools/gui.py` の `setup_theme()` を借りる。
+道具は普通の tkinter スクリプトでよい。
 
 直接起動（`python runtime/mods/322_battle_bgm/tool.py`）もできるようにしておく。
-環境変数が無いときは自分の位置と `settings/gui.json` から場所を組む（`322_` の `locate()`）。
+環境変数が無いときは自分の位置と `settings/gui.json` から場所を組む。
+
+##### インフラは `tools\modtool.py` にある。道具は `MOD_DIR` を渡すだけ
+
+どの道具も最初に同じことをする。場所を決め、設定を読み、窓の大きさを思い出し、
+配色を借り、保存のときに壊れない書き込みをする。
+6本に写していたら実際にずれた（§3.2.3 の表）。
+
+| 要ること | 呼ぶもの |
+|---|---|
+| 場所 | `modtool.locate(MOD_DIR)` → `(root, state_dir, game_dir)` |
+| 設定の名前と既定値 | `modtool.defaults(MOD_DIR)` / `decls(MOD_DIR)`（`mod.json` の `"settings"` が唯一の出所） |
+| 設定の読み書き | `modtool.load_settings(root, MOD_DIR)` / `save_settings(root, MOD_DIR, values)` |
+| 窓の記憶 | `modtool.restore_window(root, MOD_DIR, win)` / `save_window(root, MOD_DIR, win)` |
+| 壊れない書き込み | `modtool.write_json(root, path, data)` |
+| 配色と書体 | `modtool.setup_theme(win, root)`（戻り値は `gui` モジュール。他も借りられる） |
+| ディスクのセーブ | `modtool.saves_module(mod_dir=MOD_DIR)`（＝`instantale_modloader.saves`） |
+
+`modtool` は**状態を持たない**（`MOD_DIR` は毎回引数）。
+オフラインの検査が1プロセスで複数の `tool.py` を読み込むので、持つと2本目が1本目の場所を掴む。
+
+道具の先頭に書く仕掛けはこれだけ:
+
+```python
+MOD_DIR = os.path.dirname(os.path.abspath(__file__))
+_IML_ROOT = os.environ.get("IML_ROOT") or ""
+for _tools in ([os.path.join(_IML_ROOT, "tools")] if _IML_ROOT else []) + [
+        os.path.normpath(os.path.join(MOD_DIR, os.pardir, os.pardir, os.pardir, "tools"))]:
+    if os.path.isfile(os.path.join(_tools, "modtool.py")) and _tools not in sys.path:
+        sys.path.insert(0, _tools)
+
+import modtool  # noqa: E402
+```
+
+3つ上のフォールバックは**省略できない**。
+`IML_ROOT` が指す先に `tools\` が無い場合（オフラインの検査は `runtime\` だけの仮フォルダを渡す）と、
+環境変数の無い直接起動の両方がここを通る。
+`_IML_ROOT` が空のとき候補に入れないのは、`os.path.join("", "tools")` が相対 `"tools"` になり、
+`cwd` が MOD フォルダなので MOD 自身が `tools\` を持つと誤爆するため。
+
+`modtool.py` は `make_dist.bat` の**名指しの白名簿**で配布物に入る。
+`tools\` に新しいファイルを足すときはそこへ1語足すこと。
+忘れると手元と CI は緑のまま、**配布 zip でだけ「設定…」が何も開かない**。
+
+##### 土台を触ったら `tools\check_tool_screens.py` で開いてみる
+
+```
+python tools/check_tool_screens.py              開いて撮る（python と pythonw の両方）
+python tools/check_tool_screens.py --window     窓の記憶の往復（最大化して閉じて開き直す）
+python tools/check_tool_screens.py --only 322   名前に 322 を含む MOD だけ
+```
+
+`modtool.py` か `instantale_modloader.saves` を触ると6画面すべてに効くのに、
+**`tools\tests\` の検査はこの経路を通らない**:
+
+- 起動は別プロセスで、渡すのは環境変数だけ。`import` では通らない
+- 配布物のローダは `pythonw` で走る。`sys.stderr` が `None` なので、
+  そこへ書く道が在ると**無反応で死ぬ**（traceback がどこにも出ない）。だから両方で試す
+- 窓が組めても中身が空、という壊れ方がある
+
+対象は `discover()` が `"tool"` を宣言していると言った MOD（§1.3）。
+道具が増えても書き足すところは無い。
+撮ったものは `out\tool_screens\`（消してよい）。
+
+機械が決めるのは「出たか・落ちなかったか・寸法が壊れないか」までで、
+**中身が入っているか・崩れていないかは撮ったものを目で見る**。
+`tools\tests\test_*.py` に置いていないのは、あちらが
+「ゲーム不要・短時間・CI が全部走らせる」名前空間で、こちらは画面が要り、
+数分かかり、`--window` が本物の `settings\gui.json` を書く（退避して戻す）ため。
 
 > 元は `323_npc_carryover` の設計。先に `322_battle_bgm` で実装した。
 > `131_sharp_portrait` も同じ契約で、既存 NPC の顔の一括切り直しをこの画面に持つ（設定もそこで引き受ける）。
@@ -1616,9 +1726,17 @@ MOD が自分の画面を持つほうが分かりやすい。
   （`130_` は `tr` から呼ばれるので、変わっていない道は辞書引き1回で抜ける）
 
 この形は `324_place_bgm`（曲）・`130_currency_unit`（通貨の表記）・`314_area_move_custom`（日数・料金・文言）の3本が同じ。
-`130_` と `314_` の `tool.py` は**同じファイルの写し**で、
-`tools\tests\test_world_settings_tool.py` が `filecmp` で同一性を検査している。
-3本目が要るときは写しを増やさず、ローダの語彙（§3.2.3）へ移すこと。
+
+`130_` と `314_` の画面は**宣言駆動で MOD 固有のコードが1行も無かった**
+（`mod.json` の `name` / `description` / `settings` しか読まない）ので、
+501行の写しごと `tools\modtool.py` の `world_settings_main(MOD_DIR)` へ移した。
+2本の `tool.py` はそれを呼ぶだけのシムで、`__file__` 以外に何も書かない。
+だから今も同じファイルで、`tools\tests\test_world_settings_tool.py` が
+`filecmp` で同一性を、`test_modtool.py` が中身を検査している。
+
+4本目が要るときは `tool.py` を写さず、シムを1枚置いて `world_settings_main` を呼ぶこと。
+`state\` の控えのフォルダ名は `modtool.state_dirname(MOD_DIR)`（番号を落としたもの）が決めるので、
+MOD 側に書くことは何も無い。
 
 ---
 

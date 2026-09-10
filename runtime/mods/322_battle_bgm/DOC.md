@@ -74,4 +74,4 @@
 | 通常戦闘なのに `boss by flag in_boss_battle` | `in_boss_battle` が下りていない。行の `pending=` が `None` ならフラグの残骸（VERIFICATION.md §3.42） |
 | `playlist.json にある曲が見つからない` | 曲を消したか名前を変えた。行を消すか名前を直す |
 | 曲を足したのに一覧に出ない | 拡張子が対応外か、サブフォルダに入れている。直下だけを見る。画面なら「再走査」 |
-| 「設定…」を押しても画面が開かない | `out\modloader.log` ではなく設定画面の下の状態行を見る。`tool.py` が無いか、Python が tkinter を持っていない |
+| 「設定…」を押しても画面が開かない | `out\modloader.log` ではなく設定画面の下の状態行を見る。`tool.py` が無いか、`tools\modtool.py` が無い（ローダが古い）か、Python が tkinter を持っていない |

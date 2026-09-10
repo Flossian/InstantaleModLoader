@@ -417,4 +417,20 @@ toggle(lambda self: None, hud)
 assert button_bar.disabled is False and all(b.opacity == 1.0 for b in hud.right_buttons)
 host.add_widget(window)
 
+# 別の世界をロード: 前の世界の品は辞書から落ち、新しい世界の所持品には出ない。セーブへの合流も世界を見る
+assert MOD.CONTAINER, "the container should hold this world's items"
+world_b = types.SimpleNamespace(name="別の世界")
+player_b = Player()
+player_b.give(herb)
+app_b = types.SimpleNamespace(player=player_b, world=world_b, root=hud)
+MOD.ui.find_app = lambda: app_b
+data_b = {"world_data": {"name": "別の世界"}, "player_data": {"inventory": {}}}
+written = {}
+write_hook(lambda path, d: written.update(d), "savedata.json", data_b)
+assert written["player_data"]["inventory"] == {}, written   # 前の世界の品を別の世界のセーブに足さない
+toggle(lambda self: None, hud)
+assert not MOD.CONTAINER and set(player_b.inventory.inventory) == {"x1"}, (MOD.CONTAINER, player_b.inventory.inventory)
+assert any(l.startswith("world changed") for l in ctx.lines)
+MOD.ui.find_app = lambda: app
+
 print("ok")

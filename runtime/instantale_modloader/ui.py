@@ -1260,6 +1260,64 @@ def scheduler(ctx, tag="mod"):
     return schedule
 
 
+def window_watcher(ctx, handler, attr, tag="mod"):
+    """Kivy の窓の大きさが変わったら `handler` を呼ぶ、その結び役を作る。
+
+        watch_window = ui.window_watcher(ctx, on_window_resize, WINDOW_ATTR, "party expand")
+        watch_window()          # 何度呼んでも結ぶのは1本
+
+    **`attr` は mod ごとに別の文字列**にすること（`MOD_WIDGET_PREFIX` を頭に付ける）。
+    ぶつかると先に結んだ mod の手が外される（§3.2.3 の名前の断り）。
+
+    ##### なぜ `Window` に印を残すのか
+
+    ローダは注入し直すたびに mod のモジュールを作り直すが、
+    **`kivy.core.window.Window` は作り直されない**。
+    素直に `bind` するだけだと、注入の回数だけ手が積もって
+    1回のリサイズで同じ処理が何度も走る。
+    前回の手を `Window` の属性に残しておき、結ぶ前に外す。
+
+    `hasattr` ではなく `frames.attr` で読むのは、失敗するルックアップが
+    `201_probe_missing_attr` のトリップワイヤを自己発火させるため（TECH.md §6）。
+
+    ##### なぜ「本文が変わったとき」では足りないのか
+
+    窓だけ変えられると、本文を塗り直すフックは呼ばれない。
+    そちらだけを見ている mod は、ボタンを古い座標に取り残す。
+    だから窓の側も別経路で見る。
+
+    ゲームの外（オフライン検証）では Kivy が無いので**何もしない**。
+    窓が無いのだから結ぶ相手も居ない、というだけで異常ではない。
+    """
+    watching = [False]
+
+    def watch_window():
+        if watching[0]:
+            return False
+        try:
+            from kivy.core.window import Window
+        except Exception:
+            return False      # ゲームの外（オフライン検証）では窓が無い
+        watching[0] = True
+        # 注入し直したときに古い版の手が残らないよう、前のものを外してから結ぶ。
+        previous = frames.attr(Window, attr, None)
+        if previous is not None:
+            try:
+                Window.unbind(on_resize=previous)
+            except Exception:
+                pass          # 既に外れている（Kivy が畳んだ後）
+        try:
+            Window.bind(on_resize=handler)
+            setattr(Window, attr, handler)
+            return True
+        except Exception:
+            watching[0] = False
+            ctx.log_exc("{}: could not watch the window size".format(tag))
+            return False
+
+    return watch_window
+
+
 class Screen(object):
     """1つの mod から見た「選択肢と画面」。
 

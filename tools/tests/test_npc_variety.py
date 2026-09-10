@@ -144,8 +144,8 @@ class FakeCtx(object):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
-    def logger(self, name, *, tag=None, stamp=True, label=None):
-        return ml.ModContext.logger(self, name, tag=tag, stamp=stamp, label=label)
+    def logger(self, name, **kw):
+        return ml.ModContext.logger(self, name, **kw)
 
     def wrap(self, target, required=True):
         name = target.partition(":")[2].rsplit(".", 1)[-1]

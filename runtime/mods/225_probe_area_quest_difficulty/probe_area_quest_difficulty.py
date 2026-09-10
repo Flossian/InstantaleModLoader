@@ -157,7 +157,6 @@ def called_from_a_mod():
 
 
 def apply(ctx):
-    record_path = ctx.out_path(RECORD_BASENAME)
     write = ctx.logger(LOG_BASENAME)
 
     state = {"window": None, "random_seen": 0}
@@ -165,12 +164,8 @@ def apply(ctx):
     def now():
         return datetime.datetime.now().isoformat(timespec="seconds")
 
-    def record(row):
-        try:
-            with open(record_path, "a", encoding="utf-8") as fh:
-                fh.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
-        except Exception:
-            ctx.log_exc("area quest difficulty probe: record failed")
+    #: 1件1行の JSON。後から数えるための表（ローダの語彙）。
+    record = ctx.jsonl(RECORD_BASENAME)
 
     def brief(value, limit=80):
         """引数を短く写す。長文は先頭だけ、オブジェクトは id と名前だけ。"""

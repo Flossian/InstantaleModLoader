@@ -237,12 +237,8 @@ def apply(ctx):
 
     write = ctx.logger(LOG_BASENAME)
 
-    def record(row):
-        try:
-            with open(record_path, "a", encoding="utf-8") as fh:
-                fh.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
-        except Exception:
-            ctx.log_exc("event roll: record failed")
+    #: 1件1行の JSON。後から数えるための表（ローダの語彙）。
+    record = ctx.jsonl(RECORD_BASENAME)
 
     def snap(character):
         """`snapshot` を自分の記録から外して呼ぶ。

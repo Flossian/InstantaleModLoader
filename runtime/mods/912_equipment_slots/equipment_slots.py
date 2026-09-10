@@ -657,6 +657,13 @@ def apply(ctx):
             return
         key, positions = positions_of(app)
         eq = equipments_of(player) or {}
+        # 辞書はプロセスに1つ。別の世界をロードしたら前の世界の品は持たない
+        # （前の世界の品はセーブに合流済み。持ったままだと「戻し先の無い品」として新しい世界の所持品へ返る）
+        held = getattr(sys, CONTAINER_ATTR + "_world", None)
+        if held is not None and held != key and container:
+            write("world changed ({!r} -> {!r}): dropping {} item(s) of the old world".format(held, key, len(container)))
+            container.clear()
+        setattr(sys, CONTAINER_ATTR + "_world", key)
 
         def item_of(item_key):
             item = inv.get(item_key)
@@ -773,6 +780,9 @@ def apply(ctx):
         """
         if not isinstance(data, dict):
             return 0
+        held = getattr(sys, CONTAINER_ATTR + "_world", None)
+        if held is not None and state.world_key_of_dict(data, held) != held:
+            return 0                              # 別の世界のセーブ。辞書の品はこの世界の物ではない
         player_data = data.get("player_data")
         inv = player_data.get("inventory") if isinstance(player_data, dict) else None
         if not isinstance(inv, dict):

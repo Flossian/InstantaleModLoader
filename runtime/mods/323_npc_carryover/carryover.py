@@ -6,25 +6,21 @@ r"""NPC のエクスポートとインポートの土台。**画面もフック�
 片方に書いて片方へ写すと必ずずれるので、両方が要るものは全部ここに置く
 （`state.py` の冒頭と同じ理由）。
 
-##### ゲームのデータはインストール先には無い
+##### セーブの読み方はローダの語彙（`instantale_modloader.saves`）
 
-    %LOCALAPPDATA%\Darmabeko\Instantale\
-    ├─ saves\<世界名>\savedata.json          遊んでいる世界（`app.save_data_dict`）
-    ├─ worlds\<世界名>\world_data.json       世界の骨格（`app.world_dict`）
-    └─ worlds\<世界名>\characters\<名前>\    立ち絵（`image_src` が絶対パスで指す先）
+置き場（`%LOCALAPPDATA%\Darmabeko\Instantale`）・難読化の解き方・世界の一覧は
+そちらに1つだけ在る（TECH.md §3.2.3）。
+ゲームの中のこのファイルと、ゲームの外の `tool.py` と、`tools\rebalance_saved_bgm.py` の
+3者が要るもので、鍵は5箇所に散っていた。
+ここでは名前だけ再輸出しているので、`carryover.data_dir()` などはそのまま使える。
+
+`worlds\<世界名>\characters\<名前>\`（立ち絵。`image_src` が絶対パスで指す先）は
+この MOD だけが見るので `characters_dir()` として下に置いてある。
 
 `IML_GAME_DIR`（設定画面が渡すゲーム本体の場所）はインストール先＝
 `instantale.exe` の隣で、**セーブはそこには無い**
 （実機で確認。Epic 版のインストール先の下に `saves` も `worlds` も無かった）。
 だから場所は別に探す。
-
-##### セーブは XOR で難読化されている（GAME.md §2.16）
-
-    plain[i] = cipher[i] ^ b"Instantale_Save_Key_2026"[i % 24]
-
-ゲーム自身の `scripts.save_codec` には素の JSON へ落ちる読み方
-（`read_json_with_obfuscation_fallback`）があるので、こちらも
-**素で読めたらそれ、駄目なら XOR** の順で読む（手元の5世界は全部 XOR だった）。
 
 **書き戻さない。**
 この MOD がセーブを触るのはゲームの中（実行中の辞書）だけで、
@@ -49,13 +45,15 @@ import json
 import os
 import zipfile
 
+from instantale_modloader.saves import (            # noqa: F401  再輸出
+    DATA_VENDOR, SAVE_KEY, data_dir, decode, list_worlds, read_save,
+    save_path, saves_dir, worlds_dir, xor)
+
 # ---- ゲームのデータの場所 ------------------------------------------------
 
-#: セーブと世界の置き場（`%LOCALAPPDATA%\Darmabeko\Instantale`）。
-DATA_VENDOR = ("Darmabeko", "Instantale")
-
-#: セーブの難読化の鍵（GAME.md §2.16）。
-SAVE_KEY = b"Instantale_Save_Key_2026"
+#: セーブの置き場と復号はローダの語彙（`instantale_modloader.saves`）に1つだけ在る。
+#: ここで再輸出しているのは、この MOD の語彙として名前を保つため（写しではなく束縛）。
+#: 鍵（`SAVE_KEY`）をこのファイルに書き戻さないこと ― 5箇所に散っていたのを寄せた先。
 
 #: エクスポートの形式の名前。SaveEditor の `NpcPortability.Format` と同じ文字列。
 PACKAGE_FORMAT = "instantale_npc"
@@ -83,33 +81,6 @@ PLACEABLE_TYPES = ("guild", "inn")
 IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp")
 
 
-def data_dir(override: str = "") -> str:
-    r"""`saves\` と `worlds\` の親。
-
-    `override`（または環境変数 `IML_INSTANTALE_DATA`）が在ればそちら。
-    無ければ `%LOCALAPPDATA%\Darmabeko\Instantale`。
-    """
-    if override:
-        return override
-    env = os.environ.get("IML_INSTANTALE_DATA")
-    if env:
-        return env
-    local = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    return os.path.join(local, *DATA_VENDOR)
-
-
-def saves_dir(base: str = "") -> str:
-    return os.path.join(base or data_dir(), "saves")
-
-
-def worlds_dir(base: str = "") -> str:
-    return os.path.join(base or data_dir(), "worlds")
-
-
-def save_path(world: str, base: str = "") -> str:
-    return os.path.join(saves_dir(base), world, "savedata.json")
-
-
 def characters_dir(world: str, name: str = "", base: str = "") -> str:
     r"""`worlds\<世界>\characters\<名前>\`。名前を省くと `characters\` まで。
 
@@ -119,18 +90,6 @@ def characters_dir(world: str, name: str = "", base: str = "") -> str:
     if name:
         parts.append(safe_name(name))
     return os.path.join(*parts)
-
-
-def list_worlds(base: str = "") -> list:
-    """`savedata.json` を持つ世界の名前。名前順。"""
-    root = saves_dir(base)
-    try:
-        names = os.listdir(root)
-    except OSError:
-        return []
-    found = [name for name in names
-             if os.path.isfile(os.path.join(root, name, "savedata.json"))]
-    return sorted(found, key=lambda text: text.lower())
 
 
 # ---- 名前をファイル名にする ----------------------------------------------
@@ -231,47 +190,6 @@ def image_dir_of(npc, world: str = "", base: str = "") -> str:
 
 
 # ---- セーブの読み --------------------------------------------------------
-
-def xor(raw: bytes) -> bytes:
-    key = SAVE_KEY
-    size = len(key)
-    return bytes(byte ^ key[index % size] for index, byte in enumerate(raw))
-
-
-def _utf8(raw: bytes):
-    try:
-        return raw.decode("utf-8")
-    except UnicodeDecodeError:
-        return None
-
-
-def decode(raw: bytes):
-    """セーブのバイト列を辞書にする。読めなければ `None`。
-
-    素の JSON → XOR の順。
-    ゲーム自身の `read_json_with_obfuscation_fallback` と同じ向き。
-    """
-    for text in (_utf8(raw), _utf8(xor(raw))):
-        if text is None:
-            continue
-        try:
-            data = json.loads(text)
-        except ValueError:
-            continue
-        if isinstance(data, dict):
-            return data
-    return None
-
-
-def read_save(world: str, base: str = ""):
-    """1世界ぶんの `savedata.json`。読めなければ `None`。"""
-    try:
-        with io.open(save_path(world, base), "rb") as fh:
-            raw = fh.read()
-    except OSError:
-        return None
-    return decode(raw)
-
 
 # ---- セーブの中を読む ----------------------------------------------------
 

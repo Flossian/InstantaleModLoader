@@ -47,18 +47,29 @@ import threading
 import time
 
 MOD_DIR = os.path.dirname(os.path.abspath(__file__))
-MOD_NAME = os.path.basename(MOD_DIR)
 
 if MOD_DIR not in sys.path:
     sys.path.insert(0, MOD_DIR)
 
+# 共有の土台（`tools/modtool.py`）を import できるようにする。
+# `IML_ROOT` が指す先に `tools/` が無いこと（オフラインの検査）と、
+# 環境変数の無い直接起動の両方があるので、3つ上も候補に入れる。
+_IML_ROOT = os.environ.get("IML_ROOT") or ""
+for _tools in ([os.path.join(_IML_ROOT, "tools")] if _IML_ROOT else []) + [
+        os.path.normpath(os.path.join(MOD_DIR, os.pardir, os.pardir, os.pardir, "tools"))]:
+    if os.path.isfile(os.path.join(_tools, "modtool.py")) and _tools not in sys.path:
+        sys.path.insert(0, _tools)
+
 import faces  # noqa: E402  自分の隣
+import modtool  # noqa: E402
 
-#: `mod.json` の "settings" と同じ名前・同じ既定値（`sharp_portrait.py` の定数と同じ）。
-SETTING_DEFAULTS = {"SHARP_PORTRAIT": False, "FACE_RETRY": True}
+MOD_NAME = modtool.mod_name(MOD_DIR)
 
-#: セーブと世界の置き場（`%LOCALAPPDATA%\Darmabeko\Instantale`。`323_` と同じ）。
-DATA_VENDOR = ("Darmabeko", "Instantale")
+#: ディスクのセーブと世界の置き場。ローダが1つだけ持つ。
+saves = modtool.saves_module(mod_dir=MOD_DIR)
+
+#: 設定の名前と既定値は `mod.json` の "settings" が唯一の出所（写しを持たない）。
+SETTING_DEFAULTS = modtool.defaults(MOD_DIR)
 
 #: NPC のフォルダにある絵。
 GENERATED = "generated_image.png"     # SD の出力。検出はこれに対して
@@ -81,77 +92,13 @@ FACE_BOX = 128
 
 
 # ----------------------------------------------------------------- 場所と設定
-def _add_loader_path(root):
-    for runtime in (os.path.join(root, "runtime") if root else "",
-                    os.path.normpath(os.path.join(MOD_DIR, os.pardir, os.pardir))):
-        if runtime and os.path.isdir(os.path.join(runtime, "instantale_modloader")) \
-                and runtime not in sys.path:
-            sys.path.insert(0, runtime)
-
-
 def locate():
     """(root, state_dir, game_dir)。環境変数が無ければ自分で探す。"""
-    root = os.environ.get("IML_ROOT") or os.path.normpath(
-        os.path.join(MOD_DIR, os.pardir, os.pardir, os.pardir))
-    state_dir = os.environ.get("IML_STATE_DIR") or os.path.join(root, "state")
-    game_dir = os.environ.get("IML_GAME_DIR") or ""
-    if not game_dir:
-        try:
-            with io.open(os.path.join(root, "settings", "gui.json"), encoding="utf-8") as fh:
-                game_path = json.load(fh).get("game_path") or ""
-            if game_path:
-                game_dir = os.path.dirname(game_path)
-        except (OSError, ValueError):
-            game_dir = ""
-    return root, state_dir, game_dir
-
-
-def data_dir(override=""):
-    """`%LOCALAPPDATA%\\Darmabeko\\Instantale`。`IML_INSTANTALE_DATA` があればそちら。"""
-    if override:
-        return override
-    env = os.environ.get("IML_INSTANTALE_DATA")
-    if env:
-        return env
-    local = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    return os.path.join(local, *DATA_VENDOR)
+    return modtool.locate(MOD_DIR)
 
 
 def worlds_dir(base=""):
-    return os.path.join(base or data_dir(), "worlds")
-
-
-def load_settings(root):
-    """この MOD に効いている設定。読めなければ既定。"""
-    values = dict(SETTING_DEFAULTS)
-    try:
-        _add_loader_path(root)
-        from instantale_modloader import config
-        chosen = config.load_store(os.path.join(root, "runtime")).get(MOD_NAME) or {}
-    except Exception:
-        chosen = {}
-    for key in values:
-        if isinstance(chosen.get(key), bool):
-            values[key] = chosen[key]
-    return values
-
-
-def save_settings(root, values):
-    """既定と違う値だけを `mod_settings.json` に書く。他の MOD の項は触らない。"""
-    try:
-        _add_loader_path(root)
-        from instantale_modloader import config
-        runtime = os.path.join(root, "runtime")
-        store = config.load_store(runtime)
-        changed = dict((k, v) for k, v in values.items() if v != SETTING_DEFAULTS.get(k))
-        if changed:
-            store[MOD_NAME] = changed
-        else:
-            store.pop(MOD_NAME, None)
-        config.save_store(runtime, store)
-        return True
-    except Exception:
-        return False
+    return saves.worlds_dir(base)
 
 
 # ----------------------------------------------------------------- 絵の読み書き
@@ -392,12 +339,7 @@ def build_window(root_dir, game_dir, base=""):
     root.title("立ち絵の高画質化と顔認識精度の向上")
     root.minsize(980, 640)
     root.geometry("1180x760")
-    try:
-        sys.path.insert(0, os.path.join(root_dir, "tools"))
-        import gui as loader_gui
-        loader_gui.setup_theme(root)
-    except Exception:
-        pass
+    modtool.setup_theme(root, root_dir)
 
     cv2, np = load_cv2()
     cascades = load_cascades(cv2, game_dir) if cv2 else {}
@@ -413,7 +355,7 @@ def build_window(root_dir, game_dir, base=""):
               text="上は MOD の設定。下は既に居る NPC の顔を検出し直して切り直す道具").pack(anchor="w", pady=(0, 8))
 
     # --- 設定
-    settings = load_settings(root_dir)
+    settings = modtool.load_settings(root_dir, MOD_DIR)
     box = ttk.LabelFrame(outer, text="設定（ゲームの中で効くもの）", padding=8)
     box.pack(fill="x")
     sharp_var = tk.BooleanVar(value=settings["SHARP_PORTRAIT"])
@@ -426,7 +368,8 @@ def build_window(root_dir, game_dir, base=""):
     setting_status.pack(side="right")
 
     def save_now():
-        ok = save_settings(root_dir, {"SHARP_PORTRAIT": sharp_var.get(), "FACE_RETRY": retry_var.get()})
+        ok = modtool.save_settings(root_dir, MOD_DIR,
+                                   {"SHARP_PORTRAIT": sharp_var.get(), "FACE_RETRY": retry_var.get()})
         setting_status.configure(text="保存した。次の注入から効く" if ok else "保存できなかった（settings/mod_settings.json）")
 
     ttk.Button(box, text="設定を保存", command=save_now).pack(side="right", padx=(0, 8))

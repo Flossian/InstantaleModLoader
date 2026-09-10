@@ -145,9 +145,9 @@ class FakeCtx(object):
 
     _mod = "134_balance_item_effects"
 
-    def logger(self, name, *, tag=None, stamp=True, label=None):
+    def logger(self, name, **kw):
         import instantale_modloader as _ml
-        return _ml.ModContext.logger(self, name, tag=tag, stamp=stamp, label=label)
+        return _ml.ModContext.logger(self, name, **kw)
 
     def log(self, msg, level="INFO"):
         self.logs.append((level, msg))

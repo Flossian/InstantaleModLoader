@@ -61,7 +61,7 @@ MODを外しても消えない（DOC.md に明記）。
 
 import sys
 
-from instantale_modloader import frames, llm, ui
+from instantale_modloader import frames, llm, npcs, ui
 from instantale_modloader.npcs import make_npc
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
@@ -364,29 +364,11 @@ def apply(ctx):
     def enroll(app, area, area_id, npc_id):
         """`Area.adventurer_npcs` へ足す。実行時とセーブ側の両方。
 
-        セーブの形＝実行時の形ではない（GAME.md §2.7）ので、
-        素データ側の同名リストにも心当たりを全部見て書く。
+        どこに書くかはローダが1つだけ持つ（`npcs.enroll`）。
+        ここに残しているのは**ログの文言だけ**で、
+        それは VERIFICATION_LOG.md に引用がある形。
         """
-        wrote = []
-        roster = frames.attr(area, "adventurer_npcs", None)
-        if isinstance(roster, list) and npc_id not in roster:
-            roster.append(npc_id)
-            wrote.append("area")
-        for label, root in (("world_dict", getattr(app, "world_dict", None)),
-                            ("save_data_dict", getattr(app, "save_data_dict", None))):
-            if not isinstance(root, dict):
-                continue
-            holders = [root]
-            inner = root.get("world_data")
-            if isinstance(inner, dict):
-                holders.append(inner)
-            for holder in holders:
-                areas = holder.get("areas")
-                entry = areas.get(area_id) if isinstance(areas, dict) else None
-                raw = entry.get("adventurer_npcs") if isinstance(entry, dict) else None
-                if isinstance(raw, list) and raw is not roster and npc_id not in raw:
-                    raw.append(npc_id)
-                    wrote.append(label)
+        wrote = npcs.enroll(app, area, area_id, npc_id)
         write("enroll: {} -> adventurer_npcs of area {} via {}".format(
             npc_id, area_id, wrote or "nothing (roster not found)"))
         return bool(wrote)

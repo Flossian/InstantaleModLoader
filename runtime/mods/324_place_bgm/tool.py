@@ -51,8 +51,10 @@ MOD 本体（`place_bgm.py`）は決めるたびにこれらを読むので、�
 MOD 本体は import しない。
 ここはゲームの外で走る別プロセスで、本体はゲームの中で走る。
 共有したい定数（フォルダ名・拡張子・種類）はこのファイルに写してある。
-セーブの復号（`decode`）は `323_npc_carryover/carryover.py` と同じ物の写し。
-MOD どうしは import しないので（TECH.md §3.2.3）、ローダの語彙（`instantale_modloader.saves` 案)へ寄せるのが筋。`323_` と同時に行う。
+
+セーブの復号と置き場はローダの語彙（`instantale_modloader.saves`）に在る。
+場所の決め方・設定の読み書き・窓の記憶・壊れない書き込み・配色は
+どの道具も同じなので `tools/modtool.py` に在る（TECH.md §3.12）。
 """
 
 import io
@@ -62,7 +64,22 @@ import sys
 import time
 
 MOD_DIR = os.path.dirname(os.path.abspath(__file__))
-MOD_NAME = os.path.basename(MOD_DIR)
+
+# 共有の土台（`tools/modtool.py`）を import できるようにする。
+# `IML_ROOT` が指す先に `tools/` が無いこと（オフラインの検査）と、
+# 環境変数の無い直接起動の両方があるので、3つ上も候補に入れる。
+_IML_ROOT = os.environ.get("IML_ROOT") or ""
+for _tools in ([os.path.join(_IML_ROOT, "tools")] if _IML_ROOT else []) + [
+        os.path.normpath(os.path.join(MOD_DIR, os.pardir, os.pardir, os.pardir, "tools"))]:
+    if os.path.isfile(os.path.join(_tools, "modtool.py")) and _tools not in sys.path:
+        sys.path.insert(0, _tools)
+
+import modtool  # noqa: E402
+
+MOD_NAME = modtool.mod_name(MOD_DIR)
+
+#: ディスクのセーブの読み方（置き場・復号・世界の一覧）。ローダが1つだけ持つ。
+saves = modtool.saves_module(mod_dir=MOD_DIR)
 
 # place_bgm.py と同じ値。
 STATE_SUBDIR = ("musics", "place")
@@ -71,7 +88,6 @@ ASSET_SUBDIR = ("Assets", "sounds", "musics")
 BATTLE_FOLDER = "battle"
 EXTENSIONS = (".mp3", ".ogg", ".wav")
 PLAYLIST_NAME = "playlist.json"
-DEFAULT_WEIGHT = 100
 PASSAGE_TYPES = ("entrance", "exit", "ward", "dungeon_location")
 SIZE_ALIAS = {"dungeons": "dungeon"}
 PLAYLIST_HELP = [
@@ -85,10 +101,6 @@ PLAYLIST_HELP = [
     "0 か無ければその種類では鳴らない。どの段にも無ければゲームの曲",
     "土地・施設ごとの個別指定と覚えた曲は worlds/<世界>.json（DOC.md）",
 ]
-
-# セーブの置き場と復号（`323_` の carryover.py と同じ）。
-DATA_VENDOR = ("Darmabeko", "Instantale")
-SAVE_KEY = b"Instantale_Save_Key_2026"
 
 # 左の一覧。群 → (鍵, 表示名, 説明)。鍵は playlist.json の項目名。
 GROUPS = (
@@ -124,9 +136,10 @@ LEFT_WIDTH = 330            # 左（場所の一覧）の初めの幅（px）。
 ANY = "全て"
 ROOT_FOLDER = "（直下）"
 
-# mod.json の "settings" と同じ名前・同じ既定値（place_bgm.py の定数と同じ）。
-SETTING_DEFAULTS = {"DEFAULT_WEIGHT": DEFAULT_WEIGHT, "AVOID_REPEAT": True,
-                    "AREA_STICKY": True, "FACILITY_STICKY": False}
+#: 設定の名前と既定値は `mod.json` の "settings" が唯一の出所（写しを持たない）。
+SETTING_DEFAULTS = modtool.defaults(MOD_DIR)
+#: 宣言が読めなかったときの最後の受け（`place_bgm.py` と同じ値）。
+DEFAULT_WEIGHT = SETTING_DEFAULTS.get("DEFAULT_WEIGHT", 100)
 BOOL_SETTINGS = (
     ("AVOID_REPEAT", "前回と同じ曲を続けて選ばない"),
     ("AREA_STICKY", "土地の曲は一度決めたら覚える"),
@@ -134,72 +147,10 @@ BOOL_SETTINGS = (
 )
 
 
-def _add_loader_path(root):
-    """ローダ（`instantale_modloader`）を import できるようにする。
-
-    置き場は `IML_ROOT/runtime`。無ければ自分の位置から（`runtime/mods/<この MOD>/` の2つ上）。
-    """
-    for runtime in (os.path.join(root, "runtime") if root else "",
-                    os.path.normpath(os.path.join(MOD_DIR, os.pardir, os.pardir))):
-        if runtime and os.path.isdir(os.path.join(runtime, "instantale_modloader")) \
-                and runtime not in sys.path:
-            sys.path.insert(0, runtime)
-
-
-def _config_module(root):
-    _add_loader_path(root)
-    from instantale_modloader import config
-    return config
-
-
-def load_settings(root):
-    """この MOD に効いている設定。読めなければ既定。"""
-    values = dict(SETTING_DEFAULTS)
-    try:
-        chosen = _config_module(root).load_store(os.path.join(root, "runtime")).get(MOD_NAME) or {}
-    except Exception:
-        chosen = {}
-    if isinstance(chosen.get("DEFAULT_WEIGHT"), (int, float)) and not isinstance(chosen["DEFAULT_WEIGHT"], bool):
-        values["DEFAULT_WEIGHT"] = max(0, int(chosen["DEFAULT_WEIGHT"]))
-    for key, _label in BOOL_SETTINGS:
-        if isinstance(chosen.get(key), bool):
-            values[key] = chosen[key]
-    return values
-
-
-def save_settings(root, values):
-    """既定と違う値だけを `mod_settings.json` に書く。他の MOD の項は触らない。"""
-    try:
-        config = _config_module(root)
-        runtime = os.path.join(root, "runtime")
-        store = config.load_store(runtime)
-        changed = dict((k, v) for k, v in values.items() if v != SETTING_DEFAULTS.get(k))
-        if changed:
-            store[MOD_NAME] = changed
-        else:
-            store.pop(MOD_NAME, None)
-        config.save_store(runtime, store)
-        return True
-    except Exception:
-        return False
-
-
 # ----------------------------------------------------------------- 場所
 def locate():
     """(root, state_dir, game_dir)。環境変数が無ければ自分で探す。"""
-    root = os.environ.get("IML_ROOT") or os.path.normpath(
-        os.path.join(MOD_DIR, os.pardir, os.pardir, os.pardir))
-    state_dir = os.environ.get("IML_STATE_DIR") or os.path.join(root, "state")
-    game_dir = os.environ.get("IML_GAME_DIR") or ""
-    if not game_dir:
-        try:
-            with io.open(os.path.join(root, "settings", "gui.json"), encoding="utf-8") as fh:
-                game_path = json.load(fh).get("game_path") or ""
-            if game_path:
-                game_dir = os.path.dirname(game_path)
-        except (OSError, ValueError):
-            game_dir = ""
-    return root, state_dir, game_dir
+    return modtool.locate(MOD_DIR)
 
 
 def list_tracks(folder):
@@ -285,96 +236,7 @@ def place_sort_key(key):
     return tuple(id_sort_key(part) for part in str(key).split("/"))
 
 
-def write_json(root, path, data, indent=1):
-    """ローダの `write_json`（tmp → fsync → replace）で書く。無ければ同じ手順を自前で踏む。"""
-    try:
-        _add_loader_path(root)
-        import instantale_modloader as ml
-        return bool(ml.write_json(path, data, indent=indent))
-    except Exception:
-        pass
-    tmp = path + ".tmp"
-    try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with io.open(tmp, "w", encoding="utf-8", newline="\n") as fh:
-            json.dump(data, fh, ensure_ascii=False, indent=indent)
-            fh.flush()
-            os.fsync(fh.fileno())
-        os.replace(tmp, path)
-        return True
-    except OSError:
-        return False
-
-
-def world_filename(root, key):
-    """世界の鍵からファイル名。ローダの `state.world_filename`（本体と同じ規則）。無ければ素の名前。"""
-    try:
-        _add_loader_path(root)
-        from instantale_modloader import state
-        return state.world_filename(key)
-    except Exception:
-        return key + ".json"
-
-
 # ----------------------------------------------------------------- セーブを読む
-def data_dir(override=""):
-    r"""`saves\` の親。`override`（または環境変数 `IML_INSTANTALE_DATA`）が在ればそちら。"""
-    if override:
-        return override
-    env = os.environ.get("IML_INSTANTALE_DATA")
-    if env:
-        return env
-    local = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    return os.path.join(local, *DATA_VENDOR)
-
-
-def saves_dir(base=""):
-    return os.path.join(base or data_dir(), "saves")
-
-
-def save_path(world, base=""):
-    return os.path.join(saves_dir(base), world, "savedata.json")
-
-
-def list_worlds(base=""):
-    """`savedata.json` を持つ世界のフォルダ名。名前順。"""
-    try:
-        names = os.listdir(saves_dir(base))
-    except OSError:
-        return []
-    return sorted((n for n in names if os.path.isfile(save_path(n, base))), key=lambda t: t.lower())
-
-
-def xor(raw):
-    return bytes(byte ^ SAVE_KEY[index % len(SAVE_KEY)] for index, byte in enumerate(raw))
-
-
-def decode(raw):
-    """セーブのバイト列を辞書にする。読めなければ None。素の JSON → XOR の順。"""
-    for candidate in (raw, None):
-        text = None
-        try:
-            text = (candidate if candidate is not None else xor(raw)).decode("utf-8")
-        except UnicodeDecodeError:
-            continue
-        try:
-            data = json.loads(text)
-        except ValueError:
-            continue
-        if isinstance(data, dict):
-            return data
-    return None
-
-
-def read_save(world, base=""):
-    try:
-        with io.open(save_path(world, base), "rb") as fh:
-            raw = fh.read()
-    except OSError:
-        return None
-    return decode(raw)
-
-
 def places_of(save):
     """セーブから場所の木を組む。{"name": 世界名, "areas": [{"id", "name", "size", "facilities": [...]}]}。
 
@@ -382,13 +244,7 @@ def places_of(save):
     世界名は `world_data.name`（本体の `state.world_key` と同じ見方）。
     """
     save = save if isinstance(save, dict) else {}
-    world_data = save.get("world_data") if isinstance(save.get("world_data"), dict) else {}
-    name = ""
-    for key in ("world_name", "name", "title"):
-        value = world_data.get(key)
-        if isinstance(value, str) and value:
-            name = value
-            break
+    name = modtool.world_name(save, "", mod_dir=MOD_DIR)
     areas = []
     raw_areas = save.get("areas") if isinstance(save.get("areas"), dict) else {}
     for aid in sorted(raw_areas, key=id_sort_key):
@@ -416,47 +272,6 @@ def places_of(save):
     return {"name": name, "areas": areas}
 
 
-def _gui_config_path(root):
-    return os.path.join(root, "settings", "gui.json")
-
-
-def load_window(root):
-    """前回の窓の大きさと位置。{"geometry": "WxH+X+Y", "maximized": bool}。無ければ空。"""
-    try:
-        with io.open(_gui_config_path(root), encoding="utf-8") as fh:
-            cfg = json.load(fh)
-        entry = (cfg.get("tool_window") or {}).get(MOD_NAME) or {}
-        return entry if isinstance(entry, dict) else {}
-    except (OSError, ValueError, AttributeError):
-        return {}
-
-
-def save_window(root, window):
-    """窓の大きさと位置を `settings/gui.json` の `tool_window[MOD 名]` に残す。"""
-    try:
-        maximized = window.state() == "zoomed"
-        if maximized:
-            window.state("normal")
-            window.update_idletasks()
-        geometry = window.geometry()
-        path = _gui_config_path(root)
-        try:
-            with io.open(path, encoding="utf-8") as fh:
-                cfg = json.load(fh)
-        except (OSError, ValueError):
-            cfg = {}
-        if not isinstance(cfg, dict):
-            cfg = {}
-        windows = cfg.get("tool_window")
-        if not isinstance(windows, dict):
-            windows = {}
-        windows[MOD_NAME] = {"geometry": geometry, "maximized": maximized}
-        cfg["tool_window"] = windows
-        write_json(root, path, cfg, indent=2)     # gui.json は設定画面と同じ体裁
-    except Exception:
-        pass
-
-
 class Model(object):
     """一覧の中身。
 
@@ -474,7 +289,7 @@ class Model(object):
         self.worlds_dir = os.path.join(self.state_dir, WORLDS_SUBDIR)
         self.asset_dir = os.path.join(self.game_dir, *ASSET_SUBDIR) if self.game_dir else ""
         self.playlist_path = os.path.join(self.state_dir, PLAYLIST_NAME)
-        self.data_root = data_dir(data_root or "")
+        self.data_root = saves.data_dir(data_root or "")
         self.pool = {}
         self.playlists = {}
         self.file = {}
@@ -495,7 +310,7 @@ class Model(object):
         return self.settings.get("DEFAULT_WEIGHT", DEFAULT_WEIGHT)
 
     def reload(self):
-        self.settings = load_settings(self.root)
+        self.settings = modtool.load_settings(self.root, MOD_DIR)
         self.saved_settings = dict(self.settings)
         self.file = load_json(self.playlist_path)
         stored = self.file.get("playlists")
@@ -509,7 +324,7 @@ class Model(object):
             # 見つけただけの曲は 0（左の一覧に出るだけ）。「使う」で初めて重みが付く。
             self.playlists[category] = dict((key, weight_of(playlist, key)) for key in self.pool)
         self.saved = self.snapshot()
-        self.worlds = list_worlds(self.data_root)
+        self.worlds = saves.list_worlds(self.data_root)
         self.places = {}
         self.world_keys = {}
         self.world_files = {}
@@ -560,13 +375,14 @@ class Model(object):
     # -- ワールド個別設定 -------------------------------------------------
 
     def world_path(self, key):
-        return os.path.join(self.worlds_dir, world_filename(self.root, key))
+        return os.path.join(self.worlds_dir, modtool.world_filename(self.root, key, MOD_DIR))
 
     def open_world(self, folder):
         """世界を開く。セーブを読み、`worlds/<世界>.json` の指定を載せる。戻りは places（読めなければ None）。"""
         if folder in self.places:
             return self.places[folder]
-        places = places_of(read_save(folder, self.data_root)) if os.path.isfile(save_path(folder, self.data_root)) else None
+        places = (places_of(saves.read_save(folder, self.data_root))
+                  if os.path.isfile(saves.save_path(folder, self.data_root)) else None)
         if places is not None and not places["areas"]:
             places = None
         self.places[folder] = places
@@ -661,19 +477,19 @@ class Model(object):
     def save(self):
         """playlist.json・mod_settings.json・開いた世界の worlds/<世界>.json。どれかが書けなければ False。"""
         data = self.to_json()
-        if not write_json(self.root, self.playlist_path, data):
+        if not modtool.write_json(self.root, self.playlist_path, data):
             return False
         self.file = data
         self.saved = self.snapshot()
         for key in sorted(set(k for k, _g, _p in self.world_playlists)):
             world = self.to_world_json(key)
-            if not write_json(self.root, self.world_path(key), world):
+            if not modtool.write_json(self.root, self.world_path(key), world):
                 return False
             self.world_files[key] = world
         self.world_saved = self.world_snapshot()
         self.cleared = set()
         if self.settings != self.saved_settings:
-            if not save_settings(self.root, self.settings):
+            if not modtool.save_settings(self.root, MOD_DIR, self.settings):
                 return False
             self.saved_settings = dict(self.settings)
         return True
@@ -687,7 +503,7 @@ def build_window(model):
     root = tk.Tk()
     root.title("街・施設BGMの選曲")
     root.minsize(1000, 640)
-    remembered = load_window(model.root)
+    remembered = modtool.load_window(model.root, MOD_DIR)
     root.geometry(remembered.get("geometry") or "1380x860")
     if remembered.get("maximized"):
         try:
@@ -696,12 +512,7 @@ def build_window(model):
             pass
 
     # 配色と書体は設定画面のものを借りる。無ければ素の Tk。
-    try:
-        sys.path.insert(0, os.path.join(model.root, "tools"))
-        import gui as loader_gui
-        loader_gui.setup_theme(root)
-    except Exception:
-        pass
+    modtool.setup_theme(root, model.root)
 
     outer = ttk.Frame(root, padding=12)
     outer.pack(fill="both", expand=True)
@@ -747,7 +558,7 @@ def build_window(model):
         side="left", padx=(6, 18))
     bool_vars = {}
     for key, label in BOOL_SETTINGS:
-        var = tk.BooleanVar(value=bool(model.settings.get(key, SETTING_DEFAULTS[key])))
+        var = tk.BooleanVar(value=bool(model.settings.get(key, SETTING_DEFAULTS.get(key))))
         bool_vars[key] = var
         ttk.Checkbutton(opts, text=label, variable=var).pack(side="left", padx=(0, 14))
 
@@ -830,8 +641,8 @@ def build_window(model):
             iid = "w:" + folder
             world_tree.insert("", "end", iid=iid, text=folder, values=("",))
             world_tree.insert(iid, "end", iid=iid + "|" + LOADING, text=LOADING)
-        world_status.configure(text="{} 世界（{}）".format(len(model.worlds), saves_dir(model.data_root))
-                               if model.worlds else "世界が見つからない: " + saves_dir(model.data_root))
+        world_status.configure(text="{} 世界（{}）".format(len(model.worlds), saves.saves_dir(model.data_root))
+                               if model.worlds else "世界が見つからない: " + saves.saves_dir(model.data_root))
 
     def world_target_of(iid):
         """行の id から (フォルダ, 群, 場所)。世界の行やダンジョンの束は None。"""
@@ -1173,7 +984,7 @@ def build_window(model):
         model.reload()
         default_var.set(str(model.default_weight))
         for key, var in bool_vars.items():
-            var.set(bool(model.settings.get(key, SETTING_DEFAULTS[key])))
+            var.set(bool(model.settings.get(key, SETTING_DEFAULTS.get(key))))
         for part in (pool, used):
             part["folder_box"].configure(values=[ANY] + model.folders())
         fill_worlds()
@@ -1191,7 +1002,7 @@ def build_window(model):
                                  "{} か worlds\\ に書けませんでした。".format(model.playlist_path), parent=root)
 
     def close():
-        save_window(model.root, root)
+        modtool.save_window(model.root, MOD_DIR, root)
         if model.dirty():
             answer = messagebox.askyesnocancel(
                 "未保存の変更", "変更を保存してから閉じますか？", parent=root)
@@ -1243,7 +1054,7 @@ def dump(model):
     print("state   : {}".format(model.state_dir))
     print("playlist: {} ({})".format(model.playlist_path,
                                       "exists" if os.path.isfile(model.playlist_path) else "missing"))
-    print("saves   : {} ({} world(s))".format(saves_dir(model.data_root), len(model.worlds)))
+    print("saves   : {} ({} world(s))".format(saves.saves_dir(model.data_root), len(model.worlds)))
     print("pool    : {} track(s)".format(len(model.pool)))
     print()
     for key in sorted(model.pool):

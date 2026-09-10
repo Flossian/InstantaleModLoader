@@ -200,8 +200,8 @@ class FakeCtx(object):
     def write_json(self, path, data):
         return ml.write_json(path, data, report=self.log_exc)
 
-    def logger(self, name, *, tag=None, stamp=True, label=None):
-        return ml.ModContext.logger(self, name, tag=tag, stamp=stamp, label=label)
+    def logger(self, name, **kw):
+        return ml.ModContext.logger(self, name, **kw)
 
     def log(self, msg, level="INFO"):
         self.logs.append((level, msg))

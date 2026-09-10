@@ -142,13 +142,18 @@ if errorlevel 8 (
   goto :fail
 )
 
-rem  The GUI, the injector, the console watcher and the context probe (the
-rem  127_ mod needs it to pick a safe window). tools\tests\ and the one-off
-rem  save fixers are development harnesses and stay out.
+rem  The GUI, the injector, the console watcher, the context probe (the 127_
+rem  mod needs it to pick a safe window) and modtool.py -- the shared base
+rem  every mod-bundled settings screen imports (TECH.md 3.12). Leave modtool.py
+rem  out and the "Settings..." button opens nothing -- in the packaged build
+rem  only, so the repo and CI stay green. This list is a whitelist: a new
+rem  tools\ file that is not named here is dropped without a word.
+rem  tools\tests\ and the one-off save fixers are development harnesses and
+rem  stay out.
 echo   [loader] tools ...
 md "%LOADER%\tools" 2>nul
 for %%f in (gui.py injector.py watcher.py logrotate.py watch.bat check_mods.py
-           llm_ctx_probe.py llm_ctx_probe.bat) do (
+           modtool.py llm_ctx_probe.py llm_ctx_probe.bat) do (
   if not exist "tools\%%f" (
     echo   ERROR: tools\%%f is missing.
     goto :fail

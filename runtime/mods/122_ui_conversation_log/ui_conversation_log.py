@@ -299,7 +299,6 @@ def apply(ctx):
             "view": None,     # 開いている窓（Kivy のウィジェット一式）
             "world": None,    # 直前に本文を控えた世界（窓に出す相手）
             "hud": None,
-            "watching": False,
             "anchor": None,
         }
         setattr(sys, STATE_STORE_ATTR, store)
@@ -917,26 +916,8 @@ def apply(ctx):
         schedule(lambda: guarded(lambda: upkeep(hud)))
         schedule(lambda: guarded(lambda: upkeep(hud)), RESETTLE_DELAY)
 
-    def watch_window():
-        if store["watching"]:
-            return
-        try:
-            from kivy.core.window import Window
-        except Exception:
-            return            # ゲームの外（オフライン検証）では窓が無い
-        store["watching"] = True
-        previous = frames.attr(Window, WINDOW_ATTR, None)
-        if previous is not None:
-            try:
-                Window.unbind(on_resize=previous)
-            except Exception:
-                pass
-        try:
-            Window.bind(on_resize=on_window_resize)
-            setattr(Window, WINDOW_ATTR, on_window_resize)
-        except Exception:
-            store["watching"] = False
-            ctx.log_exc("conversation log: could not watch the window size")
+    #: 窓の大きさが変わったら塗り直す。結ぶのは1本だけ（ローダの語彙）。
+    watch_window = ui.window_watcher(ctx, on_window_resize, WINDOW_ATTR, "conversation log")
 
     def upkeep(hud):
         store["hud"] = weakref.ref(hud)

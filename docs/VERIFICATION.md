@@ -1989,8 +1989,11 @@ VERIFICATION_LOG.md §2.77、GAME.md §2.23）。
 
 分かっていて残していることが2つ。
 
-- セーブの復号（XOR）が `323_npc_carryover\carryover.py` と `324_place_bgm\tool.py` の2箇所にある。
-  ローダの語彙（`instantale_modloader.saves`: `data_dir` / `list_worlds` / `read_save`）へ寄せ、両方をそちらに向ける（TECH.md §3.2.3 の理由。写した先はいつかずれる）
+- ~~セーブの復号（XOR）が `323_npc_carryover\carryover.py` と `324_place_bgm\tool.py` の2箇所にある。
+  ローダの語彙（`instantale_modloader.saves`: `data_dir` / `list_worlds` / `read_save`）へ寄せ、両方をそちらに向ける~~
+  → **2026-09-10 に片付けた**（§3.58）。数えたら鍵は2箇所ではなく5箇所にあった
+  （`130_` / `314_` / `324_` の `tool.py`・`carryover.py`・`tools\rebalance_saved_bgm.py`）。
+  全部 `instantale_modloader.saves` に向けてある
 - `104_balance_area_bgm` を終えるかの判断。条件は3つ:
   上の #1〜#4 が通ること・
   選び方の差（`104_` は使用回数の最少優先、`324_` は重みの抽選。埋めるなら `AREA_PICK = "least_used"` を足す）をどうするか決めること・
@@ -2387,6 +2390,118 @@ MOD 自体はこちらの著作物で、提供を受けた MOD とは分けて�
 `314_` の通貨追従は PR の `{long}` / `{short}` と自前の読み取りを使わず、
 共有部品（`ui.rewrite_coins` / `ui.parse_coin`）のままにしてある。
 表記は `130_` が共有部品へ渡すので、`314_` は `130_` の控えを読まない（DOC.md の「通貨の表記（`130_` と組む）」）。
+
+
+### 3.58 各 MOD の `tool.py` の共通化: オフラインで決着・実機は6画面（2026-09-10）
+
+MOD 同梱の設定画面が6本あり、画面の中身ではなくインフラが写して回っていた。
+関数単位で数えた写しと、寄せた先:
+
+| 写していたもの | 本数 | 寄せた先 |
+|---|---|---|
+| `_gui_config_path` / `load_window` / `save_window` | 5本・4変種 | `modtool.load_window` / `save_window` |
+| `load_settings` / `save_settings` / `_config_module` | 4本・4変種 | `modtool.load_settings` / `save_settings` |
+| `locate()` | 6本・3変種 | `modtool.locate` |
+| `_add_loader_path` | 4本・4変種 | `modtool.add_loader_path` |
+| `write_json`（ローダ呼び＋自前の受け） | 2本 | `modtool.write_json` |
+| テーマ拝借の try ブロック | 6本 | `modtool.setup_theme` |
+| セーブの置き場・復号・世界の一覧 | 5本 | `instantale_modloader.saves` |
+| 宣言駆動のワールド別設定画面 | 2本が501行同一 | `modtool.world_settings_main` |
+
+**写しは既にずれていて、3つは実害だった**（どれも `323_npc_carryover`）:
+
+1. `save_window` が最大化を `normal` に戻さずに `geometry()` を取っていた。
+   最大化して閉じると、次に開いて「元に戻す」を押したときの寸法が画面いっぱいの値になる。
+   手元で測ると最大化中の `geometry()` は `2560x1387`、正しくは `800x600`
+2. 同じ `save_window` がローダの `write_json`（tmp → fsync → replace）ではなく
+   自前の `.writing`（fsync 無し）で書いていた
+3. `locate()` だけ `settings\gui.json` の `game_path` から `game_dir` を組んでいなかった
+
+行数は 4974 → 3601（6本の `tool.py`）。
+`tools\modtool.py` 671行 と `saves.py` 159行 が新しく1本ずつ。
+効き目は行数より**写しの箇所が 6 → 1 になったこと**。
+
+`130_` / `314_` の `tool.py` は 501行 → 38行のシムになった。
+`__file__` 以外に何も書かないので2本は今も同一で、`filecmp` の検査を残せている。
+
+オフラインは全て通っている（`tools\tests\test_*.py` 79本。9xx の `test_wip_*` は対象外）。
+新しく置いた検査は3本:
+
+| 検査 | 見るもの |
+|---|---|
+| `test_saves.py`（26項目） | 置き場・素 JSON と XOR の両方・壊れたセーブ・フォルダ名フォールバック |
+| `test_modtool.py`（32項目） | 場所・宣言・設定・入力欄の整え・書き込み・窓の記憶。**最大化の道を名指しで見る**（上の実害1の再発防止） |
+| `test_world_settings_tool.py`（書き換え） | 検査対象を `modtool` に当て直し、シムは「2本同一で、確かに `world_settings_main` を呼ぶ」ことだけ見る |
+
+`tools\check_mods.py` に `"tool.entry"` が実在するかの検査を足した。
+今までは「設定…」を押した瞬間まで欠落に気付けなかった。
+
+`make_dist.bat` の `tools\` は**名指しの白名簿**だったので `modtool.py` を足してある。
+忘れると手元と CI は緑のまま、配布 zip でだけ6画面が全部開かない。
+
+窓は6本すべて組めることをコード側で確かめた（`build_window` を呼んで `destroy`）。
+`130_` / `314_` は題名が `mod.json` から出て、タブが「一括設定 / ワールド個別設定」の2枚になる。
+
+##### 別プロセス起動と窓の記憶は `tools\check_tool_screens.py` で決着した
+
+`gui.py` は道具を `pythonw` で別プロセス起動するので traceback がどこにも出ない。
+`tools\tests\` の検査もこの経路を通らないので、道具を開く harness を足した
+（TECH.md §3.12）。対象は `discover()` が `"tool"` と言った MOD なので、道具が増えても書き足さない。
+
+    python tools/check_tool_screens.py              6本 × python / pythonw で開いて撮る
+    python tools/check_tool_screens.py --window     最大化して閉じて開き直す
+
+結果:
+
+- **12/12 で窓が出た**（6本 × `python` / `pythonw`）。無反応で死ぬものは無く、
+  撮った絵は両者で同一。`pythonw` は配布物のローダが使う側なので、ここが本番の経路
+- 画面に出る値を `settings\mod_settings.json` と突き合わせて**全6本一致**。
+  `322_` / `324_` の「前回と同じ曲を続けて選ばない」が外れて出るのも、
+  `131_` の `SHARP_PORTRAIT` が入っているのも保存どおり（`config.resolve` への
+  切り替えで値がずれていない、ということ）
+- 最大化の往復（実害1・2）:
+
+|  | 寸法 |
+|---|---|
+| 開いたとき | 1196x799 |
+| 最大化 | 2576x1426 |
+| `gui.json` に残った | `1180x760+104+104` / `maximized: true` ← **最大化前の寸法** |
+| 開き直し | 2576x1426（最大化で出る） |
+| 元に戻す | 1196x799 ← ここが壊れていた |
+
+  旧コードなら `geometry` に `2576x1426` が入り、「元に戻す」で画面いっぱいのままになる。
+  `game_path` などの他の覚えごとも落ちていない。
+
+移した画面（`130_` / `314_`）は題名が `mod.json` から出て、控えの行が
+`state\currency_unit\<世界名>.json` / `state\area_move_custom\<世界名>.json` と
+MOD ごとに変わり、注記が一括設定タブでは「既定: ゴールド」、個別タブでは
+「一括設定: ゴールド」に切り替わる。`314_` は 16 項目でスクロールが効くので、
+`_scrollable` の移設も生きている。
+
+##### 目で見るしかない残り
+
+harness が決めるのは「出たか・落ちなかったか・寸法が壊れないか」まで。
+中身が入っているか・崩れていないかは撮ったものを見る（`out\tool_screens\`）。
+2026-09-10 に6画面ぶん見て、一覧・絞り込み・設定欄がすべて埋まっていることを確認した
+（`323_` は NPC 87人、`324_` は 115曲、`131_` は 404体中 20体、`130_` / `324_` は世界6つ）。
+
+人の手が要るのは2点だけ。
+
+| # | 確かめること | どう分かるか |
+|---|---|---|
+| 1 | 設定の保存が効く | 各画面で1つ変えて保存。既定と違う項だけ `mod_settings.json` に入り、他の MOD の項は無傷、既定に戻すと項が消える |
+| 2 | **NPC の引き継ぎがゲーム内でも通る**（`carryover.py` の鍵を `saves` に向けた分） | 別の世界から NPC を引き継いで新しい世界を始める。`323_` の DOC.md の手順どおりに人物が現れる |
+
+§3.57（`130_` / `314_` のワールド個別設定）も未実機のままなので、同じ回で一緒に見る。
+画面が同じものになったので、確認を増やさずに済む。
+
+`131_sharp_portrait` だけ窓の大きさを覚えない（`tool_window` に項が作られない）。
+この作業の前からで、`modtool` に入ったので付けるなら2行。
+
+`tools\rebalance_saved_bgm.py` は `104_` がフォルダ化した時点から
+`find_mod` が `*_balance_area_bgm.py` を見つけられず落ちる（この作業の前から）。
+鍵は `saves` に向けたが、`find_mod` は直していない。
+このスクリプトの置き場所そのものが §3.48 の宿題に入っているため。
 
 
 ## 4. 運用上の取り決め

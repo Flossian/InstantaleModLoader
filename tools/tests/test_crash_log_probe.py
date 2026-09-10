@@ -144,9 +144,8 @@ class FakeCtx:
     # ログは本物の `ctx.logger` をそのまま借りる（`315_` のテストと同じ理由）。
     _mod = None
 
-    def logger(self, name, *, tag=None, stamp=True, label=None, cap=None):
-        return ml.ModContext.logger(self, name, tag=tag, stamp=stamp,
-                                    label=label, cap=cap)
+    def logger(self, name, **kw):
+        return ml.ModContext.logger(self, name, **kw)
 
     def log(self, msg, level="INFO"):
         self.logs.append((level, msg))

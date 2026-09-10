@@ -574,7 +574,7 @@ class ModContext:
         return path
 
     def logger(self, name: str, *, tag: str = None, stamp: bool = True,
-               label: str = None, cap: int = None):
+               label: str = None, cap: int = None, dedup: bool = False):
         """この MOD 専用のログ関数を作る。`out/<name>` に1行ずつ追記する。
 
             write = ctx.logger("quest_offer.log")
@@ -591,6 +591,7 @@ class ModContext:
         | `stamp` | 時刻を付けるか。既定 True。自分で時刻を組み立てて渡す記録では False |
         | `label` | 書けなかったときに `modloader.log` へ出す名前。既定は MOD のフォルダ名 |
         | `cap` | この関数からの書き込みをこの行数で打ち切る。毎フレーム呼ばれる場所からの記録用（`note = ctx.logger(名前, cap=N)` の形で、無制限の `write` と併用する）。既定は無制限 |
+        | `dedup` | **直前と同じ本文なら書かない。** 結末が変わったときだけ1行出る。会話の LLM は1ターンに何度も回るので、注入の結末をそのまま書くとログが会話で埋まる。`cap` が「N 行で打ち切る」なのに対し、こちらは「変わるまで黙る」 |
 
         `tag` を逐語にしてあるのは、**既にあるログの見た目を変えないため**。
         角括弧の形（`[BGMFIX]`）と区切りの形（`quest-end:`）が両方使われていて、
@@ -616,14 +617,24 @@ class ModContext:
         whose = label or (self._mod or "mod")
         lock = threading.Lock()
         left = [cap]                     # None なら無制限
+        last = [None]                    # dedup 用。直前に書いた本文
 
         def write(text):
             try:
+                line = str(text).rstrip("\n")
+                # dedup は cap より**先**に見る。
+                # 逆にすると、書かなかった行が枠を食って
+                # `cap=10, dedup=True` が「1行書いて終わり」になる。
+                if dedup:
+                    # 時刻と印を付ける**前**の本文で見る。
+                    # 付けた後だと時刻が毎回違うので、同じ結末でも別物になる。
+                    if line == last[0]:
+                        return
+                    last[0] = line
                 if left[0] is not None:
                     if left[0] <= 0:
                         return
                     left[0] -= 1
-                line = str(text).rstrip("\n")
                 if tag:
                     line = "{} {}".format(tag, line)
                 if stamp:
@@ -637,6 +648,43 @@ class ModContext:
                 self.log_exc("{}: write failed".format(whose))
 
         return write
+
+    def jsonl(self, name: str, *, label: str = None):
+        """1行1件の JSON（JSONL）を書き足す関数を作る。`out/<name>` へ追記する。
+
+            record = ctx.jsonl("event_roll.jsonl")
+            record({"at": "...", "roll": 12, "target": 15})
+
+        `logger()` が**読む文**なのに対して、こちらは**後で数える表**。
+        200 番台の probe が実機のログを集計するのに使う（計測は probe で行う）。
+        測った結果を機械で読み直すので、体裁（時刻・印）は付けない
+        ― 何を残すかは行の中身で決める。
+
+        `default=str` を渡しているので、JSON にできない値（オブジェクト・
+        `datetime`）も `str()` に落ちて**行ごと失われない**。
+        probe が拾うのはゲームの生の値で、何が来るか決まらない。
+
+        `logger()` と同じく、書けなくても**例外にしない**し、
+        tmp→replace も通さない（1行ずつ足すだけで、壊れても捨てられる）。
+
+        以前はこの5行が**8本の probe に写されていた**（差はログ文だけ）。
+        probe を1本書くたびに写しが1つ増える形になっていたので、ここへ集めた
+        （写して回るものはローダの語彙。TECH.md §3.2.3）。
+        """
+        path = self.out_path(name)
+        whose = label or (self._mod or "mod")
+        lock = threading.Lock()
+
+        def record(row):
+            try:
+                line = json.dumps(row, ensure_ascii=False, default=str)
+                with lock:
+                    with open(path, "a", encoding="utf-8") as fh:
+                        fh.write(line + "\n")
+            except Exception:
+                self.log_exc("{}: record failed".format(whose))
+
+        return record
 
     def warner(self, tag: str):
         """同じ警告を一度しか出さない関数を作る。

@@ -114,7 +114,6 @@ ALLY_SIDE = "ally"
 
 
 def apply(ctx):
-    record_path = ctx.out_path(RECORD_BASENAME)
     write = ctx.logger(LOG_BASENAME)
 
     state = {
@@ -127,12 +126,8 @@ def apply(ctx):
     def now():
         return datetime.datetime.now().isoformat(timespec="seconds")
 
-    def record(row):
-        try:
-            with open(record_path, "a", encoding="utf-8") as fh:
-                fh.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
-        except Exception:
-            ctx.log_exc("battle mechanics: record failed")
+    #: 1件1行の JSON。後から数えるための表（ローダの語彙）。
+    record = ctx.jsonl(RECORD_BASENAME)
 
     def brief(value, depth=4):
         """値を JSON に写す。battle_action の入れ子（効果のリスト）が要るので深めに。"""

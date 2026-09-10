@@ -137,8 +137,8 @@ class Ctx(object):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
-    def logger(self, name, *, tag=None, stamp=True, label=None):
-        real = ml.ModContext.logger(self, name, tag=tag, stamp=stamp, label=label)
+    def logger(self, name, **kw):
+        real = ml.ModContext.logger(self, name, **kw)
 
         def write(message):
             self.notes.append(str(message))

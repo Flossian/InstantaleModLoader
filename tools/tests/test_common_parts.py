@@ -16,6 +16,10 @@
 | `llm.truthy` が両方の倒し方を持つ | `changed` は True へ、`content_violation` は False へ |
 | `ui.game_day` がロード中も読める | 受け皿を持っていたのは `312_` だけだった |
 | `ui.pressed_entry` がページ送りの枠を None にする | 地図の値が `'next'` の枠を添字に落とすと、自前の一覧を出す MOD が「次」を横取りする（`325_` で実際に起きた） |
+| `ctx.jsonl` が JSON にできない値でも行を落とさない | probe が拾うのはゲームの生の値で、何が来るか決まらない（8本の写しを寄せた先） |
+| `ctx.logger(dedup=True)` が変わったときだけ書く | 会話の LLM は1ターンに何度も回る。6本の写しを寄せた先 |
+| `dedup` が `cap` の枠を食わない | 逆だと `cap=10, dedup=True` が「1行書いて終わり」になる |
+| `npcs.enroll` が心当たりを全部見て書く | セーブの形＝実行時の形ではない（GAME.md §2.7）。実行時だけに足すと次のセーブで消える |
 
 ゲームは要らない（偽の `ctx` を渡す）。
 """
@@ -34,7 +38,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir))
 sys.path.insert(0, os.path.join(ROOT, "runtime"))
 
-from instantale_modloader import jobs, llm, ui                      # noqa: E402
+import instantale_modloader as ml                                   # noqa: E402
+from instantale_modloader import jobs, llm, npcs, ui                # noqa: E402
 from instantale_modloader import state as state_mod                 # noqa: E402
 from instantale_modloader.state import world_filename               # noqa: E402
 
@@ -332,6 +337,73 @@ def test_pressed_entry():
     check("範囲外は None", ui.pressed_entry(plain, 9) is None)
 
 
+def test_records(root):
+    """`ctx.jsonl` と `ctx.logger(dedup=True)`。8本と6本の写しを寄せた先。"""
+    print("[記録]")
+    out = os.path.join(root, "out")
+    ctx = ml.ModContext(out, os.path.join(ROOT, "runtime"))
+
+    record = ctx.jsonl("probe.jsonl")
+    record({"n": 1})
+    record({"obj": object(), "when": "x"})          # JSON にできない値を混ぜる
+    rows = [json.loads(l) for l in io.open(os.path.join(out, "probe.jsonl"), encoding="utf-8")]
+    check("jsonl: 1行1件で書ける", len(rows) == 2, rows)
+    check("jsonl: JSON にできない値でも行を落とさない",
+          isinstance(rows[1]["obj"], str) and rows[1]["when"] == "x", rows[1])
+
+    note = ctx.logger("note.log", dedup=True, stamp=False)
+    for message in ("A", "A", "A", "B", "B", "A"):
+        note(message)
+    lines = io.open(os.path.join(out, "note.log"), encoding="utf-8").read().split()
+    check("dedup: 変わったときだけ書く", lines == ["A", "B", "A"], lines)
+
+    both = ctx.logger("both.log", dedup=True, cap=2, stamp=False)
+    for message in ["X"] * 5 + ["Y", "Z"]:
+        both(message)
+    lines = io.open(os.path.join(out, "both.log"), encoding="utf-8").read().split()
+    # 書かなかった行が枠を食うと ["X"] だけになる。
+    check("dedup は cap の枠を食わない", lines == ["X", "Y"], lines)
+
+    plain = ctx.logger("plain.log", stamp=False)
+    for message in ("A", "A"):
+        plain(message)
+    lines = io.open(os.path.join(out, "plain.log"), encoding="utf-8").read().split()
+    check("dedup 無しは今までどおり全部書く", lines == ["A", "A"], lines)
+
+
+def test_enroll():
+    """`npcs.enroll`。実行時の Area とセーブ側の両方に載せる（2本の写しを寄せた先）。"""
+    print("[冒険者名簿]")
+    area = types.SimpleNamespace(adventurer_npcs=[])
+    app = types.SimpleNamespace(
+        world_dict={"areas": {"0": {"adventurer_npcs": []}}},
+        save_data_dict={"world_data": {"areas": {"0": {"adventurer_npcs": []}}}})
+
+    wrote = npcs.enroll(app, area, "0", 64)
+    check("実行時とセーブの両方に書く",
+          wrote == ["area", "world_dict", "save_data_dict"], wrote)
+    check("Area に載った", area.adventurer_npcs == [64])
+    check("world_dict に載った", app.world_dict["areas"]["0"]["adventurer_npcs"] == [64])
+    check("save_data_dict の world_data の下にも載った",
+          app.save_data_dict["world_data"]["areas"]["0"]["adventurer_npcs"] == [64])
+
+    check("二度目は何もしない（重複しない）", npcs.enroll(app, area, "0", 64) == [])
+    check("重複していない", area.adventurer_npcs == [64])
+
+    # 同じ実体を2箇所から指しているとき、二重に足さない。
+    shared = []
+    area2 = types.SimpleNamespace(adventurer_npcs=shared)
+    app2 = types.SimpleNamespace(world_dict={"areas": {"0": {"adventurer_npcs": shared}}},
+                                 save_data_dict=None)
+    npcs.enroll(app2, area2, "0", 7)
+    check("同じ実体への二重書きを避ける", shared == [7], shared)
+
+    bare = types.SimpleNamespace(adventurer_npcs=None)
+    empty = types.SimpleNamespace(world_dict=None, save_data_dict=None)
+    check("名簿が1つも無ければ空を返す（例外にしない）",
+          npcs.enroll(empty, bare, "0", 1) == [])
+
+
 def main():
     root = tempfile.mkdtemp(prefix="instantale_common_")
     try:
@@ -341,6 +413,8 @@ def main():
         test_llm_reading()
         test_game_day()
         test_pressed_entry()
+        test_records(root)
+        test_enroll()
     finally:
         shutil.rmtree(root, ignore_errors=True)
     if FAILURES:

@@ -276,8 +276,8 @@ try:
             os.makedirs(os.path.dirname(path), exist_ok=True)
             return path
 
-        def logger(self, name, *, tag=None, stamp=True, label=None, cap=None):
-            return ml.ModContext.logger(self, name, tag=tag, stamp=stamp, label=label)
+        def logger(self, name, **kw):
+            return ml.ModContext.logger(self, name, **kw)
 
         def warner(self, tag):
             seen = set()

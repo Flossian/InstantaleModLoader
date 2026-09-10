@@ -38,7 +38,7 @@ README の「MOD を消せば完全に元通り」からは外れる性質なの
 import copy
 import sys
 
-from . import ids, ui
+from . import frames, ids, ui
 
 #: 生成直後の NPC の素データのひな型。
 #:
@@ -447,3 +447,50 @@ def _place(app, npc_id, character, area, facility, write=None):
             write("    move_npc_to_facility failed: {}: {}".format(
                 type(exc).__name__, exc))
         return False
+
+
+def enroll(app, area, area_id, npc_id) -> list:
+    """NPC を土地の冒険者名簿（`adventurer_npcs`）に載せる。書けた場所の名前を返す。
+
+        wrote = npcs.enroll(app, area, area_id, npc_id)
+        write("enroll: {} -> adventurer_npcs of area {} via {}".format(
+            npc_id, area_id, wrote or "nothing (roster not found)"))
+
+    戻りは `["area", "world_dict", "save_data_dict"]` の並び（書けたものだけ）。
+    **ログの文言は呼び側が決める** ― 既にあるログの見た目を変えないため
+    （`320_` と `323_` で字下げが違い、どちらも VERIFICATION_LOG.md に引用がある）。
+
+    ##### なぜ1箇所ではなく心当たりを全部見るのか
+
+    **セーブの形＝実行時の形ではない**（GAME.md §2.7）。
+    実行中の `Area` オブジェクトに足しただけでは、次のセーブで消える。
+    素データ側にも同じ名前のリストがあり、そちらは
+    `world_dict` と `save_data_dict` の2本、さらにその中の `world_data` の下にも居る。
+    どれがその世界で生きているかは決めつけられないので、
+    **在るものには全部書く**（`raw is not roster` で同じ実体への二重書きだけ避ける）。
+
+    書けた場所が1つも無ければ空のリスト。
+    呼び側はそれを「名簿が見つからなかった」として記録する
+    （例外にしない ― NPC は作れているので、一覧に出ないだけ）。
+    """
+    wrote = []
+    roster = frames.attr(area, "adventurer_npcs", None)
+    if isinstance(roster, list) and npc_id not in roster:
+        roster.append(npc_id)
+        wrote.append("area")
+    for label, root in (("world_dict", getattr(app, "world_dict", None)),
+                        ("save_data_dict", getattr(app, "save_data_dict", None))):
+        if not isinstance(root, dict):
+            continue
+        holders = [root]
+        inner = root.get("world_data")
+        if isinstance(inner, dict):
+            holders.append(inner)
+        for holder in holders:
+            areas = holder.get("areas")
+            entry = areas.get(area_id) if isinstance(areas, dict) else None
+            raw = entry.get("adventurer_npcs") if isinstance(entry, dict) else None
+            if isinstance(raw, list) and raw is not roster and npc_id not in raw:
+                raw.append(npc_id)
+                wrote.append(label)
+    return wrote

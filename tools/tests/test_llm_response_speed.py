@@ -92,8 +92,8 @@ class FakeCtx:
     # `ctx.logger` をそのまま借りる（検査だけが別経路を通らないように）。
     _mod = None
 
-    def logger(self, name, *, tag=None, stamp=True, label=None):
-        return ml.ModContext.logger(self, name, tag=tag, stamp=stamp, label=label)
+    def logger(self, name, **kw):
+        return ml.ModContext.logger(self, name, **kw)
 
     def log(self, msg, level="INFO"):
         self.logs.append((level, msg))

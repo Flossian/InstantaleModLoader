@@ -214,12 +214,8 @@ def apply(ctx):
     def now():
         return datetime.datetime.now().isoformat(timespec="seconds")
 
-    def record(row):
-        try:
-            with open(record_path, "a", encoding="utf-8") as fh:
-                fh.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
-        except Exception:
-            ctx.log_exc("bounty probe: record failed")
+    #: 1件1行の JSON。後から数えるための表（ローダの語彙）。
+    record = ctx.jsonl(RECORD_BASENAME)
 
     def wanted_of(app):
         """今のプレイヤーの手配度。土地ごとの値と要約を両方返す。"""

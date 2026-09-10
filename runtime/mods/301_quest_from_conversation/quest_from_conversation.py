@@ -294,10 +294,8 @@ def apply(ctx):
         # 会話への注入の結末。同じ結末が続く間はログに書かない。
         # 会話の LLM は1ターンに何度も回るので、
         # 毎回書くとこのログが会話で埋まる（`311_` の `note_inject` と同じ手）。
-        "last_inject": None,
         # ボタンを出さなかった理由。こちらも同じ理由が続く間は書かない。
         # `refresh_choice_buttons` は並べ直しのたびに走る。
-        "last_skip": None,
     }
     INJECT_TTL = 300.0
 
@@ -1166,23 +1164,11 @@ def apply(ctx):
             "\n".join(COMPLETED_ITEM.format(title=title) for title in titles),
             COMPLETED_BODY.format(player=player_name_of(app)))
 
-    def note_inject(message):
-        """注入の結末を残す。同じ結末が続く間は書かない。
+    #: 注入の結末。直前と同じ内容なら書かない（会話は1ターンに何度も回る）。
+    note_inject = ctx.logger(LOG_BASENAME, dedup=True)
 
-        会話の LLM は1ターンに何度も回るので、
-        毎回書くとこのログが会話で埋まる（`311_` の `note_inject` と同じ）。
-        """
-        if state["last_inject"] == message:
-            return
-        state["last_inject"] = message
-        write(message)
-
-    def note_skip(message):
-        """ボタンを出さなかった理由を残す。同じ理由が続く間は書かない。"""
-        if state["last_skip"] == message:
-            return
-        state["last_skip"] = message
-        write("no offer: " + message)
+    #: ボタンを出さなかった理由。同じ理由が続く間は書かない。
+    note_skip = ctx.logger(LOG_BASENAME, dedup=True, tag="no offer:")
 
     def with_quest_facts(label, args, kwargs):
         """NPC の浅い複製の `profile` に、片付いた依頼の事実を足した引数を組み直す。

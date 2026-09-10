@@ -107,9 +107,9 @@ class Ctx(object):
 
     _mod = None
 
-    def logger(self, name, *, tag=None, stamp=True, label=None):
+    def logger(self, name, **kw):
         # 本物の logger をそのまま借りる（検査だけ別のログ処理を通らないように）。
-        real = ml.ModContext.logger(self, name, tag=tag, stamp=stamp, label=label)
+        real = ml.ModContext.logger(self, name, **kw)
 
         def write(message):
             self.notes.append(str(message))

@@ -286,7 +286,7 @@ def apply(ctx):
     # 入れ物側にあるのは「今その枠が広いか」。
     state = {"expanded": bool(START_EXPANDED), "ask_game": True,
              "synced": False, "anchor": None, "no_portrait": False,
-             "watching": False, "hud": None, "stale": False}
+             "hud": None, "stale": False}
     labels = weakref.WeakKeyDictionary()
 
     note = ctx.logger(LOG_BASENAME)
@@ -852,32 +852,8 @@ def apply(ctx):
         # `upkeep` は何度呼んでも同じ結果になる（寸法が合っていれば何もしない）。
         schedule(lambda: guarded(lambda: upkeep(hud)), RESETTLE_DELAY)
 
-    def watch_window():
-        """窓の大きさの変化を拾う。塗り直しを待たないためにここだけ別経路。
-
-        本文が変わらない限り `update_display_text` は来ないので、
-        窓だけ変えられるとこちらは何も気付けない（ボタンが古い座標に取り残される）。
-        """
-        if state["watching"]:
-            return
-        try:
-            from kivy.core.window import Window
-        except Exception:
-            return            # ゲームの外（オフライン検証）では窓が無い
-        state["watching"] = True
-        # 注入し直したときに古い版の手が残らないよう、前のものを外してから結ぶ。
-        previous = frames.attr(Window, WINDOW_ATTR, None)
-        if previous is not None:
-            try:
-                Window.unbind(on_resize=previous)
-            except Exception:
-                pass
-        try:
-            Window.bind(on_resize=on_window_resize)
-            setattr(Window, WINDOW_ATTR, on_window_resize)
-        except Exception:
-            state["watching"] = False
-            ctx.log_exc("text expand: could not watch the window size")
+    #: 窓の大きさが変わったら塗り直す。結ぶのは1本だけ（ローダの語彙）。
+    watch_window = ui.window_watcher(ctx, on_window_resize, WINDOW_ATTR, "text expand")
 
     def apply_state(hud):
         """今の意思（広げたいか）を、今の枠に当てる。"""

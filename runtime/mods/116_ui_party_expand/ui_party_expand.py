@@ -301,7 +301,7 @@ def apply(ctx):
     # 画面を作り直されても引き継ぐので、帯ではなくこちらに持つ。
     # 帯側にあるのは「今その帯が何行か」。
     state = {"expanded": bool(START_EXPANDED), "synced": False,
-             "ask_game": True, "busy": False, "stale": False, "watching": False,
+            "ask_game": True, "busy": False, "stale": False, 
              "healed": False, "game_paints": False,
              "hud": None, "fields": None, "anchor": None}
 
@@ -955,27 +955,8 @@ def apply(ctx):
         schedule(lambda: guarded(lambda: rebuild(hud)))
         schedule(lambda: guarded(lambda: upkeep(hud)), RESETTLE_DELAY)
 
-    def watch_window():
-        if state["watching"]:
-            return
-        try:
-            from kivy.core.window import Window
-        except Exception:
-            return            # ゲームの外（オフライン検証）では窓が無い
-        state["watching"] = True
-        # 注入し直したときに古い版の手が残らないよう、前のものを外してから結ぶ。
-        previous = frames.attr(Window, WINDOW_ATTR, None)
-        if previous is not None:
-            try:
-                Window.unbind(on_resize=previous)
-            except Exception:
-                pass
-        try:
-            Window.bind(on_resize=on_window_resize)
-            setattr(Window, WINDOW_ATTR, on_window_resize)
-        except Exception:
-            state["watching"] = False
-            ctx.log_exc("party expand: could not watch the window size")
+    #: 窓の大きさが変わったら塗り直す。結ぶのは1本だけ（ローダの語彙）。
+    watch_window = ui.window_watcher(ctx, on_window_resize, WINDOW_ATTR, "party expand")
 
     # -- ボタン --------------------------------------------------------------
     def button_text():

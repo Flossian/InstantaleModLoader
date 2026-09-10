@@ -204,8 +204,8 @@ class FakeCtx:
     # ここを自前で書くと、検査だけが別のログ処理を通ることになる。
     _mod = None
 
-    def logger(self, name, *, tag=None, stamp=True, label=None, cap=None):
-        return ml.ModContext.logger(self, name, tag=tag, stamp=stamp, label=label)
+    def logger(self, name, **kw):
+        return ml.ModContext.logger(self, name, **kw)
 
     def state_path(self, *parts):
         path = os.path.join(self.state_dir, *parts)

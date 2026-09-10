@@ -304,10 +304,9 @@ class FakeCtx(object):
 
     # ログは本物の `ctx.logger` をそのまま借りる。
     # ここを自前で書くと、検査だけが別のログ処理を通ることになる。
-    def logger(self, name, *, tag=None, stamp=True, label=None):
+    def logger(self, name, **kw):
         import instantale_modloader as _ml
-        return _ml.ModContext.logger(self, name, tag=tag, stamp=stamp,
-                                     label=label)
+        return _ml.ModContext.logger(self, name, **kw)
 
     # 警告も本物の `ctx.warner` を借りる（1度しか出さない側の作りを検査に通すため）。
     def warner(self, tag):

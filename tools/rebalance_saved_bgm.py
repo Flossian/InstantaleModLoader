@@ -45,10 +45,15 @@ import os
 import shutil
 import sys
 
-KEY = b"Instantale_Save_Key_2026"
-
 HERE = os.path.dirname(os.path.abspath(__file__))
-MODS_DIR = os.path.normpath(os.path.join(HERE, os.pardir, "runtime", "mods"))
+ROOT = os.path.dirname(HERE)
+MODS_DIR = os.path.join(ROOT, "runtime", "mods")
+sys.path.insert(0, os.path.join(ROOT, "runtime"))
+
+from instantale_modloader import saves            # noqa: E402
+
+#: 鍵はローダの語彙（`instantale_modloader.saves`）に1つだけ在る。ここには写さない。
+KEY = saves.SAVE_KEY
 
 
 def find_mod(suffix: str) -> str:
@@ -69,8 +74,7 @@ def find_mod(suffix: str) -> str:
 
 
 MOD_PATH = find_mod("_balance_area_bgm.py")
-DEFAULT_WORLDS = os.path.join(
-    os.environ.get("LOCALAPPDATA", ""), "Darmabeko", "Instantale", "worlds")
+DEFAULT_WORLDS = saves.worlds_dir()
 DEFAULT_GAME = r"C:\Program Files\Epic Games\Instantaleq6Ve7"
 
 
@@ -92,10 +96,8 @@ def load_policy():
 # --------------------------------------------------------------------------
 # セーブの読み書き
 # --------------------------------------------------------------------------
-def xor(blob: bytes) -> bytes:
-    key = KEY
-    n = len(key)
-    return bytes(byte ^ key[i % n] for i, byte in enumerate(blob))
+#: 難読化の掛け外し。ローダのものをそのまま借りる（往復するので読みにも書きにも使える）。
+xor = saves.xor
 
 
 def encode(data) -> bytes:
