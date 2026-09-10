@@ -7,7 +7,7 @@
 ##### 何を任せて、何を任せないか
 
 この MOD は「AI は描写しかしない」で成立してきた（VERIFICATION_LOG.md §2.31)。
-`305_` が AI に判定させて4周外した記録もある。
+`903_`（旧 `305_`）が AI に判定させて4周外した記録もある。
 だから境界をここに引く:
 
 | | |
@@ -64,33 +64,46 @@ LIMITS = {"premise": 120, "name": 24, "job": 24, "profile": 120,
 BAD_NAME_CHARS = set('"<>:|?*/\\')
 
 
-def available(module):
-    """この版で LLM を呼べるか。呼べないなら黙って使わない。"""
-    return (module is not None
-            and callable(getattr(module, "send_request", None))
-            and callable(getattr(module, "create_model", None)))
+def available():
+    """この版で構造化の依頼を出せるか。出せないなら黙って使わない。
+
+    **送信モジュールを名指ししない**（`llm.resolve_send`）。
+    `llm_manager` の別名を先に見て、まだ生えていなければ
+    読み込まれている送信モジュール側を走査する（GAME.md §2.12）。
+    以前はここが `scripts.llm.llm_manager` 1本を `sys.modules` から引くだけで、
+    別名が後から生えるクラウドのプロバイダでは
+    実際には呼べるのに定型の事件へ降りていた
+    （`119_` が同じ形の穴を持っていて、v2 で塞いでいる）。
+    """
+    send, _where = llm.resolve_send("send_request")
+    return send is not None and llm.manager() is not None
 
 
-def build_structure(module, count):
-    """構造化出力の型を組む。`Literal` は使わない。
+def build_structure(ctx, count):
+    """構造化出力の型を組む。組めなければ None。`Literal` は使わない。
 
     空の `Literal[]` は
     pydantic が拒否してゲームごと落ちる（`203_probe_create_model` が押さえた実際の落ち方）。
     選択肢を型で縛りたくなる場面だが、ここは全部ただの `str` にして、
     縛りは検算側で持つ。
+
+    組み立て自体はローダ（`llm.create_structure`）。
+    `create_model` を直に呼ぶと、失敗したときにどの MOD が何を組もうとしたのかが
+    ログに残らない。
     """
     import typing
 
-    create_model = module.create_model
-    person = create_model(
-        "CityCasePerson",
-        name=(str, ...), job=(str, ...), profile=(str, ...),
-        personality=(str, ...), look=(str, ...))
-    return create_model(
-        "CityCaseMaterial",
-        premise=(str, ...),
-        people=(typing.List[person], ...),
-        facts=(typing.List[str], ...)), count
+    person = llm.create_structure(ctx, "CityCasePerson", {
+        "name": (str, ...), "job": (str, ...), "profile": (str, ...),
+        "personality": (str, ...), "look": (str, ...)},
+        label="city case")
+    if person is None:
+        return None
+    return llm.create_structure(ctx, "CityCaseMaterial", {
+        "premise": (str, ...),
+        "people": (typing.List[person], ...),
+        "facts": (typing.List[str], ...)},
+        label="city case")
 
 
 def wanted_facts(facts):

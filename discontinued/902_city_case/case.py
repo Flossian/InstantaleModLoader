@@ -30,10 +30,12 @@
 エンジンのフラグ（`flag_set`）は施設ローカルで、
 町を回る話には足りない（GAME.md §2.21.3）。
 加えて施設の `config` に書かれてセーブに残る。
-だから状態は `out/` に持ち、**渡すプログラムをその都度組む**。
-"""
+だから状態は `state/` に持ち、**渡すプログラムをその都度組む**。
 
-from instantale_modloader import read_json, write_json
+出し入れはローダの `state.WorldStore` が持つ（`state/city_case/<世界>.json`）。
+読めなかったときに空へ倒すか記録を残すかの判断も、
+壊れないように書く手順もあちらに1つだけ在る。
+"""
 
 #: 段階。
 #: 「揃った」段階は無い。
@@ -45,26 +47,6 @@ CLOSED = "closed"
 
 def empty():
     return {"stage": NONE}
-
-
-def load(path):
-    """控えを読む。壊れていたら記録してから無かったことにする。
-
-    ここで例外にすると、控えが1文字壊れただけで MOD が丸ごと死ぬ。
-    事件は作り直せるので、読めないなら捨てるほうが損害が小さい。
-    ただし「無い（初回）」と「在るのに読めない」は `read_json` が区別して、
-    後者はログに残す。
-    消えたことが後から追えるように。
-    """
-    data = read_json(path)
-    return data if isinstance(data, dict) and "stage" in data else empty()
-
-
-def save(path, case):
-    # 隣に書いてから差し替える（`write_json`）。
-    # 素朴な open(..., "w") だと書いている最中に落ちた瞬間に事件が消える。
-    # 親フォルダも作ってくれる。
-    return write_json(path, case, indent=2)
 
 
 def build(world_name, area_id, culprit, suspects, clues, reward):

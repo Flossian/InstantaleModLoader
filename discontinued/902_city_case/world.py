@@ -21,7 +21,7 @@ import sys
 from instantale_modloader import frames, ui
 from instantale_modloader.npcs import (
     CHARACTER_KWARGS, NEW_NPC_TEMPLATE, NPC_FIELD_ORDER,
-    character_ids, free_id, npc_stores, save_npcs)
+    character_ids, npc_stores, save_npcs)
 from instantale_modloader.npcs import make_npc as npcs_make_npc
 from instantale_modloader.state import UNKNOWN_WORLD, world_key
 
@@ -419,7 +419,7 @@ def _drop_from_rosters(app, npc_id):
     return dropped
 
 
-# 所持金の読み書きはローダの語彙（`309_` / `901_` と共有。TECH.md §3.2.3）。
+# 所持金の読み書きはローダの語彙（`309_` / `129_`（旧 `901_`）と共有。TECH.md §3.2.3）。
 # ローダ版は `bool` も弾く。
 # `True` は `int` なので、素朴な判定だと `gold = True` を所持金 1 として通してしまう。
 gold_of = ui.gold_of

@@ -13,12 +13,11 @@
 手がかりごとにラベルを分けておけば、それを見るだけで確実に判定できる。
 AI は描写しかしない。
 
-`305_` は「AI に判定させて4周外した」記録が残っている（VERIFICATION_LOG.md
-§2.19〜§2.22）。
+`903_mini_quest`（旧 `305_`。いまは `discontinued/`）は「AI に判定させて4周外した」記録を残している。
 同じ轍を踏まないための一番大事な線引き。
 
 2. 真相は最初に決めきる。
-犯人も手がかりの連鎖も事件を組む時点で確定させ、`state/city_case.json` に持つ。
+犯人も手がかりの連鎖も事件を組む時点で確定させ、`state/city_case/<世界>.json` に持つ（世界ごとに1ファイル）。
 後から決めると AI の出力次第で真相が変わる。
 
 3. 開示していない情報は AI に渡さない。
@@ -71,6 +70,7 @@ import threading
 import time
 
 from instantale_modloader import frames, ui
+from instantale_modloader import state as loader_state
 
 from . import case as case_mod
 from . import ledger
@@ -86,25 +86,24 @@ _RNG = random.Random()
 
 LOG_BASENAME = "city_case.log"
 
-#: 進行中の事件の控え。
-#: 置き場は `state/`（`ctx.state_path`）。
-RECORD_BASENAME = "city_case.json"
+#: 控えの置き場。`state/` 直下のフォルダで、**MOD 専用の名前**にする。
+#: 中身は世界ごとに1ファイル（`state.WorldStore`）。
+#: 進行中の事件が `<世界>.json`。
+STATE_DIRNAME = "city_case"
 
-#: この MOD が作った NPC の台帳。
+#: この MOD が作った NPC の台帳（`<世界>.cast.json`）。
 #: セーブの外に持つ（`ledger` の冒頭）。
 #: NPC 自身に印を持たせられないため（項目を足すと33項目の並びが壊れる。
 #: GAME.md §2.23）、掃除の手がかりはここにしか無い。
 #: **消すと片付けられなくなる**ので、ログと同じ `out/` ではなく `state/` に置く。
-LEDGER_BASENAME = "city_case_cast.json"
+CAST_SUFFIX = ".cast.json"
 
-#: 描写を書かせる相手。
-#: **ゲームのプロンプトは流用しない**。
-#: `send_request(manager_name, message, structure)` は名前・頼み文・: 応答の型を全部こちらで決められる汎用の入口（リコンの署名より）。
-LLM_MODULE = "scripts.llm.llm_manager"
+#: 控えを載せておくプロセス側の棚（`apply()` をまたいで持つ。TECH.md §3.5）。
+STORE_ATTR = "_instantale_city_case_stores"
 
 #: 押下を横取りするための印。
 #: **他の MOD と別のキーにすること**（`301_` mod_action / `302_` mod_party_action /
-#: `305_` mod_mini_action / `309_` mod_pardon_action）。
+#: `903_`（旧 `305_`）mod_mini_action / `309_` mod_pardon_action）。
 MARK = "mod_city_case_action"
 
 # ---------------------------------------------------------------- 設定（mod.json）
@@ -291,7 +290,7 @@ SUSPECT_TEXT = ("【この人物の立場】この者は町で起きた{crime}�
 #: 会話を閉じた瞬間に手がかりだけが出る。**
 #: 実機で「会話内容と得られたヒントが全くかみ合わない」ことになった。
 #: 判定を会話の中身へ寄せる道もあるが、それは
-#: `305_` が4周外した路（AI に判定させる）へ戻ることになる。
+#: `903_`（旧 `305_`）が4周外した路（AI に判定させる）へ戻ることになる。
 #: **判定はこちらが持ったまま、AI の側を確実にする**。
 #: 必ず自分から言わせる。
 #: 第一声に差し込む匂わせ。
@@ -399,10 +398,22 @@ money = ui.money          # 金額の表示（`309_` と共有）
 coins = ui.rewrite_coins  # 通貨の表記を今の表記へ（`130_`。`309_` と共有）
 
 
+def _stores():
+    """事件の控えと台帳。**`apply()` の外に置く**（`WorldStore` の docstring）。
+
+    `apply()` は1プロセスで何度も呼ばれる（TECH.md §3.6）。
+    中で作ると注入し直すたびにキャッシュと錠が別物になり、
+    LLM を待っている前の世代のスレッドが書いた内容が新しい世代から見えない。
+    """
+    shelf = getattr(sys, STORE_ATTR, None)
+    if not isinstance(shelf, dict):
+        shelf = {"cases": None, "casts": None}
+        setattr(sys, STORE_ATTR, shelf)
+    return shelf
+
+
 def apply(ctx):
     log_path = ctx.out_path(LOG_BASENAME)
-    record_path = ctx.state_path(RECORD_BASENAME)
-    ledger_path = ctx.state_path(LEDGER_BASENAME)
     # いま控える。
     # `ctx.mod_dir` は `apply()` の外では `None` になる（ローダの註）。
     # 材料を読むのはボタンが押されてからなので、
@@ -412,9 +423,22 @@ def apply(ctx):
 
     write = ctx.logger(LOG_BASENAME, stamp=False)
 
+    # 置き場所の決め方（世界ごとに1ファイル・壊れない書き方・読めなかったときの扱い）は
+    # ローダの語彙（TECH.md §3.2.3）。
+    # 以前はこの MOD が1ファイルの中に世界名を持っていて、
+    # 別の世界へ移ると進行中の事件をその場で捨てていた。
+    shelf = _stores()
+    if shelf["cases"] is None:
+        shelf["cases"] = loader_state.WorldStore(
+            ctx, STATE_DIRNAME, default=case_mod.empty, write=write)
+        shelf["casts"] = loader_state.WorldStore(
+            ctx, STATE_DIRNAME, suffix=CAST_SUFFIX, default=list, write=write)
+    cases = shelf["cases"].rebind(ctx, write)
+    casts = shelf["casts"].rebind(ctx, write)
+
     screen = ui.Screen(ctx, write, tag="city case", mark=MARK)
-    state = {"case": None, "loaded": False, "accusing": False,
-             "asking": None, "app": None, "book": None, "swept": None,
+    state = {"accusing": False,
+             "asking": None, "app": None, "swept": None,
              "deadline": None, "stash": None, "patterns": None,
              "declined": None, "ignored": None,
              "axes": None, "words": None, "facts": None,
@@ -426,13 +450,11 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 控え
     def current(app):
-        """いまの世界の事件。違う世界のものは捨てる。"""
-        if not state["loaded"]:
-            state["case"] = case_mod.load(record_path)
-            state["loaded"] = True
-        found = state["case"] or case_mod.empty()
+        """いまの世界の事件。控えは世界ごとに分かれている（`WorldStore`）。"""
+        _key, found = cases.of(app)
         name = game.world_name(app)
         if case_mod.is_active(found) and name and not case_mod.belongs_to(found, name):
+            # ファイルが世界ごとなので、ここへ来るのは世界の名前が変わったときだけ。
             found = drop(app, found, "it belongs to another world ({!r})".format(
                 found.get("world")))
         elif case_mod.is_active(found) and backfill(app, found):
@@ -482,30 +504,28 @@ def apply(ctx):
     def drop(app, found, why):
         write("[{}] dropping the case: {}".format(stamp(), why))
         empty = case_mod.empty()
-        state["case"] = empty
-        case_mod.save(record_path, empty)
+        cases.save(loader_state.world_key(app), empty)
         return empty
 
     def store(app):
-        case_mod.save(record_path, state["case"] or case_mod.empty())
+        cases.save(loader_state.world_key(app))
 
     # ------------------------------------------------------------ 台帳と後始末
-    def book():
-        """作った NPC の台帳。セーブの外に持つ（`ledger` の冒頭）。"""
-        if state["book"] is None:
-            state["book"] = ledger.load(ledger_path)
-        return state["book"]
+    def book(app):
+        """この世界で作った NPC の台帳。セーブの外に持つ（`ledger` の冒頭）。"""
+        _key, rows = casts.of(app)
+        return rows
 
-    def book_store():
-        ledger.save(ledger_path, book())
+    def book_store(app):
+        casts.save(loader_state.world_key(app))
 
     def enroll(app, npc_id, name):
         """作った1体を台帳に控える。作った直後に呼ぶ。
 
         事件の控えに書く前に落ちても掃除できるように、ここで確定させる。
         """
-        if ledger.add(book(), game.world_name(app), npc_id, name):
-            book_store()
+        if ledger.add(book(app), npc_id, name):
+            book_store(app)
 
     def retire(app, npc_ids, why):
         """役目を終えた NPC を世界から消して、台帳からも外す。
@@ -513,16 +533,15 @@ def apply(ctx):
         `set_dead` で印を立てるだけだと、繰り返し遊ぶぶんセーブに溜まり続ける（1件4体・1体あたり 1.4〜8KB）。
         消せる根拠は `world.remove_npc` の冒頭。
         """
-        name = game.world_name(app)
         done, kept = [], []
         for npc_id in list(npc_ids):
             if game.remove_npc(app, npc_id, write=write):
-                ledger.drop(book(), name, npc_id)
+                ledger.drop(book(app), npc_id)
                 done.append(str(npc_id))
             else:
                 kept.append(str(npc_id))
         if done or kept:
-            book_store()
+            book_store(app)
             write("[{}] retired {} npc(s) ({}): {}{}".format(
                 stamp(), len(done), why, done,
                 "; could not remove {}".format(kept) if kept else ""))
@@ -549,11 +568,11 @@ def apply(ctx):
         found = current(app)
         active = set(case_mod.suspect_ids(found)) if case_mod.is_active(found) else set()
 
-        stale = [i for i in ledger.ids(book(), name, kept=False)
+        stale = [i for i in ledger.ids(book(app), kept=False)
                  if i not in active]
         # 名前で拾う掃除からは、**台帳に載っている者を全部外す**。
         # 「残す」と決めた者を拾ってしまわないように。
-        known = set(ledger.ids(book(), name)) | active
+        known = set(ledger.ids(book(app))) | active
         npcs = game.save_npcs(app)
         legacy = ledger.legacy_ids(
             npcs, {base["name"] for base in (book_of(app).get("cast") or [])},
@@ -1011,9 +1030,6 @@ def apply(ctx):
         return clues, sorted(available)
 
     # ------------------------------------------------------------ 描写を書かせる
-    def llm_module():
-        return sys.modules.get(LLM_MODULE)
-
     def fact_order(facts):
         """事実を LLM に頼む形にする。特徴の語と、触れてほしくない語。
 
@@ -1071,11 +1087,10 @@ def apply(ctx):
         渡すのは「見た目の指定」と「触れてほしくない語」だけで、**犯人も手がかりの効き先も1文字も渡していない**（`writer` の冒頭）。
         だから何が返ってきても事件の論理は壊れない。
         """
-        module = llm_module()
-        if not USE_LLM or not writer.available(module):
+        if not USE_LLM or not writer.available():
             if USE_LLM:
-                write("[{}] {} cannot take a request yet; using the built-in "
-                      "cast".format(stamp(), LLM_MODULE))
+                write("[{}] no provider can take a request yet; using the "
+                      "built-in cast".format(stamp()))
             return None
         orders = fact_order(facts)
         words = state.get("words") or {}
@@ -1088,11 +1103,11 @@ def apply(ctx):
             detail.append(("性別", SEX_WORDS.get(traits.get("sex"), "")))
             people.append({"words": tell_of(traits),
                            "detail": [(k, v) for k, v in detail if v]})
-        try:
-            structure, count = writer.build_structure(module, len(members))
-        except Exception as exc:
-            write("[{}] could not build the response structure: {}: {}".format(
-                stamp(), type(exc).__name__, exc))
+        count = len(members)
+        structure = writer.build_structure(ctx, count)
+        if structure is None:
+            # 失敗の中身は `llm.create_structure` が `ctx.log_exc` に残す。
+            write("[{}] could not build the response structure".format(stamp()))
             return None
         # 町の名前を渡す。
         # 以前はギルドの施設名を「町」として渡していて、
@@ -1217,8 +1232,7 @@ def apply(ctx):
             [{"id": m["npc_id"], "tell": m.get("tell", ""),
               "claim": m.get("claim", "")} for m in keep],
             clues, REWARD_GOLD)
-        state["case"] = found
-        store(app)
+        cases.save(loader_state.world_key(app), found)
         write("\n" + "=" * 72)
         write("[{}] case opened in area {} culprit={} ({})".format(
             stamp(), area, cast[culprit_index]["npc_id"],
@@ -1607,9 +1621,9 @@ def apply(ctx):
         # 台帳から外すだけでは、
         # 次の起動で「台帳より前に作られた者」として名前で拾われて消える。
         for npc_id in staying:
-            ledger.keep(book(), game.world_name(app), npc_id)
+            ledger.keep(book(app), npc_id)
         if staying:
-            book_store()
+            book_store(app)
             write("[{}] keeping {} in town (ARREST_CULPRIT is off)".format(
                 stamp(), staying))
         gone = retire(app, leaving, "the case is closed")
@@ -1851,7 +1865,7 @@ def apply(ctx):
             write("[{}] could not lay out a solvable cast".format(stamp()))
             screen.say(app, NO_CAST_TEXT)
             return
-        if not USE_LLM or not writer.available(llm_module()):
+        if not USE_LLM or not writer.available():
             # 書かせない、または呼べない版。
             # 定型で始める。
             open_case(app, (members, facts, None))
@@ -1888,7 +1902,7 @@ def apply(ctx):
             # このスレッドは LLM を待つあいだ最長で
             # `LLM_TIMEOUT + BUSY_GRACE` 生き残るので、
             # その間に注入し直されると古い世代の続きが新しい世代と同じ
-            # `state/city_case.json` に書き込む。
+            # `state/city_case/<世界>.json` に書き込む。
             # 新しい側は既に控えを読み終えているので、
             # 書いた内容が食い違ったまま残る。
             if ctx.superseded():

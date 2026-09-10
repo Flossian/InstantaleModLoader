@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""この MOD が作った NPC の台帳。セーブの外に持つ。
+"""この MOD が作った NPC の台帳。セーブの外に、世界ごとに持つ。
 
 ##### なぜ外部ファイルなのか
 
@@ -11,17 +11,24 @@
 
 だから印は外に置く。
 セーブはゲームの形のまま、MOD の都合は `state/` に。
-この MOD が事件の控え（`city_case.json`）で既にやっていることと同じ考え方。
+この MOD が事件の控え（`case.py`）で既にやっていることと同じ考え方。
 
 ##### 何を持つか
 
-世界ごとに、作った NPC の id と名前。
+作った NPC の id と名前を並べたもの。
 事件が決着したら消して回るための名簿であって、
 これが無いと誰を掃除してよいか分からなくなる。
 
 ```json
-{"worlds": {"<世界名>": [{"id": "76", "name": "流れ者のミレイユ"}, ...]}}
+[{"id": "76", "name": "流れ者のミレイユ"}, ...]
 ```
+
+ファイルは1世界に1つで、出し入れはローダの `state.WorldStore` が持つ
+（`state/city_case/<世界>.cast.json`）。
+**世界の区別をこのファイルの中に持たない。**
+以前は `{"worlds": {...}}` で1ファイルにまとめていたが、
+置き場所の決め方はローダの語彙で、MOD ごとに別の形を持つ理由が無い
+（TECH.md §3.2.3。`WorldStore` の docstring に、写された9本で既にずれていた経緯がある）。
 
 ##### 台帳が消えても詰まないようにする
 
@@ -32,39 +39,8 @@
 ゲーム自身が同じ名前を作る見込みは薄い。
 """
 
-from instantale_modloader import read_json, write_json
 
-
-def empty():
-    return {"worlds": {}}
-
-
-def load(path):
-    """台帳を読む。壊れていたら記録してから空として扱う（控えと同じ方針）。
-
-    ここで例外にすると、台帳が1文字壊れただけで MOD が丸ごと死ぬ。
-    台帳を失う損害は「掃除し損ねる」だけで、事件そのものは動く。
-    「無い（初回）」と「在るのに読めない」の区別は `read_json` が持つ。
-    """
-    data = read_json(path)
-    if not isinstance(data, dict) or not isinstance(data.get("worlds"), dict):
-        return empty()
-    return data
-
-
-def save(path, book):
-    # 隣に書いてから差し替える（`write_json`）。
-    # 素朴な open(..., "w") だと書いている最中に落ちた瞬間に台帳が消える。
-    # 親フォルダも作ってくれる。
-    return write_json(path, book, indent=2)
-
-
-def entries(book, world_name):
-    got = book.get("worlds", {}).get(world_name)
-    return got if isinstance(got, list) else []
-
-
-def ids(book, world_name, kept=None):
+def ids(rows, kept=None):
     """控えている id。`kept` で「町に残す」印での絞り込みができる。
 
     `kept=None` は全部、`False` は掃除してよいものだけ、`True` は残すものだけ。
@@ -72,8 +48,8 @@ def ids(book, world_name, kept=None):
     `False` のほうで拾い、**`True` のぶんは名前で拾う掃除からも外す**ために全部（`None`）も要る。
     """
     out = []
-    for row in entries(book, world_name):
-        if row.get("id") is None:
+    for row in rows or ():
+        if not isinstance(row, dict) or row.get("id") is None:
             continue
         if kept is not None and bool(row.get("keep")) != kept:
             continue
@@ -81,7 +57,7 @@ def ids(book, world_name, kept=None):
     return out
 
 
-def keep(book, world_name, npc_id):
+def keep(rows, npc_id):
     """掃除の対象から外す。町の住人として残すと決めた者に立てる。
 
     消さずに台帳から外すのでは足りない。
@@ -89,35 +65,33 @@ def keep(book, world_name, npc_id):
     次の起動で消えてしまう。
     **残すことを台帳に書いておく**必要がある。
     """
-    for row in entries(book, world_name):
-        if str(row.get("id")) == str(npc_id):
+    for row in rows or ():
+        if isinstance(row, dict) and str(row.get("id")) == str(npc_id):
             row["keep"] = True
             return True
     return False
 
 
-def add(book, world_name, npc_id, name):
+def add(rows, npc_id, name):
     """作った1体を控える。作った直後に呼ぶこと。
 
     事件の控えに書く前に落ちても掃除できるように、`make_npc` が通ったその場で足す。
     二重に足さない。
     """
-    rows = book.setdefault("worlds", {}).setdefault(world_name, [])
-    if any(str(row.get("id")) == str(npc_id) for row in rows):
+    if any(isinstance(row, dict) and str(row.get("id")) == str(npc_id)
+           for row in rows):
         return False
     rows.append({"id": str(npc_id), "name": name})
     return True
 
 
-def drop(book, world_name, npc_id):
-    """掃除できた1体を台帳から外す。"""
-    rows = book.get("worlds", {}).get(world_name)
-    if not isinstance(rows, list):
+def drop(rows, npc_id):
+    """掃除できた1体を台帳から外す。**その場で書き換える**（控えは呼び側が書く）。"""
+    left = [row for row in rows
+            if not (isinstance(row, dict) and str(row.get("id")) == str(npc_id))]
+    if len(left) == len(rows):
         return False
-    keep = [row for row in rows if str(row.get("id")) != str(npc_id)]
-    if len(keep) == len(rows):
-        return False
-    book["worlds"][world_name] = keep
+    rows[:] = left
     return True
 
 

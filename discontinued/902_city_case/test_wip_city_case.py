@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """902_city_case をゲーム抜きで通す。
 
-    python tools/tests/test_city_case.py
+    python local/902_city_case/test_wip_city_case.py
 
-`305_` は実機4回かけて直している（VERIFICATION_LOG.md §2.19〜§2.22）。
+`903_mini_quest`（旧 `305_`）は実機4回かけて直している。
 実機の1周は時間がかかるうえ、外したときに原因の切り分けが難しい。
 **実機でしか分からないこと以外は全部ここで潰す。**
 
@@ -18,7 +18,7 @@
               印を失った残骸を落とす／事件の町の外では出ない
   安全     … `flag_set` を使わない（セーブを汚さない）／
               ゲームの `free_*` を横取りしない
-  共存     … `301_` / `302_` / `305_` / `309_` と印のキーが衝突していない
+  共存     … `301_` / `302_` / `309_` と印のキーが衝突していない
   名乗り    … mod.json の既定値とコードの定数が一致する
 """
 import ast
@@ -364,6 +364,8 @@ def load_mod(name="city_case_mod"):
 
 
 mod = load_mod()
+from instantale_modloader import state as loader_state
+
 case_mod = sys.modules["city_case_mod.case"]
 ledger_mod = sys.modules["city_case_mod.ledger"]
 world_mod = sys.modules["city_case_mod.world"]
@@ -404,10 +406,27 @@ class FakeCtx:
         return _ml.ModContext.logger(self, name, tag=tag, stamp=stamp,
                                      label=label)
 
-    def state_path(self, name):
-        """永続データの置き場。本番と同じく out/ とは**別のフォルダ**にする。"""
-        os.makedirs(STATE_DIR, exist_ok=True)
-        return os.path.join(STATE_DIR, name)
+    #: `WorldStore` がフォルダを数えるのに見る（`own=False` の道）。
+    state_dir = STATE_DIR
+
+    def state_path(self, *parts):
+        """永続データの置き場。本番と同じく out/ とは**別のフォルダ**にする。
+
+        本番と同じく可変長で受ける。
+        `WorldStore` は `state_path(フォルダ名, ファイル名)` の形で呼ぶ。
+        """
+        path = os.path.join(STATE_DIR, *parts)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        return path
+
+    # JSON の出し入れも本物をそのまま借りる（`logger` と同じ理由）。
+    def read_json(self, path, default=None):
+        import instantale_modloader as _ml
+        return _ml.read_json(path, default, report=self.log_exc)
+
+    def write_json(self, path, data, *, indent=1):
+        import instantale_modloader as _ml
+        return _ml.write_json(path, data, indent=indent, report=self.log_exc)
 
     def wrap(self, target, **kwargs):
         def decorator(fn):
@@ -566,17 +585,82 @@ def refresh_for(ctx, app):
     return hook(lambda self, *a, **k: None, app)
 
 
+def state_files(ctx, suffix):
+    """`state/city_case/` に在る控えの場所。検査は1世界しか作らない。
+
+    世界の鍵は `app` から採る（`state.world_key`）が、読む側は
+    `app` を持っていない場面が多いので、フォルダの中を見て拾う。
+    """
+    folder = os.path.join(STATE_DIR, mod.STATE_DIRNAME)
+    try:
+        names = sorted(os.listdir(folder))
+    except OSError:
+        return []
+    return [os.path.join(folder, name) for name in names
+            if name.endswith(suffix)
+            and (suffix != ".json" or not name.endswith(mod.CAST_SUFFIX))]
+
+
+def case_of(ctx):
+    """いまの事件の控え。無ければ空の事件。"""
+    found = state_files(ctx, ".json")
+    if not found:
+        return case_mod.empty()
+    data = json.loads(io.open(found[0], encoding="utf-8").read())
+    return data if isinstance(data, dict) and "stage" in data else case_mod.empty()
+
+
+def save_case(ctx, case):
+    """控えを直に書く（古い控えを置いて読ませる検査で使う）。
+
+    置き場所は控え自身が持つ世界名から決める。
+    `app` はまだ無い時点で書くので、`state.world_key` は使えない。
+    """
+    assert case.get("world"), case
+    path = ctx.state_path(mod.STATE_DIRNAME,
+                          loader_state.world_filename(case["world"]))
+    io.open(path, "w", encoding="utf-8").write(
+        json.dumps(case, ensure_ascii=False, indent=2))
+    # **プロセス側の棚も捨てる。** これは「MOD が動き出す前からディスクに在った
+    # 控え」を作っている場面で、前の節が読んだキャッシュが残っていると
+    # `WorldStore` はファイルを読み直さない（`load` は覚えたものを返す）。
+    if hasattr(sys, mod.STORE_ATTR):
+        delattr(sys, mod.STORE_ATTR)
+    return path
+
+
+def case_of_world(ctx, world):
+    """世界を名指しして控えを読む（複数の世界を並べる検査で使う）。"""
+    path = os.path.join(STATE_DIR, mod.STATE_DIRNAME,
+                        loader_state.world_filename(world))
+    if not os.path.exists(path):
+        return case_mod.empty()
+    return json.loads(io.open(path, encoding="utf-8").read())
+
+
+def cast_of(ctx):
+    """この MOD が作った NPC の台帳（世界ごとに1ファイル）。"""
+    found = state_files(ctx, mod.CAST_SUFFIX)
+    if not found:
+        return []
+    data = json.loads(io.open(found[0], encoding="utf-8").read())
+    return data if isinstance(data, list) else []
+
+
 def clean_record(ctx):
     """控えと台帳の両方を消す。**節どうしを独立させる。**
 
-    台帳（`city_case_cast.json`）も消さないと、
+    台帳（`<世界>.cast.json`）も消さないと、
     前の節が作って決着させずに放り出したキャストが残り、後の節の検査に混ざる。
     実際に混ざった。
+
+    **`WorldStore` のキャッシュも捨てる。** ファイルだけ消しても、
+    控えはプロセス側の棚（`mod.STORE_ATTR`）に残っていて次の節から見える。
     """
-    for basename in (mod.RECORD_BASENAME, mod.LEDGER_BASENAME):
-        path = ctx.state_path(basename)
-        if os.path.exists(path):
-            os.remove(path)
+    for path in state_files(ctx, ".json") + state_files(ctx, mod.CAST_SUFFIX):
+        os.remove(path)
+    if hasattr(sys, mod.STORE_ATTR):
+        delattr(sys, mod.STORE_ATTR)
 
 
 # ================================================================== 事件
@@ -603,7 +687,7 @@ def open_case_at(ctx, app):
     hook(lambda self, rp=False: InstantaleApp.refresh_choice_buttons(self, rp),
          app, False)
     press(ctx, app, mod.START_LABEL)
-    return case_mod.load(ctx.state_path(mod.RECORD_BASENAME))
+    return case_of(ctx)
 
 
 print("[事件] 真相が最初に固定され、事実で容疑者が消える")
@@ -705,9 +789,9 @@ check("決着したら閉じる", case3["stage"] == case_mod.CLOSED)
 print("\n[事件] 別の世界の控えは使わない")
 check("同じ世界なら使う", case_mod.belongs_to(case0, "W"))
 check("違う世界なら使わない", not case_mod.belongs_to(case0, "別世界"))
-check("壊れた控えは空として読む",
-      case_mod.load(os.path.join(OUT_DIR, "no_such_file.json"))["stage"]
-      == case_mod.NONE)
+# 読めない控えを空へ倒すのはローダ（`WorldStore` が `ctx.read_json` を通す）。
+# ここで見るのは「空として読んだものが事件として成立しない」ことだけ。
+check("空の控えは事件になっていない", case_mod.empty()["stage"] == case_mod.NONE)
 
 # ================================================================== 設置と判定
 print("\n[設置] 施設と段階でボタンが出し分かる")
@@ -743,7 +827,7 @@ app.go(places["guild"])
 app.facility_screen()
 refresh()
 press(ctx, app, mod.START_LABEL)
-found = mod.__dict__ and case_mod.load(ctx.state_path(mod.RECORD_BASENAME))
+found = mod.__dict__ and case_of(ctx)
 check("押すと事件が始まる", found["stage"] == case_mod.INVESTIGATING, found)
 check("犯人が容疑者に含まれている",
       found["culprit"] in case_mod.suspect_ids(found), found["suspects"])
@@ -752,7 +836,7 @@ check("**全部集めれば1人に絞れる**（詰んだ事件を出さない�
 check("**施設の主を犯人にしない**",
       found["culprit"] not in ("10", "11", "12"), found["culprit"])
 check("控えが書かれている",
-      os.path.exists(ctx.state_path(mod.RECORD_BASENAME)))
+      bool(state_files(ctx, ".json")))
 
 app.facility_screen()
 refresh()
@@ -769,7 +853,7 @@ app.go(places["market"])
 app.facility_screen()
 refresh()
 check("**どこから調べてもよい**（順番を強制しない）",
-      case_mod.pending_at(case_mod.load(ctx.state_path(mod.RECORD_BASENAME)),
+      case_mod.pending_at(case_of(ctx),
                           MARKET) is not None)
 
 print("\n[案内] **次にどこへ行けばよいかを必ず示す**")
@@ -818,7 +902,7 @@ check("**必ず自分から言う指示になっている**（条件付きにし
 check("元から在った知識を消さない", "既存の知識" in str(seen["args"][11]),
       seen["args"][11])
 end_conversation(ctx, app)
-found = case_mod.load(ctx.state_path(mod.RECORD_BASENAME))
+found = case_of(ctx)
 check("**c1 が立った**",
       case_mod.clue_by_id(found, "c1")["found"], found["clues"])
 gained = [str(t) for t in app.texts]
@@ -841,7 +925,7 @@ press_hook = ctx.hooks["__main__:InstantaleApp.on_button_press"]
 app.buttons.append({"text": "ゲームのボタン", "spec": None})
 press_hook(orig_press, app, len(app.buttons) - 1)
 check("知らないボタンは素通しする", passed_through["n"] == 1, passed_through)
-found = case_mod.load(ctx.state_path(mod.RECORD_BASENAME))
+found = case_of(ctx)
 check("知らないボタンでは手がかりが増えない",
       case_mod.found_count(found) == 1, found["clues"])
 app.buttons.pop()
@@ -877,11 +961,11 @@ app.go(places["market"])
 app.facility_screen()
 refresh()
 check("c1 を得ても闇市の手がかりは残っている",
-      case_mod.pending_at(case_mod.load(ctx.state_path(mod.RECORD_BASENAME)),
+      case_mod.pending_at(case_of(ctx),
                           MARKET) is not None)
 talk_to(ctx, app, places["market"].owner)
 end_conversation(ctx, app)
-found = case_mod.load(ctx.state_path(mod.RECORD_BASENAME))
+found = case_of(ctx)
 check("**集めるほど容疑者が減る**",
       len(case_mod.remaining(found)) < len(found["suspects"]),
       case_mod.remaining(found))
@@ -929,7 +1013,7 @@ check("やめると元のボタンに戻る",
       app.labels())
 check("**預かったゲームの選択肢も戻る**",
       EXIT_TEXT in app.labels(), app.labels())
-still = case_mod.load(ctx.state_path(mod.RECORD_BASENAME))
+still = case_of(ctx)
 check("やめても事件は続いている",
       case_mod.is_active(still), still["stage"])
 check("手がかりも消えていない",
@@ -940,7 +1024,7 @@ culprit = found["culprit"]
 cast_ids = list(case_mod.suspect_ids(found))
 gold_before = app.player.gold
 accuse(ctx, app, culprit)
-found = case_mod.load(ctx.state_path(mod.RECORD_BASENAME))
+found = case_of(ctx)
 check("決着した", found["stage"] == case_mod.CLOSED, found["stage"])
 # **決着したらキャストは世界から消える**（印を立てて残すのではなく）。
 # 印だけだと繰り返し遊ぶぶんセーブに溜まり続ける。
@@ -959,9 +1043,8 @@ check("**施設の名簿からも消えた**",
       [(f.id, f.characters) for node in app.world.areas["0"].nodes.values()
        for f in node.facilities.values()])
 check("台帳が空になった",
-      not ledger_mod.ids(ledger_mod.load(ctx.state_path(mod.LEDGER_BASENAME)),
-                         world_mod.world_name(app)),
-      ledger_mod.load(ctx.state_path(mod.LEDGER_BASENAME)))
+      not ledger_mod.ids(cast_of(ctx)),
+      cast_of(ctx))
 check("報酬が入った", app.player.gold == gold_before + mod.REWARD_GOLD,
       (gold_before, app.player.gold))
 check("**元から居た NPC は誰も消えていない／退場していない**",
@@ -988,7 +1071,7 @@ small_refresh = install(ctx3, small_app)
 small_app.facility_screen()
 small_refresh()
 press(ctx3, small_app, mod.START_LABEL)
-small_case = case_mod.load(ctx3.state_path(mod.RECORD_BASENAME))
+small_case = case_of(ctx3)
 check("事件が始まる", small_case["stage"] == case_mod.INVESTIGATING, small_case)
 check("手がかりが在る施設だけに置かれた",
       all(c["at_type"] in (GUILD, INN) for c in small_case["clues"]),
@@ -1002,7 +1085,7 @@ for clue in list(small_case["clues"]):
     talk_to(ctx3, small_app, target.owner)
     end_conversation(ctx3, small_app)
 
-small_case = case_mod.load(ctx3.state_path(mod.RECORD_BASENAME))
+small_case = case_of(ctx3)
 check("**集めた分だけ絞れる**", case_mod.found_count(small_case) > 0,
       small_case["clues"])
 small_app.go(guild_only)
@@ -1010,7 +1093,7 @@ small_app.facility_screen()
 small_refresh()
 check("告発できる", mod.ACCUSE_LABEL in small_app.labels(), small_app.labels())
 accuse(ctx3, small_app, small_case["culprit"])
-small_case = case_mod.load(ctx3.state_path(mod.RECORD_BASENAME))
+small_case = case_of(ctx3)
 check("**闇市が無くても解決まで通る**",
       small_case["stage"] == case_mod.CLOSED, small_case["stage"])
 
@@ -1038,7 +1121,7 @@ refreshg = install(ctxg, appg)
 appg.facility_screen()
 refreshg()
 press(ctxg, appg, mod.START_LABEL)
-caseg = case_mod.load(ctxg.state_path(mod.RECORD_BASENAME))
+caseg = case_of(ctxg)
 check("事件が始まる", caseg["stage"] == case_mod.INVESTIGATING, caseg["stage"])
 check("**犯人は生成された人物**", caseg["culprit"] not in existing,
       (caseg["culprit"], sorted(existing)))
@@ -1151,7 +1234,7 @@ refreshc = install(ctxc, appc)
 appc.facility_screen()
 refreshc()
 press(ctxc, appc, mod.START_LABEL)
-casec = case_mod.load(ctxc.state_path(mod.RECORD_BASENAME))
+casec = case_of(ctxc)
 if casec.get("suspects"):
     ids = case_mod.suspect_ids(casec)
     check("**容疑者が重複しない**", len(set(ids)) == len(ids), ids)
@@ -1176,7 +1259,7 @@ refreshb = install(ctxb, appb)
 appb.facility_screen()
 refreshb()
 press(ctxb, appb, mod.START_LABEL)
-caseb = case_mod.load(ctxb.state_path(mod.RECORD_BASENAME))
+caseb = case_of(ctxb)
 check("**生成に失敗したら事件を始めない**",
       caseb["stage"] == case_mod.NONE, caseb["stage"])
 check("既存 NPC に落ちない（愛着のある相手を犯人にしない）",
@@ -1199,7 +1282,7 @@ refresh4 = install(ctx4, app4)
 app4.facility_screen()
 refresh4()
 press(ctx4, app4, mod.START_LABEL)
-case4 = case_mod.load(ctx4.state_path(mod.RECORD_BASENAME))
+case4 = case_of(ctx4)
 # キャストは必ず生成するので、**元から居た者は誰も巻き込まれない。**
 # 群衆（`混乱する村人たち`）が犯人に選ばれた件は、
 # 既存 NPC から選ぶ設計をやめたことで根本から無くなった。
@@ -1225,7 +1308,7 @@ for _round in range(12):
     appv.facility_screen()
     refreshv()
     press(ctxv, appv, mod.START_LABEL)
-    casev = case_mod.load(ctxv.state_path(mod.RECORD_BASENAME))
+    casev = case_of(ctxv)
     if casev.get("stage") != case_mod.INVESTIGATING:
         continue
     names = tuple(appv.world_dict["npcs"][i]["name"]
@@ -1273,7 +1356,7 @@ for _round in range(30):
     appn.facility_screen()
     refreshn()
     press(ctxn, appn, mod.START_LABEL)
-    casen = case_mod.load(ctxn.state_path(mod.RECORD_BASENAME))
+    casen = case_of(ctxn)
     if casen.get("stage") != case_mod.INVESTIGATING:
         continue
     rounds += 1
@@ -1335,7 +1418,7 @@ refreshs = install(ctxs, apps)
 apps.facility_screen()
 refreshs()
 press(ctxs, apps, mod.START_LABEL)
-cases = case_mod.load(ctxs.state_path(mod.RECORD_BASENAME))
+cases = case_of(ctxs)
 check("全員に言い分がある",
       all(s.get("claim") for s in cases["suspects"]), cases["suspects"])
 claims = [s["claim"] for s in cases["suspects"]]
@@ -1355,7 +1438,7 @@ check("**容疑者に話しかけると立場を語る**",
 check("言い分がそのまま渡る", culprit_claim in str(seen_s["args"][11]),
       seen_s["args"][11])
 end_conversation(ctxs, apps)
-after_s = case_mod.load(ctxs.state_path(mod.RECORD_BASENAME))
+after_s = case_of(ctxs)
 check("**容疑者との会話では手がかりが立たない**（言い分は事実ではない）",
       case_mod.found_count(after_s) == 0, after_s["clues"])
 check("聞いた言い分は控えに残る",
@@ -1363,6 +1446,39 @@ check("聞いた言い分は控えに残る",
       after_s["suspects"])
 check("画面にも出る",
       any("言い分" in str(t) for t in apps.texts), apps.texts)
+
+print("\n[控え] **世界ごとに分かれている**")
+# 控えは `state/city_case/<世界>.json` で世界ごとに1ファイル（`state.WorldStore`）。
+# 以前は1ファイルに世界名を持っていて、別の世界へ移ると
+# 進行中の事件をその場で捨てていた（**遊びの途中が消えていた**）。
+clean_record(FakeCtx())
+ctxw3 = FakeCtx()
+here = case_mod.build("テスト世界", "0", "20", [{"id": "20", "tell": "t"}],
+                      [{"id": "c1", "at_type": INN, "label": "clue_c1",
+                        "intro": "", "ask": "", "prompt": "", "kind": "trait",
+                        "fact": "", "eliminates": []}], 500)
+there = case_mod.build("別の世界", "0", "30", [{"id": "30", "tell": "t"}],
+                       [{"id": "c1", "at_type": INN, "label": "clue_c1",
+                         "intro": "", "ask": "", "prompt": "", "kind": "trait",
+                         "fact": "", "eliminates": []}], 500)
+path_here = save_case(ctxw3, here)
+path_there = save_case(ctxw3, there)
+check("**世界ごとに別のファイル**", path_here != path_there,
+      (os.path.basename(path_here), os.path.basename(path_there)))
+check("どちらも残っている",
+      os.path.exists(path_here) and os.path.exists(path_there))
+
+mod.apply(ctxw3)
+appw3, _pw3 = fresh_world()
+refreshw3 = install(ctxw3, appw3)
+appw3.facility_screen()
+refreshw3()
+found_w3 = case_of_world(ctxw3, "テスト世界")
+check("**居る世界の事件が読める**",
+      case_mod.is_active(found_w3) and found_w3["world"] == "テスト世界",
+      found_w3)
+check("**別の世界の事件を捨てない**", os.path.exists(path_there), path_there)
+clean_record(ctxw3)
 
 print("\n[控え] **古い控えに証言者を埋める**")
 # 控えは注入をまたいで残るので、進行中の事件は古い版が作ったものでありうる。
@@ -1377,13 +1493,13 @@ old_case = case_mod.build(
       "eliminates": []}], 500)
 check("**証言者を持たない控えが在りうる**",
       not old_case["clues"][0].get("witness"), old_case["clues"][0])
-case_mod.save(ctx6.state_path(mod.RECORD_BASENAME), old_case)
+save_case(ctx6, old_case)
 mod.apply(ctx6)
 app6, places6 = fresh_world()
 refresh6 = install(ctx6, app6)
 app6.facility_screen()
 refresh6()
-filled = case_mod.load(ctx6.state_path(mod.RECORD_BASENAME))
+filled = case_of(ctx6)
 check("読んだ時点で埋まる",
       filled["clues"][0].get("witness") == places6["inn"].owner,
       filled["clues"][0].get("witness"))
@@ -1398,7 +1514,7 @@ stale = case_mod.build("テスト世界", "0", "20", [{"id": "20", "tell": "t"}]
                        [{"id": "c1", "at_type": MARKET, "label": "clue_c1",
                          "intro": "", "ask": "", "prompt": "", "kind": "trait",
                          "fact": "", "eliminates": []}], 500)
-case_mod.save(ctx5.state_path(mod.RECORD_BASENAME), stale)
+save_case(ctx5, stale)
 mod.apply(ctx5)
 app5, places5 = fresh_world()
 # 闇市を持たない町にする。
@@ -1406,7 +1522,7 @@ app5.world.areas["0"].nodes["0"].facilities.pop("3")
 refresh5 = install(ctx5, app5)
 app5.facility_screen()
 refresh5()
-after = case_mod.load(ctx5.state_path(mod.RECORD_BASENAME))
+after = case_of(ctx5)
 check("拾えない手がかりを抱えた控えは捨てられる",
       after["stage"] == case_mod.NONE, after["stage"])
 check("捨てた後は新しい事件を受けられる",
@@ -1518,7 +1634,7 @@ refreshz = install(ctxz, appz)
 appz.facility_screen()
 refreshz()
 press(ctxz, appz, mod.START_LABEL)
-casez = case_mod.load(ctxz.state_path(mod.RECORD_BASENAME))
+casez = case_of(ctxz)
 check("**材料が1つも読めなくても事件は始まる**",
       case_mod.is_active(casez), casez.get("stage"))
 check("  そのときも全部集めれば絞れる",
@@ -1578,7 +1694,7 @@ for _round in range(12):
     if mod.START_LABEL not in appv2.labels():
         break
     press(ctxv, appv2, mod.START_LABEL)
-    casev2 = case_mod.load(ctxv.state_path(mod.RECORD_BASENAME))
+    casev2 = case_of(ctxv)
     if not case_mod.is_active(casev2):
         break
     tells = [s["tell"].split("・") for s in casev2["suspects"]]
@@ -1624,7 +1740,7 @@ refreshl2()
 check("**ロード直後でもギルドにボタンが出る**",
       mod.START_LABEL in appl2.labels(), appl2.labels())
 press(ctxl2, appl2, mod.START_LABEL)
-casel2 = case_mod.load(ctxl2.state_path(mod.RECORD_BASENAME))
+casel2 = case_of(ctxl2)
 check("そのまま事件を受けられる", case_mod.is_active(casel2), casel2.get("stage"))
 check("事件の町も正しく引けている",
       casel2.get("area") == world_mod.area_id(appl2),
@@ -1652,7 +1768,7 @@ appr2.facility_screen()
 refreshr2()
 appr2.texts[:] = []
 press(ctxr2, appr2, mod.START_LABEL)
-caser2 = case_mod.load(ctxr2.state_path(mod.RECORD_BASENAME))
+caser2 = case_of(ctxr2)
 roster = [str(t) for t in appr2.texts if "・" in str(t) and "（" in str(t)]
 
 check("容疑者の行が人数ぶん出る",
@@ -1721,7 +1837,7 @@ refreshf()
 check("**旗が立っていても施設の画面なら出る**",
       mod.START_LABEL in appf.labels(), appf.labels())
 press(ctxf, appf, mod.START_LABEL)
-casef = case_mod.load(ctxf.state_path(mod.RECORD_BASENAME))
+casef = case_of(ctxf)
 check("そのまま事件を受けられる", case_mod.is_active(casef), casef.get("stage"))
 
 # **施設の画面でないときは今までどおり旗を尊重する。**
@@ -1789,7 +1905,7 @@ for _round in range(30):
     if mod.START_LABEL not in appm2.labels():
         break
     press(ctxm2, appm2, mod.START_LABEL)
-    casem2 = case_mod.load(ctxm2.state_path(mod.RECORD_BASENAME))
+    casem2 = case_of(ctxm2)
     if not case_mod.is_active(casem2):
         break
     rounds3 += 1
@@ -1824,7 +1940,7 @@ check("**どの事件も外し方が一意**（当てずっぽうにならない
 # 実機と同じ経路を通る）。
 if sample is not None:
     ctxm3 = FakeCtx()
-    case_mod.save(ctxm3.state_path(mod.RECORD_BASENAME), sample)
+    save_case(ctxm3, sample)
     mod.apply(ctxm3)
     appm3, _pm3 = fresh_world()
     refreshm3 = install(ctxm3, appm3)
@@ -1864,7 +1980,7 @@ for _round in range(24):
     if mod.START_LABEL not in appw3.labels():
         break
     press(ctxw2, appw3, mod.START_LABEL)
-    casew3 = case_mod.load(ctxw2.state_path(mod.RECORD_BASENAME))
+    casew3 = case_of(ctxw2)
     if not case_mod.is_active(casew3):
         break
     rounds2 += 1
@@ -2090,12 +2206,37 @@ check("既にリストならそのまま通す",
       writer.as_messages([{"role": "user", "content": "x"}])
       == [{"role": "user", "content": "x"}])
 
-check("send_request が無ければ使わない", not writer.available(None))
-check("create_model だけでは使わない",
-      not writer.available(types.SimpleNamespace(create_model=lambda *a, **k: None)))
-check("両方あれば使う",
-      writer.available(types.SimpleNamespace(
-          create_model=lambda *a, **k: None, send_request=lambda *a, **k: None)))
+# `available()` は**送信モジュールを名指ししない**（`llm.resolve_send`）。
+# 別名が後から生えるクラウドのプロバイダでも、呼べるなら呼ぶ。
+def _forget_llm():
+    for name in list(sys.modules):
+        if name.startswith("scripts.llm"):
+            del sys.modules[name]
+
+
+def _install(module_name, **members):
+    module = types.ModuleType(module_name)
+    module.__dict__.update(members)
+    sys.modules[module_name] = module
+    return module
+
+
+_forget_llm()
+check("送信できる先が1つも無ければ使わない", not writer.available())
+_install("scripts.llm.llm_manager", create_model=lambda *a, **k: None)
+check("create_model だけでは使わない", not writer.available())
+_forget_llm()
+_install("scripts.llm.llm_manager",
+         create_model=lambda *a, **k: None, send_request=lambda *a, **k: None)
+check("両方あれば使う", writer.available())
+# **旧版が取りこぼしていた形**。
+# `llm_manager` に別名がまだ生えておらず、送信はプロバイダ側にしか無い。
+_forget_llm()
+_install("scripts.llm.llm_manager", create_model=lambda *a, **k: None)
+_install("scripts.llm.request_llm_inference_gemini",
+         send_request=lambda *a, **k: None)
+check("**別名が生える前でもプロバイダ側から拾う**", writer.available())
+_forget_llm()
 # 例外は呼び出し側へ漏らさない（**落ちるくらいなら定型の事件を出す**）。
 boom = types.SimpleNamespace(
     create_model=lambda *a, **k: None,
@@ -2182,7 +2323,7 @@ try:
     refreshw()
     appw.texts[:] = []
     press(ctxw, appw, mod.START_LABEL)
-    casew = case_mod.load(ctxw.state_path(mod.RECORD_BASENAME))
+    casew = case_of(ctxw)
 
     check("事件が成立する", casew.get("stage") == case_mod.INVESTIGATING, casew)
     check("**この MOD 専用の名前で呼んでいる**",
@@ -2255,7 +2396,7 @@ try:
         appb.facility_screen()
         refreshb()
         press(ctxb, appb, mod.START_LABEL)
-        caseb = case_mod.load(ctxb.state_path(mod.RECORD_BASENAME))
+        caseb = case_of(ctxb)
         check("**{}でも事件は始まる**（下地に戻る）".format(label),
               caseb.get("stage") == case_mod.INVESTIGATING, caseb.get("stage"))
         check("  そのとき下地の人物が使われる ({})".format(label),
@@ -2335,7 +2476,7 @@ try:
     check("待っていることを画面に出す",
           any(mod.WRITING_TEXT in str(t) for t in appa.texts),
           [str(t) for t in appa.texts])
-    case_now = case_mod.load(ctxa.state_path(mod.RECORD_BASENAME))
+    case_now = case_of(ctxa)
     check("まだ事件は始まっていない",
           not case_mod.is_active(case_now), case_now.get("stage"))
     # **押しても何も起きない。**
@@ -2346,11 +2487,11 @@ try:
 
     # 書き込みが返ってくる（スレッドが `schedule_once` で戻す）。
     for _ in range(6):
-        if case_mod.is_active(case_mod.load(ctxa.state_path(mod.RECORD_BASENAME))):
+        if case_mod.is_active(case_of(ctxa)):
             break
         time.sleep(0.05)
         clock.run_due(upto=0)
-    casea = case_mod.load(ctxa.state_path(mod.RECORD_BASENAME))
+    casea = case_of(ctxa)
     check("返ってきたら事件が始まる",
           case_mod.is_active(casea), casea.get("stage"))
     check("**返ってきたらボタンが戻る**",
@@ -2373,7 +2514,7 @@ try:
     for _ in range(6):
         time.sleep(0.05)
         clock.run_due(upto=0)
-    caseo = case_mod.load(ctxo.state_path(mod.RECORD_BASENAME))
+    caseo = case_of(ctxo)
     check("**古い世代は控えに書かない**（新しい注入の側を上書きしない）",
           not case_mod.is_active(caseo), caseo.get("stage"))
     ctxo.superseded_now = False
@@ -2465,7 +2606,7 @@ refreshm = install(ctxm, appm)
 appm.facility_screen()
 refreshm()
 press(ctxm, appm, mod.START_LABEL)
-casem = case_mod.load(ctxm.state_path(mod.RECORD_BASENAME))
+casem = case_of(ctxm)
 
 # ① **印が残ったまま、別人との会話で発火する。**
 # 印は LLM の呼び出しで立ち、会話終了で消える。
@@ -2476,7 +2617,7 @@ other = [i for i in case_mod.suspect_ids(casem)][0]
 talk_to(ctxm, appm, witness)             # 証言者と話し始める（印が立つ）
 appm.texts[:] = []
 end_conversation_with(ctxm, appm, other)  # 別人との会話が閉じる
-after = case_mod.load(ctxm.state_path(mod.RECORD_BASENAME))
+after = case_of(ctxm)
 check("**別人との会話では手がかりが立たない**",
       not any(c["found"] for c in after["clues"]),
       [(c["id"], c["found"]) for c in after["clues"]])
@@ -2484,7 +2625,7 @@ check("画面にも出ない", not [t for t in appm.texts if "分かったこと
       [str(t) for t in appm.texts])
 # 印は消えない ― 相手のところへ戻れば、その会話を閉じたときに出る。
 end_conversation_with(ctxm, appm, witness)
-back = case_mod.load(ctxm.state_path(mod.RECORD_BASENAME))
+back = case_of(ctxm)
 check("**相手のところへ戻れば立つ**（印を捨ててしまわない）",
       any(c["found"] for c in back["clues"]),
       [(c["id"], c["found"]) for c in back["clues"]])
@@ -2499,7 +2640,7 @@ swept_hook = install(ctxt, appt)
 appt.facility_screen()
 swept_hook()
 press(ctxt, appt, mod.START_LABEL)
-caset = case_mod.load(ctxt.state_path(mod.RECORD_BASENAME))
+caset = case_of(ctxt)
 talk_to(ctxt, appt, caset["clues"][0]["witness"])
 real_monotonic = mod.time.monotonic
 mod.time.monotonic = lambda: real_monotonic() + mod.ASK_TTL + 1
@@ -2507,7 +2648,7 @@ try:
     end_conversation(ctxt, appt)
 finally:
     mod.time.monotonic = real_monotonic
-stale = case_mod.load(ctxt.state_path(mod.RECORD_BASENAME))
+stale = case_of(ctxt)
 check("**古くなった印では手がかりが立たない**",
       not any(c["found"] for c in stale["clues"]),
       [(c["id"], c["found"]) for c in stale["clues"]])
@@ -2524,10 +2665,10 @@ refreshu = install(ctxu, appu)
 appu.facility_screen()
 refreshu()
 press(ctxu, appu, mod.START_LABEL)
-caseu = case_mod.load(ctxu.state_path(mod.RECORD_BASENAME))
+caseu = case_of(ctxu)
 talk_to(ctxu, appu, caseu["clues"][0]["witness"])
 end_conversation(ctxu, appu)          # 相手の分からないマネージャ
-plain = case_mod.load(ctxu.state_path(mod.RECORD_BASENAME))
+plain = case_of(ctxu)
 check("**相手が分からなくても手がかりは立つ**（MISSING を id 扱いしない）",
       any(c["found"] for c in plain["clues"]),
       [(c["id"], c["found"]) for c in plain["clues"]])
@@ -2544,7 +2685,7 @@ refreshx = install(ctxx, appx)
 appx.facility_screen()
 refreshx()
 press(ctxx, appx, mod.START_LABEL)
-casex = case_mod.load(ctxx.state_path(mod.RECORD_BASENAME))
+casex = case_of(ctxx)
 cast_x = list(case_mod.suspect_ids(casex))
 culprit_x = casex["culprit"]
 gold_x = appx.player.gold
@@ -2556,7 +2697,7 @@ press(ctxx, appx, mod.ACCUSE_LABEL)
 refreshx()
 press(ctxx, appx, mod.GIVE_UP_LABEL)
 refreshx()
-gave = case_mod.load(ctxx.state_path(mod.RECORD_BASENAME))
+gave = case_of(ctxx)
 check("**諦めると事件が終わる**", not case_mod.is_active(gave), gave["stage"])
 check("**キャストは全員引き上げる**",
       not [i for i in cast_x if i in appx.world_dict["npcs"]],
@@ -2625,7 +2766,7 @@ refreshq = install(ctxq, appq)
 appq.facility_screen()
 refreshq()
 press(ctxq, appq, mod.START_LABEL)
-caseq = case_mod.load(ctxq.state_path(mod.RECORD_BASENAME))
+caseq = case_of(ctxq)
 witness_q = caseq["clues"][0]["witness"]
 suspect_q = case_mod.suspect_ids(caseq)[0]
 
@@ -2633,7 +2774,7 @@ suspect_q = case_mod.suspect_ids(caseq)[0]
 appq.texts[:] = []
 seen_greet = greet(ctxq, appq, witness_q)
 end_conversation_with(ctxq, appq, witness_q)
-after_q = case_mod.load(ctxq.state_path(mod.RECORD_BASENAME))
+after_q = case_of(ctxq)
 check("**尋ねずに抜けたら手がかりは立たない**",
       not any(c["found"] for c in after_q["clues"]),
       [(c["id"], c["found"]) for c in after_q["clues"]])
@@ -2652,7 +2793,7 @@ check("**第一声に事実そのものを載せない**",
 appq.texts[:] = []
 greet(ctxq, appq, suspect_q)
 end_conversation_with(ctxq, appq, suspect_q)
-claims_q = case_mod.load(ctxq.state_path(mod.RECORD_BASENAME))
+claims_q = case_of(ctxq)
 check("**尋ねずに抜けたら言い分も漏れない**（犯人がタダで割れない）",
       not case_mod.heard_claims(claims_q),
       [s for s in claims_q["suspects"] if s.get("heard")])
@@ -2664,14 +2805,14 @@ check("言い分も画面に出ない",
 appq.texts[:] = []
 talk_to(ctxq, appq, witness_q)
 end_conversation_with(ctxq, appq, witness_q)
-earned = case_mod.load(ctxq.state_path(mod.RECORD_BASENAME))
+earned = case_of(ctxq)
 check("**尋ねれば手がかりが立つ**",
       any(c["found"] for c in earned["clues"]),
       [(c["id"], c["found"]) for c in earned["clues"]])
 appq.texts[:] = []
 talk_to(ctxq, appq, suspect_q)
 end_conversation_with(ctxq, appq, suspect_q)
-heard_q = case_mod.load(ctxq.state_path(mod.RECORD_BASENAME))
+heard_q = case_of(ctxq)
 check("**尋ねれば言い分が聞ける**", case_mod.heard_claims(heard_q),
       [s for s in heard_q["suspects"] if s.get("heard")])
 
@@ -2693,7 +2834,7 @@ for _round in range(5):
     appr.facility_screen()
     refreshr()
     press(ctxr, appr, mod.START_LABEL)
-    caser = case_mod.load(ctxr.state_path(mod.RECORD_BASENAME))
+    caser = case_of(ctxr)
     if caser.get("stage") != case_mod.INVESTIGATING:
         continue
     during = len(appr.world_dict["npcs"])
@@ -2708,9 +2849,8 @@ check("**決着すれば必ず元の人数に戻る**",
       all(after == baseline for _during, after in counts),
       (baseline, counts))
 check("台帳も溜まらない",
-      not ledger_mod.ids(ledger_mod.load(ctxr.state_path(mod.LEDGER_BASENAME)),
-                         world_mod.world_name(appr)),
-      ledger_mod.load(ctxr.state_path(mod.LEDGER_BASENAME)))
+      not ledger_mod.ids(cast_of(ctxr)),
+      cast_of(ctxr))
 
 print("\n[後始末] **置き去りを起動時に掃除する**")
 # 台帳の無かったころに作られた NPC が、既にセーブへ残っている（実機で4体）。
@@ -2749,7 +2889,7 @@ refreshk = install(ctxk, appk)
 appk.facility_screen()
 refreshk()
 press(ctxk, appk, mod.START_LABEL)
-casek = case_mod.load(ctxk.state_path(mod.RECORD_BASENAME))
+casek = case_of(ctxk)
 alive = list(case_mod.suspect_ids(casek))
 mod.apply(ctxk)                  # 読み直しを模して掃除をもう一度走らせる
 refreshk2 = install(ctxk, appk)
@@ -2770,7 +2910,7 @@ refreshp = install(ctxp, appp)
 appp.facility_screen()
 refreshp()
 press(ctxp, appp, mod.START_LABEL)
-casep = case_mod.load(ctxp.state_path(mod.RECORD_BASENAME))
+casep = case_of(ctxp)
 guarded = case_mod.suspect_ids(casep)[0]
 appp.party = [guarded, "player"]
 accuse(ctxp, appp, casep["culprit"])
@@ -2790,7 +2930,7 @@ refresh2 = install(ctx2, app2)
 app2.facility_screen()
 refresh2()
 press(ctx2, app2, mod.START_LABEL)
-found2 = case_mod.load(ctx2.state_path(mod.RECORD_BASENAME))
+found2 = case_of(ctx2)
 cast2 = list(case_mod.suspect_ids(found2))
 innocent = [n for n in cast2 if n != found2["culprit"]][0]
 existing2 = sorted(set(app2.world.characters) - set(cast2))
