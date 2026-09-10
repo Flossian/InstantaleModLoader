@@ -35,6 +35,13 @@
       "label": {"ja": "買った品を作り直させない", "en": "Keep sold-out goods sold out"},
       "note": {"ja": "素のゲームは店を開くたび、売れた装備以外（食料・薬・道具）を1つ作り直して棚へ戻す。切ると素のまま（同じ回復アイテムを何度でも買える）",
                "en": "The unmodded game re-creates a sold item (anything but weapons and wearables) each time the shop is opened. When off, that stands"}
+    },
+    "NEW_STOCK": {
+      "type": "bool",
+      "default": true,
+      "label": {"ja": "入れ替えで新しい商品を作る", "en": "Generate new goods on restock"},
+      "note": {"ja": "LLM で品揃え一式を新しく作り、ゲームの生成入口で棚へ入れる（武器・防具も新しい品になる）。切ると元の品揃えと同じ品名で作り直す。1回の入れ替えで LLM を1回呼ぶ",
+               "en": "Asks the LLM for a brand-new lineup and creates each item through the game's own item entry point (weapons and wearables included). When off, the original lineup is rebuilt with the same names. One LLM call per restock"}
     }
   }
 }

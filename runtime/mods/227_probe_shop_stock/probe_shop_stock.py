@@ -424,6 +424,29 @@ def apply(ctx):
             who(frames.attr(new_inventory, "obtainer", None))),
             ui.find_app(), lambda: orig(self, new_inventory, *args, **kwargs))
 
+    def watch_generator(name):
+        """ゲームの LLM 生成が呼ばれた瞬間の、ゲーム側の呼び出し元と引数の形を録る。"""
+        @ctx.wrap("scripts.llm.llm_manager:" + name, required=False, safe=True)
+        def hook(orig, *args, **kwargs):
+            try:
+                write("LLM生成 {}: args=({}) kwargs={} 呼び出し元: {}".format(
+                    name, ", ".join(type(a).__name__ for a in args),
+                    sorted(kwargs) or "-", frames.caller(CALLER_DEPTH)))
+            except Exception:
+                ctx.log_exc("shop stock probe: cannot record the generator call")
+            result = orig(*args, **kwargs)
+            try:
+                write("LLM生成 {} -> {} {}".format(
+                    name, type(result).__name__, frames.repr_value(result)[:300]))
+            except Exception:
+                ctx.log_exc("shop stock probe: cannot record the generator result")
+            return result
+        return hook
+
+    for name in ("shop_item_generator_ordinary",
+                 "shop_additional_item_generator_ordinary"):
+        watch_generator(name)
+
     ctx.log("shop stock probe: watching the shop path; "
             "records go to out/{} and out/{}".format(
                 LOG_BASENAME, RECORD_BASENAME))
