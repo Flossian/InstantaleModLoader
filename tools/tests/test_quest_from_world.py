@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""911_quest_from_world をゲーム抜きで通す。
+"""328_quest_from_world をゲーム抜きで通す。
 
-    python tools/tests/test_wip_quest_from_world.py
+    python tools/tests/test_quest_from_world.py
 
 見ているのは、この MOD が自分で決めている所だけ:
 当たった回は街の3欄が差し替わり、外れた回は6引数が素通しになる。

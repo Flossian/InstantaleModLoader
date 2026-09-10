@@ -1354,6 +1354,7 @@ v2 で、`111_llm_prompt_replace` が使っているのと同じ仕掛け口を�
 | `225_probe_area_quest_difficulty` | 街を初めて訪ねたとき、依頼の難易度を誰がどう決めるかを録る。`settlement_quest_generator` に渡る `quest_difficulties` の実値・呼び出し元・そのローカル変数、stat↔難易度の変換、街が作られる経路の順と前後の `level_of_detail`、到着までの移動の間の `random.*`。`133_ui_area_difficulty` が未訪問の街に帯を出す材料（VERIFICATION.md §3.49 #5。結果は VERIFICATION_LOG.md §2.84） |
 | `226_probe_item_consume` | 回復アイテムを使ったとき何が起きるかを録る。右クリックで押された項目と popup の中身（`usable` 相当の値）、`ItemConsumeManager.consume_item` に渡る `usable` の実値、プレイヤーと品の持ち主の HP・スタミナ・上限・`status`・持ち物の数の前後とその間に足された文、`Item.consume` の呼び出し元、純関数 `get_heal_spec` / `get_heal_physical_integrity_barden` / `get_max_physical_integrity` の対応表、`update_max_hp` / `update_max_physical_integrity` の前後。`134_balance_item_effects` が本体を呼んだ後に戻すのか本体を呼ばずに全部書くのかを決める材料（結果は GAME.md §2.13.2）。出力は `out\item_consume.log` と `out\item_consume.jsonl` |
 | `227_probe_shop_stock` | 買った品が店の棚へ戻るのはどこかを録る。品が生まれた瞬間（`scripts.items:Item.__init__`）の id・持ち主・`attributes` とゲーム側の呼び出し元の連鎖、店の経路の境目（`ShoppingStartManagerRemake.execute` / `shopping_start_method_1` / `set_item_from_world_data` / `generate_item_in_shopping` / 生成の3入口 / `toggle_twin_inventory_window` / `buy_item` / `sell_item` / `close_shopping_window_process` / `Item.buy` / `Item.sell` / `InventoryItem.change_inventory`）ごとの主と手持ちの鍵の増減、施設の品揃えの雛形（`config['goods']` の件数・`stock_tier`・`stock_update_date`）と今日の日数、採番台帳 `index['item']`。買った品が手持ちへ移り、雛形からもう1つ作られて棚に入る（鍵は `item_` の付かない裸の数字）ところまでは出ているので、残るのは作っているのが誰か。増分が出た一番内側の境目がその場所（結果は GAME.md §2.13.1.3）。出力は `out\shop_stock.log` と `out\shop_stock.jsonl` |
+| `228_probe_area_move_reject` | エリア移動の拒否（`AreaMoveManager.execute` → `area_move_rejector`）が同行者の何を読んで決めているかを録る。`execute` に入ったら `app`・移動のマネージャ・プレイヤー・同行者の `Character` を属性読みを記録する派生クラスへ `__class__` で差し替え、同行者の `relationship` と `app.party` / `original_party` / `world.characters` を鍵読みを記録する dict / list 派生に差し替える。`area_move_rejector` か `elapse_days` が呼ばれた時点で記録を止め、窓を抜けるとき全部元に戻す。セーブには何も書かない。出力は `out\area_move_reject.log`（`window:` から `window closed` まで読まれた順に1行ずつ。`>> area_move_rejector called` の直前に並ぶ行が分岐の材料）。`329_` の版1（友好度）と版2（`Character.state`）が実機で外れたので、当て推量をやめて読まれる側に印を付けた。`cannot spy app` が出たら `InstantaleApp` の `__class__` 差し替えができない環境で、`app` の読みだけ欠ける。読みが多すぎるときは `NOISE` に属性名を足す（連続する同じ読みは畳んである）。結果は GAME.md §2.18 と VERIFICATION.md §3.56 |
 
 ---
 
@@ -3139,6 +3140,54 @@ HP・スキル・立ち絵は空のまま作り、最初に会話や戦闘をす
 | 会話に履歴の1行が出ない | `prompt at` の行が無ければ、会話相手が記録に無い主（別の宿）か、まだ一度も泊まっていない |
 | 社交の相手が変わらない | `out\inn_quality.log` の `social:` の行。`untouched (game default)` は設定が OFF。`no candidate` は同行者も生成済み NPC も居ない。`npc_list not replaced` か `argument not reached` は、ゲームの更新で LLM に渡す形が変わっている |
 | 記録をやり直したい | `state\inn_regular\<世界名>.json` を消す。好感度の既に上がったぶんはセーブに残る |
+
+### `328_quest_from_world`: 世界概要から依頼を生成する
+
+掲示板で「クエストを探す」を押すたび、ゲームは今居る街の概要・構造・周辺の描写を LLM に渡して依頼を作る。
+同じ街に居る限り毎回同じ描写を読むので、湿地の街なら霧と獣、砂漠の街なら砂嵐と陽炎、と似た依頼が続く。
+
+この MOD を入れると、依頼を作る回の一定の割合（既定 30%）で街の3欄を渡さず、
+代わりに「この街の描写は伏せてあるので世界の概要だけで作れ」の1文を渡す。
+世界の概要・街の名前・難易度はそのまま。
+依頼の形（題名・依頼人・あらすじ・敵・ボス）も難易度もゲームのままで、変わるのは題材の出どころだけ。
+
+| 設定 | 意味 |
+| --- | --- |
+| 世界だけから作る確率(%) | 既定 30。0 で何もしない、100 で毎回 |
+| 街の描写の代わりに渡す文 | 概要・構造・周辺の3欄すべてにこの文が入る |
+
+#### どう動くか
+
+- 当たり外れは依頼を作る1回ごとに引く。当たった回は `out\quest_from_world.log` に `world-only:`、外れた回は `as-is:` が1行出る
+- `301_quest_from_conversation` の「この話から依頼を作る」にも当たることがあるが、会話の書き起こしは残るので発端は消えない（`301_` より外側で包んでいる）
+- 街へ初めて入ったときの初期依頼3件（`settlement_quest_generator`）には触らない。あちらは街の紹介そのものなので、街の描写が要る
+
+#### 困ったとき
+
+| 症状 | やること |
+| --- | --- |
+| 何回引いても似た依頼のまま | `out\quest_from_world.log` に `world-only:` が出ているか。出ていなければ確率の設定。出ていて似ているなら LLM が指示を無視している（モデルを変えるか、「代わりに渡す文」を強める） |
+| 依頼の舞台が街と無関係すぎる | 確率を下げるか、「代わりに渡す文」から「舞台は街の外の別の場所でもよい」を削る |
+
+### `329_area_move_with_party`: 雇った仲間がエリア移動を拒まなくなる
+
+素のゲームは、雇った NPC を連れて「他の土地へ行く」と同行を拒まれる。
+拒否の一言（AI が書く）が出るだけで、移動も日数も運賃も動かない。
+一緒に移動できるのは「家族になろう」で家族になった相手だけ。
+この MOD を入れると、誰を連れていても移動できる。
+拒否の一言は出ない。
+家族になる経路や雇用の値段は変えない。
+
+設定は無い。
+本体の分岐は関係の配列（`同行中` か `家族` か）しか見ていないので、
+条件を緩める（友好度いくつ以上なら同行、など）形にするなら MOD 側で自前の条件を持つことになる。
+
+#### 困ったとき
+
+| 症状 | やること |
+|---|---|
+| まだ拒まれる | `out\area_move_party.log` の `WARN rejected:` の行。出ていれば本体の分岐は配列の `家族` 以外を見ている（VERIFICATION.md §3.56 の #1）。出ていなければ MOD が効いていない（`out\modloader.log` の `applied`） |
+| 移動の後で友好度が変わった | 同じログの `WARN restore` の行。移動の最中に本体が友好度を書き換えたときだけ出る |
 
 ---
 

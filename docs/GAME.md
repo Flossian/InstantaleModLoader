@@ -1809,7 +1809,16 @@ process_choice(AreaMoveManager,       '馬車(1000G)' / '徒歩(3ヵ月)')
   押すと `execute` が走り `金が足りない...` の一言で中断する
   （日数・所持金・エリアとも動かず、`AreaMoveRestriction` は通らない）
   ＝ **残高チェックも `execute` の中**
-- `llm_manager:area_move_rejector(...)` がある（同行者が移動を拒む経路と思われるが未検証）
+- 同行者による拒否は `AreaMoveManager.execute` の中、運賃と `elapse_days` より前。
+  拒否の一言は `llm_manager:area_move_rejector(character_life_log, player, character_instance, worldview)` が AI に書かせる（2件の実測とも約 2〜4 秒）。
+  頼み文は「クエスト一回限りの条件で雇用された NPC」「月単位の時間を要する」「関係性が深くないためにシステム的に拒否されるべき」の3点で固定
+- 拒否のあと本体は `current_log` に2つ書く（exe の定数表。`AreaMoveManager.method_1` の並び）:
+  NPC 側 `<会話: 雇い主の〈PC〉が遠い'〈エリア〉'エリアへの移動を試みたので、それには付き合えないことを伝えた。>`、
+  PC 側 `<会話: 遠い'〈エリア〉'エリアへの移動を試みたところ、雇用している〈NPC〉にその同行を拒否された。>`
+- 分岐が読むのは同行者の `relationship["player"]["relationship"]` の配列だけ（`228_` の実機記録。VERIFICATION.md §3.56）。友好度も `state` も読まない。雇用 NPC は `['同行中']`
+- 家族: 会話の「家族になろう」（`conversation_become_family_response`）で `二人は家族になった。` と書き、以後は「雇いたい」の代わりに「パーティに入れる」（`FamilyPartyJoinManager`、雇用の値段なし）が並ぶ。印は `relationship.player.relationship` に `家族` が入ること（定数表の並びと、`329_` 版3の実機で確認）。`Character.state` は雇用 NPC で `""` か `None` で、分岐は読まない（`329_` 版2で外れ）
+- 定数表で `area_move_rejector` の近くに並ぶ属性名は `target_area` / `target_area_dict` / `mode` / `show_loading_finished` だけで、`relationship` や `party` は畳まれていて位置から辿れない。読み手の側に印を付けて録る（`228_`）ほうが早い
+- 保存は Character の値を `save_data_dict["npcs"]` へ写してから書く。拒否の途中でも保存が走る（`329_` 版1で 999 が残った）
 
 #### クエストは日数を進めない（実機と全件計数の両方で確認）
 

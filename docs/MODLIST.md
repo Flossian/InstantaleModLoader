@@ -8,7 +8,7 @@
 手で書き換えても次の生成で消える。
 直す先は各 MOD の `mod.json` か MODS.md の見出し。
 
-同梱 97 本（基盤 2 / 修正 36 / 追加 31 / 計測 28）。
+同梱 100 本（基盤 2 / 修正 36 / 追加 33 / 計測 29）。
 うち 11 本は外部の MOD 作者からの提供（下の「提供を受けた MOD」）。
 
 並びはフォルダ名順。
@@ -81,7 +81,7 @@
 
 ---
 
-## 追加（31本）
+## 追加（33本）
 
 ゲームに無かった遊びを足す。
 
@@ -113,6 +113,8 @@
 | [`325_road_opening`](MODS.md#325_road_opening-街と街を結ぶ新しい道を切り開く) | 新たな道を探す | 街と街を結ぶ新しい道を切り開く | 18 |  |
 | [`326_npc_travel`](MODS.md#326_npc_travel-npcの街移動) | NPCの街移動 | NPCの街移動 | 15 |  |
 | [`327_inn_quality`](MODS.md#327_inn_quality-高級宿のメリット追加改善) | 高級宿のメリット追加・改善 | 高級宿のメリット追加・改善 | 13 |  |
+| [`328_quest_from_world`](MODS.md#328_quest_from_world-世界概要から依頼を生成する) | 世界概要から依頼を生成する | 世界概要から依頼を生成する | 2 |  |
+| [`329_area_move_with_party`](MODS.md#329_area_move_with_party-雇った仲間がエリア移動を拒まなくなる) | 雇った仲間がエリア移動を拒まなくなる | 雇った仲間がエリア移動を拒まなくなる | - |  |
 | [`401_battle_character_context`](MODS.md#401_battle_character_context-戦闘の審判へ同行者の人物と装備を見せる) | 戦闘キャラクター情報補完 | 戦闘の審判へ同行者の人物と装備を見せる | - |  |
 | [`402_party_inventory_transfer`](MODS.md#402_party_inventory_transfer-仲間とアイテムを受け渡しできる) | パーティーメンバー：アイテム受け渡し | 仲間とアイテムを受け渡しできる | - |  |
 | [`403_npc_social_memory`](MODS.md#403_npc_social_memory-npc同士がお互いを認知し関係を覚える) | NPC同士の認知と関係記憶 | NPC同士がお互いを認知し、関係を覚える | 5 |  |
@@ -121,7 +123,7 @@
 
 ---
 
-## 計測（28本）
+## 計測（29本）
 
 ゲームは変えない。`out\` にログを残すだけ。デバッグモードのときだけ読み込まれる。
 
@@ -155,6 +157,7 @@
 | `225_probe_area_quest_difficulty` | 街を初めて訪ねたとき、依頼の難易度を誰がどう決めるかを録る |
 | `226_probe_item_consume` | 回復アイテムを使ったとき何が起きるかを録る |
 | `227_probe_shop_stock` | 買った品が店の棚へ戻るのはどこかを録る |
+| `228_probe_area_move_reject` | エリア移動の拒否（`AreaMoveManager.execute` → `area_move_rejector`）が同行者の何を読んで決めているかを録る |
 
 ---
 

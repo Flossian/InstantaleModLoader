@@ -52,6 +52,7 @@
     "212_probe_character_sheet",
     "300_event_facility_arrival",
     "301_quest_from_conversation",
+    "328_quest_from_world",
     "302_leave_party_in_conversation",
     "402_party_inventory_transfer",
     "303_quest_end_party_to_guild",
@@ -62,6 +63,7 @@
     "307_area_move_dungeon",
     "325_road_opening",
     "326_npc_travel",
+    "329_area_move_with_party",
     "308_battle_damage_display",
     "309_office_pardon",
     "311_npc_profile_memory",
@@ -96,7 +98,8 @@
     "224_probe_npc_carryover",
     "225_probe_area_quest_difficulty",
     "226_probe_item_consume",
-    "227_probe_shop_stock"
+    "227_probe_shop_stock",
+    "228_probe_area_move_reject"
   ],
   "disabled": []
 }

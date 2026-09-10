@@ -12,7 +12,7 @@ GAME.md §2.18、`217_` の `out\\area_move.log` で `days=[] texts=1`）。
 やること: `execute` に入った時点で同行者全員のこの配列を `['家族']` に置き換え、
 判定を通り抜けた印である `elapse_days` の直前で元の配列に戻す。
 拒否・所持金不足のときは `execute` を抜けるときに戻す（どちらも `elapse_days` を通らない）。
-`save_game` の直前にも戻す（版1で、拒否の途中の保存に一時値が乗った。DOC.md §3）。
+`save_game` の直前にも戻す（版1で、拒否の途中の保存に一時値が乗った。VERIFICATION.md §3.56）。
 戻すときは `save_data_dict["npcs"][id]` に同じ値が写っていればそちらも戻す。
 
 外れの検知: 置いた後も `area_move_rejector` が呼ばれたら `WARN rejected:` を書く。
@@ -105,7 +105,7 @@ def apply(ctx):
             restore(app, "execute done")
             if state["rejected"]:
                 write("WARN rejected: the game refused the move although every companion "
-                      "had relationship {!r}; the check reads something else (DOC.md §3)".format(FAMILY))
+                      "had relationship {!r}; the check reads something else (VERIFICATION.md §3.56)".format(FAMILY))
 
     @ctx.wrap("__main__:InstantaleApp.elapse_days", required=False, safe=True)
     def elapse_days(orig, self, days, *args, **kwargs):

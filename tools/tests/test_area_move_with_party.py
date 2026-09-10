@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""913_area_move_with_party をゲーム抜きで通す。
+"""329_area_move_with_party をゲーム抜きで通す。
 
-    python tools/tests/test_wip_area_move_with_party.py
+    python tools/tests/test_area_move_with_party.py
 
 偽物の `execute` は本体の順（同行者の `relationship.player.relationship` を見る → 通れば `elapse_days`、駄目なら `area_move_rejector`）を写す。
 見るのは、判定の間だけ関係の配列が `['家族']` になること・`elapse_days` と `save_game` の前に戻ること・拒否と不足でも戻ること・セーブ側の写しにも残らないこと。
