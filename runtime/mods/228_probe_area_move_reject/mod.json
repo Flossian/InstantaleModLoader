@@ -1,0 +1,15 @@
+{
+  "entry": "probe_area_move_reject.py",
+  "api": 1,
+  "kind": "probe",
+  "name": {
+    "en": "Probe: what the area-move refusal reads",
+    "ja": "プローブ: エリア移動の拒否が何を読むか"
+  },
+  "description": {
+    "en": "During AreaMoveManager.execute, records every attribute read on app, the manager, the player and the party members, every key read on their relationship dict and on app.party / original_party / world.characters, until area_move_rejector or elapse_days is called. Shows the refusal branch's inputs without the source.",
+    "ja": "AreaMoveManager.execute の間、area_move_rejector か elapse_days が呼ばれるまでの app・マネージャ・プレイヤー・同行者の属性読みと、relationship / app.party / original_party / world.characters の鍵読みを全部記録する。拒否の分岐が何を見ているかをソース無しで割り出す"
+  },
+  "version": "1",
+  "author": "R01/Flossian"
+}

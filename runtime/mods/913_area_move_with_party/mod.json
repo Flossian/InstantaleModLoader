@@ -1,0 +1,15 @@
+{
+  "entry": "area_move_with_party.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Hired companions no longer refuse to travel between areas",
+    "ja": "雇った仲間がエリア移動を拒まなくなる"
+  },
+  "description": {
+    "en": "The game lets a hired NPC refuse an area move (an LLM line, no move, no days, no fare); only companions who became family travel. This mod marks every companion's relationship as family for the instant the check runs, so the party always travels together.",
+    "ja": "素のゲームは雇用 NPC がエリア移動を拒む（AI の一言が出て、移動も日数も運賃も動かない）。同行できるのは「家族になろう」で家族になった相手だけ。この MOD は判定の一瞬だけ同行者全員の関係を家族として扱い、いつでも一緒に移動できるようにする"
+  },
+  "version": "3",
+  "author": "R01/Flossian"
+}
