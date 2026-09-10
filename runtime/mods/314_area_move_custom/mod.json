@@ -11,7 +11,7 @@
     "ja": "徒歩・馬車の日数と馬車の料金、移動中の文言を変えられる。既定は素のゲームの値のままで挙動は変わらないが、素のゲームでは分からない馬車の所要日数を既定でもボタンに表示する"
   },
   "version": "2",
-  "author": "R01/Flossian",
+  "author": "R01/Flossian,MoririnJP",
   "shares": [
     "road_opening"
   ],
