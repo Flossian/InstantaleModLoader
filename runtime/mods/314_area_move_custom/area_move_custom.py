@@ -67,7 +67,6 @@
 遊び方の説明は MODS.md の `314_` の項、検証の経過は VERIFICATION.md §3.27。
 """
 
-import re
 import sys
 
 from instantale_modloader import ui
@@ -82,9 +81,12 @@ STATE_STORE_ATTR = "__instantale_area_move_custom_store__"
 # §3.3）。
 MARK = "mod_area_move_custom"
 
-# ---------------------------------------------------------------- 設定の既定値
-# ここの値が、同梱 tool.py とワールド別stateの基準になる。
-# 設定画面の入力値はゲーム中に直接グローバルへ書かず、stateへ保存する。
+# ---------------------------------------------------------------- 設定（mod.json）
+# ここの定数だけが GUI から変えられる（ローダは入口モジュールのグローバルへ書き込む。TECH.md
+# §3.8）。これが全ワールド共通の一括設定。
+# ワールド個別の値は同梱の tool.py が `state/area_move_custom/<世界>.json` に書き、
+# `apply()` がその世界を見ているあいだだけここへ上書きする（`refresh_world`）。
+# 他のファイルへ移さないこと。
 # 既定値はすべて素のゲームの値。
 # 素の値のままなら、この
 # MOD はその項目に一切触らない（日数もボタンの表示も料金も）。
@@ -113,7 +115,7 @@ COACH_NAME = "馬車"
 # 素のゲームは馬車の所要日数をどこにも出さないので、
 # 既定でも日数を足す（モジュール docstring の「例外」を参照）。
 WALK_BUTTON = "{name}({days}日)"
-COACH_BUTTON = "{name}({price}{short}・{days}日)"
+COACH_BUTTON = "{name}({price}G・{days}日)"
 
 # 移動中の文言テンプレート。
 # 空文字列でゲームのまま。
@@ -123,7 +125,7 @@ COACH_BUTTON = "{name}({price}{short}・{days}日)"
 # ゲームは料金をいくらに直しても「1000ゴールドを支払った」と言い続けるので（実測）、
 # ここで直すのが唯一の口。
 WALK_DEPART_TEXT = "{name}で目指す。長旅だ..."
-COACH_DEPART_TEXT = "{price}{long}を支払った。快適な旅だ..."
+COACH_DEPART_TEXT = "{price}ゴールドを支払った。快適な旅だ..."
 ARRIVE_TEXT = ""
 
 # 離れた街への距離補正。**`325_road_opening` が開いた道だけ**に効く。
@@ -176,9 +178,9 @@ GAME_WALK_DAYS = 90
 GAME_COACH_DAYS = 14
 GAME_COACH_PRICE = 1000
 
-# ラベルから料金を読む基本部分はローダの語彙（`ui.parse_coin`。`315_` と共有）。
-# 314側にも現在の `{short}` を読む経路を持ち、130が未ロードでも
-# `馬車(1000円)` のような表示を扱えるようにする。
+# ラベルから料金を読むのはローダの語彙（`ui.parse_coin`。`315_` と共有）。
+# `馬車(1000G)` → 1000。桁区切りが入っても読める。
+# 通貨の表記が差し替えられていれば（`130_`）`馬車(1000円)` も読む。
 
 # `325_road_opening` の控えのフォルダ（`state/road_opening/<世界>.json`）。
 # **読むだけ**（`WorldStore(own=False)`。MOD どうしは import せず、
@@ -186,18 +188,10 @@ GAME_COACH_PRICE = 1000
 # ファイルが無いだけで、挟む街の数は常に 0 ＝ 補正なしに落ちる）。
 ROADS_DIRNAME = "road_opening"
 
-# 314 は単位を設定・保存する MOD ではないので、currency_unitの設定があれば読み取るだけ。
-CURRENCY_DIRNAME = "currency_unit" # 130_currency_unit が保存するワールド別設定を読むための共有名。
-GAME_CURRENCY_LONG = "ゴールド"    # デフォルトの長い名称。関数{long}へ渡す。
-GAME_CURRENCY_SHORT = "G"         # デフォルトの短い名称。関数{short}へ渡す。
-ACTIVE_CURRENCY_LONG = GAME_CURRENCY_LONG # 130_currency_unit の長い単位を {long} へ渡す。
-ACTIVE_CURRENCY_SHORT = GAME_CURRENCY_SHORT # 130_currency_unit の短い単位を {short} へ渡す。
-
-# 314自身の設定をワールドごとに保存する控え。
-# 設定画面(tool.py)だけが書き、ゲーム中はこのMODが読む。
+# ワールド個別の設定の控え。
+# 書くのは同梱の tool.py だけ。ゲーム中はこの MOD が読む。
 SETTINGS_DIRNAME = "area_move_custom"
 SETTINGS_STORE_ATTR = "__instantale_area_move_custom_settings_store__"
-SETTINGS_DEFAULTS_ATTR = "__instantale_area_move_custom_settings_defaults__"
 SETTING_NAMES = (
     "WALK_DAYS", "COACH_DAYS", "COACH_PRICE", "WALK_NAME", "COACH_NAME",
     "WALK_BUTTON", "COACH_BUTTON", "WALK_DEPART_TEXT", "COACH_DEPART_TEXT",
@@ -206,7 +200,7 @@ SETTING_NAMES = (
 )
 
 # 手持ちが設定した運賃に足りないときの一言。
-REFUSE_TEXT = "（{name}代{price}{short}に足りない ― 手持ち{gold}{short}）"
+REFUSE_TEXT = "（{name}代{price}Gに足りない ― 手持ち{gold}G）"
 
 
 class _SafeDict(dict):
@@ -219,16 +213,15 @@ class _SafeDict(dict):
 def fmt(template, **values):
     """設定のテンプレートを埋める。壊れたテンプレートでも素の文字列で返す。
 
-    `{long}` / `{short}` は314が現在ワールド用に読み込んだ通貨単位で埋める。
-    130のPythonモジュールは直接読まず、共有stateだけを使う。
+    埋めた後に通貨の表記を今の表記へ直す（`130_` が差し替えていれば
+    `馬車(1000G・14日)` → `馬車(1000円・14日)`）。
+    設定のテンプレートは素のゲームの言い方（`G`）のままでよい。
     """
-    values.setdefault("long", ACTIVE_CURRENCY_LONG)
-    values.setdefault("short", ACTIVE_CURRENCY_SHORT)
     try:
         filled = str(template).format_map(_SafeDict(values))
     except Exception:
         filled = str(template)
-    return filled
+    return ui.rewrite_coins(filled)
 
 
 def kind_of_mode(mode):
@@ -301,84 +294,8 @@ def apply(ctx):
     # 読み直る）。読み取り専用なので、apply のたびに作り直しても安全。
     roads = WorldStore(ctx, ROADS_DIRNAME, own=False, write=write)
 
-    # 130_currency_unit の控えも読むだけにする。
-    # 130 の Python モジュールを import せず、共有 state の契約だけを使うことで、
-    # 314 が単位の設定元にならないようにする。fresh=True なので、ゲームを終了せず
-    # 130 の設定画面で保存した場合も、次の料金表示で読み直せる。
-    currency = WorldStore(ctx, CURRENCY_DIRNAME, own=False, default=dict,
-                          write=write)
-    currency_seen: list[tuple[object, str, str] | None] = [None]
-
-    def currency_unit_for(app):
-        """130のstateから、現在ワールドの(長い単位, 短い単位)を読む。
-
-        314の ``{price}G`` は短い単位へ、
-        ``{price}ゴールドを支払った`` は長い単位へ置き換えられるよう、
-        130の保存形式をここで明示的に利用する。314側では保存しない。
-        """
-        current_world = UNKNOWN_WORLD
-        try:
-            current_world = world_key(app)
-        except Exception:
-            pass
-        record = {}
-        if isinstance(current_world, str) and current_world != UNKNOWN_WORLD:
-            try:
-                loaded = currency.load(current_world, fresh=True)
-                if isinstance(loaded, dict):
-                    record = loaded
-            except Exception:
-                ctx.log_exc("area move custom: cannot read currency unit")
-        long_name = record.get("UNIT_LONG")
-        short_name = record.get("UNIT_SHORT")
-        if not isinstance(long_name, str) or not long_name.strip():
-            long_name = GAME_CURRENCY_LONG
-        if not isinstance(short_name, str) or not short_name.strip():
-            short_name = GAME_CURRENCY_SHORT
-        return current_world, long_name, short_name
-
-    def use_currency_unit(app):
-        """130の単位を314側の ``{long}`` / ``{short}`` へ渡す。
-
-        共有UIの単位は変更しない。
-        読み取った値を埋め込むだけにする。
-        """
-        global ACTIVE_CURRENCY_LONG, ACTIVE_CURRENCY_SHORT
-        current_world, long_name, short_name = currency_unit_for(app)
-        signature = (current_world, long_name, short_name)
-        if signature == currency_seen[0]:
-            return (ACTIVE_CURRENCY_LONG, ACTIVE_CURRENCY_SHORT)
-        ACTIVE_CURRENCY_LONG = long_name
-        ACTIVE_CURRENCY_SHORT = short_name
-        currency_seen[0] = signature
-        return (long_name, short_name)
-
-    def sync_currency(app):
-        """現在ワールドの130設定を314のテンプレートへ反映する。"""
-        return use_currency_unit(app)
-
-    def parse_currency_amount(app, text):
-        """314の現在の短い単位を含む料金ラベルから金額を読む。
-
-        共有部品のparserを使い、130が未ロードでも314単独で動くように、
-        その後に314側の短い単位でも読む。共有UIの単位は変更しない。
-        """
-        parsed = ui.parse_coin(text)
-        if parsed is not None:
-            return parsed
-        _long_name, short_name = currency_unit_for(app)[1:]
-        if not isinstance(text, str) or not text or not short_name:
-            return None
-        match = re.search(r"(\d[\d,]*)\s*" + re.escape(short_name), text)
-        if match is None:
-            return None
-        try:
-            return int(match.group(1).replace(",", ""))
-        except (TypeError, ValueError):
-            return None
-
-    # 314の設定も130と同じく、現在ワールドのstateを優先する。
-    # stateが無いワールドでは、ローダが読み込んだ既定値へ戻す。
+    # ワールド個別の設定。控えがあればその世界を見ているあいだだけ上書きし、
+    # 無い世界では一括設定（ローダが注入した値）へ戻す。
     settings_store = getattr(sys, SETTINGS_STORE_ATTR, None)
     if not isinstance(settings_store, WorldStore):
         settings_store = WorldStore(ctx, SETTINGS_DIRNAME, default=dict,
@@ -386,18 +303,14 @@ def apply(ctx):
         setattr(sys, SETTINGS_STORE_ATTR, settings_store)
     elif settings_store is not None and hasattr(settings_store, "rebind"):
         settings_store.rebind(ctx, write)
-    # apply()は同じプロセスで再注入されることがある。前のワールドを
-    # 「既定値」として取り込まないよう、初回の素の値だけをsysへ固定する。
-    base_settings = getattr(sys, SETTINGS_DEFAULTS_ATTR, None)
-    if not isinstance(base_settings, dict) or any(
-            name not in base_settings for name in SETTING_NAMES):
-        base_settings = {name: globals()[name] for name in SETTING_NAMES}
-        setattr(sys, SETTINGS_DEFAULTS_ATTR, dict(base_settings))
-    # `signature` はタプルを格納するので、型を固定して `list[None]` と推論されないようにする。
-    active_settings: list[object | None] = [None]
+    # 注入のたびにモジュールは作り直され、一括設定を注入してからここへ来る（TECH.md §3.8）。
+    # だからここで控えた値がそのまま一括設定（`sys` に固定してはいけない。
+    # 一括設定を変えて注入し直しても古い値が残る）。
+    base_settings = {name: globals()[name] for name in SETTING_NAMES}
+    active_settings = [None]    # 直前に反映した (世界, 値) の署名
 
     def refresh_world(app=None):
-        """現在ワールドの314設定を読み直す。読み書きはstateだけで完結する。"""
+        """現在のワールドの控えを読み直す。変わっていれば True。"""
         current_world = UNKNOWN_WORLD
         if app is None:
             try:
@@ -428,8 +341,6 @@ def apply(ctx):
         if changed:
             globals().update(values)
             active_settings[0] = signature
-        if app is not None:
-            sync_currency(app)
         return changed
 
     # 起動時に現在ワールドが分かっていれば即時に反映する。
@@ -555,7 +466,7 @@ def apply(ctx):
             if days is None:
                 days = GAME_COACH_DAYS
             fare = fare_for(hops)
-            parsed = parse_currency_amount(app, old)
+            parsed = ui.parse_coin(old)
             shown_price = fare if fare != GAME_COACH_PRICE else \
                 (parsed if parsed is not None else GAME_COACH_PRICE)
             new = fmt(COACH_BUTTON, name=COACH_NAME, price=shown_price,
@@ -601,7 +512,7 @@ def apply(ctx):
                               argv[1], old))
                     continue
                 if kind == "coach" and old != state["our_coach_label"]:
-                    price = parse_currency_amount(self, old)
+                    price = ui.parse_coin(old)
                     if price is not None:
                         state["game_price"] = price
                 new = relabel(kind, old, hops)
@@ -859,10 +770,10 @@ def apply(ctx):
     # `215_` と同じ方針）。
     # 通貨の表記は `130_` が差し替えていることがあるので、
     # 見本のほうも同じ表記へ通してから突き合わせる。
-    parsed = parse_currency_amount(None, "馬車(1,000G)")
+    parsed = ui.parse_coin(ui.rewrite_coins("馬車(1,000G)"))
     sample = fmt(COACH_BUTTON, name="馬車", price=1000, days=7)
     survives = fmt("{name}と{typo}", name="徒歩")
-    expected = "馬車(1000{}・7日)".format(ACTIVE_CURRENCY_SHORT)
+    expected = ui.rewrite_coins("馬車(1000G・7日)")
     # 距離補正の式。設定と無関係に確かめる（mode= / factor= を明示で渡す）。
     grown = (scaled(90, 2, 7, mode="multiply", factor=1.0),
              scaled(90, 2, 7, mode="add"),

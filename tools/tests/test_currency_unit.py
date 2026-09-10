@@ -273,6 +273,8 @@ class FakeCtx(object):
         self.manager = manager
         self.out_dir = out_dir
         self.mod_dir = os.path.join(out_dir, "mod")
+        # ワールド個別の控え（`WorldStore`）が読む。本物の ModContext と同じ属性名。
+        self.state_dir = os.path.join(out_dir, "state")
         self.lines = []
         self.errors = []
 
@@ -287,6 +289,16 @@ class FakeCtx(object):
         path = os.path.join(self.out_dir, *parts)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
+
+    def state_path(self, *parts):
+        path = os.path.join(self.state_dir, *parts)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        return path
+
+    # 読みは本物の `read_json` をそのまま借りる（`WorldStore.load` が呼ぶ）。
+    def read_json(self, path, default=None):
+        import instantale_modloader as ml
+        return ml.read_json(path, default, report=self.log_exc)
 
     _mod = None
 
@@ -375,6 +387,39 @@ def test_tr(tmp):
                       encoding="utf-8").read()
         check("置換を記録する", "馬車(1000G)" in log, log[:200])
     finally:
+        ui.set_currency(None, None)
+
+
+def test_world_override(tmp):
+    """ワールド個別の控え（同梱の tool.py が書く）が一括設定に重なり、世界を離れれば戻る。"""
+    main_module = sys.modules["__main__"]
+
+    class FakeApp(object):
+        world_dict = {"world_data": {"name": "個別世界"}}
+
+    # `ui.find_app` は __main__ の `InstantaleApp` 型の実物を __main__ の中から探す。
+    main_module.InstantaleApp = FakeApp
+    main_module.RUNNING_APP = FakeApp()
+    try:
+        out = os.path.join(tmp, "world")
+        record = os.path.join(out, "state", "currency_unit", "個別世界.json")
+        os.makedirs(os.path.dirname(record))
+        with io.open(record, "w", encoding="utf-8") as fh:
+            json.dump({"UNIT_LONG": "ドル", "UNIT_SHORT": "Dl", "REWRITE_PROMPTS": "yes"}, fh,
+                      ensure_ascii=False)
+        languages, _client, _manager, ctx = arm(out)        # 一括設定は 円
+        check("控えのある世界では控えの表記", languages.tr("馬車(1000G)") == "馬車(1000Dl)",
+              languages.tr("馬車(1000G)"))
+        check("型の違う値は一括設定のまま", M.REWRITE_PROMPTS is True, M.REWRITE_PROMPTS)
+        main_module.RUNNING_APP.world_dict = {"world_data": {"name": "控えの無い世界"}}
+        check("控えの無い世界へ移れば一括設定", languages.tr("馬車(1000G)") == "馬車(1000円)",
+              languages.tr("馬車(1000G)"))
+        main_module.RUNNING_APP.world_dict = {"world_data": {"name": "個別世界"}}
+        check("戻れば控え", languages.tr("1000ゴールド") == "1000ドル",
+              languages.tr("1000ゴールド"))
+        check("例外を出さない", not ctx.errors, ctx.errors)
+    finally:
+        del main_module.InstantaleApp, main_module.RUNNING_APP
         ui.set_currency(None, None)
 
 
@@ -629,6 +674,8 @@ def main():
         test_hud_reread_build(tmp)
         test_hud_follows_wording(tmp)
         test_hud_only(tmp)
+        print("world")
+        test_world_override(tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

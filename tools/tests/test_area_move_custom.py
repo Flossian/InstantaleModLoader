@@ -314,6 +314,11 @@ class FakeCtx:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
 
+    def state_path(self, *parts):
+        path = os.path.join(self.state_dir, *parts)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        return path
+
     # ログは本物の `ctx.logger` をそのまま借りる（`307_` のテストと同じ理由）。
     _mod = None
 
@@ -779,6 +784,25 @@ module, ctx, app, confirm_cls, move_cls = setup(configure=high_caps,
 press(app, "徒歩(120日)")
 check("14 のまま通す（120 に膨らませない）", app.elapsed == [14], app.elapsed)
 check("暦も14日だけ進む", app.day == 14, app.day)
+
+# ================================================================ ワールド個別設定
+print("[個別] 控えがある世界では一括設定を上書きし、消せば戻る（控えは同梱の tool.py が書く）")
+module, ctx, app, confirm_cls, move_cls = setup()
+world_file = os.path.join(ctx.state_dir, module.SETTINGS_DIRNAME, app.world.name + ".json")
+os.makedirs(os.path.dirname(world_file), exist_ok=True)
+with open(world_file, "w", encoding="utf-8") as fh:
+    fh.write('{"WALK_DAYS": 14, "COACH_DAYS": "7"}')
+app.process_choice(confirm_cls(app, "9"), "陽光の砦")
+CLOCK.settle()
+check("徒歩は控えの日数", texts_of(app)[0] == "徒歩(14日)", texts_of(app))
+check("型の違う値は一括設定のまま（馬車は14日）", texts_of(app)[1] == CARRIAGE_SHOWN, texts_of(app))
+press(app, "徒歩(14日)")
+check("暦も控えの日数で進む", app.elapsed == [14], app.elapsed)
+os.remove(world_file)
+app.process_choice(confirm_cls(app, "9"), "陽光の砦")
+CLOCK.settle()
+check("控えを消せば一括設定へ戻る", texts_of(app)[0] == WALK_TEXT, texts_of(app))
+check("エラーなし", not ctx.errors, ctx.errors)
 
 # ================================================================ まとめ
 print()

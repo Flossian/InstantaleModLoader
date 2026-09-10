@@ -239,8 +239,9 @@ def restate(text, template=None):
 
 
 def apply(ctx):
-    # MOD専用設定画面が保存した現在の世界の設定を読む。
-    # 記録が無い世界は、ファイル冒頭の既定値をそのまま使う。
+    # 一括設定（ローダが注入した値。TECH.md §3.8）の上に、ワールド個別の控え
+    # （同梱の tool.py が `state/currency_unit/<世界>.json` に書く）を、
+    # その世界を見ているあいだだけ重ねる。控えの無い世界は一括設定のまま。
     write = ctx.logger(LOG_BASENAME)
     store = getattr(sys, STATE_STORE_ATTR, None)
     if not isinstance(store, state_api.WorldStore):
@@ -248,15 +249,25 @@ def apply(ctx):
         setattr(sys, STATE_STORE_ATTR, store)
     if store is not None and hasattr(store, "rebind"):
         store.rebind(ctx, write)
-    active_world: list[str | None] = [None]
+    # 注入のたびにモジュールは作り直され、一括設定を注入してからここへ来る。
+    # だからここで控えた値がそのまま一括設定（`sys` に固定してはいけない。
+    # 一括設定を変えて注入し直しても古い値が残る）。
     base_values = (UNIT_LONG, UNIT_SHORT, HUD_GOLD_FORMAT, REWRITE_PROMPTS)
+    active_world = [object()]   # 初回は必ず通す（世界が無くても一括設定を共有部品へ渡す）
+    app_seen = [None]           # app はプロセスに1つ。見つけたら探し直さない
 
     def refresh_world():
-        """ワールド切替を検知した時に控えを読み直す。"""
+        """世界が変わっていれば控えを読み直して共有部品へ渡す。変わっていなければ何もしない。
+
+        画面の全文字列が通る `tr` からも呼ばれるので、変わっていない道は
+        `world_key` の辞書引きだけで済むようにしてある。
+        """
         global UNIT_LONG, UNIT_SHORT, HUD_GOLD_FORMAT, REWRITE_PROMPTS
         world = None
         try:
-            app = ui.find_app()
+            app = app_seen[0]
+            if app is None:
+                app = app_seen[0] = ui.find_app()
             if app is not None:
                 world = state_api.world_key(app)
         except Exception:
@@ -276,8 +287,8 @@ def apply(ctx):
                            if isinstance(record.get("REWRITE_PROMPTS"), bool)
                            else base_values[3])
         active_world[0] = world
-        # 314_area_move_custom を含む他MODは、ここを直接参照せず、
-        # 共有部品の表記だけを見る。ワールド切替時に一度だけ更新する。
+        # 他の MOD はここを見ず、共有部品の表記だけを見る（`314_` の馬車代など）。
+        # 世界が変わったときに1度だけ渡す。
         names = ui.set_currency(UNIT_LONG, UNIT_SHORT)
         if names != (UNIT_LONG, UNIT_SHORT):
             write("currency unit: cannot use {!r}; keeping {!r}"
@@ -285,14 +296,9 @@ def apply(ctx):
         return True
 
     refresh_world()
-
-    # ワールドを読み込んだ直後にも切り替える。これにより、次に画面や
-    # 314_area_move_custom の料金文が作られる時点で、前のワールドの表記が残らない。
-    @ctx.wrap("__main__:World.__init__", required=False, safe=True)
-    def world_loaded(orig, self, *args, **kwargs):
-        result = orig(self, *args, **kwargs)
-        refresh_world()
-        return result
+    # 世界の切替は、この MOD が触る3つの口（`tr` / 画面上部の欄 / LLM へ出る本文）の
+    # 入口で見る。この MOD の出力はその3つしか通らないので、ロードを別に包まない
+    # （`World.__init__` の中では `app.world` がまだ埋まっていない。`ui.game_day` の注記）。
 
     # 表記はローダ共有部品へ渡す。他の MOD も同じ値を見る。
     names = ui.currency_names()
