@@ -11,5 +11,6 @@
     "ja": "AreaMoveManager.execute の間、area_move_rejector か elapse_days が呼ばれるまでの app・マネージャ・プレイヤー・同行者の属性読みと、relationship / app.party / original_party / world.characters の鍵読みを全部記録する。拒否の分岐が何を見ているかをソース無しで割り出す"
   },
   "version": "1",
-  "author": "R01/Flossian"
+  "author": "R01/Flossian",
+  "debug": true
 }
