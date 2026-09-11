@@ -1,0 +1,157 @@
+{
+  "_note": [
+    "AI を切ったとき（設定『事件の文章を AI に書かせる』が OFF）に使う顔ぶれ。",
+    "AI が動いていれば、その世界に合った人物がその場で作られるのでここは使われない。",
+    "",
+    "  sex は man / woman のどちらか（容疑者一覧の『男／女』に出る）。",
+    "  name に \" < > : | ? * / \\ を入れないこと（立ち絵が無言で作られなくなる）。",
+    "",
+    "容疑者の人数より多く並べておくこと。事件ごとにこの中から引く。"
+  ],
+  "cast": [
+    {
+      "name": "運び屋のガレス",
+      "sex": "man",
+      "category": "middle-aged man",
+      "job": "adventure",
+      "profile": "荷運びで日銭を稼ぐ男。人の出入りを誰よりも見ている。",
+      "personality": "口は軽いが、肝心なことは言わない。金の話には目の色を変える。",
+      "look": "worn cloak, carrying strap, dim alley background"
+    },
+    {
+      "name": "代書屋のイーサン",
+      "sex": "man",
+      "category": "young man",
+      "job": "adventure",
+      "profile": "代書きで日銭を稼ぐ若者。誰の用件も引き受けるので町中の事情に詳しい。",
+      "personality": "愛想はいいが、他人の秘密を売ることに罪悪感が無い。",
+      "look": "ink-stained fingers, threadbare coat, town street background"
+    },
+    {
+      "name": "流れ者のミレイユ",
+      "sex": "woman",
+      "category": "young woman",
+      "job": "adventure",
+      "profile": "少し前に流れ着いた女。何をして暮らしているのか誰も知らない。",
+      "personality": "問われたことにしか答えない。目を合わせようとしない。",
+      "look": "hooded dark cloak, single travel bag, quiet expression"
+    },
+    {
+      "name": "酒場の常連ドルフ",
+      "sex": "man",
+      "category": "middle-aged man",
+      "job": "adventure",
+      "profile": "毎晩どこかの酒場に居る男。仕事をしているところを見た者がいない。",
+      "personality": "話し好きで、聞かれてもいないことまで喋る。半分は出鱈目。",
+      "look": "ruddy face, disheveled jacket, holding a cup, tavern background"
+    },
+    {
+      "name": "石工のハルカ",
+      "sex": "woman",
+      "category": "young woman",
+      "job": "adventure",
+      "profile": "石を刻んで暮らす女。夜遅くまで槌を振るっていることが多い。",
+      "personality": "無駄口を叩かない。訊かれたことには正確に答える。",
+      "look": "stone dust on apron, tied-back hair, workshop background"
+    },
+    {
+      "name": "薬売りのコルム",
+      "sex": "man",
+      "category": "middle-aged man",
+      "job": "adventure",
+      "profile": "町から町へ薬を売り歩く男。この町には数日前に着いたばかり。",
+      "personality": "如才ないが、値段の話になると急に細かくなる。",
+      "look": "leather satchel, many small bottles, market background"
+    },
+    {
+      "name": "門番あがりのノラ",
+      "sex": "woman",
+      "category": "middle-aged woman",
+      "job": "adventure",
+      "profile": "かつて門番を務めていた女。いまは日雇いで食いつないでいる。",
+      "personality": "疑り深い。人を値踏みするような目で見る。",
+      "look": "old leather guard armor, weathered face, gate background"
+    },
+    {
+      "name": "荷馬車の御者ジン",
+      "sex": "man",
+      "category": "young man",
+      "job": "adventure",
+      "profile": "荷馬車を駆って近隣を回る若者。町の外の話をよく知っている。",
+      "personality": "せっかちで、話の途中で結論を急ぐ。",
+      "look": "travel-worn coat, reins in hand, stable background"
+    },
+    {
+      "name": "糸紡ぎのマレン",
+      "sex": "woman",
+      "category": "middle-aged woman",
+      "job": "adventure",
+      "profile": "糸を紡いで売る女。窓辺に座っているので通りをよく見ている。",
+      "personality": "穏やかだが、噂の出どころには妙に詳しい。",
+      "look": "spindle in hand, shawl, window light"
+    },
+    {
+      "name": "井戸番のハウル",
+      "sex": "man",
+      "category": "old man",
+      "job": "adventure",
+      "profile": "井戸の番をして暮らす老人。町の者が皆一度は前を通る。",
+      "personality": "耳が遠いふりをするが、聞こえている。",
+      "look": "weathered hands, bucket rope, well background"
+    },
+    {
+      "name": "墓守のリーヴ",
+      "sex": "woman",
+      "category": "young woman",
+      "job": "adventure",
+      "profile": "町外れの墓を守る女。夜中に出歩いても誰も気に留めない。",
+      "personality": "言葉少なで、目を伏せて話す。",
+      "look": "grey shawl, lantern, headstones behind"
+    },
+    {
+      "name": "魚売りのトーゴ",
+      "sex": "man",
+      "category": "middle-aged man",
+      "job": "adventure",
+      "profile": "朝市で魚を売る男。夜明け前から起きている。",
+      "personality": "声が大きく、値切られると途端に不機嫌になる。",
+      "look": "rubber apron, fish crate, market dawn"
+    },
+    {
+      "name": "仕立てのユナ",
+      "sex": "woman",
+      "category": "young woman",
+      "job": "adventure",
+      "profile": "繕い物を請け負う女。家々に出入りして採寸をする。",
+      "personality": "如才ないが、他人の家の話をよく覚えている。",
+      "look": "pin cushion on wrist, measuring tape, cloth bolts"
+    },
+    {
+      "name": "炭焼きのボリス",
+      "sex": "man",
+      "category": "middle-aged man",
+      "job": "adventure",
+      "profile": "森で炭を焼いて町へ運ぶ男。町には数日おきにしか居ない。",
+      "personality": "無口。訊かれたことに短く答えるだけ。",
+      "look": "soot-stained coat, charcoal basket, forest edge"
+    },
+    {
+      "name": "薬草摘みのニナ",
+      "sex": "woman",
+      "category": "young woman",
+      "job": "adventure",
+      "profile": "野で薬草を摘んで診療所へ納める娘。夜明けと日暮れに出歩く。",
+      "personality": "人見知りで、目を合わせると話が続かなくなる。",
+      "look": "herb bundle, satchel, meadow background"
+    },
+    {
+      "name": "荷役のカイ",
+      "sex": "man",
+      "category": "young man",
+      "job": "adventure",
+      "profile": "荷の積み下ろしで日銭を稼ぐ若者。力仕事なら何でも引き受ける。",
+      "personality": "気はいいが早合点しやすい。",
+      "look": "bare arms, rope coil, dockside"
+    }
+  ]
+}

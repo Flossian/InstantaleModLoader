@@ -2166,7 +2166,16 @@ npc_id = npcs.make_npc(app, fields, area_id, facility_id, write=write)   # 作�
 > その番号は `index['npc']` から来る（上の枠）。
 
 生成した NPC は HP・スキル・装備・立ち絵のいずれも空でよい
-（ゲームが会話や戦闘の直前に `ensure_npc_detail_generated` で埋める）。
+（ゲームが会話の直前に `ensure_npc_detail_generated` で埋める）。
+
+> **戦闘はそこを通らない。**
+> ここには「会話や戦闘の直前に埋める」と書いてあったが、戦闘では埋まらない。
+> スキルが空のまま敵ターンを迎えると空の `Literal[]` が組まれて落ち
+> （VERIFICATION_LOG.md §2.40）、`image_src` が `None` のままだと
+> `StringProperty` への代入で落ちる（同 §2.42）。
+> どちらもゲーム本体のバグで、MOD が作った NPC に固有ではない
+> （実測で落ちた相手はゲーム自身が作った街の住人）。
+> 塞ぐ側は VERIFICATION.md §3.6 の1位と2位。どちらも未着手。
 
 > 空でよいのは**値**であって鍵ではない。
 > `ability_scores` は6つの鍵（strength / dexterity / constitution /

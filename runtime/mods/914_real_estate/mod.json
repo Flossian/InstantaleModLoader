@@ -1,0 +1,162 @@
+{
+  "entry": "real_estate.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Rent or buy a place of your own",
+    "ja": "役場で物件を借りて自分の拠点を持つ"
+  },
+  "description": {
+    "en": "Adds a property desk to the administrative office. Rent by the week or the month, or buy outright; the building appears in the town and offers lodging, socializing and a storage room",
+    "ja": "役場に不動産の窓口を足す。週ぎめ・月ぎめの賃貸か建売の購入で、その土地に自分の建物が建つ。中では宿屋と同じ滞在（休養・訓練・社交ほか）ができ、アイテムの保管庫が使える"
+  },
+  "version": "7",
+  "author": "R01/Flossian",
+  "settings": {
+    "RENT_WEEK": {
+      "type": "int",
+      "default": 500,
+      "min": 0,
+      "max": 10000000,
+      "label": {
+        "ja": "週ぎめの家賃",
+        "en": "Rent per week"
+      },
+      "note": {
+        "ja": "7日ごとに引かれる。0 にすると無料で借りられる",
+        "en": "Charged every 7 days. 0 makes the lease free"
+      }
+    },
+    "RENT_MONTH": {
+      "type": "int",
+      "default": 1600,
+      "min": 0,
+      "max": 10000000,
+      "label": {
+        "ja": "月ぎめの家賃",
+        "en": "Rent per month"
+      },
+      "note": {
+        "ja": "30日ごとに引かれる。宿泊1回（個室100G）と同じ30日を、まとめて借りる値段",
+        "en": "Charged every 30 days. The same 30 days one inn stay costs"
+      }
+    },
+    "PURCHASE_PRICE": {
+      "type": "int",
+      "default": 30000,
+      "min": 0,
+      "max": 100000000,
+      "label": {
+        "ja": "建売の価格",
+        "en": "Purchase price"
+      },
+      "note": {
+        "ja": "買い切り。以後の家賃も期限も無い",
+        "en": "Bought outright. No rent and no expiry afterwards"
+      }
+    },
+    "AUTO_RENEW": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "家賃を自動で払う",
+        "en": "Renew the lease automatically"
+      },
+      "note": {
+        "ja": "既定 ON。期限が来たら所持金から引いて契約を延ばす。払えない日が来たら期限切れ",
+        "en": "On by default. The rent is taken when the term ends; the lease lapses the day you cannot pay"
+      }
+    },
+    "NOTICE_DAYS": {
+      "type": "int",
+      "default": 7,
+      "min": 0,
+      "max": 365,
+      "label": {
+        "ja": "期限を知らせる日数",
+        "en": "Warn this many days ahead"
+      },
+      "note": {
+        "ja": "残りがこの日数を切ると1行出る。0 にすると知らせない",
+        "en": "One line once the lease has this many days left. 0 says nothing"
+      }
+    },
+    "RECLAIM_FEE": {
+      "type": "int",
+      "default": 2000,
+      "min": 0,
+      "max": 10000000,
+      "label": {
+        "ja": "預かり品の引き取り料",
+        "en": "Fee to reclaim seized goods"
+      },
+      "note": {
+        "ja": "期限切れで役場が預かった保管庫の中身を引き取るときに払う",
+        "en": "Paid at the office to get back what the storage room held when the lease lapsed"
+      }
+    },
+    "STORAGE_SHARED": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "保管庫を世界で1つにする",
+        "en": "One storage room for the whole world"
+      },
+      "note": {
+        "ja": "既定 OFF＝建物ごとに別の保管庫。ON にすると、どの物件からも同じ中身が開く（それまで建物ごとに預けていた品は、次に開いたとき共有の側へ移る）",
+        "en": "Off by default: each building has its own. On: every property opens the same storage (what each building held is moved into the shared one the next time it is opened)"
+      }
+    },
+    "STAY_QUALITY": {
+      "type": "choice",
+      "values": ["kennel", "bunk", "private_room", "luxury_suite"],
+      "default": "private_room",
+      "label": {
+        "ja": "滞在の部屋の等級",
+        "en": "Room quality of a stay"
+      },
+      "note": {
+        "ja": "ゲームの宿屋の部屋と同じ語彙。描写と、等級を見る MOD（327 など）に効く。宿代は取られない",
+        "en": "The game's own inn room names. Affects the narration and mods that read the quality. No fee is charged"
+      }
+    },
+    "STAY_MONTHS": {
+      "type": "int",
+      "default": 1,
+      "min": 1,
+      "max": 6,
+      "label": {
+        "ja": "1回の滞在の月数",
+        "en": "Months per stay"
+      },
+      "note": {
+        "ja": "既定1ヵ月＝30日。宿屋と同じく、滞在の始めに暦がまとめて進む",
+        "en": "1 month = 30 days by default. As at an inn, the calendar advances when the stay begins"
+      }
+    },
+    "RENT_NAME": {
+      "type": "str",
+      "default": "借りている家",
+      "label": {
+        "ja": "借りた物件の名前",
+        "en": "Name of a rented place"
+      },
+      "note": {
+        "ja": "街の中に並ぶときの名前。空にするとこの MOD の既定に戻る",
+        "en": "The name shown in town. Empty falls back to the default"
+      }
+    },
+    "OWNED_NAME": {
+      "type": "str",
+      "default": "自分の家",
+      "label": {
+        "ja": "買った物件の名前",
+        "en": "Name of an owned place"
+      },
+      "note": {
+        "ja": "街の中に並ぶときの名前。空にするとこの MOD の既定に戻る",
+        "en": "The name shown in town. Empty falls back to the default"
+      }
+    }
+  }
+}
