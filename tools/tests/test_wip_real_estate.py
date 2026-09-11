@@ -73,6 +73,9 @@ INN_TYPE = "inn"
 #: 宿屋が取る宿代（滞在で返されるのはこの額）。
 ROOM_PRICE = 100
 
+#: 役場の役人の id（家の主として据えられる相手）。
+CLERK_ID = "9"
+
 
 class PhaseSpec:
     def __init__(self, cls_name, args):
@@ -132,6 +135,9 @@ class VacationStartManager:
         # ゲームは宿泊が始まると活動の選択肢へ差し替える（GAME.md §2.17）。
         self.app.buttons = [
             {"text": "休養をとる", "spec": PhaseSpec("DisplayTalkChoice", [])},
+            {"text": "他者と交流", "spec": PhaseSpec("VacationSocializeManager",
+                                                 [self.months, self.quality])},
+            {"text": "アイテム作成", "spec": PhaseSpec("ItemCraftManager", [])},
             {"text": "宿泊を終える", "spec": PhaseSpec("DisplayTalkChoice", [])},
         ]
         self.app.refresh_choice_buttons(reset_page=True)
@@ -148,6 +154,30 @@ class VacationRestManager:
 
     def execute(self, choice_text=""):
         self.app.rests.append((self.months, self.quality))
+        return None
+
+
+class VacationSocializeManager:
+    """社交の入口。自分の家では選択肢ごと出さない。"""
+
+    def __init__(self, app, months, quality):
+        self.app = app
+        self.months = months
+        self.quality = quality
+
+    def execute(self, choice_text=""):
+        self.app.socialized += 1
+        return None
+
+
+class ItemCraftManager:
+    """アイテム作成。自分の家では選択肢ごと出さない。"""
+
+    def __init__(self, app):
+        self.app = app
+
+    def execute(self, choice_text=""):
+        self.app.crafted += 1
         return None
 
 
@@ -192,6 +222,17 @@ class World:
         self.areas = {}
         self.days_elapsed = 100
         self.characters = {}
+        # 実機の `World.__init__` は、**返る時点でエリアと施設を組み終えている**
+        # （だから MOD の当て直しがそこを読める）。セーブに `areas` があれば組む。
+        for area_id, area_data in ((save_data_dict or {}).get("areas") or {}).items():
+            area = Area(str(area_id), area_data.get("name") or "")
+            for node_id, node_data in (area_data.get("nodes") or {}).items():
+                node = Node(str(node_id))
+                node.entrance_facility = node_data.get("entrance_facility")
+                for fid, fdata in (node_data.get("facilities") or {}).items():
+                    node.facilities[str(fid)] = Facility(app, node, dict(fdata))
+                area.nodes[str(node_id)] = node
+            self.areas[str(area_id)] = area
 
 
 class Inventory:
@@ -272,6 +313,7 @@ class Player:
         self.current_area = area
         self.location = location
         self.gold = gold
+        self.age = 31                      # 30代＝素のゲームなら 3+1=4ヵ月
         self.inventory = Inventory()
         self.equipments = {}
         self.area_history = {}
@@ -293,16 +335,24 @@ class InstantaleApp:
         self.moved = []
         self.stays = []
         self.rests = []
+        self.socialized = 0
+        self.crafted = 0
         self.stay_ended = 0
         self.saves = 0
+        self.saved_at = []
+        self.saved_buttons = []
+        self.saved_shopping = []
         self.windows = []
         self.windows_from_clock = []
         self.backgrounds = []
+        self.background_raises = False
         self.made_items = []
         self.process_choice_calls = []
         self.is_button_enabled = True
         self.stay_raises = False
         self.is_adding_text = False
+        # 本文の流し込みを真似るか（実機は流している間 `is_adding_text` が立つ）。
+        self.streaming = False
         self.is_popup_window_opened = False
         self.in_battle = False
         self.in_conversation = False
@@ -312,6 +362,13 @@ class InstantaleApp:
     # -- ゲーム自身の入口 --------------------------------------------------
     def add_text(self, context):
         self.texts.append(context)
+        if self.streaming:
+            self.is_adding_text = True
+
+    def finish_text(self):
+        """流し込みが終わったことにする。"""
+        self.is_adding_text = False
+        CLOCK.settle()
 
     def update_ui(self, *args):
         self.ui_updates += 1
@@ -345,6 +402,10 @@ class InstantaleApp:
         return None
 
     def change_background_image_from_location_id(self, location_id):
+        if getattr(self, "background_raises", False):
+            # 本体は `self.app` を読むが `InstantaleApp` にその属性は無い
+            # （実機 2026-09-11。自分の家で社交を選ぶとここを通る）。
+            raise AttributeError("'InstantaleApp' object has no attribute 'app'")
         self.backgrounds.append(("location", str(location_id)))
         return None
 
@@ -353,7 +414,14 @@ class InstantaleApp:
         return None
 
     def save_game(self):
+        # セーブに焼かれるのは、そのときの立ち位置と選択肢と旗
+        # （`game_variables["buttons"]` / `in_shopping`。実セーブで確認）。
         self.saves += 1
+        location = self.player.location
+        self.saved_at.append(str(location) if isinstance(location, (str, int))
+                             else str(getattr(location, "id", "")))
+        self.saved_buttons.append([entry.get("text") for entry in self.buttons])
+        self.saved_shopping.append(self.in_shopping)
         return None
 
     def generate_item_from_dict(self, item_dict, item_id, obtainer):
@@ -411,7 +479,12 @@ class InstantaleApp:
         return self.facility_screen()
 
 
-BASES = {"app": InstantaleApp, "world": World}
+#: setup のたびに作り直すクラス。**包む先は毎回この新しい型**にする。
+#: 使い回すと、古い mod インスタンスの包みが内側に積もり、
+#: そちらが自分の控え（別の `store`）のまま同じファイルへ書いて結果を汚す。
+BASES = {"app": InstantaleApp, "world": World,
+         "stay": VacationStartManager, "end": VacationEndManager,
+         "rest": VacationRestManager, "item": InventoryItem}
 
 
 class FakeClock:
@@ -609,6 +682,16 @@ def build_world(app_cls, world_cls):
     app = app_cls(world, Player(home, None, 100000), world_dict, save_data_dict)
     app.player.id = "player"
     world.characters["player"] = app.player
+    # 役場の役人。物件を貸した側なので、家の主にはこの人が立つ。
+    clerk = Character(name="泥濘の役人",
+                      original_ability_scores=dict.fromkeys(Character.ABILITY_KEYS))
+    clerk.id = CLERK_ID
+    world.characters[CLERK_ID] = clerk
+    # その土地の住人（役場が引けないときのフォールバックの相手）。
+    resident = Character(name="泥濘の住人",
+                         original_ability_scores=dict.fromkeys(Character.ABILITY_KEYS))
+    world.characters["41"] = resident
+    home.resident_npcs = ["41"]
 
     def add(into_node, fid, name, kind, connections):
         facility = Facility(app, into_node, {"name": name, "id": fid,
@@ -624,6 +707,7 @@ def build_world(app_cls, world_cls):
     hub = add(node, "1", "中央居住区", "ward", ["0", "2", "3"])
     inn = add(node, "2", "泥濘の休み処", INN_TYPE, ["1"])
     office = add(node, "3", "泥濘の徴収所", OFFICE_TYPE, ["1"])
+    office.owner = CLERK_ID
 
     # 2つ目の街（共有の保管庫を確かめるため）。
     away = Area("1", "灰の街道")
@@ -656,9 +740,11 @@ def setup(configure=None, keep_state=False, gold=100000):
     main.DisplayTalkChoice = DisplayTalkChoice
     main.JustSetButtonToNormalPhase = JustSetButtonToNormalPhase
     main.PhaseSpec = PhaseSpec
-    main.VacationStartManager = VacationStartManager
-    main.VacationEndManager = VacationEndManager
-    main.VacationRestManager = VacationRestManager
+    main.VacationStartManager = classes["stay"]
+    main.VacationEndManager = classes["end"]
+    main.VacationRestManager = classes["rest"]
+    main.VacationSocializeManager = VacationSocializeManager
+    main.ItemCraftManager = ItemCraftManager
 
     os.makedirs(OUT_DIR, exist_ok=True)
     if os.path.exists(LOG_PATH):
@@ -677,17 +763,19 @@ def setup(configure=None, keep_state=False, gold=100000):
          "refresh_choice_buttons"),
         ("__main__:InstantaleApp.on_button_press", classes["app"], "on_button_press"),
         ("__main__:InstantaleApp.elapse_days", classes["app"], "elapse_days"),
+        ("__main__:InstantaleApp.save_game", classes["app"], "save_game"),
         ("__main__:InstantaleApp.close_shopping_window_process", classes["app"],
          "close_shopping_window_process"),
         ("__main__:World.__init__", classes["world"], "__init__"),
-        ("__main__:VacationStartManager.execute", VacationStartManager, "execute"),
-        ("__main__:VacationEndManager.execute", VacationEndManager, "execute"),
-        ("__main__:VacationRestManager.execute", VacationRestManager, "execute"),
+        ("__main__:VacationStartManager.__init__", classes["stay"], "__init__"),
+        ("__main__:VacationStartManager.execute", classes["stay"], "execute"),
+        ("__main__:VacationEndManager.execute", classes["end"], "execute"),
+        ("__main__:VacationRestManager.execute", classes["rest"], "execute"),
         ("__main__:InstantaleApp.change_background_image_to_current_location",
          classes["app"], "change_background_image_to_current_location"),
         ("__main__:InstantaleApp.change_background_image_from_location_id",
          classes["app"], "change_background_image_from_location_id"),
-        ("scripts.hud.new_hud:InventoryItem.change_inventory", InventoryItem,
+        ("scripts.hud.new_hud:InventoryItem.change_inventory", classes["item"],
          "change_inventory"),
     ))
     app, world, places = build_world(classes["app"], classes["world"])
@@ -697,7 +785,7 @@ def setup(configure=None, keep_state=False, gold=100000):
     return module, ctx, app, places, classes
 
 
-def rent(app, module, label_prefix="週ぎめで借りる"):
+def rent(app, module, label_prefix="借りる"):
     """役場で借りる。押した文字列を返す。"""
     app.press(module.OFFICE_LABEL)
     CLOCK.settle()
@@ -713,6 +801,12 @@ def home_of(app, module, places):
     if record is None:
         return None
     return places["node"].facilities.get(str(record.get("facility")))
+
+
+def module_state(module):
+    """mod が控えている旗の束（`sys` に置かれている）。"""
+    store = getattr(sys, "__instantale_real_estate_store__", None)
+    return (store or {}).get("state") or {}
 
 
 def contract_of(module, app):
@@ -742,18 +836,23 @@ check("PhaseSpec に自前のクラス名を書かない",
 print("[契約]")
 app.press(module.OFFICE_LABEL)
 CLOCK.settle()
-check("借りる・買うが3つ並ぶ",
-      sum(app.has(p) for p in ("週ぎめで借りる", "月ぎめで借りる", "建売を買い取る")) == 3,
+check("借りる・買うが2つ並ぶ",
+      sum(app.has(p) for p in ("借りる", "建売を買い取る")) == 2,
       app.labels())
-label = app.label_like("週ぎめで借りる")
-check("家賃が値札に出る", str(module.RENT_WEEK) in (label or ""), label)
+label = app.label_like("借りる")
+check("家賃が値札に出る", "{:,}".format(module.RENT_PRICE) in (label or ""), label)
+check("宿屋を見ていない世界では年齢から見積もる（31歳＝4ヵ月）",
+      module.estimated_stay_months(app) == 4, module.estimated_stay_months(app))
+stay_len = module.estimated_stay_months(app) * module.DAYS_PER_MONTH
+check("値札の日数は宿泊4回ぶん",
+      "{}日".format(stay_len * module.RENT_STAYS) in (label or ""), label)
 gold_before = app.player.gold
 app.press(label)
 CLOCK.settle()
 record = contract_of(module, app)
-check("契約が控えに1件残る", record is not None and record.get("kind") == "rent_week",
+check("契約が控えに1件残る", record is not None and record.get("kind") == "rent",
       record)
-check("家賃が引かれた", app.player.gold == gold_before - module.RENT_WEEK,
+check("家賃が引かれた", app.player.gold == gold_before - module.RENT_PRICE,
       app.player.gold)
 home = home_of(app, module, places)
 check("建物がノードに立った", home is not None,
@@ -776,7 +875,7 @@ app.press(module.OFFICE_LABEL)
 CLOCK.settle()
 check("契約中の窓口は確認と解約になる",
       app.has(module.STATUS_LABEL) and app.has(module.RELEASE_LABEL), app.labels())
-check("契約中は借りる選択肢が出ない", not app.has("週ぎめで借りる"), app.labels())
+check("契約中は借りる選択肢が出ない", not app.has("借りる"), app.labels())
 app.press(module.CANCEL_LABEL)
 CLOCK.settle()
 check("「やめる」で役場の選択肢に戻る",
@@ -823,7 +922,32 @@ app.go(places["inn"])
 app.backgrounds = []
 app.go(home)
 check("家に立つだけで背景が部屋の絵になる",
-      ("room", module.STAY_QUALITY) in app.backgrounds, app.backgrounds)
+      app.backgrounds == [("room", module.STAY_QUALITY)], app.backgrounds)
+app.facility_screen()
+app.facility_screen()
+check("家の中では描き直さない", app.backgrounds == [("room", module.STAY_QUALITY)],
+      app.backgrounds)
+
+# ゲームが背景を決める経路を通った後、画面が組み直されても二度は描かない。
+app.go(places["inn"])
+app.backgrounds = []
+app.player.location = home
+app.change_background_image_from_location_id(str(home.id))
+app.facility_screen()
+check("ゲームが描いた後に描き直さない",
+      app.backgrounds == [("room", module.STAY_QUALITY)], app.backgrounds)
+
+# 逆の順序（画面の組み直しが先に予約し、その後でゲームが背景を決めた）でも1回。
+app.go(places["inn"])
+app.backgrounds = []
+app.player.location = home
+app.buttons = []
+app.refresh_choice_buttons(True)
+app.change_background_image_from_location_id(str(home.id))
+CLOCK.settle()
+check("予約とゲームの経路が重なっても1回",
+      app.backgrounds == [("room", module.STAY_QUALITY)], app.backgrounds)
+
 app.backgrounds = []
 app.change_background_image_to_current_location()
 check("家では背景が部屋の絵になる",
@@ -840,6 +964,23 @@ app.go(places["inn"])
 app.backgrounds = []
 app.change_background_image_to_current_location()
 check("家の外では素のまま", app.backgrounds == [("current", None)], app.backgrounds)
+
+# 本体が落ちる経路（社交の相手の場所を出そうとしたとき）。握って先へ通す。
+app.go(home)
+app.background_raises = True
+app.backgrounds = []
+failed = False
+try:
+    app.change_background_image_from_location_id(str(places["inn"].id))
+except AttributeError:
+    failed = True
+check("本体の背景の差し替えが落ちても外へ出さない", not failed, "AttributeError が出た")
+check("落ちた後は家の絵に戻す",
+      app.backgrounds == [("room", module.STAY_QUALITY)], app.backgrounds)
+check("本体の不具合として記録する",
+      "the game's own change_background_image_from_location_id raised" in read_log(),
+      [l for l in read_log().splitlines() if "background" in l][-3:])
+app.background_raises = False
 app.go(home)
 
 print("[滞在]")
@@ -848,28 +989,35 @@ day_before = app.world.days_elapsed
 # 滞在の中で暦が進むので、その場で家賃も引かれる。返るのは宿代だけ。
 due = contract_of(module, app)["due"]
 rent_due = 0
-day_after = day_before + module.STAY_MONTHS * 30
+months_now = module.estimated_stay_months(app)
+day_after = day_before + months_now * module.DAYS_PER_MONTH
 while day_after >= due:
-    rent_due += module.RENT_WEEK
-    due += 7
+    rent_due += module.RENT_PRICE
+    due += contract_of(module, app)["term"]
 app.press(module.STAY_LABEL)
 CLOCK.settle()
-check("ゲームの宿泊が起きた", app.stays == [(module.STAY_MONTHS, module.STAY_QUALITY)],
-      app.stays)
+check("ゲームの宿泊が宿屋と同じ月数で起きた",
+      app.stays == [(months_now, module.STAY_QUALITY)], app.stays)
 check("滞在のあいだ建物に主が据わる",
-      "the owner of" in read_log() and "'player'" in read_log(),
+      "the owner of" in read_log() and "'{}'".format(CLERK_ID) in read_log(),
       [l for l in read_log().splitlines() if "owner" in l][:3])
 check("宿代は返される", "refunded {}".format(ROOM_PRICE) in read_log(),
       [l for l in read_log().splitlines() if "refund" in l][:3])
 check("家賃は返さない", app.player.gold == gold_before - rent_due,
       (app.player.gold, gold_before, rent_due))
 check("日数はゲームのまま進む",
-      app.world.days_elapsed == day_before + module.STAY_MONTHS * 30,
+      app.world.days_elapsed == day_after,
       app.world.days_elapsed)
 check("滞在の最中は自前のボタンを足さない",
       not app.has(module.STAY_LABEL) and not app.has(module.STORAGE_LABEL),
       app.labels())
-app.process_choice(VacationRestManager(app, module.STAY_MONTHS, module.STAY_QUALITY),
+check("家の主は役場の役人", getattr(home, "owner", None) == CLERK_ID,
+      getattr(home, "owner", None))
+check("滞在の選択肢から交流が消える", not app.has("他者と交流"), app.labels())
+check("アイテム作成も消える", not app.has("アイテム作成"), app.labels())
+check("ほかの活動は残る", app.has("休養をとる") and app.has("宿泊を終える"),
+      app.labels())
+app.process_choice(classes["rest"](app, months_now, module.STAY_QUALITY),
                    "休養をとる")
 CLOCK.settle()
 check("活動を1つ終えると滞在が終わる（1泊＝活動1回）", app.stay_ended == 1,
@@ -898,7 +1046,7 @@ holder_grid = InventoryGrid(holder)
 item = app.generate_item_from_dict(sample_item(), "item_19", app.player)
 app.player.equipments["weapon"] = item
 saves_before = app.saves
-widget = InventoryItem(item, player_grid)
+widget = classes["item"](item, player_grid)
 widget.change_inventory(holder_grid)
 CLOCK.settle()
 check("預けた品はプレイヤーの持ち物から消える",
@@ -918,25 +1066,33 @@ app.close_shopping_window_process()
 CLOCK.settle()
 
 print("[家賃]")
+term = contract_of(module, app).get("term")
+check("契約の周期は宿泊4回ぶん",
+      term == stay_len * module.RENT_STAYS, (term, stay_len))
+# 宿屋の1泊ぶん過ごしただけでは家賃は来ない（それでは借りる意味が無い）。
+gold_before = app.player.gold
+app.elapse_days(stay_len)
+CLOCK.settle()
+check("滞在1回ぶんでは家賃が来ない", app.player.gold == gold_before, app.player.gold)
 due_before = contract_of(module, app).get("due")
 gold_before = app.player.gold
-app.elapse_days(7)
+app.elapse_days(term)
 CLOCK.settle()
 record = contract_of(module, app)
-check("期限が来たら家賃を払う", app.player.gold == gold_before - module.RENT_WEEK,
+check("期限が来たら家賃を払う", app.player.gold == gold_before - module.RENT_PRICE,
       app.player.gold)
-check("期限が1期ぶん延びる", record.get("due") == due_before + 7, record.get("due"))
+check("期限が1期ぶん延びる", record.get("due") == due_before + term, record.get("due"))
 gold_before = app.player.gold
-app.elapse_days(21)
+app.elapse_days(term * 3)
 CLOCK.settle()
 record = contract_of(module, app)
 check("飛んだ期の分はまとめて払う",
-      app.player.gold == gold_before - module.RENT_WEEK * 3, app.player.gold)
+      app.player.gold == gold_before - module.RENT_PRICE * 3, app.player.gold)
 
 print("[期限切れ]")
 app.go(places["office"])
 app.player.gold = 0
-app.elapse_days(7)
+app.elapse_days(contract_of(module, app).get("term"))
 CLOCK.settle()
 data = read_state() or {}
 check("契約が消える", not (data.get("contracts") or []), data.get("contracts"))
@@ -965,6 +1121,257 @@ check("品がプレイヤーの持ち物へ戻る",
       list(app.player.inventory.inventory))
 check("預かりは空になる", not (read_state() or {}).get("seized"),
       (read_state() or {}).get("seized"))
+
+print("[中に居るあいだの期限切れ]")
+module, ctx, app, places, classes = setup()
+rent(app, module)
+inside_home = home_of(app, module, places)
+app.go(inside_home)
+check("家の中に立てた", app.has(module.STAY_LABEL), app.labels())
+app.player.gold = 0
+app.elapse_days(contract_of(module, app).get("term"))
+CLOCK.settle()
+check("中に居るあいだは取り壊さない",
+      str(inside_home.id) in places["node"].facilities,
+      list(places["node"].facilities))
+check("契約は切れて控えに残る",
+      (contract_of(module, app) or {}).get("lapsed") is True, contract_of(module, app))
+app.buttons = []
+app.refresh_choice_buttons(True)
+CLOCK.settle()
+check("切れた家からも出られる", app.has(module.LEAVE_LABEL), app.labels())
+check("切れた家では滞在できない", not app.has(module.STAY_LABEL), app.labels())
+check("切れた家では保管庫も開けない", not app.has(module.STORAGE_LABEL), app.labels())
+app.press(module.LEAVE_LABEL)
+CLOCK.settle()
+check("出ると入口へ移る", app.moved and app.moved[-1] == ["0", "0", "0"], app.moved)
+app.go(places["entrance"])
+check("出た後に建物が消える",
+      str(inside_home.id) not in places["node"].facilities,
+      list(places["node"].facilities))
+check("控えからも契約が消える", contract_of(module, app) is None, read_state())
+
+print("[取り残されたとき]")
+module, ctx, app, places, classes = setup()
+# 版12 までの期限切れが作っていた形。街から消えた施設に立ち、選択肢が1つも無い。
+ghost = Facility(app, places["node"], {"name": "消えた家", "id": "99",
+                                       "description": "", "facility_type": "location",
+                                       "tier": None, "owner": None,
+                                       "connections": [], "config": {}})
+app.player.location = ghost
+app.buttons = []
+app.refresh_choice_buttons(True)
+CLOCK.settle()
+check("消えた建物からも出口が出る", app.has(module.LEAVE_LABEL), app.labels())
+app.press(module.LEAVE_LABEL)
+CLOCK.settle()
+check("入口へ戻れる", app.moved and app.moved[-1] == ["0", "0", "0"], app.moved)
+check("取り残されたことが WARN に残る",
+      "WARN stranded" in read_log(), read_log()[-200:])
+# 実機で取り残された画面には選択肢が4つ残っていた（どれも街へは戻れない）。
+app.player.location = ghost
+app.facility_screen()
+check("選択肢が残っていても出口を出す", app.has(module.LEAVE_LABEL), app.labels())
+app.go(places["office"])
+check("よその施設では出口を出さない", not app.has(module.LEAVE_LABEL), app.labels())
+
+print("[流し込みの最中]")
+module, ctx, app, places, classes = setup()
+rent(app, module)
+app.go(places["office"])
+app.press(module.OFFICE_LABEL)
+CLOCK.settle()
+app.streaming = True                       # ここから本文が流れ続ける
+app.press(module.RELEASE_LABEL)            # 解約。戻すのは `screen.say` の直後
+CLOCK.settle()
+check("本文が流れている間は窓口を足さない", not app.has(module.OFFICE_LABEL),
+      app.labels())
+check("戻す先はゲームの選択肢", EXIT_TEXT in app.labels(), app.labels())
+app.finish_text()
+check("手が空いたら窓口が戻る", app.has(module.OFFICE_LABEL), app.labels())
+check("窓口は1つだけ",
+      len([t for t in app.labels() if t == module.OFFICE_LABEL]) == 1, app.labels())
+app.facility_screen()
+CLOCK.settle()
+check("見張りは残らない", not module_state(module).get("retry"),
+      module_state(module).get("retry"))
+
+print("[宿屋の宿泊期間に合わせる]")
+module, ctx, app, places, classes = setup()
+guess = module.estimated_stay_months(app) * module.DAYS_PER_MONTH * module.RENT_STAYS
+app.press(module.OFFICE_LABEL)
+CLOCK.settle()
+check("覚えが無いうちは年齢の見積もりで値札が出る",
+      "{}日".format(guess) in (app.label_like("借りる") or ""),
+      app.label_like("借りる"))
+app.press(module.CANCEL_LABEL)
+CLOCK.settle()
+
+# 宿屋で泊まる。ゲームが組む `months` が `elapse_days(months * 30)` の元で、
+# 年齢の変動式も `315_vacation_custom` の設定も、この時点では答えが出ている。
+app.go(places["inn"])
+classes["stay"](app, 2, "bunk")
+check("宿屋で使われた月数を覚える", (read_state() or {}).get("stay_months") == 2,
+      read_state())
+check("覚えたことがログに残る", "stay length: the inn used 2 month(s)" in read_log(),
+      read_log()[-300:])
+
+app.go(places["office"])
+rent(app, module)
+signed = contract_of(module, app)
+check("契約の周期は宿屋の長さの4回ぶん",
+      (signed or {}).get("term") == 2 * 30 * module.RENT_STAYS, signed)
+
+home_now = home_of(app, module, places)
+app.go(home_now)
+app.press(module.STAY_LABEL)
+CLOCK.settle()
+check("自分の家の滞在も宿屋と同じ月数で起きる", app.stays and app.stays[-1][0] == 2,
+      app.stays)
+check("自分の家の滞在は「宿屋で使われた月数」に数えない",
+      (read_state() or {}).get("stay_months") == 2, read_state())
+# 開いたままの滞在を次の節へ持ち越さない（古い実装のインスタンスが旗を握ったままになる）。
+app.process_choice(classes["rest"](app, 2, module.STAY_QUALITY),
+                   "休養をとる")
+CLOCK.settle()
+
+# 宿屋の長さが変われば（加齢や 315 の設定）、次に結ぶ契約から新しい長さになる。
+classes["stay"](app, 5, "private_room")
+check("宿屋が変われば覚えも変わる", (read_state() or {}).get("stay_months") == 5,
+      read_state())
+check("結んである契約の周期は動かない",
+      (contract_of(module, app) or {}).get("term") == 2 * 30 * module.RENT_STAYS,
+      contract_of(module, app))
+
+# 宿屋を一度も見ていない世界では、自宅に泊まっても見積もりのまま
+# （数えてしまうと、年を取っても見積もりが更新されなくなる）。
+module, ctx, app, places, classes = setup()
+rent(app, module)
+first_home = home_of(app, module, places)
+app.go(first_home)
+app.press(module.STAY_LABEL)
+CLOCK.settle()
+check("自宅の滞在は覚えに入れない（見積もりのまま）",
+      (read_state() or {}).get("stay_months") is None, read_state())
+app.process_choice(
+    classes["rest"](app, module.estimated_stay_months(app), module.STAY_QUALITY),
+    "休養をとる")
+CLOCK.settle()
+
+print("[週ぎめ・月ぎめからの移行]")
+# 版15 までの控え（`rent_week` / `rent_month`）。次に読んだときに1本立てへ移す。
+module, ctx, app, places, classes = setup()
+os.makedirs(STATE_DIR, exist_ok=True)
+legacy = {"contracts": [{"area": "0", "area_name": "始まりの泥濘", "node": "0",
+                         "hub": "0", "facility": "77", "kind": "rent_week",
+                         "name": "借りている家", "rent": 500, "term": 7,
+                         "since": 100, "due": 104, "storage": {},
+                         "notified": None, "at": "2026-09-11T00:00:00"}],
+          "seized": {}}
+with io.open(os.path.join(STATE_DIR, WORLD_NAME + ".json"), "w",
+             encoding="utf-8") as fh:
+    fh.write(json.dumps(legacy, ensure_ascii=False))
+module, ctx, app, places, classes = setup(keep_state=True)
+moved = contract_of(module, app)
+check("種類が1本立ての賃貸になる", (moved or {}).get("kind") == "rent", moved)
+check("周期が宿泊4回ぶんになる",
+      (moved or {}).get("term")
+      == module.estimated_stay_months(app) * module.DAYS_PER_MONTH
+      * module.RENT_STAYS, moved)
+check("家賃はいまの設定になる", (moved or {}).get("rent") == module.RENT_PRICE, moved)
+check("残りの期限は取り上げない", (moved or {}).get("due") == 104, moved)
+check("移したことがログに残る", "migrated 1 lease" in read_log(), read_log()[-200:])
+
+print("[消えた家の id がセーブに残らない]")
+module, ctx, app, places, classes = setup()
+rent(app, module)
+doomed = home_of(app, module, places)
+app.go(doomed)
+app.save_game()
+check("生きた契約なら家の中のまま保存する", app.saved_at[-1] == str(doomed.id),
+      app.saved_at)
+app.player.gold = 0
+app.elapse_days(contract_of(module, app).get("term"))
+CLOCK.settle()
+app.save_game()
+check("建て直されない家では入口の id で保存する", app.saved_at[-1] == "0", app.saved_at)
+check("保存の後は元の場所に戻す", app.player.location is doomed, app.player.location)
+app.player.location = Facility(app, places["node"], {
+    "name": "消えた家", "id": "98", "description": "", "facility_type": "location",
+    "tier": None, "owner": None, "connections": [], "config": {}})
+app.save_game()
+check("街に無い施設に立っていても入口の id で保存する", app.saved_at[-1] == "0",
+      app.saved_at)
+# ロードは選択肢を組み直さない。立ち位置だけ直しても空なら動けない。
+check("入口の選択肢も一緒に焼く", app.saved_buttons[-1] == ["中央居住区"],
+      app.saved_buttons[-1])
+check("保存の後は選択肢も元に戻す",
+      [e.get("text") for e in app.buttons] != app.saved_buttons[-1],
+      app.labels())
+
+print("[保管庫を開いたまま保存]")
+module, ctx, app, places, classes = setup()
+rent(app, module)
+open_home = home_of(app, module, places)
+app.go(open_home)
+app.press(module.STORAGE_LABEL)
+CLOCK.settle()
+check("窓が開いている", app.windows, app.windows)
+app.in_shopping = True                     # 売買の窓を借りているあいだの旗
+app.save_game()
+check("売買中の旗は下ろして保存する", app.saved_shopping[-1] is False,
+      app.saved_shopping)
+check("保存の後は旗を戻す", app.in_shopping is True, app.in_shopping)
+
+print("[消えた家に立ったままのセーブを読む]")
+module, ctx, app, places, classes = setup()
+# 実機（2026-09-11）はここで落ちた。ゲームは引けなかった施設に
+# 'facilityが見つからない' という文字列を入れ、その後 .name を読む。
+town = {"0": {"name": "始まりの泥濘",
+              "nodes": {"0": {"entrance_facility": "0",
+                              "facilities": {
+                                  "0": {"name": "泥濘の門", "id": "0",
+                                        "description": "", "facility_type": "entrance",
+                                        "tier": None, "owner": None,
+                                        "connections": ["1"], "config": {}},
+                                  "1": {"name": "中央居住区", "id": "1",
+                                        "description": "", "facility_type": "ward",
+                                        "tier": None, "owner": None,
+                                        "connections": ["0"], "config": {}}}}}}}
+save_data = {"world_data": {"name": WORLD_NAME}, "areas": town,
+             "player_data": {"location": "313", "current_area": "0"},
+             "game_variables": {"buttons": []}}
+app.world = classes["world"](save_data, app)
+check("消えた施設に立っていたら入口へ直す",
+      save_data["player_data"]["location"] == "0", save_data["player_data"])
+check("直したことがログに残る", "not in the town" in read_log(), read_log()[-300:])
+check("入口の選択肢も入れる",
+      [b.get("text") for b in save_data["game_variables"]["buttons"]]
+      == ["中央居住区"], save_data["game_variables"]["buttons"])
+check("選択肢はセーブと同じ形（`cls_name` と `args`）",
+      save_data["game_variables"]["buttons"][0]["spec"]
+      == {"cls_name": "MovePhaseManager", "args": ["0", "1", "0"]},
+      save_data["game_variables"]["buttons"][0])
+save_data = {"world_data": {"name": WORLD_NAME}, "areas": town,
+             "player_data": {"location": "1", "current_area": "0"},
+             "game_variables": {"buttons": []}}
+app.world = classes["world"](save_data, app)
+check("街にある施設はそのまま", save_data["player_data"]["location"] == "1",
+      save_data["player_data"])
+check("そのままのときは選択肢にも触らない",
+      save_data["game_variables"]["buttons"] == [],
+      save_data["game_variables"])
+# 契約が生きていると、当て直しで建物が入口に繋がる。
+# その道はセーブに無い施設への道なので、焼く選択肢には入れない。
+module, ctx, app, places, classes = setup()
+rent(app, module)
+save_data = {"world_data": {"name": WORLD_NAME}, "areas": town,
+             "player_data": {"location": "313", "current_area": "0"},
+             "game_variables": {"buttons": []}}
+app.world = classes["world"](save_data, app)
+labels = [b.get("text") for b in save_data["game_variables"]["buttons"]]
+check("建て直した建物は選択肢に焼かない",
+      labels == ["中央居住区"], labels)
 
 print("[ロード]")
 module, ctx, app, places, classes = setup()
@@ -1000,7 +1407,7 @@ check("入口の道も張り直る", built_id in node.facilities["0"].connection
 
 print("[繋ぎ直し]")
 module, ctx, app, places, classes = setup()
-rent(app, module, "週ぎめで借りる")
+rent(app, module, "借りる")
 record = contract_of(module, app)
 moved_id = str(record.get("facility"))
 est = sys.modules["real_estate_mod.estate"]
@@ -1054,7 +1461,7 @@ shared_holder = app.windows[-1][1]
 check("共有のときは見出しが共有の名前になる",
       app.hud.right_header.text == module.STORAGE_NAME, app.hud.right_header.text)
 kept = app.generate_item_from_dict(sample_item("古い羅針盤"), "item_70", app.player)
-InventoryItem(kept, InventoryGrid(app.player)).change_inventory(
+classes["item"](kept, InventoryGrid(app.player)).change_inventory(
     InventoryGrid(shared_holder))
 CLOCK.settle()
 app.close_shopping_window_process()
@@ -1068,7 +1475,7 @@ check("建物の側には持たない", not (data["contracts"][0].get("storage")
 app.player.current_area = places["away"]
 app.player.location = places["away_office"]
 app.facility_screen()
-rent(app, module, "週ぎめで借りる")
+rent(app, module, "借りる")
 check("別の土地にもう1軒持てる", len(read_state()["contracts"]) == 2,
       read_state()["contracts"])
 second = places["away_node"].facilities[str(read_state()["contracts"][1]["facility"])]
@@ -1085,7 +1492,7 @@ CLOCK.settle()
 
 # 片方の契約が切れても、もう1軒あるうちは取り上げない。
 app.player.gold = 0
-app.elapse_days(30)
+app.elapse_days(max(c.get("term") or 0 for c in read_state()["contracts"]))
 CLOCK.settle()
 data = read_state() or {}
 check("1軒失っても共有の中身は残る", len(data.get("shared") or {}) == 1,
@@ -1097,7 +1504,7 @@ module, ctx, app, places, classes = setup()
 rent(app, module, "建売を買い取る")
 app.go(places["inn"])
 gold_before = app.player.gold
-app.process_choice(VacationStartManager(app, 1, "bunk"), "宿泊する")
+app.process_choice(classes["stay"](app, 1, "bunk"), "宿泊する")
 CLOCK.settle()
 check("宿屋の宿代は引かれたまま", app.player.gold == gold_before - ROOM_PRICE,
       app.player.gold)
@@ -1105,7 +1512,7 @@ check("宿屋では自前のボタンを足さない",
       not app.has(module.STAY_LABEL) and not app.has(module.STORAGE_LABEL),
       app.labels())
 ended_before = app.stay_ended
-app.process_choice(VacationRestManager(app, 1, "bunk"), "休養をとる")
+app.process_choice(classes["rest"](app, 1, "bunk"), "休養をとる")
 CLOCK.settle()
 check("宿屋の活動では滞在を締めない", app.stay_ended == ended_before,
       (ended_before, app.stay_ended))

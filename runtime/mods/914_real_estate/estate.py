@@ -276,6 +276,22 @@ def id_list_of(holder, *names):
     return found
 
 
+#: 契約の相手（役場）の `facility_type`。その主が物件の大家になる。
+OFFICE_FACILITY_TYPE = "administrative_office"
+
+
+def office_owner(area, roster):
+    """その土地の役場の主の id。名簿に居なければ None。"""
+    for node in ui.nodes_of(area):
+        for facility in ui.facilities_of(node).values():
+            if ui.facility_type_of(facility) != OFFICE_FACILITY_TYPE:
+                continue
+            owner = getattr(facility, "owner", None)
+            if owner is not None and str(owner) in roster:
+                return str(owner)
+    return None
+
+
 def owner_candidate(app, area=None, facility=None, write=None):
     """`facility.owner` に据えられる character id。見つからなければ None。
 
@@ -283,34 +299,30 @@ def owner_candidate(app, area=None, facility=None, write=None):
     主のいない施設で起こすと `KeyError: None` でワーカースレッドごと落ち、
     画面は「…」のまま戻らない（実機 2026-09-11。DOC.md §3.2）。
 
-    自分の家の主は自分なので、まずプレイヤーを名簿から探す。
-    名簿に居ない世界のために、その建物・その土地の住人へ順に落ちる
+    据えるのは**その土地の役場の主**。
+    物件を貸したのも売ったのも役場なので、大家として立つのはそこの役人になる。
+    引けない土地のために、その建物・その土地の住人へ順に落ちる
     （**名簿に在る id しか返さない**。在らぬ id を据えると同じ `KeyError` になる）。
     """
-    characters = getattr(getattr(app, "world", None), "characters", None)
-    if not isinstance(characters, dict) or not characters:
+    roster = getattr(getattr(app, "world", None), "characters", None)
+    if not isinstance(roster, dict) or not roster:
         if write:
             write("WARN owner: the world has no character roster")
         return None
-    player = getattr(app, "player", None)
-    for key, value in characters.items():
-        if value is player:
-            return str(key)
-    player_id = str(getattr(player, "id", "") or "")
-    if player_id and player_id in characters:
-        return player_id
+    key = office_owner(area, roster)
+    if key is not None:
+        return key
     for holder in (facility, area):
         if holder is None:
             continue
-        for key in id_list_of(holder, "characters", "resident_npcs",
-                              "adventurer_npcs"):
-            if key in characters:
+        for item in id_list_of(holder, "characters", "resident_npcs",
+                               "adventurer_npcs"):
+            if item in roster:
                 if write:
-                    write("owner: the player is not in the roster; "
-                          "borrowing {!r} from {}".format(
-                              key, type(holder).__name__))
-                return key
-    key = str(next(iter(characters)))
+                    write("owner: no clerk in the office; borrowing {!r} from {}"
+                          .format(item, type(holder).__name__))
+                return item
+    key = str(next(iter(roster)))
     if write:
         write("owner: nobody else was reachable; borrowing {!r}".format(key))
     return key
