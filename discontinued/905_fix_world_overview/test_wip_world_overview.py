@@ -4,7 +4,8 @@
     python tools/tests/test_wip_world_overview.py
 
 偽の `llm_manager_world_generate`（入力を無視して自分の文章を返す）と偽の
-`save_world_json`（応答の `overview` をそのまま保存する）を組んで、次を確認する。
+`save_world_json`（応答の `overview` を `write_obfuscated_json_file` で保存する）を
+組んで、次を確認する。
 
   差し替え  … 応答の `overview` が、入力した文章そのものになる
   位置引数  … 引数がキーワードでも位置でも同じように拾える
@@ -14,7 +15,14 @@
   辞書      … 応答が pydantic ではなく辞書で来ても差し替えられる
   項目なし  … 応答に `overview` が無ければ触らず、警告だけ残す
   ずれ      … 保存された文章が差し替えたものと違えば WARN が出る
+  1回だけ   … 照合は生成の直後の1回だけ。以後の保存では走らない
+  他の書出  … `world_data.json` 以外への書き出しは素通しする
   無事故    … どの経路でも ctx.log_exc が呼ばれない
+
+二段目は `save_world_json:write_obfuscated_json_file` に載る。
+`generate_new_world` ではない理由は入口ファイルの docstring と DOC.md §3。
+偽ゲーム側も**保存を `write_obfuscated_json_file` 経由にしてある**ので、
+包みの通り道は本番と同じ。
 
 差し替えの根拠（`World` の項目名・呼び出しの順）は
 この MOD の `DOC.md` §1 と、入口ファイルの docstring。
@@ -140,17 +148,32 @@ class FakeGame:
         self.save(world_name, overview)
         return "saved"
 
-    def save(self, world_name, overview):
-        folder = os.path.join(self.root, "Darmabeko", "Instantale", "worlds",
-                              sanitize_path_name(world_name))
+    def save(self, world_name, overview, basename="world_data.json"):
+        """本体と同じく `write_obfuscated_json_file` 経由で書き出す。
+
+        モジュールの属性を毎回引く（本番の呼ばれ方）。
+        直接 `self.write_obfuscated_json_file` を呼ぶと包みを通らないので、
+        検査が本番より甘くなる。
+        """
+        folder = self.world_folder(world_name)
         os.makedirs(folder, exist_ok=True)
         data = {"world_data": {"name": world_name, "overview": overview,
                                "structure_description": "…", "story": {},
                                "days_elapsed": 0},
                 "areas": {}, "npcs": {}, "version": 0}
+        save_world = sys.modules["save_world_json"]
+        save_world.write_obfuscated_json_file(
+            os.path.join(folder, basename), data)
+
+    def world_folder(self, world_name):
+        return os.path.join(self.root, "Darmabeko", "Instantale", "worlds",
+                            sanitize_path_name(world_name))
+
+    def write_obfuscated_json_file(self, file_path, data):
+        self.calls.append(("write", os.path.basename(str(file_path))))
         payload = json.dumps(data, ensure_ascii=False,
                              separators=(",", ":")).encode("utf-8")
-        with open(os.path.join(folder, "world_data.json"), "wb") as fh:
+        with open(file_path, "wb") as fh:
             fh.write(xor_with_key(payload))
 
 
@@ -181,15 +204,11 @@ def install_fakes(game, with_codec=True):
 
     save_world = types.ModuleType("save_world_json")
     save_world.generate_new_world = game.generate_new_world
-
-    functions = types.ModuleType("scripts.functions")
-    functions.sanitize_path_name = sanitize_path_name
-    scripts.functions = functions
+    save_world.write_obfuscated_json_file = game.write_obfuscated_json_file
 
     sys.modules["scripts"] = scripts
     sys.modules["scripts.llm"] = llm_pkg
     sys.modules["scripts.llm.llm_manager_world_generate"] = llm
-    sys.modules["scripts.functions"] = functions
     sys.modules["save_world_json"] = save_world
 
     sys.modules.pop("scripts.save_codec", None)
@@ -251,8 +270,10 @@ def install(hooks, llm, save_world):
             ("scripts.llm.llm_manager_world_generate:"
              "create_world_overview_from_plot", llm,
              "create_world_overview_from_plot"),
-            ("save_world_json:generate_new_world", save_world,
-             "generate_new_world")):
+            ("scripts.llm.llm_manager_world_generate:create_world_overview",
+             llm, "create_world_overview"),
+            ("save_world_json:write_obfuscated_json_file", save_world,
+             "write_obfuscated_json_file")):
         hook = hooks.get(target)
         if hook is None:
             continue
@@ -274,7 +295,6 @@ def setup(keep_generated=False, response=None, with_codec=True):
     """mod を適用し、(mod, ctx, game, save_world) を返す。"""
     shutil.rmtree(ROOT, ignore_errors=True)
     os.makedirs(ROOT, exist_ok=True)
-    os.environ["LOCALAPPDATA"] = ROOT
     if os.path.exists(LOG_PATH):
         os.remove(LOG_PATH)
 
@@ -303,7 +323,19 @@ def saved_overview(world_name):
     return read_json_with_obfuscation_fallback(path)["world_data"]["overview"]
 
 
-_saved_localappdata = os.environ.get("LOCALAPPDATA")
+# ==================================================== 仕掛け口
+# ここだけは振る舞いではなく**どこに載せたか**を見る。
+# `generate_new_world` は画面へ関数のまま渡されて控えられるので、
+# モジュールの属性を差し替えても控えには届かない（DOC.md §3）。
+# 戻すと検査は全部通ったまま実機で二段目だけ黙るので、載せ先を直接縛る。
+print("\n-- 仕掛け口 --")
+mod, ctx, game, save_world = setup()
+check("書き出しの実体に載っている",
+      "save_world_json:write_obfuscated_json_file" in ctx.hooks,
+      sorted(ctx.hooks))
+check("generate_new_world には載せない",
+      "save_world_json:generate_new_world" not in ctx.hooks,
+      sorted(ctx.hooks))
 
 # ==================================================== 入力どおりになること
 print("\n-- 差し替え --")
@@ -372,23 +404,41 @@ print("\n-- 保存された文章がずれたとき --")
 mod, ctx, game, save_world = setup()
 hook = ctx.hooks["scripts.llm.llm_manager_world_generate:"
                  "create_world_overview_from_plot"]
-generate = ctx.hooks["save_world_json:generate_new_world"]
-
-
-def saves_something_else(world_name="", world_overview="",
-                         free_facility_enabled=False):
-    """差し替えた後、本体が別の文章を保存してしまう場合の再現。"""
-    hook(game.create_world_overview_from_plot, world_name, world_overview)
-    game.save(world_name, GENERATED)
-    return "saved"
-
-
-generate(saves_something_else, "ヴェスティア", PLOT, False)
+# 差し替えた後、本体が別の文章を保存してしまう場合の再現。
+hook(game.create_world_overview_from_plot, "ヴェスティア", PLOT)
+game.save("ヴェスティア", GENERATED)
 check("ずれたら WARN が出る",
       "WARN the saved world_data['overview'] is not what was put in"
       in log_text(), log_text()[-400:])
 check("WARN はローダのログにも出る",
       any("does not match" in note for note in ctx.notes), ctx.notes)
+
+print("\n-- 照合は生成の直後の1回だけ --")
+mod, ctx, game, save_world = setup()
+save_world.generate_new_world("ヴェスティア", PLOT, False)
+first = log_text()
+check("1回目で照合が済む", "OK the saved world_data['overview']" in first,
+      first[-400:])
+# 遊んでいる間の保存。本体が概要を書き換えていても、ここでは何も言わない。
+game.save("ヴェスティア", GENERATED)
+check("2回目以降は照合しない", log_text() == first,
+      log_text()[len(first):][:400])
+check("2回目の WARN も出ない",
+      not any("does not match" in note for note in ctx.notes), ctx.notes)
+
+print("\n-- world_data.json 以外への書き出し --")
+mod, ctx, game, save_world = setup()
+hook = ctx.hooks["scripts.llm.llm_manager_world_generate:"
+                 "create_world_overview_from_plot"]
+hook(game.create_world_overview_from_plot, "ヴェスティア", PLOT)
+before = log_text()
+game.save("ヴェスティア", GENERATED, basename="area_data.json")
+check("エリアの書き出しは素通し", log_text() == before,
+      log_text()[len(before):][:400])
+# 素通しした後も控えは生きていて、本物の world_data.json で照合できる。
+game.save("ヴェスティア", PLOT)
+check("その後の world_data.json で照合する",
+      "OK the saved world_data['overview']" in log_text(), log_text()[-400:])
 
 print("\n-- 復号器が引けないとき --")
 mod, ctx, game, save_world = setup(with_codec=False)
@@ -397,12 +447,14 @@ check("差し替え自体は効く", saved_overview("ヴェスティア") == PLO
       saved_overview("ヴェスティア"))
 check("読み返せなかったと記録される", "could not read" in log_text(),
       log_text()[-400:])
+check("書き出す直前の中身で照合する",
+      "OK what was handed to the writer is what you wrote" in log_text(),
+      log_text()[-400:])
+check("読み返しの印は出さない",
+      "OK the saved world_data['overview']" not in log_text(),
+      log_text()[-400:])
 check("例外を握り潰していない", ctx.errors == [], ctx.errors)
 
-if _saved_localappdata is None:
-    os.environ.pop("LOCALAPPDATA", None)
-else:
-    os.environ["LOCALAPPDATA"] = _saved_localappdata
 shutil.rmtree(ROOT, ignore_errors=True)
 
 print()
