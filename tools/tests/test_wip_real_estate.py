@@ -35,6 +35,7 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml                      # noqa: E402
+from instantale_modloader import modfacility            # noqa: E402
 
 
 def find_mod(suffix):
@@ -608,8 +609,15 @@ class FakeCtx:
         return ml.write_text(path, text, report=self.log_exc)
 
     def wrap(self, target, **kw):
+        """**同じ対象に何本でも積む。**
+
+        建物はローダの `modfacility` が持つので（TECH.md §5.8）、
+        `save_game` / `World.__init__` / `refresh_choice_buttons` /
+        `on_button_press` / 背景の2つは、この MOD と関所の両方が包む。
+        1本しか覚えないと、後から来たほうが前のを黙って消す。
+        """
         def decorator(func):
-            self.hooks[target] = func
+            self.hooks.setdefault(target, []).append(func)
             return func
         return decorator
 
@@ -629,18 +637,18 @@ def load_mod(path=MOD, name="real_estate_mod"):
 
 
 def install(hooks, targets):
+    """積まれた順に重ねる（先に宣言したものが内側。ローダの `wrap` と同じ）。"""
     for target, owner, name in targets:
-        hook = hooks.get(target)
-        if hook is None:
-            continue
-        original = getattr(owner, name)
-
-        def make(hook=hook, original=original):
-            def method(self, *args, **kwargs):
-                return hook(original, self, *args, **kwargs)
-            return method
-
-        setattr(owner, name, make())
+        chain = hooks.get(target) or []
+        current = getattr(owner, name)
+        for hook in chain:
+            def make(hook=hook, inner=current):
+                def method(self, *args, **kwargs):
+                    return hook(inner, self, *args, **kwargs)
+                return method
+            current = make()
+        if chain:
+            setattr(owner, name, current)
 
 
 HUD_CLS = install_fake_hud()
@@ -648,6 +656,8 @@ CLOCK = install_fake_kivy()
 install_fake_characters()
 
 STATE_DIR = os.path.join(OUT_DIR, "state", "real_estate")
+#: 建物の控えはローダが持つ（`modfacility`）。契約の控えとは別のフォルダ。
+FACILITY_STATE_DIR = os.path.join(OUT_DIR, "state", modfacility.STATE_DIRNAME)
 LOG_PATH = os.path.join(OUT_DIR, "real_estate.log")
 
 
@@ -659,12 +669,22 @@ def read_log():
         return ""
 
 
-def read_state():
+def read_state(world=None):
+    """控え。`world` を渡すとその世界のぶんだけ読む（世界ごとに1ファイル）。"""
     for name in (sorted(os.listdir(STATE_DIR)) if os.path.isdir(STATE_DIR) else []):
-        if name.endswith(".json"):
-            with io.open(os.path.join(STATE_DIR, name), encoding="utf-8") as fh:
-                return json.load(fh)
+        if not name.endswith(".json"):
+            continue
+        if world is not None and name != world + ".json":
+            continue
+        with io.open(os.path.join(STATE_DIR, name), encoding="utf-8") as fh:
+            return json.load(fh)
     return None
+
+
+def state_files():
+    """控えのファイル名（世界ごとに1つできているか）。"""
+    return sorted(n for n in (os.listdir(STATE_DIR) if os.path.isdir(STATE_DIR) else [])
+                  if n.endswith(".json"))
 
 
 def build_world(app_cls, world_cls):
@@ -749,9 +769,20 @@ def setup(configure=None, keep_state=False, gold=100000):
     os.makedirs(OUT_DIR, exist_ok=True)
     if os.path.exists(LOG_PATH):
         os.remove(LOG_PATH)
-    if not keep_state and os.path.isdir(STATE_DIR):
-        for name in os.listdir(STATE_DIR):
-            os.remove(os.path.join(STATE_DIR, name))
+    if not keep_state:
+        for folder in (STATE_DIR, FACILITY_STATE_DIR):
+            if os.path.isdir(folder):
+                for name in os.listdir(folder):
+                    os.remove(os.path.join(folder, name))
+
+    # 関所はゲームの `save_game` に当てるもので、偽の環境には無い。
+    # `spawn` は関所が今の世代で立っていなければ建てないので、立っていることにする。
+    modfacility.gate_is_live = lambda: True
+    modfacility.registry().clear()
+    for attr in (modfacility.INSTALLED_ATTR, modfacility.SCREEN_ATTR,
+                 modfacility._STATE_ATTR, modfacility.STORE_ATTR):
+        if hasattr(sys, attr):
+            delattr(sys, attr)
 
     module = load_mod()
     if configure is not None:
@@ -869,8 +900,10 @@ check("建物から入口へ道が通った",
 check("区画（ward）には繋がない",
       home is not None and str(home.id) not in list(places["hub"].connections),
       places["hub"].connections)
-check("施設 id は台帳から採った（台帳が進む）",
-      app.world_dict["index"]["facility"] > 20, app.world_dict["index"])
+check("施設 id はローダの名前空間（ゲームの台帳を進めない）",
+      str(getattr(home, "id", "")).startswith(modfacility.PREFIX)
+      and app.world_dict["index"]["facility"] == 20,
+      (getattr(home, "id", None), app.world_dict["index"]))
 app.press(module.OFFICE_LABEL)
 CLOCK.settle()
 check("契約中の窓口は確認と解約になる",
@@ -1162,16 +1195,18 @@ app.player.location = ghost
 app.buttons = []
 app.refresh_choice_buttons(True)
 CLOCK.settle()
-check("消えた建物からも出口が出る", app.has(module.LEAVE_LABEL), app.labels())
-app.press(module.LEAVE_LABEL)
+# 層ごと消えた場所なので、文言はローダの既定（もう「家」ではない）。
+EXIT_LABEL = modfacility.DEFAULT_EXIT_LABEL
+check("消えた建物からも出口が出る", app.has(EXIT_LABEL), app.labels())
+app.press(EXIT_LABEL)
 CLOCK.settle()
 check("入口へ戻れる", app.moved and app.moved[-1] == ["0", "0", "0"], app.moved)
-check("取り残されたことが WARN に残る",
-      "WARN stranded" in read_log(), read_log()[-200:])
+check("取り残されたことがログに残る",
+      "stranded=True" in read_log(), read_log()[-200:])
 # 実機で取り残された画面には選択肢が4つ残っていた（どれも街へは戻れない）。
 app.player.location = ghost
 app.facility_screen()
-check("選択肢が残っていても出口を出す", app.has(module.LEAVE_LABEL), app.labels())
+check("選択肢が残っていても出口を出す", app.has(EXIT_LABEL), app.labels())
 app.go(places["office"])
 check("よその施設では出口を出さない", not app.has(module.LEAVE_LABEL), app.labels())
 
@@ -1195,6 +1230,99 @@ app.facility_screen()
 CLOCK.settle()
 check("見張りは残らない", not module_state(module).get("retry"),
       module_state(module).get("retry"))
+
+print("[世界ごとに分ける]")
+OTHER_WORLD = "もう一つの世界"
+module, ctx, app, places, classes = setup()
+rent(app, module)
+first = home_of(app, module, places)
+check("1つ目の世界に建った", first is not None, list(places["node"].facilities))
+check("控えはその世界の名前のファイル", state_files() == [WORLD_NAME + ".json"],
+      state_files())
+
+
+def other_town():
+    """2つ目の世界の街（入口と区画だけ）。"""
+    return {"0": {"name": "別の泥濘",
+                  "nodes": {"0": {"entrance_facility": "0",
+                                  "facilities": {
+                                      "0": {"name": "別の門", "id": "0",
+                                            "description": "",
+                                            "facility_type": "entrance",
+                                            "tier": None, "owner": None,
+                                            "connections": ["1"], "config": {}},
+                                      "1": {"name": "別の区画", "id": "1",
+                                            "description": "",
+                                            "facility_type": "ward",
+                                            "tier": None, "owner": None,
+                                            "connections": ["0"], "config": {}}}}}}}
+
+
+# 別の世界をロードする。世界の鍵はセーブの `world_data.name`（`state.world_key`）。
+save_b = {"world_data": {"name": OTHER_WORLD}, "areas": other_town(),
+          "player_data": {"location": "1", "current_area": "0"},
+          "game_variables": {"buttons": []}}
+app.world_dict = {"world_data": {"name": OTHER_WORLD},
+                  "index": {"facility": 40, "npc": 5, "item": 30}}
+app.save_data_dict = save_b
+world_b = classes["world"](save_b, app)
+app.world = world_b
+area_b = world_b.areas["0"]
+node_b = area_b.nodes["0"]
+app.player.current_area = area_b
+app.go(node_b.facilities["1"])
+check("別の世界には建物が建たない",
+      str(getattr(first, "id", "")) not in node_b.facilities,
+      list(node_b.facilities))
+check("別の世界では契約が無い", contract_of(module, app) is None
+      or read_state(OTHER_WORLD) is None, read_state(OTHER_WORLD))
+check("1つ目の世界の控えはそのまま",
+      len((read_state(WORLD_NAME) or {}).get("contracts") or []) == 1,
+      read_state(WORLD_NAME))
+
+# 2つ目の世界でも借りられる。控えは別のファイル。
+office_b = Facility(app, node_b, {"name": "別の徴収所", "id": "2", "description": "",
+                                  "facility_type": OFFICE_TYPE, "tier": None,
+                                  "owner": None, "connections": ["1"],
+                                  "config": {}})
+node_b.facilities["2"] = office_b
+app.go(office_b)
+rent(app, module)
+check("控えが世界ごとに1つずつできる",
+      state_files() == sorted([WORLD_NAME + ".json", OTHER_WORLD + ".json"]),
+      state_files())
+check("2つ目の世界の契約はそちらの控えに入る",
+      len((read_state(OTHER_WORLD) or {}).get("contracts") or []) == 1,
+      read_state(OTHER_WORLD))
+check("1つ目の世界の控えは増えない",
+      len((read_state(WORLD_NAME) or {}).get("contracts") or []) == 1,
+      read_state(WORLD_NAME))
+second = node_b.facilities.get(
+    str((read_state(OTHER_WORLD)["contracts"][0]).get("facility")))
+check("2つ目の世界にも建った", second is not None, list(node_b.facilities))
+check("2つ目の世界でも台帳は進まない",
+      app.world_dict["index"]["facility"] == 40, app.world_dict["index"])
+
+# 1つ目の世界へ戻す。建物は建ち直り、2つ目の建物は持ち込まれない。
+app.world_dict = {"world_data": {"name": WORLD_NAME},
+                  "index": {"facility": 30, "npc": 5, "item": 30}}
+back_world = classes["world"]({"world_data": {"name": WORLD_NAME}}, app)
+app.world = back_world
+back_world.areas["0"] = places["area"]
+app.player.current_area = places["area"]
+app.go(places["hub"])
+check("戻ると1つ目の世界の建物が建ち直る",
+      str(getattr(first, "id", "")) in places["node"].facilities,
+      list(places["node"].facilities))
+check("2つ目の世界の建物は持ち込まれない",
+      str(getattr(second, "id", "")) not in node_b.facilities
+      or node_b.facilities[str(second.id)] is not places["node"].facilities.get(
+          str(second.id)),
+      (list(node_b.facilities), list(places["node"].facilities)))
+check("1つ目の街に建物が増えていない",
+      len([f for f in places["node"].facilities
+           if str(f).startswith(modfacility.PREFIX)]) == 1,
+      list(places["node"].facilities))
 
 print("[宿屋の宿泊期間に合わせる]")
 module, ctx, app, places, classes = setup()
@@ -1258,12 +1386,12 @@ app.process_choice(
     "休養をとる")
 CLOCK.settle()
 
-print("[週ぎめ・月ぎめからの移行]")
-# 版15 までの控え（`rent_week` / `rent_month`）。次に読んだときに1本立てへ移す。
+print("[ゲームの採番で建てていた頃の控え]")
+# 版19 までの控え。建物の id がゲームの台帳から採った整数で、もう建て直せない。
 module, ctx, app, places, classes = setup()
 os.makedirs(STATE_DIR, exist_ok=True)
 legacy = {"contracts": [{"area": "0", "area_name": "始まりの泥濘", "node": "0",
-                         "hub": "0", "facility": "77", "kind": "rent_week",
+                         "hub": "0", "facility": "77", "kind": "rent",
                          "name": "借りている家", "rent": 500, "term": 7,
                          "since": 100, "due": 104, "storage": {},
                          "notified": None, "at": "2026-09-11T00:00:00"}],
@@ -1272,15 +1400,13 @@ with io.open(os.path.join(STATE_DIR, WORLD_NAME + ".json"), "w",
              encoding="utf-8") as fh:
     fh.write(json.dumps(legacy, ensure_ascii=False))
 module, ctx, app, places, classes = setup(keep_state=True)
-moved = contract_of(module, app)
-check("種類が1本立ての賃貸になる", (moved or {}).get("kind") == "rent", moved)
-check("周期が宿泊4回ぶんになる",
-      (moved or {}).get("term")
-      == module.estimated_stay_months(app) * module.DAYS_PER_MONTH
-      * module.RENT_STAYS, moved)
-check("家賃はいまの設定になる", (moved or {}).get("rent") == module.RENT_PRICE, moved)
-check("残りの期限は取り上げない", (moved or {}).get("due") == 104, moved)
-check("移したことがログに残る", "migrated 1 lease" in read_log(), read_log()[-200:])
+check("整数の id を指す契約は落とす", contract_of(module, app) is None,
+      read_state())
+check("落としたことがログに残る",
+      "from before the loader owned the buildings" in read_log(),
+      read_log()[-200:])
+check("その家は建たない", "77" not in places["node"].facilities,
+      list(places["node"].facilities))
 
 print("[消えた家の id がセーブに残らない]")
 module, ctx, app, places, classes = setup()
@@ -1404,28 +1530,6 @@ check("ロードの後に建物が建ち直る", built_id in node.facilities,
       list(node.facilities))
 check("入口の道も張り直る", built_id in node.facilities["0"].connections,
       node.facilities["0"].connections)
-
-print("[繋ぎ直し]")
-module, ctx, app, places, classes = setup()
-rent(app, module, "借りる")
-record = contract_of(module, app)
-moved_id = str(record.get("facility"))
-est = sys.modules["real_estate_mod.estate"]
-moved_home = places["node"].facilities[moved_id]
-# 版1（区画に繋いでいた）の形へ戻してから、当て直しに拾わせる。
-est.unlink(places["entrance"], moved_id)
-est.link(places["hub"], moved_id)
-est.unlink(moved_home, "0")
-est.link(moved_home, "1")
-getattr(sys, module.STATE_STORE_ATTR)["worlds"].load(WORLD_NAME)["contracts"][0]["hub"] = "1"
-app.facility_screen()
-CLOCK.settle()
-check("区画に繋がっていた家が入口へ移る",
-      moved_id in places["entrance"].connections
-      and moved_id not in places["hub"].connections,
-      (places["entrance"].connections, places["hub"].connections))
-check("控えの繋ぎ先も入口になる", contract_of(module, app).get("hub") == "0",
-      contract_of(module, app))
 
 print("[落ちる宿泊]")
 module, ctx, app, places, classes = setup()

@@ -10,7 +10,7 @@
     "en": "Adds a property desk to the administrative office. Rent a place or buy one outright; the building appears in the town and offers lodging and a storage room. A stay lasts as long as one at an inn, and a rent period covers four",
     "ja": "役場に不動産の窓口を足す。賃貸か建売の購入で、その土地に自分の建物が建つ。中では宿屋と同じ滞在（休養・訓練・労働ほか）ができ、アイテムの保管庫が使える。滞在1回の長さは宿屋と同じで、賃貸の1期はその4回ぶん"
   },
-  "version": "18",
+  "version": "20",
   "author": "R01/Flossian",
   "settings": {
     "RENT_PRICE": {

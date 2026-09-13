@@ -1,0 +1,77 @@
+{
+  "entry": "facility_investment.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Fund a new facility in town and collect its takings",
+    "ja": "役場に出資して街に施設を建て、売上を受け取る"
+  },
+  "description": {
+    "en": "Adds an investment desk to the administrative office. Choose a kind of facility (inn, training hall, arena) and a grade; the building appears at the town entrance with a keeper of its own. What can be built depends on the size of the settlement, and both the cost and the takings scale with it. Visit the building to collect what it has earned since your last visit",
+    "ja": "役場に出資の窓口を足す。施設の種類（宿屋・道場・闘技場）と等級を選ぶと、その街の入口に建物が建ち、主人が1人立つ。建てられる種類と軒数は街の規模で決まり、費用も売上も規模に応じて増える。建物を訪ねると、前回からの売上を受け取れる"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "settings": {
+    "COST_SCALE": {
+      "type": "int",
+      "default": 100,
+      "min": 10,
+      "max": 1000,
+      "label": {
+        "ja": "建設費の倍率（%）",
+        "en": "Construction cost (%)"
+      },
+      "note": {
+        "ja": "種類ごとの基礎額 × 等級 × 街の規模 に掛ける。100 で素の表のまま",
+        "en": "Multiplies base cost × grade × settlement size. 100 keeps the table as is"
+      }
+    },
+    "INCOME_SCALE": {
+      "type": "int",
+      "default": 100,
+      "min": 10,
+      "max": 1000,
+      "label": {
+        "ja": "売上の倍率（%）",
+        "en": "Takings (%)"
+      },
+      "note": {
+        "ja": "1日あたりの売上に掛ける。100 で素の表のまま",
+        "en": "Multiplies the daily takings. 100 keeps the table as is"
+      }
+    },
+    "HOLD_DAYS": {
+      "type": "int",
+      "default": 360,
+      "min": 30,
+      "max": 3600,
+      "label": {
+        "ja": "売上を溜めておける日数",
+        "en": "Days of takings the keeper holds"
+      },
+      "note": {
+        "ja": "この日数ぶんで頭打ち。長く放置すると、それ以上は溜まらない",
+        "en": "Takings stop accumulating past this many days until you collect"
+      }
+    },
+    "STAY_QUALITY": {
+      "type": "choice",
+      "values": [
+        "kennel",
+        "bunk",
+        "private_room",
+        "luxury_suite"
+      ],
+      "default": "private_room",
+      "label": {
+        "ja": "自分の宿屋に泊まるときの部屋",
+        "en": "Room quality at your own inn"
+      },
+      "note": {
+        "ja": "ゲームの宿屋の部屋と同じ語彙。宿代は取られない",
+        "en": "The game's own inn room names. No fee is charged"
+      }
+    }
+  }
+}

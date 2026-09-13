@@ -18,17 +18,25 @@ r"""機能追加: 役場で物件を借りる・買う。その土地に自分�
 繋ぐ先はその土地の入口（`Node.entrance_facility`）。
 街に着いて最初に立つ場所で、区画（`ward`）はその先にある。
 
-## ゲームはこの施設を知らない（実機 2026-09-11）
+## 建物はローダが持つ（`modfacility`。TECH.md §5.8）
 
 **ゲームが移動の一覧を組むとき、実行時の `Facility.connections` は読まれない。**
 足した家は素データ（`world_dict` / `save_data_dict`）に無いので、
 繋ぎ先の画面にも、建物の中にも、ゲームは何も並べなかった
-（入ること自体は `MovePhaseManager` でできる。例外も出ない）。
+（入ること自体は `MovePhaseManager` でできる。例外も出ない。実機 2026-09-11）。
 GAME.md §2.28 の「遊んでいる最中に生まれた施設で売買を選ぶと `KeyError`」と同じ側面で、
 ゲームは施設を素データから引き直している。
 
-だから**道も、中の選択肢も、出口もこの MOD が出す**。
-素データに書けばゲーム自身が扱うようになるが、それはセーブに残る（TECH.md §3.11）。
+だから道も、中の選択肢も、出口も MOD 側が出すことになる。
+その肩代わりは**ローダが引き受ける**（`modfacility`）。
+建てる・壊す・控える・建て直す・道と出口を出す・背景を呼ぶ・
+保存の直前に立ち位置と選択肢を検める、までがあちらの仕事。
+
+    modfacility.register(OWNER, facility_id=…, fields=…, choices=…, on=…)
+    modfacility.spawn(app, facility_id, area_id)
+
+この MOD が宣言するのは、ここにしか決められないものだけ
+（建物の中で何ができるか・何を描くか・中のまま保存してよいか）。
 
 建物の中でできるのは3つ。
 
@@ -41,10 +49,18 @@ GAME.md §2.28 の「遊んでいる最中に生まれた施設で売買を選�
 
 足すのは実行中の `Area` / `Node` / `Facility` だけで、
 `world_data.json` にも `savedata.json` にも施設は書かない（TECH.md §3.11）。
-契約は `state\real_estate\<世界名>.json` に持ち、ロードのたびに当て直す
-（`325_road_opening` の道と同じ形）。**MOD を外せば街は素に戻る**。
+**MOD を外せば街は素に戻る。**
 
-組み立ての中身は `estate.py`。
+控えは2つに分かれる。
+
+    state\real_estate\<世界名>.json    契約（いつまで・いくら・保管庫の中身）
+    state\modfacility\<世界名>.json    建物そのもの（素データと置き場所）
+
+施設 id はローダの名前空間（`mod:914_real_estate:<土地 id>`）で、
+ゲームの採番台帳（`index['facility']`）を進めない。
+土地ごとに1軒なので、土地の id をそのまま鍵にしている。
+
+大家（滞在のあいだ据える主）は `landlord.py`。
 
 ## 保管庫の中身も控えに持つ
 
@@ -91,15 +107,22 @@ GAME.md §2.28 の「遊んでいる最中に生まれた施設で売買を選�
 import datetime
 import sys
 
-from instantale_modloader import frames, ui
-from instantale_modloader.ids import claim
+from instantale_modloader import frames, modfacility, ui
 from instantale_modloader.state import (UNKNOWN_WORLD, WorldStore, world_key,
                                         world_key_of_dict)
 
-from . import estate, storage
+from . import landlord, storage
 
 
 LOG_BASENAME = "real_estate.log"
+
+#: `modfacility` に名乗る持ち主。控えの中でこの MOD の建物を束ねる鍵になる。
+OWNER = "914_real_estate"
+
+
+def main_module():
+    """ゲーム本体のモジュール（`instantale.py`）。"""
+    return sys.modules.get("__main__")
 
 #: 世界ごとの控え `state\real_estate\<世界名>.json`。
 STATE_DIRNAME = "real_estate"
@@ -149,7 +172,7 @@ HIDDEN_ACTIVITY_CLASSES = (SOCIALIZE_CLS, CRAFT_CLS)
 
 # ---------------------------------------------------------------- 設定（mod.json）
 # ここの定数だけが GUI から変えられる（ローダは入口モジュールのグローバルへ書き込む）。
-# `estate.py` / `storage.py` へ移さないこと（TECH.md §3.8）。
+# `landlord.py` / `storage.py` へ移さないこと（TECH.md §3.8）。
 
 #: 家賃。**1期ぶん**。期間は `RENT_STAYS` 回ぶんの滞在と同じ日数。
 RENT_PRICE = 1600
@@ -233,7 +256,6 @@ RECLAIMED_TEXT = "役場から{count}点を引き取った。"
 DAYS_PER_MONTH = 30
 
 #: 週ぎめ・月ぎめだった頃の契約。次に読んだときに1本立ての賃貸へ移す。
-LEGACY_LEASE_KINDS = ("rent_week", "rent_month")
 
 
 def age_of(app):
@@ -302,7 +324,7 @@ def _description_of(kind):
 def _is_lease(record):
     if not isinstance(record, dict):
         return False
-    return record.get("kind") in (("rent",) + LEGACY_LEASE_KINDS)
+    return record.get("kind") == "rent"
 
 
 def ordered_bucket(bucket):
@@ -337,20 +359,11 @@ def apply(ctx):
                 # 一度書いた WARN の覚え。選択肢が組まれるたびに当て直すので、
                 # 同じ理由をそのたび書くとログが選択肢の回数だけ伸びる。
                 "warned": set(),
-                # 最後に書いた居場所（変わったときだけ1行書くため）。
-                "where": None,
-                # こちらが起こした「建物へ入る」移動の控え。
-                # ゲームが居場所を書き換えなかったときの拠り所（`inside_home`）。
-                "entered": None,
                 # 滞在の `execute` の中でこちらが引いた家賃。
                 # 宿代を返すとき、これは返さない（同じ `execute` で暦が進むため）。
                 "rent_charged": 0,
                 # 滞在のあいだ主を据える前の値（戻すために控える）。
                 "owner_was": None,
-                # 最後に描いた背景（同じ絵を二度描かないため）。
-                "background": None,
-                # 背景の描き直しを予約した（まだ走っていない）。
-                "background_pending": False,
                 # 手が空くのを待っているボタンの足し直し（見張りは同時に1つ）。
                 "retry": False,
                 # いま組んでいる宿泊は自分の家のものか（宿屋の月数と取り違えないため）。
@@ -363,6 +376,10 @@ def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
     worlds = store["worlds"].rebind(ctx, write)
     screen = ui.Screen(ctx, write, tag="real estate", mark=MARK)
+
+    # 建物そのものはローダが持つ（TECH.md §5.8）。
+    # 関所は何本の MOD が呼んでも1つしか立たない。
+    modfacility.install(ctx, write=write)
 
     # ------------------------------------------------------------ 補助
     def warn_once(token, text):
@@ -465,137 +482,6 @@ def apply(ctx):
     def save(app):
         worlds.save(world_key(app))
 
-    def our_facility_ids(key):
-        return set(str(record.get("facility")) for record in contracts_of(key)
-                   if record.get("facility"))
-
-    def move_choices(area, facility_id, skip=()):
-        """その施設に立ったときにゲームが並べる選択肢（繋ぎ先への移動）を組む。
-
-        **ロードは選択肢を組み直さない**。`game_variables["buttons"]` に
-        焼かれているものをそのまま戻すだけ（GAME.md §2.3）。
-        だから立ち位置だけ直しても、選択肢が空なら動けないままになる
-        （実機 2026-09-11。入口へ戻したのに1つも出なかった）。
-
-        返すのは**セーブと同じ形**の辞書。
-        文字列は繋ぎ先の名前で、実機の入口の選択肢と同じ並びになる。
-
-        `skip` には自分が建てた建物の id を渡す。
-        **セーブに無い施設への道をボタンにしてはいけない**
-        （そのボタンはセーブに焼かれ、MOD の無い環境や、
-        建物を失った後に押せてしまう）。
-        ゲーム自身もこの建物を一覧に出さないので、出さないほうが実機と同じ。
-        """
-        facility, node = ui.find_facility(area, facility_id)
-        if facility is None or node is None:
-            return []
-        node_id = estate.node_id_of(node)
-        area_id = ui.area_id_of(area)
-        entries = []
-        for target in estate.connections_of(facility):
-            if str(target) in skip:
-                continue
-            other, _node = ui.find_facility(area, target)
-            if other is None:
-                continue
-            entries.append({"text": getattr(other, "name", "") or str(target),
-                            "spec": {"cls_name": MOVE_CLS,
-                                     "args": [node_id, str(target), area_id]}})
-        return entries
-
-    def live_move_buttons(area, facility_id, skip=()):
-        """`move_choices` と同じ並びを、走っているゲームのボタンの形で組む。"""
-        entries = []
-        for entry in move_choices(area, facility_id, skip):
-            spec = screen.make_spec(entry["spec"]["cls_name"], entry["spec"]["args"])
-            if spec is None:
-                return []
-            entries.append({"text": entry["text"], "spec": spec})
-        return entries
-
-    def repair_player_location(world, save_data_dict, skip=()):
-        """セーブの立ち位置が街に無い施設を指していたら、その土地の入口へ直す。
-
-        ゲームのロードは、引けなかった施設に `'facilityが見つからない'` という
-        **文字列**を入れてから `.name` を読むので、そこで必ず落ちる
-        （実機 2026-09-11。`instantale.py:1493`。
-        直すまで、その世界はもう開けない）。
-        取り壊した建物に立ったまま保存されると、そうなる。
-
-        建物を建て直した後に呼ぶので、契約が生きている家の中に居るぶんには何もしない。
-        ここで直すのは**読み込みの途中の辞書**で、セーブの書き換えではない
-        （次にゲームが保存したときに、直った位置で書かれる）。
-        """
-        player = save_data_dict.get("player_data") \
-            if isinstance(save_data_dict, dict) else None
-        if not isinstance(player, dict):
-            return
-        here = str(player.get("location") or "")
-        if not here:
-            return
-        area = ui.areas_of_world(world).get(str(player.get("current_area") or ""))
-        if area is None:
-            return
-        facility, _node = ui.find_facility(area, here)
-        if facility is not None:
-            return
-        _node, hub = estate.hub_of(area)
-        hub_id = estate.facility_id_of(hub) if hub is not None else ""
-        if not hub_id:
-            write("WARN load: the player stands in {!r}, which is not in the town, "
-                  "and this area has no entrance".format(here))
-            return
-        player["location"] = hub_id
-        variables = save_data_dict.get("game_variables")
-        choices = move_choices(area, hub_id, skip)
-        if isinstance(variables, dict) and choices:
-            variables["buttons"] = choices
-        write("load: the player was standing in {!r}, which is not in the town; "
-              "moved to the entrance {} with {} choice(s)".format(
-                  here, hub_id, len(choices)))
-
-    def safe_save_location(app):
-        """保存のあいだだけ立ち位置を入口へ替える。替えたなら `(player, 元の値)`。
-
-        セーブに残るのは施設の id だけなので、
-        **ロードで建て直されない建物の id が残ると、次のロードでゲームが落ちる**
-        （§3.2 の14回目）。
-        契約が生きているうちはロードで建て直すので、家の中のまま保存してよい
-        （そのほうが、入ったところから続けられる）。
-        """
-        player = getattr(app, "player", None)
-        if player is None:
-            return None
-        record = contract_here(app)
-        here = record is not None and standing_in(app, record)
-        doomed = here and (record.get("lapsed")
-                           or record in state["pending_demolish"])
-        if not doomed and (here or not stranded(app)):
-            return None
-        area = ui.current_area(app)
-        _node, hub = estate.hub_of(area) if area is not None else (None, None)
-        if hub is None:
-            return None
-        hub_id = estate.facility_id_of(hub)
-        was = getattr(player, "location", None)
-        try:
-            player.location = hub
-        except Exception:
-            ctx.log_exc("real estate: cannot move the player for the save")
-            return None
-        # 立ち位置だけ替えても、焼かれる選択肢が前の場所のままでは動けない。
-        buttons = getattr(app, "buttons", None)
-        choices = live_move_buttons(area, hub_id, our_facility_ids(world_key(app)))
-        if choices:
-            app.buttons = choices
-        else:
-            buttons = None
-        write("save: the player was inside {!r}, which will not come back; "
-              "saving at the entrance {} with {} choice(s)".format(
-                  (record or {}).get("name") or "a building that is gone",
-                  hub_id, len(choices)))
-        return (player, was, buttons)
-
     # ------------------------------------------------------------ 建物の当て直し
     def remember_stay_months(app, months):
         """宿屋で実際に使われた月数を控える。
@@ -644,30 +530,101 @@ def apply(ctx):
         """
         return max(1, int(RENT_STAYS or 1)) * stay_days(app)
 
-    def migrate_leases(key, app=None):
-        """週ぎめ・月ぎめで結んだ契約を、1本立ての賃貸へ移す（版16）。
+    def drop_legacy_contracts(key):
+        """建物をゲームの採番で建てていた頃の契約を落とす（版20）。
 
-        **期限（`due`）はそのまま**にする。
-        いま借りている残り日数を取り上げる理由が無いので、
-        次に家賃を払うときから新しい周期（滞在1回ぶん）になる。
+        施設 id を `mod:` の文字列に変えたので（TECH.md §5.8）、
+        整数の id を指している控えはもう建て直せない。
+        落とすのは控えだけで、セーブには何も残っていない
+        （建物は実行時にしか無く、立ち位置が古い id を指していれば
+        ローダが入口へ直す）。
         """
-        if app is None:
-            # 周期はいまの宿泊の長さから決める（`app` が要る）。
-            # ロードの途中など、まだ渡せないときは次の呼び出しに任せる。
+        bucket = bucket_of(key)
+        old = [c for c in bucket.get("contracts") or []
+               if isinstance(c, dict)
+               and not modfacility.is_mod_facility(c.get("facility") or "")]
+        if not old:
             return 0
-        moved = []
-        for record in contracts_of(key):
-            if record.get("kind") not in LEGACY_LEASE_KINDS:
-                continue
-            record["kind"] = "rent"
-            record["term"] = lease_days(app)
-            record["rent"] = int(RENT_PRICE)
-            moved.append(record.get("name"))
-        if moved:
-            worlds.save(key)
-            write("migrated {} lease(s) to the single rent ({} days, {}G): {}".format(
-                len(moved), lease_days(app), int(RENT_PRICE), moved))
-        return len(moved)
+        bucket["contracts"] = [c for c in bucket.get("contracts") or []
+                               if c not in old]
+        worlds.save(key)
+        write("dropped {} contract(s) from before the loader owned the buildings: "
+              "{}".format(len(old), [c.get("name") for c in old]))
+        return len(old)
+
+    # ------------------------------------------------------------ 建物（`modfacility`）
+    def facility_id_for(area_id):
+        """その土地の物件の id。土地ごとに1軒なので、土地の id をそのまま鍵にする。"""
+        return modfacility.make_id(OWNER, str(area_id))
+
+    def record_of(app, facility_id):
+        """建物の id から契約を引く。無ければ None。"""
+        for record in contracts_of(world_key(app)):
+            if str(record.get("facility") or "") == str(facility_id):
+                return record
+        return None
+
+    def home_choices(app, facility_id):
+        """建物の中の選択肢。出口はローダが足すので、ここには入れない。
+
+        契約が切れた建物（取り壊し待ち）では滞在も保管庫も出さない。
+        滞在の最中は何も出さない ― 並んでいるのはゲームの活動の選択肢で、
+        そこへ「滞在する」を足すと同じ画面から滞在が二重に始まる。
+        """
+        record = record_of(app, facility_id)
+        if record is None or record.get("lapsed"):
+            return []
+        if state.get("free_stay") is not None:
+            return None      # 出口ごと出さない（`on["choices"]` が空にする）
+        return [{"key": "stay", "label": STAY_LABEL,
+                 "on": lambda info: start_stay(info["app"])},
+                {"key": "storage", "label": STORAGE_LABEL,
+                 "on": lambda info: open_storage(info["app"])}]
+
+    def register_home(record):
+        """契約1つぶんの層を積む。id を返す。
+
+        建物そのもの（建てる・壊す・控える・建て直す・道・出口・背景の呼び出し）は
+        ローダの `modfacility`（TECH.md §5.8）が持つ。
+        ここで宣言するのは、この MOD にしか決められないものだけ。
+        """
+        facility_id = str(record.get("facility") or "")
+        if not facility_id:
+            return ""
+
+        def choices(info):
+            found = home_choices(info["app"], info["facility_id"])
+            return [] if found is None else found
+
+        def no_exit(info):
+            # 滞在の最中は出口も出さない（活動の選択肢に混ぜない）。
+            return [] if home_choices(info["app"], info["facility_id"]) is None \
+                else info["args"]["choices"]
+
+        modfacility.register(
+            OWNER, facility_id=facility_id,
+            fields={"name": record.get("name") or "",
+                    "description": _description_of(record.get("kind"))},
+            choices=choices, exit_label=LEAVE_LABEL,
+            keep_inside=lambda info: keeps_inside(info["app"], info["facility_id"]),
+            on={"choices": no_exit,
+                "background": lambda info: paint_home(info["app"], info["facility_id"]),
+                "leave": lambda info: end_stay(info["app"], "left the building")},
+            write=write)
+        return facility_id
+
+    def keeps_inside(app, facility_id):
+        """中に立ったまま保存してよいか（`modfacility` が保存の直前に聞く）。
+
+        生きている契約の建物はロードで必ず建ち直るので、中のままでよい
+        （そのほうが、入ったところから続けられる）。
+        切れた契約と取り壊し待ちは建ち直らないので、入口へ移してもらう
+        ― **建て直されない建物の id が立ち位置に残ると、その世界は二度と開けない**。
+        """
+        record = record_of(app, facility_id)
+        if record is None or record.get("lapsed"):
+            return False
+        return record not in state["pending_demolish"]
 
     def apply_contracts(app, world, key, why):
         """控えの契約をこの世界へ当てる。立てた棟数を返す。
@@ -675,7 +632,7 @@ def apply(ctx):
         ロードの直後と、選択肢が組まれるたびに呼ばれる。
         既に立っているものは何もしない（何度呼んでも増えない）。
         """
-        migrate_leases(key, app)
+        drop_legacy_contracts(key)
         areas = ui.areas_of_world(world)
         if not areas:
             return 0
@@ -683,49 +640,29 @@ def apply(ctx):
         for record in contracts_of(key):
             if record.get("lapsed"):
                 continue
-            area = areas.get(str(record.get("area")))
-            if area is None:
-                warn_once(("area", key, str(record.get("area"))),
+            area_id = str(record.get("area") or "")
+            if area_id not in areas:
+                warn_once(("area", key, area_id),
                           "WARN {}: area {!r} is not in this world".format(
-                              why, record.get("area")))
+                              why, area_id))
                 continue
-            facility_id = str(record.get("facility") or "")
+            facility_id = register_home(record)
             if not facility_id:
                 continue
-            facility, _node = estate.existing(area, facility_id)
-            if facility is not None:
-                # 既に建っている。繋ぎ先の選び方が変わっていれば繋ぎ直す
-                # （`ward` から入口へ移した版のため。それ以外では何も起きない）。
-                node, hub = estate.rehome(app, area, facility_id, record.get("hub"),
-                                          write=write)
-                if hub is not None and \
-                        estate.facility_id_of(hub) != str(record.get("hub") or ""):
-                    record["node"] = estate.node_id_of(node)
-                    record["hub"] = estate.facility_id_of(hub)
-                    worlds.save(key)
-                continue
-            node, hub = estate.hub_of(area)
-            if node is None or hub is None:
-                warn_once(("hub", key, str(record.get("area"))),
-                          "WARN {}: no hub facility in area {!r}; {!r} is not standing"
-                          .format(why, record.get("area"), record.get("name")))
-                continue
-            try:
-                facility = estate.build(app, area, facility_id, record.get("name") or "",
-                                        _description_of(record.get("kind")), node, hub,
-                                        write=write)
-            except Exception:
-                ctx.log_exc("real estate: cannot build {!r}".format(record.get("name")))
-                continue
+            standing = bool((modfacility.registry().get(facility_id)
+                             or {}).get("placed"))
+            facility = modfacility.spawn(app, facility_id, area_id, world=world,
+                                         write=write)
             if facility is None:
+                warn_once(("hub", key, area_id),
+                          "WARN {}: {!r} is not standing in area {!r}".format(
+                              why, record.get("name"), area_id))
                 continue
-            record["node"] = estate.node_id_of(node)
-            record["hub"] = estate.facility_id_of(hub)
-            state["warned"].discard(("hub", key, str(record.get("area"))))
-            state["warned"].discard(("area", key, str(record.get("area"))))
-            built += 1
+            state["warned"].discard(("hub", key, area_id))
+            state["warned"].discard(("area", key, area_id))
+            if not standing:
+                built += 1
         if built:
-            worlds.save(key)
             write("{}: {} building(s) standing in world {!r}".format(why, built, key))
         return built
 
@@ -749,32 +686,14 @@ def apply(ctx):
             screen.say(app, ui.rewrite_coins(
                 "手持ちが足りない（{}G 必要だ）。".format(ui.money(price))))
             return False
-        node, hub = estate.hub_of(area)
-        if node is None or hub is None:
-            write("WARN sign: no hub facility in area {!r}".format(area_id))
-            screen.say(app, "この土地には建てられる場所が無いようだ。")
-            return False
-        facility_id = claim(app, "facility", write=write)
-        if not facility_id:
-            write("WARN sign: could not claim a facility id")
-            return False
-        name = _name_of(kind)
-        try:
-            facility = estate.build(app, area, facility_id, name, _description_of(kind),
-                                    node, hub, write=write)
-        except Exception:
-            ctx.log_exc("real estate: Facility(...) failed while signing")
-            return False
-        if facility is None:
-            return False
         day = ui.game_day(app)
         term = 0 if kind == "owned" else lease_days(app)
+        name = _name_of(kind)
+        facility_id = facility_id_for(area_id)
         record = {
             "area": area_id,
             "area_name": frames.short(getattr(area, "name", ""), 40) or area_id,
-            "node": estate.node_id_of(node),
-            "hub": estate.facility_id_of(hub),
-            "facility": str(facility_id),
+            "facility": facility_id,
             "kind": kind,
             "name": name,
             "rent": price if term else 0,
@@ -785,6 +704,14 @@ def apply(ctx):
             "notified": None,
             "at": datetime.datetime.now().isoformat(timespec="seconds"),
         }
+        # 層を先に積む（`modfacility` は登録されていない建物を建てない）。
+        register_home(record)
+        facility = modfacility.spawn(app, facility_id, area_id, write=write)
+        if facility is None:
+            modfacility.unregister(OWNER, facility_id, app=app, write=write)
+            write("WARN sign: cannot build in area {!r}".format(area_id))
+            screen.say(app, "この土地には建てられる場所が無いようだ。")
+            return False
         bucket_of(world_key(app))["contracts"].append(record)
         save(app)
         ui.add_gold(app, -price, on_error=lambda: write("WARN sign: cannot charge"))
@@ -802,11 +729,13 @@ def apply(ctx):
         save(app)
 
     def take_down(app, record, why):
-        """建物を取り壊す。中にプレイヤーが居るときは後回しにして False を返す。"""
-        areas = ui.world_areas(app)
-        area = areas.get(str(record.get("area")))
+        """建物を取り壊す。中にプレイヤーが居るときは後回しにして False を返す。
+
+        壊すのも層を外すのもローダに任せる（`unregister` が両方やる）。
+        外した時点で `modfacility` の控えからも消えるので、次のロードで建ち直らない。
+        """
         facility_id = str(record.get("facility") or "")
-        if area is None or not facility_id:
+        if not facility_id:
             return True
         if standing_in(app, record):
             if record not in state["pending_demolish"]:
@@ -814,8 +743,7 @@ def apply(ctx):
             write("{}: the player is inside {!r}; the demolition waits".format(
                 why, record.get("name")))
             return False
-        estate.demolish(app, area, facility_id, record.get("node"), record.get("hub"),
-                        write=write)
+        modfacility.unregister(OWNER, facility_id, app=app, write=write)
         return True
 
     def seize(app, record):
@@ -1071,10 +999,10 @@ def apply(ctx):
         滞在が終わったら元へ戻す（`release_owner`）。
         """
         area = ui.current_area(app)
-        facility, _node = estate.existing(area, record.get("facility"))
+        facility = modfacility.facility_of(app, record.get("facility"))
         if facility is None:
             return None
-        owner = estate.owner_candidate(app, area, facility, write=write)
+        owner = landlord.owner_candidate(app, area, facility, write=write)
         if owner is None:
             return None
         state["owner_was"] = getattr(facility, "owner", None)
@@ -1092,8 +1020,7 @@ def apply(ctx):
         home = state.get("free_stay")
         if not isinstance(home, dict) or not home.get("owner"):
             return
-        area = ui.world_areas(app).get(str(home.get("area")))
-        facility, _node = estate.existing(area, home.get("facility"))
+        facility = modfacility.facility_of(app, home.get("facility"))
         if facility is not None:
             try:
                 facility.owner = state.get("owner_was")
@@ -1113,7 +1040,7 @@ def apply(ctx):
         if record is None:
             write("stay: no contract here")
             return
-        cls = getattr(estate.main_module(), STAY_CLS, None)
+        cls = getattr(main_module(), STAY_CLS, None)
         if cls is None:
             write("WARN stay: __main__.{} is not available".format(STAY_CLS))
             return
@@ -1134,65 +1061,6 @@ def apply(ctx):
             STAY_CLS, stay_months(app), STAY_QUALITY, record.get("name")))
         screen.start_phase(app, phase, STAY_LABEL)
 
-    def enter_home(app):
-        """自前の道のボタンが押されたとき。ゲームの移動をその場で組んで起こす。
-
-        `MovePhaseManager(app, connected_node_id, facility_move_to_id, area_id)` は
-        実測した「出る」のボタンと同じ引数（GAME.md §2.2）。
-        施設を引き当ててから組むので、建物が無ければ何も起こさない。
-        """
-        record = contract_here(app)
-        if record is None:
-            return
-        args = estate.move_spec_args(ui.current_area(app), record.get("facility"))
-        cls = getattr(estate.main_module(), MOVE_CLS, None)
-        if args is None or cls is None:
-            write("WARN enter: cannot reach {!r}".format(record.get("name")))
-            return
-        try:
-            phase = cls(app, *args)
-        except Exception:
-            ctx.log_exc("real estate: cannot build {}".format(MOVE_CLS))
-            return
-        write("enter: {!r} via {}".format(record.get("name"), args))
-        state["entered"] = {"facility": str(record.get("facility") or ""),
-                            "area": str(record.get("area") or "")}
-        screen.start_phase(app, phase, record.get("name") or "家")
-
-    def leave_home(app):
-        """建物から出る。繋ぎ先（入口）へゲームの移動で戻す。
-
-        ゲームは自分で足した施設の出口を作らないので、帰り道もこちらで起こす。
-        """
-        record = contract_here(app)
-        area = ui.current_area(app)
-        if area is None:
-            write("WARN leave: no area here")
-            return
-        hub_id = str((record or {}).get("hub") or "")
-        args = estate.move_spec_args(area, hub_id) if hub_id else None
-        if args is None:
-            # 控えの広場が引けない（契約ごと消えた後など）。その土地の入口へ出す。
-            _node, hub = estate.hub_of(area)
-            if hub is not None:
-                hub_id = estate.facility_id_of(hub)
-                args = estate.move_spec_args(area, hub_id)
-        cls = getattr(estate.main_module(), MOVE_CLS, None)
-        if args is None or cls is None:
-            write("WARN leave: cannot reach the hub {!r} of {!r}".format(
-                hub_id, record.get("name")))
-            return
-        try:
-            phase = cls(app, *args)
-        except Exception:
-            ctx.log_exc("real estate: cannot build {} to leave".format(MOVE_CLS))
-            return
-        write("leave: {!r} -> hub {} via {}".format(
-            (record or {}).get("name") or "(no contract)", hub_id, args))
-        end_stay(app, "left the building")
-        state["entered"] = None
-        screen.start_phase(app, phase, LEAVE_LABEL)
-
     def inside_home(app, record):
         """いま**自分の家**の中に立っているか（切れた契約の建物は自分の家ではない）。
 
@@ -1209,61 +1077,14 @@ def apply(ctx):
     def standing_in(app, record):
         """いまその契約の建物に立っているか（契約が切れていても見る）。
 
-        本筋は `player.location`。
-        ただしゲームは自分で足した施設をよく知らない（一覧にも出さない）ので、
-        移動の後に居場所が書き換わらない可能性がある。
-        そのときは**こちらが起こした移動の控え**を使う。
-        居場所が読めて、しかもよその施設だったときは、その控えを落とす。
+        見分けはローダに任せる（`modfacility.inside`）。
+        居場所が書き換わらなかったときにこちらが起こした移動の控えで補うところまで、
+        あちらが持っている。
         """
         if record is None:
             return False
         facility_id = str(record.get("facility") or "")
-        if not facility_id:
-            return False
-        if estate.player_is_inside(app, facility_id):
-            return True
-        entered = state.get("entered")
-        if not isinstance(entered, dict) or entered.get("facility") != facility_id:
-            return False
-        location = getattr(getattr(app, "player", None), "location", None)
-        here = location if isinstance(location, (str, int)) \
-            else estate.facility_id_of(location)
-        if str(here or "") and str(here) != facility_id:
-            state["entered"] = None
-            return False
-        return True
-
-    def note_place(app, buttons, record, inside, standing):
-        """立っている場所が変わったら1行だけ書く（変わらないあいだは黙る）。
-
-        「建物に入ったのに選択肢が出ない」が起きたとき、
-        どちらが欠けていたのか（居場所の読み取りか、ゲームの選択肢か）を
-        後から読めるようにするための行。
-        """
-        location = getattr(getattr(app, "player", None), "location", None)
-        if isinstance(location, (str, int)):
-            facility_id, kind = str(location), "(id only)"
-        else:
-            facility_id = estate.facility_id_of(location)
-            kind = ui.facility_type_of(location) or "?"
-        token = (ui.area_id_of(ui.current_area(app)), facility_id, kind, inside,
-                 standing, is_facility_screen(buttons))
-        if state.get("where") == token:
-            return
-        state["where"] = token
-        if not inside:
-            # 自分の家ではなくなった。宿屋での宿泊を無料にしないため、ここで必ず落とす。
-            end_stay(app, "left the building")
-        if not standing:
-            # 建物の外に出た。
-            state["entered"] = None
-            # 外の背景になった。次に入ったときは描き直す
-            # （中に立っているあいだは覚えを持ち続ける。持たないと毎回描き直す）。
-            state["background"] = None
-        write("where: area={} facility={} type={} inside={} standing={} "
-              "game_choices={} ({})".format(
-                  token[0], facility_id, kind, inside, standing, len(buttons),
-            "home {}".format(record.get("facility")) if record else "no contract"))
+        return bool(facility_id) and bool(modfacility.inside(app, facility_id))
 
     def close_stay_after_activity(app, which):
         """活動を1つ終えたら、その滞在を締める（1泊＝活動1回）。
@@ -1277,7 +1098,7 @@ def apply(ctx):
         """
         if staying_home(app) is None:
             return
-        cls = getattr(estate.main_module(), END_CLS, None)
+        cls = getattr(main_module(), END_CLS, None)
         if cls is None:
             write("WARN stay: __main__.{} is not available".format(END_CLS))
             return
@@ -1512,23 +1333,6 @@ def apply(ctx):
         write("storage: closed ({})".format(why))
 
     # ------------------------------------------------------------ 選択肢の組み立て
-    def at_facility_type(app, kind):
-        """いま立っている施設の種類。ロード直後は id の文字列なので引き直す。"""
-        location = getattr(getattr(app, "player", None), "location", None)
-        if isinstance(location, (str, int)):
-            location, _node = ui.find_facility(ui.current_area(app), str(location))
-        return ui.facility_type_of(location) == kind
-
-    def at_hub(app, record):
-        """広場に立っているか（建物への道が並ぶべき画面か）。"""
-        hub_id = str(record.get("hub") or "")
-        if not hub_id:
-            return False
-        location = getattr(getattr(app, "player", None), "location", None)
-        if isinstance(location, (str, int)):
-            return str(location) == hub_id
-        return estate.facility_id_of(location) == hub_id
-
     def drop_unwanted_activities(app, buttons):
         """自分の家の滞在では出さない活動（`HIDDEN_ACTIVITY_CLASSES`）を落とす。
 
@@ -1548,17 +1352,14 @@ def apply(ctx):
         return True
 
     def our_labels(app):
-        """残骸の掃除に使う文言（`prune_stale`）。契約中の建物の名前も入れる。
+        """残骸の掃除に使う文言（`prune_stale`）。
 
-        建物の名前は設定で変えられるので、いま立っている名前も混ぜないと
-        「印を失った古い名前のボタン」が画面に残る。
+        印はセーブに焼かれないので、ロードや再注入のあと**印を失った自分のボタン**が
+        画面に戻っている。文言でしか見分けられない（TECH.md §6.2）。
+        ここに並ぶのは役場の窓口とその確認画面のぶんだけで、
+        建物の名前と中の選択肢はローダが自分の印で掃除する（TECH.md §5.8）。
         """
-        labels = list(OUR_LABEL_PREFIXES)
-        for record in contracts_of(world_key(app)):
-            name = record.get("name")
-            if isinstance(name, str) and name:
-                labels.append(name)
-        return labels
+        return list(OUR_LABEL_PREFIXES)
 
     def is_facility_screen(buttons):
         """施設の選択肢の画面か（移動のボタンが1つでもある）。"""
@@ -1571,108 +1372,6 @@ def apply(ctx):
         if entry is None:
             return False
         buttons.insert(max(len(buttons) - 1, 0), entry)
-        return True
-
-    def add_home_buttons(app, buttons, record):
-        """建物の中の選択肢。**出口もこちらで出す**。
-
-        ゲームは自分で足した施設の `connections` を読まないので、
-        中に立っても選択肢が1つも出ない（実機 2026-09-11）。
-        出口が無いと建物から出られなくなるため、
-        ゲームの移動のボタンが1つも無い画面では「家から出る」を足す。
-        """
-        at = len(buttons)
-        for index, item in enumerate(buttons):
-            if ui.spec_cls_name(item) == MOVE_CLS:
-                at = index
-                break
-        added = False
-        labels = [(STAY_LABEL, "stay"), (STORAGE_LABEL, "storage")]
-        if not is_facility_screen(buttons):
-            labels.append((LEAVE_LABEL, "leave"))
-        for label, mark in labels:
-            entry = screen.button(label, mark=mark)
-            if entry is None:
-                continue
-            buttons.insert(at, entry)
-            at += 1
-            added = True
-        return added
-
-    def add_exit_button(app, buttons, force=False):
-        """出口だけ足す。契約が切れた建物の中と、消えた建物に取り残されたとき。
-
-        ふだんはゲームの移動が1つでもあれば足さない（出る道はもうある）。
-        取り残されたときだけは `force` で押し通す。
-        実機（2026-09-11）でそうなった画面には**選択肢が4つ残っていた**が、
-        そこから街へ戻ることはできなかった
-        ― 残っていた選択肢が出口かどうかは当てにできない。
-        """
-        if not force and is_facility_screen(buttons):
-            return False
-        entry = screen.button(LEAVE_LABEL, mark="leave")
-        if entry is None:
-            return False
-        buttons.insert(max(len(buttons) - 1, 0), entry)
-        return True
-
-    def stranded(app):
-        """街に無い施設に立っているか（取り残された形）。
-
-        実機（2026-09-11）で、滞在の最中に契約が切れて建物が取り壊され、
-        もう街に無い施設に立ったまま選択肢が1つも無くなった。
-        壊す側は直した（`standing_in`）が、
-        **すでにそうなった遊びからも戻れるように**出口だけは出す。
-
-        誤って出さないよう、立っている施設が街から引けないことと、
-        その土地の入口が引けることの両方を見る。
-        エリアはプレイヤー自身が持っているもの（`player.current_area`）なので、
-        よその土地の入口へ出してしまうことはない。
-        """
-        area = ui.current_area(app)
-        if area is None:
-            return False
-        location = getattr(getattr(app, "player", None), "location", None)
-        here = location if isinstance(location, (str, int)) \
-            else estate.facility_id_of(location)
-        if not str(here or ""):
-            return False
-        facility, _node = ui.find_facility(area, str(here))
-        if facility is not None:
-            return False
-        _node, hub = estate.hub_of(area)
-        if hub is None:
-            return False
-        warn_once(("stranded", str(here)),
-                  "WARN stranded: facility {!r} is not in the town any more; "
-                  "offering the way out".format(here))
-        return True
-
-    def add_move_button(app, buttons, record):
-        """建物への道がゲームの一覧に無ければ、こちらで足す（`325_` と同じ保険）。
-
-        ボタンの spec は無害な既存クラスにして、押下は印で横取りする。
-        `MovePhaseManager` を spec に書くと、そのボタンがセーブへ焼かれた後に
-        **MOD を外した環境で押せてしまう**（建物はもう無いので、そこで落ちる）。
-        起こすのは押されたときで、そのときは施設が在ることを確かめてから組む。
-        """
-        facility_id = str(record.get("facility") or "")
-        for entry in buttons:
-            if ui.spec_cls_name(entry) != MOVE_CLS:
-                continue
-            args = ui.spec_args(entry)
-            if len(args) > 1 and str(args[1]) == facility_id:
-                return False
-        args = estate.move_spec_args(ui.current_area(app), facility_id)
-        if args is None:
-            return False
-        entry = screen.button(record.get("name") or "家", mark="enter")
-        if entry is None:
-            return False
-        buttons.insert(max(len(buttons) - 1, 0), entry)
-        warn_once(("list", str(record.get("area")), facility_id),
-                  "WARN hub: the game did not list {!r}; added the move button myself "
-                  "(args={})".format(record.get("name"), args))
         return True
 
     def retry_when_idle(app):
@@ -1701,7 +1400,11 @@ def apply(ctx):
         screen.when_idle(app, again, proceed_on_timeout=True, tag="retry")
 
     def maintain_buttons(app):
-        """いまの画面に応じて自前のボタンを足す。何度呼んでも増えない。"""
+        """役場の窓口を足す。何度呼んでも増えない。
+
+        建物の中の選択肢・出口・建物への道は**ローダが出す**（TECH.md §5.8）。
+        ここに残るのは、ゲームの施設（役場）に足す1つだけ。
+        """
         buttons = getattr(app, "buttons", None)
         if not isinstance(buttons, list):
             return
@@ -1709,42 +1412,20 @@ def apply(ctx):
             # 本文が流れている最中は触らない。手が空いてからやり直す。
             retry_when_idle(app)
             return
-        record = contract_here(app)
-        inside = inside_home(app, record)
-        # 契約が切れても、取り壊しを待つ建物の中に立っていることはある。
-        standing = standing_in(app, record)
-        note_place(app, buttons, record, inside, standing)
-        if inside:
-            ensure_home_background(app, record)
         if state.get("free_stay") is not None:
             # 滞在の最中。並んでいるのはゲームの活動の選択肢（休養・訓練・労働…）で、
-            # そこへ「滞在する」を足すと同じ画面から滞在が二重に始まる。
-            # 足さない代わりに、自分の家では出さない活動をここで落とす。
+            # 自分の家では出さない活動をここで落とす。
             if drop_unwanted_activities(app, buttons):
                 screen.apply_buttons(app, None, "stay menu")
             return
-        # 自分の建物の中だけは、ゲームが選択肢を1つも作らない
-        # （ゲームは実行時の `Facility.connections` を読んでいない。実機 2026-09-11）。
-        # そこでは「施設の画面か」を問わず、出口まで含めてこちらが出す。
-        # 契約が切れた建物と、消えた建物に取り残されたときは、出口だけを出す。
-        lost = not inside and not standing and stranded(app)
-        loose = not inside and (standing or lost)
-        if not inside and not loose and not is_facility_screen(buttons):
+        if not is_facility_screen(buttons):
             return
         screen.prune_stale(buttons, our_labels(app))
         if any(screen.mark_of(entry) for entry in buttons):
             return
-        touched = False
-        if inside:
-            touched = add_home_buttons(app, buttons, record)
-        elif loose:
-            touched = add_exit_button(app, buttons, force=lost)
-        elif at_facility_type(app, OFFICE_FACILITY_TYPE):
-            touched = add_office_button(app, buttons)
-        elif record is not None and not record.get("lapsed") and at_hub(app, record):
-            touched = add_move_button(app, buttons, record)
-        if touched:
-            screen.apply_buttons(app, None, "facility")
+        if landlord.at_facility_type(app, OFFICE_FACILITY_TYPE) \
+                and add_office_button(app, buttons):
+            screen.apply_buttons(app, None, "office")
 
     # ------------------------------------------------------------ 自前のフェーズ
     class EstatePhase(object):
@@ -1785,10 +1466,6 @@ def apply(ctx):
             start_stay(app)
         elif action == "storage":
             open_storage(app)
-        elif action == "enter":
-            enter_home(app)
-        elif action == "leave":
-            leave_home(app)
         elif action == "cancel":
             back(app, "cancelled")
         else:
@@ -1797,7 +1474,14 @@ def apply(ctx):
     # ================================================================ フック
     @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False, safe=True)
     def refresh_choice_buttons(orig, self, reset_page=False, *args, **kwargs):
-        """選択肢が組み直されるたびに、建物を当て直して自前のボタンを足す。"""
+        """選択肢が組み直されるたびに、建物を当て直して自前のボタンを足す。
+
+        最後にローダの塗り直しをもう一度呼ぶ。
+        あちらの関所も同じ場面を包んでいるが、**どちらが内側かは適用順で変わる**
+        （フレームワークどうしは順序を約束しない。TECH.md §5.8）。
+        先に走られると、建物を当て直す前の画面で判断されてしまう。
+        二度呼んでも増えない作りなので、ここで順序を確かめる。
+        """
         result = orig(self, reset_page, *args, **kwargs)
         try:
             apply_contracts(self, getattr(self, "world", None), world_key(self),
@@ -1805,6 +1489,7 @@ def apply(ctx):
             check_leases(self, "screen")
             flush_demolitions(self)
             maintain_buttons(self)
+            modfacility.maintain_buttons(self, write=write)
         except Exception:
             ctx.log_exc("real estate: cannot maintain the choices")
         return result
@@ -1849,8 +1534,6 @@ def apply(ctx):
                 state["pending_demolish"] = []
                 state["warned"] = set()
                 apply_contracts(app, self, key, "load")
-                repair_player_location(self, save_data_dict,
-                                       our_facility_ids(key))
         except Exception:
             ctx.log_exc("real estate: cannot rebuild the buildings on load")
         return result
@@ -1879,11 +1562,14 @@ def apply(ctx):
 
     @ctx.wrap("__main__:InstantaleApp.save_game", required=False)
     def save_game(orig, self, *args, **kwargs):
-        """建て直されない建物の中に居るあいだは、入口に立っていることにして保存する。"""
-        swapped = None
+        """保管庫を開いたまま保存するときの後始末。
+
+        立ち位置（建て直されない建物の中に居るとき入口へ移す）と、
+        建物を指す選択肢の掃除はローダの関所が持つ（TECH.md §5.8）。
+        生きている契約の建物は `keeps_inside` で「中のままでよい」と名乗ってある。
+        """
         shopping = None
         try:
-            swapped = safe_save_location(self)
             shopping = quiet_shopping_flag(self)
         except Exception:
             ctx.log_exc("real estate: cannot check the place before the save")
@@ -1895,14 +1581,6 @@ def apply(ctx):
                     self.in_shopping = shopping
                 except Exception:
                     ctx.log_exc("real estate: cannot restore in_shopping")
-            if swapped is not None:
-                player, was, buttons = swapped
-                try:
-                    player.location = was
-                    if buttons is not None:
-                        self.buttons = buttons
-                except Exception:
-                    ctx.log_exc("real estate: cannot put the player back")
 
     @ctx.wrap("__main__:InstantaleApp.elapse_days", required=False)
     def elapse_days(orig, self, days, *args, **kwargs):
@@ -1969,18 +1647,18 @@ def apply(ctx):
 
     def describe_building(app, home):
         """建物のいまの姿。落ちたときの手がかりとしてログに添える。"""
-        area = ui.world_areas(app).get(str(home.get("area")))
-        facility, node = estate.existing(area, home.get("facility"))
+        facility = modfacility.facility_of(app, home.get("facility"))
         if facility is None:
             return "the building is not standing"
         roster = getattr(getattr(app, "world", None), "characters", None)
+        spot = (modfacility.registry().get(str(home.get("facility"))) or {}).get("placed")
         return ("facility={} type={!r} owner={!r} characters={} node={} "
                 "roster={}".format(
-                    estate.facility_id_of(facility),
+                    modfacility.facility_id_of(facility),
                     ui.facility_type_of(facility),
                     getattr(facility, "owner", None),
-                    estate.id_list_of(facility, "characters"),
-                    estate.node_id_of(node),
+                    landlord.id_list_of(facility, "characters"),
+                    spot[1] if spot and len(spot) > 1 else "?",
                     len(roster) if isinstance(roster, dict) else "?"))
 
     def refund_room(app, before, why):
@@ -2024,31 +1702,21 @@ def apply(ctx):
         screen.say(app, "落ち着かない。今日は出直したほうがよさそうだ。")
         write("{}: gave the controls back".format(why))
 
-    def home_for_background(app, location_id=None):
-        """背景を決めようとしている先が自分の建物なら、その契約を返す。
-
-        `location_id` を渡さないときは「いま立っている場所」で見る。
-        施設 id は土地の中でしか一意でないので（GAME.md §2.7）、
-        今いる土地の契約とだけ突き合わせる。
-        """
-        record = contract_here(app)
-        if record is None or record.get("lapsed"):
-            return None
-        facility_id = str(record.get("facility") or "")
-        if not facility_id:
-            return None
-        if location_id is not None:
-            return record if str(location_id) == facility_id else None
-        return record if inside_home(app, record) else None
-
-    def paint_home_background(app, record, why):
+    def paint_home(app, facility_id):
         """自分の建物の背景を部屋の絵にする。描けたら True。
+
+        呼ぶのはローダ（`on["background"]`）で、
+        **どの場面で呼ぶか・二度描かないこと**はあちらが持つ（TECH.md §5.8）。
+        ここが決めるのは「何を描くか」だけ。
 
         ゲームは施設 id から背景を引くが、自分で足した施設は素データに無いので
         引けず、街の外の景色のまま残る（実機 2026-09-11。ロード直後に出た）。
         代わりに宿屋の部屋の絵を借りる（`change_background_image_to_inn_room`）。
         滞在で使う等級と同じものを渡すので、泊まったときと同じ部屋になる。
         """
+        record = record_of(app, facility_id)
+        if record is None or record.get("lapsed"):
+            return False
         paint = getattr(app, "change_background_image_to_inn_room", None)
         if not callable(paint):
             warn_once(("bg", "missing"),
@@ -2059,86 +1727,9 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("real estate: cannot paint the home background")
             return False
-        token = (str(record.get("facility")), str(STAY_QUALITY))
-        if state.get("background") != token:
-            write("background: {!r} -> the room ({}) [{}]".format(
-                record.get("name"), STAY_QUALITY, why))
-        state["background"] = token
+        write("background: {!r} -> the room ({})".format(
+            record.get("name"), STAY_QUALITY))
         return True
-
-    def ensure_home_background(app, record):
-        """建物に立っているのに背景をまだ描いていなければ、こちらから描く。
-
-        ゲームが背景を決める経路は1つとは限らないので、包みだけに頼らない
-        （ロードの後に街の外の景色が残っていた。実機 2026-09-11）。
-
-        ただし**同じ絵を二度描かない**。
-        ゲームの経路が先に描いていればそこで終わりで、
-        予約から実行までの間に描かれた場合も、走った時点でもう一度確かめて降りる
-        （画像の読み込みが2回走って見えた。実機 2026-09-11）。
-        Kivy に触るのでメインスレッドへ回す。
-        """
-        token = (str(record.get("facility")), str(STAY_QUALITY))
-        if state.get("background") == token or state.get("background_pending"):
-            return
-        state["background_pending"] = True
-
-        def paint_now():
-            state["background_pending"] = False
-            if state.get("background") == token:
-                # 待っている間にゲームの経路が描いた。
-                return
-            paint_home_background(app, record, "on arrival")
-
-        screen.schedule(paint_now, 0)
-
-    def background_fallback(app, why, detail):
-        """ゲーム自身の背景の差し替えが落ちたときの後始末。
-
-        本体の `change_background_image_from_location_id` は `self.app` を読むが、
-        `InstantaleApp` にその属性は無い（`AttributeError`。実機 2026-09-11）。
-        **呼ばれた時点で必ず落ちる本体の不具合**で、宿屋での社交では通らない。
-        自分の家で「他者と交流」を選ぶとゲーム自身がここを通り、
-        スレッドごと落ちて活動が終わらなくなっていた。
-
-        絵が変わらないだけなので、ここで握って先へ通す
-        （握らないと、その先の描写も好感度の変動も走らない）。
-        """
-        warn_once(("bg-native", why),
-                  "WARN background: the game's own {} raised ({}); "
-                  "the picture stays as it is".format(why, detail))
-        home = home_for_background(app)
-        if home is not None:
-            paint_home_background(app, home, "after the game failed")
-
-    @ctx.wrap("__main__:InstantaleApp.change_background_image_to_current_location",
-              required=False, safe=True)
-    def background_current(orig, self, *args, **kwargs):
-        """いまの場所から背景を決める経路（ロードの後もここを通る）。"""
-        record = home_for_background(self)
-        if record is not None and paint_home_background(self, record, "current"):
-            return None
-        try:
-            return orig(self, *args, **kwargs)
-        except AttributeError as exc:
-            background_fallback(self, "change_background_image_to_current_location",
-                                exc)
-            return None
-
-    @ctx.wrap("__main__:InstantaleApp.change_background_image_from_location_id",
-              required=False, safe=True)
-    def background_from_id(orig, self, location_id=None, *args, **kwargs):
-        """施設 id から背景を決める経路（建物へ入ったとき、社交の相手の場所）。"""
-        record = home_for_background(self, location_id)
-        if record is not None and paint_home_background(self, record, "location id"):
-            return None
-        try:
-            return orig(self, location_id, *args, **kwargs)
-        except AttributeError as exc:
-            background_fallback(
-                self, "change_background_image_from_location_id",
-                "location {!r}: {}".format(location_id, exc))
-            return None
 
     @ctx.wrap("__main__:VacationRestManager.execute", required=False)
     def vacation_rest(orig, self, choice_text="", *args, **kwargs):
