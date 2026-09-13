@@ -2173,9 +2173,11 @@ npc_id = npcs.make_npc(app, fields, area_id, facility_id, write=write)   # 作�
 > スキルが空のまま敵ターンを迎えると空の `Literal[]` が組まれて落ち
 > （VERIFICATION_LOG.md §2.40）、`image_src` が `None` のままだと
 > `StringProperty` への代入で落ちる（同 §2.42）。
-> どちらもゲーム本体のバグで、MOD が作った NPC に固有ではない
-> （実測で落ちた相手はゲーム自身が作った街の住人）。
-> 塞ぐ側は VERIFICATION.md §3.6 の1位と2位。どちらも未着手。
+> 実測で落ちた相手は `make_npc` で作った詳細生成前の NPC（`902_` の容疑者、2026-08-08 の1件）で、
+> 素の住人が落ちた記録は無い（素の住人は会話の直前に埋まる）。
+> 「ゲーム自身が作った街の住人」と書いていたのは §2.40 の状態の描写の読み違い（2026-09-12 に訂正）。
+> 本体が空を守っていない穴を塞ぐなら VERIFICATION.md §3.6 の1位と2位（どちらも未着手）で、
+> 作る側は先に会話を通させるか `skills` と `image_src` を持たせる。
 
 > 空でよいのは**値**であって鍵ではない。
 > `ability_scores` は6つの鍵（strength / dexterity / constitution /
@@ -2225,6 +2227,42 @@ npc_id = npcs.make_npc(app, fields, area_id, facility_id, write=write)   # 作�
 > ひな型が33項目を漏らさず持っている限り並びは保たれる。
 > 1つでも欠けていると、その項目だけが末尾に足されて並びが壊れる。
 > 項目を足すときは必ず表の正しい位置へ差し込む。末尾に足さない。
+
+> **セーブに残さない側**はローダの `modnpc`（TECH.md §5.7）。
+> `mod:` 接頭辞の文字列 id で `Character` を直に組み、保存の直前に名簿から引き上げる。
+> 素データを書かないので `generate_character` も採番台帳も通らず、
+> ゲームが id で引く場所（`npcs` / `party` / ボタンの引数 / 敵の辞書）には残らない
+> （ほかの住人の記憶に名前は残り、それは消さない。TECH.md §5.7）。
+> 同じ仕掛けで正規 NPC の属性に被せることもできる。
+> 実機で会話の一巡と保存の非漏洩まで通した（2026-09-12。VERIFICATION.md §3.59）。
+>
+> そこで分かったゲーム側の事実:
+> **保存は `world.characters` を舐める**（文字列 id の `Character` を残すと
+> `save_game` が `AttributeError: 'NoneType' object has no attribute 'id'` で落ちる。
+> 保存は別スレッドなので、その間だけ名簿から外すとゲーム自身の id 引きが `KeyError` になる）。
+> **「会話する」の一覧は `DisplayTalkChoice.update_button_display` が
+> `world.characters.items()` を舐めて、各人物の `.location` を今の施設と突き合わせて組む**
+> （読まれる側に印を付けて実測。`Facility.characters` は主を引くのに読むだけで、
+> 載せても一覧には出ない）。直に組んだ `Character` を一覧に出すなら
+> `.location` に実行時の `Facility` を据える（`modnpc.place` がそうする）。
+> `ConversationStartManager` の第一声は `context_manager.get_life_log_text` が
+> `life_log` / `current_log` / `memory` / `knowledges` を舐めるので、
+> `Character(...)` を直に組むならリストと辞書で渡す（None だと `TypeError`）。
+> 会話の直前の詳細生成は `config['level_of_detail']` が 1 のときだけ走り
+> （2 だと「埋まっている」とみなす。一覧を組むときも `config` を読む）、
+> 入口は `ConversationStartManager.generate_npc_detail_and_ready`（別スレッド）→
+> `InstantaleApp.generate_npc_detail(character_instance)`。`ensure_npc_detail_generated` は通らない。
+> LLM の答え（`speech_style` / `archetype` / `skills`）を **`save_data_dict['npcs'][id]` へ書く**ので、
+> 素データの無い id では `KeyError` でそのスレッドが死に、画面が待ちのまま止まる（プロセスは生きている）。
+> 素データが在れば `skills`（`通常攻撃` / `逃げる`）・HP・立ち絵（`fullbody` / `face`）を埋めて
+> `level_of_detail` を 2 にする（`modnpc` の写しで実測）。
+>
+> **仲間は素データが在ることが前提**（実セーブで確認。2026-09-13）。
+> `game_variables.party` の id は `npcs` の鍵を指し、その人物は
+> `areas/<エリア>/adventurer_npcs` にも載る。
+> 素データを持たない人物を `party` に入れると、ロードのときに組み立てられない。
+> `load_game_new` を直に呼ぶと LLM の用意（`AIManager(app, config).set_ai_models()`）を
+> 飛ばし、`llm_manager.send_request*` が None のまま `conversation_starter` が落ちる。
 
 ### 2.24 会話中の NPC に知識を持たせる
 

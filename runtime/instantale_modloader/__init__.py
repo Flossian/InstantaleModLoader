@@ -1972,6 +1972,10 @@ def unload(out_dir: str | None = None) -> dict:
         mod がゲームの状態そのものに書いた値（パーティの名簿・依頼）
         mod が立てたスレッドや Clock の予約
 
+    例外が1つある。`modnpc` の NPC は**剥がす前に世界から降ろす**（`modnpc.purge`）。
+    あれは「セーブに残さない」ことを保存の関所1箇所で守っているので、
+    関所だけ消して名簿に残すと、次の保存でセーブに焼かれてしまう。
+
     そのため「入れ忘れた状態に戻す」用途ではなく、**mod を疑うときの切り分け**に使うもの。
     素のゲームで確かめたいなら、注入せずに起動し直すのが確実。
     """
@@ -1986,6 +1990,16 @@ def unload(out_dir: str | None = None) -> dict:
     from . import patch as _patch
     log("=" * 70)
     log("unload: reverting patches (gen={})".format(_state.get("generation")))
+    # パッチを剥がす前に MOD の NPC を世界から降ろす。
+    # 剥がした後だと保存の関所が無くなり、名簿に残った `mod:` の id が
+    # 次の保存でセーブに焼かれる（`modnpc` の約束はそこが守っている）。
+    try:
+        from . import modnpc as _modnpc
+        if _modnpc.registry():
+            from . import ui as _ui
+            _modnpc.purge(_ui.find_app())
+    except Exception:
+        log_exc("unload: cannot take the mod npcs off the world")
     count = _patch.revert_all()
     _state["mods"] = {}
     _state["settings"] = {}

@@ -1,0 +1,144 @@
+{
+  "entry": "probe_mod_npc.py",
+  "api": 1,
+  "kind": "probe",
+  "name": {
+    "en": "Mod-owned npc probe",
+    "ja": "MOD が持つ NPC の通り道"
+  },
+  "description": {
+    "en": "Measures how far a character that only a mod owns can go. Builds one Character with a string id (mod:229_probe_mod_npc:visitor) through the loader's modnpc, follows the player into every facility, and puts a mark on the owner's profile there. Records whether the save on disk keeps any mod: key, whether a conversation starts and ends, whether the instance collects current_log and relationship, whether detail generation is needed, and whether the mark reaches the prompt arguments. Everything is lifted back before the save",
+    "ja": "MOD だけが持つ人物がどこまで通るかを測る。ローダの modnpc で文字列の id（mod:229_probe_mod_npc:visitor）の Character を1人組み、プレイヤーの入った施設へ連れて回り、その施設の主の profile に印を1行足す。ディスクのセーブに mod: の鍵が残らないか、会話が始まって終わるか、instance に current_log と relationship が溜まるか、詳細生成が要るか、印が頼み文の引数まで届くかを録る。置いたものは保存の直前に全部引き上げる"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "debug": true,
+  "settings": {
+    "PRESENT": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "来訪者を居させる",
+        "en": "Keep the visitor around"
+      },
+      "note": {
+        "ja": "切って注入し直すと unregister で片付け、名簿・施設・素データ・主の profile がどうなったかを録る",
+        "en": "Off + re-inject runs unregister and records what remains in the roster, facility, plain data and the owner's profile"
+      }
+    },
+    "FOLLOW": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "入った施設へ連れて回る",
+        "en": "Follow the player into every facility"
+      },
+      "note": {
+        "ja": "切ると人物を1人も置かない。被せだけを見たいときに使う",
+        "en": "Off places nobody; use it to watch only the override"
+      }
+    },
+    "OVERRIDE": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "その施設の主に被せを載せる",
+        "en": "Dress the owner of that facility"
+      },
+      "note": {
+        "ja": "正規 NPC の profile の末尾に印を1行足す。保存の直前に素へ戻る",
+        "en": "Adds one marked line to the plain npc's profile; restored before the save"
+      }
+    },
+    "TRY_DETAIL": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "詳細生成を本体に任せる",
+        "en": "Let the game detail the visitor"
+      },
+      "note": {
+        "ja": "ローダの既定と同じ。切ると HP・スキル・立ち絵は空のまま（挑まれると落ちる）",
+        "en": "Same as the loader default; off leaves HP, skills and portrait empty"
+      }
+    },
+    "DISK_CHECKS": {
+      "type": "int",
+      "default": 5,
+      "min": 0,
+      "max": 999,
+      "label": {
+        "ja": "保存の直後にセーブを読み直す回数",
+        "en": "How many saves to read back from disk"
+      },
+      "note": {
+        "ja": "セーブ1つを復号して数えるので、回数で抑える",
+        "en": "Each check decodes one save file, so the count is capped"
+      }
+    },
+    "AUTO_TALK": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "施設に着いたら自動で会話を起こす",
+        "en": "Start conversations automatically on arrival"
+      },
+      "note": {
+        "ja": "来訪者→その施設の主の順に、ゲームの経路で会話を起こして閉じる。画面を押せない環境の測定用",
+        "en": "Talks to the visitor, then the owner, through the game's own path and closes each; for measuring without a screen"
+      }
+    },
+    "AUTO_TALK_LINGER": {
+      "type": "int",
+      "default": 6,
+      "min": 0,
+      "max": 120,
+      "label": {
+        "ja": "自動の会話で第一声の後に置く秒数",
+        "en": "Seconds to linger after the first line"
+      },
+      "note": {
+        "ja": "手が空いてからこの秒数置いて「会話を終了する」を押す",
+        "en": "After the game is idle, wait this long before ending the conversation"
+      }
+    },
+    "LIFT_ROSTER": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "保存の間、来訪者を名簿から外す",
+        "en": "Lift the visitor off the roster during saves"
+      },
+      "note": {
+        "ja": "切っても disk の leaked が空なら、保存は名簿を読んでいない。外す窓の間はゲームも来訪者を引けない",
+        "en": "If leaked stays empty with this off, the save does not read the roster; while lifted the game cannot look the visitor up either"
+      }
+    },
+    "AUTO_LOAD_WORLD": {
+      "type": "str",
+      "default": "",
+      "label": {
+        "ja": "タイトルで注入されたら読み込む世界",
+        "en": "World to load when injected at the title"
+      },
+      "note": {
+        "ja": "空なら何もしない。画面を押せない環境の測定用",
+        "en": "Empty does nothing; for measuring without a screen"
+      }
+    },
+    "AUTO_TALK_DELAY": {
+      "type": "int",
+      "default": 45,
+      "min": 0,
+      "max": 600,
+      "label": {
+        "ja": "自動の会話を起こす前に置く秒数",
+        "en": "Grace before the automatic conversation"
+      },
+      "note": {
+        "ja": "起動直後は LLM の口がまだ無く、会話の開始スレッドが落ちて画面が止まる",
+        "en": "Right after launch the LLM is not ready and the starter thread dies, freezing the screen"
+      }
+    }
+  }
+}

@@ -99,7 +99,8 @@
     "225_probe_area_quest_difficulty",
     "226_probe_item_consume",
     "227_probe_shop_stock",
-    "228_probe_area_move_reject"
+    "228_probe_area_move_reject",
+    "229_probe_mod_npc"
   ],
   "disabled": []
 }

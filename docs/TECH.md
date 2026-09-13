@@ -42,7 +42,7 @@ GAME.md と分けているのは、**ゲームが更新されて食い違うの�
 | 台帳／設定／API 番号／剥がし方／`out/` と `state/` | §3.7 〜 §3.11 |
 | MOD 同梱の設定画面（`"tool"`。設定ダイアログに収まらない設定） | §3.12 |
 | Nuitka で効くもの・効かないもの | §4 |
-| 画面・選択肢・会話・LLM・世界ごとの控え・背景ワーカーの既製部品 | §5 |
+| 画面・選択肢・会話・LLM・世界ごとの控え・背景ワーカー・MOD が持つ NPC の既製部品 | §5 |
 | **踏んだ罠の一覧（守るべきルール）** | §6 |
 | 近い手口の既存 MOD を探す | §7 |
 | このローダでできないこと | §8 |
@@ -912,6 +912,7 @@ MOD 同梱の設定画面（`tool.py`。§3.12）は**ゲームの中では走�
 | 包む前の素の関数まで剥がす | `patch.unwrap` / `original_of` | 4本（うち2本は1段しか剥がしていなかった） |
 | 壊れない書き込み・読み込み | `ctx.write_json` / `read_json`（§3.11.1） | 3本 |
 | NPC の作り方（素データ・ひな型・配置） | `npcs.make_npc` ほか（GAME.md §2.23） | 2本（`320_` と `local/` の MOD） |
+| MOD だけが持つ NPC と正規 NPC への被せ | `modnpc`（§5.7） | **1本**（`914_` の `make_holder`）。2本目を書く前に置いた唯一のもので、理由は §5.7 の末尾 |
 | ゲームの採番台帳を通した id の採り方 | `ids.claim` / `next_id` / `advance` / `audit` | 2本（`npcs` と `402_`）。`npcs` は `max + 1` で台帳を進めず、次の町の生成でゲームに踏まれた（VERIFICATION_LOG.md §2.77） |
 | HUD への置き場所 | `ui.overlay_host`（§5.1.3） | 2本 |
 | 表示・ログ用の切り詰め | `frames.short` | 6本 |
@@ -2234,6 +2235,157 @@ day = ui.game_day(app)      # 読めなければ None
 `app.world` がまだ埋まっていない）。
 実行時の世界がまだ無いとき（ロードの途中）は `world_dict["world_data"]` から拾う。
 5本が各自でこれを読んでいて、**その受け皿を持っていたのは `312_` だけ**だった。
+
+### 5.7 `instantale_modloader.modnpc`
+
+**MOD だけが持つ NPC**と、**正規 NPC への層（頼み文とフック）**。
+`npcs.make_npc`（§3.2.3。セーブに残る本物）の裏返しで、**ゲームが id で引く場所には現れない**。
+
+> 残さないのは機械的な参照（`npcs` の項目・`party`・ボタンの引数・敵の辞書）で、
+> ロードのときに名簿を引いて落ちるもの。
+> 遊んだ記憶（ほかの住人の `current_log` / `life_log`、プレイヤーの記憶）には
+> 名前が残り、消さない。ゲームが書いた文章で、居なくなった住人と同じ扱い
+> （下の「残る足跡」）。「セーブに一切残さない」ではない。
+
+```python
+from instantale_modloader import modnpc
+
+def apply(ctx):
+    modnpc.install(ctx, write=write)          # 関所。何本の MOD が呼んでも1つ
+
+    npc_id = modnpc.register("330_my_mod", key="innkeeper",   # mod:330_my_mod:innkeeper
+                             fields={"name": "宿の主", "profile": "..."},   # 組むときの初期値
+                             on={"world": on_world}, notes=add_rumor)
+    modnpc.spawn(app, npc_id)                 # 組んで world.characters に載せる
+    modnpc.place(app, npc_id, area_id, facility_id, owner=True)
+
+    modnpc.register("330_my_mod", npc_id="42", notes=lambda info: "…")   # 正規 NPC の頼み文に足す
+```
+
+| 何を | どうなるか |
+|---|---|
+| id | `mod:<持ち主>:<鍵>` の文字列。整数の連番とは名前空間が分かれる |
+| `fields` | セーブの項目名（`npcs.NEW_NPC_TEMPLATE` の33項目）で受ける、組むときの**初期値**。控えの写しが在ればそちらが勝つ（ゲームの「新規作成時の値」と同じ扱い） |
+| 素データ | `spawn` が33項目の写し（`plain_data`）を `save_data_dict['npcs']` / `world_dict['npcs']` に同じ辞書として置く。ゲームの詳細生成（`generate_npc_detail`）はそこへ書く |
+| 保存 | 関所が実体を控えへ写し（`snapshot_all`）、施設と主から外し、名簿と素データの辞書を `_RosterView`（反復では隠し、id では引ける）に差し替え、**id が載る他の器**（選択肢・自由入力・パーティ・戦闘中の敵。`scrub_saved_refs`）からも落として、保存の後に戻す |
+| ロード | 実体は捨てられ、層に `on["world"]` が来て、控えから組み直して置く（`restore_world`。その持ち主の層が登録されているものだけ） |
+| 控え | ローダが `state\modnpc\<世界>.json` に持つ（持ち主ごとに `{id: {snapshot, spawned, place}}`）。MOD 固有の続き（出資の帳簿など）は `state.WorldStore`（§5.4） |
+
+**真実は実体1つ。** ローダは値の変換も戻しもしない。
+MOD の NPC は実体に直接書き、保存のたびにローダが実体を控えへ写す（正規 NPC でゲームがやっている保存を、
+場所を変えてやる）。正規 NPC の項目を書けばそれは本物の変更で、ゲームがセーブに書く（戻すのは書いた MOD の責任）。
+「正規 NPC の項目をセーブに残さず画面上だけ変える」機構は持たない ― 実行時に差し替えて保存の直前に戻す往復は、
+その間にゲームが書いた値を消す・世界をまたいで残る・保存の窓に漏れる、という同期の穴を作るので外した（2026-09-13）。
+要るのは「変装」と「行事の絵」くらいで、どちらも本物を書き換えて MOD が戻す形で成り立つ。
+
+**層は持ち主ごとに1つ**で、同じ `(持ち主, id)` の登録は差し替わる。
+`apply()` は注入のたびに走る（§3.5）ので、ここが重なる作りだと世代のぶんだけ積み上がる。
+
+`register` の引数:
+
+| | 効く場所 |
+|---|---|
+| `fields` | MOD の NPC を組むときの初期値 |
+| `prompt` | `llm_manager:conversation_*` の引数。名前で開いて渡すので、`messages` も `retrieved_knowledge` も触れる（GAME.md §2.24） |
+| `notes` | 相手の素性に足す文章を返す関数（`fn(info) -> str / None`）。関所が1回だけ複製を作って `profile` の末尾に繋ぎ、引数を差し替える。本物には触らない |
+| `on` | `world` / `conversation_start` / `conversation_end` / `detail` / `detail_done` / `image` / `save` |
+| `place` | 施設の名簿と主、実体の `.location` / `current_node` / `current_area`（外すと元へ戻す） |
+
+**取っ手**（`modnpc.get(app, id)` → `Npc`）。ModNPC でも正規 NPC でも同じ形。読み書きとも実体へ素通し。
+
+```python
+npc = modnpc.get(app, "mod:330_my_mod:innkeeper")   # 居なければ None
+npc.is_dead                                         # config['is_dead']（読み書き）
+npc.profile / npc.skills / npc.image_src            # セーブの33項目が同名のプロパティ
+npc.physical_integrity                              # ローダが知らない属性も実体へそのまま素通し
+npc.profile = npc.profile + "\n今日は休み"           # 実体へ書く（ModNPC は写しにも同じ値）
+npc.character / npc.config / npc.data / npc.snapshot()   # 実体／その config／ModNPC の写し／いまの写し
+npc.in_world / npc.exists / npc.is_mod
+npc.place(area, facility) / npc.despawn() / npc.unregister(owner)
+```
+
+**素データ（セーブに焼かれる側）を触る口は取っ手に無い。** `data` は ModNPC の写しだけを返し、正規 NPC では None。
+正規 NPC の素データを触るなら `npcs.make_npc` や `save_data_dict['npcs']` を直に使う（セーブの改変。片付けは MOD の責任）。
+HP は `current_hp` / `max_hp` / `original_max_hp` の3つ組（GAME.md §2.22。1つだけ動かすと本体の不変条件を破る）。
+写しに入るのは JSON に落ちる項目だけで、`location` などの実行時のオブジェクトは `place` の控えが持つ。
+
+##### 隠す先は名簿だけではない（2026-09-13 に実セーブで確認）
+
+`game_variables.buttons_backup` には
+`{"spec": {"cls_name": "ConversationStartManager", "args": ["35"]}}` が焼かれている。
+「会話する」の一覧を出したまま保存すると、そこへ `mod:` の id が残り、
+**MOD を外した後にその選択肢を押すと `KeyError` で落ちる**。
+パーティ（`party` / `original_party`）と戦闘中の敵（`current_enemy_dict`）も同じ形で id が並ぶ。
+`hide` はこの4種類も保存の窓の間だけ落とす（`SAVED_CHOICE_ATTRS` / `SAVED_SPEC_ATTRS` /
+`SAVED_PARTY_ATTRS` / `SAVED_ENEMY_ATTRS`）。
+id を載せる器を新しく見つけたら、ここへ足す。
+
+##### 仲間にはできない（関所が断る）
+
+**仲間は `save_data_dict['npcs']` に素データが在ることが前提。**
+実セーブで確認した（2026-09-13。`game_variables.party` の id が `npcs` の鍵を指し、
+その人物は `areas/<id>/adventurer_npcs` にも載っていた）。
+MOD の NPC の素データは保存の直前に隠すので、加入したまま保存すると
+ロードのときに組み立てられない。
+保存の窓で `party` から外す手もあるが、それは**仲間だったことが黙って消える**形になる。
+だから `InstantaleApp.add_party_member` を包んで断り、記録を残す（`on["party_refused"]`）。
+`SAVED_PARTY_ATTRS` の掃除は、`add_party_member` を通らない経路のための保険。
+
+仲間にしたい人物は `npcs.make_npc` で本物として作る
+（セーブに残るので、片付けはその MOD の責任。GAME.md §2.23）。
+
+##### 残る足跡と、他の MOD との関わり
+
+- **住人の記憶には名前が残る**（実セーブで確認。`npcs/<id>/current_log` に
+  「…測定用の来訪者に対し…」）。これはゲームが書いた文章で、id ではないので壊れないが、
+  MOD を外すと居ない人物の話が残る。
+  **消さない**。ほかの住人の要約は LLM が混ぜ書きした文で、名前だけ抜くと文が壊れ、
+  1件ごと消せば本物の記憶を削ることになる。倒れた住人や `326_` で旅立った住人と同じで、
+  居たことは記憶に残る。方針は「機械的な参照は残さず、記憶は残す」の2本（2026-09-13）。
+  名前を本物と重複させると痕跡が別人に付くので、名前は作る側が決める
+- **名簿を舐める MOD は MOD の NPC も拾う**（`120_` の改名・`301_` のクエスト・`327_` の社交など）。
+  `modnpc.is_mod_npc(id)` で飛ばせるが、既存の MOD は知らない。
+  名前を本物と重複させない（`120_` が改名の対象にする）、
+  ゲームに残る器へ id を渡す MOD と併用しない、で避ける
+- **`unload` は剥がす前に MOD の NPC を降ろす**（§3.10）。関所だけ消えると次の保存で焼かれる
+`npc_id` に `modnpc.ANY`（`"*"`）を渡すと**誰と話していても効く層**になる。
+`311_` / `317_` / `321_` / `403_` は「相手を複製して `profile` に足し、引数を差し替える」手順を
+4本とも自前で持っている（2026-09-12 に確認。外側の層から複製の複製ができ、繋ぐ順は
+`load_order.json` の並びでしか決まらない）。`notes` はその手順を関所に寄せるための口で、
+順は `priority`（小さいほど先。同じなら id 指定 → `ANY` → 積んだ順）、同じ文章が2本から来たら1つに畳み、
+足すのは会話の5関数（`NOTES_SITES`。要約や雇用の頼み文には足さない。層ごとに `sites=` で変えられる）。
+4本の移行は別作業で、**`notes` の口はオフラインでしか通していない**（2026-09-12 時点）。
+
+フックは `fn(info)` の1つ形で、`info` は `{"site", "app", "npc_id", "character", "args", "owner"}`。
+戻り値に意味があるのは2つだけで、`detail` は `True` で本体へ通し、`image` は `False` で本体を止める。
+フックの例外は飲む（1本の MOD の失敗で関所を止めない）。飲んだことはログに残る。
+
+> 実機で通っているのは、保存に漏れないこと・会話の一巡（開始→第一声→終了→要約、記憶の蓄積）・
+> 被せが頼み文まで届くこと（2026-09-12。VERIFICATION.md §3.59）。
+> 「会話する」の一覧にも並ぶ（`place()` が `.location` に実行時の `Facility` を据える。
+> 一覧はそこを見て組まれる。GAME.md §2.23）。置かずに話しかけさせるなら
+> `process_choice(ConversationStartManager(app, id), 名前)` を MOD が出す。
+> 名簿を外すのではなく差し替えるのは、保存が別スレッドで名簿を舐める間に
+> ゲーム自身の id 引きが落ちたため（同日、`KeyError` 2件）。
+> 戦闘はここでは何も引き受けていない（パーティ加入は関所が断る）。
+> 素の住人は会話の直前の詳細生成（`generate_npc_detail`）で HP・スキル・立ち絵が埋まるので
+> 会話から挑んでも落ちない。実測で落ちたのは `make_npc` で作った詳細生成前の NPC
+> （`902_` の容疑者。VERIFICATION_LOG.md §2.40 / §2.42）で、素の住人が落ちた記録は無い。
+> MOD の NPC も既定で同じ道を通す（`level_of_detail` を 1 で組み、素データの写しを置く。
+> 会話の直前の入口は `ensure_npc_detail_generated` ではなく `generate_npc_detail` で、
+> LLM の答えを `save_data_dict['npcs'][id]` へ書く。写しが無いと `KeyError` で会話のスレッドが死ぬ。
+> 実機 2026-09-12。写しを置いた後は `skills` / HP / 立ち絵が埋まり、`level_of_detail` が 2 に上がって
+> 会話も保存も通った）。埋まった後に何が入るかは `on["detail_done"]` で受け取れる。
+> 層が `on["detail"]` で False を返せば止まる（そのときは挑まれると落ちる）。
+> 詳細生成を経た人物は戦闘にも入れる（実機 2026-09-12。倒れると `config['is_dead']` が立って
+> 一覧から外れる。素の住人と同じ。生死を残すかは MOD の控えで決め、控えなければ組み直しで生き返る）。
+
+> この節は§3.2.3 の表（写しが2本出たら寄せる）の例外で、**写しはまだ1本**
+> （`914_real_estate` の `storage.make_holder`）。
+> 2本目（出資して建てた施設の主人）を書く前に置いたのは、
+> 「セーブに残さない」を守っているのが保存の直前の関所1箇所だけだからで、
+> そこを MOD ごとに持つと、**写した本数だけ漏れる口が増える**。
+> 寄せる順が逆になるぶん、`make_holder` 側は実機で線が引けるまで触らない。
 
 ---
 

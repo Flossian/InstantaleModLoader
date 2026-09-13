@@ -1,6 +1,6 @@
 # VERIFICATION: 現在地
 
-最終更新: 2026-09-10
+最終更新: 2026-09-12
 
 何がどこまで確かめられているかの一覧と、まだ確かめていないものの確認手順。
 
@@ -2545,6 +2545,111 @@ CI が赤くなったが手元では再現しない
 時間切れのときは待った秒数と件数を残すようにした
 （`background extraction timed out: 15.0s 待って finished 0/1` の形）。
 「本当に不発」なのか「間に合わなかっただけ」なのかが1行で分かる。
+
+### 3.59 MOD だけが持つ NPC と正規 NPC への被せ（ローダの `modnpc`）: 実機で #1〜#9 が通った（2026-09-12）
+
+`instantale_modloader/modnpc.py` を置いた（TECH.md §5.7）。
+`npcs.make_npc`（セーブに残る本物）の隣に並ぶ二本目で、置き換えではない。
+id を `mod:` 接頭辞の文字列にして、セーブの採番台帳にも実在の番号にも触らない。
+
+**オフラインは通っている**（`tools\tests\test_modnpc.py` 全項目）。
+偽の `Character` と世界で、層の積み方・6鍵の受け渡し・保存の間の引き上げ・
+被せの往復・世界が変わったときの捨て方・フックの例外の飲み方を見ている。
+ただしオフラインで通るのは「こちらが書いたとおりに動く」ことだけで、
+**ゲームが実際にどこを読むかは1つも確かめていない**。
+
+**確かめること**（`229_probe_mod_npc` を有効にし、デバッグモードで起動する。
+TECH.md §3.2.5）。
+
+| # | 見るもの | 記録（`out\mod_npc.jsonl`） | 通った印 |
+| --- | --- | --- | --- |
+| 1 | セーブに漏れないか | `at=disk` | `leaked` が `npcs` / `characters` とも空 |
+| 2 | 施設で話しかけられるか | `at=place` と選択肢 | `placed=true` で、その施設の会話の相手に「測定用の来訪者」が出る |
+| 3 | 会話が始まって終わるか | `at=conversation_start` → `at=prompt` → `at=conversation_end` | 3つとも出る |
+| 4 | 記憶がインスタンスに溜まるか | `at=conversation_end` | `current_log` が 1 以上、`relationship` に `player` |
+| 5 | 詳細生成が要るか | `at=detail` | 既定（通さない）で会話が成立する。`TRY_DETAIL` を立てた回で何が起きるかも1度見る |
+| 6 | 被せが頼み文に届くか | `at=prompt` の `mark` | 正規 NPC 相手の行で `true` |
+| 7 | 立ち絵 | `at=image` | 呼ばれるか。呼ばれた後に何が起きるか |
+
+**外れうるところ**（どれも見込みで、測る前に直さない）。
+
+- `Facility.characters` に足すだけでは会話の相手に出ない見込みがある。
+  主は `Facility.owner` から引かれ、話し相手を組む経路が別にある（GAME.md §2.7）
+- `ensure_npc_detail_generated` が素データを id で引けば、`mod:` の id は引けない。
+  既定では本体へ通していないので、通さずに会話が成立するかが #5 の答えになる
+- 保存の経路が `InstantaleApp.save_game` の1箇所とは限らない。
+  そこが答えを出すのが #1 で、`leaked` が空でなければ関所が足りていない
+- 頼み文の関数は `inspect.signature` で引数を名前に開いている。
+  Nuitka の関数で署名が読めなければ `at=prompt` が1件も出ない（素通しする作り）
+
+**戦闘とパーティ加入は測らない。**
+ただし「素の住人と同じ状態だから会話だけの人物にスキルは要らない」は誤りだった（同日、指摘で訂正）。
+素の住人は会話の直前に `ensure_npc_detail_generated` で HP・スキル・立ち絵が埋まる
+（実セーブで「話した」NPC は `通常攻撃`/`逃げる`・`current_hp 96`・立ち絵2枚）ので、会話から挑んでも落ちない。
+§2.40 / §2.42 で落ちたのは `make_npc` で作った詳細生成前の NPC（`902_` の容疑者、2026-08-08 の1件）で、
+素の住人が落ちた記録は無い。「ゲーム自身が作った街の住人」は 2026-09-11 の読み違い（同日訂正。
+`npcs.py` / GAME.md §2.23 / `902_` の DOC.md / メモリも直した）。
+MOD の NPC は既定で詳細生成を本体へ通していないので、**話しかけてから挑むと素では起きない落ち方をする**。
+だから #5（`TRY_DETAIL`）は後回しの項目ではなく既定を決める測定。
+`detail_done` の記録（スキル・HP・立ち絵・`save_data_dict['npcs']` / `world_dict['npcs']` への漏れ）を足した。
+本体の空 `Literal` と `image_portrait` の穴そのものを塞ぐなら別の修正 MOD（§3.6 の1位と2位）。
+
+`914_real_estate` の `storage.make_holder`（保管庫の窓の間だけ生きる `Character`）は
+この土台の1本目の写しにあたるが、**まだ寄せていない**。
+
+**実機の結果**（2026-09-12、注入し直し11回・ゲームの再起動2回。画面は押せない環境だったので
+`229_` の自動操作（`AUTO_LOAD_WORLD` / `AUTO_TALK`）で会話を起こした）。
+
+| # | 結果 |
+| --- | --- |
+| 1 | **通った**。保存は `world.characters` を舐めている（来訪者を残すと `save_game` が `AttributeError: 'NoneType' object has no attribute 'id'` で落ち、外すと通る）。`_RosterView` で反復から隠した状態で4回書かれ、`leaked` は空 |
+| 2 | **通った**（同日、画面で確認）。一覧は `DisplayTalkChoice.update_button_display` が `world.characters.items()` を舐めて各人物の **`.location`** を今の施設と突き合わせて組む（読まれる側に印を付けて実測。`Facility.characters` は主を引くのに読むだけ）。`place()` が `.location` / `current_node` / `current_area` に実行時の実体を据えるようにしたら一覧に並び、一覧経由で話しかけて要約まで通った |
+| 3 | **通った**。`ConversationStartManager(app, "mod:…")` → 第一声 → 「会話を終了する」 → 要約まで、来訪者・主とも一巡。落ちたのは初版の `build` が `life_log` 等を None で渡していたときだけ（`get_life_log_text` で `TypeError`） |
+| 4 | **通った**。`current_log` が 1、`relationship` に `player` |
+| 5 | **通った**（22:53、再起動後）。詳細生成は `level_of_detail` が 1 のときだけ、`generate_npc_detail`（`ensure_…` ではない）で走る。2 で組んでいたので一度も走っていなかった。1 にして通すと答えを `save_data_dict['npcs'][id]` へ書く所で `KeyError`（20:47・22:45）。`spawn` が素データの写しを置く形に直したら、ゲームが `skills=['通常攻撃','逃げる']`・`hp 48/48`・立ち絵（`fullbody` / `face`）を埋め、`level_of_detail` を 2 に上げ、会話は要約まで通り、その後の保存4回とも `leaked` 空 |
+| 6 | **通った**。`output_data` の `conversation_starter` 4件すべてに `【229 の被せ】` が載っていた。`messages` 引数は行動の1行（11字）だけで、素性は関数の中で `character_instance` から組まれる |
+| 7 | `update_character_image` は来訪者・主とも呼ばれる。立ち絵（`characters\<名前>\` の5枚）は **19:45、詳細生成がまだ走っていなかった回の会話で作られた**ので、絵の生成は詳細生成とは別の道（無ければ作る）。以後は再利用され、詳細生成が 0.8秒で済むのはそのため（LLM の `npc_detail_generater` の記録は毎回増える: 298 → 299） |
+| 9 | **片付けも通った**（23:05）。`unregister(owner, app=app)` で来訪者が名簿・施設・素データの2辞書から消え、登録簿が空になり、主の `profile` の印が素の文に戻った。その後の一覧は `['35']` だけ、保存5回とも `leaked` 空、主との会話の頼み文（`output_data` 1015）に印は無い。来訪者の名前は主の頼み文に残る（プレイヤーの `current_log` に会話の要約が在るため。ゲームの記憶であって MOD の残骸ではない） |
+| 8 | **戦闘も通った**（22:55、詳細生成の後に挑んだ）。`測定用の来訪者(48) def=13` で戦闘が始まり、1手で倒れて終了、クラッシュ無し。倒れた後は `config['is_dead']` が立ち、「会話する」の一覧から外れる（一覧は `.config` も読む。GAME.md §2.22 の素の住人と同じ振る舞い）。死んだままにするか生き返すかは MOD の控え次第で、`229_` は控えないので注入し直すと組み直されて生き返る |
+
+**直したもの**（すべて実機で踏んでから）。
+
+- `build` はひな型の項目のうち `Character.__init__` が受けるものを全部渡す（受けないのは `original_max_hp` / `max_hp` / `inventory` / `current_location` の4つ）。`relationship` は実セーブ 87/87 の形を既定に持つ
+- 頼み文の包みは署名を対象名から引く（`patch.resolve` → `original_of`）。`orig` は内側 MOD の `(*args, **kwargs)` か、`safe=True` ならローダの閉包で `__original__` すら無い
+- 同じ持ち主が登録し直したら実体を組み直す（登録簿は注入をまたいで生きるので、前の版の実体が使い回されて同じ場所で落ちた）
+- `despawn` は正規 NPC を名簿から消さない
+- 保存の間は名簿から**外さず**、`_RosterView` に差し替える。外していた頃は約0.5秒の窓で `ConversationStartManager.__init__` と `resolve_conversation` が `KeyError`（2件）
+- 登録簿（`sys`）は関所より長生きする。関所を立てる MOD の `apply()` が失敗した世代では、前の世代の実体が名簿に残ったまま関所が無く、次の保存が落ちた（18:58、`AttributeError`）。`spawn` は今の世代の関所が生きていなければ載せない（`gate_is_live`）
+
+**踏んだ罠**（`229_` の側）。
+
+- `process_choice(DisplayTalkChoice(app), "会話する")` で一覧を開かせると、その直後にゲームが別スレッドで走らせる `save_game` が戻らなくなり、以後の保存が全部宙に浮いた（5本。ディスクは 16:42 から書かれず、再起動で解けた）。一覧は受動で包んで読む
+- `load_game_new` を直に呼ぶと LLM の用意を飛ばす。`app.ai_manager` は None のままで、`conversation_starter` が `'NoneType' object is not callable`（llm_manager.py:296）。`AIManager(app, config)` を組んで `set_ai_models()` を呼ぶと、組んでいる間にプロバイダが読み込まれ `send_request*` の別名が生える
+- `ui.Screen` の見張り（`when_idle` / `end_conversation` の `follow_up`）は世代を見ないので、注入し直すと前の世代の自動操作が並走した（`cancel_if=ctx.superseded` で塞いだ。`end_conversation` の `follow_up` は呼ばれた側で見る）
+
+この節の範囲（#1〜#9）はすべて実機で線が引けた（2026-09-12）。
+
+**仲間にはできないことが確定した**（2026-09-13、実セーブの構造から）。
+`game_variables.party` の id は `npcs` の鍵を指し、その人物は `areas/<id>/adventurer_npcs` にも載る。
+MOD の NPC は素データを保存の直前に隠すので、加入したまま保存するとロードで組み立てられない。
+`party` から外す形は「仲間だったことが黙って消える」ので採らず、`add_party_member` を包んで断る形にした。
+仲間にしたい人物は `npcs.make_npc` で本物として作る（§3.6 の「実装が要るもの」ではなく、設計の線）。
+
+**2026-09-13 に見つけた漏れ（実機のセーブで確認、対処済み・再実機は未）。**
+`game_variables.buttons_backup` に `ConversationStartManager(args=[<npc id>])` が焼かれている。
+一覧を出したまま保存すると `mod:` の id がそこへ残り、MOD を外した後に押すと `KeyError` で落ちる
+（名簿と素データを隠すだけでは足りなかった）。パーティ（`party` / `original_party`）と
+戦闘中の敵も同じ形。`hide` がこの4種類も保存の窓の間だけ落とすようにした（`scrub_saved_refs`）。
+`229_` の `leaked` も **セーブ全体の `mod:` の数と出どころの鍵**を数えるように広げた
+（`npcs` と `characters` しか見ていなかった）。
+住人の `current_log` に来訪者の**名前**が残ることも同じセーブで確認した（id ではないので壊れない）。
+
+**2026-09-13 に作りを変えた（実機は未確認）。** 正規 NPC の項目を実行時だけ差し替えて保存の直前に戻す往復（`dress` / `undress`）は、
+その間にゲームが書いた値を消す・世界をまたいで残る・保存の窓に漏れる、という同期の穴を作るので外した。
+いまは「真実は実体1つ」: ModNPC は実体に直接書き、保存のたびにローダが実体を `state\modnpc\<世界>.json` へ写し（`snapshot_all`）、
+読み直しで写しから組み直す（`restore_world`）。正規 NPC への層は頼み文（`notes` / `prompt`）とフックだけ。
+229 の被せ（#6）は `notes` に置き換えた。次の実機で確かめるのは、写しが保存のたびに書かれること・世界を読み直して来訪者が
+記憶ごと戻ること・`notes` の印が `output_data` に載ること。残るのは `notes` の窓口の実機（4本の移行のとき）。`notes` の窓口（`register(owner, modnpc.ANY, notes=...)`。311 / 317 / 321 / 403 が4本とも写している差し込みの手順を関所に寄せる口）は同日にローダ側だけ置き、オフラインで通した。実機は4本の移行（321 → 317 → 403 → 311 の順、1本ずつ `output_data` の字数で前後を突き合わせる）のときに測る。
 
 ### 次回起動時の手順（忘れやすい）
 
