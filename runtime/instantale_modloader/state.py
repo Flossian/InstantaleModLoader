@@ -6,6 +6,7 @@ MOD は世界ごとにデータを分けて持つ（依頼の出所・NPC の人
 
     world_key(app)                  この世界を見分ける鍵（＝世界名）
     world_filename(key, suffix)     鍵から `state/<MOD>/` 配下のファイル名
+    playthrough_key(app)            世界×主人公（セーブと同じ寿命のものはこちら）
 
 **この2つは MOD 固有ではなくローダの語彙**なので、ここに1つだけ置く。
 
@@ -121,6 +122,66 @@ def world_key_of_dict(world_dict, fallback=None):
                 if isinstance(value, str) and value:
                     return value
     return fallback
+
+
+# ---------------------------------------------------------------------------
+# 周回の鍵（世界 × 主人公）
+# ---------------------------------------------------------------------------
+#: 世界名と主人公の名の区切り。ファイル名にそのまま出る。
+PLAYTHROUGH_SEP = "×"
+
+
+def player_name_of_dict(save_data_dict):
+    """セーブの辞書から主人公の名。読めなければ None。"""
+    if isinstance(save_data_dict, dict):
+        data = save_data_dict.get("player_data")
+        if isinstance(data, dict):
+            name = data.get("name")
+            if isinstance(name, str) and name.strip():
+                return name.strip()
+    return None
+
+
+def playthrough_key_of_dict(save_data_dict, fallback=None):
+    """**セーブの辞書から**周回を見分ける鍵（`<世界>×<主人公>`）。世界名が読めなければ `fallback`。
+
+    主人公が死ぬと、同じ世界でもう一度主人公を作って遊べる。
+    ゲームはそのとき `savedata.json` を `world_data.json` から組み直す
+    （NPC の記憶も進みも無い、初期化された同じ世界。GAME.md §2.32）。
+    世界名だけの鍵だと、前の主人公が建てた建物や結んだ契約が新しい主人公に引き継がれる
+    （実機 2026-09-14。新しい主人公が前の主人公の施設の出資者として迎えられた）。
+    **セーブの中身と同じ寿命のもの**はこの鍵で持つ。
+    世界ごとの設定（BGM・通貨の単位）は `world_key` のまま。
+
+    セーブに周回の id は無く、`original_ability_scores` も `age` も遊んでいる間に変わる
+    （実セーブ12本で確かめた）ので、名前で見分ける。
+    同じ名前で作り直せば前の周回を引き継ぐ（本人の判断 2026-09-14）。
+    主人公の名が読めないときは世界名だけ（前と同じファイル）。
+    """
+    world = world_key_of_dict(save_data_dict, None)
+    if world is None:
+        return fallback
+    name = player_name_of_dict(save_data_dict)
+    return world + PLAYTHROUGH_SEP + name if name else world
+
+
+def playthrough_key(app):
+    """この周回を見分ける鍵。世界名が読めなければ `"_"`。
+
+    世界は `world_key(app)` と同じ見方。
+    主人公の名は `app.save_data_dict` の `player_data` → 実行時の `app.player.name` の順。
+    **`World.__init__` の中では使わない**
+    （`app` の辞書と `player` はまだ前の周回を指していることがある）。
+    そこでは引数の `save_data_dict` を `playthrough_key_of_dict` に渡す。
+    """
+    world = world_key(app)
+    if world == UNKNOWN_WORLD:
+        return UNKNOWN_WORLD
+    name = player_name_of_dict(getattr(app, "save_data_dict", None))
+    if not name:
+        live = getattr(getattr(app, "player", None), "name", None)
+        name = live.strip() if isinstance(live, str) and live.strip() else None
+    return world + PLAYTHROUGH_SEP + name if name else world
 
 
 def _clean(key: str) -> str:

@@ -3,14 +3,14 @@
   "api": 1,
   "kind": "feature",
   "name": {
-    "en": "Rent or buy a place of your own",
-    "ja": "役場で物件を借りて自分の拠点を持つ"
+    "en": "Rent or buy a house",
+    "ja": "家を借りる・買う"
   },
   "description": {
-    "en": "Adds a property desk to the administrative office. Rent a place or buy one outright; the building appears in the town and offers lodging and a storage room. A stay lasts as long as one at an inn, and a rent period covers four",
-    "ja": "役場に不動産の窓口を足す。賃貸か建売の購入で、その土地に自分の建物が建つ。中では宿屋と同じ滞在（休養・訓練・労働ほか）ができ、アイテムの保管庫が使える。滞在1回の長さは宿屋と同じで、賃貸の1期はその4回ぶん"
+    "en": "Rent or buy a house at the administrative office and it appears in that town. Inside you can stay as at an inn (rest, train, work and more) and keep your gear in a storage room. A stay lasts as long as one at an inn, and a rent period covers four",
+    "ja": "役場で家を借りるか買うと、その土地に自分の家が建つ。中では宿屋と同じ滞在（休養・訓練・労働ほか）ができ、荷物を預ける保管庫が使える。滞在1回の長さは宿屋と同じで、賃貸の1期はその4回ぶん"
   },
-  "version": "20",
+  "version": "21",
   "author": "R01/Flossian",
   "settings": {
     "RENT_PRICE": {

@@ -6,7 +6,7 @@
 偽の app / Player / Area / Node / Facility / PhaseSpec / VacationStartManager /
 Character / InventoryGrid / HUD / Clock を差し込み、次を確認する。
 
-  窓口   … 役場でだけ「物件を扱う」が出る。宿屋では出ない。塗り直しても増えない
+  窓口   … 役場でだけ「家を借りる・買う」が出る。宿屋では出ない。塗り直しても増えない
   契約   … 借りると所持金が減り、広場と建物の接続が両側に張られ、控えに1件残る
   一覧   … ゲームが並べなかった建物への道を、`MovePhaseManager` のボタンで足す
   建物   … 中に立つと「滞在する」「保管庫をあける」が出る。他人の施設では出ない
@@ -16,6 +16,7 @@ Character / InventoryGrid / HUD / Clock を差し込み、次を確認する。
   期限   … 払えなければ契約が切れ、建物が街から消え、保管庫の中身は役場が預かる
   引取   … 役場で料金を払うと預かり品がプレイヤーの持ち物へ戻る
   ロード … `World.__init__` の後に建物が建ち直る（セーブには何も書かない）
+  周回   … 控えは 世界×主人公（同じ世界で新しい主人公を作っても前の主人公の家は現れない）
   保管庫 … 窓の中で移した品が控えへ写り、`save_game` が走る
   安全   … 印は `mod_` で始まり、`PhaseSpec` に自前のクラス名を書かない
 """
@@ -36,6 +37,7 @@ if RUNTIME_DIR not in sys.path:
 
 import instantale_modloader as ml                      # noqa: E402
 from instantale_modloader import modfacility            # noqa: E402
+from instantale_modloader import state as loader_state  # noqa: E402
 
 
 def find_mod(suffix):
@@ -66,6 +68,10 @@ def check(name, cond, detail=""):
 
 # ---------------------------------------------------------------- 偽ゲーム
 WORLD_NAME = "テスト世界"
+PLAYER_NAME = "テストプレイヤー"
+SEP = loader_state.PLAYTHROUGH_SEP
+#: 控えは 世界×主人公 で1ファイル（`state.playthrough_key`）。
+STATE_FILE = WORLD_NAME + SEP + PLAYER_NAME + ".json"
 EXIT_TEXT = "出る"
 TALK_TEXT = "会話する"
 OFFICE_TYPE = "administrative_office"
@@ -129,17 +135,21 @@ class VacationStartManager:
         self.app.stays.append((self.months, self.quality))
         self.app.elapse_days(int(self.months) * 30)
         self.app.player.gold -= ROOM_PRICE
+        # ゲームは部屋の絵に差し替える（GAME.md §2.17 の実測）。
+        self.app.change_background_image_to_inn_room(self.quality)
         if getattr(self.app, "stay_raises", False):
             # 主のいない施設で実機が踏んだ形（`ufl_method_1` の KeyError: None）。
             self.app.is_button_enabled = False
             raise KeyError(None)
         # ゲームは宿泊が始まると活動の選択肢へ差し替える（GAME.md §2.17）。
+        # 活動の選択肢は本物と同じクラス（GAME.md §2.17）。`DisplayTalkChoice` は施設の入口の
+        # 種類（`TOP_ENTRY_CLASSES`）なので、活動に使うと下位の画面が施設の画面に見える。
         self.app.buttons = [
-            {"text": "休養をとる", "spec": PhaseSpec("DisplayTalkChoice", [])},
+            {"text": "休養をとる", "spec": PhaseSpec("VacationRestManager", [])},
             {"text": "他者と交流", "spec": PhaseSpec("VacationSocializeManager",
                                                  [self.months, self.quality])},
             {"text": "アイテム作成", "spec": PhaseSpec("ItemCraftManager", [])},
-            {"text": "宿泊を終える", "spec": PhaseSpec("DisplayTalkChoice", [])},
+            {"text": "宿泊を終える", "spec": PhaseSpec("VacationEndManager", [])},
         ]
         self.app.refresh_choice_buttons(reset_page=True)
         return None
@@ -674,7 +684,7 @@ def read_state(world=None):
     for name in (sorted(os.listdir(STATE_DIR)) if os.path.isdir(STATE_DIR) else []):
         if not name.endswith(".json"):
             continue
-        if world is not None and name != world + ".json":
+        if world is not None and name != world + SEP + PLAYER_NAME + ".json":
             continue
         with io.open(os.path.join(STATE_DIR, name), encoding="utf-8") as fh:
             return json.load(fh)
@@ -689,10 +699,12 @@ def state_files():
 
 def build_world(app_cls, world_cls):
     """街1つ（入口・広場・宿屋・役場）と、隣の街を1つ。"""
-    world = world_cls({"world_data": {"name": WORLD_NAME, "days_elapsed": 100}}, None)
+    world = world_cls({"world_data": {"name": WORLD_NAME, "days_elapsed": 100},
+                       "player_data": {"name": PLAYER_NAME}}, None)
     world_dict = {"world_data": {"name": WORLD_NAME, "days_elapsed": 100},
                   "index": {"facility": 20, "npc": 5, "item": 30}}
     save_data_dict = {"world_data": {"name": WORLD_NAME, "days_elapsed": 100},
+                      "player_data": {"name": PLAYER_NAME},
                       "index": {"facility": 20, "npc": 5, "item": 30}}
     home = Area("0", "始まりの泥濘")
     node = Node("0")
@@ -804,6 +816,8 @@ def setup(configure=None, keep_state=False, gold=100000):
         ("__main__:VacationRestManager.execute", classes["rest"], "execute"),
         ("__main__:InstantaleApp.change_background_image_to_current_location",
          classes["app"], "change_background_image_to_current_location"),
+        ("__main__:InstantaleApp.change_background_image_to_inn_room",
+         classes["app"], "change_background_image_to_inn_room"),
         ("__main__:InstantaleApp.change_background_image_from_location_id",
          classes["app"], "change_background_image_from_location_id"),
         ("scripts.hud.new_hud:InventoryItem.change_inventory", classes["item"],
@@ -849,7 +863,8 @@ def contract_of(module, app):
 # ================================================================ 検査
 print("[窓口]")
 module, ctx, app, places, classes = setup()
-check("役場で「物件を扱う」が出る", app.has(module.OFFICE_LABEL), app.labels())
+check("役場で「家を借りる・買う」が出る", app.has(module.OFFICE_LABEL),
+      app.labels())
 before = len(app.buttons)
 app.refresh_choice_buttons(True)
 CLOCK.settle()
@@ -950,45 +965,18 @@ check("「家から出る」でゲームの移動が入口へ起きる",
       app.moved and app.moved[-1] == ["0", "0", "0"], app.moved)
 app.go(home)
 
-# 背景。ゲームは自分で足した施設の絵を引けないので、部屋の絵を借りる。
+# 背景。MOD は描かず、頼みもしない（建物へ入る移動でゲームが自分で描く。頼むと2枚になる）。
 app.go(places["inn"])
 app.backgrounds = []
 app.go(home)
-check("家に立つだけで背景が部屋の絵になる",
-      app.backgrounds == [("room", module.STAY_QUALITY)], app.backgrounds)
 app.facility_screen()
 app.facility_screen()
-check("家の中では描き直さない", app.backgrounds == [("room", module.STAY_QUALITY)],
-      app.backgrounds)
+check("家に立っても MOD は絵に触らない", app.backgrounds == [], app.backgrounds)
 
-# ゲームが背景を決める経路を通った後、画面が組み直されても二度は描かない。
-app.go(places["inn"])
-app.backgrounds = []
-app.player.location = home
-app.change_background_image_from_location_id(str(home.id))
-app.facility_screen()
-check("ゲームが描いた後に描き直さない",
-      app.backgrounds == [("room", module.STAY_QUALITY)], app.backgrounds)
-
-# 逆の順序（画面の組み直しが先に予約し、その後でゲームが背景を決めた）でも1回。
-app.go(places["inn"])
-app.backgrounds = []
-app.player.location = home
-app.buttons = []
-app.refresh_choice_buttons(True)
-app.change_background_image_from_location_id(str(home.id))
-CLOCK.settle()
-check("予約とゲームの経路が重なっても1回",
-      app.backgrounds == [("room", module.STAY_QUALITY)], app.backgrounds)
-
-app.backgrounds = []
-app.change_background_image_to_current_location()
-check("家では背景が部屋の絵になる",
-      app.backgrounds == [("room", module.STAY_QUALITY)], app.backgrounds)
+# 本体の id 引きは MOD の施設を引けない（`self.app` で落ちる）ので、名前で引く経路へ回す。
 app.backgrounds = []
 app.change_background_image_from_location_id(str(home.id))
-check("施設 id から決める経路でも同じ",
-      app.backgrounds == [("room", module.STAY_QUALITY)], app.backgrounds)
+check("家の id は名前で引く経路へ回る", app.backgrounds == [("current", None)], app.backgrounds)
 app.backgrounds = []
 app.change_background_image_from_location_id(str(places["inn"].id))
 check("よその施設の背景には手を出さない",
@@ -1008,8 +996,6 @@ try:
 except AttributeError:
     failed = True
 check("本体の背景の差し替えが落ちても外へ出さない", not failed, "AttributeError が出た")
-check("落ちた後は家の絵に戻す",
-      app.backgrounds == [("room", module.STAY_QUALITY)], app.backgrounds)
 check("本体の不具合として記録する",
       "the game's own change_background_image_from_location_id raised" in read_log(),
       [l for l in read_log().splitlines() if "background" in l][-3:])
@@ -1237,7 +1223,7 @@ module, ctx, app, places, classes = setup()
 rent(app, module)
 first = home_of(app, module, places)
 check("1つ目の世界に建った", first is not None, list(places["node"].facilities))
-check("控えはその世界の名前のファイル", state_files() == [WORLD_NAME + ".json"],
+check("控えは 世界×主人公 の名前のファイル", state_files() == [STATE_FILE],
       state_files())
 
 
@@ -1260,7 +1246,7 @@ def other_town():
 
 # 別の世界をロードする。世界の鍵はセーブの `world_data.name`（`state.world_key`）。
 save_b = {"world_data": {"name": OTHER_WORLD}, "areas": other_town(),
-          "player_data": {"location": "1", "current_area": "0"},
+          "player_data": {"name": PLAYER_NAME, "location": "1", "current_area": "0"},
           "game_variables": {"buttons": []}}
 app.world_dict = {"world_data": {"name": OTHER_WORLD},
                   "index": {"facility": 40, "npc": 5, "item": 30}}
@@ -1289,7 +1275,7 @@ node_b.facilities["2"] = office_b
 app.go(office_b)
 rent(app, module)
 check("控えが世界ごとに1つずつできる",
-      state_files() == sorted([WORLD_NAME + ".json", OTHER_WORLD + ".json"]),
+      state_files() == sorted([STATE_FILE, OTHER_WORLD + SEP + PLAYER_NAME + ".json"]),
       state_files())
 check("2つ目の世界の契約はそちらの控えに入る",
       len((read_state(OTHER_WORLD) or {}).get("contracts") or []) == 1,
@@ -1306,7 +1292,8 @@ check("2つ目の世界でも台帳は進まない",
 # 1つ目の世界へ戻す。建物は建ち直り、2つ目の建物は持ち込まれない。
 app.world_dict = {"world_data": {"name": WORLD_NAME},
                   "index": {"facility": 30, "npc": 5, "item": 30}}
-back_world = classes["world"]({"world_data": {"name": WORLD_NAME}}, app)
+back_world = classes["world"]({"world_data": {"name": WORLD_NAME},
+                               "player_data": {"name": PLAYER_NAME}}, app)
 app.world = back_world
 back_world.areas["0"] = places["area"]
 app.player.current_area = places["area"]
@@ -1396,7 +1383,7 @@ legacy = {"contracts": [{"area": "0", "area_name": "始まりの泥濘", "node":
                          "since": 100, "due": 104, "storage": {},
                          "notified": None, "at": "2026-09-11T00:00:00"}],
           "seized": {}}
-with io.open(os.path.join(STATE_DIR, WORLD_NAME + ".json"), "w",
+with io.open(os.path.join(STATE_DIR, STATE_FILE), "w",
              encoding="utf-8") as fh:
     fh.write(json.dumps(legacy, ensure_ascii=False))
 module, ctx, app, places, classes = setup(keep_state=True)
@@ -1465,7 +1452,7 @@ town = {"0": {"name": "始まりの泥濘",
                                         "tier": None, "owner": None,
                                         "connections": ["0"], "config": {}}}}}}}
 save_data = {"world_data": {"name": WORLD_NAME}, "areas": town,
-             "player_data": {"location": "313", "current_area": "0"},
+             "player_data": {"name": PLAYER_NAME, "location": "313", "current_area": "0"},
              "game_variables": {"buttons": []}}
 app.world = classes["world"](save_data, app)
 check("消えた施設に立っていたら入口へ直す",
@@ -1479,7 +1466,7 @@ check("選択肢はセーブと同じ形（`cls_name` と `args`）",
       == {"cls_name": "MovePhaseManager", "args": ["0", "1", "0"]},
       save_data["game_variables"]["buttons"][0])
 save_data = {"world_data": {"name": WORLD_NAME}, "areas": town,
-             "player_data": {"location": "1", "current_area": "0"},
+             "player_data": {"name": PLAYER_NAME, "location": "1", "current_area": "0"},
              "game_variables": {"buttons": []}}
 app.world = classes["world"](save_data, app)
 check("街にある施設はそのまま", save_data["player_data"]["location"] == "1",
@@ -1492,7 +1479,7 @@ check("そのままのときは選択肢にも触らない",
 module, ctx, app, places, classes = setup()
 rent(app, module)
 save_data = {"world_data": {"name": WORLD_NAME}, "areas": town,
-             "player_data": {"location": "313", "current_area": "0"},
+             "player_data": {"name": PLAYER_NAME, "location": "313", "current_area": "0"},
              "game_variables": {"buttons": []}}
 app.world = classes["world"](save_data, app)
 labels = [b.get("text") for b in save_data["game_variables"]["buttons"]]
@@ -1508,7 +1495,8 @@ check("買い切りには期限が無い",
       record)
 built_id = str(record.get("facility"))
 # ロード：世界を作り直し、同じ app に据える（`World.__init__` のフックが走る）。
-fresh = classes["world"]({"world_data": {"name": WORLD_NAME}}, app)
+fresh = classes["world"]({"world_data": {"name": WORLD_NAME},
+                          "player_data": {"name": PLAYER_NAME}}, app)
 area = Area("0", "始まりの泥濘")
 node = Node("0")
 node.entrance_facility = "0"

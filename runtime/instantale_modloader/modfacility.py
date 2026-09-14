@@ -12,12 +12,15 @@ MOD を外せば街は素のまま（建物も、そこへ繋がる道も残ら�
 |---|---|---|
 | 保存が舐める器 | `world.characters` と `npcs` の素データ | **舐めない**。保存は `save_data_dict['areas']` から書き、実行時の `node.facilities` を見ない |
 | だから保存で | 名簿を `_RosterView` に差し替える | 実体を隠す必要が無い |
-| ゲームが実行時の追加を見るか | 見る（会話の一覧に並ぶ） | **見ない**（移動の一覧にも、建物の中にも出ない） |
-| だから MOD が出すもの | 入口だけ | 道・中の選択肢・出口・背景の全部 |
+| ゲームが実行時の追加を見るか | 見る（会話の一覧に並ぶ） | **道は見ない**（移動の一覧に出ない）。中の選択肢は種類が既知なら出す |
+| だから MOD が出すもの | 入口だけ | 道・背景と、ゲームが出さないぶんの選択肢・出口 |
 
 ゲームは移動の一覧を素データから組み直すので、実行時に足した `connections` を読まない
-（`914_real_estate` が実機で確認。2026-09-11）。
-繋ぎ先の画面にも、建物の中にも、その施設は並ばない。
+（`914_real_estate` が実機で確認。2026-09-11）。繋ぎ先の画面にその施設への道は並ばない。
+建物の中は種類による。`location` 型はゲームが1つも出さない（914 の家）。
+`inn` 型はゲーム自身が `宿泊する` / `会話する` / `出る` を出す（915 で実機。2026-09-13）。
+こちらが足すのは**施設の画面**（ゲームの移動のボタンがある）か**何も無い画面**だけで、
+部屋選びや会話相手の一覧のような下位の画面には混ぜない。
 **だから `hide` は軽く、肩代わりが重い。**
 
 ##### 実体が隠れていても、id は別の器に載る
@@ -51,7 +54,6 @@ MOD を外せば街は素のまま（建物も、そこへ繋がる道も残ら�
 | `fields` | 施設の素データ（`FACILITY_FIELDS` の8項目）の初期値。控えの写しが在ればそちらが勝つ |
 | `choices` | 建物の中の選択肢。配列か、その時点で組む関数 |
 | `on["enter"]` / `["leave"]` | 出入り |
-| `on["background"]` | 背景を描く場面（描いたら True を返す。二重描きは関所が抑える） |
 | `on["world"]` | セーブを読んだ直後。建て直すならここ |
 | `on["save"]` | 保存の直前と直後 |
 | `on["choices"]` | 組んだ選択肢に手を入れる最後の口 |
@@ -68,6 +70,7 @@ MOD を外せば街は素のまま（建物も、そこへ繋がる道も残ら�
 """
 
 import copy
+import os
 import sys
 
 from . import log_exc, patch, state, ui
@@ -194,7 +197,8 @@ def entries(owner=None):
 
 
 def register(owner, facility_id=None, *, key=None, fields=None, choices=None,
-             exit_label=None, keep_inside=None, priority=0, on=None, write=None):
+             exit_label=None, keep_inside=None, hub=None, plain=None, priority=0,
+             on=None, write=None):
     """層を1つ積む。id を返す。
 
     | 引数 | |
@@ -206,6 +210,8 @@ def register(owner, facility_id=None, *, key=None, fields=None, choices=None,
     | `choices` | 建物の中の選択肢。`[{"key", "label", "on"}, ...]` か、`fn(info)` がそれを返す |
     | `exit_label` | 出口の文言。省くと `DEFAULT_EXIT_LABEL` |
     | `keep_inside` | 中に立ったまま保存してよいか。`True` か `fn(info) -> bool`。既定は入口へ移す |
+    | `hub` | 繋ぎ先の種類。`"entrance"`（既定。街に着いてすぐの場所）か `"ward"`（入口の下の区画の1つ） |
+    | `plain` | 真なら、中に立っている間だけ素データの写しを `world_dict` / `save_data_dict` に置く（`install_plain`）。ゲームが施設 id で素データを引く種類（闘技場）に |
     | `priority` | 選択肢を並べる順。小さいほど先 |
     | `on` | 場面ごとのフック（`fire` の site 名） |
 
@@ -225,7 +231,7 @@ def register(owner, facility_id=None, *, key=None, fields=None, choices=None,
     facility_id = str(facility_id)
     layer = {"owner": owner, "fields": dict(fields or {}),
              "choices": choices, "exit_label": exit_label,
-             "keep_inside": keep_inside,
+             "keep_inside": keep_inside, "hub": hub, "plain": bool(plain),
              "priority": int(priority), "on": dict(on or {})}
     record = _record(facility_id)
     record["layers"] = [old for old in record["layers"]
@@ -292,13 +298,20 @@ def purge(app=None, write=None):
 
 
 def forget(write=None):
-    """実体への参照だけ捨てる（世界が入れ替わったとき）。登録簿の層は残す。"""
+    """実体への参照と控えの写しを捨てる（世界が入れ替わったとき）。登録簿の層は残す。
+
+    写しも捨てるのは、次の `restore_world` がその世界の控えから入れ直すため。
+    残すと、控えに無い id（前の周回の建物）の写しが次の新築に使われる（`spawn`）。
+    """
     dropped = 0
     for record in registry().values():
         if record.get("facility") is not None or record.get("placed"):
             dropped += 1
         record["facility"] = None
+        record["snapshot"] = None
         record["placed"] = None
+        record["plain"] = None
+        record["plain_noted"] = False
     if write and dropped:
         write("modfacility: forgot {} building(s) of the previous world".format(dropped))
     return dropped
@@ -439,6 +452,39 @@ def hub_of(area):
     return None, None
 
 
+def hub_preference(facility_id):
+    """層が宣言した繋ぎ先の種類。宣言が無ければ入口。"""
+    prefer = "entrance"
+    for layer in layers_for(facility_id):
+        if layer.get("hub") in HUB_TYPES:
+            prefer = layer["hub"]
+    return prefer
+
+
+def hub_for(area, prefer="entrance", seed=""):
+    """新しく建てるときの繋ぎ先。`(ノード, 施設)`。見つからなければ `(None, None)`。
+
+    `"entrance"` はその土地の入口（`hub_of`）。
+    `"ward"` は**入口から直接繋がっている区画の1つ**で、どれにするかは `seed` で決める
+    （同じ建物は同じ区画へ。複数建てると散る）。
+    区画が無い土地では入口に落ちる。
+    """
+    node, entrance = hub_of(area)
+    if node is None or entrance is None or prefer != "ward":
+        return node, entrance
+    wards = []
+    for target in connections_of(entrance):
+        for candidate_node in ui.nodes_of(area):
+            facility = ui.facilities_of(candidate_node).get(str(target))
+            if facility is not None and ui.facility_type_of(facility) == "ward":
+                wards.append((candidate_node, facility))
+                break
+    if not wards:
+        return node, entrance
+    digest = sum(ord(ch) for ch in str(seed)) if seed else 0
+    return wards[digest % len(wards)]
+
+
 def hub_in(area, node_id, facility_id):
     """控えに書いてある繋ぎ先を引き当てる。引けなければ `hub_of` に落ちる。"""
     if node_id and facility_id:
@@ -477,11 +523,15 @@ def facility_of(app, facility_id, world=None):
 # 建てる・壊す
 # --------------------------------------------------------------------------
 def spawn(app, facility_id, area_id, *, node_id=None, hub_id=None, world=None,
-          write=None):
+          fresh=False, write=None):
     """建物を1軒建てる。建った実体を返す。建てられなければ None。
 
     控えの写し（`snapshot`）が在ればそれを素データに使い、無ければ層の `fields`。
-    繋ぎ先はノードが名乗っている入口で、引けなければ種類（`entrance` → `ward`）で探す。
+    `fresh=True` は**新築**の印で、写しが残っていても使わない（捨てる）。
+    id は `<土地>-<番>` で周回をまたいで重なるので、前の周回の建物の写しが
+    登録簿に残っていると新築がその名で建つ（実機 2026-09-14。新しい主人公の宿が
+    前の主人公の「金羊亭」になった）。
+    繋ぎ先は控えに在ればそれ（建て直し）、無ければ層の `hub` の宣言で決める（`hub_for`）。
     """
     facility_id = str(facility_id)
     if not gate_is_live():
@@ -505,7 +555,10 @@ def spawn(app, facility_id, area_id, *, node_id=None, hub_id=None, world=None,
         record["placed"] = (str(area_id), node_id_of(found_node),
                             (record.get("placed") or ("", "", ""))[2])
         return found
-    node, hub = hub_in(area, node_id, hub_id)
+    if node_id and hub_id:
+        node, hub = hub_in(area, node_id, hub_id)         # 控えの繋ぎ先（建て直し）
+    else:
+        node, hub = hub_for(area, hub_preference(facility_id), facility_id)
     if node is None or hub is None:
         if write:
             write("WARN modfacility: no hub facility in area {!r}".format(area_id))
@@ -516,8 +569,15 @@ def spawn(app, facility_id, area_id, *, node_id=None, hub_id=None, world=None,
             write("WARN modfacility: node {!r} has no facilities dict".format(
                 node_id_of(node)))
         return None
+    # 材料は 層の初期値（fields）の上に控えの写し（snapshot）。
+    # 写しは実体から取るので、本体の `Facility` が属性として持たない項目
+    # （実機では `tier`）は写しに無い。層の値で埋める。
+    fields = dict(fields_of(facility_id))
+    if fresh:
+        record["snapshot"] = None
     snap = record.get("snapshot")
-    fields = dict(snap) if isinstance(snap, dict) else fields_of(facility_id)
+    if isinstance(snap, dict):
+        fields.update(snap)
     this_hub = facility_id_of(hub)
     data = template(facility_id, fields, this_hub)
     facility = build(app, node, data, write=write)
@@ -568,8 +628,10 @@ def despawn(app, facility_id, *, world=None, write=None):
         _node, hub = hub_in(area, node_id, hub_id)
         if hub is not None:
             unlink(hub, facility_id)
+    remove_plain(app, facility_id)
     record["facility"] = None
     record["placed"] = None
+    record["plain"] = None
     _persist(app, owner_of_id(facility_id), facility_id, spawned=False, place=None)
     if write and gone:
         write("modfacility: demolished {} in area {!r}".format(facility_id, area_id))
@@ -577,12 +639,195 @@ def despawn(app, facility_id, *, world=None, write=None):
 
 
 # --------------------------------------------------------------------------
+# 素データの写し（ゲームが id で素データを引く経路のため）
+# --------------------------------------------------------------------------
+#: 素データの辞書を持つ `app` の属性。保存が書くのが前者、世界のファイルが後者（GAME.md §2.28）。
+PLAIN_HOLDERS = ("save_data_dict", "world_dict")
+
+
+def plain_wanted(facility_id):
+    """層のどれかが `plain=True` を名乗っているか。"""
+    return any(layer.get("plain") for layer in layers_for(facility_id))
+
+
+def _plain_stores(app, area_id, node_id):
+    """写しを置く `facilities` の辞書を全部。`[(辞書, 属性名), ...]`。"""
+    out = []
+    seen = set()
+    for attr in PLAIN_HOLDERS:
+        holder = getattr(app, attr, None)
+        areas = holder.get("areas") if isinstance(holder, dict) else None
+        area = areas.get(str(area_id)) if isinstance(areas, dict) else None
+        nodes = area.get("nodes") if isinstance(area, dict) else None
+        node = nodes.get(str(node_id)) if isinstance(nodes, dict) else None
+        facilities = node.get("facilities") if isinstance(node, dict) else None
+        if isinstance(facilities, dict) and id(facilities) not in seen:
+            seen.add(id(facilities))
+            out.append((facilities, attr))
+    return out
+
+
+def install_plain(app, facility_id, write=None):
+    """建物の素データの写しを、素データの辞書すべてに置く。置いた数を返す。
+
+    ゲームには実体（`node.facilities`）ではなく素データを施設 id で引く経路がある
+    （売買の `shopping_start_method_1`、闘技場の `ColosseumMatchStart.method`。GAME.md §2.28）。
+    実行時に足した施設はそこに無いので `KeyError` でワーカースレッドが死ぬ。
+    層が `plain=True` を名乗る建物は、**中に立っている間だけ**写しを置く（`sync_plain`）。
+    `config` は実体と**同じ辞書**にするので、ゲームがどちらへ書いても1つに集まり、
+    保存時の控え（`snapshot_all`）に載って建て直しでも戻る（闘技場の `current_phase` / `enemy_data`）。
+    """
+    facility_id = str(facility_id)
+    record = registry().get(facility_id)
+    if not isinstance(record, dict) or record.get("facility") is None:
+        return 0
+    facility = record["facility"]
+    spot = record.get("placed") or ("", "", "")
+    data = record.get("plain")
+    if not isinstance(data, dict):
+        data = template(facility_id, snapshot_of(facility), spot[2] if len(spot) > 2 else "")
+        config = getattr(facility, "config", None)
+        if isinstance(config, dict):
+            data["config"] = config
+        else:
+            try:
+                facility.config = data["config"]
+            except Exception:
+                pass
+        record["plain"] = data
+    placed = 0
+    for store, _attr in _plain_stores(app, spot[0], spot[1]):
+        if store.get(facility_id) is not data:
+            store[facility_id] = data
+        placed += 1
+    if placed and not record.get("plain_noted") and write:
+        write("modfacility: the plain data of {} is in {} store(s)".format(
+            facility_id, placed))
+    record["plain_noted"] = bool(placed)
+    return placed
+
+
+def remove_plain(app, facility_id):
+    """写しを素データの辞書から全部外す。外した数を返す。"""
+    facility_id = str(facility_id)
+    record = registry().get(facility_id)
+    spot = (record or {}).get("placed") if isinstance(record, dict) else None
+    removed = 0
+    if spot:
+        for store, _attr in _plain_stores(app, spot[0], spot[1]):
+            if facility_id in store:
+                store.pop(facility_id, None)
+                removed += 1
+    if isinstance(record, dict):
+        record["plain_noted"] = False
+    return removed
+
+
+def sync_plain(app, here=None, write=None):
+    """立っている建物にだけ写しを置き、ほかの建物の写しは外す。置いた数を返す。"""
+    here = str(here or inside(app) or "")
+    placed = 0
+    for facility_id, record in list(registry().items()):
+        if not is_mod_facility(facility_id):
+            continue
+        if facility_id == here and plain_wanted(facility_id) \
+                and record.get("facility") is not None:
+            placed += install_plain(app, facility_id, write=write)
+        elif record.get("plain_noted") or record.get("plain") is not None:
+            if remove_plain(app, facility_id) and write:
+                write("modfacility: the plain data of {} was taken out".format(facility_id))
+    return placed
+
+
+def lift_plain(app, write=None):
+    """保存の直前。置いてある写しを全部外し、戻す id の一覧を返す。"""
+    lifted = []
+    for facility_id, record in list(registry().items()):
+        if not is_mod_facility(facility_id) or not record.get("plain_noted"):
+            continue
+        if remove_plain(app, facility_id):
+            lifted.append(facility_id)
+    if lifted and write:
+        write("modfacility: save: plain data of {} lifted".format(", ".join(lifted)))
+    return lifted
+
+
+def keep_saved_location(data, facility_id):
+    """書き出す辞書の立ち位置を、いま立っている建物の id に戻した**写し**を返す。
+
+    `(辞書, 直したか)`。直すものが無ければ元のまま返す。
+
+    ゲームは `mod:` の id を途中で切って書くことがある（実機 2026-09-14：
+    店の中で会話しながら保存したら `player_data["location"]` が `'mod'` だけになっていた。
+    同じセーブの `game_variables` には切れていない id も在ったので、切るのは立ち位置の書き手だけ）。
+    切れたまま書かれると、次のロードで建物を引けず入口へ飛ばされる（`repair_player_location`）。
+    """
+    if not facility_id or not isinstance(data, dict):
+        return data, False
+    player = data.get("player_data")
+    if not isinstance(player, dict):
+        return data, False
+    was = player.get("location")
+    if str(was or "") == str(facility_id):
+        return data, False
+    new_player = dict(player)
+    new_player["location"] = str(facility_id)
+    new_data = dict(data)
+    new_data["player_data"] = new_player
+    return new_data, True
+
+
+def strip_plain_from(data):
+    """書き出す辞書から `mod:` の施設を落とした**写し**を返す。落とすものが無ければ元のまま。
+
+    書き出しの直前の網（`write_obfuscated_json_file` の包み）。
+    元の辞書は触らず、通り道の入れ物だけ浅く写す。落とした id の一覧も返す。
+    """
+    areas = data.get("areas") if isinstance(data, dict) else None
+    if not isinstance(areas, dict):
+        return data, []
+    dropped = []
+    new_areas = None
+    for area_id, area in areas.items():
+        nodes = area.get("nodes") if isinstance(area, dict) else None
+        if not isinstance(nodes, dict):
+            continue
+        new_nodes = None
+        for node_id, node in nodes.items():
+            facilities = node.get("facilities") if isinstance(node, dict) else None
+            if not isinstance(facilities, dict):
+                continue
+            bad = [fid for fid in facilities if is_mod_facility(fid)]
+            if not bad:
+                continue
+            dropped.extend(bad)
+            if new_nodes is None:
+                new_nodes = dict(nodes)
+            new_node = dict(node)
+            new_node["facilities"] = {fid: value for fid, value in facilities.items()
+                                      if fid not in bad}
+            new_nodes[node_id] = new_node
+        if new_nodes is not None:
+            if new_areas is None:
+                new_areas = dict(areas)
+            new_area = dict(area)
+            new_area["nodes"] = new_nodes
+            new_areas[area_id] = new_area
+    if new_areas is None:
+        return data, []
+    new_data = dict(data)
+    new_data["areas"] = new_areas
+    return new_data, dropped
+
+
+# --------------------------------------------------------------------------
 # 控え
 # --------------------------------------------------------------------------
 STORE_ATTR = "_instantale_modfacility_store"
 STATE_DIRNAME = "modfacility"
-#: 建て直しの間だけ立つ「いまの世界の鍵」。`World.__init__` の中では `app.world_dict` が
-#: まだ前の世界を指していることがあるので、鍵を引数の `save_data_dict` から決めて持ち回る。
+#: 建て直しの間だけ立つ「いまの周回の鍵」（世界×主人公。`state.playthrough_key`）。
+#: `World.__init__` の中では `app.world_dict` も `app.player` もまだ前の周回を指していることが
+#: あるので、鍵を引数の `save_data_dict` から決めて持ち回る。
 _KEY_OVERRIDE_ATTR = "_instantale_modfacility_key_override"
 
 
@@ -606,7 +851,7 @@ def _current_key(app):
     override = getattr(sys, _KEY_OVERRIDE_ATTR, None)
     if isinstance(override, str) and override:
         return override
-    return state.world_key(app) if app is not None else state.UNKNOWN_WORLD
+    return state.playthrough_key(app) if app is not None else state.UNKNOWN_WORLD
 
 
 def _bucket(app):
@@ -686,15 +931,53 @@ def _layer_of(owner, facility_id):
 SNAPSHOT_SKIP = frozenset(("id", "connections"))
 
 
-def snapshot_of(facility):
-    """実体の素データを写す（セーブの項目名で）。"""
+def _json_copy(value, path="", dropped=None):
+    """JSON に落ちる形の写し。落とせない値は捨てて、その場所を `dropped` に積む。
+
+    辞書の鍵は `str` に寄せる（`json.dump` と同じ。ゲームは実行時に int の鍵で書き、
+    セーブでは str になって戻ってくるので、控えも同じ往復にする）。
+    `bool` / `int` / `float` / `str` / `None` / list / tuple / dict 以外は捨てる。
+    """
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value, True
+    if isinstance(value, (list, tuple)):
+        out = []
+        for index, item in enumerate(value):
+            item_copy, ok = _json_copy(item, "{}[{}]".format(path, index), dropped)
+            if ok:
+                out.append(item_copy)
+        return out, True
+    if isinstance(value, dict):
+        out = {}
+        for key, item in value.items():
+            if not isinstance(key, (str, int, float, bool)) or key is None:
+                if dropped is not None:
+                    dropped.append("{}.<{} key>".format(path, type(key).__name__))
+                continue
+            item_copy, ok = _json_copy(item, "{}.{}".format(path, key), dropped)
+            if ok:
+                out[str(key)] = item_copy
+        return out, True
+    if dropped is not None:
+        dropped.append("{}:{}".format(path or "?", type(value).__name__))
+    return None, False
+
+
+def snapshot_of(facility, dropped=None):
+    """実体の素データを写す（セーブの項目名で）。
+
+    JSON に落ちない値は捨て、場所を `dropped` に積む（丸ごと捨てない。
+    実機 2026-09-13: 闘技場の `config` は試合の後に JSON に落ちない形になり、
+    項目ごと捨てていたので試合の進みが控えに残らなかった）。
+    """
     out = {}
     for field in FACILITY_FIELDS:
         if field in SNAPSHOT_SKIP or not hasattr(facility, field):
             continue
         value = getattr(facility, field)
-        if _jsonable(value):
-            out[field] = copy.deepcopy(value)
+        value_copy, ok = _json_copy(value, field, dropped)
+        if ok:
+            out[field] = value_copy
     return out
 
 
@@ -708,7 +991,14 @@ def snapshot_all(app, write=None):
     for facility_id, record in list(registry().items()):
         if not is_mod_facility(facility_id) or record.get("facility") is None:
             continue
-        snap = snapshot_of(record["facility"])
+        dropped = []
+        snap = snapshot_of(record["facility"], dropped)
+        if dropped and write and record.get("snapshot_dropped") != dropped:
+            # 何が落ちたかは1度だけ書く（同じ内容なら黙る）。実行時のオブジェクトを
+            # 素データに抱えている経路の手掛かり。
+            write("modfacility: snapshot of {}: {} value(s) not jsonable, dropped: {}".format(
+                facility_id, len(dropped), ", ".join(dropped[:6])))
+        record["snapshot_dropped"] = dropped
         if _persist(app, owner_of_id(facility_id), facility_id, snapshot=snap):
             done.append(facility_id)
     if write and done:
@@ -725,10 +1015,10 @@ def restore_world(app, world=None, save_data_dict=None, write=None):
     found = store()
     if found is None:
         return []
-    key = state.world_key_of_dict(save_data_dict, None) \
+    key = state.playthrough_key_of_dict(save_data_dict, None) \
         if save_data_dict is not None else None
     if not key:
-        key = state.world_key(app)
+        key = state.playthrough_key(app)
     if not key or key == state.UNKNOWN_WORLD:
         return []
     setattr(sys, _KEY_OVERRIDE_ATTR, key)
@@ -945,10 +1235,15 @@ def inside(app, facility_id=None):
     return here if facility is not None else ""
 
 
-def keep_inside(app, facility_id, write=None):
+def keep_inside(app, facility_id, screen=None, write=None):
     """その建物の中に立ったまま保存してよいか。
 
     層が1つでも真を返せば中のまま。既定（宣言が無い）は入口へ移す。
+
+    **会話や部屋選びの最中でも中のまま。** ゲームは会話の途中を保存して再開できるので、
+    居た場所に戻すのが正しい（本人の指摘、2026-09-14）。
+    版21〜23 はここで入口へ移していたが、再開できなかった原因は
+    `modnpc` が会話の相手の id を落としていたことで、場所でも画面でもなかった。
     """
     for layer in layers_for(facility_id):
         declared = layer.get("keep_inside")
@@ -1084,6 +1379,9 @@ def repair_player_location(world, save_data_dict, write=None):
     choices = move_choices(area, hub_id, list(registry()))
     if isinstance(variables, dict) and choices:
         variables["buttons"] = choices
+    if isinstance(variables, dict) and variables.get(BACKGROUND_ATTR):
+        # 建物の絵のまま入口に立たせない（ゲームが描き直す）。
+        variables[BACKGROUND_ATTR] = ""
     if write:
         write("modfacility: the player was standing in {!r}, which is not in the "
               "town; moved to the entrance {} with {} choice(s)".format(
@@ -1102,6 +1400,11 @@ def repair_player_location(world, save_data_dict, write=None):
 #: ここは事故の代償が「その世界が二度と開けない」なので、既定は安全側に倒し、
 #: 中のまま保存したい層が `keep_inside` で名乗り出る形にしてある。
 LIFT_LOCATION = True
+
+#: セーブに焼かれる、いま見えている背景の絵（`app` の属性 → `game_variables["location_image"]`）。
+#: 立ち位置だけ入口へ移しても、ここが建物の絵のままだと
+#: **ロードが建物の絵で始まる**（実機 2026-09-14。入口に戻ったのに店の絵のままだった）。
+BACKGROUND_ATTR = "location_image"
 
 #: セーブに焼かれる、施設の id を載せた器（`app` の属性）。
 SAVED_CHOICE_ATTRS = ("buttons", "buttons_backup", "buttons_backup_for_shopping")
@@ -1173,6 +1476,46 @@ def unscrub_saved_refs(app, undo):
             log_exc("modfacility: cannot put {} back".format(attr))
 
 
+def background_of(app, facility):
+    r"""その施設の背景の絵のパス。いま見えている絵と同じ並びで名前だけ入れ替える。
+
+    背景は施設の**名前**で `worlds\<世界>\backgrounds\<施設名>\image.png` に置かれる
+    （実機 2026-09-13）。無ければ空（ロードでゲームが描き直す）。
+    """
+    current = getattr(app, BACKGROUND_ATTR, None)
+    name = getattr(facility, "name", None)
+    if not isinstance(current, str) or not current or not name:
+        return ""
+    folder = os.path.dirname(os.path.dirname(current))
+    path = os.path.join(folder, str(name), os.path.basename(current))
+    try:
+        return path if os.path.exists(path) else ""
+    except Exception:
+        return ""
+
+
+def swap_background(app, facility, write=None):
+    """保存のあいだだけ焼かれる背景を替える。替えたなら `(属性, 元の値)`。
+
+    元の絵が引けない・入口の絵が無いときは空にする。ロードでゲームが描き直す。
+    """
+    was = getattr(app, BACKGROUND_ATTR, None)
+    if not isinstance(was, str) or not was:
+        return None
+    path = background_of(app, facility)
+    if path == was:
+        return None
+    try:
+        setattr(app, BACKGROUND_ATTR, path)
+    except Exception:
+        log_exc("modfacility: cannot swap the background for the save")
+        return None
+    if write:
+        write("modfacility: save: the background was the building's; "
+              "saving {}".format("the entrance picture" if path else "none"))
+    return (BACKGROUND_ATTR, was)
+
+
 def safe_save_location(app, screen=None, write=None):
     """保存のあいだだけ立ち位置を入口へ替える。替えたなら `(player, 元の値, 元の選択肢)`。
 
@@ -1185,7 +1528,8 @@ def safe_save_location(app, screen=None, write=None):
     here = inside(app)
     if player is None or (not here and not stranded(app)):
         return None
-    if here and (not LIFT_LOCATION or keep_inside(app, here, write=write)):
+    if here and (not LIFT_LOCATION
+                 or keep_inside(app, here, screen=screen, write=write)):
         # ロードで必ず建て直ると層が名乗った建物。入ったところから続けられる。
         return None
     area = ui.current_area(app)
@@ -1210,11 +1554,13 @@ def safe_save_location(app, screen=None, write=None):
             buttons = None
     else:
         buttons = None
+    # 立ち位置と選択肢だけでは足りない。背景もセーブに焼かれる。
+    background = swap_background(app, hub, write=write)
     if write:
         write("modfacility: save: the player was in {!r}; saving at the entrance "
               "{} with {} choice(s)".format(here or "a building that is gone",
                                             hub_id, len(choices)))
-    return (player, was, buttons)
+    return (player, was, buttons, background)
 
 
 def hide(app, *, screen=None, world=None, write=None):
@@ -1226,12 +1572,17 @@ def hide(app, *, screen=None, world=None, write=None):
     引き上げるのは id が載る器のほうだけ。
     """
     scrubbed = scrub_saved_refs(app, list(registry()), write=write)
+    lifted = lift_plain(app, write=write)      # 素データの写し（`plain=True` の建物）
     swapped = None
     try:
         swapped = safe_save_location(app, screen=screen, write=write)
     except Exception:
         log_exc("modfacility: cannot check the place before the save")
-    return {"scrubbed": scrubbed, "swapped": swapped, "world": world}
+    # 中のまま保存する建物（`keep_inside`）。書き出しのときに立ち位置を検める。
+    here = inside(app)
+    _state()["saved_inside"] = str(here) if (here and swapped is None) else None
+    return {"scrubbed": scrubbed, "swapped": swapped, "lifted": lifted,
+            "world": world}
 
 
 def restore(app, hidden, *, write=None):
@@ -1240,14 +1591,19 @@ def restore(app, hidden, *, write=None):
         return
     swapped = hidden.get("swapped")
     if swapped is not None:
-        player, was, buttons = swapped
+        player, was, buttons, background = (list(swapped) + [None])[:4]
         try:
             player.location = was
             if buttons is not None:
                 app.buttons = buttons
+            if background is not None:
+                setattr(app, background[0], background[1])
         except Exception:
             log_exc("modfacility: cannot put the player back after the save")
     unscrub_saved_refs(app, hidden.get("scrubbed"))
+    _state()["saved_inside"] = None
+    for facility_id in hidden.get("lifted") or ():
+        install_plain(app, facility_id)
 
 
 # --------------------------------------------------------------------------
@@ -1273,15 +1629,13 @@ def _state():
     """塗り直しと押下の控え。注入をまたぐ（`sys` に置く）。"""
     found = getattr(sys, _STATE_ATTR, None)
     if not isinstance(found, dict):
-        found = {"retry": False, "acting": False, "painted": None,
+        found = {"retry": False, "acting": False,
                  # こちらが起こした「建物へ入る」移動の控え。
                  # ゲームは自分で足した施設をよく知らないので、
                  # 移動の後に `player.location` が書き換わらないことがある。
                  "entered": None,
                  # 最後に書いた居場所（変わったときだけ1行書くため）。
-                 "where": None,
-                 # 背景の描き直しを予約した（まだ走っていない）。
-                 "background_pending": False}
+                 "where": None}
         setattr(sys, _STATE_ATTR, found)
     return found
 
@@ -1353,12 +1707,21 @@ def our_labels(app):
         for layer in layers_for(facility_id):
             if layer.get("exit_label"):
                 labels.add(layer["exit_label"])
-            declared = layer.get("choices")
-            if callable(declared):
-                continue
-            for item in (declared or ()):
-                if isinstance(item, dict) and item.get("label"):
-                    labels.add(item["label"])
+        # 宣言が関数でも、いま組めばその文言が出る。
+        # 文言に額のような動く部分（`売上を受け取る(1,848G)`）があると、
+        # 焼かれたときの文言と今の文言が違って前方一致でも拾えないので、
+        # 括弧の前までを前方一致の鍵として足す（建物の中で保存すると、
+        # 印の無い自前のボタンが復元されて二重に並んだ。実機 2026-09-13）。
+        try:
+            for item in choices_of(app, facility_id):
+                label = item.get("label")
+                if isinstance(label, str) and label:
+                    labels.add(label)
+                    head = label.split("(", 1)[0].split("\uff08", 1)[0]
+                    if head and head != label:
+                        labels.add(head)
+        except Exception:
+            log_exc("modfacility: cannot list the labels of {}".format(facility_id))
     labels.add(DEFAULT_EXIT_LABEL)
     return sorted(labels)
 
@@ -1368,6 +1731,49 @@ def is_facility_screen(buttons):
     if not isinstance(buttons, list):
         return False
     return any(ui.spec_cls_name(entry) == MOVE_CLS for entry in buttons)
+
+
+#: ゲームが施設の**最初の画面**に並べる入口の spec。
+#: 実行時に足した施設にはゲームが出口（`MovePhaseManager`）を作らないので、
+#: 移動のボタンだけでは施設の画面と見分けられない（`inn` 型の建物では
+#: `宿泊する` と `会話する` の2つだけが並んだ。実機 2026-09-13）。
+#: 部屋選び（`VacationStartManager` ＋ やめる）や会話相手の一覧
+#: （`ConversationStartManager` ＋ やめる）にはこれらが無い。
+#: ゲームが「別のこと」をしている最中の旗。ここが真の間は建物の選択肢を足さない。
+#: `in_shopping` は外す ― 店の外を往復しているだけでも真のままで（`ui.BUSY_FLAGS` の註）、
+#: 自分の店の中でこちらの選択肢が出なくなる。
+BUSY_FLAGS = tuple(flag for flag in ui.BUSY_FLAGS if flag != "in_shopping")
+
+
+def game_is_busy(app):
+    """会話・戦闘・自由入力の最中か。立っている旗の名前を返す（無ければ空）。
+
+    ゲームは会話の最中も施設の入口（`売買する` など）を選択肢に残す。
+    画面の中身だけでは見分けられないので旗で見る（実機 2026-09-14。
+    自分の店で主人と話している最中に `売上を受け取る` と `出る` が並んだ）。
+    """
+    return [flag for flag in BUSY_FLAGS if getattr(app, flag, False)]
+
+
+TOP_ENTRY_CLASSES = frozenset((
+    "DisplayTalkChoice", "DisplayVacationChoice", "DisplayQuestChoice",
+    "DisplayTrainingChoice", "EntryColosseumMatchManager",
+    "ShoppingStartManagerRemake", "DisplayAreaMoveChoice", "FreeFacilityManager",
+))
+
+
+def is_top_screen(buttons):
+    """建物に着いたときの画面か。
+
+    空（`location` 型。ゲームは何も出さない）、移動のボタンがある、
+    施設の入口の種類（`TOP_ENTRY_CLASSES`）がある、のどれかなら真。
+    どれも無い画面はゲームの下位の画面（部屋選び・会話相手・活動）で、そこには混ぜない。
+    """
+    if not isinstance(buttons, list) or not buttons:
+        return True
+    if is_facility_screen(buttons):
+        return True
+    return any(ui.spec_cls_name(entry) in TOP_ENTRY_CLASSES for entry in buttons)
 
 
 def _press_value(kind, facility_id, key=""):
@@ -1395,6 +1801,25 @@ def _already(buttons, value, screen):
     return any(screen.mark_of(entry) == value for entry in buttons)
 
 
+def can_add_here(app, buttons):
+    """この画面に自前の選択肢を足してよいか。
+
+    **判定はここ1か所**。中の選択肢も道も、足す前に必ずここを通る
+    （足す側それぞれに条件を書いていたら、同じ取りこぼしを3回踏んだ。
+    部屋選び 2026-09-13、会話中と会話相手の一覧 2026-09-14）。
+
+    降りるのは2つ。
+
+    - ゲームが別のことをしている最中（`game_is_busy`。会話・戦闘・自由入力）
+    - ゲームの**下位の画面**（`is_top_screen` が偽。会話相手の一覧・部屋選び・活動の選択肢）
+
+    会話の最中もゲームは施設の入口（`売買する` など）を選択肢に残すので、
+    画面の中身だけでは足りず、旗も要る。逆に会話相手の一覧はまだ `in_conversation` ではないので、
+    旗だけでも足りない。両方見る。
+    """
+    return not game_is_busy(app) and is_top_screen(buttons)
+
+
 def add_inside_buttons(app, buttons, facility_id, screen=None, write=None):
     """建物の中の選択肢を足す。**出口もここで出す**。
 
@@ -1403,6 +1828,15 @@ def add_inside_buttons(app, buttons, facility_id, screen=None, write=None):
     """
     screen = _screen(screen)
     if screen is None:
+        return False
+    if not is_top_screen(buttons):
+        # 施設の画面ではない。部屋選び・会話相手の一覧・活動の選択肢のような
+        # **ゲームの下位の画面**にこちらの選択肢を混ぜない（実機 2026-09-13。
+        # `inn` 型の建物ではゲーム自身が施設の選択肢を出し、その先の画面にも
+        # 「泊まる」「売上を受け取る」が並んでいた）。
+        # 見分けを移動のボタンだけにすると、ゲームが出口を作らないこの施設では
+        # 最初の画面（`宿泊する` / `会話する`）まで下位と読んで**出口が出ず、
+        # 外に出られなくなった**（同日）。入口の種類でも見る（`TOP_ENTRY_CLASSES`）。
         return False
     at = len(buttons)
     for index, item in enumerate(buttons):
@@ -1417,6 +1851,13 @@ def add_inside_buttons(app, buttons, facility_id, screen=None, write=None):
             continue
         value = _press_value(kind, facility_id, choice["key"])
         if _already(buttons, value, screen):
+            # 既に在る。文言だけ層の今の値に更新する（売上の額のように、押した後に変わる。
+            # 実機 2026-09-14：受け取っても「売上を受け取る(N G)」のままだった）。
+            for present in buttons:
+                if screen.mark_of(present) == value and isinstance(present, dict) \
+                        and present.get("text") != choice["label"]:
+                    present["text"] = choice["label"]
+                    added = True
             continue
         entry = screen.button(choice["label"], mark=value)
         if entry is None:
@@ -1555,19 +1996,41 @@ def maintain_buttons(app, screen=None, write=None):
         return False
     screen.prune_stale(buttons, our_labels(app))
     here = inside(app)
+    try:
+        sync_plain(app, here, write=write)
+    except Exception:
+        log_exc("modfacility: cannot sync the plain data")
     lost = (not here) and stranded(app)
     note_place(app, buttons, here, lost, write=write)
-    if here:
-        ensure_background(app, here, screen=screen, write=write)
-        return add_inside_buttons(app, buttons, here, screen=screen, write=write)
-    # 建物の外に出た。次に入ったときは背景を描き直す。
-    _state()["painted"] = None
-    _state()["entered"] = None
-    _state()["background_pending"] = False
+    addable = can_add_here(app, buttons)
+    # 絵には触らない。建物へ入る移動でゲームが自分で描く（名前で引き、無ければ生成して保存する）。
+    # こちらから頼むと、その1回が移動の描画と重なって2枚になる（実機 2026-09-14。宿屋で二重表示）。
+    if not here:
+        _state()["entered"] = None
     if lost:
-        return add_exit_button(app, buttons, player_facility_id(app),
-                               screen=screen, force=True)
-    return add_move_buttons(app, buttons, screen=screen, write=write)
+        # 取り残された（立っている施設が街に無い）。ここだけは画面を選ばない ―
+        # 出口を出さないと、その世界はもう開けない（`stranded`）。
+        touched = add_exit_button(app, buttons, player_facility_id(app),
+                                  screen=screen, force=True)
+    elif not addable:
+        # 足してよい画面ではない。掃除（`prune_stale`）と写しの同期は済ませてあるので、
+        # 足すところだけ降りる。画面が組み直されれば、その塗り直しでまた足される。
+        # **MOD 側は自分の進行中の旗で画面を判断しない。** ここが唯一の判定
+        # （915 の宿泊で、終える処理の中の組み直しに MOD の旗が間に合わず2つだけになった。2026-09-14）。
+        return False
+    elif here:
+        touched = add_inside_buttons(app, buttons, here, screen=screen, write=write)
+    else:
+        touched = add_move_buttons(app, buttons, screen=screen, write=write)
+    if touched:
+        # **差し込んだら必ず塗り直す。** ここは `refresh_choice_buttons` の後ろで走るので、
+        # `app.buttons` を変えただけでは `to_display_buttons` と `display_button_map` が
+        # 差し込む前のまま ― 画面には出ず、出ても押した添字が別のボタンを指す
+        # （実機 2026-09-13。道が「一度だけ現れ」、中に入っても出口しか見えなかった）。
+        # 塗り直しは次のフレームで、その中の `refresh_choice_buttons` でここへ戻ってくるが、
+        # 同じ印のボタンは足さない（`_already`）ので二度目は何も起きず、輪にはならない。
+        screen.apply_buttons(app, None, "modfacility")
+    return bool(touched)
 
 
 # --------------------------------------------------------------------------
@@ -1637,7 +2100,6 @@ def leave(app, facility_id=None, screen=None, write=None):
                 hub_id, facility_id))
         return False
     fire("leave", app, facility_id, args={"hub": hub_id}, write=write)
-    _state()["painted"] = None
     _state()["entered"] = None
     if write:
         write("modfacility: leave {} -> hub {} via {}".format(
@@ -1653,6 +2115,11 @@ def press(app, button_index, screen=None, write=None):
     entry = ui.pressed_entry(app, button_index)
     kind, facility_id, key = _parse_press(screen.mark_of(entry))
     if kind is None:
+        if entry is None and write:
+            # 地図（`display_button_map`）が指す先が無い。ページ送りか、塗り直し前の画面。
+            write("modfacility: press {} has no entry (map={!r}, {} button(s))".format(
+                button_index, getattr(app, "display_button_map", None),
+                len(getattr(app, "buttons", None) or ())))
         return False
     if _state().get("acting"):
         if write:
@@ -1684,6 +2151,9 @@ def press(app, button_index, screen=None, write=None):
                 if write:
                     write("WARN modfacility: the press of {} on {} failed".format(
                         choice.get("owner"), facility_id))
+            # 押した結果で文言が変わる（売上の額）。ハンドラはフェーズで非同期に走るので、
+            # 手が空いてから足し直す（既に在る選択肢は文言だけ更新される）。
+            retry_when_idle(app, screen=screen, write=write)
             return True
         return True
     finally:
@@ -1693,94 +2163,42 @@ def press(app, button_index, screen=None, write=None):
 # --------------------------------------------------------------------------
 # 背景
 # --------------------------------------------------------------------------
-def ensure_background(app, facility_id, screen=None, write=None):
-    """建物に立っているのに背景をまだ描いていなければ、こちらから描く。
+def _note_game_failure(app, why, write=None):
+    """ゲーム自身の背景の差し替えが落ちた（`self.app` を読む本体の不具合。`914_` が実機で確認）。
 
-    ゲームが背景を決める経路は1つとは限らないので、包みだけに頼らない
-    （ロードの後に街の外の景色が残っていた。`914_` が実機で踏んだ）。
-
-    ただし**同じ絵を二度描かない**。
-    ゲームの経路が先に描いていればそこで終わりで、
-    予約から実行までの間に描かれた場合も、走った時点でもう一度確かめて降りる
-    （画像の読み込みが2回走って見えた）。
-    Kivy に触るのでメインスレッドへ回す。
-    """
-    screen = _screen(screen)
-    facility_id = str(facility_id)
-    if screen is None or _state().get("painted") == facility_id \
-            or _state().get("background_pending"):
-        return False
-    _state()["background_pending"] = True
-
-    def paint_now():
-        _state()["background_pending"] = False
-        if _state().get("painted") == facility_id:
-            # 待っている間にゲームの経路が描いた。
-            return
-        paint_background(app, facility_id, "on arrival", write=write)
-
-    screen.schedule(paint_now, 0)
-    return True
-
-
-def _repaint_after_failure(app, why, write=None):
-    """ゲーム自身の背景の差し替えが落ちたときの後始末。
-
-    本体の `change_background_image_from_location_id` は `self.app` を読むが、
-    `InstantaleApp` にその属性は無い（`AttributeError`。`914_` が実機で確認）。
-    **呼ばれた時点で必ず落ちる本体の不具合**で、自分の建物で「他者と交流」を選ぶと
-    ゲーム自身がここを通り、握らないとスレッドごと落ちて活動が終わらない。
-
-    絵が変わらないだけなので握って先へ通すが、MOD の施設に立っているなら
-    描き直す（握った先で街の景色が残るのを避ける）。
+    握って先へ通す。絵が変わらないだけで、描写も好感度も走る。ここでは描かない。
     """
     if write:
         write("WARN modfacility: the game's own {} raised; "
               "the picture stays as it is".format(why))
-    try:
-        here = inside(app)
-        if here:
-            _state()["painted"] = None
-            paint_background(app, here, "after the game failed", force=True, write=write)
-    except Exception:
-        log_exc("modfacility: cannot repaint after the game's failure")
 
 
-def paint_background(app, facility_id, why, force=False, write=None):
-    """MOD の施設の背景を描く。描いたら True。
-
-    ゲームは背景を施設 id から引くので、自作の施設では前の絵（街の景色）が残る。
-    何を描くかは層が決める（`on["background"]`）。
-
-    **`force` は「ゲームが背景を決めようとしている場面」の印。**
-    そこでは必ず描く（ゲームがその場面で絵を変えたがっているのに、
-    こちらが降りると街の景色のままになる）。
-    抑えるのは「立っているから念のため描く」ほうだけで、
-    そちらを抑えないと読み込みが2回走って絵がちらつく（`914_` が実機で踏んだ）。
-    """
-    facility_id = str(facility_id)
-    if not force and _state().get("painted") == facility_id:
-        return False
-    results = fire("background", app, facility_id,
-                   facility=facility_of(app, facility_id),
-                   args={"why": why}, write=write)
-    if not any(bool(value) for _owner, value in results):
-        return False
-    _state()["painted"] = facility_id
-    if write:
-        write("modfacility: background of {} painted ({})".format(facility_id, why))
-    return True
+# 背景は**このモジュールも MOD も描かず、頼みもしない。**
+# 建物へ入る移動でゲームが `change_background_image_to_current_location` を自分で呼び、
+# 施設の名前で絵を引いて、無ければ生成して保存する（実行時の施設でも通る。`915_` の店と宿で絵ができた）。
+# ロードは保存した絵をそのまま出す。宿泊はゲームが等級の部屋の絵に替え、終えた後もそのまま残る。
+# 2026-09-13〜14 に背景で7回直した（2回読み込み・店の絵のまま入口へ・闘技場で何も出ない・
+# 宿泊後に出ない・等級の部屋のまま・ロードで2枚・頼んだ1枚が移動の描画と重なって2枚）。
+# 描く／頼む側に何かを持つたびに、ゲーム自身の描画と重なった。持たないのが答え。
+# 残っているのは本体の不具合の握り（`_note_game_failure`）と、MOD の施設の id を
+# 名前で引く経路へ回すこと（`background_from_id`）だけ。
 
 
 # --------------------------------------------------------------------------
 # 関所を立てる
 # --------------------------------------------------------------------------
 SAVE_TARGET = "__main__:InstantaleApp.save_game"
+#: セーブと世界のファイルの書き手（GAME.md §2.28。`save_world_json` の別名はローダが張り替える）。
+WRITE_TARGET = "scripts.save_codec:write_obfuscated_json_file"
 WORLD_TARGET = "__main__:World.__init__"
 REFRESH_TARGET = "__main__:InstantaleApp.refresh_choice_buttons"
 PRESS_TARGET = "__main__:InstantaleApp.on_button_press"
 BG_CURRENT_TARGET = "__main__:InstantaleApp.change_background_image_to_current_location"
 BG_ID_TARGET = "__main__:InstantaleApp.change_background_image_from_location_id"
+#: ゲームの場面が終わる口。ゲームは場面の**中で**施設の画面を組み直し、終えた後は組み直さない
+#: （実機 2026-09-14。`VacationEndManager.execute` の中で `宿泊する` / `会話する` に戻り、
+#: その後は来ない）。終わった後にもう一度足し直す（何度呼んでも増えない）。
+PHASE_END_TARGETS = ("__main__:VacationEndManager.execute",)
 
 
 def installed():
@@ -1883,12 +2301,12 @@ def _install(ctx, write):
         街に無い施設を指しているときだけ入口へ直す（そのままではロードで落ちる）。
         """
         result = orig(self, save_data_dict, app, *args, **kwargs)
-        key = state.world_key_of_dict(save_data_dict, None)
+        key = state.playthrough_key_of_dict(save_data_dict, None)
         if key:
             setattr(sys, _KEY_OVERRIDE_ATTR, key)
         try:
+            lift_plain(app)            # 前の世界の素データに写しを残さない
             forget(write=write)
-            _state()["painted"] = None
             fire_all("world", app, world=self,
                      args={"save_data_dict": save_data_dict}, write=write)
             restore_world(app, world=self, save_data_dict=save_data_dict,
@@ -1903,6 +2321,36 @@ def _install(ctx, write):
                 pass
         return result
     targets.append(WORLD_TARGET)
+
+    @ctx.wrap(WRITE_TARGET, required=False)
+    def write_obfuscated_json_file(orig, file_path=None, data=None, *args, **kwargs):
+        """書き出しの直前の網。`mod:` の施設が素データに残っていれば、写しから落として書く。
+
+        普段は `hide` が保存の前に写しを外すので何も落ちない。
+        落ちたら（保存以外の経路で書かれた）ログに残す。元の辞書は触らない。
+        """
+        try:
+            cleaned, dropped = strip_plain_from(data)
+        except Exception:
+            log_exc("modfacility: cannot check the data before it is written")
+            cleaned, dropped = data, []
+        if dropped and write:
+            write("WARN modfacility: {} mod facility(ies) were still in the data written to "
+                  "{!r}; dropped from the copy: {}".format(
+                      len(dropped), str(file_path)[-60:], ", ".join(sorted(set(dropped)))))
+        inside_id = _state().get("saved_inside")
+        try:
+            cleaned, fixed = keep_saved_location(cleaned, inside_id)
+        except Exception:
+            log_exc("modfacility: cannot check the place before it is written")
+            fixed = False
+        if fixed and write:
+            was = (data.get("player_data") or {}).get("location") \
+                if isinstance(data, dict) else None
+            write("WARN modfacility: the game wrote the place as {!r}; put {!r} back "
+                  "(the id was cut)".format(was, inside_id))
+        return orig(file_path, cleaned, *args, **kwargs)
+    targets.append(WRITE_TARGET)
 
     @ctx.wrap(REFRESH_TARGET, required=False, safe=True)
     def refresh_choice_buttons(orig, self, reset_page=False, *args, **kwargs):
@@ -1928,28 +2376,20 @@ def _install(ctx, write):
 
     @ctx.wrap(BG_CURRENT_TARGET, required=False, safe=True)
     def background_current(orig, self, *args, **kwargs):
-        """いまの場所の背景。MOD の施設に立っていれば層に描かせる。"""
-        try:
-            here = inside(self)
-            if here:
-                # 描けても描けなくても本体へは渡さない。
-                # ゲームは自作の施設を素データから引けないので、渡すと
-                # 街の景色で上書きされる（描いた絵がその場で消える）。
-                paint_background(self, here, "current", force=True, write=write)
-                return None
-        except Exception:
-            log_exc("modfacility: cannot paint the background")
+        """いまの場所の背景。本体に任せる（名前で引き、無ければ生成して保存する）。
+
+        MOD は描かず、頼みもしない。ここで握るのは本体の不具合だけ。
+        """
         try:
             return orig(self, *args, **kwargs)
         except AttributeError:
-            _repaint_after_failure(self, "change_background_image_to_current_location",
-                                   write)
+            _note_game_failure(self, "change_background_image_to_current_location", write)
             return None
     targets.append(BG_CURRENT_TARGET)
 
     @ctx.wrap(BG_ID_TARGET, required=False, safe=True)
     def background_from_id(orig, self, location_id=None, *args, **kwargs):
-        """id 指定の背景。MOD の施設なら層に描かせる。
+        """id 指定の背景。MOD の施設の id は本体が引けないので、名前で引く経路へ回す。
 
         本体のこれは `self.app` を読むので、呼ばれた時点で必ず `AttributeError` になる
         （`InstantaleApp` にその属性は無い。`914_` が実機で確認）。
@@ -1957,18 +2397,34 @@ def _install(ctx, write):
         ゲーム自身が通る経路（自分の建物での「他者と交流」）を止めないため
         （絵が変わらないだけで、描写も好感度も走る）。
         """
-        try:
-            if location_id is not None and is_mod_facility(location_id):
-                paint_background(self, location_id, "id", force=True, write=write)
-                return None      # 本体はこの id を引けない（上の枠と同じ理由）
-        except Exception:
-            log_exc("modfacility: cannot paint the background from an id")
+        if location_id is not None and is_mod_facility(location_id):
+            current = getattr(self, "change_background_image_to_current_location", None)
+            if inside(self, location_id) and callable(current):
+                return current()
+            return None      # 本体はこの id を引けない
         try:
             return orig(self, location_id, *args, **kwargs)
         except AttributeError:
-            _repaint_after_failure(self, "change_background_image_from_location_id",
-                                   write)
+            _note_game_failure(self, "change_background_image_from_location_id", write)
             return None
     targets.append(BG_ID_TARGET)
+
+    def maintain_after(target):
+        @ctx.wrap(target, required=False, safe=True)
+        def phase_end(orig, self, *args, **kwargs):
+            """場面が終わった。施設の画面ならこちらの選択肢と絵を足し直す。"""
+            result = orig(self, *args, **kwargs)
+            try:
+                app = getattr(self, "app", None) or ui.find_app()
+                if app is not None:
+                    maintain_buttons(app, write=write)
+            except Exception:
+                log_exc("modfacility: cannot maintain the choices after {}".format(target))
+            return result
+        return phase_end
+
+    for _target in PHASE_END_TARGETS:
+        maintain_after(_target)
+        targets.append(_target)
 
     return targets

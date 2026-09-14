@@ -7,6 +7,7 @@
 どちらも**ローダの語彙**で、MOD 側に写すとドリフトする（TECH.md §3.2.3）。
 
   保存先 … `world_key(app)` と `world_filename(key)`
+  周回   … `playthrough_key(app)`（世界×主人公。セーブと同じ寿命のもの用）
   書込   … `write_json` / `write_text`（隣に書いてから差し替える）
 
 保存先の検査が厚いのは、ここが**複数の MOD にまたがる取り決め**だから。
@@ -68,6 +69,35 @@ def test_world_key():
           "どこからも読めなければ既定の鍵に倒す")
     check(st.world_key(_App({"world_data": {"world_name": ""}})) == st.UNKNOWN_WORLD,
           "空文字は「読めた」に数えない")
+
+
+def test_playthrough_key():
+    """周回の鍵は 世界×主人公。主人公が死んで同じ世界で作り直したとき、
+    前の主人公の建物や契約を新しい主人公に引き継がないため（本人の指定 2026-09-14）。"""
+    print("=== playthrough_key: 世界×主人公 ===")
+    sep = st.PLAYTHROUGH_SEP
+    save = {"world_data": {"name": "灰の街"}, "player_data": {"name": "ミツバ"}}
+    check(st.playthrough_key_of_dict(save) == "灰の街" + sep + "ミツバ",
+          "セーブの辞書から 世界×主人公")
+    check(st.playthrough_key_of_dict({"world_data": {"name": "灰の街"}}) == "灰の街",
+          "主人公の名が無ければ世界名だけ（前と同じファイル）")
+    check(st.playthrough_key_of_dict({"player_data": {"name": "ミツバ"}}, "x") == "x",
+          "世界名が読めなければ fallback")
+    check(st.playthrough_key_of_dict({"world_data": {"name": "灰の街"},
+                                      "player_data": {"name": "  "}}) == "灰の街",
+          "空白だけの名は無いのと同じ")
+    app = _App({"world_data": {"world_name": "灰の街"}})
+    app.save_data_dict = save
+    app.player = _World("ムツハ")          # 実行時の主人公（名だけ要る）
+    check(st.playthrough_key(app) == "灰の街" + sep + "ミツバ",
+          "app ではセーブの辞書の名を先に見る")
+    app.save_data_dict = {"world_data": {"name": "灰の街"}}
+    check(st.playthrough_key(app) == "灰の街" + sep + "ムツハ",
+          "辞書に無ければ実行時の player.name")
+    check(st.playthrough_key(_App()) == st.UNKNOWN_WORLD,
+          "世界名が読めなければ既定の鍵（名は付けない）")
+    check(st.world_filename("灰の街" + sep + "ミツバ") == "灰の街" + sep + "ミツバ.json",
+          "区切りの文字はファイル名にそのまま使える（印が付かない）")
 
 
 def test_world_filename_is_stable():
@@ -238,6 +268,7 @@ def test_world_key_of_dict():
 
 def main():
     test_world_key()
+    test_playthrough_key()
     test_world_key_of_dict()
     test_world_filename_is_stable()
     test_world_filename_is_injective()

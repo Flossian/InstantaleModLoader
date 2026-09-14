@@ -3,14 +3,14 @@
   "api": 1,
   "kind": "feature",
   "name": {
-    "en": "Fund a new facility in town and collect its takings",
-    "ja": "役場に出資して街に施設を建て、売上を受け取る"
+    "en": "Build a facility in town (you fund it)",
+    "ja": "街に施設を建てる（出資する）"
   },
   "description": {
-    "en": "Adds an investment desk to the administrative office. Choose a kind of facility (inn, training hall, arena) and a grade; the building appears at the town entrance with a keeper of its own. What can be built depends on the size of the settlement, and both the cost and the takings scale with it. Visit the building to collect what it has earned since your last visit",
-    "ja": "役場に出資の窓口を足す。施設の種類（宿屋・道場・闘技場）と等級を選ぶと、その街の入口に建物が建ち、主人が1人立つ。建てられる種類と軒数は街の規模で決まり、費用も売上も規模に応じて増える。建物を訪ねると、前回からの売上を受け取れる"
+    "en": "Adds an investment desk to the administrative office. Choose a kind of facility (inn, shop, smithy, specialty shop, training hall or arena) and a grade; the building appears in one of the town wards with a keeper of its own. Inside, the game's own trade, training, lodging and matches work as usual. How many you can build in one settlement depends on its size (1 in a village, 2 in a town, 3 in a city), and both the cost and the takings scale with it. Visit the building to collect what it has earned since your last visit",
+    "ja": "役場に出資の窓口を足す。施設の種類（宿屋・雑貨店・鍛冶屋・専門店・道場・闘技場）と等級を選ぶと、その街の区画の1つに建物が建ち、主人が1人立つ。中ではゲーム自身の売買・訓練・宿泊・試合がそのまま動く。1つの街に建てられる軒数は規模で決まり（村1・町2・都市3）、費用も売上も規模に応じて増える。建物を訪ねると、前回からの売上を受け取れる"
   },
-  "version": "1",
+  "version": "36",
   "author": "R01/Flossian",
   "settings": {
     "COST_SCALE": {
@@ -55,6 +55,22 @@
         "en": "Takings stop accumulating past this many days until you collect"
       }
     },
+    "KEEPER_SOURCE": {
+      "type": "choice",
+      "values": [
+        "llm",
+        "table"
+      ],
+      "default": "llm",
+      "label": {
+        "ja": "主人を誰が作るか",
+        "en": "Who writes the keeper"
+      },
+      "note": {
+        "ja": "llm はゲームと同じ生成AIに建てるとき1回だけ聞く（数秒待つ）。table は用意した12人から選ぶ",
+        "en": "llm asks the game's own generator once, when you build (a few seconds). table picks from 12 ready-made keepers"
+      }
+    },
     "STAY_QUALITY": {
       "type": "choice",
       "values": [
@@ -65,13 +81,294 @@
       ],
       "default": "private_room",
       "label": {
-        "ja": "自分の宿屋に泊まるときの部屋",
-        "en": "Room quality at your own inn"
+        "ja": "「無料で泊まる」の部屋",
+        "en": "Room for \"stay for free\""
       },
       "note": {
-        "ja": "ゲームの宿屋の部屋と同じ語彙。宿代は取られない",
-        "en": "The game's own inn room names. No fee is charged"
+        "ja": "自分の宿屋の「無料で泊まる」で使う部屋。ゲームの宿屋の部屋と同じ語彙。ゲームの「宿泊する」は宿代を取る",
+        "en": "The room used by \"stay for free\" at your own inn (the game's room names). The game's own \"stay\" still charges"
       }
+    },
+    "COST_INN": {
+      "type": "int",
+      "default": 20000,
+      "min": 0,
+      "max": 10000000,
+      "label": {
+        "ja": "宿屋の建設費",
+        "en": "Inn: cost"
+      },
+      "note": {
+        "ja": "並・町で建てるときの額。等級と街の規模、建設費の倍率がこの上に掛かる",
+        "en": "The price of a basic one in a town; grade, settlement size and the cost multiplier apply on top"
+      }
+    },
+    "INCOME_INN": {
+      "type": "int",
+      "default": 60,
+      "min": 0,
+      "max": 100000,
+      "label": {
+        "ja": "宿屋の1日の売上",
+        "en": "Inn: takings a day"
+      },
+      "note": {
+        "ja": "並・町のときの額。等級と街の規模、売上の倍率がこの上に掛かる",
+        "en": "For a basic one in a town; grade, settlement size and the income multiplier apply on top"
+      }
+    },
+    "MIN_SIZE_INN": {
+      "type": "choice",
+      "values": [
+        "village",
+        "town",
+        "city"
+      ],
+      "default": "village",
+      "label": {
+        "ja": "宿屋を建てられる最低の規模",
+        "en": "Inn: smallest settlement"
+      },
+      "note": {
+        "ja": "village=村 / town=町 / city=都市。これより小さい街には建たない",
+        "en": "The kind does not appear in settlements smaller than this"
+      }
+    },
+    "COST_GENERAL_STORE": {
+      "type": "int",
+      "default": 25000,
+      "min": 0,
+      "max": 10000000,
+      "label": {
+        "ja": "雑貨店の建設費",
+        "en": "General store: cost"
+      },
+      "note": {
+        "ja": "並・町で建てるときの額。等級と街の規模、建設費の倍率がこの上に掛かる",
+        "en": "The price of a basic one in a town; grade, settlement size and the cost multiplier apply on top"
+      }
+    },
+    "INCOME_GENERAL_STORE": {
+      "type": "int",
+      "default": 70,
+      "min": 0,
+      "max": 100000,
+      "label": {
+        "ja": "雑貨店の1日の売上",
+        "en": "General store: takings a day"
+      },
+      "note": {
+        "ja": "並・町のときの額。等級と街の規模、売上の倍率がこの上に掛かる",
+        "en": "For a basic one in a town; grade, settlement size and the income multiplier apply on top"
+      }
+    },
+    "MIN_SIZE_GENERAL_STORE": {
+      "type": "choice",
+      "values": [
+        "village",
+        "town",
+        "city"
+      ],
+      "default": "village",
+      "label": {
+        "ja": "雑貨店を建てられる最低の規模",
+        "en": "General store: smallest settlement"
+      },
+      "note": {
+        "ja": "village=村 / town=町 / city=都市。これより小さい街には建たない",
+        "en": "The kind does not appear in settlements smaller than this"
+      }
+    },
+    "COST_BLACKSMITH": {
+      "type": "int",
+      "default": 40000,
+      "min": 0,
+      "max": 10000000,
+      "label": {
+        "ja": "鍛冶屋の建設費",
+        "en": "Smithy: cost"
+      },
+      "note": {
+        "ja": "並・町で建てるときの額。等級と街の規模、建設費の倍率がこの上に掛かる",
+        "en": "The price of a basic one in a town; grade, settlement size and the cost multiplier apply on top"
+      }
+    },
+    "INCOME_BLACKSMITH": {
+      "type": "int",
+      "default": 100,
+      "min": 0,
+      "max": 100000,
+      "label": {
+        "ja": "鍛冶屋の1日の売上",
+        "en": "Smithy: takings a day"
+      },
+      "note": {
+        "ja": "並・町のときの額。等級と街の規模、売上の倍率がこの上に掛かる",
+        "en": "For a basic one in a town; grade, settlement size and the income multiplier apply on top"
+      }
+    },
+    "MIN_SIZE_BLACKSMITH": {
+      "type": "choice",
+      "values": [
+        "village",
+        "town",
+        "city"
+      ],
+      "default": "village",
+      "label": {
+        "ja": "鍛冶屋を建てられる最低の規模",
+        "en": "Smithy: smallest settlement"
+      },
+      "note": {
+        "ja": "village=村 / town=町 / city=都市。これより小さい街には建たない",
+        "en": "The kind does not appear in settlements smaller than this"
+      }
+    },
+    "COST_SPECIALTY_SHOP": {
+      "type": "int",
+      "default": 45000,
+      "min": 0,
+      "max": 10000000,
+      "label": {
+        "ja": "専門店の建設費",
+        "en": "Specialty shop: cost"
+      },
+      "note": {
+        "ja": "並・町で建てるときの額。等級と街の規模、建設費の倍率がこの上に掛かる",
+        "en": "The price of a basic one in a town; grade, settlement size and the cost multiplier apply on top"
+      }
+    },
+    "INCOME_SPECIALTY_SHOP": {
+      "type": "int",
+      "default": 110,
+      "min": 0,
+      "max": 100000,
+      "label": {
+        "ja": "専門店の1日の売上",
+        "en": "Specialty shop: takings a day"
+      },
+      "note": {
+        "ja": "並・町のときの額。等級と街の規模、売上の倍率がこの上に掛かる",
+        "en": "For a basic one in a town; grade, settlement size and the income multiplier apply on top"
+      }
+    },
+    "MIN_SIZE_SPECIALTY_SHOP": {
+      "type": "choice",
+      "values": [
+        "village",
+        "town",
+        "city"
+      ],
+      "default": "village",
+      "label": {
+        "ja": "専門店を建てられる最低の規模",
+        "en": "Specialty shop: smallest settlement"
+      },
+      "note": {
+        "ja": "village=村 / town=町 / city=都市。これより小さい街には建たない",
+        "en": "The kind does not appear in settlements smaller than this"
+      }
+    },
+    "COST_TRAINING_FACILITY": {
+      "type": "int",
+      "default": 35000,
+      "min": 0,
+      "max": 10000000,
+      "label": {
+        "ja": "道場の建設費",
+        "en": "Training hall: cost"
+      },
+      "note": {
+        "ja": "並・町で建てるときの額。等級と街の規模、建設費の倍率がこの上に掛かる",
+        "en": "The price of a basic one in a town; grade, settlement size and the cost multiplier apply on top"
+      }
+    },
+    "INCOME_TRAINING_FACILITY": {
+      "type": "int",
+      "default": 80,
+      "min": 0,
+      "max": 100000,
+      "label": {
+        "ja": "道場の1日の売上",
+        "en": "Training hall: takings a day"
+      },
+      "note": {
+        "ja": "並・町のときの額。等級と街の規模、売上の倍率がこの上に掛かる",
+        "en": "For a basic one in a town; grade, settlement size and the income multiplier apply on top"
+      }
+    },
+    "MIN_SIZE_TRAINING_FACILITY": {
+      "type": "choice",
+      "values": [
+        "village",
+        "town",
+        "city"
+      ],
+      "default": "town",
+      "label": {
+        "ja": "道場を建てられる最低の規模",
+        "en": "Training hall: smallest settlement"
+      },
+      "note": {
+        "ja": "village=村 / town=町 / city=都市。これより小さい街には建たない",
+        "en": "The kind does not appear in settlements smaller than this"
+      }
+    },
+    "COST_COLOSSEUM": {
+      "type": "int",
+      "default": 120000,
+      "min": 0,
+      "max": 10000000,
+      "label": {
+        "ja": "闘技場の建設費",
+        "en": "Arena: cost"
+      },
+      "note": {
+        "ja": "並・町で建てるときの額。等級と街の規模、建設費の倍率がこの上に掛かる",
+        "en": "The price of a basic one in a town; grade, settlement size and the cost multiplier apply on top"
+      }
+    },
+    "INCOME_COLOSSEUM": {
+      "type": "int",
+      "default": 300,
+      "min": 0,
+      "max": 100000,
+      "label": {
+        "ja": "闘技場の1日の売上",
+        "en": "Arena: takings a day"
+      },
+      "note": {
+        "ja": "並・町のときの額。等級と街の規模、売上の倍率がこの上に掛かる",
+        "en": "For a basic one in a town; grade, settlement size and the income multiplier apply on top"
+      }
+    },
+    "MIN_SIZE_COLOSSEUM": {
+      "type": "choice",
+      "values": [
+        "village",
+        "town",
+        "city"
+      ],
+      "default": "town",
+      "label": {
+        "ja": "闘技場を建てられる最低の規模",
+        "en": "Arena: smallest settlement"
+      },
+      "note": {
+        "ja": "village=村 / town=町 / city=都市。これより小さい街には建たない",
+        "en": "The kind does not appear in settlements smaller than this"
+      }
+    }
+  },
+  "tool": {
+    "entry": "tool.py",
+    "label": {
+      "ja": "施設の設定（種類ごとの表）",
+      "en": "Facility settings (a table by kind)"
+    },
+    "note": {
+      "ja": "種類ごとの建設費・1日の売上・最低の規模を表で編集する。共通の5項目も同じ画面。どの世界でも効く",
+      "en": "Edit cost, takings a day and the smallest settlement per kind in a table, plus the five shared settings. Applies to every world"
     }
   }
 }

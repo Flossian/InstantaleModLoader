@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-r"""機能追加: 役場で物件を借りる・買う。その土地に自分の建物が建つ。
+r"""機能追加: 家を借りる・買う。役場で契約すると、その土地に自分の家が建つ。
 
 素のゲームでプレイヤーが腰を落ち着けられる場所は宿屋だけで、
 泊まるたびに宿代と30日を払い直す。荷物を置く場所も無い。
-この MOD は役場（`administrative_office`）の選択肢に不動産の窓口を1つ足す。
+この MOD は役場（`administrative_office`）の選択肢に、家を借りる・買うための窓口を1つ足す。
 
-    [役場]  労働の募集をみる / 市民権の発行 / 物件を扱う / 出る
+    [役場]  労働の募集をみる / 市民権の発行 / 家を借りる・買う / 出る
                                     ↓
             借りる(1,600G・120日) / 建売を買い取る(30,000G) / やめる
                                     ↓
@@ -108,8 +108,8 @@ import datetime
 import sys
 
 from instantale_modloader import frames, modfacility, ui
-from instantale_modloader.state import (UNKNOWN_WORLD, WorldStore, world_key,
-                                        world_key_of_dict)
+from instantale_modloader.state import (UNKNOWN_WORLD, WorldStore, playthrough_key,
+                                        playthrough_key_of_dict)
 
 from . import landlord, storage
 
@@ -213,7 +213,10 @@ OWNED_NAME = "自分の家"
 
 # ---------------------------------------------------------------- 文言
 #: 役場に足す選択肢。
-OFFICE_LABEL = "物件を扱う"
+#: 役場に足す選択肢。
+#: 「物件を扱う」だと 915 の出資（店を建てて売上を得る）とも読めた
+#: ので、**自分が住む家の話だと分かる文言**にした（本人の指摘、2026-09-14）。
+OFFICE_LABEL = "家を借りる・買う"
 RENT_LABEL = "借りる({}G・{}日)"
 BUY_LABEL = "建売を買い取る({}G)"
 STATUS_LABEL = "契約を確かめる"
@@ -396,6 +399,16 @@ def apply(ctx):
         return True
 
     # ------------------------------------------------------------ 控え
+    def current_key(app):
+        """いまの周回の鍵（世界×主人公。`state.playthrough_key`）。
+
+        契約を世界名だけで引くと、主人公が死んで同じ世界で作り直したときに
+        前の主人公の家と預かりが新しい主人公に引き継がれる（915 の実機 2026-09-14）。
+        ロードの建て直しの間は `world_loaded` が引数のセーブから決めた鍵を使う。
+        """
+        override = state.get("key_override")
+        return override if override else playthrough_key(app)
+
     def bucket_of(key):
         bucket = worlds.load(key)
         bucket.setdefault("contracts", [])
@@ -409,7 +422,7 @@ def apply(ctx):
         """その土地の契約。無ければ None。"""
         if not area_id:
             return None
-        for record in contracts_of(world_key(app)):
+        for record in contracts_of(current_key(app)):
             if str(record.get("area")) == str(area_id):
                 return record
         return None
@@ -419,7 +432,7 @@ def apply(ctx):
 
     def seized_of(app):
         """役場が預かっている品。`{鍵: 辞書}`。"""
-        items = bucket_of(world_key(app)).get("seized")
+        items = bucket_of(current_key(app)).get("seized")
         return items if isinstance(items, dict) else {}
 
     def storage_of(app, record):
@@ -430,7 +443,7 @@ def apply(ctx):
         建物ごとならその契約の中に持つ。
         """
         if STORAGE_SHARED:
-            bucket = bucket_of(world_key(app))
+            bucket = bucket_of(current_key(app))
             items = bucket.get("shared")
             if not isinstance(items, dict):
                 items = bucket["shared"] = {}
@@ -445,7 +458,7 @@ def apply(ctx):
     def set_storage(app, record, items):
         """保管庫の中身を書き戻す（置き場所は `storage_of` と同じ決まり）。"""
         if STORAGE_SHARED:
-            bucket_of(world_key(app))["shared"] = items
+            bucket_of(current_key(app))["shared"] = items
         elif isinstance(record, dict):
             record["storage"] = items
         save(app)
@@ -460,12 +473,12 @@ def apply(ctx):
         """
         if not STORAGE_SHARED:
             return 0
-        bucket = bucket_of(world_key(app))
+        bucket = bucket_of(current_key(app))
         shared = bucket.get("shared")
         if not isinstance(shared, dict):
             shared = bucket["shared"] = {}
         moved = 0
-        for record in contracts_of(world_key(app)):
+        for record in contracts_of(current_key(app)):
             items = record.get("storage")
             if not isinstance(items, dict) or not items:
                 continue
@@ -480,7 +493,7 @@ def apply(ctx):
         return moved
 
     def save(app):
-        worlds.save(world_key(app))
+        worlds.save(current_key(app))
 
     # ------------------------------------------------------------ 建物の当て直し
     def remember_stay_months(app, months):
@@ -497,7 +510,7 @@ def apply(ctx):
             return
         if value < 1:
             return
-        key = world_key(app)
+        key = current_key(app)
         bucket = bucket_of(key)
         if bucket.get("stay_months") == value:
             return
@@ -513,7 +526,7 @@ def apply(ctx):
         その設定が効く。どちらも自分では決めず、
         宿屋で実際に使われた値を覚えて使う。覚えが無いうちだけ見積もる。
         """
-        value = bucket_of(world_key(app)).get("stay_months")
+        value = bucket_of(current_key(app)).get("stay_months")
         if isinstance(value, int) and not isinstance(value, bool) and value >= 1:
             return value
         return estimated_stay_months(app)
@@ -559,7 +572,7 @@ def apply(ctx):
 
     def record_of(app, facility_id):
         """建物の id から契約を引く。無ければ None。"""
-        for record in contracts_of(world_key(app)):
+        for record in contracts_of(current_key(app)):
             if str(record.get("facility") or "") == str(facility_id):
                 return record
         return None
@@ -568,14 +581,12 @@ def apply(ctx):
         """建物の中の選択肢。出口はローダが足すので、ここには入れない。
 
         契約が切れた建物（取り壊し待ち）では滞在も保管庫も出さない。
-        滞在の最中は何も出さない ― 並んでいるのはゲームの活動の選択肢で、
-        そこへ「滞在する」を足すと同じ画面から滞在が二重に始まる。
+        滞在の最中（活動の選択肢）に混ぜないのはローダの判定（`is_top_screen`。TECH.md §5.8）。
+        ここでは画面を見ない（MOD の旗で見ていると、終える処理の中の組み直しに間に合わない）。
         """
         record = record_of(app, facility_id)
         if record is None or record.get("lapsed"):
             return []
-        if state.get("free_stay") is not None:
-            return None      # 出口ごと出さない（`on["choices"]` が空にする）
         return [{"key": "stay", "label": STAY_LABEL,
                  "on": lambda info: start_stay(info["app"])},
                 {"key": "storage", "label": STORAGE_LABEL,
@@ -607,8 +618,8 @@ def apply(ctx):
                     "description": _description_of(record.get("kind"))},
             choices=choices, exit_label=LEAVE_LABEL,
             keep_inside=lambda info: keeps_inside(info["app"], info["facility_id"]),
+            # 絵は描かない。ゲームが名前で引いて生成する（`modfacility は絵に触らない`。TECH.md §5.8）。
             on={"choices": no_exit,
-                "background": lambda info: paint_home(info["app"], info["facility_id"]),
                 "leave": lambda info: end_stay(info["app"], "left the building")},
             write=write)
         return facility_id
@@ -712,7 +723,7 @@ def apply(ctx):
             write("WARN sign: cannot build in area {!r}".format(area_id))
             screen.say(app, "この土地には建てられる場所が無いようだ。")
             return False
-        bucket_of(world_key(app))["contracts"].append(record)
+        bucket_of(current_key(app))["contracts"].append(record)
         save(app)
         ui.add_gold(app, -price, on_error=lambda: write("WARN sign: cannot charge"))
         write("signed: {} {!r} id={} area={!r} price={} due={}".format(
@@ -723,7 +734,7 @@ def apply(ctx):
 
     def drop_contract(app, record):
         """控えから契約を落とす。建物は呼ぶ側が先に片付けること。"""
-        bucket = bucket_of(world_key(app))
+        bucket = bucket_of(current_key(app))
         bucket["contracts"] = [c for c in bucket.get("contracts") or []
                                if c is not record]
         save(app)
@@ -754,7 +765,7 @@ def apply(ctx):
         最後の1軒を失ったときだけ、開く手段が無くなるので役場へ移す。
         """
         if STORAGE_SHARED:
-            others = [c for c in contracts_of(world_key(app))
+            others = [c for c in contracts_of(current_key(app))
                       if c is not record and not c.get("lapsed")]
             if others:
                 write("seize: the shared storage stays ({} contract(s) left)".format(
@@ -763,7 +774,7 @@ def apply(ctx):
         items = storage_of(app, record)
         if not items:
             return 0
-        bucket = bucket_of(world_key(app))
+        bucket = bucket_of(current_key(app))
         seized = bucket.get("seized")
         if not isinstance(seized, dict):
             seized = bucket["seized"] = {}
@@ -827,7 +838,7 @@ def apply(ctx):
         day = ui.game_day(app)
         if day is None:
             return
-        for record in list(contracts_of(world_key(app))):
+        for record in list(contracts_of(current_key(app))):
             if not _is_lease(record) or record.get("lapsed"):
                 continue
             term = int(record.get("term") or 0)
@@ -873,7 +884,7 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 画面
     def show_office(app):
-        """役場の不動産の窓口。"""
+        """役場の窓口（家を借りる・買う）。"""
         area = ui.current_area(app)
         area_name = frames.short(getattr(area, "name", ""), 40) or "この土地"
         record = contract_here(app)
@@ -891,7 +902,8 @@ def apply(ctx):
                                       extra={KIND_KEY: kind})
                 if entry is not None:
                     entries.append(entry)
-            screen.say(app, "{}で扱える物件は2件。".format(area_name))
+            screen.say(app, "{}で借りられる家と、買い取れる家。".format(
+                area_name))
         else:
             entry = screen.button(STATUS_LABEL, mark="status")
             if entry is not None:
@@ -982,7 +994,7 @@ def apply(ctx):
             if item is not None and inv.get(str(target)) is not item:
                 inv[str(target)] = item
             moved += 1
-        bucket_of(world_key(app))["seized"] = {}
+        bucket_of(current_key(app))["seized"] = {}
         save(app)
         write("reclaimed: {} item(s) for {}".format(moved, fee))
         screen.say(app, ui.rewrite_coins(_fmt(RECLAIMED_TEXT, count=moved)))
@@ -1381,7 +1393,7 @@ def apply(ctx):
         ところが**自前の画面から戻す塗り直しは、いつも `screen.say` の直後**に走る。
         そこで黙って戻ると、次にゲームが選択肢を組み直すまで出番が来ない
         ― 実機（2026-09-11）では解約の後、区画へ出て戻るまで
-        「物件を扱う」が消えたままだった（契約と引き取りの後も同じ）。
+        「物件を扱う」（当時の文言）が消えたままだった（契約と引き取りの後も同じ）。
 
         見張りは同時に1つだけ立てる。塗り直しは1手に何度も走るので、
         素直に立てると同じ見張りがその回数だけ並ぶ。
@@ -1484,7 +1496,7 @@ def apply(ctx):
         """
         result = orig(self, reset_page, *args, **kwargs)
         try:
-            apply_contracts(self, getattr(self, "world", None), world_key(self),
+            apply_contracts(self, getattr(self, "world", None), current_key(self),
                             "screen")
             check_leases(self, "screen")
             flush_demolitions(self)
@@ -1526,14 +1538,20 @@ def apply(ctx):
         """セーブを読み込んだ直後、契約中の建物をこの世界へ建て直す。"""
         result = orig(self, save_data_dict, app, *args, **kwargs)
         try:
-            key = world_key_of_dict(save_data_dict, None) or world_key(app)
+            key = playthrough_key_of_dict(save_data_dict, None) or playthrough_key(app)
             if key and key != UNKNOWN_WORLD:
                 worlds.forget(key)
                 state["free_stay"] = None
                 state["storage"] = None
                 state["pending_demolish"] = []
                 state["warned"] = set()
-                apply_contracts(app, self, key, "load")
+                state["key_override"] = key
+                try:
+                    apply_contracts(app, self, key, "load")
+                finally:
+                    state["key_override"] = None
+                write("load: the ledger of {!r} has {} contract(s)".format(
+                    key, len(bucket_of(key).get("contracts") or [])))
         except Exception:
             ctx.log_exc("real estate: cannot rebuild the buildings on load")
         return result
@@ -1701,35 +1719,6 @@ def apply(ctx):
         screen.schedule(give_back, 0)
         screen.say(app, "落ち着かない。今日は出直したほうがよさそうだ。")
         write("{}: gave the controls back".format(why))
-
-    def paint_home(app, facility_id):
-        """自分の建物の背景を部屋の絵にする。描けたら True。
-
-        呼ぶのはローダ（`on["background"]`）で、
-        **どの場面で呼ぶか・二度描かないこと**はあちらが持つ（TECH.md §5.8）。
-        ここが決めるのは「何を描くか」だけ。
-
-        ゲームは施設 id から背景を引くが、自分で足した施設は素データに無いので
-        引けず、街の外の景色のまま残る（実機 2026-09-11。ロード直後に出た）。
-        代わりに宿屋の部屋の絵を借りる（`change_background_image_to_inn_room`）。
-        滞在で使う等級と同じものを渡すので、泊まったときと同じ部屋になる。
-        """
-        record = record_of(app, facility_id)
-        if record is None or record.get("lapsed"):
-            return False
-        paint = getattr(app, "change_background_image_to_inn_room", None)
-        if not callable(paint):
-            warn_once(("bg", "missing"),
-                      "WARN background: change_background_image_to_inn_room is gone")
-            return False
-        try:
-            paint(str(STAY_QUALITY))
-        except Exception:
-            ctx.log_exc("real estate: cannot paint the home background")
-            return False
-        write("background: {!r} -> the room ({})".format(
-            record.get("name"), STAY_QUALITY))
-        return True
 
     @ctx.wrap("__main__:VacationRestManager.execute", required=False)
     def vacation_rest(orig, self, choice_text="", *args, **kwargs):

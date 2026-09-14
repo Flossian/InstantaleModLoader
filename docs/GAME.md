@@ -433,6 +433,13 @@ Clock で見張り、手が空いてから実行する（`ui.Screen.when_idle`�
 `in_battle` / `in_boss_battle` / `in_colosseum_battle` /
 `in_conversation` / `in_free_input` / `in_action_in_conversation`。
 
+**いま見えている背景も焼かれる**（`game_variables["location_image"]` に絵のフルパス。実セーブ 2026-09-14）。
+ロードはそれをそのまま出すので、立ち位置を書き換える MOD は絵も一緒に替える（TECH.md §5.8）。
+
+**`in_conversation` は真偽ではなく、話している相手の id が入る**（実セーブ 2026-09-14。
+`game_variables.in_conversation` に NPC の id が焼かれていた）。真偽として読むぶんには困らないが、
+**id を書き込む器**でもあるので、セーブに出したくない id を持つ MOD はここも掃除する（TECH.md §5.7）。
+
 移動が終わった瞬間は `MovePhaseManager.move_phase` の**復帰後**。
 情景描写（`llm_manager:narrator`）は `move_phase` の内側で呼ばれる。
 したがって「復帰後に印を置いて次の `narrator` で回収する」形にすると1手ずれる。
@@ -793,7 +800,8 @@ MOD 側でも「戦闘中は出さない」条件に使われるので、残骸�
 残骸かどうかは `app.current_enemy_dict` が空かで見分ける。
 
 `in_boss_battle` はボス戦の後の戦闘（闘技場）で 0 に戻っていた（1回観測。`322_` のログ）。
-`in_colosseum_battle` の 1→0 は未観測。
+`in_colosseum_battle` は `BattleEndInColosseum.execute` の後始末で `in_battle` と一緒に 0 に戻る
+（2026-09-13、`915_` の闘技場での試合。`322_` のログ 22:50:28 → 22:50:30）。
 
 #### 1手ぶんの内訳（`BattlePhaseManager`）
 
@@ -1100,6 +1108,26 @@ apply_music_volume(app)         main_023 で追加
 | 通常（依頼中の遭遇） | `in_battle=1` | `'in_quest'` |
 | ボス（`QuestEncounterFinalBoss`） | `in_battle=1 in_boss_battle=1` | `'in_quest'`（通常と同じ語） |
 | 闘技場（`ColosseumMatchStart`） | `in_battle=1 in_colosseum_battle=1` | `'colosseum'` |
+
+闘技場の相手は `scripts.llm.llm_manager:colosseum_enemy_generator(location, area, world, npc_difficulty_level)` が作り、
+施設の `config` に `current_phase` と `enemy_data`（相手の素、鍵は `"0"` / `"2"` / `"4"` …）として貯まる。
+頼み文は 世界観 / エリア名と概要 / 施設名と概要（`location` の `name` と `description`） / 強さのランク の4つだけで、
+**前に出た相手は載らない**（`output_data\...\colosseum_enemy_generator\N.json`、2026-09-13）。
+同じ施設で同じ人物に収束することがある（`915_` の闘技場で4試合とも同じ名。あちらは既出の名を概要に足して避けている）。
+
+**相手のランクは試合ごとに固定幅で上がり続ける**（同じ闘技場で5試合。実機 2026-09-14）。
+
+| `current_phase` | 0 | 2 | 4 | 6 | 8 |
+| --- | --- | --- | --- | --- | --- |
+| ランク | 35 | 51 | 66 | 82 | 97 |
+| 型 | juggernaut | battlemage | battlemage | striker | battlemage |
+
+増分は +16 / +15 / +16 / +15 で、上限は見えない。
+頼み文の中の説明ではランク1が雑魚、**ランク70が「歴史に名を残す勇者や魔王、神の化身に値するほどの強者」**なので、
+5試合目にはその上に出る。初回の 35 が何由来かは未測（プレイヤーの強さか、施設か）。
+採った場所は `state\modfacility\<世界×主人公>.json` の `snapshot.config.enemy_data.<phase>.data.rank` と、
+`output_data\...\colosseum_enemy_generator\N.json` の頼み文末尾の「相手のランク」。
+これはゲーム自身が決める値で、`915_facility_investment` は難易度に何も渡していない。
 | 衛兵 | `in_battle=1` | `'guard'`（§2.20） |
 
 （2戦＋7戦。`322_battle_bgm` の `[BGMPICK]` の行）
@@ -1762,6 +1790,8 @@ process_choice(VacationEndManager,   '宿泊を終える')
 - 部屋は4つ。`犬小屋(0G)`＝`'kennel'` / `簡易寝台(10G)`＝`'bunk'` /
   `個室(100G)`＝`'private_room'` / `高級個室(1000G)`＝`'luxury_suite'`。
 - `宿泊する(Nヵ月)` の月数はプレイヤーの年齢の変動式（若いと3ヵ月、最長6ヵ月）。
+  **N は滞在の上限で、1回の長さではない。** 部屋選びが渡す `VacationStartManager` の第1引数は常に 1
+  （実機 2026-09-14、5回とも `init_args=['1', ...]`）。MOD が N を渡すと N ヵ月分の暦と宿代が一度に動く（`915_` が踏んだ）
   実測は 20代=3・31歳=4 の2点だけで、年齢ごとの境目は未実測
 - 日数と宿代は `VacationStartManager.execute` の中で1回ずつ動く。
   宿泊の開始時点で全期間ぶんが一度に進むので、途中の活動を何回挟んでも暦は動かない
@@ -2603,6 +2633,8 @@ app.save_data_dict   saves\<世界>\savedata.json
 world 側の NPC にも33項目のものが81人居る。
 `world_data.json` は生成時の雛形のまま固定されるのではなく、遊んでいる間も更新されている
 （後ろの4項目は savedata 化された形。§2.23）。
+**書かれるのはセーブのとき**（2026-09-13: 3回セーブした最後の時刻と `world_data.json` の更新時刻が一致。
+書き手は `scripts.save_codec:write_obfuscated_json_file` で、`modfacility` はここを包んで `mod:` の施設を落としている）。
 更新は届いているのに、追加だけが届いていない。
 
 #### 症状
@@ -2790,6 +2822,11 @@ Atk:<n>(+<n>)\nDef:<n>(+<n>)\nExp:<n>/<n>\nGold:<n>\nAge:<n>\nSta:…\nLocation:
 └─ worlds\<世界名>\characters\<名前>\    立ち絵
 ```
 
+背景は `worlds\<世界名>\backgrounds\<施設名>\image.png`。宿泊の部屋は
+`backgrounds\<施設名> - room(<等級>)\image.png`（`金羊亭 - room(luxury_suite)`。実セーブ 2026-09-14）で、
+`change_background_image_to_inn_room(quality)` はこの絵を `game_variables["location_image"]` に据える。
+ロードはこの値の絵をそのまま出す（§2.3）。
+
 インストール先には無い。
 Epic 版の `instantale.exe` の隣に `saves` も `worlds` も無かった。
 
@@ -2869,3 +2906,38 @@ Python は通常のルックアップが失敗した後にのみ `__getattr__` �
 偽の `on_button_press` も本物と同じ形にする
 （`getattr(__main__, cls_name)(app, *args)` を組んで `process_choice` に渡す）。
 スタックを見て判定する MOD は、テストも本番と同じ呼び出し元から呼ぶ形にする。
+
+### 2.32 主人公が死んだ後、同じ世界で新しい主人公を作れる（セーブは `world_data.json` から組み直される）
+
+セーブは世界に1つ（`saves\<世界名>\savedata.json`。§2.31）。
+主人公が死ぬと、同じ世界でもう一度主人公を作って遊べる。
+そのときゲームは `savedata.json` を `worlds\<世界名>\world_data.json`（骨格）から組み直す。
+NPC の記憶も進みも無い、初期化された同じ世界になる。
+
+実セーブで見えたこと（`新テストワールド`、2026-09-14。前の主人公の控えは `backups\` の zip 12本）:
+
+| | 前の主人公（ミツバ） | 新しい主人公（ムツハ） |
+| --- | --- | --- |
+| `player_data.name` / `experience_level` / `age` | ミツバ / 80 / 25 | ムツハ / 1 / 23 |
+| `world_data.days_elapsed` | 2175 | 390（`world_data.json` 側の値） |
+| `index.facility` / `index.item` | 317 / 62 | 318 / 90 |
+| `game_variables.quest_log` | 27件 | 0件 |
+
+**周回を見分ける id はセーブに無い。**
+`player_data` の項目で作成時から変わらないように見えるものも、遊んでいる間に変わる:
+`original_ability_scores` は Lv1 → Lv60 の間に1度変わり（12本のうち最初の1本だけ別の値）、
+`age` は 22 → 25 に進む。変わらなかったのは `name` / `category` / `look_description` / `image_src`。
+`memory.brief_summary` は Lv80 でも「ゲーム開始」のまま。
+
+ゲームの入口は3つ:
+
+| 入口 | 何か | 根拠 |
+| --- | --- | --- |
+| `InstantaleApp.load_game_new(world_name)` | **続きから**（タイトルのロード） | `224_` が6回のロードで前後を測った（VERIFICATION.md §1）。`107_` / `110_` / `120_` がロード地点として包む |
+| `scripts.hud.hud_charamake:CharacterCreateScreen.start_story(instance)` | 作成画面の確定 | `214_` が包んだ |
+| `InstantaleApp.start_game(world_name)` | 作成から呼ばれる | `123_` が包む。**続きからも通るかは未測** |
+
+MOD の控え（`state\<MOD>\`）は世界名で引いていたので、前の主人公が建てた建物や結んだ契約が
+新しい主人公に引き継がれた（`915_` の実機。新しい主人公が前の主人公の施設の出資者として迎えられた）。
+セーブと同じ寿命のものは **世界×主人公** で持つ（`state.playthrough_key`。TECH.md §5.4）。
+同じ名前で作り直せば前の周回を引き継ぐ。

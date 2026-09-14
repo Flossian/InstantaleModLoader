@@ -39,7 +39,7 @@ r"""保管庫。預けた品を控えに落とし、開くたびに作り直す�
 
 import sys
 
-from instantale_modloader import frames
+from instantale_modloader import frames, items
 
 
 #: セーブの持ち物1件の項目と並び（実セーブ。GAME.md §2.13）。
@@ -66,18 +66,11 @@ def character_class():
 
 
 def inventory_dict(owner):
-    """持ち物の実体 `{item_id: Item}`。
+    """持ち物の実体 `{item_id: Item}`。読めなければ None。
 
-    `Character.inventory` は `Inventory` オブジェクトで、その `.inventory` が辞書
-    （`402_` が実機で確かめた形）。辞書を直接持つ形にも備える。読めなければ None。
+    形の話はローダに寄せた（`instantale_modloader.items`。`modnpc` も同じものを使う）。
     """
-    if owner is None:
-        return None
-    inv = getattr(owner, "inventory", None)
-    if isinstance(inv, dict):
-        return inv
-    inner = getattr(inv, "inventory", None)
-    return inner if isinstance(inner, dict) else None
+    return items.inventory_of(owner)
 
 
 def _plain(value):
@@ -110,24 +103,9 @@ def item_to_dict(item):
 
     落とせない品（属性が JSON にならないもの）は**預けさせない**。
     控えに入らない品を持ち主から抜くと、その品は世界から消える。
+    中身はローダの `items.to_dict`（`modnpc` も同じものを使う）。
     """
-    if item is None:
-        return None
-    data = {}
-    for field in ITEM_FIELDS:
-        if field == "width_slots":
-            data[field] = _size_of(item, 0)
-            continue
-        if field == "height_slots":
-            data[field] = _size_of(item, 1)
-            continue
-        value = getattr(item, field, None)
-        if isinstance(value, tuple):
-            value = list(value)
-        if not _plain(value):
-            return None
-        data[field] = value
-    return data
+    return items.to_dict(item)
 
 
 def describe(data):

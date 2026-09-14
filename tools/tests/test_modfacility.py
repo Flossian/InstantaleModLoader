@@ -105,11 +105,13 @@ class FakeCtx:
 def make_town():
     """入口（`0`）と宿（`2`）だけの街。入口はノードが名乗っている。"""
     entrance = types.SimpleNamespace(id="0", name="街の入口",
-                                     facility_type="entrance", connections=["2"])
+                                     facility_type="entrance", connections=["2", "1"])
     inn = types.SimpleNamespace(id="2", name="宿屋",
                                 facility_type="inn", connections=["0"])
+    ward = types.SimpleNamespace(id="1", name="広場",
+                                 facility_type="ward", connections=["0"])
     node = types.SimpleNamespace(id="10", entrance_facility="0",
-                                 facilities={"0": entrance, "2": inn})
+                                 facilities={"0": entrance, "1": ward, "2": inn})
     area = types.SimpleNamespace(id="1", nodes={"10": node})
     world = types.SimpleNamespace(areas={"1": area})
     player = types.SimpleNamespace(location=entrance, current_area=area)
@@ -186,6 +188,20 @@ def main():
     ok &= check("二度建てない", modfacility.spawn(app, fid, "1") is facility)
     ok &= check("控えに置き場所が残る",
                 modfacility.get(app, fid).placed[:2] == ("1", "10"))
+
+    print("繋ぎ先: hub=\"ward\" の層は区画へ、既定は入口へ")
+    wid = modfacility.register("915_invest", key="shop1", fields={"name": "店"}, hub="ward")
+    shop = modfacility.spawn(app, wid, "1")
+    ok &= check("区画に繋がる", shop is not None and wid in node.facilities["1"].connections
+                and wid not in entrance.connections)
+    ok &= check("控えの繋ぎ先も区画", modfacility.get(app, wid).placed[2] == "1")
+    ok &= check("既定の層は入口のまま", fid in entrance.connections)
+    modfacility.unregister("915_invest", wid, app=app)
+    ok &= check("壊すと区画の接続も外れる", wid not in node.facilities["1"].connections)
+    ok &= check("区画の無い土地は入口に落ちる",
+                modfacility.hub_for(types.SimpleNamespace(id="9", nodes={"1": types.SimpleNamespace(
+                    id="1", entrance_facility="0", facilities={"0": types.SimpleNamespace(
+                        id="0", facility_type="entrance", connections=[])})}), "ward", "x")[1] is not None)
 
     print("控える: 素データの写しが控えに入る")
     facility.name = "灯火亭（改装）"
@@ -282,6 +298,44 @@ def main():
     ok &= check("spec は無害な既存クラス",
                 all(ui.spec_cls_name(e) == ui.SAFE_CLS for e in app2.buttons))
 
+    print("下位の画面: 移動のボタンが無く空でもない画面には混ぜない")
+    app2.player.location = rebuilt
+    app2.buttons = [{"text": "犬小屋", "spec": PhaseSpec("VacationStartManager", [])},
+                    {"text": "やめる", "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}]
+    modfacility.maintain_buttons(app2)
+    ok &= check("部屋選びには足さない", len(app2.buttons) == 2)
+    app2.buttons = game_buttons(("入口", "0"))
+    modfacility.maintain_buttons(app2)
+    ok &= check("施設の画面（移動あり）には足す", "滞在する" in [e.get("text") for e in app2.buttons])
+    ok &= check("移動があるので出口は足さない", "外に出る" not in [e.get("text") for e in app2.buttons])
+    # `inn` 型の建物でゲームが出す最初の画面。出口（MovePhaseManager）は作られない。
+    app2.buttons = [{"text": "宿泊する(3ヵ月)", "spec": PhaseSpec("DisplayVacationChoice", [3])},
+                    {"text": "会話する", "spec": PhaseSpec("DisplayTalkChoice", [])}]
+    modfacility.maintain_buttons(app2)
+    texts = [e.get("text") for e in app2.buttons]
+    ok &= check("入口の種類だけの画面にも足す", "滞在する" in texts)
+    ok &= check("ゲームの出口が無いので出口を足す", "外に出る" in texts)
+    ok &= check("並びは ゲーム → こちら → 出口",
+                texts.index("会話する") < texts.index("滞在する") < texts.index("外に出る"))
+
+    print("残骸: 焼かれた文言が今と違っても、括弧の前までで掃除する")
+    modfacility.register("915_invest", facility_id=fid,
+                         choices=lambda info: [{"key": "collect", "label": "売上を受け取る(1,848G)",
+                                                "on": lambda i: None}],
+                         exit_label="外に出る")
+    app2.player.location = rebuilt
+    app2.buttons = [{"text": "売上を受け取る(まだ無い)", "spec": PhaseSpec(ui.SAFE_CLS, [])},
+                    {"text": "外に出る", "spec": PhaseSpec(ui.SAFE_CLS, [])}]
+    modfacility.maintain_buttons(app2)
+    texts = [e.get("text") for e in app2.buttons]
+    ok &= check("焼かれた売上のボタンは消える", "売上を受け取る(まだ無い)" not in texts)
+    ok &= check("今の売上のボタンが1つだけ", texts.count("売上を受け取る(1,848G)") == 1)
+    ok &= check("出口も1つだけ", texts.count("外に出る") == 1)
+    modfacility.register("915_invest", facility_id=fid,
+                         choices=[{"key": "stay", "label": "滞在する",
+                                   "on": lambda info: pressed.append(info)}],
+                         exit_label="外に出る")
+
     print("道: 繋ぎ先に立つと建物への道が出る")
     app2.player.location = entrance2
     app2.buttons = game_buttons(("宿屋", "2"))
@@ -314,17 +368,86 @@ def main():
                 if app2.buttons and not screen.mark_of(app2.buttons[0])
                 else True)
 
-    print("背景: 二度描かない")
-    painted = []
+    print("文言: 層の文言が変われば、在るボタンの文言も更新する")
+    counter = {"gold": 0}
     modfacility.register("915_invest", facility_id=fid,
-                         on={"background": lambda info: painted.append(info) or True})
-    modfacility._state()["painted"] = None
-    modfacility.paint_background(app2, fid, "test")
-    modfacility.paint_background(app2, fid, "test")
-    ok &= check("同じ建物では1度だけ", len(painted) == 1)
-    modfacility._state()["painted"] = None
-    modfacility.paint_background(app2, fid, "test")
-    ok &= check("場所が変われば描き直す", len(painted) == 2)
+                         choices=lambda info: [{"key": "collect",
+                                                "label": "売上を受け取る({}G)".format(counter["gold"]),
+                                                "on": lambda info: None}])
+    # ゲームの入口（`会話する`）が並ぶ施設の画面で（自前のボタンだけの画面は下位の画面に見える）。
+    app2.buttons = [{"text": "会話する", "spec": PhaseSpec("DisplayTalkChoice", [])}]
+    modfacility.maintain_buttons(app2)
+    ok &= check("最初の文言", any(e.get("text") == "売上を受け取る(0G)" for e in app2.buttons))
+    counter["gold"] = 300
+    modfacility.maintain_buttons(app2)          # ゲームが組み直さなくても
+    ok &= check("文言が更新される（増えない）",
+                [e.get("text") for e in app2.buttons].count("売上を受け取る(300G)") == 1
+                and not any(e.get("text") == "売上を受け取る(0G)" for e in app2.buttons))
+    modfacility.register("915_invest", facility_id=fid,
+                         choices=lambda info: [{"key": "stay", "label": "滞在する",
+                                                "on": lambda info: pressed.append(info)}])
+    app2.buttons = []
+
+    print("背景: MOD は描かず、頼みもしない（移動でゲームが自分で描く）")
+    calls = []
+    app2.change_background_image_to_current_location = lambda *a: calls.append("current")
+    app2.player.location = rebuilt
+    app2.location_image = os.path.join("C:\\x", "backgrounds", "街の入口", "image.png")
+    app2.buttons = [{"text": "会話する", "spec": PhaseSpec("DisplayTalkChoice", [])}]
+    modfacility.maintain_buttons(app2)
+    modfacility.maintain_buttons(app2)
+    ok &= check("塗り直しで絵に触らない（頼むと移動の描画と重なって2枚になる）", calls == [])
+    app2.player.location = entrance2
+    modfacility.maintain_buttons(app2)
+    app2.player.location = rebuilt
+    modfacility.maintain_buttons(app2)
+    ok &= check("出て戻っても触らない", calls == [])
+    app2.buttons = []
+    app2.location_image = ""
+
+    print("背景: 本体の経路はそのまま通し、落ちる不具合だけ握る")
+    hooks = {}
+    class Ctx2(FakeCtx):
+        def wrap(self, target, **kw):
+            def deco(fn):
+                hooks[target] = fn
+                return fn
+            return deco
+    logged = []
+    modfacility._install(Ctx2(state_root), logged.append)
+    current_hook = hooks[modfacility.BG_CURRENT_TARGET]
+    id_hook = hooks[modfacility.BG_ID_TARGET]
+    calls[:] = []
+    current_hook(lambda self, *a, **k: calls.append("orig"), app2)
+    ok &= check("いまの場所の絵は本体が描く（MOD は止めない）", calls == ["orig"])
+    def boom(self, *a, **k):
+        raise AttributeError("'InstantaleApp' object has no attribute 'app'")
+    calls[:] = []
+    ok &= check("本体が落ちても外へ出さない", current_hook(boom, app2) is None
+                and any("raised" in line for line in logged))
+    calls[:] = []
+    id_hook(lambda self, *a, **k: calls.append("orig"), app2, fid)
+    ok &= check("MOD の施設の id は名前で引く経路へ回す（本体は引けない）", calls == ["current"])
+    calls[:] = []
+    id_hook(lambda self, *a, **k: calls.append("orig"), app2, "2")
+    ok &= check("よその施設の id は本体へ", calls == ["orig"])
+
+    print("忘れる: 世界が変わったら控えの写しも捨てる（前の周回の建物の名で新築しない）")
+    # 立っている建物（fid）の記録は後の場面が使うので、控えて戻す。
+    rec = modfacility._record(fid)
+    keep = {k: rec.get(k) for k in ("facility", "placed", "plain", "plain_noted", "snapshot")}
+    rec["snapshot"] = {"name": "前の周回の金羊亭"}
+    modfacility.forget()
+    ok &= check("forget は写しも捨てる", rec.get("snapshot") is None)
+    rec.update(keep)
+    # 新築は別の id で。同じ id に前の周回の写しが残っていても使わない。
+    fresh_id = modfacility.register("915_invest", key="fresh1",
+                                    fields={"name": "新築の宿", "facility_type": "inn"})
+    modfacility._record(fresh_id)["snapshot"] = {"name": "前の周回の金羊亭"}
+    built_fresh = modfacility.spawn(app2, fresh_id, "1", fresh=True)
+    ok &= check("fresh=True の spawn は写しを使わない",
+                getattr(built_fresh, "name", None) == "新築の宿")
+    modfacility.unregister("915_invest", fresh_id, app=app2)
 
     print("飲む: 層のフックが投げても関所は止まらない")
     def boom(info):
@@ -336,6 +459,192 @@ def main():
     ok &= check("飲んだことがログに残る",
                 any("boomer" in line for line in logged))
     modfacility.unregister("boomer", app=app2)
+
+    print("写し: plain=True の建物は中に立っている間だけ素データに写る")
+    pid = modfacility.register("915_invest", key="arena1",
+                               fields={"name": "闘技場", "facility_type": "colosseum"},
+                               plain=True)
+    for holder in (app2.save_data_dict, app2.world_dict):      # 別々の辞書（GAME.md §2.28）
+        holder["areas"] = {"1": {"nodes": {"10": {"facilities": {}}}}}
+    stores = [holder["areas"]["1"]["nodes"]["10"]["facilities"]
+              for holder in (app2.save_data_dict, app2.world_dict)]
+    arena = modfacility.spawn(app2, pid, "1")
+    ok &= check("建てただけでは写らない", all(pid not in s for s in stores))
+    app2.player.location = arena
+    app2.buttons = []
+    modfacility.maintain_buttons(app2, screen=screen)
+    ok &= check("中に立つと両方の素データに写る",
+                all(pid in s for s in stores) and stores[0][pid] is stores[1][pid])
+    plain = stores[0][pid]
+    ok &= check("写しは8項目・同じ並び", list(plain) == list(modfacility.FACILITY_FIELDS))
+    ok &= check("config は実体と同じ辞書", plain["config"] is arena.config)
+    plain["config"]["current_phase"] = 3                       # ゲームが試合の進みを書く
+    plain["config"]["enemy_data"] = {0: {"type": "normal", "rank": 14},   # 実行時は int の鍵
+                                     2: {"type": "normal", "rank": 21}}
+    plain["config"]["runtime_only"] = object()                  # JSON に落ちないもの
+    modfacility.maintain_buttons(app2, screen=screen)
+    ok &= check("塗り直しても同じ写しのまま", stores[0][pid] is plain)
+    hidden = modfacility.hide(app2, screen=screen)
+    ok &= check("保存の間は外れる", all(pid not in s for s in stores))
+    logged = []
+    modfacility.snapshot_all(app2, write=logged.append)
+    entry = modfacility._persisted_entry(app2, "915_invest", pid)
+    snap_config = ((entry or {}).get("snapshot") or {}).get("config") or {}
+    ok &= check("試合の進みが控えに写る", snap_config.get("current_phase") == 3)
+    ok &= check("int の鍵は str になって写る（セーブと同じ往復）",
+                sorted(snap_config.get("enemy_data") or {}) == ["0", "2"]
+                and snap_config["enemy_data"]["2"]["rank"] == 21)
+    ok &= check("JSON に落ちない値だけ捨てる（config ごとは捨てない）",
+                "runtime_only" not in snap_config and snap_config.get("level_of_detail") == 0)
+    ok &= check("何を捨てたかがログに残る",
+                any("not jsonable" in line and "config.runtime_only:object" in line
+                    for line in logged))
+    logged[:] = []
+    modfacility.snapshot_all(app2, write=logged.append)
+    ok &= check("同じ内容なら二度は書かない", not any("not jsonable" in line for line in logged))
+    del plain["config"]["runtime_only"]
+    modfacility.restore(app2, hidden)
+    ok &= check("保存の後は戻る", all(s.get(pid) is plain for s in stores))
+    ok &= check("plain を名乗らない建物は写らない", all(fid not in s for s in stores))
+    data = {"areas": app2.save_data_dict["areas"], "npcs": {}}
+    cleaned, dropped = modfacility.strip_plain_from(data)
+    ok &= check("書き出しの網が写しを落とす",
+                dropped == [pid] and pid not in cleaned["areas"]["1"]["nodes"]["10"]["facilities"])
+    ok &= check("元の辞書は触らない", pid in stores[0] and cleaned is not data
+                and cleaned["npcs"] is data["npcs"])
+    untouched = {"areas": {"1": {"nodes": {"10": {"facilities": {"0": {}}}}}}}
+    ok &= check("落とすものが無ければ元のまま", modfacility.strip_plain_from(untouched)[0] is untouched)
+    app2.player.location = entrance2
+    app2.buttons = game_buttons(("宿屋", "2"))
+    modfacility.maintain_buttons(app2, screen=screen)
+    ok &= check("外に出ると写しが外れる", all(pid not in s for s in stores))
+    app2.player.location = arena
+    app2.buttons = []
+    modfacility.maintain_buttons(app2, screen=screen)
+    modfacility.unregister("915_invest", pid, app=app2)
+    ok &= check("壊すと写しも外れる", all(pid not in s for s in stores))
+    app2.player.location = rebuilt
+    app2.buttons = []
+
+    print("会話中の保存: 居た場所のまま保存する")
+    # ゲームは会話の途中を保存して再開できる。画面がどうであれ、
+    # 中のままと名乗った建物では居た場所に戻すのが正しい（本人の指摘 2026-09-14）。
+    modfacility.register("915_invest", facility_id=fid, keep_inside=True)
+    app2.player.location = rebuilt
+    app2.buttons = [{"text": "この話から依頼を作る（ヘルガ）",
+                     "spec": PhaseSpec("JustSetButtonToNormalPhase", [])},
+                    {"text": "話を切り上げる",
+                     "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}]
+    app2.in_conversation = "mod:915_invest:keeper"
+    hidden3 = modfacility.hide(app2, screen=screen)
+    ok &= check("会話の画面でも中のまま", app2.player.location is rebuilt)
+    ok &= check("焼かれる選択肢も会話のまま",
+                [e.get("text") for e in app2.buttons][0] == "この話から依頼を作る（ヘルガ）")
+    ok &= check("立ち位置は書き出しで守る",
+                modfacility._state().get("saved_inside") == fid)
+    modfacility.restore(app2, hidden3)
+    app2.in_conversation = False
+    app2.buttons = []
+
+    print("背景: 入口へ移すときは焼かれる絵も入口のものにする")
+    # 立ち位置だけ移しても、焼かれた絵が建物のままだとロードが建物の絵で始まる
+    # （実機 2026-09-14。入口に戻ったのに店の絵のままだった）。
+    root = os.path.join(state_root, "worlds", "検査の世界", "backgrounds")
+    for name in ("街の入口", "灯火亭（改装）"):
+        os.makedirs(os.path.join(root, name), exist_ok=True)
+        with io.open(os.path.join(root, name, "image.png"), "w") as fh:
+            fh.write("x")
+    shop_picture = os.path.join(root, "灯火亭（改装）", "image.png")
+    app2.location_image = shop_picture
+    app2.player.location = rebuilt
+    app2.buttons = game_buttons(("宿屋", "2"))
+    modfacility.register("915_invest", facility_id=fid)        # keep_inside は名乗らない
+    hidden4 = modfacility.hide(app2, screen=screen)
+    ok &= check("焼かれる絵が入口のものになる",
+                app2.location_image == os.path.join(root, "街の入口", "image.png"),
+                )
+    modfacility.restore(app2, hidden4)
+    ok &= check("保存の後は元の絵に戻る", app2.location_image == shop_picture)
+    os.remove(os.path.join(root, "街の入口", "image.png"))
+    hidden4 = modfacility.hide(app2, screen=screen)
+    ok &= check("入口の絵が無ければ空にする（ゲームが描き直す）",
+                app2.location_image == "")
+    modfacility.restore(app2, hidden4)
+    app2.location_image = shop_picture
+
+    print("書き出し: 中のまま保存した立ち位置を守る")
+    # ゲームは `mod:` の id を途中で切って書くことがある（実機 2026-09-14。
+    # 店の中で会話しながら保存したら `player_data["location"]` が 'mod' だけになった）。
+    modfacility.register("915_invest", facility_id=fid, keep_inside=True)
+    app2.player.location = rebuilt
+    app2.buttons = []
+    hidden2 = modfacility.hide(app2, screen=screen)
+    ok &= check("中のまま保存する建物を覚える",
+                modfacility._state().get("saved_inside") == fid)
+    cut = {"player_data": {"location": "mod", "gold": 10}, "areas": {}}
+    fixed_data, fixed = modfacility.keep_saved_location(cut, fid)
+    ok &= check("切れた立ち位置を書き出しの写しで直す",
+                fixed and fixed_data["player_data"]["location"] == fid)
+    ok &= check("元の辞書は触らない", cut["player_data"]["location"] == "mod"
+                and fixed_data["player_data"]["gold"] == 10)
+    same, fixed = modfacility.keep_saved_location(
+        {"player_data": {"location": fid}}, fid)
+    ok &= check("切れていなければ何もしない", not fixed)
+    ok &= check("中に居なければ何もしない",
+                not modfacility.keep_saved_location({"player_data": {"location": "9"}}, None)[1])
+    modfacility.restore(app2, hidden2)
+    ok &= check("保存が終われば覚えを落とす",
+                not modfacility._state().get("saved_inside"))
+    modfacility.register("915_invest", facility_id=fid)      # keep_inside を戻す
+
+    print("下位の画面: ゲームの選択肢に混ぜない")
+    # ゲームの画面は3通り。施設の画面（移動あり）・入口だけの画面・下位の画面。
+    # 下位の画面（会話相手の一覧・部屋選び・活動）には中の選択肢も道も足さない。
+    talk_list = [{"text": "測定用の来訪者",
+                  "spec": PhaseSpec("ConversationStartManager", ["mod:229:visitor"])},
+                 {"text": "やめる", "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}]
+    app2.player.location = entrance2          # 建物の外（道が出る場所）
+    app2.buttons = game_buttons(("宿屋", "2"))
+    modfacility.maintain_buttons(app2, screen=screen)
+    ok &= check("施設の画面には道を足す",
+                any(screen.mark_of(e) for e in app2.buttons))
+    app2.buttons = [dict(e) for e in talk_list]
+    modfacility.maintain_buttons(app2, screen=screen)
+    ok &= check("会話相手の一覧に道を混ぜない",
+                [e.get("text") for e in app2.buttons] == ["測定用の来訪者", "やめる"],
+                )
+    app2.player.location = rebuilt             # 建物の中
+    app2.buttons = [dict(e) for e in talk_list]
+    modfacility.maintain_buttons(app2, screen=screen)
+    ok &= check("会話相手の一覧に中の選択肢も混ぜない",
+                [e.get("text") for e in app2.buttons] == ["測定用の来訪者", "やめる"])
+    app2.buttons = [{"text": "犬小屋(0G)", "spec": PhaseSpec("VacationStartManager", [4, "kennel"])},
+                    {"text": "やめる", "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}]
+    modfacility.maintain_buttons(app2, screen=screen)
+    ok &= check("部屋選びにも混ぜない",
+                [e.get("text") for e in app2.buttons] == ["犬小屋(0G)", "やめる"])
+
+    print("会話中: ゲームの選択肢に混ぜない")
+    # ゲームは会話の最中も施設の入口（`売買する` など）を選択肢に残すので、
+    # 画面の中身では見分けられない（実機 2026-09-14。店の会話中に売上と出口が並んだ）。
+    app2.player.location = rebuilt
+    app2.buttons = []
+    modfacility.maintain_buttons(app2, screen=screen)
+    ok &= check("普段は足す", bool(app2.buttons))
+    app2.buttons = [{"text": "売買する", "spec": PhaseSpec("ShoppingStartManagerRemake", [])},
+                    {"text": "話を切り上げる", "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}]
+    app2.in_conversation = True
+    modfacility.maintain_buttons(app2, screen=screen)
+    ok &= check("会話中は足さない",
+                [e.get("text") for e in app2.buttons] == ["売買する", "話を切り上げる"])
+    ok &= check("旗の名前が読める", modfacility.game_is_busy(app2) == ["in_conversation"])
+    app2.in_conversation = False
+    app2.in_shopping = True
+    app2.buttons = []
+    modfacility.maintain_buttons(app2, screen=screen)
+    ok &= check("店の中（in_shopping）では足す", bool(app2.buttons))
+    app2.in_shopping = False
+    app2.buttons = []
 
     print("壊す: 街からもノードからも消える")
     ok &= check("壊せた", modfacility.despawn(app2, fid))
