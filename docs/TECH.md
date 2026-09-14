@@ -1892,6 +1892,12 @@ screen.paint(app) / screen.paint_party(app) / screen.refresh(app) / screen.say(a
 | `when_idle` | `is_adding_text` / `is_button_enabled` / `is_popup_window_opened` を見張る |
 | `busy_on` / `busy_off` | LLM を待つ間の待機表示（ゲーム自身と同じ形。GAME.md §2.4）。`busy_off(restore=False)` は「この後すぐ別の画面を出す」経路用 |
 
+`Screen` の操作はゲームのスレッド（Kivy のメインスレッド）から呼ぶこと。
+`when_idle` は1回目の状態確認を、`end_conversation` は `app.process_choice` を、呼んだスレッドでその場で行う
+（`Clock` に載るのは2回目以降の見張りと、その後の実行）。
+背景スレッド（§5.5）から画面を触りたいときは `screen.schedule(fn)` を1枚挟む。
+`apply_buttons` だけは中身を丸ごと `schedule` に載せてあるので、この縛りが無い。
+
 読み取り系:
 
 ```python
@@ -2245,6 +2251,9 @@ if worker.enqueue(job):
 5. **例外を飲む**（1件の失敗で以後が全部止まると、遊んでいる側からは何も起きなくなる）
 
 MOD 側に残るのは**何をログに出すか**だけ（`on_drop` / `on_done` / `enqueue` の戻り値）。
+
+`rebind` で新しい `run` になるのは、繋ぎ替えた後に取り出す1件から。
+既に走り出している1件は最後まで前の世代の `run` でこなす（走っている1件を止める手立ては持たない）。
 
 `Worker` と `WorldStore` はどちらも `apply()` の外に置くこと。
 `apply()` は1プロセスで何度も呼ばれる（§3.5）ので、

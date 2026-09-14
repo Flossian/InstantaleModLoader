@@ -390,10 +390,20 @@ class WorldStore(object):
         どれも世代で変わらない。それでも繋ぎ替えるのは、
         **前の世代の `ctx` を掴んだままにしない**ため
         （`write` は `ctx.logger()` が作る閉包で、打ち切りの数はその中にある）。
+
+        差し替えは錠の中で行う。
+        `load` / `save` は1回の呼び出しの中で `self.ctx` を2度読む
+        （`path()` と `read_json` / `write_json`）ので、錠の外で差し替えると
+        **1回の読み書きが旧世代と新世代の `ctx` に跨がりうる**。
+        今はどちらも同じ場所を返すので結果は変わらないが、
+        `ctx` に世代で変わるものが増えた日に、それを見つける手立てが無い。
+        待たされる心配は要らない。錠を跨いで持つ MOD はどれも
+        「読んで、書き換えて、書く」の数行しか抱えていない。
         """
-        self.ctx = ctx
-        if write is not None:
-            self.write = write
+        with self.lock:
+            self.ctx = ctx
+            if write is not None:
+                self.write = write
         return self
 
     # -- 読み ---------------------------------------------------------------
@@ -429,7 +439,10 @@ class WorldStore(object):
             # 倒さない。後者を黙って倒すと、次の `save` が空に近い正本を無傷で
             # 作る。記録だけは必ず残す（`ctx.read_json`）。
             data = self.ctx.read_json(self.path(key), None)
-            bucket = data if isinstance(data, type(self.default())) else self.default()
+            # `default` は**毎回呼ぶ**約束なので、型を見るためにもう1度呼ばない
+            # （呼ぶ側は `dict` のような作り直すものを渡してくる）。
+            blank = self.default()
+            bucket = data if isinstance(data, type(blank)) else blank
             if self.normalize is not None:
                 bucket, changed = self.normalize(bucket)
                 if changed and self.own:

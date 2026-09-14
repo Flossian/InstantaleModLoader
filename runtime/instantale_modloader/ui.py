@@ -34,6 +34,30 @@
     駄目。** 押下と同じ流れの中で差し替えると、ゲームがその後に描画するので古い
     画面に戻る。`apply_buttons` が `Clock.schedule_once(..., 0)` に載せて
     「次のフレーム・メインスレッド」で行うのはこのため
+
+## どのスレッドから呼ぶか
+
+断りが無ければ**ゲームのスレッド（Kivy のメインスレッド）から呼ぶ**。
+背景スレッド（`jobs.Worker` に渡した `run` の中）から直に呼んでよいのは、
+
+  * `Screen.schedule(fn)` と `scheduler(ctx)` が返す `schedule(fn)`
+    ― どちらも「メインスレッドの次のフレームへ渡す」ための入口そのもの
+  * `app` に載っている素のデータを読むだけのもの（`gold_of` / `current_area` /
+    `area_record` …）。読んでいる間にゲーム側が書き換えないことまでは見ていない
+
+の2つだけ。
+
+**`when_idle` と `end_conversation` は、最初の1回を呼んだスレッドでそのまま行う。**
+`when_idle` の1回目の `tick` は `is_button_enabled` / `is_adding_text` /
+`is_popup_window_opened` をその場で読む（`Clock` に載るのは2回目以降の見張りと
+`then` の実行）。`end_conversation` はその場で `app.process_choice` を呼ぶ。
+背景の仕事が終わってから画面を触りたいときは、`schedule` を1枚挟んでから呼ぶ:
+
+    def run(job):                       # 背景スレッド
+        result = ask_llm(job)
+        schedule(lambda: screen.when_idle(app, lambda: show(result)))
+
+`apply_buttons` は中身を丸ごと `schedule` に載せているので、この縛りは無い。
 """
 
 from __future__ import annotations
