@@ -72,6 +72,7 @@ TECH.md §3.2.3）。違いは3点:
 3. 完了時に接続を書くこと
 
 到着の移動にかかる日数は `ARRIVAL_DAYS`（既定 14 ＝ 馬車と同じ。`307_` の `TRAVEL_DAYS` と同じ理由）。
+日数はローダの関所へ望みを出して当てる（TECH.md §3.3.3）。
 道中のクエストは日数を進めない（GAME.md §2.18）。
 
 ## 状態はゲーム自身に聞く
@@ -96,11 +97,12 @@ TECH.md §3.2.3）。違いは3点:
 """
 
 import datetime
+import os
 import random
 import sys
 import time
 
-from instantale_modloader import ui
+from instantale_modloader import durations, ui
 from instantale_modloader.state import (UNKNOWN_WORLD, WorldStore, world_key,
                                         world_key_of_dict)
 
@@ -1427,29 +1429,47 @@ def apply(ctx):
             ctx.log_exc("road opening: cannot filter the travel text")
         return orig(self, context, *args, **kwargs)
 
+    # 日数そのものはローダの関所が渡す（TECH.md §3.3.3）。
+    # こちらは「到着の移動は何日か」を答える側に回る。
+    def days_wish(app, days):
+        """到着の移動にかかる日数（`ARRIVAL_DAYS`）を望む。段階 `moving` の最初の1回だけ。
+
+        道を行っていないときは何も望まない（None）。
+        `since` は移動が始まった時刻で、同じ移動に `314_`（街移動の設定）が
+        望みを出していても、**起こしたのはこちら**なので日数はこちらが決める。
+        """
+        observe_quest(app)
+        record = pending_of(app, "moving")
+        if record is None:
+            return None
+        if int(record.get("days_spent") or 0) > 0:
+            write("days: {} left alone (the road to {!r} already took {} day(s))"
+                  .format(days, record.get("target_name"), record.get("days_spent")))
+            return None
+        return {"days": max(0, int(ARRIVAL_DAYS)),
+                "since": record.get("moving_at")}
+
+    def days_note(app, days, granted):
+        """道が実際に取った日数を控える（到着の検算が読む）。"""
+        record = pending_of(app, "moving")
+        if record is None or int(record.get("days_spent") or 0) > 0:
+            return
+        advance(app, "moving", days_spent=max(0, int(granted)))
+        write("road: the road to {!r} takes {} day(s)".format(
+            record.get("target_name"), granted))
+
+    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "road_opening"
+    durations.claim_days(owner, days_wish, note=days_note, write=write)
+    durations.install(ctx, write)
+
     @ctx.wrap("__main__:InstantaleApp.elapse_days", required=False)
     def elapse_days(orig, self, days, *args, **kwargs):
-        """到着の移動にかかる日数を `ARRIVAL_DAYS` にする。段階 `moving` の最初の1回だけ。
+        """日数が進んだ後に、期日が来た委託を開く（`check_commissions`）。
 
-        日数が進んだ後は、期日が来た委託を開く（`check_commissions`）。
+        日数そのものには触らない（それは関所の仕事）。
+        後処理は `orig` の**後**にしか置けないので、この包みだけは残る。
         """
-        granted = days
-        try:
-            observe_quest(self)
-            record = pending_of(self, "moving")
-            if record is not None and _number(days) and days > 0:
-                if int(record.get("days_spent") or 0) > 0:
-                    write("days: {} left alone (the road to {!r} already took {} day(s))"
-                          .format(days, record.get("target_name"), record.get("days_spent")))
-                else:
-                    granted = max(0, int(ARRIVAL_DAYS))
-                    advance(self, "moving", days_spent=granted)
-                    write("days: {} -> {} (the road to {!r} takes {} day(s))".format(
-                        days, granted, record.get("target_name"), granted))
-        except Exception:
-            ctx.log_exc("road opening: cannot set the days")
-            granted = days
-        result = orig(self, granted, *args, **kwargs)
+        result = orig(self, days, *args, **kwargs)
         try:
             check_commissions(self, "days")
         except Exception:

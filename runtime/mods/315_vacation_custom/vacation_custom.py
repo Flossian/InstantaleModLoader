@@ -17,7 +17,7 @@
 | 部屋の名前・ボタンの表示 | `InstantaleApp.refresh_choice_buttons` の前に `text` だけ書き換える |
 | 宿代 | ゲームが引き落とす前に差額ぶん所持金をずらす（`314_` と同じ前払い調整） |
 | 宿泊期間（月単位） | `DisplayVacationChoice.__init__` に渡る `period_months` を差し替える |
-| 宿泊期間（週単位） | `period_months` は 1 にして、宿泊の窓の間だけ `elapse_days` に渡る日数の合計を設定値へ（`314_` の予算方式） |
+| 宿泊期間（週単位） | `period_months` は 1 にして、宿泊の窓の間だけローダの日数送りの関所へ「残りは何日か」を出す |
 | LLM の描写の月数 | 窓の間だけ、出ていく本文の `数ヵ月の宿泊` を実際の期間へ（`llm.wrap_outgoing`） |
 
 ボタンに出す期間・料金は設定値そのもので、ゲームに渡す値も同じ設定値。
@@ -27,7 +27,9 @@
 
 - 週単位は「`months=1` ＋ 日数の予算」で作る。
   ゲームの宿泊は月単位しか無いので、部屋代1回ぶんの最小の宿泊として進めさせ、
-  窓の間の `elapse_days` の合計だけを設定の日数へ切り詰める。
+  窓の間に進む日数の合計だけを設定の日数へ切り詰める。
+  切り詰めるのは**ローダの関所**（`durations`。TECH.md §3.3.3）で、
+  `elapse_days` はこちらでは包まない。こちらは窓の間だけ「残りの予算まで」と望みを出す。
   予算は `VacationStartManager.execute` ごとに積み直すので、
   連泊（`まだ宿泊する`）の2周目も同じ日数になる。
   日数送りが `elapse_days` を通らないビルドへの保険として活動マネージャにも窓を張ってあり（`STAY_WINDOW_MANAGERS`）、
@@ -64,10 +66,12 @@
 遊び方の説明は MODS.md の `315_` の項、検証の経過は VERIFICATION.md §3.28。
 """
 
+import os
 import sys
 import re
+import time
 
-from instantale_modloader import llm, ui
+from instantale_modloader import durations, llm, ui
 
 LOG_BASENAME = "vacation_custom.log"
 
@@ -363,6 +367,16 @@ def apply(ctx):
         """いまの設定と年齢での実際の期間。「デフォルト」なら None。"""
         return compute_stay(STAY_LENGTH, player_age(app), bool(AGE_SCALING))
 
+    # 宿泊の長さはローダの窓口（`durations`）に答えを置く。
+    # 読む側（自分の家の滞在を宿屋に合わせる MOD など）は窓口に聞くだけで、
+    # この MOD の名前を知らない（TECH.md §3.3.2）。
+    # 置くのは**関数**で、値ではない。年齢で変わるうえ、
+    # 設定を変えたときに置き直す責任を読む側に持たせないため。
+    # 「デフォルト」では None を返し、窓口がゲームの式へ落とす。
+    # `ctx.mod_dir` はフックの中では読めない（apply() の間だけ）ので、ここで控える。
+    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "vacation_custom"
+    durations.declare(durations.INN_STAY, stay_for, owner=owner, write=write)
+
     def set_gold(app, value):
         """所持金を書く。型を保つ（`901_` と同じ。float の世界に int を混ぜない）。"""
         player = getattr(app, "player", None)
@@ -589,7 +603,10 @@ def apply(ctx):
             if stay is not None and stay["days"] is not None \
                     and months == stay["months"]:
                 state["block"] = {"left": int(stay["days"]), "spent": 0,
-                                  "length": stay["length"]}
+                                  "length": stay["length"],
+                                  # この宿泊が始まった時刻（ローダの関所が
+                                  # 「先に始まった事情が決める」で使う）。
+                                  "since": time.time()}
                 write("stay: block of {} day(s) for {} (quality {!r})".format(
                     stay["days"], stay["length"], info.get("quality")))
             else:
@@ -668,31 +685,29 @@ def apply(ctx):
     for name in STAY_WINDOW_MANAGERS:
         install_stay_window(name)
 
-    @ctx.wrap("__main__:InstantaleApp.elapse_days", required=False)
-    def elapse_days(orig, self, days, *args, **kwargs):
-        """宿泊の窓の間だけ、渡る日数の合計を週単位の予算に合わせる。
+    # `elapse_days` はこちらでは包まない。包むのはローダの関所1枚だけで、
+    # ここは「この宿泊であと何日進めてよいか」を答える側に回る（TECH.md §3.3.3）。
+    def days_wish(app, days):
+        """宿泊の窓の間だけ、**予算までの頭打ち**を望む。窓の外・月単位では None。"""
+        block = state["block"]
+        if block is None or state["depth"] <= 0:
+            return None
+        return {"days": max(0, min(int(days), block["left"])),
+                "since": block.get("since")}
 
-        渡す数を差し替えるだけで、
-        暦の進め方も日次処理もゲームのまま（`orig` は必ず呼ぶ）。
-        窓の外では1バイトも触らない（`314_` と同じ）。
-        月単位・デフォルトでは予算そのものが無い。
-        """
-        try:
-            block = state["block"]
-            if block is not None and state["depth"] > 0 \
-                    and isinstance(days, (int, float)) \
-                    and not isinstance(days, bool) and days > 0:
-                granted = max(0, min(int(days), block["left"]))
-                block["left"] -= granted
-                block["spent"] += granted
-                if granted != days:
-                    write("days: {} -> {} ({} spent {} left {})".format(
-                        days, granted, block["length"], block["spent"],
-                        block["left"]))
-                return orig(self, granted, *args, **kwargs)
-        except Exception:
-            ctx.log_exc("vacation custom: cannot adjust the days")
-        return orig(self, days, *args, **kwargs)
+    def days_note(app, days, granted):
+        """実際に進んだ日数を予算から引く。**他所が決めた回も来る**。"""
+        block = state["block"]
+        if block is None or state["depth"] <= 0:
+            return
+        block["left"] = max(0, block["left"] - max(0, int(granted)))
+        block["spent"] += max(0, int(granted))
+        if granted != days:
+            write("stay: {} spent {} left {}".format(
+                block["length"], block["spent"], block["left"]))
+
+    durations.claim_days(owner, days_wish, note=days_note, write=write)
+    durations.install(ctx, write)
 
     @ctx.wrap("__main__:InstantaleApp.add_text", required=False)
     def add_text(orig, self, context=None, *args, **kwargs):

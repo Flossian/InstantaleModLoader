@@ -1,0 +1,19 @@
+{
+  "entry": "probe_training.py",
+  "api": 1,
+  "kind": "probe",
+  "name": {
+    "en": "Probe: facility training",
+    "ja": "計測: 施設での訓練"
+  },
+  "description": {
+    "en": "Records the years and prices offered by a training facility, when the price is charged, how many days each year advances, and what each phase passes on. Read-only",
+    "ja": "施設の訓練で並ぶ年数と代金・代金の徴収の時機・1年で暦が何日進むか・各段が次へ渡す値を録る。ゲームは変えない"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "after": [
+    "306_party_train_exp"
+  ],
+  "debug": true
+}

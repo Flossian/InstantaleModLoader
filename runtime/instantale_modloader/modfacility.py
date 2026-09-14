@@ -431,12 +431,69 @@ def unlink(facility, other_id):
     return True
 
 
-def hub_of(area):
+def node_with(area, facility_id):
+    """その施設を持っているノード。無ければ None。"""
+    if area is None or not facility_id:
+        return None
+    target = str(facility_id)
+    for node in ui.nodes_of(area):
+        if target in ui.facilities_of(node):
+            return node
+    return None
+
+
+def node_here(app, area, node_id=None):
+    """いま拠り所にすべきノード。読めなければ None。
+
+    **1つの土地が同じ形のノードを2つ以上持つ世界がある**
+    （実機 2026-09-14。カスティアは入口・区画・役場・宿を持つノードを2つ持っていた）。
+    ノードどうしは繋がっていないので、
+    プレイヤーが歩いている側と違うノードに建てると**どこからも入れない**。
+
+    拠り所は2つだけ。名指しの `node_id`（控えや保存の `current_node`）と、
+    プレイヤーがいま立っている施設が在るノード。
+    **`current_area` は見ない** ― ロードの途中では前の世界のプレイヤーが
+    残っていることがあり、そこから当てると別の街のノードを選びうる。
+    """
+    if area is None:
+        return None
+    if node_id:
+        for node in ui.nodes_of(area):
+            if node_id_of(node) == str(node_id):
+                return node
+    return node_with(area, player_facility_id(app)) if app is not None else None
+
+
+def hub_in_node(node):
+    """そのノードの繋ぎ先。`(ノード, 施設)`。無ければ `(None, None)`。"""
+    if node is None:
+        return None, None
+    facilities = ui.facilities_of(node)
+    entrance_id = getattr(node, "entrance_facility", None)
+    if entrance_id is not None:
+        facility = facilities.get(str(entrance_id))
+        if facility is not None and ui.facility_type_of(facility) in HUB_TYPES:
+            return node, facility
+    for kind in HUB_TYPES:
+        for facility in facilities.values():
+            if ui.facility_type_of(facility) == kind:
+                return node, facility
+    return None, None
+
+
+def hub_of(area, app=None, node_id=None):
     """建物を繋ぐ先。`(ノード, 施設)`。見つからなければ `(None, None)`。
 
     ノード自身が「ここが入口だ」と持っている（実データの `entrance_facility`）ので、
     まずそれを引く。種類で探すのはその後（入口を持たないノードのため）。
+
+    **どのノードかが分かるなら、そのノードの中だけで探す**（`node_here`）。
+    土地の先頭のノードから探すと、ノードが2つある街で
+    プレイヤーの居ない側に建つ（実機 2026-09-14）。
     """
+    node, facility = hub_in_node(node_here(app, area, node_id))
+    if facility is not None:
+        return node, facility
     for node in ui.nodes_of(area):
         entrance_id = getattr(node, "entrance_facility", None)
         if entrance_id is None:
@@ -461,7 +518,7 @@ def hub_preference(facility_id):
     return prefer
 
 
-def hub_for(area, prefer="entrance", seed=""):
+def hub_for(area, prefer="entrance", seed="", app=None):
     """新しく建てるときの繋ぎ先。`(ノード, 施設)`。見つからなければ `(None, None)`。
 
     `"entrance"` はその土地の入口（`hub_of`）。
@@ -469,23 +526,23 @@ def hub_for(area, prefer="entrance", seed=""):
     （同じ建物は同じ区画へ。複数建てると散る）。
     区画が無い土地では入口に落ちる。
     """
-    node, entrance = hub_of(area)
+    node, entrance = hub_of(area, app)
     if node is None or entrance is None or prefer != "ward":
         return node, entrance
+    # 区画は**その入口と同じノードの中**から選ぶ。
+    # 土地ぜんぶから選ぶと、ノードが2つある街で入口と別のノードの区画に繋ぎうる。
     wards = []
     for target in connections_of(entrance):
-        for candidate_node in ui.nodes_of(area):
-            facility = ui.facilities_of(candidate_node).get(str(target))
-            if facility is not None and ui.facility_type_of(facility) == "ward":
-                wards.append((candidate_node, facility))
-                break
+        facility = ui.facilities_of(node).get(str(target))
+        if facility is not None and ui.facility_type_of(facility) == "ward":
+            wards.append((node, facility))
     if not wards:
         return node, entrance
     digest = sum(ord(ch) for ch in str(seed)) if seed else 0
     return wards[digest % len(wards)]
 
 
-def hub_in(area, node_id, facility_id):
+def hub_in(area, node_id, facility_id, app=None):
     """控えに書いてある繋ぎ先を引き当てる。引けなければ `hub_of` に落ちる。"""
     if node_id and facility_id:
         for node in ui.nodes_of(area):
@@ -494,7 +551,7 @@ def hub_in(area, node_id, facility_id):
             facility = ui.facilities_of(node).get(str(facility_id))
             if facility is not None:
                 return node, facility
-    return hub_of(area)
+    return hub_of(area, app)
 
 
 def area_of(app, area_id, world=None):
@@ -522,6 +579,25 @@ def facility_of(app, facility_id, world=None):
 # --------------------------------------------------------------------------
 # 建てる・壊す
 # --------------------------------------------------------------------------
+def misplaced(app, area, node, facility_id):
+    """プレイヤーの行けないノードに建っているか。
+
+    ノードどうしは繋がっていないので、**別のノードに在る建物には入れない**
+    （実機 2026-09-14。ノードが2つあるカスティアで、買った家へ入る道がどこにも出なかった）。
+    居場所が読めないときは動かさない（読めないことを理由に壊さない）。
+    中に立っているときも動かさない（足元を崩さない）。
+    """
+    here = player_facility_id(app)
+    if not here or str(here) == str(facility_id):
+        return False
+    wanted = node_with(area, here)
+    if wanted is None or node is None:
+        return False
+    if node_id_of(wanted) == node_id_of(node):
+        return False
+    return hub_in_node(wanted)[1] is not None
+
+
 def spawn(app, facility_id, area_id, *, node_id=None, hub_id=None, world=None,
           fresh=False, write=None):
     """建物を1軒建てる。建った実体を返す。建てられなければ None。
@@ -548,17 +624,33 @@ def spawn(app, facility_id, area_id, *, node_id=None, hub_id=None, world=None,
             write("WARN modfacility: area {!r} is not in this world".format(area_id))
         return None
     # 既に街に在るなら建て直さない（塗り直しで二重に建てない）。
+    # ただし**プレイヤーの行けないノードに在る**なら、そこは無いのと同じ。
     found, found_node = ui.find_facility(area, facility_id)
-    if found is not None:
+    if found is not None and not misplaced(app, area, found_node, facility_id):
         record["facility"] = found
         record["built_in"] = getattr(patch, "_generation", None)
         record["placed"] = (str(area_id), node_id_of(found_node),
                             (record.get("placed") or ("", "", ""))[2])
         return found
+    if found is not None:
+        # 別のノードへ移す。中身（実体の値）は写しに取ってから壊す。
+        record["snapshot"] = snapshot_of(found)
+        if write:
+            write("modfacility: {} stands in node {!r} where the player cannot go; "
+                  "moving it to node {!r}".format(
+                      facility_id, node_id_of(found_node),
+                      node_id_of(node_here(app, area))))
+        despawn(app, facility_id, world=world, write=write)
+        node_id = hub_id = None
+    wanted = node_here(app, area)
+    if node_id and hub_id and wanted is not None \
+            and node_id_of(wanted) != str(node_id):
+        # 控えの繋ぎ先は別のノードだった（土地の作り直しなど）。
+        node_id = hub_id = None
     if node_id and hub_id:
-        node, hub = hub_in(area, node_id, hub_id)         # 控えの繋ぎ先（建て直し）
+        node, hub = hub_in(area, node_id, hub_id, app)    # 控えの繋ぎ先（建て直し）
     else:
-        node, hub = hub_for(area, hub_preference(facility_id), facility_id)
+        node, hub = hub_for(area, hub_preference(facility_id), facility_id, app)
     if node is None or hub is None:
         if write:
             write("WARN modfacility: no hub facility in area {!r}".format(area_id))
@@ -1287,7 +1379,7 @@ def stranded(app):
     facility, _node = ui.find_facility(area, here)
     if facility is not None:
         return False
-    _node, hub = hub_of(area)
+    _node, hub = hub_of(area, app)
     return hub is not None
 
 
@@ -1367,7 +1459,8 @@ def repair_player_location(world, save_data_dict, write=None):
     facility, _node = ui.find_facility(area, here)
     if facility is not None:
         return False
-    _node, hub = hub_of(area)
+    # 保存の `current_node` が、どのノードへ戻すかを知っている。
+    _node, hub = hub_of(area, node_id=str(player.get("current_node") or ""))
     hub_id = facility_id_of(hub) if hub is not None else ""
     if not hub_id:
         if write:
@@ -1533,7 +1626,7 @@ def safe_save_location(app, screen=None, write=None):
         # ロードで必ず建て直ると層が名乗った建物。入ったところから続けられる。
         return None
     area = ui.current_area(app)
-    _node, hub = hub_of(area) if area is not None else (None, None)
+    _node, hub = hub_of(area, app) if area is not None else (None, None)
     if hub is None:
         return None
     hub_id = facility_id_of(hub)
@@ -2089,7 +2182,7 @@ def leave(app, facility_id=None, screen=None, write=None):
     hub_id = str(spot[2]) if spot and len(spot) > 2 else ""
     args = move_spec_args(area, hub_id) if hub_id else None
     if args is None:
-        _node, hub = hub_of(area)
+        _node, hub = hub_of(area, app)
         if hub is not None:
             hub_id = facility_id_of(hub)
             args = move_spec_args(area, hub_id)

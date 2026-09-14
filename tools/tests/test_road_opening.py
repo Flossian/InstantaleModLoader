@@ -437,6 +437,8 @@ def install_fake_functions(quests):
 
 
 class FakeCtx:
+    _seq = 0
+
     def __init__(self, out_dir):
         self.out_dir = out_dir
         self.state_dir = os.path.join(out_dir, "state")
@@ -444,6 +446,11 @@ class FakeCtx:
         self.errors = []
         self.logs = []
         self.ready = []
+        # 世代は apply() ごとに違う（本物の `ctx.generation`）。
+        # ローダの日数送りの関所は世代で「もう立てたか」を見るので、
+        # ここが同じ値だと 2本目以降の apply() で関所が立たない（durations.install）。
+        FakeCtx._seq += 1
+        self.generation = FakeCtx._seq
 
     def out_path(self, *parts):
         path = os.path.join(self.out_dir, *parts)
@@ -481,8 +488,23 @@ class FakeCtx:
         return True
 
     def wrap(self, target, **kw):
+        """同じ対象に2枚当たったら層にする（本物は後から当てたほうが外側。TECH.md §3.3）。
+
+        `325_` は日数送りに「後処理だけ」の包みを持ち、日数そのものは
+        ローダの関所が渡す。1枚しか覚えないと、後から当てたほうだけが残る。
+        """
         def decorator(func):
-            self.hooks[target] = func
+            previous = self.hooks.get(target)
+            if previous is None:
+                self.hooks[target] = func
+                return func
+
+            def layered(orig, this, *args, _prev=previous, _func=func, **kwargs):
+                def inner(obj, *a, **kw2):
+                    return _prev(orig, obj, *a, **kw2)
+                return _func(inner, this, *args, **kwargs)
+
+            self.hooks[target] = layered
             return func
         return decorator
 

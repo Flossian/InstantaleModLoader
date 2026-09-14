@@ -80,10 +80,24 @@ GAME.md §2.28 の「遊んでいる最中に生まれた施設で売買を選�
 宿泊1回の長さは**ゲームの宿屋と同じ**（自分の家の滞在も同じ長さ）。
 素のゲームは3ヵ月から年齢で伸びる変動式で、
 `315_vacation_custom` を入れていればその設定が効く。
-どちらも自分では決めず、**宿屋で実際に使われた月数を覚えて使う**
-（`VacationStartManager.__init__` の `months`。
-そこが `elapse_days(months * 30)` の元。218 の実測）。
-まだ宿屋を見ていない世界では年齢から見積もる（`estimated_stay_months`）。
+どちらも自分では決めず、宿屋から2つ覚える。
+
+    月数   宿屋の部屋の選択肢（`VacationStartManager` の spec の `args[0]`）。
+           **開くだけで覚える**。滞在を起こすときに渡す値で、
+           他 MOD の日数の細工もここに噛み合う
+    日数   滞在1回で**実際に進んだ日数**。賃貸の1期はこれを数える
+           （月数×30 とは限らない。315 の週単位は月数1のまま7日しか進めない）。
+           宿屋の宿泊でも**自分の家の滞在でも測る**ので、宿屋に泊まらなくてよい。
+           どの月数で測ったかを添え（`stay_days_for`）、月数が変わったら使わない
+
+**`VacationStartManager.__init__` は見ない。**
+MOD が自分で起こす滞在（`915_facility_investment` の「無料で泊まる」や、この MOD の
+家の滞在）も同じ入口を通るので、よその MOD の都合の月数を宿屋の値として覚えてしまう
+（実機 2026-09-14）。部屋のボタンはゲームだけが組む。
+日数のほうも、MOD が建てた建物の中の宿泊では数えない。
+
+まだ宿屋の部屋を見ていない世界では、ローダの窓口に聞く（`durations.inn_stay`。
+変える MOD が入っていればその答え、無ければゲームの式。TECH.md §3.3.2）。
 
 契約の周期は**結んだ時点の長さで固定**する。
 年を取って宿泊が伸びても、いま借りている契約の期限は動かない。
@@ -107,7 +121,7 @@ GAME.md §2.28 の「遊んでいる最中に生まれた施設で売買を選�
 import datetime
 import sys
 
-from instantale_modloader import frames, modfacility, ui
+from instantale_modloader import durations, frames, modfacility, ui
 from instantale_modloader.state import (UNKNOWN_WORLD, WorldStore, playthrough_key,
                                         playthrough_key_of_dict)
 
@@ -201,10 +215,6 @@ STORAGE_SHARED = False
 #: 滞在の部屋の等級。ゲームの宿屋と同じ語彙（GAME.md §2.17）。
 STAY_QUALITY = "private_room"
 
-#: 自分の家に居ないとき（宿屋を一度も見ていない世界）の、滞在の月数の見積もり。
-#: 素のゲームは3ヵ月から年齢で伸びる。宿屋を1度でも使えば実際の値を覚える。
-BASE_STAY_MONTHS = 3
-
 #: 借りた物件の名前。
 RENT_NAME = "借りている家"
 
@@ -261,38 +271,15 @@ DAYS_PER_MONTH = 30
 #: 週ぎめ・月ぎめだった頃の契約。次に読んだときに1本立ての賃貸へ移す。
 
 
-def age_of(app):
-    """プレイヤーの年齢。読めなければ None。"""
-    value = getattr(getattr(app, "player", None), "age", None)
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        return int(value)
-    try:
-        return int(str(value))
-    except (TypeError, ValueError):
-        return None
+def game_stay(app):
+    """いまの宿屋の宿泊1回の長さ。ローダの窓口に聞く（`durations.inn_stay`）。
 
-
-def estimated_stay_months(app):
-    """宿屋の宿泊期間の見積もり（素のゲームの式）。
-
-    3ヵ月を土台に、30代 +1・40代 +2・50代以上 +3、上限6ヵ月
-    （`315_vacation_custom` が同じ式を持っている。
-    GAME.md §2.17 の実測は 20代=3・31歳=4 の2点）。
-    **見積もりを使うのは宿屋を一度も見ていない間だけ**で、
-    1度でも泊まれば実際の値に置き換わる。
+    素のゲームは3ヵ月から年齢で伸びる式で、変える MOD
+    （`315_vacation_custom` など）が入っていればその答えになる。
+    **この MOD は式を持たないし、変える MOD の名前も知らない**（TECH.md §3.3.2）。
+    返るのは必ず辞書 `{"months", "days", "length", "source"}`。
     """
-    months = int(BASE_STAY_MONTHS or 3)
-    age = age_of(app)
-    if age is not None:
-        if age >= 50:
-            months += 3
-        elif age >= 40:
-            months += 2
-        elif age >= 30:
-            months += 1
-    return max(1, min(months, 6))
+    return durations.inn_stay(app)
 
 
 #: 契約の家賃の周期（日）。買い切りは 0、賃貸は `lease_days(app)`。
@@ -369,8 +356,6 @@ def apply(ctx):
                 "owner_was": None,
                 # 手が空くのを待っているボタンの足し直し（見張りは同時に1つ）。
                 "retry": False,
-                # いま組んでいる宿泊は自分の家のものか（宿屋の月数と取り違えないため）。
-                "own_stay": False,
             },
         }
         setattr(sys, STATE_STORE_ATTR, store)
@@ -496,28 +481,80 @@ def apply(ctx):
         worlds.save(current_key(app))
 
     # ------------------------------------------------------------ 建物の当て直し
-    def remember_stay_months(app, months):
-        """宿屋で実際に使われた月数を控える。
+    def note_inn_months(app, buttons):
+        """宿屋の部屋の選択肢から、いまの宿泊の月数を読む。控えたら True。
 
-        見ているのは `VacationStartManager.__init__` に渡る `months`。
-        **そこが `elapse_days(months * 30)` の元**（218 の実測）で、
-        年齢の変動式も `315_vacation_custom` の設定も、
-        この時点では答えが出ている。
+        ゲーム自身が組む部屋のボタン（`犬小屋(0G)` … `高級個室(1000G)`）の spec が
+        `VacationStartManager(app, months, quality)`（GAME.md §2.17）。
+        **そこに載っている月数が、MOD を全部通った後の答え**
+        （年齢の変動式も `315_vacation_custom` の期間の差し替えも、この時点で済んでいる）。
+
+        `VacationStartManager.__init__` を見る形はやめた。
+        MOD が自分で起こす滞在（`915_facility_investment` の「無料で泊まる」や
+        この MOD の家の滞在）も同じ入口を通るので、
+        **よその MOD の都合の月数を「宿屋の値」として覚えてしまう**
+        （実機 2026-09-14。915 の宿で3ヵ月を拾っていた）。
+        部屋のボタンはゲームだけが組むので、そこが混ざらない。
+
+        ただし**滞在の最中の画面も同じ spec のボタンを持つ**。
+        ゲームは活動の選択肢に `まだ宿泊する`（連泊。`VacationStartManager`）を並べ、
+        そこには**いま走っている滞在の月数**が載っている。
+        自分の家の滞在でそれを拾うと、見積もりで始めた月数を
+        「宿屋の値」として覚え直してしまう（実機 2026-09-14。3ヵ月で固まった）。
+        MOD が建てた建物の中では数えない。
         """
+        if inside_mod_building(app):
+            return False
+        for entry in buttons or []:
+            if ui.spec_cls_name(entry) != STAY_CLS:
+                continue
+            args = ui.spec_args(entry)
+            if args and remember_stay_months(app, args[0]):
+                return True
+        return False
+
+    def remember_stay_months(app, months):
+        """宿屋の宿泊の月数を控える。控えたら True。"""
         try:
             value = int(str(months))
         except (TypeError, ValueError):
-            return
+            return False
         if value < 1:
-            return
+            return False
         key = current_key(app)
         bucket = bucket_of(key)
         if bucket.get("stay_months") == value:
-            return
+            return True
         bucket["stay_months"] = value
         worlds.save(key)
-        write("stay length: the inn used {} month(s) = {} days".format(
-            value, value * DAYS_PER_MONTH))
+        write("stay length: the inn's rooms are booked by {} month(s)".format(
+            value))
+        return True
+
+    def inside_mod_building(app):
+        """MOD が建てた建物の中に立っているか。
+
+        よその MOD の宿（`915_facility_investment` の「無料で泊まる」）で測ると、
+        その MOD の都合の日数を宿屋の値として覚えてしまう。
+        """
+        try:
+            return bool(modfacility.inside(app))
+        except Exception:
+            return False
+
+    def game_stay_here(app):
+        """ローダの窓口に聞いた宿泊の長さ。誰が決めたかを1度だけログに残す。
+
+        これは**まだ宿屋の部屋の選択肢を一度も見ていない世界**のための落ちどころ。
+        一度でも見れば、そちら（実際に観測した値）が答えになる。
+        """
+        plan = durations.inn_stay(app, write=write)
+        warn_once(("stay-source", plan.get("source"), plan.get("length")),
+                  "stay length: {} month(s){} by {}".format(
+                      plan["months"],
+                      "/{} day(s)".format(plan["days"]) if plan.get("days") else "",
+                      plan.get("source") or "the game's own rule"))
+        return plan
 
     def stay_months(app):
         """1回の滞在の月数。**宿屋と同じ**（本人の指定、2026-09-11）。
@@ -529,11 +566,58 @@ def apply(ctx):
         value = bucket_of(current_key(app)).get("stay_months")
         if isinstance(value, int) and not isinstance(value, bool) and value >= 1:
             return value
-        return estimated_stay_months(app)
+        return game_stay_here(app)["months"]
+
+    def remember_stay_days(app, days, months=None, why="the inn"):
+        """滞在1回で**実際に進んだ日数**を控える。
+
+        月数×30 とは限らない。`315_vacation_custom` の週単位は
+        ゲームに渡す月数を1にしたまま、日数だけを設定の値へ縮める
+        （実機 2026-09-14。宿は `宿泊する(1週間)` で7日だった）。
+        賃貸の1期はこの日数を数えるので、月数ではなくこちらで数える。
+
+        **どの月数で測ったか**を一緒に控える。
+        月数が変わったら（宿屋の部屋を見て覚え直した・設定を変えた）、
+        前に測った日数はもうその答えではない。
+        """
+        try:
+            value = int(days)
+        except (TypeError, ValueError):
+            return False
+        if value < 1:
+            return False
+        try:
+            tag = int(str(months))
+        except (TypeError, ValueError):
+            tag = None
+        key = current_key(app)
+        bucket = bucket_of(key)
+        if bucket.get("stay_days") == value and bucket.get("stay_days_for") == tag:
+            return True
+        bucket["stay_days"] = value
+        bucket["stay_days_for"] = tag
+        worlds.save(key)
+        write("stay length: {} moved the calendar {} day(s) (months={})".format(
+            why, value, tag))
+        return True
 
     def stay_days(app):
-        """滞在1回で進む日数。"""
-        return stay_months(app) * DAYS_PER_MONTH
+        """滞在1回で進む日数。
+
+        測れていればその日数、まだなら月数×30。
+        **測ったときの月数が今と違えば使わない**（設定が変わった後の値）。
+        """
+        bucket = bucket_of(current_key(app))
+        value = bucket.get("stay_days")
+        months = stay_months(app)
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 1 \
+                and bucket.get("stay_days_for") == months:
+            return value
+        plan = game_stay_here(app)
+        if plan.get("days") and plan["months"] == months:
+            # 週単位。ゲームに渡る月数は1のまま、日数だけが縮む。
+            return plan["days"]
+        return months * DAYS_PER_MONTH
 
     def lease_days(app):
         """賃貸の1期の長さ（日）。**滞在 `RENT_STAYS` 回ぶん**。
@@ -1057,11 +1141,7 @@ def apply(ctx):
             write("WARN stay: __main__.{} is not available".format(STAY_CLS))
             return
         try:
-            state["own_stay"] = True
-            try:
-                phase = cls(app, int(stay_months(app)), str(STAY_QUALITY))
-            finally:
-                state["own_stay"] = False
+            phase = cls(app, int(stay_months(app)), str(STAY_QUALITY))
         except Exception:
             ctx.log_exc("real estate: cannot build {}".format(STAY_CLS))
             return
@@ -1420,6 +1500,9 @@ def apply(ctx):
         buttons = getattr(app, "buttons", None)
         if not isinstance(buttons, list):
             return
+        # 宿屋の部屋の選択肢が出ていれば、そこから宿泊の月数を覚える。
+        # 読むだけなので、本文が流れていても構わない。
+        note_inn_months(app, buttons)
         if ui.busy_signals(app):
             # 本文が流れている最中は触らない。手が空いてからやり直す。
             retry_when_idle(app)
@@ -1610,22 +1693,6 @@ def apply(ctx):
             ctx.log_exc("real estate: cannot settle the rent")
         return result
 
-    @ctx.wrap("__main__:VacationStartManager.__init__", required=False, safe=True)
-    def stay_init(orig, self, app=None, months=None, quality=None, *args, **kwargs):
-        """宿屋の宿泊が組まれるたび、その月数を控える。
-
-        自分の家の滞在（こちらが組んだもの）は数えない。
-        覚えた値をそのまま渡しているので害は無いが、
-        見積もりで始めた世界で、その見積もりが「実測」に化けるのを避ける。
-        """
-        result = orig(self, app, months, quality, *args, **kwargs)
-        try:
-            if not state.get("own_stay") and app is not None:
-                remember_stay_months(app, months)
-        except Exception:
-            ctx.log_exc("real estate: cannot note the length of the stay")
-        return result
-
     @ctx.wrap("__main__:VacationStartManager.execute", required=False)
     def vacation_start(orig, self, choice_text="", *args, **kwargs):
         """自分の建物での滞在は宿代を取らない。宿屋での宿泊には触らない。
@@ -1643,8 +1710,21 @@ def apply(ctx):
         app = getattr(self, "app", None) or ui.find_app()
         home = staying_home(app) if app is not None else None
         if home is None:
-            return orig(self, choice_text, *args, **kwargs)
+            # 宿屋（か、よその MOD の宿）の宿泊。
+            # **実際に何日進んだか**をここで測る（月数×30 とは限らない）。
+            day_before = ui.game_day(app) if app is not None else None
+            result = orig(self, choice_text, *args, **kwargs)
+            try:
+                day_after = ui.game_day(app) if app is not None else None
+                if isinstance(day_before, int) and isinstance(day_after, int) \
+                        and not inside_mod_building(app):
+                    remember_stay_days(app, day_after - day_before,
+                                       getattr(self, "months", None))
+            except Exception:
+                ctx.log_exc("real estate: cannot measure the stay")
+            return result
         before = ui.gold_of(app)
+        day_before = ui.game_day(app)
         state["rent_charged"] = 0
         try:
             result = orig(self, choice_text, *args, **kwargs)
@@ -1661,6 +1741,16 @@ def apply(ctx):
             recover(app, "stay failed")
             return None
         refund_room(app, before, "stay")
+        try:
+            # 自分の家の滞在でも日数は測れる。
+            # **渡した月数はゲームの宿屋と同じ**なので、他 MOD の日数の細工も
+            # そのまま乗る（宿屋へ行かなくても、1期の長さがここで決まる）。
+            day_after = ui.game_day(app)
+            if isinstance(day_before, int) and isinstance(day_after, int):
+                remember_stay_days(app, day_after - day_before,
+                                   getattr(self, "months", None), why="the home stay")
+        except Exception:
+            ctx.log_exc("real estate: cannot measure the home stay")
         return result
 
     def describe_building(app, home):

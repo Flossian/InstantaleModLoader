@@ -1810,6 +1810,37 @@ process_choice(VacationEndManager,   '宿泊を終える')
 > **ローダ側で塞いである**ので答えは正しくなるが、名前で見る予備の経路に落ちるので重い。
 > 自分で包むなら `MethodWatch` をやめて自分のラッパで印を立てる方が速い（TECH.md §6.3）。
 
+#### 訓練の流れ（実測、2026-09-15、`231_probe_training`）
+
+```text
+process_choice(DisplayTrainingChoice, '訓練する')          args=['訓練']（training_type）
+    選択肢: 訓練を受ける(300G)   spec=TrainingStartManager args=[3, 300]   ← 年数3・代金300
+process_choice(TrainingStartManager, '訓練を受ける(300G)')
+    所持金 -300（代金はここ）。日数は進まない
+    「あと3年間。どうする？」
+    選択肢: ただ鍛える(1年) / 基礎を積む(2年) / 技を磨く(2年) / 新たな技を学ぶ(3年)
+            spec=TrainingPhaseManager args=[type, remaining_years, training_log]
+            type は 'simple' / 'fundamental' / 'train_skill' / 'learn_new_skill'
+process_choice(TrainingPhaseManager, '新たな技を学ぶ(3年)')
+    elapse_days(1095)    ← 3年 × 365日。この段の中で1回
+    残り 3-3=0 →「訓練を終えた。卒業だ...」
+同じ施設でもう一度                「十分に学んだ。これ以上ここで得るものはないだろう。」代金も日数も動かない
+```
+
+- **1年＝365日**（1095 ＝ 3×365。360 なら 1080）。進むのは各段の `TrainingPhaseManager.execute` の中で、
+  その活動の年数ぶんが1回で進む。`TrainingStartManager.execute` では進まない
+- 活動の年数はボタンの `(N年)` と `remaining_years` から。1年の活動は `elapse_days(365)`、2年は `elapse_days(730)`
+  （2回目の実測、同日）。段を終えると `remaining_years` が減り（3 → 2）、
+  **残り年数に収まる活動だけが並ぶ**（残り2年では 1年・2年の2つ）。`training_log` には前の段の文
+  （`一年間、ひたすら鍛錬した。0の経験値を得た。`）が渡る
+- 代金は **300 で固定**。年数は修行内容の選択肢で決まる（1年・2年・3年。本人の知識、2026-09-15）。
+  `TrainingStartManager` の args の 3 は開始時の残り年数（`remaining_years`）で、
+  施設は `915_facility_investment` の `training_facility`（道場）。915 は年数も代金も書いていない。
+  開始時の年数が施設や等級で変わるかは未計測（観測は 915 の道場2軒、どちらも3年。素の施設は未観測）
+- 同じ施設では、卒業した直後の2回目も断られる（「十分に学んだ。」レベル60でも、新しい主人公でも同じ）。
+  卒業前に途中で出て戻れるかは未計測
+- ローダの `durations.TRAINING` はこの暦（1年の日数と活動ごとの年数）だけを持つ（TECH.md §3.3.2）
+
 ### 2.18 エリア移動（土地から土地へ）
 
 ```python

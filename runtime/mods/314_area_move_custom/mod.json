@@ -10,7 +10,7 @@
     "en": "Change how long walking and the coach take, the coach fare, and the travel wording. Defaults are the game's own values (behavior is untouched until you edit them); the coach button always shows the travel days, which the game itself never displays",
     "ja": "徒歩・馬車の日数と馬車の料金、移動中の文言を変えられる。既定は素のゲームの値のままで挙動は変わらないが、素のゲームでは分からない馬車の所要日数を既定でもボタンに表示する"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian,MoririnJP",
   "shares": [
     "road_opening"

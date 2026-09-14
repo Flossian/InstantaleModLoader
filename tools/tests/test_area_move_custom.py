@@ -44,6 +44,7 @@ if RUNTIME_DIR not in sys.path:
 
 import instantale_modloader as ml                      # noqa: E402
 from instantale_modloader import state as mstate       # noqa: E402
+from instantale_modloader import durations            # noqa: E402
 
 
 def find_mod(suffix):
@@ -175,21 +176,6 @@ class DoubleElapseMoveManager(AreaMoveManager):
         return None
 
 
-class CappedElapseMoveManager(AreaMoveManager):
-    """外側（`307_` の予算）が素の 90 を減らした後の数が来る想定。
-
-    素の値と違う数を距離補正で**増やしてはいけない**（307_ の上限を破る）。
-    """
-
-    def execute(self, choice_text):
-        self.app.moved.append((self.target_area_id, self.mode, choice_text))
-        self.app.add_text("徒歩で目指す。長旅だ...")
-        self.app.elapse_days(14)
-        self.app.add_text("辿り着いた。")
-        self.app.player.current_area = self.app.world.areas[str(self.target_area_id)]
-        return None
-
-
 class AreaMoveCofirmation:
     """徒歩と馬車が並ぶ確認画面。"""
 
@@ -265,8 +251,7 @@ class InstantaleApp:
 
 
 BASES = {"app": InstantaleApp, "confirm": AreaMoveCofirmation,
-         "move": AreaMoveManager, "move2": DoubleElapseMoveManager,
-         "move3": CappedElapseMoveManager}
+         "move": AreaMoveManager, "move2": DoubleElapseMoveManager}
 
 
 class FakeClock:
@@ -300,6 +285,8 @@ def install_fake_kivy():
 
 
 class FakeCtx:
+    _seq = 0
+
     def __init__(self, out_dir):
         self.out_dir = out_dir
         # `WorldStore(own=False)` が他 MOD の控えを組み立てるときに読む
@@ -308,6 +295,11 @@ class FakeCtx:
         self.hooks = {}
         self.errors = []
         self.logs = []
+        # 世代は apply() ごとに違う（本物の `ctx.generation`）。
+        # ローダの日数送りの関所は世代で「もう立てたか」を見るので、
+        # ここが同じ値だと 2本目以降の apply() で関所が立たない（durations.install）。
+        FakeCtx._seq += 1
+        self.generation = FakeCtx._seq
 
     def out_path(self, *parts):
         path = os.path.join(self.out_dir, *parts)
@@ -337,8 +329,23 @@ class FakeCtx:
         return ml.read_json(path, default, report=self.log_exc)
 
     def wrap(self, target, **kw):
+        """同じ対象に2枚当たったら層にする（本物は後から当てたほうが外側。TECH.md §3.3）。
+
+        `325_` は日数送りに「後処理だけ」の包みを持ち、日数そのものは
+        ローダの関所が渡す。1枚しか覚えないと、後から当てたほうだけが残る。
+        """
         def decorator(func):
-            self.hooks[target] = func
+            previous = self.hooks.get(target)
+            if previous is None:
+                self.hooks[target] = func
+                return func
+
+            def layered(orig, this, *args, _prev=previous, _func=func, **kwargs):
+                def inner(obj, *a, **kw2):
+                    return _prev(orig, obj, *a, **kw2)
+                return _func(inner, this, *args, **kwargs)
+
+            self.hooks[target] = layered
             return func
         return decorator
 
@@ -410,9 +417,7 @@ def setup(configure=None, double_elapse=False, roads=None):
     app_cls = type("InstantaleApp", (BASES["app"],), {})
     confirm_cls = type("AreaMoveCofirmation", (BASES["confirm"],), {})
     move_cls = type("AreaMoveManager",
-                    (BASES["move2" if double_elapse == True else
-                           "move3" if double_elapse == "capped" else "move"],),
-                    {})
+                    (BASES["move2" if double_elapse else "move"],), {})
 
     main = sys.modules["__main__"]
     main.InstantaleApp = app_cls
@@ -776,13 +781,15 @@ press(app, WALK_TEXT)
 check("日数も素のまま", app.elapsed == [90], app.elapsed)
 check("エラーなし", not ctx.errors, ctx.errors)
 
-print("[距離] 外側(307_)が減らした日数は増やさない")
-module, ctx, app, confirm_cls, move_cls = setup(configure=high_caps,
-                                                roads=FAR_ROAD,
-                                                double_elapse="capped")
+print("[距離] 他の MOD が起こした移動では、こちらは頭打ちだけ（増やさない）")
+module, ctx, app, confirm_cls, move_cls = setup(configure=high_caps, roads=FAR_ROAD)
+# `307_`（危険な道）の代役。**先に始まった事情**として 14 日を望む。
+# 決めるのは向こうで、こちらは頭打ちだけ ＝ 120 には膨らまない（TECH.md §3.3.3）。
+durations.claim_days("307_stand_in", lambda _app, days: {"days": 14, "since": 1.0})
 press(app, "徒歩(120日)")
-check("14 のまま通す（120 に膨らませない）", app.elapsed == [14], app.elapsed)
+check("先に始まった 14 が通る（120 に膨らませない）", app.elapsed == [14], app.elapsed)
 check("暦も14日だけ進む", app.day == 14, app.day)
+durations.forget("307_stand_in")
 
 # ================================================================ ワールド個別設定
 print("[個別] 控えがある世界では一括設定を上書きし、消せば戻る（控えは同梱の tool.py が書く）")
@@ -801,6 +808,26 @@ os.remove(world_file)
 app.process_choice(confirm_cls(app, "9"), "陽光の砦")
 CLOCK.settle()
 check("控えを消せば一括設定へ戻る", texts_of(app)[0] == WALK_TEXT, texts_of(app))
+check("エラーなし", not ctx.errors, ctx.errors)
+
+print("[窓口] ローダの durations に、行き先ごとの実効値を置く（TECH.md §3.3.2）")
+module, ctx, app, confirm_cls, move_cls = setup()
+plan = durations.area_move(app, target_area_id="9")
+check("素のままなら素の値（90/14/1000）",
+      (plan["walk_days"], plan["coach_days"], plan["coach_fare"]) == (90, 14, 1000), plan)
+check("置いたのはこの MOD", bool(plan["source"]), plan)
+module, ctx, app, confirm_cls, move_cls = setup(
+    configure=lambda m: (setattr(m, "WALK_DAYS", 30), setattr(m, "COACH_PRICE", 600)))
+plan = durations.area_move(app, target_area_id="9")
+check("設定を変えれば窓口の答えも変わる",
+      (plan["walk_days"], plan["coach_days"], plan["coach_fare"]) == (30, 14, 600), plan)
+module, ctx, app, confirm_cls, move_cls = setup(
+    roads=[{"from": "7", "to": "9", "hops": 2}])
+plan = durations.area_move(app, target_area_id="9")
+check("距離補正も窓口の答えに乗る",
+      plan["walk_days"] > 90 or plan["coach_fare"] > 1000, plan)
+check("行き先が無ければ補正なし",
+      durations.area_move(app)["walk_days"] == 90, durations.area_move(app))
 check("エラーなし", not ctx.errors, ctx.errors)
 
 # ================================================================ まとめ

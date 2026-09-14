@@ -12,13 +12,13 @@
 | 何を変えるか | どこで変えるか |
 |---|---|
 | ボタンの表示 | `AreaMoveCofirmation.update_button_display` の後で `text` だけ書き換える |
-| 経過する日数 | `AreaMoveManager.execute` の間だけ `InstantaleApp.elapse_days` に渡る数を差し替える |
+| 経過する日数 | `AreaMoveManager.execute` の間だけ、ローダの日数送りの関所へ「この移動は何日か」を出す |
 | 移動中の文言 | 同じ窓の間だけ `InstantaleApp.add_text` の文言をテンプレートへ置き換える |
 | 馬車の料金 | ゲームが引き落とす前に差額ぶん所持金をずらす（前払い調整） |
 | 離れた街への距離補正 | `325_road_opening` が開いた道だけ、挟む街の数に応じて日数と馬車代を加算/倍加（設定でオフ可） |
 
 この作りの利点は、表示と実態が必ず一致すること。
-ボタンに出す日数は設定値そのもので、`elapse_days` に渡す数も同じ設定値。
+ボタンに出す日数は設定値そのもので、`elapse_days` に渡る数も同じ設定値。
 ゲームが内部で日数をどう決めていても食い違わない。
 
 留意点:
@@ -27,12 +27,13 @@
   この MOD を外しても押下の挙動は壊れない。
   手段の見分けもラベルの文字列には下がらず `args` の
   `mode` だけで行う（`kind_of_mode` のコメント）
-- 日数は渡す数を差し替えるだけ。
-  `orig` は必ず呼ぶので暦の進め方はゲームのまま。
-  窓は `AreaMoveManager.execute` の間だけで、
-  訓練・休養・他の依頼の日数送りには触らない。
-  1回の移動で複数回呼ばれても合計が設定値を超えないよう予算方式（`307_` の
-  `TRAVEL_DAYS` と同じ形）
+- 日数は**ローダの関所**（`durations`。TECH.md §3.3.3）に望みを出すだけで、
+  `elapse_days` はこちらでは包まない。
+  望むのは「この移動の残りの予算」で、窓（`AreaMoveManager.execute` の間）の外では
+  何も望まない ＝ 訓練・休養・他の依頼の日数送りには触らない。
+  1回の移動で複数回来ても、渡った日数は `note` で予算から引かれるので合計は設定値を超えない。
+  同じ移動に他の MOD（`307_` の危険な道）も望みを出していたら、
+  **先に始まった事情が決めて、こちらは頭打ちだけ**掛かる（決めるのはローダの1か所）
 - 料金は前払い調整。
   徴収の関数も引く額（素の運賃）も変えられないので、
   引かれる前に「素の運賃 − 設定額」ぶん所持金をずらす。
@@ -49,10 +50,9 @@
   **読むだけ**で使う（`WorldStore(own=False)`。TECH.md §3.2.3）。
   いまの接続で BFS し直さないのは、開いた道自体が辺になっていて必ず「隣」に
   なってしまうため。`325_` が無ければ挟む街の数は常に 0 ＝ 素の移動は不変。
-  距離補正で日数が**増える**方向は、`elapse_days` に来た数が素の値
-  （90 / 14）そのものだったときだけ予算へ置き換えることで効かせる。
-  素の値と違う数は外側（`307_` の予算）が減らした可能性があるので、
-  頭打ちだけ掛けて増やさない
+  距離補正で日数が**増える**方向（90 → 270）は、こちらが決める側に回った回に効く。
+  他の MOD が起こした移動（`307_` の危険な道）では決める側にならないので、
+  そこでは頭打ちだけになる
 
 「素のままなら触らない」の例外が1つだけある: **馬車のボタンには既定でも日数を出す**（`馬車(1000G)`
 → `馬車(1000G・14日)`）。
@@ -67,9 +67,11 @@
 遊び方の説明は MODS.md の `314_` の項、検証の経過は VERIFICATION.md §3.27。
 """
 
+import os
 import sys
+import time
 
-from instantale_modloader import ui
+from instantale_modloader import durations, ui
 from instantale_modloader.state import UNKNOWN_WORLD, WorldStore, world_key
 
 LOG_BASENAME = "area_move_custom.log"
@@ -412,6 +414,25 @@ def apply(ctx):
     def name_of(kind):
         return WALK_NAME if kind == "walk" else COACH_NAME if kind == "coach" else "?"
 
+    def area_move_for(app, target_area_id=None):
+        """ローダの窓口（`durations.AREA_MOVE`）に置く答え。行き先ごとの実効値。
+
+        日数は設定値に距離補正を乗せたもの（素のままなら素の値）、運賃も同じ。
+        読む側はこの MOD の名前を知らず、窓口に聞くだけ（TECH.md §3.3.2）。
+        行き先が無ければ距離補正なし（挟む街は 0）。
+        """
+        origin = ui.area_id_of(ui.current_area(app)) if app is not None else ""
+        hops = road_hops(app, origin, target_area_id) if target_area_id else 0
+        return {
+            "walk_days": days_limit("walk", hops) or GAME_WALK_DAYS,
+            "coach_days": days_limit("coach", hops) or GAME_COACH_DAYS,
+            "coach_fare": fare_for(hops),
+        }
+
+    # `ctx.mod_dir` はフックの中では読めない（apply() の間だけ）ので、ここで控える。
+    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "area_move_custom"
+    durations.declare(durations.AREA_MOVE, area_move_for, owner=owner, write=write)
+
     def values_for(window):
         """テンプレートに渡す変数一式。日数と料金は「変えていなければ素の値」。"""
         kind = window.get("kind")
@@ -591,7 +612,10 @@ def apply(ctx):
             "hops": hops,        # 325_ が開いた道なら挟む街の数（それ以外は 0）
             "fare": fare_for(hops),          # 実効の馬車代（距離補正込み）
             "days_limit": days_limit(kind, hops),   # 実効日数。None=触らない
-            "spent": 0,          # この移動で elapse_days に渡した日数の合計
+            "spent": 0,          # この移動で実際に渡った日数の合計
+            # この移動が始まった時刻。日数送りに複数の MOD が望みを出したとき、
+            # **先に始まった事情が決める**（ローダの `durations`）。
+            "since": time.time(),
             "gold_before": None,
             "prepaid": None,     # 前払い調整の後の所持金（調整したときだけ入る）
             "game_price": GAME_COACH_PRICE,
@@ -689,42 +713,27 @@ def apply(ctx):
                     ctx.log_exc("area move custom: cannot settle the fare")
 
     # ============================================================ 日数
-    @ctx.wrap("__main__:InstantaleApp.elapse_days", required=False)
-    def elapse_days(orig, self, days, *args, **kwargs):
-        """移動の窓の間だけ、渡る日数の合計を設定値に合わせる。
+    # `elapse_days` はこちらでは包まない。包むのはローダの関所1枚だけで、
+    # ここは「この移動を何日にしたいか」を答える側に回る（TECH.md §3.3.3）。
+    def days_wish(app, days):
+        """移動の窓の間だけ、**残りの予算**を望む。窓の外・素のままでは None。"""
+        window = state["window"]
+        if window is None:
+            return None
+        limit = window.get("days_limit")
+        if limit is None:
+            return None              # 設定が素のまま ＝ この移動には関心が無い
+        return {"days": max(0, int(limit) - window["spent"]),
+                "since": window.get("since")}
 
-        渡す数を差し替えるだけで、
-        暦の進め方も日次処理もゲームのまま（`orig` は必ず呼ぶ）。
-        窓の外では1バイトも触らない。
-        """
-        try:
-            window = state["window"]
-            if window is not None and isinstance(days, (int, float)) \
-                    and not isinstance(days, bool) and days > 0:
-                limit = window.get("days_limit")
-                if limit is not None:
-                    remaining = max(0, int(limit) - window["spent"])
-                    raw = GAME_WALK_DAYS if window.get("kind") == "walk" \
-                        else GAME_COACH_DAYS
-                    if int(days) == raw:
-                        # ゲームが素の値をそのまま渡してきた（観測ではこの1回で
-                        # 移動の全日数）。予算へ丸ごと置き換える。min では
-                        # 距離補正で**増やす**方向（90 -> 270）が効かない。
-                        granted = remaining
-                    else:
-                        # 素の値と違う数は、外側（`307_` の予算）が既に減らした
-                        # 可能性がある。増やす方向には触らず、頭打ちだけ掛ける。
-                        granted = max(0, min(int(days), remaining))
-                    window["spent"] += granted
-                    if granted != days:
-                        write("days: {} -> {} ({} spent {}/{})".format(
-                            days, granted, window.get("kind"),
-                            window["spent"], limit))
-                    return orig(self, granted, *args, **kwargs)
-                window["spent"] += int(days)
-        except Exception:
-            ctx.log_exc("area move custom: cannot adjust the days")
-        return orig(self, days, *args, **kwargs)
+    def days_note(app, days, granted):
+        """実際に渡った日数を予算から引く。**他所が決めた回も来る**。"""
+        window = state["window"]
+        if window is not None and window.get("days_limit") is not None:
+            window["spent"] += max(0, int(granted))
+
+    durations.claim_days(owner, days_wish, note=days_note, write=write)
+    durations.install(ctx, write)
 
     # ============================================================ 文言
     def reword(window, text):

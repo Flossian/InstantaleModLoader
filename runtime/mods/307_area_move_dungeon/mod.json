@@ -10,7 +10,7 @@
     "en": "Adds a third way to travel between areas: clear a dungeon on the road and you arrive at the destination",
     "ja": "エリア移動に「危険な道を行く」を追加する。道中のクエストを踏破すると目的地に着く"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "after": [
     "301_quest_from_conversation"

@@ -78,9 +78,10 @@
     __main__:InstantaleApp.elapse_days(self, days)
 
 `__main__` にある唯一の日数送りの入口。
-最後のエリア移動のときだけこれを包み、**渡す数を `TRAVEL_DAYS` 日
+最後のエリア移動のときだけローダの関所へ望みを出し、**渡る数を `TRAVEL_DAYS` 日
 （既定14＝馬車と同じ）に差し替える**。上限ではなく、この日数になる。
-`orig` は必ず呼ぶので、暦の進め方も日次処理もゲームのまま。
+包むのは関所1枚（TECH.md §3.3.3）で、`orig` はそこが必ず呼ぶ。
+暦の進め方も日次処理もゲームのまま。
 
 道中のクエストは日数を進めない（GAME.md §2.18）ので、触る相手はこの1回だけ。
 以前は「道中と移動の合計」を予算として全段階を切り詰めていたが、
@@ -100,10 +101,11 @@
 読めなかったときは通す（値が読めないことを理由に遊びを止めない。WARN は残す）。
 """
 
+import os
 import random
 import time
 
-from instantale_modloader import ui
+from instantale_modloader import durations, ui
 
 from . import world
 from .journey import Journey
@@ -903,15 +905,14 @@ def apply(ctx):
             ctx.log_exc("road travel: cannot filter the travel text")
         return orig(self, context, *args, **kwargs)
 
-    @ctx.wrap("__main__:InstantaleApp.elapse_days", required=False)
-    def elapse_days(orig, self, days, *args, **kwargs):
-        """危険な道の**エリア移動**にかかる日数を `TRAVEL_DAYS` にする。
+    # `elapse_days` はこちらでは包まない。包むのはローダの関所1枚だけで
+    # （TECH.md §3.3.3）、ここは「この道は何日か」を答える側に回る。
+    def days_wish(app, days):
+        """危険な道の**エリア移動**にかかる日数（`TRAVEL_DAYS`）を望む。
 
-        渡す数を差し替えるだけで、暦の進め方も日次処理もゲームのまま（`orig` は必ず呼ぶ。呼ばずに戻ると、
-        日数以外の後始末まで落とすことになる）。
-        道を行っていないときは1バイトも触らない。
+        道を行っていないときは何も望まない（None）。
 
-        **触るのは段階 `moving`（最後のエリア移動）の、しかも最初の1回だけ。**
+        **望むのは段階 `moving`（最後のエリア移動）の、しかも最初の1回だけ。**
         道中のクエストは日数を進めない（GAME.md §2.18）ので、
         切り詰める相手はこの1回しか無い。
         2回目以降を素通しするのは、到着の検出が外れたときの保険。
@@ -920,34 +921,42 @@ def apply(ctx):
 
         以前は「道中と移動の合計」を予算として全段階を切り詰めていた。
         予算を使い切ると以後の日数送りに **0** が渡り続け、
-        `elapse_days` は宿泊も徒歩も休暇も通るので、控えが外れないと
+        日数送りは宿泊も徒歩も休暇も通るので、控えが外れないと
         **その世界の暦が止まっていた**（画面には何も出ない）。
         道中が0日である以上、積み上げる意味は無かった。
+
+        `since` は移動が始まった時刻。同じ移動に `314_`（街移動の設定）も
+        望みを出すが、**この移動を起こしたのはこちら**なので日数はこちらが決め、
+        あちらは頭打ちだけを掛ける（決めるのはローダの1か所）。
         """
-        try:
-            journey.sync()
-            observe_quest(self)
-            record = road_of(self, "moving")
-            if record is not None and isinstance(days, (int, float)) \
-                    and not isinstance(days, bool) and days > 0:
-                spent = journey.days_spent()
-                if spent > 0:
-                    # この道ではもう渡している
-                    # ＝これはエリア移動の日数送りではない。素通しする。
-                    write("days: {} left alone (the road to {!r} already took "
-                          "{} day(s))".format(
-                              days, record.get("target_area_name"), spent))
-                    return orig(self, days, *args, **kwargs)
-                # 渡された日数は見ない。道にかかる日数はこちらが決める。
-                # `days > 0` の門は残す。ゲームが0を渡した回に日数を作らない。
-                granted = max(0, int(TRAVEL_DAYS))
-                journey.advance("moving", days_spent=granted)
-                write("days: {} -> {} (the road to {!r} takes {} day(s))".format(
-                    days, granted, record.get("target_area_name"), granted))
-                return orig(self, granted, *args, **kwargs)
-        except Exception:
-            ctx.log_exc("road travel: cannot set the days")
-        return orig(self, days, *args, **kwargs)
+        journey.sync()
+        observe_quest(app)
+        record = road_of(app, "moving")
+        if record is None:
+            return None
+        spent = journey.days_spent()
+        if spent > 0:
+            # この道ではもう渡している
+            # ＝これはエリア移動の日数送りではない。素通しする。
+            write("days: {} left alone (the road to {!r} already took "
+                  "{} day(s))".format(
+                      days, record.get("target_area_name"), spent))
+            return None
+        return {"days": max(0, int(TRAVEL_DAYS)),
+                "since": record.get("moving_at")}
+
+    def days_note(app, days, granted):
+        """道が実際に取った日数を控える（`arrived_check` が読む）。"""
+        record = road_of(app, "moving")
+        if record is None or journey.days_spent() > 0:
+            return
+        journey.advance("moving", days_spent=max(0, int(granted)))
+        write("road: the road to {!r} takes {} day(s)".format(
+            record.get("target_area_name"), granted))
+
+    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "area_move_dungeon"
+    durations.claim_days(owner, days_wish, note=days_note, write=write)
+    durations.install(ctx, write)
 
     @ctx.wrap("__main__:AreaMoveManager.__init__", required=False)
     def area_move(orig, self, app, target_area_id, mode, *args, **kwargs):

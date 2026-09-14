@@ -125,6 +125,40 @@ def make_town():
     return app, world, area, node, entrance, inn
 
 
+def make_two_node_town():
+    """同じ形のノードを2つ持つ街（実機 2026-09-14 のカスティア）。
+
+    ノードどうしは繋がっていない。入口の `connections` はそのノードの中で閉じる。
+    プレイヤーはノード `20` の入口に立っている。
+    """
+    def one(node_id, entrance_id, ward_id, inn_id):
+        entrance = types.SimpleNamespace(
+            id=entrance_id, name="入口" + node_id, facility_type="entrance",
+            connections=[ward_id, inn_id])
+        ward = types.SimpleNamespace(id=ward_id, name="区画" + node_id,
+                                     facility_type="ward", connections=[entrance_id])
+        inn = types.SimpleNamespace(id=inn_id, name="宿" + node_id,
+                                    facility_type="inn", connections=[entrance_id])
+        node = types.SimpleNamespace(
+            id=node_id, entrance_facility=entrance_id,
+            facilities={entrance_id: entrance, ward_id: ward, inn_id: inn})
+        return node, entrance
+
+    first, first_entrance = one("10", "0", "1", "2")
+    second, second_entrance = one("20", "50", "51", "52")
+    area = types.SimpleNamespace(id="1", nodes={"10": first, "20": second})
+    world = types.SimpleNamespace(areas={"1": area})
+    player = types.SimpleNamespace(location=second_entrance, current_area=area)
+    app = types.SimpleNamespace(
+        world=world, player=player, buttons=[], buttons_backup=[],
+        function_correspond_to_input=None, saved=None,
+        world_dict={"world_data": {"name": "検査の世界"}},
+        save_data_dict={"world_data": {"name": "検査の世界"}})
+    app.process_choice = lambda phase, text: app.__setattr__("started", (phase, text))
+    app.started = None
+    return app, area, first, second, first_entrance, second_entrance
+
+
 def game_buttons(*entries):
     """ゲームが組んだ移動のボタンの形。"""
     return [{"text": text,
@@ -658,6 +692,41 @@ def main():
     modfacility.gate_is_live = lambda: False
     ok &= check("建てない", modfacility.spawn(app2, fid, "1") is None)
     modfacility.gate_is_live = lambda: True
+
+    print("ノードが2つある街: プレイヤーの居る側に建てる")
+    two = modfacility.register("914_home", key="two",
+                               fields={"name": "自分の家",
+                                       "facility_type": "location"})
+    town, town_area, node_a, node_b, entrance1, entrance2 = make_two_node_town()
+    built = modfacility.spawn(town, two, "1")
+    ok &= check("プレイヤーの居るノードに建つ",
+                node_b.facilities.get(two) is built and two not in node_a.facilities)
+    ok &= check("そのノードの入口から繋がる", two in entrance2.connections)
+    ok &= check("別のノードの入口には繋がない", two not in entrance1.connections)
+    ok &= check("控えの置き場所もそのノード",
+                modfacility.get(town, two).placed[:2] == ("1", "20"))
+
+    print("ノードが2つある街: 行けないノードに在る建物は移す")
+    modfacility.despawn(town, two)
+    town.player.location = entrance1                      # 一度あちら側に建てる
+    modfacility.spawn(town, two, "1")
+    ok &= check("いったん別のノードに建った", two in node_a.facilities)
+    town.player.location = entrance2                      # 遊んでいるのはこちら側
+    moved = modfacility.spawn(town, two, "1")
+    ok &= check("プレイヤーの居るノードへ移る",
+                node_b.facilities.get(two) is moved and two not in node_a.facilities)
+    ok &= check("前のノードの入口からは外れる", two not in entrance1.connections)
+    ok &= check("控えの置き場所も書き換わる",
+                modfacility.get(town, two).placed[:2] == ("1", "20"))
+    ok &= check("名前は写しから戻る",
+                getattr(moved, "name", None) == "自分の家")
+
+    print("ノードが2つある街: 中に立っているあいだは動かさない")
+    town.player.location = moved
+    same = modfacility.spawn(town, two, "1")
+    ok &= check("中に居るなら建て直さない", same is moved)
+    town.player.location = entrance2
+    modfacility.unregister("914_home", app=town)
 
     print("片付け: unregister で層も控えも消える")
     modfacility.unregister("915_invest", app=app2)
