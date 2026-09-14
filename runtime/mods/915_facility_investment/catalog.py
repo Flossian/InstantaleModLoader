@@ -342,12 +342,28 @@ def income_per_day(kind, tier, size, scale=100, base=None):
                      * (scale / 100.0)))
 
 
-def facility_name(kind, tier, area_name, seed):
+def facility_name(kind, tier, area_name, seed, taken=()):
+    """施設の名前を表から1つ。`taken` に在る名前は飛ばす（版37）。
+
+    **同じ鍵と同じ `taken` からは同じ名前**（建て直しても変わらない）。
+    鍵だけで選んでいた頃は、別の世界でも同じ土地の同じ番号なら同じ名前になった
+    （実機 2026-09-14。`3-1` がどちらも「七宝の間」）。
+    候補を全部使っていたら、鍵の名前に土地の名を冠して分ける。
+    """
     spec = kind_of(kind)
     if spec is None:
         return ""
-    template = _pick(seed, spec["names"].get(tier) or ())
-    return (template or spec["label"]).format(area=area_name or "")
+    options = spec["names"].get(tier) or ()
+    if not options:
+        return spec["label"]
+    used = set(str(name) for name in (taken or ()) if name)
+    start = _index(seed, len(options))
+    for step in range(len(options)):
+        candidate = options[(start + step) % len(options)].format(area=area_name or "")
+        if candidate not in used:
+            return candidate
+    plain = options[start].format(area=area_name or "")
+    return "{}の{}".format(area_name, plain) if area_name else plain
 
 
 def description_of(kind, tier):
@@ -447,6 +463,8 @@ KEEPER_SYSTEM = (
     "- personality: 性格と来歴を一文か二文で。\n"
     "- profile: 何者かを二文で。その施設を任されていること、"
     "売上を預かって出資者が訪ねてきたときに渡すことを含める。\n"
+    "- facility_name: その施設の名前。看板に出す固有名で、種類の語（宿屋・店など）を"
+    "そのまま名乗らせない。土地と格に合わせて短く。\n"
     "【その他】\n"
     "- 出資者に雇われた立場で、出資者には礼を尽くす。敵対的な人物にはしない。\n"
     "- 戦う相手ではない。強さや戦闘の話は書かない。\n"
@@ -455,32 +473,52 @@ KEEPER_SYSTEM = (
 KEEPER_ASK = (
     "【世界の情報】\n- 世界観: {world}\n"
     "【土地の情報】\n- 名前: {area}（{size}）\n"
-    "【施設の情報】\n- 名前: {facility}\n- 種類: {kind}\n- 格: {tier}\n- 概要: {description}\n"
+    "【施設の情報】\n- 種類: {kind}\n- 格: {tier}\n- 概要: {description}\n"
     "【出資者】\n- 名前: {investor}\n"
     "【生成する主人】\n- 立場: {role}\n"
 )
 
 #: 既にこの世界に居る主人の名前を避けさせる一文。
 KEEPER_AVOID = "- 次の名前は既にこの世界の主人が使っている。避けること: {names}\n"
+#: 既にこの世界に在る施設の名前を避けさせる一文（版37）。
+PLACE_AVOID = "- 次の名前は既にこの世界の施設が使っている。避けること: {names}\n"
 
 
-def keeper_prompt(kind, tier, area_name, size, facility_name_, world_overview,
-                  investor, taken=()):
-    """主人を作らせる頼み文。`(system, user)`。"""
+def keeper_prompt(kind, tier, area_name, size, world_overview,
+                  investor, taken=(), places=()):
+    """主人と施設の名前を作らせる頼み文。`(system, user)`。
+
+    `taken` はその世界で使っている主人の名前、`places` は施設の名前。どちらも避けさせる。
+    """
     spec = kind_of(kind) or {}
     system = KEEPER_SYSTEM.format(categories=" / ".join(KEEPER_CATEGORIES))
     names = [str(name) for name in (taken or ()) if name]
     if names:
         system += KEEPER_AVOID.format(names="、".join(names))
+    used_places = [str(name) for name in (places or ()) if name]
+    if used_places:
+        system += PLACE_AVOID.format(names="、".join(used_places))
     user = KEEPER_ASK.format(
         world=world_overview or "", area=area_name or "この街",
         size=SIZE_LABEL.get(normalize_size(size) or "", size or ""),
-        facility=facility_name_ or spec.get("label", ""),
         kind=spec.get("label", str(kind)),
         tier=TIER_LABEL.get(tier, tier or ""),
         description=description_of(kind, tier), investor=investor or "出資者",
         role=spec.get("keeper_role", "主人"))
     return system, user
+
+
+def made_name_from(answer, taken=()):
+    """答えの中の施設の名前。使えなければ空（呼ぶ側が表から選ぶ）。
+
+    既にこの世界で使っている名前は受けない（`taken` は施設の名前）。
+    """
+    if not isinstance(answer, dict):
+        return ""
+    name = answer.get("facility_name")
+    name = name.strip()[:40] if isinstance(name, str) else ""
+    used = set(str(other) for other in (taken or ()) if other)
+    return "" if not name or name in used else name
 
 
 def keeper_fields_from(answer, kind, area_name, facility_name_, seed,

@@ -729,6 +729,18 @@ check("上の等級は高い", cat.cost_of("inn", "advanced", "town") > cat.cost
 check("値段は 100G 単位", cat.cost_of("colosseum", "standard", "city") % 100 == 0)
 check("名前は鍵が同じなら同じ",
       cat.facility_name("inn", "basic", "泥の村", "k") == cat.facility_name("inn", "basic", "泥の村", "k"))
+# 建物の名前も同じ世界で重ねない（実機 2026-09-14。別の世界でも `3-1` が「七宝の間」だった）。
+check("使っている建物の名前は飛ばす（版37）",
+      cat.facility_name("specialty_shop", "advanced", "泥の村", "k", taken=["七宝の間"])
+      != "七宝の間",
+      cat.facility_name("specialty_shop", "advanced", "泥の村", "k", taken=["七宝の間"]))
+check("同じ鍵と同じ顔ぶれからは同じ名前",
+      cat.facility_name("specialty_shop", "advanced", "泥の村", "k", taken=["七宝の間"])
+      == cat.facility_name("specialty_shop", "advanced", "泥の村", "k", taken=["七宝の間"]))
+_used_up = cat.facility_name("specialty_shop", "advanced", "泥の村", "k",
+                             taken=[n.format(area="泥の村")
+                                    for n in cat.KINDS["specialty_shop"]["names"]["advanced"]])
+check("候補を使い切ったら土地の名を冠して分ける", _used_up.startswith("泥の村の"), _used_up)
 # 主人の名前は同じ世界で重ねない（実機 2026-09-14。闘技場と道場がどちらもトビアスだった）。
 first = cat.keeper_choice("k")[0]
 check("同じ鍵からは同じ主人", cat.keeper_choice("k")[0] == first)
@@ -930,7 +942,8 @@ print("[主人を作らせる]")
 module, ctx, app, world, classes = setup()
 FakeLLM.load([{"name": "サリ", "category": "middle-aged woman",
                "speech_style": "短く言い切る", "personality": "荒くれも黙らせる女主人",
-               "profile": "灯火亭を任されている宿の女主人。売上を預かっている。"}])
+               "profile": "灯火亭を任されている宿の女主人。売上を預かっている。",
+               "facility_name": "風待ちの宿"}])
 try:
     app.press(module.DESK_LABEL)
     app.press("宿屋を建てる")
@@ -942,6 +955,14 @@ try:
               for word in ("世界観", "泥の村", "宿屋", app.player.name)),
           FakeLLM.calls[0]["text"][:200])
     check("待つ秒数を必ず渡す", FakeLLM.calls[0]["timeout"] == module.KEEPER_TIMEOUT)
+    check("答えの名前で建物が建つ（版37）", made.get("name") == "風待ちの宿"
+          and getattr(building_of(world, made)[0], "name", None) == "風待ちの宿",
+          made.get("name"))
+    # 施設の情報は種類から始まる（名前は渡さず、生成 AI に付けさせる。版37）。
+    check("頼み文は施設名を渡さず作らせる",
+          "facility_name" in FakeLLM.calls[0]["text"]
+          and "【施設の情報】" + chr(10) + "- 種類:" in FakeLLM.calls[0]["text"],
+          FakeLLM.calls[0]["text"][:400])
     check("答えの名前で主人が立つ", made.get("keeper_name") == "サリ"
           and getattr(world.characters.get(made.get("keeper")), "name", None) == "サリ")
     keeper = world.characters.get(made.get("keeper"))
@@ -957,8 +978,8 @@ try:
     CLOCK.settle()
     check("塗り直しても聞き直さない", len(FakeLLM.calls) == 1, FakeLLM.calls)
 
-    # 答えが読めないときは表へ降りる。
-    FakeLLM.answers = [{"name": ""}]
+    # 答えが読めないときは表へ降りる（建物の名前も含めて）。
+    FakeLLM.answers = [{"name": "", "facility_name": ""}]
     app.go(world.areas["2"].nodes["10"].facilities["3"])
     app.player.current_area = world.areas["2"]
     app.press(module.DESK_LABEL)
@@ -969,6 +990,8 @@ try:
           cat.keeper_by_name(fallen.get("keeper_name")) is not None,
           fallen.get("keeper_name"))
     check("表の人でも名前は重ならない", fallen.get("keeper_name") != "サリ")
+    check("建物の名前も表から（生成の名前を使わない）",
+          fallen.get("name") and fallen.get("name") != "風待ちの宿", fallen.get("name"))
 
     # 落ちたときも建つ（LLM は建てるのを止める理由にしない）。
     FakeLLM.answers = [RuntimeError("落ちた")]

@@ -480,45 +480,53 @@ def apply(ctx):
                 return frames.short(text.strip(), 600)
         return ""
 
-    def generate_keeper(app, record, taken):
-        """主人をゲームと同じ生成 AI に作らせる。作れなければ None（表へ降りる）。
+    def generate_keeper(app, record, taken, places):
+        """建物の名前と主人をゲームと同じ生成 AI に作らせる。`(主人の素データ, 施設名)`。
 
         呼ぶのは**建てるときの1回だけ**。答えは帳簿に控えるので、
-        建て直しでもロードでも二度と呼ばない（同じ人が戻る）。
+        建て直しでもロードでも二度と呼ばない（同じ建物と同じ人が戻る）。
+        作れなければ `(None, "")` で、呼ぶ側が表から選ぶ。
         """
         if str(KEEPER_SOURCE).lower() != "llm":
-            return None
+            return None, ""
         structure = llm.create_structure(ctx, "FacilityKeeper", {
             "name": (str, ...), "category": (str, ...),
             "speech_style": (str, ...), "personality": (str, ...),
-            "profile": (str, ...),
+            "profile": (str, ...), "facility_name": (str, ...),
         }, label="investment")
         if structure is None:
             write("keeper: cannot build the structure; using the table")
-            return None
+            return None, ""
         system, user = catalog.keeper_prompt(
             record.get("kind"), record.get("tier"), record.get("area_name"),
-            record.get("size"), record.get("name"), world_overview(app),
-            record.get("investor"), taken)
+            record.get("size"), world_overview(app),
+            record.get("investor"), taken, places)
         answer = llm.ask(ctx, KEEPER_MANAGER,
                          [{"role": "system", "content": system},
                           {"role": "user", "content": user}],
                          timeout=KEEPER_TIMEOUT, structure=structure,
                          label="investment", write=write)
+        made_name = catalog.made_name_from(answer, places)
         fields = catalog.keeper_fields_from(
-            answer, record.get("kind"), record.get("area_name"), record.get("name"),
+            answer, record.get("kind"), record.get("area_name"),
+            made_name or record.get("name"),
             record.get("keeper"), investor=record.get("investor"), taken=taken)
         if fields is None:
             write("keeper: the answer was not usable; using the table")
-            return None
+            return None, made_name
         write("keeper: {!r}（{}）was made for {!r}".format(
-            fields.get("name"), fields.get("category"), record.get("name")))
-        return fields
+            fields.get("name"), fields.get("category"), made_name or record.get("name")))
+        return fields, made_name
 
     def keeper_names(app, skip=None):
         """その世界の主人の名前。新しい主人はこれと重ならないように選ぶ。"""
         return [keeper_name(app, record) for record in holdings_of(app)
                 if record is not skip]
+
+    def place_names(app, skip=None):
+        """その世界の施設の名前。新しい建物はこれと重ならないように選ぶ（版37）。"""
+        return [str(record.get("name") or "") for record in holdings_of(app)
+                if record is not skip and record.get("name")]
 
     def building_choices(app, facility_id):
         """建物の中の選択肢。出口はローダが足す。"""
@@ -822,7 +830,10 @@ def apply(ctx):
         serial = next_serial(app, area_id)
         facility_id = facility_id_for(area_id, serial)
         keeper_id = keeper_id_for(area_id, serial)
-        name = catalog.facility_name(kind, tier, area_name, facility_id)
+        places = place_names(app)
+        # 表から選ぶときも、その世界で使っている建物の名前は飛ばす（版37。
+        # 鍵だけで選んでいた頃は別の世界でも同じ土地の同じ番号なら同じ名前になった）。
+        name = catalog.facility_name(kind, tier, area_name, facility_id, taken=places)
         day = ui.game_day(app)
         record = {
             "area": area_id,
@@ -844,7 +855,12 @@ def apply(ctx):
         }
         # 主人を先に決める（帳簿に控える）。`register_holding` はそれを使う。
         taken = keeper_names(app)
-        made = generate_keeper(app, record, taken)
+        made, made_name = generate_keeper(app, record, taken, places)
+        if made_name:
+            # 生成 AI が付けた名前。建物の描写も帳簿もこれで揃える。
+            name = made_name
+            record["name"] = name
+            write("build: the generator named it {!r}".format(name))
         if made is None:
             made = catalog.keeper_fields(kind, area_name, name, keeper_id,
                                          investor=record.get("investor"), taken=taken)
