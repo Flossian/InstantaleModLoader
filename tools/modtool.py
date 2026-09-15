@@ -523,6 +523,39 @@ def load_world_settings(found, path, base):
     return values
 
 
+def world_record(found, base, values):
+    """その世界の控えに**実際に書かれる中身**（一括設定と違う項目だけ）。
+
+    空なら控えは持たない（ファイルは消える）。
+    保存の後に「何を書いたか」を出す側（`saved_paths`）も同じ式を見るので、
+    ここ1か所に置いてある。
+    """
+    return dict((k, v) for k, v in values.items() if k in found and v != base.get(k))
+
+
+def saved_paths(found, was, now, shared_path, world_path):
+    """保存で**実際に書いた先**の並び。何も動いていなければ空。
+
+        was / now   … {"shared": 一括設定, "world": その世界の値}（押す前 / 押した後）
+        world_path  … 空なら世界が無い（一括設定だけを見る）
+
+    入力欄が同じままでも、**一括設定を動かすと個別の控えの中身は変わる**
+    （控えは差分なので、消えることもある）。
+    だから「入力欄が変わったか」ではなく、書かれる中身が変わったかで見る。
+    """
+    written = []
+    if now["shared"] != was["shared"]:
+        written.append(shared_path)
+    if world_path:
+        before = world_record(found, was["shared"], was["world"])
+        after = world_record(found, now["shared"], now["world"])
+        if before != after:
+            # 全部一括設定と同じになった回は、控えを書くのではなく消している。
+            written.append(world_path if after
+                           else world_path + "（一括設定と同じになったので削除）")
+    return written
+
+
 def save_world_settings(root, path, found, base, values):
     """一括設定と違う項目だけを書く。全部同じならファイルを消す。書けなければ False。
 
@@ -533,7 +566,7 @@ def save_world_settings(root, path, found, base, values):
     全部同じならファイルを消すのは、空の控えを残すと
     「この世界は個別設定を持っている」と読めてしまうため。
     """
-    record = dict((k, v) for k, v in values.items() if k in found and v != base.get(k))
+    record = world_record(found, base, values)
     if not record:
         try:
             os.remove(path)
@@ -825,6 +858,8 @@ def build_world_settings_window(mod_dir, title="", blurb=""):
         新しい一括設定を `shared` に入れてから差分を取る必要がある。
         """
         nonlocal shared
+        # **押す前の保存済み**を控えてから書く。何が動いたかは後で出す。
+        was = {"shared": dict(saved["shared"]), "world": dict(saved["world"])}
         new_shared, bad = coerce_all(mod_dir, shared_form.get(), root_dir)
         if bad:
             messagebox.showerror("一括設定を確かめてください", bad, parent=root)
@@ -849,10 +884,15 @@ def build_world_settings_window(mod_dir, title="", blurb=""):
             return False
         # 世界が無いときは個別設定を持たないので、基準を一括設定に揃える。
         saved["world"] = dict(new_world) if name else dict(shared)
-        # 書いた先を出す。控えが消えた（全部一括設定と同じ）ときもこのパスが出るが、
-        # そのときファイルは無い。VERIFICATION.md §3.57 の #3 がその道。
+        # 書いた先を出す。**実際に動いたものだけ**を並べる。
+        # 一括設定だけ直したのに世界の控えのパスが出ると、
+        # その世界を保存したように読める（実機で踏んだ）。判断は `saved_paths`。
+        written = saved_paths(found, was,
+                              {"shared": new_shared, "world": new_world},
+                              config.store_path(runtime), path_of(name))
         status.configure(text="保存しました {}  {}".format(
-            time.strftime("%H:%M:%S"), path_of(name) if name else config.store_path(runtime)))
+            time.strftime("%H:%M:%S"),
+            " / ".join(written) if written else "（変更はありません）"))
         return True
 
     def close():

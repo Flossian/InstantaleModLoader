@@ -7,10 +7,10 @@
     "ja": "訓練所のカスタマイズ"
   },
   "description": {
-    "en": "Change the training fee, the length of one course, and how many days a year of training advances the calendar. Defaults are the game's own values (300G, 3 years, 365 days a year), so nothing changes until you edit them",
-    "ja": "訓練所の代金・1回の修行の年数・1年で進む日数を変えられる。既定は素のゲームの値（300G・3年・1年365日）のままで、変えた項目だけが効く"
+    "en": "Change the training fee, how much training one course buys, how long one session takes (a base period times a per-activity multiplier), and whether you may train again where you graduated; the wording follows the real length. Defaults are the game's own values, so nothing changes until you edit them",
+    "ja": "訓練所の代金・1回の修行の量・1段の期間（ベース期間×修行内容ごとの倍率）を変えられる。卒業した施設での再訓練も選べる。文言もAIの描写も実際の期間に揃う。既定は素のゲームの値のままで、変えた項目だけが効く"
   },
-  "version": "1",
+  "version": "10",
   "author": "R01/Flossian",
   "after": [
     "306_party_train_exp"
@@ -22,8 +22,8 @@
       "en": "Training hall settings by world"
     },
     "note": {
-      "ja": "ワールドごとに代金・年数・1年の日数を変える。ここの設定は全ワールド共通の値",
-      "en": "Per-world fee, course length and days per year. The settings here are the shared defaults"
+      "ja": "ワールドごとに代金・年数・1段の期間を変える。ここの設定は全ワールド共通の値",
+      "en": "Per-world fee, course length and session length. The settings here are the shared defaults"
     }
   },
   "settings": {
@@ -47,26 +47,87 @@
       "min": 1,
       "max": 30,
       "label": {
-        "ja": "1回の修行の年数",
+        "ja": "1回の修行で受けられる量（年）",
         "en": "Years in one course"
       },
       "note": {
-        "ja": "素のゲームは3年。修行内容を1つ選ぶたびにその年数ぶん減り、0になると卒業する。増やすと1回の代金で活動を何段も受けられる。残り年数に収まる活動だけが並ぶのはゲームの決まりのまま",
-        "en": "The game's own value is 3 years. Each activity you pick spends its own years; at 0 you graduate. Raising it lets one fee buy several activities. The game still lists only the activities that fit in the years left"
+        "ja": "素のゲームは3年。修行内容を1つ選ぶたびにゲームが数える年数（1年/2年/2年/3年）がこれから引かれ、0になると卒業する。増やすと1回の代金で何段も受けられる。この年数はゲームが数える修行の量で、実際に進む暦は下のベース期間×倍率の合計になる（画面の「あと3年間」もゲームが出しているこちらの数）",
+        "en": "The game's own value is 3. Each activity spends the years the game assigns it (1/2/2/3); at 0 you graduate. Raising it lets one fee buy several sessions. This counter is the game's own measure of how much training is left, not the calendar: the days that pass come from the base period below"
       }
     },
-    "DAYS_PER_YEAR": {
-      "type": "int",
-      "default": 365,
-      "min": 1,
-      "max": 365,
+    "BASE_PERIOD": {
+      "type": "choice",
+      "values": [
+        "1ヵ月",
+        "2ヵ月",
+        "3ヵ月",
+        "6ヵ月",
+        "1年"
+      ],
+      "default": "1年",
       "label": {
-        "ja": "1年で進む日数",
-        "en": "Days a training year advances"
+        "ja": "1段のベース期間",
+        "en": "Base period of one session"
       },
       "note": {
-        "ja": "素のゲームは365日。3年の活動は「3×この日数」進む（素のままだと1095日で、ここが訓練所を使いにくくしている）。30にすれば「新たな技を学ぶ(3年)」は90日で終わる。ボタンの年数の表示は変わらないので、実日数を出したいときは修行内容のボタンの表示に {days} を入れる",
-        "en": "The game's own value is 365. A three-year activity advances three times this (1095 days as shipped). At 30, 新たな技を学ぶ(3年) takes 90 days. The years shown on the button do not change; put {days} in the activity button template to show the real days"
+        "ja": "いちばん短い修行（ただ鍛える）1回で進む暦。他の修行はこれの倍率で決まる。素のゲームは「1年」（365日）で、3年の修行は1095日ぶん暦が飛ぶ。「1ヵ月」（30日）にすると ただ鍛える=1ヵ月・新たな技を学ぶ=3ヵ月 になる。ボタンにはこの期間が出るので表示と実態はずれない",
+        "en": "How much calendar one 'ただ鍛える' session costs; every other activity is a multiple of it. The game's own value is 1年 (365 days), which makes a three-year activity jump 1095 days. At 1ヵ月 (30 days) the four activities take 1/2/2/3 months. The buttons show the real length"
+      }
+    },
+    "SIMPLE_FACTOR": {
+      "type": "int",
+      "default": 1,
+      "min": 1,
+      "max": 60,
+      "label": {
+        "ja": "「ただ鍛える」の倍率",
+        "en": "Multiplier: ただ鍛える"
+      },
+      "note": {
+        "ja": "ベース期間の何倍か。素のゲームは1年の修行なので1倍。ゲームが数える年数（1年）は変わらないので、卒業までの段数は倍率を変えても変わらない",
+        "en": "How many base periods this activity costs. The game's own value is 1 (a one-year activity). The years the game counts are unchanged, so the number of sessions per course stays the same"
+      }
+    },
+    "FUNDAMENTAL_FACTOR": {
+      "type": "int",
+      "default": 2,
+      "min": 1,
+      "max": 60,
+      "label": {
+        "ja": "「基礎を積む」の倍率",
+        "en": "Multiplier: 基礎を積む"
+      },
+      "note": {
+        "ja": "ベース期間の何倍か。素のゲームは2年の修行なので2倍",
+        "en": "How many base periods this activity costs. The game's own value is 2 (a two-year activity)"
+      }
+    },
+    "TRAIN_SKILL_FACTOR": {
+      "type": "int",
+      "default": 2,
+      "min": 1,
+      "max": 60,
+      "label": {
+        "ja": "「技を磨く」の倍率",
+        "en": "Multiplier: 技を磨く"
+      },
+      "note": {
+        "ja": "ベース期間の何倍か。素のゲームは2年の修行なので2倍",
+        "en": "How many base periods this activity costs. The game's own value is 2 (a two-year activity)"
+      }
+    },
+    "LEARN_NEW_SKILL_FACTOR": {
+      "type": "int",
+      "default": 3,
+      "min": 1,
+      "max": 60,
+      "label": {
+        "ja": "「新たな技を学ぶ」の倍率",
+        "en": "Multiplier: 新たな技を学ぶ"
+      },
+      "note": {
+        "ja": "ベース期間の何倍か。素のゲームは3年の修行なので3倍",
+        "en": "How many base periods this activity costs. The game's own value is 3 (a three-year activity)"
       }
     },
     "START_BUTTON": {
@@ -83,14 +144,50 @@
     },
     "PHASE_BUTTON": {
       "type": "str",
-      "default": "{name}({years}年)",
+      "default": "{name}({length})",
       "label": {
         "ja": "修行内容のボタンの表示",
         "en": "Activity button label"
       },
       "note": {
-        "ja": "使える変数: {name} {years}（ゲームが出している年数）{days}（実際に進む日数）。既定はゲームの表示と同じ形なので1文字も変わらない。{name}({days}日) にすると「ただ鍛える(30日)」のように実日数が出る",
-        "en": "Variables: {name}, {years} (as the game shows them) and {days} (the real days). The default reproduces the game's own label exactly. {name}({days}日) shows the real days instead"
+        "ja": "使える変数: {name} {length}（実際に進む期間。「3ヵ月」「2年」）{days}（日数）{factor}（倍率）{base}（ベース期間）。ベース期間が「1年」ならゲームの表示と同じ文字列になるので、既定のままなら1文字も変わらない",
+        "en": "Variables: {name}, {length} (the real length, e.g. 3ヵ月), {days}, {factor} and {base}. With the 1年 base this reproduces the game's own labels exactly"
+      }
+    },
+    "ALLOW_RETRAIN": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "卒業した施設でも再訓練できる",
+        "en": "Allow training again where you graduated"
+      },
+      "note": {
+        "ja": "素のゲームは断る（「十分に学んだ。これ以上ここで得るものはないだろう。」で代金も日数も動かない）。断っている根は施設に立つ訓練済みの印（config の trained。実測）で、ONだとその印をたたむだけ。ゲームは卒業していない施設とまったく同じ道を通るので、代金も背景も選択肢も文言も全部ゲームのまま",
+        "en": "The game refuses a second course at the same facility. The refusal comes from a 'trained' mark on the facility itself; on, that mark is simply folded away, so the game runs exactly as it does at a facility you have not graduated from ― fee, background, choices and wording all its own"
+      }
+    },
+    "PERIOD_WORDING": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "文言の「N年間」も実際の期間に直す",
+        "en": "Match the wording to the real length"
+      },
+      "note": {
+        "ja": "ONだと、訓練中に出る「あと3年間。どうする？」「一年間、ひたすら鍛錬した。」の年数を実際の期間に直す（「あと3ヵ月。」「1ヵ月、ひたすら鍛錬した。」）。素の設定では直す先が同じ文字列なので1文字も変わらない。切るとゲームの言い方のまま残り、暦と文言が食い違う。AIが書く描写（「これからの三年間…」）はどちらでも触らない",
+        "en": "Rewrites the years the game states during training (あと3年間 / 一年間、…) into the real length. With the game's own settings the result is the same string, so nothing changes. Off keeps the game's wording, which then disagrees with the calendar. The AI's own narration is never touched"
+      }
+    },
+    "LLM_PERIOD_WORDING": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "AI に渡す頼み文の年数も直す",
+        "en": "Match the AI's prompt to the real length"
+      },
+      "note": {
+        "ja": "ゲームは頼み文にも年数を焼き込む（「残り訓練年数: 3年」「費用と3年の時間を費やす」など）ので、切っていると画面は3ヵ月なのに師範のセリフだけが「三年間」と言う（実機で確認）。ONだと訓練の頼み文の年数だけを実際の期間に直す。人生ログ（「3年間の過酷な基礎訓練を終え」）や土地との縁（「合計2年暮らしている」）は過去の記録なので触らない",
+        "en": "The game bakes the years into its prompts (残り訓練年数: 3年 and so on), so with this off the trainer's own lines still say three years even when the screen says three months. On, only the training prompt's years are rewritten; the life log and the years someone has lived in a town are records of the past and are never touched"
       }
     },
     "REFUSE_TEXT": {

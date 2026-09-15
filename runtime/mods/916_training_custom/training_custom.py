@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""機能調整: 訓練所の代金・修行の年数・1年で進む日数を設定で変えられるようにする。
+"""機能調整: 訓練所の代金・修行の年数・1段の期間を設定で変えられるようにする。
 
 素のゲームの訓練所は、代金が 300G で固定、1回の修行が3年、
 活動1段で「その年数 × 365 日」の暦が一度に進む（実測は GAME.md §2.17。
@@ -8,13 +8,15 @@
 この MOD はその3つを mod.json の設定から変えられるようにする。
 既定値はすべて素のゲームの値で、そのままなら挙動は何も変わらない。
 
-変更点は3つ。
+変更点は4つ。
 
 | 何を変えるか | どこで変えるか |
 |---|---|
 | 代金 | `TrainingStartManager.__init__` に渡る `training_price` を差し替える |
 | 1回の修行の年数 | 同じ `__init__` の `training_years` を差し替える |
-| 1年で進む日数 | 段の実行中だけ、ローダの日数送りの関所へ「この段は何日か」を出す |
+| 1段の期間（ベース期間 × 倍率） | 段の実行中だけ、ローダの日数送りの関所へ「この段は何日か」を出す |
+| 年で言う文言 | 画面の文言（`あと3年間`）と、AI へ渡る頼み文の年数（`残り訓練年数: 3年`）を実際の期間へ |
+| 卒業した施設での再訓練 | 施設に立つ訓練済みの印（`config["trained"]`）をたたむ。あとはゲームがいつもどおり進める |
 
 留意点:
 
@@ -25,22 +27,31 @@
   訓練所の代金が**引数で渡ってくる**から（馬車の運賃は渡ってこない）。
   それでも引き落としが設定額にならなかった回は `execute` の前後の所持金で気付けるので、
   差額をその場で戻して WARN を残す（別の場所で徴収しているビルドに備えた保険）
+- **1段の期間は「ベース期間 × 倍率」で決める。**
+  ベース期間はいちばん短い修行1回の長さ（1ヵ月〜1年から選ぶ）で、
+  倍率は修行内容ごとに持つ（既定は素の年数と同じ 1/2/2/3）。
+  素の設定（ベース「1年」）なら 365 / 730 / 730 / 1095 日 ＝ ゲームの値そのもの。
+  修行内容の種類（`simple` / `fundamental` / `train_skill` / `learn_new_skill`）は
+  `TrainingPhaseManager` の第1引数とボタンの spec の args から読む。
+  知らない種類のときだけ、ゲームが出している年数（`(N年)` と `elapse_days` の日数 ÷ 365）を
+  倍率の代わりに使う
 - **日数はローダの関所**（`durations`。TECH.md §3.3.3）に望みを出すだけで、
   `elapse_days` はこちらでは包まない。
-  望むのは「ゲームが送ろうとした日数を、設定の1年の長さで測り直した数」で、
   段の窓（`TrainingPhaseManager.execute` の間）の外では何も望まない
   ＝ 街移動・宿泊・他の依頼の日数送りには触らない。
-  **活動ごとの年数はゲームのまま**にしてある（残り年数の減り方と、
-  残り年数に収まる活動だけを並べる判定はゲームの内側に在って、引数には出てこない）。
-  1年の長さだけを変えれば、その勘定はゲームの中で辻褄が合ったまま暦だけが縮む
+  **ゲームが数える年数（残り年数）には触らない。**
+  残り年数の減り方も、残り年数に収まる修行だけを並べる判定もゲームの内側に在って、
+  引数には出てこない。
+  こちらが変えるのは暦のほうだけなので、その勘定はゲームの中で辻褄が合ったまま残る
+  （`あと3年間` の3は**ゲームが数える修行の量**で、実際に進む暦は選んだ段の長さの合計）
 - ボタンは `text` だけ触る（`314_` と同じ）。
   代金を変えたときだけ `訓練を受ける(300G)` を書き直し、
-  段のボタン（`ただ鍛える(1年)`）は**既定では触らない**。
-  1年の長さを変えても年数の表示は変わらないので、実日数を出したいときは
-  設定の表示テンプレートに `{days}` を入れる
+  段のボタンは**実際に進む期間**で出す（`ただ鍛える(1ヵ月)`）。
+  素の設定ではその文字列がゲームの表示（`ただ鍛える(1年)`）と一致するので、
+  既定のままなら1文字も変わらない
 
 開発中（9xx。TECH.md §2.6）なので、遊び方も検証の記録も同じフォルダの DOC.md にある
-（§1 が MODS.md 相当、§3 が実機で見る8点）。
+（§1 が MODS.md 相当、§3 が実機の記録と残りの確認）。
 """
 
 import os
@@ -48,7 +59,7 @@ import re
 import sys
 import time
 
-from instantale_modloader import durations, ui
+from instantale_modloader import durations, llm, ui
 from instantale_modloader.state import UNKNOWN_WORLD, WorldStore, world_key
 
 LOG_BASENAME = "training_custom.log"
@@ -81,10 +92,19 @@ TRAINING_PRICE = 300
 # 増やすと1回の修行で活動を何段も受けられる。
 COURSE_YEARS = 3
 
-# 1年で進む日数（素のゲームは 365 日）。
-# 3年の活動は「3 × この日数」進む。
-# 30 にすれば `新たな技を学ぶ(3年)` は 90 日で終わる（年数の表示は変わらない）。
-DAYS_PER_YEAR = 365
+# 1段のベース期間（素のゲームは「1年」＝ 365 日）。
+# いちばん短い修行（`ただ鍛える`）1回の長さで、他の修行はこれの倍率で決まる。
+# 選択肢は下の `PERIOD_DAYS`（1ヵ月＝30日はゲームの1ヵ月。GAME.md §2.17）。
+BASE_PERIOD = "1年"
+
+# 修行内容ごとの倍率。**ベース期間の何倍か**。
+# 既定は素のゲームの年数そのもの（1年 / 2年 / 2年 / 3年）なので、
+# ベース期間が「1年」のままなら1日もずれない。
+# 種類の綴りは実測（`231_probe_training`。GAME.md §2.17）。
+SIMPLE_FACTOR = 1              # ただ鍛える
+FUNDAMENTAL_FACTOR = 2         # 基礎を積む
+TRAIN_SKILL_FACTOR = 2         # 技を磨く
+LEARN_NEW_SKILL_FACTOR = 3     # 新たな技を学ぶ
 
 # 訓練を受けるボタンの表示テンプレート。
 # 使える変数: {name}（ボタンから料金の括弧を落とした呼び名）{price} {years}。
@@ -92,10 +112,36 @@ DAYS_PER_YEAR = 365
 START_BUTTON = "{name}({price}G)"
 
 # 修行内容のボタンの表示テンプレート。
-# 使える変数: {name} {years}（ゲームが出している年数）{days}（実際に進む日数）。
-# 既定はゲームの表示と同じ形なので、既定のままなら1文字も変わらない。
-# 1年の日数を縮めたときに実日数を出したいなら `{name}({days}日)` にする。
-PHASE_BUTTON = "{name}({years}年)"
+# 使える変数: {name} {length}（実際に進む期間。`3ヵ月` `2年`）{days} {factor} {base}。
+# 既定のままでベース期間が「1年」なら、ゲームの表示（`ただ鍛える(1年)`）と
+# 1文字も変わらない。ベース期間を変えると**その長さが表示に出る**
+# （`ただ鍛える(1ヵ月)`）ので、表示と実態は常に一致する。
+PHASE_BUTTON = "{name}({length})"
+
+# 訓練中の文言の「N年間」を実際の期間に直すか。
+# ゲームは残りの量も1段の結果も**年**で言う（`あと3年間。どうする？` /
+# `一年間、ひたすら鍛錬した。`）ので、ベース期間を縮めると文言だけが年のまま残る。
+# ONだと、訓練の窓の間に出る文言のその部分だけを実際の期間に直す
+# （`あと3ヵ月。どうする？` / `1ヵ月、ひたすら鍛錬した。`）。
+# 素の設定では**直す先が同じ文字列になるので1文字も変わらない**。
+# 切るとゲームの言い方のまま（暦と文言が食い違う）。
+PERIOD_WORDING = True
+
+# 卒業した施設でもう一度訓練を受けられるようにするか。
+# 素のゲームは断る（`十分に学んだ。これ以上ここで得るものはないだろう。` で、
+# 代金も日数も動かない。実測）。
+# 断っている根は施設の**訓練済みの印**（`config["trained"]`。実測 2026-09-16）で、
+# ONだとその印をたたむだけ。
+# ゲームは卒業していない施設とまったく同じ道を通る（代金も支度も背景も選択肢もゲームのまま）。
+ALLOW_RETRAIN = False
+
+# AI に渡す頼み文の年数も実際の期間に直すか。
+# ゲームは頼み文にも年数を焼き込む（`残り訓練年数: 3年` など。実測）ので、
+# 切っていると**画面は3ヵ月なのに師範のセリフだけが「三年間」と言う**
+# （実機 2026-09-15 で確認）。
+# ONだと、訓練の頼み文の中の年数だけを実際の期間に直す。
+# 人生ログや土地との縁の年数（過去の記録）には当てない（`PROMPT_RULES` の注記）。
+LLM_PERIOD_WORDING = True
 
 # 手持ちが設定した代金に足りないときの一言（`314_` / `315_` と同じ形）。
 REFUSE_TEXT = "（訓練の代金{price}Gに足りない ― 手持ち{gold}G）"
@@ -115,20 +161,109 @@ GAME_PRICE = 300
 GAME_COURSE_YEARS = durations.GAME_TRAINING_COURSE_YEARS
 GAME_DAYS_PER_YEAR = durations.GAME_TRAINING_DAYS_PER_YEAR
 
+#: ベース期間の選択肢と日数。
+#: 1ヵ月はゲームの1ヵ月（30日。`durations.DAYS_PER_MONTH`）、
+#: 「1年」は訓練の1年（365日。`231_probe_training` の実測）で、
+#: **素のゲームはここ**（ベース「1年」×倍率 1/2/2/3 ＝ 365/730/730/1095 日）。
+#: mod.json の選択肢とこの並びは同じにすること。
+PERIOD_DAYS = {
+    "1ヵ月": 1 * durations.DAYS_PER_MONTH,
+    "2ヵ月": 2 * durations.DAYS_PER_MONTH,
+    "3ヵ月": 3 * durations.DAYS_PER_MONTH,
+    "6ヵ月": 6 * durations.DAYS_PER_MONTH,
+    "1年": durations.GAME_TRAINING_DAYS_PER_YEAR,
+}
+GAME_BASE_PERIOD = "1年"
+
+#: 修行内容の種類（実測値）と、その倍率を持つ設定の名前。
+#: 設定はワールドごとに差し替わる（`refresh_world` が `globals()` を書く）ので、
+#: 値ではなく**名前**で持ち、読むのは呼ばれた時（`factor_of`）。
+FACTOR_SETTING = {
+    "simple": "SIMPLE_FACTOR",
+    "fundamental": "FUNDAMENTAL_FACTOR",
+    "train_skill": "TRAIN_SKILL_FACTOR",
+    "learn_new_skill": "LEARN_NEW_SKILL_FACTOR",
+}
+
+#: 修行内容ごとの**ゲームが数える年数**（実測。`durations` が持っているものを借りる）。
+#: 使うのは「残りN年ぶんで暦がどれだけ進みうるか」（`budget_days`）だけ。
+#: 1段の長さはこの表ではなく設定の倍率で決まる。
+GAME_ACTIVITY_YEARS = dict(durations.GAME_TRAINING_ACTIVITY_YEARS)
+
+#: 施設に立つ「訓練済み」の印。ゲームはこれを見て2回目を断る。
+#: 実測 2026-09-16 ― 卒業した道場の控え
+#: （`state\modfacility\<世界×主人公>.json`）に
+#: `snapshot.config.trained = True` が立っていた。
+#: セーブ側には同じ名前の項目が無く（`savedata.json` を走査して0件）、
+#: 施設そのものが持っている。
+#: **落とすのはキーごと**（`False` を入れても断られた。`fold_trained` の注記）。
+TRAINED_KEY = "trained"
+
 # 修行内容のボタンの年数（`ただ鍛える(1年)` の 1）。
-# **ゲームが出している数をそのまま読む**（こちらの表から引かない）。
-# 活動の種類ごとの年数はゲームの内側に在り、引数にも出てこないので、
-# 画面に出ている数字が唯一の出どころになる。
+# 種類が実測の4つに当たらないビルドで、**ゲームが出している数**を倍率の代わりに使う。
 YEARS_RE = re.compile(r"[（(]\s*(\d+)\s*年\s*[)）]\s*$")
 
 # ラベル末尾の括弧（`(300G)` `(1年)`）。呼び名だけを取り出すのに使う。
 TAIL_RE = re.compile(r"\s*[（(][^（()）]*[)）]\s*$")
 
+# 訓練中の文言の「N年間」（実測は GAME.md §2.17 と `out\training.jsonl`）。
+#
+#   算用数字     `あと3年間。どうする？` / `残り2年間。どうする？`
+#                残りの**量**。ゲームが数える年数なので、暦に直すのは `budget_days`
+#   漢数字＋行頭 `一年間、ひたすら鍛錬した。` / `二年間で基礎能力の向上に費やした。`
+#                `二年を基礎能力の向上に費やした。`（実機 2026-09-16。**「間」が無い形**）
+#                その1段の結果。長さはその段のもの
+#
+# **漢数字は行頭のものだけ**を見る。
+# AI の描写も漢数字で年を言うが（`これからの三年間、…` `この三年間、…`）、
+# あちらは文の途中に出るうえ、指しているのが1段ではなく修行全体なので、
+# 段の長さで書き換えると数が嘘になる（実測の4文で確認）。
+#
+# 「間」の有無は修行内容で変わる（`ただ鍛える` は `一年間、`、
+# `基礎を積む` は `二年を`）。後ろに続く助詞（`、` `を` `で`）まで見て、
+# `三年後` のような**別の意味の年**には当てない。
+COUNT_YEARS_RE = re.compile(r"(\d+)年間")
+KANJI_YEARS_RE = re.compile(r"^([一二三四五六七八九十]+)年(?:間)?(?=[、をで])")
+KANJI_NUMBERS = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5,
+                 "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
+
+# AI へ渡る頼み文の中の年数（実測 2026-09-15。
+# `output_data\<世界>\<PC>\training_conversation_starter\N.json` と
+# `conversation_facilitator\N.json`。数えた結果は DOC.md §3）。
+#
+#   残り訓練年数: 3年              訓練所の頼み文（開始・完了の両方）
+#   費用と3年の時間を費やす代わりに  同上（システム側の説明）
+#   入学の希望を受けた場合: 3年間を費やし    会話の頼み文（訓練の勧誘の説明）
+#   新たな技の会得に3年を費やした...        訓練の記録（その段の結果）
+#
+# **錨は訓練の頼み文にしか無い言い回しに打つ。**
+# 素の `N年` に当てると、同じ記録に写っている
+# 「…は指導者レオンのもとで3年間の過酷な基礎訓練を終え」（人生ログ。訓練の後に書かれ、
+# 以後あらゆる頼み文へ運ばれる）や「この土地に合計2年暮らしている」（縁）まで
+# 書き換えてしまう。
+# どちらも**過去の記録**なので、後から期間を書き換えるのは嘘になる。
+PROMPT_RULES = (
+    (re.compile(r"残り訓練年数(?P<sep>[:：]\s*)(?P<y>\d+)\s*年"), "budget",
+     lambda m, length: "残り訓練期間" + m.group("sep") + length),
+    (re.compile(r"費用と(?P<y>\d+)\s*年の時間"), "budget",
+     lambda m, length: "費用と" + length + "の時間"),
+    (re.compile(r"(?P<head>入学の希望を受けた場合[:：]?\s*)(?P<y>\d+)\s*年間"), "budget",
+     lambda m, length: m.group("head") + length),
+    (re.compile(r"(?P<y>\d+)\s*年を費やした"), "phase",
+     lambda m, length: length + "を費やした"),
+)
+
+# 頼み文が訓練のものだと分かる手掛かり（当たらなかったときのログ用）。
+PROMPT_MARKS = ("残り訓練年数", "訓練施設", "訓練の記録", "入学の希望")
+
 # ワールド個別の設定の控え。
 # 書くのは同梱の tool.py だけ。ゲーム中はこの MOD が読む。
 SETTINGS_DIRNAME = "training_custom"
-SETTING_NAMES = ("TRAINING_PRICE", "COURSE_YEARS", "DAYS_PER_YEAR",
-                 "START_BUTTON", "PHASE_BUTTON", "REFUSE_TEXT")
+SETTING_NAMES = ("TRAINING_PRICE", "COURSE_YEARS", "BASE_PERIOD",
+                 "SIMPLE_FACTOR", "FUNDAMENTAL_FACTOR", "TRAIN_SKILL_FACTOR",
+                 "LEARN_NEW_SKILL_FACTOR",
+                 "START_BUTTON", "PHASE_BUTTON", "ALLOW_RETRAIN",
+                 "PERIOD_WORDING", "LLM_PERIOD_WORDING", "REFUSE_TEXT")
 
 
 class _SafeDict(dict):
@@ -168,22 +303,163 @@ def plain_name(label):
     return TAIL_RE.sub("", str(label or "")) or str(label or "")
 
 
-def scaled_days(days, per_year=None):
-    """ゲームが送ろうとした日数を、設定の1年の長さで測り直す。
+def base_days(period=None):
+    """ベース期間の日数。知らない選択肢なら素の値（365日）。"""
+    period = BASE_PERIOD if period is None else period
+    value = PERIOD_DAYS.get(str(period))
+    return int(value) if value else GAME_DAYS_PER_YEAR
 
-    ゲームは「活動の年数 × 365 日」を送ってくるので、
-    それを `365` で割って設定の日数を掛ければ、**活動の種類を知らなくても**
-    その段の実日数になる（種類ごとの年数はゲームの内側に在って読めない）。
-    素の 365 のままなら同じ数＝触らない。1日は必ず進める（0 日の段を作らない）。
 
-    `per_year` は自己検証が設定と無関係に式を確かめるための引数で、
-    実経路では常に設定（`DAYS_PER_YEAR`）を読む。
+def factor_of(activity, fallback=None):
+    """その修行内容の倍率。実測の4種に当たらなければ `fallback`。
+
+    値ではなく設定の名前から引くのは、ワールドごとに差し替わるため
+    （`refresh_world` が `globals()` を書き直す）。
     """
-    per_year = int(DAYS_PER_YEAR) if per_year is None else int(per_year)
+    name = FACTOR_SETTING.get(str(activity))
+    if name is None:
+        return fallback
+    try:
+        return max(1, int(globals()[name]))
+    except (KeyError, TypeError, ValueError):
+        return fallback
+
+
+def phase_days(activity, game_days=None, years=None):
+    """その1段で進む日数（ベース期間 × 倍率）。
+
+    倍率は修行内容の種類から引く。
+    知らない種類のときは**ゲーム自身が言っている年数**を倍率の代わりに使う
+    （段の実行中なら `elapse_days` に来た日数 ÷ 365、画面ならボタンの `(N年)`）。
+    どちらも無ければ 1 倍。1日は必ず進める（0 日の段を作らない）。
+    """
+    fallback = years
+    if fallback is None and game_days:
+        fallback = int(round(int(game_days) / float(GAME_DAYS_PER_YEAR)))
+    factor = factor_of(activity, fallback)
+    try:
+        factor = max(1, int(factor))
+    except (TypeError, ValueError):
+        factor = 1
+    return max(1, base_days() * factor), factor
+
+
+def budget_days(years):
+    """残りN年ぶんで進みうる暦の (最短, 最長)。読めなければ `(None, None)`。
+
+    ゲームが数える年数は、こちらの倍率では**一意に暦へ直せない**。
+    残り3年は「3年の修行1回」でも「1年の修行3回」でも埋まり、
+    倍率を修行ごとに変えているとその2つは長さが違う。
+    そこで、残りを埋める組み合わせの中での最短と最長を返す
+    （素の比のまま＝倍率がゲームの年数と同じなら、最短＝最長＝その年数 × ベース期間）。
+
+    使うのは文言の書き換えだけ（`あと3年間` を実際の期間へ）。
+    暦そのものは1段ずつ `phase_days` で決まるので、ここの数は何も動かさない。
+    """
+    try:
+        years = int(years)
+    except (TypeError, ValueError):
+        return None, None
+    if years < 0:
+        return None, None
+    costs = []
+    for key, game_years in GAME_ACTIVITY_YEARS.items():
+        days, _factor = phase_days(key)
+        if isinstance(game_years, int) and game_years >= 1:
+            costs.append((game_years, days))
+    if not costs:
+        return None, None
+    # 残り year 年を埋める組み合わせの最短・最長（どちらも 1年の修行で必ず埋まる）。
+    shortest, longest = [0] * (years + 1), [0] * (years + 1)
+    for year in range(1, years + 1):
+        fits = [(cost, days) for cost, days in costs if cost <= year]
+        if not fits:
+            return None, None
+        shortest[year] = min(days + shortest[year - cost] for cost, days in fits)
+        longest[year] = max(days + longest[year - cost] for cost, days in fits)
+    return shortest[years], longest[years]
+
+
+def length_text(days):
+    """日数を読める長さに（`365` → `1年`、`90` → `3ヵ月`、それ以外は `N日`）。
+
+    素の設定（ベース「1年」×1/2/2/3）ではゲームの表示（`1年` `2年` `3年`）と
+    同じ文字列になるので、既定のままならボタンは1文字も変わらない。
+    """
     days = int(days)
-    if per_year == GAME_DAYS_PER_YEAR:
-        return days
-    return max(1, int(round(days * per_year / float(GAME_DAYS_PER_YEAR))))
+    if days and days % GAME_DAYS_PER_YEAR == 0:
+        return "{}年".format(days // GAME_DAYS_PER_YEAR)
+    if days and days % durations.DAYS_PER_MONTH == 0:
+        return "{}ヵ月".format(days // durations.DAYS_PER_MONTH)
+    return "{}日".format(days)
+
+
+def budget_text(years):
+    """残りN年ぶんの言い方。ゲームの言い方と同じなら None（＝文言を触らない）。
+
+    最短と最長が同じなら1つの長さ（`3ヵ月`）、違えば幅（`3ヵ月〜18ヵ月`）。
+    """
+    shortest, longest = budget_days(years)
+    if shortest is None:
+        return None
+    if shortest == longest:
+        return length_text(shortest) if shortest != int(years) * GAME_DAYS_PER_YEAR \
+            else None
+    return "{}〜{}".format(length_text(shortest), length_text(longest))
+
+
+def reprompt(text, activity=None, phase=False):
+    """AI へ渡る頼み文の年数を実際の期間へ。触らないなら None。
+
+    書き換えるのは `PROMPT_RULES` の錨に当たった所だけ。
+    `phase` の規則（その段の結果）は段の中でのみ当てる
+    ― 訓練の外では、同じ言い回しが過去の記録として運ばれてくることがある。
+    """
+    if not LLM_PERIOD_WORDING or not isinstance(text, str) or not text:
+        return None
+    new = text
+    for pattern, kind, build in PROMPT_RULES:
+        if kind == "phase" and not phase:
+            continue
+
+        def one(match, kind=kind, build=build):
+            years = match.group("y")
+            if kind == "phase":
+                days, _factor = phase_days(activity, years=int(years))
+                said = length_text(days) \
+                    if days != int(years) * GAME_DAYS_PER_YEAR else None
+            else:
+                said = budget_text(years)
+            return build(match, said) if said else match.group(0)
+
+        new = pattern.sub(one, new)
+    return new if new != text else None
+
+
+def reword(text, activity=None, phase=False):
+    """訓練中の文言の「N年間」を実際の期間へ。触らないなら None。
+
+    算用数字（`あと3年間`）は残りの量なので `budget_text`。
+    行頭の漢数字（`一年間、ひたすら鍛錬した。`）はその1段の長さで直す
+    ― これは段の中（`phase=True`）だけ。
+    どちらも当たらない文・直した先が同じ文字列になる文は None。
+    """
+    if not PERIOD_WORDING or not isinstance(text, str) or not text:
+        return None
+
+    def by_count(match):
+        said = budget_text(match.group(1))
+        return said if said else match.group(0)
+
+    new = COUNT_YEARS_RE.sub(by_count, text)
+    match = KANJI_YEARS_RE.match(new) if phase else None
+    if match is not None:
+        years = KANJI_NUMBERS.get(match.group(1))
+        if years:
+            days, _factor = phase_days(activity, years=years)
+            if days != years * GAME_DAYS_PER_YEAR:
+                new = length_text(days) + new[match.end():]
+    return new if new != text else None
 
 
 def apply(ctx):
@@ -200,13 +476,22 @@ def apply(ctx):
         state = {
             # いま `TrainingPhaseManager.execute` の中に居るかの窓。
             "phase": None,
+            # いま `TrainingStartManager.execute` の中に居るか（文言の書き換え用）。
+            "start": False,
+
             # ボタンと引数から読み取った素の代金（読めた最新の値）。
             "game_price": None,
-            # 自分が書いたラベル。画面がラベルを組み直さないビルドで同じ処理が
-            # もう一度来たとき、**自分の書いた値を素の値として読み込まない**ための目印。
-            "ours": set(),
+            # 自分が書いた「訓練を受ける」のラベル。画面がラベルを組み直さない
+            # ビルドで同じ処理がもう一度来たとき、**自分の書いた額を素の代金として
+            # 読み込まない**ための目印（`314_` の `our_coach_label` と同じ）。
+            # 段のラベルはここに入れない ― あちらは spec の args から組み直すので
+            # 読み直しても同じ文字列になり、素の設定では**ゲームの表示と一致する**
+            # （溜めると、後から素のラベルが自分のものに見えて塗り直しが止まる）。
+            "our_start_label": None,
             # 年数が読めなかったラベル（同じものを何度もログに出さない）。
             "unknown": set(),
+            # 施設が読めない旨を1度だけ言うための印。
+            "quiet": False,
         }
         setattr(sys, STATE_STORE_ATTR, state)
 
@@ -267,11 +552,16 @@ def apply(ctx):
     def training_for(app):
         """ローダの窓口（`durations.TRAINING`）に置く答え。
 
-        活動の種類ごとの年数は渡さない（こちらは変えないので、窓口が素の値で埋める）。
-        読む側はこの MOD の名前を知らず、窓口に聞くだけ（TECH.md §3.3.2）。
+        窓口は「1段の日数 ＝ `activity_years` × `days_per_year`」の形で持つので、
+        ベース期間を `days_per_year` に、倍率を `activity_years` に入れる
+        （掛け算の形が同じなので、読む側が受け取る日数は正しい。TECH.md §3.3.2）。
+        素の設定なら 365 と 1/2/2/3 ＝ 窓口の素の値そのものになる。
+        読む側はこの MOD の名前を知らず、窓口に聞くだけ。
         """
-        return {"days_per_year": max(1, int(DAYS_PER_YEAR)),
-                "course_years": max(1, int(COURSE_YEARS))}
+        return {"days_per_year": base_days(),
+                "course_years": max(1, int(COURSE_YEARS)),
+                "activity_years": dict((key, factor_of(key, 1))
+                                       for key in FACTOR_SETTING)}
 
     durations.declare(durations.TRAINING, training_for, owner=owner, write=write)
 
@@ -282,7 +572,7 @@ def apply(ctx):
         player.gold = float(value) if isinstance(current, float) else int(round(value))
 
     # ============================================================ ボタンの表示
-    def relabel_start(old):
+    def relabel_start(old, entry=None):
         """訓練を受けるボタンの新しいラベル。触らないなら None。
 
         代金を変えたときだけテンプレートで表示し直す。
@@ -294,21 +584,26 @@ def apply(ctx):
                   years=int(COURSE_YEARS))
         return new if new != old else None
 
-    def relabel_phase(old):
+    def relabel_phase(old, entry=None):
         """修行内容のボタンの新しいラベル。触らないなら None。
 
-        年数はゲームが出している数をそのまま使う（こちらは活動の年数を変えない）。
-        既定のテンプレートはゲームの表示と同じ形なので、既定のままなら None が返る。
+        修行内容の種類は**ボタンの spec の args から読む**（`['simple', 3, '']`。
+        ラベルの文字列には下がらない）。
+        知らない種類のときだけ、ゲームが出している `(N年)` を倍率の代わりに使う。
+        素の設定ならゲームの表示と同じ文字列になるので None が返る。
         """
+        argv = ui.spec_args(entry) if entry is not None else None
+        activity = argv[0] if argv else None
         years = phase_years(old)
-        if years is None:
+        if activity is None and years is None:
             if old not in state["unknown"]:
                 state["unknown"].add(old)
-                write("no years in the phase label {!r}; leaving it alone "
-                      "(the game may have changed its wording)".format(old))
+                write("no activity and no years in the phase label {!r}; leaving "
+                      "it alone (the game may have changed its wording)".format(old))
             return None
-        new = fmt(PHASE_BUTTON, name=plain_name(old), years=years,
-                  days=years * max(1, int(DAYS_PER_YEAR)))
+        days, factor = phase_days(activity, years=years)
+        new = fmt(PHASE_BUTTON, name=plain_name(old), length=length_text(days),
+                  days=days, factor=factor, base=str(BASE_PERIOD))
         return new if new != old else None
 
     def relabel(app, cls_name, make):
@@ -325,12 +620,14 @@ def apply(ctx):
             if not isinstance(entry, dict) or ui.spec_cls_name(entry) != cls_name:
                 continue
             old = entry.get("text") or ""
-            if not old or old in state["ours"]:
-                continue          # 自分が書いたラベルは読み直さない
-            new = make(old)
+            if not old or (cls_name == START_CLS
+                           and old == state["our_start_label"]):
+                continue          # 自分が書いた代金のラベルは読み直さない
+            new = make(old, entry)
             if new and new != old:
                 entry["text"] = new
-                state["ours"].add(new)
+                if cls_name == START_CLS:
+                    state["our_start_label"] = new
                 changed = True
                 write("label: {!r} -> {!r} ({})".format(old, new, cls_name))
         return changed
@@ -358,7 +655,7 @@ def apply(ctx):
             refresh_world(app)
             for entry in getattr(app, "buttons", None) or []:
                 if isinstance(entry, dict) and ui.spec_cls_name(entry) == START_CLS \
-                        and (entry.get("text") or "") not in state["ours"]:
+                        and (entry.get("text") or "") != state["our_start_label"]:
                     price = ui.parse_coin(entry.get("text") or "")
                     if price is not None:
                         state["game_price"] = price
@@ -430,19 +727,79 @@ def apply(ctx):
             write("WARN price: the gold moved {} (ours is {}); leaving it as is "
                   "({} -> {})".format(moved, want, before, after))
 
+    # ============================================================ 再訓練
+    def facility_here(app):
+        """いま立っている施設の実体。読めなければ None。
+
+        立ち位置はロード直後だけ文字列で、遊んでいる最中は施設の実体（GAME.md §2.7）。
+        文字列のときは今のエリアから id で引く。
+        """
+        location = getattr(getattr(app, "player", None), "location", None)
+        if location is not None and not isinstance(location, (str, int)):
+            return location
+        facility, _node = ui.find_facility(ui.current_area(app), str(location or ""))
+        return facility
+
+    def fold_trained(app):
+        """訓練済みの印を**キーごと**落とす。落としたら True。
+
+        これが再訓練の全部。
+        印さえ無ければ、ゲームは卒業していない施設と同じ道を通るので、
+        代金も支度（主の絵と背景）も選択肢も文言もゲームのまま。
+
+        **`False` を入れるのでは足りない**（実機 2026-09-16）。
+        `config[TRAINED_KEY] = False` にしても断られ、控えにも `"trained": false` が
+        残っていた。一度も卒業していない道場（同じ世界の `天流院`）の config には
+        **キー自体が無い**ので、ゲームが見ているのは値ではなくキーの有無と読める。
+        未訓練の施設と同じ姿にする。
+
+        版5〜7 は断られた回を引き取って選択肢を組み直していた。
+        引数の形は実測どおりでも支度が飛ぶので背景の出ない画面になり（実機 2026-09-16）、
+        伏せる・払い戻すの後始末も要った。印を落とす側に寄せて全部やめた。
+        """
+        facility = facility_here(app)
+        config = getattr(facility, "config", None)
+        if not isinstance(config, dict):
+            # 施設が読めない（立ち位置が引けない・config を持たない作り）。
+            # **黙って諦めない** ― 断られたのに手掛かりが無い、を作らない。
+            if not state["quiet"]:
+                state["quiet"] = True
+                write("WARN retrain: cannot read the config of the place we are "
+                      "standing in ({!r}); the mark is left alone".format(facility))
+            return False
+        state["quiet"] = False
+        if TRAINED_KEY not in config:
+            return False                  # もともと未訓練（何もしない）
+        config.pop(TRAINED_KEY, None)
+        write("retrain: dropped the {!r} mark of {!r} (config now {})".format(
+            TRAINED_KEY, ui.facility_name(app, facility), sorted(config)))
+        return True
+
     @ctx.wrap("__main__:{}.execute".format(START_CLS), required=False)
     def start_execute(orig, self, choice_text=None, *args, **kwargs):
-        """代金の引き落としを前後の所持金で確かめ、続く修行内容のボタンを整える。"""
+        """代金の引き落としを前後の所持金で確かめ、続く修行内容のボタンを整える。
+
+        文言の書き換え（`あと3年間` → `あと3ヵ月`）のために、この間だけ窓を開ける。
+        卒業済みの施設は、設定が許していれば**印をたたんでから**ゲームに通す。
+        """
         app = getattr(self, "app", None) or ui.find_app()
         refresh_world(app)
         before = ui.gold_of(app)
+        state["start"] = True
+        if ALLOW_RETRAIN:
+            # 断られる前に印をたたむ。ここから先はゲームがいつもどおり進める。
+            fold_trained(app)
         try:
             return orig(self, choice_text, *args, **kwargs)
         finally:
+            # 窓（文言の直しと断りの伏せ）は**再訓練の支度が終わるまで**開けておく。
+            # `training_start()` も `あと3年間。どうする？` を出すので、
+            # 先に閉じるとそこだけ年のまま残る。
             try:
                 settle_price(app, before)
             except Exception:
                 ctx.log_exc("training custom: cannot settle the price")
+            state["start"] = False
             repaint(app, PHASE_CLS, relabel_phase)
 
     # ============================================================ 日数
@@ -476,10 +833,14 @@ def apply(ctx):
                       # この段が始まった時刻。日数送りに複数の MOD が望みを出したとき、
                       # **先に始まった事情が決める**（ローダの `durations`）。
                       "since": time.time(),
-                      "granted": []}
-            write("phase: activity={!r} remaining={!r} choice={!r} "
-                  "days_per_year={}".format(window["activity"], window["remaining"],
-                                            choice_text, DAYS_PER_YEAR))
+                      "granted": [],
+                      # 暦が動いたかの見張り。**自分の望みとは別の経路**で見る
+                      # （素の設定では望みを出さないので `granted` は空のままになる）。
+                      "day_before": ui.game_day(app)}
+            write("phase: activity={!r} remaining={!r} choice={!r} base={} "
+                  "factor={}".format(
+                      window["activity"], window["remaining"], choice_text,
+                      BASE_PERIOD, factor_of(window["activity"], "?")))
             state["phase"] = window
         except Exception:
             ctx.log_exc("training custom: cannot open the phase window")
@@ -488,26 +849,34 @@ def apply(ctx):
             return orig(self, choice_text, *args, **kwargs)
         finally:
             state["phase"] = None
-            if window is not None and int(DAYS_PER_YEAR) != GAME_DAYS_PER_YEAR \
-                    and not window["granted"]:
+            if window is not None and not window["granted"] \
+                    and str(BASE_PERIOD) != GAME_BASE_PERIOD:
                 write("WARN phase: no elapse_days call came through this phase; "
                       "the days were left as they are")
+            if ALLOW_RETRAIN:
+                # 卒業した段でまた印が立つ。**立たせたままにしない**（本人の指定）。
+                try:
+                    fold_trained(app)
+                except Exception:
+                    ctx.log_exc("training custom: cannot fold the trained mark")
             repaint(app, PHASE_CLS, relabel_phase)
 
     # `elapse_days` はこちらでは包まない。包むのはローダの関所1枚だけで、
     # ここは「この段を何日にしたいか」を答える側に回る（TECH.md §3.3.3）。
     def days_wish(app, days):
-        """段の窓の間だけ、設定の1年の長さで測り直した日数を望む。
+        """段の窓の間だけ、ベース期間 × 倍率の日数を望む。窓の外では None。
 
-        窓の外・素のままでは None。
-        1段で何回来ても、そのつど**送られてきた数を測り直す**ので
-        （固定の予算ではないので）合計がずれない。
+        ゲームが送ってきた数と同じなら None（＝素の設定。この段には関心が無い）。
+        1段で何回来ても、そのつど同じ式で答えるので合計がずれない。
         実測では1段につき1回（`231_probe_training`）。
         """
         window = state["phase"]
-        if window is None or int(DAYS_PER_YEAR) == GAME_DAYS_PER_YEAR:
+        if window is None:
             return None
-        return {"days": scaled_days(days), "since": window.get("since")}
+        want, _factor = phase_days(window.get("activity"), game_days=days)
+        if want == int(days):
+            return None
+        return {"days": want, "since": window.get("since")}
 
     def days_note(app, days, granted):
         """実際に渡った日数を控える。**他所が決めた回も来る**。"""
@@ -517,6 +886,71 @@ def apply(ctx):
 
     durations.claim_days(owner, days_wish, note=days_note, write=write)
     durations.install(ctx, write)
+
+    # ============================================================ 文言
+    @ctx.wrap("__main__:InstantaleApp.add_text", required=False)
+    def add_text(orig, self, context=None, *args, **kwargs):
+        """訓練の窓の間だけ、文言の「N年間」を実際の期間に直す。
+
+        窓の外（他の場面の文言）には一切触らない。
+        当たらなかった文はログに残す（ゲームの言い回しが変わったときの手掛かり）。
+        """
+        try:
+            window = state["phase"]
+            if (window is not None or state["start"]) and isinstance(context, str):
+                refresh_world(self)
+                activity = window.get("activity") if window is not None else None
+                replaced = reword(context, activity, phase=window is not None)
+                if replaced is not None and replaced != context:
+                    write("text: {!r} -> {!r}".format(context, replaced))
+                    return orig(self, replaced, *args, **kwargs)
+                if PERIOD_WORDING and "年" in context and len(context) < 40:
+                    write("text passing through (no year mark matched): {!r}"
+                          .format(context))
+        except Exception:
+            ctx.log_exc("training custom: cannot reword the training text")
+        return orig(self, context, *args, **kwargs)
+
+    def rewrite_outgoing(texts, site):
+        """AI へ出ていく頼み文の年数を実際の期間に直す。
+
+        ここが持つのは何をどう書き換えるかだけで、仕掛け先の選択と
+        「1回の推論で1回だけ」はローダ側（`llm.wrap_outgoing`。TECH.md §5.3）。
+        ローカルもクラウドも同じ1か所を通る。
+
+        窓（`state`）はわざとスレッドをまたぐ形にしてある（`315_` と同じ）。
+        訓練の `execute` はワーカースレッドで走り、送信はそこからさらに
+        別のスレッドへ渡りうる。スレッドローカルにすると渡った先で窓が閉じて見える。
+        またいだぶん無関係な推論にも掛かりうるが、
+        錨が訓練の頼み文にしか無い言い回しなので実害は無い。
+
+        書き換えに失敗しても本文はそのまま送られる（ローダが握る）。
+        描写の年数がずれるだけで、遊びは止めないほうがよい。
+        """
+        window = state["phase"]
+        result, changed = [], False
+        for content in texts:
+            new = reprompt(content, window.get("activity") if window else None,
+                           phase=window is not None)
+            if new is not None:
+                changed = True
+                write("prompt at {}: the years became the real period".format(site))
+            elif any(mark in content for mark in PROMPT_MARKS):
+                # 訓練の頼み文なのに1つも当たらなかった。
+                # ゲームの言い回しが実測から変わったときのために、その一節だけ残す。
+                for mark in PROMPT_MARKS:
+                    at = content.find(mark)
+                    if at >= 0:
+                        write("prompt at {} kept as is: ...{}...".format(
+                            site, content[max(0, at - 30):at + 50]))
+                        break
+            result.append(new if new is not None else content)
+        return result if changed else None
+
+    if LLM_PERIOD_WORDING:
+        # 設定は遊んでいる最中に変わりうるので、素の設定でも仕掛けておく
+        # （素のままなら `reprompt` が即 None を返すので、他の推論の邪魔はしない）。
+        llm.wrap_outgoing(ctx, rewrite_outgoing, label="training custom")
 
     # ============================================================ 手持ちの確認
     @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False)
@@ -555,18 +989,37 @@ def apply(ctx):
               plain_name("やった"))
     years = (phase_years("ただ鍛える(1年)"), phase_years("新たな技を学ぶ(3年)"),
              phase_years("やった"))
-    # 日数の式。設定と無関係に確かめる（per_year= を明示で渡す）。
-    rescaled = (scaled_days(1095, 30), scaled_days(365, 30), scaled_days(730, 30),
-                scaled_days(1095, 365), scaled_days(365, 1))
+    # ベース期間の表と長さの言い方。設定と無関係に確かめる（期間名を明示で渡す）。
+    periods = tuple(base_days(name) for name in
+                    ("1ヵ月", "2ヵ月", "3ヵ月", "6ヵ月", "1年", "そんな期間は無い"))
+    lengths = (length_text(365), length_text(1095), length_text(30),
+               length_text(540), length_text(7))
+    # 知らない修行内容のときに、ゲームの言う年数が倍率の代わりに立つこと。
+    fallbacks = (phase_days("no_such_activity", game_days=1095)[1],
+                 phase_days("no_such_activity", years=2)[1],
+                 factor_of("no_such_activity", 4))
+    # 文言の書き換え。**設定に関わらず成り立つこと**だけを見る（実測の文で。
+    # 設定しだいで変わる側は `tools\tests\test_wip_training_custom.py` が見ている）。
+    #   AI の描写（文の途中の漢数字）には触らない
+    #   段の外では行頭の漢数字にも触らない
+    spoken = (reword("これからの三年間、私が責任を持ってお手伝いいたしましょう。"),
+              reword("一年間、ひたすら鍛錬した。0の経験値を得た。", "simple"))
     if sample == expected and survives == "訓練と{typo}" \
             and labels == ("訓練を受ける", "ただ鍛える", "やった") \
-            and years == (1, 3, None) and rescaled == (90, 30, 60, 1095, 1):
-        ctx.log("verified: reads the years from a label, formats templates, "
-                "and rescales the days")
+            and years == (1, 3, None) \
+            and periods == (30, 60, 90, 180, 365, 365) \
+            and lengths == ("1年", "3年", "1ヵ月", "18ヵ月", "7日") \
+            and fallbacks == (3, 2, 4) and spoken == (None, None):
+        ctx.log("verified: reads the activity and the years, formats templates, "
+                "turns a base period into days, and leaves the game's own "
+                "wording alone")
     else:
         ctx.log("VERIFY FAILED: sample={!r} survives={!r} labels={!r} years={!r} "
-                "rescaled={!r}".format(sample, survives, labels, years, rescaled),
-                level="ERROR")
+                "periods={!r} lengths={!r} fallbacks={!r} spoken={!r}".format(
+                    sample, survives, labels, years, periods, lengths, fallbacks,
+                    spoken), level="ERROR")
 
-    ctx.log("training custom: price={} course={}y year={}d log={}".format(
-        TRAINING_PRICE, COURSE_YEARS, DAYS_PER_YEAR, log_path))
+    ctx.log("training custom: price={} course={}y base={}({}d) factors={} "
+            "log={}".format(
+                TRAINING_PRICE, COURSE_YEARS, BASE_PERIOD, base_days(),
+                tuple(factor_of(key, 1) for key in FACTOR_SETTING), log_path))

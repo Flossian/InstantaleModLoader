@@ -174,6 +174,44 @@ try:
         fh.write("{ not json")
     check("読めなければ空を返す（例外にしない）", modtool.load_window(root, first) == {})
     check("locate も倒れない", modtool.locate(first)[0] == root)
+    # ----------------------------------------------------------------- 書いた先
+    # 保存の後に出す一行は、**実際に書いた先だけ**を並べる。
+    # 一括設定だけ直したのに世界の控えのパスが出ると、その世界を保存したように読める
+    # （実機で踏んだ。2026-09-15）。
+    print("[書いた先]")
+    decls = {"A": {"default": 1}, "B": {"default": "x"}}
+    shared_path, world_path = r"settings" + chr(92) + "mod_settings.json", \
+        r"state" + chr(92) + "mod" + chr(92) + "世界.json"
+
+    def targets(was_shared, was_world, now_shared, now_world, world=world_path):
+        return modtool.saved_paths(
+            decls, {"shared": was_shared, "world": was_world},
+            {"shared": now_shared, "world": now_world}, shared_path, world)
+
+    check("一括設定だけ変えたら一括設定だけ",
+          targets({"A": 1}, {"A": 1}, {"A": 2}, {"A": 2}) == [shared_path],
+          targets({"A": 1}, {"A": 1}, {"A": 2}, {"A": 2}))
+    check("個別だけ変えたら控えだけ",
+          targets({"A": 1}, {"A": 1}, {"A": 1}, {"A": 5}) == [world_path],
+          targets({"A": 1}, {"A": 1}, {"A": 1}, {"A": 5}))
+    check("両方変えたら両方",
+          targets({"A": 1}, {"A": 5}, {"A": 2}, {"A": 9}) == [shared_path, world_path],
+          targets({"A": 1}, {"A": 5}, {"A": 2}, {"A": 9}))
+    check("何も変えなければ空", targets({"A": 1}, {"A": 1}, {"A": 1}, {"A": 1}) == [])
+    check("世界が無ければ一括設定だけを見る",
+          targets({"A": 1}, {"A": 1}, {"A": 2}, {"A": 2}, world="") == [shared_path])
+    # 控えは差分なので、入力欄が同じままでも一括設定を動かすと中身が変わる。
+    gone = targets({"A": 1}, {"A": 5}, {"A": 5}, {"A": 5})
+    check("一括設定が個別に追いついたら控えは消える（その旨を出す）",
+          len(gone) == 2 and gone[0] == shared_path
+          and gone[1].startswith(world_path) and "削除" in gone[1], gone)
+    born = targets({"A": 1}, {"A": 1}, {"A": 2}, {"A": 1})
+    check("一括設定だけ動かして差が生まれたら控えも書く",
+          born == [shared_path, world_path], born)
+    check("宣言に無い項目は差分に数えない",
+          modtool.world_record(decls, {"A": 1}, {"A": 1, "Z": 9}) == {},
+          modtool.world_record(decls, {"A": 1}, {"A": 1, "Z": 9}))
+
 finally:
     for key in ("IML_ROOT", "IML_STATE_DIR", "IML_GAME_DIR"):
         os.environ.pop(key, None)

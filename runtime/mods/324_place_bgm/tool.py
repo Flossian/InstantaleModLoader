@@ -303,6 +303,7 @@ class Model(object):
         self.world_playlists = {}
         self.world_saved = {}
         self.cleared = set()        # 覚えた曲を消す (鍵, 群, 場所)
+        self.written = []           # 直前の保存で実際に書いた先（画面の一行に出す）
         self.reload()
 
     @property
@@ -475,16 +476,28 @@ class Model(object):
         return ordered
 
     def save(self):
-        """playlist.json・mod_settings.json・開いた世界の worlds/<世界>.json。どれかが書けなければ False。"""
+        """playlist.json・mod_settings.json・開いた世界の worlds/<世界>.json。どれかが書けなければ False。
+
+        **書いた先は `self.written` に残す**（画面がその一行を出す）。
+        3つとも書きうるのに1つの名前しか出さないと、
+        世界の指定だけ直した回でも「playlist を保存した」と読める。
+        """
+        self.written = []
         data = self.to_json()
+        changed = data != self.file or bool(self.cleared)
         if not modtool.write_json(self.root, self.playlist_path, data):
             return False
+        if changed:
+            self.written.append(self.playlist_path)
         self.file = data
         self.saved = self.snapshot()
         for key in sorted(set(k for k, _g, _p in self.world_playlists)):
             world = self.to_world_json(key)
+            moved = world != self.world_files.get(key)
             if not modtool.write_json(self.root, self.world_path(key), world):
                 return False
+            if moved:
+                self.written.append(self.world_path(key))
             self.world_files[key] = world
         self.world_saved = self.world_snapshot()
         self.cleared = set()
@@ -492,6 +505,8 @@ class Model(object):
             if not modtool.save_settings(self.root, MOD_DIR, self.settings):
                 return False
             self.saved_settings = dict(self.settings)
+            self.written.append(modtool.config_module(self.root, MOD_DIR)
+                                .store_path(os.path.join(self.root, "runtime")))
         return True
 
 
@@ -995,8 +1010,11 @@ def build_window(model):
     def save():
         if model.save():
             refresh()
+            # 書いた先だけを並べる（`model.written`）。
+            # 何も動いていない回に名前を出すと、その先を書いたように読める。
             status.configure(text="保存しました {}  {}".format(
-                time.strftime("%H:%M:%S"), model.playlist_path))
+                time.strftime("%H:%M:%S"),
+                " / ".join(model.written) if model.written else "（変更はありません）"))
         else:
             messagebox.showerror("保存に失敗しました",
                                  "{} か worlds\\ に書けませんでした。".format(model.playlist_path), parent=root)

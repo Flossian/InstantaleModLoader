@@ -11,6 +11,12 @@ r"""計測: 施設での訓練。ゲームは変えない。
     4. 各段が次へ渡す値（`TrainingPhaseManager(app, training_type, remaining_years,
        training_log)` の引数）
 
+5つ目（2026-09-16 に追加）。`技を磨く` だけが 0.0 秒で
+`<エリア>の風は今日はここまでのようだ。出直したほうがよさそうだ。` と断られた
+（`916_training_custom` の再訓練で踏んだが、**素の訓練でも同じかは未計測**）。
+段の中の4つの道（`simple_training` / `fundamental_training` / `enhance_skill` /
+`learn_new_skill`）と支度（`training_start` / `generate_images`）に入ったかを録る。
+
 録り方は `218_probe_vacation` と同じ。マネージャの `execute` を窓にして、
 窓の前後の所持金と日付、窓の間の `elapse_days`・文言・次に並ぶボタンを1行にまとめる。
 `elapse_days` は窓の外でも呼び出し元つきで残す（窓の外の Clock で進むビルドなら、
@@ -36,6 +42,16 @@ TEXT_LIMIT = 30
 #:   TrainingStartManager(app, training_years, training_price)
 #:   TrainingPhaseManager(app, training_type, remaining_years, training_log)
 MANAGERS = ("TrainingStartManager", "TrainingPhaseManager")
+
+#: 段の中の道と、開始側の支度（`targets.txt` の実在メソッド）。
+#: 入ったか・何を受け取ったか・何を返したかだけを録る（ゲームは変えない）。
+INNER = (("TrainingPhaseManager", "method"),
+         ("TrainingPhaseManager", "simple_training"),
+         ("TrainingPhaseManager", "fundamental_training"),
+         ("TrainingPhaseManager", "enhance_skill"),
+         ("TrainingPhaseManager", "learn_new_skill"),
+         ("TrainingStartManager", "training_start"),
+         ("TrainingStartManager", "generate_images"))
 
 
 def apply(ctx):
@@ -140,7 +156,7 @@ def apply(ctx):
             """窓の前後の所持金と日付、窓の間の日数・文言を1行に。"""
             app = getattr(self, "app", None) or ui.find_app()
             window = {"cls": cls_name, "texts": [], "days": [], "dots": 0,
-                      "overflow": 0}
+                      "overflow": 0, "inner": []}
             gold_before = ui.gold_of(app)
             day_before = ui.game_day(app)
             started = time.monotonic()
@@ -179,6 +195,7 @@ def apply(ctx):
                         "texts": window["texts"],
                         "texts_dropped": window["overflow"],
                         "loading_dots": window["dots"],
+                        "inner": window.get("inner") or [],
                         "buttons_after": buttons_brief(app),
                         "seconds": round(time.monotonic() - started, 1),
                     }
@@ -199,6 +216,29 @@ def apply(ctx):
 
     for name in MANAGERS:
         install_windows(name)
+
+    # ------------------------------------------------ 段の中の道と開始側の支度
+    def install_inner(cls_name, method):
+        @ctx.wrap("__main__:{}.{}".format(cls_name, method), required=False,
+                  safe=True)
+        def inner(orig, self, *args, **kwargs):
+            """入ったこと・引数・戻り値を残す。**ゲームは変えない**（素通し）。"""
+            head = "{}.{}".format(cls_name, method)
+            try:
+                write("    -> {}({})".format(head, frames.repr_value(args)))
+            except Exception:
+                pass
+            result = orig(self, *args, **kwargs)
+            try:
+                write("    <- {} returned {}".format(head, frames.repr_value(result)))
+                if state["windows"]:
+                    state["windows"][-1].setdefault("inner", []).append(head)
+            except Exception:
+                pass
+            return result
+
+    for cls_name, method in INNER:
+        install_inner(cls_name, method)
 
     # ------------------------------------------------- 日数送りと文言（窓の内外）
     @ctx.wrap("__main__:InstantaleApp.elapse_days", required=False, safe=True)

@@ -169,6 +169,15 @@ try:
     ok = model.save()
     check("save: written", ok and os.path.isfile(model.playlist_path) and not os.path.exists(model.playlist_path + ".tmp"))
     check("save: dirty falls", not model.dirty())
+    # 画面はこの並びをそのまま一行に出す。書いていない先の名前を出さないこと
+    # （出すと、その先を保存したように読める。`modtool` と同じ直し。2026-09-15）。
+    check("save: written names the playlist (and the settings, both moved here)",
+          model.written[0] == model.playlist_path
+          and any(w.endswith("mod_settings.json") for w in model.written),
+          model.written)
+    model.save()
+    check("save: a second save with no edits names nothing", model.written == [],
+          model.written)
     on_disk = read_json(model.playlist_path)
     check("save: area:town on disk", on_disk["playlists"]["area:town"] == {"town/calm/a.mp3": 60, "town/calm/b.mp3": 40})
     check("settings: default weight is the declared default", model.default_weight == core.DEFAULT_WEIGHT)
@@ -242,6 +251,8 @@ try:
     with io.open(world_path, "w", encoding="utf-8") as fh:
         json.dump(on_disk, fh, ensure_ascii=False)
     check("save: worlds file written", model.save() and not model.dirty())
+    check("save: written names the world file", world_path in model.written,
+          model.written)
     on_disk = read_json(world_path)
     check("save: facility playlist with the name from the save",
           on_disk["facilities"]["7/106"]["playlist"] == {"town/calm/a.mp3": 50, "宿.mp3": 100}

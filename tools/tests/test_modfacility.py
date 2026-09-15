@@ -314,6 +314,31 @@ def main():
     ok &= check("建っている建物の中はそのまま",
                 not modfacility.repair_player_location(world2, stay))
 
+    # 立ち位置を入口へ直したら、焼かれている絵も入口のものにする。
+    # 空にして済ませると、ロードが前の画面の絵のまま始まる（別の場所の絵になる）。
+    bg_root = os.path.join(state_root, "worlds", "検査の世界", "backgrounds")
+    for name in ("街の入口", "灯火亭（改装）"):
+        os.makedirs(os.path.join(bg_root, name), exist_ok=True)
+        with io.open(os.path.join(bg_root, name, "image.png"), "w") as fh:
+            fh.write("x")
+    moved = {"player_data": {"location": "mod:915_invest:gone",
+                             "current_area": "1"},
+             "game_variables": {"buttons": [],
+                                "location_image": os.path.join(
+                                    bg_root, "灯火亭（改装）", "image.png")}}
+    ok &= check("直した（絵つき）",
+                modfacility.repair_player_location(world2, moved))
+    ok &= check("焼かれている絵も入口のものになる",
+                moved["game_variables"]["location_image"]
+                == os.path.join(bg_root, "街の入口", "image.png"))
+    os.remove(os.path.join(bg_root, "街の入口", "image.png"))
+    moved["player_data"]["location"] = "mod:915_invest:gone"
+    moved["game_variables"]["location_image"] = os.path.join(
+        bg_root, "灯火亭（改装）", "image.png")
+    ok &= check("入口の絵が無ければ空（建物の絵のままにはしない）",
+                modfacility.repair_player_location(world2, moved)
+                and moved["game_variables"]["location_image"] == "")
+
     print("出口: 選択肢が1つも無い画面でも出る")
     pressed = []
     modfacility.register("915_invest", facility_id=fid,
@@ -601,10 +626,71 @@ def main():
     ok &= check("保存の後は元の絵に戻る", app2.location_image == shop_picture)
     os.remove(os.path.join(root, "街の入口", "image.png"))
     hidden4 = modfacility.hide(app2, screen=screen)
-    ok &= check("入口の絵が無ければ空にする（ゲームが描き直す）",
+    ok &= check("入口の絵が無ければ空にする（建物の絵のままにはしない）",
                 app2.location_image == "")
     modfacility.restore(app2, hidden4)
     app2.location_image = shop_picture
+
+    print("背景: 中のまま保存するときは焼かれる絵をその建物のものにする")
+    # ゲームは MOD の施設に入っても `location_image` を更新しない（実セーブ 2026-09-16。
+    # 道場の中で保存したセーブの絵が、繋ぎ先の区画のままだった）。
+    # そのままだと、中に立ったまま再開したのに繋ぎ先の絵でロードが始まる。
+    os.makedirs(os.path.join(root, "街の入口"), exist_ok=True)
+    with io.open(os.path.join(root, "街の入口", "image.png"), "w") as fh:
+        fh.write("x")
+    entrance_picture = os.path.join(root, "街の入口", "image.png")
+    modfacility.register("915_invest", facility_id=fid, keep_inside=True)
+    app2.player.location = rebuilt
+    app2.buttons = []
+    app2.location_image = entrance_picture        # 来た場所の絵のまま入った
+    hidden5 = modfacility.hide(app2, screen=screen)
+    ok &= check("中に居るのに来た場所の絵、を直す",
+                app2.location_image == shop_picture)
+    ok &= check("立ち位置は中のまま", app2.player.location is rebuilt)
+    modfacility.restore(app2, hidden5)
+    ok &= check("保存の後は元の絵に戻る", app2.location_image == entrance_picture)
+    os.remove(shop_picture)
+    hidden5 = modfacility.hide(app2, screen=screen)
+    ok &= check("建物の絵がまだ無ければ触らない（空にしない）",
+                app2.location_image == entrance_picture)
+    modfacility.restore(app2, hidden5)
+    with io.open(shop_picture, "w") as fh:
+        fh.write("x")
+    app2.location_image = shop_picture
+
+    print("書き出し: 絵と立ち位置が揃っているかを最後に検める")
+    # どの経路が取りこぼしても、書き出しの直前でここが揃える。
+    app2.player.location = rebuilt
+    room_picture = os.path.join(root, "灯火亭（改装） - room(luxury_suite)", "image.png")
+    before = {"player_data": {"location": fid},
+              "game_variables": {"location_image": entrance_picture}}
+    after, was_folder = modfacility.keep_saved_background(before, app2)
+    ok &= check("食い違っていれば立ち位置の絵に直す",
+                after["game_variables"]["location_image"] == shop_picture)
+    ok &= check("直す前のフォルダ名を返す（ログに出す）", was_folder == "街の入口")
+    ok &= check("元の辞書は触らない",
+                before["game_variables"]["location_image"] == entrance_picture)
+    same = {"player_data": {"location": fid},
+            "game_variables": {"location_image": shop_picture}}
+    ok &= check("揃っていれば触らない",
+                modfacility.keep_saved_background(same, app2)[1] == "")
+    room = {"player_data": {"location": fid},
+            "game_variables": {"location_image": room_picture}}
+    ok &= check("宿の部屋（`<施設名> - room(<等級>)`）は揃っている扱い",
+                modfacility.keep_saved_background(room, app2)[1] == "")
+    blank = {"player_data": {"location": fid},
+             "game_variables": {"location_image": ""}}
+    ok &= check("空は触らない（据える絵を引く手掛かりが無い）",
+                modfacility.keep_saved_background(blank, app2)[1] == "")
+    os.remove(shop_picture)
+    ok &= check("その場所の絵がまだ無ければ触らない（描かない・頼まない）",
+                modfacility.keep_saved_background(before, app2)[1] == "")
+    with io.open(shop_picture, "w") as fh:
+        fh.write("x")
+    lost = {"player_data": {"location": "999"},
+            "game_variables": {"location_image": entrance_picture}}
+    ok &= check("立ち位置が引けなければ触らない",
+                modfacility.keep_saved_background(lost, app2)[1] == "")
 
     print("書き出し: 中のまま保存した立ち位置を守る")
     # ゲームは `mod:` の id を途中で切って書くことがある（実機 2026-09-14。

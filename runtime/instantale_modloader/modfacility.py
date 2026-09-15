@@ -869,6 +869,62 @@ def keep_saved_location(data, facility_id):
     return new_data, True
 
 
+def saved_place_name(app, data):
+    """書き出す辞書の立ち位置が指す場所の名前。引けなければ空。"""
+    player = data.get("player_data") if isinstance(data, dict) else None
+    if not isinstance(player, dict):
+        return ""
+    here = str(player.get("location") or "")
+    area = ui.current_area(app) if app is not None else None
+    if not here or area is None:
+        return ""
+    facility, _node = ui.find_facility(area, here)
+    return str(getattr(facility, "name", "") or "")
+
+
+def keep_saved_background(data, app):
+    r"""書き出す辞書の絵を、立ち位置と同じ場所のものに直した**写し**を返す。
+
+    `(辞書, 直す前のフォルダ名)`。直すものが無ければ元のまま返す。
+
+    **絵と立ち位置が揃っていることを、ここ1箇所で最後に検める。**
+    ロードは焼かれた絵をそのまま出す（GAME.md §2.3）ので、
+    食い違ったまま書かれると、次のロードは別の場所の絵で始まる。
+    これまでは取りこぼした経路ごとに直していた（保存の立ち位置替え・ロードの救済・
+    中のまま保存）が、経路が増えるたびに同じ形で再発した。
+    どの経路が取りこぼしても、書き出しの直前でここが揃える。
+
+    直さない場面が3つある。
+
+      絵が空            … 据える絵を引く手掛かりが無い（その場所の絵がまだ世界に無い）
+      立ち位置が引けない … 場所が分からないので何とも言えない
+      その場所の絵が無い … **描かない・頼まない**（TECH.md §5.8）
+
+    宿の部屋は `<施設名> - room(<等級>)` で、施設の絵とは別に在る（GAME.md §2.28）。
+    施設名で始まるフォルダは揃っているものとして扱う。
+    """
+    variables = data.get("game_variables") if isinstance(data, dict) else None
+    if not isinstance(variables, dict):
+        return data, ""
+    current = variables.get(BACKGROUND_ATTR)
+    if not isinstance(current, str) or not current:
+        return data, ""
+    name = saved_place_name(app, data)
+    if not name:
+        return data, ""
+    folder = os.path.basename(os.path.dirname(current))
+    if folder == name or folder.startswith(name + " - "):
+        return data, ""
+    path = picture_beside(current, name)
+    if not path:
+        return data, ""
+    new_variables = dict(variables)
+    new_variables[BACKGROUND_ATTR] = path
+    new_data = dict(data)
+    new_data["game_variables"] = new_variables
+    return new_data, folder
+
+
 def strip_plain_from(data):
     """書き出す辞書から `mod:` の施設を落とした**写し**を返す。落とすものが無ければ元のまま。
 
@@ -1473,8 +1529,12 @@ def repair_player_location(world, save_data_dict, write=None):
     if isinstance(variables, dict) and choices:
         variables["buttons"] = choices
     if isinstance(variables, dict) and variables.get(BACKGROUND_ATTR):
-        # 建物の絵のまま入口に立たせない（ゲームが描き直す）。
-        variables[BACKGROUND_ATTR] = ""
+        # 建物の絵のまま入口に立たせない。入口の絵が在るならそれを据える。
+        # **空にして済ませない** ― ロードは焼かれた絵をそのまま出すだけで
+        # （GAME.md §2.3）、空のときに描き直すかは測っていない。
+        # 描き直さないなら、前の画面の絵のままロードが始まる（別の場所の絵になる）。
+        variables[BACKGROUND_ATTR] = picture_beside(
+            variables.get(BACKGROUND_ATTR), getattr(hub, "name", None))
     if write:
         write("modfacility: the player was standing in {!r}, which is not in the "
               "town; moved to the entrance {} with {} choice(s)".format(
@@ -1569,14 +1629,12 @@ def unscrub_saved_refs(app, undo):
             log_exc("modfacility: cannot put {} back".format(attr))
 
 
-def background_of(app, facility):
-    r"""その施設の背景の絵のパス。いま見えている絵と同じ並びで名前だけ入れ替える。
+def picture_beside(current, name):
+    r"""`current` と同じ並びで名前だけ入れ替えた絵のパス。無ければ空。
 
     背景は施設の**名前**で `worlds\<世界>\backgrounds\<施設名>\image.png` に置かれる
-    （実機 2026-09-13）。無ければ空（ロードでゲームが描き直す）。
+    （実機 2026-09-13）。
     """
-    current = getattr(app, BACKGROUND_ATTR, None)
-    name = getattr(facility, "name", None)
     if not isinstance(current, str) or not current or not name:
         return ""
     folder = os.path.dirname(os.path.dirname(current))
@@ -1587,16 +1645,24 @@ def background_of(app, facility):
         return ""
 
 
-def swap_background(app, facility, write=None):
+def background_of(app, facility):
+    """その施設の背景の絵のパス。いま見えている絵と同じ並びで名前だけ入れ替える。"""
+    return picture_beside(getattr(app, BACKGROUND_ATTR, None),
+                          getattr(facility, "name", None))
+
+
+def swap_background(app, facility, write=None, blank_if_missing=True, note=""):
     """保存のあいだだけ焼かれる背景を替える。替えたなら `(属性, 元の値)`。
 
-    元の絵が引けない・入口の絵が無いときは空にする。ロードでゲームが描き直す。
+    `blank_if_missing` が真なら、その施設の絵が無いときは空にする
+    （入口へ移すとき。建物の絵のまま入口に立たせないため）。
+    偽なら触らない（中のまま保存するとき。焼かれている絵を悪くしない）。
     """
     was = getattr(app, BACKGROUND_ATTR, None)
     if not isinstance(was, str) or not was:
         return None
     path = background_of(app, facility)
-    if path == was:
+    if path == was or (not path and not blank_if_missing):
         return None
     try:
         setattr(app, BACKGROUND_ATTR, path)
@@ -1604,9 +1670,32 @@ def swap_background(app, facility, write=None):
         log_exc("modfacility: cannot swap the background for the save")
         return None
     if write:
-        write("modfacility: save: the background was the building's; "
-              "saving {}".format("the entrance picture" if path else "none"))
+        write("modfacility: save: the background {} saving {}".format(
+            note or "was the building's;",
+            "{!r}".format(os.path.basename(os.path.dirname(path)))
+            if path else "none"))
     return (BACKGROUND_ATTR, was)
+
+
+def keep_inside_background(app, facility_id, write=None):
+    r"""中のまま保存するとき、焼かれる絵をその建物のものにする。替えたなら `(属性, 元の値)`。
+
+    **ゲームは MOD の施設に入っても `location_image` を更新しない**
+    （実セーブ 2026-09-16。`ゼニスの風` の中で保存したセーブの絵が
+    `下層居住区（ローワー・スラム）`＝繋ぎ先の区画のままだった。
+    素の施設ではどのセーブでも立ち位置と絵の名前が一致している）。
+    そのままだと、中に立ったまま再開したのに繋ぎ先の絵でロードが始まる。
+
+    絵が世界に無ければ触らない（描くのも頼むのもしない。TECH.md §5.8）。
+    """
+    area = ui.current_area(app)
+    if area is None:
+        return None
+    facility, _node = ui.find_facility(area, str(facility_id))
+    if facility is None:
+        return None
+    return swap_background(app, facility, write=write, blank_if_missing=False,
+                           note="was the place we came from;")
 
 
 def safe_save_location(app, screen=None, write=None):
@@ -1673,9 +1762,16 @@ def hide(app, *, screen=None, world=None, write=None):
         log_exc("modfacility: cannot check the place before the save")
     # 中のまま保存する建物（`keep_inside`）。書き出しのときに立ち位置を検める。
     here = inside(app)
-    _state()["saved_inside"] = str(here) if (here and swapped is None) else None
+    staying = bool(here) and swapped is None
+    _state()["saved_inside"] = str(here) if staying else None
+    background = None
+    if staying:
+        try:
+            background = keep_inside_background(app, here, write=write)
+        except Exception:
+            log_exc("modfacility: cannot check the background before the save")
     return {"scrubbed": scrubbed, "swapped": swapped, "lifted": lifted,
-            "world": world}
+            "background": background, "world": world}
 
 
 def restore(app, hidden, *, write=None):
@@ -1693,6 +1789,12 @@ def restore(app, hidden, *, write=None):
                 setattr(app, background[0], background[1])
         except Exception:
             log_exc("modfacility: cannot put the player back after the save")
+    kept = hidden.get("background")          # 中のまま保存したときの絵
+    if kept is not None:
+        try:
+            setattr(app, kept[0], kept[1])
+        except Exception:
+            log_exc("modfacility: cannot put the background back after the save")
     unscrub_saved_refs(app, hidden.get("scrubbed"))
     _state()["saved_inside"] = None
     for facility_id in hidden.get("lifted") or ():
@@ -2442,6 +2544,16 @@ def _install(ctx, write):
                 if isinstance(data, dict) else None
             write("WARN modfacility: the game wrote the place as {!r}; put {!r} back "
                   "(the id was cut)".format(was, inside_id))
+        # 絵と立ち位置が揃っているかは、ここで最後に検める（`keep_saved_background`）。
+        try:
+            cleaned, was_folder = keep_saved_background(cleaned, ui.find_app())
+        except Exception:
+            log_exc("modfacility: cannot check the background before it is written")
+            was_folder = ""
+        if was_folder and write:
+            write("modfacility: save: the picture was {!r} but the place is {!r}; "
+                  "saved the picture of the place".format(
+                      was_folder, saved_place_name(ui.find_app(), cleaned)))
         return orig(file_path, cleaned, *args, **kwargs)
     targets.append(WRITE_TARGET)
 

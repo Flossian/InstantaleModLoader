@@ -7,10 +7,10 @@
     "ja": "計測: 施設での訓練"
   },
   "description": {
-    "en": "Records the years and prices offered by a training facility, when the price is charged, how many days each year advances, and what each phase passes on. Read-only",
-    "ja": "施設の訓練で並ぶ年数と代金・代金の徴収の時機・1年で暦が何日進むか・各段が次へ渡す値を録る。ゲームは変えない"
+    "en": "Records the years and prices offered by a training facility, when the price is charged, how many days each year advances, what each phase passes on, and which inner path a phase takes. Read-only",
+    "ja": "施設の訓練で並ぶ年数と代金・代金の徴収の時機・1年で暦が何日進むか・各段が次へ渡す値・段の中のどの道へ入ったかを録る。ゲームは変えない"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "after": [
     "306_party_train_exp"
