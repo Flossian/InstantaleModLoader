@@ -1,0 +1,109 @@
+{
+  "entry": "training_custom.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Customize the training hall",
+    "ja": "訓練所のカスタマイズ"
+  },
+  "description": {
+    "en": "Change the training fee, the length of one course, and how many days a year of training advances the calendar. Defaults are the game's own values (300G, 3 years, 365 days a year), so nothing changes until you edit them",
+    "ja": "訓練所の代金・1回の修行の年数・1年で進む日数を変えられる。既定は素のゲームの値（300G・3年・1年365日）のままで、変えた項目だけが効く"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "after": [
+    "306_party_train_exp"
+  ],
+  "tool": {
+    "entry": "tool.py",
+    "label": {
+      "ja": "ワールド別の訓練所設定",
+      "en": "Training hall settings by world"
+    },
+    "note": {
+      "ja": "ワールドごとに代金・年数・1年の日数を変える。ここの設定は全ワールド共通の値",
+      "en": "Per-world fee, course length and days per year. The settings here are the shared defaults"
+    }
+  },
+  "settings": {
+    "TRAINING_PRICE": {
+      "type": "int",
+      "default": 300,
+      "min": 0,
+      "max": 10000000,
+      "label": {
+        "ja": "訓練の代金",
+        "en": "Training fee"
+      },
+      "note": {
+        "ja": "素のゲームは300G（施設によらず固定。実測）。300のままなら触らない。0でタダ。手持ちがこの額に満たないと押した時点で断られる",
+        "en": "The game's own fee is 300G, the same at every facility. Left at 300, nothing is touched. 0 makes it free; pressing the button with less than this is refused"
+      }
+    },
+    "COURSE_YEARS": {
+      "type": "int",
+      "default": 3,
+      "min": 1,
+      "max": 30,
+      "label": {
+        "ja": "1回の修行の年数",
+        "en": "Years in one course"
+      },
+      "note": {
+        "ja": "素のゲームは3年。修行内容を1つ選ぶたびにその年数ぶん減り、0になると卒業する。増やすと1回の代金で活動を何段も受けられる。残り年数に収まる活動だけが並ぶのはゲームの決まりのまま",
+        "en": "The game's own value is 3 years. Each activity you pick spends its own years; at 0 you graduate. Raising it lets one fee buy several activities. The game still lists only the activities that fit in the years left"
+      }
+    },
+    "DAYS_PER_YEAR": {
+      "type": "int",
+      "default": 365,
+      "min": 1,
+      "max": 365,
+      "label": {
+        "ja": "1年で進む日数",
+        "en": "Days a training year advances"
+      },
+      "note": {
+        "ja": "素のゲームは365日。3年の活動は「3×この日数」進む（素のままだと1095日で、ここが訓練所を使いにくくしている）。30にすれば「新たな技を学ぶ(3年)」は90日で終わる。ボタンの年数の表示は変わらないので、実日数を出したいときは修行内容のボタンの表示に {days} を入れる",
+        "en": "The game's own value is 365. A three-year activity advances three times this (1095 days as shipped). At 30, 新たな技を学ぶ(3年) takes 90 days. The years shown on the button do not change; put {days} in the activity button template to show the real days"
+      }
+    },
+    "START_BUTTON": {
+      "type": "str",
+      "default": "{name}({price}G)",
+      "label": {
+        "ja": "訓練を受けるボタンの表示",
+        "en": "Training button label"
+      },
+      "note": {
+        "ja": "使える変数: {name}（ボタンから括弧を落とした呼び名）{price} {years}。代金を変えたときだけこの形で表示し直す",
+        "en": "Variables: {name} (the label without its brackets), {price} and {years}. Used only when you change the fee"
+      }
+    },
+    "PHASE_BUTTON": {
+      "type": "str",
+      "default": "{name}({years}年)",
+      "label": {
+        "ja": "修行内容のボタンの表示",
+        "en": "Activity button label"
+      },
+      "note": {
+        "ja": "使える変数: {name} {years}（ゲームが出している年数）{days}（実際に進む日数）。既定はゲームの表示と同じ形なので1文字も変わらない。{name}({days}日) にすると「ただ鍛える(30日)」のように実日数が出る",
+        "en": "Variables: {name}, {years} (as the game shows them) and {days} (the real days). The default reproduces the game's own label exactly. {name}({days}日) shows the real days instead"
+      }
+    },
+    "REFUSE_TEXT": {
+      "type": "str",
+      "default": "（訓練の代金{price}Gに足りない ― 手持ち{gold}G）",
+      "label": {
+        "ja": "代金に足りないときの一言",
+        "en": "Line shown when you cannot pay"
+      },
+      "note": {
+        "ja": "使える変数: {price} {gold}。代金を変えたときだけ出る（素の300Gのままならゲームに任せる）",
+        "en": "Variables: {price} and {gold}. Shown only when you changed the fee; at the game's own 300G the game decides"
+      }
+    }
+  }
+}
