@@ -121,7 +121,7 @@ MOD が自分で起こす滞在（`915_facility_investment` の「無料で泊�
 import datetime
 import sys
 
-from instantale_modloader import durations, frames, modfacility, ui
+from instantale_modloader import durations, frames, llm, modfacility, ui
 from instantale_modloader.state import (UNKNOWN_WORLD, WorldStore, playthrough_key,
                                         playthrough_key_of_dict)
 
@@ -264,6 +264,23 @@ LAPSED_TEXT = "家賃を払えず、{area}の{name}を引き払うことにな�
 SEIZED_TEXT = "保管庫にあった{count}点は役場が預かっている。"
 RELEASED_TEXT = "{area}の{name}を引き払った。"
 RECLAIMED_TEXT = "役場から{count}点を引き取った。"
+
+#: 滞在の描写をゲームが AI に頼むとき、**どこに泊まったかは渡らない**。
+#: 頼み文は「このエリアで数ヵ月の宿泊をし」で、あとはエリアの一覧が続くだけ
+#: （実測 2026-09-15。GAME.md §2.17）。
+#: 街に自分の家が建つと、読み手はその一覧から自分の家を選び、
+#: 宿屋に泊まったのに自宅で過ごした話になる（実機 2026-09-15、DOC.md §3.2 の18回目）。
+#: こちらが持ち込んだ取り違えなので、**自分の家がある街の滞在の頼み文にだけ**1文を足す。
+SCENE_HEAD = "※今回の"
+INN_SCENE_TEXT = (SCENE_HEAD
+                  + "宿泊先はこのエリアの「{place}」である。{name}の家「{home}」ではない。")
+HOME_SCENE_TEXT = SCENE_HEAD + "滞在先は{name}自身の家「{home}」である。宿屋ではない。"
+
+#: 足す位置（ゲームがエリアの一覧を並べる前）と、滞在の頼み文だと見分ける語。
+#: 見分けが外れて別の頼み文に足すより、足しそこねるほうがまし。
+SCENE_MARK = "【エリアの構造】"
+SCENE_HERE = "このエリア"
+SCENE_WORDS = ("宿泊", "休暇")
 
 #: ゲームの1ヵ月（`elapse_days(months * 30)`。GAME.md §2.17 の実測）。
 DAYS_PER_MONTH = 30
@@ -1692,6 +1709,60 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("real estate: cannot settle the rent")
         return result
+
+    # ------------------------------------------------------ 滞在の描写
+    def player_name(app):
+        name = getattr(getattr(app, "player", None), "name", "")
+        return name.strip() if isinstance(name, str) and name.strip() else "プレイヤー"
+
+    def stay_place(app):
+        """描写に添える `(いま居る場所, この街の自分の家, 自分の家か)`。
+
+        この街に契約が無ければ None ＝ 頼み文には触らない。
+        取り違えを持ち込んでいない街の描写はゲームのままでよい。
+        """
+        record = contract_here(app)
+        if record is None:
+            return None
+        home = str(record.get("name") or "").strip() or _name_of(record.get("kind"))
+        if standing_in(app, record):
+            return home, home, True
+        facility, _node = ui.find_facility(ui.current_area(app),
+                                           modfacility.player_facility_id(app))
+        place = ui.facility_name(app, facility)
+        return (place, home, False) if place else None
+
+    def name_the_place(app, text):
+        """滞在の描写の頼み文に、いま居る場所の1文を足す。触らないなら None。"""
+        if not isinstance(text, str) or SCENE_MARK not in text \
+                or SCENE_HERE not in text or SCENE_HEAD in text \
+                or not any(word in text for word in SCENE_WORDS):
+            return None
+        found = stay_place(app)
+        if found is None:
+            return None
+        place, home, at_home = found
+        line = (_fmt(HOME_SCENE_TEXT, name=player_name(app), home=home) if at_home
+                else _fmt(INN_SCENE_TEXT, place=place, name=player_name(app),
+                          home=home))
+        write("stay scene: telling the writer the stay is at {!r} (home {!r})".format(
+            place, home))
+        return text.replace(SCENE_MARK, line + "\n" + SCENE_MARK, 1)
+
+    def tell_where_the_stay_is(texts, site):
+        """ローダから呼ばれる（`llm.wrap_outgoing`）。触らないときは None。"""
+        app = ui.find_app()
+        if app is None:
+            return None
+        changed = [name_the_place(app, text) for text in texts]
+        if not any(text is not None for text in changed):
+            return None
+        return [new if new is not None else old for old, new in zip(texts, changed)]
+
+    # LLM へ出ていく文章を捕まえる口はローダが持っている
+    # （ローカルの3点・クラウドの別名・後から生える別名の掛け直しまで向こうの担当。
+    # GAME.md §2.12）。
+    llm.wrap_outgoing(ctx, tell_where_the_stay_is, label="real estate")
 
     @ctx.wrap("__main__:VacationStartManager.execute", required=False)
     def vacation_start(orig, self, choice_text="", *args, **kwargs):

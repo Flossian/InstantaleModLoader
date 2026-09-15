@@ -37,6 +37,7 @@ if RUNTIME_DIR not in sys.path:
 
 import instantale_modloader as ml                      # noqa: E402
 from instantale_modloader import durations            # noqa: E402
+from instantale_modloader import llm as loader_llm    # noqa: E402
 from instantale_modloader import modfacility            # noqa: E402
 from instantale_modloader import state as loader_state  # noqa: E402
 
@@ -56,6 +57,19 @@ def find_mod(suffix):
 
 
 MOD = find_mod("_real_estate")
+
+#: LLM へ出ていく文章を捕まえる口はローダが持っている（`llm.wrap_outgoing`）。
+#: 偽の環境には送り口も `ctx.resolve` も無いので、掛けるのはやめて
+#: **渡された書き換えの関数だけ**を控え、こちらから直に呼ぶ。
+PROMPT_HOOK = {}
+
+
+def capture_outgoing(ctx, rewrite, **kwargs):
+    PROMPT_HOOK["rewrite"] = rewrite
+    return None
+
+
+loader_llm.wrap_outgoing = capture_outgoing
 
 failures = []
 
@@ -1812,6 +1826,67 @@ app.process_choice(classes["rest"](app, 1, "bunk"), "休養をとる")
 CLOCK.settle()
 check("宿屋の活動では滞在を締めない", app.stay_ended == ended_before,
       (ended_before, app.stay_ended))
+
+print("[滞在の描写に場所を添える]")
+# ゲームは描写を頼むとき、エリアの一覧は渡すのに**どこに泊まったかを渡さない**
+# （実測 2026-09-15。GAME.md §2.17）。街に自分の家があると、
+# 宿屋に泊まったのに自宅で過ごした話になる（実機 2026-09-15）。
+PROMPT_HOOK.clear()
+module, ctx, app, places, classes = setup()
+rewrite = PROMPT_HOOK.get("rewrite")
+check("ローダの書き換えの口に載せている", callable(rewrite), PROMPT_HOOK)
+
+STAY_PROMPT = ("今プレイヤーキャラの{}はこのエリアで数ヵ月の宿泊をし、疲労を回復した。"
+               "【エリアの構造】\n{{'name': '始まりの泥濘'}}").format(PLAYER_NAME)
+
+
+def asked(text=STAY_PROMPT):
+    """ゲームが送る文章を1本通す。書き換えなければ None。"""
+    if not callable(rewrite):
+        return None
+    result = rewrite([text], "chat")
+    return result[0] if result else None
+
+
+app.go(places["inn"])
+check("家が無い街の宿泊には触らない", asked() is None, asked())
+
+app.go(places["office"])
+rent(app, module, "建売を買い取る")
+house = home_of(app, module, places)
+app.go(places["inn"])
+inn_line = asked()
+check("宿屋での宿泊には宿屋の名前を添える",
+      inn_line is not None and "泥濘の休み処" in inn_line, inn_line)
+check("自分の家ではないと書く",
+      inn_line is not None and module.OWNED_NAME in inn_line
+      and "ではない" in inn_line, inn_line)
+check("エリアの一覧より前に置く",
+      inn_line is not None
+      and inn_line.index(module.SCENE_HEAD) < inn_line.index(module.SCENE_MARK),
+      inn_line)
+check("二度は足さない", asked(inn_line) is None, asked(inn_line))
+
+# 足した1文を抜くと、ゲームの頼み文がそのまま戻る（本文はどこも削っていない）。
+without = (inn_line.split(module.SCENE_HEAD)[0] + module.SCENE_MARK
+           + inn_line.split(module.SCENE_MARK, 1)[1]) if inn_line else ""
+check("ゲームの頼み文は1文字も削らない", without == STAY_PROMPT, without)
+
+where = app.player.location
+app.player.location = None
+check("どこに立っているか読めなければ触らない", asked() is None, asked())
+app.player.location = where
+
+app.go(house)
+home_line = asked()
+check("自分の家での滞在は自分の家だと書く",
+      home_line is not None and module.OWNED_NAME in home_line
+      and "宿屋ではない" in home_line, home_line)
+
+check("エリアの一覧が無い文章には触らない",
+      asked("今プレイヤーキャラはこのエリアで数ヵ月の宿泊をした。") is None)
+check("滞在の頼み文でなければ触らない",
+      asked("依頼の相手を選ぶ。【エリアの構造】\n{'name': '始まりの泥濘'}") is None)
 
 print("[例外]")
 check("ctx.log_exc に例外が出ていない", not ctx.errors, ctx.errors)

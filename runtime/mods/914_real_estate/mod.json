@@ -10,7 +10,7 @@
     "en": "Rent or buy a house at the administrative office and it appears in that town. Inside you can stay as at an inn (rest, train, work and more) and keep your gear in a storage room. A stay lasts as long as one at an inn, and a rent period covers four",
     "ja": "役場で家を借りるか買うと、その土地に自分の家が建つ。中では宿屋と同じ滞在（休養・訓練・労働ほか）ができ、荷物を預ける保管庫が使える。滞在1回の長さは宿屋と同じで、賃貸の1期はその4回ぶん"
   },
-  "version": "29",
+  "version": "30",
   "author": "R01/Flossian",
   "settings": {
     "RENT_PRICE": {
