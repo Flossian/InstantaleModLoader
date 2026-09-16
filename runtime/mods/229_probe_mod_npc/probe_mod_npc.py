@@ -607,7 +607,7 @@ def apply(ctx):
     @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False,
               safe=True)
     def refresh(orig, self, *args, **kwargs):
-        """選択肢が組み直されるたびに居場所を見る（`914_` と同じ契機）。"""
+        """選択肢が組み直されるたびに居場所を見る（`330_` と同じ契機）。"""
         result = orig(self, *args, **kwargs)
         try:
             follow(self)

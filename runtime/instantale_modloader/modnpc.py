@@ -414,11 +414,11 @@ def register(owner, npc_id=None, *, key=None, fields=None, prompt=None,
         # 後者だと、塗り直しのたびに層を積む MOD が毎回実体を組み直してしまう。
         # それを避けようと MOD 側が「層は一度だけ積む」とすると、今度は登録簿が注入をまたぐぶん
         # **前の版の層（`notes` / `fields`）が残り続ける**（実機 2026-09-13。
-        # 915 の主人に足したはずの出資者の一文が、注入し直しても頼み文に出なかった）。
+        # 331 の主人に足したはずの出資者の一文が、注入し直しても頼み文に出なかった）。
         #
         # 別の持ち主が層を積み直しただけ（`229_` が施設の主に被せる）では捨てない。
         # 捨てると `place` / `unplace` / `snapshot_all` が実体に触れなくなり、
-        # `.location` が据わらないまま会話の一覧から消える（実機 2026-09-13。915 の主人）。
+        # `.location` が据わらないまま会話の一覧から消える（実機 2026-09-13。331 の主人）。
         record["character"] = None
         record["built_in"] = None
         record["rebuild"] = True          # 次の `spawn` は名簿に居ても採らず組み直す
@@ -521,7 +521,7 @@ def build(fields, npc_id=None, write=None, data=None):
 
     ひな型は `npcs.NEW_NPC_TEMPLATE` をそのまま使う。
     セーブに出さないので並び順は要らないが、控えに落とした中身を
-    セーブと見比べられる形にしておく（`914_` の保管庫と同じ考え）。
+    セーブと見比べられる形にしておく（`330_` の保管庫と同じ考え）。
     深い複製にするのは、入れ子（`ability_scores` / `memory` / `image_src`）が
     作った NPC 全員で同じ辞書になるのを避けるため。
     """
@@ -759,7 +759,7 @@ def _character_at(app, npc_id, world=None):
     """その id の実体。**名簿に居ればそれが真実**で、記録の参照は名簿に合わせる。
 
     ゲームは詳細生成（会話の直前）の後に `Character` を作り直して名簿を差し替える
-    （実機 2026-09-13。915 の主人が `config['difficulty_level']` を変えて別の実体になり、
+    （実機 2026-09-13。331 の主人が `config['difficulty_level']` を変えて別の実体になり、
     記録が掴んでいた古い実体に `.location` を据えても新しい方には届かず、
     会話の一覧から消えた）。記録だけを信じると、置いたつもりの人物がどこにも居ない。
     """
@@ -809,7 +809,7 @@ def place(app, npc_id, area_id, facility_id, *, owner=False, world=None, write=N
     **`world` を渡すこと。** `World.__init__` を包んでいる間は `app.world` がまだ
     前の世界を指していて、渡さないと**前の世界の施設**に置く（そこには前の建物が
     残っている）。実体の `.location` が古いオブジェクトになるので、
-    「会話する」の一覧はその人物を出さない（実機 2026-09-13。915 の主人が消えた）。
+    「会話する」の一覧はその人物を出さない（実機 2026-09-13。331 の主人が消えた）。
 
     `move_npc_to_facility` は通さない。
     あちらは素データ側にも登録する引数（`register_facility`）を持っていて、
@@ -819,7 +819,7 @@ def place(app, npc_id, area_id, facility_id, *, owner=False, world=None, write=N
     GAME.md §2.7）。
 
     `owner=True` は施設の主にも据える。
-    元の主は記録に控えて `unplace` で戻す（`914_` の滞在中の差し替えと同じ形）。
+    元の主は記録に控えて `unplace` で戻す（`330_` の滞在中の差し替えと同じ形）。
     """
     npc_id = str(npc_id)
     areas = ui.areas_of_world(world) if world is not None else ui.world_areas(app)
@@ -1040,7 +1040,7 @@ def items_of(character, write=None):
 
     入れ物も品も JSON に落ちないオブジェクトなので、`items` が1件ずつ均す。
     素直に属性を控えると持ち物が丸ごと落ちる（実機 2026-09-14。
-    `915_` の店の主人に品が並んでいても控えは空だった。入れ物だけ剥がしても
+    `331_` の店の主人に品が並んでいても控えは空だった。入れ物だけ剥がしても
     中身が `Item` のままなので、やはり落ちる）。
     """
     records, _lost = items.to_records(character, write=write)

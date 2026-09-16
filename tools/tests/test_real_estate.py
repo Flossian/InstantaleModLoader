@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
-"""914_real_estate をゲーム抜きで通す。
+"""330_real_estate をゲーム抜きで通す。
 
-    python tools/tests/test_wip_real_estate.py
+    python tools/tests/test_real_estate.py
+
+（開発中は `914_real_estate` / `test_wip_real_estate.py` だった。2026-09-16 に正式化。）
 
 偽の app / Player / Area / Node / Facility / PhaseSpec / VacationStartManager /
 Character / InventoryGrid / HUD / Clock を差し込み、次を確認する。
@@ -1334,7 +1336,7 @@ check("1つ目の街に建物が増えていない",
 print("[宿屋を見る前から他 MOD の設定に合わせる]")
 # ローダは mod を `instantale_mod_<フォルダ名>` で `sys.modules` に載せ、
 # 選んだ設定値を入口のグローバルへ書き込む。
-# 914 はそこにある `compute_stay` をそのまま呼ぶ（式は写さない）。
+# 330 はそこにある `compute_stay` をそのまま呼ぶ（式は写さない）。
 PLAN = {"length": "1週間"}
 
 
@@ -1349,7 +1351,7 @@ def fake_length(app):
     return None                                  # 「デフォルト」
 
 
-# 変える MOD はローダの窓口に答えを置く（914 はその MOD の名前を知らない）。
+# 変える MOD はローダの窓口に答えを置く（330 はその MOD の名前を知らない）。
 durations.declare(durations.INN_STAY, fake_length, owner="fake_315")
 try:
     module, ctx, app, places, classes = setup()
@@ -1573,7 +1575,7 @@ app.process_choice(classes["rest"](app, 1, module.STAY_QUALITY), "休養をと�
 CLOCK.settle()
 
 print("[MOD が建てた宿では数えない]")
-# `915_facility_investment` の「無料で泊まる」のような、MOD の建物の中の宿泊。
+# `331_facility_investment` の「無料で泊まる」のような、MOD の建物の中の宿泊。
 module, ctx, app, places, classes = setup()
 app.go(places["inn"])
 room_menu(2)

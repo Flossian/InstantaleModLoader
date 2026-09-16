@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
-"""915_facility_investment をゲーム抜きで通す。
+"""331_facility_investment をゲーム抜きで通す。
 
-    python tools/tests/test_wip_facility_investment.py
+    python tools/tests/test_facility_investment.py
+
+（開発中は `915_facility_investment` / `test_wip_facility_investment.py` だった。2026-09-16 に正式化。）
 
 偽の app / Player / Area / Node / Facility / PhaseSpec / VacationStartManager /
 EntryColosseumMatchManager / Character / Clock を差し込み、次を確認する。
@@ -879,7 +881,7 @@ building, node = building_of(world, record or {})
 check("入口のノードに建った", building is not None and node is not None
       and node.id == "10", list(world.areas["1"].nodes["10"].facilities))
 check("id はローダの名前空間（台帳は進まない）",
-      str(getattr(building, "id", "")).startswith("mod:915_facility_investment:")
+      str(getattr(building, "id", "")).startswith("mod:331_facility_investment:")
       and app.world_dict["index"]["facility"] == 20, getattr(building, "id", None))
 check("種類と等級が施設に載る",
       getattr(building, "facility_type", None) == "inn" and getattr(building, "tier", None) == "basic")

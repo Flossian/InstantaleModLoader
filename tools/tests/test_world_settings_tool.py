@@ -26,7 +26,7 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir))
 RUNTIME_DIR = os.path.join(ROOT, "runtime")
-MODS = ("130_currency_unit", "314_area_move_custom")
+MODS = ("130_currency_unit", "314_area_move_custom", "332_training_custom")
 sys.path.insert(0, RUNTIME_DIR)
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 
@@ -56,7 +56,8 @@ def xor(raw, key):
 
 print("[同一]")
 paths = [os.path.join(RUNTIME_DIR, "mods", m, "tool.py") for m in MODS]
-check("2本の tool.py は同じ", filecmp.cmp(paths[0], paths[1], shallow=False))
+check("{}本の tool.py は同じ".format(len(paths)),
+      all(filecmp.cmp(paths[0], _p, shallow=False) for _p in paths[1:]))
 for _p in paths:
     _src = io.open(_p, encoding="utf-8").read()
     check("{} のシムは modtool を呼ぶ".format(os.path.basename(os.path.dirname(_p))),

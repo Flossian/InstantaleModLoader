@@ -193,7 +193,7 @@ def main():
     modfacility.register("915_invest", key="inn1",
                          fields={"name": "灯火亭", "facility_type": "inn",
                                  "tier": "basic"})
-    modfacility.register("914_real_estate", facility_id=fid,
+    modfacility.register("330_real_estate", facility_id=fid,
                          fields={"tier": "standard"})
     ok &= check("id は mod: の文字列", fid == "mod:915_invest:inn1")
     ok &= check("持ち主2人で層は2つ", len(modfacility.layers(fid)) == 2)
@@ -202,7 +202,7 @@ def main():
     ok &= check("持ち主が id から引ける",
                 modfacility.owner_of_id(fid) == "915_invest")
     ok &= check("entries が持ち主で絞れる",
-                modfacility.entries("914_real_estate") == [fid])
+                modfacility.entries("330_real_estate") == [fid])
 
     print("素形: 実セーブの location と同じ8項目・同じ並び")
     data = modfacility.template(fid, modfacility.fields_of(fid), "0")
@@ -816,7 +816,7 @@ def main():
 
     print("片付け: unregister で層も控えも消える")
     modfacility.unregister("915_invest", app=app2)
-    modfacility.unregister("914_real_estate", app=app2)
+    modfacility.unregister("330_real_estate", app=app2)
     ok &= check("登録簿が空", modfacility.entries() == [])
     ok &= check("控えも消える",
                 modfacility._persisted_entry(app2, "915_invest", fid) is None)

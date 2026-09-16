@@ -206,12 +206,12 @@ def main():
     print("層: 同じ持ち主は積み重ならない")
     npc_id = modnpc.register("229_probe", key="clerk", fields={"name": "受付"})
     modnpc.register("229_probe", key="clerk", fields={"name": "受付", "job": "inn"})
-    modnpc.register("914_real_estate", npc_id=npc_id, fields={"job": "guild"})
+    modnpc.register("330_real_estate", npc_id=npc_id, fields={"job": "guild"})
     ok &= check("id は mod: の文字列", npc_id == "mod:229_probe:clerk")
     ok &= check("持ち主2人で層は2つ", len(modnpc.layers(npc_id)) == 2)
     ok &= check("後から積んだ層が勝つ", modnpc.fields_of(npc_id)["job"] == "guild")
     ok &= check("entries が持ち主で絞れる",
-                modnpc.entries("914_real_estate") == [npc_id])
+                modnpc.entries("330_real_estate") == [npc_id])
 
     print("組む: 能力値の6鍵が渡る")
     built = modnpc.build(modnpc.fields_of(npc_id))
@@ -408,7 +408,7 @@ def main():
     # 登録簿は注入をまたいで生きる。前の版で組んだ実体を使い回すと、
     # `build` を直しても古い実体が同じ場所で落ちる（実機 2026-09-12）。
     # 逆に「登録し直したら捨てる」だと、塗り直しのたびに層を積む MOD が毎回組み直す。
-    # それを避けて MOD が「層は一度だけ」にすると前の版の層が残る（実機 2026-09-13。915 の notes）。
+    # それを避けて MOD が「層は一度だけ」にすると前の版の層が残る（実機 2026-09-13。331 の notes）。
     patch.set_generation("gen1")
     modnpc.register("229_probe", key="clerk", fields={"name": "受付"})
     stale = modnpc.spawn(app2, npc_id)

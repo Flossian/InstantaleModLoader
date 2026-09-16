@@ -3,7 +3,7 @@
 
 宿屋の宿泊1回の長さのように、**ゲームが決めている期間**を
 変える MOD（`315_vacation_custom`）と、その期間に合わせたい MOD
-（`914_real_estate` の自分の家の滞在）がある。
+（`330_real_estate` の自分の家の滞在）がある。
 MOD どうしは import しない（TECH.md §3.2.3）ので、両者はここで繋がる。
 
     期間を変える側      durations.declare(durations.INN_STAY, fn, owner="315_…")

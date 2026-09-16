@@ -13,7 +13,7 @@ r"""計測: 施設での訓練。ゲームは変えない。
 
 5つ目（2026-09-16 に追加）。`技を磨く` だけが 0.0 秒で
 `<エリア>の風は今日はここまでのようだ。出直したほうがよさそうだ。` と断られた
-（`916_training_custom` の再訓練で踏んだが、**素の訓練でも同じかは未計測**）。
+（`332_training_custom` の再訓練で踏んだが、**素の訓練でも同じかは未計測**）。
 段の中の4つの道（`simple_training` / `fundamental_training` / `enhance_skill` /
 `learn_new_skill`）と支度（`training_start` / `generate_images`）に入ったかを録る。
 

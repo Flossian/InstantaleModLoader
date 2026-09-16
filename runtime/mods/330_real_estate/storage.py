@@ -54,7 +54,7 @@ SITUATION = "real_estate_storage"
 #: 能力値の6つの鍵（GAME.md §2.23）。
 #: `Character.__init__` は `original_ability_scores` を**添字で読む**ので、
 #: `None` のまま渡すと `TypeError: 'NoneType' object is not subscriptable` で落ちる
-#: （実機 2026-09-11。窓が開かなかった原因）。値は `None` でよいが、鍵は要る。
+#: （VERIFICATION.md §3.62）。値は `None` でよいが、鍵は要る。
 ABILITY_KEYS = ("strength", "dexterity", "constitution", "intelligence", "wisdom",
                 "charisma")
 

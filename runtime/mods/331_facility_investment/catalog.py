@@ -13,14 +13,14 @@ r"""建てられる施設の表。種類・等級・街の規模と、値段と�
 
 ## どこに何軒まで建つか
 
-**上限は種類ごとではなく、その街に建てられる合計の軒数**（本人の指定、2026-09-14）。
+**上限は種類ごとではなく、その街に建てられる合計の軒数**（本人の指定）。
 数えるのは**この MOD で建てた分だけ**で、ゲームが最初から置いた施設は数えない
 （数えると宿屋も雑貨店も最初から在る村では何も建たなくなる）。
 
     村 1軒 / 町 2軒 / 都市 3軒     ← 種類を問わない合計（SIZE_SLOTS）
 
 種類ごとにあるのは**最低の規模**だけ（`min_size`）。
-道場と闘技場は町から（村には建たない）。実セーブ56街でも村には1軒も無かった（DOC.md §3.1）。
+道場と闘技場は町から（村には建たない）。実セーブ56街でも村には1軒も無かった（VERIFICATION.md §3.63）。
 
 上限は**その街に既にある同種の施設も数に入れる**。宿屋が1軒ある村には建てられない。
 
@@ -43,7 +43,7 @@ SIZE_ALIAS = {"dungeons": "dungeon"}
 SIZE_COST = {"village": 0.6, "town": 1.0, "city": 1.8}
 #: 売上に掛ける。
 SIZE_INCOME = {"village": 0.5, "town": 1.0, "city": 2.0}
-#: その街に建てられる合計の軒数（種類を問わない。本人の指定、2026-09-14）。
+#: その街に建てられる合計の軒数（種類を問わない。本人の指定）。
 SIZE_SLOTS = {"village": 1, "town": 2, "city": 3}
 
 # ---------------------------------------------------------------- 等級
@@ -53,10 +53,10 @@ TIER_COST = {"basic": 1.0, "standard": 1.8, "advanced": 3.2}
 TIER_INCOME = {"basic": 1.0, "standard": 1.5, "advanced": 2.2}
 
 # ---------------------------------------------------------------- 種類
-#: `enabled` が偽の種類は窓口に出さない（中身の経路が未確認のもの。DOC.md §3.3）。
+#: `enabled` が偽の種類は窓口に出さない（中身の経路が未確認のもの。VERIFICATION.md §3.63）。
 #: `plain` が真の種類は、中に立っている間だけ素データの写しを置いてもらう
 #: （`modfacility.register(plain=...)`）。ゲームが施設 id で素データを引く経路
-#: （売買・闘技場の試合）のため。宿屋は要らない（実体で足りた。DOC.md §3.2 の11回目）。
+#: （売買・闘技場の試合）のため。宿屋は要らない（実体で足りた。VERIFICATION.md §3.63）。
 KINDS = {
     "inn": {
         "label": "宿屋",
@@ -144,7 +144,7 @@ KINDS = {
         "enabled": True,
         # 訓練の入口はゲームが `facility_type` から出す（宿屋・闘技場と同じ）ので、
         # こちらが `DisplayTrainingChoice(app, training_type)` を組む場面は無い。
-        # その先が施設 id で素データを引くなら写しが要る（DOC.md §3.2 の18回目）。
+        # その先が施設 id で素データを引くなら写しが要る（VERIFICATION.md §3.63）。
         "plain": True,
         "min_size": "town",
         "cost": 35000,
@@ -166,7 +166,7 @@ KINDS = {
         "label": "闘技場",
         "plain": True,
         # 試合（`ColosseumMatchStart.method`）は施設の `config`
-        # （`current_phase` / `enemy_data`）を `world_dict` から施設 id で引く（実機 2026-09-13）。
+        # （`current_phase` / `enemy_data`）を `world_dict` から施設 id で引く（実機）。
         "enabled": True,
         "min_size": "town",
         "cost": 120000,
@@ -190,7 +190,7 @@ KINDS = {
 KIND_ORDER = ("inn", "general_store", "blacksmith", "specialty_shop",
               "training_facility", "colosseum")
 
-#: 窓口に出す設置条件の一文（本人の指定、2026-09-14）。
+#: 窓口に出す設置条件の一文（本人の指定）。
 #: 建てられないときに「いま建てられるものは無い」だけだと、
 #: 規模が足りないのか軒数が埋まっているのかが分からない。
 REQUIREMENT_MIN_SIZE = "{label}: {min_size}から（{size}には建たない）"
@@ -200,7 +200,7 @@ SLOTS_FULL_TEXT = "この街に建てられるのは合計{slots}軒まで（い
 
 # ---------------------------------------------------------------- 主人
 #: `category` は実セーブの NPC 541 人が使っている10語のうち、主人に据えて不自然でないもの。
-#: 6人だと4軒目あたりで名前が重なる（実機 2026-09-14：闘技場と道場がどちらもトビアスになった）。
+#: 6人だと4軒目あたりで名前が重なる（実機：闘技場と道場がどちらもトビアスになった）。
 #: 数を増やしたうえで、`keeper_choice` が**その世界で使っていない名前**まで送る。
 KEEPER_POOL = (
     ("ガレン", "middle-aged man", "低い声で手短に話す", "無口だが客を見る目は確か"),
@@ -221,7 +221,7 @@ KEEPER_POOL = (
 KEEPER_LEVEL = 5
 #: 主人がプレイヤーに持つ好感度の初期値。40 は「多少の好意がある」の段（GAME.md §2.25.1）。
 #: 会話の頼み文には `affinity` から組んだ文が毎回載るので、初対面の「警戒心がある」のままだと
-#: 出資者を警戒する主人になる（実機 2026-09-13 の指摘）。
+#: 出資者を警戒する主人になる（実機での指摘）。
 KEEPER_AFFINITY = 40
 
 KEEPER_PROFILE = (
@@ -234,13 +234,13 @@ KEEPER_NOTES = (
     "売上を預かって渡す相手であり、出資者として礼を尽くして接する。"
 )
 #: 闘技場の相手を作る頼み文に足す一文。ゲームの頼み文は世界観・エリア・施設・ランクだけで、
-#: 前に出た相手を載せないため、同じ施設では毎回同じ人物に収束した（実機 2026-09-13。DOC.md §3.2 の14回目）。
+#: 前に出た相手を載せないため、同じ施設では毎回同じ人物に収束した（VERIFICATION.md §3.63）。
 ARENA_VARIETY_NOTE = (
     "この闘技場には既に {names} が出場している。"
     "名前も出自も戦い方もこれらとは重ならない、別の闘士を作ること。"
 )
-#: 名前そのものに読点を含むことがある（「黄金の断罪者、アウレリウス」）ので、
-#: 並べるときは1人ずつ括る（実機 2026-09-13。読点で繋いだら切れ目が読めなかった）。
+#: 名前そのものに読点を含むことがある（「<二つ名>、<相手の名>」）ので、
+#: 並べるときは1人ずつ括る（実機。読点で繋いだら切れ目が読めなかった）。
 ARENA_NAME_WRAP = "「{}」"
 
 
@@ -303,7 +303,7 @@ def floor_size(kind, min_size=None):
 def allowed(kind, size, min_size=None):
     """その規模の街に建ててよい種類か（軒数は見ない）。
 
-    `min_size` は設定からの上書き（`915_` の `MIN_SIZE_<種類>`）。
+    `min_size` は設定からの上書き（`331_` の `MIN_SIZE_<種類>`）。
     """
     spec = kind_of(kind)
     size = normalize_size(size)
@@ -321,7 +321,7 @@ def slots(size):
 def cost_of(kind, tier, size, scale=100, base=None):
     """建設費。`scale` は % で、設定から来る。
 
-    `base` は種類ごとの基礎額の上書き（`915_` の `COST_<種類>`。読めなければ表の値）。
+    `base` は種類ごとの基礎額の上書き（`331_` の `COST_<種類>`。読めなければ表の値）。
     等級と街の規模の倍率はその上に掛かるので、`base` は**並・町**での額と同じ。
     """
     spec = kind_of(kind)
@@ -333,7 +333,7 @@ def cost_of(kind, tier, size, scale=100, base=None):
 
 
 def income_per_day(kind, tier, size, scale=100, base=None):
-    """1日の売上。`base` は種類ごとの基礎額の上書き（`915_` の `INCOME_<種類>`）。"""
+    """1日の売上。`base` は種類ごとの基礎額の上書き（`331_` の `INCOME_<種類>`）。"""
     spec = kind_of(kind)
     size = normalize_size(size)
     if spec is None or size is None or tier not in TIERS:
@@ -347,7 +347,7 @@ def facility_name(kind, tier, area_name, seed, taken=()):
 
     **同じ鍵と同じ `taken` からは同じ名前**（建て直しても変わらない）。
     鍵だけで選んでいた頃は、別の世界でも同じ土地の同じ番号なら同じ名前になった
-    （実機 2026-09-14。`3-1` がどちらも「七宝の間」）。
+    （実機。`3-1` がどちらも「七宝の間」）。
     候補を全部使っていたら、鍵の名前に土地の名を冠して分ける。
     """
     spec = kind_of(kind)
@@ -581,7 +581,7 @@ def keeper_fields(kind, area_name, facility_name_, seed, investor=None,
         "age": 20,
         # 詳細生成（会話の直前に本体が能力値を埋める）は `experience_level` を掛け算に使う。
         # None だと `calculate_attribute` が `int * None` で落ち、会話のスレッドが死んで
-        # 画面が「…」のまま戻らない（実機 2026-09-13。DOC.md §3.2）。
+        # 画面が「…」のまま戻らない（VERIFICATION.md §3.63）。
         # 商人なので低め。戦う相手ではない。
         "experience_level": KEEPER_LEVEL,
     }

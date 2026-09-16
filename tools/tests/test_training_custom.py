@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
-"""916_training_custom.py をゲーム抜きで通す（開発中の MOD。TECH.md §2.6）。
+"""332_training_custom.py をゲーム抜きで通す。
 
-    python tools/tests/test_wip_training_custom.py
+    python tools/tests/test_training_custom.py
+
+（開発中は `916_training_custom` / `test_wip_training_custom.py` だった。2026-09-16 に正式化。）
 
 偽の app / PhaseSpec / DisplayTrainingChoice / TrainingStartManager /
 TrainingPhaseManager を差し込み、次を確認する。
@@ -130,7 +132,7 @@ class Facility:
     """訓練所。**断りの根は `config["trained"]`**（実測 2026-09-16）。"""
 
     def __init__(self, name="ゼニスの風", trained=False):
-        self.id = "mod:915_facility_investment:6-1"
+        self.id = "mod:331_facility_investment:6-1"
         self.name = name
         # 一度も卒業していない施設は**キー自体を持たない**（実測 2026-09-16）。
         self.config = {"level_of_detail": 0}

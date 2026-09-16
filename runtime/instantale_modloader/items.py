@@ -5,10 +5,10 @@ r"""持ち物（`Character.inventory`）の読み書き。
 その `.inventory` が `{鍵: Item}` の辞書（`402_` が実機で確かめた形）。
 品そのものも JSON に落ちないオブジェクトなので、控えに入れるときは
 **セーブと同じ形の辞書**に均し、戻すときはゲーム自身に作り直させる
-（`InstantaleApp.generate_item_from_dict`。`914_` が実機で通した経路）。
+（`InstantaleApp.generate_item_from_dict`。`330_` が実機で通した経路）。
 
 素直に `getattr(character, "inventory")` を控えると、入れ物ごと落ちて
-**持ち物が丸ごと消える**（実機 2026-09-14。`915_` の店の主人に品が並んでいても控えは空だった）。
+**持ち物が丸ごと消える**（実機 2026-09-14。`331_` の店の主人に品が並んでいても控えは空だった）。
 
 記録は GAME.md §2.13（セーブの1件の形）と TECH.md §5.7。
 """
@@ -17,7 +17,7 @@ import sys
 
 from . import log_exc
 
-#: セーブの1件が持つ項目（`914_` の保管庫が実機で往復させた12項目）。
+#: セーブの1件が持つ項目（`330_` の保管庫が実機で往復させた12項目）。
 ITEM_FIELDS = ("name", "item_type", "attributes", "description", "value", "rarity",
                "skill", "upgrade_level", "width_slots", "height_slots", "image_src",
                "grid_pos")

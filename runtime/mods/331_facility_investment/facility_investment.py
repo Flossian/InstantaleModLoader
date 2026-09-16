@@ -45,9 +45,9 @@ r"""機能追加: 街に施設を建てる（出資する）。
 
 実行時に足した施設で本体の売買（`shopping_start_method_1`）を起こすと
 `world_dict` を引いて `KeyError` で落ちる（GAME.md §2.28）。
-だから店は建てない。宿屋は `VacationStartManager`（`914_` で実機を通した経路）。
+だから店は建てない。宿屋は `VacationStartManager`（`330_` で実機を通した経路）。
 **中の選択肢はゲームが `facility_type` から出す。** 宿屋の `宿泊する`、闘技場の `試合に出る` / `観戦する` が
-実行時に足した建物でもそのまま出た（実機 2026-09-13）。だからこの MOD が足すのは `売上を受け取る` だけで、
+実行時に足した建物でもそのまま出た（実機）。だからこの MOD が足すのは `売上を受け取る` だけで、
 中身は本体の経路に任せる。
 
 本体の経路には**実体ではなく素データを施設 id で引く**ものがある
@@ -73,7 +73,7 @@ from . import catalog
 LOG_BASENAME = "facility_investment.log"
 
 #: `modfacility` / `modnpc` に名乗る持ち主。控えの中でこの MOD の建物と主人を束ねる鍵。
-OWNER = "915_facility_investment"
+OWNER = "331_facility_investment"
 
 #: 世界ごとの控え `state\facility_investment\<世界名>.json`。
 STATE_DIRNAME = "facility_investment"
@@ -107,11 +107,11 @@ ARENA_CLS = "EntryColosseumMatchManager"
 #: `(包む先, 何の処理か, その網が効く種類)`。
 GUARDED_PHASES = (
     # 闘技場の試合。`申し込む` で `method` が施設 id で `world_dict` を引く
-    # （実機 2026-09-13、DOC.md §3.2 の10回目）。
+    # （VERIFICATION.md §3.63）。
     ("__main__:ColosseumMatchStart.execute", "match", ("colosseum",)),
     # 売買。`shopping_start_method_1` が同じ引き方をする（GAME.md §2.28）。
     ("__main__:ShoppingStartManagerRemake.execute", "shopping", SHOP_KINDS),
-    # 訓練。中で何を引くかは未測（DOC.md §3.2 の18回目）。
+    # 訓練。中で何を引くかは未測（VERIFICATION.md §3.63）。
     ("__main__:TrainingStartManager.execute", "training", ("training_facility",)),
     ("__main__:TrainingPhaseManager.execute", "training", ("training_facility",)),
 )
@@ -128,7 +128,7 @@ INCOME_SCALE = 100
 HOLD_DAYS = 360
 STAY_QUALITY = "private_room"
 
-#: 種類ごとの建設費と1日の売上、建てられる最低の規模（本人の指定 2026-09-14）。
+#: 種類ごとの建設費と1日の売上、建てられる最低の規模（本人の指定）。
 #: 既定は `catalog.KINDS` の表と同じ。等級と街の規模の倍率はこの上に掛かるので、
 #: この額は**並・町**のときの額そのもの。倍率（`COST_SCALE` / `INCOME_SCALE`）はさらにその上。
 #: 名前は `<項目>_<種類を大文字にしたもの>`（`base_of` がこの規則で引く）。
@@ -158,7 +158,7 @@ KEEPER_SOURCE = "llm"
 # ---------------------------------------------------------------- 文言
 #: 役場の窓口の名。「出資する」では何をして何を得るかが分からず、
 #: 「施設を建てて売上を得る」は説明文で選択肢の名ではなかった。役場の他の項目
-#: （市民権の発行）と同じ名詞の形にし、得られるものは本文で言う（本人の選択 2026-09-14）。
+#: （市民権の発行）と同じ名詞の形にし、得られるものは本文で言う（本人の選択）。
 DESK_LABEL = "施設の建設（出資）"
 #: 前の版の窓口の名。セーブに焼かれた古い選択肢を掃除するために残す（`OUR_LABEL_PREFIXES`）。
 OLD_DESK_LABELS = ("出資する", "施設を建てて売上を得る")
@@ -170,7 +170,7 @@ COLLECT_LABEL = "売上を受け取る({}G)"
 COLLECT_EMPTY_LABEL = "売上を受け取る(まだ無い)"
 #: 自分の宿屋の無料の宿泊。ゲームの `宿泊する`（宿代を取る）と**別のボタン**にする。
 #: 版33 までは同じ `宿泊する` を押させて宿代を後から返していたが、払って戻るのが見えず
-#: 分かりづらかった（本人の指摘 2026-09-14）。
+#: 分かりづらかった（本人の指摘）。
 STAY_LABEL = "無料で泊まる"
 LEAVE_LABEL = "出る"
 
@@ -259,7 +259,7 @@ def vary_location(location, names):
     """相手を作る頼み文に渡す `location` に、既出の闘士の一文を足したものを返す。
 
     ゲームの頼み文は施設の名前と概要（`description`）だけを読む（`output_data` の記録。
-    DOC.md §3.2 の14回目）ので、概要の末尾に足す。本物の施設には書かない（身代わりを渡す）。
+    VERIFICATION.md §3.63）ので、概要の末尾に足す。本物の施設には書かない（身代わりを渡す）。
     `location` は辞書のことも実体のこともありうるので両方受ける。
     """
     note = catalog.arena_variety_note(names)
@@ -322,7 +322,7 @@ def apply(ctx):
         """いまの周回の鍵（世界×主人公。`state.playthrough_key`）。
 
         帳簿を世界名だけで引くと、主人公が死んで同じ世界で作り直したときに
-        前の主人公の建物と主人が新しい主人公に引き継がれる（実機 2026-09-14）。
+        前の主人公の建物と主人が新しい主人公に引き継がれる（実機）。
         ロードの建て直しの間は `world_loaded` が引数のセーブから決めた鍵を使う
         （`app` の辞書と `player` はまだ前の周回を指していることがある）。
         """
@@ -403,7 +403,7 @@ def apply(ctx):
     def built_here(app, area_id):
         """その街にこの MOD で建てた軒数。種類は問わない。
 
-        **ゲームが最初から置いた施設は数えない**（本人の指定、2026-09-14）。
+        **ゲームが最初から置いた施設は数えない**（本人の指定）。
         上限は「その街に合計で何軒建てられるか」なので、素の街の中身とは別の話。
         """
         return len(holdings_in(app, area_id))
@@ -535,7 +535,7 @@ def apply(ctx):
             return []
         # 宿泊の最中（活動の選択肢）に混ぜないのはローダの判定（`is_top_screen`）。
         # ここで `own_stay` を見ていたら、終える処理の中の組み直しに旗が間に合わず
-        # 2つだけの画面で止まった（実機 2026-09-14）。画面の判断は1か所（TECH.md §5.8）。
+        # 2つだけの画面で止まった（実機）。画面の判断は1か所（TECH.md §5.8）。
         out = []
         kind = record.get("kind")
         # 自分の宿屋には「無料で泊まる」を、ゲームの `宿泊する`（宿代を取る）とは**別に**出す。
@@ -543,7 +543,7 @@ def apply(ctx):
         if kind == "inn":
             out.append({"key": "stay", "label": STAY_LABEL,
                         "on": lambda info: act(info["app"], "stay", facility_id)})
-        # 闘技場の `試合に出る` はゲーム自身が出す（`colosseum` 型。実機 2026-09-13）。こちらは足さない。
+        # 闘技場の `試合に出る` はゲーム自身が出す（`colosseum` 型。実機）。こちらは足さない。
         gold, _days = owed(app, record)
         label = COLLECT_LABEL.format(ui.money(gold)) if gold > 0 else COLLECT_EMPTY_LABEL
         out.append({"key": "collect", "label": ui.rewrite_coins(label),
@@ -576,7 +576,7 @@ def apply(ctx):
             choices=choices, exit_label=LEAVE_LABEL,
             # 持ち株の建物はロードで必ず建ち直る（手放す経路がまだ無い）。
             keep_inside=True,
-            # 入口ではなく、入口の下の区画の1つに繋ぐ（本人の指定。実機 2026-09-13）。
+            # 入口ではなく、入口の下の区画の1つに繋ぐ（本人の指定）。
             # 入口に置くと街に着いた瞬間に店が見え、区画を回っても見つからない。
             hub="ward",
             # ゲームが素データを施設 id で引く種類（売買・闘技場の試合）だけ、
@@ -589,7 +589,7 @@ def apply(ctx):
             write=write)
         # 主人の層は**この世代のこのロードで1度だけ**積む（ロードのたびに積み直す）。塗り直しのたびに呼ぶとログが毎手流れる。
         # 「登録簿に層が在れば積まない」にしていたら、注入し直しても前の版の層が残り、
-        # 版13 で足した `notes`（出資者の一文）が実機の頼み文に出なかった（2026-09-13。DOC.md §3.2 の15回目）。
+        # 版13 で足した `notes`（出資者の一文）が実機の頼み文に出なかった（VERIFICATION.md §3.63）。
         if keeper_id not in keepers_registered:
             keepers_registered.add(keeper_id)
             # 建てたときに作った主人（LLM か表）を帳簿から使う。
@@ -614,7 +614,7 @@ def apply(ctx):
         """版4以前に生まれた主人の `experience_level` を埋める。
 
         控えの写しは層の初期値より勝つので（`modnpc.spawn`）、None のまま写った主人は
-        建て直しても None のまま。詳細生成がこれを掛け算に使って落ちる（DOC.md §3.2 の4回目）。
+        建て直しても None のまま。詳細生成がこれを掛け算に使って落ちる（VERIFICATION.md §3.63）。
         """
         handle = modnpc.get(app, keeper_id, world=world)
         if handle is None:
@@ -700,7 +700,7 @@ def apply(ctx):
         記録（`placed`）ではなく実体の `.location` を見る。
         世界を読み直すと施設もエリアも別のオブジェクトになるので、
         記録だけで判じると古い世界の建物に立ったままの人物を「置いてある」と読む
-        （実機 2026-09-13。会話の一覧から主人が消えた）。
+        （実機。会話の一覧から主人が消えた）。
         """
         if facility is None:
             return False
@@ -769,7 +769,7 @@ def apply(ctx):
         """帳簿に主人の名を控える。重なっていたら後の方を空いている名前へ寄せる。
 
         版24 までは名前を控えず、建てるたびに鍵から選んでいた。候補が6人しかなかったので
-        4軒目で重なった（実機 2026-09-14：闘技場と道場がどちらもトビアス）。
+        4軒目で重なった（実機：闘技場と道場がどちらもトビアス）。
         版25 は建てたときに控えるが、**それ以前の持ち株には控えが無い**ので、ここで埋める。
         埋めるついでに、重なっている分だけ空いている名前へ寄せる（その1回だけ実体の名も変える）。
         """
@@ -840,7 +840,7 @@ def apply(ctx):
             "area_name": area_name,
             "investor": investor_name(app),
             # 主人は下で作る（`KEEPER_SOURCE`）。表のときは使っていない名前を選ぶ
-            # （6人だと4軒目で重なった。実機 2026-09-14：闘技場と道場がどちらもトビアス）。
+            # （6人だと4軒目で重なった。実機：闘技場と道場がどちらもトビアス）。
             "keeper_name": "",
             "facility": facility_id,
             "keeper": keeper_id,
@@ -926,7 +926,7 @@ def apply(ctx):
         try:
             # 第1引数はゲームの部屋選びと同じ **1**（1単位＝30日と活動1回。連泊は本体の
             # `まだ宿泊する`）。年齢の式で 3 を渡していたら3ヵ月分の暦と宿代が一度に動いた
-            # （実機 2026-09-14。`init_args=['3', ...]`。本体の経路は5回とも `['1', ...]`）。
+            # （実機。`init_args=['3', ...]`。本体の経路は5回とも `['1', ...]`）。
             phase = cls(app, 1, str(STAY_QUALITY))
         except Exception:
             ctx.log_exc("investment: cannot build {}".format(STAY_CLS))
@@ -947,7 +947,7 @@ def apply(ctx):
 
         ゲーム自身の `宿泊する` から始めた宿泊は**自分の宿屋でも素のまま**（宿代を取る）。
         版33 までは両方を無料にしていたが、払って戻るのが見えず分かりづらかったので、
-        無料は別のボタンにした（本人の指摘 2026-09-14）。
+        無料は別のボタンにした（本人の指摘）。
         """
         home = state.get("own_stay")
         if isinstance(home, dict) and modfacility.inside(app, home.get("facility")):
@@ -967,7 +967,7 @@ def apply(ctx):
         return own_building(app, ("colosseum",))
 
     def recover(app, why):
-        """ゲームの処理が途中で落ちた後、操作を戻す（`914_` と同じ手当て）。
+        """ゲームの処理が途中で落ちた後、操作を戻す（`330_` と同じ手当て）。
 
         待機表示はゲームが `is_button_enabled=False` で止めているだけなので（GAME.md §2.4）、
         戻して塗り直せば押せる状態に戻る。ワーカースレッドの中なので画面はメインスレッドへ回す。
@@ -980,7 +980,7 @@ def apply(ctx):
         """役場の出資の窓口。建てられる種類を並べ、**全部の種類の条件**を本文に出す。
 
         建てられないときに「いま建てられるものは無い」だけだと、規模が足りないのか
-        軒数が埋まっているのかが分からない（本人の指摘、2026-09-14。村で出た）。
+        軒数が埋まっているのかが分からない（本人の指摘。村で出た）。
         """
         area = ui.current_area(app)
         area_name = frames.short(getattr(area, "name", ""), 40) or "この土地"
@@ -1002,7 +1002,7 @@ def apply(ctx):
                 if entry is not None:
                     entries.append(entry)
                     buildable += 1
-            # 本文に出すのは**建たない種類の条件だけ**（本人の指定 2026-09-14）。
+            # 本文に出すのは**建たない種類の条件だけ**（本人の指定）。
             # 建つ種類の値札は選択肢を押した先（等級の画面）で出る。
             line = catalog.requirement_text(kind, size, min_size_of(kind))
             if line:
@@ -1246,7 +1246,7 @@ def apply(ctx):
         """自分の宿屋の宿泊は宿代を取らない。よその宿屋には触らない。
 
         宿代の引き落としは `execute` の中で1回だけ起きる（GAME.md §2.17）ので、
-        前後の所持金の差を返す。落ちたときは操作を戻す（`914_` と同じ手当て）。
+        前後の所持金の差を返す。落ちたときは操作を戻す（`330_` と同じ手当て）。
         """
         app = getattr(self, "app", None) or ui.find_app()
         home = staying_here(app) if app is not None else None
@@ -1282,7 +1282,7 @@ def apply(ctx):
         """自分の闘技場の相手を作るとき、既に出た闘士の名前を頼み文に足す。
 
         ゲームの頼み文は世界観・エリア・施設名と概要・ランクだけで、前の相手を載せない。
-        同じ施設では毎回ほぼ同じ人物に収束した（実機 2026-09-13。4試合とも「黄金の…アウレリウス」）。
+        同じ施設では毎回ほぼ同じ人物に収束した（実機。4試合とも同じ「<相手の名>」）。
         よその闘技場には触らない。
         """
         try:
