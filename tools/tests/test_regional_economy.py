@@ -1,0 +1,241 @@
+# -*- coding: utf-8 -*-
+"""405_regional_economy をゲーム抜きで通す。
+
+    python tools/tests/test_regional_economy.py
+
+LLM もゲームも要らない部分だけを見る。
+
+  規模     … 街かダンジョンかを素データの `areas[*]["size"]` から決める。
+             **実行時の `Area.size` は読めない**（`324_` の実機 38/38）ので
+             `save_data_dict` / `world_dict` から取る
+  門       … 街はプロフィールを作り、ダンジョンは作らない。
+             世界構造（`World.structure`）は保存されないので条件にしない
+  倍率     … 需給スコア 1〜5 と、強い変動 / 弱い変動 の対応
+  矢印     … プレイヤー側は需要過多が上向き。店主側は 6-score で引き直すので、
+             表が対称であれば必ず逆を向く
+  スコア   … 名指しの品がジャンルより先。どちらにも当たらなければ 3
+"""
+import importlib.util
+import io
+import json
+import os
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
+MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
+
+if RUNTIME_DIR not in sys.path:
+    sys.path.insert(0, RUNTIME_DIR)
+
+failures = []
+
+
+def check(name, cond, detail=""):
+    print(("  ok   " if cond else "  FAIL ") + name
+          + ((" -- " + str(detail)) if detail and not cond else ""))
+    if not cond:
+        failures.append(name)
+
+
+def find_mod(suffix):
+    """mod を **番号を除いた名前** で探す（番号は振り直されることがある）。"""
+    matches = sorted(name for name in os.listdir(MODS_DIR)
+                     if name.endswith(suffix)
+                     and os.path.isfile(os.path.join(MODS_DIR, name, "mod.json")))
+    if not matches:
+        raise SystemExit("cannot find *{} in {}".format(suffix, MODS_DIR))
+    folder = os.path.join(MODS_DIR, matches[0])
+    with io.open(os.path.join(folder, "mod.json"), encoding="utf-8") as fh:
+        entry = json.load(fh)["entry"]
+    return folder, os.path.join(folder, entry)
+
+
+MOD_DIR, MOD = find_mod("_regional_economy")
+
+spec = importlib.util.spec_from_file_location(
+    "regional_economy_mod", MOD, submodule_search_locations=[MOD_DIR])
+mod = importlib.util.module_from_spec(spec)
+sys.modules["regional_economy_mod"] = mod
+spec.loader.exec_module(mod)
+
+
+# ---------------------------------------------------------------- 偽ゲーム
+class App:
+    """`world_dict` と `save_data_dict` だけの app（405 が読むのはここ）。"""
+
+    def __init__(self, world=None, save=None):
+        if world is not None:
+            self.world_dict = world
+        if save is not None:
+            self.save_data_dict = save
+
+
+def world(name, areas):
+    return {"world_data": {"name": name}, "areas": areas}
+
+
+#: 実セーブを復号して確かめた形（3世界とも街9件、残りは全部 dungeon）。
+AREAS = {
+    "0": {"name": "エテルナ", "size": "city", "connections": ["1", "4"]},
+    "1": {"name": "リヴェール", "size": "town", "connections": ["0"]},
+    "4": {"name": "ソラリス", "size": "village", "connections": ["0"]},
+    "9": {"name": "下層区の迷路路地", "size": "dungeon", "connections": []},
+}
+
+
+def main():
+    print("[エリアの規模]")
+    app = App(world("テスト", AREAS))
+    check("都市が読める", mod._area_size(app, "0") == "city")
+    check("町が読める", mod._area_size(app, "1") == "town")
+    check("村が読める", mod._area_size(app, "4") == "village")
+    check("ダンジョンが読める", mod._area_size(app, "9") == "dungeon")
+    check("id は数でも文字列でも同じ", mod._area_size(app, 0) == "city")
+    check("知らない id は None", mod._area_size(app, "99") is None)
+    check("id が空なら None", mod._area_size(app, "") is None)
+    check("app が無ければ None", mod._area_size(None, "0") is None)
+    check("areas が無ければ None",
+          mod._area_size(App({"world_data": {"name": "空"}}), "0") is None)
+    check("大文字と空白は均す",
+          mod._area_size(App(world("T", {"0": {"size": " CITY "}})), "0") == "city")
+    check("size が文字列でなければ None",
+          mod._area_size(App(world("T", {"0": {"size": 3}})), "0") is None)
+
+    print("[遊んでいるセーブ側を優先する]")
+    # 同じ id が別の世界で別の規模を持つことがある。
+    # 世界名が食い違うときは、いま遊んでいるセーブ側を採る（405 の既存の決まり）。
+    app = App(world("古い世界", {"0": {"size": "dungeon"}}),
+              world("いまの世界", {"0": {"size": "city"}}))
+    check("世界名が食い違えばセーブ側", mod._area_size(app, "0") == "city")
+    app = App(world("同じ世界", {"0": {"size": "city"}}),
+              world("同じ世界", {"0": {"size": "city"}}))
+    check("一致していれば同じ答え", mod._area_size(app, "0") == "city")
+
+    print("[プロフィールを作る門]")
+    # **世界構造は条件にしない。** `World.structure` は保存される world_data の
+    # 5項目に入らないので、ロードした世界では必ず読めない（GAME.md §2.27）。
+    app = App(world("テスト", AREAS))
+    for area_id, size in (("0", "city"), ("1", "town"), ("4", "village")):
+        check("{} はプロフィールを作る".format(size),
+              mod._area_size(app, area_id) in mod.SETTLEMENT_SIZES)
+    check("ダンジョンは作らない",
+          mod._area_size(app, "9") not in mod.SETTLEMENT_SIZES)
+    check("読めないエリアは作らない",
+          mod._area_size(app, "99") not in mod.SETTLEMENT_SIZES)
+    check("街の規模は3語", tuple(mod.SETTLEMENT_SIZES) == ("village", "town", "city"),
+          mod.SETTLEMENT_SIZES)
+    check("構造を引く関数は残っていない",
+          not hasattr(mod, "_active_world_structure"))
+
+    print("[需給スコアの倍率]")
+    mod.STRONG_FLUCTUATION_MULTIPLIER = 1.5
+    mod.WEAK_FLUCTUATION_MULTIPLIER = 1.2
+    check("5（需要過多）は強い変動", mod._regional_multiplier(5) == 1.5)
+    check("4 は弱い変動", mod._regional_multiplier(4) == 1.2)
+    check("3 は等倍", mod._regional_multiplier(3) == 1.0)
+    check("2 は弱い変動の逆数", abs(mod._regional_multiplier(2) - 1 / 1.2) < 1e-9)
+    check("1（供給過多）は強い変動の逆数",
+          abs(mod._regional_multiplier(1) - 1 / 1.5) < 1e-9)
+    check("知らないスコアは等倍", mod._regional_multiplier(9) == 1.0)
+    mod.STRONG_FLUCTUATION_MULTIPLIER = "こわれた"
+    check("設定が壊れていたら等倍", mod._regional_multiplier(5) == 1.0)
+    mod.STRONG_FLUCTUATION_MULTIPLIER = 1.5
+
+    print("[矢印の向き]")
+    marks = mod.FIXED_SCORE_MARKS
+    check("需要過多が上向き（提供者の意図）", marks[5] == "↑↑" and marks[4] == "↑",
+          marks)
+    check("供給過多が下向き", marks[1] == "↓↓" and marks[2] == "↓", marks)
+    check("3 は表に無い（別のスイッチで `-`）", 3 not in marks, marks)
+    # 店主側は 6-score で引き直す。表が対称でなければ片側だけ空欄になる。
+    check("反転しても必ず印が在る",
+          all((6 - score) in marks for score in marks), sorted(marks))
+    check("反転すると必ず逆を向く",
+          all(marks[6 - score] != marks[score] for score in marks), marks)
+    check("反転を2回かけると戻る",
+          all(marks[6 - (6 - score)] == marks[score] for score in marks))
+
+    print("[1品のスコア]")
+    record = {"shortage_goods": ["鉄鉱石"], "surplus_goods": ["小麦"],
+              "genre_scores": {"plant": 4}}
+    score, why = mod._score_for_item(record, "gem", "鉄鉱石")
+    check("不足の名指しは5", score == 5 and why.startswith("name/shortage"), (score, why))
+    score, why = mod._score_for_item(record, "gem", "小麦")
+    check("過剰の名指しは1", score == 1 and why.startswith("name/surplus"), (score, why))
+    score, why = mod._score_for_item(record, "plant", "名も無き草")
+    check("名指しに無ければジャンル", score == 4 and why == "genre:plant", (score, why))
+    score, why = mod._score_for_item(record, "unknown_detail", "名も無き草")
+    check("どちらにも無ければ3", score == 3 and why == "default", (score, why))
+    score, _why = mod._score_for_item({}, "plant", "小麦")
+    check("プロフィールが空でも3に倒れる", score == 3, score)
+
+    print("[検品の控えは内容で引く]")
+
+    class Goods:
+        """`scripts.items.Item` の、検品に関わるところだけ。"""
+
+        def __init__(self, name="宝石", iid="item_1", desc="澄んだ石",
+                     detail="gem", rarity="common"):
+            self.name = name
+            self.id = iid
+            self.description = desc
+            self.item_type = "material"
+            self.rarity = rarity
+            self.attributes = {"item_detail": detail}
+
+    one = mod._item_snapshot(Goods(iid="item_1"))
+    two = mod._item_snapshot(Goods(iid="item_2"))       # 買って棚に作り直された品
+    other = mod._item_snapshot(Goods(iid="item_3", desc="濁った石"))
+    check("1回の問い合わせでは品ごとに別の鍵",
+          len({one["item_key"], two["item_key"], other["item_key"]}) == 3)
+    check("内容が同じなら控えの鍵は同じ（内部IDを含めない）",
+          one["content_key"] == two["content_key"],
+          (one["content_key"], two["content_key"]))
+    check("内容が違えば控えの鍵も違う",
+          one["content_key"] != other["content_key"])
+
+    print("[控えは state に残ったぶんも引く]")
+    state = {"classification_lock": __import__("threading").RLock(),
+             "classifications": {}}
+    scope = ("テスト", "5")
+    record = {"classifications": {one["content_key"]: {"score": 5}}}
+    check("state の控えが引ける",
+          mod._known_classification(state, scope, record,
+                                    one["content_key"]) == {"score": 5})
+    check("買って作り直された品も同じ答え",
+          mod._known_classification(state, scope, record,
+                                    two["content_key"]) == {"score": 5})
+    check("知らない品は None",
+          mod._known_classification(state, scope, record,
+                                    other["content_key"]) is None)
+    check("控えの無いエリアでも落ちない",
+          mod._known_classification(state, scope, {}, one["content_key"]) is None)
+
+    print("[聞くのは未検品のぶんだけ]")
+    wanted = mod._unclassified(state, scope, record, [one, two, other])
+    check("既知の2件は聞かない", [s["content_key"] for s in wanted]
+          == [other["content_key"]], [s["name"] for s in wanted])
+    check("全部既知なら空",
+          mod._unclassified(state, scope, record, [one, two]) == [])
+    check("エリアが分からなければ聞かない",
+          mod._unclassified(state, None, record, [other]) == [])
+
+    print("[実行中の控えが state より先]")
+    state["classifications"][(scope, other["content_key"])] = {"score": 1}
+    check("実行中の控えが引ける",
+          mod._known_classification(state, scope, record,
+                                    other["content_key"]) == {"score": 1})
+    check("それも聞かなくなる",
+          mod._unclassified(state, scope, record, [one, two, other]) == [])
+
+    print("")
+    if failures:
+        print("失敗: {}".format(", ".join(failures)))
+        return 1
+    print("すべて通った")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

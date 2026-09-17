@@ -94,8 +94,8 @@
         "en": "Show market fluctuation markers"
       },
       "note": {
-        "ja": "エリアの市場変動を、アイテム名の末尾にマークとして表示します。規定：ON\n↑↑/↓↓:そのエリアでの強い変動。需要過多/供給過多\n↑/↓:そのエリアでの弱い変動。需要あり/供給あり",
-        "en": "Shows area market fluctuation markers after item names. Default: ON\n↑↑/↓↓: strong fluctuation, excess demand/supply\n↑/↓: weak fluctuation, demand/supply"
+        "ja": "エリアの市場変動を、アイテム名の末尾にマークとして表示します。規定：ON\n向きはプレイヤー側の見え方で、上向きが「この街で売ると得」です。\n↑↑/↓↓:そのエリアでの強い変動。需要過多/供給過多\n↑/↓:そのエリアでの弱い変動。需要あり/供給あり",
+        "en": "Shows area market fluctuation markers after item names. Default: ON\nThe direction is from the player's side: up means it sells well here.\n↑↑/↓↓: strong fluctuation, excess demand/supply\n↑/↓: weak fluctuation, demand/supply"
       }
     },
     "REVERSE_TRADE_MARK": {
@@ -125,7 +125,12 @@
     "SPECIALTY_MARK": {
       "type": "choice",
       "default": "（特産品）",
-      "values": ["（特産品）", "※", "★", "なし"],
+      "values": [
+        "（特産品）",
+        "※",
+        "★",
+        "なし"
+      ],
       "label": {
         "ja": "特産品の表示",
         "en": "Local specialty marker"

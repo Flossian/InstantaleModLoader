@@ -101,10 +101,22 @@ def declare(kind, fn, owner="", write=None):
     return before
 
 
+#: `forget(owner)` のときに一緒に呼ぶ片付け。`prices` が自分のぶんを足す。
+#: **登録簿を1つに寄せる代わりの口**で、片付けの入口は `forget` の1本に保つ
+#: （期間と値段で `forget` を2回呼ばせない）。
+_CLEANERS = []
+
+
+def on_forget(fn):
+    """`forget(owner)` で一緒に呼ぶ片付けを足す。`fn(owner, write=None)` は名前の一覧を返す。"""
+    if callable(fn) and fn not in _CLEANERS:
+        _CLEANERS.append(fn)
+
+
 def forget(owner, write=None):
     """その持ち主が置いたものを全部外す（MOD を外したとき）。外した種類を返す。
 
-    日数送りの望み（`claim_days`）も一緒に外す。
+    日数送りの望み（`claim_days`）も、`on_forget` で足された片付けも一緒に外す。
     """
     registry = _registry()
     gone = [kind for kind, (who, _fn) in registry.items() if who == str(owner)]
@@ -112,6 +124,11 @@ def forget(owner, write=None):
         registry.pop(kind, None)
     if _claims().pop(str(owner), None) is not None:
         gone.append("days")
+    for cleaner in list(_CLEANERS):
+        try:
+            gone.extend(cleaner(str(owner)) or [])
+        except Exception:
+            log_exc("durations: a forget cleaner failed")
     if write and gone:
         write("durations: {!r} no longer decides {}".format(owner, gone))
     return gone

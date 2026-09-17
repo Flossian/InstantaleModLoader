@@ -35,12 +35,18 @@
 
 値段はアイテムの `attributes` にゲーム自身が書いている。
 店が売る品は `買価`、プレイヤーが売る品は `売価`（GAME.md §2.13.2）。
-表示も売買もここを読むので、**既にある鍵の値だけを上書きする**。
-鍵は新設しない:
 
-  * `買価` と `売価` はゲームが持ち主に応じて付け替える。こちらが足すと
-    「店でもないのに売価が付いた品」ができる
-  * セーブに残る項目なので、並びも増減もゲームの形のままにしておく
+**この mod は値段を書かない。式を1枚置くだけ。**
+書くのはローダの関所（`instantale_modloader.prices`）で、
+`base_for(item)` が返した買価・売価を、関所が地点ごとに書く。
+
+値段を書く対象は8つ、書く地点はその中に10あり、**書く時点が地点ごとに違う**
+（画面の2対象＝3地点は描く前なので `orig` の前、残り6対象＝7地点は後）。
+包みの勝敗は適用順ではなく `orig` の前に書くか後に書くかで決まるので、
+値段を触る mod が別々に包むと、相手がどちらの層に居ても半分の地点で負ける
+（TECH.md §3.3.1。実測は VERIFICATION.md §3.19.1 で、
+`405_regional_economy` の地域倍率が買値だけ9回とも消えていた）。
+8箇所を関所が1枚だけ包むことで、式を置く側も倍率を乗せる側も層を考えなくてよい。
 
 ## 決済とのずれ
 
@@ -58,16 +64,6 @@
 「一度も売買していない」が区別できず、
 決済がこちらの値段を読んでいるのかを後から確かめようがない。
 
-## 値付けの後に他の MOD を通す
-
-値段を書く地点が10箇所あり、**書く時点が地点ごとに違う**（画面の2箇所は
-描く前なので `orig` の前、残りは `orig` の後）。
-包みの勝敗は適用順ではなく `orig` の前に書くか後に書くかで決まるので、
-値段へ何かを乗せたい MOD は、外側に居ても内側に居ても半分の地点で負ける。
-そこで**書いた直後に呼ぶ口**を1つ持たせてある（`POST_ATTR`）。
-こちらがどこで書いても、同じ呼吸で後処理が乗る。
-実例は `405_regional_economy` の地域倍率。
-
 ## 触らないもの
 
 `get_item_base_price` は包まない。
@@ -78,9 +74,10 @@
 売買の値段はこの mod、内部の段階計算はゲーム自身、と分ける。
 """
 
+import os
 import sys
 
-from instantale_modloader import ui
+from instantale_modloader import prices, ui
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
 #      `tools/check_mods.py` が AST で突き合わせる）------------------------
@@ -192,41 +189,13 @@ STAT_KEY_BY_TYPE = {
 
 # `attributes` のうち値段の鍵。
 # ゲームは持ち主に応じてどちらか一方だけを書く。
-BUY_KEY = "買価"
-SELL_KEY = "売価"
-PRICE_KEYS = (BUY_KEY, SELL_KEY)
+BUY_KEY = prices.BUY
+SELL_KEY = prices.SELL
 
 SKILL_KEY = "スキル"
 
 # 再注入しても1組だけ持つ（件数と、決済のずれの記録）。
 STORE_ATTR = "_instantale_item_price_store"
-
-# ---- 値付けの後に割り込む口（他の MOD 向け）-------------------------------
-#
-# `sys` に置いた**素のリスト**で、中身は `(名乗り, 関数)` の組。
-# この MOD が値段を書いた**直後**に、登録された順で呼ぶ。
-#
-#     fn(item, attributes, why)      # 戻り値は見ない。例外は握って記録する
-#
-# 使う側（`405_regional_economy` がこの形）:
-#
-#     hooks = getattr(sys, "_instantale_item_price_post", None)
-#     if not isinstance(hooks, list):
-#         hooks = []
-#         setattr(sys, "_instantale_item_price_post", hooks)
-#     hooks[:] = [e for e in hooks if e[0] != 私の名乗り]   # 再注入で重ねない
-#     hooks.append((私の名乗り, fn))
-#
-# **なぜ包み直しではなくこの形なのか。** この MOD は10箇所で値段を書くが、
-# 書く時点が地点ごとに違う ― 画面の2箇所（`toggle_twin_inventory_window` /
-# `ItemDetailBox.update_content`）は描く前なので `orig` の**前**、残りは
-# `orig` の**後**。包みの勝敗は適用順ではなく「`orig` の前に書くか後に書くか」で
-# 決まるので、相手がどちらの層に居ても必ず半分の地点で負ける
-# （実測: 地域倍率が `shop_owner` / `normalize_shop_inventory_prices` で
-# 9回とも消えていた。VERIFICATION.md §3.19）。
-# ここを通せば、こちらがどこで書いても同じ呼吸で後処理が乗る。
-POST_ATTR = "_instantale_item_price_post"
-
 
 def _num(value):
     """数として読めれば float、読めなければ None（文字列で入ることがある）。"""
@@ -252,25 +221,9 @@ def _round_nice(price):
     return price
 
 
-def read_item(item):
-    """`Item` インスタンスからもセーブの辞書からも、同じ形で読む。
-
-    セーブを直に読む場面（検査・別 mod）でも同じ関数を通せるようにしてある。
-    """
-    if isinstance(item, dict):
-        attributes = item.get("attributes")
-
-        def field(name):
-            return item.get(name)
-    else:
-        attributes = getattr(item, "attributes", None)
-
-        def field(name):
-            return getattr(item, name, None)
-
-    if not isinstance(attributes, dict):
-        attributes = {}
-    return field, attributes
+#: `Item` インスタンスからもセーブの辞書からも同じ形で読む（ローダの語彙）。
+#: 決済の突き合わせ（`price_on_show` / `name_of`）がこれを通る。
+read_item = prices.read_item
 
 
 def apply(ctx):
@@ -282,7 +235,7 @@ def apply(ctx):
     # 注入し直すと `label not in False` で TypeError になり、
     # 決済の検算だけが黙って死ぬ（`safe=True` なので画面には出ない）。
     # 手での注入し直しはこのプロジェクトの通常の操作なので、実際に踏む。
-    blanks = {"logged": 0, "repriced": 0, "reconciled": 0, "skipped": 0,
+    blanks = {"logged": 0, "reconciled": 0, "skipped": 0,
               "gold_before": None, "settled": set()}
     store = getattr(sys, STORE_ATTR, None)
     if not isinstance(store, dict):
@@ -306,28 +259,6 @@ def apply(ctx):
         elif store["logged"] == LOG_LIMIT + 1:
             write("... 以降は件数だけ数える（LOG_LIMIT={}）".format(LOG_LIMIT))
 
-    # 値段の後に割り込む口（宣言は POST_ATTR の説明を参照）。
-    # **リストは相手が先に作っていることがある**（適用順はどちらが先とも限らない）
-    # ので、無ければ作る・在ればそれを使う、で揃える。
-    post_hooks = getattr(sys, POST_ATTR, None)
-    if not isinstance(post_hooks, list):
-        post_hooks = []
-        setattr(sys, POST_ATTR, post_hooks)
-
-    def run_post(item, attributes, why):
-        """値段を書いた直後に、登録された後処理を順に通す。
-
-        壊れた後処理でこちらの値付けまで巻き添えにしない。
-        1つが投げても残りは通し、記録だけ残す（`safe=True` と同じ考え方）。
-        """
-        if not post_hooks:
-            return
-        for entry in list(post_hooks):
-            try:
-                entry[1](item, attributes, why)
-            except Exception:
-                ctx.log_exc("item price: post hook {!r} failed".format(
-                    entry[0] if isinstance(entry, tuple) and entry else entry))
 
     # 表は apply() の中で組む。
     # 設定はモジュールのグローバルへ書き込まれるので、
@@ -387,124 +318,33 @@ def apply(ctx):
         price = min(max(price, float(MIN_PRICE)), float(MAX_PRICE))
         return _round_nice(price), axis
 
-    def reprice(item, why):
-        """既にある値段の鍵だけを付け直す。鍵は新設しない。
+    def base_for(item):
+        """買価と売価を組む。**組めなければ None**（ゲームの額が軸になる）。
 
-        戻り値は「実際に書き換えたか」。
-        同じ額なら書かない。
-        売買画面は同じ品を何度も通るので、変わったときだけ数えたい。
+        書くのはローダの関所（`prices.install`）で、ここは式だけを返す。
+        値段を書く地点は10あり、書く時点が地点ごとに `orig` の前後で
+        混ざっているので、書く側を1枚に寄せないと乗る側が必ず半分負ける
+        （TECH.md §3.3.1。実測は VERIFICATION.md §3.19.1）。
         """
-        _field, attributes = read_item(item)
-        keys = [key for key in PRICE_KEYS if key in attributes]
-        if not keys:
-            return False
-
         price, axis = base_price(item)
         if price is None:
             store["skipped"] += 1
             note("skip {} ({})".format(name_of(item), axis))
-            # 値段を組めなかった品でも後処理は通す。
-            # 素の値段のまま残る品にも、相手の倍率は乗ってよい。
-            run_post(item, attributes, why)
-            return False
-
-        changed = False
-        for key in keys:
-            if key == BUY_KEY:
-                new = price
-            else:
-                new = _round_nice(min(max(price * float(SELL_RATE),
-                                          float(MIN_PRICE)), float(MAX_PRICE)))
-            old = attributes.get(key)
-            if _num(old) == float(new):
-                continue
-            attributes[key] = new
-            changed = True
-            note("{} {} {}: {} -> {}  [{}]".format(
-                why, key, name_of(item), old, new, axis))
-        if changed:
-            store["repriced"] += 1
-        # **書かなかったときも通す。**
-        # 相手が「まだ乗せていない倍率」を持っていることがあり
-        # （その土地のプロフィールが後から出来る）、
-        # こちらが書いた回だけ呼ぶと、値段が同じ品にいつまでも乗らない。
-        run_post(item, attributes, why)
-        return changed
-
-    def reprice_inventory(obtainer, why):
-        """持ち物ひとまとまりを付け直す。持ち物が引けなければ何もしない。"""
-        inventory = getattr(obtainer, "inventory", None)
-        if isinstance(inventory, dict):
-            items = list(inventory.values())
-        elif isinstance(inventory, (list, tuple)):
-            items = list(inventory)
-        else:
-            return 0
-        return sum(1 for item in items if reprice(item, why))
+            return None
+        sell = _round_nice(min(max(price * float(SELL_RATE), float(MIN_PRICE)),
+                               float(MAX_PRICE)))
+        return {prices.BUY: price, prices.SELL: sell, "axis": axis}
 
     # ---- 値段が書かれる経路 -----------------------------------------------
-    # どの経路で書くかは版によって違いうるので、書きうる場所を全部通す。
-    # `reprice` は同じ額なら何もしないので、重ねて通っても害が無い。
-
-    @ctx.wrap("__main__:InstantaleApp.set_shop_price_for_owner", safe=True)
-    def price_for_owner(orig, self, item_instance=None, *args, **kwargs):
-        result = orig(self, item_instance, *args, **kwargs)
-        reprice(item_instance, "shop_owner")
-        return result
-
-    @ctx.wrap("__main__:InstantaleApp.set_shop_price_for_player", safe=True)
-    def price_for_player(orig, self, item_instance=None, *args, **kwargs):
-        result = orig(self, item_instance, *args, **kwargs)
-        reprice(item_instance, "shop_player")
-        return result
-
-    @ctx.wrap("__main__:InstantaleApp.normalize_shop_inventory_prices", safe=True)
-    def normalize_prices(orig, self, shop_obtainer=None, player_obtainer=None,
-                         *args, **kwargs):
-        result = orig(self, shop_obtainer, player_obtainer, *args, **kwargs)
-        reprice_inventory(shop_obtainer, "normalize/shop")
-        reprice_inventory(player_obtainer, "normalize/player")
-        return result
-
-    @ctx.wrap("__main__:InstantaleApp.generate_item_from_item_data", safe=True)
-    def generated_from_data(orig, self, *args, **kwargs):
-        result = orig(self, *args, **kwargs)
-        reprice(result, "generated")
-        return result
-
-    @ctx.wrap("__main__:InstantaleApp.generate_item_from_dict", safe=True)
-    def generated_from_dict(orig, self, *args, **kwargs):
-        result = orig(self, *args, **kwargs)
-        reprice(result, "generated/dict")
-        return result
-
-    @ctx.wrap("__main__:InstantaleApp.generate_item_from_ready_made_data",
-              safe=True, required=False)
-    def generated_ready_made(orig, self, *args, **kwargs):
-        result = orig(self, *args, **kwargs)
-        reprice(result, "generated/ready_made")
-        return result
-
-    # ---- 既にセーブに在る品 -----------------------------------------------
-    # 上の経路は「これから作られる品」と「ゲームが値付けし直す品」しか通らない。
-    # 古いセーブの持ち物は元の値段のまま残るので、画面に出た時点で付け直す。
-
-    if REPRICE_ON_SIGHT:
-        @ctx.wrap("__main__:InstantaleApp.toggle_twin_inventory_window", safe=True)
-        def twin_window(orig, self, left_inventory_obtainer=None,
-                        right_inventory_obtainer=None, left_label_text=None,
-                        situation=None, *args, **kwargs):
-            # 描く前に直す（描画は `attributes` をそのまま読む）。
-            reprice_inventory(left_inventory_obtainer, "window/left")
-            reprice_inventory(right_inventory_obtainer, "window/right")
-            return orig(self, left_inventory_obtainer, right_inventory_obtainer,
-                        left_label_text, situation, *args, **kwargs)
-
-        @ctx.wrap("scripts.hud.new_hud:ItemDetailBox.update_content", safe=True)
-        def detail_box(orig, self, item=None, *args, **kwargs):
-            reprice(getattr(item, "item_instance", None) or item, "detail")
-            return orig(self, item, *args, **kwargs)
-
+    # 8箇所を包むのはローダの関所。ここは式を1枚置くだけで、
+    # 地点ごとの `orig` の前後も、乗ってくる他の MOD の段も関所が引き受ける。
+    #
+    # `REPRICE_ON_SIGHT` は画面に出た品を付け直すかどうか。
+    # 包む対象は関所が持つので、**頼む側の性質**として渡す。
+    prices.install(ctx, write)
+    prices.declare_base(os.path.basename(getattr(ctx, "mod_dir", "") or
+                                         "129_balance_item_price"),
+                        base_for, on_sight=bool(REPRICE_ON_SIGHT), write=note)
     # ---- 決済とのずれ -----------------------------------------------------
 
     # 所持金の読み方はローダの語彙（`309_` / `902_` と共有）。
@@ -583,12 +423,13 @@ def apply(ctx):
             settle(self, item_instance, SELL_KEY, +1, "sell", shown)
             return result
 
-    write("---- installed  scale={:g} sell_rate={:g} type={} rarity={} post={} ----"
-          .format(float(PRICE_SCALE), float(SELL_RATE),
-                  {key: round(value, 3) for key, value in sorted(type_mult.items())},
-                  {key: round(value, 3) for key, value in sorted(rarity_mult.items())},
-                  [entry[0] for entry in post_hooks
-                   if isinstance(entry, tuple) and entry] or "-"))
+    base_owner, layers = prices.item_price_sources()
+    write("---- installed  scale={:g} sell_rate={:g} type={} rarity={} "
+          "layers={} ----".format(
+              float(PRICE_SCALE), float(SELL_RATE),
+              {key: round(value, 3) for key, value in sorted(type_mult.items())},
+              {key: round(value, 3) for key, value in sorted(rarity_mult.items())},
+              layers or "-"))
     ctx.log("item price: installed (scale={:g}, sell_rate={:g}, on_sight={}, "
             "reconcile={})".format(float(PRICE_SCALE), float(SELL_RATE),
                                    bool(REPRICE_ON_SIGHT), bool(RECONCILE_GOLD)))

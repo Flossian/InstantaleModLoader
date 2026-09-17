@@ -58,17 +58,20 @@ stateファイルは読まない。読み書きは全部ワーカーの中で行
 
 例外は `profile_for()` の1回だけで、そこは意図して同期に読む（理由はその場に書いた）。
 
-価格印はゲーム側のスレッドと保存の経路の両方から触るので `price_lock` で守る。
-**保存後の戻し直しは控えた素の値から組み直す。現在値を軸にしない。**
-軸にすると、保存の実体が走っている間に売買画面が先に掛け直していた場合、
-その上へもう一度掛かって倍率が積み上がる（並行テストで 100 が 168万まで伸びた）。
+## 値段
 
-## セーブ
+**このMODは値段を書かない。** ローダの値段の関所（`prices`。TECH.md §5.9）へ
+段を1枚置き、「この品にいくつ掛けるか」だけを答える。129が置く式の上に乗る。
 
-倍率は実物の `attributes` へ書くので、保存の直前に外して保存の後に戻す。
-別の街の倍率を持ち歩かないよう、エリアが変わった時点で
-**素の値段へ戻してから**印を捨てる（印だけ消すと戻す手掛かりが消え、
-その値段がセーブへ入る）。
+書く側を関所1枚に寄せてあるのは、値段を書く地点が10あって書く時点が
+`orig` の前後で混ざっており、MODが別々に包むと相手が必ず半分の地点で負けるため
+（TECH.md §3.3.1。実測は VERIFICATION.md §3.19.1）。
+
+段は `temporary` で置くので、**保存の直前は関所が段を外した額を書き、保存後に戻す**。
+エリアが変わったら `prices.refresh()` を押して組み直す。
+最終額はいつでも式から組み直せるので、このMODは自分が書いた額を控えない
+（控えていた頃は、保存中に売買画面が先に掛け直すと倍率が積み上がった
+ ― 並行テストで 100 が 168万まで伸びた。組み直す形にしてその経路ごと無くなった）。
 """
 
 import json
@@ -79,7 +82,7 @@ import sys
 import threading
 import typing
 
-from instantale_modloader import frames, llm, ui
+from instantale_modloader import frames, llm, prices, ui
 from instantale_modloader.state import (world_filename, world_key,
                                         world_key_of_dict)
 
@@ -128,10 +131,16 @@ ITEM_DESCRIPTION_CHARS = 1200
 # （GAME.md §2.13）。地域の需給は交易の値段の話なので、
 # 売り買いをしない窓では触らない。
 TRADE_SITUATION = "shop"
-BUY_KEY = "買価"
-SELL_KEY = "売価"
-PRICE_KEYS = (BUY_KEY, SELL_KEY)
-FIXED_SCORE_MARKS = {1: "↑↑", 2: "↑", 4: "↓", 5: "↓↓"}
+# プレイヤー側の表示は**需要過多が上向き**。並ぶのは自分が売る品なので、
+# 「ここで売ると得」が上を向く（提供者の意図。2026-09-17 に確認）。
+# 店主側は `REVERSE_TRADE_MARK` が 6-score で引き直すので、表が対称であれば
+# そのまま逆向きになる。
+FIXED_SCORE_MARKS = {1: "↓↓", 2: "↓", 4: "↑", 5: "↑↑"}
+
+#: 街の規模。ゲームが `areas[*]["size"]` に書く語で、実データ3世界を数えると
+#: **街はどの世界でもちょうど9件**（village/town/city）、残りは全部 `dungeon`。
+#: `connections` の有無とも完全に一致した（街は必ず有り、ダンジョンは必ず空）。
+SETTLEMENT_SIZES = ("village", "town", "city")
 SPECIALTY_MARK_CHOICES = ("（特産品）", "※", "★", "なし")
 VALID_RARITIES = {
     "common", "rare", "magical", "epic", "legendary", "mythic",
@@ -258,15 +267,38 @@ def _active_world_data(app):
     return _active_world_context(app)[1]
 
 
-def _active_world_structure(app):
-    """現在の世界の構造を取得する。"""
-    container = _active_world_data(app)
-    if isinstance(container, dict):
-        world_data = container.get("world_data")
-        structure = _get(world_data, "structure")
-        if structure is not None:
-            return structure
-    return _get(getattr(app, "world", None), "structure")
+def _area_size(app, area_id):
+    """そのエリアの規模。読めなければ None。
+
+    **実行時の `Area.size` は読めない**（`324_` の実機 38/38）ので素データから取る。
+    見る順は、いま遊んでいる世界として選ばれた側 → `save_data_dict` →
+    `world_dict`（`331_facility_investment` の `area_size` と同じ考え方）。
+    """
+    # **先に文字列へ均す。** `not area_id` だけで見ると、開始地点の街である
+    # id 0 が整数で来た回に空と同じ扱いで落ちる。
+    key = "" if area_id is None else str(area_id).strip()
+    if app is None or not key:
+        return None
+    containers = []
+    _name, active, _source = _active_world_context(app)
+    if isinstance(active, dict):
+        containers.append(active)
+    for attr in ("save_data_dict", "world_dict"):
+        found = getattr(app, attr, None)
+        if isinstance(found, dict) and not any(found is c for c in containers):
+            containers.append(found)
+    for container in containers:
+        areas = container.get("areas")
+        if not isinstance(areas, dict):
+            continue
+        entry = areas.get(key)
+        if entry is None:
+            entry = next((v for k, v in areas.items() if str(k) == key), None)
+        if isinstance(entry, dict):
+            size = entry.get("size")
+            if isinstance(size, str) and size.strip():
+                return size.strip().lower()
+    return None
 
 
 def _short(value, limit):
@@ -468,19 +500,13 @@ def _store():
         # ゲームの1回の品揃え生成につき、特産品生成を1度だけ確保する。
         "specialty_lock": threading.RLock(),
         "stock_batch": None,
-        # 価格印はゲーム側のスレッド（売買画面・品物欄）と
-        # 保存の経路の両方から触る。辞書が途中の形で読まれないようにする。
-        "price_lock": threading.RLock(),
-        "price_marks": {},
         # 商品分類は永続化しない。売買画面の一括検品が完了した後、
         # 同じ商品内容を再利用するための実行中だけの控え。
+        # ゲーム側のスレッド（売買画面・品物欄）と、関所が段を聞きに来る経路の
+        # 両方から触るので、辞書が途中の形で読まれないようにする。
         "classification_lock": threading.RLock(),
         "classifications": {},
         "classification_pending": set(),
-        # 保存中の印。`save_game` が内側で保存の実体を呼ぶので、
-        # 二重に戻さないための門番。読んで書くまでを割り込ませない。
-        "save_lock": threading.Lock(),
-        "save_in_progress": False,
         # world_dict と現在セーブの名前が一時的に食い違ったことを、
         # 同じロード中に何度も書かないための控え。
         "world_identity_mismatches": set(),
@@ -488,8 +514,6 @@ def _store():
     for key, value in defaults.items():
         if key not in found:
             found[key] = value
-    if not isinstance(found.get("price_marks"), dict):
-        found["price_marks"] = {}
     if not isinstance(found.get("profile_events"), dict):
         found["profile_events"] = {}
     if not isinstance(found.get("classifications"), dict):
@@ -710,8 +734,9 @@ def _item_snapshot(item):
     item_id = _short(_get(item, "id", ""), 160)
     if not name and not description:
         return None
+    # **内部IDは digest に入れない。** `item_key` が別に前置しており、
+    # ここへ入れると内容が同じ品でも digest が変わって控えが引けなくなる。
     identity = {
-        "id": item_id,
         "name": name,
         "description": description,
         "item_type": item_type,
@@ -721,10 +746,16 @@ def _item_snapshot(item):
     digest = hashlib.sha256(json.dumps(
         identity, ensure_ascii=False, sort_keys=True).encode("utf-8")
     ).hexdigest()[:24]
+    # `item_key` は**1回の問い合わせの中で品を見分けるため**の鍵なので、
+    # 内部IDを含める（同じ内容の品が2つ並ぶことがある）。
+    # `content_key` は**控えを引くため**の鍵で、内部IDを含めない。
+    # 買うとゲームが同じ内容の品を棚へ作り直す（GAME.md §2.13.1）ので、
+    # 内部IDで控えると来店のたびに聞き直すことになる。
     item_key = ("id:{}:{}".format(item_id, digest) if item_id
                 else "content:{}".format(digest))
     return {
         "item_key": item_key,
+        "content_key": "content:{}".format(digest),
         "item_id": item_id,
         "name": name,
         "description": description,
@@ -1172,6 +1203,40 @@ def _save_profile(ctx, state, write, snapshot, profile):
     return True
 
 
+def _save_classifications(ctx, state, write, world, area_id, fresh):
+    """検品結果を世界の控えへ書き足す。**起動をまたいで残す。**
+
+    残さないとプロセスごとに店を1回ずつ聞き直すことになる。
+    地域のプロフィールは街ごとに固定なので、同じ内容の品の答えは変わらない。
+    """
+    if not fresh:
+        return False
+    with state["data_lock"]:
+        bucket = _load_bucket(ctx, state, world, write)
+        record = _record_of(bucket, area_id)
+        if not isinstance(record, dict):
+            return False
+        saved = dict(_saved_classifications(record))
+        before = len(saved)
+        saved.update(fresh)
+        if len(saved) == before:
+            return False
+        areas = dict(bucket.get("areas", {}))
+        merged = dict(record)
+        merged["classifications"] = saved
+        areas[area_id] = merged
+        updated = {"world_key": bucket.get("world_key", world), "areas": areas}
+        if not ctx.write_json(_state_path(ctx, world), updated, indent=1):
+            write("could not save the item classifications for {!r} / {!r}"
+                  .format(world, area_id))
+            return False
+        state["buckets"][world] = updated
+        write("classifications saved: {} new, {} known in total"
+              " world={!r} area={!r}".format(
+                  len(saved) - before, len(saved), world, area_id))
+    return True
+
+
 def _inventory_items(obtainer):
     """売買UIへ渡される在庫実体を配列で取り出す。"""
     inventory = _get(obtainer, "inventory")
@@ -1185,6 +1250,31 @@ def _inventory_items(obtainer):
     if isinstance(inner, (list, tuple)):
         return list(inner)
     return []
+
+
+def _shop_owner(app):
+    """いま居る施設の主。引けなければ None。
+
+    引き方は `312_shop_restock` と同じ（ロード直後の `location` は id の文字列
+    なので引き当て直す）。MOD どうしは import しないので、同じ形をここにも置く。
+    """
+    if app in (None, frames.MISSING):
+        return None
+    location = _get(getattr(app, "player", None), "location", None)
+    if location in (None, frames.MISSING):
+        return None
+    facility = location
+    if isinstance(location, str):
+        found = ui.find_facility(ui.current_area(app), location)
+        facility = found[0] if isinstance(found, (tuple, list)) and found else None
+    if facility is None:
+        return None
+    owner = getattr(facility, "owner", None)
+    if owner is None:
+        return None
+    if isinstance(owner, (str, int)):
+        return ui.character_of(app, str(owner))
+    return owner
 
 
 def _inventory_dict(obtainer):
@@ -1435,67 +1525,70 @@ def _classification_price_score(classification):
     return _classification_display_score(classification)
 
 
-def _classification_for_item(state, scope, item):
-    """実行中だけ保持する一括分類から、商品1個の結果を引く。"""
+def _classification_for_item(state, scope, record, item):
+    """商品1個の検品結果。内容の鍵で引くので、持ち主が移っても同じ答え。"""
     if scope is None or item is None:
         return None
     snapshot = _item_snapshot(item)
     if snapshot is None:
         return None
-    key = (scope, snapshot.get("item_key"))
-    with state["classification_lock"]:
-        result = state["classifications"].get(key)
-        if isinstance(result, dict):
-            return result
-        # 同一内容・内部IDなしの重複品は一括入力時に #2 以降を付ける。
-        # 詳細欄には元の内容キーで引き、同じ分類を表示する。
-        prefix = snapshot.get("item_key", "") + "#"
-        for (saved_scope, saved_key), candidate in state[
-                "classifications"].items():
-            if (saved_scope == scope and isinstance(saved_key, str) and
-                    saved_key.startswith(prefix) and isinstance(candidate, dict)):
-                return candidate
-    return None
+    return _known_classification(state, scope, record,
+                                 snapshot.get("content_key"))
 
 
 def _remember_classifications(state, scope, snapshots, classifications):
-    """一括結果を価格・ホバー表示用の実行時控えへ入れる。"""
+    """一括結果を控えへ入れる。**内容の鍵で持つ**（内部IDでは持たない）。
+
+    入れた `{内容の鍵: 分類}` を返す。呼び側がそれを state へ書き足す。
+    """
+    fresh = {}
     if scope is None or not isinstance(classifications, list):
-        return
+        return fresh
     with state["classification_lock"]:
         for snapshot, classification in zip(snapshots, classifications):
             if not isinstance(snapshot, dict) or not isinstance(classification, dict):
                 continue
-            key = snapshot.get("item_key")
+            key = snapshot.get("content_key") or snapshot.get("item_key")
             if isinstance(key, str) and key:
                 state["classifications"][(scope, key)] = classification
+                fresh[key] = classification
+    return fresh
 
 
-def _classifications_complete(state, scope, snapshots):
-    """この売買画面の商品一式を既に検品済みか。"""
-    if scope is None or not snapshots:
-        return False
+def _saved_classifications(record):
+    """state に残っている検品結果 `{内容の鍵: 分類}`。無ければ空。"""
+    saved = record.get("classifications") if isinstance(record, dict) else None
+    return saved if isinstance(saved, dict) else {}
+
+
+def _known_classification(state, scope, record, content_key):
+    """この品の分類。実行中の控え → state の控え の順に引く。"""
+    if not content_key:
+        return None
     with state["classification_lock"]:
-        return all(
-            (scope, snapshot.get("item_key")) in state["classifications"]
-            for snapshot in snapshots if isinstance(snapshot, dict)
-        )
+        found = state["classifications"].get((scope, content_key))
+    if isinstance(found, dict):
+        return found
+    found = _saved_classifications(record).get(content_key)
+    return found if isinstance(found, dict) else None
 
 
-def _price_number(value):
-    """買価・売価を正の数として読む。"""
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        number = float(value)
-    elif isinstance(value, str):
-        try:
-            number = float(value.strip())
-        except ValueError:
-            return None
-    else:
-        return None
-    return number if number >= 0 else None
+def _unclassified(state, scope, record, snapshots):
+    """まだ検品していない品だけを返す。**聞くのはこれだけ。**
+
+    全部まとめて聞き直すと、1品増えただけで店中の品を聞くことになる。
+    """
+    if scope is None:
+        return []
+    out = []
+    for snapshot in snapshots:
+        if not isinstance(snapshot, dict):
+            continue
+        if _known_classification(
+                state, scope, record, snapshot.get("content_key")) is None:
+            out.append(snapshot)
+    return out
+
 
 
 def _regional_multiplier(score):
@@ -1520,172 +1613,10 @@ def _regional_multiplier(score):
     return 1.0
 
 
-def _apply_one_price(state, note, scope, item, attributes, name, score, why):
-    """現物1個の買価・売価へ、地域倍率を一度だけ掛ける。
-
-    **129が素の値段へ戻した直後に呼ばれる前提**で書く（`after` で129の
-    外側に居るので、129が値付けし直すたびにこちらが掛け直す）。
-    現在値が前回こちらが書いた額と同じなら控えた素の値を軸にし、
-    違えば129が付け直した今の値を軸にする。どちらでも二重には掛からない。
-
-    価格印は保存の経路からも触るので `price_lock` の中で読み書きする。
-    """
-    multiplier = _regional_multiplier(score)
-    if multiplier == 1.0 or item is None:
-        return 0
-    changed = 0
-    lines = []
-    with state["price_lock"]:
-        for price_key in PRICE_KEYS:
-            if price_key not in attributes:
-                continue
-            current = _price_number(attributes.get(price_key))
-            if current is None:
-                continue
-            mark_key = (id(item), price_key)
-            previous = state["price_marks"].get(mark_key)
-            previous_applied = (_price_number(previous.get("applied"))
-                                if isinstance(previous, dict) else None)
-            if (previous_applied is not None and
-                    abs(current - previous_applied) < 0.0001):
-                base = _price_number(previous.get("base"))
-                if base is None:
-                    base = current
-            else:
-                base = current
-            new_price = int(round(base * multiplier))
-            if new_price < 0:
-                continue
-            if abs(current - float(new_price)) >= 0.0001:
-                attributes[price_key] = new_price
-                changed += 1
-                lines.append("regional {} {} score={} {} x{:g}: {:g} -> {}".format(
-                    price_key, name, score, why, multiplier, current, new_price))
-            state["price_marks"][mark_key] = {
-                "scope": scope,
-                # 価格印はプロセス内だけの情報。save_game前に戻すため、
-                # 現物への参照も保持する（JSONへは書き出さない）。
-                "_runtime_item": item,
-                "base": base,
-                "multiplier": multiplier,
-                "applied": new_price,
-            }
-    # 記録は錠を放してから。ログの書き込みで保存側を待たせない。
-    if note is not None:
-        for line in lines:
-            note(line)
-    return changed
 
 
-def _overlay_item(state, note, scope, record, item, classification=None):
-    """1品にこの土地の倍率を掛ける。書き換えた値段の数を返す。"""
-    if item is None:
-        return 0
-    attributes = _get(item, "attributes", {})
-    if not isinstance(attributes, dict):
-        return 0
-    name = _short(_get(item, "name", ""), 240)
-    detail = _short(attributes.get("item_detail"), 120).casefold()
-    if classification is None:
-        score, why = _score_for_item(record, detail, name)
-    else:
-        score = _classification_price_score(classification)
-        if score is None:
-            return 0
-        why = "llm:{}".format(
-            _classification_name(classification.get("classification")))
-    return _apply_one_price(state, note, scope, item, attributes,
-                            name, score, why)
 
 
-def _restore_mark(mark_key, mark):
-    """印1つを素の値段へ戻す。戻せたら True。"""
-    if not isinstance(mark, dict):
-        return False
-    item = mark.get("_runtime_item")
-    price_key = (mark_key[1] if isinstance(mark_key, tuple) and
-                 len(mark_key) == 2 else None)
-    if item is None or price_key not in PRICE_KEYS:
-        return False
-    attributes = _get(item, "attributes", {})
-    if not isinstance(attributes, dict):
-        return False
-    current = _price_number(attributes.get(price_key))
-    applied = _price_number(mark.get("applied"))
-    base = _price_number(mark.get("base"))
-    if (current is None or applied is None or base is None or
-            abs(current - applied) >= 0.0001):
-        return False
-    attributes[price_key] = int(round(base))
-    return True
-
-
-def _restore_price_overlays_for_save(state):
-    """405の一時価格だけをsave_gameの直前に元の値へ戻す。"""
-    restored = []
-    marks = state.get("price_marks", {})
-    if not isinstance(marks, dict):
-        return restored
-    with state["price_lock"]:
-        for mark_key, mark in list(marks.items()):
-            if _restore_mark(mark_key, mark):
-                restored.append((mark_key, mark, mark["_runtime_item"],
-                                 mark_key[1], _price_number(mark["multiplier"])))
-    return restored
-
-
-def _reapply_price_overlays_after_save(state, restored):
-    """save_game後に、画面表示用の405価格だけを現物へ戻す。
-
-    **控えた素の値から組み直す。現在値を軸にしない。**
-    軸にすると、保存の実体が走っている間に売買画面や品物欄が
-    先に掛け直していた場合、その上へもう一度掛かって倍率が積み上がる
-    （並行テストで実際に 100 が 168万まで伸びた）。
-
-    保存の間に誰かが値を動かしていたら、こちらは触らずに降りる。
-    次に画面へ出たときに129と405が付け直す。
-    """
-    marks = state.get("price_marks", {})
-    if not isinstance(marks, dict):
-        return
-    with state["price_lock"]:
-        for mark_key, mark, item, price_key, multiplier in restored:
-            attributes = _get(item, "attributes", {})
-            if not isinstance(attributes, dict) or price_key not in attributes:
-                # 所有権移動などで鍵が消えた場合、古い印は破棄する。
-                marks.pop(mark_key, None)
-                continue
-            base = _price_number(mark.get("base"))
-            if base is None or multiplier is None:
-                marks.pop(mark_key, None)
-                continue
-            current = _price_number(attributes.get(price_key))
-            if current is None or abs(current - round(base)) >= 0.5:
-                continue          # 保存中に誰かが動かした。任せる
-            new_price = int(round(base * multiplier))
-            attributes[price_key] = new_price
-            mark["applied"] = new_price
-
-
-def _drop_foreign_marks(state, scope):
-    """いまの取引地点以外の印を、素の値段へ戻してから捨てる。
-
-    別の街の倍率が乗ったままの品を持ち歩かせない。
-    **戻さずに印だけ消してはいけない**。戻す手掛かりが消え、
-    その街の倍率がセーブへ入る。
-    """
-    marks = state.get("price_marks")
-    if not isinstance(marks, dict):
-        return 0
-    dropped = 0
-    with state["price_lock"]:
-        for mark_key, mark in list(marks.items()):
-            if isinstance(mark, dict) and mark.get("scope") == scope:
-                continue
-            _restore_mark(mark_key, mark)
-            marks.pop(mark_key, None)
-            dropped += 1
-    return dropped
 
 
 def apply(ctx):
@@ -1727,18 +1658,25 @@ def apply(ctx):
         if not area_id:
             write("skip: current area has no id")
             return None
-        # 405のプロフィールは世界構造の最上位ノードだけが持つ。
-        # 子ノードは親の保存済み要約を参照し、独自のLLM生成を行わない。
+        # 405のプロフィールは**街**（村・町・都市）だけが持つ。
+        # ダンジョンや小地点は自分の経済を持たず、親の街の要約を使う。
+        #
+        # **世界構造（`World.structure`）では判定できない。**
+        # 構造は世界生成時の `World` にしか無く、保存される `world_data` の5項目
+        # （GAME.md §2.27）に入らない。実セーブを復号して確かめた3世界とも
+        # `world_data` の鍵は name / overview / structure_description / story /
+        # days_elapsed だけで、`structure` は無い。
+        # 構造を条件にしていた版は、ロードした世界で `world structure unavailable`
+        # が15回以上出て成功0だった（実機 2026-09-17）。
         current_app = app if app is not None else ui.find_app()
-        structure = (_active_world_structure(current_app)
-                     if current_app is not None else None)
-        if structure is None:
-            write("world structure unavailable: no regional profile generated")
+        size = _area_size(current_app, area_id)
+        if size is None:
+            write("area size unavailable: no regional profile generated:"
+                  " world={!r} area={!r}".format(world, area_id))
             return None
-        if _structure_parent(
-                structure, snapshot.get("area_name"), area_id) is not None:
-            write("child area: no regional profile generated: world={!r} area={!r}"
-                  .format(world, area_id))
+        if size not in SETTLEMENT_SIZES:
+            write("child area ({}): no regional profile generated:"
+                  " world={!r} area={!r}".format(size, world, area_id))
             return None
         snapshot = dict(snapshot)
         snapshot["world_key"] = world
@@ -1840,10 +1778,11 @@ def apply(ctx):
             target = app if app is not None else ui.find_app()
             try:
                 note_world_identity(target)
-                dropped = _drop_foreign_marks(state, _scope_of(target))
-                if dropped:
-                    write("left an area: restored and dropped {} price mark(s)"
-                          .format(dropped))
+                # 街が変わると段の答えが変わる。関所を押して組み直す
+                # （前の街の倍率が乗ったまま持ち歩かせない）。
+                changed = prices.refresh("area change")
+                if changed:
+                    write("left an area: rebuilt {} price(s)".format(changed))
                 snapshot = _snapshot(target)
             except Exception:
                 ctx.log_exc("regional economy: area snapshot failed")
@@ -1853,24 +1792,6 @@ def apply(ctx):
                 return
             enqueue(snapshot, reason, app=target)
         schedule(capture, delay=delay)
-
-    def save_without_regional_prices(orig, call_args, call_kwargs):
-        """保存処理の実体へ405の一時価格を渡さない。"""
-        with state["save_lock"]:
-            if state.get("save_in_progress"):
-                # `save_game` の内側から保存の実体が呼ばれた場合。
-                # 既に外してあるので二重に戻さない。
-                return orig(*call_args, **call_kwargs)
-            state["save_in_progress"] = True
-        restored = []
-        try:
-            restored = _restore_price_overlays_for_save(state)
-            return orig(*call_args, **call_kwargs)
-        finally:
-            try:
-                _reapply_price_overlays_after_save(state, restored)
-            finally:
-                state["save_in_progress"] = False
 
     def profile_for(app):
         """いまの取引地点と、そのプロフィール。無ければ `(scope, None)`。
@@ -1915,7 +1836,10 @@ def apply(ctx):
             return None, None
         note_world_identity(app)
         world = str(_short(_active_world_key(app), 240) or "_")
-        structure = (_active_world_structure(app) or world_structure)
+        # 構造はゲームが `create_settlement_detail` の引数で渡してくる。
+        # ここは世界生成の最中なので、保存されない構造がそのまま手に入る
+        # （素データから引き直す必要も、引ける当ても無い）。
+        structure = world_structure
         target_id = None
         current_area = ui.current_area(app)
         if current_area is not None:
@@ -2052,122 +1976,150 @@ def apply(ctx):
             write("WARN specialty native result: expected 1 added item, got {}"
                   .format(len(added)))
 
-    def _classification_for_snapshot(scope, snapshot):
-        key = snapshot.get("item_key") if isinstance(snapshot, dict) else None
-        if not isinstance(key, str):
-            return None
-        with state["classification_lock"]:
-            result = state["classifications"].get((scope, key))
-        return result if isinstance(result, dict) else None
+    def _classification_for_snapshot(scope, record, snapshot):
+        key = snapshot.get("content_key") if isinstance(snapshot, dict) else None
+        return _known_classification(state, scope, record, key)
 
     def _apply_trade_classifications(scope, record, snapshots):
-        """一括結果を左右の商品へ価格として反映する。"""
-        changed = count = 0
-        for snapshot in snapshots:
-            if not isinstance(snapshot, dict):
-                continue
-            item = snapshot.get("_runtime_item")
-            classification = _classification_for_snapshot(scope, snapshot)
-            if item is None or classification is None:
-                continue
-            count += 1
-            changed += _overlay_item(
-                state, note, scope, record, item, classification=classification)
-        write("regional overlay: {} price(s) on {} item(s)"
+        r"""検品が済んだので、関所を押して既に触った品を組み直す。
+
+        ここで 0 件でも困らない。**この直後に売買画面を開く**ので、
+        関所がその地点で全品を組み直し、そこで段が乗る。
+        押しているのは、前にこの街で触った品が控えに残っている場合のため。
+        乗ったかどうかは `out\item_price.log` の `+` の付いた行で見る。
+        """
+        count = sum(1 for snapshot in snapshots
+                    if isinstance(snapshot, dict)
+                    and _classification_for_snapshot(
+                        scope, record, snapshot) is not None)
+        changed = prices.refresh("classified")
+        write("classified {} item(s); rebuilt {} price(s) already in hand"
               " world={!r} area={!r}".format(
-                  changed, count, scope[0], scope[1]))
+                  count, changed, scope[0], scope[1]))
 
-    def _open_trade_after_classification(orig, app, left, right, label_text,
-                                         situation, extra_args, extra_kwargs,
-                                         snapshot, scope, record, snapshots,
-                                         pending_key):
-        """LLM検品が済んだ後、メインスレッドでだけ売買画面を開く。"""
-        def worker():
-            classifications = None
-            try:
-                if not ctx.superseded():
-                    classifications = _ask_classification(
-                        ctx, write, snapshot, record, snapshots)
-            except Exception:
-                ctx.log_exc("regional economy: batch classification failed")
+    def classify_shop(manager, blocking=True):
+        """店と手持ちの品をまとめて検品する。
 
-            def finish():
-                opened = False
-                try:
-                    if ctx.superseded():
-                        write("classification cancelled: newer injection is active")
-                        return
-                    if _scope_of(app) != scope:
-                        write("classification cancelled: area changed while waiting")
-                        return
-                    if isinstance(classifications, list):
-                        _remember_classifications(
-                            state, scope, snapshots, classifications)
-                        _apply_trade_classifications(scope, record, snapshots)
-                        write("classification batch: {} item(s) returned in one JSON"
-                              .format(len(classifications)))
-                    else:
-                        write("classification failed; opening trade window without overlay")
-                    screen.busy_off(app, restore=False)
-                    orig(app, left, right, label_text, situation,
-                         *extra_args, **extra_kwargs)
-                    opened = True
-                except Exception:
-                    ctx.log_exc("regional economy: trade window continuation failed")
-                finally:
-                    if not opened:
-                        try:
-                            screen.busy_off(app, restore=False)
-                        except Exception:
-                            pass
-                    with state["classification_lock"]:
-                        state["classification_pending"].discard(pending_key)
+        ここはゲーム自身が LLM を待つワーカースレッド（`execute`）で、
+        `312_shop_restock` の再入荷も同じ場所で待っている。
 
-            schedule(finish, delay=0)
-
-        threading.Thread(
-            target=worker,
-            name="instantale_mod.regional_economy_item_batch",
-            daemon=True,
-        ).start()
-
-    def _hold_trade_for_classification(orig, app, left, right, label_text,
-                                       situation, extra_args, extra_kwargs,
-                                       snapshot, scope, record, snapshots):
-        """同じ商品一式の検品中は、売買画面を開かず二重呼び出しを防ぐ。"""
-        pending_key = (id(app), scope,
-                       tuple(item.get("item_key") for item in snapshots))
+        **売買画面を押さえて後から開く作りはやめた。** 待機表示は下の画面の
+        選択肢を潰すので、潰したまま売買画面を開くと、閉じて戻ったときに
+        選択肢が待機表示のまま残る。`restore=True` でも、開くのを1コマ遅らせても
+        直らなかった（実機 2026-09-17）。ここで済ませれば画面を潰す場面が
+        売買画面と重ならず、後始末はゲーム自身の画面の組み直しに任せられる。
+        """
+        app = _get(manager, "app", None) or ui.find_app()
+        if app in (None, frames.MISSING):
+            return
+        scope, record = profile_for(app)
+        if scope is None or record is None:
+            write("classification skipped: no regional profile for this area yet")
+            return
+        snapshot = _snapshot(app)
+        if snapshot is None:
+            return
+        owner = _shop_owner(app)
+        if blocking and not _inventory_items(owner):
+            # 棚が空＝この後ゲームが品揃えを作る。ここで聞くと手持ちだけを
+            # 聞いて、作られた後にもう一度聞くことになる（1回の来店で2回）。
+            write("classification deferred: the stock has not been built yet")
+            return
+        snapshots = _item_snapshots(owner, _get(app, "player", None))
+        if not snapshots:
+            write("classification skipped: no items to inspect")
+            return
+        wanted = _unclassified(state, scope, record, snapshots)
+        if not wanted:
+            write("classification cached: {} item(s)".format(len(snapshots)))
+            return
+        # **聞くのは未検品のぶんだけ。** 1品増えただけで店中を聞き直さない。
+        write("classification needed: {} of {} item(s)".format(
+            len(wanted), len(snapshots)))
+        snapshots = wanted
+        pending_key = (scope, tuple(item.get("content_key") for item in snapshots))
         with state["classification_lock"]:
             if pending_key in state["classification_pending"]:
-                write("classification already pending; trade window held")
-                return True
+                return
             state["classification_pending"].add(pending_key)
-        try:
-            screen.busy_on(app)
-            write("classification queued: {} item(s); trade window held"
-                  .format(len(snapshots)))
-            _open_trade_after_classification(
-                orig, app, left, right, label_text, situation, extra_args,
-                extra_kwargs, snapshot, scope, record, snapshots, pending_key)
-            return True
-        except Exception:
-            with state["classification_lock"]:
-                state["classification_pending"].discard(pending_key)
-            ctx.log_exc("regional economy: could not hold trade window")
-            return False
+        def run(after=None):
+            try:
+                write("classification queued: {} item(s) ({})".format(
+                    len(snapshots), "before the trade window" if blocking
+                    else "in the background"))
+                classifications = _ask_classification(
+                    ctx, write, snapshot, record, snapshots)
+                if isinstance(classifications, list):
+                    fresh = _remember_classifications(
+                        state, scope, snapshots, classifications)
+                    write("classification batch: {} item(s) returned in one JSON"
+                          .format(len(classifications)))
+                    _save_classifications(ctx, state, write, scope[0],
+                                          scope[1], fresh)
+                else:
+                    write("classification failed;"
+                          " the trade window opens without overlay")
+            except Exception:
+                ctx.log_exc("regional economy: batch classification failed")
+            finally:
+                if after is not None:
+                    try:
+                        after()
+                    except Exception:
+                        ctx.log_exc("regional economy: classification cleanup failed")
+                with state["classification_lock"]:
+                    state["classification_pending"].discard(pending_key)
 
-    @ctx.wrap("__main__:InstantaleApp.save_game",
-              required=False, safe=True)
-    def save_game(orig, self, *args, **kwargs):
-        """ゲームの通常保存を、405の一時価格を戻してから実行する。"""
-        return save_without_regional_prices(
-            orig, (self,) + args, kwargs)
+        if not blocking:
+            # 画面はもう開いている。待機表示は出さず、済んだら値段を組み直す
+            # （関所を押す。`prices.refresh`）。
+            threading.Thread(
+                target=lambda: run(lambda: schedule(
+                    lambda: write("late overlay: rebuilt {} price(s)".format(
+                        prices.refresh("classified late"))), delay=0)),
+                name="instantale_mod.regional_economy_late_batch",
+                daemon=True,
+            ).start()
+            return
 
-    @ctx.wrap("save_world_json:write_obfuscated_json_file",
-              required=False, safe=True)
-    def write_world_save(orig, *args, **kwargs):
-        """保存実体が直接呼ばれる経路でも405の価格を混ぜない。"""
-        return save_without_regional_prices(orig, args, kwargs)
+        screen.busy_on(app)
+        # `restore=False`。この後ゲームが店の画面を組み直すので、
+        # ここで塗ると一瞬だけ古い選択肢が見える（`312_` と同じ形）。
+        run(lambda: screen.busy_off(app, restore=False))
+
+
+    def regional_for(item, key, price):
+        """この土地の需給倍率を1段だけ乗せる。対象外なら None（触らない）。
+
+        **書くのはローダの関所**（`prices.install`）で、ここは「いくつ掛けるか」
+        だけを答える。売買の地点も画面の地点も保存の直前も関所が回すので、
+        値段印も錠も持たない ― 最終額はいつでも式から組み直せる。
+
+        `temporary=True` で置くので、保存の直前にはこの段が外れる
+        （その土地の倍率をセーブへ焼き付けない）。
+        """
+        app = ui.find_app()
+        if app is None:
+            return None
+        scope, record = profile_for(app)
+        if scope is None or record is None:
+            return None
+        # **未検品の品は動かさない。** 名前とジャンルからの推測で先に乗せると、
+        # 検品が済んだ時点で別の倍率へ組み直されて、開いた直後と数秒後で
+        # 値段が変わる（実機 2026-09-17。3817 -> 3053）。
+        classification = _classification_for_item(state, scope, record, item)
+        if classification is None:
+            return None
+        score = _classification_price_score(classification)
+        if score is None:
+            return None
+        multiplier = _regional_multiplier(score)
+        return None if multiplier == 1.0 else price * multiplier
+
+    prices.install(ctx, write)
+    prices.adjust(os.path.basename(getattr(ctx, "mod_dir", "") or
+                                   "405_regional_economy"),
+                  regional_for, temporary=True, write=write)
 
     @ctx.wrap(SETTLEMENT_DETAIL_TARGET, required=False, safe=True)
     def create_settlement_detail(orig, world_overview, world_structure,
@@ -2221,12 +2173,27 @@ def apply(ctx):
         with state["specialty_lock"]:
             previous = state.get("stock_batch")
             state["stock_batch"] = batch
+        # **`orig` の前に検品する。** `orig` の中で売買画面が Clock へ積まれ、
+        # メインスレッドは `execute` が戻る前にそれを走らせうる
+        # （GAME.md §2.13.1）。`finally` に置くと画面が先に開き、
+        # LLM が売買画面の上で走る（実機 2026-09-17）。
+        try:
+            classify_shop(self)
+        except Exception:
+            ctx.log_exc("regional economy: shop classification failed")
         try:
             return orig(self, *args, **kwargs)
         finally:
             with state["specialty_lock"]:
                 if state.get("stock_batch") is batch:
                     state["stock_batch"] = previous
+            # ここで品揃えが作られた回（初めて開く店・312の再入荷）は、
+            # 上の検品の時点で品がまだ無い。画面はもう開いているので待たせず、
+            # 背景で検品して済んだら値段を組み直す。
+            try:
+                classify_shop(self, blocking=False)
+            except Exception:
+                ctx.log_exc("regional economy: late shop classification failed")
 
     @ctx.wrap("__main__:ShoppingStartManagerRemake.generate_item_in_shopping",
               required=False, safe=True)
@@ -2274,23 +2241,13 @@ def apply(ctx):
                     write("no regional profile yet for world={!r} area={!r};"
                           " opening as-is".format(*scope))
                 else:
-                    snapshot = _snapshot(self)
-                    snapshots = (_item_snapshots(
-                        left_inventory_obtainer, right_inventory_obtainer)
-                                 if snapshot is not None else [])
-                    if snapshots and snapshot is not None:
-                        if _classifications_complete(state, scope, snapshots):
-                            _apply_trade_classifications(
-                                scope, record, snapshots)
-                        else:
-                            # LLM待ちは専用ワーカーへ移し、完了まで元の
-                            # toggleを呼ばない。したがって売買画面は出ない。
-                            if _hold_trade_for_classification(
-                                    orig, self, left_inventory_obtainer,
-                                    right_inventory_obtainer, left_label_text,
-                                    situation, args, dict(kwargs),
-                                    snapshot, scope, record, snapshots):
-                                return None
+                    # **画面は押さえない。** 検品は店の開始時に済んでいる
+                    # （`classify_shop`）。まだ済んでいない品は素のまま開き、
+                    # 次にこの店を開いたときに乗る。
+                    snapshots = _item_snapshots(left_inventory_obtainer,
+                                                right_inventory_obtainer)
+                    if snapshots:
+                        _apply_trade_classifications(scope, record, snapshots)
         except Exception:
             ctx.log_exc("regional economy: trade window overlay failed")
         return orig(self, left_inventory_obtainer,
@@ -2319,19 +2276,13 @@ def apply(ctx):
                     detail = (_short(attributes.get("item_detail"), 120).casefold()
                               if isinstance(attributes, dict) else "")
                     classification = _classification_for_item(
-                        state, scope, target)
+                        state, scope, record, target)
                     if classification is not None:
                         score = _classification_display_score(classification)
                     elif context == "own":
                         score, _why = _score_for_item(
                             record, detail,
                             _short(_get(target, "name", ""), 240))
-                    if context == "trade":
-                        # 一括検品済みの商品のみ掛け直す。未検品のまま
-                        # 推測で価格を変えると、表示と決済の根拠がずれる。
-                        if classification is not None:
-                            _overlay_item(state, None, scope, record, target,
-                                          classification=classification)
         except Exception:
             ctx.log_exc("regional economy: item detail overlay failed")
         result = orig(self, item, *args, **kwargs)
