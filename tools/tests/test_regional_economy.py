@@ -208,19 +208,92 @@ def main():
            "価格" in mod.configured_score_mark(5)))
     mod.MARK_STYLE = mod.MARK_STYLE_PERCENT
 
-    print("[1品のスコア]")
-    record = {"shortage_goods": ["鉄鉱石"], "surplus_goods": ["小麦"],
-              "genre_scores": {"plant": 4}}
-    score, why = mod._score_for_item(record, "gem", "鉄鉱石")
-    check("不足の名指しは5", score == 5 and why.startswith("name/shortage"), (score, why))
-    score, why = mod._score_for_item(record, "gem", "小麦")
-    check("過剰の名指しは1", score == 1 and why.startswith("name/surplus"), (score, why))
-    score, why = mod._score_for_item(record, "plant", "名も無き草")
-    check("名指しに無ければジャンル", score == 4 and why == "genre:plant", (score, why))
-    score, why = mod._score_for_item(record, "unknown_detail", "名も無き草")
-    check("どちらにも無ければ3", score == 3 and why == "default", (score, why))
-    score, _why = mod._score_for_item({}, "plant", "小麦")
-    check("プロフィールが空でも3に倒れる", score == 3, score)
+    print("[プロフィールの中身]")
+    # ジャンル別スコアは作るのをやめた。値付けは品ごとの検品が決めるので、
+    # 誰も読まないものを毎回LLMに作らせていた。
+    check("ジャンル表は残っていない", not hasattr(mod, "GENRES"))
+    check("ジャンル別スコアを組む関数も無い", not hasattr(mod, "_genre_scores"))
+    check("推測で値付けする関数も無い", not hasattr(mod, "_score_for_item"))
+    prompt = mod._build_messages({
+        "world_key": "W", "area_id": "1", "area_name": "街",
+        "world_overview": "概要", "area_overview": "説明"})[0]["content"]
+    check("頼み文にジャンルを求める文が無い", "genre" not in prompt)
+    check("要約と品名は引き続き求める",
+          all(word in prompt for word in ("regional_economy_summary",
+                                          "major_products", "surplus_goods",
+                                          "shortage_goods")))
+
+    print("[揃ったプロフィールかの判定]")
+    # ここでジャンル表を要求すると、新しく作った控えが毎回「未完成」になって
+    # 作り直し続ける。
+    check("要約があれば揃っている",
+          mod._record_ready({"regional_economy_summary": "鉱山の街"}))
+    check("要約が空なら揃っていない",
+          not mod._record_ready({"regional_economy_summary": "  "}))
+    check("ジャンル表だけでは揃っていない",
+          not mod._record_ready({"genre_scores": {"ore": 2}}))
+    check("辞書でなければ揃っていない", not mod._record_ready(None))
+
+    print("[検品のプロンプトと突き合わせ]")
+    # 固定の指示だけを system に置く。街や棚が変わっても前半が変わらない形。
+    snap = {"world_key": "W", "area_id": "5", "area_name": "オーラム",
+            "world_overview": "概要", "area_overview": "説明"}
+    econ = {"regional_economy_summary": "鉱山の町。",
+            "major_industries": ["採掘"], "major_products": ["魔導鋼"],
+            "surplus_goods": ["鉄鉱石"], "shortage_goods": ["小麦"]}
+    goods = [{"item_key": "k%d" % i, "content_key": "c%d" % i,
+              "item_id": "i%d" % i, "name": name, "description": "",
+              "item_type": "", "item_detail": "", "rarity": "common"}
+             for i, name in enumerate(("鉄鉱石", "小麦", "謎の石"))]
+    msgs = mod._build_classification_messages(snap, econ, goods)
+    head = next(x["content"] for x in msgs if x["role"] == "system")
+    body = next(x["content"] for x in msgs if x["role"] == "user")
+    check("system は街や棚の中身を含まない",
+          all(word not in head for word in ("オーラム", "鉄鉱石", "鉱山の町")), head[-80:])
+    check("街も棚も user にある",
+          all(word in body for word in ("オーラム", "鉄鉱石", "鉱山の町")))
+    other = mod._build_classification_messages(
+        {"world_key": "W2", "area_id": "9", "area_name": "別の街",
+         "world_overview": "", "area_overview": ""}, econ, goods)
+    check("街が変わっても system は同じ",
+          next(x["content"] for x in other if x["role"] == "system") == head)
+    check("内部の鍵は渡さない", "item_key" not in body and "item_id" not in body,
+          body[:120])
+    check("商品には連番が振られる", '"n": 1' in body and '"n": 3' in body)
+
+    print("[応答の突き合わせ]")
+
+    def classify(rows):
+        got = mod._normalize_batch({"items": rows}, goods, econ)
+        return [(c["item_name"], c["classification"], c["score"]) for c in got]
+
+    ordered = [
+        {"n": 1, "classification": "surplus_good", "score": 1,
+         "matched_goods": ["鉄鉱石"]},
+        {"n": 2, "classification": "shortage_good", "score": 5,
+         "matched_goods": ["小麦"]},
+        {"n": 3, "classification": "unclassified", "score": 3,
+         "matched_goods": []}]
+    want = [("鉄鉱石", "surplus_good", 1), ("小麦", "shortage_good", 5),
+            ("謎の石", "unclassified", 3)]
+    check("順番どおりなら入力順に並ぶ", classify(ordered) == want, classify(ordered))
+    check("順番が崩れても連番で拾う",
+          classify(list(reversed(ordered))) == want,
+          classify(list(reversed(ordered))))
+    check("連番が文字列でも拾う",
+          classify([{"n": "2", "classification": "shortage_good", "score": 5,
+                     "matched_goods": ["小麦"]}])[1]
+          == ("小麦", "shortage_good", 5))
+    check("連番が無ければ名前で拾う",
+          classify([{"item_name": "小麦", "classification": "shortage_good",
+                     "score": 5, "matched_goods": ["小麦"]}])[1]
+          == ("小麦", "shortage_good", 5))
+    check("返って来なかった品は未分類",
+          classify([])[0] == ("鉄鉱石", "unclassified", 3))
+    # `matched_goods` は飾りではない。照合が空なら分類を捨てる。
+    check("照合が空なら分類を採らない",
+          classify([{"n": 1, "classification": "surplus_good", "score": 1}])[0]
+          == ("鉄鉱石", "unclassified", 3))
 
     print("[検品の控えは内容で引く]")
 
