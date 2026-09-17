@@ -90,36 +90,64 @@
       "type": "bool",
       "default": true,
       "label": {
-        "ja": "市場変動マークを表示",
-        "en": "Show market fluctuation markers"
+        "ja": "市場変動の表示",
+        "en": "Show market fluctuation"
       },
       "note": {
-        "ja": "エリアの市場変動を、アイテム名の末尾にマークとして表示します。規定：ON\n向きはプレイヤー側の見え方で、上向きが「この街で売ると得」です。\n↑↑/↓↓:そのエリアでの強い変動。需要過多/供給過多\n↑/↓:そのエリアでの弱い変動。需要あり/供給あり",
-        "en": "Shows area market fluctuation markers after item names. Default: ON\nThe direction is from the player's side: up means it sells well here.\n↑↑/↓↓: strong fluctuation, excess demand/supply\n↑/↓: weak fluctuation, demand/supply"
+        "ja": "この街での値段が素の値段からどれだけ動いているかを、アイテム名の末尾へ出します。規定：ON\n向きは常に値段の向きで、左右で反転しません。得か損かは色が表します。",
+        "en": "Shows how far the price moved from its normal value in this town, after the item name. Default: ON. The direction is always the price direction and is never flipped between panes; the color shows whether it is good for you."
+      }
+    },
+    "MARK_STYLE": {
+      "type": "choice",
+      "default": "割合（価格+20%）",
+      "values": [
+        "割合（価格+20%）",
+        "矢印（↑↑ ↓↓）"
+      ],
+      "label": {
+        "ja": "市場変動の形",
+        "en": "Market fluctuation style"
+      },
+      "note": {
+        "ja": "規定：割合",
+        "en": "Default: the percentage form."
       }
     },
     "REVERSE_TRADE_MARK": {
       "type": "bool",
       "default": true,
       "label": {
-        "ja": "売買時に表示を逆転",
-        "en": "Reverse markers during trade"
+        "ja": "店の品は色を逆にする",
+        "en": "Invert the color for the shop's goods"
       },
       "note": {
-        "ja": "そのエリアでの売買時に、ショップ側の表記を逆転させます。\n上の末尾を表示がfalseの場合は何も起こりません。規定：ON\n（例：プレイヤーが「↓↓」のアイテムを売却した際、ショップ側では「↑↑」と表記される）",
-        "en": "Reverses the marker shown on the shop side during trade. If market markers above are OFF, this has no effect. Default: ON."
+        "ja": "値段が上がることの意味は左右で逆です。自分の品なら高く売れて得、店の品なら余計に払うので損。規定：ON\nONだと色は「自分にとって得か損か」を表します。\nOFFにすると、色は値段の向きだけを表します（左右で同じ）。",
+        "en": "A price rise means the opposite on each side: good for your own goods, bad for the shop's. Default: ON, so the color means \"good or bad for you\". Turn it off and the color follows the price direction on both sides."
       }
     },
     "SCORE_MARK_3": {
       "type": "bool",
-      "default": true,
+      "default": false,
       "label": {
-        "ja": "スコア3に「-」を付ける",
-        "en": "Show '-' for score 3"
+        "ja": "変動なしに「-」を付ける",
+        "en": "Show '-' when the price does not move"
       },
       "note": {
-        "ja": "等倍の商品名末尾へ「-」を表示するスイッチ。",
-        "en": "Toggle the neutral '-' marker after the item name."
+        "ja": "素の値段のままの商品名末尾へ「-」を表示するスイッチ。規定：OFF\n切っていると、値段が動いた品だけに表示が付きます。\nONにすると「変動なし」と「まだ検品していない」を見分けられます。",
+        "en": "Toggle the neutral '-' shown after items whose price does not move. Default: OFF, so only items whose price changed are marked. Turn it on to tell \"no change\" from \"not inspected yet\"."
+      }
+    },
+    "COLOR_SCORE_MARKS": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "市場変動マークに色を付ける",
+        "en": "Color the market fluctuation markers"
+      },
+      "note": {
+        "ja": "自分にとって得になる側を緑、損になる側を赤で表示します。規定：ON\n変動なしの「-」には色を付けません。",
+        "en": "Shows up markers (good for you) in green and down markers in red. Default: ON. The neutral '-' is left uncolored."
       }
     },
     "SPECIALTY_MARK": {

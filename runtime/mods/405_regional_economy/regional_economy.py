@@ -99,11 +99,15 @@ WEAK_FLUCTUATION_MULTIPLIER = 1.2
 # 1/2/4/5 は 1=↑↑、2=↑、4=↓、5=↓↓ とする。
 SHOW_SCORE_MARKS = True
 REVERSE_TRADE_MARK = True
-SCORE_MARK_3 = True
+# 変動なしの品に何も出さない。動いた品だけが目に入るほうが読みやすい。
+# 切っていると「変動なし」と「まだ検品していない」が画面上で同じに見えるので、
+# 確かめたいときは ON に戻す。
+SCORE_MARK_3 = False
+COLOR_SCORE_MARKS = True
+MARK_STYLE = "割合（価格+20%）"
 SPECIALTY_MARK = "（特産品）"
 # 安全のための内部値。プレイヤー設定には公開しない。
 LLM_TIMEOUT = 120
-
 
 LOG_BASENAME = "regional_economy.log"
 # stateの保存先。他のMODに揃えてMODの主題の名前にする
@@ -131,16 +135,34 @@ ITEM_DESCRIPTION_CHARS = 1200
 # （GAME.md §2.13）。地域の需給は交易の値段の話なので、
 # 売り買いをしない窓では触らない。
 TRADE_SITUATION = "shop"
-# プレイヤー側の表示は**需要過多が上向き**。並ぶのは自分が売る品なので、
-# 「ここで売ると得」が上を向く（提供者の意図。2026-09-17 に確認）。
-# 店主側は `REVERSE_TRADE_MARK` が 6-score で引き直すので、表が対称であれば
-# そのまま逆向きになる。
-FIXED_SCORE_MARKS = {1: "↓↓", 2: "↓", 4: "↑", 5: "↑↑"}
+# 表示は**素の値段から何%動くか**。矢印をやめたのは、上下が「値段の向き」とも
+# 「得か損か」とも読めるうえ、店主側で反転するので左右で意味が変わったため
+# （2026-09-17）。割合なら数字は常に値段の向きで、反転しない。
+# 得か損かは色だけが表す。
 
 #: 街の規模。ゲームが `areas[*]["size"]` に書く語で、実データ3世界を数えると
 #: **街はどの世界でもちょうど9件**（village/town/city）、残りは全部 `dungeon`。
 #: `connections` の有無とも完全に一致した（街は必ず有り、ダンジョンは必ず空）。
 SETTLEMENT_SIZES = ("village", "town", "city")
+
+#: 需給マークの色。**上向き＝自分に得**なので緑、下向き＝損なので赤。
+#: 暗い画面に載るので、どちらも明度を上げた色にしてある。
+#: 等倍（`-`）には付けない ― 得でも損でもないため。
+GAIN_MARK_COLOR = "#7fdf7f"
+LOSS_MARK_COLOR = "#ff8c8c"
+
+#: 変動の書き方。`{:+d}` に割合が入る。何の割合かを書いておく。
+PERCENT_FORMAT = "（価格{:+d}%）"
+
+#: 表示の形。**`mod.json` の選択肢と同じ綴りにすること**（`check_mods` が見る）。
+#: 選ぶ画面で形が分かるよう、綴りそのものに例を入れてある。
+MARK_STYLE_PERCENT = "割合（価格+20%）"
+MARK_STYLE_ARROW = "矢印（↑↑ ↓↓）"
+
+#: 矢印で出すときの表。**割合と同じく「値段の向き」**にしてある。
+#: 得か損かは割合のときと同じく色だけが表すので、左右で引き直さない
+#: （向きと色で別々のことを言うと、読み方が2通りに割れる）。
+ARROW_MARKS = {1: "↓↓", 2: "↓", 4: "↑", 5: "↑↑"}
 SPECIALTY_MARK_CHOICES = ("（特産品）", "※", "★", "なし")
 VALID_RARITIES = {
     "common", "rare", "magical", "epic", "legendary", "mythic",
@@ -213,13 +235,11 @@ MIN_GENRE_SCORES = 8
 
 _FULLWIDTH_DIGITS = str.maketrans("１２３４５", "12345")
 
-
 def _get(value, name, default=None):
     """属性と辞書の両方から値を読む。"""
     if isinstance(value, dict):
         return value.get(name, default)
     return getattr(value, name, default)
-
 
 def _active_world_context(app):
     """現在遊んでいる世界の鍵と、同じ世界のデータ源を返す。
@@ -1591,6 +1611,70 @@ def _unclassified(state, scope, record, snapshots):
 
 
 
+def _score_percent(score):
+    """そのスコアで値段が何%動くかの文字列。等倍なら空。
+
+    倍率そのものから作るので、設定（強い変動 / 弱い変動）を変えれば
+    表示もついてくる。既定なら 5=+50% / 4=+20% / 2=-17% / 1=-33%。
+    """
+    multiplier = _regional_multiplier(score)
+    percent = int(round((multiplier - 1.0) * 100))
+    # **何の%かを表示自体に書く。** 品名の横に `+20%` だけが出ても、
+    # 値段の話なのか能力値の話なのか読み取れない（2026-09-17）。
+    # 説明欄に値段だけのラベルは無く（`109_` の実測で name / attributes / desc の
+    # 3枚）、値段は `attributes` の文へ混ざるので、数字の隣には置けない。
+    return PERCENT_FORMAT.format(percent) if percent else ""
+
+
+def configured_score_mark(score):
+    """そのスコアの表示。設定により `（価格+50%）` か `↑↑`。変動なしは `-` か空。
+
+    **左右で反転しない。** どちらの形でもいつも「この街での値段の向き」で、
+    自分にとって得か損かは色が表す。
+    """
+    if not bool(globals().get("SHOW_SCORE_MARKS", True)):
+        return ""
+    # 綴りに例が入っているので、頭の語だけで見分ける
+    # （例の書き方を変えても、保存済みの設定がそのまま効く）。
+    if "矢印" in str(globals().get("MARK_STYLE", "")):
+        mark = ARROW_MARKS.get(score, "") if _score_percent(score) else ""
+    else:
+        mark = _score_percent(score)
+    if not mark:
+        return "-" if bool(globals().get("SCORE_MARK_3", False)) else ""
+    return mark
+
+def _mark_rises(mark):
+    """その表示が値上がりを指すなら True、値下がりなら False、それ以外は None。
+
+    形（割合か矢印か）を問わずここで見分ける。変動なしの `-` は None。
+    """
+    if not mark:
+        return None
+    if mark.startswith("↑"):
+        return True
+    if mark.startswith("↓"):
+        return False
+    if "%" not in mark:
+        return None
+    return "+" in mark
+
+
+def colored_mark(mark, trade_owner=False):
+    """割合を色付きの markup へ包む。色を使わない設定ならそのまま返す。
+
+    **値段が上がることの意味は左右で逆。** 店の品なら余計に払うので損、
+    自分の品なら高く売れるので得。だから色は品がどちら側にあるかで決める。
+    `REVERSE_TRADE_MARK` を切ると、色は値段の向きだけを表す（左右で同じ）。
+    """
+    rises = _mark_rises(mark)
+    if rises is None or not bool(globals().get("COLOR_SCORE_MARKS", True)):
+        return mark
+    flip = trade_owner and bool(globals().get("REVERSE_TRADE_MARK", True))
+    gains = (not rises) if flip else rises
+    return "[color={}]{}[/color]".format(
+        GAIN_MARK_COLOR if gains else LOSS_MARK_COLOR, mark)
+
 def _regional_multiplier(score):
     """需給スコアを、方向込みの一段の倍率へ変換する。
 
@@ -1859,40 +1943,37 @@ def apply(ctx):
             return None, None
         return context, (world, parent_id, settlement_name)
 
-    def configured_score_mark(score, trade_owner=False):
-        """スコアに応じた印を返す。設定により店主側なら反転する。"""
-        if not bool(globals().get("SHOW_SCORE_MARKS", True)):
-            return ""
-        if score == 3:
-            return "-" if bool(globals().get("SCORE_MARK_3", True)) else ""
-        if score not in FIXED_SCORE_MARKS:
-            return ""
-        reverse = (trade_owner and
-                   bool(globals().get("REVERSE_TRADE_MARK", True)))
-        display_score = (6 - score if reverse else score)
-        if display_score not in FIXED_SCORE_MARKS:
-            return ""
-        # 表示/非表示の設定は商品の本来のスコアに紐付け、
-        # 店主側では記号だけを反転する。
-        return FIXED_SCORE_MARKS[display_score]
-
     def clear_item_markers(box):
         """箱の名前ラベルから、スコアや特産品印を消す。"""
         label = frames.attr(box, "name_label", None)
         if label in (None, frames.MISSING):
             return
-        previous = frames.attr(label, "_instantale_regional_suffix", "")
+        written = frames.attr(label, "_instantale_regional_text", "")
+        plain = frames.attr(label, "_instantale_regional_plain", "")
         current = frames.text_of(label)
-        if (isinstance(previous, str) and previous and
-                isinstance(current, str) and current.endswith(previous)):
+        try:
+            # **素の文字へ戻してから markup を落とす。**
+            # タグの付いた文字列を残したまま markup だけ落とすと、
+            # ゲームが塗り直すまで `[color=...]` がそのまま画面に出る
+            # （`118_batch_message_render` が実機で踏んだ）。
+            if (isinstance(written, str) and written and
+                    current == written and isinstance(plain, str)):
+                label.text = plain
+            elif isinstance(current, str) and isinstance(plain, str) and plain:
+                # ゲームが塗り直していたら触らない。印だけ畳む。
+                pass
+            was = frames.attr(label, "_instantale_regional_markup", None)
+            if was is not None and was is not frames.MISSING:
+                label.markup = bool(was)
+        except Exception:
+            ctx.log_exc("regional economy: cannot clear the item marker")
+        for attr in ("_instantale_regional_text", "_instantale_regional_plain",
+                     "_instantale_regional_markup"):
             try:
-                label.text = current[:-len(previous)]
+                setattr(label, attr, "" if attr.endswith("text")
+                        or attr.endswith("plain") else None)
             except Exception:
                 pass
-        try:
-            setattr(label, "_instantale_regional_suffix", "")
-        except Exception:
-            pass
 
     def paint_item_markers(box, item_widget, target, record, score,
                            classification=None):
@@ -1900,7 +1981,7 @@ def apply(ctx):
         if label in (None, frames.MISSING):
             return
         trade_owner = _trade_owner_side(item_widget, ui.find_app())
-        score_text = configured_score_mark(score, trade_owner=trade_owner)
+        score_text = configured_score_mark(score)
         name = _short(_get(target, "name", ""), 240)
         is_specialty = (_major_product_hit(record, name) or
                         (isinstance(classification, dict) and
@@ -1917,16 +1998,36 @@ def apply(ctx):
             return
         # 別ウィジェットを箱の横へ置かず、ゲーム自身の名前ラベルへ一時連結する。
         # そのため位置・フォント・フォントサイズ・折返しは、元のアイテム名と同じになる。
-        previous = frames.attr(label, "_instantale_regional_suffix", "")
+        written = frames.attr(label, "_instantale_regional_text", "")
+        remembered = frames.attr(label, "_instantale_regional_plain", "")
         current = frames.text_of(label) or name
-        if isinstance(previous, str) and previous and current.endswith(previous):
-            current = current[:-len(previous)]
-        base_name = current.rstrip()
+        if (isinstance(written, str) and written and current == written
+                and isinstance(remembered, str) and remembered):
+            base_name = remembered          # 前回こちらが書いたもの
+        else:
+            base_name = current.rstrip()    # ゲームが塗り直したもの
         if not base_name:
             base_name = name
+        colored = colored_mark(score_text, trade_owner=trade_owner)
+        want_markup = colored != score_text
         try:
-            label.text = base_name + suffix
-            setattr(label, "_instantale_regional_suffix", suffix)
+            if want_markup:
+                from kivy.utils import escape_markup
+                # 品名に `[` が入っていてもタグとして解釈させない。
+                parts = [escape_markup(base_name), colored]
+                if specialty_text:
+                    parts.append(escape_markup(specialty_text))
+                text = " ".join(parts)
+                if frames.attr(label, "_instantale_regional_markup", None) in (
+                        None, frames.MISSING):
+                    setattr(label, "_instantale_regional_markup",
+                            bool(frames.attr(label, "markup", False)))
+                label.markup = True
+            else:
+                text = base_name + suffix
+            label.text = text
+            setattr(label, "_instantale_regional_text", text)
+            setattr(label, "_instantale_regional_plain", base_name)
             # 属性を読むことで、ゲーム側の実際の書体・サイズを経由していることを
             # 明示する。値は変更せず、ユーザー環境の設定をそのまま使う。
             frames.text_of(label, "font_name")

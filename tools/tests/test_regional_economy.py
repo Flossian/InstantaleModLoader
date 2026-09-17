@@ -24,6 +24,8 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
+OUT_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir,
+                                        "out", "test"))
 
 if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
@@ -142,19 +144,69 @@ def main():
     check("設定が壊れていたら等倍", mod._regional_multiplier(5) == 1.0)
     mod.STRONG_FLUCTUATION_MULTIPLIER = 1.5
 
-    print("[矢印の向き]")
-    marks = mod.FIXED_SCORE_MARKS
-    check("需要過多が上向き（提供者の意図）", marks[5] == "↑↑" and marks[4] == "↑",
-          marks)
-    check("供給過多が下向き", marks[1] == "↓↓" and marks[2] == "↓", marks)
-    check("3 は表に無い（別のスイッチで `-`）", 3 not in marks, marks)
-    # 店主側は 6-score で引き直す。表が対称でなければ片側だけ空欄になる。
-    check("反転しても必ず印が在る",
-          all((6 - score) in marks for score in marks), sorted(marks))
-    check("反転すると必ず逆を向く",
-          all(marks[6 - score] != marks[score] for score in marks), marks)
-    check("反転を2回かけると戻る",
-          all(marks[6 - (6 - score)] == marks[score] for score in marks))
+    print("[表示は値段の増減（%）]")
+    # 既定は 強い変動 1.5 / 弱い変動 1.2。
+    check("5（需要過多）は +50%", mod._score_percent(5) == "（価格+50%）",
+          mod._score_percent(5))
+    check("4 は +20%", mod._score_percent(4) == "（価格+20%）",
+          mod._score_percent(4))
+    check("3 は空（別のスイッチで `-`）", mod._score_percent(3) == "")
+    check("変動なしには既定で何も出さない",
+          mod.SCORE_MARK_3 is False and mod.configured_score_mark(3) == "",
+          (mod.SCORE_MARK_3, mod.configured_score_mark(3)))
+    mod.SCORE_MARK_3 = True
+    check("スイッチをONにすると `-` が出る", mod.configured_score_mark(3) == "-")
+    mod.SCORE_MARK_3 = False
+    check("動いた品には常に表示が付く",
+          all(mod.configured_score_mark(s) for s in (1, 2, 4, 5)))
+    check("2 は -17%", mod._score_percent(2) == "（価格-17%）",
+          mod._score_percent(2))
+    check("1（供給過多）は -33%", mod._score_percent(1) == "（価格-33%）",
+          mod._score_percent(1))
+    mod.STRONG_FLUCTUATION_MULTIPLIER = 2.0
+    check("設定を変えれば表示も変わる", mod._score_percent(5) == "（価格+100%）",
+          mod._score_percent(5))
+    mod.STRONG_FLUCTUATION_MULTIPLIER = 1.5
+    check("符号が必ず付く",
+          all(("+" in mod._score_percent(s)) or ("-" in mod._score_percent(s))
+              for s in (1, 2, 4, 5)))
+    # 品名の横に数字だけが出ると、何の%か読み取れない。
+    check("何の%かが表示に書いてある",
+          all("価格" in mod._score_percent(s) for s in (1, 2, 4, 5)),
+          mod._score_percent(5))
+
+    print("[割合と矢印を切り替える]")
+    check("既定は割合", mod.MARK_STYLE == mod.MARK_STYLE_PERCENT, mod.MARK_STYLE)
+    # 選ぶ画面で形が分かるよう、選択肢の綴りそのものに例を入れてある。
+    check("選択肢に表示例が入っている",
+          "+20%" in mod.MARK_STYLE_PERCENT and "↑↑" in mod.MARK_STYLE_ARROW,
+          (mod.MARK_STYLE_PERCENT, mod.MARK_STYLE_ARROW))
+    # 例の書き方を変えても保存済みの設定が効くよう、頭の語だけで見分ける。
+    mod.MARK_STYLE = "矢印"
+    check("例が付いていない綴りでも矢印になる",
+          mod.configured_score_mark(5) == "↑↑", mod.configured_score_mark(5))
+    mod.MARK_STYLE = mod.MARK_STYLE_ARROW
+    check("矢印にすると矢印が出る", mod.configured_score_mark(5) == "↑↑",
+          mod.configured_score_mark(5))
+    check("矢印も値段の向き（値上がりが上）",
+          mod.configured_score_mark(5) == "↑↑"
+          and mod.configured_score_mark(1) == "↓↓")
+    check("矢印でも変動なしは既定で出ない", mod.configured_score_mark(3) == "")
+    # 形が変わっても色の意味は同じ。向きで決めているので両方に効く。
+    for style in (mod.MARK_STYLE_PERCENT, mod.MARK_STYLE_ARROW):
+        mod.MARK_STYLE = style
+        up = mod.configured_score_mark(5)
+        down = mod.configured_score_mark(1)
+        check("{}: 自分の品の値上がりは得の色".format(style),
+              mod.GAIN_MARK_COLOR in mod.colored_mark(up))
+        check("{}: 店の品の値上がりは損の色".format(style),
+              mod.LOSS_MARK_COLOR in mod.colored_mark(up, trade_owner=True))
+        check("{}: 自分の品の値下がりは損の色".format(style),
+              mod.LOSS_MARK_COLOR in mod.colored_mark(down))
+    check("知らない綴りなら割合に倒れる",
+          (setattr(mod, "MARK_STYLE", "なにか") or
+           "価格" in mod.configured_score_mark(5)))
+    mod.MARK_STYLE = mod.MARK_STYLE_PERCENT
 
     print("[1品のスコア]")
     record = {"shortage_goods": ["鉄鉱石"], "surplus_goods": ["小麦"],
@@ -228,6 +280,108 @@ def main():
                                     other["content_key"]) == {"score": 1})
     check("それも聞かなくなる",
           mod._unclassified(state, scope, record, [one, two, other]) == [])
+
+    print("[矢印の色]")
+    # 色は**向き**で決める。スコアで決めると、表記が反転する店主側だけ
+    # 色と向きが食い違う（緑の下向き矢印が出る）。
+    import importlib.util as _il
+
+    class Ctx:
+        """色付けに要るぶんだけの偽 ctx。"""
+        generation = 1
+        _mod = "405_regional_economy"
+        mod_dir = MOD_DIR
+
+        def __init__(self):
+            self.hooks = {}
+            self.errors = []
+
+        def out_path(self, *p):
+            path = os.path.join(OUT_DIR, *p)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            return path
+
+        state_path = out_path
+
+        def logger(self, name, **kw):
+            import instantale_modloader as _ml
+            return _ml.ModContext.logger(self, name, **kw)
+
+        def log(self, m, level="INFO"):
+            pass
+
+        def log_exc(self, m):
+            self.errors.append(m)
+
+        def write_json(self, p, d, indent=1):
+            import instantale_modloader as _ml
+            return _ml.write_json(p, d, indent=indent, report=self.log_exc)
+
+        def read_json(self, p, default=None):
+            import instantale_modloader as _ml
+            return _ml.read_json(p, default, report=self.log_exc)
+
+        def write_text(self, p, t):
+            import instantale_modloader as _ml
+            return _ml.write_text(p, t, report=self.log_exc)
+
+        def superseded(self):
+            return False
+
+        def on_ready(self, fn, **kw):
+            return None
+
+        def wrap(self, target, **kw):
+            def deco(fn):
+                self.hooks[target] = fn
+                return fn
+            return deco
+
+    holder = {}
+    original_wrap = Ctx.wrap
+
+    # `colored_mark` は apply() の中にあるので、包みの登録に相乗りして取り出す。
+    def capture_wrap(self, target, **kw):
+        holder.setdefault("ctx", self)
+        return original_wrap(self, target, **kw)
+
+    Ctx.wrap = capture_wrap
+    ctx = Ctx()
+    mod.apply(ctx)
+    check("色付きで当てても例外が出ない", not ctx.errors, ctx.errors)
+
+    check("得と損で別の色", mod.GAIN_MARK_COLOR != mod.LOSS_MARK_COLOR)
+    check("色は6桁のHTML色",
+          all(len(c) == 7 and c.startswith("#")
+              for c in (mod.GAIN_MARK_COLOR, mod.LOSS_MARK_COLOR)),
+          (mod.GAIN_MARK_COLOR, mod.LOSS_MARK_COLOR))
+    check("色の設定がモジュールに在る", hasattr(mod, "COLOR_SCORE_MARKS"))
+
+    # 値段が上がることの意味は左右で逆。自分の品なら高く売れて得、
+    # 店の品なら余計に払うので損。数字は同じで、色だけが分かれる。
+    paint = mod.colored_mark
+    if True:
+        up, down = mod._score_percent(5), mod._score_percent(1)
+        mine_up = paint(up, trade_owner=False)
+        shop_up = paint(up, trade_owner=True)
+        mine_down = paint(down, trade_owner=False)
+        shop_down = paint(down, trade_owner=True)
+        check("数字は左右で同じ",
+              up in mine_up and up in shop_up, (mine_up, shop_up))
+        check("自分の品が値上がり＝得の色", mod.GAIN_MARK_COLOR in mine_up, mine_up)
+        check("店の品が値上がり＝損の色", mod.LOSS_MARK_COLOR in shop_up, shop_up)
+        check("自分の品が値下がり＝損の色", mod.LOSS_MARK_COLOR in mine_down, mine_down)
+        check("店の品が値下がり＝得の色", mod.GAIN_MARK_COLOR in shop_down, shop_down)
+        check("等倍には色を付けない", paint("-", trade_owner=False) == "-")
+
+        mod.REVERSE_TRADE_MARK = False
+        check("反転を切ると色は値段の向きだけを表す",
+              mod.GAIN_MARK_COLOR in paint(up, trade_owner=True))
+        mod.REVERSE_TRADE_MARK = True
+
+        mod.COLOR_SCORE_MARKS = False
+        check("色を切れば素の文字", paint(up, trade_owner=True) == up)
+        mod.COLOR_SCORE_MARKS = True
 
     print("")
     if failures:
