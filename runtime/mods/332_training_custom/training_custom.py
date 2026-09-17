@@ -87,9 +87,10 @@ MARK = "mod_training_custom"
 # 0 にするとタダ。
 TRAINING_PRICE = 300
 
-# 1回の修行の年数（開始時の残り年数。素のゲームは3年）。
-# 活動を1つ選ぶたびにその活動の年数ぶん減り、0 になると卒業する。
-# 増やすと1回の修行で活動を何段も受けられる。
+# 1回の修行で取れる行動の回数（素のゲームは3回ぶん）。
+# 行動を1つ選ぶたびにその行動の消費量（1/2/2/3）ぶん減り、0 になると卒業する。
+# **決めるのは回数で、期間ではない**（暦はベース期間×倍率から決まる）。
+# ゲームはこの数を年で言うので、画面には「あと3年間」と出る。
 COURSE_YEARS = 3
 
 # 1段のベース期間（素のゲームは「1年」＝ 365 日）。
@@ -128,12 +129,14 @@ PHASE_BUTTON = "{name}({length})"
 PERIOD_WORDING = True
 
 # 卒業した施設でもう一度訓練を受けられるようにするか。
+# 卒業した施設でもう一度訓練を受けられるようにするか。
+# **ここだけは既定が素のゲームの値ではない**（本人の指定）。
 # 素のゲームは断る（`十分に学んだ。これ以上ここで得るものはないだろう。` で、
 # 代金も日数も動かない。実測）。
 # 断っている根は施設の**訓練済みの印**（`config["trained"]`。実測）で、
 # ONだとその印をたたむだけ。
 # ゲームは卒業していない施設とまったく同じ道を通る（代金も支度も背景も選択肢もゲームのまま）。
-ALLOW_RETRAIN = False
+ALLOW_RETRAIN = True
 
 # AI に渡す頼み文の年数も実際の期間に直すか。
 # ゲームは頼み文にも年数を焼き込む（`残り訓練年数: 3年` など。実測）ので、
@@ -407,12 +410,15 @@ def budget_text(years):
     return "{}〜{}".format(length_text(shortest), length_text(longest))
 
 
-def reprompt(text, activity=None, phase=False):
+def reprompt(text, activity=None, phase=False, budget=None):
     """AI へ渡る頼み文の年数を実際の期間へ。触らないなら None。
 
     書き換えるのは `PROMPT_RULES` の錨に当たった所だけ。
     `phase` の規則（その段の結果）は段の中でのみ当てる。
     訓練の外では、同じ言い回しが過去の記録として運ばれてくることがある。
+
+    `budget` を渡すと、残りの量を言う錨（`残り訓練年数: 3年` など）を
+    その回数で読み替える（`fresh_budget`。画面の1行と同じ理由）。
     """
     if not LLM_PERIOD_WORDING or not isinstance(text, str) or not text:
         return None
@@ -423,6 +429,8 @@ def reprompt(text, activity=None, phase=False):
 
         def one(match, kind=kind, build=build):
             years = match.group("y")
+            if kind != "phase" and budget is not None:
+                years = budget
             if kind == "phase":
                 days, _factor = phase_days(activity, years=int(years))
                 said = length_text(days) \
@@ -435,19 +443,24 @@ def reprompt(text, activity=None, phase=False):
     return new if new != text else None
 
 
-def reword(text, activity=None, phase=False):
+def reword(text, activity=None, phase=False, budget=None):
     """訓練中の文言の「N年間」を実際の期間へ。触らないなら None。
 
     算用数字（`あと3年間`）は残りの量なので `budget_text`。
     行頭の漢数字（`一年間、ひたすら鍛錬した。`）はその1段の長さで直す。
     これは段の中（`phase=True`）だけ。
     どちらも当たらない文・直した先が同じ文字列になる文は None。
+
+    `budget` を渡すと**最初の1つだけ**その回数で読み替える（`fresh_budget`）。
     """
     if not PERIOD_WORDING or not isinstance(text, str) or not text:
         return None
+    ours = [budget]
 
     def by_count(match):
-        said = budget_text(match.group(1))
+        years = ours[0] if ours[0] is not None else match.group(1)
+        ours[0] = None
+        said = budget_text(years)
         return said if said else match.group(0)
 
     new = COUNT_YEARS_RE.sub(by_count, text)
@@ -887,6 +900,21 @@ def apply(ctx):
     durations.install(ctx, write)
 
     # ============================================================ 文言
+    def fresh_budget():
+        """開始の1行が指すべき回数。読み替えないなら None。
+
+        ゲームは訓練を始めた直後の1行を**差し替える前の回数**で書く
+        （行動回数を 6 にしても `あと3年間` と出て、2行目以降は 6 起点で正しい。
+        VERIFICATION.md §3.64 の #13）。こちらは渡した回数を知っているので、
+        開始の窓の間だけその数で読み替える。
+        段が始まればゲームの数が正しいので、窓の外では何もしない。
+        """
+        if not state.get("start") or state.get("phase") is not None:
+            return None
+        if int(COURSE_YEARS) == GAME_COURSE_YEARS:
+            return None
+        return max(1, int(COURSE_YEARS))
+
     @ctx.wrap("__main__:InstantaleApp.add_text", required=False)
     def add_text(orig, self, context=None, *args, **kwargs):
         """訓練の窓の間だけ、文言の「N年間」を実際の期間に直す。
@@ -899,7 +927,14 @@ def apply(ctx):
             if (window is not None or state["start"]) and isinstance(context, str):
                 refresh_world(self)
                 activity = window.get("activity") if window is not None else None
-                replaced = reword(context, activity, phase=window is not None)
+                budget = fresh_budget()
+                if budget is not None:
+                    said = COUNT_YEARS_RE.search(context)
+                    if said is not None and int(said.group(1)) != budget:
+                        write("text: the start line still said {} year(s); using the "
+                              "{} we set".format(said.group(1), budget))
+                replaced = reword(context, activity, phase=window is not None,
+                                  budget=budget)
                 if replaced is not None and replaced != context:
                     write("text: {!r} -> {!r}".format(context, replaced))
                     return orig(self, replaced, *args, **kwargs)
@@ -930,7 +965,7 @@ def apply(ctx):
         result, changed = [], False
         for content in texts:
             new = reprompt(content, window.get("activity") if window else None,
-                           phase=window is not None)
+                           phase=window is not None, budget=fresh_budget())
             if new is not None:
                 changed = True
                 write("prompt at {}: the years became the real period".format(site))

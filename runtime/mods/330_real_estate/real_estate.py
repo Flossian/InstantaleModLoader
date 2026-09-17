@@ -53,21 +53,48 @@ GAME.md §2.28 の「遊んでいる最中に生まれた施設で売買を選�
 
 控えは2つに分かれる。
 
-    state\real_estate\<世界名>.json    契約（いつまで・いくら・保管庫の中身）
+    state\real_estate\<世界名>.json    契約（いつまで・いくら・管理人・保管庫の中身）
     state\modfacility\<世界名>.json    建物そのもの（素データと置き場所）
+    state\modnpc\<世界名>.json         管理人の実体（会話の記憶・置き場所）
 
 施設 id はローダの名前空間（`mod:330_real_estate:<土地 id>`）で、
 ゲームの採番台帳（`index['facility']`）を進めない。
 土地ごとに1軒なので、土地の id をそのまま鍵にしている。
 
-大家（滞在のあいだ据える主）は `landlord.py`。
+## 建物には管理人（大家）が1人居る
 
-## 保管庫の中身も控えに持つ
+契約1つにつき人物を1人決め、滞在のあいだその人を建物の主にする。
+立場は契約の種類で呼び分ける。賃貸なら大家、建売なら雇われた管理人。
+素性は契約を結んだ1回だけ生成 AI に作らせ、**契約の控えに持つ**（`landlord.py`）。
 
-預けた品の置き場所として NPC を1人作れば、セーブの正規の形で残せる。
-それはやらない（人が1人増え、契約が切れたときに消す責任がこちらに移る）。
-代わりに、預けた品をセーブと同じ形の辞書にして控えへ落とし、
-窓を開くたびに**その窓の間だけ生きる持ち主**へ作り直す。中身は `storage.py`。
+**実体はローダの `modnpc` に預ける**（TECH.md §5.7）。
+名簿に居る人物はゲームの保存が居場所の `.id` を読むので、保存の直前に引き上げる仕掛けが要る。
+それを持っているのはローダのほうで、こちらで同じものを作らない
+（自前で名簿へ足した版33 は、滞在が始まった直後の保存で落ちた。VERIFICATION.md §3.62）。
+
+**「会話する」の一覧には出さない**（`place(listed=False)`）。
+自分の家に他人が住んでいるように見えるため。
+素のゲームの名簿は「居る人は必ずどこかの施設に立っている」形で、居場所を持たない人物は1人も居ない
+（実セーブ7世界・620人。同 §3.62）。`modnpc` の人物はそもそもセーブに入らないので、その形は崩れない。
+
+主を据えるのは、ゲームの宿泊が**主を世界の名簿から引く**ため
+（主のいない施設で起こすと `KeyError: None` で落ちる。同 §3.62）。
+据えたままにしてよく、外すのは契約が切れたときだけ（`seat_keeper` / `drop_keeper`）。
+版31 までは役場の役人を借りていたが、宿の主人を見る MOD がその役人を宿の主人と読んだ（同 §3.62）。
+役人を借りる道は、管理人が組めなかったときの逃げ道として残してある。
+
+契約が切れる・解約する・建物を壊すときは、控えからその人も落とす。
+
+## 保管庫の中身は控えに持つ
+
+保管庫の窓の右に立つのは**その建物の管理人**（窓の見出しもその人の名前）。
+ただし**預けた品はその人の持ち物に住まわせない**。
+`modnpc` は保存のたびに MOD の NPC の持ち物まで控えるので、
+そこへ置くと 330 の控えと二重になり、ロードのたびに品が増える。
+
+預けた品はセーブと同じ形の辞書にして 330 の控えへ落とし、
+窓を開くたびに管理人へ作り直し、窓を閉じるときに控えへ写して手元から外す。
+管理人が引けないときは、その窓の間だけ生きる持ち主を立てる。中身は `storage.py`。
 
 預けた瞬間にプレイヤーの持ち物から品が消えるので、**その場で `save_game` を呼ぶ**。
 呼ばずに落ちると、控えにも持ち物にも同じ品が居る状態でセーブが残る（品が増える）。
@@ -109,6 +136,11 @@ MOD が自分で起こす滞在（`331_facility_investment` の「無料で泊�
 預かった品は、どこの役場でも引き取り料を払えば戻る。
 建売（`owned`）には期限も家賃も無い。
 
+**精算は滞在の外でだけ行う。**
+自分の家の滞在は `VacationStartManager.execute` の中で暦を進めるので、
+その最中に来た期限は見送り（`rent_pending`）、滞在が終わってから1回で払う。
+宿代の前払いと同じ区間で金を動かさないため。
+
 **プレイヤーが建物の中に居るあいだは取り壊さない**（出口の無い施設に立たせないため）。
 その場合は次に外へ出たときに壊す。
 
@@ -118,10 +150,12 @@ MOD が自分で起こす滞在（`331_facility_investment` の「無料で泊�
 押下は `on_button_press` を包んで印（`mod_real_estate`）で横取りする。
 """
 
+import copy
 import datetime
 import sys
 
-from instantale_modloader import durations, frames, llm, modfacility, ui
+from instantale_modloader import (durations, frames, llm, modfacility, modnpc,
+                                  npcs, prices, ui)
 from instantale_modloader.state import (UNKNOWN_WORLD, WorldStore, playthrough_key,
                                         playthrough_key_of_dict)
 
@@ -178,7 +212,7 @@ CRAFT_CLS = "ItemCraftManager"
 
 #: 自分の家の滞在では出さない活動（VERIFICATION.md §3.62）。
 #:
-#: 社交   … 誰と会うかはゲームが決め、自分の家では大家（役場の役人）が相手になる
+#: 社交   … 誰と会うかはゲームが決め、自分の家ではその場面が成り立たなかった
 #: 作成   … 自分の家ではまだ成り立っていない
 #:
 #: 宿屋の側には触らない（落とすのは自分の建物での滞在の最中だけ）。
@@ -214,6 +248,11 @@ STORAGE_SHARED = False
 
 #: 滞在の部屋の等級。ゲームの宿屋と同じ語彙（GAME.md §2.17）。
 STAY_QUALITY = "private_room"
+
+#: 管理人（大家）を誰が作るか。`llm` はゲームと同じ生成 AI に1回だけ聞く
+#: （契約を結ぶときだけ。数秒）。`table` は `landlord.KEEPER_POOL` の12人から選ぶ
+#: （待ち時間ゼロ、名前は使い回し）。
+KEEPER_SOURCE = "llm"
 
 #: 借りた物件の名前。
 RENT_NAME = "借りている家"
@@ -258,6 +297,8 @@ RENT_DESCRIPTION = "借り受けた小さな家。家財は少ないが、鍵は
 OWNED_DESCRIPTION = "買い取った家。狭くはあるが、ここは間違いなく自分の場所だ。"
 
 SIGNED_TEXT = "{area}に{name}を構えた。"
+#: 契約した直後に続けて出す一文（管理人が立てられたときだけ）。
+KEEPER_TEXT = "{keeper}が{role}として鍵を預かっている。"
 RENEWED_TEXT = "{name}の家賃 {price}G を納めた。"
 NOTICE_TEXT = "{name}の契約はあと{days}日で切れる。"
 LAPSED_TEXT = "家賃を払えず、{area}の{name}を引き払うことになった。"
@@ -281,6 +322,11 @@ HOME_SCENE_TEXT = SCENE_HEAD + "滞在先は{name}自身の家「{home}」であ
 SCENE_MARK = "【エリアの構造】"
 SCENE_HERE = "このエリア"
 SCENE_WORDS = ("宿泊", "休暇")
+
+#: 管理人を作らせる頼み文の名前（`output_data\<世界>\<PC>\<この名>\N.json` に残る）。
+KEEPER_MANAGER = "mod_real_estate_keeper"
+#: 待つ秒数。契約を結ぶ操作の中で1回だけ呼ぶ。返らなければ表の人で立てる。
+KEEPER_TIMEOUT = 90
 
 #: ゲームの1ヵ月（`elapse_days(months * 30)`。GAME.md §2.17 の実測）。
 DAYS_PER_MONTH = 30
@@ -366,9 +412,8 @@ def apply(ctx):
                 # 一度書いた WARN の覚え。選択肢が組まれるたびに当て直すので、
                 # 同じ理由をそのたび書くとログが選択肢の回数だけ伸びる。
                 "warned": set(),
-                # 滞在の `execute` の中でこちらが引いた家賃。
-                # 宿代を返すとき、これは返さない（同じ `execute` で暦が進むため）。
-                "rent_charged": 0,
+                # 滞在の最中に来た家賃の期限（滞在が終わってから精算する）。
+                "rent_pending": False,
                 # 滞在のあいだ主を据える前の値（戻すために控える）。
                 "owner_was": None,
                 # 手が空くのを待っているボタンの足し直し（見張りは同時に1つ）。
@@ -377,14 +422,17 @@ def apply(ctx):
         }
         setattr(sys, STATE_STORE_ATTR, store)
     state = store["state"]
+    #: この世代で `modnpc` の層を積んだ管理人。`apply()` ごとに空から始まるので、
+    #: 注入し直せば層は積み直る（登録簿は注入をまたいで生きる。TECH.md §5.7）。
 
     write = ctx.logger(LOG_BASENAME)
     worlds = store["worlds"].rebind(ctx, write)
     screen = ui.Screen(ctx, write, tag="real estate", mark=MARK)
 
-    # 建物そのものはローダが持つ（TECH.md §5.8）。
+    # 建物と管理人はローダが持つ（TECH.md §5.7 / §5.8）。
     # 関所は何本の MOD が呼んでも1つしか立たない。
     modfacility.install(ctx, write=write)
+    modnpc.install(ctx, write=write)
 
     # ------------------------------------------------------------ 補助
     def warn_once(token, text):
@@ -666,6 +714,209 @@ def apply(ctx):
               "{}".format(len(old), [c.get("name") for c in old]))
         return len(old)
 
+    # ------------------------------------------------------------ 管理人（`modnpc`）
+    def keeper_id_for(area_id):
+        """その土地の管理人の id。建物は土地に1軒なので、土地の id をそのまま鍵にする。"""
+        return modnpc.make_id(OWNER, "keeper-{}".format(area_id))
+
+    def keeper_of(record):
+        """契約に控えた管理人。まだ居なければ None。"""
+        found = record.get("keeper") if isinstance(record, dict) else None
+        return found if isinstance(found, dict) and found.get("id") else None
+
+    def world_overview(app):
+        """世界観の文。頼み文に入れる（無ければ空）。"""
+        for attr in ("save_data_dict", "world_dict"):
+            holder = getattr(app, attr, None)
+            data = holder.get("world_data") if isinstance(holder, dict) else None
+            text = data.get("overview") if isinstance(data, dict) else None
+            if isinstance(text, str) and text.strip():
+                return frames.short(text.strip(), 600)
+        return ""
+
+    def keeper_name(app, record, world=None):
+        """管理人の名。控えた名 → 実体の名 → 鍵から引いた表の名。
+
+        控えを先に見るのは、**建て直しても同じ人**にするため。
+        """
+        keeper = keeper_of(record)
+        if keeper is None:
+            return ""
+        stored = keeper.get("name")
+        if stored:
+            return str(stored)
+        return landlord.keeper_choice(keeper.get("id"))[0]
+
+    def keeper_names(app, skip=None):
+        """その世界の管理人の名前。新しい管理人はこれと重ならないように選ぶ。"""
+        found = []
+        for record in contracts_of(current_key(app)):
+            if record is skip:
+                continue
+            keeper = keeper_of(record)
+            if keeper is not None and keeper.get("name"):
+                found.append(str(keeper.get("name")))
+        return found
+
+    def generate_keeper(app, record, keeper_id, taken):
+        """管理人の素データをゲームと同じ生成 AI に作らせる。作れなければ None。
+
+        呼ぶのは**契約を結ぶときの1回だけ**。答えは控えに持つので、
+        建て直しでもロードでも二度と聞かない（同じ人が戻る）。
+        呼べない版・読めない答えのときは None を返し、呼ぶ側が表から選ぶ。
+        """
+        if str(KEEPER_SOURCE).lower() != "llm":
+            return None
+        structure = llm.create_structure(ctx, "HouseKeeper", {
+            "name": (str, ...), "category": (str, ...),
+            "speech_style": (str, ...), "personality": (str, ...),
+            "profile": (str, ...),
+        }, label="real estate")
+        if structure is None:
+            write("keeper: cannot build the structure; using the table")
+            return None
+        system, user = landlord.keeper_prompt(
+            record.get("kind"), record.get("area_name"), record.get("name"),
+            world_overview(app), player_name(app), taken)
+        answer = llm.ask(ctx, KEEPER_MANAGER,
+                         [{"role": "system", "content": system},
+                          {"role": "user", "content": user}],
+                         timeout=KEEPER_TIMEOUT, structure=structure,
+                         label="real estate", write=write)
+        fields = landlord.keeper_fields_from(
+            answer, record.get("kind"), record.get("area_name"), record.get("name"),
+            keeper_id, player=player_name(app), taken=taken)
+        if fields is None:
+            write("keeper: the answer was not usable; using the table")
+            return None
+        write("keeper: {!r}（{}）was made for {!r}".format(
+            fields.get("name"), fields.get("category"), record.get("name")))
+        return fields
+
+    def make_keeper(app, record):
+        """契約を結んだときに管理人を1人決め、控えへ書く。書いた辞書を返す。
+
+        **名前が無いまま登録しない**（生成 AI が使えなければ表の人で組む）。
+        """
+        keeper_id = keeper_id_for(record.get("area"))
+        taken = keeper_names(app, skip=record)
+        fields = generate_keeper(app, record, keeper_id, taken)
+        source = "llm"
+        if fields is None:
+            source = "table"
+            fields = landlord.keeper_fields(
+                record.get("kind"), record.get("area_name"), record.get("name"),
+                keeper_id, player=player_name(app), taken=taken)
+        keeper = {"id": keeper_id,
+                  "name": fields.get("name"),
+                  "role": landlord.role_of(record.get("kind")),
+                  "source": source,
+                  "fields": fields}
+        record["keeper"] = keeper
+        return keeper
+
+    #: この世代で層を積んだ管理人（ロードのたびに積み直す）。
+    keepers_registered = set()
+
+    def keeper_fields_of(record):
+        """控えの素データ（無ければ表の人で組む）。"""
+        keeper = keeper_of(record) or {}
+        made = keeper.get("fields")
+        if isinstance(made, dict) and made.get("name"):
+            return dict(made)
+        return landlord.keeper_fields(record.get("kind"), record.get("area_name"),
+                                      record.get("name"), keeper.get("id"),
+                                      name=keeper.get("name"))
+
+    def register_keeper(app, record):
+        """管理人の層を積む。id を返す（控えに居なければ空）。
+
+        積むのは**この世代のこのロードで1度だけ**。
+        塗り直しのたびに積むとログが毎手流れ、「層が在れば積まない」にすると
+        注入し直しても前の版の層が残る（TECH.md §5.7）。
+        """
+        keeper = keeper_of(record)
+        if keeper is None:
+            return ""
+        keeper_id = str(keeper.get("id"))
+        if keeper_id in keepers_registered:
+            return keeper_id
+        keepers_registered.add(keeper_id)
+        modnpc.register(OWNER, npc_id=keeper_id, fields=keeper_fields_of(record),
+                        write=write)
+        return keeper_id
+
+    def keeper_character(app, record, world=None):
+        """管理人の実体。名簿に居なければ None。"""
+        keeper = keeper_of(record)
+        if keeper is None:
+            return None
+        handle = modnpc.get(app, keeper.get("id"), world=world)
+        return getattr(handle, "character", None) if handle is not None else None
+
+    def seat_keeper(app, record, facility, world=None):
+        """管理人を建物の主に据える。据えた id を返す（駄目なら None）。
+
+        **`modnpc` に預ける。** 名簿に居る人物はゲームの保存が舐めるので
+        （`save_game` が居場所の `.id` を読む。実機で `AttributeError` が出た）、
+        保存の前に名簿から引き上げる仕掛けが要る。それはローダが持っている
+        （`hide` / `restore`。TECH.md §5.7）ので、こちらで同じものを作らない。
+
+        **一覧には出さない**（`listed=False`）。自分の家の `会話する` に大家が並ぶと、
+        他人がそこに住んでいるように見える（本人の指定）。
+        """
+        if facility is None:
+            return None
+        keeper = keeper_of(record)
+        if keeper is None and isinstance(record, dict):
+            # **版31 までに結んだ契約には管理人が居ない。** 決めるのは契約のときだけなので、
+            # そのままでは役人を借り続ける。ここで1人決めて控えへ書く（聞くのは1回だけ）。
+            write("keeper: {!r} was signed before the house had a keeper; "
+                  "choosing one now".format(record.get("name")))
+            keeper = make_keeper(app, record)
+            save(app)
+        if keeper is None:
+            return None
+        keeper_id = register_keeper(app, record)
+        if not keeper_id:
+            return None
+        # **名簿や `owner` を見て飛ばさない。** `spawn` も `place` も何度呼んでもよく、
+        # 名簿に実体だけ在れば `spawn` がそれを拾って記録に繋ぎ直す。
+        # 手前で飛ばすと記録が歯抜けのまま残り、`keeper_character` は空を返し、
+        # `placed` が空なので保存の直前の `unplace` も効かない
+        # （実機 2026-09-17。前の版が名簿へ直に足した実体が残っていた世界で踏んだ）。
+        if modnpc.spawn(app, keeper_id, world=world, write=write) is None:
+            warn_once(("keeper", keeper_id),
+                      "WARN keeper: {} did not spawn; the house has no keeper"
+                      .format(keeper_id))
+            return None
+        modnpc.place(app, keeper_id, str(record.get("area")),
+                     str(record.get("facility")),
+                     owner=True, listed=False, world=world, write=write)
+        state["warned"].discard(("keeper", keeper_id))
+        return keeper_id
+
+    def release_keeper(app):
+        """滞在のあいだの据え置きは `modnpc` が持つので、ここでは何もしない。"""
+        return
+
+    def drop_keeper(app, record):
+        """管理人を世界から降ろし、控えからも落とす。降ろしたら True。
+
+        解約・期限切れ・取り壊しで呼ぶ（MOD が足したものは MOD が片付ける）。
+        """
+        keeper = keeper_of(record)
+        if keeper is None:
+            return False
+        keeper_id = str(keeper.get("id"))
+        modnpc.unregister(OWNER, keeper_id, app=app, write=write)
+        keepers_registered.discard(keeper_id)
+        state["warned"].discard(("keeper", keeper_id))
+        record.pop("keeper", None)
+        write("keeper: {!r} is no longer the keeper of {!r}".format(
+            keeper.get("name"), record.get("name")))
+        return True
+
     # ------------------------------------------------------------ 建物（`modfacility`）
     def facility_id_for(area_id):
         """その土地の物件の id。土地ごとに1軒なので、土地の id をそのまま鍵にする。"""
@@ -808,6 +1059,8 @@ def apply(ctx):
             "facility": facility_id,
             "kind": kind,
             "name": name,
+            # 管理人は建物が立ってから作る（`make_keeper`）。
+            "keeper": None,
             "rent": price if term else 0,
             "term": term,
             "since": day,
@@ -824,13 +1077,20 @@ def apply(ctx):
             write("WARN sign: cannot build in area {!r}".format(area_id))
             screen.say(app, "この土地には建てられる場所が無いようだ。")
             return False
+        # 管理人を決める（生成 AI に聞くのはここ1回だけ）。控えに書くだけで、
+        # ここでは控えに書くだけ。名簿へ載せて主に据えるのは `seat_keeper`。
+        keeper = make_keeper(app, record)
         bucket_of(current_key(app))["contracts"].append(record)
         save(app)
-        ui.add_gold(app, -price, on_error=lambda: write("WARN sign: cannot charge"))
-        write("signed: {} {!r} id={} area={!r} price={} due={}".format(
-            kind, name, facility_id, area_id, price, record["due"]))
-        screen.say(app, ui.rewrite_coins(_fmt(SIGNED_TEXT, area=record["area_name"],
-                                              name=name)))
+        ui.add_gold(app, -price, on_error=lambda msg: write("WARN sign: " + msg))
+        write("signed: {} {!r} id={} area={!r} price={} due={} keeper={}".format(
+            kind, name, facility_id, area_id, price, record["due"],
+            keeper.get("id") if keeper else None))
+        lines = [_fmt(SIGNED_TEXT, area=record["area_name"], name=name)]
+        if keeper:
+            lines.append(_fmt(KEEPER_TEXT, keeper=keeper_name(app, record),
+                              role=landlord.role_of(kind)))
+        screen.say(app, ui.rewrite_coins(" ".join(lines)))
         return True
 
     def drop_contract(app, record):
@@ -841,13 +1101,15 @@ def apply(ctx):
         save(app)
 
     def take_down(app, record, why):
-        """建物を取り壊す。中にプレイヤーが居るときは後回しにして False を返す。
+        """建物を取り壊し、管理人を降ろす。中にプレイヤーが居るときは後回しにして False。
 
         壊すのも層を外すのもローダに任せる（`unregister` が両方やる）。
-        外した時点で `modfacility` の控えからも消えるので、次のロードで建ち直らない。
+        外した時点で `modfacility` / `modnpc` の控えからも消えるので、
+        次のロードで建ち直りも立ち直りもしない。
         """
         facility_id = str(record.get("facility") or "")
         if not facility_id:
+            drop_keeper(app, record)
             return True
         if standing_in(app, record):
             if record not in state["pending_demolish"]:
@@ -855,6 +1117,8 @@ def apply(ctx):
             write("{}: the player is inside {!r}; the demolition waits".format(
                 why, record.get("name")))
             return False
+        # 管理人を先に降ろす（建物が消えてからだと立ち位置を戻せない）。
+        drop_keeper(app, record)
         modfacility.unregister(OWNER, facility_id, app=app, write=write)
         return True
 
@@ -935,7 +1199,22 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 家賃
     def check_leases(app, why, idle=False):
-        """期限の来た契約を精算する。日付が進んだときと画面が組まれたときに呼ぶ。"""
+        """期限の来た契約を精算する。日付が進んだときと画面が組まれたときに呼ぶ。
+
+        **滞在の最中は精算しない。**
+        自分の家の滞在では `VacationStartManager.execute` の中で暦が進むので、
+        ここで引くと宿代の前払いと同じ区間で金が動く
+        （どちらがいくら動かしたのかが所持金の差からは読めなくなる）。
+        見送ったことだけ `rent_pending` に控え、滞在が終わったら `end_stay` が
+        1回呼び直す。滞在が終わらないまま次に暦が進んだときも、
+        そちらの `check_leases` が同じ期をまとめて払う（期限は日付で見るので取りこぼさない）。
+        """
+        if staying_home(app) is not None:
+            if not state.get("rent_pending"):
+                state["rent_pending"] = True
+                write("rent: postponed while the stay is running ({})".format(why))
+            return
+        state["rent_pending"] = False
         day = ui.game_day(app)
         if day is None:
             return
@@ -959,10 +1238,7 @@ def apply(ctx):
                     due = None
                     break
                 ui.add_gold(app, -rent,
-                            on_error=lambda: write("WARN rent: cannot charge"))
-                # 滞在の `execute` の中から呼ばれることがある。
-                # そのときは宿代と一緒に引かれるので、返す額から除くために数えておく。
-                state["rent_charged"] = int(state.get("rent_charged") or 0) + rent
+                            on_error=lambda msg: write("WARN rent: " + msg))
                 due += term
                 paid += rent
                 record["due"] = due
@@ -1083,7 +1359,7 @@ def apply(ctx):
             write("WARN reclaim: cannot read the player's inventory")
             back(app, "no inventory")
             return
-        ui.add_gold(app, -fee, on_error=lambda: write("WARN reclaim: cannot charge"))
+        ui.add_gold(app, -fee, on_error=lambda msg: write("WARN reclaim: " + msg))
         moved = 0
         for key, data in sorted(seized.items()):
             target = storage.free_key(inv, key)
@@ -1104,34 +1380,47 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 滞在
     def hold_owner(app, record):
-        """滞在のあいだだけ建物に主を据える。据えた id を返す（据えなければ None）。
+        """滞在の主を決める。`(据えた id, 借り物か)`。
 
         ゲームの宿泊は主を名簿から引くので、主のいない施設では落ちる
         （`KeyError: None`。VERIFICATION.md §3.62）。
-        自分の家の主は自分なので、名簿に居るプレイヤーを据えるのが本筋。
-        滞在が終わったら元へ戻す（`release_owner`）。
+        据えるのはその建物の管理人で、実体は `modnpc` が持つ（`seat_keeper`）。
+        据えたままでよく、保存の直前の引き上げはローダがやる。
+
+        管理人が組めないときだけ**滞在のあいだ役人を借りる**（`release_owner` で戻す）。
+        借り物を主にすると宿の主人を見る MOD がその役人を宿の主人と読むので、
+        落ちたことは WARN に残す。
         """
         area = ui.current_area(app)
         facility = modfacility.facility_of(app, record.get("facility"))
         if facility is None:
-            return None
+            return None, False
+        keeper_id = seat_keeper(app, record, facility)
+        if keeper_id and str(getattr(facility, "owner", "")) == str(keeper_id):
+            write("stay: the owner of {!r} is its keeper {!r}".format(
+                record.get("name"), keeper_name(app, record)))
+            return keeper_id, False
         owner = landlord.owner_candidate(app, area, facility, write=write)
         if owner is None:
-            return None
+            write("WARN stay: {!r} has no keeper and nobody can stand in".format(
+                record.get("name")))
+            return None, False
         state["owner_was"] = getattr(facility, "owner", None)
         try:
             facility.owner = owner
         except Exception:
             ctx.log_exc("real estate: cannot set the owner of the building")
-            return None
-        write("stay: the owner of {!r} is {!r} for this stay".format(
+            return None, False
+        write("WARN stay: {!r} has no keeper; borrowing {!r} for this stay".format(
             record.get("name"), owner))
-        return owner
+        return owner, True
 
     def release_owner(app):
-        """滞在のあいだ据えた主を元へ戻す。"""
+        """滞在のあいだ載せた主を元へ戻す。管理人も借りた役人も、ここで降りる。"""
+        release_keeper(app)
         home = state.get("free_stay")
-        if not isinstance(home, dict) or not home.get("owner"):
+        if not isinstance(home, dict) or not home.get("owner") \
+                or not home.get("borrowed"):
             return
         facility = modfacility.facility_of(app, home.get("facility"))
         if facility is not None:
@@ -1141,13 +1430,14 @@ def apply(ctx):
                 ctx.log_exc("real estate: cannot restore the owner")
         state["owner_was"] = None
         home["owner"] = None
+        home["borrowed"] = False
 
     def start_stay(app):
         """宿屋の宿泊と同じ経路を、宿代を取らずに起こす。
 
         `VacationStartManager(app, months, quality)` は実測した署名
         （GAME.md §2.17）。日数・体力・活動の選択肢はゲームが持っているので、
-        こちらが足すのは「主を据えること」と「宿代を返すこと」の2つ。
+        こちらが足すのは「主が名簿に居ることを確かめること」と「宿代を前払いすること」の2つ。
         """
         record = contract_here(app)
         if record is None:
@@ -1165,7 +1455,9 @@ def apply(ctx):
         state["free_stay"] = {"facility": str(record.get("facility")),
                               "area": str(record.get("area")),
                               "name": record.get("name")}
-        state["free_stay"]["owner"] = hold_owner(app, record)
+        owner, borrowed = hold_owner(app, record)
+        state["free_stay"]["owner"] = owner
+        state["free_stay"]["borrowed"] = borrowed
         write("stay: starting {} months={} quality={!r} at {!r}".format(
             STAY_CLS, stay_months(app), STAY_QUALITY, record.get("name")))
         screen.start_phase(app, phase, STAY_LABEL)
@@ -1248,15 +1540,31 @@ def apply(ctx):
             write("WARN storage: cannot read the player's inventory")
             return
         gather_into_shared(app)
+        # 窓の右に立つのはその建物の管理人。まだ名簿に居なければここで据える
+        # （滞在を1度もしていない家でも、窓を開けたら鍵を預かっている人が出る）。
+        # 引けないときだけ、その窓の間だけ生きる持ち主を立てる。
+        #
+        # **見出しに管理人の名前は出さない**（本人の指定）。
+        # この人は「会話する」の一覧に出さないので、名乗る場面が無いまま名前だけが並ぶ
+        # （前からある契約に後から決まった管理人には、契約のときの紹介の一文も無い）。
+        # 見出しは共有なら保管庫の名、そうでなければ建物の名。
+        seat_keeper(app, record, modfacility.facility_of(app, record.get("facility")))
+        holder = keeper_character(app, record)
         name = STORAGE_NAME if STORAGE_SHARED else (record.get("name") or "保管庫")
-        try:
-            holder = storage.make_holder(app, name, write=write)
-        except Exception:
-            ctx.log_exc("real estate: cannot make the storage holder")
-            return
+        if holder is None:
+            write("WARN storage: {!r} has no keeper; the window borrows a holder"
+                  .format(record.get("name")))
+            try:
+                holder = storage.make_holder(app, name, write=write)
+            except Exception:
+                ctx.log_exc("real estate: cannot make the storage holder")
+                return
         if holder is None:
             return
         items = storage_of(app, record)
+        # 管理人の持ち物は**窓を開いている間だけ**の姿。前の窓の残りが在れば先に払う
+        # （控えが正で、実体はそこから毎回作り直す）。
+        empty_holder(holder)
         try:
             storage.fill(app, holder, items, write=write)
         except Exception:
@@ -1327,6 +1635,21 @@ def apply(ctx):
     def storage_holder():
         open_window = state.get("storage")
         return open_window.get("holder") if isinstance(open_window, dict) else None
+
+    def empty_holder(holder):
+        """窓の持ち主の持ち物を空にする。外した点数を返す。
+
+        預けた品は 330 の控えが正で、持ち主はその写しを窓のあいだだけ持つ。
+        管理人は名簿に居る人なので、持たせたままにすると `modnpc` の控えにも
+        同じ品が写り（保存のたびに持ち物まで控える。TECH.md §5.7）、
+        次に開いたときに控えと写しで二重になる。
+        """
+        inv = storage.inventory_dict(holder) if holder is not None else None
+        if not isinstance(inv, dict) or not inv:
+            return 0
+        count = len(inv)
+        inv.clear()
+        return count
 
     def record_of_open_storage(app):
         open_window = state.get("storage")
@@ -1438,6 +1761,8 @@ def apply(ctx):
         if state.get("storage") is None:
             return
         write_down(app, why)
+        # 控えへ写したら持ち主の手元は空にする（管理人に品を住まわせない）。
+        empty_holder(storage_holder())
         state["storage"] = None
         write("storage: closed ({})".format(why))
 
@@ -1646,6 +1971,9 @@ def apply(ctx):
                 state["pending_demolish"] = []
                 state["warned"] = set()
                 state["key_override"] = key
+                # 管理人の層はロードのたびに積み直す。周回（世界×主人公）が変わると
+                # 同じ id（`keeper-<土地>`）に別の人が立つ。
+                keepers_registered.clear()
                 try:
                     apply_contracts(app, self, key, "load")
                 finally:
@@ -1678,22 +2006,47 @@ def apply(ctx):
         write("save: the storage window is open; saving with in_shopping down")
         return was
 
+    def quiet_storage_items(app):
+        """保管庫を開いたまま保存するときは、管理人の手元を空にして保存する。
+
+        窓の右に立っているのは名簿に居る管理人で、`modnpc` の関所は保存と同じ時点で
+        MOD の NPC の持ち物まで控える（TECH.md §5.7）。開いたまま保存すると
+        330 の控えと二重になり、次に開いたときに品が増える。
+        中身は先に控えへ写し、保存の間だけ手元から外す。
+        """
+        holder = storage_holder()
+        inv = storage.inventory_dict(holder) if holder is not None else None
+        if not isinstance(inv, dict) or not inv:
+            return None
+        write_down(app, "save")
+        kept = dict(inv)
+        inv.clear()
+        write("save: the storage window is open; {} item(s) set aside".format(
+            len(kept)))
+        return inv, kept
+
     @ctx.wrap("__main__:InstantaleApp.save_game", required=False)
     def save_game(orig, self, *args, **kwargs):
-        """保管庫を開いたまま保存するときの後始末。
+        """保管庫を開いたまま保存するときの後始末（売買中の旗と、管理人の手元）。
 
         立ち位置（建て直されない建物の中に居るとき入口へ移す）と、
         建物を指す選択肢の掃除はローダの関所が持つ（TECH.md §5.8）。
         生きている契約の建物は `keeps_inside` で「中のままでよい」と名乗ってある。
         """
-        shopping = None
+        shopping, stored = None, None
         try:
             shopping = quiet_shopping_flag(self)
+            stored = quiet_storage_items(self)
         except Exception:
             ctx.log_exc("real estate: cannot check the place before the save")
         try:
             return orig(self, *args, **kwargs)
         finally:
+            if stored is not None:
+                try:
+                    stored[0].update(stored[1])
+                except Exception:
+                    ctx.log_exc("real estate: cannot put the stored items back")
             if shopping is not None:
                 try:
                     self.in_shopping = shopping
@@ -1702,7 +2055,10 @@ def apply(ctx):
 
     @ctx.wrap("__main__:InstantaleApp.elapse_days", required=False)
     def elapse_days(orig, self, days, *args, **kwargs):
-        """日付が進んだら家賃を精算する。日付を動かすのはここ1箇所（GAME.md §2.16）。"""
+        """日付が進んだら家賃を精算する。日付を動かすのはここ1箇所（GAME.md §2.16）。
+
+        滞在の最中に進んだぶんは `check_leases` が見送る（精算は `end_stay` で1回）。
+        """
         result = orig(self, days, *args, **kwargs)
         try:
             check_leases(self, "elapse", idle=True)
@@ -1768,13 +2124,13 @@ def apply(ctx):
     def vacation_start(orig, self, choice_text="", *args, **kwargs):
         """自分の建物での滞在は宿代を取らない。宿屋での宿泊には触らない。
 
-        宿代の引き落としは `execute` の中で1回だけ起きる（GAME.md §2.17）。
-        ただし**同じ `execute` の中で暦も進む**ので、そこで家賃も引かれる
-        （実機で 1,100 ＝ 宿代 100 + 家賃 1,000 が動いた）。
-        差額をそのまま返すと家賃まで返してしまうので、
-        こちらが引いた家賃（`rent_charged`）を除いてから返す。
+        取り方は**前払い**（`314_area_move_custom` の運賃・`315_vacation_custom`
+        の宿代と同じ形）。ゲームが引く額を先に足しておき、ゲームが引いて元に戻す。
+        引かせてから差額を返す形はやめた。差を取る区間が `execute` 全体で、
+        その中で暦も進むため、同じ区間で金を動かした他の MOD のぶんまで
+        巻き込んでいた（VERIFICATION.md §3.62）。
 
-        ゲーム側が途中で落ちたときは、引かれた宿代を返して操作を戻す。
+        ゲーム側が途中で落ちたときも同じ帳尻を通してから操作を戻す。
         ここで例外をそのまま通すと、`execute` がワーカースレッドごと終わって
         **画面が「…」のまま戻らない**（VERIFICATION.md §3.62）。
         """
@@ -1794,9 +2150,10 @@ def apply(ctx):
             except Exception:
                 ctx.log_exc("real estate: cannot measure the stay")
             return result
+        quality = getattr(self, "quality", None) or STAY_QUALITY
         before = ui.gold_of(app)
         day_before = ui.game_day(app)
-        state["rent_charged"] = 0
+        prepaid = prepay_room(app, quality, before)
         try:
             result = orig(self, choice_text, *args, **kwargs)
         except Exception as exc:
@@ -1807,11 +2164,11 @@ def apply(ctx):
                 describe_building(app, home)))
             ctx.log_exc("real estate: the game's stay failed at {!r}".format(
                 home.get("name")))
-            refund_room(app, before, "stay failed")
+            settle_room(app, before, prepaid, "stay failed")
             end_stay(app, "the stay failed")
             recover(app, "stay failed")
             return None
-        refund_room(app, before, "stay")
+        settle_room(app, before, prepaid, "stay")
         try:
             # 自分の家の滞在でも日数は測れる。
             # **渡した月数はゲームの宿屋と同じ**なので、他 MOD の日数の細工も
@@ -1840,29 +2197,71 @@ def apply(ctx):
                     spot[1] if spot and len(spot) > 1 else "?",
                     len(roster) if isinstance(roster, dict) else "?"))
 
-    def refund_room(app, before, why):
-        """引かれた宿代を返す。家賃として引いたぶんは返さない。"""
+    def prepay_room(app, quality, before):
+        """ゲームが引く宿代を先に足しておく。足せた額を返す（足さなければ 0）。
+
+        額はローダの窓口に聞く（`prices.inn_room`）。
+        宿代を変える MOD が入っていればその額、入っていなければゲームの値。
+        **知らない等級では None** が返る。そのときは 0 のまま進み、
+        帳尻の枝が引かれた額をそのまま返す（WARN が残るので気づける）。
+        """
+        price = prices.inn_room(app, quality, write=write)
+        if not isinstance(price, int) or price <= 0 or not isinstance(before, int):
+            if price is None:
+                write("WARN stay: no price for the room ({!r}); "
+                      "falling back to paying the difference".format(quality))
+            return 0
+        if ui.add_gold(app, price,
+                       on_error=lambda msg: write("WARN stay: " + msg)) is None:
+            return 0
+        write("stay: prepaid {} for the room ({!r})".format(price, quality))
+        return price
+
+    def settle_room(app, before, prepaid, why):
+        """滞在の後の帳尻。前払いが効いていれば所持金は元に戻っている。
+
+        正常な回はここで何も動かない（足した額と引かれた額が同じ）。
+        動くのは、ゲームが引かなかったとき（前払いを引き戻す）と、
+        額が分からず前払いできなかったとき（引かれたぶんを返す）の2つ。
+        どちらも所持金の差で当てているので、同じ区間で他の MOD が金を
+        動かしていれば巻き込む。WARN を残すのはそのため。
+        """
         after = ui.gold_of(app)
         if not isinstance(before, int) or not isinstance(after, int):
-            write("WARN {}: cannot read the gold; nothing refunded".format(why))
+            write("WARN {}: cannot read the gold; the books are left as they are".format(
+                why))
             return 0
-        room = (before - after) - int(state.get("rent_charged") or 0)
-        if room <= 0:
+        off = before - after
+        if off == 0:
             return 0
-        ui.add_gold(app, room,
-                    on_error=lambda: write("WARN {}: cannot refund".format(why)))
-        write("{}: refunded {} (rent {} was not refunded)".format(
-            why, room, state.get("rent_charged")))
-        return room
+        if prepaid <= 0 and off < 0:
+            # 前払いできなかった回に**増えた**ぶんは宿代の話ではない
+            # （この区間では他の MOD も金を動かす）。取り上げない。
+            write("WARN {}: the gold grew by {} during the stay; leaving it "
+                  "alone".format(why, -off))
+            return 0
+        ui.add_gold(app, off, on_error=lambda msg: write("WARN {}: {}".format(why, msg)))
+        write("WARN {}: the room cost {} but we prepaid {}; corrected {}".format(
+            why, prepaid + off, prepaid, off))
+        return off
 
     def end_stay(app, why):
-        """滞在の後始末。据えた主を戻し、宿代を返す印を落とす。"""
+        """滞在の後始末。据えた主を戻し、滞在の印を落とし、家賃を精算する。
+
+        滞在の最中に来た期限は `check_leases` が見送っている。
+        印を落としてから呼ぶので、ここでの精算はもう滞在の外の1回になる。
+        """
         if state.get("free_stay") is None:
             return
         release_owner(app)
         write("stay: finished at {!r} ({})".format(
             (state["free_stay"] or {}).get("name"), why))
         state["free_stay"] = None
+        if state.get("rent_pending"):
+            try:
+                check_leases(app, "after the stay", idle=True)
+            except Exception:
+                ctx.log_exc("real estate: cannot settle the rent after the stay")
 
     def recover(app, why):
         """ゲームの処理が途中で落ちた後、操作を戻す。
@@ -1928,7 +2327,7 @@ def apply(ctx):
 
     @ctx.wrap("__main__:VacationEndManager.execute", required=False)
     def vacation_end(orig, self, choice_text="", *args, **kwargs):
-        """滞在が終わったら、据えた主を戻して宿代を返す印を落とす。"""
+        """滞在が終わったら、据えた主を戻して滞在の印を落とす。"""
         app = getattr(self, "app", None) or ui.find_app()
         try:
             if app is not None:

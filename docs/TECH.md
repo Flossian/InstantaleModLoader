@@ -125,6 +125,7 @@ runtime/instantale_modloader/
     modfacility.py  MOD だけが持つ施設（街に建てて MOD が管理する。§5.8）
     durations.py  ゲームの期間（宿泊1回の長さなど）の窓口。変える MOD が答えを置き、合わせたい MOD が聞く（§3.3.2）。
                   日数送り（elapse_days）を包むのもここ1枚で、当てる MOD は望みを出すだけ（§3.3.3）
+    prices.py     ゲームが決めている値段（宿屋の部屋など）の窓口。登録簿は durations と同じ1つ（§3.3.4）
     ids.py        ゲームの採番台帳（`index`）を通した id の採り方（§3.2.3）
     saves.py      ディスクのセーブの読み方（置き場・難読化・世界の一覧。§3.2.3）
     recon.py      実行時リコン（モジュール構造ダンプ）
@@ -1229,6 +1230,38 @@ def days_note(app, days, granted):     # 決まった後に必ず来る（勝っ
 > **呼び出しの入れ子では表せない**ため。`307_` の到着は `process_choice` の先の
 > 別スレッドで走ることがあり（`depart()` のコメント）、`with` で囲える範囲に無い。
 > 控え（`moving_at`）は既にその時刻を持っていたので、新しい寿命を増やさずに済む。
+
+#### 3.3.4 ゲームが決めている値段も窓口で持つ（`prices`）
+
+期間と同じ形で、**ゲームが決めている額**もローダが1箇所で持つ。
+置き場は `instantale_modloader/prices.py`、登録簿は `durations` と同じ1つなので、
+片付けは `durations.forget(owner)` の1本で期間と値段の両方が外れる。
+
+```python
+# 値段を変える側（`315_vacation_custom`）
+prices.declare(prices.INN_ROOM, room_price_for, owner=owner, write=write)
+
+# 値段を先に知りたい側（`330_real_estate` / `331_facility_investment`）
+price = prices.inn_room(app, quality, write=write)   # int か None
+```
+
+| 種類 | 答え | 素の値（実測） | 置いている MOD |
+|---|---|---|---|
+| `INN_ROOM` | `{"price": int}` | 犬小屋 0 / 簡易寝台 10 / 個室 100 / 高級個室 1000（GAME.md §2.17） | `315_vacation_custom` |
+
+**知らない `quality` では None を返す。** 「分からない」と「0」を別の答えにしてあるのは、
+ゲームの更新で語彙が変わったときに当て推量の額を前払いしないため。
+
+> なぜ額を**先に**知りたいのか。
+> 自分の建物での滞在はゲームの宿泊をそのまま起こすので、ゲームは宿代を引く。
+> ゲームは所持金を `player.gold` に直接書いていて、引き落としの瞬間を掴む口が無い
+> （リコンの一覧にも支払いの関数は無く、掴めるのは `VacationStartManager` の
+> `__init__` / `execute` / `method` だけ）。
+> 以前は**引かせてから所持金の差を返して**いたが、差を取る区間の中で暦も進むので、
+> 同じ区間で金を動かした MOD のぶんまで巻き込む。
+> 先に足しておけば引かれて元に戻り、正常な回は引き算そのものが要らない
+> （前払い調整。`314_` の運賃・`315_` の宿代と同じ手）。
+> 帳尻が合わない回だけ WARN を出して差を戻す。
 
 ### 3.4 まだ現れていない対象を狙う（保留と当て直し）
 

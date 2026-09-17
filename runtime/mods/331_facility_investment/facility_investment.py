@@ -63,7 +63,7 @@ r"""機能追加: 街に施設を建てる（出資する）。
 import datetime
 import sys
 
-from instantale_modloader import frames, llm, modfacility, modnpc, ui
+from instantale_modloader import frames, llm, modfacility, modnpc, prices, ui
 from instantale_modloader.state import (UNKNOWN_WORLD, WorldStore, playthrough_key,
                                         playthrough_key_of_dict)
 
@@ -285,7 +285,8 @@ def apply(ctx):
                 "saved": None,
                 # 窓口で選んだ種類（等級を選ぶ画面へ持ち回る）。
                 "choosing": None,
-                # 自分の宿屋での宿泊。`{"facility": id}`。宿代を返すために覚える。
+                # 自分の宿屋での宿泊。`{"facility": id, "name": …, "quality": …}`。
+                # 宿代を前払いする部屋を覚える。
                 "own_stay": None,
                 # 一度書いた WARN の覚え。
                 "warned": set(),
@@ -882,7 +883,7 @@ def apply(ctx):
                   .format(keeper_id))
         bucket_of(current_key(app))["holdings"].append(record)
         save(app)
-        ui.add_gold(app, -price, on_error=lambda: write("WARN build: cannot charge"))
+        ui.add_gold(app, -price, on_error=lambda msg: write("WARN build: cannot charge"))
         write("built: {} {} {!r} id={} keeper={} area={!r} size={} price={}".format(
             kind, tier, name, facility_id, keeper_id, area_id, size, price))
         spot = (modfacility.registry().get(facility_id) or {}).get("placed") or ()
@@ -904,7 +905,7 @@ def apply(ctx):
         if gold <= 0:
             screen.say(app, _fmt(NOTHING_TEXT, keeper=who))
             return 0
-        ui.add_gold(app, gold, on_error=lambda: write("WARN collect: cannot pay"))
+        ui.add_gold(app, gold, on_error=lambda msg: write("WARN collect: cannot pay"))
         today = ui.game_day(app)
         record["collected"] = today if today is not None else record.get("collected")
         save(app)
@@ -915,7 +916,7 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 中でできること
     def start_stay(app, facility_id):
-        """自分の宿屋に泊まる。宿屋の宿泊と同じ経路で、宿代は返す。"""
+        """自分の宿屋に泊まる。宿屋の宿泊と同じ経路で、宿代は前払いで打ち消す。"""
         record = holding_of(app, facility_id)
         if record is None:
             return
@@ -923,17 +924,21 @@ def apply(ctx):
         if cls is None:
             write("WARN stay: __main__.{} is not available".format(STAY_CLS))
             return
+        quality = str(STAY_QUALITY)
         try:
             # 第1引数はゲームの部屋選びと同じ **1**（1単位＝30日と活動1回。連泊は本体の
             # `まだ宿泊する`）。年齢の式で 3 を渡していたら3ヵ月分の暦と宿代が一度に動いた
             # （実機。`init_args=['3', ...]`。本体の経路は5回とも `['1', ...]`）。
-            phase = cls(app, 1, str(STAY_QUALITY))
+            phase = cls(app, 1, quality)
         except Exception:
             ctx.log_exc("investment: cannot build {}".format(STAY_CLS))
             return
-        state["own_stay"] = {"facility": str(facility_id), "name": record.get("name")}
+        # `quality` を控えるのは、前払いする額を**この部屋で**引くため。設定が滞在の
+        # 最中に変わっても、渡した部屋と払う部屋が食い違わない。
+        state["own_stay"] = {"facility": str(facility_id), "name": record.get("name"),
+                             "quality": quality}
         write("stay: starting {} quality={!r} at {!r}".format(
-            STAY_CLS, STAY_QUALITY, record.get("name")))
+            STAY_CLS, quality, record.get("name")))
         screen.start_phase(app, phase, STAY_LABEL)
 
     def end_stay(app, why):
@@ -1243,39 +1248,84 @@ def apply(ctx):
 
     @ctx.wrap("__main__:VacationStartManager.execute", required=False)
     def vacation_start(orig, self, choice_text="", *args, **kwargs):
-        """自分の宿屋の宿泊は宿代を取らない。よその宿屋には触らない。
+        """自分の宿屋の「無料で泊まる」は宿代を取らない。よその宿屋には触らない。
 
-        宿代の引き落としは `execute` の中で1回だけ起きる（GAME.md §2.17）ので、
-        前後の所持金の差を返す。落ちたときは操作を戻す（`330_` と同じ手当て）。
+        ゲームが引く額を**先に足しておき**、ゲームが引いて元へ戻す（前払い）。
+        額はローダの窓口（`prices.inn_room`）が答える。`315_vacation_custom` が
+        宿代を変えていればその額になる。
+
+        前後の所持金の差で返すのはやめた。差を取る区間が `execute` 全体で、
+        その中で暦も進むので、同じ区間で金を動かした他の MOD のぶんまで巻き込む。
+        前払いなら正常な回は差が0で、こちらは何も動かさない。
+        落ちたときは操作を戻す（`330_` と同じ手当て）。宿代の引き落としが
+        `execute` の中で1回だけ起きることは GAME.md §2.17、この経路の確認は
+        VERIFICATION.md §3.63。
         """
         app = getattr(self, "app", None) or ui.find_app()
         home = staying_here(app) if app is not None else None
         if home is None:
             return orig(self, choice_text, *args, **kwargs)
         before = ui.gold_of(app)
+        prepaid = prepay_room(app, home, before)
         try:
             result = orig(self, choice_text, *args, **kwargs)
         except Exception as exc:
             write("WARN stay: the game's stay failed: {}({!r}) at {!r}".format(
                 type(exc).__name__, getattr(exc, "args", ()), home.get("name")))
             ctx.log_exc("investment: the game's stay failed at {!r}".format(home.get("name")))
-            refund(app, before, "stay failed")
+            settle_room(app, before, prepaid, "stay failed")
             end_stay(app, "the stay failed")
             screen.schedule(lambda: screen.busy_off(app), 0)
             return None
-        refund(app, before, "stay")
+        settle_room(app, before, prepaid, "stay")
         return result
 
-    def refund(app, before, why):
+    def prepay_room(app, home, before):
+        """ゲームが引く宿代を先に足す。足せた額。足せなければ 0。
+
+        部屋は宿泊を始めたときに控えた `quality`（設定の `STAY_QUALITY`）。
+        額が分からない（窓口が `None` を返す）ときは 0 のまま進み、`settle_room` の
+        帳尻が引かれたぶんを戻す。当て推量の額は前払いしない。
+        """
+        quality = home.get("quality") or STAY_QUALITY
+        price = prices.inn_room(app, quality, write=write)
+        if price is None:
+            write("WARN stay: the price of the room ({!r}) is unknown; "
+                  "settling by the difference instead".format(quality))
+            return 0
+        if not isinstance(price, int) or price <= 0 or not isinstance(before, int):
+            return 0
+        if ui.add_gold(app, price, on_error=lambda msg:
+                       write("WARN stay: cannot prepay: " + msg)) is None:
+            write("WARN stay: cannot prepay {} for the room ({!r})".format(price, quality))
+            return 0
+        write("stay: prepaid {} for the room ({!r})".format(price, quality))
+        return price
+
+    def settle_room(app, before, prepaid, why):
+        """前払いと引き落としの帳尻。動かした額（正常なら 0）。
+
+        前払いした額とゲームが引いた額が同じなら差は0で、ここは何もしない。
+        差が残るのは、額が分からずに前払いできなかったか、ゲームが引かなかったか、
+        ゲームの額がこちらの知る額と違うとき。どれも WARN で残す。
+        """
         after = ui.gold_of(app)
         if not isinstance(before, int) or not isinstance(after, int):
             return 0
-        room = before - after
-        if room <= 0:
+        off = before - after
+        if off == 0:
             return 0
-        ui.add_gold(app, room, on_error=lambda: write("WARN {}: cannot refund".format(why)))
-        write("{}: refunded {}".format(why, room))
-        return room
+        if prepaid <= 0 and off < 0:
+            # 前払いできなかった回に**増えた**ぶんは、宿代とは関係が無い
+            # （この区間では他の MOD も金を動かす）。取り上げない。
+            write("WARN {}: the gold grew by {} during the stay; leaving it "
+                  "alone".format(why, -off))
+            return 0
+        ui.add_gold(app, off, on_error=lambda msg:
+                    write("WARN {}: cannot correct: {}".format(why, msg)))
+        write("WARN {}: the room cost {} but we prepaid {}; corrected {}".format(
+            why, prepaid + off, prepaid, off))
+        return off
 
     @ctx.wrap("scripts.llm.llm_manager:colosseum_enemy_generator", required=False)
     def colosseum_enemy_generator(orig, location=None, *args, **kwargs):

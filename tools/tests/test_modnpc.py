@@ -248,6 +248,21 @@ def main():
     ok &= check("location が施設オブジェクト", character.location is facility)
     ok &= check("current_area がエリア", character.current_area is world.areas["1"])
 
+    print("置く: 主にするが「会話する」の一覧には出さない（330 の大家）")
+    quiet = modnpc.register("330_home", key="keeper-1", fields={"name": "大家"})
+    modnpc.spawn(app, quiet)
+    ok &= check("置けた", modnpc.place(app, quiet, "1", "5", owner=True, listed=False))
+    ok &= check("主にはなる", facility.owner == quiet)
+    ok &= check("施設の名簿には載せない", quiet not in facility.characters)
+    ok &= check("location を据えない（＝一覧に出ない）",
+                getattr(world.characters.get(quiet), "location", None) is not facility)
+    ok &= check("控えにも「出さない」が残る",
+                (modnpc._persisted_entry(app, "330_home", quiet) or {}).get("place")
+                == ["1", "5", True, False])
+    modnpc.unplace(app, quiet)
+    modnpc.unregister("330_home", quiet, app=app)
+    facility.owner = npc_id                      # 元の主に戻す（後の検査のため）
+
     print("隠す: 保存の間だけ引き上げる")
     # 実セーブの `game_variables.buttons_backup` には
     # `ConversationStartManager(args=[<id>])` が入っている（2026-09-13 に確認）。
@@ -325,8 +340,8 @@ def main():
                 entry["snapshot"].get("current_log") == ["受付と話した"]
                 and entry["snapshot"].get("config", {}).get("is_dead") is True)
     ok &= check("実行時のオブジェクトは写さない", "location" not in entry["snapshot"])
-    ok &= check("存在と置き場所も控えに在る",
-                entry["spawned"] is True and entry["place"] == ["1", "5", True])
+    ok &= check("存在と置き場所も控えに在る（主か・一覧に出すかも）",
+                entry["spawned"] is True and entry["place"] == ["1", "5", True, True])
     ok &= check("state/modnpc/<世界>.json に書かれている",
                 os.path.isfile(modnpc.store().path("検査の世界")))
     modnpc.forget()

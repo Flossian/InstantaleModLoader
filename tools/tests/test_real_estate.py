@@ -6,20 +6,28 @@
 （開発中は `914_real_estate` / `test_wip_real_estate.py` だった。2026-09-16 に正式化。）
 
 偽の app / Player / Area / Node / Facility / PhaseSpec / VacationStartManager /
-Character / InventoryGrid / HUD / Clock を差し込み、次を確認する。
+Character / InventoryGrid / HUD / Clock / llm_manager を差し込み、次を確認する。
 
   窓口   … 役場でだけ「家を借りる・買う」が出る。宿屋では出ない。塗り直しても増えない
   契約   … 借りると所持金が減り、広場と建物の接続が両側に張られ、控えに1件残る
   一覧   … ゲームが並べなかった建物への道を、`MovePhaseManager` のボタンで足す
   建物   … 中に立つと「滞在する」「保管庫をあける」が出る。他人の施設では出ない
-  滞在   … `VacationStartManager` をゲームの経路で起こし、**引かれた宿代を返す**。
-           宿屋での宿泊（自分の建物の外）には手を出さない
-  家賃   … 日数が進むと期限のぶんだけ引かれ、期限が延びる。何期ぶんか飛んでもまとめて払う
+  管理人 … 契約ごとに1人立ち、建物の主になる。素性は契約の1回だけ生成 AI に聞き、
+           読めない・落ちた・無い版では表の12人へ降りる。ロードでは聞き直さない。
+           解約すると `modnpc` から降り、控えからも消える
+  滞在   … `VacationStartManager` をゲームの経路で起こし、**宿代を前払いする**
+           （ゲームが引いて所持金が元に戻る）。主はその建物の管理人で、
+           管理人が居ない契約でだけ役人を借りる（WARN）。宿屋での宿泊には手を出さない
+  帳尻   … ゲームが引かなかったときは前払いを引き戻す。額が分からない等級では
+           差で返し、WARN を残す
+  家賃   … 日数が進むと期限のぶんだけ引かれ、期限が延びる。何期ぶんか飛んでもまとめて払う。
+           滞在の最中に来た期限は見送り、滞在が終わってから1回で払う
   期限   … 払えなければ契約が切れ、建物が街から消え、保管庫の中身は役場が預かる
   引取   … 役場で料金を払うと預かり品がプレイヤーの持ち物へ戻る
   ロード … `World.__init__` の後に建物が建ち直る（セーブには何も書かない）
   周回   … 控えは 世界×主人公（同じ世界で新しい主人公を作っても前の主人公の家は現れない）
-  保管庫 … 窓の中で移した品が控えへ写り、`save_game` が走る
+  保管庫 … 窓の右に立つのは管理人。移した品は往復とも控えへ写り、`save_game` が走る。
+           窓を閉じると管理人の手元は空になる（`modnpc` の控えと二重にしない）
   安全   … 印は `mod_` で始まり、`PhaseSpec` に自前のクラス名を書かない
 """
 import importlib.util
@@ -41,6 +49,7 @@ import instantale_modloader as ml                      # noqa: E402
 from instantale_modloader import durations            # noqa: E402
 from instantale_modloader import llm as loader_llm    # noqa: E402
 from instantale_modloader import modfacility            # noqa: E402
+from instantale_modloader import modnpc                 # noqa: E402
 from instantale_modloader import state as loader_state  # noqa: E402
 
 
@@ -150,11 +159,23 @@ class VacationStartManager:
 
     def execute(self, choice_text=""):
         self.app.stays.append((self.months, self.quality))
+        # **主の記録に書き足す**（実機の形。素データの欄が `None` のままだと
+        # `AttributeError: 'NoneType' object has no attribute 'append'` で落ち、
+        # 画面には「落ち着かない。今日は出直したほうがよさそうだ。」が出た）。
+        here = self.app.player.location
+        owner = getattr(here, "owner", None)
+        keeper = (getattr(getattr(self.app, "world", None), "characters", None)
+                  or {}).get(str(owner)) if owner else None
+        if keeper is not None:
+            keeper.current_log.append("<宿泊: 客を迎えた。>")
         # 進む日数は月数×30。ただし `315_vacation_custom` の週単位は
         # ゲームに渡す月数を1にしたまま、日数だけを縮める（実機 2026-09-14）。
         days = getattr(self.app, "short_stay_days", None) or int(self.months) * 30
         self.app.elapse_days(int(days))
-        self.app.player.gold -= ROOM_PRICE
+        # 徴収を止めたビルドの代わり（`stay_charges` を落とすと引かない）。
+        # 前払いした額が宙に浮かないかを見る。
+        if getattr(self.app, "stay_charges", True):
+            self.app.player.gold -= ROOM_PRICE
         # ゲームは部屋の絵に差し替える（GAME.md §2.17 の実測）。
         self.app.change_background_image_to_inn_room(self.quality)
         if getattr(self.app, "stay_raises", False):
@@ -287,9 +308,15 @@ class Character:
         self.name = name
         self.id = id
         self.original_ability_scores = original_ability_scores
+        self.gold = 0
+        self.config = {}
+        # 残りの項目（`job` / `profile` / `relationship` …）は素直に属性へ。
+        # `modnpc.build` はひな型の33項目を名前で渡してくる（**kwargs を持つ型には全部）。
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+        # 入れ物は本体と同じく `__init__` の外で持つ（ひな型の `inventory` で潰さない）。
         self.inventory = Inventory()
         self.equipments = {}
-        self.gold = 0
 
 
 class Item:
@@ -591,6 +618,47 @@ def install_fake_characters():
     return module
 
 
+class FakeLLM(object):
+    """`scripts.llm.llm_manager` の代わり（`create_model` + `send_request`）。
+
+    載っていない版もあるので、載せない筋書きも通す（`unload`）。
+    """
+
+    answers = []
+    calls = []
+
+    @classmethod
+    def create_model(cls, model_name, **fields):
+        return type(str(model_name), (object,), {"mod_fields": dict(fields)})
+
+    @classmethod
+    def send_request(cls, manager_name, message, structure, max_tokens=None,
+                     timeout=None):
+        cls.calls.append({"manager": manager_name, "timeout": timeout,
+                          "text": "\n".join(m.get("content", "") for m in message)})
+        if not cls.answers:
+            raise RuntimeError("答えが用意されていない")
+        answer = cls.answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    @classmethod
+    def load(cls, answers=()):
+        cls.answers = list(answers)
+        cls.calls = []
+        module = types.ModuleType("scripts.llm.llm_manager")
+        module.create_model = cls.create_model
+        module.send_request = cls.send_request
+        sys.modules["scripts.llm.llm_manager"] = module
+
+    @classmethod
+    def unload(cls):
+        sys.modules.pop("scripts.llm.llm_manager", None)
+        cls.answers = []
+        cls.calls = []
+
+
 def install_fake_kivy():
     clock = FakeClock()
     kivy = types.ModuleType("kivy")
@@ -690,6 +758,8 @@ install_fake_characters()
 STATE_DIR = os.path.join(OUT_DIR, "state", "real_estate")
 #: 建物の控えはローダが持つ（`modfacility`）。契約の控えとは別のフォルダ。
 FACILITY_STATE_DIR = os.path.join(OUT_DIR, "state", modfacility.STATE_DIRNAME)
+#: 管理人の控えもローダが持つ（`modnpc`）。
+NPC_STATE_DIR = os.path.join(OUT_DIR, "state", modnpc.STATE_DIRNAME)
 LOG_PATH = os.path.join(OUT_DIR, "real_estate.log")
 
 
@@ -709,6 +779,17 @@ def read_state(world=None):
         if world is not None and name != world + SEP + PLAYER_NAME + ".json":
             continue
         with io.open(os.path.join(STATE_DIR, name), encoding="utf-8") as fh:
+            return json.load(fh)
+    return None
+
+
+def read_npc_state():
+    """管理人の控え（ローダの `modnpc` が持つ）。無ければ None。"""
+    for name in (sorted(os.listdir(NPC_STATE_DIR))
+                 if os.path.isdir(NPC_STATE_DIR) else []):
+        if not name.endswith(".json"):
+            continue
+        with io.open(os.path.join(NPC_STATE_DIR, name), encoding="utf-8") as fh:
             return json.load(fh)
     return None
 
@@ -804,17 +885,20 @@ def setup(configure=None, keep_state=False, gold=100000):
     if os.path.exists(LOG_PATH):
         os.remove(LOG_PATH)
     if not keep_state:
-        for folder in (STATE_DIR, FACILITY_STATE_DIR):
+        for folder in (STATE_DIR, FACILITY_STATE_DIR, NPC_STATE_DIR):
             if os.path.isdir(folder):
                 for name in os.listdir(folder):
                     os.remove(os.path.join(folder, name))
 
-    # 関所はゲームの `save_game` に当てるもので、偽の環境には無い。
+    # 2つの関所はゲームの `save_game` に当てるもので、偽の環境には無い。
     # `spawn` は関所が今の世代で立っていなければ建てないので、立っていることにする。
     modfacility.gate_is_live = lambda: True
+    modnpc.gate_is_live = lambda: True
     modfacility.registry().clear()
+    modnpc.registry().clear()
     for attr in (modfacility.INSTALLED_ATTR, modfacility.SCREEN_ATTR,
-                 modfacility._STATE_ATTR, modfacility.STORE_ATTR):
+                 modfacility._STATE_ATTR, modfacility.STORE_ATTR,
+                 modnpc.INSTALLED_ATTR, modnpc.STORE_ATTR):
         if hasattr(sys, attr):
             delattr(sys, attr)
 
@@ -880,6 +964,11 @@ def contract_of(module, app):
     data = read_state()
     contracts = (data or {}).get("contracts") or []
     return contracts[0] if contracts else None
+
+
+def keeper_name_of(module, app):
+    """いまの契約に控えてある管理人の名前。"""
+    return ((contract_of(module, app) or {}).get("keeper") or {}).get("name")
 
 
 # ================================================================ 検査
@@ -1027,33 +1116,31 @@ app.go(home)
 print("[滞在]")
 gold_before = app.player.gold
 day_before = app.world.days_elapsed
-# 滞在の中で暦が進むので、その場で家賃も引かれる。返るのは宿代だけ。
-due = contract_of(module, app)["due"]
-rent_due = 0
 months_now = durations.game_inn_stay(app)["months"]
 day_after = day_before + months_now * module.DAYS_PER_MONTH
-while day_after >= due:
-    rent_due += module.RENT_PRICE
-    due += contract_of(module, app)["term"]
 app.press(module.STAY_LABEL)
 CLOCK.settle()
 check("ゲームの宿泊が宿屋と同じ月数で起きた",
       app.stays == [(months_now, module.STAY_QUALITY)], app.stays)
-check("滞在のあいだ建物に主が据わる",
-      "the owner of" in read_log() and "'{}'".format(CLERK_ID) in read_log(),
-      [l for l in read_log().splitlines() if "owner" in l][:3])
-check("宿代は返される", "refunded {}".format(ROOM_PRICE) in read_log(),
-      [l for l in read_log().splitlines() if "refund" in l][:3])
-check("家賃は返さない", app.player.gold == gold_before - rent_due,
-      (app.player.gold, gold_before, rent_due))
+keeper_id = (contract_of(module, app).get("keeper") or {}).get("id")
+check("滞在の主は建物の管理人", getattr(home, "owner", None) == keeper_id,
+      (getattr(home, "owner", None), keeper_id))
+check("役人は借りない（役場の役人が主にならない）",
+      getattr(home, "owner", None) != CLERK_ID, getattr(home, "owner", None))
+# (a) 宿代は前払いしてある。ゲームが引くと所持金は元に戻る。
+check("宿代を先に足す",
+      "stay: prepaid {} for the room".format(ROOM_PRICE) in read_log(),
+      [l for l in read_log().splitlines() if "prepaid" in l][:3])
+check("ゲームが引いて所持金が元に戻る", app.player.gold == gold_before,
+      (app.player.gold, gold_before))
+check("帳尻の直しは要らない", "corrected" not in read_log(),
+      [l for l in read_log().splitlines() if "corrected" in l][:3])
 check("日数はゲームのまま進む",
       app.world.days_elapsed == day_after,
       app.world.days_elapsed)
 check("滞在の最中は自前のボタンを足さない",
       not app.has(module.STAY_LABEL) and not app.has(module.STORAGE_LABEL),
       app.labels())
-check("家の主は役場の役人", getattr(home, "owner", None) == CLERK_ID,
-      getattr(home, "owner", None))
 check("滞在の選択肢から交流が消える", not app.has("他者と交流"), app.labels())
 check("アイテム作成も消える", not app.has("アイテム作成"), app.labels())
 check("ほかの活動は残る", app.has("休養をとる") and app.has("宿泊を終える"),
@@ -1066,8 +1153,9 @@ check("活動を1つ終えると滞在が終わる（1泊＝活動1回）", app.
 app.facility_screen()
 check("滞在を終えると建物の選択肢に戻る",
       app.has(module.STAY_LABEL) and app.has(module.STORAGE_LABEL), app.labels())
-check("据えた主は元へ戻る", getattr(home, "owner", "?") is None,
-      getattr(home, "owner", "?"))
+# 主は据えたままでよい（保存のときはローダが名簿から引き上げる。TECH.md §5.7）。
+check("滞在の後も主は管理人のまま",
+      getattr(home, "owner", None) == keeper_id, getattr(home, "owner", None))
 
 print("[保管庫]")
 app.go(home)
@@ -1078,10 +1166,18 @@ check("場面名はゲームに無い名前", app.windows[-1][3] == "real_estate
       app.windows[-1][3])
 check("窓はメインスレッド（Clock）から開く",
       app.windows_from_clock == [True], app.windows_from_clock)
-check("右の見出しが保管庫の名前になる",
-      app.hud.right_header.text == getattr(home, "name", None),
+# 見出しに管理人の名前は出さない（名乗る場面が無いため。本人の指定）。
+check("右の見出しは建物の名前", app.hud.right_header.text == getattr(home, "name", None),
+      app.hud.right_header.text)
+check("見出しに管理人の名前は出さない",
+      app.hud.right_header.text != keeper_name_of(module, app),
       app.hud.right_header.text)
 holder = app.windows[-1][1]
+check("窓の右に立つのは管理人",
+      getattr(holder, "name", None) == keeper_name_of(module, app),
+      getattr(holder, "name", None))
+check("窓の右は名簿に居るその人", app.world.characters.get(keeper_id) is holder,
+      (holder, app.world.characters.get(keeper_id)))
 player_grid = InventoryGrid(app.player)
 holder_grid = InventoryGrid(holder)
 item = app.generate_item_from_dict(sample_item(), "item_19", app.player)
@@ -1103,8 +1199,23 @@ check("控えに品が書かれる",
       isinstance((record or {}).get("storage"), dict) and len(record["storage"]) == 1,
       (record or {}).get("storage"))
 check("保存が走る", app.saves > saves_before, (saves_before, app.saves))
+# 取り出す向きも同じ窓で通る（持ち主が管理人になっても往復は変わらない）。
+widget.change_inventory(player_grid)
+CLOCK.settle()
+check("取り出すとプレイヤーの持ち物へ戻る",
+      any(v is item for v in app.player.inventory.inventory.values()),
+      list(app.player.inventory.inventory))
+check("控えからも消える", not (contract_of(module, app) or {}).get("storage"),
+      (contract_of(module, app) or {}).get("storage"))
+widget.change_inventory(holder_grid)             # 以降の節はまた1点を預けた状態で
+CLOCK.settle()
 app.close_shopping_window_process()
 CLOCK.settle()
+check("窓を閉じたら管理人は品を持たない",
+      not holder.inventory.inventory, list(holder.inventory.inventory))
+check("預けた品は 330 の控えにだけ残る",
+      len((contract_of(module, app) or {}).get("storage") or {}) == 1,
+      (contract_of(module, app) or {}).get("storage"))
 
 print("[家賃]")
 term = contract_of(module, app).get("term")
@@ -1739,6 +1850,267 @@ check("ロードの後に建物が建ち直る", built_id in node.facilities,
 check("入口の道も張り直る", built_id in node.facilities["0"].connections,
       node.facilities["0"].connections)
 
+
+def module_keeper_name(record):
+    """控えに残っている管理人の名前（実体はまだ組まない）。"""
+    return ((record or {}).get("keeper") or {}).get("name")
+
+
+def reload_world(app, classes, module):
+    """世界を作り直して同じ app に据える（`World.__init__` のフックが走る）。
+
+    実機のロードと同じ順（ローダが建て直し、そのあと画面が組まれる）を通す。
+    返すのは新しい世界と、その街のノード。
+    """
+    fresh = classes["world"]({"world_data": {"name": WORLD_NAME},
+                              "player_data": {"name": PLAYER_NAME}}, app)
+    area = Area("0", "始まりの泥濘")
+    node = Node("0")
+    node.entrance_facility = "0"
+    area.nodes["0"] = node
+    fresh.areas["0"] = area
+    for fid, name, kind, conn in (("0", "泥濘の門", "entrance", ["1"]),
+                                  ("1", "中央居住区", "ward", ["0", "2", "3"]),
+                                  ("2", "泥濘の休み処", INN_TYPE, ["1"]),
+                                  ("3", "泥濘の徴収所", OFFICE_TYPE, ["1"])):
+        node.facilities[fid] = Facility(app, node, {
+            "name": name, "id": fid, "description": "", "facility_type": kind,
+            "tier": None, "owner": None, "connections": list(conn),
+            "config": {"level_of_detail": 0}})
+    app.world = fresh
+    app.player.current_area = area
+    app.player.location = node.facilities["3"]
+    app.facility_screen()
+    return fresh, node
+
+
+print("[管理人]")
+# 建物ごとに管理人（賃貸なら大家）を1人立て、その人を建物の主にする。
+# 版31 までは滞在のあいだだけ役場の役人を借りていた（VERIFICATION.md §3.62）。
+ANSWER = {"name": "セルマ", "category": "old woman",
+          "speech_style": "短く言い切る",
+          "personality": "この通りに長く住んでいる",
+          "profile": "家の鍵を預かっている。住人が留守のあいだも建物を見ている。"}
+FakeLLM.load([dict(ANSWER)])
+try:
+    module, ctx, app, places, classes = setup()
+    rent(app, module)
+    record = contract_of(module, app)
+    keeper = (record or {}).get("keeper") or {}
+    kept_home = home_of(app, module, places)
+    check("契約すると管理人が控えに残る", bool(keeper.get("id")), record)
+    check("id は土地ごとに1人（`keeper-<土地 id>`）",
+          keeper.get("id") == "mod:{}:keeper-0".format(module.OWNER),
+          keeper.get("id"))
+    check("生成 AI に聞くのは契約の1回だけ", len(FakeLLM.calls) == 1, FakeLLM.calls)
+    check("答えの名前で立つ",
+          keeper.get("name") == ANSWER["name"] and keeper.get("source") == "llm",
+          keeper)
+    check("賃貸の立場は大家", keeper.get("role") == "大家", keeper.get("role"))
+    check("頼み文に立場と住人の名が入る",
+          "大家" in FakeLLM.calls[0]["text"]
+          and PLAYER_NAME in FakeLLM.calls[0]["text"],
+          FakeLLM.calls[0]["text"][:200])
+    check("頼み文は専用の名前で残る（他 MOD と混ざらない）",
+          FakeLLM.calls[0]["manager"] == module.KEEPER_MANAGER,
+          FakeLLM.calls[0]["manager"])
+    # **世界には登録しない**（保管庫の持ち主と同じ扱い）。
+    # 素のゲームの名簿は「居る人は必ずどこかの施設に立っている」形なので、
+    # 居場所を持たない人物をそこへ足さない。
+    check("契約しただけでは名簿に載らない",
+          keeper.get("id") not in app.world.characters, sorted(app.world.characters))
+    check("建物の名簿にも載らない",
+          keeper.get("id") not in getattr(kept_home, "characters", []),
+          getattr(kept_home, "characters", None))
+    check("契約しただけでは主にもならない",
+          getattr(kept_home, "owner", None) != keeper.get("id"),
+          getattr(kept_home, "owner", None))
+    # ロードし直しても同じ人（控えに持っているので聞き直さない）。
+    calls_before = len(FakeLLM.calls)
+    world2, node2 = reload_world(app, classes, module)
+    CLOCK.settle()
+    record = contract_of(module, app)
+    # ロード後の建物は**新しい世界のノード**に建つ（古い方の実体は掴まない）。
+    rebuilt = node2.facilities.get(str(record.get("facility")))
+    same = module_keeper_name(record)
+    check("ロードの後も控えの名前は同じ", same == ANSWER["name"], same)
+    check("ロードでは生成 AI を呼び直さない", len(FakeLLM.calls) == calls_before,
+          FakeLLM.calls)
+    check("ロードしても名簿には載っていない",
+          keeper.get("id") not in world2.characters, sorted(world2.characters))
+
+    # 滞在の**あいだだけ**名簿に載り、主になる（役人へ落ちない）。
+    app.go(rebuilt)
+    app.press(module.STAY_LABEL)
+    CLOCK.settle()
+    check("滞在はその人を主として起きる", app.stays, app.stays)
+    check("滞在の最中だけ主は管理人",
+          getattr(rebuilt, "owner", None) == keeper.get("id"),
+          getattr(rebuilt, "owner", None))
+    check("滞在の最中だけ名簿にも載る",
+          keeper.get("id") in world2.characters, sorted(world2.characters))
+    person = world2.characters.get(keeper.get("id"))
+    check("答えの人柄と話し方がそのまま入る",
+          getattr(person, "personality", None) == ANSWER["personality"]
+          and getattr(person, "speech_style", None) == ANSWER["speech_style"],
+          (getattr(person, "personality", None), getattr(person, "speech_style", None)))
+    check("立場が job に入る", getattr(person, "job", None) == "大家",
+          getattr(person, "job", None))
+    check("詳細生成が掛け算に使う値が埋まっている",
+          isinstance(getattr(person, "original_ability_scores", None), dict),
+          getattr(person, "original_ability_scores", None))
+    # 素データの33項目は埋める（ゲームは主の記録に `append` する。実機で落ちた）。
+    check("記録の欄が埋まっている（None に append しない）",
+          isinstance(getattr(person, "current_log", None), list)
+          and isinstance(getattr(person, "memory", None), dict),
+          (getattr(person, "current_log", None), getattr(person, "memory", None)))
+    check("どこにも立たせない（会話の一覧に出ない）",
+          not hasattr(getattr(person, "location", None), "facility_type")
+          and getattr(person, "current_location", None) is None,
+          (getattr(person, "location", None),
+           getattr(person, "current_location", None)))
+    check("役人を借りた WARN は出ない", "has no keeper" not in read_log(),
+          [l for l in read_log().splitlines() if "keeper" in l][:4])
+    app.process_choice(classes["rest"](app, app.stays[-1][0], module.STAY_QUALITY),
+                       "休養をとる")
+    CLOCK.settle()
+
+    # 解約すると `modnpc` から降り、記録からも消える。
+    app.go(node2.facilities["3"])
+    app.press(module.OFFICE_LABEL)
+    CLOCK.settle()
+    app.press(module.RELEASE_LABEL)
+    CLOCK.settle()
+    check("解約すると控えから契約が消える", contract_of(module, app) is None,
+          read_state())
+    check("管理人も名簿から降りる", keeper.get("id") not in world2.characters,
+          sorted(world2.characters))
+    check("登録簿からも消える", not modnpc.layers(keeper.get("id")),
+          modnpc.layers(keeper.get("id")))
+    check("降ろしたことがログに残る", "is no longer the keeper" in read_log(),
+          [l for l in read_log().splitlines() if "keeper" in l][-3:])
+    check("控えにも残らない（次の周回で増えない）",
+          keeper.get("id") not in json.dumps(read_npc_state() or {},
+                                             ensure_ascii=False),
+          read_npc_state())
+
+    # 建売の管理人は「管理人」。同じ世界では名前も重ならない。
+    FakeLLM.answers = [dict(ANSWER, name="ハルカ")]
+    app.press(module.OFFICE_LABEL)
+    CLOCK.settle()
+    app.press(app.label_like("建売を買い取る"))
+    CLOCK.settle()
+    bought = contract_of(module, app) or {}
+    check("建売の立場は管理人", (bought.get("keeper") or {}).get("role") == "管理人",
+          bought.get("keeper"))
+    # 立場は素性の文に持たせる（滞在の描写を書く AI はここを読む）。
+    check("買った家の管理人は雇い主に仕える形で書かれる",
+          "雇い主" in ((bought.get("keeper") or {}).get("fields") or {})
+          .get("profile", ""),
+          ((bought.get("keeper") or {}).get("fields") or {}).get("profile"))
+
+    # 答えが読めなければ表の12人へ落ちる（名前が無いまま登録しない）。
+    FakeLLM.answers = [{"name": "", "category": "", "speech_style": "",
+                        "personality": "", "profile": ""}]
+    module, ctx, app, places, classes = setup()
+    rent(app, module)
+    fallen = (contract_of(module, app) or {}).get("keeper") or {}
+    check("読めない答えは表の人へ落ちる", fallen.get("source") == "table", fallen)
+    check("表の人にも名前がある",
+          module.landlord.keeper_by_name(fallen.get("name")) is not None,
+          fallen.get("name"))
+    check("落ちたことがログに残る", "using the table" in read_log(),
+          [l for l in read_log().splitlines() if "keeper" in l][:3])
+
+    # 生成が落ちても契約は通る。
+    FakeLLM.answers = [RuntimeError("生成に失敗")]
+    module, ctx, app, places, classes = setup()
+    rent(app, module)
+    crashed = (contract_of(module, app) or {}).get("keeper") or {}
+    check("生成が落ちても管理人は立つ", crashed.get("source") == "table"
+          and bool(crashed.get("name")), crashed)
+    check("控えに名前まで入る（滞在のときにこの人が主になる）",
+          bool((crashed.get("fields") or {}).get("name")), crashed)
+finally:
+    FakeLLM.unload()
+
+# 生成 AI が載っていない版。構造が作れないので、聞かずに表から選ぶ。
+module, ctx, app, places, classes = setup()
+rent(app, module)
+plain = (contract_of(module, app) or {}).get("keeper") or {}
+check("生成 AI が無い版でも管理人は立つ", plain.get("source") == "table"
+      and bool(plain.get("name")), plain)
+check("聞けないことがログに残る", "cannot build the structure" in read_log(),
+      [l for l in read_log().splitlines() if "keeper" in l][:3])
+
+# 設定で表から選ぶ。生成 AI が居ても聞かない。
+FakeLLM.load([dict(ANSWER)])
+try:
+    module, ctx, app, places, classes = setup(
+        configure=lambda m: setattr(m, "KEEPER_SOURCE", "table"))
+    rent(app, module)
+    picked = (contract_of(module, app) or {}).get("keeper") or {}
+    check("table なら聞かない", not FakeLLM.calls, FakeLLM.calls)
+    check("table でも管理人は立つ", picked.get("source") == "table"
+          and module.landlord.keeper_by_name(picked.get("name")) is not None, picked)
+    # 2軒目は別の名前（同じ世界で名前を重ねない）。
+    app.player.current_area = places["away"]
+    app.go(places["away_office"])
+    rent(app, module)
+    both = [(c.get("keeper") or {}).get("name")
+            for c in (read_state() or {}).get("contracts") or []]
+    check("同じ世界で名前が重ならない", len(both) == 2 and both[0] != both[1], both)
+finally:
+    FakeLLM.unload()
+
+print("[管理人が居ない契約]")
+# 版31 までの控え（管理人の欄が無い）。滞在のときに1人決めて控えへ書く
+# （決めるのが契約のときだけだと、前からある契約は役人を借り続ける。実機で踏んだ）。
+module, ctx, app, places, classes = setup()
+rent(app, module)
+legacy_contract = dict(contract_of(module, app))
+legacy_contract.pop("keeper", None)
+os.makedirs(STATE_DIR, exist_ok=True)
+with io.open(os.path.join(STATE_DIR, STATE_FILE), "w", encoding="utf-8") as fh:
+    fh.write(json.dumps({"contracts": [legacy_contract], "seized": {}},
+                        ensure_ascii=False))
+module, ctx, app, places, classes = setup(keep_state=True)
+old_home = home_of(app, module, places)
+check("管理人が居なくても建物は建つ", old_home is not None,
+      list(places["node"].facilities))
+app.go(old_home)
+app.press(module.STAY_LABEL)
+CLOCK.settle()
+late = (contract_of(module, app) or {}).get("keeper") or {}
+check("滞在のときに管理人が決まる", bool(late.get("name")), late)
+check("決めたことがログに残る",
+      "was signed before the house had a keeper" in read_log(),
+      [l for l in read_log().splitlines() if "keeper" in l][:3])
+check("控えにも書き足す（次の滞在では聞き直さない）",
+      ((read_state() or {}).get("contracts") or [{}])[0].get("keeper", {}).get("name")
+      == late.get("name"),
+      (read_state() or {}).get("contracts"))
+check("役人は借りない", getattr(old_home, "owner", None) != CLERK_ID,
+      getattr(old_home, "owner", None))
+check("役人を借りた WARN も出ない", "has no keeper; borrowing" not in read_log(),
+      [l for l in read_log().splitlines() if "borrowing" in l][:3])
+app.process_choice(classes["rest"](app, app.stays[-1][0], module.STAY_QUALITY),
+                   "休養をとる")
+CLOCK.settle()
+check("決まった管理人が主のまま残る",
+      getattr(old_home, "owner", "?") == (late.get("id")),
+      getattr(old_home, "owner", "?"))
+app.facility_screen()
+app.press(module.STORAGE_LABEL)
+CLOCK.settle()
+check("保管庫も開く", len(app.windows) == 1, app.windows)
+check("見出しは建物の名前のまま",
+      app.hud.right_header.text == getattr(old_home, "name", None)
+      and app.hud.right_header.text != late.get("name"),
+      app.hud.right_header.text)
+app.close_shopping_window_process()
+CLOCK.settle()
+
 print("[落ちる宿泊]")
 module, ctx, app, places, classes = setup()
 rent(app, module, "建売を買い取る")
@@ -1770,8 +2142,10 @@ app.go(first)
 app.press(module.STORAGE_LABEL)
 CLOCK.settle()
 shared_holder = app.windows[-1][1]
-check("共有のときは見出しが共有の名前になる",
-      app.hud.right_header.text == module.STORAGE_NAME, app.hud.right_header.text)
+check("共有なら見出しは保管庫の名前",
+      app.hud.right_header.text == module.STORAGE_NAME
+      and app.hud.right_header.text != getattr(shared_holder, "name", None),
+      app.hud.right_header.text)
 kept = app.generate_item_from_dict(sample_item("古い羅針盤"), "item_70", app.player)
 classes["item"](kept, InventoryGrid(app.player)).change_inventory(
     InventoryGrid(shared_holder))
@@ -1810,6 +2184,79 @@ data = read_state() or {}
 check("1軒失っても共有の中身は残る", len(data.get("shared") or {}) == 1,
       data.get("shared"))
 check("役場の預かりは空のまま", not (data.get("seized") or {}), data.get("seized"))
+
+print("[ゲームが引かなかったとき]")
+# (b) 徴収が `execute` の外にあるビルド。前払いした額をそのまま引き戻す。
+module, ctx, app, places, classes = setup()
+rent(app, module, "建売を買い取る")
+app.go(home_of(app, module, places))
+app.stay_charges = False
+gold_before = app.player.gold
+app.press(module.STAY_LABEL)
+CLOCK.settle()
+check("前払いが宙に浮かない", app.player.gold == gold_before,
+      (app.player.gold, gold_before))
+check("引き戻したことが WARN で残る",
+      "WARN stay: the room cost 0 but we prepaid {}; corrected -{}".format(
+          ROOM_PRICE, ROOM_PRICE) in read_log(),
+      [l for l in read_log().splitlines() if "corrected" in l][:3])
+app.stay_charges = True
+
+print("[額が分からない等級]")
+# (c) ローダの窓口が額を答えられない等級。前払いはせず、引かれた差で返す。
+UNKNOWN_QUALITY = "silk_bed"
+module, ctx, app, places, classes = setup(
+    configure=lambda m: setattr(m, "STAY_QUALITY", UNKNOWN_QUALITY))
+rent(app, module, "建売を買い取る")
+app.go(home_of(app, module, places))
+gold_before = app.player.gold
+app.press(module.STAY_LABEL)
+CLOCK.settle()
+check("等級が分からなくても宿代は取られない", app.player.gold == gold_before,
+      (app.player.gold, gold_before))
+check("前払いできなかったことを書く",
+      "WARN stay: no price for the room ('{}')".format(UNKNOWN_QUALITY) in read_log(),
+      [l for l in read_log().splitlines() if "no price" in l][:3])
+check("差で返したことも書く",
+      "WARN stay: the room cost {} but we prepaid 0; corrected {}".format(
+          ROOM_PRICE, ROOM_PRICE) in read_log(),
+      [l for l in read_log().splitlines() if "corrected" in l][:3])
+
+print("[滞在の家賃は滞在の後で]")
+# (d) 滞在の中では暦が進むだけ。期限が来ていても引くのは滞在が終わってから1回。
+module, ctx, app, places, classes = setup()
+rent(app, module)
+term = contract_of(module, app)["term"]
+stay_len = durations.game_inn_stay(app)["months"] * module.DAYS_PER_MONTH
+app.elapse_days(term - stay_len)               # あと1回の滞在で期限が来る
+CLOCK.settle()
+due_before = contract_of(module, app)["due"]
+gold_before = app.player.gold
+check("ここまでは家賃が来ていない",
+      app.world.days_elapsed < due_before, (app.world.days_elapsed, due_before))
+app.go(home_of(app, module, places))
+app.press(module.STAY_LABEL)
+CLOCK.settle()
+check("滞在の最中に期限が来ても引かない", app.player.gold == gold_before,
+      (app.player.gold, gold_before, module.RENT_PRICE))
+check("期限を過ぎている", app.world.days_elapsed >= due_before,
+      (app.world.days_elapsed, due_before))
+check("見送ったことがログに残る", "rent: postponed" in read_log(),
+      [l for l in read_log().splitlines() if "rent" in l][:3])
+check("期限はまだ延びていない", contract_of(module, app)["due"] == due_before,
+      contract_of(module, app)["due"])
+app.process_choice(classes["rest"](app, durations.game_inn_stay(app)["months"],
+                                   module.STAY_QUALITY), "休養をとる")
+CLOCK.settle()
+check("滞在が終わると家賃を1回だけ引く",
+      app.player.gold == gold_before - module.RENT_PRICE,
+      (app.player.gold, gold_before, module.RENT_PRICE))
+check("期限が1期ぶん延びる", contract_of(module, app)["due"] == due_before + term,
+      (contract_of(module, app)["due"], due_before, term))
+app.facility_screen()
+CLOCK.settle()
+check("画面を組み直しても二重に引かない",
+      app.player.gold == gold_before - module.RENT_PRICE, app.player.gold)
 
 print("[宿屋には手を出さない]")
 module, ctx, app, places, classes = setup()

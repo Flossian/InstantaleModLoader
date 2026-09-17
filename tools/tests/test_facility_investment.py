@@ -16,7 +16,9 @@ EntryColosseumMatchManager / Character / Clock を差し込み、次を確認す
   上限   … その街に建てた合計の軒数で止まる（ゲームの施設は数えない）
   建物   … 中では「無料で泊まる」と「売上を受け取る」と出口が出る
   売上   … 日数 × 1日の売上を受け取り、溜まりは HOLD_DAYS で頭打ち
-  宿泊   … 「無料で泊まる」は宿代を取らない。ゲームの「宿泊する」は自分の宿屋でも素のまま。よその宿屋には触らない
+  宿泊   … 「無料で泊まる」は宿代を先に足してゲームに引かせる（打ち消し合って所持金は動かない）。
+          引かないビルドでは前払いを戻し、知らない部屋では差で返して WARN を出す。
+          ゲームの「宿泊する」は自分の宿屋でも素のまま。よその宿屋には触らない
   店と道場 … 窓口に並び、中ではゲームの売買・訓練が通る（素データの写しが要る）
   闘技場 … 中に立っている間だけ素データの写しが在り、ゲームの試合（素データを引く）が通る。落ちても操作が戻る。
           既に出た闘士の名前が相手を作る頼み文に足される
@@ -127,7 +129,7 @@ class VacationStartManager:
     def execute(self, choice_text=""):
         self.app.stays.append((self.months, self.quality))
         self.app.elapse_days(int(self.months) * 30)
-        self.app.player.gold -= ROOM_PRICE
+        self.app.player.gold -= getattr(self.app, "room_price", ROOM_PRICE)
         # ゲームは部屋の絵に差し替える（GAME.md §2.17 の実測。ローダはこれで描いた覚えを消す）。
         self.app.change_background_image_to_inn_room(self.quality)
         if self.app.stay_raises:
@@ -326,6 +328,8 @@ class InstantaleApp:
         self.backgrounds = []
         self.is_button_enabled = True
         self.stay_raises = False
+        #: ゲームが宿泊で引く宿代。引かないビルドを作るために 0 にできる。
+        self.room_price = ROOM_PRICE
         self.is_adding_text = False
         self.is_popup_window_opened = False
         self.in_battle = False
@@ -1105,10 +1109,18 @@ print("[宿泊]")
 app.go(building)
 gold_before = app.player.gold
 day_before = world.days_elapsed
+log_mark = len(read_log())
 app.press(module.STAY_LABEL)
+stay_log = read_log()[log_mark:]
 # 第1引数はゲームの部屋選びと同じ 1（1単位）。年齢の式（31歳なら4）を渡さない（版35）。
 check("ゲームの宿泊が1単位で起きる", app.stays and app.stays[-1] == (1, module.STAY_QUALITY), app.stays)
-check("宿代は返る", app.player.gold == gold_before, (gold_before, app.player.gold))
+check("宿代は前払いで打ち消される（所持金は元のまま）",
+      app.player.gold == gold_before, (gold_before, app.player.gold))
+check("設定の部屋の額を先に足す（ログに prepaid）",
+      "stay: prepaid {} for the room ({!r})".format(ROOM_PRICE, module.STAY_QUALITY) in stay_log,
+      stay_log)
+check("打ち消し合ったので帳尻は動かない（corrected は出ない）",
+      "corrected" not in stay_log, stay_log)
 check("暦は1単位ぶん進む", world.days_elapsed == day_before + 30, world.days_elapsed)
 check("宿泊中は自前の選択肢を混ぜない",
       not app.has(module.STAY_LABEL) and not app.has("売上を受け取る"), app.labels())
@@ -1127,6 +1139,41 @@ check("終えた直後に絵を上書きしない（泊まった部屋の絵の�
       not app.backgrounds, app.backgrounds)
 app.go(building)
 check("終えると建物の選択肢に戻る", app.has(module.STAY_LABEL), app.labels())
+
+# ゲームが宿代を引かなかったとき（引き落としの無いビルド）。前払いを引き戻す。
+app.room_price = 0
+gold_before = app.player.gold
+log_mark = len(read_log())
+app.press(module.STAY_LABEL)
+stay_log = read_log()[log_mark:]
+check("ゲームが引かなければ前払いを戻す", app.player.gold == gold_before,
+      (gold_before, app.player.gold))
+check("戻したことが WARN に出る",
+      "corrected {}".format(-ROOM_PRICE) in stay_log and "we prepaid {}".format(ROOM_PRICE) in stay_log,
+      stay_log)
+app.press("宿泊を終える")
+CLOCK.settle()
+app.room_price = ROOM_PRICE
+app.go(building)
+
+# 知らない部屋（ゲームの更新で語彙が変わった形）。額が分からないので前払いせず、差で返す。
+quality_before = module.STAY_QUALITY
+module.STAY_QUALITY = "cave"
+gold_before = app.player.gold
+log_mark = len(read_log())
+app.press(module.STAY_LABEL)
+stay_log = read_log()[log_mark:]
+check("知らない部屋でも宿代は戻る", app.player.gold == gold_before,
+      (gold_before, app.player.gold))
+check("知らない部屋では前払いしない（prepaid は出ない）",
+      "stay: prepaid" not in stay_log, stay_log)
+check("額が分からないことと、差で返したことが WARN に出る",
+      "the price of the room ('cave') is unknown" in stay_log
+      and "corrected {}".format(ROOM_PRICE) in stay_log, stay_log)
+app.press("宿泊を終える")
+CLOCK.settle()
+module.STAY_QUALITY = quality_before
+app.go(building)
 # よその宿屋には触らない。
 inn = world.areas["2"].nodes["10"].facilities["3"]
 app.player.current_area = world.areas["2"]
@@ -1587,8 +1634,9 @@ check("窓を組む口が在る（開くのは check_tool_screens）", callable(
 print("[例外]")
 check("ctx.log_exc に例外が出ていない", not ctx.errors, ctx.errors[:3])
 warns = [line for line in read_log().splitlines()
-         if "WARN" in line and "the game's" not in line]
-check("ログに WARN が無い（網が握った3行を除く）", not warns, warns[:3])
+         if "WARN" in line and "the game's" not in line
+         and "corrected" not in line and "is unknown" not in line]
+check("ログに WARN が無い（網が握った3行と、宿代の帳尻でわざと出した行を除く）", not warns, warns[:3])
 
 print()
 if failures:

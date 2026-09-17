@@ -7,10 +7,10 @@
     "ja": "家を借りる・買う"
   },
   "description": {
-    "en": "Rent or buy a house at the administrative office and it appears in that town. Inside you can stay as at an inn (rest, train, work and more) and keep your gear in a storage room. A stay lasts as long as one at an inn, and a rent period covers four",
-    "ja": "役場で家を借りるか買うと、その土地に自分の家が建つ。中では宿屋と同じ滞在（休養・訓練・労働ほか）ができ、荷物を預ける保管庫が使える。滞在1回の長さは宿屋と同じで、賃貸の1期はその4回ぶん"
+    "en": "Rent or buy a house at the administrative office and it appears in that town. Each house gets its own keeper (a landlord when rented, a caretaker when bought) who holds the keys and can be talked to. Inside you can stay as at an inn (rest, train, work and more) and keep your gear in a storage room. A stay lasts as long as one at an inn, and a rent period covers four",
+    "ja": "役場で家を借りるか買うと、その土地に自分の家が建つ。建物ごとに管理人（賃貸なら大家）が1人立ち、鍵を預かって会話もできる。中では宿屋と同じ滞在（休養・訓練・労働ほか）ができ、荷物を預ける保管庫が使える。滞在1回の長さは宿屋と同じで、賃貸の1期はその4回ぶん"
   },
-  "version": "30",
+  "version": "36",
   "author": "R01/Flossian",
   "settings": {
     "RENT_PRICE": {
@@ -105,6 +105,22 @@
       "note": {
         "ja": "既定 OFF＝建物ごとに別の保管庫。ON にすると、どの物件からも同じ中身が開く（それまで建物ごとに預けていた品は、次に開いたとき共有の側へ移る）",
         "en": "Off by default: each building has its own. On: every property opens the same storage (what each building held is moved into the shared one the next time it is opened)"
+      }
+    },
+    "KEEPER_SOURCE": {
+      "type": "choice",
+      "values": [
+        "llm",
+        "table"
+      ],
+      "default": "llm",
+      "label": {
+        "ja": "管理人（大家）を誰が作るか",
+        "en": "Who writes the keeper"
+      },
+      "note": {
+        "ja": "llm はゲームと同じ生成AIに契約するとき1回だけ聞く（数秒待つ）。table は用意した12人から選ぶ。どちらでも建物ごとに1人立ち、その人が建物の主になる",
+        "en": "llm asks the game's own generator once, when you sign (a few seconds). table picks from 12 ready-made keepers. Either way each house gets one, and that person is its owner"
       }
     },
     "STAY_QUALITY": {

@@ -71,7 +71,7 @@ import sys
 import re
 import time
 
-from instantale_modloader import durations, llm, ui
+from instantale_modloader import durations, llm, prices, ui
 
 LOG_BASENAME = "vacation_custom.log"
 
@@ -376,6 +376,18 @@ def apply(ctx):
     # `ctx.mod_dir` はフックの中では読めない（apply() の間だけ）ので、ここで控える。
     owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "vacation_custom"
     durations.declare(durations.INN_STAY, stay_for, owner=owner, write=write)
+
+    # 宿代も同じ約束でローダの窓口へ置く（`prices`）。
+    # 自分の建物での滞在を無料にする MOD は、ゲームに引かせてから返すのではなく、
+    # ここで聞いた額を先に足しておく（前払い調整。TECH.md §3.3.4）。
+    # 部屋が見分けられないときは None を返し、窓口がゲームの値へ落とす。
+    def room_price_for(app, quality=None):
+        slot = slot_of_quality(quality)
+        if slot is None:
+            return None
+        return {"price": int(room_conf(slot)["price"])}
+
+    prices.declare(prices.INN_ROOM, room_price_for, owner=owner, write=write)
 
     def set_gold(app, value):
         """所持金を書く。型を保つ（`901_` と同じ。float の世界に int を混ぜない）。"""

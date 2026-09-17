@@ -803,7 +803,8 @@ def replace_if_stale(app, npc_id, world=None, write=None):
 # --------------------------------------------------------------------------
 # 置く
 # --------------------------------------------------------------------------
-def place(app, npc_id, area_id, facility_id, *, owner=False, world=None, write=None):
+def place(app, npc_id, area_id, facility_id, *, owner=False, listed=True,
+          world=None, write=None):
     """施設の名簿に載せる。載ったら True。
 
     **`world` を渡すこと。** `World.__init__` を包んでいる間は `app.world` がまだ
@@ -820,6 +821,11 @@ def place(app, npc_id, area_id, facility_id, *, owner=False, world=None, write=N
 
     `owner=True` は施設の主にも据える。
     元の主は記録に控えて `unplace` で戻す（`330_` の滞在中の差し替えと同じ形）。
+
+    `listed=False` は**主に据えるだけで「会話する」の一覧には出さない**。
+    ゲームの宿泊は主を名簿から引くだけなので、これでも通る。
+    自分の家のように「他人がそこに住んでいるように見えてはいけない」建物のため
+    （`330_` の大家）。店の主人のように話せる相手は既定（`listed=True`）のまま。
     """
     npc_id = str(npc_id)
     areas = ui.areas_of_world(world) if world is not None else ui.world_areas(app)
@@ -836,7 +842,7 @@ def place(app, npc_id, area_id, facility_id, *, owner=False, world=None, write=N
                   .format(area_id, facility_id, npc_id))
         return False
     roster = getattr(facility, "characters", None)
-    if isinstance(roster, list) and npc_id not in roster:
+    if listed and isinstance(roster, list) and npc_id not in roster:
         roster.append(npc_id)
     # 「会話する」の一覧は `world.characters` を舐めて各人物の `.location` を
     # 今の施設と突き合わせる（実機 2026-09-12。名簿に居ても `.location` が
@@ -846,6 +852,9 @@ def place(app, npc_id, area_id, facility_id, *, owner=False, world=None, write=N
     record = _record(npc_id)
     character = _character_at(app, npc_id, world)     # 名簿に居ればそれ（記録も合わせる）
     record["stale_placed"] = False
+    if not listed:
+        # `.location` を据えない＝「会話する」の一覧に出ない（主にはなる）。
+        character = None
     if character is not None:
         was_at = {name: getattr(character, name, None)
                   for name in ("location", "current_node", "current_area")}
@@ -869,10 +878,11 @@ def place(app, npc_id, area_id, facility_id, *, owner=False, world=None, write=N
     record["was_at"] = was_at
     if is_mod_npc(npc_id):
         _persist(app, owner_of_id(npc_id), npc_id,
-                 place=[str(area_id), str(facility_id), bool(owner)])
+                 place=[str(area_id), str(facility_id), bool(owner), bool(listed)])
     if write:
-        write("modnpc: {} is at {}/{}{}".format(
-            npc_id, area_id, facility_id, " as the owner" if owner else ""))
+        write("modnpc: {} is at {}/{}{}{}".format(
+            npc_id, area_id, facility_id, " as the owner" if owner else "",
+            "" if listed else " (not in the talk list)"))
     return True
 
 
@@ -1135,6 +1145,7 @@ def restore_world(app, world=None, save_data_dict=None, write=None):
                         # 読み直しの最中は `app.world` がまだ前の世界なので `world` を渡す。
                         place(app, npc_id, spot[0], spot[1],
                               owner=bool(spot[2]) if len(spot) > 2 else False,
+                              listed=bool(spot[3]) if len(spot) > 3 else True,
                               world=world, write=write)
                 done.append((owner, npc_id))
     finally:

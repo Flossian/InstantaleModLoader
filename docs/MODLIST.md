@@ -116,7 +116,7 @@
 | [`327_inn_quality`](MODS.md#327_inn_quality-高級宿のメリット追加改善) | 高級宿のメリット追加・改善 | 高級宿のメリット追加・改善 | 13 |  |
 | [`328_quest_from_world`](MODS.md#328_quest_from_world-世界概要から依頼を生成する) | 世界概要から依頼を生成する | 世界概要から依頼を生成する | 2 |  |
 | [`329_area_move_with_party`](MODS.md#329_area_move_with_party-雇った仲間がエリア移動を拒まなくなる) | 雇った仲間がエリア移動を拒まなくなる | 雇った仲間がエリア移動を拒まなくなる | - |  |
-| [`330_real_estate`](MODS.md#330_real_estate-家を借りる買う) | 家を借りる・買う | 家を借りる・買う | 10 |  |
+| [`330_real_estate`](MODS.md#330_real_estate-家を借りる買う) | 家を借りる・買う | 家を借りる・買う | 11 |  |
 | [`331_facility_investment`](MODS.md#331_facility_investment-街に施設を建てる出資する) | 街に施設を建てる（出資する） | 街に施設を建てる（出資する） | 23 |  |
 | [`332_training_custom`](MODS.md#332_training_custom-訓練所の代金修行の量1段の期間再訓練の可否を変える) | 訓練所のカスタマイズ | 訓練所の代金・修行の量・1段の期間・再訓練の可否を変える | 13 |  |
 | [`401_battle_character_context`](MODS.md#401_battle_character_context-戦闘の審判へ同行者の人物と装備を見せる) | 戦闘キャラクター情報補完 | 戦闘の審判へ同行者の人物と装備を見せる | - |  |

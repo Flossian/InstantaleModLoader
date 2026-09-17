@@ -10,7 +10,7 @@
     "en": "Change the training fee, how much training one course buys, how long one session takes (a base period times a per-activity multiplier), and whether you may train again where you graduated; the wording follows the real length. Defaults are the game's own values, so nothing changes until you edit them",
     "ja": "訓練所の代金・1回の修行の量・1段の期間（ベース期間×修行内容ごとの倍率）を変えられる。卒業した施設での再訓練も選べる。文言もAIの描写も実際の期間に揃う。既定は素のゲームの値のままで、変えた項目だけが効く"
   },
-  "version": "10",
+  "version": "12",
   "author": "R01/Flossian",
   "after": [
     "306_party_train_exp"
@@ -47,12 +47,12 @@
       "min": 1,
       "max": 30,
       "label": {
-        "ja": "1回の修行で受けられる量（年）",
-        "en": "Years in one course"
+        "ja": "1回の修行の行動回数",
+        "en": "Actions in one training course"
       },
       "note": {
-        "ja": "素のゲームは3年。修行内容を1つ選ぶたびにゲームが数える年数（1年/2年/2年/3年）がこれから引かれ、0になると卒業する。増やすと1回の代金で何段も受けられる。この年数はゲームが数える修行の量で、実際に進む暦は下のベース期間×倍率の合計になる（画面の「あと3年間」もゲームが出しているこちらの数）",
-        "en": "The game's own value is 3. Each activity spends the years the game assigns it (1/2/2/3); at 0 you graduate. Raising it lets one fee buy several sessions. This counter is the game's own measure of how much training is left, not the calendar: the days that pass come from the base period below"
+        "ja": "素のゲームは3回ぶん。行動ごとの消費量（ただ鍛える1・基礎を積む2・技を磨く2・新たな技を学ぶ3）がここから引かれ、0 で卒業する。だから3なら `ただ鍛える` を3回か、`新たな技を学ぶ` を1回で終わる。決めるのは回数で、期間ではない（実際に進む暦は下のベース期間×倍率の合計）。増やすと1回の代金で何回も行動できる。ゲームはこの数を年で言うので、画面には「あと3年間」と出る（その文言は下の設定で実際の期間に直せる）",
+        "en": "The game gives 3. Each action spends its own amount (1/2/2/3) and you graduate at 0, so three buys three sessions of the cheapest action or one of the costliest. It sets how many actions one fee buys, not how long they take: the days that pass come from the base period below. The game words the count in years, which is why the screen says \"3 years left\"."
       }
     },
     "BASE_PERIOD": {
@@ -156,14 +156,14 @@
     },
     "ALLOW_RETRAIN": {
       "type": "bool",
-      "default": false,
+      "default": true,
       "label": {
         "ja": "卒業した施設でも再訓練できる",
         "en": "Allow training again where you graduated"
       },
       "note": {
-        "ja": "素のゲームは断る（「十分に学んだ。これ以上ここで得るものはないだろう。」で代金も日数も動かない）。断っている根は施設に立つ訓練済みの印（config の trained。実測）で、ONだとその印をたたむだけ。ゲームは卒業していない施設とまったく同じ道を通るので、代金も背景も選択肢も文言も全部ゲームのまま",
-        "en": "The game refuses a second course at the same facility. The refusal comes from a 'trained' mark on the facility itself; on, that mark is simply folded away, so the game runs exactly as it does at a facility you have not graduated from ― fee, background, choices and wording all its own"
+        "ja": "既定 ON（この MOD を入れると受けられる）。素のゲームは断る（「十分に学んだ。これ以上ここで得るものはないだろう。」で代金も日数も動かない）。断っている根は施設に立つ訓練済みの印（config の trained。実測）で、ONだとその印をたたむだけ。ゲームは卒業していない施設とまったく同じ道を通るので、代金も背景も選択肢も文言も全部ゲームのまま。OFF にすれば素のゲームどおり断る",
+        "en": "On by default: installing this mod lets you train again. The game itself refuses a second course at the same facility. The refusal comes from a \"trained\" mark on the facility itself; on, that mark is simply folded away, so the game runs exactly as it does at a facility you have not graduated from, with its own fee, background, choices and wording. Turn it off to get the game's own refusal back."
       }
     },
     "PERIOD_WORDING": {

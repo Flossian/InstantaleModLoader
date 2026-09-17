@@ -236,7 +236,10 @@ class TrainingStartManager:
         # AI の描写（漢数字・文の途中）。**書き換えてはいけない**側の実測文。
         self.app.add_text("これからの三年間、私が責任を持ってあなたの研鑽を"
                           "お手伝いいたしましょう。")
-        self.app.add_text("あと{}年間。どうする？".format(self.training_years))
+        # 実機のビルドは、この1行だけ**差し替える前の回数**で書く
+        # （VERIFICATION.md §3.64 の #13）。`stale_start_years` でその癖を再現する。
+        said = getattr(self.app, "stale_start_years", None) or self.training_years
+        self.app.add_text("あと{}年間。どうする？".format(said))
         self.app.buttons = phase_buttons(self.training_years, "")
         self.app.refresh_choice_buttons(reset_page=True)
 
@@ -736,6 +739,40 @@ press(app, "ただ鍛える(1ヵ月)")
 check("暦は縮んでいる（文言だけがゲームのまま）", app.elapsed == [30], app.elapsed)
 check("エラーなし", not ctx.errors, ctx.errors)
 
+print("[文言] 開始の1行が素の回数のままのビルドでも、設定した回数で読み替える")
+module, ctx, app, choice_cls = setup(
+    configure=lambda m: (setattr(m, "BASE_PERIOD", "1ヵ月"),
+                         setattr(m, "COURSE_YEARS", 6)))
+app.stale_start_years = 3                     # ゲームは差し替え前の3を書く
+press(app, START_TEXT)
+check("設定した6回ぶんで出る", "あと6ヵ月。どうする？" in app.texts, app.texts)
+check("素の3で出さない", "あと3ヵ月。どうする？" not in app.texts, app.texts)
+check("読み替えたことがログに残る",
+      "the start line still said 3 year(s)" in read_log(), read_log()[-400:])
+press(app, "ただ鍛える(1ヵ月)")
+check("2行目以降はゲームの数のまま（5回ぶん）",
+      "残り5ヵ月。どうする？" in app.texts, app.texts)
+check("エラーなし", not ctx.errors, ctx.errors)
+
+print("[文言] 回数を変えていなければ読み替えない")
+module, ctx, app, choice_cls = setup(
+    configure=lambda m: setattr(m, "BASE_PERIOD", "1ヵ月"))
+app.stale_start_years = 3
+press(app, START_TEXT)
+check("素のままなら3回ぶん", "あと3ヵ月。どうする？" in app.texts, app.texts)
+check("読み替えのログも出ない",
+      "the start line still said" not in read_log()[-400:], read_log()[-400:])
+
+print("[頼み文] 残りの量の錨も設定した回数で読み替える")
+check("6回ぶんで書き換わる",
+      module.reprompt("- 残り訓練年数: 3年", budget=6)
+      == "- 残り訓練期間: 6ヵ月",
+      module.reprompt("- 残り訓練年数: 3年", budget=6))
+check("渡さなければ書かれている数のまま",
+      module.reprompt("- 残り訓練年数: 3年")
+      == "- 残り訓練期間: 3ヵ月",
+      module.reprompt("- 残り訓練年数: 3年"))
+
 print("[文言] 訓練の外の文言には触らない")
 module, ctx, app, choice_cls = setup(
     configure=lambda m: setattr(m, "BASE_PERIOD", "1ヵ月"))
@@ -743,8 +780,9 @@ app.add_text("あと3年間。どうする？")
 check("窓の外は素通し", app.texts[-1] == "あと3年間。どうする？", app.texts[-1])
 
 # ================================================================ 再訓練
-print("[再訓練] 既定では印をたたまない（素のゲームのまま断られる）")
-module, ctx, app, choice_cls = setup(graduated=True)
+print("[再訓練] 切れば印をたたまない（素のゲームのまま断られる）")
+module, ctx, app, choice_cls = setup(
+    graduated=True, configure=lambda m: setattr(m, "ALLOW_RETRAIN", False))
 gold_before = app.player.gold
 press(app, START_TEXT)
 check("ゲームの断りがそのまま出る",
@@ -756,9 +794,10 @@ check("修行の選択肢は並ばない",
 check("所持金も動かない", app.player.gold == gold_before, app.player.gold)
 check("エラーなし", not ctx.errors, ctx.errors)
 
-print("[再訓練] ONだと印をたたんで、ゲームがいつもどおり進める")
-module, ctx, app, choice_cls = setup(
-    graduated=True, configure=lambda m: setattr(m, "ALLOW_RETRAIN", True))
+print("[再訓練] 既定（ON）では印をたたんで、ゲームがいつもどおり進める")
+module, ctx, app, choice_cls = setup(graduated=True)
+check("既定は ON（この MOD を入れると受けられる。他の設定と違い素の値ではない）",
+      module.ALLOW_RETRAIN is True, module.ALLOW_RETRAIN)
 gold_before = app.player.gold
 press(app, START_TEXT)
 check("印がキーごと落ちる", "trained" not in app.player.location.config,
