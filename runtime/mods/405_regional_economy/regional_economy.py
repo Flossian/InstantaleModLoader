@@ -1,54 +1,47 @@
 # -*- coding: utf-8 -*-
-"""都市ごとの地域経済プロフィールを作り、その土地の需給を売買の値段へ乗せるMOD。
+"""最上位エリアの地域経済プロフィールを作り、下流へ渡すMOD。
 
-## 倍率の軸はジャンル（`item_detail`）
+## 倍率の軸は売買画面ごとの一括商品照合
 
-エリアごとに1回だけLLMへ聞き、**32種のジャンルそれぞれに 1〜5 の需給スコア**を
-付けてもらう。売買画面では品の `attributes["item_detail"]` からスコアを辞書引きし、
-プレイヤー設定の倍率へ変換して買価・売価へ掛ける。**売買画面でLLMは呼ばない。**
+最上位エリアだけで1回、地域経済を作る。売買画面では左右の全商品を1回の一括推論へ
+渡し、名前と説明文を中心に地域との関係を判定する。返った1〜5の値をプレイヤー
+設定の倍率へ変換して、129が付けた買価・売価へ掛ける。
 
-品ごとにLLMへ聞く形にしない理由:
+商品ごとに別々のLLM呼び出しをしない。売買画面を開く前に、全商品を1つのJSONへ
+まとめて裏で検品し、完了してから元の売買画面を開く。結果は実行中のメモリだけに
+保持し、商品分類をstateへ保存しない。
 
-- 画面を開くたびに待ちが入る。品数に比例して伸び、返らなければ画面が出ない
-- 同じ品が開くたびに違う判定になりうる。**値段が動くと交易が遊びにならない**
-  （安く仕入れて高く売るには、その土地の値段が固定である必要がある）
-
-ジャンルを軸にできるのは、ゲーム自身が全ての品に細分を書いているため。
-実プレイのログ1382件で `item_detail` の欠けは0件、24種が出現した。
-
-語彙は2段で、生成時の `sub_type` と品に書かれる `item_detail` は綴りが違う
-（`small` → `small_weapon`、`herb` → `plant`。GAME.md §2.13.2）。
-軸にするのは `item_detail` のほうで、画像フォルダと同じ32種。
-sub_type 専用の綴りは持たない。外部ツールが作ったデータは考慮しない。
-`129_balance_item_price` の値付け表も同じ鍵で引いている。
+ゲーム側の補助分類は参考資料として渡すが、自由生成される商品に対応するため、
+名前と説明文を最重視する。ゲーム側に存在する `herb` や専用画像の有無に関する
+調査記録は残すが、405の特産品生成許可分類からは外す。
 
 ## 具体名の層
 
-ジャンルは粗いので、プロフィールが名指しした品だけは上書きする。
-`shortage_goods` に名前が当たれば 5、`surplus_goods` なら 1。
-文字列の照合だけなのでLLMは要らない。`major_products` では値段を動かさない
-（特産品は関連の強さであって、需要・供給の方向を持たないため）。
+判定はプロフィールの特産品・過不足品と、商品の名前・説明文・補助分類をLLMへ
+同時に渡す。`major_product`は関連の強さだけを示し価格は動かさず、
+`unclassified`は3（等倍）にする。
 
-## 129 との層 ― 包み直しではなく、129の後処理の口へ登録する
+## 下流エリアへの引き継ぎ
 
-**層の置き場所では解けない。** 129は10箇所で値段を書くが、書く時点が地点ごとに
-違う ― 画面の2箇所（`toggle_twin_inventory_window` /
-`ItemDetailBox.update_content`）は描く前なので元の関数の**前**、
-`set_shop_price_for_*` や `normalize_shop_inventory_prices` は**後**。
-包みの勝敗は適用順ではなく「元の関数の前に書くか後に書くか」で決まるので、
-外側でも内側でも必ず半分の地点で負ける
-（実測: 内側に置いていた版で、地域倍率が `shop_owner` /
-`normalize_shop_inventory_prices` で9回とも消えていた。買値にだけ乗らない状態）。
+`create_settlement_detail` の `settlement_overview` が子エリアの概要として
+ゲームのLLMへ渡る。世界構造から直上のエリアを特定し、そのエリアの405保存済み
+プロフィールがある場合だけ、要約・スコア1の供給過多品・スコア5の需要過多品・
+特産品を概要へ一時追記する。親を一段だけ見るため、孫へは直接渡さない。
+ゲームの `Area` や `world_data`、セーブ、405の保存プロフィールは変更しない。
 
-そこで129が持っている**値付け直後の口**（`sys._instantale_item_price_post`）へ
-登録する。129がどこで書いてもその場で倍率が乗るので、
-適用順にも、129がどの経路を通るかにも依存しない。
+売買の左右とプレイヤー自身の所持品では、同じスコアを商品名末尾の表示へ使う。
+既定の上下表示はゲーム側の名前ラベルと同じ文字表示で、商品データそのものは書き換えない。
 
-自前の2フックは残してある。129を切っている構成では素の値段に倍率が掛かるだけの
-MODとして動く必要があり、そこは口が存在しないため。
-価格印が二重掛けを防ぐので、両方通っても倍率は積み上がらない。
-`mod.json` の `"before"` も残す。口が無い版の129と組んだときに、
-画面の2箇所だけは内側に居れば従来どおり掛かるため（保険であって、前提ではない）。
+店が本来の商品を生成した一連では、`major_products`の1品をゲーム本来の
+`generate_item_in_shopping`へ1回だけ追加で渡す。312を名指しせず、初回生成と
+再入荷が共通して通るゲーム側の経路だけを見る。
+
+## 129 との層
+
+`mod.json` の `"after"` で129の**外側**に置く。129は売買画面
+（`toggle_twin_inventory_window`）でも品物欄（`ItemDetailBox.update_content`）でも
+元の関数を呼ぶ**前**に値段を素から組み直すので、後段の405がその直後に掛ける。
+129は同じ品を何度でも組み直すので、405も同じ2地点で掛け直す。
 
 ## スレッド
 
@@ -79,6 +72,7 @@ stateファイルは読まない。読み書きは全部ワーカーの中で行
 """
 
 import json
+import hashlib
 import os
 import queue
 import sys
@@ -86,15 +80,24 @@ import threading
 import typing
 
 from instantale_modloader import frames, llm, ui
-from instantale_modloader.state import world_filename, world_key
+from instantale_modloader.state import (world_filename, world_key,
+                                        world_key_of_dict)
 
 
 # ---- 設定（mod.json の default と一致させる。tools/check_mods.py が検査する）
-REGIONAL_ECONOMY_SUMMARY_CHARS = 300
-REGIONAL_ECONOMY_ITEM_COUNT = 3
+REGIONAL_ECONOMY_SUMMARY_CHARS = 200
+REGIONAL_ECONOMY_ITEM_COUNT = 2
 REGIONAL_ECONOMY_PROCESSING_STAGES = 2
+# 商品照合の派生推論はMODの固定仕様とする。プレイヤー設定には公開しない。
+ITEM_INFERENCE_ROUNDS = 1
 STRONG_FLUCTUATION_MULTIPLIER = 1.5
 WEAK_FLUCTUATION_MULTIPLIER = 1.2
+# スコア表示はプレイヤー視点で固定する。設定は一括表示と売買時反転だけ。
+# 1/2/4/5 は 1=↑↑、2=↑、4=↓、5=↓↓ とする。
+SHOW_SCORE_MARKS = True
+REVERSE_TRADE_MARK = True
+SCORE_MARK_3 = True
+SPECIALTY_MARK = "（特産品）"
 # 安全のための内部値。プレイヤー設定には公開しない。
 LLM_TIMEOUT = 120
 
@@ -105,10 +108,22 @@ LOG_BASENAME = "regional_economy.log"
 STATE_DIRNAME = "regional_economy"
 # shared llmの自動記録をMOD名の1フォルダへ集約する。
 MANAGER_NAME = "mod_regional_economy"
+# プロフィール・商品一括検品・特産品生成を同じMODの監査先へまとめる。
+SPECIALTY_MANAGER_NAME = MANAGER_NAME
 STATE_STORE_ATTR = "__instantale_regional_economy_store__"
+
+# ゲーム本体の町詳細生成。`settlement_overview` が生成対象エリアの
+# 概要としてプロンプトへ渡るため、親エリアの経済情報はここへだけ足す。
+SETTLEMENT_DETAIL_TARGET = (
+    "scripts.llm.llm_manager_world_generate:create_settlement_detail"
+)
+ECONOMY_CONTEXT_HEADER = "【この土地の産業と経済】"
+STRUCTURE_NAME_KEYS = ("settlement_name", "area_name", "name")
+STRUCTURE_ID_KEYS = ("area_id", "id")
 WORLD_OVERVIEW_CHARS = 2400
 AREA_OVERVIEW_CHARS = 2400
 LIST_ITEM_CHARS = 240
+ITEM_DESCRIPTION_CHARS = 1200
 # 売買の窓だけに掛ける。所持品は None、402の受け渡しは "party_transfer"
 # （GAME.md §2.13）。地域の需給は交易の値段の話なので、
 # 売り買いをしない窓では触らない。
@@ -116,109 +131,71 @@ TRADE_SITUATION = "shop"
 BUY_KEY = "買価"
 SELL_KEY = "売価"
 PRICE_KEYS = (BUY_KEY, SELL_KEY)
+FIXED_SCORE_MARKS = {1: "↑↑", 2: "↑", 4: "↓", 5: "↓↓"}
+SPECIALTY_MARK_CHOICES = ("（特産品）", "※", "★", "なし")
+VALID_RARITIES = {
+    "common", "rare", "magical", "epic", "legendary", "mythic",
+}
+# ゲームの構造化出力で許されている item_category / sub_type。
+# 画像の選択はゲーム自身の generate_item_in_shopping に任せ、405側で
+# 代替画像を決めない。`herb`は現在の許可sub_typeには含めない。
+VALID_SUBTYPES = {
+    "weapon": {"small", "medium", "large", "long", "throwable"},
+    "wearable": {
+        "headgear", "body_armor", "legwear", "gauntlets", "shield",
+        "accessory", "clothing",
+    },
+    "consumable": {
+        "food", "drink", "medicine", "potion", "scroll",
+        "plant", "mushroom",
+    },
+    "healing_item": {"food", "drink", "medicine", "potion", "plant"},
+    "material": {
+        "creature_part", "creature", "ore", "metal", "gem", "treasure",
+        "plant", "mushroom", "relic", "scrap", "magical_material",
+        "other_material", "liquid_material",
+    },
+    "utility": {"tool", "document", "scroll"},
+}
 
-# 129 が値段を書いた直後に呼んでもらう口（`sys` の素のリスト。
-# 中身は `(名乗り, 関数)`。宣言は 129 の `POST_ATTR` の説明にある）。
-# 129 は10箇所で値段を書き、そのうち画面の2箇所しかこちらの層では取れない。
-# ここへ登録すれば、129 がどこで書いてもその場で倍率が乗る。
-POST_ATTR = "_instantale_item_price_post"
-POST_TAG = "405_regional_economy"
-
-# 後処理から記録を出す経路。
-# 画面の2箇所（`detail` / `window/*`）はこの MOD 自身のフックが既に通っていて
-# 同じ行が出るので、**新しく拾えるようになった経路だけ**を残す。
-POST_NOTED = ("shop_owner", "shop_player", "normalize", "generated")
-
-# 品の細分（`attributes["item_detail"]`）を item_type ごとに並べたもの。
-#
-# 語彙は2段になっていて、混ぜてはいけない（GAME.md §2.13.2）。
-#
-#   sub_type    生成のときにLLMが選ぶ綴り。ゲームの定数 `ITEM_TYPE_SUBTYPES`
-#               （`209_probe_free_facility` が実機から写している）
-#   item_detail 品に書かれる綴り。**倍率の軸はこちら**
-#
-# 間に変換が入り、**画像を引くより前に済んでいる**。
-# 実測（`out/item_image.log`）で画像選択へ渡るのは `small` ではなく
-# `small_weapon`、`herb` ではなく `plant`。
-# したがって `item_detail` に現れるのは画像フォルダ
-# `Assets/images/item_candidates_dark/` と同じ32種で、ここもその32種にする。
-#
-# **sub_type 専用の綴りは置かない**（`small` `medium` `herb` など）。
-# `herb` は現役の生成候補だが、品に書かれる段階で `plant` になるため
-# `item_detail` としては現れない（実測: consumable と healing_item の
-# 300件で `herb` は0件、`plant` は68件）。
-# セーブエディタが `herb` を書ける状態にあるが、
-# **外部ツールが作ったデータは考慮しない**。
-#
-# ここへ写しているのは、ModLoaderが単体で配られるため。
-# ゲームのファイルを実行時に読むと、ModLoaderだけを入れた環境で動かなくなる。
-# 訳語はこちらで付けている。
-# 表に無い細分が来ても落ちない（スコア3＝等倍で、値段に触れない）。
-#
-# `129_balance_item_price` の `RATES` も同じ鍵で引いている。
-GENRE_GROUPS = (
-    ("weapon", "武器", (
-        ("small_weapon", "短剣・小型の武器"),
-        ("medium_weapon", "片手剣などの中型の武器"),
-        ("large_weapon", "大剣などの大型の武器"),
-        ("long_weapon", "槍・長物"),
-        ("throwable_weapon", "投擲武器"),
-    )),
-    ("wearable", "防具・装身具", (
-        ("headgear", "兜・頭の防具"),
-        ("body_armor", "鎧・胴の防具"),
-        ("legwear", "脚の防具"),
-        ("gauntlets", "手甲"),
-        ("shield", "盾"),
-        ("accessory", "装身具・装飾品"),
-        ("clothing", "衣服"),
-    )),
-    ("consumable", "飲食・薬", (
-        ("food", "食料"),
-        ("drink", "飲み物"),
-        ("plant", "薬草・植物"),
-        ("mushroom", "きのこ"),
-        ("medicine", "薬"),
-        ("potion", "調合された薬品"),
-    )),
-    ("utility", "道具・書物", (
-        ("tool", "道具"),
-        ("document", "書物・文書"),
-        ("scroll", "巻物"),
-    )),
-    ("material", "素材・財宝", (
-        ("creature", "生き物"),
-        ("creature_part", "生き物の部位"),
-        ("ore", "鉱石"),
-        ("metal", "金属・インゴット"),
-        ("gem", "宝石"),
-        ("treasure", "財宝"),
-        ("relic", "遺物"),
-        ("scrap", "がらくた"),
-        ("magical_material", "魔法の素材"),
-        ("liquid_material", "液体の素材"),
-        ("other_material", "その他の素材"),
-    )),
-)
-
-# 引くための平らな表。`item_detail` から訳語を引く。
-GENRES = {name: gloss
-          for _key, _label, pairs in GENRE_GROUPS
-          for name, gloss in pairs}
-
-
-def _genre_catalog():
-    """プロンプトへ載せる、種別ごとに束ねたジャンル一覧。
-
-    平らに32行並べるより、種別で束ねたほうが
-    「武器は一通り作れるが薬は輸入」のような筋の通った付け方になる。
-    """
-    lines = []
-    for _key, label, pairs in GENRE_GROUPS:
-        lines.append("【{}】".format(label))
-        lines += ["・{} : {}".format(name, gloss) for name, gloss in pairs]
-    return "\n".join(lines)
-
+# 品の細分（`attributes["item_detail"]`）と、LLMへ渡す訳語。
+# `herb`は現在の特産品生成では使わないため405の許可分類から外している。
+# ゲーム側に存在すること、専用画像の有無に関する調査記録はDOC.mdへ残す。
+# ここに無い細分が来ても落ちない（スコア3＝等倍として扱う）。
+GENRES = {
+    "small_weapon": "短剣・小型の武器",
+    "medium_weapon": "片手剣などの中型の武器",
+    "large_weapon": "大剣などの大型の武器",
+    "long_weapon": "槍・長物",
+    "throwable_weapon": "投擲武器",
+    "headgear": "兜・頭の防具",
+    "body_armor": "鎧・胴の防具",
+    "legwear": "脚の防具",
+    "gauntlets": "手甲",
+    "shield": "盾",
+    "accessory": "装身具・装飾品",
+    "clothing": "衣服",
+    "food": "食料",
+    "drink": "飲み物",
+    "plant": "薬草・植物",
+    "mushroom": "きのこ",
+    "medicine": "薬",
+    "potion": "調合された薬品",
+    "scroll": "巻物",
+    "tool": "道具",
+    "document": "書物・文書",
+    "creature": "生き物",
+    "creature_part": "生き物の部位",
+    "ore": "鉱石",
+    "metal": "金属・インゴット",
+    "gem": "宝石",
+    "treasure": "財宝",
+    "relic": "遺物",
+    "scrap": "がらくた",
+    "magical_material": "魔法の素材",
+    "liquid_material": "液体の素材",
+    "other_material": "その他の素材",
+}
 
 # LLMが返したジャンルの数がこれを下回るプロフィールは保存しない。
 # 半端な表は「鉱石だけ安くて他は全部平常」のような歪んだ経済になる。
@@ -233,6 +210,63 @@ def _get(value, name, default=None):
     if isinstance(value, dict):
         return value.get(name, default)
     return getattr(value, name, default)
+
+
+def _active_world_context(app):
+    """現在遊んでいる世界の鍵と、同じ世界のデータ源を返す。
+
+    通常は `app.world_dict`（世界ファイル）と
+    `app.save_data_dict`（現在のプレイ中セーブ）の `world_data` が同じ名前に
+    なる。ところがロード直後や世界を切り替えた直後は、実行時の
+    `world_dict` が前の世界を指したまま、セーブ側だけが新しい世界を指す
+    瞬間がある。このとき共有部品の `world_key(app)` だけに任せると、
+    同じエリアIDを持つ別世界のプロフィールを拾う可能性がある。
+
+    そこで、両方を共有部品の `world_key_of_dict` で照合する。名前が一致する
+    ときは世界ファイルを使い、食い違うときは「いまプレイヤーが遊んでいる
+    セーブ」の名前とデータを採用する。405はゲーム本体やセーブを書き換えず、
+    参照元だけを選ぶ。
+    """
+    if app is None:
+        return "", None, ""
+
+    world_dict = getattr(app, "world_dict", None)
+    save_dict = getattr(app, "save_data_dict", None)
+    world_name = world_key_of_dict(world_dict, None)
+    save_name = world_key_of_dict(save_dict, None)
+
+    if isinstance(world_name, str) and world_name:
+        if isinstance(save_name, str) and save_name and save_name != world_name:
+            return save_name, save_dict, "save_data_dict"
+        return world_name, world_dict, "world_dict"
+    if isinstance(save_name, str) and save_name:
+        return save_name, save_dict, "save_data_dict"
+
+    fallback = world_key(app)
+    if isinstance(fallback, str) and fallback:
+        return fallback, None, "runtime"
+    return "", None, ""
+
+
+def _active_world_key(app):
+    """現在の世界名だけを取得する。stateの鍵は必ずこれを使う。"""
+    return _active_world_context(app)[0]
+
+
+def _active_world_data(app):
+    """現在の世界に対応する辞書を取得する。"""
+    return _active_world_context(app)[1]
+
+
+def _active_world_structure(app):
+    """現在の世界の構造を取得する。"""
+    container = _active_world_data(app)
+    if isinstance(container, dict):
+        world_data = container.get("world_data")
+        structure = _get(world_data, "structure")
+        if structure is not None:
+            return structure
+    return _get(getattr(app, "world", None), "structure")
 
 
 def _short(value, limit):
@@ -256,7 +290,7 @@ def _overview_only(value, limit):
 
 def _world_overview(app):
     """world_data.overviewだけを読む。"""
-    world_dict = getattr(app, "world_dict", None)
+    world_dict = _active_world_data(app)
     if isinstance(world_dict, dict):
         world_data = world_dict.get("world_data")
         if isinstance(world_data, dict):
@@ -277,6 +311,98 @@ def _area_overview(area):
     return _overview_only(_get(area, "overview"), AREA_OVERVIEW_CHARS)
 
 
+def _structure_identity(node):
+    """世界構造の1ノードから、保存照合用の `(id, name)` を読む。"""
+    if isinstance(node, str):
+        return "", node.strip()
+    if not isinstance(node, dict):
+        return "", ""
+    node_id = next((node.get(key) for key in STRUCTURE_ID_KEYS
+                    if node.get(key) not in (None, "")), "")
+    node_name = next((node.get(key) for key in STRUCTURE_NAME_KEYS
+                      if node.get(key) not in (None, "")), "")
+    return (str(node_id) if node_id not in (None, "") else "",
+            node_name.strip() if isinstance(node_name, str) else "")
+
+
+def _structure_parent(structure, target_name, target_id=None):
+    """対象ノードの直上だけを `(親ID, 親名)` として返す。"""
+    wanted_name = target_name.strip() if isinstance(target_name, str) else ""
+    wanted_id = str(target_id) if target_id not in (None, "") else ""
+    if not wanted_name and not wanted_id:
+        return None
+    visited = set()
+
+    def visit(node, parent):
+        if isinstance(node, (dict, list, tuple)):
+            marker = id(node)
+            if marker in visited:
+                return None
+            visited.add(marker)
+        node_id, node_name = _structure_identity(node)
+        matches = (wanted_id and node_id == wanted_id) if node_id else \
+            (wanted_name and node_name == wanted_name)
+        if matches:
+            return parent
+        next_parent = (node_id, node_name) if (node_id or node_name) else parent
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key in STRUCTURE_ID_KEYS + STRUCTURE_NAME_KEYS:
+                    continue
+                found = visit(value, next_parent)
+                if found is not None:
+                    return found
+        elif isinstance(node, (list, tuple)):
+            for value in node:
+                found = visit(value, parent)
+                if found is not None:
+                    return found
+        return None
+
+    return visit(structure, None)
+
+
+def _economy_context(record):
+    """親エリアから子エリアへ渡す短い経済ブロックを作る。"""
+    if not isinstance(record, dict):
+        return ""
+    summary = _short(record.get("regional_economy_summary"),
+                     REGIONAL_ECONOMY_SUMMARY_CHARS)
+    if not summary:
+        return ""
+
+    def goods(key):
+        values = record.get(key)
+        if isinstance(values, str):
+            values = [values]
+        if not isinstance(values, (list, tuple)):
+            return ""
+        result = [_clean_item_text(value) for value in values]
+        return "、".join(value for value in result if value)
+
+    lines = [ECONOMY_CONTEXT_HEADER, summary]
+    surplus = goods("surplus_goods")
+    shortage = goods("shortage_goods")
+    products = goods("major_products")
+    if surplus:
+        lines.append("供給過多の製品: " + surplus)
+    if shortage:
+        lines.append("需要過多の製品: " + shortage)
+    if products:
+        lines.append("特産品: " + products)
+    return "\n".join(lines)
+
+
+def _area_id_by_name(app, area_name):
+    """構造側にIDが無い版だけ、実行中のArea一覧で名前をIDへ戻す。"""
+    if app is None or not isinstance(area_name, str) or not area_name.strip():
+        return ""
+    for area_id, area in (ui.world_areas(app) or {}).items():
+        if _short(_get(area, "name", ""), 120).strip() == area_name.strip():
+            return str(area_id)
+    return ""
+
+
 def _snapshot(app):
     """メインスレッドで採る、地域経済生成用の最小資料。"""
     if app is None:
@@ -287,7 +413,7 @@ def _snapshot(app):
         return None
     area_name = _short(_get(area, "name", ""), 120) or area_id
     return {
-        "world_key": _short(world_key(app), 240),
+        "world_key": _short(_active_world_key(app), 240),
         "area_id": str(area_id),
         "area_name": area_name,
         "world_overview": _world_overview(app),
@@ -308,7 +434,7 @@ def _scope_of(app):
     area_id = str(ui.area_id_of(area) or "")
     if area is None or not area_id:
         return None
-    return (str(_short(world_key(app), 240) or "_"), area_id)
+    return (str(_short(_active_world_key(app), 240) or "_"), area_id)
 
 
 def _new_bucket(world):
@@ -328,6 +454,9 @@ def _store():
         "buckets": {},
         "blocked_worlds": set(),
         "pending": set(),
+        # プロフィール待ちが必要なのは、ゲームが初回の店の商品を作り始めたのに
+        # 到着時の裏仕事がまだ終わっていない1回だけ。Eventはプロセス内限定。
+        "profile_events": {},
         # 生成済みと分かっている取引地点。ゲーム側のスレッドが
         # stateファイルを読まずに「積むか」を決めるための控え。
         "ready": set(),
@@ -336,20 +465,39 @@ def _store():
         "worker": None,
         "data_lock": threading.RLock(),
         "worker_lock": threading.Lock(),
+        # ゲームの1回の品揃え生成につき、特産品生成を1度だけ確保する。
+        "specialty_lock": threading.RLock(),
+        "stock_batch": None,
         # 価格印はゲーム側のスレッド（売買画面・品物欄）と
         # 保存の経路の両方から触る。辞書が途中の形で読まれないようにする。
         "price_lock": threading.RLock(),
         "price_marks": {},
+        # 商品分類は永続化しない。売買画面の一括検品が完了した後、
+        # 同じ商品内容を再利用するための実行中だけの控え。
+        "classification_lock": threading.RLock(),
+        "classifications": {},
+        "classification_pending": set(),
         # 保存中の印。`save_game` が内側で保存の実体を呼ぶので、
         # 二重に戻さないための門番。読んで書くまでを割り込ませない。
         "save_lock": threading.Lock(),
         "save_in_progress": False,
+        # world_dict と現在セーブの名前が一時的に食い違ったことを、
+        # 同じロード中に何度も書かないための控え。
+        "world_identity_mismatches": set(),
     }
     for key, value in defaults.items():
         if key not in found:
             found[key] = value
     if not isinstance(found.get("price_marks"), dict):
         found["price_marks"] = {}
+    if not isinstance(found.get("profile_events"), dict):
+        found["profile_events"] = {}
+    if not isinstance(found.get("classifications"), dict):
+        found["classifications"] = {}
+    if not isinstance(found.get("classification_pending"), set):
+        found["classification_pending"] = set()
+    if not isinstance(found.get("world_identity_mismatches"), set):
+        found["world_identity_mismatches"] = set()
     return found
 
 
@@ -543,8 +691,182 @@ def _raw_dict(raw):
     return data if isinstance(data, dict) else None
 
 
+def _item_snapshot(item):
+    """商品オブジェクトを、LLMへ渡す短い辞書へ写す。"""
+    if item is None:
+        return None
+    attributes = _get(item, "attributes", {})
+    if not isinstance(attributes, dict):
+        attributes = {}
+    name = _short(_get(item, "name", ""), 240)
+    description = _short(_get(item, "description", ""), ITEM_DESCRIPTION_CHARS)
+    item_type = _short(_get(item, "item_type", ""), 120)
+    item_detail = ""
+    for key in ("item_detail", "category", "subtype", "material"):
+        item_detail = _short(attributes.get(key), 240)
+        if item_detail:
+            break
+    rarity = _short(_get(item, "rarity", ""), 80)
+    item_id = _short(_get(item, "id", ""), 160)
+    if not name and not description:
+        return None
+    identity = {
+        "id": item_id,
+        "name": name,
+        "description": description,
+        "item_type": item_type,
+        "item_detail": item_detail,
+        "rarity": rarity,
+    }
+    digest = hashlib.sha256(json.dumps(
+        identity, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()[:24]
+    item_key = ("id:{}:{}".format(item_id, digest) if item_id
+                else "content:{}".format(digest))
+    return {
+        "item_key": item_key,
+        "item_id": item_id,
+        "name": name,
+        "description": description,
+        "item_type": item_type,
+        "item_detail": item_detail,
+        "rarity": rarity,
+    }
+
+
+def _item_snapshots(*obtainers):
+    """左右の全商品を入力順で取り出す。出力へは実体を含めない。"""
+    result = []
+    counts = {}
+    for obtainer in obtainers:
+        for item in _inventory_items(obtainer):
+            snapshot = _item_snapshot(item)
+            if snapshot is None:
+                continue
+            base_key = snapshot["item_key"]
+            counts[base_key] = counts.get(base_key, 0) + 1
+            occurrence = counts[base_key]
+            if occurrence > 1:
+                snapshot["item_key"] = "{}#{}".format(base_key, occurrence)
+            snapshot["_runtime_item"] = item
+            result.append(snapshot)
+    return result
+
+
+def _classification_name(value):
+    """LLMの返しを、分類名として安全な文字列へ揃える。"""
+    if not isinstance(value, str):
+        return "unclassified"
+    value = value.strip().casefold()
+    if value in ("surplus_good", "shortage_good", "major_product",
+                 "unclassified"):
+        return value
+    return "unclassified"
+
+
+def _relation_name(value):
+    """LLMの返しを、関係名として安全な文字列へ揃える。"""
+    if not isinstance(value, str):
+        return "none"
+    value = value.strip().casefold()
+    return value if value in ("direct", "derived", "none") else "none"
+
+
+def _matched_name(value):
+    """LLMの返しを、物品名として安全な文字列へ揃える。"""
+    return _clean_item_text(value)
+
+
+def _source_buckets(record):
+    """地域プロフィールの物品名を、方向判定用の一時索引へ展開する。"""
+    result = {}
+    for field, bucket_name in (
+            ("major_products", "major_product"),
+            ("surplus_goods", "surplus_good"),
+            ("shortage_goods", "shortage_good")):
+        values = record.get(field) if isinstance(record, dict) else None
+        if not isinstance(values, (list, tuple)):
+            continue
+        for value in values:
+            name = _clean_item_text(value)
+            if name:
+                result.setdefault(_name_key(name), set()).add(bucket_name)
+    return result
+
+
+def _default_classification(item, reason):
+    """LLMの返しが無い場合の安全な1分類を作る。"""
+    return {
+        "item_key": item["item_key"],
+        "item_name": _short(item.get("name", ""), 240),
+        "classification": "unclassified",
+        "score": 3,
+        "matched_goods": [],
+        "relation": "none",
+        "reason": reason,
+    }
+
+
+def _normalize_classification(data, item, record):
+    """LLMの返しを、保存できる形へ固定する。"""
+    if not isinstance(data, dict):
+        return _default_classification(item, "一括結果にこの商品が無かったため未分類。")
+    classification = _classification_name(data.get("classification"))
+    relation = _relation_name(data.get("relation"))
+    raw_matches = data.get("matched_goods", [])
+    if isinstance(raw_matches, str):
+        raw_matches = [raw_matches]
+    if not isinstance(raw_matches, (list, tuple)):
+        raw_matches = []
+    matched = []
+    for value in raw_matches:
+        name = _matched_name(value)
+        if name and name not in matched:
+            matched.append(name)
+        if len(matched) >= REGIONAL_ECONOMY_ITEM_COUNT:
+            break
+    score = _score_value(data.get("score"))
+    if classification == "unclassified" or score is None:
+        classification = "unclassified"
+        relation = "none"
+        score = 3
+    else:
+        source = _source_buckets(record)
+        directions = set()
+        for name in matched:
+            directions.update(source.get(_name_key(name), set()))
+        directions.discard("major_product")
+        if len(directions) > 1:
+            classification = "unclassified"
+            relation = "none"
+            score = 3
+        elif directions:
+            classification = next(iter(directions))
+        if classification == "surplus_good" and score > 3:
+            classification = "unclassified"
+            relation = "none"
+            score = 3
+        elif classification == "shortage_good" and score < 3:
+            classification = "unclassified"
+            relation = "none"
+            score = 3
+        elif not matched:
+            classification = "unclassified"
+            relation = "none"
+            score = 3
+    return {
+        "item_key": item["item_key"],
+        "item_name": _short(item.get("name", ""), 240),
+        "classification": classification,
+        "score": score,
+        "matched_goods": matched,
+        "relation": relation,
+        "reason": _short(data.get("reason", ""), 240),
+    }
+
+
 def _build_messages(snapshot):
-    """1回の呼び出しで、要約とジャンル別の需給スコアを両方もらう。"""
+    """systemへ指示、userへ現在エリアの最小資料を分けて渡す。"""
     json_format = json.dumps({
         "regional_economy_summary": "要約",
         "major_industries": [
@@ -568,8 +890,9 @@ def _build_messages(snapshot):
             {"genre": "potion", "score": 4},
         ],
     }, ensure_ascii=False)
-    genre_lines = _genre_catalog()
-    instruction = (
+    genre_lines = "\n".join(
+        "・{} : {}".format(name, gloss) for name, gloss in GENRES.items())
+    system_content = (
         "あなたは下記の世界観を持つ架空世界での経済を考え、作成する担当です。"
         "以下に従い、JSONオブジェクト1個だけを返してください。\n\n"
         "【経済の前提】\n"
@@ -592,6 +915,11 @@ def _build_messages(snapshot):
         "（例：現実世界でいえば（石油→ガソリンは2段階、銅鉱石→銅のインゴット→銅の鍋は3段階、"
         "羊→羊毛→羊毛布→羊毛布団は4段階）といった具合で考える。世界観に従い、"
         "謎の産出物は{}段階を経て、製品になると考える）\n"
+        "・major_products、surplus_goods、shortage_goodsの物品名は必ず日本語で書く。\n"
+        "・上記3欄の物品名へ『高級な』『上質な』などの品質・価値を飾る語を絶対に付けない。"
+        "物品そのものを指す、短く具体的な普通名詞にする。\n"
+        "・上記3欄では『魔物の』『竜の』『○○由来の』など、所有・出所を前置きする接続語を原則使わない。"
+        "世界観上どうしても物品を識別できない場合だけ使い、同じ接続語は3欄を通して1度までとする。\n"
         "・surplus_goodsとshortage_goodsに同じ物品は記述してはならない。\n\n"
         "【ジャンル別の需給】\n"
         "- genre_scores:下記の全ジャンルについて、このエリアでの需給を"
@@ -603,8 +931,7 @@ def _build_messages(snapshot):
         "・**全てを3にしてはならない。** 必ず得手不得手があるので、"
         "少なくとも幾つかは1〜2へ、幾つかは4〜5へ振り分ける。\n"
         "・そのエリアと縁の薄いジャンルは3でよい。\n\n"
-        "【ジャンルの綴りと意味】種別ごとに並べてある。\n{}\n\n"
-        "【JSON形式】\n"
+        "【ジャンルの綴りと意味】\n{}\n\n"
     ).format(
         REGIONAL_ECONOMY_SUMMARY_CHARS,
         REGIONAL_ECONOMY_ITEM_COUNT,
@@ -613,10 +940,12 @@ def _build_messages(snapshot):
         REGIONAL_ECONOMY_ITEM_COUNT,
         REGIONAL_ECONOMY_PROCESSING_STAGES,
         genre_lines,
-    ) + json_format
-    payload = json.dumps(snapshot, ensure_ascii=False, indent=2)
-    return [{"role": "user", "content": instruction +
-             "\n\n【入力資料】\n" + payload}]
+    ) + "【JSON形式】\n" + json_format
+    user_content = json.dumps(snapshot, ensure_ascii=False, indent=2)
+    return [
+        {"role": "system", "content": system_content},
+        {"role": "user", "content": user_content},
+    ]
 
 
 def _ask_profile(ctx, write, snapshot):
@@ -658,6 +987,145 @@ def _ask_profile(ctx, write, snapshot):
         write=write,
     )
     return _normalize_profile(_raw_dict(raw))
+
+
+def _build_classification_messages(snapshot, record, items):
+    """systemへ商品一式、userへ地域経済要約を置く一括検品メッセージ。"""
+    rounds = max(0, min(2, int(ITEM_INFERENCE_ROUNDS)))
+    instruction = (
+        "あなたは、ゲーム上の架空都市における地域経済を商品に反映させる役割です。"
+        "JSONオブジェクト1個だけを返してください。\n\n"
+        "【指示】\n"
+        "両者の持つ全てのアイテムに、1～5の整数刻みで数値を割り当てる。\n"
+        "・別の都市や世界の経済を混ぜてはならない。\n"
+        "・商品の名前と説明文を最重視し、item_type等は補助資料として使う。\n"
+        "・名前が地域経済欄と一字一句同じでなくても、意味として同じ物品かを考える。\n"
+        "・素材が含まれるだけで、このエリアが産地・特産品とは断定しない。商品が産業工程のどこに位置するかを考える。"
+        "（例：銅鉱石が産出しても、銅製品の名産地とは限らない）\n"
+        "・このエリアで生産される物品や不足している物品から、<{}>回派生を推論してよい。"
+        "（1回の推論例：「電池→懐中電灯」（懐中電灯には電池も含まれるであろう））"
+        "<{}>回を超える推論は行わないこと。\n"
+        "・1つの物品に1つの数値のみ割り当てる。複数の数値が1つの物品に存在する場合は、"
+        "3から最も離れた1つの数値を選ぶ。供給過多と不足が同時に候補になり判断できない場合は3にする。\n"
+        "・正当な関係が無い場合は未分類とし、数値は3にする。\n\n"
+        "【出力規則】\n"
+        "- classification は surplus_good、shortage_good、major_product、unclassified のいずれかを記述。"
+        "（surplus_good は供給過多側、shortage_good は不足・需要過多側、major_product は特産品だが過不足欄の方向を採用しない場合、unclassified は補正不要。）\n"
+        "- score:1〜5の整数数値。3が等倍、1側が供給過多、5側が不足・需要過多。"
+        "major_productの場合も地域との関連の強さを1〜5で示す。\n"
+        "- matched_goods は地域経済欄から照合に使った物品名を記載する。該当しなければ空配列。\n"
+        "- relation:direct、derived、none のいずれか。\n"
+        "- reason:判断理由を日本語で短く記載。推論を行った場合はA→B→C...といった、推論の経由も記載。\n\n"
+    ).format(rounds, rounds)
+    location = json.dumps({
+        "world_key": snapshot.get("world_key", ""),
+        "area_id": snapshot.get("area_id", ""),
+        "area_name": snapshot.get("area_name", ""),
+    }, ensure_ascii=False, indent=2)
+    item_data = []
+    for item in items:
+        item_data.append({
+            "item_key": item.get("item_key", ""),
+            "name": item.get("name", ""),
+            "description": item.get("description", ""),
+            "item_type": item.get("item_type", ""),
+            "item_detail": item.get("item_detail", ""),
+            "rarity": item.get("rarity", ""),
+            "item_id": item.get("item_id", ""),
+        })
+    system_content = (
+        instruction + "【取引地点】\n" + location +
+        "\n\n【売買画面の全商品】\n" +
+        json.dumps(item_data, ensure_ascii=False, indent=2)
+    )
+    user_content = json.dumps({
+        "regional_economy_summary": {
+            "summary": record.get("regional_economy_summary", ""),
+            "major_industries": record.get("major_industries", []),
+            "major_products": record.get("major_products", []),
+            "surplus_goods": record.get("surplus_goods", []),
+            "shortage_goods": record.get("shortage_goods", []),
+        },
+    }, ensure_ascii=False, indent=2)
+    return [
+        {"role": "system", "content": system_content},
+        {"role": "user", "content": user_content},
+    ]
+
+
+def _normalize_batch(data, items, record):
+    """一括JSONを入力順・全商品1件ずつの結果へ揃える。"""
+    raw_items = data.get("items", []) if isinstance(data, dict) else []
+    if not isinstance(raw_items, (list, tuple)):
+        raw_items = []
+    by_key = {}
+    by_name = {}
+    for raw in raw_items:
+        if not isinstance(raw, dict):
+            continue
+        key = raw.get("item_key")
+        if isinstance(key, str) and key and key not in by_key:
+            by_key[key] = raw
+        name = raw.get("item_name")
+        if isinstance(name, str):
+            by_name.setdefault(_name_key(name), []).append(raw)
+    used = set()
+    result = []
+    for item in items:
+        raw = by_key.get(item.get("item_key"))
+        if raw is None:
+            candidates = by_name.get(_name_key(item.get("name", "")), [])
+            raw = next((candidate for candidate in candidates
+                        if id(candidate) not in used), None)
+        if raw is None:
+            result.append(_default_classification(
+                item, "一括結果にこの商品が無かったため未分類。"))
+            continue
+        used.add(id(raw))
+        result.append(_normalize_classification(raw, item, record))
+    return result
+
+
+def _ask_classification(ctx, write, snapshot, record, items):
+    """左右の全商品を1回の構造化LLM呼び出しへ渡す。"""
+    item_fields = {
+        "item_key": (str, ...),
+        "classification": (str, ...),
+        "score": (int, ...),
+        "matched_goods": (typing.List[str], ...),
+        "relation": (str, ...),
+        "reason": (str, ...),
+    }
+    item_structure = llm.create_structure(
+        ctx, "RegionalEconomyItemClassification", item_fields,
+        label="regional economy item",
+    )
+    item_type = typing.List[typing.Dict[str, str]]
+    if item_structure is not None:
+        try:
+            item_type = typing.List[item_structure]
+        except Exception:
+            item_type = typing.List[typing.Dict[str, str]]
+    structure = llm.create_structure(
+        ctx,
+        "RegionalEconomyItemClassificationBatch",
+        {"items": (item_type, ...)},
+        label="regional economy item batch",
+    )
+    raw = llm.ask(
+        ctx,
+        MANAGER_NAME,
+        _build_classification_messages(snapshot, record, items),
+        timeout=LLM_TIMEOUT,
+        structure=structure,
+        max_tokens=max(2400, len(items) * 240),
+        label="regional economy item batch",
+        write=write,
+    )
+    data = _raw_dict(raw)
+    if not isinstance(data, dict):
+        return None
+    return _normalize_batch(data, items, record)
 
 
 def _save_profile(ctx, state, write, snapshot, profile):
@@ -719,6 +1187,188 @@ def _inventory_items(obtainer):
     return []
 
 
+def _inventory_dict(obtainer):
+    """ゲームが店主へ持たせている在庫辞書。生成前後の差を見るために使う。"""
+    inventory = _get(obtainer, "inventory")
+    if isinstance(inventory, dict):
+        return inventory
+    inner = _get(inventory, "inventory")
+    return inner if isinstance(inner, dict) else None
+
+
+def _selected_major_product(record, scope, owner):
+    """店ごとに特産品候補を1つ選ぶ。同じ店では同じ候補になる。"""
+    products = record.get("major_products") if isinstance(record, dict) else None
+    if not isinstance(products, (list, tuple)) or not products:
+        return ""
+    owner_id = _short(_get(owner, "id", ""), 120)
+    seed = "{}\0{}\0{}".format(scope[0], scope[1], owner_id).encode(
+        "utf-8", errors="replace")
+    index = int.from_bytes(hashlib.sha256(seed).digest()[:8], "big") % len(products)
+    return _clean_item_text(products[index])
+
+
+def _specialty_messages(snapshot, record, product, value):
+    """ゲーム本来の商品スキーマで、特産品をちょうど1個だけ依頼する。"""
+    category_lines = []
+    for category, subtypes in VALID_SUBTYPES.items():
+        category_lines.append("- {}: {}".format(
+            category, ", ".join(sorted(subtypes))))
+    system_text = (
+        "あなたはRPGの店へ地域の特産品を1個だけ追加する担当です。"
+        "JSONオブジェクト1個だけを返してください。配列や前後の説明は返しません。\n\n"
+        "【必須規則】\n"
+        "・item_nameは指定された特産品名と一字一句同じ日本語にする。"
+        "高級な、上質な、希少な等の装飾語を足さない。\n"
+        "・1個の普通の商品として説明し、別の都市や世界の設定を混ぜない。\n"
+        "・item_category.typeとsub_typeは次の許可された組合せだけを使う。\n{}\n"
+        "・rarityは common、rare、magical、epic、legendary、mythic のどれか。\n"
+        "・item_appearanceは画像生成用の短い英語1文にする。\n"
+        "・valueは指定値をそのまま返す。金額や能力値は考えない。"
+    ).format("\n".join(category_lines))
+    payload = {
+        "world_key": snapshot.get("world_key", ""),
+        "area_id": snapshot.get("area_id", ""),
+        "area_name": snapshot.get("area_name", ""),
+        "regional_economy_summary": record.get(
+            "regional_economy_summary", ""),
+        "major_product": product,
+        "value": value,
+    }
+    return [
+        {"role": "system", "content": system_text},
+        {"role": "user", "content": json.dumps(
+            payload, ensure_ascii=False, indent=2)},
+    ]
+
+
+def _normalize_specialty(raw, product, value):
+    """LLMの返答をゲームへ渡せる1商品へ狭める。勝手な分類補正はしない。"""
+    data = _raw_dict(raw)
+    if not isinstance(data, dict) or not product:
+        return None
+    category = data.get("item_category")
+    if not isinstance(category, dict):
+        return None
+    item_type = _short(category.get("type"), 60).casefold()
+    sub_type = _short(category.get("sub_type"), 80).casefold()
+    if item_type not in VALID_SUBTYPES or sub_type not in VALID_SUBTYPES[item_type]:
+        return None
+    rarity = _short(data.get("rarity"), 40).casefold()
+    if rarity not in VALID_RARITIES:
+        return None
+    description = _short(data.get("description"), 1000)
+    appearance = _short(data.get("item_appearance"), 1000)
+    if not description or not appearance:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return {
+        # 名前はプロフィールの正本を使う。これによりロード後も、余計な
+        # アイテム別stateを持たずに特産品マークを再現できる。
+        "item_name": product,
+        "value": int(round(value)),
+        "description": description,
+        "item_category": {"type": item_type, "sub_type": sub_type},
+        "rarity": rarity,
+        "item_appearance": appearance,
+    }
+
+
+def _ask_specialty_item(ctx, write, snapshot, record, product, value):
+    """構造化出力を、ゲームのgenerate_item_in_shoppingへ渡すモデルにする。"""
+    category_structure = llm.create_structure(
+        ctx,
+        "RegionalEconomySpecialtyCategory",
+        {"type": (str, ...), "sub_type": (str, ...)},
+        label="regional economy specialty category",
+    )
+    if category_structure is None:
+        return None
+    structure = llm.create_structure(
+        ctx,
+        "RegionalEconomySpecialtyItem",
+        {
+            "item_name": (str, ...),
+            "value": (int, ...),
+            "description": (str, ...),
+            "item_category": (category_structure, ...),
+            "rarity": (str, ...),
+            "item_appearance": (str, ...),
+        },
+        label="regional economy specialty item",
+    )
+    if structure is None:
+        return None
+    raw = llm.ask(
+        ctx,
+        SPECIALTY_MANAGER_NAME,
+        _specialty_messages(snapshot, record, product, value),
+        timeout=LLM_TIMEOUT,
+        structure=structure,
+        max_tokens=1200,
+        label="regional economy specialty item",
+        write=write,
+    )
+    normalized = _normalize_specialty(raw, product, value)
+    if normalized is None:
+        return None
+    try:
+        return structure(**normalized)
+    except Exception:
+        validator = getattr(structure, "model_validate", None)
+        if callable(validator):
+            try:
+                return validator(normalized)
+            except Exception:
+                pass
+        ctx.log_exc("regional economy: cannot build specialty item data")
+        return None
+
+
+def _major_product_hit(record, name):
+    if not isinstance(record, dict):
+        return ""
+    return _name_hit(record.get("major_products"), _name_key(name))
+
+
+def _visible_inventory_context(item_widget, app):
+    """マークを出してよい売買画面またはプレイヤー自身の所持品か。"""
+    grid = _get(item_widget, "inventory", None)
+    if grid is None:
+        return ""
+    situation = _get(grid, "situation", frames.MISSING)
+    if situation == TRADE_SITUATION:
+        return "trade"
+    if situation is not None:
+        return ""
+    obtainer = _get(grid, "obtainer", None)
+    player = _get(app, "player", None)
+    if obtainer is player and player is not None:
+        return "own"
+    obtainer_id = _short(_get(obtainer, "id", ""), 120)
+    player_id = _short(_get(player, "id", ""), 120)
+    return "own" if obtainer_id and obtainer_id == player_id else ""
+
+
+def _trade_owner_side(item_widget, app):
+    """売買画面で店主側の商品かを判定する。未知なら反転しない。"""
+    grid = _get(item_widget, "inventory", None)
+    if grid is None or _get(grid, "situation", frames.MISSING) != TRADE_SITUATION:
+        return False
+    obtainer = _get(grid, "obtainer", None)
+    player = _get(app, "player", None)
+    if obtainer in (None, frames.MISSING) or player in (None, frames.MISSING):
+        return False
+    if obtainer is player:
+        return False
+    obtainer_id = _short(_get(obtainer, "id", ""), 120)
+    player_id = _short(_get(player, "id", ""), 120)
+    if obtainer_id and player_id:
+        return obtainer_id != player_id
+    return True
+
+
 def _name_key(value):
     if not isinstance(value, str):
         return ""
@@ -768,6 +1418,70 @@ def _score_for_item(record, detail, name):
     return 3, "default"
 
 
+def _classification_display_score(classification):
+    """分類結果の表示用score。無効な返却は未分類の3に戻す。"""
+    if not isinstance(classification, dict):
+        return 3
+    return _score_value(classification.get("score")) or 3
+
+
+def _classification_price_score(classification):
+    """価格補正へ使えるscoreだけを取り出す。特産品は価格を動かさない。"""
+    if not isinstance(classification, dict):
+        return None
+    if classification.get("classification") not in (
+            "surplus_good", "shortage_good"):
+        return 3
+    return _classification_display_score(classification)
+
+
+def _classification_for_item(state, scope, item):
+    """実行中だけ保持する一括分類から、商品1個の結果を引く。"""
+    if scope is None or item is None:
+        return None
+    snapshot = _item_snapshot(item)
+    if snapshot is None:
+        return None
+    key = (scope, snapshot.get("item_key"))
+    with state["classification_lock"]:
+        result = state["classifications"].get(key)
+        if isinstance(result, dict):
+            return result
+        # 同一内容・内部IDなしの重複品は一括入力時に #2 以降を付ける。
+        # 詳細欄には元の内容キーで引き、同じ分類を表示する。
+        prefix = snapshot.get("item_key", "") + "#"
+        for (saved_scope, saved_key), candidate in state[
+                "classifications"].items():
+            if (saved_scope == scope and isinstance(saved_key, str) and
+                    saved_key.startswith(prefix) and isinstance(candidate, dict)):
+                return candidate
+    return None
+
+
+def _remember_classifications(state, scope, snapshots, classifications):
+    """一括結果を価格・ホバー表示用の実行時控えへ入れる。"""
+    if scope is None or not isinstance(classifications, list):
+        return
+    with state["classification_lock"]:
+        for snapshot, classification in zip(snapshots, classifications):
+            if not isinstance(snapshot, dict) or not isinstance(classification, dict):
+                continue
+            key = snapshot.get("item_key")
+            if isinstance(key, str) and key:
+                state["classifications"][(scope, key)] = classification
+
+
+def _classifications_complete(state, scope, snapshots):
+    """この売買画面の商品一式を既に検品済みか。"""
+    if scope is None or not snapshots:
+        return False
+    with state["classification_lock"]:
+        return all(
+            (scope, snapshot.get("item_key")) in state["classifications"]
+            for snapshot in snapshots if isinstance(snapshot, dict)
+        )
+
+
 def _price_number(value):
     """買価・売価を正の数として読む。"""
     if isinstance(value, bool):
@@ -809,8 +1523,8 @@ def _regional_multiplier(score):
 def _apply_one_price(state, note, scope, item, attributes, name, score, why):
     """現物1個の買価・売価へ、地域倍率を一度だけ掛ける。
 
-    **129が素の値段へ戻した直後に呼ばれる前提**で書く（`before` で129の
-    内側に居るので、129が値付けし直すたびにこちらが掛け直す）。
+    **129が素の値段へ戻した直後に呼ばれる前提**で書く（`after` で129の
+    外側に居るので、129が値付けし直すたびにこちらが掛け直す）。
     現在値が前回こちらが書いた額と同じなら控えた素の値を軸にし、
     違えば129が付け直した今の値を軸にする。どちらでも二重には掛からない。
 
@@ -863,7 +1577,7 @@ def _apply_one_price(state, note, scope, item, attributes, name, score, why):
     return changed
 
 
-def _overlay_item(state, note, scope, record, item):
+def _overlay_item(state, note, scope, record, item, classification=None):
     """1品にこの土地の倍率を掛ける。書き換えた値段の数を返す。"""
     if item is None:
         return 0
@@ -872,7 +1586,14 @@ def _overlay_item(state, note, scope, record, item):
         return 0
     name = _short(_get(item, "name", ""), 240)
     detail = _short(attributes.get("item_detail"), 120).casefold()
-    score, why = _score_for_item(record, detail, name)
+    if classification is None:
+        score, why = _score_for_item(record, detail, name)
+    else:
+        score = _classification_price_score(classification)
+        if score is None:
+            return 0
+        why = "llm:{}".format(
+            _classification_name(classification.get("classification")))
     return _apply_one_price(state, note, scope, item, attributes,
                             name, score, why)
 
@@ -975,15 +1696,50 @@ def apply(ctx):
     state = _store()
     jobs = state["jobs"]
     schedule = ui.scheduler(ctx, "regional economy")
+    screen = ui.Screen(ctx, write, tag="regional economy",
+                       mark="mod_regional_economy")
 
-    def enqueue(snapshot, reason):
-        if not isinstance(snapshot, dict):
+    def note_world_identity(app):
+        """世界ファイルと現在セーブの食い違いを1回だけ記録する。"""
+        if app is None:
             return
+        world_name = world_key_of_dict(getattr(app, "world_dict", None), None)
+        save_name = world_key_of_dict(getattr(app, "save_data_dict", None), None)
+        if not (isinstance(world_name, str) and world_name and
+                isinstance(save_name, str) and save_name and
+                world_name != save_name):
+            return
+        signature = (world_name, save_name)
+        with state["data_lock"]:
+            if signature in state["world_identity_mismatches"]:
+                return
+            state["world_identity_mismatches"].add(signature)
+        selected, _data, source = _active_world_context(app)
+        write("world identity mismatch: world_dict={!r} save_data_dict={!r}; "
+              "using {!r} from {}".format(
+                  world_name, save_name, selected, source))
+
+    def enqueue(snapshot, reason, app=None):
+        if not isinstance(snapshot, dict):
+            return None
         world = str(snapshot.get("world_key") or "_")
         area_id = str(snapshot.get("area_id") or "")
         if not area_id:
             write("skip: current area has no id")
-            return
+            return None
+        # 405のプロフィールは世界構造の最上位ノードだけが持つ。
+        # 子ノードは親の保存済み要約を参照し、独自のLLM生成を行わない。
+        current_app = app if app is not None else ui.find_app()
+        structure = (_active_world_structure(current_app)
+                     if current_app is not None else None)
+        if structure is None:
+            write("world structure unavailable: no regional profile generated")
+            return None
+        if _structure_parent(
+                structure, snapshot.get("area_name"), area_id) is not None:
+            write("child area: no regional profile generated: world={!r} area={!r}"
+                  .format(world, area_id))
+            return None
         snapshot = dict(snapshot)
         snapshot["world_key"] = world
         snapshot["area_id"] = area_id
@@ -992,8 +1748,14 @@ def apply(ctx):
         # **stateファイルは読まない。** 読むのはワーカーの仕事で、
         # ここは覚えている範囲だけで積むかどうかを決める。
         with state["data_lock"]:
-            if scope in state["ready"] or scope in state["pending"]:
-                return
+            if scope in state["ready"]:
+                event = threading.Event()
+                event.set()
+                return event
+            if scope in state["pending"]:
+                return state["profile_events"].get(scope)
+            event = threading.Event()
+            state["profile_events"][scope] = event
             state["pending"].add(scope)
             jobs.put((snapshot, reason))
             write("summary queued: world={!r} area={!r} name={!r} reason={}".format(
@@ -1001,7 +1763,7 @@ def apply(ctx):
         with state["worker_lock"]:
             worker = state.get("worker")
             if worker is not None and worker.is_alive():
-                return
+                return event
             worker = threading.Thread(
                 target=worker_loop,
                 name="instantale_mod.regional_economy_profile",
@@ -1009,6 +1771,7 @@ def apply(ctx):
             )
             state["worker"] = worker
             worker.start()
+        return event
 
     def worker_loop():
         """LLM待ちと、stateファイルの読み書きを引き受けるスレッド。
@@ -1062,6 +1825,9 @@ def apply(ctx):
             finally:
                 with state["data_lock"]:
                     state["pending"].discard(scope)
+                    event = state["profile_events"].pop(scope, None)
+                    if event is not None:
+                        event.set()
                 jobs.task_done()
         with state["worker_lock"]:
             if state.get("worker") is threading.current_thread():
@@ -1069,10 +1835,11 @@ def apply(ctx):
         write("profile worker stepped down (superseded)")
 
     def schedule_current(app, reason, delay=0.25):
-        """次のフレームで現在地を見て、控えの掃除と生成の積みを行う。"""
+        """次のフレームで現在地を見て、最上位だけ生成を積む。"""
         def capture():
             target = app if app is not None else ui.find_app()
             try:
+                note_world_identity(target)
                 dropped = _drop_foreign_marks(state, _scope_of(target))
                 if dropped:
                     write("left an area: restored and dropped {} price mark(s)"
@@ -1084,7 +1851,7 @@ def apply(ctx):
             if snapshot is None:
                 write("area not ready; no summary queued (reason={})".format(reason))
                 return
-            enqueue(snapshot, reason)
+            enqueue(snapshot, reason, app=target)
         schedule(capture, delay=delay)
 
     def save_without_regional_prices(orig, call_args, call_kwargs):
@@ -1124,34 +1891,270 @@ def apply(ctx):
         record = _record_of(bucket, scope[1])
         return scope, (record if _record_ready(record) else None)
 
-    def regional_post(item, attributes, why):
-        """129 が値段を書いた**直後**に呼ばれる。その値へ土地の倍率を掛け直す。
+    def profile_for_stock(app):
+        """最上位エリアの初回品揃えだけ、到着時の生成を待つ。"""
+        scope, record = profile_for(app)
+        if record is not None or scope is None:
+            return scope, record
+        snapshot = _snapshot(app)
+        event = enqueue(snapshot, "shop stock generation", app=app)
+        if event is not None:
+            event.wait(timeout=LLM_TIMEOUT)
+        if ctx.superseded():
+            return scope, None
+        return profile_for(app)
 
-        129 は書く時点が地点ごとに違う（画面の2箇所は `orig` の前、
-        `set_shop_price_for_*` や `normalize_shop_inventory_prices` は後）。
-        包みの層をどちらに置いても半分の地点で負けるので、
-        129 が用意した後処理の口を通す。ここなら10箇所すべてに乗る。
+    def downstream_economy_context(settlement_name, world_structure):
+        """子エリアの概要へ渡す、直上エリアの経済情報を探す。
 
-        `_apply_one_price` は価格印で二重掛けを避けるので、
-        この MOD 自身のフックと重なっても倍率は積み上がらない。
+        親プロフィールの保存済みデータだけを読む。見つからない場合は
+        生成を待ったり新しいLLMを呼んだりせず、ゲーム本来の概要を使う。
         """
-        scope, record = profile_for(ui.find_app())
-        if record is None:
-            return
-        told = note if str(why).split("/")[0] in POST_NOTED else None
-        _overlay_item(state, told, scope, record, item)
+        app = ui.find_app()
+        if app is None:
+            return None, None
+        note_world_identity(app)
+        world = str(_short(_active_world_key(app), 240) or "_")
+        structure = (_active_world_structure(app) or world_structure)
+        target_id = None
+        current_area = ui.current_area(app)
+        if current_area is not None:
+            target_id = ui.area_id_of(current_area) or None
+        parent = _structure_parent(structure, settlement_name, target_id)
+        if parent is None:
+            return None, None
+        parent_id, parent_name = parent
+        if not parent_id:
+            parent_id = _area_id_by_name(app, parent_name)
+        if not parent_id:
+            return None, None
+        bucket = _load_bucket(ctx, state, world, write)
+        record = _record_of(bucket, parent_id)
+        context = _economy_context(record)
+        if not context:
+            return None, None
+        return context, (world, parent_id, settlement_name)
 
-    # 129 が先か後かは順序で決まらないので、リストは在ればそれを使う。
-    # **入れ替えるのではなく中身を書き換える**（129 が握っているのは
-    # このリストそのもの。差し替えると向こうから見えなくなる）。
-    post_hooks = getattr(sys, POST_ATTR, None)
-    if not isinstance(post_hooks, list):
-        post_hooks = []
-        setattr(sys, POST_ATTR, post_hooks)
-    post_hooks[:] = [entry for entry in post_hooks
-                     if not (isinstance(entry, tuple) and entry
-                             and entry[0] == POST_TAG)]
-    post_hooks.append((POST_TAG, regional_post))
+    def configured_score_mark(score, trade_owner=False):
+        """スコアに応じた印を返す。設定により店主側なら反転する。"""
+        if not bool(globals().get("SHOW_SCORE_MARKS", True)):
+            return ""
+        if score == 3:
+            return "-" if bool(globals().get("SCORE_MARK_3", True)) else ""
+        if score not in FIXED_SCORE_MARKS:
+            return ""
+        reverse = (trade_owner and
+                   bool(globals().get("REVERSE_TRADE_MARK", True)))
+        display_score = (6 - score if reverse else score)
+        if display_score not in FIXED_SCORE_MARKS:
+            return ""
+        # 表示/非表示の設定は商品の本来のスコアに紐付け、
+        # 店主側では記号だけを反転する。
+        return FIXED_SCORE_MARKS[display_score]
+
+    def clear_item_markers(box):
+        """箱の名前ラベルから、スコアや特産品印を消す。"""
+        label = frames.attr(box, "name_label", None)
+        if label in (None, frames.MISSING):
+            return
+        previous = frames.attr(label, "_instantale_regional_suffix", "")
+        current = frames.text_of(label)
+        if (isinstance(previous, str) and previous and
+                isinstance(current, str) and current.endswith(previous)):
+            try:
+                label.text = current[:-len(previous)]
+            except Exception:
+                pass
+        try:
+            setattr(label, "_instantale_regional_suffix", "")
+        except Exception:
+            pass
+
+    def paint_item_markers(box, item_widget, target, record, score,
+                           classification=None):
+        label = frames.attr(box, "name_label", None)
+        if label in (None, frames.MISSING):
+            return
+        trade_owner = _trade_owner_side(item_widget, ui.find_app())
+        score_text = configured_score_mark(score, trade_owner=trade_owner)
+        name = _short(_get(target, "name", ""), 240)
+        is_specialty = (_major_product_hit(record, name) or
+                        (isinstance(classification, dict) and
+                         classification.get("classification") == "major_product"))
+        specialty_choice = globals().get("SPECIALTY_MARK", "")
+        if (specialty_choice not in SPECIALTY_MARK_CHOICES or
+                specialty_choice == "なし"):
+            specialty_choice = ""
+        specialty_text = specialty_choice if is_specialty else ""
+        suffix_parts = [text for text in (score_text, specialty_text) if text]
+        suffix = (" " + " ".join(suffix_parts)) if suffix_parts else ""
+        if not suffix:
+            clear_item_markers(box)
+            return
+        # 別ウィジェットを箱の横へ置かず、ゲーム自身の名前ラベルへ一時連結する。
+        # そのため位置・フォント・フォントサイズ・折返しは、元のアイテム名と同じになる。
+        previous = frames.attr(label, "_instantale_regional_suffix", "")
+        current = frames.text_of(label) or name
+        if isinstance(previous, str) and previous and current.endswith(previous):
+            current = current[:-len(previous)]
+        base_name = current.rstrip()
+        if not base_name:
+            base_name = name
+        try:
+            label.text = base_name + suffix
+            setattr(label, "_instantale_regional_suffix", suffix)
+            # 属性を読むことで、ゲーム側の実際の書体・サイズを経由していることを
+            # 明示する。値は変更せず、ユーザー環境の設定をそのまま使う。
+            frames.text_of(label, "font_name")
+            frames.attr(label, "font_size", None)
+        except Exception:
+            ctx.log_exc("regional economy: cannot append item marker to name")
+
+    def add_specialty_once(orig, manager, item_data, owner, tier):
+        """ゲームの在庫生成1回につき、同じ正規経路でもう1品だけ作る。"""
+        app = _get(manager, "app", None) or ui.find_app()
+        scope, record = profile_for_stock(app)
+        snapshot = _snapshot(app)
+        if scope is None or record is None or snapshot is None:
+            write("specialty skipped: regional profile is unavailable")
+            return
+        if (snapshot.get("world_key"), snapshot.get("area_id")) != scope:
+            write("specialty skipped: area changed while waiting for profile")
+            return
+        product = _selected_major_product(record, scope, owner)
+        value = _get(item_data, "value", None)
+        if not product or isinstance(value, bool) or not isinstance(value, (int, float)):
+            write("specialty skipped: product or native value is unavailable")
+            return
+        generated = _ask_specialty_item(
+            ctx, write, snapshot, record, product, value)
+        if generated is None:
+            write("specialty not generated: invalid LLM result for {!r}".format(
+                product))
+            return
+        inventory = _inventory_dict(owner)
+        before = ({id(value) for value in inventory.values()}
+                  if isinstance(inventory, dict) else set())
+        try:
+            # このorigはゲーム本来の1品生成。独自ID・画像・能力値・配置を
+            # 405側で再実装せず、通常商品と同じ経路へ任せる。
+            orig(manager, generated, owner, tier)
+        except Exception:
+            ctx.log_exc("regional economy: native specialty generation failed")
+            return
+        inventory = _inventory_dict(owner)
+        added = ([value for value in inventory.values() if id(value) not in before]
+                 if isinstance(inventory, dict) else [])
+        if len(added) == 1:
+            write("specialty generated: {!r} owner={!r} tier={!r}".format(
+                product, _get(owner, "id", None), tier))
+        else:
+            write("WARN specialty native result: expected 1 added item, got {}"
+                  .format(len(added)))
+
+    def _classification_for_snapshot(scope, snapshot):
+        key = snapshot.get("item_key") if isinstance(snapshot, dict) else None
+        if not isinstance(key, str):
+            return None
+        with state["classification_lock"]:
+            result = state["classifications"].get((scope, key))
+        return result if isinstance(result, dict) else None
+
+    def _apply_trade_classifications(scope, record, snapshots):
+        """一括結果を左右の商品へ価格として反映する。"""
+        changed = count = 0
+        for snapshot in snapshots:
+            if not isinstance(snapshot, dict):
+                continue
+            item = snapshot.get("_runtime_item")
+            classification = _classification_for_snapshot(scope, snapshot)
+            if item is None or classification is None:
+                continue
+            count += 1
+            changed += _overlay_item(
+                state, note, scope, record, item, classification=classification)
+        write("regional overlay: {} price(s) on {} item(s)"
+              " world={!r} area={!r}".format(
+                  changed, count, scope[0], scope[1]))
+
+    def _open_trade_after_classification(orig, app, left, right, label_text,
+                                         situation, extra_args, extra_kwargs,
+                                         snapshot, scope, record, snapshots,
+                                         pending_key):
+        """LLM検品が済んだ後、メインスレッドでだけ売買画面を開く。"""
+        def worker():
+            classifications = None
+            try:
+                if not ctx.superseded():
+                    classifications = _ask_classification(
+                        ctx, write, snapshot, record, snapshots)
+            except Exception:
+                ctx.log_exc("regional economy: batch classification failed")
+
+            def finish():
+                opened = False
+                try:
+                    if ctx.superseded():
+                        write("classification cancelled: newer injection is active")
+                        return
+                    if _scope_of(app) != scope:
+                        write("classification cancelled: area changed while waiting")
+                        return
+                    if isinstance(classifications, list):
+                        _remember_classifications(
+                            state, scope, snapshots, classifications)
+                        _apply_trade_classifications(scope, record, snapshots)
+                        write("classification batch: {} item(s) returned in one JSON"
+                              .format(len(classifications)))
+                    else:
+                        write("classification failed; opening trade window without overlay")
+                    screen.busy_off(app, restore=False)
+                    orig(app, left, right, label_text, situation,
+                         *extra_args, **extra_kwargs)
+                    opened = True
+                except Exception:
+                    ctx.log_exc("regional economy: trade window continuation failed")
+                finally:
+                    if not opened:
+                        try:
+                            screen.busy_off(app, restore=False)
+                        except Exception:
+                            pass
+                    with state["classification_lock"]:
+                        state["classification_pending"].discard(pending_key)
+
+            schedule(finish, delay=0)
+
+        threading.Thread(
+            target=worker,
+            name="instantale_mod.regional_economy_item_batch",
+            daemon=True,
+        ).start()
+
+    def _hold_trade_for_classification(orig, app, left, right, label_text,
+                                       situation, extra_args, extra_kwargs,
+                                       snapshot, scope, record, snapshots):
+        """同じ商品一式の検品中は、売買画面を開かず二重呼び出しを防ぐ。"""
+        pending_key = (id(app), scope,
+                       tuple(item.get("item_key") for item in snapshots))
+        with state["classification_lock"]:
+            if pending_key in state["classification_pending"]:
+                write("classification already pending; trade window held")
+                return True
+            state["classification_pending"].add(pending_key)
+        try:
+            screen.busy_on(app)
+            write("classification queued: {} item(s); trade window held"
+                  .format(len(snapshots)))
+            _open_trade_after_classification(
+                orig, app, left, right, label_text, situation, extra_args,
+                extra_kwargs, snapshot, scope, record, snapshots, pending_key)
+            return True
+        except Exception:
+            with state["classification_lock"]:
+                state["classification_pending"].discard(pending_key)
+            ctx.log_exc("regional economy: could not hold trade window")
+            return False
 
     @ctx.wrap("__main__:InstantaleApp.save_game",
               required=False, safe=True)
@@ -1166,6 +2169,37 @@ def apply(ctx):
         """保存実体が直接呼ばれる経路でも405の価格を混ぜない。"""
         return save_without_regional_prices(orig, args, kwargs)
 
+    @ctx.wrap(SETTLEMENT_DETAIL_TARGET, required=False, safe=True)
+    def create_settlement_detail(orig, world_overview, world_structure,
+                                 settlement_name, settlement_overview,
+                                 settlement_size, area_description,
+                                 include_free_facility=False,
+                                 *args, **kwargs):
+        """親エリアの地域経済を、子エリアの概要へ一時的に渡す。
+
+        変更するのはゲーム関数へ渡すローカル引数だけ。ゲームのArea、
+        world_data、セーブデータ、405のプロフィール保存内容は変更しない。
+        """
+        try:
+            context, source = downstream_economy_context(
+                settlement_name, world_structure)
+            if context:
+                base = settlement_overview or ""
+                settlement_overview = (base.rstrip() + "\n\n" + context
+                                       if base.strip() else context)
+                parent_name = ""
+                if isinstance(source, (tuple, list)) and len(source) > 1:
+                    parent_name = _short(source[1], 120)
+                elif isinstance(source, dict):
+                    parent_name = _short(source.get("name", source.get("area_name")), 120)
+                write("downstream economy injected: parent={!r} -> child={!r}"
+                      .format(parent_name or "?", settlement_name))
+        except Exception:
+            ctx.log_exc("regional economy: downstream overview injection failed")
+        return orig(world_overview, world_structure, settlement_name,
+                    settlement_overview, settlement_size, area_description,
+                    include_free_facility, *args, **kwargs)
+
     @ctx.wrap("__main__:MovePhaseManager.move_phase",
               required=False, safe=True)
     def move_phase(orig, self, *args, **kwargs):
@@ -1179,18 +2213,56 @@ def apply(ctx):
         schedule_current(getattr(self, "app", None), "area arrival")
         return result
 
+    @ctx.wrap("__main__:ShoppingStartManagerRemake.execute",
+              required=False, safe=True)
+    def stock_generation_batch(orig, self, *args, **kwargs):
+        """初回生成と312の再入荷を区別せず、ゲームの1回の処理として囲う。"""
+        batch = {"manager": id(self), "claimed": False}
+        with state["specialty_lock"]:
+            previous = state.get("stock_batch")
+            state["stock_batch"] = batch
+        try:
+            return orig(self, *args, **kwargs)
+        finally:
+            with state["specialty_lock"]:
+                if state.get("stock_batch") is batch:
+                    state["stock_batch"] = previous
+
+    @ctx.wrap("__main__:ShoppingStartManagerRemake.generate_item_in_shopping",
+              required=False, safe=True)
+    def observe_stock_item(orig, self, item_data=None,
+                           shop_owner_instance=None, item_stock_tier=None,
+                           *args, **kwargs):
+        """通常商品の生成を先に通し、その一連で特産品を一度だけ追加する。"""
+        result = orig(self, item_data, shop_owner_instance, item_stock_tier,
+                      *args, **kwargs)
+        try:
+            claimed = False
+            with state["specialty_lock"]:
+                batch = state.get("stock_batch")
+                if (isinstance(batch, dict) and
+                        batch.get("manager") == id(self) and
+                        not batch.get("claimed")):
+                    # 失敗時に同じ一連の2品目、3品目で再試行しない。
+                    # LLMの返答後に通信が切れた場合の重複を避けるほうを優先する。
+                    batch["claimed"] = True
+                    claimed = True
+            if claimed and shop_owner_instance is not None:
+                add_specialty_once(
+                    orig, self, item_data, shop_owner_instance,
+                    item_stock_tier)
+        except Exception:
+            # 本来の商品は既に生成済み。追加品の失敗を店全体へ伝播させない。
+            ctx.log_exc("regional economy: specialty generation failed")
+        return result
+
     @ctx.wrap("__main__:InstantaleApp.toggle_twin_inventory_window",
               required=False, safe=True)
     def inspect_trade_window(orig, self, left_inventory_obtainer=None,
                              right_inventory_obtainer=None,
                              left_label_text=None, situation=None,
                              *args, **kwargs):
-        """売買画面の値段へ地域倍率を掛ける。**ここでLLMは呼ばない。**
-
-        倍率は (エリア, ジャンル) の辞書引きなので待つものが無く、
-        画面が出るのが遅れない。プロフィールがまだ無ければ補正なしで開き、
-        背景の生成だけ積む（次にこの街で開いたときから効く）。
-        """
+        """全商品を一括検品してから、元の売買画面処理を呼ぶ。"""
         try:
             # 所持品の窓（situation=None）と402の受け渡しは素通しする。
             if situation == TRADE_SITUATION:
@@ -1202,20 +2274,23 @@ def apply(ctx):
                     write("no regional profile yet for world={!r} area={!r};"
                           " opening as-is".format(*scope))
                 else:
-                    seen = set()
-                    changed = count = 0
-                    for obtainer in (left_inventory_obtainer,
-                                     right_inventory_obtainer):
-                        for item in _inventory_items(obtainer):
-                            if item is None or id(item) in seen:
-                                continue
-                            seen.add(id(item))
-                            count += 1
-                            changed += _overlay_item(
-                                state, note, scope, record, item)
-                    write("regional overlay: {} price(s) on {} item(s)"
-                          " world={!r} area={!r}".format(
-                              changed, count, scope[0], scope[1]))
+                    snapshot = _snapshot(self)
+                    snapshots = (_item_snapshots(
+                        left_inventory_obtainer, right_inventory_obtainer)
+                                 if snapshot is not None else [])
+                    if snapshots and snapshot is not None:
+                        if _classifications_complete(state, scope, snapshots):
+                            _apply_trade_classifications(
+                                scope, record, snapshots)
+                        else:
+                            # LLM待ちは専用ワーカーへ移し、完了まで元の
+                            # toggleを呼ばない。したがって売買画面は出ない。
+                            if _hold_trade_for_classification(
+                                    orig, self, left_inventory_obtainer,
+                                    right_inventory_obtainer, left_label_text,
+                                    situation, args, dict(kwargs),
+                                    snapshot, scope, record, snapshots):
+                                return None
         except Exception:
             ctx.log_exc("regional economy: trade window overlay failed")
         return orig(self, left_inventory_obtainer,
@@ -1225,27 +2300,71 @@ def apply(ctx):
     @ctx.wrap("scripts.hud.new_hud:ItemDetailBox.update_content",
               required=False, safe=True)
     def item_detail(orig, self, item=None, *args, **kwargs):
-        """品物欄の値段にも地域の倍率を残す。
+        """売買の値段を保ち、許可された所持品画面だけへ需給印を重ねる。
 
         129は品を選ぶたびに値段を素から組み直す（`detail` 経路）。
-        こちらは129の内側なので、その直後に掛け直す。
+        こちらは129の後段なので、その直後に掛け直す。
         """
+        app = ui.find_app()
+        target = _get(item, "item_instance", None) or item
+        context = _visible_inventory_context(item, app)
+        scope = record = None
+        score = 3
+        classification = None
         try:
-            target = _get(item, "item_instance", None) or item
-            if target is not None:
-                scope, record = profile_for(ui.find_app())
+            if target is not None and context:
+                scope, record = profile_for(app)
                 if record is not None:
-                    # 品を選ぶたびに通るので、ここからは記録しない
-                    # （同じ行が売買画面を開いたときに既に出ている）。
-                    _overlay_item(state, None, scope, record, target)
+                    attributes = _get(target, "attributes", {})
+                    detail = (_short(attributes.get("item_detail"), 120).casefold()
+                              if isinstance(attributes, dict) else "")
+                    classification = _classification_for_item(
+                        state, scope, target)
+                    if classification is not None:
+                        score = _classification_display_score(classification)
+                    elif context == "own":
+                        score, _why = _score_for_item(
+                            record, detail,
+                            _short(_get(target, "name", ""), 240))
+                    if context == "trade":
+                        # 一括検品済みの商品のみ掛け直す。未検品のまま
+                        # 推測で価格を変えると、表示と決済の根拠がずれる。
+                        if classification is not None:
+                            _overlay_item(state, None, scope, record, target,
+                                          classification=classification)
         except Exception:
             ctx.log_exc("regional economy: item detail overlay failed")
-        return orig(self, item, *args, **kwargs)
+        result = orig(self, item, *args, **kwargs)
+        try:
+            if context and record is not None and target is not None:
+                paint_item_markers(self, item, target, record, score,
+                                   classification=classification)
+                # native Labelのtexture_sizeが更新されるのは次フレームに
+                # なることがある。再利用される詳細箱が同じ商品のまま
+                # であることを確認してから、商品名末尾の位置を再計算する。
+                item_snapshot = _item_snapshot(target)
+                item_key = (item_snapshot.get("item_key")
+                            if isinstance(item_snapshot, dict) else "")
+                setattr(self, "_instantale_regional_item_key", item_key)
 
-    ctx.log("regional economy: installed genre-based regional price overlay")
-    write("installed: profile with {} genre scores + price overlay"
-          " (strong={:g} weak={:g}) post-hook on {}".format(
+                def repaint():
+                    if (frames.attr(self, "_instantale_regional_item_key", "")
+                            != item_key):
+                        return
+                    paint_item_markers(self, item, target, record, score,
+                                       classification=classification)
+
+                schedule(repaint, delay=0)
+            else:
+                clear_item_markers(self)
+        except Exception:
+            ctx.log_exc("regional economy: item marker display failed")
+        return result
+
+    ctx.log("regional economy: installed profile, downstream economy context, "
+            "batch classification, prices, markers, and specialty stock")
+    write("installed: profile + one batch item classification + price overlay + markers"
+          " + one specialty per native stock generation + downstream overview context"
+          " (genres={} strong={:g} weak={:g})".format(
               len(GENRES), float(STRONG_FLUCTUATION_MULTIPLIER),
-              float(WEAK_FLUCTUATION_MULTIPLIER),
-              ", ".join(entry[0] for entry in post_hooks
-                        if isinstance(entry, tuple) and entry) or "-"))
+              float(WEAK_FLUCTUATION_MULTIPLIER)))

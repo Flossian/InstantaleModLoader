@@ -2,26 +2,23 @@
   "entry": "regional_economy.py",
   "api": 1,
   "kind": "feature",
-  "version": "1",
+  "version": "2",
   "author": "MoririnJP, R01/Flossian",
   "name": {
     "ja": "地域毎に物価が変動する",
     "en": "Regional economy profile"
   },
   "description": {
-    "ja": "都市ごとの地域経済プロフィールを一度だけ作り、ジャンル別の需給倍率を売買の値段へ乗せる。129が値付けした直後に掛けるので、売買画面ではLLMを呼ばず待ち時間が出ない",
-    "en": "Builds a one-time regional economy profile per city and applies per-genre supply and demand multipliers to buy and sell prices, right after 129 prices them. No LLM call and no wait when the trade window opens."
+    "ja": "都市ごとの需給を売買価格へ反映し、所持品へ需給マークを表示する。店の初回生成や再入荷では特産品を1個だけ通常の商品生成経路で追加する",
+    "en": "Applies each city's supply and demand to trade prices, shows demand markers in inventory views, and adds exactly one local specialty through the native item generator when shop stock is generated."
   },
-  "shares": [
-    "_instantale_item_price_post"
-  ],
-  "before": [
+  "after": [
     "129_balance_item_price"
   ],
   "settings": {
     "REGIONAL_ECONOMY_SUMMARY_CHARS": {
       "type": "int",
-      "default": 300,
+      "default": 200,
       "min": 100,
       "max": 1200,
       "label": {
@@ -29,13 +26,13 @@
         "en": "Area industry and economy summary characters"
       },
       "note": {
-        "ja": "regional_economy_summaryとして要約保存される目安",
-        "en": "Approximate length saved as regional_economy_summary."
+        "ja": "regional_economy_summaryとして要約保存される目安\n要約文はエリア情報と共にLLMへ渡る。文字数を増やしすぎるとプロンプトが肥大化します。",
+        "en": "Approximate length saved as regional_economy_summary. The summary is sent to the LLM with area information; making it too long expands the prompt."
       }
     },
     "REGIONAL_ECONOMY_ITEM_COUNT": {
       "type": "int",
-      "default": 3,
+      "default": 2,
       "min": 1,
       "max": 10,
       "label": {
@@ -87,6 +84,55 @@
       "note": {
         "ja": "エリアで需要/供給に変動がある物品の売買金額へ補正される倍率(倍)",
         "en": "Multiplier applied to the buy and sell amounts of goods with weaker area supply or demand changes."
+      }
+    },
+    "SHOW_SCORE_MARKS": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "市場変動マークを表示",
+        "en": "Show market fluctuation markers"
+      },
+      "note": {
+        "ja": "エリアの市場変動を、アイテム名の末尾にマークとして表示します。規定：ON\n↑↑/↓↓:そのエリアでの強い変動。需要過多/供給過多\n↑/↓:そのエリアでの弱い変動。需要あり/供給あり",
+        "en": "Shows area market fluctuation markers after item names. Default: ON\n↑↑/↓↓: strong fluctuation, excess demand/supply\n↑/↓: weak fluctuation, demand/supply"
+      }
+    },
+    "REVERSE_TRADE_MARK": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "売買時に表示を逆転",
+        "en": "Reverse markers during trade"
+      },
+      "note": {
+        "ja": "そのエリアでの売買時に、ショップ側の表記を逆転させます。\n上の末尾を表示がfalseの場合は何も起こりません。規定：ON\n（例：プレイヤーが「↓↓」のアイテムを売却した際、ショップ側では「↑↑」と表記される）",
+        "en": "Reverses the marker shown on the shop side during trade. If market markers above are OFF, this has no effect. Default: ON."
+      }
+    },
+    "SCORE_MARK_3": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "スコア3に「-」を付ける",
+        "en": "Show '-' for score 3"
+      },
+      "note": {
+        "ja": "等倍の商品名末尾へ「-」を表示するスイッチ。",
+        "en": "Toggle the neutral '-' marker after the item name."
+      }
+    },
+    "SPECIALTY_MARK": {
+      "type": "choice",
+      "default": "（特産品）",
+      "values": ["（特産品）", "※", "★", "なし"],
+      "label": {
+        "ja": "特産品の表示",
+        "en": "Local specialty marker"
+      },
+      "note": {
+        "ja": "特産品由来の商品名末尾へ、需給マークのさらに後ろに表示する記号または「（特産品）」。",
+        "en": "Symbol or '（特産品）' appended after the score marker for specialty-derived goods."
       }
     }
   }
