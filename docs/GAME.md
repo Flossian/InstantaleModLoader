@@ -3002,3 +3002,102 @@ MOD の控え（`state\<MOD>\`）は世界名で引いていたので、前の�
 新しい主人公に引き継がれた（`331_` の実機。新しい主人公が前の主人公の施設の出資者として迎えられた）。
 セーブと同じ寿命のものは **世界×主人公** で持つ（`state.playthrough_key`。TECH.md §5.4）。
 同じ名前で作り直せば前の周回を引き継ぐ。
+
+### 2.33 画像生成のバックエンドと出口（`230_` で実測、2026-09-18）
+
+画像生成は選ばれた**一族**だけが import される。
+選択は `config.json` の `ai_setting.local_model_setting.sd_backend.name`（§2.12.1 と同じファイル）。
+実機で4つを通した。
+
+| `sd_backend.name` | 上の層（種類が分かる） | 出口（生成そのもの） |
+| --- | --- | --- |
+| `sdcpp_cuda` | `image_generation.sdcppcuda.stable_diffusion_manager` | `sdcpp_cuda.stable_diffusion:StableDiffusion.generate_image` |
+| `sdcpp_vulkan` | `image_generation.sdcppvulkan.stable_diffusion_manager` | `sdcpp_vulkan.stable_diffusion:StableDiffusion.generate_image` |
+| `sdcpp_cpu` | `image_generation.sdcppcpu.stable_diffusion_manager` | `sdcpp_cpu.stable_diffusion:StableDiffusion.generate_image` |
+| `diffusers_openvino` | `image_generation.diffusers_openvino.stable_diffusion_manager` | `optimum.intel.openvino.modeling_diffusion:OVStableDiffusionPipeline.__call__` |
+
+**名前は組み立てられない。**
+`image_generation.` の下では下線が落ち（`sdcpp_cuda` から `sdcppcuda`）、`sdcpp_*` の側では残る。
+`diffusers_openvino` の出口はゲームのパッケージですらない（optimum）。
+クラスを属性で持っているのは sdcpp 系の `stable_diffusion_manager` だけなので、
+**出口のクラスは生きた `txt2img_pipe` の型から引く**のが4つとも通る唯一の道。
+
+#### 出口は一族につき1つ
+
+実機の生成6回はすべて上の表の出口を通り、`upscale()` と `generate_video()` は0回。
+立ち絵の2段（`generate_image_anime` の 256x512 と `image_to_image_anime` の 512x1024）も同じ出口で、
+`character_generation_quality = 'highres_upscale'` の「upscale」は `upscale()` ではなく img2img のこと。
+
+引数の名前は一族で変わる。
+
+| | sdcpp 系 | `diffusers_openvino` |
+| --- | --- | --- |
+| 寸法 | `width` / `height` | `width` / `height` |
+| サンプラー | `sample_method` / `sample_steps` / `cfg_scale` / `scheduler` | `num_inference_steps` / `guidance_scale` |
+| 種 | `seed`（実測は `-1`） | 実測では来ていない |
+| img2img | `image_to_image_anime` が `init_image` 付きで同じ出口へ | 関数ごと無い |
+| LoRA | ゲームが上の層と出口の**間**で `<lora:...>` を足す | 概念が無い（`lora_dir` も `taesd_path` も無い） |
+
+素の値（`sdcpp_cuda`、実測）:
+
+| 種類 | 寸法 | サンプラー / steps / cfg | 通る関数 |
+| --- | --- | --- | --- |
+| 背景 | 1024x512 | `lcm` / 5 / 1 | `generate_image_real_lcm` |
+| 立ち絵1段目 | 256x512 | `euler_a` / 20 / 8 | `generate_image_anime` |
+| 立ち絵2段目（img2img） | 512x1024 | `dpmpp2m` / 15 / 7 | `image_to_image_anime` |
+| 敵・モンスター | **512x512（1段だけ）** | `lcm` / 5 / 1 | `generate_image_real_lcm` |
+
+**画質の設定で立ち絵の経路が変わる。**
+`highres_upscale` は上の2段（`generate_image_anime` と `image_to_image_anime`）を通り、
+`highres_faster` は **LCM の段1回**（`generate_image_real_lcm`、512x1024）で描く（実測 2026-09-18）。
+LCM の段を通る回はプロンプトに `<lora:LCM_LoRA_Weights_SD15:1>` が入る。
+
+敵・モンスターは立ち絵と同じ経路だと読めるが、実際は別物で、
+正方形を1段で描き、サンプラーは背景と同じ LCM（実測 2026-09-18、1.5 秒）。
+入口は `generate_enemy_image`（`image_generation_creature.py:235` から `generate_image_real_lcm` を呼ぶ）。
+
+背景のプロンプトには出口の時点で `<lora:LCM_LoRA_Weights_SD15:1>` が入っている。
+上の層の引数には入っていないので、**LoRA の付け替えは出口でしか掛からない**。
+
+#### パイプラインはワールド選択を押した時に建つ
+
+```text
+AIManager.set_ai_models (instantale.py:510〜516)   一族を import する行（実測: cuda 510 / vulkan 512 / openvino 514 / cpu 516）
+                        (instantale.py:536)        load_sd_pipeline() で建てる
+  呼ばれ方: AIManager.__init__ (307) から。さらに InstantaleApp.show_world_choice (782)、ボタンの on_touch_up
+```
+
+- プロセス起動時でもモジュールの import 時でもない。
+  `set_ai_models` に**入った時点では一族がまだ import されていない**（実測4回とも0件）
+- import から構築の開始まで **0.27〜0.62 秒**（4つの一族・6回の実測）
+- 構築そのものは sdcpp 系が 1.2〜1.3 秒、`diffusers_openvino` が 6.3〜7.4 秒
+- 構築は manager のモジュール変数をそのまま渡す（`sdcpp_cpu` で実測）。
+  `model_path_anime` が `model_path` へ、`lora_dir` が `lora_model_dir` へ、
+  `taesd_path` と `vae_path` はそのままの名前で渡る。
+  `wtype='default'` / `rng_type='cuda'`（CPU バックエンドでも `cuda` のまま渡る）
+
+チェックポイント・TAESD・VAE は、このモジュール変数を建つ前に書き換えれば差し替わる
+（実機 2026-09-18。`taesd_path` を空にして建て、`StableDiffusion.__init__` にそのまま渡った。VERIFICATION.md §3.65）。
+
+> **バックエンドを切り替えても画質の設定は付いてこない。**
+> `diffusers_openvino` の manager には `image_to_image_anime` が無いのに、
+> `character_generation_quality` が `highres_upscale`（2段で描く指定）のまま残ると、
+> ゲーム自身が `UnboundLocalError: local variable 'generated_image' referenced before assignment`
+> （`image_generation\diffusers_openvino\image_generation_creature.py:83`）で落ちる。
+> 同梱の初期テンプレートはこの一族に `lowres_faster` を組み合わせている。
+>
+> この一族は**形を固定して変換したモデル**を回すので、
+> 出口へ渡す寸法を変えるとモデルの作り直しが走る。
+> 背景を 1024x512 から 1536x768（画素 x2.25）にした実機では、
+> 64GB の RAM を使い切って SSD へページングを始めた（2026-09-18）。
+> 1152x576（画素 x1.27）なら 15.1 秒で通る（素の 1024x512 は 10.5 秒）が、
+> **通った回も RAM は伸びたまま、ゲームを閉じるまで戻らない**。
+> 寸法ごとに作り直したものが常駐すると読める。
+
+> 別配布の画質強化 MOD（`stable-diffusion.dll` のプロキシ）が入っていると、
+> この出口の**後ろ**でもう一度書き換わる。
+> そちらのログ（`InstantaleSDMod\proxy_resize.log`、2026-07-28 まで）では、
+> 出口の `euler_a` / 20 / 8 がプロキシ側で `dpm++2mv2` / 15 / 5 になっていた。
+> 上の実測（2026-09-18）はプロキシが入っていない状態で録ったもので、
+> 3つのバックエンドとも `stable-diffusion.dll` は退避されている `-real.dll` とハッシュが一致していた
+> （入っているかどうかはこの比較で分かる。`-real.dll` の有無では分からない）。

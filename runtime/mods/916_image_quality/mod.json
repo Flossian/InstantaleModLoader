@@ -1,0 +1,450 @@
+{
+  "entry": "image_quality.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Higher quality image generation",
+    "ja": "画像生成の画質を上げる"
+  },
+  "description": {
+    "en": "Raises the generation resolution and overrides the sampler at the single exit every backend goes through, separately for portraits, enemies and backgrounds, keeping the aspect ratio. The checkpoint, TAESD, VAE and LoRA folder can be pointed elsewhere (for an SDXL model) because they are written before the pipeline is built. Every default is the game's own measured value, and a setting left at its default is never written",
+    "ja": "どのバックエンドでも通る1つの出口で、生成解像度を上げ、サンプラーを上書きする。立ち絵・敵・背景で別々に指定でき、縦横比は保つ。チェックポイント・TAESD・VAE・LoRA の置き場も差し替えられる（パイプラインが建つ前に書くため。SDXL のモデルへ移る用）。既定値はすべて実測したゲームの値で、既定のままの項目は書き換えない",
+    "why_wip": "実機で6項目が通ったが、プロンプトの規則（付け替え・条件つき追加・除去・置換・skip）は実機で当てていない。既存 sd_upscale.ini からの移行と、131_sharp_portrait を切にした組み合わせも未確認"
+  },
+  "version": "15",
+  "author": "R01/Flossian",
+  "settings": {
+    "PORTRAIT_SHORT": {
+      "type": "int",
+      "default": 512,
+      "min": 256,
+      "max": 2048,
+      "label": {
+        "ja": "立ち絵の短辺の目標",
+        "en": "Portrait target short side"
+      },
+      "note": {
+        "ja": "立ち絵（キャラクタ）の生成解像度。ゲームの最終段は 512x1024 で、512 のままなら触らない。縦横比は保つので、先に長辺の上限へ当たればそこで止まる。1段目（256x512）も同じ比で上がる",
+        "en": "Generation resolution for character portraits. The game's final stage is 512x1024; leaving this at 512 changes nothing. The aspect ratio is kept, so the long-side cap can stop the enlargement first. The first stage (256x512) is scaled by the same factor"
+      }
+    },
+    "PORTRAIT_MAX_LONG": {
+      "type": "int",
+      "default": 1024,
+      "min": 256,
+      "max": 2048,
+      "label": {
+        "ja": "立ち絵の長辺の上限",
+        "en": "Portrait long-side cap"
+      },
+      "note": {
+        "ja": "ゲームのままは 1024。短辺の目標を上げてもここで止まるので、実際に短辺を伸ばすならこちらも比例して上げること",
+        "en": "1024 leaves the game as it is. Raising the short-side target alone stops here, so raise this proportionally when you want the short side to actually grow"
+      }
+    },
+    "ENEMY_SHORT": {
+      "type": "int",
+      "default": 512,
+      "min": 256,
+      "max": 2048,
+      "label": {
+        "ja": "敵・モンスターの短辺の目標",
+        "en": "Enemy target short side"
+      },
+      "note": {
+        "ja": "敵とモンスターの絵だけに効く（入口が立ち絵と別なので分けられる）。ゲームは正方形 512x512 を1段で描くので、512 のままなら触らない",
+        "en": "Applies only to enemies and monsters, which enter through their own functions. The game draws them as a single 512x512 square, so 512 leaves it as it is"
+      }
+    },
+    "ENEMY_MAX_LONG": {
+      "type": "int",
+      "default": 512,
+      "min": 256,
+      "max": 2048,
+      "label": {
+        "ja": "敵・モンスターの長辺の上限",
+        "en": "Enemy long-side cap"
+      },
+      "note": {
+        "ja": "ゲームのままは 512（敵は正方形なので短辺と同じ）",
+        "en": "512 leaves the game as it is (enemies are square, so this matches the short side)"
+      }
+    },
+    "BACKGROUND_SHORT": {
+      "type": "int",
+      "default": 512,
+      "min": 256,
+      "max": 2048,
+      "label": {
+        "ja": "背景の短辺の目標",
+        "en": "Background target short side"
+      },
+      "note": {
+        "ja": "背景はゲームでは 1024x512（短辺 512）。512 のままなら触らない",
+        "en": "Backgrounds are 1024x512 in the game (short side 512). Leaving this at 512 changes nothing"
+      }
+    },
+    "BACKGROUND_MAX_LONG": {
+      "type": "int",
+      "default": 1024,
+      "min": 256,
+      "max": 2048,
+      "label": {
+        "ja": "背景の長辺の上限",
+        "en": "Background long-side cap"
+      },
+      "note": {
+        "ja": "ゲームのままは 1024",
+        "en": "1024 leaves the game as it is"
+      }
+    },
+    "STAGE1_METHOD": {
+      "type": "choice",
+      "values": [
+        "euler_a",
+        "euler",
+        "heun",
+        "dpm2",
+        "dpmpp2s_a",
+        "dpmpp2m",
+        "dpmpp2mv2",
+        "ipndm",
+        "ipndm_v",
+        "lcm",
+        "ddim_trailing",
+        "tcd"
+      ],
+      "default": "euler_a",
+      "label": {
+        "ja": "1段目のサンプリング方法",
+        "en": "First stage sampling method"
+      },
+      "note": {
+        "ja": "立ち絵と敵の1段目（下描き）。ゲームのままは euler_a。立ち絵と敵は同じ関数を通るので、この段の設定は両方に効く",
+        "en": "The first (draft) stage for portraits and enemies. The game uses euler_a. Portraits and enemies go through the same function, so this applies to both"
+      }
+    },
+    "STAGE1_STEPS": {
+      "type": "int",
+      "default": 20,
+      "min": 1,
+      "max": 200,
+      "label": {
+        "ja": "1段目の steps",
+        "en": "First stage steps"
+      },
+      "note": {
+        "ja": "ゲームのままは 20",
+        "en": "The game uses 20"
+      }
+    },
+    "STAGE1_CFG": {
+      "type": "float",
+      "default": 8.0,
+      "min": 0.1,
+      "max": 50.0,
+      "label": {
+        "ja": "1段目の cfg",
+        "en": "First stage cfg"
+      },
+      "note": {
+        "ja": "ゲームのままは 8.0",
+        "en": "The game uses 8.0"
+      }
+    },
+    "STAGE1_SCHEDULER": {
+      "type": "choice",
+      "values": [
+        "default",
+        "discrete",
+        "karras",
+        "exponential",
+        "ays",
+        "gits",
+        "smoothstep"
+      ],
+      "default": "default",
+      "label": {
+        "ja": "1段目のスケジューラ",
+        "en": "First stage scheduler"
+      },
+      "note": {
+        "ja": "ゲームのままは default",
+        "en": "The game uses default"
+      }
+    },
+    "STAGE2_METHOD": {
+      "type": "choice",
+      "values": [
+        "euler_a",
+        "euler",
+        "heun",
+        "dpm2",
+        "dpmpp2s_a",
+        "dpmpp2m",
+        "dpmpp2mv2",
+        "ipndm",
+        "ipndm_v",
+        "lcm",
+        "ddim_trailing",
+        "tcd"
+      ],
+      "default": "dpmpp2m",
+      "label": {
+        "ja": "2段目のサンプリング方法",
+        "en": "Second stage sampling method"
+      },
+      "note": {
+        "ja": "立ち絵と敵の2段目（1段目の絵を描き直す段）。ゲームのままは dpmpp2m",
+        "en": "The second stage for portraits and enemies, which redraws the first stage image. The game uses dpmpp2m"
+      }
+    },
+    "STAGE2_STEPS": {
+      "type": "int",
+      "default": 15,
+      "min": 1,
+      "max": 200,
+      "label": {
+        "ja": "2段目の steps",
+        "en": "Second stage steps"
+      },
+      "note": {
+        "ja": "ゲームのままは 15",
+        "en": "The game uses 15"
+      }
+    },
+    "STAGE2_CFG": {
+      "type": "float",
+      "default": 7.0,
+      "min": 0.1,
+      "max": 50.0,
+      "label": {
+        "ja": "2段目の cfg",
+        "en": "Second stage cfg"
+      },
+      "note": {
+        "ja": "ゲームのままは 7.0",
+        "en": "The game uses 7.0"
+      }
+    },
+    "STAGE2_SCHEDULER": {
+      "type": "choice",
+      "values": [
+        "default",
+        "discrete",
+        "karras",
+        "exponential",
+        "ays",
+        "gits",
+        "smoothstep"
+      ],
+      "default": "karras",
+      "label": {
+        "ja": "2段目のスケジューラ",
+        "en": "Second stage scheduler"
+      },
+      "note": {
+        "ja": "ゲームのままは karras（この段だけ default ではない）",
+        "en": "The game uses karras here, unlike the other stages"
+      }
+    },
+    "CHECKPOINT_PATH": {
+      "type": "str",
+      "default": "",
+      "label": {
+        "ja": "チェックポイントの差し替え",
+        "en": "Checkpoint override"
+      },
+      "note": {
+        "ja": "空でゲームのまま。SDXL のモデルへ移るときに指す。パスはゲームのフォルダからの相対（例: runtime/models/sd15/checkpoints/<名前>.safetensors）。TAESD と VAE の系統も一緒に揃えること",
+        "en": "Empty leaves the game as it is. Point this at an SDXL model to switch. The path is relative to the game folder. Keep the TAESD and VAE of the same family"
+      }
+    },
+    "TAESD_PATH": {
+      "type": "str",
+      "default": "",
+      "label": {
+        "ja": "TAESD デコーダの差し替え",
+        "en": "TAESD decoder override"
+      },
+      "note": {
+        "ja": "空でゲームのまま。SDXL のチェックポイントには TAESDXL が要る（系統が違うと絵が崩れる）",
+        "en": "Empty leaves the game as it is. An SDXL checkpoint needs the TAESDXL decoder; mismatched families produce broken images"
+      }
+    },
+    "VAE_PATH": {
+      "type": "str",
+      "default": "",
+      "label": {
+        "ja": "VAE の差し替え",
+        "en": "VAE override"
+      },
+      "note": {
+        "ja": "空でゲームのまま",
+        "en": "Empty leaves the game as it is"
+      }
+    },
+    "LORA_DIR": {
+      "type": "str",
+      "default": "",
+      "label": {
+        "ja": "LoRA の置き場の差し替え",
+        "en": "LoRA folder override"
+      },
+      "note": {
+        "ja": "空でゲームのまま（runtime/models/sd15/lora）。SDXL 用の LoRA を別のフォルダに置くとき",
+        "en": "Empty leaves the game as it is (runtime/models/sd15/lora). Use this when SDXL LoRAs live in another folder"
+      }
+    },
+    "DISABLE_TAESD": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "TAESD を使わずに建てる",
+        "en": "Build the pipeline without TAESD"
+      },
+      "note": {
+        "ja": "パイプラインが建つ前に TAESD のパスを空にして、VAE で復号させる。遅くなるが絵は出る。書き込みが構築まで届くかを確かめるための項目で、普段は切でよい",
+        "en": "Empties the TAESD path before the pipeline is built so the VAE decodes instead. Slower, but images still come out. This exists to check that a write reaches construction; leave it off for normal play"
+      }
+    },
+    "DIFFUSERS_RESIZE": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "diffusers 系でも寸法を変える",
+        "en": "Resize on the diffusers family too"
+      },
+      "note": {
+        "ja": "diffusers_openvino のような変換済みモデルの一族では、既定で寸法を変えない。この一族は形を固定してあるので、寸法を変えるとモデルの作り直しが走り、実機では 64GB の RAM を使い切って SSD へページングを始めた。sdcpp 系（cuda / vulkan / cpu）には関係しない設定",
+        "en": "On families that run converted, fixed-shape models such as diffusers_openvino, the size is left alone by default. Changing it forces the model to be rebuilt; on the test machine that filled 64GB of RAM and started paging to the SSD. This setting does not affect the sdcpp family"
+      }
+    },
+    "LCM_METHOD": {
+      "type": "choice",
+      "values": [
+        "euler_a",
+        "euler",
+        "heun",
+        "dpm2",
+        "dpmpp2s_a",
+        "dpmpp2m",
+        "dpmpp2mv2",
+        "ipndm",
+        "ipndm_v",
+        "lcm",
+        "ddim_trailing",
+        "tcd"
+      ],
+      "default": "lcm",
+      "label": {
+        "ja": "LCM の段のサンプリング方法",
+        "en": "LCM stage sampling method"
+      },
+      "note": {
+        "ja": "背景と敵・モンスターが通る段（どちらも generate_image_real_lcm を通る）。ゲームのままは lcm（5 steps・cfg 1.0 の速い設定）。別の方法にするなら steps と cfg も一緒に上げること",
+        "en": "The stage backgrounds, enemies and monsters go through (all via generate_image_real_lcm). The game uses lcm with 5 steps and cfg 1.0. Switching the method means raising steps and cfg to match"
+      }
+    },
+    "LCM_STEPS": {
+      "type": "int",
+      "default": 5,
+      "min": 1,
+      "max": 200,
+      "label": {
+        "ja": "LCM の段の steps",
+        "en": "LCM stage steps"
+      },
+      "note": {
+        "ja": "ゲームのままは 5",
+        "en": "The game uses 5"
+      }
+    },
+    "LCM_CFG": {
+      "type": "float",
+      "default": 1.0,
+      "min": 0.1,
+      "max": 50.0,
+      "label": {
+        "ja": "LCM の段の cfg",
+        "en": "LCM stage cfg"
+      },
+      "note": {
+        "ja": "ゲームのままは 1.0（LCM 用の低い値）",
+        "en": "The game uses 1.0, which suits LCM"
+      }
+    },
+    "LCM_SCHEDULER": {
+      "type": "choice",
+      "values": [
+        "default",
+        "discrete",
+        "karras",
+        "exponential",
+        "ays",
+        "gits",
+        "smoothstep"
+      ],
+      "default": "default",
+      "label": {
+        "ja": "LCM の段のスケジューラ",
+        "en": "LCM stage scheduler"
+      },
+      "note": {
+        "ja": "ゲームのままは default",
+        "en": "The game uses default"
+      }
+    },
+    "STRIP_LORA": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "プロンプトの LoRA タグを外す",
+        "en": "Strip LoRA tags from the prompt"
+      },
+      "note": {
+        "ja": "ゲームが背景・敵・（画質を下げたときの）立ち絵のプロンプトに入れる SD1.5 用の LCM LoRA のタグを外す。外すのはゲームが入れたタグだけで、規則で付け替えた先や足したタグは残る。系統の違うモデル（SDXL）に当たるとプロセスごと落ちるので、チェックポイントを差し替えるときはこれも入にする。既定は切（ゲームのまま）",
+        "en": "Strips the SD1.5 LCM LoRA tag the game inserts into the prompt for backgrounds, enemies and (at lower quality settings) portraits. Only tags the game inserted are removed; tags remapped or added by your rules stay. Applying an SD1.5 LoRA to a model of another family such as SDXL crashes the process, so turn this on whenever you point the checkpoint elsewhere. Off by default, which is the game's own behaviour"
+      }
+    },
+    "DISABLE_VAE": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "VAE を渡さずに建てる",
+        "en": "Build the pipeline without the VAE"
+      },
+      "note": {
+        "ja": "ゲームは SD1.5 用の VAE を必ず渡す。系統の違うモデル（SDXL）ではこれが残ると復号が合わず、絵がマゼンタへ潰れる。TAESD を差し替えても色が合わないときに切る。既定は切らない（ゲームのまま）",
+        "en": "The game always passes its SD1.5 VAE. With a model of another family such as SDXL this breaks the decode and images collapse into magenta. Turn it off when the colours stay wrong after replacing the TAESD decoder. Off by default, which is the game's own behaviour"
+      }
+    },
+    "MODEL_SAFETY": {
+      "type": "choice",
+      "values": [
+        "auto",
+        "off"
+      ],
+      "default": "auto",
+      "label": {
+        "ja": "モデルの系統に合わせて直す",
+        "en": "Fit the settings to the model family"
+      },
+      "note": {
+        "ja": "チェックポイントの中身（safetensors のヘッダに並ぶテンソルの名前）から SD1.5 か SDXL かを見分け、壊れると実測で分かっている組み合わせだけを直す。名前でもファイルの大きさでも判定しない。SDXL のときは、ゲームが入れる SD1.5 用の LoRA タグを外し（当たるとプロセスごと落ちる。規則で足したタグは残す）、素のままの LCM の段の設定を euler_a / 24 / cfg 5.0 にする（そのままだとマゼンタに潰れる。1段目・2段目は触らない）。寸法は学習の寸法から離れていても警告だけで、値は動かさない。off で何もしない",
+        "en": "Reads the tensor names in the checkpoint's safetensors header to tell SD1.5 from SDXL, then fixes only the combinations measured to break. Neither the file name nor its size is used. With SDXL it strips the SD1.5 LoRA tags the game inserts (which crash the process; tags added by your rules stay) and replaces an untouched LCM-stage sampler with euler_a / 24 / cfg 5.0 (without which images collapse into magenta; the first and second stages are left alone). Sizes far from the family's training resolution only produce a warning and are left alone. off does nothing"
+      }
+    }
+  },
+  "tool": {
+    "entry": "tool.py",
+    "label": {
+      "ja": "画像生成の設定を開く",
+      "en": "Open the image generation settings"
+    },
+    "note": {
+      "ja": "元 InstantaleStableDiffusionMod の GUI を写した画面。タブは状態 / モデル・解像度・LoRA 付替・プロンプト追加・条件付き追加・タグ除去・完全置き換え・サンプラーの8枚で、固定行の「有効」チェックや一覧の行追加も元と同じ作り。元 MOD の sd_upscale.ini を読み込んで設定と規則へ写せる。解像度は入れた値で実際に何ピクセルになるかをその場で計算して見せ、チェックポイントは中身から SD1.5 / SDXL を判定して表示する",
+      "en": "A dedicated window modelled on the original InstantaleStableDiffusionMod GUI: the same eight tabs (status / model, resolution, LoRA remap, prompt additions, conditional additions, tag removal, full replacement, sampler), per-kind rows with an enable checkbox and add-row tables. It can import the original sd_upscale.ini into settings and rules, computes as you type the size each kind will actually be generated at, and reads SD1.5 / SDXL from the checkpoint's contents"
+    }
+  }
+}

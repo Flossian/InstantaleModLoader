@@ -104,6 +104,7 @@
     "227_probe_shop_stock",
     "228_probe_area_move_reject",
     "229_probe_mod_npc",
+    "230_probe_image_generation",
     "231_probe_training"
   ],
   "disabled": []
