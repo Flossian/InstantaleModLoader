@@ -181,7 +181,7 @@ class Model(object):
         for npc_id in npc_ids:
             npc = npcs.get(str(npc_id))
             if not isinstance(npc, dict):
-                failed.append("{}: セーブに居ない".format(npc_id))
+                failed.append("{}: セーブに居ません".format(npc_id))
                 continue
             try:
                 dest = self.C.free_path(folder, npc.get("name") or npc_id)
@@ -599,7 +599,7 @@ def build_window(model):
     def choose_world(*_args):
         world = world_var.get()
         if not model.open_world(world):
-            say("{} のセーブを読めなかった".format(world))
+            say("{} のセーブを読めませんでした".format(world))
             refill_filters()
             refresh_list(keep=False)
             return
@@ -751,9 +751,9 @@ def build_window(model):
         reload_import()
         if failed:
             messagebox.showwarning(
-                "書き出せなかったものがある",
-                "{}人を書き出した。\n\n".format(done) + "\n".join(failed[:10]))
-        say("{}人をエクスポートした（{}）".format(done, model.export_dir()))
+                "書き出せなかったものがあります",
+                "{}人を書き出しました。\n\n".format(done) + "\n".join(failed[:10]))
+        say("{}人をエクスポートしました（{}）".format(done, model.export_dir()))
 
     tree.heading("#0", text="", command=toggle_all)
     tree.bind("<Button-1>", on_click)
@@ -954,8 +954,8 @@ def build_window(model):
                          tags=(tag,) if tag else ())
         resort_plan()
         plan_note.configure(
-            text="{}件が同名で見送りになる。先住側をセーブエディタで改名するか、"
-                 "置き先を変えると予約できる".format(warned) if warned else "")
+            text="{}件が同名で見送りになります。先住側をセーブエディタで改名するか、"
+                 "置き先を変えると予約できます".format(warned) if warned else "")
 
     def show_package(package):
         """選んだ zip の中身を右に出す。未選択なら空にする。"""
@@ -1003,17 +1003,17 @@ def build_window(model):
             return
         hit = model.collides(package.name, world)
         if hit is None:
-            verdict.configure(text="{} のセーブを読めない。検査できない".format(world),
+            verdict.configure(text="{} のセーブを読めません。検査できません".format(world),
                               style="Warn.TLabel")
             reserve_button.configure(state="disabled")
         elif hit:
             verdict.configure(
-                text="{} には同名の「{}」が既に居る。\nこのままでは予約できない"
-                     "（先住側を改名するか、置き先を変える）".format(world, package.name),
+                text="{} には同名の「{}」が既に居ます。\nこのままでは予約できません"
+                     "（先住側を改名するか、置き先を変えてください）".format(world, package.name),
                 style="Warn.TLabel")
             reserve_button.configure(state="disabled")
         else:
-            verdict.configure(text="同名の人物は居ない（いま検査した）",
+            verdict.configure(text="同名の人物は居ません（いま検査しました）",
                               style="Sub.TLabel")
             reserve_button.configure(state="normal")
 
@@ -1028,7 +1028,7 @@ def build_window(model):
         inherit = {key: bool(var.get()) for key, var in inherit_vars.items()}
         model.reserve(package, world, inherit)
         refresh_plan()
-        say("「{}」を {} へ予約した".format(package.name, world))
+        say("「{}」を {} へ予約しました".format(package.name, world))
 
     def drop_label(row):
         """その行を消すことが何を意味するか。
@@ -1064,17 +1064,17 @@ def build_window(model):
         refresh_plan()
         on_plan_select()
         if placed:
-            say("「{}」の記録を消した（世界に居る NPC はそのまま。"
+            say("「{}」の記録を消しました（世界に居る NPC はそのままです。"
                 "消すならセーブエディタで）".format(row.get("name") or ""))
         else:
-            say("「{}」の予約を取り消した（zip は消さない）".format(
+            say("「{}」の予約を取り消しました（zip は消しません）".format(
                 row.get("name") or ""))
 
     def do_recheck():
         model.recheck()
         refresh_plan()
         check_collision()
-        say("予約を検査し直した（{}件）".format(len(model.pending)))
+        say("予約を検査し直しました（{}件）".format(len(model.pending)))
 
     ptree.bind("<<TreeviewSelect>>", check_collision)
     rtree.bind("<<TreeviewSelect>>", on_plan_select)
@@ -1101,7 +1101,7 @@ def build_window(model):
     if model.worlds:
         choose_world()
     else:
-        say("{} に世界が無い".format(model.C.saves_dir()))
+        say("{} に世界がありません".format(model.C.saves_dir()))
     reload_import()
     return window
 

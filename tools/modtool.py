@@ -310,7 +310,7 @@ def coerce_all(mod_dir, raw, root=""):
     try:
         config = config_module(root, mod_dir)
     except Exception:
-        return None, "設定の読み方が引けない"
+        return None, "設定の読み方が引けません"
     values = {}
     for key, decl in decls(mod_dir, root).items():
         ok, value, why = config.coerce(decl, raw.get(key))
@@ -769,7 +769,7 @@ def build_world_settings_window(mod_dir, title="", blurb=""):
     per_world = ttk.Frame(tabs, padding=(6, 8, 6, 6))
     tabs.add(per_world, text="  ワールド個別設定  ")
     ttk.Label(per_world, text="その世界だけ。一括設定と違う項目だけが state\\{}\\<世界名>.json に入る。"
-              "セーブは世界名を読むだけで書かない".format(state_dirname(mod_dir)),
+              "セーブからは世界名を読むだけで、セーブには何も書かない".format(state_dirname(mod_dir)),
               style="Sub.TLabel").pack(anchor="w", pady=(0, 4))
     picker = ttk.Frame(per_world)
     picker.pack(fill="x", pady=(0, 4))
@@ -783,7 +783,7 @@ def build_world_settings_window(mod_dir, title="", blurb=""):
     world_status = ttk.Label(world_bottom, style="Faint.TLabel")
     world_status.pack(side="left", fill="x", expand=True)
     world_status.configure(text="{} 世界（{}）".format(len(worlds), store)
-                           if worlds else "世界が見つからない: " + store)
+                           if worlds else "世界が見つかりません: " + store)
     body = ttk.Frame(per_world, padding=(0, 0, 6, 0))
     body.pack(fill="both", expand=True)
     world_form = _Form(_scrollable(body), found, lambda k: "一括設定: " + shown(shared[k]))
@@ -844,7 +844,8 @@ def build_world_settings_window(mod_dir, title="", blurb=""):
     load_into_form(world_var.get())
 
     status = ttk.Label(footer, style="Faint.TLabel",
-                       text="一括設定は次の注入から、ワールド個別設定は次にその世界を見たときから効く")
+                       text="一括設定は次にゲームへ注入したときから、"
+                            "ワールド個別設定は次にその世界を開いたときから効く")
     status.pack(side="left")
 
     def save():

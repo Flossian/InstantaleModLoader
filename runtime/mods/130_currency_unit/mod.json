@@ -7,8 +7,8 @@
     "ja": "通貨の表記を変更する"
   },
   "description": {
-    "en": "Renames the game's currency (ゴールド / G) to anything you like -- 円, シルバー, ドル -- and lets you restate the Gold: line at the top of the screen. The wording and what the game sends to the LLM change together",
-    "ja": "通貨の呼び名（ゴールド / G）を好きな表記に変える。画面上部の `Gold:` の欄も自分の書式にできる。文中の表記とゲームが LLM へ送る文章は同時に変わる"
+    "en": "Renames the game's currency (ゴールド / G) to anything you like (円, シルバー, ドル) and lets you restate the Gold: line at the top of the screen. The wording and what the game sends to the LLM change together",
+    "ja": "通貨の呼び名（ゴールド / G）を好きな表記に変える。画面上部の「Gold:」の欄も自分の書式にできる。文中の表記とゲームが LLM へ送る文章は同時に変わる"
   },
   "version": "4",
   "author": "R01/Flossian,MoririnJP",

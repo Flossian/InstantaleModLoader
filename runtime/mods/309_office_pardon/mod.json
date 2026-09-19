@@ -37,7 +37,7 @@
         "en": "Wanted below this lawfulness"
       },
       "note": {
-        "ja": "既定0＝手配度が0未満なら犯罪者。罰金はこの値との差で決まる",
+        "ja": "既定0＝手配度がこの値を下回っていると手配とみなす。罰金は手配度とこの値との差で決まる",
         "en": "0 = wanted while lawfulness is negative. The fine scales with the gap"
       }
     },

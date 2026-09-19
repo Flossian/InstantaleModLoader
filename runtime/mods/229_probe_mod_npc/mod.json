@@ -59,7 +59,7 @@
       },
       "note": {
         "ja": "ローダの既定と同じ。切ると HP・スキル・立ち絵は空のまま（挑まれると落ちる）",
-        "en": "Same as the loader default; off leaves HP, skills and portrait empty"
+        "en": "Same as the loader default; off leaves HP, skills and portrait empty, and a battle against the visitor crashes"
       }
     },
     "DISK_CHECKS": {
@@ -110,7 +110,7 @@
         "en": "Lift the visitor off the roster during saves"
       },
       "note": {
-        "ja": "切っても disk の leaked が空なら、保存は名簿を読んでいない。外す窓の間はゲームも来訪者を引けない",
+        "ja": "切っても disk の leaked が空なら、保存は名簿を読んでいない。外している間はゲームも来訪者を引けない",
         "en": "If leaked stays empty with this off, the save does not read the roster; while lifted the game cannot look the visitor up either"
       }
     },

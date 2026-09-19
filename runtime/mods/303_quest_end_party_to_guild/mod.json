@@ -29,8 +29,8 @@
         "en": "Also on quest retire"
       },
       "note": {
-        "ja": "未検証",
-        "en": "not verified"
+        "ja": "クエストを放棄して解散するときも、仲間をいま居る町のギルドに残す。放棄の経路は未検証",
+        "en": "Abandoning a quest also leaves the members at the guild of the town you are in. That path is not verified"
       }
     }
   }

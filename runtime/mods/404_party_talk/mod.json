@@ -63,7 +63,7 @@
         "en": "Show every member's portrait side by side"
       },
       "note": {
-        "ja": "既定は入。参加者全員の立ち絵を横に等間隔で並べる。切ると、喋った人物へ立ち絵を切り替えて終わるとアンカーへ戻す",
+        "ja": "既定は入。参加者全員の立ち絵を横に等間隔で並べる。切ると、喋った人物へ立ち絵を切り替え、会話が終わったらアンカーへ戻す",
         "en": "On by default: every participant's portrait is laid out across the screen. Off: the portrait switches to whoever speaks and returns to the anchor"
       }
     },

@@ -37,7 +37,7 @@
         "en": "Training fee"
       },
       "note": {
-        "ja": "素のゲームは300G（施設によらず固定。実測）。300のままなら触らない。0でタダ。手持ちがこの額に満たないと押した時点で断られる",
+        "ja": "素のゲームは300G（施設によらず固定）。300のままなら触らない。0でタダ。手持ちがこの額に満たないと押した時点で断られる",
         "en": "The game's own fee is 300G, the same at every facility. Left at 300, nothing is touched. 0 makes it free; pressing the button with less than this is refused"
       }
     },
@@ -51,7 +51,7 @@
         "en": "Actions in one training course"
       },
       "note": {
-        "ja": "素のゲームは3回ぶん。行動ごとの消費量（ただ鍛える1・基礎を積む2・技を磨く2・新たな技を学ぶ3）がここから引かれ、0 で卒業する。だから3なら `ただ鍛える` を3回か、`新たな技を学ぶ` を1回で終わる。決めるのは回数で、期間ではない（実際に進む暦は下のベース期間×倍率の合計）。増やすと1回の代金で何回も行動できる。ゲームはこの数を年で言うので、画面には「あと3年間」と出る（その文言は下の設定で実際の期間に直せる）",
+        "ja": "素のゲームは3回ぶん。行動ごとの消費量（ただ鍛える1・基礎を積む2・技を磨く2・新たな技を学ぶ3）がここから引かれ、0 で卒業する。だから3なら「ただ鍛える」を3回か、「新たな技を学ぶ」を1回で終わる。決めるのは回数で、期間ではない（実際に進む暦は下のベース期間×倍率の合計）。増やすと1回の代金で何回も行動できる。ゲームはこの数を年で言うので、画面には「あと3年間」と出る（その文言は下の設定で実際の期間に直せる）",
         "en": "The game gives 3. Each action spends its own amount (1/2/2/3) and you graduate at 0, so three buys three sessions of the cheapest action or one of the costliest. It sets how many actions one fee buys, not how long they take: the days that pass come from the base period below. The game words the count in years, which is why the screen says \"3 years left\"."
       }
     },
@@ -162,7 +162,7 @@
         "en": "Allow training again where you graduated"
       },
       "note": {
-        "ja": "既定 ON（この MOD を入れると受けられる）。素のゲームは断る（「十分に学んだ。これ以上ここで得るものはないだろう。」で代金も日数も動かない）。断っている根は施設に立つ訓練済みの印（config の trained。実測）で、ONだとその印をたたむだけ。ゲームは卒業していない施設とまったく同じ道を通るので、代金も背景も選択肢も文言も全部ゲームのまま。OFF にすれば素のゲームどおり断る",
+        "ja": "既定 ON（この MOD を入れると受けられる）。素のゲームは断る（「十分に学んだ。これ以上ここで得るものはないだろう。」で代金も日数も動かない）。断りの根拠は施設に付く訓練済みの印（config の trained）で、ON だとその印をたたむだけ。ゲームは卒業していない施設とまったく同じ道を通るので、代金も背景も選択肢も文言も全部ゲームのまま。OFF にすれば素のゲームどおり断る",
         "en": "On by default: installing this mod lets you train again. The game itself refuses a second course at the same facility. The refusal comes from a \"trained\" mark on the facility itself; on, that mark is simply folded away, so the game runs exactly as it does at a facility you have not graduated from, with its own fee, background, choices and wording. Turn it off to get the game's own refusal back."
       }
     },
@@ -174,7 +174,7 @@
         "en": "Match the wording to the real length"
       },
       "note": {
-        "ja": "ONだと、訓練中に出る「あと3年間。どうする？」「一年間、ひたすら鍛錬した。」の年数を実際の期間に直す（「あと3ヵ月。」「1ヵ月、ひたすら鍛錬した。」）。素の設定では直す先が同じ文字列なので1文字も変わらない。切るとゲームの言い方のまま残り、暦と文言が食い違う。AIが書く描写（「これからの三年間…」）はどちらでも触らない",
+        "ja": "ON だと、訓練中に出る「あと3年間。どうする？」「一年間、ひたすら鍛錬した。」の年数を実際の期間に直す（「あと3ヵ月。」「1ヵ月、ひたすら鍛錬した。」）。素の設定では直す先が同じ文字列なので1文字も変わらない。切るとゲームの言い方のまま残り、暦と文言が食い違う。AIが書く描写（「これからの三年間…」）はどちらでも触らない",
         "en": "Rewrites the years the game states during training (あと3年間 / 一年間、…) into the real length. With the game's own settings the result is the same string, so nothing changes. Off keeps the game's wording, which then disagrees with the calendar. The AI's own narration is never touched"
       }
     },
@@ -186,7 +186,7 @@
         "en": "Match the AI's prompt to the real length"
       },
       "note": {
-        "ja": "ゲームは頼み文にも年数を焼き込む（「残り訓練年数: 3年」「費用と3年の時間を費やす」など）ので、切っていると画面は3ヵ月なのに師範のセリフだけが「三年間」と言う（実機で確認）。ONだと訓練の頼み文の年数だけを実際の期間に直す。人生ログ（「3年間の過酷な基礎訓練を終え」）や土地との縁（「合計2年暮らしている」）は過去の記録なので触らない",
+        "ja": "ゲームは頼み文にも年数を焼き込む（「残り訓練年数: 3年」「費用と3年の時間を費やす」など）ので、切っていると画面は3ヵ月なのに師範のセリフだけが「三年間」と言う。ON だと訓練の頼み文の年数だけを実際の期間に直す。人生ログ（「3年間の過酷な基礎訓練を終え」）や土地との縁（「合計2年暮らしている」）は過去の記録なので触らない",
         "en": "The game bakes the years into its prompts (残り訓練年数: 3年 and so on), so with this off the trainer's own lines still say three years even when the screen says three months. On, only the training prompt's years are rewritten; the life log and the years someone has lived in a town are records of the past and are never touched"
       }
     },

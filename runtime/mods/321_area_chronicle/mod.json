@@ -35,8 +35,8 @@
         "en": "Allow mentions in the opening line"
       },
       "note": {
-        "ja": "会話の第一声（conversation_starter）でだけ、話し相手の複製の profile に下の1行を足す。年代記のある土地でしか足さない。既定 OFF ＝ 素の挙動。案内文の差し替えだけで言及が増えるかを見てから入れる保険",
-        "en": "Adds the line below to a copy of the NPC the opening line is generated for, only in lands that have a chronicle. Off by default: try the rewritten descriptions alone first, this is the fallback"
+        "ja": "会話の第一声（conversation_starter）でだけ、話し相手の複製の profile に下の1行を足す。年代記のある土地でしか足さない。既定 OFF ＝ 素の挙動。案内文の差し替えだけでは会話が近況に触れてこないときに入れる",
+        "en": "Adds the line below to a copy of the NPC the opening line is generated for, only in lands that have a chronicle. Off by default. Turn it on when the rewritten descriptions alone do not get the change mentioned"
       }
     },
     "MENTION_TEXT": {

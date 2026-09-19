@@ -8,7 +8,7 @@
   },
   "description": {
     "en": "Records which image-generation backend family the game imported, what object the generation goes out through, which arguments arrive there (size, prompt, sampler, steps, cfg, seed, init image), and when the pipeline is built or rebuilt with which checkpoint, TAESD and VAE. The backend is never named in the mod; every target is resolved from sys.modules at run time. Read-only. An observer on sys.meta_path catches the moment the family is imported and records whether the pipeline was already built when the module body finished",
-    "ja": "ゲームがどのバックエンドの一族を import したか、生成がどのオブジェクトの出口を通るか、そこへ何が渡るか（寸法・プロンプト・サンプラー・steps・cfg・seed・init 画像）、パイプラインがいつ・どのチェックポイントと TAESD と VAE で組まれ直すかを録る。MOD はバックエンドを名指しせず、対象は実行時に sys.modules から引く。ゲームは変えない。import の瞬間に割り込む観測者を sys.meta_path に置き、モジュールの本体が走り終えた直後（MOD が値を差し替えられる時点）にパイプラインが建っているかを録る"
+    "ja": "ゲームがどのバックエンドの一族を import したか、生成がどのオブジェクトの出口を通るか、そこへ何が渡るか（寸法・プロンプト・サンプラー・steps・cfg・seed・init 画像）、パイプラインがいつ・どのチェックポイントと TAESD と VAE で組まれ直すかを録る。MOD はバックエンドを名指しせず、対象は実行時に sys.modules から引く。読み取りだけでゲームは変えない。import の瞬間に割り込む観測者を sys.meta_path に置き、モジュールの本体が走り終えた直後（MOD が値を差し替えられる時点）にパイプラインが建っているかを録る"
   },
   "version": "7",
   "author": "R01/Flossian",

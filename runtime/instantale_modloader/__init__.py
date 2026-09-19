@@ -1449,18 +1449,18 @@ def _sort_dependencies(order: list[str], manifests: dict,
             elif other in silent:
                 pass
             elif other in manifests:
-                notes.append("{}: \"after\" が無効な mod を指している（{}）".format(name, other))
+                notes.append("{}: \"after\" が無効な mod を指しています（{}）".format(name, other))
             else:
-                notes.append("{}: \"after\" の {} が見つからない".format(name, other))
+                notes.append("{}: \"after\" の {} が見つかりません".format(name, other))
         for other in manifest.get("before") or []:
             if other in known:
                 edges[name].add(other)
             elif other in silent:
                 pass
             elif other in manifests:
-                notes.append("{}: \"before\" が無効な mod を指している（{}）".format(name, other))
+                notes.append("{}: \"before\" が無効な mod を指しています（{}）".format(name, other))
             else:
-                notes.append("{}: \"before\" の {} が見つからない".format(name, other))
+                notes.append("{}: \"before\" の {} が見つかりません".format(name, other))
 
     incoming = {name: 0 for name in order}
     for src, targets in edges.items():
@@ -1482,7 +1482,7 @@ def _sort_dependencies(order: list[str], manifests: dict,
 
     if len(result) != len(order):
         stuck = [n for n in order if n not in result]
-        notes.append("適用順の制約が循環している（{}）。load_order.json の並びで動かす"
+        notes.append("適用順の制約が循環しています（{}）。load_order.json の並びで動かします"
                      .format(", ".join(stuck)))
         return list(order), notes
 
@@ -1494,7 +1494,7 @@ def _sort_dependencies(order: list[str], manifests: dict,
                        if ((manifests.get(n) or {}).get("after")
                            or (manifests.get(n) or {}).get("before"))
                        and result.index(n) != index[n]]
-        notes.append("\"after\"/\"before\" に従って並べ替えた: {}".format(
+        notes.append("\"after\"/\"before\" に従って並べ替えました: {}".format(
             ", ".join(constrained) or "（順序は同じ）"))
     return result, notes
 
@@ -1514,7 +1514,7 @@ def _check_conflicts(order: list[str], manifests: dict) -> list[str]:
         for other in (manifests.get(name) or {}).get("conflicts") or []:
             if other in active and other != name:
                 pair = " と ".join(sorted((name, other)))
-                note = "非互換が宣言されている mod が両方有効: {}".format(pair)
+                note = "非互換が宣言されている mod が両方とも有効になっています: {}".format(pair)
                 if note not in notes:
                     notes.append(note)
     return notes

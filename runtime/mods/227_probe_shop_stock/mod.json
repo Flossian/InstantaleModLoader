@@ -7,7 +7,7 @@
     "ja": "買った品が棚に戻る道"
   },
   "description": {
-    "en": "Records where a bought item comes back onto the shop's shelf. Every Item.__init__ with its id, obtainer, attributes and the game-side caller chain; the shop path boundaries (ShoppingStartManagerRemake.execute / shopping_start_method_1 / toggle_twin_inventory_window / buy_item / sell_item / close_shopping_window_process / the generators) with the keys added to and removed from both inventories; the facility's goods template with stock_tier and stock_update_date; and index['item']. Reading only",
+    "en": "Records where a bought item comes back onto the shop's shelf. Every Item.__init__ with its id, obtainer, attributes and the game-side caller chain; the shop path boundaries (ShoppingStartManagerRemake.execute / shopping_start_method_1 / toggle_twin_inventory_window / buy_item / sell_item / close_shopping_window_process / the generators) with the keys added to and removed from both inventories; the facility's goods template with stock_tier and stock_update_date; and index['item']. Read-only",
     "ja": "買った品が店の棚へ戻るのがどこかを録る。Item.__init__ ごとの id・持ち主・attributes とゲーム側の呼び出し元の連鎖、店の経路の境目（ShoppingStartManagerRemake.execute / shopping_start_method_1 / toggle_twin_inventory_window / buy_item / sell_item / close_shopping_window_process / 生成の3入口）ごとの主と手持ちの鍵の増減、施設の品揃えの雛形（goods・stock_tier・stock_update_date）、採番台帳 index['item']。読み取りだけでゲームは変えない"
   },
   "version": "1",
@@ -24,7 +24,7 @@
         "en": "New items to record outside a shop"
       },
       "note": {
-        "ja": "店の場面の中は枠に関わらず全部写す。ロードのたびに何百も生まれるのはここで抑える",
+        "ja": "店の場面の中で生まれた品は、この件数に関わらず全部写す。ロードのたびに何百も生まれる店の外の品を、この件数で抑える",
         "en": "Items born during a shop scene are always recorded; this caps the rest (a load creates hundreds)"
       }
     },

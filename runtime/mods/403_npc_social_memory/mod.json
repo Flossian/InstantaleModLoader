@@ -11,7 +11,7 @@
   },
   "description": {
     "en": "Keeps directional NPC-to-NPC recognition/relationship memories separately and injects party-member context into one-on-one conversations. Does not modify 311.",
-    "ja": "NPC同士の認知・関係を有向で保持する。311の記憶形式と共有部品に従い、本体生情報と311のprofile/about_playerは抽出材料として短く読み取り専用で参照する。会話への注入は関係記録を中心にしてプロンプトの肥大を抑える。最新版ローダーの構造化LLM共通部品を優先利用する。"
+    "ja": "NPC同士の認知と関係を、向きごとに分けて持つ。記憶の形式と共有部品は311に合わせる。本体が持つ人物情報と311のprofile/about_playerは、抽出の材料として短く読むだけで書き換えない。会話へ注入するのは関係の記録を中心にして、プロンプトが膨らむのを抑える。構造化LLMの呼び出しには、あればローダの共通部品を使う。"
   },
   "after": [
     "311_npc_profile_memory"

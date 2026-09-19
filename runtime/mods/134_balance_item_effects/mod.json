@@ -8,7 +8,7 @@
   },
   "description": {
     "en": "Reworks what items do, one category at a time. This version covers healing items: food and drink restore stamina, medicine restores a share of max HP, potions restore a quarter of that and cure ailments, herbs and mushrooms shift HP and stamina by amounts rolled when the item is made. No stamina cost",
-    "ja": "アイテムの効果を分類ごとに作り直す。この版は回復アイテム。食料・飲み物はスタミナ回復、医薬品は最大 HP の割合で回復、ポーションはその 1/4 と状態異常の解除、薬草・きのこは生成時に決まった幅で HP とスタミナが増減。スタミナ消費は無し"
+    "ja": "アイテムの効果を分類ごとに作り直す。この版は回復アイテム。食料・飲み物はスタミナ回復、医薬品は最大 HP の割合で回復、ポーションはその 1/4 と状態異常の解除、薬草・きのこは、品を作った時点で決まる幅で HP とスタミナが増減。スタミナ消費は無し"
   },
   "version": "3",
   "author": "R01/Flossian",

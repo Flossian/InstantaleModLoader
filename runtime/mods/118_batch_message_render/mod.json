@@ -57,7 +57,7 @@
       },
       "note": {
         "ja": "古い本文の見分け方が seconds のときに使う。新しいメッセージが追加された時点で、この秒数以内の本文を白色にする。表示中には色を変えない。0なら追加直後から灰色にする",
-        "en": "Used when older text is decided by seconds. When a new message is added, messages younger than this many seconds are white. Colors do not change while idle. 0 grays them immediately"
+        "en": "Used when older text is decided by seconds. When a new message is added, messages younger than this many seconds are white. Colors never change while a message is on screen, only when the next one is added. 0 grays them immediately"
       }
     },
     "FRESH_SESSIONS": {

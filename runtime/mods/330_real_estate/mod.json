@@ -23,7 +23,7 @@
         "en": "Rent"
       },
       "note": {
-        "ja": "1期ぶん。期間は宿泊「賃貸の1期＝滞在何回ぶん」回ぶんで、宿屋の宿泊期間に付いてくる。0 にすると無料で借りられる",
+        "ja": "1期ぶん。1期の長さは下の「賃貸の1期＝滞在何回ぶん」で決まり、1回ぶんの長さは宿屋の宿泊と同じ。0 にすると無料で借りられる",
         "en": "Per period. A period covers that many inn-length stays, so it follows the game's own stay length. 0 makes the lease free"
       }
     },

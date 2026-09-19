@@ -63,8 +63,8 @@
         "en": "Remember the track chosen for each area"
       },
       "note": {
-        "ja": "入。土地ごとに最初に選んだ曲を state/musics/place/worlds/<世界>.json に覚え、次からも同じ曲を鳴らす（素のゲームと同じく土地に曲が付く）。切ると入るたびに選び直す",
-        "en": "On: the first track chosen for an area is remembered in state/musics/place/worlds/<world>.json and played again next time (an area keeps its music, as in the game). Off: re-rolled on every visit"
+        "ja": "既定 ON。土地ごとに最初に選んだ曲を state/musics/place/worlds/<世界>.json に覚え、次からも同じ曲を鳴らす（素のゲームと同じく土地に曲が付く）。切ると入るたびに選び直す",
+        "en": "On by default: the first track chosen for an area is remembered in state/musics/place/worlds/<world>.json and played again next time (an area keeps its music, as in the game). Off: re-rolled on every visit"
       }
     },
     "FACILITY_STICKY": {
@@ -75,8 +75,8 @@
         "en": "Remember the track chosen for each facility"
       },
       "note": {
-        "ja": "切。入れると施設ごとに最初に選んだ曲を覚え、その宿・その店ではいつも同じ曲が鳴る",
-        "en": "Off. On: the first track chosen for a facility is remembered, so that inn or shop always plays the same track"
+        "ja": "既定 OFF。入れると施設ごとに最初に選んだ曲を覚え、その宿・その店ではいつも同じ曲が鳴る",
+        "en": "Off by default. On: the first track chosen for a facility is remembered, so that inn or shop always plays the same track"
       }
     }
   }

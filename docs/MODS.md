@@ -917,7 +917,7 @@ v4 はプロバイダに依存しない形へ置き換え、v5 で取りこぼ�
 | 設定 | 意味 |
 | --- | --- |
 | 置換したことを記録する | 既定 ON。`out\prompt_bloat.log` の `[REPLACE]` |
-| ルールの読込を記録する | 既定 ON。`out\prompt_bloat.log` の `[RULES]`（書式の誤りは切っても必ず残る） |
+| ルールの読込を記録する | 既定 ON。`out\prompt_bloat.log` の `[RULES]`（この設定を OFF にしても、書式を誤ったルールは必ず残る） |
 
 ### `117_message_text_integrity`: 長い応答が途中で切れるのを直す
 

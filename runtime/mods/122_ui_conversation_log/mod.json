@@ -24,7 +24,7 @@
         "en": "Where to put the button"
       },
       "note": {
-        "ja": "既定は「本文の表示域を広げる」(113) のボタンのすぐ左。Modが入っていないときは本文の枠の内側・右上に出る",
+        "ja": "既定は「本文の表示域を広げる」(113) のボタンのすぐ左。113 が入っていないときは本文の枠の内側・右上に出る",
         "en": "Default is just left of 113_ui_text_expand's button; falls back to that mod's own spot (the narration frame's top-right) when it is not installed"
       }
     },
@@ -75,7 +75,7 @@
         "en": "Button height (px)"
       },
       "note": {
-        "ja": "表示域拡大Modのボタンの隣に並ぶときは、そちらの高さに合わせるので使われない",
+        "ja": "「本文の表示域を広げる」(113) のボタンの隣に並ぶときは、そちらの高さに合わせるので使われない",
         "en": "Ignored while the button sits next to Expandable text area Mod's, where it copies that button's height"
       }
     },
@@ -119,7 +119,7 @@
         "en": "Draw a white border around the window"
       },
       "note": {
-        "ja": "窓の縁に白い線を1本引く。背景との境目が分かりにくいときに",
+        "ja": "窓の縁に白い線を1本引く。背景との境目が分かりにくいときに入れる",
         "en": "Outlines the window so it stands out from what is behind it"
       }
     },

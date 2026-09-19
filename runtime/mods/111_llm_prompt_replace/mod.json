@@ -7,7 +7,7 @@
     "ja": "LLM への指示文を置換"
   },
   "description": {
-    "en": "Rewrites the text sent to the LLM with the user's replacement rules; reads the same llm_replacements.txt as InstantaleLlmProxy",
+    "en": "Rewrites the text sent to the LLM with your replacement rules; reads the same llm_replacements.txt as InstantaleLlmProxy",
     "ja": "LLM に送る文章を置換ルールで書き換える。InstantaleLlmProxy と同じ llm_replacements.txt をそのまま読む"
   },
   "version": "6",
@@ -37,8 +37,8 @@
         "en": "Log rule loading"
       },
       "note": {
-        "ja": "out\\prompt_bloat.log の [RULES]。書式の誤りは切っても必ず残る",
-        "en": "[RULES] lines; broken rules are always logged"
+        "ja": "out\\prompt_bloat.log の [RULES]。この設定を OFF にしても、書式を誤ったルールは必ず残る",
+        "en": "[RULES] lines in out\\prompt_bloat.log. Rules with broken syntax are logged even when this is off"
       }
     }
   }

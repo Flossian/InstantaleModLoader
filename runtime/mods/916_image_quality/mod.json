@@ -7,8 +7,8 @@
     "ja": "画像生成の画質を上げる"
   },
   "description": {
-    "en": "Raises the generation resolution and overrides the sampler at the single exit every backend goes through, separately for portraits, enemies and backgrounds, keeping the aspect ratio. The checkpoint, TAESD, VAE and LoRA folder can be pointed elsewhere (for an SDXL model) because they are written before the pipeline is built. Every default is the game's own measured value, and a setting left at its default is never written",
-    "ja": "どのバックエンドでも通る1つの出口で、生成解像度を上げ、サンプラーを上書きする。立ち絵・敵・背景で別々に指定でき、縦横比は保つ。チェックポイント・TAESD・VAE・LoRA の置き場も差し替えられる（パイプラインが建つ前に書くため。SDXL のモデルへ移る用）。既定値はすべて実測したゲームの値で、既定のままの項目は書き換えない",
+    "en": "Raises the generation resolution and overrides the sampler at the single exit every backend goes through, separately for portraits, enemies and backgrounds, keeping the aspect ratio. The checkpoint, TAESD, VAE and LoRA folder can be pointed elsewhere (for an SDXL model) because they are written before the pipeline is built. Every default is the game's own value, and a setting left at its default is never written",
+    "ja": "どのバックエンドでも通る1つの出口で、生成解像度を上げ、サンプラーを上書きする。立ち絵・敵・背景で別々に指定でき、縦横比は保つ。チェックポイント・TAESD・VAE・LoRA の置き場も差し替えられる（パイプラインが建つ前に書くため。SDXL のモデルへ移る用）。既定値はすべてゲームの値で、既定のままの項目は書き換えない",
     "why_wip": "実機で6項目が通ったが、プロンプトの規則（付け替え・条件つき追加・除去・置換・skip）は実機で当てていない。既存 sd_upscale.ini からの移行と、131_sharp_portrait を切にした組み合わせも未確認"
   },
   "version": "16",
@@ -316,8 +316,8 @@
         "en": "Resize on the diffusers family too"
       },
       "note": {
-        "ja": "diffusers_openvino のような変換済みモデルの一族では、既定で寸法を変えない。この一族は形を固定してあるので、寸法を変えるとモデルの作り直しが走り、実機では 64GB の RAM を使い切って SSD へページングを始めた。sdcpp 系（cuda / vulkan / cpu）には関係しない設定",
-        "en": "On families that run converted, fixed-shape models such as diffusers_openvino, the size is left alone by default. Changing it forces the model to be rebuilt; on the test machine that filled 64GB of RAM and started paging to the SSD. This setting does not affect the sdcpp family"
+        "ja": "diffusers_openvino のような変換済みモデルの一族では、既定で寸法を変えない。この一族は形を固定してあるので、寸法を変えるとモデルの作り直しが走り、64GB の RAM を使い切って SSD へページングを始める。sdcpp 系（cuda / vulkan / cpu）には関係しない設定",
+        "en": "On families that run converted, fixed-shape models such as diffusers_openvino, the size is left alone by default. Changing it forces the model to be rebuilt, which fills 64GB of RAM and starts paging to the SSD. This setting does not affect the sdcpp family"
       }
     },
     "LCM_METHOD": {
@@ -431,8 +431,8 @@
         "en": "Fit the settings to the model family"
       },
       "note": {
-        "ja": "チェックポイントの中身（safetensors のヘッダに並ぶテンソルの名前）から SD1.5 か SDXL かを見分け、壊れると実測で分かっている組み合わせだけを直す。名前でもファイルの大きさでも判定しない。SDXL のときは、ゲームが入れる SD1.5 用の LoRA タグを外し（当たるとプロセスごと落ちる。規則で足したタグは残す）、素のままの LCM の段の設定を euler_a / 24 / cfg 5.0 にする（そのままだとマゼンタに潰れる。1段目・2段目は触らない）。寸法は学習の寸法から離れていても警告だけで、値は動かさない。off で何もしない",
-        "en": "Reads the tensor names in the checkpoint's safetensors header to tell SD1.5 from SDXL, then fixes only the combinations measured to break. Neither the file name nor its size is used. With SDXL it strips the SD1.5 LoRA tags the game inserts (which crash the process; tags added by your rules stay) and replaces an untouched LCM-stage sampler with euler_a / 24 / cfg 5.0 (without which images collapse into magenta; the first and second stages are left alone). Sizes far from the family's training resolution only produce a warning and are left alone. off does nothing"
+        "ja": "チェックポイントの中身（safetensors のヘッダに並ぶテンソルの名前）から SD1.5 か SDXL かを見分け、壊れると分かっている組み合わせだけを直す。名前でもファイルの大きさでも判定しない。SDXL のときに直すのは2つ。1つは、ゲームが入れる SD1.5 用の LoRA タグを外すこと（当たるとプロセスごと落ちる。規則で足したタグは残す）。もう1つは、素のままの LCM の段の設定を euler_a / 24 / cfg 5.0 にすること（そのままだとマゼンタに潰れる。1段目・2段目は触らない）。寸法は学習の寸法から離れていても警告を出すだけで、値は動かさない。off で何もしない",
+        "en": "Reads the tensor names in the checkpoint's safetensors header to tell SD1.5 from SDXL, then fixes only the combinations known to break. Neither the file name nor its size is used. With SDXL it strips the SD1.5 LoRA tags the game inserts (which crash the process; tags added by your rules stay) and replaces an untouched LCM-stage sampler with euler_a / 24 / cfg 5.0 (without which images collapse into magenta; the first and second stages are left alone). Sizes far from the family's training resolution only produce a warning and are left alone. off does nothing"
       }
     }
   },

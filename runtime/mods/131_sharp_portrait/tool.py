@@ -161,14 +161,14 @@ def install_cv2(report):
             proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                     text=True, encoding="utf-8", errors="replace")
         except OSError as exc:
-            report("起動できない: {}".format(exc))
+            report("起動できません: {}".format(exc))
             return False
         for line in proc.stdout:
             report(line.rstrip("\n"))
         code = proc.wait()
         if code == 0:
             return load_cv2()[0] is not None
-        report("pip が {} で終わった{}".format(code, "。--user で入れ直す" if not user else ""))
+        report("pip が {} で終わりました{}".format(code, "。--user で入れ直します" if not user else ""))
     return False
 
 
@@ -283,12 +283,12 @@ def apply_face(cv2, np, cascades, npc, source, dry_run):
     """1体ぶん。`(結果の文, 書いたか)`。書く前に `face_image.orig.png` を残す。"""
     hit = detect_npc(cv2, np, cascades, npc)
     if hit is None:
-        return "見つからず", False
+        return "見つかりませんでした", False
     prep, name, box, detect_size = hit
     how = "{}{}".format("素の絵" if prep is None else prep, " + " + faces.short_name(name))
     crop = faces.crop_box(box, detect_size)
     if dry_run:
-        return "{} で見えた {}（検出だけ）".format(how, crop), False
+        return "{} で見えました {}（検出だけ）".format(how, crop), False
     face = crop_face(cv2, np, npc, crop, detect_size, source)
     target = npc.path(FACE)
     backup = npc.path(FACE_BACKUP)
@@ -298,7 +298,7 @@ def apply_face(cv2, np, cascades, npc, source, dry_run):
     npc.face = (face.shape[1], face.shape[0])
     npc.state = face_state(npc.face)
     npc.backup = os.path.isfile(backup)
-    return "{} で拾い、{}x{} に切り直した".format(how, face.shape[1], face.shape[0]), True
+    return "{} で拾い、{}x{} に切り直しました".format(how, face.shape[1], face.shape[0]), True
 
 
 def restore_face(npc):
@@ -352,7 +352,7 @@ def build_window(root_dir, game_dir, base=""):
     outer.pack(fill="both", expand=True)
     ttk.Label(outer, text="立ち絵の高画質化と顔認識精度の向上", style="Title.TLabel").pack(anchor="w")
     ttk.Label(outer, style="Sub.TLabel",
-              text="上は MOD の設定。下は既に居る NPC の顔を検出し直して切り直す道具").pack(anchor="w", pady=(0, 8))
+              text="上は、これから作られる絵に効く MOD の設定。下は、既に居る NPC の顔を検出し直して切り直す道具").pack(anchor="w", pady=(0, 8))
 
     # --- 設定
     settings = modtool.load_settings(root_dir, MOD_DIR)
@@ -370,7 +370,7 @@ def build_window(root_dir, game_dir, base=""):
     def save_now():
         ok = modtool.save_settings(root_dir, MOD_DIR,
                                    {"SHARP_PORTRAIT": sharp_var.get(), "FACE_RETRY": retry_var.get()})
-        setting_status.configure(text="保存した。次の注入から効く" if ok else "保存できなかった（settings/mod_settings.json）")
+        setting_status.configure(text="保存しました。次の注入から効きます" if ok else "保存できませんでした（settings/mod_settings.json）")
 
     ttk.Button(box, text="設定を保存", command=save_now).pack(side="right", padx=(0, 8))
 
@@ -382,8 +382,8 @@ def build_window(root_dir, game_dir, base=""):
         missing = ttk.Frame(tool)
         missing.pack(fill="x")
         ttk.Label(missing, foreground="#b42318", justify="left",
-                  text="cv2（OpenCV）が見つからないので、この道具は使えない。\n"
-                       "ゲームの同梱は別の Python なので借りられない。この画面を動かしている Python に入れる:\n"
+                  text="cv2（OpenCV）が見つからないので、この道具は使えません。\n"
+                       "ゲームに同梱されている Python は別物なので、そちらの cv2 は借りられません。この画面を動かしている Python に入れてください:\n"
                        "    {}".format(" ".join(pip_command()))).pack(anchor="w")
         install_row = ttk.Frame(missing)
         install_row.pack(fill="x", pady=(4, 0))
@@ -400,7 +400,7 @@ def build_window(root_dir, game_dir, base=""):
 
         def install():
             install_button.state(["disabled"])
-            install_status.configure(text="入れている…")
+            install_status.configure(text="入れています…")
 
             def work():
                 ok = install_cv2(report)
@@ -426,18 +426,18 @@ def build_window(root_dir, game_dir, base=""):
             if finished is None:
                 root.after(100, poll_install)
             elif finished:
-                install_status.configure(text="入った。画面を開き直す")
+                install_status.configure(text="入りました。画面を開き直します")
                 root.restart = True
                 root.after(600, root.destroy)
             else:
                 install_button.state(["!disabled"])
-                install_status.configure(text="入らなかった。上の出力を見る")
+                install_status.configure(text="入りませんでした。上の出力を見てください")
 
         install_button.configure(command=install)
     elif not cascades:
         ttk.Label(tool, foreground="#b42318", justify="left",
-                  text="ゲームのカスケードが見つからない: {}\n"
-                       "ローダの設定画面でゲームの場所を指定してから開き直す".format(
+                  text="ゲームのカスケードが見つかりません: {}\n"
+                       "ローダの設定画面でゲームの場所を指定してから開き直してください".format(
                            os.path.join(game_dir or "<ゲームのフォルダ>", faces.CASCADE_DIR))).pack(anchor="w")
 
     top = ttk.Frame(tool)
@@ -571,12 +571,12 @@ def build_window(root_dir, game_dir, base=""):
     def run():
         picked = targets_of(npcs, selected_worlds(), everyone_var.get())
         if not picked:
-            messagebox.showinfo("対象なし", "その条件に当たる NPC が居ない")
+            messagebox.showinfo("対象なし", "その条件に当たる NPC が居ません")
             return
         source = source_var.get()
         if source == SOURCE_NO_BG and not all(n.has_no_bg for n in picked):
             messagebox.showwarning("元絵が無い個体がある",
-                                   "no_bg_image.png が無い個体は立ち絵から切る")
+                                   "no_bg_image.png が無い個体は、顔を立ち絵から切ります")
         dry = dry_var.get()
         run_button.state(["disabled"])
         results.clear()
@@ -616,8 +616,8 @@ def build_window(root_dir, game_dir, base=""):
             progress.configure(text="{} / {}".format(done, total))
         if finished:
             run_button.state(["!disabled"])
-            hits = sum(1 for t in results.values() if "拾" in t or "見えた" in t)
-            progress.configure(text="終わり。{} 体中 {} 体で顔が見えた".format(len(results), hits))
+            hits = sum(1 for t in results.values() if "拾" in t or "見え" in t)
+            progress.configure(text="終わりました。{} 体中 {} 体で顔が見えました".format(len(results), hits))
             refresh_worlds()
             on_select()
         else:
@@ -628,25 +628,25 @@ def build_window(root_dir, game_dir, base=""):
         if npc is None:
             return
         if restore_face(npc):
-            results[npc.folder] = "元に戻した"
+            results[npc.folder] = "元に戻しました"
         else:
-            results[npc.folder] = "控えが無い"
+            results[npc.folder] = "控えがありません"
         fill(list(rows.values()))
         refresh_worlds()
 
     def restore_all():
         picked = [n for n in npcs if n.backup and (not selected_worlds() or n.world in selected_worlds())]
         if not picked:
-            messagebox.showinfo("控えなし", "元に戻せる個体が居ない")
+            messagebox.showinfo("控えなし", "元に戻せる個体が居ません")
             return
-        if not messagebox.askyesno("元に戻す", "{} 体の顔を控え（face_image.orig.png）に戻す。よいか".format(len(picked))):
+        if not messagebox.askyesno("元に戻す", "{} 体の顔を控え（face_image.orig.png）に戻します。よろしいですか".format(len(picked))):
             return
         for npc in picked:
             restore_face(npc)
-            results[npc.folder] = "元に戻した"
+            results[npc.folder] = "元に戻しました"
         fill(picked)
         refresh_worlds()
-        progress.configure(text="{} 体を元に戻した".format(len(picked)))
+        progress.configure(text="{} 体を元に戻しました".format(len(picked)))
 
     run_button.configure(command=run)
     restore_button.configure(command=restore_selected)

@@ -33,7 +33,7 @@
         "en": "Affect narration"
       },
       "note": {
-        "ja": "narrator に渡る player_profile に評判を足す。到着した土地での周囲の反応に出る。既定は OFF（情景描写は毎回本文が出る場所なので、まず会話だけで様子を見る）",
+        "ja": "narrator に渡る player_profile に評判を足す。到着した土地での周囲の反応に出る。既定は OFF。情景描写は移動のたびに必ず本文が出るので、まず会話だけで効き方を見る",
         "en": "Adds the reputation to the player_profile the narrator receives. Off by default: narration prints on every move, so try conversations first"
       }
     },
@@ -59,8 +59,8 @@
         "en": "Epithet length cap (characters)"
       },
       "note": {
-        "ja": "全角で数える。超えた名は切り詰めずに捨てて前の名を残す。既定の8は、モデルによって12だと冗長な名になりがちだったため。人物欄のレベル行に続けて1行で収まる範囲は12程度まで",
-        "en": "Counted in full-width characters. Names over the cap are discarded, not truncated. The default 8 keeps names from turning long-winded on some models; up to about 12 still fits the level line in the character sheet"
+        "ja": "全角で数える。超えた名は切り詰めずに捨てて前の名を残す。12 まで広げるとモデルによっては冗長な名になるので、既定は8。人物欄のレベル行に続けて1行に収まるのは12程度まで",
+        "en": "Counted in full-width characters. Names over the cap are discarded, not truncated. Widening the cap to 12 makes some models produce long-winded names, so the default is 8; up to about 12 still fits the level line in the character sheet"
       }
     },
     "EPITHET_RANDOM_LENGTH": {

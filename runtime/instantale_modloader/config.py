@@ -165,7 +165,7 @@ def coerce(decl: dict, value):
     if value is None:
         if decl["allow_null"]:
             return True, None, ""
-        return False, None, "null は許されていない"
+        return False, None, "null は許されていません"
 
     try:
         if kind == "bool":
@@ -178,7 +178,7 @@ def coerce(decl: dict, value):
                 elif text in ("false", "0", "no", "off"):
                     out = False
                 else:
-                    return False, None, "真偽値として読めない: {!r}".format(value)
+                    return False, None, "真偽値として読めません: {!r}".format(value)
         elif kind == "int":
             out = int(str(value).strip()) if not isinstance(value, bool) else int(value)
         elif kind == "float":
@@ -188,18 +188,18 @@ def coerce(decl: dict, value):
         elif kind == "choice":
             out = value if value in decl["values"] else str(value)
             if out not in decl["values"]:
-                return False, None, "選択肢の外: {!r}（{}）".format(
+                return False, None, "選択肢にありません: {!r}（{}）".format(
                     value, " / ".join(repr(v) for v in decl["values"]))
         else:
-            return False, None, "type が不明: {!r}".format(kind)
+            return False, None, "type が不明です: {!r}".format(kind)
     except (TypeError, ValueError):
-        return False, None, "{} として読めない: {!r}".format(kind, value)
+        return False, None, "{} として読めません: {!r}".format(kind, value)
 
     for bound, cmp, word in (("min", lambda a, b: a < b, "下限"),
                              ("max", lambda a, b: a > b, "上限")):
         limit = decl.get(bound)
         if limit is not None and isinstance(out, (int, float)) and cmp(out, limit):
-            return False, None, "{}を外れている（{} {}）".format(word, bound, limit)
+            return False, None, "{}を外れています（{} {}）".format(word, bound, limit)
     return True, out, ""
 
 

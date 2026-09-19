@@ -8,7 +8,7 @@
   },
   "description": {
     "en": "After each turn, a background LLM call updates a persistent profile formed from what conversations reveal about that NPC, plus a separate record of how that NPC sees the player. Both are appended to the NPC profile in every later conversation",
-    "ja": "会話1ターンごとに、バックグラウンドの LLM が会話から形成された人物プロフィールと、その人物から見たプレイヤーの記録を更新する。どちらも以降の会話でゲーム本体のプロフィール欄に毎回載る"
+    "ja": "会話1ターンごとに裏で LLM を呼び、会話で分かったことから人物プロフィールと、その人物から見たプレイヤーの記録を更新する。どちらも以降の会話で、ゲーム本体のプロフィール欄に毎回載る"
   },
   "version": "5",
   "author": "yoshinari/tomotomo-y, R01/Flossian",
@@ -37,7 +37,7 @@
         "en": "Target extra profile length"
       },
       "note": {
-        "ja": "抜き出しLLMへの要約の目安。保存や注入では切らない。上げるほど会話が遅く高くつく",
+        "ja": "抜き出しLLMへの要約の目安。保存や注入では切らない。上げるほど以降の会話のプロンプトが伸び、会話が遅く高くつく",
         "en": "Soft target for the extractor summary. Not hard-truncated on save or inject"
       }
     },
@@ -75,7 +75,7 @@
         "en": "Discovered facts kept per person"
       },
       "note": {
-        "ja": "書き換えではなく追記で伸びる唯一の控え。次の抜き出しに差し戻して、要約で人物像から消えた事実を書き戻させる（会話のプロンプトには載らない）。0 で残さない",
+        "ja": "ここだけは書き換えずに追記で伸ばす控え。次の抜き出しに差し戻して、要約で人物像から消えた事実を書き戻させる（会話のプロンプトには載らない）。0 で残さない",
         "en": "The only append-only record here. Fed back into the next extraction so facts dropped by summarising are restored; never added to the conversation prompt. 0 disables it"
       }
     }

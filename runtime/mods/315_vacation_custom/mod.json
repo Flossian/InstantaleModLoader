@@ -43,7 +43,7 @@
         "en": "Age-based length bonus"
       },
       "note": {
-        "ja": "ONだと、選んだ期間に年齢の加算が乗る（20代まで無し・30代+1・40代+2・50代以上+3。上限は4週間/6ヵ月）。ゲーム自身の期間が年齢の変動式なのに合わせた仕様。「デフォルト」では意味を持たない",
+        "ja": "ONだと、選んだ期間に年齢の加算が乗る（20代まで無し・30代+1・40代+2・50代以上+3。上限は4週間/6ヵ月）。ゲーム自身も年齢で宿泊期間を変えるのに合わせてある。宿泊期間が「デフォルト」のときは効かない",
         "en": "Adds +1/+2/+3 weeks or months in your 30s/40s/50s+ (capped at 4 weeks / 6 months), mirroring how the game itself lengthens stays with age. Ignored when the stay length is デフォルト"
       }
     },
@@ -55,8 +55,8 @@
         "en": "Name of the free room"
       },
       "note": {
-        "ja": "素のゲームは「犬小屋」（0G）。宿の主が話に出す通り、本当に選択肢にある",
-        "en": "The game's own name is 犬小屋, and it really is free (0G)"
+        "ja": "素のゲームは「犬小屋」。宿の主が話に出す部屋で、宿代は 0G",
+        "en": "The game's own name is 犬小屋, the 0G room the innkeeper mentions"
       }
     },
     "KENNEL_PRICE": {

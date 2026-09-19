@@ -26,7 +26,7 @@
         "en": "Area industry and economy summary characters"
       },
       "note": {
-        "ja": "regional_economy_summaryとして要約保存される目安\n要約文はエリア情報と共にLLMへ渡る。文字数を増やしすぎるとプロンプトが肥大化します。",
+        "ja": "regional_economy_summaryとして要約保存される目安\n要約文はエリア情報と共にLLMへ渡る。文字数を増やしすぎるとプロンプトが肥大化する",
         "en": "Approximate length saved as regional_economy_summary. The summary is sent to the LLM with area information; making it too long expands the prompt."
       }
     },
@@ -40,7 +40,7 @@
         "en": "Area industry item count"
       },
       "note": {
-        "ja": "エリアの主要産業/特産品/需要過多の物品/供給過多の物品を指定された分作ります",
+        "ja": "エリアの主要産業/特産品/需要過多の物品/供給過多の物品を、この数だけ作る",
         "en": "Creates the specified number of major industries, products, demand-heavy goods, and supply-heavy goods for the area."
       }
     },
@@ -54,7 +54,7 @@
         "en": "Processing stages until an unknown output becomes a product"
       },
       "note": {
-        "ja": "現実に存在しない物質が、使い物になるまでに有する採取と加工回数（ドラゴンストーン→ドラゴンランプ）で2回。産業として成り立つ程度には採取ができることが前提です。このMODでのみ参照し、世界観全体には影響しません。",
+        "ja": "現実に存在しない物質が使い物になるまでの、採取と加工の回数。ドラゴンストーン→ドラゴンランプなら2回。産業として成り立つ程度に採取できることが前提。このMODでのみ参照し、世界観全体には影響しない",
         "en": "The number of extraction and processing steps for a fictional material to become usable (for example, dragon stone to dragon lamp is two). Used only by this mod; it does not alter the overall world setting."
       }
     },
@@ -68,7 +68,7 @@
         "en": "Strong fluctuation"
       },
       "note": {
-        "ja": "エリアで需要/供給に大きく変動がある物品の売買金額へ補正される倍率(倍)",
+        "ja": "エリアで需要/供給が大きく動いている物品の売買金額に掛ける倍率",
         "en": "Multiplier applied to the buy and sell amounts of goods with strong area supply or demand changes."
       }
     },
@@ -82,7 +82,7 @@
         "en": "Weak fluctuation"
       },
       "note": {
-        "ja": "エリアで需要/供給に変動がある物品の売買金額へ補正される倍率(倍)",
+        "ja": "エリアで需要/供給が小さく動いている物品の売買金額に掛ける倍率",
         "en": "Multiplier applied to the buy and sell amounts of goods with weaker area supply or demand changes."
       }
     },
@@ -94,7 +94,7 @@
         "en": "Show market fluctuation"
       },
       "note": {
-        "ja": "この街での値段が素の値段からどれだけ動いているかを、アイテム名の末尾へ出します。規定：ON\n向きは常に値段の向きで、左右で反転しません。得か損かは色が表します。",
+        "ja": "この街での値段が素の値段からどれだけ動いているかを、アイテム名の末尾へ出す。既定：ON\n向きは常に値段の向きで、左右で反転しない。得か損かは色が表す",
         "en": "Shows how far the price moved from its normal value in this town, after the item name. Default: ON. The direction is always the price direction and is never flipped between panes; the color shows whether it is good for you."
       }
     },
@@ -110,7 +110,7 @@
         "en": "Market fluctuation style"
       },
       "note": {
-        "ja": "規定：割合",
+        "ja": "既定：割合",
         "en": "Default: the percentage form."
       }
     },
@@ -122,7 +122,7 @@
         "en": "Invert the color for the shop's goods"
       },
       "note": {
-        "ja": "値段が上がることの意味は左右で逆です。自分の品なら高く売れて得、店の品なら余計に払うので損。規定：ON\nONだと色は「自分にとって得か損か」を表します。\nOFFにすると、色は値段の向きだけを表します（左右で同じ）。",
+        "ja": "値段が上がることの意味は左右で逆。自分の品なら高く売れて得、店の品なら余計に払うので損。既定：ON\nONだと色は「自分にとって得か損か」を表す。\nOFFにすると、色は値段の向きだけを表す（左右で同じ）",
         "en": "A price rise means the opposite on each side: good for your own goods, bad for the shop's. Default: ON, so the color means \"good or bad for you\". Turn it off and the color follows the price direction on both sides."
       }
     },
@@ -134,7 +134,7 @@
         "en": "Show '-' when the price does not move"
       },
       "note": {
-        "ja": "素の値段のままの商品名末尾へ「-」を表示するスイッチ。規定：OFF\n切っていると、値段が動いた品だけに表示が付きます。\nONにすると「変動なし」と「まだ検品していない」を見分けられます。",
+        "ja": "素の値段のままの商品名末尾へ「-」を表示するスイッチ。既定：OFF\n切っていると、値段が動いた品だけに印が付く。\nONにすると「変動なし」と「まだ検品していない」を見分けられる",
         "en": "Toggle the neutral '-' shown after items whose price does not move. Default: OFF, so only items whose price changed are marked. Turn it on to tell \"no change\" from \"not inspected yet\"."
       }
     },
@@ -146,7 +146,7 @@
         "en": "Color the market fluctuation markers"
       },
       "note": {
-        "ja": "自分にとって得になる側を緑、損になる側を赤で表示します。規定：ON\n変動なしの「-」には色を付けません。",
+        "ja": "自分にとって得になる側を緑、損になる側を赤で表示する。既定：ON\n変動なしの「-」には色を付けない",
         "en": "Shows up markers (good for you) in green and down markers in red. Default: ON. The neutral '-' is left uncolored."
       }
     },

@@ -7,8 +7,8 @@
     "ja": "依頼クリアで難易度上昇"
   },
   "description": {
-    "en": "Clearing a quest raises the difficulty of the quests that land offers. Every clear draws a random step and adds it, up to a cap. Nothing else is touched: the game already derives the shop stock, the item prices, the enemies, the rewards and the talent points from that one number, so they all follow. Measured on a live game: a land raised to 23 produced level 24 enemies, and its shop stocked items of a value the plain save cannot produce",
-    "ja": "依頼を1つ片付けるたびに、その土地で受けられる依頼の難易度が上がる。上がる量は毎回ランダムで、上限まで積み上がる。触るのはその1つの数だけで、店の在庫・値段・敵・報酬・才能はゲーム自身がそこから決めているので後から付いてくる。実機で確認済み ― 難易度23 まで上げた土地でレベル24 の敵が出て、その土地の店に素のセーブからは出ない value 33 の品が並んだ"
+    "en": "Clearing a quest raises the difficulty of the quests that land offers. Every clear draws a random step and adds it, up to a cap. Nothing else is touched: the game already derives the shop stock, the item prices, the enemies, the rewards and the talent points from that one number, so they all follow. A land raised to 23 produced level 24 enemies, and its shop stocked items of a value the plain save cannot produce",
+    "ja": "依頼を1つ片付けるたびに、その土地で受けられる依頼の難易度が上がる。上がる量は毎回ランダムで、上限まで積み上がる。触るのはその1つの数だけで、店の在庫・値段・敵・報酬・才能はゲーム自身がそこから決めているので後から付いてくる。難易度を23まで上げた土地ではレベル24の敵が出て、その土地の店に素のセーブからは出ない value 33 の品が並んだ"
   },
   "version": "2",
   "author": "R01/Flossian",

@@ -2312,7 +2312,7 @@ class App(ttk.Frame):
         entry = os.path.join(mod_dir, tool["entry"])
         if not os.path.isfile(entry):
             messagebox.showerror("道具が見つかりません",
-                                 "{} が無い。\n{}".format(tool["entry"], mod_dir))
+                                 "{} がありません。\n{}".format(tool["entry"], mod_dir))
             return
         env = dict(os.environ)
         env["IML_ROOT"] = ROOT

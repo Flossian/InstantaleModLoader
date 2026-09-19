@@ -7,8 +7,8 @@
     "ja": "行動判定に能力値を効かせる"
   },
   "description": {
-    "en": "Neither of the game's two success rolls uses the player's ability scores. In quest field events the LLM picks a reference_attribute that is then ignored; in free actions the LLM sets the odds with no scores in the prompt at all. Raises both by the relevant ability (4% per 3 points from 15, up to +20% at 28-30) plus a flat bonus, inferring which ability applies from the action text where the game does not say. Never lowers the vanilla odds by default",
-    "ja": "ゲームの成否判定は2系統あり、どちらもキャラクタの能力値を見ていない。クエスト中のミニイベントは参照能力値が選ばれるだけで使われず、街や会話での自由入力は LLM が確率を決めていてプロンプトに能力値が載っていない。両方に能力値の加点を入れる（15から3点ごとに+4%、28〜30で最大+20%）。どの能力値の判定かをゲームが言わない自由入力では、行動文から推定する。減点はしないので素のゲームより不利にはならない"
+    "en": "Neither of the game's two success rolls uses the player's ability scores. In quest field events the LLM picks a reference_attribute that is then ignored; in free actions the LLM sets the odds with no scores in the prompt at all. Raises both by the relevant ability (4% per 3 points from 15, up to +20% at 28-30), inferring which ability applies from the action text where the game does not say. By default it never lowers the vanilla odds",
+    "ja": "ゲームの成否判定は2系統あり、どちらもキャラクタの能力値を見ていない。クエスト中のミニイベントは参照能力値が選ばれるだけで使われず、街や会話での自由入力は LLM が確率を決めていてプロンプトに能力値が載っていない。両方に能力値の加点を入れる（15から3点ごとに+4%、28〜30で最大+20%）。どの能力値の判定かをゲームが言わない自由入力では、行動文から推定する。既定では減点しないので、素のゲームより不利にはならない"
   },
   "version": "5",
   "author": "R01/Flossian",
@@ -138,8 +138,8 @@
         "en": "Which score to read"
       },
       "note": {
-        "ja": "raw=素の能力値 / condition=負傷や体力で目減りした換算値。ゲーム側が既に状態で確率を下げている疑いがあるので既定は raw",
-        "en": "condition applies the game's own wound/condition scaling on top"
+        "ja": "raw=素の能力値 / condition=負傷や体力で目減りした換算値。ゲーム自身が状態で確率を下げているかは測っていないので、二重に下がらないよう既定は raw",
+        "en": "raw = the score as it stands / condition applies the game's own wound and condition scaling on top. raw by default, since whether the game already lowers the odds by condition has not been measured"
       }
     }
   }

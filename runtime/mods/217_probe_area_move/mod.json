@@ -8,7 +8,7 @@
   },
   "description": {
     "en": "Records the coach's wording, days, and when the fare is charged. Read-only",
-    "ja": "馬車の文言・日数・料金の徴収の時機を録る。ゲームは変えない"
+    "ja": "馬車の文言・日数・料金を徴収する時機を録る。読み取りだけでゲームは変えない"
   },
   "version": "1",
   "author": "R01/Flossian",

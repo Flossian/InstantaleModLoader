@@ -20,7 +20,7 @@
       },
       "note": {
         "en": "Zips out/recon/ into out/recon_snapshots/<version>_<date>.zip before overwriting it, so the two builds can be compared. Only runs when the build changed.",
-        "ja": "上書きする前に out\\recon\\ を out\\recon_snapshots\\<版>_<日付>.zip へ固めます。版が変わったときだけ走ります"
+        "ja": "上書きする前に out\\recon\\ を out\\recon_snapshots\\<版>_<日付>.zip へ固め、前の版と見比べられるようにする。版が変わったときだけ走る"
       }
     }
   },

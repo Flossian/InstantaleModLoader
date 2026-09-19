@@ -233,8 +233,8 @@
         "en": "Price floor"
       },
       "note": {
-        "ja": "宿の簡易寝台が 10G。それより安いものを作らないための下限",
-        "en": "The cheapest inn bed costs 10G; this keeps items from going below a sane floor"
+        "ja": "どの品もこの額より安くしない。目安として、宿の簡易寝台が 10G",
+        "en": "No item is priced below this. For scale, the cheapest inn bed costs 10G"
       }
     },
     "MAX_PRICE": {

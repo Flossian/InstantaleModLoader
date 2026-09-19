@@ -8,7 +8,7 @@
   },
   "description": {
     "en": "Counts overlapping LLM requests during real play from inside the process (local llama.cpp path only)",
-    "ja": "実プレイ中のLLMリクエストの多重送信をプロセス内で数える（ローカル llama.cpp 経路のみ）"
+    "ja": "実プレイ中のLLMリクエストの重なりをプロセス内で数える（ローカル llama.cpp 経路のみ）"
   },
   "version": "1",
   "author": "R01/Flossian",

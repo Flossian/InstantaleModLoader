@@ -29,8 +29,8 @@
         "en": "Share exp from training at a facility"
       },
       "note": {
-        "ja": "年月と代金を払って主に教わる訓練。切ると宿屋だけになる",
-        "en": "Off = only the inn's training is shared"
+        "ja": "施設の主に代金と年月を払って教わる訓練。切ると宿屋の訓練だけになる",
+        "en": "The training you pay a facility owner for. Off = only the inn's training is shared"
       }
     },
     "SHARE_REST": {
@@ -41,8 +41,8 @@
         "en": "Share exp from resting too"
       },
       "note": {
-        "ja": "訓練ではないので既定オフ・未検証",
-        "en": "Off by default; resting is not training"
+        "ja": "休養で得た経験値も仲間に渡す。休養は訓練ではないので既定はオフ。未検証",
+        "en": "Shares the exp from resting too. Off by default, since resting is not training. Not verified"
       }
     },
     "SHARE_RATIO": {

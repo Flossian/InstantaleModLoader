@@ -29,7 +29,7 @@
       "type": "bool",
       "default": true,
       "label": {"ja": "GM に所持品を見せる", "en": "Show the inventory to the GM"},
-      "note": {"ja": "切ると会話の外の自由入力と同じ材料が無くなり、渡す品の名前が創作されることがある",
+      "note": {"ja": "切ると、会話の外の自由入力では渡している所持品の一覧が GM に届かず、渡す品の名前を GM が作ってしまうことがある",
                "en": "Off: the GM has no item list and may invent an item name"}
     },
     "MAX_ITEMS": {
@@ -38,7 +38,7 @@
       "min": 0,
       "max": 200,
       "label": {"ja": "見せる所持品の上限", "en": "Max items shown"},
-      "note": {"ja": "所持品の並び順でここまで。0 で名前だけの一覧も出さない",
+      "note": {"ja": "所持品の並び順で、ここに入れた数まで渡す。0 なら一覧をまったく渡さない",
                "en": "In inventory order. 0 sends no list at all"}
     },
     "NOTE_ACTION": {

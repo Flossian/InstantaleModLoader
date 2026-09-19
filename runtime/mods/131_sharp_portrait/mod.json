@@ -44,8 +44,8 @@
         "en": "Retry face detection"
       },
       "note": {
-        "ja": "ゲームが顔を見つけられなかった回だけ、前処理した絵で検出をやり直す。検出は縮小の前の絵に対して走るので、立ち絵の設定と関係なく効く。手元の 364 体では外れが 58 体あり、そのうち 42 体を拾う（4 体は顔でないものを拾う）",
-        "en": "Only when the game fails to find a face, retries the detection on a preprocessed copy. Detection runs on the pre-shrink drawing, so this works regardless of the portrait setting. Of 58 misses among 364 local NPCs it recovers 42 (4 of them are not faces)"
+        "ja": "ゲームが顔を見つけられなかった回だけ、前処理した絵で検出をやり直す。検出は縮小の前の絵に対して走るので、立ち絵の設定と関係なく効く。外れた顔の大半は拾えるが、顔でないところを顔として切り出すこともある",
+        "en": "Only when the game fails to find a face, retries the detection on a preprocessed copy. Detection runs on the pre-shrink drawing, so this works regardless of the portrait setting. It recovers most of the misses, but sometimes crops something that is not a face"
       }
     }
   }

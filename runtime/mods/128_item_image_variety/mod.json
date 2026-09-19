@@ -37,7 +37,7 @@
         "en": "Similarity floor (relative to top1)"
       },
       "note": {
-        "ja": "上げるほど見た目に忠実、下げるほど多様。0.8 で clothing のような急落する品種は自動的に絞られる",
+        "ja": "上げるほど見た目に忠実、下げるほど多様。0.8 なら、clothing のように類似度が急に落ちる品種では候補が自動的に絞られる",
         "en": "Higher = closer look, lower = more variety. 0.8 auto-narrows folders where similarity falls off fast"
       }
     },

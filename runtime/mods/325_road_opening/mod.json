@@ -96,7 +96,7 @@
         "en": "Hops assumed for an isolated town"
       },
       "note": {
-        "ja": "移動網から切り離された街（エディタで足した直後など）には道筋が無いので、この数を使う。既定 5 は 9 街の木で最も遠い2つの街の間の数",
+        "ja": "移動網から切り離された街（エディタで足した直後など）には道筋が無いので、この数を使う。既定 5 は、素の9街の繋がりで最も離れた2街の間に挟まる街の数",
         "en": "A town no path reaches (e.g. just added by the editor) uses this count. 5 = the farthest pair in the stock 9-town tree"
       }
     },

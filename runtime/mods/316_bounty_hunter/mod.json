@@ -8,7 +8,7 @@
   },
   "description": {
     "en": "While the player is wanted, hunters come after them across land borders. They are the game's own guard encounter (BattleStartManager with enemy_type 'guard'), started by this mod at the moment you choose - arriving in a land, arriving at a facility, days passing, or a free action - with the difficulty scaled to how heavily you are wanted. Two conditions start it: the wanted level in the land you are in, and the total of every land's wanted level, so hunters keep coming even where you are clean",
-    "ja": "手配されている間、土地を跨いで追手が来る。追手はゲーム自身の衛兵の戦闘（`enemy_type='guard'`）そのもので、それを設定した場面（土地への到着・施設への到着・日数の経過・自由行動）でこの MOD が起こす。強さは手配の重さに合わせて渡す。始まる条件は2つあり、今いる土地の手配度と、全ての土地の手配度の合計。合計の側があるので、手配されていない土地へ逃げても追ってくる"
+    "ja": "手配されている間、土地を跨いで追手が来る。追手にはゲーム自身の衛兵の戦闘（enemy_type='guard'）をそのまま使い、設定でONにした場面（土地への到着・施設への到着・日数の経過・自由行動）でこの MOD が起こす。強さは手配の重さに合わせて渡す。始まる条件は2つあり、今いる土地の手配度と、全ての土地の手配度の合計。合計の側があるので、手配されていない土地へ逃げても追ってくる"
   },
   "version": "1",
   "author": "R01/Flossian",
@@ -82,8 +82,8 @@
         "en": "Lowest difficulty of the hunters"
       },
       "note": {
-        "ja": "既定 20 は、ゲーム自身の衛兵で実測した値と同じ（そのとき敵はレベル21だった）",
-        "en": "Default 20 is the value measured from the game's own guards, who came out at level 21"
+        "ja": "既定 20 はゲーム自身の衛兵と同じ強さ。この難易度で出た敵はレベル21だった",
+        "en": "Default 20 matches the game's own guards; at this difficulty the enemies came out at level 21"
       }
     },
     "DIFFICULTY_PER_WANTED": {
@@ -182,8 +182,8 @@
         "en": "Killing the hunters does not make you more wanted"
       },
       "note": {
-        "ja": "既定 ON。ゲームは衛兵との戦闘で手配度を下げる（実測 -10）ので、追手を出した土地の手配度を控えておき、戦闘後に下がっていたら戻す。切ると追手を倒すたびに手配が重くなる",
-        "en": "Default ON. The game lowers lawfulness after a guard battle (measured -10), so the mod remembers the value and puts it back afterwards. Turn it off and every hunt makes you more wanted"
+        "ja": "既定 ON。ゲームは衛兵との戦闘で手配度を 10 下げるので、追手を出した土地の手配度を控えておき、戦闘後に下がっていたら戻す。切ると追手を倒すたびに手配が重くなる",
+        "en": "Default ON. The game lowers lawfulness by 10 after a guard battle, so the mod remembers the value and puts it back afterwards. Turn it off and every hunt makes you more wanted"
       }
     },
     "YIELD_TO_GUARDS": {

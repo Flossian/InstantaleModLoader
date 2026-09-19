@@ -99,8 +99,8 @@
         "en": "Hide the long-journey line"
       },
       "note": {
-        "ja": "到着の移動中だけ。道中を踏破した後に「徒歩で目指す。長旅だ...」と出るのを伏せる",
-        "en": "Only while arriving after the road has been cleared"
+        "ja": "道中を踏破した後の到着の移動で「徒歩で目指す。長旅だ...」と出るのを伏せる。ふつうのエリア移動の文言には触らない",
+        "en": "Hides the line while arriving after the road has been cleared. Ordinary area moves keep their wording"
       }
     },
     "NOTE_IN_SUMMARY": {

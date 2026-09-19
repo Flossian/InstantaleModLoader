@@ -125,7 +125,7 @@ def build_window(mod_dir=MOD_DIR):
     outer.pack(fill="both", expand=True)
     ttk.Label(outer, text=title, style="Title.TLabel").pack(anchor="w")
     ttk.Label(outer, style="Sub.TLabel", wraplength=920, justify="left",
-              text="種類ごとの建設費・1日の売上・建てられる最低の規模と、共通の5項目。"
+              text="この画面で、種類ごとの建設費・1日の売上・建てられる最低の規模と、共通の5項目を決める。"
                    "額は並の等級を町に建てるときのもの。等級と街の規模と倍率はこの上に掛かる"
                    "（右の参考は都市・最上のとき）。どの世界でも効く（settings\\mod_settings.json）"
               ).pack(anchor="w", pady=(0, 8))
@@ -159,7 +159,7 @@ def build_window(mod_dir=MOD_DIR):
             decl = found.get(key)
             var = tk.StringVar()
             if decl is None:
-                ttk.Label(table, text="（宣言が無い）", style="Faint.TLabel").grid(
+                ttk.Label(table, text="（宣言がありません）", style="Faint.TLabel").grid(
                     row=row, column=column, sticky="w", pady=(4, 0))
             elif decl["type"] == "choice":
                 ttk.Combobox(table, textvariable=var, values=decl["values"], width=10,
@@ -218,7 +218,7 @@ def build_window(mod_dir=MOD_DIR):
     def dirty():
         return as_shown(everything()) != saved["values"]
 
-    status = ttk.Label(footer, style="Faint.TLabel", text="次の注入から効く"
+    status = ttk.Label(footer, style="Faint.TLabel", text="次の注入から効きます"
                        + ("  ※ 宣言が無い項目: " + ", ".join(missing) if missing else ""))
     status.pack(side="left")
 

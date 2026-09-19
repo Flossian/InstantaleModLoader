@@ -49,8 +49,8 @@
         "en": "Keep the top rung (\"irresistibly attractive\")"
       },
       "note": {
-        "ja": "既定は入。打ち解けた相手にだけ出る。切ると上限が1つ下の段（「強い魅力を感じている」）になり、無条件に折れる文言が世界から消える",
-        "en": "On by default, and only for NPCs you are close to. Off caps everyone one rung lower"
+        "ja": "既定は入。打ち解けた相手にだけ出る。切ると上限が1つ下の段（「強い魅力を感じている」）になり、最上段の文は誰にも出なくなる",
+        "en": "On by default, and only for NPCs you are close to. Off caps everyone one rung lower, so the top rung's line never appears"
       }
     }
   }

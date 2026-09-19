@@ -7,8 +7,8 @@
     "ja": "クエスト後も解散しない"
   },
   "description": {
-    "en": "Quest completion no longer disbands the party (game balance changes on purpose)",
-    "ja": "クエストクリアでパーティを解散しない（ゲームバランスは意図的に変わる）"
+    "en": "Quest completion no longer disbands the party. The balance built around disbanding changes",
+    "ja": "クエストクリアでパーティを解散しない。解散を前提にしたゲームバランスは変わる"
   },
   "version": "1",
   "author": "R01/Flossian",
@@ -36,8 +36,8 @@
         "en": "Also block disband on quest retire"
       },
       "note": {
-        "ja": "未検証",
-        "en": "not verified"
+        "ja": "クエストを放棄したときの解散も止める。放棄の経路は未検証",
+        "en": "Abandoning a quest also keeps the party together. That path is not verified"
       }
     }
   }

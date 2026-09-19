@@ -8,7 +8,7 @@
   },
   "description": {
     "en": "Records when the room price is charged, the quality values, period_months, and how the months elapse. Read-only",
-    "ja": "宿代の徴収の時機・quality の実値・宿泊期間の決まり方・日数送りの経路を録る。ゲームは変えない"
+    "ja": "宿代を徴収する時機・quality の実値・宿泊期間の決まり方・日数送りの経路を録る。読み取りだけでゲームは変えない"
   },
   "version": "1",
   "author": "R01/Flossian",

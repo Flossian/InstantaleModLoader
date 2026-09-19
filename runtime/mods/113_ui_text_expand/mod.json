@@ -24,7 +24,7 @@
       },
       "note": {
         "ja": "既定の 1.0 は横に広げない（上へ伸ばすだけ）。上げると右へ広がる。元の寸法は out\\text_expand.log に出る",
-        "en": "1.0 (default) = do not widen; the frame only grows upwards. Above 1.0 it grows to the right"
+        "en": "1.0 (default) = do not widen; the frame only grows upwards. Above 1.0 it grows to the right. The original size is logged to out\\text_expand.log"
       }
     },
     "HEIGHT_SCALE": {
@@ -37,8 +37,8 @@
         "en": "Height when expanded (x original)"
       },
       "note": {
-        "ja": "1.0 で縦には広げない。下端は動かず上へ伸びる。窓に入る分で頭打ち",
-        "en": "1.0 = do not grow taller. The bottom edge stays put and the frame grows upwards"
+        "ja": "1.0 では縦に広げない。下端は動かず上へ伸びる。窓に入る高さで頭打ちになる",
+        "en": "1.0 = do not grow taller. The bottom edge stays put and the frame grows upwards, capped by what fits in the window"
       }
     },
     "BUTTON_CORNER": {

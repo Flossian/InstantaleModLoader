@@ -52,8 +52,8 @@
         "en": "Panel top edge (fraction of the window height, from the top)"
       },
       "note": {
-        "ja": "素の位置は 0.055 相当。上げたぶんは能力値など縦の余裕になる",
-        "en": "The vanilla sheet sits at about 0.055; the extra height goes to the columns"
+        "ja": "素の位置は 0.055 相当。小さくするほど枠が上へ伸び、そのぶんが能力値などの縦の余裕になる",
+        "en": "The vanilla sheet sits at about 0.055. Lower values grow the panel upward, and that height goes to the columns"
       }
     },
     "PANEL_BOTTOM": {

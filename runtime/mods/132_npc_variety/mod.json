@@ -79,8 +79,8 @@
         "en": "Residents seeded per town"
       },
       "note": {
-        "ja": "必須施設の主5人と冒険者は別に付く。生成される人数がこれより少なければ余りは捨てられる",
-        "en": "Owners of the five required facilities and adventurers are seeded separately"
+        "ja": "必須施設の主5人と冒険者は別に付く。町に作られる住民がこの人数より少なければ、余った種は使われない",
+        "en": "Owners of the five required facilities and adventurers are seeded separately. Seeds left over when a town makes fewer residents go unused"
       }
     },
     "TOWN_ADVENTURERS": {

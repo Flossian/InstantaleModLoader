@@ -7,7 +7,7 @@
     "ja": "戦闘のダメージ表示"
   },
   "description": {
-    "en": "Shows how much HP actually moved each turn: damage your side deals to the enemies and damage the enemies deal to you and your party",
+    "en": "Shows the damage in numbers: what you and your party deal to the enemies, and what the enemies deal to you and your party",
     "ja": "戦闘で自分や味方が敵に与えたダメージ、敵が自分や味方に与えたダメージを数字で表示する"
   },
   "version": "3",

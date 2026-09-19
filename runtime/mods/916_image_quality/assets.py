@@ -38,7 +38,7 @@ DOWNLOADS = {
                "diffusion_pytorch_model.safetensors",
         "name": "diffusion_pytorch_model.safetensors",
         "license": "MIT（madebyollin/taesdxl）",
-        "about": "SDXL のチェックポイントを使うときに要る。系統が違うと絵が崩れる",
+        "about": "SDXL のチェックポイントを使うときに要ります。系統が違うと絵が崩れます",
     },
     ("sd15", "taesd"): {
         "label": "TAESD（SD1.5 用のデコーダ）",
@@ -46,7 +46,7 @@ DOWNLOADS = {
                "diffusion_pytorch_model.safetensors",
         "name": "diffusion_pytorch_model.safetensors",
         "license": "MIT（madebyollin/taesd）",
-        "about": "ゲームに同梱されているものと同じ。ゲームのフォルダを読ませたくないときだけ",
+        "about": "ゲームに同梱されているものと同じです。ゲームのフォルダを読ませたくないときだけ使います",
     },
 }
 

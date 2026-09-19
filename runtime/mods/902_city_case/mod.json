@@ -71,7 +71,7 @@
         "en": "Chance of a mistaken testimony (%)"
       },
       "note": {
-        "ja": "混じると、聞いた話を全部信じたときに誰も当てはまらなくなる。0 で従来どおり全部が真",
+        "ja": "混じると、聞いた話を全部信じたときに誰も当てはまらなくなる。0 なら手がかりは全部が真",
         "en": "With one wrong clue, believing every clue leaves nobody; 0 keeps all clues true"
       }
     },
