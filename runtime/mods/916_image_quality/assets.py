@@ -138,18 +138,19 @@ def download(url, dest, timeout=120, opener=None):
                     fh.write(chunk)
     except Exception as exc:
         _drop(part)
-        return False, "ダウンロードできない: {}".format(exc)
+        return False, "ダウンロードできませんでした: {}".format(exc)
 
     size = os.path.getsize(part) if os.path.isfile(part) else 0
     if size < MIN_BYTES:
         _drop(part)
-        return False, "応答が小さすぎる（{} バイト）。URL を手で開いて確かめる".format(size)
+        return False, ("応答が小さすぎます（{} バイト）。"
+                       "URL をブラウザで開いて確かめてください".format(size))
     try:
         os.replace(part, dest)
     except Exception as exc:
         _drop(part)
-        return False, "置き換えられない: {}".format(exc)
-    return True, "{} に置いた（{:.1f}MB）".format(dest, size / float(1024 * 1024))
+        return False, "置き換えられませんでした: {}".format(exc)
+    return True, "{} に置きました（{:.1f}MB）".format(dest, size / float(1024 * 1024))
 
 
 def _drop(path):
@@ -163,7 +164,7 @@ def manual_steps(entry, dest_dir):
     """ダウンロードが使えないときの案内。URL と置き場と名前を出す。"""
     return "\n".join([
         "{}（{}）".format(entry["label"], entry["license"]),
-        "  1. {} をブラウザで開いて保存する".format(entry["url"]),
-        "  2. {} へ置く".format(dest_dir),
-        "  3. 名前は {} のままでよい".format(entry["name"]),
+        "  1. {} をブラウザで開いて保存してください".format(entry["url"]),
+        "  2. {} へ置いてください".format(dest_dir),
+        "  3. 名前は {} のままで構いません".format(entry["name"]),
     ])

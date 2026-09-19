@@ -151,7 +151,7 @@ def describe_family(values, game_dir=""):
     full = path if os.path.isabs(path) else os.path.join(game_dir, path)
     family = sizes.family_of(full)
     if family is None:
-        return "チェックポイント: {}（系統が読めない。パスを確かめる）".format(
+        return "チェックポイント: {}（系統が読めません。パスを確かめてください）".format(
             os.path.basename(path))
     return "チェックポイント: {}（中身から見て {}）".format(
         os.path.basename(path), "SDXL" if family == "sdxl" else "SD1.5")
@@ -169,7 +169,7 @@ def preview_lines(values):
             short = int(values.get(prefixes[kind] + "_SHORT"))
             long_ = int(values.get(prefixes[kind] + "_MAX_LONG"))
         except (TypeError, ValueError):
-            lines.append("{} 数字を入れる".format(label))
+            lines.append("{} 数字を入れてください".format(label))
             continue
         scale = sizes.size_scale(kind, short, long_)
         parts = []
@@ -427,7 +427,7 @@ def build_window(rules_in=None, settings_in=None, note=""):
         try:
             os.startfile(path)                       # noqa: S606  Windows のみ
         except Exception:
-            messagebox.showinfo("置き場", path)
+            messagebox.showinfo("置き場", "エクスプローラで開けませんでした。\n" + path)
         refresh_assets()
 
     def fetch(family, kind):
@@ -436,7 +436,7 @@ def build_window(rules_in=None, settings_in=None, note=""):
         dest = os.path.join(dest_dir, entry["name"])
         if not messagebox.askokcancel(
                 entry["label"],
-                "{}{sep}{}{sep}{} へダウンロードする。続けるか".replace(
+                "{}{sep}{}{sep}{} へダウンロードします。続けますか？".replace(
                     "{sep}", chr(10) * 2).format(
                     entry["about"], entry["url"], dest_dir)):
             return
@@ -446,7 +446,7 @@ def build_window(rules_in=None, settings_in=None, note=""):
         if not ok:
             messagebox.showerror(
                 entry["label"],
-                message + chr(10) * 2 + "手で入れる場合:" + chr(10)
+                message + chr(10) * 2 + "手で入れる場合は次の手順です。" + chr(10)
                 + assets.manual_steps(entry, dest_dir))
             return
         if kind == "taesd" and "TAESD_PATH" in entries:
@@ -580,7 +580,7 @@ def build_window(rules_in=None, settings_in=None, note=""):
     refresh_assets()
     if note:
         widgets["import_note"].configure(
-            text="取り込んだ:" + chr(10) + note)
+            text="取り込みました:" + chr(10) + note)
 
     def gather_rules():
         """画面の中身を規則の形へ戻す。固定行と一覧を節ごとに束ねる。"""
@@ -593,17 +593,19 @@ def build_window(rules_in=None, settings_in=None, note=""):
 
     def save():
         if not rulebook.save(state_dir, gather_rules()):
-            messagebox.showerror("規則を保存できない", rulebook.rules_path(state_dir))
+            messagebox.showerror("規則を保存できませんでした",
+                                 "{} に書けませんでした。".format(rulebook.rules_path(state_dir)))
             return
         if modtool.save_settings(root_dir, MOD_DIR,
                                  modtool.coerce_all(MOD_DIR, current(), root_dir)):
             messagebox.showinfo(
-                "保存した",
-                "次に注入したときから効く（ゲームの再起動は要らない）。\n"
+                "保存しました",
+                "次に注入したときから効きます（ゲームの再起動は要りません）。\n"
                 "モデルの差し替えだけはパイプラインを建て直すので、\n"
-                "注入し直してからワールド選択をやり直す。")
+                "注入し直してからワールド選択をやり直してください。")
         else:
-            messagebox.showerror("保存できない", r"settings\mod_settings.json を確かめる")
+            messagebox.showerror("保存に失敗しました",
+                                 r"settings\mod_settings.json を確かめてください。")
 
     def reset():
         for key, var in entries.items():

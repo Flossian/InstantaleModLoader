@@ -89,7 +89,7 @@ def read(path):
         with io.open(path, encoding="utf-8-sig", errors="replace") as fh:
             text = fh.read()
     except Exception as exc:
-        return {}, _empty_rules(), ["読めない: {}".format(exc)]
+        return {}, _empty_rules(), ["読めませんでした: {}".format(exc)]
     return convert(parse(text))
 
 
@@ -136,10 +136,10 @@ def _float(value, fallback=0.0):
 def _sizes(up, settings, notes):
     """`[upscale]` を種類別の短辺・長辺へ。切ってある種類はゲームの値のまま。"""
     if _int(get(up, "enabled", 1), 1) == 0:
-        notes.append("[upscale] enabled=0 なので寸法は写していない（全部ゲームのまま）")
+        notes.append("[upscale] enabled=0 なので寸法は写していません（全部ゲームのまま）")
         return
     if _int(get(up, "round", 64), 64) != 64:
-        notes.append("round={} は写せない（こちらは 64 の固定）".format(get(up, "round")))
+        notes.append("round={} は写せません（こちらは 64 の固定）".format(get(up, "round")))
 
     short = _int(get(up, "goal_short"), GAME_SHORT["portrait"])
     long_ = _int(get(up, "max_long"), GAME_LONG["portrait"])
@@ -152,7 +152,7 @@ def _sizes(up, settings, notes):
         flag = {"portrait": "enabled_portrait", "enemy": "enabled_square",
                 "background": "enabled_landscape"}[kind]
         if _int(get(up, flag, 1), 1) == 0:
-            notes.append("{}=0 なので {} は写していない".format(flag, kind))
+            notes.append("{}=0 なので {} は写していません".format(flag, kind))
             continue
         settings[PREFIX[kind] + "_SHORT"] = values[0]
         settings[PREFIX[kind] + "_MAX_LONG"] = values[1]
@@ -195,13 +195,13 @@ def _sampler(sampler, settings, notes):
             for suffix, value in got.items():
                 name = "{}_{}".format(head, suffix)
                 if name in settings and settings[name] != value:
-                    notes.append("{} が {} と食い違うので先に読んだほうを残した".format(
+                    notes.append("{} が {} と食い違うので先に読んだほうを残しました".format(
                         cls, name))
                     continue
                 settings[name] = value
         if cls == "portrait":
-            notes.append("portrait のサンプラーを1段目と2段目の両方へ写した"
-                         "（元 MOD は段を分けていない）")
+            notes.append("portrait のサンプラーを1段目と2段目の両方へ写しました"
+                         "（元 MOD は段を分けていません）")
 
 
 def _rows(section, name, target, rules):
@@ -227,12 +227,12 @@ def _conditional(section, rules, notes):
     for name, value in sorted(section.items()):
         parts = [part.strip() for part in str(value or "").split("|")]
         if len(parts) < 3:
-            notes.append("[lora_add_if] {} は「クラス | 条件 | 追加内容」の形ではない".format(name))
+            notes.append("[lora_add_if] {} は「クラス | 条件 | 追加内容」の形ではありません".format(name))
             continue
         cls, condition, text = parts[0], parts[1], "|".join(parts[2:])
         kind = KIND_OF.get(cls.lower())
         if kind is None:
-            notes.append("[lora_add_if] {} のクラス {} が読めない".format(name, cls))
+            notes.append("[lora_add_if] {} のクラス {} が読めません".format(name, cls))
             continue
         rules["add"].append({"enabled": True, "kind": kind, "target": "prompt",
                              "when": condition, "text": text, "name": name})
@@ -250,6 +250,6 @@ def summarize(settings, rules, notes):
             sum(count for _name, count in counts),
             ", ".join("{} {}".format(name, count) for name, count in counts)))
     if not lines:
-        lines.append("写すものが無かった（ini が空か、全部コメントアウトされている）")
+        lines.append("写すものがありませんでした（ini が空か、全部コメントアウトされています）")
     lines.extend("※ " + note for note in notes)
     return "\n".join(lines)

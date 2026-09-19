@@ -671,12 +671,12 @@ check("書き途中のファイルを残さない", not os.path.isfile(dest + ".
 
 ok, message = AS.download("https://例", dest + "2",
                           opener=lambda _url, _timeout: _Response(b"<html>error</html>"))
-check("小さすぎる応答は失敗にする", not ok and "小さすぎる" in message, message)
+check("小さすぎる応答は失敗にする", not ok and "小さすぎ" in message, message)
 check("失敗したら置き場を汚さない", not os.path.isfile(dest + "2"))
 
 ok, message = AS.download("https://例", dest + "3",
                           opener=lambda _url, _timeout: (_ for _ in ()).throw(IOError("切断")))
-check("繋がらないときも例外を投げない", not ok and "ダウンロードできない" in message, message)
+check("繋がらないときも例外を投げない", not ok and "ダウンロードできませんでした" in message, message)
 check("手で入れる案内に URL と置き場と名前が出る",
       all(part in AS.manual_steps(AS.DOWNLOADS[("sdxl", "taesd")],
                                   AS.dir_of(store, "sdxl", "taesd"))
