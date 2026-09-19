@@ -262,7 +262,6 @@ OWNED_NAME = "自分の家"
 
 # ---------------------------------------------------------------- 文言
 #: 役場に足す選択肢。
-#: 役場に足す選択肢。
 #: 「物件を扱う」だと 331 の出資（店を建てて売上を得る）とも読めた
 #: ので、**自分が住む家の話だと分かる文言**にした（本人の指摘）。
 OFFICE_LABEL = "家を借りる・買う"
@@ -331,8 +330,6 @@ KEEPER_TIMEOUT = 90
 #: ゲームの1ヵ月（`elapse_days(months * 30)`。GAME.md §2.17 の実測）。
 DAYS_PER_MONTH = 30
 
-#: 週ぎめ・月ぎめだった頃の契約。次に読んだときに1本立ての賃貸へ移す。
-
 
 def game_stay(app):
     """いまの宿屋の宿泊1回の長さ。ローダの窓口に聞く（`durations.inn_stay`）。
@@ -343,10 +340,6 @@ def game_stay(app):
     返るのは必ず辞書 `{"months", "days", "length", "source"}`。
     """
     return durations.inn_stay(app)
-
-
-#: 契約の家賃の周期（日）。買い切りは 0、賃貸は `lease_days(app)`。
-#: 周期は**契約した時点の長さで固定**する（途中で伸び縮みさせない）。
 
 
 def _fmt(template, **values):
@@ -422,8 +415,6 @@ def apply(ctx):
         }
         setattr(sys, STATE_STORE_ATTR, store)
     state = store["state"]
-    #: この世代で `modnpc` の層を積んだ管理人。`apply()` ごとに空から始まるので、
-    #: 注入し直せば層は積み直る（登録簿は注入をまたいで生きる。TECH.md §5.7）。
 
     write = ctx.logger(LOG_BASENAME)
     worlds = store["worlds"].rebind(ctx, write)
@@ -896,10 +887,6 @@ def apply(ctx):
         state["warned"].discard(("keeper", keeper_id))
         return keeper_id
 
-    def release_keeper(app):
-        """滞在のあいだの据え置きは `modnpc` が持つので、ここでは何もしない。"""
-        return
-
     def drop_keeper(app, record):
         """管理人を世界から降ろし、控えからも落とす。降ろしたら True。
 
@@ -1359,21 +1346,36 @@ def apply(ctx):
             write("WARN reclaim: cannot read the player's inventory")
             back(app, "no inventory")
             return
-        ui.add_gold(app, -fee, on_error=lambda msg: write("WARN reclaim: " + msg))
-        moved = 0
+        # 持ち物に戻った品だけを数え、戻らなかった品は預かりに残す
+        # （`storage.fill` と同じ確かめ方）。控えから消した品は世界から消える。
+        moved, left = 0, {}
         for key, data in sorted(seized.items()):
             target = storage.free_key(inv, key)
             try:
                 item = app.generate_item_from_dict(dict(data), str(target), player)
             except Exception:
                 ctx.log_exc("real estate: cannot rebuild a seized item")
+                left[key] = data
                 continue
             if item is not None and inv.get(str(target)) is not item:
                 inv[str(target)] = item
-            moved += 1
-        bucket_of(current_key(app))["seized"] = {}
+            if str(target) in inv:
+                moved += 1
+            else:
+                write("WARN reclaim: {} {} did not land in the inventory".format(
+                    key, storage.describe(data)))
+                left[key] = data
+        if not moved:
+            # 1点も戻せなかった回は料金を取らない（預かりはそのまま）。
+            write("WARN reclaim: nothing came back; the fee was not charged")
+            screen.say(app, "預かり品を受け取れなかった。")
+            back(app, "nothing reclaimed")
+            return
+        ui.add_gold(app, -fee, on_error=lambda msg: write("WARN reclaim: " + msg))
+        bucket_of(current_key(app))["seized"] = left
         save(app)
-        write("reclaimed: {} item(s) for {}".format(moved, fee))
+        write("reclaimed: {} item(s) for {}{}".format(
+            moved, fee, " ({} left)".format(len(left)) if left else ""))
         screen.say(app, ui.rewrite_coins(_fmt(RECLAIMED_TEXT, count=moved)))
         save_soon(app, "reclaim")
         back(app, "reclaimed")
@@ -1416,8 +1418,7 @@ def apply(ctx):
         return owner, True
 
     def release_owner(app):
-        """滞在のあいだ載せた主を元へ戻す。管理人も借りた役人も、ここで降りる。"""
-        release_keeper(app)
+        """滞在のあいだ借りた役人を元へ戻す。管理人は据えたままでよい（`modnpc` が持つ）。"""
         home = state.get("free_stay")
         if not isinstance(home, dict) or not home.get("owner") \
                 or not home.get("borrowed"):
@@ -1940,6 +1941,31 @@ def apply(ctx):
                 state["pending_demolish"].remove(record)
                 drop_contract(app, record)
 
+    def sweep_lapsed(app, key, why):
+        """切れたまま控えに残っている契約を片付ける。片付けた数を返す。
+
+        中に居るあいだの期限切れ・解約は取り壊しを後回しにするが（`pending_demolish`）、
+        その覚えはメモリだけなので、外へ出ずに終了するとロードで空に戻る。
+        残った契約は `contract_here` が拾い、役場は「契約を確かめる／解約する」のままになる。
+        ロードの直後は建物の中に居ない（切れた建物は建て直さず、立ち位置はローダが入口へ直す）ので、
+        ここで必ず壊せる。
+
+        層を先に積むのは、`unregister` が登録の無い id の控え
+        （`state/modfacility` と `state/modnpc`）を落とさないため。
+        """
+        done = 0
+        for record in contracts_of(key):
+            if not record.get("lapsed"):
+                continue
+            register_home(record)
+            register_keeper(app, record)
+            if take_down(app, record, why):
+                drop_contract(app, record)
+                done += 1
+        if done:
+            write("{}: swept {} lapsed contract(s)".format(why, done))
+        return done
+
     @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False)
     def on_button_press(orig, self, button_index, *args, **kwargs):
         """自前のボタンだけ横取りする。印が無ければ必ず素通し。"""
@@ -1975,6 +2001,7 @@ def apply(ctx):
                 # 同じ id（`keeper-<土地>`）に別の人が立つ。
                 keepers_registered.clear()
                 try:
+                    sweep_lapsed(app, key, "load")
                     apply_contracts(app, self, key, "load")
                 finally:
                     state["key_override"] = None

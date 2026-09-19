@@ -10,7 +10,7 @@
     "en": "Adds an investment desk to the administrative office. Choose a kind of facility (inn, shop, smithy, specialty shop, training hall or arena) and a grade; the building appears in one of the town wards with a keeper of its own. Inside, the game's own trade, training, lodging and matches work as usual. How many you can build in one settlement depends on its size (1 in a village, 2 in a town, 3 in a city), and both the cost and the takings scale with it. Visit the building to collect what it has earned since your last visit",
     "ja": "役場に出資の窓口を足す。施設の種類（宿屋・雑貨店・鍛冶屋・専門店・道場・闘技場）と等級を選ぶと、その街の区画の1つに建物が建ち、主人が1人立つ。中ではゲーム自身の売買・訓練・宿泊・試合がそのまま動く。1つの街に建てられる軒数は規模で決まり（村1・町2・都市3）、費用も売上も規模に応じて増える。建物を訪ねると、前回からの売上を受け取れる"
   },
-  "version": "38",
+  "version": "39",
   "author": "R01/Flossian",
   "settings": {
     "COST_SCALE": {

@@ -7,10 +7,10 @@
     "ja": "家を借りる・買う"
   },
   "description": {
-    "en": "Rent or buy a house at the administrative office and it appears in that town. Each house gets its own keeper (a landlord when rented, a caretaker when bought) who holds the keys and can be talked to. Inside you can stay as at an inn (rest, train, work and more) and keep your gear in a storage room. A stay lasts as long as one at an inn, and a rent period covers four",
+    "en": "Rent or buy a house at the administrative office and it appears in that town. Each house gets its own keeper (a landlord when rented, a caretaker when bought) who holds the keys and can be talked to. Inside you can stay as at an inn (rest, train, work and more) and keep your gear in a storage room. A stay lasts as long as one at an inn, and a rent period covers four of them",
     "ja": "役場で家を借りるか買うと、その土地に自分の家が建つ。建物ごとに管理人（賃貸なら大家）が1人立ち、鍵を預かって会話もできる。中では宿屋と同じ滞在（休養・訓練・労働ほか）ができ、荷物を預ける保管庫が使える。滞在1回の長さは宿屋と同じで、賃貸の1期はその4回ぶん"
   },
-  "version": "36",
+  "version": "37",
   "author": "R01/Flossian",
   "settings": {
     "RENT_PRICE": {

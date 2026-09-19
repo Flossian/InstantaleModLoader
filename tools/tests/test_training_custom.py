@@ -773,6 +773,21 @@ check("渡さなければ書かれている数のまま",
       == "- 残り訓練期間: 3ヵ月",
       module.reprompt("- 残り訓練年数: 3年"))
 
+print("[文言] ベース期間が素のままでも、回数を変えていれば開始の1行は読み替える")
+module, ctx, app, choice_cls = setup(
+    configure=lambda m: setattr(m, "COURSE_YEARS", 6))
+app.stale_start_years = 3
+press(app, START_TEXT)
+check("素の長さのまま数だけ直る", "あと6年間。どうする？" in app.texts, app.texts)
+check("素の3では出さない", "あと3年間。どうする？" not in app.texts, app.texts)
+check("頼み文の錨も数だけ直る",
+      module.reprompt("- 残り訓練年数: 3年", budget=6) == "- 残り訓練期間: 6年",
+      module.reprompt("- 残り訓練年数: 3年", budget=6))
+check("渡さなければ素のまま触らない",
+      module.reprompt("- 残り訓練年数: 3年") is None,
+      module.reprompt("- 残り訓練年数: 3年"))
+check("エラーなし", not ctx.errors, ctx.errors)
+
 print("[文言] 訓練の外の文言には触らない")
 module, ctx, app, choice_cls = setup(
     configure=lambda m: setattr(m, "BASE_PERIOD", "1ヵ月"))

@@ -1884,6 +1884,45 @@ def reload_world(app, classes, module):
     return fresh, node
 
 
+print("[中に居るまま切れて、出ずに終了したセーブを読む]")
+module, ctx, app, places, classes = setup()
+rent(app, module)
+app.go(home_of(app, module, places))
+app.player.gold = 0
+app.elapse_days(contract_of(module, app).get("term"))
+CLOCK.settle()
+lapsed_id = str((contract_of(module, app) or {}).get("facility"))
+check("契約は切れて控えに残る",
+      (contract_of(module, app) or {}).get("lapsed") is True, contract_of(module, app))
+
+
+def facility_state_ids():
+    """ローダの建物の控え（`state\\modfacility`）にあるこの MOD の建物 id。"""
+    found = []
+    for name in (sorted(os.listdir(FACILITY_STATE_DIR))
+                 if os.path.isdir(FACILITY_STATE_DIR) else []):
+        if not name.endswith(".json"):
+            continue
+        with io.open(os.path.join(FACILITY_STATE_DIR, name), encoding="utf-8") as fh:
+            found.extend(((json.load(fh) or {}).get(module.OWNER) or {}).keys())
+    return found
+
+
+check("建物はローダの控えに居る", lapsed_id in facility_state_ids(), facility_state_ids())
+# 出ずに終了した形（`pending_demolish` はメモリだけ）。ロードで片付くこと。
+fresh, node = reload_world(app, classes, module)
+CLOCK.settle()
+check("切れた契約はロードで控えから消える",
+      not (read_state() or {}).get("contracts"), read_state())
+check("切れた建物は建て直さない", lapsed_id not in node.facilities, list(node.facilities))
+check("ローダの建物の控えからも消える",
+      lapsed_id not in facility_state_ids(), facility_state_ids())
+app.press(module.OFFICE_LABEL)
+CLOCK.settle()
+check("役場は借りる側に戻る",
+      any(label.startswith("借りる") for label in app.labels()), app.labels())
+check("エラーなし", not ctx.errors, ctx.errors)
+
 print("[管理人]")
 # 建物ごとに管理人（賃貸なら大家）を1人立て、その人を建物の主にする。
 # 版31 までは滞在のあいだだけ役場の役人を借りていた（VERIFICATION.md §3.62）。

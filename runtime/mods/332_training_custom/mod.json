@@ -10,7 +10,7 @@
     "en": "Change the training fee, how much training one course buys, how long one session takes (a base period times a per-activity multiplier), and whether you may train again where you graduated; the wording follows the real length. Defaults are the game's own values, so nothing changes until you edit them",
     "ja": "訓練所の代金・1回の修行の量・1段の期間（ベース期間×修行内容ごとの倍率）を変えられる。卒業した施設での再訓練も選べる。文言もAIの描写も実際の期間に揃う。既定は素のゲームの値のままで、変えた項目だけが効く"
   },
-  "version": "12",
+  "version": "13",
   "author": "R01/Flossian",
   "after": [
     "306_party_train_exp"

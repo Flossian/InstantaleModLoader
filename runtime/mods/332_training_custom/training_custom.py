@@ -129,7 +129,6 @@ PHASE_BUTTON = "{name}({length})"
 PERIOD_WORDING = True
 
 # 卒業した施設でもう一度訓練を受けられるようにするか。
-# 卒業した施設でもう一度訓練を受けられるようにするか。
 # **ここだけは既定が素のゲームの値ではない**（本人の指定）。
 # 素のゲームは断る（`十分に学んだ。これ以上ここで得るものはないだろう。` で、
 # 代金も日数も動かない。実測）。
@@ -410,6 +409,19 @@ def budget_text(years):
     return "{}〜{}".format(length_text(shortest), length_text(longest))
 
 
+def budget_said(years, budget=None):
+    """残りの量の言い方。`budget` で読み替える回は、素の長さでも必ず何か言う。
+
+    `budget_text` の None は「ゲームの言い方と同じ」の印だが、
+    読み替える回はゲームが書いた数（差し替え前の 3）と設定の回数が違うので、
+    長さが素の式のままでも数のほうを直す（`あと3年間` → `あと6年間`）。
+    """
+    said = budget_text(years)
+    if said is None and budget is not None:
+        return "{}年".format(int(years))
+    return said
+
+
 def reprompt(text, activity=None, phase=False, budget=None):
     """AI へ渡る頼み文の年数を実際の期間へ。触らないなら None。
 
@@ -436,7 +448,7 @@ def reprompt(text, activity=None, phase=False, budget=None):
                 said = length_text(days) \
                     if days != int(years) * GAME_DAYS_PER_YEAR else None
             else:
-                said = budget_text(years)
+                said = budget_said(years, budget)
             return build(match, said) if said else match.group(0)
 
         new = pattern.sub(one, new)
@@ -458,10 +470,14 @@ def reword(text, activity=None, phase=False, budget=None):
     ours = [budget]
 
     def by_count(match):
-        years = ours[0] if ours[0] is not None else match.group(1)
-        ours[0] = None
-        said = budget_text(years)
-        return said if said else match.group(0)
+        budget_now, ours[0] = ours[0], None
+        years = budget_now if budget_now is not None else match.group(1)
+        said = budget_said(years, budget_now)
+        if said is None:
+            return match.group(0)
+        # 素の長さのまま数だけ直す回は「間」を残す（`あと6年間`）。
+        return said + "間" if said.endswith("年") and budget_now is not None \
+            and said == "{}年".format(int(years)) else said
 
     new = COUNT_YEARS_RE.sub(by_count, text)
     match = KANJI_YEARS_RE.match(new) if phase else None
@@ -981,10 +997,10 @@ def apply(ctx):
             result.append(new if new is not None else content)
         return result if changed else None
 
-    if LLM_PERIOD_WORDING:
-        # 設定は遊んでいる最中に変わりうるので、素の設定でも仕掛けておく
-        # （素のままなら `reprompt` が即 None を返すので、他の推論の邪魔はしない）。
-        llm.wrap_outgoing(ctx, rewrite_outgoing, label="training custom")
+    # 設定は遊んでいる最中に変わりうる（ワールド個別の上書きも含む）ので、
+    # 切ってあっても仕掛けておく。旗は `reprompt` が呼ばれた時に見るので、
+    # 切ってあれば即 None を返し、他の推論の邪魔はしない。
+    llm.wrap_outgoing(ctx, rewrite_outgoing, label="training custom")
 
     # ============================================================ 手持ちの確認
     @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False)

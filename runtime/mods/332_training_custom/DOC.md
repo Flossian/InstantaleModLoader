@@ -53,7 +53,7 @@
 2行目以降はゲームも新しい回数で数えるので、そこは合っている。
 この MOD は自分が渡した回数を知っているので、その1行だけ設定値で読み替える
 （画面と、AI へ渡る頼み文の「残り訓練年数」の両方）。
-読み替えたときは `out	raining_custom.log` に `the start line still said N year(s)` が残る。
+読み替えたときは `out\training_custom.log` に `the start line still said N year(s)` が残る。
 
 ## 文言の「N年間」も実際の期間になる
 
