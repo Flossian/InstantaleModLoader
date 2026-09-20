@@ -48,6 +48,10 @@ r"""機能追加: 街に施設を建てる（出資する）。
 店の売買、道場の訓練が実行時に足した建物でもそのまま出た（実機）。
 だからこの MOD が足すのは `売上を受け取る` と、自分の宿屋の `無料で泊まる` と出口だけ。
 
+ゲームが出すもののうち、**自分の宿の `宿泊する` だけは伏せる**（`modfacility` の `hide`。TECH.md §5.8）。
+自分で建てた宿に宿代を払って泊まる理由が無い（本人の指定）。
+よその宿屋には掛からない（層は建物ごとに積むので、持ち株の宿にしか効かない）。
+
 本体の経路には**実体ではなく素データを施設 id で引く**ものがある
 （売買の `shopping_start_method_1`、闘技場の `ColosseumMatchStart.method`。GAME.md §2.28）。
 実行時に足した施設はそこに無いので `KeyError` でワーカースレッドが死ぬ。
@@ -61,7 +65,8 @@ r"""機能追加: 街に施設を建てる（出資する）。
 import datetime
 import sys
 
-from instantale_modloader import frames, llm, modfacility, modnpc, prices, ui
+from instantale_modloader import (durations, frames, llm, modfacility, modnpc,
+                                  prices, ui)
 from instantale_modloader.state import (UNKNOWN_WORLD, WorldStore, playthrough_key,
                                         playthrough_key_of_dict)
 
@@ -98,6 +103,14 @@ SHOP_KINDS = ("general_store", "specialty_shop", "blacksmith")
 
 #: 宿泊の入口。実測の署名は `(app, months, quality)`（GAME.md §2.17）。
 STAY_CLS = "VacationStartManager"
+
+#: ゲームの部屋選びの入口（`宿泊する(Nヵ月)`。spec は `DisplayVacationChoice`）。
+ROOM_CLS = "DisplayVacationChoice"
+
+#: 自分の宿で出さないゲームの選択肢（`modfacility` の `hide`。TECH.md §5.8）。
+#: **自分の宿に宿代を取る宿泊を並べる理由が無い**（本人の指定）。`無料で泊まる` で足りる。
+#: よその宿屋には触らない（層は建物ごとなので、持ち株の宿にしか掛からない）。
+HIDDEN_INN_CLASSES = (ROOM_CLS,)
 
 #: 闘技場の入口。署名は `(app)`（`out\recon\targets.txt`）。入口そのものは実行時の施設でも通る。
 ARENA_CLS = "EntryColosseumMatchManager"
@@ -166,7 +179,7 @@ STATUS_LABEL = "持っている施設"
 CANCEL_LABEL = "やめる"
 COLLECT_LABEL = "売上を受け取る({}G)"
 COLLECT_EMPTY_LABEL = "売上を受け取る(まだ無い)"
-#: 自分の宿屋の無料の宿泊。ゲームの `宿泊する`（宿代を取る）と**別のボタン**にする。
+#: 自分の宿屋の無料の宿泊。ゲームの `宿泊する` は自分の宿では伏せるので、泊まり方はこれだけ。
 #: 版33 までは同じ `宿泊する` を押させて宿代を後から返していたが、払って戻るのが見えず
 #: 分かりづらかった（本人の指摘）。
 STAY_LABEL = "無料で泊まる"
@@ -537,10 +550,12 @@ def apply(ctx):
         # 2つだけの画面で止まった（実機）。画面の判断は1か所（TECH.md §5.8）。
         out = []
         kind = record.get("kind")
-        # 自分の宿屋には「無料で泊まる」を、ゲームの `宿泊する`（宿代を取る）とは**別に**出す。
+        # 自分の宿屋の泊まり方はこれだけ（版40 でゲームの `宿泊する` を伏せた）。
         # 同じ入口を押させて後から返す形は、払って戻るのが見えず分かりづらかった（版34）。
         if kind == "inn":
             out.append({"key": "stay", "label": STAY_LABEL,
+                        # 伏せたゲームの `宿泊する` と同じ並びで出す（本人の指定）。
+                        "replaces": ROOM_CLS,
                         "on": lambda info: act(info["app"], "stay", facility_id)})
         # 闘技場の `試合に出る` はゲーム自身が出す（`colosseum` 型。実機）。こちらは足さない。
         gold, _days = owed(app, record)
@@ -575,6 +590,8 @@ def apply(ctx):
             choices=choices, exit_label=LEAVE_LABEL,
             # 持ち株の建物はロードで必ず建ち直る（手放す経路がまだ無い）。
             keep_inside=True,
+            # 自分の宿ではゲームの `宿泊する`（宿代を取る）を出さない。
+            hide=HIDDEN_INN_CLASSES if record.get("kind") == "inn" else None,
             # 入口ではなく、入口の下の区画の1つに繋ぐ（本人の指定）。
             # 入口に置くと街に着いた瞬間に店が見え、区画を回っても見つからない。
             hub="ward",
@@ -926,11 +943,17 @@ def apply(ctx):
             write("WARN stay: __main__.{} is not available".format(STAY_CLS))
             return
         quality = str(STAY_QUALITY)
+        # 第1引数は**いまの宿屋と同じ月数**。ローダの窓口に聞く
+        # （`durations.inn_stay`。TECH.md §3.3.2）ので、この MOD は式も、
+        # 長さを変える MOD の名前も持たない。
+        # 版40 までは 1 を直に渡していた。「本体の経路は5回とも `['1', ...]`」という
+        # 実測から決めたが、その5回は `315_vacation_custom` が週単位の設定で走っていた回で、
+        # 週単位は月数を1に落として日数だけを縮める。素の `3ヵ月` では本体は 3 を渡すので、
+        # 同じ宿で払えば3ヵ月、無料なら1ヵ月という食い違いになっていた
+        # （実機 2026-09-20。VERIFICATION.md §3.63 #7e）。
+        months = max(1, int(durations.inn_stay(app, write=write)["months"]))
         try:
-            # 第1引数はゲームの部屋選びと同じ **1**（1単位＝30日と活動1回。連泊は本体の
-            # `まだ宿泊する`）。年齢の式で 3 を渡していたら3ヵ月分の暦と宿代が一度に動いた
-            # （実機。`init_args=['3', ...]`。本体の経路は5回とも `['1', ...]`）。
-            phase = cls(app, 1, quality)
+            phase = cls(app, months, quality)
         except Exception:
             ctx.log_exc("investment: cannot build {}".format(STAY_CLS))
             return
@@ -938,8 +961,8 @@ def apply(ctx):
         # 最中に変わっても、渡した部屋と払う部屋が食い違わない。
         state["own_stay"] = {"facility": str(facility_id), "name": record.get("name"),
                              "quality": quality}
-        write("stay: starting {} quality={!r} at {!r}".format(
-            STAY_CLS, quality, record.get("name")))
+        write("stay: starting {} months={} quality={!r} at {!r}".format(
+            STAY_CLS, months, quality, record.get("name")))
         screen.start_phase(app, phase, STAY_LABEL)
 
     def end_stay(app, why):
@@ -951,9 +974,12 @@ def apply(ctx):
     def staying_here(app):
         """こちらの「無料で泊まる」から始めた宿泊か（`own_stay`）。
 
-        ゲーム自身の `宿泊する` から始めた宿泊は**自分の宿屋でも素のまま**（宿代を取る）。
+        ゲーム自身の `宿泊する` から始めた宿泊は**素のまま**（宿代を取る）。
         版33 までは両方を無料にしていたが、払って戻るのが見えず分かりづらかったので、
         無料は別のボタンにした（本人の指摘）。
+        版40 からは自分の宿にその `宿泊する` を出さない（`HIDDEN_INN_CLASSES`）ので、
+        ここを通るのはよその宿屋の宿泊だけになる。判定は残す
+        （ボタンを伏せてもゲームの経路そのものは塞いでいない）。
         """
         home = state.get("own_stay")
         if isinstance(home, dict) and modfacility.inside(app, home.get("facility")):

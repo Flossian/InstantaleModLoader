@@ -119,6 +119,7 @@ BANDS = (
         "128_item_image_variety",
         "129_balance_item_price",
         "134_balance_item_effects",
+        "135_fix_inn_button_order",
         "130_currency_unit",
         "131_sharp_portrait",
         "132_npc_variety",

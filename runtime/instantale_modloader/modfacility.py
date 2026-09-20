@@ -108,6 +108,14 @@ DEFAULT_CONFIG = {"level_of_detail": 0}
 #: 移動のボタンの spec のクラス名（GAME.md §2.2）。
 MOVE_CLS = "MovePhaseManager"
 
+#: 会話のボタンの spec のクラス名。ゲームは施設の選択肢の**最後**に足す。
+TALK_CLS = "DisplayTalkChoice"
+
+#: ゲームが後ろに置く選択肢。自前のボタンはこの手前に入れる。
+#: 素の施設は 操作 → 出る → 会話する の順なので（`232_probe_facility_choices` で実測。
+#: GAME.md §2.2）、MOD の建物もその並びに合わせる（本人の指定）。
+TAIL_CLASSES = (MOVE_CLS, TALK_CLS)
+
 
 # --------------------------------------------------------------------------
 # id
@@ -198,7 +206,7 @@ def entries(owner=None):
 
 def register(owner, facility_id=None, *, key=None, fields=None, choices=None,
              exit_label=None, keep_inside=None, hub=None, plain=None, priority=0,
-             on=None, write=None):
+             hide=None, on=None, write=None):
     """層を1つ積む。id を返す。
 
     | 引数 | |
@@ -207,13 +215,20 @@ def register(owner, facility_id=None, *, key=None, fields=None, choices=None,
     | `facility_id` | 省いて `key` を渡す。id は `mod:<owner>:<key>` になる |
     | `key` | MOD の中で建物を見分ける鍵 |
     | `fields` | 素データの初期値（`FACILITY_FIELDS` の項目名）。控えの写しが在ればそちらが勝つ |
-    | `choices` | 建物の中の選択肢。`[{"key", "label", "on"}, ...]` か、`fn(info)` がそれを返す |
+    | `choices` | 建物の中の選択肢。`[{"key", "label", "on", "replaces"}, ...]` か、`fn(info)` がそれを返す |
     | `exit_label` | 出口の文言。省くと `DEFAULT_EXIT_LABEL` |
     | `keep_inside` | 中に立ったまま保存してよいか。`True` か `fn(info) -> bool`。既定は入口へ移す |
     | `hub` | 繋ぎ先の種類。`"entrance"`（既定。街に着いてすぐの場所）か `"ward"`（入口の下の区画の1つ） |
     | `plain` | 真なら、中に立っている間だけ素データの写しを `world_dict` / `save_data_dict` に置く（`install_plain`）。ゲームが施設 id で素データを引く種類（闘技場）に |
     | `priority` | 選択肢を並べる順。小さいほど先 |
+    | `hide` | この建物では出さない**ゲームの**選択肢。spec のクラス名の並びか、`fn(info)` がそれを返す |
     | `on` | 場面ごとのフック（`fire` の site 名） |
+
+    `hide` はゲームが施設の種類や主から勝手に出す選択肢を伏せるためのもの
+    （`330_real_estate` の家は `DisplayTalkChoice` を伏せる。
+    主を据えるとゲームが `会話する` を出すが、その管理人は一覧に出さない人なので
+    誰も並ばない選択肢になる）。**建物ごとの話なので層が持つ。**
+    落とすのは spec のクラス名が一致したものだけで、文言では見ない（GAME.md §2.2）。
 
     `keep_inside` を真にするのは、**その建物がロードで必ず建て直る**ときだけ。
     建て直らない建物の id が立ち位置に残ると、その世界は二度と開けない
@@ -232,7 +247,7 @@ def register(owner, facility_id=None, *, key=None, fields=None, choices=None,
     layer = {"owner": owner, "fields": dict(fields or {}),
              "choices": choices, "exit_label": exit_label,
              "keep_inside": keep_inside, "hub": hub, "plain": bool(plain),
-             "priority": int(priority), "on": dict(on or {})}
+             "priority": int(priority), "hide": hide, "on": dict(on or {})}
     record = _record(facility_id)
     record["layers"] = [old for old in record["layers"]
                         if old["owner"] != owner]
@@ -2015,6 +2030,68 @@ def can_add_here(app, buttons):
     return not game_is_busy(app) and is_top_screen(buttons)
 
 
+def hidden_choices(app, facility_id, buttons=None):
+    """その建物では出さないゲームの選択肢（spec のクラス名の並び）。
+
+    層の `hide` を集める。関数なら呼んで、落ちたら「伏せない」に倒す
+    （伏せ損なうより、伏せたつもりで選択肢が全部消えるほうが困る）。
+    """
+    names = []
+    for layer in layers_for(facility_id):
+        want = layer.get("hide")
+        if callable(want):
+            try:
+                want = want({"app": app, "facility_id": facility_id,
+                             "buttons": buttons})
+            except Exception:
+                log_exc("modfacility: the hide list of {} raised".format(facility_id))
+                want = None
+        for name in (want or ()):
+            if name and str(name) not in names:
+                names.append(str(name))
+    return names
+
+
+def drop_hidden_choices(app, buttons, facility_id, screen=None, write=None):
+    """`hide` に挙がっているゲームの選択肢を落とす。`{クラス名: 落とした位置}` を返す。
+
+    位置は**落とした後の並びでの添字**で、その選択肢の代わりを同じ場所に出すために使う
+    （`choices` の `replaces`）。同じクラスが2つ在れば先に出てきたほうの位置。
+
+    ゲームは施設の種類や主から選択肢を勝手に出す。
+    その中に、その建物では成り立たないものが混じることがある
+    （`330_real_estate` の家は主を据えた時点でゲームが `会話する` を出すが、
+    その管理人は一覧に出さない人なので誰も並ばない）。
+
+    **自前のボタンは落とさない。** 印の付いたものは飛ばす
+    （こちらのボタンにも無害な既存クラスの spec を載せているため。GAME.md §2.2）。
+    ゲームは塗り直しのたびに選択肢を組み直すので、ここも毎回走る。
+    """
+    names = hidden_choices(app, facility_id, buttons)
+    if not names:
+        return {}
+    screen = _screen(screen)
+
+    def ours(entry):
+        return screen is not None and screen.mark_of(entry) is not None
+
+    kept, slots, gone = [], {}, []
+    for entry in buttons:
+        cls = ui.spec_cls_name(entry)
+        if cls in names and not ours(entry):
+            gone.append((entry.get("text") if isinstance(entry, dict) else None,
+                         cls))
+            slots.setdefault(cls, len(kept))
+            continue
+        kept.append(entry)
+    if not gone:
+        return {}
+    buttons[:] = kept
+    if write:
+        write("modfacility: {} hides {}".format(facility_id, gone))
+    return slots
+
+
 def add_inside_buttons(app, buttons, facility_id, screen=None, write=None):
     """建物の中の選択肢を足す。**出口もここで出す**。
 
@@ -2033,9 +2110,14 @@ def add_inside_buttons(app, buttons, facility_id, screen=None, write=None):
         # 最初の画面（`宿泊する` / `会話する`）まで下位と読んで**出口が出ず、
         # 外に出られなくなった**（同日）。入口の種類でも見る（`TOP_ENTRY_CLASSES`）。
         return False
+    # 伏せるのは自前の選択肢を足す前（`at` を残りの並びから決めるため）。
+    slots = drop_hidden_choices(app, buttons, facility_id, screen=screen,
+                                write=write)
+    # 自前のボタンはゲームが後ろに置く選択肢（移動・会話）の手前に入れる。
+    # 素の施設が 操作 → 出る → 会話する の順なので、MOD の建物もそれに揃える。
     at = len(buttons)
     for index, item in enumerate(buttons):
-        if ui.spec_cls_name(item) == MOVE_CLS:
+        if ui.spec_cls_name(item) in TAIL_CLASSES:
             at = index
             break
     added = False
@@ -2045,6 +2127,16 @@ def add_inside_buttons(app, buttons, facility_id, screen=None, write=None):
             # ゲームの移動が並んでいる画面。出る道はもうあるので足さない。
             continue
         value = _press_value(kind, facility_id, choice["key"])
+        # 伏せたゲームの選択肢の代わりなら、**その選択肢が居た場所**に出す
+        # （`replaces`）。自分の宿の `無料で泊まる` はゲームの `宿泊する` と
+        # 同じ並びで出す（本人の指定）。宣言が無ければ `at`（移動・会話の手前）に足す。
+        # 居た場所が `at` と同じでも、その場所に出す
+        # （`<` にしていたら、ゲームの並びが `会話する` → `宿泊する` のとき後ろへ落ちた）。
+        slot = slots.get(str(choice.get("replaces") or "")) if choice.get("replaces") \
+            else None
+        if slot is not None and slot > at:
+            slot = None
+        target = at if slot is None else slot
         if _already(buttons, value, screen):
             # 既に在る。文言だけ層の今の値に更新する（売上の額のように、押した後に変わる。
             # 実機 2026-09-14：受け取っても「売上を受け取る(N G)」のままだった）。
@@ -2053,14 +2145,28 @@ def add_inside_buttons(app, buttons, facility_id, screen=None, write=None):
                         and present.get("text") != choice["label"]:
                     present["text"] = choice["label"]
                     added = True
+            # 入る場所より後ろに居るなら、そこへ動かす。
+            # 塗り直しは1手に何度も走り、ゲームは組み直しの途中でも選択肢を足す。
+            # 先の塗り直しで（まだ会話も伏せるものも無く）後ろに足された自前のボタンは、
+            # 次の塗り直しでそれが現れても `_already` で素通りし、
+            # 後ろに残ったままだった（実機 2026-09-20。宿泊を終えた直後の自分の宿で
+            # `会話する` → `無料で泊まる` の順になった）。
+            index = next((i for i, present in enumerate(buttons)
+                          if screen.mark_of(present) == value), None)
+            if index is not None and index > target:
+                buttons.insert(target, buttons.pop(index))
+                if index > at:
+                    # `at` に居たゲームの選択肢が1つ後ろへずれた。
+                    at += 1
+                added = True
             continue
         entry = screen.button(choice["label"], mark=value)
         if entry is None:
             continue
-        buttons.insert(at, entry)
+        buttons.insert(target, entry)
         at += 1
         added = True
-    return added
+    return added or bool(slots)
 
 
 def add_exit_button(app, buttons, facility_id="", screen=None, force=False):

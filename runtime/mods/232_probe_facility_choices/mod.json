@@ -1,0 +1,19 @@
+{
+  "entry": "probe_facility_choices.py",
+  "api": 1,
+  "kind": "probe",
+  "name": {
+    "en": "Probe: facility choice order",
+    "ja": "計測: 施設の選択肢の並び"
+  },
+  "description": {
+    "en": "Records, on every move into a facility, the facility's own `choices` (its type and iteration order), the buttons the game built from it, and whether string hashing is randomized in this process. Dumps the bytecode of the functions that build the buttons once. Read-only. For finding why inns list 'Leave' first",
+    "ja": "施設へ入るたびに、施設が持つ `choices`（型と、そのまま回したときの順）とゲームがそこから組んだボタンの並び、文字列のハッシュがこのプロセスで乱数化されているかを録る。ボタンを組む関数のバイトコードも1度だけ書き出す。読み取りだけでゲームは変えない。宿屋だけ `出る` が先頭になる原因を探すため"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "after": [
+    "135_fix_inn_button_order"
+  ],
+  "debug": true
+}

@@ -189,7 +189,9 @@ class VacationStartManager:
             {"text": "休養をとる", "spec": PhaseSpec("VacationRestManager", [])},
             {"text": "他者と交流", "spec": PhaseSpec("VacationSocializeManager",
                                                  [self.months, self.quality])},
-            {"text": "アイテム作成", "spec": PhaseSpec("ItemCraftManager", [])},
+            # 実機ではここに載るのは `NotImplementedManager`（押しても何も起きない
+            # 未実装の置き場所。実測 2026-09-20）。`ItemCraftManager` ではない。
+            {"text": "アイテム作成", "spec": PhaseSpec("NotImplementedManager", [])},
             {"text": "宿泊を終える", "spec": PhaseSpec("VacationEndManager", [])},
         ]
         self.app.refresh_choice_buttons(reset_page=True)
@@ -222,8 +224,11 @@ class VacationSocializeManager:
         return None
 
 
-class ItemCraftManager:
-    """アイテム作成。自分の家では選択肢ごと出さない。"""
+class NotImplementedManager:
+    """ゲームの未実装の置き場所。宿泊の `アイテム作成` はこれが載っている（実測）。
+
+    自分の家では選択肢ごと出さない。
+    """
 
     def __init__(self, app):
         self.app = app
@@ -879,7 +884,7 @@ def setup(configure=None, keep_state=False, gold=100000):
     main.VacationEndManager = classes["end"]
     main.VacationRestManager = classes["rest"]
     main.VacationSocializeManager = VacationSocializeManager
-    main.ItemCraftManager = ItemCraftManager
+    main.NotImplementedManager = NotImplementedManager
 
     os.makedirs(OUT_DIR, exist_ok=True)
     if os.path.exists(LOG_PATH):
@@ -1060,6 +1065,13 @@ check("「滞在する」が出る", app.has(module.STAY_LABEL), app.labels())
 check("「保管庫をあける」が出る", app.has(module.STORAGE_LABEL), app.labels())
 check("ゲームの出口があるときは出口を足さない", not app.has(module.LEAVE_LABEL),
       app.labels())
+# 主を据えるとゲームが `会話する` を出すが、管理人は一覧に出さない人なので誰も並ばない。
+# 大家とは話さない（本人の指定）ので、家では伏せる（`modfacility` の `hide`）。
+check("家では「会話する」を出さない", not app.has(TALK_TEXT), app.labels())
+check("よその施設の「会話する」には触らない",
+      TALK_TEXT in [entry.get("text") for entry in app.go(places["inn"])],
+      app.labels())
+app.go(home)
 
 # 実機のゲームは、自分で足した施設の中では選択肢を1つも作らない（2026-09-11）。
 # その画面でも滞在・保管庫・出口が出ること。出口が無いと建物から出られなくなる。
@@ -1520,12 +1532,17 @@ check("入れていなければ年齢からの見積もり",
 app.press(module.CANCEL_LABEL)
 CLOCK.settle()
 
-print("[宿屋の宿泊期間に合わせる]")
+print("[宿泊の長さはローダの窓口が決める]")
+# 版40 から、月数も日数も窓口（`durations.inn_stay`）の答えをそのまま使う。
+# 宿屋の部屋のボタンからの観測は控えるだけで、答えにはしない。
+# 観測を答えにしていた版39 までは、設定を変えても控えが古いままだった
+# （`3ヵ月` に戻した後も1ヵ月で滞在していた。実機 2026-09-20。VERIFICATION.md §3.62 #11）。
 module, ctx, app, places, classes = setup()
-guess = durations.game_inn_stay(app)["months"] * module.DAYS_PER_MONTH * module.RENT_STAYS
+window_months = durations.game_inn_stay(app)["months"]
+guess = window_months * module.DAYS_PER_MONTH * module.RENT_STAYS
 app.press(module.OFFICE_LABEL)
 CLOCK.settle()
-check("覚えが無いうちは年齢の見積もりで値札が出る",
+check("値札は窓口の長さの4回ぶん",
       "{}日".format(guess) in (app.label_like("借りる") or ""),
       app.label_like("借りる"))
 app.press(module.CANCEL_LABEL)
@@ -1536,7 +1553,7 @@ def room_menu(months):
     """宿屋で「宿泊する」を押したときにゲームが組む部屋の選択肢。
 
     spec は `VacationStartManager(app, months, quality)`。
-    **月数はここに載っている値が答え**で、年齢の変動式も 315 の設定も通った後。
+    ここに載っている月数は**観測**で、控えはするが答えにはしない（版40）。
     """
     app.buttons = [
         {"text": "犬小屋(0G)", "spec": PhaseSpec("VacationStartManager",
@@ -1549,118 +1566,67 @@ def room_menu(months):
     CLOCK.settle()
 
 
-# 宿屋で部屋の選択肢を開くだけで覚える（泊まらなくてよい）。
+# 宿屋で部屋の選択肢を開くと控えるが、答えは窓口のまま。
 app.go(places["inn"])
 room_menu(2)
-check("宿屋の部屋のボタンから月数を覚える",
+check("宿屋の部屋のボタンの月数は控える",
       (read_state() or {}).get("stay_months") == 2, read_state())
-check("覚えたことがログに残る",
+check("控えたことがログに残る",
       "stay length: the inn's rooms are booked by 2 month(s)" in read_log(),
       read_log()[-300:])
-
-# 実際に泊まると、進んだ日数のほうを覚える（月数×30 とは限らない）。
-app.process_choice(classes["stay"](app, 2, "private_room"), "個室(100G)")
-CLOCK.settle()
-check("宿屋の宿泊で進んだ日数を覚える",
-      (read_state() or {}).get("stay_days") == 2 * 30, read_state())
 
 app.go(places["office"])
 rent(app, module)
 signed = contract_of(module, app)
-check("契約の周期は宿泊4回ぶんの日数",
-      (signed or {}).get("term") == 2 * 30 * module.RENT_STAYS, signed)
+check("契約の周期は窓口の長さの4回ぶん（部屋のボタンでは動かない）",
+      (signed or {}).get("term") == guess, signed)
 
 home_now = home_of(app, module, places)
 app.go(home_now)
 app.press(module.STAY_LABEL)
 CLOCK.settle()
-check("自分の家の滞在も宿屋と同じ月数で起きる", app.stays and app.stays[-1][0] == 2,
-      app.stays)
-check("自分の家の滞在は宿屋の覚えを書き換えない",
-      (read_state() or {}).get("stay_days") == 2 * 30, read_state())
-# 開いたままの滞在を次の節へ持ち越さない（古い実装のインスタンスが旗を握ったままになる）。
-app.process_choice(classes["rest"](app, 2, module.STAY_QUALITY), "休養をとる")
+check("自分の家の滞在も窓口と同じ月数で起きる",
+      app.stays and app.stays[-1][0] == window_months, app.stays)
+check("観測と窓口が食い違ったら1度だけ残す",
+      "but the window says {}".format(window_months) in read_log(),
+      read_log()[-400:])
+check("誰が決めた長さかもログに残る",
+      "stay length: {} month(s) by the game's own rule".format(window_months)
+      in read_log(), read_log()[-400:])
+app.process_choice(classes["rest"](app, window_months, module.STAY_QUALITY),
+                   "休養をとる")
 CLOCK.settle()
 
-# 315 の週単位。ゲームに渡る月数は1のまま、日数だけが縮む。
-print("[他 MOD が宿泊日数を変えている]")
+print("[設定を変えたらその場で効く]")
+# `1ヵ月` と `1週間` はどちらもゲームに渡る月数が 1 なので、
+# 月数を見張る形（版39 の `stay_days_for`）では見分けられなかった。
+# 窓口は日数も持っているので、切り替えた時点で効く。
 module, ctx, app, places, classes = setup()
 app.go(places["inn"])
-room_menu(1)
-check("週単位でも部屋のボタンの月数（1）を覚える",
-      (read_state() or {}).get("stay_months") == 1, read_state())
-app.short_stay_days = 7                    # 315 の予算が日数を縮めた形
+room_menu(1)                                 # `1ヵ月` の頃の観測を控えに残す
 app.process_choice(classes["stay"](app, 1, "private_room"), "個室(100G)")
 CLOCK.settle()
-check("縮んだ日数のほうを覚える", (read_state() or {}).get("stay_days") == 7,
-      read_state())
-app.go(places["office"])
-rent(app, module)
-check("契約の周期も縮んだ日数の4回ぶん",
-      (contract_of(module, app) or {}).get("term") == 7 * module.RENT_STAYS,
-      contract_of(module, app))
-short_home = home_of(app, module, places)
-app.go(short_home)
-app.press(module.STAY_LABEL)
-CLOCK.settle()
-check("自分の家の滞在も同じ月数で起こす（日数は他 MOD が縮める）",
-      app.stays and app.stays[-1][0] == 1, app.stays)
-app.process_choice(classes["rest"](app, 1, module.STAY_QUALITY), "休養をとる")
-CLOCK.settle()
-
-# よその MOD が建てた宿での「無料で泊まる」は、宿屋の値として数えない。
-print("[宿屋に泊まらなくても決まる]")
-# 部屋の選択肢を開いて月数を覚えたら、あとは自分の家の滞在で日数が決まる。
-module, ctx, app, places, classes = setup()
-app.go(places["inn"])
-room_menu(1)                                 # 開くだけ（泊まらない）
-check("泊まらなくても月数は覚える",
-      (read_state() or {}).get("stay_months") == 1, read_state())
-check("日数はまだ無い", (read_state() or {}).get("stay_days") is None, read_state())
-app.go(places["office"])
-rent(app, module)
-own_home = home_of(app, module, places)
-app.go(own_home)
-app.short_stay_days = 7                      # 他 MOD が日数を縮めている
-app.press(module.STAY_LABEL)
-CLOCK.settle()
-check("自分の家の滞在でも日数を測る", (read_state() or {}).get("stay_days") == 7,
-      read_state())
-check("測ったことがログに残る",
-      "the home stay moved the calendar 7 day(s)" in read_log(), read_log()[-300:])
-app.process_choice(classes["rest"](app, 1, module.STAY_QUALITY), "休養をとる")
-CLOCK.settle()
-# 2軒目（別の土地）の契約は、測った日数で周期が決まる。
-app.go(places["away_office"])
-app.player.current_area = places["away"]
-rent(app, module)
-second_contract = [c for c in (read_state() or {}).get("contracts") or []
-                   if c.get("area") == "1"]
-check("次の契約の周期は測った日数の4回ぶん",
-      second_contract and second_contract[0].get("term") == 7 * module.RENT_STAYS,
-      second_contract)
-
-# 宿屋の月数が変わったら、前に測った日数はもう答えではない。
-app.player.current_area = places["area"]
-app.go(places["inn"])
-room_menu(3)
-check("測ったときの月数が控えに残る",
-      (read_state() or {}).get("stay_days_for") == 1, read_state())
-# 2軒目を引き払って、同じ土地の値札をもう一度見る。
-app.player.current_area = places["away"]
-app.go(places["away_office"])
-app.press(module.OFFICE_LABEL)
-CLOCK.settle()
-app.press(module.RELEASE_LABEL)
-CLOCK.settle()
-app.go(places["away_office"])
-app.press(module.OFFICE_LABEL)
-CLOCK.settle()
-check("月数が変われば前の日数は使わない（値札は月数×30 の4回ぶん）",
-      "{}日".format(3 * 30 * module.RENT_STAYS) in (app.label_like("借りる") or ""),
-      app.label_like("借りる"))
-app.press(module.CANCEL_LABEL)
-CLOCK.settle()
+check("月単位のうちは30日で数える",
+      (read_state() or {}).get("stay_days") == 30, read_state())
+PLAN["length"] = "1週間"
+durations.declare(durations.INN_STAY, fake_length, owner="fake_315")
+try:
+    app.go(places["office"])
+    rent(app, module)
+    check("週単位へ変えたら契約の周期は7日の4回ぶん",
+          (contract_of(module, app) or {}).get("term") == 7 * module.RENT_STAYS,
+          contract_of(module, app))
+    short_home = home_of(app, module, places)
+    app.go(short_home)
+    app.press(module.STAY_LABEL)
+    CLOCK.settle()
+    check("自分の家の滞在も週単位の月数（1）で起こす",
+          app.stays and app.stays[-1][0] == 1, app.stays)
+    app.process_choice(classes["rest"](app, 1, module.STAY_QUALITY), "休養をとる")
+    CLOCK.settle()
+finally:
+    durations.forget("fake_315")
+    PLAN["length"] = "デフォルト"
 
 print("[自分の家の滞在で月数を学び直さない]")
 # ゲームは滞在の最中の画面に `まだ宿泊する`（`VacationStartManager`）を並べる。

@@ -208,6 +208,12 @@ def apply(ctx):
                         "texts_dropped": window["overflow"],
                         "loading_dots": window["dots"],
                         "seconds": round(time.monotonic() - started, 1),
+                        # 窓が終わった時点で並んでいるボタン。
+                        # `VacationStartManager` の後なら**活動の選択肢**がここに写る
+                        # （`休養をとる` / `アイテム作成` の spec のクラス名が分かる）。
+                        # 部屋選びと違ってここは `DisplayXxxChoice` を通らないので、
+                        # 上の2つのフックでは録れない。
+                        "buttons_after": buttons_brief(app),
                     }
                     write("{} done: gold {} -> {} (moved {}) days={} bg={} "
                           "texts={} dots={} in {}s".format(
@@ -217,6 +223,9 @@ def apply(ctx):
                               window["dots"], row["seconds"]))
                     for text in window["texts"]:
                         write("    text: {!r}".format(text))
+                    for entry in row["buttons_after"]:
+                        write("    after: {!r} cls={} args={}".format(
+                            entry["text"], entry["cls"], entry["args"]))
                     record(row)
                 except Exception:
                     ctx.log_exc("vacation probe: cannot record the window")

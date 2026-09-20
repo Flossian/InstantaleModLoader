@@ -46,7 +46,7 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml                              # noqa: E402
-from instantale_modloader import modfacility, modnpc            # noqa: E402
+from instantale_modloader import durations, modfacility, modnpc  # noqa: E402
 from instantale_modloader import state as loader_state          # noqa: E402
 
 
@@ -1051,22 +1051,30 @@ check("宿屋の絵に MOD は触らない（描かず、頼まない。移動�
       app.backgrounds)
 
 print("[ゲームが出す画面との重なり]")
-# `inn` 型ではゲーム自身が `宿泊する(N)` を出す（実機 2026-09-13）。こちらの「無料で泊まる」は
-# それとは**別のボタン**として並ぶ（版34。同じ入口を押させて後から返す形は分かりづらかった）。
+# `inn` 型ではゲーム自身が `宿泊する(N)` を出す（実機 2026-09-13）が、**自分の宿では伏せる**
+# （版40。宿代を取る宿泊を自分の宿に並べる理由が無い。本人の指定）。残るのは「無料で泊まる」。
+# ゲームが組む順は 操作 / 出る / 会話する（`232_probe_facility_choices` で実測。
+# 宿屋だけ `出る` が先頭に来るのは `135_fix_inn_button_order` が直す）。
 app.buttons = [{"text": "宿泊する(4ヵ月)", "spec": PhaseSpec("DisplayVacationChoice", [4])},
-               {"text": TALK_TEXT, "spec": PhaseSpec("DisplayTalkChoice", [])},
-               {"text": EXIT_TEXT, "spec": PhaseSpec("MovePhaseManager", ["10", "9", "1"])}]
+               {"text": EXIT_TEXT, "spec": PhaseSpec("MovePhaseManager", ["10", "9", "1"])},
+               {"text": TALK_TEXT, "spec": PhaseSpec("DisplayTalkChoice", [])}]
 app.refresh_choice_buttons(reset_page=True)
 CLOCK.settle()
-check("ゲームの「宿泊する」と並んで「無料で泊まる」が出る",
-      app.has("宿泊する") and app.has(module.STAY_LABEL), app.labels())
+check("自分の宿ではゲームの「宿泊する」を出さない", not app.has("宿泊する"), app.labels())
+check("「無料で泊まる」は出る", app.has(module.STAY_LABEL), app.labels())
+check("主人との「会話する」は残る", app.has(TALK_TEXT), app.labels())
+# 並びは動かさない。伏せた `宿泊する` が居た場所に `無料で泊まる` を出す（本人の指定）。
+check("「無料で泊まる」はゲームの「宿泊する」が居た場所に出る",
+      app.labels().index(module.STAY_LABEL) == 0, app.labels())
 check("売上の選択肢は出る", app.has("売上を受け取る"), app.labels())
-check("ゲームの選択肢の後、出口の前に並ぶ",
-      app.labels().index("売上を受け取る(まだ無い)") > app.labels().index(TALK_TEXT)
-      and app.labels().index("売上を受け取る(まだ無い)") < app.labels().index(EXIT_TEXT), app.labels())
+# 素の施設と同じ並びにする（本人の指定）。ゲームは `出る` と `会話する` を後ろに置く。
+check("素の施設と同じ並び: 操作 → 出る → 会話する",
+      app.labels() == [module.STAY_LABEL, "売上を受け取る(まだ無い)", EXIT_TEXT, TALK_TEXT],
+      app.labels())
+# ボタンは伏せても、ゲームの宿泊そのものには手を出さない（よその宿屋で押される経路は同じ）。
 gold_before = app.player.gold
 app.process_choice(classes["stay"](app, 4, "bunk"), "簡易寝台(10G)")
-check("ゲームの「宿泊する」は自分の宿屋でも素のまま（宿代を取る）",
+check("ゲームの宿泊はそのまま宿代を取る",
       app.player.gold == gold_before - ROOM_PRICE, (gold_before, app.player.gold))
 app.press("宿泊を終える")
 # 部屋選び（ゲームの下位の画面。移動のボタンが無い）には混ぜない。
@@ -1112,8 +1120,13 @@ day_before = world.days_elapsed
 log_mark = len(read_log())
 app.press(module.STAY_LABEL)
 stay_log = read_log()[log_mark:]
-# 第1引数はゲームの部屋選びと同じ 1（1単位）。年齢の式（31歳なら4）を渡さない（版35）。
-check("ゲームの宿泊が1単位で起きる", app.stays and app.stays[-1] == (1, module.STAY_QUALITY), app.stays)
+# 第1引数は**いまの宿屋と同じ月数**。ローダの窓口（`durations.inn_stay`）から取る（版41）。
+# 版40 までは 1 を直に渡していて、設定が `3ヵ月` のときに
+# 「払えば3ヵ月、無料なら1ヵ月」という食い違いになっていた
+# （実機 2026-09-20。VERIFICATION.md §3.63 #7e）。
+stay_months = durations.game_inn_stay(app)["months"]
+check("宿泊は窓口と同じ月数で起きる",
+      app.stays and app.stays[-1] == (stay_months, module.STAY_QUALITY), app.stays)
 check("宿代は前払いで打ち消される（所持金は元のまま）",
       app.player.gold == gold_before, (gold_before, app.player.gold))
 check("設定の部屋の額を先に足す（ログに prepaid）",
@@ -1121,7 +1134,8 @@ check("設定の部屋の額を先に足す（ログに prepaid）",
       stay_log)
 check("打ち消し合ったので帳尻は動かない（corrected は出ない）",
       "corrected" not in stay_log, stay_log)
-check("暦は1単位ぶん進む", world.days_elapsed == day_before + 30, world.days_elapsed)
+check("暦は窓口の長さぶん進む",
+      world.days_elapsed == day_before + stay_months * 30, world.days_elapsed)
 check("宿泊中は自前の選択肢を混ぜない",
       not app.has(module.STAY_LABEL) and not app.has("売上を受け取る"), app.labels())
 ended_before = app.stay_ended

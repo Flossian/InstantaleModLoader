@@ -37,6 +37,7 @@
     "122_ui_conversation_log",
     "133_ui_area_difficulty",
     "134_balance_item_effects",
+    "135_fix_inn_button_order",
     "200_probe_bug_sites",
     "201_probe_missing_attr",
     "202_probe_summarizers",
@@ -105,7 +106,8 @@
     "228_probe_area_move_reject",
     "229_probe_mod_npc",
     "230_probe_image_generation",
-    "231_probe_training"
+    "231_probe_training",
+    "232_probe_facility_choices"
   ],
   "disabled": []
 }

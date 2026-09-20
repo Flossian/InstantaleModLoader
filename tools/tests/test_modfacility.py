@@ -374,8 +374,107 @@ def main():
     texts = [e.get("text") for e in app2.buttons]
     ok &= check("入口の種類だけの画面にも足す", "滞在する" in texts)
     ok &= check("ゲームの出口が無いので出口を足す", "外に出る" in texts)
-    ok &= check("並びは ゲーム → こちら → 出口",
-                texts.index("会話する") < texts.index("滞在する") < texts.index("外に出る"))
+    # 素の施設は 操作 → 出る → 会話する の順（`232_probe_facility_choices` で実測）。
+    # MOD の建物もその並びに合わせる（本人の指定）ので、`会話する` は最後に残す。
+    ok &= check("並びは 素の施設と同じ ゲームの操作 → こちら → 出口 → 会話する",
+                texts == ["宿泊する(3ヵ月)", "滞在する", "外に出る", "会話する"])
+
+    print("hide: その建物では出さないゲームの選択肢")
+    modfacility.register("915_invest", facility_id=fid,
+                         choices=[{"key": "stay", "label": "滞在する",
+                                   "on": lambda info: pressed.append(info)}],
+                         exit_label="外に出る", hide=("DisplayTalkChoice",))
+    app2.buttons = [{"text": "宿泊する(3ヵ月)", "spec": PhaseSpec("DisplayVacationChoice", [3])},
+                    {"text": "会話する", "spec": PhaseSpec("DisplayTalkChoice", [])}]
+    modfacility.maintain_buttons(app2)
+    texts = [e.get("text") for e in app2.buttons]
+    ok &= check("伏せた種類は消える", "会話する" not in texts)
+    ok &= check("ほかのゲームの選択肢は残る", "宿泊する(3ヵ月)" in texts)
+    ok &= check("自前の選択肢と出口は出る",
+                "滞在する" in texts and "外に出る" in texts)
+    # **自前のボタンは伏せの対象にしない。** こちらのボタンも spec に無害な既存クラスを
+    # 載せているので（GAME.md §2.2）、そのクラス名を伏せると自分のボタンまで消える。
+    modfacility.register("915_invest", facility_id=fid,
+                         choices=[{"key": "stay", "label": "滞在する",
+                                   "on": lambda info: pressed.append(info)}],
+                         exit_label="外に出る", hide=(ui.SAFE_CLS,))
+    app2.buttons = game_buttons(("入口", "0"))
+    modfacility.maintain_buttons(app2)          # 足す
+    modfacility.maintain_buttons(app2)          # 2度目は伏せの対象に見える
+    ok &= check("印の付いた自前のボタンは残る",
+                "滞在する" in [e.get("text") for e in app2.buttons])
+
+    print("replaces: 伏せたものの代わりは、その選択肢が居た場所に出す")
+    modfacility.register("915_invest", facility_id=fid,
+                         choices=[{"key": "stay", "label": "滞在する",
+                                   "replaces": "DisplayVacationChoice",
+                                   "on": lambda info: pressed.append(info)},
+                                  {"key": "collect", "label": "売上を受け取る",
+                                   "on": lambda info: pressed.append(info)}],
+                         exit_label="外に出る", hide=("DisplayVacationChoice",))
+    app2.buttons = [{"text": "宿泊する(3ヵ月)", "spec": PhaseSpec("DisplayVacationChoice", [3])},
+                    {"text": "会話する", "spec": PhaseSpec("DisplayTalkChoice", [])}]
+    modfacility.maintain_buttons(app2)
+    texts = [e.get("text") for e in app2.buttons]
+    ok &= check("代わりは伏せたものの場所に出る",
+                texts.index("滞在する") < texts.index("会話する"))
+    ok &= check("宣言の無い選択肢はこちらの並びの後ろ",
+                texts.index("滞在する") < texts.index("売上を受け取る"))
+    ok &= check("出口はこちらの最後（`会話する` の前）",
+                texts == ["滞在する", "売上を受け取る", "外に出る", "会話する"])
+    # 伏せるものが無い画面では `replaces` は効かない（その場所が無い）。
+    # 素の店の並び（売買する / 出る / 会話する）に混ぜたときは、
+    # ゲームの操作の後、移動と会話の前に入る。
+    app2.buttons = [{"text": "売買する", "spec": PhaseSpec("ShoppingStartManagerRemake", [])}] \
+        + game_buttons(("入口", "0")) \
+        + [{"text": "会話する", "spec": PhaseSpec("DisplayTalkChoice", [])}]
+    modfacility.maintain_buttons(app2)
+    texts = [e.get("text") for e in app2.buttons]
+    ok &= check("伏せるものが無ければ ゲームの操作の後・移動と会話の前",
+                texts == ["売買する", "滞在する", "売上を受け取る", "入口", "会話する"])
+
+    # ゲームは組み直しの途中でも選択肢を足す（塗り直しは1手に何度も走る）。
+    # 先の塗り直しでは伏せるものがまだ無く、自前のボタンは後ろに足される。
+    # その後にゲームが `宿泊する` を先頭へ足しても、次の塗り直しで
+    # 自前のボタンはその場所へ動く（実機 2026-09-20。宿泊を終えた直後の自分の宿で
+    # `会話する` → `無料で泊まる` の順になった）。
+    app2.buttons = [{"text": "会話する", "spec": PhaseSpec("DisplayTalkChoice", [])}]
+    modfacility.maintain_buttons(app2)
+    texts = [e.get("text") for e in app2.buttons]
+    ok &= check("先の塗り直し: 伏せるものが無くても `会話する` の前",
+                texts == ["滞在する", "売上を受け取る", "外に出る", "会話する"])
+    # 焼かれた並びが古い画面（自前のボタンが `会話する` の後ろ）を読んでも戻す。
+    app2.buttons.insert(0, app2.buttons.pop(texts.index("会話する")))
+    modfacility.maintain_buttons(app2)
+    texts = [e.get("text") for e in app2.buttons]
+    ok &= check("後ろに居た自前のボタンは前へ動く",
+                texts == ["滞在する", "売上を受け取る", "外に出る", "会話する"])
+    app2.buttons.insert(0, {"text": "宿泊する(3ヵ月)",
+                            "spec": PhaseSpec("DisplayVacationChoice", [3])})
+    modfacility.maintain_buttons(app2)
+    texts = [e.get("text") for e in app2.buttons]
+    ok &= check("次の塗り直し: 伏せたものの場所のまま",
+                texts == ["滞在する", "売上を受け取る", "外に出る", "会話する"])
+    ok &= check("動かしても増えない", texts.count("滞在する") == 1)
+    modfacility.maintain_buttons(app2)
+    ok &= check("3度目は何も動かない",
+                [e.get("text") for e in app2.buttons] == texts)
+    # 伏せるものが移動のボタンの直前（`slot == at`）でも、その場所に出す。
+    # 素の宿屋の並び（宿泊する / 出る / 会話する。`135_fix_inn_button_order` の後）。
+    app2.buttons = [{"text": "宿泊する(3ヵ月)",
+                     "spec": PhaseSpec("DisplayVacationChoice", [3])}] \
+        + game_buttons(("入口", "0")) \
+        + [{"text": "会話する", "spec": PhaseSpec("DisplayTalkChoice", [])}]
+    modfacility.maintain_buttons(app2)
+    texts = [e.get("text") for e in app2.buttons]
+    ok &= check("代わりは伏せた場所に出て、残りは移動と会話の前",
+                texts == ["滞在する", "売上を受け取る", "入口", "会話する"])
+
+    # 伏せない形に戻す（この後の検査は素の並びを見る）。
+    modfacility.register("915_invest", facility_id=fid,
+                         choices=[{"key": "stay", "label": "滞在する",
+                                   "on": lambda info: pressed.append(info)}],
+                         exit_label="外に出る")
 
     print("残骸: 焼かれた文言が今と違っても、括弧の前までで掃除する")
     modfacility.register("915_invest", facility_id=fid,

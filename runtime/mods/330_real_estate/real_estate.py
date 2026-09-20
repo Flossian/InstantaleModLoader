@@ -32,7 +32,7 @@ GAME.md §2.28 の「遊んでいる最中に生まれた施設で売買を選�
 建てる・壊す・控える・建て直す・道と出口を出す・背景を呼ぶ・
 保存の直前に立ち位置と選択肢を検める、までがあちらの仕事。
 
-    modfacility.register(OWNER, facility_id=…, fields=…, choices=…, on=…)
+    modfacility.register(OWNER, facility_id=…, fields=…, choices=…, hide=…, on=…)
     modfacility.spawn(app, facility_id, area_id)
 
 この MOD が宣言するのは、ここにしか決められないものだけ
@@ -107,24 +107,23 @@ GAME.md §2.28 の「遊んでいる最中に生まれた施設で売買を選�
 宿泊1回の長さは**ゲームの宿屋と同じ**（自分の家の滞在も同じ長さ）。
 素のゲームは3ヵ月から年齢で伸びる変動式で、
 `315_vacation_custom` を入れていればその設定が効く。
-どちらも自分では決めず、宿屋から2つ覚える。
-
-    月数   宿屋の部屋の選択肢（`VacationStartManager` の spec の `args[0]`）。
-           **開くだけで覚える**。滞在を起こすときに渡す値で、
-           他 MOD の日数の細工もここに噛み合う
-    日数   滞在1回で**実際に進んだ日数**。賃貸の1期はこれを数える
-           （月数×30 とは限らない。315 の週単位は月数1のまま7日しか進めない）。
-           宿屋の宿泊でも**自分の家の滞在でも測る**ので、宿屋に泊まらなくてよい。
-           どの月数で測ったかを添え（`stay_days_for`）、月数が変わったら使わない
-
-**`VacationStartManager.__init__` は見ない。**
-MOD が自分で起こす滞在（`331_facility_investment` の「無料で泊まる」や、この MOD の
-家の滞在）も同じ入口を通るので、よその MOD の都合の月数を宿屋の値として覚えてしまう
-（VERIFICATION.md §3.62）。部屋のボタンはゲームだけが組む。
-日数のほうも、MOD が建てた建物の中の宿泊では数えない。
-
-まだ宿屋の部屋を見ていない世界では、ローダの窓口に聞く（`durations.inn_stay`。
+どちらも自分では決めず、**ローダの窓口に聞く**（`durations.inn_stay`。
 変える MOD が入っていればその答え、無ければゲームの式。TECH.md §3.3.2）。
+窓口は月数と日数の両方を返すので、賃貸の1期もそこから数える
+（月数×30 とは限らない。315 の週単位は月数1のまま7日しか進めない）。
+
+版39 までは宿屋の部屋の選択肢から観測した月数のほうを答えにしていた。
+観測は**部屋の一覧を出したときにしか更新されない**ので、設定を変えても古いままで、
+`3ヵ月` に戻した後も1ヵ月で滞在していた（実機 2026-09-20。VERIFICATION.md §3.62 #11）。
+`1ヵ月` と `1週間` はどちらもゲームに渡る月数が 1 なので、
+「月数が変わったら測り直す」という見張り方でも見分けられない。
+
+観測そのものは残してあり、窓口と食い違ったら1度だけ書く
+（窓口に出さずに長さを変えている MOD が居る、という手掛かりになる）。
+観測に `VacationStartManager.__init__` は見ない。
+MOD が自分で起こす滞在（`331_facility_investment` の「無料で泊まる」や、この MOD の
+家の滞在）も同じ入口を通るので、よその MOD の都合の月数を宿屋の値として拾ってしまう。
+部屋のボタンはゲームだけが組む。
 
 契約の周期は**結んだ時点の長さで固定**する。
 年を取って宿泊が伸びても、いま借りている契約の期限は動かない。
@@ -207,16 +206,29 @@ ACTIVITY_CLASSES = ("VacationRestManager", "VacationTrainManager",
 #: 社交の入口。
 SOCIALIZE_CLS = "VacationSocializeManager"
 
-#: アイテム作成の入口。
-CRAFT_CLS = "ItemCraftManager"
+#: 宿泊の活動に並ぶ `アイテム作成`。
+#: このビルドでは**ゲームの未実装の置き場所**が載っている（押しても何も起きない）。
+#: `ItemCraftManager` は別に在るが、宿泊の活動からは呼ばれない
+#: （実測。宿屋でも自分の家でも同じクラス。VERIFICATION.md §3.62）。
+CRAFT_CLS = "NotImplementedManager"
 
 #: 自分の家の滞在では出さない活動（VERIFICATION.md §3.62）。
 #:
 #: 社交   … 誰と会うかはゲームが決め、自分の家ではその場面が成り立たなかった
-#: 作成   … 自分の家ではまだ成り立っていない
+#: 作成   … 押しても何も起きないボタン。自分の家の画面はこの MOD が出しているので並べない
 #:
 #: 宿屋の側には触らない（落とすのは自分の建物での滞在の最中だけ）。
 HIDDEN_ACTIVITY_CLASSES = (SOCIALIZE_CLS, CRAFT_CLS)
+
+#: 会話の一覧の入口。
+TALK_CLS = "DisplayTalkChoice"
+
+#: 家の中では出さないゲームの選択肢（`modfacility` の `hide`。TECH.md §5.8）。
+#:
+#: 主を据えるとゲームが `会話する` を出すが、**管理人はその一覧に出さない人**なので
+#: （`place(listed=False)`）、誰も並ばない選択肢が家に残る。
+#: 大家とは話さない（管理人の存在自体を公開していないため。本人の指定）。
+HIDDEN_HOME_CLASSES = (TALK_CLS,)
 
 # ---------------------------------------------------------------- 設定（mod.json）
 # ここの定数だけが GUI から変えられる（ローダは入口モジュールのグローバルへ書き込む）。
@@ -599,10 +611,14 @@ def apply(ctx):
             return False
 
     def game_stay_here(app):
-        """ローダの窓口に聞いた宿泊の長さ。誰が決めたかを1度だけログに残す。
+        """いまの宿泊の長さ。**これが答え**。誰が決めたかを1度だけログに残す。
 
-        これは**まだ宿屋の部屋の選択肢を一度も見ていない世界**のための落ちどころ。
-        一度でも見れば、そちら（実際に観測した値）が答えになる。
+        版39 まではここを「まだ宿屋を見ていない世界の落ちどころ」にして、
+        宿屋の部屋の選択肢から観測した値のほうを答えにしていた。
+        観測は設定を変えても更新されない（書き直すのは部屋の一覧を出したときだけ）ので、
+        `3ヵ月` に戻した後も1ヵ月のまま滞在していた（実機 2026-09-20。§3.62 #11）。
+        月数と日数の両方を持っているのも窓口だけ
+        （`1ヵ月` と `1週間` はどちらも月数が 1 で、月数では見分けられない）。
         """
         plan = durations.inn_stay(app, write=write)
         warn_once(("stay-source", plan.get("source"), plan.get("length")),
@@ -616,13 +632,19 @@ def apply(ctx):
         """1回の滞在の月数。**宿屋と同じ**（本人の指定）。
 
         素のゲームは3ヵ月から年齢で伸び、`315_vacation_custom` を入れていれば
-        その設定が効く。どちらも自分では決めず、
-        宿屋で実際に使われた値を覚えて使う。覚えが無いうちだけ見積もる。
+        その設定が効く。どちらも自分では決めず、ローダの窓口に聞く。
+        観測した値は答えにしないが、食い違ったら1度だけ残す
+        （窓口に出さずに長さを変えている MOD が居る、という手掛かりになる）。
         """
-        value = bucket_of(current_key(app)).get("stay_months")
-        if isinstance(value, int) and not isinstance(value, bool) and value >= 1:
-            return value
-        return game_stay_here(app)["months"]
+        months = game_stay_here(app)["months"]
+        seen = bucket_of(current_key(app)).get("stay_months")
+        if isinstance(seen, int) and not isinstance(seen, bool) and seen >= 1 \
+                and seen != months:
+            warn_once(("stay-months", seen, months),
+                      "stay length: the inn's rooms were booked by {} month(s) "
+                      "but the window says {}; using the window".format(
+                          seen, months))
+        return months
 
     def remember_stay_days(app, days, months=None, why="the inn"):
         """滞在1回で**実際に進んだ日数**を控える。
@@ -658,22 +680,17 @@ def apply(ctx):
         return True
 
     def stay_days(app):
-        """滞在1回で進む日数。
+        """滞在1回で進む日数。ローダの窓口の答え（`days` が無ければ月数×30）。
 
-        測れていればその日数、まだなら月数×30。
-        **測ったときの月数が今と違えば使わない**（設定が変わった後の値）。
+        版39 までは実際に進んだ日数の控えを先に見ていた。
+        `315_vacation_custom` の週単位も `1ヵ月` もゲームに渡る月数は 1 なので、
+        「測ったときの月数が今と違えば使わない」（`stay_days_for`）では
+        この2つを見分けられず、`1週間` に変えた後も30日で数えていた
+        （実機 2026-09-20。§3.62 #11）。
+        窓口は月数と日数の両方を持っている。
         """
-        bucket = bucket_of(current_key(app))
-        value = bucket.get("stay_days")
-        months = stay_months(app)
-        if isinstance(value, int) and not isinstance(value, bool) and value >= 1 \
-                and bucket.get("stay_days_for") == months:
-            return value
         plan = game_stay_here(app)
-        if plan.get("days") and plan["months"] == months:
-            # 週単位。ゲームに渡る月数は1のまま、日数だけが縮む。
-            return plan["days"]
-        return months * DAYS_PER_MONTH
+        return plan["days"] if plan.get("days") else plan["months"] * DAYS_PER_MONTH
 
     def lease_days(app):
         """賃貸の1期の長さ（日）。**滞在 `RENT_STAYS` 回ぶん**。
@@ -957,6 +974,8 @@ def apply(ctx):
                     "description": _description_of(record.get("kind"))},
             choices=choices, exit_label=LEAVE_LABEL,
             keep_inside=lambda info: keeps_inside(info["app"], info["facility_id"]),
+            # 家では `会話する` を出さない（`modfacility` の `hide`。TECH.md §5.8）。
+            hide=HIDDEN_HOME_CLASSES,
             # 絵は描かない。ゲームが名前で引いて生成する（`modfacility は絵に触らない`。TECH.md §5.8）。
             on={"choices": no_exit,
                 "leave": lambda info: end_stay(info["app"], "left the building")},
