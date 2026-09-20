@@ -18,7 +18,7 @@ r"""プロンプトの書き換え規則。MOD 本体と道具画面で共有す
 除去や置換で消した語が条件に効いてしまうと、規則を足した順で結果が変わるため。
 
 規則は表なのでローダの設定には宣言できない（TECH.md §3.8.2）。
-`state\image_quality\prompt_rules.json` に持ち、道具画面で編む。
+`state\stable_diffusion\prompt_rules.json` に持ち、道具画面で編む。
 
     {
       "lora_map":     [{"enabled": true, "from": "LCM_LoRA_Weights_SD15", "to": "off"}],
@@ -41,7 +41,7 @@ import os
 import re
 
 #: 規則の置き場（`state\` の下。`322_battle_bgm` の playlist と同じ持ち方）。
-STATE_DIRNAME = "image_quality"
+STATE_DIRNAME = "stable_diffusion"
 RULES_NAME = "prompt_rules.json"
 
 #: 表の種類と、その行が持つ項目。道具画面もこれを見て欄を作る。

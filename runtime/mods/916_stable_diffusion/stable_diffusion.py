@@ -43,7 +43,7 @@ from . import live as hot
 from . import rules as rulebook
 from . import sizes
 
-LOG_BASENAME = "image_quality.log"
+LOG_BASENAME = "stable_diffusion.log"
 
 #: 種類と段の印（スレッドごと）。`apply()` の中に置くと、当て直しを跨いだ回に届かない
 #: （VERIFICATION_LOG.md §2.86）。
@@ -53,7 +53,7 @@ MARKS = threading.local()
 FAMILY = {"name": None, "path": None}
 
 #: `sys.meta_path` に置いた観測者の目印（入れ直しで積み上げないため）。
-OBSERVER_MARK = "_mod_916_image_quality"
+OBSERVER_MARK = "_mod_916_stable_diffusion"
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること）------------
 # 既定はすべてゲームの実測値。同じ値のままなら触らない。
@@ -286,7 +286,7 @@ class _ImportObserver(object):
 
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
-    warn = ctx.warner("image_quality")
+    warn = ctx.warner("stable_diffusion")
     seen = set()
 
     #: 寸法・サンプラー・安全弁・規則。生成のたびに変わっていれば読み直す（`live.py`）。
@@ -744,4 +744,4 @@ def apply(ctx):
         Clock.schedule_interval(poll, 5.0)
 
     ctx.on_ready(start_poll,
-                 key="916_image_quality:poll:{}".format(ctx.generation))
+                 key="916_stable_diffusion:poll:{}".format(ctx.generation))

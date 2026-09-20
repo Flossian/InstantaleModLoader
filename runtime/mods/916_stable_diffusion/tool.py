@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 r"""画像生成の設定の画面。元 `InstantaleStableDiffusionMod` の GUI を写した形。
 
-    python runtime/mods/916_image_quality/tool.py           窓を開く
-    python runtime/mods/916_image_quality/tool.py --dump    窓を開かず、状態を標準出力に出す
+    python runtime/mods/916_stable_diffusion/tool.py           窓を開く
+    python runtime/mods/916_stable_diffusion/tool.py --dump    窓を開かず、状態を標準出力に出す
 
 TECH.md §3.12 の契約で動く（`131_sharp_portrait` の道具と同じ）。
 ローダの設定画面（`tools/gui.py`）が `mod.json` の `"tool"` を見てこのファイルを
@@ -36,9 +36,9 @@ TECH.md §3.12 の契約で動く（`131_sharp_portrait` の道具と同じ）�
 ##### 触るもの
 
 書くのは `settings/mod_settings.json` の自分の項と
-`state/image_quality/prompt_rules.json` だけ。
+`state/stable_diffusion/prompt_rules.json` だけ。
 ゲームのファイルは触らない。
-MOD 本体（`image_quality.py`）は import しない。共通部品は `sizes.py` と `rules.py`。
+MOD 本体（`stable_diffusion.py`）は import しない。共通部品は `sizes.py` と `rules.py`。
 """
 import io
 import json
@@ -602,7 +602,7 @@ def build_window(rules_in=None, settings_in=None, note=""):
                 backend.get("name") or "不明",
                 backend.get("character_generation_quality") or "不明"),
             describe_family(raw, game_dir),
-            r"書き換えた値は out\image_quality.log に出る",
+            r"書き換えた値は out\stable_diffusion.log に出る",
         ]))
         widgets["preview"].configure(text="\n".join(preview_lines(raw)))
 

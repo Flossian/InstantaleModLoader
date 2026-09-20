@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""916_image_quality をゲーム抜きで通す。
+"""916_stable_diffusion をゲーム抜きで通す。
 
-    python tools/tests/test_wip_image_quality.py
+    python tools/tests/test_wip_stable_diffusion.py
 
 見ているのは、この MOD が自分で決めている所だけ。
 
@@ -30,7 +30,7 @@ if RUNTIME_DIR not in sys.path:
 
 import instantale_modloader as ml            # noqa: E402
 
-MOD_DIR = os.path.join(MODS_DIR, "916_image_quality")
+MOD_DIR = os.path.join(MODS_DIR, "916_stable_diffusion")
 MANIFEST_PATH = os.path.join(MOD_DIR, "mod.json")
 with io.open(MANIFEST_PATH, encoding="utf-8") as fh:
     MANIFEST = json.load(fh)
@@ -48,9 +48,9 @@ def check(name, cond, detail=""):
 
 # `from . import sizes` が通るよう、パッケージとして読み込む（`131_` の検査と同じ）。
 spec = importlib.util.spec_from_file_location(
-    "image_quality_under_test", MOD_PATH, submodule_search_locations=[MOD_DIR])
+    "stable_diffusion_under_test", MOD_PATH, submodule_search_locations=[MOD_DIR])
 MOD = importlib.util.module_from_spec(spec)
-sys.modules["image_quality_under_test"] = MOD
+sys.modules["stable_diffusion_under_test"] = MOD
 spec.loader.exec_module(MOD)
 SZ = MOD.sizes          # 寸法と系統の計算は本体と道具で共有している
 
@@ -177,7 +177,7 @@ def fresh(_state_dir=None, **settings):
     values = {key: MANIFEST["settings"][key]["default"]
               for key in MANIFEST["settings"]}
     values.update(settings)
-    ctx = Ctx(tempfile.mkdtemp(prefix="image_quality_test_"), values)
+    ctx = Ctx(tempfile.mkdtemp(prefix="stable_diffusion_test_"), values)
     if _state_dir:
         ctx.state_dir = _state_dir      # 規則の置き場（`state\`）を差し替える
     MOD.apply(ctx)
@@ -444,7 +444,7 @@ check("skip の条件", RB.skip_upscale(RULES, "portrait", "pixel art of a cat")
       and RB.skip_upscale(RULES, "portrait", "a cat") is False)
 
 print("規則がフック越しに効く")
-rules_dir = tempfile.mkdtemp(prefix="image_quality_rules_")
+rules_dir = tempfile.mkdtemp(prefix="stable_diffusion_rules_")
 os.makedirs(os.path.join(rules_dir, RB.STATE_DIRNAME))
 io.open(RB.rules_path(rules_dir), "w", encoding="utf-8").write(
     json.dumps(RULES, ensure_ascii=False))
@@ -492,7 +492,7 @@ SDXL_RULES = {
     "add": [{"enabled": True, "kind": "portrait", "target": "prompt",
              "text": "<lora:styleXL:0.6>"}],
 }
-sdxl_rules_dir = tempfile.mkdtemp(prefix="image_quality_sdxl_rules_")
+sdxl_rules_dir = tempfile.mkdtemp(prefix="stable_diffusion_sdxl_rules_")
 os.makedirs(os.path.join(sdxl_rules_dir, RB.STATE_DIRNAME))
 io.open(RB.rules_path(sdxl_rules_dir), "w", encoding="utf-8").write(
     json.dumps(SDXL_RULES, ensure_ascii=False))
@@ -677,7 +677,7 @@ _spec = _ilu.spec_from_file_location("assets_under_test",
 AS = _ilu.module_from_spec(_spec)
 _spec.loader.exec_module(AS)
 
-store = tempfile.mkdtemp(prefix="image_quality_models_")
+store = tempfile.mkdtemp(prefix="stable_diffusion_models_")
 made = AS.ensure_dirs(store)
 check("系統ごとに4つのフォルダを作る", len(made) == 8, made)
 check(r"置き場は state\models\<系統>\<種類>",
@@ -765,7 +765,7 @@ check("SDXL プリセットは置き場の一番新しいチェックポイン�
       sdxl_values["CHECKPOINT_PATH"].endswith("x.safetensors"), sdxl_values["CHECKPOINT_PATH"])
 check("SDXL プリセットは置き場の TAESD を指す（ダウンロードで置いたもの）",
       sdxl_values["TAESD_PATH"].endswith("taesdxl.safetensors"), sdxl_values["TAESD_PATH"])
-empty_store = tempfile.mkdtemp(prefix="image_quality_empty_")
+empty_store = tempfile.mkdtemp(prefix="stable_diffusion_empty_")
 sdxl_values, sdxl_notes = PR.resolve("sdxl", empty_store)
 check("置き場に無ければ空のまま注記が出る",
       sdxl_values["CHECKPOINT_PATH"] == "" and len(sdxl_notes) == 2
@@ -880,7 +880,7 @@ check("最初は既定のまま", (got["width"], got["height"]) == (256, 512), g
 store = _config.store_path(ctx_hot.runtime_dir)
 os.makedirs(os.path.dirname(store), exist_ok=True)
 io.open(store, "w", encoding="utf-8").write(json.dumps(
-    {"916_image_quality": {"PORTRAIT_SHORT": 832, "PORTRAIT_MAX_LONG": 1664,
+    {"916_stable_diffusion": {"PORTRAIT_SHORT": 832, "PORTRAIT_MAX_LONG": 1664,
                            "STAGE1_STEPS": "28"}}))
 got = hot_hook(Pipe.generate_image, pipe, prompt="p", width=256, height=512)
 check("設定ファイルを書き換えると次の生成から効く（注入し直し不要）",
@@ -896,7 +896,7 @@ check("変わっていなければ読み直さない（ログも増えない）"
       not any(note.startswith("reloaded") for note in ctx_hot.notes[notes_before:]))
 
 io.open(store, "w", encoding="utf-8").write(json.dumps(
-    {"916_image_quality": {"PORTRAIT_SHORT": 832, "PORTRAIT_MAX_LONG": 1664,
+    {"916_stable_diffusion": {"PORTRAIT_SHORT": 832, "PORTRAIT_MAX_LONG": 1664,
                            "STAGE1_STEPS": "not a number"}}))
 got = hot_hook(Pipe.generate_image, pipe, prompt="p", width=256, height=512)
 check("読めない値は既定に倒れ、他の項目は生きたまま",

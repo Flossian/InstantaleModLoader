@@ -8,7 +8,7 @@ r"""生成のたびに読み直す設定と規則（元 MOD のホットリロ�
 こちらは出口のフックの先頭で、次の2つが変わっていたら読み直す。
 
     settings\mod_settings.json     寸法・サンプラー・安全弁（ローダの設定）
-    state\image_quality\prompt_rules.json   プロンプトの規則
+    state\stable_diffusion\prompt_rules.json   プロンプトの規則
 
 読み直すのは更新時刻と大きさの組が変わったときだけで、普段は属性を1回見るだけ。
 書く側はどちらも隣に書いてから `os.replace` で差し替えるので、半端なファイルは掴まない。
