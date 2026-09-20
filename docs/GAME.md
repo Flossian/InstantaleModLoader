@@ -86,7 +86,7 @@ Epic の `AppVersion` は
 
 `game_version` は main_023 以降 `014` のまま据え置きで、
 上がっているのは Epic の `AppVersion` だけ（`main_023` → `024` → `025`）。
-`python310.dll` は 2026-06-03 のままなので**注入基盤は無傷**。
+`python310.dll` は更新の前後で変わっていないので**注入基盤は無傷**。
 
 | 版 | ゲーム側の変化 | MOD 側 |
 | --- | --- | --- |
@@ -438,18 +438,18 @@ Clock で見張り、手が空いてから実行する（`ui.Screen.when_idle`�
 `in_battle` / `in_boss_battle` / `in_colosseum_battle` /
 `in_conversation` / `in_free_input` / `in_action_in_conversation`。
 
-**いま見えている背景も焼かれる**（`game_variables["location_image"]` に絵のフルパス。実セーブ 2026-09-14）。
+**いま見えている背景も焼かれる**（`game_variables["location_image"]` に絵のフルパス。実セーブで確認）。
 ロードはそれをそのまま出すので、立ち位置を書き換える MOD は絵も一緒に替える（TECH.md §5.8）。
 
 ゲームの施設なら、この絵は立ち位置と揃っている。
 手元の7つのセーブで立ち位置の施設名と絵のフォルダ名を突き合わせたところ、
-素の施設に立っている5つは全て一致した（2026-09-16。残る2つは入口と出口の対で、移動の途中の保存）。
+素の施設に立っている5つは全て一致した（残る2つは入口と出口の対で、移動の途中の保存）。
 **実行時に足した施設（`mod:` の id）では更新されない。**
-`ゼニスの風`（`331_` の道場）の中で保存したセーブの絵は、繋ぎ先の区画
-（`下層居住区（ローワー・スラム）`）のままだった。
+`331_` の道場の中で保存したセーブの絵は、繋ぎ先の区画
+（素の `ward`）のままだった。
 画面に何が出ているかは別に測ること（この突き合わせはセーブの中身だけを見ている）。
 
-**`in_conversation` は真偽ではなく、話している相手の id が入る**（実セーブ 2026-09-14。
+**`in_conversation` は真偽ではなく、話している相手の id が入る**（実セーブで確認。
 `game_variables.in_conversation` に NPC の id が焼かれていた）。真偽として読むぶんには困らないが、
 **id を書き込む器**でもあるので、セーブに出したくない id を持つ MOD はここも掃除する（TECH.md §5.7）。
 
@@ -814,7 +814,7 @@ MOD 側でも「戦闘中は出さない」条件に使われるので、残骸�
 
 `in_boss_battle` はボス戦の後の戦闘（闘技場）で 0 に戻っていた（1回観測。`322_` のログ）。
 `in_colosseum_battle` は `BattleEndInColosseum.execute` の後始末で `in_battle` と一緒に 0 に戻る
-（2026-09-13、`331_` の闘技場での試合。`322_` のログ 22:50:28 → 22:50:30）。
+（`331_` の闘技場での試合。`322_` のログで2秒差）。
 
 #### 1手ぶんの内訳（`BattlePhaseManager`）
 
@@ -964,7 +964,7 @@ LLM の power の選択は extreme の端でしか意味を持たない。
 
 #### 2.10.3 審判は実際に何を出しているか（記録2869件の集計）
 
-`output_data` に溜まった審判の記録を全部数えた（2026-09-09。集計の手順は
+`output_data` に溜まった審判の記録を全部数えた（集計の手順は
 VERIFICATION_LOG.md §2.85）。
 §2.10.1 が「何を出せるか」（スキーマ）、ここが「何を出したか」（分布）。
 
@@ -1125,10 +1125,10 @@ apply_music_volume(app)         main_023 で追加
 闘技場の相手は `scripts.llm.llm_manager:colosseum_enemy_generator(location, area, world, npc_difficulty_level)` が作り、
 施設の `config` に `current_phase` と `enemy_data`（相手の素、鍵は `"0"` / `"2"` / `"4"` …）として貯まる。
 頼み文は 世界観 / エリア名と概要 / 施設名と概要（`location` の `name` と `description`） / 強さのランク の4つだけで、
-**前に出た相手は載らない**（`output_data\...\colosseum_enemy_generator\N.json`、2026-09-13）。
+**前に出た相手は載らない**（`output_data\...\colosseum_enemy_generator\N.json`）。
 同じ施設で同じ人物に収束することがある（`331_` の闘技場で4試合とも同じ名。あちらは既出の名を概要に足して避けている）。
 
-**相手のランクは試合ごとに固定幅で上がり続ける**（同じ闘技場で5試合。実機 2026-09-14）。
+**相手のランクは試合ごとに固定幅で上がり続ける**（同じ闘技場で5試合。実機）。
 
 | `current_phase` | 0 | 2 | 4 | 6 | 8 |
 | --- | --- | --- | --- | --- | --- |
@@ -1351,7 +1351,7 @@ InstantaleApp.normalize_shop_inventory_prices(shop_obtainer, player_obtainer)
 - `execute` はワーカースレッドで走り、売買画面を開く `toggle_twin_inventory_window` は Clock でメインスレッドへ回す（`instantale.py:3208` の lambda）。
   **メインスレッドは `execute` が戻る前にこれを走らせうる。**
   `execute` の戻り際に主の持ち物の辞書へ触ると、`normalize_shop_inventory_prices`（`instantale.py:2660`。辞書を直に回す）と競合して
-  `RuntimeError: dictionary changed size during iteration` でゲームごと落ちる（2026-09-07 実機。VERIFICATION.md §3.52）。
+  `RuntimeError: dictionary changed size during iteration` でゲームごと落ちる（実機。VERIFICATION.md §3.52）。
   持ち物を触るなら `toggle_twin_inventory_window` の手前（同じスレッド、辞書を回す前）で
 - 主の持ち物はセーブの `npcs[<id>].inventory`。
   実セーブでは51人中8人だけが中身を持っていた（**中身を持っているのは店として開いた施設の主だけ**）
@@ -1754,7 +1754,7 @@ Character.calculate_current_required_exp_on_display() / _gained_exp_on_display(g
 
 | キャラ | `point_use` | 合計 | 各値の幅 |
 | --- | --- | --- | --- |
-| テスト女性 / テスト男性 | 16 | 66 | 11 一律 |
+| 既定のまま作ったキャラ（2体） | 16 | 66 | 11 一律 |
 | 才能点を少し積んだキャラ | 31 | 71 | 9〜15 |
 | 才能点を大量に積んだキャラ | 300 | 142 | 18〜26 |
 
@@ -1804,11 +1804,11 @@ process_choice(VacationEndManager,   '宿泊を終える')
   `個室(100G)`＝`'private_room'` / `高級個室(1000G)`＝`'luxury_suite'`。
 - `宿泊する(Nヵ月)` の月数はプレイヤーの年齢の変動式（若いと3ヵ月、最長6ヵ月）。
   **N は滞在の上限で、1回の長さではない。** 部屋選びが渡す `VacationStartManager` の第1引数は常に 1
-  （実機 2026-09-14、5回とも `init_args=['1', ...]`）。MOD が N を渡すと N ヵ月分の暦と宿代が一度に動く（`331_` が踏んだ）
+  （実機5回とも `init_args=['1', ...]`）。MOD が N を渡すと N ヵ月分の暦と宿代が一度に動く（`331_` が踏んだ）
   実測は 20代=3・31歳=4 の2点だけで、年齢ごとの境目は未実測
 - 日数と宿代は `VacationStartManager.execute` の中で1回ずつ動く。
   宿泊の開始時点で全期間ぶんが一度に進むので、途中の活動を何回挟んでも暦は動かない
-- 1泊＝活動1回。`out/vacation.jsonl` の宿泊 54 回（2026-08-18〜09-05）すべてが
+- 1泊＝活動1回。`out/vacation.jsonl` の宿泊 54 回すべてが
   `VacationStartManager` → 活動1回 → `VacationEndManager` で、活動2回に見える 5 回は社交
   （`VacationSocializeManager` と `...ResolveManager` の対）。
   宿代は活動1回の料金で、同時に暦を 30 日払っている（`327_` の土台）
@@ -1818,7 +1818,7 @@ process_choice(VacationEndManager,   '宿泊を終える')
   宿泊の長さを変える MOD から見ると、
   ゲームの文言は月数を持つのに LLM 側は「数ヵ月」で固定される
 - **その頼み文に「どこに泊まったか」は入らない**（休養の `vacation_rest_overview_generator` も、
-  社交の場面の `vacation_scene_generator` も。実測 2026-09-15）。
+  社交の場面の `vacation_scene_generator` も。実測）。
   渡るのは上の一文と `【エリアの構造】`（そのエリアの全ロケーションの説明と NPC）だけで、
   宿屋の名前も立ち位置も入らない。
   素のゲームは街に泊まれる場所が宿屋しか無いので困らないが、
@@ -1830,7 +1830,7 @@ process_choice(VacationEndManager,   '宿泊を終える')
 > **ローダ側で塞いである**ので答えは正しくなるが、名前で見る予備の経路に落ちるので重い。
 > 自分で包むなら `MethodWatch` をやめて自分のラッパで印を立てる方が速い（TECH.md §6.3）。
 
-#### 訓練の流れ（実測、2026-09-15、`231_probe_training`）
+#### 訓練の流れ（実測、`231_probe_training`）
 
 ```text
 process_choice(DisplayTrainingChoice, '訓練する')          args=['訓練']（training_type）
@@ -1850,10 +1850,10 @@ process_choice(TrainingPhaseManager, '新たな技を学ぶ(3年)')
 - **1年＝365日**（1095 ＝ 3×365。360 なら 1080）。進むのは各段の `TrainingPhaseManager.execute` の中で、
   その活動の年数ぶんが1回で進む。`TrainingStartManager.execute` では進まない
 - 活動の年数はボタンの `(N年)` と `remaining_years` から。1年の活動は `elapse_days(365)`、2年は `elapse_days(730)`
-  （2回目の実測、同日）。段を終えると `remaining_years` が減り（3 → 2）、
+  （2回目の実測）。段を終えると `remaining_years` が減り（3 → 2）、
   **残り年数に収まる活動だけが並ぶ**（残り2年では 1年・2年の2つ）。`training_log` には前の段の文
   （`一年間、ひたすら鍛錬した。0の経験値を得た。`）が渡る
-- 代金は **300 で固定**。年数は修行内容の選択肢で決まる（1年・2年・3年。本人の知識、2026-09-15）。
+- 代金は **300 で固定**。年数は修行内容の選択肢で決まる（1年・2年・3年。本人の知識）。
   `TrainingStartManager` の args の 3 は開始時の残り年数（`remaining_years`）で、
   施設は `331_facility_investment` の `training_facility`（道場）。331 は年数も代金も書いていない。
   開始時の年数が施設や等級で変わるかは未計測（観測は 331 の道場2軒、どちらも3年。素の施設は未観測）
@@ -1867,7 +1867,7 @@ process_choice(TrainingPhaseManager, '新たな技を学ぶ(3年)')
 
 ```python
 process_choice(DisplayAreaMoveChoice, '他の土地へ行く')
-process_choice(AreaMoveCofirmation,   '陽光の砦')
+process_choice(AreaMoveCofirmation,   '<エリア名>')
 process_choice(AreaMoveManager,       '馬車(1000G)' / '徒歩(3ヵ月)')
 ```
 
@@ -1997,23 +1997,23 @@ app.buttons      = ['労働の募集をみる', '市民権の発行', '出る', 
 - **手配を解く選択肢は素のゲームには無い**（`309_` と二重にならない）
 - `出る` が `会話する` より前に来る。
   施設の選択肢は「操作 → 退出」の順とは限らないので、位置を文字列や並び順で決め打ちしない
-- **宿屋だけ `出る` が先頭に来る**（2026-09-20 に確認）。
-  同じ期間の記録で店は `売買する / 出る / 会話する`、鍛冶屋は `装備の強化 / 出る / 会話する`、
+- **宿屋だけ `出る` が先頭に来る**。
+  同じ記録で店は `売買する / 出る / 会話する`、鍛冶屋は `装備の強化 / 出る / 会話する`、
   役場は上のとおりだが、宿屋は `出る / 宿泊する(Nヵ月) / 会話する` になる。
-  2026-08-24 以降の宿屋の記録は5軒・全件がこの並びで、例外が無い。
+  残っている宿屋の記録は5軒・全件がこの並びで、例外が無い。
   **MOD を1つも当てない状態でも同じ**（本人が実機で確認。ゲームを入れ直しても同じ）ので、原因はゲームの側にある。
   `Facility.choices` を触っている MOD は1本も無く、画面を組むときに生まれる `PhaseSpec` は
   `DisplayVacationChoice` と `DisplayTalkChoice` の2つだけで `MovePhaseManager` は含まれない
   （出るは施設が元から持っている選択肢）。
   `315_vacation_custom` の宿泊期間を素の3ヵ月に戻しても変わらない（直接試した）
 - **セーブの `game_variables["buttons"]` を手で並べ替えると、その並びでロードされる**
-  （2026-09-20 に実際にやって確認）。
+  （実際にやって確認）。
   ロードが終わった最初の描画は手で直した `宿泊する(1週間) / 出る / 会話する` で出た。
   ロードが選択肢を組み直さず焼かれたものを戻すだけであること（§2.3）の裏取りになる。
   **ただし直るのはその1画面だけ**で、一度出て入り直すと `出る` が先頭に戻る。
   並びを決めているのは施設に入る経路のほうで、そこは手で直せない。
   ゲームが `宿泊する` を先頭に組んだ記録は1件も無い
-- **原因は `Facility.choices` の中身**（`232_probe_facility_choices` で実測。2026-09-20、起動2回）。
+- **原因は `Facility.choices` の中身**（`232_probe_facility_choices` で実測。起動2回）。
   `choices` は集合ではなく **dict**（挿入順）で、宿屋は `['出る']` の**1つだけ**。
   店は `['売買する', '出る']`、区画は繋がる施設の名前の並び。
   ゲームは `choices` の並びでボタンを組み、宿屋の `宿泊する`（期間の引数を持つ
@@ -2021,10 +2021,10 @@ app.buttons      = ['労働の募集をみる', '市民権の発行', '出る', 
   最後に `会話する` を足す。店の操作は `choices` の中に `出る` より前で入っているので先に出る。
   宿屋だけ操作が `choices` の外に居る。
   文字列のハッシュは無関係（`hash_randomization=1` で `出る` の枠が起動ごとに 0 → 3 と変わったのに並びは同じ）
-  **並びが「入れ替わった」記録は無い。** 残っているログの最初の宿屋（2026-08-21、main_025）から `出る` が先頭で、
+  **並びが「入れ替わった」記録は無い。** 残っているログの最初の宿屋（main_025）から `出る` が先頭で、
   ゲームの版の差分（上の表。023 → 025）にも施設の選択肢に触るものは無い。
   `宿泊する` が先頭に出るのは、**MOD が建てた宿**（`331_` の自分の宿。`choices` が空で
-  ゲームの `出る` が出ない。`quest_flow.log` に 2026-09-13 から 239 画面）と、
+  ゲームの `出る` が出ない。`quest_flow.log` に 239 画面）と、
   セーブの `buttons` を手で並べ替えた直後の1画面だけ
   描く直前に並べ直すのが `135_fix_inn_button_order`（`出る` より前に `宿泊する` が無いときだけ動かす）
 - 会話を挟むと抜けた後に施設の選択肢が組み直されるので、
@@ -2286,9 +2286,9 @@ npc_id = npcs.make_npc(app, fields, area_id, facility_id, write=write)   # 作�
 > スキルが空のまま敵ターンを迎えると空の `Literal[]` が組まれて落ち
 > （VERIFICATION_LOG.md §2.40）、`image_src` が `None` のままだと
 > `StringProperty` への代入で落ちる（同 §2.42）。
-> 実測で落ちた相手は `make_npc` で作った詳細生成前の NPC（`902_` の容疑者、2026-08-08 の1件）で、
+> 実測で落ちた相手は `make_npc` で作った詳細生成前の NPC（`902_` の容疑者の1件）で、
 > 素の住人が落ちた記録は無い（素の住人は会話の直前に埋まる）。
-> 「ゲーム自身が作った街の住人」と書いていたのは §2.40 の状態の描写の読み違い（2026-09-12 に訂正）。
+> 「ゲーム自身が作った街の住人」と書いていたのは §2.40 の状態の描写の読み違い（後に訂正）。
 > 本体が空を守っていない穴を塞ぐなら VERIFICATION.md §3.6 の1位と2位（どちらも未着手）で、
 > 作る側は先に会話を通させるか `skills` と `image_src` を持たせる。
 
@@ -2347,7 +2347,7 @@ npc_id = npcs.make_npc(app, fields, area_id, facility_id, write=write)   # 作�
 > ゲームが id で引く場所（`npcs` / `party` / ボタンの引数 / 敵の辞書）には残らない
 > （ほかの住人の記憶に名前は残り、それは消さない。TECH.md §5.7）。
 > 同じ仕掛けで正規 NPC の属性に被せることもできる。
-> 実機で会話の一巡と保存の非漏洩まで通した（2026-09-12。VERIFICATION.md §3.59）。
+> 実機で会話の一巡と保存の非漏洩まで通した（VERIFICATION.md §3.59）。
 >
 > そこで分かったゲーム側の事実:
 > **保存は `world.characters` を舐める**（文字列 id の `Character` を残すと
@@ -2370,7 +2370,7 @@ npc_id = npcs.make_npc(app, fields, area_id, facility_id, write=write)   # 作�
 > 素データが在れば `skills`（`通常攻撃` / `逃げる`）・HP・立ち絵（`fullbody` / `face`）を埋めて
 > `level_of_detail` を 2 にする（`modnpc` の写しで実測）。
 >
-> **仲間は素データが在ることが前提**（実セーブで確認。2026-09-13）。
+> **仲間は素データが在ることが前提**（実セーブで確認）。
 > `game_variables.party` の id は `npcs` の鍵を指し、その人物は
 > `areas/<エリア>/adventurer_npcs` にも載る。
 > 素データを持たない人物を `party` に入れると、ロードのときに組み立てられない。
@@ -2716,7 +2716,7 @@ app.save_data_dict   saves\<世界>\savedata.json
 world 側の NPC にも33項目のものが81人居る。
 `world_data.json` は生成時の雛形のまま固定されるのではなく、遊んでいる間も更新されている
 （後ろの4項目は savedata 化された形。§2.23）。
-**書かれるのはセーブのとき**（2026-09-13: 3回セーブした最後の時刻と `world_data.json` の更新時刻が一致。
+**書かれるのはセーブのとき**（3回セーブした最後の時刻と `world_data.json` の更新時刻が一致。
 書き手は `scripts.save_codec:write_obfuscated_json_file` で、`modfacility` はここを包んで `mod:` の施設を落としている）。
 更新は届いているのに、追加だけが届いていない。
 
@@ -2906,7 +2906,7 @@ Atk:<n>(+<n>)\nDef:<n>(+<n>)\nExp:<n>/<n>\nGold:<n>\nAge:<n>\nSta:…\nLocation:
 ```
 
 背景は `worlds\<世界名>\backgrounds\<施設名>\image.png`。宿泊の部屋は
-`backgrounds\<施設名> - room(<等級>)\image.png`（`金羊亭 - room(luxury_suite)`。実セーブ 2026-09-14）で、
+`backgrounds\<施設名> - room(<等級>)\image.png`（等級は `luxury_suite` など。実セーブで確認）で、
 `change_background_image_to_inn_room(quality)` はこの絵を `game_variables["location_image"]` に据える。
 ロードはこの値の絵をそのまま出す（§2.3）。
 
@@ -3005,11 +3005,11 @@ Python は通常のルックアップが失敗した後にのみ `__getattr__` �
 そのときゲームは `savedata.json` を `worlds\<世界名>\world_data.json`（骨格）から組み直す。
 NPC の記憶も進みも無い、初期化された同じ世界になる。
 
-実セーブで見えたこと（`新テストワールド`、2026-09-14。前の主人公の控えは `backups\` の zip 12本）:
+実セーブで見えたこと（世界A。前の主人公の控えは `backups\` の zip 12本）:
 
-| | 前の主人公（ミツバ） | 新しい主人公（ムツハ） |
+| | 前の主人公（A） | 新しい主人公（B） |
 | --- | --- | --- |
-| `player_data.name` / `experience_level` / `age` | ミツバ / 80 / 25 | ムツハ / 1 / 23 |
+| `player_data.name` / `experience_level` / `age` | 主人公A / 80 / 25 | 主人公B / 1 / 23 |
 | `world_data.days_elapsed` | 2175 | 390（`world_data.json` 側の値） |
 | `index.facility` / `index.item` | 317 / 62 | 318 / 90 |
 | `game_variables.quest_log` | 27件 | 0件 |
@@ -3033,7 +3033,7 @@ MOD の控え（`state\<MOD>\`）は世界名で引いていたので、前の�
 セーブと同じ寿命のものは **世界×主人公** で持つ（`state.playthrough_key`。TECH.md §5.4）。
 同じ名前で作り直せば前の周回を引き継ぐ。
 
-### 2.33 画像生成のバックエンドと出口（`230_` で実測、2026-09-18）
+### 2.33 画像生成のバックエンドと出口（`230_` で実測）
 
 画像生成は選ばれた**一族**だけが import される。
 選択は `config.json` の `ai_setting.local_model_setting.sd_backend.name`（§2.12.1 と同じファイル）。
@@ -3079,11 +3079,11 @@ MOD の控え（`state\<MOD>\`）は世界名で引いていたので、前の�
 
 **画質の設定で立ち絵の経路が変わる。**
 `highres_upscale` は上の2段（`generate_image_anime` と `image_to_image_anime`）を通り、
-`highres_faster` は **LCM の段1回**（`generate_image_real_lcm`、512x1024）で描く（実測 2026-09-18）。
+`highres_faster` は **LCM の段1回**（`generate_image_real_lcm`、512x1024）で描く（実測）。
 LCM の段を通る回はプロンプトに `<lora:LCM_LoRA_Weights_SD15:1>` が入る。
 
 敵・モンスターは立ち絵と同じ経路だと読めるが、実際は別物で、
-正方形を1段で描き、サンプラーは背景と同じ LCM（実測 2026-09-18、1.5 秒）。
+正方形を1段で描き、サンプラーは背景と同じ LCM（実測 1.5 秒）。
 入口は `generate_enemy_image`（`image_generation_creature.py:235` から `generate_image_real_lcm` を呼ぶ）。
 
 背景のプロンプトには出口の時点で `<lora:LCM_LoRA_Weights_SD15:1>` が入っている。
@@ -3107,7 +3107,7 @@ AIManager.set_ai_models (instantale.py:510〜516)   一族を import する行�
   `wtype='default'` / `rng_type='cuda'`（CPU バックエンドでも `cuda` のまま渡る）
 
 チェックポイント・TAESD・VAE は、このモジュール変数を建つ前に書き換えれば差し替わる
-（実機 2026-09-18。`taesd_path` を空にして建て、`StableDiffusion.__init__` にそのまま渡った。VERIFICATION.md §3.65）。
+（実機。`taesd_path` を空にして建て、`StableDiffusion.__init__` にそのまま渡った。VERIFICATION.md §3.65）。
 
 > **バックエンドを切り替えても画質の設定は付いてこない。**
 > `diffusers_openvino` の manager には `image_to_image_anime` が無いのに、
@@ -3119,15 +3119,15 @@ AIManager.set_ai_models (instantale.py:510〜516)   一族を import する行�
 > この一族は**形を固定して変換したモデル**を回すので、
 > 出口へ渡す寸法を変えるとモデルの作り直しが走る。
 > 背景を 1024x512 から 1536x768（画素 x2.25）にした実機では、
-> 64GB の RAM を使い切って SSD へページングを始めた（2026-09-18）。
+> 64GB の RAM を使い切って SSD へページングを始めた。
 > 1152x576（画素 x1.27）なら 15.1 秒で通る（素の 1024x512 は 10.5 秒）が、
 > **通った回も RAM は伸びたまま、ゲームを閉じるまで戻らない**。
 > 寸法ごとに作り直したものが常駐すると読める。
 
 > 別配布の画質強化 MOD（`stable-diffusion.dll` のプロキシ）が入っていると、
 > この出口の**後ろ**でもう一度書き換わる。
-> そちらのログ（`InstantaleSDMod\proxy_resize.log`、2026-07-28 まで）では、
+> そちらのログ（`InstantaleSDMod\proxy_resize.log`。以前の記録）では、
 > 出口の `euler_a` / 20 / 8 がプロキシ側で `dpm++2mv2` / 15 / 5 になっていた。
-> 上の実測（2026-09-18）はプロキシが入っていない状態で録ったもので、
+> 上の実測はプロキシが入っていない状態で録ったもので、
 > 3つのバックエンドとも `stable-diffusion.dll` は退避されている `-real.dll` とハッシュが一致していた
 > （入っているかどうかはこの比較で分かる。`-real.dll` の有無では分からない）。

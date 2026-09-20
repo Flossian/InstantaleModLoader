@@ -20,7 +20,7 @@
 
 プロキシと同位置の `_post_with_model_loading_retry`（payload に `prompt` と `json_schema` が揃う地点）にも仕掛けていたが、
 `chat` が上流で先に圧縮するとマーカーが残らず、実機 2,803 件で payload 側の発火は 0 だった（VERIFICATION_LOG.md §2.3）。
-2026-09-09 に外した。
+その仕掛けは外した。
 `chat` に仕掛かったかどうかは `bootstrap.log` の `schema compact: armed on chat` で分かる。
 
 #### 割り切り（プロキシと同じ）
