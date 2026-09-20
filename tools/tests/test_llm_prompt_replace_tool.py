@@ -151,7 +151,10 @@ try:
     # ------------------------------------------------------------ 同梱の既定を読んで書き戻す
     default_path = os.path.join(MOD_DIR, tool.DEFAULT_RULES_FILE_NAME)
     text, bom, newline = tool.read_text(default_path)
-    check("既定: BOM 付きの CRLF", bom is True and newline == "\r\n")
+    # 改行は見ない。`.gitattributes`（`eol=lf`）で checkout は LF、手元の作業ツリーは CRLF になり、
+    # どちらで開いても読んだ形のまま書き戻すのがこの画面の約束（下の「往復」がそれを見る）。
+    check("既定: BOM 付き", bom is True, (bom, newline))
+    check("既定: 改行は LF か CRLF のどちらか", newline in ("\n", "\r\n"), repr(newline))
     shipped = tool.Document.parse(text)
     check("既定: 往復で1行も変わらない", shipped.render() == text)
     check("既定: ゲームが見るルールが変わらない",
