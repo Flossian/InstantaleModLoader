@@ -12,8 +12,9 @@
   確率     … グループごとに1回だけ抽選すること・合計 100 超・0%
   経路     … chat / _apply_chat_template / payload のどこでも当たること
   1回だけ  … 入れ子の経路で二重に抽選しないこと（スレッドの印と、出力の記憶）
-  置き場所 … **MOD フォルダの中だけ**を読み、外は一切見ないこと。手元の
-             `llm_replacements.txt` が同梱の `.default.txt` に優先すること
+  置き場所 … `state\\` の手元のルール → 旧い置き場（MOD フォルダ）→ 同梱の既定の順。
+             設定 `RULES_PATH` の指定が最優先（絶対・相対・フォルダ）。
+             指定しない限り外（`settings\\`・プロキシ）は見ないこと
   配布     … 手元のファイルが配布物に入らないこと（＝更新で消えない根拠）
   再読込   … ファイルを書き換えると次のリクエストから効くこと
   壊さない … ルールが無い・読めない・例外が出た場合に文章をそのまま送ること
@@ -38,6 +39,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir))
 RUNTIME_DIR = os.path.join(ROOT, "runtime")
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
+STATE_DIR = os.path.join(ROOT, "state")   # 手元のルールの置き場（ゲームと同じ判定にするため）
 
 if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
@@ -162,9 +164,8 @@ class FakeLlmManager(object):
 class FakeCtx(object):
     """`apply(ctx)` が使うぶんだけの ctx。`wrap` は偽クライアントに当てる。
 
-    `mod_dir` は**本物の MOD フォルダを指さない**。
-    ルールは MOD フォルダの中の `llm_replacements.txt` だけを読むので、
-    本物を渡すと同梱のルールで動いてしまい、
+    `mod_dir` も `state_dir` も**本物を指さない**。
+    本物を渡すと同梱のルールや手元のルールで動いてしまい、
     テストがその中身に左右される（同梱ルールは `test_real_prompts` で当てる）。
     """
 
@@ -174,6 +175,7 @@ class FakeCtx(object):
         self.out_dir = out_dir
         self.runtime_dir = os.path.join(out_dir, "runtime")
         self.mod_dir = mod_dir or os.path.join(out_dir, "mod")
+        self.state_dir = os.path.join(out_dir, "state")   # 手元のルールの置き場
         self.game_dir = os.path.join(out_dir, "game")
         self.api = 1
         self.lines = []
@@ -657,73 +659,134 @@ def test_single_pass(tmp):
 # 4. 置き場所と再読込
 # --------------------------------------------------------------------------
 def test_self_contained(tmp):
-    """読むのは **MOD フォルダの中の1ファイルだけ**。探索も外部参照もしない。
+    r"""読む先の優先順と、**指定しない限り外を見ない**こと。
 
-    以前は `settings\\` と既存プロキシの置き場所も探していた。
-    MOD 単体の部品は MOD のフォルダで完結させる決まりにしたので（外に出るのは
-    `out\\` のログだけ）、その両方を見ないことをここで固定する。
+    以前は MOD フォルダの中だけを読んでいた。
+    手で書いたルールは遊びの続き（`state\\` の定義そのもの）なので置き場を移し、
+    MOD のフォルダは**読むだけ**の旧い置き場として残してある
+    （前の版で書いたルールが、更新した瞬間に黙って効かなくなるのを避けるため）。
     """
-    mod_dir = os.path.join(tmp, "contained", "mod")
+    home = os.path.join(tmp, "contained")
+    mod_dir = os.path.join(home, "mod")
+    state_dir = os.path.join(home, "state")
     os.makedirs(mod_dir, exist_ok=True)
     default_path = os.path.join(mod_dir, "llm_replacements.default.txt")
-    user_path = os.path.join(mod_dir, "llm_replacements.txt")
-    check("置き場所: 手元のファイルが無ければ同梱の既定",
-          mod.rules_path(mod_dir) == default_path, mod.rules_path(mod_dir))
-    with io.open(user_path, "w", encoding="utf-8") as fh:
-        fh.write("#tab:t\n中=>手元のファイルが効いた\n")
-    check("置き場所: 手元のファイルがあればそちら",
-          mod.rules_path(mod_dir) == user_path, mod.rules_path(mod_dir))
-    os.remove(user_path)
-    check("置き場所: mod_dir が無ければ None（apply() の外）",
+    legacy_path = os.path.join(mod_dir, "llm_replacements.txt")
+    state_path = os.path.join(state_dir, mod.STATE_DIRNAME, "llm_replacements.txt")
+
+    def put(path, text):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with io.open(path, "w", encoding="utf-8") as fh:
+            fh.write(text)
+
+    check("置き場所: どれも無ければ同梱の既定の場所",
+          mod.rules_path(mod_dir, state_dir) == default_path,
+          mod.rules_path(mod_dir, state_dir))
+    put(legacy_path, "#tab:t\n中=>旧い置き場が効いた\n")
+    check("置き場所: 旧い置き場（MOD フォルダ）も読む",
+          mod.rules_path(mod_dir, state_dir) == legacy_path,
+          mod.rules_path(mod_dir, state_dir))
+    put(state_path, "#tab:t\n中=>state のルールが効いた\n")
+    check("置き場所: state\\ が旧い置き場に優先する",
+          mod.rules_path(mod_dir, state_dir) == state_path,
+          mod.rules_path(mod_dir, state_dir))
+    check("置き場所: 書く先は state\\（同梱の既定には書かない）",
+          mod.rules_target(mod_dir, state_dir) == state_path,
+          mod.rules_target(mod_dir, state_dir))
+    check("置き場所: 候補は4つ（指定・state・旧い置き場・同梱）",
+          mod.rules_candidates(mod_dir, state_dir) == [state_path, legacy_path, default_path],
+          mod.rules_candidates(mod_dir, state_dir))
+    check("置き場所: mod_dir も state_dir も無ければ None（apply() の外）",
           mod.rules_path(None) is None, mod.rules_path(None))
 
-    # 外に紛らわしいものを置いても読まない（配布フォルダの settings\ と、
-    # プロキシ風のフォルダ・目印）。
-    out_dir = os.path.join(tmp, "contained")
-    for directory, text in (
-            (os.path.join(out_dir, "settings"), "#tab:t\n外=>settings が効いた\n"),
-            (os.path.join(out_dir, "InstantaleLlmProxy"), "#tab:t\n外=>プロキシが効いた\n"),
-            (os.path.join(tmp, "InstantaleLlmProxy"), "#tab:t\n外=>親のプロキシが効いた\n")):
-        os.makedirs(directory, exist_ok=True)
-        with io.open(os.path.join(directory, "llm_replacements.txt"),
-                     "w", encoding="utf-8") as fh:
-            fh.write(text)
-    with io.open(os.path.join(out_dir, "llm_proxy_dir.txt"), "w", encoding="utf-8") as fh:
-        fh.write(os.path.join(tmp, "InstantaleLlmProxy"))
+    # 指定（`RULES_PATH`）は最優先。絶対・相対・フォルダの3通り。
+    elsewhere = os.path.join(tmp, "別の場所", "別名.txt")
+    put(elsewhere, "#tab:t\n中=>指定したファイルが効いた\n")
+    check("置き場所: 指定（絶対パス）が最優先",
+          mod.rules_path(mod_dir, state_dir, elsewhere) == elsewhere,
+          mod.rules_path(mod_dir, state_dir, elsewhere))
+    check("置き場所: 指定したファイルへ書く",
+          mod.rules_target(mod_dir, state_dir, elsewhere) == elsewhere,
+          mod.rules_target(mod_dir, state_dir, elsewhere))
+    put(os.path.join(state_dir, mod.STATE_DIRNAME, "別の束.txt"), "#tab:t\n中=>別の束が効いた\n")
+    check("置き場所: 指定（相対）は state のこの MOD のフォルダから",
+          mod.rules_path(mod_dir, state_dir, "別の束.txt")
+          == os.path.join(state_dir, mod.STATE_DIRNAME, "別の束.txt"),
+          mod.rules_path(mod_dir, state_dir, "別の束.txt"))
+    folder = os.path.dirname(elsewhere)
+    check("置き場所: 指定がフォルダならその中の llm_replacements.txt",
+          mod.rules_target(mod_dir, state_dir, folder)
+          == os.path.join(folder, "llm_replacements.txt"),
+          mod.rules_target(mod_dir, state_dir, folder))
+    put(os.path.join(folder, "llm_replacements.txt"), "#tab:t\n中=>フォルダ指定が効いた\n")
+    check("置き場所: フォルダ指定でもそのファイルを読む",
+          mod.rules_path(mod_dir, state_dir, folder)
+          == os.path.join(folder, "llm_replacements.txt"),
+          mod.rules_path(mod_dir, state_dir, folder))
+    check("置き場所: 指定が空なら既定の置き場",
+          mod.rules_path(mod_dir, state_dir, "   ") == state_path,
+          mod.rules_path(mod_dir, state_dir, "   "))
+    check("置き場所: 指定した先が無ければ次の候補へ倒れる",
+          mod.rules_path(mod_dir, state_dir, os.path.join(tmp, "無い.txt")) == state_path,
+          mod.rules_path(mod_dir, state_dir, os.path.join(tmp, "無い.txt")))
 
-    # 外のルールはどれも「外」を置換する。
-    # 効いていなければ「外」が残る。
-    client, ctx, _path = arm("#tab:t\n中=>MOD の中が効いた\n", out_dir, roll=lambda d: 0)
+    # ---- ここから実経路。外に紛らわしいものを置いても読まない
+    # （配布フォルダの settings\ と、プロキシ風のフォルダ・目印）。
+    for directory, text in (
+            (os.path.join(home, "settings"), "#tab:t\n外=>settings が効いた\n"),
+            (os.path.join(home, "InstantaleLlmProxy"), "#tab:t\n外=>プロキシが効いた\n"),
+            (os.path.join(tmp, "InstantaleLlmProxy"), "#tab:t\n外=>親のプロキシが効いた\n")):
+        put(os.path.join(directory, "llm_replacements.txt"), text)
+    put(os.path.join(home, "llm_proxy_dir.txt"), os.path.join(tmp, "InstantaleLlmProxy"))
+    os.remove(state_path)
+    os.remove(legacy_path)
+
+    # 外のルールはどれも「外」を置換する。効いていなければ「外」が残る。
+    client, ctx, _path = arm("#tab:t\n中=>同梱の既定が効いた\n", home, roll=lambda d: 0)
     client.chat("model", [{"role": "user", "content": "中と外"}])
-    check("置き場所: MOD の中のルールが効く",
-          client.sent == ["MOD の中が効いたと外"], client.sent)
+    check("置き場所: 同梱の既定が効く",
+          client.sent == ["同梱の既定が効いたと外"], client.sent)
     check("置き場所: 外部（settings\\・プロキシ）は参照しない",
-          "が効いた" not in client.sent[-1].replace("MOD の中が効いた", ""),
+          "が効いた" not in client.sent[-1].replace("同梱の既定が効いた", ""),
           client.sent)
 
-    # 手元のファイルを後から置くと、次のリクエストでそちらに切り替わる（MOD を更新しても残るのはこちら側。
-    # `.default.txt` は上書きされる）。
-    user_file = os.path.join(out_dir, "mod", "llm_replacements.txt")
-    with io.open(user_file, "w", encoding="utf-8") as fh:
-        fh.write("#tab:t\n中=>手元のファイルが効いた\n")
+    # 旧い置き場に置くと、次のリクエストでそちらへ切り替わる。
+    put(legacy_path, "#tab:t\n中=>旧い置き場が効いた\n")
     client.chat("model", [{"role": "user", "content": "中と外"}])
-    check("置き場所: 手元のファイルを置くと次のリクエストで切り替わる",
-          client.sent[-1] == "手元のファイルが効いたと外", client.sent)
-    log = read_log(out_dir)
+    check("置き場所: 旧い置き場を置くと次のリクエストで切り替わる",
+          client.sent[-1] == "旧い置き場が効いたと外", client.sent)
+
+    # state\ に置くと、旧い置き場より優先される（設定画面の保存がこれをする）。
+    put(state_path, "#tab:t\n中=>state のルールが効いた\n")
+    client.chat("model", [{"role": "user", "content": "中と外"}])
+    check("置き場所: state\\ を置くと旧い置き場より優先される",
+          client.sent[-1] == "state のルールが効いたと外", client.sent)
+    log = read_log(home)
     check("置き場所: 切り替えを [RULES] に残す",
           "[RULES] 読む先を切り替えた" in log, log)
 
-    # 消せば既定に戻る。
-    os.remove(user_file)
+    # 消せば1つずつ下の候補へ戻る。
+    os.remove(state_path)
     client.chat("model", [{"role": "user", "content": "中と外"}])
-    check("置き場所: 手元のファイルを消すと既定に戻る",
-          client.sent[-1] == "MOD の中が効いたと外", client.sent)
+    check("置き場所: state\\ を消すと旧い置き場に戻る",
+          client.sent[-1] == "旧い置き場が効いたと外", client.sent)
+    os.remove(legacy_path)
+    client.chat("model", [{"role": "user", "content": "中と外"}])
+    check("置き場所: 旧い置き場も消すと同梱の既定に戻る",
+          client.sent[-1] == "同梱の既定が効いたと外", client.sent)
 
-    # 設定に場所も流用の切り替えも残っていないこと（宣言を消したので、
-    # `mod_settings.json` に古い値が残っていても効かない）。
-    for gone in ("RULES_PATH", "USE_PROXY_RULES"):
-        check("置き場所: 設定 {} は廃止".format(gone), not hasattr(mod, gone),
-              getattr(mod, gone, None))
+    # 設定で外を指せば、そのときだけ外を読む（指定は最優先）。
+    client, ctx, _path = arm("#tab:t\n中=>同梱の既定が効いた\n", home, roll=lambda d: 0,
+                             settings={"RULES_PATH": os.path.join(
+                                 tmp, "InstantaleLlmProxy", "llm_replacements.txt")})
+    client.chat("model", [{"role": "user", "content": "中と外"}])
+    check("置き場所: 指定すればプロキシのルールも読める",
+          client.sent[-1] == "中と親のプロキシが効いた", client.sent)
+    mod.RULES_PATH = ""
+
+    # 流用の切り替えは廃止のまま（`mod_settings.json` に古い値が残っていても効かない）。
+    check("置き場所: 設定 USE_PROXY_RULES は廃止", not hasattr(mod, "USE_PROXY_RULES"),
+          getattr(mod, "USE_PROXY_RULES", None))
 
 
 def test_not_shipped():
@@ -745,9 +808,9 @@ def test_bundled_rules():
     """同梱の既定（`llm_replacements.default.txt`）が警告なしで読めること。
 
     ルールを書き換えたときにここが落ちる（＝書式を間違えた）。
-    手元のファイルを置いている環境ではそちらを読む（`rules_path` と同じ判定）。
+    手元のルールを置いている環境ではそちらを読む（ゲームと同じ判定＝`rules_path`）。
     """
-    path = mod.rules_path(MOD_DIR)
+    path = mod.rules_path(MOD_DIR, STATE_DIR)
     if not os.path.isfile(path):
         print("skip 同梱: ルールファイルが無い")
         return
@@ -773,7 +836,7 @@ def test_real_prompts():
     置換した本文をあちらのスキーマ解析が読むことになる（`mod.json` の `after`）。
     `output_data/` が無い環境では飛ばす。
     """
-    found = mod.rules_path(MOD_DIR)
+    found = mod.rules_path(MOD_DIR, STATE_DIR)
     files = sorted(glob.glob(os.path.join(
         GAME_DIR, "output_data", "*", "*", "*", "*.json")))
     if not os.path.isfile(found) or not files:
@@ -908,8 +971,10 @@ def test_settings(tmp):
     mismatch = [name for name, spec in declared.items()
                 if getattr(fresh, name) != spec["default"]]
     check("設定: mod.json とコードの既定値が一致", not mismatch, mismatch)
-    check("設定: 記録の ON/OFF だけを宣言している（場所の設定は持たない）",
-          sorted(declared) == ["LOG_REPLACE", "LOG_RULES"], sorted(declared))
+    check("設定: 宣言は記録2つと置き場の指定だけ",
+          sorted(declared) == ["LOG_REPLACE", "LOG_RULES", "RULES_PATH"], sorted(declared))
+    check("設定: 置き場の指定の既定は空（＝state\\ の既定の場所）",
+          declared["RULES_PATH"]["default"] == "", declared["RULES_PATH"])
 
 
 def main():

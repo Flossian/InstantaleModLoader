@@ -10,13 +10,36 @@
     "en": "Rewrites the text sent to the LLM with your replacement rules; reads the same llm_replacements.txt as InstantaleLlmProxy",
     "ja": "LLM に送る文章を置換ルールで書き換える。InstantaleLlmProxy と同じ llm_replacements.txt をそのまま読む"
   },
-  "version": "6",
+  "version": "7",
   "author": "R01/Flossian",
+  "tool": {
+    "entry": "tool.py",
+    "label": {
+      "ja": "置換ルールを編む",
+      "en": "Edit replacement rules"
+    },
+    "note": {
+      "ja": "llm_replacements.txt を表で編む画面。タブで分け、確率と正規表現を付け、いまのルールを文章に当てて試せる",
+      "en": "Edits llm_replacements.txt as a table: tabs, per-rule probability and regex, and a preview that applies the current rules to a sample text"
+    }
+  },
   "after": [
     "102_fix_prompt_dedup",
     "105_fix_schema_compact"
   ],
   "settings": {
+    "RULES_PATH": {
+      "type": "str",
+      "default": "",
+      "label": {
+        "ja": "ルールファイルの置き場",
+        "en": "Rules file location"
+      },
+      "note": {
+        "ja": "空なら state\\llm_prompt_replace\\llm_replacements.txt（設定画面の保存先）。別名やフォルダを書くとそちらを先に読む（相対は state のこの MOD のフォルダから）",
+        "en": "Empty means state\\llm_prompt_replace\\llm_replacements.txt (where the settings screen saves). A file or folder written here wins over it; relative paths start at this mod's folder under state"
+      }
+    },
     "LOG_REPLACE": {
       "type": "bool",
       "default": true,

@@ -73,14 +73,25 @@ MOD は逆にこちらより外側へ置いて素の本文を見せる（その�
 
 ## ルールファイル
 
-この MOD のフォルダの中だけ。
-探索はしない（TECH.md §3.1.1）:
+手元のルールは `state\\` に置く（遊びの続きと同じ寿命。TECH.md §3.11）。
+読む先は上から順に、**在るものが1つ**:
 
-    llm_replacements.txt          手元のルール。あればこちらを読む
-    llm_replacements.default.txt  同梱の既定。MOD 更新で上書きされるのはこちらだけ
-                                  （手元のルールは配布物に無いので生き残る。
-                                  default を書き換えていた場合は GUI の更新が
-                                  上書きの前に手元の名前へ改名する。TECH.md §3.1.1.1）
+    <設定 RULES_PATH>                            指定が在ればこれが最優先
+    state\\llm_prompt_replace\\llm_replacements.txt   手元のルール（保存先もここ）
+    <MOD>\\llm_replacements.txt                   旧い置き場。読むだけ（移行のため残す）
+    <MOD>\\llm_replacements.default.txt           同梱の既定。MOD 更新で上書きされるのはこれだけ
+
+`state\\` へ移したのは、MOD のフォルダが**更新のたびに上書きされる置き場**だから。
+以前は「MOD 単体の部品は MOD のフォルダで完結させる」を理由に MOD の中だけを読んでいたが、
+手で書いたルールは消耗品ではなく遊びの続き（§3.11 の `state\\` の定義そのもの）で、
+`state\\` なら MOD を入れ替えても、フォルダごと消しても巻き添えにならない。
+旧い置き場を読む候補に残してあるので、前の版で書いたルールは黙って無効にならない
+（設定画面で保存すると `state\\` へ移る）。
+
+`RULES_PATH` は別名・別フォルダを使いたいときの逃げ道（外部プロキシと同じファイルを共有する、
+ルールの束を切り替える）。
+相対パスは `state\\llm_prompt_replace\\` から辿り、フォルダを指したらその中の
+`llm_replacements.txt` を読む。
 
 変更はリクエストのたびに反映（更新時刻と大きさで読み直す。
 読めない間は前回のルールで続け、無ければ何もしない）。
@@ -103,13 +114,17 @@ from instantale_modloader.llm import wrap_outgoing
 # --------------------------------------------------------------------------
 # 設定（既定値。`mod.json` の "settings" が同じ値を宣言している）
 # --------------------------------------------------------------------------
+RULES_PATH = ""              # ルールファイルの置き場（空なら state\ の既定の場所）
 LOG_REPLACE = True           # [REPLACE] / [SKIP] を残すか
 LOG_RULES = True             # [RULES]（読込）を残すか
 
-# ルールファイルは**この MOD のフォルダの中**だけ（探索も設定もしない）。
-# 手元のファイルは配布物に入っていない＝MOD を更新しても残る（`rules_path`）。
-RULES_FILE_NAME = "llm_replacements.txt"                  # 手元のルール（優先）
+# 手元のルールは `state\` に置き、同梱の既定だけが MOD のフォルダに在る（`rules_path`）。
+RULES_FILE_NAME = "llm_replacements.txt"                  # 手元のルール（保存先）
 DEFAULT_RULES_FILE_NAME = "llm_replacements.default.txt"  # 同梱の既定
+
+#: `state\` の下のフォルダ名。番号を落とした形（TECH.md §3.11）。
+#: 番号を振り直しても手元のルールが行方不明にならないよう、`111_` は付けない。
+STATE_DIRNAME = "llm_prompt_replace"
 
 # 書式（プロキシと同じ）
 SEPARATOR = "=>"
@@ -489,26 +504,80 @@ def snip(text):
 # --------------------------------------------------------------------------
 # ルールファイル
 # --------------------------------------------------------------------------
-def rules_path(mod_dir):
-    """読むルールファイル。**この MOD のフォルダの中だけ**（探索はしない）。
+def resolve_path(custom, state_dir="", mod_dir=""):
+    r"""設定（`RULES_PATH`）が指す1つのファイル。指定が無ければ空文字。
 
-    手元のファイル（`llm_replacements.txt`）があればそれを、
-    無ければ同梱の既定（`llm_replacements.default.txt`）を返す。
-    **手元のファイルは配布物に入っていない**ので、
-    MOD を新しい版に差し替えても上書きされずに残る。
+    絶対パスならそのまま。
+    相対パスは `state\<この MOD>\` から辿る（手元のルールの置き場と同じ起点）。
+    フォルダを指していたら、その中の `llm_replacements.txt`。
 
-    配布フォルダの `settings\\` も外部プロキシの置き場所も見ない（MOD 単体の部品は
-    MOD のフォルダで完結させる。外に出るのは `out\\` のログだけ）。
-    `mod_dir` は `apply()` の外では None になるので、呼ぶ側が控えておくこと。
-
-    既定のファイルが無くても、その場所を返す（呼ぶ側が「無い」を扱う）。
+    `~` と `%VAR%` は展開する（設定欄に貼られる形として普通なので、
+    そのまま繋いで「そんなフォルダは無い」にしない）。
+    引用符付きで貼られることがあるので両端の `"` も落とす。
     """
-    if not mod_dir:
-        return None
-    user = os.path.join(mod_dir, RULES_FILE_NAME)
-    if os.path.isfile(user):
-        return user
-    return os.path.join(mod_dir, DEFAULT_RULES_FILE_NAME)
+    custom = (custom or "").strip().strip('"').strip()
+    if not custom:
+        return ""
+    path = os.path.expanduser(os.path.expandvars(custom))
+    if not os.path.isabs(path):
+        base = os.path.join(state_dir, STATE_DIRNAME) if state_dir else (mod_dir or "")
+        path = os.path.join(base, path)
+    if os.path.isdir(path):
+        path = os.path.join(path, RULES_FILE_NAME)
+    return os.path.normpath(path)
+
+
+def rules_candidates(mod_dir, state_dir="", custom=""):
+    r"""読む先を優先順に並べる。**在るものの先頭**が使われる（`rules_path`）。
+
+        <RULES_PATH>                      指定が在れば最優先
+        state\<この MOD>\<手元のルール>     既定の置き場。設定画面の保存先
+        <MOD>\<手元のルール>               旧い置き場。読むだけ（移行のため）
+        <MOD>\<同梱の既定>                 配布物。MOD の更新で上書きされる
+
+    `mod_dir` も `state_dir` も `apply()` の外では引けないので、呼ぶ側が控えておくこと。
+    """
+    paths = []
+    picked = resolve_path(custom, state_dir, mod_dir)
+    if picked:
+        paths.append(picked)
+    if state_dir:
+        paths.append(os.path.join(state_dir, STATE_DIRNAME, RULES_FILE_NAME))
+    if mod_dir:
+        # 旧い置き場。前の版で書いたルールを黙って無効にしないために読む
+        # （書く側はもう `state\` だけ。設定画面で保存すると向こうへ移る）。
+        paths.append(os.path.join(mod_dir, RULES_FILE_NAME))
+        paths.append(os.path.join(mod_dir, DEFAULT_RULES_FILE_NAME))
+    return paths
+
+
+def rules_path(mod_dir, state_dir="", custom=""):
+    """いま読むルールファイル。
+
+    候補（`rules_candidates`）の先頭から、**在るもの**を返す。
+    どれも無ければ最後の候補（同梱の既定）の場所を返す（呼ぶ側が「無い」を扱う）。
+    候補そのものが無い（`apply()` の外で場所を控え忘れた）なら `None`。
+    """
+    paths = rules_candidates(mod_dir, state_dir, custom)
+    for path in paths:
+        if os.path.isfile(path):
+            return path
+    return paths[-1] if paths else None
+
+
+def rules_target(mod_dir="", state_dir="", custom=""):
+    r"""書く先。指定が在ればそこ、無ければ `state\<この MOD>\<手元のルール>`。
+
+    **同梱の既定（`*.default.txt`）は返さない。**
+    あれは配布物で、書くと MOD の更新で消える。
+    `state_dir` が引けなければ `None`（書く先が決められないことを呼ぶ側に伝える）。
+    """
+    picked = resolve_path(custom, state_dir, mod_dir)
+    if picked:
+        return picked
+    if state_dir:
+        return os.path.join(state_dir, STATE_DIRNAME, RULES_FILE_NAME)
+    return None
 
 
 class RuleFile(object):
@@ -525,10 +594,11 @@ class RuleFile(object):
     読む先もその場で切り替わる（`rules_path`）。
     """
 
-    def __init__(self, mod_dir, report):
+    def __init__(self, mod_dir, state_dir, report):
         self.mod_dir = mod_dir
+        self.state_dir = state_dir
         self.report = report          # ログを出す関数（行, force）
-        self.path = rules_path(mod_dir)
+        self.path = rules_path(mod_dir, state_dir, RULES_PATH)
         self.stamp = None
         self.groups = []
         self.count = 0
@@ -544,11 +614,11 @@ class RuleFile(object):
             return self.groups
 
     def _reload_if_changed(self):
-        if not self.mod_dir:
+        if not self.mod_dir and not self.state_dir:
             return
         # 手元のファイルが置かれた／消えたら、読む先を入れ替える。
-        # ファイル1つを見るだけなので、リクエストごとに確かめても軽い。
-        path = rules_path(self.mod_dir)
+        # 候補は4つまでなので、リクエストごとに確かめても軽い。
+        path = rules_path(self.mod_dir, self.state_dir, RULES_PATH)
         if path != self.path:
             self.report("[RULES] 読む先を切り替えた: {} -> {}".format(self.path, path),
                         force=True)
@@ -640,10 +710,11 @@ class Seen(object):
 # --------------------------------------------------------------------------
 def apply(ctx):
     log_path = ctx.out_path("prompt_bloat.log")
-    # ルールは MOD のフォルダの中。
-    # `ctx.mod_dir` は apply() の外では None になるので、
+    # 手元のルールは `state\`、同梱の既定は MOD のフォルダ（`rules_candidates`）。
+    # `ctx.mod_dir` も `ctx.state_dir` も apply() の外では引けないので、
     # ここで控えておく（ラッパは後からこの値を使う）。
     mod_dir = ctx.mod_dir
+    state_dir = getattr(ctx, "state_dir", "") or ""
     seen = Seen()
 
     write = ctx.logger("prompt_bloat.log")
@@ -652,7 +723,7 @@ def apply(ctx):
         if force or LOG_RULES:
             write(line)
 
-    rules = RuleFile(mod_dir, report)
+    rules = RuleFile(mod_dir, state_dir, report)
 
     def run(texts, site):
         """文章の並びにルールを当てる。変わらなければ None。

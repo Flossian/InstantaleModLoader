@@ -54,7 +54,7 @@
 | [`108_fix_shop_inventory_overflow`](MODS.md#108_fix_shop_inventory_overflow-売買画面を開くと落ちるのを直す) | 売買画面クラッシュの修正 | 売買画面を開くと落ちるのを直す | - | 取込済 main_024 |
 | [`109_fix_item_detail_autosize`](MODS.md#109_fix_item_detail_autosize-アイテムの説明が途中で切れるのを直す) | アイテム説明欄の拡張 | アイテムの説明が途中で切れるのを直す | 1 |  |
 | [`110_fix_character_name_path`](MODS.md#110_fix_character_name_path-名前のせいでnpcの画像が作れないのを直す) | キャラクタ名の正規化 | 名前のせいでNPCの画像が作れないのを直す | - | 取込済 main_024 |
-| [`111_llm_prompt_replace`](MODS.md#111_llm_prompt_replace-llm-への指示文を置換ルールで書き換える) | LLM への指示文を置換 | LLM への指示文を置換ルールで書き換える | 2 |  |
+| [`111_llm_prompt_replace`](MODS.md#111_llm_prompt_replace-llm-への指示文を置換ルールで書き換える) | LLM への指示文を置換 | LLM への指示文を置換ルールで書き換える | 3 |  |
 | [`112_ui_text_spacing`](MODS.md#112_ui_text_spacing-広すぎる本文の行間を詰める) | 本文の行間を詰める | 広すぎる本文の行間を詰める | 2 |  |
 | [`113_ui_text_expand`](MODS.md#113_ui_text_expand-本文の表示域をボタンで広げる) | 本文の表示域を広げる | 本文の表示域をボタンで広げる | 10 |  |
 | [`114_ui_input_focus`](MODS.md#114_ui_input_focus-自由入力のあと入力欄にフォーカスを戻す) | 入力欄のフォーカスを保つ | 自由入力のあと入力欄にフォーカスを戻す | 3 |  |
