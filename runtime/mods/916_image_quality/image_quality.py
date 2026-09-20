@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-r"""画像生成の画質を上げる。
+r"""Stable Diffusion の解像度・サンプラー・モデル・プロンプトを差し替える。
 
 ゲームは生成の解像度もサンプラーも設定画面から変えられず、
 立ち絵を 256x512 で描いてから 512x1024 で描き直し、背景を 1024x512 で描く。
@@ -20,6 +20,10 @@ r"""画像生成の画質を上げる。
 設定が既定のままの項目は書き換えない。
 ゲームが更新で値を変えたとき、こちらの既定が古い値を焼き付けないため。
 
+寸法・サンプラー・安全弁・規則は**生成のたびに変わっていれば読み直す**（`live.py`。
+元 MOD のホットリロードに当たる）。道具画面で保存すれば次の絵から効き、
+注入し直しは要らない。材料（モデルの置き場）だけは建つ瞬間にしか効かない。
+
 パイプラインの材料（チェックポイント・TAESD・VAE・LoRA の置き場）は
 建つ前にしか書けない。
 建てる関数 `load_sd_pipeline` を包み、その直前に書く（建てるたびに効く）。
@@ -35,6 +39,7 @@ import threading
 
 from instantale_modloader import frames
 
+from . import live as hot
 from . import rules as rulebook
 from . import sizes
 
@@ -284,23 +289,14 @@ def apply(ctx):
     warn = ctx.warner("image_quality")
     seen = set()
 
-    #: 種類ごとの倍率と、段ごとのサンプラー。`apply()` の中で組む（§3.8.2）。
-    scales = {
-        "portrait": sizes.size_scale("portrait", ctx.setting("PORTRAIT_SHORT"),
-                               ctx.setting("PORTRAIT_MAX_LONG")),
-        "enemy": sizes.size_scale("enemy", ctx.setting("ENEMY_SHORT"),
-                            ctx.setting("ENEMY_MAX_LONG")),
-        "background": sizes.size_scale("background", ctx.setting("BACKGROUND_SHORT"),
-                                 ctx.setting("BACKGROUND_MAX_LONG")),
-    }
-    samplers = {
-        "stage1": (ctx.setting("STAGE1_METHOD"), ctx.setting("STAGE1_STEPS"),
-                   ctx.setting("STAGE1_CFG"), ctx.setting("STAGE1_SCHEDULER")),
-        "stage2": (ctx.setting("STAGE2_METHOD"), ctx.setting("STAGE2_STEPS"),
-                   ctx.setting("STAGE2_CFG"), ctx.setting("STAGE2_SCHEDULER")),
-        "lcm": (ctx.setting("LCM_METHOD"), ctx.setting("LCM_STEPS"),
-                ctx.setting("LCM_CFG"), ctx.setting("LCM_SCHEDULER")),
-    }
+    #: 寸法・サンプラー・安全弁・規則。生成のたびに変わっていれば読み直す（`live.py`）。
+    live = hot.Live(ctx, write)
+    for line in live.describe():
+        write(line)
+    if not live.hot():
+        write("hot reload: off (場所が控えられない。設定は注入し直しで効く)")
+
+    #: 建つ前に書く材料。**熱くしない**（建つ瞬間にしか効かない）。
     materials = [(attr, ctx.setting(name)) for name, attr in MATERIALS
                  if str(ctx.setting(name) or "").strip()]
 
@@ -309,20 +305,7 @@ def apply(ctx):
     diffusers_sizes = set()
     no_taesd = bool(ctx.setting("DISABLE_TAESD"))
     no_vae = bool(ctx.setting("DISABLE_VAE"))
-    diffusers_resize = bool(ctx.setting("DIFFUSERS_RESIZE"))
-    strip_lora = bool(ctx.setting("STRIP_LORA"))
-    rules = rulebook.load(ctx.state_dir)
-    counts = sum(len(rows) for rows in rules.values())
-    if counts:
-        write("rules: {} 行（{}）".format(
-            counts, ", ".join("{} {}".format(name, len(rows))
-                              for name, rows in sorted(rules.items()) if rows)))
-    safety = str(ctx.setting("MODEL_SAFETY") or "auto")
 
-    write("size x{portrait:.3f}/{enemy:.3f}/{background:.3f} (立ち絵/敵/背景)".format(**scales))
-    for stage, values in sorted(samplers.items()):
-        if values != sizes.GAME_SAMPLER[stage]:
-            write("sampler {}: {} -> {}".format(stage, sizes.GAME_SAMPLER[stage], values))
     for attr, value in materials:
         write("material {} -> {!r}".format(attr, value))
     if no_taesd:
@@ -405,6 +388,7 @@ def apply(ctx):
         サンプラーは**設定が既定と同じ項目には触らない**。
         """
         changes = {}
+        scales, samplers, rules = live.scales, live.samplers, live.rules
         scale = scales.get(kind, 1.0)
         if rulebook.skip_upscale(rules, kind, params.get("prompt")):
             scale = 1.0
@@ -418,7 +402,7 @@ def apply(ctx):
             got = rulebook.rewrite(rules, kind, target, body, body)
             if got is not None:
                 changes[name] = got
-        if strip_lora:
+        if live.strip_lora:
             drop_game_lora(params, changes)
         if stage in samplers:
             method, steps, cfg, scheduler = samplers[stage]
@@ -463,7 +447,8 @@ def apply(ctx):
         設定で明示された値は動かさない（**寄せるのは素のままの項目だけ**）。
         """
         family = FAMILY.get("name")
-        if safety != "auto" or family is None:
+        samplers = live.samplers
+        if live.safety != "auto" or family is None:
             return
         # 寸法: その系統で無理の無い画素数へ寄せる。
         width = changes.get("width", params.get("width"))
@@ -532,7 +517,7 @@ def apply(ctx):
             if name in ("width", "height"):
                 # 形を固定して変換したモデルなので、寸法を変えると作り直しが走る。
                 # 実機では RAM を使い切ってページングに入った（DOC.md §3）。
-                if diffusers_resize:
+                if live.diffusers_resize:
                     out[name] = value
                     if name == "width":
                         diffusers_sizes.add((value, changes.get("height")))
@@ -557,6 +542,7 @@ def apply(ctx):
 
     def make_exit_hook(label, sig, diffusers):
         def hook(orig, self, *args, **kwargs):
+            live.refresh()                 # 設定と規則が変わっていれば読み直す
             kind = kind_now()
             stage = stage_of(frames.attr(MARKS, "func", None))
             if sig is None:
@@ -601,6 +587,16 @@ def apply(ctx):
         return 1
 
     def attach():
+        # **用済みの apply() は当て直さない。**
+        # `load_sd_pipeline` の包みも見張りも、注入し直した後まで生きている。
+        # そこから当て直すと、ローダは「いまの世代」として入れてしまい、
+        # 新しい世代の包みの**外側に**古い包みが重なる。
+        # 重なると、古い包みが新しい包みの書いた寸法をもう一度拡大し、
+        # 印は別インスタンスなので段が None になる
+        # （実機 2026-09-20: 1段目が 256x512 -> 512x1024 -> 1024x2048 と二重に効き、
+        #  22 秒かかった。`[portrait/None]` の行がその印）。
+        if ctx.superseded():
+            return 0
         added = 0
         for name in managers():
             # 系統は import のときにも見るが、**注入し直しでは import が起きない**。
@@ -694,7 +690,8 @@ def apply(ctx):
         """
         def hook(orig, *args, **kwargs):
             module = sys.modules.get(name)
-            if module is not None:
+            # 用済みの apply() は書かない（古い設定を建てる直前に戻してしまう）。
+            if module is not None and not ctx.superseded():
                 write_materials(name, module)
             try:
                 return orig(*args, **kwargs)

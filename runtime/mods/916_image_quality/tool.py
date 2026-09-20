@@ -58,6 +58,7 @@ for _tools in [os.environ.get("INSTANTALE_MODLOADER_TOOLS", ""),
 import assets     # noqa: E402  自分の隣（モデルの置き場とダウンロード）
 import iniimport  # noqa: E402  自分の隣（元 MOD の ini の取り込み）
 import modtool  # noqa: E402
+import presets   # noqa: E402  自分の隣（SD1.5 / SDXL のプリセット）
 import rules as rulebook  # noqa: E402  自分の隣（本体と共通の規則）
 import sizes    # noqa: E402  自分の隣（本体と共通の計算）
 
@@ -119,7 +120,8 @@ BLURBS = {
                      "判定は単語境界つき・大文字小文字を問わない。"),
     "タグ除去": ("ゲームの (ネガティブ) プロンプトから、カンマ区切りで指定したタグを取り除く"
                  "（ゲームが固定で埋め込む画風タグ外しに）。1区画単位・大文字小文字を問わない完全一致で、"
-                 "watercolor と書いても watercolor painting は消えない。"),
+                 "watercolor と書いても watercolor painting は消えない。"
+                 "重みの括弧の中でも当たる（(nsfw, worst quality:1.4) から nsfw と書けば nsfw だけ消える）。"),
     "完全置き換え": ("記入した種類は (ネガティブ) プロンプトが丸ごとここの内容になる。"
                      "{prompt} と書いた位置にゲーム本来のプロンプトが埋め込まれる。"
                      "{prompt} 無しだと、その種類の画像は毎回ほぼ同じ絵になる。"),
@@ -331,7 +333,7 @@ def build_window(rules_in=None, settings_in=None, note=""):
     rules_now = rules_in if rules_in is not None else rulebook.load(state_dir)
 
     window = tk.Tk()
-    window.title("Instantale 画質強化（ModLoader 版）")
+    window.title("Stable Diffusionの各種差し替え（ModLoader 版）")
     modtool.setup_theme(window, root_dir)
     modtool.restore_window(root_dir, MOD_DIR, window, fallback="940x780")
 
@@ -461,6 +463,36 @@ def build_window(rules_in=None, settings_in=None, note=""):
         ttk.Button(row, text=entry["label"] + " をダウンロード",
                    command=lambda f=family, k=kind: fetch(f, k)).pack(side="left",
                                                                      padx=(8, 0))
+
+    box = group(tab, "プリセット（元 MOD のモード切替）")
+    ttk.Label(box, style="Faint.TLabel", wraplength=740, justify="left",
+              text=("寸法・サンプラー・LoRA タグの除去・チェックポイント・TAESD をプリセットとして入れ替える。"
+                    "片方だけ外すと残りが噛み合わない（SDXL の寸法のまま SD1.5 に描かせるなど）ので、"
+                    "モードを移るときはここから。入れ替えただけでは保存されない。"
+                    "規則（付け替え・追加・除去・置き換え）は触らない。")
+              ).pack(anchor="w")
+    preset_note = ttk.Label(box, text="", justify="left")
+
+    def use_preset(key):
+        values, notes = presets.resolve(key, state_dir)
+        for name, value in values.items():
+            if name in entries:
+                entries[name].set(value)
+        preset_note.configure(text=chr(10).join(
+            ["{} を入れました。内容を見て「保存」を押してください。".format(
+                presets.by_key(key)["label"])] + ["※ " + note for note in notes]))
+
+    row = ttk.Frame(box)
+    row.pack(anchor="w", pady=(8, 0))
+    for preset in presets.PRESETS:
+        ttk.Button(row, text=preset["label"],
+                   command=lambda k=preset["key"]: use_preset(k)).pack(side="left",
+                                                                       padx=(0, 8))
+    for preset in presets.PRESETS:
+        ttk.Label(box, style="Faint.TLabel", wraplength=740, justify="left",
+                  text="{}: {}".format(preset["label"], preset["about"])).pack(
+            anchor="w", pady=(4, 0))
+    preset_note.pack(anchor="w", pady=(6, 0))
 
     box = group(tab, "元 MOD（DLL 版）の設定を取り込む")
     ttk.Label(box, style="Faint.TLabel", wraplength=740, justify="left",
@@ -592,20 +624,29 @@ def build_window(rules_in=None, settings_in=None, note=""):
         return got
 
     def save():
+        # 打たれた値を先に検める（`coerce_all` は `(値, 最初の不備)` を返す）。
+        # 版17 までは組のまま `save_settings` へ渡していたので、必ず失敗していた。
+        values, bad = modtool.coerce_all(MOD_DIR, current(), root_dir)
+        if bad:
+            messagebox.showerror("設定を確かめてください", bad)
+            return
         if not rulebook.save(state_dir, gather_rules()):
             messagebox.showerror("規則を保存できませんでした",
                                  "{} に書けませんでした。".format(rulebook.rules_path(state_dir)))
             return
-        if modtool.save_settings(root_dir, MOD_DIR,
-                                 modtool.coerce_all(MOD_DIR, current(), root_dir)):
-            messagebox.showinfo(
-                "保存しました",
-                "次に注入したときから効きます（ゲームの再起動は要りません）。\n"
-                "モデルの差し替えだけはパイプラインを建て直すので、\n"
-                "注入し直してからワールド選択をやり直してください。")
-        else:
-            messagebox.showerror("保存に失敗しました",
-                                 r"settings\mod_settings.json を確かめてください。")
+        try:
+            modtool.save_settings(root_dir, MOD_DIR, values, strict=True)
+        except Exception as exc:
+            messagebox.showerror("保存に失敗しました", "{}\n{}: {}".format(
+                modtool.config_module(root_dir, MOD_DIR).store_path(
+                    os.path.join(root_dir, "runtime")),
+                type(exc).__name__, exc))
+            return
+        messagebox.showinfo(
+            "保存しました",
+            "次に生成される絵から効きます（注入し直しは要りません）。\n"
+            "モデルの差し替えだけはパイプラインを建て直すので、\n"
+            "注入し直してからワールド選択をやり直してください。")
 
     def reset():
         for key, var in entries.items():

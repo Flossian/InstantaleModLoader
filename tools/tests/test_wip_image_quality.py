@@ -65,6 +65,8 @@ class Ctx(object):
         self.out_dir = out_dir
         self.state_dir = os.path.join(out_dir, "state")
         self.game_dir = out_dir          # 本物の ctx はゲームの exe の在る場所
+        self.runtime_dir = os.path.join(out_dir, "runtime")   # settings\ はこの隣
+        self.mod_dir = MOD_DIR           # 宣言（mod.json）を読む場所
         self.settings = settings
         self.hooks = {}
         self.errors = []
@@ -387,6 +389,29 @@ check("除去は区画単位の完全一致",
       RB.remove_tags("solo, medieval, watercolor painting, 1boy",
                      "medieval, watercolor") == "solo, watercolor painting, 1boy",
       RB.remove_tags("solo, medieval, watercolor painting, 1boy", "medieval, watercolor"))
+GAME_NEG = "photoreal, (nsfw, worst quality, low quality:1.4), thighs, nude"
+check("重みの括弧の中の区画も当たる（先頭の括弧は次の区画へ）",
+      RB.remove_tags(GAME_NEG, "nsfw")
+      == "photoreal, (worst quality, low quality:1.4), thighs, nude",
+      RB.remove_tags(GAME_NEG, "nsfw"))
+check("括弧の末尾の区画を消すと :重み) は前の区画へ",
+      RB.remove_tags(GAME_NEG, "low quality")
+      == "photoreal, (nsfw, worst quality:1.4), thighs, nude",
+      RB.remove_tags(GAME_NEG, "low quality"))
+check("真ん中の区画はそのまま落ちる",
+      RB.remove_tags(GAME_NEG, "worst quality")
+      == "photoreal, (nsfw, low quality:1.4), thighs, nude",
+      RB.remove_tags(GAME_NEG, "worst quality"))
+check("括弧が閉じた1区画は丸ごと消える",
+      RB.remove_tags("a, (nsfw:1.4), b", "nsfw") == "a, b",
+      RB.remove_tags("a, (nsfw:1.4), b", "nsfw"))
+check("指定側に飾りが付いていても本体で比べる",
+      RB.remove_tags(GAME_NEG, "(nsfw:1.2)")
+      == "photoreal, (worst quality, low quality:1.4), thighs, nude")
+check("括弧の中身を全部消すと括弧ごと消える",
+      RB.remove_tags(GAME_NEG, "nsfw, worst quality, low quality")
+      == "photoreal, thighs, nude",
+      RB.remove_tags(GAME_NEG, "nsfw, worst quality, low quality"))
 check("付け替え（off で外す）",
       RB.remap_lora("a, <lora:LCM_LoRA_Weights_SD15:1>, b",
                     [("LCM_LoRA_Weights_SD15", "off")]) == "a, , b",
@@ -514,6 +539,17 @@ ctx_off = fresh()
 check("設定が全部既定なら1つも書き換えない",
       ctx_off.hooks[exit_target](Pipe.generate_image, pipe, prompt="p",
                                  width=256, height=512)["width"] == 256)
+GAME_PROMPT = "full-body, masterpiece,high quality, detailed face, medieval"
+check("規則が空ならプロンプトのカンマも均さない（ゲームの本文は空白無しで来る）",
+      ctx_off.hooks[exit_target](
+          Pipe.generate_image, pipe, prompt=GAME_PROMPT,
+          width=256, height=512)["prompt"] == GAME_PROMPT)
+check("規則が空なら rewrite は None",
+      RB.rewrite(RB.empty(), "portrait", "prompt", GAME_PROMPT, GAME_PROMPT) is None)
+check("当たる規則があるときは付け替えの穴を塞ぐ（tidy は残す）",
+      RB.rewrite({"lora_map": [{"enabled": True, "from": "X", "to": "off"}]},
+                 "portrait", "prompt", "a, <lora:X:1>, b", "a, <lora:X:1>, b")
+      == "a, b")
 
 # ---------------------------------------------------------------- 一族の差
 print("diffusers 系")
@@ -581,6 +617,26 @@ built = []
 ctx_again.hooks[build_target](lambda: built.append(again.model_path_anime))
 check("建てる直前に材料が書き換わっている（import は走っていない）",
       built == ["runtime/models/sdxl/checkpoints/second.safetensors"], built)
+
+print("用済みの apply() は当て直さない（包みが重ならない）")
+cleanup("image_generation.fake5.stable_diffusion_manager",
+        "image_generation.fake5.image_generation_creature")
+stale_mod, _ = fake_backend("image_generation.fake5.stable_diffusion_manager",
+                            "image_generation.fake5.image_generation_creature")
+ctx_old = fresh(PORTRAIT_SHORT=832, PORTRAIT_MAX_LONG=1664)
+old_build = "image_generation.fake5.stable_diffusion_manager:load_sd_pipeline"
+check("生きている間は当て直す", old_build in ctx_old.hooks, sorted(ctx_old.hooks)[:3])
+wrapped_before = len(ctx_old.hooks)
+ctx_old.superseded = lambda: True
+cleanup()                     # 印だけ戻す（モジュールは残す）
+ctx_old.hooks[old_build](lambda: None)
+check("用済みになったら load_sd_pipeline の包みからは当て直さない",
+      len(ctx_old.hooks) == wrapped_before, (wrapped_before, len(ctx_old.hooks)))
+check("用済みの apply() は建てる直前にも書かない",
+      stale_mod.model_path_anime.endswith("sotemix_v30.safetensors"),
+      stale_mod.model_path_anime)
+cleanup("image_generation.fake5.stable_diffusion_manager",
+        "image_generation.fake5.image_generation_creature")
 
 print("用済みの観測者は書かない")
 cleanup("image_generation.fake2.stable_diffusion_manager",
@@ -682,6 +738,42 @@ check("手で入れる案内に URL と置き場と名前が出る",
                                   AS.dir_of(store, "sdxl", "taesd"))
           for part in ("https://", "taesd", "diffusion_pytorch_model.safetensors")))
 
+print("プリセット（SD1.5 / SDXL）")
+if MOD_DIR not in sys.path:
+    sys.path.insert(0, MOD_DIR)          # presets は道具と同じく隣を素の名前で import する
+import presets as PR  # noqa: E402
+
+sd15_values, sd15_notes = PR.resolve("sd15", store)
+check("SD1.5 プリセットは元の sd15.ini の値（832 / 1216、euler_a / 24 / 5.0）",
+      sd15_values["PORTRAIT_SHORT"] == 832 and sd15_values["PORTRAIT_MAX_LONG"] == 1216
+      and sd15_values["STAGE2_METHOD"] == "euler_a" and sd15_values["STAGE2_STEPS"] == 24
+      and sd15_values["STAGE2_CFG"] == 5.0, sd15_values)
+check("SD1.5 プリセットは材料と LoRA 除去を空に戻す",
+      sd15_values["CHECKPOINT_PATH"] == "" and sd15_values["TAESD_PATH"] == ""
+      and sd15_values["STRIP_LORA"] is False and sd15_values["LCM_METHOD"] == "lcm"
+      and not sd15_notes, (sd15_values, sd15_notes))
+sdxl_values, sdxl_notes = PR.resolve("sdxl", store)
+check("SDXL プリセットは元の sdxl.ini の値（1024 / 2048、背景 704 / 1408）",
+      sdxl_values["PORTRAIT_SHORT"] == 1024 and sdxl_values["PORTRAIT_MAX_LONG"] == 2048
+      and sdxl_values["BACKGROUND_SHORT"] == 704 and sdxl_values["BACKGROUND_MAX_LONG"] == 1408,
+      sdxl_values)
+check("SDXL プリセットは実測で要ると分かった2つを足す（LoRA 除去と LCM の段）",
+      sdxl_values["STRIP_LORA"] is True
+      and (sdxl_values["LCM_METHOD"], sdxl_values["LCM_STEPS"], sdxl_values["LCM_CFG"])
+      == ("euler_a", 24, 5.0), sdxl_values)
+check("SDXL プリセットは置き場の一番新しいチェックポイントを指す（x.safetensors）",
+      sdxl_values["CHECKPOINT_PATH"].endswith("x.safetensors"), sdxl_values["CHECKPOINT_PATH"])
+check("SDXL プリセットは置き場の TAESD を指す（ダウンロードで置いたもの）",
+      sdxl_values["TAESD_PATH"].endswith("taesdxl.safetensors"), sdxl_values["TAESD_PATH"])
+empty_store = tempfile.mkdtemp(prefix="image_quality_empty_")
+sdxl_values, sdxl_notes = PR.resolve("sdxl", empty_store)
+check("置き場に無ければ空のまま注記が出る",
+      sdxl_values["CHECKPOINT_PATH"] == "" and len(sdxl_notes) == 2
+      and all("無い" in note for note in sdxl_notes), sdxl_notes)
+check("プリセットの値は全部 mod.json に宣言がある",
+      all(name in MANIFEST["settings"] for name in sdxl_values),
+      [name for name in sdxl_values if name not in MANIFEST["settings"]])
+
 print("元 MOD の ini の取り込み")
 _spec = _ilu.spec_from_file_location("iniimport_under_test",
                                      os.path.join(MOD_DIR, "iniimport.py"))
@@ -771,6 +863,59 @@ check("取り込んだ規則がそのまま使える",
       == "solo, 1boy, <lora:myChar:0.7>, masterpiece, <lora:maleStyle:0.8>",
       RB.rewrite(imported, "portrait", "prompt", "solo, medieval, 1boy, watercolor",
                  "solo, medieval, 1boy, watercolor"))
+
+print("生成のたびに読み直す（ホットリロード）")
+from instantale_modloader import config as _config  # noqa: E402
+
+cleanup(MANAGER, CREATURE)
+fake_backend()
+ctx_hot = fresh()
+hot_hook = ctx_hot.hooks[exit_target]
+check("場所が控えられていれば読み直しが効く状態", ctx_hot.notes and not any(
+    "hot reload: off" in note for note in ctx_hot.notes), ctx_hot.notes[-3:])
+MOD.MARKS.kind, MOD.MARKS.func = "portrait", "generate_image_anime"
+got = hot_hook(Pipe.generate_image, pipe, prompt="p", width=256, height=512)
+check("最初は既定のまま", (got["width"], got["height"]) == (256, 512), got)
+
+store = _config.store_path(ctx_hot.runtime_dir)
+os.makedirs(os.path.dirname(store), exist_ok=True)
+io.open(store, "w", encoding="utf-8").write(json.dumps(
+    {"916_image_quality": {"PORTRAIT_SHORT": 832, "PORTRAIT_MAX_LONG": 1664,
+                           "STAGE1_STEPS": "28"}}))
+got = hot_hook(Pipe.generate_image, pipe, prompt="p", width=256, height=512)
+check("設定ファイルを書き換えると次の生成から効く（注入し直し不要）",
+      (got["width"], got["height"]) == (448, 832), got)
+check("値はローダの型変換を通る（文字列の '28' が int に）",
+      got["sample_steps"] == 28, got["sample_steps"])
+check("読み直したとログに出る", any(note.startswith("reloaded settings") for note in ctx_hot.notes),
+      ctx_hot.notes[-2:])
+
+notes_before = len(ctx_hot.notes)
+hot_hook(Pipe.generate_image, pipe, prompt="p", width=256, height=512)
+check("変わっていなければ読み直さない（ログも増えない）",
+      not any(note.startswith("reloaded") for note in ctx_hot.notes[notes_before:]))
+
+io.open(store, "w", encoding="utf-8").write(json.dumps(
+    {"916_image_quality": {"PORTRAIT_SHORT": 832, "PORTRAIT_MAX_LONG": 1664,
+                           "STAGE1_STEPS": "not a number"}}))
+got = hot_hook(Pipe.generate_image, pipe, prompt="p", width=256, height=512)
+check("読めない値は既定に倒れ、他の項目は生きたまま",
+      got["sample_steps"] == 20 and (got["width"], got["height"]) == (448, 832), got)
+
+os.remove(store)
+got = hot_hook(Pipe.generate_image, pipe, prompt="p", width=256, height=512)
+check("設定ファイルが消えれば既定に戻る", (got["width"], got["height"]) == (256, 512), got)
+
+rules_live = RB.rules_path(ctx_hot.state_dir)
+os.makedirs(os.path.dirname(rules_live), exist_ok=True)
+io.open(rules_live, "w", encoding="utf-8").write(json.dumps(
+    {"add": [{"enabled": True, "kind": "any", "target": "prompt", "text": "hot"}]}))
+got = hot_hook(Pipe.generate_image, pipe, prompt="p", width=256, height=512)
+check("規則も次の生成から効く", got["prompt"] == "p, hot", got["prompt"])
+os.remove(rules_live)
+got = hot_hook(Pipe.generate_image, pipe, prompt="p", width=256, height=512)
+check("規則のファイルが消えれば何もしない", got["prompt"] == "p", got["prompt"])
+check("読み直しで例外が出ていない", not ctx_hot.errors, ctx_hot.errors)
 
 print("積み上げ")
 before = len([f for f in sys.meta_path if getattr(f, MOD.OBSERVER_MARK, None)])

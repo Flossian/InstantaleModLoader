@@ -3,15 +3,15 @@
   "api": 1,
   "kind": "feature",
   "name": {
-    "en": "Higher quality image generation",
-    "ja": "画像生成の画質を上げる"
+    "en": "Override Stable Diffusion resolution, sampler, model and prompts",
+    "ja": "Stable Diffusionの各種差し替え"
   },
   "description": {
     "en": "Raises the generation resolution and overrides the sampler at the single exit every backend goes through, separately for portraits, enemies and backgrounds, keeping the aspect ratio. The checkpoint, TAESD, VAE and LoRA folder can be pointed elsewhere (for an SDXL model) because they are written before the pipeline is built. Every default is the game's own value, and a setting left at its default is never written",
     "ja": "どのバックエンドでも通る1つの出口で、生成解像度を上げ、サンプラーを上書きする。立ち絵・敵・背景で別々に指定でき、縦横比は保つ。チェックポイント・TAESD・VAE・LoRA の置き場も差し替えられる（パイプラインが建つ前に書くため。SDXL のモデルへ移る用）。既定値はすべてゲームの値で、既定のままの項目は書き換えない",
     "why_wip": "実機で6項目が通ったが、プロンプトの規則（付け替え・条件つき追加・除去・置換・skip）は実機で当てていない。既存 sd_upscale.ini からの移行と、131_sharp_portrait を切にした組み合わせも未確認"
   },
-  "version": "16",
+  "version": "22",
   "author": "R01/Flossian",
   "settings": {
     "PORTRAIT_SHORT": {
@@ -439,12 +439,12 @@
   "tool": {
     "entry": "tool.py",
     "label": {
-      "ja": "画像生成の設定を開く",
-      "en": "Open the image generation settings"
+      "ja": "Stable Diffusion の設定を開く",
+      "en": "Open the Stable Diffusion settings"
     },
     "note": {
-      "ja": "元 InstantaleStableDiffusionMod の GUI を写した画面。タブは状態 / モデル・解像度・LoRA 付替・プロンプト追加・条件付き追加・タグ除去・完全置き換え・サンプラーの8枚で、固定行の「有効」チェックや一覧の行追加も元と同じ作り。元 MOD の sd_upscale.ini を読み込んで設定と規則へ写せる。解像度は入れた値で実際に何ピクセルになるかをその場で計算して見せ、チェックポイントは中身から SD1.5 / SDXL を判定して表示する",
-      "en": "A dedicated window modelled on the original InstantaleStableDiffusionMod GUI: the same eight tabs (status / model, resolution, LoRA remap, prompt additions, conditional additions, tag removal, full replacement, sampler), per-kind rows with an enable checkbox and add-row tables. It can import the original sd_upscale.ini into settings and rules, computes as you type the size each kind will actually be generated at, and reads SD1.5 / SDXL from the checkpoint's contents"
+      "ja": "元 InstantaleStableDiffusionMod の GUI を写した画面。タブは状態 / モデル・解像度・LoRA 付替・プロンプト追加・条件付き追加・タグ除去・完全置き換え・サンプラーの8枚で、固定行の「有効」チェックや一覧の行追加も元と同じ作り。元 MOD の sd_upscale.ini を読み込んで設定と規則へ写せる。SD1.5 / SDXL のプリセット（元 MOD のモード切替に当たる）をボタンで入れ替えられる。解像度は入れた値で実際に何ピクセルになるかをその場で計算して見せ、チェックポイントは中身から SD1.5 / SDXL を判定して表示する",
+      "en": "A dedicated window modelled on the original InstantaleStableDiffusionMod GUI: the same eight tabs (status / model, resolution, LoRA remap, prompt additions, conditional additions, tag removal, full replacement, sampler), per-kind rows with an enable checkbox and add-row tables. It can import the original sd_upscale.ini into settings and rules, swap in the SD1.5 or SDXL preset bundle with one button, computes as you type the size each kind will actually be generated at, and reads SD1.5 / SDXL from the checkpoint's contents"
     }
   }
 }

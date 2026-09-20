@@ -159,12 +159,53 @@ def split_tags(text):
     return [part.strip() for part in str(text or "").split(",")]
 
 
+#: 区画の飾り。先頭の括弧、本体、末尾の `:重み` と閉じ括弧。
+#: ゲームのネガティブは `(nsfw, worst quality, low quality:1.4)` のように
+#: 重みの括弧でまとめて来るので、区画をそのまま比べると `(nsfw` になって当たらない
+#: （実機 2026-09-20: `nsfw` の除去が1件も効かなかった）。
+_DRESSED = re.compile(r"^([\(\[\{]*)(.*?)((?::[\d.]+)?[\)\]\}]*)$")
+
+
+def bare(tag):
+    """区画の飾りを外した `(先頭の括弧, 本体, 末尾)`。本体で比べる。"""
+    found = _DRESSED.match(tag.strip())
+    return found.group(1), found.group(2).strip(), found.group(3)
+
+
 def remove_tags(body, spec):
-    """指定したタグを取り除く。1区画単位・大文字小文字を問わない完全一致。"""
-    drop = set(tag.lower() for tag in split_tags(spec) if tag)
+    """指定したタグを取り除く。1区画単位・大文字小文字を問わない完全一致。
+
+    比べるのは飾りを外した本体（`(nsfw` も `nsfw:1.2)` も `nsfw`）。
+    消すときは区画ごと落とし、括弧の対応が崩れないように
+    先頭の括弧は次の区画へ、末尾の `:重み)` は前の区画へ移す。
+
+        (nsfw, worst quality, low quality:1.4)  から nsfw   → (worst quality, low quality:1.4)
+        (nsfw, worst quality, low quality:1.4)  から low quality → (nsfw, worst quality:1.4)
+        (nsfw:1.4)                              から nsfw   → 消える
+    """
+    drop = set(bare(tag)[1].lower() for tag in split_tags(spec) if tag)
+    drop.discard("")
     if not drop:
         return body
-    kept = [tag for tag in split_tags(body) if tag and tag.lower() not in drop]
+    kept = []
+    carry = ""                              # 落とした区画の先頭の括弧
+    for tag in split_tags(body):
+        if not tag:
+            continue
+        opening, core, closing = bare(tag)
+        if core.lower() not in drop:
+            kept.append(carry + tag)
+            carry = ""
+            continue
+        if opening and closing:
+            continue                        # 括弧が閉じている1区画。丸ごと落とす
+        if opening:
+            carry += opening
+        elif closing:
+            if carry:
+                carry = ""                  # 開きも閉じも落とした区画。括弧ごと消える
+            elif kept:
+                kept[-1] += closing
     return ", ".join(kept)
 
 
@@ -235,24 +276,38 @@ def rewrite(rules, kind, target, body, original):
     """
     now = body if isinstance(body, str) else ""
     was = now
+    #: 当たった規則が1つでもあるか。**1つも無ければ本文に触らない。**
+    #: 当たっていないのに `tidy()` を通すと、ゲームの `a,b` が `a, b` に均されて
+    #: 「規則が空でも毎回プロンプトを書き換える」ことになる
+    #: （実機 2026-09-20: 規則0行で 227字 -> 231字。ゲームの本文はカンマの後に空白が無い）。
+    touched = False
 
     for row in active(rules, "remove", kind, target):
         now = remove_tags(now, row.get("text"))
+        touched = True
 
     for row in active(rules, "replace", kind, target):
         text = str(row.get("text") or "")
         if text:
             now = text.replace(PLACEHOLDER, now)
+            touched = True
 
     if target == "prompt":
         pairs = [(row.get("from"), row.get("to"))
                  for row in active(rules, "lora_map")]
-        now = remap_lora(now, pairs)
+        if pairs:
+            now = remap_lora(now, pairs)
+            touched = True
 
     additions = [str(row.get("text") or "")
                  for row in active(rules, "add", kind, target)
                  if matches(row.get("when"), original)]
-    now = join([now] + additions) if additions else tidy(now)
+    if additions:
+        now = join([now] + additions)
+    elif touched:
+        now = tidy(now)          # 付け替えで空いた区画を塞ぐ
+    elif not touched:
+        return None
 
     return None if now == was else now
 
