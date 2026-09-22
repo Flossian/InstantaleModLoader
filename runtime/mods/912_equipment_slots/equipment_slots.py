@@ -28,6 +28,7 @@
 
 記録は DOC.md（開発中のため docs\\ には無い）。
 """
+import re
 import sys
 
 from instantale_modloader import frames, state, ui
@@ -47,6 +48,14 @@ SETTLE_DELAY = 0.1
 # GUI から変えられる値（mod.json の "settings" と同じ名前・既定値。TECH.md §3.8）。
 #: 小さい品を部位いっぱいに広げて描く（1×1 を 2×2 の部位なら 2 倍）。
 SCALE_TO_FIT = True
+#: 装備欄の品を合算して戦闘と画面上部の Atk/Def に効かせる。切ると最高値の1品だけ（本体どおり）。
+COMBINE_SLOTS = False
+#: 合算の圧縮率（%）。最高値の品はそのまま、残りの品にこの率を掛けて足す。
+COMBINE_ATTACK_PERCENT = 50
+COMBINE_DEFENSE_PERCENT = 10
+
+#: 画面上部の能力欄の行（`Atk:432(+500)`）。括弧の中が装備の値。
+STATUS_LINE = re.compile(r"^(Atk|Def):([0-9.]+)\(\+([0-9.]+)\)", re.M)
 
 #: 装備欄の品 {持ち物の鍵: Item}。`apply()` が差す（ゲーム抜きの試験から中身を見るため）。
 #: 実体は `sys` に置く（装備中の品は持ち物の辞書に居ないので、注入し直しで MOD の
@@ -191,7 +200,7 @@ def apply(ctx):
             if isinstance(current, str):
                 current = items.get(current)
             if current is want:
-                if force and want is not None:
+                if (force or COMBINE_SLOTS) and want is not None:
                     write("refresh {}: {!r}".format(
                         game_key, frames.short(getattr(want, "name", None), 60)))
                     native_manager(app, "ItemEquipManager", want)
@@ -205,6 +214,25 @@ def apply(ctx):
             write("{} -> {!r} (was {!r})".format(
                 game_key, frames.short(getattr(want, "name", None), 60) if want else None,
                 frames.short(getattr(current, "name", None), 60) if current else None))
+        if COMBINE_SLOTS:
+            repaint_status(app)
+
+    def repaint_status(app):
+        """画面上部の能力欄を今の文字列で描き直す。
+
+        本体は `status_texts`（Kivy の StringProperty）が変わったときだけ見張りを呼ぶ。最高値の品が
+        変わらないドラッグでは文字列が同じなので、合算の値は HP や所持金が動くまで描き変わらなかった
+        （実機 2026-09-22、DOC.md §3.1）。見張りを直に呼べば包み（合算の描き変え）を通る。
+        """
+        hud = ui.find_hud(app)
+        text = frames.attr(hud, "status_texts", None)
+        update = frames.attr(hud, "update_status_texts", None)
+        if not isinstance(text, str) or not callable(update):
+            return
+        try:
+            update(hud, text)
+        except Exception:
+            ctx.log_exc("equipment slots: repainting the status texts failed")
 
     def after_change(app):
         key, _positions = positions_of(app)
@@ -770,6 +798,97 @@ def apply(ctx):
                         break
             if cells is not None:
                 taken |= cells
+
+    # ------------------------------------------------------------ 合算
+    #: 戦闘の1手の間だけ立つ旗と、直前に聞かれた敵の防御（味方被弾と見分けるため。DOC.md §4）。
+    battle = {"active": False, "npc_defense": None, "shown": {}}
+
+    def matches(a, b):
+        try:
+            return abs(float(a) - float(b)) < 0.5
+        except (TypeError, ValueError):
+            return False
+
+    def combined_of(app, game_key):
+        """(最高の品の値, 合算した値)。合算が切ってあるか候補が無ければ None。
+
+        窓を開いていなくても引けるよう、控えの位置と持ち物＋装備欄の辞書から組む
+        （ロード直後は装備欄の品も持ち物の辞書に居る）。
+        """
+        if not COMBINE_SLOTS:
+            return None
+        items = dict(inventory_of(player_of(app)) or {})
+        items.update(container)
+        _key, positions = positions_of(app)
+        slots = rules.slots_from_positions(positions, items)
+        percent = COMBINE_ATTACK_PERCENT if game_key == "weapon" else COMBINE_DEFENSE_PERCENT
+        chosen, value = rules.combined(slots, items, game_key, percent)
+        if chosen is None:
+            return None
+        return rules.stat_of(chosen, dict(rules.GAME_KEYS)[game_key]), value
+
+    def note_combined(kind, before, after):
+        if battle["shown"].get(kind) != (before, after):
+            battle["shown"][kind] = (before, after)
+            write("combine {}: {:g} -> {:g}".format(kind, before, after))
+
+    @ctx.wrap("scripts.functions:get_base_damage_value", required=False, safe=True)
+    def get_base_damage_value(orig, character_attack=None, weapon_attack=None, *args, **kwargs):
+        """プレイヤーの手の火力。武器攻撃力を両手の合算に差し替える（通るのはプレイヤーの手だけ）。"""
+        app = ui.find_app()
+        found = combined_of(app, "weapon") if app is not None else None
+        if found is not None and matches(weapon_attack, found[0]):
+            note_combined("weapon", found[0], found[1])
+            weapon_attack = found[1]
+        return orig(character_attack, weapon_attack, *args, **kwargs)
+
+    @ctx.wrap("scripts.characters:Character.get_npc_defense", required=False, safe=True)
+    def get_npc_defense(orig, self, *args, **kwargs):
+        result = orig(self, *args, **kwargs)
+        battle["npc_defense"] = result
+        return result
+
+    @ctx.wrap("__main__:BattlePhaseManager.resolve_battle_effect", required=False, safe=True)
+    def resolve_battle_effect(orig, self, *args, **kwargs):
+        battle["active"], battle["npc_defense"] = True, None
+        try:
+            return orig(self, *args, **kwargs)
+        finally:
+            battle["active"] = False
+
+    @ctx.wrap("scripts.functions:get_instant_damage", required=False, safe=True)
+    def get_instant_damage(orig, attack=None, defense=None, *args, **kwargs):
+        """味方被弾の防御（防具の防御力がそのまま来る）を全部位の合算に差し替える。
+
+        敵被弾は直前の `get_npc_defense` の値で来るので、それと同じ値なら触らない。
+        319_ より外側で包む（`after`）。319_ は渡された防御で軽減を組む。
+        """
+        if battle["active"] and not matches(defense, battle["npc_defense"]):
+            app = ui.find_app()
+            found = combined_of(app, "wearable") if app is not None else None
+            if found is not None and matches(defense, found[0]):
+                note_combined("wearable", found[0], found[1])
+                defense = found[1]
+        return orig(attack, defense, *args, **kwargs)
+
+    def restate_status(app, text):
+        """画面上部の `Atk:432(+500)` の括弧の中を合算の値にする。"""
+        if not COMBINE_SLOTS or not isinstance(text, str):
+            return text
+
+        def sub(m):
+            found = combined_of(app, "weapon" if m.group(1) == "Atk" else "wearable")
+            if found is None or not matches(m.group(3), found[0]):
+                return m.group(0)
+            return "{}:{}(+{})".format(m.group(1), m.group(2), int(round(found[1])))
+        return STATUS_LINE.sub(sub, text)
+
+    @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.update_status_texts", safe=True)
+    def update_status_texts(orig, self, instance=None, value=None, *args, **kwargs):
+        app = ui.find_app()
+        if app is not None:
+            value = restate_status(app, value)
+        return orig(self, instance, value, *args, **kwargs)
 
     def merge_into_save(data):
         """書き出す直前のセーブ辞書へ、装備欄の品を `to_dict()` で足す。足した数を返す。

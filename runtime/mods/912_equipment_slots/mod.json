@@ -7,13 +7,14 @@
     "ja": "インベントリに装備枠を追加"
   },
   "description": {
-    "en": "Adds an equipment panel (head, left/right hand, body, arms, legs, two accessories) beside the inventory. Weapons and shields go to the hands; other wearables to their body part. The game only reads one weapon and one wearable, so the highest attack among the hands and the highest defense among all slots are handed to it (no summing).",
-    "ja": "所持品の窓の横に装備欄（頭・左手・右手・胴・腕・脚・装飾×2）を足す。武器と盾は手、他の防具は各部位へ。本体が読む装備は武器1つと防具1つだけなので、手の武器で攻撃力が最高のものと、全部位で防御力が最高のものを渡す（合算しない）"
+    "en": "Adds an equipment panel (head, left/right hand, body, arms, legs, two accessories) beside the inventory. Weapons and shields go to the hands; other wearables to their body part. The game only reads one weapon and one wearable, so the highest attack among the hands and the highest defense among all slots are handed to it. Optionally the other slots are added on top at a reduced rate",
+    "ja": "所持品の窓の横に装備欄（頭・左手・右手・胴・腕・脚・装飾×2）を足す。武器と盾は手、他の防具は各部位へ。本体が読む装備は武器1つと防具1つだけなので、手の武器で攻撃力が最高のものと、全部位で防御力が最高のものを渡す。設定で合算も入れられる（最高値はそのまま、残りの品は圧縮して足す）"
   },
   "version": "1",
   "author": "R01/Flossian",
   "after": [
-    "402_party_inventory_transfer"
+    "402_party_inventory_transfer",
+    "319_battle_tactics"
   ],
   "settings": {
     "SCALE_TO_FIT": {
@@ -26,6 +27,46 @@
       "note": {
         "ja": "1×1 の品を 2×2 の部位に置いたとき 2 倍で描く。切ると本来の大きさのまま",
         "en": "A 1x1 item in a 2x2 slot is drawn at 2x. Off: items keep their own size"
+      }
+    },
+    "COMBINE_SLOTS": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "装備欄の品を合算する",
+        "en": "Add up the equipped items"
+      },
+      "note": {
+        "ja": "最高値の品はそのまま、残りの品は下の率で圧縮して足し、戦闘と画面上部の Atk/Def に効かせる。切ると最高値の1品だけ",
+        "en": "The best item counts in full; the rest are added at the rates below, for battle and the Atk/Def display. Off: only the best item"
+      }
+    },
+    "COMBINE_ATTACK_PERCENT": {
+      "type": "int",
+      "default": 50,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "攻撃の圧縮率（%）",
+        "en": "Attack rate for the other hand (%)"
+      },
+      "note": {
+        "ja": "もう片方の手の武器の攻撃力にこの率を掛けて足す。火力は平方根で効くので 50 でも約 1.2 倍まで",
+        "en": "The other hand's attack is added at this rate. Firepower grows with the square root, so 50 gives at most about x1.2"
+      }
+    },
+    "COMBINE_DEFENSE_PERCENT": {
+      "type": "int",
+      "default": 10,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "防御の圧縮率（%）",
+        "en": "Defense rate for the other slots (%)"
+      },
+      "note": {
+        "ja": "最高値以外の部位の防御力にこの率を掛けて足す。全部位 500 で 10 なら 800",
+        "en": "The other slots' defense is added at this rate. Seven slots of 500 at 10 give 800"
       }
     }
   }

@@ -433,4 +433,54 @@ assert not MOD.CONTAINER and set(player_b.inventory.inventory) == {"x1"}, (MOD.C
 assert any(l.startswith("world changed") for l in ctx.lines)
 MOD.ui.find_app = lambda: app
 
+# 合算: 最高値はそのまま、残りは圧縮して足す。1品なら今と同じ
+player.give(sword, dagger, helm, ring)
+store = getattr(sys, MOD.STORE_ATTR)
+_key, bucket = store.of(app)
+bucket["テスト"] = {"w1": [4, 2], "w2": [0, 2], "h1": [2, 0], "r1": [4, 6]}
+toggle(lambda self: None, hud)
+assert set(MOD.CONTAINER) == {"w1", "w2", "h1", "r1"}, set(MOD.CONTAINER)
+base_hook = ctx.hooks["scripts.functions:get_base_damage_value"]
+dmg_hook = ctx.hooks["scripts.functions:get_instant_damage"]
+npc_hook = ctx.hooks["scripts.characters:Character.get_npc_defense"]
+battle_hook = ctx.hooks["__main__:BattlePhaseManager.resolve_battle_effect"]
+status_hook = ctx.hooks["scripts.hud.new_hud:InstanTaleHUD.update_status_texts"]
+seen = lambda *a: a
+MOD.COMBINE_SLOTS = False
+assert base_hook(seen, 390, 580) == (390, 580)                         # 切っていれば素通し
+MOD.COMBINE_SLOTS, MOD.COMBINE_ATTACK_PERCENT, MOD.COMBINE_DEFENSE_PERCENT = True, 50, 10
+assert base_hook(seen, 390, 580) == (390, 580 + 451 * 0.5), base_hook(seen, 390, 580)
+assert base_hook(seen, 390, 100) == (390, 100)                         # 最高値でない値は他人の呼び出し
+# 防御: 戦闘の1手の中で、直前の敵の防御と違う値が防具の最高値なら合算
+assert dmg_hook(seen, 800, 439) == (800, 439)                          # 手の外では触らない
+def one_turn(self):
+    npc_hook(lambda s: 439, None)                                       # 敵の防御が偶然同じ値
+    assert dmg_hook(seen, 800, 439) == (800, 439)
+    npc_hook(lambda s: 120, None)
+    assert dmg_hook(seen, 800, 439) == (800, 439 + 120 * 0.1)
+    assert dmg_hook(seen, 800, 120) == (800, 120)                       # 敵被弾
+    return "turn"
+assert battle_hook(one_turn, None) == "turn"
+assert dmg_hook(seen, 800, 439) == (800, 439)                          # 手が終われば触らない
+# 画面上部: 括弧の中を合算の値に。最高値でない括弧は触らない
+text = "Atk:432(+580)\nDef:0(+439)\nExp:1/2"
+assert status_hook(lambda s, i, v: v, hud, None, text) == "Atk:432(+806)\nDef:0(+451)\nExp:1/2"
+assert status_hook(lambda s, i, v: v, hud, None, "Atk:432(+100)\nDef:0(+439)") == "Atk:432(+100)\nDef:0(+451)"
+assert any(l.startswith("combine weapon: 580 -> 805.5") for l in ctx.lines)
+# 装備欄が変わったら能力欄を描き直す（本体の文字列が同じでも合算の値で描く）
+hud.status_texts = "Atk:432(+580)\nDef:0(+439)"
+hud.update_status_texts = lambda inst, v: status_hook(lambda s, i, v2: setattr(hud, "painted", v2), hud, inst, v)
+bucket["テスト"] = {"w1": [4, 2], "h1": [2, 0]}
+toggle(lambda self: None, hud)                               # 短剣は所持品へ戻る
+mine.taken = set()                                           # 偽グリッドの占有を空に（古い偽ウィジェットは片付いている）
+w_dagger2 = Widget(dagger, main, (1, 5))
+drop(w_dagger2, 0, 2)                                        # 左手へ。最高値の剣は変わらない
+assert hud.painted == "Atk:432(+806)\nDef:0(+439)", getattr(hud, "painted", None)
+# 1品だけなら合算を入れても同じ値
+bucket["テスト"] = {"w1": [4, 2]}
+MOD.CONTAINER.clear(); player.give(sword, dagger, helm, ring)
+toggle(lambda self: None, hud)
+assert base_hook(seen, 390, 580) == (390, 580)
+MOD.COMBINE_SLOTS = False
+
 print("ok")

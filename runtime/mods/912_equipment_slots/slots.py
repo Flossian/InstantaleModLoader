@@ -156,6 +156,25 @@ def accepts(item, x, y, occupied):
     return None
 
 
+def combined(slots, items, game_key, percent):
+    """合算。最高値の品はそのまま、残りの同じ種類の品に percent/100 を掛けて足す。
+
+    (最高の品, 合算した値)。候補が無ければ (None, 0.0)。品が1つなら `best` と同じ値になる
+    （合算を切っても入れても、1つだけ装備した主人公の数字は変わらない）。
+    """
+    stat = dict(GAME_KEYS)[game_key]
+    chosen = best(slots, items, game_key)
+    if chosen is None:
+        return None, 0.0
+    rest = 0.0
+    for name in REGIONS:
+        item = items.get(slots.get(name))
+        if item is None or item is chosen or getattr(item, "item_type", None) != game_key:
+            continue
+        rest += stat_of(item, stat)
+    return chosen, stat_of(chosen, stat) + rest * float(percent) / 100.0
+
+
 def slots_from_positions(positions, items):
     """{id: (x, y)} → {部位: id}。部位の外の品は無視する。"""
     slots = {}
