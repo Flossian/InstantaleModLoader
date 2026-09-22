@@ -28,10 +28,11 @@
 
 記録は DOC.md（開発中のため docs\\ には無い）。
 """
+import os
 import re
 import sys
 
-from instantale_modloader import frames, state, ui
+from instantale_modloader import combat, frames, state, ui
 
 from . import slots as rules
 
@@ -851,6 +852,12 @@ def apply(ctx):
     @ctx.wrap("__main__:BattlePhaseManager.resolve_battle_effect", required=False, safe=True)
     def resolve_battle_effect(orig, self, *args, **kwargs):
         battle["active"], battle["npc_defense"] = True, None
+        app = ui.find_app()
+        if app is not None:
+            try:
+                sync_game(app)            # 本体の popup で枠を落とされていても、装備欄の品で戦う
+            except Exception:
+                ctx.log_exc("equipment slots: sync before a battle turn failed")
         try:
             return orig(self, *args, **kwargs)
         finally:
@@ -870,6 +877,39 @@ def apply(ctx):
                 note_combined("wearable", found[0], found[1])
                 defense = found[1]
         return orig(attack, defense, *args, **kwargs)
+
+    def gear_value(app, holder, game_key):
+        """この人物の装備の値（窓口 `combat` への答え）。装備が無ければ None。
+
+        主人公は装備欄（合算が入っていれば合算、切っていれば最高値）。仲間は本体の
+        `equipments[weapon|wearable]`（402_ が書く id か実体）を持ち物から引いた 1 品。
+        仲間の装備欄は段2で足す（DOC.md §3.4）。
+        """
+        stat = dict(rules.GAME_KEYS)[game_key]
+        if holder is player_of(app):
+            found = combined_of(app, game_key)
+            if found is not None:
+                return found[1]
+            slots = current_slots(app)
+            chosen = rules.best(slots, container, game_key)
+            return rules.stat_of(chosen, stat) if chosen is not None else None
+        eq = getattr(holder, "equipments", None)
+        ref = eq.get(game_key) if isinstance(eq, dict) else None
+        if ref is None:
+            return None
+        item = ref
+        if isinstance(ref, (str, int)):
+            item = (inventory_of(holder) or {}).get(str(ref))
+        if item is None or getattr(item, "item_type", None) != game_key:
+            return None
+        value = rules.stat_of(item, stat)
+        return value if value > 0 else None
+
+    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "912_equipment_slots"
+    combat.declare(combat.ATTACK, lambda app, holder: gear_value(app, holder, "weapon"),
+                   owner=owner, write=write)
+    combat.declare(combat.DEFENSE, lambda app, holder: gear_value(app, holder, "wearable"),
+                   owner=owner, write=write)
 
     def restate_status(app, text):
         """画面上部の `Atk:432(+500)` の括弧の中を合算の値にする。"""
@@ -1178,6 +1218,29 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("equipment slots: popup unequip failed")
         return None
+
+    def resync_after_native(orig, self, *args, **kwargs):
+        """本体の ItemEquipManager / ItemUnequipManager が MOD 以外の経路で走ったあと、装備欄から組み直す。
+
+        本体の unequip は渡された品の種類の枠（`equipments[item_type]`）を無条件に落とし、HUD を (+0) にする。
+        装備欄に居る品と別の品を本体の popup で外すと、装備欄の品の枠まで消えた（実機 2026-09-23 00:43、
+        DOC.md §3.3）。MOD 自身が呼んだとき（`placing["native"]`）は組み直さない。
+        """
+        result = orig(self, *args, **kwargs)
+        if not placing["native"]:
+            app = ui.find_app()
+            if app is not None:
+                def resync():
+                    try:
+                        sync_game(app, force=True)
+                        refresh_marks(app)
+                    except Exception:
+                        ctx.log_exc("equipment slots: resync after a native manager failed")
+                schedule(resync)
+        return result
+
+    for _target in ("ItemEquipManager.equip_item", "ItemUnequipManager.unequip_item"):
+        ctx.wrap("__main__:" + _target, required=False, safe=True)(resync_after_native)
 
     @ctx.wrap("scripts.save_codec:write_obfuscated_json_file", safe=True)
     def write_save(orig, file_path, data, *args, **kwargs):

@@ -280,6 +280,14 @@ check("渡した widget の装備印を落とす", widget.is_equipped is False,
 FakeClock.run_all()
 check("予約が走ると save_game が1回", app.saves == 1, app.saves)
 check("遅延後の呼び出しで例外を残さない", ctx.errors == [], ctx.errors)
+# 仲間側の品の右クリック: 本体は popup を出さないので自前のボタンを出す（Kivy 抜きでは出せず、1行残して戻る）
+SHOW = "scripts.hud.new_hud:InventoryItem.show_popup_menu"
+widget = types.SimpleNamespace(item_id="item_9", item_instance=types.SimpleNamespace(obtainer=npc, item_type="weapon"),
+                               parent=types.SimpleNamespace())
+ctx.hooks[SHOW](lambda self, pos: None, widget, (10, 20))
+FakeClock.run_all()
+check("右クリックの包みで例外を残さない", ctx.errors == [], ctx.errors)
+
 shutil.rmtree(out_dir, ignore_errors=True)
 
 
@@ -381,6 +389,7 @@ check("id文字列の参照も正常として通す", string_item.unequip_calls 
       string_item.unequip_calls)
 check("例外を残さない", ctx.errors == [], ctx.errors)
 shutil.rmtree(out_dir, ignore_errors=True)
+
 
 
 print()

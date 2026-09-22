@@ -103,9 +103,10 @@ band が火力の一部しか1発に乗せないため。
 セーブに MOD 独自の鍵は増やさない。
 """
 
+import math
 import random
 
-from instantale_modloader import frames, ui
+from instantale_modloader import combat, frames, ui
 
 LOG_BASENAME = "battle_tactics.log"
 LOG_TAG = "battle tactics"
@@ -160,6 +161,14 @@ DAMAGE_WOBBLE = 10
 # ダンジョンの回復なしの連戦が成立しない（実機の指摘）。
 # 50 で、雑魚の群れ1戦の消耗が2割前後・同格やボスは変わらず脅威、に収まる。
 ENEMY_POWER = 50
+
+# 仲間の装備の効き（%）。仲間の錨（本人の max_hp）に 2×√(能力 × 武器) × この率を足し、
+# 仲間の防御（本人の get_npc_defense）に防具の防御力 × この率を足す。
+# 「大きいほう」では効かない（仲間の素の値は体力・レベル由来で既に高く、Lv68 の仲間は
+# max_hp 992 に対し武器の式が 580、素の防御 260 に対し指輪 268。実機 2026-09-23）。
+# 50 で、杖 323 の仲間の錨が +29%、指輪 268 の防御が 260 → 394（軽減 24% → 33%）。
+# 0 で素のゲームどおり（仲間の装備は数に乗らない）。
+ALLY_GEAR_PERCENT = 50
 
 # 審判が付けた状態異常の中身（毎ターンの効果・能力の増減）を復元して効かせる。
 RESTORE_EFFECTS = True
@@ -324,6 +333,39 @@ def hit_damage(entries, anchor, defender_max_hp, defense,
     if defender_max_hp > 0:
         damage = max(damage, defender_max_hp * MIN_FRACTION)
     return max(1, int(round(damage)))
+
+
+def ally_anchor(attacker_max, defender_max, ability=None, weapon=None, percent=None):
+    """仲間の火力の錨。本人の max_hp（受け側 max_hp を下限）に、武器があれば
+    プレイヤーと同じ基礎値 2×√(能力 × 武器) × 率（`ALLY_GEAR_PERCENT`）を**足す**。
+
+    武器は上乗せにしかならない（弱い武器を持たせて弱くなることは無い）。
+    「大きいほう」にすると仲間の素の値に負けて一度も効かない（実機 2026-09-23、DOC.md）。
+    能力は `get_npc_defense()` の値で代える（プレイヤーの基礎値の能力側と
+    一致した実測が 1 点）。武器は窓口 `combat.attack` から。
+    """
+    base = max(float(attacker_max or 0), float(defender_max or 0))
+    rate = (ALLY_GEAR_PERCENT if percent is None else percent) / 100.0
+    try:
+        ability, weapon = float(ability), float(weapon)
+    except (TypeError, ValueError):
+        return base
+    if ability <= 0 or weapon <= 0 or rate <= 0:
+        return base
+    return base + 2.0 * math.sqrt(ability * weapon) * rate
+
+
+def gear_defense(defense, gear=None, percent=None):
+    """受け側の防御。本体が渡した値（仲間は `get_npc_defense`）に装備の防御力 × 率を足す。"""
+    rate = (ALLY_GEAR_PERCENT if percent is None else percent) / 100.0
+    try:
+        gear = float(gear)
+        base = float(defense)
+    except (TypeError, ValueError):
+        return defense
+    if gear <= 0 or rate <= 0:
+        return defense
+    return base + gear * rate
 
 
 def per_turn_amount(max_hp, power, intensity):
@@ -506,6 +548,17 @@ def apply(ctx):
         if not isinstance(value, (int, float)) or value <= 0:
             return None
         return float(value)
+
+    def ability_of(holder):
+        """仲間の基礎値の能力側。`get_npc_defense()` の値で代える（`ally_anchor` の説明）。"""
+        fn = frames.attr(holder, "get_npc_defense", None)
+        if not callable(fn):
+            return None
+        try:
+            value = fn()
+        except Exception:
+            return None
+        return float(value) if isinstance(value, (int, float)) and value > 0 else None
 
     def name_of(holder, fallback="?"):
         name = frames.attr(holder, "name", None)
@@ -742,14 +795,26 @@ def apply(ctx):
             # 基礎値の取れない敵・仲間は本人の max_hp。
             # 仲間だけは受け側 max_hp を下限にする（HP の低い仲間が
             # 無力に見えないための底上げ。§2.69 の版2から引き継ぎ）。
+            gear_note = ""
             if base_value is not None:
                 anchor = base_value
             elif action["side"] == ALLY_SIDE:
-                anchor = max(attacker_max or 0, defender_max)
+                # 仲間の武器（窓口 `combat`。912_ が置く）。無ければ従来どおり。
+                weapon = combat.attack(app, action["attacker"])
+                ability = ability_of(action["attacker"]) if weapon else None
+                anchor = ally_anchor(attacker_max, defender_max, ability, weapon)
+                if weapon:
+                    gear_note += " weapon={:g}x{:g}".format(ability or 0, weapon)
             else:
                 # 敵の錨（本人の max_hp）は素だと強く出過ぎる（ENEMY_POWER の
                 # 説明）。仲間とプレイヤーには掛けない。
                 anchor = (attacker_max or defender_max) * ENEMY_POWER / 100.0
+            if holder is not getattr(app, "player", None):
+                # 仲間の防具（窓口 `combat`）。プレイヤーの防具は本体が渡す値に入っている
+                gear = combat.defense(app, holder)
+                if gear:
+                    defense = gear_defense(defense, gear)
+                    gear_note += " armor={:g}".format(gear)
             final = hit_damage(entries, anchor, defender_max, defense,
                                out_mult=out_mult, in_mult=in_mult,
                                attacker_level=attacker_level,
@@ -763,7 +828,7 @@ def apply(ctx):
                       attacker_level if attacker_level is not None else "?",
                       defender_level if defender_level is not None else "?",
                       final, final / defender_max, int(defender_max),
-                      " guard" if guard else "",
+                      (" guard" if guard else "") + gear_note,
                       "" if out_mult == 1.0 and in_mult == 1.0 else
                       " mults=({:.2f},{:.2f})".format(out_mult, in_mult)))
             return final

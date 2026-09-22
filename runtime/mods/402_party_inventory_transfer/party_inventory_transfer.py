@@ -37,10 +37,12 @@ mod.json の `after` で 301 より後に読み込み、ゲームと 301 が選�
 ## 仲間の装備
 
 NPC の装備装着は素のゲームに存在しない（`319_` の DOC にある公式回答）。
-本体の `ItemEquipManager` はプレイヤー固定なので呼ばず、窓の右側の武器・防具に
-MOD 専用の「装備する／外す」ボタンを足し、その NPC 自身の
+本体の `ItemEquipManager` はプレイヤー固定なので呼ばず、窓の右側の武器・防具を右クリックしたとき
+MOD 専用の「装備する／外す」ボタンを 1 つ出し、その NPC 自身の
 `equipments[weapon|wearable]` を id で書いて `save_game` する。
-これは MOD が作る記録で、読むのは `401_` だけ。
+本体は仲間側の品に popup を出さない（`ItemPopupMenu` を作るだけで親を付けない。店の品と同じ扱い）ので、
+本体の popup へ足すのではなく、押した位置に自前のボタンを Window の直下に置く（品の説明の箱より上）。
+外を触れば消える。この記録を読むのは `401_`（審判への文）と、`912_`＋`319_` を入れているときの戦闘の数。
 解除時は slot キーごと落とす（本体がプレイヤーの装備を外した後と同じ形）。
 
 ## ログ
@@ -450,6 +452,15 @@ def apply(ctx):
     EQUIP_TYPES = ("weapon", "wearable")
     #: MOD が足したボタンに付ける印（属性名）。同じ popup へ二重に足さないため。
     EQUIP_BUTTON_MARK = "_mod_party_npc_equip_button"
+    menu_skip = set()
+
+    def skip_once(reason, widget):
+        """ボタンを出せなかった理由を、理由ごとに 1 回だけ残す（黙って戻ると切り分けられない）。"""
+        if reason in menu_skip:
+            return
+        menu_skip.add(reason)
+        write("npc equipment button skipped: {} (item_id={})".format(
+            reason, getattr(widget, "item_id", None)))
 
     def item_id_in(owner, item_instance, preferred=None):
         """持ち主の持ち物の中でのこの Item の鍵。"""
@@ -588,132 +599,133 @@ def apply(ctx):
 
         save_after_equipment(app, npc, item_instance, action)
 
-    def add_npc_equipment_button(widget):
-        """NPC側InventoryItemのpopupへ、確実に見えるMOD専用ボタンを1つ足す。
+    def remove_npc_menu():
+        """出している自前のボタンを消す（同時に 1 つだけ）。"""
+        button = state.get("menu")
+        state["menu"] = None
+        if button is not None:
+            parent = getattr(button, "parent", None)
+            if parent is not None:
+                try:
+                    parent.remove_widget(button)
+                except Exception:
+                    pass
+        unbind = state.get("menu_unbind")
+        state["menu_unbind"] = None
+        if callable(unbind):
+            try:
+                unbind()
+            except Exception:
+                pass
 
-        `show_popup_menu` の直後（同フレームの末尾）に Clock から呼ばれる。
-        足す条件は、受け渡しの窓の NPC 側の品で、item_type が weapon / wearable のとき。
-        本体の popup は固定サイズの枠なので、枠を1段ぶん広げて（下へ伸ばせなければ
-        上へ）その段にボタンを置く。見た目は popup 内の既存ボタンから寸法とフォントを写す。
+    def show_npc_menu(widget, pos):
+        """仲間側の武器・防具を右クリックしたとき、その位置に「装備する／外す」を 1 つ出す。
+
+        本体は仲間側の品には popup を出さない（`ItemPopupMenu` を作るだけで親を付けない。
+        実機 2026-09-23。店の品と同じ扱い）。だから本体の popup へ足すのではなく、本体の popup と
+        同じ置き場（品のウィジェットの親＝窓の FloatLayout）に自前のボタンを置く。
+        外を触ったら消える。押すと記録を書き換えて消える。
         """
         app = ui.find_app()
         npc = state.get("npc")
+        if app is not None and npc is None:
+            npc = current_party_npc(app)          # 窓を開いたまま注入し直した（state が空）
+            if npc is not None:
+                state["npc"] = npc
+                state["player"] = getattr(app, "player", None)
         if app is None or npc is None:
+            skip_once("no app or no party npc in the transfer state", widget)
             return
-
         item_instance = getattr(widget, "item_instance", None)
         if item_instance is None:
+            skip_once("widget has no item_instance", widget)
             return
         if getattr(item_instance, "obtainer", None) is not npc:
-            return
+            return                                  # 自分側の品は本体の popup に任せる
         item_type = getattr(item_instance, "item_type", None)
         if item_type not in EQUIP_TYPES:
             return
-
-        popup = getattr(widget, "active_popup", None)
-        if popup is None:
-            return
-
-        # 同じpopupへ二重に足さない。
-        for child in list(getattr(popup, "children", []) or []):
-            if getattr(child, EQUIP_BUTTON_MARK, False):
-                return
-
         try:
             from kivy.uix.button import Button
             from kivy.core.window import Window
         except Exception:
-            ctx.log_exc("party inventory/equipment: Kivy Button unavailable")
+            write("npc equipment menu skipped: kivy unavailable")
             return
+        host = Window            # 品の説明の箱（hover で出る）より上に描くため、窓ではなく Window の直下
 
-        # 本体popup内の既存Buttonを見本にし、サイズ・fontだけ共有する。
+        remove_npc_menu()
+        # 見た目は本体の popup のボタンと同じにする（実機で写した描き方。DOC.md「装備する」の節）:
+        # 75×37、背景は黒 70%、文字は白の MisakiGothic 20、下地に暗い矩形、四辺に明るい 2px の縁
         template = None
-        for child in list(getattr(popup, "children", []) or []):
+        for child in list(getattr(getattr(widget, "popup_menu", None), "children", []) or []):
             if isinstance(child, Button):
                 template = child
                 break
-
+        kwargs = {"size_hint": (None, None), "size": (75, 37), "background_normal": "",
+                  "background_color": (0, 0, 0, 0.7), "color": (1, 1, 1, 1), "font_size": 20}
         if template is not None:
-            size = tuple(getattr(template, "size", (120, 40)))
-            font_size = getattr(template, "font_size", 14)
-            font_name = getattr(template, "font_name", None)
-        else:
-            size = (140, 40)
-            font_size = 14
-            font_name = None
-
+            kwargs["size"] = tuple(template.size)
+            for name in ("font_size", "font_name", "background_normal", "background_down",
+                         "background_color", "color", "border"):
+                value = getattr(template, name, None)
+                if value is not None:
+                    kwargs[name] = value
         equipped = is_equipped_by(npc, item_instance, getattr(widget, "item_id", None))
-        kwargs = {
-            "text": "外す" if equipped else "装備する",
-            "size_hint": (None, None),
-            "size": size,
-            "font_size": font_size,
-        }
-        if font_name:
-            kwargs["font_name"] = font_name
-        button = Button(**kwargs)
+        button = Button(text="外す" if equipped else "装備", **kwargs)
         setattr(button, EQUIP_BUTTON_MARK, True)
-
-        # popupの上下どちらかに1段拡張して必ず可視領域へ置く。
-        px = float(getattr(popup, "x", 0) or 0)
-        py = float(getattr(popup, "y", 0) or 0)
-        pw = float(getattr(popup, "width", size[0] + 8) or (size[0] + 8))
-        ph = float(getattr(popup, "height", size[1] + 8) or (size[1] + 8))
-        bw = float(button.width)
-        bh = float(button.height)
-        gap = 4.0
-        extra = bh + gap
-
         try:
-            window_h = float(Window.height)
+            from kivy.graphics import Color, Rectangle
+            with button.canvas.before:
+                Color(0.07, 0.06, 0.05, 0.5)
+                shade = Rectangle(pos=button.pos, size=button.size)
+            with button.canvas.after:
+                Color(0.8, 0.78, 0.76, 1.0)
+                edges = [Rectangle() for _ in range(4)]
+
+            def redraw(*_):
+                x, y, w, h = button.x, button.y, button.width, button.height
+                shade.pos, shade.size = (x, y), (w, h)
+                for edge, (pos, size) in zip(edges, (((x, y + h - 2), (w, 2)), ((x, y), (w, 2)),
+                                                    ((x, y), (2, h)), ((x + w - 2, y), (2, h)))):
+                    edge.pos, edge.size = pos, size
+            redraw()
+            button.bind(pos=redraw, size=redraw)
         except Exception:
-            window_h = py + ph + extra + 1
-
-        # 下へ伸ばせるなら、既存popupのtopを動かさず下段を追加。
-        if py >= extra:
-            popup.y = py - extra
-            popup.height = ph + extra
-            button.pos = (
-                px + max(2.0, (pw - bw) / 2.0),
-                py - extra + gap / 2.0,
-            )
-        else:
-            # 下が無理なら上へ追加。
-            popup.height = ph + extra
-            button.pos = (
-                px + max(2.0, (pw - bw) / 2.0),
-                py + ph + gap / 2.0,
-            )
-            if py + ph + extra > window_h:
-                try:
-                    popup.y = max(0.0, window_h - (ph + extra))
-                    button.y = popup.y + ph + gap / 2.0
-                except Exception:
-                    pass
-
-        button.bind(
-            on_release=lambda *_: apply_npc_equipment(
-                app, npc, widget, item_instance
-            )
-        )
-
+            ctx.log_exc("party inventory/equipment: button look failed")
         try:
-            popup.add_widget(button)
-            try:
-                ui.clamp_into_window(popup)
-            except Exception:
-                pass
-            write(
-                "npc equipment button shown: npc={} item_id={} item={!r} type={} action={!r}".format(
-                    character_name(npc, "?"),
-                    item_id_in(npc, item_instance, getattr(widget, "item_id", None)),
-                    frames.short(getattr(item_instance, "name", "?"), 80),
-                    item_type,
-                    button.text,
-                )
-            )
+            x, y = float(pos[0]), float(pos[1])
+        except Exception:
+            x, y = float(getattr(widget, "x", 0)), float(getattr(widget, "top", 0))
+        button.pos = (x, y - float(button.height))   # 本体の popup と同じく、押した点の下に
+        try:
+            ui.clamp_into_window(button)
+        except Exception:
+            pass
+
+        def pressed(*_):
+            write("npc equipment button pressed: {!r}".format(button.text))
+            apply_npc_equipment(app, npc, widget, item_instance)
+            remove_npc_menu()
+
+        def outside(_window, touch):
+            if not button.collide_point(*touch.pos):
+                screen.schedule(remove_npc_menu, 0)
+            return False
+
+        button.bind(on_release=pressed)
+        try:
+            host.add_widget(button)
         except Exception:
             ctx.log_exc("party inventory/equipment: cannot add npc equipment button")
+            return
+        Window.bind(on_touch_down=outside)
+        state["menu"] = button
+        state["menu_unbind"] = lambda: Window.unbind(on_touch_down=outside)
+        write("npc equipment button shown: npc={} item_id={} item={!r} type={} action={!r} pos={}".format(
+            character_name(npc, "?"),
+            item_id_in(npc, item_instance, getattr(widget, "item_id", None)),
+            frames.short(getattr(item_instance, "name", "?"), 80),
+            item_type, button.text, [int(button.x), int(button.y)]))
 
     # ------------------------------------------------------------ 会話の選択肢
     # 会話の選択肢は `app.buttons` の list（1件が dict。`spec` に押したときの処理）。
@@ -935,11 +947,10 @@ def apply(ctx):
         safe=True,
     )
     def show_popup_menu(orig, self, pos, *args, **kwargs):
-        """品を右クリックしたときの本体の popup。開いた後で MOD のボタンを足す。"""
+        """品を右クリックしたときの本体の popup。仲間側の品には本体が出さないので、自前のボタンを出す。"""
         result = orig(self, pos, *args, **kwargs)
         try:
-            # popup生成後、同フレーム末尾で本体の配置が終わってから足す。
-            screen.schedule(lambda: add_npc_equipment_button(self), 0)
+            screen.schedule(lambda: show_npc_menu(self, pos), 0)
         except Exception:
             ctx.log_exc("party inventory/equipment: cannot schedule npc equipment button")
         return result

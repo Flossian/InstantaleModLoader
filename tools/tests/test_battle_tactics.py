@@ -250,6 +250,23 @@ check("attribute: con enhancement lowers incoming damage",
 check("attribute: unknown attributes are skipped",
       mod.attribute_recipe("enhancement", "luck", "weak") is None)
 
+# 仲間の錨: 武器は上乗せにしかならない。防具は本体の値と装備の大きいほう
+check("ally anchor: no weapon keeps the max_hp floor",
+      mod.ally_anchor(460, 1560) == 1560 and mod.ally_anchor(460, 300) == 460)
+check("ally anchor: a weapon adds 2*sqrt(ability*weapon) at the rate",
+      abs(mod.ally_anchor(992, 600, 260, 323, percent=50) - (992 + 2 * (260 * 323) ** 0.5 * 0.5)) < 1e-9)
+check("ally anchor: the rate comes from the setting by default",
+      abs(mod.ally_anchor(992, 600, 260, 323) - mod.ally_anchor(992, 600, 260, 323, percent=mod.ALLY_GEAR_PERCENT)) < 1e-9)
+check("ally anchor: a weak weapon still only adds",
+      mod.ally_anchor(460, 600, 300, 23) > 600)
+check("ally anchor: rate 0 and broken inputs fall back",
+      mod.ally_anchor(460, 600, 300, 480, percent=0) == 600
+      and mod.ally_anchor(460, 600, None, 480) == 600 and mod.ally_anchor(460, 600, "x", 480) == 600)
+check("gear defense: the armor is added at the rate",
+      mod.gear_defense(260, 268, percent=50) == 260 + 134 and mod.gear_defense(294, 100, percent=100) == 394
+      and mod.gear_defense(294, None) == 294 and mod.gear_defense(294, 0) == 294
+      and mod.gear_defense(294, 500, percent=0) == 294)
+
 print()
 if failures:
     print("FAILED: {}".format(", ".join(failures)))

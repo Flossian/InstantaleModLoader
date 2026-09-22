@@ -476,6 +476,28 @@ mine.taken = set()                                           # 偽グリッド�
 w_dagger2 = Widget(dagger, main, (1, 5))
 drop(w_dagger2, 0, 2)                                        # 左手へ。最高値の剣は変わらない
 assert hud.painted == "Atk:432(+806)\nDef:0(+439)", getattr(hud, "painted", None)
+# 窓口 combat: 主人公は装備欄（合算）、仲間は本体の equipments の 1 品
+from instantale_modloader import combat
+assert combat.source_of(combat.ATTACK).endswith("equipment_slots")
+assert combat.attack(app, player) == 580 + 451 * 0.5 and combat.defense(app, player) == 439
+mate = Player(); mate.name = "仲間"
+spear = Item("k1", "weapon", "long_weapon", 300, size=(1, 4))
+mate.give(spear)
+mate.equipments = {"weapon": "k1"}
+assert combat.attack(app, mate) == 300 and combat.defense(app, mate) is None
+mate.equipments = {"weapon": spear}
+assert combat.attack(app, mate) == 300
+mate.equipments = {"weapon": "missing"}
+assert combat.attack(app, mate) is None
+MOD.COMBINE_SLOTS = False
+assert combat.attack(app, player) == 580                    # 合算を切れば最高値
+MOD.COMBINE_SLOTS = True
+# 本体の Manager が MOD 以外の経路で走ったら、装備欄から weapon / wearable を組み直す
+best_wearable = player.equipments.get("wearable")
+assert best_wearable is not None
+player.equipments.pop("wearable")                             # 本体の unequip は枠を無条件に落とす
+ctx.hooks["__main__:ItemUnequipManager.unequip_item"](lambda self, item: None, object(), herb)
+assert player.equipments.get("wearable") is best_wearable, player.equipments
 # 1品だけなら合算を入れても同じ値
 bucket["テスト"] = {"w1": [4, 2]}
 MOD.CONTAINER.clear(); player.give(sword, dagger, helm, ring)
