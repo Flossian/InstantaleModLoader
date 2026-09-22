@@ -41,16 +41,13 @@ r"""計測: 闘技場の試合（相手の強さと報酬）。ゲームは変�
 `D` は `get_quest_difficulties` が返す一覧の**平均を整数に落とした値**
 （3つの闘技場で一致。中央値では合わない）。
 
-読めていないこと（3つ）:
+読めていないこと（2つ）:
 
   1. **報酬の式そのもの**。実測7点（30 → 173 / 43 → 282 / 44 → 288 / 58 → 359 /
      71 → 426 / 85 → 452 / 97 → 454）で、1ランクあたりの伸びは
      8.2（30〜44）→ 5.1（44〜71）→ 1.1（71〜97）と落ち、**格70を超えると頭打ち**。
      線形・対数・平方根・飽和型のどれも7点には乗らない
   2. `D` の丸めが切り捨てか四捨五入か（実測3つとも小数部が .5 未満で分かれない）
-  3. `観戦する` の行き先（対応するマネージャが `targets.txt` に無い）。
-     **観戦を作ると決めるまで測る意味は無い**ので、狙って押しには行かない。
-     包みだけ張ってあり、押した回に1行残る
 
 ## 測り方
 
@@ -687,20 +684,6 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("colosseum probe: cannot record the game over")
         return orig(self, app, *args, **kwargs)
-
-    @ctx.wrap("__main__:NotImplementedManager.method", required=False, safe=True)
-    def not_implemented(orig, self, *args, **kwargs):
-        """`観戦する` の行き先の確かめ。押した地点の施設と呼び出し元を残す。"""
-        try:
-            app = getattr(self, "app", None) or ui.find_app()
-            write("NotImplementedManager.method: facility={!r} from {}".format(
-                getattr(facility_of(app), "name", None), frames.caller()))
-            record({"at": now(), "phase": "not_implemented",
-                    "arena": arena_here(app), "caller": frames.caller(),
-                    "flags": flags_of(app), "buttons": buttons_brief(app)})
-        except Exception:
-            ctx.log_exc("colosseum probe: cannot record the unimplemented choice")
-        return orig(self, *args, **kwargs)
 
     # ------------------------------------------------ 施設の出入り・文言・日数
     @ctx.wrap("__main__:MovePhaseManager.move_phase", required=False, safe=True)

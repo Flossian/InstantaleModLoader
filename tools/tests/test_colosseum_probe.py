@@ -210,7 +210,6 @@ for target in ("__main__:EntryColosseumMatchManager.method",
                "__main__:BattleEndManager.end_phase",
                "__main__:BattleEndInFreeAction.end_phase",
                "__main__:GameOverManager.__init__",
-               "__main__:NotImplementedManager.method",
                "__main__:MovePhaseManager.move_phase",
                "__main__:InstantaleApp.add_text",
                "__main__:InstantaleApp.elapse_days"):
@@ -218,7 +217,7 @@ for target in ("__main__:EntryColosseumMatchManager.method",
 
 print("闘技場に立つ")
 app.buttons = [button("試合に出る", "EntryColosseumMatchManager"),
-               button("観戦する", "NotImplementedManager")]
+               button("出る", "MovePhaseManager")]
 moved = ctx.hooks["__main__:MovePhaseManager.move_phase"](
     lambda self: "moved", Manager(app))
 check("orig の戻りをそのまま返す", moved == "moved", moved)
@@ -235,10 +234,6 @@ app.player.location = Facility("霧隠れの宿", "inn", {})
 ctx.hooks["__main__:MovePhaseManager.move_phase"](lambda self: "moved", Manager(app))
 check("宿屋では行が増えない", len(rows("facility")) == 1, rows("facility"))
 app.player.location = arena
-
-print("観戦する")
-ctx.hooks["__main__:NotImplementedManager.method"](lambda self: None, Manager(app))
-check("observe の行", len(rows("not_implemented")) == 1, rows("not_implemented"))
 
 print("申し込む → 相手を作る → 勝つ")
 
