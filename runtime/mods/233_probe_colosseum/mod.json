@@ -1,0 +1,19 @@
+{
+  "entry": "probe_colosseum.py",
+  "api": 1,
+  "kind": "probe",
+  "name": {
+    "en": "Probe: colosseum matches",
+    "ja": "計測: 闘技場の試合"
+  },
+  "description": {
+    "en": "Records one row per colosseum match: how the difficulty rank reaches the enemy generator and what comes back, the quest difficulties of the area (the source of the rank), the reward and where the gold actually moves, the facility's current_phase before and after each step, and whether the match ended in a win, an escape or a game over. Read-only. Groundwork for a mod that sets how fast the opponents grow and what a win pays",
+    "ja": "闘技場の試合を1件1行で録る。相手の難易度が敵の生成へどう渡り何が返るか、その土地の依頼の難易度（ランクの源）、報酬の額と所持金が実際に動く地点、各段の前後の `current_phase`、勝ち・逃げ・負け（ゲームオーバー）のどれで終わったかを残す。読み取りだけでゲームは変えない。相手の強さの伸びと報酬を設定で決める MOD の下調べ"
+  },
+  "version": "2",
+  "author": "R01/Flossian",
+  "after": [
+    "331_facility_investment"
+  ],
+  "debug": true
+}

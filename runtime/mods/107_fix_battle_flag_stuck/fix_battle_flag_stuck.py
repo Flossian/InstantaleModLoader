@@ -3,12 +3,13 @@
 
 ## 原因（GAME.md §2.10 / VERIFICATION_LOG.md §2.6）
 
-戦闘終了マネージャは2つあり、**フラグを下ろすのは片方だけ**。
+戦闘終了マネージャは3つあり、**フラグを下ろし切るのは一部だけ**。
 
-| 終了マネージャ | `end_phase` 完了時の `in_battle` | 入口 |
+| 終了マネージャ | `end_phase` 完了時 | 入口 |
 |---|---|---|
-| `BattleEndManager` | 0（ゲーム自身が下ろしている） | クエスト中のエンカウントなど通常の戦闘 |
-| `BattleEndInFreeAction` | 1（下ろし忘れ） | 自由入力・会話から入った戦闘 |
+| `BattleEndManager` | `in_battle` は 0（ゲーム自身が下ろす）。**`in_colosseum_battle` は 1 のまま** | 通常の戦闘と、**闘技場からの撤退** |
+| `BattleEndInFreeAction` | `in_battle` が 1（下ろし忘れ） | 自由入力・会話から入った戦闘 |
+| `BattleEndInColosseum` | 両方 0（ゲーム自身が下ろす） | 闘技場で勝ったとき |
 
 `106_`（戦闘BGM）の「復帰呼び出しが app ではなく
 `self` を渡している」と **同じマネージャの、同じ種類の書き忘れ**。
@@ -24,14 +25,31 @@
 さらに mod 側でもこのフラグを「戦闘中は出さない」条件に使っているので、
 一度戦闘するとその後ずっとイベントが出なくなる。
 
+## 闘技場から撤退すると次の戦闘が落ちる
+
+`in_colosseum_battle` が残ったまま次の戦闘に入ると、
+**その戦闘の終わりにゲームが `BattleEndInColosseum` を選ぶ**。
+闘技場に立っていないので施設の `config` に `current_phase` が無く、
+`KeyError: 'current_phase'`（`instantale.py:8070`）でワーカースレッドが死ぬ。
+画面は待機表示のまま止まる。
+
+実測の並び（`233_probe_colosseum` のログ）。
+
+    闘技場の試合 → 撤退 → BattleEndManager(end_type='escaped') → 旗は 1 のまま
+    依頼の戦闘の開始 → battle_start の flags に in_colosseum_battle=1
+    依頼の戦闘の終わり → BattleEndInColosseum.end_phase → KeyError
+
 ## 触る範囲
 
-下ろすのは `in_battle` だけ。
-1→0 の遷移が確認できているのがこれだけで、
-`in_boss_battle` /
-`in_colosseum_battle` は一度も立っているところを観測していない（立っていたら記録だけ残す）。
-ゲームが既に下ろしている場合は何もしない。
-`BattleEndManager` の経路ではこの mod は無音で素通りする。
+下ろすのは `in_battle` と `in_colosseum_battle` の2つ。
+どちらも**ゲーム自身が下ろしている経路がある**（前者は `BattleEndManager`、
+後者は `BattleEndInColosseum`）ので、抜けている経路にも同じことをするだけで、
+値を発明してはいない。
+`in_boss_battle` は立っているところを一度しか観測しておらず、
+戦闘の後に 0 へ戻るのも見えている（GAME.md §2.10）ので、
+こちらは立っていたら記録だけ残す。
+ゲームが既に下ろしている場合は何もしない
+（勝った試合の `BattleEndInColosseum` の経路では無音で素通りする）。
 
 タイミングもゲームに合わせる。
 `BattleEndManager` は `end_phase` を抜けた時点で 0 になっているので、
@@ -52,12 +70,15 @@ from instantale_modloader import frames, ui
 LOG_BASENAME = "battle_bgm.log"   # 106_ / 207_ と同じ時系列で読めるようにする
 
 # 下ろすフラグ。
-# 実測で「ゲーム自身が下ろしている」ことを確認できたものだけ。
-CLEAR_FLAGS = ("in_battle",)
+# 実測で「ゲーム自身が下ろしている経路がある」ことを確認できたものだけ。
+#   in_battle           … `BattleEndManager` の経路で 0 になる
+#   in_colosseum_battle … 勝った試合（`BattleEndInColosseum`）で 0 になる。
+#                         撤退（`BattleEndManager`）では残り、次の戦闘の終わりに落ちる
+CLEAR_FLAGS = ("in_battle", "in_colosseum_battle")
 
 # 立っていたら記録だけする（下ろさない）。
-# 観測できていないため。
-REPORT_FLAGS = ("in_boss_battle", "in_colosseum_battle")
+# ボス戦の旗は戦闘の後に自分で 0 へ戻るところまで観測できている。
+REPORT_FLAGS = ("in_boss_battle",)
 
 # ロード直後にも残骸を下ろすか。
 CLEAR_ON_LOAD = True

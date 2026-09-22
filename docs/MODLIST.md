@@ -8,7 +8,7 @@
 手で書き換えても次の生成で消える。
 直す先は各 MOD の `mod.json` か MODS.md の見出し。
 
-同梱 108 本（基盤 2 / 修正 37 / 追加 36 / 計測 33）。
+同梱 109 本（基盤 2 / 修正 37 / 追加 36 / 計測 34）。
 うち 11 本は外部の MOD 作者からの提供（下の「提供を受けた MOD」）。
 ほかに 2 本は自作だが、外部からの提案を取り込んでいる（下の「提案を取り込んだ MOD」）。
 
@@ -50,7 +50,7 @@
 | [`104_balance_area_bgm`](MODS.md#104_balance_area_bgm-新しいエリアのbgmの偏りを均す) | エリアBGMの均し | 新しいエリアのBGMの偏りを均す | 1 |  |
 | [`105_fix_schema_compact`](MODS.md#105_fix_schema_compact-llm-へ送るスキーマ説明を圧縮する) | スキーマ説明の圧縮 | LLM へ送るスキーマ説明を圧縮する | - |  |
 | [`106_fix_battle_bgm_restore`](MODS.md#106_fix_battle_bgm_restore-戦闘後にbgmが戻らないのを直す) | 戦闘BGMの復帰 | 戦闘後にBGMが戻らないのを直す | 1 | 取込済 main_024 |
-| [`107_fix_battle_flag_stuck`](MODS.md#107_fix_battle_flag_stuck-ロードすると戦闘bgmで始まるのを直す) | 戦闘フラグの修正 | ロードすると戦闘BGMで始まるのを直す | - | 取込済 main_024 |
+| [`107_fix_battle_flag_stuck`](MODS.md#107_fix_battle_flag_stuck-闘技場から撤退した後に次の戦闘が固まるのを直す) | 戦闘フラグの修正 | 闘技場から撤退した後に次の戦闘が固まるのを直す | - |  |
 | [`108_fix_shop_inventory_overflow`](MODS.md#108_fix_shop_inventory_overflow-売買画面を開くと落ちるのを直す) | 売買画面クラッシュの修正 | 売買画面を開くと落ちるのを直す | - | 取込済 main_024 |
 | [`109_fix_item_detail_autosize`](MODS.md#109_fix_item_detail_autosize-アイテムの説明が途中で切れるのを直す) | アイテム説明欄の拡張 | アイテムの説明が途中で切れるのを直す | 1 |  |
 | [`110_fix_character_name_path`](MODS.md#110_fix_character_name_path-名前のせいでnpcの画像が作れないのを直す) | キャラクタ名の正規化 | 名前のせいでNPCの画像が作れないのを直す | - | 取込済 main_024 |
@@ -128,7 +128,7 @@
 
 ---
 
-## 計測（33本）
+## 計測（34本）
 
 ゲームは変えない。`out\` にログを残すだけ。デバッグモードのときだけ読み込まれる。
 
@@ -167,6 +167,7 @@
 | `230_probe_image_generation` | 画像生成の出口とバックエンドを録る |
 | `231_probe_training` | 施設での訓練の暦を録る |
 | `232_probe_facility_choices` | 宿屋だけ `出る` が先頭に並ぶ原因を測る |
+| `233_probe_colosseum` | 闘技場の試合を録る |
 
 ---
 

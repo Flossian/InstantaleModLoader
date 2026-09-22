@@ -7,10 +7,9 @@
     "ja": "戦闘フラグの修正"
   },
   "description": {
-    "en": "Clears the in_battle flag left set after a battle, keeping it out of saves",
-    "ja": "戦闘終了後も残る in_battle フラグを下ろし、セーブへの焼き付きを防ぐ"
+    "en": "Clears the in_battle and in_colosseum_battle flags left set after a battle. Fleeing an arena match leaves the arena flag set, and the next battle crashes when the game picks the arena's own ending for it",
+    "ja": "戦闘終了後も残る `in_battle` / `in_colosseum_battle` フラグを下ろす。闘技場から撤退すると闘技場の旗が残り、次の戦闘の終わりにゲームが闘技場用の後始末を選んで落ちる"
   },
-  "version": "1",
-  "author": "R01/Flossian",
-  "superseded": "main_024"
+  "version": "2",
+  "author": "R01/Flossian"
 }

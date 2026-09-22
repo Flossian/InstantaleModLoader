@@ -107,7 +107,8 @@
     "229_probe_mod_npc",
     "230_probe_image_generation",
     "231_probe_training",
-    "232_probe_facility_choices"
+    "232_probe_facility_choices",
+    "233_probe_colosseum"
   ],
   "disabled": []
 }

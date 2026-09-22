@@ -1,0 +1,172 @@
+{
+  "entry": "colosseum_custom.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Customize the colosseum",
+    "ja": "闘技場のカスタマイズ"
+  },
+  "description": {
+    "en": "Set how fast the opponents get stronger and where that stops, base the first opponent on your own level instead of the area, multiply the prize by your level or the opponent's rank, have the clerk tell you the next opponent's class before you sign, end a lost match as a retreat instead of the run, and stop the same fighter from showing up every time. Defaults are the game's own values, so nothing changes until you edit them",
+    "ja": "闘技場の相手が強くなる速さと、その打ち止めを決める。初戦の相手を土地ではなく自分のレベルに合わせることも、懸賞金をレベルや相手の格で増やすこともできる。申し込む前に受付が相手の格を告げ、倒れてもゲームオーバーにせず負けとして試合を切り上げる設定と、毎回同じ闘士が出てくるのを防ぐ設定もある。既定は素のゲームの値のままで、変えた項目だけが効く"
+  },
+  "version": "2",
+  "author": "R01/Flossian",
+  "after": [
+    "331_facility_investment"
+  ],
+  "settings": {
+    "RANK_START_SCALE": {
+      "type": "float",
+      "default": 1.0,
+      "min": 0.05,
+      "max": 10.0,
+      "label": {
+        "ja": "初戦の相手の強さ（倍）",
+        "en": "First opponent's strength (x)"
+      },
+      "note": {
+        "ja": "素のゲームは、その土地の依頼の難易度の半分の格で始まる（難易度60の街なら格30）。1.0 のままなら触らない。0.5 にすると初戦が半分の格になる",
+        "en": "The game starts at half the area's quest difficulty (rank 30 in a difficulty-60 town). Left at 1.0, nothing is touched; 0.5 halves the first opponent"
+      }
+    },
+    "RANK_STEP_SCALE": {
+      "type": "float",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 10.0,
+      "label": {
+        "ja": "1試合ごとに強くなる速さ（倍）",
+        "en": "How fast opponents grow (x)"
+      },
+      "note": {
+        "ja": "素のゲームは1試合勝つごとに難易度の 2/9 ずつ上がる（難易度60の街なら +13）。1.0 のままなら触らない。0.5 で伸びが半分、0 で初戦の格のまま止まる",
+        "en": "Each win raises the rank by 2/9 of the area's difficulty (+13 in a difficulty-60 town). Left at 1.0, nothing is touched; 0.5 halves the growth and 0 keeps the first rank forever"
+      }
+    },
+    "RANK_CAP": {
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 1000,
+      "label": {
+        "ja": "相手の格の上限",
+        "en": "Cap on the opponent's rank"
+      },
+      "note": {
+        "ja": "素のゲームに上限は無く、勝ち続けると際限なく上がる（格97まで実機で確認）。0 ならその素のまま。70 はゲーム自身の説明で「伝説の勇者や魔王」に当たる格",
+        "en": "The game has no cap and the rank climbs forever (rank 97 seen in play). 0 keeps that. 70 is what the game's own prompt calls a legendary hero or demon king"
+      }
+    },
+    "RANK_BASIS": {
+      "type": "choice",
+      "values": [
+        "土地の難易度",
+        "プレイヤーのレベル",
+        "高いほう"
+      ],
+      "default": "土地の難易度",
+      "label": {
+        "ja": "初戦の相手を何に合わせるか",
+        "en": "What the first opponent is based on"
+      },
+      "note": {
+        "ja": "素のゲームは土地の難易度だけを見る（誰で挑んでも同じ相手。レベル1でも格30が出る）。「プレイヤーのレベル」にすると、自分の強さに合った相手から始まる",
+        "en": "The game looks only at the area (rank 30 even for a level-1 character). Basing it on your level starts you against someone your own size"
+      }
+    },
+    "RANK_PLAYER_RATIO": {
+      "type": "float",
+      "default": 1.0,
+      "min": 0.1,
+      "max": 5.0,
+      "label": {
+        "ja": "レベルに合わせるときの初戦の格（レベルの何倍か）",
+        "en": "First rank as a multiple of your level"
+      },
+      "note": {
+        "ja": "上を「プレイヤーのレベル」か「高いほう」にしたときだけ効く。1.0 ならレベルと同じ格の相手から始まる（相手のレベルは格＋1）",
+        "en": "Only used when the basis above is your level. 1.0 starts you against a rank equal to your level (the opponent's level is rank + 1)"
+      }
+    },
+    "REWARD_SCALE": {
+      "type": "float",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 100.0,
+      "label": {
+        "ja": "懸賞金の倍率",
+        "en": "Prize multiplier"
+      },
+      "note": {
+        "ja": "素の懸賞金は相手の格だけで決まり、格30で173G・格58で359G・格97で454Gと、強い相手ほど伸びが鈍る。1.0 のままなら触らない",
+        "en": "The game's prize depends only on the opponent's rank (173G at rank 30, 359G at 58, 454G at 97) and flattens out as the rank climbs. Left at 1.0, nothing is touched"
+      }
+    },
+    "REWARD_PER_LEVEL": {
+      "type": "float",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "label": {
+        "ja": "レベル1ごとの上乗せ（倍）",
+        "en": "Bonus per character level (x)"
+      },
+      "note": {
+        "ja": "自分のレベルが1上がるごとに、素の額の何倍を足すか。0 なら素のまま。0.02 ならレベル50で素の約2倍（1.0 + 49×0.02）",
+        "en": "Adds this much of the base prize for every level above 1. 0 keeps the game's own amount; 0.02 roughly doubles it at level 50"
+      }
+    },
+    "REWARD_PER_RANK": {
+      "type": "float",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "label": {
+        "ja": "相手の格1ごとの上乗せ（倍）",
+        "en": "Bonus per rank of the opponent (x)"
+      },
+      "note": {
+        "ja": "相手の格1につき素の額の何倍を足すか。0 なら素のまま。素の額は格が上がるほど伸びが鈍るので、強い相手ほど割に合わせたいときはここを上げる",
+        "en": "Adds this much of the base prize for each rank of the opponent. 0 keeps the game's own amount. Use it when you want tough opponents to pay off, since the game's own curve flattens"
+      }
+    },
+    "ANNOUNCE_RANK": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "申し込む前に相手の格を告げる",
+        "en": "Tell the opponent's class before signing"
+      },
+      "note": {
+        "ja": "受付の口上の後に、次の相手の格を1行足す。素のゲームは何も言わないまま試合が始まり、負けるとゲームオーバーになる",
+        "en": "Adds one line after the clerk's speech. The game tells you nothing, and losing ends the run"
+      }
+    },
+    "SURVIVE_DEFEAT": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "倒れてもゲームオーバーにしない",
+        "en": "Losing a match does not end the run"
+      },
+      "note": {
+        "ja": "素のゲームは闘技場で倒れるとそのままゲームオーバー。入れると、倒れたところで体力1で踏みとどまり、負けを認めてその場で試合を切り上げる。ゲームが撤退のときに通るのと同じ終わり方なので、`current_phase` は進まず懸賞金も出ない（次に申し込むと同じ格の相手が作り直される）。自分から撤退するのは素のゲームでもできる",
+        "en": "In the game, going down in the arena ends the run. With this on you hold out at 1 HP and the match is called there, using the same ending the game uses when you flee: current_phase does not advance and no prize is paid"
+      }
+    },
+    "VARY_OPPONENT": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "毎回同じ闘士が出てこないようにする",
+        "en": "Stop the same fighter from returning"
+      },
+      "note": {
+        "ja": "ゲームが相手を作る頼み文には前に出た相手が載らないので、同じ闘技場では同じ人物に収束することがある。入れると、既に出た闘士の名前を頼み文の末尾に足す（`331_facility_investment` が自分の闘技場でやっているのと同じ手を、どの闘技場にも効かせる）",
+        "en": "The game's prompt never mentions earlier opponents, so the same person keeps showing up. This appends the names already seen, the same trick 331_facility_investment uses in your own arena"
+      }
+    }
+  },
+  "debug": false
+}
