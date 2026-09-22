@@ -618,6 +618,47 @@ ctx_again.hooks[build_target](lambda: built.append(again.model_path_anime))
 check("建てる直前に材料が書き換わっている（import は走っていない）",
       built == ["runtime/models/sdxl/checkpoints/second.safetensors"], built)
 
+print("差し替えが届いていないと知らせる（既に建っている回）")
+
+
+def only_fake(name):
+    """偽のバックエンドを1つだけ残す。
+
+    `attach()` は載っている manager を全部見るので、前の節の偽が残っていると
+    警告が複数回数えられる（本物の `ctx.warner` は同じ鍵を1度しか出さないが、
+    ここの偽 `Ctx` は素直に全部溜める）。
+    """
+    for key in [k for k in sys.modules
+                if "image_generation.fake" in k or k in (MANAGER, CREATURE)]:
+        sys.modules.pop(key, None)
+    return fake_backend(name + ".stable_diffusion_manager",
+                        name + ".image_generation_creature")
+
+
+late, _ = only_fake("image_generation.fake6")
+late.model_path_anime = sd15_path             # ゲームが建てた SD1.5
+MOD.FAMILY.update({"name": None, "path": None})
+ctx_late = fresh(CHECKPOINT_PATH=sdxl_path)   # 建った後に注入した形
+gap = [message for key, message in ctx_late.warnings if key == "material-gap"]
+check("既に建っているのに設定が別のモデルを指していたら警告する", len(gap) == 1, ctx_late.warnings)
+check("警告に起動し直しと、選び直しでは駄目なことが出る",
+      gap and "起動し直" in gap[0] and "選び直しても建て直らない" in gap[0], gap)
+check("警告に両方の系統が出る（いま sd15 / 設定 sdxl）",
+      gap and "sd15" in gap[0] and "sdxl" in gap[0], gap)
+
+quiet, _ = only_fake("image_generation.fake7")
+quiet.txt2img_pipe = None                     # まだ建っていない
+ctx_quiet = fresh(CHECKPOINT_PATH=sdxl_path)
+check("まだ建っていなければ警告しない（次に建つときに効く）",
+      not any(key == "material-gap" for key, _ in ctx_quiet.warnings), ctx_quiet.warnings)
+only_fake("image_generation.fake8")
+ctx_same = fresh()
+check("差し替えていなければ警告しない",
+      not any(key == "material-gap" for key, _ in ctx_same.warnings), ctx_same.warnings)
+for _name in ("image_generation.fake6", "image_generation.fake7", "image_generation.fake8"):
+    cleanup(_name + ".stable_diffusion_manager", _name + ".image_generation_creature")
+fake_backend()                                # 後ろの節が使う偽を戻す
+
 print("用済みの apply() は当て直さない（包みが重ならない）")
 cleanup("image_generation.fake5.stable_diffusion_manager",
         "image_generation.fake5.image_generation_creature")

@@ -306,12 +306,16 @@ def apply(ctx):
     no_taesd = bool(ctx.setting("DISABLE_TAESD"))
     no_vae = bool(ctx.setting("DISABLE_VAE"))
 
+    # **「これから書く値」であって、書いた記録ではない。**
+    # 実際に書いたときは `<モジュール名>: model_path_anime '旧' -> '新'` の形で出る。
+    # 材料はパイプラインが建つ瞬間にしか効かないので、既に建っていれば次の起動まで届かない
+    # （試作の提供先で、この2つを取り違えて「差し替えたのに sd15 と出る」になった）。
     for attr, value in materials:
-        write("material {} -> {!r}".format(attr, value))
+        write("material (次に建てるとき) {} -> {!r}".format(attr, value))
     if no_taesd:
-        write("material taesd_path -> '' (VAE で復号させる)")
+        write("material (次に建てるとき) taesd_path -> '' (VAE で復号させる)")
     if no_vae:
-        write("material vae_path -> '' (VAE を渡さない)")
+        write("material (次に建てるとき) vae_path -> '' (VAE を渡さない)")
 
     def owner_of(cls, name):
         """`name` を自分の MRO の中に持っているクラス。無ければ None。"""
@@ -602,6 +606,7 @@ def apply(ctx):
             # 系統は import のときにも見るが、**注入し直しでは import が起きない**。
             # 当て直しのたびに、いま効いているチェックポイントで見直す。
             detect_family(sys.modules.get(name))
+            warn_material_gap(sys.modules.get(name))
         for name in creature_modules():
             mod = sys.modules.get(name)
             for fn, kind in KIND_FUNCS.items():
@@ -653,7 +658,7 @@ def apply(ctx):
             now = frames.attr(module, attr, None)
             if now is None or now == value:
                 continue
-            write("{}: {} {!r} -> {!r}".format(name, attr, now, value))
+            write("{}: (適用) {} {!r} -> {!r}".format(name, attr, now, value))
             setattr(module, attr, value)
         if no_taesd and frames.attr(module, "taesd_path", None):
             write("{}: taesd_path {!r} -> ''".format(name, module.taesd_path))
@@ -715,6 +720,38 @@ def apply(ctx):
             write("safety: 系統が読めない（safetensors のヘッダを見た）: {}".format(full))
         else:
             write("safety: 系統は {}（{}）".format(name, os.path.basename(path)))
+
+    def warn_material_gap(module):
+        """設定のチェックポイントが**まだ建っていない**なら知らせる。
+
+        材料はパイプラインが建つ瞬間にしか効かない。
+        注入したときに既に建っていれば、設定を入れても届かないまま生成が続く。
+        **ワールド選択をやり直しても建て直らない**（実測: `set_ai_models` に入った時点で
+        `txt2img_pipe` が在る回は `load_sd_pipeline` を呼ばない。7回ともそうだった）。
+        ゲームは1プロセスに1回しか建てないので、要るのは起動し直し。
+
+        試作の提供先でこれを踏んだ。SDXL を指したまま SD1.5 のモデルで描き続け、
+        規則が付け替えた SDXL 用の LoRA が SD1.5 に当たる一歩手前だった。
+        """
+        want = dict(materials).get("model_path_anime")
+        if not want or module is None:
+            return
+        now = frames.attr(module, "model_path_anime", None)
+        if not now or now == want:
+            return
+        if frames.attr(module, "txt2img_pipe", None) is None:
+            return                          # まだ建っていない。次に建つときに効く
+        live = FAMILY.get("name")
+        want_family = sizes.family_of(
+            want if os.path.isabs(want) else os.path.join(ctx.game_dir, want))
+        warn("material-gap",
+             "チェックポイントの差し替えが**まだ効いていない**。"
+             "いま建っているのは {}（{}）で、設定は {}（{}）を指している。"
+             "材料はパイプラインが建つ瞬間にしか効かず、"
+             "**タイトルへ戻ってワールドを選び直しても建て直らない**（実測）。"
+             "ゲームを起動し直してから注入すること".format(
+                 live or "系統不明", os.path.basename(str(now)),
+                 want_family or "系統不明", os.path.basename(str(want))))
 
     def install_observer():
         kept = [f for f in sys.meta_path

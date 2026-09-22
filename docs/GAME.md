@@ -800,11 +800,11 @@ QuestEventManager(app, event_name, enemies_info, event_turn)
 
 戦闘終了マネージャは3つあり、経路によって挙動が違う。
 
-| マネージャ | 入口 | `end_phase` 完了時の `in_battle` |
+| マネージャ | 入口 | `end_phase` 完了時 |
 | --- | --- | --- |
-| `BattleEndManager` | 通常の戦闘 | 0（ゲーム自身が下ろす） |
-| `BattleEndInFreeAction` | 自由入力・会話から入った戦闘 | 1（下ろし忘れ。main_024 で解消） |
-| `BattleEndInColosseum` | コロシアム | - |
+| `BattleEndManager` | 通常の戦闘と、**闘技場からの撤退** | `in_battle` は 0（ゲーム自身が下ろす）。`in_colosseum_battle` は**1のまま** |
+| `BattleEndInFreeAction` | 自由入力・会話から入った戦闘 | `in_battle` が 1（下ろし忘れ。main_024 で解消） |
+| `BattleEndInColosseum` | 闘技場で勝ったとき | 両方 0（ゲーム自身が下ろす） |
 
 `in_battle` はセーブに入り、ロード時の分岐に使われる
 （`instantale.py:1458` が戦闘BGM、`:1460` がエリアBGM）。
@@ -815,6 +815,18 @@ MOD 側でも「戦闘中は出さない」条件に使われるので、残骸�
 `in_boss_battle` はボス戦の後の戦闘（闘技場）で 0 に戻っていた（1回観測。`322_` のログ）。
 `in_colosseum_battle` は `BattleEndInColosseum.execute` の後始末で `in_battle` と一緒に 0 に戻る
 （`331_` の闘技場での試合。`322_` のログで2秒差）。
+**ただし戻るのは勝ったときだけで、撤退すると立ったまま残る**（`233_probe_colosseum` の実機。
+撤退は `BattleEndManager(end_type='escaped')` を通り、そこでは誰も下ろさない）。
+`BattleEndManager(app, end_type)` の `end_type` で観測できている値は
+`'won'`（通常の戦闘・ボス戦に勝ったとき）と `'escaped'`（逃げたとき）の2つ。
+どちらも呼び出し元は `BattlePhaseManager.check_battle_end`。
+
+残ると次の戦闘を巻き込む。**その戦闘の終わりにゲームが `BattleEndInColosseum` を選び**、
+闘技場に立っていないので施設の `config` に `current_phase` が無く、
+`KeyError: 'current_phase'`（`instantale.py:8070`）でワーカースレッドが死ぬ
+（画面は待機表示のまま止まる）。実測の並びは
+「闘技場で撤退 → 依頼の戦闘の `battle_start` に `in_colosseum_battle=1` → その戦闘の終わりで例外」。
+`107_fix_battle_flag_stuck` がこの旗も下ろす（版2）。
 
 #### 1手ぶんの内訳（`BattlePhaseManager`）
 
@@ -1128,19 +1140,65 @@ apply_music_volume(app)         main_023 で追加
 **前に出た相手は載らない**（`output_data\...\colosseum_enemy_generator\N.json`）。
 同じ施設で同じ人物に収束することがある（`331_` の闘技場で4試合とも同じ名。あちらは既出の名を概要に足して避けている）。
 
-**相手のランクは試合ごとに固定幅で上がり続ける**（同じ闘技場で5試合。実機）。
+**相手のランクはその土地の依頼の難易度から決まる**（`233_probe_colosseum` の実機。4つの闘技場・16点が一致）。
 
-| `current_phase` | 0 | 2 | 4 | 6 | 8 |
-| --- | --- | --- | --- | --- | --- |
-| ランク | 35 | 51 | 66 | 82 | 97 |
-| 型 | juggernaut | battlemage | battlemage | striker | battlemage |
+    rank(n) = round(D * (9 + 4n) / 18)     D = その土地の依頼の難易度、n = current_phase / 2
 
-増分は +16 / +15 / +16 / +15 で、上限は見えない。
+初戦は D の半分で、1試合ごとに D の 2/9 ずつ増える。**頭打ちは無い**。
+
+| 闘技場 | D | ランク（`current_phase` 0, 2, 4 …） |
+| --- | --- | --- |
+| 彩色の都・祝祭の円形闘技場 | 29 | 14 / 21 / 27 |
+| ゼニス・至高の円座（`331_` が建てたもの） | 60 | 30 / 43 / 57 / 70 / 83 / 97 |
+| イシュメルド・漆黒斗技場 | 61 | 30 / 44 |
+| 以前に採った闘技場 | 70 | 35 / 51 / 66 / 82 / 97 |
+
+`D` は `get_quest_difficulties(area, world)` が返す値（店の品揃えと同じ源。§2.13.1.1）で、
+返る一覧のどれ（平均か中央値か）を使っているかは未確定。
+**プレイヤーのレベルには依らない**（レベル1の主人公でも 30 で始まった）。
 頼み文の中の説明ではランク1が雑魚、**ランク70が「歴史に名を残す勇者や魔王、神の化身に値するほどの強者」**なので、
-5試合目にはその上に出る。初回の 35 が何由来かは未測（プレイヤーの強さか、施設か）。
+D が 60 を超える土地では5〜6試合目にその上へ出る。
+
+ゲームは決めた格を**3か所で別々に使う**。
+
+| 使い道 | どこ |
+|---|---|
+| 頼み文に載せる | `colosseum_enemy_generator` の第4引数 |
+| 施設に焼く | `config.enemy_data.<phase>.data.rank`（LLM の応答に `rank` は無い） |
+| 相手の数値を作る | `scripts.functions:get_enemy_exp_lvl` / `get_enemy_attributes_base_point` の第2引数（§2.20） |
+
+**頼み文の値だけを書き換えても相手は弱くならない**（`917_colosseum_custom` 版1の実機）。
+上限70を当てて頼み文を 71 → 70 / 85 → 70 に下げたが、
+敵のレベルは 72 と 86 のまま、焼かれた `data.rank` も 71 / 85 のままで、
+懸賞金も焼かれた格のほうで決まった（同じ回で 426 と 452 と別々の額）。
+強さを動かすなら3か所とも揃える。
+敵のレベルは `格 + 1`、HP は同じ格でもばらつく（rank 44 で 440 と 640）。
 採った場所は `state\modfacility\<世界×主人公>.json` の `snapshot.config.enemy_data.<phase>.data.rank` と、
 `output_data\...\colosseum_enemy_generator\N.json` の頼み文末尾の「相手のランク」。
 これはゲーム自身が決める値で、`331_facility_investment` は難易度に何も渡していない。
+
+試合の終わり方は3つあり、`current_phase` の動きが違う（`233_` の実機）。
+
+| 終わり方 | 通る道 | `current_phase` |
+| --- | --- | --- |
+| 勝ち | `BattleEndInColosseum.execute` → `end_phase` → `colosseum_battle_summarizer` | +2 |
+| 逃げ | `BattleEndManager.end_phase`（`BattleEndInColosseum` は来ない） | 据え置き。次に申し込むと同じランクの相手が作り直される |
+| 負け | `check_character_death` → `GameOverManager`（`in_colosseum_battle` は立ったまま） | ゲームオーバー |
+
+報酬は勝ったときだけで、`end_phase` の中で所持金に入る
+（`BattleEndInColosseum.execute` → `instantale.py:8105`、ワーカースレッド。Clock 待ちではない）。
+額は**ランクだけで決まり、乱数は乗っていない**
+（同じ闘技場・同じランク58で、セーブ → 勝つ → ロード → 勝つ を実機で通し、
+相手の名前が変わっても2回とも 359。土地が違っても同じランクなら同じ額で、
+`D` 60 の闘技場と 61 の闘技場でランク30 がどちらも 173）。
+実測7点は ランク 30 → 173 / 43 → 282 / 44 → 288 / 58 → 359 / 71 → 426 / 85 → 452 / 97 → 454。
+1ランクあたりの伸びは 8.2（30〜44）→ 5.1（44〜71）→ 1.1（71〜97）で、
+**格70を超えると頭打ちになる**（85 と 97 の差はわずか 2G）。
+単純な式（線形・対数・平方根・飽和型）はどれも7点に乗らないので、**式は未確定**。
+倍率で乗せるぶんには困らない（`917_colosseum_custom`）。
+参加費は取らない（受付の口上は「報酬は客の賭け具合で決まる」）。
+試合の要約は `colosseum_battle_summarizer` が作るが、
+`output_data` には `guard_battle_summarizer` の名前で落ちる（ゲーム側の取り違え）。
 | 衛兵 | `in_battle=1` | `'guard'`（§2.20） |
 
 （2戦＋7戦。`322_battle_bgm` の `[BGMPICK]` の行）
@@ -3089,7 +3147,7 @@ LCM の段を通る回はプロンプトに `<lora:LCM_LoRA_Weights_SD15:1>` が
 背景のプロンプトには出口の時点で `<lora:LCM_LoRA_Weights_SD15:1>` が入っている。
 上の層の引数には入っていないので、**LoRA の付け替えは出口でしか掛からない**。
 
-#### パイプラインはワールド選択を押した時に建つ
+#### パイプラインは1プロセスに1回だけ建つ（最初のワールド選択）
 
 ```text
 AIManager.set_ai_models (instantale.py:510〜516)   一族を import する行（実測: cuda 510 / vulkan 512 / openvino 514 / cpu 516）
@@ -3108,6 +3166,12 @@ AIManager.set_ai_models (instantale.py:510〜516)   一族を import する行�
 
 チェックポイント・TAESD・VAE は、このモジュール変数を建つ前に書き換えれば差し替わる
 （実機。`taesd_path` を空にして建て、`StableDiffusion.__init__` にそのまま渡った。VERIFICATION.md §3.65）。
+
+**建つのは1プロセスに1回だけ。**
+`set_ai_models` に入った時点で `txt2img_pipe` が既に在ると `load_sd_pipeline` は呼ばれない。
+タイトルへ戻ってワールドを選び直しても、`set_ai_models` は走るのに `txt2img_pipe` の id は前後で変わらない
+（実測 11 回。`pipe=null` の4回は建ち、既に在る7回は建たなかった）。
+**モジュール変数の差し替えを効かせるには、ゲームの起動し直しが要る。**
 
 > **バックエンドを切り替えても画質の設定は付いてこない。**
 > `diffusers_openvino` の manager には `image_to_image_anime` が無いのに、
