@@ -1845,7 +1845,9 @@ def _state():
                  # 移動の後に `player.location` が書き換わらないことがある。
                  "entered": None,
                  # 最後に書いた居場所（変わったときだけ1行書くため）。
-                 "where": None}
+                 "where": None,
+                 # 最後に書いた「足さなかった理由」（同上）。
+                 "blocked": None}
         setattr(sys, _STATE_ATTR, found)
     return found
 
@@ -1955,6 +1957,10 @@ def is_facility_screen(buttons):
 BUSY_FLAGS = tuple(flag for flag in ui.BUSY_FLAGS if flag != "in_shopping")
 
 
+#: 戦闘の旗。ゲームはこれを下ろし忘れる経路を持っている（`107_` の表）。
+BATTLE_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle")
+
+
 def game_is_busy(app):
     """会話・戦闘・自由入力の最中か。立っている旗の名前を返す（無ければ空）。
 
@@ -1963,6 +1969,19 @@ def game_is_busy(app):
     自分の店で主人と話している最中に `売上を受け取る` と `出る` が並んだ）。
     """
     return [flag for flag in BUSY_FLAGS if getattr(app, flag, False)]
+
+
+def battle_leftovers(app, busy):
+    """立っている旗が**戦闘の残骸だけ**か。敵が居るなら本物の戦闘。
+
+    合図は `app.current_enemy_dict` が空の辞書であること（`107_` の実測。
+    残骸のとき `len=0`）。ここでは旗を下ろさない。
+    下ろすのはゲームの仕事で、こちらは「閉じ込めない」ためにだけ読む。
+    """
+    if not busy or any(flag not in BATTLE_FLAGS for flag in busy):
+        return False
+    enemies = getattr(app, "current_enemy_dict", None)
+    return isinstance(enemies, dict) and not enemies
 
 
 TOP_ENTRY_CLASSES = frozenset((
@@ -2026,8 +2045,17 @@ def can_add_here(app, buttons):
     会話の最中もゲームは施設の入口（`売買する` など）を選択肢に残すので、
     画面の中身だけでは足りず、旗も要る。逆に会話相手の一覧はまだ `in_conversation` ではないので、
     旗だけでも足りない。両方見る。
+
+    例外は**戦闘の旗の残骸**。ゲームには戦闘の旗を下ろし忘れる経路があり
+    （`107_` の表。闘技場の試合から逃げた回に実機で踏んだ。2026-09-20）、
+    そのまま旗を信じると建物の**出口が二度と出ず、その建物から出られない**。
+    敵が居らず（`battle_leftovers`）、選択肢が並んでいる画面のときだけ、
+    戦闘の旗は無かったものとして扱う。旗そのものは下ろさない。
     """
-    return not game_is_busy(app) and is_top_screen(buttons)
+    busy = game_is_busy(app)
+    if busy and buttons and battle_leftovers(app, busy):
+        busy = []
+    return not busy and is_top_screen(buttons)
 
 
 def hidden_choices(app, facility_id, buttons=None):
@@ -2285,6 +2313,28 @@ def note_place(app, buttons, here, lost, write=None):
     return True
 
 
+def note_blocked(app, buttons, here, reason, write=None):
+    """建物の中なのに何も足さなかった回を1行だけ書く（理由が変わるまで黙る）。
+
+    **出口が出ないと、その建物からは出られない。** 足さない判断は正しいことが多いが
+    （下位の画面・会話中）、外から見ると「出口が消えた」と同じに見えるので、
+    どの門で降りたのかを後から読めるようにしておく。
+    画面は spec のクラス名で残す（文言は層や設定で変わる）。
+    """
+    if not here:
+        return False
+    names = [ui.spec_cls_name(entry) or "?" for entry in buttons] \
+        if isinstance(buttons, list) else []
+    token = (str(here), str(reason), tuple(names))
+    if _state().get("blocked") == token:
+        return False
+    _state()["blocked"] = token
+    if write:
+        write("modfacility: nothing added inside {}: {} (choices: {})".format(
+            here, reason, ", ".join(names) or "-"))
+    return True
+
+
 def maintain_buttons(app, screen=None, write=None):
     """いまの画面に応じて自前のボタンを足す。何度呼んでも増えない。"""
     screen = _screen(screen)
@@ -2293,6 +2343,7 @@ def maintain_buttons(app, screen=None, write=None):
         return False
     if ui.busy_signals(app):
         # 本文が流れている最中は触らない。手が空いてからやり直す。
+        # ここでは何も書かない（やり直しでも足せなければ、そちらで理由が1行残る）。
         retry_when_idle(app, screen=screen, write=write)
         return False
     screen.prune_stale(buttons, our_labels(app))
@@ -2318,12 +2369,20 @@ def maintain_buttons(app, screen=None, write=None):
         # 足すところだけ降りる。画面が組み直されれば、その塗り直しでまた足される。
         # **MOD 側は自分の進行中の旗で画面を判断しない。** ここが唯一の判定
         # （331 の宿泊で、終える処理の中の組み直しに MOD の旗が間に合わず2つだけになった。2026-09-14）。
+        busy = game_is_busy(app)
+        note_blocked(app, buttons, here,
+                     "the game is busy ({}{})".format(
+                         ", ".join(busy),
+                         "; enemies are present" if any(
+                             flag in BATTLE_FLAGS for flag in busy) else "")
+                     if busy else "not a top screen", write=write)
         return False
     elif here:
         touched = add_inside_buttons(app, buttons, here, screen=screen, write=write)
     else:
         touched = add_move_buttons(app, buttons, screen=screen, write=write)
     if touched:
+        _state()["blocked"] = None
         # **差し込んだら必ず塗り直す。** ここは `refresh_choice_buttons` の後ろで走るので、
         # `app.buttons` を変えただけでは `to_display_buttons` と `display_button_map` が
         # 差し込む前のまま ― 画面には出ず、出ても押した添字が別のボタンを指す

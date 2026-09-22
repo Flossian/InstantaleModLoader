@@ -865,6 +865,37 @@ def main():
     app2.in_shopping = False
     app2.buttons = []
 
+    print("戦闘の旗: 敵が居る間は足さない。残骸なら出口を出す")
+    # 闘技場の試合から逃げた回に旗が残り、建物の出口が二度と出なかった
+    # （実機 2026-09-20。ゲームには戦闘の旗を下ろし忘れる経路がある ＝ `107_` の表）。
+    arena_top = [{"text": "試合に出る",
+                  "spec": PhaseSpec("EntryColosseumMatchManager", [])},
+                 {"text": "会話する", "spec": PhaseSpec("DisplayTalkChoice", [])}]
+    app2.in_colosseum_battle = True
+    app2.current_enemy_dict = {"0": {"name": "闘士"}}
+    app2.buttons = [dict(e) for e in arena_top]
+    modfacility.maintain_buttons(app2, screen=screen)
+    ok &= check("敵が居るなら足さない（本物の戦闘）",
+                [e.get("text") for e in app2.buttons] == ["試合に出る", "会話する"])
+    app2.current_enemy_dict = {}
+    app2.buttons = [dict(e) for e in arena_top]
+    modfacility.maintain_buttons(app2, screen=screen)
+    exits = [e for e in app2.buttons
+             if str(screen.mark_of(e) or "").startswith("exit	")]
+    ok &= check("敵が居なければ出口が出る（残骸）", bool(exits))
+    ok &= check("旗そのものは下ろさない", app2.in_colosseum_battle is True)
+    ok &= check("旗の名前はそのまま読める",
+                modfacility.game_is_busy(app2) == ["in_colosseum_battle"])
+    app2.in_conversation = True
+    app2.buttons = [dict(e) for e in arena_top]
+    modfacility.maintain_buttons(app2, screen=screen)
+    ok &= check("会話の旗が混ざっていたら足さない",
+                [e.get("text") for e in app2.buttons] == ["試合に出る", "会話する"])
+    app2.in_conversation = False
+    app2.in_colosseum_battle = False
+    app2.current_enemy_dict = {}
+    app2.buttons = []
+
     print("壊す: 街からもノードからも消える")
     ok &= check("壊せた", modfacility.despawn(app2, fid))
     ok &= check("ノードから消える", fid not in node2.facilities)

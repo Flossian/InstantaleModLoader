@@ -756,14 +756,25 @@ def apply(ctx):
         return landlord.keeper_choice(keeper.get("id"))[0]
 
     def keeper_names(app, skip=None):
-        """その世界の管理人の名前。新しい管理人はこれと重ならないように選ぶ。"""
+        """新しい管理人が避ける名前。**その世界で使われている名前を全部**。
+
+        自分の控えの管理人に加えて、ローダの窓口（`modnpc.names_in_use`）が返す
+        素の NPC・実行時の名簿・他の MOD の NPC・プレイヤーまで見る。
+        名前が重なると、**名前でしか相手を引けない場所**で別人に当たる
+        （ゲームの人物欄。VERIFICATION.md §3.68）。
+        """
         found = []
+        mine = keeper_of(skip) if skip is not None else None
         for record in contracts_of(current_key(app)):
             if record is skip:
                 continue
             keeper = keeper_of(record)
             if keeper is not None and keeper.get("name"):
                 found.append(str(keeper.get("name")))
+        for name in modnpc.names_in_use(
+                app, skip=[mine.get("id")] if mine else ()):
+            if name not in found:
+                found.append(name)
         return found
 
     def generate_keeper(app, record, keeper_id, taken):
@@ -854,6 +865,43 @@ def apply(ctx):
                         write=write)
         return keeper_id
 
+    def settle_keeper_name(app, record, world=None):
+        """管理人の名がその世界の誰かと重なっていたら、空いている名前へ寄せる。
+
+        名前が重なると、ゲームが名前で人を扱う経路（立ち絵は
+        `characters\<名前>\` のフォルダ、LLM へ渡すのは名前の列挙）で別人に当たる
+        （実機 2026-09-21。VERIFICATION.md §3.68）。
+        直すのは控えの2か所（`keeper.name` と素データの `name`）と、居れば実体。
+        **変わるのは一度だけ**で、次のロードでは控えの名前がもう空いている。
+        """
+        keeper = keeper_of(record)
+        if keeper is None:
+            return ""
+        name = str(keeper.get("name") or "")
+        taken = keeper_names(app, skip=record)
+        if not name or name not in taken:
+            return name
+        fresh = str(landlord.keeper_choice(keeper.get("id"), taken)[0])
+        if fresh in taken:
+            write("WARN keeper: {!r} is already used in this world and the table has "
+                  "no free name; leaving it as it is".format(name))
+            return name
+        keeper["name"] = fresh
+        made = keeper.get("fields")
+        if isinstance(made, dict):
+            made["name"] = fresh
+        save(app)
+        handle = modnpc.get(app, keeper.get("id"), world=world)
+        if handle is not None and getattr(handle, "name", None) != fresh:
+            try:
+                handle.name = fresh
+            except Exception:
+                ctx.log_exc("real estate: cannot rename the keeper")
+        write("keeper: {} was renamed {!r} -> {!r} "
+              "(the name was already used in this world)".format(
+                  keeper.get("id"), name, fresh))
+        return fresh
+
     def keeper_character(app, record, world=None):
         """管理人の実体。名簿に居なければ None。"""
         keeper = keeper_of(record)
@@ -885,6 +933,9 @@ def apply(ctx):
             save(app)
         if keeper is None:
             return None
+        # 名前が世界の誰かと重なっていたらここで寄せる（層を積む前。積んだ後だと
+        # その世代の頼み文に古い名前が載る）。
+        settle_keeper_name(app, record, world=world)
         keeper_id = register_keeper(app, record)
         if not keeper_id:
             return None

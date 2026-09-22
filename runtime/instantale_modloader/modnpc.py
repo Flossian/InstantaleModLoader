@@ -360,6 +360,52 @@ def entries(owner=None):
     return sorted(out)
 
 
+def names_in_use(app, skip=()):
+    """その世界で既に使われている人名。**人を作る前にここを見る。**
+
+    集めるのは3つ。実行時の名簿（`world.characters`）・セーブの素データ
+    （`npcs.save_npcs`。まだ実体になっていない人も載っている）・
+    登録されている MOD の NPC（持ち主をまたいで全部）。プレイヤーの名も入れる。
+
+    名前が既存の人物と重なると、**名前でしか相手を引けない場所**で別人に当たる
+    （ゲームの人物欄は `visible_character_sheet_data` に id を持たず、名前しか渡さない。
+    実機 2026-09-21。`330_` の管理人と素の NPC が同じ名前になり、
+    `120_` の衝突の記録にも並んだ）。
+    MOD どうしは相手の名簿を知らないので、**跨ぐ集約はローダが持つ**
+    （`330_` と `331_` の主人が同じ名前になった回も、ここを見ていれば避けられた）。
+
+    `skip` はその id の名前を数えない（自分の建て直しで自分の名前を避けないため）。
+    返すのは重複を畳んだ並び（`taken` にそのまま渡せる）。
+    """
+    skip = {str(one) for one in (skip or ())}
+    found = []
+
+    def add(name):
+        name = str(name or "").strip()
+        if name and name not in found:
+            found.append(name)
+
+    player = getattr(app, "player", None)
+    add(getattr(player, "name", None))
+    roster = _roster(app) or {}
+    for npc_id, character in list(roster.items()):
+        if str(npc_id) in skip:
+            continue
+        add(getattr(character, "name", None))
+    try:
+        for npc_id, entry in npcs.save_npcs(app).items():
+            if str(npc_id) in skip or not isinstance(entry, dict):
+                continue
+            add(entry.get("name"))
+    except Exception:
+        log_exc("modnpc: cannot read the plain npc data for the names in use")
+    for npc_id in entries():
+        if str(npc_id) in skip:
+            continue
+        add(fields_of(npc_id).get("name"))
+    return found
+
+
 def register(owner, npc_id=None, *, key=None, fields=None, prompt=None,
              notes=None, sites=None, priority=0, on=None, place=None,
              app=None, write=None):

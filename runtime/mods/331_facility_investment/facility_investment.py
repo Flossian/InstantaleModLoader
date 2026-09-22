@@ -531,9 +531,25 @@ def apply(ctx):
         return fields, made_name
 
     def keeper_names(app, skip=None):
-        """その世界の主人の名前。新しい主人はこれと重ならないように選ぶ。"""
-        return [keeper_name(app, record) for record in holdings_of(app)
-                if record is not skip]
+        """新しい主人が避ける名前。**その世界で使われている名前を全部**。
+
+        自分の帳簿の主人に加えて、ローダの窓口（`modnpc.names_in_use`）が返す
+        素の NPC・実行時の名簿・他の MOD の NPC・プレイヤーまで見る。
+        名前が重なると、**名前でしか相手を引けない場所**で別人に当たる
+        （ゲームの人物欄。VERIFICATION.md §3.68）。
+        """
+        found = []
+        for record in holdings_of(app):
+            if record is skip:
+                continue
+            name = keeper_name(app, record)
+            if name and name not in found:
+                found.append(name)
+        mine = str(skip.get("keeper") or "") if isinstance(skip, dict) else ""
+        for name in modnpc.names_in_use(app, skip=[mine] if mine else ()):
+            if name not in found:
+                found.append(name)
+        return found
 
     def place_names(app, skip=None):
         """その世界の施設の名前。新しい建物はこれと重ならないように選ぶ（版37）。"""
@@ -788,8 +804,16 @@ def apply(ctx):
         4軒目で重なった（実機：闘技場と道場がどちらもトビアス）。
         版25 は建てたときに控えるが、**それ以前の持ち株には控えが無い**ので、ここで埋める。
         埋めるついでに、重なっている分だけ空いている名前へ寄せる（その1回だけ実体の名も変える）。
+
+        **見るのは自分の主人だけではない。** その世界で使われている名前を全部
+        （素の NPC・他の MOD の人物・プレイヤー。`modnpc.names_in_use`）先に置いてから
+        突き合わせる。名前が重なると、ゲームが名前で人を扱う経路
+        （立ち絵のフォルダ・LLM へ渡す名前の列挙）で別人に当たるため（VERIFICATION.md §3.68）。
         """
-        used, changed = [], False
+        own = [str(record.get("keeper")) for record in holdings_of(app)
+               if record.get("keeper")]
+        used = list(modnpc.names_in_use(app, skip=own))
+        changed = False
         for record in holdings_of(app):
             keeper_id = record.get("keeper")
             name = record.get("keeper_name")
@@ -798,14 +822,29 @@ def apply(ctx):
                 name = getattr(handle, "name", None) \
                     or catalog.keeper_choice(keeper_id)[0]
             if name in used:
-                name = catalog.keeper_choice(keeper_id, used)[0]
-                if handle is not None and getattr(handle, "name", None) != name:
-                    try:
-                        handle.name = name
-                        write("keeper: {} was renamed to {!r} (the name was taken)".format(
-                            keeper_id, name))
-                    except Exception:
-                        ctx.log_exc("investment: cannot rename the keeper {}".format(keeper_id))
+                was, name = name, catalog.keeper_choice(keeper_id, used)[0]
+                if name in used:
+                    warn_once(("keeper-name", keeper_id),
+                              "WARN keeper: {!r} is already used in this world and the "
+                              "table has no free name; leaving {} as it is".format(
+                                  was, keeper_id))
+                    name = was
+                else:
+                    # 控えの素データにも同じ名前を書く。建て直しはこちらが勝つので、
+                    # 直さないと次のロードで元の名前に戻る。
+                    made = record.get("keeper_fields")
+                    if isinstance(made, dict) and made.get("name"):
+                        made["name"] = name
+                        changed = True
+                    if handle is not None and getattr(handle, "name", None) != name:
+                        try:
+                            handle.name = name
+                        except Exception:
+                            ctx.log_exc(
+                                "investment: cannot rename the keeper {}".format(keeper_id))
+                    write("keeper: {} was renamed {!r} -> {!r} "
+                          "(the name was already used in this world)".format(
+                              keeper_id, was, name))
             if record.get("keeper_name") != name:
                 record["keeper_name"] = name
                 changed = True

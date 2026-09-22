@@ -1980,6 +1980,31 @@ try:
                        "休養をとる")
     CLOCK.settle()
 
+    # 名前が世界の誰かと重なっていたら、次に据えるときに空いている名前へ寄せる
+    # （ゲームは立ち絵のフォルダと LLM の列挙を名前で引く。VERIFICATION.md §3.68）。
+    world2.characters["777"] = types.SimpleNamespace(name=ANSWER["name"])
+    app.go(rebuilt)
+    app.press(module.STAY_LABEL)
+    CLOCK.settle()
+    renamed = module_keeper_name(contract_of(module, app))
+    check("同名の人物が居たら管理人の名を寄せる",
+          bool(renamed) and renamed != ANSWER["name"], renamed)
+    check("実体の名も変わる",
+          getattr(world2.characters.get(keeper.get("id")), "name", None) == renamed,
+          getattr(world2.characters.get(keeper.get("id")), "name", None))
+    check("控えの素データにも書く（建て直しで戻らない）",
+          (((contract_of(module, app) or {}).get("keeper") or {}).get("fields")
+           or {}).get("name") == renamed,
+          ((contract_of(module, app) or {}).get("keeper") or {}).get("fields"))
+    check("素の人物のほうは変えない",
+          world2.characters["777"].name == ANSWER["name"],
+          world2.characters["777"].name)
+    check("寄せたことがログに残る", "was renamed" in read_log(),
+          [l for l in read_log().splitlines() if "renamed" in l][:3])
+    app.process_choice(classes["rest"](app, app.stays[-1][0], module.STAY_QUALITY),
+                       "休養をとる")
+    CLOCK.settle()
+
     # 解約すると `modnpc` から降り、記録からも消える。
     app.go(node2.facilities["3"])
     app.press(module.OFFICE_LABEL)

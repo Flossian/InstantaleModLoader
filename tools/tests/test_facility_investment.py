@@ -1340,6 +1340,20 @@ check("重なっていた分は寄せ直す", len(filled) == len(set(filled)), f
 check("実体の名も寄る",
       getattr(modnpc.get(app, holdings()[1].get("keeper")), "name", None) == filled[1],
       filled)
+# 素の NPC と重なった場合も寄せる（自分の帳簿だけでは見えない。§3.68）。
+stock_name = holdings()[0].get("keeper_name")
+world.characters["777"] = types.SimpleNamespace(name=stock_name)
+app.refresh_choice_buttons(reset_page=True)
+CLOCK.settle()
+moved = holdings()[0].get("keeper_name")
+check("素の NPC と同名なら主人の名を寄せる",
+      bool(moved) and moved != stock_name, (stock_name, moved))
+check("素の人物のほうは変えない",
+      world.characters["777"].name == stock_name, world.characters["777"].name)
+check("実体の名も寄る",
+      getattr(modnpc.get(app, holdings()[0].get("keeper")), "name", None) == moved,
+      moved)
+
 app.go(shop)
 check("店でも中に立つと写しが置かれる",
       mod_facilities_in(app.world_dict) == [shop_record["facility"]], mod_facilities_in(app.world_dict))

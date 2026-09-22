@@ -560,6 +560,23 @@ def main():
     ok &= check("投げた層の後も次が呼ばれる", "906_quiet" in calls)
     ok &= check("戻り値は投げなかった層のぶん", ("906_quiet", True) in results)
 
+    print("名前: その世界で使われている名前を1か所から答える")
+    # 人を作る MOD が名前を決める前に見る（同名だと、名前でしか相手を引けない
+    # 場所で別人に当たる。実機 2026-09-21。VERIFICATION.md §3.68）。
+    app3.player = types.SimpleNamespace(name="主人公")
+    app3.save_data_dict["npcs"]["9"] = {"name": "客A"}
+    modnpc.register("330_real_estate", key="keeper-6", fields={"name": "エレン"})
+    used = modnpc.names_in_use(app3)
+    ok &= check("実行時の名簿から拾う", "宿の主" in used)
+    ok &= check("セーブの素データからも拾う", "客A" in used)
+    ok &= check("他の MOD の登録からも拾う", "エレン" in used)
+    ok &= check("プレイヤーも入る", "主人公" in used)
+    ok &= check("重複は畳む", len(used) == len(set(used)))
+    skipped = modnpc.names_in_use(
+        app3, skip=[modnpc.make_id("330_real_estate", "keeper-6")])
+    ok &= check("skip に渡した id の名前は数えない", "エレン" not in skipped)
+    modnpc.unregister("330_real_estate", modnpc.make_id("330_real_estate", "keeper-6"))
+
     print("片付け: purge で登録簿が空になる")
     modnpc.register("229_probe", key="clerk", fields={"name": "受付"})
     modnpc.spawn(app3, npc_id)
