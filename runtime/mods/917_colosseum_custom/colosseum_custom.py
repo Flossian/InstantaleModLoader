@@ -297,7 +297,9 @@ def apply(ctx):
             return None
         if not values:
             return None
-        return sum(values) / float(len(values))
+        # ゲームは一覧の**平均を整数に落としてから**式に入れる（実測。GAME.md §2.11）。
+        # 小数のまま計算すると告げる格が1ずれる（平均 69.33 の土地で 35 と出たが実際は 34）。
+        return int(sum(values) / float(len(values)))
 
     # ------------------------------------------------------ 相手の強さを決める
     def adjusted_rank(app, raw, index):
