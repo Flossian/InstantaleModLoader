@@ -1175,7 +1175,7 @@ D が 60 を超える土地では5〜6試合目にその上へ出る。
 | 施設に焼く | `config.enemy_data.<phase>.data.rank`（LLM の応答に `rank` は無い） |
 | 相手の数値を作る | `scripts.functions:get_enemy_exp_lvl` / `get_enemy_attributes_base_point` の第2引数（§2.20） |
 
-**頼み文の値だけを書き換えても相手は弱くならない**（`917_colosseum_custom` 版1の実機）。
+**頼み文の値だけを書き換えても相手は弱くならない**（`334_colosseum_custom` 版1の実機）。
 上限70を当てて頼み文を 71 → 70 / 85 → 70 に下げたが、
 敵のレベルは 72 と 86 のまま、焼かれた `data.rank` も 71 / 85 のままで、
 懸賞金も焼かれた格のほうで決まった（同じ回で 426 と 452 と別々の額）。
@@ -1203,7 +1203,7 @@ D が 60 を超える土地では5〜6試合目にその上へ出る。
 1ランクあたりの伸びは 8.2（30〜44）→ 5.1（44〜71）→ 1.1（71〜97）で、
 **格70を超えると頭打ちになる**（85 と 97 の差はわずか 2G）。
 単純な式（線形・対数・平方根・飽和型）はどれも7点に乗らないので、**式は未確定**。
-倍率で乗せるぶんには困らない（`917_colosseum_custom`）。
+倍率で乗せるぶんには困らない（`334_colosseum_custom`）。
 参加費は取らない（受付の口上は「報酬は客の賭け具合で決まる」）。
 試合の要約は `colosseum_battle_summarizer` が作るが、
 `output_data` には `guard_battle_summarizer` の名前で落ちる（ゲーム側の取り違え）。
@@ -1640,6 +1640,54 @@ ItemPopupMenu.on_consume_item          右クリックの「消費」
 `簡易寝台なら10G、個室なら100G、…高級個室も1000G`（3ヵ月単位の長期滞在、前払い）。
 比較用に、NPC の雇用は難易度76 で 5,045G。
 **アイテムの買価の上端（2,000G 台）より、宿の高級個室2部屋ぶんのほうが近い**という開きがある。
+
+#### 2.13.3 装備と装備欄
+
+`333_equipment_slots` を組むときに確かめたこと（VERIFICATION.md §3.70）。
+
+- 本体が読む装備は `equipments` の `weapon` と `wearable` の2つだけ。セーブの形は
+  `{"wearable": "item_2", "weapon": "item_0"}`（id の文字列）で、実行時は `Item` オブジェクト。
+  書いているのは `ItemPopupMenu` 側で、`Item.equip()` は書かない
+- 装備の種類は `attributes['item_detail']`（`weapon`: `small_weapon` / `medium_weapon` /
+  `long_weapon` / `large_weapon` / `throwable`、`wearable`: `shield` / `clothing` /
+  `body_armor` / `accessory` / `legwear` / `leg_armor` / `gauntlets` / `headgear`）。
+  `Item` に `sub_type` の属性は無く、`ITEM_TYPE_SUBTYPES` の語彙がここに写っている
+  （`leg_armor` と `legwear` は両方 `Data\item_embeddings\` に在る）
+- `ItemEquipManager` / `ItemUnequipManager` はロード時に1度だけ作られ（`223_` の記録: `__init__` が
+  ロード直後）、`execute` はそのとき束縛した参照で呼ばれる。だから `execute` をクラス属性で包んでも
+  popup からの呼び出しには届かない。`execute` はワーカースレッドで走り、所持品の窓を閉じる。
+  `equip_item` / `unequip_item` が HUD の Atk/Def を更新する
+- 本体の unequip は渡された品の種類の枠（`equipments[item_type]`）を無条件に落とす。
+  装備している品と別の品を外しても、その種類の枠ごと消える
+- 本体は仲間側（店の品も同じ）の品に popup を出さない。`ItemPopupMenu` を作るだけで親を付けない
+- `InventoryGrid(cols, rows, item_dict, obtainer, ...)` はマス（`InventorySlot`）だけを子に持つ
+  `GridLayout`。品（`InventoryItem`）はグリッドの親（窓の `FloatLayout`）に置かれ、
+  `item_dict` からは並べない（並べるのは HUD の toggle）。品を子にすると `GridLayoutException`
+- `InventoryGrid.place_existing_item(widget)` は `widget.item_instance.grid_pos = [x, 下から y]` の
+  位置に置く（ウィジェットの座標は見ない。同じフレームで置くとマスの位置がまだ無い）。
+  `is_valid_placement(grid_x, grid_y, w, h)` の `grid_y` も下から。
+  `current_slots` の添字は `grid_y * cols + grid_x`。マス 64px + 隙間 1px で、品の位置は grid.x ＋ 列 × 65 の
+  固定の単位（`InventorySlot` の大きさやグリッドの `size` を変えても追随しない）
+- `InventoryItem.on_touch_up`: まず落とす先のグリッドで `is_valid_placement` の下見（new_hud.py:924）。
+  通らなければ `try_place_item` を呼ばず、品を元の位置へ戻す。通れば `target.try_place_item(self, pos)`（:961）→
+  可否に関わらず `self.change_inventory(target)`（:962）。途中で `ItemUnequipManager.unequip_item` と
+  `ItemEquipManager.equip_item` を通す。`change_inventory` は移動元の `item_dict` から鍵を消し、移動先へ入れる
+  （元に無ければ KeyError）。断ったドロップの後の `equipments` に `healing_item` のような余計な鍵が残ることがある
+- `InventoryItem.get_all_inventories()` は HUD の `FloatLayout` の中の `InventoryGrid` を全部拾う
+  （MOD が足したものも）
+- 本体は持ち物の辞書を回している最中に `save_game` を呼ぶことがある（戦利品の窓を組む途中）
+- 右側の選択肢は `hud.right_buttons`（入れ物は `right_button_layout`）。所持品の窓を開くとき、本体は
+  左の `button_layout` を 0×0 に畳み、右は `right_button_layout.opacity` を 0 にするが、ボタンはそのまま描かれる
+- 画面上部の能力欄は `InstanTaleHUD.status_texts` の1本の文字列（`Atk:432(+500)`）。括弧の中が装備の値で、
+  `update_status_texts(instance, value)` の `value` を直せば描き変わる（`130_` と同じ口）。
+  見張りは文字列が変わったときだけ呼ばれる
+- 戦闘の数は `resolve_battle_effect` の中で `get_instant_damage(素点, 防御)` に落ちる。味方被弾の防御は
+  防具の防御力がそのまま、敵被弾の防御は直前の `get_npc_defense()` の値（§2.10.2）。
+  プレイヤーの火力は `get_base_damage_value(能力, 武器攻撃力)` で、通るのはプレイヤーの手だけ。
+  どちらも `scripts.functions` のモジュール関数で、包みが効く
+- 仲間の被弾の防御は `get_npc_defense(その仲間)`（本人のレベル由来の値。同行 3 人で 255・294・298 のように
+  人ごとに違い、日を追って上がる）。主人公だけ防具の防御力が渡る。`resolve_allies` の中で仲間ごとに
+  `get_npc_defense` が呼ばれる（`222_` の記録、仲間の被弾 160 件）。仲間の攻撃は `get_base_damage_value` を通らない
 
 ### 2.14 アイテム詳細ボックス
 

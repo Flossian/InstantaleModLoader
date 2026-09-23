@@ -799,7 +799,7 @@ def apply(ctx):
             if base_value is not None:
                 anchor = base_value
             elif action["side"] == ALLY_SIDE:
-                # 仲間の武器（窓口 `combat`。912_ が置く）。無ければ従来どおり。
+                # 仲間の武器（窓口 `combat`。333_ が置く）。無ければ従来どおり。
                 weapon = combat.attack(app, action["attacker"])
                 ability = ability_of(action["attacker"]) if weapon else None
                 anchor = ally_anchor(attacker_max, defender_max, ability, weapon)

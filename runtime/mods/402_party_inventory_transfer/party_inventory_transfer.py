@@ -34,7 +34,7 @@ mod.json の `after` で 301 より後に読み込み、ゲームと 301 が選�
 `Item.unequip` には番人を立てる。equipments がその品を指していない解除は本体へ通さず、
 1行記録して無視する（本体は無条件に辞書を引くため、食い違い状態では必ず落ちる）。
 
-装備欄の MOD（`912_`）が居るときは、仲間の `equipments` はそちらだけが書く。ローダの窓口
+装備欄の MOD（`333_`）が居るときは、仲間の `equipments` はそちらだけが書く。ローダの窓口
 `combat.equipped` が答える持ち主の品では、解除も掃除もしない（DOC.md「「装備する」ボタンは記録を書く」）。
 
 ## 仲間の装備
@@ -45,7 +45,7 @@ MOD 専用の「装備する／外す」ボタンを 1 つ出し、その NPC �
 `equipments[weapon|wearable]` を id で書いて `save_game` する。
 本体は仲間側の品に popup を出さない（`ItemPopupMenu` を作るだけで親を付けない。店の品と同じ扱い）ので、
 本体の popup へ足すのではなく、押した位置に自前のボタンを Window の直下に置く（品の説明の箱より上）。
-外を触れば消える。この記録を読むのは `401_`（審判への文）と、`912_`＋`319_` を入れているときの戦闘の数。
+外を触れば消える。この記録を読むのは `401_`（審判への文）と、`333_`＋`319_` を入れているときの戦闘の数。
 解除時は slot キーごと落とす（本体がプレイヤーの装備を外した後と同じ形）。
 
 ## ログ
@@ -366,9 +366,9 @@ def apply(ctx):
         native_new_key = key_for_instance(new_inv, item_instance, old_widget_id)
         original_item_id = getattr(item_instance, "id", None)
 
-        # 装備欄の MOD（912_）がこの持ち主の装備を持っていれば、`equipments` はそちらが書く。
+        # 装備欄の MOD（333_）がこの持ち主の装備を持っていれば、`equipments` はそちらが書く。
         # ここで外すと書き手が 2 本になり、装備欄から主人公側へ引いた品が仲間の持ち物にも残った
-        # （DOC.md「仲間の装備」）。窓口が None なら装備欄は無く、ここで外す
+        # （DOC.md「「装備する」ボタンは記録を書く」）。窓口が None なら装備欄は無く、ここで外す
         app = ui.find_app()
         slots_answer = combat.equipped(app, old_owner, item_instance) if app is not None else None
 

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""912_equipment_slots をゲーム抜きで通す。
+"""333_equipment_slots をゲーム抜きで通す。
 
-    python tools/tests/test_wip_equipment_slots.py
+    python tools/tests/test_equipment_slots.py
 
 見るのは MOD が自分で決めている所だけ:
 部位の矩形と受け入れ（収まる・種類が合う・空いている）、本体へ渡す1つ（合算せず最高値）、
@@ -9,7 +9,7 @@
 右クリックの「装備」「外す」の移動、開いたときの控えの突き合わせ。
 
 本体の座標は「y は下から」、控えは「y は上から」。偽物のグリッドは本体と同じ約束で動く
-（`place_existing_item` は `item.grid_pos = [x, 下から y]` で置く。DOC.md §4）。
+（`place_existing_item` は `item.grid_pos = [x, 下から y]` で置く。GAME.md §2.13.3）。
 """
 import importlib.util
 import io
@@ -565,7 +565,7 @@ assert combat.toggle(app, mate, ring) is None
 ring.obtainer = player
 
 # 段3: 仲間の装備欄から主人公側へ直接引く。402_ が持ち物の辞書と持ち主を移し（窓口の答えを見て
-# `equipments` には触らない）、912 は品を仲間の持ち物へ戻さず、`equipments` を自分で外す
+# `equipments` には触らない）、333 は品を仲間の持ち物へ戻さず、`equipments` を自分で外す
 assert "k1" in NSC["container"] and mate.equipments.get("weapon") == "k1"
 left = Grid(4, 6, player)
 left.situation = "party_transfer"
@@ -584,7 +584,7 @@ HOOKS["change"](handover, w_spear, left)
 assert "k1" not in NSC["container"], NSC["container"]
 assert "k1" not in mate.inventory.inventory, mate.inventory.inventory   # 仲間の持ち物へ戻さない
 assert player.inventory.inventory.get("k1") is spear
-assert "weapon" not in mate.equipments, mate.equipments                 # 書くのは 912
+assert "weapon" not in mate.equipments, mate.equipments                 # 書くのは 333
 assert any("npc:78: 'k1' handed to" in l for l in ctx.lines), ctx.lines[-5:]
 assert combat.equipped(app, mate, spear) is False
 

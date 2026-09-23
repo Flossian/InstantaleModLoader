@@ -287,7 +287,7 @@ shutil.rmtree(out_dir2, ignore_errors=True)
 
 
 # ---------------------------------------------------------------- 装備欄（ローダの窓口 combat.gear）
-# 装備欄の MOD（912_）が答えれば、weapon / wearable の代わりに部位ごとに書く。主人公も装備の行だけ載せる
+# 装備欄の MOD（333_）が答えれば、weapon / wearable の代わりに部位ごとに書く。主人公も装備の行だけ載せる
 print("装備欄の全部位")
 from instantale_modloader import combat  # noqa: E402
 app = party_of(1)

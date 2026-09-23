@@ -1282,12 +1282,12 @@ price = prices.inn_room(app, quality, write=write)   # int か None
 
 #### 3.3.5 人物ごとの装備の数も窓口で持つ（`combat`）
 
-装備欄を持つ MOD（`912_equipment_slots`）と、戦闘の数を組む MOD（`319_battle_tactics`）は
+装備欄を持つ MOD（`333_equipment_slots`）と、戦闘の数を組む MOD（`319_battle_tactics`）は
 互いを import しない。**「この人物の装備は攻撃力いくつ・防御力いくつ」**だけを
 `instantale_modloader/combat.py` で受け渡す。
 
 ```python
-# 置く側（912）。答えは装備の側の値だけ（合算するならその結果）。装備が無ければ None
+# 置く側（333）。答えは装備の側の値だけ（合算するならその結果）。装備が無ければ None
 combat.declare(combat.ATTACK, lambda app, holder: ..., owner=owner, write=write)
 combat.declare(combat.DEFENSE, lambda app, holder: ..., owner=owner, write=write)
 
@@ -1295,7 +1295,7 @@ combat.declare(combat.DEFENSE, lambda app, holder: ..., owner=owner, write=write
 weapon = combat.attack(app, attacker)      # 仲間の錨 = 従来 + 2×√(能力 × weapon) × 率
 armor = combat.defense(app, defender)      # 仲間の防御 = 本体の値 + armor × 率
 
-# 装備の操作も同じ窓口（402 の「装備／外す」→ 912 の装備欄）。None なら聞く側が自分で書く
+# 装備の操作も同じ窓口（402 の「装備／外す」→ 333 の装備欄）。None なら聞く側が自分で書く
 done = combat.toggle(app, npc, item)        # "equipped" / "unequipped" / 断りの文字列 / None
 flag = combat.equipped(app, npc, item)      # True / False / None
 
@@ -1305,17 +1305,17 @@ worn = combat.gear(app, holder)             # [(部位, 品), ...] / None
 
 仲間の `equipments` を書くのは装備欄の MOD だけ。`equipped` が None でない（装備欄の MOD がその持ち主を
 持っている）とき、402 は受け渡しのドラッグでも解除や参照の掃除をしない。書き手が 2 本あると、装備欄から
-主人公側へ引いた品が仲間の持ち物にも残った（912 DOC.md §3.3）。
+主人公側へ引いた品が仲間の持ち物にも残った（VERIFICATION.md §3.70）。
 
 | 決まり | 理由 |
 |---|---|
 | 答えは装備の値。1 発の数にするのは聞く側 | 能力・体力・帯・レベル差は戦闘の MOD の持ち物。窓口が式を持つと 2 か所に式ができる |
 | 仲間の装備は上乗せにしかならない | 素のゲームは仲間の武器を読まない（公式の回答）。弱い武器を持たせて弱くなる形にすると、装備欄が罰になる。「大きいほう」も駄目で、仲間の素の値（体力・レベル由来）が装備の式より常に大きく一度も効かない（実機）。素の値に率を掛けて足す |
-| プレイヤーは窓口を通さない | 本体自身が `get_base_damage_value` / `get_instant_damage` に装備の値を渡す。912 はそこを包む。319 は渡された値をそのまま使う |
+| プレイヤーは窓口を通さない | 本体自身が `get_base_damage_value` / `get_instant_damage` に装備の値を渡す。333 はそこを包む。319 は渡された値をそのまま使う |
 | 例外・負の数・数でない答えは None | 聞く側はゲームのままにする。壊れた答えで戦闘を止めない |
 
 公式が NPC に武器を参照させない理由は「審判 LLM の文脈に全員の装備を書くと小規模モデルで壊れる」で、
-数の側の理由ではない（`401_` が文字数の予算で抑えている）。数だけを足す判断は 912 の DOC.md §3.4。
+数の側の理由ではない（`401_` が文字数の予算で抑えている）。数だけを足す判断は VERIFICATION.md §3.70。
 
 ### 3.4 まだ現れていない対象を狙う（保留と当て直し）
 
@@ -2232,7 +2232,7 @@ screen.back_button_index(buttons)              # ゲーム側の「やめる」�
 ```
 
 `walk_widgets` の兄弟の順は2通りある。
-既定は `children` の並び（新しい子から）で、`115_` / `124_` / `912_` がこの順で動いている。
+既定は `children` の並び（新しい子から）で、`115_` / `124_` / `333_` がこの順で動いている。
 `oldest_first=True` は古い子からで、`330_` / `402_` が見出しの「所持品」を探すのに使う。
 どちらも「最初に見つかった1つ」を採る呼び手があり、実機で確かめた順なので揃えていない。
 `seen` に同じ集合を渡すと、2本の木を続けて辿っても重なった分を二度出さない（`115_` が HUD と窓の直下で使う）。

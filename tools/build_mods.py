@@ -171,6 +171,8 @@ BANDS = (
         "330_real_estate",
         "331_facility_investment",
         "332_training_custom",
+        "333_equipment_slots",
+        "334_colosseum_custom",
     )),
     #: 提供（4xx）は出どころの帯なので kind を固定しない（TECH.md §3.2.2）。
     (None, CONTRIB_HEAD, (

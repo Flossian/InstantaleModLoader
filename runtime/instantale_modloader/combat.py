@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """戦闘の数（人物ごとの装備の攻撃力・防御力）の窓口。
 
-装備を持つ MOD（`912_equipment_slots`）が「この人物の装備は攻撃力いくつ・防御力いくつ」を
+装備を持つ MOD（`333_equipment_slots`）が「この人物の装備は攻撃力いくつ・防御力いくつ」を
 答える関数を置き、戦闘を組む MOD（`319_battle_tactics`）が聞く。
 MOD どうしは import しない（TECH.md §3.2.3）ので、両者はここで繋がる。
 
-    置く側   combat.declare(combat.ATTACK, fn, owner="912_…")   # fn(app, holder) -> 数 | None
+    置く側   combat.declare(combat.ATTACK, fn, owner="333_…")   # fn(app, holder) -> 数 | None
     聞く側   value = combat.attack(app, holder)                 # 数 | None
 
 答えは**装備の側の値だけ**（武器の攻撃力・防具の防御力。合算するならその結果）。
@@ -13,7 +13,7 @@ MOD どうしは import しない（TECH.md §3.2.3）ので、両者はここ�
 `None` は「誰も置いていない」か「その人物は何も装備していない」で、聞く側はゲームのままにする。
 
 素のゲームでは、プレイヤーの武器・防具だけが数に入る（GAME.md §2.10.2）。仲間の装備を
-数に入れるのは MOD の判断（912 DOC.md §3.4）で、公式が NPC に武器を参照させない理由は
+数に入れるのは MOD の判断（VERIFICATION.md §3.70）で、公式が NPC に武器を参照させない理由は
 審判 LLM の文脈の肥大であり、数の側の理由ではない。
 
 同じ種類を 2 本の MOD が置いたら後から置いたほうが勝ち、その旨をログに残す（`durations` と同じ）。

@@ -1,32 +1,24 @@
 # -*- coding: utf-8 -*-
-"""所持品の窓の左に装備欄を足す。装備はドラッグか右クリックの「装備する」で移す。
+"""所持品の窓の左に装備欄を足す。装備はドラッグか右クリックの「装備」で移す。
 
-装備欄は本体の `InventoryGrid`（6列×8行）をもう1枚作ったもの。
+装備欄は本体の `InventoryGrid`（6列×10行）をもう1枚作ったもの。
 本体の `InventoryItem.get_all_inventories()` は HUD の `FloatLayout` の中からグリッドを探す
-（実機で確認。DOC.md §3）ので、同じ場所に置けばドラッグの受け渡しは本体の処理がそのまま効く。
+（GAME.md §2.13.3）ので、同じ場所に置けばドラッグの受け渡しは本体の処理がそのまま効く。
 部位はそのグリッドの上の矩形（`slots.REGIONS`）で、
 ドロップは「その部位に収まる・種類が合う・空いている」ときだけ受ける（`is_valid_placement` の包み）。
 
-本体の作り（実機で確認。DOC.md §4）:
+- 装備中の品は持ち物の辞書から抜き、装備欄の辞書（`sys` に置く）だけに持つ。本体は窓を開くたびに
+  持ち物の辞書から品を並べ直すので、抜いておけば所持品にも売買・クラフト・強化の窓にも出ない。
+  セーブのときだけ、書き出す直前の JSON へ合流させる
+- 装備欄の辞書は装備欄のグリッドの持ち物の辞書でもある（本体はドラッグで品を出すときそこから抜く）
+- どの品がどの部位に居るかは MOD の控え（世界ごと。`{持ち主の鍵: {品の鍵: [x, y]}}`、y は上から）
+- 持ち主ごとに scope（辞書・控えの鍵・窓の場面）を持つ。主人公は所持品の窓、仲間は
+  `402_party_inventory_transfer` の受け渡しの窓
+- 本体が読む装備は `equipments` の `weapon` / `wearable` の2つだけなので、手の武器で攻撃力が最高の1つと
+  全部位の防具で防御力が最高の1つを渡す。合算（設定）は戦闘の数と画面上部の表示のときにだけ作る
+- 戦闘の数（`319_`）と審判への文（`401_`）へは、ローダの窓口 `combat` を通して答える（TECH.md §3.3.5）
 
-- `InventoryGrid` はマス（`InventorySlot`）だけを子に持つ `GridLayout`。品のウィジェット
-  （`InventoryItem`）はグリッドの親（窓の `FloatLayout`）に置かれる
-- `place_existing_item(widget)` は `item_instance.grid_pos = [x, 下から数えた y]` の位置に置く。
-  ウィジェットの座標は見ない。`current_slots` の添字は `y * cols + x`（y は下から）
-- ドロップ（`InventoryItem.on_touch_up`）は `try_place_item` の可否に関わらず
-  `change_inventory(target)` まで進む。断るときは `change_inventory` の包みで元へ戻す
-- 所持品の窓は開くたびに本体が持ち物の辞書から品を並べ直す。装備欄の品も一度そこに並ぶので、
-  1フレーム置いてから装備欄へ移す（`move_widget`）。持ち物の辞書には残したままなので、
-  セーブも `equipments` の id の解決も本体のまま動く
-
-どの品がどの部位に居るかは MOD の控え（`state\\equipment_slots\\<世界>.json`。
-`{主人公: {品の鍵: [x, y]}}`。y は上から）。
-
-本体が読む装備は `equipments` の `weapon` / `wearable` の2つだけなので、
-手の武器で攻撃力が最高の1つと、全部位の防具（盾を含む）で防御力が最高の1つを
-`Item.equip()` / `unequip()` で写す。合算はしない。
-
-記録は DOC.md（開発中のため docs\\ には無い）。
+遊び方は DOC.md、検証の記録と決めた仕様は VERIFICATION.md §3.70、ゲーム側の事実は GAME.md §2.13.3。
 """
 import os
 import re
@@ -297,7 +289,7 @@ def apply(ctx):
 
         本体は `status_texts`（Kivy の StringProperty）が変わったときだけ見張りを呼ぶ。最高値の品が
         変わらないドラッグでは文字列が同じなので、合算の値は HP や所持金が動くまで描き変わらなかった
-        （実機 2026-09-22、DOC.md §3.1）。見張りを直に呼べば包み（合算の描き変え）を通る。
+        （VERIFICATION.md §3.70）。見張りを直に呼べば包み（合算の描き変え）を通る。
         """
         hud = ui.find_hud(app)
         text = frames.attr(hud, "status_texts", None)
@@ -527,7 +519,7 @@ def apply(ctx):
         `disabled` はボタンだけを子に持つ親（`right_button_layout`）に付ける。各ボタンの
         `disabled` は本体が応答待ちで切り替えるので触らない（116_ と同じ理由。Kivy は親の
         `disabled` を子へ継承するので、子の値を変えずに押せなくできる）。
-        `opacity` はボタンごとに付ける。親の `opacity` は本体も 0 にしているが描画には効かない（DOC.md §3.3）。
+        `opacity` はボタンごとに付ける。親の `opacity` は本体も 0 にしているが描画には効かない（VERIFICATION.md §3.70）。
         """
         buttons = [b for b in (frames.attr(hud, "right_buttons", None) or ()) if b is not None]
         targets = []
@@ -558,8 +550,8 @@ def apply(ctx):
         """所持品の窓が開いていなければ右側の選択肢を戻す。
 
         窓は本体の別の経路（会話に入る・ロード・タイトルへ戻る）でも閉じられ、そのときは
-        `toggle_center_inventory_visibility` を通らないので、隠したままになった（実機 2026-09-23、
-        ロード後に会話の選択肢が出ない）。選択肢が組み直されるたびに確かめる。
+        `toggle_center_inventory_visibility` を通らないので、隠したままになった
+        （ロード後に会話の選択肢が出なかった。VERIFICATION.md §3.70）。選択肢が組み直されるたびに確かめる。
         """
         hud = ui.find_hud(app)
         if hud is None:
@@ -623,7 +615,7 @@ def apply(ctx):
         except (TypeError, ValueError, IndexError):
             gap = 1.0
         # マスは持ち物と同じ大きさ。本体は品を固定の単位（65px）で置き、ドロップの座標も同じ単位で割るので、
-        # マスを縮めると絵と枠がずれる（DOC.md §3.3）。画面に収まらないぶんは余白を詰めて上下に寄せる
+        # マスを縮めると絵と枠がずれる（VERIFICATION.md §3.70）。画面に収まらないぶんは余白を詰めて上下に寄せる
         main_cell = cell = (float(grid.width) + gap) / cols
         host = ui.overlay_host(hud)
         window = window_of(grid, host)
@@ -929,7 +921,7 @@ def apply(ctx):
                 taken |= cells
 
     # ------------------------------------------------------------ 合算
-    #: 戦闘の1手の間だけ立つ旗と、直前に聞かれた敵の防御（味方被弾と見分けるため。DOC.md §4）。
+    #: 戦闘の1手の間だけ立つ旗と、直前に聞かれた敵の防御（味方被弾と見分けるため。GAME.md §2.13.3）。
     battle = {"active": False, "npc_defense": None, "shown": {}}
 
     def matches(a, b):
@@ -1009,9 +1001,8 @@ def apply(ctx):
     def gear_value(app, holder, game_key):
         """この人物の装備の値（窓口 `combat` への答え）。装備が無ければ None。
 
-        主人公は装備欄（合算が入っていれば合算、切っていれば最高値）。仲間は本体の
-        `equipments[weapon|wearable]`（402_ が書く id か実体）を持ち物から引いた 1 品。
-        仲間の装備欄は段2で足す（DOC.md §3.4）。
+        装備欄を使っている持ち主は装備欄から（合算が入っていれば合算、切っていれば最高値）。
+        使っていない仲間は本体の `equipments[weapon|wearable]`（402_ が書く id か実体）を持ち物から引いた 1 品。
         """
         stat = dict(rules.GAME_KEYS)[game_key]
         sc = scope_for(app, holder, create=False)
@@ -1033,7 +1024,7 @@ def apply(ctx):
         value = rules.stat_of(item, stat)
         return value if value > 0 else None
 
-    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "912_equipment_slots"
+    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "333_equipment_slots"
     global SCOPE_FOR
     SCOPE_FOR = scope_for
     combat.declare(combat.ATTACK, lambda app, holder: gear_value(app, holder, "weapon"),
@@ -1065,7 +1056,7 @@ def apply(ctx):
 
         生きている持ち物の辞書には触らない。本体は戦利品の窓などを組みながら（辞書を回している
         最中に）セーブを呼ぶことがあり、そこで辞書へ足すと
-        `dictionary changed size during iteration` で落ちる（実機 2026-09-08 14:31）。
+        `dictionary changed size during iteration` で落ちた（VERIFICATION.md §3.70）。
         """
         if not isinstance(data, dict):
             return 0
@@ -1286,7 +1277,7 @@ def apply(ctx):
     # 右クリックの popup（`ItemPopupMenu`）は右クリックのたびに作られ、ボタンはそのときの
     # `on_equip_item` / `on_unequip_item` に束縛される。ここなら包みが効く（メインスレッド）。
     # 本体の Manager はロード時に1度だけ作られ、ロード時に束縛した参照で呼ばれるので、
-    # `ItemEquipManager.execute` 等をクラス属性で包いても届かない（実機 2026-09-08、DOC.md §4）。
+    # `ItemEquipManager.execute` 等をクラス属性で包んでも届かない（GAME.md §2.13.3）。
     # プレイヤーの品は本体の経路（equipments の直書き → Manager）を通さず、ここで移すだけにする。
     def popup_widget(self, app):
         """popup が指す InventoryItem。プレイヤーの品で、所持品の窓が開いていなければ None。"""
@@ -1378,8 +1369,8 @@ def apply(ctx):
         """本体の ItemEquipManager / ItemUnequipManager が MOD 以外の経路で走ったあと、装備欄から組み直す。
 
         本体の unequip は渡された品の種類の枠（`equipments[item_type]`）を無条件に落とし、HUD を (+0) にする。
-        装備欄に居る品と別の品を本体の popup で外すと、装備欄の品の枠まで消えた（実機 2026-09-23 00:43、
-        DOC.md §3.3）。MOD 自身が呼んだとき（`placing["native"]`）は組み直さない。
+        装備欄に居る品と別の品を本体の popup で外すと、装備欄の品の枠まで消えた（
+        VERIFICATION.md §3.70）。MOD 自身が呼んだとき（`placing["native"]`）は組み直さない。
         """
         result = orig(self, *args, **kwargs)
         if not placing["native"]:
@@ -1530,7 +1521,7 @@ def apply(ctx):
         if sc is None or sc["player"]:
             return None
         # 装備欄から引いている最中は False になる。装備欄の辞書はグリッドの持ち物の辞書でもあり、
-        # 本体がドラッグで品を抜くため（DOC.md §3.3）。受け渡しで聞く 402_ は None かどうかしか見ない
+        # 本体がドラッグで品を抜くため（VERIFICATION.md §3.70）。受け渡しで聞く 402_ は None かどうかしか見ない
         return str(getattr(item, "id", "")) in sc["container"]
 
     def worn_of(app, holder):

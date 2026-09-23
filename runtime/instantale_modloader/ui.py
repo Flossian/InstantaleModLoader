@@ -365,7 +365,7 @@ def walk_widgets(root, max_depth=None, seen=None, oldest_first=False):
     「最初に見つかった1つ」を採る呼び手（`330_` / `402_` の見出し探し）は
     この順で実機を確かめてあるので、変えないこと。
 
-    `330_` / `402_` の `walk_widgets` と `115_` / `124_` / `912_` の `walk`（深さの上限つき）を寄せた。
+    `330_` / `402_` の `walk_widgets` と `115_` / `124_` / `333_` の `walk`（深さの上限つき）を寄せた。
     """
     if root is None:
         return

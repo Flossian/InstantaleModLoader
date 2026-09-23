@@ -29,7 +29,7 @@ job・tactics・traits・status）の順。
 装備は本体がプレイヤーの装備を書くときの `名前(説明)` の形に寄せ、
 内部属性（attributes）は別の行に分ける。`equipments` の値が id なら持ち物から実体を引く。
 
-装備欄の MOD（`912_`）を入れていれば、ローダの窓口 `combat.gear` に身に着けている品を聞き、
+装備欄の MOD（`333_`）を入れていれば、ローダの窓口 `combat.gear` に身に着けている品を聞き、
 weapon / wearable の代わりに部位ごと（`right_hand` / `head` / `accessory1` など）の行で書く。
 装備欄の品は持ち物の辞書に居ないので、`equipments` の id からは引けない（id だけの行になった）。
 主人公も装備欄を使っていれば、装備の行だけの `- player:` の枠を足す（本体が渡すのは weapon / wearable の

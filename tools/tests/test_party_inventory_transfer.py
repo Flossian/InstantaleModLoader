@@ -348,7 +348,7 @@ shutil.rmtree(out_dir, ignore_errors=True)
 
 
 # ---------------------------------------------------------------- 装備欄の MOD が居るとき
-# 仲間の `equipments` を書くのは装備欄の MOD（912_）だけ。窓口 `combat.equipped` が答える持ち主では、
+# 仲間の `equipments` を書くのは装備欄の MOD（333_）だけ。窓口 `combat.equipped` が答える持ち主では、
 # 本体の unequip も参照の掃除もしない（書き手が 2 本になると、渡した品が仲間の持ち物にも残った）
 print("装備欄の MOD が居る受け渡し")
 from instantale_modloader import combat  # noqa: E402

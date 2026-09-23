@@ -24,7 +24,7 @@
 
 ## 装備欄の MOD を入れているとき
 
-装備欄の MOD（開発中の `912_equipment_slots`）を入れていれば、装備は `weapon` / `wearable` の 2 行ではなく
+装備欄の MOD（`333_equipment_slots`）を入れていれば、装備は `weapon` / `wearable` の 2 行ではなく
 部位ごとの行で書く（版8）。部位の名前は装備欄の MOD のもの（`right_hand` `left_hand` `head` `body` `arms` `legs`
 `accessory1` `accessory2`）で、属性は `right_hand_attributes` のように本文の直後の行に分ける。
 身に着けている品は、ローダの窓口 `combat.gear` に聞く（TECH.md §3.3.5）。
@@ -32,14 +32,14 @@
 ```text
 【パーティーメンバー戦闘情報】
 player は主人公。装備欄に身に着けている品を部位ごとに載せる（本体の weapon / wearable はこの中の一部）。
-- player: ミツバ
+- player: <プレイヤー名>
   head: 革の兜(使い込まれている)
   right_hand: 鋼の剣(重い)
 パーティーメンバーについては、以下の人物・装備情報を優先して参照してください。
-- party_member: 元傭兵の銀髪・ゼノ
+- party_member: 鉄拳のグレン
   HP: 803/992
-  right_hand: 星詠みの魔導杖(星が宿る)
-  accessory1: 古びた真鍮の指輪(くすんでいる)
+  right_hand: 鉄の大盾(歪んだ縁に無数の刃こぼれが残る)
+  accessory1: 銀の指輪(くすんでいる)
   profile: …
 ```
 

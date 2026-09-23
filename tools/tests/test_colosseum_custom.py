@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
-"""917_colosseum_custom をゲーム抜きで通す（開発中の MOD なので CI の外）。
+"""334_colosseum_custom をゲーム抜きで通す。
 
-    python tools/tests/test_wip_colosseum_custom.py
+    python tools/tests/test_colosseum_custom.py
 
 確認するもの:
 
   素のまま … 設定を触らなければ難易度も所持金も文も1つも動かない
   強さ     … 初戦・伸び・上限・基準（土地／レベル／高いほう）が効く
   懸賞金   … 文の額と所持金の増えが必ず揃う。書き換えられなければ金も触らない
-  踏み止まり… 闘技場でだけ、1試合に1度だけ、倒れているときだけ
+  負け     … 闘技場でだけ、1試合に1度だけ、倒れているときだけ逃走扱いで終える
   相手     … 既出の闘士を頼み文に足す。同じ一文が既にあれば二重にしない
 """
 import importlib.util
@@ -20,7 +20,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
-MOD_DIR = os.path.join(RUNTIME_DIR, "mods", "917_colosseum_custom")
+MOD_DIR = os.path.join(RUNTIME_DIR, "mods", "334_colosseum_custom")
 OUT_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "out", "test",
                                         "colosseum_custom"))
 
@@ -90,7 +90,7 @@ class FakeUI(object):
 
 
 class FakeCtx(object):
-    _mod = "917_colosseum_custom"
+    _mod = "334_colosseum_custom"
 
     def __init__(self, out_dir):
         self.out_dir = out_dir

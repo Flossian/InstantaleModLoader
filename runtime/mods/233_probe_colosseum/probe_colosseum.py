@@ -23,7 +23,7 @@ r"""計測: 闘技場の試合（相手の強さと報酬）。ゲームは変�
   * 難易度は `colosseum_enemy_generator` の**第4位置引数**で渡る（`kwargs` は空）
   * ゲームは決めた格を**3か所で別々に使う**（頼み文・`config.enemy_data.<phase>.data.rank`・
     敵の数値を作る `scripts.functions:get_enemy_*` の第2引数）。
-    頼み文だけ書き換えても相手は弱くならない（`917_` 版1 の実機）
+    頼み文だけ書き換えても相手は弱くならない（`334_` 版1 の実機）
   * 敵のレベルは `rank + 1`。HP は同じランクでもばらつく（rank 44 で 440 と 640）
   * **報酬は `end_phase` の中で入る**（`BattleEndInColosseum.execute` →
     `instantale.py:8105`、ワーカースレッド）。Clock 待ちではないので上乗せは戻る前に書ける
@@ -463,7 +463,7 @@ def apply(ctx):
     # ---------------------------------------------------------------- 戦闘
     #: 敵の数値を作る関数（`scripts.functions`。GAME.md §2.20）。
     #: **闘技場の相手の実際の強さがここで決まる**（レベルは難易度 + 1）。
-    #: `917_colosseum_custom` が上限を当てても敵のレベルが下がらなかったので、
+    #: `334_colosseum_custom` が上限を当てても敵のレベルが下がらなかったので、
     #: 頼み文の難易度とは別にこちらが呼ばれていると読める。引数と戻りをそのまま録る。
     ENEMY_NUMBER_FNS = ("get_enemy_exp_lvl", "get_enemy_attributes_base_point",
                         "get_enemy_count_in_quest")
@@ -605,7 +605,7 @@ def apply(ctx):
     def battle_end_init(orig, self, app=None, end_type=None, *args, **kwargs):
         """`end_type` の実値と、誰が作ったか。
 
-        **倒れたときに負けとして試合を終える**（`917_colosseum_custom`）には、
+        **倒れたときに負けとして試合を終える**（`334_colosseum_custom`）には、
         ゲームが逃げたときに通るのと同じ引数でこのマネージャを起こす必要がある。
         闘技場の外の戦闘でも録る（`end_type` に何種類あるかを知りたいので）。
         """
