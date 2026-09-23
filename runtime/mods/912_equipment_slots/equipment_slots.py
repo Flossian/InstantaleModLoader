@@ -1529,25 +1529,9 @@ def apply(ctx):
         sc = scope_for(app, holder, create=False)
         if sc is None or sc["player"]:
             return None
-        key = str(getattr(item, "id", ""))
-        found = key in sc["container"]
-        if not found:
-            # 計測（2026-09-23）: 装備欄から主人公側へ引いた途中で False が返った。引いた辞書が画面の装備欄の
-            # 辞書と同じか、品が同一の物としてどこに居るかを残す（912 DOC.md §3.2）
-            try:
-                grid = my_grid(app, sc)
-                shown = scope_of_grid(grid) if grid is not None else None
-                held_by = [k for k, c in npc_containers.items() if any(v is item for v in c.values())]
-                write("{}: equipped? {!r} -> False (keys={} same_as_panel={} panel_keys={} held_by={} "
-                      "same_owner={} registered={})".format(
-                          sc["key"], key, sorted(sc["container"]),
-                          shown is not None and shown["container"] is sc["container"],
-                          sorted(shown["container"]) if shown is not None else None, held_by,
-                          shown is not None and shown["owner"] is holder,
-                          npc_containers.get(sc["key"]) is sc["container"]))
-            except Exception:
-                ctx.log_exc("equipment slots: tracing equipped? failed")
-        return found
+        # 装備欄から引いている最中は False になる。装備欄の辞書はグリッドの持ち物の辞書でもあり、
+        # 本体がドラッグで品を抜くため（DOC.md §3.3）。受け渡しで聞く 402_ は None かどうかしか見ない
+        return str(getattr(item, "id", "")) in sc["container"]
 
     def worn_of(app, holder):
         """身に着けている品 `[(部位, 品), ...]`（部位の並び順）。窓口 `combat.gear` の答え。
