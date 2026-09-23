@@ -1,0 +1,140 @@
+{
+  "entry": "cloud_model_override.py",
+  "api": 1,
+  "kind": "fix",
+  "name": {
+    "en": "Cloud model override",
+    "ja": "クラウドモデルの差し替え"
+  },
+  "description": {
+    "en": "Uses an OpenAI or Claude model that is not in the game's built-in list, picked from a list. The model name is swapped on the wire just before the request goes out, and parameters the new model rejects are fixed up",
+    "ja": "ゲームの選択肢に無い OpenAI / Claude のモデルを、一覧から選んで使う。送信直前にモデル名を差し替え、差し替え先が受け付けない引数も直す",
+    "why_wip": "Claude の経路（anthropic の SDK）と、GPT-6 系への差し替えを実機で当てていない"
+  },
+  "version": "3",
+  "author": "R01/Flossian",
+  "settings": {
+    "OPENAI_MODEL": {
+      "type": "choice",
+      "values": [
+        "off",
+        "gpt-6-astra",
+        "gpt-6-sol",
+        "gpt-6-luna",
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna",
+        "gpt-5.5",
+        "gpt-5.4",
+        "gpt-5.4-mini",
+        "gpt-5.4-nano"
+      ],
+      "default": "gpt-6-luna",
+      "label": {
+        "ja": "OpenAI: 実際に送るモデル",
+        "en": "OpenAI: model actually sent"
+      },
+      "note": {
+        "ja": "ゲームの設定画面では OpenAI の中から何を選んでいてもよい（速い経路を組み立てる gpt-5.5 などを推奨）。off で差し替えない",
+        "en": "Any OpenAI model may be selected in the game's settings (gpt-5.5 or similar builds the fast path). off = no swap"
+      }
+    },
+    "OPENAI_CUSTOM": {
+      "type": "str",
+      "default": "",
+      "label": {
+        "ja": "OpenAI: 一覧に無いモデル",
+        "en": "OpenAI: model not in the list"
+      },
+      "note": {
+        "ja": "書いてあれば上の一覧より優先する。空なら一覧の選択を使う",
+        "en": "Takes priority over the list above when filled in. Empty = use the list"
+      }
+    },
+    "OPENAI_EFFORT": {
+      "type": "choice",
+      "values": [
+        "keep",
+        "none",
+        "low",
+        "medium",
+        "high"
+      ],
+      "default": "keep",
+      "label": {
+        "ja": "OpenAI: 推論量",
+        "en": "OpenAI: reasoning effort"
+      },
+      "note": {
+        "ja": "keep はゲームが組み立てた値のまま（gpt-5.5 などを選んでいれば none）。上げると賢くなるが応答が遅くなる。gpt-6-astra は none を受け付けないので low に上げて送る",
+        "en": "keep = whatever the game built (none for gpt-5.5 and similar). Higher is smarter but slower. gpt-6-astra rejects none, so low is sent instead"
+      }
+    },
+    "CLAUDE_MODEL": {
+      "type": "choice",
+      "values": [
+        "off",
+        "claude-opus-5-5",
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "claude-haiku-4-5",
+        "claude-fable-5-1",
+        "claude-opus-4-8",
+        "claude-sonnet-4-6"
+      ],
+      "default": "off",
+      "label": {
+        "ja": "Claude: 実際に送るモデル",
+        "en": "Claude: model actually sent"
+      },
+      "note": {
+        "ja": "ゲームの設定画面では Claude の中から何を選んでいてもよい。off で差し替えない（推論量の指定も効かない）",
+        "en": "Any Claude model may be selected in the game's settings. off = no swap (the effort setting is not applied either)"
+      }
+    },
+    "CLAUDE_CUSTOM": {
+      "type": "str",
+      "default": "",
+      "label": {
+        "ja": "Claude: 一覧に無いモデル",
+        "en": "Claude: model not in the list"
+      },
+      "note": {
+        "ja": "書いてあれば上の一覧より優先する。知らない名前には最新世代の制約（temperature 等を外す）を当てる",
+        "en": "Takes priority over the list above when filled in. Unknown names get the newest generation's restrictions (temperature etc. removed)"
+      }
+    },
+    "CLAUDE_EFFORT": {
+      "type": "choice",
+      "values": [
+        "keep",
+        "low",
+        "medium",
+        "high"
+      ],
+      "default": "low",
+      "label": {
+        "ja": "Claude: 推論量",
+        "en": "Claude: effort"
+      },
+      "note": {
+        "ja": "Opus 5.5 / Fable 5.1 は思考を切れないので、low にしないと応答が遅い。claude-haiku-4-5 には送らない（受け付けないため）",
+        "en": "Opus 5.5 / Fable 5.1 cannot turn thinking off, so anything above low is slow. Never sent to claude-haiku-4-5 (it rejects it)"
+      }
+    },
+    "LOG_LIMIT": {
+      "type": "int",
+      "default": 3,
+      "min": 0,
+      "max": 999,
+      "label": {
+        "ja": "差し替えをログに出す回数",
+        "en": "How many swaps to log"
+      },
+      "note": {
+        "ja": "0 にすると何も出さない。効いているかの確認用なので数回で足りる",
+        "en": "0 = log nothing. A few lines are enough to confirm the hook works"
+      }
+    }
+  }
+}
