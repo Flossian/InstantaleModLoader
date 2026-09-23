@@ -423,6 +423,63 @@ check("例外を残さない", ctx.errors == [], ctx.errors)
 shutil.rmtree(out_dir, ignore_errors=True)
 
 
+# ---------------------------------------------------------------- 窓を閉じたら会話へ戻る
+# 売買の窓を閉じると、ゲームは `buttons_backup_for_shopping` を選択肢へ戻す。
+# 前に開いた店（ここでは鍛冶屋）の退避が残っていると、会話の旗だけ残して店の画面へ戻っていた。
+class Spec(object):
+    """実行時の spec（PhaseSpec）の代役。"""
+
+    def __init__(self, cls_name, args=()):
+        self.cls_name, self.args = cls_name, list(args)
+
+    def to_dict(self):
+        return {"cls_name": self.cls_name, "args": list(self.args)}
+
+
+CLOSE = "__main__:InstantaleApp.close_shopping_window_process"
+print("\n[窓を閉じたら会話へ戻る]")
+ctx, app, out_dir = open_window()
+blacksmith = [{"text": "装備の強化", "spec": Spec("EquipmentReinforcementStart")},
+              {"text": "出る", "spec": Spec("MovePhaseManager", ["34", "200", "5"])},
+              {"text": "会話する", "spec": Spec("DisplayTalkChoice")}]
+talk = [{"text": "ここで別れる", "spec": Spec("JustSetButtonToNormalPhase")},
+        {"text": MOD.LABEL, "spec": None, MOD.MARK: "transfer"},
+        {"text": "会話を終了する", "spec": Spec("ConversationEndManager", ["80"])}]
+app.buttons = list(talk)
+app.buttons_backup_for_shopping = list(blacksmith)
+app.in_conversation = "80"
+FakeClock.scheduled = []
+ctx.hooks[PRESS](lambda self, index: "orig", app, 1)
+FakeClock.run_all()
+check("開く前に会話の選択肢を退避へ入れる",
+      [b["text"] for b in app.buttons_backup_for_shopping] == [b["text"] for b in talk],
+      app.buttons_backup_for_shopping)
+
+
+def native_close(self):
+    # ゲームの閉じる処理の代わり。退避を選択肢へ戻す。
+    self.buttons = list(self.buttons_backup_for_shopping)
+
+
+ctx.notes[:] = []
+ctx.hooks[CLOSE](native_close, app)
+FakeClock.run_all()
+check("閉じた後は会話の選択肢", [b["text"] for b in app.buttons] == [b["text"] for b in talk],
+      [b["text"] for b in app.buttons])
+closed = [n for n in ctx.notes if n.startswith("closed the window:")]
+check("閉じた後の画面を1行残す",
+      len(closed) == 1 and "ConversationEndManager" in closed[0] and "'80'" in closed[0], closed)
+
+# 店の窓（402 が開いていない）を閉じたときは何も書かない。
+ctx.notes[:] = []
+ctx.hooks[CLOSE](native_close, app)
+FakeClock.run_all()
+check("402 の窓でなければ書かない",
+      not any(n.startswith("closed the window:") for n in ctx.notes), ctx.notes)
+check("例外を残さない（閉じる）", ctx.errors == [], ctx.errors)
+shutil.rmtree(out_dir, ignore_errors=True)
+
+
 
 print()
 if failures:

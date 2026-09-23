@@ -15,20 +15,35 @@ r"""闘技場の相手の強さと懸賞金を設定で決める。
 プレイヤーのレベルには依らない（レベル1の主人公でも格30から始まる）。
 `current_phase` は施設の `config` に焼かれるので、この伸びはセーブをまたいで続く。
 
-懸賞金は**相手の格だけ**で決まり、乱数は乗っていない（同じ格で2回やると同額）。
+懸賞金に乱数は乗っていない（同じ格で2回やると同額）。
 格30→173G / 43→282 / 44→288 / 58→359 / 71→426 / 85→452 / 97→454 で、
 **格70を超えると頭打ち**（85 と 97 の差は 2G）。式そのものは当てていない。
+格だけでも決まらず（`D` 32 の土地では格30で 177）、施設に焼いた格も読まない
+（上限で下げても素の格の額が出る）。
 
 ## この MOD の当て所
 
 | やること | 包む先 |
 |---|---|
-| 相手の**実際の強さ** | `scripts.functions:get_enemy_exp_lvl` / `get_enemy_attributes_base_point` の第2引数。レベルは難易度 + 1（GAME.md §2.20） |
+| 相手の**実際の強さ** | `scripts.functions:get_enemy_exp_lvl` / `get_enemy_attributes_base_point` の第2引数。レベルは難易度 + 1（GAME.md §2.20）。ゲームは施設に焼いた格をここへ渡すので、焼く格を揃えれば済む。この包みは揃える前の値が来たときの控え |
 | 相手の**描写** | `llm_manager:colosseum_enemy_generator` の第4引数（頼み文に載る格） |
 | 保存される格 | `ColosseumMatchStart.generate_enemy_data` の戻りの `data.rank` |
 | 懸賞金 | `BattleEndInColosseum.end_phase`。所持金はこの中で動く（`instantale.py:8105`） |
 | 相手の格を告げる | `EntryColosseumMatchManager.method` の後 |
-| 負けても死なない | `BattlePhaseManager.check_battle_end` の前（ここから `GameOverManager` が作られる）。体力を戻したうえで、逃げたときと同じ `BattleEndManager(app, 'escaped')` を起こして試合を切り上げる |
+| 負けても死なない | `BattlePhaseManager.check_battle_end` の前（ここから `GameOverManager` が作られる）。体力を戻したうえで、逃げたときと同じ `BattleEndManager(app, 'escaped')` を起こして試合を切り上げる。起こす前にゲーム自身の逃走と同じ状態にする（敵の一覧を空にし、倒れて一覧から外された主人公を `escaped_member_in_battle` に預けてゲームに戻させる）。`True` を返して戦闘の繰り返しを抜けさせる |
+| 死なずに退く描写 | 審判（`referee_*`）と試合の要約（`colosseum_battle_summarizer`）の送り口。最後の user message の末尾に一文を足す |
+
+## 描写の出どころ
+
+闘技場の試合の文章を書いているのは2か所で、どちらも LLM。
+1手ごとの描写は戦闘の審判の `narration`（GAME.md §2.10.1）、
+勝った後の締めは `colosseum_battle_summarizer`（GAME.md §2.11）。
+審判の頼み文には闘技場かどうかが載らないので、敵の体力が尽きる手では
+依頼の戦闘と同じく絶命や惨殺が書かれる。
+審判は `in_colosseum_battle` が立っている間だけ、要約はその呼び出しの間だけ足す。
+要約の頼みは `guard_battle_summarizer` の名前で送られる（ゲーム側の取り違え。GAME.md §2.11）ので、
+名前だけでは衛兵戦の要約と見分けられず、呼び出しの間の印で見分ける。
+送り口は `401_battle_character_context` と同じ所で、後から生える別名はローダの `llm.watch_aliases` に任せる。
 
 **頼み文の難易度だけを変えても相手は弱くならない**（版1の実機。上限70を当てたのに
 敵のレベルは 72 と 86 のままで、`data.rank` も 71 / 85 で焼かれた）。
@@ -53,14 +68,14 @@ r"""闘技場の相手の強さと懸賞金を設定で決める。
 
 `in_colosseum_battle` が立っていない戦闘には触らない。
 `331_facility_investment` が建てた闘技場も本物の闘技場も同じに扱う（どちらもゲームの経路）。
-既出の闘士を頼み文に足す一文は 331 と同じ文面なので、
-向こうが先に足していたら二重には足さない。
+既出の闘士を頼み文に足す一文は 331 と同じ文面で、
+どちらも既に入っていれば足さない（読む順ではこちらが外側の包みで、先に足す）。
 """
 
 import sys
 import time
 
-from instantale_modloader import frames, ui
+from instantale_modloader import frames, llm, ui
 
 LOG_BASENAME = "colosseum_custom.log"
 MARK = "_mod_colosseum_custom"
@@ -82,6 +97,19 @@ DEFEAT_TEXT = "膝をついた。これ以上は続けられない。門番に�
 END_MANAGER_CLS = "BattleEndManager"
 ESCAPED_END_TYPE = "escaped"
 SURVIVE_HP = 1
+
+#: 切り上げた後、敵の欄の更新で起きる 0 除算を握っている秒数（`enemy_display`）。
+#: 実機では終わってから約 1 秒後に来た。
+ENEMY_DISPLAY_TARGET = "scripts.hud.new_hud:InstanTaleHUD.update_enemy_display"
+SURRENDER_GUARD_SECONDS = 10
+
+#: 切り上げた戦闘に付ける印と、その後は飛ばす戦闘の手（`after_surrender`）。
+SURRENDERED_MARK = MARK + "_surrendered"
+AFTER_SURRENDER_STEPS = ("enemy_turn_separate", "handle_battle_situation",
+                         "reduce_status_turns_and_log")
+
+#: `app.party` の主人公の鍵（仲間は id。実機のログ `party=['player', '78']`）。
+PLAYER_KEY = "player"
 
 #: 格の言い換え。ゲーム自身の頼み文の説明（ランク1が凡人や雑魚動物、
 #: ランク70が伝説の勇者や魔王、半神の怪物）に合わせてある。
@@ -117,9 +145,43 @@ REWARD_PER_RANK = 0.0
 ANNOUNCE_RANK = True
 SURVIVE_DEFEAT = False
 VARY_OPPONENT = True
+NONLETHAL_NARRATION = False
+
+#: 審判と要約へ足す一文。見出しは同じ message に2度足さないための印も兼ねる。
+#: 審判には**判定は普段どおり・決着は体力**を必ず添える。
+#: 「殺し合いではない」だけを渡した版では、審判が描写の中で「審判が試合を止めた」と書いて
+#: ダメージを付けず、以後の手も戦闘ログのその一文を引き継いで効果を出さなくなった
+#: （敵の体力が残ったまま、試合が終わらなくなった。実機）。
+NONLETHAL_MARK = "【闘技場の試合】"
+NONLETHAL_NOTE = ("\n\n" + NONLETHAL_MARK + "\n"
+                  "これは観客の前で行う闘技場の試合で、殺し合いではない。"
+                  "これは描写の言葉づかいだけの指示で、攻撃・ダメージ・効果の判定は普段どおり出すこと。"
+                  "試合の決着はゲームが体力で判定する。"
+                  "体力が残っている者を描写の中で倒したり、試合を止めたり、決着させたりしない"
+                  "（戦闘ログにそう書かれていても、体力が残っていれば試合は続いている）。"
+                  "体力が尽きた者も死なず、気を失う・降参する・膝をついて退く・担ぎ出されるなどして試合から退く。"
+                  "絶命・惨殺・致命傷・遺体の描写はしない。")
+#: 試合の要約へ足す一文。要約は決着の後なので判定の話は要らない。
+NONLETHAL_SUMMARY_NOTE = ("\n\n" + NONLETHAL_MARK + "\n"
+                          "これは観客の前で行う闘技場の試合で、殺し合いではない。"
+                          "敗れた者も死なず、気を失う・降参する・担ぎ出されるなどして退いた。"
+                          "絶命・惨殺・致命傷・遺体の描写はしない。")
+
+#: 審判と要約の送り口（`401_battle_character_context` と同じ所）。
+#: 審判は `llm_manager_battle`、要約は `llm_manager` を通る。
+NARRATION_SEND_TARGETS = (
+    "scripts.llm.llm_manager_battle:send_request",
+    "scripts.llm.llm_manager_battle:send_request_with_no_structure",
+    "scripts.llm.llm_manager:send_request",
+    "scripts.llm.llm_manager:send_request_with_no_structure",
+)
+#: 審判の manager_name の頭。
+REFEREE_PREFIX = "referee_"
+#: 試合の要約の manager_name（ゲームは衛兵戦の名前で送る。GAME.md §2.11）。
+SUMMARY_MANAGERS = ("colosseum_battle_summarizer", "guard_battle_summarizer")
 
 #: 既に出た闘士を頼み文へ足す一文。`331_facility_investment` と同じ文面
-#: （向こうが先に足していたら二重にしないため、頭の句で見分ける）。
+#: （どちらが先に足しても二重にしないため、頭の句で見分ける）。
 VARIETY_NOTE = ("この闘技場には既に {names} が出場している。"
                 "名前も出自も戦い方もこれらとは重ならない、別の闘士を作ること。")
 VARIETY_HEAD = "この闘技場には既に"
@@ -168,6 +230,33 @@ def replace_amount(text, base, want):
     return None
 
 
+def append_note(message, note):
+    """最後の user message の末尾に `note` を足した写しを返す。足さなければ `message` そのもの。
+
+    呼び出し元の list も dict も書き換えない（ゲームが同じ list を持ち続けているため）。
+    既に印が入っていれば足さない（別名の包みが二重に掛かったときや再送の保険）。
+    """
+    if not isinstance(message, list):
+        return message
+    for item in message:
+        content = item.get("content") if isinstance(item, dict) else None
+        if isinstance(content, str) and NONLETHAL_MARK in content:
+            return message
+    for index in range(len(message) - 1, -1, -1):
+        item = message[index]
+        if not isinstance(item, dict) or item.get("role") != "user":
+            continue
+        content = item.get("content")
+        if not isinstance(content, str):
+            continue
+        rewritten = list(message)
+        replacement = dict(item)
+        replacement["content"] = content + note
+        rewritten[index] = replacement
+        return rewritten
+    return message
+
+
 class _LocationView(object):
     """`location` の身代わり。`description` だけ差し替え、ほかは本物へ素通しする。
 
@@ -189,7 +278,7 @@ def vary_location(location, names):
     """頼み文に渡す `location` に、既出の闘士の一文を足したものを返す。
 
     ゲームの頼み文が読むのは施設の名前と概要だけ（GAME.md §2.11）なので概要の末尾に足す。
-    既に同じ一文が入っていれば（`331_` が先に足していれば）そのまま返す。
+    既に同じ一文が入っていればそのまま返す。
     """
     note = variety_note(names)
     if not note or location is None:
@@ -212,7 +301,11 @@ def apply(ctx):
     screen = ui.Screen(ctx, write, tag="colosseum", mark=MARK)
     #: 試合1回ぶんの控え。`reward` は `end_phase` の間、
     #: `window` は相手を仕込んでいる間だけ入る。
-    state = {"survived": False, "reward": None, "window": None}
+    #: `summarizing` は試合の要約を頼んでいる最中の深さ。
+    #: `surrendered_at` は負けとして切り上げた時刻（`time.monotonic()`）。
+    #: `removed_player` は試合中に一覧から外された主人公の値（切り上げで戻す）。
+    state = {"survived": False, "reward": None, "window": None, "summarizing": 0,
+             "surrendered_at": None, "removed_player": None}
 
     # ------------------------------------------------------------------ 設定
     def rank_untouched():
@@ -297,9 +390,10 @@ def apply(ctx):
             return None
         if not values:
             return None
-        # ゲームは一覧の**平均を整数に落としてから**式に入れる（実測。GAME.md §2.11）。
-        # 小数のまま計算すると告げる格が1ずれる（平均 69.33 の土地で 35 と出たが実際は 34）。
-        return int(sum(values) / float(len(values)))
+        # ゲームは一覧の**平均を四捨五入してから**式に入れる（実測。GAME.md §2.11）。
+        # 小数のまま計算すると告げる格が1ずれ（平均 69.33 の土地で 35 と出たが実際は 34）、
+        # 切り捨てでも1ずれる（平均 31.67 の土地で 29 と出たが実際は 30）。
+        return int(round(sum(values) / float(len(values))))
 
     # ------------------------------------------------------ 相手の強さを決める
     def adjusted_rank(app, raw, index):
@@ -372,9 +466,20 @@ def apply(ctx):
         return remember(opened, raw, adjusted_rank(app, raw, index), what, index)
 
     def adjust_in_window(app, raw, what):
-        """敵の数値。**窓の中でしか触らない**（依頼の敵も同じ関数を通るため）。"""
+        """敵の数値。**窓の中でしか触らない**（依頼の敵も同じ関数を通るため）。
+
+        ゲームは敵の数値を施設に焼いた格から作る（実機。焼いた格が 16 なら 16 が渡る）。
+        焼く格は `generate_enemy_data` で既に揃えてあるので、渡ってきたのがその値なら触らない。
+        組み直した値をもう一度組み直すと、上限以外の設定では二重に掛かる
+        （伸び0で格16に揃えた試合で、16 をさらに 6 へ下げ、敵がレベル7になった）。
+        ここで組み直すのは、揃える前の素の値が渡ってきたときと、頼み文を見ていないときだけ。
+        """
         opened = window()
         if opened is None or rank_untouched():
+            return raw
+        if opened.get("new") is not None:
+            if raw == opened["raw"]:
+                return remember(opened, raw, opened["new"], what, opened["index"])
             return raw
         return remember(opened, raw, adjusted_rank(app, raw, opened["index"]), what,
                         opened["index"])
@@ -406,7 +511,8 @@ def apply(ctx):
         """施設に焼かれる格も、こちらが決めた値へ揃える。
 
         ここで保存された `data.rank` は次の試合以降も残る。
-        懸賞金もこの値で決まる（版1の実機。頼み文へ渡した値ではなくこちらが効いていた）。
+        懸賞金はこの値では決まらない。上限で下げた試合でも、素の格の額が出た
+        （素なら格65 → 40 に下げても 393。GAME.md §2.11）。
         """
         result = orig(self, enemy_id, *args, **kwargs)
         try:
@@ -473,6 +579,7 @@ def apply(ctx):
         """1試合ぶんの札を戻し、相手を仕込む窓を開ける。"""
         app = getattr(self, "app", None) or ui.find_app()
         state["survived"] = False
+        state["removed_player"] = None
         open_window(app)
         try:
             return orig(self, choice_text, *args, **kwargs)
@@ -508,12 +615,88 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("colosseum: cannot build the battle end manager")
             return False
+        # 落ちても何をしようとしていたかが残るよう、起こす前に書く。
+        write("surrender: ending the match as an escape")
+        state["surrendered_at"] = time.monotonic()
+        try:
+            prepare_escape(app)
+        except Exception:
+            ctx.log_exc("colosseum: cannot prepare the escape")
         try:
             manager.execute("")
         except Exception:
             ctx.log_exc("colosseum: the escape ending failed")
             return False
+        try:
+            ensure_player_back(app)
+        except Exception:
+            ctx.log_exc("colosseum: cannot put the player back in the party")
         return True
+
+    def prepare_escape(app):
+        """ゲーム自身の逃走と同じ状態にしてから終わり方を起こす（`233_` 版3 の実機の比較）。
+
+        ゲームが逃げたとき:
+          判定の中で敵の一覧を空にする（1 → 0）。
+          逃げた者は `app.party` から外して `escaped_member_in_battle` に預け、
+          終わり方の実行の中でゲームが `app.party` へ戻す（party 0 → 1、預かり 1 → 0）。
+        倒れたとき（こちらが切り上げる前）:
+          ゲームが主人公を `app.party` から外すだけで、どこにも預けない。
+          そのまま終わり方を起こすと、主人公が一覧に戻らず画面から消え、
+          敵も一覧に残って 331 の闘技場の出口が足されなかった（実機）。
+        なので外された主人公を預かりに入れ、敵の一覧を空にする（仕組みは GAME.md §2.10）。
+        """
+        enemies = getattr(app, "current_enemy_dict", None)
+        if isinstance(enemies, dict) and enemies:
+            names = list(enemies)
+            enemies.clear()
+            write("surrender: cleared {} enem{} like the game's own escape ({})".format(
+                len(names), "y" if len(names) == 1 else "ies", ", ".join(names)))
+        party = getattr(app, "party", None)
+        removed = state.get("removed_player")
+        if isinstance(party, dict) and PLAYER_KEY in party:
+            return                          # まだ一覧に居る（外されていない）
+        if removed is None:
+            write("WARN surrender: the player left the party but nothing was kept to bring back")
+            return
+        escaped = getattr(app, "escaped_member_in_battle", None)
+        if isinstance(escaped, dict):
+            escaped[PLAYER_KEY] = removed
+            write("surrender: handed the player to escaped_member_in_battle "
+                  "for the game to bring back ({})".format(type(removed).__name__))
+        else:
+            write("WARN surrender: escaped_member_in_battle is {} -- will put the player "
+                  "back by hand".format(type(escaped).__name__))
+
+    def ensure_player_back(app):
+        """ゲームが主人公を一覧へ戻さなかったときだけ、控えた値で戻す。"""
+        party = getattr(app, "party", None)
+        removed = state.pop("removed_player", None)
+        if not isinstance(party, dict) or PLAYER_KEY in party:
+            if isinstance(party, dict):
+                write("surrender: the player is back in the party")
+            return
+        if removed is None:
+            write("WARN surrender: the player is not in the party and cannot be put back")
+            return
+        party[PLAYER_KEY] = removed
+        escaped = getattr(app, "escaped_member_in_battle", None)
+        if isinstance(escaped, dict):
+            escaped.pop(PLAYER_KEY, None)
+        write("WARN surrender: the game did not bring the player back; put back by hand")
+
+    @ctx.wrap("__main__:InstantaleApp.remove_party_member", required=False, safe=True)
+    def remove_party_member(orig, self, member_id=None, *args, **kwargs):
+        """闘技場の試合で主人公が一覧から外されるとき、その値を控える（切り上げで戻すため）。"""
+        try:
+            if (SURVIVE_DEFEAT and member_id == PLAYER_KEY
+                    and getattr(self, "in_colosseum_battle", False)):
+                party = getattr(self, "party", None)
+                if isinstance(party, dict) and PLAYER_KEY in party:
+                    state["removed_player"] = party[PLAYER_KEY]
+        except Exception:
+            ctx.log_exc("colosseum: cannot keep the player leaving the party")
+        return orig(self, member_id, *args, **kwargs)
 
     @ctx.wrap("__main__:BattlePhaseManager.check_battle_end", required=False, safe=True)
     def check_battle_end(orig, self, *args, **kwargs):
@@ -527,6 +710,8 @@ def apply(ctx):
         （試合はもう終わっている）。起こせなかったときは素の判定へ落とし、
         少なくとも**その一撃では死なない**状態にしておく。
         """
+        if getattr(self, SURRENDERED_MARK, False):
+            return True                     # こちらが終わらせた戦闘。もう判定しない
         try:
             if SURVIVE_DEFEAT and not state["survived"]:
                 app = getattr(self, "app", None) or ui.find_app()
@@ -537,14 +722,55 @@ def apply(ctx):
                     state["survived"] = True
                     screen.say(app, DEFEAT_TEXT)
                     if surrender(app):
+                        setattr(self, SURRENDERED_MARK, True)
                         write("surrender: hp {} -> {}; ended the match as an escape"
                               .format(hp, SURVIVE_HP))
-                        return None
+                        return True
                     write("WARN surrender: hp {} -> {} but the match goes on"
                           .format(hp, SURVIVE_HP))
         except Exception:
             ctx.log_exc("colosseum: cannot end the match as a loss")
         return orig(self, *args, **kwargs)
+
+    def install_after_surrender(name):
+        @ctx.wrap("__main__:BattlePhaseManager.{}".format(name), required=False)
+        def after_surrender(orig, self, *args, **kwargs):
+            """こちらが切り上げた戦闘の、残りの手を飛ばす。
+
+            切り上げた後もゲームの戦闘の繰り返しが止まらず、敵の次の手を処理しようとして、
+            一覧から消えた敵を引いて `KeyError`（`resolve_opponents`、`instantale.py:7266`）で
+            ワーカースレッドが死んだ（実機）。`check_battle_end` が `True` を返せば止まるのかは
+            確かめていないので、止まらなかったときの受けとしてここで止める。
+            触るのは切り上げた `BattlePhaseManager` だけ（印は実体に付ける）。
+            """
+            if getattr(self, SURRENDERED_MARK, False):
+                write("surrender: skipped {} after the match ended".format(name))
+                return None
+            return orig(self, *args, **kwargs)
+
+    for _name in AFTER_SURRENDER_STEPS:
+        install_after_surrender(_name)
+
+    @ctx.wrap(ENEMY_DISPLAY_TARGET, required=False)
+    def enemy_display(orig, *args, **kwargs):
+        """切り上げた直後の敵の欄の更新で起きる 0 除算だけを握る。
+
+        こちらは敵の手番の途中で試合を終わらせる（体力が尽きるのは敵の一撃）。
+        その一撃の演出が予約した敵の欄の更新が、戦闘の欄が畳まれた（大きさ 0）後に走り、
+        `new_hud.py:2306` の `ZeroDivisionError` で落ちた（実機。終わってから約 1 秒後）。
+        ゲーム自身の「逃げる」は自分の手番なので、この予約が残らない。
+        戦闘はもう終わっていて敵の欄は要らないので、描かないのが正しい。
+        切り上げてから `SURRENDER_GUARD_SECONDS` 秒の間の、この例外だけを握る。
+        """
+        try:
+            return orig(*args, **kwargs)
+        except ZeroDivisionError:
+            since = state.get("surrendered_at")
+            if since is None or time.monotonic() - since > SURRENDER_GUARD_SECONDS:
+                raise
+            write("surrender: skipped an enemy panel update after the match ended "
+                  "(ZeroDivisionError)")
+            return None
 
     # -------------------------------------------------------------- 懸賞金
     @ctx.wrap("__main__:InstantaleApp.add_text", required=False, safe=True)
@@ -620,5 +846,62 @@ def apply(ctx):
             except Exception:
                 ctx.log_exc("colosseum: cannot settle the prize")
             state["reward"] = None
+
+    # -------------------------------------------------------- 死なずに退く描写
+    def narration_kind(manager_name):
+        """足す相手なら `"referee"` / `"summary"`。それ以外は None。"""
+        if not NONLETHAL_NARRATION or not isinstance(manager_name, str):
+            return None
+        if manager_name.startswith(REFEREE_PREFIX):
+            app = ui.find_app()
+            if getattr(app, "in_colosseum_battle", False):
+                return "referee"
+            return None
+        if manager_name in SUMMARY_MANAGERS:
+            # 勝った試合は `colosseum_battle_summarizer` の中から来る。
+            # 逃げた試合（こちらが負けとして切り上げた試合も）は `BattleEndManager.end_phase` から
+            # 衛兵戦の名前のまま直接来るので、闘技場の旗で見分ける（旗は `end_phase` の後で下りる）。
+            # 足さなかった回は、主人公が消え去る締めが書かれた（実機）。
+            if state["summarizing"] > 0:
+                return "summary"
+            if getattr(ui.find_app(), "in_colosseum_battle", False):
+                return "summary"
+        return None
+
+    @ctx.wrap("scripts.llm.llm_manager:colosseum_battle_summarizer", required=False)
+    def battle_summarizer(orig, *args, **kwargs):
+        """試合の要約を頼んでいる間だけ印を立てる（送り口で衛兵戦と見分けるため）。"""
+        state["summarizing"] += 1
+        try:
+            return orig(*args, **kwargs)
+        finally:
+            state["summarizing"] -= 1
+
+    def install_send(target):
+        """送り口1つに包みを掛ける。`llm.watch_aliases` が対象ごとに呼ぶ。"""
+        @ctx.wrap(target, required=False, safe=True)
+        def narration_send(orig, *args, **kwargs):
+            manager_name = args[0] if args else kwargs.get("manager_name")
+            try:
+                kind = narration_kind(manager_name)
+                if kind is not None:
+                    note = NONLETHAL_SUMMARY_NOTE if kind == "summary" else NONLETHAL_NOTE
+                    if len(args) >= 2 and isinstance(args[1], list):
+                        replaced = append_note(args[1], note)
+                        if replaced is not args[1]:
+                            args = args[:1] + (replaced,) + args[2:]
+                            write("nonlethal: {} ({})".format(manager_name, kind))
+                    elif isinstance(kwargs.get("message"), list):
+                        replaced = append_note(kwargs["message"], note)
+                        if replaced is not kwargs["message"]:
+                            kwargs = dict(kwargs, message=replaced)
+                            write("nonlethal: {} ({})".format(manager_name, kind))
+            except Exception:
+                ctx.log_exc("colosseum: cannot add the nonlethal note")
+            return orig(*args, **kwargs)
+
+    # 送り口はプロバイダの初期化後に生える。後生えと別名はローダの見張りに任せる。
+    llm.watch_aliases(ctx, list(NARRATION_SEND_TARGETS), install_send,
+                      label="colosseum custom")
 
     ctx.log("colosseum custom: ready")

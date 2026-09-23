@@ -122,7 +122,7 @@
 | [`331_facility_investment`](MODS.md#331_facility_investment-街に施設を建てる出資する) | 街に施設を建てる（出資する） | 街に施設を建てる（出資する） | 23 |  |
 | [`332_training_custom`](MODS.md#332_training_custom-訓練所の代金修行の量1段の期間再訓練の可否を変える) | 訓練所のカスタマイズ | 訓練所の代金・修行の量・1段の期間・再訓練の可否を変える | 13 |  |
 | [`333_equipment_slots`](MODS.md#333_equipment_slots-インベントリに装備枠を追加) | インベントリに装備枠を追加 | インベントリに装備枠を追加 | 4 |  |
-| [`334_colosseum_custom`](MODS.md#334_colosseum_custom-闘技場の相手の強さと懸賞金を決める) | 闘技場のカスタマイズ | 闘技場の相手の強さと懸賞金を決める | 11 |  |
+| [`334_colosseum_custom`](MODS.md#334_colosseum_custom-闘技場の相手の強さと懸賞金を決める) | 闘技場のカスタマイズ | 闘技場の相手の強さと懸賞金を決める | 12 |  |
 | [`401_battle_character_context`](MODS.md#401_battle_character_context-戦闘の審判へ同行者の人物と装備を見せる) | 戦闘キャラクター情報補完 | 戦闘の審判へ同行者の人物と装備を見せる | - |  |
 | [`402_party_inventory_transfer`](MODS.md#402_party_inventory_transfer-仲間とアイテムを受け渡しできる) | パーティーメンバー：アイテム受け渡し | 仲間とアイテムを受け渡しできる | - |  |
 | [`403_npc_social_memory`](MODS.md#403_npc_social_memory-npc同士がお互いを認知し関係を覚える) | NPC同士の認知と関係記憶 | NPC同士がお互いを認知し、関係を覚える | 5 |  |

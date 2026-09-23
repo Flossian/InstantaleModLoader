@@ -272,15 +272,23 @@ def vary_location(location, names):
     ゲームの頼み文は施設の名前と概要（`description`）だけを読む（`output_data` の記録。
     VERIFICATION.md §3.63）ので、概要の末尾に足す。本物の施設には書かない（身代わりを渡す）。
     `location` は辞書のことも実体のこともありうるので両方受ける。
+
+    既に同じ一文が入っていれば足さない。`334_colosseum_custom` もどの闘技場にも同じ一文を足し、
+    読む順ではあちらが外側の包みになる（先に足す）ので、こちらで見ないと二重になった（実機）。
     """
     note = catalog.arena_variety_note(names)
     if not note or location is None:
         return location
+    head = catalog.ARENA_VARIETY_NOTE.split("{names}")[0].strip()
     if isinstance(location, dict):
+        if head in (location.get("description") or ""):
+            return location
         copied = dict(location)
         copied["description"] = "{}\n{}".format(location.get("description") or "", note).strip()
         return copied
     description = getattr(location, "description", None)
+    if head in (description or ""):
+        return location
     return _LocationView(location, "{}\n{}".format(description or "", note).strip())
 
 
@@ -1396,10 +1404,11 @@ def apply(ctx):
             record = own_arena(app) if app is not None else None
             if record is not None:
                 names = fighters_so_far(app, record)
-                if names:
+                varied = vary_location(location, names) if names else location
+                if varied is not location:
                     write("arena: {} earlier fighter(s) told to the generator: {}".format(
                         len(names), "、".join(names[-3:])))
-                    location = vary_location(location, names)
+                    location = varied
         except Exception:
             ctx.log_exc("investment: cannot vary the arena prompt")
         return orig(location, *args, **kwargs)

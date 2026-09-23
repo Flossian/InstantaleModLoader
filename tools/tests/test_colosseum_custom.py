@@ -89,6 +89,15 @@ class FakeUI(object):
         return getattr(self._real, name)
 
 
+class FakeLLM(object):
+    """`llm.watch_aliases` の代わり。見張らずに、その場で全部の送り口へ当てる。"""
+
+    def watch_aliases(self, ctx, targets, install, **kw):
+        for target in targets:
+            install(target)
+        return []
+
+
 class FakeCtx(object):
     _mod = "334_colosseum_custom"
 
@@ -137,6 +146,7 @@ def fresh(app):
     os.makedirs(OUT_DIR, exist_ok=True)
     module, manifest = load_mod()
     module.ui = FakeUI(app, ml.ui)
+    module.llm = FakeLLM()
     ctx = FakeCtx(OUT_DIR)
     module.apply(ctx)
     hook = ctx.hooks["__main__:InstantaleApp.add_text"]
@@ -284,6 +294,19 @@ check("窓は時間切れで失効する",
 module.WINDOW_SECONDS = saved
 
 module.RANK_CAP = 0
+module.RANK_STEP_SCALE = 0.0
+arena.config["current_phase"] = 8
+ctx.hooks["__main__:ColosseumMatchStart.execute"](
+    lambda self, choice: None, Manager(app), "申し込む")
+check("伸び0なら5試合目の頼み文も初戦の格", generate(ctx, arena, 44)["difficulty"] == 16)
+check("焼いた格（揃えた後）が渡ってきたら組み直さない（二重に掛けない）",
+      lvl(enemy_level, "normal", 16) == 17 and seen["difficulty"] == 16, seen)
+check("揃える前の素の値が渡ってきたら揃える",
+      lvl(enemy_level, "normal", 44) == 17 and seen["difficulty"] == 16, seen)
+ctx.hooks["__main__:BattleStartManager.start_battle"](lambda self: None, Manager(app))
+module.RANK_STEP_SCALE = 1.0
+arena.config["current_phase"] = 4
+
 ctx.hooks["__main__:ColosseumMatchStart.execute"](
     lambda self, choice: None, Manager(app), "申し込む")
 check("素のままなら窓の中でも触らない",
@@ -412,20 +435,110 @@ app.player.current_hp = -107
 app.texts = []
 FakeEnd.made = []
 called = []
-result = hook(lambda self: called.append(1) or "checked", Manager(app))
+battle = Manager(app)
+result = hook(lambda self: called.append(1) or "checked", battle)
 check("体力1で踏みとどまる", app.player.current_hp == 1, app.player.current_hp)
 check("逃走と同じ終わり方を起こす",
       FakeEnd.made == [("init", "escaped"), ("execute", "")], FakeEnd.made)
-check("ゲームの判定は通さない（試合はもう終わっている）",
-      result is None and not called, (result, called))
+check("ゲームの判定は通さず、決着したと返す（試合はもう終わっている）",
+      result is True and not called, (result, called))
 check("退いた一文が出る", app.texts and module.DEFEAT_TEXT in app.texts[-1], app.texts)
 
 app.player.current_hp = -50
 FakeEnd.made = []
-result = hook(lambda self: "checked", Manager(app))
-check("同じ試合で2度は起こさない",
-      result == "checked" and not FakeEnd.made and app.player.current_hp == -50,
+result = hook(lambda self: "checked", battle)
+check("同じ戦闘ではもう判定しない（決着したと返し続ける）",
+      result is True and not FakeEnd.made and app.player.current_hp == -50,
       (result, FakeEnd.made))
+result = hook(lambda self: "checked", Manager(app))
+check("別の戦闘では同じ試合で2度は起こさない（素の判定へ）",
+      result == "checked" and not FakeEnd.made, (result, FakeEnd.made))
+
+# 切り上げた後もゲームの戦闘の繰り返しが敵の次の手を処理しようとして、消えた敵で落ちた（実機）。
+fighting = Manager(app)
+for step in module.AFTER_SURRENDER_STEPS:
+    target = "__main__:BattlePhaseManager." + step
+    check("切り上げた戦闘の " + step + " を飛ばす",
+          ctx.hooks[target](lambda self, *a: "ran", battle) is None)
+    check("よその戦闘の " + step + " は素通し",
+          ctx.hooks[target](lambda self, *a: "ran", fighting) == "ran")
+
+# 切り上げた後、敵の一撃の演出が予約した敵の欄の更新が畳まれた欄で 0 除算になる（実機）。
+display = ctx.hooks[module.ENEMY_DISPLAY_TARGET]
+
+
+def collapsed_panel(self, *args):
+    raise ZeroDivisionError("float division by zero")
+
+
+check("切り上げた直後の敵の欄の 0 除算は握る",
+      display(collapsed_panel, object()) is None)
+check("握ったことが残る", any("skipped an enemy panel update" in line for line in io.open(
+    os.path.join(OUT_DIR, module.LOG_BASENAME), encoding="utf-8")))
+check("普段の敵の欄の更新は素通し", display(lambda self: "drawn", object()) == "drawn")
+module.SURRENDER_GUARD_SECONDS = -1
+try:
+    display(collapsed_panel, object())
+    raised = False
+except ZeroDivisionError:
+    raised = True
+check("切り上げから時間が経っていれば握らない（よその不具合を隠さない）", raised)
+module.SURRENDER_GUARD_SECONDS = 10
+
+print("ゲーム自身の逃走と同じ状態にしてから切り上げる")
+
+
+class GameEnd(FakeEnd):
+    """ゲームの逃走の終わり方: 預かった者を一覧へ戻す（実機の差 party 0 → 1、預かり 1 → 0）。"""
+
+    def execute(self, choice_text):
+        self.app.party.update(self.app.escaped_member_in_battle)
+        self.app.escaped_member_in_battle.clear()
+        return FakeEnd.execute(self, choice_text)
+
+
+class ForgetfulEnd(FakeEnd):
+    """預かりを戻さない終わり方（値の形が合わなかったときの受けを確かめる）。"""
+
+
+def fall_in_arena(end_cls):
+    """闘技場で倒れて、ゲームが主人公を一覧から外すところまで。"""
+    module.ui.classes = {"BattleEndManager": end_cls}
+    ctx.hooks["__main__:ColosseumMatchStart.execute"](
+        lambda self, choice: None, Manager(app), "申し込む")
+    app.in_battle = "normal"
+    app.in_colosseum_battle = 1
+    app.player.current_hp = -30
+    app.current_enemy_dict = {"黄金の蒐集家": object()}
+    app.escaped_member_in_battle = {}
+    app.party = {"player": app.player}
+
+    def game_removes(self, member_id):
+        self.party.pop(member_id, None)
+
+    ctx.hooks["__main__:InstantaleApp.remove_party_member"](game_removes, app, "player")
+    return Manager(app)
+
+
+battle = fall_in_arena(GameEnd)
+check("倒れて外された時点では一覧に居ない", "player" not in app.party)
+result = hook(lambda self: "checked", battle)
+check("主人公がゲームの手で一覧に戻る", app.party.get("player") is app.player, app.party)
+check("預かりは空に戻る", app.escaped_member_in_battle == {}, app.escaped_member_in_battle)
+check("敵の一覧を空にする（出口を足す側が忙しいと見ない）", app.current_enemy_dict == {},
+      app.current_enemy_dict)
+lines = io.open(os.path.join(OUT_DIR, module.LOG_BASENAME), encoding="utf-8").read()
+check("預けたことと戻ったことが残る",
+      "handed the player to escaped_member_in_battle" in lines
+      and "the player is back in the party" in lines, lines[-600:])
+
+battle = fall_in_arena(ForgetfulEnd)
+hook(lambda self: "checked", battle)
+check("ゲームが戻さなければ控えた値で戻す", app.party.get("player") is app.player, app.party)
+check("手で戻したことは WARN で残る", "put back by hand" in io.open(
+    os.path.join(OUT_DIR, module.LOG_BASENAME), encoding="utf-8").read())
+
+module.ui.classes = {"BattleEndManager": FakeEnd}
 
 print("終わり方を起こせないとき")
 module.ui.classes = {}
@@ -498,6 +611,98 @@ check("施設が無くても落ちない",
       generate(ctx, arena, 58)["difficulty"] == 58
       and hook(lambda self: "checked", Manager(app)) == "checked")
 check("例外を漏らさない（通し）", not ctx.errors, ctx.errors)
+
+print("試合で誰も死なない描写")
+arena = Facility(config={"current_phase": 4, "enemy_data": {}})
+app = App(Player(arena))
+module, ctx, manifest = fresh(app)
+battle_send = ctx.hooks["scripts.llm.llm_manager_battle:send_request"]
+manager_send = ctx.hooks["scripts.llm.llm_manager:send_request_with_no_structure"]
+summarizer = ctx.hooks["scripts.llm.llm_manager:colosseum_battle_summarizer"]
+for target in module.NARRATION_SEND_TARGETS:
+    check("包む: " + target, target in ctx.hooks)
+
+
+def sent(hook, manager_name, message, by_keyword=False):
+    """送り口の包みを1回通し、`orig` が受け取った message を返す。"""
+    seen = {}
+
+    def orig(*args, **kwargs):
+        seen["message"] = args[1] if len(args) >= 2 else kwargs.get("message")
+        return "reply"
+
+    if by_keyword:
+        hook(orig, manager_name=manager_name, message=message)
+    else:
+        hook(orig, manager_name, message)
+    return seen["message"]
+
+
+def ask():
+    return [{"role": "system", "content": "審判"}, {"role": "user", "content": "手"}]
+
+
+app.in_battle = app.in_colosseum_battle = 1
+original = ask()
+check("既定（OFF）では審判に足さない",
+      sent(battle_send, "referee_player_attack_new_new", original) is original)
+
+module.NONLETHAL_NARRATION = True
+got = sent(battle_send, "referee_player_attack_new_new", original)
+check("闘技場の審判の最後の user に足す",
+      got[-1]["content"].endswith(module.NONLETHAL_NOTE) and got[0] == original[0], got)
+check("呼び出し元の message は書き換えない", original == ask(), original)
+check("敵の手の審判にも足す",
+      module.NONLETHAL_MARK in sent(battle_send, "referee_enemy_new", ask())[-1]["content"])
+check("keyword で渡されても足す",
+      module.NONLETHAL_MARK in sent(battle_send, "referee_npc", ask(),
+                                    by_keyword=True)[-1]["content"])
+check("二重には足さない（別名の包みが重なったとき）",
+      sent(battle_send, "referee_npc", got) is got)
+check("審判以外には足さない",
+      sent(battle_send, "conversation_starter", original) is original)
+
+app.in_colosseum_battle = 0
+check("依頼の戦闘の審判には足さない",
+      sent(battle_send, "referee_player_attack_new_new", original) is original)
+check("闘技場の外の要約（衛兵戦）には足さない",
+      sent(manager_send, "guard_battle_summarizer", original) is original)
+app.in_colosseum_battle = 1
+escaped = sent(manager_send, "guard_battle_summarizer", ask())
+check("闘技場で逃げた（負けて切り上げた）試合の締めには足す",
+      escaped[-1]["content"].endswith(module.NONLETHAL_SUMMARY_NOTE), escaped)
+app.in_colosseum_battle = 0
+
+inside = {}
+
+
+def summarize(*args, **kwargs):
+    inside["message"] = sent(manager_send, "guard_battle_summarizer", ask())
+    return "要約"
+
+
+check("試合の要約は素通しで返る", summarizer(summarize, "闘技場", "街") == "要約")
+check("試合の要約の頼み（衛兵戦の名前で送られる）には足す",
+      module.NONLETHAL_MARK in inside["message"][-1]["content"], inside)
+check("要約が終われば印は下りる", module.NONLETHAL_MARK not in
+      sent(manager_send, "guard_battle_summarizer", ask())[-1]["content"])
+
+
+def broken(*args, **kwargs):
+    raise RuntimeError("boom")
+
+
+try:
+    summarizer(broken)
+except RuntimeError:
+    pass
+check("要約が落ちても印は下りる",
+      sent(manager_send, "guard_battle_summarizer", original) is original)
+lines = io.open(os.path.join(OUT_DIR, module.LOG_BASENAME), encoding="utf-8").read()
+check("足した回はログに残る",
+      "nonlethal: referee_player_attack_new_new (referee)" in lines
+      and "nonlethal: guard_battle_summarizer (summary)" in lines, lines)
+check("例外を漏らさない（描写）", not ctx.errors, ctx.errors)
 
 if failures:
     print("FAILED: " + ", ".join(failures))

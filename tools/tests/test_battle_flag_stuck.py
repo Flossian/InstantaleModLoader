@@ -180,6 +180,53 @@ check("焼き付いた印を両方下ろす",
       app.in_battle is False and app.in_colosseum_battle is False,
       (app.in_battle, app.in_colosseum_battle))
 
+# 戦闘の最中に保存したセーブ。ロードの後は戦闘の画面に戻ることも、場所の画面になることもある（実機）。
+class Spec(object):
+    def __init__(self, cls_name):
+        self.cls_name = cls_name
+        self.args = []
+
+
+def buttons(*names):
+    return [{"text": name, "spec": Spec(name)} for name in names]
+
+
+app = App(battle="normal", colosseum=True, enemies={"オルヴァン": object()})
+app.buttons = buttons("BattlePhaseManager", "SkillChoicePhaseManager",
+                      "UtteranceChoiceInBattleManager", "BattlePhaseManager")
+module, ctx, _manifest = fresh(app)
+ctx.hooks["__main__:InstantaleApp.load_game_new"](lambda self: None, app)
+check("戦闘の画面に戻ったら下ろさない",
+      app.in_battle == "normal" and app.in_colosseum_battle is True
+      and app.current_enemy_dict, (app.in_battle, app.in_colosseum_battle))
+check("下ろさなかった理由が残る",
+      any("the save was made mid-battle" in line for line in lines()), lines())
+
+app = App(battle="normal", colosseum=True, enemies={"オルヴァン": object()})
+app.buttons = buttons("BattlePhaseManager", "CancelBattleActionManager")   # スキルを選んでいる最中
+module, ctx, _manifest = fresh(app)
+ctx.hooks["__main__:InstantaleApp.load_game_new"](lambda self: None, app)
+check("スキルの選択中の画面でも下ろさない",
+      app.in_battle == "normal" and app.in_colosseum_battle is True)
+
+app = App(battle="normal", colosseum=True, enemies={"オルヴァン": object()})
+app.buttons = buttons("MovePhaseManager", "MovePhaseManager", "MovePhaseManager")
+module, ctx, _manifest = fresh(app)
+ctx.hooks["__main__:InstantaleApp.load_game_new"](lambda self: None, app)
+check("場所の画面なら敵が居ても下ろす（敵はセーブから戻っただけ）",
+      app.in_battle is False and app.in_colosseum_battle is False,
+      (app.in_battle, app.in_colosseum_battle))
+check("残った敵も空にする（次の戦闘に混ざらない）", app.current_enemy_dict == {},
+      app.current_enemy_dict)
+check("敵を空にしたことが残る",
+      any("stale enemy" in line for line in lines()), lines())
+
+app = App(enemies={"オルヴァン": object()})
+app.buttons = buttons("MovePhaseManager")
+module, ctx, _manifest = fresh(app)
+ctx.hooks["__main__:InstantaleApp.load_game_new"](lambda self: None, app)
+check("旗が立っていなければ敵にも触らない", app.current_enemy_dict)
+
 print("注入した時点")
 app = App(battle=1, colosseum=1)       # 敵が居ない＝残骸
 module, ctx, _manifest = fresh(app)

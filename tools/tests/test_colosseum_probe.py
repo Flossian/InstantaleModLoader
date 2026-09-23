@@ -374,6 +374,30 @@ check("逃げた試合の報酬は空", escaped[-1].get("rewards") == [], escape
 other = rows("battle_end_other")
 check("battle_end_other の行", len(other) == 1 and other[0]["end_type"] == "escaped",
       other)
+executed = rows("battle_end_manager_execute")
+check("終わり方の前後の差が残る", executed and "changed" in executed[-1], executed)
+
+# 戦闘を終える判定の中で終わり方が作られた回だけ、戻り値と前後の差を残す。
+app.current_enemy_dict = {"闘士": object()}
+
+
+def game_ends_it(self):
+    ctx.hooks["__main__:BattleEndManager.__init__"](
+        lambda self_, app_, end_type: None, Escape(app), app, "escaped")
+    app.current_enemy_dict = {}
+    return True
+
+
+result = ctx.hooks["__main__:BattlePhaseManager.check_battle_end"](game_ends_it, Manager(app))
+ended = rows("check_battle_end_ended")
+check("判定の戻り値はそのまま返す", result is True, result)
+check("戻り値と型が残る", ended and ended[-1]["returned_type"] == "bool", ended)
+check("前後で変わった app の値が残る（敵の一覧が空になった）",
+      ended and "app.current_enemy_dict" in ended[-1]["changed"], ended)
+before = len(rows("check_battle_end_ended"))
+ctx.hooks["__main__:BattlePhaseManager.check_battle_end"](lambda self: None, Manager(app))
+check("終わり方が作られなかった判定は書かない",
+      len(rows("check_battle_end_ended")) == before)
 
 print("闘技場の外の戦闘では窓を作らない")
 before = len(records())

@@ -7,10 +7,10 @@
     "ja": "闘技場のカスタマイズ"
   },
   "description": {
-    "en": "Set how fast the opponents get stronger and where that stops, base the first opponent on your own level instead of the area, multiply the prize by your level or the opponent's rank, have the clerk tell you the next opponent's class before you sign, end a lost match as a retreat instead of the run, and stop the same fighter from showing up every time. Defaults are the game's own values, so nothing changes until you edit them",
-    "ja": "闘技場の相手が強くなる速さと、その打ち止めを決める。初戦の相手を土地ではなく自分のレベルに合わせることも、懸賞金をレベルや相手の格で増やすこともできる。申し込む前に受付が相手の格を告げ、倒れてもゲームオーバーにせず負けとして試合を切り上げる設定と、毎回同じ闘士が出てくるのを防ぐ設定もある。既定は素のゲームの値のままで、変えた項目だけが効く"
+    "en": "Set how fast the opponents get stronger and where that stops, base the first opponent on your own level instead of the area, multiply the prize by your level or the opponent's rank, have the clerk tell you the next opponent's class before you sign, end a lost match as a retreat instead of the run, stop the same fighter from showing up every time, and have the fallen yield instead of dying in the narration. Defaults are the game's own values, so nothing changes until you edit them",
+    "ja": "闘技場の相手が強くなる速さと、その打ち止めを決める。初戦の相手を土地ではなく自分のレベルに合わせることも、懸賞金をレベルや相手の格で増やすこともできる。申し込む前に受付が相手の格を告げ、倒れてもゲームオーバーにせず負けとして試合を切り上げる設定と、毎回同じ闘士が出てくるのを防ぐ設定、試合の描写で誰も死なないようにする設定もある。既定は素のゲームの値のままで、変えた項目だけが効く"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "after": [
     "331_facility_investment"
@@ -99,8 +99,8 @@
         "en": "Prize multiplier"
       },
       "note": {
-        "ja": "素の懸賞金は相手の格だけで決まり、格30で173G・格58で359G・格97で454Gと、強い相手ほど伸びが鈍る。1.0 のままなら触らない",
-        "en": "The game's prize depends only on the opponent's rank (173G at rank 30, 359G at 58, 454G at 97) and flattens out as the rank climbs. Left at 1.0, nothing is touched"
+        "ja": "素の懸賞金は格30で173G・格58で359G・格97で454Gと、強い相手ほど伸びが鈍る。上限で相手の格を下げても、額は素の格のぶんが出る。1.0 のままなら触らない",
+        "en": "The game's prize (173G at rank 30, 359G at 58, 454G at 97) flattens out as the rank climbs, and capping the rank does not lower it. Left at 1.0, nothing is touched"
       }
     },
     "REWARD_PER_LEVEL": {
@@ -165,6 +165,18 @@
       "note": {
         "ja": "ゲームが相手を作る頼み文には前に出た相手が載らないので、同じ闘技場では同じ人物に収束することがある。入れると、既に出た闘士の名前を頼み文の末尾に足す（`331_facility_investment` が自分の闘技場でやっているのと同じ手を、どの闘技場にも効かせる）",
         "en": "The game's prompt never mentions earlier opponents, so the same person keeps showing up. This appends the names already seen, the same trick 331_facility_investment uses in your own arena"
+      }
+    },
+    "NONLETHAL_NARRATION": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "試合で誰も死なない描写にする",
+        "en": "Nobody dies in the match narration"
+      },
+      "note": {
+        "ja": "素のゲームは、闘技場の試合でも依頼の戦闘と同じ頼み方で描写させるので、体力の尽きた相手が息絶えたり惨殺されたりする。入れると、1手ごとの描写と試合後の締めの頼み文に「殺し合いではない。倒れた者は気を失う・降参するなどして退く」という一文を足す。変わるのは文章だけで、勝ち負けや数値には触らない",
+        "en": "The game narrates arena matches the same way as any other fight, so beaten opponents often die on the page. With this on, the per-turn narration and the post-match summary are asked to have the fallen faint, yield or withdraw instead. Only the text changes"
       }
     }
   },

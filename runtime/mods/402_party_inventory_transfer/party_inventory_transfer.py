@@ -86,6 +86,7 @@ def apply(ctx):
         "npc": None,                     # 同じく右側。この2人の間の移動だけ同期する（店の売買には触らない）
         "save_generation": 0,            # 遅延保存の世代番号。予約のたびに増やし、古い予約は走らない
         "equipment_save_generation": 0,  # 同じく装備の書き換え後の保存
+        "open": False,                   # 受け渡しの窓を開いている間 True（閉じた後の画面を1行残すため）
     }
 
     # 選択肢の dict から spec のクラス名を読む／押された index の dict を引く（ローダ共通）。
@@ -842,8 +843,10 @@ def apply(ctx):
 
         player_name = character_name(player, "プレイヤー")
         npc_name = character_name(npc, str(state["npc_id"]))
+        keep_conversation_choices(app)
 
         try:
+            state["open"] = True
             app.toggle_twin_inventory_window(
                 player,
                 npc,
@@ -855,9 +858,51 @@ def apply(ctx):
             ))
             screen.schedule(lambda: rename_right_header(app, npc_name), 0)
         except Exception:
+            state["open"] = False
             ctx.log_exc("party inventory transfer: toggle_twin_inventory_window failed")
 
+    def keep_conversation_choices(app):
+        """窓を閉じたときにゲームが戻す選択肢を、今の会話の選択肢にしておく。
+
+        売買の窓を閉じると、ゲームは `app.buttons_backup_for_shopping` を選択肢へ戻す。
+        これを書くのは売買や装備の強化の入口で、`toggle_twin_inventory_window` は書かない。
+        そのまま借りると、**前に開いた店の選択肢**が戻り、会話の旗
+        （`in_conversation`）だけが残る。そこから「出る」で施設を離れられるので、
+        旗は会話を1度終えるまで下りず、旗を見る MOD が止まる（VERIFICATION.md §3.72）。
+        """
+        buttons = getattr(app, "buttons", None)
+        if not isinstance(buttons, list):
+            write("WARN cannot keep the conversation choices: app.buttons is {}".format(
+                type(buttons).__name__))
+            return
+        try:
+            app.buttons_backup_for_shopping = list(buttons)
+        except Exception:
+            ctx.log_exc("party inventory transfer: cannot keep the conversation choices")
+            return
+        write("kept the conversation choices for the window: {}".format(
+            [spec_cls_name(entry) for entry in buttons]))
+
     # ================================================================ フック
+
+    @ctx.wrap("__main__:InstantaleApp.close_shopping_window_process", required=False,
+              safe=True)
+    def close_shopping_window(orig, self, *args, **kwargs):
+        """受け渡しの窓を閉じた後の画面を1行残す（会話に戻れたかを後から読むため）。"""
+        result = orig(self, *args, **kwargs)
+        if state["open"]:
+            state["open"] = False
+
+            def report():
+                # 選択肢の塗り直しは閉じる処理の後に来ることがあるので、次のフレームで読む。
+                buttons = getattr(self, "buttons", None)
+                write("closed the window: in_conversation={!r} choices={}".format(
+                    getattr(self, "in_conversation", None),
+                    [spec_cls_name(entry) for entry in buttons]
+                    if isinstance(buttons, list) else None))
+
+            screen.schedule(report, 0)
+        return result
 
     @ctx.wrap("__main__:ConversationStartManager.__init__", required=False)
     def conversation_start(orig, self, app, character_id, *args, **kwargs):

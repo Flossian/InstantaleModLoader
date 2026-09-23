@@ -58,9 +58,20 @@
 ロード時にも見る。
 **既に `in_battle=True` で保存されてしまったセーブ**があるため（この
 mod を入れる前に保存したもの）、読み込み直後に立っていたら下ろす。
-ロード直後に戦闘が復元されていることは無い。
-戦闘の中身（敵・戦闘ログ）は復元されず、残っていたフラグだけが効いている状態なので、
-これは残骸の後始末にあたる。
+
+戦闘の最中に保存したセーブは、`game_variables` に `in_battle`（`"normal"` のような戦闘の種類）・
+`in_colosseum_battle`・`current_enemy_data`（敵）・`buttons`（`攻撃` など）が入っている。
+ロードの後の画面は2通りあった（実機）。
+
+| ロードの後 | 旗を下ろすと | 旗を残すと |
+|---|---|---|
+| 戦闘のボタンが戻る | 戦闘の欄が畳まれたまま（大きさ 0）で、攻撃した後の敵の欄の描画が `ZeroDivisionError`（`new_hud.py:2306`）で落ちた | 戦闘の続き |
+| 場所のボタン（移動など）が出る | 普段どおり | 旗と敵が残ったまま依頼を始め、闘技場の相手と依頼の敵が1つの戦闘に混ざった |
+
+敵の有無では見分けられない（どちらも `current_enemy_dict` にセーブの敵が戻る）。
+なので**ロードの後に並んだボタンが戦闘のものなら触らない**。
+そうでなければ旗を下ろし、残っている敵も空にする（戦闘を普通に終えたときのゲームと同じ状態）。
+戦闘の最中のセーブの中身とロード後の2通りは GAME.md §2.10。
 """
 
 import sys
@@ -79,6 +90,12 @@ CLEAR_FLAGS = ("in_battle", "in_colosseum_battle")
 # 立っていたら記録だけする（下ろさない）。
 # ボス戦の旗は戦闘の後に自分で 0 へ戻るところまで観測できている。
 REPORT_FLAGS = ("in_boss_battle",)
+
+# ロード直後に「戦闘の画面に戻った」と見なすボタンのクラス（`攻撃` / `スキル・防御` /
+# `発言する` と、スキルを選んでいる最中の `やめる`）。
+BATTLE_BUTTON_CLASSES = ("BattlePhaseManager", "SkillChoicePhaseManager",
+                         "UtteranceChoiceInBattleManager", "UtteranceInBattleManager",
+                         "CancelBattleActionManager")
 
 # ロード直後にも残骸を下ろすか。
 CLEAR_ON_LOAD = True
@@ -117,6 +134,35 @@ def apply(ctx):
             write("{}: {} still set -- not touching (never observed being cleared)"
                   .format(where, ", ".join(others)))
 
+    def in_real_battle(app):
+        """敵が居るか（本物の戦闘の最中か）。残骸のときは `current_enemy_dict` が空（実測）。"""
+        enemies = getattr(app, "current_enemy_dict", None) if app is not None else None
+        return isinstance(enemies, dict) and bool(enemies)
+
+    def battle_on_screen(app):
+        """いま並んでいるボタンが戦闘のものか。ロード直後の見分けに使う。
+
+        ロードでは敵を見ても分からない。ゲームは戦闘の最中に保存したセーブの敵を、
+        戦闘の画面に戻らなかったときも `current_enemy_dict` に持ち続ける（実機）。
+        """
+        buttons = getattr(app, "buttons", None) if app is not None else None
+        if not isinstance(buttons, list):
+            return False
+        return any(ui.spec_cls_name(entry) in BATTLE_BUTTON_CLASSES for entry in buttons)
+
+    def clear_stale_enemies(app, where):
+        """戦闘の画面でないのに残っている敵を空にする（戦闘を終えたときのゲームと同じ状態）。"""
+        enemies = getattr(app, "current_enemy_dict", None)
+        if isinstance(enemies, dict) and enemies:
+            names = list(enemies)
+            try:
+                enemies.clear()
+            except Exception:
+                ctx.log_exc("battle flag: could not clear the stale enemies")
+                return
+            write("{}: cleared {} stale enem{} ({})".format(
+                where, len(names), "y" if len(names) == 1 else "ies", ", ".join(names)))
+
     # ------------------------------------------------------- 戦闘終了マネージャ
     # 3種類とも同じ扱いにしてよい。
     # ゲームが下ろしている経路では stale が空になり、
@@ -150,7 +196,16 @@ def apply(ctx):
                 # §6.3）。
                 owner = self if frames.attr(self, "in_battle") is not frames.MISSING \
                     else find_app()
-                clear_stale(owner, label)
+                if battle_on_screen(owner):
+                    write("{}: the battle screen came back -- the save was made "
+                          "mid-battle; not touching".format(label))
+                elif any(getattr(owner, name, False) for name in CLEAR_FLAGS):
+                    seen = [ui.spec_cls_name(entry)
+                            for entry in (getattr(owner, "buttons", None) or [])]
+                    write("{}: not a battle screen (buttons: {})".format(
+                        label, ", ".join(str(name) for name in seen) or "none"))
+                    clear_stale(owner, label)
+                    clear_stale_enemies(owner, label)
             except Exception:
                 ctx.log_exc("battle flag: clear failed")
             return result
@@ -168,7 +223,7 @@ def apply(ctx):
         try:
             app = find_app()
             enemies = getattr(app, "current_enemy_dict", None) if app else None
-            if app is not None and isinstance(enemies, dict) and not enemies:
+            if app is not None and isinstance(enemies, dict) and not in_real_battle(app):
                 clear_stale(app, "injection")
             elif app is not None and getattr(app, "in_battle", False):
                 write("injection: in_battle is set and enemies are present "

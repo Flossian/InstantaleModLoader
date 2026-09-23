@@ -34,20 +34,17 @@ r"""計測: 闘技場の試合（相手の強さと報酬）。ゲームは変�
     `in_colosseum_battle` が立ったまま `GameOverManager` へ）
   * 参加費は取らない。受付の口上は「報酬は客の賭け具合で決まる」
 
-報酬も**ランクだけで決まり、乱数は乗っていない**（版2の実機。同じランク58で
-セーブ → 勝つ → ロード → 勝つ を通し、相手の名前が変わっても2回とも 359。
-土地が違っても同じランクなら同じ額で、`D` 60 と 61 の闘技場でランク30 がどちらも 173）。
+報酬に**乱数は乗っていない**（版2の実機。同じランク58で
+セーブ → 勝つ → ロード → 勝つ を通し、相手の名前が変わっても2回とも 359）。
+ただしランクだけでは決まらない（ランク30 が `D` 60・61 の初戦では 173、`D` 32 の3試合目では 177）。
+施設に焼いた `data.rank` も読まない（`334_` の上限で下げても、下げる前のランクの額が出た）。
 
-`D` は `get_quest_difficulties` が返す一覧の**平均を整数に落とした値**
-（3つの闘技場で一致。中央値では合わない）。
+`D` は `get_quest_difficulties` が返す一覧の**平均を四捨五入した値**
+（4つの闘技場で一致。中央値では合わない。平均 31.67 の土地で切り捨てと分かれた）。
 
-読めていないこと（2つ）:
-
-  1. **報酬の式そのもの**。実測7点（30 → 173 / 43 → 282 / 44 → 288 / 58 → 359 /
-     71 → 426 / 85 → 452 / 97 → 454）で、1ランクあたりの伸びは
-     8.2（30〜44）→ 5.1（44〜71）→ 1.1（71〜97）と落ち、**格70を超えると頭打ち**。
-     線形・対数・平方根・飽和型のどれも7点には乗らない
-  2. `D` の丸めが切り捨てか四捨五入か（実測3つとも小数部が .5 未満で分かれない）
+読めていないこと: **報酬の式そのもの**。`D` と試合数から別に計算していると見られる。
+伸びは高いランクで鈍り、**格70を超えると頭打ち**。
+線形・対数・平方根・飽和型のどれもランクの点には乗らない（点は GAME.md §2.11 の表）
 
 ## 測り方
 
@@ -100,7 +97,7 @@ def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
     record = ctx.jsonl(RECORD_BASENAME)
     state = {"match": None, "seq": 0, "gold": None, "watch_until": 0.0,
-             "enemy_type": None, "generated": []}
+             "enemy_type": None, "generated": [], "ending": None}
 
     def now():
         return datetime.datetime.now().isoformat(timespec="seconds")
@@ -141,8 +138,8 @@ def apply(ctx):
 
         **相手のランクはこの値から決まっている**（版1の実機。4つの闘技場・16点が
         `round(D * (9 + 4n) / 18)` に乗った。`D` は難易度、`n` は `current_phase` / 2）。
-        `D` は**この一覧の平均を整数に落とした値**（3つの闘技場で一致。中央値では合わない）。
-        丸めが切り捨てか四捨五入かはまだ分かれていないので、一覧をそのまま写し続ける。
+        `D` は**この一覧の平均を四捨五入した値**（4つの闘技場で一致。中央値では合わない）。
+        報酬の式の手掛かりになるので、一覧はそのまま写し続ける。
         """
         functions = sys.modules.get("scripts.functions")
         fn = getattr(functions, "get_quest_difficulties", None) if functions else None
@@ -601,6 +598,73 @@ def apply(ctx):
             except Exception:
                 ctx.log_exc("colosseum probe: cannot record end_phase")
 
+    # ---------------------------------------------- 戦闘を終える判定の前後の差
+    def brief_value(value):
+        """差を比べるための短い写し。入れ物は長さ、形の読めない物は型と id。"""
+        if value is None or isinstance(value, (bool, int, float)):
+            return value
+        if isinstance(value, str):
+            return value[:40]
+        if isinstance(value, (list, tuple, dict, set)):
+            return "{}(len={})".format(type(value).__name__, len(value))
+        return "{}#{:x}".format(type(value).__name__, id(value))
+
+    def snapshot(obj):
+        try:
+            items = dict(vars(obj))
+        except Exception:
+            return {}
+        return dict((str(key), brief_value(value)) for key, value in items.items())
+
+    def screen_snapshot(app):
+        """app と、名前に hud を含む属性の中身（プレイヤーの絵がどこに持たれているか分からないので広く）。"""
+        shot = {"app." + key: value for key, value in snapshot(app).items()}
+        try:
+            names = [name for name in vars(app) if "hud" in str(name).lower()]
+        except Exception:
+            names = []
+        for name in names:
+            for key, value in snapshot(getattr(app, name, None)).items():
+                shot["{}.{}".format(name, key)] = value
+        return shot
+
+    def diff(before, after):
+        keys = sorted(set(before) | set(after))
+        return dict((key, [before.get(key), after.get(key)]) for key in keys
+                    if before.get(key) != after.get(key))
+
+    @ctx.wrap("__main__:BattlePhaseManager.check_battle_end", required=False, safe=True)
+    def check_battle_end(orig, self, *args, **kwargs):
+        """戦闘を終える判定の戻り値と、その前後で app と HUD の何が変わったか。
+
+        `334_colosseum_custom` が負けを逃走扱いで切り上げると、画面からプレイヤーが消え、
+        敵が一覧に残って 331 の闘技場から出られなくなった（実機）。
+        ゲーム自身の逃走はこの関数の中で終わり方を作り、ゲームが片付けまで進める。
+        何を片付けているかを、両方の経路で同じ形に録って比べる。
+        終わり方が作られた回（`battle_end_init` が立てる印）だけ書く。
+        """
+        app = getattr(self, "app", None) or ui.find_app()
+        state["ending"] = None
+        before = screen_snapshot(app) if app is not None else {}
+        result = orig(self, *args, **kwargs)
+        try:
+            if state["ending"] is not None:
+                after = screen_snapshot(app) if app is not None else {}
+                changed = diff(before, after)
+                write("check_battle_end -> {!r} ({}) end_type={!r}; {} change(s): {}".format(
+                    brief_value(result), type(result).__name__, state["ending"],
+                    len(changed), changed))
+                record({"at": now(), "phase": "check_battle_end_ended",
+                        "returned": frames.repr_value(result),
+                        "returned_type": type(result).__name__,
+                        "end_type": state["ending"], "changed": changed,
+                        "enemies_after": enemies_brief(app), "flags": flags_of(app),
+                        "match": (state["match"] or {}).get("seq")})
+        except Exception:
+            ctx.log_exc("colosseum probe: cannot record the battle end check")
+        state["ending"] = None
+        return result
+
     @ctx.wrap("__main__:BattleEndManager.__init__", required=False, safe=True)
     def battle_end_init(orig, self, app=None, end_type=None, *args, **kwargs):
         """`end_type` の実値と、誰が作ったか。
@@ -610,6 +674,7 @@ def apply(ctx):
         闘技場の外の戦闘でも録る（`end_type` に何種類あるかを知りたいので）。
         """
         try:
+            state["ending"] = keep(end_type)
             target = app or ui.find_app()
             write("BattleEndManager(end_type={!r}) from {}".format(
                 keep(end_type), frames.caller()))
@@ -625,14 +690,39 @@ def apply(ctx):
     @ctx.wrap("__main__:BattleEndManager.execute", required=False, safe=True)
     def battle_end_other_execute(orig, self, choice_text="", *args, **kwargs):
         """`execute` と `end_phase` のどちらが先かを残す（起こす側が呼ぶ順の材料）。"""
+        app = getattr(self, "app", None) or ui.find_app()
         try:
-            step(getattr(self, "app", None) or ui.find_app(),
-                 "BattleEndManager.execute",
+            step(app, "BattleEndManager.execute",
                  "end_type={!r} choice={!r}".format(
                      keep(getattr(self, "end_type", None)), choice_text))
         except Exception:
             pass
-        return orig(self, choice_text, *args, **kwargs)
+        before = screen_snapshot(app) if app is not None else {}
+        try:
+            # 逃げた者の預かりと一覧の中身の形（`334_` が倒れた主人公を預けて戻させるため）。
+            shapes = {}
+            for name in ("escaped_member_in_battle", "party"):
+                held = getattr(app, name, None)
+                if isinstance(held, dict):
+                    shapes[name] = dict((str(key), type(value).__name__)
+                                        for key, value in held.items())
+            write("BattleEndManager.execute: holding {}".format(shapes))
+        except Exception:
+            pass
+        try:
+            return orig(self, choice_text, *args, **kwargs)
+        finally:
+            # 終わり方そのものが何を片付けるか（`check_battle_end` の差と並べて読む）。
+            try:
+                changed = diff(before, screen_snapshot(app) if app is not None else {})
+                write("BattleEndManager.execute: {} change(s): {}".format(len(changed), changed))
+                record({"at": now(), "phase": "battle_end_manager_execute",
+                        "end_type": keep(getattr(self, "end_type", None)),
+                        "changed": changed, "enemies_after": enemies_brief(app),
+                        "flags": flags_of(app),
+                        "match": (state["match"] or {}).get("seq")})
+            except Exception:
+                ctx.log_exc("colosseum probe: cannot record the battle end execute")
 
     def install_other_end(cls_name):
         """闘技場以外の終わり方で窓を閉じる。

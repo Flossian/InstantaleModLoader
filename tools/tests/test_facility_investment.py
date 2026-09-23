@@ -1270,6 +1270,9 @@ check("本物の概要は変わらない", "アウレリウス" not in arena.des
 varied_dict = module.vary_location({"name": "x", "description": "y"}, ["A"])
 check("辞書の location でも同じ", varied_dict["description"].startswith("y") and "A" in varied_dict["description"])
 check("既出が無ければそのまま", module.vary_location(arena, []) is arena)
+check("既に一文が入っていれば二重に足さない（334_ が外側で先に足した）",
+      module.vary_location(varied, ["A"]) is varied
+      and module.vary_location(varied_dict, ["B"]) is varied_dict)
 arena.config["enemy_data"] = {2: {"rank": 14}}      # 偽の試合が書いた分だけに戻す
 check("落ちていないので WARN も log_exc も無い",
       not ctx.errors and "match failed" not in read_log(), ctx.errors)

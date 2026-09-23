@@ -10,6 +10,6 @@
     "en": "Clears the in_battle and in_colosseum_battle flags left set after a battle. Fleeing an arena match leaves the arena flag set, and the next battle crashes when the game picks the arena's own ending for it",
     "ja": "戦闘終了後も残る `in_battle` / `in_colosseum_battle` フラグを下ろす。闘技場から撤退すると闘技場の旗が残り、次の戦闘の終わりにゲームが闘技場用の後始末を選んで落ちる"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian"
 }
