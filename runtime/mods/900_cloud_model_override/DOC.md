@@ -11,7 +11,8 @@ git には入れるが、CI・配布物・`load_order.json`・`docs\` の文書�
 | 2026-08-30 | 開発終了として `discontinued\` へ移した。OpenAI の1モデルを名前で差し替えるだけで、手元の事情に閉じていた |
 | 2026-09-23 | 再開して `runtime\mods\` へ戻した。**Claude にも対応し、差し替え先を一覧から選べるようにした**（版2） |
 | 2026-09-23 | GPT-6（Astra / Sol / Luna）に対応。OpenAI の既定を `gpt-6-luna` に変更（版3） |
-| 残っている確認 | Claude の経路（anthropic の SDK）と、GPT-6 系への差し替えを実機で当てていない（§3） |
+| 2026-09-23 | 実機で `gpt-5.5` → `gpt-6-luna` の差し替えが成立（§3） |
+| 残っている確認 | Claude の経路（anthropic の SDK）と、GPT-6 Astra への差し替えを実機で当てていない（§3） |
 
 ---
 
@@ -59,6 +60,25 @@ anthropic._base_client:SyncAPIClient.post    Claude
 
 ## 2. 設定
 
+### ゲーム側で選ぶもの
+
+差し替えは**同じプロバイダの中だけ**で行う。
+OpenAI のモデルを Claude に、Claude のモデルを OpenAI に変えることはできない。
+ゲームはプロバイダごとに別のクライアント（`openai.OpenAI` / `anthropic.Anthropic`）で送り、API キーも別だから（GAME.md「プロバイダは1つだけ import される」）。
+先にゲームの設定画面で、使いたい側のプロバイダを選んで API キーを入れておく。
+
+| 使いたいモデル | ゲームの設定画面 | この MOD の設定 |
+| --- | --- | --- |
+| OpenAI（`gpt-6-luna` など） | プロバイダは OpenAI、キーは OpenAI の API キー。モデルは OpenAI の一覧のどれでもよい（`gpt-5.5` を推奨。effort `none` の速い経路を組み立てる） | 「OpenAI: 実際に送るモデル」 |
+| Claude（`claude-opus-5-5` など） | プロバイダは Claude、キーは Anthropic の API キー。モデルは Claude の一覧のどれでもよい（素のゲームの既定は `claude-sonnet-5`） | 「Claude: 実際に送るモデル」。既定は `off` なので必ず選ぶ |
+
+ゲーム側を OpenAI にしたまま Claude の欄だけ設定しても、何も起きない。
+Claude の送信が1度も走らないため。
+使わない側の欄は既定のままでよい。
+その SDK が読み込まれなければ、仕掛けも当たらない。
+
+### 設定の一覧
+
 | 設定 | 既定 | 意味 |
 | --- | --- | --- |
 | OpenAI: 実際に送るモデル | `gpt-6-luna` | 一覧から選ぶ。`off` で差し替えない |
@@ -74,9 +94,6 @@ anthropic._base_client:SyncAPIClient.post    Claude
 - OpenAI: `gpt-6-astra` / `gpt-6-sol` / `gpt-6-luna` / `gpt-5.6-sol` / `gpt-5.6-terra` / `gpt-5.6-luna` / `gpt-5.5` / `gpt-5.4` / `gpt-5.4-mini` / `gpt-5.4-nano`
 - Claude: `claude-opus-5-5` / `claude-opus-5` / `claude-sonnet-5` / `claude-haiku-4-5` / `claude-fable-5-1` / `claude-opus-4-8` / `claude-sonnet-4-6`
 
-ゲームの設定画面では、そのプロバイダの中から何を選んでいてもよい。
-OpenAI は `gpt-5.5` など effort `none` の経路を組み立てるモデルを選んでおくと速い。
-
 OpenAI 互換の別サーバー（任意互換 / Alibaba）も `openai` の SDK を通るので、
 **宛先が `api.openai.com` のときだけ**差し替える。
 
@@ -84,7 +101,7 @@ OpenAI 互換の別サーバー（任意互換 / Alibaba）も `openai` の SDK 
 
 | 項目 | 手順 | 状態 |
 | --- | --- | --- |
-| OpenAI → GPT-6 | ゲームで `gpt-5.5` を選び、`out\modloader.log` に `[openai] gpt-5.5 -> gpt-6-luna` が出て応答が返る | 未確認（版1で `gpt-5.6-luna` への差し替えは成立） |
+| OpenAI → GPT-6 | ゲームで `gpt-5.5` を選び、`out\modloader.log` に `[openai] gpt-5.5 -> gpt-6-luna` が出て応答が返る | **成立**（実機1回。推論量 `none`。`/responses` で3回とも差し替わり、400 は出ず応答がゲームに渡った。`fixed:` は付かない。`gpt-5.5` が組み立てる `none` を `gpt-6-luna` がそのまま受けるため） |
 | OpenAI → GPT-6 Astra | 同上で `fixed: effort none->low` が付き、400 が出ないこと | 未確認 |
 | Claude → Opus 5.5 | ゲームで `claude-sonnet-5` を選び、`[claude] claude-sonnet-5 -> claude-opus-5-5` の行と `fixed:` の中身を見る。400 が出ないこと | 未確認 |
 | Claude → Haiku 4.5 | 同上で `-effort` が付くこと | 未確認 |
@@ -93,7 +110,7 @@ OpenAI 互換の別サーバー（任意互換 / Alibaba）も `openai` の SDK 
 
 | 症状 | 見るところ |
 | --- | --- |
-| 差し替わっていない | ログに `cloud model override: [...]` の行が出ているか。出ていなければ、ゲーム側が別のプロバイダ（またはローカル LLM）で動いている |
+| 差し替わっていない | ログに `cloud model override: [...]` の行が出ているか。出ていなければ、ゲーム側のプロバイダとこの MOD で設定した側が合っていない（§2「ゲーム側で選ぶもの」）か、ゲームがローカル LLM で動いている |
 | API がモデル名を知らないと返す | 一覧に無いモデルの欄の綴り。鍵の側でそのモデルが使えるかも見る |
 | 400 で引数を断られる | ログの `fixed:` に何が載っているか。ゲームが新しい引数を送り始めた可能性がある。エラー文にある引数名を添えて報告する |
 | 応答が遅い | 推論量を下げる（OpenAI は `none`、Claude は `low`）。`gpt-6-astra` は `none` にできないので、速さが要るなら `gpt-6-luna` / `gpt-6-sol` |

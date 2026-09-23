@@ -35,8 +35,8 @@
         "en": "OpenAI: model actually sent"
       },
       "note": {
-        "ja": "ゲームの設定画面では OpenAI の中から何を選んでいてもよい（速い経路を組み立てる gpt-5.5 などを推奨）。off で差し替えない",
-        "en": "Any OpenAI model may be selected in the game's settings (gpt-5.5 or similar builds the fast path). off = no swap"
+        "ja": "ゲームの設定画面でプロバイダを OpenAI にしているときだけ効く。モデルは OpenAI の中から何を選んでいてもよい（速い経路を組み立てる gpt-5.5 などを推奨）。off で差し替えない",
+        "en": "Only takes effect when the game's provider is OpenAI. Any OpenAI model may be selected there (gpt-5.5 or similar builds the fast path). off = no swap"
       }
     },
     "OPENAI_CUSTOM": {
@@ -88,8 +88,8 @@
         "en": "Claude: model actually sent"
       },
       "note": {
-        "ja": "ゲームの設定画面では Claude の中から何を選んでいてもよい。off で差し替えない（推論量の指定も効かない）",
-        "en": "Any Claude model may be selected in the game's settings. off = no swap (the effort setting is not applied either)"
+        "ja": "ゲームの設定画面でプロバイダを Claude にし、Anthropic の API キーを入れているときだけ効く（OpenAI のままでは Claude へは送れない）。モデルは Claude の中から何を選んでいてもよい。off で差し替えない（推論量の指定も効かない）",
+        "en": "Only takes effect when the game's provider is Claude with an Anthropic API key (an OpenAI setup cannot be redirected to Claude). Any Claude model may be selected there. off = no swap (the effort setting is not applied either)"
       }
     },
     "CLAUDE_CUSTOM": {
