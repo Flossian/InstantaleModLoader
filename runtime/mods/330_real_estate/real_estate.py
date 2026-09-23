@@ -732,16 +732,6 @@ def apply(ctx):
         found = record.get("keeper") if isinstance(record, dict) else None
         return found if isinstance(found, dict) and found.get("id") else None
 
-    def world_overview(app):
-        """世界観の文。頼み文に入れる（無ければ空）。"""
-        for attr in ("save_data_dict", "world_dict"):
-            holder = getattr(app, attr, None)
-            data = holder.get("world_data") if isinstance(holder, dict) else None
-            text = data.get("overview") if isinstance(data, dict) else None
-            if isinstance(text, str) and text.strip():
-                return frames.short(text.strip(), 600)
-        return ""
-
     def keeper_name(app, record, world=None):
         """管理人の名。控えた名 → 実体の名 → 鍵から引いた表の名。
 
@@ -796,7 +786,7 @@ def apply(ctx):
             return None
         system, user = landlord.keeper_prompt(
             record.get("kind"), record.get("area_name"), record.get("name"),
-            world_overview(app), player_name(app), taken)
+            ui.world_overview(app), player_name(app), taken)
         answer = llm.ask(ctx, KEEPER_MANAGER,
                          [{"role": "system", "content": system},
                           {"role": "user", "content": user}],
@@ -1667,23 +1657,6 @@ def apply(ctx):
 
         screen.schedule(show, 0)
 
-    def walk_widgets(root):
-        """Kivy のウィジェット木を深さ優先で辿る。同じものは1度だけ。"""
-        if root is None:
-            return
-        seen = set()
-        stack = [root]
-        while stack:
-            widget = stack.pop()
-            ident = id(widget)
-            if ident in seen:
-                continue
-            seen.add(ident)
-            yield widget
-            children = getattr(widget, "children", None)
-            if isinstance(children, (list, tuple)):
-                stack.extend(children)
-
     def rename_right_header(app, name):
         """2枚並びの窓の右側の見出しを保管庫の名前にする。
 
@@ -1692,7 +1665,7 @@ def apply(ctx):
         hud = ui.find_hud(app)
         if hud is None:
             return
-        for widget in walk_widgets(hud):
+        for widget in ui.walk_widgets(hud, oldest_first=True):
             text = frames.text_of(widget, "text")
             if isinstance(text, str) and text.strip() == "所持品":
                 try:

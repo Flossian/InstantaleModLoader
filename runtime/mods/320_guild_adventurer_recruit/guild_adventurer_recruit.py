@@ -130,18 +130,6 @@ def apply(ctx):
         state["armed"] = False
         return orig(self, choice_text, *args, **kwargs)
 
-    def back_button_index(buttons):
-        """ゲーム側の「やめる」の位置。無ければ None（＝一覧ではない）。
-
-        無害 spec（`JustSetButtonToNormalPhase`）で、どのMODの印も
-        付いていないもの。自前のボタンも同じ spec を使うので、印で除く。
-        """
-        for index, entry in enumerate(buttons):
-            if (ui.spec_cls_name(entry) == ui.SAFE_CLS
-                    and not screen.marked_by_a_mod(entry)):
-                return index
-        return None
-
     def offer(app, buttons):
         """一覧なら、人数が閾値以下のとき募集ボタンを差す。"""
         if not state["armed"]:
@@ -152,7 +140,7 @@ def apply(ctx):
             return
         if any(screen.mark_of(entry) is not None for entry in buttons):
             return                      # もう差してある
-        at = back_button_index(buttons)
+        at = screen.back_button_index(buttons)
         if at is None:
             return                      # 「やめる」が無い＝一覧が組み上がっていない
         count = names.count("ConversationStartManager")

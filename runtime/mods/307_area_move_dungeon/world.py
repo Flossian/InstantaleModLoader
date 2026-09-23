@@ -33,20 +33,8 @@ def short(value, limit=60):
 id_sort = ui.id_sort_key
 
 
-def current_quest_id(app):
-    """ゲームがいま進めているクエストの id。無ければ None。
-
-    これがゲーム自身の答え。
-    `QuestStartManager` を捕まえられなくても（注入し直しをまたいだ場合など）、
-    これを見れば道中のクエストの最中かどうかが分かる。
-    `app.current_quest_data` はクエスト中だけ `Quest` が入り、
-    それ以外は None（`206_` の記録で確認済み）。
-    """
-    quest = getattr(app, "current_quest_data", None) if app is not None else None
-    if quest is None:
-        return None
-    value = quest.get("id") if isinstance(quest, dict) else getattr(quest, "id", None)
-    return str(value) if value is not None else None
+# ゲームがいま進めているクエストの id。ローダの語彙（`325_` と共有）。
+current_quest_id = ui.current_quest_id
 
 
 # --------------------------------------------------------------- エリア

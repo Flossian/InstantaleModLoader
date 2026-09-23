@@ -157,33 +157,6 @@ def _get(obj, name, default=None):
     return value
 
 
-def arg_of(args, kwargs, names, name):
-    """位置引数・キーワード引数のどちらで来ても読む（`313_` と同じ理由）。"""
-    if name in kwargs:
-        return kwargs[name]
-    try:
-        index = names.index(name)
-    except ValueError:
-        return None
-    return args[index] if len(args) > index else None
-
-
-def replace_arg(args, kwargs, names, name, value):
-    """来た側（位置かキーワード）に合わせて差し替えた `(args, kwargs)` を返す。"""
-    if name in kwargs:
-        replaced = dict(kwargs)
-        replaced[name] = value
-        return args, replaced
-    index = names.index(name)
-    if len(args) > index:
-        replaced = list(args)
-        replaced[index] = value
-        return tuple(replaced), kwargs
-    replaced = dict(kwargs)
-    replaced[name] = value
-    return args, replaced
-
-
 # ---------------------------------------------------------------- 所持品
 
 def inventory_items(player, limit):
@@ -322,17 +295,18 @@ def apply(ctx):
             action = st.get("pending")
             if not action:
                 return orig(*args, **kwargs)
-            player = arg_of(args, kwargs, names, "player")
+            player = frames.arg(args, kwargs, "player", names)
             if player is None:
                 player = frames.attr(ui.find_app(), "player", None)
             notes = notes_for(action, player, SHOW_INVENTORY, MAX_ITEMS)
-            log = arg_of(args, kwargs, names, "conversation_log")
+            log = frames.arg(args, kwargs, "conversation_log", names)
             extended = with_notes(log, notes)
             if extended is None:
                 write("WARN {}: conversation_log is {}; nothing added".format(
                     name, type(log).__name__))
                 return orig(*args, **kwargs)
-            args, kwargs = replace_arg(args, kwargs, names, "conversation_log", extended)
+            args, kwargs, _ = frames.replace_arg(args, kwargs, "conversation_log", names,
+                                                 extended, insert=True)
             write("{}: +{} line(s), {} chars".format(
                 name, len(notes), sum(len(n) for n in notes)))
             return orig(*args, **kwargs)

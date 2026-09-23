@@ -864,16 +864,6 @@ def apply(ctx):
         """仲間が `MIN_MEMBERS` 人以上か。1人なら本体の会話と変わらないので出さない。"""
         return len(party_ids(app)) >= MIN_MEMBERS
 
-    def back_button_index(buttons):
-        """一覧の「やめる」の位置。無ければ None（一覧が組み上がっていない）。
-
-        自前のボタンも同じ無害 spec なので、MOD の印が無いものを採る（`320_` と同じ）。
-        """
-        for index, entry in enumerate(buttons):
-            if ui.spec_cls_name(entry) == ui.SAFE_CLS and not screen.marked_by_a_mod(entry):
-                return index
-        return None
-
     def talk_list_slot(buttons):
         """「会話する」の相手一覧なら、差し込む位置。違えば None。"""
         if not st["talk_list"]:
@@ -884,7 +874,7 @@ def apply(ctx):
             return None
         # 相手が居なければ一覧は「やめる」1つだけ（ギルドの「会話する」など。実機で確認）。
         # 人数は問わず、「やめる」が在れば一覧とみなす。
-        return back_button_index(buttons)
+        return screen.back_button_index(buttons)
 
     def wants_own_talk_choice(app, buttons):
         """NPC 不在で本体の「会話する」が無い根のメニューか。

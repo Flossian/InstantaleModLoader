@@ -49,6 +49,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import sys
 import threading
 
 #: ファイル名に使えない文字（Windows の禁則＋制御文字）。
@@ -504,3 +505,68 @@ class WorldStore(object):
             else:
                 self._buckets.pop(key, None)
                 self._stamps.pop(key, None)
+
+
+def jsonable(value) -> bool:
+    """控えに入れてよい値か。JSON に落ちるものだけ（実行時のオブジェクトは控えない）。
+
+    `items` / `modnpc` / `modfacility` に同じ本体が写されていた。
+    """
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return True
+    if isinstance(value, (list, tuple)):
+        return all(jsonable(v) for v in value)
+    if isinstance(value, dict):
+        return all(isinstance(k, str) and jsonable(v) for k, v in value.items())
+    return False
+
+
+class SysWorldStore(object):
+    """ローダのモジュールが持つ、周回（世界×主人公）ごとの控えの繋ぎ方。
+
+    控え（`WorldStore`）は `sys` の属性に置く。注入し直しをまたいで残り、
+    ローダのモジュールが作り直されても消えない。
+    `modnpc` と `modfacility` に同じ本体が写されていて、違うのは下の3つの名前だけだった:
+
+        store_attr     控えを置く `sys` の属性名
+        dirname        `state/` 配下のフォルダ名
+        override_attr  建て直しの間だけ立つ「いまの周回の鍵」の `sys` の属性名
+                       （`World.__init__` の中では `app.world_dict` も `app.player` も
+                       まだ前の周回を指していることがあるので、呼ぶ側が引数から決めて立てる）
+    """
+
+    def __init__(self, store_attr, dirname, override_attr):
+        self.store_attr = store_attr
+        self.dirname = dirname
+        self.override_attr = override_attr
+
+    def bind(self, ctx, write=None) -> WorldStore:
+        """控えを今の世代の `ctx` に繋ぐ（`install` が毎回呼ぶ）。"""
+        found = getattr(sys, self.store_attr, None)
+        if isinstance(found, WorldStore):
+            return found.rebind(ctx, write)
+        found = WorldStore(ctx, self.dirname, write=write)
+        setattr(sys, self.store_attr, found)
+        return found
+
+    def store(self):
+        """控え。`bind` がまだなら None（控えずに動く）。"""
+        found = getattr(sys, self.store_attr, None)
+        return found if isinstance(found, WorldStore) else None
+
+    def current_key(self, app):
+        """いまの周回の鍵。建て直しの間は立っている鍵を優先する。"""
+        override = getattr(sys, self.override_attr, None)
+        if isinstance(override, str) and override:
+            return override
+        return playthrough_key(app) if app is not None else UNKNOWN_WORLD
+
+    def bucket(self, app):
+        """`(周回の鍵, 控え)`。控えが無いか周回が分からなければ `(None, None)`。"""
+        found = self.store()
+        if found is None or app is None:
+            return None, None
+        key = self.current_key(app)
+        if not key or key == UNKNOWN_WORLD:
+            return None, None
+        return key, found.load(key)

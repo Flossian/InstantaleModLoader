@@ -22,7 +22,7 @@
 
 import sys
 
-from instantale_modloader import frames
+from instantale_modloader import frames, ui
 
 # ウィジェット木を何段まで降りるか。
 # パーティ欄は HUD より数段下に居る。
@@ -62,35 +62,14 @@ BLOCK_RECT_ATTR = "_instantale_party_block_rect"
 
 
 # ---------------------------------------------------------------- 寸法
-def numbers(value, count):
-    """`size_hint` などを素の tuple にする（Kivy の可変列を持ち歩かない）。"""
-    try:
-        return tuple(value)[:count]
-    except Exception:
-        return None
-
-
-def rect_of(widget):
-    size = numbers(frames.attr(widget, "size"), 2)
-    pos = numbers(frames.attr(widget, "pos"), 2)
-    if not size or not pos:
-        return None
-    try:
-        return (float(pos[0]), float(pos[1]), float(size[0]), float(size[1]))
-    except (TypeError, ValueError):
-        return None
+#: 寸法の読み方はローダの語彙（`113_` と共有）。
+numbers = ui.numbers
+rect_of = ui.rect_of
 
 
 def same_rect(rect, target):
-    """見た目に同じ矩形か。枠線・背景は数 px ずれて置かれていることがある。"""
-    if rect is None or target is None:
-        return False
-    slack_x = max(RECT_SLACK, target[2] * RECT_RATIO)
-    slack_y = max(RECT_SLACK, target[3] * RECT_RATIO)
-    return (abs(rect[0] - target[0]) <= slack_x
-            and abs(rect[1] - target[1]) <= slack_y
-            and abs(rect[2] - target[2]) <= slack_x * 2
-            and abs(rect[3] - target[3]) <= slack_y * 2)
+    """見た目に同じ矩形か（許容はこの MOD の `RECT_SLACK` / `RECT_RATIO`）。"""
+    return ui.same_rect(rect, target, RECT_SLACK, RECT_RATIO)
 
 
 def overlaps(rect, target):
@@ -108,9 +87,8 @@ def is_widget(obj):
     return True
 
 
-def children_of(widget):
-    children = frames.attr(widget, "children")
-    return list(children) if isinstance(children, (list, tuple)) else []
+#: 子の写し。ローダの語彙（`115_` / `124_` と同じもの）。
+children_of = ui.children_of
 
 
 # ---------------------------------------------------------------- 枠を探す

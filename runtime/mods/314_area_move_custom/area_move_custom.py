@@ -205,25 +205,9 @@ SETTING_NAMES = (
 REFUSE_TEXT = "（{name}代{price}Gに足りない ― 手持ち{gold}G）"
 
 
-class _SafeDict(dict):
-    """テンプレートに無い変数名が来ても落とさない（`{typo}` はそのまま残る）。"""
-
-    def __missing__(self, key):
-        return "{" + str(key) + "}"
-
-
-def fmt(template, **values):
-    """設定のテンプレートを埋める。壊れたテンプレートでも素の文字列で返す。
-
-    埋めた後に通貨の表記を今の表記へ直す（`130_` が差し替えていれば
-    `馬車(1000G・14日)` → `馬車(1000円・14日)`）。
-    設定のテンプレートは素のゲームの言い方（`G`）のままでよい。
-    """
-    try:
-        filled = str(template).format_map(_SafeDict(values))
-    except Exception:
-        filled = str(template)
-    return ui.rewrite_coins(filled)
+#: 設定のテンプレートを埋める（知らない変数名は残し、通貨の表記を今の表記へ直す）。
+#: ローダの語彙（`314_` / `315_` / `332_` で共有）。
+fmt = ui.fill_template
 
 
 def kind_of_mode(mode):
@@ -452,12 +436,6 @@ def apply(ctx):
             "hops": hops,
         }
 
-    def set_gold(app, value):
-        """所持金を書く。型を保つ（`901_` と同じ。float の世界に int を混ぜない）。"""
-        player = getattr(app, "player", None)
-        current = getattr(player, "gold", None)
-        player.gold = float(value) if isinstance(current, float) else int(round(value))
-
     # ============================================================ ボタンの表示
     def relabel(kind, old, hops=0):
         """新しいラベル。触らないなら None。
@@ -647,7 +625,8 @@ def apply(ctx):
             write("fare: charged {} in one deduction; gold {} -> {} (arrived={})"
                   .format(int(fare), before, after, arrived))
         elif after == prepaid:
-            set_gold(app, before)
+            ui.set_gold(app, before,
+                        on_error=lambda msg: write("WARN fare: " + msg))
             write("fare: the game did not charge; gold back to {} (arrived={})"
                   .format(before, arrived))
         else:
@@ -694,12 +673,14 @@ def apply(ctx):
             try:
                 pre = window["gold_before"] + window["game_price"] \
                     - int(window["fare"])
-                set_gold(app, pre)
-                window["prepaid"] = pre
-                write("fare: gold {} -> {} before the game charges {} "
-                      "(ours is {}; one deduction, no refund)".format(
-                          window["gold_before"], pre, window["game_price"],
-                          int(window["fare"])))
+                if ui.set_gold(app, pre) is None:
+                    write("WARN fare: cannot write the gold; not pre-adjusted")
+                else:
+                    window["prepaid"] = pre
+                    write("fare: gold {} -> {} before the game charges {} "
+                          "(ours is {}; one deduction, no refund)".format(
+                              window["gold_before"], pre, window["game_price"],
+                              int(window["fare"])))
             except Exception:
                 ctx.log_exc("area move custom: cannot pre-adjust the fare")
         try:

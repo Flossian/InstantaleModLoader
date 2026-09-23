@@ -267,25 +267,9 @@ SETTING_NAMES = ("TRAINING_PRICE", "COURSE_YEARS", "BASE_PERIOD",
                  "PERIOD_WORDING", "LLM_PERIOD_WORDING", "REFUSE_TEXT")
 
 
-class _SafeDict(dict):
-    """テンプレートに無い変数名が来ても落とさない（`{typo}` はそのまま残る）。"""
-
-    def __missing__(self, key):
-        return "{" + str(key) + "}"
-
-
-def fmt(template, **values):
-    """設定のテンプレートを埋める。壊れたテンプレートでも素の文字列で返す。
-
-    埋めた後に通貨の表記を今の表記へ直す（`130_` が差し替えていれば
-    `訓練を受ける(500G)` → `訓練を受ける(500円)`）。
-    設定のテンプレートは素のゲームの言い方（`G`）のままでよい。
-    """
-    try:
-        filled = str(template).format_map(_SafeDict(values))
-    except Exception:
-        filled = str(template)
-    return ui.rewrite_coins(filled)
+#: 設定のテンプレートを埋める（知らない変数名は残し、通貨の表記を今の表記へ直す）。
+#: ローダの語彙（`314_` / `315_` / `332_` で共有）。
+fmt = ui.fill_template
 
 
 def phase_years(label):
@@ -593,12 +577,6 @@ def apply(ctx):
 
     durations.declare(durations.TRAINING, training_for, owner=owner, write=write)
 
-    def set_gold(app, value):
-        """所持金を書く。型を保つ（float の世界に int を混ぜない）。"""
-        player = getattr(app, "player", None)
-        current = getattr(player, "gold", None)
-        player.gold = float(value) if isinstance(current, float) else int(round(value))
-
     # ============================================================ ボタンの表示
     def relabel_start(old, entry=None):
         """訓練を受けるボタンの新しいラベル。触らないなら None。
@@ -747,7 +725,8 @@ def apply(ctx):
             write("price: nothing was charged (gold {}); the training did not "
                   "start".format(before))
         elif moved == game:
-            set_gold(app, before - want)
+            ui.set_gold(app, before - want,
+                        on_error=lambda msg: write("WARN price: " + msg))
             write("WARN price: the game charged its own {} instead of {}; "
                   "gold {} -> {} (corrected)".format(
                       game, want, after, before - want))

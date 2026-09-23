@@ -136,6 +136,16 @@ try:
     with io.open(target, encoding="utf-8") as fh:
         check("読み返せる", json.load(fh) == {"a": 1})
     check("tmp を残さない", not os.path.exists(target + ".tmp"))
+    check("read_json で読み返せる", modtool.read_json(target) == {"a": 1})
+    check("無いファイルは空の辞書", modtool.read_json(os.path.join(tmp, "none.json")) == {})
+    broken = os.path.join(tmp, "broken.json")
+    with io.open(broken, "w", encoding="utf-8") as fh:
+        fh.write("{not json")
+    listed = os.path.join(tmp, "listed.json")
+    with io.open(listed, "w", encoding="utf-8") as fh:
+        fh.write("[1, 2]")
+    check("壊れたファイルも辞書でないものも空の辞書",
+          modtool.read_json(broken) == {} and modtool.read_json(listed) == {})
 
     print("[窓の記憶]")
     import tkinter as tk

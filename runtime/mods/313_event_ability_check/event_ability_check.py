@@ -127,7 +127,7 @@ VERIFICATION_LOG.md §2.37。
 import math
 import time
 
-from instantale_modloader import llm, ui
+from instantale_modloader import frames, llm, ui
 
 LOG_BASENAME = "event_roll.log"
 
@@ -272,21 +272,6 @@ def _set(container, name, value):
         return current == value and isinstance(current, type(value))
     except Exception:
         return False
-
-
-def arg_of(args, kwargs, names, name):
-    """位置引数・キーワード引数のどちらで来ても読む。無ければ None。
-
-    呼び出し側はコンパイル済みで読めないので、
-    どちらの渡し方かを決め打ちできない（`103_fix_eventlog_trim` と同じ理由）。
-    """
-    if name in kwargs:
-        return kwargs[name]
-    try:
-        index = names.index(name)
-    except ValueError:
-        return None
-    return args[index] if len(args) > index else None
 
 
 def score_of(character, attribute, source=None):
@@ -557,14 +542,14 @@ def apply(ctx):
             try:
                 if FREE_ACTION_MODE == "off":
                     return result
-                player = arg_of(args, kwargs, names, "player")
+                player = frames.arg(args, kwargs, "player", names)
                 if player is None:
                     player = getattr(ui.find_app(), "player", None)
-                action = arg_of(args, kwargs, names, "choice_text")
+                action = frames.arg(args, kwargs, "choice_text", names)
                 if not isinstance(action, str):
                     # 会話からの経路には行動文が無い。
                     # 会話ログの末尾を使う。
-                    log = arg_of(args, kwargs, names, "conversation_log")
+                    log = frames.arg(args, kwargs, "conversation_log", names)
                     action = log[-INFER_TEXT_MAX:] if isinstance(log, str) else ""
                 adjust_rolls(name, result, player, action)
             except Exception:
@@ -588,7 +573,7 @@ def apply(ctx):
             if not isinstance(credibility, (int, float)):
                 return result
 
-            player = arg_of(args, kwargs, EVAL_ARGS, "player")
+            player = frames.arg(args, kwargs, "player", EVAL_ARGS)
             if player is None:
                 player = getattr(ui.find_app(), "player", None)
             score = score_of(player, attribute)

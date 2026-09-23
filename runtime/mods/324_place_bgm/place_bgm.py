@@ -95,7 +95,7 @@ import os
 import random
 import sys
 
-from instantale_modloader import ui
+from instantale_modloader import sounds, ui
 from instantale_modloader.state import WorldStore, world_key
 
 # GUI から変えられる値。mod.json の "settings" と同じ名前・同じ既定値。
@@ -112,9 +112,8 @@ STATE_SUBDIR = ("musics", "place")
 WORLDS_DIRNAME = "musics/place/worlds"      # `state/` からの相対。世界ごとの控え（個別指定と覚えた曲）
 ASSET_SUBDIR = ("Assets", "sounds", "musics")
 MUSIC_DIR_MARK = "/musics/"
-BATTLE_DIR_MARK = "/musics/battle/"
 BATTLE_FOLDER = "battle"
-EXTENSIONS = (".mp3", ".ogg", ".wav")
+EXTENSIONS = sounds.EXTENSIONS          # 曲の見分け方はローダの語彙（`sounds`）
 
 # 施設の段を持つ `facility_type`（GAME.md §2.7 の実在する型から通路を除いたもの。
 # `training_facility` と `free` は実セーブと §2.21 にある）。
@@ -167,29 +166,9 @@ _rng = random.Random()
 
 
 # --------------------------------------------------------------- 純関数
-def is_battle_track(src):
-    """ゲームが渡してきたパスが戦闘曲か。`106_` / `322_` と同じ判定。"""
-    if not isinstance(src, str) or not src:
-        return False
-    return BATTLE_DIR_MARK in ("/" + src.replace("\\", "/").lstrip("/")).lower()
-
-
-def game_root():
-    """ゲーム本体のフォルダ。`Assets/sounds/musics` が在る場所を探す（`322_` と同じ順）。"""
-    seen = []
-    for get in (os.getcwd,
-                lambda: os.path.dirname(os.path.abspath(sys.executable)),
-                lambda: sys.prefix):
-        try:
-            base = get()
-        except Exception:
-            continue
-        if not base or base in seen:
-            continue
-        seen.append(base)
-        if os.path.isdir(os.path.join(base, *ASSET_SUBDIR)):
-            return base
-    return None
+#: 戦闘曲の判定と重みの読み方はローダ（`sounds`）。`106_` / `322_` と同じもの。
+is_battle_track = sounds.is_battle_track
+coerce_weight = sounds.coerce_weight
 
 
 def list_tracks(folder):
@@ -223,18 +202,6 @@ def scan_tracks(asset_dir, state_dir):
             found[key] = (path, where)
     return found
 
-
-def coerce_weight(value):
-    """重みを 0 以上の数にする。読めない値は 0。"""
-    if isinstance(value, bool):
-        return 100.0 if value else 0.0
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return 0.0
-    if number != number or number < 0:      # NaN / 負
-        return 0.0
-    return number
 
 
 def candidates(playlist, found):
@@ -532,7 +499,7 @@ def apply(ctx):
     # 置き場所は apply() の中で確定させておく（`ctx` の値はここでしか当てにならない）。
     playlist_path = ctx.state_path(*(STATE_SUBDIR + (PLAYLIST_NAME,)))
     state_dir = os.path.dirname(playlist_path)
-    root = game_root()
+    root = sounds.game_root(ASSET_SUBDIR)
     asset_dir = os.path.join(root, *ASSET_SUBDIR) if root else None
     if asset_dir is None:
         ctx.log("place bgm: Assets/sounds/musics not found; "
@@ -591,12 +558,6 @@ def apply(ctx):
         if any(getattr(app, flag, False) for flag in BATTLE_FLAGS):
             return True
         return is_battle_track(store.get("current_src"))
-
-    def audible(sound):
-        try:
-            return sound is not None and sound.get_num_channels() > 0
-        except Exception:
-            return False
 
     def world_bucket(info):
         """世界ファイル。設定画面が書き換えていれば読み直す（更新時刻で見る）。"""
@@ -732,7 +693,7 @@ def apply(ctx):
         app = app or ui.find_app()
         if app is None or in_battle(app):
             return
-        if not audible(getattr(app, "music", None)):
+        if not sounds.audible(getattr(app, "music", None)):
             return                  # 何も鳴っていない ＝ ゲームが切り替えの最中か題名画面。ゲームの play に任せる
         info = context_of(app)
         store["last_ctx"] = context_key(info)

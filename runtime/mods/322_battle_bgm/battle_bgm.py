@@ -77,8 +77,9 @@
 
 import os
 import random
-import sys
 import time
+
+from instantale_modloader import sounds
 
 # GUI から変えられる値。mod.json の "settings" と同じ名前・同じ既定値。
 DEFAULT_WEIGHT = 100     # 設定画面で「使う」に入れたときの重み（本体は読まない。宣言と既定値を揃えるためにある）
@@ -90,8 +91,7 @@ LOG_TAG = "[BGMPICK]"
 PLAYLIST_NAME = "playlist.json"
 STATE_SUBDIR = ("musics", "battle")
 ASSET_SUBDIR = ("Assets", "sounds", "musics", "battle")
-BATTLE_DIR_MARK = "/musics/battle/"
-EXTENSIONS = (".mp3", ".ogg", ".wav")
+EXTENSIONS = sounds.EXTENSIONS          # 曲の見分け方はローダの語彙（`sounds`）
 
 CATEGORY_NORMAL = "normal"
 CATEGORY_BOSS = "boss"
@@ -117,29 +117,9 @@ _rng = random.Random()
 
 
 # --------------------------------------------------------------- 純関数
-def is_battle_track(src):
-    """ゲームが渡してきたパスが戦闘曲か。`106_` と同じ判定。"""
-    if not isinstance(src, str) or not src:
-        return False
-    return BATTLE_DIR_MARK in ("/" + src.replace("\\", "/").lstrip("/")).lower()
-
-
-def game_root():
-    """ゲーム本体のフォルダ。`Assets/sounds/musics/battle` が在る場所を探す（`104_` と同じ順）。"""
-    seen = []
-    for get in (os.getcwd,
-                lambda: os.path.dirname(os.path.abspath(sys.executable)),
-                lambda: sys.prefix):
-        try:
-            base = get()
-        except Exception:
-            continue
-        if not base or base in seen:
-            continue
-        seen.append(base)
-        if os.path.isdir(os.path.join(base, *ASSET_SUBDIR)):
-            return base
-    return None
+#: 戦闘曲の判定と重みの読み方はローダ（`sounds`）。`106_` / `324_` と同じもの。
+is_battle_track = sounds.is_battle_track
+coerce_weight = sounds.coerce_weight
 
 
 def list_tracks(folder):
@@ -163,18 +143,6 @@ def scan_tracks(asset_dir, state_dir):
             found[name] = (os.path.join(folder, name), where)
     return found
 
-
-def coerce_weight(value):
-    """重みを 0 以上の数にする。読めない値は 0。"""
-    if isinstance(value, bool):
-        return 100.0 if value else 0.0
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return 0.0
-    if number != number or number < 0:      # NaN / 負
-        return 0.0
-    return number
 
 
 def weight_of(entry, category):
@@ -293,7 +261,7 @@ def apply(ctx):
     # `state_path()` は親フォルダを作るので、曲を置く場所も同時にできる。
     playlist_path = ctx.state_path(*(STATE_SUBDIR + (PLAYLIST_NAME,)))
     state_dir = os.path.dirname(playlist_path)
-    root = game_root()
+    root = sounds.game_root(ASSET_SUBDIR)
     asset_dir = os.path.join(root, *ASSET_SUBDIR) if root else None
     if asset_dir is None:
         ctx.log("battle bgm: Assets/sounds/musics/battle not found; "

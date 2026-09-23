@@ -278,7 +278,7 @@ def apply(ctx):
             restore(app, "not wanted")
             return
         area_name, _entry, wanted, price = found
-        gold = record.gold_of(getattr(app, "player", None))
+        gold = ui.gold_of(app)
 
         state["saved"] = [item for item in (getattr(app, "buttons", None) or [])
                           if not screen.mark_of(item)]
@@ -320,8 +320,7 @@ def apply(ctx):
             restore(app, "not wanted")
             return
         area_name, entry, wanted, price = found
-        player = getattr(app, "player", None)
-        gold = record.gold_of(player)
+        gold = ui.gold_of(app)
 
         if gold is None:
             # 所持金が読めないなら払わせない。
@@ -347,7 +346,7 @@ def apply(ctx):
             screen.say(app, FAILED_TEXT)
             restore(app, "cannot write lawfulness")
             return
-        if price > 0 and not record.set_gold(player, gold - price):
+        if price > 0 and ui.set_gold(app, gold - price) is None:
             # 金を取れなかったので手配度も戻す。
             # 片方だけ通さない。
             record.set_lawfulness(entry, before)

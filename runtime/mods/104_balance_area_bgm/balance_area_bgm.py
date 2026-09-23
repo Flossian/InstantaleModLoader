@@ -76,8 +76,8 @@ JDSherbert のアンビエント）を指しているエリア。
 
 import os
 import random
-import sys
 
+from instantale_modloader import frames, sounds
 from instantale_modloader.state import world_key_of_dict
 
 MUSIC_MARKER = "assets/sounds/musics"
@@ -204,27 +204,9 @@ def is_special(area):
 # ディスク上にある曲の一覧（プール）
 # --------------------------------------------------------------------------
 def music_root():
-    """Assets/sounds/musics の場所を探す。
-
-    リコンの結果ではゲームプロセスのカレントディレクトリがゲーム本体のフォルダになっていたので、
-    まずそこを見る。
-    """
-    seen = []
-    # カレントディレクトリ → 実行ファイルのある場所 → sys.prefix の順で試す。
-    for get in (os.getcwd,
-                lambda: os.path.dirname(os.path.abspath(sys.executable)),
-                lambda: sys.prefix):
-        try:
-            base = get()
-        except Exception:
-            continue
-        if not base or base in seen:
-            continue
-        seen.append(base)
-        candidate = os.path.join(base, "Assets", "sounds", "musics")
-        if os.path.isdir(candidate):
-            return candidate
-    return None
+    """Assets/sounds/musics の場所。無ければ None（探し方はローダの `sounds.game_root`）。"""
+    base = sounds.game_root(sounds.MUSIC_SUBDIR)
+    return os.path.join(base, *sounds.MUSIC_SUBDIR) if base else None
 
 
 def scan_pool(root):
@@ -510,14 +492,8 @@ def apply(ctx):
     # 呼び出し側はコンパイル済みなので、
     # 引数が位置で渡されるのかキーワードで渡されるのかを知る方法が無い。
     # そこで各ラッパは *args/**kwargs をそのまま元の関数へ渡し、
-    # 自分に必要な値だけを「名前か位置」で取り出す。見つからなければ何もせず、
-    # 呼び出し自体は通常どおり通す。
-    def arg_at(args, kwargs, index, name):
-        if name in kwargs:
-            return kwargs[name]
-        if len(args) > index:
-            return args[index]
-        return None
+    # 自分に必要な値だけを「名前か位置」で取り出す（`frames.arg`）。
+    # 見つからなければ何もせず、呼び出し自体は通常どおり通す。
 
     @ctx.wrap("save_area_json:write_area_data_to_world_dict", required=False)
     def write_area_data_to_world_dict(orig, *args, **kwargs):
@@ -525,8 +501,8 @@ def apply(ctx):
         # bgm が書き込まれた後でないと選び直せない。
         result = orig(*args, **kwargs)
         try:
-            world_dict = arg_at(args, kwargs, 0, "world_dict")
-            area_id = arg_at(args, kwargs, 1, "area_id")
+            world_dict = frames.arg(args, kwargs, "world_dict", 0)
+            area_id = frames.arg(args, kwargs, "area_id", 1)
             if world_dict is not None and area_id is not None:
                 handle_named_area("write_area_data_to_world_dict", world_dict, area_id)
         except Exception:
@@ -539,9 +515,9 @@ def apply(ctx):
     def generate_quest_area(orig, *args, **kwargs):
         result = orig(*args, **kwargs)
         try:
-            world_dict = arg_at(args, kwargs, 0, "world_dict")
+            world_dict = frames.arg(args, kwargs, "world_dict", 0)
             # この関数だけはエリア id が3番目の引数（next_area_id）にある。
-            area_id = arg_at(args, kwargs, 2, "next_area_id")
+            area_id = frames.arg(args, kwargs, "next_area_id", 2)
             if world_dict is not None and area_id is not None:
                 handle_named_area("generate_quest_area", world_dict, area_id)
         except Exception:
@@ -553,7 +529,7 @@ def apply(ctx):
         # こちらは書き込みの前に選び直す。
         # ディスクに出る内容そのものを直したいため。
         try:
-            data = arg_at(args, kwargs, 1, "data")
+            data = frames.arg(args, kwargs, "data", 1)
             if data is not None:
                 handle_world("write_obfuscated_json_file", data)
         except Exception:

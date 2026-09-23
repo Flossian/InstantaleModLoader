@@ -200,9 +200,7 @@ def apply(ctx):
 
     schedule = ui.scheduler(ctx, "item list")
 
-    def children_of(widget):
-        children = frames.attr(widget, "children")
-        return list(children) if isinstance(children, (list, tuple)) else []
+    children_of = ui.children_of
 
     def parent_of(widget):
         parent = frames.attr(widget, "parent")
@@ -305,27 +303,18 @@ def apply(ctx):
         top = max(size_of(row, "y", 0.0) + size_of(row, "height", 0.0) for row in rows)
         return bottom, top
 
-    def walk(widget, depth, seen, out):
-        if id(widget) in seen:
-            return
-        seen.add(id(widget))
-        out.append(widget)
-        if depth >= MAX_DEPTH:
-            return
-        for child in children_of(widget):
-            walk(child, depth + 1, seen, out)
-
     def tree(hud):
         """一覧が出てきうる場所すべて（HUD の下と、窓に直付けされたもの）。"""
         found, seen = [], set()
         try:
-            walk(hud, 0, seen, found)
+            found.extend(ui.walk_widgets(hud, MAX_DEPTH, seen))
         except Exception:
             ctx.log_exc("item list: walking the HUD failed")
         try:
             from kivy.core.window import Window
             for child in children_of(Window):
-                walk(child, 1, seen, found)
+                # 窓の直下は深さ 1 から数える（HUD と同じ上限に揃える）
+                found.extend(ui.walk_widgets(child, MAX_DEPTH - 1, seen))
         except Exception:
             pass              # 窓を持たない環境（オフライン検証）ではここは無い
         return found

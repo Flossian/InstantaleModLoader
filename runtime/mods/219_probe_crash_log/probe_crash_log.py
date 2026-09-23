@@ -124,18 +124,6 @@ class _DatetimeShim(object):
 _SHIM = _DatetimeShim()
 
 
-def _arg(args, kwargs, name, index):
-    """引数を1つ拾う。キーワードを先に見て、無ければ位置で拾う。
-
-    位置は版で動きうるので、名前で当たるならそちらを採る。
-    """
-    if name in kwargs:
-        return kwargs[name]
-    if len(args) > index:
-        return args[index]
-    return None
-
-
 def _chain_length(exc_value):
     """`__cause__` / `__context__` を辿った例外の数。輪になっていても止まる。"""
     count = 0
@@ -226,8 +214,8 @@ def apply(ctx):
             # 記録の失敗でクラッシュ処理を巻き込まない。
             # 控えは全部 try で囲み、失敗してもログに残すだけにする。
             try:
-                exc_value = _arg(args, kwargs, "exc_value", 1)
-                title = _arg(args, kwargs, "title", 3)
+                exc_value = frames.arg(args, kwargs, "exc_value", 1)
+                title = frames.arg(args, kwargs, "title", 3)
                 route, ours = _route()
                 state["calls"] += 1
                 write("--- make_crash_log #{} ---".format(state["calls"]))
@@ -235,7 +223,7 @@ def apply(ctx):
                 write("  title    = {} {}".format(
                     type(title).__name__, frames.short(repr(title), SNIP)))
                 write("  exc      = {} chain={}".format(
-                    getattr(_arg(args, kwargs, "exc_type", 0), "__name__", "?"),
+                    getattr(frames.arg(args, kwargs, "exc_type", 0), "__name__", "?"),
                     _chain_length(exc_value)))
                 bound = getattr(main, "datetime", None)
                 loaded = sys.modules.get("datetime")
@@ -314,7 +302,7 @@ def apply(ctx):
         @ctx.wrap("__main__:write_crash_log_to_file", required=False)
         def write_crash_log_to_file(orig, *args, **kwargs):
             try:
-                text = _arg(args, kwargs, "crash_log", 0)
+                text = frames.arg(args, kwargs, "crash_log", 0)
                 write("  -> write_crash_log_to_file: {} chars".format(
                     len(text) if isinstance(text, str) else -1))
             except Exception:
@@ -336,7 +324,7 @@ def apply(ctx):
             # 送るか止めるかを決めるのはこの probe ではない
             # （`001_crash_recorder` が注入中は止める）。
             try:
-                text = _arg(args, kwargs, "crash_log", 0)
+                text = frames.arg(args, kwargs, "crash_log", 0)
                 write("  -> send_crash_log_to_server: {} chars "
                       "(送るかどうかは下の層が決める)".format(
                           len(text) if isinstance(text, str) else -1))

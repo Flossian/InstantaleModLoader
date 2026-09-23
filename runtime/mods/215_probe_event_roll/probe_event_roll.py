@@ -121,21 +121,6 @@ def shape_of(value):
     return "{}({})".format(type(value).__name__, ", ".join(fields))
 
 
-def arg_of(args, kwargs, names, name):
-    """位置引数・キーワード引数のどちらで来ても読む。無ければ None。
-
-    呼び出し側はコンパイル済みで読めないので、
-    どちらの渡し方かを決め打ちできない（`103_fix_eventlog_trim` と同じ理由）。
-    """
-    if name in kwargs:
-        return kwargs[name]
-    try:
-        index = names.index(name)
-    except ValueError:
-        return None
-    return args[index] if len(args) > index else None
-
-
 def last_mark(text):
     """`quest_event_log` の末尾にある判定の印を読む。`(確率, 結果)` か `None`。"""
     if not isinstance(text, str):
@@ -256,7 +241,7 @@ def apply(ctx):
 
     def player_of(args, kwargs, names):
         """引数のプレイヤーを使い、取れなければ app から拾う。"""
-        found = arg_of(args, kwargs, names, "player")
+        found = frames.arg(args, kwargs, "player", names)
         if found is not None:
             return found, "arg"
         app = ui.find_app()
@@ -286,10 +271,10 @@ def apply(ctx):
                 "credibility": credibility,
                 "reference_attribute": _get(result_type, "reference_attribute"),
                 "event": frames.repr_value(_get(
-                    arg_of(args, kwargs, EVAL_ARGS, "triggered_event"), "event_name")),
-                "event_turn": arg_of(args, kwargs, EVAL_ARGS, "event_turn"),
+                    frames.arg(args, kwargs, "triggered_event", EVAL_ARGS), "event_name")),
+                "event_turn": frames.arg(args, kwargs, "event_turn", EVAL_ARGS),
                 "player_action": frames.repr_value(
-                    arg_of(args, kwargs, EVAL_ARGS, "player_action")),
+                    frames.arg(args, kwargs, "player_action", EVAL_ARGS)),
                 "player_via": via,
                 "player": snap(player),
             }
@@ -315,9 +300,9 @@ def apply(ctx):
               required=False, safe=True)
     def resolve(orig, *args, **kwargs):
         try:
-            event_log = arg_of(args, kwargs, RESOLVE_ARGS, "quest_event_log")
+            event_log = frames.arg(args, kwargs, "quest_event_log", RESOLVE_ARGS)
             mark = last_mark(event_log)
-            outcome = arg_of(args, kwargs, RESOLVE_ARGS, "outcome")
+            outcome = frames.arg(args, kwargs, "outcome", RESOLVE_ARGS)
             player, via = player_of(args, kwargs, RESOLVE_ARGS)
             before = state.get("pending") or {}
             credibility = before.get("credibility")
@@ -333,7 +318,7 @@ def apply(ctx):
                 "reference_attribute": before.get("reference_attribute"),
                 "ceiling": ceiling,
                 "gap": (percent - ceiling) if (percent is not None and ceiling is not None) else None,
-                "event_turn": arg_of(args, kwargs, RESOLVE_ARGS, "event_turn"),
+                "event_turn": frames.arg(args, kwargs, "event_turn", RESOLVE_ARGS),
                 "player_via": via,
                 "player_before": before.get("player"),
                 "player_now": snap(player),

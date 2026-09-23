@@ -37,16 +37,8 @@ r"""保管庫。預けた品を控えに落とし、開くたびに作り直す�
 持ち物の実体（`inventory` の辞書）・`Item.id`・`Item.obtainer` はこちらで揃える。
 """
 
-import sys
-
 from instantale_modloader import frames, items
 
-
-#: セーブの持ち物1件の項目と並び（実セーブ。GAME.md §2.13）。
-#: 並びを保つのは、控えがそのままセーブと見比べられる形であってほしいから。
-ITEM_FIELDS = ("name", "item_type", "attributes", "description", "value", "rarity",
-               "skill", "upgrade_level", "width_slots", "height_slots", "image_src",
-               "grid_pos")
 
 #: ゲームに無い場面名。本体の売買処理をこの窓に掛けないための札（`402_` と同じ）。
 SITUATION = "real_estate_storage"
@@ -59,10 +51,8 @@ ABILITY_KEYS = ("strength", "dexterity", "constitution", "intelligence", "wisdom
                 "charisma")
 
 
-def character_class():
-    """`scripts.characters.Character`。引けなければ None。"""
-    module = sys.modules.get("scripts.characters")
-    return getattr(module, "Character", None) if module is not None else None
+#: `scripts.characters.Character`。引けなければ None（ローダの `items` と同じもの）。
+character_class = items.character_class
 
 
 def inventory_dict(owner):
@@ -71,31 +61,6 @@ def inventory_dict(owner):
     形の話はローダに寄せた（`instantale_modloader.items`。`modnpc` も同じものを使う）。
     """
     return items.inventory_of(owner)
-
-
-def _plain(value):
-    """控えに入れてよい値か。JSON に落ちるものだけを通す。"""
-    if value is None or isinstance(value, (bool, int, float, str)):
-        return True
-    if isinstance(value, (list, tuple)):
-        return all(_plain(v) for v in value)
-    if isinstance(value, dict):
-        return all(isinstance(k, str) and _plain(v) for k, v in value.items())
-    return False
-
-
-def _size_of(item, index):
-    """幅・高さ。`width_slots` / `height_slots` が無ければ `size` から読む。"""
-    name = ("width_slots", "height_slots")[index]
-    value = getattr(item, name, None)
-    if isinstance(value, int) and not isinstance(value, bool):
-        return value
-    size = getattr(item, "size", None)
-    if isinstance(size, (list, tuple)) and len(size) > index:
-        value = size[index]
-        if isinstance(value, int) and not isinstance(value, bool):
-            return value
-    return 1
 
 
 def item_to_dict(item):

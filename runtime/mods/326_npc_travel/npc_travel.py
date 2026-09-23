@@ -894,14 +894,6 @@ def apply(ctx):
                 found.add(str(args[0]))
         return found
 
-    def back_button_index(buttons):
-        """ゲーム側の「やめる」の位置。無ければ None（＝一覧ではない）。`320_` と同じ。"""
-        for index, entry in enumerate(buttons):
-            if (ui.spec_cls_name(entry) == ui.SAFE_CLS
-                    and not screen.marked_by_a_mod(entry)):
-                return index
-        return None
-
     def list_label(app, npc_id, trip):
         name = ui.character_name(app, npc_id, fallback=trip.get("name") or npc_id)
         where = where_text(app, trip["dest_area"], trip["dest_facility"])
@@ -931,7 +923,7 @@ def apply(ctx):
         if any(name in OTHER_SCREEN_SPECS for name in names):
             listing["armed"] = False
             return
-        at = back_button_index(buttons)
+        at = screen.back_button_index(buttons)
         if at is None:
             return                      # 「やめる」が無い＝一覧が組み上がっていない
         area = ui.current_area(app)

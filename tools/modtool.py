@@ -100,15 +100,9 @@ def locate(mod_dir):
     if not game_dir:
         # 直接起動（`python runtime/mods/322_battle_bgm/tool.py`）では環境変数が無い。
         # 設定画面が覚えているゲームの場所を借りると、そのときも曲や絵が見える。
-        # `AttributeError` も捕るのは、`gui.json` が配列だったときに
-        # `.get` が無くて落ちるため（壊れた設定で道具が開かないのは割に合わない）。
-        try:
-            with io.open(gui_config_path(root), encoding="utf-8") as fh:
-                game_path = json.load(fh).get("game_path") or ""
-            if game_path:
-                game_dir = os.path.dirname(game_path)
-        except (OSError, ValueError, AttributeError):
-            game_dir = ""
+        # `gui.json` が配列でも `read_json` が空の辞書にするので、壊れた設定で道具が開かないことはない。
+        game_path = read_json(gui_config_path(root)).get("game_path") or ""
+        game_dir = os.path.dirname(game_path) if isinstance(game_path, str) and game_path else ""
     return root, state_dir, game_dir
 
 
@@ -199,12 +193,7 @@ def world_name(save, fallback="", root="", mod_dir=""):
 # ----------------------------------------------------------------- 宣言と設定
 def manifest(mod_dir):
     """`mod.json`。読めなければ `{}`。"""
-    try:
-        with io.open(os.path.join(mod_dir, "mod.json"), encoding="utf-8") as fh:
-            data = json.load(fh)
-        return data if isinstance(data, dict) else {}
-    except (OSError, ValueError):
-        return {}
+    return read_json(os.path.join(mod_dir, "mod.json"))
 
 
 def decls(mod_dir, root=""):
@@ -321,6 +310,21 @@ def coerce_all(mod_dir, raw, root=""):
 
 
 # ----------------------------------------------------------------- 書き込み
+def read_json(path):
+    """ファイル全体（辞書）。無い・読めない・辞書でないときは空の辞書。
+
+    `write_json` の対。設定画面が控えや `gui.json` を読む形はどれもこれだった
+    （`322_` の `load_playlist` と `324_` の `load_json` は同じ本体の写し）。
+    壊れたファイルで道具が開かないより、空から始めるほうがよい。
+    """
+    try:
+        with io.open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def write_json(root, path, data, indent=1):
     """ローダの `write_json`（tmp → fsync → replace）で書く。
 
@@ -356,13 +360,9 @@ def write_json(root, path, data, indent=1):
 # ----------------------------------------------------------------- 窓の記憶
 def load_window(root, mod_dir):
     """前回の窓の大きさと位置。`{"geometry": "WxH+X+Y", "maximized": bool}`。無ければ空。"""
-    try:
-        with io.open(gui_config_path(root), encoding="utf-8") as fh:
-            cfg = json.load(fh)
-        entry = (cfg.get(WINDOW_KEY) or {}).get(mod_name(mod_dir)) or {}
-        return entry if isinstance(entry, dict) else {}
-    except (OSError, ValueError, AttributeError):
-        return {}
+    windows = read_json(gui_config_path(root)).get(WINDOW_KEY)
+    entry = windows.get(mod_name(mod_dir)) if isinstance(windows, dict) else None
+    return entry if isinstance(entry, dict) else {}
 
 
 def save_window(root, mod_dir, window):
@@ -394,15 +394,9 @@ def save_window(root, mod_dir, window):
         path = gui_config_path(root)
         # `gui.json` はローダの設定画面と共有している。
         # 丸ごと書くと `game_path` やローダ自身の窓の記憶を消すので、読んでから足す。
-        try:
-            with io.open(path, encoding="utf-8") as fh:
-                cfg = json.load(fh)
-        except (OSError, ValueError):
-            cfg = {}
-        # 辞書でなければ捨てて作り直す。壊れた `gui.json` のせいで
+        # 辞書でなければ捨てて作り直す（`read_json` が空にする）。壊れた `gui.json` のせいで
         # 以降ずっと窓を覚えられないより、1回分の覚えを失うほうがよい。
-        if not isinstance(cfg, dict):
-            cfg = {}
+        cfg = read_json(path)
         windows = cfg.get(WINDOW_KEY)
         if not isinstance(windows, dict):
             windows = {}

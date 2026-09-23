@@ -991,49 +991,13 @@ STATE_DIRNAME = "modnpc"
 _KEY_OVERRIDE_ATTR = "_instantale_modnpc_key_override"
 
 
-def bind_store(ctx, write=None):
-    """控えを今の世代の `ctx` に繋ぐ（`install` が毎回呼ぶ）。"""
-    found = getattr(sys, STORE_ATTR, None)
-    if isinstance(found, state.WorldStore):
-        return found.rebind(ctx, write)
-    found = state.WorldStore(ctx, STATE_DIRNAME, write=write)
-    setattr(sys, STORE_ATTR, found)
-    return found
-
-
-def store():
-    """控え。`install` がまだなら None（控えずに動く）。"""
-    found = getattr(sys, STORE_ATTR, None)
-    return found if isinstance(found, state.WorldStore) else None
-
-
-def _current_key(app):
-    override = getattr(sys, _KEY_OVERRIDE_ATTR, None)
-    if isinstance(override, str) and override:
-        return override
-    return state.playthrough_key(app) if app is not None else state.UNKNOWN_WORLD
-
-
-def _bucket(app):
-    """`(世界の鍵, 控え)`。控えが無いか世界が分からなければ `(None, None)`。"""
-    found = store()
-    if found is None or app is None:
-        return None, None
-    key = _current_key(app)
-    if not key or key == state.UNKNOWN_WORLD:
-        return None, None
-    return key, found.load(key)
-
-
-def _jsonable(value):
-    """控えに入れてよい値か。JSON に落ちるものだけ（実行時のオブジェクトは控えない）。"""
-    if value is None or isinstance(value, (bool, int, float, str)):
-        return True
-    if isinstance(value, (list, tuple)):
-        return all(_jsonable(v) for v in value)
-    if isinstance(value, dict):
-        return all(isinstance(k, str) and _jsonable(v) for k, v in value.items())
-    return False
+#: 繋ぎ方は `modnpc` / `modfacility` で同じなので `state` に1つ（違うのは上の3つの名前だけ）。
+_stores = state.SysWorldStore(STORE_ATTR, STATE_DIRNAME, _KEY_OVERRIDE_ATTR)
+bind_store = _stores.bind           # 控えを今の世代の `ctx` に繋ぐ（`install` が毎回呼ぶ）
+store = _stores.store               # 控え。`install` がまだなら None（控えずに動く）
+_current_key = _stores.current_key
+_bucket = _stores.bucket            # `(周回の鍵, 控え)` か `(None, None)`
+_jsonable = state.jsonable
 
 
 def _persist(app, owner, npc_id, **changes):

@@ -21,7 +21,8 @@
 
 手配度の**読み方**はローダ（`instantale_modloader.ui`）に移した。
 同じ読み方を要る MOD が3本になったため（TECH.md §3.2.3）。
-ここに残っているのは書き戻す側と所持金。
+所持金の読み書きもローダ（`ui.gold_of` / `set_gold`）。
+ここに残っているのは手配度を書き戻す側。
 """
 
 from instantale_modloader import ui
@@ -36,23 +37,6 @@ area_history_of = ui.area_history_of
 history_entry = ui.area_record
 lawfulness_of = ui.lawfulness_of
 set_lawfulness = ui.set_lawfulness
-
-
-def gold_of(player):
-    """所持金。読めなければ `None`。"""
-    value = getattr(player, "gold", None)
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    return int(value)
-
-
-def set_gold(player, value):
-    """所持金を書き戻す。書けたら `True`。"""
-    try:
-        player.gold = int(value)
-    except Exception:
-        return False
-    return True
 
 
 def current_facility(app):

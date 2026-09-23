@@ -50,13 +50,9 @@ pygame に直接聞く。
 import sys
 import time
 
-from instantale_modloader import ui
+from instantale_modloader import sounds, ui
 
 LOG_BASENAME = "battle_bgm.log"      # 207_ の計測と同じログに時系列で並べる
-
-# 戦闘曲かどうかの判定。
-# Assets/sounds/musics/battle/ 配下だけが戦闘曲。
-BATTLE_DIR_MARK = "/musics/battle/"
 
 # 戦闘終了を検知してから実際に見に行くまでの猶予（秒）。
 RESTORE_DELAY = 2.5
@@ -105,17 +101,10 @@ def apply(ctx):
         parts = value.replace("\\", "/").rstrip("/").split("/")
         return "/".join(parts[-2:]) if len(parts) >= 2 else value
 
-    def is_battle_track(src):
-        if not isinstance(src, str) or not src:
-            return False
-        return BATTLE_DIR_MARK in ("/" + src.replace("\\", "/").lstrip("/")).lower()
-
-    def audible(sound):
-        """その Sound が今いくつのチャンネルで鳴っているか。ここが唯一の真実。"""
-        try:
-            return sound is not None and sound.get_num_channels() > 0
-        except Exception:
-            return False
+    # 戦闘曲かどうか（Assets/sounds/musics/battle/ 配下だけ）と、
+    # その Sound が今鳴っているか（チャンネルの数が唯一の真実）。ローダの語彙。
+    is_battle_track = sounds.is_battle_track
+    audible = sounds.audible
 
     find_app = ui.find_app     # 走っている app の探し方はローダの語彙
 

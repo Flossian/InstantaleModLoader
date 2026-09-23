@@ -243,20 +243,12 @@ def apply(ctx):
         paint_labels(app)
 
     # ------------------------------------------------------------ 画面の走査
-    def walk(widget, depth, out):
-        if depth > 14:
-            return
-        out.append(widget)
-        for child in frames.attr(widget, "children", ()) or ():
-            walk(child, depth + 1, out)
-
     def item_widgets(app):
         """画面に居るプレイヤーの品のウィジェット。"""
         hud = ui.find_hud(app)
         if hud is None:
             return []
-        found = []
-        walk(hud, 0, found)
+        found = list(ui.walk_widgets(hud, max_depth=14))
         player = player_of(app)
         return [w for w in found
                 if frames.attr(w, "item_instance") not in (frames.MISSING, None)
@@ -278,8 +270,7 @@ def apply(ctx):
         hud = ui.find_hud(app)
         if hud is None:
             return None
-        found = []
-        walk(hud, 0, found)
+        found = list(ui.walk_widgets(hud, max_depth=14))
         player = player_of(app)
         for widget in found:
             if frames.attr(widget, "place_new_item") is frames.MISSING or is_mine(widget):
@@ -430,8 +421,7 @@ def apply(ctx):
         窓を閉じたときにカーソルの下に品が無くなると「離れた」が来ず、窓だけ残る。
         """
         host = ui.overlay_host(hud)
-        found = []
-        walk(host, 0, found)
+        found = list(ui.walk_widgets(host, max_depth=14))
         removed = 0
         for widget in found:
             if type(widget).__name__ != "ItemDetailBox":

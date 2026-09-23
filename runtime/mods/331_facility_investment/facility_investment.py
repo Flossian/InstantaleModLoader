@@ -482,16 +482,6 @@ def apply(ctx):
         name = getattr(handle, "name", None) if handle is not None else None
         return name or catalog.keeper_choice(record.get("keeper"))[0]
 
-    def world_overview(app):
-        """世界観の文。頼み文に入れる（無ければ空）。"""
-        for attr in ("save_data_dict", "world_dict"):
-            holder = getattr(app, attr, None)
-            data = holder.get("world_data") if isinstance(holder, dict) else None
-            text = data.get("overview") if isinstance(data, dict) else None
-            if isinstance(text, str) and text.strip():
-                return frames.short(text.strip(), 600)
-        return ""
-
     def generate_keeper(app, record, taken, places):
         """建物の名前と主人をゲームと同じ生成 AI に作らせる。`(主人の素データ, 施設名)`。
 
@@ -511,7 +501,7 @@ def apply(ctx):
             return None, ""
         system, user = catalog.keeper_prompt(
             record.get("kind"), record.get("tier"), record.get("area_name"),
-            record.get("size"), world_overview(app),
+            record.get("size"), ui.world_overview(app),
             record.get("investor"), taken, places)
         answer = llm.ask(ctx, KEEPER_MANAGER,
                          [{"role": "system", "content": system},

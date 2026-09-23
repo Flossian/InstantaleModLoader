@@ -318,12 +318,6 @@ def apply(ctx):
 
     schedule = ui.scheduler(ctx, "party expand")
 
-    def close_enough(value, wanted):
-        try:
-            return abs(float(value) - float(wanted)) < 0.5
-        except (TypeError, ValueError):
-            return False
-
     def rows_now(box):
         """今その帯が何行に広がっているか。触っていない帯では None。
 
@@ -609,7 +603,7 @@ def apply(ctx):
             blocker = party_panel.make_blocker(ctx.log_exc)
             if blocker is None:
                 return        # 板が作れない環境では敷かない（何も壊さない）
-            host = host_of(hud)
+            host = ui.overlay_host(hud)
             index = party_panel.behind_index(host, box)
             if index is None:
                 return        # 帯がその入れ物の中に居ない画面では敷かない
@@ -654,7 +648,7 @@ def apply(ctx):
         if own not in (None, frames.MISSING):
             keep.add(id(own))         # こちらのボタンを隠すと戻す手段が消える
         covered = []
-        for widget in party_panel.coverable(host_of(hud), gained, keep,
+        for widget in party_panel.coverable(ui.overlay_host(hud), gained, keep,
                                             toggle_button.window_size(), MAX_HIDE_AREA):
             if frames.attr(widget, HIDDEN_ATTR) is not frames.MISSING:
                 covered.append(widget)
@@ -740,7 +734,7 @@ def apply(ctx):
         delta = pitch * (rows - design["rows"])
         height = float(design["size"][1]) + delta
         if (rows_now(box) == rows
-                and close_enough(frames.attr(box, "height"), height)):
+                and ui.close_enough(frames.attr(box, "height"), height)):
             # もう広がっている。
             # 寸法には触らないが、
             # 中身の見え方だけは毎回合わせ直す（ゲームが枠を塗り替えると絵の大きさが変わる）。
@@ -976,23 +970,6 @@ def apply(ctx):
                 ctx.log_exc("party expand: could not relabel the button")
             place_button(hud, widget)     # 帯が動いたぶんを追い、向きも描き直す
 
-    def host_of(hud):
-        """ボタンを載せる相手。HUD 自身の子の並びは変えない。
-
-        規則は `ui.overlay_host` に集約してある（`113_` と共通。
-        同じ発見を 2箇所に書かない。TECH.md §6.1）。
-        素の HUD の子は `FloatLayout` 1枚だけで、そこへ直接足すと子が2つになり、
-        「画面の最初の子」を取る側から見える相手が変わる（`scripts.hud.new_hud:get_current_screen_root`）。
-        ここを外すとアイテムの移動・装備が効かなくなる（VERIFICATION_LOG.md
-        §2.33）。
-
-        選ぶのはいちばん古い子。
-        先頭（＝いちばん新しい子）を採ると、
-        他の MOD が HUD 直下に残したウィジェットの中へ入り込みうる。
-        HUD へウィジェットを足す MOD が2本あれば成立してしまう。
-        """
-        return ui.overlay_host(hud)
-
     def place_button(hud, widget):
         """置き直す。塗り直しのたびに呼ぶ（帯は伸び縮みする）。"""
         if BUTTON_CORNER not in PLACEMENTS:
@@ -1062,7 +1039,7 @@ def apply(ctx):
                 warn_once("button", "kivy Button unavailable; no toggle will be shown")
                 return
             setattr(hud, BUTTON_ATTR, widget)
-        host = host_of(hud)
+        host = ui.overlay_host(hud)
         parent = frames.attr(widget, "parent")
         if parent is not host:
             if parent not in (None, frames.MISSING):

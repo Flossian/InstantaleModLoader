@@ -415,23 +415,10 @@ def apply(ctx):
         refresh_view(key)
 
     # -- 画面の手がかり ------------------------------------------------------
-    def is_label(widget):
-        """本文を描けるウィジェットか。型では見ない（GAME.md §1.3）。"""
-        for name in ("text", "texture_update", "text_size"):
-            if frames.attr(widget, name) is frames.MISSING:
-                return False
-        return isinstance(frames.attr(widget, "text"), str)
-
     def label_of(hud):
         """本文のラベル。書体を写す相手であり、枠を探す起点。"""
         named = frames.attr(hud, "text_display")
-        return named if named is not frames.MISSING and is_label(named) else None
-
-    def is_scroller(widget):
-        for name in ("scroll_y", "do_scroll_y"):
-            if frames.attr(widget, name) is frames.MISSING:
-                return False
-        return True
+        return named if named is not frames.MISSING and ui.is_label(named) else None
 
     def frame_rect(hud):
         """本文の枠の矩形。見つからなければ None（隅へ落とす）。
@@ -449,7 +436,7 @@ def apply(ctx):
             if widget in (None, frames.MISSING) or widget is hud:
                 break
             box = widget          # 見つからなければ HUD の1つ下を枠とみなす
-            if is_scroller(widget):
+            if ui.is_scroller(widget):
                 break
             widget = frames.attr(widget, "parent")
         if box is None:

@@ -1095,13 +1095,6 @@ def apply(ctx):
               .format(record.get("quest_id"), record.get("target_name")))
         return True
 
-    def current_quest_id(app):
-        quest = getattr(app, "current_quest_data", None) if app is not None else None
-        if quest is None:
-            return None
-        value = quest.get("id") if isinstance(quest, dict) else getattr(quest, "id", None)
-        return str(value) if value is not None else None
-
     def arrived_check(app):
         record = pending_of(app, "moving")
         if record is None:
@@ -1346,7 +1339,7 @@ def apply(ctx):
         app = getattr(self, "app", None) or ui.find_app()
         ended = None
         try:
-            ended = current_quest_id(app)
+            ended = ui.current_quest_id(app)
         except Exception:
             ctx.log_exc("road opening: cannot read the current quest")
         result = orig(self, *args, **kwargs)
@@ -1384,7 +1377,7 @@ def apply(ctx):
         app = getattr(self, "app", None) or ui.find_app()
         ended = None
         try:
-            ended = current_quest_id(app)
+            ended = ui.current_quest_id(app)
         except Exception:
             ctx.log_exc("road opening: cannot read the current quest")
         result = orig(self, *args, **kwargs)

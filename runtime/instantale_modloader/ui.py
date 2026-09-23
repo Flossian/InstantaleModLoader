@@ -349,6 +349,115 @@ def overlay_host(hud):
     return hud            # 子を持たない画面なら HUD 自身に（従来どおり）
 
 
+def children_of(widget):
+    """ウィジェットの子の写し（Kivy の並びは新しい順）。読めなければ空。"""
+    children = frames.attr(widget, "children")
+    return list(children) if isinstance(children, (list, tuple)) else []
+
+
+def walk_widgets(root, max_depth=None, seen=None, oldest_first=False):
+    """ウィジェット木を深さ優先の前順で辿る生成器。同じものは1度だけ。
+
+    `max_depth` … `root` を 0 として、この深さのものまで出す（その子へは降りない）。
+    `seen` … 出したものの `id` を入れる集合。2本の木を続けて辿るとき、
+    同じ集合を渡せば重なった分を二度出さない（`115_` が HUD と窓の直下で使う）。
+    `oldest_first` … 兄弟を古い順（`children` の逆）に出す。
+    「最初に見つかった1つ」を採る呼び手（`330_` / `402_` の見出し探し）は
+    この順で実機を確かめてあるので、変えないこと。
+
+    `330_` / `402_` の `walk_widgets` と `115_` / `124_` / `912_` の `walk`（深さの上限つき）を寄せた。
+    """
+    if root is None:
+        return
+    if seen is None:
+        seen = set()
+    stack = [(root, 0)]
+    while stack:
+        widget, depth = stack.pop()
+        if id(widget) in seen:
+            continue
+        seen.add(id(widget))
+        yield widget
+        if max_depth is not None and depth >= max_depth:
+            continue
+        children = children_of(widget)
+        if not oldest_first:
+            children.reverse()      # 積んだ逆から出るので、並びどおりに出すには逆に積む
+        stack.extend((child, depth + 1) for child in children)
+
+
+#: 本文を描けるウィジェットが持っている property（`is_label` の既定）。
+LABEL_ATTRS = ("text", "texture_update", "text_size")
+
+
+def is_label(widget, needs=LABEL_ATTRS):
+    """本文を描けるウィジェットか。**型では見ない**（GAME.md §1.3）。
+
+    ゲーム側の派生クラスや別名の Label がありうるので、
+    `needs` の property が全部在り、`text` が文字列であることで見分ける。
+    触る property が違う呼び手は `needs` を渡す（`112_` は `line_height`）。
+    """
+    for name in needs:
+        if frames.attr(widget, name) is frames.MISSING:
+            return False
+    return isinstance(frames.attr(widget, "text"), str)
+
+
+def is_scroller(widget):
+    """縦に送れる枠（`ScrollView` の類）か。型では見ない。"""
+    for name in ("scroll_y", "do_scroll_y"):
+        if frames.attr(widget, name) is frames.MISSING:
+            return False
+    return True
+
+
+# --------------------------------------------------------------------------
+# 寸法（`113_` / `116_` が共有する）
+# --------------------------------------------------------------------------
+def numbers(value, count):
+    """`size_hint` / `size` などを素の tuple にする（Kivy の可変列を持ち歩かない）。"""
+    try:
+        return tuple(value)[:count]
+    except Exception:
+        return None
+
+
+def rect_of(widget):
+    """`(x, y, 幅, 高さ)`（親の座標系）。読めなければ None。"""
+    size = numbers(frames.attr(widget, "size"), 2)
+    pos = numbers(frames.attr(widget, "pos"), 2)
+    if not size or not pos:
+        return None
+    try:
+        return (float(pos[0]), float(pos[1]), float(size[0]), float(size[1]))
+    except (TypeError, ValueError):
+        return None
+
+
+def same_rect(rect, target, slack, ratio):
+    """見た目に同じ矩形か。枠線・背景はぴったり重ならず数 px ずれて置かれている。
+
+    許すずれは `max(slack, 寸法 × ratio)`（位置）とその2倍（寸法）。
+    `113_` / `116_` はどちらも `slack=12.0, ratio=0.03` を渡している。
+    """
+    if rect is None or target is None:
+        return False
+    slack_x = max(slack, target[2] * ratio)
+    slack_y = max(slack, target[3] * ratio)
+    return (abs(rect[0] - target[0]) <= slack_x
+            and abs(rect[1] - target[1]) <= slack_y
+            and abs(rect[2] - target[2]) <= slack_x * 2
+            and abs(rect[3] - target[3]) <= slack_y * 2)
+
+
+def close_enough(value, wanted):
+    """寸法が「もうその値になっている」か。浮動小数の丸め（0.5 未満）は差と見ない。"""
+    try:
+        return abs(float(value) - float(wanted)) < 0.5
+    except (TypeError, ValueError):
+        return False
+
+
 # --------------------------------------------------------------------------
 # プレイヤーの所持金と、画面を出してはいけない状態
 # --------------------------------------------------------------------------
@@ -465,6 +574,30 @@ def rewrite_coins(text):
     return _rewrite_coins(text, _coin_names["long"], _coin_names["short"])
 
 
+class _KeepMissing(dict):
+    """テンプレートに無い変数名が来ても落とさない（`{typo}` はそのまま残る）。"""
+
+    def __missing__(self, key):
+        return "{" + str(key) + "}"
+
+
+def fill_template(template, **values):
+    """設定のテンプレートを埋め、通貨の表記を今の表記へ直す。
+
+    壊れたテンプレートでも素の文字列で返す。
+    知らない変数名（`{typo}`）はそのまま残す。打ち間違いを画面で見えるようにするため。
+    設定のテンプレートは素のゲームの言い方（`G`）のままでよい
+    （`130_` が差し替えていれば `馬車(1000G・14日)` → `馬車(1000円・14日)`）。
+
+    `314_` / `315_` / `332_` の `fmt` に1字違わず写されていた。
+    """
+    try:
+        filled = str(template).format_map(_KeepMissing(values))
+    except Exception:
+        filled = str(template)
+    return rewrite_coins(filled)
+
+
 def parse_coin(text):
     """ラベルから額を読む。読めなければ `None`。
 
@@ -492,8 +625,8 @@ def parse_coin(text):
         return None
 
 
-def gold_of(app):
-    """プレイヤーの所持金。読めなければ `None`。
+def _raw_gold(app):
+    """所持金の素の値（`int` か `float`）。読めなければ `None`。
 
     **`bool` を弾く。**
     Python では `True` は `int` なので、
@@ -502,26 +635,55 @@ def gold_of(app):
     value = frames.attr(frames.attr(app, "player", None), "gold", None)
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    return int(value)
+    return value
 
 
-def add_gold(app, amount, on_error=None):
-    """所持金を増減する。書けたら新しい額、書けなければ `None`。
+def gold_of(app):
+    """プレイヤーの所持金（`int` に切り捨てる）。読めなければ `None`。"""
+    value = _raw_gold(app)
+    return None if value is None else int(value)
 
-    ゲーム自身の支払い経路を通さずに直接触るので、**呼ぶ側が理由を記録する** こと（報酬・罰金など）。
-    読めない所持金には書き込まない。
+
+def set_gold(app, value, on_error=None):
+    """所持金を `value` にする。書けたら新しい額、書けなければ `None`。
+
+    **今の型を保つ。**
+    `float` の所持金には `float` を、`int` の所持金には丸めた `int` を書く
+    （float の世界に int を混ぜない）。
+    この式は `314_` / `315_` / `332_` に1字違わず写されていた。
+
+    読めない所持金には書き込まない（`gold_of` が `None` を返す相手）。
+    ゲーム自身の支払い経路を通さずに直接触るので、**呼ぶ側が理由を記録する** こと。
     """
-    current = gold_of(app)
+    current = _raw_gold(app)
     if current is None:
         return None
     try:
         player = frames.attr(app, "player", None)
-        player.gold = current + int(amount)
+        player.gold = float(value) if isinstance(current, float) else int(round(value))
         return player.gold
     except Exception:
         if on_error is not None:
             on_error("cannot change the player's gold")
         return None
+
+
+def add_gold(app, amount, on_error=None):
+    """所持金を増減する。書けたら新しい額、書けなければ `None`。
+
+    足すのは**素の値**に対して（`gold_of` の切り捨てを通さない）。
+    書き方は `set_gold` と同じで、今の型を保つ。
+    """
+    current = _raw_gold(app)
+    if current is None:
+        return None
+    try:
+        target = current + amount
+    except Exception:
+        if on_error is not None:
+            on_error("cannot change the player's gold")
+        return None
+    return set_gold(app, target, on_error=on_error)
 
 
 # --------------------------------------------------------------------------
@@ -566,6 +728,40 @@ def quest_of(app, quest_id):
         if quest_id in store:
             return store[quest_id]
     return None
+
+
+def world_overview(app, limit=600):
+    """世界観の文（`world_data.overview`）。LLM への頼み文に入れる。無ければ空。
+
+    `save_data_dict` → `world_dict` の順に見て、先に読めた方を `limit` 字で切る。
+    `330_` / `331_` に同じ本体が写されていた。
+    `405_` は別の読み方（遊んでいる世界の控えと `app.world` まで見る）なので寄せていない。
+    """
+    for attr in ("save_data_dict", "world_dict"):
+        holder = frames.attr(app, attr, None)
+        data = holder.get("world_data") if isinstance(holder, dict) else None
+        text = data.get("overview") if isinstance(data, dict) else None
+        if isinstance(text, str) and text.strip():
+            return frames.short(text.strip(), limit)
+    return ""
+
+
+def current_quest_id(app):
+    """ゲームがいま進めているクエストの id（文字列）。クエスト中でなければ None。
+
+    これがゲーム自身の答え。
+    `QuestStartManager` を捕まえられなくても（注入し直しをまたいだ場合など）、
+    これを見れば道中のクエストの最中かどうかが分かる。
+    `app.current_quest_data` はクエスト中だけ `Quest` が入り、
+    それ以外は None（`206_` の記録で確認済み）。
+
+    `307_` / `325_` に同じ本体が写されていた。
+    """
+    quest = frames.attr(app, "current_quest_data", None) if app is not None else None
+    if quest is None:
+        return None
+    value = quest.get("id") if isinstance(quest, dict) else frames.attr(quest, "id", None)
+    return str(value) if value is not None else None
 
 
 def id_sort_key(value):
@@ -1510,6 +1706,19 @@ class Screen(object):
             return False
         return any(isinstance(key, str) and key.startswith(MARK_PREFIX)
                    for key in entry)
+
+    @staticmethod
+    def back_button_index(buttons):
+        """ゲーム側の「やめる」の位置。無ければ None（＝一覧ではない／まだ組み上がっていない）。
+
+        無害 spec（`SAFE_CLS`）で、どの MOD の印も付いていないもの。
+        自前のボタンも同じ spec を使うので、印で除く。
+        `320_` / `326_` / `404_` に同じ本体が写されていた。
+        """
+        for index, entry in enumerate(buttons):
+            if spec_cls_name(entry) == SAFE_CLS and not Screen.marked_by_a_mod(entry):
+                return index
+        return None
 
     def instantiate_spec(self, app, entry_or_spec):
         """ボタンの `PhaseSpec` から、それが呼ぶはずのマネージャを組み立てる。

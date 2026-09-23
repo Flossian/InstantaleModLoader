@@ -393,18 +393,16 @@ def apply(ctx):
                       .format(label, name_of(item), expected))
             return
         corrected = max(after + gap * sign, 0.0)
-        player = getattr(app, "player", None)
-        try:
-            player.gold = (corrected if isinstance(getattr(player, "gold", 0), float)
-                           else int(round(corrected)))
-        except Exception:
-            ctx.log_exc("item price: could not correct gold")
+        # 型を保って書く（float の所持金は float のまま）。
+        gold = ui.set_gold(app, corrected, on_error=lambda msg: ctx.log(
+            "item price: could not correct gold: " + msg, level="WARN"))
+        if gold is None:
             return
         store["reconciled"] += 1
         ctx.log("item price: {} settled at {:g} but showed {:g}; gold {:g} -> {}"
-                .format(label, moved, expected, after, player.gold), level="WARN")
+                .format(label, moved, expected, after, gold), level="WARN")
         write("reconcile {} {} shown={:g} moved={:g} gold {:g} -> {}".format(
-            label, name_of(item), expected, moved, after, player.gold))
+            label, name_of(item), expected, moved, after, gold))
 
     if RECONCILE_GOLD:
         @ctx.wrap("__main__:InstantaleApp.buy_item", safe=True)

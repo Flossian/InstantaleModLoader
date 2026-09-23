@@ -15,7 +15,7 @@ r"""持ち物（`Character.inventory`）の読み書き。
 
 import sys
 
-from . import log_exc
+from . import log_exc, state
 
 #: セーブの1件が持つ項目（`330_` の保管庫が実機で往復させた12項目）。
 ITEM_FIELDS = ("name", "item_type", "attributes", "description", "value", "rarity",
@@ -40,15 +40,8 @@ def inventory_of(owner):
     return inner if isinstance(inner, dict) else None
 
 
-def _jsonable(value):
-    """控えに入れてよい値か。JSON に落ちるものだけ。"""
-    if value is None or isinstance(value, (bool, int, float, str)):
-        return True
-    if isinstance(value, (list, tuple)):
-        return all(_jsonable(v) for v in value)
-    if isinstance(value, dict):
-        return all(isinstance(k, str) and _jsonable(v) for k, v in value.items())
-    return False
+#: 控えに入れてよい値か（JSON に落ちるものだけ）。`state` の語彙。
+_jsonable = state.jsonable
 
 
 def _size_of(item, index):

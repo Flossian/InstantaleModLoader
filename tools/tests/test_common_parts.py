@@ -20,6 +20,12 @@
 | `ctx.logger(dedup=True)` が変わったときだけ書く | 会話の LLM は1ターンに何度も回る。6本の写しを寄せた先 |
 | `dedup` が `cap` の枠を食わない | 逆だと `cap=10, dedup=True` が「1行書いて終わり」になる |
 | `npcs.enroll` が心当たりを全部見て書く | セーブの形＝実行時の形ではない（GAME.md §2.7）。実行時だけに足すと次のセーブで消える |
+| `frames.arg` / `replace_arg` が位置でもキーワードでも届く | 5本に写っていて、届かなかったときの振る舞いが `327_` と `910_` で違った |
+| `sounds` が曲の置き場と戦闘曲を見分ける | `104_` / `106_` / `322_` / `324_` に同じ本体が写っていた |
+| `ui.walk_widgets` が2通りの順を出し分ける | `330_` / `402_` は「最初の1つ」を採るので、実機で確かめた順（古い子から）を変えられない |
+| 寸法・見分け・テンプレート・クエスト・世界観の小さな部品 | 2〜3本ずつ写されていた（HANDOFF の §2） |
+| `state.SysWorldStore` が上書き鍵を優先する | `modnpc` / `modfacility` の建て直しの間の鍵 |
+| `ui.set_gold` / `add_gold` が所持金の型を保つ | `314_` / `315_` / `332_` の写しが避けていた int への変換を、`add_gold` が行っていた |
 
 ゲームは要らない（偽の `ctx` を渡す）。
 """
@@ -39,7 +45,7 @@ ROOT = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir))
 sys.path.insert(0, os.path.join(ROOT, "runtime"))
 
 import instantale_modloader as ml                                   # noqa: E402
-from instantale_modloader import jobs, llm, npcs, ui                # noqa: E402
+from instantale_modloader import frames, jobs, llm, npcs, sounds, ui  # noqa: E402
 from instantale_modloader import state as state_mod                 # noqa: E402
 from instantale_modloader.state import world_filename               # noqa: E402
 
@@ -404,6 +410,200 @@ def test_enroll():
           npcs.enroll(empty, bare, "0", 1) == [])
 
 
+def test_args():
+    print("frames.arg / replace_arg")
+    names = ("quest_data", "player", "log")
+    check("キーワードを先に見る", frames.arg(("a", "b"), {"player": "k"}, "player", 1) == "k")
+    check("位置で読む（添字）", frames.arg(("a", "b"), {}, "player", 1) == "b")
+    check("位置で読む（引数名の並び）", frames.arg(("a", "b"), {}, "player", names) == "b")
+    check("届いていなければ default",
+          frames.arg(("a",), {}, "player", 1, default="d") == "d")
+    check("並びに無い名前はキーワードだけを見る",
+          frames.arg(("a", "b", "c"), {}, "choice_text", names) is None
+          and frames.arg((), {"choice_text": "x"}, "choice_text", names) == "x")
+
+    args, kwargs = ["a", "b"], {"x": 1}
+    new_args, new_kwargs, done = frames.replace_arg(args, kwargs, "player", names, "P")
+    check("位置の差し替え", done and new_args == ("a", "P") and new_kwargs == {"x": 1})
+    check("渡した入れ物は書き換えない", args == ["a", "b"] and kwargs == {"x": 1})
+    new_args, new_kwargs, done = frames.replace_arg(("a",), {"player": 1}, "player", 1, "P")
+    check("キーワードの差し替え", done and new_kwargs == {"player": "P"} and new_args == ("a",))
+    new_args, new_kwargs, done = frames.replace_arg(("a",), {}, "player", 1, "P")
+    check("届いていなければ触らない（既定）", not done and new_kwargs == {} and new_args == ("a",))
+    new_args, new_kwargs, done = frames.replace_arg(("a",), {}, "log", names, "L", insert=True)
+    check("insert=True ならキーワードとして足す", done and new_kwargs == {"log": "L"})
+
+
+def test_sounds(root):
+    print("sounds")
+    check("戦闘曲（区切り・大文字を問わない）",
+          sounds.is_battle_track(r"Assets\Sounds\Musics\Battle\a.mp3")
+          and sounds.is_battle_track("musics/battle/a.ogg"))
+    check("戦闘曲でないもの",
+          not sounds.is_battle_track("Assets/sounds/musics/town/a.mp3")
+          and not sounds.is_battle_track(None) and not sounds.is_battle_track(""))
+    check("重み", sounds.coerce_weight("40") == 40.0 and sounds.coerce_weight(-1) == 0.0
+          and sounds.coerce_weight(float("nan")) == 0.0 and sounds.coerce_weight(True) == 100.0)
+
+    class Playing(object):
+        def get_num_channels(self):
+            return 1
+
+    class Broken(object):
+        def get_num_channels(self):
+            raise RuntimeError("gone")
+    check("鳴っているか", sounds.audible(Playing()) and not sounds.audible(Broken())
+          and not sounds.audible(None))
+
+    game = os.path.join(root, "game")
+    os.makedirs(os.path.join(game, *sounds.MUSIC_SUBDIR))
+    here = os.getcwd()
+    try:
+        os.chdir(game)
+        found = sounds.game_root()
+        check("カレントから曲の置き場を探す",
+              found is not None and os.path.samefile(found, game), found)
+        check("無いサブフォルダなら None",
+              sounds.game_root(("no", "such", "dir")) is None)
+    finally:
+        os.chdir(here)
+
+
+class W(object):
+    """ウィジェットの代わり。`children` は Kivy と同じく新しい順。"""
+
+    def __init__(self, name, *children, **attrs):
+        self.name = name
+        self.children = list(children)
+        self.__dict__.update(attrs)
+
+
+def test_widgets():
+    print("ui.walk_widgets ほか")
+    #      root
+    #     /        #    b      a      （children は新しい順: b が新しい）
+    #    |      |
+    #    b1     a1
+    a1, b1 = W("a1"), W("b1")
+    root = W("root", W("b", b1), W("a", a1))
+    names = lambda seq: [w.name for w in seq]
+    check("前順（children の並び）",
+          names(ui.walk_widgets(root)) == ["root", "b", "b1", "a", "a1"],
+          names(ui.walk_widgets(root)))
+    check("古い子から（330_ / 402_ の順）",
+          names(ui.walk_widgets(root, oldest_first=True)) == ["root", "a", "a1", "b", "b1"],
+          names(ui.walk_widgets(root, oldest_first=True)))
+    check("深さの上限（その深さまで出す）",
+          names(ui.walk_widgets(root, max_depth=1)) == ["root", "b", "a"])
+    seen = set()
+    first = names(ui.walk_widgets(root.children[0], seen=seen))
+    check("seen を共有すれば重なりを二度出さない",
+          first == ["b", "b1"] and names(ui.walk_widgets(root, seen=seen)) == ["root", "a", "a1"])
+    check("None は何も出さない", list(ui.walk_widgets(None)) == [])
+    check("children_of は写しを返す", ui.children_of(root) is not root.children
+          and ui.children_of(root) == root.children and ui.children_of(object()) == [])
+
+    label = W("l", text="本文", texture_update=None, text_size=(0, 0))
+    check("is_label", ui.is_label(label) and not ui.is_label(W("x", text="t")))
+    check("is_label の needs", ui.is_label(W("x", text="t", line_height=1, texture_update=None),
+                                           needs=("text", "line_height", "texture_update")))
+    check("is_scroller", ui.is_scroller(W("s", scroll_y=1, do_scroll_y=True))
+          and not ui.is_scroller(W("s", scroll_y=1)))
+
+    box = W("box", pos=(10, 20), size=(100, 50))
+    check("rect_of", ui.rect_of(box) == (10.0, 20.0, 100.0, 50.0) and ui.rect_of(W("n")) is None)
+    check("same_rect（許容の内と外）",
+          ui.same_rect((15, 25, 110, 55), (10, 20, 100, 50), 12.0, 0.03)
+          and not ui.same_rect((40, 20, 100, 50), (10, 20, 100, 50), 12.0, 0.03))
+    check("close_enough", ui.close_enough(10.4, 10) and not ui.close_enough(10.6, 10)
+          and not ui.close_enough("x", 10))
+
+    safe = {"text": "やめる", "spec": types.SimpleNamespace(cls_name=ui.SAFE_CLS, args=[])}
+    marked = dict(safe, **{ui.MARK_PREFIX + "x": True})
+    other = {"text": "話す", "spec": types.SimpleNamespace(cls_name="Other", args=[])}
+    check("back_button_index は印の無い無害 spec",
+          ui.Screen.back_button_index([other, marked, safe]) == 2
+          and ui.Screen.back_button_index([other, marked]) is None)
+
+    check("fill_template は知らない名前を残す",
+          ui.fill_template("{a}と{typo}", a="砦") == "砦と{typo}"
+          and ui.fill_template("{", a=1) == "{")
+
+    check("current_quest_id（インスタンスでも dict でも）",
+          ui.current_quest_id(types.SimpleNamespace(current_quest_data={"id": 7})) == "7"
+          and ui.current_quest_id(types.SimpleNamespace(
+              current_quest_data=types.SimpleNamespace(id="q"))) == "q"
+          and ui.current_quest_id(types.SimpleNamespace(current_quest_data=None)) is None
+          and ui.current_quest_id(None) is None)
+    app = types.SimpleNamespace(save_data_dict={"world_data": {"overview": "  "}},
+                                world_dict={"world_data": {"overview": " 世界 " + "あ" * 700}})
+    text = ui.world_overview(app)
+    check("world_overview は空を飛ばして次を読み、切り詰める",
+          text.startswith("世界") and len(text) <= 601, len(text))
+    check("world_overview が無ければ空", ui.world_overview(types.SimpleNamespace()) == "")
+
+
+def test_sys_world_store(root):
+    print("state.jsonable / SysWorldStore")
+    check("jsonable", state_mod.jsonable({"a": [1, 2.0, None, "x", True]})
+          and not state_mod.jsonable({"a": object()}) and not state_mod.jsonable({1: 2}))
+    shared = state_mod.SysWorldStore("_instantale_test_sys_store", "sys_store",
+                                     "_instantale_test_sys_store_key")
+    try:
+        check("bind 前は store が None で bucket は空", shared.store() is None
+              and shared.bucket(types.SimpleNamespace()) == (None, None))
+        first = shared.bind(FakeCtx(root))
+        again = shared.bind(FakeCtx(root))
+        check("bind し直しても同じ控え（世代をまたぐ）", first is again and shared.store() is first)
+        setattr(sys, "_instantale_test_sys_store_key", "上書きの鍵")
+        key, bucket = shared.bucket(types.SimpleNamespace())
+        check("上書き鍵を優先する", key == "上書きの鍵" and isinstance(bucket, dict), key)
+    finally:
+        for name in ("_instantale_test_sys_store", "_instantale_test_sys_store_key"):
+            if hasattr(sys, name):
+                delattr(sys, name)
+
+
+def test_gold():
+    print("ui.set_gold / add_gold")
+    def app_with(gold):
+        return types.SimpleNamespace(player=types.SimpleNamespace(gold=gold))
+    errors = []
+
+    app = app_with(100)
+    check("int の所持金へは丸めた int を書く",
+          ui.set_gold(app, 49.6) == 50 and type(app.player.gold) is int, app.player.gold)
+    app = app_with(100.5)
+    check("float の所持金へは float を書く",
+          ui.set_gold(app, 49) == 49.0 and type(app.player.gold) is float, app.player.gold)
+
+    app = app_with(100.5)
+    check("add_gold は float を保つ（素の値に足す）",
+          ui.add_gold(app, -10) == 90.5 and type(app.player.gold) is float, app.player.gold)
+    app = app_with(100)
+    check("add_gold は int を保つ",
+          ui.add_gold(app, 25) == 125 and type(app.player.gold) is int, app.player.gold)
+
+    for bad in (None, True, "100"):
+        app = app_with(bad)
+        check("読めない所持金（{!r}）には書かない".format(bad),
+              ui.set_gold(app, 5) is None and ui.add_gold(app, 5) is None
+              and app.player.gold is bad, app.player.gold)
+    check("player が無ければ None", ui.set_gold(types.SimpleNamespace(), 5) is None)
+
+    class Locked(object):
+        gold = 10
+
+        def __setattr__(self, name, value):
+            raise AttributeError(name)
+    app = types.SimpleNamespace(player=Locked())
+    check("書けなければ None で on_error に渡す",
+          ui.set_gold(app, 5, on_error=errors.append) is None and len(errors) == 1, errors)
+    check("足せない額は書かずに on_error",
+          ui.add_gold(app_with(10), "x", on_error=errors.append) is None
+          and len(errors) == 2, errors)
+
+
 def main():
     root = tempfile.mkdtemp(prefix="instantale_common_")
     try:
@@ -415,6 +615,11 @@ def main():
         test_pressed_entry()
         test_records(root)
         test_enroll()
+        test_args()
+        test_sounds(root)
+        test_widgets()
+        test_sys_world_store(root)
+        test_gold()
     finally:
         shutil.rmtree(root, ignore_errors=True)
     if FAILURES:

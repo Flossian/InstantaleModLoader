@@ -128,6 +128,7 @@ runtime/instantale_modloader/
     prices.py     値段の2つ。ゲームが決めている額（宿屋の部屋など）の窓口（§3.3.4）と、
                   アイテムの売買額を組む関所（式1枚＋段N枚。書く地点8つを1枚だけ包む。§5.9）
     combat.py     戦闘の数の窓口。人物ごとの装備の攻撃力・防御力を、装備を持つ MOD が置き、戦闘を組む MOD が聞く（§3.3.5）
+    sounds.py     曲の置き場所の探し方・戦闘曲の見分け方・重みの読み方（§5.10）
     ids.py        ゲームの採番台帳（`index`）を通した id の採り方（§3.2.3）
     saves.py      ディスクのセーブの読み方（置き場・難読化・世界の一覧。§3.2.3）
     recon.py      実行時リコン（モジュール構造ダンプ）
@@ -943,6 +944,16 @@ MOD 同梱の設定画面（`tool.py`。§3.12）は**ゲームの中では走�
 | ディスクのセーブの読み方（置き場・難読化・世界の一覧） | `saves.data_dir` / `decode` / `read_save` / `list_worlds` / `world_names` | 5本。鍵（`SAVE_KEY`）が `130_` / `314_` / `324_` の `tool.py`・`323_` の `carryover.py`・`tools\rebalance_saved_bgm.py` に散っていた |
 | 同梱の設定画面のインフラ（場所・設定・窓の記憶・書き込み・配色） | `tools\modtool.py`（§3.12） | 6本。`save_window` が4変種に枝分かれし、**1本は最大化した窓の寸法を壊していた** |
 | 宣言駆動のワールド別設定画面 | `modtool.world_settings_main`（§3.12.1） | 2本が **501行バイト同一**の写しだった |
+| 所持金を型を保って書く | `ui.set_gold`（`add_gold` も同じ書き方に直した。§5.1.3） | 3本。ローダの `add_gold` だけが float の所持金を int に変えていた |
+| 位置でもキーワードでも来うる引数の読み書き | `frames.arg` / `replace_arg`（§5.2） | 5本 / 2本。届かなかったときの振る舞いが `327_` と `910_` で違った |
+| 曲の置き場所と戦闘曲の見分け方 | `sounds`（§5.10） | 4本。docstring が「`106_` と同じ判定」と互いを参照していた |
+| ウィジェット木の辿り方 | `ui.walk_widgets` / `children_of`（§5.1.3） | 5本 / 3本。兄弟を出す順が2通りあり、どちらも実機で確かめた順なので引数で残した |
+| 寸法とウィジェットの見分け | `ui.rect_of` / `same_rect` / `numbers` / `close_enough` / `is_label` / `is_scroller`（§5.1.3） | 2〜3本 |
+| ゲームの「やめる」の位置 | `ui.Screen.back_button_index` | 3本 |
+| 設定のテンプレートを埋める | `ui.fill_template` | 3本 |
+| 進んでいるクエストの id・世界観の文 | `ui.current_quest_id` / `world_overview`（§5.1.3） | 2本 / 2本 |
+| JSON に落ちるかの判定・周回ごとの控えの繋ぎ方 | `state.jsonable` / `SysWorldStore`（§5.4） | ローダの中の3本 / 2本（`modnpc` と `modfacility`） |
+| 設定画面の JSON の読み方 | `modtool.read_json`（§3.12） | 2本（`322_` / `324_` の `tool.py`）と `modtool` の中の4か所 |
 
 ```python
 from instantale_modloader import state
@@ -1813,6 +1824,7 @@ MOD が自分の画面を持つほうが分かりやすい。
 | 設定の読み書き | `modtool.load_settings(root, MOD_DIR)` / `save_settings(root, MOD_DIR, values)` |
 | 窓の記憶 | `modtool.restore_window(root, MOD_DIR, win)` / `save_window(root, MOD_DIR, win)` |
 | 壊れない書き込み | `modtool.write_json(root, path, data)` |
+| 読み込み | `modtool.read_json(path)`（無い・壊れた・辞書でないファイルは空の辞書） |
 | 配色と書体 | `modtool.setup_theme(win, root)`（戻り値は `gui` モジュール。他も借りられる） |
 | ディスクのセーブ | `modtool.saves_module(mod_dir=MOD_DIR)`（＝`instantale_modloader.saves`） |
 
@@ -2091,7 +2103,12 @@ schedule(fn) / schedule(fn, delay=0.5)
 ui.quest_stores(app) / ui.quest_ids(app) / ui.quest_of(app, id)
 ui.quest_value(quest, name, default) / ui.set_quest_value(app, id, name, value, on_error=...)
 ui.id_sort_key            # id を数として並べる鍵
+ui.current_quest_id(app)  # いま進めているクエストの id（`app.current_quest_data`）。クエスト中でなければ None
+ui.world_overview(app)    # 世界観の文（`world_data.overview` を600字で切る）。無ければ空
 ```
+
+`world_overview` は `save_data_dict` → `world_dict` の順に見る。
+`405_` は遊んでいる世界の控えと `app.world` まで見る別の読み方で、こちらには寄せていない。
 
 `id_sort_key` を通すのは、ゲームの id が採番順の**文字列**だから。
 素の `sorted()` は辞書順なので `"10" < "9"` になり、
@@ -2100,12 +2117,19 @@ ui.id_sort_key            # id を数として並べる鍵
 **所持金と「今は画面を出さない」状態**:
 
 ```python
-ui.gold_of(app) / ui.add_gold(app, amount, on_error=...) / ui.money(value)
+ui.gold_of(app) / ui.money(value)
+ui.set_gold(app, value, on_error=...) / ui.add_gold(app, amount, on_error=...)
 ui.BUSY_FLAGS            # 戦闘中・会話中など
 ```
 
 `gold_of` は `bool` を弾く（Python では `True` が `int` なので、
 素朴な `isinstance` だと `gold = True` を所持金1として通してしまう）。
+
+`set_gold` と `add_gold` は**今の型を保って書く**。
+float の所持金には float を、int の所持金には丸めた int を書く。
+書けたら新しい額、読めない所持金や書けなかったときは `None` を返す。
+`add_gold` は `gold_of` の切り捨てを通さず、素の値に足す。
+実機で `player.gold` が float になる場面があるかは測っていない（GAME.md に記録が無い）。
 
 **通貨の表記**（GAME.md §2.29。額ではなく**呼び名**だけを扱う）:
 
@@ -2124,7 +2148,7 @@ ui.COIN_LONG / ui.COIN_SHORT             # 素のゲームの言い方（`ゴー
 | 使う側 | 何のために |
 |---|---|
 | `309_` / `local/` の MOD | 自分で組んだ文言を画面に出す直前に `rewrite_coins` を通す |
-| `314_` / `315_` | テンプレートを埋めた後に `rewrite_coins`、ゲームのラベルから額を読むのに `parse_coin` |
+| `314_` / `315_` / `332_` | 設定のテンプレートを `ui.fill_template` で埋める（知らない変数名は残し、埋めた後に `rewrite_coins` を通す）。`314_` / `315_` はゲームのラベルから額を読むのに `parse_coin` も使う |
 
 `set_currency` は**何度通しても伸びない表記しか受け取らない**
 （`ゴールド` → `金ゴールド` のように新しい表記の中に素の表記が残っていると、
@@ -2184,6 +2208,23 @@ setattr(widget, "_instantale_<mod>_<用途>", ...)   # ui.MOD_WIDGET_PREFIX に�
 （`overlay_host` がこの接頭辞だけを手がかりにしている）。
 ボタン辞書の印（`ui.MARK_PREFIX` ＝ `mod_`）とは別で、あちらは選択肢、こちらはウィジェットの印。
 
+**ウィジェット木を辿る・見分ける**:
+
+```python
+ui.children_of(widget)                         # 子の写し（Kivy の並びは新しい順）。読めなければ空
+ui.walk_widgets(root, max_depth=None, seen=None, oldest_first=False)   # 深さ優先の前順。生成器
+ui.is_label(widget, needs=ui.LABEL_ATTRS) / ui.is_scroller(widget)     # 型では見ない（GAME.md §1.3）
+ui.rect_of(widget) / ui.numbers(value, count) / ui.close_enough(value, wanted)
+ui.same_rect(rect, target, slack, ratio)       # 見た目に同じ矩形か（`113_` / `116_` は 12.0 と 0.03）
+screen.back_button_index(buttons)              # ゲーム側の「やめる」の位置。印の付いたボタンは除く
+```
+
+`walk_widgets` の兄弟の順は2通りある。
+既定は `children` の並び（新しい子から）で、`115_` / `124_` / `912_` がこの順で動いている。
+`oldest_first=True` は古い子からで、`330_` / `402_` が見出しの「所持品」を探すのに使う。
+どちらも「最初に見つかった1つ」を採る呼び手があり、実機で確かめた順なので揃えていない。
+`seen` に同じ集合を渡すと、2本の木を続けて辿っても重なった分を二度出さない（`115_` が HUD と窓の直下で使う）。
+
 **パーティの名簿**（`302_` が4回外して固めた手順。GAME.md §2.8）:
 
 ```python
@@ -2208,7 +2249,16 @@ frames.attr(obj, name)     # hasattr を使わない存在確認
 frames.repr_value(value)   # dict はキーとキーの型を出す
 frames.format_locals(...) / frames.describe_instance(...)
 frames.MISSING             # 「属性が無い」を None と区別する番兵
+frames.arg(args, kwargs, name, index, default=None)        # 位置でもキーワードでも来うる引数を読む
+frames.replace_arg(args, kwargs, name, index, value, insert=False)  # -> (args, kwargs, 書けたか)
 ```
+
+`arg` / `replace_arg` は `@ctx.wrap` の中で使う。
+呼び手はコンパイル済みで、位置で渡すかキーワードで渡すかを決め打ちできないため。
+キーワードを先に見る。
+`index` は添字か引数名の並び（`("quest_data", "player", ...)`）で、並びに無い名前はキーワードだけを見る。
+`replace_arg` はどちらにも届いていなければ既定では触らない。
+`insert=True` はキーワードとして足す（素の関数がその名前を受けない版では `TypeError` になる）。
 
 `MISSING` は文字列（`"<missing>"`）。
 存在確認は `is frames.MISSING` で書き、
@@ -2389,6 +2439,22 @@ key = state.playthrough_key_of_dict(save_data_dict)  # `World.__init__` の中�
 - **`World.__init__` の中では `app` の辞書も `player` もまだ前の周回を指していることがある。** 引数の `save_data_dict` を `playthrough_key_of_dict` に渡し、建て直しの間はその鍵を持ち回る（`modfacility` の `_KEY_OVERRIDE_ATTR`、`330_` / `331_` の `state["key_override"]`）
 - 建物や主人の id は周回をまたいで重なる（`<土地>-<番>`）。登録簿はプロセスで1つなので、**ロードのたびに層を積み直す**（`331_` の `keepers_registered.clear()`）。`modfacility.forget` は控えの写しも捨て、新築は `spawn(fresh=True)` で写しを使わない（残すと新しい主人公の宿が前の主人公の宿の名で建つ。実機）
 - 同じ名前で作り直せば前の周回を引き継ぐ（決めた仕様。セーブに周回の id は無く、`original_ability_scores` も `age` も遊んでいる間に変わる）
+
+#### ローダのモジュールが持つ控え（`SysWorldStore`）
+
+`modnpc` と `modfacility` は周回ごとの控えを `sys` の属性に置き、注入し直しをまたいで持つ。
+繋ぎ方は同じで、違うのは3つの名前（`sys` の属性名・`state/` のフォルダ名・建て直しの間の鍵の属性名）だけ。
+
+```python
+_stores = state.SysWorldStore(STORE_ATTR, STATE_DIRNAME, _KEY_OVERRIDE_ATTR)
+_stores.bind(ctx, write)     # `install` が毎回呼ぶ。2回目からは同じ控えを今の `ctx` に繋ぎ直す
+_stores.store()              # 控え。`bind` がまだなら None
+_stores.bucket(app)          # (周回の鍵, 控え)。周回が分からなければ (None, None)
+state.jsonable(value)        # 控えに入れてよい値か（JSON に落ちるものだけ）
+```
+
+建て直しの間の鍵は、呼ぶ側が `setattr(sys, _KEY_OVERRIDE_ATTR, key)` で立てて外す。
+立っている間は `bucket` がその鍵を優先する。
 
 ### 5.5 `instantale_modloader.jobs`
 
@@ -2917,6 +2983,26 @@ def apply(ctx):
 > 129 は 594 → 436 行、405 は価格まわりの約180行（価格印・錠・保存前後の剥がしと戻し・
 > 別の街の印の掃除）が丸ごと消えた。
 > 経緯は §3.3.1 の引用と VERIFICATION.md §3.19.1。
+
+### 5.10 `instantale_modloader.sounds`（曲）
+
+```python
+from instantale_modloader import sounds
+
+root = sounds.game_root(("Assets", "sounds", "musics", "battle"))   # ゲーム本体のフォルダ。無ければ None
+sounds.is_battle_track(src)     # `/musics/battle/` 配下か。区切りと大文字小文字は問わない
+sounds.coerce_weight(value)     # 重みを 0 以上の数に。読めない値は 0、True は 100
+sounds.audible(sound)           # その Sound が今鳴っているか（チャンネルの数で見る）
+sounds.EXTENSIONS / sounds.MUSIC_SUBDIR / sounds.BATTLE_DIR_MARK
+```
+
+`game_root` はカレント → 実行ファイルの隣 → `sys.prefix` の順に、`subdir` が在る場所を探す。
+リコンではカレントがゲーム本体のフォルダだった。
+
+使う MOD は `104_` / `106_` / `322_` / `324_`。
+曲の一覧の作り方（`list_tracks`）は置いていない。
+`322_` はフォルダ直下だけ、`324_` は再帰で `battle/` を除き、名前が同じだけで仕様が違う。
+設定画面（`tool.py`）はローダを import できないことがあるので、あちらの `EXTENSIONS` は各自で持つ。
 
 ---
 

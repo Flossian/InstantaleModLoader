@@ -779,23 +779,6 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 見出しの描き替え
 
-    def walk_widgets(root):
-        """Kivy のウィジェット木を深さ優先で辿る。同じものは1度だけ。"""
-        if root is None:
-            return
-        seen = set()
-        stack = [root]
-        while stack:
-            widget = stack.pop()
-            ident = id(widget)
-            if ident in seen:
-                continue
-            seen.add(ident)
-            yield widget
-            children = getattr(widget, "children", None)
-            if isinstance(children, (list, tuple)):
-                stack.extend(children)
-
     def rename_right_header(app, npc_name):
         """2枚並びの窓の右側の見出しを仲間の名前にする。
 
@@ -807,7 +790,7 @@ def apply(ctx):
         if hud is None:
             return
 
-        for widget in walk_widgets(hud):
+        for widget in ui.walk_widgets(hud, oldest_first=True):
             text = getattr(widget, "text", None)
             if isinstance(text, str) and text.strip() == "所持品":
                 try:

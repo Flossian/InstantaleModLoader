@@ -38,8 +38,6 @@ MOD 本体は import しない。
 どの道具も同じなので `tools/modtool.py` に在る（TECH.md §3.12）。
 """
 
-import io
-import json
 import os
 import sys
 import time
@@ -112,14 +110,8 @@ def scan(asset_dir, state_dir):
     return sorted(found.items())
 
 
-def load_playlist(path):
-    """ファイル全体。無い・読めないときは空の辞書。"""
-    try:
-        with io.open(path, encoding="utf-8") as fh:
-            data = json.load(fh)
-    except (OSError, ValueError):
-        return {}
-    return data if isinstance(data, dict) else {}
+#: ファイル全体。無い・読めないときは空の辞書（`modtool` の語彙。`324_` と共有）。
+load_playlist = modtool.read_json
 
 
 def weight_of(entry, category):

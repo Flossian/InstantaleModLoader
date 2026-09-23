@@ -194,9 +194,7 @@ def apply(ctx):
         parent = frames.attr(widget, "parent")
         return None if parent in (None, frames.MISSING) else parent
 
-    def children_of(widget):
-        children = frames.attr(widget, "children")
-        return list(children) if isinstance(children, (list, tuple)) else []
+    children_of = ui.children_of
 
     def geom(widget):
         """局所座標（`x`/`y`）と窓座標（`wx`/`wy`）の両方。読めなければ None。
@@ -315,20 +313,10 @@ def apply(ctx):
             walker = parent_of(walker)
         return False
 
-    def walk(widget, depth, seen, out):
-        if id(widget) in seen:
-            return
-        seen.add(id(widget))
-        out.append(widget)
-        if depth >= MAX_DEPTH:
-            return
-        for child in children_of(widget):
-            walk(child, depth + 1, seen, out)
-
     def visible_grids(hud, avoid_for):
         found = []
         try:
-            walk(hud, 0, set(), found)
+            found.extend(ui.walk_widgets(hud, MAX_DEPTH))
         except Exception:
             ctx.log_exc("craft window: walking the HUD failed")
             return []

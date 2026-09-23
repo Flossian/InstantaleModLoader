@@ -75,7 +75,7 @@ value と一致も包含もしなくなり、探索が空振りする（VERIFICA
 import re
 import weakref
 
-from instantale_modloader import frames
+from instantale_modloader import frames, ui
 
 LOG_BASENAME = "text_spacing.log"
 
@@ -138,13 +138,9 @@ def apply(ctx):
 
     # -- ラベルかどうか ------------------------------------------------------
     def is_label(widget):
-        """本文を描けるウィジェットか。型では見ない（ゲーム側の派生クラスや
-        別名の Label がありうる）。
-        触る property が3つとも在ることを条件にする。"""
-        for name in ("text", "line_height", "texture_update"):
-            if frames.attr(widget, name) is frames.MISSING:
-                return False
-        return isinstance(frames.attr(widget, "text"), str)
+        """本文を描けるウィジェットか。見分け方はローダ（`ui.is_label`）。
+        この MOD が触る property（`line_height`）が在ることを条件にする。"""
+        return ui.is_label(widget, needs=("text", "line_height", "texture_update"))
 
     def rank(text, value):
         """`value` との近さ。0 ＝ 一致しない、大きいほど確からしい。"""

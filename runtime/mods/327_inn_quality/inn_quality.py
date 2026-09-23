@@ -58,7 +58,7 @@
 import random
 import sys
 
-from instantale_modloader import llm, ui
+from instantale_modloader import frames, llm, ui
 from instantale_modloader.state import WorldStore
 
 LOG_BASENAME = "inn_quality.log"
@@ -217,19 +217,6 @@ def pick_partner(app, rng=RNG):
     return None, "no candidate"
 
 
-def replace_arg(args, kwargs, name, index, value):
-    """位置でもキーワードでも渡りうる引数を1つ差し替える。届いていなければ触らない。"""
-    if name in kwargs:
-        kwargs = dict(kwargs)
-        kwargs[name] = value
-    elif len(args) > index:
-        args = list(args)
-        args[index] = value
-    else:
-        return args, kwargs, False
-    return args, kwargs, True
-
-
 def life_log_dict(app, character):
     """ゲーム自身の作り方で人生ログの辞書を組む。読めなければ空。"""
     module = sys.modules.get("scripts.llm.context_manager")
@@ -341,7 +328,7 @@ def apply(ctx):
             return args, kwargs
         app = ui.find_app()
         character = ui.character_of(app, partner[0])
-        npc_list = kwargs.get("npc_list", args[index] if len(args) > index else None)
+        npc_list = frames.arg(args, kwargs, "npc_list", index)
         if character is None or not isinstance(npc_list, (list, tuple)):
             write("social: {} npc_list not replaced (character {} / list {})".format(
                 site, character is not None, type(npc_list).__name__))
@@ -352,7 +339,7 @@ def apply(ctx):
         entry = dict(template)
         entry["instance"] = character
         entry["life_log_dict"] = life_log_dict(app, character)
-        args, kwargs, done = replace_arg(args, kwargs, "npc_list", index, [entry])
+        args, kwargs, done = frames.replace_arg(args, kwargs, "npc_list", index, [entry])
         write("social: {} npc_list {} -> [{}]{}".format(
             site, before, partner[1], "" if done else " (argument not reached)"))
         return args, kwargs
@@ -379,8 +366,8 @@ def apply(ctx):
         try:
             partner = state.get("partner")
             if partner is not None:
-                before = kwargs.get("npc_id_list", args[4] if len(args) > 4 else None)
-                args, kwargs, done = replace_arg(args, kwargs, "npc_id_list", 4, [partner[0]])
+                before = frames.arg(args, kwargs, "npc_id_list", 4)
+                args, kwargs, done = frames.replace_arg(args, kwargs, "npc_id_list", 4, [partner[0]])
                 write("social: npc_id_list {} -> [{}]{}".format(
                     before, partner[0], "" if done else " (argument not reached)"))
         except Exception:

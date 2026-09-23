@@ -215,25 +215,9 @@ STAY_WINDOW_MANAGERS = (
 REFUSE_TEXT = "（{name}の宿代{price}Gに足りない ― 手持ち{gold}G）"
 
 
-class _SafeDict(dict):
-    """テンプレートに無い変数名が来ても落とさない（`{typo}` はそのまま残る）。"""
-
-    def __missing__(self, key):
-        return "{" + str(key) + "}"
-
-
-def fmt(template, **values):
-    """設定のテンプレートを埋める。壊れたテンプレートでも素の文字列で返す。
-
-    埋めた後に通貨の表記を今の表記へ直す（`130_` が差し替えていれば
-    `個室(100G)` → `個室(100円)`）。
-    設定のテンプレートは素のゲームの言い方（`G`）のままでよい。
-    """
-    try:
-        filled = str(template).format_map(_SafeDict(values))
-    except Exception:
-        filled = str(template)
-    return ui.rewrite_coins(filled)
+#: 設定のテンプレートを埋める（知らない変数名は残し、通貨の表記を今の表記へ直す）。
+#: ローダの語彙（`314_` / `315_` / `332_` で共有）。
+fmt = ui.fill_template
 
 
 def parse_age(value):
@@ -388,12 +372,6 @@ def apply(ctx):
         return {"price": int(room_conf(slot)["price"])}
 
     prices.declare(prices.INN_ROOM, room_price_for, owner=owner, write=write)
-
-    def set_gold(app, value):
-        """所持金を書く。型を保つ（`901_` と同じ。float の世界に int を混ぜない）。"""
-        player = getattr(app, "player", None)
-        current = getattr(player, "gold", None)
-        player.gold = float(value) if isinstance(current, float) else int(round(value))
 
     # ============================================================ ボタンの表示
     def relabel_room(entry):
@@ -581,7 +559,8 @@ def apply(ctx):
             write("price: charged {} in one deduction; gold {} -> {} ({})".format(
                 conf["price"], before, after, window["slot"]))
         elif after == prepaid:
-            set_gold(app, before)
+            ui.set_gold(app, before,
+                        on_error=lambda msg: write("WARN price: " + msg))
             write("price: the game did not charge inside execute; gold back to "
                   "{} ({}) -- the charge happens elsewhere in this build; "
                   "run 218_probe_vacation".format(before, window["slot"]))
@@ -655,12 +634,14 @@ def apply(ctx):
                 conf = room_conf(window["slot"])
                 pre = window["gold_before"] + window["game_price"] \
                     - conf["price"]
-                set_gold(app, pre)
-                window["prepaid"] = pre
-                write("price: gold {} -> {} before the game charges {} "
-                      "(ours is {}; one deduction, no refund)".format(
-                          window["gold_before"], pre, window["game_price"],
-                          conf["price"]))
+                if ui.set_gold(app, pre) is None:
+                    write("WARN price: cannot write the gold; not pre-adjusted")
+                else:
+                    window["prepaid"] = pre
+                    write("price: gold {} -> {} before the game charges {} "
+                          "(ours is {}; one deduction, no refund)".format(
+                              window["gold_before"], pre, window["game_price"],
+                              conf["price"]))
             except Exception:
                 ctx.log_exc("vacation custom: cannot pre-adjust the price")
         state["depth"] += 1
