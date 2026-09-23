@@ -10,9 +10,11 @@
     "en": "Accept quests from conversation, or generate one from what you just talked about. Finished quests are told to the NPC who asked for them",
     "ja": "会話から依頼を受注できる。いま話した内容から依頼を1件生成することもできる。片付けた依頼はその依頼人との会話にも伝わる"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
-  "shares": ["npc_profiles"],
+  "shares": [
+    "npc_profiles"
+  ],
   "settings": {
     "FILTER_BY_NPC": {
       "type": "bool",

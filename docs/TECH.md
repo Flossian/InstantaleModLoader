@@ -116,7 +116,8 @@ runtime/instantale_modloader/
     patch_registry.py  どの MOD がどこへ当てたかの台帳・重なり・未解決の報告
     config.py     MOD ごとの設定 / ローダ自身の切り替え（デバッグモード）
     frames.py     フレームローカル採取・値の要約・呼び出し元の特定
-    ui.py         選択肢 / 画面の塗り替え / 会話の閉じ方 / idle待ち / 施設の引き当て
+    ui.py         選択肢 / 画面の塗り替え / 会話の閉じ方 / idle待ち / 施設の引き当て /
+                  ロード後に名簿が復元されてから選択肢を組み直して塗る口（`refresh_choices_after_load`。ロード中は `app.party` が `['player']` だけ。塗るのは `paint_choices`）
     state.py      世界の見分け方と保存先の決め方・世界ごとの控え（§3.2.3 / §5.4）
     jobs.py       重い処理を背景で直列にこなすワーカー（§5.5）
     llm.py        LLM へ出ていく文章の捕まえ方・1問だけ聞く口・返答の読み方（§5.3）
@@ -1293,7 +1294,18 @@ combat.declare(combat.DEFENSE, lambda app, holder: ..., owner=owner, write=write
 # 聞く側（319）。誰も置いていなければ None ＝ ゲームのまま
 weapon = combat.attack(app, attacker)      # 仲間の錨 = 従来 + 2×√(能力 × weapon) × 率
 armor = combat.defense(app, defender)      # 仲間の防御 = 本体の値 + armor × 率
+
+# 装備の操作も同じ窓口（402 の「装備／外す」→ 912 の装備欄）。None なら聞く側が自分で書く
+done = combat.toggle(app, npc, item)        # "equipped" / "unequipped" / 断りの文字列 / None
+flag = combat.equipped(app, npc, item)      # True / False / None
+
+# 身に着けている品（401 が審判へ見せる）。主人公にも答える。装備欄を使っていなければ None
+worn = combat.gear(app, holder)             # [(部位, 品), ...] / None
 ```
+
+仲間の `equipments` を書くのは装備欄の MOD だけ。`equipped` が None でない（装備欄の MOD がその持ち主を
+持っている）とき、402 は受け渡しのドラッグでも解除や参照の掃除をしない。書き手が 2 本あると、装備欄から
+主人公側へ引いた品が仲間の持ち物にも残った（912 DOC.md §3.3）。
 
 | 決まり | 理由 |
 |---|---|

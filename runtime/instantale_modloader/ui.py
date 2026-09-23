@@ -1425,6 +1425,97 @@ def party_member_ids(app):
             if member_id and member_id != PLAYER_ID]
 
 
+def paint_choices(app, texts, oops=None):
+    """選択肢の文字列を実際に画面へ塗る。効いた手段の一覧を返す（`Screen.paint` の中身）。
+
+    `refresh_choice_buttons()` が組み直すのは `to_display_buttons` までで、画面の文字は
+    HUD 側の `update_button_texts` を呼ばないと変わらない（冒頭の事実）。`app.buttons` だけ
+    直して塗らないと、見えている文字と押される処理が食い違う（ロード後の組み直しで実機）。
+    `oops(what)` は例外の記録先。無ければ黙って続ける。
+    """
+    done = []
+
+    def failed(what):
+        if oops is not None:
+            oops(what)
+
+    loader = getattr(app, "display_button_load", None)
+    if callable(loader):
+        try:
+            loader(0)
+            done.append("display_button_load")
+        except Exception:
+            failed("display_button_load failed")
+
+    hud = find_hud(app)
+    updater = getattr(hud, "update_button_texts", None) if hud is not None else None
+    if callable(updater):
+        try:
+            updater(app, list(texts))
+            done.append("hud.update_button_texts")
+        except Exception:
+            failed("hud.update_button_texts failed")
+    elif hud is None:
+        # ここが出たら画面は塗り替わらない。
+        # 型で探して見つからない＝ HUD の構成が変わったということなので、
+        # その合図として残す。
+        done.append("hud not found")
+
+    return done
+
+
+_AFTER_LOAD_ATTR = "_instantale_after_load"
+
+
+def refresh_choices_after_load(ctx, write=None, tries=12, interval=0.25):
+    """ロードのあと、名簿（party）が復元されてから選択肢を 1 度組み直す。
+
+    ロード中に本体が選択肢を組む時点では `app.party` がまだ `['player']` で、同行者との会話を
+    復元しても相手が仲間だと分からない（`302_` が「ここで別れる」を落とし、`301_` が依頼の
+    選択肢を足した。実機）。名簿に同行者が入るまで（上限 `tries` 回、`interval` 秒おき）待ってから
+    `refresh_choice_buttons()` を 1 度呼び、画面にも塗る（`paint_choices`。組み直すだけでは文字が
+    古いままで、押される処理と食い違った。実機）。同行者が居ないセーブでは上限で 1 度呼ぶ（害は無い）。
+    何本の MOD が呼んでも、1 回のロードで組み直すのは 1 度（後から入った層の見張りが勝つ）。
+    Kivy の Clock が無ければ（ゲームの外）何もしない。
+    """
+    shared = getattr(sys, _AFTER_LOAD_ATTR, None)
+    if not isinstance(shared, dict):
+        shared = {"token": None}
+        setattr(sys, _AFTER_LOAD_ATTR, shared)
+
+    @ctx.wrap("__main__:InstantaleApp.load_game_new", required=False, safe=True)
+    def load_game_new(orig, self, *args, **kwargs):
+        result = orig(self, *args, **kwargs)
+        try:
+            from kivy.clock import Clock
+        except Exception:
+            return result
+        token = object()
+        shared["token"] = token
+        left = [int(tries)]
+
+        def check(_dt):
+            if shared.get("token") is not token:
+                return False                          # 別の層（または次のロード）が引き継いだ
+            left[0] -= 1
+            if not party_member_ids(self) and left[0] > 0:
+                return True
+            shared["token"] = None
+            try:
+                before = list(getattr(self, "to_display_buttons", []) or [])
+                self.refresh_choice_buttons()
+                after = list(getattr(self, "to_display_buttons", []) or [])
+                done = paint_choices(self, after, ctx.log_exc)
+                if write:
+                    write("refreshed the choices after the load (party={}): {} -> {} via {}".format(
+                        party_ids(self), before, after, "+".join(done) if done else "(nothing)"))
+            except Exception:
+                ctx.log_exc("after load: refresh_choice_buttons failed")
+            return False
+        Clock.schedule_interval(check, interval)
+        return result
+
+
 def describe_stores(app):
     """名簿の在り処と中身を1行で。切り分けのときこれが頼りになる。"""
     return "; ".join("{}={}".format(label, store_ids(store))
@@ -1776,31 +1867,7 @@ class Screen(object):
         Clock コールバックの形なので `dt` を渡せば直接呼べる）も通す。
         描画のためにゲームを落とさないよう、例外はどれも外へ出さない。
         """
-        done = []
-
-        loader = getattr(app, "display_button_load", None)
-        if callable(loader):
-            try:
-                loader(0)
-                done.append("display_button_load")
-            except Exception:
-                self._oops("display_button_load failed")
-
-        hud = find_hud(app)
-        updater = getattr(hud, "update_button_texts", None) if hud is not None else None
-        if callable(updater):
-            try:
-                updater(app, list(texts))
-                done.append("hud.update_button_texts")
-            except Exception:
-                self._oops("hud.update_button_texts failed")
-        elif hud is None:
-            # ここが出たら画面は塗り替わらない。
-            # 型で探して見つからない＝ HUD の構成が変わったということなので、
-            # その合図として残す。
-            done.append("hud not found")
-
-        return done
+        return paint_choices(app, texts, self._oops)
 
     def paint_party(self, app):
         """HUD の仲間欄を塗り直す。効いた手段の一覧を返す。

@@ -306,6 +306,7 @@ def apply(ctx):
     # 特に **画面を塗るのは `refresh_choice_buttons` ではなく HUD 側**という
     # `302_` の実測結果は、この mod にも要る（下の `apply_buttons`）。
     screen = ui.Screen(ctx, write, tag="quest offer", mark=MARK)
+    ui.refresh_choices_after_load(ctx, write)      # ロード直後は名簿が空。復元されてから組み直す
 
     find_app = ui.find_app
     cls_of = ui.cls_of
@@ -1342,6 +1343,14 @@ def apply(ctx):
                         note_skip("party member {!r} ({}): not a client".format(
                             ui.character_name(self, partner), partner))
                         at = None
+                        # ロード直後は名簿が空で相手を仲間と見なせず、依頼の選択肢を足してしまう。
+                        # 名簿が復元されて組み直されたとき（`ui.refresh_choices_after_load`）に落とす
+                        stale = [b for b in buttons
+                                 if isinstance(b, dict) and b.get(MARK) in ("offer", "generate")]
+                        if stale:
+                            buttons[:] = [b for b in buttons if not any(b is d for d in stale)]
+                            write("dropped {} offer button(s): {!r} is a party member".format(
+                                len(stale), ui.character_name(self, partner)))
                 if at is not None:
                     # 会話画面には「この話から依頼を作る」も置く。
                     # 掲示板を経由しないので会話を閉じずに生成できる。

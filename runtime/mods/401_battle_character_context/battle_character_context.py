@@ -29,6 +29,12 @@ job・tactics・traits・status）の順。
 装備は本体がプレイヤーの装備を書くときの `名前(説明)` の形に寄せ、
 内部属性（attributes）は別の行に分ける。`equipments` の値が id なら持ち物から実体を引く。
 
+装備欄の MOD（`912_`）を入れていれば、ローダの窓口 `combat.gear` に身に着けている品を聞き、
+weapon / wearable の代わりに部位ごと（`right_hand` / `head` / `accessory1` など）の行で書く。
+装備欄の品は持ち物の辞書に居ないので、`equipments` の id からは引けない（id だけの行になった）。
+主人公も装備欄を使っていれば、装備の行だけの `- player:` の枠を足す（本体が渡すのは weapon / wearable の
+2 つだけで、残りの部位は審判に見えていなかった）。窓口が None なら今までどおり。
+
 referee は1手ごとに呼ばれるので、項目ごとの上限（`FIELD_CHARS`）と
 同行者全員ぶんの合計（`BLOCK_TOTAL_CHARS`）を置く。
 合計は人数で割って1人ぶんの予算にし、溢れた分は末尾の項目から落とす。
@@ -43,7 +49,7 @@ NPC の runtime の Character には口調などが載らないことがある�
 タイトルへ戻るときに控えを捨て、別ワールド・別セーブへの持ち越しを防ぐ。
 """
 
-from instantale_modloader import frames, llm, ui
+from instantale_modloader import combat, frames, llm, ui
 
 
 #: 追記する塊の見出し。同じ message に2度足さないための印でもある（`append_block`）。
@@ -314,11 +320,22 @@ def apply(ctx):
                 return value
         return None
 
-    def character_block(character, role, budget=BLOCK_TOTAL_CHARS):
+    def worn_lines(worn):
+        """装備欄の答え `[(部位, 品), ...]` を `(項目名, 本文)` の並びにする。属性は本文の直後。"""
+        rows = []
+        for region, item in worn:
+            main, attrs = item_summary(item)
+            rows.append((region, main))
+            rows.append((region + "_attributes", attrs))
+        return rows
+
+    def character_block(character, role, budget=BLOCK_TOTAL_CHARS, worn=None, gear_only=False):
         """1人ぶんを `budget` 文字までで組む。溢れた分は末尾の項目から落とす。
 
         並びがそのまま優先順位。名前とHPは必ず載せ、
         次に戦闘の材料である装備、その後に人物・口調の順で埋める。
+        `worn` は装備欄の答え（`combat.gear`）。あれば weapon / wearable の代わりに部位ごとに書く。
+        `gear_only` は主人公の枠（名前と装備だけ。HP や人物は本体が渡している）。
         """
         name = text_of(character, "name")
         if not name:
@@ -332,7 +349,7 @@ def apply(ctx):
         lines = ["- {}: {}".format(role, frames.short(name, 300))]
 
         # 名前と HP は上限に関係なく載せる。
-        hp = hp_of(character)
+        hp = hp_of(character) if not gear_only else None
         if hp:
             lines.append("  HP: " + frames.short(hp, 100))
 
@@ -352,16 +369,18 @@ def apply(ctx):
             return True
 
         # 装備は戦闘の材料なので人物より先。属性は本文の直後に置く。
-        weapon, weapon_attributes = equipment_summary(character, "weapon")
-        wearable, wearable_attributes = equipment_summary(character, "wearable")
-        for label, text in (
-            ("weapon", weapon),
-            ("weapon_attributes", weapon_attributes),
-            ("wearable", wearable),
-            ("wearable_attributes", wearable_attributes),
-        ):
+        if worn is not None:
+            rows = worn_lines(worn)
+        else:
+            weapon, weapon_attributes = equipment_summary(character, "weapon")
+            wearable, wearable_attributes = equipment_summary(character, "wearable")
+            rows = [("weapon", weapon), ("weapon_attributes", weapon_attributes),
+                    ("wearable", wearable), ("wearable_attributes", wearable_attributes)]
+        for label, text in rows:
             if not add(label, text):
                 break
+        if gear_only:
+            return "\n".join(lines) if len(lines) > 1 else None
 
         # 戦闘時に意味があり、Characterが元から持つ情報だけ。
         # runtime に無い項目は保存辞書から補う（NPC は speech_style などが
@@ -403,36 +422,45 @@ def apply(ctx):
         return result
 
     def build_block(app):
-        """追記する本文と、載せた人数を返す。
+        """追記する本文と、載せた人数（主人公の装備の枠は数えない）を返す。
 
         人数はログ用。ここで返さないと、同行者の解決が1手につき2回走る。
         """
         members = current_party(app)
+        # 主人公は装備欄を使っているときだけ、装備の行だけの枠を足す（`combat.gear`）
+        player = getattr(app, "player", None)
+        player_worn = combat.gear(app, player) if player is not None else None
         # 合計上限を人数で割って1人ぶんの予算にする。人数が多くて割った値が
         # MEMBER_MIN_CHARS を切るときは下限を優先する（合計は上限を超えるが、
         # 名前と HP だけの仲間を作るよりよい）。
+        count = len(members) + (1 if player_worn else 0)
         budget = (
-            max(MEMBER_MIN_CHARS, BLOCK_TOTAL_CHARS // len(members))
-            if members else BLOCK_TOTAL_CHARS
+            max(MEMBER_MIN_CHARS, BLOCK_TOTAL_CHARS // count)
+            if count else BLOCK_TOTAL_CHARS
         )
 
+        player_block = (character_block(player, "player", budget, worn=player_worn, gear_only=True)
+                        if player_worn else None)
         blocks = []
         for role, character in members:
-            rendered = character_block(character, role, budget)
+            rendered = character_block(character, role, budget, worn=combat.gear(app, character))
             if rendered:
                 blocks.append(rendered)
+
+        head = "\n\n" + MARKER + "\n"
+        mine = ""
+        if player_block:
+            mine = ("player は主人公。装備欄に身に着けている品を部位ごとに載せる"
+                    "（本体の weapon / wearable はこの中の一部）。\n" + player_block + "\n")
 
         # 仲間が居なくても見出しだけは足す。「情報が無い」と「MOD が動かなかった」を
         # プロンプトの側で区別できるようにするため。
         if not blocks:
-            return (
-                "\n\n" + MARKER + "\n"
-                "パーティーメンバーなし"
-            ), 0
+            return head + mine + "パーティーメンバーなし", 0
 
         return (
-            "\n\n" + MARKER + "\n"
-            "パーティーメンバーについては、以下の人物・装備情報を優先して参照してください。\n"
+            head + mine
+            + "パーティーメンバーについては、以下の人物・装備情報を優先して参照してください。\n"
             + "\n".join(blocks)
         ), len(blocks)
 

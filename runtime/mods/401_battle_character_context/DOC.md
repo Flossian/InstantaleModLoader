@@ -20,6 +20,35 @@
 
 同行者が武器を持ち替えていれば描写が変わり、口調が決まっていれば戦闘中もその口調で喋る。
 プレイヤー自身の情報は足さない（本体が既に渡している）。
+ただし装備欄の MOD を入れているときは、主人公の装備だけを足す（次の節）。
+
+## 装備欄の MOD を入れているとき
+
+装備欄の MOD（開発中の `912_equipment_slots`）を入れていれば、装備は `weapon` / `wearable` の 2 行ではなく
+部位ごとの行で書く（版8）。部位の名前は装備欄の MOD のもの（`right_hand` `left_hand` `head` `body` `arms` `legs`
+`accessory1` `accessory2`）で、属性は `right_hand_attributes` のように本文の直後の行に分ける。
+身に着けている品は、ローダの窓口 `combat.gear` に聞く（TECH.md §3.3.5）。
+
+```text
+【パーティーメンバー戦闘情報】
+player は主人公。装備欄に身に着けている品を部位ごとに載せる（本体の weapon / wearable はこの中の一部）。
+- player: ミツバ
+  head: 革の兜(使い込まれている)
+  right_hand: 鋼の剣(重い)
+パーティーメンバーについては、以下の人物・装備情報を優先して参照してください。
+- party_member: 元傭兵の銀髪・ゼノ
+  HP: 803/992
+  right_hand: 星詠みの魔導杖(星が宿る)
+  accessory1: 古びた真鍮の指輪(くすんでいる)
+  profile: …
+```
+
+- 主人公の枠（`- player:`）は装備の行だけで、HP や人物は載せない（本体が渡している）。
+  本体が渡すのは武器 1 つと防具 1 つだけで、残りの部位は審判に見えていなかった
+- 主人公の枠も予算の人数に数える（6,000 字を仲間と主人公で割る）。記録の `appended N character(s)` の N は仲間の数
+- 装備欄を使っていない人物（窓口の答えが無い）は、今までどおり `weapon` / `wearable` で書く
+- 装備欄の品は持ち物の辞書に居ないので、`equipments` の id からは引けない。版7までは装備欄の MOD を入れると
+  `wearable: item_id=item_207` のように id だけになっていた
 
 ## どう動くか
 
@@ -63,6 +92,7 @@
 | 症状 | 見るところ |
 | --- | --- |
 | 補足が載っているか確かめたい | `out\battle_character_context.log`。載せるたびに `appended N character(s), M chars` が出る。実物は `output_data\<世界>\<PC>\referee_*\` の最新 JSON の user message 末尾（世界名が解決できない場合は `unknown\unknown\` に入る） |
-| `appended 0 character(s), 29 chars` が出る | 同行者がいない戦闘の正常な記録。「パーティーメンバーなし」とだけ伝えている |
+| `appended 0 character(s), 29 chars` が出る | 同行者がいない戦闘の正常な記録。「パーティーメンバーなし」とだけ伝えている（装備欄の MOD を入れていれば、主人公の装備の枠のぶん字数が増える） |
+| 仲間の装備が `item_id=…` だけになる | 装備欄の MOD を入れていて、この MOD が版7以前。版8で部位ごとに書く |
 | `WARN cannot resolve party member` が出る | 名簿に id はあるのに実体が引けていない。名簿の在り処も同じ行に写るので、そのまま報告の材料になる |
 | `NOTE in_boss_battle is set ...` が出る | `in_battle` が落ちているのに別の戦闘フラグが立っていた記録。戦闘中判定を広げるかの判断材料なので、出たら報告 |

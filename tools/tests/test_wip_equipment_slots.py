@@ -287,10 +287,12 @@ MOD.ui.find_app = lambda: app
 panel = Node()
 host.add_widget(panel)
 mine = Grid(COLS, ROWS, player)
-setattr(mine, MOD.GRID_ATTR, True)
+PSC = MOD.SCOPE_FOR(app, player)                         # 主人公の scope（鍵は名前、辞書は CONTAINER）
+assert PSC["player"] and PSC["container"] is MOD.CONTAINER
+setattr(mine, MOD.GRID_ATTR, PSC)
 panel.add_widget(mine)
 mine.x, mine.y = 0.0, 0.0
-setattr(panel, MOD.PANEL_ATTR, {"grid": mine, "labels": {}, "cell": 65.0, "gap": 1.0})
+setattr(panel, MOD.PANEL_ATTR, {"grid": mine, "labels": {}, "cell": 65.0, "gap": 1.0, "owner_key": PSC["key"]})
 
 
 touch_down = ctx.hooks["scripts.hud.new_hud:InventoryItem.on_touch_down"]
@@ -407,7 +409,7 @@ assert "w2" not in positions and positions["s1"] == [4, 2], positions
 assert positions["w1"] == [0, 2], positions                  # 右手は盾なので、空いている左手へ
 assert "w1" not in player.inventory.inventory and MOD.CONTAINER["w1"] is sword
 assert any(l.startswith("dropped 'w2'") for l in ctx.lines)
-assert any(l.startswith("adopted 'w1'") for l in ctx.lines)
+assert any("adopted 'w1'" in l for l in ctx.lines)
 
 # 開いている間は右側の選択肢を親ごと隠し、閉じると戻す。各ボタンの disabled は触らない
 assert button_bar.disabled is True and all(b.opacity == 0.0 for b in hud.right_buttons)
@@ -415,6 +417,14 @@ assert all(b.disabled is False for b in hud.right_buttons)
 host.remove_widget(window)                                   # 閉じた（窓が無い）
 toggle(lambda self: None, hud)
 assert button_bar.disabled is False and all(b.opacity == 1.0 for b in hud.right_buttons)
+host.add_widget(window)
+# 本体の別の経路で窓が消えたあと、選択肢の組み直しで戻る
+toggle(lambda self: None, hud)                               # 開いた → 隠れる
+assert all(b.opacity == 0.0 for b in hud.right_buttons)
+host.remove_widget(window)                                   # 本体が窓を消した（toggle を通らない）
+ctx.hooks["__main__:InstantaleApp.refresh_choice_buttons"](lambda self: None, app)
+assert button_bar.disabled is False and all(b.opacity == 1.0 for b in hud.right_buttons)
+assert any(l == "choice buttons restored" for l in ctx.lines)
 host.add_widget(window)
 
 # 別の世界をロード: 前の世界の品は辞書から落ち、新しい世界の所持品には出ない。セーブへの合流も世界を見る
@@ -504,5 +514,95 @@ MOD.CONTAINER.clear(); player.give(sword, dagger, helm, ring)
 toggle(lambda self: None, hud)
 assert base_hook(seen, 390, 580) == (390, 580)
 MOD.COMBINE_SLOTS = False
+
+# ---------------------------------------------------------------- 仲間の装備欄（段2）
+# 402_ の受け渡しの窓: 右側が仲間のグリッド（場面 party_transfer）。開く前に仲間の装備欄の品を辞書から抜く
+mate.id = "78"
+mate.equipments = {"weapon": "k1"}                              # 402_ の直書き（id の文字列）
+twin_hook = ctx.hooks["__main__:InstantaleApp.toggle_twin_inventory_window"]
+twin_hook(lambda self, l, r, lab, sit: None, app, player, mate, "x", "party_transfer")
+NSC = MOD.SCOPE_FOR(app, mate, create=False)
+assert NSC is not None and not NSC["player"] and NSC["key"] == "npc:78"
+assert "k1" in NSC["container"] and "k1" not in mate.inventory.inventory   # 直書きの装備を拾って辞書から抜いた
+assert any("npc:78: adopted 'k1'" in l for l in ctx.lines)
+# 装備欄（build_panel は Kivy が要るので、同じ形を手で組む）と受け渡しの窓
+twin_window = Node()
+host.add_widget(twin_window)
+twin = Grid(4, 6, mate)
+twin.situation = "party_transfer"
+twin_window.add_widget(twin)
+npanel = Node()
+host.add_widget(npanel)
+nmine = Grid(COLS, ROWS, mate)
+setattr(nmine, MOD.GRID_ATTR, NSC)
+npanel.add_widget(nmine)
+nmine.x, nmine.y = 0.0, 0.0
+setattr(npanel, MOD.PANEL_ATTR, {"grid": nmine, "labels": {}, "cell": 65.0, "gap": 1.0, "owner_key": NSC["key"]})
+w_spear = Widget(spear, nmine, (4, ROWS - 2 - 4))               # 拾った槍は右手に居る
+helm2b = Item("h9", "wearable", "headgear", 50)
+mate.give(helm2b)
+w_helm2b = Widget(helm2b, twin, (0, 0))
+# 402_ の「装備」は窓口を通してここへ来る
+assert combat.equipped(app, mate, helm2b) is False and combat.equipped(app, mate, spear) is True
+assert combat.toggle(app, mate, helm2b) == "equipped"
+assert "h9" in NSC["container"] and "h9" not in mate.inventory.inventory
+assert mate.equipments == {"weapon": "k1", "wearable": "h9"}, mate.equipments   # 辞書には id で書く
+assert combat.defense(app, mate) == 50 and combat.attack(app, mate) == 300
+assert combat.toggle(app, mate, helm2b) == "unequipped"
+assert "h9" not in NSC["container"] and "h9" in mate.inventory.inventory
+assert mate.equipments == {"weapon": "k1"}, mate.equipments
+assert combat.toggle(app, mate, herb) is None                    # 仲間の品でなければ 402_ に任せる
+# セーブ: 仲間の装備欄の品は npcs[<id>].inventory へ足す。主人公の品は主人公へ
+data = {"world_data": {"name": "世界"}, "player_data": {"inventory": {}}, "npcs": {"78": {"inventory": {}}}}
+written = {}
+write_hook(lambda path, d: written.update(d), "savedata.json", data)
+assert "k1" in written["npcs"]["78"]["inventory"] and "w1" in written["player_data"]["inventory"]
+assert "k1" not in written["player_data"]["inventory"]
+# 主人公の品は仲間の装備欄へ置けない（渡す前の品）
+w_ring2 = Widget(ring, twin, (1, 0))
+ring.obtainer = player
+assert combat.toggle(app, mate, ring) is None
+ring.obtainer = player
+
+# 段3: 仲間の装備欄から主人公側へ直接引く。402_ が持ち物の辞書と持ち主を移し（窓口の答えを見て
+# `equipments` には触らない）、912 は品を仲間の持ち物へ戻さず、`equipments` を自分で外す
+assert "k1" in NSC["container"] and mate.equipments.get("weapon") == "k1"
+left = Grid(4, 6, player)
+left.situation = "party_transfer"
+twin_window.add_widget(left)
+
+
+def handover(widget, new):
+    """402_ の sync_transfer と同じ結果（本体の移動の後、辞書・id・持ち主を新しい側へ）。"""
+    widget.inventory = new
+    mate.inventory.inventory.pop("k1", None)
+    player.inventory.inventory["k1"] = spear
+    spear.obtainer = player
+
+
+HOOKS["change"](handover, w_spear, left)
+assert "k1" not in NSC["container"], NSC["container"]
+assert "k1" not in mate.inventory.inventory, mate.inventory.inventory   # 仲間の持ち物へ戻さない
+assert player.inventory.inventory.get("k1") is spear
+assert "weapon" not in mate.equipments, mate.equipments                 # 書くのは 912
+assert any("npc:78: 'k1' handed to" in l for l in ctx.lines), ctx.lines[-5:]
+assert combat.equipped(app, mate, spear) is False
+
+# 段4: 身に着けている品（`combat.gear`）。部位の並び順で、主人公にも答える
+worn = combat.gear(app, player)
+assert worn, worn
+assert [r for r, _i in worn] == [r for r in rules.REGIONS if r in dict(worn)], worn
+assert all(item is not None for _r, item in worn)
+assert combat.toggle(app, mate, helm2b) == "equipped"
+assert combat.gear(app, mate) == [("head", helm2b)], combat.gear(app, mate)
+# ロード直後（窓をまだ開いていない）: 品は持ち物の辞書に居て、装備欄の辞書には無い／古い品が残る
+NSC["container"].clear()
+mate.inventory.inventory["h9"] = helm2b
+assert combat.gear(app, mate) == [("head", helm2b)], combat.gear(app, mate)
+stale = Item("h9", "wearable", "headgear", 50)
+NSC["container"]["h9"] = stale                                    # ロード前の品
+assert combat.gear(app, mate)[0][1] is helm2b                      # 持ち物の辞書を先に引く
+stranger = Player(); stranger.name = "他人"; stranger.id = "99"
+assert combat.gear(app, stranger) is None                         # 装備欄を使っていなければ None
 
 print("ok")

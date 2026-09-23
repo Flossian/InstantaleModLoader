@@ -10,7 +10,7 @@
     "ja": "会話中の相手が現在のパーティーメンバーの時だけ「＜アイテムの受け渡し＞」を追加します。301_quest_from_conversation の後に読み込み、「会話を終了する」の直前へ挿入します。NPC側weapon/wearableを右クリックすると「装備する／外す」を表示しますが、NPCに武器・防具を装備させることはできません（NPCのequipmentsへ記録を書くだけで、装備としては機能しません）。通常の成功ログは専用ログへ出さず、警告・失敗・例外のみmodloader.logへ記録します。観測専用のフックは223_probe_party_equipmentへ分離しました。",
     "en": "Party-member item transfer mod. Loads after 301_quest_from_conversation and inserts the transfer choice immediately before conversation end. Right-clicking an NPC-owned weapon/wearable shows Equip/Unequip, but NPCs cannot actually equip weapons or armor: it only writes a record into the NPC's equipments. Routine success logs are suppressed; warnings/failures/exceptions go to modloader.log. Observation-only hooks live in 223_probe_party_equipment."
   },
-  "version": "19",
+  "version": "20",
   "author": "MoririnJP",
   "after": [
     "301_quest_from_conversation",

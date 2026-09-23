@@ -208,6 +208,7 @@ def apply(ctx):
     # ここで確かめた「描画は HUD 側を直接呼ぶ」「差し替えは次のフレーム」もそこに入っているので、他の
     # mod からも同じものが使える。
     screen = ui.Screen(ctx, write, tag="party leave", mark=MARK)
+    ui.refresh_choices_after_load(ctx, write)      # ロード直後は名簿が空。復元されてから組み直す
 
     spec_cls_name = ui.spec_cls_name
     pressed_entry = ui.pressed_entry

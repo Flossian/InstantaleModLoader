@@ -347,6 +347,38 @@ check("例外を残さない", ctx.errors == [], ctx.errors)
 shutil.rmtree(out_dir, ignore_errors=True)
 
 
+# ---------------------------------------------------------------- 装備欄の MOD が居るとき
+# 仲間の `equipments` を書くのは装備欄の MOD（912_）だけ。窓口 `combat.equipped` が答える持ち主では、
+# 本体の unequip も参照の掃除もしない（書き手が 2 本になると、渡した品が仲間の持ち物にも残った）
+print("装備欄の MOD が居る受け渡し")
+from instantale_modloader import combat  # noqa: E402
+ctx, app, out_dir = open_window()
+npc = app.world.characters["80"]
+player = app.player
+asked = []
+combat.declare(combat.EQUIPPED, lambda a, holder, item: asked.append(holder) or True, owner="test_slots")
+staff = Item("星詠みの魔導杖")
+staff.obtainer = npc
+staff.id = "item_212"
+npc.inventory["item_212"] = staff
+npc.equipments["weapon"] = "item_212"
+widget = InventoryItem(staff, "item_212", Grid(npc))
+FakeClock.scheduled = []
+move(ctx, app, widget, Grid(player))
+check("窓口に旧持ち主を聞く", asked == [npc], asked)
+check("本体の unequip を通さない", staff.unequip_calls == 0, staff.unequip_calls)
+check("equipments に触らない（装備欄の MOD が書く）", npc.equipments.get("weapon") == "item_212",
+      npc.equipments)
+check("持ち物の受け渡しはする", staff in player.inventory.values() and staff.obtainer is player,
+      player.inventory)
+check("任せた旨を 1 行残す", any("left to the equipment slots" in n for n in ctx.notes),
+      ctx.notes[-3:])
+combat.forget("test_slots")
+FakeClock.run_all()
+check("例外を残さない", ctx.errors == [], ctx.errors)
+shutil.rmtree(out_dir, ignore_errors=True)
+
+
 # ---------------------------------------------------------------- unequip の番人
 # 実体が別の場所へ移った後、古い「装備中」表示から本体popupの「外す」が飛ぶと、
 # 本体 unequip は空の equipments を引いて KeyError で落ちる（実測）。

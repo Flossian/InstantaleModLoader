@@ -39,6 +39,10 @@ from . import slots as rules
 LOG_BASENAME = "equipment_slots.log"
 STORE_ATTR = "_instantale_equipment_slots_store"
 CONTAINER_ATTR = "_instantale_equipment_slots_container"
+#: 仲間の装備欄の辞書 {"npc:<id>": {鍵: Item}}。主人公の辞書と同じく sys に置く。
+CONTAINERS_ATTR = "_instantale_equipment_slots_npc_containers"
+#: 402_ の受け渡しの窓の場面名（`toggle_twin_inventory_window(..., situation)`）。仲間の装備欄はこの窓にだけ出す。
+SITUATION_TWIN = "party_transfer"
 PANEL_ATTR = "_instantale_equipment_slots_panel"
 GRID_ATTR = "_instantale_equipment_slots_grid"
 GRID_MODULE, GRID_CLASS = "scripts.hud.new_hud", "InventoryGrid"
@@ -58,6 +62,8 @@ COMBINE_DEFENSE_PERCENT = 10
 #: 画面上部の能力欄の行（`Atk:432(+500)`）。括弧の中が装備の値。
 STATUS_LINE = re.compile(r"^(Atk|Def):([0-9.]+)\(\+([0-9.]+)\)", re.M)
 
+#: 持ち主 → scope（ゲーム抜きの試験から引くため）。`apply()` が差す。
+SCOPE_FOR = None
 #: 装備欄の品 {持ち物の鍵: Item}。`apply()` が差す（ゲーム抜きの試験から中身を見るため）。
 #: 実体は `sys` に置く（装備中の品は持ち物の辞書に居ないので、注入し直しで MOD の
 #: モジュールが読み直されても消えないようにする。TECH.md §5.5 と同じ理由）。
@@ -86,6 +92,12 @@ def apply(ctx):
         container = {}
         setattr(sys, CONTAINER_ATTR, container)
     CONTAINER = container
+    npc_containers = getattr(sys, CONTAINERS_ATTR, None)
+    if not isinstance(npc_containers, dict):
+        npc_containers = {}
+        setattr(sys, CONTAINERS_ATTR, npc_containers)
+    #: scope の控え {鍵: scope}。同じ持ち主には同じ辞書を返す（グリッドに付けて見分けるため）。
+    scopes = {}
     #: ドロップ中の品（`try_place_item` → `is_valid_placement` の間だけ）と、MOD 自身が移している最中の旗。
     placing = {"item": None, "moving": False, "native": False, "cell": None}
 
@@ -119,11 +131,45 @@ def apply(ctx):
         inner = getattr(inv, "inventory", None)
         return inner if isinstance(inner, dict) else None
 
-    def positions_of(app):
-        """(世界の鍵, この主人公の控え {品の鍵: [x, y]})。y は上から。"""
+    def scope_for(app, owner, create=True):
+        """持ち主（Character）の scope。主人公は名前が鍵、仲間は "npc:<id>"。
+
+        `create=False` なら、装備欄をまだ持たない仲間（店の主など）には None。
+        """
+        if app is None or owner is None:
+            return None
+        if owner is player_of(app):
+            key = str(getattr(owner, "name", None) or "_")
+            sc = scopes.get(key)
+            if sc is None or sc["owner"] is not owner:
+                sc = scopes[key] = {"owner": owner, "key": key, "container": container,
+                                    "situation": None, "player": True}
+            return sc
+        cid = getattr(owner, "id", None)
+        if cid is None:
+            return None
+        key = "npc:" + str(cid)
+        sc = scopes.get(key)
+        if sc is not None and sc["owner"] is owner:
+            return sc
+        if not create and key not in npc_containers:
+            return None
+        sc = scopes[key] = {"owner": owner, "key": key, "container": npc_containers.setdefault(key, {}),
+                            "situation": SITUATION_TWIN, "player": False}
+        return sc
+
+    def player_scope(app):
+        return scope_for(app, player_of(app))
+
+    def scope_of_grid(grid):
+        """装備欄のグリッドに付けた scope。装備欄でなければ None。"""
+        found = getattr(grid, GRID_ATTR, None)
+        return found if isinstance(found, dict) else None
+
+    def positions_of(app, sc):
+        """(世界の鍵, この持ち主の控え {品の鍵: [x, y]})。y は上から。"""
         key, bucket = store.of(app)
-        name = getattr(player_of(app), "name", None) or "_"
-        return key, bucket.setdefault(str(name), {})
+        return key, bucket.setdefault(sc["key"], {})
 
     def instance_of(widget_or_item):
         inst = getattr(widget_or_item, "item_instance", None)
@@ -144,7 +190,7 @@ def apply(ctx):
         return eq
 
     def is_mine(grid):
-        return getattr(grid, GRID_ATTR, False) is True
+        return scope_of_grid(grid) is not None
 
     def game_class(name):
         module = sys.modules.get(GRID_MODULE)
@@ -173,21 +219,49 @@ def apply(ctx):
         return (low % rules.COLS, to_top_y(low // rules.COLS, h))
 
     # ------------------------------------------------------------ 本体との同期
-    def current_slots(app):
-        _key, positions = positions_of(app)
-        return rules.slots_from_positions(positions, container)
+    def current_slots(app, sc):
+        _key, positions = positions_of(app, sc)
+        return rules.slots_from_positions(positions, sc["container"])
 
-    def sync_game(app, force=False):
+    def sync_npc(app, sc):
+        """仲間の `equipments` を装備欄から決め直す。id の文字列で書く（402_ と同じ形。本体の Manager は主人公固定）。"""
+        eq = equipments_of(sc["owner"])
+        if eq is None:
+            return
+        slots = current_slots(app, sc)
+        container = sc["container"]
+        for game_key, _stat in rules.GAME_KEYS:
+            want = rules.best(slots, container, game_key)
+            want_key = next((k for k, v in container.items() if v is want), None) if want is not None else None
+            current = eq.get(game_key)
+            current_key = None
+            if current is not None:
+                current_key = next((k for k, v in container.items() if v is current), None) or str(current)
+            if current_key == want_key:
+                continue
+            if want_key is None:
+                eq.pop(game_key, None)
+            else:
+                eq[game_key] = want_key
+            write("{}: {} -> {!r} (was {!r})".format(
+                sc["key"], game_key, frames.short(getattr(want, "name", None), 60) if want else None, current_key))
+
+    def sync_game(app, sc, force=False):
         """控えから本体の `weapon` / `wearable` を決め直す。
 
         `force` は変わっていなくても本体の `equip_item` を通す（HUD の Atk/Def は
         本体が装備を変えたときにしか塗り直さないので、窓を開いたときに1度かける）。
+        仲間は `sync_npc`（辞書を書くだけ）。
         """
-        player = player_of(app)
+        if not sc["player"]:
+            sync_npc(app, sc)
+            return
+        player = sc["owner"]
+        container = sc["container"]
         eq = equipments_of(player)
         if eq is None:
             return
-        slots = current_slots(app)
+        slots = current_slots(app, sc)
         items = dict(inventory_of(player) or {})
         items.update(container)
         # 本体のドロップ処理は種類を問わず `equipments[item_type]` を書く（断ったドロップでも）。
@@ -235,28 +309,26 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("equipment slots: repainting the status texts failed")
 
-    def after_change(app):
-        key, _positions = positions_of(app)
-        sync_game(app)
+    def after_change(app, sc):
+        key, _positions = positions_of(app, sc)
+        sync_game(app, sc)
         store.save(key)
-        refresh_marks(app)
-        paint_labels(app)
+        refresh_marks(app, sc)
+        paint_labels(app, sc)
 
     # ------------------------------------------------------------ 画面の走査
-    def item_widgets(app):
-        """画面に居るプレイヤーの品のウィジェット。"""
+    def item_widgets(app, owner):
+        """画面に居る、この持ち主の品のウィジェット。"""
         hud = ui.find_hud(app)
         if hud is None:
             return []
-        found = list(ui.walk_widgets(hud, max_depth=14))
-        player = player_of(app)
-        return [w for w in found
+        return [w for w in ui.walk_widgets(hud, max_depth=14)
                 if frames.attr(w, "item_instance") not in (frames.MISSING, None)
-                and getattr(instance_of(w), "obtainer", None) is player]
+                and getattr(instance_of(w), "obtainer", None) is owner]
 
-    def refresh_marks(app):
+    def refresh_marks(app, sc):
         """装備欄の品に装備印。所持品側は本体の印（2鍵の品）を外す。"""
-        for widget in item_widgets(app):
+        for widget in item_widgets(app, sc["owner"]):
             try:
                 widget.is_equipped = is_mine(frames.attr(widget, "inventory", None))
                 redraw = getattr(widget, "_update_equipped_border", None)
@@ -265,19 +337,25 @@ def apply(ctx):
             except Exception:
                 pass
 
-    def find_grid(app):
-        """所持品の窓に見えているプレイヤーのグリッド（装備欄ではない方）。無ければ None。"""
+    def find_grid(app, sc):
+        """この持ち主の見えている持ち物のグリッド（装備欄ではない方）。無ければ None。
+
+        主人公は所持品の窓（場面なし）、仲間は 402_ の受け渡しの窓（場面 `party_transfer`）。
+        """
         hud = ui.find_hud(app)
-        if hud is None:
+        if hud is None or sc is None:
             return None
         found = list(ui.walk_widgets(hud, max_depth=14))
-        player = player_of(app)
         for widget in found:
             if frames.attr(widget, "place_new_item") is frames.MISSING or is_mine(widget):
                 continue
-            if frames.attr(widget, "obtainer") is not player:
+            if frames.attr(widget, "obtainer") is not sc["owner"]:
                 continue
-            if frames.attr(widget, "situation", None) not in (None, ""):
+            situation = frames.attr(widget, "situation", None)
+            if sc["situation"] is None:
+                if situation not in (None, ""):
+                    continue
+            elif situation != sc["situation"]:
                 continue
             node, visible = widget, True
             for _ in range(14):
@@ -305,16 +383,20 @@ def apply(ctx):
             node = parent
         return grid
 
-    def panel_of(hud):
+    def panels_of(hud):
         host = ui.overlay_host(hud)
-        for child in list(frames.attr(host, "children", ()) or ()):
-            if getattr(child, PANEL_ATTR, None) is not None:
+        return [child for child in list(frames.attr(host, "children", ()) or ())
+                if getattr(child, PANEL_ATTR, None) is not None]
+
+    def panel_of(hud, sc):
+        for child in panels_of(hud):
+            if getattr(child, PANEL_ATTR).get("owner_key") == sc["key"]:
                 return child
         return None
 
-    def my_grid(app):
+    def my_grid(app, sc):
         hud = ui.find_hud(app)
-        panel = panel_of(hud) if hud is not None else None
+        panel = panel_of(hud, sc) if hud is not None else None
         return getattr(panel, PANEL_ATTR)["grid"] if panel is not None else None
 
     # ------------------------------------------------------------ 品を移す
@@ -360,8 +442,9 @@ def apply(ctx):
         断ったドロップの戻しでは装備欄の辞書に入っていないことがあるので、先に入れておく。
         """
         placing["moving"] = True
-        if is_mine(frames.attr(widget, "inventory", None)):
-            container.setdefault(key_of(widget), instance_of(widget))
+        sc = scope_of_grid(frames.attr(widget, "inventory", None))
+        if sc is not None:
+            sc["container"].setdefault(key_of(widget), instance_of(widget))
         try:
             try:
                 widget.clear_current_slots()
@@ -372,20 +455,21 @@ def apply(ctx):
         finally:
             placing["moving"] = False
 
-    def build_items(app):
+    def build_items(app, sc):
         """装備欄の品のウィジェットを作って並べる（持ち物の辞書に無いので本体は作らない）。
 
         `InventoryGrid` はマスだけを子に持つので、品は所持品の品と同じ親（窓の `FloatLayout`）へ。
         マスの位置が決まる次のフレーム以降に呼ぶこと（同じフレームだと占有マスがずれる）。
         """
-        metrics = panel_metrics(app)
-        main = find_grid(app)
+        metrics = panel_metrics(app, sc)
+        main = find_grid(app, sc)
         cls = game_class("InventoryItem")
         if metrics is None or main is None or cls is None:
             return
         mine = metrics["grid"]
+        container = sc["container"]
         host = frames.attr(main, "parent", None)
-        _key, positions = positions_of(app)
+        _key, positions = positions_of(app, sc)
         made = metrics.setdefault("widgets", [])
         for item_key, item in list(container.items()):
             pos = positions.get(item_key)
@@ -409,9 +493,9 @@ def apply(ctx):
             finally:
                 placing["moving"] = False
                 placing["cell"] = None
-        write("built {} of {} items".format(len(made), len(container)))
-        sync_game(app, force=True)
-        after_change(app)
+        write("{}: built {} of {} items".format(sc["key"], len(made), len(container)))
+        sync_game(app, sc, force=True)
+        after_change(app, sc)
 
     # ------------------------------------------------------------ 装備欄の窓
     def drop_detail_boxes(hud):
@@ -458,15 +542,35 @@ def apply(ctx):
                 target.disabled = bool(hidden)
             except Exception:
                 ctx.log_exc("equipment slots: hiding the choice buttons failed")
+        changed = False
         for button in buttons:
             try:
-                button.opacity = 0.0 if hidden else 1.0
+                want = 0.0 if hidden else 1.0
+                if float(button.opacity) != want:
+                    changed = True
+                button.opacity = want
             except Exception:
                 ctx.log_exc("equipment slots: hiding the choice buttons failed")
+        if changed:
+            write("choice buttons {}".format("hidden" if hidden else "restored"))
 
-    def drop_panel(hud):
-        panel = panel_of(hud)
-        if panel is not None:
+    def ensure_buttons(app):
+        """所持品の窓が開いていなければ右側の選択肢を戻す。
+
+        窓は本体の別の経路（会話に入る・ロード・タイトルへ戻る）でも閉じられ、そのときは
+        `toggle_center_inventory_visibility` を通らないので、隠したままになった（実機 2026-09-23、
+        ロード後に会話の選択肢が出ない）。選択肢が組み直されるたびに確かめる。
+        """
+        hud = ui.find_hud(app)
+        if hud is None:
+            return
+        hide_buttons(hud, find_grid(app, player_scope(app)) is not None)
+
+    def drop_panel(hud, sc=None):
+        """装備欄を片付ける。`sc` を省けば全部。"""
+        for panel in panels_of(hud):
+            if sc is not None and getattr(panel, PANEL_ATTR).get("owner_key") != sc["key"]:
+                continue
             for widget in getattr(panel, PANEL_ATTR).get("widgets", []):
                 parent = frames.attr(widget, "parent", None)
                 if parent is not None:
@@ -480,15 +584,26 @@ def apply(ctx):
                 pass
         drop_detail_boxes(hud)
 
-    def build_panel(app):
-        """装備欄を組んで所持品の窓の左に置く。開くたびに作り直す。"""
+    def drop_stale_panels(app):
+        """持ち物のグリッドが見えなくなった装備欄を片付ける（受け渡しの窓を閉じたときなど）。"""
         hud = ui.find_hud(app)
-        grid = find_grid(app)
         if hud is None:
             return
-        drop_panel(hud)
+        for panel in panels_of(hud):
+            sc = scope_of_grid(getattr(panel, PANEL_ATTR).get("grid"))
+            if sc is None or find_grid(app, sc) is None:
+                drop_panel(hud, sc)
+
+    def build_panel(app, sc):
+        """装備欄を組む。主人公は所持品の窓の左、仲間は受け渡しの窓の右。開くたびに作り直す。"""
+        hud = ui.find_hud(app)
+        grid = find_grid(app, sc)
+        if hud is None:
+            return
+        drop_panel(hud, sc)
         if grid is None:
             return
+        container = sc["container"]
         cls = game_class(GRID_CLASS)
         if cls is None:
             write("WARN InventoryGrid class not found")
@@ -507,26 +622,34 @@ def apply(ctx):
             gap = float(spacing[0])
         except (TypeError, ValueError, IndexError):
             gap = 1.0
-        cell = (float(grid.width) + gap) / cols
+        # マスは持ち物と同じ大きさ。本体は品を固定の単位（65px）で置き、ドロップの座標も同じ単位で割るので、
+        # マスを縮めると絵と枠がずれる（DOC.md §3.3）。画面に収まらないぶんは余白を詰めて上下に寄せる
+        main_cell = cell = (float(grid.width) + gap) / cols
+        host = ui.overlay_host(hud)
+        window = window_of(grid, host)
         width = rules.COLS * cell - gap
         height = rules.ROWS * cell - gap
         pad = cell * 0.5
+        _screen_w, screen_h = ui.window_size()
+        tight = bool(screen_h) and height + 2 * pad > screen_h * 0.64   # 1080p: 窓より高い
+        if tight:
+            pad = 0.0                                          # 余白なし（窓の下の印に掛けない）
 
-        player = player_of(app)
         try:
-            mine = cls(rules.COLS, rules.ROWS, container, player,
+            mine = cls(rules.COLS, rules.ROWS, container, sc["owner"],
                        size_hint=(None, None), size=(width, height))
         except Exception:
             ctx.log_exc("equipment slots: building the equipment grid failed")
             return
-        setattr(mine, GRID_ATTR, True)
+        setattr(mine, GRID_ATTR, sc)
         try:
             mine.size_hint = (None, None)
             mine.size = (width, height)
         except Exception:
             pass
 
-        # 部位の外のマス（上の両隅）は見せない（slots の添字は上の行から）
+        # 部位の外のマス（上の両隅）は見せない（slots の添字は上の行から）。
+        # 縮めた装備欄ではマスの大きさも縮める（本体のマスは固定の大きさで、グリッドの size だけでは縮まない）
         slots = frames.attr(mine, "slots", None)
         if isinstance(slots, (list, tuple)):
             for x, y in rules.UNUSED_CELLS:
@@ -564,13 +687,20 @@ def apply(ctx):
                 labels[name][0].pos = (x, y)
 
         panel.bind(pos=layout)
-        setattr(panel, PANEL_ATTR, {"grid": mine, "labels": labels, "cell": cell, "gap": gap})
+        setattr(panel, PANEL_ATTR, {"grid": mine, "labels": labels, "cell": cell, "gap": gap,
+                                    "main_cell": main_cell, "owner_key": sc["key"]})
 
-        host = ui.overlay_host(hud)
-        window = window_of(grid, host)
         wx, wy = window.to_window(window.x, window.y)
-        px = wx - cell * 0.5 - panel.width
+        screen_w, screen_h = ui.window_size()
+        if sc["player"]:
+            px = wx - cell * 0.5 - panel.width
+        else:
+            px = wx + float(window.width) + cell * 0.5          # 仲間は窓の右
+            if screen_w and (tight or px + panel.width > screen_w):
+                px = screen_w - panel.width                    # 窓より高いときは右上に寄せる（窓の下の印に掛けない）
         py = wy + (float(window.height) - panel.height) / 2.0
+        if screen_h:
+            py = min(py, screen_h - panel.height)              # 画面の上端を割らない（窓より高いとき）
         if hasattr(host, "to_widget"):
             px, py = host.to_widget(px, py)
         panel.pos = (max(0.0, px), max(0.0, py))
@@ -580,29 +710,30 @@ def apply(ctx):
         at = children.index(window) + 1 if window in children else len(children)
         host.add_widget(panel, index=at)
         layout()
-        write("panel built: cell={:.1f} items={} pos=({:.0f},{:.0f})".format(
-            cell, len(container), panel.x, panel.y))
-        paint_labels(app)
+        write("{}: panel built: cell={:.1f} pad={:.1f} items={} pos=({:.0f},{:.0f})".format(
+            sc["key"], cell, pad, len(container), panel.x, panel.y))
+        paint_labels(app, sc)
 
-    def paint_labels(app):
+    def paint_labels(app, sc):
         """空いている部位だけ名前を見せる。"""
         hud = ui.find_hud(app)
-        panel = panel_of(hud) if hud is not None else None
+        panel = panel_of(hud, sc) if hud is not None else None
         if panel is None:
             return
-        slots = current_slots(app)
+        slots = current_slots(app, sc)
         for name, (text, _rx, _ry, _rw, _rh) in getattr(panel, PANEL_ATTR)["labels"].items():
             text.opacity = 0.0 if slots.get(name) else 1.0
 
     # ------------------------------------------------------------ 見た目の大きさ
-    def panel_metrics(app):
+    def panel_metrics(app, sc):
         hud = ui.find_hud(app)
-        panel = panel_of(hud) if hud is not None else None
+        panel = panel_of(hud, sc) if (hud is not None and sc is not None) else None
         return getattr(panel, PANEL_ATTR) if panel is not None else None
 
     def fit_widget(app, widget):
         """装備欄の品を部位いっぱいに広げる（1×1 を 2×2 の部位なら 2 倍）。部位の左上に寄せる。"""
-        metrics = panel_metrics(app)
+        sc = scope_of_grid(frames.attr(widget, "inventory", None))
+        metrics = panel_metrics(app, sc)
         cell_pos = cell_of(widget)
         if metrics is None or cell_pos is None:
             return
@@ -611,14 +742,14 @@ def apply(ctx):
         if name is None:
             return
         factor = rules.fit_scale(item, name) if SCALE_TO_FIT else 1
-        if factor <= 1:
-            return
         cell, gap, mine = metrics["cell"], metrics["gap"], metrics["grid"]
         rx, ry, _rw, _rh = rules.REGIONS[name]
         w, h = rules.size_of(item)
+        if factor <= 1:
+            return
         if tuple(cell_pos) != (rx, ry):
             # 占有マスを部位の左上へ寄せる（本体の装備印はマス単位に描かれるので、絵と揃える）
-            key, positions = positions_of(app)
+            key, positions = positions_of(app, sc)
             try:
                 widget.clear_current_slots()
                 item.grid_pos = [rx, to_game_y(ry, h)]
@@ -634,12 +765,12 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("equipment slots: fitting {!r} failed".format(key_of(widget)))
 
-    def unfit_widget(app, widget):
-        """所持品へ戻す品を元の大きさに。"""
-        metrics = panel_metrics(app)
+    def unfit_widget(app, widget, sc):
+        """所持品へ戻す品を持ち物のマスの大きさに。"""
+        metrics = panel_metrics(app, sc)
         if metrics is None:
             return
-        cell, gap = metrics["cell"], metrics["gap"]
+        cell, gap = metrics.get("main_cell", metrics["cell"]), metrics["gap"]
         w, h = rules.size_of(instance_of(widget))
         try:
             widget.size = (w * cell - gap, h * cell - gap)
@@ -647,41 +778,48 @@ def apply(ctx):
             pass
 
     # ------------------------------------------------------------ 控えとの突き合わせ
-    def occupied_except(app, item_key):
-        slots = current_slots(app)
+    def occupied_except(app, sc, item_key):
+        slots = current_slots(app, sc)
         return {name: held for name, held in slots.items() if held != item_key}
 
-    def free_region(app, item, item_key):
+    def free_region(app, sc, item, item_key):
         """この品が入る空いている部位 (名前, x, y_top)。無ければ None。"""
         kind = rules.kind_of(item)
         if kind is None:
             return None
-        taken = occupied_except(app, item_key)
+        taken = occupied_except(app, sc, item_key)
         for name, (rx, ry, _rw, _rh) in rules.REGIONS.items():
             if rules.KIND_OF[name] == kind and not taken.get(name):
                 return name, rx, ry
         return None
 
-    def refresh_container(app):
-        """控えを持ち物と突き合わせ、`container` を組み直し、装備欄の品を持ち物の辞書から抜く。
+    def refresh_container(app, sc):
+        """控えを持ち物と突き合わせ、装備欄の辞書を組み直し、装備欄の品を持ち物の辞書から抜く。
 
-        品は持ち物の辞書（ロード直後・セーブ直後）か `container` のどちらかに居る。
+        品は持ち物の辞書（ロード直後・セーブ直後）か装備欄の辞書のどちらかに居る。
         どちらにも無い品（売った・渡した・捨てた）は落とす。
-        本体が装備しているのに控えに無い品（MOD を入れる前のセーブ）は空いている部位
+        本体が装備しているのに控えに無い品（MOD を入れる前のセーブ、402_ の直書き）は空いている部位
         （手は右手が先）へ拾う。窓を組む前に呼ぶこと（本体が辞書から品を並べる前に抜く）。
         """
-        player = player_of(app)
+        player = sc["owner"]
+        container = sc["container"]
         inv = inventory_of(player)
         if inv is None:
             return
-        key, positions = positions_of(app)
+        key, positions = positions_of(app, sc)
         eq = equipments_of(player) or {}
         # 辞書はプロセスに1つ。別の世界をロードしたら前の世界の品は持たない
         # （前の世界の品はセーブに合流済み。持ったままだと「戻し先の無い品」として新しい世界の所持品へ返る）
         held = getattr(sys, CONTAINER_ATTR + "_world", None)
-        if held is not None and held != key and container:
-            write("world changed ({!r} -> {!r}): dropping {} item(s) of the old world".format(held, key, len(container)))
-            container.clear()
+        if held is not None and held != key:
+            count = len(CONTAINER) + sum(len(c) for c in npc_containers.values())
+            if count:
+                write("world changed ({!r} -> {!r}): dropping {} item(s) of the old world".format(held, key, count))
+            CONTAINER.clear()
+            npc_containers.clear()
+            scopes.clear()
+            container = sc["container"] = CONTAINER if sc["player"] else npc_containers.setdefault(sc["key"], {})
+            scopes[sc["key"]] = sc
         setattr(sys, CONTAINER_ATTR + "_world", key)
 
         def item_of(item_key):
@@ -690,7 +828,7 @@ def apply(ctx):
 
         # 持ち物にも装備欄にも無い品は、プロセスに残っていれば持ち物へ返す
         # （MOD の作り直しや落ちたときの保険。持ち主がプレイヤーで、どの辞書にも居ない Item）
-        if not getattr(sys, CONTAINER_ATTR + "_swept", False):
+        if sc["player"] and not getattr(sys, CONTAINER_ATTR + "_swept", False):
             setattr(sys, CONTAINER_ATTR + "_swept", True)
             try:
                 import gc
@@ -735,11 +873,11 @@ def apply(ctx):
                     break
             if item_key is None or item_key in positions:
                 continue
-            found = free_region(app, item_of(item_key), item_key)
+            found = free_region(app, sc, item_of(item_key), item_key)
             if found is not None:
                 name, rx, ry = found
                 positions[item_key] = [rx, ry]
-                write("adopted {!r} into {}".format(item_key, name))
+                write("{}: adopted {!r} into {}".format(sc["key"], item_key, name))
         tidy_inventory_positions(inv)
         fresh = {item_key: item_of(item_key) for item_key in positions}
         # 控えに無いのに装備欄の辞書に残っている品（戻し先が無かった品）は持ち物へ返す
@@ -800,17 +938,17 @@ def apply(ctx):
         except (TypeError, ValueError):
             return False
 
-    def combined_of(app, game_key):
+    def combined_of(app, sc, game_key):
         """(最高の品の値, 合算した値)。合算が切ってあるか候補が無ければ None。
 
         窓を開いていなくても引けるよう、控えの位置と持ち物＋装備欄の辞書から組む
         （ロード直後は装備欄の品も持ち物の辞書に居る）。
         """
-        if not COMBINE_SLOTS:
+        if not COMBINE_SLOTS or sc is None:
             return None
-        items = dict(inventory_of(player_of(app)) or {})
-        items.update(container)
-        _key, positions = positions_of(app)
+        items = dict(inventory_of(sc["owner"]) or {})
+        items.update(sc["container"])
+        _key, positions = positions_of(app, sc)
         slots = rules.slots_from_positions(positions, items)
         percent = COMBINE_ATTACK_PERCENT if game_key == "weapon" else COMBINE_DEFENSE_PERCENT
         chosen, value = rules.combined(slots, items, game_key, percent)
@@ -827,7 +965,7 @@ def apply(ctx):
     def get_base_damage_value(orig, character_attack=None, weapon_attack=None, *args, **kwargs):
         """プレイヤーの手の火力。武器攻撃力を両手の合算に差し替える（通るのはプレイヤーの手だけ）。"""
         app = ui.find_app()
-        found = combined_of(app, "weapon") if app is not None else None
+        found = combined_of(app, player_scope(app), "weapon") if app is not None else None
         if found is not None and matches(weapon_attack, found[0]):
             note_combined("weapon", found[0], found[1])
             weapon_attack = found[1]
@@ -845,7 +983,7 @@ def apply(ctx):
         app = ui.find_app()
         if app is not None:
             try:
-                sync_game(app)            # 本体の popup で枠を落とされていても、装備欄の品で戦う
+                sync_game(app, player_scope(app))   # 本体の popup で枠を落とされていても、装備欄の品で戦う
             except Exception:
                 ctx.log_exc("equipment slots: sync before a battle turn failed")
         try:
@@ -862,7 +1000,7 @@ def apply(ctx):
         """
         if battle["active"] and not matches(defense, battle["npc_defense"]):
             app = ui.find_app()
-            found = combined_of(app, "wearable") if app is not None else None
+            found = combined_of(app, player_scope(app), "wearable") if app is not None else None
             if found is not None and matches(defense, found[0]):
                 note_combined("wearable", found[0], found[1])
                 defense = found[1]
@@ -876,12 +1014,12 @@ def apply(ctx):
         仲間の装備欄は段2で足す（DOC.md §3.4）。
         """
         stat = dict(rules.GAME_KEYS)[game_key]
-        if holder is player_of(app):
-            found = combined_of(app, game_key)
+        sc = scope_for(app, holder, create=False)
+        if sc is not None and (sc["player"] or positions_of(app, sc)[1]):
+            found = combined_of(app, sc, game_key)
             if found is not None:
                 return found[1]
-            slots = current_slots(app)
-            chosen = rules.best(slots, container, game_key)
+            chosen = rules.best(current_slots(app, sc), sc["container"], game_key)
             return rules.stat_of(chosen, stat) if chosen is not None else None
         eq = getattr(holder, "equipments", None)
         ref = eq.get(game_key) if isinstance(eq, dict) else None
@@ -896,6 +1034,8 @@ def apply(ctx):
         return value if value > 0 else None
 
     owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "912_equipment_slots"
+    global SCOPE_FOR
+    SCOPE_FOR = scope_for
     combat.declare(combat.ATTACK, lambda app, holder: gear_value(app, holder, "weapon"),
                    owner=owner, write=write)
     combat.declare(combat.DEFENSE, lambda app, holder: gear_value(app, holder, "wearable"),
@@ -907,7 +1047,7 @@ def apply(ctx):
             return text
 
         def sub(m):
-            found = combined_of(app, "weapon" if m.group(1) == "Atk" else "wearable")
+            found = combined_of(app, player_scope(app), "weapon" if m.group(1) == "Atk" else "wearable")
             if found is None or not matches(m.group(3), found[0]):
                 return m.group(0)
             return "{}:{}(+{})".format(m.group(1), m.group(2), int(round(found[1])))
@@ -932,22 +1072,31 @@ def apply(ctx):
         held = getattr(sys, CONTAINER_ATTR + "_world", None)
         if held is not None and state.world_key_of_dict(data, held) != held:
             return 0                              # 別の世界のセーブ。辞書の品はこの世界の物ではない
+        targets = []
         player_data = data.get("player_data")
         inv = player_data.get("inventory") if isinstance(player_data, dict) else None
-        if not isinstance(inv, dict):
-            return 0
+        if isinstance(inv, dict):
+            targets.append((inv, container))
+        npcs = data.get("npcs")
+        if isinstance(npcs, dict):
+            for key, held in npc_containers.items():
+                entry = npcs.get(key[4:])
+                inv = entry.get("inventory") if isinstance(entry, dict) else None
+                if isinstance(inv, dict) and held:
+                    targets.append((inv, held))
         added = 0
-        for item_key, item in list(container.items()):
-            if item_key in inv:
-                continue
-            to_dict = getattr(item, "to_dict", None)
-            if not callable(to_dict):
-                continue
-            try:
-                inv[item_key] = to_dict()
-                added += 1
-            except Exception:
-                ctx.log_exc("equipment slots: to_dict of {!r} failed".format(item_key))
+        for inv, held in targets:
+            for item_key, item in list(held.items()):
+                if item_key in inv:
+                    continue
+                to_dict = getattr(item, "to_dict", None)
+                if not callable(to_dict):
+                    continue
+                try:
+                    inv[item_key] = to_dict()
+                    added += 1
+                except Exception:
+                    ctx.log_exc("equipment slots: to_dict of {!r} failed".format(item_key))
         return added
 
     # ------------------------------------------------------------ フック
@@ -964,23 +1113,25 @@ def apply(ctx):
             ctx.log_exc("equipment slots: scanning the inventory for room failed")
         return False
 
-    def evict_for(app, widget, gx, y_top):
+    def evict_for(app, sc, widget, gx, y_top):
         """落とす先の部位に同じ種類の別の品が居れば、所持品の空きへ出す（置換）。
 
         空きが無ければ何もしない。出せたら True。
         """
-        main = find_grid(app)
+        main = find_grid(app, sc)
         if main is None:
             return False
         item = instance_of(widget)
+        if getattr(item, "obtainer", None) is not sc["owner"]:
+            return False
         name = rules.fits(item, gx, y_top)
         if name is None or rules.KIND_OF[name] != rules.kind_of(item):
             return False
-        held = current_slots(app).get(name)
+        held = current_slots(app, sc).get(name)
         item_key = key_of(widget)
         if not held or held == item_key:
             return False
-        old = next((w for w in item_widgets(app) if key_of(w) == held), None)
+        old = next((w for w in item_widgets(app, sc["owner"]) if key_of(w) == held), None)
         if old is None:
             return False
         if not main_has_room(main, instance_of(old)):
@@ -998,12 +1149,13 @@ def apply(ctx):
     @ctx.wrap("scripts.hud.new_hud:InventoryGrid.try_place_item", safe=True)
     def try_place_item(orig, self, item, pos, *args, **kwargs):
         """装備欄へのドロップ。可否は `is_valid_placement` の包みが決める。ここでは置換の先出しと品の控えだけ。"""
-        placing["item"] = item if is_mine(self) else None
+        sc = scope_of_grid(self)
+        placing["item"] = item if sc is not None else None
         try:
             result = orig(self, item, pos, *args, **kwargs)
         finally:
             placing["item"] = None
-        if is_mine(self):
+        if sc is not None:
             # 本体はドロップの途中で Manager を通す（断ったドロップでも）ので、装備印や
             # `equipments` に余計なものが残る。次のフレームで整える
             write("try_place_item {!r} -> {!r}".format(key_of(item), result))
@@ -1012,7 +1164,7 @@ def apply(ctx):
             def settle_drop():
                 # 所持品から来た品を断ったとき、本体は change_inventory を呼ばず、
                 # 品を落とした座標に置いたまま（窓の外なので見えない）にする。所持品の空きへ戻す
-                main = find_grid(app)
+                main = find_grid(app, sc)
                 if (not result and main is not None
                         and not is_mine(frames.attr(item, "inventory", None))
                         and main_has_room(main, instance_of(item))):
@@ -1021,7 +1173,7 @@ def apply(ctx):
                         write("drop of {!r} rejected: back to inventory".format(key_of(item)))
                     except Exception:
                         ctx.log_exc("equipment slots: returning {!r} failed".format(key_of(item)))
-                after_change(app)
+                after_change(app, sc)
             if app is not None:
                 schedule(settle_drop)
         return result
@@ -1029,7 +1181,8 @@ def apply(ctx):
     @ctx.wrap("scripts.hud.new_hud:InventoryGrid.is_valid_placement", safe=True)
     def is_valid_placement(orig, self, grid_x, grid_y, width, height, *args, **kwargs):
         result = orig(self, grid_x, grid_y, width, height, *args, **kwargs)
-        if not is_mine(self):
+        sc = scope_of_grid(self)
+        if sc is None:
             return result
         item = placing["item"]
         if item is None:
@@ -1038,7 +1191,7 @@ def apply(ctx):
             if not result and dragging is not None and "on_touch_up" in frames.caller(4):
                 app = ui.find_app()
                 try:
-                    if app is not None and evict_for(app, dragging, int(grid_x), to_top_y(int(grid_y), int(height))):
+                    if app is not None and evict_for(app, sc, dragging, int(grid_x), to_top_y(int(grid_y), int(height))):
                         result = orig(self, grid_x, grid_y, width, height, *args, **kwargs)
                 except (TypeError, ValueError):
                     pass
@@ -1049,9 +1202,11 @@ def apply(ctx):
         item_key = key_of(item)
         try:
             reason = rules.accepts(instance_of(item), int(grid_x), to_top_y(int(grid_y), int(height)),
-                                   occupied_except(app, item_key))
+                                   occupied_except(app, sc, item_key))
         except (TypeError, ValueError):
             reason = "bad cell"
+        if reason is None and getattr(instance_of(item), "obtainer", None) is not sc["owner"]:
+            reason = "not this owner's item"           # 受け渡しの窓で、渡す前の品を仲間の装備欄へは置けない
         write("drop {!r} at ({}, {}) {}x{} -> {}".format(
             item_key, grid_x, grid_y, width, height, reason or "ok"))
         placing["cell"] = (int(grid_x), to_top_y(int(grid_y), int(height))) if reason is None else None
@@ -1062,12 +1217,14 @@ def apply(ctx):
         old = frames.attr(self, "inventory", None)
         result = orig(self, new_inventory, *args, **kwargs)
         app = ui.find_app()
-        if app is None or not (is_mine(new_inventory) or is_mine(old)):
+        sc = scope_of_grid(new_inventory) or scope_of_grid(old)
+        if app is None or sc is None:
             return result
+        container = sc["container"]
         item_key = key_of(self)
         item = instance_of(self)
-        _key, positions = positions_of(app)
-        inv = inventory_of(player_of(app))
+        _key, positions = positions_of(app, sc)
+        inv = inventory_of(sc["owner"])
         if is_mine(new_inventory):
             cell = placing["cell"]
             if not placing["moving"]:
@@ -1082,8 +1239,8 @@ def apply(ctx):
                     inv[item_key] = item
 
                 def put_back():
-                    mine = my_grid(app)
-                    main = find_grid(app)
+                    mine = my_grid(app, sc)
+                    main = find_grid(app, sc)
                     try:
                         if came_from_mine and mine is not None and previous is not None:
                             move_widget(app, self, mine, previous[0], previous[1])
@@ -1098,7 +1255,7 @@ def apply(ctx):
                             write("drop of {!r} rejected: no room to return it now".format(item_key))
                     except Exception:
                         ctx.log_exc("equipment slots: putting {!r} back failed".format(item_key))
-                    after_change(app)
+                    after_change(app, sc)
 
                 schedule(put_back)
                 return result
@@ -1107,15 +1264,23 @@ def apply(ctx):
             if inv is not None:
                 inv.pop(item_key, None)       # 装備欄に居る間は持ち物の辞書に居ない
             schedule(lambda: fit_widget(app, self))   # 本体がドロップの座標を置き終えた後で
-            write("equipped {!r} at {}".format(item_key, cell))
+            write("{}: equipped {!r} at {}".format(sc["key"], item_key, cell))
         else:
-            container.pop(item_key, None)
-            positions.pop(item_key, None)
-            if inv is not None:
+            # 鍵は控えに入れたときのもの（402_ が渡した先で鍵を振り直すことがある）
+            held_key = next((k for k, v in container.items() if v is item), item_key)
+            container.pop(held_key, None)
+            positions.pop(held_key, None)
+            new_owner = frames.attr(new_inventory, "obtainer", None)
+            if new_owner is not None and new_owner is not sc["owner"]:
+                # 受け渡しの窓で別の持ち主へ渡った。持ち物の辞書は 402_ が移したので、元の持ち主へは戻さない。
+                # `equipments` はここ（after_change）だけが書く（402_ は窓口の答えを見て手を引く）
+                write("{}: {!r} handed to {!r}".format(
+                    sc["key"], held_key, frames.short(getattr(new_owner, "name", None), 40)))
+            elif inv is not None:
                 inv[item_key] = item
-            unfit_widget(app, self)
-            write("unequipped {!r}".format(item_key))
-        after_change(app)
+            unfit_widget(app, self, sc)
+            write("{}: unequipped {!r}".format(sc["key"], held_key))
+        after_change(app, sc)
         return result
 
     # 右クリックの popup（`ItemPopupMenu`）は右クリックのたびに作られ、ボタンはそのときの
@@ -1129,7 +1294,7 @@ def apply(ctx):
         item = getattr(widget, "item_instance", None) if widget is not None else None
         if item is None or getattr(item, "obtainer", None) is not player_of(app):
             return None
-        if find_grid(app) is None:
+        if find_grid(app, player_scope(app)) is None:
             return None
         return widget
 
@@ -1141,23 +1306,23 @@ def apply(ctx):
             except Exception:
                 pass
 
-    def do_equip(app, widget):
+    def do_equip(app, sc, widget):
         """品を空いている部位へ移す（手は右手が先）。埋まっていれば右手の品と入れ替える。"""
-        mine = my_grid(app)
-        main = find_grid(app)
+        mine = my_grid(app, sc)
+        main = find_grid(app, sc)
         item_instance = instance_of(widget)
         if mine is None or main is None:
             return
         if is_mine(frames.attr(widget, "inventory", None)):
             return                                                       # もう装備欄に居る
         item_key = key_of(widget)
-        found = free_region(app, item_instance, item_key)
+        found = free_region(app, sc, item_instance, item_key)
         if found is None:
             kind = rules.kind_of(item_instance)
             for name, (rx, ry, _rw, _rh) in rules.REGIONS.items():
                 if rules.KIND_OF[name] == kind:
-                    held = current_slots(app).get(name)
-                    old = next((w for w in item_widgets(app) if key_of(w) == held), None)
+                    held = current_slots(app, sc).get(name)
+                    old = next((w for w in item_widgets(app, sc["owner"]) if key_of(w) == held), None)
                     if old is not None:
                         try:
                             move_back(app, old, main)
@@ -1184,7 +1349,7 @@ def apply(ctx):
         if widget is None:
             return orig(self, *args, **kwargs)
         hide_popup(widget)
-        do_equip(app, widget)
+        do_equip(app, player_scope(app), widget)
         return None
 
     @ctx.wrap("scripts.hud.new_hud:ItemPopupMenu.on_unequip_item", safe=True)
@@ -1195,9 +1360,9 @@ def apply(ctx):
         if widget is None:
             return orig(self, *args, **kwargs)
         hide_popup(widget)
-        main = find_grid(app)
+        main = find_grid(app, player_scope(app))
         if not is_mine(frames.attr(widget, "inventory", None)):
-            refresh_marks(app)                                            # 装備印だけ残っていた
+            refresh_marks(app, player_scope(app))                         # 装備印だけ残っていた
             return None
         if main is None or not main_has_room(main, instance_of(widget)):
             write("popup unequip {!r} ignored: no room in the inventory".format(key_of(widget)))
@@ -1222,8 +1387,8 @@ def apply(ctx):
             if app is not None:
                 def resync():
                     try:
-                        sync_game(app, force=True)
-                        refresh_marks(app)
+                        sync_game(app, player_scope(app), force=True)
+                        refresh_marks(app, player_scope(app))
                     except Exception:
                         ctx.log_exc("equipment slots: resync after a native manager failed")
                 schedule(resync)
@@ -1247,7 +1412,7 @@ def apply(ctx):
         widget = popup_widget(self, app)
         if widget is None or not is_mine(frames.attr(widget, "inventory", None)):
             return orig(self, *args, **kwargs)
-        main = find_grid(app)
+        main = find_grid(app, player_scope(app))
         if main is None or not main_has_room(main, instance_of(widget)):
             hide_popup(widget)
             write("discard of {!r} ignored: no room to unequip first".format(key_of(widget)))
@@ -1264,7 +1429,7 @@ def apply(ctx):
     @ctx.wrap("scripts.hud.new_hud:InventoryItem.on_touch_down", safe=True)
     def on_touch_down(orig, self, touch, *args, **kwargs):
         try:
-            if self.collide_point(*touch.pos) and getattr(instance_of(self), "obtainer", None) is player_of(ui.find_app()):
+            if self.collide_point(*touch.pos) and scope_for(ui.find_app(), getattr(instance_of(self), "obtainer", None), create=False) is not None:
                 placing["dragging"] = self
         except Exception:
             pass
@@ -1283,8 +1448,9 @@ def apply(ctx):
         result = orig(self, *args, **kwargs)
         try:
             item = getattr(self, "item_instance", None)
-            if item is not None and getattr(item, "obtainer", None) is player_of(ui.find_app()):
-                self.is_equipped = key_of(self) in container
+            sc = scope_for(ui.find_app(), getattr(item, "obtainer", None), create=False) if item is not None else None
+            if sc is not None:
+                self.is_equipped = key_of(self) in sc["container"]
         except Exception:
             ctx.log_exc("equipment slots: marking failed")
         return result
@@ -1298,21 +1464,145 @@ def apply(ctx):
         app = ui.find_app()
         if app is not None:
             try:
-                refresh_container(app)
+                refresh_container(app, player_scope(app))
             except Exception:
                 ctx.log_exc("equipment slots: refreshing the container before a window failed")
-        return orig(self, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
+        if app is not None:
+            schedule(lambda: drop_stale_panels(app))   # 窓を閉じたら仲間の装備欄も片付ける
+        return result
 
     for _target in ("toggle_twin_inventory_visibility", "toggle_craft_inventory_visibility",
                     "toggle_reinforcement_inventory_visibility"):
         ctx.wrap("scripts.hud.new_hud:InstanTaleHUD." + _target, required=False, safe=True)(pull_before_window)
+
+    @ctx.wrap("__main__:InstantaleApp.toggle_twin_inventory_window", required=False, safe=True)
+    def toggle_twin_window(orig, self, left=None, right=None, label=None, situation=None, *args, **kwargs):
+        """402_ の受け渡しの窓。右側が同行の仲間なら、組む前にその仲間の装備欄の品を辞書から抜き、
+        組んだ後に装備欄を窓の右に出す。店（場面が違う）には出さない。"""
+        app = ui.find_app()
+        sc = None
+        if (app is not None and situation == SITUATION_TWIN and right is not None
+                and right is not player_of(app)):
+            sc = scope_for(app, right, create=True)
+            if sc is not None:
+                try:
+                    refresh_container(app, sc)
+                except Exception:
+                    ctx.log_exc("equipment slots: refreshing the npc container failed")
+        result = orig(self, left, right, label, situation, *args, **kwargs)
+        if sc is not None:
+            def settle():
+                try:
+                    build_panel(app, sc)
+                    if find_grid(app, sc) is not None:
+                        schedule(lambda: build_items(app, sc), delay=SETTLE_DELAY)
+                except Exception:
+                    ctx.log_exc("equipment slots: npc panel failed")
+            schedule(settle)
+        return result
+
+    # 402_ の「装備／外す」はローダの窓口を通してここへ来る（書く役を 1 本にする。TECH.md §3.3.5）。
+    def npc_toggle(app, holder, item):
+        """仲間の品を装備欄へ入れる／戻す。窓口 `combat.toggle` の答え。装備欄が無ければ None（402_ の直書きに任せる）。"""
+        sc = scope_for(app, holder, create=False)
+        if sc is None or sc["player"]:
+            return None
+        mine, main = my_grid(app, sc), find_grid(app, sc)
+        if mine is None or main is None:
+            return None
+        key = str(getattr(item, "id", ""))
+        widget = next((w for w in item_widgets(app, holder) if key_of(w) == key), None)
+        if widget is None:
+            return None
+        if is_mine(frames.attr(widget, "inventory", None)):
+            if not main_has_room(main, instance_of(widget)):
+                write("{}: unequip {!r} ignored: no room in the inventory".format(sc["key"], key))
+                return "no room"
+            move_back(app, widget, main)
+            write("{}: unequipped {!r} via the window".format(sc["key"], key))
+            return "unequipped"
+        do_equip(app, sc, widget)
+        return "equipped" if is_mine(frames.attr(widget, "inventory", None)) else "not equipment"
+
+    def npc_equipped(app, holder, item):
+        sc = scope_for(app, holder, create=False)
+        if sc is None or sc["player"]:
+            return None
+        key = str(getattr(item, "id", ""))
+        found = key in sc["container"]
+        if not found:
+            # 計測（2026-09-23）: 装備欄から主人公側へ引いた途中で False が返った。引いた辞書が画面の装備欄の
+            # 辞書と同じか、品が同一の物としてどこに居るかを残す（912 DOC.md §3.2）
+            try:
+                grid = my_grid(app, sc)
+                shown = scope_of_grid(grid) if grid is not None else None
+                held_by = [k for k, c in npc_containers.items() if any(v is item for v in c.values())]
+                write("{}: equipped? {!r} -> False (keys={} same_as_panel={} panel_keys={} held_by={} "
+                      "same_owner={} registered={})".format(
+                          sc["key"], key, sorted(sc["container"]),
+                          shown is not None and shown["container"] is sc["container"],
+                          sorted(shown["container"]) if shown is not None else None, held_by,
+                          shown is not None and shown["owner"] is holder,
+                          npc_containers.get(sc["key"]) is sc["container"]))
+            except Exception:
+                ctx.log_exc("equipment slots: tracing equipped? failed")
+        return found
+
+    def worn_of(app, holder):
+        """身に着けている品 `[(部位, 品), ...]`（部位の並び順）。窓口 `combat.gear` の答え。
+
+        控え（世界ごとの位置の控え。DOC.md「仲間の装備欄」）から組む。品は持ち物の辞書を先に、
+        無ければ装備欄の辞書から引く（ロード直後で窓をまだ開いていないとき、品は持ち物の辞書に居る。
+        装備欄の辞書にはロード前の品が残っていることがある）。scope は作らない
+        （作ると戦闘の数が空の辞書を引く）。控えが無ければ None。
+        """
+        if app is None or holder is None:
+            return None
+        if holder is player_of(app):
+            key, container = str(getattr(holder, "name", None) or "_"), CONTAINER
+        else:
+            cid = getattr(holder, "id", None)
+            if cid is None:
+                return None
+            key = "npc:" + str(cid)
+            container = npc_containers.get(key) or {}
+        _world, bucket = store.of(app)
+        positions = bucket.get(key) if isinstance(bucket, dict) else None
+        if not positions:
+            return None
+        inv = inventory_of(holder) or {}
+        items = {}
+        for item_key in positions:
+            item = inv.get(item_key)
+            if item is None:
+                item = container.get(item_key)
+            if item is not None:
+                items[item_key] = item
+        slots = rules.slots_from_positions(positions, items)
+        return [(name, items[slots[name]]) for name in rules.REGIONS if name in slots]
+
+    combat.declare(combat.TOGGLE, npc_toggle, owner=owner, write=write)
+    combat.declare(combat.EQUIPPED, npc_equipped, owner=owner, write=write)
+    combat.declare(combat.GEAR, worn_of, owner=owner, write=write)
+
+    def restore_buttons_after(orig, self, *args, **kwargs):
+        """選択肢の組み直し・ロード・タイトルへ戻るの後で、隠した選択肢を戻す。"""
+        result = orig(self, *args, **kwargs)
+        app = ui.find_app()
+        if app is not None:
+            schedule(lambda: ensure_buttons(app))
+        return result
+
+    for _target in ("refresh_choice_buttons", "load_game_new", "return_to_title"):
+        ctx.wrap("__main__:InstantaleApp." + _target, required=False, safe=True)(restore_buttons_after)
 
     @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.toggle_center_inventory_visibility", safe=True)
     def toggle_inventory(orig, self, *args, **kwargs):
         app = ui.find_app()
         if app is not None:
             try:
-                refresh_container(app)        # 本体が辞書から品を並べる前に、装備欄の品を抜く
+                refresh_container(app, player_scope(app))   # 本体が辞書から品を並べる前に、装備欄の品を抜く
             except Exception:
                 ctx.log_exc("equipment slots: refreshing the container failed")
         result = orig(self, *args, **kwargs)
@@ -1321,11 +1611,12 @@ def apply(ctx):
             if app is None:
                 return
             try:
-                build_panel(app)              # 閉じたときは片付けるだけ
-                opened = find_grid(app) is not None
+                sc = player_scope(app)
+                build_panel(app, sc)          # 閉じたときは片付けるだけ
+                opened = find_grid(app, sc) is not None
                 hide_buttons(ui.find_hud(app), opened)
                 if opened:
-                    schedule(lambda: build_items(app), delay=SETTLE_DELAY)
+                    schedule(lambda: build_items(app, sc), delay=SETTLE_DELAY)
             except Exception:
                 ctx.log_exc("equipment slots: panel failed")
 

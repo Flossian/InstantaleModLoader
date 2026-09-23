@@ -25,6 +25,10 @@ MOD専用の「装備する／外す」ボタンも出るが、
 この記録を読むのは `401_battle_character_context`（戦闘の審判へ「この仲間は何を装備しているか」
 という文として渡す）と、`912_equipment_slots` と `319_battle_tactics` を入れているときの戦闘の数
 （仲間の一撃と防御に上乗せ。TECH.md §3.3.5）。
+`912_equipment_slots` を入れていれば、仲間の `equipments` を書くのはそちらだけになる。
+「装備／外す」はローダの窓口（`combat.toggle`）を通してそちらの装備欄へ品を移す。
+受け渡しのドラッグでも、窓口（`combat.equipped`）が答える持ち主の品では、本体の解除も参照の掃除もしない
+（記録に `left to the equipment slots` が 1 行残る）。居なければここが `equipments` を直に書く。
 
 版18まで、このボタンは実機で一度も出ていなかった。本体は仲間側の品には popup を出さない
 （`ItemPopupMenu` を作るだけで画面に載せない。店の品と同じ扱い）ので、本体の popup へ足す作りでは

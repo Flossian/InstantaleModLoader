@@ -27,6 +27,15 @@ from . import log_exc
 ATTACK = "attack"
 #: 装備の防御力。答えは float。
 DEFENSE = "defense"
+#: 仲間の品を装備欄へ入れる／戻す。`fn(app, holder, item)` → "equipped" / "unequipped" / 断りの文字列、
+#: 装備欄が無ければ None（聞く側が自分で `equipments` を書く）。
+TOGGLE = "toggle"
+#: 仲間の品が装備欄に居るか。`fn(app, holder, item)` → bool、装備欄が無ければ None。
+EQUIPPED = "equipped"
+#: 身に着けている品の一覧。`fn(app, holder)` → `[(部位, 品), ...]`（部位は装備欄の MOD の名前、並びが優先順）。
+#: 装備欄を使っていなければ None（聞く側は `equipments` の weapon / wearable を読む）。
+#: 聞くのは戦闘の審判へ装備を見せる側（`401_`）。主人公にも答える。
+GEAR = "gear"
 
 _ATTR = "_instantale_combat"
 
@@ -90,6 +99,42 @@ def _ask(kind, app, holder):
     except (TypeError, ValueError):
         return None
     return value if value > 0 else None
+
+
+def _call(kind, app, *args):
+    entry = _registry().get(str(kind))
+    if entry is None:
+        return None
+    owner, fn = entry
+    try:
+        return fn(app, *args)
+    except Exception:
+        log_exc("combat: {!r} by {!r} failed; treated as not handled".format(kind, owner))
+        return None
+
+
+def toggle(app, holder, item):
+    """仲間の品を装備欄へ入れる／戻す。装備欄の MOD が無ければ None（聞く側が自分で書く）。"""
+    return _call(TOGGLE, app, holder, item)
+
+
+def equipped(app, holder, item):
+    """仲間の品が装備欄に居るか。装備欄の MOD が無ければ None。"""
+    return _call(EQUIPPED, app, holder, item)
+
+
+def gear(app, holder):
+    """身に着けている品 `[(部位, 品), ...]`。装備欄の MOD が無い／その人物が装備欄を使っていなければ None。
+
+    形の崩れた答え（並びでない、組が 2 つでない）は None にする（聞く側は素の読み方に戻る）。
+    """
+    answer = _call(GEAR, app, holder)
+    if answer is None:
+        return None
+    try:
+        return [(str(name), item) for name, item in answer if item is not None]
+    except (TypeError, ValueError):
+        return None
 
 
 def attack(app, holder):

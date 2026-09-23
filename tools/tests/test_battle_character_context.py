@@ -286,6 +286,60 @@ shutil.rmtree(out_dir, ignore_errors=True)
 shutil.rmtree(out_dir2, ignore_errors=True)
 
 
+# ---------------------------------------------------------------- 装備欄（ローダの窓口 combat.gear）
+# 装備欄の MOD（912_）が答えれば、weapon / wearable の代わりに部位ごとに書く。主人公も装備の行だけ載せる
+print("装備欄の全部位")
+from instantale_modloader import combat  # noqa: E402
+app = party_of(1)
+app.player = app.world.characters["player"]
+app.in_battle = True
+npc = app.world.characters["80"]
+npc.equipments = {"weapon": "item_212"}                       # 装備欄の品は持ち物の辞書に居ない
+worn = {
+    "80": [("right_hand", {"name": "星詠みの魔導杖", "description": "星が宿る。", "attributes": {"attack": 323}}),
+           ("accessory1", {"name": "古びた真鍮の指輪", "description": "くすんでいる。"})],
+    "player": [("head", {"name": "革の兜"}), ("right_hand", {"name": "鋼の剣", "description": "重い。"})],
+}
+combat.declare(combat.GEAR, lambda a, holder: worn.get(str(holder.id)), owner="test_slots")
+ctx, send, sent, out_dir = build(app)
+send("referee_npc", user_message())
+block = appended_block(sent)
+check("仲間は部位ごとに 名前(説明) で載る", "  right_hand: 星詠みの魔導杖(星が宿る。)" in block, block)
+check("部位の属性は本文の直後の行", "  right_hand_attributes: " in block, block)
+check("2 つ目の部位も載る", "  accessory1: 古びた真鍮の指輪(くすんでいる。)" in block, block)
+check("id だけの weapon 行を出さない", "item_id=" not in block and "  weapon:" not in block, block)
+mine = block[block.index("- player:"):block.index("- party_member:")] if "- player:" in block else ""
+check("主人公の枠が載る", "- player: 主人公" in mine and "  head: 革の兜" in mine, block)
+check("主人公の枠は装備だけ（HP・人物は本体が渡す）", "HP:" not in mine, mine)
+check("人数には主人公の枠を数えない", any("appended 1 character(s)" in n for n in ctx.notes), ctx.notes[-2:])
+
+worn.pop("player")                                             # 主人公が装備欄を使っていない
+send("referee_npc", user_message())
+check("主人公の枠は答えがあるときだけ", "- player:" not in appended_block(sent), appended_block(sent))
+
+worn["player"] = [("head", {"name": "革の兜"})]
+solo = party_of(0)
+solo.player = solo.world.characters["player"]
+solo.in_battle = True
+ctx3, send3, sent3, out_dir3 = build(solo)
+send3("referee_player_attack_new_new", user_message())
+check("仲間が居なくても主人公の枠は載る",
+      "- player: 主人公" in appended_block(sent3) and "パーティーメンバーなし" in appended_block(sent3),
+      appended_block(sent3))
+
+combat.forget("test_slots")                                    # 装備欄の MOD が居ない
+npc.inventory = {"item_212": {"name": "星詠みの魔導杖", "description": "星が宿る。"}}
+ctx4, send, sent, out_dir4 = build(app)                           # 偽ゲームを app へ戻す（build(solo) で切り替わった）
+send("referee_npc", user_message())
+check("窓口が None なら weapon / wearable の読み方のまま",
+      "  weapon: 星詠みの魔導杖(星が宿る。)" in appended_block(sent) and "- player:" not in appended_block(sent),
+      appended_block(sent))
+check("例外を残さない", ctx.errors == [] and ctx3.errors == [] and ctx4.errors == [],
+      ctx.errors + ctx3.errors + ctx4.errors)
+for folder in (out_dir, out_dir3, out_dir4):
+    shutil.rmtree(folder, ignore_errors=True)
+
+
 # ---------------------------------------------------------------- 他の戦闘フラグ
 print("in_battle が落ちている間の他の戦闘フラグ")
 app = party_of(1, profile="剣士。")
