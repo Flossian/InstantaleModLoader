@@ -8,8 +8,7 @@
   },
   "description": {
     "en": "Uses an OpenAI or Claude model that is not in the game's built-in list, picked from a list. The model name is swapped on the wire just before the request goes out, and parameters the new model rejects are fixed up",
-    "ja": "ゲームの選択肢に無い OpenAI / Claude のモデルを、一覧から選んで使う。送信直前にモデル名を差し替え、差し替え先が受け付けない引数も直す",
-    "why_wip": "Claude の経路（anthropic の SDK）と、GPT-6 系への差し替えを実機で当てていない"
+    "ja": "ゲームの選択肢に無い OpenAI / Claude のモデルを、一覧から選んで使う。送信直前にモデル名を差し替え、差し替え先が受け付けない引数も直す"
   },
   "version": "3",
   "author": "R01/Flossian",

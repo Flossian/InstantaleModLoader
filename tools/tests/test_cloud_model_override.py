@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""900_cloud_model_override をゲーム抜きで通す。
+"""136_cloud_model_override をゲーム抜きで通す。
 
-    python tools/tests/test_wip_cloud_model_override.py
+    python tools/tests/test_cloud_model_override.py
 
 見るのは MOD が自分で決めている所だけ:
 送信の1点（`SyncAPIClient.post`）で本文の写しを直すこと、宛先が本家でなければ触らないこと、
