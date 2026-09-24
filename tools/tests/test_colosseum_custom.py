@@ -8,7 +8,11 @@
   素のまま … 設定を触らなければ難易度も所持金も文も1つも動かない
   強さ     … 初戦・伸び・上限・基準（土地／レベル／高いほう）が効く
   懸賞金   … 文の額と所持金の増えが必ず揃う。書き換えられなければ金も触らない
-  負け     … 闘技場でだけ、1試合に1度だけ、倒れているときだけ逃走扱いで終える
+  負け     … 闘技場でだけ、1試合に1度だけ、倒れているときだけ逃走扱いで終える。
+             ゲームの逃走と同じ状態にしてから終え（敵を空に・主人公を預ける）、戦闘の繰り返しを抜けさせる
+  仲間     … 試合で倒れた仲間を、勝っても逃げても負けても体力1で一覧へ戻す
+  手配度   … 逃げて終わった試合で下がった分を戻す（負けは常に、自分で逃げたのは設定で）。勝った試合は触らない
+  描写     … 闘技場の審判と試合の要約にだけ一文を足す。二重にしない
   相手     … 既出の闘士を頼み文に足す。同じ一文が既にあれば二重にしない
 """
 import importlib.util
@@ -537,6 +541,169 @@ hook(lambda self: "checked", battle)
 check("ゲームが戻さなければ控えた値で戻す", app.party.get("player") is app.player, app.party)
 check("手で戻したことは WARN で残る", "put back by hand" in io.open(
     os.path.join(OUT_DIR, module.LOG_BASENAME), encoding="utf-8").read())
+
+print("倒れた仲間も連れて戻る")
+
+
+class Member(object):
+    def __init__(self, name):
+        self.name = name
+        self.current_hp = 300
+        self.location = "arena"
+        self.current_area = "5"
+        self.current_node = "200"
+
+
+def game_loses_track(self, member_id):
+    """ゲームが倒れた者を一覧から外し、仲間なら居場所も空にする（実機のセーブ）。"""
+    member = self.party.pop(member_id, None)
+    if member_id != "player" and member is not None:
+        member.location = member.current_area = member.current_node = None
+
+
+def bring_escaped_back(self):
+    """ゲームの逃走の end_phase: 預かりを一覧へ戻す。"""
+    self.app.party.update(self.app.escaped_member_in_battle)
+    self.app.escaped_member_in_battle.clear()
+
+
+class EscapeThroughEndPhase(FakeEnd):
+    """実機と同じく、終わり方の実行の中で `end_phase`（包みごと）を呼ぶ。"""
+
+    def execute(self, choice_text):
+        FakeEnd.made.append(("execute", choice_text))
+        ctx.hooks["__main__:BattleEndManager.end_phase"](bring_escaped_back, self)
+        self.app.in_battle = 0
+        self.app.in_colosseum_battle = 0
+        return "ended"
+
+
+jacob = Member("ジェイコブ")
+battle = fall_in_arena(EscapeThroughEndPhase)
+app.party["87"] = jacob
+jacob.current_hp = -387
+ctx.hooks["__main__:InstantaleApp.remove_party_member"](game_loses_track, app, "87")
+check("倒れた仲間は一覧から外れ、居場所も空になる（素のゲーム）",
+      "87" not in app.party and jacob.location is None)
+hook(lambda self: "checked", battle)
+check("負けて切り上げたら仲間もゲームの手で一覧に戻る",
+      app.party.get("87") is jacob and app.party.get("player") is app.player, app.party)
+check("仲間の体力は 1", jacob.current_hp == 1, jacob.current_hp)
+check("仲間の居場所が戻る",
+      (jacob.location, jacob.current_area, jacob.current_node) == ("arena", "5", "200"),
+      (jacob.location, jacob.current_area, jacob.current_node))
+
+# 勝った試合でも、途中で倒れた仲間を連れて戻る（勝ちの終わり方は預かりを戻さないとして確かめる）。
+jacob = Member("ジェイコブ")
+ctx.hooks["__main__:ColosseumMatchStart.execute"](
+    lambda self, choice: None, Manager(app), "申し込む")
+app.in_colosseum_battle = 1
+app.escaped_member_in_battle = {}
+app.party = {"player": app.player, "87": jacob}
+jacob.current_hp = -20
+ctx.hooks["__main__:InstantaleApp.remove_party_member"](game_loses_track, app, "87")
+ctx.hooks["__main__:BattleEndInColosseum.end_phase"](lambda self: None, Manager(app))
+check("勝った試合で倒れていた仲間も一覧に戻る（手で）", app.party.get("87") is jacob, app.party)
+check("預かりに置き去りにしない", "87" not in app.escaped_member_in_battle,
+      app.escaped_member_in_battle)
+check("勝った試合でも居場所と体力が戻る",
+      jacob.location == "arena" and jacob.current_hp == 1,
+      (jacob.location, jacob.current_hp))
+
+print("負けて切り上げても手配されない")
+
+
+class Area(object):
+    id = "5"
+
+
+module.ui.current_area = lambda app_: Area()
+app.player.area_history = {"5": {"lawfulness": 45}}
+battle = fall_in_arena(EscapeThroughEndPhase)
+hook(lambda self: "checked", battle)
+check("切り上げた直後はまだ下がっていない（ゲームは後の段で下げる）",
+      app.player.area_history["5"]["lawfulness"] == 45)
+app.player.area_history["5"]["lawfulness"] = 35      # ゲームが衛兵戦の罰として下げる
+refresh = ctx.hooks["__main__:InstantaleApp.refresh_choice_buttons"]
+refresh(lambda self: "drawn", app)
+check("画面が整った合図で、下がった分を戻す", app.player.area_history["5"]["lawfulness"] == 45,
+      app.player.area_history)
+app.player.area_history["5"]["lawfulness"] = 25
+refresh(lambda self: "drawn", app)
+check("戻したら見張りを閉じる（試合の外の罪は戻さない）",
+      app.player.area_history["5"]["lawfulness"] == 25)
+
+app.player.area_history = {"5": {"lawfulness": 45}}
+battle = fall_in_arena(EscapeThroughEndPhase)
+hook(lambda self: "checked", battle)
+app.player.area_history["5"]["lawfulness"] = 60      # 払って軽くなった
+refresh(lambda self: "drawn", app)
+check("上がった側は触らない", app.player.area_history["5"]["lawfulness"] == 60)
+for _ in range(module.LAWFUL_WATCH_SIGNALS + 2):
+    refresh(lambda self: "drawn", app)
+app.player.area_history["5"]["lawfulness"] = 10
+refresh(lambda self: "drawn", app)
+check("見張りは合図の回数で閉じる", app.player.area_history["5"]["lawfulness"] == 10)
+
+print("自分で逃げた試合の手配度")
+
+
+def sign_up():
+    ctx.hooks["__main__:ColosseumMatchStart.execute"](
+        lambda self, choice: None, Manager(app), "申し込む")
+    app.in_colosseum_battle = 1
+    app.escaped_member_in_battle = {}
+
+
+def game_escape_lowering_lawfulness(self):
+    """ゲーム自身の逃走（終わり方の中で下がる場合も確かめる）。"""
+    app.player.area_history["5"]["lawfulness"] -= 10
+
+
+app.player.area_history = {"5": {"lawfulness": 0}}
+module.NO_WANTED_ON_ESCAPE = False
+sign_up()
+ctx.hooks["__main__:BattleEndManager.end_phase"](game_escape_lowering_lawfulness, Manager(app))
+refresh(lambda self: "drawn", app)
+check("設定を切っていれば、自分で逃げたぶんは素のまま下がる",
+      app.player.area_history["5"]["lawfulness"] == -10, app.player.area_history)
+
+module.NO_WANTED_ON_ESCAPE = True
+app.player.area_history = {"5": {"lawfulness": 0}}
+sign_up()
+app.player.area_history["5"]["lawfulness"] = -10       # 終わり方より前に下がっていた場合
+ctx.hooks["__main__:BattleEndManager.end_phase"](lambda self: None, Manager(app))
+check("申し込む前の値に戻す（終わり方より前に下がっていても）",
+      app.player.area_history["5"]["lawfulness"] == 0, app.player.area_history)
+lines = io.open(os.path.join(OUT_DIR, module.LOG_BASENAME), encoding="utf-8").read()
+check("逃げたぶんを戻したことが残る", "undid the drop from fleeing the match" in lines, lines[-400:])
+
+app.player.area_history = {"5": {"lawfulness": 0}}
+sign_up()
+ctx.hooks["__main__:BattleEndManager.end_phase"](lambda self: None, Manager(app))
+app.player.area_history["5"]["lawfulness"] = -10       # 画面が整う合図のころに下がる場合
+refresh(lambda self: "drawn", app)
+check("後の段で下がっても合図で戻す", app.player.area_history["5"]["lawfulness"] == 0)
+
+app.player.area_history = {"5": {"lawfulness": 0}}
+sign_up()
+ctx.hooks["__main__:BattleEndInColosseum.end_phase"](lambda self: None, Manager(app))
+app.player.area_history["5"]["lawfulness"] = 5          # 勝って +5
+refresh(lambda self: "drawn", app)
+app.player.area_history["5"]["lawfulness"] = -5         # その後に犯した罪
+refresh(lambda self: "drawn", app)
+check("勝った試合では手配度に触らない（その後の罪も戻さない）",
+      app.player.area_history["5"]["lawfulness"] == -5)
+module.NO_WANTED_ON_ESCAPE = False
+app.in_colosseum_battle = 0
+
+# 闘技場の外の戦闘で倒れた仲間には触らない（素のゲームどおり居なくなる）。
+jacob = Member("ジェイコブ")
+app.in_colosseum_battle = 0
+app.party = {"player": app.player, "87": jacob}
+ctx.hooks["__main__:InstantaleApp.remove_party_member"](game_loses_track, app, "87")
+ctx.hooks["__main__:BattleEndManager.end_phase"](lambda self: None, Manager(app))
+check("闘技場の外で倒れた仲間は戻さない", "87" not in app.party and jacob.location is None)
 
 module.ui.classes = {"BattleEndManager": FakeEnd}
 

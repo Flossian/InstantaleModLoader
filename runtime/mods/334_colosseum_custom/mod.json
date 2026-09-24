@@ -7,10 +7,10 @@
     "ja": "闘技場のカスタマイズ"
   },
   "description": {
-    "en": "Set how fast the opponents get stronger and where that stops, base the first opponent on your own level instead of the area, multiply the prize by your level or the opponent's rank, have the clerk tell you the next opponent's class before you sign, end a lost match as a retreat instead of the run, stop the same fighter from showing up every time, and have the fallen yield instead of dying in the narration. Defaults are the game's own values, so nothing changes until you edit them",
-    "ja": "闘技場の相手が強くなる速さと、その打ち止めを決める。初戦の相手を土地ではなく自分のレベルに合わせることも、懸賞金をレベルや相手の格で増やすこともできる。申し込む前に受付が相手の格を告げ、倒れてもゲームオーバーにせず負けとして試合を切り上げる設定と、毎回同じ闘士が出てくるのを防ぐ設定、試合の描写で誰も死なないようにする設定もある。既定は素のゲームの値のままで、変えた項目だけが効く"
+    "en": "Set how fast the opponents get stronger and where that stops, base the first opponent on your own level instead of the area, and multiply the prize by your level or the opponent's rank. Optional: losing a match ends it as a retreat and nobody in your party dies, fleeing the arena does not make you wanted, and the narration has the fallen yield instead of dying. The clerk tells you the next opponent's class and the same fighter stops showing up every time (these two are on by default); everything else defaults to the game's own values",
+    "ja": "闘技場の相手が強くなる速さと、その打ち止めを決める。初戦の相手を土地ではなく自分のレベルに合わせることも、懸賞金をレベルや相手の格で増やすこともできる。負けても主人公と仲間が死なず負けとして試合を終える設定、闘技場から逃げても手配されない設定、試合の描写で誰も死なないようにする設定もある。申し込む前に受付が相手の格を告げ、同じ闘士が毎回出てくるのを防ぐ（この2つだけ既定でON）。ほかの既定は素のゲームの値"
   },
-  "version": "3",
+  "version": "4",
   "author": "R01/Flossian",
   "after": [
     "331_facility_investment"
@@ -147,12 +147,24 @@
       "type": "bool",
       "default": false,
       "label": {
-        "ja": "倒れてもゲームオーバーにしない",
-        "en": "Losing a match does not end the run"
+        "ja": "倒れてもゲームオーバーにしない（仲間も死なない）",
+        "en": "Losing a match does not end the run (companions survive too)"
       },
       "note": {
-        "ja": "素のゲームは闘技場で倒れるとそのままゲームオーバー。入れると、倒れたところで体力1で踏みとどまり、負けを認めてその場で試合を切り上げる。ゲームが撤退のときに通るのと同じ終わり方なので、`current_phase` は進まず懸賞金も出ない（次に申し込むと同じ格の相手が作り直される）。自分から撤退するのは素のゲームでもできる",
-        "en": "In the game, going down in the arena ends the run. With this on you hold out at 1 HP and the match is called there, using the same ending the game uses when you flee: current_phase does not advance and no prize is paid"
+        "ja": "素のゲームは闘技場で倒れるとそのままゲームオーバー。入れると、倒れたところで体力1で踏みとどまり、負けを認めてその場で試合を切り上げる。ゲームが撤退のときに通るのと同じ終わり方なので、`current_phase` は進まず懸賞金も出ない（次に申し込むと同じ格の相手が作り直される）。自分から撤退するのは素のゲームでもできる。試合の途中で倒れた仲間も、勝っても負けても体力1で連れて戻る（素のゲームでは倒れた仲間はそのまま居なくなる）。素のゲームは闘技場から逃げると衛兵と戦ったのと同じくその土地の手配度を下げるが、負けて切り上げたときは下がった分を戻す",
+        "en": "In the game, going down in the arena ends the run. With this on you hold out at 1 HP and the match is called there, using the same ending the game uses when you flee: current_phase does not advance and no prize is paid. Companions who go down during a match come back with 1 HP whether you win or lose (in the game they are lost). Fleeing an arena lowers your standing in the town as if you had fought the guards; losing a match here does not"
+      }
+    },
+    "NO_WANTED_ON_ESCAPE": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "闘技場から逃げても手配されない",
+        "en": "Fleeing the arena does not make you wanted"
+      },
+      "note": {
+        "ja": "素のゲームは闘技場から逃げると、衛兵と戦ったのと同じくその土地の手配度を10下げる（0を下回ると手配される）。入れると、自分で逃げた試合でも申し込む前の手配度に戻す。負けて切り上げた試合は、上の設定を入れていればこちらを入れなくても戻る",
+        "en": "The game lowers your standing in the town by 10 when you flee an arena match, as if you had fought the guards. With this on it is put back to what it was when you signed up. Losing a match with the setting above is covered either way"
       }
     },
     "VARY_OPPONENT": {

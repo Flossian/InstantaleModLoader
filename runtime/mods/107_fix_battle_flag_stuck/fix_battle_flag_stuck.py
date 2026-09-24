@@ -97,6 +97,9 @@ BATTLE_BUTTON_CLASSES = ("BattlePhaseManager", "SkillChoicePhaseManager",
                          "UtteranceChoiceInBattleManager", "UtteranceInBattleManager",
                          "CancelBattleActionManager")
 
+# `app.party` の主人公の鍵（仲間は id）。
+PLAYER_KEY = "player"
+
 # ロード直後にも残骸を下ろすか。
 CLEAR_ON_LOAD = True
 
@@ -163,6 +166,58 @@ def apply(ctx):
             write("{}: cleared {} stale enem{} ({})".format(
                 where, len(names), "y" if len(names) == 1 else "ies", ", ".join(names)))
 
+    def return_escaped(app, where):
+        """逃げた者の預かりに残っている者を一覧へ戻す（逃走の終わり方でゲームがしていること）。
+
+        ゲームは逃げる手で逃げた者を `app.party` から外して `escaped_member_in_battle` に預け、
+        逃走の終わり方（`BattleEndManager`）の中で一覧へ戻す。
+        ところが同じ手で審判が敵も倒すと、判定は逃走より先に全滅を見て勝ちに進み、
+        勝ちの終わり方（`BattleEndInColosseum`）は預かりを戻さない。
+        主人公が一覧に居ないまま画面から消え、そのままセーブに焼かれた
+        （実機。一覧 `['88']`・預かり `['player']`。GAME.md §2.10）。
+        実行中の預かりは `{id: Character}`、セーブでは id の並びなので、どちらも受ける。
+        主人公は一覧の先頭へ戻す（セーブの並びを崩さない）。
+        """
+        if app is None:
+            return
+        escaped = getattr(app, "escaped_member_in_battle", None)
+        party = getattr(app, "party", None)
+        if not escaped or not isinstance(party, dict):
+            return
+        if isinstance(escaped, dict):
+            held = list(escaped.items())
+        elif isinstance(escaped, (list, tuple)):
+            held = [(member_id, None) for member_id in escaped]
+        else:
+            return
+        back, missing = [], []
+        for member_id, value in held:
+            if member_id in party:
+                continue
+            if value is None or isinstance(value, (str, int)):
+                value = (getattr(app, "player", None) if member_id == PLAYER_KEY
+                         else ui.character_of(app, member_id))
+            if value is None:
+                missing.append(member_id)
+                continue
+            party[member_id] = value
+            back.append(member_id)
+        if PLAYER_KEY in back:
+            ordered = [(PLAYER_KEY, party[PLAYER_KEY])] + [
+                (key, value) for key, value in party.items() if key != PLAYER_KEY]
+            party.clear()
+            party.update(ordered)
+        try:
+            escaped.clear()
+        except Exception:
+            ctx.log_exc("battle flag: could not clear escaped_member_in_battle")
+        if back:
+            write("{}: brought {} back from escaped_member_in_battle (the game left them "
+                  "there)".format(where, ", ".join(str(m) for m in back)))
+        if missing:
+            write("{}: WARN cannot find {} to bring back".format(
+                where, ", ".join(str(m) for m in missing)))
+
     # ------------------------------------------------------- 戦闘終了マネージャ
     # 3種類とも同じ扱いにしてよい。
     # ゲームが下ろしている経路では stale が空になり、
@@ -171,10 +226,15 @@ def apply(ctx):
         @ctx.wrap(target, required=False)
         def _end(orig, self, *args, **kwargs):
             result = orig(self, *args, **kwargs)
+            app = getattr(self, "app", None) or find_app()
             try:
-                clear_stale(getattr(self, "app", None) or find_app(), label)
+                clear_stale(app, label)
             except Exception:
                 ctx.log_exc("battle flag: clear failed")
+            try:
+                return_escaped(app, label)
+            except Exception:
+                ctx.log_exc("battle flag: could not bring the escaped members back")
             return result
         return _end
 
@@ -199,7 +259,9 @@ def apply(ctx):
                 if battle_on_screen(owner):
                     write("{}: the battle screen came back -- the save was made "
                           "mid-battle; not touching".format(label))
-                elif any(getattr(owner, name, False) for name in CLEAR_FLAGS):
+                    return result
+                return_escaped(owner, label)
+                if any(getattr(owner, name, False) for name in CLEAR_FLAGS):
                     seen = [ui.spec_cls_name(entry)
                             for entry in (getattr(owner, "buttons", None) or [])]
                     write("{}: not a battle screen (buttons: {})".format(

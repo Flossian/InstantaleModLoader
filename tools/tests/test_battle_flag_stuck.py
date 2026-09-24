@@ -227,6 +227,62 @@ module, ctx, _manifest = fresh(app)
 ctx.hooks["__main__:InstantaleApp.load_game_new"](lambda self: None, app)
 check("旗が立っていなければ敵にも触らない", app.current_enemy_dict)
 
+print("逃げた手で敵も倒れて勝ちになったとき")
+
+
+class Hero(object):
+    name = "ミツバ"
+
+
+class World(object):
+    def __init__(self, characters):
+        self.characters = characters
+
+
+hero, benny = Hero(), Hero()
+app = App()
+app.player = hero
+app.party = {"88": benny}
+app.escaped_member_in_battle = {"player": hero}     # 逃げる手で預けられたまま
+module, ctx, _manifest = fresh(app)
+ctx.hooks["__main__:BattleEndInColosseum.end_phase"](lambda self: None, Manager(app))
+check("勝ちの終わり方の後、預かりの主人公を一覧へ戻す",
+      app.party.get("player") is hero and app.escaped_member_in_battle == {}, app.party)
+check("主人公は一覧の先頭（セーブの並びを崩さない）", list(app.party) == ["player", "88"],
+      list(app.party))
+check("戻したことが残る", any("brought player back" in line for line in lines()), lines())
+
+app = App()
+app.player = hero
+app.party = {"player": hero}
+app.escaped_member_in_battle = {}
+module, ctx, _manifest = fresh(app)
+ctx.hooks["__main__:BattleEndManager.end_phase"](lambda self: None, Manager(app))
+check("預かりが空なら何も書かない", not any("brought" in line for line in lines()), lines())
+
+# そのまま焼かれたセーブ: ロード後の預かりが id の並び、一覧に主人公が居ない。
+app = App()
+app.player = hero
+app.world = World({"88": benny, "90": Hero()})
+app.party = {"88": benny}
+app.escaped_member_in_battle = ["player", "90"]
+app.buttons = buttons("MovePhaseManager")
+module, ctx, _manifest = fresh(app)
+ctx.hooks["__main__:InstantaleApp.load_game_new"](lambda self: None, app)
+check("ロード後も預かりの id から主人公と仲間を一覧へ戻す",
+      list(app.party) == ["player", "88", "90"] and app.party["player"] is hero
+      and app.escaped_member_in_battle == [], (list(app.party), app.escaped_member_in_battle))
+
+app = App(battle="normal", colosseum=True, enemies={"敵": object()})
+app.player = hero
+app.party = {}
+app.escaped_member_in_battle = {"player": hero}
+app.buttons = buttons("BattlePhaseManager", "SkillChoicePhaseManager")
+module, ctx, _manifest = fresh(app)
+ctx.hooks["__main__:InstantaleApp.load_game_new"](lambda self: None, app)
+check("戦闘の画面に戻ったロードでは預かりに触らない（戦闘の続きで逃げる途中）",
+      app.escaped_member_in_battle == {"player": hero} and app.party == {})
+
 print("注入した時点")
 app = App(battle=1, colosseum=1)       # 敵が居ない＝残骸
 module, ctx, _manifest = fresh(app)

@@ -30,7 +30,8 @@ r"""闘技場の相手の強さと懸賞金を設定で決める。
 | 保存される格 | `ColosseumMatchStart.generate_enemy_data` の戻りの `data.rank` |
 | 懸賞金 | `BattleEndInColosseum.end_phase`。所持金はこの中で動く（`instantale.py:8105`） |
 | 相手の格を告げる | `EntryColosseumMatchManager.method` の後 |
-| 負けても死なない | `BattlePhaseManager.check_battle_end` の前（ここから `GameOverManager` が作られる）。体力を戻したうえで、逃げたときと同じ `BattleEndManager(app, 'escaped')` を起こして試合を切り上げる。起こす前にゲーム自身の逃走と同じ状態にする（敵の一覧を空にし、倒れて一覧から外された主人公を `escaped_member_in_battle` に預けてゲームに戻させる）。`True` を返して戦闘の繰り返しを抜けさせる |
+| 負けても死なない | `BattlePhaseManager.check_battle_end` の前（ここから `GameOverManager` が作られる）。体力を戻したうえで、逃げたときと同じ `BattleEndManager(app, 'escaped')` を起こして試合を切り上げる。起こす前にゲーム自身の逃走と同じ状態にする（敵の一覧を空にし、倒れて一覧から外された主人公を `escaped_member_in_battle` に預けてゲームに戻させる）。`True` を返して戦闘の繰り返しを抜けさせる。試合の途中で倒れた仲間も、終わり方（`BattleEndManager` / `BattleEndInColosseum` の `end_phase`）の前に体力1で預かりへ入れ、後で戻っていなければ手で戻し、空になった居場所も戻す |
+| 逃げて手配されない | `ColosseumMatchStart.execute` で手配度を控え、逃げて終わった試合（`BattleEndManager.end_phase`）の後と、その後の画面が整った合図（`refresh_choice_buttons`）で下がっていれば戻す。勝った試合では控えを捨てる |
 | 死なずに退く描写 | 審判（`referee_*`）と試合の要約（`colosseum_battle_summarizer`）の送り口。最後の user message の末尾に一文を足す |
 
 ## 描写の出どころ
@@ -111,6 +112,14 @@ AFTER_SURRENDER_STEPS = ("enemy_turn_separate", "handle_battle_situation",
 #: `app.party` の主人公の鍵（仲間は id。実機のログ `party=['player', '78']`）。
 PLAYER_KEY = "player"
 
+#: 倒れた仲間の居場所。一覧に居る仲間はもともと居場所を持たない（area / node / facility とも None）ので、
+#: 普段は控えも空で何もしない。外されたときに居場所を持っていた場合だけ、空になっていれば戻す。
+MEMBER_PLACE_ATTRS = ("location", "current_area", "current_node")
+
+#: 逃げて終わった後、下がった手配度を見張る「画面が整った」合図の回数。
+#: 長いと試合の外で犯した罪まで戻してしまう（316 の `PROTECT_MAX_SIGNALS` と同じ考え）。
+LAWFUL_WATCH_SIGNALS = 10
+
 #: 格の言い換え。ゲーム自身の頼み文の説明（ランク1が凡人や雑魚動物、
 #: ランク70が伝説の勇者や魔王、半神の怪物）に合わせてある。
 RANK_WORDS = ((10, "駆け出しの闘士"), (25, "腕に覚えのある程度の相手"),
@@ -144,6 +153,7 @@ REWARD_PER_LEVEL = 0.0
 REWARD_PER_RANK = 0.0
 ANNOUNCE_RANK = True
 SURVIVE_DEFEAT = False
+NO_WANTED_ON_ESCAPE = False
 VARY_OPPONENT = True
 NONLETHAL_NARRATION = False
 
@@ -305,7 +315,8 @@ def apply(ctx):
     #: `surrendered_at` は負けとして切り上げた時刻（`time.monotonic()`）。
     #: `removed_player` は試合中に一覧から外された主人公の値（切り上げで戻す）。
     state = {"survived": False, "reward": None, "window": None, "summarizing": 0,
-             "surrendered_at": None, "removed_player": None}
+             "surrendered_at": None, "removed_player": None, "fallen": {},
+             "lawful_guard": None, "surrendering": False}
 
     # ------------------------------------------------------------------ 設定
     def rank_untouched():
@@ -580,6 +591,11 @@ def apply(ctx):
         app = getattr(self, "app", None) or ui.find_app()
         state["survived"] = False
         state["removed_player"] = None
+        state["fallen"].clear()
+        try:
+            guard_lawfulness(app)
+        except Exception:
+            ctx.log_exc("colosseum: cannot keep the lawfulness")
         open_window(app)
         try:
             return orig(self, choice_text, *args, **kwargs)
@@ -622,16 +638,90 @@ def apply(ctx):
             prepare_escape(app)
         except Exception:
             ctx.log_exc("colosseum: cannot prepare the escape")
+        state["surrendering"] = True
         try:
             manager.execute("")
         except Exception:
             ctx.log_exc("colosseum: the escape ending failed")
+            state["surrendering"] = False
             return False
+        state["surrendering"] = False
         try:
             ensure_player_back(app)
         except Exception:
             ctx.log_exc("colosseum: cannot put the player back in the party")
+        restore_lawfulness(app, "surrendered")
         return True
+
+    # ---------------------------------------------- 負けて手配されないように
+    def guard_lawfulness(app):
+        """申し込んだ時点のこの土地の手配度を控える（逃げて終わったら、下がった分を戻すため）。
+
+        闘技場から逃げると、ゲームは衛兵戦と同じ終わり方を通り、その土地の手配度を 10 下げる
+        （実機。自分で `逃げる` を押した1回で 0 → −10。逃走5回で 45 → −5 とも合う）。
+        負けを逃走扱いで切り上げても同じ罰を受ける。どちらも戻す（本人の指定）。
+        下がる時機が終わり方の前か後かは測っていないので、控えるのは試合の前にする。
+        勝った試合では控えを捨てる（勝つと +5 になるが、それには触らない）。
+        """
+        state["lawful_guard"] = None
+        if not (SURVIVE_DEFEAT or NO_WANTED_ON_ESCAPE):
+            return
+        player = getattr(app, "player", None)
+        area_id = ui.area_id_of(ui.current_area(app))
+        before = ui.lawfulness_of(ui.area_record(player, area_id))
+        if before is None:
+            write("WARN lawfulness: cannot read it for area {!r}; a drop cannot be undone"
+                  .format(area_id))
+            state["lawful_guard"] = None
+            return
+        state["lawful_guard"] = {"area": area_id, "value": before, "signals": 0,
+                                 "armed": False}
+
+    def arm_lawfulness(why):
+        """逃げて終わった試合で、控えた手配度を戻す見張りを始める。"""
+        guard = state.get("lawful_guard")
+        if guard is None:
+            return
+        if state.get("surrendering") and SURVIVE_DEFEAT:
+            guard["armed"], guard["why"] = True, "losing the match"
+        elif NO_WANTED_ON_ESCAPE and not state.get("surrendering"):
+            guard["armed"], guard["why"] = True, "fleeing the match"
+        else:
+            state["lawful_guard"] = None        # この終わり方では戻さない
+
+    def restore_lawfulness(app, why):
+        """控えより下がっていたら戻す。**下がった側だけ**（払って軽くなったのはそのまま）。"""
+        guard = state.get("lawful_guard")
+        if guard is None or app is None or not guard.get("armed"):
+            return
+        try:
+            guard["signals"] += 1
+            entry = ui.area_record(getattr(app, "player", None), guard["area"])
+            now_value = ui.lawfulness_of(entry)
+            if now_value is not None and now_value < guard["value"]:
+                if ui.set_lawfulness(entry, guard["value"]):
+                    write("lawfulness: {}: undid the drop from {}, area {} {} -> {}"
+                          .format(why, guard.get("why"), guard["area"], now_value,
+                                  guard["value"]))
+                    state["lawful_guard"] = None
+                    return
+                write("WARN lawfulness: {}: cannot write it back, area {} {}".format(
+                    why, guard["area"], now_value))
+            if guard["signals"] > LAWFUL_WATCH_SIGNALS:
+                write("lawfulness: stopped watching area {} (no drop seen)".format(guard["area"]))
+                state["lawful_guard"] = None
+        except Exception:
+            ctx.log_exc("colosseum: cannot put the lawfulness back")
+            state["lawful_guard"] = None
+
+    @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False, safe=True)
+    def refresh_choice_buttons(orig, self, *args, **kwargs):
+        """画面が整った合図。逃げて終わった後、下がった手配度をここで拾う（316 と同じ時機）。"""
+        result = orig(self, *args, **kwargs)
+        guard = state.get("lawful_guard")
+        if guard is not None and guard.get("armed"):
+            restore_lawfulness(self, "screen settled")
+        return result
 
     def prepare_escape(app):
         """ゲーム自身の逃走と同じ状態にしてから終わり方を起こす（`233_` 版3 の実機の比較）。
@@ -687,16 +777,95 @@ def apply(ctx):
 
     @ctx.wrap("__main__:InstantaleApp.remove_party_member", required=False, safe=True)
     def remove_party_member(orig, self, member_id=None, *args, **kwargs):
-        """闘技場の試合で主人公が一覧から外されるとき、その値を控える（切り上げで戻すため）。"""
+        """闘技場の試合で一覧から外される者の値を控える（試合の終わりに戻すため）。
+
+        主人公は切り上げで、仲間は試合の終わり方の前後で戻す。
+        仲間は倒れると一覧から外されたままで、一覧に居る仲間はもともと居場所を持たないので、
+        世界のどこにも居なくなった（実機。素のゲームでも同じ。GAME.md §2.10）。
+        外される前の居場所も控えるが、普段は空で使われない。
+        逃げる者も同じ入口を通るが、そちらはゲームが戻すので、控えても使われない。
+        """
         try:
-            if (SURVIVE_DEFEAT and member_id == PLAYER_KEY
-                    and getattr(self, "in_colosseum_battle", False)):
+            if SURVIVE_DEFEAT and getattr(self, "in_colosseum_battle", False):
                 party = getattr(self, "party", None)
-                if isinstance(party, dict) and PLAYER_KEY in party:
-                    state["removed_player"] = party[PLAYER_KEY]
+                if isinstance(party, dict) and member_id in party:
+                    value = party[member_id]
+                    if member_id == PLAYER_KEY:
+                        state["removed_player"] = value
+                    else:
+                        state["fallen"][member_id] = {
+                            "value": value,
+                            "places": dict((name, getattr(value, name, None))
+                                           for name in MEMBER_PLACE_ATTRS)}
         except Exception:
-            ctx.log_exc("colosseum: cannot keep the player leaving the party")
+            ctx.log_exc("colosseum: cannot keep a member leaving the party")
         return orig(self, member_id, *args, **kwargs)
+
+    def hand_over_fallen(app):
+        """倒れた仲間を体力 1 にして預かりへ入れ、ゲームに一覧へ戻させる（主人公と同じ手）。"""
+        fallen = state.get("fallen") or {}
+        party = getattr(app, "party", None)
+        escaped = getattr(app, "escaped_member_in_battle", None)
+        if not fallen or not isinstance(party, dict) or not isinstance(escaped, dict):
+            return
+        for member_id, kept in fallen.items():
+            if member_id in party or member_id in escaped:
+                continue
+            value = kept["value"]
+            hp = getattr(value, "current_hp", None)
+            if isinstance(hp, (int, float)) and not isinstance(hp, bool) and hp <= 0:
+                value.current_hp = SURVIVE_HP
+            escaped[member_id] = value
+            write("fallen: handed {} ({}) to escaped_member_in_battle, hp {} -> {}".format(
+                member_id, getattr(value, "name", "?"), hp, getattr(value, "current_hp", None)))
+
+    def restore_fallen(app, where):
+        """試合の終わり方の後、戻っていない仲間を戻し、空になった居場所を控えた値へ戻す。"""
+        fallen = state.get("fallen") or {}
+        if not fallen:
+            return
+        party = getattr(app, "party", None)
+        escaped = getattr(app, "escaped_member_in_battle", None)
+        for member_id, kept in list(fallen.items()):
+            value = kept["value"]
+            if isinstance(party, dict) and member_id not in party:
+                party[member_id] = value
+                if isinstance(escaped, dict):
+                    escaped.pop(member_id, None)
+                write("WARN fallen: {}: the game did not bring {} back; put back by hand".format(
+                    where, member_id))
+            else:
+                write("fallen: {}: {} ({}) is back in the party".format(
+                    where, member_id, getattr(value, "name", "?")))
+            for name, before in kept["places"].items():
+                if getattr(value, name, None) is None and before is not None:
+                    try:
+                        setattr(value, name, before)
+                        write("fallen: {}: put {}.{} back".format(where, member_id, name))
+                    except Exception:
+                        ctx.log_exc("colosseum: cannot put {}.{} back".format(member_id, name))
+        fallen.clear()
+
+    @ctx.wrap("__main__:BattleEndManager.end_phase", required=False)
+    def escaped_end_phase(orig, self, *args, **kwargs):
+        """闘技場から逃げた（負けて切り上げた）試合の終わり。倒れた仲間を連れて戻る。"""
+        app = getattr(self, "app", None) or ui.find_app()
+        arena = bool(getattr(app, "in_colosseum_battle", False))
+        if arena:
+            try:
+                hand_over_fallen(app)
+            except Exception:
+                ctx.log_exc("colosseum: cannot hand over the fallen members")
+            arm_lawfulness("escaped")
+        try:
+            return orig(self, *args, **kwargs)
+        finally:
+            if arena:
+                try:
+                    restore_fallen(app, "escaped")
+                except Exception:
+                    ctx.log_exc("colosseum: cannot bring the fallen members back")
+                restore_lawfulness(app, "escaped")
 
     @ctx.wrap("__main__:BattlePhaseManager.check_battle_end", required=False, safe=True)
     def check_battle_end(orig, self, *args, **kwargs):
@@ -822,8 +991,23 @@ def apply(ctx):
 
     @ctx.wrap("__main__:BattleEndInColosseum.end_phase", required=False)
     def end_phase(orig, self, *args, **kwargs):
-        """勝ったときの懸賞金に倍率を乗せる。所持金はこの中で動く（実機）。"""
+        """勝った試合の終わり。倒れた仲間を連れて戻り、懸賞金に倍率を乗せる。"""
         app = getattr(self, "app", None) or ui.find_app()
+        try:
+            hand_over_fallen(app)
+        except Exception:
+            ctx.log_exc("colosseum: cannot hand over the fallen members")
+        state["lawful_guard"] = None            # 勝った試合の手配度には触らない
+        try:
+            return won_end_phase(orig, self, app, *args, **kwargs)
+        finally:
+            try:
+                restore_fallen(app, "won")
+            except Exception:
+                ctx.log_exc("colosseum: cannot bring the fallen members back")
+
+    def won_end_phase(orig, self, app, *args, **kwargs):
+        """勝ったときの懸賞金に倍率を乗せる。所持金はこの中で動く（実機）。"""
         rank = None
         try:
             rank = expected_rank(app)
