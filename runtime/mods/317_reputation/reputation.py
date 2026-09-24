@@ -106,6 +106,9 @@ LOG_MATERIAL = True       # 素材の実行時の形を1回だけログに残す
 
 LOG_BASENAME = "reputation.log"
 
+# グローバルの `random` から引くとゲーム自身の乱数列がずれる（TECH.md §6.1）。
+_RNG = random.Random()
+
 #: 世界ごとのキャッシュを置くフォルダ（`state/` の下）。
 #: ファイル名は `instantale_modloader.state.world_filename` が作る。
 #: 規則をここに写さない（写した版がずれた実例が TECH.md §3.2.3 に在る）。
@@ -277,7 +280,7 @@ def pick_epithet_length():
         return EPITHET_CHARS
     if EPITHET_CHARS <= EPITHET_LENGTH_FLOOR:
         return EPITHET_CHARS
-    return random.randint(EPITHET_LENGTH_FLOOR, EPITHET_CHARS)
+    return _RNG.randint(EPITHET_LENGTH_FLOOR, EPITHET_CHARS)
 
 
 def clean_epithet(text):
@@ -763,6 +766,21 @@ def apply(ctx):
             "day": material.game_day(app),
         }
 
+    def epithet_sources(app, mark):
+        """二つ名の写しを見分ける素材。評判の立つ土地の成した事と、片付けた依頼の題名。
+
+        二つ名は各地の評判文から編むので、写しになりうるのはその土地の素材だけ。
+        編纂はワーカーのスレッドで走るので、ゲームの状態は照合の側（ここ）で読んでおく。
+        """
+        sources = {"achievements": [], "quests": []}
+        for area_id in mark.get("qualifying") or ():
+            item = material.gather(app, area_id)
+            if item is None:
+                continue
+            sources["achievements"].extend(item.get("achievements") or [])
+            sources["quests"].extend(item.get("quests") or [])
+        return sources
+
     def job_key(job):
         return (job.get("kind", "area"), job["world"], job.get("area_id", ""))
 
@@ -851,6 +869,7 @@ def apply(ctx):
                  "player": material.player_name(app),
                  "day": material.game_day(app),
                  "mark": mark, "exclude": exclude,
+                 "sources": epithet_sources(app, mark),
                  "why": "{}: {}".format(why, reason)})
 
     # ------------------------------------------------------------------ 編纂
@@ -922,9 +941,9 @@ def apply(ctx):
             return
         epithet = parsed[KEY_EPITHET]
         description = parsed[KEY_DESCRIPTION]
-        if epithet and echoes_material(epithet, job["player"], None):
-            write("二つ名: {!r} は本人の名前の写しなので捨てた（{}）".format(
-                epithet, world))
+        if epithet and echoes_material(epithet, job["player"], job.get("sources")):
+            write("二つ名: {!r} は本人の名前か依頼の題名・成した事の写しなので捨てた（{}）"
+                  .format(epithet, world))
             epithet = ""
         if epithet and exclude and epithet == exclude:
             # 除けと言った名がそのまま返った。前の名のまま（もう一度押せば再挑戦）。

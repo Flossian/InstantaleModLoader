@@ -602,11 +602,12 @@ def run():
     check("a widget somewhere else on the HUD is not touched",
           hud.elsewhere.size == (900.0, 120.0) and hud.elsewhere.pos == (600.0, 120.0),
           (hud.elsewhere.size, hud.elsewhere.pos))
-    check("the height is recomputed by the game's own method",
-          hud.height_updates > 0, hud.height_updates)
-
     # -- 上端を保って窓の内側へ ----------------------------------------------
-    CLOCK.tick()                       # 位置を窓に収める予約を流す
+    CLOCK.tick()                       # 位置を窓に収める予約と、高さの決め直しを流す
+    check("the height is recomputed by the game's own method on the next frame",
+          hud.height_updates > 0, hud.height_updates)
+    check("the mod does not rebuild the label texture itself (Kivy does)",
+          hud.text_display.updates == 0, hud.text_display.updates)
     check("the frame stays inside the window",
           frame.x >= 0 and frame.y >= 0
           and frame.x + frame.width <= WIN_WIDTH

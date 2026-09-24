@@ -289,7 +289,9 @@ def npc_id_of(app, character, world=None):
         return ""
     characters = _roster(app, world)
     if isinstance(characters, dict):
-        for key, value in characters.items():
+        # 頼み文の包みと詳細生成は別スレッドで走り、その間にメインスレッドが
+        # 名簿を変えうる。複製してから回す（`names_in_use` と同じ）。
+        for key, value in list(characters.items()):
             if value is character:
                 return str(key)
     value = getattr(character, "id", None)
@@ -320,7 +322,7 @@ def _record(npc_id):
             "built_in": None,    # その実体を組んだ世代（`patch._generation`）
             "stale_placed": False,  # 名簿の実体が差し替わった。置き直しが要る
             "snapshot": None,    # 控えから読んだ実体の写し（次の spawn の材料）
-            "placed": None,      # (area_id, facility_id, 主の元の値)
+            "placed": None,      # (area_id, facility_id, 主の元の値, 主か, 一覧に出すか)
         }
     return record
 
@@ -827,7 +829,7 @@ def replace_if_stale(app, npc_id, world=None, write=None):
     """名簿の実体が差し替わっていたら、控えの置き場所へ置き直す。置き直したら True。
 
     差し替えは `_character_at` が見つけて印（`stale_placed`）を立てる。
-    ここで消すのは印だけで、置き場所は記録の `placed`（エリア・施設・主か）を使う。
+    ここで消すのは印だけで、置き場所は記録の `placed`（エリア・施設・主か・一覧に出すか）を使う。
     """
     npc_id = str(npc_id)
     record = registry().get(npc_id)
@@ -837,13 +839,26 @@ def replace_if_stale(app, npc_id, world=None, write=None):
     spot = record.get("placed")
     if not spot:
         return False
-    area_id, facility_id, _owner_was, was_owner = spot
+    area_id, facility_id, owner_was, was_owner, listed = _spot_of(spot)
     record["placed"] = None          # 前の実体の置き場所。`place` に据え直させる
     if write:
         write("modnpc: {} was rebuilt by the game; placing the new instance again"
               .format(npc_id))
-    return place(app, npc_id, area_id, facility_id, owner=bool(was_owner),
-                 world=world, write=write)
+    done = place(app, npc_id, area_id, facility_id, owner=bool(was_owner),
+                 listed=listed, world=world, write=write)
+    current = record.get("placed")
+    if done and was_owner and current:
+        # 施設の主は前の実体のときから自分なので、`place` が取った「元の主」は自分の id。
+        # そのままだと `unplace` が主を自分へ戻し、保存に `mod:` の id が焼かれる。
+        record["placed"] = current[:2] + (owner_was,) + tuple(current[3:])
+    return done
+
+
+def _spot_of(spot):
+    """記録の `placed` を `(area, facility, 主の元の値, 主か, 一覧に出すか)` に揃える。"""
+    spot = tuple(spot)
+    listed = bool(spot[4]) if len(spot) > 4 else True
+    return spot[0], spot[1], spot[2], spot[3], listed
 
 
 # --------------------------------------------------------------------------
@@ -872,6 +887,17 @@ def place(app, npc_id, area_id, facility_id, *, owner=False, listed=True,
     ゲームの宿泊は主を名簿から引くだけなので、これでも通る。
     自分の家のように「他人がそこに住んでいるように見えてはいけない」建物のため
     （`330_` の大家）。店の主人のように話せる相手は既定（`listed=True`）のまま。
+    """
+    return _place(app, npc_id, area_id, facility_id, owner=owner, listed=listed,
+                  world=world, write=write, persist=True)
+
+
+def _place(app, npc_id, area_id, facility_id, *, owner, listed, world, write,
+           persist):
+    """`place` の中身。`persist=False` は控えを書かない（保存の間の戻し）。
+
+    保存の窓の外し・戻しは置き場所を変えない。控えを書くと保存のたびに
+    2回書き込み、間で落ちると控えに `place=None` が残る。
     """
     npc_id = str(npc_id)
     areas = ui.areas_of_world(world) if world is not None else ui.world_areas(app)
@@ -920,9 +946,10 @@ def place(app, npc_id, area_id, facility_id, *, owner=False, listed=True,
                 write("WARN modnpc: cannot set the owner of {}/{}: {}: {}"
                       .format(area_id, facility_id, type(exc).__name__, exc))
             owner_was = None
-    record["placed"] = (str(area_id), str(facility_id), owner_was, bool(owner))
+    record["placed"] = (str(area_id), str(facility_id), owner_was, bool(owner),
+                        bool(listed))
     record["was_at"] = was_at
-    if is_mod_npc(npc_id):
+    if persist and is_mod_npc(npc_id):
         _persist(app, owner_of_id(npc_id), npc_id,
                  place=[str(area_id), str(facility_id), bool(owner), bool(listed)])
     if write:
@@ -934,11 +961,16 @@ def place(app, npc_id, area_id, facility_id, *, owner=False, listed=True,
 
 def unplace(app, npc_id, world=None, write=None):
     """施設の名簿から外し、主を元へ戻す。"""
+    return _unplace(app, npc_id, world=world, write=write, persist=True)
+
+
+def _unplace(app, npc_id, *, world, write, persist):
+    """`unplace` の中身。`persist=False` は控えを書かない（保存の間の外し）。"""
     npc_id = str(npc_id)
     record = registry().get(npc_id)
     if not isinstance(record, dict) or not record.get("placed"):
         return False
-    area_id, facility_id, owner_was, was_owner = record["placed"]
+    area_id, facility_id, owner_was, was_owner, _listed = _spot_of(record["placed"])
     facility = facility_of(app, area_id, facility_id, world)
     if facility is None:
         record["placed"] = None
@@ -961,7 +993,7 @@ def unplace(app, npc_id, world=None, write=None):
             log_exc("modnpc: cannot restore the owner of {}/{}".format(
                 area_id, facility_id))
     record["placed"] = None
-    if is_mod_npc(npc_id):
+    if persist and is_mod_npc(npc_id):
         _persist(app, owner_of_id(npc_id), npc_id, place=None)
     if write:
         write("modnpc: {} left {}/{}".format(npc_id, area_id, facility_id))
@@ -1460,16 +1492,19 @@ def _entry_mentions(entry, mod_ids):
     return _spec_mentions(entry.get("spec"), mod_ids)
 
 
-def scrub_saved_refs(app, mod_ids, write=None):
+def scrub_saved_refs(app, mod_ids, write=None, undo=None):
     """保存に焼かれる器から MOD の NPC への参照を落とす。戻すための控えを返す。
 
     落とすのは保存の窓の間だけで、`unscrub_saved_refs` が元の器をそのまま戻す
     （中身を組み直さない ― ゲームが同じ器を握っているので、差し替えた側を戻す）。
+    `undo` に並びを渡すと、書き換えるたびにそこへ積む（途中で投げても、
+    そこまでに落としたものは戻せる）。
     """
+    if undo is None:
+        undo = []
     mod_ids = set(str(npc_id) for npc_id in mod_ids)
     if not mod_ids:
-        return []
-    undo = []
+        return undo
     # 選択肢（`SAVED_CHOICE_ATTRS`）は落とさない。落とすと一覧を出したまま保存したセーブが
     # 「やめる」だけの画面で戻る（実機 2026-09-14。定数の注記）。
     for attr in SAVED_SPEC_ATTRS:
@@ -1533,10 +1568,12 @@ def talking_with(app):
     return str(value) if isinstance(value, str) and value else ""
 
 
-def hide(app, *, world=None, write=None):
+def hide(app, *, world=None, write=None, into=None):
     """保存の直前。MOD の NPC を名簿と素データの反復から隠す。
 
     戻すための控えを返す（`restore` にそのまま渡す）。
+    `into` に空の dict を渡すと控えをそこへ書くたびに積むので、途中で投げても
+    そこまでに外したものは `restore(app, into)` で戻る（保存の関所はこちらを使う）。
 
     **いま話している相手だけは痕跡を残す。** ゲームは会話の途中を保存して再開できる
     （`in_conversation` に相手の id、`current_conversation_history` に流れ、選択肢は会話のもの）。
@@ -1544,15 +1581,21 @@ def hide(app, *, world=None, write=None):
     相手の居ない会話の残骸だけが並ぶ（実機 2026-09-14。「NPC が消えた」）。
     ロードは `restore_world` が名簿を戻してから続きが動くので、id は解ける。
     """
-    characters = _roster(app, world)
+    hidden = into if into is not None else {}
     taken = []
     placed = []
+    scrubbed = []
+    plain_views = []
+    hidden.update({"taken": taken, "placed": placed, "view": None,
+                   "plain_views": plain_views, "scrubbed": scrubbed, "world": world})
+    characters = _roster(app, world)
     talking = talking_with(app)
     # 名簿と素データだけでは足りない。選択肢・自由入力・パーティ・敵にも id が載る。
     # 会話中の相手は除く（上の注記）。
-    scrubbed = scrub_saved_refs(
+    scrub_saved_refs(
         app, [npc_id for npc_id in registry()
-              if is_mod_npc(npc_id) and npc_id != talking], write=write)
+              if is_mod_npc(npc_id) and npc_id != talking], write=write,
+        undo=scrubbed)
     if talking and is_mod_npc(talking) and write:
         write("modnpc: save: {} is in a conversation; its trace is kept so the "
               "save can pick it up".format(talking))
@@ -1560,12 +1603,15 @@ def hide(app, *, world=None, write=None):
         if not is_mod_npc(npc_id):
             continue
         record = registry()[npc_id]
-        if record.get("placed"):
-            placed.append((npc_id, record["placed"]))
-            unplace(app, npc_id)
+        spot = record.get("placed")
+        if spot:
+            # 置き場所は変わらないので控えは書かない（`_place` の注記）。
+            # 積むのは外し終えてから。外す前に投げた人を戻しで置き直すと、
+            # 自分を「元の主」として取り直してしまう。
+            _unplace(app, npc_id, world=world, write=None, persist=False)
+            placed.append((npc_id, spot))
         if LIFT_ROSTER and characters is not None and npc_id in characters:
             taken.append(npc_id)
-    view = None
     if taken:
         # 名簿から外さない。反復だけ隠す辞書に差し替える（`_RosterView`）。
         target = world if world is not None else getattr(app, "world", None)
@@ -1573,11 +1619,10 @@ def hide(app, *, world=None, write=None):
         view = _RosterView(source, taken)
         try:
             target.characters = view
+            hidden["view"] = view
         except Exception:
             log_exc("modnpc: cannot swap the roster for the save")
-            view = None
     # 素データの写しも同じ形で隠す（保存は `save_data_dict['npcs']` をそのまま書く）。
-    plain_views = []
     if LIFT_ROSTER:
         mod_ids = [npc_id for npc_id in registry() if is_mod_npc(npc_id)]
         for holder, key in _plain_containers(app):
@@ -1590,14 +1635,15 @@ def hide(app, *, world=None, write=None):
             plain_views.append((holder, key, plain_view))
     if write and taken:
         write("modnpc: save: {} instance(s) hidden from the roster".format(len(taken)))
-    return {"taken": taken, "placed": placed, "view": view,
-            "plain_views": plain_views, "scrubbed": scrubbed, "world": world}
+    return hidden
 
 
 def restore(app, hidden, *, world=None, write=None):
-    """保存の直後。引き上げたものを戻す。"""
+    """保存の直後。引き上げたものを戻す。`hide` が途中で投げた控えも受ける。"""
     if not isinstance(hidden, dict):
         return
+    if world is None:
+        world = hidden.get("world")
     view = hidden.get("view")
     if view is not None:
         target = world if world is not None else getattr(app, "world", None)
@@ -1611,8 +1657,14 @@ def restore(app, hidden, *, world=None, write=None):
         if holder.get(key) is view:
             holder[key] = view.source
     for npc_id, spot in hidden.get("placed") or ():
-        area_id, facility_id, _owner_was, was_owner = spot
-        place(app, npc_id, area_id, facility_id, owner=was_owner)
+        area_id, facility_id, _owner_was, was_owner, listed = _spot_of(spot)
+        try:
+            # 置き場所は保存の前と同じなので控えは書かない。`listed` も引き継ぐ
+            # （落とすと一覧に出さない人が保存のたびに一覧へ出る）。
+            _place(app, npc_id, area_id, facility_id, owner=bool(was_owner),
+                   listed=listed, world=world, write=None, persist=False)
+        except Exception:
+            log_exc("modnpc: cannot place {} back after the save".format(npc_id))
 
 
 def installed():
@@ -1680,11 +1732,13 @@ def _install(ctx, write):
 
     def save_game(orig, self, *args, **kwargs):
         """保存の間だけ、MOD の持ち物を世界から外す。"""
-        hidden = None
+        # 控えは先に作って `hide` に埋めさせる。途中で投げても、そこまでに
+        # 外したもの（パーティ・敵・施設の主など）は後ろの `restore` が戻す。
+        hidden = {}
         try:
             fire_all("save", self, args={"phase": "hide"}, write=write)
             snapshot_all(self, write=write)     # ゲームの保存と同じ時点で実体を写す
-            hidden = hide(self, write=write)
+            hide(self, write=write, into=hidden)
         except Exception:
             log_exc("modnpc: cannot lift the mod npcs before the save")
         try:

@@ -8,7 +8,8 @@
   検証   … 応答の正規化は1本（`normalize_result`）で、構造化・非構造化の
            どちらから来ても同じ検証（id・自己参照・重複方向）を通る
   件数   … 残す事実の数は設定（`FACT_LOG_LIMIT`）に従い、プロンプトにも同じ数が載る
-  経路   … 構造化出力を1度使えなかった provider では、以後その経路を試さない
+  経路   … 構造を作れない・呼べない provider では以後その経路を試さない。
+           タイムアウト・読めない応答・起動直後では諦めない
   注入   … 会話へ足すのは NPC の**浅い複製**で、世界の NPC 本体と messages は触らない
   参照   … 311 の state は読むだけ。書き換わったら読み直す
 
@@ -268,27 +269,52 @@ def state_file(ctx, app):
 
 
 class FakeLLM(object):
-    """`llm.ask` / `llm.create_structure` の差し替え。呼ばれ方を控える。"""
+    """`llm.ask` / `llm.create_structure` / `llm.manager` / `llm.resolve_send` の差し替え。
+    呼ばれ方を控える。
 
-    def __init__(self, structured=None, plain=None, buildable=True):
+    `raises` は構造化の送信が投げる例外（`llm.ask` と同じく `errors` へ積んで None を返す）。
+    `factory` は本体の create_model があるか、`structured_send` は構造化の口があるか。
+    """
+
+    def __init__(self, structured=None, plain=None, buildable=True, raises=None,
+                 factory=True, structured_send=True):
         self.structured = structured
         self.plain = plain
         self.buildable = buildable
+        self.raises = raises
+        self.factory = factory
+        self.structured_send = structured_send
         self.calls = []          # (structured か, messages)
 
     def create_structure(self, ctx, name, fields, *, label="llm"):
         return dict if self.buildable else None
 
+    def manager(self):
+        return types.SimpleNamespace(create_model=dict if self.factory else None)
+
+    def resolve_send(self, name="send_request_with_no_structure"):
+        if name == "send_request" and not self.structured_send:
+            return None, None
+        return (lambda *a, **kw: None), "fake"
+
     def ask(self, ctx, manager_name, message, *, timeout, structure=None,
-            max_tokens=None, label="llm", write=None):
+            max_tokens=None, label="llm", write=None, errors=None):
         self.calls.append(("structured" if structure is not None else "plain", message))
+        if structure is not None and self.raises is not None:
+            if errors is not None:
+                errors.append(self.raises)
+            return None
         return self.structured if structure is not None else self.plain
+
+
+PATCHED = ("ask", "create_structure", "manager", "resolve_send")
 
 
 def run_turn(ctx, app, fake):
     """会話が1ターン進んだところまで流し、抽出を終わらせる。"""
-    original_ask, original_create = llm.ask, llm.create_structure
-    llm.ask, llm.create_structure = fake.ask, fake.create_structure
+    originals = {name: getattr(llm, name) for name in PATCHED}
+    for name in PATCHED:
+        setattr(llm, name, getattr(fake, name))
     try:
         FakeClock.scheduled = []
         ctx.hooks[TURN](lambda self, text: None,
@@ -297,7 +323,8 @@ def run_turn(ctx, app, fake):
         store = getattr(sys, MOD.STORE_ATTR)
         store["worker"].jobs.join()  # ワーカーが片付けるまで待つ
     finally:
-        llm.ask, llm.create_structure = original_ask, original_create
+        for name, fn in originals.items():
+            setattr(llm, name, fn)
 
 
 def answer(facts):
@@ -326,6 +353,9 @@ prompt = fake.calls[0][1][0]["content"]
 check("プロンプトの件数は設定と同じ",
       "最大{}件".format(MOD.FACT_LOG_LIMIT) in prompt,
       [l for l in prompt.split("\n") if "new_facts" in l][:1])
+check("プレイヤー名はメインスレッドの写しから載る",
+      "形成されたエリスから見た主人公】" in prompt,
+      [l for l in prompt.split("\n") if "から見た" in l][:2])
 check("relationship の目標長も設定と同じ",
       "おおむね{}文字".format(MOD.RELATION_CHARS) in prompt,
       [l for l in prompt.split("\n") if "おおむね" in l][:1])
@@ -348,24 +378,77 @@ shutil.rmtree(out_dir, ignore_errors=True)
 
 # ---------------------------------------------------------------- 経路の切り替え
 print("構造化経路を使えない provider")
+plain = json.dumps(answer(["剣を折った"]), ensure_ascii=False)
+
+
+def kinds(fake):
+    return [kind for kind, _ in fake.calls]
+
+
 app = InstantaleApp()
 ctx, out_dir = fresh(app)
-plain = json.dumps(answer(["剣を折った"]), ensure_ascii=False)
-fake = FakeLLM(structured=None, plain=plain)
+fake = FakeLLM(plain=plain, raises=TypeError("unexpected keyword argument 'timeout'"))
 run_turn(ctx, app, fake)
-check("1回目は構造化を試してから降りる",
-      [kind for kind, _ in fake.calls] == ["structured", "plain"],
-      [kind for kind, _ in fake.calls])
+check("呼べない（TypeError）: 1回目は構造化を試してから降りる",
+      kinds(fake) == ["structured", "plain"], kinds(fake))
 
 fake.calls = []
 run_turn(ctx, app, fake)
-check("2回目からは構造化を試さない",
-      [kind for kind, _ in fake.calls] == ["plain"],
-      [kind for kind, _ in fake.calls])
+check("呼べない（TypeError）: 2回目からは構造化を試さない",
+      kinds(fake) == ["plain"], kinds(fake))
 saved = json.load(io.open(state_file(ctx, app), encoding="utf-8"))
 check("非構造化でも保存まで届く",
       saved["80"]["relations"]["81"]["relationship"] == "信用していない。", saved)
 shutil.rmtree(out_dir, ignore_errors=True)
+
+for label, options in (
+        ("構造を作れない（create_model はある）", {"buildable": False}),
+        ("構造化の口が無い（素の口だけある）", {"structured_send": False})):
+    app = InstantaleApp()
+    ctx, out_dir = fresh(app)
+    fake = FakeLLM(plain=plain, **options)
+    run_turn(ctx, app, fake)
+    fake.calls = []
+    run_turn(ctx, app, fake)
+    check("{}: 2回目からは構造化を試さない".format(label),
+          kinds(fake) == ["plain"], kinds(fake))
+    shutil.rmtree(out_dir, ignore_errors=True)
+
+print("一時的な障害では構造化を諦めない")
+app = InstantaleApp()
+ctx, out_dir = fresh(app)
+fake = FakeLLM(plain=plain, raises=TimeoutError("timed out"))
+run_turn(ctx, app, fake)
+check("タイムアウト: その回は素の経路を重ねない",
+      kinds(fake) == ["structured"], kinds(fake))
+fake.raises = None
+fake.structured = answer(["剣を折った"])
+fake.calls = []
+run_turn(ctx, app, fake)
+check("タイムアウト: 次の回はまた構造化で聞く",
+      kinds(fake) == ["structured"], kinds(fake))
+check("タイムアウトの後も保存まで届く",
+      json.load(io.open(state_file(ctx, app), encoding="utf-8"))
+      ["80"]["relations"]["81"]["relationship"] == "信用していない。")
+shutil.rmtree(out_dir, ignore_errors=True)
+
+for label, options in (
+        ("読めない応答", {}),
+        ("起動直後（create_model がまだ無い）", {"buildable": False, "factory": False}),
+        ("起動直後（送信の口がまだ無い）", {"structured_send": False})):
+    app = InstantaleApp()
+    ctx, out_dir = fresh(app)
+    fake = FakeLLM(structured=None, plain=plain, **options)
+    if label.endswith("送信の口がまだ無い）"):
+        fake.resolve_send = lambda name="send_request_with_no_structure": (None, None)
+    run_turn(ctx, app, fake)
+    first = kinds(fake)
+    check("{}: 構造化を諦めない".format(label),
+          getattr(sys, MOD.STORE_ATTR)["no_structure"] is False)
+    if not label.startswith("起動直後"):
+        check("{}: その回は素の経路で拾う".format(label),
+              first == ["structured", "plain"], first)
+    shutil.rmtree(out_dir, ignore_errors=True)
 
 
 # ---------------------------------------------------------------- 注入

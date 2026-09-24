@@ -57,6 +57,24 @@ try:
 
     print("[復号]")
     check("XOR は往復する", saves.xor(saves.xor(b"abc\x00\xff")) == b"abc\x00\xff")
+
+    # 1バイトずつ掛ける素直な形と、全長・全バイトが一致すること。
+    # 整数にまとめて掛けるので、長さが鍵の倍数でないとき・末尾が 0 になるとき
+    # （鍵と同じバイトで終わる）・空のときを取りこぼしやすい。
+    def xor_bytewise(raw):
+        key = saves.SAVE_KEY
+        return bytes(b ^ key[i % len(key)] for i, b in enumerate(raw))
+
+    import random
+    rng = random.Random(20260924)
+    samples = [b"", b"\x00", saves.SAVE_KEY, saves.SAVE_KEY * 3 + b"I",
+               saves.SAVE_KEY[:7], b"\x00" * 50]
+    samples += [bytes(rng.randrange(256) for _ in range(n)) for n in range(1, 100)]
+    samples.append(bytes(rng.randrange(256) for _ in range(100000)))
+    wrong = [len(raw) for raw in samples if saves.xor(raw) != xor_bytewise(raw)]
+    check("1バイトずつ掛けた結果と同じ（{} 通り）".format(len(samples)), not wrong, wrong[:5])
+    check("鍵と同じバイト列は全部 0 になり、長さは縮まない",
+          saves.xor(saves.SAVE_KEY * 2) == b"\x00" * 48)
     check("鍵は 24 バイト", len(saves.SAVE_KEY) == 24, len(saves.SAVE_KEY))
     body = {"world_data": {"world_name": "ヴェスティア"}}
     raw = json.dumps(body, ensure_ascii=False).encode("utf-8")

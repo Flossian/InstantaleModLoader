@@ -223,6 +223,43 @@ def test_dump_end_to_end():
         shutil.rmtree(sandbox, ignore_errors=True)
 
 
+def test_dump_module_vanishes():
+    print("=== dump: 走査中にモジュールが消えても止まらない ===")
+    # 写しを取った後で `sys.modules[name]` を直に引くと、消えたモジュールで KeyError になり
+    # summary 以降と build.json が書かれない。
+    import types
+    name = "scripts._recon_vanishing_probe"
+    sys.modules[name] = types.ModuleType(name)
+    real_describe = recon.describe_module
+    popped = []
+
+    def describe_and_drop(mod_name, module, *, deep):
+        if not popped:
+            popped.append(sys.modules.pop(name, None))
+        return real_describe(mod_name, module, deep=deep)
+
+    sandbox = _sandbox()
+    recon.describe_module = describe_and_drop
+    try:
+        try:
+            recon_dir = recon.dump(sandbox, backup=False)
+        except Exception as exc:
+            check(False, "消えたモジュールで dump が止まった: {!r}".format(exc))
+            return
+        check(popped and popped[0] is not None, "（前提）走査の途中で消えている")
+        missing = [n for n in list(recon.OUTPUT_FILES) + [recon.BUILD_NAME]
+                   if not os.path.isfile(os.path.join(recon_dir, n))]
+        check(not missing, "成果物一式と build.json が揃う（欠け: {}）".format(missing))
+        with io.open(os.path.join(recon_dir, "game_modules.txt"), encoding="utf-8") as fh:
+            check(name in fh.read(), "写しを取った時点のモジュールとして載る")
+        check(not [n for n in os.listdir(recon_dir) if n.endswith(".tmp")],
+              "build.json の書きかけを残さない（壊れない書き方で書く）")
+    finally:
+        recon.describe_module = real_describe
+        sys.modules.pop(name, None)
+        shutil.rmtree(sandbox, ignore_errors=True)
+
+
 def test_build_identity():
     print("=== build_identity: ビルドの素性 ===")
     identity = recon.build_identity()
@@ -243,6 +280,7 @@ def main():
     test_snapshot_name()
     test_archive_previous()
     test_dump_end_to_end()
+    test_dump_module_vanishes()
     test_build_identity()
     print()
     if _FAILS:

@@ -8,7 +8,9 @@
   層     … 同じ持ち主は積み重ならず差し替わる（注入し直しても増えない）
   組む   … `original_ability_scores` に6つの鍵が渡る（None だと実機で落ちる）
   載る   … 文字列の id で `world.characters` に載り、素データの写しが置かれる
+  出さず … `listed=False` の人は保存と実体の作り直しを通しても一覧に出ず、控えも書き換わらない
   隠す   … 保存の間だけ名簿と素データの反復から消え、id では引ける。施設の名簿と主も一緒に外れる
+           （途中で投げても、そこまでに外したものは戻る）
   写す   … 保存のたびに実体が控えへ写され、読み直しで写しから組み直される
   取っ手 … 読み書きとも実体へ素通し。正規 NPC の素データは取っ手から触らない
   窓口   … 誰にでも効く層と notes が1つの複製にまとまる
@@ -249,6 +251,9 @@ def main():
     ok &= check("current_area がエリア", character.current_area is world.areas["1"])
 
     print("置く: 主にするが「会話する」の一覧には出さない（330 の大家）")
+    # 同じ施設の主を2人重ねない（外す順と戻す順が主の控えを取り違える）。
+    # 受付はいったん外し、大家の検査の後で置き直す。
+    modnpc.unplace(app, npc_id)
     quiet = modnpc.register("330_home", key="keeper-1", fields={"name": "大家"})
     modnpc.spawn(app, quiet)
     ok &= check("置けた", modnpc.place(app, quiet, "1", "5", owner=True, listed=False))
@@ -259,9 +264,50 @@ def main():
     ok &= check("控えにも「出さない」が残る",
                 (modnpc._persisted_entry(app, "330_home", quiet) or {}).get("place")
                 == ["1", "5", True, False])
+
+    print("置く: 一覧に出さない人は、保存を通しても出ないまま")
+    persisted = []
+    real_persist = modnpc._persist
+
+    def counting_persist(*args, **kwargs):
+        persisted.append(kwargs)
+        return real_persist(*args, **kwargs)
+
+    modnpc._persist = counting_persist
+    try:
+        hidden_q = modnpc.hide(app)
+        ok &= check("保存の間は主から外れる", facility.owner == "7")
+        modnpc.restore(app, hidden_q)
+    finally:
+        modnpc._persist = real_persist
+    ok &= check("保存の後も施設の名簿に載らない", quiet not in facility.characters)
+    ok &= check("保存の後も location を据えない",
+                getattr(world.characters.get(quiet), "location", None) is not facility)
+    ok &= check("保存の後、主には戻る", facility.owner == quiet)
+    ok &= check("保存の後も控えは「出さない」のまま",
+                (modnpc._persisted_entry(app, "330_home", quiet) or {}).get("place")
+                == ["1", "5", True, False])
+    ok &= check("保存の間の外し・戻しは控えを書かない",
+                not any("place" in kw for kw in persisted))
+
+    print("置く: 一覧に出さない人は、ゲームが実体を作り直しても出ないまま")
+    remade = FakeCharacter(name="大家", original_ability_scores=dict(
+        (key, 10) for key in ABILITY_KEYS))
+    remade.config = {"level_of_detail": 2, "is_player": False, "is_dead": False}
+    world.characters[quiet] = remade                 # 詳細生成の後に本体がやること
+    modnpc.get(app, quiet).character                 # 差し替えに気付かせる
+    ok &= check("置き直しが要ると分かる", modnpc.replace_if_stale(app, quiet))
+    ok &= check("置き直しても施設の名簿に載らない", quiet not in facility.characters)
+    ok &= check("置き直しても location を据えない",
+                getattr(remade, "location", None) is not facility)
+    ok &= check("置き直しても主のまま", facility.owner == quiet)
+    ok &= check("置き直しても控えは「出さない」のまま",
+                (modnpc._persisted_entry(app, "330_home", quiet) or {}).get("place")
+                == ["1", "5", True, False])
     modnpc.unplace(app, quiet)
     modnpc.unregister("330_home", quiet, app=app)
-    facility.owner = npc_id                      # 元の主に戻す（後の検査のため）
+    ok &= check("主が元の値に戻る", facility.owner == "7")
+    modnpc.place(app, npc_id, "1", "5", owner=True)  # 受付を置き直す（後の検査のため）
 
     print("隠す: 保存の間だけ引き上げる")
     # 実セーブの `game_variables.buttons_backup` には
@@ -327,6 +373,35 @@ def main():
     app.function_correspond_to_input = {"cls_name": "FreeInputStart", "args": []}
     app.party = ["player"]
     app.original_party = ["player"]
+    app.current_enemy_dict = {}
+
+    print("隠す: 途中で投げても、そこまでに外したものは戻る")
+    app.party = ["player", npc_id]
+    app.current_enemy_dict = {npc_id: {"name": "受付"}}
+    real_unplace = modnpc._unplace
+
+    def broken_unplace(*args, **kwargs):
+        raise RuntimeError("施設から外す途中の失敗")
+
+    modnpc._unplace = broken_unplace
+    partial = {}
+    try:
+        try:
+            modnpc.hide(app, into=partial)
+        except RuntimeError:
+            pass
+    finally:
+        modnpc._unplace = real_unplace
+    ok &= check("投げる前に外したパーティは控えに積まれている",
+                app.party == ["player"] and partial.get("scrubbed"))
+    modnpc.restore(app, partial)
+    ok &= check("途中までの控えでパーティと敵が戻る",
+                app.party == ["player", npc_id] and npc_id in app.current_enemy_dict)
+    ok &= check("施設の置き場所もそのまま", facility.characters == [npc_id]
+                and facility.owner == npc_id)
+    ok &= check("外せなかった人の「元の主」は取り直さない",
+                modnpc.registry()[npc_id]["placed"][2] == "7")
+    app.party = ["player"]
     app.current_enemy_dict = {}
 
     print("写す: 保存のたびに実体が控えへ写り、読み直しで写しから組み直す")

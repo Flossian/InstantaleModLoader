@@ -27,6 +27,10 @@ from instantale_modloader import frames
 
 ITEM_TYPES = ("healing_item", "consumable")
 
+# 乱数は MOD 専用に持つ（ゲームと共有の `random` から引くとゲーム側の乱数列がずれる。TECH.md §6.1）。
+# 検査は `rng=random.Random(n)` を渡して固定する。
+RNG = random.Random()
+
 # 細分（`attributes["item_detail"]`）→ 効き方の種類。
 KIND_BY_DETAIL = {
     "food": "stamina",
@@ -157,10 +161,10 @@ def spread(rng, variance):
     variance = float(variance)
     if variance <= 0:
         return 1.0
-    return rng.uniform(1.0 - variance, 1.0 + variance)
+    return (RNG if rng is None else rng).uniform(1.0 - variance, 1.0 + variance)
 
 
-def stamina_amount(value, rarity, detail, rules, rng=random):
+def stamina_amount(value, rarity, detail, rules, rng=None):
     """スタミナの回復量。(底 + 価値段階 × 上乗せ) × レア度 × 飲み物の割合 × (1 ± stamina_variance)。
 
     乱数は生成時に1回引いて品に書く。
@@ -173,7 +177,7 @@ def stamina_amount(value, rarity, detail, rules, rng=random):
     return max(1, int(round(amount)))
 
 
-def hp_percent(value, rarity, rules, rng=random, rate=1.0):
+def hp_percent(value, rarity, rules, rng=None, rate=1.0):
     """HP の回復の割合（最大 HP の %）。(底 + 価値段階 × 上乗せ) × レア度 × rate × (1 ± hp_variance)。"""
     pct = (float(rules["hp_base_pct"])
            + float(rules["hp_pct_per_value"]) * value) * rarity_mult(rarity, rules)
@@ -188,7 +192,7 @@ def signed_roll(magnitude, rng, rules):
     return size if rng.random() < float(rules["herb_good_chance"]) else -size
 
 
-def rework(item, rules, lang, rng=random):
+def rework(item, rules, lang, rng=None):
     """`attributes` を細分の効き方に書き換える。作り直し済み・対象外なら False。
 
     戻り値は書いた効果の辞書（記録用）。
@@ -201,6 +205,8 @@ def rework(item, rules, lang, rng=random):
     field, attributes = read_item(item)
     if is_reworked(attributes):
         return False
+    if rng is None:
+        rng = RNG
 
     detail = attributes.get("item_detail")
     value = num(field("value")) or 1.0

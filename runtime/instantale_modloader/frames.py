@@ -28,6 +28,16 @@ GAME_FILE_HINTS = ("instantale.py", "\\scripts\\", "/scripts/",
 # caller() を参照。
 RUNTIME_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+# 配る予定の無い MOD の置き場（`local/`）。runtime の**外**、配布フォルダの根の直下にある
+# （`__init__.LOCAL_DIRNAME`。このモジュールは os / sys しか import しないので名前を写す）。
+# ここを数えないと、`caller()` が `local/` の MOD のフレームをゲーム側の呼び出し元として出す。
+LOCAL_DIR = os.path.join(os.path.dirname(RUNTIME_DIR), "local")
+
+# `is_ours` が比べる接頭辞。区切りの向きと大文字小文字を均し、末尾に区切りを付ける
+# （`runtime_old` のような隣のフォルダを巻き込まない）。
+_OURS = tuple(os.path.join(os.path.normcase(folder).lower(), "")
+              for folder in (RUNTIME_DIR, LOCAL_DIR))
+
 # 「属性が無い」と「値が None」を区別するための番人。
 # 戦闘BGMの原因特定では、`app.music` が **None ではなく存在しない** ことが決め手になった（渡されたオブジェクトが
 # app ではなかった）。
@@ -190,9 +200,9 @@ def is_game_frame(filename: str) -> bool:
 
 
 def is_ours(filename: str) -> bool:
-    """このフレームがローダか mod のものか（＝ゲーム側ではない）。"""
+    """このフレームがローダか mod のものか（＝ゲーム側ではない）。`local/` の MOD も含む。"""
     try:
-        return filename.lower().startswith(RUNTIME_DIR.lower())
+        return os.path.normcase(filename).lower().startswith(_OURS)
     except Exception:
         return False
 

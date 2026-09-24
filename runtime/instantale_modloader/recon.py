@@ -32,7 +32,7 @@ import zipfile
 # patch.py もエイリアス張り替えの範囲を決めるのに同じ表を見るので、
 # 2箇所に書き写さないため。
 # 名前はここからも引けるように再公開しておく。
-from . import GAME_TOPLEVEL, is_game_module, log, log_exc  # noqa: F401
+from . import GAME_TOPLEVEL, is_game_module, log, log_exc, write_json  # noqa: F401
 
 MAX_REPR = 300
 MAX_CONST_ITEMS = 40
@@ -592,11 +592,9 @@ def _write_build(recon_dir: str, identity: dict, counts: dict) -> None:
     record["files"] = {name: _digest(os.path.join(recon_dir, name))
                        for name in OUTPUT_FILES
                        if os.path.isfile(os.path.join(recon_dir, name))}
-    try:
-        with open(os.path.join(recon_dir, BUILD_NAME), "w", encoding="utf-8") as fh:
-            json.dump(record, fh, ensure_ascii=False, indent=1, default=str)
-    except Exception:
-        log_exc("recon: cannot write {}".format(BUILD_NAME))
+    # 壊れない書き方で書く。途中で落ちて読めない控えが残ると、次の回は
+    # 「別のビルド」と判定して要らない退避を1つ増やす。
+    write_json(os.path.join(recon_dir, BUILD_NAME), record, indent=1)
 
 
 # --------------------------------------------------------------------------
@@ -622,7 +620,10 @@ def dump(out_dir: str, *, backup: bool = True) -> str:
             log("recon: archived the previous dump to {}".format(archived))
 
     # 走査の途中で sys.modules が変化しても壊れないよう、先にコピーを取る。
+    # 以降は `sys.modules` を直に引かず、この写し（`modules_by_name`）から引く。
+    # 走査中にモジュールが消えると KeyError で dump 全体が止まるため。
     snapshot = [(name, mod) for name, mod in list(sys.modules.items()) if mod is not None]
+    modules_by_name = dict(snapshot)
     game_names = sorted(name for name, _ in snapshot if is_game_module(name))
 
     log("recon: {} modules loaded, {} classified as game code".format(
@@ -664,7 +665,7 @@ def dump(out_dir: str, *, backup: bool = True) -> str:
     summary += [f"  {p}" for p in sys.path]
     summary += ["", "game modules", "-" * 72]
     for name in game_names:
-        module = sys.modules[name]
+        module = modules_by_name[name]
         summary.append("  {:<58} {}".format(
             name, os.path.basename(str(getattr(module, "__file__", "?")))))
     summary += ["", "top-level non-game packages", "-" * 72]
@@ -679,7 +680,7 @@ def dump(out_dir: str, *, backup: bool = True) -> str:
     # 本物のソースが無い以上、これが一番コードに近い出力になる。
     detail: list[str] = []
     for name in game_names:
-        module = sys.modules[name]
+        module = modules_by_name[name]
         detail.append("=" * 72)
         detail.append(f"{name}   (file={getattr(module, '__file__', '?')}, "
                       f"compiled={is_compiled(module)})")
@@ -725,7 +726,7 @@ def dump(out_dir: str, *, backup: bool = True) -> str:
         "",
     ]
     for name in game_names:
-        module = sys.modules[name]
+        module = modules_by_name[name]
         try:
             entries = sorted(vars(module).items())
         except Exception:

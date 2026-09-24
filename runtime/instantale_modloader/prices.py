@@ -388,6 +388,11 @@ def _apply_one(item, why, from_game, temporary=True):
         if base is None and not registry["adjust"]:
             return 0
         write = registry.get("write")
+        if temporary and registry.get("saving", 0) > 0:
+            # 保存は別スレッドで走る。その窓の間に画面や生成の地点が通っても
+            # 一時の段を書き戻さない（セーブへ焼き付く）。窓が閉じた後の
+            # 組み直しは `saving` の戻しが控えのある品を全部やり直す。
+            temporary = False
         ledger = registry["ledger"]
         axis_prices, axis = _axis_prices(item, attributes, registry, ledger,
                                          from_game, write)

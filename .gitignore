@@ -20,6 +20,11 @@ __pycache__/
 # 未公開の MOD を手元で動かすための順序ファイル。在れば load_order.json に
 # 優先する（instantale_modloader.order_path）。配布物にもコミットにも入れない。
 /runtime/mods/load_order.local.json
+# 同梱の既定（`*.default.*`）の手元版。名前は `.default` を抜いたもの
+# （tools/gui.py の SHIPPED_DEFAULTS / user_name）。make_dist.bat の /XF と揃える。
+/runtime/mods/*/llm_replacements.txt
+/runtime/mods/*/npc.json
+/runtime/mods/*/seeds.json
 
 # ---- ローカル環境ファイル ----
 /InstantaleModLoader.code-workspace
@@ -27,4 +32,3 @@ __pycache__/
 .idea/
 Thumbs.db
 .DS_Store
-llm_replacements.txt

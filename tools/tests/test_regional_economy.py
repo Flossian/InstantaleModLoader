@@ -456,6 +456,75 @@ def main():
         check("色を切れば素の文字", paint(up, trade_owner=True) == up)
         mod.COLOR_SCORE_MARKS = True
 
+    print("[注入し直しで降りたワーカーの残した仕事]")
+    # 前の世代のワーカーは `ctx.superseded()` で降り、待ち行列に残った仕事の
+    # `pending` と Event はそのまま残る。同じ地点が積まれに来たら、積み直さずに
+    # ワーカーを立て直して片付ける（品揃えが待ちの上限まで止まらない）。
+    import threading
+    import types as _types
+
+    class GenCtx(Ctx):
+        def __init__(self):
+            Ctx.__init__(self)
+            self.gone = False
+
+        def superseded(self):
+            return self.gone
+
+    area = _types.SimpleNamespace(id="0", name="エテルナ")
+    app = App(world("ワーカーの世界", AREAS))
+    app.player = _types.SimpleNamespace(current_area=area)
+    move = "__main__:MovePhaseManager.move_phase"
+    asked = []
+    original_ask = mod._ask_profile
+    mod._ask_profile = lambda c, w, snap: asked.append(snap["area_id"]) or None
+
+    def left_over(state, old_ctx, worker):
+        """前の世代が降りた後の形を置く。`(scope, Event)`。"""
+        snapshot = mod._snapshot(app)
+        scope = (snapshot["world_key"], snapshot["area_id"])
+        event = threading.Event()
+        with state["data_lock"]:
+            state["pending"].add(scope)
+            state["profile_events"][scope] = event
+        state["jobs"].put((snapshot, "left over"))
+        state["worker"] = worker
+        state["worker_ctx"] = old_ctx
+        return scope, event
+
+    try:
+        for label, still_running in (("降りきった", False), ("まだ降りる途中", True)):
+            if hasattr(sys, mod.STATE_STORE_ATTR):
+                delattr(sys, mod.STATE_STORE_ATTR)
+            old_ctx = GenCtx()
+            mod.apply(old_ctx)
+            old_ctx.gone = True
+            hold = threading.Event()
+            stuck = threading.Thread(target=hold.wait, daemon=True)
+            if still_running:
+                stuck.start()
+            state = mod._store()
+            scope, event = left_over(state, old_ctx, stuck if still_running else None)
+            new_ctx = GenCtx()
+            mod.apply(new_ctx)
+            del asked[:]
+            new_ctx.hooks[move](lambda self: None, _types.SimpleNamespace(app=app))
+            done = event.wait(timeout=10)
+            hold.set()
+            check("{}: 残った仕事が片付く".format(label), done)
+            check("{}: 積み直さない（1回だけ聞く）".format(label), asked == ["0"], asked)
+            check("{}: pending が空く".format(label), scope not in state["pending"],
+                  state["pending"])
+            check("{}: 例外が出ない".format(label),
+                  not new_ctx.errors and not old_ctx.errors, new_ctx.errors + old_ctx.errors)
+            new_ctx.gone = True
+            if done:                 # 片付かなかったときに検査ごと止まらないように
+                state["jobs"].join()
+    finally:
+        mod._ask_profile = original_ask
+        if hasattr(sys, mod.STATE_STORE_ATTR):
+            delattr(sys, mod.STATE_STORE_ATTR)
+
     print("")
     if failures:
         print("失敗: {}".format(", ".join(failures)))

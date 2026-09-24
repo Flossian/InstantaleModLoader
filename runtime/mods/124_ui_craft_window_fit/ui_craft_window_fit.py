@@ -661,6 +661,13 @@ def apply(ctx):
             outcome, arrow_outcome,
             " ".join(show(block) for block in blocks)))
 
+    def fit_later(hud):
+        """Clock から呼ぶ `fit`。フックの safe=True は Clock の中まで届かず、ここで投げるとゲームごと落ちる。"""
+        try:
+            fit(hud)
+        except Exception:
+            ctx.log_exc("craft window: the delayed fit failed; leaving the window alone")
+
     def schedule(hud):
         """次のフレームから数回当て直す。`fit` は何度呼んでも同じ結果になる。"""
         try:
@@ -670,7 +677,7 @@ def apply(ctx):
             return
         for delay in PASS_DELAYS:
             try:
-                Clock.schedule_once(lambda _dt, target=hud: fit(target), delay)
+                Clock.schedule_once(lambda _dt, target=hud: fit_later(target), delay)
             except Exception:
                 ctx.log_exc("craft window: could not schedule the fit")
                 return

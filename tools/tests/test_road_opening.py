@@ -108,9 +108,10 @@ class Quest:
         self.__dict__.update(kw)
 
 
-def make_world_dict():
+def make_world_dict(player="旅人"):
     return {
         "world_data": {"world_name": "テスト世界", "days_elapsed": 100},
+        "player_data": {"name": player},
         "areas": {aid: {"id": aid, "name": n, "size": s, "connections": list(c)}
                   for aid, (n, s, c) in STOCK.items()},
         "quests": {},
@@ -132,6 +133,7 @@ class World:
 
 class Player:
     def __init__(self, area):
+        self.name = "旅人"
         self.current_area = area
         self.gold = 10000
         self.physical_integrity = 100
@@ -327,6 +329,7 @@ class InstantaleApp:
         self.ui_updates = 0
         self.pages = 0
         self.hud = HUD_CLS()
+        self.saves = []
 
     def add_text(self, context):
         self.texts.append(context)
@@ -334,6 +337,11 @@ class InstantaleApp:
     def elapse_days(self, days):
         self.elapsed.append(days)
         self.world.days_elapsed += int(days)
+        return None
+
+    def save_game(self):
+        # 保存に焼かれる所持金（払った額が控えと一緒に残るか）
+        self.saves.append(self.player.gold)
         return None
 
     def update_ui(self, *args):
@@ -755,6 +763,8 @@ app.on_button_press(index)
 app.on_button_press(index)
 CLOCK.settle()
 check("gold deducted once for two presses", app.player.gold == 1000, app.player.gold)
+check("the game saves once after paying (the paid gold and the commission stay together)",
+      app.saves == [1000], app.saves)
 check("second press refused as already commissioned", "already commissioned" in read_log()
       and any("委託済み" in t for t in app.texts), app.texts)
 check("commission line names the days", any("開通まで 14日" in t for t in app.texts), app.texts)
@@ -846,6 +856,27 @@ check("load logged", "load: applied 2 edge(s)" in read_log(), read_log()[-400:])
 plain = BASES["world"](make_world_dict(), None)   # 素の World（`main.World` は差し替え済み）
 check("without the mod the world is stock", plain.areas["0"].connections == ["1", "4", "7"])
 check("no errors so far", not ctx.errors, ctx.errors)
+
+# 控えは周回（世界×主人公）ごと。同じ世界で作り直した主人公には前の主人公の道が無い。
+from instantale_modloader.state import PLAYTHROUGH_SEP, world_filename   # noqa: E402
+OWN_FILE = os.path.join(STATE_DIR, world_filename("テスト世界" + PLAYTHROUGH_SEP + "旅人"))
+OLD_FILE = os.path.join(STATE_DIR, world_filename("テスト世界"))
+check("record lives in the playthrough file", os.path.exists(OWN_FILE)
+      and not os.path.exists(OLD_FILE), sorted(os.listdir(STATE_DIR)))
+app3 = classes["app"](make_world_dict("別の旅人"))
+check("another hero in the same world starts stock", app3.world.areas["0"].connections == ["1", "4", "7"],
+      app3.world.areas["0"].connections)
+
+# 前の版が作った世界名だけの控えは、見つけた時点の主人公のものとして移す。
+print("[世界名だけの控え]")
+os.replace(OWN_FILE, OLD_FILE)
+module, ctx, app, classes = setup(keep_state=True)
+app4 = classes["app"](make_world_dict())
+check("old world file re-applied for the hero found playing", "6" in links(app4, "0"),
+      links(app4, "0"))
+check("moved to the playthrough file and the old one removed", os.path.exists(OWN_FILE)
+      and not os.path.exists(OLD_FILE), sorted(os.listdir(STATE_DIR)))
+check("no errors after the move", not ctx.errors, ctx.errors)
 
 # ================================================================ 踏破
 print("[踏破]")

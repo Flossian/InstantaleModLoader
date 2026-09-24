@@ -25,6 +25,7 @@ import io
 import json
 import os
 import sys
+import tempfile
 import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -370,7 +371,8 @@ def install(hooks, cls):
         setattr(cls, name, make())
 
 
-OUT_DIR = os.path.join(os.environ.get("TEMP", HERE), "instantale_test_quest_end")
+# `TEMP` の無い環境（Linux の CI など）でもリポジトリの中に作らない。
+OUT_DIR = os.path.join(tempfile.gettempdir(), "instantale_test_quest_end")
 
 
 def setup(here="9", home="7", guild_here=True, member="71", extra_mods=()):

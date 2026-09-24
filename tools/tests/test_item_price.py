@@ -475,6 +475,25 @@ def main():
     game_buy(app, shown, paid=50)             # 素の値段なら買えてしまう高額品
     check("所持金は負にしない", app.player.gold == 0, app.player.gold)
 
+    # 別の取引が orig の最中に割り込んでも（別スレッドの取引が重なった形）、
+    # それぞれ自分の取引前の所持金で測る。
+    outer_item, inner_item = weapon(96), weapon(96)
+    outer_app = InstantaleApp(Character("勇者", gold=100000))
+    inner_app = InstantaleApp(Character("仲間", gold=50000))
+    buy_price(ctx, outer_item)
+    buy_price(ctx, inner_item)
+
+    def overlapped(_self, _item, *a, **k):
+        outer_app.player.gold -= 468
+        game_buy(inner_app, inner_item, paid=468)
+        return "bought"
+
+    buy_hook(overlapped, outer_app, outer_item)
+    check("取引が重なっても、それぞれ自分の取引前の所持金で直す",
+          outer_app.player.gold == 100000 - outer_item.attributes["買価"]
+          and inner_app.player.gold == 50000 - inner_item.attributes["買価"],
+          (outer_app.player.gold, inner_app.player.gold, outer_item.attributes["買価"]))
+
     module, ctx = fresh_mod(RECONCILE_GOLD=False)
     check("切れば決済の経路は当たらない",
           "__main__:InstantaleApp.buy_item" not in ctx.hooks, sorted(ctx.hooks))

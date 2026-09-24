@@ -20,6 +20,9 @@ mod は __main__ や kivy.input.providers にパッチを当てるので、
     python watcher.py                # Ctrl-C で終了するまで監視し続ける
     python watcher.py --interval 3   # 監視の間隔を 3 秒にする（既定は 2 秒）
     python watcher.py --once         # 今動いているゲームに注入して終了する
+                                     # （注入に失敗したら終了コード 1。保留は 0）
+
+監視を始めた時点で既に動いていたゲームにも注入するが、ログは入れ替えない（`--once` を除く）。
 """
 
 from __future__ import annotations
@@ -100,19 +103,34 @@ def wait_until_ready(pid: int, timeout: float = READY_TIMEOUT) -> bool:
 
 
 # --------------------------------------------------------------------------
-def inject_pid(pid: int) -> bool:
-    """1つのプロセスに注入して、結果をログに出す。例外は外に投げない。"""
+#: `inject_pid` の結果。
+#: 保留（PENDING）は失敗ではない。スタブが GIL を待っているだけで、後から完走する
+#: （`injector.INJECT_PENDING`）。失敗として出すと、入る注入を「入らなかった」と読ませる。
+INJECTED = "injected"
+PENDING = "pending"
+FAILED = "failed"
+
+
+def inject_pid(pid: int) -> str:
+    """1つのプロセスに注入して、結果をログに出す。例外は外に投げない。
+
+    戻り値は `INJECTED` / `PENDING` / `FAILED`。
+    """
     payload = injector.make_bootstrap(injector.RUNTIME_DIR, injector.OUT_DIR, injector.BOOT_LOG)
     try:
         rc = injector.inject(pid, payload)
     except Exception as exc:
         log(f"  pid {pid}: injection error: {type(exc).__name__}: {exc}")
-        return False
+        return FAILED
     if rc == 0:
         log(f"  pid {pid}: injected, mods applied (see modloader.log)")
-        return True
+        return INJECTED
+    if rc == injector.INJECT_PENDING:
+        log(f"  pid {pid}: injection pending (the game is busy); "
+            f"it finishes on its own, see {injector.BOOT_LOG} later")
+        return PENDING
     log(f"  pid {pid}: PyRun_SimpleString returned {rc}; see {injector.BOOT_LOG}")
-    return False
+    return FAILED
 
 
 def main() -> int:
@@ -133,35 +151,50 @@ def main() -> int:
         log("log rotate: disabled; out/*.log will keep growing")
 
     handled: set[int] = set()
+    # 監視を始めた時点で既に動いていたゲーム。
+    # GUI や injector.py で注入済みかもしれないので、ログは入れ替えない
+    # （そのプレイの記録が途中で2つのファイルに分かれる）。
+    # 注入はし直す。層は積み上がらない（TECH.md §3.5）。
+    # `--once` は動いているゲームへの注入を頼まれているので、injector.py と同じく入れ替える。
+    running_at_start: set[int] | None = None
+    failed = False
     try:
         while True:
             alive = {pid for pid, _ in injector.find_processes(injector.TARGET_EXE)}
+            if running_at_start is None:
+                running_at_start = set() if args.once else set(alive)
             # 終了した pid を記録から外す。
             # これでゲームを再起動したときに、改めて注入されるようになる。
             # （pid は使い回されることがあるので、
             # 外しておかないと取り違えの元にもなる）
             handled &= alive
+            running_at_start &= alive
 
-            fresh = sorted(alive - handled)
-            if fresh:
-                # ゲームが起動した時点が1世代の境目。
-                # ここで前回のログを退避して、
-                # この起動の記録が空のファイルから始まるようにする。
-                # 同時に2つ見つけた場合でも入れ替えは1回だけ（ログは共用のため）。
-                injector.rotate_logs(args.log_rotate, log=log)
-
-            for pid in fresh:
+            rotated = False
+            for pid in sorted(alive - handled):
                 log(f"new game process: pid {pid}")
                 # 準備待ちに入る前に記録しておく。
                 # 待って失敗した場合に、同じプロセスを何度も掴み直さないため。
                 handled.add(pid)
-                if wait_until_ready(pid):
-                    inject_pid(pid)
-                else:
+                if not wait_until_ready(pid):
                     log(f"  pid {pid}: never became ready within {READY_TIMEOUT:.0f}s; skipped")
+                    failed = True
+                    continue
+                if pid in running_at_start:
+                    log(f"  pid {pid}: already running when the watcher started; "
+                        "logs are not rotated")
+                elif not rotated:
+                    # ゲームが起動した時点が1世代の境目。
+                    # 前回のログを退避して、この起動の記録が空のファイルから始まるようにする。
+                    # 注入の直前に行うのは、準備が整わずに諦めたときに入れ替えだけが起きないため。
+                    # 同時に2つ見つけた場合でも入れ替えは1回だけ（ログは共用のため）。
+                    injector.rotate_logs(args.log_rotate, log=log)
+                    rotated = True
+                if inject_pid(pid) == FAILED:
+                    failed = True
 
             if args.once:
-                return 0 if handled else 1
+                return 0 if handled and not failed else 1
             time.sleep(args.interval)
     except KeyboardInterrupt:
         log("watcher stopped")

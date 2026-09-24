@@ -2,7 +2,7 @@
   "entry": "npc_social_memory.py",
   "api": 1,
   "kind": "feature",
-  "version": "7",
+  "version": "8",
   "author": "MoririnJP",
   "shares": ["npc_profiles"],
   "name": {

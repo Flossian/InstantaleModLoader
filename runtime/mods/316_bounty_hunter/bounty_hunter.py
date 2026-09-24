@@ -43,7 +43,7 @@
 | --- | --- |
 | 多段の場面（宿泊・訓練・賭博ほか） | 並んでいる選択肢のクラス名（`SEQUENCE_MARKS`）。旗でも手待ちでも捕まらない。`Display...Choice` は品書きなので数えない |
 | 戦闘 | 旗と `current_enemy_dict`。戦闘中は控えすら置かない（置くと戦闘の直後に次の戦闘が始まる） |
-| ゲーム自身の衛兵 | `BattleStartManager.__init__` を包み、自分が組んだぶん（`memo["building"]`）以外を数える。出たら控えを落とし、1回の遭遇として数える |
+| ゲーム自身の衛兵 | `BattleStartManager.__init__` を包み、自分が組んだぶん（`memo["building"]`）以外で `enemy_type='guard'` のものを数える。出たら控えを落とし、1回の遭遇として数える。依頼中の戦闘と闘技場は数えない（数えるとクエスト1回で追手が止まる） |
 
 ##### 作り替えるのは自分の戦闘の中だけ
 
@@ -102,7 +102,11 @@ LOG_BASENAME = "bounty_hunter_send.log"
 STATE_DIRNAME = "bounty_hunter"
 
 # ゲーム自身の衛兵の戦闘を指す語（実測。GAME.md §2.20）。
+# 依頼中の遭遇・ボス（'in_quest'）と闘技場（'colosseum'）は衛兵ではないので数えない。
 GUARD_ENEMY_TYPE = "guard"
+
+# グローバルの `random` から引くとゲーム自身の乱数列がずれる（TECH.md §6.1）。
+_RNG = random.Random()
 
 # 寿命はどれも**画面が整った合図の回数**で数える（秒は数えない）。
 DUE_MAX_SIGNALS = 20        # 決めたのに出せないまま過ぎたら捨てる
@@ -430,7 +434,7 @@ def apply(ctx):
             # `1-(1-p)^n` になって設定より高くなる。画面が変わるまで1回だけ。
             return
         memo["rolled"] = True
-        if random.random() * 100.0 >= CHANCE_PERCENT:
+        if _RNG.random() * 100.0 >= CHANCE_PERCENT:
             write("{}: 手配 ここ{} 合計{} で抽選に外れた（発生率{}%）".format(
                 trigger, here, total, CHANCE_PERCENT))
             return
@@ -540,9 +544,13 @@ def apply(ctx):
 
         自分が組んだぶんは `memo["building"]` で見分ける
         （この時点では `memo["phase"]` にまだ入っていない）。
+        衛兵かどうかは `enemy_type` で見る。依頼中の遭遇・ボス・闘技場も
+        同じマネージャを通るので、見ないとクエストの戦闘1回でクールダウンがやり直しになる
+        （クエスト中は暦が進まないので、そのまま日数ぶん追手が来なくなる）。
         """
         result = orig(self, app, enemy_type, enemy_content, *args, **kwargs)
-        if not memo["building"] and YIELD_TO_GUARDS:
+        if not memo["building"] and YIELD_TO_GUARDS \
+                and enemy_type == GUARD_ENEMY_TYPE:
             # **1回の遭遇として数える。**
             # 秒で猶予を置くのをやめ、追手と同じクールダウン（ゲーム内の日数）に乗せた。
             # ゲームの衛兵と戦った直後に追手が来るのは、
@@ -553,7 +561,7 @@ def apply(ctx):
                 memo["last"] = memo["days"]
                 memo["due"] = None
                 save_memo(target)
-            write("ゲーム自身が戦闘を起こした（{!r}）。1回の遭遇として数える"
+            write("ゲーム自身が衛兵を出した（{!r}）。1回の遭遇として数える"
                   "（次は{}日後から）".format(enemy_type, COOLDOWN_DAYS))
         return result
 
@@ -644,12 +652,25 @@ def apply(ctx):
 
     @ctx.wrap("__main__:InstantaleApp.elapse_days", required=False, safe=True)
     def elapse_days(orig, self, days=None, *args, **kwargs):
-        """暦を数えるのはここだけ。`ON_DAYS` が OFF でも数は数える。"""
+        """暦を数えるのはここだけ。`ON_DAYS` が OFF でも数は数える。
+
+        数えるのは**暦が実際に動いた日数**（`orig` の前後の `ui.game_day` の差）。
+        この包みは日数送りの関所（`durations.install`）より外側に載るので、
+        `days` は関所が差し替える前の素の値（徒歩 90 など）で、
+        307_ / 314_ / 315_ が日数を変えた回は暦の進みと食い違う（TECH.md §3.3.3）。
+        暦が読めないときだけ `days` を足す。
+        """
+        before = ui.game_day(self)
         result = orig(self, days, *args, **kwargs)
         try:
             load_memo(self)
-            if _is_number(days) and days > 0:
-                memo["days"] += float(days)
+            after = ui.game_day(self)
+            if before is not None and after is not None:
+                moved = after - before
+            else:
+                moved = days if _is_number(days) else 0
+            if moved > 0:
+                memo["days"] += float(moved)
                 save_memo(self)
             visit("日数経過", self, ON_DAYS)
         except Exception:

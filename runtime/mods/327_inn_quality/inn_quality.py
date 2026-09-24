@@ -15,7 +15,8 @@
    宿泊のたびに宿の主の好感度（`relationship["player"]["affinity"]`）が等級ぶん上がり、
    宿泊由来の累計は上限で止まる（泊まり続けて家族同然になるのは不自然）。
    宿の主と話すときは、出ていく本文へ宿泊の履歴を1行足す。
-   記録は `state\\inn_regular\\<世界名>.json`。
+   記録は `state\\inn_regular\\<世界名×主人公名>.json`（好感度と同じくセーブと同じ寿命なので周回の鍵。
+   TECH.md §5.4）。
 3. **社交で会う相手を同行者から選ぶ**。
    素のゲームの社交は、エリアの施設を1つ選んでそこの主と会う
    （実測: 【イベントの場所】が宿なら宿の主、ギルドならギルドの主。宿の名簿 `Facility.characters` を
@@ -48,6 +49,10 @@
 - 好感度は本体の `relationship` に直接足す。文（`affinity_text`）は本体が会話のたびに
   書き直すので触らない（GAME.md §2.25.1）。`"player"` の欄が無い初対面の主には足さず記録だけ残す
   （欄を新設しない。TECH.md §6.4）
+- 記録（`stays` / `granted` ほか）はメモリの中だけで動かし、ゲームの `save_game` が通った後に
+  `state\\` へ書く。ロードと新規開始（`World.__init__`）では、まだ書いていない分を捨てて読み直す。
+  好感度はセーブに入り、記録は `state\\` に入るので、その場で書くと保存の前に落ちたときに
+  記録だけが進み、実際には上がっていない好感度で上限を使い切る
 - 会話相手は `app.in_conversation`（`311_` と同じ読み方）。
   1行は `llm.wrap_outgoing` で先頭の本文に足す。同じ行が既に在れば足さない
 - `311_` / `403_` / `300_` の控えは読みも書きもしない
@@ -247,6 +252,8 @@ def apply(ctx):
         setattr(sys, STORE_ATTR, store)
     state = store["state"]
     state.setdefault("partner", None)   # 前の版の控えが `sys` に残っていても落ちない
+    # 書き換えたがまだ `state\` へ書いていない世界の鍵。ゲームの保存が通ったら書く。
+    pending = store.setdefault("pending", set())
     worlds = store["worlds"].rebind(ctx, write)
 
     # ============================================================ 活動の数
@@ -413,8 +420,9 @@ def apply(ctx):
         if owner is None:
             write("regular: no facility owner under the player; not recorded")
             return
-        key, bucket = worlds.of(app)
+        key = worlds.playthrough(app)
         with worlds.lock:
+            bucket = worlds.load(key)
             record = bucket.get(owner)
             if not isinstance(record, dict):
                 record = bucket[owner] = {"stays": 0, "by_quality": {}, "granted": 0}
@@ -441,9 +449,44 @@ def apply(ctx):
                 else:
                     write("regular: {} has no relationship['player']['affinity']; "
                           "recorded only".format(record["name"]))
-            worlds.save(key)
-        write("regular: {} stays={} rooms={}".format(
+            pending.add(key)
+        write("regular: {} stays={} rooms={} (written at the next save)".format(
             record["name"], record["stays"], record["by_quality"]))
+
+    # ============================================================ 記録の確定
+    @ctx.wrap("__main__:InstantaleApp.save_game", required=False)
+    def save_game(orig, self, *args, **kwargs):
+        """ゲームの保存が通ったら、まだ書いていない記録を `state\\` へ書く。
+
+        錠は保存の間ずっと持つ。宿泊の書き換え（好感度と記録を同じ錠の中で動かす）が
+        保存の途中に割り込むと、セーブに入らなかった好感度の記録だけを確定してしまう。
+        `orig` が投げたら書かない（次の保存でまとめて書く）。
+        """
+        with worlds.lock:
+            result = orig(self, *args, **kwargs)
+            try:
+                for key in sorted(pending):
+                    if worlds.cached(key) is None:
+                        # 読み直しで捨てた控え。空の控えで上書きしない。
+                        pending.discard(key)
+                    elif worlds.save(key):
+                        pending.discard(key)
+                        write("save: records of {} written".format(key))
+            except Exception:
+                ctx.log_exc("inn quality: cannot write the records after the save")
+        return result
+
+    @ctx.wrap("__main__:World.__init__", required=False, safe=True)
+    def world_init(orig, self, *args, **kwargs):
+        """ロードと新規開始。まだ書いていない記録を捨て、次に引くときに `state\\` から読み直す。"""
+        result = orig(self, *args, **kwargs)
+        with worlds.lock:
+            dropped = sorted(pending)
+            pending.clear()
+            worlds.forget()
+        if dropped:
+            write("load: unsaved records of {} dropped".format(dropped))
+        return result
 
     def rewrite_outgoing(texts, site):
         if not REGULAR_MEMORY or not texts:
@@ -452,7 +495,7 @@ def apply(ctx):
         npc = getattr(app, "in_conversation", None)
         if not isinstance(npc, str) or not npc:
             return None
-        _key, bucket = worlds.of(app)
+        bucket = worlds.load(worlds.playthrough(app))
         record = bucket.get(npc)
         if not isinstance(record, dict) or not record.get("stays"):
             return None

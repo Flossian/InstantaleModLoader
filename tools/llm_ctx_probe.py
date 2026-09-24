@@ -14,12 +14,12 @@ VRAM から溢れると Windows は失敗せず共有メモリへ退避するた
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import re
 import subprocess
 import sys
 import time
-import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -152,13 +152,18 @@ def http_json(url: str, payload: dict | None = None, timeout: int = 900) -> dict
         return json.loads(resp.read().decode("utf-8", "replace"))
 
 
-def wait_ready(port: int, timeout: int) -> bool:
+def wait_ready(port: int, timeout: int, proc: subprocess.Popen | None = None) -> bool:
+    """/health が ok を返すまで待つ。サーバが先に終わってしまえば、その時点で False。"""
     deadline = time.time() + timeout
     while time.time() < deadline:
+        # 起動に失敗したサーバ（VRAM 不足・引数の誤り）は数秒で終わる。
+        # 見ないと、居ないサーバの返事を上限まで待ち続ける。
+        if proc is not None and proc.poll() is not None:
+            return False
         try:
             if http_json("http://127.0.0.1:%d/health" % port, timeout=5).get("status") == "ok":
                 return True
-        except (urllib.error.URLError, OSError, ValueError):
+        except (OSError, ValueError, http.client.HTTPException):
             pass
         time.sleep(2)
     return False
@@ -180,9 +185,24 @@ def parse_server_log(text: str) -> dict:
     }
 
 
+#: いま測っている llama-server。Ctrl-C のときに落とす相手（自分が起こしたものだけ）。
+_current: subprocess.Popen | None = None
+
+
+def kill_tree(proc: subprocess.Popen) -> None:
+    """起こしたサーバを子ごと落とす。名前で落とすと、同じ名前の別のサーバまで巻き込む。"""
+    subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True)
+
+
 def probe(server: Path, model: Path, ctx: int, parallel: int | None,
           port: int, logdir: Path, prompt: str, load_timeout: int) -> dict | None:
-    """1構成ぶん起こして測る。起動しなければ None。"""
+    """1構成ぶん起こして測る。起動しない・測定中に応答が途絶えたら None。
+
+    例外を外へ出さない。
+    VRAM が溢れてサーバが落ちると問い合わせが接続断やタイムアウトになるが、
+    それはこの構成が使えないという結果で、それまで測った構成の表と推奨値は出す。
+    """
+    global _current
     logfile = logdir / ("llm_ctx_probe_%d_%s.log" % (ctx, parallel or "auto"))
     cmd = [str(server), "-m", str(model), "--host", "127.0.0.1", "--port", str(port),
            "--ctx-size", str(ctx), "--n-gpu-layers", "999", "--cache-reuse", "256",
@@ -191,9 +211,10 @@ def probe(server: Path, model: Path, ctx: int, parallel: int | None,
         cmd += ["--parallel", str(parallel)]
 
     handle = logfile.open("w", encoding="utf-8", errors="replace")
-    proc = subprocess.Popen(cmd, stdout=handle, stderr=subprocess.STDOUT)
+    proc = _current = subprocess.Popen(cmd, stdout=handle, stderr=subprocess.STDOUT)
     try:
-        if not wait_ready(port, load_timeout):
+        if not wait_ready(port, load_timeout, proc):
+            log("        サーバが起動しなかった（%s）。" % logfile.name)
             return None
         used = nvidia_memory()
         result = {"ctx": ctx, "parallel": parallel or "auto",
@@ -203,8 +224,14 @@ def probe(server: Path, model: Path, ctx: int, parallel: int | None,
 
         best_pp = best_tg = 0.0
         for _ in range(2):
-            body = http_json("http://127.0.0.1:%d/completion" % port,
-                             {"prompt": prompt, "n_predict": 128, "cache_prompt": False})
+            try:
+                body = http_json("http://127.0.0.1:%d/completion" % port,
+                                 {"prompt": prompt, "n_predict": 128, "cache_prompt": False})
+            except (OSError, ValueError, http.client.HTTPException) as exc:
+                # HTTPError・タイムアウト・接続断はどれもここ（URLError と socket.timeout は OSError、
+                # 読んでいる途中で切れたときの IncompleteRead は HTTPException）。
+                log("        測定中に応答が途絶えた（%s: %s）。" % (type(exc).__name__, exc))
+                return None
             timings = body.get("timings", {})
             best_pp = max(best_pp, float(timings.get("prompt_per_second") or 0))
             best_tg = max(best_tg, float(timings.get("predicted_per_second") or 0))
@@ -216,8 +243,8 @@ def probe(server: Path, model: Path, ctx: int, parallel: int | None,
         try:
             proc.wait(timeout=30)
         except subprocess.TimeoutExpired:
-            subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"],
-                           capture_output=True)
+            kill_tree(proc)
+        _current = None
         handle.close()
         time.sleep(6)  # VRAM が返るのを待つ
 
@@ -283,7 +310,7 @@ def main() -> int:
         row = probe(build_dir / "llama-server.exe", model, ctx, parallel,
                     args.port, outdir, prompt, args.load_timeout)
         if row is None:
-            log("        起動しなかった。ここで打ち切る。")
+            log("        この構成は測れなかった。ここで打ち切る。")
             break
         rows.append(row)
         peak_tg = max(peak_tg, row["tg"])
@@ -363,6 +390,8 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except KeyboardInterrupt:
-        subprocess.run(["taskkill", "/IM", "llama-server.exe", "/F"], capture_output=True)
+        # 普段は probe の finally が落としている。そこでもう一度 Ctrl-C を押されたときのため。
+        if _current is not None and _current.poll() is None:
+            kill_tree(_current)
         log("\n  中断した。起動していた llama-server は落とした。")
         sys.exit(130)

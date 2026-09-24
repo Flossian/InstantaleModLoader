@@ -56,6 +56,7 @@ popup と装備欄の中身まで写す観測は `223_probe_party_equipment` に
 """
 
 from instantale_modloader import combat, frames, ui
+from instantale_modloader.ids import claim
 
 
 #: 会話に足す選択肢の文言。
@@ -187,11 +188,13 @@ def apply(ctx):
                 return key
         return None
 
-    def next_item_id(inv, preferred=None, item_instance=None):
+    def next_item_id(app, inv, preferred=None, item_instance=None):
         """渡した先の持ち物で使う鍵を決める。
 
         元の id（`preferred`）が空いているか、既にこの Item 自身を指していればそのまま。
-        相手側に同じ id の別の品が居るときだけ `item_N` の空き番号を振る。
+        相手側に同じ id の別の品が居るときだけ、ゲームの採番台帳から新しく採る
+        （`ids.claim`。持ち物の鍵は世界全体で一意なので、渡した先の辞書の中だけで
+        空きを探すと他の人物の品の鍵と重なり、台帳より後ろの番号も踏む。TECH.md §3.2.3）。
         """
         if preferred is not None:
             preferred_s = str(preferred)
@@ -199,13 +202,7 @@ def apply(ctx):
             if existing is None or existing is item_instance:
                 return preferred_s
 
-        used = {str(k) for k in inv.keys()}
-        n = 0
-        while True:
-            candidate = "item_{}".format(n)
-            if candidate not in used:
-                return candidate
-            n += 1
+        return claim(app, "item", used=[str(k) for k in inv.keys()], write=write)
 
     def is_referenced_in_equipments(owner, item_instance, candidate_ids):
         """持ち主の equipments がこの品を指しているか（同一instance / id文字列の両対応）。
@@ -408,7 +405,7 @@ def apply(ctx):
             else getattr(item_instance, "id", None)
         )
 
-        new_id = next_item_id(new_inv, preferred=base_id, item_instance=item_instance)
+        new_id = next_item_id(app, new_inv, preferred=base_id, item_instance=item_instance)
         new_inv[new_id] = item_instance
 
         try:

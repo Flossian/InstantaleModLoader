@@ -17,7 +17,7 @@ r"""MOD が持つ NPC と、正規 NPC への被せがどこまで通るかを�
 |---|---|---|
 | 1 | 保存に漏れないか | `at=disk`。保存の直後にディスクのセーブを読み、`npcs` と `characters` に `mod:` の鍵が無いかを数える |
 | 2 | 会話が始まって終わるか | `at=conversation_start` / `at=prompt` / `at=conversation_end` |
-| 3 | 詳細生成が要るか | `at=detail`。既定では本体へ通さない。`TRY_DETAIL` を立てると通す |
+| 3 | 詳細生成が要るか | `at=detail`。既定では本体へ通す（ローダの既定と同じ）。`TRY_DETAIL` を切ると通さない |
 | 4 | 被せが頼み文に載るか | `at=prompt` の `mark`。正規 NPC の `profile` に足した印が引数に含まれるか |
 | 5 | 立ち絵 | `at=image`。作り直しの入口が呼ばれるか |
 
@@ -347,6 +347,40 @@ def apply(ctx):
             type(self).reads += 1
             return list.__len__(self)
 
+    def swap_in(owner, name, make):
+        """`owner` の `name`（属性、`owner` が dict なら鍵）を読みを数える写しに置き換える。
+        戻り値は `put_back` に渡す `(元, 写し, 写した時点の鍵)`。"""
+        original = dict.get(owner, name) if isinstance(owner, dict) else getattr(owner, name)
+        spied = make(original)
+        if isinstance(owner, dict):
+            owner[name] = spied
+        else:
+            setattr(owner, name, spied)
+        return original, spied, set(dict.keys(original)) if isinstance(original, dict) else None
+
+    def put_back(owner, name, original, spied, taken):
+        """写しを外し、窓の間に写しへ入った書き込みを元のオブジェクトへ移す。
+
+        写しに置き換えている間も本体や保存スレッドが名簿へ書くので、元へ戻すだけでは
+        その分が消える。窓の間に本体が別のオブジェクトを置いていたらそちらを残す。
+        写した後に元へ直接入った書き込み（元を握っていた側の分）は残し、写しから消えた鍵だけ元からも消す。
+        読みの印は通さない（`dict.items` / `list.__getitem__` を直に呼ぶ）。
+        """
+        if isinstance(owner, dict):
+            current = dict.get(owner, name)
+            if current is spied:
+                owner[name] = original
+        elif getattr(owner, name, None) is spied:
+            setattr(owner, name, original)
+        if isinstance(original, dict):
+            items = list(dict.items(spied))
+            kept = set(key for key, _ in items)
+            for key in taken - kept:
+                original.pop(key, None)
+            original.update(items)
+        else:
+            original[:] = list.__getitem__(spied, slice(None))
+
     @ctx.wrap(TALK_TARGET, required=False, safe=True)
     def talk_choice(orig, self, *args, **kwargs):
         """「会話する」の一覧が組まれる間、施設の名簿が読まれるかを見る。
@@ -358,27 +392,28 @@ def apply(ctx):
         app = getattr(self, "app", None) or ui.find_app()
         facility = getattr(getattr(app, "player", None), "location", None)
         roster = getattr(facility, "characters", None)
-        swapped = isinstance(roster, list)
-        if swapped:
+        listed = [str(k) for k in (roster or [])]
+        swapped = None
+        if isinstance(roster, list):
             ReadCountingList.reads = 0
-            facility.characters = ReadCountingList(roster)
+            swapped = swap_in(facility, "characters", ReadCountingList)
         try:
             return orig(self, *args, **kwargs)
         finally:
             try:
                 if swapped:
-                    facility.characters = list(facility.characters)
+                    put_back(facility, "characters", *swapped)
                 offered = [str(ui.spec_args(entry)[0])
                            for entry in (getattr(app, "buttons", None) or [])
                            if ui.spec_cls_name(entry) == "ConversationStartManager"
                            and ui.spec_args(entry)]
                 note("talk_choice", offered=offered,
-                     facility_characters=[str(k) for k in (roster or [])],
+                     facility_characters=listed,
                      owner=str(getattr(facility, "owner", None)),
                      roster_reads=ReadCountingList.reads if swapped else None,
                      visitor_offered=seen["npc_id"] in offered)
                 write("talk choice: offered={} roster={} reads={}".format(
-                    offered, [str(k) for k in (roster or [])],
+                    offered, listed,
                     ReadCountingList.reads if swapped else "?"))
             except Exception:
                 ctx.log_exc("mod npc: cannot record the talk choice")
@@ -482,16 +517,13 @@ def apply(ctx):
         swapped = {}
         try:
             if isinstance(getattr(world, "characters", None), dict):
-                swapped["roster"] = world.characters
-                world.characters = RosterSpy(world.characters)
+                swapped["roster"] = swap_in(world, "characters", RosterSpy)
             if isinstance(save, dict) and isinstance(save.get("npcs"), dict):
-                swapped["npcs"] = save["npcs"]
-                save["npcs"] = NpcsSpy(save["npcs"])
+                swapped["npcs"] = swap_in(save, "npcs", NpcsSpy)
             roster = getattr(facility, "characters", None)
             if isinstance(roster, list):
-                swapped["facility"] = roster
                 ReadCountingList.reads = 0
-                facility.characters = ReadCountingList(roster)
+                swapped["facility"] = swap_in(facility, "characters", ReadCountingList)
             if visitor is not None:
                 swapped["visitor_cls"] = spy_visitor(visitor)
         except Exception:
@@ -501,11 +533,11 @@ def apply(ctx):
         finally:
             try:
                 if "roster" in swapped:
-                    world.characters = swapped["roster"]
+                    put_back(world, "characters", *swapped["roster"])
                 if "npcs" in swapped:
-                    save["npcs"] = swapped["npcs"]
+                    put_back(save, "npcs", *swapped["npcs"])
                 if "facility" in swapped:
-                    facility.characters = swapped["facility"]
+                    put_back(facility, "characters", *swapped["facility"])
                 if swapped.get("visitor_cls") is not None:
                     visitor.__class__ = swapped["visitor_cls"]
                 offered = offered_ids(app)

@@ -55,6 +55,7 @@
 stateファイルは読まない。読み書きは全部ワーカーの中で行う。
 ワーカーは `while not ctx.superseded():` で回し、新しい注入が来たら降りる
 （自前のスレッドは `revert_all()` では止まらない。TECH.md §3.6.1）。
+降りたワーカーが残した仕事は、次に積みに来た新しい世代が（同じ地点でも）ワーカーを立て直して片付ける。
 
 例外は `profile_for()` の1回だけで、そこは意図して同期に読む（理由はその場に書いた）。
 
@@ -96,7 +97,7 @@ ITEM_INFERENCE_ROUNDS = 1
 STRONG_FLUCTUATION_MULTIPLIER = 1.5
 WEAK_FLUCTUATION_MULTIPLIER = 1.2
 # スコア表示はプレイヤー視点で固定する。設定は一括表示と売買時反転だけ。
-# 1/2/4/5 は 1=↑↑、2=↑、4=↓、5=↓↓ とする。
+# 1/2/4/5 は値段の向きで 1=↓↓、2=↓、4=↑、5=↑↑（`ARROW_MARKS`）。
 SHOW_SCORE_MARKS = True
 REVERSE_TRADE_MARK = True
 # 変動なしの品に何も出さない。動いた品だけが目に入るほうが読みやすい。
@@ -480,6 +481,8 @@ def _store():
         "skip_logged": set(),
         "jobs": queue.Queue(),
         "worker": None,
+        # ワーカーを立てた世代の ctx。降りる途中の前の世代のワーカーを見分ける。
+        "worker_ctx": None,
         "data_lock": threading.RLock(),
         "worker_lock": threading.Lock(),
         # ゲームの1回の品揃え生成につき、特産品生成を1度だけ確保する。
@@ -1670,16 +1673,23 @@ def apply(ctx):
                 event.set()
                 return event
             if scope in state["pending"]:
-                return state["profile_events"].get(scope)
-            event = threading.Event()
-            state["profile_events"][scope] = event
-            state["pending"].add(scope)
-            jobs.put((snapshot, reason))
-            write("summary queued: world={!r} area={!r} name={!r} reason={}".format(
-                world, area_id, snapshot["area_name"], reason))
+                # 積み直さないが、ワーカーが居るかは下で確かめる。前の世代のワーカーが
+                # 降りた後も仕事は待ち行列に残るので、起こさずに返すと
+                # 別の地点が積まれるまで誰も片付けない（品揃えが待ちの上限まで止まる）。
+                event = state["profile_events"].get(scope)
+            else:
+                event = threading.Event()
+                state["profile_events"][scope] = event
+                state["pending"].add(scope)
+                jobs.put((snapshot, reason))
+                write("summary queued: world={!r} area={!r} name={!r} reason={}".format(
+                    world, area_id, snapshot["area_name"], reason))
         with state["worker_lock"]:
             worker = state.get("worker")
-            if worker is not None and worker.is_alive():
+            owner = state.get("worker_ctx")
+            # 前の世代のワーカーはまだ生きていても降りる途中なので、居ないものとして扱う。
+            if (worker is not None and worker.is_alive()
+                    and not (owner is not None and owner.superseded())):
                 return event
             worker = threading.Thread(
                 target=worker_loop,
@@ -1687,6 +1697,7 @@ def apply(ctx):
                 daemon=True,
             )
             state["worker"] = worker
+            state["worker_ctx"] = ctx
             worker.start()
         return event
 

@@ -496,10 +496,19 @@ class FakeCtx(object):
             (lambda: HUD, "update_display_text"),
     }
 
+    generation = "test"
+
     def __init__(self):
         self.errors = []
         self.wrapped = {}
         self.logs = []
+        self.ready = []
+        self.bound_during_apply = None
+
+    def on_ready(self, fn, key=None, **_kwargs):
+        # 本番は Clock（メインスレッド）で後から走る。`install` が apply() の後に流す。
+        self.ready.append((key, fn))
+        return True
 
     def wrap(self, target, **_kwargs):
         owner, name = self.TARGETS[target]
@@ -539,6 +548,10 @@ def install(module, ctx, batch_mode="click", fresh_mode="seconds"):
     # 「クリックの後にティックが残っていないこと」の検査と混ざるので切る。
     module.WATCH_AFTER_SKIP = False
     module.apply(ctx)
+    ctx.bound_during_apply = list(WINDOW.handlers)
+    ready, ctx.ready = ctx.ready, []
+    for _key, fn in ready:
+        fn()
 
 
 def install_fake_hud_module():
@@ -570,6 +583,11 @@ def run():
     mod = load_mod()
     mod.monotonic_time = lambda: CLOCK.now
     install(mod, ctx)
+    check("apply() leaves the window alone (it runs off the main thread)",
+          ctx.bound_during_apply == [], ctx.bound_during_apply)
+    check("the click watcher is bound from on_ready",
+          len([handler for handler in WINDOW.handlers
+               if handler[0] == "on_touch_down"]) == 1, WINDOW.handlers)
     check("hooked character streaming",
           "__main__:InstantaleApp.add_text_display" in ctx.wrapped)
     check("hooked the repaint that erases the colors",

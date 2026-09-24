@@ -373,7 +373,13 @@ def apply(ctx):
             self.member_id = member_id
 
         def execute(self, choice_text):
-            return dispatch(self.app, self.action, self.member_id, choice_text)
+            # ゲームの別スレッドで走る。例外をゲームの側へ抜けさせない
+            # （`307_` の `RoadPhase` と同じ受け方）。
+            try:
+                return dispatch(self.app, self.action, self.member_id, choice_text)
+            except Exception:
+                ctx.log_exc("leave party: phase {!r} failed".format(self.action))
+                return None
 
     def start_phase(app, action, member_id, choice_text):
         screen.start_phase(app, LeavePhase(app, action, member_id), choice_text,
@@ -446,25 +452,35 @@ def apply(ctx):
             return
 
         state["leaving"] = True
-        name = name_of(app, member_id)
-        write("=" * 78)
-        write("leave: {!r} ({}) -> {!r} [{}] node={!r}".format(
-            name, member_id, facility_name(app, facility) or facility, why, node))
-        write("leave: party before = {} ({})".format(party_ids(app), describe_stores(app)))
-
-        # 確認画面に切り替えた時点で「会話を終了する」ボタンは画面から消えている。
-        # だから押された時に控えておいたものを使う。
-        end_entry = state["end_button"]
         # 押す前の選択肢は手元に控えてから外す。
         # 会話を閉じられなかったとき（終了ボタンを組めない・要約が返らない）に
         # 戻す先がここにしか無い。先に捨てると、画面にはこの MOD の
         # 2つのボタンだけが残り、「やめておく」も効かなくなる。
         saved = state["saved_buttons"]
-        state["saved_buttons"] = None
-        end_conversation_then(
-            app, end_entry, name,
-            lambda a: finish_leave(a, member_id, character, facility, node, name),
-            saved=saved)
+        try:
+            name = name_of(app, member_id)
+            write("=" * 78)
+            write("leave: {!r} ({}) -> {!r} [{}] node={!r}".format(
+                name, member_id, facility_name(app, facility) or facility, why, node))
+            write("leave: party before = {} ({})".format(party_ids(app),
+                                                         describe_stores(app)))
+
+            # 確認画面に切り替えた時点で「会話を終了する」ボタンは画面から消えている。
+            # だから押された時に控えておいたものを使う。
+            end_entry = state["end_button"]
+            state["saved_buttons"] = None
+            end_conversation_then(
+                app, end_entry, name,
+                lambda a: finish_leave(a, member_id, character, facility, node, name),
+                saved=saved)
+        except Exception:
+            # 会話を閉じに行く前に投げた回。「実行中」の印を戻さないと
+            # 以後ずっと別れられなくなる（`abort` と同じ後始末）。
+            ctx.log_exc("leave party: cannot start the farewell")
+            state["leaving"] = False
+            say(app, FAILED_TEXT)
+            if saved is not None:
+                apply_buttons(app, saved, "restore after failure")
 
     # ------------------------------------------------ どこへ置くか（配置ルール）
     def choose_destination(app, character):

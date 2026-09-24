@@ -59,10 +59,10 @@ _UNSAFE = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
 #: 切られると書いた先と読む先がずれる。
 _TRAILING = ". "
 
-#: パス構成要素にできない予約デバイス名（`110_` と同じ表）。
-#: 大文字小文字を問わない。
+#: パス構成要素にできない予約デバイス名（`110_` の表に `CONIN$` / `CONOUT$` を足したもの）。
+#: 大文字小文字を問わない。拡張子が付いても予約名のまま（`CON.foo` も作れない）。
 RESERVED = frozenset(
-    ["CON", "PRN", "AUX", "NUL"]
+    ["CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"]
     + ["COM{}".format(n) for n in range(1, 10)]
     + ["LPT{}".format(n) for n in range(1, 10)]
 )
@@ -194,14 +194,16 @@ def _clean(key: str) -> str:
          残すと書いた先と読む先がずれる
       4. 空・`"."`・`".."` は `"_"` に倒す（どれもファイル名にできない）
       5. 長すぎれば切り、切った結果また末尾が `.` になったら落とす
-      6. 予約デバイス名なら `_` を前に付ける（`CON` → `_CON`）
+      6. 予約デバイス名なら `_` を前に付ける（`CON` → `_CON`）。
+         見るのは最初の `.` より前（後ろの空白を落とす）。Windows は拡張子が付いても
+         予約名として扱うので、`CON.foo` から `CON.foo.json` は作れない
     """
     name = _UNSAFE.sub("_", key.strip()).rstrip(_TRAILING)
     if not name or name in (".", ".."):
         name = UNKNOWN_WORLD
     if len(name) > MAX_STEM:
         name = name[:MAX_STEM].rstrip(_TRAILING) or UNKNOWN_WORLD
-    if name.upper() in RESERVED:
+    if name.split(".", 1)[0].rstrip(" ").upper() in RESERVED:
         name = "_" + name
     return name
 
@@ -336,6 +338,8 @@ class WorldStore(object):
         self._buckets = {}
         #: 世界の鍵 -> 最後に読んだときの (mtime_ns, size)。`load(fresh=True)` 用。
         self._stamps = {}
+        if own:
+            _owners()[dirname] = self
 
     # -- 場所 ---------------------------------------------------------------
 
@@ -462,6 +466,79 @@ class WorldStore(object):
         with self.lock:
             return self._buckets.get(key)
 
+    # -- 周回 ---------------------------------------------------------------
+
+    def playthrough(self, app=None, save_data_dict=None) -> str:
+        """いまの周回の鍵（世界×主人公）を返す。世界名だけの控えが残っていれば先に移す。
+
+        控えを世界名から周回の鍵へ切り替えた MOD が、鍵を引くたびに呼ぶ:
+
+        ```python
+        key = worlds.playthrough(app)                   # ふだん
+        key = worlds.playthrough(app, save_data_dict)   # World.__init__ の中
+        bucket = worlds.load(key)
+        ```
+
+        `World.__init__` の中では `app` の辞書も `player` もまだ前の周回を指していることが
+        あるので、引数のセーブを渡す（`playthrough_key` と同じ注意）。
+        移し方は `adopt` を見ること。
+        """
+        key = world = None
+        if save_data_dict is not None:
+            key = playthrough_key_of_dict(save_data_dict, None)
+            world = world_key_of_dict(save_data_dict, None)
+        if key is None:
+            key = playthrough_key(app)
+            world = world_key(app)
+        self.adopt(key, world)
+        return key
+
+    def adopt(self, key, old_key) -> bool:
+        """`old_key`（世界名だけ）の控えを、周回の鍵 `key` へ丸ごと移す。移したかを返す。
+
+        周回の鍵へ切り替える前のファイルは、見つかった時点で遊んでいる主人公のものとみなす
+        （本人の判断）。移すのは `key` のファイルがまだ無く、`old_key` のファイルに中身があるときだけ。
+        移したら `old_key` のファイルは消す。残すと、同じ世界で作り直した次の主人公にもう一度渡る。
+        主人公の名が読めず `key` が世界名のままのときと、世界名が読めないときは何もしない。
+        1つの鍵につき確かめるのはプロセスで1度だけ（鍵を引くたびにディスクを叩かない）。
+        """
+        if not self.own or not key or not old_key or key == old_key \
+                or UNKNOWN_WORLD in (key, old_key):
+            return False
+        with self.lock:
+            # 前の版のローダが作った控えは `sys` に残っていて、この欄を持たない。
+            checked = self.__dict__.setdefault("_adopted", set())
+            if key in checked:
+                return False
+            checked.add(key)
+            if self._buckets.get(key) or os.path.exists(self.path(key)):
+                return False
+            old_path = self.path(old_key)
+            if not os.path.isfile(old_path):
+                return False
+            bucket = self.load(old_key)
+            if not bucket:
+                return False
+            if not self.save(key, bucket):
+                self._buckets.pop(key, None)
+                return False
+            try:
+                os.remove(old_path)
+            except OSError:
+                # 消せなかったら移した側を取り下げる。両方に残すと次の主人公にも渡る。
+                self._buckets.pop(key, None)
+                try:
+                    os.remove(self.path(key))
+                except OSError:
+                    pass
+                if self.write is not None:
+                    self.write("世界名だけの控えを消せないので移さなかった: {}".format(old_path))
+                return False
+            self.forget(old_key)
+            if self.write is not None:
+                self.write("世界名だけの控え {!r} を周回 {!r} へ移した".format(old_key, key))
+            return True
+
     # -- 書き ---------------------------------------------------------------
 
     def save(self, key, bucket=None) -> bool:
@@ -507,6 +584,39 @@ class WorldStore(object):
                 self._stamps.pop(key, None)
 
 
+#: 自分の控え（`own=True`）の `WorldStore` をフォルダ名で引く台帳を置く `sys` の属性。
+#: ローダは注入のたびに読み直される（TECH.md §3.5）ので、モジュール変数では世代をまたげない。
+_OWNERS_ATTR = "_instantale_state_owners"
+
+
+def _owners() -> dict:
+    found = getattr(sys, _OWNERS_ATTR, None)
+    if not isinstance(found, dict):
+        found = {}
+        setattr(sys, _OWNERS_ATTR, found)
+    return found
+
+
+def owner_of(dirname):
+    """そのフォルダを持つ MOD が、このプロセスで作った `WorldStore`。無ければ None。
+
+    他の MOD の控えへ**書き足す**側が使う（`323_` が `311_` / `403_` の控えへ記憶を写す）。
+    ファイルを直に書くと相手の覚えている控え（`load` のキャッシュ）には載らず、
+    相手が次に `save` したときに消える。相手の `WorldStore` を通せば錠もキャッシュも同じになる:
+
+        owner = state.owner_of("npc_profiles")
+        if owner is not None:
+            with owner.lock:
+                owner.load(key)[npc_id] = record
+                owner.save(key)
+
+    None のときは相手がこのプロセスで控えを持っていないので、ファイルを直に書いてよい。
+    型は `isinstance` で見ない（`_is_store`。相手は前の世代に作った控えを `sys` に置いて使い続ける）。
+    """
+    found = _owners().get(dirname)
+    return found if _is_store(found) else None
+
+
 def jsonable(value) -> bool:
     """控えに入れてよい値か。JSON に落ちるものだけ（実行時のオブジェクトは控えない）。
 
@@ -519,6 +629,12 @@ def jsonable(value) -> bool:
     if isinstance(value, dict):
         return all(isinstance(k, str) and jsonable(v) for k, v in value.items())
     return False
+
+
+def _is_store(found) -> bool:
+    """`WorldStore` の実体か。読み直す前のモジュールの実体も含める（`SysWorldStore.bind`）。"""
+    return (found is not None and callable(getattr(found, "rebind", None))
+            and callable(getattr(found, "load", None)))
 
 
 class SysWorldStore(object):
@@ -541,9 +657,14 @@ class SysWorldStore(object):
         self.override_attr = override_attr
 
     def bind(self, ctx, write=None) -> WorldStore:
-        """控えを今の世代の `ctx` に繋ぐ（`install` が毎回呼ぶ）。"""
+        """控えを今の世代の `ctx` に繋ぐ（`install` が毎回呼ぶ）。
+
+        控えの型は `isinstance` で見ない。手で注入し直すとこのモジュールが読み直され、
+        前の世代が置いた控えは**古い** `WorldStore` の実体なので、必ず偽になる
+        （キャッシュと錠が作り直され、古い世代のコードの `store()` は None を返す）。
+        """
         found = getattr(sys, self.store_attr, None)
-        if isinstance(found, WorldStore):
+        if _is_store(found):
             return found.rebind(ctx, write)
         found = WorldStore(ctx, self.dirname, write=write)
         setattr(sys, self.store_attr, found)
@@ -552,7 +673,7 @@ class SysWorldStore(object):
     def store(self):
         """控え。`bind` がまだなら None（控えずに動く）。"""
         found = getattr(sys, self.store_attr, None)
-        return found if isinstance(found, WorldStore) else None
+        return found if _is_store(found) else None
 
     def current_key(self, app):
         """いまの周回の鍵。建て直しの間は立っている鍵を優先する。"""

@@ -120,6 +120,9 @@ from instantale_modloader.state import (UNKNOWN_WORLD, WorldStore,
 LOG_BASENAME = "area_difficulty.log"
 STATE_DIRNAME = "area_difficulty"
 
+# グローバルの `random` から引くとゲーム自身の乱数列がずれる（TECH.md §6.1）。
+_RNG = random.Random()
+
 #: 生成へ渡す上昇量の印の寿命（秒）。`301_` / `307_` と同じ形。
 #: 生成が始まらなかった回の印を、次の生成が拾わないための時限。
 INJECT_TTL = 300.0
@@ -170,7 +173,7 @@ def apply(ctx):
     def draw_step():
         """1回ぶんの上昇量を引く。幅が無ければ乱数を回さない。"""
         low, high = step_range()
-        return low if low == high else random.randint(low, high)
+        return low if low == high else _RNG.randint(low, high)
 
     def max_bonus():
         return max(0, int(MAX_BONUS))

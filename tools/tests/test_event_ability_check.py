@@ -272,6 +272,17 @@ def main():
     check("注入時の自己検証が通っている",
           not [level for level, _ in ctx.logs if level == "ERROR"], ctx.logs)
 
+    print("自己検証は設定に左右されない")
+    for label, settings in (
+            ("刻みを切る", {"FINE_STEPS": False}),
+            ("基準と段の幅を変える", {"PIVOT": 10, "STEP": 5}),
+            ("1段と上限を変える", {"BONUS_PER_STEP": 10, "MAX_BONUS": 50}),
+            ("減点を許す", {"MAX_PENALTY": 20}),
+            ("底上げを付ける", {"FLAT_BONUS": 10})):
+        module, ctx = fresh_mod(**settings)
+        check("{}でも VERIFY FAILED が出ない".format(label),
+              not [msg for level, msg in ctx.logs if level == "ERROR"], ctx.logs)
+
     print("減点")
     module, ctx = fresh_mod(PIVOT=15, STEP=3, BONUS_PER_STEP=4, MAX_PENALTY=8,
                             FLAT_BONUS=0)

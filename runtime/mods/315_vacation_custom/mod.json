@@ -10,7 +10,7 @@
     "en": "Choose how long a stay lasts (1-2 weeks or 1-6 months, optionally scaled by the player's age), and change the names and prices of all four rooms at inns. Defaults are the game's own values; behavior is untouched until you edit them",
     "ja": "宿の宿泊期間を選択式で変えられる（1〜2週間・1〜6ヵ月。年齢による加算のON/OFF付き）。部屋4つの名前と宿代も変更できる。既定は素のゲームの値のままで、変えた項目だけが効く"
   },
-  "version": "5",
+  "version": "6",
   "author": "R01/Flossian",
   "settings": {
     "STAY_LENGTH": {

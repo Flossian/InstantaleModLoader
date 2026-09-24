@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """既にセーブに書き込まれている BGM を、後からまとめて均し直す。
 
-mod（runtime/mods/104_balance_area_bgm.py）が書き換えるのは、
+mod（runtime/mods/104_balance_area_bgm/）が書き換えるのは、
 注入した後に新しく作られたエリアだけ。
 このスクリプトは、既にあるワールドに対して同じことをする。
 
@@ -56,24 +56,30 @@ from instantale_modloader import saves            # noqa: E402
 KEY = saves.SAVE_KEY
 
 
-def find_mod(suffix: str) -> str:
-    """mod を **番号を除いた名前** で探す。
+def find_mod(suffix: str, mods_dir: str = MODS_DIR) -> str:
+    """mod を **番号を除いた名前** で探し、入口ファイルのパスを返す。
 
-    mod ファイルの番号は適用順を表すだけの通し番号で、
+    mod のフォルダの番号は適用順を表すだけの通し番号で、
     分類を見直すたびに振り直される（実際に 14_ -> 104_ と変わった）。
-    番号ごと書くとその都度ここが壊れるので、末尾で引く。
+    番号ごと書くとその都度ここが壊れるので、フォルダ名の末尾で引く。
+    入口のファイル名は `mod.json` の `"entry"` が決める（ローダと同じ読み方）。
     """
-    matches = sorted(name for name in os.listdir(MODS_DIR)
-                     if name.endswith(suffix) and name[:1].isdigit())
+    matches = sorted(name for name in os.listdir(mods_dir)
+                     if name.endswith(suffix) and name[:1].isdigit()
+                     and os.path.isfile(os.path.join(mods_dir, name, "mod.json")))
     if not matches:
-        raise SystemExit("cannot find *{} in {}".format(suffix, MODS_DIR))
+        raise SystemExit("cannot find *{} in {}".format(suffix, mods_dir))
     # 番号違いの同名が複数あるのは事故なので、黙って1つ選ばない。
     if len(matches) > 1:
-        raise SystemExit("ambiguous: {} in {}".format(matches, MODS_DIR))
-    return os.path.join(MODS_DIR, matches[0])
+        raise SystemExit("ambiguous: {} in {}".format(matches, mods_dir))
+    folder = os.path.join(mods_dir, matches[0])
+    with io.open(os.path.join(folder, "mod.json"), encoding="utf-8") as fh:
+        entry = json.load(fh).get("entry")
+    if not entry:
+        raise SystemExit("no \"entry\" in {}".format(os.path.join(folder, "mod.json")))
+    return os.path.join(folder, entry)
 
 
-MOD_PATH = find_mod("_balance_area_bgm.py")
 DEFAULT_WORLDS = saves.worlds_dir()
 DEFAULT_GAME = r"C:\Program Files\Epic Games\Instantaleq6Ve7"
 
@@ -84,10 +90,12 @@ def load_policy():
     mod ファイルはトップレベルでは何もしない（処理は全て apply() の中）ので、
     ゲームの外から普通に import しても安全。
     ルールを2箇所に書かないための工夫でもある。
+    探すのはここで行う（読み込みの時点で探すと、見つからないときに `--help` まで止まる）。
     """
-    spec = importlib.util.spec_from_file_location("bgm_policy", os.path.normpath(MOD_PATH))
+    mod_path = find_mod("_balance_area_bgm")
+    spec = importlib.util.spec_from_file_location("bgm_policy", os.path.normpath(mod_path))
     if spec is None or spec.loader is None:
-        raise SystemExit("cannot load {}".format(MOD_PATH))
+        raise SystemExit("cannot load {}".format(mod_path))
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

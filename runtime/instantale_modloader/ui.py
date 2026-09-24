@@ -1557,7 +1557,18 @@ def scheduler(ctx, tag="mod"):
     同じ経路を通したいので、ゲームの外では即時実行に落ちる。
     ボタンを挿す mod は `Screen` の方を使うこと（あちらは
     Clock が無い＝画面が無いので、実行せず諦めるのが正しい）。
+
+    Clock から呼ぶ `fn` の例外はここで握ってローダのログへ残す。
+    Clock の中で投げるとゲームごと落ちる（TECH.md §5.1.2）ので、mod が素の関数を
+    渡しても窓口の側で守る。ゲームの外の即時実行は握らない
+    （検査で例外がそのまま見える方がよい）。
     """
+    def guarded(fn):
+        try:
+            fn()
+        except Exception:
+            ctx.log_exc("{}: scheduled call failed".format(tag))
+
     def schedule(fn, delay=0.0):
         try:
             from kivy.clock import Clock
@@ -1565,10 +1576,53 @@ def scheduler(ctx, tag="mod"):
             fn()              # ゲームの外（オフライン検証）ではその場で
             return
         try:
-            Clock.schedule_once(lambda _dt: fn(), delay)
+            Clock.schedule_once(lambda _dt: guarded(fn), delay)
         except Exception:
             ctx.log_exc("{}: could not schedule".format(tag))
     return schedule
+
+
+#: `saver` が保存を呼ぶまでの待ち（秒）。同じ操作の中で続く書き換えを済ませてから保存する。
+SAVE_DELAY = 0.15
+
+
+def saver(ctx, write=None, tag="mod", delay=SAVE_DELAY):
+    """ゲーム自身の `save_game` を少し待ってから呼ぶ関数を1つ作る。
+
+        save_soon = ui.saver(ctx, write, "real estate")
+        save_soon(app, "rent")      # 続けて呼べば、保存は最後の1回だけ
+
+    `state/` の控えとセーブの両方にまたがる変更をした MOD が、控えを書いた直後に呼ぶ。
+    控えはその場でファイルになるが、所持金や持ち物はメモリの中で動くだけなので、
+    保存しないまま終えたりロードし直したりすると控えだけが進んだ形が残る
+    （家や道がタダで手に入る、預けた品が控えと持ち物の両方に残る）。
+
+    続けて呼ばれたら古い予約は捨てる（世代で見分ける。1回の操作で何度動かしても保存は1回）。
+    実行は `scheduler` と同じく次のフレーム以降のメインスレッドで、ゲームの外では
+    その場で保存する。落ちた `save_game` はローダのログへ残す。
+    `330_` と `402_` が同じ形を持っていて、`331_` / `325_` が3本目・4本目になるところで移した。
+    """
+    schedule = scheduler(ctx, tag)
+    generation = [0]
+
+    def save_soon(app, why):
+        generation[0] += 1
+        mine = generation[0]
+
+        def do_save():
+            if mine != generation[0]:
+                return
+            try:
+                app.save_game()
+            except Exception:
+                ctx.log_exc("{}: save_game after {} failed".format(tag, why))
+                return
+            if write is not None:
+                write("{}: save_game complete".format(why))
+
+        schedule(do_save, delay)
+
+    return save_soon
 
 
 def window_watcher(ctx, handler, attr, tag="mod"):
@@ -1599,8 +1653,18 @@ def window_watcher(ctx, handler, attr, tag="mod"):
 
     ゲームの外（オフライン検証）では Kivy が無いので**何もしない**。
     窓が無いのだから結ぶ相手も居ない、というだけで異常ではない。
+
+    `handler` は `scheduler` と同じく例外を握る包みに入れてから結ぶ
+    （リサイズの通知も Kivy の中から呼ばれる）。`Window` に残す印も包みの方。
     """
     watching = [False]
+
+    def guarded(*args, **kwargs):
+        try:
+            return handler(*args, **kwargs)
+        except Exception:
+            ctx.log_exc("{}: window resize handler failed".format(tag))
+            return None
 
     def watch_window():
         if watching[0]:
@@ -1618,8 +1682,8 @@ def window_watcher(ctx, handler, attr, tag="mod"):
             except Exception:
                 pass          # 既に外れている（Kivy が畳んだ後）
         try:
-            Window.bind(on_resize=handler)
-            setattr(Window, attr, handler)
+            Window.bind(on_resize=guarded)
+            setattr(Window, attr, guarded)
             return True
         except Exception:
             watching[0] = False
@@ -1646,7 +1710,7 @@ class Screen(object):
         self.tag = tag
         self.mark = mark
         self.safe_cls = safe_cls
-        self._busy = {"on": False, "frame": 0, "enabled": None}
+        self._busy = {"on": False, "frame": 0, "enabled": None, "gen": 0}
 
     # -- 例外を外へ出さないための土台 ---------------------------------------
     def _oops(self, what):
@@ -1955,10 +2019,22 @@ class Screen(object):
 
         LLM を待つ間これを出さないと、**画面が固まったように見える**（GAME.md
         §2.4）。
+
+        出している間にもう一度呼ばれても、戻す値（`is_button_enabled`）は
+        取り直さず、コマ送りの interval も足さない。取り直すと自分が立てた
+        `False` を覚えてしまい、`busy_off` の後も選択肢が押せないまま残る。
+        入れ子は数えない（先に来た `busy_off` で解く）。`busy_on` と対でなく
+        `busy_off` だけを呼ぶ経路があるので、数えると解けなくなる側に倒れる。
         """
         busy = self._busy
-        busy["enabled"] = getattr(app, "is_button_enabled", None)
-        busy["frame"] = 0
+        again = bool(busy["on"])
+        if not again:
+            busy["enabled"] = getattr(app, "is_button_enabled", None)
+            busy["frame"] = 0
+            # 解いてから次のコマが来る前に出し直すと、前の interval が
+            # `on` を見て生き残る。世代で見分けて古い方を外す。
+            busy["gen"] += 1
+        gen = busy["gen"]
         busy["on"] = True
         slots = self.busy_slots(app)
 
@@ -1969,7 +2045,7 @@ class Screen(object):
         self.set_send_button(app, False)
 
         def tick(_dt):
-            if not busy["on"]:
+            if not busy["on"] or busy["gen"] != gen:
                 return False                    # Clock から外れる
             frame = self.BUSY_FRAMES[busy["frame"] % len(self.BUSY_FRAMES)]
             busy["frame"] += 1
@@ -1981,6 +2057,10 @@ class Screen(object):
                 self._oops("busy frame failed")
             return True
 
+        if again:
+            # コマ送りは最初の呼び出しの interval が続ける。
+            self.write("{}: busy on again ({} slots)".format(self.tag, slots))
+            return slots
         self.schedule(lambda: tick(0), 0)       # 1コマ目はすぐ
         self._interval(tick, self.BUSY_INTERVAL)
         self.write("{}: busy on ({} slots) -> {}".format(

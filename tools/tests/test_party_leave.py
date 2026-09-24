@@ -665,6 +665,42 @@ check("置き場所が無ければ外さない", app.removed == [] and app.party
 check("会話も閉じない", app.in_conversation is True)
 check("断り文句を出す", any(mod.NO_PLACE_TEXT in t for t in app.texts), app.texts)
 
+# ------------------------------------- 会話を閉じに行く前に投げた場合
+from instantale_modloader import ui as _ui_module
+
+mod, ctx, app = setup()
+app.refresh_choice_buttons()
+app.on_button_press(index_of(app, "confirm"))
+clock.run_onces()
+real_end_conversation = _ui_module.Screen.end_conversation
+
+
+def broken_end_conversation(self, *args, **kwargs):
+    raise RuntimeError("cannot build the end button")
+
+
+_ui_module.Screen.end_conversation = broken_end_conversation
+try:
+    app.on_button_press(index_of(app, "leave"))
+    clock.tick()
+    clock.run_onces()
+finally:
+    _ui_module.Screen.end_conversation = real_end_conversation
+check("投げても外さない", app.removed == [] and app.party == ["player", "63"],
+      (app.removed, app.party))
+check("例外は記録に残る",
+      any("cannot start the farewell" in e for e in ctx.errors), ctx.errors)
+check("断り文句を出す", any(mod.FAILED_TEXT in t for t in app.texts), app.texts)
+check("押す前の選択肢に戻る", index_of(app, "confirm") >= 0,
+      [b.get("text") for b in app.buttons])
+app.on_button_press(index_of(app, "confirm"))
+clock.run_onces()
+app.on_button_press(index_of(app, "leave"))
+clock.tick()
+clock.run_onces()
+check("実行中の印が戻っているので、もう一度押せば別れられる",
+      app.party == ["player"], app.party)
+
 # --------------------------------------------- 会話がもう終わっている場合
 mod, ctx, app = setup()
 app.refresh_choice_buttons()

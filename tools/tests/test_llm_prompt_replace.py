@@ -794,12 +794,36 @@ def test_not_shipped():
 
     `make_dist.bat` が `llm_replacements.txt` を除外していることを見る（配布物に入ってしまうと、
     次の更新でそのルールを上書きしてしまう）。
+    同じ形の手元版は 111 のほかにもある（120 の `npc.json`、132 の `seeds.json`）ので、
+    名前は `gui.py` の `SHIPPED_DEFAULTS` から導いて全部を見る。コミットに紛れないよう `.gitignore` も見る。
+    `gui.py` は tkinter と Win32 を読むので import せず、構文木から辞書の鍵だけ取る。
     """
+    import ast
     with io.open(os.path.join(ROOT, "make_dist.bat"), encoding="utf-8",
                  errors="replace") as fh:
         script = fh.read()
-    check("配布: make_dist.bat が llm_replacements.txt を除外している",
-          '"llm_replacements.txt"' in script and "/XF" in script, None)
+    with io.open(os.path.join(ROOT, "tools", "gui.py"), encoding="utf-8") as fh:
+        tree = ast.parse(fh.read())
+    shipped = []
+    for node in tree.body:
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and getattr(node.targets[0], "id", None) == "SHIPPED_DEFAULTS"):
+            shipped = [key.value for key in node.value.keys]
+    check("配布: SHIPPED_DEFAULTS が読める", "llm_replacements.default.txt" in shipped, shipped)
+    xf = [line for line in script.splitlines()
+          if line.startswith('robocopy "runtime\\mods" ') and "/XF" in line]
+    check("配布: runtime\\mods を写す robocopy が1本", len(xf) == 1, xf)
+    excluded = xf[0].split("/XF", 1)[1] if xf else ""
+    with io.open(os.path.join(ROOT, ".gitignore"), encoding="utf-8") as fh:
+        ignored = [line.strip() for line in fh if line.strip() and not line.startswith("#")]
+    for default_name in shipped:
+        # `gui.user_name` と同じ規則（`npc.default.json` → `npc.json`）。
+        stem, _dot, ext = default_name.rpartition(".default.")
+        user = stem + "." + ext
+        check("配布: make_dist.bat が {} を除外している".format(user),
+              '"{}"'.format(user) in excluded.split("/", 1)[0], excluded)
+        check("配布: .gitignore が {} を除外している".format(user),
+              "/runtime/mods/*/" + user in ignored, ignored)
     check("配布: 同梱される既定は .default.txt",
           os.path.isfile(os.path.join(MOD_DIR, "llm_replacements.default.txt")), None)
 

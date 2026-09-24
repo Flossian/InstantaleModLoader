@@ -1046,9 +1046,13 @@ def apply(ctx):
                 ctx.log_exc("batch message render: could not color the text")
         return result
 
-    watching = watch_touch()
+    # 窓の購読者を書き換えるのはメインスレッドで（apply() は boot のリモートスレッドの上。TECH.md §6.2）。
+    # 注入し直したら新しい版の手へ付け替えるので、キーに世代を混ぜる（§3.6.1）。
+    # 結べなかったときは watch_touch が log_exc に残す。
+    ctx.on_ready(watch_touch,
+                 key="118_batch_message_render:touch:{}".format(ctx.generation))
     ctx.log("batch message render installed "
             "(BATCH_MODE={}, click watch={}, FRESH_MODE={}, "
             "FRESH_SECONDS={}, FRESH_SESSIONS={}, OLD_TEXT_COLOR={})".format(
-                BATCH_MODE, "on" if watching else "off", FRESH_MODE,
+                BATCH_MODE, "on" if BATCH_MODE == "click" else "off", FRESH_MODE,
                 FRESH_SECONDS, FRESH_SESSIONS, OLD_TEXT_COLOR))

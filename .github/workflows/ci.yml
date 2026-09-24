@@ -79,8 +79,10 @@ jobs:
 
       # デコレータの対象と引数の食い違い、mod.json の entry、load_order の
       # 突き合わせ。構文が正しくてもゲームを落とすものはここで捕まる。
+      # 同梱 MOD は `--strict`（note も失敗に数える。TECH.md §2.3）。手元では
+      # load_order.local.json の知らせが note に出るので付けないが、CI の作業ツリーには無い。
       - name: check_mods
-        run: python tools/check_mods.py
+        run: python tools/check_mods.py --strict
 
       # docs\MODS.md と docs\MODLIST.md は生成物（TECH.md §2.7）。DOC.md や
       # mod.json を直して生成し忘れると、配布物の中の説明だけが古いまま通る。
@@ -160,38 +162,107 @@ jobs:
 
       # 配布物に LICENSE / NOTICE が入っていなければ、それは配れない zip。
       # make_dist.bat 自身も欠けていれば止まるが、**組み上がった中身**を
-      # 見るのはここだけ。
+      # 見るのはここだけ。make_dist.bat は「全部の zip に入れる」と言っているので、
+      # 3本とも見る（loader 単体・mods 単体の欠けは full を見ても分からない）。
+      # 名前は版から組む。手元に古い版の zip が残っていても、そちらを検査しない。
       - name: zip の中身
         shell: pwsh
         run: |
-          # 一番新しいものを見る。名前順で取ると、古い版の zip が残って
-          # いる環境（手元）でそちらを検査してしまう。
-          $zip = Get-ChildItem dist/*.zip | Sort-Object LastWriteTime -Descending |
-                 Select-Object -First 1
-          if (-not $zip) { Write-Host "zip が作られていない"; exit 1 }
-          Write-Host "  $($zip.Name)"
-
+          $ver = (Select-String -Path runtime/instantale_modloader/__init__.py `
+                  -Pattern '^__version__\s*=\s*["'']([^"'']+)["'']').Matches[0].Groups[1].Value
+          Write-Host "  版 $ver"
           Add-Type -AssemblyName System.IO.Compression.FileSystem
-          # Windows で作った zip の区切りは "\"。"/" 決め打ちだと必ず外れる。
-          $leaves = [IO.Compression.ZipFile]::OpenRead($zip.FullName).Entries |
-                    ForEach-Object { $_.Name }
-          foreach ($want in @('LICENSE', 'NOTICE', 'InstantaleModLoader.bat')) {
-            if ($leaves -notcontains $want) {
-              Write-Host "$want が配布物に入っていない"
-              exit 1
-            }
-            Write-Host "  ok    $want"
-          }
 
+          # 手元版（`*.default.*` から `.default` を抜いた名前）はどの zip にも入れない。
+          # 入ると、更新がその人の書き換えた版を上書きする。
+          $userCopies = @(Get-ChildItem runtime/mods -Recurse -File -Filter '*.default.*' |
+                          ForEach-Object { $_.Name -replace '\.default\.', '.' } |
+                          Sort-Object -Unique)
           # docs\ に在るものは全部配布物に入る。名前を並べて写していた頃、
           # 足した文書が並びから漏れても誰も気付かなかった（VERIFICATION_LOG.md）。
-          # 読む人には「README が挙げている文書が入っていない」としてだけ見える
-          # ので、ここで数え合わせる。
-          foreach ($doc in Get-ChildItem docs/*.md | Sort-Object Name) {
-            if ($leaves -notcontains $doc.Name) {
-              Write-Host "docs\$($doc.Name) が配布物に入っていない"
-              exit 1
+          $docs = @(Get-ChildItem docs/*.md | Sort-Object Name | ForEach-Object { "docs/$($_.Name)" })
+          $loader = @('LICENSE', 'NOTICE', 'InstantaleModLoader.bat', 'tools/gui.py',
+                      'runtime/instantale_modloader/__init__.py',
+                      'runtime/mods/_template/mod.json') + $docs
+          $packages = @(
+            @{ zip = "InstantaleModLoader-$ver-full.zip"; mods = 'runtime/mods/'
+               want = $loader + @('runtime/mods/load_order.json'); deny = @() },
+            @{ zip = "InstantaleModLoader-$ver.zip"; mods = $null
+               want = $loader; deny = @('runtime/mods/load_order.json') },
+            @{ zip = "InstantaleMods-$ver.zip"; mods = ''
+               want = @('LICENSE', 'NOTICE'); deny = @('load_order.json', '_template/mod.json') }
+          )
+
+          $bad = 0
+          foreach ($p in $packages) {
+            $path = Join-Path dist $p.zip
+            if (-not (Test-Path $path)) { Write-Host "  $($p.zip) が作られていない"; $bad++; continue }
+            $archive = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $path).Path)
+            try { $names = @($archive.Entries | ForEach-Object { $_.FullName }) }
+            finally { $archive.Dispose() }
+            Write-Host "  $($p.zip)  $($names.Count) ファイル / $([math]::Round((Get-Item $path).Length/1KB)) KB"
+            # 区切りは "/"（make_dist.bat の :zip）。"\" で書くと読めない展開ソフトがある。
+            $backslash = @($names | Where-Object { $_.Contains('\') })
+            if ($backslash) { Write-Host "    区切りが \ の項目: $($backslash[0])"; $bad++ }
+            # 先頭の一段（包みのフォルダ）を剥がした相対パスで見る。
+            $rel = @($names | ForEach-Object { ($_ -split '/', 2)[-1] })
+            foreach ($want in $p.want) {
+              if ($rel -notcontains $want) { Write-Host "    入っていない: $want"; $bad++ }
             }
-            Write-Host "  ok    docs\$($doc.Name)"
+            foreach ($deny in $p.deny) {
+              if ($rel -contains $deny) { Write-Host "    入っている: $deny"; $bad++ }
+            }
+            foreach ($leak in @($rel | Where-Object { $userCopies -contains ($_ -split '/')[-1] })) {
+              Write-Host "    手元版が入っている: $leak"; $bad++
+            }
+            if ($null -ne $p.mods) {
+              $pattern = '^' + [regex]::Escape($p.mods) + '[^/_][^/]*/mod\.json$'
+              $count = @($rel | Where-Object { $_ -match $pattern }).Count
+              if ($count -eq 0) { Write-Host "    MOD が1本も入っていない"; $bad++ }
+              else { Write-Host "    MOD $count 本" }
+            }
           }
-          Write-Host "  $($leaves.Count) ファイル / $([math]::Round($zip.Length/1KB)) KB"
+          if ($bad) { exit 1 }
+          Write-Host "  ok    3本とも中身が揃っている"
+
+      # 配った tools が配布物の中で動くか。一覧（make_dist.bat）は許可制なので、
+      # 配ったファイルが読む tools\ のモジュールを入れ忘れると、配布物でだけ
+      # ImportError になる（リポジトリと上の検査では通ってしまう）。
+      # 同梱 MOD は `check_mods.py --strict` を通す（TECH.md §2.3）。展開した full で
+      # 走らせるので、make_dist.bat が落とした MOD と load_order.json の食い違いもここで出る。
+      - name: 展開した配布物で tools を読み込む
+        shell: pwsh
+        run: |
+          $ver = (Select-String -Path runtime/instantale_modloader/__init__.py `
+                  -Pattern '^__version__\s*=\s*["'']([^"'']+)["'']').Matches[0].Groups[1].Value
+          $dest = Join-Path ([IO.Path]::GetTempPath()) "instantale-dist-$ver"
+          if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
+          Expand-Archive -Path "dist/InstantaleModLoader-$ver-full.zip" -DestinationPath $dest
+          $root = Join-Path $dest "InstantaleModLoader-$ver"
+
+          $failed = @()
+          Push-Location (Join-Path $root 'tools')
+          try {
+            foreach ($py in Get-ChildItem *.py | Sort-Object Name) {
+              $out = & python -c "import $($py.BaseName)" 2>&1
+              if ($LASTEXITCODE -ne 0) {
+                $failed += "import $($py.BaseName)"
+                Write-Host "  FAIL  import $($py.BaseName)"
+                $out | ForEach-Object { Write-Host "        $_" }
+              } else {
+                Write-Host "  ok    import $($py.BaseName)"
+              }
+            }
+          } finally { Pop-Location }
+
+          Push-Location $root
+          try {
+            & python tools/check_mods.py --strict
+            if ($LASTEXITCODE -ne 0) { $failed += 'check_mods.py --strict' }
+          } finally { Pop-Location }
+
+          if ($failed) {
+            Write-Host ""
+            Write-Host "失敗: $($failed -join ', ')"
+            exit 1
+          }

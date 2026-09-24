@@ -9,10 +9,14 @@
 - 同行者の `relationship` とその `player` の欄を、鍵読みを記録する dict 派生に差し替える
 - `app.party` / `app.original_party` / `app.world.characters` を、読みを記録する dict / list 派生に差し替える
 
-`area_move_rejector` が呼ばれた時点で記録を止める（そこから先は頼み文を組む側の読み）。
-窓を抜けるとき全部元に戻す。記録は `out\\area_move_reject.log`。
+`area_move_rejector` か `elapse_days` が呼ばれた時点で記録を止め、差し替えを全部解く
+（そこから先は頼み文を組む側の読み）。dict / list は写しなので、窓の間に写しへ入った書き込みは
+解くときに元のオブジェクトへ移す（移動先のエリアの生成や日数送りの書き込みを捨てないため）。
+記録は `out\\area_move_reject.log`。
 読まれた順に並ぶので、`>> area_move_rejector` の直前に並ぶ属性が分岐の材料。
 """
+
+import threading
 
 from instantale_modloader import ui
 
@@ -96,8 +100,8 @@ def apply(ctx):
     def logging_list(tag, source):
         return type("Logging_" + tag, (LoggingList,), {"_tag": tag})(source)
 
-    def spy(obj, label, undo):
-        """属性読みを記録する派生クラスへ差し替える。戻しは `undo` に積む。"""
+    def spy(obj, label):
+        """属性読みを記録する派生クラスへ差し替える。戻しは窓の `undo` に積む。"""
         base = type(obj)
 
         def __getattribute__(self, name):
@@ -116,7 +120,7 @@ def apply(ctx):
         except TypeError as exc:
             write("  cannot spy {} ({}): {}".format(label, base.__name__, exc))
             return
-        undo.append(lambda o=obj, b=base: object.__setattr__(o, "__class__", b))
+        window["undo"].append(lambda o=obj, b=base: object.__setattr__(o, "__class__", b))
 
     def short(value):
         try:
@@ -125,7 +129,57 @@ def apply(ctx):
             text = "<unrepr>"
         return text if len(text) <= 120 else text[:117] + "..."
 
-    def swap_attr(owner, name, make, undo):
+    # 窓の差し替えの戻し。窓を開いた側と `area_move_rejector` / `elapse_days` の側
+    # （別スレッドのこともある）のどちらが先に解いても1回だけ走るよう、鍵を掛けて取り出す。
+    window = {"undo": [], "copies": {}}
+    lock = threading.Lock()
+
+    def original_of(value):
+        """写しの中に入れた写し（relationship の player）は元に置き換えて書き戻す。"""
+        return window["copies"].get(id(value), value)
+
+    def copy_back(original, copied, taken):
+        """写しの中身を元のオブジェクトへ移す。
+
+        写した後に元へ直接入った書き込み（写す前から元を握っていた側の分）は残し、
+        写しから消えた鍵だけ元からも消す。写しの読みの印は通らない（`dict.items` を直に呼ぶ）。
+        """
+        if isinstance(original, dict):
+            items = [(key, original_of(value)) for key, value in dict.items(copied)]
+            kept = set(key for key, _ in items)
+            for key in taken:
+                if key not in kept:
+                    original.pop(key, None)
+            original.update(items)
+        else:
+            original[:] = [original_of(value) for value in list.__getitem__(copied, slice(None))]
+
+    def track(original, copied, get=None, put=None):
+        """写しを戻しに積む。`get` / `put` があれば、まだ写しが置かれているときだけ元を置き直す
+        （窓の間に本体が別のオブジェクトを置いたなら、そちらを残す）。"""
+        taken = set(dict.keys(original)) if isinstance(original, dict) else None
+        window["copies"][id(copied)] = original
+
+        def undo():
+            if get is not None and get() is copied:
+                put(original)
+            copy_back(original, copied, taken)
+        window["undo"].append(undo)
+
+    def disarm():
+        """記録を止め、差し替えを全部解く。2度目以降は何もしない。"""
+        state["active"] = False
+        with lock:
+            undo, window["undo"] = window["undo"], []
+        for fn in reversed(undo):
+            try:
+                fn()
+            except Exception:
+                ctx.log_exc("area move reject probe: cannot disarm")
+        if undo:
+            window["copies"] = {}
+
+    def swap_attr(owner, name, make):
         value = getattr(owner, name, None)
         if isinstance(value, dict):
             new = make("dict", value)
@@ -134,12 +188,13 @@ def apply(ctx):
         else:
             return
         setattr(owner, name, new)
-        undo.append(lambda o=owner, n=name, v=value: setattr(o, n, v))
+        track(value, new, get=lambda o=owner, n=name: getattr(o, n, None),
+              put=lambda v, o=owner, n=name: setattr(o, n, v))
 
     @ctx.wrap("__main__:AreaMoveManager.execute", required=False)
     def execute(orig, self, choice_text=None, *args, **kwargs):
         app = getattr(self, "app", None) or ui.find_app()
-        undo = []
+        disarm()
         try:
             write("=" * 72)
             write("window: choice={!r} party={} original_party={!r} quest={} accompany={!r}".format(
@@ -157,20 +212,24 @@ def apply(ctx):
                     spied = logging_dict(label + ".rel", rel)
                     player = rel.get("player")
                     if isinstance(player, dict):
-                        dict.__setitem__(spied, "player", logging_dict(label + ".rel.player", player))
+                        inner = logging_dict(label + ".rel.player", player)
+                        dict.__setitem__(spied, "player", inner)
+                        track(player, inner)
                     object.__setattr__(character, "relationship", spied)
-                    undo.append(lambda c=character, r=rel: object.__setattr__(c, "relationship", r))
-                spy(character, label, undo)
+                    track(rel, spied,
+                          get=lambda c=character: object.__getattribute__(c, "relationship"),
+                          put=lambda v, c=character: object.__setattr__(c, "relationship", v))
+                spy(character, label)
             player = getattr(app, "player", None)
             if player is not None:
-                spy(player, "player", undo)
+                spy(player, "player")
             for name in ("party", "original_party"):
-                swap_attr(app, name, lambda kind, v, n=name: (logging_dict if kind == "dict" else logging_list)("app." + n, v), undo)
+                swap_attr(app, name, lambda kind, v, n=name: (logging_dict if kind == "dict" else logging_list)("app." + n, v))
             world = getattr(app, "world", None)
             if world is not None:
-                swap_attr(world, "characters", lambda kind, v: logging_dict("world.characters", v), undo)
-            spy(self, "manager", undo)
-            spy(app, "app", undo)
+                swap_attr(world, "characters", lambda kind, v: logging_dict("world.characters", v))
+            spy(self, "manager")
+            spy(app, "app")
             state["active"] = True
             state["n"] = 0
             state["last"] = None
@@ -179,26 +238,21 @@ def apply(ctx):
         try:
             return orig(self, choice_text, *args, **kwargs)
         finally:
-            state["active"] = False
-            for fn in reversed(undo):
-                try:
-                    fn()
-                except Exception:
-                    ctx.log_exc("area move reject probe: cannot disarm")
+            disarm()
             write("window closed ({} reads)".format(state["n"]))
 
     @ctx.wrap("scripts.llm.llm_manager:area_move_rejector", required=False, safe=True)
     def area_move_rejector(orig, *args, **kwargs):
         if state["active"]:
             write("  >> area_move_rejector called (reads above are the branch's inputs)")
-        state["active"] = False
+        disarm()
         return orig(*args, **kwargs)
 
     @ctx.wrap("__main__:InstantaleApp.elapse_days", required=False, safe=True)
     def elapse_days(orig, self, days, *args, **kwargs):
         if state["active"]:
             write("  >> elapse_days({}) (the branch passed)".format(days))
-            state["active"] = False
+        disarm()
         return orig(self, days, *args, **kwargs)
 
     ctx.log("area move reject probe: installed -> {}".format(ctx.out_path(LOG_BASENAME)))

@@ -876,8 +876,28 @@ app.press("宿屋を建てる")
 check("等級が3つ並ぶ", all(app.has(cat.TIER_LABEL[t]) for t in cat.TIERS), app.labels())
 price = cat.cost_of("inn", "basic", "village", module.COST_SCALE)
 check("値札が村の値段", app.has("並({}G)".format(ml.ui.money(price))), app.labels())
+# 代金を引けなかった回は帳簿にも街にも残さない（帳簿は引けてから書く）
+real_add_gold = module.ui.add_gold
+module.ui.add_gold = lambda *args, **kwargs: None
+try:
+    app.press_like("並(")
+    CLOCK.settle()
+finally:
+    module.ui.add_gold = real_add_gold
+check("引けなかった回は帳簿に残らない", not holdings(), holdings())
+check("引けなかった回は建物も主人も残らない",
+      not any(str(fid).startswith("mod:331_facility_investment:")
+              for fid in world.areas["1"].nodes["10"].facilities)
+      and not any(str(cid).startswith("mod:331_facility_investment:") for cid in world.characters),
+      (list(world.areas["1"].nodes["10"].facilities), sorted(world.characters)))
+app.press(module.DESK_LABEL)
+app.press("宿屋を建てる")
+saves_before = len(app.saved)
 app.press_like("並(")
+CLOCK.settle()
 check("所持金が減った", app.player.gold == gold_before - price, (gold_before, app.player.gold))
+check("建てた後にゲームの保存が走る（所持金と帳簿を揃える）", len(app.saved) > saves_before,
+      (saves_before, len(app.saved)))
 record = holdings()[0] if holdings() else None
 check("帳簿に1件残る", record is not None and record.get("kind") == "inn"
       and record.get("tier") == "basic" and record.get("size") == "village", record)
@@ -1098,9 +1118,23 @@ app.go(building)
 check("溜まった額が値札に出る",
       app.has(module.COLLECT_LABEL.format(ml.ui.money(30 * per_day))), app.labels())
 gold_before = app.player.gold
+collected_before = holdings()[0].get("collected")
+module.ui.add_gold = lambda *args, **kwargs: None
+try:
+    app.press_like("売上を受け取る")
+    CLOCK.settle()
+finally:
+    module.ui.add_gold = real_add_gold
+check("渡せなかった回は受け取った日を進めない（売上が消えない）",
+      holdings()[0].get("collected") == collected_before, holdings()[0])
+app.go(building)
+saves_before = len(app.saved)
 app.press_like("売上を受け取る")
+CLOCK.settle()
 check("30日ぶんが入る", app.player.gold == gold_before + 30 * per_day,
       (gold_before, app.player.gold, per_day))
+check("受け取った後にゲームの保存が走る", len(app.saved) > saves_before,
+      (saves_before, len(app.saved)))
 check("受け取った日が帳簿に残る", holdings()[0].get("collected") == world.days_elapsed,
       holdings()[0])
 app.go(building)
@@ -1165,6 +1199,22 @@ check("ゲームが引かなければ前払いを戻す", app.player.gold == gol
 check("戻したことが WARN に出る",
       "corrected {}".format(-ROOM_PRICE) in stay_log and "we prepaid {}".format(ROOM_PRICE) in stay_log,
       stay_log)
+app.press("宿泊を終える")
+CLOCK.settle()
+app.room_price = ROOM_PRICE
+app.go(building)
+
+# 宿泊の中で他の引き落としが起きたとき（`330_` の家賃の期限が暦の進みで来た形）。
+# 前払いした回は差で返さない。返すと家賃がタダになり、期限だけ延びる
+app.room_price = ROOM_PRICE + 70
+gold_before = app.player.gold
+log_mark = len(read_log())
+app.press(module.STAY_LABEL)
+stay_log = read_log()[log_mark:]
+check("前払いした回に余分に減ったぶんは返さない", app.player.gold == gold_before - 70,
+      (gold_before, app.player.gold))
+check("返さなかったことが WARN に出る（corrected は出ない）",
+      "leaving it alone" in stay_log and "corrected" not in stay_log, stay_log)
 app.press("宿泊を終える")
 CLOCK.settle()
 app.room_price = ROOM_PRICE

@@ -829,6 +829,39 @@ check("311_ が無ければ会話の記録だけを添える", "会話の記録"
 check("311_ が無くても人物像の節は足さない",
       "過去の会話から分かっていること" not in area, area[-300:])
 
+# 生成の後の読み直しで投げた回。生成中の印と待機表示を残さない。
+print("=== 生成の途中で投げても後始末は通る ===")
+mod, ctx, app = setup(history=history)
+board_cls = sys.modules["__main__"].DisplayQuestChoice
+original_generate = board_cls.generate_random_quest
+real_sort_key = _ui.id_sort_key
+
+
+def generate_then_break(self):
+    result = original_generate(self)
+
+    def broken(_value):
+        raise RuntimeError("quest ids unreadable")
+    _ui.id_sort_key = broken          # 生成の後の並べ直しで投げる
+    return result
+
+
+board_cls.generate_random_quest = generate_then_break
+try:
+    app.refresh_choice_buttons()
+    app.on_button_press(index_of(app, "generate"))
+    clock.settle()
+finally:
+    board_cls.generate_random_quest = original_generate
+    _ui.id_sort_key = real_sort_key
+check("フェーズの例外は記録に残り、ゲームの側へ抜けない",
+      any("phase 'generate' failed" in e for e in ctx.errors), ctx.errors)
+check("待機表示が解ける", getattr(app, "is_button_enabled", None) is True,
+      getattr(app, "is_button_enabled", None))
+app.refresh_choice_buttons()
+check("生成中の印が残らない（依頼を作るボタンがまた足される）",
+      index_of(app, "generate") >= 0, [b.get("text") for b in app.buttons])
+
 # ================================== 片付いた依頼を依頼人との会話に伝える
 # 会話のプロンプトには依頼の結末が入る欄が無い（GAME.md §2.25）ので、
 # `character_instance` の複製の `profile` に添える。

@@ -56,18 +56,21 @@ def apply(ctx):
     # `safe hook failed` を見たら直す。握り潰しの代わりに使ってはいけない。
     # 引数の名前と並びは targets.txt が教えてくれる:
     #     __main__:InstantaleApp.add_text(self, context)
-    # 残りを `*args, **kwargs` で受けておくのは、ゲーム更新で引数が増えても
-    # そのまま素通しできるようにするため。既定値を付けておくのも同じ理由。
+    # 引数は `*args, **kwargs` で受けたまま `orig` へ渡す。
+    # 名前を付けて受け直すと、呼び元が省いた引数まで明示して渡すことになり、
+    # 素通しにならない（ゲーム更新で引数が増えたときも同じ形で通る）。
     @ctx.wrap("__main__:InstantaleApp.add_text", safe=True)
-    def add_text(orig, self, context=None, *args, **kwargs):
+    def add_text(orig, self, *args, **kwargs):
         # `@ctx.wrap` が飾る関数は、第1引数が元の関数で、
         # メソッドを包むなら第2引数が self。
         # この並びは check_mods.py が見ている。
-        result = orig(self, context, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
 
         # 元の関数を先に呼んでから自分の処理をする。
         # こうしておくと、ここで壊れても safe=True が
         # orig の結果をそのまま返せる（§3.1.5）。
+        # 中身を読みたい引数は、受けたものから拾う（位置でも名前でも来る）。
+        context = args[0] if args else kwargs.get("context")
         state["seen"] += 1
         ctx.log("template: add_text #{} len={}".format(
             state["seen"], len(context) if isinstance(context, str) else "?"))
@@ -76,7 +79,8 @@ def apply(ctx):
 
     # apply() の中で出したログは out/modloader.log に入る。
     # 量が多くなるなら
-    # MOD 専用のファイルに分ける（`ctx.out_path("template.log")`）。
+    # MOD 専用のファイルに分ける（`write = ctx.logger("template.log")` で書く関数を作る。
+    # 自分で open を書かない。§3.11.2）。
     # 次に遊ぶときに要るデータは `ctx.state_path("template.json")` へ。
     # out/ は消してよい場所なので、消えると巻き戻るものを置かない（TECH.md §3.11）。
     ctx.log("template: installed")

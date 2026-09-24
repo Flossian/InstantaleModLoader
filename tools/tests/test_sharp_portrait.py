@@ -10,7 +10,9 @@
   顔の代わり … 減色の後の縮小だけは元の工程を呼ぶ。旗は1度きり。スレッドを跨がない
   顔       … ゲームが見つけた回は触らない。見つけられなかった回は前処理した絵で
              呼び直し、ゲームの関数が返した値をそのまま返す。**本物の cv2 と
-             ゲームのカスケードと、実際に外れた絵で通す**（無ければ飛ばす）
+             ゲームのカスケードと、実際に外れた絵で通す**（無ければ飛ばす）。
+             呼び直すのは包みを剥がした素の関数で、`orig` は本番の1回だけ。
+             素の関数が投げても None で返す
   設置     … `safe=True` / `alias_scan=False`。対象名はリコンのダンプに在る
 """
 import importlib.util
@@ -19,6 +21,7 @@ import json
 import os
 import sys
 import threading
+import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir))
@@ -118,6 +121,17 @@ class FakeCtx(object):
         return decorator
 
 
+def game_module(module, detect):
+    """ゲームの検出モジュールを置く。検出の関数はローダが包んだ後の形
+    （外側は包み、`__original__` を辿ると素の `detect`）。"""
+    def wrapper(*args, **kwargs):
+        raise AssertionError("呼び直しが包みの側を呼んだ")
+    wrapper.__original__ = detect
+    creature = types.ModuleType(module.CREATURE)
+    creature.detect_face_coordinates = wrapper
+    sys.modules[module.CREATURE] = creature
+
+
 def fresh_mod(**overrides):
     # 既定は「立ち絵を荒くしない」が切（版15）。検査は入れた側で通し、切は明示して確かめる。
     overrides.setdefault("SHARP_PORTRAIT", True)
@@ -202,6 +216,11 @@ def main():
     got = face(game_found, FakeImage(512, 1024), "lbpcascade_animeface.xml")
     check("ゲームが見つけた回はそのまま返す（呼び直さない）",
           got == (100, 40, 120, 120) and len(calls) == 1, (got, len(calls)))
+    sys.modules.pop(module.CREATURE, None)
+    got = face(lambda image, *a, **k: None, FakeImage(512, 1024), "lbpcascade_animeface.xml")
+    check("素の関数が引けなければやり直さない",
+          got is None and any("素の関数が引けない" in line for line in log_lines(module, ctx)),
+          (got, log_lines(module, ctx)))
 
     try:
         import cv2
@@ -255,6 +274,7 @@ def main():
             gray = cv2.cvtColor(np.asarray(image.convert("RGB")), cv2.COLOR_RGB2GRAY)
             return module.faces.pick_face(gray, loaded[os.path.basename(cascade_path)])
 
+        game_module(module, game_like)
         for want in module.faces.CASCADES:
             label = want.split("cascade")[0]
             path = samples[want]
@@ -293,12 +313,41 @@ def main():
 
         module, ctx, pixel, reduce_ = fresh_mod()
         face = ctx.hooks[module.CREATURE + ":detect_face_coordinates"]
+        game_module(module, game_blind)
         check("ゲームの関数が拒み続ければ None", face(game_blind, picture, "lbpcascade_animeface.xml") is None)
         check("そのとき、こちらが見た箱を記録に残す",
               any("こちらは見えたがゲームの関数は None" in line for line in log_lines(module, ctx)),
               log_lines(module, ctx))
+        game_module(module, game_like)
         blank = PIL.Image.new("RGBA", (512, 1024), (40, 40, 40, 255))
         check("何も無い絵は None のまま", face(game_like, blank, "lbpcascade_animeface.xml") is None)
+
+        # safe=True の包みは最後に呼んだ orig の結果を本番の答えとして覚える。探りで orig を呼ばない。
+        production = []
+
+        def game_orig(image, *args, **kwargs):
+            production.append(image)
+            return None
+
+        got = face(game_orig, picture, "lbpcascade_animeface.xml")
+        check("呼び直しは剥がした素の関数で、orig は本番の1回だけ",
+              got is not None and len(production) == 1, (got, len(production)))
+
+        def game_throws(image, *args, **kwargs):
+            raise ValueError("カスケードが合わない")
+
+        game_module(module, game_throws)
+        try:
+            got = face(game_orig, picture, "lbpcascade_animeface.xml")
+            leaked = None
+        except Exception as exc:
+            got, leaked = None, exc
+        check("素の関数が探りで投げても None を返す（ゲームへ投げない）",
+              leaked is None and got is None, repr(leaked))
+        check("投げたことを記録に残す",
+              any("で投げた ValueError" in line for line in log_lines(module, ctx)),
+              log_lines(module, ctx))
+    sys.modules.pop(module.CREATURE, None)
 
     print("顔の切り直し")
     module, ctx, pixel, reduce_ = fresh_mod()

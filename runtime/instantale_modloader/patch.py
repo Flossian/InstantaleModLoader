@@ -39,6 +39,7 @@ Nuitka が1つの関数の中で解決してしまった呼び出しは、外か
 from __future__ import annotations
 
 import functools
+import inspect
 import os
 import sys
 from typing import Any, Callable
@@ -67,6 +68,18 @@ def _undo_log() -> list[tuple[str, Any, str, Any, bool]]:
 PATCH_MARK = "__instantale_patch__"
 GENERATION_MARK = "__instantale_gen__"
 _LEGACY_MARKS = (PATCH_MARK, "__wrapper_of__")
+
+# フックを書いたモジュールの名前（`func.__module__`）。
+# `drop_stale_layers` が、前の世代の層を剥がしてよいかを決めるのに見る。
+HOOK_MODULE_MARK = "__instantale_hook_module__"
+
+# 前の世代の層でも剥がさない、フレームワークの関所を書いたモジュール。
+# どれも登録簿が `sys` に在って世代より長生きし、世界に置いた持ち物
+# （MOD の NPC・施設・一時の値段）を保存の間だけ外すのが仕事。
+# 使う MOD を全部切った世代でも持ち物は世界に残るので、関所だけ剥がすと
+# 次の保存でセーブに焼き付く（`unload` が剥がす前に `modnpc.purge` を呼ぶのと同じ理由）。
+_KEEP_ACROSS_GENERATIONS = frozenset(
+    "{}.{}".format(__package__, name) for name in ("modnpc", "modfacility", "prices"))
 
 # 今回の注入を表す ID（boot() が設定する）。
 # 前回以前の注入で付いたラッパは剥がし、今回の注入で付けたものは残す。
@@ -122,10 +135,19 @@ def owners_ready() -> list[str]:
 
     見張り（`__init__._deferred_loop`）から呼ぶ。
     `sys.modules` を見るだけでは分からないので、実際に引いて確かめる。
+
+    import の実行途中のモジュールは、引けても ready にしない。
+    `mod:func` の形は持ち主がモジュール自身なので、葉が無くても `resolve()` が通る。
+    それを ready と読むと、見張りが5秒ごとに当て直しを走らせて上限（`MAX_DEFERRED_BOOTS`）を
+    使い切り、まだ来ていない他の保留までまとめて降ろしてしまう。
+    走り終わった後は、葉が無くても ready にする。当て直しの boot が
+    `required` に従って UNRESOLVED として報告する（待っても来ないものを1時間待たない）。
     """
     ready = []
     for target in sorted(_pending_owners):
         try:
+            if _still_loading(split_target(target)[0]):
+                continue
             resolve(target)
         except Exception:
             continue
@@ -217,6 +239,10 @@ def _defer_if_owner_not_ready(target: str, kind: str, exc: BaseException) -> boo
     見るのは**持ち主**が欠けている場合だけ。
     葉（`World.generate_character` の `generate_character`）が無いのは、
     打ち間違いかゲーム更新で消えたかの本物の問題なので `required` に従う。
+
+    `__main__` が組み上がった後（`_main_is_built`）は保留にしない。
+    持ち主の打ち間違い（`__main__:Wrld.x`）が1時間待った末に skipped に落ちると、
+    ゲーム更新を疑う UNRESOLVED に出てこない。
     """
     if not isinstance(exc, AttributeError):
         return False
@@ -226,11 +252,34 @@ def _defer_if_owner_not_ready(target: str, kind: str, exc: BaseException) -> boo
         return False
     if mod_name != "__main__" or "." not in qual:
         return False        # 実行中に見えるのは `__main__` だけ／葉は対象外
+    if _main_is_built():
+        return False        # もう来ない。`required` に従う
     _pending_owners.add(target)
     _registry.record(_registry.DEFERRED, target, detail=mod_name)
     log("defer {} {} ({}; the game is still building __main__)".format(
         kind, target, exc))
     return True
+
+
+def _main_is_built() -> bool:
+    """`__main__` が最後まで組み上がったか。
+
+    ゲームはクラスを全部定義した後で、モジュールの最後に `InstantaleApp` の
+    実体を作って走らせる（リコンの `modules.json` の並びでも、実体の
+    `instantale_app` は最後のクラス `Quest` より後に在る）。
+    実体が在れば、それより前に定義されるクラスは全部揃っている。
+    クラスの名前だけで見ないのは、`InstantaleApp` の定義はモジュールの途中に在り、
+    その後に定義されるクラスがまだ多く残っているため。
+    """
+    main = sys.modules.get("__main__")
+    app_class = getattr(main, "InstantaleApp", None)
+    if not isinstance(app_class, type):
+        return False
+    try:
+        values = list(vars(main).values())
+    except Exception:
+        return False
+    return any(isinstance(value, app_class) for value in values)
 
 
 def unwrap_ours(value: Any) -> Any:
@@ -339,6 +388,49 @@ def resolve(target: str) -> tuple[Any, str, Any]:
     return owner, name, getattr(owner, name, None)
 
 
+def _current(owner: Any, name: str) -> tuple[Any, Any]:
+    """包む相手の関数と、書き戻すときの包み（`staticmethod` / `classmethod` / None）。
+
+    `resolve()` の値は `getattr` で引くので、クラスの staticmethod / classmethod は
+    デスクリプタが外れて返る（素の関数・持ち主に束縛済みのメソッド）。
+    それを素の関数として書き戻すと、staticmethod はインスタンス経由の呼び出しで
+    self が混ざり、classmethod はサブクラスから呼んでも `cls` が持ち主に固定される。
+    生の値（継承しただけなら基底の生の値）を見て、中身の関数と包みを返す。
+    classmethod のフックは、メソッドの self と同じ位置に `cls` を受け取る。
+    """
+    if isinstance(owner, type):
+        try:
+            raw = inspect.getattr_static(owner, name)
+        except AttributeError:
+            raw = None
+        if isinstance(raw, staticmethod):
+            return raw.__func__, staticmethod
+        if isinstance(raw, classmethod):
+            return raw.__func__, classmethod
+    return getattr(owner, name, None), None
+
+
+def _had_own(owner: Any, name: str) -> bool:
+    """戻すときに書き戻すか消すか。
+
+    クラスは自分の `__dict__` に在ったかで決める。継承しただけの属性を
+    「在った」と記録すると、戻すときにサブクラスへ基底の関数の写しを書いて影ができる。
+    """
+    if isinstance(owner, type):
+        try:
+            return name in vars(owner)
+        except Exception:
+            pass
+    return hasattr(owner, name)
+
+
+def _plain(value: Any) -> Any:
+    """staticmethod / classmethod なら中身の関数。複製束縛の張り替えはこちらで比べる。"""
+    if isinstance(value, (staticmethod, classmethod)):
+        return value.__func__
+    return value
+
+
 # --------------------------------------------------------------------------
 # エイリアスの張り替え
 # --------------------------------------------------------------------------
@@ -416,8 +508,12 @@ def set_attr(target: str, value: Any, *, alias_scan: Any = True,
     戻り値は「素の元の関数」。
     前回以前の注入で付いた層は先に剥がしてから返すので、
     パッチは積み重なるのではなく置き換わる。
+
+    対象がクラスの staticmethod / classmethod なら、`value` を同じデスクリプタで
+    包んでから書く（`_current`）。
     """
-    owner, name, current = resolve(target)
+    owner, name, _value = resolve(target)
+    current, descriptor = _current(owner, name)
     original = unwrap_ours(current)
     if original is not current:
         log("  replacing a previous patch layer on {}".format(target))
@@ -425,9 +521,14 @@ def set_attr(target: str, value: Any, *, alias_scan: Any = True,
     # 元々その属性が存在したかどうかも記録しておく。
     # 存在しなかったものは、戻すときに
     # delattr する必要があるため（None を入れて残すのとは意味が違う）。
-    existed = hasattr(owner, name)
-    _undo_log().append((label or target, owner, name, original, existed))
-    setattr(owner, name, value)
+    existed = _had_own(owner, name)
+    restore = original
+    if descriptor is not None:
+        # 戻すのはデスクリプタごと。層が無ければ生の値をそのまま控える。
+        raw = vars(owner).get(name) if existed else None
+        restore = raw if _plain(raw) is original else descriptor(original)
+    _undo_log().append((label or target, owner, name, restore, existed))
+    setattr(owner, name, value if descriptor is None else descriptor(value))
 
     if alias_scan:
         # 持ち主がモジュール自身なら、今 setattr したばかりなので走査から除く。
@@ -492,7 +593,9 @@ def patch(target: str, *, alias_scan: Any = True, required: bool = True,
             log("patch {} creates a new attribute (was not there)".format(target),
                 level="WARN")
 
-        old = unwrap_ours(old)
+        # `update_wrapper` が `__module__` を元の関数のもので上書きするので、先に控える。
+        hook_module = getattr(func, "__module__", None)
+        old = unwrap_ours(_current(owner, name)[0])
         try:
             # __name__ や __doc__ を引き継いで、トレースバックの見た目を保つ。
             functools.update_wrapper(func, old)
@@ -505,6 +608,7 @@ def patch(target: str, *, alias_scan: Any = True, required: bool = True,
         installed.__original__ = old
         setattr(installed, PATCH_MARK, target)
         setattr(installed, GENERATION_MARK, _generation)
+        setattr(installed, HOOK_MODULE_MARK, hook_module)
         set_attr(target, installed, alias_scan=alias_scan)
         _registry.record(_registry.APPLIED, target,
                          detail="patch safe" if safe else "patch")
@@ -704,7 +808,8 @@ def wrap(target: str, *, alias_scan: Any = True, required: bool = True,
 
         # 委譲先は素の関数にする。
         # 前回の注入で残ったラッパを呼ぶと二重実行になる。
-        old = unwrap_ours(old)
+        # classmethod は束縛済みのメソッドではなく中身の関数（`_current`）。
+        old = unwrap_ours(_current(owner, name)[0])
 
         if safe:
             # _guard が「orig を呼んだか」を見分けられるように印を付ける。
@@ -724,6 +829,7 @@ def wrap(target: str, *, alias_scan: Any = True, required: bool = True,
         wrapper.__wrapper_of__ = target
         setattr(wrapper, PATCH_MARK, target)
         setattr(wrapper, GENERATION_MARK, _generation)
+        setattr(wrapper, HOOK_MODULE_MARK, getattr(func, "__module__", None))
         set_attr(target, wrapper, alias_scan=alias_scan)
         _registry.record(_registry.APPLIED, target,
                          detail="wrap safe" if safe else "wrap")
@@ -758,13 +864,14 @@ def revert_all() -> int:
             # 当てるときに張り替えた複製束縛（`from x import y` でコピーされた名前）はこちらのラッパを指したままで、
             # そこから呼ばれる経路が生き残ってしまう。
             # 当てたときと同じ範囲を逆向きに張り替える。
-            current = getattr(owner, name, None)
+            current = _current(owner, name)[0]
             if existed:
                 setattr(owner, name, old)
-            else:
+            elif _had_own(owner, name):
+                # 無ければ消さない（`drop_stale_layers` が先に消していることがある）。
                 delattr(owner, name)
-            if current is not None and current is not old:
-                rebind_aliases(current, old,
+            if current is not None and current is not _plain(old):
+                rebind_aliases(current, _plain(old),
                                skip=owner if isinstance(owner, type(sys)) else None,
                                scope=_alias_scope(label, True))
             count += 1
@@ -772,6 +879,70 @@ def revert_all() -> int:
             log_exc("revert failed: {}".format(label))
     log("reverted {} patch(es)".format(count))
     return count
+
+
+_NO_MARK = object()
+
+
+def drop_stale_layers() -> list[str]:
+    """前の世代が当てたまま、今の世代が当て直さなかった層を剥がす。剥がした対象を返す。
+
+    `boot()` が全 MOD の適用を終えた後に呼ぶ。
+    今の世代が当てた対象は `set_attr` が前の層を剥がし済みなので、
+    一番上に他の世代の印が残っているのは、今回当て直されなかった対象だけ:
+    切った MOD、デバッグモードを切って伏せた計測 MOD、今回 apply に失敗した MOD、
+    対象名を変えた MOD の旧い対象。
+    残すと「切ったのに効いている」のに、台帳は世代ごとに作り直されるので
+    status.json にも GUI にも出ない。
+
+    上から順に、他の世代の層を剥がす。次のどれかに当たったらそこで止め、その層から下は残す:
+
+        今の世代の層
+        `_KEEP_ACROSS_GENERATIONS` のフックの層（残す理由はそちら）
+        `HOOK_MODULE_MARK` を持たない層（印を付ける前の版が当てたもの。持ち主が分からない）
+
+    記録（`_undo_log`）は消さない。`revert_all` は最後に素の値を書き戻すので、
+    ここで剥がした後に呼んでも結果は同じ。
+    """
+    entries = list(_undo_log())
+    first: dict = {}
+    for entry in entries:
+        first.setdefault((id(entry[1]), entry[2]), entry)
+    dropped: list[str] = []
+    for label, owner, name, restore, existed in first.values():
+        try:
+            current, descriptor = _current(owner, name)
+            value = current
+            for _ in range(32):
+                if value is None or not any(hasattr(value, mark) for mark in _LEGACY_MARKS):
+                    break       # 素の関数（または属性が無い）
+                if getattr(value, GENERATION_MARK, None) == _generation:
+                    break
+                module = getattr(value, HOOK_MODULE_MARK, _NO_MARK)
+                if module is _NO_MARK or module in _KEEP_ACROSS_GENERATIONS:
+                    break
+                value = getattr(value, "__original__", None)
+            if value is current:
+                continue
+            if value is None and not existed:
+                delattr(owner, name)        # 前の世代が新設した名前
+            elif descriptor is None:
+                setattr(owner, name, value)
+            else:
+                # 素まで戻ったなら、最初に控えた生の値（デスクリプタごと）を戻す。
+                setattr(owner, name, restore if _plain(restore) is value
+                        else descriptor(value))
+            if value is not None:
+                rebind_aliases(current, value,
+                               skip=owner if isinstance(owner, type(sys)) else None,
+                               scope=_alias_scope(label, True))
+            dropped.append(label)
+        except Exception:
+            log_exc("cannot drop the stale layer on {}".format(label))
+    if dropped:
+        log("dropped {} layer(s) left by earlier injections: {}".format(
+            len(dropped), ", ".join(dropped[:8]) + (" ..." if len(dropped) > 8 else "")))
+    return dropped
 
 
 def active() -> list[str]:

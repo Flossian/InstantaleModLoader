@@ -75,8 +75,10 @@ class Bindable(FakeWidget):
     def __init__(self):
         FakeWidget.__init__(self)
         self.bound = {}
+        self.bind_calls = 0
 
     def bind(self, **kwargs):
+        self.bind_calls += 1
         for event, callback in kwargs.items():
             self.bound.setdefault(event, []).append(callback)
 
@@ -354,6 +356,28 @@ def run():
           hud.text_input.bound)
     check("Enter の経路も監視する", hud.text_input.watchers("on_text_validate") == 1)
     check("送信ボタンの塞がりを監視する", hud.text_send_button.watchers("disabled") == 1)
+    binds = (hud.text_input.bind_calls, hud.text_send_button.bind_calls)
+    for _round in range(20):
+        hud.show()                               # 本文の1文字ごとに塗り直しが来る
+        hud.repaint()
+    check("同じ相手なら塗り直しのたびに結び直さない",
+          (hud.text_input.bind_calls, hud.text_send_button.bind_calls) == binds,
+          ((hud.text_input.bind_calls, hud.text_send_button.bind_calls), binds))
+    old_input = hud.text_input
+    old_input.parent = None                      # 外された欄（Kivy は親を外す）
+    hud.text_input = FakeTextInput()             # 画面が組み直されて入力欄が別物になった
+    hud.text_input.parent = hud.bar
+    hud.bar.children = [hud.text_send_button, hud.text_input]
+    hud.show()
+    check("入力欄が替わったら新しい方に結び直す",
+          hud.text_input.watchers("focus") == 1
+          and hud.text_input.watchers("on_text_validate") == 1, hud.text_input.bound)
+    check("送信ボタンの監視は1本のまま", hud.text_send_button.watchers("disabled") == 1,
+          hud.text_send_button.bound)
+    hud.text_input = old_input                   # 以降の検査は元の欄で
+    old_input.parent = hud.bar
+    hud.bar.children = [hud.text_send_button, old_input]
+    hud.show()
 
     print("\n[選別]")
     two = FakeHUD(extra_input=True)

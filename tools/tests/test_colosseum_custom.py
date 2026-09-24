@@ -317,6 +317,29 @@ check("素のままなら窓の中でも触らない",
       lvl(enemy_level, "normal", 58) == 59 and seen["difficulty"] == 58, seen)
 ctx.hooks["__main__:BattleStartManager.start_battle"](lambda self: None, Manager(app))
 
+# 相手を仕込んでいる最中に当て直し（最初の LLM の呼び出しで起きる）が挟まっても、
+# 新しい世代の包みから同じ窓が見える
+module.RANK_CAP = 40
+ctx.hooks["__main__:ColosseumMatchStart.execute"](
+    lambda self, choice: None, Manager(app), "申し込む")
+module_next, _manifest = load_mod()
+module_next.ui = FakeUI(app, ml.ui)
+module_next.llm = FakeLLM()
+module_next.RANK_CAP = 40
+ctx_next = FakeCtx(OUT_DIR)
+module_next.apply(ctx_next)
+check("当て直しの後の包みからも窓が見える",
+      ctx_next.hooks["scripts.functions:get_enemy_exp_lvl"](enemy_level, "normal", 58) == 41,
+      seen)
+result = ctx_next.hooks["__main__:ColosseumMatchStart.generate_enemy_data"](
+    made, Manager(app), "4")
+check("当て直しの後も施設に焼かれる格が揃う", result["data"]["rank"] == 40, result)
+ctx_next.hooks["__main__:BattleStartManager.start_battle"](lambda self: None, Manager(app))
+check("閉じた窓は前の世代の包みからも閉じて見える",
+      lvl(enemy_level, "normal", 58) == 59 and seen["difficulty"] == 58, seen)
+check("当て直しの後も例外を漏らさない", not ctx_next.errors, ctx_next.errors)
+module.RANK_CAP = 0
+
 # ---------------------------------------------------------------- 相手の顔ぶれ
 print("同じ闘士が出てこないようにする")
 arena.config["enemy_data"] = {"0": {"data": {"name": "灰燼の断罪者"}},

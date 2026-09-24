@@ -85,6 +85,9 @@ MAX_WANTED_LINES = 24
 #: 足したウィジェットの目印（`ui.added_by_a_mod` が見る接頭辞に合わせる）。
 MARK = ui.MOD_WIDGET_PREFIX + "character_sheet"
 
+#: 窓の大きさの見張りを `Window` に控える属性名（`ui.window_watcher` が注入し直すたびに付け替える）。
+WINDOW_ATTR = MARK + "_on_resize"
+
 HUD_MODULE = "scripts.hud.new_hud"
 
 
@@ -435,49 +438,34 @@ def apply(ctx):
         if app is not None:
             paint(app, hud, boxes, reroll)
 
-    def watch_window():
-        """窓の大きさが変わったら置き直す。掛け直しても重ならない。
+    def on_window_resize(*_args):
+        """窓の大きさが変わったら置き直す。
 
         ゲーム自身も窓の大きさに合わせて人物欄の寸法を入れ直すので、
         こちらが後から当て直さないと、リサイズした瞬間だけ素の寸法に戻る。
-        束ねた相手は Window に控えておき、注入し直したときは古いものを外してから掛ける（`apply()` は1プロセスで何度も走る。
-        §3.4）。
         """
         try:
-            from kivy.core.window import Window
+            # 直前に整えた HUD を覚えておく。
+            # 人物欄を一度も開いていない間は探しに行く（探せなくても、
+            # 次に開いたときに整う）。
+            hud = state.get("hud") or ui.find_hud(ui.find_app())
+            if hud is not None:
+                decorate(hud, repaint=False)
         except Exception:
-            return          # 画面の無い環境（オフライン検証）
-        previous = getattr(Window, MARK + "_resize", None)
-        if previous is not None:
-            try:
-                Window.unbind(size=previous)
-            except Exception:
-                ctx.log_exc("character sheet: could not unbind the old watcher")
+            ctx.log_exc("character sheet: resize failed")
 
-        def on_resize(_instance, _value):
-            try:
-                # 直前に整えた HUD を覚えておく。
-                # 人物欄を一度も開いていない間は探しに行く（探せなくても、
-                # 次に開いたときに整う）。
-                hud = state.get("hud") or ui.find_hud(ui.find_app())
-                if hud is not None:
-                    decorate(hud, repaint=False)
-            except Exception:
-                ctx.log_exc("character sheet: resize failed")
-
-        try:
-            Window.bind(size=on_resize)
-            setattr(Window, MARK + "_resize", on_resize)
-        except Exception:
-            ctx.log_exc("character sheet: cannot watch the window size")
+    # 結ぶのは最初のフックの中（メインスレッド）。
+    # apply() は boot のリモートスレッドの上で走り、そこから Window の購読者を書き換えない（TECH.md §6.2）。
+    # 人物欄を開くまでは置き直す相手が無いので、開いたときに結べば間に合う。
+    watch_window = ui.window_watcher(ctx, on_window_resize, WINDOW_ATTR, "character sheet")
 
     @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.toggle_character_sheet_visibility",
               safe=True)
     def toggle(orig, self, *args, **kwargs):
         result = orig(self, *args, **kwargs)
+        watch_window()      # 注入ごとに1回だけ結ぶ（2回目からは何もしない）
         decorate(self)      # 壊れてもゲームは orig の結果を受け取る（§3.1.5）
         return result
 
-    watch_window()
     ctx.log("character sheet: panel at ({}, {})-({}, {}) of the window"
             .format(PANEL_LEFT, PANEL_TOP, PANEL_RIGHT, PANEL_BOTTOM))

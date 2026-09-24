@@ -10,7 +10,7 @@
     "en": "Moves the craft window's generate button and arrow out of the item grids so nothing is crossed or buried. The grids are never moved; both are shifted only as far as they must",
     "ja": "クラフト画面の「作成」ボタンと矢印をグリッドから出して、枠の交差と埋もれを直す。グリッドは動かさない。どちらも重なっているぶんだけ動かす"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "settings": {
     "MARGIN": {

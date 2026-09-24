@@ -18,7 +18,7 @@
         │             │
         │      実行中の Area.descriptions を差し替え
         │             │
-        │      state/area_chronicle/<世界名>.json
+        │      state/area_chronicle/<世界名×主人公名>.json
         │
         └─ ロード時（World.__init__）に再適用（318_ と同型）
 ```
@@ -69,8 +69,7 @@ import sys
 import time
 
 from instantale_modloader import frames, jobs, llm, ui
-from instantale_modloader.state import (WorldStore, world_key,
-                                        world_key_of_dict)
+from instantale_modloader.state import WorldStore
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
 #      `tools/check_mods.py` が AST で突き合わせる）------------------------
@@ -268,7 +267,7 @@ def apply(ctx):
                 "noted": set(),        # 1回だけ出す知らせの鍵
                 "last_check": 0.0,     # 照合した時刻（間引き用）
             },
-            # 世界名 -> 控え（書くのはこの MOD だけ）。出し入れと錠は
+            # 周回（世界×主人公）-> 控え（書くのはこの MOD だけ）。出し入れと錠は
             # ローダの語彙（`state.WorldStore`）。世代をまたいで持つ。
             "worlds": WorldStore(ctx, STATE_DIRNAME, order=by_area_id),
             # 編纂を回す背景スレッド。作るのは `compile_area` が出来てから
@@ -296,7 +295,7 @@ def apply(ctx):
     # フォルダを作るのは最初に触ったときで、`apply()` では作らない
     # （一度も編纂していない `state/` に空のフォルダを置かないため。TECH.md §3.11）。
     def bucket_of(key):
-        """その世界の控え `{エリアid: 記録}`。無ければ読み込む。錠は呼び側が持つ。"""
+        """その周回の控え `{エリアid: 記録}`。無ければ読み込む。錠は呼び側が持つ。"""
         return worlds.load(key)
 
     def record_of(key, area_id):
@@ -430,7 +429,7 @@ def apply(ctx):
         if LOG_MATERIAL:
             note_once("shape", "実行時の形: 土地 {} の {}".format(
                 area_id, describe_shape(ui.current_area(app))))
-        key = world_key(app)
+        key = worlds.playthrough(app)
         total, done = pending_deeds(app, key, area_id)
         if total > done:
             enqueue({"world": key, "area_id": area_id, "why": why,
@@ -444,8 +443,8 @@ def apply(ctx):
                 job["world"], job["area_id"]))
             return
         key, area_id = job["world"], job["area_id"]
-        if world_key(app) != key:
-            write("編纂: 世界が変わっていたので見送り（{} / {}）".format(key, area_id))
+        if worlds.playthrough(app) != key:
+            write("編纂: 周回が変わっていたので見送り（{} / {}）".format(key, area_id))
             return
 
         # クリア直後は、ゲーム側の要約が achievements を書くのを待つ。
@@ -562,7 +561,7 @@ def apply(ctx):
             note_inject("starter: app が見つからない")
             return args, kwargs
         area_id = ui.area_id_of(ui.current_area(app))
-        if not area_id or record_of(world_key(app), area_id) is None:
+        if not area_id or record_of(worlds.playthrough(app), area_id) is None:
             note_inject("starter: この土地の年代記はまだ無い")
             return args, kwargs
         base = getattr(npc, "profile", "") or ""
@@ -614,7 +613,7 @@ def apply(ctx):
         result = orig(self, *args, **kwargs)
         try:
             if app is not None and area_id:
-                enqueue({"world": world_key(app), "area_id": area_id,
+                enqueue({"world": worlds.playthrough(app), "area_id": area_id,
                          "why": "クリア", "wait": True,
                          "queued": time.monotonic()})
             elif app is not None:
@@ -633,11 +632,11 @@ def apply(ctx):
         """
         result = orig(self, save_data_dict, app, *args, **kwargs)
         try:
-            key = world_key_of_dict(save_data_dict, None) or world_key(app)
+            key = worlds.playthrough(app, save_data_dict)
             if key:
                 applied = reapply_world(self, key, "load")
                 if applied:
-                    write("load: 世界 {!r} の案内文を当て直した（{}件）".format(
+                    write("load: 周回 {!r} の案内文を当て直した（{}件）".format(
                         key, applied))
         except Exception:
             ctx.log_exc("area chronicle: ロード直後に当て直せなかった")
@@ -673,10 +672,10 @@ def apply(ctx):
             world = getattr(app, "world", None) if app is not None else None
             if world is None:
                 return
-            key = world_key(app)
+            key = worlds.playthrough(app)
             applied = reapply_world(world, key, "inject")
             if applied:
-                write("inject: 実行中の世界 {!r} へ当て直した（{}件）".format(
+                write("inject: 実行中の周回 {!r} へ当て直した（{}件）".format(
                     key, applied))
         except Exception:
             ctx.log_exc("area chronicle: 注入直後の当て直しに失敗した")

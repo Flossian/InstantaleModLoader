@@ -408,8 +408,6 @@ def apply(ctx):
                 "free_stay": None,
                 # 開いている保管庫。`{"holder": Character, "area": id}`。
                 "storage": None,
-                # 保存の世代（連続で動かしたときは最後の1回だけ保存する）。
-                "save_generation": 0,
                 # 取り壊しを待っている契約（プレイヤーが中に居た）。
                 "pending_demolish": [],
                 # 自前の画面を出す前の選択肢（`やめる` で戻すために控える）。
@@ -431,6 +429,10 @@ def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
     worlds = store["worlds"].rebind(ctx, write)
     screen = ui.Screen(ctx, write, tag="real estate", mark=MARK)
+    # 所持金や持ち物を動かして控えを進めたら、ゲーム自身の保存を少し後に1回呼ぶ。
+    # 控えはその場でファイルになるが、所持金と持ち物がセーブに入るのは次の保存のとき。
+    # 保存しないまま落ちると控えだけが進んだ形が残る（預けた品が増える、家賃を払わずに期限が延びる）。
+    save_soon = ui.saver(ctx, write, "real estate")
 
     # 建物と管理人はローダが持つ（TECH.md §5.7 / §5.8）。
     # 関所は何本の MOD が呼んでも1つしか立たない。
@@ -1127,9 +1129,17 @@ def apply(ctx):
         # 管理人を決める（生成 AI に聞くのはここ1回だけ）。控えに書くだけで、
         # ここでは控えに書くだけ。名簿へ載せて主に据えるのは `seat_keeper`。
         keeper = make_keeper(app, record)
+        # 代金を先に引き、引けたときだけ契約を控えに載せる。控えは即座にファイルになるので、
+        # 逆の順では引けなかった回にも家が残る。
+        if ui.add_gold(app, -price, on_error=lambda msg: write("WARN sign: " + msg)) is None:
+            modfacility.unregister(OWNER, facility_id, app=app, write=write)
+            write("WARN sign: cannot charge {}; the contract in area {!r} was not made".format(
+                price, area_id))
+            screen.say(app, "手続きが済まなかった。")
+            return False
         bucket_of(current_key(app))["contracts"].append(record)
         save(app)
-        ui.add_gold(app, -price, on_error=lambda msg: write("WARN sign: " + msg))
+        save_soon(app, "sign")
         write("signed: {} {!r} id={} area={!r} price={} due={} keeper={}".format(
             kind, name, facility_id, area_id, price, record["due"],
             keeper.get("id") if keeper else None))
@@ -1284,8 +1294,12 @@ def apply(ctx):
                     lapse(app, record, idle=idle)
                     due = None
                     break
-                ui.add_gold(app, -rent,
-                            on_error=lambda msg: write("WARN rent: " + msg))
+                # 引けたときだけ期限を進める（逆の順では、引けなかった回にも期限だけ延びる）。
+                if ui.add_gold(app, -rent,
+                               on_error=lambda msg: write("WARN rent: " + msg)) is None:
+                    write("WARN rent: cannot charge {} for {!r}; the due day stays {}".format(
+                        rent, record.get("name"), due))
+                    break
                 due += term
                 paid += rent
                 record["due"] = due
@@ -1296,6 +1310,13 @@ def apply(ctx):
             if paid:
                 write("rent: {!r} paid {} (next due {})".format(
                     record.get("name"), paid, due))
+                # 日数送りの最中なら、その処理が終わって手が空いてから保存する
+                # （移動や宿泊の途中の形をセーブに焼かない）。
+                if idle:
+                    screen.when_idle(app, lambda: save_soon(app, "rent"),
+                                     proceed_on_timeout=True, tag="rent save")
+                else:
+                    save_soon(app, "rent")
                 announce(app, _fmt(RENEWED_TEXT, name=record.get("name") or "家",
                                    price=ui.money(paid)), idle=idle)
                 continue
@@ -1715,26 +1736,6 @@ def apply(ctx):
         write("{}: the storage now holds {} item(s){}".format(
             why, len(items), " (lost {})".format(lost) if lost else ""))
         return len(items)
-
-    def save_soon(app, why):
-        """少し待ってからゲーム自身の `save_game` を呼ぶ（連続の移動は最後の1回だけ）。
-
-        預けた品はプレイヤーの持ち物から外れるので、保存しないまま落ちると
-        控えと持ち物の両方に同じ品が残る（品が増える）。
-        """
-        state["save_generation"] += 1
-        generation = state["save_generation"]
-
-        def do_save():
-            if generation != state["save_generation"]:
-                return
-            try:
-                app.save_game()
-                write("{}: save_game complete".format(why))
-            except Exception:
-                ctx.log_exc("real estate: save_game after {} failed".format(why))
-
-        screen.schedule(do_save, 0.15)
 
     def sync_storage(app, widget, old_owner, new_owner):
         """窓の中でアイテムが片側から片側へ移った直後に、持ち物の実体を揃える。
@@ -2295,6 +2296,11 @@ def apply(ctx):
         額が分からず前払いできなかったとき（引かれたぶんを返す）の2つ。
         どちらも所持金の差で当てているので、同じ区間で他の MOD が金を
         動かしていれば巻き込む。WARN を残すのはそのため。
+
+        **前払いした回に減ったぶんは返さない。** 滞在の `execute` の中では暦が進み、
+        他の MOD がその区間で金を引く（`331_` の宿に泊まっている間に来たこの MOD の家賃など）。
+        差で返すと、引かれた家賃まで返して期限だけ延びる。
+        前払いした回に増えたぶんは、前払いの額までを引き戻す（ゲームが引かなかった回）。
         """
         after = ui.gold_of(app)
         if not isinstance(before, int) or not isinstance(after, int):
@@ -2310,6 +2316,13 @@ def apply(ctx):
             write("WARN {}: the gold grew by {} during the stay; leaving it "
                   "alone".format(why, -off))
             return 0
+        if prepaid > 0 and off > 0:
+            write("WARN {}: the gold fell by {} more than the prepaid room ({}); "
+                  "leaving it alone (other charges run inside the stay)".format(
+                      why, off, prepaid))
+            return 0
+        if prepaid > 0:
+            off = max(off, -prepaid)
         ui.add_gold(app, off, on_error=lambda msg: write("WARN {}: {}".format(why, msg)))
         write("WARN {}: the room cost {} but we prepaid {}; corrected {}".format(
             why, prepaid + off, prepaid, off))

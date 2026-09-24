@@ -446,7 +446,7 @@ MOD.ui.find_app = lambda: app
 # 合算: 最高値はそのまま、残りは圧縮して足す。1品なら今と同じ
 player.give(sword, dagger, helm, ring)
 store = getattr(sys, MOD.STORE_ATTR)
-_key, bucket = store.of(app)
+bucket = store.load(MOD.state.playthrough_key(app))            # 控えは世界×主人公
 bucket["テスト"] = {"w1": [4, 2], "w2": [0, 2], "h1": [2, 0], "r1": [4, 6]}
 toggle(lambda self: None, hud)
 assert set(MOD.CONTAINER) == {"w1", "w2", "h1", "r1"}, set(MOD.CONTAINER)
@@ -604,5 +604,60 @@ NSC["container"]["h9"] = stale                                    # ロード前
 assert combat.gear(app, mate)[0][1] is helm2b                      # 持ち物の辞書を先に引く
 stranger = Player(); stranger.name = "他人"; stranger.id = "99"
 assert combat.gear(app, stranger) is None                         # 装備欄を使っていなければ None
+
+# ---------------------------------------------------------------- 同じ世界のロード・別の主人公
+# 装備中の品は装備欄の辞書にだけ居る。ロードでそれを捨てないと、セーブの後に手に入れて装備した品が
+# 控えの位置から拾い直されて生き返る（品が増える）。別の主人公には前の主人公の品が持ち物へ返る
+load_hook = ctx.hooks["__main__:World.__init__"]
+p1 = Player()
+c1 = Item("c1", "wearable", "headgear", 10)
+c2 = Item("c2", "weapon", "small_weapon", 20)                 # セーブの後で手に入れて装備した品
+p1.give(c1, c2)
+app_r = types.SimpleNamespace(player=p1, world=types.SimpleNamespace(name="世界"), root=hud)
+save_same = {"world_data": {"name": "世界"}, "player_data": {"name": "テスト", "inventory": {"c1": {}}}}
+load_hook(lambda self, d, *a: None, object(), save_same, app_r)   # ここまでの試験の品を持ち越さない
+MOD.ui.find_app = lambda: app_r
+bucket = store.load(MOD.state.playthrough_key(app_r))
+bucket["テスト"] = {"c1": [2, 0], "c2": [0, 2]}
+toggle(lambda self: None, hud)
+assert set(MOD.CONTAINER) == {"c1", "c2"} and not p1.inventory.inventory, MOD.CONTAINER
+# 同じ世界・同じ主人公のセーブを読み直す。セーブには c1 だけが合流している
+p2 = Player()
+c1_loaded = Item("c1", "wearable", "headgear", 10)
+p2.give(c1_loaded)
+load_hook(lambda self, d, *a: None, object(), save_same, app_r)
+assert not MOD.CONTAINER, MOD.CONTAINER
+app_r.player = p2
+toggle(lambda self: None, hud)
+assert set(MOD.CONTAINER) == {"c1"} and MOD.CONTAINER["c1"] is c1_loaded, MOD.CONTAINER
+assert "c2" not in p2.inventory.inventory, p2.inventory.inventory          # 生き返らない
+assert "c2" not in bucket["テスト"], bucket["テスト"]
+assert any(l.startswith("load (") and "dropped 2 item(s)" in l for l in ctx.lines)
+# 同じ世界で別の主人公を作った。前の主人公の品も控えも渡らない
+p3 = Player(); p3.name = "別人"
+herb3 = Item("x3", "healing_item", "herb")
+p3.give(herb3)
+save_other = {"world_data": {"name": "世界"}, "player_data": {"name": "別人", "inventory": {"x3": {}}}}
+load_hook(lambda self, d, *a: None, object(), save_other, app_r)
+app_r.player = p3
+toggle(lambda self: None, hud)
+assert not MOD.CONTAINER and set(p3.inventory.inventory) == {"x3"}, (MOD.CONTAINER, p3.inventory.inventory)
+assert c1_loaded.obtainer is p2                                         # 前の主人公の品はそのまま
+other_bucket = store.load(MOD.state.playthrough_key(app_r))
+assert MOD.state.playthrough_key(app_r) == "世界×別人" and "テスト" not in other_bucket, other_bucket
+assert combat.gear(app_r, p3) is None
+# 世界名だけの控え（版17まで）は、初めて引いた主人公へ移して元から消す
+store.save("旧世界", {"古参": {"c9": [2, 0]}, "npc:5": {"k9": [4, 2]}, "他人": {"z": [2, 0]}})
+p4 = Player(); p4.name = "古参"
+c9 = Item("c9", "wearable", "headgear", 5)
+p4.give(c9)
+app_old = types.SimpleNamespace(player=p4, world=types.SimpleNamespace(name="旧世界"), root=hud)
+MOD.ui.find_app = lambda: app_old
+toggle(lambda self: None, hud)
+moved = store.load("旧世界×古参")
+assert moved.get("古参") == {"c9": [2, 0]} and "npc:5" in moved, moved
+assert store.load("旧世界") == {"他人": {"z": [2, 0]}}, store.load("旧世界")
+assert set(MOD.CONTAINER) == {"c9"}, MOD.CONTAINER
+MOD.ui.find_app = lambda: app
 
 print("ok")

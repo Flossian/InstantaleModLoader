@@ -10,7 +10,7 @@
     "en": "Adds a choice at the administrative office: pay a fine and clear the wanted status for the area you are in",
     "ja": "役場の選択肢に「罰金を納めて手配を解く」を追加する。対象は今いるエリアの手配度だけ"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "settings": {
     "PRICE_PER_POINT": {
@@ -51,8 +51,8 @@
         "en": "Lawfulness after paying"
       },
       "note": {
-        "ja": "既定10＝素の平常値。今の値より低い値を入れても下がらない",
-        "en": "10 = the untouched default. It never lowers the current value"
+        "ja": "既定10＝素の平常値。今の値より低い値を入れても下がらない。「手配とみなす手配度」より低い値を入れたときは、そこまで戻す",
+        "en": "10 = the untouched default. It never lowers the current value, and never stops below the wanted threshold"
       }
     },
     "ANNOUNCE_ON_ARRIVAL": {

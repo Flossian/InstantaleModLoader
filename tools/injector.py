@@ -177,6 +177,11 @@ MEM_RELEASE = 0x8000
 PAGE_READWRITE = 0x04
 PAGE_EXECUTE_READ = 0x20
 WAIT_TIMEOUT = 0x102
+WAIT_OBJECT_0 = 0x0
+STILL_ACTIVE = 259        # GetExitCodeThread: スレッドがまだ動いている
+#: `inject()` の戻り値のうち、スタブの完走を確かめられなかったもの（失敗ではなく保留）。
+#: GIL が空くのを待っているだけのことが多く、後から完走する。
+INJECT_PENDING = -2
 
 
 class PROCESSENTRY32W(ctypes.Structure):
@@ -500,18 +505,29 @@ def inject(pid: int, payload: bytes, dry_run: bool = False) -> int:
         thread = kernel32.CreateRemoteThread(handle, None, 0, stub_mem, None, 0, None)
         _check(thread, "CreateRemoteThread")
         try:
-            if kernel32.WaitForSingleObject(thread, 30000) == WAIT_TIMEOUT:
+            waited = kernel32.WaitForSingleObject(thread, 30000)
+            rc = wintypes.DWORD(0)
+            # 終わったと言えるのは、待ちが WAIT_OBJECT_0 で返り、終了コードが読めて、
+            # それが STILL_ACTIVE でないときだけ。
+            # 待ちそのものの失敗（WAIT_FAILED）もここで拾う。完了として進めると、
+            # 下の finally が動いているスタブのメモリを解放してしまう。
+            finished = (waited == WAIT_OBJECT_0
+                        and kernel32.GetExitCodeThread(thread, ctypes.byref(rc))
+                        and rc.value != STILL_ACTIVE)
+            if not finished:
                 # AI の推論が長く走っていると、
                 # GIL が握られたままになってここまで到達しないことがある。
                 # 放っておけば後から完走するので、メモリは解放せずに残す。
                 # 解放してしまうと、実行中のコードそのものを消すことになり、
                 # ゲームが落ちる。
-                print("  WARNING: stub still running after 30s (GIL contention?)")
+                if waited == WAIT_TIMEOUT:
+                    print("  WARNING: stub still running after 30s (GIL contention?)")
+                else:
+                    print(f"  WARNING: could not confirm the stub finished "
+                          f"(wait=0x{waited:X}, exit={rc.value})")
                 print("           leaving remote memory allocated on purpose")
                 stub_mem = code_mem = None
-                return -2
-            rc = wintypes.DWORD(0)
-            kernel32.GetExitCodeThread(thread, ctypes.byref(rc))
+                return INJECT_PENDING
             # スレッドの終了コードは PyRun_SimpleString の戻り値（0 が成功）。
             # 符号付きとして解釈する。
             return ctypes.c_int32(rc.value).value
@@ -632,14 +648,14 @@ def main() -> int:
         if args.unload:
             print("mods reverted; on_ready side effects and game-state writes remain.")
         print(f"See {BOOT_LOG} and {os.path.join(OUT_DIR, 'modloader.log')}")
-    elif rc == -2:
+    elif rc == INJECT_PENDING:
         # 上の GIL 待ちで時間切れになったケース。
         # 失敗ではなく保留。
         print("\nPENDING: see the logs once the game becomes idle.")
     else:
         print(f"\nFAILED: PyRun_SimpleString returned {rc} "
               f"(the bootstrap raised; check {BOOT_LOG}).")
-    return 0 if rc == 0 else 1
+    return 0 if rc in (0, INJECT_PENDING) else 1
 
 
 if __name__ == "__main__":

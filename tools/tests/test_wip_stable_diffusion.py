@@ -968,6 +968,38 @@ check("関係の無い import は素通し（spec を作らない）",
       observer().find_spec("json") is None)
 check("フックの中で例外が出ていない", not ctx.errors, ctx.errors)
 
+print("用済みの観測者は包まない")
+# 観測者を外すのは次の apply() だけ。916 を切って注入し直しても残るので、
+# 用済みになった後は名前が合うモジュールでも他の finder に聞かず素通しする。
+import importlib.machinery  # noqa: E402
+
+
+class _Finder(object):
+    calls = []
+
+    def find_spec(self, name, path=None, target=None):
+        if not name.startswith("diffusers.probe_"):
+            return None
+        _Finder.calls.append(name)
+        loader = types.SimpleNamespace(create_module=lambda spec: None,
+                                       exec_module=lambda module: None)
+        return importlib.machinery.ModuleSpec(name, loader)
+
+
+finder = _Finder()
+sys.meta_path.append(finder)
+try:
+    ctx_live = fresh()
+    spec = observer().find_spec("diffusers.probe_live")
+    check("生きている間は名前が合うモジュールのローダを包む",
+          spec is not None and isinstance(spec.loader, MOD._LoaderProxy), spec)
+    ctx_live.superseded = lambda: True
+    del _Finder.calls[:]
+    check("用済みになったら包まない", observer().find_spec("diffusers.probe_stale") is None)
+    check("用済みになったら他の finder にも聞かない", _Finder.calls == [], _Finder.calls)
+finally:
+    sys.meta_path.remove(finder)
+
 cleanup("image_generation.fake4.stable_diffusion_manager",
         "image_generation.fake4.image_generation_creature")
 

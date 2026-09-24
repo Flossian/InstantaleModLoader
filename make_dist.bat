@@ -36,8 +36,11 @@ rem  does and does not cover (game-derived strings, GAME.md, the EULA question).
 rem
 rem  Never shipped: out\, state\ and settings\ (all three made at
 rem  runtime), __pycache__ / *.pyc, tools\tests\test_*.py and the one-off save fixers, and
-rem  llm_replacements.txt / npc.json -- those last two are the player's own copy
-rem  of a mod's data file, so only the shipped *.default.* versions go in.
+rem  llm_replacements.txt / npc.json / seeds.json -- those three are the
+rem  player's own copy of a mod's data file, so only the shipped *.default.*
+rem  versions go in. The names are the *.default.* ones with ".default"
+rem  dropped (SHIPPED_DEFAULTS and user_name() in tools\gui.py);
+rem  tools\tests\test_llm_prompt_replace.py checks the /XF list against them.
 rem
 rem    make_dist.bat           version comes from runtime\instantale_modloader
 rem    make_dist.bat 1.2.0     override the version string
@@ -146,14 +149,17 @@ rem  The GUI, the injector, the console watcher, the context probe (the 127_
 rem  mod needs it to pick a safe window) and modtool.py -- the shared base
 rem  every mod-bundled settings screen imports (TECH.md 3.12). Leave modtool.py
 rem  out and the "Settings..." button opens nothing -- in the packaged build
-rem  only, so the repo and CI stay green. This list is a whitelist: a new
-rem  tools\ file that is not named here is dropped without a word.
+rem  only, so the repo stays green (the packaging job in CI imports every
+rem  shipped tool from the unpacked zip to catch it). This list is a whitelist: a new
+rem  tools\ file that is not named here is dropped without a word, and so is
+rem  a tools\ module one of these imports -- check_mods.py needs mods_meta.py.
+rem  tools\tests\test_update.py checks that every import is named here.
 rem  tools\tests\ and the one-off save fixers are development harnesses and
 rem  stay out.
 echo   [loader] tools ...
 md "%LOADER%\tools" 2>nul
 for %%f in (gui.py injector.py watcher.py logrotate.py watch.bat check_mods.py
-           modtool.py llm_ctx_probe.py llm_ctx_probe.bat) do (
+           mods_meta.py modtool.py llm_ctx_probe.py llm_ctx_probe.bat) do (
   if not exist "tools\%%f" (
     echo   ERROR: tools\%%f is missing.
     goto :fail
@@ -179,7 +185,7 @@ rem ===========================================================================
 rem  mods
 rem ===========================================================================
 echo   [mods] copying ...
-robocopy "runtime\mods" "%MODS%" /E /XD "__pycache__" "_template" /XF "*.pyc" "llm_replacements.txt" "npc.json" "load_order.json" "load_order.local.json" /NFL /NDL /NJH /NJS /NP >nul
+robocopy "runtime\mods" "%MODS%" /E /XD "__pycache__" "_template" /XF "*.pyc" "llm_replacements.txt" "npc.json" "seeds.json" "load_order.json" "load_order.local.json" /NFL /NDL /NJH /NJS /NP >nul
 if errorlevel 8 (
   echo   ERROR: robocopy failed on runtime\mods ^(code %ERRORLEVEL%^).
   goto :fail
@@ -246,24 +252,30 @@ rem  syntax check
 rem ===========================================================================
 rem  Same interpreter preference as watch.bat. The full package contains every
 rem  .py that ships, so checking it covers the other two. Skipped when no
-rem  Python is installed.
-set "PY="
+rem  Python is installed. The program and its arguments are kept apart, as in
+rem  watch.bat: PYEXE is quoted when it runs (a path may hold spaces) and
+rem  PYARGS carries the "-3" of the py launcher outside the quotes.
+set "PYEXE="
+set "PYARGS="
 if exist "%LOCALAPPDATA%\Programs\Python\Python313\python.exe" (
-  set "PY=%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
+  set "PYEXE=%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
 ) else (
-  where py >nul 2>&1 && set "PY=py -3"
+  where py >nul 2>&1 && (
+    set "PYEXE=py"
+    set "PYARGS=-3"
+  )
 )
-if not defined PY (
-  where python >nul 2>&1 && set "PY=python"
+if not defined PYEXE (
+  where python >nul 2>&1 && set "PYEXE=python"
 )
 
-if defined PY (
+if defined PYEXE (
   echo   syntax check ...
-  %PY% -m compileall -q "%FULL%" >nul
+  "%PYEXE%" %PYARGS% -m compileall -q "%FULL%" >nul
   if errorlevel 1 (
     echo.
     echo   ERROR: a staged .py file does not compile. Nothing was zipped.
-    %PY% -m compileall -q "%FULL%"
+    "%PYEXE%" %PYARGS% -m compileall -q "%FULL%"
     goto :fail
   )
   rem compileall just created the caches we refuse to ship -- drop them again.

@@ -536,6 +536,12 @@ check("背景の quality もゲームのまま", app.backgrounds == ["private_ro
 check("日数送りもゲームのまま（90日）", app.elapsed == [90], app.elapsed)
 check("エラーなし", not ctx.errors, ctx.errors)
 
+print("[ラベル] 部屋のボタンの形を変えても自己検証は通る")
+module, ctx, app, choice_cls, start_cls = setup(
+    configure=lambda m: setattr(m, "ROOM_BUTTON", "{name}【{price}G】"))
+check("VERIFY FAILED が出ない",
+      not [msg for level, msg in ctx.logs if level == "ERROR"], ctx.logs)
+
 print("[ラベル] 名前と宿代を変えた部屋だけ表示し直す")
 
 

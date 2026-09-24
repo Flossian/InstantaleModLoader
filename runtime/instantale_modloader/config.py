@@ -250,6 +250,30 @@ def load_store(runtime_dir: str) -> dict:
     return {k: v for k, v in data.items() if isinstance(k, str) and isinstance(v, dict)}
 
 
+def load_store_for_write(runtime_dir: str) -> dict:
+    """書き戻す前に `mod_settings.json` を読む。在るのに読めなければ例外を投げる。
+
+    `load_store` は読めないファイルを `{}` として返す（遊ぶ側は既定で動けばよい）。
+    書く側がその `{}` に1件足して丸ごと書くと、他の MOD の設定が全部消える。
+    手で編集してカンマを1つ間違えただけでも起きるので、「無い」と「在るのに読めない」を分け、
+    後者は書かずに断る。中身は選り分けずにそのまま返す（書き戻しで項を落とさない）。
+    """
+    path = store_path(runtime_dir)
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except FileNotFoundError:
+        return {}
+    except Exception as exc:
+        raise ValueError("{} を読めないため、上書きせずに止めました。"
+                         "ファイルを直すか消してから保存し直してください（{}: {}）".format(
+                             path, type(exc).__name__, exc))
+    if not isinstance(data, dict):
+        raise ValueError("{} の中身がオブジェクトではないため、上書きせずに止めました。"
+                         "ファイルを直すか消してから保存し直してください".format(path))
+    return data
+
+
 def load_flags(runtime_dir: str) -> dict:
     """`loader.json` を読む。無ければ `{}`（＝全て既定＝切）。
 

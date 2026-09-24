@@ -62,6 +62,7 @@ import importlib.util
 import json
 import os
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -170,10 +171,15 @@ def write_text(path: str, text: str, *, report=None) -> bool:
 
     やっていることは3つ:
 
-      1. 隣に `名前.tmp` として書く（本体は最後まで無傷）
+      1. 隣に `名前.<一意な印>.tmp` として書く（本体は最後まで無傷）。
+         一時ファイルの名前を書くたびに変えるのは、同じ path へ2本が同時に書くと、
+         固定の名前では片方が切り詰めている最中の中身をもう片方が差し替えで正本に入れるため
+         （`write_status` は boot と見張りと MOD の `ctx.refresh_status` から呼ばれる）
       2. `flush` + `fsync` で中身をディスクまで落とす。ここを省くと、電源断で
          「差し替えは済んだが中身は空」になりうる
-      3. `os.replace` で差し替える。同じフォルダなので不可分に入れ替わる
+      3. `os.replace` で差し替える。同じフォルダなので不可分に入れ替わる。
+         Windows では読み手が正本を開いている間 PermissionError になるので、
+         短く数回やり直す（`_replace`）
 
     **例外を投げない。**
     呼ぶのはゲームのスレッドの中で、書けないことよりゲームを巻き込むことの方が困る。
@@ -183,24 +189,47 @@ def write_text(path: str, text: str, *, report=None) -> bool:
     こちらを直に使うのは、1行1レコードの記録（`122_` の会話ログ）のように
     JSON 文書1つではないものを書くとき。
     """
-    tmp = path + TEMP_SUFFIX
+    tmp = None
     try:
         parent = os.path.dirname(path)
         if parent:
             os.makedirs(parent, exist_ok=True)
-        with open(tmp, "w", encoding="utf-8") as fh:
+        handle, tmp = tempfile.mkstemp(prefix=os.path.basename(path) + ".",
+                                       suffix=TEMP_SUFFIX, dir=parent or None)
+        with os.fdopen(handle, "w", encoding="utf-8") as fh:
             fh.write(text)
             fh.flush()
             os.fsync(fh.fileno())
-        os.replace(tmp, path)
+        _replace(tmp, path)
         return True
     except Exception:
         (report or log_exc)("cannot write {}".format(path))
-        try:
-            os.remove(tmp)      # 書きかけを残さない（残しても実害は無い）
-        except Exception:
-            pass
+        if tmp is not None:
+            try:
+                os.remove(tmp)      # 書きかけを残さない（残しても実害は無い）
+            except Exception:
+                pass
         return False
+
+
+#: 差し替えを PermissionError でやり直す回数と間隔（秒）。
+REPLACE_RETRIES = 5
+REPLACE_RETRY_WAIT = 0.05
+
+
+def _replace(src: str, dst: str) -> None:
+    """`os.replace` を、Windows の一時的な PermissionError だけ短くやり直す。
+
+    Python の `open` は FILE_SHARE_DELETE を付けずに開くので、読み手（GUI・別の MOD）が
+    正本を開いている間は差し替えが拒まれる。1回で諦めると、控えの更新が黙って1回落ちる。
+    """
+    for _ in range(REPLACE_RETRIES):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            time.sleep(REPLACE_RETRY_WAIT)
+    os.replace(src, dst)
 
 
 def write_json(path: str, data, *, indent: int = 1, sort_keys: bool = False,
@@ -1130,6 +1159,16 @@ def _order(mods_dir: str, found: list[str],
         problems.append("{}: \"order\" が配列ではありません。"
                         "フォルダ名順で読み込みます".format(order_file))
         order = []
+    # 文字列でない要素は先に落とす。
+    # 下で set と突き合わせるので、dict や list が1つ混ざると TypeError になり、
+    # boot も GUI も静的検査も全 MOD ごと止まる。
+    strange = [name for name in order if not isinstance(name, str)]
+    if strange:
+        problems.append("{}: \"order\" に文字列でない記述があります（飛ばします）: {}"
+                        .format(order_file, ", ".join(json.dumps(name, ensure_ascii=False,
+                                                                 default=str)
+                                                      for name in strange)))
+        order = [name for name in order if isinstance(name, str)]
 
     # 配布物に入らない mod ― 開発中（9xx）と `local/` の中身 ― は、
     # この順序ファイルが名指ししているものだけ読み込む。
@@ -1681,14 +1720,19 @@ def _deferred_loop(out_dir: str, generation: str, pending: list,
         note = list(arrived)
         if ready:
             note.append("{} target(s) whose owner appeared".format(len(ready)))
-        log("deferred: {} arrived; re-applying mods".format(", ".join(note)))
-        _state["deferred_boots"] += 1
-        try:
-            boot(out_dir)
-        except BaseException:
-            # ここで投げるとゲーム側のスレッドを道連れにするので、
-            # 記録だけして降りる。
-            log_exc("deferred re-apply failed")
+        # 錠を取ってから、用済みかをもう一度確かめる。
+        # 待っている間に手で注入し直されていたら、その boot が当て直しを済ませている。
+        with _boot_lock():
+            if _superseded(generation):
+                return
+            log("deferred: {} arrived; re-applying mods".format(", ".join(note)))
+            _state["deferred_boots"] += 1
+            try:
+                boot(out_dir)
+            except BaseException:
+                # ここで投げるとゲーム側のスレッドを道連れにするので、
+                # 記録だけして降りる。
+                log_exc("deferred re-apply failed")
         return
     from . import patch_registry as _registry
     late = [n for n in pending if sys.modules.get(n) is None]
@@ -1745,8 +1789,56 @@ def _arm_deferred(out_dir: str, generation: str) -> None:
                      name="instantale_modloader.deferred", daemon=True).start()
 
 
+# boot() と unload() を1本ずつにする錠。
+# 遅延当て直しの boot（見張りのスレッド）の最中に手で注入し直すと、2本の boot が並ぶ。
+# ブートストラップはローダを sys.modules から落としてから読み直すので、古い boot の
+# `from . import patch` も新しい patch モジュールを引き、世代と保留と台帳を上書きし合う。
+# 片方の層に相手の世代の印が付くと `unwrap_ours` が剥がさず、フックが2段に重なる。
+# 新旧のローダが同じ錠を持つよう、sys に置く（`_ONCE_ATTR` と同じ理由）。
+# 見張りは錠を取った後で用済みかを確かめ直し、錠を持ったまま boot() に入るので、
+# 再入できる RLock にしてある。
+_BOOT_LOCK_ATTR = "__instantale_boot_lock__"
+
+
+def _boot_lock():
+    lock = getattr(sys, _BOOT_LOCK_ATTR, None)
+    if lock is None:
+        # 2本が同時に作っても1つに決まるよう、辞書の setdefault で置く。
+        lock = vars(sys).setdefault(_BOOT_LOCK_ATTR, threading.RLock())
+    return lock
+
+
 def boot(out_dir: str) -> dict:
     """注入されたブートストラップから呼ばれる入口。"""
+    with _boot_lock():
+        return _boot(out_dir)
+
+
+def _forget_unapplied(results: dict, manifests: dict) -> list[str]:
+    """今回 "ok" にならなかった MOD が置いた期間・日数の望み・値段を外す。外した持ち主を返す。
+
+    登録簿（`durations` / `prices`）は sys に在って注入をまたぐ。
+    切った MOD や今回 apply に失敗した MOD の旧い関数が残ると、
+    関所がそれに聞き続ける（古いモジュールの設定値を握ったまま）。
+    持ち主はフォルダ名（MOD が `ctx.mod_dir` から名乗る）。
+    登録簿に居るが今は無い名前（消した・改名した MOD）も外す。
+    """
+    from . import durations as _durations
+    # `on_forget` の片付けを、この世代の durations に登録させる。
+    # durations は注入のたびに読み直されるので、prices がまだ読まれていない世代では
+    # 値段の片付けが繋がっていない。
+    from . import prices as _prices
+    ok = {name for name, verdict in results.items() if verdict == "ok"}
+    base, layers = _prices.item_price_sources()
+    owners = set(manifests) | set(_durations.owners()) | {base} | set(layers)
+    gone = []
+    for owner in sorted(owners - ok - {""}):
+        if _durations.forget(owner, write=log):
+            gone.append(owner)
+    return gone
+
+
+def _boot(out_dir: str) -> dict:
     _state["out_dir"] = out_dir
     _state["log_path"] = os.path.join(out_dir, "modloader.log")
     _state["boot_count"] += 1
@@ -1791,7 +1883,15 @@ def boot(out_dir: str) -> dict:
     # 前回の boot の値を残すと、設定を宣言しなくなった mod に古い値が見え続ける。
     _state["settings"] = settings
 
-    found = discover()
+    try:
+        found = discover()
+    except BaseException:
+        # ここで投げるとブートストラップまで抜けて、ローダごと動かない。
+        # 空の構成で続ける（status.json と見張りは立つ）。
+        log_exc("discover failed; no mod is applied in this boot")
+        found = {"mods_dir": _mods_dir(), "dirs": {}, "local": set(), "order": [],
+                 "manifests": {}, "notes": [],
+                 "problems": ["MOD の一覧を作れませんでした（modloader.log を参照）"]}
     mods_dir = found["mods_dir"]
     dirs = found.get("dirs") or {}
     manifests = found["manifests"]
@@ -1894,6 +1994,18 @@ def boot(out_dir: str) -> dict:
     _state["settings"] = settings
     _state["booted"] = True
 
+    # 今回当て直されなかった前の世代のフックと、登録簿に残った前の世代の関数を片付ける。
+    # 「切ったのに効いている」を残さない（`config.debug_mode` の「切り替えが効くのは
+    # 次の注入から」もこれで成り立つ）。
+    try:
+        _patch.drop_stale_layers()
+    except BaseException:
+        log_exc("cannot drop the stale patch layers")
+    try:
+        _forget_unapplied(results, manifests)
+    except BaseException:
+        log_exc("cannot forget the durations of the mods not applied")
+
     ok = sum(1 for v in results.values() if v == "ok")
     log("-" * 70)
     log("boot complete: {}/{} mod(s) applied".format(ok, len(results)))
@@ -1979,6 +2091,56 @@ def unload(out_dir: str | None = None) -> dict:
     そのため「入れ忘れた状態に戻す」用途ではなく、**mod を疑うときの切り分け**に使うもの。
     素のゲームで確かめたいなら、注入せずに起動し直すのが確実。
     """
+    with _boot_lock():
+        return _unload(out_dir)
+
+
+#: `unload` が、NPC を降ろしてパッチを剥がすのをメインスレッドで待つ上限（秒）。
+UNLOAD_WAIT = 10.0
+
+
+def _run_on_main_thread(fn, timeout: float):
+    """`fn()` をメインスレッド（Kivy の Clock）で走らせ、終わるまで待って戻り値を返す。
+
+    注入のリモートスレッドからゲームの状態を書き換えると、メインスレッドが
+    同じ辞書を反復している最中に "dictionary changed size" が起こりうる（TECH.md §6.2）。
+    Clock が無い（ゲームの外）・既にメインスレッドに居る・`timeout` 秒待っても
+    走らない（メインループが止まっている）ときは、この場で走らせる。
+    どちらで走っても1回だけ（先に始めた側が取る）。
+    """
+    claim = threading.Lock()
+    done = threading.Event()
+    box: dict = {}
+
+    def run(_dt=None):
+        if not claim.acquire(False):
+            return
+        try:
+            box["result"] = fn()
+        except BaseException:
+            # Clock の中で投げるとゲームが落ちる。
+            log_exc("the job on the main thread failed")
+        finally:
+            done.set()
+
+    clock = None
+    if threading.current_thread() is not threading.main_thread():
+        try:
+            from kivy.clock import Clock as clock
+            clock.schedule_once(run, 0)
+        except BaseException:
+            clock = None
+    if clock is not None and done.wait(timeout):
+        return box.get("result")
+    if clock is not None:
+        log("the main thread did not take the job in {:.0f}s; running it here"
+            .format(timeout), level="WARN")
+    run()
+    done.wait()       # Clock の側が先に取って走っている最中なら、終わるのを待つ
+    return box.get("result")
+
+
+def _unload(out_dir: str | None) -> dict:
     # 注入し直して呼ばれるので、
     # このモジュールは読み込み直された直後＝out_dir を知らない状態で入ってくる。
     # ログの行き先を先に決める（記録が残らないと、
@@ -1990,17 +2152,32 @@ def unload(out_dir: str | None = None) -> dict:
     from . import patch as _patch
     log("=" * 70)
     log("unload: reverting patches (gen={})".format(_state.get("generation")))
-    # パッチを剥がす前に MOD の NPC を世界から降ろす。
-    # 剥がした後だと保存の関所が無くなり、名簿に残った `mod:` の id が
-    # 次の保存でセーブに焼かれる（`modnpc` の約束はそこが守っている）。
+
+    def take_down():
+        # パッチを剥がす前に MOD の NPC を世界から降ろす。
+        # 剥がした後だと保存の関所が無くなり、名簿に残った `mod:` の id が
+        # 次の保存でセーブに焼かれる（`modnpc` の約束はそこが守っている）。
+        # どちらもゲームの状態を書き換えるので、メインスレッドで続けて行う
+        # （間に保存が挟まらない）。
+        try:
+            from . import modnpc as _modnpc
+            if _modnpc.registry():
+                from . import ui as _ui
+                _modnpc.purge(_ui.find_app())
+        except Exception:
+            log_exc("unload: cannot take the mod npcs off the world")
+        return _patch.revert_all()
+
+    count = _run_on_main_thread(take_down, UNLOAD_WAIT) or 0
+    # 期間・日数の望み・値段の登録簿も空にする（関所が剥がれた後も sys に残るため）。
     try:
-        from . import modnpc as _modnpc
-        if _modnpc.registry():
-            from . import ui as _ui
-            _modnpc.purge(_ui.find_app())
+        from . import durations as _durations
+        from . import prices as _prices
+        base, layers = _prices.item_price_sources()
+        for owner in sorted((set(_durations.owners()) | {base} | set(layers)) - {""}):
+            _durations.forget(owner, write=log)
     except Exception:
-        log_exc("unload: cannot take the mod npcs off the world")
-    count = _patch.revert_all()
+        log_exc("unload: cannot forget the durations")
     _state["mods"] = {}
     _state["settings"] = {}
     _state["booted"] = False

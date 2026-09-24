@@ -111,6 +111,10 @@ from instantale_modloader import combat, frames, ui
 LOG_BASENAME = "battle_tactics.log"
 LOG_TAG = "battle tactics"
 
+# グローバルの `random` から引くとゲーム自身の乱数列がずれる（TECH.md §6.1）。
+# 揺らぎは戦闘の1発ごとに引くので、ずれる量もいちばん大きい。
+_RNG = random.Random()
+
 # ボタン辞書に付ける印のキー。mod ごとに別の文字列にする（TECH.md §3.3）。
 MARK = "mod_battle_tactics"
 
@@ -286,12 +290,15 @@ def level_multiplier(gap):
     return mult if gap >= 0 else 1.0 / mult
 
 
-def damage_wobble(rng=random):
-    """1発ごとの揺らぎの倍率。幅は `DAMAGE_WOBBLE`（% の設定、0 で無効）。"""
+def damage_wobble(rng=None):
+    """1発ごとの揺らぎの倍率。幅は `DAMAGE_WOBBLE`（% の設定、0 で無効）。
+
+    `rng` を省くとこの MOD 専用の乱数（`_RNG`）から引く。
+    """
     width = max(0, DAMAGE_WOBBLE) / 100.0
     if width <= 0:
         return 1.0
-    return 1.0 + rng.uniform(-width, width)
+    return 1.0 + (_RNG if rng is None else rng).uniform(-width, width)
 
 
 def hit_damage(entries, anchor, defender_max_hp, defense,
@@ -726,10 +733,13 @@ def apply(ctx):
             open_action(app, character_key, character_side)
         except Exception:
             ctx.log_exc("battle tactics: cannot open the action")
-        result = orig(self, character_key, character_side, battle_action,
-                      *args, **kwargs)
-        close_action()
-        return result
+        # 本体が投げても1手は必ず閉じる。閉じないと古い `state["action"]` が残って
+        # 手の外で呼ばれた `get_instant_damage` まで圧縮し、立てた構えも武装されない。
+        try:
+            return orig(self, character_key, character_side, battle_action,
+                        *args, **kwargs)
+        finally:
+            close_action()
 
     @ctx.wrap("__main__:BattlePhaseManager.calculate_battle_effect",
               required=False, safe=True)
@@ -819,7 +829,7 @@ def apply(ctx):
                                out_mult=out_mult, in_mult=in_mult,
                                attacker_level=attacker_level,
                                defender_level=defender_level,
-                               wobble=damage_wobble())
+                               wobble=damage_wobble(_RNG))
             write("hit: {} -> {} {} raw={} vanilla={} anchor={} lv={}->{} "
                   "final={} ({:.0%} of {}){}{}".format(
                       attacker_name, defender_name,
@@ -914,7 +924,9 @@ def apply(ctx):
                             # 継続ダメージでは死なない。HP 1 で止める。
                             new_hp = max(1, hp - amount)
                         else:
-                            new_hp = min(max_hp, hp + amount)
+                            # `max_hp_of` は float を返すので、上限に当たった回に
+                            # `1560.0` のような float が HUD とセーブへ漏れる。整数に戻す。
+                            new_hp = int(min(max_hp, hp + amount))
                         if new_hp != hp:
                             # 出どころを控えてから動かす。
                             # 画面の行（308_）が「泥の浸食 で 29 の

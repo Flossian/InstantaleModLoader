@@ -10,7 +10,7 @@
     "en": "Puts the keyboard focus back into the free-input box after each send, so you can keep typing without clicking it again",
     "ja": "自由入力を送るたびに外れるフォーカスを入力欄へ戻す。毎回クリックし直さずに次の一言を打てる"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "settings": {
     "REFOCUS_ON_BLUR": {

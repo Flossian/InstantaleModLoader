@@ -46,7 +46,7 @@
   当たらなかったものはログへ残す。
   待機表示の点（`show_loading_text`）には触らない
 - 距離補正の「挟む街の数」は、`325_` が道を開いた時点に控え
-  （`state/road_opening/<世界>.json` の `roads` の `hops`）へ記録した値を
+  （`state/road_opening/<世界×主人公>.json` の `roads` の `hops`）へ記録した値を
   **読むだけ**で使う（`WorldStore(own=False)`。TECH.md §3.2.3）。
   いまの接続で BFS し直さないのは、開いた道自体が辺になっていて必ず「隣」に
   なってしまうため。`325_` が無ければ挟む街の数は常に 0 ＝ 素の移動は不変。
@@ -72,7 +72,7 @@ import sys
 import time
 
 from instantale_modloader import durations, ui
-from instantale_modloader.state import UNKNOWN_WORLD, WorldStore, world_key
+from instantale_modloader.state import UNKNOWN_WORLD, WorldStore, playthrough_key, world_key
 
 LOG_BASENAME = "area_move_custom.log"
 
@@ -184,7 +184,8 @@ GAME_COACH_PRICE = 1000
 # `馬車(1000G)` → 1000。桁区切りが入っても読める。
 # 通貨の表記が差し替えられていれば（`130_`）`馬車(1000円)` も読む。
 
-# `325_road_opening` の控えのフォルダ（`state/road_opening/<世界>.json`）。
+# `325_road_opening` の控えのフォルダ（`state/road_opening/<世界×主人公>.json`。
+# 道は主人公ごとなので周回の鍵で引く。TECH.md §5.4）。
 # **読むだけ**（`WorldStore(own=False)`。MOD どうしは import せず、
 # 同じファイルを読むことで繋がる。TECH.md §3.2.3。325_ が入っていなければ
 # ファイルが無いだけで、挟む街の数は常に 0 ＝ 補正なしに落ちる）。
@@ -361,7 +362,7 @@ def apply(ctx):
                 or not origin_id or not target_id:
             return 0
         try:
-            bucket = roads.load(world_key(app), fresh=True)
+            bucket = roads.load(playthrough_key(app), fresh=True)
             want = {str(origin_id), str(target_id)}
             for record in (bucket or {}).get("roads") or []:
                 if isinstance(record, dict) and \
@@ -761,7 +762,9 @@ def apply(ctx):
     # 通貨の表記は `130_` が差し替えていることがあるので、
     # 見本のほうも同じ表記へ通してから突き合わせる。
     parsed = ui.parse_coin(ui.rewrite_coins("馬車(1,000G)"))
-    sample = fmt(COACH_BUTTON, name="馬車", price=1000, days=7)
+    # テンプレートは既定の形を直に書く（`COACH_BUTTON` は GUI で変えられるので、
+    # 設定を通すと変えた回に期待値とずれる）。
+    sample = fmt("{name}({price}G・{days}日)", name="馬車", price=1000, days=7)
     survives = fmt("{name}と{typo}", name="徒歩")
     expected = ui.rewrite_coins("馬車(1000G・7日)")
     # 距離補正の式。設定と無関係に確かめる（mode= / factor= を明示で渡す）。

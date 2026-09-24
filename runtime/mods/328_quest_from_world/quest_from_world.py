@@ -24,8 +24,11 @@ NOTE_WORLD_ONLY = "（この街の描写は意図的に伏せてある。世界�
 
 LOG_BASENAME = "quest_from_world.log"
 
+#: この MOD 専用の乱数（ゲーム全体の乱数の並びをずらさない。TECH.md §6.1）。
+_rng = random.Random()
 
-def roll(chance_percent, rnd=random.random):
+
+def roll(chance_percent, rnd=_rng.random):
     """当たりなら True。0 で決して当たらず、100 で必ず当たる。"""
     return rnd() * 100.0 < chance_percent
 

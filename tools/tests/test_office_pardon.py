@@ -627,9 +627,20 @@ app.press(pardon_label(app))
 CLOCK.settle()
 app.press("3,000ゴールドを納める")
 CLOCK.settle()
-check("**手配度を下げる方向には動かさない**",
-      app.player.area_history["0"]["lawfulness"] == -3,
+check("**手配度を下げる方向には動かさない**（戻し先が低すぎれば閾値の 0 まで）",
+      app.player.area_history["0"]["lawfulness"] == 0,
       app.player.area_history["0"])
+
+module, ctx, app = setup(configure=configure(threshold=20, restore=10))
+app.press(pardon_label(app))
+CLOCK.settle()
+app.press("23,000ゴールドを納める")
+CLOCK.settle()
+check("戻し先が閾値より低ければ閾値まで戻す（払えば手配は解ける）",
+      app.player.area_history["0"]["lawfulness"] == 20,
+      app.player.area_history["0"])
+check("閾値まで戻ればボタンはもう出ない", pardon_label(app) is None, app.labels())
+check("罰金は1回ぶんだけ", app.player.gold == 100000 - 23000, app.player.gold)
 
 module, ctx, app = setup(configure=configure(announce=False))
 check("知らせを切れる",

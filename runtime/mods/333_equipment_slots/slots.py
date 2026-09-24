@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """装備欄の決まりごと。画面にもゲームにも触らない。
 
-装備欄は本体の `InventoryGrid`（6列×8行）で、部位はその上の矩形（`REGIONS`）。
+装備欄は本体の `InventoryGrid`（6列×10行）で、部位はその上の矩形（`REGIONS`）。
 品の位置（マスの座標）から部位を引き、本体に渡す1つを選ぶところまでをここに置き、
-ゲーム抜きで確かめられるようにしてある（`tools\\tests\\test_wip_equipment_slots.py`）。
+ゲーム抜きで確かめられるようにしてある（`tools\\tests\\test_equipment_slots.py`）。
 """
 
 COLS, ROWS = 6, 10

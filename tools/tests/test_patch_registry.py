@@ -188,6 +188,39 @@ def main():
         _World.generate_character = lambda self, cid: cid
         check(P.owners_ready() == ["__main__:World.generate_character"],
               "生えたら解決できるようになる: {}".format(P.owners_ready()))
+
+        # 組み上がった後の持ち主の打ち間違いは保留にしない。
+        # 1時間待って skipped に落ちると、ゲーム更新を疑う UNRESOLVED に出ない。
+        class InstantaleApp(object):
+            pass
+        fake_main.InstantaleApp = InstantaleApp
+        R.begin_mod("300_late.py")
+        try:
+            @ctx.wrap("__main__:Wrold.not_yet")
+            def _still_building(orig, *a):
+                return None
+        except Exception as exc:
+            check(False, "アプリの実体が無いあいだは保留（組み立て中）: {}".format(exc))
+        finally:
+            R.end_mod()
+        check("__main__:Wrold.not_yet" in P.pending_owners(),
+              "クラスが在っても実体がまだなら組み立て中として積む")
+        fake_main.instantale_app = InstantaleApp()   # ゲームは全クラスの後で実体を作る
+        threw = False
+        R.begin_mod("300_late.py")
+        try:
+            @ctx.wrap("__main__:Wrld.generate_character")
+            def _owner_typo(orig, *a):
+                return None
+        except AttributeError:
+            threw = True
+        finally:
+            R.end_mod()
+        check(threw, "組み上がった後の持ち主の打ち間違いは required に従って投げる")
+        check(R.unresolved()[-1][1] == "__main__:Wrld.generate_character",
+              "UNRESOLVED に載る: {}".format(R.unresolved()[-1]))
+        check("__main__:Wrld.generate_character" not in P.pending_owners(),
+              "保留には積まない")
     finally:
         if real_main is None:
             sys.modules.pop("__main__", None)
@@ -215,6 +248,14 @@ def main():
             R.end_mod()
         check("halfbaked:not_defined_yet" in P.pending_owners(),
               "実行途中は保留に積む: {}".format(P.pending_owners()))
+        # 持ち主がモジュール自身なので `resolve()` は葉が無くても通る。
+        # それを ready と読むと、見張りが5秒ごとに当て直して上限を使い切る。
+        check("halfbaked:not_defined_yet" not in P.owners_ready(),
+              "実行途中のあいだは ready にしない: {}".format(P.owners_ready()))
+        loading.not_defined_yet = lambda: None
+        check("halfbaked:not_defined_yet" not in P.owners_ready(),
+              "葉が生えても実行途中なら ready にしない（残りの定義を待つ）")
+        del loading.not_defined_yet
 
         # 走り終わったのに無ければ、それは本物の間違い。
         loading.__spec__._initializing = False
@@ -414,6 +455,20 @@ def main():
     numeric = Bare()
     numeric.text = 42
     check(F.text_of(numeric) is None, "文字列でない値は None")
+
+    # 「こちら側のフレーム」には `local/`（runtime の外）の MOD も入る。
+    # 入らないと `caller()` が local/ の MOD のフレームをゲーム側として出す。
+    root = os.path.dirname(F.RUNTIME_DIR)
+    local_file = os.path.join(root, "local", "950_local_mod", "m.py")
+    check(F.is_ours(local_file), "local/ の MOD はこちら側")
+    if os.sep == "\\":
+        check(F.is_ours(local_file.replace("\\", "/").upper()),
+              "Windows では区切りの向きと大文字小文字を問わない")
+    check(F.is_ours(os.path.join(F.RUNTIME_DIR, "mods", "x", "x.py")),
+          "runtime/ の MOD とローダはこちら側")
+    check(not F.is_ours(F.RUNTIME_DIR + "_old" + os.sep + "x.py"),
+          "名前が runtime で始まるだけの隣のフォルダは含めない")
+    check(not F.is_ours(os.path.join(root, "instantale.py")), "ゲーム側はこちら側ではない")
     check(isinstance(F.attr(Bare(), "text"), str),
           "（前提）`attr` の番人は文字列。だから `isinstance(str)` では弾けない")
 
@@ -616,6 +671,16 @@ def main():
         put("load_order.json", "{ this is not json")
         check(order_of(tmp_mods) == ["apple", "zebra"],
               "順序ファイルが壊れていても名前順で動く")
+        # 文字列でない記述が混ざっても全滅させない（set と突き合わせて TypeError になっていた）。
+        put_json("load_order.json", {"order": ["zebra", {"x": 1}, ["y"], 3, "apple"]})
+        try:
+            mixed = survey(tmp_mods)
+            check(mixed["order"] == ["zebra", "apple"],
+                  "文字列でない記述は飛ばし、残りの順は守る: {}".format(mixed["order"]))
+            check(any("文字列でない" in p for p in mixed["problems"]),
+                  "飛ばしたことは problems に出る: {}".format(mixed["problems"]))
+        except Exception as exc:
+            check(False, "文字列でない記述で discover が落ちた: {!r}".format(exc))
         put_json("load_order.json", {"order": ["zebra", "apple"]})
 
         # -- 手元だけの順序ファイル ---------------------------------------
@@ -1211,6 +1276,106 @@ def main():
     sys.modules.pop("totally_unrelated_lib", None)
     P.revert_all()
 
+    print("=== staticmethod / classmethod / 継承しただけのメソッド ===")
+    # `getattr` で引くとデスクリプタが外れる。素の関数として書き戻すと、
+    # staticmethod はインスタンス経由で self が混ざり、classmethod は cls が持ち主に固定される。
+    # 継承しただけの属性を「在った」と記録すると、戻すときにサブクラスへ写しが残る。
+    class Base(object):
+        @staticmethod
+        def sm(x):
+            return ("sm", x)
+
+        @classmethod
+        def cm(cls, x):
+            return (cls.__name__, x)
+
+        def method(self, x):
+            return ("method", x)
+
+    class Sub(Base):
+        pass
+
+    victim.Base, victim.Sub = Base, Sub
+    raw_sm, raw_cm = vars(Base)["sm"], vars(Base)["cm"]
+    P.set_generation("gen_descriptor")
+
+    @P.wrap("fakegame:Base.sm")
+    def wrapped_sm(orig, x):
+        return ("w",) + orig(x)
+
+    @P.wrap("fakegame:Base.cm")
+    def wrapped_cm(orig, cls, x):
+        return ("w",) + orig(cls, x)
+
+    @P.wrap("fakegame:Sub.method")
+    def wrapped_inherited(orig, self, x):
+        return ("w",) + orig(self, x)
+
+    check(Base.sm(1) == ("w", "sm", 1) and Base().sm(1) == ("w", "sm", 1),
+          "staticmethod はクラスからもインスタンスからも同じ引数で呼べる")
+    check(isinstance(vars(Base)["sm"], staticmethod), "staticmethod のまま差し込む")
+    check(Sub.cm(2) == ("w", "Sub", 2) and Sub().cm(2) == ("w", "Sub", 2),
+          "classmethod はサブクラスから呼ぶと cls がサブクラス: {}".format(Sub.cm(2)))
+    check(Base.cm(2) == ("w", "Base", 2), "持ち主から呼べば cls は持ち主")
+    check(Sub().method(3) == ("w", "method", 3) and Base().method(3) == ("method", 3),
+          "継承しただけのメソッドはサブクラスだけに効く")
+
+    # 次の世代が包み直しても層は1枚（デスクリプタ越しでも前の層を剥がせる）。
+    P.set_generation("gen_descriptor2")
+
+    @P.wrap("fakegame:Base.sm")
+    def wrapped_sm2(orig, x):
+        return ("w2",) + orig(x)
+
+    @P.wrap("fakegame:Base.cm")
+    def wrapped_cm2(orig, cls, x):
+        return ("w2",) + orig(cls, x)
+
+    check(Base().sm(4) == ("w2", "sm", 4), "staticmethod を包み直しても重ならない")
+    check(Sub.cm(4) == ("w2", "Sub", 4), "classmethod を包み直しても重ならない")
+
+    @P.patch("fakegame:Base.sm")
+    def replaced_sm(x):
+        return ("patched", x)
+
+    check(Base().sm(5) == ("patched", 5), "patch でも staticmethod のまま差し込む")
+    P.revert_all()
+    check(vars(Base)["sm"] is raw_sm and vars(Base)["cm"] is raw_cm,
+          "戻すと元のデスクリプタそのものが戻る")
+    check(Base().sm(6) == ("sm", 6) and Sub.cm(6) == ("Sub", 6), "戻した後も素のまま呼べる")
+    check("method" not in vars(Sub),
+          "継承しただけの属性は消して戻す（サブクラスに写しを残さない）")
+
+    print("=== 当て直されなかった層を剥がす（drop_stale_layers）===")
+    P.set_generation("gen_stale")
+
+    @P.wrap("fakegame:Base.sm")
+    def stale_sm(orig, x):
+        return ("stale",) + orig(x)
+
+    @P.patch("fakegame:brand_new", required=False)
+    def brand_new():
+        return "new"
+
+    legacy_target = victim.legacy = lambda x: ("legacy", x)
+
+    @P.wrap("fakegame:legacy")
+    def legacy_hook(orig, x):
+        return ("old-loader",) + orig(x)
+    delattr(victim.legacy, P.HOOK_MODULE_MARK)     # 印を付ける前の版が当てた層を模す
+
+    P.set_generation("gen_stale2")                 # 次の世代は何も当て直さない
+    dropped = P.drop_stale_layers()
+    check(vars(Base)["sm"] is raw_sm, "staticmethod は元のデスクリプタそのものへ戻す")
+    check(not hasattr(victim, "brand_new"), "前の世代が新設した名前は消す")
+    check(victim.legacy is not legacy_target and victim.legacy(1) == ("old-loader", "legacy", 1),
+          "持ち主の分からない（印の無い）層は残す")
+    check(sorted(dropped) == ["fakegame:Base.sm", "fakegame:brand_new"],
+          "剥がした対象を返す: {}".format(dropped))
+    reverted = P.revert_all()
+    check(reverted == 3 and victim.legacy is legacy_target,
+          "剥がした後の revert_all も失敗せず全部戻す: {}".format(reverted))
+
     print("=== 同梱 mod は全て名乗っている ===")
     mods_dir = os.path.join(_ROOT, "runtime", "mods")
     survey_result = survey(mods_dir)
@@ -1475,12 +1640,301 @@ def main():
     finally:
         shutil.rmtree(sandbox, ignore_errors=True)
 
+    test_reinjection()
+    test_main_thread_job()
+
     print()
     if _FAILS:
         print("{} 件失敗: {}".format(len(_FAILS), _FAILS))
         return 1
     print("全て通過")
     return 0
+
+
+_REINJECT_KEEP = '''
+def apply(ctx):
+    import sys
+    sys._instantale_test_events.append("keep")
+
+    @ctx.wrap("fakegame_reinject:keep")
+    def keep(orig, x):
+        return ("k",) + orig(x)
+'''
+
+_REINJECT_DROP = '''
+import os
+from instantale_modloader import durations, prices
+
+
+def apply(ctx):
+    owner = os.path.basename(ctx.mod_dir)
+
+    @ctx.wrap("fakegame_reinject:dropme")
+    def dropme(orig, x):
+        return ("d",) + orig(x)
+
+    durations.claim_days(owner, lambda app, days: 1)
+    durations.declare(durations.INN_STAY, lambda app: {"months": 9}, owner=owner)
+    prices.adjust(owner, lambda item, key, price: price)
+'''
+
+_REINJECT_BROKEN = '''
+def apply(ctx):
+    raise RuntimeError("intentional (this traceback is expected)")
+'''
+
+# 保存の関所（modnpc / modfacility / prices）を模す。フックの `__module__` で見分けられる。
+_REINJECT_GATE = '''
+def apply(ctx):
+    def saved(orig, x):
+        return ("gate",) + orig(x)
+    saved.__module__ = "instantale_modloader.modnpc"
+    ctx.wrap("fakegame_reinject:saved")(saved)
+'''
+
+_REINJECT_SLOW = '''
+def apply(ctx):
+    import sys
+    gate = sys._instantale_test_gate
+    sys._instantale_test_events.append("slow:start")
+
+    @ctx.wrap("fakegame_reinject:slow1")
+    def slow1(orig, x):
+        return ("s1",) + orig(x)
+
+    gate["entered"].set()
+    gate["release"].wait(10)
+
+    @ctx.wrap("fakegame_reinject:slow2")
+    def slow2(orig, x):
+        return ("s2",) + orig(x)
+
+    sys._instantale_test_events.append("slow:end")
+'''
+
+
+def test_reinjection():
+    """注入し直し・遅延当て直しの経路を、偽の MOD フォルダで boot() ごと通す。"""
+    import shutil
+    import tempfile
+    import threading
+    import time
+    from instantale_modloader import durations as D
+    from instantale_modloader import prices as PR
+
+    dist = tempfile.mkdtemp(prefix="instantale_reinject_")
+    mods = os.path.join(dist, "runtime", "mods")
+    out = os.path.join(dist, "out")
+
+    def put_mod(name, source):
+        folder = os.path.join(mods, name)
+        os.makedirs(folder, exist_ok=True)
+        with open(os.path.join(folder, "mod.json"), "w", encoding="utf-8") as fh:
+            json.dump({"entry": "m.py"}, fh)
+        with open(os.path.join(folder, "m.py"), "w", encoding="utf-8") as fh:
+            fh.write(source)
+
+    def put_order(order, disabled=()):
+        with open(os.path.join(mods, "load_order.json"), "w", encoding="utf-8") as fh:
+            json.dump({"order": order, "disabled": list(disabled)}, fh)
+
+    def keep(x):
+        return ("keep", x)
+
+    def dropme(x):
+        return ("drop", x)
+
+    def saved(x):
+        return ("saved", x)
+
+    game = types.ModuleType("fakegame_reinject")
+    game.keep, game.dropme, game.saved = keep, dropme, saved
+    game.slow1 = game.slow2 = lambda x: ("slow", x)
+    alias = types.ModuleType("fakegame_reinject.alias")   # `from x import dropme` の写し
+    alias.dropme = dropme
+    sys.modules["fakegame_reinject"] = game
+    sys.modules["fakegame_reinject.alias"] = alias
+    sys._instantale_test_events = []
+
+    real_mods_dir, real_discover = ml._mods_dir, ml.discover
+    ml._mods_dir = lambda: mods
+    saved_log = ml._state.get("log_path")
+    try:
+        print("=== 注入し直し: 切った MOD の前の世代を剥がす ===")
+        put_mod("100_keep", _REINJECT_KEEP)
+        put_mod("200_drop", _REINJECT_DROP)
+        put_mod("300_gate", _REINJECT_GATE)
+        put_order(["100_keep", "200_drop", "300_gate"])
+        first = ml.boot(out)
+        check(first == {"100_keep": "ok", "200_drop": "ok", "300_gate": "ok"},
+              "1回目は3本とも当たる: {}".format(first))
+        check(game.dropme(1) == ("d", "drop", 1) and alias.dropme is game.dropme,
+              "（前提）写しも含めて当たっている")
+        check("200_drop" in D.owners() and "200_drop" in PR.item_price_sources()[1],
+              "（前提）期間・日数・値段の登録簿に 200_drop が居る")
+
+        # 200_drop は今回 apply に失敗し、300_gate は切った。
+        put_mod("200_drop", _REINJECT_BROKEN)
+        put_order(["100_keep", "200_drop", "300_gate"], disabled=["300_gate"])
+        second = ml.boot(out)
+        check(second.get("200_drop") == "apply-error", "（前提）200_drop は apply-error")
+        check(game.dropme is dropme, "当て直されなかった前の世代の層は剥がれる")
+        check(alias.dropme is dropme, "  → 写し（複製束縛）も素に戻る")
+        check(game.dropme(1) == ("drop", 1), "  → 呼んでも前の世代のフックが走らない")
+        check(P.unwrap(game.keep)[1] == 1 and game.keep(1) == ("k", "keep", 1),
+              "当て直した対象は1枚のまま（剥がし過ぎない・重ねない）")
+        check(P.unwrap(game.saved)[1] == 1 and game.saved(1) == ("gate", "saved", 1),
+              "保存の関所は使う MOD を切っても残す（持ち物がセーブに焼き付かないように）")
+        check("200_drop" not in D.owners(),
+              "適用されなかった MOD の期間と日数の望みを外す: {}".format(D.owners()))
+        check(D.source_of(D.INN_STAY) == "", "  → 宿泊の期間はゲームの式に戻る")
+        check("200_drop" not in PR.item_price_sources()[1],
+              "  → 値段の段も一緒に外れる（prices の on_forget）")
+        check(P.active(), "剥がした後も記録は残る（unload で素に戻せる）")
+
+        print("=== 同時に走る boot（遅延当て直しの最中の再注入） ===")
+        # 1本目の apply の途中で2本目が始まると、世代と台帳を上書きし合って層が2段に重なる。
+        gate = {"entered": threading.Event(), "release": threading.Event()}
+        sys._instantale_test_gate = gate
+        put_mod("200_drop", _REINJECT_SLOW)
+        put_order(["100_keep", "200_drop"], disabled=["300_gate"])
+        del sys._instantale_test_events[:]
+        runs = []
+        first_boot = threading.Thread(target=lambda: runs.append(ml.boot(out)))
+        first_boot.start()
+        check(gate["entered"].wait(10), "（前提）1本目が apply の途中で止まっている")
+        second_boot = threading.Thread(target=lambda: runs.append(ml.boot(out)))
+        second_boot.start()
+        time.sleep(0.3)
+        check(sys._instantale_test_events == ["keep", "slow:start"],
+              "2本目は1本目が終わるまで始まらない: {}".format(sys._instantale_test_events))
+        gate["release"].set()
+        first_boot.join(20)
+        second_boot.join(20)
+        check(sys._instantale_test_events
+              == ["keep", "slow:start", "slow:end", "keep", "slow:start", "slow:end"],
+              "1本ずつ順に走る: {}".format(sys._instantale_test_events))
+        check(P.unwrap(game.slow1)[1] == 1 and P.unwrap(game.slow2)[1] == 1,
+              "層は1枚ずつ（重ならない）: {} / {}".format(
+                  P.unwrap(game.slow1)[1], P.unwrap(game.slow2)[1]))
+        check(game.slow2(1) == ("s2", "slow", 1), "  → 中身は1回だけ走る")
+
+        print("=== 遅延当て直しは錠を取った後で用済みかを確かめ直す ===")
+        saved_poll = ml.DEFERRED_POLL
+        ml.DEFERRED_POLL = 0.01
+        lock = ml._boot_lock()
+        lock.acquire()
+        boots_before = ml._state["boot_count"]
+        generation = ml._state["generation"]
+        watcher = threading.Thread(
+            target=ml._deferred_loop, args=(out, generation, ["fakegame_reinject"]))
+        try:
+            watcher.start()
+            time.sleep(0.2)                          # 見張りは錠の前で待っている
+            ml._state["generation"] = "a-manual-reinjection"   # その間に別の boot が済んだ
+        finally:
+            lock.release()
+            ml.DEFERRED_POLL = saved_poll
+        watcher.join(10)
+        check(not watcher.is_alive() and ml._state["boot_count"] == boots_before,
+              "錠を待つ間に別の boot が済んでいたら当て直さない")
+        ml._state["generation"] = generation
+
+        print("=== discover が落ちても boot は続く ===")
+
+        def broken_discover(*_a, **_kw):
+            raise TypeError("intentional (this traceback is expected)")
+
+        ml.discover = broken_discover
+        try:
+            empty = ml.boot(out)
+            check(empty == {}, "空の構成で続ける: {}".format(empty))
+            check(any("一覧を作れません" in line for line in ml._state["problems"]),
+                  "落ちたことは problems に出る")
+        except BaseException as exc:
+            check(False, "discover の例外が boot の外へ抜けた: {!r}".format(exc))
+        finally:
+            ml.discover = real_discover
+
+        print("=== unload: 期間の登録簿も空にする ===")
+        D.claim_days("999_leftover", lambda app, days: 1)
+        result = ml.unload(out)
+        check(game.keep is keep and game.slow1(1) == ("slow", 1),
+              "unload で全部素に戻る: {}".format(result))
+        check(game.saved is saved, "  → 関所も剥がす（unload は全部戻す）")
+        check(D.owners() == [], "日数の望みと期間の登録簿も空になる: {}".format(D.owners()))
+    finally:
+        ml._mods_dir, ml.discover = real_mods_dir, real_discover
+        ml._state["log_path"] = saved_log
+        for name in ("fakegame_reinject", "fakegame_reinject.alias", "instantale_mod_100_keep",
+                     "instantale_mod_200_drop", "instantale_mod_300_gate"):
+            sys.modules.pop(name, None)
+        for attr in ("_instantale_test_events", "_instantale_test_gate"):
+            if hasattr(sys, attr):
+                delattr(sys, attr)
+        P.revert_all()
+        shutil.rmtree(dist, ignore_errors=True)
+
+
+def test_main_thread_job():
+    """`unload` がゲームの状態を書き換える仕事は、メインスレッド（Clock）で走らせる。"""
+    import threading
+    import time
+    print("=== メインスレッドで走らせる（unload の NPC 降ろしと剥がし）===")
+    queue = []
+
+    class FakeClock(object):
+        @staticmethod
+        def schedule_once(fn, delay):
+            queue.append(fn)
+
+    clock_module = types.ModuleType("kivy.clock")
+    clock_module.Clock = FakeClock
+    saved_kivy = {name: sys.modules.get(name) for name in ("kivy", "kivy.clock")}
+    sys.modules["kivy"] = types.ModuleType("kivy")
+    sys.modules["kivy.clock"] = clock_module
+    try:
+        ran_on, result = [], []
+
+        def job():
+            ran_on.append(threading.current_thread())
+            return 7
+
+        worker = threading.Thread(
+            target=lambda: result.append(ml._run_on_main_thread(job, 10.0)))
+        worker.start()
+        deadline = time.monotonic() + 5
+        while not queue and time.monotonic() < deadline:
+            time.sleep(0.01)
+        check(bool(queue), "（前提）注入のスレッドは Clock に載せる")
+        if queue:
+            queue.pop()()                       # メインループが次のフレームで呼ぶ
+        worker.join(10)
+        check(ran_on == [threading.main_thread()] and result == [7],
+              "仕事はメインスレッドで走り、戻り値が注入のスレッドへ返る")
+
+        # メインループが止まっていたら、待ち切った後でその場で走らせる（1回だけ）。
+        del ran_on[:], result[:], queue[:]
+        worker = threading.Thread(
+            target=lambda: result.append(ml._run_on_main_thread(job, 0.2)))
+        worker.start()
+        worker.join(10)
+        check(len(ran_on) == 1 and ran_on[0] is not threading.main_thread()
+              and result == [7], "Clock が回らなければ待ち切ってからその場で走らせる")
+        for late in list(queue):
+            late()                              # 後から Clock が呼んでも
+        check(len(ran_on) == 1, "  → 2回は走らない: {}".format(len(ran_on)))
+
+        del ran_on[:], queue[:]
+        check(ml._run_on_main_thread(job, 10.0) == 7 and not queue
+              and ran_on == [threading.main_thread()],
+              "既にメインスレッドに居れば Clock に載せずにその場で走らせる")
+    finally:
+        for name, module in saved_kivy.items():
+            if module is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
 
 
 if __name__ == "__main__":

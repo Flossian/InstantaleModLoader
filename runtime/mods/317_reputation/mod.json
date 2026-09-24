@@ -10,7 +10,7 @@
     "en": "Builds a reputation for each land out of what the player actually did there - the deeds the game already writes into area_history, the wanted level, the quests finished, the days stayed - and hands it to the NPCs you talk to. First meetings start from 'I have heard of you'. The epithet is one per world and is only re-coined on qualitative shifts: the set of lands with a reputation changes, a wanted state flips, or total deeds double. Compilation runs in the background only when the material changes, so conversations are never slowed down. Nothing is written to the save; the compiled text lives in state/",
     "ja": "その土地で実際にやったことから土地ごとの評判を編み、会話する NPC に渡す。素材はゲーム自身が area_history に書いている成した事・手配度・完了した依頼・滞在日数で、この MOD が新しく記録を始めるものは無い。初対面の NPC が「噂は聞いている」から入る。二つ名は世界に1つで、評判の立つ土地の増減・手配の反転・行いの倍増という質的な変化のときだけ編み直す。編纂は素材が変わったときだけ別スレッドで LLM を回すので、会話は遅くならない。セーブには書かず、編纂した文は state\\ に置く"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "settings": {
     "IN_CONVERSATION": {

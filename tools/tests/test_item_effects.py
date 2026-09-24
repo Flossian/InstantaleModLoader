@@ -365,6 +365,20 @@ check("herb keys in order",
       list(herb.attributes) == ["item_detail", "HP増減", "スタミナ増減", "疲労負荷", "買価"],
       list(herb.attributes))
 
+# ---------------------------------------------------------------- 乱数
+print("[乱数]")
+# 生成のフックは rng を渡さない。ゲームと共有の `random` を1つも進めず、MOD 専用の RNG から引く。
+generated = ctx.hooks["__main__:InstantaleApp.generate_item_from_item_data"]
+random.seed(99)
+shared_before = random.getstate()
+own_before = module.healing.RNG.getstate()
+for detail in ("food", "medicine", "potion", "plant"):
+    made = generated(lambda self, *a, **k: Item("生成品", detail, value=40, obtainer=player), app)
+    if not module.is_reworked(made.attributes):
+        check("generated {} reworked".format(detail), False, made.attributes)
+check("generation leaves the shared random untouched", random.getstate() == shared_before)
+check("generation draws from the MOD's own RNG", module.healing.RNG.getstate() != own_before)
+
 # 触らない
 print("[触らない]")
 scroll = Item("巻物", "scroll", item_type="consumable", obtainer=player)

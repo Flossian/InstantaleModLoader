@@ -66,6 +66,36 @@ import instantale_modloader as ml                        # noqa: E402
 user32 = ctypes.WinDLL("user32", use_last_error=True)
 gdi32 = ctypes.WinDLL("gdi32", use_last_error=True)
 
+# ハンドルを扱う API には型を明示する（`injector.py` と同じ決まり）。
+# 書かないと ctypes はハンドルを 32bit の C int として受け渡し、64bit の値を黙って切り詰める。
+_WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+for _fn, _args, _res in (
+        (user32.GetWindowRect, [wintypes.HWND, ctypes.POINTER(wintypes.RECT)], wintypes.BOOL),
+        (user32.GetWindowDC, [wintypes.HWND], wintypes.HDC),
+        (user32.ReleaseDC, [wintypes.HWND, wintypes.HDC], ctypes.c_int),
+        (user32.PrintWindow, [wintypes.HWND, wintypes.HDC, wintypes.UINT], wintypes.BOOL),
+        (user32.GetWindowThreadProcessId, [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)],
+         wintypes.DWORD),
+        (user32.IsWindowVisible, [wintypes.HWND], wintypes.BOOL),
+        (user32.GetWindowTextLengthW, [wintypes.HWND], ctypes.c_int),
+        (user32.GetWindowTextW, [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int], ctypes.c_int),
+        (user32.EnumWindows, [_WNDENUMPROC, wintypes.LPARAM], wintypes.BOOL),
+        (user32.PostMessageW, [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM],
+         wintypes.BOOL),
+        (user32.ShowWindow, [wintypes.HWND, ctypes.c_int], wintypes.BOOL),
+        (gdi32.CreateCompatibleDC, [wintypes.HDC], wintypes.HDC),
+        (gdi32.CreateCompatibleBitmap, [wintypes.HDC, ctypes.c_int, ctypes.c_int],
+         wintypes.HBITMAP),
+        (gdi32.SelectObject, [wintypes.HDC, wintypes.HGDIOBJ], wintypes.HGDIOBJ),
+        (gdi32.BitBlt, [wintypes.HDC, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                        wintypes.HDC, ctypes.c_int, ctypes.c_int, wintypes.DWORD], wintypes.BOOL),
+        (gdi32.GetDIBits, [wintypes.HDC, wintypes.HBITMAP, wintypes.UINT, wintypes.UINT,
+                           ctypes.c_void_p, ctypes.c_void_p, wintypes.UINT], ctypes.c_int),
+        (gdi32.DeleteObject, [wintypes.HGDIOBJ], wintypes.BOOL),
+        (gdi32.DeleteDC, [wintypes.HDC], wintypes.BOOL)):
+    _fn.argtypes = _args
+    _fn.restype = _res
+
 PW_RENDERFULLCONTENT = 2
 DIB_RGB_COLORS = 0
 BI_RGB = 0
@@ -169,7 +199,7 @@ def visible_windows(pid):
     """その pid が持つ、題名のある見えているトップレベル窓の `[(hwnd, 題名)]`。"""
     found = []
 
-    @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    @_WNDENUMPROC
     def each(hwnd, _param):
         owner = wintypes.DWORD()
         user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))

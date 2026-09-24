@@ -646,6 +646,33 @@ def run():
 
     check("握り潰した例外が無い", not ctx.errors, "\n".join(ctx.errors[:2]))
 
+    # -- Clock の中の例外 ----------------------------------------------------
+    print("\n[例外] 次のフレームの当て直しで投げても、ゲームへ漏らさない")
+    install(mod, ctx)
+    hud = FakeHUD()
+    hud.toggle_craft_inventory_visibility()      # フックが Clock へ積む
+    real_frames = mod.frames
+
+    class BrokenFrames(object):
+        MISSING = real_frames.MISSING
+
+        @staticmethod
+        def attr(*args, **kwargs):
+            raise RuntimeError("boom")
+
+    mod.frames = BrokenFrames
+    try:
+        hud.settle()
+        leaked = None
+    except Exception as exc:
+        leaked = exc
+    finally:
+        mod.frames = real_frames
+    check("Clock の外へ例外が出ない", leaked is None, repr(leaked))
+    check("失敗は記録に残す", any("delayed fit failed" in text for text in ctx.errors),
+          "\n".join(ctx.errors[:1]))
+    del ctx.errors[:]
+
     print()
     if failures:
         print("FAILED: " + ", ".join(failures))

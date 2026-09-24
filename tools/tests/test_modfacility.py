@@ -11,7 +11,8 @@
   控える … 建てた・壊した・素データの写しが世界ごとの控えに残る
   戻す   … 読み直しで控えから建ち直り、接続も張り直る
   隠す   … 保存の間だけ立ち位置が入口へ移り、選択肢も一緒に置かれる
-  掃除   … MOD の施設を指す選択肢が保存の間だけ外れ、後で戻る
+  掃除   … MOD の施設を指す選択肢が保存の間だけ外れ、後で戻る（途中で投げても戻る）
+  写し   … `plain=True` の写しは保存の間、反復からは消えて id では引ける
   救済   … 街に無い施設を指すセーブが入口へ直る（そのままではロードで落ちる）
   出口   … 選択肢が1つも無い画面でも出る（無いと建物から出られない）
   道     … 繋ぎ先に立つと建物への道が出る。ゲームが既に出していれば足さない
@@ -300,6 +301,26 @@ def main():
     ok &= check("ゲームのボタンは残る", len(app2.buttons) == 1)
     modfacility.restore(app2, hidden)
     ok &= check("保存の後に戻る", len(app2.buttons) == 2)
+
+    print("掃除: hide が途中で投げても、そこまでに外した選択肢は戻る")
+    real_veil = modfacility.veil_plain
+
+    def broken_veil(*args, **kwargs):
+        raise RuntimeError("写しを隠す途中の失敗")
+
+    modfacility.veil_plain = broken_veil
+    partial = {}
+    try:
+        try:
+            modfacility.hide(app2, screen=screen, into=partial)
+        except RuntimeError:
+            pass
+    finally:
+        modfacility.veil_plain = real_veil
+    ok &= check("投げる前に外したボタンは控えに積まれている",
+                len(app2.buttons) == 1 and partial.get("scrubbed"))
+    modfacility.restore(app2, partial)
+    ok &= check("途中までの控えで選択肢が戻る", len(app2.buttons) == 2)
 
     print("救済: 街に無い施設を指すセーブは入口へ直る")
     save_data = {"player_data": {"location": "mod:915_invest:gone",
@@ -643,7 +664,15 @@ def main():
     modfacility.maintain_buttons(app2, screen=screen)
     ok &= check("塗り直しても同じ写しのまま", stores[0][pid] is plain)
     hidden = modfacility.hide(app2, screen=screen)
-    ok &= check("保存の間は外れる", all(pid not in s for s in stores))
+    veiled = [holder["areas"]["1"]["nodes"]["10"]["facilities"]
+              for holder in (app2.save_data_dict, app2.world_dict)]
+    ok &= check("保存の間は反復と複製から消える",
+                all(pid not in list(v) and pid not in dict(v)
+                    and json.dumps(v) == "{}" for v in veiled))
+    # 保存は別スレッドで、その間もゲームは施設 id で素データを引く（売買・闘技場）。
+    # 外すと `KeyError` でワーカースレッドが死ぬ（`install_plain` の注記）。
+    ok &= check("保存の間も id では引ける",
+                all(v[pid] is plain and v.get(pid) is plain and pid in v for v in veiled))
     logged = []
     modfacility.snapshot_all(app2, write=logged.append)
     entry = modfacility._persisted_entry(app2, "915_invest", pid)
@@ -662,7 +691,11 @@ def main():
     ok &= check("同じ内容なら二度は書かない", not any("not jsonable" in line for line in logged))
     del plain["config"]["runtime_only"]
     modfacility.restore(app2, hidden)
-    ok &= check("保存の後は戻る", all(s.get(pid) is plain for s in stores))
+    ok &= check("保存の後は戻る", all(s.get(pid) is plain for s in stores)
+                and [holder["areas"]["1"]["nodes"]["10"]["facilities"]
+                     for holder in (app2.save_data_dict, app2.world_dict)] == stores
+                and all(type(holder["areas"]["1"]["nodes"]["10"]["facilities"]) is dict
+                        for holder in (app2.save_data_dict, app2.world_dict)))
     ok &= check("plain を名乗らない建物は写らない", all(fid not in s for s in stores))
     data = {"areas": app2.save_data_dict["areas"], "npcs": {}}
     cleaned, dropped = modfacility.strip_plain_from(data)

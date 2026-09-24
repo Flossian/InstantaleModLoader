@@ -44,6 +44,7 @@ import io
 import json
 import os
 import sys
+import threading
 
 MOD_DIR = os.path.dirname(os.path.abspath(__file__))
 if MOD_DIR not in sys.path:
@@ -432,7 +433,14 @@ def build_window(rules_in=None, settings_in=None, note=""):
             messagebox.showinfo("置き場", "エクスプローラで開けませんでした。\n" + path)
         refresh_assets()
 
+    # ダウンロード（約10MB、待ちは最大120秒）は別スレッドで回す。Tk のメインスレッドで
+    # 待つと、その間は画面が応答しない。Tk は他のスレッドから触れないので、
+    # 終わったかは画面の側が `after` で見に行き、結果の表示はメインスレッドで出す。
+    fetch_buttons = []
+
     def fetch(family, kind):
+        if any(button.instate(["disabled"]) for button in fetch_buttons):
+            return
         entry = assets.DOWNLOADS[(family, kind)]
         dest_dir = assets.dir_of(state_dir, family, kind)
         dest = os.path.join(dest_dir, entry["name"])
@@ -443,26 +451,47 @@ def build_window(rules_in=None, settings_in=None, note=""):
                     entry["about"], entry["url"], dest_dir)):
             return
         assets.ensure_dirs(state_dir)
-        ok, message = assets.download(entry["url"], dest)
-        refresh_assets()
-        if not ok:
-            messagebox.showerror(
-                entry["label"],
-                message + chr(10) * 2 + "手で入れる場合は次の手順です。" + chr(10)
-                + assets.manual_steps(entry, dest_dir))
-            return
-        if kind == "taesd" and "TAESD_PATH" in entries:
-            entries["TAESD_PATH"].set(dest)          # 指す先も埋めておく
-        messagebox.showinfo(entry["label"], message)
+        result = {}
+
+        def work():
+            try:
+                result["done"] = assets.download(entry["url"], dest)
+            except Exception as exc:              # スレッドで投げると誰も拾わない
+                result["done"] = (False, "ダウンロードできませんでした: {}".format(exc))
+
+        def finish():
+            if "done" not in result:
+                assets_note.after(200, finish)
+                return
+            for button in fetch_buttons:
+                button.state(["!disabled"])
+            ok, message = result["done"]
+            refresh_assets()
+            if not ok:
+                messagebox.showerror(
+                    entry["label"],
+                    message + chr(10) * 2 + "手で入れる場合は次の手順です。" + chr(10)
+                    + assets.manual_steps(entry, dest_dir))
+                return
+            if kind == "taesd" and "TAESD_PATH" in entries:
+                entries["TAESD_PATH"].set(dest)          # 指す先も埋めておく
+            messagebox.showinfo(entry["label"], message)
+
+        for button in fetch_buttons:
+            button.state(["disabled"])
+        assets_note.configure(text="{} をダウンロードしています…".format(entry["label"]))
+        threading.Thread(target=work, name="916 download", daemon=True).start()
+        assets_note.after(200, finish)
 
     row = ttk.Frame(box)
     row.pack(anchor="w", pady=(8, 0))
     ttk.Button(row, text="置き場を開く", command=open_dir).pack(side="left")
     for family, kind in (("sdxl", "taesd"), ("sd15", "taesd")):
         entry = assets.DOWNLOADS[(family, kind)]
-        ttk.Button(row, text=entry["label"] + " をダウンロード",
-                   command=lambda f=family, k=kind: fetch(f, k)).pack(side="left",
-                                                                     padx=(8, 0))
+        button = ttk.Button(row, text=entry["label"] + " をダウンロード",
+                            command=lambda f=family, k=kind: fetch(f, k))
+        button.pack(side="left", padx=(8, 0))
+        fetch_buttons.append(button)
 
     box = group(tab, "プリセット（元 MOD のモード切替）")
     ttk.Label(box, style="Faint.TLabel", wraplength=740, justify="left",

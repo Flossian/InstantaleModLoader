@@ -235,10 +235,16 @@ class _ImportObserver(object):
 
     自分では読み込まない。
     他の finder に spec を作らせて、その `loader` だけを1件ぶん包む。
+
+    外すのは次の apply() だけなので、916 を切って注入し直しても残る。
+    `stale()` が真になった後は何も包まずに素通しする（名前が合うモジュールは数百あり、
+    用済みの観測者がそのローダを包み続けないため）。
+    `find_spec` の中で `sys.meta_path` から自分を抜くと、走査中の一覧がずれて次の finder が飛ばされる。
     """
 
-    def __init__(self, after):
+    def __init__(self, after, stale=None):
         self._after = after
+        self._stale = stale
         self._busy = threading.local()
         setattr(self, OBSERVER_MARK, True)
 
@@ -251,6 +257,8 @@ class _ImportObserver(object):
     def find_spec(self, name, path=None, target=None):
         # 投げるとゲームの import ごと落ちる。何があっても None に落とす。
         try:
+            if self._stale is not None and self._stale():
+                return None
             return self._find(name, path, target)
         except Exception:
             return None
@@ -756,7 +764,8 @@ def apply(ctx):
     def install_observer():
         kept = [f for f in sys.meta_path
                 if frames.attr(f, OBSERVER_MARK, None) is None]
-        sys.meta_path[:] = [_ImportObserver(on_import_done)] + kept
+        observer = _ImportObserver(on_import_done, stale=lambda: ctx.superseded())
+        sys.meta_path[:] = [observer] + kept
 
     install_observer()
     attach()

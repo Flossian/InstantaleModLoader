@@ -24,6 +24,7 @@ import io
 import json
 import os
 import sys
+import tempfile
 import time
 import types
 
@@ -359,7 +360,8 @@ def install(hooks, cls):
         setattr(cls, name, make())
 
 
-OUT_DIR = os.path.join(os.environ.get("TEMP", HERE), "instantale_test_quest_keep")
+# `TEMP` の無い環境（Linux の CI など）でもリポジトリの中に作らない。
+OUT_DIR = os.path.join(tempfile.gettempdir(), "instantale_test_quest_keep")
 LOG_PATH = os.path.join(OUT_DIR, "party_leave.log")
 
 

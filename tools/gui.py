@@ -88,6 +88,8 @@ CONFIG_PATH = os.path.join(SETTINGS_DIR, "gui.json")
 # 更新の確認先。起動のたびに別スレッドで1回だけ見る（`App._check_update`）。
 RELEASE_API = ("https://api.github.com/repos/Flossian/InstantaleModLoader"
                "/releases/latest")
+# 更新の zip を落とすときの、1回の読みを待つ上限（秒）。全体の所要時間の上限ではない。
+UPDATE_TIMEOUT = 30
 # 上書きで消えないもの。確認の文に出す（zip に入らないので展開は触らない）。
 UPDATE_KEEPS = ("settings\\・state\\・local\\・手元で足した MOD\n"
                 "（書き換えた *.default.txt / *.default.json は "
@@ -180,12 +182,17 @@ def extract_release(zip_path: str, dest: str = ROOT) -> int:
     （2026-09-05 に実際に起きた。git で戻せるが、戻す前に何を失ったか見ること）。
     """
     count = 0
+    # 書き先は絶対パスにして dest の中かを確かめる（`install_from_zip` と同じ）。
+    # `..` を見るだけでは、Windows でドライブ名（`C:`）や `\` を含む名前が dest の外を指す。
+    base = os.path.abspath(dest)
     with zipfile.ZipFile(zip_path) as z:
         for info in z.infolist():
             parts = info.filename.split("/")[1:]
             if info.is_dir() or not parts or ".." in parts:
                 continue
-            path = os.path.join(dest, *parts)
+            path = os.path.abspath(os.path.join(base, *parts))
+            if not path.startswith(base + os.sep):
+                continue
             os.makedirs(os.path.dirname(path), exist_ok=True)
             keep_edited_default(path)
             with z.open(info) as src, open(path, "wb") as dst:
@@ -822,6 +829,10 @@ def install_from_zip(zip_path: str) -> list[str]:
         if not roots:
             raise ValueError("{} が見つかりません（MOD の zip ファイルではありません）".format(
                 ml.MANIFEST_NAME))
+        # 別の mod のフォルダの中にある mod.json は、その mod の中身として一緒に写す。
+        # 独立した mod として mods/ 直下へもう1つ置くと、同じものが2回読み込まれる。
+        roots = {r for r in roots
+                 if not any(o != r and (o == "" or r.startswith(o + "/")) for o in roots)}
 
         installed = []
         for root in sorted(roots):
@@ -1205,7 +1216,9 @@ class App(ttk.Frame):
         self.drag: str | None = None      # ドラッグ中の mod のフォルダ名
         self.dirty = False
         self.busy = False
-        self.update: tuple[str, str] | None = None   # 新しい版（版, full zip の URL）
+        # 新しい版（版, full zip の URL）。
+        # `update` と名付けると tkinter の `Misc.update()` を覆うので別の名前にする。
+        self.available_update: tuple[str, str] | None = None
         self._status_text = ""            # 状態表示に今出ている文言
         self.shown_count = 0              # 絞り込みの結果、一覧に出ている数
         # デバッグモード。
@@ -1690,7 +1703,7 @@ class App(ttk.Frame):
         ("<Control-o>", "add_mod"),
         ("<Control-s>", "save"),
         ("<Control-f>", "focus_search"),
-        ("<F5>", "reload"),
+        ("<F5>", "reload_from_disk"),
         ("<F9>", "launch"),
     )
 
@@ -1703,7 +1716,8 @@ class App(ttk.Frame):
                            command=self.add_mod)
         m_file.add_separator()
         m_file.add_command(label="保存", accelerator="Ctrl+S", command=self.save)
-        m_file.add_command(label="再読み込み", accelerator="F5", command=self.reload)
+        m_file.add_command(label="再読み込み", accelerator="F5",
+                           command=self.reload_from_disk)
         m_file.add_separator()
         m_file.add_command(label="ゲームの場所を設定…", command=self.choose_game)
         m_file.add_separator()
@@ -1830,24 +1844,34 @@ class App(ttk.Frame):
         self.save_btn.state(["!disabled"] if self.dirty else ["disabled"])
 
     # -- 一覧 --------------------------------------------------------------
-    def reload(self) -> None:
-        found = read_mods()
-        self.mods = found["mods"]
-        self.disabled = found["disabled"]
-        self.problems = found["problems"]
-        # 一覧を作り直すたびに読み直す。
-        # GUI を開いたまま `settings/loader.json` を手で書き換えた場合にも、
-        # F5 で追いつけるようにしておく。
-        self.debug_mode = found["debug_mode"]
-        self.debug_var.set(self.debug_mode)
+    def reload(self, keep_edits: bool = False) -> None:
+        """ディスクから読み直して一覧を作り直す。
+
+        `keep_edits` は注入の後の追従（`_finish` / `_reload_while_deferred`）が使う。
+        未保存の並び替えや有効/無効があるときは、一覧をディスクから作り直さず、
+        結果（status.json）と設定だけを読み直す。
+        追従は 10 秒ごとに 2 分ほど続くので、作り直すとその間の編集が黙って消える。
+        人が押す再読み込みと MOD の追加は、先に `_settle_unsaved` で聞いてからここを呼ぶ。
+        """
+        if not (keep_edits and self.dirty):
+            found = read_mods()
+            self.mods = found["mods"]
+            self.disabled = found["disabled"]
+            self.problems = found["problems"]
+            # 一覧を作り直すたびに読み直す。
+            # GUI を開いたまま `settings/loader.json` を手で書き換えた場合にも、
+            # F5 で追いつけるようにしておく。
+            self.debug_mode = found["debug_mode"]
+            self.debug_var.set(self.debug_mode)
+            self.dirty = False
         # 世代管理は logrotate に聞く。
         # **GUI で覚えない**のが要点で、環境変数や logrotate.py の既定値でも変わるため、
         # こちらで持つと実際と食い違う。
         self.log_rotate_var.set(logrotate.enabled())
         self.settings = C.load_store(RUNTIME_DIR)
         self.status = read_status()
-        self.dirty = False
-        self._refresh()
+        selected = self.tree.selection()
+        self._refresh(keep=selected[0] if selected else None)
         self._update_actions()
 
         known, off = len(self._known_mods()), len(self._off_known())
@@ -1866,8 +1890,35 @@ class App(ttk.Frame):
         skipped = (self.status.get("patches") or {}).get("skipped") or []
         if skipped:
             msg += " ｜ この実行では通らない経路のフック {} 件".format(len(skipped))
+        if self.dirty:
+            msg += " ｜ 順序と有効/無効の変更は未保存"
         self._set_status(msg)
         self._show_warnings()
+
+    def reload_from_disk(self) -> None:
+        """F5 とメニューの「再読み込み」。未保存の編集があれば先に聞く。"""
+        if self._settle_unsaved("読み直します"):
+            self.reload()
+
+    def _settle_unsaved(self, doing: str) -> bool:
+        """未保存の並び替えや有効/無効があれば、保存するか捨てるかを聞く。
+
+        続けてよければ True。
+        「キャンセル」と、保存に失敗したときは False で、呼ぶ側は何もしない。
+        一覧を作り直す操作（再読み込み・MOD の追加）と、窓を閉じる操作の前に呼ぶ。
+        """
+        if not self.dirty:
+            return True
+        answer = messagebox.askyesnocancel(
+            "未保存の変更",
+            "順序と有効/無効の変更が未保存です。保存してから{}か？\n"
+            "「いいえ」を選ぶと、変更は失われます。".format(doing))
+        if answer is None:
+            return False
+        if answer:
+            self.save()
+            return not self.dirty
+        return True
 
     def _show_warnings(self) -> None:
         lines = list(self.problems)
@@ -2349,9 +2400,10 @@ class App(ttk.Frame):
         if dialog.result is None:
             return          # キャンセル
 
-        store = C.load_store(RUNTIME_DIR)
-        store[mod["dir"]] = dialog.result
         try:
+            # 読めないファイルを `{}` として扱うと、1件足して書いた時点で他の MOD の設定が消える。
+            store = C.load_store_for_write(RUNTIME_DIR)
+            store[mod["dir"]] = dialog.result
             C.save_store(RUNTIME_DIR, store)
         except Exception as exc:
             messagebox.showerror("保存に失敗しました", f"{type(exc).__name__}: {exc}")
@@ -2366,6 +2418,10 @@ class App(ttk.Frame):
 
     # -- mod の追加とフォルダ ------------------------------------------------
     def add_mod(self) -> None:
+        # 追加の後は一覧を読み直して順序を書き戻すので、未保存の編集はその前に片付ける
+        # （黙って読み直すと、捨てた編集の上にディスクの内容を書き戻すことになる）。
+        if not self._settle_unsaved("追加します"):
+            return
         path = filedialog.askopenfilename(
             title="MOD の zip ファイルを選択（フォルダから追加する場合はキャンセル）",
             filetypes=[("zip", "*.zip"), ("すべて", "*.*")])
@@ -2557,9 +2613,14 @@ class App(ttk.Frame):
 
             report(f"pid {pid}: 注入中…")
             injector.rotate_logs(None, log=report)
-            ok = watcher.inject_pid(pid)
-            if ok:
+            result = watcher.inject_pid(pid)
+            if result == watcher.INJECTED:
                 self.events.put(("done", f"pid {pid} に注入しました"))
+            elif result == watcher.PENDING:
+                # 失敗ではない。ゲームが処理中で GIL が空くのを待っているだけで、後から完走する。
+                # 結果は status.json の追従（`_reload_while_deferred`）で拾う。
+                self.events.put(("pending", f"pid {pid}: 注入の完了待ちです"
+                                            "（ゲームが処理中のため。手が空けば自動で完了します）"))
             else:
                 self.events.put(("error", f"pid {pid}: 注入に失敗しました"
                                           "（out/bootstrap.log を確認してください）"))
@@ -2575,6 +2636,9 @@ class App(ttk.Frame):
             rc = injector.inject(pid, payload)
             if rc == 0:
                 self.events.put(("done", f"pid {pid}: MOD を外しました"))
+            elif rc == injector.INJECT_PENDING:
+                self.events.put(("pending", f"pid {pid}: 解除の完了待ちです"
+                                            "（ゲームが処理中のため。手が空けば自動で完了します）"))
             else:
                 self.events.put(("error", f"pid {pid}: 解除に失敗しました"
                                           f"（PyRun_SimpleString が {rc}）"))
@@ -2589,6 +2653,9 @@ class App(ttk.Frame):
                     self._set_status(msg)
                 elif kind == "done":
                     self._finish(msg, reload=True)
+                elif kind == "pending":
+                    self._finish(msg, reload=True)
+                    messagebox.showinfo("注入の完了待ち", msg)
                 elif kind == "error":
                     self._finish(msg)
                     messagebox.showerror("エラー", msg)
@@ -2608,7 +2675,7 @@ class App(ttk.Frame):
         if reload:
             # 結果（status.json）はローダが書き出す。
             # 少し待ってから読む ―注入が返った直後はまだ boot の途中のことがある。
-            self.after(1500, self.reload)
+            self.after(1500, lambda: self.reload(keep_edits=True))
             # 1.5 秒では足りないことがある。
             # ゲームの起動直後に注入すると、モジュールが出揃って段階適用が終わるまで実測で 80 秒ほどかかり、その間の
             # status.json は「対象が見つからない」が並んだ途中経過になる。
@@ -2629,7 +2696,7 @@ class App(ttk.Frame):
     def _reload_while_deferred(self, remaining: int | None = None) -> None:
         if remaining is None:
             remaining = self._SETTLE_CHECKS
-        self.reload()          # 状態表示は reload が書く。続きはその後ろに足す
+        self.reload(keep_edits=True)   # 状態表示は reload が書く。続きはその後ろに足す
         patches = self.status.get("patches") or {}
         waiting = patches.get("deferred") or []
         if waiting and remaining > 0:
@@ -2664,13 +2731,13 @@ class App(ttk.Frame):
         except Exception:
             return
         if found:
-            self.update = found
+            self.available_update = found
             self.events.put(("update", found[0]))
 
     def _update(self) -> None:
-        if self.busy or not self.update:
+        if self.busy or not self.available_update:
             return
-        ver, url = self.update
+        ver, url = self.available_update
         if not messagebox.askokcancel(
                 "更新",
                 "v{} をダウンロードしてこのフォルダへ上書きし、\n"
@@ -2693,7 +2760,11 @@ class App(ttk.Frame):
         try:
             self.events.put(("status", "ダウンロード中…"))
             os.makedirs(OUT_DIR, exist_ok=True)
-            urllib.request.urlretrieve(url, path)
+            # 待ちには上限を付ける（`urlretrieve` には無い）。
+            # 通信が止まったまま戻らないと `busy` が落ちず、起動ボタンが押せないまま残る。
+            with urllib.request.urlopen(url, timeout=UPDATE_TIMEOUT) as r, \
+                    open(path, "wb") as f:
+                shutil.copyfileobj(r, f)
             self.events.put(("status", "展開中…"))
             extract_release(path)
             os.remove(path)
@@ -2703,10 +2774,19 @@ class App(ttk.Frame):
         self.events.put(("restart", ""))
 
     def _restart(self) -> None:
+        # 未保存の確認はしない。
+        # ディスクは新しい版に置き換わった後で、手元の一覧は古い版のものなので、
+        # ここで保存すると新しい版の順序ファイルを古い並びで上書きする。
         subprocess.Popen([sys.executable, os.path.abspath(__file__)], cwd=ROOT)
-        self._on_close()
+        self._close()
 
     def _on_close(self) -> None:
+        """窓の ×・メニューの「終了」。未保存の編集があれば先に聞く。"""
+        if not self._settle_unsaved("閉じます"):
+            return
+        self._close()
+
+    def _close(self) -> None:
         master = self.winfo_toplevel()
         update_config(window=self.geom,
                       window_maximized=(master.state() == "zoomed"),

@@ -83,7 +83,6 @@ HP は**最大 HP に対する割合**で書く（`回復: 25%`）。
 `update_ability_scores` の関係）が測れていないので、この版では状態異常の解除だけ。
 """
 
-import random
 import sys
 import threading
 
@@ -167,8 +166,11 @@ def rules_of():
     }
 
 
-def rework(item, why="", rng=random):
-    """品1つを作り直す。書いた効果の辞書か、何もしなければ False（記録は呼ぶ側）。"""
+def rework(item, why="", rng=None):
+    """品1つを作り直す。書いた効果の辞書か、何もしなければ False（記録は呼ぶ側）。
+
+    `rng` を省くと `healing.RNG`（MOD 専用の乱数）から引く。
+    """
     return healing.rework(item, rules_of(), labels_of(), rng)
 
 
@@ -220,7 +222,7 @@ def apply(ctx):
     active = {}
 
     # ---- 品を作り直す --------------------------------------------------
-    def rework_one(item, why, rng=random):
+    def rework_one(item, why, rng=None):
         effects = rework(item, why, rng)
         if effects:
             store["reworked"] += 1

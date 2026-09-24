@@ -358,7 +358,13 @@ def apply(ctx):
             self.action = action
 
         def execute(self, choice_text):
-            return dispatch(self.app, self.action, choice_text)
+            # ゲームの別スレッドで走る。例外をゲームの側へ抜けさせない
+            # （`307_` の `RoadPhase` と同じ受け方）。
+            try:
+                return dispatch(self.app, self.action, choice_text)
+            except Exception:
+                ctx.log_exc("quest offer: phase {!r} failed".format(self.action))
+                return None
 
     def start_phase(app, action, choice_text):
         """ゲームの経路で自前のフェーズを起こす。使えなければ直接やる。"""
@@ -837,18 +843,14 @@ def apply(ctx):
         # 会話中に押されたのか（＝生成が終わっても会話に戻る）を控える。
         in_conversation = bool(getattr(app, "in_conversation", False))
 
-        state["generating"] = True
         # 人物像はここで読んでおく。
         # 生成のフックは `execute` の別スレッドで走るので、
         # ゲームの状態（`world_key`）を触るのはこちら側に寄せる。
+        persona = npc_memory(app, npc_id_at_start)
+        state["generating"] = True
         state["inject"] = {"transcript": transcript, "npc_name": npc_name,
-                           "persona": npc_memory(app, npc_id_at_start)}
+                           "persona": persona}
         state["inject_at"] = time.monotonic()
-        show_busy(app)
-        say(app, "――話を整理して、依頼として書き起こしている……")
-        write("=" * 78)
-        write("generate: npc={!r} transcript={} chars in_conversation={!r}".format(
-            npc_name, len(transcript), in_conversation))
 
         def finish(quest_id):
             state["generating"] = False
@@ -887,21 +889,38 @@ def apply(ctx):
             schedule(app, lambda: (say(app, "「{}」の話がまとまった。".format(title)),
                                    open_quest_board(app, OFFER_LABEL)))
 
-        started = time.monotonic()
-        before = set(quest_ids(app))
+        settled = False
         try:
-            display_cls(app).generate_random_quest()
-        except Exception:
-            ctx.log_exc("quest offer: generate_random_quest failed")
-            finish(None)
-            return
-        # 数として並べる。
-        # 素の sorted は辞書順なので "10" < "9" になり、
-        # 1回の生成で複数増えた回だけ「いちばん新しい id」を取り違える。
-        added = sorted(set(quest_ids(app)) - before, key=ui.id_sort_key)
-        write("generate: took {:.1f}s; new quest ids={}".format(
-            time.monotonic() - started, added))
-        finish(added[-1] if added else None)
+            show_busy(app)
+            say(app, "――話を整理して、依頼として書き起こしている……")
+            write("=" * 78)
+            write("generate: npc={!r} transcript={} chars in_conversation={!r}".format(
+                npc_name, len(transcript), in_conversation))
+            started = time.monotonic()
+            before = set(quest_ids(app))
+            try:
+                display_cls(app).generate_random_quest()
+            except Exception:
+                ctx.log_exc("quest offer: generate_random_quest failed")
+                added = []
+            else:
+                # 数として並べる。
+                # 素の sorted は辞書順なので "10" < "9" になり、
+                # 1回の生成で複数増えた回だけ「いちばん新しい id」を取り違える。
+                added = sorted(set(quest_ids(app)) - before, key=ui.id_sort_key)
+                write("generate: took {:.1f}s; new quest ids={}".format(
+                    time.monotonic() - started, added))
+            finish(added[-1] if added else None)
+            settled = True
+        finally:
+            if not settled:
+                # 依頼の読み直しや後始末（`remember_client` ほか）が投げた回。
+                # 生成中の印が残ると依頼ボタンが二度と足されず、
+                # 待機表示が残ると画面が押せないままになる。
+                state["generating"] = False
+                state["inject"] = None
+                if screen.is_busy():
+                    clear_busy(app)
 
     def schedule(app, fn):
         """LLM を待った後の後始末をメインスレッドで走らせる。

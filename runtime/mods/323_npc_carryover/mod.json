@@ -10,7 +10,7 @@
     "en": "Exports NPCs from another world's save as zip packages and imports them into a chosen world - the NPC arrives at a random town's guild or inn when that world loads, keeping their looks, profile, affinity and (optionally) what they remembered about you",
     "ja": "別の世界のセーブから NPC を zip に書き出し、選んだ世界へ持ち込む。持ち込んだ NPC はその世界をロードしたときに、どこかの街のギルドか宿に旅の冒険者として現れる。見た目・人物像・好感度に加えて、覚えていたことも引き継げる"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "after": [
     "120_fix_npc_name_collision",

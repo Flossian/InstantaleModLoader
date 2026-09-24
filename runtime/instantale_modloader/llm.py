@@ -362,7 +362,7 @@ def parse_json(raw):
 
 
 def ask(ctx, manager_name: str, message, *, timeout, structure=None,
-        max_tokens=None, label: str = "llm", write=None):
+        max_tokens=None, label: str = "llm", write=None, errors=None):
     """LLM に1問だけ聞く。呼べない・失敗した・読めないときは None。
 
     戻り値は `structure` を渡したときは辞書（`as_dict` で均したもの）、
@@ -374,6 +374,7 @@ def ask(ctx, manager_name: str, message, *, timeout, structure=None,
     | `message` | **必ずリスト**（`[{"role": "user", "content": ...}]`）。素の文字列は `TypeError` になる（GAME.md §2.12） |
     | `timeout` | **キーワードで必ず渡す。** 既定値は置いていない ― ゲーム側の既定は無期限で、1回返らないと呼んだ側が永久に止まる |
     | `write` | MOD 自身のログ関数（かかった秒数と結果を1行）。無くてよい |
+    | `errors` | list を渡すと、送信が投げた例外をそこへ積む。None の理由（呼べなかった `TypeError` か、タイムアウト・通信エラーか）を呼び側で分けたいときに使う。無くてよい |
 
     `timeout` を受け付けない未実測のプロバイダでは `TypeError` で失敗して
     None を返す（呼び側は LLM を使わない道へ降りる）。
@@ -395,8 +396,10 @@ def ask(ctx, manager_name: str, message, *, timeout, structure=None,
     started = time.monotonic()
     try:
         raw = send(*args, **kwargs)
-    except Exception:
+    except Exception as exc:
         ctx.log_exc("{}: {} failed via {}".format(label, manager_name, where))
+        if errors is not None:
+            errors.append(exc)
         return None
     result = as_dict(raw) if structure is not None else raw
     if write is not None:
@@ -467,6 +470,10 @@ def watch_aliases(ctx, targets, install, *, label="llm", on_arm=None):
                     level="WARN")
                 return
             time.sleep(ALIAS_POLL_SECONDS)
+        if remaining:
+            # 注入し直されて降りた。見張りは新しい世代が立て直す。
+            ctx.log("{}: stopped watching {} (superseded by a newer "
+                    "injection)".format(label, ", ".join(remaining)))
 
     def guarded():
         try:

@@ -263,7 +263,8 @@ def save_settings(root, mod_dir, values, strict=False):
         name = mod_name(mod_dir)
         # 読んでから書く。他の MOD の項が同じファイルに同居しているので、
         # 丸ごと置き換えると隣を消す。
-        store = config.load_store(runtime)
+        # 同じ理由で、在るのに読めないファイルは書かずに断る（`load_store` だと `{}` になる）。
+        store = config.load_store_for_write(runtime)
         # 既定と同じ値は書かない（§3.8）。
         # 書いてしまうと、後で本体の既定を変えたときに
         # 「触っていない項目が古い値に固定される」が起きる。
@@ -391,6 +392,11 @@ def save_window(root, mod_dir, window):
             window.state("normal")
             window.update_idletasks()
         geometry = window.geometry()
+        if maximized:
+            # 寸法を取ったら最大化へ戻す。
+            # 呼ぶ側は閉じる前にここを通してから未保存の確認を出すので、
+            # 確認で「キャンセル」を選ぶと、戻さない限り最大化の解けた窓が残る。
+            window.state("zoomed")
         path = gui_config_path(root)
         # `gui.json` はローダの設定画面と共有している。
         # 丸ごと書くと `game_path` やローダ自身の窓の記憶を消すので、読んでから足す。

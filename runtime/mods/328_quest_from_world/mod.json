@@ -10,7 +10,7 @@
     "en": "When a quest is generated at the board, with some probability the settlement's overview, structure and area description are withheld and the quest is built from the world overview alone. Breaks the run of near-identical quests that keep reflecting the same town",
     "ja": "掲示板で依頼を作るとき、一定の確率で街の概要・構造・周辺の描写を渡さず、世界の概要だけから依頼を作らせる。同じ街の描写を毎回読んで似た依頼ばかりになるのを崩す"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "after": [
     "301_quest_from_conversation"

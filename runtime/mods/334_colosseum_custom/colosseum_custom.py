@@ -81,6 +81,9 @@ from instantale_modloader import frames, llm, ui
 LOG_BASENAME = "colosseum_custom.log"
 MARK = "_mod_colosseum_custom"
 
+#: 試合1回ぶんの控えの置き場（`sys` の属性名）。注入し直しをまたいで残す。
+STATE_STORE_ATTR = "__instantale_colosseum_custom_state__"
+
 #: 闘技場の `facility_type`。
 ARENA_TYPE = "colosseum"
 
@@ -314,9 +317,20 @@ def apply(ctx):
     #: `summarizing` は試合の要約を頼んでいる最中の深さ。
     #: `surrendered_at` は負けとして切り上げた時刻（`time.monotonic()`）。
     #: `removed_player` は試合中に一覧から外された主人公の値（切り上げで戻す）。
-    state = {"survived": False, "reward": None, "window": None, "summarizing": 0,
-             "surrendered_at": None, "removed_player": None, "fallen": {},
-             "lawful_guard": None, "surrendering": False}
+    #:
+    #: 置き場は `sys`（`332_` と同じ理由）。当て直しは最初の LLM の呼び出しのときに背景スレッドの
+    #: `boot()` から来るので、相手を仕込んでいる最中に挟まることがある。ここで作り直した空の器を
+    #: 新しいラッパが握ると、窓が見えないまま素の格で相手が作られ、そのまま保存される。
+    #: 版が上がって足した項目は `setdefault` で埋める（前の世代の器にはまだ無い）。
+    state = getattr(sys, STATE_STORE_ATTR, None)
+    if not isinstance(state, dict):
+        state = {}
+        setattr(sys, STATE_STORE_ATTR, state)
+    for _name, _value in (("survived", False), ("reward", None), ("window", None),
+                          ("summarizing", 0), ("surrendered_at", None),
+                          ("removed_player", None), ("fallen", {}),
+                          ("lawful_guard", None), ("surrendering", False)):
+        state.setdefault(_name, _value)
 
     # ------------------------------------------------------------------ 設定
     def rank_untouched():

@@ -74,6 +74,8 @@ import os
 import sys
 
 from . import log_exc, patch, state, ui
+# 保存の間だけ成り代わる辞書。名簿と同じく、反復では隠し id では引ける（`veil_plain`）。
+from .modnpc import _RosterView
 
 #: MOD の施設の id の接頭辞。ゲームの採番は整数の連番なので、ここが被ることはない。
 PREFIX = "mod:"
@@ -846,8 +848,61 @@ def sync_plain(app, here=None, write=None):
     return placed
 
 
+def veil_plain(app, write=None, views=None):
+    """保存の直前。写しを載せた `facilities` を、反復では隠し id では引ける辞書に差し替える。
+
+    戻すための `[(ノードの辞書, 差し替えた辞書), ...]` を返す（`views` を渡すと差し替えるたびに積む）。
+
+    写しは**外さない**。保存は別スレッドで走り（約0.5秒）、その間もゲームは
+    施設 id で素データを引く（`shopping_start_method_1` / `ColosseumMatchStart.method`）。
+    外すとそこが `KeyError` でワーカースレッドを殺す（`install_plain` の注記。
+    `modnpc` が名簿で実際に踏んで `_RosterView` に替えたのと同じ穴）。
+    保存が舐めるのは反復と C レベルの複製なので、そこからだけ消す。
+    書き出しの網（`strip_plain_from`）は残してあり、こちらが外れた経路の受け止めになる。
+    """
+    views = [] if views is None else views
+    wanted = {}
+    for facility_id, record in list(registry().items()):
+        spot = record.get("placed")
+        if not is_mod_facility(facility_id) or not record.get("plain_noted") or not spot:
+            continue
+        wanted.setdefault((str(spot[0]), str(spot[1])), []).append(facility_id)
+    seen = set()
+    for (area_id, node_id), ids in wanted.items():
+        for attr in PLAIN_HOLDERS:
+            holder = getattr(app, attr, None)
+            areas = holder.get("areas") if isinstance(holder, dict) else None
+            area = areas.get(area_id) if isinstance(areas, dict) else None
+            nodes = area.get("nodes") if isinstance(area, dict) else None
+            node = nodes.get(node_id) if isinstance(nodes, dict) else None
+            facilities = node.get("facilities") if isinstance(node, dict) else None
+            if not isinstance(facilities, dict) or id(node) in seen:
+                continue
+            seen.add(id(node))
+            source = facilities.source if isinstance(facilities, _RosterView) else facilities
+            present = [fid for fid in ids if fid in source]
+            if not present:
+                continue
+            view = _RosterView(source, present)
+            node["facilities"] = view
+            views.append((node, view))
+    if views and write:
+        write("modfacility: save: plain data in {} store(s) veiled".format(len(views)))
+    return views
+
+
+def unveil_plain(views):
+    """保存の直後。`veil_plain` が差し替えた辞書を元へ戻す。"""
+    for node, view in reversed(views or ()):
+        try:
+            if node.get("facilities") is view:
+                node["facilities"] = view.source
+        except Exception:
+            log_exc("modfacility: cannot put the plain data back after the save")
+
+
 def lift_plain(app, write=None):
-    """保存の直前。置いてある写しを全部外し、戻す id の一覧を返す。"""
+    """置いてある写しを全部外し、戻す id の一覧を返す（世界を読み直す前に使う）。"""
     lifted = []
     for facility_id, record in list(registry().items()):
         if not is_mod_facility(facility_id) or not record.get("plain_noted"):
@@ -1558,7 +1613,7 @@ def _spec_mentions(value, mod_ids):
     return any(str(a) in mod_ids for a in (args or ()))
 
 
-def scrub_saved_refs(app, mod_ids, write=None):
+def scrub_saved_refs(app, mod_ids, write=None, undo=None):
     """保存の直前。MOD の施設を指す選択肢を外す。戻すための控えを返す。
 
     自前のボタンの spec は無害な既存クラスなので焼かれても押せないが、
@@ -1566,11 +1621,13 @@ def scrub_saved_refs(app, mod_ids, write=None):
     MOD を外した環境で押せてしまう（そこに建物はもう無い）。
     ゲームは実行時に足した施設を一覧に出さないので普段は空振りするが、
     出す版が来たときに漏らさないための関所。
+    `undo` に並びを渡すと、外すたびにそこへ積む（途中で投げても戻せる）。
     """
     mod_ids = {str(i) for i in mod_ids}
     if not mod_ids:
-        return None
-    undo = []
+        return undo
+    if undo is None:
+        undo = []
     for attr in SAVED_CHOICE_ATTRS:
         found = getattr(app, attr, None)
         if not isinstance(found, list):
@@ -1699,14 +1756,16 @@ def safe_save_location(app, screen=None, write=None):
         return None
     hub_id = facility_id_of(hub)
     was = getattr(player, "location", None)
+    # 入口の選択肢は立ち位置を替える前に組む。替えた後に投げると、
+    # 控えを返せないまま入口に立たせたことになる。
+    choices = live_move_buttons(screen, area, hub_id, list(registry())) \
+        if screen is not None else []
     try:
         player.location = hub
     except Exception:
         log_exc("modfacility: cannot move the player for the save")
         return None
     buttons = getattr(app, "buttons", None)
-    choices = live_move_buttons(screen, area, hub_id, list(registry())) \
-        if screen is not None else []
     if choices:
         try:
             app.buttons = choices
@@ -1724,37 +1783,44 @@ def safe_save_location(app, screen=None, write=None):
     return (player, was, buttons, background)
 
 
-def hide(app, *, screen=None, world=None, write=None):
+def hide(app, *, screen=None, world=None, write=None, into=None):
     """保存の直前。MOD の施設の痕跡を引き上げる。戻すための控えを返す。
 
     **実体は隠さない。** 保存は `save_data_dict['areas']` から書き、
     実行時の `node.facilities` を舐めないので、建物はそのまま置いてよい
     （`modnpc` が名簿を `_RosterView` に差し替えるのと、そこが違う）。
-    引き上げるのは id が載る器のほうだけ。
+    引き上げるのは id が載る器と、素データの写し（`veil_plain`）。
+
+    `into` に空の dict を渡すと控えをそこへ書くたびに積むので、途中で投げても
+    そこまでに外したものは `restore(app, into)` で戻る（保存の関所はこちらを使う）。
     """
-    scrubbed = scrub_saved_refs(app, list(registry()), write=write)
-    lifted = lift_plain(app, write=write)      # 素データの写し（`plain=True` の建物）
+    hidden = into if into is not None else {}
+    scrubbed = []
+    views = []
+    hidden.update({"scrubbed": scrubbed, "swapped": None, "views": views,
+                   "background": None, "world": world})
+    scrub_saved_refs(app, list(registry()), write=write, undo=scrubbed)
+    veil_plain(app, write=write, views=views)   # 素データの写し（`plain=True` の建物）
     swapped = None
     try:
         swapped = safe_save_location(app, screen=screen, write=write)
     except Exception:
         log_exc("modfacility: cannot check the place before the save")
+    hidden["swapped"] = swapped
     # 中のまま保存する建物（`keep_inside`）。書き出しのときに立ち位置を検める。
     here = inside(app)
     staying = bool(here) and swapped is None
     _state()["saved_inside"] = str(here) if staying else None
-    background = None
     if staying:
         try:
-            background = keep_inside_background(app, here, write=write)
+            hidden["background"] = keep_inside_background(app, here, write=write)
         except Exception:
             log_exc("modfacility: cannot check the background before the save")
-    return {"scrubbed": scrubbed, "swapped": swapped, "lifted": lifted,
-            "background": background, "world": world}
+    return hidden
 
 
 def restore(app, hidden, *, write=None):
-    """保存の直後。引き上げたものを戻す。"""
+    """保存の直後。引き上げたものを戻す。`hide` が途中で投げた控えも受ける。"""
     if not isinstance(hidden, dict):
         return
     swapped = hidden.get("swapped")
@@ -1776,8 +1842,7 @@ def restore(app, hidden, *, write=None):
             log_exc("modfacility: cannot put the background back after the save")
     unscrub_saved_refs(app, hidden.get("scrubbed"))
     _state()["saved_inside"] = None
-    for facility_id in hidden.get("lifted") or ():
-        install_plain(app, facility_id)
+    unveil_plain(hidden.get("views"))
 
 
 # --------------------------------------------------------------------------
@@ -2590,11 +2655,13 @@ def _install(ctx, write):
 
     def save_game(orig, self, *args, **kwargs):
         """保存の間だけ、MOD の施設の痕跡を世界から外す。"""
-        hidden = None
+        # 控えは先に作って `hide` に埋めさせる。途中で投げても、そこまでに
+        # 外したもの（選択肢・写し・立ち位置）は後ろの `restore` が戻す。
+        hidden = {}
         try:
             fire_all("save", self, args={"phase": "hide"}, write=write)
             snapshot_all(self, write=write)   # ゲームの保存と同じ時点で素データを写す
-            hidden = hide(self, screen=screen_of(), write=write)
+            hide(self, screen=screen_of(), write=write, into=hidden)
         except Exception:
             log_exc("modfacility: cannot lift the buildings before the save")
         try:
@@ -2650,7 +2717,7 @@ def _install(ctx, write):
     def write_obfuscated_json_file(orig, file_path=None, data=None, *args, **kwargs):
         """書き出しの直前の網。`mod:` の施設が素データに残っていれば、写しから落として書く。
 
-        普段は `hide` が保存の前に写しを外すので何も落ちない。
+        普段は `hide` が保存の前に写しを反復から隠す（`veil_plain`）ので何も落ちない。
         落ちたら（保存以外の経路で書かれた）ログに残す。元の辞書は触らない。
         """
         try:

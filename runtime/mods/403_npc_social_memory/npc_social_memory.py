@@ -21,8 +21,9 @@
 会話の写し（参加者・書き起こし・既存の記録）をメインスレッドで取り、
 1本のワーカーで直列に LLM を呼ぶ（ワーカーは app を触らない）。
 応答の検証は `normalize_result` 1本にまとめ、構造化・非構造化の両経路が同じ道を通る。
-構造化経路を一度使えなかった provider では以後その経路を試さない
+構造を作れない・呼べない provider では以後その経路を試さない
 （試すたびに `EXTRACT_TIMEOUT` を2本ぶん待つため）。
+タイムアウト・通信エラー・読めない応答では諦めない（一時的な障害1回で以後ずっと非構造化になるため）。
 残す事実の件数はプロンプトも設定（`FACT_LOG_LIMIT`）から出す。
 
 自前の manager_name（`MANAGER_EXTRACT`）を付けるので、
@@ -653,7 +654,8 @@ def apply(ctx):
                 existing[(observer["id"], target["id"])] = (
                     _field(record, "relationship"), recent_facts(record))
         return {"world": key, "people": people,
-                "transcript": transcript, "existing": existing}
+                "transcript": transcript, "existing": existing,
+                "player_name": player_name_of(app)}
 
     def build_messages(snap):
         """抽出 LLM へ渡す messages と、許す id の一覧を返す。
@@ -663,8 +665,7 @@ def apply(ctx):
         """
         people = snap["people"]
         ids = [person["id"] for person in people]
-        app = ui.find_app()
-        player_name = player_name_of(app) if app is not None else "プレイヤーキャラクター"
+        player_name = snap["player_name"]
 
         participant_index = "\n".join(
             "- id={} / 名前={}".format(person["id"], person["name"])
@@ -741,11 +742,26 @@ changed=falseならrelations=[]。""".format(player_name=player_name,
         """応答の上限トークン。方向の数 × 要約の長さの目安で、最低 1200。"""
         return max(1200, RELATION_CHARS * max(2, len(ids)))
 
+    def structure_missing():
+        """構造を作れなかった理由。本体の create_model がまだ無ければ "not_ready"
+        （起動直後。次の回にまた試す）、あるのに作れなければ "unsupported"。"""
+        factory = getattr(llm.manager(), "create_model", None)
+        return "unsupported" if callable(factory) else "not_ready"
+
     def ask_structured(messages, ids):
-        """最新版llm共通部品の構造化出力を優先する。使えなければNone。
+        """最新版llm共通部品の構造化出力で聞く。`(応答, 何が起きたか)` を返す。
 
         応答の型を2段（relations の1行 → 全体）で作り、`llm.ask` に渡す。
-        `create_structure` が None を返すのは本体の create_model がまだ無いとき。
+        何が起きたかは次のどれか。諦めるのは "unsupported" だけで、
+        一時的な障害（起動直後・タイムアウト・通信エラー・読めない応答）では諦めない。
+
+        | 値 | 意味 |
+        |---|---|
+        | "ok" | 辞書が返った（中身の検証は呼び側の `normalize_result`） |
+        | "unsupported" | 構造を作れない・構造化の口が無い・呼べない（`TypeError`） |
+        | "not_ready" | create_model か送信の口がまだ無い |
+        | "failed" | 送信が投げた（タイムアウト・通信エラー） |
+        | "unreadable" | 返ったが辞書に読めなかった |
         """
         relation = llm.create_structure(
             ctx, "NpcSocialRelationUpdate",
@@ -753,18 +769,30 @@ changed=falseならrelations=[]。""".format(player_name=player_name,
              "relationship": (str, ...), "new_facts": (typing.List[str], ...)},
             label="npc social memory")
         if relation is None:
-            return None
+            return None, structure_missing()
 
         structure = llm.create_structure(
             ctx, "NpcSocialMemoryUpdate",
             {"changed": (str, ...), "relations": (typing.List[relation], ...)},
             label="npc social memory")
         if structure is None:
-            return None
+            return None, structure_missing()
 
-        return llm.ask(ctx, MANAGER_EXTRACT, messages, timeout=EXTRACT_TIMEOUT,
-                       structure=structure, max_tokens=max_tokens_for(ids),
-                       label="npc social memory", write=write)
+        errors = []
+        result = llm.ask(ctx, MANAGER_EXTRACT, messages, timeout=EXTRACT_TIMEOUT,
+                         structure=structure, max_tokens=max_tokens_for(ids),
+                         label="npc social memory", write=write, errors=errors)
+        if result is not None:
+            return result, "ok"
+        if any(isinstance(error, TypeError) for error in errors):
+            return None, "unsupported"
+        if errors:
+            return None, "failed"
+        if llm.resolve_send("send_request")[0] is None:
+            # 素の口だけある provider は構造化を持たない。どちらも無いのは起動直後。
+            return None, ("unsupported" if llm.resolve_send()[0] is not None
+                          else "not_ready")
+        return None, "unreadable"
 
     def extract(snap):
         """抽出1回ぶん。ワーカースレッドで走る。
@@ -776,17 +804,25 @@ changed=falseならrelations=[]。""".format(player_name=player_name,
 
         rows = None
         if not store["no_structure"]:
-            structured = ask_structured(messages, ids)
+            structured, status = ask_structured(messages, ids)
             rows = normalize_result(structured, ids) if structured is not None else None
-            if rows is None:
-                # 一度失敗したproviderで毎回試すと、失敗のたびに
+            if status == "unsupported":
+                # 構造化を持たない provider で毎回試すと、そのたびに
                 # EXTRACT_TIMEOUT を2本ぶん待つことになる。以後は非構造化だけにする。
                 store["no_structure"] = True
                 write("extract: structured route unusable; "
                       "falling back to plain JSON from now on")
+            elif status == "failed":
+                # 返らなかった・通じなかった回に素の経路を重ねても、同じ待ちがもう1本増えるだけ。
+                # 構造化は諦めず、この回は見送る。
+                write("extract: structured request failed; no change this time")
+                return
+            elif rows is None:
+                write("extract: structured route gave nothing usable ({}); "
+                      "plain JSON for this turn".format(status))
 
         if rows is None:
-            # 構造化出力を使えないproviderだけ旧no-structure経路へ降りる。
+            # 構造化出力を使えないproviderと、構造化で読める応答が来なかった回は旧no-structure経路へ降りる。
             result = llm.ask(ctx, MANAGER_EXTRACT, messages, timeout=EXTRACT_TIMEOUT,
                              max_tokens=max_tokens_for(ids),
                              label="npc social memory", write=write)

@@ -10,7 +10,7 @@
     "en": "Adds a corner button that widens the narration area so more text fits on screen, and puts it back when pressed again",
     "ja": "画面の隅にボタンを足し、押すと本文の表示域が広がってまとめて読める。もう一度押すと元に戻る"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "settings": {
     "WIDTH_SCALE": {

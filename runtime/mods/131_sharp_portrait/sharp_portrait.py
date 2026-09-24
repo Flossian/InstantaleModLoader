@@ -60,6 +60,10 @@
 暗い絵・コントラストの低い絵で外れる。
 
 包んで、**ゲームが `None` を返した回だけ**、前処理を変えた絵で同じ関数を呼び直す。
+呼び直すのは包みを全部剥がした素の関数（`patch.unwrap`）で、フックが受け取った `orig` ではない。
+`safe=True` の包みは最後に呼んだ `orig` の結果を本番の答えとして覚えるので、
+探りの呼び出しで投げるとその例外がゲームへ素通しになる（TECH.md §6.1）。
+呼び直しが投げた回は「拾えなかった」として次へ進む。
 
   * 前処理は座標系を変えないものだけ（均一化 / CLAHE / ガンマ / ぼかし）。
     ゲームの関数が返した値をそのまま渡せる
@@ -93,7 +97,10 @@
 """
 
 import os
+import sys
 import threading
+
+from instantale_modloader import patch
 
 from . import faces
 
@@ -197,6 +204,14 @@ def apply(ctx):
             cascades[path] = cv2.CascadeClassifier(path)
         return cascades[path]
 
+    def raw_detector():
+        """呼び直しに使うゲームの素の検出関数（包みを全部剥がしたもの）。引けなければ None。"""
+        module = sys.modules.get(CREATURE)
+        current = vars(module).get("detect_face_coordinates") if module is not None else None
+        if not callable(current):
+            return None
+        return patch.unwrap(current)[0]
+
     @ctx.wrap(CREATURE + ":detect_face_coordinates",
               required=False, safe=True, alias_scan=False)
     def detect_face_coordinates(orig, image, *args, **kwargs):
@@ -208,6 +223,10 @@ def apply(ctx):
             return found
         if not FACE_RETRY:
             note("顔: ゲームは見つけられず、やり直しは切")
+            return None
+        raw = raw_detector()
+        if raw is None:
+            note("顔: ゲームは見つけられず、呼び直す素の関数が引けないのでやり直さない")
             return None
         import cv2
         import numpy as np
@@ -237,8 +256,13 @@ def apply(ctx):
                     if "A" in image.getbands():
                         prepped.putalpha(image.getchannel("A"))
                 path = os.path.join(os.path.dirname(given), name) if os.path.dirname(given) else name
-                again = orig(prepped, **dict(rest, cascade_path=path))
                 short = faces.short_name(name)
+                try:
+                    again = raw(prepped, **dict(rest, cascade_path=path))
+                except Exception as exc:
+                    # 探りの失敗はゲームへ返さない（素の答えはもう None で確定している）。
+                    tried.append("{}+{}={} で投げた {}".format(prep, short, box, type(exc).__name__))
+                    continue
                 if again is not None:
                     note("顔: ゲームは見つけられず、{} + {} で拾った {}（箱 {}）".format(
                         prep, short, again, box))

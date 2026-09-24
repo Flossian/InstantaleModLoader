@@ -3,8 +3,8 @@
 
     python tools/tests/test_battle_tactics.py
 
-モジュール直下の純関数だけを叩く（フックの側は実機で確かめる。
-VERIFICATION.md の 3xx の表）。
+主にモジュール直下の純関数を叩く（フックの側は実機で確かめる。
+VERIFICATION.md の 3xx の表）。フック越しに通すのは、後始末と型が崩れる経路だけ。
 
   帯       … power の列挙 → 火力に乗せる割合。知らない語は normal 扱い
   軽減     … 防御の飽和曲線と上限 60%
@@ -266,6 +266,120 @@ check("gear defense: the armor is added at the rate",
       mod.gear_defense(260, 268, percent=50) == 260 + 134 and mod.gear_defense(294, 100, percent=100) == 394
       and mod.gear_defense(294, None) == 294 and mod.gear_defense(294, 0) == 294
       and mod.gear_defense(294, 500, percent=0) == 294)
+
+# ---------------------------------------------------------------- 揺らぎの乱数
+# 省いた rng はこの MOD 専用の乱数から引く（ゲーム自身の乱数列をずらさない）。
+_state = _random.getstate()
+mod.damage_wobble()
+check("wobble: the default draw leaves the global random untouched",
+      _random.getstate() == _state)
+check("wobble: the mod keeps its own Random",
+      isinstance(mod._RNG, _random.Random) and mod._RNG is not _random)
+
+# ---------------------------------------------------------------- フック
+# 数の芯とは別に、後始末と型が崩れる経路だけをフック越しに通す。
+import instantale_modloader as _ml                             # noqa: E402
+
+OUT_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "out", "test"))
+
+
+class _Ctx(object):
+    """`apply()` を通すだけの ctx。ログの書き方は本物を借りる。"""
+    _mod = "319_battle_tactics"
+
+    def __init__(self):
+        self.hooks = {}
+        self.errors = []
+        self.logs = []
+
+    def out_path(self, *parts):
+        path = os.path.join(OUT_DIR, *parts)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        return path
+
+    def logger(self, name, **kw):
+        return _ml.ModContext.logger(self, name, **kw)
+
+    def warner(self, tag):
+        return _ml.ModContext.warner(self, tag)
+
+    def log(self, msg, level="INFO"):
+        self.logs.append((level, msg))
+
+    def log_exc(self, msg):
+        self.errors.append(msg)
+
+    def wrap(self, target, **kw):
+        def decorator(func):
+            self.hooks[target] = func
+            return func
+        return decorator
+
+
+def _fresh():
+    path = os.path.join(OUT_DIR, mod.LOG_BASENAME)
+    if os.path.exists(path):
+        os.remove(path)
+    ctx = _Ctx()
+    mod.apply(ctx)
+    return ctx
+
+
+def _log():
+    path = os.path.join(OUT_DIR, mod.LOG_BASENAME)
+    if not os.path.exists(path):
+        return ""
+    with io.open(path, encoding="utf-8") as fh:
+        return fh.read()
+
+
+# 継続回復が上限に当たった回。`max_hp_of` は float を返す。
+_ctx = _fresh()
+_king = types.SimpleNamespace(name="灰の王", max_hp=1560, current_hp=1550,
+                              experience_level=60, status={"再生": {}})
+_app = types.SimpleNamespace(current_enemy_dict={"灰の王": _king}, player=None)
+_phase = types.SimpleNamespace(app=_app)
+_ctx.hooks["__main__:BattlePhaseManager.convert_llm_output_to_instruction_dict"](
+    lambda *a, **k: {}, _phase, None, None,
+    {"additional_effects": [
+        {"type": "text_status", "target": ["灰の王"], "status_name": "再生",
+         "description": "...", "duration": 3, "intensity": 3,
+         "effects_per_turn": [{"type": "instant_heal", "target": ["灰の王"],
+                               "power": "weak"}]}]})
+_ctx.hooks["__main__:BattlePhaseManager.reduce_status_turns_and_log"](
+    lambda *a, **k: None, _phase, _king)
+check("per-turn: a heal that hits the ceiling stays an int",
+      _king.current_hp == 1560 and type(_king.current_hp) is int,
+      repr(_king.current_hp))
+check("per-turn: nothing was swallowed", not _ctx.errors, _ctx.errors)
+
+# 1手の本体が投げても、その手は閉じる（構えが武装される）。
+_ctx = _fresh()
+_hero = types.SimpleNamespace(name="エリス", max_hp=1560, current_hp=1560,
+                              experience_level=62, status={})
+_app = types.SimpleNamespace(current_enemy_dict={}, player=_hero,
+                             add_text=lambda text: None)
+_saved_find_app = _ui.find_app
+_ui.find_app = lambda: _app
+try:
+    def _raising_turn(*args, **kwargs):
+        _ctx.hooks["scripts.llm.llm_manager_battle:"
+                   "referee_player_any_input_new_new"](
+            lambda *a, **k: None, None, _hero, "盾を構えて守る")
+        raise RuntimeError("the game's turn failed")
+
+    try:
+        _ctx.hooks["__main__:BattlePhaseManager.handle_battle_situation"](
+            _raising_turn, types.SimpleNamespace(app=_app), "エリス", "味方側",
+            None)
+        _raised = False
+    except RuntimeError:
+        _raised = True
+finally:
+    _ui.find_app = _saved_find_app
+check("close: the game's exception still reaches the caller", _raised)
+check("close: the action is closed and the guard armed",
+      "guard armed: エリス" in _log(), _log())
 
 print()
 if failures:

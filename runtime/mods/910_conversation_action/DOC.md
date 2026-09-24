@@ -72,7 +72,7 @@ GM には行動の1行と所持品の一覧（名前と説明）を添えるの�
 
 | mod | 内容 | 状態 |
 | --- | --- | --- |
-| `910_conversation_action` | 会話中の入力を ＜＞ / <> で包んで送ると、会話の LLM の返答の `call_free_action` を True に書き換え、ゲーム自身の会話からの GM（`master_ai_facilitator_from_conversation`）に行動として処理させる。GM の `conversation_log` の末尾に行動の1行と所持品（名前→説明）の1行を `<システム: ...>` の形で足す | **未実機**（2026-09-05、版1）。設計の根拠は `output_data\` の計数（§3.54）: 括弧つきの会話入力 258 件のうち自由行動へ行ったのは 34 件、会話からの GM 167 件に `move_item` は 3 件。オフラインは `tools\tests\test_conversation_action.py` 86件 |
+| `910_conversation_action` | 会話中の入力を ＜＞ / <> で包んで送ると、会話の LLM の返答の `call_free_action` を True に書き換え、ゲーム自身の会話からの GM（`master_ai_facilitator_from_conversation`）に行動として処理させる。GM の `conversation_log` の末尾に行動の1行と所持品（名前→説明）の1行を `<システム: ...>` の形で足す | **未実機**（2026-09-05、版1）。設計の根拠は `output_data\` の計数（§3.54）: 括弧つきの会話入力 258 件のうち自由行動へ行ったのは 34 件、会話からの GM 167 件に `move_item` は 3 件。オフラインは `tools\tests\test_wip_conversation_action.py` 86件 |
 
 ---
 

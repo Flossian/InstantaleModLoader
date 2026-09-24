@@ -435,42 +435,54 @@ def apply(ctx):
               .format(origin_level, target_level, difficulty,
                       DIFFICULTY_MODE, DIFFICULTY_OFFSET))
 
-        quest_id, quest = generate(app, origin_name, target_name, difficulty)
-        if quest_id is None:
-            return
+        settled = False
+        try:
+            quest_id, quest = generate(app, origin_name, target_name, difficulty)
+            if quest_id is None:
+                settled = True
+                return
 
-        # 前の道が残っていたら、ここで紐付けと一文を外す。
-        # 上書きするだけだと、
-        # もう移動しない依頼が「移動します」と言い続けることになる。
-        if journey.record is not None:
-            drop_road(app, "replaced by a new road")
+            # 前の道が残っていたら、ここで紐付けと一文を外す。
+            # 上書きするだけだと、
+            # もう移動しない依頼が「移動します」と言い続けることになる。
+            if journey.record is not None:
+                drop_road(app, "replaced by a new road")
 
-        journey.start({
-            "stage": "offered",
-            "quest_id": str(quest_id),
-            "cls_name": "AreaMoveManager",
-            "args": [str(a) for a in args],
-            "label": entry.get("text") or ROAD_LABEL,
-            "target_area_id": target_id,
-            "target_area_name": target_name,
-            "origin_area_id": origin_id,
-            "origin_area_name": origin_name,
-            "difficulty": difficulty,
-            "world": world.world_key(app),
-            "at": time.time(),
-            # 最後の移動でゲームへ渡した日数。0 のまま着いたら
-            # `elapse_days` を通らなかった合図（`arrived_check` が WARN に出す）。
-            "days_spent": 0,
-            "moving_at": 0.0,
-        })
+            journey.start({
+                "stage": "offered",
+                "quest_id": str(quest_id),
+                "cls_name": "AreaMoveManager",
+                "args": [str(a) for a in args],
+                "label": entry.get("text") or ROAD_LABEL,
+                "target_area_id": target_id,
+                "target_area_name": target_name,
+                "origin_area_id": origin_id,
+                "origin_area_name": origin_name,
+                "difficulty": difficulty,
+                "world": world.world_key(app),
+                "at": time.time(),
+                # 最後の移動でゲームへ渡した日数。0 のまま着いたら
+                # `elapse_days` を通らなかった合図（`arrived_check` が WARN に出す）。
+                "days_spent": 0,
+                "moving_at": 0.0,
+            })
 
-        title = world.short(world.quest_value(quest, "quest_title", ""), 40)
-        # `restore=False` ＝ この後すぐ受注画面を開くので、
-        # 元の選択肢は塗り直さない（塗ると一瞬だけ古い画面が見える。
-        # `301_` の教訓）。
-        screen.busy_off(app, restore=False)
-        settle(app, lambda: open_acceptance(app, quest_id, title, target_name,
-                                            difficulty))
+            title = world.short(world.quest_value(quest, "quest_title", ""), 40)
+            # `restore=False` ＝ この後すぐ受注画面を開くので、
+            # 元の選択肢は塗り直さない（塗ると一瞬だけ古い画面が見える。
+            # `301_` の教訓）。
+            screen.busy_off(app, restore=False)
+            settle(app, lambda: open_acceptance(app, quest_id, title, target_name,
+                                                difficulty))
+            settled = True
+        finally:
+            if not settled:
+                # `busy_on` の後に投げた回。生成中の印が残ると次の「危険な道」が
+                # 「いま道の話を聞いている」で断られ、待機表示が残ると画面が押せない。
+                state["generating"] = False
+                state["inject"] = None
+                if screen.is_busy():
+                    screen.busy_off(app)
 
     def generate(app, origin_name, target_name, difficulty):
         """ゲーム自身の生成経路を、道中の性質を添えて呼ぶ。`(id, quest)`。

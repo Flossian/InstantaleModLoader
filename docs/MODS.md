@@ -1554,8 +1554,8 @@ v2 で、`111_llm_prompt_replace` が使っているのと同じ仕掛け口を�
 | `225_probe_area_quest_difficulty` | 街を初めて訪ねたとき、依頼の難易度を誰がどう決めるかを録る。`settlement_quest_generator` に渡る `quest_difficulties` の実値・呼び出し元・そのローカル変数、stat↔難易度の変換、街が作られる経路の順と前後の `level_of_detail`、到着までの移動の間の `random.*`。`133_ui_area_difficulty` が未訪問の街に帯を出す材料（VERIFICATION.md §3.49 #5。結果は VERIFICATION_LOG.md §2.84） |
 | `226_probe_item_consume` | 回復アイテムを使ったとき何が起きるかを録る。右クリックで押された項目と popup の中身（`usable` 相当の値）、`ItemConsumeManager.consume_item` に渡る `usable` の実値、プレイヤーと品の持ち主の HP・スタミナ・上限・`status`・持ち物の数の前後とその間に足された文、`Item.consume` の呼び出し元、純関数 `get_heal_spec` / `get_heal_physical_integrity_barden` / `get_max_physical_integrity` の対応表、`update_max_hp` / `update_max_physical_integrity` の前後。`134_balance_item_effects` が本体を呼んだ後に戻すのか本体を呼ばずに全部書くのかを決める材料（結果は GAME.md §2.13.2）。出力は `out\item_consume.log` と `out\item_consume.jsonl` |
 | `227_probe_shop_stock` | 買った品が店の棚へ戻るのはどこかを録る。品が生まれた瞬間（`scripts.items:Item.__init__`）の id・持ち主・`attributes` とゲーム側の呼び出し元の連鎖、店の経路の境目（`ShoppingStartManagerRemake.execute` / `shopping_start_method_1` / `set_item_from_world_data` / `generate_item_in_shopping` / 生成の3入口 / `toggle_twin_inventory_window` / `buy_item` / `sell_item` / `close_shopping_window_process` / `Item.buy` / `Item.sell` / `InventoryItem.change_inventory`）ごとの主と手持ちの鍵の増減、施設の品揃えの雛形（`config['goods']` の件数・`stock_tier`・`stock_update_date`）と今日の日数、採番台帳 `index['item']`。買った品が手持ちへ移り、雛形からもう1つ作られて棚に入る（鍵は `item_` の付かない裸の数字）ところまでは出ているので、残るのは作っているのが誰か。増分が出た一番内側の境目がその場所（結果は GAME.md §2.13.1.3）。出力は `out\shop_stock.log` と `out\shop_stock.jsonl` |
-| `228_probe_area_move_reject` | エリア移動の拒否（`AreaMoveManager.execute` → `area_move_rejector`）が同行者の何を読んで決めているかを録る。`execute` に入ったら `app`・移動のマネージャ・プレイヤー・同行者の `Character` を属性読みを記録する派生クラスへ `__class__` で差し替え、同行者の `relationship` と `app.party` / `original_party` / `world.characters` を鍵読みを記録する dict / list 派生に差し替える。`area_move_rejector` か `elapse_days` が呼ばれた時点で記録を止め、窓を抜けるとき全部元に戻す。セーブには何も書かない。出力は `out\area_move_reject.log`（`window:` から `window closed` まで読まれた順に1行ずつ。`>> area_move_rejector called` の直前に並ぶ行が分岐の材料）。`329_` の版1（友好度）と版2（`Character.state`）が実機で外れたので、当て推量をやめて読まれる側に印を付けた。`cannot spy app` が出たら `InstantaleApp` の `__class__` 差し替えができない環境で、`app` の読みだけ欠ける。読みが多すぎるときは `NOISE` に属性名を足す（連続する同じ読みは畳んである）。結果は GAME.md §2.18 と VERIFICATION.md §3.56 |
-| `229_probe_mod_npc` | ローダの `instantale_modloader.modnpc`（MOD だけが持つ NPC と、正規 NPC への被せ）を実機に通し、どこまで通るかを録る。文字列の id（`mod:229_probe_mod_npc:visitor`）の `Character` を1人組んでプレイヤーの入った施設へ連れて回り、同じ施設に主が居れば `notes` の層を載せ、頼み文を組む瞬間だけ主の複製の `profile` の末尾に印（`【229 の被せ】`）を1行足す（本物には触らない）。来訪者は保存の直前にローダの関所が名簿と素データの反復から隠し、実体は控え（`state\modnpc\<世界>.json`）へ写すので、**セーブに残らず、読み直しで記憶ごと戻ること**が測りたいことの1つ目になる。記録は `out\mod_npc.jsonl` の `at` で分かれ、`place`（施設へ置けたか）・`dress`（主に被せを載せたか）・`save`（保存の前後で関所が呼ばれたか）・`disk`（書かれたセーブの `npcs` と `characters` に `mod:` の鍵が残っていないか。`leaked` が空でなければ漏れている）・`conversation_start`（文字列の id で会話が始まるか）・`prompt`（どの頼み文に何字で載るか。印が届いたかは `output_data` の頼み文で数える）・`conversation_end`（要約の後に `current_log` と `relationship` が溜まったか）・`detail`（詳細生成が呼ばれたか。既定では本体へ通さない ― 通すと素データを id で引かれ、無い id では落ちうる）・`image`（立ち絵の作り直しが呼ばれたか）。読む文は `out\mod_npc.log`。設定は、来訪者を居させるか（`PRESENT`。切って注入し直すと `unregister` で片付け、名簿・施設・素データ・主の `profile` の状態を `cleanup` として録る）・連れて回るか・主に被せるか・詳細生成を本体へ通すか・保存の直後にセーブを読み直す回数（1回につき1つ復号するので上限を置く）に加え、画面を押せない環境の測定用に、タイトルで注入されたら読み込む世界（`AUTO_LOAD_WORLD`。直呼びの `load_game_new` は LLM の用意を飛ばすので `AIManager(app, config)` を組んで `set_ai_models()` も呼ぶ）・施設に着いたら来訪者→主の順に会話を起こして閉じる自動操作（`AUTO_TALK`。LLM の口が生えてから）・保存の間に来訪者を名簿の反復から隠すか（`LIFT_ROSTER`）がある。戦闘とパーティ加入は触らない（スキルと立ち絵が空のまま戦闘に入るとゲーム本体が落ちる。VERIFICATION_LOG.md §2.40 / §2.42）。`at=place` の `placed` が false ならロード直後で `player.location` がまだ id の文字列（GAME.md §2.7）、`at=prompt` が1件も出ないときは頼み文の関数の署名が読めていない（ローダは署名が読めなければ位置で当て推量せず素通しする）。実機の結果は VERIFICATION.md §3.59 と GAME.md §2.23。`talk_step` / `talk_reads` は `DisplayTalkChoice` の `__init__` / `update_button_display` を受動で包んだ記録（後者は `world.characters`・`save_data_dict['npcs']`・施設の名簿・来訪者の実体を読み取り記録つきに差し替えて、何をどの順で読んだかを残す）で、一覧を自分から開かせてはいけない（`process_choice` で開かせた回から、その直後の保存スレッドが戻らなくなった） |
+| `228_probe_area_move_reject` | エリア移動の拒否（`AreaMoveManager.execute` → `area_move_rejector`）が同行者の何を読んで決めているかを録る。`execute` に入ったら `app`・移動のマネージャ・プレイヤー・同行者の `Character` を属性読みを記録する派生クラスへ `__class__` で差し替え、同行者の `relationship` と `app.party` / `original_party` / `world.characters` を鍵読みを記録する dict / list 派生に差し替える。`area_move_rejector` か `elapse_days` が呼ばれた時点で記録を止めて差し替えを全部解く（dict / list は写しなので、窓の間に写しへ入った書き込みは元のオブジェクトへ移す）。セーブには何も書かない。出力は `out\area_move_reject.log`（`window:` から `window closed` まで読まれた順に1行ずつ。`>> area_move_rejector called` の直前に並ぶ行が分岐の材料）。`329_` の版1（友好度）と版2（`Character.state`）が実機で外れたので、当て推量をやめて読まれる側に印を付けた。`cannot spy app` が出たら `InstantaleApp` の `__class__` 差し替えができない環境で、`app` の読みだけ欠ける。読みが多すぎるときは `NOISE` に属性名を足す（連続する同じ読みは畳んである）。結果は GAME.md §2.18 と VERIFICATION.md §3.56 |
+| `229_probe_mod_npc` | ローダの `instantale_modloader.modnpc`（MOD だけが持つ NPC と、正規 NPC への被せ）を実機に通し、どこまで通るかを録る。文字列の id（`mod:229_probe_mod_npc:visitor`）の `Character` を1人組んでプレイヤーの入った施設へ連れて回り、同じ施設に主が居れば `notes` の層を載せ、頼み文を組む瞬間だけ主の複製の `profile` の末尾に印（`【229 の被せ】`）を1行足す（本物には触らない）。来訪者は保存の直前にローダの関所が名簿と素データの反復から隠し、実体は控え（`state\modnpc\<世界>.json`）へ写すので、**セーブに残らず、読み直しで記憶ごと戻ること**が測りたいことの1つ目になる。記録は `out\mod_npc.jsonl` の `at` で分かれ、`place`（施設へ置けたか）・`dress`（主に被せを載せたか）・`save`（保存の前後で関所が呼ばれたか）・`disk`（書かれたセーブの `npcs` と `characters` に `mod:` の鍵が残っていないか。`leaked` が空でなければ漏れている）・`conversation_start`（文字列の id で会話が始まるか）・`prompt`（どの頼み文に何字で載るか。印が届いたかは `output_data` の頼み文で数える）・`conversation_end`（要約の後に `current_log` と `relationship` が溜まったか）・`detail`（詳細生成が呼ばれたか。既定では本体へ通す（ローダの既定と同じ）。`TRY_DETAIL` を切ると通さず、HP・スキル・立ち絵は空のまま）・`image`（立ち絵の作り直しが呼ばれたか）。読む文は `out\mod_npc.log`。設定は、来訪者を居させるか（`PRESENT`。切って注入し直すと `unregister` で片付け、名簿・施設・素データ・主の `profile` の状態を `cleanup` として録る）・連れて回るか・主に被せるか・詳細生成を本体へ通すか・保存の直後にセーブを読み直す回数（1回につき1つ復号するので上限を置く）に加え、画面を押せない環境の測定用に、タイトルで注入されたら読み込む世界（`AUTO_LOAD_WORLD`。直呼びの `load_game_new` は LLM の用意を飛ばすので `AIManager(app, config)` を組んで `set_ai_models()` も呼ぶ）・施設に着いたら来訪者→主の順に会話を起こして閉じる自動操作（`AUTO_TALK`。LLM の口が生えてから）・保存の間に来訪者を名簿の反復から隠すか（`LIFT_ROSTER`）がある。戦闘とパーティ加入は触らない（スキルと立ち絵が空のまま戦闘に入るとゲーム本体が落ちる。VERIFICATION_LOG.md §2.40 / §2.42）。`at=place` の `placed` が false ならロード直後で `player.location` がまだ id の文字列（GAME.md §2.7）、`at=prompt` が1件も出ないときは頼み文の関数の署名が読めていない（ローダは署名が読めなければ位置で当て推量せず素通しする）。実機の結果は VERIFICATION.md §3.59 と GAME.md §2.23。`talk_step` / `talk_reads` は `DisplayTalkChoice` の `__init__` / `update_button_display` を受動で包んだ記録（後者は `world.characters`・`save_data_dict['npcs']`・施設の名簿・来訪者の実体を読み取り記録つきに差し替えて、何をどの順で読んだかを残す。名簿は写しなので、窓の間に写しへ入った書き込みは抜けるときに元のオブジェクトへ移す）で、一覧を自分から開かせてはいけない（`process_choice` で開かせた回から、その直後の保存スレッドが戻らなくなった） |
 | `230_probe_image_generation` | 画像生成の出口とバックエンドを録る。画像の強化（解像度・LoRA の付け替え・サンプラー上書き）を DLL の差し替えからローダの MOD へ移せるかの下調べで、recon から読めない3つを実機で押さえる。(1) バックエンドは選ばれた一族だけが import されるのか（実機の `config.json` は `sd_backend.name` が `sdcpp_cuda`、インストール先の初期テンプレートは `diffusers_openvino` で、sdcpp とは別の一族が在ることだけが分かっていた）、(2) 生成の出口は本当に1つか（`txt2img_pipe` の型のメソッド1本に txt2img も img2img も来るのか、`highres_upscale` の段が `upscale()` という別の口を通っていないか）、(3) TAESD とチェックポイントと VAE はいつ決まるのか（`load_sd_pipeline()` がどの時点で何回呼ばれ、設定画面でバックエンドやモデルを変えたときに組み直されるのか。組み直されるならファイルを差し替えずに MOD から差し替えられる）。録り方は2段で、種類の分かる上の層（`generate_image_anime` / `image_to_image_anime` / `generate_image_real_lcm`）でスレッドに印を立て、下の出口（`txt2img_pipe` の型が自分の MRO に持つメソッド）で印ごと引数を残す。MOD はバックエンドを名指しせず、対象は実行時に `sys.modules` から引く（`111_llm_prompt_replace` がプロバイダを名指ししないのと同じ形で、名指ししないで当たるかどうか自体が (1) の答えになる）。出力は `out\image_generation.log`（読む用）と `out\image_generation.jsonl`（1呼び出し＝1行）で、行の種類は `inventory`（バックエンド名・載っているモジュール・出口の型・manager のグローバル）・`manager`（種類と寸法とプロンプトの lora タグ）・`exit`（寸法・サンプラー・steps・cfg・seed・init 画像・印の有無）・`load_sd_pipeline`（前後の `txt2img_pipe` の id とグローバルの差）・`pipe_init`（構築に実際に渡った `model_path` / `taesd_path` / `vae_path` / `lora_model_dir`）の5つ。プロンプトは頭 80 字と長さと `<lora:...>` タグだけを残す。見張りを1本立てて、設定を切り替えた後に現れたモジュールにも当て直す。5秒ごとの見張りでは間に合わない（実機ではワールドの読み込みで一式が import され、気付いた時にはパイプラインが既に建っていた）ので、`sys.meta_path` の先頭に観測者を置いてimport の瞬間も捕まえる。観測者は自分では読み込まず、他の finder が作った spec の `loader` だけを包み、モジュールの本体が走り終えた直後（＝MOD が `taesd_path` のような値を差し替えられる時点）に`import_done` を残して当て直す。`built_during_import` が真なら、その時点で既にパイプラインが建っている＝ 値の差し替えは組み直しを伴う（版2）。`exit` の `kind` が空の行が出たら、上の層を通らない生成の道がもう1本在るということで、出口1本で包括できるかの答えはそこに出る。実機の結果は GAME.md §2.33（バックエンド4つの出口と引数、パイプラインが建つ時点）と VERIFICATION_LOG.md §2.86（測った件数と、probe 側で2回外した箇所）。残っている書き込み側の手順は VERIFICATION.md §3.65 |
 | `231_probe_training` | 施設での訓練の暦を録る。`DisplayTrainingChoice` が組むボタンの spec から並ぶ年数と代金を、各 `execute` の前後の所持金と日付から代金の徴収の時機を、窓の間の `elapse_days` から1年で何日進むか・どの段で進むかを、`TrainingPhaseManager` の引数から各段が次へ渡す値（活動の種類・残り年数・前の段の文）を残す。ゲームは変えない（200番台の約束どおり読み取りだけ）。出力は `out\training.log`（読む用）と `out\training.jsonl`（1窓＝1行。`gold_moved` / `days_moved` / `elapse_days_calls` / `buttons_after`）で、`elapse_days` は窓の外でも呼び出し元つきで残す（暦が Clock で進むビルドならそこに出る）。段の中のどの道へ入ったか（`simple_training` / `fundamental_training` / `enhance_skill` / `learn_new_skill`）と開始側の支度（`training_start` / `generate_images`）も、入った順と引数・戻り値で残す（版2）。ローダの `durations` に訓練の暦を載せるための下調べで、実測の結果は GAME.md §2.17「訓練の流れ」（1年＝365日・代金は開始時に300で固定・活動は 1年/2年/2年/3年の4種・段を終えると残り年数に収まる活動だけが並ぶ・卒業した施設の2回目は断られる）。まだ録れていないのは、`技を磨く` が 0.0 秒で断られる条件（`<エリア>の風は今日はここまでのようだ。` 実機で観測。素の訓練でも同じかは未計測）と、開始時の年数（3）が施設や等級で変わるか（素のゲームの `training_facility` で同じ画面を出す）と、卒業前に途中で出て戻って続きができるか（1年の活動の後に施設を出て、戻って `訓練する` を押す）の2つ |
 | `232_probe_facility_choices` | 宿屋だけ `出る` が先頭に並ぶ原因を測る。施設へ入るたび（`MovePhaseManager.move_phase` の直後）に、立っている施設の `choices` の型とそのまま回したときの順、ゲームが組み終えた `app.buttons` の並び（文言と spec のクラス名）、`sys.flags.hash_randomization` と `PYTHONHASHSEED`、`出る` / `宿泊する` などのハッシュの下3ビット（集合の 8 枠のどこに入るか）を `out\facility_choices.log` に残す。読み取りだけでゲームは変えない。**結果は出た**（起動2回）。`choices` は集合ではなく dict で、宿屋は `['出る']` の1つだけ、店は `['売買する', '出る']`。ハッシュの枠は起動ごとに変わったのに並びは同じなのでハッシュは無関係。ゲームは `choices` の並びでボタンを組み、宿屋の `宿泊する`（期間の引数を持つ `DisplayVacationChoice`。静的な `choices` に入っていない）をその後ろに足し、最後に `会話する` を足す。店の操作は `choices` の中に `出る` より前で入っているので先に出る。宿屋だけ操作が `choices` の外に居るのが原因（GAME.md §2.2）。ここで見える `buttons` は `135_fix_inn_button_order` が並べ直した後の並び。バイトコードの書き出しも試したが、Nuitka ビルドでは `co_consts` が空で読めず外した |
@@ -1858,7 +1858,7 @@ LLM が書いた本文はそのまま残る。
 | --- | --- |
 | 手配度1あたりの罰金 | 既定 1000。0 にすると無料で解ける |
 | 手配とみなす手配度 | 既定 0（手配度が 0 未満なら犯罪者）。罰金はこの値との差で決まる |
-| 罰金を納めた後の手配度 | 既定 10（素の平常値）。今の値より低い値を入れても下がらない |
+| 罰金を納めた後の手配度 | 既定 10（素の平常値）。今の値より低い値を入れても下がらない。「手配とみなす手配度」より低い値を入れたときは、手配が解けるようにそこまで戻す |
 | 役場に入ったら手配を知らせる | 既定 ON。手配されているときだけ1行出る |
 
 #### 困ったとき
@@ -2392,6 +2392,10 @@ LLM が「確実に成功」「確実に失敗」と判断した回（入力全�
 ゲーム自身の衛兵イベントとは重ならない。
 ゲームが衛兵を出した回も1回の遭遇として数えるので、
 続けて追手が来ることはない（設定で切れる）。
+依頼中の戦闘や闘技場の試合は衛兵ではないので数えない。
+
+次の追手までの日数は、暦が実際に進んだぶんで数える。
+移動や宿泊の日数を他の MOD（`307_` / `314_` / `315_` など）が変えていれば、変えた後の日数になる。
 
 | 設定 | 意味 |
 | --- | --- |
@@ -2846,7 +2850,7 @@ HP・スキル・立ち絵は空のまま作り、最初に会話や戦闘をす
 依頼クリア → 新しい功績 ＋ 現行の案内文 → LLM が書き直す（別スレッド）
               「変化を織り込む。土地の正体は変えない。長さは維持」
            → 実行中の Area.descriptions を差し替え
-           → state\area_chronicle\<世界名>.json（ロード時に当て直す）
+           → state\area_chronicle\<世界名×主人公名>.json（ロード時に当て直す）
 ```
 
 `descriptions` は2枚あり、差し替えれば読み手全員に一度で届く。
@@ -2881,8 +2885,12 @@ HP・スキル・立ち絵は空のまま作り、最初に会話や戦闘をす
 遊んでいる側からは連続して見える。見返りは `318_` と同じ2つ。
 
 - MOD を外せば世界は素のまま。外すために何かする必要は無い
-- おかしくなったら `state\area_chronicle\<世界名>.json` を消せば、
-  その世界の案内文は素に戻る（功績の記録はゲーム側のものなので消えない）
+- おかしくなったら `state\area_chronicle\<世界名×主人公名>.json` を消せば、
+  その主人公の案内文は素に戻る（功績の記録はゲーム側のものなので消えない）
+
+記録は主人公ごとに持つ。同じ世界で主人公を作り直すと、案内文は素から始まり、
+その主人公の功績だけが織り込まれていく。
+以前の版が作った世界名だけの記録（`<世界名>.json`）は、見つけた時点で遊んでいる主人公のものとして移し、元のファイルは消す。
 
 #### 設定
 
@@ -2901,7 +2909,7 @@ HP・スキル・立ち絵は空のまま作り、最初に会話や戦闘をす
 | 症状 | 見るところ |
 | --- | --- |
 | 案内文が変わらない | `out\area_chronicle.log`。クリア後に `編纂を予約:` と `編纂できた:` が対で出る。`新しい功績が現れなかった` ならゲーム側の要約待ちに間に合っていない（次の到着・日数経過で立ち直る） |
-| 変わった文面がロードで戻った | 同じログの `load: 世界 … を当て直した`。出ていなければ `state\area_chronicle\` に控えが無い |
+| 変わった文面がロードで戻った | 同じログの `load: 周回 … を当て直した`。出ていなければ `state\area_chronicle\` に控えが無い |
 | 書き直しが下手 | `output_data\<世界>\<PC>\mod_area_chronicle\` に頼み文と返答がそのまま残る。出来事の並べ直しに堕ちていないかはここで見る |
 | 差し替え自体が効かない | ログの `descriptions:` 行。dict でない形が出ていたらこの版のゲームでは差し替えられない |
 
@@ -3216,7 +3224,8 @@ HP・スキル・立ち絵は空のまま作り、最初に会話や戦闘をす
 
 その場で支払い、「4,000G を支払い、黄金の砂漠への道の開削を委託した。開通まで 14日。」と出る。
 日数は設定（既定 14。0 で支払った場で開通）。期日はゲーム内の日付で数え、移動や宿泊で日数が進んだときに開いて「開始の町と黄金の砂漠を結ぶ道が開かれた。」の1行が出る。
-期日までは同じ街に二度払えない（「開削を委託済み。開通まであと N日」）。委託は `state\road_opening\<世界名>.json` の `commissions` に残り、ゲームを閉じても続く。
+期日までは同じ街に二度払えない（「開削を委託済み。開通まであと N日」）。委託は `state\road_opening\<世界名×主人公名>.json` の `commissions` に残り、ゲームを閉じても続く。
+支払った直後にゲーム自身の保存が走る。委託と道はすぐファイルになるが、所持金がセーブに入るのは次の保存のときなので、保存しないまま終えると道だけがタダで残る。
 
 #### 自ら切り拓くは `307_` と同じ仕組み
 
@@ -3227,7 +3236,9 @@ HP・スキル・立ち絵は空のまま作り、最初に会話や戦闘をす
 
 #### セーブには書かない
 
-開いた道は `state\road_opening\<世界名>.json` に記録し、ロードのたびに当て直す。`world_data.json` にもセーブにも書かないので、MOD を外せば素の繋がりに戻り、`state\` を消せば開いた道も消える。
+開いた道は `state\road_opening\<世界名×主人公名>.json` に記録し、ロードのたびに当て直す。`world_data.json` にもセーブにも書かないので、MOD を外せば素の繋がりに戻り、`state\` を消せば開いた道も消える。
+主人公ごとの記録なので、同じ世界で主人公を作り直すと道は素の繋がりから始まる。
+以前の版が作った世界名だけの記録（`<世界名>.json`）は、見つけた時点で遊んでいる主人公のものとして移し、元のファイルは消す。
 委託で開いたときは、その土地の功績に「AとBを結ぶ新しい道が開かれた。」が1件足される。踏破は依頼のクリアそのものが功績になるので足さない。
 
 | 設定 | 意味 |
@@ -3258,7 +3269,7 @@ HP・スキル・立ち絵は空のまま作り、最初に会話や戦闘をす
 | 「新たな道を探す」が出ない | `out\road_opening.log` の `list:` の行。`no unlinked town` なら全部の街と繋がっているか、土地の種類が読めていない（直前の `WARN size: cannot read the size`）。行が無ければ一覧のフックが効いていない（`out\modloader.log` の `applied`） |
 | 候補の金額・難易度が思ったのと違う | 同じログの `candidate:` の行に `hops=`（挟む街の数）と両側の適正が出る。`isolated` は道筋が無い街 |
 | 支払ったのに一覧に出ない | 委託は期日まで開かない（`commissioned: ... due day N`。日数を進めると `days: commission due` → `opened:`）。`opened:` があれば接続は書けている。その後の `WARN list: the game did not list the opened road` は、ゲームが接続を別の場所から読んでいて MOD が自前でボタンを足している印 |
-| ロードしたら道が消えた | `load: applied N edge(s)` の行。無ければ世界名が変わっている（`state\road_opening\` のファイル名と突き合わせる） |
+| ロードしたら道が消えた | `load: applied N edge(s)` の行。無ければ世界名か主人公の名前が変わっている（`state\road_opening\` のファイル名と突き合わせる） |
 | 踏破したのに道が開かない・着かない | `cleared:` の行があるか。無ければその依頼が道のものとして認識されていない（`armed:` も見る）。`arrive: falling back to the confirmation screen` なら移動を組めなかったので、徒歩・馬車を自分で選ぶ |
 | 同じ道に二度払った | 連打の2発目は `ignored ...: the previous press is still running` か `already linked` で捨てる。それでも引かれていればその2行が無いはずなので、`pressed` の行と一緒に報告する |
 | 踏破の後の移動が3ヵ月かかった | `days:` の行が無い。`WARN arrived: elapse_days was never seen` が出ていれば、そのビルドの日数送りが `elapse_days` を通っていない |
@@ -3370,7 +3381,10 @@ HP・スキル・立ち絵は空のまま作り、最初に会話や戦闘をす
 【宿の客として】プレイヤーは宿にこれまで5回泊まっている（個室2回・高級個室3回）。最後の宿泊は12日前。
 ```
 
-記録は `state\inn_regular\<世界名>.json` に宿の主ごとに入る。
+記録は `state\inn_regular\<世界名×主人公名>.json` に宿の主ごとに入る。
+主人公ごとの記録なので、同じ世界で主人公を作り直すと宿泊の回数も上限も 0 から始まる。
+以前の版が作った世界名だけの記録（`<世界名>.json`）は、見つけた時点で遊んでいる主人公のものとして移し、元のファイルは消す。
+書くのはゲームが保存したときで、保存の前にゲームが落ちたときは、好感度と一緒に記録も泊まる前に戻る。
 `311_npc_profile_memory` の記録は読みも書きもしない。
 宿の主がこの1行を台詞にすれば、次の会話から 311 が自分で覚える。
 
@@ -3397,9 +3411,10 @@ HP・スキル・立ち絵は空のまま作り、最初に会話や戦闘をす
 | --- | --- |
 | 活動を終えても選択肢が戻らない | `out\inn_quality.log`。`stay: no elapse_days in the window` なら宿泊が成立していない（宿代が足りない等）。`menu:` の行が無ければ、活動の一覧を写せていない |
 | 好感度が上がらない | 同じログの `regular:` の行。`has no relationship['player']` なら初対面の主で、一度会話してから泊まると上がる。`granted 20/20` なら上限 |
+| 泊まったのに記録が増えていない | 同じログで `regular:` の後に `save: records of … written` が無ければ、ゲームがまだ保存していない。`load: unsaved records … dropped` は保存の前にロードし直した回で、好感度も一緒に戻っている |
 | 会話に履歴の1行が出ない | `prompt at` の行が無ければ、会話相手が記録に無い主（別の宿）か、まだ一度も泊まっていない |
 | 社交の相手が変わらない | `out\inn_quality.log` の `social:` の行。`untouched (game default)` は設定が OFF。`no candidate` は同行者も生成済み NPC も居ない。`npc_list not replaced` か `argument not reached` は、ゲームの更新で LLM に渡す形が変わっている |
-| 記録をやり直したい | `state\inn_regular\<世界名>.json` を消す。好感度の既に上がったぶんはセーブに残る |
+| 記録をやり直したい | `state\inn_regular\<世界名×主人公名>.json` を消す。好感度の既に上がったぶんはセーブに残る |
 
 ### `328_quest_from_world`: 世界概要から依頼を生成する
 
@@ -3608,6 +3623,10 @@ HP・スキル・立ち絵は空のまま作り、最初に会話や戦闘をす
 窓の右に立つのは管理人だが、預けた品をその人に持たせたままにはしない
 （窓を閉じると控えへ写して手元から外す。両方に残ると、開くたびに品が増える）。
 預けた品はプレイヤーの持ち物から外れるので、預けた時点でゲーム自身の保存が走る。
+お金が動いたとき（契約・家賃・引き取り料）も同じで、控えを書いた直後に保存が走る
+（控えはすぐファイルになるが、所持金がセーブに入るのは次の保存のとき。
+保存しないまま終えると、払っていない家や延びただけの期限が残る）。
+代金を引けなかった回は、契約を結ばず期限も延ばさない。
 
 > MOD を外すと、控えは残るが建物は建たない。
 > 保管庫に預けたままの品はその控えの中に居るので、入れ直せば戻る。
@@ -3653,7 +3672,7 @@ HP・スキル・立ち絵は空のまま作り、最初に会話や戦闘をす
 | 建物に入っても選択肢が出ない | ログの `modfacility: where:` の行。`inside=-` なら居場所の読み取りが外れている（その行の `facility=` が家の id か見る）。契約が切れた建物は取り壊し待ちなので、出口だけを出す |
 | 家の中なのに背景が街の景色のまま | 初めて入るときは生成の待ちがある（ゲームが名前で生成する。ローダは絵に触らない）。出ないなら `location_image` の値を添えて報告してほしい |
 | 家から出られない | 上と同じ。出口はゲームの移動を起こすだけなので、動かないときは `WARN modfacility: cannot reach` が出ているはず |
-| 滞在で宿代が引かれた | 宿代は前払いしてある（ログの `stay: prepaid`）。所持金が合わないときは `WARN stay:` の行に `corrected` の額が出る。家賃は滞在の中では引かれず、滞在が終わってから `rent:` の行で1回引かれる |
+| 滞在で宿代が引かれた | 宿代は前払いしてある（ログの `stay: prepaid`）。所持金が合わないときは `WARN stay:` の行に `corrected` の額が出る。前払いより多く減った回は返さず、`leaving it alone` の行だけ残す（滞在の中で他の MOD が引いた額を巻き込まないため）。家賃は滞在の中では引かれず、滞在が終わってから `rent:` の行で1回引かれる |
 | 交流を選ぶと止まる | ログの `WARN background: the game's own ... raised` があれば、本体の不具合を握って先へ通している（絵が変わらないだけ）。無いのに止まるなら別の原因なので、`crash_log.txt` の当日分を添えて報告してほしい |
 | 滞在を押すと「…」のまま戻らない | ログの `WARN stay: the game's stay failed:` の行。ゲームの宿泊が落ちた記録で、例外の種類とそのときの建物の姿が出る。この場合でも前払いの帳尻は合い、操作は戻るはず（戻らなければその行を添えて報告してほしい） |
 | 家に管理人が居ない | ログの `keeper:` の行。`using the table` は生成 AI が答えなかったので表の人にした記録（管理人は立っている）。`WARN keeper:` は立てられなかった記録で、この場合の滞在は今までどおり役場の役人を借りる（`WARN stay: ... has no keeper`） |
@@ -3820,6 +3839,11 @@ HP・スキル・立ち絵は空のまま作り、最初に会話や戦闘をす
 | `state\modfacility\<世界名×主人公名>.json` | 建物そのもの（ローダが持つ） |
 | `state\modnpc\<世界名×主人公名>.json` | 主人（ローダが持つ） |
 
+帳簿はすぐファイルになるが、所持金がセーブに入るのは次の保存のとき。
+そこで建てたときと売上を受け取ったときは、帳簿を書いた直後にゲーム自身の保存が走る
+（保存しないまま終えると、払っていない建物や、受け取った日だけ進んで消えた売上が残る）。
+代金を引けなかった回は建てず、売上を渡せなかった回は受け取った日を進めない。
+
 MOD を外せば街は素のまま。建物も主人も、そこへ繋がる道も残らない。
 
 **控えは世界×主人公で1つ**。主人公が死んで同じ世界で新しい主人公を作ると、
@@ -3851,7 +3875,7 @@ MOD を外せば街は素のまま。建物も主人も、そこへ繋がる道�
 | 建物に入っても選択肢が出ない | ログの `modfacility: where:` の行（`330_real_estate` と同じ見方） |
 | 主人が居ない | ログの `modnpc:` の行。`did not spawn` が出ていれば `modnpc` の関所が立っていない世代（`out\status.json`） |
 | 売上が増えない | 日数が進んでいない（移動も宿泊もしていない）か、溜まりの上限に達している |
-| 「無料で泊まる」で宿代が引かれた | 宿代は先に足してから引かせる。ログに `stay: prepaid` が無ければ足せていない。`WARN stay: ... corrected` が出ていれば、足した額とゲームが引いた額が食い違っている（所持金は合わせてあるので、引かれたままにはならない） |
+| 「無料で泊まる」で宿代が引かれた | 宿代は先に足してから引かせる。ログに `stay: prepaid` が無ければ足せていない。`WARN stay: ... corrected` が出ていれば、足した額とゲームが引いた額が食い違っている（ゲームが引かなかった回は足した額を引き戻す）。前払いより多く減った回は返さず、`leaving it alone` の行だけ残す（宿泊の中で暦が進み、`330_` の家賃のように他の MOD が引いた額を巻き込まないため） |
 | 自分の宿に「宿泊する」が出る | 出ないのが正しい。出るならログに `modfacility: ... hides` の行が無いはずで、伏せる宣言が効いていない。よその宿屋の `宿泊する` は今までどおり出る |
 | 帳簿をやり直したい | `state\facility_investment\<世界名×主人公名>.json` を消す。建物と主人はロードし直すと消える（ローダの控えは `unregister` を通らないので `state\modfacility\` と `state\modnpc\` の同名ファイルも消す） |
 
@@ -4144,7 +4168,7 @@ Atk/Def はこの2つを見る（GAME.md §2.13.3 / §2.29）。
   通してこちらへ来る。受け渡しのドラッグでは 402_ が窓口（`combat.equipped`）に聞いて手を引く。
   この MOD を入れていなければ 402_ が `equipments` を直に書く
 - 店の売買の窓（場面が違う）には出さない
-- 控えは 世界×人物（`npc:<id>`）。主人公と同じ `state\equipment_slots\<世界>.json` の中
+- 控えは 周回×人物（`npc:<id>`）。主人公と同じ `state\equipment_slots\<世界>×<主人公>.json` の中
 
 #### 戦闘への効き方
 
@@ -4184,9 +4208,13 @@ Atk/Def はこの2つを見る（GAME.md §2.13.3 / §2.29）。
 - 置換は本体の下見で行う。本体はドロップの前に `is_valid_placement` で置けるかを確かめ、
   通らなければ `try_place_item` を呼ばずに品を元へ戻す。その下見で「同じ種類の品が居る部位」なら
   居た品を所持品の空きへ出してから下見をやり直す
-- どの品がどの位置に居るかは MOD の控え（`state\equipment_slots\<世界>.json`。
+- どの品がどの位置に居るかは MOD の控え（`state\equipment_slots\<世界>×<主人公>.json`。
   `{持ち主の鍵: {品の鍵: [x, y]}}`。主人公は名前、仲間は `npc:<id>`。y は上から）。
-  品の実体を持つ辞書はプロセスに1つなので、別の世界をロードしたら前の世界の品は持たない
+  控えはセーブと同じ寿命なので、同じ世界で主人公を作り直すと装備欄は空から始まる（TECH.md §5.4）。
+  版17までの `<世界>.json` に残っている位置は、その世界で初めて窓を開いた主人公へ移る
+- 品の実体を持つ辞書はプロセスに1つなので、ロードと新規開始のたびに空にする（`World.__init__` の包み）。
+  同じ世界・同じ主人公のロードでも空にする。セーブの後で装備した品はロードしたセーブの持ち物に無く、
+  残すと控えの位置から拾い直されて品が増える
 - 本体への書き込みは `equipments` の直書き（本体の popup も同じ）と、HUD の更新のための
   `ItemEquipManager.equip_item` / `ItemUnequipManager.unequip_item`。本体の Manager が MOD 以外の経路で
   走ったとき（本体の unequip は品の種類の枠を無条件に落とす）は、次のフレームと戦闘の1手ごとに装備欄から組み直す
@@ -4592,7 +4620,9 @@ MOD を外しても受け渡し済みのアイテムはそのまま相手の持�
 | 関係が育っている気がしない | `out\npc_social_memory.log`。ターンごとに `extract queued`、更新されれば `updated 誰→誰` が出る |
 | `extract skipped: fewer than two NPC participants` | 1対1の会話で同行者がいない。記録するNPCのペアが無いので何もしない、の正常な報告 |
 | 反映が1歩遅れる | 仕様。抽出は裏で走るので、今の会話の変化が載るのは次のターン以降 |
-| `structured route unusable` が出た | 構造化応答を返せない LLM 構成。以後は普通の JSON で聞き直す経路に固定される。ローカルLLMでは正常な切り替え |
+| `structured route unusable` が出た | 構造化応答を作れない・呼べない LLM 構成。以後は普通の JSON で聞き直す経路に固定される。ローカルLLMでは正常な切り替え |
+| `structured request failed; no change this time` が出た | 構造化の問い合わせがタイムアウトか通信エラーで返らなかった。その回は見送り、次の回はまた構造化で聞く |
+| `structured route gave nothing usable` が出た | 構造化の応答が読めなかった（起動直後で口がまだ無いときも）。その回だけ普通の JSON で聞き直し、次の回はまた構造化で聞く |
 | 覚え違いをリセットしたい | `state\npc_social_memory\<世界名>.json` を消す。その世界のNPC同士の記憶だけが初期化される |
 
 ### `404_party_talk`: パーティーメンバー全員と話す

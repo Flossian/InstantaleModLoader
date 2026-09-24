@@ -82,7 +82,7 @@ def make_app(*members):
     return app
 
 
-def run(members, gold_ok=True, family_passes=True, save_in_branch=False):
+def run(members, gold_ok=True, family_passes=True, save_in_branch=False, errors=None):
     """偽の本体。戻り値は (辿り着いたか, 判定時に見えた配列の一覧, 拒否回数, セーブ側)。"""
     ctx = FakeCtx(tempfile.mkdtemp())
     MOD.apply(ctx)
@@ -124,7 +124,10 @@ def run(members, gold_ok=True, family_passes=True, save_in_branch=False):
 
     manager = types.SimpleNamespace(app=app)
     ctx.hooks["__main__:AreaMoveManager.execute"](orig_execute, manager, "馬車")
-    assert not ctx.errors, ctx.errors
+    if errors is None:
+        assert not ctx.errors, ctx.errors
+    else:
+        errors.extend(ctx.errors)
     saved = {m: e["relationship"]["player"].get("relationship", "MISSING")
              for m, e in app.save_data_dict["npcs"].items()}
     return bool(seen["days"]), seen["tags"], seen["rejected"], saved
@@ -157,5 +160,28 @@ assert saved == {"5": ["同行中"]}, saved
 # 同行者なし: 何もしない
 arrived, tags, _, _ = run([])
 assert arrived and tags == []
+
+# 書き換えの途中で落ちても（2人目の名前を引くところ）、それまでに書いた 家族 は戻り、セーブにも残らない
+first, second = Character("F", ["同行中"]), Character("G", ["同行中"])
+real_name = MOD.ui.character_name
+asked = []
+
+
+def failing_name(app, npc_id, *args, **kwargs):
+    asked.append(npc_id)
+    if len(asked) == 2:
+        raise RuntimeError("name lookup failed")
+    return real_name(app, npc_id, *args, **kwargs)
+
+
+MOD.ui.character_name = failing_name
+errors = []
+try:
+    arrived, tags, _, saved = run([("6", first), ("7", second)], errors=errors)
+finally:
+    MOD.ui.character_name = real_name
+assert any("cannot lift" in e for e in errors), errors
+assert tags_of(first) == ["同行中"] and tags_of(second) == ["同行中"], (tags_of(first), tags_of(second))
+assert saved == {"6": ["同行中"], "7": ["同行中"]}, saved
 
 print("ok")

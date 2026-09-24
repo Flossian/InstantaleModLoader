@@ -30,7 +30,6 @@
 import collections
 import importlib.util
 import io
-import random
 import json
 import os
 import shutil
@@ -442,6 +441,35 @@ try:
                   {"memory": True, "relationship": True, "life_log": True})
     # 記憶の受け皿（311_ が入っている世界を演じる）
     os.makedirs(os.path.join(state_dir, "npc_profiles"), exist_ok=True)
+    # 311_ はこの世界の控えを既に読んで覚えている（同じプロセスで遊んでいた）。
+    # 323 がファイルを直に書くと、311_ が次に保存したとき持ち込んだ記憶が消える
+    from instantale_modloader import state as loader_state
+
+    class StoreCtx:
+        def __init__(self, root):
+            self.state_dir = root
+
+        def state_path(self, *parts):
+            path = os.path.join(self.state_dir, *parts)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            return path
+
+        def read_json(self, path, default=None):
+            try:
+                return json.load(io.open(path, encoding="utf-8"))
+            except (OSError, ValueError):
+                return default
+
+        def write_json(self, path, data, **kw):
+            io.open(path, "w", encoding="utf-8").write(json.dumps(data, ensure_ascii=False))
+            return True
+
+    profile_owner = loader_state.WorldStore(StoreCtx(state_dir), "npc_profiles")
+    profile_owner.load("アルカディア")["0"] = {"profile": "先住の記録"}
+    check("自分の控えは台帳に載る", loader_state.owner_of("npc_profiles") is profile_owner)
+    check("読むだけの控えは載らない",
+          loader_state.WorldStore(StoreCtx(state_dir), "npc_profiles", own=False)
+          is not None and loader_state.owner_of("npc_profiles") is profile_owner)
 
     ctx = FakeCtx(out_dir, state_dir)
     mod = load("npc_carryover_mod", os.path.join(MOD_DIR, "npc_carryover.py"),
@@ -527,6 +555,16 @@ try:
         encoding="utf-8"))
     check("記憶を新しい id で写す",
           profiles.get(hans_id, {}).get("profile") == "覚えた人物像", profiles)
+    check("311_ の覚えている控えにも載る（次に 311_ が保存しても消えない）",
+          profile_owner.cached("アルカディア").get(hans_id, {}).get("profile") == "覚えた人物像"
+          and profile_owner.cached("アルカディア").get("0") == {"profile": "先住の記録"},
+          profile_owner.cached("アルカディア"))
+    profile_owner.save("アルカディア")
+    profiles = json.load(io.open(
+        os.path.join(state_dir, "npc_profiles", "アルカディア.json"), encoding="utf-8"))
+    check("311_ が保存した後も持ち込んだ記憶が残る",
+          profiles.get(hans_id, {}).get("profile") == "覚えた人物像" and "0" in profiles,
+          sorted(profiles))
     rows = carryover.load_pending(state_dir)
     check("予約が placed になる",
           all(row["status"] == carryover.PLACED for row in rows),
@@ -660,7 +698,7 @@ try:
     # 代役の世界: area 0 にギルド(1)と宿(2)、area 2 に宿(4)だけ、area 1 はダンジョン。
     spread = collections.Counter()
     for seed in range(300):
-        random.seed(seed)
+        mod._rng.seed(seed)
         fresh = build_app({"0": npc_record("先住のバルガス", 0)})
         fresh.world_dict["world_data"] = {"world_name": "アルカディア"}
         fresh.save_data_dict["world_data"] = {"world_name": "アルカディア"}

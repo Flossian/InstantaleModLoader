@@ -65,5 +65,7 @@
 | 関係が育っている気がしない | `out\npc_social_memory.log`。ターンごとに `extract queued`、更新されれば `updated 誰→誰` が出る |
 | `extract skipped: fewer than two NPC participants` | 1対1の会話で同行者がいない。記録するNPCのペアが無いので何もしない、の正常な報告 |
 | 反映が1歩遅れる | 仕様。抽出は裏で走るので、今の会話の変化が載るのは次のターン以降 |
-| `structured route unusable` が出た | 構造化応答を返せない LLM 構成。以後は普通の JSON で聞き直す経路に固定される。ローカルLLMでは正常な切り替え |
+| `structured route unusable` が出た | 構造化応答を作れない・呼べない LLM 構成。以後は普通の JSON で聞き直す経路に固定される。ローカルLLMでは正常な切り替え |
+| `structured request failed; no change this time` が出た | 構造化の問い合わせがタイムアウトか通信エラーで返らなかった。その回は見送り、次の回はまた構造化で聞く |
+| `structured route gave nothing usable` が出た | 構造化の応答が読めなかった（起動直後で口がまだ無いときも）。その回だけ普通の JSON で聞き直し、次の回はまた構造化で聞く |
 | 覚え違いをリセットしたい | `state\npc_social_memory\<世界名>.json` を消す。その世界のNPC同士の記憶だけが初期化される |

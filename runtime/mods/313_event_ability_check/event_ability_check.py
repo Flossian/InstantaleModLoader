@@ -617,21 +617,32 @@ def apply(ctx):
     table = [(score, ability_percent(score))
              for score in (PIVOT, PIVOT + 1, PIVOT + STEP,
                            PIVOT + STEP + 1, 28, 30)]
+    # 式を確かめるので、設定は既定の値を明示で渡す（GUI で変えても期待値がずれない）。
+    # 既定 15 / 3点 / 1段4% / 上限20% / 減点なし / 底上げ0 / 10% 未満の刻みあり。
+    base = {"flat": 0, "fine": True, "pivot": 15, "step": 3, "per_step": 4,
+            "bonus_cap": 20, "penalty_cap": 0}
     cases = (
-        # (能力値, 説得力, 期待する新しい説得力)  既定 15 / 3点 / 1段4% / 上限20%
-        # / 底上げ10%
-        (15, 5, 5 + (0 + FLAT_BONUS) / 10.0),
-        (16, 5, 5 + (BONUS_PER_STEP + FLAT_BONUS) / 10.0),
-        (1, 5, 5 + FLAT_BONUS / 10.0),      # 低くても減点しない（MAX_PENALTY=0）
-        (99, 5, 5 + (MAX_BONUS + FLAT_BONUS) / 10.0),
-        (99, 10, CREDIBILITY_MAX),          # 上限で頭打ち
-        (None, 5, 5 + FLAT_BONUS / 10.0),   # 読めない能力値は底上げだけ
+        # (能力値, 説得力, 既定から変える値, 期待する新しい説得力)
+        (15, 5, {}, 5),
+        (16, 5, {}, 5 + 4 / 10.0),
+        (1, 5, {}, 5),                        # 低くても減点しない（減点上限0）
+        (99, 5, {}, 5 + 20 / 10.0),
+        (99, 10, {}, CREDIBILITY_MAX),        # 上限で頭打ち
+        (None, 5, {"flat": 10}, 5 + 10 / 10.0),   # 読めない能力値は底上げだけ
+        (16, 5, {"fine": False}, 5),          # 刻みを切れば整数へ丸める
+        (1, 5, {"penalty_cap": 8}, 5 - 8 / 10.0),  # 減点を許せば下がる
     )
-    failures = [c for c in cases if adjusted(c[1], c[0])[0] != c[2]]
+
+    def verify_case(score, credibility, change):
+        options = dict(base, **change)
+        return adjusted(credibility, score, **options)[0]
+
+    failures = [c for c in cases if verify_case(c[0], c[1], c[2]) != c[3]]
     if failures:
         ctx.log("VERIFY FAILED: {}".format(
-            ["score={} cred={} want={} got={}".format(
-                s, c, want, adjusted(c, s)[0]) for s, c, want in failures]),
+            ["score={} cred={} with={} want={} got={}".format(
+                s, c, change, want, verify_case(s, c, change))
+             for s, c, change, want in failures]),
             level="ERROR")
     else:
         ctx.log("verified: pivot={} step={} 1段{}% 加点上限{}% 減点上限{}% "

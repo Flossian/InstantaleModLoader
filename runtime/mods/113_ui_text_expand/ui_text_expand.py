@@ -579,15 +579,22 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("text expand: could not set the wrap width")
 
-    def settle(hud, label):
-        """枠を変えた後、本文の高さをゲーム自身の計算で決め直させる（GAME.md §2.3）。"""
-        try:
-            label.texture_update()
-            update_height = frames.attr(hud, "update_label_height")
-            if callable(update_height):
-                update_height()
-        except Exception:
-            ctx.log_exc("text expand: could not settle the label height")
+    def settle(hud):
+        """枠を変えた後、本文の高さをゲーム自身の計算で決め直させる（GAME.md §2.3）。
+
+        次のフレームで `update_label_height` を呼ぶだけで、`texture_update()` は呼ばない（TECH.md §6.2）。
+        折り返し幅を変えた時点で Kivy がテクスチャの作り直しを予約しており、
+        それはこの予約より先に走るので、高さを出す時点の `texture_size` は新しい幅のものになっている。
+        """
+        def run():
+            try:
+                update_height = frames.attr(hud, "update_label_height")
+                if callable(update_height):
+                    update_height()
+            except Exception:
+                ctx.log_exc("text expand: could not settle the label height")
+
+        schedule(run)
 
     def clamp(box):
         """`pos_hint` を持たない枠を窓の内側へ。位置はゲームが入れるので次のフレームに。"""
@@ -704,7 +711,7 @@ def apply(ctx):
             warn_once("sizer", "the game's own sizer resets the text frame; "
                                "sizing it here instead")
         schedule(lambda: clamp_all(design))
-        settle(hud, label)
+        settle(hud)
         note("expanded to {}x{:.0f} (design {:.0f}x{:.0f}), {} widget(s)".format(
             "{:.0f}".format(width) if widen else "(unchanged)",
             height, design["size"][0], design["size"][1],
@@ -737,7 +744,7 @@ def apply(ctx):
             setattr(box, EXPANDED_ATTR, False)
         except Exception:
             pass
-        settle(hud, label)
+        settle(hud)
         note("restored to {}".format(design["size"]))
         return True
 

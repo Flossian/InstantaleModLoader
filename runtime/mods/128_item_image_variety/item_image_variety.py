@@ -170,10 +170,12 @@ def apply(ctx):
         if pool is None:
             return orig(query_text, item_sub_type, *args, **kwargs)
         keys, matrix, key_set = pool
-        ensure_world()
 
         # 同じ外見文には同じ絵。埋め込みの計算より先に引けるので、再入手は速い。
         with lock:
+            # 表の差し替えも錠の中で。外で2本が同時に読み直すと、
+            # 片方が足した対応を、もう片方が読み直した表で上書きして失う。
+            ensure_world()
             kept = state["images"].get((item_sub_type, query_text))
             if kept is not None and kept in key_set:
                 log("{}: kept {} for {!r}".format(

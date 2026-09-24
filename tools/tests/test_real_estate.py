@@ -176,6 +176,8 @@ class VacationStartManager:
         # 前払いした額が宙に浮かないかを見る。
         if getattr(self.app, "stay_charges", True):
             self.app.player.gold -= ROOM_PRICE
+        # 同じ区間で他の MOD が引いた額（暦が進んで来た家賃など）。
+        self.app.player.gold -= getattr(self.app, "other_charge", 0)
         # ゲームは部屋の絵に差し替える（GAME.md §2.17 の実測）。
         self.app.change_background_image_to_inn_room(self.quality)
         if getattr(self.app, "stay_raises", False):
@@ -1009,6 +1011,22 @@ stay_len = durations.game_inn_stay(app)["months"] * module.DAYS_PER_MONTH
 check("値札の日数は宿泊4回ぶん",
       "{}日".format(stay_len * module.RENT_STAYS) in (label or ""), label)
 gold_before = app.player.gold
+# 代金を引けなかった回は契約も建物も残さない（控えは引けてから書く）
+real_add_gold = module.ui.add_gold
+module.ui.add_gold = lambda *args, **kwargs: None
+try:
+    app.press(label)
+    CLOCK.settle()
+finally:
+    module.ui.add_gold = real_add_gold
+check("引けなかった回は契約が控えに残らない", contract_of(module, app) is None,
+      contract_of(module, app))
+check("引けなかった回は建物も立たない", home_of(app, module, places) is None,
+      list(places["node"].facilities))
+app.press(module.OFFICE_LABEL)
+CLOCK.settle()
+label = app.label_like("借りる")
+saves_before = app.saves
 app.press(label)
 CLOCK.settle()
 record = contract_of(module, app)
@@ -1016,6 +1034,8 @@ check("契約が控えに1件残る", record is not None and record.get("kind") 
       record)
 check("家賃が引かれた", app.player.gold == gold_before - module.RENT_PRICE,
       app.player.gold)
+check("契約の後にゲームの保存が走る（所持金と控えを揃える）", app.saves > saves_before,
+      (saves_before, app.saves))
 home = home_of(app, module, places)
 check("建物がノードに立った", home is not None,
       list(places["node"].facilities))
@@ -1240,12 +1260,29 @@ CLOCK.settle()
 check("滞在1回ぶんでは家賃が来ない", app.player.gold == gold_before, app.player.gold)
 due_before = contract_of(module, app).get("due")
 gold_before = app.player.gold
+saves_before = app.saves
 app.elapse_days(term)
 CLOCK.settle()
 record = contract_of(module, app)
 check("期限が来たら家賃を払う", app.player.gold == gold_before - module.RENT_PRICE,
       app.player.gold)
 check("期限が1期ぶん延びる", record.get("due") == due_before + term, record.get("due"))
+check("家賃を払ったらゲームの保存が走る", app.saves > saves_before, (saves_before, app.saves))
+# 引けなかった回は期限を延ばさない
+module.ui.add_gold = lambda *args, **kwargs: None
+try:
+    app.elapse_days(term)
+    CLOCK.settle()
+finally:
+    module.ui.add_gold = real_add_gold
+check("家賃を引けなかった回は期限が延びない",
+      contract_of(module, app).get("due") == due_before + term,
+      contract_of(module, app).get("due"))
+app.elapse_days(0)
+CLOCK.settle()
+check("次の機会に払い、期限が延びる",
+      contract_of(module, app).get("due") == due_before + term * 2,
+      contract_of(module, app).get("due"))
 gold_before = app.player.gold
 app.elapse_days(term * 3)
 CLOCK.settle()
@@ -2231,6 +2268,21 @@ check("引き戻したことが WARN で残る",
           ROOM_PRICE, ROOM_PRICE) in read_log(),
       [l for l in read_log().splitlines() if "corrected" in l][:3])
 app.stay_charges = True
+
+print("[滞在の中の他の引き落とし]")
+# 前払いした回に余分に減ったぶんは差で返さない（`331_` の宿に泊まる間に来た家賃と同じ形）
+app.go(home_of(app, module, places))
+app.other_charge = 70
+gold_before = app.player.gold
+log_mark = len(read_log())
+app.press(module.STAY_LABEL)
+CLOCK.settle()
+check("余分に減ったぶんは返さない", app.player.gold == gold_before - 70,
+      (app.player.gold, gold_before))
+check("返さなかったことが WARN で残る",
+      "leaving it alone" in read_log()[log_mark:] and "corrected" not in read_log()[log_mark:],
+      read_log()[log_mark:][-400:])
+app.other_charge = 0
 
 print("[額が分からない等級]")
 # (c) ローダの窓口が額を答えられない等級。前払いはせず、引かれた差で返す。

@@ -10,7 +10,7 @@
     "en": "Reprices items from their own category, ability scores and rarity, instead of the flat scale the game uses",
     "ja": "アイテムの値段を、種別・能力値・レア度から付け直す。素のゲームがレア度をほぼ無視して一律に安いのを直す"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "settings": {
     "PRICE_SCALE": {

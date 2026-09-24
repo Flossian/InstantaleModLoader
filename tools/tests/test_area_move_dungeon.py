@@ -804,6 +804,33 @@ check("道中のクエストが1件できる", len(app.world.quests) == 2, app.w
 check("受注画面へ渡す", app.accepted == [("settlement_quest", "40")], app.accepted)
 check("例外も出ない", not ctx.errors, ctx.errors)
 
+print("=== 待機表示の後に投げても後始末は通る ===")
+mod, ctx, app, classes = setup()
+show_confirmation(app, classes[0])
+real_quest_ids = mod.world.quest_ids
+reads = []
+
+
+def quest_ids_then_break(app_obj):
+    reads.append(1)
+    if len(reads) > 1:                   # 生成の後の読み直しで投げる
+        raise RuntimeError("quest table unreadable")
+    return real_quest_ids(app_obj)
+
+
+mod.world.quest_ids = quest_ids_then_break
+try:
+    press(app, "危険な道を行く")
+finally:
+    mod.world.quest_ids = real_quest_ids
+check("例外は記録に残る", any("phase failed" in e for e in ctx.errors), ctx.errors)
+check("待機表示が解ける", app.is_button_enabled is True, app.is_button_enabled)
+show_confirmation(app, classes[0])
+press(app, "危険な道を行く")
+check("生成中の印が残らない（もう一度押せば道が出る）",
+      not any("いま道の話を聞いている" in text for text in app.texts)
+      and app.accepted, (app.texts[-3:], app.accepted))
+
 print("=== 体力が足りなければ断る ===")
 mod, ctx, app, classes = setup()
 app.player.physical_integrity = 32       # 3分の1を下回っている

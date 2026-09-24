@@ -12,7 +12,9 @@
   強さ     … 起こした戦闘の間だけ難易度が差し替わる。ゲーム自身の衛兵には触らない。
              引数の並びが変わっても数のある位置を選ぶ
   降ろす   … 敵が揃えば差し替えが降りる。起こせなかったときも降りる。時限でも降りる
-  暦       … `elapse_days` の日数を足して控えに残す。控えは世界ごと
+  暦       … 暦が進んだ日数（読めなければ `elapse_days` の日数）を足して控えに残す。
+             関所が縮めた回も縮めた後の日数で数える。控えは世界ごと
+  衛兵     … 数えるのはゲーム自身の衛兵（'guard'）だけ。依頼中と闘技場は数えない
   合図     … 契機は決めるだけで、起こすのは refresh_choice_buttons の中だけ
   変えない … どのフックでも本体が1回だけ呼ばれ、戻り値がそのまま返る
 """
@@ -183,6 +185,7 @@ class FakeUI(object):
         self.area_record = real.area_record
         self.set_lawfulness = real.set_lawfulness
         self.spec_cls_name = real.spec_cls_name
+        self.game_day = real.game_day
 
     def scheduler(self, ctx, tag="mod"):
         """本物と同じく「次のフレーム」。ゲームの外ではその場で実行する。"""
@@ -272,7 +275,7 @@ def fresh_mod(app, screen_cls=FakeScreen, **settings):
     BattleStartManager.last = None
     module = load_mod()
     module.ui = FakeUI(app, screen_cls)
-    module.random = types.SimpleNamespace(random=lambda: 0.0)   # 抽選は必ず当たる
+    module._RNG = types.SimpleNamespace(random=lambda: 0.0)   # 抽選は必ず当たる
     for name, value in settings.items():
         setattr(module, name, value)
     ctx = FakeCtx(OUT_DIR)
@@ -300,11 +303,25 @@ def counting(result=None):
 _display_button_load = App.display_button_load
 
 
-def game_guard(ctx, app):
-    """ゲーム自身が衛兵を出したことにする（`__init__` を素で通す）。"""
+def game_guard(ctx, app, enemy_type="guard"):
+    """ゲーム自身が戦闘を起こしたことにする（`__init__` を素で通す）。
+
+    既定は衛兵。依頼中の遭遇・ボスは 'in_quest'、闘技場は 'colosseum'（GAME.md の戦闘BGMの表）。
+    """
     orig, _ = counting(None)
     ctx.hooks["__main__:BattleStartManager.__init__"](
-        orig, types.SimpleNamespace(), app, "guard", None)
+        orig, types.SimpleNamespace(), app, enemy_type, None)
+
+
+def calendar(app, step):
+    """暦を `step` 日だけ進める `elapse_days` の本体（関所が差し替えた後の数の代わり）。"""
+    calls = []
+
+    def orig(this, days, *args, **kwargs):
+        calls.append(days)
+        this.days_elapsed = getattr(this, "days_elapsed", 0) + step
+        return "戻り値"
+    return orig, calls
 
 
 def start_of(ctx, app, phase):
@@ -401,7 +418,7 @@ def main():
 
     app = App({"0": -25})
     module, ctx = fresh_mod(app, CHANCE_PERCENT=100)
-    module.random = types.SimpleNamespace(random=lambda: 0.99)
+    module._RNG = types.SimpleNamespace(random=lambda: 0.99)
     module.CHANCE_PERCENT = 30
     arrive(ctx, app)
     check("発生率は％で読む（30% に 0.99 は外れ）",
@@ -499,7 +516,7 @@ def main():
     module, ctx = fresh_mod(app, CHANCE_PERCENT=100)
     game_guard(ctx, app)
     check("ゲームが衛兵を出したことを記録する",
-          any("ゲーム自身が戦闘を起こした" in line for line in read_log()), read_log())
+          any("ゲーム自身が衛兵を出した" in line for line in read_log()), read_log())
     arrive(ctx, app)
     check("その直後は追手を出さない（1回の遭遇として数える）",
           not BattleStartManager.built
@@ -513,6 +530,19 @@ def main():
     arrive(ctx, app)
     check("譲る設定を切れば出す", BattleStartManager.built == [("guard", None)],
           BattleStartManager.built)
+
+    for enemy_type, what in (("in_quest", "依頼中の遭遇・ボス"), ("colosseum", "闘技場")):
+        app = App({"0": -30})
+        module, ctx = fresh_mod(app, CHANCE_PERCENT=100)
+        arrive(ctx, app, ready=False)                 # 追手が決まった（控えがある）
+        game_guard(ctx, app, enemy_type)
+        check("{}の戦闘は衛兵として数えない".format(what),
+              not any("1回の遭遇として数える" in line for line in read_log())
+              and not ctx.files, (read_log()[-2:], ctx.files))
+        ready_screen(ctx, app)
+        check("{}の戦闘では決まっていた追手を落とさない".format(what),
+              BattleStartManager.built == [("guard", None)],
+              BattleStartManager.built)
 
     app = App({"0": -30})
     module, ctx = fresh_mod(app, CHANCE_PERCENT=100)
@@ -709,7 +739,7 @@ def main():
     print("抽選は画面ごとに1回")
     app = App({"0": -25})
     module, ctx = fresh_mod(app, CHANCE_PERCENT=100)
-    module.random = types.SimpleNamespace(random=lambda: 0.99)
+    module._RNG = types.SimpleNamespace(random=lambda: 0.99)
     module.CHANCE_PERCENT = 30
     for _ in range(3):        # 1つの行動で契機が3回来る
         ctx.hooks["__main__:InstantaleApp.elapse_days"](counting(None)[0], app, 1)
@@ -839,6 +869,28 @@ def main():
     key = list(ctx2.files)[0]
     check("控えは世界ごとのファイルに置く",
           "テストワールド" in key or key.endswith(".json"), key)
+
+    # 関所（durations）が 90 を 14 に縮めた移動。この包みには素の 90 が来る。
+    app = App({"0": -25})
+    app.days_elapsed = 100
+    module, ctx = fresh_mod(app, CHANCE_PERCENT=100, ON_DAYS=False)
+    orig, calls = calendar(app, 14)
+    returned = ctx.hooks["__main__:InstantaleApp.elapse_days"](orig, app, 90)
+    check("暦が読めれば、渡された日数ではなく暦の進みで数える",
+          [v for v in ctx.files.values()] == [{"days": 14.0, "last": None}],
+          ctx.files)
+    check("そのときも本体は1回・渡す日数はそのまま",
+          returned == "戻り値" and calls == [90], (returned, calls))
+    orig, calls = calendar(app, 0)
+    ctx.hooks["__main__:InstantaleApp.elapse_days"](orig, app, 30)
+    check("暦が動かなかった回は数えない",
+          [v for v in ctx.files.values()] == [{"days": 14.0, "last": None}],
+          ctx.files)
+    orig, calls = calendar(app, 7)
+    ctx.hooks["__main__:InstantaleApp.elapse_days"](orig, app, 30)
+    check("週単位の宿泊（30 が 7 に縮む）も7日と数える",
+          [v for v in ctx.files.values()] == [{"days": 21.0, "last": None}],
+          ctx.files)
 
     print("変えない")
     app = App({"0": 10})

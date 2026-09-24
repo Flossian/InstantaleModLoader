@@ -24,29 +24,34 @@ rem machine's code page (cp932 and friends), which breaks once this folder
 rem sits under a path containing Japanese or other non-ASCII characters.
 set "PYTHONUTF8=1"
 
-set "PY=%LOCALAPPDATA%\Programs\Python\Python313\pythonw.exe"
-if exist "%PY%" goto :run
+rem The program and its arguments are kept apart. PYEXE is always quoted when
+rem it runs, so a path with spaces in it (C:\Users\Taro Yamada\...) works;
+rem PYARGS holds the "-3" of the py launcher, which must stay outside the quotes.
+set "PYEXE=%LOCALAPPDATA%\Programs\Python\Python313\pythonw.exe"
+set "PYARGS="
+if exist "%PYEXE%" goto :run
 
 where pyw >nul 2>&1
 if not errorlevel 1 (
-  set "PY=pyw -3"
+  set "PYEXE=pyw"
+  set "PYARGS=-3"
   goto :run
 )
 
 where pythonw >nul 2>&1
 if not errorlevel 1 (
-  set "PY=pythonw"
+  set "PYEXE=pythonw"
   goto :run
 )
 
 echo.
 echo   No 64-bit Python found.
-echo   Install one from python.org, or edit the PY= line in this file
+echo   Install one from python.org, or edit the PYEXE= line in this file
 echo   to point at your pythonw.exe.
 echo.
 pause
 exit /b 2
 
 :run
-start "" %PY% "tools\gui.py"
+start "" "%PYEXE%" %PYARGS% "tools\gui.py"
 endlocal

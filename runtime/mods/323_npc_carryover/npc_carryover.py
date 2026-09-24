@@ -98,6 +98,9 @@ ANNOUNCE = True               # 到着と見送りをゲーム内の文で知ら
 # ---- 設定にしない定数 ----------------------------------------------------
 LOG_BASENAME = "npc_carryover.log"
 
+#: 置き先を引く乱数。MOD 専用にする（ゲーム全体の乱数の並びをずらさない。TECH.md §6.1）。
+_rng = random.Random()
+
 #: ロードの入口。新規と続きの両方（名前では決められない。GAME.md §1.3）。
 LOAD_TARGETS = ("__main__:InstantaleApp.load_game_new",
                 "__main__:InstantaleApp.start_game")
@@ -195,11 +198,11 @@ def apply(ctx):
         if not spots:
             return None
         areas = sorted({spot[1] for spot in spots})
-        area_id = random.choice(areas)
+        area_id = _rng.choice(areas)
         here = [spot for spot in spots if spot[1] == area_id]
         kinds = sorted({spot[3] for spot in here})
-        kind = random.choice(kinds)
-        return random.choice([spot for spot in here if spot[3] == kind])
+        kind = _rng.choice(kinds)
+        return _rng.choice([spot for spot in here if spot[3] == kind])
 
     def where_text(area, facility, kind):
         """到着の知らせに書く場所。「〈エリア名〉の〈施設名〉」。
@@ -375,9 +378,12 @@ def apply(ctx):
         return fresh, dropped
 
     def carry_memories(app, package, world, npc_id):
-        """`311_` / `403_` の記録を、置き先の世界のファイルへ新しい id で書く。
+        """`311_` / `403_` の記録を、置き先の世界の控えへ新しい id で書く。
 
-        書き方は相手と同じ「隣に作ってから差し替える」。
+        相手がこのプロセスで控えを持っていれば、相手の `WorldStore` を通して書く
+        （`state.owner_of`。錠とキャッシュが相手と同じになる）。ファイルを直に書くと、
+        その世界を既に読んでいた相手が次に保存したとき、持ち込んだ記憶が消える。
+        持っていなければファイルを書く。書き方は相手と同じ「隣に作ってから差し替える」。
         相手が入っていなければ何もしない（空のフォルダを作らない。TECH.md §3.11）。
         """
         done = []
@@ -390,6 +396,16 @@ def apply(ctx):
                 if dropped:
                     write("    memory: dropped {} relation(s) whose other "
                           "side is not in this world".format(dropped))
+            owner = loader_state.owner_of(dirname)
+            if owner is not None:
+                with owner.lock:
+                    owner.load(world)[str(npc_id)] = record
+                    saved = owner.save(world)
+                if saved:
+                    done.append(dirname)
+                else:
+                    write("    memory: cannot write {} for {}".format(dirname, world))
+                continue
             folder = os.path.join(state_dir, dirname)
             if not os.path.isdir(folder):
                 continue                # その MOD を入れていない

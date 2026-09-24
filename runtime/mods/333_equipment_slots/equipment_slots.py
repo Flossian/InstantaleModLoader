@@ -11,7 +11,7 @@
   持ち物の辞書から品を並べ直すので、抜いておけば所持品にも売買・クラフト・強化の窓にも出ない。
   セーブのときだけ、書き出す直前の JSON へ合流させる
 - 装備欄の辞書は装備欄のグリッドの持ち物の辞書でもある（本体はドラッグで品を出すときそこから抜く）
-- どの品がどの部位に居るかは MOD の控え（世界ごと。`{持ち主の鍵: {品の鍵: [x, y]}}`、y は上から）
+- どの品がどの部位に居るかは MOD の控え（世界×主人公ごと。`{持ち主の鍵: {品の鍵: [x, y]}}`、y は上から）
 - 持ち主ごとに scope（辞書・控えの鍵・窓の場面）を持つ。主人公は所持品の窓、仲間は
   `402_party_inventory_transfer` の受け渡しの窓
 - 本体が読む装備は `equipments` の `weapon` / `wearable` の2つだけなので、手の武器で攻撃力が最高の1つと
@@ -63,7 +63,7 @@ CONTAINER = None
 
 
 def _store(ctx, write):
-    """世界ごとの控え。`apply()` の外（プロセス側）に1つ（TECH.md §5.5）。"""
+    """周回（世界×主人公）ごとの控え。`apply()` の外（プロセス側）に1つ（TECH.md §5.5）。"""
     store = getattr(sys, STORE_ATTR, None)
     if store is None:
         store = state.WorldStore(ctx, "equipment_slots", write=write)
@@ -158,9 +158,32 @@ def apply(ctx):
         found = getattr(grid, GRID_ATTR, None)
         return found if isinstance(found, dict) else None
 
+    def bucket_of(app):
+        """(周回の鍵, 控え)。控えはセーブと同じ寿命なので世界×主人公で持つ（TECH.md §5.4）。
+
+        世界名だけの鍵だと、同じ世界で作り直した主人公に前の主人公の位置が乗る。
+        世界名だけのファイル（版17まで）に残っている分は、初めて引いたときにこの主人公の名の分と
+        仲間の分を移し、元のファイルからは消す（次に作り直した主人公へ二度渡さない）。
+        """
+        key = state.playthrough_key(app)
+        bucket = store.load(key)
+        world = state.world_key(app)
+        if bucket or world == key or world == state.UNKNOWN_WORLD:
+            return key, bucket
+        old = store.load(world)
+        name = str(getattr(player_of(app), "name", None) or "_")
+        moved = [k for k in list(old) if k == name or str(k).startswith("npc:")]
+        if moved:
+            for k in moved:
+                bucket[k] = old.pop(k)
+            store.save(key)
+            store.save(world)
+            write("moved {} owner(s) from the world file {!r} to {!r}".format(len(moved), world, key))
+        return key, bucket
+
     def positions_of(app, sc):
-        """(世界の鍵, この持ち主の控え {品の鍵: [x, y]})。y は上から。"""
-        key, bucket = store.of(app)
+        """(周回の鍵, この持ち主の控え {品の鍵: [x, y]})。y は上から。"""
+        key, bucket = bucket_of(app)
         return key, bucket.setdefault(sc["key"], {})
 
     def instance_of(widget_or_item):
@@ -785,6 +808,14 @@ def apply(ctx):
                 return name, rx, ry
         return None
 
+    def forget_containers():
+        """装備欄の辞書（主人公・仲間）と scope を空にする。持っていた品の数を返す。"""
+        count = len(CONTAINER) + sum(len(c) for c in npc_containers.values())
+        CONTAINER.clear()
+        npc_containers.clear()
+        scopes.clear()
+        return count
+
     def refresh_container(app, sc):
         """控えを持ち物と突き合わせ、装備欄の辞書を組み直し、装備欄の品を持ち物の辞書から抜く。
 
@@ -800,19 +831,18 @@ def apply(ctx):
             return
         key, positions = positions_of(app, sc)
         eq = equipments_of(player) or {}
-        # 辞書はプロセスに1つ。別の世界をロードしたら前の世界の品は持たない
-        # （前の世界の品はセーブに合流済み。持ったままだと「戻し先の無い品」として新しい世界の所持品へ返る）
-        held = getattr(sys, CONTAINER_ATTR + "_world", None)
+        # 辞書はプロセスに1つ。別の周回に移ったら前の周回の品は持たない
+        # （前の周回の品はセーブに合流済み。持ったままだと「戻し先の無い品」として新しい所持品へ返る）。
+        # ロードでは `world_loaded` が先に空にしている。ここはロードを包めなかったときの受け皿
+        held = getattr(sys, CONTAINER_ATTR + "_playthrough", None)
         if held is not None and held != key:
-            count = len(CONTAINER) + sum(len(c) for c in npc_containers.values())
+            count = forget_containers()
             if count:
                 write("world changed ({!r} -> {!r}): dropping {} item(s) of the old world".format(held, key, count))
-            CONTAINER.clear()
-            npc_containers.clear()
-            scopes.clear()
             container = sc["container"] = CONTAINER if sc["player"] else npc_containers.setdefault(sc["key"], {})
             scopes[sc["key"]] = sc
-        setattr(sys, CONTAINER_ATTR + "_world", key)
+        setattr(sys, CONTAINER_ATTR + "_playthrough", key)
+        setattr(sys, CONTAINER_ATTR + "_world", state.world_key(app))
 
         def item_of(item_key):
             item = inv.get(item_key)
@@ -1388,6 +1418,27 @@ def apply(ctx):
     for _target in ("ItemEquipManager.equip_item", "ItemUnequipManager.unequip_item"):
         ctx.wrap("__main__:" + _target, required=False, safe=True)(resync_after_native)
 
+    @ctx.wrap("__main__:World.__init__", required=False, safe=True)
+    def world_loaded(orig, self, save_data_dict=None, *args, **kwargs):
+        """ロード・新規開始。前の周回の装備欄の品を必ず捨てる。
+
+        装備中の品は装備欄の辞書にしか居ないが、セーブには書き出しの時点で合流済み。
+        同じ世界・同じ主人公のロードでも捨てる。残すと、セーブの後で手に入れて装備した品を
+        `refresh_container` が控えの位置から拾い直し、次のセーブで品が増える。
+        同じ世界の別の主人公では、前の主人公の品が「戻し先の無い品」として持ち物へ返る。
+        ここでは `app` から周回の鍵を引かない（`app` の辞書と `player` はまだ前の周回を指していることがある）。
+        鍵は次に窓を組むときに `refresh_container` が引く。
+        """
+        result = orig(self, save_data_dict, *args, **kwargs)
+        count = forget_containers()
+        # 印は次に窓を組むときに今の周回で立て直す（空の辞書を合流させても何も足さない）
+        setattr(sys, CONTAINER_ATTR + "_playthrough", None)
+        setattr(sys, CONTAINER_ATTR + "_world", None)
+        if count:
+            write("load ({!r}): dropped {} item(s) of the previous play".format(
+                state.playthrough_key_of_dict(save_data_dict, None), count))
+        return result
+
     @ctx.wrap("scripts.save_codec:write_obfuscated_json_file", safe=True)
     def write_save(orig, file_path, data, *args, **kwargs):
         """セーブの書き出し。装備欄の品を JSON 側へ足す（`equipments` の id は本体が書いている）。"""
@@ -1527,7 +1578,7 @@ def apply(ctx):
     def worn_of(app, holder):
         """身に着けている品 `[(部位, 品), ...]`（部位の並び順）。窓口 `combat.gear` の答え。
 
-        控え（世界ごとの位置の控え。DOC.md「仲間の装備欄」）から組む。品は持ち物の辞書を先に、
+        控え（周回ごとの位置の控え。DOC.md「仲間の装備欄」）から組む。品は持ち物の辞書を先に、
         無ければ装備欄の辞書から引く（ロード直後で窓をまだ開いていないとき、品は持ち物の辞書に居る。
         装備欄の辞書にはロード前の品が残っていることがある）。scope は作らない
         （作ると戦闘の数が空の辞書を引く）。控えが無ければ None。
@@ -1542,7 +1593,7 @@ def apply(ctx):
                 return None
             key = "npc:" + str(cid)
             container = npc_containers.get(key) or {}
-        _world, bucket = store.of(app)
+        _key, bucket = bucket_of(app)
         positions = bucket.get(key) if isinstance(bucket, dict) else None
         if not positions:
             return None

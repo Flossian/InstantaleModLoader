@@ -106,6 +106,7 @@ class World:
 
 class Player:
     def __init__(self, area):
+        self.name = "主人公"
         self.current_area = area
         self.gold = 5000
 
@@ -381,11 +382,12 @@ def install(hooks, targets):
 CLOCK = install_fake_kivy()
 LOG_PATH = os.path.join(OUT_DIR, "area_move_custom.log")
 
-# 325_road_opening の控え（`state/road_opening/<世界>.json`）。距離補正はこれを
+# 325_road_opening の控え（`state/road_opening/<世界×主人公>.json`）。距離補正はこれを
 # **読むだけ**なので、テストは本物と同じ場所に同じ形で置く。ファイル名の作り方は
 # ローダの語彙（`state.world_filename`。揺れると「読めない」＝道が無い扱いになる）。
 ROADS_DIR = os.path.join(OUT_DIR, "state", "road_opening")
-ROADS_PATH = os.path.join(ROADS_DIR, mstate.world_filename("テスト世界"))
+ROADS_PATH = os.path.join(ROADS_DIR, mstate.world_filename(
+    "テスト世界" + mstate.PLAYTHROUGH_SEP + "主人公"))
 
 
 def write_roads(records):
@@ -507,6 +509,14 @@ def full(module):
 module, ctx, app, confirm_cls, move_cls = setup(configure=full)
 check("徒歩(30日)", texts_of(app)[0] == "徒歩(30日)", texts_of(app))
 check("竜車(500G・7日)", texts_of(app)[1] == "竜車(500G・7日)", texts_of(app))
+
+print("[ラベル] 馬車のボタンの形を変えても自己検証は通る")
+module, ctx, app, confirm_cls, move_cls = setup(
+    configure=lambda m: setattr(m, "COACH_BUTTON", "{name}【{days}日・{price}G】"))
+check("VERIFY FAILED が出ない",
+      not [msg for level, msg in ctx.logs if level == "ERROR"], ctx.logs)
+check("ボタンは変えた形で出る", texts_of(app)[1].endswith("日・1000G】"),
+      texts_of(app))
 
 print("[ラベル] 料金だけ変える（日数はゲームのまま）")
 

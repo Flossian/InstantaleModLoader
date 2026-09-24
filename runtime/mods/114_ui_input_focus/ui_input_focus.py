@@ -111,7 +111,7 @@ SEND_ATTR = "_instantale_focus_on_send"
 
 
 def apply(ctx):
-    state = {"attempts": [], "standdown": 0.0, "chosen": None}
+    state = {"attempts": [], "standdown": 0.0, "chosen": None, "held": None}
     inputs = weakref.WeakKeyDictionary()      # hud -> 入力欄への弱参照
 
     note = ctx.logger(LOG_BASENAME)
@@ -297,6 +297,7 @@ def apply(ctx):
 
         注入し直すと `apply()` がもう一度走る（TECH.md §3.6）。
         前の版の手を外してから結ばないと、古い注入の処理が重なったまま走り続ける。
+        結べたら `(widget, attr, callback)` を、結べなければ None を返す。
         """
         previous = frames.attr(widget, attr, None)
         if previous is not None:
@@ -309,6 +310,8 @@ def apply(ctx):
             setattr(widget, attr, callback)
         except Exception:
             ctx.log_exc("input focus: could not watch " + event)
+            return None
+        return widget, attr, callback
 
     def bind_input(hud, widget):
         def on_focus(_instance=None, value=True, *_args):
@@ -323,13 +326,12 @@ def apply(ctx):
             # 送信ボタンを経由しないビルド用。
             request(hud, "enter")
 
-        rebind(widget, "focus", FOCUS_ATTR, on_focus)
-        rebind(widget, "on_text_validate", VALIDATE_ATTR, on_validate)
+        return [rebind(widget, "focus", FOCUS_ATTR, on_focus),
+                rebind(widget, "on_text_validate", VALIDATE_ATTR, on_validate)]
 
-    def bind_send(hud):
-        button = send_button(hud)
+    def bind_send(hud, button):
         if button is None:
-            return
+            return []
 
         def on_disabled(_instance=None, value=True, *_args):
             # 塞がれた → 解かれた、が「応答が返ってきた」の合図（GAME.md §2.4）。
@@ -337,18 +339,33 @@ def apply(ctx):
                 return
             request(hud, "send finished")
 
-        rebind(button, "disabled", SEND_ATTR, on_disabled)
+        return [rebind(button, "disabled", SEND_ATTR, on_disabled)]
+
+    def still_held(key):
+        """前に結んだ相手が同じで、どれにもこの注入の手が付いたままか。"""
+        held = state["held"]
+        if held is None or held[0] != key:
+            return False
+        return all(entry is not None and frames.attr(entry[0], entry[1], None) is entry[2]
+                   for entry in held[1])
 
     def upkeep(hud):
         """塗り直しのたびに、監視が今の注入に結ばれていることを保つ。
 
         画面が組み直されて入力欄が別のウィジェットに変わっても、ここで結び直る。
+        塗り直しは本文の1文字ごとに来るので、HUD・入力欄・送信ボタンが前と同じで
+        この注入の手が付いたままなら結び直さない（外して結ぶ組を毎文字くり返さない）。
+        手が付いているかは印の中身と今の注入の手を突き合わせて見るので、
+        別のウィジェットが同じ `id` を引き継いだ場合も結び直る。
         """
         widget = input_of(hud)
         if widget is None:
             return
-        bind_input(hud, widget)
-        bind_send(hud)
+        button = send_button(hud)
+        key = (id(hud), id(widget), id(button) if button is not None else None)
+        if still_held(key):
+            return
+        state["held"] = (key, bind_input(hud, widget) + bind_send(hud, button))
 
     # -- フック --------------------------------------------------------------
     # 本文が変わったとき（送信の直後に必ず来る）と、選択肢が塗り直されたとき。

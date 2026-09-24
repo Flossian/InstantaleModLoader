@@ -10,7 +10,7 @@
     "en": "While the player is wanted, hunters come after them across land borders. They are the game's own guard encounter (BattleStartManager with enemy_type 'guard'), started by this mod at the moment you choose - arriving in a land, arriving at a facility, days passing, or a free action - with the difficulty scaled to how heavily you are wanted. Two conditions start it: the wanted level in the land you are in, and the total of every land's wanted level, so hunters keep coming even where you are clean",
     "ja": "手配されている間、土地を跨いで追手が来る。追手にはゲーム自身の衛兵の戦闘（enemy_type='guard'）をそのまま使い、設定でONにした場面（土地への到着・施設への到着・日数の経過・自由行動）でこの MOD が起こす。強さは手配の重さに合わせて渡す。始まる条件は2つあり、今いる土地の手配度と、全ての土地の手配度の合計。合計の側があるので、手配されていない土地へ逃げても追ってくる"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "after": [
     "309_office_pardon"

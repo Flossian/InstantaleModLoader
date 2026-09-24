@@ -26,6 +26,9 @@
 | 寸法・見分け・テンプレート・クエスト・世界観の小さな部品 | 2〜3本ずつ写されていた（HANDOFF の §2） |
 | `state.SysWorldStore` が上書き鍵を優先する | `modnpc` / `modfacility` の建て直しの間の鍵 |
 | `ui.set_gold` / `add_gold` が所持金の型を保つ | `314_` / `315_` / `332_` の写しが避けていた int への変換を、`add_gold` が行っていた |
+| `ui.scheduler` / `window_watcher` が Clock の中の例外を握る | MOD は素の関数を渡している。漏れるとゲームごと落ちる |
+| `Screen.busy_on` を重ねても戻す値と interval が増えない | 取り直すと自分の `False` を覚えて、選択肢が押せないまま残る |
+| `llm.watch_aliases` が注入し直しで降りるときも1行残す | 黙って降りると、当たらなかった理由を追えない |
 
 ゲームは要らない（偽の `ctx` を渡す）。
 """
@@ -224,6 +227,10 @@ def test_worker(root):
                         key=lambda job: job["area"])
     keyed.enqueue({"area": "a"})          # 走り出して hold で止まる
     check("走り出した1件は待ち行列から出ている", keyed.pending() == 0)
+    # 処理中の鍵も積まない。積む側は `run` が書く結果を見て積むかを決めるので、
+    # 受けると同じ入力で LLM を二度呼ぶ（jobs.Worker.enqueue の注記）。
+    check("処理中の鍵は積まない", not keyed.enqueue({"area": "a"}))
+    check("処理中の鍵も waiting が答える", keyed.waiting("a"))
     keyed.enqueue({"area": "b"})
     check("違う鍵は積む", keyed.enqueue({"area": "c"}))
     check("待っている鍵は積まない", not keyed.enqueue({"area": "b"}))
@@ -604,6 +611,146 @@ def test_gold():
           and len(errors) == 2, errors)
 
 
+class FakeClock(object):
+    """`kivy.clock.Clock` の代わり。載せた関数を溜めるだけで、呼ぶのは検査の側。"""
+
+    def __init__(self):
+        self.once = []
+        self.intervals = []
+
+    def schedule_once(self, callback, delay=0):
+        self.once.append(callback)
+
+    def schedule_interval(self, callback, poll):
+        self.intervals.append(callback)
+
+
+class FakeWindow(object):
+    """`kivy.core.window.Window` の代わり。結んだ手を1本ずつ持つ。"""
+
+    def __init__(self):
+        self.handlers = []
+
+    def bind(self, on_resize=None):
+        self.handlers.append(on_resize)
+
+    def unbind(self, on_resize=None):
+        self.handlers.remove(on_resize)
+
+
+def with_fake_kivy(body):
+    """Kivy が在るゲームの中と同じ経路を通すため、偽の `kivy.clock` / `kivy.core.window` を差す。"""
+    names = ("kivy", "kivy.clock", "kivy.core", "kivy.core.window")
+    saved = {name: sys.modules.get(name) for name in names}
+    clock, window = FakeClock(), FakeWindow()
+    for name in names:
+        sys.modules[name] = types.ModuleType(name)
+    sys.modules["kivy.clock"].Clock = clock
+    sys.modules["kivy.core.window"].Window = window
+    try:
+        body(clock, window)
+    finally:
+        for name, module in saved.items():
+            if module is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
+
+
+def test_clock_guard(root):
+    print("ui.scheduler / window_watcher / Screen.busy_on（Clock の中の例外と重なり）")
+    ctx = FakeCtx(root)
+
+    def body(clock, window):
+        def boom():
+            raise RuntimeError("MOD の不具合")
+
+        schedule = ui.scheduler(ctx, "guard test")
+        ran = []
+        schedule(boom)
+        schedule(lambda: ran.append(1), delay=0.5)
+        raised = None
+        try:
+            for callback in clock.once:
+                callback(0)
+        except Exception as exc:
+            raised = exc
+        check("scheduler: Clock のコールバックから例外が漏れない", raised is None, raised)
+        check("scheduler: 投げたことはローダのログに残る",
+              any("guard test" in e for e in ctx.errors), ctx.errors)
+        check("scheduler: ほかの予約はそのまま走る", ran == [1], ran)
+
+        def on_resize(_window, width, height):
+            raise RuntimeError("窓の手の不具合")
+
+        attr = ui.MOD_WIDGET_PREFIX + "guard_test_resize"
+        watch = ui.window_watcher(ctx, on_resize, attr, "guard test")
+        check("window_watcher: 結べた", watch() and len(window.handlers) == 1,
+              window.handlers)
+        del ctx.errors[:]
+        raised = None
+        try:
+            window.handlers[0](window, 800, 600)
+        except Exception as exc:
+            raised = exc
+        check("window_watcher: リサイズの手から例外が漏れない", raised is None, raised)
+        check("window_watcher: 投げたことはログに残る",
+              any("guard test" in e for e in ctx.errors), ctx.errors)
+        # 注入し直した世代は、前の世代が残した包みを外してから結ぶ。
+        again = ui.window_watcher(ctx, on_resize, attr, "guard test")
+        check("window_watcher: 結び直しても手は1本",
+              again() and len(window.handlers) == 1, window.handlers)
+
+        screen = ui.Screen(ctx, lambda line: None, tag="guard test")
+        app = types.SimpleNamespace(is_button_enabled=True,
+                                    to_display_buttons=["a", "b"])
+        screen.busy_on(app)
+        screen.busy_on(app)          # 待機表示を出したまま、もう一度
+        check("busy_on: 重ねても interval は1本", len(clock.intervals) == 1,
+              len(clock.intervals))
+        screen.busy_off(app, restore=False)
+        check("busy_on: 重ねた後の busy_off で押せる状態へ戻る",
+              app.is_button_enabled is True, app.is_button_enabled)
+        # 解いた直後、前のコマが来る前に出し直す。
+        screen.busy_on(app)
+        check("busy_on: 出し直しでは interval を足す", len(clock.intervals) == 2,
+              len(clock.intervals))
+        check("busy_on: 前の世代のコマ送りは外れる",
+              clock.intervals[0](0) is False and clock.intervals[1](0) is True)
+        screen.busy_off(app, restore=False)
+        check("busy_on: 出し直しの後も元の値へ戻る", app.is_button_enabled is True,
+              app.is_button_enabled)
+
+    with_fake_kivy(body)
+
+
+def test_watch_aliases_superseded():
+    print("llm.watch_aliases（注入し直されて降りるときも1行残す）")
+    lines = []
+    state = {"superseded": False}
+    ctx = types.SimpleNamespace(
+        resolve=lambda target: (None, None, None),     # 別名はまだ生えない
+        superseded=lambda: state["superseded"],
+        log=lambda msg, level="INFO": lines.append(msg),
+        log_exc=lambda msg: lines.append("EXC " + msg))
+    old_poll = llm.ALIAS_POLL_SECONDS
+    llm.ALIAS_POLL_SECONDS = 0.02
+    try:
+        watched = llm.watch_aliases(ctx, ["llm_manager:send_request"],
+                                    lambda target: None, label="alias test")
+        check("生えていない対象は見張りに回る", watched == ["llm_manager:send_request"],
+              watched)
+        state["superseded"] = True
+        deadline = time.monotonic() + 5.0
+        while not lines and time.monotonic() < deadline:
+            time.sleep(0.01)
+        check("降りたことと対象が記録に残る",
+              any("alias test" in line and "send_request" in line
+                  and "superseded" in line for line in lines), lines)
+    finally:
+        llm.ALIAS_POLL_SECONDS = old_poll
+
+
 def main():
     root = tempfile.mkdtemp(prefix="instantale_common_")
     try:
@@ -620,6 +767,8 @@ def main():
         test_widgets()
         test_sys_world_store(root)
         test_gold()
+        test_clock_guard(root)
+        test_watch_aliases_superseded()
     finally:
         shutil.rmtree(root, ignore_errors=True)
     if FAILURES:

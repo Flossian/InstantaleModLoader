@@ -100,12 +100,17 @@ def save_path(world: str, base: str = "") -> str:
 def xor(raw: bytes) -> bytes:
     """難読化の掛け外し。**同じ関数で往復する**（XOR なので読みにも書きにも使える）。
 
-    `key` と `size` をループの外に出しているのは、
-    100 MB を超えるセーブで属性引きが積み上がるため。
+    1バイトずつではなく、全体を1つの整数にして1回で XOR する。
+    100 MB を超えるセーブがあり、1バイトずつのジェネレータでは数秒かかる。
+    鍵は同じ長さまで繰り返して並べる。バイト順は little にそろえ、
+    `to_bytes` に元の長さを渡すので、末尾が 0 になっても長さは縮まない。
     """
-    key = SAVE_KEY
-    size = len(key)
-    return bytes(byte ^ key[index % size] for index, byte in enumerate(raw))
+    size = len(raw)
+    if not size:
+        return b""
+    key = (SAVE_KEY * (size // len(SAVE_KEY) + 1))[:size]
+    value = int.from_bytes(raw, "little") ^ int.from_bytes(key, "little")
+    return value.to_bytes(size, "little")
 
 
 def _utf8(raw: bytes):

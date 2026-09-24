@@ -394,6 +394,31 @@ def gate_main():
     ok &= check("外側が済んでから戻る", item.attributes[prices.BUY] == 1200,
                 item.attributes[prices.BUY])
 
+    print("[保存の窓の間に別の地点が通っても一時の段を書き戻さない]")
+    ctx = fresh_gate()
+    prices.declare_base("129", lambda it: {prices.BUY: 800, prices.SELL: 320})
+    prices.adjust("405", lambda it, key, price: price * 1.5, temporary=True)
+    item = Item()
+    price_owner(ctx, item)
+    during = {}
+
+    def crossing(*args, **kwargs):
+        # 保存のスレッドが書き出している間に、メインスレッドの画面・
+        # `refresh()`・ゲームが値を付け直す地点が通る。
+        open_window(ctx, Obtainer(item))
+        during["window"] = item.attributes[prices.BUY]
+        prices.refresh("test")
+        during["refresh"] = item.attributes[prices.BUY]
+        price_owner(ctx, item)
+        during["game"] = item.attributes[prices.BUY]
+
+    ctx.hooks[prices.SAVE_TARGETS[0]](crossing, None)
+    ok &= check("画面の地点を通っても式だけの額", during.get("window") == 800, during)
+    ok &= check("refresh を押されても式だけの額", during.get("refresh") == 800, during)
+    ok &= check("ゲームが書く地点を通っても式だけの額", during.get("game") == 800, during)
+    ok &= check("保存が済んだら倍率が戻る", item.attributes[prices.BUY] == 1200,
+                item.attributes[prices.BUY])
+
     print("[段の答えが変わったら押して組み直す]")
     ctx = fresh_gate()
     prices.declare_base("129", lambda it: {prices.BUY: 100, prices.SELL: 100})

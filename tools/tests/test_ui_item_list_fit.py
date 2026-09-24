@@ -672,6 +672,33 @@ def run():
 
     check("握り潰した例外が無い", not ctx.errors, "\n".join(ctx.errors[:2]))
 
+    print("\n[例外] 後から当て直す回で投げても、ゲームへ漏らさない")
+    install(mod, ctx)
+    hud = FakeHUD(count=18)
+    hud.press_item_icon()                   # フックが後の回を Clock へ積む
+    real_frames = mod.frames
+
+    class BrokenFrames(object):
+        MISSING = real_frames.MISSING
+
+        @staticmethod
+        def attr(*args, **kwargs):
+            raise RuntimeError("boom")
+
+    mod.frames = BrokenFrames
+    try:
+        hud.settle()
+        leaked = None
+    except Exception as exc:
+        leaked = exc
+    finally:
+        mod.frames = real_frames
+    check("Clock の外へ例外が出ない", leaked is None, repr(leaked))
+    check("MOD 自身が捕まえて記録する",
+          any("follow-up pass failed" in text for text in ctx.errors),
+          "\n".join(ctx.errors[:1]))
+    del ctx.errors[:]
+
     print()
     if failures:
         print("FAILED: " + ", ".join(failures))

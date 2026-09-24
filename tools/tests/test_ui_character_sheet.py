@@ -95,24 +95,29 @@ PORTRAIT_LEFT = 0.70
 
 # ---------------------------------------------------------------- 偽 Kivy
 class FakeWindow(object):
+    """結んだ手を (事象名, 手) で持つ。`resize` は Kivy と同じく
+    `on_resize` へ (窓, 幅, 高さ)、`size` へ (窓, (幅, 高さ)) を配る。"""
     width, height = WIN_WIDTH, WIN_HEIGHT
     bound = []
 
     @classmethod
     def bind(cls, **kwargs):
-        cls.bound += list(kwargs.values())
+        cls.bound += list(kwargs.items())
 
     @classmethod
     def unbind(cls, **kwargs):
-        for handler in kwargs.values():
-            if handler in cls.bound:
-                cls.bound.remove(handler)
+        for item in kwargs.items():
+            if item in cls.bound:
+                cls.bound.remove(item)
 
     @classmethod
     def resize(cls, width, height):
         cls.width, cls.height = float(width), float(height)
-        for handler in list(cls.bound):
-            handler(cls, (cls.width, cls.height))
+        for name, handler in list(cls.bound):
+            if name == "on_resize":
+                handler(cls, cls.width, cls.height)
+            elif name == "size":
+                handler(cls, (cls.width, cls.height))
 
 
 class FakeLabel(object):
@@ -389,6 +394,8 @@ def run():
     ctx, hud = FakeCtx(), FakeHUD()
     app, player = sample_world()
     toggle, borders = install(mod, ctx, hud, app)
+    check("apply() の中では窓に結ばない（boot のスレッドの上）", FakeWindow.bound == [],
+          FakeWindow.bound)
     portrait = (tuple(hud.character_image_right.pos_hint.items()),
                 hud.character_image_right.size)
     toggle()                                   # 開く
@@ -507,6 +514,7 @@ def run():
     ctx2, hud2 = FakeCtx(), FakeHUD()
     toggle2, _borders = install(mod, ctx2, hud2, app2)
     toggle2()
+    check("注入し直しても見張りは1つだけ", len(FakeWindow.bound) == 1, FakeWindow.bound)
     text2 = "".join(box.text for box in hud2.character_sheet_layout.children
                     if "手配度" in box.text)
     check("BGM が dungeons の土地を落とす", "霧の湿地帯" not in text2, text2)

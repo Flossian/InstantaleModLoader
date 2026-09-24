@@ -2,7 +2,7 @@
   "entry": "regional_economy.py",
   "api": 1,
   "kind": "feature",
-  "version": "2",
+  "version": "3",
   "author": "MoririnJP, R01/Flossian",
   "name": {
     "ja": "地域毎に物価が変動する",

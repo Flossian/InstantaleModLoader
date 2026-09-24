@@ -480,6 +480,32 @@ check("例外を残さない（閉じる）", ctx.errors == [], ctx.errors)
 shutil.rmtree(out_dir, ignore_errors=True)
 
 
+# ---------------------------------------------------------------- 渡した先で鍵が重なるとき
+# 持ち物の鍵は世界全体で一意。渡した先に同じ鍵の別の品が居るときは、
+# 渡した先の辞書の中の空き番号ではなく、採番台帳から採る（TECH.md §3.2.3）。
+print("渡した先で鍵が重なる受け渡し")
+ctx, app, out_dir = open_window()
+npc = app.world.characters["80"]
+player = app.player
+app.save_data_dict = {"index": {"item": 50}, "npcs": {}}
+mine = Item("主人公の薬草", item_type="consumable")
+mine.obtainer, mine.id = player, "item_3"
+player.inventory["item_3"] = mine
+player.inventory["item_0"] = Item("主人公の最初の品", item_type="consumable")
+theirs = Item("仲間の薬草", item_type="consumable")
+theirs.obtainer, theirs.id = npc, "item_3"
+npc.inventory["item_3"] = theirs
+FakeClock.scheduled = []
+move(ctx, app, InventoryItem(theirs, "item_3", Grid(npc)), Grid(player))
+check("元の品はそのまま", player.inventory.get("item_3") is mine, player.inventory)
+check("渡した品は台帳から採った鍵に入る",
+      player.inventory.get("item_50") is theirs and theirs.id == "item_50",
+      sorted(player.inventory))
+check("台帳を進める", app.save_data_dict["index"]["item"] == 51, app.save_data_dict)
+FakeClock.run_all()
+check("例外を残さない（鍵の重なり）", ctx.errors == [], ctx.errors)
+shutil.rmtree(out_dir, ignore_errors=True)
+
 
 print()
 if failures:

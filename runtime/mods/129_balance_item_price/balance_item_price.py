@@ -235,18 +235,15 @@ def apply(ctx):
     # 注入し直すと `label not in False` で TypeError になり、
     # 決済の検算だけが黙って死ぬ（`safe=True` なので画面には出ない）。
     # 手での注入し直しはこのプロジェクトの通常の操作なので、実際に踏む。
-    blanks = {"logged": 0, "reconciled": 0, "skipped": 0,
-              "gold_before": None, "settled": set()}
+    blanks = {"logged": 0, "reconciled": 0, "skipped": 0, "settled": set()}
     store = getattr(sys, STORE_ATTR, None)
     if not isinstance(store, dict):
         store = dict(blanks)
         setattr(sys, STORE_ATTR, store)
     else:
         # 足りない鍵と、型の変わった鍵だけを入れ替える（件数は残したい）。
-        # `gold_before` は None で始まって数が入るので、型では見ない。
         for name, blank in blanks.items():
-            if name not in store or (blank is not None
-                                     and not isinstance(store[name], type(blank))):
+            if name not in store or not isinstance(store[name], type(blank)):
                 store[name] = set() if isinstance(blank, set) else blank
 
     write = ctx.logger(LOG_BASENAME, stamp=False)
@@ -361,16 +358,17 @@ def apply(ctx):
         _field, attributes = read_item(item)
         return _num(attributes.get(key))
 
-    def settle(app, item, key, sign, label, expected=None):
+    def settle(app, item, key, sign, label, before, expected=None):
         """`orig` の前後で所持金を測り、表示との差を直す。
 
         `sign` は所持金が動く向き（買うと -1、売ると +1）。
         **動いていなければ取引そのものが成立していない**（買えなかった等）ので何もしない。
+        `before` は `orig` を呼ぶ前の所持金。取引ごとの局所に持つ
+        （プロセスで1つの器に置くと、別スレッドの取引が重なったとき他方の「前」を読む）。
         `expected` は `orig` を呼ぶ前に読んだ表示値（`price_on_show`）。
         """
         if expected is None:
             expected = price_on_show(item, key)
-        before = store["gold_before"]
         after = gold_of(app)
         if expected is None or before is None or after is None:
             return
@@ -407,18 +405,18 @@ def apply(ctx):
     if RECONCILE_GOLD:
         @ctx.wrap("__main__:InstantaleApp.buy_item", safe=True)
         def buy_item(orig, self, item_instance=None, *args, **kwargs):
-            store["gold_before"] = gold_of(self)
+            before = gold_of(self)
             shown = price_on_show(item_instance, BUY_KEY)
             result = orig(self, item_instance, *args, **kwargs)
-            settle(self, item_instance, BUY_KEY, -1, "buy", shown)
+            settle(self, item_instance, BUY_KEY, -1, "buy", before, shown)
             return result
 
         @ctx.wrap("__main__:InstantaleApp.sell_item", safe=True)
         def sell_item(orig, self, item_instance=None, *args, **kwargs):
-            store["gold_before"] = gold_of(self)
+            before = gold_of(self)
             shown = price_on_show(item_instance, SELL_KEY)
             result = orig(self, item_instance, *args, **kwargs)
-            settle(self, item_instance, SELL_KEY, +1, "sell", shown)
+            settle(self, item_instance, SELL_KEY, +1, "sell", before, shown)
             return result
 
     base_owner, layers = prices.item_price_sources()

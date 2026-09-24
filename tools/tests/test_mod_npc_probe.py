@@ -10,6 +10,7 @@
   隠す   … 保存の包みの中では名簿に `mod:` が無く、被せも素へ戻っている
   漏れ   … 書かれたセーブに `mod:` の鍵があれば `leaked` に出る（見つけられることの確認）
   会話   … 会話の入口を通ると記録が1行ずつ増える
+  一覧   … 一覧の窓で名簿の読みを録り、窓の間に写しへ入った書き込みは元の名簿に残る
   変えない … 包んだ本体はどれも1回だけ呼ばれ、戻り値はそのまま通る
 
 背景: `apply()` の中の未定義名は次の起動まで潜伏する。
@@ -390,6 +391,56 @@ def main():
     check("内側のラッパ越しでも通る", answer == "answer", answer)
     check("内側のラッパ越しでも録れる",
           len(at(records(), "prompt")) == before + 1)
+
+    print("一覧の窓: 読みを録り、窓の間の書き込みは元の名簿に残す")
+    module, ctx, app, saves = fresh("gen4")
+    refresh = ctx.hooks["__main__:InstantaleApp.refresh_choice_buttons"][0]
+    refresh(lambda self, *a, **kw: None, app)
+    roster, npcs, facility = (app.world.characters, app.save_data_dict["npcs"],
+                              app.facility.characters)
+
+    def display(self, *a, **kw):
+        # 一覧が名簿を読み、その間に本体（別スレッドの保存や生成）が書き込む
+        for key in app.world.characters:
+            app.save_data_dict["npcs"].get(key)
+        len(app.facility.characters)
+        app.world.characters["30"] = "spawned"
+        app.save_data_dict["npcs"]["30"] = {"name": "新顔"}
+        app.facility.characters.append("30")
+        roster["31"] = "direct"        # 写す前から元を握っていた側の分
+        return "shown"
+
+    talk_display = ctx.hooks["__main__:DisplayTalkChoice.update_button_display"][0]
+    check("一覧の包みは本体の戻り値を通す",
+          talk_display(display, types.SimpleNamespace(app=app)) == "shown")
+    rows = at(records(), "talk_reads")
+    check("talk_reads が録れている", len(rows) == 1, rows)
+    check("名簿の読みが録れる",
+          rows and any(r.startswith("world.characters") for r in rows[0]["reads"]), rows)
+    check("施設の名簿の読みが数えられる", rows and rows[0]["facility_reads"] == 1, rows)
+    check("入れ物は元のオブジェクトに戻る",
+          app.world.characters is roster and app.save_data_dict["npcs"] is npcs
+          and app.facility.characters is facility)
+    check("型は素に戻る",
+          type(roster) is dict and type(npcs) is dict and type(facility) is list)
+    check("窓の間に名簿へ入った書き込みが残る", roster.get("30") == "spawned", sorted(roster))
+    check("元を握っていた側の書き込みも残る", roster.get("31") == "direct", sorted(roster))
+    check("素データへの書き込みが残る", npcs.get("30") == {"name": "新顔"}, sorted(npcs))
+    check("施設の名簿への追記が残る", facility[-1:] == ["30"], facility)
+
+    def choice(self, *a, **kw):
+        app.facility.characters.append("32")
+        return "listed"
+
+    talk_choice = ctx.hooks[module.TALK_TARGET][0]
+    check("会話の一覧の包みは本体の戻り値を通す",
+          talk_choice(choice, types.SimpleNamespace(app=app)) == "listed")
+    check("施設の名簿は元のオブジェクトのまま追記が残る",
+          app.facility.characters is facility and facility[-1:] == ["32"], facility)
+    listed = at(records(), "talk_choice")
+    check("talk_choice は窓に入った時点の名簿を録る",
+          listed and "32" not in listed[-1]["facility_characters"], listed)
+    check("例外は出ていない（一覧の窓）", ctx.errors == [], ctx.errors)
 
     sys.modules.pop("scripts.llm.llm_manager", None)
     modnpc.purge()

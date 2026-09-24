@@ -27,6 +27,8 @@ MOD ごとに `elapse_days` を包むのをやめ、ローダが1枚だけ包ん
 
 置き場は `sys` の属性（`_instantale_durations`）。注入し直しをまたいで残り、
 ローダのモジュールが作り直されても消えない。名前はローダのもので、MOD は触らない。
+その注入で適用されなかった MOD（切った・apply に失敗した）のぶんは、
+ローダの `boot()` が最後に `forget` で外す。`unload()` は全部外す。
 """
 import sys
 
@@ -132,6 +134,17 @@ def forget(owner, write=None):
     if write and gone:
         write("durations: {!r} no longer decides {}".format(owner, gone))
     return gone
+
+
+def owners():
+    """期間か日数の望みを置いている持ち主の名前。
+
+    ローダの `boot()` が、今回適用されなかった MOD のぶんを `forget` するのに使う
+    （登録簿は注入をまたいで残るので、切った MOD の旧い関数に聞き続けないように）。
+    """
+    names = {who for who, _fn in _registry().values()}
+    names.update(_claims())
+    return sorted(names)
 
 
 def source_of(kind):

@@ -504,7 +504,7 @@ def run():
           "字以内" in prompt and "字くらい" not in prompt, prompt)
     module.EPITHET_RANDOM_LENGTH = True
     drawn = []
-    real_random = module.random
+    real_random = module._RNG
     real_cap = module.EPITHET_CHARS
 
     class FakeRandom(object):
@@ -513,7 +513,7 @@ def run():
             drawn.append((low, high))
             return 7
 
-    module.random = FakeRandom
+    module._RNG = FakeRandom
     try:
         length = module.pick_epithet_length()
         check("狙いは下限〜上限から引く",
@@ -530,7 +530,7 @@ def run():
               module.pick_epithet_length() == module.EPITHET_LENGTH_FLOOR
               and len(drawn) == 1, drawn)
     finally:
-        module.random = real_random
+        module._RNG = real_random
         module.EPITHET_CHARS = real_cap
     prompt = module.build_epithet_messages(
         "リン", [("灰の街", "噂。")], "", length=module.EPITHET_CHARS
@@ -632,6 +632,24 @@ def run():
     check("本人の名前の写しは捨てて前の名を残す（印は消費）",
           record["epithet"] == "竜追い"
           and record["mark"]["qualifying"] == ["3", "7"], record)
+
+    # 評判の立つ土地（7）で片付けた依頼の題名がそのまま返った回。
+    # 番人に素材が渡っていないと、名前の写しだけを弾いてこの名を通してしまう。
+    app_k.player.area_history["7"]["lawfulness"] = -5    # 手配の反転で立て直す
+    module.llm.replies = [json.dumps({"epithet": "塩の護送"}, ensure_ascii=False)]
+    trigger(module, ctx, app_k)
+    record = read_cache(module)["epithet"]
+    check("依頼の題名の写しも捨てて前の名を残す（印は消費）",
+          record["epithet"] == "竜追い" and record["mark"]["wanted"] == ["7"],
+          record)
+    app_k.player.area_history["7"]["lawfulness"] = 10
+    module.llm.replies = [json.dumps({"epithet": "よその土地の手柄"},
+                                     ensure_ascii=False)]
+    trigger(module, ctx, app_k)
+    record = read_cache(module)["epithet"]
+    check("成した事の写しも捨てて前の名を残す",
+          record["epithet"] == "竜追い" and record["mark"]["wanted"] == [],
+          record)
 
     # -- 引き直し（人物欄のボタンが書く頼みのファイル） --
     from instantale_modloader.state import world_filename

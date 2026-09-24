@@ -192,6 +192,7 @@ NO_GOLD_TEXT = "手持ちが足りない（{gold}G 必要だ）。"
 NO_ROOM_TEXT = "{area}にこれ以上建てる余地は無いようだ（合計{slots}軒まで）。"
 NO_SIZE_TEXT = "{area}の規模では{kind}は成り立たないと言われた。"
 NO_HUB_TEXT = "この土地には建てられる場所が無いようだ。"
+NO_CHARGE_TEXT = "手続きが済まなかった。"
 DESK_TEXT = ("建設費を払うと{area}（{size}）に主人つきの施設が建つ。"
              "以後は建物を訪ねるたびに、溜まった売上（1日の額は種類と等級で決まる）を受け取れる。")
 DESK_FULL_TEXT = ("建設費を払うと{area}（{size}）に主人つきの施設が建ち、訪ねるたびに売上を受け取れる。"
@@ -324,6 +325,10 @@ def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
     worlds = store["worlds"].rebind(ctx, write)
     screen = ui.Screen(ctx, write, tag="investment", mark=MARK)
+    # 所持金を動かして帳簿を進めたら、ゲーム自身の保存を少し後に1回呼ぶ（`ui.saver`）。
+    # 帳簿はその場でファイルになるが、所持金がセーブに入るのは次の保存のとき。
+    # 保存しないまま落ちると、建物がタダで残り、受け取った売上は消えて `collected` だけ進む。
+    save_soon = ui.saver(ctx, write, "investment")
 
     # 建物と主人はローダが持つ。関所は何本の MOD が呼んでも1つしか立たない。
     modfacility.install(ctx, write=write)
@@ -921,13 +926,16 @@ def apply(ctx):
         record["keeper_name"] = made.get("name")
         register_holding(record)
         # 新築。同じ id の写しが登録簿に残っていても使わない（周回をまたぐと id が重なる）。
-        facility = modfacility.spawn(app, facility_id, area_id, fresh=True, write=write)
-        if facility is None:
+        def undo():
             modfacility.unregister(OWNER, facility_id, app=app, write=write)
             modnpc.unregister(OWNER, keeper_id, app=app, write=write)
             # 層は外したので「積んだ」覚えも戻す。残すと、同じ土地で建て直したとき
             # （同じ番号＝同じ id）に `register_holding` が主人の層を積まず、主の居ない建物になる。
             keepers_registered.discard(keeper_id)
+
+        facility = modfacility.spawn(app, facility_id, area_id, fresh=True, write=write)
+        if facility is None:
+            undo()
             screen.say(app, NO_HUB_TEXT)
             return False
         if modnpc.spawn(app, keeper_id, write=write) is not None:
@@ -936,9 +944,16 @@ def apply(ctx):
         else:
             write("WARN build: the keeper {} did not spawn; the building has no owner"
                   .format(keeper_id))
+        # 代金を先に引き、引けたときだけ帳簿に載せる。帳簿は即座にファイルになるので、
+        # 逆の順では引けなかった回にも建物が残る。
+        if ui.add_gold(app, -price, on_error=lambda msg: write("WARN build: " + msg)) is None:
+            undo()
+            write("WARN build: cannot charge {}; {!r} was not built".format(price, name))
+            screen.say(app, NO_CHARGE_TEXT)
+            return False
         bucket_of(current_key(app))["holdings"].append(record)
         save(app)
-        ui.add_gold(app, -price, on_error=lambda msg: write("WARN build: cannot charge"))
+        save_soon(app, "build")
         write("built: {} {} {!r} id={} keeper={} area={!r} size={} price={}".format(
             kind, tier, name, facility_id, keeper_id, area_id, size, price))
         spot = (modfacility.registry().get(facility_id) or {}).get("placed") or ()
@@ -960,10 +975,16 @@ def apply(ctx):
         if gold <= 0:
             screen.say(app, _fmt(NOTHING_TEXT, keeper=who))
             return 0
-        ui.add_gold(app, gold, on_error=lambda msg: write("WARN collect: cannot pay"))
+        # 渡せたときだけ受け取った日を進める（逆の順では、渡せなかった売上が消える）。
+        if ui.add_gold(app, gold, on_error=lambda msg: write("WARN collect: " + msg)) is None:
+            write("WARN collect: cannot pay {}G at {!r}; the books stay as they are".format(
+                gold, record.get("name")))
+            screen.say(app, NO_CHARGE_TEXT)
+            return 0
         today = ui.game_day(app)
         record["collected"] = today if today is not None else record.get("collected")
         save(app)
+        save_soon(app, "collect")
         write("collected: {}G for {} day(s) at {!r}".format(gold, days, record.get("name")))
         screen.say(app, ui.rewrite_coins(_fmt(COLLECTED_TEXT, keeper=who, days=days,
                                               gold=ui.money(gold))))
@@ -1372,6 +1393,11 @@ def apply(ctx):
         前払いした額とゲームが引いた額が同じなら差は0で、ここは何もしない。
         差が残るのは、額が分からずに前払いできなかったか、ゲームが引かなかったか、
         ゲームの額がこちらの知る額と違うとき。どれも WARN で残す。
+
+        **前払いした回に減ったぶんは返さない。** 宿泊の `execute` の中では暦が進み、
+        他の MOD がその区間で金を引く（`330_` の家賃は期限が来ればここで引かれる）。
+        差で返すと家賃まで返し、期限だけ延びる。前払いした回に増えたぶんは、
+        前払いの額までを引き戻す（ゲームが引かなかった回）。
         """
         after = ui.gold_of(app)
         if not isinstance(before, int) or not isinstance(after, int):
@@ -1385,6 +1411,13 @@ def apply(ctx):
             write("WARN {}: the gold grew by {} during the stay; leaving it "
                   "alone".format(why, -off))
             return 0
+        if prepaid > 0 and off > 0:
+            write("WARN {}: the gold fell by {} more than the prepaid room ({}); "
+                  "leaving it alone (other charges run inside the stay)".format(
+                      why, off, prepaid))
+            return 0
+        if prepaid > 0:
+            off = max(off, -prepaid)
         ui.add_gold(app, off, on_error=lambda msg:
                     write("WARN {}: cannot correct: {}".format(why, msg)))
         write("WARN {}: the room cost {} but we prepaid {}; corrected {}".format(

@@ -10,7 +10,7 @@
     "en": "Adds an equipment panel (head, left/right hand, body, arms, legs, two accessories) beside the inventory. Weapons and shields go to the hands; other wearables to their body part. The game only reads one weapon and one wearable, so the highest attack among the hands and the highest defense among all slots are handed to it. Optionally the other slots are added on top at a reduced rate. In the party transfer window of 402_party_inventory_transfer, party members get the same panel, which feeds 319_battle_tactics and 401_battle_character_context through the loader's combat window",
     "ja": "所持品の窓の横に装備欄（頭・左手・右手・胴・腕・脚・装飾×2）を足す。武器と盾は手、他の防具は各部位へ。本体が読む装備は武器1つと防具1つだけなので、手の武器で攻撃力が最高のものと、全部位で防御力が最高のものを渡す。設定で合算も入れられる（最高値はそのまま、残りの品は圧縮して足す）。402_party_inventory_transfer の受け渡しの窓では仲間にも装備欄が付き、ローダの窓口 combat を通して 319_battle_tactics の戦闘の数と 401_battle_character_context の審判への文に効く"
   },
-  "version": "17",
+  "version": "18",
   "author": "R01/Flossian",
   "after": [
     "402_party_inventory_transfer",

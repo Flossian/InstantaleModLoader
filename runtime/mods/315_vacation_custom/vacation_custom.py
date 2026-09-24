@@ -775,7 +775,9 @@ def apply(ctx):
     # 通貨の表記は `130_` が差し替えていることがあるので、
     # 見本のほうも同じ表記へ通してから突き合わせる。
     parsed = ui.parse_coin(ui.rewrite_coins("個室(1,000G)"))
-    sample = fmt(ROOM_BUTTON, name="大部屋", price=30)
+    # テンプレートは既定の形を直に書く（`ROOM_BUTTON` は GUI で変えられるので、
+    # 設定を通すと変えた回に期待値とずれる）。
+    sample = fmt("{name}({price}G)", name="大部屋", price=30)
     room_label = ui.rewrite_coins("大部屋(30G)")
     survives = fmt("{name}と{typo}", name="個室")
     def stay_field(choice, age, scaling, key):

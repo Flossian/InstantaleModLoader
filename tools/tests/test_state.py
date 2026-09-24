@@ -7,7 +7,8 @@
 どちらも**ローダの語彙**で、MOD 側に写すとドリフトする（TECH.md §3.2.3）。
 
   保存先 … `world_key(app)` と `world_filename(key)`
-  周回   … `playthrough_key(app)`（世界×主人公。セーブと同じ寿命のもの用）
+  周回   … `playthrough_key(app)`（世界×主人公。セーブと同じ寿命のもの用）と、
+           世界名だけの控えを周回へ移す `WorldStore.playthrough` / `adopt`
   書込   … `write_json` / `write_text`（隣に書いてから差し替える）
 
 保存先の検査が厚いのは、ここが**複数の MOD にまたがる取り決め**だから。
@@ -138,6 +139,17 @@ def test_world_filename_is_stable():
               "予約名でも元の名前が読み取れる: {!r}".format(made))
     check(st.world_filename("CONTAINER") == "CONTAINER.json",
           "予約名で始まるだけの名前は触らない")
+    # Windows は拡張子が付いても予約名として扱う（`CON.foo.json` は作れない）。
+    # 語幹全体で見ると素通りする。コンソールの `CONIN$` / `CONOUT$` も同じ。
+    for reserved in ("CON.foo", "nul.x", "Aux .txt", "CONIN$", "conout$", "COM1.a.b"):
+        made = st.world_filename(reserved)
+        head = made.split(".")[0].rstrip(" ").upper()
+        check(head not in st.RESERVED,
+              "拡張子付き・コンソールの予約名もそのまま使わない: {!r} -> {!r}".format(
+                  reserved, made))
+    check({"CONIN$", "CONOUT$"} <= st.RESERVED, "コンソールの予約名も表に在る")
+    check(st.world_filename("CONTAINER.foo") == "CONTAINER.foo.json",
+          "予約名で始まるだけなら拡張子付きでも触らない")
 
 
 def test_world_filename_is_injective():
@@ -161,6 +173,7 @@ def test_world_filename_is_injective():
     # 総当たりでも重ならないこと（取りこぼしの網）。
     keys = ["灰の街", " 灰の街", "灰の街 ", "灰/の街", "灰\\の街", "灰:の街",
             "CON", "_CON", "con", "NUL", "", ".", "..", "_",
+            "CON.foo", "_CON.foo", "CONIN$", "_CONIN$",
             "あ" * 130 + "X", "あ" * 130 + "Y", "A" * 200, "A" * 201]
     made = [st.world_filename(k) for k in keys]
     dupes = {n for n in made if made.count(n) > 1}
@@ -239,6 +252,166 @@ def test_safe_writes():
         nested = os.path.join(sandbox, "state", "deep", "er", "n.json")
         check(ml.write_json(nested, {"n": 1}) and os.path.isfile(nested),
               "親フォルダが無ければ作ってから書く")
+
+        # 同じ path へ2本が同時に書く（`write_status` は boot・見張り・MOD から呼ばれる）。
+        # 一時ファイルの名前が固定だと、片方が切り詰めている最中の中身を
+        # もう片方が差し替えで正本に入れる。
+        import threading
+        shared = ctx.state_path("shared.json")
+        bodies = [{"who": who, "pad": who * 20000} for who in ("a", "b")]
+        results = []
+
+        def hammer(body):
+            for _ in range(40):
+                results.append(ml.write_json(shared, body))
+
+        threads = [threading.Thread(target=hammer, args=(body,)) for body in bodies]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        with open(shared, encoding="utf-8") as fh:
+            final = json.load(fh)
+        check(final in bodies, "同時に書いても正本はどちらか一方の完全な中身")
+        leftovers = [name for name in os.listdir(os.path.dirname(shared))
+                     if name.endswith(ml.TEMP_SUFFIX)]
+        check(not leftovers, "書きかけを残さない: {}".format(leftovers))
+        # Windows では読み手が正本を開いている間、差し替えが一時的に拒まれる。
+        # 失敗して 1 回で諦めると (False)、控えの更新が黙って1回落ちる。
+        # 押し合いの中でも、拒まれたのは差し替えを数回やり直して通す。
+        refused = results.count(False)
+        check(refused == 0, "押し合っても差し替えを諦めない（False {} 回）".format(refused))
+
+        denied = [2]
+        real_replace = ml.os.replace
+
+        def flaky_replace(src, dst):
+            if denied[0]:
+                denied[0] -= 1
+                raise PermissionError("読み手が開いている")
+            return real_replace(src, dst)
+
+        ml.os.replace = flaky_replace
+        try:
+            check(ml.write_json(shared, {"after": "retry"}) is True,
+                  "PermissionError は短くやり直して書き切る")
+        finally:
+            ml.os.replace = real_replace
+        with open(shared, encoding="utf-8") as fh:
+            check(json.load(fh) == {"after": "retry"}, "やり直した中身が正本に入る")
+    finally:
+        shutil.rmtree(sandbox, ignore_errors=True)
+
+
+def test_store_survives_reload():
+    """注入し直すと state モジュールが読み直され、前の世代の控えは**古い型**の実体になる。"""
+    print("=== SysWorldStore: 読み直しをまたいで控えを引き継ぐ ===")
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "instantale_state_reloaded", st.__file__)
+    older = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(older)
+    check(older.WorldStore is not st.WorldStore, "（前提）読み直した型は別物")
+
+    sandbox = tempfile.mkdtemp(prefix="instantale_store_")
+    attr = "_instantale_test_reloaded_store"
+    try:
+        ctx = ml.ModContext(os.path.join(sandbox, "out"),
+                            os.path.join(_ROOT, "runtime"),
+                            os.path.join(sandbox, "state"))
+        kept = older.WorldStore(ctx, "reload_test")
+        setattr(sys, attr, kept)
+        link = st.SysWorldStore(attr, "reload_test", attr + "_override")
+        check(link.bind(ctx) is kept,
+              "bind は前の世代の控えを繋ぎ直す（作り直してキャッシュと錠を捨てない）")
+        check(getattr(sys, attr) is kept, "sys の控えは差し替わらない")
+        check(link.store() is kept, "store() も前の世代の控えを返す（None にしない）")
+        setattr(sys, attr, {"not": "a store"})
+        check(link.store() is None, "控えでないものは控えとして扱わない")
+    finally:
+        if hasattr(sys, attr):
+            delattr(sys, attr)
+        shutil.rmtree(sandbox, ignore_errors=True)
+
+
+def test_adopt_world_file():
+    """世界名だけの控えを、周回の鍵へ切り替えた MOD が見つけたときの移し方。"""
+    print("=== WorldStore.playthrough: 世界名だけの控えを周回へ移す ===")
+    sep = st.PLAYTHROUGH_SEP
+    sandbox = tempfile.mkdtemp(prefix="instantale_adopt_")
+    try:
+        ctx = ml.ModContext(os.path.join(sandbox, "out"),
+                            os.path.join(_ROOT, "runtime"),
+                            os.path.join(sandbox, "state"))
+        logged = []
+
+        def fresh_store():
+            return st.WorldStore(ctx, "adopt_test", write=logged.append)
+
+        def app_of(player):
+            app = _App({"world_data": {"world_name": "灰の街"}})
+            app.save_data_dict = {"world_data": {"name": "灰の街"},
+                                  "player_data": {"name": player}}
+            return app
+
+        def exists(key):
+            return os.path.exists(fresh_store().path(key))
+
+        old = fresh_store()
+        old.load("灰の街")["7"] = {"stays": 3}
+        old.save("灰の街")
+
+        worlds = fresh_store()
+        key = worlds.playthrough(app_of("ミツバ"))
+        check(key == "灰の街" + sep + "ミツバ", "鍵は 世界×主人公")
+        check(worlds.load(key) == {"7": {"stays": 3}},
+              "世界名だけの控えは、見つけた時点で遊んでいる主人公のものとして移る")
+        check(not exists("灰の街"), "移した後、世界名だけのファイルは消える")
+        check(any("移した" in line for line in logged), "移したことをログに残す")
+
+        worlds = fresh_store()
+        other = worlds.playthrough(app_of("ムツハ"))
+        check(worlds.load(other) == {}, "同じ世界で作り直した次の主人公には渡らない")
+
+        old = fresh_store()
+        old.load("灰の街")["9"] = {"stays": 1}
+        old.save("灰の街")
+        worlds = fresh_store()
+        worlds.playthrough(app_of("ミツバ"))
+        check(worlds.load(key) == {"7": {"stays": 3}} and exists("灰の街"),
+              "周回のファイルが既に在れば移さない（世界名のファイルも触らない）")
+
+        worlds = fresh_store()
+        save = {"world_data": {"name": "灰の街"}, "player_data": {"name": "ナナセ"}}
+        loading = app_of("ミツバ")      # World.__init__ の中では app がまだ前の周回
+        got = worlds.playthrough(loading, save)
+        check(got == "灰の街" + sep + "ナナセ" and worlds.load(got) == {"9": {"stays": 1}},
+              "セーブの辞書を渡せば、そちらの主人公へ移す")
+
+        old = fresh_store()
+        old.save("灰の街", {})
+        worlds = fresh_store()
+        empty = worlds.playthrough(app_of("ヤツカ"))
+        check(worlds.load(empty) == {} and not exists(empty) and exists("灰の街"),
+              "空の控えは移さない")
+
+        worlds = fresh_store()
+        nameless = _App({"world_data": {"world_name": "灰の街"}})
+        check(worlds.playthrough(nameless) == "灰の街",
+              "主人公の名が読めなければ鍵は世界名のまま（移しようがない）")
+
+        old = fresh_store()
+        old.save("霧の谷", {"x": 1})
+        reader = st.WorldStore(ctx, "adopt_test", own=False)
+        check(not reader.adopt("霧の谷" + sep + "ミツバ", "霧の谷") and exists("霧の谷"),
+              "読むだけの控え（own=False）は移さない")
+
+        worlds = fresh_store()
+        check(worlds.adopt("霧の谷" + sep + "ミツバ", "霧の谷"), "（前提）1度目は移す")
+        old = fresh_store()
+        old.save("霧の谷", {"y": 2})
+        check(not worlds.adopt("霧の谷" + sep + "ミツバ", "霧の谷") and exists("霧の谷"),
+              "同じ鍵を確かめるのはプロセスで1度だけ")
     finally:
         shutil.rmtree(sandbox, ignore_errors=True)
 
@@ -274,6 +447,8 @@ def main():
     test_world_filename_is_injective()
     test_plain_names_keep_their_file()
     test_safe_writes()
+    test_store_survives_reload()
+    test_adopt_world_file()
     print()
     if _FAILS:
         print("{} 件失敗: {}".format(len(_FAILS), _FAILS))

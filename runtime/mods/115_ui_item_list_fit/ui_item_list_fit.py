@@ -714,7 +714,7 @@ def apply(ctx):
     def fit_later(hud, before):
         """今と、レイアウトが落ち着いた後に当てる。`fit` は何度でも同じ結果。"""
         for delay in PASS_DELAYS:
-            schedule(lambda: fit(hud, before), delay)
+            schedule(lambda: guard(lambda: fit(hud, before)), delay)
 
     # -- フック --------------------------------------------------------------
     # アイコンの押下 ＝ 一覧が開く（もう一度押すと閉じる）。

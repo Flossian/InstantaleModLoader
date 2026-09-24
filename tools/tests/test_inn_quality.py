@@ -13,11 +13,16 @@
              並ぶのはゲームの活動の cls / args の写し。連泊で残りが積み直る
   常連     … 宿泊のたびに記録が増え、好感度が等級ぶん上がり、累計 20 で止まる。
              `"player"` の欄が無い主には足さず記録だけ。金が足りない宿泊は数えない
+  保存     … 記録はゲームの保存が通ったときに書く。保存の前にロードし直すと、
+             好感度と一緒に記録も戻る（上限を使い切らない）。保存が投げたら書かない
+  周回     … 記録は世界×主人公ごと。世界名だけの記録は見つけた時点の主人公へ移し、
+             同じ世界で作り直した主人公には渡さない
   1行      … 宿の主と話しているときだけ本文の先頭に入り、二度は入らない
   社交     … 部屋を問わず 同行者 → 好感度の高い相手 → ランダム。設定 OFF なら触らない。
              ゲームは施設の主を選ぶ（実測）ので、LLM へ渡る `npc_list` と
              `VacationSocializeResolveManager` の `npc_id_list` を同じ1人に差し替える
 """
+import copy
 import importlib.util
 import io
 import json
@@ -216,6 +221,9 @@ class InstantaleApp:
         self.done = []
         self.in_conversation = None
         self.chat_hook = None
+        self.autosave = True
+        self.fail_save = False
+        self.saved = {}
 
     def add_text(self, context):
         self.texts.append(context)
@@ -227,7 +235,18 @@ class InstantaleApp:
         self.to_display_buttons = [e["text"] for e in self.buttons]
 
     def process_choice(self, function, choice_text=""):
-        return function.execute(choice_text)
+        # ゲームに任意セーブは無く、行動のたびにセーブを上書きする。
+        result = function.execute(choice_text)
+        if self.autosave:
+            self.save_game()
+        return result
+
+    def save_game(self):
+        """セーブに入るのは好感度（relationship）。327 の記録は入らない。"""
+        if self.fail_save:
+            raise RuntimeError("save failed")
+        self.saved = {key: copy.deepcopy(c.relationship)
+                      for key, c in self.world.characters.items()}
 
     def press(self, text):
         entry = next(e for e in self.buttons if e["text"] == text)
@@ -323,7 +342,7 @@ def setup():
         if attr.startswith("__instantale_inn_quality"):
             delattr(sys, attr)
     classes = {}
-    for base in (InstantaleApp, VacationStartManager, VacationTrainManager,
+    for base in (InstantaleApp, World, VacationStartManager, VacationTrainManager,
                  VacationRestManager, VacationSocializeManager,
                  VacationSocializeResolveManager, VacationEndManager):
         classes[base.__name__] = type(base.__name__, (base,), {})
@@ -342,6 +361,8 @@ def setup():
     install(ctx.hooks, [
         ("__main__:InstantaleApp.refresh_choice_buttons", app_cls, "refresh_choice_buttons"),
         ("__main__:InstantaleApp.elapse_days", app_cls, "elapse_days"),
+        ("__main__:InstantaleApp.save_game", app_cls, "save_game"),
+        ("__main__:World.__init__", classes["World"], "__init__"),
         ("__main__:VacationStartManager.__init__", classes["VacationStartManager"], "__init__"),
         ("__main__:VacationStartManager.execute", classes["VacationStartManager"], "execute"),
         ("__main__:VacationTrainManager.execute", classes["VacationTrainManager"], "execute"),
@@ -492,6 +513,98 @@ app.press("宿泊を終える")
 module.SOCIAL_PRIORITY = True
 check("social: log names the swap", "npc_list ['エリン'] -> [仲間]" in io.open(
     os.path.join(OUT_DIR, "inn_quality.log"), encoding="utf-8").read())
+
+# ---------------------------------------------------------------- 保存と確定
+def load(app):
+    """セーブを読み直す。好感度はセーブの値へ戻り、ゲームは World を組み直す。"""
+    for key, relationship in app.saved.items():
+        app.world.characters[key].relationship = copy.deepcopy(relationship)
+    sys.modules["__main__"].World()
+
+
+def memory_of(key):
+    return getattr(sys, module.STORE_ATTR)["worlds"].of(app)[1].get(key)
+
+
+def affinity(key):
+    return app.world.characters[key].relationship["player"]["affinity"]
+
+
+app.party = ["player"]
+app.world.characters["12"] = Character("ダン", {"player": {"affinity": 0}})
+app.player.location = Facility("52", "12", ["12"])
+app.save_game()
+app.autosave = False
+
+stay(app, "luxury_suite")
+check("save: affinity moves at once", affinity("12") == 4, affinity("12"))
+check("save: record waits for the game's save", "12" not in record_of(ctx), record_of(ctx))
+app.save_game()
+rec = record_of(ctx).get("12", {})
+check("save: record written with the save", rec.get("granted") == 4 and rec.get("stays") == 1, rec)
+
+stay(app, "luxury_suite")
+check("load: stay before the reload moved affinity", affinity("12") == 8, affinity("12"))
+load(app)
+check("load: affinity back to the save", affinity("12") == 4, affinity("12"))
+check("load: file untouched", record_of(ctx)["12"]["granted"] == 4, record_of(ctx)["12"])
+check("load: unsaved record dropped", memory_of("12")["granted"] == 4
+      and memory_of("12")["stays"] == 1, memory_of("12"))
+
+for _ in range(4):
+    stay(app, "luxury_suite")
+    app.save_game()
+check("load: cap still reachable after a reload", affinity("12") == 20
+      and record_of(ctx)["12"]["granted"] == 20, (affinity("12"), record_of(ctx)["12"]))
+
+app.world.characters["12"].relationship["player"]["affinity"] = 0
+app.player.location = Facility("53", "10", ["10"])
+stay(app, "bunk")
+app.fail_save = True
+try:
+    app.save_game()
+except RuntimeError:
+    pass
+check("failed save: nothing written", "10" not in record_of(ctx), record_of(ctx))
+app.fail_save = False
+app.save_game()
+check("failed save: written with the next save", record_of(ctx).get("10", {}).get("stays") == 1,
+      record_of(ctx))
+app.autosave = True
+
+# ---------------------------------------------------------------- 周回の鍵
+# ここまでの主人公は名が無いので、控えは世界名だけのファイル（前の版と同じ場所）に在る。
+from instantale_modloader.state import PLAYTHROUGH_SEP, world_filename   # noqa: E402
+REGULAR_DIR = os.path.join(ctx.state_dir, "inn_regular")
+OLD_FILE = os.path.join(REGULAR_DIR, world_filename("テスト世界"))
+HERO_FILE = os.path.join(REGULAR_DIR, world_filename("テスト世界" + PLAYTHROUGH_SEP + "旅人"))
+before = record_of(ctx)
+check("playthrough: (premise) records sit in the world-only file", os.path.exists(OLD_FILE)
+      and before.get("12", {}).get("granted") == 20, sorted(os.listdir(REGULAR_DIR)))
+
+app.player.name = "旅人"
+app.player.location = app.world.characters["7"].location
+app.in_conversation = "12"
+sent = app.send_prompt("こんにちは")
+check("playthrough: the world-only records move to the hero found playing",
+      os.path.exists(HERO_FILE) and not os.path.exists(OLD_FILE) and record_of(ctx) == before,
+      sorted(os.listdir(REGULAR_DIR)))
+check("playthrough: the moved record still feeds the conversation",
+      "ダンの宿にこれまで" in sent[0]["content"], sent[0]["content"])
+
+app.player.name = "別の旅人"
+sys.modules["__main__"].World()          # 同じ世界で作り直した主人公を読み込む
+app.world.characters["7"].relationship["player"]["affinity"] = 0
+stay(app, "luxury_suite")
+app.press("宿泊を終える")
+mine = os.path.join(REGULAR_DIR, world_filename("テスト世界" + PLAYTHROUGH_SEP + "別の旅人"))
+with io.open(mine, encoding="utf-8") as fh:
+    fresh = json.load(fh)
+check("playthrough: another hero starts from zero", fresh.get("7", {}).get("stays") == 1
+      and fresh["7"].get("granted") == 4 and "12" not in fresh, fresh)
+with io.open(HERO_FILE, encoding="utf-8") as fh:
+    check("playthrough: the first hero's file is untouched", json.load(fh) == before)
+app.in_conversation = None
 
 check("no hook errors", not ctx.errors, ctx.errors)
 
