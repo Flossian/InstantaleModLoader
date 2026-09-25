@@ -2472,7 +2472,7 @@ MOD の位置の絞り（下記）を掛けると、ゲームが外した絵で�
 
 #### 2.80.5 同じ目的の道具が既に手元で動いていた
 
-`InstantaleHDPortraitScript`（`hd_portrait.ps1`）と、それを取り込んだ `InstantaleLauncher` の `PortraitWatcher` が、
+`InstantaleHDPortraitScript`（`hd_portrait.ps1`）が、
 ゲームが立ち絵を書き終えた後に `reduced_color_image.png` を `no_bg_image.png`（512x1024 か 640x1216）で上書きし、
 元のドット絵を `reduced_color_image.orig.png` へ退避する。
 手元の立ち絵 363 体のうち 359 体が `.orig.png` 付きの 512x1024 / 640x1216 で、330x660 はこの MOD だけで作った4体。
