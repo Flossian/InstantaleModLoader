@@ -428,6 +428,50 @@ check("待ち合わせが始まらない", not clock.intervals and not clock.onc
       (clock.intervals, clock.onces))
 app.in_battle = False
 
+print("7a. 着いた先で衛兵に見つかった画面には割り込まない")
+
+
+class Spec:
+    """ゲームの PhaseSpec の代わり。画面の見分けに使うのはクラス名だけ。"""
+
+    def __init__(self, cls_name, *args):
+        self.cls_name = cls_name
+        self.args = list(args)
+
+
+GUARD_SCREEN = [{"text": "大人しく捕まる", "spec": Spec("TrialStartManager")},
+                {"text": "抵抗する！", "spec": Spec("BattleStartManager", "guard", None)}]
+INN_SCREEN = [{"text": "宿泊する", "spec": Spec("DisplayVacationChoice")},
+              {"text": "出る", "spec": Spec("MovePhaseManager", "1", "2", "0")},
+              {"text": "会話する", "spec": Spec("DisplayTalkChoice")}]
+
+clock = install_fake_kivy()
+mod, ctx, calls, hooks = setup()
+app.process_choice_calls = []
+app.buttons = list(GUARD_SCREEN)        # 衛兵の画面では旗は何も立たない
+do_move(hooks)
+check("衛兵の画面では待ち合わせが始まらない", not clock.intervals and not clock.onces,
+      (clock.intervals, clock.onces))
+app.buttons = list(INN_SCREEN)
+do_move(hooks)
+clock.tick()
+clock.run_onces()
+check("宿の最初の画面では発火する", len(app.process_choice_calls) == 1,
+      app.process_choice_calls)
+
+# 着いた時点では宿の画面で、手が空くまでの間に衛兵の画面へ変わった場合。
+clock = install_fake_kivy()
+mod, ctx, calls, hooks = setup()
+app.process_choice_calls = []
+app.buttons = list(INN_SCREEN)
+do_move(hooks)
+clock.tick()
+app.buttons = list(GUARD_SCREEN)
+clock.run_onces()
+check("待っている間に衛兵の画面へ変わったら押さない", not app.process_choice_calls,
+      app.process_choice_calls)
+del app.buttons
+
 print("7b. in_shopping は発火を止めない（実測で居座るため除外した）")
 clock = install_fake_kivy()
 mod, ctx, calls, hooks = setup()

@@ -90,7 +90,7 @@ import random
 import sys
 import time
 
-from instantale_modloader import frames, llm, ui
+from instantale_modloader import frames, llm, modfacility, ui
 from instantale_modloader.state import WorldStore, world_key
 
 LOG_BASENAME = "player_events.log"
@@ -242,6 +242,18 @@ def apply(ctx):
     }
 
     # ------------------------------------------------------------ 発火の判定
+    def off_the_first_screen(app):
+        """施設に着いたときの画面でなければ、その選択肢のクラス名を返す（画面なら None）。
+
+        着いた先で衛兵に見つかると、ゲームは「大人しく捕まる／抵抗する！」だけを並べる。
+        旗は何も立たないので `BUSY_FLAGS` では弾けず、その上から会話を始めていた（実機）。
+        画面の見分けはローダの `modfacility.is_top_screen` に任せる（`331_` などと同じ判定）。
+        """
+        buttons = getattr(app, "buttons", None)
+        if modfacility.is_top_screen(buttons):
+            return None
+        return [ui.spec_cls_name(entry) for entry in buttons]
+
     def chance_for(facility_type):
         if CHANCE_OVERRIDE is not None:
             # 表に無い種別（通路など）は override でも対象外のままにする。
@@ -365,6 +377,10 @@ def apply(ctx):
         if busy:
             write("skip: {} busy {}".format(where, busy))
             return None
+        other = off_the_first_screen(app)
+        if other:
+            write("skip: {} not the facility's first screen {}".format(where, other))
+            return None
         if getattr(app, "current_quest_data", None):
             write("skip: {} in quest".format(where))
             return None
@@ -416,6 +432,10 @@ def apply(ctx):
             busy = [flag for flag in BUSY_FLAGS if getattr(app, flag, False)]
             if busy:
                 return "became busy {}".format(busy)
+            # 手が空くまでの間に、衛兵のような別の画面に変わっていることもある。
+            other = off_the_first_screen(app)
+            if other:
+                return "the screen changed to {}".format(other)
             return None
 
         def start():

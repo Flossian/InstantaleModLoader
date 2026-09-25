@@ -3692,6 +3692,7 @@ GAME.md §1.8 から移した。
 | `131_sharp_portrait` | 15→16 | 探りの呼び直しを包む前の素の関数で行い、投げたら失敗として扱う | 従来どおり |
 | `134_balance_item_effects` | 3→4 | 乱数を MOD 専用にした | 従来どおり |
 | `228_probe_area_move_reject` / `229_probe_mod_npc` | 1→2 | 窓の間に差し替えた写しを解くとき、中身を元へ書き戻す（計測。デバッグモードのみ） | 移動・会話の一覧の後に NPC や仲間が消えない |
+| `300_event_facility_arrival` | 1→2 | 施設に着いたときの画面でなければ（`modfacility.is_top_screen` が偽）話しかけない。着いた先で衛兵に見つかると、ゲームは旗を立てずに「大人しく捕まる／抵抗する！」だけを並べるので、その上から会話を始めていた（実機）。着いた直後と、会話を始める直前の両方で見る | 手配中の土地の施設に入って衛兵に見つかったとき、`player_events.log` に `skip: … not the facility's first screen` が出て、会話が始まらない |
 | `301_quest_from_conversation` / `302_leave_party_in_conversation` / `307_area_move_dungeon` | 3→4 / 2→3 / 2→3 | 途中で投げても待機表示と進行中の旗を戻す | 従来どおり |
 | `309_office_pardon` | 1→2 | 戻し先を閾値より低くしても、閾値まで戻す（罰金を取り続けない） | 罰金1回で手配が解ける |
 | `313_event_ability_check` / `314_area_move_custom` / `315_vacation_custom` | 5→6 / 3→4 / 5→6 | 起動時の自己検証を既定の値で行う（設定を変えても `VERIFY FAILED` を出さない） | 設定を変えた起動で ERROR が出ない |
