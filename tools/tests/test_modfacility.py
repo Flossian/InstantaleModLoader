@@ -767,6 +767,9 @@ def main():
     # ゲームは MOD の施設に入っても `location_image` を更新しない（実セーブ。
     # 道場の中で保存したセーブの絵が、繋ぎ先の区画のままだった）。
     # そのままだと、中に立ったまま再開したのに繋ぎ先の絵でロードが始まる。
+    # 直すのは書き出す写しの側（`keep_saved_background`）。**見えている絵は触らない**
+    # （`location_image` は画面の背景そのもので、保存のあいだ差し替えると
+    # 保存のたびに背景が切り替わって戻った。330 の滞在。実機 2026-09-25）。
     os.makedirs(os.path.join(root, "街の入口"), exist_ok=True)
     with io.open(os.path.join(root, "街の入口", "image.png"), "w") as fh:
         fh.write("x")
@@ -776,18 +779,16 @@ def main():
     app2.buttons = []
     app2.location_image = entrance_picture        # 来た場所の絵のまま入った
     hidden5 = modfacility.hide(app2, screen=screen)
-    ok &= check("中に居るのに来た場所の絵、を直す",
-                app2.location_image == shop_picture)
-    ok &= check("立ち位置は中のまま", app2.player.location is rebuilt)
-    modfacility.restore(app2, hidden5)
-    ok &= check("保存の後は元の絵に戻る", app2.location_image == entrance_picture)
-    os.remove(shop_picture)
-    hidden5 = modfacility.hide(app2, screen=screen)
-    ok &= check("建物の絵がまだ無ければ触らない（空にしない）",
+    ok &= check("中のまま保存しても、見えている絵は触らない",
                 app2.location_image == entrance_picture)
+    ok &= check("立ち位置は中のまま", app2.player.location is rebuilt)
+    written, _was = modfacility.keep_saved_background(
+        {"player_data": {"location": fid},
+         "game_variables": {"location_image": app2.location_image}}, app2)
+    ok &= check("焼かれる絵は書き出しの網が建物の絵にする",
+                written["game_variables"]["location_image"] == shop_picture)
     modfacility.restore(app2, hidden5)
-    with io.open(shop_picture, "w") as fh:
-        fh.write("x")
+    ok &= check("保存の後も見えている絵はそのまま", app2.location_image == entrance_picture)
     app2.location_image = shop_picture
 
     print("書き出し: 絵と立ち位置が揃っているかを最後に検める")

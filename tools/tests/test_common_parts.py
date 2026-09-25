@@ -624,6 +624,70 @@ class FakeClock(object):
     def schedule_interval(self, callback, poll):
         self.intervals.append(callback)
 
+    def get_events(self):
+        """予約されている関数（`ui.button_load_pending` が読む）。"""
+        return [types.SimpleNamespace(get_callback=lambda cb=cb: cb)
+                for cb in self.once + self.intervals]
+
+    def unschedule(self, callback):
+        self.once = [cb for cb in self.once if cb != callback]
+
+    def step(self):
+        """次のフレーム。いま載っている `schedule_once` を1回ずつ呼ぶ。"""
+        pending, self.once = self.once, []
+        for callback in pending:
+            callback(0)
+
+
+class FakeHUD(object):
+    """`scripts.hud.new_hud.InstanTaleHUD` の代わり。左の枠が2つ。"""
+
+    def __init__(self):
+        self.buttons = [types.SimpleNamespace(text="") for _ in range(2)]
+
+    def update_button_texts(self, instance, value):
+        for widget, text in zip(self.buttons, list(value)):
+            widget.text = text
+
+
+class WaitingApp(object):
+    """ゲームの点送り（`234_probe_busy_display` の実測。GAME.md §2.4）。
+
+    `is_button_enabled` が False のあいだに `display_button_load` が呼ばれると、
+    **いまの一覧の文字から**次のコマを決めて（`.`→`..`→`...`→`.`、点でなければ `.`）
+    `to_display_buttons` に書いて塗り、0.3秒後の自分を予約し直す。
+    True に戻っていれば、今の一覧を塗って止まる（予約し直さない）。
+    `process_choice` は旗を下ろして、自分で点送りを1本始める。
+    """
+
+    NEXT = {".": "..", "..": "...", "...": "."}
+
+    def __init__(self, clock):
+        self.clock = clock
+        self.is_button_enabled = True
+        self.to_display_buttons = ["a", "b"]
+        self.buttons = []
+        self.painted = []
+        self.hud = FakeHUD()
+        self.hud.update_button_texts(self, self.to_display_buttons)
+
+    def display_button_load(self, dt):
+        if self.is_button_enabled is False:
+            now = (self.to_display_buttons or [""])[0]
+            self.to_display_buttons = [self.NEXT.get(now, ".")] * 2
+            self.clock.schedule_once(self.display_button_load, 0.3)
+        self.hud.update_button_texts(self, self.to_display_buttons)
+        self.painted.append(list(self.to_display_buttons))
+
+    def process_choice(self, function, choice_text=""):
+        self.is_button_enabled = False
+        self.clock.schedule_once(self.display_button_load, 0)
+
+    def chains(self):
+        """回っている点送りの本数（予約されている `display_button_load` の数）。"""
+        return sum(1 for cb in self.clock.once
+                   if getattr(cb, "__name__", "") == "display_button_load")
+
 
 class FakeWindow(object):
     """`kivy.core.window.Window` の代わり。結んだ手を1本ずつ持つ。"""
@@ -701,25 +765,92 @@ def test_clock_guard(root):
         check("window_watcher: 結び直しても手は1本",
               again() and len(window.handlers) == 1, window.handlers)
 
+        # 待機表示。点を送るのはゲーム自身で、こちらは旗を下ろして1回だけ回し始める。
+        # 以前は自前でもコマを送り、塗るたびに `display_button_load` を呼んで
+        # ゲームの点送りを1本ずつ増やしていた（点が飛んだ。実機 2026-09-25）。
+        del clock.once[:]
+        del clock.intervals[:]
+        hud_module = types.ModuleType(ui.HUD_MODULE)
+        setattr(hud_module, ui.HUD_CLASS, FakeHUD)
+        saved_hud = sys.modules.get(ui.HUD_MODULE)
+        sys.modules[ui.HUD_MODULE] = hud_module
         screen = ui.Screen(ctx, lambda line: None, tag="guard test")
-        app = types.SimpleNamespace(is_button_enabled=True,
-                                    to_display_buttons=["a", "b"])
+        app = WaitingApp(clock)
         screen.busy_on(app)
-        screen.busy_on(app)          # 待機表示を出したまま、もう一度
-        check("busy_on: 重ねても interval は1本", len(clock.intervals) == 1,
+        check("busy_on: その場で押せなくなる", app.is_button_enabled is False,
+              app.is_button_enabled)
+        clock.step()
+        check("busy_on: 点送りを1本だけ回し始める", app.chains() == 1, app.chains())
+        check("busy_on: 1コマ目は「.」", app.to_display_buttons == [".", "."],
+              app.to_display_buttons)
+        check("busy_on: 自前の interval は立てない", not clock.intervals,
               len(clock.intervals))
+        screen.busy_on(app)          # 待機表示を出したまま、もう一度
+        clock.step()
+        check("busy_on: 重ねても点送りは1本", app.chains() == 1, app.chains())
+        frames = []
+        for _ in range(4):
+            clock.step()
+            frames.append(app.to_display_buttons[0])
+        check("busy_on: 1フレームに1コマずつ、飛ばずに進む",
+              frames == ["...", ".", "..", "..."], frames)
+        screen.paint(app, ["x", "y"])
+        clock.step()
+        check("busy_on: 待機中に塗っても点送りは増えない", app.chains() == 1,
+              app.chains())
         screen.busy_off(app, restore=False)
         check("busy_on: 重ねた後の busy_off で押せる状態へ戻る",
               app.is_button_enabled is True, app.is_button_enabled)
-        # 解いた直後、前のコマが来る前に出し直す。
+        clock.step()
+        clock.step()
+        check("busy_off: 点送りは止まる", app.chains() == 0, app.chains())
+
+        # ゲーム自身の待機がまだ回っているところで出す（活動の直後など）。
+        app = WaitingApp(clock)
+        app.is_button_enabled = False
+        app.display_button_load(0)           # ゲームが回し始めた
         screen.busy_on(app)
-        check("busy_on: 出し直しでは interval を足す", len(clock.intervals) == 2,
-              len(clock.intervals))
-        check("busy_on: 前の世代のコマ送りは外れる",
-              clock.intervals[0](0) is False and clock.intervals[1](0) is True)
+        clock.step()
+        check("busy_on: ゲームの点送りが回っていれば足さない", app.chains() == 1,
+              app.chains())
         screen.busy_off(app, restore=False)
-        check("busy_on: 出し直しの後も元の値へ戻る", app.is_button_enabled is True,
+
+        # ゲームが自分の待機を終えたその場で覆う（活動の後の選択肢）。
+        # 待機を終えるとゲームは旗を戻して選択肢を組み、次のフレームで今の一覧を塗る。
+        # 覆いがその塗りに間に合わないと1フレームだけ選択肢が見えた（実機 2026-09-25）。
+        del clock.once[:]
+        app = WaitingApp(clock)
+        app.is_button_enabled = False
+        app.display_button_load(0)           # ゲームの待機（「.」）
+        clock.step()                         # 「..」
+        app.is_button_enabled = True         # ゲームが待機を終え、選択肢を組んだ
+        app.to_display_buttons = ["休養をとる", "宿泊を終える"]
+        screen.busy_on(app)                  # 組んだその場（ワーカー）で覆う
+        check("busy_on: 枠の点をそのまま一覧に書く（次の塗りも点になる）",
+              app.to_display_buttons == ["..", ".."], app.to_display_buttons)
+        check("busy_on: その場で押せなくなる（組んだ直後）", app.is_button_enabled is False,
               app.is_button_enabled)
+        clock.step()
+        check("busy_on: 点送りは続きから進む（「..」の次は「...」）",
+              app.hud.buttons[0].text == "...", app.hud.buttons[0].text)
+        check("busy_on: 引き継いだ点送りは1本のまま", app.chains() == 1, app.chains())
+
+        # 覆ったまま次の場面を起こす（滞在を締める）。
+        # 次の場面の `process_choice` も点送りを始めるので、前のを外さないと2本になる。
+        screen.start_phase(app, types.SimpleNamespace(), "宿泊を終える")
+        clock.step()
+        check("start_phase: 回っている点送りを外してから起こす（1本のまま）",
+              app.chains() == 1, app.chains())
+        frames = []
+        for _ in range(3):
+            clock.step()
+            frames.append(app.hud.buttons[0].text)
+        check("start_phase: 点は1フレームに1コマ", frames == ["..", "...", "."], frames)
+        screen.busy_off(app, restore=False)
+        if saved_hud is None:
+            sys.modules.pop(ui.HUD_MODULE, None)
+        else:
+            sys.modules[ui.HUD_MODULE] = saved_hud
 
     with_fake_kivy(body)
 

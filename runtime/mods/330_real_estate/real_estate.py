@@ -291,6 +291,8 @@ STORAGE_LABEL = "保管庫をあける"
 #: 同じ文言だと、印を失った残骸（セーブから戻ったボタン）を掃除で見分けられず、
 #: 押しても何も起きない `出る` が画面に残る。
 LEAVE_LABEL = "家から出る"
+#: 滞在を締めるときに `process_choice` へ渡す文言（ゲームの `宿泊を終える` と同じ）。
+END_LABEL = "宿泊を終える"
 
 #: 印を失った残骸を文言で見分けて掃除するための前方一致
 #: （`ui.Screen.prune_stale`。GAME.md §2.2）。
@@ -421,6 +423,12 @@ def apply(ctx):
                 "owner_was": None,
                 # 手が空くのを待っているボタンの足し直し（見張りは同時に1つ）。
                 "retry": False,
+                # 滞在を締める `VacationEndManager` を起こした（二度は起こさない）。
+                "ending": False,
+                # 活動の後の選択肢を待機表示で覆っている（締め終えたら解く）。
+                "covered": False,
+                # 覆った滞在（`free_stay` の辞書）。1回の滞在で覆うのは1度だけ。
+                "covered_for": None,
             },
         }
         setattr(sys, STATE_STORE_ATTR, store)
@@ -1581,25 +1589,35 @@ def apply(ctx):
         """
         if staying_home(app) is None:
             return
+        screen.when_idle(app, lambda: end_home_stay(app, "{} finished".format(which)),
+                         proceed_on_timeout=True, tag="one activity")
+
+    def end_home_stay(app, why):
+        """自分の家の滞在を締める（ゲームの `VacationEndManager` を起こす）。起こすのは1回だけ。
+
+        起こせなかったときは待機表示を解き、ゲームの選択肢
+        （`まだ宿泊する` / `宿泊を終える`）を見せる。そこから自分で終えられる。
+        """
+        if staying_home(app) is None:
+            write("stay: {}, but the stay is already over".format(why))
+            uncover(app, "the stay is already over")
+            return
+        if state.get("ending"):
+            return
         cls = getattr(main_module(), END_CLS, None)
         if cls is None:
             write("WARN stay: __main__.{} is not available".format(END_CLS))
+            uncover(app, "cannot end the stay")
             return
-
-        def close():
-            if staying_home(app) is None:
-                write("stay: {} finished, but the stay is already over".format(which))
-                return
-            try:
-                phase = cls(app)
-            except Exception:
-                ctx.log_exc("real estate: cannot build {}".format(END_CLS))
-                return
-            write("stay: {} finished; ending the stay (one activity per stay)".format(
-                which))
-            screen.start_phase(app, phase, "宿泊を終える")
-
-        screen.when_idle(app, close, proceed_on_timeout=True, tag="one activity")
+        try:
+            phase = cls(app)
+        except Exception:
+            ctx.log_exc("real estate: cannot build {}".format(END_CLS))
+            uncover(app, "cannot end the stay")
+            return
+        state["ending"] = True
+        write("stay: {}; ending the stay (one activity per stay)".format(why))
+        screen.start_phase(app, phase, END_LABEL)
 
     def staying_home(app):
         """いま自分の建物で滞在中か。宿屋での宿泊と取り違えないための確認。"""
@@ -1830,6 +1848,55 @@ def apply(ctx):
         write("stay menu: dropped {}".format(dropped))
         return True
 
+    def cover_after_activity(app):
+        """自分の家で活動を1つ終えた後の選択肢を、締め終えるまで待機表示（…）で覆う。
+
+        ゲームは活動の後に `まだ宿泊する` と `宿泊を終える` を並べ、
+        `327_inn_quality` は残りの回数があれば活動を先頭に足し直す。
+        こちらは1泊＝活動1回なので手が空いたら締めるが、手が空くまで
+        （`when_idle` の待ち）その選択肢が見えていた（実機 2026-09-25）。
+
+        選択肢そのもの（`app.buttons`）には触らない。覆うのは表示だけで
+        （`screen.busy_on`。GAME.md §2.4）、締められなかったときは覆いを解けば
+        ゲームの選択肢がそのまま押せる。
+        `when_idle` は自分の出した待機表示を待たない（`_others_busy`）ので、締めは遅れない。
+
+        見分けるのは `まだ宿泊する`（`VacationStartManager`）と `宿泊を終える` の対。
+        最初の活動の選択肢には `VacationStartManager` が無い（実機のログ）。
+
+        覆ったら True。
+        """
+        buttons = getattr(app, "buttons", None)
+        if not isinstance(buttons, list):
+            return False
+        if ui.find_spec_button(buttons, STAY_CLS) is None \
+                or ui.find_spec_button(buttons, END_CLS) is None:
+            return False
+        home = staying_home(app)
+        if home is None or state.get("covered"):
+            return False
+        # 覆うのは1回の滞在につき1度。解いたとき（締められなかったとき）の塗り直しで
+        # 同じ選択肢がまた組まれるので、ここで覆い直すと二度と解けない。
+        if state.get("covered_for") is home:
+            return False
+        state["covered"] = True
+        state["covered_for"] = home
+        write("stay menu: covered {} until the stay ends (one activity per stay)".format(
+            [entry.get("text") for entry in buttons if isinstance(entry, dict)]))
+        # その場で覆う（ワーカースレッドのまま）。ゲームは組んだ次のフレームで塗るので、
+        # Clock へ回すと1フレームだけ選択肢が見える（実機 2026-09-25）。
+        # `busy_on` が直に触るのは旗と一覧だけで、画面に触る手は向こうが Clock へ回す。
+        screen.busy_on(app)
+        return True
+
+    def uncover(app, why):
+        """覆いを解く。選択肢を塗り直すので、そのときの `app.buttons` が見える。"""
+        if not state.get("covered"):
+            return
+        state["covered"] = False
+        write("stay menu: uncovered ({})".format(why))
+        screen.schedule(lambda: screen.busy_off(app))
+
     def our_labels(app):
         """残骸の掃除に使う文言（`prune_stale`）。
 
@@ -1966,6 +2033,10 @@ def apply(ctx):
         """
         result = orig(self, reset_page, *args, **kwargs)
         try:
+            cover_after_activity(self)
+        except Exception:
+            ctx.log_exc("real estate: cannot cover the choices after the activity")
+        try:
             apply_contracts(self, getattr(self, "world", None), current_key(self),
                             "screen")
             check_leases(self, "screen")
@@ -2037,6 +2108,8 @@ def apply(ctx):
             if key and key != UNKNOWN_WORLD:
                 worlds.forget(key)
                 state["free_stay"] = None
+                state["ending"] = False
+                state["covered"] = False
                 state["storage"] = None
                 state["pending_demolish"] = []
                 state["warned"] = set()
@@ -2412,13 +2485,19 @@ def apply(ctx):
     def vacation_end(orig, self, choice_text="", *args, **kwargs):
         """滞在が終わったら、据えた主を戻して滞在の印を落とす。"""
         app = getattr(self, "app", None) or ui.find_app()
+        state["ending"] = False
         try:
             if app is not None:
                 end_stay(app, "the game ended the stay")
         except Exception:
             ctx.log_exc("real estate: cannot finish the stay")
             state["free_stay"] = None
-        return orig(self, choice_text, *args, **kwargs)
+        try:
+            return orig(self, choice_text, *args, **kwargs)
+        finally:
+            # 建物の選択肢が組み直された後で解く（先に解くと活動の後の選択肢が見える）。
+            if app is not None:
+                uncover(app, "the stay ended")
 
     @ctx.wrap("scripts.hud.new_hud:InventoryItem.change_inventory", required=False)
     def change_inventory(orig, self, new_inventory, *args, **kwargs):

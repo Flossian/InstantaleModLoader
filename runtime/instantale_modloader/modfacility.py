@@ -1713,27 +1713,6 @@ def swap_background(app, facility, write=None, blank_if_missing=True, note=""):
     return (BACKGROUND_ATTR, was)
 
 
-def keep_inside_background(app, facility_id, write=None):
-    r"""中のまま保存するとき、焼かれる絵をその建物のものにする。替えたなら `(属性, 元の値)`。
-
-    **ゲームは MOD の施設に入っても `location_image` を更新しない**
-    （実セーブ。`ゼニスの風` の中で保存したセーブの絵が
-    `下層居住区（ローワー・スラム）`＝繋ぎ先の区画のままだった。
-    素の施設ではどのセーブでも立ち位置と絵の名前が一致している）。
-    そのままだと、中に立ったまま再開したのに繋ぎ先の絵でロードが始まる。
-
-    絵が世界に無ければ触らない（描くのも頼むのもしない。TECH.md §5.8）。
-    """
-    area = ui.current_area(app)
-    if area is None:
-        return None
-    facility, _node = ui.find_facility(area, str(facility_id))
-    if facility is None:
-        return None
-    return swap_background(app, facility, write=write, blank_if_missing=False,
-                           note="was the place we came from;")
-
-
 def safe_save_location(app, screen=None, write=None):
     """保存のあいだだけ立ち位置を入口へ替える。替えたなら `(player, 元の値, 元の選択肢)`。
 
@@ -1798,7 +1777,7 @@ def hide(app, *, screen=None, world=None, write=None, into=None):
     scrubbed = []
     views = []
     hidden.update({"scrubbed": scrubbed, "swapped": None, "views": views,
-                   "background": None, "world": world})
+                   "world": world})
     scrub_saved_refs(app, list(registry()), write=write, undo=scrubbed)
     veil_plain(app, write=write, views=views)   # 素データの写し（`plain=True` の建物）
     swapped = None
@@ -1808,14 +1787,13 @@ def hide(app, *, screen=None, world=None, write=None, into=None):
         log_exc("modfacility: cannot check the place before the save")
     hidden["swapped"] = swapped
     # 中のまま保存する建物（`keep_inside`）。書き出しのときに立ち位置を検める。
+    # 焼かれる絵もそこで揃う（`keep_saved_background` が書き出す写しの側で直す）。
+    # **見えている絵（`location_image`）は触らない。** 以前は保存のあいだだけ
+    # 建物の絵へ差し替えて戻していたが、`location_image` は画面の背景そのもので、
+    # 保存のたびに背景が切り替わって戻った（330 の滞在で1回に3度。実機 2026-09-25）。
     here = inside(app)
     staying = bool(here) and swapped is None
     _state()["saved_inside"] = str(here) if staying else None
-    if staying:
-        try:
-            hidden["background"] = keep_inside_background(app, here, write=write)
-        except Exception:
-            log_exc("modfacility: cannot check the background before the save")
     return hidden
 
 
@@ -1834,12 +1812,6 @@ def restore(app, hidden, *, write=None):
                 setattr(app, background[0], background[1])
         except Exception:
             log_exc("modfacility: cannot put the player back after the save")
-    kept = hidden.get("background")          # 中のまま保存したときの絵
-    if kept is not None:
-        try:
-            setattr(app, kept[0], kept[1])
-        except Exception:
-            log_exc("modfacility: cannot put the background back after the save")
     unscrub_saved_refs(app, hidden.get("scrubbed"))
     _state()["saved_inside"] = None
     unveil_plain(hidden.get("views"))

@@ -353,7 +353,36 @@ app.refresh_choice_buttons(reset_page=True)
 | `app.text_input_disabled` | `False` のまま（＝これは機構ではない） |
 | `app.buttons`（spec の一覧） | 触らない。表示だけ差し替えるので後始末が要らない |
 
+**点を送っているのはゲーム自身**（`234_probe_busy_display` の実機、2026-09-25。宿屋の休養の待ち）。
+
+```text
+process_choice(...)                 is_button_enabled = False
+display_button_load(dt)  Clock      点を1コマ進めて to_display_buttons に書き、
+    → update_ui → hud.update_button_texts   塗って、約0.3秒後の自分を予約し直す
+    ...（0.3秒ごとに . → .. → ... ）
+finish_button_load（ワーカー）       is_button_enabled = True → refresh_choice_buttons
+display_button_load(dt)             True を見て今の一覧を塗り、予約しない（止まる）
+```
+
+- **待機中に `display_button_load` を呼ぶと、その呼び出しからも予約が始まる**。
+  呼んだ数だけ点送りが並んで回り、1回の周期に何コマも進む（点が飛ぶ）。
+  True に戻ったときは並んだ本数だけ塗って止まる（実機で4本が同じ1ミリ秒に止まった）
+- 点を書く先は `to_display_buttons` なので、待機の後は一覧を組み直すまで点が残る。
+  ゲームは待機の終わりに `refresh_choice_buttons` を呼んでから塗る
+- **次のコマは今の一覧の文字から決まる**（`.`→`..`→`...`→`.`、点でない文字の次は `.`）。
+  コマ数を数えているわけではない
+- **`process_choice` は旗を下ろして、自分で点送りを1本始める**。
+  別の点送りが回っているところで場面を起こすと2本になり、点が速く進む
+  （実機 2026-09-25。締めの場面の間だけ 0.1 秒刻みになった）
+- 待機を終えるときは、ワーカーで `is_button_enabled = True` → `refresh_choice_buttons` と進み、
+  **次のフレーム**で今の一覧を塗る。
+  そこを覆いたいなら、組んだその場（ワーカー）で旗を下ろし、一覧を点にしておく
+- 送信ボタンの無効・有効は `scripts.functions` の中から（`disable_text_send_button` /
+  `enable_text_send_button`）
+
 自前の処理でも同じものを出せる（`ui.Screen.busy_on` / `busy_off`）。
+ローダは旗を下ろし、点送りが回っていなければ1回だけ回し始める（自分ではコマを送らない）。
+枠に点が出ていればその点を一覧に書いておき、`start_phase` は回っている点送りを外してから起こす。
 
 画面の繋ぎ目を隠すのにも使える。
 会話を閉じてから次の画面を開くまでの間、`ConversationEndManager` の終了処理が
@@ -437,6 +466,7 @@ Clock で見張り、手が空いてから実行する（`ui.Screen.when_idle`�
 `in_conversation` / `in_free_input` / `in_action_in_conversation`。
 
 **いま見えている背景も焼かれる**（`game_variables["location_image"]` に絵のフルパス。実セーブで確認）。
+`location_image` は画面の背景そのもので、ゲームの背景替え（`change_background_image_*`）はこれを書き、後から `update_ui` が HUD の `update_image_source` で塗る（`234_probe_busy_display` 版2 の実機。呼び出しから塗りまで約2秒）。保存のあいだだけ書き換えて戻すと、そのたびに背景が切り替わって見える（`330_` の滞在で実機）。
 ロードはそれをそのまま出すので、立ち位置を書き換える MOD は絵も一緒に替える（TECH.md §5.8）。
 
 ゲームの施設なら、この絵は立ち位置と揃っている。

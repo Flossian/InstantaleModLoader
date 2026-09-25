@@ -1440,7 +1440,13 @@ def paint_choices(app, texts, oops=None):
             oops(what)
 
     loader = getattr(app, "display_button_load", None)
-    if callable(loader):
+    if getattr(app, "is_button_enabled", None) is False:
+        # 待機中（「…」を出している間）は呼ばない。`display_button_load` は待機中に
+        # 呼ばれると次のコマを自分で予約し直すので、呼ぶたびにゲームの点送りが1本ずつ増え、
+        # 点が飛ぶ（`234_probe_busy_display` の実測。GAME.md §2.4）。
+        # 待機中の枠はどのみちゲームが点で塗り直す。
+        done.append("display_button_load skipped (waiting)")
+    elif callable(loader):
         try:
             loader(0)
             done.append("display_button_load")
@@ -1462,6 +1468,57 @@ def paint_choices(app, texts, oops=None):
         done.append("hud not found")
 
     return done
+
+
+BUSY_DOTS = (".", "..", "...")
+
+
+def shown_dots(app):
+    """いま選択肢の枠に出ている点（`.` / `..` / `...`）。点でなければ None。"""
+    hud = find_hud(app)
+    widgets = getattr(hud, "buttons", None) if hud is not None else None
+    if not isinstance(widgets, (list, tuple)) or not widgets:
+        return None
+    text = getattr(widgets[0], "text", None)
+    return text if text in BUSY_DOTS else None
+
+
+def stop_button_load(app):
+    """回っているゲームの点送り（`display_button_load` の予約）を Clock から外す。
+
+    外したら True。`process_choice` は自分で点送りを始めるので、
+    回っているまま次の場面を起こすと2本になり、点が速くなる（GAME.md §2.4）。
+    """
+    loader = getattr(app, "display_button_load", None)
+    if loader is None or not button_load_pending(app):
+        return False
+    try:
+        from kivy.clock import Clock
+        Clock.unschedule(loader)
+    except Exception:
+        return False
+    return True
+
+
+def button_load_pending(app):
+    """ゲームの点送り（`display_button_load` の予約）が Clock に載っているか。
+
+    真なら回っている。読めないときは None（呼ぶ側は「回っていない」として1回だけ回す。
+    点が出ないより、1本多いほうがまし）。
+    """
+    try:
+        from kivy.clock import Clock
+        events = Clock.get_events()
+    except Exception:
+        return None
+    for event in events or ():
+        try:
+            callback = event.get_callback()
+        except Exception:
+            callback = getattr(event, "callback", None)
+        if getattr(callback, "__name__", "") == "display_button_load":
+            return True
+    return False
 
 
 _AFTER_LOAD_ATTR = "_instantale_after_load"
@@ -1710,7 +1767,7 @@ class Screen(object):
         self.tag = tag
         self.mark = mark
         self.safe_cls = safe_cls
-        self._busy = {"on": False, "frame": 0, "enabled": None, "gen": 0}
+        self._busy = {"on": False, "enabled": None}
 
     # -- 例外を外へ出さないための土台 ---------------------------------------
     def _oops(self, what):
@@ -1973,18 +2030,23 @@ class Screen(object):
 
     # -- 待機表示（「.」→「..」→「...」）-----------------------------------
     #
-    # **ゲーム自身の待機表示を実測して、そのまま真似る**（値は GAME.md §2.4）:
+    # **点を送っているのはゲーム自身**（GAME.md §2.4。`234_probe_busy_display` の実測）:
     #
-    #   * `is_button_enabled = False` を立てる
-    #   * 点は1個の `…` ではなく `.` → `..` → `...` のアニメーションで、
-    #     **ボタン全枠**に出る（枠数は `hud.buttons` の数）
+    #   * `is_button_enabled` が False のあいだ、Clock に載った
+    #     `InstantaleApp.display_button_load` が約0.3秒ごとに `.` → `..` → `...` を
+    #     `to_display_buttons` に書いて塗り、次のコマを自分で予約し直す
+    #   * 待機中に `display_button_load` を呼ぶと、その呼び出しからも予約が始まる
+    #     （**回し手が1本増える**）。True に戻ると、どの回し手も今の一覧を塗って止まる
     #   * `text_send_button.disabled = True`（自由入力を塞ぐ）
     #   * `app.text_input_disabled` は False のまま ＝ **これは機構ではない**
     #
+    # だからこちらは旗を下ろすだけにし、回っていなければ1回だけ回し始める。
+    # 以前は自前でコマを送っていて、ゲームの回し手と二重に回ったうえ、
+    # 塗るたびに `display_button_load` を呼んで回し手を増やしていた（点が飛び、
+    # 解いた後にも点が一瞬戻った。実機 2026-09-25）。
+    #
     # **`app.buttons`（spec の一覧）には触らない。** ゲームも表示だけ差し替えて
     # いるので、こちらも表示だけにすれば後始末が要らない。
-    BUSY_FRAMES = (".", "..", "...")
-    BUSY_INTERVAL = 0.3
 
     def busy_slots(self, app):
         """待機表示を出す枠の数。実物のボタンウィジェット数に合わせる。"""
@@ -2015,14 +2077,23 @@ class Screen(object):
         return bool(self._busy["on"])
 
     def busy_on(self, app):
-        """待機表示を出す。ゲーム自身と同じ見た目・同じ止め方。
+        """待機表示を出す。ゲーム自身と同じ出し方（上の説明。GAME.md §2.4）。
 
         LLM を待つ間これを出さないと、**画面が固まったように見える**（GAME.md
         §2.4）。
 
+        ワーカースレッドからも呼べる。ここで直に触るのは旗と一覧（`to_display_buttons`）
+        だけで、画面に触る手（送信ボタン・点送りの始動）は Clock へ回す。
+        ゲームが選択肢を組んだその場で覆いたいとき（組んだ次のフレームでゲームが塗る）に使う。
+
+        枠に点が出ていれば（ゲームの待機の直後）、その点を一覧に書いておく。
+        ゲームは待機を終えた次のフレームで今の一覧を塗るので、書いておかないと
+        そのフレームだけ選択肢が見える。点送りは一覧の文字から次のコマを決めるので、
+        続きから進む（実機 2026-09-25）。
+
         出している間にもう一度呼ばれても、戻す値（`is_button_enabled`）は
-        取り直さず、コマ送りの interval も足さない。取り直すと自分が立てた
-        `False` を覚えてしまい、`busy_off` の後も選択肢が押せないまま残る。
+        取り直さない。取り直すと自分が立てた `False` を覚えてしまい、
+        `busy_off` の後も選択肢が押せないまま残る。
         入れ子は数えない（先に来た `busy_off` で解く）。`busy_on` と対でなく
         `busy_off` だけを呼ぶ経路があるので、数えると解けなくなる側に倒れる。
         """
@@ -2030,11 +2101,6 @@ class Screen(object):
         again = bool(busy["on"])
         if not again:
             busy["enabled"] = getattr(app, "is_button_enabled", None)
-            busy["frame"] = 0
-            # 解いてから次のコマが来る前に出し直すと、前の interval が
-            # `on` を見て生き残る。世代で見分けて古い方を外す。
-            busy["gen"] += 1
-        gen = busy["gen"]
         busy["on"] = True
         slots = self.busy_slots(app)
 
@@ -2042,27 +2108,32 @@ class Screen(object):
             app.is_button_enabled = False
         except Exception:
             self._oops("cannot clear is_button_enabled")
+        frame = shown_dots(app)
+        if frame is not None:
+            try:
+                app.to_display_buttons = [frame] * slots
+            except Exception:
+                self._oops("cannot hold the dots")
         self.set_send_button(app, False)
 
-        def tick(_dt):
-            if not busy["on"] or busy["gen"] != gen:
-                return False                    # Clock から外れる
-            frame = self.BUSY_FRAMES[busy["frame"] % len(self.BUSY_FRAMES)]
-            busy["frame"] += 1
-            try:
-                texts = [frame] * slots
-                app.to_display_buttons = texts
-                self.paint(app, texts)
-            except Exception:
-                self._oops("busy frame failed")
-            return True
-
         if again:
-            # コマ送りは最初の呼び出しの interval が続ける。
             self.write("{}: busy on again ({} slots)".format(self.tag, slots))
             return slots
-        self.schedule(lambda: tick(0), 0)       # 1コマ目はすぐ
-        self._interval(tick, self.BUSY_INTERVAL)
+
+        def start():
+            # 待っている間に解かれていたら何もしない。
+            if not busy["on"]:
+                return
+            pending = button_load_pending(app)
+            if pending:
+                # ゲームの点送りが回っている（ゲーム自身の待機の直後など）。増やさない。
+                self.write("{}: the game is already turning the dots".format(self.tag))
+                return
+            loader = getattr(app, "display_button_load", None)
+            if callable(loader):
+                loader(0)       # 1コマ目を塗り、以後はゲームが自分で予約し直す
+
+        self.schedule(start, 0)
         self.write("{}: busy on ({} slots) -> {}".format(
             self.tag, slots, self.busy_state(app)))
         return slots
@@ -2127,7 +2198,14 @@ class Screen(object):
         描画の面倒はその経路が見ているので、同じ経路に乗せる。
         フェーズは `execute(choice_text)` だけを持つ自前クラスでよい。
         **`PhaseSpec` には決して載せない。**
+
+        待機中（点送りが回っている）なら外してから起こす。
+        `process_choice` は自分で点送りを始めるので、残すと2本になって点が速くなる
+        （実機 2026-09-25。締めの場面の間だけ 0.1 秒刻みになった。GAME.md §2.4）。
         """
+        if getattr(app, "is_button_enabled", None) is False and stop_button_load(app):
+            self.write("{}: stopped the running dots before {}".format(
+                self.tag, type(phase).__name__))
         try:
             app.process_choice(phase, choice_text)
             return True

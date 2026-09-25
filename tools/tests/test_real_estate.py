@@ -210,6 +210,15 @@ class VacationRestManager:
 
     def execute(self, choice_text=""):
         self.app.rests.append((self.months, self.quality))
+        # 活動の後は `まだ宿泊する`（連泊。`VacationStartManager`）と `宿泊を終える`
+        # を並べ、`execute` の中で組み直す（実機のログ 2026-09-25。
+        # 組み直しは `execute` が返る約0.1秒前）。
+        self.app.buttons = [
+            {"text": "まだ宿泊する", "spec": PhaseSpec("VacationStartManager",
+                                                   [self.months, self.quality])},
+            {"text": "宿泊を終える", "spec": PhaseSpec("VacationEndManager", [])},
+        ]
+        self.app.refresh_choice_buttons(reset_page=True)
         return None
 
 
@@ -246,6 +255,9 @@ class VacationEndManager:
 
     def execute(self, choice_text=""):
         self.app.stay_ended += 1
+        # 締めた瞬間に画面がどう見えていたか（押せるか・枠の文字）。
+        self.app.end_seen.append((self.app.is_button_enabled,
+                                  list(self.app.to_display_buttons or [])))
         return None
 
 
@@ -403,6 +415,7 @@ class InstantaleApp:
         self.socialized = 0
         self.crafted = 0
         self.stay_ended = 0
+        self.end_seen = []
         self.saves = 0
         self.saved_at = []
         self.saved_buttons = []
@@ -449,6 +462,12 @@ class InstantaleApp:
         self.to_display_buttons = [entry["text"] for entry in self.buttons]
 
     def display_button_load(self, dt):
+        # ゲームの点送り（`234_probe_busy_display` の実測。GAME.md §2.4）。
+        # 待機中（`is_button_enabled` が False）は点を1コマ進めて書き、次のコマを予約し直す。
+        if self.is_button_enabled is False:
+            self.busy_frame = getattr(self, "busy_frame", 0) + 1
+            self.to_display_buttons = [(".", "..", "...")[(self.busy_frame - 1) % 3]] * 4
+            CLOCK.schedule_once(self.display_button_load, 0.3)
         return None
 
     def on_button_press(self, button_index):
@@ -549,6 +568,30 @@ class InstantaleApp:
 #: setup のたびに作り直すクラス。**包む先は毎回この新しい型**にする。
 #: 使い回すと、古い mod インスタンスの包みが内側に積もり、
 #: そちらが自分の控え（別の `store`）のまま同じファイルへ書いて結果を汚す。
+class InnQualityApp(InstantaleApp):
+    """`327_inn_quality` の並べ直しを持つゲーム。
+
+    327 は `refresh_choice_buttons` の orig の**前**で、活動が無く `宿泊を終える` が
+    ある画面に、残りの回数ぶんの活動を先頭へ足し直す（実物の条件）。
+    ロード順で 327 が先に包むので、330 より**内側**の層になる。
+    ここに置けば、330 の包みの内側で走る（`install` は積まれた順に外へ重ねる）。
+    """
+
+    def refresh_choice_buttons(self, reset_page=False):
+        activities = ("VacationRestManager", "VacationTrainManager")
+        buttons = self.buttons
+        if not any(entry["spec"].cls_name in activities for entry in buttons) \
+                and any(entry["spec"].cls_name == "VacationEndManager"
+                        for entry in buttons):
+            buttons[0:0] = [
+                {"text": "休養をとる", "spec": PhaseSpec("VacationRestManager", []),
+                 "mod_inn_quality": "again"},
+                {"text": "訓練する", "spec": PhaseSpec("VacationTrainManager", []),
+                 "mod_inn_quality": "again"},
+            ]
+        return super().refresh_choice_buttons(reset_page)
+
+
 BASES = {"app": InstantaleApp, "world": World,
          "stay": VacationStartManager, "end": VacationEndManager,
          "rest": VacationRestManager, "item": InventoryItem}
@@ -2418,6 +2461,95 @@ check("エリアの一覧が無い文章には触らない",
       asked("今プレイヤーキャラはこのエリアで数ヵ月の宿泊をした。") is None)
 check("滞在の頼み文でなければ触らない",
       asked("依頼の相手を選ぶ。【エリアの構造】\n{'name': '始まりの泥濘'}") is None)
+
+print("[活動の後の選択肢]")
+# 自分の家で活動を1つ終えると、手が空いてから滞在を締める。
+# その待ちのあいだ、ゲームと 327 の選択肢（休養をとる・訓練する・まだ宿泊する・
+# 宿泊を終える）が見えていた（実機 2026-09-25）。締め終えるまで待機表示（…）で覆う。
+
+
+def after_activity_setup():
+    """327 の並べ直し（内側の層）を持つゲームで、家に入って滞在を始めたところ。"""
+    BASES["app"] = InnQualityApp
+    try:
+        found = setup()
+    finally:
+        BASES["app"] = InstantaleApp
+    module, ctx, app, places, classes = found
+    rent(app, module, "建売を買い取る")
+    app.go(home_of(app, module, places))
+    app.press(module.STAY_LABEL)
+    CLOCK.settle()
+    return found
+
+
+# 締められなかったとき（先に見る。最後の setup の記録は [例外] が読む）。
+module, ctx, app, places, classes = after_activity_setup()
+main = sys.modules["__main__"]
+real_end = main.VacationEndManager
+main.VacationEndManager = None
+try:
+    app.process_choice(classes["rest"](app, 1, module.STAY_QUALITY), "休養をとる")
+    CLOCK.settle()
+finally:
+    main.VacationEndManager = real_end
+check("締められなければ覆いを解く", app.is_button_enabled is True,
+      app.is_button_enabled)
+check("ゲームの選択肢がそのまま押せる（宿泊を終える が残る）",
+      app.has("宿泊を終える") and app.has("まだ宿泊する"), app.labels())
+check("覆いを解いた理由が残る", "stay menu: uncovered (cannot end the stay)" in read_log(),
+      [l for l in read_log().splitlines() if "stay menu" in l][-3:])
+
+module, ctx, app, places, classes = after_activity_setup()
+check("最初の活動の選択肢はそのまま（休養は残る）", app.has("休養をとる"), app.labels())
+check("最初の活動の選択肢は覆わない", app.is_button_enabled is True,
+      app.is_button_enabled)
+ended_before = app.stay_ended
+# 活動の描写が流れているあいだ（実機では流し終えてから締めまで落ち着きの 0.6 秒がある。
+# 偽の Clock は待ち時間を数えないので、流している最中で止めて見る）。
+app.is_adding_text = True
+app.process_choice(classes["rest"](app, 1, module.STAY_QUALITY), "休養をとる")
+# ゲームは選択肢を組んだ次のフレームで塗るので、覆いは Clock を待たずにその場で掛ける
+# （Clock へ回したら1フレームだけ選択肢が見えた。実機 2026-09-25）。
+check("選択肢を組んだその場で押せなくなる（Clock を待たない）",
+      app.is_button_enabled is False, app.is_button_enabled)
+CLOCK.settle()
+check("流している間は締めない", app.stay_ended == ended_before,
+      (ended_before, app.stay_ended))
+check("活動の後の選択肢は押せない", app.is_button_enabled is False,
+      app.is_button_enabled)
+check("見えているのは「…」だけ",
+      bool(app.to_display_buttons)
+      and all(t and not t.strip(".") for t in app.to_display_buttons),
+      app.to_display_buttons)
+app.finish_text()
+CLOCK.settle()
+check("手が空いたら滞在を締める", app.stay_ended == ended_before + 1,
+      (ended_before, app.stay_ended))
+seen = app.end_seen[-1] if app.end_seen else (None, [])
+check("締めるときには覆われている（押せない）", seen[0] is False, seen)
+check("覆っている間の枠は「…」",
+      bool(seen[1]) and all(t and not t.strip(".") for t in seen[1]), seen)
+check("選択肢そのものは触らない（327 が足した活動も含めて並びのまま）",
+      "stay menu: covered ['休養をとる', '訓練する', 'まだ宿泊する', '宿泊を終える']"
+      in read_log(), [l for l in read_log().splitlines() if "stay menu" in l][-3:])
+check("締め終えたら覆いを解く", app.is_button_enabled is True
+      and "stay menu: uncovered (the stay ended)" in read_log(),
+      (app.is_button_enabled, [l for l in read_log().splitlines()
+                               if "stay menu" in l][-3:]))
+
+# 宿屋の活動の後はゲームのまま（覆わない）。
+app.facility_screen()
+app.go(places["inn"])
+app.process_choice(classes["stay"](app, 1, "bunk"), "宿泊する")
+CLOCK.settle()
+covered_before = read_log().count("stay menu: covered")
+app.process_choice(classes["rest"](app, 1, "bunk"), "休養をとる")
+CLOCK.settle()
+check("宿屋の活動の後は覆わない",
+      app.is_button_enabled is True
+      and read_log().count("stay menu: covered") == covered_before
+      and app.has("まだ宿泊する") and app.has("休養をとる"), app.labels())
 
 print("[例外]")
 check("ctx.log_exc に例外が出ていない", not ctx.errors, ctx.errors)

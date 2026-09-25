@@ -2116,12 +2116,12 @@ screen.paint(app) / screen.paint_party(app) / screen.refresh(app) / screen.say(a
 | 関数 | 何をするか |
 |---|---|
 | `apply_buttons` | `Clock.schedule_once(..., 0)` 経由で `app.buttons` を差し替え、`refresh` と `paint` まで行う |
-| `paint` | `display_button_load(0)` と `hud.update_button_texts` の2手。`hud not found` は HUD の構成が変わった合図 |
+| `paint` | `display_button_load(0)` と `hud.update_button_texts` の2手。`hud not found` は HUD の構成が変わった合図。待機中（`is_button_enabled` が False）は `display_button_load` を呼ばない（呼ぶたびにゲームの点送りが1本増える。GAME.md §2.4） |
 | `paint_party` | 仲間欄を塗り直す。パーティを増減させたら最後に呼ぶ |
-| `start_phase` | 自前フェーズを `PhaseSpec` に載せずに起こす |
+| `start_phase` | 自前フェーズを `PhaseSpec` に載せずに起こす。待機中なら回っている点送りを外してから（`process_choice` が自分で1本始めるので、残すと2本になる。GAME.md §2.4） |
 | `end_conversation` | 画面のボタンの args を写し `end_text` だけ差し替えて閉じ、閉じ終わってから続きを実行 |
 | `when_idle` | `is_adding_text` / `is_button_enabled` / `is_popup_window_opened` を見張る |
-| `busy_on` / `busy_off` | LLM を待つ間の待機表示（ゲーム自身と同じ形。GAME.md §2.4）。`busy_off(restore=False)` は「この後すぐ別の画面を出す」経路用 |
+| `busy_on` / `busy_off` | LLM を待つ間の待機表示（ゲーム自身と同じ形。GAME.md §2.4）。点はゲームが送る。こちらは旗を下ろし、回っていなければ1回だけ回し始める。枠に点が出ていればその点を一覧に書く（ゲームが待機を終えた直後の塗りも点になる）。直に触るのは旗と一覧だけなので、ワーカースレッドからも呼べる。`busy_off(restore=False)` は「この後すぐ別の画面を出す」経路用 |
 
 `Screen` の操作はゲームのスレッド（Kivy のメインスレッド）から呼ぶこと。
 `when_idle` は1回目の状態確認を、`end_conversation` は `app.process_choice` を、呼んだスレッドでその場で行う
@@ -2947,12 +2947,18 @@ MOD は自分の進行中の旗（宿泊中・滞在中）で画面を判断し�
 手元の7セーブで空回しして、正しい5つには触らず、
 食い違う2つも絵が無いので触らないことを確かめてある。
 
-**中のまま保存するときも絵は据え直す**（`keep_inside_background`）。
+**中のまま保存するときの絵は、書き出しの網が揃える**（`keep_saved_background`）。
 ゲームは MOD の施設に入っても `location_image` を更新しないので（GAME.md §2.3）、
 何もしないと繋ぎ先の区画の絵が焼かれ、中に立ったまま再開したのに別の場所の絵で始まる
-（`331_` の道場で実セーブ。ここだけは立ち位置も選択肢も替えず、絵だけ替える）。
-建物の絵がまだ世界に無ければ**触らない**。空にするのは入口へ移すときだけで、
-中に居るのに空にすると、焼かれている絵を悪くする。
+（`331_` の道場で実セーブ）。
+網は `keep_saved_location` が写しに立ち位置を戻した後で走るので、この場合も拾える。
+建物の絵がまだ世界に無ければ**触らない**（空にはしない。焼かれている絵を悪くする）。
+**見えている絵（`location_image`）は触らない**。
+以前は保存のあいだだけ建物の絵へ差し替えて戻していた（`keep_inside_background`）が、
+`location_image` は画面の背景そのもので、保存のたびに背景が切り替わって戻った
+（`330_` の滞在で1回に3度。実機 2026-09-25）。
+入口へ移して保存する側（`safe_save_location`）は今も保存のあいだ絵を差し替えている。
+同じ切り替わりが出るなら、そちらも網へ寄せる。
 
 立ち位置に残った id は、その世界を二度と開けなくする。
 ゲームのロードは、引けなかった施設に `'facilityが見つからない'` という**文字列**を入れてから
