@@ -3,7 +3,7 @@
 
     python tools/tests/test_training_custom.py
 
-（開発中は `916_training_custom` / `test_wip_training_custom.py` だった。2026-09-16 に正式化。）
+（開発中は `916_training_custom` / `test_wip_training_custom.py` だった。）
 
 偽の app / PhaseSpec / DisplayTrainingChoice / TrainingStartManager /
 TrainingPhaseManager を差し込み、次を確認する。
@@ -26,7 +26,7 @@ TrainingPhaseManager を差し込み、次を確認する。
   個別   … ワールド個別の控えがある世界では一括設定を上書きし、消せば戻る
   窓口   … ローダの `durations` に訓練の暦を置く（活動ごとの年数は素の値のまま）
 
-偽ゲームの形は実測に合わせてある（`231_probe_training`、2026-09-15。GAME.md §2.17）:
+偽ゲームの形は実測に合わせてある（`231_probe_training`。GAME.md §2.17）:
 代金は `TrainingStartManager.execute` で引かれて日数は進まず、
 暦は各段の `TrainingPhaseManager.execute` で「活動の年数 × 365 日」が1回で進む。
 活動の年数と残り年数の減り方は**ゲームの内側**に在るので、偽物もその形にしてある
@@ -96,7 +96,7 @@ PHASE_LOG = "一年間、ひたすら鍛錬した。0の経験値を得た。"
 #: 1段の結果の文言が使う漢数字（実測は `一年間` / `二年間` / `二年`）。
 KANJI = {1: "一", 2: "二", 3: "三"}
 
-#: 1段の結果の言い回しは修行内容で違う（実測 2026-09-15〜16。全4種とも見た）。
+#: 1段の結果の言い回しは修行内容で違う（実測。全4種とも見た）。
 #: **「間」が付かない形があり、年を言わない形もある。**
 #:
 #:   ただ鍛える     `一年間、ひたすら鍛錬した。0の経験値を得た。`
@@ -113,7 +113,7 @@ PHASE_TEXTS = {
 PHASE_TEXT_DEFAULT = "{}年間、ひたすら鍛錬した。0の経験値を得た。"
 
 #: AI へ渡る頼み文の実測（`output_data` の training_conversation_starter /
-#: conversation_facilitator、2026-09-15）。前の2つは直す側、後の2つは触らない側。
+#: conversation_facilitator）。前の2つは直す側、後の2つは触らない側。
 PROMPT_SAMPLES = (
     "【訓練所の情報】\n- 残り訓練年数: 3年\n- プロフィール: 剣の師範。",
     "今、プレイヤーが訓練施設での訓練を開始しました。"
@@ -129,12 +129,12 @@ KEEP_SAMPLES = (
 
 
 class Facility:
-    """訓練所。**断りの根は `config["trained"]`**（実測 2026-09-16）。"""
+    """訓練所。**断りの根は `config["trained"]`**（実測）。"""
 
     def __init__(self, name="ゼニスの風", trained=False):
         self.id = "mod:331_facility_investment:6-1"
         self.name = name
-        # 一度も卒業していない施設は**キー自体を持たない**（実測 2026-09-16）。
+        # 一度も卒業していない施設は**キー自体を持たない**（実測）。
         self.config = {"level_of_detail": 0}
         if trained:
             self.config["trained"] = True
@@ -207,7 +207,7 @@ class TrainingStartManager:
     def execute(self, choice_text):
         # 卒業した施設の2回目は断る（実測。代金も日数も動かない）。
         # 見ているのは施設に立つ印で、プレイヤー側の値ではない。
-        # **キーの有無**で見る（`False` を入れても断られた。実機 2026-09-16）。
+        # **キーの有無**で見る（`False` を入れても断られた。実機）。
         if "trained" in (getattr(self.app.player.location, "config", None) or {}):
             self.app.add_text("十分に学んだ。これ以上ここで得るものはないだろう。")
             self.app.buttons = [

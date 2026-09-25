@@ -135,7 +135,7 @@ PIPELINE_FUNC = "load_sd_pipeline"
 #: 段の印を立てる上の層（`stable_diffusion_manager` の関数）。
 #: **関数から段を決め打ちしない。**
 #: `generate_image_real_lcm` は背景だけのものではなく、
-#: `diffusers_openvino` ではキャラの絵もここを通る（実機 2026-09-18）。
+#: `diffusers_openvino` ではキャラの絵もここを通る（実機）。
 #: 段は種類と関数の組で決める（`stage_of`）。
 STAGE_FUNCS = ("generate_image_anime", "image_to_image_anime",
                "generate_image_real_lcm")
@@ -185,7 +185,7 @@ def stage_of(func):
     """サンプラーの設定を引く段。**上の層の関数だけで決まる**（種類は見ない）。
 
     `generate_image_real_lcm` は LCM の段で、背景と敵・モンスターが通る
-    （実機 2026-09-18: 敵は 512x512 を lcm / 5 / cfg 1 で1枚）。
+    （実機: 敵は 512x512 を lcm / 5 / cfg 1 で1枚）。
     `diffusers_openvino` ではキャラもここを通る。
     種類では決めない（種類で決めると、同じ呼び出しに違う設定が当たる）。
     """
@@ -605,7 +605,7 @@ def apply(ctx):
         # 新しい世代の包みの**外側に**古い包みが重なる。
         # 重なると、古い包みが新しい包みの書いた寸法をもう一度拡大し、
         # 印は別インスタンスなので段が None になる
-        # （実機 2026-09-20: 1段目が 256x512 -> 512x1024 -> 1024x2048 と二重に効き、
+        # （実機: 1段目が 256x512 -> 512x1024 -> 1024x2048 と二重に効き、
         #  22 秒かかった。`[portrait/None]` の行がその印）。
         if ctx.superseded():
             return 0

@@ -27,7 +27,7 @@ base_url は `/v1` まで含めること（欠けると HTTP 200 で無言に失
 
 `--current 灰の街の盾` を渡すと「いままでの二つ名」を頼み文に載せた形で測れる
 （D案の据え置き率。集計に「据え置き」の行が増える）。
-2026-08-24 以前の記録（`out\\epithet_probe_*.json`）は旧1段目の頼み文で測ったもの。
+古い記録（`out\\epithet_probe_*.json`）には、旧1段目の頼み文で測ったものが混ざっている。
 
 サンプリングはゲームの config.json の `llama-cpp-completion-cuda` から読む
 （既定 --temp 1.0 --top-p 0.95 --top-k 64）。seed は渡さない＝毎回変わる。

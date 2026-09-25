@@ -143,7 +143,7 @@ class AreaMoveManager:
             self.app.player.gold -= GAME_FARE
         self.app.moved.append((self.target_area_id, self.mode, choice_text))
         if self.mode == CARRIAGE_MODE:
-            # 実測の文言（2026-08-17、217_）。
+            # 実測の文言（217_）。
             # **金額はゲームの運賃で焼き込まれ、
             # mod が料金をいくらに直しても 1000 のまま**という実挙動を真似る。
             self.app.add_text("{}ゴールドを支払った。快適な旅だ...".format(GAME_FARE))

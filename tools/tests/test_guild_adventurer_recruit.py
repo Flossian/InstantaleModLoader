@@ -127,7 +127,7 @@ class World:
     def generate_character(self, character_id, character_value):
         data = self._save_data_dict["npcs"][character_id]   # 無い id は KeyError
         # 実機は ability_scores の6つの鍵を引く。無いと KeyError: 'constitution'
-        # （2026-08-27 実機。VERIFICATION_LOG.md §2.72）。値は None でよい。
+        # （実機。VERIFICATION_LOG.md §2.72）。値は None でよい。
         scores = data["ability_scores"]
         for key in ("strength", "dexterity", "constitution",
                     "intelligence", "wisdom", "charisma"):

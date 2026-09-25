@@ -64,7 +64,7 @@ id で引かれる場所に残さないことを守っているのは、**保存
 値の変換も戻しもしない。MOD の NPC は実体に直接書き、保存のたびにローダが実体を控えへ写す
 （正規 NPC でゲームがやっている保存を、場所を変えてやる）。
 正規 NPC の項目を書けばそれは本物の変更で、ゲームがセーブに書く。
-「セーブに残さず画面上だけ変える」機構は持たない（往復の機構は同期の穴を作るので外した。2026-09-13）。
+「セーブに残さず画面上だけ変える」機構は持たない（往復の機構は同期の穴を作るので外した）。
 頼み文だけに効かせるなら `notes` / `prompt`。
 
 ##### 未確認
@@ -73,7 +73,7 @@ id で引かれる場所に残さないことを守っているのは、**保存
 文字列 id の `Character` がセーブに漏れないか、会話が始まって終わるか、
 詳細生成が素データを引かずに済むかは、この時点ではどれも見込みでしかない。
 **パーティ加入はできない**（関所が断る）。
-仲間は `save_data_dict['npcs']` に素データが在ることが前提で（実セーブで確認。2026-09-13）、
+仲間は `save_data_dict['npcs']` に素データが在ることが前提で（実セーブで確認）、
 ここで組む NPC はそこに出ないので、加入したまま保存するとロードで組み立てられない。
 仲間にしたい人物は `npcs.make_npc` で本物として作る。
 
@@ -114,7 +114,7 @@ INSTALLED_ATTR = "_instantale_modnpc_installed"
 #: 保存の間、MOD の NPC を名簿の**反復**から隠すか。
 #: 最初は名簿から外していたが、外している窓（実機で約0.5秒。保存は別スレッド）の間は
 #: ゲーム自身のコードもその id を引けず、`ConversationStartManager.__init__` と
-#: `resolve_conversation` が `KeyError` で落ちた（2026-09-12）。
+#: `resolve_conversation` が `KeyError` で落ちた。
 #: いまは `world.characters` を `_RosterView`（反復では隠し、id では引ける）に
 #: 差し替えるので、窓は無い。保存が名簿を読まないと分かれば False にしてよい。
 LIFT_ROSTER = True
@@ -127,7 +127,7 @@ class _RosterView(dict):
     どれで舐めても MOD の NPC は出ない（dict の C レベルの複製は `items()` を
     呼ばず内部の格納を写すので、隠し方を Python 側の `items()` だけに頼れない）。
     隠した分は `hidden` に持ち、id で引く読み（`[]` / `get` / `in`）だけそこへ落ちる。
-    保存が名簿を舐めて書く経路でも書かれず（実機 2026-09-12: 舐めている。
+    保存が名簿を舐めて書く経路でも書かれず（実機: 舐めている。
     来訪者を残すと `AttributeError` で保存が落ち、外すと通った）、
     その間にゲームが id で引いても `KeyError` にならない。
     書き込みは元の辞書にも通す（保存中に生まれた NPC を失わない）。
@@ -195,7 +195,7 @@ FIELD_TO_ATTR = {"ability_scores": "original_ability_scores",
 
 #: 誰とも話していない NPC の `relationship`。
 #: ひな型（`npcs.NEW_NPC_TEMPLATE`）は None だが、実セーブでは詳細生成前の個体を含む
-#: 87/87 がこの形だった（2026-09-12）。`make_npc` の側はゲームが埋めるが、
+#: 87/87 がこの形だった。`make_npc` の側はゲームが埋めるが、
 #: ここは素データを通らないので自分で持つ。
 DEFAULT_RELATIONSHIP = {"player": {"affinity": 0, "affinity_text": "警戒心がある",
                                    "relationship": ["初対面"],
@@ -203,7 +203,7 @@ DEFAULT_RELATIONSHIP = {"player": {"affinity": 0, "affinity_text": "警戒心が
 
 #: 組んだ直後の `config`。`npcs.DEFAULT_CONFIG` と違って `level_of_detail` は **1**。
 #: 2（詳細生成済みの値）で組むと、ゲームは「もう埋まっている」とみなして
-#: 会話の直前の `ensure_npc_detail_generated` を呼ばない（実機 2026-09-12。
+#: 会話の直前の `ensure_npc_detail_generated` を呼ばない（実機。
 #: 一覧を組むときも `config` を読んでいる）。素の生成直後の住人は 1。
 #: `fields["config"]` で上書きできる。
 DEFAULT_CONFIG = dict(npcs.DEFAULT_CONFIG, level_of_detail=1)
@@ -247,7 +247,7 @@ CONVERSATION_START_TARGET = "__main__:ConversationStartManager.__init__"
 CONVERSATION_END_TARGET = "__main__:ConversationEndManager.resolve_conversation"
 DETAIL_TARGET = "__main__:InstantaleApp.ensure_npc_detail_generated"
 #: 会話の直前の詳細生成が実際に通る入口。`ConversationStartManager.generate_npc_detail_and_ready`
-#: （別スレッド）がここを直に呼ぶ（実機 2026-09-12。`ensure_npc_detail_generated` は通らなかった）。
+#: （別スレッド）がここを直に呼ぶ（実機。`ensure_npc_detail_generated` は通らなかった）。
 #: LLM の答えを `save_data_dict['npcs'][id]` へ書くので、素データの写しが無いと `KeyError`。
 DETAIL_GEN_TARGET = "__main__:InstantaleApp.generate_npc_detail"
 IMAGE_TARGET = "__main__:InstantaleApp.update_character_image"
@@ -371,7 +371,7 @@ def names_in_use(app, skip=()):
 
     名前が既存の人物と重なると、**名前でしか相手を引けない場所**で別人に当たる
     （ゲームの人物欄は `visible_character_sheet_data` に id を持たず、名前しか渡さない。
-    実機 2026-09-21。`330_` の管理人と素の NPC が同じ名前になり、
+    実機。`330_` の管理人と素の NPC が同じ名前になり、
     `120_` の衝突の記録にも並んだ）。
     MOD どうしは相手の名簿を知らないので、**跨ぐ集約はローダが持つ**
     （`330_` と `331_` の主人が同じ名前になった回も、ここを見ていれば避けられた）。
@@ -429,7 +429,7 @@ def register(owner, npc_id=None, *, key=None, fields=None, prompt=None,
 
     `notes` は「何を書くか」だけを MOD に残すための口。
     `311_` / `317_` / `321_` / `403_` は「相手を複製して `profile` に足し、引数を
-    差し替える」手順を4本とも自前で持っていて（2026-09-12 に確認）、
+    差し替える」手順を4本とも自前で持っていて（確認済み）、
     外側の層から順に複製の複製ができ、繋ぐ順は `load_order.json` の並びでしか決まらなかった。
     ここに寄せると複製は1つ、順は宣言、ログは1行になる。
 
@@ -455,18 +455,18 @@ def register(owner, npc_id=None, *, key=None, fields=None, prompt=None,
             and record.get("built_in") != getattr(patch, "_generation", None):
         # **その id の持ち主**が登録し、実体は**前の世代**で組んだもの＝注入し直された。
         # 登録簿は注入をまたいで生きるので、前の版の `build` と `fields` で組んだ実体が残る
-        # （実機 2026-09-12。`build` を直しても古い実体が使い回されて同じ場所で落ちた）。
+        # （実機。`build` を直しても古い実体が使い回されて同じ場所で落ちた）。
         # 次の `spawn` で今の `fields` と今の `build` から組み直す。
         #
         # 見るのは**世代**で「登録し直したか」ではない（`modfacility` の `built_in` と同じ）。
         # 後者だと、塗り直しのたびに層を積む MOD が毎回実体を組み直してしまう。
         # それを避けようと MOD 側が「層は一度だけ積む」とすると、今度は登録簿が注入をまたぐぶん
-        # **前の版の層（`notes` / `fields`）が残り続ける**（実機 2026-09-13。
+        # **前の版の層（`notes` / `fields`）が残り続ける**（実機。
         # 331 の主人に足したはずの出資者の一文が、注入し直しても頼み文に出なかった）。
         #
         # 別の持ち主が層を積み直しただけ（`229_` が施設の主に被せる）では捨てない。
         # 捨てると `place` / `unplace` / `snapshot_all` が実体に触れなくなり、
-        # `.location` が据わらないまま会話の一覧から消える（実機 2026-09-13。331 の主人）。
+        # `.location` が据わらないまま会話の一覧から消える（実機。331 の主人）。
         record["character"] = None
         record["built_in"] = None
         record["rebuild"] = True          # 次の `spawn` は名簿に居ても採らず組み直す
@@ -587,7 +587,7 @@ def build(fields, npc_id=None, write=None, data=None):
     # `npcs.CHARACTER_KWARGS` の15個だけだと `life_log` / `current_log` /
     # `memory` / `knowledges` が既定の None のままになり、会話の第一声を組む
     # `context_manager.get_life_log_text` が `'NoneType' object is not iterable`
-    # で落ちる（実機 2026-09-12）。素データ経由なら `[]` / `{}` が渡る項目。
+    # で落ちる（実機）。素データ経由なら `[]` / `{}` が渡る項目。
     kwargs = {}
     accepts = _accepted_kwargs(cls)
     for field, value in data.items():
@@ -776,7 +776,7 @@ def install_plain(app, npc_id, write=None):
     """素データの写しを素データの辞書すべてに置く。置いた数を返す。
 
     ゲームの詳細生成（`generate_npc_detail`）は結果を `save_data_dict['npcs'][id]` へ書く
-    （実機 2026-09-12: 無いと LLM の答えが返った直後に `KeyError` で会話のスレッドが死ぬ）。
+    （実機: 無いと LLM の答えが返った直後に `KeyError` で会話のスレッドが死ぬ）。
     置くのは `plain_data` の**同じ辞書**なので、どこに書かれても1つに集まる。
     保存の間は `hide` が反復から隠す。
     """
@@ -807,7 +807,7 @@ def _character_at(app, npc_id, world=None):
     """その id の実体。**名簿に居ればそれが真実**で、記録の参照は名簿に合わせる。
 
     ゲームは詳細生成（会話の直前）の後に `Character` を作り直して名簿を差し替える
-    （実機 2026-09-13。331 の主人が `config['difficulty_level']` を変えて別の実体になり、
+    （実機。331 の主人が `config['difficulty_level']` を変えて別の実体になり、
     記録が掴んでいた古い実体に `.location` を据えても新しい方には届かず、
     会話の一覧から消えた）。記録だけを信じると、置いたつもりの人物がどこにも居ない。
     """
@@ -871,7 +871,7 @@ def place(app, npc_id, area_id, facility_id, *, owner=False, listed=True,
     **`world` を渡すこと。** `World.__init__` を包んでいる間は `app.world` がまだ
     前の世界を指していて、渡さないと**前の世界の施設**に置く（そこには前の建物が
     残っている）。実体の `.location` が古いオブジェクトになるので、
-    「会話する」の一覧はその人物を出さない（実機 2026-09-13。331 の主人が消えた）。
+    「会話する」の一覧はその人物を出さない（実機。331 の主人が消えた）。
 
     `move_npc_to_facility` は通さない。
     あちらは素データ側にも登録する引数（`register_facility`）を持っていて、
@@ -917,7 +917,7 @@ def _place(app, npc_id, area_id, facility_id, *, owner, listed, world, write,
     if listed and isinstance(roster, list) and npc_id not in roster:
         roster.append(npc_id)
     # 「会話する」の一覧は `world.characters` を舐めて各人物の `.location` を
-    # 今の施設と突き合わせる（実機 2026-09-12。名簿に居ても `.location` が
+    # 今の施設と突き合わせる（実機。名簿に居ても `.location` が
     # 施設オブジェクトでなければ出ない）。実行時の NPC と同じ形で持たせる。
     # 保存には出ない（`_RosterView` が反復から隠す）ので、オブジェクトを持っても焼かれない。
     was_at = None
@@ -1091,7 +1091,7 @@ def items_of(character, write=None):
     """持ち物を控えの形（`{鍵: 辞書}`）で。読めなければ None。
 
     入れ物も品も JSON に落ちないオブジェクトなので、`items` が1件ずつ均す。
-    素直に属性を控えると持ち物が丸ごと落ちる（実機 2026-09-14。
+    素直に属性を控えると持ち物が丸ごと落ちる（実機。
     `331_` の店の主人に品が並んでいても控えは空だった。入れ物だけ剥がしても
     中身が `Item` のままなので、やはり落ちる）。
     """
@@ -1427,8 +1427,8 @@ def fire_all(site, app, *, args=None, world=None, write=None):
 # --------------------------------------------------------------------------
 #: セーブに焼かれる、NPC の id を載せた選択肢の器（`app` の属性。`game_variables` はここから組まれる）。
 #: 実セーブの `game_variables.buttons_backup` に
-#: `{"spec": {"cls_name": "ConversationStartManager", "args": ["35"]}}` が在る（2026-09-13 に確認）。
-#: **ここは落とさない**（2026-09-14）。落としていた頃は、「会話する」の一覧を出したまま保存すると
+#: `{"spec": {"cls_name": "ConversationStartManager", "args": ["35"]}}` が在る（確認済み）。
+#: **ここは落とさない**。落としていた頃は、「会話する」の一覧を出したまま保存すると
 #: MOD の NPC の項目だけが抜けた一覧が焼かれ、ロードで「やめる」だけの画面が戻った
 #: （実機。店で主人の一覧を出したまま保存→ロードで「店の選択肢が消えた」）。
 #: ゲームは一覧を出したままの保存を再開できるので、その挙動を壊さない（会話の途中と同じ判断）。
@@ -1442,7 +1442,7 @@ SAVED_SPEC_ATTRS = ("function_correspond_to_input", "input_backup",
 #: 戦闘中の敵（`{id: 情報}`）。MOD の NPC と戦っている最中の保存で焼かれうる。
 SAVED_ENEMY_ATTRS = ("current_enemy_dict",)
 #: 相手の id を持つ旗。`in_conversation` は真偽ではなく**話している相手の id**が入る
-#: （実機 2026-09-14）。**ここは落とさない。** 落とすと会話の途中で保存したセーブが
+#: （実機）。**ここは落とさない。** 落とすと会話の途中で保存したセーブが
 #: 会話から再開できなくなる（同日の指摘。`talking_with`）。
 CONVERSATION_ATTR = "in_conversation"
 #: パーティの id が並ぶ器。`ui.party_stores` は「いまのパーティ」だけを見るが、
@@ -1506,7 +1506,7 @@ def scrub_saved_refs(app, mod_ids, write=None, undo=None):
     if not mod_ids:
         return undo
     # 選択肢（`SAVED_CHOICE_ATTRS`）は落とさない。落とすと一覧を出したまま保存したセーブが
-    # 「やめる」だけの画面で戻る（実機 2026-09-14。定数の注記）。
+    # 「やめる」だけの画面で戻る（実機。定数の注記）。
     for attr in SAVED_SPEC_ATTRS:
         value = getattr(app, attr, None)
         if value is None or not _spec_mentions(value, mod_ids):
@@ -1562,7 +1562,7 @@ def unscrub_saved_refs(app, undo):
 def talking_with(app):
     """いま会話している相手の id。会話していなければ空。
 
-    `in_conversation` は真偽ではなく**相手の id**が入る（実機 2026-09-14）。
+    `in_conversation` は真偽ではなく**相手の id**が入る（実機）。
     """
     value = getattr(app, CONVERSATION_ATTR, None)
     return str(value) if isinstance(value, str) and value else ""
@@ -1578,7 +1578,7 @@ def hide(app, *, world=None, write=None, into=None):
     **いま話している相手だけは痕跡を残す。** ゲームは会話の途中を保存して再開できる
     （`in_conversation` に相手の id、`current_conversation_history` に流れ、選択肢は会話のもの）。
     その id を選択肢や旗から落とすと、**ロードしても会話から再開できない** ―
-    相手の居ない会話の残骸だけが並ぶ（実機 2026-09-14。「NPC が消えた」）。
+    相手の居ない会話の残骸だけが並ぶ（実機。「NPC が消えた」）。
     ロードは `restore_world` が名簿を戻してから続きが動くので、id は解ける。
     """
     hidden = into if into is not None else {}
@@ -1678,7 +1678,7 @@ def gate_is_live():
 
     登録簿は `sys` に在って関所より長生きする。
     関所を立てた MOD の `apply()` が失敗した世代では、前の世代の実体が名簿に残ったまま
-    関所だけが無く、次の保存が名簿を舐めて落ちる（実機 2026-09-12 18:58。
+    関所だけが無く、次の保存が名簿を舐めて落ちる（実機。
     `AttributeError: 'NoneType' object has no attribute 'id'`）。
     だから `spawn` はここが真でなければ載せない。
     """
@@ -1860,7 +1860,7 @@ def _install(ctx, write):
         """**MOD の NPC は仲間にできない。** 断って記録を残す。
 
         仲間は `save_data_dict['npcs']` に素データが在ることが前提
-        （実セーブで確認。2026-09-13: `game_variables.party` の id が `npcs` の鍵を指し、
+        （実セーブで確認: `game_variables.party` の id が `npcs` の鍵を指し、
         その人物は `areas/<id>/adventurer_npcs` にも載っている）。
         MOD の NPC の素データは保存の直前に隠すので、加入したまま保存すると
         **ロードのときに組み立てられない**。
@@ -2053,7 +2053,7 @@ def _bind(target, args, kwargs):
 
     署名は `orig` ではなく**素の関数**から取る。
     同じ対象を包む MOD が他に居ると `orig` は内側の MOD のラッパで、
-    その署名は `(*args, **kwargs)` でしかない（実機 2026-09-12。
+    その署名は `(*args, **kwargs)` でしかない（実機。
     `conversation_starter` に9本が載っていて、名前が1つも引けずに素通りした）。
     `safe=True` の包みでは `orig` 自体がローダの閉包で `__original__` すら持たない
     （同日。底が `(*a, **kw)` で止まった）ので、`orig` からはたどらない。

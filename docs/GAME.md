@@ -69,7 +69,7 @@ save_area_json, save_world_json, api_key_manager, build_type, sdcpp_cuda
 
 | 項目 | 値 |
 | --- | --- |
-| ゲーム本体 | `C:\Program Files\Epic Games\Instantaleq6Ve7\instantale.exe` |
+| ゲーム本体 | `<Epic のライブラリ>\Instantaleq6Ve7\instantale.exe`（ライブラリの既定は `C:\Program Files\Epic Games`。フォルダ名はマニフェストの `MandatoryAppFolderName` で決まっていて、置き場所を変えても同じ） |
 | ランタイム | CPython 3.10.11 / Kivy / SDL2 |
 | `game_version` | `014`（`__main__.get_game_version()`）。Epic の `AppVersion`（`main_025`）は別系統 |
 | ロード済みモジュール | 4226（うち 3212 が Nuitka コンパイル済み）／ゲーム自身は 67（main_025 のダンプ） |
@@ -81,6 +81,7 @@ save_area_json, save_world_json, api_key_manager, build_type, sdcpp_cuda
 Epic の `AppVersion` は
 `%PROGRAMDATA%\Epic\EpicGamesLauncher\Data\Manifests\*.item` の
 `AppVersionString` から、ゲームを起動せずに読める。
+実際のインストール先も同じファイルの `InstallLocation` にある。
 
 ### 1.5 更新の記録
 
@@ -124,9 +125,9 @@ Epic の `AppVersion` は
 > 上流の状態を `upstream:` 行に記録する。
 > 能動的に起こせないバグはこの形でしか判定できない。
 > ただし**「何を測ったか」を自分で検算させること**。
-> 最初の版は再注入で前回のラッパを測っていて（層を剥がすのは `ctx.wrap` の中＝控えより後）、
-> clamp 済みの関数はどの入力でも落ちないので誤判定した。
-> いまは `__original__` を最下層までたどり、剥がした層数と、
+> 再注入のときに控えた関数は、前回のラッパのことがある（層を剥がすのは `ctx.wrap` の中＝控えより後）。
+> clamp 済みの関数はどの入力でも落ちないので、それを測ると誤判定する。
+> `101_` は `__original__` を最下層までたどり、剥がした層数と、
 > 底にローダの印が残っていないかを併せて記録する。
 
 伏せる／残すの判断は、**セーブに残るものを書き換えるか**で分かれる。
@@ -175,39 +176,33 @@ Epic の `AppVersion` は
 
 ### 1.7 起動直後に注入したときの見え方（更新とは無関係）
 
-段階適用の途中経過が WARN として大量に出るので、更新で壊れたように見える。
+ゲームのモジュールがまだ揃っていないうちに注入すると、当たらない対象を保留にして、揃うたびに当て直す。
+その途中の `patches:` の数だけを見ると、更新で壊れたように見える。
 
-| 起動からの時間 | patches | 中身 |
-| --- | --- | --- |
-| 3秒 | 11 / 9 target / 9 mod | `__main__` がまだ空。`has no attribute 'InstantaleApp'` が大量に出る |
-| 9秒 | 47 / 35 / 20 | 一部のモジュールが import され、再適用 |
-| 85秒 | 137 / 93 / 26 | 満額 |
+見張り（`tools\watch.bat`）は窓が出るのを待ってから注入する。
+同じ日の起動3回とも次の3段で、間隔も件数もほぼ同じだった（MOD 111本）:
+
+| 注入からの時間 | patches | 保留 | 中身 |
+| --- | --- | --- | --- |
+| 0秒 | 288 / 210 target / 48 mod | 569 | `__main__` を組み立てている途中。保留のうち 400件が `__main__` の対象 |
+| 8秒 | 881 / 397 / 106 | 9 | 残りは画像生成のモジュール（`image_generation.*` / `scripts.image_processing.*`）の import 待ち |
+| 19秒 | 908 / 417 / 109 | 0 | 満額 |
 
 - **`boot complete: N/N mod(s) applied` は「掴めた」ことの証拠にならない**
   （`apply()` が例外を出さなければその数になる）。
   見るのは次の行の `patches: N applied on M target(s)`
 - 再注入は安全（`replacing a previous patch layer` が出て二重には掛からない）
-- `ERROR bgm restore: channel scan failed`（`mixer not initialized`）もこの状況で出る。
-  掃除が mixer 起動前に走っただけで、捕捉済み・処理は継続
 
-### 1.8 影響を確かめていないこと
+### 1.8 クラウド LLM 経路ではプロンプト系 MOD が素通りする
 
-- **クラウド LLM 経路ではプロンプト系 MOD が素通りする**（確定）。
-  経路はプロバイダごとの `request_llm_inference_*` で、`LlamaCppClient` を通らない（§2.12）。
-  `111_` は v4 でプロバイダ非依存の `llm_manager` 別名包みに置き換えて対処済み。
-  素通りの実害があるのは `103_` だけ（`quest_event_log` の肥大はマネージャ層で起きるのでクラウドでも育つ）。
-  `102_` は本体が直済み、`105_` の対象はローカル固有。
-  `301_` は `LlamaCppClient` を使っていないのでクラウドでも効く。
-  **1本の MOD の中で半分だけ効く形もありうる**（`llm_manager:quest_referee*` に仕掛けた側は効く）
-- 自由生成施設（`FreeFacilityManager`）の最中に `300_` の施設イベントが乗るか未確認。
-  どちらも「施設に入ったとき」に働くので二重に始まる余地がある（§2.5）
-- 四体以上の敵との戦闘を更新後に通していない。
-  公式修正が入った箇所なので `106_` / `107_` / `207_` と噛み合うかはこれから
-- サイドカーの多重起動抑止が三者競合（ゲーム自身の修正・`LlamaCppSidecar` の所有者調停・
-  InstantaleLLMProxy）になった（§2.12）
-- 装備強化の画面が `109_` と噛み合うか未確認（`upgrade_level` が詳細欄に出るなら文字量が増える）
-- `InventoryGrid.try_place_item` / `get_unique_items` は `108_` が掴む
-  `place_existing_item` とは別経路。強化画面のグリッドで同じはみ出しが起きるかは未確認
+経路はプロバイダごとの `request_llm_inference_*` で、`LlamaCppClient` を通らない（§2.12）。
+`111_` は v4 でプロバイダ非依存の `llm_manager` 別名包みに置き換えて対処済み。
+素通りの実害があるのは `103_` だけ（`quest_event_log` の肥大はマネージャ層で起きるのでクラウドでも育つ）。
+`102_` は本体が直済み、`105_` の対象はローカル固有。
+`301_` は `LlamaCppClient` を使っていないのでクラウドでも効く。
+**1本の MOD の中で半分だけ効く形もありうる**（`llm_manager:quest_referee*` に仕掛けた側は効く）。
+
+ゲームの更新で増えた経路のうち、まだ通していないものは VERIFICATION.md §3.74 に置く。
 
 ---
 
@@ -242,7 +237,10 @@ app.refresh_choice_buttons(reset_page=True)
 押されると `getattr(__main__, cls_name)(app, *args)` が組み立てられ
 `app.process_choice(それ, 文字列)` に渡る。
 押された添字は `display_button_map` で引き直される（`ui.pressed_entry` が同じことをする）。
-選択肢が1ページ（8枠）に収まらないときは最後の枠が `次` になり、`display_button_map` のその枠には添字ではなく文字列 `'next'` が入る（`206_` の記録: `['<int>'×7, 'next']`。`choice_button_page` は 0）。整数でない枠はボタンではないので `ui.pressed_entry` は None を返し、`次` の押下はどの MOD のログにも出ない（素通し。添字そのままに落ちて `buttons[7]` を引き、自前の一覧を出す MOD がページ送りを横取りしていた不具合は 直した。VERIFICATION.md §3.50）。2ページ目以降の枠の文字列（戻る側）は未実測。
+選択肢が1ページ（8枠）に収まらないときは最後の枠が `次` になり、`display_button_map` のその枠には添字ではなく文字列 `'next'` が入る（`206_` の記録: `['<int>'×7, 'next']`。`choice_button_page` は 0）。
+整数でない枠はボタンではないので `ui.pressed_entry` は None を返し、`次` の押下は素通しになる。
+添字のまま `buttons[7]` を引くと、自前の一覧を出す MOD がページ送りを横取りする（VERIFICATION.md §3.50）。
+2ページ目以降の枠の文字列（戻る側）は未実測。
 
 > `app.function_correspond_to_input` は名前に反して対応表ではなく `PhaseSpec` 1個。
 > 「いま自由入力を送ったら何を呼ぶか」を保持している。
@@ -298,7 +296,7 @@ app.refresh_choice_buttons(reset_page=True)
 
 いずれも `ui.Screen.apply_buttons` / `paint` に入っている。MOD 側で書き直さないこと。
 
-**ロードも組み直さない。**
+ロードも組み直さない。
 `game_variables["buttons"]` に焼かれている選択肢をそのまま戻すだけなので、
 保存の瞬間に選択肢が空だった画面はロードしても空のままで、そこから動けない。
 立ち位置を書き換える MOD は、その場所の選択肢も一緒に置く（TECH.md §5.8）。
@@ -313,7 +311,7 @@ app.refresh_choice_buttons(reset_page=True)
 
 | 何 | どこ |
 | --- | --- |
-| 選択肢の文字 | `hud.buttons[i].text`（`app.to_display_buttons` とは別物）。枠数は 4 で固定 |
+| 選択肢の文字 | 左の `hud.buttons[i].text`（入れ物は `button_layout`）と右の `hud.right_buttons[i].text`（`right_button_layout`）。どちらも4枠で、合わせると §2.2 の1ページ8枠と数が合う（右の `right_buttons[0]` に `会話する` が入った実例がある。どの添字がどちらへ塗られるかは未実測）。`app.to_display_buttons` とは別物 |
 | 自由入力の可否 | `hud.text_send_button.disabled` |
 | 本文（情景描写・LLM の応答） | `hud.text_display`（`kivy.uix.label.Label`） |
 
@@ -444,7 +442,7 @@ Clock で見張り、手が空いてから実行する（`ui.Screen.when_idle`�
 ゲームの施設なら、この絵は立ち位置と揃っている。
 手元の7つのセーブで立ち位置の施設名と絵のフォルダ名を突き合わせたところ、
 素の施設に立っている5つは全て一致した（残る2つは入口と出口の対で、移動の途中の保存）。
-**実行時に足した施設（`mod:` の id）では更新されない。**
+実行時に足した施設（`mod:` の id）では更新されない。
 `331_` の道場の中で保存したセーブの絵は、繋ぎ先の区画
 （素の `ward`）のままだった。
 画面に何が出ているかは別に測ること（この突き合わせはセーブの中身だけを見ている）。
@@ -626,10 +624,10 @@ app.world_dict['quests']  {id: dict}                 世界の雛形
 
 新規 id の検出は両者の合併を取る（どちらに登録されるかを決め打ちしない）。
 
-#### 2.9.1 `world_dict` はセーブの中身ではなく世界の雛形（訂正）
+#### 2.9.1 `world_dict` はセーブの中身ではなく世界の雛形
 
-以前ここには「`world_dict['quests']` がセーブに出るほう」「書くときは必ず両方」と
-書いてあった。どちらも実測に反する。
+セーブに出るのは `app.world.quests` の側で、`world_dict['quests']` ではない。
+依頼を書くときに両方へ書く必要も無い。
 
 | | 中身 | 書き出し先 |
 | --- | --- | --- |
@@ -902,7 +900,7 @@ check_battle_end / enemy_delete_animation / convert_llm_output_to_instruction_di
 - 1手で複数の敵に当たる手がある（スキル）
 - 倒れた敵は1手の中で `current_enemy_dict` から抜ける。
   1手の前後で敵の状態を比べる MOD は、この抜けた敵を別に拾わないと取りこぼす
-  （`308_` が実機1回目でとどめの一撃を落とした原因）
+  （`308_` がとどめの一撃を取りこぼした原因）
 
 > 入れ子の順序（`calculate` → `resolve` → `process`）は署名から読んだだけで実測していない。
 > `308_` はこの順序に寄りかからない形（1手の外側で HP の差を測る）にしてある。
@@ -1188,6 +1186,9 @@ apply_music_volume(app)         main_023 で追加
 | 通常（依頼中の遭遇） | `in_battle=1` | `'in_quest'` |
 | ボス（`QuestEncounterFinalBoss`） | `in_battle=1 in_boss_battle=1` | `'in_quest'`（通常と同じ語） |
 | 闘技場（`ColosseumMatchStart`） | `in_battle=1 in_colosseum_battle=1` | `'colosseum'` |
+| 衛兵 | `in_battle=1` | `'guard'`（§2.20） |
+
+（2戦＋7戦。`322_battle_bgm` の `[BGMPICK]` の行）
 
 闘技場の相手は `scripts.llm.llm_manager:colosseum_enemy_generator(location, area, world, npc_difficulty_level)` が作り、
 施設の `config` に `current_phase` と `enemy_data`（相手の素、鍵は `"0"` / `"2"` / `"4"` …）として貯まる。
@@ -1273,9 +1274,6 @@ D が 60 を超える土地では5〜6試合目にその上へ出る。
 参加費は取らない（受付の口上は「報酬は客の賭け具合で決まる」）。
 試合の要約は `colosseum_battle_summarizer` が作るが、
 `output_data` には `guard_battle_summarizer` の名前で落ちる（ゲーム側の取り違え）。
-| 衛兵 | `in_battle=1` | `'guard'`（§2.20） |
-
-（2戦＋7戦。`322_battle_bgm` の `[BGMPICK]` の行）
 
 `play_music_from_src` は絶対パスをそのまま受け付ける（ゲームのフォルダの外に置いた曲が鳴った）。
 `106_` の戦闘曲判定は `/musics/battle/` の部分一致なので、外に置く曲もそのフォルダ名の下に置けば戦闘曲として扱われる。
@@ -1481,7 +1479,7 @@ InstantaleApp.normalize_shop_inventory_prices(shop_obtainer, player_obtainer)
 ```
 
 - `execute` はワーカースレッドで走り、売買画面を開く `toggle_twin_inventory_window` は Clock でメインスレッドへ回す（`instantale.py:3208` の lambda）。
-  **メインスレッドは `execute` が戻る前にこれを走らせうる。**
+  メインスレッドは `execute` が戻る前にこれを走らせうる。
   `execute` の戻り際に主の持ち物の辞書へ触ると、`normalize_shop_inventory_prices`（`instantale.py:2660`。辞書を直に回す）と競合して
   `RuntimeError: dictionary changed size during iteration` でゲームごと落ちる（実機。VERIFICATION.md §3.52）。
   持ち物を触るなら `toggle_twin_inventory_window` の手前（同じスレッド、辞書を回す前）で
@@ -1916,6 +1914,14 @@ cipher[i]  = plaintext[i] ^ b"Instantale_Save_Key_2026"[i % 24]
 日付は世界に1つ（`world.days_elapsed`。セーブでは `world_data.days_elapsed`）。
 進めているのは `InstantaleApp.elapse_days(days)`（§2.18）。
 
+任意の保存は無い。
+ゲームは何か行動するたびに `save_game` でセーブを上書きする（実機で確認）。
+好きな時点のセーブを選んで戻る手段が無いので、`state\` に持つ控えとセーブが食い違うのは、
+控えを書いてから次の保存までの間にゲームが落ちたときだけになる。
+控えをセーブと揃えたい MOD は、`save_game` が戻った後で書き、
+`World.__init__`（ロードと新規開始）でまだ書いていない分を捨てる（`327_`）。
+`save_game` は書き終えてから戻る（前後で名簿を外して戻す `modnpc` の形が、保存に漏れず実機で通っている。§2.23）。
+
 ### 2.17 経験値・レベル・訓練
 
 ```text
@@ -1943,7 +1949,7 @@ Character.calculate_current_required_exp_on_display() / _gained_exp_on_display(g
 セーブで見た上端は 30。
 
 > 能力値に閾値を置く調整は、9〜16 の側を基準にしないと新規キャラで一度も発火しない
-> （`313_` が実機1回目でこれを踏んだ）。
+> （`313_` がこれを踏んだ）。
 
 その他:
 
@@ -1983,8 +1989,9 @@ process_choice(VacationEndManager,   '宿泊を終える')
 - 部屋は4つ。`犬小屋(0G)`＝`'kennel'` / `簡易寝台(10G)`＝`'bunk'` /
   `個室(100G)`＝`'private_room'` / `高級個室(1000G)`＝`'luxury_suite'`。
 - `宿泊する(Nヵ月)` の月数はプレイヤーの年齢の変動式（若いと3ヵ月、最長6ヵ月）。
-  **N は滞在の上限で、1回の長さではない。** 部屋選びが渡す `VacationStartManager` の第1引数は常に 1
-  （実機5回とも `init_args=['1', ...]`）。MOD が N を渡すと N ヵ月分の暦と宿代が一度に動く（`331_` が踏んだ）
+  N は滞在の上限で、1回の長さではない。
+  部屋選びが渡す `VacationStartManager` の第1引数は常に 1（実機5回とも `init_args=['1', ...]`）。
+  MOD が N を渡すと N ヵ月分の暦と宿代が一度に動く（`331_` が踏んだ）。
   実測は 20代=3・31歳=4 の2点だけで、年齢ごとの境目は未実測
 - 日数と宿代は `VacationStartManager.execute` の中で1回ずつ動く。
   宿泊の開始時点で全期間ぶんが一度に進むので、途中の活動を何回挟んでも暦は動かない
@@ -2200,12 +2207,13 @@ app.buttons      = ['労働の募集をみる', '市民権の発行', '出る', 
   `DisplayVacationChoice(app, period_months)`。静的な `choices` に入っていない）を**その後ろに足し**、
   最後に `会話する` を足す。店の操作は `choices` の中に `出る` より前で入っているので先に出る。
   宿屋だけ操作が `choices` の外に居る。
-  文字列のハッシュは無関係（`hash_randomization=1` で `出る` の枠が起動ごとに 0 → 3 と変わったのに並びは同じ）
-  **並びが「入れ替わった」記録は無い。** 残っているログの最初の宿屋（main_025）から `出る` が先頭で、
+  文字列のハッシュは無関係（`hash_randomization=1` で `出る` の枠が起動ごとに 0 → 3 と変わったのに並びは同じ）。
+  並びが「入れ替わった」記録は無い。
+  残っているログの最初の宿屋（main_025）から `出る` が先頭で、
   ゲームの版の差分（上の表。023 → 025）にも施設の選択肢に触るものは無い。
   `宿泊する` が先頭に出るのは、**MOD が建てた宿**（`331_` の自分の宿。`choices` が空で
   ゲームの `出る` が出ない。`quest_flow.log` に 239 画面）と、
-  セーブの `buttons` を手で並べ替えた直後の1画面だけ
+  セーブの `buttons` を手で並べ替えた直後の1画面だけ。
   描く直前に並べ直すのが `135_fix_inn_button_order`（`出る` より前に `宿泊する` が無いときだけ動かす）
 - 会話を挟むと抜けた後に施設の選択肢が組み直されるので、
   足した自前のボタンは組み直しのたびに入れ直す必要がある
@@ -2230,7 +2238,7 @@ BattleStartManager(app, enemy_type='guard', enemy_content=None)
 
 | 項目 | 分かっていること |
 | --- | --- |
-| `enemy_type` | 衛兵の経路では `'guard'`。コロシアム・クエストの語は未採取 |
+| `enemy_type` | 衛兵の経路では `'guard'`。依頼中の戦闘（ボス戦を含む）は `'in_quest'`、闘技場は `'colosseum'`（§2.11 の戦闘BGM の表） |
 | `enemy_content` | 衛兵の経路では `None`。中身はマネージャ側が作る |
 | 難易度 | **数値1つ**。敵のレベルも能力値もこれ1つから決まる（`get_enemy_*` の第2引数） |
 | `enemy_tier` | `'normal'`（`get_enemy_*` の第1引数） |
@@ -2260,7 +2268,11 @@ BattleStartManager(app, enemy_type='guard', enemy_content=None)
 
   **レベルは難易度+1**、**敵の数は難易度で動かない**。
   基準点はほとんど動かず、強さの差はレベルと HP の側から来ている
-- **闘技場から逃げても、その土地の手配度が 10 下がる**（`334_colosseum_custom` の実機。自分で `逃げる` を押した1回で 0 → −10。逃走5回で 45 → −5 とも合う）。逃走の終わり方は衛兵戦と同じ `BattleEndManager.end_phase` で、締めの要約も `guard_battle_summarizer` で呼ばれる。逃走1回で −10・闘技場で勝つと +5 は、別の区切りでも合った（10 から逃走2回と勝ち2回で 0）。下がるのは終わり方（`BattleEndManager.execute` / `end_phase`）が済んだ後で、その後の最初の画面が整った合図（`refresh_choice_buttons`）の時点では下がっている（負けて逃走扱いで切り上げた回の実測。衛兵戦で `316_` が下がった値を拾う時機と同じ）
+- **闘技場から逃げても、その土地の手配度が 10 下がる**（`334_colosseum_custom` の実機。自分で `逃げる` を押した1回で 0 → -10。逃走5回で 45 → -5 とも合う）。
+  逃走の終わり方は衛兵戦と同じ `BattleEndManager.end_phase` で、締めの要約も `guard_battle_summarizer` で呼ばれる。
+  逃走1回で -10・闘技場で勝つと +5 は、別の区切りでも合った（10 から逃走2回と勝ち2回で 0）。
+  下がるのは終わり方（`BattleEndManager.execute` / `end_phase`）が済んだ後で、その後の最初の画面が整った合図（`refresh_choice_buttons`）の時点では下がっている
+  （負けて逃走扱いで切り上げた回の実測。衛兵戦で `316_` が下がった値を拾う時機と同じ）
 - **衛兵と戦うと、その土地の手配度が 10 下がる**。
   手配の有無に関わらず一律で、**手配されていない土地（平常10）でも `0` になる**
   （実測2回。`-10` → `-20` と `10` → `0`）
@@ -2462,14 +2474,12 @@ npc_id = npcs.make_npc(app, fields, area_id, facility_id, write=write)   # 作�
 生成した NPC は HP・スキル・装備・立ち絵のいずれも空でよい
 （ゲームが会話の直前に `ensure_npc_detail_generated` で埋める）。
 
-> **戦闘はそこを通らない。**
-> ここには「会話や戦闘の直前に埋める」と書いてあったが、戦闘では埋まらない。
+> 埋まるのは会話の直前だけで、戦闘はそこを通らない。
 > スキルが空のまま敵ターンを迎えると空の `Literal[]` が組まれて落ち
 > （VERIFICATION_LOG.md §2.40）、`image_src` が `None` のままだと
 > `StringProperty` への代入で落ちる（同 §2.42）。
 > 実測で落ちた相手は `make_npc` で作った詳細生成前の NPC（`902_` の容疑者の1件）で、
 > 素の住人が落ちた記録は無い（素の住人は会話の直前に埋まる）。
-> 「ゲーム自身が作った街の住人」と書いていたのは §2.40 の状態の描写の読み違い（後に訂正）。
 > 本体が空を守っていない穴を塞ぐなら VERIFICATION.md §3.6 の1位と2位（どちらも未着手）で、
 > 作る側は先に会話を通させるか `skills` と `image_src` を持たせる。
 
@@ -3014,7 +3024,7 @@ Atk:<n>(+<n>)\nDef:<n>(+<n>)\nExp:<n>/<n>\nGold:<n>\nAge:<n>\nSta:…\nLocation:
 > 通貨の呼び名は3通りに綴られている。
 > 文中の `ゴールド`、英語表示の ` gold`、そして画面上部の `Gold`。
 > 呼び名を差し替える側は3つとも拾うこと
-> （`130_` は最初これを2つだと思っていて、画面上部だけ英語で残った）。
+> （文中の2つだけを拾うと、画面上部だけ英語で残る。`130_` が踏んだ）。
 
 日本語の `所持金` は別物で、**キャラクタ作成画面**の見出し
 （`筋力` `器用` `耐久` `知力` `判断` `魅力` `所持金` と並ぶ側。属性は `gol`）。
@@ -3091,7 +3101,7 @@ Atk:<n>(+<n>)\nDef:<n>(+<n>)\nExp:<n>/<n>\nGold:<n>\nAge:<n>\nSta:…\nLocation:
 `change_background_image_to_inn_room(quality)` はこの絵を `game_variables["location_image"]` に据える。
 ロードはこの値の絵をそのまま出す（§2.3）。
 
-**`change_background_image_from_location_id` は、呼ばれたら必ず落ちる。**
+`change_background_image_from_location_id` は、呼ばれたら必ず落ちる。
 関数の中で `self.app` を読むが、`InstantaleApp` にその属性は無い
 （`instantale.py:2349` で `AttributeError`）。
 素のゲームでこの経路を通るのは、相手が別の施設に居る社交の場面だけで、
@@ -3110,7 +3120,7 @@ Epic 版の `instantale.exe` の隣に `saves` も `worlds` も無かった。
 `face_image.png` の大きさは揃っていない。
 実データ194件のうち 144件が 165×165、**40件は 32×64**、残り10件はまちまち。
 
-##### 施設は生成されるまで無い。生成されたらギルドと宿が揃う
+#### 施設は生成されるまで無い。生成されたらギルドと宿が揃う
 
 5世界の非ダンジョンのエリア45件のうち、
 
@@ -3119,10 +3129,152 @@ Epic 版の `instantale.exe` の隣に `saves` も `worlds` も無かった。
 
 「ギルドが無くて宿だけ在る町」は生成されたデータには無い。
 
-##### NPC に装備は無い
+#### NPC に装備は無い
 
 5世界 369体の `equipments` は**全て空**。
 持ち物（`inventory`）は 28体（7.6%）が持っている。
+
+### 2.32 主人公が死んだ後、同じ世界で新しい主人公を作れる（セーブは `world_data.json` から組み直される）
+
+セーブは世界に1つ（`saves\<世界名>\savedata.json`。§2.31）。
+主人公が死ぬと、同じ世界でもう一度主人公を作って遊べる。
+そのときゲームは `savedata.json` を `worlds\<世界名>\world_data.json`（骨格）から組み直す。
+NPC の記憶も進みも無い、初期化された同じ世界になる。
+
+実セーブで見えたこと（世界A。前の主人公の控えは `backups\` の zip 12本）:
+
+| | 前の主人公（A） | 新しい主人公（B） |
+| --- | --- | --- |
+| `player_data.name` / `experience_level` / `age` | 主人公A / 80 / 25 | 主人公B / 1 / 23 |
+| `world_data.days_elapsed` | 2175 | 390（`world_data.json` 側の値） |
+| `index.facility` / `index.item` | 317 / 62 | 318 / 90 |
+| `game_variables.quest_log` | 27件 | 0件 |
+
+周回を見分ける id はセーブに無い。
+`player_data` の項目で作成時から変わらないように見えるものも、遊んでいる間に変わる:
+`original_ability_scores` は Lv1 → Lv60 の間に1度変わり（12本のうち最初の1本だけ別の値）、
+`age` は 22 → 25 に進む。変わらなかったのは `name` / `category` / `look_description` / `image_src`。
+`memory.brief_summary` は Lv80 でも「ゲーム開始」のまま。
+
+ゲームの入口は3つ:
+
+| 入口 | 何か | 根拠 |
+| --- | --- | --- |
+| `InstantaleApp.load_game_new(world_name)` | **続きから**（タイトルのロード） | `224_` が6回のロードで前後を測った（VERIFICATION.md §1）。`107_` / `110_` / `120_` がロード地点として包む |
+| `scripts.hud.hud_charamake:CharacterCreateScreen.start_story(instance)` | 作成画面の確定 | `214_` が包んだ |
+| `InstantaleApp.start_game(world_name)` | 作成から呼ばれる | `123_` が包む。**続きからも通るかは未測** |
+
+MOD の控え（`state\<MOD>\`）は世界名で引いていたので、前の主人公が建てた建物や結んだ契約が
+新しい主人公に引き継がれた（`331_` の実機。新しい主人公が前の主人公の施設の出資者として迎えられた）。
+セーブと同じ寿命のものは **世界×主人公** で持つ（`state.playthrough_key`。TECH.md §5.4）。
+同じ名前で作り直せば前の周回を引き継ぐ。
+
+### 2.33 画像生成のバックエンドと出口（`230_` で実測）
+
+画像生成は選ばれた**一族**だけが import される。
+選択は `config.json` の `ai_setting.local_model_setting.sd_backend.name`（§2.12.1 と同じファイル）。
+実機で4つを通した。
+
+| `sd_backend.name` | 上の層（種類が分かる） | 出口（生成そのもの） |
+| --- | --- | --- |
+| `sdcpp_cuda` | `image_generation.sdcppcuda.stable_diffusion_manager` | `sdcpp_cuda.stable_diffusion:StableDiffusion.generate_image` |
+| `sdcpp_vulkan` | `image_generation.sdcppvulkan.stable_diffusion_manager` | `sdcpp_vulkan.stable_diffusion:StableDiffusion.generate_image` |
+| `sdcpp_cpu` | `image_generation.sdcppcpu.stable_diffusion_manager` | `sdcpp_cpu.stable_diffusion:StableDiffusion.generate_image` |
+| `diffusers_openvino` | `image_generation.diffusers_openvino.stable_diffusion_manager` | `optimum.intel.openvino.modeling_diffusion:OVStableDiffusionPipeline.__call__` |
+
+名前は組み立てられない。
+`image_generation.` の下では下線が落ち（`sdcpp_cuda` から `sdcppcuda`）、`sdcpp_*` の側では残る。
+`diffusers_openvino` の出口はゲームのパッケージですらない（optimum）。
+クラスを属性で持っているのは sdcpp 系の `stable_diffusion_manager` だけなので、
+**出口のクラスは生きた `txt2img_pipe` の型から引く**のが4つとも通る唯一の道。
+
+#### 出口は一族につき1つ
+
+実機の生成6回はすべて上の表の出口を通り、`upscale()` と `generate_video()` は0回。
+立ち絵の2段（`generate_image_anime` の 256x512 と `image_to_image_anime` の 512x1024）も同じ出口で、
+`character_generation_quality = 'highres_upscale'` の「upscale」は `upscale()` ではなく img2img のこと。
+
+引数の名前は一族で変わる。
+
+| | sdcpp 系 | `diffusers_openvino` |
+| --- | --- | --- |
+| 寸法 | `width` / `height` | `width` / `height` |
+| サンプラー | `sample_method` / `sample_steps` / `cfg_scale` / `scheduler` | `num_inference_steps` / `guidance_scale` |
+| 種 | `seed`（実測は `-1`） | 実測では来ていない |
+| img2img | `image_to_image_anime` が `init_image` 付きで同じ出口へ | 関数ごと無い |
+| LoRA | ゲームが上の層と出口の**間**で `<lora:...>` を足す | 概念が無い（`lora_dir` も `taesd_path` も無い） |
+
+素の値（`sdcpp_cuda`、実測）:
+
+| 種類 | 寸法 | サンプラー / steps / cfg | 通る関数 |
+| --- | --- | --- | --- |
+| 背景 | 1024x512 | `lcm` / 5 / 1 | `generate_image_real_lcm` |
+| 立ち絵1段目 | 256x512 | `euler_a` / 20 / 8 | `generate_image_anime` |
+| 立ち絵2段目（img2img） | 512x1024 | `dpmpp2m` / 15 / 7 | `image_to_image_anime` |
+| 敵・モンスター | **512x512（1段だけ）** | `lcm` / 5 / 1 | `generate_image_real_lcm` |
+
+画質の設定で立ち絵の経路が変わる。
+`highres_upscale` は上の2段（`generate_image_anime` と `image_to_image_anime`）を通り、
+`highres_faster` は **LCM の段1回**（`generate_image_real_lcm`、512x1024）で描く（実測）。
+LCM の段を通る回はプロンプトに `<lora:LCM_LoRA_Weights_SD15:1>` が入る。
+
+敵・モンスターは立ち絵と同じ経路だと読めるが、実際は別物で、
+正方形を1段で描き、サンプラーは背景と同じ LCM（実測 1.5 秒）。
+入口は `generate_enemy_image`（`image_generation_creature.py:235` から `generate_image_real_lcm` を呼ぶ）。
+
+背景のプロンプトには出口の時点で `<lora:LCM_LoRA_Weights_SD15:1>` が入っている。
+上の層の引数には入っていないので、**LoRA の付け替えは出口でしか掛からない**。
+
+#### パイプラインは1プロセスに1回だけ建つ（最初のワールド選択）
+
+```text
+AIManager.set_ai_models (instantale.py:510〜516)   一族を import する行（実測: cuda 510 / vulkan 512 / openvino 514 / cpu 516）
+                        (instantale.py:536)        load_sd_pipeline() で建てる
+  呼ばれ方: AIManager.__init__ (307) から。さらに InstantaleApp.show_world_choice (782)、ボタンの on_touch_up
+```
+
+- プロセス起動時でもモジュールの import 時でもない。
+  `set_ai_models` に**入った時点では一族がまだ import されていない**（実測4回とも0件）
+- import から構築の開始まで **0.27〜0.62 秒**（4つの一族・6回の実測）
+- 構築そのものは sdcpp 系が 1.2〜1.3 秒、`diffusers_openvino` が 6.3〜7.4 秒
+- 構築は manager のモジュール変数をそのまま渡す（`sdcpp_cpu` で実測）。
+  `model_path_anime` が `model_path` へ、`lora_dir` が `lora_model_dir` へ、
+  `taesd_path` と `vae_path` はそのままの名前で渡る。
+  `wtype='default'` / `rng_type='cuda'`（CPU バックエンドでも `cuda` のまま渡る）
+
+チェックポイント・TAESD・VAE は、このモジュール変数を建つ前に書き換えれば差し替わる
+（実機。`taesd_path` を空にして建て、`StableDiffusion.__init__` にそのまま渡った。VERIFICATION.md §3.65）。
+
+建つのは1プロセスに1回だけ。
+`set_ai_models` に入った時点で `txt2img_pipe` が既に在ると `load_sd_pipeline` は呼ばれない。
+タイトルへ戻ってワールドを選び直しても、`set_ai_models` は走るのに `txt2img_pipe` の id は前後で変わらない
+（実測 11 回。`pipe=null` の4回は建ち、既に在る7回は建たなかった）。
+モジュール変数の差し替えを効かせるには、ゲームの起動し直しが要る。
+
+> バックエンドを切り替えても画質の設定は付いてこない。
+> `diffusers_openvino` の manager には `image_to_image_anime` が無いのに、
+> `character_generation_quality` が `highres_upscale`（2段で描く指定）のまま残ると、
+> ゲーム自身が `UnboundLocalError: local variable 'generated_image' referenced before assignment`
+> （`image_generation\diffusers_openvino\image_generation_creature.py:83`）で落ちる。
+> 同梱の初期テンプレートはこの一族に `lowres_faster` を組み合わせている。
+>
+> この一族は**形を固定して変換したモデル**を回すので、
+> 出口へ渡す寸法を変えるとモデルの作り直しが走る。
+> 背景を 1024x512 から 1536x768（画素 x2.25）にした実機では、
+> 64GB の RAM を使い切って SSD へページングを始めた。
+> 1152x576（画素 x1.27）なら 15.1 秒で通る（素の 1024x512 は 10.5 秒）が、
+> **通った回も RAM は伸びたまま、ゲームを閉じるまで戻らない**。
+> 寸法ごとに作り直したものが常駐すると読める。
+
+> 別配布の画質強化 MOD（`stable-diffusion.dll` のプロキシ）が入っていると、
+> この出口の**後ろ**でもう一度書き換わる。
+> そちらのログ（`InstantaleSDMod\proxy_resize.log`。以前の記録）では、
+> 出口の `euler_a` / 20 / 8 がプロキシ側で `dpm++2mv2` / 15 / 5 になっていた。
+> 上の実測はプロキシが入っていない状態で録ったもので、
+> 3つのバックエンドとも `stable-diffusion.dll` は退避されている `-real.dll` とハッシュが一致していた
+> （入っているかどうかはこの比較で分かる。`-real.dll` の有無では分からない）。
+
+---
 
 ## 3. 調査手法
 
@@ -3178,143 +3330,3 @@ Python は通常のルックアップが失敗した後にのみ `__getattr__` �
 偽の `on_button_press` も本物と同じ形にする
 （`getattr(__main__, cls_name)(app, *args)` を組んで `process_choice` に渡す）。
 スタックを見て判定する MOD は、テストも本番と同じ呼び出し元から呼ぶ形にする。
-
-### 2.32 主人公が死んだ後、同じ世界で新しい主人公を作れる（セーブは `world_data.json` から組み直される）
-
-セーブは世界に1つ（`saves\<世界名>\savedata.json`。§2.31）。
-主人公が死ぬと、同じ世界でもう一度主人公を作って遊べる。
-そのときゲームは `savedata.json` を `worlds\<世界名>\world_data.json`（骨格）から組み直す。
-NPC の記憶も進みも無い、初期化された同じ世界になる。
-
-実セーブで見えたこと（世界A。前の主人公の控えは `backups\` の zip 12本）:
-
-| | 前の主人公（A） | 新しい主人公（B） |
-| --- | --- | --- |
-| `player_data.name` / `experience_level` / `age` | 主人公A / 80 / 25 | 主人公B / 1 / 23 |
-| `world_data.days_elapsed` | 2175 | 390（`world_data.json` 側の値） |
-| `index.facility` / `index.item` | 317 / 62 | 318 / 90 |
-| `game_variables.quest_log` | 27件 | 0件 |
-
-**周回を見分ける id はセーブに無い。**
-`player_data` の項目で作成時から変わらないように見えるものも、遊んでいる間に変わる:
-`original_ability_scores` は Lv1 → Lv60 の間に1度変わり（12本のうち最初の1本だけ別の値）、
-`age` は 22 → 25 に進む。変わらなかったのは `name` / `category` / `look_description` / `image_src`。
-`memory.brief_summary` は Lv80 でも「ゲーム開始」のまま。
-
-ゲームの入口は3つ:
-
-| 入口 | 何か | 根拠 |
-| --- | --- | --- |
-| `InstantaleApp.load_game_new(world_name)` | **続きから**（タイトルのロード） | `224_` が6回のロードで前後を測った（VERIFICATION.md §1）。`107_` / `110_` / `120_` がロード地点として包む |
-| `scripts.hud.hud_charamake:CharacterCreateScreen.start_story(instance)` | 作成画面の確定 | `214_` が包んだ |
-| `InstantaleApp.start_game(world_name)` | 作成から呼ばれる | `123_` が包む。**続きからも通るかは未測** |
-
-MOD の控え（`state\<MOD>\`）は世界名で引いていたので、前の主人公が建てた建物や結んだ契約が
-新しい主人公に引き継がれた（`331_` の実機。新しい主人公が前の主人公の施設の出資者として迎えられた）。
-セーブと同じ寿命のものは **世界×主人公** で持つ（`state.playthrough_key`。TECH.md §5.4）。
-同じ名前で作り直せば前の周回を引き継ぐ。
-
-### 2.33 画像生成のバックエンドと出口（`230_` で実測）
-
-画像生成は選ばれた**一族**だけが import される。
-選択は `config.json` の `ai_setting.local_model_setting.sd_backend.name`（§2.12.1 と同じファイル）。
-実機で4つを通した。
-
-| `sd_backend.name` | 上の層（種類が分かる） | 出口（生成そのもの） |
-| --- | --- | --- |
-| `sdcpp_cuda` | `image_generation.sdcppcuda.stable_diffusion_manager` | `sdcpp_cuda.stable_diffusion:StableDiffusion.generate_image` |
-| `sdcpp_vulkan` | `image_generation.sdcppvulkan.stable_diffusion_manager` | `sdcpp_vulkan.stable_diffusion:StableDiffusion.generate_image` |
-| `sdcpp_cpu` | `image_generation.sdcppcpu.stable_diffusion_manager` | `sdcpp_cpu.stable_diffusion:StableDiffusion.generate_image` |
-| `diffusers_openvino` | `image_generation.diffusers_openvino.stable_diffusion_manager` | `optimum.intel.openvino.modeling_diffusion:OVStableDiffusionPipeline.__call__` |
-
-**名前は組み立てられない。**
-`image_generation.` の下では下線が落ち（`sdcpp_cuda` から `sdcppcuda`）、`sdcpp_*` の側では残る。
-`diffusers_openvino` の出口はゲームのパッケージですらない（optimum）。
-クラスを属性で持っているのは sdcpp 系の `stable_diffusion_manager` だけなので、
-**出口のクラスは生きた `txt2img_pipe` の型から引く**のが4つとも通る唯一の道。
-
-#### 出口は一族につき1つ
-
-実機の生成6回はすべて上の表の出口を通り、`upscale()` と `generate_video()` は0回。
-立ち絵の2段（`generate_image_anime` の 256x512 と `image_to_image_anime` の 512x1024）も同じ出口で、
-`character_generation_quality = 'highres_upscale'` の「upscale」は `upscale()` ではなく img2img のこと。
-
-引数の名前は一族で変わる。
-
-| | sdcpp 系 | `diffusers_openvino` |
-| --- | --- | --- |
-| 寸法 | `width` / `height` | `width` / `height` |
-| サンプラー | `sample_method` / `sample_steps` / `cfg_scale` / `scheduler` | `num_inference_steps` / `guidance_scale` |
-| 種 | `seed`（実測は `-1`） | 実測では来ていない |
-| img2img | `image_to_image_anime` が `init_image` 付きで同じ出口へ | 関数ごと無い |
-| LoRA | ゲームが上の層と出口の**間**で `<lora:...>` を足す | 概念が無い（`lora_dir` も `taesd_path` も無い） |
-
-素の値（`sdcpp_cuda`、実測）:
-
-| 種類 | 寸法 | サンプラー / steps / cfg | 通る関数 |
-| --- | --- | --- | --- |
-| 背景 | 1024x512 | `lcm` / 5 / 1 | `generate_image_real_lcm` |
-| 立ち絵1段目 | 256x512 | `euler_a` / 20 / 8 | `generate_image_anime` |
-| 立ち絵2段目（img2img） | 512x1024 | `dpmpp2m` / 15 / 7 | `image_to_image_anime` |
-| 敵・モンスター | **512x512（1段だけ）** | `lcm` / 5 / 1 | `generate_image_real_lcm` |
-
-**画質の設定で立ち絵の経路が変わる。**
-`highres_upscale` は上の2段（`generate_image_anime` と `image_to_image_anime`）を通り、
-`highres_faster` は **LCM の段1回**（`generate_image_real_lcm`、512x1024）で描く（実測）。
-LCM の段を通る回はプロンプトに `<lora:LCM_LoRA_Weights_SD15:1>` が入る。
-
-敵・モンスターは立ち絵と同じ経路だと読めるが、実際は別物で、
-正方形を1段で描き、サンプラーは背景と同じ LCM（実測 1.5 秒）。
-入口は `generate_enemy_image`（`image_generation_creature.py:235` から `generate_image_real_lcm` を呼ぶ）。
-
-背景のプロンプトには出口の時点で `<lora:LCM_LoRA_Weights_SD15:1>` が入っている。
-上の層の引数には入っていないので、**LoRA の付け替えは出口でしか掛からない**。
-
-#### パイプラインは1プロセスに1回だけ建つ（最初のワールド選択）
-
-```text
-AIManager.set_ai_models (instantale.py:510〜516)   一族を import する行（実測: cuda 510 / vulkan 512 / openvino 514 / cpu 516）
-                        (instantale.py:536)        load_sd_pipeline() で建てる
-  呼ばれ方: AIManager.__init__ (307) から。さらに InstantaleApp.show_world_choice (782)、ボタンの on_touch_up
-```
-
-- プロセス起動時でもモジュールの import 時でもない。
-  `set_ai_models` に**入った時点では一族がまだ import されていない**（実測4回とも0件）
-- import から構築の開始まで **0.27〜0.62 秒**（4つの一族・6回の実測）
-- 構築そのものは sdcpp 系が 1.2〜1.3 秒、`diffusers_openvino` が 6.3〜7.4 秒
-- 構築は manager のモジュール変数をそのまま渡す（`sdcpp_cpu` で実測）。
-  `model_path_anime` が `model_path` へ、`lora_dir` が `lora_model_dir` へ、
-  `taesd_path` と `vae_path` はそのままの名前で渡る。
-  `wtype='default'` / `rng_type='cuda'`（CPU バックエンドでも `cuda` のまま渡る）
-
-チェックポイント・TAESD・VAE は、このモジュール変数を建つ前に書き換えれば差し替わる
-（実機。`taesd_path` を空にして建て、`StableDiffusion.__init__` にそのまま渡った。VERIFICATION.md §3.65）。
-
-**建つのは1プロセスに1回だけ。**
-`set_ai_models` に入った時点で `txt2img_pipe` が既に在ると `load_sd_pipeline` は呼ばれない。
-タイトルへ戻ってワールドを選び直しても、`set_ai_models` は走るのに `txt2img_pipe` の id は前後で変わらない
-（実測 11 回。`pipe=null` の4回は建ち、既に在る7回は建たなかった）。
-**モジュール変数の差し替えを効かせるには、ゲームの起動し直しが要る。**
-
-> **バックエンドを切り替えても画質の設定は付いてこない。**
-> `diffusers_openvino` の manager には `image_to_image_anime` が無いのに、
-> `character_generation_quality` が `highres_upscale`（2段で描く指定）のまま残ると、
-> ゲーム自身が `UnboundLocalError: local variable 'generated_image' referenced before assignment`
-> （`image_generation\diffusers_openvino\image_generation_creature.py:83`）で落ちる。
-> 同梱の初期テンプレートはこの一族に `lowres_faster` を組み合わせている。
->
-> この一族は**形を固定して変換したモデル**を回すので、
-> 出口へ渡す寸法を変えるとモデルの作り直しが走る。
-> 背景を 1024x512 から 1536x768（画素 x2.25）にした実機では、
-> 64GB の RAM を使い切って SSD へページングを始めた。
-> 1152x576（画素 x1.27）なら 15.1 秒で通る（素の 1024x512 は 10.5 秒）が、
-> **通った回も RAM は伸びたまま、ゲームを閉じるまで戻らない**。
-> 寸法ごとに作り直したものが常駐すると読める。
-
-> 別配布の画質強化 MOD（`stable-diffusion.dll` のプロキシ）が入っていると、
-> この出口の**後ろ**でもう一度書き換わる。
-> そちらのログ（`InstantaleSDMod\proxy_resize.log`。以前の記録）では、
-> 出口の `euler_a` / 20 / 8 がプロキシ側で `dpm++2mv2` / 15 / 5 になっていた。
-> 上の実測はプロキシが入っていない状態で録ったもので、
-> 3つのバックエンドとも `stable-diffusion.dll` は退避されている `-real.dll` とハッシュが一致していた
-> （入っているかどうかはこの比較で分かる。`-real.dll` の有無では分からない）。

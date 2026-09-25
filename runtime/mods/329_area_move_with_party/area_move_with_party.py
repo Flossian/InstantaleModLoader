@@ -5,7 +5,7 @@
 `llm_manager:area_move_rejector` に拒否の一言を書かせて戻る（運賃も日数も動かない。
 GAME.md §2.18、`217_` の `out\\area_move.log` で `days=[] texts=1`）。
 
-分岐が読むのは `relationship["player"]["relationship"]` の配列（`228_` の実機記録、2026-09-10。
+分岐が読むのは `relationship["player"]["relationship"]` の配列（`228_` の実機記録。
 雇用 NPC は `['同行中']`）。友好度（版1）も `Character.state`（版2）も読んでいない。
 「家族になろう」の会話で `二人は家族になった。` と書く経路がこの配列に `家族` を入れると読む。
 

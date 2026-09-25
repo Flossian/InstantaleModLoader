@@ -82,7 +82,7 @@ MOD どうしが名前を共有すると**静かに壊れる**。
 
 | 何 | 決まり |
 |---|---|
-| 自前ボタンの印（mark キー） | `mod_` で始めること（`ui.MARK_PREFIX`）。同梱が使用中のものは [TECH.md §5.1.1](TECH.md#511-組み立て) に一覧がある |
+| 自前ボタンの印（mark キー） | `mod_` で始めること（`ui.MARK_PREFIX`）。同梱が使っているものとぶつかれば `tools/check_mods.py` が止める（[TECH.md §5.1.1](TECH.md#511-組み立て)） |
 | プロセスに置く控え（`sys` の属性） | `__instantale_<自分の名前>_store__` の形にする |
 | `state\` のフォルダ名 | 自分の MOD 名にする。他の MOD の控えを読むときは**フォルダを作らないこと**（[TECH.md §3.11](TECH.md#311-書き込み先out-と-state)） |
 | ログの名前・LLM の `manager_name` | 自分の MOD 名にする |

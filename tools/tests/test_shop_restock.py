@@ -203,7 +203,7 @@ class ShoppingStartManagerRemake:
                     "name": self.new_name}
         # 画面を開くのは Clock 経由でメインスレッド（`instantale.py:3208`）。
         # `execute` は別スレッドなので、メインスレッドは `execute` が戻る前に
-        # 画面を組み始めうる（2026-09-07 の実機はこの順で落ちた）。
+        # 画面を組み始めうる（実機はこの順で落ちた）。
         # その順を再現する: 予約してから、戻る前に走らせる。
         if owner is not None:
             CLOCK.schedule_once(

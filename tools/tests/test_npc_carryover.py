@@ -482,7 +482,7 @@ try:
     app.world_dict["world_data"] = {"world_name": "アルカディア"}
     app.save_data_dict["world_data"] = {"world_name": "アルカディア"}
     # 実機のロード直後は `world.characters` がまだ埋まっていない
-    # （2026-08-30 の1回目は1件だけだった）。素データを見分けられるかは
+    # （1回目は1件だけだった）。素データを見分けられるかは
     # ローダ側の `npc_stores` の仕事だが、ここを空にしておかないと
     # その経路を通らない。
     app.world.characters.clear()

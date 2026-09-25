@@ -16,7 +16,7 @@ AWAY_TYPES = ("guild", "inn")
 
 #: 主の居ない通路。同じ街の行き先にしない（GAME.md §2.7）。
 #: `free` はシーン記述エンジンが画面を持つ施設（GAME.md §2.21）で、
-#: 置いても会えるか分からないので同じく外す（実機 2026-09-04 で 4 件が引かれて気付いた）。
+#: 置いても会えるか分からないので同じく外す（実機で 4 件が引かれて気付いた）。
 PASSAGE_TYPES = ("entrance", "exit", "ward", "location", "dungeon_location", "free")
 
 #: 街とみなす `size`（`325_` の TOWN_SIZES と同じ語彙）。

@@ -75,7 +75,7 @@ SINGLE = ["必ず日本語で、以下のjson形式で出力すること: {'prop
           "'look_description': ...}}\n- look_description: 見た目",
           "あなたはダークファンタジーRPGのキャラクター生成AIだ。",
           "【生成するNPC】\n- 名前: 宿屋の主人\n- 概要: 宿場の古い宿を一人で切り盛りしている。\n- 強さのランク: 8\n"]
-# 実機の衛兵の頼み文の形（2026-09-02）。system に `- look_description:` が**ある**。
+# 実機の衛兵の頼み文の形。system に `- look_description:` が**ある**。
 GUARD = ["必ず日本語で、以下のjson形式で出力すること: {'properties': {'look': ...}}",
          "あなたはダークファンタジーRPGのキャラクター生成AIだ。\nプレイヤーが犯罪を行ったときに逮捕や戦闘のために出現する衛兵NPCをデザインしろ。\n"
          "【出力要素】\n- category: 老若男女のカテゴリ。- personality: 性格というか兵としての行動方針。\n- look_description: そのキャラクターの外見、特徴、服装などを自然言語で記述。",

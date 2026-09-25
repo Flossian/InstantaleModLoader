@@ -11,7 +11,7 @@ r"""計測: 施設での訓練。ゲームは変えない。
     4. 各段が次へ渡す値（`TrainingPhaseManager(app, training_type, remaining_years,
        training_log)` の引数）
 
-5つ目（2026-09-16 に追加）。`技を磨く` だけが 0.0 秒で
+5つ目（後から足した）。`技を磨く` だけが 0.0 秒で
 `<エリア>の風は今日はここまでのようだ。出直したほうがよさそうだ。` と断られた
 （`332_training_custom` の再訓練で踏んだが、**素の訓練でも同じかは未計測**）。
 段の中の4つの道（`simple_training` / `fundamental_training` / `enhance_skill` /

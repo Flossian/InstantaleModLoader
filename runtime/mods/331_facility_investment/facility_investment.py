@@ -1008,7 +1008,7 @@ def apply(ctx):
         # 実測から決めたが、その5回は `315_vacation_custom` が週単位の設定で走っていた回で、
         # 週単位は月数を1に落として日数だけを縮める。素の `3ヵ月` では本体は 3 を渡すので、
         # 同じ宿で払えば3ヵ月、無料なら1ヵ月という食い違いになっていた
-        # （実機 2026-09-20。VERIFICATION.md §3.63 #7e）。
+        # （実機。VERIFICATION.md §3.63 #7e）。
         months = max(1, int(durations.inn_stay(app, write=write)["months"]))
         try:
             phase = cls(app, months, quality)

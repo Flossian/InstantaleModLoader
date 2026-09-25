@@ -3,7 +3,7 @@
 
     python tools/tests/test_real_estate.py
 
-（開発中は `914_real_estate` / `test_wip_real_estate.py` だった。2026-09-16 に正式化。）
+（開発中は `914_real_estate` / `test_wip_real_estate.py` だった。）
 
 偽の app / Player / Area / Node / Facility / PhaseSpec / VacationStartManager /
 Character / InventoryGrid / HUD / Clock / llm_manager を差し込み、次を確認する。
@@ -169,7 +169,7 @@ class VacationStartManager:
         if keeper is not None:
             keeper.current_log.append("<宿泊: 客を迎えた。>")
         # 進む日数は月数×30。ただし `315_vacation_custom` の週単位は
-        # ゲームに渡す月数を1にしたまま、日数だけを縮める（実機 2026-09-14）。
+        # ゲームに渡す月数を1にしたまま、日数だけを縮める（実機）。
         days = getattr(self.app, "short_stay_days", None) or int(self.months) * 30
         self.app.elapse_days(int(days))
         # 徴収を止めたビルドの代わり（`stay_charges` を落とすと引かない）。
@@ -192,7 +192,7 @@ class VacationStartManager:
             {"text": "他者と交流", "spec": PhaseSpec("VacationSocializeManager",
                                                  [self.months, self.quality])},
             # 実機ではここに載るのは `NotImplementedManager`（押しても何も起きない
-            # 未実装の置き場所。実測 2026-09-20）。`ItemCraftManager` ではない。
+            # 未実装の置き場所。実測）。`ItemCraftManager` ではない。
             {"text": "アイテム作成", "spec": PhaseSpec("NotImplementedManager", [])},
             {"text": "宿泊を終える", "spec": PhaseSpec("VacationEndManager", [])},
         ]
@@ -471,7 +471,7 @@ class InstantaleApp:
     def change_background_image_from_location_id(self, location_id):
         if getattr(self, "background_raises", False):
             # 本体は `self.app` を読むが `InstantaleApp` にその属性は無い
-            # （実機 2026-09-11。自分の家で社交を選ぶとここを通る）。
+            # （実機。自分の家で社交を選ぶとここを通る）。
             raise AttributeError("'InstantaleApp' object has no attribute 'app'")
         self.backgrounds.append(("location", str(location_id)))
         return None
@@ -1093,7 +1093,7 @@ check("よその施設の「会話する」には触らない",
       app.labels())
 app.go(home)
 
-# 実機のゲームは、自分で足した施設の中では選択肢を1つも作らない（2026-09-11）。
+# 実機のゲームは、自分で足した施設の中では選択肢を1つも作らない。
 # その画面でも滞在・保管庫・出口が出ること。出口が無いと建物から出られなくなる。
 app.player.location = home
 app.buttons = []
@@ -1573,7 +1573,7 @@ print("[宿泊の長さはローダの窓口が決める]")
 # 版40 から、月数も日数も窓口（`durations.inn_stay`）の答えをそのまま使う。
 # 宿屋の部屋のボタンからの観測は控えるだけで、答えにはしない。
 # 観測を答えにしていた版39 までは、設定を変えても控えが古いままだった
-# （`3ヵ月` に戻した後も1ヵ月で滞在していた。実機 2026-09-20。VERIFICATION.md §3.62 #11）。
+# （`3ヵ月` に戻した後も1ヵ月で滞在していた。実機。VERIFICATION.md §3.62 #11）。
 module, ctx, app, places, classes = setup()
 window_months = durations.game_inn_stay(app)["months"]
 guess = window_months * module.DAYS_PER_MONTH * module.RENT_STAYS
@@ -1772,7 +1772,7 @@ check("保存の後は旗を戻す", app.in_shopping is True, app.in_shopping)
 
 print("[消えた家に立ったままのセーブを読む]")
 module, ctx, app, places, classes = setup()
-# 実機（2026-09-11）はここで落ちた。ゲームは引けなかった施設に
+# 実機はここで落ちた。ゲームは引けなかった施設に
 # 'facilityが見つからない' という文字列を入れ、その後 .name を読む。
 town = {"0": {"name": "始まりの泥濘",
               "nodes": {"0": {"entrance_facility": "0",
@@ -2360,8 +2360,8 @@ check("宿屋の活動では滞在を締めない", app.stay_ended == ended_befo
 
 print("[滞在の描写に場所を添える]")
 # ゲームは描写を頼むとき、エリアの一覧は渡すのに**どこに泊まったかを渡さない**
-# （実測 2026-09-15。GAME.md §2.17）。街に自分の家があると、
-# 宿屋に泊まったのに自宅で過ごした話になる（実機 2026-09-15）。
+# （実測。GAME.md §2.17）。街に自分の家があると、
+# 宿屋に泊まったのに自宅で過ごした話になる（実機）。
 PROMPT_HOOK.clear()
 module, ctx, app, places, classes = setup()
 rewrite = PROMPT_HOOK.get("rewrite")

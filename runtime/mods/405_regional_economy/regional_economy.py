@@ -137,8 +137,8 @@ ITEM_DESCRIPTION_CHARS = 1200
 # 売り買いをしない窓では触らない。
 TRADE_SITUATION = "shop"
 # 表示は**素の値段から何%動くか**。矢印をやめたのは、上下が「値段の向き」とも
-# 「得か損か」とも読めるうえ、店主側で反転するので左右で意味が変わったため
-# （2026-09-17）。割合なら数字は常に値段の向きで、反転しない。
+# 「得か損か」とも読めるうえ、店主側で反転するので左右で意味が変わったため。
+# 割合なら数字は常に値段の向きで、反転しない。
 # 得か損かは色だけが表す。
 
 #: 街の規模。ゲームが `areas[*]["size"]` に書く語で、実データ3世界を数えると
@@ -1518,7 +1518,7 @@ def _score_percent(score):
     multiplier = _regional_multiplier(score)
     percent = int(round((multiplier - 1.0) * 100))
     # **何の%かを表示自体に書く。** 品名の横に `+20%` だけが出ても、
-    # 値段の話なのか能力値の話なのか読み取れない（2026-09-17）。
+    # 値段の話なのか能力値の話なのか読み取れない。
     # 説明欄に値段だけのラベルは無く（`109_` の実測で name / attributes / desc の
     # 3枚）、値段は `attributes` の文へ混ざるので、数字の隣には置けない。
     return PERCENT_FORMAT.format(percent) if percent else ""
@@ -1649,7 +1649,7 @@ def apply(ctx):
         # `world_data` の鍵は name / overview / structure_description / story /
         # days_elapsed だけで、`structure` は無い。
         # 構造を条件にしていた版は、ロードした世界で `world structure unavailable`
-        # が15回以上出て成功0だった（実機 2026-09-17）。
+        # が15回以上出て成功0だった（実機）。
         current_app = app if app is not None else ui.find_app()
         size = _area_size(current_app, area_id)
         if size is None:
@@ -2013,7 +2013,7 @@ def apply(ctx):
         **売買画面を押さえて後から開く作りはやめた。** 待機表示は下の画面の
         選択肢を潰すので、潰したまま売買画面を開くと、閉じて戻ったときに
         選択肢が待機表示のまま残る。`restore=True` でも、開くのを1コマ遅らせても
-        直らなかった（実機 2026-09-17）。ここで済ませれば画面を潰す場面が
+        直らなかった（実機）。ここで済ませれば画面を潰す場面が
         売買画面と重ならず、後始末はゲーム自身の画面の組み直しに任せられる。
         """
         # `manager` はゲームの店の管理者。売買画面の側から呼ぶときは
@@ -2111,7 +2111,7 @@ def apply(ctx):
             return None
         # **未検品の品は動かさない。** 名前とジャンルからの推測で先に乗せると、
         # 検品が済んだ時点で別の倍率へ組み直されて、開いた直後と数秒後で
-        # 値段が変わる（実機 2026-09-17。3817 -> 3053）。
+        # 値段が変わる（実機。3817 -> 3053）。
         classification = _classification_for_item(state, scope, record, item)
         if classification is None:
             return None
@@ -2181,7 +2181,7 @@ def apply(ctx):
         # **`orig` の前に検品する。** `orig` の中で売買画面が Clock へ積まれ、
         # メインスレッドは `execute` が戻る前にそれを走らせうる
         # （GAME.md §2.13.1）。`finally` に置くと画面が先に開き、
-        # LLM が売買画面の上で走る（実機 2026-09-17）。
+        # LLM が売買画面の上で走る（実機）。
         try:
             classify_shop(self, stock_only=True)
         except Exception:
@@ -2232,7 +2232,7 @@ def apply(ctx):
         """検品が済むまで売買画面を描かせない。**待つのは別スレッド。**
 
         メインスレッドで待つと Clock が止まり、待機表示のアニメごと画面が
-        固まる（実機 2026-09-17。`・・・` が出たまま固まって見えた）。
+        固まる（実機。`・・・` が出たまま固まって見えた）。
         ここは待機表示を出して**すぐ戻り**、済んだら元の処理を呼ぶ。
 
         戻り値が真なら、呼び側は `orig` を呼ばずに降りる。
@@ -2355,7 +2355,7 @@ def apply(ctx):
         正しい文字へ塗り直してはいるが、その直後に売買画面が被さるため、
         戻ってきたときに画面へ残っているのは `・・・` のほうになる。
 
-        実機で3点を録って決めた（2026-09-17）。閉じる前・直後・0.5秒後の
+        実機で3点を録って決めた。閉じる前・直後・0.5秒後の
         どこでも `buttons` と `to_display_buttons` は正しい文字のままで、
         **データではなく画面だけが古い**。だから塗り直しで足りる。
         閉じるのは `toggle_twin_inventory_window` を通らないので、

@@ -264,7 +264,7 @@ def _check(ok, what: str):
 #: （`PermissionError: [WinError 24]` と出るので紛らわしい）。
 #:
 #: このゲームは起動直後に torch / arrow / onnx などを大量に読むので、
-#: 一覧が落ち着くまでの窓が実際に当たる（2026-08-21、pid 21260 で発生）。
+#: 一覧が落ち着くまでの窓が実際に当たる（pid 21260 で発生）。
 ERROR_BAD_LENGTH = 24
 SNAPSHOT_ATTEMPTS = 20
 SNAPSHOT_WAIT = 0.1

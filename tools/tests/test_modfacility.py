@@ -127,7 +127,7 @@ def make_town():
 
 
 def make_two_node_town():
-    """同じ形のノードを2つ持つ街（実機 2026-09-14 のカスティア）。
+    """同じ形のノードを2つ持つ街（実機のカスティア）。
 
     ノードどうしは繋がっていない。入口の `connections` はそのノードの中で閉じる。
     プレイヤーはノード `20` の入口に立っている。
@@ -457,7 +457,7 @@ def main():
     # ゲームは組み直しの途中でも選択肢を足す（塗り直しは1手に何度も走る）。
     # 先の塗り直しでは伏せるものがまだ無く、自前のボタンは後ろに足される。
     # その後にゲームが `宿泊する` を先頭へ足しても、次の塗り直しで
-    # 自前のボタンはその場所へ動く（実機 2026-09-20。宿泊を終えた直後の自分の宿で
+    # 自前のボタンはその場所へ動く（実機。宿泊を終えた直後の自分の宿で
     # `会話する` → `無料で泊まる` の順になった）。
     app2.buttons = [{"text": "会話する", "spec": PhaseSpec("DisplayTalkChoice", [])}]
     modfacility.maintain_buttons(app2)
@@ -719,7 +719,7 @@ def main():
 
     print("会話中の保存: 居た場所のまま保存する")
     # ゲームは会話の途中を保存して再開できる。画面がどうであれ、
-    # 中のままと名乗った建物では居た場所に戻すのが正しい（本人の指摘 2026-09-14）。
+    # 中のままと名乗った建物では居た場所に戻すのが正しい（本人の指摘）。
     modfacility.register("915_invest", facility_id=fid, keep_inside=True)
     app2.player.location = rebuilt
     app2.buttons = [{"text": "この話から依頼を作る（ヘルガ）",
@@ -739,7 +739,7 @@ def main():
 
     print("背景: 入口へ移すときは焼かれる絵も入口のものにする")
     # 立ち位置だけ移しても、焼かれた絵が建物のままだとロードが建物の絵で始まる
-    # （実機 2026-09-14。入口に戻ったのに店の絵のままだった）。
+    # （実機。入口に戻ったのに店の絵のままだった）。
     root = os.path.join(state_root, "worlds", "検査の世界", "backgrounds")
     for name in ("街の入口", "灯火亭（改装）"):
         os.makedirs(os.path.join(root, name), exist_ok=True)
@@ -764,7 +764,7 @@ def main():
     app2.location_image = shop_picture
 
     print("背景: 中のまま保存するときは焼かれる絵をその建物のものにする")
-    # ゲームは MOD の施設に入っても `location_image` を更新しない（実セーブ 2026-09-16。
+    # ゲームは MOD の施設に入っても `location_image` を更新しない（実セーブ。
     # 道場の中で保存したセーブの絵が、繋ぎ先の区画のままだった）。
     # そのままだと、中に立ったまま再開したのに繋ぎ先の絵でロードが始まる。
     os.makedirs(os.path.join(root, "街の入口"), exist_ok=True)
@@ -825,7 +825,7 @@ def main():
                 modfacility.keep_saved_background(lost, app2)[1] == "")
 
     print("書き出し: 中のまま保存した立ち位置を守る")
-    # ゲームは `mod:` の id を途中で切って書くことがある（実機 2026-09-14。
+    # ゲームは `mod:` の id を途中で切って書くことがある（実機。
     # 店の中で会話しながら保存したら `player_data["location"]` が 'mod' だけになった）。
     modfacility.register("915_invest", facility_id=fid, keep_inside=True)
     app2.player.location = rebuilt
@@ -878,7 +878,7 @@ def main():
 
     print("会話中: ゲームの選択肢に混ぜない")
     # ゲームは会話の最中も施設の入口（`売買する` など）を選択肢に残すので、
-    # 画面の中身では見分けられない（実機 2026-09-14。店の会話中に売上と出口が並んだ）。
+    # 画面の中身では見分けられない（実機。店の会話中に売上と出口が並んだ）。
     app2.player.location = rebuilt
     app2.buttons = []
     modfacility.maintain_buttons(app2, screen=screen)
@@ -900,7 +900,7 @@ def main():
 
     print("戦闘の旗: 敵が居る間は足さない。残骸なら出口を出す")
     # 闘技場の試合から逃げた回に旗が残り、建物の出口が二度と出なかった
-    # （実機 2026-09-20。ゲームには戦闘の旗を下ろし忘れる経路がある ＝ `107_` の表）。
+    # （実機。ゲームには戦闘の旗を下ろし忘れる経路がある ＝ `107_` の表）。
     arena_top = [{"text": "試合に出る",
                   "spec": PhaseSpec("EntryColosseumMatchManager", [])},
                  {"text": "会話する", "spec": PhaseSpec("DisplayTalkChoice", [])}]

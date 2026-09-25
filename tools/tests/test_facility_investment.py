@@ -3,7 +3,7 @@
 
     python tools/tests/test_facility_investment.py
 
-（開発中は `915_facility_investment` / `test_wip_facility_investment.py` だった。2026-09-16 に正式化。）
+（開発中は `915_facility_investment` / `test_wip_facility_investment.py` だった。）
 
 偽の app / Player / Area / Node / Facility / PhaseSpec / VacationStartManager /
 EntryColosseumMatchManager / Character / Clock を差し込み、次を確認する。
@@ -150,7 +150,7 @@ class VacationEndManager:
 
     def execute(self, choice_text=""):
         self.app.stay_ended += 1
-        # ゲームは終える処理の**中で**宿の画面を組み直す（実機 2026-09-14。
+        # ゲームは終える処理の**中で**宿の画面を組み直す（実機。
         # `where: ... game_choices=2` が `stay: finished` より先に出た）。その後は組み直さない。
         self.app.buttons = [
             {"text": "宿泊する", "spec": PhaseSpec("DisplayVacationChoice", [])},
@@ -168,7 +168,7 @@ class EntryColosseumMatchManager:
 
 
 class ColosseumMatchStart:
-    """ゲームの試合。`method` が施設 id で `world_dict` を引いて落ちる（実機 2026-09-13）。"""
+    """ゲームの試合。`method` が施設 id で `world_dict` を引いて落ちる（実機）。"""
     def __init__(self, app):
         self.app = app
 
@@ -735,7 +735,7 @@ check("上の等級は高い", cat.cost_of("inn", "advanced", "town") > cat.cost
 check("値段は 100G 単位", cat.cost_of("colosseum", "standard", "city") % 100 == 0)
 check("名前は鍵が同じなら同じ",
       cat.facility_name("inn", "basic", "泥の村", "k") == cat.facility_name("inn", "basic", "泥の村", "k"))
-# 建物の名前も同じ世界で重ねない（実機 2026-09-14。別の世界でも `3-1` が「七宝の間」だった）。
+# 建物の名前も同じ世界で重ねない（実機。別の世界でも `3-1` が「七宝の間」だった）。
 check("使っている建物の名前は飛ばす（版37）",
       cat.facility_name("specialty_shop", "advanced", "泥の村", "k", taken=["七宝の間"])
       != "七宝の間",
@@ -747,7 +747,7 @@ _used_up = cat.facility_name("specialty_shop", "advanced", "泥の村", "k",
                              taken=[n.format(area="泥の村")
                                     for n in cat.KINDS["specialty_shop"]["names"]["advanced"]])
 check("候補を使い切ったら土地の名を冠して分ける", _used_up.startswith("泥の村の"), _used_up)
-# 主人の名前は同じ世界で重ねない（実機 2026-09-14。闘技場と道場がどちらもトビアスだった）。
+# 主人の名前は同じ世界で重ねない（実機。闘技場と道場がどちらもトビアスだった）。
 first = cat.keeper_choice("k")[0]
 check("同じ鍵からは同じ主人", cat.keeper_choice("k")[0] == first)
 check("使われている名前は飛ばす", cat.keeper_choice("k", [first])[0] != first)
@@ -763,7 +763,7 @@ check("主人の profile に出資者の名が入る", "テストプレイヤー
 check("主人はプレイヤーに好意を持って生まれる",
       fields["relationship"]["player"]["affinity"] == cat.KEEPER_AFFINITY
       and "出資者" in fields["relationship"]["player"]["relationship"])
-# 名前そのものに読点が入るので1人ずつ括る（実機 2026-09-13）。
+# 名前そのものに読点が入るので1人ずつ括る（実機）。
 check("設置条件の一文（規模で建たない）",
       cat.requirement_text("colosseum", "village") == "闘技場: 町から（村には建たない）",
       cat.requirement_text("colosseum", "village"))
@@ -793,7 +793,7 @@ check("闘技場は窓口に出す（試合の間だけ素データの写しを�
       "colosseum" in cat.enabled_kinds())
 
 print("[種類ごとの設定]")
-# 建設費・1日の売上・最低の規模を種類ごとに動かせる（本人の指定 2026-09-14）。
+# 建設費・1日の売上・最低の規模を種類ごとに動かせる（本人の指定）。
 # 宣言は `mod.json`、既定は `catalog.KINDS` の表と同じ。
 declared = json.load(io.open(os.path.join(os.path.dirname(MOD), "mod.json"),
                              encoding="utf-8"))["settings"]
@@ -943,7 +943,7 @@ check("建ったことが本文に出る", any("建った" in t for t in app.tex
 check("役場の選択肢に戻る", app.has(EXIT_TEXT), app.labels())
 
 print("[上限]")
-# 上限は種類ごとではなく、その街に建てた合計（本人の指定 2026-09-14）。村は1軒。
+# 上限は種類ごとではなく、その街に建てた合計（本人の指定）。村は1軒。
 app.press(module.DESK_LABEL)
 check("村は1軒建てたら打ち止め",
       not any(app.has(module.BUILD_LABEL.format(cat.KINDS[k]["label"]))
@@ -963,7 +963,7 @@ check("いまの軒数はこちらが建てた分だけ",
       "合計1軒まで（いま0軒）" in app2.texts[-1], app2.texts[-1:])
 
 print("[主人を作らせる]")
-# 建てるときに1回だけゲームと同じ生成 AI に聞く（本人の指定 2026-09-14）。
+# 建てるときに1回だけゲームと同じ生成 AI に聞く（本人の指定）。
 # 読めなければ表の12人へ降りる。
 module, ctx, app, world, classes = setup()
 FakeLLM.load([{"name": "サリ", "category": "middle-aged woman",
@@ -1071,7 +1071,7 @@ check("宿屋の絵に MOD は触らない（描かず、頼まない。移動�
       app.backgrounds)
 
 print("[ゲームが出す画面との重なり]")
-# `inn` 型ではゲーム自身が `宿泊する(N)` を出す（実機 2026-09-13）が、**自分の宿では伏せる**
+# `inn` 型ではゲーム自身が `宿泊する(N)` を出す（実機）が、**自分の宿では伏せる**
 # （版40。宿代を取る宿泊を自分の宿に並べる理由が無い。本人の指定）。残るのは「無料で泊まる」。
 # ゲームが組む順は 操作 / 出る / 会話する（`232_probe_facility_choices` で実測。
 # 宿屋だけ `出る` が先頭に来るのは `135_fix_inn_button_order` が直す）。
@@ -1157,7 +1157,7 @@ stay_log = read_log()[log_mark:]
 # 第1引数は**いまの宿屋と同じ月数**。ローダの窓口（`durations.inn_stay`）から取る（版41）。
 # 版40 までは 1 を直に渡していて、設定が `3ヵ月` のときに
 # 「払えば3ヵ月、無料なら1ヵ月」という食い違いになっていた
-# （実機 2026-09-20。VERIFICATION.md §3.63 #7e）。
+# （実機。VERIFICATION.md §3.63 #7e）。
 stay_months = durations.game_inn_stay(app)["months"]
 check("宿泊は窓口と同じ月数で起きる",
       app.stays and app.stays[-1] == (stay_months, module.STAY_QUALITY), app.stays)
@@ -1178,7 +1178,7 @@ app.press("宿泊を終える")
 CLOCK.settle()
 check("終えると滞在の覚えが消える", app.stay_ended == ended_before + 1
       and module_state_own_stay() is None)
-# ゲームが終える処理の中で組み直した画面に、こちらから足し直す（実機 2026-09-14。
+# ゲームが終える処理の中で組み直した画面に、こちらから足し直す（実機。
 # `宿泊する` / `会話する` の2つで止まり、絵も出なかった）。
 check("終えた直後に売上と出口が並ぶ（組み直しを待たない）",
       any("売上を受け取る" in label for label in app.labels()) and app.has(module.LEAVE_LABEL),
@@ -1269,7 +1269,7 @@ app.press(module.DESK_LABEL)
 check("1軒建てても町にはまだ1枠ある",
       app.has("宿屋を建てる") and "合計2軒まで（いま1軒）" in app.texts[-1], app.texts[-1:])
 app.press(module.CANCEL_LABEL)
-# ゲームは `colosseum` 型の建物に `試合に出る`（EntryColosseumMatchManager）を出す（実機 2026-09-13）。
+# ゲームは `colosseum` 型の建物に `試合に出る`（EntryColosseumMatchManager）を出す（実機）。
 app.player.location = arena
 app.buttons = [{"text": "試合に出る", "spec": PhaseSpec("EntryColosseumMatchManager", [])},
                {"text": TALK_TEXT, "spec": PhaseSpec("DisplayTalkChoice", [])}]
@@ -1373,7 +1373,7 @@ check("店主の職は店の種類",
       getattr(world.characters.get(shop_record["keeper"]), "job", None) == "general_store")
 names = [h.get("keeper_name") for h in holdings()]
 check("同じ世界の主人は名前が重ならない", len(names) == len(set(names)), names)
-# 版24 までの持ち株には控えが無く、名前が重なっていることがある（実機 2026-09-14）。
+# 版24 までの持ち株には控えが無く、名前が重なっていることがある（実機）。
 # 帳簿から控えを消し、2人を同じ名前にしてから当て直す。
 store = read_state() or {}
 doubled = store["holdings"][:2]
@@ -1416,7 +1416,7 @@ check("店で足すのは売上と出口だけ",
 result = app.process_choice(classes["shop"](app), "買い物をする")
 CLOCK.settle()
 check("ゲームの売買が通る", app.shops == 1 and result is not None, (app.shops, result))
-# 会話の最中は混ぜない（実機 2026-09-14。店主と話している画面に売上と出口が並んだ）。
+# 会話の最中は混ぜない（実機。店主と話している画面に売上と出口が並んだ）。
 # ゲームは会話中も `売買する` を選択肢に残すので、画面の中身では見分けられない。
 app.buttons = [{"text": "売買する", "spec": PhaseSpec("ShoppingStartManagerRemake", [])},
                {"text": "この話から依頼を作る（ヘルガ）",
@@ -1509,7 +1509,7 @@ check("主人が主として戻る", getattr(rebuilt, "owner", None) == record.g
       and record.get("keeper") in world2.characters,
       (getattr(rebuilt, "owner", None), sorted(world2.characters)))
 # 記録（`placed`）ではなく実体を見る。読み直しで施設は別のオブジェクトになるので、
-# 古い建物に立ったままだと「会話する」の一覧に出ない（実機 2026-09-13）。
+# 古い建物に立ったままだと「会話する」の一覧に出ない（実機）。
 keeper = world2.characters.get(record.get("keeper"))
 check("主人が新しい建物の実体に立っている",
       getattr(keeper, "location", None) is rebuilt,
@@ -1523,7 +1523,7 @@ check("エリアとノードも新しいもの",
       (getattr(keeper, "current_area", None), getattr(keeper, "current_node", None)))
 check("区画に建物への道が出る", app.has(record.get("name")), app.labels())
 # 区画で「会話する」を押した先（会話相手の一覧）には道を混ぜない
-# （実機 2026-09-14。交易の路の会話一覧に建物の名が並んだ）。
+# （実機。交易の路の会話一覧に建物の名が並んだ）。
 app.buttons = [{"text": "測定用の来訪者",
                 "spec": PhaseSpec("ConversationStartManager", ["mod:229:visitor"])},
                {"text": "やめる", "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}]
@@ -1594,7 +1594,7 @@ app.go(world_c.areas["2"].nodes["10"].facilities["9"])
 print("[新しい主人公]")
 # 主人公が死んで同じ世界で作り直すと、ゲームは世界を world_data.json から組み直す
 # （初期化された同じ世界）。帳簿は 世界×主人公 で持つので、前の主人公の建物も主人も
-# 新しい主人公には現れない（本人の指定 2026-09-14。実機では新しい主人公が前の主人公の
+# 新しい主人公には現れない（本人の指定。実機では新しい主人公が前の主人公の
 # 施設の出資者として迎えられた）。
 before = holdings()
 first_player, first_save = app.player, app.save_data_dict
@@ -1629,7 +1629,7 @@ with io.open(heir_file, encoding="utf-8") as fh:
     heir_holdings = (json.load(fh) or {}).get("holdings") or []
 check("新しい主人公の帳簿に1件", len(heir_holdings) == 1, heir_holdings)
 # id は <土地>-<番> で前の周回の建物と重なる。登録簿に残った前の周回の写しで建ててはいけない
-# （実機 2026-09-14。ムツハの宿がミツバの「金羊亭」になった）。
+# （実機。ムツハの宿がミツバの「金羊亭」になった）。
 heir_building, _ = building_of(world3, heir_holdings[0]) if heir_holdings else (None, None)
 check("新しい主人公の建物は帳簿の名前で建つ（前の周回の写しではない）",
       heir_building is not None
@@ -1671,7 +1671,7 @@ check("戻した主人は元の主人公を出資者と知っている",
       PLAYER_NAME in (back_note or "") and "二代目" not in (back_note or ""), back_note)
 
 print("[設定画面]")
-# 23 項目を1列に並べると読めないので、種類を行・項目を列にした表の画面を同梱する（本人の指摘 2026-09-14）。
+# 23 項目を1列に並べると読めないので、種類を行・項目を列にした表の画面を同梱する（本人の指摘）。
 # 窓は開かず、純粋な部分（設定名の規則・共通の項目・参考の値札・保存に渡す形）だけ見る。
 TOOLS_DIR = os.path.join(RUNTIME_DIR, os.pardir, "tools")
 for extra in (os.path.normpath(TOOLS_DIR), os.path.dirname(MOD)):

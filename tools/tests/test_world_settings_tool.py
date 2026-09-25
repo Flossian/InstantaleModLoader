@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
-"""130_ / 314_ のワールド別設定画面を窓抜きで通す。
+"""130_ / 314_ / 332_ のワールド別設定画面を窓抜きで通す。
 
     python tools/tests/test_world_settings_tool.py
 
-画面そのものは `tools/modtool.py` に1本だけ在り、2本の `tool.py` は
+画面そのものは `tools/modtool.py` に1本だけ在り、3本の `tool.py` は
 `modtool.world_settings_main(MOD_DIR)` を呼ぶシム（TECH.md §3.12.1）。
 だから検査も共有側に当てて、シムは「同じもので、確かに共有側を呼ぶ」ことだけ見る。
 
-  同一    … 2本の tool.py は同じファイル（`__file__` 以外を書いていない）。シムは modtool を呼ぶ
+  同一    … 3本の tool.py は同じファイル（`__file__` 以外を書いていない）。シムは modtool を呼ぶ
   宣言    … 項目は mod.json の "settings" から読む（本体の定数と同じ顔ぶれ）。控えのフォルダ名も本体と同じ
   世界    … セーブを復号して world_data の名前を鍵にする。フォルダ名ではない
   個別    … 一括設定と違う項目だけ書く。全部同じならファイルを消す。型の違う値は読まない

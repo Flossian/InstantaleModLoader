@@ -12,7 +12,7 @@ MOD を1つも当てない状態でも同じで、原因はゲームの側にあ
 `DisplayVacationChoice`（宿泊する）と `DisplayTalkChoice`（会話する）の2つだけ。
 `出る` は施設が元から持っている選択肢で、並びを決めているのは施設に入る経路のほう。
 
-原因は `232_probe_facility_choices` で測った（2026-09-20）。
+原因は `232_probe_facility_choices` で測った。
 施設が持つ `choices` は挿入順の dict で、**宿屋は `出る` の1つだけ**（店は `売買する` → `出る`）。
 ゲームは `choices` の並びでボタンを組んでから、宿屋の `宿泊する`
 （期間の引数を持つ `DisplayVacationChoice` なので静的な `choices` に入っていない）を後ろに足し、

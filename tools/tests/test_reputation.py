@@ -3,7 +3,7 @@
 
     python tools/tests/test_reputation.py
 
-（開発中は `908_reputation` / `test_wip_reputation.py` だった。2026-08-24 に正式化。）
+（開発中は `908_reputation` / `test_wip_reputation.py` だった。）
 
 偽の `area_history` と偽の依頼台帳、偽の LLM を差し込み、次を確認する。
 

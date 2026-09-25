@@ -9,7 +9,7 @@ MSDN が「成功するまで再試行せよ」と書いている種類の失敗
 ただし Python 側では `PermissionError: [WinError 24]` として上がってくるので、
 そのままだと権限や多重起動を疑うことになる。
 
-実際に踏んだ（2026-08-21、pid 21260）:
+実際に踏んだ（pid 21260）:
 
     injection error: PermissionError: [WinError 24]
     CreateToolhelp32Snapshot(module, pid=21260) failed

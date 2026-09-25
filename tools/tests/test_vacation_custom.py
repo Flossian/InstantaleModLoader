@@ -5,7 +5,7 @@
 
 偽の app / PhaseSpec / DisplayVacationChoice / VacationStartManager /
 VacationRestManager / VacationEndManager を差し込む。
-**偽ゲームは実機の実測に合わせてある**（2026-08-18、`out/vacation.log`。
+**偽ゲームは実機の実測に合わせてある**（`out/vacation.log`。
 GAME.md §2.17）:
 
   部屋は4つ  犬小屋(0G)=kennel / 簡易寝台(10G)=bunk /
@@ -88,7 +88,7 @@ def check(name, cond, detail=""):
 
 
 # ---------------------------------------------------------------- 偽ゲーム
-#: 実測の部屋（2026-08-18）。
+#: 実測の部屋。
 #: ラベルと quality の対まで実機どおり。
 ROOMS = (("犬小屋(0G)", "kennel", 0),
          ("簡易寝台(10G)", "bunk", 10),

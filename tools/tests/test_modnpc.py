@@ -221,7 +221,7 @@ def main():
     ok &= check("名前が入る", getattr(built, "name", None) == "受付")
     ok &= check("6鍵が揃っている",
                 sorted(built.original_ability_scores) == sorted(ABILITY_KEYS))
-    # 2（詳細生成済み）で組むとゲームが会話の直前に埋めない（実機 2026-09-12）。
+    # 2（詳細生成済み）で組むとゲームが会話の直前に埋めない（実機）。
     ok &= check("level_of_detail は 1（生成直後の住人と同じ）",
                 built.config.get("level_of_detail") == 1)
 
@@ -234,7 +234,7 @@ def main():
                 modnpc.spawn(app, npc_id) is character)
     ok &= check("npc_id_of が名簿から引ける",
                 modnpc.npc_id_of(app, character) == npc_id)
-    # ゲームの詳細生成は `save_data_dict['npcs'][id]` へ書く（実機 2026-09-12: 無いと KeyError）。
+    # ゲームの詳細生成は `save_data_dict['npcs'][id]` へ書く（実機: 無いと KeyError）。
     ok &= check("素データの写しが save_data_dict['npcs'] に居る",
                 npc_id in app.save_data_dict["npcs"])
     ok &= check("world_dict['npcs'] にも同じ辞書",
@@ -246,7 +246,7 @@ def main():
     ok &= check("置けた", modnpc.place(app, npc_id, "1", "5", owner=True))
     ok &= check("施設の名簿に載る", facility.characters == [npc_id])
     ok &= check("主になった", facility.owner == npc_id)
-    # 「会話する」の一覧は各人物の `.location` を施設と突き合わせる（実機 2026-09-12）。
+    # 「会話する」の一覧は各人物の `.location` を施設と突き合わせる（実機）。
     ok &= check("location が施設オブジェクト", character.location is facility)
     ok &= check("current_area がエリア", character.current_area is world.areas["1"])
 
@@ -311,7 +311,7 @@ def main():
 
     print("隠す: 保存の間だけ引き上げる")
     # 実セーブの `game_variables.buttons_backup` には
-    # `ConversationStartManager(args=[<id>])` が入っている（2026-09-13 に確認）。
+    # `ConversationStartManager(args=[<id>])` が入っている（確認済み）。
     # 一覧を出したまま保存すると `mod:` の id がそこへ焼かれ、MOD を外した後に押すと落ちる。
     app.buttons.append({"text": "受付", "spec": {"cls_name": "ConversationStartManager",
                                                  "args": [npc_id]}})
@@ -326,7 +326,7 @@ def main():
     app.current_enemy_dict = {npc_id: {"name": "受付"}}
     hidden = modnpc.hide(app)
     # 反復からは消えるが id では引ける（保存は別スレッドで、その間にゲームが引く。
-    # 外していた頃は `KeyError` で落ちた。実機 2026-09-12）。
+    # 外していた頃は `KeyError` で落ちた。実機）。
     ok &= check("保存の間、id では引ける", world.characters.get(npc_id) is character
                 and npc_id in world.characters)
     ok &= check("保存の間、反復には出ない",
@@ -347,7 +347,7 @@ def main():
     ok &= check("保存の瞬間、主が元の値", saved["owner"] == "7")
     ok &= check("保存の瞬間、素データの写しが反復に出ない",
                 saved["plain"] == ["7"] and saved["plain_copy"] == ["7"])
-    # 選択肢は落とさない（2026-09-14）。落とすと、一覧を出したまま保存したセーブが
+    # 選択肢は落とさない。落とすと、一覧を出したまま保存したセーブが
     # 「やめる」だけの画面で戻る（実機。店で主人の一覧を出したまま保存→ロード）。
     ok &= check("保存の瞬間、選択肢はそのまま（一覧を出したまま保存しても『やめる』だけにならない）",
                 npc_id in saved["buttons"] and npc_id in saved["buttons_backup"])
@@ -496,9 +496,9 @@ def main():
 
     print("組み直す: 注入し直した世代だけ実体を組み直す")
     # 登録簿は注入をまたいで生きる。前の版で組んだ実体を使い回すと、
-    # `build` を直しても古い実体が同じ場所で落ちる（実機 2026-09-12）。
+    # `build` を直しても古い実体が同じ場所で落ちる（実機）。
     # 逆に「登録し直したら捨てる」だと、塗り直しのたびに層を積む MOD が毎回組み直す。
-    # それを避けて MOD が「層は一度だけ」にすると前の版の層が残る（実機 2026-09-13。331 の notes）。
+    # それを避けて MOD が「層は一度だけ」にすると前の版の層が残る（実機。331 の notes）。
     patch.set_generation("gen1")
     modnpc.register("229_probe", key="clerk", fields={"name": "受付"})
     stale = modnpc.spawn(app2, npc_id)
@@ -524,7 +524,7 @@ def main():
 
     print("会話中の保存: その会話から再開できるように痕跡を残す")
     # ゲームは会話の途中を保存して再開できる（`in_conversation` に相手の id、
-    # 選択肢は会話のもの）。相手の id を落とすと再開できない（実機 2026-09-14）。
+    # 選択肢は会話のもの）。相手の id を落とすと再開できない（実機）。
     talking = modnpc.register("915_test", key="shoptalk", fields={"name": "主人"})
     modnpc.spawn(app2, talking)
     other = modnpc.register("915_test", key="passerby", fields={"name": "通行人"})
@@ -540,7 +540,7 @@ def main():
     ok &= check("会話の相手は旗に残る", app2.in_conversation == talking)
     ok &= check("会話の相手を指す選択肢も残る",
                 any(talking in json.dumps(e, ensure_ascii=False) for e in app2.buttons))
-    # 選択肢は誰を指していても落とさない（2026-09-14。落とすと一覧を出したまま保存した
+    # 選択肢は誰を指していても落とさない（落とすと一覧を出したまま保存した
     # セーブが「やめる」だけの画面で戻る）。
     ok &= check("他の MOD の NPC を指す選択肢も残る",
                 any(other in json.dumps(e, ensure_ascii=False) for e in app2.buttons))
@@ -557,7 +557,7 @@ def main():
 
     print("持ち物: 品ごとに辞書へ均して控え、ゲームに作り直させる")
     # 入れ物（`ItemContainer`）も品（`Item`）も JSON に落ちない。
-    # 素直に控えると持ち物が丸ごと落ちて、店の在庫がロードで消える（実機 2026-09-14）。
+    # 素直に控えると持ち物が丸ごと落ちて、店の在庫がロードで消える（実機）。
     shop_id = modnpc.register("915_test", key="shopkeeper", fields={"name": "店主"})
     keeper = modnpc.spawn(app2, shop_id)
     app2.generate_item_from_dict(
@@ -637,7 +637,7 @@ def main():
 
     print("名前: その世界で使われている名前を1か所から答える")
     # 人を作る MOD が名前を決める前に見る（同名だと、名前でしか相手を引けない
-    # 場所で別人に当たる。実機 2026-09-21。VERIFICATION.md §3.68）。
+    # 場所で別人に当たる。実機。VERIFICATION.md §3.68）。
     app3.player = types.SimpleNamespace(name="主人公")
     app3.save_data_dict["npcs"]["9"] = {"name": "客A"}
     modnpc.register("330_real_estate", key="keeper-6", fields={"name": "エレン"})

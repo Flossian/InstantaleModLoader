@@ -379,7 +379,7 @@ def main():
     check("本物の profile には載らない", module.OVERRIDE_MARK not in app.owner.profile)
 
     print("内側に別 MOD のラッパが居ても名前で引ける")
-    # 実機 2026-09-12: `conversation_starter` には9本が載っていて、229 の `orig` は
+    # 実機: `conversation_starter` には9本が載っていて、229 の `orig` は
     # 内側 MOD の `(*args, **kwargs)`。署名は素の関数から取らないと名前が1つも引けない。
     def inner(*args, **kwargs):
         return starter(*args, **kwargs)

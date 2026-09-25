@@ -71,7 +71,7 @@ PIPELINE_FUNC = "load_sd_pipeline"
 
 #: sdcpp 自身のメッセージ（`log_event(level, message)`）。
 #: 何を読んだか・読めなかったかはここにしか出ない
-#: （TAESD が読めないと黙って VAE へ落ちる。実機 2026-09-18 の色化け）。
+#: （TAESD が読めないと黙って VAE へ落ちる。実機の色化け）。
 LOGGER_SUFFIX = "._logger"
 LOGGER_FUNC = "log_event"
 
@@ -496,7 +496,7 @@ def apply(ctx):
                 counts["exit_unmarked"] += 1
             # **元を呼ぶ前にも1行残す。**
             # ネイティブ側で落ちるとプロセスごと消えて、
-            # 返ってから書く記録は何も残らない（実機 2026-09-18: SDXL で1回）。
+            # 返ってから書く記録は何も残らない（実機: SDXL で1回）。
             before = params_of(sig, (self,) + tuple(args), kwargs)[0]
             write("exit #{} {} kind={} {}x{} lora={} ...".format(
                 counts["exit"], method, kind,

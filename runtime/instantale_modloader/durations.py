@@ -51,7 +51,7 @@ GAME_COACH_FARE = 1000
 #: 施設での訓練。答えは
 #: `{"days_per_year": int, "course_years": int, "activity_years": {種類: 年}}`。
 #: 置く関数は `fn(app)`。
-#: 素の値は実測（`231_probe_training`、2026-09-15。GAME.md §2.17）:
+#: 素の値は実測（`231_probe_training`。GAME.md §2.17）:
 #: 各段の `TrainingPhaseManager.execute` で、その活動の年数 × 365 日が1回で進む
 #: （3年の活動で `elapse_days(1095)`）。開始時の残り年数は 3（観測は1軒）。
 #: 代金（300 で固定）は `TrainingStartManager.execute` で引かれ、期間ではないのでここには無い。

@@ -85,7 +85,7 @@ AUTO_TALK_LINGER = 6
 AUTO_LOAD_WORLD = ""
 #: 自動の会話を起こす前に置く秒数。起動直後は LLM の口がまだ無い
 #: （ロードの3秒後に起こして `conversation_starter` が `'NoneType' object is not callable`
-#: で落ち、画面が「…」のまま止まった。実機 2026-09-12）。
+#: で落ち、画面が「…」のまま止まった。実機）。
 AUTO_TALK_DELAY = 45
 #: 保存の間、来訪者を名簿から外す（ローダの `modnpc.LIFT_ROSTER`）。
 #: 切って `leaked` が空のままなら、保存は名簿を読んでいない。
@@ -556,7 +556,7 @@ def apply(ctx):
 
     # -- 自動の会話（画面を押せない環境用）--------------------------------------
     def stale():
-        """前の世代の見張りは降りる（注入し直すと2世代が並走した。実機 2026-09-12）。"""
+        """前の世代の見張りは降りる（注入し直すと2世代が並走した。実機）。"""
         return "superseded" if ctx.superseded() else None
 
     def open_talk_list(app, npc_id):
@@ -564,7 +564,7 @@ def apply(ctx):
 
         `process_choice(DisplayTalkChoice(app), "会話する")` で開かせた回から、
         その直後にゲームが別スレッドで走らせる `save_game` が戻らなくなった
-        （実機 2026-09-12 16:44 以降、5本の保存が宙に浮き、ディスクは書かれなかった）。
+        （実機。途中から5本の保存が宙に浮き、ディスクは書かれなかった）。
         一覧の中身は `talk_step` の受動の記録（`__init__` / `update_button_display` の包み）で
         取れているので、ここでは開かずに来訪者へ進む。
         """
@@ -577,7 +577,7 @@ def apply(ctx):
         """`ConversationStartManager(app, id)` をゲームの経路で起こす（GAME.md §2.5）。"""
         cls = ui.cls_of("ConversationStartManager")
         if modnpc.is_mod_npc(npc_id) and not in_roster(app):
-            # 名簿から消えていた（実機 2026-09-12: 一覧を開いた後の `KeyError`）。
+            # 名簿から消えていた（実機: 一覧を開いた後の `KeyError`）。
             # 誰が消したかは `talk_step` の前後で分かる。ここでは組み直して続ける。
             note("auto", step=npc_id, vanished=True)
             write("auto talk: the visitor is not in the roster any more; respawning")
@@ -652,7 +652,7 @@ def apply(ctx):
     def save_game(orig, self, *args, **kwargs):
         """保存の直後にディスクのセーブを読む。関所の外側から数える。
 
-        16:43 以降、包みは呼ばれるのに読み直しが1度も走らなかった（実機 2026-09-12）。
+        途中から、包みは呼ばれるのに読み直しが1度も走らなかった（実機）。
         `orig` が投げてここを素通りしている可能性があるので、入り・戻り・投げを1行ずつ残す。
         """
         write("save: entering (in_conversation={} thread={})".format(
@@ -694,7 +694,7 @@ def apply(ctx):
                                       if modnpc.is_mod_npc(str(k)))
         # `npcs` と `characters` だけでは足りない。
         # `game_variables` の選択肢（`buttons_backup` の `ConversationStartManager`）・
-        # 自由入力・パーティ・敵にも id が載る（2026-09-13 に実セーブで確認）。
+        # 自由入力・パーティ・敵にも id が載る（実セーブで確認）。
         # セーブ全体を1つの文字列にして `mod:` を数え、出どころの鍵も並べる。
         whole = json.dumps(data, ensure_ascii=False, default=str)
         leaked["anywhere"] = whole.count(modnpc.PREFIX)
@@ -717,7 +717,7 @@ def apply(ctx):
         """`AIManager.set_ai_models()` を別スレッドで。
 
         タイトルのロードは LLM を用意してから世界を読むが、`load_game_new` を直に呼ぶと
-        そこを飛ばす（実機 2026-09-12: `conversation_starter` が
+        そこを飛ばす（実機: `conversation_starter` が
         `'NoneType' object is not callable`、4分半待っても変わらず）。
         """
         # 属性は2つある（`ai_mamanger` と `ai_manager`。`210_` の97属性の記録）。
@@ -732,7 +732,7 @@ def apply(ctx):
                 break
         if fn is None:
             # 正規の起動が組む `AIManager(app, config)` が無い（`ai_manager` は None。
-            # 実機 2026-09-12 の診断）。同じ引数で組んで、同じ属性に置く。
+            # 実機の診断）。同じ引数で組んで、同じ属性に置く。
             diagnose_llm(app)
             cls = ui.cls_of("AIManager")
             config = getattr(getattr(app, "auto_configuration_screen", None), "config", None)

@@ -3,7 +3,7 @@
 
     python tools/tests/test_place_bgm_tool.py
 
-（開発中は `910_place_bgm` / `test_wip_place_bgm_tool.py` だった。2026-09-02 に正式化。）
+（開発中は `910_place_bgm` / `test_wip_place_bgm_tool.py` だった。）
 
   場所    … 環境変数が無ければ settings/gui.json と MOD の位置から組む
   一覧    … 2つのフォルダを再帰で合算。playlist.json に無い曲は 0（使うに入れるまで鳴らない）
@@ -170,7 +170,7 @@ try:
     check("save: written", ok and os.path.isfile(model.playlist_path) and not os.path.exists(model.playlist_path + ".tmp"))
     check("save: dirty falls", not model.dirty())
     # 画面はこの並びをそのまま一行に出す。書いていない先の名前を出さないこと
-    # （出すと、その先を保存したように読める。`modtool` と同じ直し。2026-09-15）。
+    # （出すと、その先を保存したように読める。`modtool` と同じ直し）。
     check("save: written names the playlist (and the settings, both moved here)",
           model.written[0] == model.playlist_path
           and any(w.endswith("mod_settings.json") for w in model.written),

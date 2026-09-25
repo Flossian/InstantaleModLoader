@@ -7,7 +7,7 @@
 モジュール階層に `import` や代入を書くと、
 本体がその名前に束縛していたものを黙って上書きする。
 
-実際に踏んだ形（2026-08-21）:
+実際に踏んだ形:
 
     BOOTSTRAP_TEMPLATE = r'''
     import sys, os, datetime, traceback

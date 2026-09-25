@@ -3,7 +3,7 @@
 
     python tools/tests/test_place_bgm.py
 
-（開発中は `910_place_bgm` / `test_wip_place_bgm.py` だった。2026-09-02 に正式化。）
+（開発中は `910_place_bgm` / `test_wip_place_bgm.py` だった。）
 
   走査    … 2つのフォルダを再帰で1つのプールにする。鍵は相対パス。battle/ は除く。同じ鍵は state 側
   重み    … 文字列の数字も読む。負・読めない・無い項目は 0

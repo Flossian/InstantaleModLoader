@@ -74,7 +74,7 @@ def test_world_key():
 
 def test_playthrough_key():
     """周回の鍵は 世界×主人公。主人公が死んで同じ世界で作り直したとき、
-    前の主人公の建物や契約を新しい主人公に引き継がないため（本人の指定 2026-09-14）。"""
+    前の主人公の建物や契約を新しい主人公に引き継がないため（本人の指定）。"""
     print("=== playthrough_key: 世界×主人公 ===")
     sep = st.PLAYTHROUGH_SEP
     save = {"world_data": {"name": "灰の街"}, "player_data": {"name": "ミツバ"}}
