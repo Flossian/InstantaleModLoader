@@ -348,11 +348,14 @@ def test_adopt_world_file():
         def fresh_store():
             return st.WorldStore(ctx, "adopt_test", write=logged.append)
 
-        def app_of(player):
-            app = _App({"world_data": {"world_name": "灰の街"}})
-            app.save_data_dict = {"world_data": {"name": "灰の街"},
+        def app_of_world(world, player):
+            app = _App({"world_data": {"world_name": world}})
+            app.save_data_dict = {"world_data": {"name": world},
                                   "player_data": {"name": player}}
             return app
+
+        def app_of(player):
+            return app_of_world("灰の街", player)
 
         def exists(key):
             return os.path.exists(fresh_store().path(key))
@@ -382,11 +385,41 @@ def test_adopt_world_file():
               "周回のファイルが既に在れば移さない（世界名のファイルも触らない）")
 
         worlds = fresh_store()
+        logged[:] = []
         save = {"world_data": {"name": "灰の街"}, "player_data": {"name": "ナナセ"}}
         loading = app_of("ミツバ")      # World.__init__ の中では app がまだ前の周回
         got = worlds.playthrough(loading, save)
-        check(got == "灰の街" + sep + "ナナセ" and worlds.load(got) == {"9": {"stays": 1}},
+        check(got == "灰の街" + sep + "ナナセ" and worlds.load(got) == {} and exists("灰の街"),
+              "別の主人公の周回（灰の街×ミツバ）が在る世界では、世界名だけの控えを移さない")
+        check(any("移さなかった" in line and "灰の街" + sep + "ミツバ" in line for line in logged),
+              "移さなかったことと、見つけた周回をログに残す")
+
+        old = fresh_store()
+        old.save("砂の港", {"3": {"stays": 2}})
+        worlds = fresh_store()
+        save = {"world_data": {"name": "砂の港"}, "player_data": {"name": "ナナセ"}}
+        got = worlds.playthrough(app_of("ミツバ"), save)
+        check(got == "砂の港" + sep + "ナナセ" and worlds.load(got) == {"3": {"stays": 2}},
               "セーブの辞書を渡せば、そちらの主人公へ移す")
+
+        other_mod = os.path.join(sandbox, "state", "other_mod")
+        os.makedirs(other_mod)
+        with open(os.path.join(other_mod, "岩の里" + sep + "ムツハ.json"), "w", encoding="utf-8") as f:
+            f.write("{}")
+        old = fresh_store()
+        old.save("岩の里", {"1": {"stays": 1}})
+        worlds = fresh_store()
+        got = worlds.playthrough(app_of_world("岩の里", "ミツバ"))
+        check(worlds.load(got) == {} and exists("岩の里"),
+              "別の MOD の控えでも、別の主人公の周回が在れば移さない")
+        check(st.other_playthroughs(os.path.join(sandbox, "state"), "岩の里" + sep + "ミツバ")
+              == ["岩の里" + sep + "ムツハ"], "other_playthroughs は別の主人公の周回の語幹を返す")
+        check(st.other_playthroughs(os.path.join(sandbox, "state"), "岩の里" + sep + "ムツハ") == [],
+              "自分の周回は数えない")
+        check(st.other_playthroughs(os.path.join(sandbox, "state"), "岩の里") == [],
+              "鍵が世界名だけなら空")
+        check(st.other_playthroughs(os.path.join(sandbox, "state"), "岩" + sep + "ミツバ") == [],
+              "世界名の頭が同じだけの別の世界は数えない")
 
         old = fresh_store()
         old.save("灰の街", {})

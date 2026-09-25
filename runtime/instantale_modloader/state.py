@@ -185,6 +185,42 @@ def playthrough_key(app):
     return world + PLAYTHROUGH_SEP + name if name else world
 
 
+def other_playthroughs(state_dir, key) -> list:
+    """同じ世界の、別の主人公の周回の控え（`state/` のどの MOD のものでも）。ファイル名の語幹を返す。
+
+    世界名だけの控えが誰のものかは、中身からは分からない。
+    その世界に別の主人公の周回の控えが在れば、世界名だけの控えはその主人公の遊びの
+    続きだったかもしれない（実機。死んだ主人公の控えが、同じ世界で作り直した主人公へ移った）。
+    見るのはファイル名だけ。`key` が周回の鍵でなければ（世界名だけ）空を返す。
+    `WorldStore` のメソッドにしないのは、`333_` のように控えを `sys` に置いて注入をまたぐ
+    MOD があり、前の版のローダが作った控えにはメソッドが増えないため。
+    """
+    world, sep, _name = str(key).partition(PLAYTHROUGH_SEP)
+    if not sep or not state_dir:
+        return []
+    own = world_filename(key, "")
+    prefix = _UNSAFE.sub("_", world.strip()) + PLAYTHROUGH_SEP
+    found = set()
+    try:
+        folders = os.listdir(state_dir)
+    except OSError:
+        return []
+    for folder in folders:
+        path = os.path.join(state_dir, folder)
+        if not os.path.isdir(path):
+            continue
+        try:
+            names = os.listdir(path)
+        except OSError:
+            continue
+        for name in names:
+            stem = os.path.splitext(name)[0]
+            if stem.startswith(prefix) and stem != own \
+                    and os.path.isfile(os.path.join(path, name)):
+                found.add(stem)
+    return sorted(found)
+
+
 def _clean(key: str) -> str:
     """使える文字だけにした語幹。**この時点ではまだ一意ではない。**
 
@@ -497,7 +533,10 @@ class WorldStore(object):
         """`old_key`（世界名だけ）の控えを、周回の鍵 `key` へ丸ごと移す。移したかを返す。
 
         周回の鍵へ切り替える前のファイルは、見つかった時点で遊んでいる主人公のものとみなす
-        （本人の判断）。移すのは `key` のファイルがまだ無く、`old_key` のファイルに中身があるときだけ。
+        （本人の判断）。ただし、その世界に別の主人公の周回の控えが在れば移さない
+        （モジュールの `other_playthroughs`）。持ち主が移し損ねても空から始まるだけで、
+        他の主人公の遊びの続きを渡すより損が小さい（`world_filename` と同じ判断）。
+        移すのは `key` のファイルがまだ無く、`old_key` のファイルに中身があるときだけ。
         移したら `old_key` のファイルは消す。残すと、同じ世界で作り直した次の主人公にもう一度渡る。
         主人公の名が読めず `key` が世界名のままのときと、世界名が読めないときは何もしない。
         1つの鍵につき確かめるのはプロセスで1度だけ（鍵を引くたびにディスクを叩かない）。
@@ -518,6 +557,12 @@ class WorldStore(object):
                 return False
             bucket = self.load(old_key)
             if not bucket:
+                return False
+            others = other_playthroughs(self.ctx.state_dir, key)
+            if others:
+                if self.write is not None:
+                    self.write("世界名だけの控え {!r} は、別の主人公の周回（{}）が在る世界のものなので {!r} へ移さなかった".format(
+                        old_key, ", ".join(others), key))
                 return False
             if not self.save(key, bucket):
                 self._buckets.pop(key, None)

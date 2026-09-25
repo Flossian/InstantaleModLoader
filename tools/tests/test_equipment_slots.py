@@ -171,6 +171,7 @@ class Ctx(object):
         self.hooks = {}
         self.lines = []
         self.root = root
+        self.state_dir = root
 
     def logger(self, name, **kw):
         return self.lines.append
@@ -655,9 +656,28 @@ app_old = types.SimpleNamespace(player=p4, world=types.SimpleNamespace(name="旧
 MOD.ui.find_app = lambda: app_old
 toggle(lambda self: None, hud)
 moved = store.load("旧世界×古参")
-assert moved.get("古参") == {"c9": [2, 0]} and "npc:5" in moved, moved
-assert store.load("旧世界") == {"他人": {"z": [2, 0]}}, store.load("旧世界")
+# 別の主人公（他人）の分があるファイルでは、仲間の分は誰の周回のものか分からないので残す
+assert moved == {"古参": {"c9": [2, 0]}}, moved
+assert store.load("旧世界") == {"npc:5": {"k9": [4, 2]}, "他人": {"z": [2, 0]}}, store.load("旧世界")
+assert any("left the companions in the world file '旧世界'" in l and "他人" in l for l in ctx.lines)
 assert set(MOD.CONTAINER) == {"c9"}, MOD.CONTAINER
+# 別の主人公が居ないファイルなら、仲間の分も一緒に移す
+store.save("古い村", {"古参": {"c9": [2, 0]}, "npc:5": {"k9": [4, 2]}})
+app_old.world = types.SimpleNamespace(name="古い村")
+toggle(lambda self: None, hud)
+# （主人公の分の中身は、同じ主人公で世界を替えたので組み直しで変わる。見るのは移ったかだけ）
+got = store.load("古い村×古参")
+assert "古参" in got and got.get("npc:5") == {"k9": [4, 2]}, got
+assert store.load("古い村") == {}, store.load("古い村")
+# ファイルに別の主人公の名が無くても、別の MOD の控えにその世界の別の周回があれば仲間の分は残す
+store.save("廃都", {"npc:5": {"k9": [4, 2]}})
+os.makedirs(os.path.join(root, "other_mod"), exist_ok=True)
+io.open(os.path.join(root, "other_mod", "廃都×死んだ人.json"), "w", encoding="utf-8").write("{}")
+app_old.world = types.SimpleNamespace(name="廃都")
+toggle(lambda self: None, hud)
+assert "npc:5" not in store.load("廃都×古参"), store.load("廃都×古参")
+assert store.load("廃都") == {"npc:5": {"k9": [4, 2]}}, store.load("廃都")
+assert any("left the companions in the world file '廃都'" in l and "廃都×死んだ人" in l for l in ctx.lines)
 MOD.ui.find_app = lambda: app
 
 print("ok")

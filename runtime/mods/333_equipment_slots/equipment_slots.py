@@ -90,6 +90,10 @@ def apply(ctx):
         setattr(sys, CONTAINERS_ATTR, npc_containers)
     #: scope の控え {鍵: scope}。同じ持ち主には同じ辞書を返す（グリッドに付けて見分けるため）。
     scopes = {}
+    #: 周回の鍵 -> その世界の別の主人公の周回（`bucket_of` が世界名だけのファイルを見るたびにディスクを叩かない）。
+    checked_others = {}
+    #: 仲間の分を移さなかったことを書いた周回の鍵（1回だけ書く）。
+    noted_others = set()
     #: ドロップ中の品（`try_place_item` → `is_valid_placement` の間だけ）と、MOD 自身が移している最中の旗。
     placing = {"item": None, "moving": False, "native": False, "cell": None}
 
@@ -164,6 +168,9 @@ def apply(ctx):
         世界名だけの鍵だと、同じ世界で作り直した主人公に前の主人公の位置が乗る。
         世界名だけのファイル（版17まで）に残っている分は、初めて引いたときにこの主人公の名の分と
         仲間の分を移し、元のファイルからは消す（次に作り直した主人公へ二度渡さない）。
+        仲間の分は持ち主の主人公が分からないので、ファイルに別の主人公の名の分があるときと、
+        その世界に別の主人公の周回の控えがあるとき（`state.other_playthroughs`）は移さない
+        （実機。死んだ主人公の仲間の位置が、同じ世界で作り直した主人公へ移った）。
         """
         key = state.playthrough_key(app)
         bucket = store.load(key)
@@ -171,8 +178,20 @@ def apply(ctx):
         if bucket or world == key or world == state.UNKNOWN_WORLD:
             return key, bucket
         old = store.load(world)
+        if not old:
+            return key, bucket
         name = str(getattr(player_of(app), "name", None) or "_")
-        moved = [k for k in list(old) if k == name or str(k).startswith("npc:")]
+        players = [k for k in old if not str(k).startswith("npc:")]
+        if key not in checked_others:
+            checked_others[key] = state.other_playthroughs(getattr(store.ctx, "state_dir", None), key)
+        mine_only = any(k != name for k in players) or checked_others[key]
+        moved = [k for k in list(old)
+                 if k == name or (not mine_only and str(k).startswith("npc:"))]
+        if mine_only and any(str(k).startswith("npc:") for k in old) \
+                and key not in noted_others:
+            noted_others.add(key)
+            write("left the companions in the world file {!r}: another protagonist played this world ({})".format(
+                world, ", ".join([k for k in players if k != name] + checked_others[key])))
         if moved:
             for k in moved:
                 bucket[k] = old.pop(k)

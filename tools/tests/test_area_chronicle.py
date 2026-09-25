@@ -248,6 +248,19 @@ def read_cache(module, world=PLAYTHROUGH):
         return json.load(fh)
 
 
+def drop_other_playthroughs(world, keep):
+    """`STATE_DIR` のどのフォルダからも、`world` の `keep` 以外の周回のファイルを消す。"""
+    from instantale_modloader.state import PLAYTHROUGH_SEP, world_filename
+    own = world_filename(keep)
+    for folder in os.listdir(STATE_DIR):
+        path = os.path.join(STATE_DIR, folder)
+        if not os.path.isdir(path):
+            continue
+        for name in os.listdir(path):
+            if name.startswith(world + PLAYTHROUGH_SEP) and name != own:
+                os.remove(os.path.join(path, name))
+
+
 def clear_cache(module):
     path = os.path.join(STATE_DIR, module.STATE_DIRNAME)
     if os.path.isdir(path):
@@ -425,6 +438,9 @@ def run():
     print("世界名だけの控え（前の版）")
     kept = read_cache(module)
     clear_cache(module)
+    # 別の主人公の周回が在る世界では移さない（ローダの state.adopt）。`out\test\state` は
+    # 他の検査と共有なので、この世界の別の周回（他の検査の残り）を先に片付ける
+    drop_other_playthroughs("テスト世界", PLAYTHROUGH)
     old_path = cache_path(module, "テスト世界")
     os.makedirs(os.path.dirname(old_path), exist_ok=True)
     with io.open(old_path, "w", encoding="utf-8") as fh:

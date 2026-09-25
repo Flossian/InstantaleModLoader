@@ -870,6 +870,15 @@ check("another hero in the same world starts stock", app3.world.areas["0"].conne
 # 前の版が作った世界名だけの控えは、見つけた時点の主人公のものとして移す。
 print("[世界名だけの控え]")
 os.replace(OWN_FILE, OLD_FILE)
+# 別の主人公の周回が在る世界では移さない（ローダの state.adopt）。`out\test\state` は
+# 他の検査と共有なので、この世界の別の周回（他の検査の残り）を先に片付ける
+_STATE_ROOT = os.path.dirname(STATE_DIR)
+for _folder in os.listdir(_STATE_ROOT):
+    _path = os.path.join(_STATE_ROOT, _folder)
+    if os.path.isdir(_path):
+        for _name in os.listdir(_path):
+            if _name.startswith("テスト世界" + PLAYTHROUGH_SEP):
+                os.remove(os.path.join(_path, _name))
 module, ctx, app, classes = setup(keep_state=True)
 app4 = classes["app"](make_world_dict())
 check("old world file re-applied for the hero found playing", "6" in links(app4, "0"),
