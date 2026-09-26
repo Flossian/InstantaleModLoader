@@ -4,13 +4,13 @@
   "kind": "probe",
   "name": {
     "en": "Missing attribute probe",
-    "ja": "欠落属性の計測"
+    "ja": "計測: 欠落属性の読み手"
   },
   "description": {
     "en": "Finds where the missing FreeInputStart attribute is read, via a __getattr__ tripwire",
     "ja": "FreeInputStart の欠落属性を読んでいる箇所を、__getattr__ トリップワイヤで特定する"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "debug": true
 }

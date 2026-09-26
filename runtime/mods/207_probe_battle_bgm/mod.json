@@ -4,13 +4,13 @@
   "kind": "probe",
   "name": {
     "en": "Battle BGM probe",
-    "ja": "戦闘BGMの計測"
+    "ja": "計測: 戦闘BGMの切り替え"
   },
   "description": {
     "en": "Measures how the battle BGM switches (call sites of play_music_from_src)",
     "ja": "戦闘 BGM の切り替え経路（play_music_from_src の呼び出し元）を計測する"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "debug": true,
   "after": [

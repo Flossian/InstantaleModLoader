@@ -4,13 +4,13 @@
   "kind": "fix",
   "name": {
     "en": "Battle BGM restore",
-    "ja": "戦闘BGMの復帰"
+    "ja": "戦闘後の戦闘BGMの停止"
   },
   "description": {
     "en": "Stops the battle BGM after a battle and clears orphaned overlapping tracks",
     "ja": "戦闘終了後も鳴り続ける戦闘 BGM を止め、重なって残った迷子の曲を掃除する"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "superseded": "main_024",
   "settings": {

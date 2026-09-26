@@ -4,13 +4,13 @@
   "kind": "fix",
   "name": {
     "en": "Fit the item list",
-    "ja": "アイテム一覧を収める"
+    "ja": "アイテム・スキル一覧を画面に収める"
   },
   "description": {
     "en": "Keeps the item/skill list that opens above the input box inside the window by laying it out in columns. Position and row size stay as the game made them",
     "ja": "入力欄の上に開くアイテム・スキル一覧を、列を増やして画面内に収める。位置も行の大きさもゲームのまま"
   },
-  "version": "3",
+  "version": "4",
   "author": "R01/Flossian",
   "settings": {
     "MAX_FILL": {

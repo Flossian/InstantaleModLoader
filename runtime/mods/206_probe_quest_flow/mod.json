@@ -4,13 +4,13 @@
   "kind": "probe",
   "name": {
     "en": "Quest flow probe",
-    "ja": "クエスト経路の計測"
+    "ja": "計測: クエストの受注経路"
   },
   "description": {
     "en": "Finds the quest acceptance path and how choice buttons are registered",
     "ja": "クエストの受注経路と、選択肢ボタンの登録方法を特定する"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "debug": true,
   "after": [

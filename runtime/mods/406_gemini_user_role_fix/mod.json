@@ -4,12 +4,12 @@
   "kind": "fix",
   "name": {
     "en": "Gemini User Role Fix",
-    "ja": "Geminiでのユーザーロール補完"
+    "ja": "Geminiの無応答の防止"
   },
   "description": {
     "en": "Dummy supplement for missing user role that causes unresponsiveness in Gemini lineage when using the cloud API.",
     "ja": "クラウドAPI使用時のGemini系統で応答不能になる、user roleの欠落をダミーで補完します。"
   },
-  "version": "1",
+  "version": "2",
   "author": "MoririnJP"
 }

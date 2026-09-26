@@ -4,13 +4,13 @@
   "kind": "fix",
   "name": {
     "en": "NPC hire price fix",
-    "ja": "NPC雇用価格の修正"
+    "ja": "NPC雇用時のクラッシュ修正"
   },
   "description": {
     "en": "Prevents the KeyError in NPC hire pricing by using the game's own clamp",
     "ja": "NPC 雇用価格の KeyError を、ゲーム自身のクランプ関数を通して防ぐ"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "superseded": "main_024"
 }

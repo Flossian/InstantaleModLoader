@@ -4,13 +4,13 @@
   "kind": "probe",
   "name": {
     "en": "Battle mechanics probe",
-    "ja": "戦闘の数の作られ方"
+    "ja": "計測: 戦闘の数の作られ方"
   },
   "description": {
     "en": "Records how the battle referee's vocabulary (power enums, buffs, debuffs, status effects) is converted into numbers. Each action becomes one record: the battle_action, every damage/defense calculation that ran inside it with its caller chain, and a full attribute diff of every combatant (so we learn where AttributeEffect and TextStatusEffect actually land without guessing attribute names). The two numeric functions are also called actively on a grid of representative values at injection time, to map the attack-vs-defense curve without playing dozens of battles. Read-only",
     "ja": "審判 LLM の語彙（power の列挙・バフ・デバフ・状態異常）が数へ変換されるところを録る。1手を1件にして、battle_action と、その手の中で走ったダメージ・防御の計算（呼び出し元の連鎖つき）と、戦闘に居る全員の属性の差分を残す（バフがどの属性へ書かれるかを、属性名を推測せずに見つけるため）。数値だけを取る2関数は注入時に代表値の格子でも呼び、攻撃対防御の曲線を何十戦も遊ばずに写す。読み取りだけでゲームは変えない"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "debug": true,
   "settings": {

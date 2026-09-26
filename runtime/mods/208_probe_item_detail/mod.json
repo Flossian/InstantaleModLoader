@@ -4,13 +4,13 @@
   "kind": "probe",
   "name": {
     "en": "Item detail probe",
-    "ja": "アイテム説明欄の計測"
+    "ja": "計測: アイテム説明欄"
   },
   "description": {
     "en": "Captures the real geometry of the item detail box to see why text is cut off",
     "ja": "アイテム説明欄の実寸と中身を写し取り、説明が途中で切れる原因を測る"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "debug": true,
   "after": [

@@ -4,13 +4,13 @@
   "kind": "feature",
   "name": {
     "en": "City case",
-    "ja": "街の事件"
+    "ja": "街の事件の捜査と告発"
   },
   "description": {
     "en": "A case to investigate around town: gather clues at facilities, then name the culprit",
     "ja": "街を回って調べる事件。施設で聞き込み、手がかりが揃ったら犯人を告発する"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "settings": {
     "START_FACILITY_TYPE": {

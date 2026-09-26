@@ -4,13 +4,13 @@
   "kind": "probe",
   "name": {
     "en": "Item consume probe",
-    "ja": "回復アイテムの効き方"
+    "ja": "計測: 回復アイテムの効き方"
   },
   "description": {
     "en": "Records what actually happens when a healing item is used: which popup entry was pressed and what the popup holds (the `usable` flag), the real `usable` handed to ItemConsumeManager.consume_item, the before/after of HP, stamina, their caps and status on the player and on the item's owner, the text lines added meanwhile, who calls Item.consume, the pure functions get_heal_spec / get_heal_physical_integrity_barden / get_max_physical_integrity, and the cap updates. Read-only",
     "ja": "回復アイテムを使ったとき実際に何が起きるかを録る。右クリックのどの項目が押されたかと popup の中身（`usable` 相当）、ItemConsumeManager.consume_item に渡る `usable` の実値、プレイヤーと品の持ち主の HP・スタミナ・上限・status の前後、その間に足された文、Item.consume を誰が呼ぶか、純関数 get_heal_spec / get_heal_physical_integrity_barden / get_max_physical_integrity の対応表、上限の更新。読み取りだけでゲームは変えない"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "debug": true,
   "settings": {

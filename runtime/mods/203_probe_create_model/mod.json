@@ -4,13 +4,13 @@
   "kind": "probe",
   "name": {
     "en": "Model build probe",
-    "ja": "モデル生成の計測"
+    "ja": "計測: 空の Literal の発生源"
   },
   "description": {
     "en": "Catches empty Literal[] as the pydantic model is built, recording the caller",
     "ja": "pydantic モデル生成の瞬間に空 Literal[] を捕らえ、呼び出し元まで記録する"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "debug": true
 }

@@ -44,31 +44,31 @@
 | フォルダ | GUI の名前 | 何をするか | 設定 | 状態 |
 |---|---|---|---|---|
 | [`100_fix_kivy_shutdown`](MODS.md#100_fix_kivy_shutdown-終了時に落ちるのを防ぐ) | 終了時クラッシュの修正 | 終了時に落ちるのを防ぐ | - |  |
-| [`101_fix_npc_employ_price`](MODS.md#101_fix_npc_employ_price-npc-を雇うと落ちるのを直す) | NPC雇用価格の修正 | NPC を雇うと落ちるのを直す | - | 取込済 main_024 |
+| [`101_fix_npc_employ_price`](MODS.md#101_fix_npc_employ_price-npc-を雇うと落ちるのを直す) | NPC雇用時のクラッシュ修正 | NPC を雇うと落ちるのを直す | - | 取込済 main_024 |
 | [`102_fix_prompt_dedup`](MODS.md#102_fix_prompt_dedup-llm-へ送る文章の重複を畳む) | プロンプト重複の除去 | LLM へ送る文章の重複を畳む | - | 取込済 main_023 |
-| [`103_fix_eventlog_trim`](MODS.md#103_fix_eventlog_trim-llm-へ送るイベントログを刈り込む) | イベントログの刈り込み | LLM へ送るイベントログを刈り込む | - | 取込済 main_024 |
-| [`104_balance_area_bgm`](MODS.md#104_balance_area_bgm-新しいエリアのbgmの偏りを均す) | エリアBGMの均し | 新しいエリアのBGMの偏りを均す | 1 |  |
+| [`103_fix_eventlog_trim`](MODS.md#103_fix_eventlog_trim-llm-へ送るイベントログを刈り込む) | プロンプト内のイベントログの刈り込み | LLM へ送るイベントログを刈り込む | - | 取込済 main_024 |
+| [`104_balance_area_bgm`](MODS.md#104_balance_area_bgm-新しいエリアのbgmの偏りを均す) | エリアBGMの偏りの均し | 新しいエリアのBGMの偏りを均す | 1 |  |
 | [`105_fix_schema_compact`](MODS.md#105_fix_schema_compact-llm-へ送るスキーマ説明を圧縮する) | スキーマ説明の圧縮 | LLM へ送るスキーマ説明を圧縮する | - |  |
-| [`106_fix_battle_bgm_restore`](MODS.md#106_fix_battle_bgm_restore-戦闘後にbgmが戻らないのを直す) | 戦闘BGMの復帰 | 戦闘後にBGMが戻らないのを直す | 1 | 取込済 main_024 |
-| [`107_fix_battle_flag_stuck`](MODS.md#107_fix_battle_flag_stuck-闘技場から撤退した後に次の戦闘が固まるのを直す) | 戦闘フラグの修正 | 闘技場から撤退した後に次の戦闘が固まるのを直す | - |  |
+| [`106_fix_battle_bgm_restore`](MODS.md#106_fix_battle_bgm_restore-戦闘後にbgmが戻らないのを直す) | 戦闘後の戦闘BGMの停止 | 戦闘後にBGMが戻らないのを直す | 1 | 取込済 main_024 |
+| [`107_fix_battle_flag_stuck`](MODS.md#107_fix_battle_flag_stuck-闘技場から撤退した後に次の戦闘が固まるのを直す) | 戦闘後の後始末漏れの修正 | 闘技場から撤退した後に次の戦闘が固まるのを直す | - |  |
 | [`108_fix_shop_inventory_overflow`](MODS.md#108_fix_shop_inventory_overflow-売買画面を開くと落ちるのを直す) | 売買画面クラッシュの修正 | 売買画面を開くと落ちるのを直す | - | 取込済 main_024 |
 | [`109_fix_item_detail_autosize`](MODS.md#109_fix_item_detail_autosize-アイテムの説明が途中で切れるのを直す) | アイテム説明欄の拡張 | アイテムの説明が途中で切れるのを直す | 1 |  |
-| [`110_fix_character_name_path`](MODS.md#110_fix_character_name_path-名前のせいでnpcの画像が作れないのを直す) | キャラクタ名の正規化 | 名前のせいでNPCの画像が作れないのを直す | - | 取込済 main_024 |
+| [`110_fix_character_name_path`](MODS.md#110_fix_character_name_path-名前のせいでnpcの画像が作れないのを直す) | 画像生成に通らない名前の置き換え | 名前のせいでNPCの画像が作れないのを直す | - | 取込済 main_024 |
 | [`111_llm_prompt_replace`](MODS.md#111_llm_prompt_replace-llm-への指示文を置換ルールで書き換える) | LLM への指示文を置換 | LLM への指示文を置換ルールで書き換える | 3 |  |
 | [`112_ui_text_spacing`](MODS.md#112_ui_text_spacing-広すぎる本文の行間を詰める) | 本文の行間を詰める | 広すぎる本文の行間を詰める | 2 |  |
 | [`113_ui_text_expand`](MODS.md#113_ui_text_expand-本文の表示域をボタンで広げる) | 本文の表示域を広げる | 本文の表示域をボタンで広げる | 10 |  |
 | [`114_ui_input_focus`](MODS.md#114_ui_input_focus-自由入力のあと入力欄にフォーカスを戻す) | 入力欄のフォーカスを保つ | 自由入力のあと入力欄にフォーカスを戻す | 3 |  |
-| [`115_ui_item_list_fit`](MODS.md#115_ui_item_list_fit-はみ出すアイテム一覧を画面内に収める) | アイテム一覧を収める | はみ出すアイテム一覧を画面内に収める | 3 |  |
-| [`116_ui_party_expand`](MODS.md#116_ui_party_expand-4人目以降の仲間も表示する) | 4人目以降を表示 | 4人目以降の仲間も表示する | 12 |  |
+| [`115_ui_item_list_fit`](MODS.md#115_ui_item_list_fit-はみ出すアイテム一覧を画面内に収める) | アイテム・スキル一覧を画面に収める | はみ出すアイテム一覧を画面内に収める | 3 |  |
+| [`116_ui_party_expand`](MODS.md#116_ui_party_expand-4人目以降の仲間も表示する) | パーティ欄の4人目以降を表示 | 4人目以降の仲間も表示する | 12 |  |
 | [`117_message_text_integrity`](MODS.md#117_message_text_integrity-長い応答が途中で切れるのを直す) | 長い本文をより多く見せる | 長い応答が途中で切れるのを直す | 1 |  |
-| [`118_batch_message_render`](MODS.md#118_batch_message_render-本文の出し方逐次一括と既読の色を選ぶ) | メッセージの表示速度と文字色 | 本文の出し方（逐次／一括）と既読の色を選ぶ | 4 |  |
-| [`119_fix_crime_attribution`](MODS.md#119_fix_crime_attribution-他人の犯罪が主人公のものになるのを直す) | 犯罪主体の誤帰属修正 | 他人の犯罪が主人公のものになるのを直す | - |  |
-| [`120_fix_npc_name_collision`](MODS.md#120_fix_npc_name_collision-npc-の名前が重複するのを直す) | NPC名の重複防止 | NPC の名前が重複するのを直す | 5 |  |
-| [`121_ui_character_sheet`](MODS.md#121_ui_character_sheet-人物欄に手配度スキル特性を出す) | 人物欄を広げて手配度・スキル・特性を出す | 人物欄に手配度・スキル・特性を出す | 5 |  |
-| [`122_ui_conversation_log`](MODS.md#122_ui_conversation_log-流れた本文を後から読み返す) | 会話ログのビューア | 流れた本文を後から読み返す | 11 |  |
+| [`118_batch_message_render`](MODS.md#118_batch_message_render-本文の出し方逐次一括と既読の色を選ぶ) | 本文の一括表示と既読の灰色化 | 本文の出し方（逐次／一括）と既読の色を選ぶ | 4 |  |
+| [`119_fix_crime_attribution`](MODS.md#119_fix_crime_attribution-他人の犯罪が主人公のものになるのを直す) | 他人の犯罪で手配される件の修正 | 他人の犯罪が主人公のものになるのを直す | - |  |
+| [`120_fix_npc_name_collision`](MODS.md#120_fix_npc_name_collision-npc-の名前が重複するのを直す) | NPC名の重複・類似の防止 | NPC の名前が重複するのを直す | 5 |  |
+| [`121_ui_character_sheet`](MODS.md#121_ui_character_sheet-人物欄に手配度スキル特性を出す) | 人物欄に手配度・スキル・特性を足す | 人物欄に手配度・スキル・特性を出す | 5 |  |
+| [`122_ui_conversation_log`](MODS.md#122_ui_conversation_log-流れた本文を後から読み返す) | 本文の読み返し窓 | 流れた本文を後から読み返す | 11 |  |
 | [`123_fix_new_character_level`](MODS.md#123_fix_new_character_level-新規キャラがレベル60で始まるのを直す) | 新規キャラをレベル1で始める | 新規キャラがレベル60で始まるのを直す | 1 | 取込済 main_025 |
 | [`124_ui_craft_window_fit`](MODS.md#124_ui_craft_window_fit-クラフト画面の枠の重なりを直す) | クラフト画面の枠の重なりを直す | クラフト画面の枠の重なりを直す | 3 |  |
-| [`125_balance_charisma_impression`](MODS.md#125_balance_charisma_impression-魅力が高いと初対面から全員に好かれるのを直す) | 魅力が高いと初対面から全員に好かれるのを直す | 魅力が高いと初対面から全員に好かれるのを直す | 3 |  |
+| [`125_balance_charisma_impression`](MODS.md#125_balance_charisma_impression-魅力だけで全員に好かれるのを直す) | 魅力だけで全員に好かれるのを直す | 魅力だけで全員に好かれるのを直す | 3 |  |
 | [`126_ui_title_version`](MODS.md#126_ui_title_version-タイトル画面にローダの版を出す) | タイトル画面にローダの版を出す | タイトル画面にローダの版を出す | 4 |  |
 | [`127_llm_response_speed`](MODS.md#127_llm_response_speed-ローカル-llm-の応答を速くする) | ローカルLLMの応答を速くする | ローカル LLM の応答を速くする | 3 |  |
 | [`128_item_image_variety`](MODS.md#128_item_image_variety-アイテム画像の偏りを均す) | アイテム画像の均し | アイテム画像の偏りを均す | 3 |  |
@@ -76,11 +76,11 @@
 | [`130_currency_unit`](MODS.md#130_currency_unit-通貨の呼び名と所持金の表示を変える) | 通貨の表記を変更する | 通貨の呼び名と所持金の表示を変える | 4 |  |
 | [`131_sharp_portrait`](MODS.md#131_sharp_portrait-立ち絵の縮小減色を通さず顔の検出をやり直す) | 立ち絵の高画質化と顔認識精度の向上 | 立ち絵の縮小・減色を通さず、顔の検出をやり直す | 2 |  |
 | [`132_npc_variety`](MODS.md#132_npc_variety-npc-の外見性格経歴に種を渡す) | NPC の外見・性格・経歴の多様化 | NPC の外見・性格・経歴に種を渡す | 7 |  |
-| [`133_ui_area_difficulty`](MODS.md#133_ui_area_difficulty-移動先に適正レベル帯を出す) | エリア毎に適正レベル帯の表示 | 移動先に適正レベル帯を出す | 9 |  |
+| [`133_ui_area_difficulty`](MODS.md#133_ui_area_difficulty-移動先に適正レベル帯を出す) | 移動先の適正レベル帯の表示 | 移動先に適正レベル帯を出す | 9 |  |
 | [`134_balance_item_effects`](MODS.md#134_balance_item_effects-アイテムの効果を分類ごとに作り直す) | アイテム効果の調整 | アイテムの効果を分類ごとに作り直す | 18 |  |
-| [`135_fix_inn_button_order`](MODS.md#135_fix_inn_button_order-宿屋の選択肢を-宿泊する出る会話する-の順にする) | 宿屋の選択肢を 宿泊する／出る／会話する の順にする | 宿屋の選択肢を 宿泊する／出る／会話する の順にする | - |  |
+| [`135_fix_inn_button_order`](MODS.md#135_fix_inn_button_order-宿屋の選択肢を他の施設と同じ順にする) | 宿屋の選択肢を他の施設と同じ順にする | 宿屋の選択肢を他の施設と同じ順にする | - |  |
 | [`136_cloud_model_override`](MODS.md#136_cloud_model_override-クラウドのモデルを差し替える) | クラウドモデルの差し替え | クラウドのモデルを差し替える | 7 |  |
-| [`406_gemini_user_role_fix`](MODS.md#406_gemini_user_role_fix-クラウド-api-の-gemini-で-user-role-の無い依頼を補う) | Geminiでのユーザーロール補完 | クラウド API の Gemini で user role の無い依頼を補う | - |  |
+| [`406_gemini_user_role_fix`](MODS.md#406_gemini_user_role_fix-クラウド-api-の-gemini-で-user-role-の無い依頼を補う) | Geminiの無応答の防止 | クラウド API の Gemini で user role の無い依頼を補う | - |  |
 
 ---
 
@@ -93,10 +93,10 @@
 | [`300_event_facility_arrival`](MODS.md#300_event_facility_arrival-施設でnpcから話しかけてくる) | 施設でNPCが話しかける | 施設でNPCから話しかけてくる | 13 |  |
 | [`301_quest_from_conversation`](MODS.md#301_quest_from_conversation-会話から依頼を受けられる) | 会話から依頼を受ける | 会話から依頼を受けられる | 10 |  |
 | [`302_leave_party_in_conversation`](MODS.md#302_leave_party_in_conversation-会話から仲間と別れられる) | 会話で仲間と別れる | 会話から仲間と別れられる | 1 |  |
-| [`303_quest_end_party_to_guild`](MODS.md#303_quest_end_party_to_guild-解散した仲間を町のギルドに残す) | 解散先をいまの町に | 解散した仲間を町のギルドに残す | 2 |  |
+| [`303_quest_end_party_to_guild`](MODS.md#303_quest_end_party_to_guild-解散した仲間を町のギルドに残す) | 解散した仲間をいまの町に残す | 解散した仲間を町のギルドに残す | 2 |  |
 | [`304_quest_end_keep_party`](MODS.md#304_quest_end_keep_party-クエストをクリアしても解散しない) | クエスト後も解散しない | クエストをクリアしても解散しない | 2 |  |
 | [`306_party_train_exp`](MODS.md#306_party_train_exp-宿屋の訓練で仲間も育つ) | 仲間も訓練で育つ | 宿屋の訓練で仲間も育つ | 6 |  |
-| [`307_area_move_dungeon`](MODS.md#307_area_move_dungeon-第3の移動手段危険な道を行くを足す) | 危険な道を行く | 第3の移動手段「危険な道を行く」を足す | 8 |  |
+| [`307_area_move_dungeon`](MODS.md#307_area_move_dungeon-第3の移動手段危険な道を行くを足す) | ダンジョン経由のエリア移動 | 第3の移動手段「危険な道を行く」を足す | 8 |  |
 | [`308_battle_damage_display`](MODS.md#308_battle_damage_display-戦闘のダメージ表示) | 戦闘のダメージ表示 | 戦闘のダメージ表示 | 8 |  |
 | [`309_office_pardon`](MODS.md#309_office_pardon-役場で罰金を納めて手配を解く) | 役場で手配を解く | 役場で罰金を納めて手配を解く | 4 |  |
 | [`311_npc_profile_memory`](MODS.md#311_npc_profile_memory-npcが会話の内容を覚える) | NPCが会話を覚える | NPCが会話の内容を覚える | 5 |  |
@@ -107,24 +107,24 @@
 | [`316_bounty_hunter`](MODS.md#316_bounty_hunter-手配されていると追手が来る) | 賞金稼ぎが襲ってくる | 手配されていると追手が来る | 15 |  |
 | [`317_reputation`](MODS.md#317_reputation-評判と二つ名) | 評判と二つ名 | 評判と二つ名 | 8 |  |
 | [`318_area_difficulty_growth`](MODS.md#318_area_difficulty_growth-土地が育つ依頼の難易度が上がる) | 依頼クリアで難易度上昇 | 土地が育つ（依頼の難易度が上がる） | 7 |  |
-| [`319_battle_tactics`](MODS.md#319_battle_tactics-戦闘を複数手の駆け引きにする) | 戦闘のバランス調整とバフ・デバフの有効化 | 戦闘を複数手の駆け引きにする | 17 |  |
+| [`319_battle_tactics`](MODS.md#319_battle_tactics-戦闘を複数手の駆け引きにする) | 戦闘の数値とバフ・デバフの作り直し | 戦闘を複数手の駆け引きにする | 17 |  |
 | [`320_guild_adventurer_recruit`](MODS.md#320_guild_adventurer_recruit-ギルドの冒険者の補充) | ギルドの冒険者の補充 | ギルドの冒険者の補充 | 2 |  |
-| [`321_area_chronicle`](MODS.md#321_area_chronicle-エリアの状況を更新依頼クリアで案内文が変わる) | エリアの状況を更新 | エリアの状況を更新（依頼クリアで案内文が変わる） | 4 |  |
+| [`321_area_chronicle`](MODS.md#321_area_chronicle-エリアの状況を更新依頼クリアで案内文が変わる) | 功績による土地の案内文の書き換え | エリアの状況を更新（依頼クリアで案内文が変わる） | 4 |  |
 | [`322_battle_bgm`](MODS.md#322_battle_bgm-戦闘bgmを置いた曲から選んで鳴らす) | 戦闘BGMの選曲 | 戦闘BGMを置いた曲から選んで鳴らす | 2 |  |
 | [`323_npc_carryover`](MODS.md#323_npc_carryover-別の世界のnpcを連れてくる) | 別の世界のNPCを連れてくる | 別の世界のNPCを連れてくる | 4 |  |
 | [`324_place_bgm`](MODS.md#324_place_bgm-施設と土地のbgmを置いた曲から選んで鳴らす) | 街・施設BGMの選曲 | 施設と土地のBGMを置いた曲から選んで鳴らす | 4 |  |
-| [`325_road_opening`](MODS.md#325_road_opening-街と街を結ぶ新しい道を切り開く) | 新たな道を探す | 街と街を結ぶ新しい道を切り開く | 18 |  |
+| [`325_road_opening`](MODS.md#325_road_opening-街と街を結ぶ新しい道を切り開く) | 未接続の街への道の開通 | 街と街を結ぶ新しい道を切り開く | 18 |  |
 | [`326_npc_travel`](MODS.md#326_npc_travel-npcの街移動) | NPCの街移動 | NPCの街移動 | 15 |  |
-| [`327_inn_quality`](MODS.md#327_inn_quality-高級宿のメリット追加改善) | 高級宿のメリット追加・改善 | 高級宿のメリット追加・改善 | 13 |  |
+| [`327_inn_quality`](MODS.md#327_inn_quality-部屋の格と宿の常連の効果) | 部屋の格と宿の常連の効果 | 部屋の格と宿の常連の効果 | 13 |  |
 | [`328_quest_from_world`](MODS.md#328_quest_from_world-世界概要から依頼を生成する) | 世界概要から依頼を生成する | 世界概要から依頼を生成する | 2 |  |
-| [`329_area_move_with_party`](MODS.md#329_area_move_with_party-雇った仲間がエリア移動を拒まなくなる) | 雇った仲間がエリア移動を拒まなくなる | 雇った仲間がエリア移動を拒まなくなる | - |  |
+| [`329_area_move_with_party`](MODS.md#329_area_move_with_party-仲間がエリア移動を拒まない) | 仲間がエリア移動を拒まない | 仲間がエリア移動を拒まない | - |  |
 | [`330_real_estate`](MODS.md#330_real_estate-家を借りる買う) | 家を借りる・買う | 家を借りる・買う | 11 |  |
-| [`331_facility_investment`](MODS.md#331_facility_investment-街に施設を建てる出資する) | 街に施設を建てる（出資する） | 街に施設を建てる（出資する） | 23 |  |
+| [`331_facility_investment`](MODS.md#331_facility_investment-街に出資して施設を建てる) | 街に出資して施設を建てる | 街に出資して施設を建てる | 23 |  |
 | [`332_training_custom`](MODS.md#332_training_custom-訓練所の代金修行の量1段の期間再訓練の可否を変える) | 訓練所のカスタマイズ | 訓練所の代金・修行の量・1段の期間・再訓練の可否を変える | 13 |  |
 | [`333_equipment_slots`](MODS.md#333_equipment_slots-インベントリに装備枠を追加) | インベントリに装備枠を追加 | インベントリに装備枠を追加 | 4 |  |
 | [`334_colosseum_custom`](MODS.md#334_colosseum_custom-闘技場の相手の強さと懸賞金を決める) | 闘技場のカスタマイズ | 闘技場の相手の強さと懸賞金を決める | 13 |  |
-| [`401_battle_character_context`](MODS.md#401_battle_character_context-戦闘の審判へ同行者の人物と装備を見せる) | 戦闘キャラクター情報補完 | 戦闘の審判へ同行者の人物と装備を見せる | - |  |
-| [`402_party_inventory_transfer`](MODS.md#402_party_inventory_transfer-仲間とアイテムを受け渡しできる) | パーティーメンバー：アイテム受け渡し | 仲間とアイテムを受け渡しできる | - |  |
+| [`401_battle_character_context`](MODS.md#401_battle_character_context-戦闘の審判へ同行者の人物と装備を見せる) | 戦闘の審判への仲間の情報補完 | 戦闘の審判へ同行者の人物と装備を見せる | - |  |
+| [`402_party_inventory_transfer`](MODS.md#402_party_inventory_transfer-仲間とアイテムを受け渡しできる) | 仲間とのアイテム受け渡し | 仲間とアイテムを受け渡しできる | - |  |
 | [`403_npc_social_memory`](MODS.md#403_npc_social_memory-npc同士がお互いを認知し関係を覚える) | NPC同士の認知と関係記憶 | NPC同士がお互いを認知し、関係を覚える | 5 |  |
 | [`404_party_talk`](MODS.md#404_party_talk-パーティーメンバー全員と話す) | パーティーメンバーと話す | パーティーメンバー全員と話す | 7 |  |
 | [`405_regional_economy`](MODS.md#405_regional_economy-街ごとの需給表示特産品) | 地域毎に物価が変動する | 街ごとの需給・表示・特産品 | 11 |  |

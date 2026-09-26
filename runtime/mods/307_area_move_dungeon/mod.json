@@ -4,13 +4,13 @@
   "kind": "feature",
   "name": {
     "en": "Travel the dangerous road",
-    "ja": "危険な道を行く"
+    "ja": "ダンジョン経由のエリア移動"
   },
   "description": {
     "en": "Adds a third way to travel between areas: clear a dungeon on the road and you arrive at the destination",
     "ja": "エリア移動に「危険な道を行く」を追加する。道中のクエストを踏破すると目的地に着く"
   },
-  "version": "3",
+  "version": "4",
   "author": "R01/Flossian",
   "after": [
     "301_quest_from_conversation"

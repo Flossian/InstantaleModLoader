@@ -4,13 +4,13 @@
   "kind": "probe",
   "name": {
     "en": "Item level probe",
-    "ja": "品物のレベルの決まり方"
+    "ja": "計測: 品物のレベルの決まり方"
   },
   "description": {
     "en": "Records who decides how good an item is. The four functions that return a land's quest difficulties, with the real arguments each caller passes for `tier`; the six that convert difficulty to price and price back to level; the shop restock, with the tier it is given and the values the owner ends up holding; and the craft path, above all the real arguments and the return type of ItemCraftManager.calculate_modification, which is the one link in the chain that has never been measured. Read-only",
     "ja": "品物のレベルを誰が決めているかを録る。土地の依頼の難易度を返す4関数と、呼び出し側が `tier` に渡している実値。難易度→値段と値段→レベルの変換6本。店の品揃えの生成に渡る段と、生成後に主が持っている品の value。そしてクラフトの経路、とりわけ ItemCraftManager.calculate_modification の実引数と戻り値の型（この鎖で一度も測れていない1箇所）。読み取りだけでゲームは変えない"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "debug": true,
   "settings": {

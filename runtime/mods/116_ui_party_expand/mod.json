@@ -4,13 +4,13 @@
   "kind": "fix",
   "name": {
     "en": "Show 4th party member",
-    "ja": "4人目以降を表示"
+    "ja": "パーティ欄の4人目以降を表示"
   },
   "description": {
     "en": "The party panel only has three slots, so the 4th member onwards is never drawn. Adds a button that grows the panel and copies extra slots for them",
     "ja": "パーティ欄の枠は3つしか作られず、4人目以降が出ない。ボタンを足し、押すと帯が上へ伸びて足りないぶんの枠が現れる。もう一度押すと元に戻る"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "settings": {
     "MAX_ROWS": {

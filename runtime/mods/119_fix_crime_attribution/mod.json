@@ -4,13 +4,13 @@
   "kind": "fix",
   "name": {
     "en": "Crime attribution fix",
-    "ja": "犯罪主体の誤帰属修正"
+    "ja": "他人の犯罪で手配される件の修正"
   },
   "description": {
     "en": "Prevents crimes committed by NPCs or third parties from being attributed to the player",
     "ja": "NPCや第三者の犯罪を主人公の犯罪として扱う誤判定を防ぐ"
   },
-  "version": "2",
+  "version": "3",
   "author": "yoshinari/tomotomo-y",
   "after": [
     "105_fix_schema_compact",

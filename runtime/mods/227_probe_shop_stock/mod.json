@@ -4,13 +4,13 @@
   "kind": "probe",
   "name": {
     "en": "Shop stock probe",
-    "ja": "買った品が棚に戻る道"
+    "ja": "計測: 買った品が棚に戻る道"
   },
   "description": {
     "en": "Records where a bought item comes back onto the shop's shelf. Every Item.__init__ with its id, obtainer, attributes and the game-side caller chain; the shop path boundaries (ShoppingStartManagerRemake.execute / shopping_start_method_1 / toggle_twin_inventory_window / buy_item / sell_item / close_shopping_window_process / the generators) with the keys added to and removed from both inventories; the facility's goods template with stock_tier and stock_update_date; and index['item']. Read-only",
     "ja": "買った品が店の棚へ戻るのがどこかを録る。Item.__init__ ごとの id・持ち主・attributes とゲーム側の呼び出し元の連鎖、店の経路の境目（ShoppingStartManagerRemake.execute / shopping_start_method_1 / toggle_twin_inventory_window / buy_item / sell_item / close_shopping_window_process / 生成の3入口）ごとの主と手持ちの鍵の増減、施設の品揃えの雛形（goods・stock_tier・stock_update_date）、採番台帳 index['item']。読み取りだけでゲームは変えない"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "debug": true,
   "settings": {

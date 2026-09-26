@@ -4,13 +4,13 @@
   "kind": "fix",
   "name": {
     "en": "NPC name dedup",
-    "ja": "NPC名の重複防止"
+    "ja": "NPC名の重複・類似の防止"
   },
   "description": {
     "en": "Renames a newly generated NPC whose name reads the same as someone already in the world (Vargas / Varugasu / \"One-eyed\" Vargas). The replacement is picked from a bundled name roster, with an epithet some of the time. Optionally names every new NPC, not just the clashing ones",
     "ja": "生成された NPC の名前が世界に居る誰かと同じに読めるとき（バルガス／ヴァルガス／「隻眼の」バルガス）、同梱の名簿から空いている名前を選んで付け直す。一定の割合で二つ名も付く。設定で、重複していなくても新しい NPC の名前を全部こちらで付けられる"
   },
-  "version": "5",
+  "version": "6",
   "author": "R01/Flossian",
   "settings": {
     "ALWAYS_RENAME": {

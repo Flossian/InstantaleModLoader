@@ -4,13 +4,13 @@
   "kind": "probe",
   "name": {
     "en": "Prompt bloat probe",
-    "ja": "プロンプト肥大の計測"
+    "ja": "計測: プロンプトの肥大"
   },
   "description": {
     "en": "Measures the EVENTLOG / DEDUP / sidecar launch prompt bloat behaviours",
     "ja": "EVENTLOG / DEDUP / サイドカー起動という3つのプロンプト肥大化挙動を実測する"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "debug": true,
   "after": [

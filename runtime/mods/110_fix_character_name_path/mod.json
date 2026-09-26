@@ -4,13 +4,13 @@
   "kind": "fix",
   "name": {
     "en": "Character name sanitize",
-    "ja": "キャラクタ名の正規化"
+    "ja": "画像生成に通らない名前の置き換え"
   },
   "description": {
     "en": "Replaces path-unsafe characters in character names so portraits generate",
     "ja": "パスに使えない文字を含むキャラクタ名を全角に置き換え、画像生成の失敗を防ぐ"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "superseded": "main_024"
 }

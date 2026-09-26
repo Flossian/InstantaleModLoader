@@ -4,13 +4,13 @@
   "kind": "probe",
   "name": {
     "en": "LLM request overlap probe",
-    "ja": "LLMリクエストの重なりの計測"
+    "ja": "計測: LLMリクエストの重なり"
   },
   "description": {
     "en": "Counts overlapping LLM requests during real play from inside the process (local llama.cpp path only)",
     "ja": "実プレイ中のLLMリクエストの重なりをプロセス内で数える（ローカル llama.cpp 経路のみ）"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "debug": true
 }

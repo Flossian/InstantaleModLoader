@@ -4,13 +4,13 @@
   "kind": "probe",
   "name": {
     "en": "Player event probe",
-    "ja": "行動イベントの計測"
+    "ja": "計測: 行動イベントの差し込み口"
   },
   "description": {
     "en": "Finds where to hook events triggered by player actions",
     "ja": "プレイヤーの行動をトリガーにしたイベントの差し込み場所を特定する"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "debug": true
 }

@@ -4,13 +4,13 @@
   "kind": "probe",
   "name": {
     "en": "Crash site probe",
-    "ja": "クラッシュ地点の計測"
+    "ja": "計測: クラッシュ地点"
   },
   "description": {
     "en": "Instruments the 4 open crash sites on every call, not just on failure. Read-only",
     "ja": "未解決の4つのクラッシュ地点を、失敗時だけでなく毎回計測する。読み取りだけでゲームは変えない"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "debug": true
 }

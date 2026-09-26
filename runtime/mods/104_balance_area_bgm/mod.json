@@ -4,13 +4,13 @@
   "kind": "fix",
   "name": {
     "en": "Area BGM balance",
-    "ja": "エリアBGMの均し"
+    "ja": "エリアBGMの偏りの均し"
   },
   "description": {
     "en": "Evens out BGM for newly generated areas so unused tracks get played too",
     "ja": "新しく生成されるエリアの BGM の偏りを均し、使われていなかった曲も出るようにする"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "settings": {
     "FILL_MISSING": {

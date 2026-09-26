@@ -4,13 +4,13 @@
   "kind": "feature",
   "name": {
     "en": "Actions in conversation",
-    "ja": "会話中の明示行動"
+    "ja": "会話中の＜＞による行動"
   },
   "description": {
     "en": "Wrap a line in <> (full- or half-width) during a conversation and it is handled as an action by the game's own free-action GM, like free input outside conversation: handing over items, paying, starting a fight. The GM also gets your inventory so it can name the item",
     "ja": "会話中に ＜＞ か <> で包んだ入力を、会話の外の自由入力と同じようにゲーム自身の自由行動 GM に処理させる。アイテムの受け渡し・支払い・戦闘開始など。GM には所持品の一覧も渡すので、渡す品の名前が通る"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "after": [
     "301_quest_from_conversation",

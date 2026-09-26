@@ -4,13 +4,13 @@
   "kind": "probe",
   "name": {
     "en": "Text speed probe",
-    "ja": "本文の表示速度の計測"
+    "ja": "計測: 本文の表示速度"
   },
   "description": {
     "en": "Measures the typewriter tick against app.text_speed, the frame rate, and the cost of rebuilding the label texture",
     "ja": "本文の1文字ごとの間隔・`app.text_speed`・フレームレート・ラベルのテクスチャ作り直しの重さを測る"
   },
-  "version": "4",
+  "version": "5",
   "author": "R01/Flossian",
   "debug": true,
   "after": [

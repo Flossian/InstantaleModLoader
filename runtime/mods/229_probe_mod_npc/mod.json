@@ -4,13 +4,13 @@
   "kind": "probe",
   "name": {
     "en": "Mod-owned npc probe",
-    "ja": "MOD が持つ NPC の通り道"
+    "ja": "計測: MOD が持つ NPC の通り道"
   },
   "description": {
     "en": "Measures how far a character that only a mod owns can go. Builds one Character with a string id (mod:229_probe_mod_npc:visitor) through the loader's modnpc, follows the player into every facility, and puts a mark on the owner's profile there. Records whether the save on disk keeps any mod: key, whether a conversation starts and ends, whether the instance collects current_log and relationship, whether detail generation is needed, and whether the mark reaches the prompt arguments. Everything is lifted back before the save",
     "ja": "MOD だけが持つ人物がどこまで通るかを測る。ローダの modnpc で文字列の id（mod:229_probe_mod_npc:visitor）の Character を1人組み、プレイヤーの入った施設へ連れて回り、その施設の主の profile に印を1行足す。ディスクのセーブに mod: の鍵が残らないか、会話が始まって終わるか、instance に current_log と relationship が溜まるか、詳細生成が要るか、印が頼み文の引数まで届くかを録る。置いたものは保存の直前に全部引き上げる"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "debug": true,
   "settings": {

@@ -4,13 +4,13 @@
   "kind": "probe",
   "name": {
     "en": "Character sheet probe",
-    "ja": "プレイヤー人物欄の計測"
+    "ja": "計測: プレイヤーの人物欄"
   },
   "description": {
     "en": "Captures the character sheet's widget tree and the values it could show (wanted level, skills, traits)",
     "ja": "プレイヤーの人物欄（プロフィール画面）の実寸と組み立てを写し取り、載せられる値（手配度・スキル・特性）の在り処を確かめる"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "debug": true
 }

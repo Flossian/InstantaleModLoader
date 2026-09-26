@@ -4,13 +4,13 @@
   "kind": "fix",
   "name": {
     "en": "Conversation log viewer",
-    "ja": "会話ログのビューア"
+    "ja": "本文の読み返し窓"
   },
   "description": {
     "en": "Keeps every message that scrolled past and shows it in a scrollable window opened by a book icon next to the text-expand button",
     "ja": "画面に流れた本文を残し、本のアイコンから読み返せる窓を出す。ログは state\\conversation_log\\ に世界ごとに残る"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "after": ["113_ui_text_expand", "118_batch_message_render"],
   "shares": ["_instantale_expand_button"],

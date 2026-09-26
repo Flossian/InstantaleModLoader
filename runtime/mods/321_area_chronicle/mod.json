@@ -4,13 +4,13 @@
   "kind": "feature",
   "name": {
     "en": "Area chronicle",
-    "ja": "エリアの状況を更新"
+    "ja": "功績による土地の案内文の書き換え"
   },
   "description": {
     "en": "Clearing a quest rewrites that land's description: an LLM weaves the recorded outcome (the same achievements the game already writes) into the overview and the facilities text, so NPC talk and quest generation read a land that has actually changed. Once the marsh fog is lifted, the fog leaves the text. The compilation runs in a background thread only when a new achievement appears; nothing is written to the save or to world_data.json, the rewritten text lives in state\\ and is re-applied on load. Removing the mod restores the plain world",
     "ja": "依頼を片付けると、その土地の案内文が変わる。ゲームが area_history に書いている功績（クリアの結果の要約）を、土地の概要と様子の文へ LLM が織り込んで書き直すので、会話の【土地情報】と依頼の生成が「実際に変わった土地」を読むようになる。湿地の霧を晴らせば、案内文から霧の記述が消える。編纂は新しい功績が現れたときだけ別スレッドで走る。セーブにも world_data.json にも書かず、書き直した文は state\\ に置いてロード時に当て直す。MOD を外せば世界は素のまま"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "settings": {
     "RECENT_DEEDS": {

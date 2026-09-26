@@ -1,4 +1,4 @@
-# `125_balance_charisma_impression`: 魅力が高いと初対面から全員に好かれるのを直す
+# `125_balance_charisma_impression`: 魅力だけで全員に好かれるのを直す
 
 NPC がプレイヤーに対して抱いている感情は2つの文で持たれていて、1つ目が好感度、
 2つ目が見た目の魅力。

@@ -4,13 +4,13 @@
   "kind": "fix",
   "name": {
     "en": "Charm should not win over everyone at first sight",
-    "ja": "魅力が高いと初対面から全員に好かれるのを直す"
+    "ja": "魅力だけで全員に好かれるのを直す"
   },
   "description": {
     "en": "The line an NPC carries about how attractive you look is decided from your charisma alone, so a charm-focused character is seen at the top rung (\"Finds you irresistibly attractive\") by every NPC in the world, from the first meeting onward, and every answer comes back unconditionally friendly. Keeps the game's own rungs but picks one from two more things: a fixed per-NPC taste, and how far the relationship has come. The top rung only appears once the NPC already feels some affection. The rungs and their thresholds are read out of the game at runtime, so no wording is hardcoded and other languages work too",
     "ja": "NPC が持つ「プレイヤーがどう見えているか」の文はプレイヤーの魅力だけで決まるため、魅力に振ったキャラは初対面から世界の全員に最上段「耐え難いほど魅力的に見えている」で見られ、応答が無条件に友好的になる（交渉も説得も勝手に通る）。段はゲームのものを使ったまま、どの段になるかを「相手ごとに固定の好み」と「どこまで打ち解けたか」の2つで決め直す。最上段は好意を持たれている相手にしか出ない。段の並びと閾値は実行時にゲームから読むので、文言は1つも持たず、日本語以外でも効く"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "settings": {
     "TASTE_SPREAD": {

@@ -4,13 +4,13 @@
   "kind": "fix",
   "name": {
     "en": "Show the level band of each destination",
-    "ja": "エリア毎に適正レベル帯の表示"
+    "ja": "移動先の適正レベル帯の表示"
   },
   "description": {
     "en": "The area move list only names the destinations, so you cannot tell which one fits your level until you get there. Appends the destination's quest difficulty band to each button (read from the game's own quest list, so difficulty raised by 318 shows up in the band). Towns not yet visited get a band estimated from their slot, marked as such",
     "ja": "「他の土地へ行く」の一覧は土地の名前だけで、レベル適正は行ってみるまで分からない。各ボタンにその土地の依頼の難易度帯を添える（ゲーム自身の依頼一覧から読むので、318「依頼クリアで難易度上昇」で難易度が上がれば帯も上がる）。まだ訪ねていない街は、街の枠から見積もった帯を「推定」付きで出す"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "settings": {
     "SHOW": {

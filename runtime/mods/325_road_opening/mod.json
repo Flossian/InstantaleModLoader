@@ -4,13 +4,13 @@
   "kind": "feature",
   "name": {
     "en": "Open new roads between towns",
-    "ja": "新たな道を探す"
+    "ja": "未接続の街への道の開通"
   },
   "description": {
     "en": "Adds 'search for a new road' to the area move list. Pick a town that is not yet connected, then either pay for the road or clear a dungeon on the way; the road opens for good (both directions) and the town joins the normal move list. Price and difficulty grow with the number of towns in between",
     "ja": "「他の土地へ行く」に「新たな道を探す」を足す。まだ繋がっていない街を選び、お金を支払うか道中のダンジョンを踏破すると道が開き、以後は普通の移動先に並ぶ。金額と難易度は間に挟む街の数で上がる"
   },
-  "version": "4",
+  "version": "5",
   "author": "R01/Flossian",
   "settings": {
     "SEARCH_LABEL": {

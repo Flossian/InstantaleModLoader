@@ -4,13 +4,13 @@
   "kind": "feature",
   "name": {
     "en": "Disband at local guild",
-    "ja": "解散先をいまの町に"
+    "ja": "解散した仲間をいまの町に残す"
   },
   "description": {
     "en": "Quest-end disband leaves members at the guild of the town you are in",
     "ja": "クエストクリアの解散で、仲間をいま居る町のギルドに残す"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "settings": {
     "ANNOUNCE_DESTINATION": {

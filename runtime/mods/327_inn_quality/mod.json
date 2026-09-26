@@ -4,13 +4,13 @@
   "kind": "feature",
   "name": {
     "en": "Perks for pricier inn rooms",
-    "ja": "高級宿のメリット追加・改善"
+    "ja": "部屋の格と宿の常連の効果"
   },
   "description": {
     "en": "Better rooms allow more activities per stay (1/1/2/3 by default), innkeepers remember regular guests (small capped affinity gain, conversations know your stay history), and socializing picks companions first, then well-liked locals, then anyone",
     "ja": "高い部屋ほど1回の宿泊でできる活動が増える（既定 1/1/2/3）。宿の主が常連を覚え、宿泊のたびに好感度が少し上がり（上限あり）、会話で宿泊の履歴を知っている。社交で会う相手を 同行者 → 好感度の高い相手 → 誰でも の順で選ぶ"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "settings": {
     "ACTIONS_KENNEL": {
