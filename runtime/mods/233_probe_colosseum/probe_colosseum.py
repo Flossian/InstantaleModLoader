@@ -467,8 +467,10 @@ def apply(ctx):
 
     def install_enemy_number(name):
         @ctx.wrap("scripts.functions:{}".format(name), required=False, safe=True)
-        def enemy_number(orig, tier=None, difficulty=None, *args, **kwargs):
-            result = orig(tier, difficulty, *args, **kwargs)
+        def enemy_number(orig, enemy_tier=None, quest_difficulty=None, *args, **kwargs):
+            # 引数名は本体と同じにする（キーワードで渡されても二重にならない。版4）。
+            result = orig(enemy_tier, quest_difficulty, *args, **kwargs)
+            tier, difficulty = enemy_tier, quest_difficulty
             try:
                 if state["match"] is not None or watching():
                     write("{}({!r}, {!r}) -> {!r} from {}".format(

@@ -398,6 +398,10 @@ def main():
     touched = []
     got = extract(lambda *a, **k: touched.append(a) or "game", FakeImage(330, 660), (94, 21, 259, 186), "x.png")
     check("顔の切り直しもしない（ゲームの縮め方がそのまま合う）", got == "game" and len(touched) == 1)
+    keyword = []
+    got = extract(lambda pixelated_image, coordinates, output_path: keyword.append(pixelated_image) or "game",
+                  pixelated_image=FakeImage(330, 660), coordinates=(94, 21, 259, 186), output_path="x.png")
+    check("本体の引数名のキーワードで呼ばれても二重に渡さない", got == "game" and len(keyword) == 1, keyword)
     check("顔の検出のやり直しは立ち絵の設定と独立に残る",
           module.CREATURE + ":detect_face_coordinates" in ctx.hooks and module.FACE_RETRY)
 

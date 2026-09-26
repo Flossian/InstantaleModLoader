@@ -2,7 +2,7 @@
   "entry": "party_talk.py",
   "api": 1,
   "kind": "feature",
-  "version": "8",
+  "version": "9",
   "name": {
     "ja": "パーティーメンバーと話す",
     "en": "Party Talk"

@@ -276,8 +276,10 @@ def apply(ctx):
 
     @ctx.wrap(CREATURE + ":extract_and_save_face",
               required=False, safe=True, alias_scan=False)
-    def extract_and_save_face(orig, image, coordinates, output_path, *args, **kwargs):
-        result = orig(image, coordinates, output_path, *args, **kwargs)
+    def extract_and_save_face(orig, pixelated_image, coordinates, output_path, *args, **kwargs):
+        # 引数名は本体と同じにする（キーワードで渡されても二重にならない。版17）。
+        result = orig(pixelated_image, coordinates, output_path, *args, **kwargs)
+        image = pixelated_image
         if enemy():
             return result
         # 顔が切られた＝見つかった。顔の代わりを作る縮小は来ないので旗を降ろす

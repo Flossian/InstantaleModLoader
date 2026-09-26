@@ -1030,14 +1030,15 @@ def apply(ctx):
         write("hid the party-only choices of other mods ({} left)".format(len(buttons)))
 
     @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False, safe=True)
-    def press(orig, self, index, *args, **kwargs):
+    def press(orig, self, button_index, *args, **kwargs):
         """自前の選択肢だけ横取りする。他は本体へ。
 
         会話の開始は次のフレームへ予約する（押下の処理の中で phase を切り替えると
         本体が同じ押下の後始末で上書きするため）。
+        引数名は本体と同じにする（キーワードで渡されても二重にならない。版9）。
         """
         try:
-            action = screen.mark_of(ui.pressed_entry(self, index))
+            action = screen.mark_of(ui.pressed_entry(self, button_index))
         except Exception:
             action = None
         if action == TALK_MARK:
@@ -1045,7 +1046,7 @@ def apply(ctx):
             open_own_talk_list(self)
             return None
         if action != START_MARK:
-            return orig(self, index, *args, **kwargs)
+            return orig(self, button_index, *args, **kwargs)
         write("pressed {!r}".format(START_LABEL))
         screen.schedule(lambda: open_talk(self), 0)
         return None

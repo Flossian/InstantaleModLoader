@@ -10,7 +10,7 @@
     "en": "Set how fast the opponents get stronger and where that stops, base the first opponent on your own level instead of the area, and multiply the prize by your level or the opponent's rank. Optional: losing a match ends it as a retreat and nobody in your party dies, fleeing the arena does not make you wanted, and the narration has the fallen yield instead of dying. The clerk tells you the next opponent's class and the same fighter stops showing up every time (these two are on by default); everything else defaults to the game's own values",
     "ja": "闘技場の相手が強くなる速さと、その打ち止めを決める。初戦の相手を土地ではなく自分のレベルに合わせることも、懸賞金をレベルや相手の格で増やすこともできる。負けても主人公と仲間が死なず負けとして試合を終える設定、闘技場から逃げても手配されない設定、試合の描写で誰も死なないようにする設定もある。申し込む前に受付が相手の格を告げ、同じ闘士が毎回出てくるのを防ぐ（この2つだけ既定でON）。ほかの既定は素のゲームの値"
   },
-  "version": "5",
+  "version": "6",
   "author": "R01/Flossian",
   "after": [
     "331_facility_investment"

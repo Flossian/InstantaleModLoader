@@ -277,6 +277,15 @@ check("能力値のほうにも同じ値が渡る",
           enemy_level, "normal", 58) == 41, seen)
 
 
+def enemy_level_kw(enemy_tier, quest_difficulty):
+    seen["difficulty"] = quest_difficulty
+    return quest_difficulty + 1
+
+
+check("本体の引数名のキーワードで呼ばれても二重に渡さず、上限も効く",
+      lvl(enemy_level_kw, enemy_tier="normal", quest_difficulty=58) == 41, seen)
+
+
 def made(self, enemy_id):
     return {"type": "normal", "data": {"name": "闘士", "rank": 58}}
 

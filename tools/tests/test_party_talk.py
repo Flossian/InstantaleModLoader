@@ -733,6 +733,9 @@ APP.buttons = [{"text": n, "spec": Spec(n)} for n in ("MovePhaseManager",)]
 ctx.hooks[REFRESH](lambda self, reset_page=False: None, APP)
 check("「やめる」で根のメニューに戻ると旗が下り、自前の「会話する」が付き直す",
       store["talk_list"] is False and [e.get("text") for e in APP.buttons][-1] == MOD.TALK_LABEL)
+pressed = []
+ctx.hooks[PRESS](lambda self, button_index: pressed.append(button_index), APP, button_index=0)
+check("本体の引数名のキーワードで押されても二重に渡さず、本体へ届く", pressed == [0], pressed)
 
 print()
 if failures:

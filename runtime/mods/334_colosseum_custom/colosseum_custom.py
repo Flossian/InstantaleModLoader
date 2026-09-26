@@ -511,13 +511,17 @@ def apply(ctx):
 
     def install_enemy_number(name):
         @ctx.wrap("scripts.functions:{}".format(name), required=False, safe=True)
-        def enemy_number(orig, tier=None, difficulty=None, *args, **kwargs):
-            """相手の**実際の強さ**。レベルも能力値もこの難易度1つから決まる。"""
+        def enemy_number(orig, enemy_tier=None, quest_difficulty=None, *args, **kwargs):
+            """相手の**実際の強さ**。レベルも能力値もこの難易度1つから決まる。
+
+            引数名は本体と同じにする（キーワードで渡されても二重にならない。版6）。
+            """
+            difficulty = quest_difficulty
             try:
-                difficulty = adjust_in_window(ui.find_app(), difficulty, name)
+                difficulty = adjust_in_window(ui.find_app(), quest_difficulty, name)
             except Exception:
                 ctx.log_exc("colosseum: cannot adjust {}".format(name))
-            return orig(tier, difficulty, *args, **kwargs)
+            return orig(enemy_tier, difficulty, *args, **kwargs)
 
     for _name in ENEMY_NUMBER_FNS:
         install_enemy_number(_name)
