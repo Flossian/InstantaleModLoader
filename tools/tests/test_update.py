@@ -4,6 +4,9 @@
     python tools/tests/test_update.py
 
   版の比較 … "v1.11.0" > "1.10.0"、"1.10.0" は "1.9.0" より新しい（文字列比較でない）
+  更新内容 … 前に開いた版から今の版までの Release を新しい順に選ぶ。下書き・pre-release は出さない。
+             本文の Markdown を行の種類と太字・コードに分ける（太字の中のコードも）。
+             一度取れた一覧は控えに残し、今の版が入っている間は取りに行かない
   展開     … 頭一段を剥がして上書きする。zip に無いファイルは残る。".." と別のドライブ名は書かない
   MOD の追加 … install_from_zip も ".." とドライブ名を書かない。mods/ の外を指す mod は断る。
              入れ子の mod.json は外側の mod の中身として写す
@@ -23,6 +26,85 @@ import gui  # noqa: E402
 
 assert gui._vtuple("v1.11.0") > gui._vtuple("1.10.0")
 assert gui._vtuple("1.10.0") > gui._vtuple("1.9.0")
+# 字の付いたタグ（実在する）で落ちない。数字の部分で比べる。
+assert gui._vtuple("v1.9.0a") == gui._vtuple("1.9.0")
+
+# 更新内容に出す版。GitHub の並び（新しい順）のまま渡す。
+RELEASES = [{"tag_name": t, "body": "# " + t, "html_url": "u/" + t,
+             "draft": False, "prerelease": False}
+            for t in ("v1.14.0", "v1.13.0", "v1.12.0", "v1.9.0", "v1.9.0b", "v1.9.0a",
+                      "v1.8.0")]
+RELEASES.insert(0, {"tag_name": "v1.15.0", "body": "", "draft": True})
+RELEASES.insert(0, {"tag_name": "v1.16.0", "body": "", "prerelease": True})
+
+
+def picked(since, current):
+    return [n["tag"] for n in gui.pick_notes(RELEASES, since, current)]
+
+
+assert picked("1.12.0", "1.14.0") == ["v1.14.0", "v1.13.0"]        # 飛ばした間も出す
+assert picked("1.8.0", "1.9.0") == ["v1.9.0", "v1.9.0b", "v1.9.0a"]
+assert picked(None, "1.13.0") == ["v1.13.0"]                        # 前の版を覚えていない
+assert picked("1.13.0", "1.13.0") == []
+assert picked("1.14.0", "1.16.0") == []                             # 下書き・pre-release は出さない
+assert gui.pick_notes(RELEASES, "1.13.0", "1.14.0")[0]["url"] == "u/v1.14.0"
+# 見出しの無い本文（v1.7.1 以前に実在する）には版名の見出しを補う。
+assert gui.pick_notes([{"tag_name": "v1.7.1", "body": "本文"}], "1.7.0", "1.7.1")[0]["body"] \
+    == "# v1.7.1\n\n本文"
+
+# 控え。一度取れたら、今の版が入っている間はネットに出ない。
+calls = []
+
+
+def fake_fetch():
+    calls.append(1)
+    return [dict(r, assets=["重い"]) for r in RELEASES]
+
+
+def offline():
+    raise OSError("offline")
+
+
+with tempfile.TemporaryDirectory() as tmp:
+    cache = os.path.join(tmp, "out", "release_notes.json")
+    got = gui.fetch_notes("1.12.0", "1.14.0", cache=cache, fetch=fake_fetch)
+    assert [n["tag"] for n in got] == ["v1.14.0", "v1.13.0"] and len(calls) == 1
+    # 2回目は控えから。取りに行けなくても出る。範囲の分（飛ばした間）も控えで足りる
+    got = gui.fetch_notes("1.12.0", "1.14.0", cache=cache, fetch=offline)
+    assert [n["tag"] for n in got] == ["v1.14.0", "v1.13.0"]
+    assert [n["tag"] for n in gui.fetch_notes(None, "1.13.0", cache=cache, fetch=offline)] \
+        == ["v1.13.0"]
+    assert "assets" not in gui._read_json(cache)[0]               # 要る分だけ残す
+    # 控えに無い版（次の版へ上げた後）は取り直して控えを置き換える
+    newer = [{"tag_name": "v1.17.0", "body": "# v1.17.0"}] + RELEASES
+    got = gui.fetch_notes("1.14.0", "1.17.0", cache=cache, fetch=lambda: newer)
+    assert [n["tag"] for n in got] == ["v1.17.0"]
+    assert gui._read_json(cache)[0]["tag_name"] == "v1.17.0"
+    # 取れなければ例外のまま（呼ぶ側が黙るか知らせるかを決める）。控えも壊さない
+    try:
+        gui.fetch_notes(None, "1.18.0", cache=cache, fetch=offline)
+        raise AssertionError("例外にならない")
+    except OSError:
+        pass
+    assert gui._read_json(cache)[0]["tag_name"] == "v1.17.0"
+
+# 本文の Markdown。行の種類と、行の中の太字・コード。
+runs = gui.markdown_runs("# T\n\n## 追加\n\n- **333 装備** 枠\n説明の行\n\n"
+                         "地の文 `state\\` です\n\n\n末尾\n"
+                         "- **窓口を足しました（`combat`）**")
+assert runs == [
+    ("T", ("h1",)), ("\n", ("h1",)), ("\n", ("gap",)),
+    ("追加", ("h2",)), ("\n", ("h2",)), ("\n", ("gap",)),
+    ("・", ("item",)), ("333 装備", ("item", "bold")), (" 枠", ("item",)), ("\n", ("item",)),
+    ("説明の行", ("cont",)), ("\n", ("cont",)), ("\n", ("gap",)),
+    ("地の文 ", ("para",)), ("state\\", ("para", "code")), (" です", ("para",)),
+    ("\n", ("para",)),
+    ("\n", ("gap",)),                                                # 空行が続いても1つ
+    ("末尾", ("para",)), ("\n", ("para",)),
+    # 太字の中のコード。バッククォートを字のまま残さない
+    ("・", ("item",)), ("窓口を足しました（", ("item", "bold")),
+    ("combat", ("item", "bold", "code")), ("）", ("item", "bold")), ("\n", ("item",)),
+], runs
 
 # 一時フォルダと別のドライブ名（同じドライブ名なら join は dest の中に留まる）。
 OTHER_DRIVE = "R:" if tempfile.gettempdir().upper().startswith("Q:") else "Q:"

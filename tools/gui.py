@@ -45,6 +45,7 @@ import shutil
 import subprocess
 import sys
 import queue
+import re
 import threading
 import time
 import tkinter as tk
@@ -72,6 +73,10 @@ MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 # MOD が配布用の順序ファイルへ書き戻される。
 OUT_DIR = os.path.join(ROOT, "out")
 STATUS_PATH = os.path.join(OUT_DIR, ml.STATUS_NAME)
+# 取った Release の本文の控え（`fetch_notes`）。
+# 一度取れたら、次からはネットに出ずに読める。
+# out/ に置くのは、消しても次に読むときに取り直すだけだから（ログの世代送りは *.log しか触らない）。
+NOTES_CACHE = os.path.join(OUT_DIR, "release_notes.json")
 
 # MOD が持つ永続データ（進行中の道中、依頼の出所、NPC の控え）。
 # out/ とは別。
@@ -85,9 +90,16 @@ STATE_DIR = ml.state_dir(RUNTIME_DIR)
 SETTINGS_DIR = C.settings_dir(RUNTIME_DIR)
 CONFIG_PATH = os.path.join(SETTINGS_DIR, "gui.json")
 
+# ヘルプメニューの「GitHub を開く」。
+REPO_URL = "https://github.com/Flossian/InstantaleModLoader"
 # 更新の確認先。起動のたびに別スレッドで1回だけ見る（`App._check_update`）。
 RELEASE_API = ("https://api.github.com/repos/Flossian/InstantaleModLoader"
                "/releases/latest")
+# 更新後に出す本文の取り先（`App._check_notes`）。
+# 版が変わった後の起動で1回だけ見る。
+# 何版も飛ばして上げた人にも間の分を出すので、最新1件ではなく一覧を取る。
+RELEASES_API = ("https://api.github.com/repos/Flossian/InstantaleModLoader"
+                "/releases?per_page=30")
 # 更新の zip を落とすときの、1回の読みを待つ上限（秒）。全体の所要時間の上限ではない。
 UPDATE_TIMEOUT = 30
 # 上書きで消えないもの。確認の文に出す（zip に入らないので展開は触らない）。
@@ -148,7 +160,9 @@ def keep_edited_default(path: str) -> bool:
 
 
 def _vtuple(ver: str) -> tuple[int, ...]:
-    return tuple(int(x) for x in ver.lstrip("v").split("."))
+    # 数字だけを拾う。
+    # タグには `v1.9.0a` のような字の付いたものがあり、`int("0a")` で落ちる。
+    return tuple(int(x) for x in re.findall(r"\d+", ver))
 
 
 def newer_release(current: str = ml.__version__) -> tuple[str, str] | None:
@@ -167,6 +181,137 @@ def newer_release(current: str = ml.__version__) -> tuple[str, str] | None:
         if asset["name"].endswith("-full.zip"):
             return ver, asset["browser_download_url"]
     return None
+
+
+def pick_notes(releases: list, since: str | None,
+               current: str = ml.__version__) -> list[dict]:
+    """Release の一覧から、`since` より新しく `current` 以下のものを新しい順に返す。
+
+    `since` が None なら `current` と同じ版だけ（前の版を覚えていない。`App._check_notes`）。
+    下書きと pre-release は出さない（更新ボタンも `/releases/latest` なので拾わない）。
+    並びは GitHub の返す順（新しい順）のまま。上げた先の版が一番上に来る。
+    """
+    cur = _vtuple(current)
+    low = _vtuple(since) if since else None
+    picked = []
+    for r in releases:
+        if r.get("draft") or r.get("prerelease"):
+            continue
+        ver = _vtuple(str(r.get("tag_name", "")))
+        if not ver or ver > cur:
+            continue
+        if low is None:
+            if ver != cur:
+                continue
+        elif ver <= low:
+            continue
+        tag, body = str(r["tag_name"]), (r.get("body") or "")
+        # 続けて出したときの境目。
+        # v1.8.0 から本文は `# InstantaleModLoader v…` で始めているが、それより前は見出しが無い。
+        if not body.lstrip().startswith("# "):
+            body = "# {}\n\n{}".format(tag, body)
+        picked.append({"tag": tag, "body": body, "url": r.get("html_url") or ""})
+    return picked
+
+
+def fetch_releases() -> list:
+    """GitHub の Release の一覧（新しい順）。ネットが無い等は例外のまま返す。"""
+    import urllib.request
+    with urllib.request.urlopen(RELEASES_API, timeout=5) as r:
+        data = json.load(r)
+    if not isinstance(data, list):
+        raise ValueError("Release の一覧ではありません")
+    return data
+
+
+def fetch_notes(since: str | None, current: str = ml.__version__,
+                cache: str | None = None, fetch=fetch_releases) -> list[dict]:
+    """`pick_notes` を Release の一覧に掛ける。一覧は控え（`NOTES_CACHE`）を先に見る。
+
+    控えに `current` の Release があれば、ネットに出ずに控えから選ぶ。
+    `current` が控えにあるなら、それより前の版も同じ一覧に入っている（新しい順に 30 件取っている）ので、
+    何版か飛ばした起動時の分も控えで足りる。
+    無ければ取り直して控えを置き換える。
+    GitHub で後から本文を直しても、控えに今の版がある間は取り直さない（窓の「GitHub で開く」で最新を読める）。
+    """
+    cache = cache or NOTES_CACHE
+    cur = _vtuple(current)
+    kept = _read_json(cache)
+    if isinstance(kept, list) and any(
+            isinstance(r, dict) and _vtuple(str(r.get("tag_name", ""))) == cur
+            for r in kept):
+        return pick_notes(kept, since, current)
+    data = fetch()
+    # 窓に出すのに要る分だけ残す（一覧の生の形は assets や作者の情報で 10 倍ほど重い）。
+    keys = ("tag_name", "body", "html_url", "draft", "prerelease")
+    os.makedirs(os.path.dirname(cache), exist_ok=True)
+    ml.write_json(cache, [{k: r.get(k) for k in keys} for r in data], indent=1)
+    return pick_notes(data, since, current)
+
+
+# 本文の Markdown のうち、リリースノートで使っている分だけを読む。
+# 見出し（#・##・###）、箇条書き（- ）、行の中の **太字** と `コード`。
+# それ以外（リンク・表）は書いたままの字で出る。
+_BOLD_MD = re.compile(r"\*\*(.+?)\*\*")
+_CODE_MD = re.compile(r"`([^`]+)`")
+
+
+def _inline_runs(text: str, tags: tuple[str, ...]) -> list[tuple[str, tuple[str, ...]]]:
+    """行の中の **太字** と `コード` を分ける。
+
+    太字で先に切ってから、それぞれの中のコードを切る。
+    見出しの項目は「**…を足しました（`combat`）**」のように太字の中にコードを書くので、
+    1本の正規表現で左から拾うと太字が先に取ってバッククォートが字のまま残る。
+    """
+    runs = []
+    pos = 0
+    for m in list(_BOLD_MD.finditer(text)) + [None]:
+        plain = text[pos:m.start() if m else len(text)]
+        for piece, extra in _split_code(plain):
+            runs.append((piece, tags + extra))
+        if m:
+            for piece, extra in _split_code(m.group(1)):
+                runs.append((piece, tags + ("bold",) + extra))
+            pos = m.end()
+    return [r for r in runs if r[0]]
+
+
+def _split_code(text: str) -> list[tuple[str, tuple[str, ...]]]:
+    parts = _CODE_MD.split(text)
+    # split は括弧の中身を奇数番目に挟んで返す。
+    return [(p, ("code",) if i % 2 else ()) for i, p in enumerate(parts)]
+
+
+def markdown_runs(body: str) -> list[tuple[str, tuple[str, ...]]]:
+    """本文を (字, Text の tag) の並びにする。Tk を使わないのでテストで通せる。
+
+    tag は行の種類（h1 / h2 / item / cont / para / gap）と、行の中の bold / code。
+    箇条書きの下に続く行（空行まで）は `cont` で、項目と同じ深さに下げる。
+    本文は「- **見出し**」の次の行から説明を書く形なので、下げないと説明がどの項目の物か読めない。
+    空行は `gap`（続けて何行あっても1つ）。
+    本文は一文一行なので、行の間隔だけでは段落の切れ目が見えない。
+    """
+    runs: list[tuple[str, tuple[str, ...]]] = []
+    in_item = False
+    for line in body.replace("\r\n", "\n").split("\n"):
+        stripped = line.strip()
+        if not stripped:
+            in_item = False
+            if runs and runs[-1][1] != ("gap",):
+                runs.append(("\n", ("gap",)))
+            continue
+        m = re.match(r"(#{1,6})\s+(.*)", stripped)
+        if m:
+            kind, text = ("h1" if len(m.group(1)) == 1 else "h2"), m.group(2)
+            in_item = False
+        elif stripped[:2] in ("- ", "* "):
+            kind, text = "item", "・" + stripped[2:]
+            in_item = True
+        else:
+            kind, text = ("cont" if in_item else "para"), stripped
+        runs.extend(_inline_runs(text, (kind,)))
+        runs.append(("\n", (kind,)))
+    return runs
 
 
 def extract_release(zip_path: str, dest: str = ROOT) -> int:
@@ -1090,6 +1235,105 @@ class SettingsDialog(tk.Toplevel):
 
 
 # --------------------------------------------------------------------------
+# 更新内容のウィンドウ
+# --------------------------------------------------------------------------
+class ReleaseNotesDialog(tk.Toplevel):
+    """上げた版の Release の本文を出す（`App._check_notes`）。
+
+    更新ボタンを押すだけで GitHub も Discord も見ない人に、何が変わったかを届けるための窓。
+    何版も飛ばしたときは、間の版を新しい順に続けて出す。
+    モーダルにしない。読みながら一覧で新しい MOD を探せるように。
+    """
+
+    def __init__(self, master: tk.Misc, notes: list[dict]):
+        super().__init__(master)
+        if len(notes) == 1:
+            self.title("{} の更新内容".format(notes[0]["tag"]))
+        else:
+            self.title("{} から {} までの更新内容".format(notes[-1]["tag"], notes[0]["tag"]))
+        self.configure(background=PALETTE["bg"])
+        self.transient(master)
+        self.url = notes[0]["url"]
+
+        outer = ttk.Frame(self, padding=12)
+        outer.pack(fill="both", expand=True)
+        box = ttk.Frame(outer)
+        box.pack(fill="both", expand=True)
+        # 書体と地の色は一覧の説明欄（`App._build_info`）と揃える。
+        text = tk.Text(box, wrap="char", relief="flat", bd=0,
+                       width=1, height=1, padx=12, pady=8,
+                       font="TkDefaultFont",
+                       background=PALETTE["surface"],
+                       foreground=PALETTE["text"],
+                       highlightthickness=1,
+                       highlightbackground=PALETTE["control_edge"],
+                       highlightcolor=PALETTE["control_edge"],
+                       cursor="arrow")
+        text.pack(side="left", fill="both", expand=True)
+        scroll = ttk.Scrollbar(box, orient="vertical", command=text.yview)
+        scroll.pack(side="left", fill="y")
+        text.configure(yscrollcommand=scroll.set)
+
+        base = tkfont.nametofont("TkDefaultFont")
+        h1 = base.copy()
+        h1.configure(weight="bold", size=FONT_SIZE + 4)
+        h2 = base.copy()
+        h2.configure(weight="bold", size=FONT_SIZE + 1)
+        bold = base.copy()
+        bold.configure(weight="bold")
+        gap = base.copy()
+        gap.configure(size=max(4, FONT_SIZE // 2))
+        # Python 側の Font が捨てられると Tk の font も消えて既定の字に戻るので、窓が持つ。
+        self._fonts = (h1, h2, bold, gap)
+        indent = base.measure("・")
+        text.tag_configure("h1", font=h1, spacing1=14, spacing3=6)
+        text.tag_configure("h2", font=h2, foreground=PALETTE["accent_dim"],
+                           spacing1=10, spacing3=4)
+        text.tag_configure("para", spacing2=3, spacing3=2)
+        text.tag_configure("item", spacing1=4, spacing2=3, spacing3=2,
+                           lmargin1=4, lmargin2=4 + indent)
+        text.tag_configure("cont", spacing2=3, spacing3=2,
+                           lmargin1=4 + indent, lmargin2=4 + indent)
+        text.tag_configure("gap", font=gap)
+        # 太字とコードは行の tag の後ろに足すので、後から作った方が勝つ（Tk の規則）。
+        text.tag_configure("bold", font=bold)
+        text.tag_configure("code", foreground=PALETTE["text_sub"],
+                           background=PALETTE["raised"])
+
+        for note in notes:
+            for chunk, tags in markdown_runs(note["body"]):
+                text.insert("end", chunk, tags)
+            text.insert("end", "\n", ("gap",))
+        text.configure(state="disabled")
+        self.text = text
+
+        bar = ttk.Frame(outer)
+        bar.pack(fill="x", pady=(10, 0))
+        ttk.Label(bar, text="GitHub の Release と同じ内容です",
+                  style="Faint.TLabel").pack(side="left")
+        ttk.Button(bar, text="閉じる", command=self.destroy).pack(side="right")
+        if self.url:
+            ttk.Button(bar, text="GitHub で開く", command=self._open).pack(
+                side="right", padx=(0, 8))
+
+        self.bind("<Escape>", lambda _e: self.destroy())
+        # 一覧の窓に重ねて出す。
+        # 窓の外に出ると気付かれないので、置き場所は覚えない。
+        master.update_idletasks()
+        w = min(760, max(480, master.winfo_width() - 120))
+        h = min(680, max(360, master.winfo_height() - 80))
+        x = master.winfo_rootx() + (master.winfo_width() - w) // 2
+        y = master.winfo_rooty() + (master.winfo_height() - h) // 2
+        self.geometry("{}x{}+{}+{}".format(w, h, max(0, x), max(0, y)))
+        self.lift()
+        self.focus_set()
+
+    def _open(self) -> None:
+        import webbrowser
+        webbrowser.open(self.url)
+
+
+# --------------------------------------------------------------------------
 # 説明の吹き出し
 # --------------------------------------------------------------------------
 class Tooltip:
@@ -1241,7 +1485,8 @@ class App(ttk.Frame):
         self.log_rotate_var = tk.BooleanVar(value=True)
         # 注入は別スレッドで動くので、進捗はキュー越しに受け取ってメインスレッドの
         # after で描く（tkinter は他スレッドから触れない）。
-        self.events: queue.Queue[tuple[str, str]] = queue.Queue()
+        # 中身は文言が主で、"notes" だけ Release の一覧（`_check_notes`）。
+        self.events: queue.Queue[tuple[str, object]] = queue.Queue()
         # 最大化していない状態の大きさと位置。
         # 最大化中の値を覚えると、
         # 次に開いたときに画面いっぱいの「普通の窓」になってしまうので分けて持つ。
@@ -1250,6 +1495,8 @@ class App(ttk.Frame):
         self._build()
         self.reload()
         threading.Thread(target=self._check_update, daemon=True).start()
+        threading.Thread(target=self._check_notes, args=(read_config(),),
+                         daemon=True).start()
         # 進捗を拾う繰り返し。
         # 閉じるときに止める（止めないと、消えた widget を相手に1回だけ走って
         # Tk がエラーを吐く）。
@@ -1772,6 +2019,12 @@ class App(ttk.Frame):
                               variable=self.log_rotate_var,
                               command=self._toggle_log_rotate)
         bar.add_cascade(label="実行", menu=m_run)
+
+        # 更新の直後に出る窓（`_check_notes`）を閉じた後で、もう一度読むための口。
+        m_help = tk.Menu(bar, tearoff=0)
+        m_help.add_command(label="このバージョンの更新内容…", command=self.show_notes)
+        m_help.add_command(label="GitHub を開く", command=self.open_github)
+        bar.add_cascade(label="ヘルプ", menu=m_help)
 
         master.configure(menu=bar)
 
@@ -2662,6 +2915,23 @@ class App(ttk.Frame):
                 elif kind == "update":
                     self.update_btn.configure(text="更新 (v{})".format(msg))
                     self.update_btn.pack(side="right")
+                elif kind == "notes":
+                    # 出したら覚える。空（この版の Release が無い）でも覚えて、次から取りに行かない。
+                    update_config(seen_version=ml.__version__)
+                    if msg:
+                        ReleaseNotesDialog(self.winfo_toplevel(), msg)
+                elif kind == "notes_menu":
+                    # メニューから頼まれた分。
+                    # 頼まれて何も出ないと押せていないように見えるので、無いときも知らせる。
+                    if isinstance(msg, str):
+                        messagebox.showerror("更新内容", msg)
+                    elif msg:
+                        ReleaseNotesDialog(self.winfo_toplevel(), msg)
+                    else:
+                        messagebox.showinfo(
+                            "更新内容",
+                            "この版（v{}）の Release は GitHub にありません。".format(
+                                ml.__version__))
                 elif kind == "restart":
                     self._restart()
         except queue.Empty:
@@ -2733,6 +3003,46 @@ class App(ttk.Frame):
         if found:
             self.available_update = found
             self.events.put(("update", found[0]))
+
+    def _check_notes(self, cfg: dict) -> None:
+        """別スレッド。前に開いたときより版が上がっていれば、間の Release の本文を出す。
+
+        更新ボタンで上げても、zip を手で上書きしても、次に開いたときに出る。
+        前の版は `gui.json` の `seen_version`。
+        これが無いときは2通りある。
+          ・`window` も無い … 初めて開いた。出さずに今の版を覚える
+          ・`window` はある … この仕組みより前の版から上げた。今の版の分だけ出す
+        `window` は閉じるたびに書く（`_close`）ので、一度でも開いた人には必ずある。
+        取れなかった（ネットが無い等）ときは覚えずに黙る。次に開いたときにまた取りに行く。
+        """
+        seen = cfg.get("seen_version")
+        if seen is None and "window" not in cfg:
+            self.events.put(("notes", []))
+            return
+        if seen is not None and _vtuple(str(seen)) >= _vtuple(ml.__version__):
+            return
+        try:
+            notes = fetch_notes(seen)
+        except Exception:
+            return
+        self.events.put(("notes", notes))
+
+    def open_github(self) -> None:
+        import webbrowser
+        webbrowser.open(REPO_URL)
+
+    def show_notes(self) -> None:
+        """メニューの「このバージョンの更新内容」。今の版の Release だけを出す。"""
+        threading.Thread(target=self._fetch_current_notes, daemon=True).start()
+
+    def _fetch_current_notes(self) -> None:
+        """別スレッド。取れなければ理由の文言を返す（起動時と違い、頼まれた操作なので黙らない）。"""
+        try:
+            notes = fetch_notes(None)
+        except Exception as e:
+            self.events.put(("notes_menu", "更新内容を取得できませんでした: {}".format(e)))
+            return
+        self.events.put(("notes_menu", notes))
 
     def _update(self) -> None:
         if self.busy or not self.available_update:
