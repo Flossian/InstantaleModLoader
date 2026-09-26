@@ -668,6 +668,19 @@ assert set(MOD.CONTAINER) == {"c1"} and MOD.CONTAINER["c1"] is c1_loaded, MOD.CO
 assert "c2" not in p2.inventory.inventory, p2.inventory.inventory          # 生き返らない
 assert "c2" not in bucket["テスト"], bucket["テスト"]
 assert any(l.startswith("load (") and "dropped 2 item(s)" in l for l in ctx.lines)
+# ロードしてすぐ戦う（窓を開かない）。1手の前に装備欄を組み直し、本体の装備を外さない（版22）
+load_hook(lambda self, d, *a: None, object(), save_same, app_r)
+p5 = Player()
+c1_battle = Item("c1", "wearable", "headgear", 10)
+p5.give(c1_battle)
+p5.equipments = {"wearable": c1_battle}                  # 本体はセーブから装備を戻している
+app_r.player = p5
+assert not MOD.CONTAINER
+before = len(ctx.lines)
+assert battle_hook(lambda self: "turn", None) == "turn"
+assert p5.equipments.get("wearable") is c1_battle, p5.equipments      # 素手・裸にしない
+assert set(MOD.CONTAINER) == {"c1"} and "c1" not in p5.inventory.inventory, MOD.CONTAINER
+assert not any("-> None" in l for l in ctx.lines[before:]), ctx.lines[before:]
 # 同じ世界で別の主人公を作った。前の主人公の品も控えも渡らない
 p3 = Player(); p3.name = "別人"
 herb3 = Item("x3", "healing_item", "herb")

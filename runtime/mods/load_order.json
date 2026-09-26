@@ -39,6 +39,7 @@
     "133_ui_area_difficulty",
     "134_balance_item_effects",
     "135_fix_inn_button_order",
+    "137_fix_npc_skill_uses",
     "200_probe_bug_sites",
     "201_probe_missing_attr",
     "202_probe_summarizers",
@@ -67,7 +68,6 @@
     "325_road_opening",
     "326_npc_travel",
     "329_area_move_with_party",
-    "308_battle_damage_display",
     "309_office_pardon",
     "311_npc_profile_memory",
     "403_npc_social_memory",
@@ -83,6 +83,7 @@
     "317_reputation",
     "318_area_difficulty_growth",
     "319_battle_tactics",
+    "308_battle_damage_display",
     "320_guild_adventurer_recruit",
     "321_area_chronicle",
     "322_battle_bgm",
@@ -113,7 +114,8 @@
     "232_probe_facility_choices",
     "233_probe_colosseum",
     "234_probe_busy_display",
-    "235_probe_sound_effects"
+    "235_probe_sound_effects",
+    "236_probe_enemy_stats"
   ],
   "disabled": []
 }

@@ -120,6 +120,7 @@ BANDS = (
         "129_balance_item_price",
         "134_balance_item_effects",
         "135_fix_inn_button_order",
+        "137_fix_npc_skill_uses",
         "130_currency_unit",
         "131_sharp_portrait",
         "132_npc_variety",

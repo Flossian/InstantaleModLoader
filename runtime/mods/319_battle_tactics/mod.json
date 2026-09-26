@@ -7,94 +7,38 @@
     "ja": "戦闘の数値とバフ・デバフの作り直し"
   },
   "description": {
-    "en": "Stops evenly-matched battles from ending in one hit. The size of a blow comes from your own weapon and abilities (and how heavy the AI referee judged it), so the number stays in the same band whether you hit a mook or a boss; tough or higher-level foes just take less, and fights last as long as the target's health deserves. Equals trade about seven blows, a boss's finisher hurts badly and is meant to be guarded against, and one-shots still exist where they should: a legendary hero swats a starter-village slime, an overwhelming foe fells a novice. Every blow varies a little from the last, and poison, curses and stat drops the referee describes now actually change the numbers, and a Guard entry in the skill list (or typing something defensive) halves what you take until your next move",
-    "ja": "互角の戦闘が一撃で終わらなくなる。一撃の大きさは自分の武器と能力（と AI の審判が裁いた攻撃の重さ）で決まり、相手が雑魚でもボスでも同じ帯の数字が出る。硬い相手・格上には通りが悪くなり、決着の手数は相手の体力なりに伸びる。同格とは7回前後の殴り合いになり、ボスの大技は手痛く、防御で受けるのが前提。一撃が出るべき場面では出る。最強の英雄は初期村の魔物を一撃で払い、圧倒的な強敵は駆け出しを一撃で沈める。ダメージは毎回わずかに揺らぐ。審判が語ってくる毒や能力低下も数字に効く。スキル一覧に「防御」が加わり、次に自分が動くまで被ダメージを半分にできる（自由入力で防御的に動いても同じ構えになる）"
+    "en": "Stops evenly-matched battles from ending in one hit. Damage still comes from the game's own attack and defense, but defense now divides instead of subtracting (defense equal to the attack lets half through), and a stronger enemy really does hit harder. Enemies get 2.5 times their health, so a mook takes about three blows and a boss lasts as long as its health deserves. Solo, level-appropriate gear loses the war of attrition; one step better gear or some training gets you through, and with a companion a quest costs about a third of your health. Foes 15 levels above you are fearsome and 20 above is no contest. Poison, curses and stat drops the referee describes now change the numbers, and a Guard entry in the skill list (or typing something defensive) halves what you take until your next move",
+    "ja": "互角の戦闘が一撃で終わらなくなる。ダメージはゲーム自身の攻撃と防御から出すまま、防御を引き算から割り算に替える（防御が攻撃と同じなら半分が通る）。敵の筋力の差もそのまま効く。敵の体力は2.5倍になり、雑魚は3発前後、ボスは体力なりに長持ちする。ソロはレベル相応の装備では削り負け、一段強い装備か訓練で通る。仲間を連れていれば1回の依頼で体力の3割ほどを失う。レベルが15上の相手は強敵、20上は勝負にならない。審判が語ってくる毒や能力低下も数字に効く。スキル一覧に「防御」が加わり、次に自分が動くまで被ダメージを半分にできる（自由入力で防御的に動いても同じ構えになる）"
   },
-  "version": "17",
+  "version": "18",
   "author": "R01/Flossian",
   "settings": {
-    "BAND_WEAK": {
+    "ENEMY_HP": {
       "type": "int",
-      "default": 18,
+      "default": 250,
+      "min": 100,
+      "max": 1000,
+      "label": {
+        "ja": "敵の体力（%）",
+        "en": "Enemy health (%)"
+      },
+      "note": {
+        "ja": "戦闘の開始で敵の最大体力に掛ける。100 でゲームのまま。250 で雑魚は主人公の通常攻撃3発前後。上げるほど戦闘が長くなる",
+        "en": "Applied to every enemy's maximum health when a battle starts. 100 keeps the game's value. At 250 a mook takes about three of your basic attacks. Raise it for longer fights"
+      }
+    },
+    "ENEMY_DAMAGE": {
+      "type": "int",
+      "default": 12,
       "min": 1,
       "max": 100,
       "label": {
-        "ja": "弱い一撃の強さ（火力の%）",
-        "en": "A weak hit carries (% of power)"
+        "ja": "敵の一撃の強さ（%）",
+        "en": "Enemy blow strength (%)"
       },
       "note": {
-        "ja": "AIの審判が「弱い」と裁いた一撃が、自分の火力の何%か。火力は武器と能力から決まり、相手が誰でも同じ帯の数字が出る",
-        "en": "How much of your own power a hit judged weak carries. Power comes from your weapon and abilities, so the number stays in the same band whoever you hit"
-      }
-    },
-    "BAND_NORMAL": {
-      "type": "int",
-      "default": 30,
-      "min": 1,
-      "max": 100,
-      "label": {
-        "ja": "普通の一撃の強さ（火力の%）",
-        "en": "A normal hit carries (% of power)"
-      },
-      "note": {
-        "ja": "同じ強さの相手となら7回前後の殴り合いになる高さにしてある",
-        "en": "Tuned so equals trade about seven blows"
-      }
-    },
-    "BAND_STRONG": {
-      "type": "int",
-      "default": 45,
-      "min": 1,
-      "max": 100,
-      "label": {
-        "ja": "強い一撃の強さ（火力の%）",
-        "en": "A strong hit carries (% of power)"
-      },
-      "note": {
-        "ja": "スキルの一撃はだいたいこの段になる",
-        "en": "Most skill hits land on this step"
-      }
-    },
-    "BAND_VERY_STRONG": {
-      "type": "int",
-      "default": 65,
-      "min": 1,
-      "max": 100,
-      "label": {
-        "ja": "大技の強さ（火力の%）",
-        "en": "A heavy blow carries (% of power)"
-      },
-      "note": {
-        "ja": "2発までは耐えられ、3発目で倒れる高さ",
-        "en": "You survive two, not three"
-      }
-    },
-    "BAND_EXTREME": {
-      "type": "int",
-      "default": 90,
-      "min": 1,
-      "max": 100,
-      "label": {
-        "ja": "必殺級の強さ（火力の%）",
-        "en": "A finisher carries (% of power)"
-      },
-      "note": {
-        "ja": "ボスの切り札。これが来そうなときに「防御」で受ける",
-        "en": "A boss's trump card; the moment to guard"
-      }
-    },
-    "MITIGATION_PIVOT": {
-      "type": "int",
-      "default": 800,
-      "min": 1,
-      "max": 99999,
-      "label": {
-        "ja": "防具の効きにくさ",
-        "en": "How slowly armor ramps up"
-      },
-      "note": {
-        "ja": "小さくすると防具が強く効く。防御力がこの値と同じとき、受けるダメージがほぼ半分になる（軽減の上限は6割）",
-        "en": "Smaller makes armor matter more. When your defense equals this value you take about half damage (reduction caps at 60%)"
+        "ja": "敵の一撃に掛ける。仲間には掛からない。12 で、ソロはレベル相応の装備では削り負け、一段強い装備で通る。仲間を連れていれば1回の依頼の消耗が3割ほど。上げるほど歯応えが増す",
+        "en": "Scales every enemy blow (allies are untouched). At 12 a solo hero with level-appropriate gear is worn down while one step better gear gets through, and with a companion a quest costs about a third of your health. Raise it for a harder game"
       }
     },
     "GUARD_CUT": {
@@ -111,34 +55,6 @@
         "en": "Applied to everything you take between guarding and your next move"
       }
     },
-    "DAMAGE_WOBBLE": {
-      "type": "int",
-      "default": 10,
-      "min": 0,
-      "max": 50,
-      "label": {
-        "ja": "ダメージの揺らぎ（±%）",
-        "en": "Damage variance (+/-%)"
-      },
-      "note": {
-        "ja": "1発ごとに、この幅でダメージが上下に振れる。0 にすると毎回きっかり同じ数字になる",
-        "en": "Each blow lands somewhere within this range above or below its computed value. Set 0 for identical numbers every time"
-      }
-    },
-    "ENEMY_POWER": {
-      "type": "int",
-      "default": 50,
-      "min": 10,
-      "max": 200,
-      "label": {
-        "ja": "敵の火力（%）",
-        "en": "Enemy power (%)"
-      },
-      "note": {
-        "ja": "敵の一撃の強さ。仲間には掛からない。50 で、雑魚の群れとの1戦で減る体力が2割前後になり、回復なしの連戦が成り立つ。上げるほど歯応えが増す",
-        "en": "Scales every enemy blow (allies are untouched). At 50 a pack of mooks costs about a fifth of your health, so chained dungeon fights without healing stay possible. Raise it for a harder game"
-      }
-    },
     "LEVEL_FAIR_GAP": {
       "type": "int",
       "default": 10,
@@ -149,8 +65,8 @@
         "en": "Level gap counted as fair"
       },
       "note": {
-        "ja": "この差までは互角の相手として扱い、レベル差の補正は付かない",
-        "en": "Up to this gap the fight counts as fair; no level bonus either way"
+        "ja": "この差まではレベル差の倍率が付かない（ゲームの数値そのものはレベルで伸びるので、格上はそれだけで手強い）",
+        "en": "Up to this gap no level multiplier applies (the game's own numbers already grow with level, so a higher foe is tougher anyway)"
       }
     },
     "LEVEL_ELITE_GAP": {
@@ -177,13 +93,13 @@
         "en": "Level gap of a different class"
       },
       "note": {
-        "ja": "この差以上は勝負にならない領域。「格が違う倍率」が掛かり、上のレベルの側は一撃で倒すことが多い",
-        "en": "Beyond this gap it is no contest: the outclass multiplier applies and the higher side usually kills in one blow"
+        "ja": "この差以上は勝負にならない領域。「格が違う倍率」が掛かる",
+        "en": "Beyond this gap it is no contest: the outclass multiplier applies"
       }
     },
     "LEVEL_ELITE_MULT": {
       "type": "int",
-      "default": 200,
+      "default": 150,
       "min": 100,
       "max": 900,
       "label": {
@@ -191,13 +107,13 @@
         "en": "Fearsome-foe multiplier (%)"
       },
       "note": {
-        "ja": "レベルが「強敵」の差だけ上の側の与えるダメージに掛かる。下の側の与えるダメージは同じ率で割られる。200 で2倍",
-        "en": "Applied to the higher side's damage at the fearsome gap; the lower side's damage is divided by the same rate. 200 means double"
+        "ja": "レベルが「強敵」の差だけ上の側の与えるダメージに掛かる。下の側のダメージは割らない。150 で1.5倍",
+        "en": "Applied to the higher side's damage at the fearsome gap; the lower side's damage is left alone. 150 means 1.5 times"
       }
     },
     "LEVEL_OUTCLASS_MULT": {
       "type": "int",
-      "default": 300,
+      "default": 200,
       "min": 100,
       "max": 900,
       "label": {
@@ -205,8 +121,8 @@
         "en": "Different-class multiplier (%)"
       },
       "note": {
-        "ja": "レベルが「格が違う」差だけ上の側に掛かる倍率。300 で3倍",
-        "en": "Applied at the outclass gap. 300 means triple"
+        "ja": "レベルが「格が違う」差だけ上の側に掛かる倍率。200 で2倍",
+        "en": "Applied at the outclass gap. 200 means double"
       }
     },
     "RESTORE_EFFECTS": {
@@ -233,6 +149,18 @@
         "en": "The Skill button becomes \"Skill / Guard\" and a Guard entry appears in the list just before Cancel. Guarding spends your turn. Even when OFF, typing something defensive in the free input raises the same stance"
       }
     },
+    "STEADY_BASIC_ATTACK": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "通常攻撃をスキル並みにしない",
+        "en": "Keep basic attacks below skills"
+      },
+      "note": {
+        "ja": "主人公の通常攻撃を裁く AI に、一撃の重さは修正で表し、追加の大ダメージを重ねないよう頼む。ローカルのモデルは通常攻撃のたびに必殺級のダメージを重ねがちで、通常攻撃がスキル並みになる。OFF で素のゲームの頼み文のまま",
+        "en": "Asks the AI judging your basic attack to express its weight through modifiers instead of stacking an extra big hit. Local models tend to stack a finisher-class hit on every basic attack, making it as strong as a skill. OFF sends the game's prompt unchanged"
+      }
+    },
     "ALLY_GEAR_PERCENT": {
       "type": "int",
       "default": 50,
@@ -243,8 +171,8 @@
         "en": "Ally gear rate (%)"
       },
       "note": {
-        "ja": "装備欄の MOD を入れているとき、仲間の武器・防具をこの率で一撃と防御に足す。50 で杖 323 の仲間の一撃が約 3 割増し。0 で素のゲームどおり（仲間の装備は数に乗らない）",
-        "en": "With the equipment slots mod, allies' weapons and armor are added to their blows and defense at this rate. At 50 a staff of 323 adds about 30% to the blow. 0 restores the game's rule (ally gear is ignored)"
+        "ja": "装備欄の MOD を入れているとき、仲間の武器・防具をこの率で一撃と防御に足す。武器は主人公と同じ組み方（能力と武器を掛けて平方根）で、その半分が乗る。0 で素のゲームどおり（仲間の装備は数に乗らない）",
+        "en": "With the equipment slots mod, allies' weapons and armor are added to their blows and defense at this rate. The weapon counts the way yours does (the square root of ability times weapon), at half strength by default. 0 restores the game's rule (ally gear is ignored)"
       }
     }
   }

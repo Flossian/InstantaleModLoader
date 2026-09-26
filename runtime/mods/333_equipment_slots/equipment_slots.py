@@ -281,6 +281,18 @@ def apply(ctx):
             write("{}: {} -> {!r} (was {!r})".format(
                 sc["key"], game_key, frames.short(getattr(want, "name", None), 60) if want else None, current_key))
 
+    def container_ready(app, sc):
+        """主人公の装備欄の辞書が今の周回で組まれているか。まだなら組む（窓を開くときと同じ `refresh_container`）。
+
+        ロードは辞書を空にし（`world_loaded`）、組み直すのは窓を開くときだった。窓を開かずに戦闘へ入ると、
+        1手ごとの `sync_game` が空の辞書を「何も装備していない」と読み、本体の武器と防具を外した
+        （実機。ロードしてすぐ戦うと、2手目から素手になりダメージが 1 桁に落ちた。版22）。
+        組めなかったとき（持ち物が読めない）は偽を返し、呼び手は本体の装備に触らない。
+        """
+        if getattr(sys, CONTAINER_ATTR + "_playthrough", None) is None:
+            refresh_container(app, sc)
+        return getattr(sys, CONTAINER_ATTR + "_playthrough", None) is not None
+
     def sync_game(app, sc, force=False):
         """控えから本体の `weapon` / `wearable` を決め直す。
 
@@ -295,6 +307,8 @@ def apply(ctx):
         """
         if not sc["player"]:
             sync_npc(app, sc)
+            return
+        if not container_ready(app, sc):
             return
         player = sc["owner"]
         container = sc["container"]

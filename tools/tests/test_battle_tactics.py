@@ -4,12 +4,14 @@
     python tools/tests/test_battle_tactics.py
 
 主にモジュール直下の純関数を叩く（フックの側は実機で確かめる。
-VERIFICATION.md の 3xx の表）。フック越しに通すのは、後始末と型が崩れる経路だけ。
+VERIFICATION.md の 3xx の表）。フック越しに通すのは、後始末と型が崩れる経路と、
+敵の体力の伸ばし方・1発の置き換えの通し。
 
-  帯       … power の列挙 → 火力に乗せる割合。知らない語は normal 扱い
-  軽減     … 防御の飽和曲線と上限 60%
-  1発      … 錨は攻め手の火力。雑魚と同格に同じ帯の数字が出て、
-             手数は相手の体力から生まれる（雑魚2手 / 同格7手前後）
+  係数     … power の列挙 → ゲームの素点の係数 k。知らない語は normal 扱い
+  1発      … 素点 × 素点 ÷ (素点 + 防御) × multiplier。同じ相手の2本目は k で割り戻して組む。
+             Lv20 の実測の式で、雑魚は主人公の通常攻撃3発、敵の weak は HP の 3% 前後
+  レベル差 … 格上の側の与ダメだけ伸びる（×1.5 / ×2）
+  敵の体力 … ゲームの式どおりの HP だけ伸ばし、二度掛けしない
   復元     … 審判の生の戻り（辞書でもオブジェクトでも）から
              text_status の毎ターン効果と AttributeEffect を抜き出せる
   倍率     … AttributeEffect が (状態異常名, 説明, 倍率の帳簿) になる
@@ -61,112 +63,76 @@ def check(label, ok, detail=""):
         print("  FAIL  {} {}".format(label, detail))
 
 
-# ---------------------------------------------------------------- 帯
-check("band: weak", mod.band_of("weak") == mod.BAND_WEAK / 100.0)
-check("band: extreme", mod.band_of("extreme") == mod.BAND_EXTREME / 100.0)
-check("band: unknown word falls to normal",
-      mod.band_of("colossal") == mod.BAND_NORMAL / 100.0)
-
-# ---------------------------------------------------------------- 軽減
-check("mitigation: zero defense", mod.mitigation(0) == 0.0)
-check("mitigation: capped", mod.mitigation(10 ** 9) == mod.MITIGATION_MAX)
-check("mitigation: bad input", mod.mitigation("armor") == 0.0)
+# ---------------------------------------------------------------- 係数
+check("k: weak and extreme follow the game's table",
+      mod.game_k("weak") == 1.0 and mod.game_k("extreme") == 2.45)
+check("k: unknown word falls to normal", mod.game_k("colossal") == mod.GAME_K["normal"])
 
 # ---------------------------------------------------------------- レベル差
 check("level: within the fair gap nothing changes",
-      mod.level_multiplier(0) == 1.0 and mod.level_multiplier(10) == 1.0
-      and mod.level_multiplier(-10) == 1.0)
-check("level: the elite gap doubles",
-      mod.level_multiplier(15) == 2.0 and mod.level_multiplier(-15) == 0.5)
-check("level: the outclass gap triples and stays there",
-      mod.level_multiplier(20) == 3.0 and mod.level_multiplier(40) == 3.0)
+      mod.level_multiplier(0) == 1.0 and mod.level_multiplier(10) == 1.0)
+check("level: the elite gap is x1.5 and the outclass gap x2, and stays there",
+      mod.level_multiplier(15) == 1.5 and mod.level_multiplier(20) == 2.0
+      and mod.level_multiplier(40) == 2.0)
 check("level: ramps between the steps",
-      1.0 < mod.level_multiplier(12) < 2.0
-      and 2.0 < mod.level_multiplier(17) < 3.0)
+      1.0 < mod.level_multiplier(12) < 1.5 and 1.5 < mod.level_multiplier(17) < 2.0)
+check("level: the lower side's damage is not divided",
+      mod.level_multiplier(-15) == 1.0 and mod.level_multiplier(-40) == 1.0)
 check("level: unreadable levels count as fair",
       mod.level_gap(None, 30) == 0 and mod.level_gap("x", None) == 0)
 
-# ---------------------------------------------------------------- 1発（実測の帯）
-# エリス: 基礎値 896・Lv62・HP1560。数字は攻め手に固有で、
-# 「大きい相手ほど大きい数字」は出ない。手数は相手の体力から生まれる。
-mob = mod.hit_damage([("normal", 1)], 896, 460, 96,
-                     attacker_level=62, defender_level=53)
-equal = mod.hit_damage([("normal", 1)], 896, 1560, 150,
-                       attacker_level=62, defender_level=62)
-check("hit: the same swing lands in the same band on mob and equal",
-      220 <= mob <= 260 and 200 <= equal <= 245
-      and abs(mob - equal) < 0.2 * max(mob, equal),
-      "mob={} equal={}".format(mob, equal))
-check("hit: a mob falls in about 3 blows", 2 <= -(-460 // mob) <= 4,
-      "hits={}".format(-(-460 // mob)))
-check("hit: an equal takes 7-9 blows", 7 <= -(-1560 // equal) <= 9,
-      "hits={}".format(-(-1560 // equal)))
-boss = mod.hit_damage([("normal", 1)], 896, 3120, 300,
-                      attacker_level=62, defender_level=62)
-check("hit: a big boss simply lasts longer", 15 <= -(-3120 // boss) <= 24,
-      "hits={}".format(-(-3120 // boss)))
+# ---------------------------------------------------------------- 1発
+check("hit: defense equal to the raw lets half through",
+      mod.hit_damage([("weak", 1)], 200, 200, 10 ** 4) == 100)
+check("hit: no defense lets the raw through",
+      mod.hit_damage([("weak", 1)], 200, 0, 10 ** 4) == 200)
+check("hit: the referee's multiplier scales the blow (the game ignores it)",
+      mod.hit_damage([("weak", 2)], 200, 200, 10 ** 4) == 200
+      and mod.hit_damage([("normal", 0.67)], 240, 0, 10 ** 4) == 161)
+# 同じ相手の2本目。ゲームは最後の裁き（extreme）の素点しか渡さない（実測 1185 → 2613〜3127）
+check("hit: two rulings on one target are rebuilt from the last one's raw",
+      mod.hit_damage([("weak", 2), ("extreme", 1)], 2450, 0, 10 ** 5) == 2000 + 2450)
+check("hit: an enemy blow is scaled by the enemy setting",
+      mod.hit_damage([("weak", 1)], 1000, 0, 10 ** 3, enemy=True)
+      == round(1000 * mod.ENEMY_DAMAGE / 100.0))
+check("hit: the higher side gets the level multiplier",
+      mod.hit_damage([("weak", 1)], 200, 0, 10 ** 4, attacker_level=75, defender_level=60) == 300
+      and mod.hit_damage([("weak", 1)], 200, 0, 10 ** 4, attacker_level=60, defender_level=75) == 200)
 check("hit: never below the floor",
       mod.hit_damage([("weak", 0.01)], 10, 10 ** 6, 10 ** 6) == 10 ** 4)
-
-# 一撃と過剰殺傷: 数字は普段と同じ物差しのまま、相手の体力を超える。
-slime = mod.hit_damage([("normal", 1)], 896, 64, 0,
-                       attacker_level=62, defender_level=38)
-check("hit: the hero one-shots a slime with an everyday-scale number",
-      slime > 64 and 400 <= slime <= 900, "final={}".format(slime))
-# 上限は無い（版12で撤廃）。互角への1発は式の時点で体力の一部に収まる。
-equal_extreme = mod.hit_damage([("extreme", 1)], 896, 1560, 150,
-                               attacker_level=62, defender_level=62)
-check("hit: an equal's finisher hurts but does not kill from full",
-      0.35 * 1560 <= equal_extreme <= 0.75 * 1560,
-      "final={}".format(equal_extreme))
-nuke = mod.hit_damage([("extreme", 1)], 1500 * 0.5, 1560, 500,
-                      attacker_level=77, defender_level=62)
-check("hit: an elite boss nuke is brutal but survivable from full",
-      0.4 * 1560 <= nuke < 1560, "final={}".format(nuke))
-guarded = mod.hit_damage([("extreme", 1)], 1500 * 0.5, 1560, 500, in_mult=0.5,
-                         attacker_level=77, defender_level=62)
+check("hit: broken inputs do not raise",
+      mod.hit_damage([], None, "x", None) == 1
+      and mod.hit_damage([("weak", "x")], 100, 0, 0) == 100)
+check("hit: a weapon bonus joins the base before k",
+      mod.hit_damage([("strong", 1)], 150, 0, 10 ** 4, bonus=50) == 225)
+_low = mod.hit_damage([("weak", 1)], 200, 100, 10 ** 3, in_mult=0.5)
 check("hit: guarding halves what gets through",
-      abs(guarded - nuke * 0.5) <= 1, "nuke={} guarded={}".format(nuke, guarded))
-demon = mod.hit_damage([("extreme", 1)], 5000, 300, 50,
-                       attacker_level=80, defender_level=60)
-check("hit: an outclassing boss fells a novice in one blow", demon > 300,
-      "final={}".format(demon))
+      _low == round(200 * 200 / 300.0 * 0.5), "guarded={}".format(_low))
 
-# 武器: 錨が基礎値なので √武器 がそのまま与ダメに乗る。
-with_sword = mod.hit_damage([("normal", 1)], 896, 460, 96)
-with_knife = mod.hit_damage([("normal", 1)], 189, 460, 96)
-check("gear: the full weapon range multiplies damage by about 4.7",
-      4.2 <= with_sword / with_knife <= 5.2,
-      "ratio={}".format(with_sword / with_knife))
+# Lv20 の実測の式（GAME.md §2.10.4）。主人公は筋力16・耐久15、武器と防具は価値20（攻撃力・防御力 89）。
+# 雑魚は基準点 11.37 の balanced。通常攻撃は weak×1.5（VERIFICATION.md §3.77 の試算と同じ置き方）
+_m = (20 + 5) / 5.0
+_hero_raw = 2 * (16 * _m * 89) ** 0.5
+_mob_hp = mod.scaled_hp(round(11.37 * 4 * _m), 11.37, 20)
+_blow = mod.hit_damage([("weak", 1.5)], _hero_raw, 11.37 * _m, _mob_hp,
+                       attacker_level=20, defender_level=20)
+# 素点の揺らぎ（±5%）を除いた値で 3.0 発ぶん。揺らぎ込みでは3発か4発
+check("hit: a Lv20 mob falls to about three basic attacks",
+      _mob_hp and 2.8 <= _mob_hp / float(_blow) <= 3.2, "blow={} hp={}".format(_blow, _mob_hp))
+_taken = mod.hit_damage([("weak", 1)], 2 * 11.37 * _m, 89, 15 * 4 * _m, enemy=True,
+                        attacker_level=20, defender_level=20)
+check("hit: a Lv20 mob's weak blow takes about 3% of the hero's HP",
+      0.02 <= _taken / (15 * 4 * _m) <= 0.04, "taken={}".format(_taken))
 
-# 仲間: 錨は本人の max_hp（呼び出し側が受け側 max_hp で底上げする）。
-weak_ally = mod.hit_damage([("weak", 1)], max(132, 460), 460, 96,
-                           attacker_level=36, defender_level=36)
-check("ally floor: a low-HP member still bites",
-      weak_ally >= 460 * 0.10, "final={}".format(weak_ally))
-
-# ---------------------------------------------------------------- 揺らぎ
-import random as _random                                       # noqa: E402
-
-_rng = _random.Random(20260827)
-_rolls = [mod.damage_wobble(_rng) for _ in range(2000)]
-check("wobble: stays inside the configured band",
-      all(1 - mod.DAMAGE_WOBBLE / 100.0 <= r <= 1 + mod.DAMAGE_WOBBLE / 100.0
-          for r in _rolls))
-check("wobble: actually varies and centres on 1.0",
-      len(set(_rolls)) > 1900 and abs(sum(_rolls) / len(_rolls) - 1.0) < 0.01,
-      "mean={}".format(sum(_rolls) / len(_rolls)))
-_saved = mod.DAMAGE_WOBBLE
-mod.DAMAGE_WOBBLE = 0
-check("wobble: zero means identical numbers every time",
-      mod.damage_wobble(_rng) == 1.0)
-mod.DAMAGE_WOBBLE = _saved
-
-_low = mod.hit_damage([("normal", 1)], 896, 1560, 150, wobble=0.9)
-_high = mod.hit_damage([("normal", 1)], 896, 1560, 150, wobble=1.1)
-check("wobble: a swing swings the final number",
-      _high > _low and abs(_high / _low - 1.22) < 0.05,
-      "low={} high={}".format(_low, _high))
+# ---------------------------------------------------------------- 敵の体力
+check("enemy hp: the game's own HP is stretched",
+      mod.scaled_hp(760, 12, 74) == 1900)
+check("enemy hp: an already stretched HP is left alone",
+      mod.scaled_hp(1900, 12, 74) is None)
+check("enemy hp: 100% and unreadable values change nothing",
+      mod.scaled_hp(760, 12, 74, percent=100) is None
+      and mod.scaled_hp(760, None, 74) is None and mod.scaled_hp("x", 12, 74) is None
+      and mod.scaled_hp(760, 12, None) is None)
 
 # ---------------------------------------------------------------- 出どころの受け渡し
 from instantale_modloader import ui as _ui                     # noqa: E402
@@ -231,6 +197,28 @@ check("extract: object form reads the same",
       extras and extras[0]["per_turn"] == [("instant_damage", "strong")]
       and extras[0]["intensity"] == 5, repr(extras))
 
+# スキル側の強化・弱体（変換が捨てる）。effect_id は 1 始まり、期限はスキルの duration
+_skills = {"強者への追従": {"effects": [{"type": "buff", "target_type": "self", "attribute_type": "dex",
+                                          "power": "strong", "duration": 2}]},
+           "砂塵の足掻き": {"effects": [{"type": "debuff", "target_type": "single_enemy",
+                                          "attribute_type": "dex", "power": "normal"}]},
+           "放浪の連撃": {"effects": [{"type": "instant_damage", "power": "strong"}]}}
+_buff = mod.skill_extras(_skills, {"skill": "強者への追従",
+                                   "skill_effects": [{"effect_id": 1, "targets": ["メイ"]}]})
+check("skill extras: a buff becomes an enhancement with the skill's duration",
+      _buff == [{"kind": "attribute", "targets": ["メイ"], "type": "enhancement",
+                 "attribute_type": "dex", "power": "strong", "duration": 2}], repr(_buff))
+_debuff = mod.skill_extras(_skills, types.SimpleNamespace(
+    skill="砂塵の足掻き", skill_effects=[types.SimpleNamespace(effect_id=1, targets="霧の声")]))
+check("skill extras: a debuff becomes a reduction; no duration falls to the default",
+      _debuff and _debuff[0]["type"] == "reduction" and _debuff[0]["targets"] == ["霧の声"]
+      and _debuff[0]["duration"] is None, repr(_debuff))
+check("skill extras: damage skills, unknown skills and bad effect ids yield nothing",
+      mod.skill_extras(_skills, {"skill": "放浪の連撃", "skill_effects": [{"effect_id": 1, "targets": ["x"]}]}) == []
+      and mod.skill_extras(_skills, {"skill": "無い", "skill_effects": [{"effect_id": 1}]}) == []
+      and mod.skill_extras(_skills, {"skill": "強者への追従", "skill_effects": [{"effect_id": 9}]}) == []
+      and mod.skill_extras(None, {"skill": "強者への追従"}) == [])
+
 check("extract: garbage yields nothing",
       mod.extract_extras(None) == [] and mod.extract_extras({"additional_effects": 3}) == [])
 
@@ -250,31 +238,18 @@ check("attribute: con enhancement lowers incoming damage",
 check("attribute: unknown attributes are skipped",
       mod.attribute_recipe("enhancement", "luck", "weak") is None)
 
-# 仲間の錨: 武器は上乗せにしかならない。防具は本体の値と装備の大きいほう
-check("ally anchor: no weapon keeps the max_hp floor",
-      mod.ally_anchor(460, 1560) == 1560 and mod.ally_anchor(460, 300) == 460)
-check("ally anchor: a weapon adds 2*sqrt(ability*weapon) at the rate",
-      abs(mod.ally_anchor(992, 600, 260, 323, percent=50) - (992 + 2 * (260 * 323) ** 0.5 * 0.5)) < 1e-9)
-check("ally anchor: the rate comes from the setting by default",
-      abs(mod.ally_anchor(992, 600, 260, 323) - mod.ally_anchor(992, 600, 260, 323, percent=mod.ALLY_GEAR_PERCENT)) < 1e-9)
-check("ally anchor: a weak weapon still only adds",
-      mod.ally_anchor(460, 600, 300, 23) > 600)
-check("ally anchor: rate 0 and broken inputs fall back",
-      mod.ally_anchor(460, 600, 300, 480, percent=0) == 600
-      and mod.ally_anchor(460, 600, None, 480) == 600 and mod.ally_anchor(460, 600, "x", 480) == 600)
+# 仲間の武器: 素点の基礎へ 2×√(能力 × 武器) × 率 を足す。上乗せにしかならない
+check("ally gear: a weapon adds 2*sqrt(ability*weapon) at the rate",
+      abs(mod.ally_gear_bonus(260, 323, percent=50) - 2 * (260 * 323) ** 0.5 * 0.5) < 1e-9)
+check("ally gear: the rate comes from the setting by default",
+      mod.ally_gear_bonus(260, 323) == mod.ally_gear_bonus(260, 323, percent=mod.ALLY_GEAR_PERCENT))
+check("ally gear: rate 0 and broken inputs add nothing",
+      mod.ally_gear_bonus(260, 323, percent=0) == 0 and mod.ally_gear_bonus(None, 323) == 0
+      and mod.ally_gear_bonus("x", 323) == 0 and mod.ally_gear_bonus(260, None) == 0)
 check("gear defense: the armor is added at the rate",
       mod.gear_defense(260, 268, percent=50) == 260 + 134 and mod.gear_defense(294, 100, percent=100) == 394
       and mod.gear_defense(294, None) == 294 and mod.gear_defense(294, 0) == 294
       and mod.gear_defense(294, 500, percent=0) == 294)
-
-# ---------------------------------------------------------------- 揺らぎの乱数
-# 省いた rng はこの MOD 専用の乱数から引く（ゲーム自身の乱数列をずらさない）。
-_state = _random.getstate()
-mod.damage_wobble()
-check("wobble: the default draw leaves the global random untouched",
-      _random.getstate() == _state)
-check("wobble: the mod keeps its own Random",
-      isinstance(mod._RNG, _random.Random) and mod._RNG is not _random)
 
 # ---------------------------------------------------------------- フック
 # 数の芯とは別に、後始末と型が崩れる経路だけをフック越しに通す。
@@ -308,6 +283,9 @@ class _Ctx(object):
 
     def log_exc(self, msg):
         self.errors.append(msg)
+
+    def superseded(self):
+        return False              # テスト中に注入し直しは起きない（`llm.wrap_outgoing` の見張りが聞く）
 
     def wrap(self, target, **kw):
         def decorator(func):
@@ -353,6 +331,21 @@ check("per-turn: a heal that hits the ceiling stays an int",
       repr(_king.current_hp))
 check("per-turn: nothing was swallowed", not _ctx.errors, _ctx.errors)
 
+# 仲間の自己強化スキルが、状態異常と与ダメの倍率になる（期限はスキルの duration）。
+_ctx = _fresh()
+_mei = types.SimpleNamespace(name="メイ", max_hp=1108, current_hp=1108, experience_level=68,
+                             status={}, skills=_skills)
+_app = types.SimpleNamespace(current_enemy_dict={}, player=_mei)
+_ctx.hooks["__main__:BattlePhaseManager.convert_llm_output_to_instruction_dict"](
+    lambda *a, **k: {}, types.SimpleNamespace(app=_app), _mei, None,
+    {"skill": "強者への追従", "skill_effects": [{"effect_id": 1, "targets": ["メイ"]}],
+     "additional_effects": []})
+check("skill buff: written as a status with the skill's duration",
+      _mei.status.get("敏捷強化", {}).get("duration") == 2, repr(_mei.status))
+check("skill buff: logged as a restored attribute effect",
+      "restored attribute effect: '敏捷強化' on メイ" in _log(), _log())
+check("skill buff: nothing was swallowed", not _ctx.errors, _ctx.errors)
+
 # 1手の本体が投げても、その手は閉じる（構えが武装される）。
 _ctx = _fresh()
 _hero = types.SimpleNamespace(name="エリス", max_hp=1560, current_hp=1560,
@@ -380,6 +373,84 @@ finally:
 check("close: the game's exception still reaches the caller", _raised)
 check("close: the action is closed and the guard armed",
       "guard armed: エリス" in _log(), _log())
+
+# 戦闘の開始で敵の HP を3つ組で伸ばす。2回目（戦闘中のセーブから読み直した敵など）は触らない。
+_ctx = _fresh()
+_goblin = types.SimpleNamespace(name="ゴブリン", experience_level=20, max_hp=227, current_hp=227,
+                                original_max_hp=227, status={},
+                                ability_scores={"constitution": 11.37})
+_hero = types.SimpleNamespace(name="エリス", max_hp=300, current_hp=300, original_max_hp=300,
+                              experience_level=20, status={})
+_app = types.SimpleNamespace(current_enemy_dict={"ゴブリン1": _goblin}, player=_hero,
+                             add_text=lambda text: None)
+_start = _ctx.hooks["__main__:BattleStartManager.start_battle"]
+check("enemy hp: start_battle returns the game's result",
+      _start(lambda self: "started", types.SimpleNamespace(app=_app)) == "started")
+_stretched = (_goblin.original_max_hp, _goblin.max_hp, _goblin.current_hp)
+check("enemy hp: all three HP fields are stretched together",
+      _stretched == (568, 568, 568), repr(_stretched))
+_start(lambda self: None, types.SimpleNamespace(app=_app))
+check("enemy hp: a second start does not stretch again",
+      (_goblin.original_max_hp, _goblin.max_hp, _goblin.current_hp) == _stretched)
+check("enemy hp: the hero is untouched", (_hero.max_hp, _hero.current_hp) == (300, 300))
+check("enemy hp: the stretch is logged", "enemy hp: ゴブリン 227 -> 568" in _log(), _log())
+
+# 1発の置き換えを1手の流れで通す（calculate の素点 → get_instant_damage）。
+_phase = types.SimpleNamespace(app=_app)
+_calc = _ctx.hooks["__main__:BattlePhaseManager.calculate_battle_effect"]
+_damage = _ctx.hooks["scripts.functions:get_instant_damage"]
+_defense = _ctx.hooks["scripts.characters:Character.get_npc_defense"]
+_got = {}
+
+
+def _enemy_turn(*args, **kwargs):
+    action = {"instant_damage": [{"target": "エリス", "power": "weak", "multiplier": 1,
+                                  "category": "physical"}]}
+    _calc(lambda self, a: [{"エリス": 114}] + [{}] * 7, _phase, action)
+    _got["enemy"] = _damage(lambda a, d: a - d, 114, 89)
+
+
+def _hero_turn(*args, **kwargs):
+    action = {"instant_damage": [{"target": "ゴブリン1", "power": "weak", "multiplier": 1.5,
+                                  "category": "physical"}]}
+    _calc(lambda self, a: [{"ゴブリン1": 169}] + [{}] * 7, _phase, action)
+    defense = _defense(lambda self: 57, _goblin)
+    _got["hero"] = _damage(lambda a, d: a - d, 169, defense)
+
+
+_saved_find_app = _ui.find_app
+_ui.find_app = lambda: _app
+try:
+    _turn = _ctx.hooks["__main__:BattlePhaseManager.handle_battle_situation"]
+    _turn(_enemy_turn, _phase, "ゴブリン1", "敵側", None)
+    _turn(_hero_turn, _phase, "エリス", "味方側", None)
+finally:
+    _ui.find_app = _saved_find_app
+check("turn: an enemy blow uses the game's raw and the armor, scaled for enemies",
+      _got.get("enemy") == mod.hit_damage([("weak", 1)], 114, 89, 300, enemy=True) == 8,
+      repr(_got))
+check("turn: the hero's blow applies the referee's multiplier to the ratio",
+      _got.get("hero") == mod.hit_damage([("weak", 1.5)], 169, 57, 568) == 190, repr(_got))
+check("turn: both blows are logged", _log().count("hit: ") == 2, _log())
+check("turn: nothing was swallowed", not _ctx.errors, _ctx.errors)
+
+# ---------------------------------------------------------------- 通常攻撃の頼み
+# 通常攻撃の審判の頼み文にだけ一文を足す。仲間・敵の審判の似た行には当てない（実記録の文面）。
+_attack = ("【生成要素】\n- modifications: これまでの戦闘の流れから、今回の効果に対してもっともらしい修正がある場合にそれを記入する。\n"
+           + mod.BASIC_ATTACK_LINE + "\n- vfx: 画面に表示するvfxを選択する。")
+_npc = ("- additional_effects: 戦闘の状況や流れからスキル詳細とは別の追加効果が発生すると考えられる場合、"
+        "その内容を記入する。追加が無い場合は空のリストを返す。")
+_asked = mod.steady_basic_attack(_attack)
+check("basic attack: the rule follows the additional_effects line",
+      mod.BASIC_ATTACK_LINE + mod.BASIC_ATTACK_RULE + "\n- vfx" in _asked, _asked)
+check("basic attack: asking twice adds it once",
+      mod.steady_basic_attack(_asked) == _asked)
+check("basic attack: other referees and other text are untouched",
+      mod.steady_basic_attack(_npc) == _npc and mod.steady_basic_attack("x") == "x"
+      and mod.steady_basic_attack(None) is None)
+_ctx = _fresh()
+check("basic attack: the outgoing text passes through the loader's hook",
+      _ml.llm.CHAT_TARGET in _ctx.hooks, sorted(_ctx.hooks))
 
 print()
 if failures:

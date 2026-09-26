@@ -1,0 +1,15 @@
+{
+  "entry": "fix_npc_skill_uses.py",
+  "api": 1,
+  "kind": "fix",
+  "name": {
+    "en": "NPCs stop using spent skills and stop recasting buffs",
+    "ja": "仲間と敵は使い切ったスキルと効果中の強化・弱体を使わず、宿で休むと回数が戻る"
+  },
+  "description": {
+    "en": "The game counts every skill use but never stops companions or enemies once a skill runs out: the AI referee keeps picking it with minus uses left, so a companion can spend every turn on the same self-buff and never attack, and a boss can repeat its big move endlessly. Spent skills are now hidden from the referee (the basic attack always stays), a buff or debuff skill is not offered again while its effect lasts, and your companions' uses are refilled when you rest at an inn",
+    "ja": "ゲームはスキルを使うたびに残り回数を減らすが、仲間と敵は使い切っても止まらない。AI の審判は残りがマイナスのスキルを選び続け、仲間が同じ自己強化を毎手繰り返して一度も攻撃しなかったり、ボスが大技を延々と使ったりする。使い切ったスキルを審判に見せないようにする（通常攻撃は残す）。強化・弱体のスキルは、効果が続いている間はもう一度選ばせない。仲間の回数は宿屋で休養したときに上限まで戻る"
+  },
+  "version": "1",
+  "author": "R01/Flossian"
+}

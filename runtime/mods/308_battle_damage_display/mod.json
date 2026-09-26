@@ -10,8 +10,11 @@
     "en": "Shows the damage in numbers: what you and your party deal to the enemies, and what the enemies deal to you and your party",
     "ja": "戦闘で自分や味方が敵に与えたダメージ、敵が自分や味方に与えたダメージを数字で表示する"
   },
-  "version": "3",
+  "version": "4",
   "author": "R01/Flossian",
+  "after": [
+    "319_battle_tactics"
+  ],
   "settings": {
     "SHOW_DAMAGE_TO_ENEMIES": {
       "type": "bool",

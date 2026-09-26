@@ -700,6 +700,14 @@ check("HP を書く側（resolve_battle_effect）は包まない ― 地の文�
 check("ダメージの式（get_instant_damage）は読まない",
       not any("damage" in target for target in targets), targets)
 
+# 319 は戦闘の開始（orig の後）で敵の体力を伸ばす。内側に居ると伸ばす前の値で台帳を取り、
+# 最初の報告で伸ばしたぶんを「回復」と出す（版3の実機）。外側（after）に入ること
+with io.open(os.path.join(os.path.dirname(find_mod("_battle_damage_display")), "mod.json"),
+             encoding="utf-8") as _fh:
+    _after = json.load(_fh).get("after") or []
+check("319_battle_tactics より外側で包む",
+      any(name.endswith("_battle_tactics") for name in _after), _after)
+
 print()
 if failures:
     print("失敗 {} 件: {}".format(len(failures), failures))

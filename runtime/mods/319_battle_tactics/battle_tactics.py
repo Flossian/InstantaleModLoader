@@ -16,51 +16,32 @@
 発案）はそのまま使い、**捨てられているものを拾って効かせる**。
 新しい判定は発明しない。
 
-## 1. ダメージの作り直し（引き算 → 攻め手の火力）
+## 1. ダメージの作り直し（引き算 → 割り算）
 
 `resolve_*` が呼ぶ `get_instant_damage(素点, 防御)` を包み、
-1手の文脈（誰が誰へ・power・倍率）が揃っているときだけ結果を置き換える:
+1手の文脈（誰が誰へ・power・倍率）が揃っているときだけ結果を置き換える。
+素点と防御はゲームが計算した値をそのまま使い、効き方だけを変える（版18）:
 
-    1発 = 火力 × band(power) × multiplier   火力はその手の攻め手に固有
-         × レベル差の倍率                    高い側が伸び、低い側は割られる
-         × (1 − 軽減)                        軽減 = 防御 ÷ (防御 + PIVOT)、上限 60%
+    1発 = Σ multiplier × r × r ÷ (r + 防御)   r はその裁きの素点
+         × レベル差の倍率                     格上の側の与ダメだけ伸びる
          × 防御の構え・状態異常の倍率
-         × 揺らぎ（±DAMAGE_WOBBLE%。素点側の乱数を捨てたぶんを戻す）
-    下限は受け側 max_hp の 1%（格上も削れなくはならない）。上限は無い。
-    相手の体力を超える数字（過剰殺傷）はそのまま出る
+         × 敵の一撃の強さ（敵の手だけ）
+    下限は受け側 max_hp の 1%。上限は無い
+    敵の HP は戦闘の開始で「敵の体力」の率を掛ける
 
-**火力**はプレイヤーなら**基礎値**（2×√(能力側×武器攻撃力)。ゲーム自身の
-`get_base_damage_value` が同じ手の中で計算する値を控えて使う）。
-基礎値が取れない手（敵と仲間は `get_base_damage_value` を通らない。
-仕様: NPC は武器を参照しない。§2.68 / §2.69）は**本人の max_hp** で代える。
-仲間だけは受け側 max_hp を下限にする（HP の低い仲間が無力に見えないための
-底上げ。仲間の成長はレベル差の側で受ける）。
+素点はゲームの `calculate_battle_effect` の値（GAME.md §2.10.4）。
+プレイヤー 2×√(attack_power×武器)×k、敵と仲間 2×attack_power×k（魔法は magic_power）、
+k は審判の power で決まる（weak 1.0 〜 extreme 約 2.45）。
+防御もゲームが渡す値（敵は `get_npc_defense`、プレイヤーは防具の防御力）。
+ゲームは同じ相手への2本目の裁きで素点を上書きし、`multiplier` はどこでも掛けない
+（GAME.md §2.10.4）ので、最後の裁きの素点から k で割り戻して1本ずつ組み直す。
 
-一撃の大きさが**攻め手に固有**なのが要点。
-受け側の max_hp 比で削る旧版（〜版7）は、HP600 の雑魚に 150・HP1500 の
-ボスに 400 と「大きい相手ほど大きい数字」が出て、仕組みを知らないと
-説明が付かない（実機の指摘）。この形なら同じ一振りはどの相手にも同じ帯の
-数字で、硬い相手・格上に通りが悪くなる向きだけが残る。
-**手数は相手の体力から自然に生まれる**:
-
-    実測の帯（エリス: 基礎値896・Lv62、normal どうし）:
-      雑魚   HP460  def96   → 240/発 → 2手。被弾は 41/発（ENEMY_POWER 50%）
-      同格   HP1560 def150  → 226/発 → 7手
-      ボス   HP1500〜3000   → 7〜16手（体力なりに長持ちする）
-      スライム HP64（格が違う）→ 806/発（撃破）… 過剰殺傷が同じ物差しで出る
-    雑魚3体の1戦で減るHPは2割前後 ＝ 回復なしの連戦が成り立つ
-    （敵の錨を素のまま使う版8は1戦で4割消えた。ENEMY_POWER の説明）
-
-武器は基礎値を通して直に効く（√武器なので、23 → 500 の全幅で与ダメ約4.7倍。
-一段ごとの手数の変わり方は下の表）。引き算と違って
-「素点が HP の帯を追い越して全員一撃」には戻らない ―
-band が火力の一部しか1発に乗せないため。
-
-    武器の攻撃力    雑魚460   同格1560
-    500 (基礎896)     2手       7手
-    245 (基礎618)     3手      10手
-     96 (基礎387)     5手      15手
-     23 (基礎189)     9手      （挑む装備ではない）
+割り算にしたのは、素点・防御・HP がどれも「能力値 × レベル係数」で伸びるため。
+防御が素点と同じなら半分が通り、NPC どうしの手数はレベルに依らない。
+プレイヤーの素点は √(レベル係数 × 武器) なので装備で差がつく。
+版17までは火力を独自に組んでいた（プレイヤーは k の前の基礎値 × 帯、敵と仲間は max_hp）ので、
+敵と仲間の筋力もゲームの k も効いていなかった。
+既定の率（敵の体力 250%・敵の一撃の強さ 12%）の試算は VERIFICATION.md §3.77。
 
 ## 2. 捨てられた効果の復元
 
@@ -73,6 +54,9 @@ band が火力の一部しか1発に乗せないため。
   * `AttributeEffect`: 対象の `status` へ普通の状態異常として書き
     （筋力低下 など、期限つき）、その間の与ダメ・被ダメに倍率を掛ける。
     筋・敏・知・魅 は与える側、耐・賢 は受ける側
+  * スキルの強化・弱体（効果が `buff` / `debuff` のスキル）も同じ形で書く（版18）。
+    期限はスキルの `duration`。変換はスキル側の強化・弱体も捨てていて、
+    NPC の手の4割がこれを選んでいたのに数は1つも動いていなかった（GAME.md §2.10.4）
 
 状態異常の入れ物はゲーム自身の `Character.status`
 （`{status_name, description, duration}`。審判由来の「泥濘の拘束」と同じ形・同じ場所）。
@@ -100,20 +84,15 @@ band が火力の一部しか1発に乗せないため。
 ## 触らないもの
 
 即時回復・逃走・`physical_integrity`・経験値・戦利品はゲームのまま。
-セーブに MOD 独自の鍵は増やさない。
+セーブに MOD 独自の鍵は増やさない（敵の HP は戦闘中のセーブに入るが、戦闘の終わりに敵ごと消える）。
 """
 
 import math
-import random
 
-from instantale_modloader import combat, frames, ui
+from instantale_modloader import combat, frames, llm, ui
 
 LOG_BASENAME = "battle_tactics.log"
 LOG_TAG = "battle tactics"
-
-# グローバルの `random` から引くとゲーム自身の乱数列がずれる（TECH.md §6.1）。
-# 揺らぎは戦闘の1発ごとに引くので、ずれる量もいちばん大きい。
-_RNG = random.Random()
 
 # ボタン辞書に付ける印のキー。mod ごとに別の文字列にする（TECH.md §3.3）。
 MARK = "mod_battle_tactics"
@@ -124,53 +103,39 @@ ALLY_SIDE = "ally"
 # ---------------------------------------------------------------- 設定
 # GUI から変えられる値（同じ名前と既定値が mod.json にもある。TECH.md §3.8）。
 
-# power 1段ごとに、攻め手の火力の何%を1発に乗せるか。
-# 火力 ＝ プレイヤーは基礎値（2×√(能力×武器)）、敵と仲間は本人の max_hp
-# （敵はさらに ENEMY_POWER が掛かる）。
-# normal 30% は、実測の帯（基礎値896）で 雑魚2手・同格7手前後 にする高さ。
-BAND_WEAK = 18
-BAND_NORMAL = 30
-BAND_STRONG = 45
-BAND_VERY_STRONG = 65
-BAND_EXTREME = 90
+# 敵の体力（%）。戦闘の開始で敵の max_hp に掛ける。100 でゲームのまま。
+# ゲームの素点は HP に比べて大きく（NPC の weak 1発が HP の半分前後）、割り算の防御だけでは
+# 雑魚が1〜2発で倒れる。与ダメを削らずに HP の側で手数を作る（ダメージの数字が小さく
+# 見えると強くなった感が薄れる。本人の指摘）。250 で雑魚は主人公だけで3発。
+ENEMY_HP = 250
 
-# 防御の効き。軽減 = 防御 ÷ (防御 + この値)。
-# 大きいほど防御が効かなくなる。実測の帯（防具500・敵防御100前後）で
-# 800 なら 38% / 11% になる。
-MITIGATION_PIVOT = 800
+# 敵の一撃の強さ（%）。敵の一撃だけに掛かる（仲間には掛からない）。
+# 敵の HP を伸ばすと敵が手番を持つ回数が増えるので、1発を小さくして1クエストの消耗を合わせる。
+# 12 で、ソロはレベル相応の装備では倒れ・価値 +10 の装備で通り（Lv5〜45）、
+# 仲間1人なら1クエストの消耗が3割強（VERIFICATION.md §3.77 の試算）。
+ENEMY_DAMAGE = 12
 
 # 防御の構えの軽減（%）。次の自分の手番までの被ダメに掛かる。
 GUARD_CUT = 50
 
-# レベル差の段。攻める側が受け側より高いとき、差に応じて与ダメに倍率が乗る
-# （逆向きは同じ倍率で割る ＝ 格上からの被ダメ増・格下への被ダメ減が同時に出る）。
+# レベル差の段。攻める側が受け側より高いとき、差に応じて与ダメに倍率が乗る。
+# 低い側の与ダメは割らない（両方に掛けた版17までは、差15で消耗が4倍になり、どのレベルでも
+# 格上が即死の相手になった。VERIFICATION.md §3.77 の試算）。
 #     差 ≤ FAIR         適正。倍率なし
-#     差 = ELITE        強敵の域。LEVEL_ELITE_MULT（既定 ×2）
-#     差 ≥ OUTCLASS     格が違う。LEVEL_OUTCLASS_MULT（既定 ×3）
+#     差 = ELITE        強敵の域。LEVEL_ELITE_MULT（既定 ×1.5）
+#     差 ≥ OUTCLASS     格が違う。LEVEL_OUTCLASS_MULT（既定 ×2）
 # 間は直線でつなぐ（1レベルで挙動が跳ねる崖を作らない）。
+# ゲームの素点・防御・HP もレベル係数で伸びるので、格上は倍率が無くても手強い。
+# 倍率はその差が小さくなる終盤でも「強敵」を残すためのもの。
 LEVEL_FAIR_GAP = 10
 LEVEL_ELITE_GAP = 15
 LEVEL_OUTCLASS_GAP = 20
-LEVEL_ELITE_MULT = 200
-LEVEL_OUTCLASS_MULT = 300
+LEVEL_ELITE_MULT = 150
+LEVEL_OUTCLASS_MULT = 200
 
-# ダメージの揺らぎ（%）。1発ごとに ±この幅で一様に振れる。
-# 圧縮式は素のゲームの素点側の乱数（±10%。§2.68）を捨てて決定的になっていた。
-# 毎回同じ数字は作り物めくので戻す。
-DAMAGE_WOBBLE = 10
-
-# 敵の火力（%）。敵の一撃だけに掛かる（仲間には掛からない）。
-# 敵の錨は本人の max_hp で、素のままだとプレイヤーの錨（基礎値 ≈ max_hp の
-# 6割）より強く出る。雑魚3体と1戦するとHPの4割が消え、
-# ダンジョンの回復なしの連戦が成立しない（実機の指摘）。
-# 50 で、雑魚の群れ1戦の消耗が2割前後・同格やボスは変わらず脅威、に収まる。
-ENEMY_POWER = 50
-
-# 仲間の装備の効き（%）。仲間の錨（本人の max_hp）に 2×√(能力 × 武器) × この率を足し、
+# 仲間の装備の効き（%）。仲間の素点に 2×√(能力 × 武器) × k × この率を足し、
 # 仲間の防御（本人の get_npc_defense）に防具の防御力 × この率を足す。
-# 「大きいほう」では効かない（仲間の素の値は体力・レベル由来で既に高く、Lv68 の仲間は
-# max_hp 992 に対し武器の式が 580、素の防御 260 に対し指輪 268。実機）。
-# 50 で、杖 323 の仲間の錨が +29%、指輪 268 の防御が 260 → 394（軽減 24% → 33%）。
+# 能力は物理なら attack_power、魔法なら magic_power（プレイヤーの素点と同じ組み方）。
 # 0 で素のゲームどおり（仲間の装備は数に乗らない）。
 ALLY_GEAR_PERCENT = 50
 
@@ -180,12 +145,26 @@ RESTORE_EFFECTS = True
 # 戦闘の選択肢に「防御」ボタンを足す。
 GUARD_BUTTON = True
 
+# 主人公の通常攻撃の審判に「一撃の重さは修正で表し、追加効果にダメージを重ねない」と頼む。
+# 通常攻撃の定義は `instant_damage weak`（セーブのスキル表）。ローカルのモデルは通常の武器でも
+# 9割の手で `additional_effects` に `instant_damage`（多くは extreme）を重ね、通常攻撃が
+# スキル並みになっていた（クラウドの gpt-6-luna は重ねない。VERIFICATION.md §3.77）。
+# 敵の体力と敵の一撃の強さの既定値は重ねない出し方で決めたので、この頼みと組で効く。
+STEADY_BASIC_ATTACK = True
+
 # ---------------------------------------------------------------- 定数
-# 軽減の上限。防御をどれだけ積んでも被ダメは4割残る。
-MITIGATION_MAX = 0.60
+# ゲームの素点の係数 k（power → 倍率。GAME.md §2.10.4 の実測）。
+# 同じ相手に裁きが2本あると、ゲームは最後の1本の素点しか残さないので、
+# 素点を k で割り戻して1本ずつ組み直すのに使う。
+GAME_K = {"weak": 1.0, "normal": 1.2, "strong": 1.5,
+          "very_strong": 1.95, "extreme": 2.45}
 
 # 1発の下限割合。「1点」だけが延々続く状態を作らない。
 MIN_FRACTION = 0.01
+
+# 敵の HP を掛けたかどうかの見分けの幅。ゲームの HP は 耐久 × 4 × レベル係数 を
+# 四捨五入の範囲（±2）で守る（GAME.md §2.10.4）。掛けた後はこの幅から外れる。
+HP_FORMULA_SLACK = 2
 
 # 毎ターンの継続効果の基準割合（%）。intensity 3 を等倍とする。
 PER_TURN_BANDS = {"weak": 3, "normal": 5, "strong": 8,
@@ -233,25 +212,36 @@ SKILL_MANAGER_CLS = "SkillChoicePhaseManager"
 CANCEL_MANAGER_CLS = "CancelBattleActionManager"
 
 
+# 通常攻撃の審判（`referee_player_attack_new_new`）の頼み文にだけある行。
+# 仲間・敵の審判は「スキル詳細とは別の」、スキルと自由入力の審判にはこの行が無い（output_data の実記録）。
+BASIC_ATTACK_LINE = ("- additional_effects: 戦闘の状況や流れから本来とは別の追加効果が"
+                     "発生すると考えられる場合、その内容を記入する。追加が無い場合は空のリストを返す。")
+BASIC_ATTACK_RULE = ("通常攻撃そのもののダメージは skill_effects で既に発動するので、"
+                     "ここに instant_damage として重ねて書かない。一撃の重さは modifications で表す。")
+
+
 # ================================================================ 純関数
 # 数の芯はモジュール直下に置く。オフラインの検査（tools/tests/）から直接叩ける。
 
-def band_of(power):
-    """power の列挙 → 基準割合。知らない語は normal 扱い（黙って 0 にしない）。"""
-    table = {"weak": BAND_WEAK, "normal": BAND_NORMAL, "strong": BAND_STRONG,
-             "very_strong": BAND_VERY_STRONG, "extreme": BAND_EXTREME}
-    return table.get(power, BAND_NORMAL) / 100.0
+def steady_basic_attack(text):
+    """通常攻撃の審判の頼み文なら、`additional_effects` の行の末尾に頼みを足す。それ以外はそのまま。"""
+    if not isinstance(text, str) or BASIC_ATTACK_LINE not in text \
+            or BASIC_ATTACK_RULE in text:
+        return text
+    return text.replace(BASIC_ATTACK_LINE, BASIC_ATTACK_LINE + BASIC_ATTACK_RULE, 1)
 
 
-def mitigation(defense):
-    """防御 → 軽減率 [0, MITIGATION_MAX]。引き算ではなく飽和曲線。"""
+def game_k(power):
+    """power の列挙 → ゲームの素点の係数 k。知らない語は normal 扱い（黙って 0 にしない）。"""
+    return GAME_K.get(power, GAME_K["normal"])
+
+
+def _number(value, default):
     try:
-        defense = float(defense)
-    except Exception:
-        return 0.0
-    if defense <= 0:
-        return 0.0
-    return min(MITIGATION_MAX, defense / (defense + float(MITIGATION_PIVOT)))
+        value = float(value)
+    except (TypeError, ValueError):
+        return default
+    return value if value == value else default      # NaN も読めない値として扱う
 
 
 def _ramp(value, low, high, at_low, at_high):
@@ -272,94 +262,91 @@ def level_gap(attacker_level, defender_level):
 
 
 def level_multiplier(gap):
-    """レベル差の倍率。高い側の与ダメに掛かり、低い側の与ダメは同じ率で割る。
+    """レベル差の倍率。攻める側が高いときだけ与ダメに掛かる（低い側は 1.0）。
 
-    FAIR まで 1.0、ELITE で LEVEL_ELITE_MULT、OUTCLASS で LEVEL_OUTCLASS_MULT。
-    間は直線。負の差は逆数（格上へ挑む側は同じ段だけ通りが悪くなる）。
+    FAIR まで 1.0、ELITE で LEVEL_ELITE_MULT、OUTCLASS で LEVEL_OUTCLASS_MULT。間は直線。
     """
-    magnitude = abs(gap)
-    if magnitude <= LEVEL_FAIR_GAP:
+    if gap <= LEVEL_FAIR_GAP:
         return 1.0
     elite = max(1.0, LEVEL_ELITE_MULT / 100.0)
     outclass = max(elite, LEVEL_OUTCLASS_MULT / 100.0)
-    if magnitude <= LEVEL_ELITE_GAP:
-        mult = _ramp(magnitude, LEVEL_FAIR_GAP, LEVEL_ELITE_GAP, 1.0, elite)
-    else:
-        mult = _ramp(magnitude, LEVEL_ELITE_GAP, LEVEL_OUTCLASS_GAP,
-                     elite, outclass)
-    return mult if gap >= 0 else 1.0 / mult
+    if gap <= LEVEL_ELITE_GAP:
+        return _ramp(gap, LEVEL_FAIR_GAP, LEVEL_ELITE_GAP, 1.0, elite)
+    return _ramp(gap, LEVEL_ELITE_GAP, LEVEL_OUTCLASS_GAP, elite, outclass)
 
 
-def damage_wobble(rng=None):
-    """1発ごとの揺らぎの倍率。幅は `DAMAGE_WOBBLE`（% の設定、0 で無効）。
-
-    `rng` を省くとこの MOD 専用の乱数（`_RNG`）から引く。
-    """
-    width = max(0, DAMAGE_WOBBLE) / 100.0
-    if width <= 0:
-        return 1.0
-    return 1.0 + (_RNG if rng is None else rng).uniform(-width, width)
-
-
-def hit_damage(entries, anchor, defender_max_hp, defense,
+def hit_damage(entries, raw, defense, defender_max_hp,
                out_mult=1.0, in_mult=1.0,
-               attacker_level=None, defender_level=None, wobble=1.0):
-    """1発の最終ダメージ。錨は**攻め手の火力**（`anchor`）。
+               attacker_level=None, defender_level=None,
+               enemy=False, bonus=0.0):
+    """1発の最終ダメージ。
 
-    `entries` はその対象への `[(power, multiplier), ...]`
-    （1手で同じ相手に複数のエントリが乗ることがある。実測 §2.68）。
-    `anchor` はプレイヤーなら基礎値（2×√(能力×武器)）、
-    敵・仲間なら本人の max_hp（呼び出し側が選ぶ）。
-    受け側で決まるのは 軽減（防御）・レベル差の向き・下限だけ。
-    上限は無い（版12で撤廃）。錨が攻め手の側にあるので、互角への1発は
-    式の時点で体力の一部に収まる（同格へ normal 15%・extreme 58%）。
-    受け側 max_hp 比の上限を残すと、大きい一撃の帯で「大きい相手ほど大きい数字」が
-    復活し（extreme×1.5 が雑魚に 347・同格に 1014）、雑魚への一撃まで邪魔する。
-    「大きい相手ほど大きい数字」は出ない（版7までの割合式の不自然さ。実機の指摘）。
+    `entries` はその対象への `[(power, multiplier), ...]`（1手で同じ相手に複数乗ることがある）。
+    `raw` はゲームがその対象に渡した素点で、`entries` の**最後**の裁きの値
+    （ゲームは同じ相手の2本目で素点を上書きする）。そこから k で割り戻した基礎に、
+    裁き1本ずつの k を掛けて r を作り、`multiplier × r × r ÷ (r + 防御)` を足し合わせる。
+    `bonus` は基礎への上乗せ（仲間の武器。`ally_gear_bonus`）。
+    `enemy` なら敵の一撃の強さ（`ENEMY_DAMAGE`）を掛ける。
     """
-    band_sum = 0.0
+    entries = list(entries) or [("normal", 1)]
+    raw = max(0.0, _number(raw, 0.0))
+    defense = max(0.0, _number(defense, 0.0))
+    base = raw / game_k(entries[-1][0]) + max(0.0, _number(bonus, 0.0))
+    damage = 0.0
     for power, multiplier in entries:
-        try:
-            multiplier = float(multiplier)
-        except Exception:
-            multiplier = 1.0
-        band_sum += band_of(power) * multiplier
-    try:
-        anchor = float(anchor)
-    except Exception:
-        anchor = 0.0
-    gap = level_gap(attacker_level, defender_level)
-    damage = (band_sum * anchor * level_multiplier(gap)
-              * (1.0 - mitigation(defense))
-              * out_mult * wobble)
-    try:
-        defender_max_hp = float(defender_max_hp)
-    except Exception:
-        defender_max_hp = 0.0
-    damage *= in_mult
+        r = base * game_k(power)
+        if r > 0:
+            damage += _number(multiplier, 1.0) * r * r / (r + defense)
+    damage *= level_multiplier(level_gap(attacker_level, defender_level))
+    damage *= _number(out_mult, 1.0) * _number(in_mult, 1.0)
+    if enemy:
+        damage *= ENEMY_DAMAGE / 100.0
+    defender_max_hp = _number(defender_max_hp, 0.0)
     if defender_max_hp > 0:
         damage = max(damage, defender_max_hp * MIN_FRACTION)
     return max(1, int(round(damage)))
 
 
-def ally_anchor(attacker_max, defender_max, ability=None, weapon=None, percent=None):
-    """仲間の火力の錨。本人の max_hp（受け側 max_hp を下限）に、武器があれば
-    プレイヤーと同じ基礎値 2×√(能力 × 武器) × 率（`ALLY_GEAR_PERCENT`）を**足す**。
+def ally_gear_bonus(ability, weapon, percent=None):
+    """仲間の武器の上乗せ（素点の基礎＝k を掛ける前の値へ足す）。
 
-    武器は上乗せにしかならない（弱い武器を持たせて弱くなることは無い）。
-    「大きいほう」にすると仲間の素の値に負けて一度も効かない（実機、DOC.md）。
-    能力は `get_npc_defense()` の値で代える（プレイヤーの基礎値の能力側と
-    一致した実測が 1 点）。武器は窓口 `combat.attack` から。
+    プレイヤーと同じ 2×√(能力 × 武器) に率（`ALLY_GEAR_PERCENT`）を掛ける。
+    能力は物理なら attack_power、魔法なら magic_power。読めなければ 0（ゲームのまま）。
     """
-    base = max(float(attacker_max or 0), float(defender_max or 0))
     rate = (ALLY_GEAR_PERCENT if percent is None else percent) / 100.0
-    try:
-        ability, weapon = float(ability), float(weapon)
-    except (TypeError, ValueError):
-        return base
+    ability, weapon = _number(ability, 0.0), _number(weapon, 0.0)
     if ability <= 0 or weapon <= 0 or rate <= 0:
-        return base
-    return base + 2.0 * math.sqrt(ability * weapon) * rate
+        return 0.0
+    return 2.0 * math.sqrt(ability * weapon) * rate
+
+
+def level_factor(level):
+    """ゲームのレベル係数 m = (レベル + 5) ÷ 5（GAME.md §2.10.4）。"""
+    return (_number(level, 0.0) + 5.0) / 5.0
+
+
+def game_max_hp(constitution, level):
+    """ゲームの式どおりの max_hp（耐久 × 4 × m）。読めなければ None。"""
+    constitution = _number(constitution, None)
+    if constitution is None or constitution <= 0 or _number(level, None) is None:
+        return None
+    return constitution * 4.0 * level_factor(level)
+
+
+def scaled_hp(hp, constitution, level, percent=None):
+    """敵の HP を「敵の体力」の率で伸ばした値。掛けない（掛け済み・読めない・100%）なら None。
+
+    `hp` がゲームの式どおりのときだけ掛ける。掛けた後は式から外れるので二度掛けにならない
+    （戦闘中のセーブから読み直した敵も同じ判定で素通りする）。
+    """
+    percent = ENEMY_HP if percent is None else percent
+    hp = _number(hp, None)
+    expected = game_max_hp(constitution, level)
+    if hp is None or hp <= 0 or expected is None or percent == 100:
+        return None
+    if abs(hp - expected) > HP_FORMULA_SLACK:
+        return None
+    return max(1, int(round(hp * percent / 100.0)))
 
 
 def gear_defense(defense, gear=None, percent=None):
@@ -433,6 +420,41 @@ def extract_extras(referee_response):
                 "attribute_type": str(read_field(effect, "attribute_type", "")),
                 "power": str(read_field(effect, "power", "normal")),
             })
+    return found
+
+
+def skill_extras(skills, referee_response):
+    """選ばれたスキルの強化・弱体（`buff` / `debuff`）を、`extract_extras` の attribute と同じ形で返す。
+
+    `skills` は手番の者の `Character.skills`。審判の戻りの `skill` で引き、
+    `skill_effects` の `effect_id`（1 始まり）と `targets` で、どの効果が誰に掛かったかを読む。
+    期限はスキルの `duration`（`"duration"` の鍵。無ければ呼び出し側が既定を使う）。
+    """
+    found = []
+    name = read_field(referee_response, "skill")
+    skill = skills.get(name) if isinstance(skills, dict) and isinstance(name, str) else None
+    effects = skill.get("effects") if isinstance(skill, dict) else None
+    if not isinstance(effects, list):
+        return found
+    for entry in read_field(referee_response, "skill_effects") or []:
+        try:
+            effect = effects[int(read_field(entry, "effect_id")) - 1]
+        except (TypeError, ValueError, IndexError):
+            continue
+        if not isinstance(effect, dict) or effect.get("type") not in ("buff", "debuff"):
+            continue
+        targets = read_field(entry, "targets") or []
+        if isinstance(targets, str):
+            targets = [targets]
+        duration = effect.get("duration")
+        found.append({
+            "kind": "attribute", "targets": [str(t) for t in targets],
+            "type": "enhancement" if effect["type"] == "buff" else "reduction",
+            "attribute_type": str(effect.get("attribute_type", "")),
+            "power": str(effect.get("power", "normal")),
+            "duration": duration if isinstance(duration, int) and not isinstance(duration, bool)
+            and duration > 0 else None,
+        })
     return found
 
 
@@ -556,15 +578,10 @@ def apply(ctx):
             return None
         return float(value)
 
-    def ability_of(holder):
-        """仲間の基礎値の能力側。`get_npc_defense()` の値で代える（`ally_anchor` の説明）。"""
-        fn = frames.attr(holder, "get_npc_defense", None)
-        if not callable(fn):
-            return None
-        try:
-            value = fn()
-        except Exception:
-            return None
+    def ability_of(holder, category):
+        """素点の能力側。物理は attack_power、魔法は magic_power（ゲームの素点と同じ。GAME.md §2.10.4）。"""
+        name = "magic_power" if category == "magical" else "attack_power"
+        value = frames.attr(holder, name, None)
         return float(value) if isinstance(value, (int, float)) and value > 0 else None
 
     def name_of(holder, fallback="?"):
@@ -656,7 +673,7 @@ def apply(ctx):
         state["action"] = {"app": app, "actor_key": str(character_key),
                            "side": side, "attacker": attacker,
                            "actor_name": actor_name,
-                           "entries": {}, "plan": {}, "base": None}
+                           "entries": {}, "categories": {}, "plan": {}}
 
     def close_action():
         action = state["action"]
@@ -675,7 +692,7 @@ def apply(ctx):
         action = state["action"]
         if action is None:
             return
-        entries = {}
+        entries, categories = {}, {}
         for entry in read_field(battle_action, "instant_damage") or []:
             target = read_field(entry, "target")
             if target is None:
@@ -683,7 +700,10 @@ def apply(ctx):
             entries.setdefault(str(target), []).append(
                 (str(read_field(entry, "power", "normal")),
                  read_field(entry, "multiplier", 1)))
+            # 素点は最後の裁きのもの（ゲームが上書きする）なので、分類も最後のものを残す
+            categories[str(target)] = str(read_field(entry, "category", "physical"))
         action["entries"] = entries
+        action["categories"] = categories
         plan = {}
         if isinstance(effect, (list, tuple)) and effect:
             first = effect[0]
@@ -759,17 +779,6 @@ def apply(ctx):
             state["last_defense"] = (self, result)
         return result
 
-    # その手の基礎値（2×√(能力×武器)）を控える。
-    # 武器と能力の伸びを与ダメに戻す項の材料で、値はゲーム自身の計算をそのまま使う。
-    # 敵の攻撃はこの関数を通らない（実測 §2.68）ので、控えが無い手は代用の比になる。
-    @ctx.wrap("scripts.functions:get_base_damage_value", required=False, safe=True)
-    def get_base_damage_value(orig, *args, **kwargs):
-        result = orig(*args, **kwargs)
-        action = state["action"]
-        if action is not None and isinstance(result, (int, float)):
-            action["base"] = result
-        return result
-
     @ctx.wrap("scripts.functions:get_instant_damage", required=False, safe=True)
     def get_instant_damage(orig, attack=None, defense=None, *args, **kwargs):
         result = orig(attack, defense, *args, **kwargs)
@@ -786,10 +795,10 @@ def apply(ctx):
                          "defense={}); left as is".format(attack, defense))
                 return result
             defender_max = max_hp_of(holder)
-            attacker_max = max_hp_of(action["attacker"])
             if defender_max is None:
                 return result
             entries = action["entries"].get(target) or [("normal", 1)]
+            attacker = action["attacker"]
             attacker_name = action["actor_name"]
             defender_name = name_of(holder, target)
             out_mult, _ = status_mults(attacker_name)
@@ -797,47 +806,39 @@ def apply(ctx):
             guard = state["guards"].get(defender_name)
             if guard:
                 in_mult *= 1.0 - GUARD_CUT / 100.0
-            base_value = action.get("base")
-            attacker_level = frames.attr(action["attacker"],
-                                         "experience_level", None)
+            attacker_level = frames.attr(attacker, "experience_level", None)
             defender_level = frames.attr(holder, "experience_level", None)
-            # 火力の錨。プレイヤーは基礎値（武器×能力）、
-            # 基礎値の取れない敵・仲間は本人の max_hp。
-            # 仲間だけは受け側 max_hp を下限にする（HP の低い仲間が
-            # 無力に見えないための底上げ。§2.69 の版2から引き継ぎ）。
-            gear_note = ""
-            if base_value is not None:
-                anchor = base_value
-            elif action["side"] == ALLY_SIDE:
-                # 仲間の武器（窓口 `combat`。333_ が置く）。無ければ従来どおり。
-                weapon = combat.attack(app, action["attacker"])
-                ability = ability_of(action["attacker"]) if weapon else None
-                anchor = ally_anchor(attacker_max, defender_max, ability, weapon)
+            player = getattr(app, "player", None)
+            gear_note, bonus = "", 0.0
+            if action["side"] == ALLY_SIDE and attacker is not None and attacker is not player:
+                # 仲間の武器（窓口 `combat`。333_ が置く）。無ければゲームの素点のまま。
+                # プレイヤーの武器はゲームが素点に入れている
+                weapon = combat.attack(app, attacker)
                 if weapon:
+                    ability = ability_of(attacker, action["categories"].get(target))
+                    bonus = ally_gear_bonus(ability, weapon)
                     gear_note += " weapon={:g}x{:g}".format(ability or 0, weapon)
-            else:
-                # 敵の錨（本人の max_hp）は素だと強く出過ぎる（ENEMY_POWER の
-                # 説明）。仲間とプレイヤーには掛けない。
-                anchor = (attacker_max or defender_max) * ENEMY_POWER / 100.0
-            if holder is not getattr(app, "player", None):
+            if holder is not player:
                 # 仲間の防具（窓口 `combat`）。プレイヤーの防具は本体が渡す値に入っている
                 gear = combat.defense(app, holder)
                 if gear:
                     defense = gear_defense(defense, gear)
                     gear_note += " armor={:g}".format(gear)
-            final = hit_damage(entries, anchor, defender_max, defense,
+            enemy = action["side"] == ENEMY_SIDE
+            final = hit_damage(entries, attack, defense, defender_max,
                                out_mult=out_mult, in_mult=in_mult,
                                attacker_level=attacker_level,
                                defender_level=defender_level,
-                               wobble=damage_wobble(_RNG))
-            write("hit: {} -> {} {} raw={} vanilla={} anchor={} lv={}->{} "
-                  "final={} ({:.0%} of {}){}{}".format(
+                               enemy=enemy, bonus=bonus)
+            write("hit: {} -> {} {} raw={:g} def={:g} vanilla={} lv={}->{} "
+                  "final={} ({:.0%} of {}){}{}{}".format(
                       attacker_name, defender_name,
                       "+".join("{}x{}".format(p, m) for p, m in entries),
-                      attack, result, int(anchor),
+                      attack, _number(defense, 0.0), result,
                       attacker_level if attacker_level is not None else "?",
                       defender_level if defender_level is not None else "?",
                       final, final / defender_max, int(defender_max),
+                      " enemy x{}%".format(ENEMY_DAMAGE) if enemy else "",
                       (" guard" if guard else "") + gear_note,
                       "" if out_mult == 1.0 and in_mult == 1.0 else
                       " mults=({:.2f},{:.2f})".format(out_mult, in_mult)))
@@ -857,7 +858,9 @@ def apply(ctx):
             return result
         try:
             app = getattr(self, "app", None) or ui.find_app()
-            for extra in extract_extras(referee_response):
+            extras = extract_extras(referee_response) + skill_extras(
+                frames.attr(actor, "skills", None), referee_response)
+            for extra in extras:
                 if extra["kind"] == "status":
                     if not extra["per_turn"] or not extra["status_name"]:
                         continue
@@ -880,7 +883,7 @@ def apply(ctx):
                     for target in extra["targets"]:
                         for holder in holders_named(app, target):
                             if not add_status(holder, name, description,
-                                              ATTR_DURATION):
+                                              extra.get("duration") or ATTR_DURATION):
                                 continue
                             state["recipes"][(name_of(holder, target), name)] = book
                             # 画面の行は出さない。付与は `308_` が status の差で
@@ -1098,11 +1101,50 @@ def apply(ctx):
                 del state["recipes"][key]
         except Exception:
             ctx.log_exc("battle tactics: cannot reset at the battle start")
+        try:
+            stretch_enemy_hp(getattr(self, "app", None) or ui.find_app())
+        except Exception:
+            ctx.log_exc("battle tactics: cannot stretch the enemies' HP")
         return result
 
-    ctx.log("battle tactics: bands={}/{}/{}/{}/{}% pivot={} guard_cut={}% "
-            "enemy_power={}% wobble={}% restore={} button={} (log -> {})".format(
-                BAND_WEAK, BAND_NORMAL, BAND_STRONG, BAND_VERY_STRONG,
-                BAND_EXTREME, MITIGATION_PIVOT, GUARD_CUT, ENEMY_POWER,
-                DAMAGE_WOBBLE, RESTORE_EFFECTS, GUARD_BUTTON,
+    def stretch_enemy_hp(app):
+        """敵の HP を「敵の体力」の率で伸ばす。HP は3つ組（current / max / original_max）で動かす。
+
+        掛けるのはゲームの式どおりの HP だけ（`scaled_hp`）なので、戦闘中のセーブから
+        読み直した敵には二度掛けしない。敵は戦闘の終わりに一覧ごと消える。
+        """
+        for key, holder in list((enemy_dict(app) or {}).items()):
+            scores = frames.attr(holder, "ability_scores", None)
+            constitution = scores.get("constitution") if isinstance(scores, dict) else None
+            level = frames.attr(holder, "experience_level", None)
+            original = frames.attr(holder, "original_max_hp", None)
+            reference = original if isinstance(original, (int, float)) else frames.attr(holder, "max_hp", None)
+            target = scaled_hp(reference, constitution, level)
+            if target is None:
+                continue
+            ratio = target / float(reference)
+            for field in ("original_max_hp", "max_hp", "current_hp"):
+                value = frames.attr(holder, field, None)
+                if isinstance(value, (int, float)):
+                    setattr(holder, field, max(1, int(round(value * ratio))))
+            write("enemy hp: {} {} -> {} (x{}%)".format(
+                name_of(holder, key), int(reference), frames.attr(holder, "max_hp", "?"), ENEMY_HP))
+
+    # ================================================================ 通常攻撃の頼み
+    def rewrite_outgoing(texts, site):
+        if not STEADY_BASIC_ATTACK:
+            return None
+        result = [steady_basic_attack(t) for t in texts]
+        if result == list(texts):
+            return None
+        write("basic attack: asked the referee to weigh the blow by modifications ({})".format(site))
+        return result
+
+    llm.wrap_outgoing(ctx, rewrite_outgoing, label=LOG_TAG)
+
+    ctx.log("battle tactics: enemy_hp={}% enemy_damage={}% level={}/{}/{} x{}%/x{}% "
+            "guard_cut={}% ally_gear={}% restore={} button={} steady_attack={} (log -> {})".format(
+                ENEMY_HP, ENEMY_DAMAGE, LEVEL_FAIR_GAP, LEVEL_ELITE_GAP, LEVEL_OUTCLASS_GAP,
+                LEVEL_ELITE_MULT, LEVEL_OUTCLASS_MULT, GUARD_CUT, ALLY_GEAR_PERCENT,
+                RESTORE_EFFECTS, GUARD_BUTTON, STEADY_BASIC_ATTACK,
                 ctx.out_path(LOG_BASENAME)))

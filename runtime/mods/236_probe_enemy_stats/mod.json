@@ -1,0 +1,45 @@
+{
+  "entry": "probe_enemy_stats.py",
+  "api": 1,
+  "kind": "probe",
+  "name": {
+    "en": "Probe: where combat stats come from",
+    "ja": "計測: 敵と味方の強さの出どころ"
+  },
+  "description": {
+    "en": "Records how enemies' and allies' numbers are made: the arguments and results of get_enemy_attributes_base_point / get_character_attributes / get_npc_attributes, a snapshot of every combatant at the start of each battle (level, HP, ability scores, get_npc_defense, type-like fields, skill powers, equipment, battle type and boss flag), and for each action the referee's damage entries together with the raw get_base_damage_value / get_instant_damage calls made inside it. For calculate_battle_effect it also records the whole battle_action before and after, its return value and any HP or status change across the call, and with the DRY_RUN setting on it dry-runs that step at the start of each battle: for every combatant it hands the game made-up actions (weak to extreme, physical and magical) and records the raw damage the game returns, without resolving them. Groundwork for rebuilding 319_battle_tactics around HP, attack and defense. Read-only",
+    "ja": "敵と味方の数の作られ方を録る。get_enemy_attributes_base_point / get_character_attributes / get_npc_attributes の引数と戻り、戦闘の開始時の全員の値（レベル・HP・能力値・get_npc_defense・型らしい項目・スキルの強度・装備・戦闘の種類・ボスの旗）、1手ごとに審判の裁きと、その中で呼ばれた get_base_damage_value / get_instant_damage の素の引数と戻り。calculate_battle_effect については、呼ぶ前後の battle_action の全体・戻り値・前後で変わった全員の HP と状態異常も録る（この段だけを試し打ちさせて素点を測れるかの判断材料）。設定「素点の試し打ち」を ON にすると、戦闘の開始で全員に作った行動（weak〜extreme × 物理・魔法）をゲームのこの段に渡し、返った素点を録る（HP には当てない）。319_battle_tactics を HP・攻撃・防御で組み直すための下調べ。読み取りだけでゲームは変えない"
+  },
+  "version": "3",
+  "author": "R01/Flossian",
+  "debug": true,
+  "settings": {
+    "DRY_RUN": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "素点の試し打ち",
+        "en": "Dry-run raw damage"
+      },
+      "note": {
+        "ja": "戦闘の開始で、敵と味方の全員について、作った行動（weak〜extreme の裁き × 物理・魔法）をゲームの素点の計算に渡し、返った素点を録る。HP には当てない。呼ぶ前後で HP や状態が動いたら、その場で止める",
+        "en": "At the start of each battle, hands the game made-up actions (weak to extreme, physical and magical) for every combatant and records the raw damage it computes. Nothing is applied to HP. Stops at once if HP or status changes across the calls"
+      }
+    },
+    "DRY_REPEAT": {
+      "type": "int",
+      "default": 3,
+      "min": 1,
+      "max": 10,
+      "label": {
+        "ja": "試し打ちの回数（1通りあたり）",
+        "en": "Dry runs per plan"
+      },
+      "note": {
+        "ja": "ゲームの素点には揺らぎがあるので、1通りにつきこの回数だけ呼ぶ",
+        "en": "The game's raw damage varies, so each plan is run this many times"
+      }
+    }
+  }
+}
+
