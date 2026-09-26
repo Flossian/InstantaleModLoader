@@ -1173,6 +1173,27 @@ apply_music_volume(app)         main_023 で追加
 止められなくなった曲は、止めずに `app.music` へ入れ直すと音が途切れず、
 しかも以後ゲーム自身の `stop_music` が効くようになる。
 
+#### 効果音（`235_probe_sound_effects` で実測）
+
+効果音は2通りで鳴る。
+
+```text
+play_sound(app, 名前)              起動時に読んだ `SoundManager.sounds` の鍵。戦闘の '斬撃' / 'ダメージ1' / 'ダメージ3' など
+play_sound_from_src(app, パス)     'Assets/sounds/sounds/ui/拠点/移動(屋外-屋内).wav' / '購入.wav' /
+                                   'ui/クエスト/戦闘開始(雑魚).wav' など、画面の操作の音
+```
+
+装備の音は `ui/常時/装備する.wav` と `ui/常時/装備を外す.wav`（`play_sound_from_src`）で、
+`ItemEquipManager.equip_item` / `ItemUnequipManager.unequip_item` を1回呼ぶたびに1回鳴る。
+所持品の窓を開く音は `ui/常時/アイコン_鞄.wav`。
+
+どちらも**呼んだ関数の中では鳴らさず、Clock に預けた lambda からメインスレッドで鳴らす**
+（呼び出し元は `<lambda> (instantale.py:7237)` ← `post_idle`）。
+戦闘の手はワーカースレッドで走り、その手の効果音は数百ミリ秒遅れてメインスレッドで鳴る。
+したがって「ある関数を呼んでいる間だけ音を止める」ような包みでは止まらない。
+鳴らしたくない音は、音の元になる呼び出し（装備なら `ItemEquipManager.equip_item`）をしないことで止める
+（`333_` の版20）。
+
 #### エリアBGM
 
 パスはエリア生成時に確定し、セーブに焼き込まれる:

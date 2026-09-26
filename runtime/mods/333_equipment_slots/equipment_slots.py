@@ -101,6 +101,7 @@ def apply(ctx):
         """本体の ItemEquipManager / ItemUnequipManager を素通しで走らせる（HUD の更新と文言のため）。
 
         `equipments` はこの MOD が書く（本体も popup 側で書いてから Manager を呼ぶ。223_ の記録）。
+        本体は装備のたびに効果音を鳴らすので、装備が変わらないときは呼ばない（`sync_game`）。
         """
         cls = getattr(sys.modules.get("__main__"), name, None)
         if not isinstance(cls, type):
@@ -283,8 +284,13 @@ def apply(ctx):
     def sync_game(app, sc, force=False):
         """控えから本体の `weapon` / `wearable` を決め直す。
 
-        `force` は変わっていなくても本体の `equip_item` を通す（HUD の Atk/Def は
-        本体が装備を変えたときにしか塗り直さないので、窓を開いたときに1度かける）。
+        装備が変わっていなければ本体の `equip_item` は通さない。本体は装備のたびに効果音を鳴らすので、
+        毎回通していた版は、所持品の窓を開くたびに、合算を入れていると戦闘の1手ごとにも装備の音が鳴り、
+        攻撃の効果音が聞こえなくなった（別の環境の実機）。合算の表示は最後の `repaint_status` で描き直す。
+
+        `force`（窓を開いたとき・本体の Manager の後の組み直し）は、画面上部の括弧の中
+        （本体が持っている装備の値）が装備欄の最高値と食い違っているときだけ通す。HUD の Atk/Def は
+        本体が装備を変えたときにしか塗り直さないため。食い違いはログに残す（どの場面で起きるかは未測定）。
         仲間は `sync_npc`（辞書を書くだけ）。
         """
         if not sc["player"]:
@@ -309,10 +315,13 @@ def apply(ctx):
             if isinstance(current, str):
                 current = items.get(current)
             if current is want:
-                if (force or COMBINE_SLOTS) and want is not None:
-                    write("refresh {}: {!r}".format(
-                        game_key, frames.short(getattr(want, "name", None), 60)))
-                    native_manager(app, "ItemEquipManager", want)
+                if force and want is not None:
+                    shown = hud_bonus(app, game_key)
+                    value = rules.stat_of(want, _stat)
+                    if shown is None or not matches(shown, value):
+                        write("refresh {}: the status shows (+{}) but {!r} gives {}".format(
+                            game_key, shown, frames.short(getattr(want, "name", None), 60), value))
+                        native_manager(app, "ItemEquipManager", want)
                 continue
             if current is not None and eq.get(game_key) is not None:
                 eq.pop(game_key, None)
@@ -325,6 +334,20 @@ def apply(ctx):
                 frames.short(getattr(current, "name", None), 60) if current else None))
         if COMBINE_SLOTS:
             repaint_status(app)
+
+    def hud_bonus(app, game_key):
+        """画面上部の `Atk:432(+580)` の括弧の中（本体が今持っている装備の値）。読めなければ None。
+
+        `status_texts` は本体が書いた素の文字列（合算の置き換えは塗るときの値にだけ入る）。
+        """
+        text = frames.attr(ui.find_hud(app), "status_texts", None)
+        if not isinstance(text, str):
+            return None
+        label = "Atk" if game_key == "weapon" else "Def"
+        for m in STATUS_LINE.finditer(text):
+            if m.group(1) == label:
+                return m.group(3)
+        return None
 
     def repaint_status(app):
         """画面上部の能力欄を今の文字列で描き直す。

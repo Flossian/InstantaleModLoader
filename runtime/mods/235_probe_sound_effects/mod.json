@@ -1,0 +1,16 @@
+{
+  "entry": "probe_sound_effects.py",
+  "api": 1,
+  "kind": "probe",
+  "name": {
+    "en": "Probe: sound effects",
+    "ja": "計測: 効果音"
+  },
+  "description": {
+    "en": "Records every sound effect the game plays (SoundManager.play_sound / play_sound_from_src) with its arguments, whether it happened inside ItemEquipManager.equip_item / ItemUnequipManager.unequip_item or a battle turn, the battle flags, the mods on the stack and the game-side caller. Also records every call of equip_item / unequip_item and the start of each battle turn. Used to check that 333_equipment_slots no longer plays the equip sound when opening the inventory or on every battle turn. Read-only",
+    "ja": "ゲームが鳴らす効果音（SoundManager.play_sound / play_sound_from_src）を1回ずつ録る。引数、本体の装備（equip_item / unequip_item）や戦闘の1手の中か、戦闘の旗、スタックに居る MOD、ゲーム側の呼び出し元つき。装備の入口の呼び出しと戦闘の1手の始まりも録る。333_equipment_slots が所持品の窓を開くたびと戦闘の1手ごとに装備の音を鳴らしていた件の、直した後の裏取り用。読み取りだけでゲームは変えない"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "debug": true
+}

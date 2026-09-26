@@ -1,0 +1,3 @@
+# `235_probe_sound_effects`
+
+効果音を録る。ゲームが効果音を鳴らす出口（`SoundManager.play_sound` / `play_sound_from_src`。`106_fix_battle_bgm_restore` が控えを取っている2つ）を包み、鳴らすたびに、引数（音の名前か絵のパス）、本体の装備（`ItemEquipManager.equip_item` / `ItemUnequipManager.unequip_item`）や戦闘の1手（`BattlePhaseManager.resolve_battle_effect`）の中で鳴ったか、戦闘の旗、スタックに居る MOD、ゲーム側の呼び出し元を1行書く。装備の入口が呼ばれたこと（品の名前と呼んだ MOD）と、戦闘の1手の始まりも録る。`333_equipment_slots` が装備を変えないのに `equip_item` を呼び直して、所持品の窓を開くたびと戦闘の1手ごとに装備の音が鳴っていた件（別の環境の実機）の、直した後の裏取りに使う。効果音が `SoundManager` を通らずに鳴っていても、装備の入口の呼び出しの数は取れる。どの MOD が呼んだかは、ローダの `frames.caller` が MOD のフレームを飛ばすので、スタックのファイル名（`runtime\mods\<フォルダ>\`）から別に拾う。読む用は `out\sound_effects.log`、数える用は `out\sound_effects.jsonl`。ゲームは変えない（200番台の約束どおり読み取りだけ。どの包みも `orig` の戻りをそのまま返す）

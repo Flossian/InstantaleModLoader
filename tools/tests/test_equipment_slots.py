@@ -509,6 +509,33 @@ assert best_wearable is not None
 player.equipments.pop("wearable")                             # 本体の unequip は枠を無条件に落とす
 ctx.hooks["__main__:ItemUnequipManager.unequip_item"](lambda self, item: None, object(), herb)
 assert player.equipments.get("wearable") is best_wearable, player.equipments
+# 装備が変わらないときは本体の equip_item（装備の効果音が鳴る）を通さない。
+# 戦闘の1手では合算を入れていても通さない。組み直し（force）は、画面上部の括弧の値が食い違うときだけ通す
+equips = []
+
+
+class FakeEquipManager(object):
+    def __init__(self, app):
+        self.app = app
+
+    def equip_item(self, item):
+        equips.append(item)
+
+
+main_module = sys.modules["__main__"]
+main_module.ItemEquipManager = FakeEquipManager
+unequip_hook = ctx.hooks["__main__:ItemUnequipManager.unequip_item"]
+assert battle_hook(lambda self: "turn", None) == "turn"
+assert not equips, equips
+hud.status_texts = "Atk:432(+580)\nDef:0(+439)\nExp:1/2"        # 本体の括弧が装備欄の最高値と合っている
+unequip_hook(lambda self, item: None, object(), herb)            # 枠は落とさない
+assert not equips, equips
+hud.status_texts = "Atk:432(+300)\nDef:0(+439)\nExp:1/2"        # 武器の括弧だけ古い
+unequip_hook(lambda self, item: None, object(), herb)
+assert [getattr(i, "id", None) for i in equips] == ["w1"], equips
+assert any(l.startswith("refresh weapon: the status shows (+300)") for l in ctx.lines)
+del main_module.ItemEquipManager
+hud.status_texts = "Atk:432(+580)\nDef:0(+439)"
 # 1品だけなら合算を入れても同じ値
 bucket["テスト"] = {"w1": [4, 2]}
 MOD.CONTAINER.clear(); player.give(sword, dagger, helm, ring)

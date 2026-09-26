@@ -112,7 +112,8 @@
     "231_probe_training",
     "232_probe_facility_choices",
     "233_probe_colosseum",
-    "234_probe_busy_display"
+    "234_probe_busy_display",
+    "235_probe_sound_effects"
   ],
   "disabled": []
 }
