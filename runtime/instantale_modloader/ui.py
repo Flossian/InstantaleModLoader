@@ -231,6 +231,29 @@ def conversation_partner(buttons):
     return (str(args[0]) if args else None), entry
 
 
+#: ゲーム自身の衛兵の戦闘を指す `enemy_type`（GAME.md §2.20）。
+GUARD_ENEMY_TYPE = "guard"
+
+
+def guard_encounter(buttons):
+    """衛兵に見つかった画面なら「抵抗する！」のボタンを返す。そうでなければ None。
+
+    ゲームはこの画面で旗を何も立てず、「大人しく捕まる／抵抗する！」だけを並べる
+    （`300_` の実機）。抵抗するほうは `BattleStartManager(app, 'guard', None)` を組む
+    （`bounty_hunter.log` の呼び出し元が `on_button_press`）。
+    文字列ではなく、spec のクラス名と `args[0]` で見分ける。
+    """
+    if not isinstance(buttons, (list, tuple)):
+        return None
+    for entry in buttons:
+        if spec_cls_name(entry) != "BattleStartManager":
+            continue
+        args = spec_args(entry)
+        if args and args[0] == GUARD_ENEMY_TYPE:
+            return entry
+    return None
+
+
 def pressed_entry(app, button_index):
     """押された添字から `app.buttons` の要素を引く。
 

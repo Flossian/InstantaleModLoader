@@ -1561,9 +1561,14 @@ def apply(ctx):
         ctx.wrap("scripts.hud.new_hud:InstanTaleHUD." + _target, required=False, safe=True)(pull_before_window)
 
     @ctx.wrap("__main__:InstantaleApp.toggle_twin_inventory_window", required=False, safe=True)
-    def toggle_twin_window(orig, self, left=None, right=None, label=None, situation=None, *args, **kwargs):
+    def toggle_twin_window(orig, self, left_inventory_obtainer=None, right_inventory_obtainer=None,
+                           left_label_text=None, situation=None, *args, **kwargs):
         """402_ の受け渡しの窓。右側が同行の仲間なら、組む前にその仲間の装備欄の品を辞書から抜き、
-        組んだ後に装備欄を窓の右に出す。店（場面が違う）には出さない。"""
+        組んだ後に装備欄を窓の右に出す。店（場面が違う）には出さない。
+
+        引数の名前は本体と同じにする。店を開く本体の lambda はキーワードで渡してくるので、
+        名前が違うと値が `kwargs` に残り、位置でも渡して二重になって落ちる（版21）。"""
+        right = right_inventory_obtainer
         app = ui.find_app()
         sc = None
         if (app is not None and situation == SITUATION_TWIN and right is not None
@@ -1574,7 +1579,8 @@ def apply(ctx):
                     refresh_container(app, sc)
                 except Exception:
                     ctx.log_exc("equipment slots: refreshing the npc container failed")
-        result = orig(self, left, right, label, situation, *args, **kwargs)
+        result = orig(self, left_inventory_obtainer, right_inventory_obtainer, left_label_text,
+                      situation, *args, **kwargs)
         if sc is not None:
             def settle():
                 try:

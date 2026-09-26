@@ -548,6 +548,13 @@ MOD.COMBINE_SLOTS = False
 mate.id = "78"
 mate.equipments = {"weapon": "k1"}                              # 402_ の直書き（id の文字列）
 twin_hook = ctx.hooks["__main__:InstantaleApp.toggle_twin_inventory_window"]
+# 店を開く本体の lambda はキーワードで渡してくる。二重に渡さず、そのまま本体へ届く（版21）
+got = []
+twin_hook(lambda self, left_inventory_obtainer, right_inventory_obtainer, left_label_text, situation:
+          got.append((left_inventory_obtainer, right_inventory_obtainer, left_label_text, situation)),
+          app, left_inventory_obtainer=player, right_inventory_obtainer="店主",
+          left_label_text="x", situation="trade")
+assert got == [(player, "店主", "x", "trade")], got
 twin_hook(lambda self, l, r, lab, sit: None, app, player, mate, "x", "party_transfer")
 NSC = MOD.SCOPE_FOR(app, mate, create=False)
 assert NSC is not None and not NSC["player"] and NSC["key"] == "npc:78"

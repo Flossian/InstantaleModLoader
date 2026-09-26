@@ -183,14 +183,22 @@ NEW_STOCK_TIMEOUT = 120      # LLM を待つ秒数（`405_` と同じ。返ら�
 NEW_STOCK_MIN = 4            # 1回の入れ替えで作る品の数の下限・上限（雛形の件数に合わせる）
 NEW_STOCK_MAX = 12
 
-# `item_type` / `item_sub_type` の語彙。実セーブ6世界の品と `129_` の分類から。
+# `item_type` / `item_sub_type` の語彙。ゲーム自身の品揃え生成（`shop_item_generator_ordinary`）の
+# スキーマと同じ組（`output_data` の実記録）。`generate_item_from_item_data` はこの語彙を受けて
+# `item_detail` に直す（武器は `small` -> `small_weapon`、薬草は `herb` -> `plant`）。
+# 品の `item_detail`（`small_weapon`）を渡すと `small_weapon_weapon` になり、
+# 画像の埋め込み `Data/item_embeddings/<item_detail>.json` が見つからずに落ちる（版2まで。武器が1本も入らなかった）。
 # LLM にはこの組から選ばせ、外れたら先頭の細分に寄せる。
 ITEM_TYPES = {
-    "weapon": ("small_weapon", "medium_weapon", "long_weapon", "large_weapon"),
-    "wearable": ("body_armor", "accessory", "clothing"),
-    "healing_item": ("food", "drink", "potion", "medicine", "plant"),
+    "weapon": ("small", "medium", "large", "long", "throwable"),
+    "wearable": ("headgear", "body_armor", "legwear", "gauntlets", "shield",
+                 "accessory", "clothing"),
+    "healing_item": ("food", "drink", "herb", "medicine", "potion"),
+    "consumable": ("food", "drink", "herb", "medicine", "potion", "scroll"),
     "utility": ("tool", "document"),
-    "material": ("ore", "gem", "relic", "magical_material", "creature_part"),
+    "material": ("creature_part", "ore", "gem", "treasure", "metal", "creature",
+                 "plant", "mushroom", "relic", "scrap", "magical_material",
+                 "other_material"),
 }
 RARITIES = ("common", "rare", "magical", "epic", "legendary", "mythic")
 

@@ -2133,7 +2133,7 @@ screen.paint(app) / screen.paint_party(app) / screen.refresh(app) / screen.say(a
 
 ```python
 ui.spec_cls_name(entry) / ui.spec_args(entry) / ui.pressed_entry(app, index)
-ui.conversation_partner(buttons) / ui.find_spec_button(...)
+ui.conversation_partner(buttons) / ui.find_spec_button(...) / ui.guard_encounter(buttons)
 ui.find_app() / ui.find_hud(app) / ui.cls_of(...) / ui.IDLE_SIGNALS / ui.SAFE_CLS
 ui.current_area(app) / ui.world_areas(...) / ui.nodes_of(...) / ui.facilities_of(...)
 ui.find_guild(area) / ui.find_facility(area, id) / ui.facility_name(app, facility)

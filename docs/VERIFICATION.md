@@ -3781,6 +3781,19 @@ GAME.md §1.8 から移した。
 | `injector`: 30秒の打ち切りを保留として返す | 実機では確かめない。推論中に手で注入して30秒を越えさせる必要があり、狙って起こせない（オフラインの検査で扱う） |
 | `405_` 注入し直しで降りたワーカーを立て直す | 実質 ✓。4回の注入の後に特産品の生成と9品の分類が通り、売買の窓が開いた（立て直した旨の行は無い） |
 
+### 3.76 v1.13.0 の後に直した版: `333_` 版21 は実機で成立・`312_` 版3 は実機未確認
+
+| mod | 版 | 変えたこと | 実機で見ること |
+| --- | --- | --- | --- |
+| `312_shop_restock` | 2→3 | 品揃えを入れ替えるときに `generate_item_from_item_data` へ渡す細分を、ゲーム自身の品揃え生成（`shop_item_generator_ordinary`）のスキーマの語彙にした（武器は `small` / `medium` / `large` / `long` / `throwable`、薬草は `herb`。防具と素材も同じ組へ広げた）。品の `item_detail`（`small_weapon`）を渡していたので、ゲームが `_weapon` を足して `Data/item_embeddings/small_weapon_weapon.json` を開いて落ち、**武器が1本も棚に入らなかった**（実機。`small_weapon_weapon` 12回・`medium_weapon_weapon` 8回） | 店の品揃えが入れ替わったとき、`out\shop_restock.log` の `new stock: … generated N of M` で N が M に揃い、武器の品名が並ぶ。`out\modloader.log` に `shop restock: generate_item_from_item_data failed` と `item_embeddings/…_weapon_weapon.json` が出ない |
+| `333_equipment_slots` | 20→21 | 売買の窓（`toggle_twin_inventory_window`）の包みの引数名を本体と同じにした。店を開く本体の lambda はキーワードで渡してくるので、名前が違うと値を位置でも渡して二重になり、`got multiple values for argument 'left_inventory_obtainer'` で落ちた（実機）。`227_probe_shop_stock` が外側に居る起動（デバッグモード）では、227 が位置へ直して渡すので出なかった | デバッグモードを切って店の `売買する` を押し、窓が開く。`out\modloader.log` に `multiple values` が出ない |
+
+**実機で見えたこと**（版21 の最初の起動）:
+`227_` を読み込まず、`333_` が包みの一番外側に居る並び（`129 / 405 / 134 / 312 / 333`）で店の `売買する` を押し、窓が開いて閉じられた。
+`multiple values` と `MAIN CRASH` は出なかった。
+
+ローダ（版は上げない）: `ui.guard_encounter(buttons)` を足した（衛兵に見つかった画面の「抵抗する！」のボタンを返す）。
+
 ---
 
 ## 4. 運用上の取り決め

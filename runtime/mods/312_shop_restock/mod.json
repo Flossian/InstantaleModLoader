@@ -10,7 +10,7 @@
     "en": "Regenerates a shop owner's stock after a number of in-game days, and keeps the game from re-creating an item the moment it is bought",
     "ja": "ゲーム内で一定の日数が経った店の品揃えを入れ替える。買った品がその場で作り直されて棚に戻るのも止める"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "settings": {
     "RESTOCK_DAYS": {
