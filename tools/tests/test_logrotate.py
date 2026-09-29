@@ -4,7 +4,8 @@
     python tools/tests/test_logrotate.py
 
   世代送り … `名前.log` → `.1` → `.2` … と1つずつ後ろへ。keep を超えた最古は消える。keep 0 は消すだけ
-  対象     … out/ 直下の空でない `*.log` だけ。サブフォルダ・status.json・空のログには触らない
+  対象     … out/ 直下の空でない `*.log` と `*.jsonl` だけ。サブフォルダ・status.json・空のログ・
+             送った後の `.1` には触らない
   優先順位 … コマンドライン > 環境変数 > settings/loader.json > 既定値（ROTATE_LOGS）。
              環境変数の読めない値は無いものとして下へ落ちる
 """
@@ -57,19 +58,30 @@ with tempfile.TemporaryDirectory() as tmp:
 print("[対象]")
 with tempfile.TemporaryDirectory() as out:
     write(os.path.join(out, "modloader.log"), "中身")
+    write(os.path.join(out, "probe.jsonl"), "{}\n")
     write(os.path.join(out, "empty.log"), "")
+    write(os.path.join(out, "empty.jsonl"), "")
     write(os.path.join(out, "status.json"), "{}")
     os.makedirs(os.path.join(out, "test"))
     write(os.path.join(out, "test", "inner.log"), "中身")
+    write(os.path.join(out, "test", "inner.jsonl"), "{}\n")
     said = []
     count = logrotate.rotate(out, cli_override=True, keep=1, log=said.append)
-    check("送ったのは空でない直下の .log だけ", count == 1, count)
+    check("送ったのは空でない直下の .log と .jsonl だけ", count == 2, count)
     check("modloader.log は .1 へ", read(os.path.join(out, "modloader.log.1")) == "中身")
+    check("probe.jsonl は .1 へ", read(os.path.join(out, "probe.jsonl.1")) == "{}\n"
+          and not os.path.exists(os.path.join(out, "probe.jsonl")))
     check("空のログはそのまま", os.path.exists(os.path.join(out, "empty.log"))
-          and not os.path.exists(os.path.join(out, "empty.log.1")))
+          and not os.path.exists(os.path.join(out, "empty.log.1"))
+          and os.path.exists(os.path.join(out, "empty.jsonl"))
+          and not os.path.exists(os.path.join(out, "empty.jsonl.1")))
     check("status.json とサブフォルダには触らない",
           os.path.exists(os.path.join(out, "status.json"))
-          and os.path.exists(os.path.join(out, "test", "inner.log")))
+          and os.path.exists(os.path.join(out, "test", "inner.log"))
+          and os.path.exists(os.path.join(out, "test", "inner.jsonl")))
+    check("送った後の .1 は次の回で送らない",
+          logrotate.rotate(out, cli_override=True, keep=1) == 0
+          and read(os.path.join(out, "probe.jsonl.1")) == "{}\n")
     write(os.path.join(out, "modloader.log"), "次")
     check("切っていれば何もしない", logrotate.rotate(out, cli_override=False) == 0
           and read(os.path.join(out, "modloader.log")) == "次")

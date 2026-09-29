@@ -7,16 +7,16 @@
     "ja": "計測: 買った品が棚に戻る道"
   },
   "description": {
-    "en": "Records where a bought item comes back onto the shop's shelf. Every Item.__init__ with its id, obtainer, attributes and the game-side caller chain; the shop path boundaries (ShoppingStartManagerRemake.execute / shopping_start_method_1 / toggle_twin_inventory_window / buy_item / sell_item / close_shopping_window_process / the generators) with the keys added to and removed from both inventories; the facility's goods template with stock_tier and stock_update_date; and index['item']. Read-only",
-    "ja": "買った品が店の棚へ戻るのがどこかを録る。Item.__init__ ごとの id・持ち主・attributes とゲーム側の呼び出し元の連鎖、店の経路の境目（ShoppingStartManagerRemake.execute / shopping_start_method_1 / toggle_twin_inventory_window / buy_item / sell_item / close_shopping_window_process / 生成の3入口）ごとの主と手持ちの鍵の増減、施設の品揃えの雛形（goods・stock_tier・stock_update_date）、採番台帳 index['item']。読み取りだけでゲームは変えない"
+    "en": "Records where a bought item comes back onto the shop's shelf (answered: shopping_start_method_1 rebuilds it from the goods template when the shop opens). Items born during a shop scene with id, obtainer, attributes and the game-side caller; the shop path boundaries (ShoppingStartManagerRemake.execute / shopping_start_method_1 / toggle_twin_inventory_window / buy_item / sell_item / close_shopping_window_process, and the generators inside a shop scene) as the keys added to and removed from both inventories; the goods template summary and index['item']. Read-only",
+    "ja": "買った品が店の棚へ戻るのがどこかを録る（決着: 店を開いたときに shopping_start_method_1 が雛形から作り直す）。店の場面の中で生まれた品の id・持ち主・attributes とゲーム側の呼び出し元、店の経路の境目（ShoppingStartManagerRemake.execute / shopping_start_method_1 / toggle_twin_inventory_window / buy_item / sell_item / close_shopping_window_process と、店の場面の中の生成の入口）ごとの主と手持ちの鍵の増減、品揃えの雛形の要約と採番台帳 index['item']。読み取りだけでゲームは変えない"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "debug": true,
   "settings": {
     "ITEM_SAMPLES": {
       "type": "int",
-      "default": 200,
+      "default": 0,
       "min": 0,
       "max": 9999,
       "label": {
@@ -24,8 +24,8 @@
         "en": "New items to record outside a shop"
       },
       "note": {
-        "ja": "店の場面の中で生まれた品は、この件数に関わらず全部写す。ロードのたびに何百も生まれる店の外の品を、この件数で抑える",
-        "en": "Items born during a shop scene are always recorded; this caps the rest (a load creates hundreds)"
+        "ja": "店の場面の中で生まれた品は、この件数に関わらず全部写す。店の外（ロードや NPC の生成で何百も生まれる）は既定で写さない",
+        "en": "Items born during a shop scene are always recorded; the rest (a load or npc generation creates hundreds) are not recorded by default"
       }
     },
     "BOUNDARY_SAMPLES": {
@@ -44,7 +44,7 @@
     },
     "CALLER_DEPTH": {
       "type": "int",
-      "default": 8,
+      "default": 5,
       "min": 1,
       "max": 40,
       "label": {

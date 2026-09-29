@@ -10,7 +10,7 @@
     "en": "Measures how far a character that only a mod owns can go. Builds one Character with a string id (mod:229_probe_mod_npc:visitor) through the loader's modnpc, follows the player into every facility, and puts a mark on the owner's profile there. Records whether the save on disk keeps any mod: key, whether a conversation starts and ends, whether the instance collects current_log and relationship, whether detail generation is needed, and whether the mark reaches the prompt arguments. Everything is lifted back before the save",
     "ja": "MOD だけが持つ人物がどこまで通るかを測る。ローダの modnpc で文字列の id（mod:229_probe_mod_npc:visitor）の Character を1人組み、プレイヤーの入った施設へ連れて回り、その施設の主の profile に印を1行足す。ディスクのセーブに mod: の鍵が残らないか、会話が始まって終わるか、instance に current_log と relationship が溜まるか、詳細生成が要るか、印が頼み文の引数まで届くかを録る。置いたものは保存の直前に全部引き上げる"
   },
-  "version": "3",
+  "version": "4",
   "author": "R01/Flossian",
   "debug": true,
   "settings": {
@@ -100,18 +100,6 @@
       "note": {
         "ja": "手が空いてからこの秒数置いて「会話を終了する」を押す",
         "en": "After the game is idle, wait this long before ending the conversation"
-      }
-    },
-    "LIFT_ROSTER": {
-      "type": "bool",
-      "default": true,
-      "label": {
-        "ja": "保存の間、来訪者を名簿から外す",
-        "en": "Lift the visitor off the roster during saves"
-      },
-      "note": {
-        "ja": "切っても disk の leaked が空なら、保存は名簿を読んでいない。外している間はゲームも来訪者を引けない",
-        "en": "If leaked stays empty with this off, the save does not read the roster; while lifted the game cannot look the visitor up either"
       }
     },
     "AUTO_LOAD_WORLD": {

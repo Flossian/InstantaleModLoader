@@ -7,10 +7,10 @@
     "ja": "計測: クラッシュ地点"
   },
   "description": {
-    "en": "Instruments the 4 open crash sites on every call, not just on failure. Read-only",
-    "ja": "未解決の4つのクラッシュ地点を、失敗時だけでなく毎回計測する。読み取りだけでゲームは変えない"
+    "en": "Instruments the open crash sites on every call; the 2 settled ones are recorded only on failure. Read-only",
+    "ja": "未解決のクラッシュ地点を、失敗時だけでなく毎回計測する（決着した2つは失敗時だけ残す）。読み取りだけでゲームは変えない"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "debug": true
 }

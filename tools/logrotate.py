@@ -9,6 +9,7 @@
 そこで注入のたびに（＝1世代ごとに）ログを新しくする。
 今あるものは `名前.log.1` に退避し、本体は空の状態から書き始める。
 KEEP_GENERATIONS を増やせば `.1`, `.2`, ... と複数世代を残せる。
+対象は `*.log` と、probe が後で数えるために書く `*.jsonl`（ROTATED_SUFFIXES）。
 
 【なぜホスト側（injector.py / watcher.py）で行うのか】ゲームプロセスの中（instantale_modloader.boot）で入れ替えると、
 boot が自分で modloader.log に書いている最中や、
@@ -50,6 +51,12 @@ ROTATE_LOGS = True
 # 1 なら `名前.log.1` だけが残る。
 # 0 にすると退避せずに消す（ディスクを一切使いたくないとき用）。
 KEEP_GENERATIONS = 1
+
+# 世代を送る拡張子。
+# `*.jsonl` は元は対象外で、切り替えを ON にしていても積み上がり続けていた
+# （`area_quest_difficulty.jsonl` が約1か月で約100MB）。
+# 注入をまたいで数えたいときは、`*.log` と同じく切り替えを OFF にする。
+ROTATED_SUFFIXES = (".log", ".jsonl")
 
 ENV_VAR = "INSTANTALE_LOG_ROTATE"
 
@@ -126,7 +133,8 @@ def add_arguments(parser) -> None:
     # このファイルの定数を出すと嘘になる。
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--log-rotate", dest="log_rotate", action="store_true", default=None,
-                       help="start fresh out/*.log on every injection (default: {})".format(
+                       help="start fresh out/*.log and *.jsonl on every injection "
+                            "(default: {})".format(
                            "on" if enabled() else "off"))
     group.add_argument("--no-log-rotate", dest="log_rotate", action="store_false",
                        help="keep appending to the existing logs (for debugging)")
@@ -154,11 +162,11 @@ def _shift(path: str, keep: int) -> None:
 
 def rotate(out_dir: str, *, cli_override: bool | None = None,
            keep: int = KEEP_GENERATIONS, log=None) -> int:
-    """out_dir 直下の *.log を1世代ぶん送る。入れ替えた本数を返す。
+    """out_dir 直下の *.log と *.jsonl を1世代ぶん送る。入れ替えた本数を返す。
 
     OFF のときは何もせず 0 を返す。
-    out/ 直下の `*.log` だけが対象で、サブディレクトリ（out/test, out/recon）や `*.log` でないもの（status.json,
-    crashlog_baseline.txt）には触らない。
+    out/ 直下の `ROTATED_SUFFIXES` だけが対象で、サブディレクトリ（out/test, out/recon）や
+    それ以外の拡張子（status.json, crashlog_baseline.txt, release_notes.json）には触らない。
 
     MOD が持つ永続データはそもそもここに来ない（`state/`。
     ローダの `ctx.state_path`）。
@@ -180,7 +188,7 @@ def rotate(out_dir: str, *, cli_override: bool | None = None,
     rotated = 0
     failed = []
     for name in sorted(os.listdir(out_dir)):
-        if not name.endswith(".log"):
+        if not name.endswith(ROTATED_SUFFIXES):
             continue
         path = os.path.join(out_dir, name)
         if not os.path.isfile(path):

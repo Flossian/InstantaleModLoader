@@ -10,7 +10,7 @@
     "en": "Measures summarizer/facilitator arguments to find the source of empty Literal[]",
     "ja": "サマライザ／ファシリテータ一族の引数を計測し、空 Literal[] の発生源を追う"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "debug": true
 }

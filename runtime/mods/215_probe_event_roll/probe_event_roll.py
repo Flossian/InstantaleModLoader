@@ -49,6 +49,12 @@ HP・体力(physical_integrity)・負傷・レベルのどれとも、
 どちらも `313_event_ability_check` と同じ場所に書く。
 判定を触る MOD と計測が別々の時系列になると、
 差が MOD のせいか元からかを見分けられないため。
+
+版3: `evaluate` の本体が例外で抜けたときに窓を閉じるようにした。
+版2までは窓が開いたまま残り、次の `resolve` まで判定と無関係な
+`calculate_attribute` を上限（40件）まで拾いえた。
+あわせて `calculate_attribute` の包みは受け取った引数をそのまま本体へ渡す形にした
+（キーワードで来た引数を位置へ直さない）。
 """
 
 import datetime
@@ -255,7 +261,13 @@ def apply(ctx):
         # ここから resolve までの calculate_attribute を数える。
         state["open"] = True
         state["calc"] = []
-        result = orig(*args, **kwargs)
+        try:
+            result = orig(*args, **kwargs)
+        except BaseException:
+            # 本体が投げたら resolve は来ない。窓を開けたままにしない（版3）。
+            state["open"] = False
+            state["pending"] = None
+            raise
         try:
             if state["shape"] is None:
                 state["shape"] = shape_of(result)
@@ -350,8 +362,8 @@ def apply(ctx):
     # ------------------------- 能力値が判定に読まれているかを直接見る
     @ctx.wrap("scripts.characters:Character.calculate_attribute",
               required=False, safe=True)
-    def calculate_attribute(orig, self, attribute_score, *args, **kwargs):
-        result = orig(self, attribute_score, *args, **kwargs)
+    def calculate_attribute(orig, self, *args, **kwargs):
+        result = orig(self, *args, **kwargs)
         try:
             # 窓の外（戦闘・訓練・画面表示）でも呼ばれる。
             # 判定と無関係な呼び出しでログを埋めないよう、
@@ -362,7 +374,7 @@ def apply(ctx):
             if (state["open"] and not state["probing"]
                     and len(state["calc"]) < CALC_LOG_LIMIT):
                 state["calc"].append({
-                    "arg": attribute_score,
+                    "arg": frames.arg(args, kwargs, "attribute_score", 0),
                     "result": result,
                     "who": getattr(self, "name", None),
                     "caller": frames.caller(depth=3),

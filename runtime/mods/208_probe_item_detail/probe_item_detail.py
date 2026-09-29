@@ -29,6 +29,18 @@
 
 この mod は観測しかしない。
 値は変えず、記録に失敗しても本体は必ず呼ぶ。
+
+版3: 寸法の問いは `109_fix_item_detail_autosize` で決着した（VERIFICATION_LOG.md §2.17）。
+版2までは注入のたびに（1プロセス平均6回ほど）新しい品を最大40件、1件約 5KB の
+木ごとの書き出しをしていて、`item_detail.log` の約6割がこれだった。
+寸法の書き出しは1プロセスあたり最初の2件だけにし、それ以外の品は書かない。
+説明欄が閉じた後も残る件（VERIFICATION.md §3.11。計測中）の opacity の見張りは残す。
+見張りの行の呼び出し元は毎回付ける。§3.11 は `-> 1` の呼び出し元から対になる関数を探す手順で、
+間欠の症状がどの行で出るかは選べないため。
+`frames.caller` の重さの元だった `owner_of` の総当たりは、ローダが答えを覚えるようになった。
+見張りの件数・書き出した品の控えは `sys` に置き、1プロセスで数える
+（件数の上限は1プロセス 1000。1か月の実測で1プロセス平均約50件）。
+包みは `safe=True` にし、受け取った引数をそのまま `orig` へ渡す。
 """
 
 import datetime
@@ -38,9 +50,8 @@ from instantale_modloader import frames
 
 LOG_BASENAME = "item_detail.log"
 
-# 書き出す組み合わせの上限。
-# 1つのアイテムにつき1件なので少しでいい。
-MAX_SAMPLES = 40
+# 寸法を木ごと書き出す品の数（1プロセスあたり。版3で40件/注入から減らした）。
+MAX_SAMPLES = 2
 
 # 子ウィジェットを何段まで潜るか。
 # BoxLayout の中に BoxLayout があっても届く程度。
@@ -54,14 +65,27 @@ LABEL_ATTRS = ("font_size", "font_name", "text_size", "texture_size", "halign",
                "valign", "shorten", "shorten_from", "max_lines", "line_height",
                "markup", "strip", "bold", "color")
 
-# `opacity` の上げ下げを何件まで残すか。
+# `opacity` の上げ下げを何件まで残すか（1プロセスあたり。版3）。
 # 所持品を開くたびに数件出るので、
-# 「閉じたのに残った」1回分を含む前後が読めれば十分。
-MAX_OPACITY_EVENTS = 200
+# 「閉じたのに残った」1回分を含む前後が読めれば足りるが、
+# 間欠なので長く遊んだ回の後半で出ても拾えるよう広めに取る。
+MAX_OPACITY_EVENTS = 1000
 
 # アイテム側から読む値。
 # 説明文の本当の長さが要る（画面に出た分ではなく）。
 ITEM_ATTRS = ("item_id", "text", "rarity", "width_slots", "height_slots")
+
+# 1プロセスで共有する数えと控え。
+# 注入し直すと MOD のモジュールごと読み直されるので、モジュール変数では消える。`sys` に置く。
+STATE_ATTR = "_instantale_probe_item_detail_state"
+
+
+def _state() -> dict:
+    state = getattr(sys, STATE_ATTR, None)
+    if not isinstance(state, dict):
+        state = {"seen": set(), "opacity": 0}
+        setattr(sys, STATE_ATTR, state)
+    return state
 
 
 def apply(ctx):
@@ -70,7 +94,7 @@ def apply(ctx):
         ctx.log("scripts.hud.new_hud not loaded; skipping", level="WARN")
         return
 
-    seen = set()
+    state = _state()
 
     write = ctx.logger(LOG_BASENAME, stamp=False)
 
@@ -119,8 +143,6 @@ def apply(ctx):
             depth += 1
         return lines or ["  parent[0] <none: the box is not in the tree>"]
 
-    opacity_log = {"count": 0}
-
     def window_size():
         try:
             from kivy.core.window import Window
@@ -128,50 +150,58 @@ def apply(ctx):
         except Exception:
             return "?"
 
-    @ctx.wrap("scripts.hud.new_hud:ItemDetailBox.update_content")
-    def update_content(orig, self, item, *args, **kwargs):
-        result = orig(self, item, *args, **kwargs)
-        # 箱はホバーのたびに作り直されるので、
-        # 見張りもそのたびに掛け直す（同じ箱には二度掛からないよう印を持たせてある）。
-        watch_opacity(self)
+    def dump(box, item):
+        """寸法を木ごと書き出す。1プロセスあたり最初の `MAX_SAMPLES` 品だけ（版3）。"""
+        seen = state["seen"]
+        # 版3: 上限を先に見る。越えたら品の値も読まない。
+        if len(seen) >= MAX_SAMPLES:
+            return
+        text = frames.attr(item, "text")
+        key = (frames.attr(item, "item_id"),
+               len(text) if isinstance(text, str) else -1)
+        # マウスが乗っている間ずっと呼ばれる。
+        # 中身が変わったときだけ書く。
+        if key in seen:
+            return
+        seen.add(key)
+
+        lines = ["", "=" * 72,
+                 "[{}] update_content  window={}".format(
+                     datetime.datetime.now().isoformat(timespec="milliseconds"),
+                     window_size()),
+                 "  item: " + "  ".join(
+                     "{}={}".format(name, frames.repr_value(frames.attr(item, name)))
+                     for name in ITEM_ATTRS)]
+
+        # 属性名は推測しない。
+        # box が自分で持っているものを全部出す（どれが説明のラベルなのかは、
+        # ここに出る名前で決める）。
         try:
-            text = frames.attr(item, "text")
-            key = (frames.attr(item, "item_id"),
-                   len(text) if isinstance(text, str) else -1)
-            # マウスが乗っている間ずっと呼ばれる。
-            # 中身が変わったときだけ書く。
-            if key in seen or len(seen) >= MAX_SAMPLES:
-                return result
-            seen.add(key)
+            own = vars(box)
+        except Exception:
+            own = {}
+        # `+` は `or` より先に評価されるので、
+        # `"..." + x or y` の y は決して使われない（左辺が必ず真になる）。
+        # 組んでから判定する。
+        names = ", ".join(sorted(own))
+        lines.append("  vars(box): " + (names or "<none>"))
+        for name in sorted(own):
+            lines.append("    {:<28} = {}".format(name, frames.repr_value(own[name])))
 
-            lines = ["", "=" * 72,
-                     "[{}] update_content  window={}".format(
-                         datetime.datetime.now().isoformat(timespec="milliseconds"),
-                         window_size()),
-                     "  item: " + "  ".join(
-                         "{}={}".format(name, frames.repr_value(frames.attr(item, name)))
-                         for name in ITEM_ATTRS)]
+        lines.append("  tree:")
+        lines += describe(box, 0)
+        lines.append("  ancestry:")
+        lines += ancestry(box)
+        write("\n".join(lines))
 
-            # 属性名は推測しない。
-            # box が自分で持っているものを全部出す（どれが説明のラベルなのかは、
-            # ここに出る名前で決める）。
-            try:
-                own = vars(self)
-            except Exception:
-                own = {}
-            # `+` は `or` より先に評価されるので、
-            # `"..." + x or y` の y は決して使われない（左辺が必ず真になる）。
-            # 組んでから判定する。
-            names = ", ".join(sorted(own))
-            lines.append("  vars(box): " + (names or "<none>"))
-            for name in sorted(own):
-                lines.append("    {:<28} = {}".format(name, frames.repr_value(own[name])))
-
-            lines.append("  tree:")
-            lines += describe(self, 0)
-            lines.append("  ancestry:")
-            lines += ancestry(self)
-            write("\n".join(lines))
+    @ctx.wrap("scripts.hud.new_hud:ItemDetailBox.update_content", safe=True)
+    def update_content(orig, self, *args, **kwargs):
+        result = orig(self, *args, **kwargs)
+        try:
+            # 箱はホバーのたびに作り直されるので、
+            # 見張りもそのたびに掛け直す（同じ箱には二度掛からないよう印を持たせてある）。
+            watch_opacity(self)
+            dump(self, frames.arg(args, kwargs, "item", 0))
         except Exception:
             ctx.log_exc("item detail probe: dump failed")
         return result
@@ -197,9 +227,10 @@ def apply(ctx):
             return
 
         def on_opacity(instance, value):
-            if opacity_log["count"] >= MAX_OPACITY_EVENTS:
+            # 版3: 数えは1プロセスで共有する（版2は注入ごとの閉包に持っていた）。
+            if state["opacity"] >= MAX_OPACITY_EVENTS:
                 return
-            opacity_log["count"] += 1
+            state["opacity"] += 1
             try:
                 # 呼び出し元は段数で数えない（`runtime/` 配下を飛ばす）。
                 caller = frames.caller()

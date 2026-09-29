@@ -10,7 +10,7 @@
     "en": "Catches empty Literal[] as the pydantic model is built, recording the caller",
     "ja": "pydantic モデル生成の瞬間に空 Literal[] を捕らえ、呼び出し元まで記録する"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "debug": true
 }

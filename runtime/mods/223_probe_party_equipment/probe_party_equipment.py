@@ -32,6 +32,18 @@ MOD どうしは import しない（TECH.md §3.2.3）ので、402 の state は
 
 200番台の約束どおり読み取りだけ。
 引数も戻り値も装備処理も触らず、記録に失敗しても本体は必ず呼ぶ。
+
+##### 版の記録
+
+- 版5: 402 の確認は済んでいた（402 は版21 まで進んだ）が、デバッグモードで毎回動き続け、
+  ログの 8 割が `333_` の内部の装備（マネージャを組み直して `equip_item` を直に呼ぶ）
+  だった。次のように直した。
+  - 受け取った引数をそのまま `orig` へ渡す。`app` / `character_id` / `pos` /
+    `item_instance` を名前で受けて位置で渡していたので、内側の MOD が受け取る
+    呼び方が素と変わっていた（`227_` で実例。VERIFICATION.md §3.76）
+  - 行数の枠（`LOG_CAP`）を使い切った後は、行を組む前・popup の予約の前に降りる
+    （前は装備欄を文字にしてから、ロガーの枠で捨てていた）
+  - マネージャの `__init__` はクラスごとに注入1回につき1行にした
 """
 
 from instantale_modloader import frames, ui
@@ -42,11 +54,28 @@ LOG_CAP = 500
 SEEN_CAP = 300
 
 
+def arg_of(args, kwargs, index, name):
+    """包みが受け取った引数から1つ引く。位置でもキーワードでも同じ値を返す（版5）。"""
+    if name in kwargs:
+        return kwargs[name]
+    return args[index] if len(args) > index else None
+
+
 def apply(ctx):
-    probe = ctx.logger(LOG_BASENAME, tag="party equipment probe:", cap=LOG_CAP)
+    _probe = ctx.logger(LOG_BASENAME, tag="party equipment probe:", cap=LOG_CAP)
     schedule = ui.scheduler(ctx, "party equipment probe")
     state = {"npc_id": None}
     seen = set()
+    inited = set()
+    written = [0]
+
+    def probe(text):
+        written[0] += 1
+        _probe(text)
+
+    def has_room():
+        """この注入で書ける行が残っているか。行を組む前に見る（版5）。"""
+        return written[0] < LOG_CAP
 
     def character_name(character, fallback=""):
         name = getattr(character, "name", None)
@@ -86,11 +115,16 @@ def apply(ctx):
             for slot, ref in equipments.items()) + "}"
 
     # ------------------------------------------------------------ 会話相手
+    # 版5: どの包みも受け取った引数をそのまま `orig` へ渡す。記録に要る値は `arg_of` で引く。
 
     @ctx.wrap("__main__:ConversationStartManager.__init__", required=False, safe=True)
-    def conversation_start(orig, self, app, character_id, *args, **kwargs):
-        state["npc_id"] = str(character_id) if character_id is not None else None
-        return orig(self, app, character_id, *args, **kwargs)
+    def conversation_start(orig, self, *args, **kwargs):
+        try:
+            character_id = arg_of(args, kwargs, 1, "character_id")
+            state["npc_id"] = str(character_id) if character_id is not None else None
+        except Exception:
+            ctx.log_exc("party equipment probe: cannot read the conversation partner")
+        return orig(self, *args, **kwargs)
 
     @ctx.wrap("__main__:ConversationEndManager.finish_conversation",
               required=False, safe=True)
@@ -102,6 +136,8 @@ def apply(ctx):
 
     def probe_popup(widget):
         try:
+            if not has_room():
+                return
             item = getattr(widget, "item_instance", None)
             owner = getattr(item, "obtainer", None) if item is not None else None
             popup = getattr(widget, "active_popup", None)
@@ -167,17 +203,21 @@ def apply(ctx):
 
     @ctx.wrap("scripts.hud.new_hud:InventoryItem.show_popup_menu",
               required=False, safe=True)
-    def show_popup_menu(orig, self, pos, *args, **kwargs):
-        result = orig(self, pos, *args, **kwargs)
+    def show_popup_menu(orig, self, *args, **kwargs):
+        result = orig(self, *args, **kwargs)
         # active_popup はこの戻りの時点では未設定だった（同期読みは popup=None を写す）。
-        # 402 のボタン追加と同じく、次フレームで読む。
-        schedule(lambda: probe_popup(self))
+        # 402 のボタン追加と同じく、次フレームで読む。版5: 枠を使い切った後は予約もしない。
+        if has_room():
+            schedule(lambda: probe_popup(self))
         return result
 
     # ------------------------------------------------------------ 装備Manager
 
     def probe_manager(stage, manager, item=None):
         try:
+            # 版5: 枠を使い切った後は、行を組む前に降りる（前は組んでから捨てていた）。
+            if not has_room():
+                return
             app = getattr(manager, "app", None)
             if app is None:
                 app = ui.find_app()
@@ -207,45 +247,41 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("party equipment probe: manager observation failed")
 
-    @ctx.wrap("__main__:ItemEquipManager.__init__", required=False, safe=True)
-    def equip_init(orig, self, app, *args, **kwargs):
-        result = orig(self, app, *args, **kwargs)
-        probe_manager("ItemEquipManager.__init__:after", self, None)
-        return result
+    def probe_init(stage, manager):
+        """`__init__` はクラスごとに注入1回につき1行だけ。
 
-    @ctx.wrap("__main__:ItemEquipManager.execute", required=False, safe=True)
-    def equip_execute(orig, self, item_instance, *args, **kwargs):
-        probe_manager("ItemEquipManager.execute:before", self, item_instance)
-        result = orig(self, item_instance, *args, **kwargs)
-        probe_manager("ItemEquipManager.execute:after", self, item_instance)
-        return result
+        版5: `333_` が装備のたびにマネージャを組み直すので、`__init__` の行が
+        ログの 3 割近くを占めていた。ロード時に作られることは確かめ済み（GAME.md §2.13.3）。
+        """
+        if stage in inited:
+            return
+        inited.add(stage)
+        probe_manager(stage, manager, None)
 
-    @ctx.wrap("__main__:ItemEquipManager.equip_item", required=False, safe=True)
-    def equip_item(orig, self, item_instance, *args, **kwargs):
-        probe_manager("ItemEquipManager.equip_item:before", self, item_instance)
-        result = orig(self, item_instance, *args, **kwargs)
-        probe_manager("ItemEquipManager.equip_item:after", self, item_instance)
-        return result
+    def watch_manager(cls_name, method):
+        @ctx.wrap("__main__:{}.{}".format(cls_name, method), required=False, safe=True)
+        def around(orig, self, *args, **kwargs):
+            item = arg_of(args, kwargs, 0, "item_instance")
+            label = "{}.{}".format(cls_name, method)
+            probe_manager(label + ":before", self, item)
+            result = orig(self, *args, **kwargs)
+            probe_manager(label + ":after", self, item)
+            return result
+        return around
 
-    @ctx.wrap("__main__:ItemUnequipManager.__init__", required=False, safe=True)
-    def unequip_init(orig, self, app, *args, **kwargs):
-        result = orig(self, app, *args, **kwargs)
-        probe_manager("ItemUnequipManager.__init__:after", self, None)
-        return result
+    def watch_init(cls_name):
+        @ctx.wrap("__main__:{}.__init__".format(cls_name), required=False, safe=True)
+        def init(orig, self, *args, **kwargs):
+            result = orig(self, *args, **kwargs)
+            probe_init("{}.__init__:after".format(cls_name), self)
+            return result
+        return init
 
-    @ctx.wrap("__main__:ItemUnequipManager.execute", required=False, safe=True)
-    def unequip_execute(orig, self, item_instance, *args, **kwargs):
-        probe_manager("ItemUnequipManager.execute:before", self, item_instance)
-        result = orig(self, item_instance, *args, **kwargs)
-        probe_manager("ItemUnequipManager.execute:after", self, item_instance)
-        return result
-
-    @ctx.wrap("__main__:ItemUnequipManager.unequip_item", required=False, safe=True)
-    def unequip_item(orig, self, item_instance, *args, **kwargs):
-        probe_manager("ItemUnequipManager.unequip_item:before", self, item_instance)
-        result = orig(self, item_instance, *args, **kwargs)
-        probe_manager("ItemUnequipManager.unequip_item:after", self, item_instance)
-        return result
+    for cls_name, methods in (("ItemEquipManager", ("execute", "equip_item")),
+                              ("ItemUnequipManager", ("execute", "unequip_item"))):
+        watch_init(cls_name)
+        for method in methods:
+            watch_manager(cls_name, method)
 
     ctx.log("party equipment probe: popup + ItemEquipManager/ItemUnequipManager "
             "observation goes to out/{}".format(LOG_BASENAME))

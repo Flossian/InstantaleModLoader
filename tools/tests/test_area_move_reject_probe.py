@@ -183,5 +183,39 @@ for passes, marker in ((False, ">> area_move_rejector called"), (True, ">> elaps
         check("日数送りの中の書き込みが残る", app.world.characters.get("13") == "after",
               sorted(app.world.characters))
 
+print("版4: 値は型名だけ・引数は受け取った形のまま")
+ctx = FakeCtx(tempfile.mkdtemp())
+MOD.apply(ctx)
+app = App()
+app.party = {"player": {}}
+app.original_party = ["player"]
+app.world = types.SimpleNamespace(characters={})
+app.player = types.SimpleNamespace(name="PC")
+app.world_dict = {"areas": {str(i): "x" * 50 for i in range(200)}}
+app.text_speed = 0.04
+received = []
+
+
+def kw_execute(self, *args, **kwargs):
+    received.append(("execute", args, dict(kwargs)))
+    _ = app.world_dict, app.text_speed
+    ctx.hooks["__main__:InstantaleApp.elapse_days"](
+        lambda s, *a, **k: received.append(("elapse", a, dict(k))), app, days=14)
+
+
+ctx.hooks["__main__:AreaMoveManager.execute"](kw_execute, Manager(app), choice_text="馬車")
+with io.open(os.path.join(ctx.out_dir, MOD.LOG_BASENAME), encoding="utf-8") as fh:
+    text = fh.read()
+check("execute はキーワードのまま渡す",
+      received[:1] == [("execute", (), {"choice_text": "馬車"})], received)
+check("elapse_days もキーワードのまま渡す",
+      received[1:] == [("elapse", (), {"days": 14})], received)
+check("キーワードの choice も窓の行に出る", "choice='馬車'" in text, text[:200])
+check("キーワードの日数も分岐の行に出る", ">> elapse_days(14)" in text, text)
+check("大きな辞書は型と件数だけ", ".world_dict = dict(len=1)" in text
+      and "xxxxx" not in text, text)
+check("数はそのまま", ".text_speed = 0.04" in text, text)
+check("例外は出ていない", ctx.errors == [], ctx.errors)
+
 print("PASS" if not failures else "FAIL: " + ", ".join(failures))
 sys.exit(0 if not failures else 1)

@@ -240,10 +240,39 @@ def owner_of(code):
 
     `__main__` のクラスを舐めて**同じコードオブジェクト**を探せば、
     推測なしに持ち主が決まる。
-    稀にしか呼ばれない場所で使う前提なので総当たりでよい。
+
+    総当たりの答えはコードオブジェクトごとに覚える（`_OWNER_CACHE`）。
+    元は「稀にしか呼ばれない場所で使う前提なので総当たりでよい」として毎回舐めていたが、
+    `caller()` が1段ごとにここを呼ぶので、probe の多くが押下・描画・戦闘の手のたびに
+    `__main__` の全クラスを何度も舐めていた（1回 1〜2ms の見積もり）。
+    ゲームのコードの持ち主は、包まれても `__original__` の層に残るので変わらない。
+    見つからなかった答え（Kivy や `scripts.*` のコード）も覚える。
+    ローダと mod のコードだけは覚えない。非 safe な `ctx.wrap` のラッパは全パッチで
+    `__code__` を共有しているので、1つ目に見つかった持ち主を覚えると他でも同じ名前を返す。
     """
+    if code is None:
+        return None
+    try:
+        return _OWNER_CACHE[code]
+    except KeyError:
+        pass
+    except TypeError:
+        return None
+    owner = _find_owner(code)
+    if not is_ours(getattr(code, "co_filename", "")):
+        _OWNER_CACHE[code] = owner
+    return owner
+
+
+#: `owner_of` の答え。`コードオブジェクト -> 'クラス名.メソッド名' か None`。
+#: 鍵はゲームと外部ライブラリのコードだけで、数はその関数の数で頭打ちになる。
+_OWNER_CACHE = {}
+
+
+def _find_owner(code):
+    """`owner_of` の総当たりの本体。"""
     module = sys.modules.get("__main__")
-    if module is None or code is None:
+    if module is None:
         return None
     try:
         entries = list(vars(module).items())
@@ -309,7 +338,9 @@ class MethodWatch(object):
     名前が被っていても誤判定しない）。
     包まれていても答えは正しい。
 
-    ただし予備は毎回 `__main__` の全クラスを舐めるので**重い**。
+    ただし予備は、コードごとの初回に `__main__` の全クラスを舐めるので**重い**
+    （2回目からは `owner_of` が覚えた答えを返す）。
+    毎回スタックを遡る分はそのまま残る。
     包む対象と見張る対象が自分の中で重なるなら、スタックを見るのをやめて
     **自分のラッパでスレッドごとの印を立てる**方が速い（`306_party_train_exp`
     がその形）。

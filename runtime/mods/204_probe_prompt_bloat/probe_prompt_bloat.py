@@ -26,10 +26,22 @@ InstantaleLLMProxy/TECH.md は3つの暫定対策を記録しているが、
 この mod は計測しかしない。
 数値を TECH.md のものと突き合わせてから修正を書くためのものである。
 何も変更せず、何も握り潰さない。
+
+版3: 3つの挙動は本体で直った（VERIFICATION_LOG.md §2.3）が、
+VERIFICATION.md §3.36 #4（`311_` と `317_` を併せたプロンプト長）をこの記録で測るので残す。
+包みをすべて `safe=True` にし、orig の前の記録（サイドカーの `repr` など）を try に入れ、
+引数は受け取った形のまま `orig` へ渡すようにした。
+見出しの2行は注入のたびに出ていた（1か月で約 2,000 行）ので1プロセス1回にした。
 """
 
 import hashlib
+import os
 import sys
+
+from instantale_modloader import frames
+
+# 見出しを「このプロセスで書いた」印。モジュール変数は注入し直すと消えるので `sys` に置く。
+HEADER_MARK = "_instantale_probe_prompt_bloat_header"
 
 TURN_SEPARATOR = "〈プレイヤーの入力〉"
 EVENT_LOG_ARG = 2          # referee 2関数いずれも quest_event_log は第3引数
@@ -52,8 +64,10 @@ def apply(ctx):
 
     write = ctx.logger("prompt_bloat.log")
 
-    write("=" * 78)
-    write("prompt bloat probe start (pid {})".format(__import__("os").getpid()))
+    if not getattr(sys, HEADER_MARK, False):
+        setattr(sys, HEADER_MARK, True)
+        write("=" * 78)
+        write("prompt bloat probe start (pid {})".format(os.getpid()))
 
     # ------------------------------------------------------------ EVENTLOG
     def describe_event_log(fn_name, args, kwargs):
@@ -96,7 +110,7 @@ def apply(ctx):
     for fn_name in EVENT_TARGETS:
         # ループ変数を閉じ込める工場関数。
         def make(name):
-            @ctx.wrap("scripts.llm.llm_manager:{}".format(name), required=False)
+            @ctx.wrap("scripts.llm.llm_manager:{}".format(name), required=False, safe=True)
             def probe(orig, *args, **kwargs):
                 try:
                     describe_event_log(name, args, kwargs)
@@ -115,10 +129,13 @@ def apply(ctx):
     ctx.log("eventlog probes: {} target(s) armed or deferred".format(installed))
 
     # --------------------------------------------------------------- DEDUP
+    # 版3: 引数は受け取った形のまま `orig` へ渡す。
+    # 版2は `timeout` を位置に直して渡していた（キーワードで来た呼び出しでは形が変わる）。
     @ctx.wrap("llama_cpp_runtime_completion:LlamaCppClient._apply_chat_template",
-              required=False)
-    def apply_chat_template(orig, self, model, messages, timeout=None, *args, **kwargs):
+              required=False, safe=True)
+    def apply_chat_template(orig, self, *args, **kwargs):
         try:
+            messages = frames.arg(args, kwargs, "messages", 1)
             # 各メッセージを (role, 文字数, 指紋) に潰す。
             # この3つ組が一致すれば内容がバイト単位で同一ということ。
             blocks = []
@@ -146,33 +163,51 @@ def apply(ctx):
                           len(repeats), DEDUP_MIN_BLOCK, repeats))
         except Exception:
             pass
-        return orig(self, model, messages, timeout, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     # ------------------------------------------------------------ SIDECAR
-    @ctx.wrap("llama_cpp_runtime_completion:LlamaCppSidecar.__init__", required=False)
+    # 版3: 記録は try に入れた。
+    # 版2は `repr` などが投げると、その例外でサイドカーの起動ごと止まる形だった。
+    @ctx.wrap("llama_cpp_runtime_completion:LlamaCppSidecar.__init__",
+              required=False, safe=True)
     def sidecar_init(orig, self, *args, **kwargs):
         # 起動のたびに1行残す。
         # 多重起動しているかどうかは行数で分かる。
-        write("LlamaCppSidecar.__init__ args={} kwargs={}".format(
-            [repr(a)[:80] for a in args], {k: repr(v)[:80] for k, v in kwargs.items()}))
+        try:
+            write("LlamaCppSidecar.__init__ args={} kwargs={}".format(
+                [repr(a)[:80] for a in args], {k: repr(v)[:80] for k, v in kwargs.items()}))
+        except Exception:
+            pass
         return orig(self, *args, **kwargs)
 
-    @ctx.wrap("llama_cpp_runtime_completion:LlamaCppSidecar.start", required=False)
-    def sidecar_start(orig, self, on_cpu=None, additional_env=None,
-                      additional_params=None, *args, **kwargs):
-        write("LlamaCppSidecar.start on_cpu={!r} additional_params={!r} env_keys={}".format(
-            on_cpu, additional_params,
-            # env は値に API キー等が入り得るのでキー名だけ記録する。
-            sorted(additional_env) if isinstance(additional_env, dict) else additional_env))
-        # 後日 --parallel 1 を注入する際、既存の指定と衝突しないかの下調べ。
-        has_parallel = "--parallel" in str(additional_params or "")
-        write("   --parallel present in params: {}".format(has_parallel))
+    @ctx.wrap("llama_cpp_runtime_completion:LlamaCppSidecar.start",
+              required=False, safe=True)
+    def sidecar_start(orig, self, *args, **kwargs):
         try:
-            return orig(self, on_cpu, additional_env, additional_params, *args, **kwargs)
+            on_cpu = frames.arg(args, kwargs, "on_cpu", 0)
+            additional_env = frames.arg(args, kwargs, "additional_env", 1)
+            additional_params = frames.arg(args, kwargs, "additional_params", 2)
+            write("LlamaCppSidecar.start on_cpu={!r} additional_params={!r} env_keys={}".format(
+                on_cpu, additional_params,
+                # env は値に API キー等が入り得るのでキー名だけ記録する。
+                # dict でなければ型名だけにする（版3。版2は値ごと書いていた）。
+                sorted(additional_env) if isinstance(additional_env, dict)
+                else type(additional_env).__name__))
+            # 後日 --parallel 1 を注入する際、既存の指定と衝突しないかの下調べ。
+            has_parallel = "--parallel" in str(additional_params or "")
+            write("   --parallel present in params: {}".format(has_parallel))
+        except Exception:
+            pass
+        try:
+            return orig(self, *args, **kwargs)
         except Exception as exc:
             # 起動失敗は crash_log.txt で 35 件を占める症状。
             # 記録して再送出する。
-            write("!! LlamaCppSidecar.start raised {}: {}".format(type(exc).__name__, exc))
+            try:
+                write("!! LlamaCppSidecar.start raised {}: {}".format(
+                    type(exc).__name__, exc))
+            except Exception:
+                pass
             raise
 
     ctx.log("prompt bloat log: {}".format(log_path))

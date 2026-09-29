@@ -36,13 +36,20 @@ GAME.md §2.18 の実測には穴が残っている（すべて `徒歩` 側の1
 ##### 出力
 
 `out/area_move.log`（読む用）と `out/area_move.jsonl`（1移動=1行、突き合わせる用）。
+
+版2: 移動の窓（`AreaMoveManager.execute`）の包みで、本体を呼ぶ前の控え
+（所持金・土地・ログの見出し）を try に入れた。版1ではここが投げると
+本体が呼ばれずに移動そのものが止まる形だった（実機で踏んだ記録は無い）。
+あわせて全部の包みを、受け取った引数をそのまま本体へ渡す形にした
+（キーワードで来た引数を位置へ直さない。直すと内側の MOD の食い違いが
+デバッグモードのときだけ隠れる。VERIFICATION.md §3.76 の `333_` の件）。
 """
 
 import datetime
 import json
 import time
 
-from instantale_modloader import ui
+from instantale_modloader import frames, ui
 
 LOG_BASENAME = "area_move.log"
 RECORD_BASENAME = "area_move.jsonl"
@@ -97,18 +104,21 @@ def apply(ctx):
         return result
 
     @ctx.wrap("__main__:AreaMoveCofirmation.execute", required=False, safe=True)
-    def confirmation_execute(orig, self, choice_text=None, *args, **kwargs):
+    def confirmation_execute(orig, self, *args, **kwargs):
         try:
-            write("confirm pressed: {!r}".format(choice_text))
+            write("confirm pressed: {!r}".format(
+                frames.arg(args, kwargs, "choice_text", 0)))
         except Exception:
             pass
-        return orig(self, choice_text, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     # ------------------------------------------------------- 行けないときの画面
     @ctx.wrap("__main__:AreaMoveRestriction.__init__", required=False, safe=True)
-    def restriction(orig, self, app, target_area_id, *args, **kwargs):
+    def restriction(orig, self, *args, **kwargs):
         """`AreaMoveRestriction` が「手持ち不足」の受け皿かどうかを見る。"""
         try:
+            app = frames.arg(args, kwargs, "app", 0)
+            target_area_id = frames.arg(args, kwargs, "target_area_id", 1)
             gold = ui.gold_of(app)
             write("restriction: target={!r} gold={}".format(target_area_id, gold))
             record({"at": now(), "phase": "restriction",
@@ -116,35 +126,46 @@ def apply(ctx):
                     "area": area_brief(app)})
         except Exception:
             ctx.log_exc("area move probe: cannot record the restriction")
-        return orig(self, app, target_area_id, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     # ------------------------------------------------------------ 移動そのもの
     @ctx.wrap("__main__:AreaMoveManager.__init__", required=False, safe=True)
-    def move_init(orig, self, app, target_area_id, mode, *args, **kwargs):
-        result = orig(self, app, target_area_id, mode, *args, **kwargs)
+    def move_init(orig, self, *args, **kwargs):
+        result = orig(self, *args, **kwargs)
         try:
-            self._probe_area_move = {"target_id": str(target_area_id),
-                                     "mode": str(mode)}
+            self._probe_area_move = {
+                "target_id": str(frames.arg(args, kwargs, "target_area_id", 1)),
+                "mode": str(frames.arg(args, kwargs, "mode", 2))}
         except Exception:
             pass
         return result
 
     @ctx.wrap("__main__:AreaMoveManager.execute", required=False)
-    def move_execute(orig, self, choice_text=None, *args, **kwargs):
-        """移動の窓。前後の所持金・エリアと、窓の間の日数・文言をまとめて1行に。"""
-        app = getattr(self, "app", None) or ui.find_app()
-        info = getattr(self, "_probe_area_move", None) or {}
+    def move_execute(orig, self, *args, **kwargs):
+        """移動の窓。前後の所持金・エリアと、窓の間の日数・文言をまとめて1行に。
+
+        `safe=True` を付けないのは、本体が投げた例外を窓の片付けの後にそのまま
+        上げたいため。本体を呼ぶ前の控えは try に入れ、失敗しても本体は必ず1回呼ぶ（版2）。
+        """
+        app = info = choice_text = gold_before = origin = None
         window = {"texts": [], "days": [], "dots": 0, "overflow": 0}
-        gold_before = ui.gold_of(app)
-        origin = area_brief(app)
         started = time.monotonic()
-        state["window"] = window
         try:
+            app = getattr(self, "app", None) or ui.find_app()
+            info = getattr(self, "_probe_area_move", None) or {}
+            choice_text = frames.arg(args, kwargs, "choice_text", 0)
+            gold_before = ui.gold_of(app)
+            origin = area_brief(app)
+            state["window"] = window
             write("=" * 72)
             write("move: mode={!r} target={!r} choice={!r} gold={} from {}".format(
                 info.get("mode"), info.get("target_id"), choice_text,
                 gold_before, origin))
-            return orig(self, choice_text, *args, **kwargs)
+        except Exception:
+            ctx.log_exc("area move probe: cannot open the move window")
+        info = info or {}
+        try:
+            return orig(self, *args, **kwargs)
         finally:
             state["window"] = None
             try:
@@ -181,19 +202,21 @@ def apply(ctx):
 
     # ------------------------------------------------- 窓の間の日数と文言
     @ctx.wrap("__main__:InstantaleApp.elapse_days", required=False, safe=True)
-    def elapse_days(orig, self, days, *args, **kwargs):
+    def elapse_days(orig, self, *args, **kwargs):
         window = state["window"]
         if window is not None:
             try:
+                days = frames.arg(args, kwargs, "days", 0)
                 window["days"].append(days)
                 write("elapse_days({!r})".format(days))
             except Exception:
                 pass
-        return orig(self, days, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     @ctx.wrap("__main__:InstantaleApp.add_text", required=False, safe=True)
-    def add_text(orig, self, context=None, *args, **kwargs):
+    def add_text(orig, self, *args, **kwargs):
         window = state["window"]
+        context = frames.arg(args, kwargs, "context", 0) if window is not None else None
         if window is not None and isinstance(context, str):
             try:
                 if context.strip() and not context.strip(".。 　"):
@@ -204,7 +227,7 @@ def apply(ctx):
                     window["overflow"] += 1
             except Exception:
                 pass
-        return orig(self, context, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     ctx.log("area move probe installed; log={} records={}".format(
         log_path, record_path))

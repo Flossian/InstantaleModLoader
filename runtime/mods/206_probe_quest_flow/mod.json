@@ -10,7 +10,7 @@
     "en": "Finds the quest acceptance path and how choice buttons are registered",
     "ja": "クエストの受注経路と、選択肢ボタンの登録方法を特定する"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "debug": true,
   "after": [

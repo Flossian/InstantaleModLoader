@@ -28,17 +28,34 @@
 
 この mod は観測しかしない。
 値は変えず、例外も握り潰さない（wrap の中で記録に失敗しても本体は必ず呼ぶ）。
+
+版3: 読み取り専用の約束が破れていたので直した。
+`quest_type` の語彙の総当たり（`QuestChoiceManager` を候補12個 × 2件で組み立てる）は、
+注入のたびに生きた世界に対して走っていた。
+`QuestChoiceManager.__init__` は `318_area_difficulty_growth` が包んでいて、受注前の寄せ直しで
+依頼の難易度と `state` フォルダの控えを書く。そのため総当たりのたびに `318_` の書き込みが起きていた
+（`area_difficulty.log` の `accept:` の行が、どれも総当たりと同じ時刻だった）。
+答えは `'settlement_quest'` で決着している（GAME.md §2.9）ので、総当たりはコードごと消した。
+待機表示の 20Hz の見張りスレッドも消した。問いは `234_probe_busy_display` で決着していて
+（GAME.md §2.4）、上限に達した後も書かずに回り続け、メインスレッドの外から HUD のウィジェットを読んでいた
+（`quest_flow.log` の約6割がこの行だった）。
+スナップショットは `sys` の印で1プロセス1回にし、メインスレッドで取る。
+標本の数えは1プロセスあたりにし、上限を先に見てから `button_state` / `wait_state` を組み立てる。
+`on_button_press` を2回包んでいたのを1つにまとめた。
+包みはすべて `safe=True` にし、受け取った引数をそのまま `orig` へ渡す。
+HUD の文字はメインスレッドの上でだけ読む。
 """
 
+import os
 import sys
-import time
+import threading
 
-from instantale_modloader import ui
+from instantale_modloader import frames, ui
 from instantale_modloader.frames import repr_value
 
 LOG_BASENAME = "quest_flow.log"
 
-# 起動直後に一度だけ、今のゲーム状態を写し取る。
+# 起動直後に一度だけ、今のゲーム状態を写し取る（版3で1プロセス1回）。
 SNAPSHOT_ON_BOOT = True
 
 # ボタン関係で差分を取る app の属性。1. の候補全部。
@@ -52,14 +69,17 @@ QUEST_TOP_KEYS = ("quest_title", "client_name", "request_summary", "difficulty",
                   "id", "quest_type", "config", "quest_area_id",
                   "neighboring_settlement_id")
 
-# 1つの wrap あたり何回まで記録するか。
+# 1つの wrap あたり何回まで記録するか（版3で1プロセスあたりにした）。
 # 会話中に何度も走るものがあるため。
 MAX_SAMPLES = 6
+# 依頼の生成・受注のように稀にしか起きないものの上限。
+MAX_RARE_SAMPLES = 30
 
-#: 20Hz の見張りが `quest_flow.log` へ書ける行数の上限。
-#: 見張りは状態が変わるたびに書くので、放っておくとログを埋める
-#: （実測 9.2MB / 42,498行のうち 27,724行がこの1行だった）。
-WAITSTATE_LOG_LIMIT = 400
+# スナップショットの印・標本の数え・PhaseSpec の初見の控え。
+# 注入し直すと MOD のモジュールごと読み直されるので、モジュール変数では消える。`sys` に置く。
+SNAPSHOT_MARK = "_instantale_probe_quest_flow_snapshot"
+COUNTS_ATTR = "_instantale_probe_quest_flow_counts"
+SEEN_SPECS_ATTR = "_instantale_probe_quest_flow_specs"
 
 
 def _sig_of(func):
@@ -71,21 +91,32 @@ def _sig_of(func):
         return "<signature unavailable: {}>".format(type(exc).__name__)
 
 
+def _process_store(name, factory):
+    """プロセスに1つの入れ物（`sys` に置く）。"""
+    value = getattr(sys, name, None)
+    if not isinstance(value, factory):
+        value = factory()
+        setattr(sys, name, value)
+    return value
+
+
+def _on_main_thread() -> bool:
+    return threading.current_thread() is threading.main_thread()
+
+
 def apply(ctx):
     log_path = ctx.out_path(LOG_BASENAME)
-    counts = {}
+    counts = _process_store(COUNTS_ATTR, dict)
 
     write = ctx.logger(LOG_BASENAME)
-    # 20Hz の見張りからの記録だけは上限を掛ける。
-    # 上限が無いと `quest_flow.log` の3分の2がこの1行で埋まる
-    # （実測 9.2MB / 42,498行のうち 27,724行）。
-    note_wait = ctx.logger(LOG_BASENAME, cap=WAITSTATE_LOG_LIMIT)
 
-    def sample(key):
-        """記録回数の上限管理。True の間だけ書く。"""
+    def sample(key, limit=MAX_SAMPLES):
+        """記録回数の上限管理。True の間だけ書く。重い組み立てより先に呼ぶ。"""
         n = counts.get(key, 0)
+        if n >= limit:
+            return False
         counts[key] = n + 1
-        return n < MAX_SAMPLES
+        return True
 
     find_app = ui.find_app     # 走っている app の探し方はローダの語彙
 
@@ -93,7 +124,7 @@ def apply(ctx):
     def describe_spec(spec):
         """PhaseSpec の中身を「どのクラスを何の引数で呼ぶか」として出す。
 
-`app.buttons` は `[{'text': str, 'spec': PhaseSpec}, ...]` で、
+        `app.buttons` は `[{'text': str, 'spec': PhaseSpec}, ...]` で、
         `PhaseSpec.__init__(self, cls_name, args)` なので、ボタンは**マネージャの
         インスタンスではなくその作り方**を持っている（GAME.md §2.2）。自前で
         ボタンを足すにはこの `args` の並びを知る必要がある。
@@ -215,6 +246,9 @@ def apply(ctx):
     # **画面に出ている文字は `hud.buttons` の各ウィジェットの `.text`** で、
     # `app.to_display_buttons` とは別物。
     def hud_texts(app):
+        # 版3: ウィジェットはメインスレッドの上でだけ読む。
+        if not _on_main_thread():
+            return "<off main thread>"
         hud = ui_find_hud(app)
         if hud is None:
             return "<no hud>"
@@ -238,8 +272,7 @@ def apply(ctx):
 
     def ui_find_hud(app):
         try:
-            from instantale_modloader import ui as _ui
-            return _ui.find_hud(app)
+            return ui.find_hud(app)
         except Exception:
             return getattr(app, "hud", None)
 
@@ -276,12 +309,20 @@ def apply(ctx):
                 write("    {:<32} = {!r}".format(name, value[:60]))
 
     def snapshot():
-        write("=" * 78)
-        write("quest snapshot (pid {})".format(__import__("os").getpid()))
-        app = find_app()
-        if app is None:
-            write("  InstantaleApp instance not found (not in a game yet?)")
+        """起動時の写し。1プロセス1回・メインスレッド（版3）。
+
+        印はゲームの中（app と player が揃っている）で取れたときにだけ付ける。
+        タイトル画面の注入で印を付けると、そのプロセスでは二度と取れない。
+        """
+        if getattr(sys, SNAPSHOT_MARK, False):
             return
+        app = find_app()
+        if app is None or getattr(app, "player", None) is None:
+            return
+        setattr(sys, SNAPSHOT_MARK, True)
+
+        write("=" * 78)
+        write("quest snapshot (pid {})".format(os.getpid()))
 
         # --- 1. ボタン関係の今の姿。
         # ここが「選択肢の出し方」の出発点。
@@ -383,11 +424,22 @@ def apply(ctx):
                 except Exception as exc:
                     write("    get_quest_reward !! {}: {}".format(type(exc).__name__, exc))
 
-    if SNAPSHOT_ON_BOOT:
+    def guarded_snapshot():
         try:
             snapshot()
         except Exception:
             ctx.log_exc("quest probe: snapshot failed")
+
+    if SNAPSHOT_ON_BOOT:
+        # 版3: メインスレッドで取る（HUD のウィジェットを読むので）。
+        ui.scheduler(ctx, "quest probe snapshot")(guarded_snapshot)
+
+    # 記録の失敗で本体の呼び出しを妨げないための共通の囲い。
+    def note(fn):
+        try:
+            fn()
+        except Exception:
+            ctx.log_exc("quest probe: record failed")
 
     # ==================================================================
     # 1. 選択肢ボタンの登録方法
@@ -396,16 +448,22 @@ def apply(ctx):
     # これが作りたい「個別依頼の一覧」と同じ構造なので、
     # その前後の差分が設計図になる。
     def wrap_button_display(target, label):
-        @ctx.wrap(target, required=False)
+        @ctx.wrap(target, required=False, safe=True)
         def _display(orig, self, *args, **kwargs):
+            # 版3: 上限を先に見る。越えたら前の姿も組み立てない。
+            if not sample(target):
+                return orig(self, *args, **kwargs)
             app = getattr(self, "app", None) or find_app()
-            before = button_state(app) if app is not None else {}
+            box = {}
+            note(lambda: box.update(before=button_state(app) if app is not None else {}))
             result = orig(self, *args, **kwargs)
-            if sample(target):
+
+            def record():
                 write("-" * 78)
                 write("{}.update_button_display() -> {}".format(label, repr_value(result)))
                 if app is not None:
-                    diff_buttons(app, label, before)
+                    diff_buttons(app, label, box.get("before", {}))
+            note(record)
             return result
         return _display
 
@@ -414,12 +472,13 @@ def apply(ctx):
     wrap_button_display("__main__:DisplayQuestChoice.update_button_display",
                         "DisplayQuestChoice")
 
-    @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False)
-    def refresh_choice_buttons(orig, self, reset_page=False, *args, **kwargs):
+    @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False, safe=True)
+    def refresh_choice_buttons(orig, self, *args, **kwargs):
         if sample("refresh_choice_buttons"):
-            write("refresh_choice_buttons(reset_page={!r}) buttons={}".format(
-                reset_page, repr_value(getattr(self, "buttons", None))))
-        return orig(self, reset_page, *args, **kwargs)
+            note(lambda: write("refresh_choice_buttons(reset_page={!r}) buttons={}".format(
+                frames.arg(args, kwargs, "reset_page", 0, False),
+                repr_value(getattr(self, "buttons", None)))))
+        return orig(self, *args, **kwargs)
 
     # ------------------------------------------- 待機表示（ボタンが「…」になる）
     # ゲーム自身の長い処理は、その間ボタンを「…」にしてプレイヤーを待たせる。
@@ -428,94 +487,48 @@ def apply(ctx):
     # 自前のフェーズを起こすときに素通しすべき経路が変わる（301_ は
     # on_button_press を横取りして process_choice を直接呼んでいるので、
     # 前者だと待機表示が出ない）。
-    @ctx.wrap("__main__:InstantaleApp.process_choice", required=False)
-    def process_choice_waitstate(orig, self, function, choice_text="", *args, **kwargs):
-        if sample("process_choice.waitstate"):
-            write("process_choice({}, {!r})".format(
-                type(function).__name__, choice_text))
-            write("    before -> {}".format(wait_state(self)))
-            result = orig(self, function, choice_text, *args, **kwargs)
-            write("    after  -> {}".format(wait_state(self)))
-            return result
-        return orig(self, function, choice_text, *args, **kwargs)
-
-    # ---- ゲーム自身の待機表示を捕まえる -----------------------------------
-    # 「…」がどこで立つのか、前後の標本では捕まらない。`process_choice` は
-    # `execute` をスレッドに渡して即座に返るので、「after」は「最中」ではない。
-    # そこで2本立てで観測する:
-    #
-    #   1. 状態の変化そのものを監視する（下の watcher）。誰が立てたかは
-    #      分からないが、**立つかどうか・どんな見た目か**は確実に分かる
-    #   2. `AreaMoveManager.show_loading_text`。`__main__` にある唯一の
-    #      「待機表示」らしきメソッド。移動のたびに走るので、特別な操作を
-    #      頼まなくても普段のプレイで捕まる。ゲーム native の待機表示の
-    #      実例として、その前後の差分がそのまま答えになる
-    WATCH_WAIT_STATE = True
-    WATCH_POLL = 0.05
-
-    @ctx.wrap("__main__:AreaMoveManager.show_loading_text", required=False)
-    def show_loading_text(orig, self, *args, **kwargs):
-        app = getattr(self, "app", None) or find_app()
-        before = wait_state(app) if app is not None else "<no app>"
+    # 版3: 状態の変化を 20Hz で見張るスレッドは消した（決着は GAME.md §2.4）。
+    @ctx.wrap("__main__:InstantaleApp.process_choice", required=False, safe=True)
+    def process_choice_waitstate(orig, self, *args, **kwargs):
+        if not sample("process_choice.waitstate"):
+            return orig(self, *args, **kwargs)
+        note(lambda: write("process_choice({}, {!r})".format(
+            type(frames.arg(args, kwargs, "function", 0)).__name__,
+            frames.arg(args, kwargs, "choice_text", 1, ""))))
+        note(lambda: write("    before -> {}".format(wait_state(self))))
         result = orig(self, *args, **kwargs)
-        if sample("show_loading_text"):
-            write("=" * 78)
-            write("AreaMoveManager.show_loading_text()  <- ゲーム native の待機表示")
-            write("    before -> {}".format(before))
-            write("    after  -> {}".format(wait_state(app) if app else "<no app>"))
+        note(lambda: write("    after  -> {}".format(wait_state(self))))
         return result
 
-    # 再注入のたびにスレッドが積み上がらないようにする。
-    # 判定はローダが持っている（`ctx.superseded()`）ので、合言葉を自前で置かない。
-    # 置き場所と判定が MOD ごとにばらつくうえ、
-    # 「ローダごと読み込み直された」の判定が抜けやすい（TECH.md §3.6.1）。
-    def watch_wait_state():
-        """待機表示に関わる状態が変わった瞬間だけを記録する。
+    @ctx.wrap("__main__:AreaMoveManager.show_loading_text", required=False, safe=True)
+    def show_loading_text(orig, self, *args, **kwargs):
+        # 版3: 上限を先に見る。越えたら前の姿も組み立てない。
+        if not sample("show_loading_text"):
+            return orig(self, *args, **kwargs)
+        app = getattr(self, "app", None) or find_app()
+        box = {}
+        note(lambda: box.update(before=wait_state(app) if app is not None else "<no app>"))
+        result = orig(self, *args, **kwargs)
 
-        誰が立てたかまでは分からない（属性への代入は追えない）。
-        だが **そもそも立つのか・立つならどんな見た目なのか**が分かれば、
-        自前で出すべきか乗れるのかを判断できる。
-        """
-        last = None
-        while True:
-            if ctx.superseded():
-                return                      # 新しい boot に交代した
-            try:
-                app = find_app()
-                if app is not None:
-                    key = (getattr(app, "is_button_enabled", None),
-                           getattr(app, "text_input_disabled", None),
-                           tuple(getattr(app, "to_display_buttons", ()) or ())[:8],
-                           repr(hud_texts(app)))
-                    if key != last:
-                        last = key
-                        note_wait("waitstate -> {}".format(wait_state(app)))
-            except Exception:
-                pass        # 監視で本体を巻き込まない
-            time.sleep(WATCH_POLL)
+        def record():
+            write("=" * 78)
+            write("AreaMoveManager.show_loading_text()  <- ゲーム native の待機表示")
+            write("    before -> {}".format(box.get("before")))
+            write("    after  -> {}".format(wait_state(app) if app else "<no app>"))
+        note(record)
+        return result
 
-    if WATCH_WAIT_STATE:
-        import threading
-        threading.Thread(target=watch_wait_state,
-                         name="instantale_mod.waitstate_watch",
-                         daemon=True).start()
-
-    @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False)
-    def on_button_press_waitstate(orig, self, button_index, *args, **kwargs):
-        if sample("on_button_press.waitstate"):
-            write("on_button_press({}) before -> {}".format(
-                button_index, wait_state(self)))
-            result = orig(self, button_index, *args, **kwargs)
-            write("on_button_press({}) after  -> {}".format(
-                button_index, wait_state(self)))
-            return result
-        return orig(self, button_index, *args, **kwargs)
-
-    @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False)
-    def on_button_press(orig, self, button_index, *args, **kwargs):
+    # 版3: 版2は `on_button_press` を2回包んでいた（待機表示の前後と、押された枠の spec）。
+    # 同じ世代の層は両方残るので1回の押下で2層走っていた。1つにまとめた。
+    @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False, safe=True)
+    def on_button_press(orig, self, *args, **kwargs):
         # 押された添字と、そのとき表示されていた文字列・spec の対応。
         # 押下 -> PhaseSpec -> マネージャ生成 -> process_choice の連鎖が読める。
-        if sample("on_button_press"):
+        if not sample("on_button_press"):
+            return orig(self, *args, **kwargs)
+        button_index = frames.arg(args, kwargs, "button_index", 0)
+
+        def before():
             buttons = getattr(self, "buttons", None)
             entry = None
             if isinstance(buttons, (list, tuple)) and isinstance(button_index, int):
@@ -523,61 +536,83 @@ def apply(ctx):
                     entry = buttons[button_index]
             write("on_button_press(index={!r}) {}".format(
                 button_index, describe_button(entry)))
-        return orig(self, button_index, *args, **kwargs)
+            write("on_button_press({}) before -> {}".format(
+                button_index, wait_state(self)))
+        note(before)
+        result = orig(self, *args, **kwargs)
+        note(lambda: write("on_button_press({}) after  -> {}".format(
+            button_index, wait_state(self))))
+        return result
 
     # PhaseSpec が「どのクラスをどんな引数で呼ぶか」の唯一の記述。
     # クラス名ごとに1回だけ記録すれば、自前のボタンを足すときの雛形になる。
     # （例: '会話する' は DisplayTalkChoice を引数なし、NPC 選択は
     #   ConversationStartManager を character_id 1個で呼んでいるはず）
-    seen_specs = {}
+    # 版3: 控えを1プロセスで共有する（版2は注入のたびに白紙に戻っていた）。
+    seen_specs = _process_store(SEEN_SPECS_ATTR, set)
 
-    @ctx.wrap("__main__:PhaseSpec.__init__", required=False)
-    def phase_spec_init(orig, self, cls_name, args, *rest, **kwargs):
+    @ctx.wrap("__main__:PhaseSpec.__init__", required=False, safe=True)
+    def phase_spec_init(orig, self, *args, **kwargs):
         try:
-            if cls_name not in seen_specs:
-                seen_specs[cls_name] = True
+            cls_name = frames.arg(args, kwargs, "cls_name", 0)
+            if isinstance(cls_name, str) and cls_name not in seen_specs:
+                seen_specs.add(cls_name)
                 write("PhaseSpec({!r}, args={}) -- {}(app, *args)".format(
-                    cls_name, repr_value(args), cls_name))
+                    cls_name, repr_value(frames.arg(args, kwargs, "args", 1)), cls_name))
         except Exception:
             pass
-        return orig(self, cls_name, args, *rest, **kwargs)
+        return orig(self, *args, **kwargs)
 
     # ==================================================================
     # 2. 受注経路
     # ==================================================================
-    @ctx.wrap("__main__:DisplayQuestChoice.__init__", required=False)
-    def display_quest_init(orig, self, app, *args, **kwargs):
-        write("DisplayQuestChoice(app) constructed")
-        return orig(self, app, *args, **kwargs)
+    # 版3: 答えは出ている（GAME.md §2.2 / §2.9）。どれも1プロセスあたりの上限を付けた。
+    @ctx.wrap("__main__:DisplayQuestChoice.__init__", required=False, safe=True)
+    def display_quest_init(orig, self, *args, **kwargs):
+        if sample("DisplayQuestChoice.__init__"):
+            note(lambda: write("DisplayQuestChoice(app) constructed"))
+        return orig(self, *args, **kwargs)
 
-    @ctx.wrap("__main__:DisplayQuestChoice.execute", required=False)
-    def display_quest_execute(orig, self, choice_text, *args, **kwargs):
-        write("DisplayQuestChoice.execute({!r})".format(choice_text))
-        result = orig(self, choice_text, *args, **kwargs)
-        write("  -> {}".format(repr_value(result)))
+    @ctx.wrap("__main__:DisplayQuestChoice.execute", required=False, safe=True)
+    def display_quest_execute(orig, self, *args, **kwargs):
+        if not sample("DisplayQuestChoice.execute"):
+            return orig(self, *args, **kwargs)
+        note(lambda: write("DisplayQuestChoice.execute({!r})".format(
+            frames.arg(args, kwargs, "choice_text", 0))))
+        result = orig(self, *args, **kwargs)
+        note(lambda: write("  -> {}".format(repr_value(result))))
         return result
 
-    @ctx.wrap("__main__:DisplayQuestChoice.get_active_quest_count", required=False)
+    @ctx.wrap("__main__:DisplayQuestChoice.get_active_quest_count", required=False, safe=True)
     def active_quest_count(orig, self, *args, **kwargs):
         result = orig(self, *args, **kwargs)
         if sample("get_active_quest_count"):
-            write("get_active_quest_count() -> {!r}".format(result))
+            note(lambda: write("get_active_quest_count() -> {!r}".format(result)))
         return result
 
-    @ctx.wrap("__main__:DisplayQuestChoice.generate_random_quest", required=False)
+    @ctx.wrap("__main__:DisplayQuestChoice.generate_random_quest", required=False, safe=True)
     def generate_random_quest(orig, self, *args, **kwargs):
         # ここが「1件を世界に登録する」入口なら、前後で quests の件数が増える。
+        if not sample("generate_random_quest", MAX_RARE_SAMPLES):
+            return orig(self, *args, **kwargs)
         app = getattr(self, "app", None) or find_app()
-        before = _quest_ids(app)
-        write("=" * 78)
-        write("DisplayQuestChoice.generate_random_quest() start; quests={}".format(
-            len(before)))
+        box = {}
+
+        def before():
+            box["ids"] = _quest_ids(app)
+            write("=" * 78)
+            write("DisplayQuestChoice.generate_random_quest() start; quests={}".format(
+                len(box["ids"])))
+        note(before)
         result = orig(self, *args, **kwargs)
-        after = _quest_ids(app)
-        write("generate_random_quest -> {}".format(repr_value(result)))
-        write("  quest ids added: {}".format(sorted(set(after) - set(before))))
-        for qid in sorted(set(after) - set(before)):
-            dump_quest(_quest_of(app, qid), "new quest {!r}".format(qid))
+
+        def after():
+            added = sorted(set(_quest_ids(app)) - set(box.get("ids", [])), key=str)
+            write("generate_random_quest -> {}".format(repr_value(result)))
+            write("  quest ids added: {}".format(added))
+            for qid in added:
+                dump_quest(_quest_of(app, qid), "new quest {!r}".format(qid))
+        note(after)
         return result
 
     def _quests_of(app):
@@ -595,241 +630,194 @@ def apply(ctx):
 
     # --- 受注そのもの。
     # 300_ の process_choice 経由で起こせる形かを確かめる。
-    @ctx.wrap("__main__:QuestChoiceManager.__init__", required=False)
-    def quest_choice_init(orig, self, app, quest_type, quest_id, *args, **kwargs):
+    # 版3: `quest_type` の語彙の総当たり（候補を並べて `QuestChoiceManager` を組む）は消した。
+    # 答えは `'settlement_quest'`（GAME.md §2.9）。組み立てのたびに `318_` の包みが
+    # 依頼の難易度と `state\` を書いていたので、読み取り専用の約束が破れていた。
+    @ctx.wrap("__main__:QuestChoiceManager.__init__", required=False, safe=True)
+    def quest_choice_init(orig, self, *args, **kwargs):
         # 例外も記録する。
         # 301_ がここで2回落ちた（`quest_type` の語彙違い）ので、
         # 誰がどんな値で呼んだのかが最も重要な記録になった。
+        quest_type = frames.arg(args, kwargs, "quest_type", 1)
+        quest_id = frames.arg(args, kwargs, "quest_id", 2)
         try:
-            result = orig(self, app, quest_type, quest_id, *args, **kwargs)
+            result = orig(self, *args, **kwargs)
         except Exception as exc:
-            write("QuestChoiceManager(quest_type={!r}, quest_id={!r}) !! {}: {}".format(
-                quest_type, quest_id, type(exc).__name__, exc))
+            note(lambda: write("QuestChoiceManager(quest_type={!r}, quest_id={!r}) !! {}: {}"
+                               .format(quest_type, quest_id, type(exc).__name__, exc)))
             raise
-        write("QuestChoiceManager(quest_type={!r} [{}], quest_id={!r} [{}]) ok".format(
-            quest_type, type(quest_type).__name__, quest_id, type(quest_id).__name__))
+        if sample("QuestChoiceManager.__init__", MAX_RARE_SAMPLES):
+            note(lambda: write("QuestChoiceManager(quest_type={!r} [{}], quest_id={!r} [{}]) ok"
+                               .format(quest_type, type(quest_type).__name__,
+                                       quest_id, type(quest_id).__name__)))
         return result
 
-    # ------------------------------------ quest_type の語彙を総当たりで割り出す
-    # `QuestChoiceManager(app, quest_type, quest_id)` の `quest_type` は、
-    # クエスト辞書の `quest_type` フィールド（'normal_quest' /
-    # 'random_quest'）**とは別の語彙**（どちらを渡しても
-    # KeyError になる ＝ ストーリー側の分岐に落ちる。GAME.md §2.2）。
-    # 引数で分岐して辞書を引くだけの処理なので総当たりが効く（GAME.md
-    # §3「純粋関数は総当たりで定義域を割り出す」）。
-    # **実在する quest_id を渡し、例外が出ないものを探す。**
-    # 作ったインスタンスは捨てる。
-    # `execute` を呼ばないので画面も状態も動かない。
-    PROBE_QUEST_TYPES = True
-
-    QUEST_TYPE_CANDIDATES = (
-        "normal_quest", "random_quest", "story_quest",   # セーブのフィールド値
-        "normal", "random", "story",                     # 短い形
-        "quest", "settlement_quest", "area_quest",
-        "normal_quests", "quests", "world_quest",
-    )
-
-    # 世界がロードされるまで待つ。
-    # 注入はタイトル画面でも起きるので、素朴に走らせると
-    # `world.quests unavailable` で空振りして終わる（実際に踏んだ）。
-    PROBE_WAIT_POLL = 10.0
-    PROBE_WAIT_LIMIT = 360      # 10秒 x 360 = 1時間
-
-    def wait_for_world():
-        """世界がロードされるまで待つ。降りたら None。
-
-        **`ctx.superseded()` を毎周見る**（TECH.md §3.6.1）。
-        この待ちは最長 1時間で、その間に注入し直されると古い版が回り続ける。
-        上の `watch_wait_state` と同じ理由・同じ形。
-        降りる側の合図が無いと、
-        世界がロードされた瞬間に**古い世代と新しい世代の総当たりが同時に走る**（`QuestChoiceManager` を候補ぶん組む処理なので、
-        重なるほど濃くなる）。
-        """
-        for _ in range(PROBE_WAIT_LIMIT):
-            if ctx.superseded():
-                return None                 # 新しい boot に交代した
-            app = find_app()
-            quests = getattr(getattr(app, "world", None), "quests", None)
-            if isinstance(quests, dict) and quests:
-                return app
-            time.sleep(PROBE_WAIT_POLL)
-        write("quest_type probe: gave up waiting for a loaded world")
-        return None
-
-    def probe_quest_types():
-        """世界が載るのを待ってから、総当たりを**メインスレッドで**走らせる。
-
-        待つのはこのスレッドでよい（待つだけなので何にも触らない）。
-        総当たりのほうは `QuestChoiceManager` をプレイヤーの生きた
-        `world.quests` に対して実際に組むので、ゲームのスレッドで行う。
-        ここは「読むだけ」の probe の中で唯一ゲーム側の
-        コンストラクタを呼ぶ場所で、別スレッドから触れてよい保証が無い。
-        """
-        app = wait_for_world()
-        if app is None:
-            return
-        ui.scheduler(ctx, "quest probe")(lambda: _guarded_probe(
-            lambda: run_quest_type_probe(app)))
-
-    def run_quest_type_probe(app):
-        main = sys.modules.get("__main__")
-        cls = getattr(main, "QuestChoiceManager", None) if main else None
-        if not isinstance(cls, type):
-            write("quest_type probe: QuestChoiceManager not found")
-            return
-        world = getattr(app, "world", None)
-        quests = getattr(world, "quests", None)
-        story = getattr(world, "story_quests", None)
-        if not isinstance(quests, dict) or not quests:
-            write("quest_type probe: world.quests unavailable")
-            return
-        normal_id = sorted(quests, key=lambda k: int(k) if str(k).isdigit() else 0)[-1]
-        story_id = sorted(story)[0] if isinstance(story, dict) and story else None
-        write("=" * 78)
-        write("quest_type probe: world.quests id={!r}, story_quests id={!r}".format(
-            normal_id, story_id))
-        for label, quest_id in (("world.quests", normal_id),
-                                ("story_quests", story_id)):
-            if quest_id is None:
-                continue
-            accepted = []
-            for candidate in QUEST_TYPE_CANDIDATES:
-                try:
-                    cls(app, candidate, quest_id)
-                except Exception as exc:
-                    write("  {:<14} {!r:<18} !! {}: {}".format(
-                        label, candidate, type(exc).__name__, exc))
-                    continue
-                accepted.append(candidate)
-                write("  {:<14} {!r:<18} -> OK".format(label, candidate))
-            write("  => accepted for {}: {}".format(label, accepted))
-
-    def _guarded_probe(fn):
-        try:
-            fn()
-        except Exception:
-            ctx.log_exc("quest probe: quest_type probe failed")
-
-    if PROBE_QUEST_TYPES:
-        import threading
-        threading.Thread(target=lambda: _guarded_probe(probe_quest_types),
-                         name="instantale_mod.quest_type_probe", daemon=True).start()
-
-    @ctx.wrap("__main__:QuestChoiceManager.execute", required=False)
-    def quest_choice_execute(orig, self, choice_text, *args, **kwargs):
-        import threading
-        write("QuestChoiceManager.execute({!r}) [{}] quest_type={!r} quest_id={!r}".format(
-            choice_text, threading.current_thread().name,
-            getattr(self, "quest_type", "<none>"), getattr(self, "quest_id", "<none>")))
-        result = orig(self, choice_text, *args, **kwargs)
-        write("  -> {}".format(repr_value(result)))
+    @ctx.wrap("__main__:QuestChoiceManager.execute", required=False, safe=True)
+    def quest_choice_execute(orig, self, *args, **kwargs):
+        if not sample("QuestChoiceManager.execute", MAX_RARE_SAMPLES):
+            return orig(self, *args, **kwargs)
+        note(lambda: write(
+            "QuestChoiceManager.execute({!r}) [{}] quest_type={!r} quest_id={!r}".format(
+                frames.arg(args, kwargs, "choice_text", 0),
+                threading.current_thread().name,
+                getattr(self, "quest_type", "<none>"), getattr(self, "quest_id", "<none>"))))
+        result = orig(self, *args, **kwargs)
+        note(lambda: write("  -> {}".format(repr_value(result))))
         return result
 
-    @ctx.wrap("__main__:QuestChoiceManager.quest_acceptance_choice", required=False)
+    @ctx.wrap("__main__:QuestChoiceManager.quest_acceptance_choice", required=False, safe=True)
     def quest_acceptance_choice(orig, self, *args, **kwargs):
+        # 版3: 版2は上限なしで、毎回前後のボタンの姿を組み立てていた。
+        if not sample("quest_acceptance_choice", MAX_RARE_SAMPLES):
+            return orig(self, *args, **kwargs)
         app = getattr(self, "app", None) or find_app()
-        before = button_state(app) if app is not None else {}
+        box = {}
+        note(lambda: box.update(before=button_state(app) if app is not None else {}))
         result = orig(self, *args, **kwargs)
-        write("QuestChoiceManager.quest_acceptance_choice() -> {}".format(
-            repr_value(result)))
-        if app is not None:
-            diff_buttons(app, "quest_acceptance_choice", before)
+
+        def record():
+            write("QuestChoiceManager.quest_acceptance_choice() -> {}".format(
+                repr_value(result)))
+            if app is not None:
+                diff_buttons(app, "quest_acceptance_choice", box.get("before", {}))
+        note(record)
         return result
 
-    @ctx.wrap("__main__:QuestStartManager.__init__", required=False)
-    def quest_start_init(orig, self, app, quest_type, quest_id, *args, **kwargs):
-        write("QuestStartManager(quest_type={!r}, quest_id={!r} [{}])".format(
-            quest_type, quest_id, type(quest_id).__name__))
-        return orig(self, app, quest_type, quest_id, *args, **kwargs)
+    @ctx.wrap("__main__:QuestStartManager.__init__", required=False, safe=True)
+    def quest_start_init(orig, self, *args, **kwargs):
+        if sample("QuestStartManager.__init__", MAX_RARE_SAMPLES):
+            def record():
+                quest_id = frames.arg(args, kwargs, "quest_id", 2)
+                write("QuestStartManager(quest_type={!r}, quest_id={!r} [{}])".format(
+                    frames.arg(args, kwargs, "quest_type", 1), quest_id,
+                    type(quest_id).__name__))
+            note(record)
+        return orig(self, *args, **kwargs)
 
-    @ctx.wrap("__main__:QuestStartManager.start_quest", required=False)
+    @ctx.wrap("__main__:QuestStartManager.start_quest", required=False, safe=True)
     def start_quest(orig, self, *args, **kwargs):
+        if not sample("QuestStartManager.start_quest", MAX_RARE_SAMPLES):
+            return orig(self, *args, **kwargs)
         app = getattr(self, "app", None) or find_app()
-        write("QuestStartManager.start_quest() quest_id={!r}".format(
-            getattr(self, "quest_id", "<none>")))
+        note(lambda: write("QuestStartManager.start_quest() quest_id={!r}".format(
+            getattr(self, "quest_id", "<none>"))))
         result = orig(self, *args, **kwargs)
-        write("  -> {}".format(repr_value(result)))
-        write("  app.current_quest_data = {}".format(
-            repr_value(getattr(app, "current_quest_data", None))))
+
+        def record():
+            write("  -> {}".format(repr_value(result)))
+            write("  app.current_quest_data = {}".format(
+                repr_value(getattr(app, "current_quest_data", None))))
+        note(record)
         return result
 
-    @ctx.wrap("__main__:QuestSearchManager.search_quest", required=False)
+    @ctx.wrap("__main__:QuestSearchManager.search_quest", required=False, safe=True)
     def search_quest(orig, self, *args, **kwargs):
         result = orig(self, *args, **kwargs)
-        write("QuestSearchManager.search_quest() -> {}".format(repr_value(result)))
+        if sample("QuestSearchManager.search_quest", MAX_RARE_SAMPLES):
+            note(lambda: write("QuestSearchManager.search_quest() -> {}".format(
+                repr_value(result))))
         return result
 
     # ==================================================================
     # 3. クエストの実体を作る経路
     # ==================================================================
-    @ctx.wrap("__main__:World.generate_quests", required=False)
+    @ctx.wrap("__main__:World.generate_quests", required=False, safe=True)
     def generate_quests(orig, self, *args, **kwargs):
-        write("World.generate_quests() start")
+        if not sample("World.generate_quests", MAX_RARE_SAMPLES):
+            return orig(self, *args, **kwargs)
+        note(lambda: write("World.generate_quests() start"))
         result = orig(self, *args, **kwargs)
-        write("World.generate_quests -> {}".format(repr_value(result)))
-        write("  world.quests now = {}".format(repr_value(getattr(self, "quests", None))))
+
+        def record():
+            write("World.generate_quests -> {}".format(repr_value(result)))
+            write("  world.quests now = {}".format(
+                repr_value(getattr(self, "quests", None))))
+        note(record)
         return result
 
-    @ctx.wrap("__main__:World.generate_quest_area", required=False)
-    def world_generate_quest_area(orig, self, quest_value, next_area_id, *args, **kwargs):
-        write("World.generate_quest_area(quest_value={}, next_area_id={!r})".format(
-            repr_value(quest_value), next_area_id))
-        result = orig(self, quest_value, next_area_id, *args, **kwargs)
-        write("  -> {}".format(repr_value(result)))
+    @ctx.wrap("__main__:World.generate_quest_area", required=False, safe=True)
+    def world_generate_quest_area(orig, self, *args, **kwargs):
+        if not sample("World.generate_quest_area", MAX_RARE_SAMPLES):
+            return orig(self, *args, **kwargs)
+        note(lambda: write("World.generate_quest_area(quest_value={}, next_area_id={!r})".format(
+            repr_value(frames.arg(args, kwargs, "quest_value", 0)),
+            frames.arg(args, kwargs, "next_area_id", 1))))
+        result = orig(self, *args, **kwargs)
+        note(lambda: write("  -> {}".format(repr_value(result))))
         return result
 
-    @ctx.wrap("save_area_json:generate_quest_area", required=False)
-    def save_generate_quest_area(orig, world_dict, quest_value, next_area_id,
-                                 *args, **kwargs):
-        write("save_area_json.generate_quest_area(next_area_id={!r}) quest={}".format(
-            next_area_id, repr_value(quest_value)))
-        result = orig(world_dict, quest_value, next_area_id, *args, **kwargs)
-        write("  -> {}".format(repr_value(result)))
+    @ctx.wrap("save_area_json:generate_quest_area", required=False, safe=True)
+    def save_generate_quest_area(orig, *args, **kwargs):
+        if not sample("save_area_json.generate_quest_area", MAX_RARE_SAMPLES):
+            return orig(*args, **kwargs)
+        # 引数の並び: world_dict, quest_value, next_area_id
+        note(lambda: write("save_area_json.generate_quest_area(next_area_id={!r}) quest={}".format(
+            frames.arg(args, kwargs, "next_area_id", 2),
+            repr_value(frames.arg(args, kwargs, "quest_value", 1)))))
+        result = orig(*args, **kwargs)
+        note(lambda: write("  -> {}".format(repr_value(result))))
         return result
 
+    # 引数の並び: world_overview, settlement_name, settlement_overview,
+    # settlement_structure_description, area_description, quest_difficulty
     @ctx.wrap("scripts.llm.llm_manager_world_generate:random_quest_generator",
-              required=False)
-    def random_quest_generator(orig, world_overview, settlement_name,
-                               settlement_overview, settlement_structure_description,
-                               area_description, quest_difficulty, *args, **kwargs):
-        write("=" * 78)
-        write("random_quest_generator(settlement={!r}, difficulty={!r})".format(
-            settlement_name, quest_difficulty))
-        write("  area_description = {}".format(repr_value(area_description)))
-        result = orig(world_overview, settlement_name, settlement_overview,
-                      settlement_structure_description, area_description,
-                      quest_difficulty, *args, **kwargs)
-        write("  -> [{}] {}".format(type(result).__name__, repr_value(result)))
-        if isinstance(result, dict):
-            write("     keys = {}".format(list(result)))
+              required=False, safe=True)
+    def random_quest_generator(orig, *args, **kwargs):
+        if not sample("random_quest_generator", MAX_RARE_SAMPLES):
+            return orig(*args, **kwargs)
+
+        def before():
+            write("=" * 78)
+            write("random_quest_generator(settlement={!r}, difficulty={!r})".format(
+                frames.arg(args, kwargs, "settlement_name", 1),
+                frames.arg(args, kwargs, "quest_difficulty", 5)))
+            write("  area_description = {}".format(
+                repr_value(frames.arg(args, kwargs, "area_description", 4))))
+        note(before)
+        result = orig(*args, **kwargs)
+
+        def after():
+            write("  -> [{}] {}".format(type(result).__name__, repr_value(result)))
+            if isinstance(result, dict):
+                write("     keys = {}".format(list(result)))
+        note(after)
         return result
 
     # ==================================================================
     # 4. 会話側。
     # どこに割り込めば選択肢を足せるか。
     # ==================================================================
-    @ctx.wrap("__main__:ConversationPhaseManager.__init__", required=False)
-    def conversation_phase_init(orig, self, app, instruction, *args, **kwargs):
+    @ctx.wrap("__main__:ConversationPhaseManager.__init__", required=False, safe=True)
+    def conversation_phase_init(orig, self, *args, **kwargs):
         if sample("ConversationPhaseManager.__init__"):
-            write("ConversationPhaseManager(instruction={}) args={} kwargs={}".format(
-                repr_value(instruction), repr_value(args), repr_value(kwargs)))
-        return orig(self, app, instruction, *args, **kwargs)
+            # `self` の後ろは app, instruction, ... の順。
+            note(lambda: write("ConversationPhaseManager(instruction={}) args={} kwargs={}".format(
+                repr_value(frames.arg(args, kwargs, "instruction", 1)),
+                repr_value(args[2:]), repr_value(kwargs))))
+        return orig(self, *args, **kwargs)
 
-    @ctx.wrap("__main__:ConversationPhaseManager.conversation_continued", required=False)
-    def conversation_continued(orig, self, choice_text, *args, **kwargs):
+    @ctx.wrap("__main__:ConversationPhaseManager.conversation_continued",
+              required=False, safe=True)
+    def conversation_continued(orig, self, *args, **kwargs):
+        # 版3: 上限を先に見る。版2は会話の1ターンごとに前の姿を組み立てていた。
+        if not sample("conversation_continued"):
+            return orig(self, *args, **kwargs)
         app = getattr(self, "app", None) or find_app()
-        before = button_state(app) if app is not None else {}
-        if sample("conversation_continued"):
+        box = {}
+
+        def before():
+            box["before"] = button_state(app) if app is not None else {}
             write("-" * 78)
             write("ConversationPhaseManager.conversation_continued({!r})".format(
-                choice_text))
-        result = orig(self, choice_text, *args, **kwargs)
-        if counts.get("conversation_continued", 0) <= MAX_SAMPLES and app is not None:
-            diff_buttons(app, "conversation_continued", before)
+                frames.arg(args, kwargs, "choice_text", 0)))
+        note(before)
+        result = orig(self, *args, **kwargs)
+        if app is not None:
+            note(lambda: diff_buttons(app, "conversation_continued", box.get("before", {})))
         return result
 
-    @ctx.wrap("__main__:ConversationStartManager.execute", required=False)
-    def conversation_start_execute(orig, self, choice_text, *args, **kwargs):
+    @ctx.wrap("__main__:ConversationStartManager.execute", required=False, safe=True)
+    def conversation_start_execute(orig, self, *args, **kwargs):
         """会話が始まった直後のボタンの姿。ここが「依頼を受ける」を足す場所。
 
         会話中は自由入力が主で、
@@ -838,18 +826,21 @@ def apply(ctx):
         生きているなら何が並んでいるのかを確かめる。
         """
         app = getattr(self, "app", None) or find_app()
-        result = orig(self, choice_text, *args, **kwargs)
-        if sample("ConversationStartManager.execute") and app is not None:
-            write("=" * 78)
-            write("ConversationStartManager.execute({!r}) done; character_id={!r}".format(
-                choice_text, getattr(self, "character_id", "<none>")))
-            for key, value in sorted(button_state(app).items()):
-                write("    app.{:<28} = {}".format(key, value))
-            write("    app.in_conversation={!r} in_free_input={!r} "
-                  "in_action_in_conversation={!r}".format(
-                      getattr(app, "in_conversation", None),
-                      getattr(app, "in_free_input", None),
-                      getattr(app, "in_action_in_conversation", None)))
+        result = orig(self, *args, **kwargs)
+        if app is not None and sample("ConversationStartManager.execute"):
+            def record():
+                write("=" * 78)
+                write("ConversationStartManager.execute({!r}) done; character_id={!r}".format(
+                    frames.arg(args, kwargs, "choice_text", 0),
+                    getattr(self, "character_id", "<none>")))
+                for key, value in sorted(button_state(app).items()):
+                    write("    app.{:<28} = {}".format(key, value))
+                write("    app.in_conversation={!r} in_free_input={!r} "
+                      "in_action_in_conversation={!r}".format(
+                          getattr(app, "in_conversation", None),
+                          getattr(app, "in_free_input", None),
+                          getattr(app, "in_action_in_conversation", None)))
+            note(record)
         return result
 
     # ------------------------------------------------- 会話中の上部ボタン
@@ -874,19 +865,25 @@ def apply(ctx):
         return "{} <{}>".format(name or "?", type(value).__name__)
 
     def wrap_top_info_callbacks(target, label, names):
-        @ctx.wrap(target, required=False)
-        def _set(orig, self, first, second, *args, **kwargs):
-            write("=" * 78)
-            write("{}:".format(label))
-            write("    {} = {}".format(names[0], describe_callback(first)))
-            write("    {} = {}".format(names[1], describe_callback(second)))
-            app = find_app()
-            if app is not None:
-                write("    app.hud_top_info_texts = {}".format(
-                    repr_value(getattr(app, "hud_top_info_texts", None))))
-                write("    app.hud_top_info_label = {}".format(
-                    repr_value(getattr(app, "hud_top_info_label", None))))
-            return orig(self, first, second, *args, **kwargs)
+        # 版3: 版2は上限なしで、会話のたびに4〜5行出ていた（1か月で約 3,200 行）。
+        @ctx.wrap(target, required=False, safe=True)
+        def _set(orig, self, *args, **kwargs):
+            if sample(target):
+                def record():
+                    write("=" * 78)
+                    write("{}:".format(label))
+                    write("    {} = {}".format(names[0], describe_callback(
+                        frames.arg(args, kwargs, names[0].strip(), 0))))
+                    write("    {} = {}".format(names[1], describe_callback(
+                        frames.arg(args, kwargs, names[1].strip(), 1))))
+                    app = find_app()
+                    if app is not None:
+                        write("    app.hud_top_info_texts = {}".format(
+                            repr_value(getattr(app, "hud_top_info_texts", None))))
+                        write("    app.hud_top_info_label = {}".format(
+                            repr_value(getattr(app, "hud_top_info_label", None))))
+                note(record)
+            return orig(self, *args, **kwargs)
         return _set
 
     wrap_top_info_callbacks(
@@ -899,14 +896,16 @@ def apply(ctx):
         "set_top_info_layout_action_in_conversation_button_callback",
         ("callbacks_button_2", "callbacks_button_3"))
 
-    @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.update_top_info_texts", required=False)
-    def update_top_info_texts(orig, self, instance, value, *args, **kwargs):
+    @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.update_top_info_texts",
+              required=False, safe=True)
+    def update_top_info_texts(orig, self, *args, **kwargs):
         # 上部ボタンの文字列が変わるたびに記録する。
         # 会話に入った瞬間に何が並ぶかが分かれば、
         # 「この文字のボタン」と言える。
         if sample("update_top_info_texts"):
-            write("hud top info texts -> {}".format(repr_value(value)))
-        return orig(self, instance, value, *args, **kwargs)
+            note(lambda: write("hud top info texts -> {}".format(
+                repr_value(frames.arg(args, kwargs, "value", 1)))))
+        return orig(self, *args, **kwargs)
 
     # 会話中の「行動」メニュー。
     # `app.in_action_in_conversation` を立てて自由入力から選択肢に切り替える経路で、
@@ -914,17 +913,19 @@ def apply(ctx):
     # 「依頼を受ける」を足すならここが本来の居場所。
     # 並んでいる spec を見る。
     def wrap_action_toggle(target, label):
-        @ctx.wrap(target, required=False)
+        @ctx.wrap(target, required=False, safe=True)
         def _toggle(orig, self, *args, **kwargs):
             result = orig(self, *args, **kwargs)
             if sample(target):
-                write("=" * 78)
-                write("{} done".format(label))
-                for key, value in sorted(button_state(self).items()):
-                    write("    app.{:<28} = {}".format(key, value))
-                write("    in_action_in_conversation={!r} in_conversation={!r}".format(
-                    getattr(self, "in_action_in_conversation", None),
-                    getattr(self, "in_conversation", None)))
+                def record():
+                    write("=" * 78)
+                    write("{} done".format(label))
+                    for key, value in sorted(button_state(self).items()):
+                        write("    app.{:<28} = {}".format(key, value))
+                    write("    in_action_in_conversation={!r} in_conversation={!r}".format(
+                        getattr(self, "in_action_in_conversation", None),
+                        getattr(self, "in_conversation", None)))
+                note(record)
             return result
         return _toggle
 
@@ -933,25 +934,27 @@ def apply(ctx):
     wrap_action_toggle("__main__:InstantaleApp.toggle_from_action_in_conversation",
                        "toggle_from_action_in_conversation")
 
-    @ctx.wrap("__main__:ConversationEndManager.__init__", required=False)
-    def conversation_end_init(orig, self, app, in_conversation_id, finisher, end_text,
-                              *args, **kwargs):
+    @ctx.wrap("__main__:ConversationEndManager.__init__", required=False, safe=True)
+    def conversation_end_init(orig, self, *args, **kwargs):
         if sample("ConversationEndManager.__init__"):
-            write("ConversationEndManager(in_conversation_id={!r}, finisher={!r}, "
-                  "end_text={})".format(in_conversation_id, finisher,
-                                        repr_value(end_text)))
-        return orig(self, app, in_conversation_id, finisher, end_text, *args, **kwargs)
+            # `self` の後ろは app, in_conversation_id, finisher, end_text の順。
+            note(lambda: write("ConversationEndManager(in_conversation_id={!r}, finisher={!r}, "
+                               "end_text={})".format(
+                                   frames.arg(args, kwargs, "in_conversation_id", 1),
+                                   frames.arg(args, kwargs, "finisher", 2),
+                                   repr_value(frames.arg(args, kwargs, "end_text", 3)))))
+        return orig(self, *args, **kwargs)
 
     # NPC が「この土地の依頼」を語るときに使う知識。
     # 会話から依頼を作るとき、
     # ゲーム自身が何をクエスト情報として渡しているかがそのまま雛形になる。
     @ctx.wrap("scripts.llm.context_manager:get_quest_data_for_conversation",
-              required=False)
-    def quest_data_for_conversation(orig, app, functions, *args, **kwargs):
-        result = orig(app, functions, *args, **kwargs)
+              required=False, safe=True)
+    def quest_data_for_conversation(orig, *args, **kwargs):
+        result = orig(*args, **kwargs)
         if sample("get_quest_data_for_conversation"):
-            write("get_quest_data_for_conversation -> [{}] {}".format(
-                type(result).__name__, repr_value(result)))
+            note(lambda: write("get_quest_data_for_conversation -> [{}] {}".format(
+                type(result).__name__, repr_value(result))))
         return result
 
     ctx.log("quest flow probe log: {}".format(log_path))

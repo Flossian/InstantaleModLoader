@@ -212,7 +212,9 @@ for target in ("__main__:EntryColosseumMatchManager.method",
                "__main__:GameOverManager.__init__",
                "__main__:MovePhaseManager.move_phase",
                "__main__:InstantaleApp.add_text",
-               "__main__:InstantaleApp.elapse_days"):
+               "__main__:InstantaleApp.elapse_days",
+               "__main__:InstantaleApp.load_game_new",
+               "__main__:InstantaleApp.start_game"):
     check("包む: " + target, target in ctx.hooks, sorted(ctx.hooks))
 
 print("闘技場に立つ")
@@ -378,6 +380,8 @@ executed = rows("battle_end_manager_execute")
 check("終わり方の前後の差が残る", executed and "changed" in executed[-1], executed)
 
 # 戦闘を終える判定の中で終わり方が作られた回だけ、戻り値と前後の差を残す。
+# 版4の続き: 闘技場の戦闘（旗が立っている）の中だけ。
+app.in_colosseum_battle = 1
 app.current_enemy_dict = {"闘士": object()}
 
 
@@ -398,6 +402,18 @@ before = len(rows("check_battle_end_ended"))
 ctx.hooks["__main__:BattlePhaseManager.check_battle_end"](lambda self: None, Manager(app))
 check("終わり方が作られなかった判定は書かない",
       len(rows("check_battle_end_ended")) == before)
+
+print("闘技場の外の戦闘の判定と終わり方は写さない（版4の続き）")
+app.in_colosseum_battle = 0
+app.current_enemy_dict = {"闘士": object()}
+before = len(records())
+result = ctx.hooks["__main__:BattlePhaseManager.check_battle_end"](
+    game_ends_it, Manager(app))
+check("判定の戻り値はそのまま返す（闘技場の外）", result is True, result)
+check("闘技場の外では何も書かない", len(records()) == before, records()[before:])
+ctx.hooks["__main__:BattleEndManager.execute"](
+    lambda self, choice_text: "ok", Escape(app), "")
+check("闘技場の外の終わり方も書かない", len(records()) == before, records()[before:])
 
 print("闘技場の外の戦闘では窓を作らない")
 before = len(records())
@@ -426,6 +442,21 @@ check("game_over が真", match_rows[-1]["game_over"] is True, match_rows[-1])
 check("負けた試合に通った地点が残る",
       "check_team_annihilation" in (match_rows[-1].get("steps") or []),
       match_rows[-1])
+
+print("試合の途中でロードしたら窓を閉じる（版4の続き）")
+ctx.hooks["__main__:ColosseumMatchStart.execute"](
+    match_start_execute, Manager(app), "申し込む")
+before = len(rows("match"))
+loaded = ctx.hooks["__main__:InstantaleApp.load_game_new"](
+    lambda self, world: "loaded", app, "世界")
+check("ロードの戻りはそのまま返す", loaded == "loaded", loaded)
+check("開いていた窓がロードで閉じる",
+      len(rows("match")) == before + 1
+      and rows("match")[-1].get("closed_by") == "load_game_new", rows("match")[-1:])
+before = len(records())
+ctx.hooks["__main__:BattlePhaseManager.check_team_annihilation"](
+    lambda self: False, Manager(app))
+check("閉じた後の戦闘の手は録らない", len(records()) == before, records()[before:])
 
 print("窓の外・値が読めないとき")
 app.player.location = None

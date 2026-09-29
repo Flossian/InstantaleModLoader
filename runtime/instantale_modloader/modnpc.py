@@ -117,7 +117,13 @@ INSTALLED_ATTR = "_instantale_modnpc_installed"
 #: `resolve_conversation` が `KeyError` で落ちた。
 #: いまは `world.characters` を `_RosterView`（反復では隠し、id では引ける）に
 #: 差し替えるので、窓は無い。保存が名簿を読まないと分かれば False にしてよい。
+#: 切り替えは `settings/loader.json` の `"modnpc_lift_roster"`（`install` が注入のたびに読む）。
+#: 元は `229_probe_mod_npc` の設定がこの旗を書き換えていて、229 を入れている間は
+#: ModNPC を使う全 MOD（`330_` など）に効いていた。ローダ全体の旗なのでローダの設定へ移した。
 LIFT_ROSTER = True
+
+#: `settings/loader.json` で `LIFT_ROSTER` を決める鍵。無ければ既定（True）。
+LIFT_ROSTER_FLAG = "modnpc_lift_roster"
 
 
 class _RosterView(dict):
@@ -1706,6 +1712,7 @@ def install(ctx, write=None):
     次の世代では別の MOD が立てる。
     """
     bind_store(ctx, write)
+    _read_lift_roster(ctx, write)
     generation = getattr(ctx, "generation", None)
     done = installed()
     if done is not None and done.get("generation") == generation:
@@ -1718,6 +1725,29 @@ def install(ctx, write=None):
     if write:
         write("modnpc: the gate was declared on {}".format(", ".join(targets)))
     return targets
+
+
+def _read_lift_roster(ctx, write):
+    """`settings/loader.json` の `LIFT_ROSTER_FLAG` を `LIFT_ROSTER` に写す。
+
+    無いか真偽値でなければ既定（True）に戻す。
+    前の注入で切ったまま `loader.json` から消した場合も、ここで戻る。
+    """
+    global LIFT_ROSTER
+    value = None
+    runtime_dir = getattr(ctx, "runtime_dir", None)
+    if runtime_dir:
+        try:
+            from . import config
+            value = config.load_flags(runtime_dir).get(LIFT_ROSTER_FLAG)
+        except Exception:
+            log_exc("modnpc: cannot read {}".format(LIFT_ROSTER_FLAG))
+    LIFT_ROSTER = value if isinstance(value, bool) else True
+    if not LIFT_ROSTER:
+        log("modnpc: {} is off; the mod npcs stay in the roster during saves".format(
+            LIFT_ROSTER_FLAG), level="WARN")
+        if write:
+            write("modnpc: {} is off".format(LIFT_ROSTER_FLAG))
 
 
 def _install(ctx, write):

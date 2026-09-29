@@ -23,6 +23,13 @@
 
 この mod は観測しかしない。
 値は変えず、記録に失敗しても本体は必ず呼ぶ。
+
+版3: 値の在り処は決着済み（VERIFICATION_LOG.md §2.46）。人物欄の採寸は他の MOD の調べにも使うので残し、次を直した。
+
+- ダンプの上限に達した後は、次のフレームの写しを Clock に積まない。
+  版2は開閉のたびに、何もしない予約を1本ずつ積んでいた
+- 載せる値の在り処（player の値・エリアの表・world の生の辞書探し）はプロセスに1回にした。
+  版2は注入のたびに最初のダンプへ付けていて（1回 19KB 前後）、中身は毎回同じだった
 """
 
 import datetime
@@ -31,6 +38,9 @@ import sys
 from instantale_modloader import frames, ui
 
 LOG_BASENAME = "character_sheet.log"
+
+# 値の在り処を書いたか（版3。`sys` に置いて1プロセスに1回。TECH.md §3.6）。
+VALUES_MARK = "_instantale_probe_charsheet_values"
 
 # 何回ぶん書き出すか。
 # 開閉のたびに1件出るので、開く→閉じるを数回で足りる。
@@ -290,9 +300,10 @@ def apply(ctx):
                 lines.append("  {}:".format(name))
                 lines += describe(widget, 0, label=name)
                 lines += canvas_of(widget)
-        if app is not None and state["dumps"] == 1:
+        if app is not None and not getattr(sys, VALUES_MARK, False):
             # 値の在り処は1回取れば足りる。
-            # 開閉のたびに繰り返さない。
+            # 開閉のたびにも、注入し直すたびにも繰り返さない（版3でプロセスに1回）。
+            setattr(sys, VALUES_MARK, True)
             lines += player_values(app)
         write("\n".join(lines))
 
@@ -300,6 +311,9 @@ def apply(ctx):
               safe=True)
     def toggle_visibility(orig, self, *args, **kwargs):
         result = orig(self, *args, **kwargs)
+        if state["dumps"] >= MAX_DUMPS:
+            # 上限の後は予約も積まない（版3）。
+            return result
         try:
             # 直後の `pos` はまだ1つ前のレイアウトの値（`size` だけ新しい）。
             # 落ち着いた寸法が要るので、次のフレームでもう1回写す。
@@ -314,6 +328,9 @@ def apply(ctx):
     @ctx.wrap("__main__:InstantaleApp.toggle_character_sheet_window", safe=True)
     def toggle_window(orig, self, *args, **kwargs):
         result = orig(self, *args, **kwargs)
+        if state["dumps"] >= MAX_DUMPS:
+            # 上限の後は HUD も探さない（版3）。
+            return result
         try:
             dump("toggle_character_sheet_window", ui.find_hud(self))
         except Exception:

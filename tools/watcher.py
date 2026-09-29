@@ -148,7 +148,7 @@ def main() -> int:
     os.makedirs(injector.OUT_DIR, exist_ok=True)
     log("watcher started; polling every {}s for {}".format(args.interval, injector.TARGET_EXE))
     if not logrotate.enabled(args.log_rotate):
-        log("log rotate: disabled; out/*.log will keep growing")
+        log("log rotate: disabled; out/*.log and *.jsonl will keep growing")
 
     handled: set[int] = set()
     # 監視を始めた時点で既に動いていたゲーム。

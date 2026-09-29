@@ -7,10 +7,10 @@
     "ja": "計測: アイテム説明欄"
   },
   "description": {
-    "en": "Captures the real geometry of the item detail box to see why text is cut off",
-    "ja": "アイテム説明欄の実寸と中身を写し取り、説明が途中で切れる原因を測る"
+    "en": "Watches the item detail box's opacity to see why it stays after closing (plus its geometry for the first few items)",
+    "ja": "アイテム説明欄の opacity の上げ下げを見張り、閉じた後も残る原因を測る（寸法は最初の数品だけ写す）"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "debug": true,
   "after": [

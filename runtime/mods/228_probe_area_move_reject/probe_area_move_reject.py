@@ -14,6 +14,20 @@
 解くときに元のオブジェクトへ移す（移動先のエリアの生成や日数送りの書き込みを捨てないため）。
 記録は `out\\area_move_reject.log`。
 読まれた順に並ぶので、`>> area_move_rejector` の直前に並ぶ属性が分岐の材料。
+
+##### 版の記録
+
+- 版4: 属性読みの記録が、読まれた値の `repr` を全文作ってから 120 字に切っていた。
+  窓の間は `app` の読みが全スレッドで通るので、`world_dict` / `save_data_dict` を読まれるたびに
+  世界の辞書まるごとの `repr` を組んでいた。値は数・真偽・短い文字列だけ写し、
+  それ以外は型名（入れ物は件数も）にした。窓が閉じた後の読みは値を見る前に素通しする。
+  `AreaMoveManager.execute` の包みに `safe=True` を付け、受け取った引数を
+  キーワードのまま `orig` へ渡すようにした（`choice_text` を位置に直していた）。
+- 版3 の実機（09-10）で `window:` 21回に対し `window closed` が 13回だった。
+  欠けた8回は `217_probe_area_move` の `move done` も同じ回で欠けており、
+  `execute` そのものが戻っていない（二重押下で `execute` が 0.9 秒差で2本走った直後から、
+  その起動の間ずっと戻らなかった）。窓の記録は `>> elapse_days` の時点で解けていて、
+  閉じの行が出ないのは `execute` の戻りを待つ行だから。原因は本体側で、この probe では測っていない
 """
 
 import threading
@@ -105,7 +119,8 @@ def apply(ctx):
         base = type(obj)
 
         def __getattribute__(self, name):
-            if name not in NOISE and not name.startswith("__"):
+            # 版4: 窓が閉じた後（戻しが済むまでの間）は、値を見る前に素通しする。
+            if state["active"] and name not in NOISE and not name.startswith("__"):
                 value = object.__getattribute__(self, name)
                 if not callable(value):
                     note(label, ".{} = {}".format(name, short(value)))
@@ -123,11 +138,19 @@ def apply(ctx):
         window["undo"].append(lambda o=obj, b=base: object.__setattr__(o, "__class__", b))
 
     def short(value):
-        try:
-            text = repr(value)
-        except Exception:
-            text = "<unrepr>"
-        return text if len(text) <= 120 else text[:117] + "..."
+        """読まれた値の写し。数・真偽・短い文字列だけ値ごと、ほかは型名（版4）。
+
+        前は `repr` を全文作ってから切っていたので、`app.world_dict` を読まれるたびに
+        世界の辞書まるごとを文字にしていた。
+        """
+        if value is None or isinstance(value, (bool, int, float)):
+            return repr(value)
+        if isinstance(value, str):
+            return repr(value) if len(value) <= 60 else "str(len={})".format(len(value))
+        name = type(value).__name__
+        if isinstance(value, (dict, list, tuple, set)):
+            return "{}(len={})".format(name, len(value))
+        return "<{}>".format(name)
 
     # 窓の差し替えの戻し。窓を開いた側と `area_move_rejector` / `elapse_days` の側
     # （別スレッドのこともある）のどちらが先に解いても1回だけ走るよう、鍵を掛けて取り出す。
@@ -191,10 +214,16 @@ def apply(ctx):
         track(value, new, get=lambda o=owner, n=name: getattr(o, n, None),
               put=lambda v, o=owner, n=name: setattr(o, n, v))
 
-    @ctx.wrap("__main__:AreaMoveManager.execute", required=False)
-    def execute(orig, self, choice_text=None, *args, **kwargs):
-        app = getattr(self, "app", None) or ui.find_app()
-        disarm()
+    # 版4: `safe=True` を付け、受け取った引数をそのまま `orig` へ渡す。
+    @ctx.wrap("__main__:AreaMoveManager.execute", required=False, safe=True)
+    def execute(orig, self, *args, **kwargs):
+        choice_text = args[0] if args else kwargs.get("choice_text")
+        try:
+            app = getattr(self, "app", None) or ui.find_app()
+            disarm()
+        except Exception:
+            app = None
+            ctx.log_exc("area move reject probe: cannot reset the window")
         try:
             write("=" * 72)
             write("window: choice={!r} party={} original_party={!r} quest={} accompany={!r}".format(
@@ -236,7 +265,7 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("area move reject probe: cannot arm")
         try:
-            return orig(self, choice_text, *args, **kwargs)
+            return orig(self, *args, **kwargs)
         finally:
             disarm()
             write("window closed ({} reads)".format(state["n"]))
@@ -249,10 +278,12 @@ def apply(ctx):
         return orig(*args, **kwargs)
 
     @ctx.wrap("__main__:InstantaleApp.elapse_days", required=False, safe=True)
-    def elapse_days(orig, self, days, *args, **kwargs):
+    def elapse_days(orig, self, *args, **kwargs):
+        # 版4: 日数を位置に直して渡していたのをやめ、受け取った形のまま渡す。
         if state["active"]:
+            days = args[0] if args else kwargs.get("days")
             write("  >> elapse_days({}) (the branch passed)".format(days))
         disarm()
-        return orig(self, days, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     ctx.log("area move reject probe: installed -> {}".format(ctx.out_path(LOG_BASENAME)))

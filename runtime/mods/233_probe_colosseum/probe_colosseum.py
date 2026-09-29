@@ -66,6 +66,22 @@ r"""計測: 闘技場の試合（相手の強さと報酬）。ゲームは変�
 ## 200番台の約束どおり読み取りだけ
 
 どの包みも `orig` の戻りをそのまま返す。ゲームの値は書き換えない。
+
+## 版4の続き（リリース前の見直し）
+
+  * `check_battle_end` は**全戦闘の毎手**で、判定より先に app と HUD の全属性を写してから
+    捨てていた（書いたのは終わり方が作られた回だけ）。`BattleEndManager` の `__init__` /
+    `execute` も闘技場の外の戦闘で差分と記録を取っていた。
+    3つとも、闘技場の窓の中か `in_colosseum_battle` が立っているときだけにし、判定を写しより先にした
+    （`in_arena`）。`CancelBattleActionManager.cancel_action` と報酬の文の記録も同じにした
+  * `safe=True` の無い包みが3本あった（`ColosseumMatchStart.execute`、
+    `BattleEndInColosseum.execute` / `.end_phase`）。付けた
+  * 包みは受け取った引数をそのまま `orig` へ渡す形にした（キーワードを位置に直さない）
+  * `enemy_number` と `GameOverManager` で呼び出し元を2回組んでいたのを1回にした。
+    使っていない `state["generated"]` を消した
+  * 窓が閉じ損ねると（試合の途中でロードしたとき）、次の申し込みまで開いたままで、
+    闘技場の外の戦闘の手も窓に積まれていた。ロードと新規開始
+    （`InstantaleApp.load_game_new` / `start_game`）の前で窓を閉じる
 """
 
 import datetime
@@ -97,7 +113,7 @@ def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
     record = ctx.jsonl(RECORD_BASENAME)
     state = {"match": None, "seq": 0, "gold": None, "watch_until": 0.0,
-             "enemy_type": None, "generated": [], "ending": None}
+             "enemy_type": None, "ending": None}
 
     def now():
         return datetime.datetime.now().isoformat(timespec="seconds")
@@ -237,6 +253,13 @@ def apply(ctx):
     def watching():
         return state["match"] is not None or time.monotonic() < state["watch_until"]
 
+    def in_arena(app):
+        """闘技場の試合の中か（窓が開いているか、闘技場の戦闘の旗が立っている）。
+
+        版4の続き: 重い写し（`screen_snapshot`）や記録より**先に**これで見る。
+        """
+        return state["match"] is not None or bool(getattr(app, "in_colosseum_battle", False))
+
     def touch_gold(app, where):
         """所持金が**変わった地点**を残す。増えた場所を突き止めるのが目的。"""
         if app is None or not watching():
@@ -347,15 +370,16 @@ def apply(ctx):
             ctx.log_exc("colosseum probe: cannot record the entry")
         return result
 
-    @ctx.wrap("__main__:ColosseumMatchStart.execute", required=False)
-    def match_execute(orig, self, choice_text=None, *args, **kwargs):
+    @ctx.wrap("__main__:ColosseumMatchStart.execute", required=False, safe=True)
+    def match_execute(orig, self, *args, **kwargs):
         """試合の窓。`申し込む` を押した地点から。"""
-        app = getattr(self, "app", None) or ui.find_app()
         try:
+            app = getattr(self, "app", None) or ui.find_app()
+            choice_text = args[0] if args else kwargs.get("choice_text")
             open_match(app, "ColosseumMatchStart.execute({!r})".format(choice_text))
         except Exception:
             ctx.log_exc("colosseum probe: cannot open the match window")
-        return orig(self, choice_text, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     @ctx.wrap("__main__:ColosseumMatchStart.method", required=False, safe=True)
     def match_method(orig, self, *args, **kwargs):
@@ -376,18 +400,19 @@ def apply(ctx):
 
     @ctx.wrap("__main__:ColosseumMatchStart.generate_enemy_data", required=False,
               safe=True)
-    def generate_enemy_data(orig, self, enemy_id=None, *args, **kwargs):
+    def generate_enemy_data(orig, self, *args, **kwargs):
         """`enemy_id` の実値と、作られた相手のランク。前後の `config` も写す。"""
         app = getattr(self, "app", None) or ui.find_app()
         before = arena_here(app)
         started = time.monotonic()
-        result = orig(self, enemy_id, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
         try:
+            enemy_id = args[0] if args else kwargs.get("enemy_id")
             after = arena_here(app)
             rank = rank_of(result)
             row = {"at": now(), "phase": "generate_enemy_data",
                    "enemy_id": keep(enemy_id),
-                   "args": [frames.repr_value(a) for a in args],
+                   "args": [frames.repr_value(a) for a in args[1:]],
                    "kwargs": {k: frames.repr_value(v) for k, v in kwargs.items()},
                    "returned_rank": rank, "returned_name": name_of(result),
                    "returned_type": type(result).__name__,
@@ -467,18 +492,21 @@ def apply(ctx):
 
     def install_enemy_number(name):
         @ctx.wrap("scripts.functions:{}".format(name), required=False, safe=True)
-        def enemy_number(orig, enemy_tier=None, quest_difficulty=None, *args, **kwargs):
-            # 引数名は本体と同じにする（キーワードで渡されても二重にならない。版4）。
-            result = orig(enemy_tier, quest_difficulty, *args, **kwargs)
-            tier, difficulty = enemy_tier, quest_difficulty
+        def enemy_number(orig, *args, **kwargs):
+            # 版4では引数名を本体と同じにして、キーワードで渡されたときの二重を避けた。
+            # 版4の続きで、受け取ったまま渡す形にした。
+            result = orig(*args, **kwargs)
             try:
                 if state["match"] is not None or watching():
+                    tier = args[0] if args else kwargs.get("enemy_tier")
+                    difficulty = (args[1] if len(args) > 1
+                                  else kwargs.get("quest_difficulty"))
+                    caller = frames.caller()
                     write("{}({!r}, {!r}) -> {!r} from {}".format(
-                        name, keep(tier), keep(difficulty), keep(result),
-                        frames.caller()))
+                        name, keep(tier), keep(difficulty), keep(result), caller))
                     record({"at": now(), "phase": "enemy_number", "fn": name,
                             "tier": keep(tier), "difficulty": keep(difficulty),
-                            "returned": keep(result), "caller": frames.caller(),
+                            "returned": keep(result), "caller": caller,
                             "match": (state["match"] or {}).get("seq")})
             except Exception:
                 pass
@@ -488,9 +516,13 @@ def apply(ctx):
         install_enemy_number(_fn)
 
     @ctx.wrap("__main__:BattleStartManager.__init__", required=False, safe=True)
-    def battle_init(orig, self, app=None, enemy_type=None, *args, **kwargs):
-        state["enemy_type"] = keep(enemy_type)
-        return orig(self, app, enemy_type, *args, **kwargs)
+    def battle_init(orig, self, *args, **kwargs):
+        try:
+            state["enemy_type"] = keep(args[1] if len(args) > 1
+                                       else kwargs.get("enemy_type"))
+        except Exception:
+            pass
+        return orig(self, *args, **kwargs)
 
     @ctx.wrap("__main__:BattleStartManager.start_battle", required=False, safe=True)
     def start_battle(orig, self, *args, **kwargs):
@@ -518,9 +550,17 @@ def apply(ctx):
     def cancel_action(orig, self, *args, **kwargs):
         """**降りられるか。** 闘技場の戦闘でも撤退が通るのかを見る。"""
         app = getattr(self, "app", None) or ui.find_app()
-        step(app, "CancelBattleActionManager.cancel_action",
-             "flags={}".format(flags_of(app)))
+        # 版4の続き: 闘技場の外の撤退は録らない。
+        inside = in_arena(app)
+        if inside:
+            try:
+                step(app, "CancelBattleActionManager.cancel_action",
+                     "flags={}".format(flags_of(app)))
+            except Exception:
+                ctx.log_exc("colosseum probe: cannot record the cancel step")
         result = orig(self, *args, **kwargs)
+        if not inside:
+            return result
         try:
             record({"at": now(), "phase": "cancel_action", "flags": flags_of(app),
                     "player": player_brief(app), "buttons": buttons_brief(app),
@@ -543,9 +583,10 @@ def apply(ctx):
 
     @ctx.wrap("__main__:BattlePhaseManager.check_character_death", required=False,
               safe=True)
-    def check_character_death(orig, self, index=None, character=None, *args, **kwargs):
-        result = orig(self, index, character, *args, **kwargs)
+    def check_character_death(orig, self, *args, **kwargs):
+        result = orig(self, *args, **kwargs)
         try:
+            character = args[1] if len(args) > 1 else kwargs.get("character")
             if state["match"] is not None and getattr(character, "is_player", False):
                 step(getattr(self, "app", None) or ui.find_app(),
                      "check_character_death(player)",
@@ -557,13 +598,17 @@ def apply(ctx):
         return result
 
     # ---------------------------------------------------------- 試合の終わり
-    @ctx.wrap("__main__:BattleEndInColosseum.execute", required=False)
-    def battle_end_execute(orig, self, choice_text=None, *args, **kwargs):
+    @ctx.wrap("__main__:BattleEndInColosseum.execute", required=False, safe=True)
+    def battle_end_execute(orig, self, *args, **kwargs):
         app = getattr(self, "app", None) or ui.find_app()
+        choice_text = args[0] if args else kwargs.get("choice_text")
         gold_before = ui.gold_of(app)
-        step(app, "BattleEndInColosseum.execute", "choice={!r}".format(choice_text))
         try:
-            return orig(self, choice_text, *args, **kwargs)
+            step(app, "BattleEndInColosseum.execute", "choice={!r}".format(choice_text))
+        except Exception:
+            ctx.log_exc("colosseum probe: cannot record the colosseum battle end step")
+        try:
+            return orig(self, *args, **kwargs)
         finally:
             try:
                 touch_gold(app, "BattleEndInColosseum.execute (returned)")
@@ -575,12 +620,15 @@ def apply(ctx):
             except Exception:
                 ctx.log_exc("colosseum probe: cannot record the colosseum battle end")
 
-    @ctx.wrap("__main__:BattleEndInColosseum.end_phase", required=False)
+    @ctx.wrap("__main__:BattleEndInColosseum.end_phase", required=False, safe=True)
     def battle_end_phase(orig, self, *args, **kwargs):
         """**報酬はここか、この後の Clock か。** 戻った地点の所持金を必ず残す。"""
         app = getattr(self, "app", None) or ui.find_app()
         gold_before = ui.gold_of(app)
-        step(app, "BattleEndInColosseum.end_phase", "gold={}".format(gold_before))
+        try:
+            step(app, "BattleEndInColosseum.end_phase", "gold={}".format(gold_before))
+        except Exception:
+            ctx.log_exc("colosseum probe: cannot record the end_phase step")
         try:
             return orig(self, *args, **kwargs)
         finally:
@@ -647,6 +695,9 @@ def apply(ctx):
         """
         app = getattr(self, "app", None) or ui.find_app()
         state["ending"] = None
+        # 版4の続き: 闘技場の外の戦闘では写さない（判定を写しより先に）。
+        if not in_arena(app):
+            return orig(self, *args, **kwargs)
         before = screen_snapshot(app) if app is not None else {}
         result = orig(self, *args, **kwargs)
         try:
@@ -668,31 +719,40 @@ def apply(ctx):
         return result
 
     @ctx.wrap("__main__:BattleEndManager.__init__", required=False, safe=True)
-    def battle_end_init(orig, self, app=None, end_type=None, *args, **kwargs):
+    def battle_end_init(orig, self, *args, **kwargs):
         """`end_type` の実値と、誰が作ったか。
 
         **倒れたときに負けとして試合を終える**（`334_colosseum_custom`）には、
         ゲームが逃げたときに通るのと同じ引数でこのマネージャを起こす必要がある。
-        闘技場の外の戦闘でも録る（`end_type` に何種類あるかを知りたいので）。
+        版4までは `end_type` の種類を知るため闘技場の外の戦闘でも録っていた。
+        版4の続きで闘技場の中だけにした（`334_` の負けの扱いは実装済み）。
         """
         try:
-            state["ending"] = keep(end_type)
+            app = args[0] if args else kwargs.get("app")
+            end_type = args[1] if len(args) > 1 else kwargs.get("end_type")
             target = app or ui.find_app()
-            write("BattleEndManager(end_type={!r}) from {}".format(
-                keep(end_type), frames.caller()))
-            record({"at": now(), "phase": "battle_end_init",
-                    "end_type": keep(end_type), "caller": frames.caller(),
-                    "flags": flags_of(target), "arena": arena_here(target),
-                    "args": [frames.repr_value(a) for a in args],
-                    "match": (state["match"] or {}).get("seq")})
+            if in_arena(target):
+                state["ending"] = keep(end_type)
+                caller = frames.caller()
+                write("BattleEndManager(end_type={!r}) from {}".format(
+                    keep(end_type), caller))
+                record({"at": now(), "phase": "battle_end_init",
+                        "end_type": keep(end_type), "caller": caller,
+                        "flags": flags_of(target), "arena": arena_here(target),
+                        "args": [frames.repr_value(a) for a in args[2:]],
+                        "match": (state["match"] or {}).get("seq")})
         except Exception:
             ctx.log_exc("colosseum probe: cannot record the battle end manager")
-        return orig(self, app, end_type, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     @ctx.wrap("__main__:BattleEndManager.execute", required=False, safe=True)
-    def battle_end_other_execute(orig, self, choice_text="", *args, **kwargs):
+    def battle_end_other_execute(orig, self, *args, **kwargs):
         """`execute` と `end_phase` のどちらが先かを残す（起こす側が呼ぶ順の材料）。"""
         app = getattr(self, "app", None) or ui.find_app()
+        # 版4の続き: 闘技場の外では写さない（判定を写しより先に）。
+        if not in_arena(app):
+            return orig(self, *args, **kwargs)
+        choice_text = args[0] if args else kwargs.get("choice_text", "")
         try:
             step(app, "BattleEndManager.execute",
                  "end_type={!r} choice={!r}".format(
@@ -712,7 +772,7 @@ def apply(ctx):
         except Exception:
             pass
         try:
-            return orig(self, choice_text, *args, **kwargs)
+            return orig(self, *args, **kwargs)
         finally:
             # 終わり方そのものが何を片付けるか（`check_battle_end` の差と並べて読む）。
             try:
@@ -758,24 +818,26 @@ def apply(ctx):
         install_other_end(_cls)
 
     @ctx.wrap("__main__:GameOverManager.__init__", required=False, safe=True)
-    def game_over_init(orig, self, app=None, *args, **kwargs):
+    def game_over_init(orig, self, *args, **kwargs):
         try:
+            app = args[0] if args else kwargs.get("app")
             target = app or ui.find_app()
             match = state["match"]
             if match is not None:
                 match["game_over"] = True
+            caller = frames.caller()
             write("GameOverManager(): flags={} player={} from {}".format(
-                flags_of(target), player_brief(target), frames.caller()))
+                flags_of(target), player_brief(target), caller))
             record({"at": now(), "phase": "game_over", "flags": flags_of(target),
                     "player": player_brief(target), "arena": arena_here(target),
-                    "caller": frames.caller(), "enemy_type": state["enemy_type"],
+                    "caller": caller, "enemy_type": state["enemy_type"],
                     "match": (match or {}).get("seq"),
                     "steps": (match or {}).get("steps")})
             if match is not None:
                 close_match(target, "game over")
         except Exception:
             ctx.log_exc("colosseum probe: cannot record the game over")
-        return orig(self, app, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     # ------------------------------------------------ 施設の出入り・文言・日数
     @ctx.wrap("__main__:MovePhaseManager.move_phase", required=False, safe=True)
@@ -796,10 +858,12 @@ def apply(ctx):
         return result
 
     @ctx.wrap("__main__:InstantaleApp.add_text", required=False, safe=True)
-    def add_text(orig, self, context=None, *args, **kwargs):
+    def add_text(orig, self, *args, **kwargs):
         try:
+            context = args[0] if args else kwargs.get("context")
             if isinstance(context, str) and context.strip():
-                reward = any(mark in context for mark in REWARD_MARKS)
+                # 版4の続き: 報酬の文は窓の中と見張りの間だけ（依頼の報酬の文は録らない）。
+                reward = watching() and any(mark in context for mark in REWARD_MARKS)
                 match = state["match"]
                 if reward:
                     amount = ui.parse_coin(context)
@@ -819,11 +883,12 @@ def apply(ctx):
             touch_gold(self, "add_text")
         except Exception:
             pass
-        return orig(self, context, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     @ctx.wrap("__main__:InstantaleApp.elapse_days", required=False, safe=True)
-    def elapse_days(orig, self, days=None, *args, **kwargs):
+    def elapse_days(orig, self, *args, **kwargs):
         try:
+            days = args[0] if args else kwargs.get("days")
             match = state["match"]
             if match is not None:
                 match["days"].append(keep(days))
@@ -831,6 +896,23 @@ def apply(ctx):
             touch_gold(self, "elapse_days")
         except Exception:
             pass
-        return orig(self, days, *args, **kwargs)
+        return orig(self, *args, **kwargs)
+
+    # ------------------------------------------------ ロードと新規開始（版4の続き）
+    def install_reset(name):
+        @ctx.wrap("__main__:InstantaleApp.{}".format(name), required=False, safe=True)
+        def reset(orig, self, *args, **kwargs):
+            """試合の途中でロードすると窓が開いたまま残るので、ここで閉じる。"""
+            try:
+                if state["match"] is not None:
+                    close_match(self, name)
+                state["watch_until"] = 0.0
+                state["ending"] = None
+            except Exception:
+                ctx.log_exc("colosseum probe: cannot close the window on {}".format(name))
+            return orig(self, *args, **kwargs)
+
+    for _name in ("load_game_new", "start_game"):
+        install_reset(_name)
 
     ctx.log("colosseum probe: ready ({}, {})".format(LOG_BASENAME, RECORD_BASENAME))

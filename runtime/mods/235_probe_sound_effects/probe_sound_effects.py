@@ -22,6 +22,13 @@ GAME.md §2.11）を包み、鳴らすたびに1行書く。
 
     out\sound_effects.log     読む用
     out\sound_effects.jsonl   後から数える用
+
+版2（見直し。問いは 333 の版20 の裏取りで決着した）:
+  * 戦闘の1手（`turn`）ごとに呼び出し元を組んでいた（`frames.caller` は `__main__` の全クラスを
+    総当たりする）。手の区切りの印として使うだけなので、呼び出し元を外した
+  * 効果音の呼び出し元とスタックの MOD は、音の名前ごとに最初の `CALLER_SAMPLES` 回だけ組む。
+    同じ音は同じ経路で鳴る（GAME.md「効果音」）ので、以後は数だけ残る
+  * 包みは受け取った引数をそのまま `orig` へ渡す形にした（キーワードを位置に直さない）
 """
 import datetime
 import os
@@ -39,6 +46,9 @@ BATTLE_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle")
 
 #: 呼び出し元の連鎖の段数。
 CALLER_DEPTH = 6
+
+#: 効果音の呼び出し元を組むのは、音の名前ごとに最初のこの回数だけ（版2）。
+CALLER_SAMPLES = 5
 
 
 def apply(ctx):
@@ -79,17 +89,26 @@ def apply(ctx):
             " ".join("{}={}".format(k, v) for k, v in fields.items())))
 
     # ------------------------------------------------------------ 効果音
+    #: 音の名前ごとに、鳴った回数（呼び出し元を組むかの判定。版2）。
+    heard = {}
+
     def watch_sound(method):
-        def wrapper(orig, self, app=None, *args, **kwargs):
+        def wrapper(orig, self, *args, **kwargs):
             try:
-                event("sound", method=method,
-                      args=[frames.short(repr(a), 120) for a in args],
-                      within=[name for name, depth in inside.items() if depth > 0],
-                      flags=flags_of(app), mods=mods_on_stack(),
-                      caller=frames.caller(CALLER_DEPTH))
+                app = args[0] if args else kwargs.get("app")
+                sound = [frames.short(repr(a), 120) for a in args[1:]]
+                key = (method, sound[0] if sound else None)
+                heard[key] = heard.get(key, 0) + 1
+                fields = {"method": method, "args": sound,
+                          "within": [name for name, depth in inside.items() if depth > 0],
+                          "flags": flags_of(app), "count": heard[key]}
+                if heard[key] <= CALLER_SAMPLES:
+                    fields["mods"] = mods_on_stack()
+                    fields["caller"] = frames.caller(CALLER_DEPTH)
+                event("sound", **fields)
             except Exception:
                 ctx.log_exc("sound effects probe: recording {} failed".format(method))
-            return orig(self, app, *args, **kwargs)
+            return orig(self, *args, **kwargs)
         return wrapper
 
     for _method in ("play_sound", "play_sound_from_src"):
@@ -106,7 +125,8 @@ def apply(ctx):
                           item=frames.short(getattr(item, "name", None) or repr(item), 60),
                           mods=mods_on_stack(), caller=frames.caller(CALLER_DEPTH))
                 else:
-                    event("turn", caller=frames.caller(CALLER_DEPTH))
+                    # 版2: 手の区切りの印だけ。呼び出し元は組まない。
+                    event("turn")
             except Exception:
                 ctx.log_exc("sound effects probe: recording {} failed".format(name))
             inside[name] += 1

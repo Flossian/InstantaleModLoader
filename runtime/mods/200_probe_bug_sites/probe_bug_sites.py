@@ -26,17 +26,34 @@ AttributeError）。
 何も握り潰さない。
 例外はログしてから再送出する。
 この mod は観測するだけ。
+
+版3: 決着した2つ（`KeyError: 80` は VERIFICATION_LOG.md §2.2、空 `Literal[]` は §2.40）の
+記録を絞った。
+版2までは注入のたびに（遅延の当て直しを含めて1プロセス平均6回ほど）、
+価格表の総当たり・クランプの総当たり・モジュール定数と表の書き出しを
+約 2.3KB ずつ出していて、`probes.log` の約95%がこの塊だった。
+これを `sys` の印で1プロセス1回にした。
+`get_npc_employ_price` は成功した呼び出しを書かず、失敗したときだけ残す。
+サマライザの包みは `202_probe_summarizers` と同じ対象を二重に包んでいたので外した。
+`generate_npc_detail` の包みは残す（VERIFICATION.md §3.53 #10 が入れたまま見ている）。
+包みはどれも受け取った引数をそのまま `orig` へ渡し（キーワードを位置に直さない）、
+`safe=True` にして、記録の失敗がゲームへ抜けないようにした。
 """
 
+import os
 import sys
-
-from instantale_modloader import patch
 import traceback
 
+from instantale_modloader import frames, patch
 from instantale_modloader.frames import describe_instance, format_locals, repr_value
 
 LOG_BASENAME = "probes.log"
 MAX_TABLE_DICTS = 12
+
+# 起動時の総当たりと書き出しを「このプロセスで済ませた」印。
+# 注入し直すと MOD のモジュールごと読み直されるので、モジュール変数では印ごと消える。
+# `209_` と同じく `sys` に置く。
+SWEEP_MARK = "_instantale_probe_bug_sites_swept"
 
 
 def apply(ctx):
@@ -46,9 +63,12 @@ def apply(ctx):
 
     def on_error(label: str, exc: BaseException) -> None:
         """例外を、後から読める形（型・ローカル変数・トレースバック）で残す。"""
-        write("!! {} raised {}: {}".format(label, type(exc).__name__, exc))
-        write(format_locals(sys.exc_info()[2] or exc.__traceback__, depth=3))
-        write("   traceback:\n" + "".join(traceback.format_tb(exc.__traceback__)).rstrip())
+        try:
+            write("!! {} raised {}: {}".format(label, type(exc).__name__, exc))
+            write(format_locals(sys.exc_info()[2] or exc.__traceback__, depth=3))
+            write("   traceback:\n" + "".join(traceback.format_tb(exc.__traceback__)).rstrip())
+        except Exception:
+            ctx.log_exc("probe: error dump failed for {}".format(label))
 
     def dump_module_dicts(module_name: str, note: str) -> None:
         """モジュール直下の dict をログする。参照表はここにあり、f_locals には無い。"""
@@ -70,9 +90,6 @@ def apply(ctx):
                 write("     ... more dicts omitted")
                 break
             write("     {:<28} {}".format(name, repr_value(value)))
-
-    write("=" * 78)
-    write("probe session start (pid {})".format(__import__("os").getpid()))
 
     # ---------------------------------------------------------------------
     # 一発計測: get_npc_employ_price の有効な定義域を割り出す。
@@ -159,72 +176,83 @@ def apply(ctx):
         if scalars:
             write("   constants in {}: {}".format(module_name, repr_value(scalars)))
 
-    # 一発計測は失敗しても他の計測を止めないよう、個別に try で囲んで回す。
-    for probe_fn, label in ((sweep_employ_price, "employ price sweep"),
-                            (sweep_clamp, "clamp sweep")):
-        try:
-            probe_fn()
-        except Exception:
-            ctx.log_exc("probe: {} failed".format(label))
+    def startup_once():
+        """起動時の総当たりと書き出し。1プロセス1回（版3）。
 
-    for mod_name in ("scripts.functions", "scripts.data_tables"):
-        try:
-            dump_module_constants(mod_name)
-        except Exception:
-            ctx.log_exc("probe: constants dump failed for {}".format(mod_name))
+        印は `scripts.functions` が読めたときにだけ付ける。
+        まだ import されていない注入で印を付けると、そのプロセスでは二度と測れない。
+        """
+        if getattr(sys, SWEEP_MARK, False):
+            return
+        if sys.modules.get("scripts.functions") is None:
+            return
+        setattr(sys, SWEEP_MARK, True)
 
-    # 一発計測: 参照表はモジュールのグローバルにあり、
-    # どのフレームのローカルにも無い。
-    dump_module_dicts("scripts.functions", "startup snapshot:")
-    dump_module_dicts("scripts.data_tables", "startup snapshot:")
+        write("=" * 78)
+        write("probe session start (pid {})".format(os.getpid()))
+
+        # 一発計測は失敗しても他の計測を止めないよう、個別に try で囲んで回す。
+        for probe_fn, label in ((sweep_employ_price, "employ price sweep"),
+                                (sweep_clamp, "clamp sweep")):
+            try:
+                probe_fn()
+            except Exception:
+                ctx.log_exc("probe: {} failed".format(label))
+
+        for mod_name in ("scripts.functions", "scripts.data_tables"):
+            try:
+                dump_module_constants(mod_name)
+            except Exception:
+                ctx.log_exc("probe: constants dump failed for {}".format(mod_name))
+
+        # 一発計測: 参照表はモジュールのグローバルにあり、
+        # どのフレームのローカルにも無い。
+        dump_module_dicts("scripts.functions", "startup snapshot:")
+        dump_module_dicts("scripts.data_tables", "startup snapshot:")
+
+    try:
+        startup_once()
+    except Exception:
+        ctx.log_exc("probe: startup sweep failed")
 
     # ---------------------------------------------------------------- KeyError: 80
-    @ctx.wrap("scripts.functions:get_npc_employ_price", required=False)
-    def get_npc_employ_price(orig, npc_difficulty_level, *args, **kwargs):
+    # 版3: 成功した呼び出しは書かない（決着済み。VERIFICATION_LOG.md §2.2）。
+    # 本体が再び壊れたときだけ、引数と候補の表を残す。
+    @ctx.wrap("scripts.functions:get_npc_employ_price", required=False, safe=True)
+    def get_npc_employ_price(orig, *args, **kwargs):
         try:
-            result = orig(npc_difficulty_level, *args, **kwargs)
+            return orig(*args, **kwargs)
         except Exception as exc:
-            # 失敗時は引数の値と *型* を残す。'
-            # 52'(str) と 80(int) の区別が争点。
-            write("get_npc_employ_price(npc_difficulty_level={!r} [{}]) FAILED".format(
-                npc_difficulty_level, type(npc_difficulty_level).__name__))
-            on_error("get_npc_employ_price", exc)
-            dump_module_dicts("scripts.functions", "candidate tables:")
-            dump_module_dicts("scripts.data_tables", "candidate tables:")
-            raise
-        write("get_npc_employ_price(npc_difficulty_level={!r} [{}]) -> {!r}".format(
-            npc_difficulty_level, type(npc_difficulty_level).__name__, result))
-        return result
-
-    # ------------------------------------------------- AssertionError: Literal[]
-    @ctx.wrap("scripts.llm.llm_manager:master_ai_process_summarizer_in_conversation",
-              required=False)
-    def summarizer(orig, player, player_life_log, worldview, npc_list, *args, **kwargs):
-        write("master_ai_process_summarizer_in_conversation: npc_list={}".format(
-            repr_value(npc_list)))
-        # 空なら成功していても警告する。
-        # これが Literal[] を生む条件だから。
-        if not npc_list:
-            write("   ^^ npc_list is EMPTY -- this is the Literal[] condition")
-        try:
-            return orig(player, player_life_log, worldview, npc_list, *args, **kwargs)
-        except Exception as exc:
-            on_error("master_ai_process_summarizer_in_conversation", exc)
+            try:
+                # 失敗時は引数の値と *型* を残す。
+                # '52'(str) と 80(int) の区別が争点。
+                level = frames.arg(args, kwargs, "npc_difficulty_level", 0)
+                write("get_npc_employ_price(npc_difficulty_level={!r} [{}]) FAILED".format(
+                    level, type(level).__name__))
+                on_error("get_npc_employ_price", exc)
+                dump_module_dicts("scripts.functions", "candidate tables:")
+                dump_module_dicts("scripts.data_tables", "candidate tables:")
+            except Exception:
+                ctx.log_exc("probe: get_npc_employ_price failure dump failed")
             raise
 
     # ------------------------------------------------------------- KeyError: '52'
-    @ctx.wrap("__main__:InstantaleApp.generate_npc_detail", required=False)
-    def generate_npc_detail(orig, self, character_instance, *args, **kwargs):
+    @ctx.wrap("__main__:InstantaleApp.generate_npc_detail", required=False, safe=True)
+    def generate_npc_detail(orig, self, *args, **kwargs):
         # どの NPC で落ちたかを特定できるよう、識別子らしき属性を要約して残す。
-        write("generate_npc_detail({})".format(describe_instance(character_instance)))
         try:
-            return orig(self, character_instance, *args, **kwargs)
+            write("generate_npc_detail({})".format(describe_instance(
+                frames.arg(args, kwargs, "character_instance", 0))))
+        except Exception:
+            ctx.log_exc("probe: generate_npc_detail record failed")
+        try:
+            return orig(self, *args, **kwargs)
         except Exception as exc:
             on_error("generate_npc_detail", exc)
             raise
 
     @ctx.wrap("__main__:ConversationStartManager.generate_npc_detail_and_ready",
-              required=False)
+              required=False, safe=True)
     def generate_npc_detail_and_ready(orig, self, *args, **kwargs):
         # 呼び出し元側。
         # トレースバックの上段を押さえるためだけに包む。
@@ -235,14 +263,18 @@ def apply(ctx):
             raise
 
     # ------------------------------- AttributeError: FreeInputStart.facility_move_to
-    @ctx.wrap("__main__:FreeInputStart.method", required=False)
-    def free_input_method(orig, self, choice_text, *args, **kwargs):
+    @ctx.wrap("__main__:FreeInputStart.method", required=False, safe=True)
+    def free_input_method(orig, self, *args, **kwargs):
         # ここで hasattr() を使わないこと: 201_probe_missing_attr がこのクラスに
         # __getattr__ トリップワイヤを仕掛けており、
         # hasattr は呼び出しのたびにそれを自己発火させてしまう。
-        write("FreeInputStart.method(choice_text={})".format(repr_value(choice_text)))
         try:
-            return orig(self, choice_text, *args, **kwargs)
+            write("FreeInputStart.method(choice_text={})".format(
+                repr_value(frames.arg(args, kwargs, "choice_text", 0))))
+        except Exception:
+            ctx.log_exc("probe: FreeInputStart.method record failed")
+        try:
+            return orig(self, *args, **kwargs)
         except Exception as exc:
             # 失敗時はインスタンスが実際に持っている属性を列挙する。
             # 「何が無いのか」ではなく「何があるのか」が手がかりになる。

@@ -54,6 +54,18 @@ NPC のセーブ項目にも `memory` / `life_log` / `relationship` /
 値は書かず、記録に失敗しても本体は必ず呼ぶ。
 `311_` の抽出呼び出し（`manager_name` が `mod_` で始まるもの）は測らない。
 このプローブの対象はゲーム自身の経路。
+
+版6: 主要部は決着済み（VERIFICATION_LOG.md §2.38）。
+要約が走らない抜け方の網羅は未了で、それに要る resolver の判定と会話終了の差分はそのまま残した。
+直したのは次の3つ。
+
+- 抜粋を1行に畳む `one_line` が改行を置き換えていなかった。
+  v1.4.1 で印を cp932 に入る文字へ替えたとき、置き換え先が改行のままになっていた。
+  記録が複数行に割れていたので、印を `¶` にした（cp932 に入る）
+- 項目1つを会話のたびに2回 JSON にしていた（型と大きさを出す `kind_of` と、控えを作る `flat`）。
+  1回作ったテキストを両方で使う
+- 照合に使う文字列の葉も `KEEP_CHARS` で切る。
+  版5は項目のテキストだけを切っていて、葉は長さの上限なしに控えに残っていた
 """
 
 import datetime
@@ -149,8 +161,11 @@ def flat(value, limit=None):
     return text if limit is None else text[:limit]
 
 
-def kind_of(value):
-    """型と大きさを1語で。`str(1234字)` / `list(3件, 456字)` の形。"""
+def kind_of(value, text=None):
+    """型と大きさを1語で。`str(1234字)` / `list(3件, 456字)` の形。
+
+    `text` に `flat(value)` を渡せば、それを字数に使う（版6。同じ値を2回 JSON にしないため）。
+    """
     if value is None:
         return "None"
     if isinstance(value, str):
@@ -160,8 +175,9 @@ def kind_of(value):
             size = len(value)
         except Exception:
             size = "?"
-        return "{}({}件, {}字)".format(type(value).__name__, size,
-                                       len(flat(value)))
+        if text is None:
+            text = flat(value)
+        return "{}({}件, {}字)".format(type(value).__name__, size, len(text))
     return type(value).__name__
 
 
@@ -172,7 +188,8 @@ def one_line(text, limit=160):
     # 改行は見える印に置き換える（1レコード1行を保つため）。
     # **cp932 に入る文字を使う**。
     # ログを cp932 の端末やエディタで開く人が居る（§6.2）。
-    text = text.replace("\r", "").replace("\n", "\n")
+    # 版5までは置き換え先が改行のままで、何も置き換わっていなかった（版6で `¶` にした）。
+    text = text.replace("\r", "").replace("\n", "¶")
     return text if len(text) <= limit else text[:limit] + "…"
 
 
@@ -193,7 +210,8 @@ def leaf_texts(value, out=None):
     if isinstance(value, str):
         text = value.strip()
         if len(text) >= MIN_LEAF_CHARS:
-            out.append(text)
+            # 控えに残すのは `KEEP_CHARS` まで（版6。照合もこの長さまでしか使わない）。
+            out.append(text[:KEEP_CHARS])
     elif isinstance(value, dict):
         for item in value.values():
             leaf_texts(item, out)
@@ -305,7 +323,7 @@ def apply(ctx):
         for name in WATCHED_FIELDS:
             value = getattr(npc, name, None)
             text = flat(value)
-            out[name] = {"kind": kind_of(value), "digest": _digest(text),
+            out[name] = {"kind": kind_of(value, text), "digest": _digest(text),
                          "text": text[:KEEP_CHARS], "leaves": leaf_texts(value)}
         return out
 
@@ -400,7 +418,9 @@ def apply(ctx):
         # NPC の `life_log` と一致するのか、プレイヤー側なのかで読み方が変わる。
         if len(args) >= 3:
             life_log = args[1]
-            log_digest = _digest(flat(life_log))
+            # テキストは1回だけ作り、指紋と大きさの両方に使う（版6）。
+            log_text = flat(life_log)
+            log_digest = _digest(log_text)
             owners = []
             if log_digest == fields["life_log"]["digest"]:
                 owners.append("npc.life_log と同内容")
@@ -408,18 +428,21 @@ def apply(ctx):
             if player_log is not None and _digest(flat(player_log)) == log_digest:
                 owners.append("player.life_log と同内容")
             write("  character_life_log: {} [{}]".format(
-                kind_of(life_log), " / ".join(owners) or "どちらとも不一致"))
+                kind_of(life_log, log_text), " / ".join(owners) or "どちらとも不一致"))
 
         # 5番目以降は版で動きうるので、名前を決め打ちせず全部書く（`retrieved_knowledge` /
         # `job_knowledge` の実体と位置がここで分かる）。
+        # 版6: 大きさと抜粋に同じテキストを使う（版5は1つの値を2回 JSON にしていた）。
+        def arg_line(value):
+            text = flat(value)
+            return "{} {!r}".format(kind_of(value, text), one_line(text[:200], 120))
+
         for index, value in enumerate(args[4:], start=4):
-            write("  args[{}]: {} {!r}".format(
-                index, kind_of(value), one_line(flat(value, 200), 120)))
+            write("  args[{}]: {}".format(index, arg_line(value)))
         for key, value in sorted(kwargs.items()):
             if key == "character_instance":
                 continue
-            write("  kwargs[{}]: {} {!r}".format(
-                key, kind_of(value), one_line(flat(value, 200), 120)))
+            write("  kwargs[{}]: {}".format(key, arg_line(value)))
 
         return {"fn": fn_name, "npc_id": npc_id, "npc_name": npc_name,
                 "fields": fields}

@@ -12,6 +12,7 @@
   生成       … 新しい依頼は素の帯で生まれるので、作らせたその場で上げ直す
   上げる     … その土地の依頼が「素の値 + 積んだ上昇量」になる。世界の雛形には書かない
   他の土地   … 数えた土地以外は動かない
+  物語       … 物語の依頼を受けても、同じ id の通常依頼の土地を寄せ直さない
   上限       … MAX_BONUS と難易度の上限を超えない
   範囲       … SCOPE=incomplete では完了済みの依頼を動かさない
   戻す       … ROLLBACK を入れると素の値へ戻り、控えごと消える
@@ -346,28 +347,37 @@ def load_world(ctx, app):
     実機では難易度がセーブに残らないので、ここは**素へ戻った状態**から始まる。
     """
     save_data_dict = {"world_data": {"name": app.world.name},
+                      "player_data": {"name": app.player.name},
                       "quests": {}}
     hook = ctx.hooks["__main__:World.__init__"]
     hook(lambda self, *a, **kw: None, app.world, save_data_dict, app)
     return app
 
 
-def accept_quest(ctx, app, quest_id):
-    """受注の入口（`QuestChoiceManager.__init__`）を通す。"""
+def accept_quest(ctx, app, quest_id, quest_type="settlement_quest"):
+    """受注の入口（`QuestChoiceManager.__init__`）を通す。
+
+    本体は `'settlement_quest'` なら `world.quests`、それ以外なら
+    `story_quests` を引く（`206_` の総当たり）。偽物もそのとおりに引き分ける。
+    """
     hook = ctx.hooks["__main__:QuestChoiceManager.__init__"]
     seen = {}
 
-    def init(self, app_, quest_type, qid, *args, **kwargs):
-        seen["difficulty"] = app_.world.quests[qid].difficulty
+    def init(self, app_, quest_type_, qid, *args, **kwargs):
+        store = (app_.world.quests if quest_type_ == "settlement_quest"
+                 else app_.world.story_quests)
+        seen["difficulty"] = store[qid].difficulty
         return None
 
-    hook(init, object(), app, "settlement_quest", str(quest_id))
+    hook(init, object(), app, quest_type, str(quest_id))
     return seen.get("difficulty")
 
 
-def state_file(world_name="試しの世界"):
-    from instantale_modloader.state import world_filename
-    path = os.path.join(STATE_DIR, "area_difficulty", world_filename(world_name))
+def state_file(world_name="試しの世界", player="試しのプレイヤー"):
+    """控えのファイル。版4から鍵は周回（世界×主人公）。`player=None` で世界名だけのファイル。"""
+    from instantale_modloader.state import PLAYTHROUGH_SEP, world_filename
+    key = world_name + PLAYTHROUGH_SEP + player if player else world_name
+    path = os.path.join(STATE_DIR, "area_difficulty", world_filename(key))
     if not os.path.exists(path):
         return None
     with io.open(path, encoding="utf-8") as fh:
@@ -435,6 +445,51 @@ check("ロード直後は素の難易度", difficulties(app, "0")[0] == [3, 4, 5
       difficulties(app, "0")[0])
 check("受注の直前に書き直す", accept_quest(ctx, app, "1") == 15,
       accept_quest(ctx, app, "1"))
+
+# 物語の依頼は `story_quests` に別の id の列で入っていて、通常依頼と id が重なる。
+# 本体は `quest_type` が `'settlement_quest'` 以外なら `story_quests` を引く。
+# 同じ id で `world.quests` を引くと、関係の無い土地（ここでは土地 0）を寄せ直す。
+for quest in app.world.quests.values():
+    if quest.neighboring_settlement_id == "0":
+        quest.difficulty = state_file()["0"]["base"][quest.id]
+app.world.story_quests = {"1": Quest("1", "1", 14)}
+before_state = state_file()
+story_seen = accept_quest(ctx, app, "1", quest_type="story_quest")
+check("物語の依頼の受注は本体へ渡す", story_seen == 14, story_seen)
+check("物語の依頼を受けても同じ id の通常依頼の土地は寄せ直さない",
+      difficulties(app, "0")[0] == [3, 4, 5, 4], difficulties(app, "0")[0])
+check("物語の依頼そのものも書き換えない",
+      app.world.story_quests["1"].difficulty == 14,
+      app.world.story_quests["1"].difficulty)
+check("物語の依頼の受注では控えを書かない", state_file() == before_state,
+      state_file())
+check("受注の検査で例外を出していない", not ctx.errors, ctx.errors)
+
+# 物語の依頼を片付けてもクリアに数えない（版4。本人の判断）。
+# 物語の依頼は `quest_type: 'story_quest'` を持つ。欠けていても、id が通常依頼の一覧に無ければ数えない。
+def end_story(quest):
+    app.current_quest_data = quest
+    manager = QuestEndManager(app)
+    ctx.hooks["__main__:QuestEndManager.execute"](
+        lambda self, *a, **kw: QuestEndManager.execute(self, *a, **kw), manager, "帰還する")
+    CLOCK.run_onces()
+
+
+story = app.world.story_quests["1"]
+story.quest_type = "story_quest"
+before_state = state_file()
+end_story(story)
+check("物語の依頼を片付けてもクリアに数えない", state_file() == before_state,
+      state_file())
+check("物語の依頼の片付けでは同じ id の通常依頼の土地を寄せ直さない",
+      difficulties(app, "0")[0] == [3, 4, 5, 4], difficulties(app, "0")[0])
+unmarked = Quest("99", "1", 14)
+unmarked.quest_type = None
+end_story(unmarked)
+check("quest_type が欠けていても通常依頼の一覧に無い id は数えない",
+      state_file() == before_state, state_file())
+check("物語の片付けの検査で例外を出していない", not ctx.errors, ctx.errors)
+del app.world.story_quests
 
 # -- 幅 -------------------------------------------------------------------
 # 引く値は必ず最小〜最大の中。乱数そのものは信用してよいので、
@@ -588,6 +643,40 @@ check("別の世界は動かない", difficulties(second, "0")[0] == [3, 4, 5],
 check("控えは世界ごとに分かれる",
       state_file("第一の世界") is not None and state_file("第二の世界") is None,
       [state_file("第一の世界"), state_file("第二の世界")])
+
+# -- 周回が混ざらない（版4） -----------------------------------------------
+# 同じ世界でも主人公が違えば別の控え。主人公が死んで作り直した周回に前の育ちを渡さない。
+reset()
+module, ctx = fresh(fixed(5))
+app = make_world(BAND)
+end_quest(ctx, app, "1")
+# 作り直した周回のロード。難易度はセーブに残らないので、素の値から始まる。
+again = make_world(BAND)
+again.player.name = "二人目の主人公"
+load_world(ctx, again)
+check("別の主人公の周回は素のまま", difficulties(again, "0")[0] == [3, 4, 5],
+      difficulties(again, "0")[0])
+check("控えは周回ごとに分かれる",
+      state_file()["0"]["cleared"] == 1
+      and (state_file(player="二人目の主人公") or {}).get("0", {}).get("cleared", 0) == 0,
+      [state_file(), state_file(player="二人目の主人公")])
+
+# 版3までの世界名だけの控えは、見つかったときに遊んでいる主人公の周回へ移す（ローダの `adopt`）。
+reset()
+os.makedirs(os.path.join(STATE_DIR, "area_difficulty"))
+with io.open(os.path.join(STATE_DIR, "area_difficulty", "試しの世界.json"), "w",
+             encoding="utf-8") as fh:
+    json.dump({"0": {"cleared": 2, "bonus": 10, "day": 100,
+                     "base": {"1": 3, "2": 4, "3": 5}}}, fh, ensure_ascii=False)
+module, ctx = fresh(fixed(5))
+app = load_world(ctx, make_world(BAND))
+check("世界名だけの控えを今の周回へ移す",
+      (state_file() or {}).get("0", {}).get("cleared") == 2, state_file())
+check("移した後は世界名だけの控えを消す", state_file(player=None) is None,
+      state_file(player=None))
+check("移した育ちでロード直後に上がる", difficulties(app, "0")[0] == [13, 14, 15],
+      difficulties(app, "0")[0])
+check("移す検査で例外を出していない", not ctx.errors, ctx.errors)
 
 # -- 知らせ ---------------------------------------------------------------
 reset()

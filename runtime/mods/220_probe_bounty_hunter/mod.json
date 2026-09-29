@@ -7,10 +7,10 @@
     "ja": "計測: 戦闘を起こす経路"
   },
   "description": {
-    "en": "Records what a mod would need in order to send bounty hunters after a wanted player: the real arguments of every route that starts a battle (BattleStartManager / execute_battle_process / the conversation route), what the game's own guard encounter passes to guard_npc_generator, the game's own enemy strength table, and the player's wanted level at each of the four places an encounter could be triggered (area arrival, facility arrival, day elapse, free action). It also records the signals that the game is back at its normal choices (set_buttons_to_normal / refresh_choice_buttons) and the four exits of free input, to find out whether the mod can hook an event instead of polling",
-    "ja": "手配されたプレイヤーに賞金首狩りを差し向ける MOD を書くために要る値を記録する。戦闘を起こす経路すべての実引数（BattleStartManager / execute_battle_process / 会話からの経路）、ゲーム自身の衛兵が guard_npc_generator へ渡している難易度、ゲーム自身の敵の強さの表、そして遭遇を起こしうる4箇所（エリア到着・施設到着・日数経過・自由行動）でのプレイヤーの手配度。あわせて、割り込む先をポーリングからイベントへ移せるかの下調べとして、画面が普通の選択肢に戻る合図（set_buttons_to_normal / refresh_choice_buttons）と自由入力の4つの出口も録る"
+    "en": "Records what a mod would need in order to send bounty hunters after a wanted player: the real arguments of the routes that start a battle (BattleStartManager / execute_battle_process), what the game's own guard encounter passes to guard_npc_generator, the game's own enemy strength table, and the player's wanted level at each of the four places an encounter could be triggered (area arrival, facility arrival, day elapse, free action). It also records the signal that the game is back at its normal choices (refresh_choice_buttons), the exit of free input, and whether the choice-painting steps move the two overlapping panels",
+    "ja": "手配されたプレイヤーに賞金首狩りを差し向ける MOD を書くために要る値を記録する。戦闘を起こす経路の実引数（BattleStartManager / execute_battle_process）、ゲーム自身の衛兵が guard_npc_generator へ渡している難易度、ゲーム自身の敵の強さの表、そして遭遇を起こしうる4箇所（エリア到着・施設到着・日数経過・自由行動）でのプレイヤーの手配度。あわせて、画面が普通の選択肢に戻る合図（refresh_choice_buttons）と自由入力の出口、選択肢を塗る段が重なる2つの枠を動かしたかも録る"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "debug": true,
   "settings": {
@@ -38,8 +38,8 @@
         "en": "How many screen-ready signals to record"
       },
       "note": {
-        "ja": "set_buttons_to_normal / refresh_choice_buttons が呼ばれるたびに1行。数が多くなりうるのでここで打ち切る。0 にすると録らない",
-        "en": "One line per set_buttons_to_normal / refresh_choice_buttons call. These can be frequent, so recording stops here. 0 = do not record"
+        "ja": "refresh_choice_buttons が呼ばれるたびに1行、枠が動くたびに1行（1プロセスあたり、それぞれこの件数まで）。数が多くなりうるのでここで打ち切る。0 にすると録らない",
+        "en": "One line per refresh_choice_buttons call and one per panel change (each up to this many per process). These can be frequent, so recording stops here. 0 = do not record"
       }
     },
     "SCALING_SAMPLES": {
@@ -52,8 +52,8 @@
         "en": "How many distinct enemy-strength calls to record"
       },
       "note": {
-        "ja": "同じ引数の組は1度しか書かない。0 にすると強さの式は録らない",
-        "en": "Each distinct set of arguments is written once. 0 = do not record the strength table"
+        "ja": "同じ引数の組は1プロセスで1度しか書かない（注入し直しても書き直さない）。0 にすると強さの式は録らない",
+        "en": "Each distinct set of arguments is written once per process (re-injecting does not write it again). 0 = do not record the strength table"
       }
     }
   }

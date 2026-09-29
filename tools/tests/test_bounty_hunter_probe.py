@@ -9,10 +9,13 @@
              境界（手配度 0）と、数でない値（True / None）の扱い
   形だけ   … `shape` が中身ではなく形を出す。入れ子は打ち切られ、
              長い文字列は切り詰められ、鍵の数には上限がある
-  変えない … 26の対象すべてで本体が1回だけ呼ばれ、戻り値がそのまま返る。
-             引数も素通しする
+  変えない … 対象すべてで本体が1回だけ呼ばれ、戻り値がそのまま返る。
+             引数も素通しする（キーワードは位置へ直さない）
   記録     … `out/bounty_hunter.jsonl` が1件1行の JSON で、
              戦闘の入口・衛兵・手配度の行が残る
+  枠       … 位置・大きさ・濃さが動いたときだけ1行。子の数だけの変化では書かない。
+             上限の後とメインスレッド以外では枠を読まない（版3）
+  持ち越し … 強さの表と件数は注入し直しをまたいで効く。呼び出し元は最初の N 件だけ（版3）
   壊れても … 記録が失敗しても本体は呼ばれ、戻り値は変わらない
   経路     … 対象が全部登録される
 """
@@ -37,8 +40,6 @@ TARGETS = (
     "__main__:BattleStartManager.__init__",
     "__main__:BattleStartManager.start_battle",
     "__main__:InstantaleApp.execute_battle_process",
-    "__main__:InstantaleApp.start_battle_with_in_conversation",
-    "__main__:InstantaleApp.generate_character_from_enemy_data",
     "__main__:InstantaleApp.generate_enemy_instance_from_quest_dict",
     "scripts.llm.llm_manager:guard_npc_generator",
     "scripts.llm.llm_manager:guard_battle_summarizer",
@@ -51,14 +52,20 @@ TARGETS = (
     "scripts.llm.llm_manager:master_ai_facilitator",
     "__main__:InstantaleApp.refresh_choice_buttons",
     "__main__:FreeInputStart.end_process",
-    "__main__:FreeInputStart.end_process_in_conversation",
-    "__main__:FreeInputStart.end_process_in_quest",
-    "__main__:FreeInputStart.end_process_in_conversation_in_quest",
     "__main__:InstantaleApp.set_buttons_to_normal",
     "__main__:InstantaleApp.display_button_load",
     "scripts.hud.new_hud:InstanTaleHUD.update_button_texts",
-    "scripts.hud.new_hud:InstanTaleHUD.update_enemy_display",
     "scripts.hud.new_hud:InstanTaleHUD.turnoff_window_visibility",
+)
+
+# 版3で外した対象。1か月で一度も来なかったか、枠を一度も動かしていなかった。
+DROPPED = (
+    "__main__:InstantaleApp.start_battle_with_in_conversation",
+    "__main__:InstantaleApp.generate_character_from_enemy_data",
+    "__main__:FreeInputStart.end_process_in_conversation",
+    "__main__:FreeInputStart.end_process_in_quest",
+    "__main__:FreeInputStart.end_process_in_conversation_in_quest",
+    "scripts.hud.new_hud:InstanTaleHUD.update_enemy_display",
     "__main__:InstantaleApp.update_enemy_info",
 )
 
@@ -211,11 +218,22 @@ def load_mod(name="bounty_hunter_probe_mod"):
 
 
 def fresh_mod(app):
-    """mod を読み直して当て直す。記録は毎回まっさらにする。"""
+    """mod を読み直して当て直す。記録も `sys` の持ち越しも毎回まっさらにする。"""
     for name in (RECORD_NAME, LOG_NAME):
         path = os.path.join(OUT_DIR, name)
         if os.path.exists(path):
             os.remove(path)
+    module = load_mod()
+    if hasattr(sys, module.STORE_ATTR):
+        delattr(sys, module.STORE_ATTR)
+    module.ui = FakeUI(app)
+    ctx = FakeCtx(OUT_DIR)
+    module.apply(ctx)
+    return module, ctx
+
+
+def reapply(app):
+    """注入し直しの形。mod は読み直すが、記録と `sys` の持ち越しは残す。"""
     module = load_mod()
     module.ui = FakeUI(app)
     ctx = FakeCtx(OUT_DIR)
@@ -306,6 +324,8 @@ def main():
     check("対象が全部登録される",
           sorted(ctx.hooks) == sorted(TARGETS),
           set(TARGETS) ^ set(ctx.hooks))
+    check("版3で外した対象は登録しない",
+          not set(DROPPED) & set(ctx.hooks), set(DROPPED) & set(ctx.hooks))
     for target in TARGETS:
         orig, calls = counting("戻り値")
         returned = ctx.hooks[target](orig, app, "A", "B")
@@ -314,10 +334,19 @@ def main():
             check("{} が素通しする".format(target), False, (returned, calls))
             break
     else:
-        check("26の対象すべてで本体が1回だけ呼ばれ、戻り値がそのまま返る", True)
+        check("{}の対象すべてで本体が1回だけ呼ばれ、戻り値がそのまま返る".format(
+            len(TARGETS)), True)
     orig, calls = counting(None)
     ctx.hooks["__main__:InstantaleApp.elapse_days"](orig, app, 14)
     check("引数も素通しする", calls == [((app, 14), {})], calls)
+    for target in TARGETS:
+        orig, calls = counting("戻り値")
+        ctx.hooks[target](orig, app, choice_text="A", days=3)
+        if calls != [((app,), {"choice_text": "A", "days": 3})]:
+            check("{} がキーワードを位置へ直さない".format(target), False, calls)
+            break
+    else:
+        check("キーワードで来た引数はキーワードのまま本体へ渡す", True)
     check("記録に失敗していない", not ctx.errors, ctx.errors)
 
     print("記録")
@@ -347,8 +376,8 @@ def main():
               and row["npc_difficulty_level"]["value"] == 24
               and "caller" in row for row in rows), phases)
     arrival = [row for row in rows if row["phase"] == "到着(土地)"]
-    check("到着の行に手配度が土地ごとと要約の両方で残る",
-          arrival and arrival[0]["lawfulness"] == {"0": 10, "3": -12, "7": -30}
+    check("到着の行に手配度が要約と、手配された土地ぶんだけ残る（平常の土地は写さない）",
+          arrival and arrival[0]["lawfulness"] == {"3": -12, "7": -30}
           and arrival[0]["wanted"]["total"] == 42, arrival)
     check("手が空いているかも残る", arrival and arrival[0]["busy"] == [], arrival)
     check("読む用のログにも1行ずつ出る", len(read_log()) >= 4, read_log())
@@ -377,7 +406,7 @@ def main():
           not [r for r in read_records() if r["phase"] == "画面が戻った"]
           and len(calls) == 1, read_records())
 
-    print("戦闘に入ったときの配置")
+    print("戦闘に入ったとき")
     module, ctx = fresh_mod(app)
     orig, _ = counting(None)
     ctx.hooks["__main__:BattleStartManager.__init__"](
@@ -385,20 +414,20 @@ def main():
     ctx.hooks["__main__:BattleStartManager.start_battle"](
         orig, types.SimpleNamespace(app=app))
     rows = [r for r in read_records() if r["phase"] == "start_battle"]
-    check("HUD の枠の実寸が残る",
-          rows and "right_button_layout" in (rows[-1].get("hud") or {}),
-          rows[-1].get("hud") if rows else None)
-    check("ウィジェットでない属性は写さない",
-          rows and "not_a_widget" not in (rows[-1].get("hud") or {}),
-          rows[-1].get("hud") if rows else None)
-    check("位置・大きさ・濃さが揃っている",
-          rows and set(rows[-1]["hud"]["top_info_layout_battle"]) >= {"pos", "size", "opacity"},
-          rows[-1]["hud"]["top_info_layout_battle"] if rows else None)
+    check("HUD の実寸は写さない（版3。§2.59 で決着）",
+          rows and "hud" not in rows[-1], rows[-1] if rows else None)
     check("誰が起こしたかが残る",
           rows and rows[-1]["started_by"] in ("ゲーム(button)", "MOD/その他"),
           rows[-1].get("started_by") if rows else None)
+    orig, _ = counting(None)
+    ctx.hooks["__main__:InstantaleApp.refresh_choice_buttons"](orig, app)
+    rows = [r for r in read_records() if r["phase"] == "画面が戻った"]
+    check("戦闘中の合図も HUD の実寸は写さない（版3）",
+          rows and "hud" not in rows[-1] and "started_by" in rows[-1],
+          rows[-1] if rows else None)
 
     print("枠の出し入れ")
+    panel_target = "scripts.hud.new_hud:InstanTaleHUD.update_button_texts"
     app2 = App({"0": -5})
     module, ctx = fresh_mod(app2)
     hud = app2.hud
@@ -408,17 +437,44 @@ def main():
         hud.top_info_layout_battle.opacity = 0
         return "戻り値"
 
-    returned = ctx.hooks["scripts.hud.new_hud:InstanTaleHUD.update_enemy_display"](
-        collapse, hud)
+    returned = ctx.hooks[panel_target](collapse, hud)
     rows = [r for r in read_records() if r["phase"] == "枠が動いた"]
-    check("枠が動いたら前後が残る",
-          rows and rows[-1]["before"] != rows[-1]["after"], rows[-1] if rows else None)
+    check("枠が動いたら、動いた枠の前後だけが残る",
+          rows and list(rows[-1]["changed"]) == ["top_info_layout_battle"]
+          and rows[-1]["changed"]["top_info_layout_battle"]["after"]["opacity"] == 0,
+          rows[-1] if rows else None)
     check("その段も素通し（戻り値そのまま）", returned == "戻り値", returned)
     orig, calls = counting("戻り値")
-    ctx.hooks["scripts.hud.new_hud:InstanTaleHUD.update_enemy_display"](orig, hud)
+    ctx.hooks[panel_target](orig, hud)
     check("動かなければ書かない",
           len([r for r in read_records() if r["phase"] == "枠が動いた"]) == 1
           and len(calls) == 1, read_records())
+
+    def add_children(*args, **kwargs):
+        hud.right_button_layout.children = [1, 2, 3]
+        return "戻り値"
+
+    ctx.hooks[panel_target](add_children, hud)
+    check("子の数だけの変化では書かない（版3）",
+          len([r for r in read_records() if r["phase"] == "枠が動いた"]) == 1,
+          read_records())
+
+    reads = []
+    module.ui.find_hud = lambda app: reads.append(app) or app.hud
+    sys_store = getattr(sys, module.STORE_ATTR)
+    sys_store["screen"]["panels"] = module.SCREEN_SAMPLES
+    orig, calls = counting("戻り値")
+    ctx.hooks[panel_target](orig, hud)
+    check("上限の後は枠を読まずに素通しする（版3）",
+          not reads and len(calls) == 1, (reads, calls))
+    sys_store["screen"]["panels"] = 0
+    import threading
+    orig, calls = counting("戻り値")
+    worker = threading.Thread(target=lambda: ctx.hooks[panel_target](orig, hud))
+    worker.start()
+    worker.join()
+    check("メインスレッド以外では枠を読まない（版3）",
+          not reads and len(calls) == 1, (reads, calls))
 
     print("強さの表")
     module, ctx = fresh_mod(app)
@@ -433,6 +489,12 @@ def main():
     check("引数と戻り値が対で残る",
           rows[0]["args"][0]["value"] == 2 and rows[0]["result"]["value"] == 12,
           rows[0])
+    module, ctx = reapply(app)
+    orig, _ = counting(12)
+    ctx.hooks[target](orig, 2, 5)
+    rows = [row for row in read_records() if row["phase"] == "strength"]
+    check("注入し直しても同じ組は書き直さない（版3。控えは sys にある）",
+          len(rows) == 2, rows)
     module, ctx = fresh_mod(app)
     module.SCALING_SAMPLES = 0
     orig, calls = counting(12)
@@ -440,6 +502,26 @@ def main():
     check("0 にすれば録らない（本体は呼ばれる）",
           not [r for r in read_records() if r["phase"] == "strength"]
           and len(calls) == 1, read_records())
+
+    print("呼び出し元は最初の N 件だけ")
+    module, ctx = fresh_mod(app)
+    module.CALLER_SAMPLES = 1
+    for _ in range(2):
+        orig, calls = counting(None)
+        ctx.hooks["scripts.llm.llm_manager:guard_npc_generator"](
+            orig, Area("3", "陽光の砦"), None, 24)
+    rows = [r for r in read_records() if r["phase"] == "guard_npc_generator"]
+    check("1件目には呼び出し元があり、上限の後は組まない",
+          len(rows) == 2 and isinstance(rows[0]["caller"], str)
+          and rows[1]["caller"] is None, rows)
+    module, ctx = reapply(app)
+    module.CALLER_SAMPLES = 1
+    orig, _ = counting(None)
+    ctx.hooks["scripts.llm.llm_manager:guard_npc_generator"](
+        orig, Area("3", "陽光の砦"), None, 24)
+    rows = [r for r in read_records() if r["phase"] == "guard_npc_generator"]
+    check("件数は注入し直しをまたいで数える",
+          len(rows) == 3 and rows[-1]["caller"] is None, rows)
 
     print("壊れても")
     module, ctx = fresh_mod(app)

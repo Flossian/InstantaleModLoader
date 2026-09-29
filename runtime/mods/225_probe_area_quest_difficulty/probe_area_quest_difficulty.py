@@ -41,6 +41,12 @@ id6≈62 / id7≈43 / id8≈70）なので、決め方はゲームのコード�
 乱数は上限300件が窓の開始から2秒で尽きた（`132_` の種の抽選 72 件と、その内側の
 `getrandbits` 228 件）ので、肝心の場面は写っていない。版3で MOD 自身の抽選と
 `random` の内側を数えないようにし、上限を 1000 にした。
+
+版7: 経路の記録を移動の窓の間だけにした。版6までは窓の外でも写していて、
+ロードのたびに `World.generate_areas` が全部の街の `Area.update` / `Area.generate_nodes` を呼ぶので、
+街の数×2行が引数の街の設定（説明文入りの辞書）ごと `.jsonl` に積もっていた
+（1か月で約100MB、その9割がこの2本）。
+あわせて経路の `args` は辞書と配列を中身ではなく大きさで写す。街の状態は `before` / `after` にある。
 """
 
 import datetime
@@ -181,6 +187,14 @@ def apply(ctx):
             return "range({}, {}, {})".format(value.start, value.stop, value.step)
         return frames.short(frames.describe_instance(value), limit)
 
+    def shape(value):
+        """経路の引数を写す。辞書と配列は大きさだけ（`world_dict` や街の設定を丸写ししない）。"""
+        if isinstance(value, dict):
+            return "<dict {} keys>".format(len(value))
+        if isinstance(value, (list, tuple)):
+            return "<{} {}>".format(type(value).__name__, len(value))
+        return brief(value)
+
     def context(app):
         """その瞬間の世界の段階。難易度が物語の段階に連れて動くなら、ここで見分ける。"""
         if app is None:
@@ -311,6 +325,9 @@ def apply(ctx):
 
         @ctx.wrap(target, required=False, safe=True)
         def build(orig, *args, **kwargs):
+            # 街が作られるのは到着の移動の中（1回目の計測）。窓の外はロードの作り直しなので写さない。
+            if state["window"] is None:
+                return orig(*args, **kwargs)
             app = ui.find_app()
             started = time.monotonic()
             area_id = None
@@ -329,7 +346,7 @@ def apply(ctx):
             try:
                 row = {"at": now(), "phase": "経路", "func": name,
                        "seconds": round(time.monotonic() - started, 1),
-                       "args": [brief(a) for a in args],
+                       "args": [shape(a) for a in args],
                        "before": before,
                        "after": area_brief(app, area_id) if area_id is not None else None,
                        "caller": frames.caller(depth=5)}

@@ -75,7 +75,7 @@ OUT_DIR = os.path.join(ROOT, "out")
 STATUS_PATH = os.path.join(OUT_DIR, ml.STATUS_NAME)
 # 取った Release の本文の控え（`fetch_notes`）。
 # 一度取れたら、次からはネットに出ずに読める。
-# out/ に置くのは、消しても次に読むときに取り直すだけだから（ログの世代送りは *.log しか触らない）。
+# out/ に置くのは、消しても次に読むときに取り直すだけだから（ログの世代送りは *.log と *.jsonl しか触らない）。
 NOTES_CACHE = os.path.join(OUT_DIR, "release_notes.json")
 
 # MOD が持つ永続データ（進行中の道中、依頼の出所、NPC の控え）。
@@ -2541,7 +2541,7 @@ class App(ttk.Frame):
                              "（計測用・取込済・開発中の MOD は読み込まれません）")
 
     def _toggle_log_rotate(self) -> None:
-        """out/*.log を注入のたびに新しくするかを切り替える。
+        """out/*.log と *.jsonl を注入のたびに新しくするかを切り替える。
 
         書き先はデバッグモードと同じ `settings/loader.json`。
         読むのは `tools/logrotate.py` で、優先順位はコマンドライン → 環境変数 → このファイル →

@@ -44,18 +44,21 @@
 （HUD の描画先を `texts` で探して外した実例。GAME.md §1.3）。
 騒がしい属性（ログ・記憶・画像）だけ除外してある。
 
-## 式は能動でも測る（グリッド）
+## 式は能動でも測れる（グリッド。既定では走らせない）
 
 引数が数値だけの2関数
 （`get_instant_damage` / `get_base_damage_value`）に限り、
-注入時に代表値の格子で直接呼んで対応表を書く。
+代表値の格子で直接呼んで対応表を書ける。
 受け身の記録だけだと、いま遊んでいる帯の値しか流れてこないので、
 「レベルが上がると一撃になる」の曲線の形が出るまで何十戦も要る。
-同じ点を `GRID_REPEATS` 回ずつ呼ぶのは乱数の幅を見るため
-（1回では「たまたまの値」と「決まった値」の区別がつかない。
-memory: 区別のつく状態を作ってから測る）。
-純関数かどうかは確かめていないので、
-1点目で例外が出たらグリッドごと諦めて記録に残す。`GRID_REPEATS=0` で切れる。
+同じ点を `GRID_REPEATS` 回ずつ呼ぶのは乱数の幅を見るため。
+
+1回目の計測でこの表は取り終えた（VERIFICATION_LOG.md §2.68）。
+その後も起動のたびに走っていたが、156回とも258点の結果が1つも違わず、
+同じ点の繰り返しも揃っていた（純関数で乱数を使わない）。
+そこで版3から既定を `GRID_REPEATS=0`（走らせない）にした。
+走らせるときは1プロセスで1回、包みを剥がした素の関数を呼ぶ
+（他の MOD の包みとこの MOD 自身の記録を通さない）。
 
 ## 200番台の約束どおり読み取りだけ
 
@@ -65,28 +68,57 @@ memory: 区別のつく状態を作ってから測る）。
 
 出力は `out/battle_mechanics.log`（読む用）と
 `out/battle_mechanics.jsonl`（1件1行）。
+
+版3で直したこと:
+
+- 格子の既定を「走らせない」にし、走らせるときも素の関数を呼ぶようにした（上の節）。
+  版2では格子が起動ごとに約39,000行・約6MBを積んでいた
+- 戦闘開始の名簿で自分が呼ぶ `get_npc_defense` を記録から外した。
+  版2は自分の呼び出しを「手の外の計算」として約900行書き、件数の枠も食っていた
+- 格子と自分の呼び出しを黙らせる旗、件数、開いている手を `sys` に置いた。
+  版2は世代ごとの控えだったので、遅延の当て直しと格子が交差した起動で、
+  新しい世代の包みが格子の呼び出しを「手の外の計算」として300行書いた
+- 件数の上限を、呼び出し元の文字列（1回あたり約1ms）や全員の属性の写しより先に見る。
+  `ACTION_SAMPLES=0` のときは書かない（版2は 0 で上限が外れていた）
+- 包みは受け取った引数をそのまま本体へ渡す（キーワードで来た引数を位置へ直さない）
+- `236_probe_enemy_stats` の試し打ちの間は記録しない（`DRY_RUN_THREAD_MARK`）。
+  版2は試し打ちの計算を本物として「手の外の calculate」と `get_base_damage_value` に約1,400行書いていた
 """
 
 import datetime
 import json
+import sys
+import threading
 
-from instantale_modloader import frames, ui
+from instantale_modloader import frames, patch, ui
 
 LOG_BASENAME = "battle_mechanics.log"
 RECORD_BASENAME = "battle_mechanics.jsonl"
 
 # GUI から変えられる値（同じ名前と既定値が mod.json にもある。TECH.md §3.8）。
 ACTION_SAMPLES = 300
-GRID_REPEATS = 3
+GRID_REPEATS = 0
 
-# 引数が数値だけの計算関数。1手の文脈に入出力をぶら下げ、グリッドでも呼ぶ。
+# 1プロセスで持ち越す置き場（注入し直しと遅延の当て直しで数え直さない）。
+STORE_ATTR = "_instantale_probe_battle_mechanics"
+
+# `236_probe_enemy_stats` が試し打ちの間だけ置く、試し打ちをしているスレッドの id。
+# 名前は 236 の `DRY_THREAD_MARK` と同じ。
+DRY_RUN_THREAD_MARK = "_instantale_probe_dry_run_thread"
+
+# 引数が数値だけの計算関数。1手の文脈に入出力をぶら下げ、グリッドでも呼べる。
 PURE_TARGETS = ("get_base_damage_value", "get_instant_damage")
 
 # 1手の中に積む計算の上限。全体攻撃＋継続ダメージでも溢れない程度。
 CALLS_PER_ACTION = 24
 
-# 戦闘開始の名簿を録る回数の上限（1戦闘1件。設定にするほど動かさない）。
+# 戦闘開始の名簿を録る回数の上限（1プロセスあたり。設定にするほど動かさない）。
 ROSTER_SAMPLES = 40
+
+# 引数の並び（out/recon/targets.txt より）。
+SITUATION_ARGS = ("character_key", "character_side", "battle_action")
+EFFECT_ARGS = ("battle_action",)
+STATUS_ARGS = ("character",)
 
 # 属性の差分から除外する名前。
 # 毎手必ず動く記録類と、差分に意味のない大物。
@@ -113,21 +145,63 @@ ENEMY_SIDE = "enemy"
 ALLY_SIDE = "ally"
 
 
+def process_store():
+    """1プロセスで持ち越す控え。`sys` に置いて注入し直しをまたぐ（版3）。
+
+    | 鍵 | 中身 |
+    | --- | --- |
+    | `action` | 開いている1手。閉じるときに1行になる |
+    | `rows` | 書いた手の数（`ACTION_SAMPLES` で打ち切り） |
+    | `rosters` | 書いた名簿の数 |
+    | `quiet` | スレッドごとの「自分で呼んでいる最中」の印（`threading.local`） |
+    """
+    found = getattr(sys, STORE_ATTR, None)
+    if not isinstance(found, dict):
+        found = {}
+        setattr(sys, STORE_ATTR, found)
+    found.setdefault("action", None)
+    found.setdefault("rows", 0)
+    found.setdefault("rosters", 0)
+    found.setdefault("quiet", threading.local())
+    return found
+
+
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
 
-    state = {
-        "action": None,      # 開いている1手。閉じるときに1行になる
-        "rows": 0,           # 書いた手の数（ACTION_SAMPLES で打ち切り）
-        "rosters": 0,        # 書いた名簿の数
-        "grid": False,       # グリッド実行中（受け身の記録を黙らせる）
-    }
+    state = process_store()
 
     def now():
         return datetime.datetime.now().isoformat(timespec="seconds")
 
     #: 1件1行の JSON。後から数えるための表（ローダの語彙）。
     record = ctx.jsonl(RECORD_BASENAME)
+
+    def room():
+        """まだ書けるか。`ACTION_SAMPLES=0` は書かない。"""
+        return ACTION_SAMPLES > 0 and state["rows"] < ACTION_SAMPLES
+
+    def quiet():
+        """この MOD 自身か `236_` の試し打ちが呼んでいる最中か。
+
+        `236_probe_enemy_stats` は戦闘の開始で素点の計算を試し打ちし、その間だけ
+        `sys` の `DRY_RUN_THREAD_MARK` に自分のスレッドの id を置く。
+        """
+        if getattr(state["quiet"], "depth", 0) > 0:
+            return True
+        return getattr(sys, DRY_RUN_THREAD_MARK, None) == threading.get_ident()
+
+    class Quietly(object):
+        """この中で走った計算は記録しない。スレッドごとに数える。"""
+
+        def __enter__(self):
+            mark = state["quiet"]
+            mark.depth = getattr(mark, "depth", 0) + 1
+
+        def __exit__(self, *exc):
+            mark = state["quiet"]
+            mark.depth = max(getattr(mark, "depth", 1) - 1, 0)
+            return False
 
     def brief(value, depth=4):
         """値を JSON に写す。battle_action の入れ子（効果のリスト）が要るので深めに。"""
@@ -203,6 +277,10 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 1手の文脈
     def open_action(kind, actor, side, battle_action, app):
+        """手を開く。上限に達していれば開かない（全員の写しを取らない。版3）。"""
+        if not room():
+            state["action"] = None
+            return False
         state["action"] = {
             "at": now(), "phase": kind,
             "actor": frames.short(actor, 60), "side": frames.short(side, 20),
@@ -210,13 +288,12 @@ def apply(ctx):
             "calc": [], "effect": None,
             "_before": snapshot_all(app) if app is not None else {},
         }
+        return True
 
     def close_action(app):
         action = state["action"]
         state["action"] = None
-        if action is None:
-            return
-        if ACTION_SAMPLES > 0 and state["rows"] >= ACTION_SAMPLES:
+        if action is None or not room():
             return
         state["rows"] += 1
         before = action.pop("_before")
@@ -229,7 +306,16 @@ def apply(ctx):
             list(action["changed"]) if action["changed"] else "-"))
 
     def push_calc(name, args, kwargs, result):
+        """計算1回を開いている手に積む。手が無ければ文脈なしの1行にする。
+
+        上限（手の中の件数・全体の件数）を先に見てから呼び出し元を組む（版3）。
+        """
         action = state["action"]
+        if action is not None:
+            if len(action["calc"]) >= CALLS_PER_ACTION:
+                return
+        elif not room():
+            return
         entry = {"func": name,
                  "args": [brief(value, 1) for value in args],
                  "result": brief(result, 1),
@@ -238,21 +324,19 @@ def apply(ctx):
             entry["kwargs"] = {key: brief(value, 1)
                                for key, value in kwargs.items()}
         if action is not None:
-            if len(action["calc"]) < CALLS_PER_ACTION:
-                action["calc"].append(entry)
+            action["calc"].append(entry)
             return
         # 手の外で走った計算（敵の生成時など）。文脈なしの1行で残す。
-        if ACTION_SAMPLES > 0 and state["rows"] < ACTION_SAMPLES:
-            state["rows"] += 1
-            entry.update({"at": now(), "phase": "手の外の計算"})
-            record(entry)
+        state["rows"] += 1
+        entry.update({"at": now(), "phase": "手の外の計算"})
+        record(entry)
 
     # ------------------------------------------------------------ 計算の見張り
     def watch_pure(name):
         @ctx.wrap("scripts.functions:{}".format(name), required=False, safe=True)
         def pure(orig, *args, **kwargs):
             result = orig(*args, **kwargs)
-            if not state["grid"]:
+            if not quiet():
                 try:
                     push_calc(name, args, kwargs, result)
                 except Exception:
@@ -268,26 +352,29 @@ def apply(ctx):
               required=False, safe=True)
     def get_npc_defense(orig, self, *args, **kwargs):
         result = orig(self, *args, **kwargs)
-        try:
-            push_calc("get_npc_defense",
-                      (frames.attr(self, "name", "?"),), kwargs, result)
-        except Exception:
-            pass
+        if not quiet():
+            try:
+                push_calc("get_npc_defense",
+                          (frames.attr(self, "name", "?"),), kwargs, result)
+            except Exception:
+                pass
         return result
 
     # ================================================================ 1手
     @ctx.wrap("__main__:BattlePhaseManager.handle_battle_situation",
               required=False, safe=True)
-    def handle_battle_situation(orig, self, character_key=None,
-                                character_side=None, battle_action=None,
-                                *args, **kwargs):
-        app = getattr(self, "app", None) or ui.find_app()
+    def handle_battle_situation(orig, self, *args, **kwargs):
+        app = None
         try:
-            open_action("1手", character_key, character_side, battle_action, app)
+            app = getattr(self, "app", None) or ui.find_app()
+            open_action("1手",
+                        frames.arg(args, kwargs, "character_key", SITUATION_ARGS),
+                        frames.arg(args, kwargs, "character_side", SITUATION_ARGS),
+                        frames.arg(args, kwargs, "battle_action", SITUATION_ARGS),
+                        app)
         except Exception:
             ctx.log_exc("battle mechanics: cannot open the action")
-        result = orig(self, character_key, character_side, battle_action,
-                      *args, **kwargs)
+        result = orig(self, *args, **kwargs)
         try:
             close_action(app)
         except Exception:
@@ -298,18 +385,23 @@ def apply(ctx):
     # 開いている手にぶら下げる（手の外で呼ばれたらそれ自体を1行にする）。
     @ctx.wrap("__main__:BattlePhaseManager.calculate_battle_effect",
               required=False, safe=True)
-    def calculate_battle_effect(orig, self, battle_action=None, *args, **kwargs):
-        result = orig(self, battle_action, *args, **kwargs)
+    def calculate_battle_effect(orig, self, *args, **kwargs):
+        result = orig(self, *args, **kwargs)
+        if quiet():
+            return result
         try:
             action = state["action"]
-            if action is not None:
-                action["battle_action"] = brief(battle_action)
-                action["effect"] = brief(result)
-            elif ACTION_SAMPLES > 0 and state["rows"] < ACTION_SAMPLES:
-                state["rows"] += 1
-                record({"at": now(), "phase": "手の外の calculate",
-                        "battle_action": brief(battle_action),
-                        "effect": brief(result)})
+            if action is not None or room():
+                battle_action = frames.arg(args, kwargs, "battle_action",
+                                           EFFECT_ARGS)
+                if action is not None:
+                    action["battle_action"] = brief(battle_action)
+                    action["effect"] = brief(result)
+                else:
+                    state["rows"] += 1
+                    record({"at": now(), "phase": "手の外の calculate",
+                            "battle_action": brief(battle_action),
+                            "effect": brief(result)})
         except Exception:
             pass
         return result
@@ -317,17 +409,18 @@ def apply(ctx):
     # 毒などの継続分。1手と同じ形で、キャラクタ1人ぶんの小さな手として録る。
     @ctx.wrap("__main__:BattlePhaseManager.reduce_status_turns_and_log",
               required=False, safe=True)
-    def reduce_status_turns_and_log(orig, self, character=None, *args, **kwargs):
-        app = getattr(self, "app", None) or ui.find_app()
+    def reduce_status_turns_and_log(orig, self, *args, **kwargs):
+        app = None
         opened = False
         try:
-            if state["action"] is None:
-                open_action("継続効果", frames.attr(character, "name", "?"),
-                            "-", None, app)
-                opened = True
+            if state["action"] is None and room():
+                app = getattr(self, "app", None) or ui.find_app()
+                character = frames.arg(args, kwargs, "character", STATUS_ARGS)
+                opened = open_action("継続効果", frames.attr(character, "name", "?"),
+                                     "-", None, app)
         except Exception:
             ctx.log_exc("battle mechanics: cannot open the status turn")
-        result = orig(self, character, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
         if opened:
             try:
                 close_action(app)
@@ -351,10 +444,12 @@ def apply(ctx):
             if value is not None:
                 entry[field] = brief(value)
         # 防御の実値。引数なしの読み取りなので戦闘開始時に1回だけ能動で聞く。
+        # 自分の呼び出しは記録しない（版3。版2は「手の外の計算」に書いていた）。
         try:
             getter = getattr(holder, "get_npc_defense", None)
             if callable(getter):
-                entry["npc_defense"] = brief(getter(), 1)
+                with Quietly():
+                    entry["npc_defense"] = brief(getter(), 1)
         except Exception:
             entry["npc_defense"] = "<failed>"
         return entry
@@ -380,15 +475,20 @@ def apply(ctx):
 
     # ================================================================ グリッド
     def grid_of(name, first_values, second_values):
+        """素の関数を格子で呼ぶ。包み（他の MOD とこの MOD 自身）を通さない（版3）。"""
         try:
             found = ctx.resolve("scripts.functions:{}".format(name))
         except Exception:
             # ゲームの外（オフライン検証）では scripts.functions が無い。
             # 見つからないのは異常ではないので静かに諦める。
             found = None
-        func = found[2] if found else None
-        if not callable(func):
+        current = found[2] if found else None
+        if not callable(current):
             write("グリッド: {} が見つからないので諦めた".format(name))
+            return
+        func, _depth, still_ours = patch.unwrap(current)
+        if still_ours or not callable(func):
+            write("グリッド: {} の包みを剥がし切れないので諦めた".format(name))
             return
         points = 0
         for a in first_values:
@@ -407,7 +507,6 @@ def apply(ctx):
     def run_grid():
         if GRID_REPEATS <= 0:
             return
-        state["grid"] = True
         try:
             grid_of("get_instant_damage", GRID_ATTACK, GRID_DEFENSE)
             grid_of("get_base_damage_value",
@@ -415,10 +514,10 @@ def apply(ctx):
         except Exception:
             # 純関数かどうかは確かめていない。落ちたらグリッドごと諦めて残す。
             ctx.log_exc("battle mechanics: the grid died; giving it up")
-        finally:
-            state["grid"] = False
 
-    ctx.on_ready(run_grid)
+    # on_ready は1プロセスに1回。既定（GRID_REPEATS=0）では積まない。
+    if GRID_REPEATS > 0:
+        ctx.on_ready(run_grid)
 
     ctx.log("battle mechanics probe: log -> {} (actions<={} grid x{})".format(
         ctx.out_path(LOG_BASENAME), ACTION_SAMPLES, GRID_REPEATS))

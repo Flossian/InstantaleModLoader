@@ -54,7 +54,20 @@
 
 200番台の約束どおり読み取りだけ。
 値は書かず、記録に失敗しても本体は必ず呼ぶ（`safe=True` と、書き込みの握り潰し）。
-総当たりで呼ぶ4つは引数から戻り値を決めるだけの関数で、ゲームの状態を触らない。
+総当たりで呼ぶのは引数から戻り値を決めるだけの関数で、ゲームの状態を触らない。
+
+版3: 読み取り専用の約束を1つ破っていたので直し、ログを絞った（問いは VERIFICATION_LOG.md §2.36 で決着済み）。
+
+- 表の総当たりから `get_npc_exp_level` を外した。
+  モジュール共用の `random` を引く関数で（表の値が注入ごとに全部違った）、
+  注入のたびにゲームの乱数の列を 81 回ぶん進めていた。
+  残りの3本は決定的で毎回同じ値だったので、1プロセスに1回にした
+- `Character.__init__` はプレイヤーだけを写す。
+  版2は開始処理の窓の間に生まれる NPC も全員写していて、
+  ロードのたびに全員を作り直すので1人3行・呼び出し元つきで積もった（1か月で約40MB、このログの8割）。
+  NPC は判定の前に素通しにし、呼び出し元も組まない
+- 2秒ごとの見張りは、レベルとレベルから決まる値だけを素の値で比べる。
+  版2は所持金や HP まで repr して比べていたので、行動のたびに1行出ていた
 """
 
 import datetime
@@ -117,8 +130,9 @@ WATCHED_FUNCTIONS = (
 )
 
 # 注入時に総当たりする表と範囲 `(名前, 最小, 最大)`。
+# 版3で `get_npc_exp_level` を外した（共用の乱数を引くので、呼ぶとゲームの乱数の列が進む）。
+# 決定的な表だけを置くこと。
 TABLE_TARGETS = (
-    ("get_npc_exp_level", 0, 80),
     ("clamp_character_level", -5, 120),
     ("get_max_physical_integrity", 1, 80),
     ("get_days_elapsed_experience_point", 1, 80),
@@ -140,13 +154,22 @@ WINDOW_SECONDS = 300.0
 # 記録の上限。
 # 世界の NPC も同じ `Character.__init__` を通る（1回の開始で
 # 100 体ほど生まれる）ので、窓の中でも打ち止めを置く。
-MAX_INIT_LINES = 300
+# 版3で `Character.__init__` はプレイヤーだけになった（1回のロードで1〜2件）。
+MAX_INIT_LINES = 40
 MAX_CALL_LINES = 500
 MAX_LEVEL_EVENTS = 80
 
 # プレイヤーの値の見張り。
 # 作成の後で誰かが書き換えるなら、この差分に出る。
 POLL_SECONDS = 2.0
+
+# 見張りが比べる項目。
+# レベルと、レベルから決まる値だけ（所持金や今の HP は行動のたびに動くので比べない。版3）。
+POLL_FIELDS = ("experience_level", "max_hp", "original_max_hp",
+               "max_physical_integrity", "original_max_physical_integrity")
+
+# 表の総当たりを1プロセスに1回にするための印（`sys` に置く。TECH.md §3.6）。
+TABLES_MARK = "_instantale_probe_newchar_tables"
 
 
 def apply(ctx):
@@ -308,18 +331,19 @@ def apply(ctx):
     def character_init(orig, self, *args, **kwargs):
         result = orig(self, *args, **kwargs)
         try:
+            # 問いはプレイヤーだけ。NPC はここで素通しにする（版3。版2は窓の間の NPC も全員写していた）。
             is_player = bool(kwargs.get("is_player"))
             config = kwargs.get("config")
             if isinstance(config, dict) and config.get("is_player"):
                 is_player = True
-            if not is_player and not window_open():
+            if not is_player:
                 return result
             if state["inits"] >= MAX_INIT_LINES:
                 return result
             state["inits"] += 1
-            write("[{}] Character.__init__{} name={} experience_level={} "
+            write("[{}] Character.__init__ PLAYER name={} experience_level={} "
                   "experience_point={} max_hp={} max_physical_integrity={}".format(
-                      stamp(), " PLAYER" if is_player else "",
+                      stamp(),
                       frames.repr_value(frames.attr(self, "name")),
                       frames.repr_value(frames.attr(self, "experience_level")),
                       frames.repr_value(frames.attr(self, "experience_point")),
@@ -414,10 +438,15 @@ def apply(ctx):
         - 落ち始めたらそこで止め、どこから落ちるかを書く。
           表の上限はそれ自体が知りたい事実（`PRICE_TABLE_MAX = 76` と同じ）
         """
+        # 表は決定的な関数だけで、毎回同じ値になる（版2の 1,008 回で1通り）。
+        # 注入し直しで出直さないよう、印は `sys` に置く（版3）。
+        if getattr(sys, TABLES_MARK, False):
+            return
         functions = sys.modules.get(FUNCTIONS_MODULE)
         if functions is None:
             write("[{}] {} not loaded; no tables".format(stamp(), FUNCTIONS_MODULE))
             return
+        setattr(sys, TABLES_MARK, True)
         state["probing"] = True
         try:
             for name, low, high in TABLE_TARGETS:
@@ -467,14 +496,17 @@ def apply(ctx):
                 write("polling stopped (a newer injection took over)")
                 return False
             try:
-                snap = player_snapshot()
-                if snap is None:
+                # 比べるのはレベル系の素の値だけ（版3）。
+                # 行を書くときだけ全項目を写す。
+                app = ui.find_app()
+                player = frames.attr(app, "player") if app is not None else None
+                if player in (None, frames.MISSING):
                     return True
-                keyed = tuple(frames.repr_value(snap.get(f)) for f in PLAYER_FIELDS)
+                keyed = tuple(frames.attr(player, f) for f in POLL_FIELDS)
                 if state["last"] is None:
-                    note_player("player appeared (poll)")
+                    note_player("player appeared (poll)", app)
                 elif keyed != state["last"]:
-                    note_player("player changed (poll)")
+                    note_player("player changed (poll)", app)
                 state["last"] = keyed
             except Exception:
                 ctx.log_exc("new character probe: polling failed")

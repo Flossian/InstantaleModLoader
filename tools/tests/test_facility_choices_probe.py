@@ -103,6 +103,7 @@ def setup():
                                                   os.path.join(folder, entry))
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    sys.__dict__.pop(module.ONCE_MARK, None)
     ctx = FakeCtx(OUT_DIR)
     module.apply(ctx)
     return module, ctx
@@ -146,6 +147,19 @@ if True:
     check("env は1度だけ", sum(1 for l in lines if "hash_randomization=" in l) == 1, lines)
     check("move_phase の行は増える", sum(1 for l in lines if "move_phase:" in l) == 2)
     check("属性名の行は種類ごとに1度", sum(1 for l in lines if "attrs of a inn" in l) == 1)
+
+    print("注入し直し（版2: 1プロセス1回）")
+    ctx2 = FakeCtx(OUT_DIR)
+    module.apply(ctx2)
+    ctx2.hooks["__main__:MovePhaseManager.move_phase"](
+        MovePhaseManager.move_phase, MovePhaseManager(app))
+    lines = log_lines()
+    check("注入し直しても env は出直さない",
+          sum(1 for l in lines if "hash_randomization=" in l) == 1, lines)
+    check("注入し直しても属性名の行は出直さない",
+          sum(1 for l in lines if "attrs of a inn" in l) == 1)
+    check("move_phase の行は増える（注入し直し）",
+          sum(1 for l in lines if "move_phase:" in l) == 3)
 
     print("店（list の choices）")
     shop = Facility("雑貨店", "general_store", ["売買する", "出る"])

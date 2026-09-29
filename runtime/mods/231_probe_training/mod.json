@@ -10,7 +10,7 @@
     "en": "Records the years and prices offered by a training facility, when the price is charged, how many days each year advances, what each phase passes on, and which inner path a phase takes. Read-only",
     "ja": "施設の訓練で並ぶ年数と代金・その代金を徴収する時機・1年で暦が何日進むか・各段が次へ渡す値・段の中のどの道へ入ったかを録る。読み取りだけでゲームは変えない"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "after": [
     "306_party_train_exp"

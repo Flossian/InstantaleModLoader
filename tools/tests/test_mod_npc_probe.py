@@ -442,6 +442,38 @@ def main():
           listed and "32" not in listed[-1]["facility_characters"], listed)
     check("例外は出ていない（一覧の窓）", ctx.errors == [], ctx.errors)
 
+    # 版4: 窓が入れ子になっても、外側の読みの数を内側が壊さない。
+    def nested_choice(self, *a, **kw):
+        len(app.player.location.characters)
+        len(app.player.location.characters)
+        talk_display(lambda s, *aa, **kk: len(app.player.location.characters) and None,
+                     types.SimpleNamespace(app=app))
+        return "listed"
+
+    talk_choice(nested_choice, types.SimpleNamespace(app=app))
+    outer = at(records(), "talk_choice")[-1:]
+    inner = at(records(), "talk_reads")[-1:]
+    check("入れ子: 外側の読みは外側の数だけ",
+          outer and outer[0]["roster_reads"] == 2, outer)
+    check("入れ子: 内側の読みは内側の数だけ",
+          inner and inner[0]["facility_reads"] == 1, inner)
+
+    # 版4: 保存ごとの行は注入1回あたり SAVE_LINES 回ぶんまで。
+    save_hooks = ctx.hooks[modnpc.SAVE_TARGET]
+    module.SAVE_LINES = 2
+    saves_before = len(at(records(), "save"))
+    for _ in range(5):
+        save_hooks[1](lambda self, *a, **kw: save_hooks[0](
+            lambda s, *aa, **kk: s.save_game(), self), app)
+    with io.open(os.path.join(OUT_DIR, LOG_NAME), encoding="utf-8") as fh:
+        log_text = fh.read()
+    check("保存の行は枠の数だけ", log_text.count("save: entering") == 2,
+          log_text.count("save: entering"))
+    save_rows = at(records(), "save")[saves_before:]
+    # 1回の保存で 登録2件（来訪者と主）× hide / restore の4件。5回保存しても2回ぶん。
+    check("at=save も枠の数だけ", len(save_rows) == 2 * 4, [r.get("phase") for r in save_rows])
+    module.SAVE_LINES = 20
+
     sys.modules.pop("scripts.llm.llm_manager", None)
     modnpc.purge()
     print("PASS" if not failures else "FAIL: " + ", ".join(failures))

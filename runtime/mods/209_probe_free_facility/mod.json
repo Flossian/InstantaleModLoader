@@ -10,7 +10,7 @@
     "en": "Captures the scene-scripting engine (steps, flag scope, program source) to see whether mods can author scenes with it",
     "ja": "シーン記述エンジンの中身（ステップ・フラグのスコープ・プログラムの出どころ）を写し取り、MOD から使えるかを測る"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "debug": true
 }

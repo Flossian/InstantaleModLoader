@@ -16,7 +16,9 @@ import importlib.util
 import io
 import json
 import os
+import random
 import sys
+import threading
 import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -202,8 +204,12 @@ class FakePhase(object):
     """ゲームの BattlePhaseManager の代わり。素点だけ返す（版2の実機の戻りの形）。"""
     seen = []
 
+    marks = []
+
     def calculate_battle_effect(self, battle_action):
         FakePhase.seen.append(getattr(self, "app", None))
+        FakePhase.marks.append(getattr(sys, mod.DRY_THREAD_MARK, None))
+        random.random()                 # ゲームの素点の揺らぎと同じく乱数を引く
         entry = battle_action["instant_damage"][0]
         raw = {"weak": 100, "normal": 120, "strong": 150, "very_strong": 170,
                "extreme": 230}[entry["power"]] * entry["multiplier"]
@@ -215,19 +221,32 @@ class FakePhase(object):
 app.current_enemy_dict = {"ゴーレム": golem}
 mod.ui.cls_of = lambda name: FakePhase if name == "BattlePhaseManager" else None
 mod.DRY_RUN, mod.DRY_REPEAT = True, 2
+getattr(sys, mod.DRY_SEEN_MARK, set()).clear()
+random.seed(12345)
+expected = random.random()
+random.seed(12345)
 before = len(ctx.rows)
 check("戻りはそのまま", ctx.hooks["__main__:BattleStartManager.start_battle"](
     lambda self: "go", manager) == "go")
+check("試し打ちの後は乱数の列が元に戻る（版3の続き）", random.random() == expected)
 dry = [r for r in ctx.rows[before:] if r["kind"] == "dry"]
 plans = len(mod.DRY_POWERS) * len(mod.DRY_CATEGORIES) + len(mod.DRY_EXTRA)
+check("倍率の2通りは外した（版3の続き）", plans == 10, plans)
 check("敵と味方の全員ぶん、全部の通りを録る", len(dry) == plans * 2, len(dry))
 row = [r for r in dry if r["actor"] == "ゴーレム" and r["power"] == "extreme"
        and r["category"] == "magical"][0]
 check("敵の手は主人公を相手に、回数ぶんの素点が並ぶ", row["raws"] == [231, 231] and row["side"] == "enemy", row)
-row = [r for r in dry if r["actor"] == "アーリ" and r["multiplier"] == 2][0]
-check("味方の手は先頭の敵を相手に、倍率も渡る", row["raws"] == [200, 200] and row["side"] == "ally", row)
+row = [r for r in dry if r["actor"] == "アーリ" and r["power"] == "weak"
+       and r["category"] == "physical"][0]
+check("味方の手は先頭の敵を相手に", row["raws"] == [100, 100] and row["side"] == "ally", row)
 check("実体には app を持たせて呼ぶ", FakePhase.seen and FakePhase.seen[-1] is app)
 check("試し打ちの間は act の行を録らない", not [r for r in ctx.rows[before:] if r["kind"] == "act"])
+check("試し打ちの間は sys にスレッドの印が立ち、終われば消える",
+      FakePhase.marks and set(FakePhase.marks) == {threading.get_ident()}
+      and not hasattr(sys, mod.DRY_THREAD_MARK), set(FakePhase.marks))
+before = len(ctx.rows)
+ctx.hooks["__main__:BattleStartManager.start_battle"](lambda self: "go", manager)
+check("同じ相手は1プロセス1回だけ試す", not [r for r in ctx.rows[before:] if r["kind"] == "dry"])
 
 
 class HurtingPhase(FakePhase):
@@ -237,11 +256,13 @@ class HurtingPhase(FakePhase):
 
 
 mod.ui.cls_of = lambda name: HurtingPhase
+getattr(sys, mod.DRY_SEEN_MARK, set()).clear()
 before = len(ctx.rows)
 ctx.hooks["__main__:BattleStartManager.start_battle"](lambda self: "go", manager)
 check("前後で HP が動いたら止めて記録に残す",
       [r["kind"] for r in ctx.rows[before:]][-1] == "dry_abort", [r["kind"] for r in ctx.rows[before:]])
 before = len(ctx.rows)
+getattr(sys, mod.DRY_SEEN_MARK, set()).clear()
 ctx.hooks["__main__:BattleStartManager.start_battle"](lambda self: "go", manager)
 check("止めた後は試し打ちしない", not [r for r in ctx.rows[before:] if r["kind"].startswith("dry")])
 hero.current_hp = 1832

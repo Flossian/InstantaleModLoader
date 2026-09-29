@@ -258,6 +258,52 @@ check("item が無い観測でも1行書く", "ItemEquipManager.__init__:after" 
 check("owner=None を player と写さない", "owner_is_player=False" in line, line)
 check("owner=None を npc と写さない", "owner_is_npc=False" in line, line)
 check("例外を残さない", ctx.errors == [], ctx.errors)
+
+# 版5: `__init__` はクラスごとに注入1回につき1行（333_ が装備のたびに組み直す）。
+ctx.hooks[EQUIP_INIT](lambda self, a: None, manager, app)
+check("__init__ の2回目は書かない",
+      sum("ItemEquipManager.__init__" in n for n in ctx.notes) == 1, ctx.notes)
+shutil.rmtree(out_dir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------- 引数の素通し（版5）
+print("引数の素通し")
+ctx, app, out_dir = build()
+received = []
+ctx.hooks[START](lambda self, *a, **k: received.append((a, k)), object(),
+                 app=app, character_id="80")
+check("__init__ はキーワードのまま渡す",
+      received == [((), {"app": app, "character_id": "80"})], received)
+received[:] = []
+FakeClock.scheduled = []
+ctx.hooks[POPUP](lambda self, *a, **k: received.append((a, k)) or "shown",
+                 widget, pos=(1, 2))
+check("show_popup_menu もキーワードのまま",
+      received == [((), {"pos": (1, 2)})], received)
+EQUIP = "__main__:ItemEquipManager.equip_item"
+received[:] = []
+ctx.hooks[EQUIP](lambda self, *a, **k: received.append((a, k)), manager,
+                 item_instance=item)
+check("equip_item もキーワードのまま",
+      received == [((), {"item_instance": item})], received)
+check("キーワードで来た品も記録に写る",
+      any("item='鉄の剣'" in n for n in ctx.notes), ctx.notes)
+shutil.rmtree(out_dir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------- 枠の後（版5）
+print("枠の後")
+ctx, app, out_dir = build()
+MOD_CAP = MOD.LOG_CAP
+MOD.LOG_CAP = 1
+ctx.hooks[EQUIP](lambda self, *a, **k: None, manager, item)   # before で1行使い切る
+count = len(ctx.notes)
+FakeClock.scheduled = []
+ctx.hooks[POPUP](InventoryItem.show_popup_menu, widget, (0, 0))
+check("枠の後は popup を予約しない", FakeClock.scheduled == [], FakeClock.scheduled)
+ctx.hooks[EQUIP](lambda self, *a, **k: "装備した", manager, item)
+check("枠の後は行を組まない（書き込みも呼ばない）", len(ctx.notes) == count, ctx.notes)
+MOD.LOG_CAP = MOD_CAP
 shutil.rmtree(out_dir, ignore_errors=True)
 
 

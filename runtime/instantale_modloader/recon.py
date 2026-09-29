@@ -56,7 +56,7 @@ SNAPSHOT_DIR_NAME = "recon_snapshots"
 #: `_same_build` と tools/tests/test_recon_archive.py を参照）ので、
 #: 素性が読めるようになる前後で1回の起動から2つ以上できることがある。
 #: 実測では同じ版のまま 109 個 / 23MB まで溜まっていた。
-#: `tools/logrotate.py` は `out/*.log` しか回さないので、ここで刈る。
+#: `tools/logrotate.py` は `out/` 直下の `*.log` と `*.jsonl` しか回さないので、ここで刈る。
 SNAPSHOT_KEEP = 20
 
 

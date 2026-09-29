@@ -149,8 +149,8 @@
 | `204_probe_prompt_bloat` | EVENTLOG / DEDUP / サイドカー起動という3つのプロンプト肥大化挙動を測る |
 | `205_probe_player_events` | プレイヤーの行動をトリガーにしたイベントの差し込み場所を特定する |
 | `206_probe_quest_flow` | クエストの受注経路と、選択肢ボタンの登録方法を特定する |
-| `207_probe_battle_bgm` | 戦闘BGMの切り替え経路（`play_music_from_src` の呼び出し元）を計測する |
-| `208_probe_item_detail` | アイテム説明欄の実寸と中身を写し取る |
+| `207_probe_battle_bgm` | BGM を鳴らす・止める呼び出しと、鳴っているミキサーの本数を見張る（戦闘BGMの直しが退行していないかの見張り） |
+| `208_probe_item_detail` | アイテム説明欄の opacity の上げ下げを見張り、閉じた後も残る原因を測る（寸法は最初の数品だけ写す） |
 | `209_probe_free_facility` | シーン記述エンジンの中身（ステップ・フラグのスコープ・プログラムの出どころ）を写し取り、MOD から使えるかを測る |
 | `210_probe_character_state` | NPC の死亡の印を特定し、誰がその NPC を参照しているかを数えて、印だけで安全に退場させられるかを測る |
 | `211_probe_text_speed` | 本文の1文字ごとの間隔・`app.text_speed`・フレームレート・ラベルのテクスチャ作り直しの重さを測る |

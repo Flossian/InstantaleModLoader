@@ -34,6 +34,11 @@
 `co_consts` / `co_names` が空（TECH.md §1 のとおり）。読めるのはローダの包みだけだった。
 
 ゲームは変えない（200番台の約束どおり読み取りだけ）。
+
+版2（見直し）: 環境の行（ハッシュの乱数化と枠）と、施設の種類ごとの属性名の行は
+「1度だけ」のつもりが apply ごとの控えだったので、注入し直しと遅延の当て直しのたびに
+出直していた（環境 約 110 行・属性 約 190 行）。控えを `sys` の `ONCE_MARK` へ移して
+1プロセス1回にした。
 """
 
 import os
@@ -45,10 +50,16 @@ LOG_BASENAME = "facility_choices.log"
 #: ハッシュの枠を見る文言。
 HASH_WORDS = ("出る", "宿泊する", "会話する", "売買する", "利用する")
 
+#: 1プロセス1回だけ書く行の控え（版2）。
+ONCE_MARK = "_instantale_probe_232_once"
+
 
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
-    state = {"env": False}
+    state = getattr(sys, ONCE_MARK, None)
+    if not isinstance(state, dict):
+        state = {"env": False}
+        setattr(sys, ONCE_MARK, state)
 
     def facility_of(app):
         """立っている施設（`player.location`）。id だけなら街から引く。"""

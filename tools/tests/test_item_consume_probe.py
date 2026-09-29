@@ -15,6 +15,8 @@
   純関数   … 同じ引数の組は1度だけ
   壊れても … 記録が失敗しても本体は呼ばれ、戻り値は変わらない
   上限     … 使用の外の上限更新は UPDATE_SAMPLES 件で打ち切る
+  版3      … 使用の外の上限更新は既定で録らず写しもしない。キーワードはキーワードのまま渡す。
+             枠の後は写さない。本体が投げても控えの文が次の記録へ混ざらない
 """
 import importlib.util
 import io
@@ -347,6 +349,72 @@ log = read_log()
 check("cap updates outside a use are capped",
       log.count("Character.update_max_hp") == 2, log.count("Character.update_max_hp"))
 check("original still runs past the cap", player.max_hp == 125, player.max_hp)
+
+# ---------------------------------------------------------------- 版3
+print("[版3]")
+# 前の段で持ち物を使い切っているので足しておく（偽の本体は1回に1つ減らす）。
+player.inventory.update({"v3_{}".format(i): object() for i in range(10)})
+module4, ctx4 = fresh_mod(app)
+check("default: updates outside a use are off", module4.UPDATE_SAMPLES == 0,
+      module4.UPDATE_SAMPLES)
+snaps = []
+real_snapshot = module4.snapshot
+module4.snapshot = lambda character: snaps.append(character) or real_snapshot(character)
+update4 = ctx4.hooks["scripts.characters:Character.update_max_hp"]
+before_hp = player.max_hp
+update4(fake_update, player)
+check("default: update outside a use is not written",
+      "Character.update_max_hp" not in read_log(), read_log())
+check("default: update outside a use is not snapshotted", snaps == [], snaps)
+check("default: update still runs", player.max_hp == before_hp + 1, player.max_hp)
+
+# キーワードで渡されたらキーワードのまま（位置に直さない）
+seen_args = []
+
+
+def kw_consume(self, *args, **kwargs):
+    seen_args.append((args, dict(kwargs)))
+    return fake_consume(self, *args, **kwargs)
+
+
+hook4 = ctx4.hooks["__main__:ItemConsumeManager.consume_item"]
+item4 = Item("薬草茶", player)
+hook4(kw_consume, manager, item_instance=item4, usable=True)
+check("keywords pass through as keywords",
+      seen_args == [((), {"item_instance": item4, "usable": True})], seen_args)
+rows = [r for r in read_records() if r.get("phase") == "consume_item"]
+check("keywords: usable still recorded", rows and rows[-1].get("usable") is True,
+      rows[-1:] if rows else rows)
+
+# 枠の後は写さず、文も控えない
+module4.CONSUME_SAMPLES = 1
+snaps[:] = []
+hook4(fake_consume, manager, Item("薬草茶", player), True)
+check("past the cap: no snapshot", snaps == [], len(snaps))
+check("past the cap: game text still shown", app.texts[-1] == "薬草茶を使った。",
+      app.texts[-1:])
+rows_after = [r for r in read_records() if r.get("phase") == "consume_item"]
+check("past the cap: no new row", len(rows_after) == len(rows), len(rows_after))
+
+# 本体が投げても控えの文は残らない
+module5, ctx5 = fresh_mod(app)
+hook5 = ctx5.hooks["__main__:ItemConsumeManager.consume_item"]
+
+
+def raising(self, item_instance, usable):
+    self.app.add_text("途中の文")
+    raise ValueError("本体の失敗")
+
+
+try:
+    hook5(raising, manager, Item("薬草茶", player), True)
+except ValueError:
+    pass
+hook5(fake_consume, manager, Item("焼き魚", player), True)
+rows = [r for r in read_records() if r.get("phase") == "consume_item"]
+check("a raising use leaves no stale text",
+      rows and rows[-1].get("texts") == ["焼き魚を使った。"],
+      rows[-1].get("texts") if rows else rows)
 
 # ---------------------------------------------------------------- 結果
 print()

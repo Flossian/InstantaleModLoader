@@ -26,6 +26,19 @@ Nuitka でコンパイルされていてもフレームは通常どおり積ま�
 
 この mod は観測しかしない。
 値は変えず、記録に失敗しても本体は必ず呼ぶ。
+
+版3: 原因は決着し（VERIFICATION_LOG.md §2.5）、本体も main_024 で直した。
+いま残る役目は、本体が退行したときの見張り（VERIFICATION.md §3.1。合格条件は
+`mixer = n/8 channel(s) busy` が1本を超えて増えていかないこと）なので、
+曲を鳴らす口と止める口の記録と `mixer` の行は残した。
+戦闘の開始・終了の9か所と `BattleEndManager.__init__` の包みは、経路の特定が済んでいるので外した。
+版2までは、注入のたびのスナップショット（1回約 1.5KB。1プロセス平均6回ほど走る）と、
+標本ごとの呼び出し元（8段。1段ごとに `__main__` の全クラスを総当たりする `owner_of` が走る）で、
+`battle_bgm.log` の半分近くを占めていた。
+スナップショットは `sys` の印で1プロセス1回にしてメインスレッドで取り、
+呼び出し元は1プロセスあたり最初の数件だけにした。
+標本の数えも1プロセスあたりにした。
+包みは `safe=True` にし、受け取った引数をそのまま `orig` へ渡す。
 """
 
 import os
@@ -37,32 +50,52 @@ from instantale_modloader.frames import repr_value
 
 LOG_BASENAME = "battle_bgm.log"
 
-# 起動直後に一度だけ、音まわりの今の姿を写し取る。
+# 起動直後に一度だけ、音まわりの今の姿を写し取る（版3で1プロセス1回）。
 SNAPSHOT_ON_BOOT = True
 
 # 呼び出し元として記録するフレーム数（自分のラッパを除いた直近ぶん）。
 STACK_DEPTH = 8
 
-# BGM の呼び出しは多くないので、上限を緩くしてよい。
-# 戦闘1回ぶんを丸ごと残したい。
+# 曲を鳴らす／止める口の記録の上限（1プロセスあたり。版3）。
+# 1プロセスで鳴らすのは数回〜十数回なので、見張りの行はほぼ全部残る。
 MAX_SAMPLES = 200
+
+# 呼び出し元を付ける件数（口ごと・1プロセスあたり。版3）。
+# `frames.caller` は1段ごとに `owner_of` の総当たりが走るので、最初の数件で足りる。
+MAX_CALLER_SAMPLES = 10
 
 # 戦闘まわりの状態フラグ。
 # 曲が切り替わった瞬間にどれが立っていたかを見る。
 BATTLE_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle",
                 "in_conversation", "in_free_input", "in_action_in_conversation")
 
+# スナップショットの印と標本の数え。
+# 注入し直すと MOD のモジュールごと読み直されるので、モジュール変数では消える。`sys` に置く。
+SNAPSHOT_MARK = "_instantale_probe_battle_bgm_snapshot"
+COUNTS_ATTR = "_instantale_probe_battle_bgm_counts"
+
+
+def _counts() -> dict:
+    counts = getattr(sys, COUNTS_ATTR, None)
+    if not isinstance(counts, dict):
+        counts = {}
+        setattr(sys, COUNTS_ATTR, counts)
+    return counts
+
 
 def apply(ctx):
     log_path = ctx.out_path(LOG_BASENAME)
-    counts = {}
+    counts = _counts()
 
     write = ctx.logger(LOG_BASENAME)
 
-    def sample(key):
+    def sample(key, limit=MAX_SAMPLES):
+        """枠が残っていれば1つ使って True。重い組み立てより先に呼ぶ。"""
         n = counts.get(key, 0)
+        if n >= limit:
+            return False
         counts[key] = n + 1
-        return n < MAX_SAMPLES
+        return True
 
     find_app = ui.find_app     # 走っている app の探し方はローダの語彙
 
@@ -114,31 +147,40 @@ def apply(ctx):
         except Exception:
             return repr(sound)
 
-    def callers():
-        """自分のラッパより手前のフレームを並べる。
+    def callers(key):
+        """自分のラッパより手前のフレームを並べる。最初の数件だけ（版3）。
 
         段数で数えないこと（TECH.md §6.3）。
-        この MOD は `BattleEndManager.execute` なども包んでいるので、
-        そこから
-        `play_music_from_src` に到達した呼び出しでは自分のラッパがスタックに載る。
-        以前は末尾2段の決め打ちで落としていて、
-        ファイル名での除外（`startswith("207_probe")`）は**実際のファイル名が
-        `probe_battle_bgm.py`** なので一度も一致していなかった。
-        つまり効いていたのは段数の決め打ちだけだった。
-
         `frames.caller` はローダと MOD のフレームを置き場所で飛ばすので、
         何段挟まっても正しい呼び出し元から並ぶ。
+        上限を越えたら `frames.caller` を呼ばない（1段ごとに `owner_of` の総当たりが走る）。
         """
+        if not sample("caller:" + key, MAX_CALLER_SAMPLES):
+            return "<omitted>"
         return frames.caller(depth=STACK_DEPTH)
+
+    def note(fn):
+        """記録の失敗で本体の呼び出しを妨げない。"""
+        try:
+            fn()
+        except Exception:
+            ctx.log_exc("battle bgm probe: record failed")
 
     # ------------------------------------------------------- 起動時の一発計測
     def snapshot():
+        """起動時の写し。1プロセス1回・メインスレッド（版3）。
+
+        印はゲームの中（app と player が揃っている）で取れたときにだけ付ける。
+        """
+        if getattr(sys, SNAPSHOT_MARK, False):
+            return
+        app = find_app()
+        if app is None or getattr(app, "player", None) is None:
+            return
+        setattr(sys, SNAPSHOT_MARK, True)
+
         write("=" * 78)
         write("battle bgm snapshot (pid {})".format(os.getpid()))
-        app = find_app()
-        if app is None:
-            write("  InstantaleApp instance not found (not in a game yet?)")
-            return
         # 「今鳴っている曲」の控えがどこにあるか。
         # app.music が本命。
         for attr in ("music", "sound", "sound_manager"):
@@ -176,96 +218,67 @@ def apply(ctx):
             write("  SoundManager methods = {}".format(
                 sorted(n for n in vars(cls) if not n.startswith("__"))))
 
-    if SNAPSHOT_ON_BOOT:
+    def guarded_snapshot():
         try:
             snapshot()
         except Exception:
             ctx.log_exc("battle bgm probe: snapshot failed")
 
+    if SNAPSHOT_ON_BOOT:
+        ui.scheduler(ctx, "battle bgm probe snapshot")(guarded_snapshot)
+
     # ==================================================================
-    # 1. 曲を鳴らす/止める口。
-    # ここが全ての判定材料。
+    # 曲を鳴らす/止める口。
+    # ここが全ての判定材料で、VERIFICATION.md §3.1 の見張りもここの `mixer` の行を読む。
     # ==================================================================
-    @ctx.wrap("scripts.sounds:SoundManager.play_music_from_src", required=False)
-    def play_music_from_src(orig, self, app, music_src, *args, **kwargs):
-        before = getattr(app, "music", "<missing>")
-        if sample("play_music_from_src"):
+    @ctx.wrap("scripts.sounds:SoundManager.play_music_from_src", required=False, safe=True)
+    def play_music_from_src(orig, self, *args, **kwargs):
+        # 版3: 上限を先に見る。越えたら何も組み立てずに素通しにする。
+        if not sample("play_music_from_src"):
+            return orig(self, *args, **kwargs)
+        app = frames.arg(args, kwargs, "app", 0)
+
+        def before():
             write("-" * 78)
-            write("play_music_from_src({!r})".format(short_src(music_src)))
+            write("play_music_from_src({!r})".format(
+                short_src(frames.arg(args, kwargs, "music_src", 1))))
             write("    target = {}".format(who(app)))
-            write("    .music before = {!r}".format(short_src(before)))
+            write("    .music before = {!r}".format(
+                short_src(getattr(app, "music", "<missing>"))))
             write("    flags  = {}".format(flags_of(app)))
-            write("    caller = {}".format(callers()))
+            write("    caller = {}".format(callers("play_music_from_src")))
             write("    thread = {}".format(threading.current_thread().name))
-        result = orig(self, app, music_src, *args, **kwargs)
-        if counts.get("play_music_from_src", 0) <= MAX_SAMPLES:
-            write("    .music after  = {}".format(
-                sound_state(getattr(app, "music", None))))
+        note(before)
+        result = orig(self, *args, **kwargs)
+
+        def after():
+            write("    .music after  = {}".format(sound_state(getattr(app, "music", None))))
             write("    mixer  = {}".format(channels()))
+        note(after)
         return result
 
-    @ctx.wrap("scripts.sounds:SoundManager.stop_music", required=False)
-    def stop_music(orig, self, app, *args, **kwargs):
-        if sample("stop_music"):
+    @ctx.wrap("scripts.sounds:SoundManager.stop_music", required=False, safe=True)
+    def stop_music(orig, self, *args, **kwargs):
+        if not sample("stop_music"):
+            return orig(self, *args, **kwargs)
+        app = frames.arg(args, kwargs, "app", 0)
+
+        def before():
             write("stop_music() target={} .music={}".format(
                 who(app), sound_state(getattr(app, "music", None))))
             write("    flags  = {}".format(flags_of(app)))
-            write("    caller = {}".format(callers()))
-        result = orig(self, app, *args, **kwargs)
-        if counts.get("stop_music", 0) <= MAX_SAMPLES:
-            write("    mixer after stop = {}".format(channels()))
+            write("    caller = {}".format(callers("stop_music")))
+        note(before)
+        result = orig(self, *args, **kwargs)
+        note(lambda: write("    mixer after stop = {}".format(channels())))
         return result
 
-    # ==================================================================
-    # 2. 戦闘の開始と終了。
-    # どの経路がどのマネージャを通るか。
-    # ==================================================================
-    def trace(target, label, with_music=True):
-        """入口と出口で状態を書くだけの汎用ラッパ。"""
-        @ctx.wrap(target, required=False)
-        def _traced(orig, self, *args, **kwargs):
-            app = getattr(self, "app", None) or find_app()
-            if sample(target):
-                write("=" * 78)
-                write("{}({}) start".format(label, repr_value(args)[:200]))
-                if with_music:
-                    write("    app.music = {!r} | {}".format(
-                        short_src(getattr(app, "music", "<missing>")), flags_of(app)))
-                write("    thread = {} caller = {}".format(
-                    threading.current_thread().name, callers()))
-            result = orig(self, *args, **kwargs)
-            if counts.get(target, 0) <= MAX_SAMPLES:
-                write("{} done".format(label))
-                if with_music:
-                    write("    app.music = {!r} | {}".format(
-                        short_src(getattr(app, "music", "<missing>")), flags_of(app)))
-            return result
-        return _traced
-
-    # 開始側。
-    # 会話からの戦闘とそれ以外で、どこが分岐するか。
-    trace("__main__:InstantaleApp.start_battle_with_in_conversation",
-          "InstantaleApp.start_battle_with_in_conversation")
-    trace("__main__:InstantaleApp.execute_battle_process",
-          "InstantaleApp.execute_battle_process")
-    trace("__main__:BattleStartManager.start_battle", "BattleStartManager.start_battle")
-
-    # 終了側。
-    # 3種類ある。
-    # 会話経由でどれが走る（走らない）のかがこの計測の核心。
-    trace("__main__:BattlePhaseManager.check_battle_end",
-          "BattlePhaseManager.check_battle_end")
-    trace("__main__:BattleEndManager.end_phase", "BattleEndManager.end_phase")
-    trace("__main__:BattleEndManager.execute", "BattleEndManager.execute")
-    trace("__main__:BattleEndInFreeAction.end_phase", "BattleEndInFreeAction.end_phase")
-    trace("__main__:BattleEndInColosseum.end_phase", "BattleEndInColosseum.end_phase")
-    trace("__main__:LootPhaseManager.looting_phase", "LootPhaseManager.looting_phase")
-
-    # 戦闘終了マネージャがどの end_type で作られるか。
-    # 分岐の語彙が分かる。
-    @ctx.wrap("__main__:BattleEndManager.__init__", required=False)
-    def battle_end_init(orig, self, app, end_type, *args, **kwargs):
-        write("BattleEndManager(end_type={!r}) flags={}".format(end_type, flags_of(app)))
-        return orig(self, app, end_type, *args, **kwargs)
+    # 版3: 戦闘の開始と終了の経路（`start_battle_with_in_conversation` /
+    # `execute_battle_process` / `BattleStartManager.start_battle` /
+    # `BattlePhaseManager.check_battle_end` / `BattleEndManager.end_phase` / `.execute` /
+    # `BattleEndInFreeAction.end_phase` / `BattleEndInColosseum.end_phase` /
+    # `LootPhaseManager.looting_phase` と `BattleEndManager.__init__`）の包みは外した。
+    # 原因は `BattleEndInFreeAction` が曲の持ち主に自分自身を渡すことで確定している
+    # （VERIFICATION_LOG.md §2.5）。フラグの下ろし忘れの見張りは `107_` の `[FLAGFIX]` が出す。
 
     ctx.log("battle bgm probe log: {}".format(log_path))

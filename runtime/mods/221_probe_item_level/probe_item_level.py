@@ -20,22 +20,36 @@
 
 | 何を録るか | 見どころ |
 | --- | --- |
-| 土地の難易度を返す4関数 | 引数と戻り値。誰が `tier` に何を渡しているか |
+| 土地の難易度を返す2関数 | 引数と戻り値。誰が `tier` に何を渡しているか |
 | 難易度 ↔ 値段 ↔ レベルの変換 | `get_*_price(難易度)` と `get_*_level_from_price(値段)` の対応表 |
-| 店の品揃えの生成 | `set_item_from_world_data` の `next_tier` と、生成後に主が持っている品の value |
+| 店の品揃えの生成 | `generate_item_in_shopping` に渡る段（`item_stock_tier`） |
 | クラフト | `calculate_modification` の実引数と**戻り値の型**、素材と成果物の value |
 
 200番台の約束どおり読み取りだけ。`safe=True` と握り潰しで、
 記録に失敗しても本体は必ず1回呼ぶ。
+包みは受け取った引数をそのまま本体へ渡す（キーワードで来た引数を位置へ直さない）。
 
 出力は `out/item_level.log`（読む用）と `out/item_level.jsonl`（1件1行）。
 純関数の対応表は**同じ引数の組を1度しか書かない**（`220_` と同じ形）。
+
+版3: 1回目の計測で鎖は端まで繋がり（VERIFICATION_LOG.md §2.67）、残る問いは
+`tier` の式とクラフトの倍率の式だけになったので、それに要らない記録を外した。
+
+- 土地の難易度の `get_quest_difficulties` / `get_active_quest_difficulties` を外した。
+  引数に土地を持つので組が土地ごとに分かれ、注入のたびに40行前後を書き直していた
+  （1か月で約5,700行・`.jsonl` の7割）
+- `set_item_from_world_data` の包みを外した。品揃えを作るのは
+  `generate_item_in_shopping` で（GAME.md §2.13.1.2）、1か月で一度も来なかった
+- `generate_item_in_shopping` の戻り値の列を外した。いつも `None`（品は主の持ち物へ入る）
+- 「同じ組は1度だけ」と件数の控えを `sys` に置いて、注入し直しで数え直さないようにした
+- クラフトの依頼は、件数の枠を先に取ってから素材を写す
 """
 
 import datetime
 import json
+import sys
 
-from instantale_modloader import frames, ui
+from instantale_modloader import frames
 
 LOG_BASENAME = "item_level.log"
 RECORD_BASENAME = "item_level.jsonl"
@@ -44,12 +58,12 @@ RECORD_BASENAME = "item_level.jsonl"
 TABLE_SAMPLES = 120
 ITEM_SAMPLES = 200
 
-# 土地の難易度を返す4関数。
-# 店の品揃えも `318_` もここを源にしている。
-# 引数のどれが `tier` なのかは名前で分かるので、実値だけ欲しい。
+# 1プロセスで数を持ち越す置き場（注入し直しと遅延の当て直しで数え直さない）。
+STORE_ATTR = "_instantale_probe_item_level"
+
+# 土地の難易度を返す関数。
+# `tier` の式を出すための2本だけを残した（版3）。
 AREA_TARGETS = (
-    "get_quest_difficulties",
-    "get_active_quest_difficulties",
     "get_area_average_difficulty",
     "get_area_quest_difficulty_for_tier",
 )
@@ -74,6 +88,12 @@ SPEC_TARGETS = (
     "get_item_skill_usefulness",
 )
 
+# 引数の並び（out/recon/targets.txt より）。
+SHOPPING_ARGS = ("item_data", "shop_owner_instance", "item_stock_tier")
+MODIFICATION_ARGS = ("item_type", "item_price")
+CRAFT_ARGS = ("material_list", "prompt")
+PLACE_ARGS = ("generated_item", "generated_item_id")
+
 
 def item_brief(item, limit=40):
     """品物1つを数で写す。説明文と画像は要らない。"""
@@ -95,28 +115,25 @@ def item_brief(item, limit=40):
     }
 
 
-def inventory_values(character):
-    """持ち物の value を並べる。品揃えの段を見るのに要るのはこれだけ。"""
-    inventory = frames.attr(character, "inventory", None)
-    if isinstance(inventory, dict):
-        items = list(inventory.values())
-    elif isinstance(inventory, (list, tuple)):
-        items = list(inventory)
-    else:
-        return None
-    values = []
-    for item in items:
-        value = item.get("value") if isinstance(item, dict) \
-            else frames.attr(item, "value", None)
-        values.append(value)
-    return values
+def process_store():
+    """1プロセスで持ち越す控え。`sys` に置いて注入し直しをまたぐ（版3）。
+
+    `table` は書いた引数の組、`items` は写した品物の件数。
+    """
+    found = getattr(sys, STORE_ATTR, None)
+    if not isinstance(found, dict):
+        found = {}
+        setattr(sys, STORE_ATTR, found)
+    found.setdefault("table", {})
+    found.setdefault("items", 0)
+    return found
 
 
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
 
     # 同じ引数の組は1度しか書かない（表を作るのが目的で、回数は要らない）。
-    seen = {"table": {}, "items": 0}
+    seen = process_store()
 
     def now():
         return datetime.datetime.now().isoformat(timespec="seconds")
@@ -186,58 +203,19 @@ def apply(ctx):
         return True
 
     # ------------------------------------------------------------ 店の品揃え
-    def shop_context(app, owner):
-        """主の居る施設と土地。`tier` の正体を確かめるのに要る。"""
-        area = ui.current_area(app)
-        facility = frames.attr(frames.attr(app, "player", None), "location", None)
-        return {"owner": {"id": frames.attr(owner, "id", None),
-                          "name": frames.short(frames.attr(owner, "name", ""), 40)},
-                "facility": {"id": frames.attr(facility, "id", None),
-                             "type": ui.facility_type_of(facility),
-                             "tier": frames.attr(facility, "tier", None)},
-                "area": {"id": ui.area_id_of(area),
-                         "name": frames.attr(area, "name", None)}}
-
-    @ctx.wrap("__main__:ShoppingStartManagerRemake.set_item_from_world_data",
-              required=False, safe=True)
-    def set_item_from_world_data(orig, self, shop_owner_instance, next_tier=None,
-                                 *args, **kwargs):
-        before = inventory_values(shop_owner_instance)
-        result = orig(self, shop_owner_instance, next_tier, *args, **kwargs)
-        try:
-            if take_item_slot():
-                app = frames.attr(self, "app", None) or ui.find_app()
-                row = {"at": now(), "phase": "店の品揃え",
-                       "next_tier": brief(next_tier),
-                       "before": before,
-                       "after": inventory_values(shop_owner_instance)}
-                row.update(shop_context(app, shop_owner_instance))
-                record(row)
-                write("店の品揃え: {} tier={!r} 施設={} value {} -> {}".format(
-                    row["owner"]["name"], next_tier,
-                    "{}/{}".format(row["facility"]["type"], row["facility"]["tier"]),
-                    before, row["after"]))
-        except Exception:
-            ctx.log_exc("item level probe: cannot record the restock")
-        return result
-
     @ctx.wrap("__main__:ShoppingStartManagerRemake.generate_item_in_shopping",
               required=False, safe=True)
-    def generate_item_in_shopping(orig, self, item_data=None,
-                                  shop_owner_instance=None, item_stock_tier=None,
-                                  *args, **kwargs):
-        result = orig(self, item_data, shop_owner_instance, item_stock_tier,
-                      *args, **kwargs)
+    def generate_item_in_shopping(orig, self, *args, **kwargs):
+        """品揃えの1品に渡る段。作った品は主の持ち物へ入り、戻り値は `None`（版3で列を外した）。"""
+        result = orig(self, *args, **kwargs)
         try:
             if take_item_slot():
+                tier = frames.arg(args, kwargs, "item_stock_tier", SHOPPING_ARGS)
                 record({"at": now(), "phase": "店の品1つ",
-                        "item_stock_tier": brief(item_stock_tier),
-                        "item_data": brief(item_data),
-                        "result": item_brief(result) if result is not None
-                        else None,
-                        "result_type": type(result).__name__})
-                write("店の品1つ: tier={!r} -> {}".format(
-                    item_stock_tier, item_brief(result)))
+                        "item_stock_tier": brief(tier),
+                        "item_data": brief(frames.arg(args, kwargs, "item_data",
+                                                      SHOPPING_ARGS))})
+                write("店の品1つ: tier={!r}".format(tier))
         except Exception:
             ctx.log_exc("item level probe: cannot record the generated item")
         return result
@@ -245,37 +223,43 @@ def apply(ctx):
     # ------------------------------------------------------------ クラフト
     @ctx.wrap("__main__:ItemCraftManager.calculate_modification",
               required=False, safe=True)
-    def calculate_modification(orig, self, item_type=None, item_price=None,
-                               *args, **kwargs):
+    def calculate_modification(orig, self, *args, **kwargs):
         """**この MOD の主目的**。引数の実値と、戻り値の型を録る。
 
         名前は `item_price` だが、渡っているのが素材の合計なのか1つぶんなのか、
         戻り値が数なのか辞書なのかが読めていない。
         `318_` がクラフトへ直接手を出さずに済むかは、ここの答えで決まる。
         """
-        result = orig(self, item_type, item_price, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
         try:
             table("クラフトの式", "ItemCraftManager.calculate_modification",
-                  (item_type, item_price), kwargs, result)
+                  (frames.arg(args, kwargs, "item_type", MODIFICATION_ARGS),
+                   frames.arg(args, kwargs, "item_price", MODIFICATION_ARGS)),
+                  {}, result)
         except Exception:
             pass
         return result
 
     @ctx.wrap("scripts.llm.llm_manager:item_craft_generator",
               required=False, safe=True)
-    def item_craft_generator(orig, material_list=None, *args, **kwargs):
+    def item_craft_generator(orig, *args, **kwargs):
+        # 件数の枠を先に取る。枠が無ければ素材を写さない（版3）。
+        slot = False
         materials = None
         try:
-            if isinstance(material_list, (list, tuple)):
+            slot = take_item_slot()
+            material_list = frames.arg(args, kwargs, "material_list", CRAFT_ARGS)
+            if slot and isinstance(material_list, (list, tuple)):
                 materials = [item_brief(item) for item in material_list[:8]]
         except Exception:
             materials = None
-        result = orig(material_list, *args, **kwargs)
+        result = orig(*args, **kwargs)
         try:
-            if take_item_slot():
+            if slot:
                 record({"at": now(), "phase": "クラフトの生成",
                         "materials": materials,
-                        "args": [brief(value) for value in args],
+                        "args": [brief(value) for value in
+                                 (args if "material_list" in kwargs else args[1:])],
                         "result": brief(result),
                         "result_type": type(result).__name__})
                 write("クラフトの生成: 素材 {} -> {}".format(materials, brief(result)))
@@ -285,17 +269,18 @@ def apply(ctx):
 
     @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.place_crafted_item",
               required=False, safe=True)
-    def place_crafted_item(orig, self, generated_item=None,
-                           generated_item_id=None, *args, **kwargs):
+    def place_crafted_item(orig, self, *args, **kwargs):
         try:
             if take_item_slot():
+                item = frames.arg(args, kwargs, "generated_item", PLACE_ARGS)
                 record({"at": now(), "phase": "クラフトの成果物",
-                        "id": brief(generated_item_id),
-                        "item": item_brief(generated_item)})
-                write("クラフトの成果物: {}".format(item_brief(generated_item)))
+                        "id": brief(frames.arg(args, kwargs, "generated_item_id",
+                                               PLACE_ARGS)),
+                        "item": item_brief(item)})
+                write("クラフトの成果物: {}".format(item_brief(item)))
         except Exception:
             ctx.log_exc("item level probe: cannot record the crafted item")
-        return orig(self, generated_item, generated_item_id, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     ctx.log("item level probe: table<={} item<={}; log goes to out/{} and out/{}"
             .format(TABLE_SAMPLES, ITEM_SAMPLES, LOG_BASENAME, RECORD_BASENAME))

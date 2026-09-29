@@ -595,7 +595,7 @@ class ModContext:
 
         **消してよいもの**の置き場。
         ログ・調査の出力・status.json。
-        注入のたびに `tools/logrotate.py` が直下の `*.log` を1世代送る。
+        注入のたびに `tools/logrotate.py` が直下の `*.log` と `*.jsonl` を1世代送る。
         遊びの続きに要るものは `state_path()` へ。
         """
         path = os.path.join(self.out_dir, *parts)
@@ -695,6 +695,8 @@ class ModContext:
 
         `logger()` と同じく、書けなくても**例外にしない**し、
         tmp→replace も通さない（1行ずつ足すだけで、壊れても捨てられる）。
+        注入のたびに `tools/logrotate.py` が1世代送るのも `logger()` と同じ。
+        注入をまたいで数えたいときは世代送りを切る。
 
         以前はこの5行が**8本の probe に写されていた**（差はログ文だけ）。
         probe を1本書くたびに写しが1つ増える形になっていたので、ここへ集めた
@@ -2056,7 +2058,7 @@ def write_status(out_dir: str | None = None) -> str | None:
     1方向で済み、ゲームが終了した後でも読める。
 
     遅延当て直し（`_arm_deferred`）のたびに上書きされるので、中身は常に最新の boot。
-    ログ（`*.log`）とは別扱いなので世代管理の対象にしない。
+    ログ（`*.log` / `*.jsonl`）とは別扱いなので世代管理の対象にしない。
     常に「今の状態」を表すファイルで、履歴に意味が無い。
     """
     out_dir = out_dir or _state.get("out_dir")

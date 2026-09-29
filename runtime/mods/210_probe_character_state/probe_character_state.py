@@ -46,6 +46,20 @@
 200番台の約束どおり読み取りだけ。
 値は書かず、記録に失敗しても本体は必ず呼ぶ。
 `check_character_death` の差分を取るために対象の属性を読むが、書かない。
+
+版3: 問いは決着済み（VERIFICATION_LOG.md §2.29・GAME.md §2.22）なので、見張りは残したままログと手間を絞った。
+
+- 数えた人数を印と同じく `sys` に置いた。
+  版2は人数を apply ごとの器に持っていて、注入し直すたびに「人数が変わった」と読んで
+  census を丸ごと取り直していた（取り直し 326 回の大半がこれ）
+- 人別の表は世界ごとに前回の census との差分だけを書く。
+  列も参照・`is_dead`・`state`・`category`・`job` に絞った。
+  版2は1回 40KB 前後の表を毎回全部書いていて、1か月で約19MB、このログの7割だった。
+  サンプルの全属性はプロセスに1回
+- `check_character_death` は上限を先に見て、写し取りを try に入れた。
+  版2は上限の後も本体を呼ぶ前に毎回全属性を舐めていて、その部分は例外を握っていなかった。
+  何も変わらなかった回は1行にした
+- セーブ辞書の全文と `generate_npc` の記録に、プロセス単位の上限を付けた
 """
 
 import datetime
@@ -53,11 +67,21 @@ import json
 import sys
 
 from instantale_modloader import frames, ui
+from instantale_modloader.state import world_key
 
 LOG_BASENAME = "character_state.log"
 
 # 1プロセスに1回だけにするための印（`sys` に置く。TECH.md §3.6）。
 CENSUS_MARK = "_instantale_probe_charstate_census"
+# 最後に数えた人数（版3。apply ごとの器に持つと注入し直しで None に戻り、census を取り直していた）。
+COUNT_MARK = "_instantale_probe_charstate_counted"
+# 世界ごとの前回の人別の行 `{世界: {id: 行}}`（版3。差分だけを書くため）。
+ROWS_MARK = "_instantale_probe_charstate_rows"
+# サンプルの全属性を書いたか（版3。プロセスに1回）。
+SAMPLE_MARK = "_instantale_probe_charstate_sample"
+# セーブ辞書と `generate_npc` の記録数（版3。プロセス単位で数える）。
+SAVES_MARK = "_instantale_probe_charstate_saves"
+NPCS_MARK = "_instantale_probe_charstate_npcs"
 
 # 死亡の印が入っていそうな項目。
 # ここに無くても構わない。
@@ -98,14 +122,22 @@ DEAD_FLAG = "is_dead"
 
 # セーブ辞書のダンプ件数。
 # 数体ぶんあれば項目の一覧は分かる。
+# 版3でプロセス単位にした（版2は注入のたびに4体ぶん書いていた）。
 MAX_SAVE_DUMPS = 4
+
+# `generate_npc` を写す件数（プロセス単位）。
+# 版2は上限が無く、毎回呼び出し元と npc_data の全文を書いていた。
+MAX_NPC_DUMPS = 10
+
+# 人別の表の行に載せる項目（版3。版2は `STATE_ATTRS` を全部載せていた）。
+ROW_ATTRS = ("state", "category", "job")
 
 
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME, stamp=False)
-    # 上限つきの器。`counted` だけは None で始める。
-    # 人数を一度も数えられていないときは、次の機会に数え直したい。
-    state = {"deaths": 0, "saves": 0, "save_keys": None, "counted": None}
+    # 上限つきの器。
+    # 数えた人数・セーブ辞書の件数は `sys` に置く（版3。上の COUNT_MARK / SAVES_MARK）。
+    state = {"deaths": 0, "quiet_keys_written": False}
 
     def stamp():
         return datetime.datetime.now().isoformat(timespec="milliseconds")
@@ -171,31 +203,44 @@ def apply(ctx):
     # ------------------------------------------------------------------
     @ctx.wrap("__main__:BattlePhaseManager.check_character_death", required=False)
     def check_death(orig, self, *args, **kwargs):
-        # 署名は決め打ちしない（リコンでは (self, index, character)）。
-        character = None
-        for candidate in list(args) + list(kwargs.values()):
-            if frames.attr(candidate, "name") is not frames.MISSING:
-                character = candidate
-                break
-
-        keys = interesting_keys(character) if character is not None else []
-        before = snapshot(character, keys) if character is not None else {}
+        # 上限を先に見る（版3。版2は上限の後も本体の前で毎回全属性を舐めていた）。
+        # 写し取りは try の中に置く。失敗しても本体はそのまま1回呼ぶ。
+        character, keys, before = None, [], {}
+        if state["deaths"] < MAX_DEATH_EVENTS:
+            try:
+                # 署名は決め打ちしない（リコンでは (self, index, character)）。
+                for candidate in list(args) + list(kwargs.values()):
+                    if frames.attr(candidate, "name") is not frames.MISSING:
+                        character = candidate
+                        break
+                if character is not None:
+                    keys = interesting_keys(character)
+                    before = snapshot(character, keys)
+            except Exception:
+                character = None
+                ctx.log_exc("character state probe: death snapshot failed")
         result = orig(self, *args, **kwargs)
+        if character is None:
+            return result
         try:
-            if character is not None and state["deaths"] < MAX_DEATH_EVENTS:
-                state["deaths"] += 1
-                after = snapshot(character, keys)
-                changes = diff(before, after)
+            state["deaths"] += 1
+            changes = diff(before, snapshot(character, keys))
+            if changes:
                 write("\n[{}] check_character_death -> {}".format(
                     stamp(), frames.repr_value(result)))
                 write("    character: {}".format(
                     frames.describe_instance(character)))
-                if changes:
-                    write("    changed:")
-                    for line in changes:
-                        write(line)
-                else:
-                    write("    changed: <nothing in the watched keys>")
+                write("    changed:")
+                for line in changes:
+                    write(line)
+            else:
+                # 何も変わらなかった回は1行（版3。版2は見張った項目の一覧まで毎回4行書いていて、
+                # 記録の9割近くがこれだった）。項目の一覧は注入ごとに1回だけ出す。
+                write("[{}] check_character_death -> {}  {}  changed: <nothing>".format(
+                    stamp(), frames.repr_value(result),
+                    frames.repr_value(frames.attr(character, "name"))))
+                if not state["quiet_keys_written"]:
+                    state["quiet_keys_written"] = True
                     write("    watched: {}".format(keys))
         except Exception:
             ctx.log_exc("character state probe: death record failed")
@@ -206,6 +251,11 @@ def apply(ctx):
     # ------------------------------------------------------------------
     @ctx.wrap("__main__:World.generate_character", required=False)
     def generate_character(orig, self, *args, **kwargs):
+        # 件数はプロセス単位（版3。版2は注入のたびに鍵の一覧と4体ぶんの全文を書いていた）。
+        # 上限の後は何も見ずに素通しにする。
+        saves = getattr(sys, SAVES_MARK, 0)
+        if saves >= MAX_SAVE_DUMPS:
+            return orig(self, *args, **kwargs)
         try:
             value = None
             for candidate in list(args)[1:] + list(kwargs.values()):
@@ -213,22 +263,20 @@ def apply(ctx):
                     value = candidate
                     break
             if isinstance(value, dict):
-                if state["save_keys"] is None:
-                    state["save_keys"] = sorted(value)
+                setattr(sys, SAVES_MARK, saves + 1)
+                if saves == 0:
                     write("\n" + "=" * 72)
                     write("[{}] character save keys ({}):".format(
                         stamp(), len(value)))
-                    write("    " + ", ".join(state["save_keys"]))
+                    write("    " + ", ".join(sorted(str(key) for key in value)))
                     # 名前に死亡の気配があるものを名指しする。
                     hits = [key for key in value
                             if any(hint in str(key).lower()
                                    for hint in STATE_HINTS)]
                     write("    state-ish keys: {}".format(hits or "<none>"))
-                if state["saves"] < MAX_SAVE_DUMPS:
-                    state["saves"] += 1
-                    write("\n[{}] generate_character({})".format(
-                        stamp(), frames.repr_value(args[0] if args else None)))
-                    write(as_json(value))
+                write("\n[{}] generate_character({})".format(
+                    stamp(), frames.repr_value(args[0] if args else None)))
+                write(as_json(value))
         except Exception:
             ctx.log_exc("character state probe: save dump failed")
         return orig(self, *args, **kwargs)
@@ -247,8 +295,13 @@ def apply(ctx):
 
         遊んでいて発火しない可能性もある（世界生成でしか呼ばれないなら）。
         掛け捨ての保険として置いておく。
+        実際には遊んでいる間にも発火していた（版2までに約300回）ので、版3でプロセス単位の上限を付けた。
         """
+        count = getattr(sys, NPCS_MARK, 0)
+        if count >= MAX_NPC_DUMPS:
+            return orig(*args, **kwargs)
         try:
+            setattr(sys, NPCS_MARK, count + 1)
             write("\n" + "=" * 72)
             write("[{}] generate_npc(args={} kwargs={})".format(
                 stamp(),
@@ -284,7 +337,7 @@ def apply(ctx):
         if not isinstance(characters, dict) or not characters:
             return
         setattr(sys, CENSUS_MARK, True)
-        state["counted"] = len(characters)
+        setattr(sys, COUNT_MARK, len(characters))
 
         # 参照元を集める。
         # **誰がどこから指されているか**が本題。
@@ -321,28 +374,28 @@ def apply(ctx):
         except Exception:
             party = set()
 
-        sample = next(iter(characters.values()))
-        keys = interesting_keys(sample)
+        # 行はまとめて1回で書く（版3。版2は1行ごとにファイルを開いていて、1回の census で 170 回前後開いていた）。
+        lines = ["", "#" * 72, "# {}  character census".format(stamp()), "#" * 72,
+                 "characters={} facilities={} party={}".format(
+                     len(characters), facilities_seen, sorted(party))]
 
-        write("\n" + "#" * 72)
-        write("# {}  character census".format(stamp()))
-        write("#" * 72)
-        write("characters={} facilities={} party={}".format(
-            len(characters), facilities_seen, sorted(party)))
-        write("watched keys: {}".format(keys))
-        write("\nvars(sample character) [{}]:".format(
-            frames.describe_instance(sample)))
-        for key, value in sorted(own_dict(sample).items()):
-            write("    {:<28} = {}".format(key, frames.repr_value(value)))
+        # サンプルの全属性はプロセスに1回（版3。版2は census のたびに 4KB 前後書いていた）。
+        if not getattr(sys, SAMPLE_MARK, False):
+            setattr(sys, SAMPLE_MARK, True)
+            sample = next(iter(characters.values()))
+            lines.append("watched keys: {}".format(interesting_keys(sample)))
+            lines.append("\nvars(sample character) [{}]:".format(
+                frames.describe_instance(sample)))
+            for key, value in sorted(own_dict(sample).items()):
+                lines.append("    {:<28} = {}".format(key, frames.repr_value(value)))
 
-        write("\n--- per character ---")
-        write("  id / name / refs(owner,roster,resident,party) / state")
+        # 人別の行は、この世界の前回の census と違う行だけを書く（版3）。
+        # 前回が無ければ（この世界をこのプロセスで初めて数えたとき）全部書く。
+        rows = {}
         unreferenced = []
         for index, (character_id, character) in enumerate(
                 sorted(characters.items(), key=lambda kv: str(kv[0]))):
             if index >= MAX_CHARACTERS:
-                write("    ... {} more (limit {})".format(
-                    len(characters) - MAX_CHARACTERS, MAX_CHARACTERS))
                 break
             cid = str(character_id)
             refs = []
@@ -356,12 +409,44 @@ def apply(ctx):
                 refs.append("party")
             if not refs:
                 unreferenced.append(cid)
-            values = snapshot(character, keys)
-            write("  {:<6} {:<24} {:<40} {}".format(
+            values = snapshot(character, ROW_ATTRS)
+            values[DEAD_FLAG] = frames.repr_value(flag_of(character, DEAD_FLAG))
+            rows[cid] = "  {:<6} {:<24} {:<40} {}".format(
                 cid,
                 frames.repr_value(frames.attr(character, "name"))[:24],
                 ", ".join(refs)[:40] or "<no reference>",
-                "  ".join("{}={}".format(k, v) for k, v in sorted(values.items()))))
+                "  ".join("{}={}".format(k, v) for k, v in sorted(values.items())))
+
+        try:
+            wkey = world_key(app)
+        except Exception:
+            wkey = "_"
+        by_world = getattr(sys, ROWS_MARK, None)
+        if not isinstance(by_world, dict):
+            by_world = {}
+            setattr(sys, ROWS_MARK, by_world)
+        previous = by_world.get(wkey)
+        by_world[wkey] = rows
+
+        lines.append("\n--- per character ---")
+        lines.append("  id / name / refs(owner,roster,resident,party) / "
+                     "category is_dead job state")
+        if previous is None:
+            lines.append("  (first census of this world in this process: all rows)")
+            lines.extend(rows[cid] for cid in rows)
+        else:
+            changed = [cid for cid in rows if previous.get(cid) != rows[cid]]
+            gone = [cid for cid in previous if cid not in rows]
+            lines.append("  (diff against the previous census of this world: "
+                         "{} new/changed, {} gone, {} unchanged)".format(
+                             len(changed), len(gone), len(rows) - len(changed)))
+            lines.extend(rows[cid] for cid in changed)
+            if gone:
+                lines.append("  gone: {}".format(gone[:40]))
+        if len(characters) > MAX_CHARACTERS:
+            lines.append("    ... {} more (limit {})".format(
+                len(characters) - MAX_CHARACTERS, MAX_CHARACTERS))
+        write("\n".join(lines))
 
         # ★ ここが答えの出る場所。
         #
@@ -382,26 +467,27 @@ def apply(ctx):
             else:
                 alive.append(cid)
 
-        write("\n--- summary ---")
-        write("  facility owners (removing these breaks the world): {}".format(
-            len(owners)))
-        write("  listed in a facility roster: {}".format(len(rosters)))
-        write("  area residents: {}".format(len(residents)))
-        write("  referenced by nothing: {} {}".format(
-            len(unreferenced), unreferenced[:40]))
-        write("  {}=True: {} {}".format(DEAD_FLAG, len(dead), dead[:40]))
-        write("  {}=False/absent: {}".format(DEAD_FLAG, len(alive)))
-        write("  dead but still referenced: {} {}".format(
-            len(dead_referenced), dead_referenced[:40]))
+        lines = ["\n--- summary ---",
+                 "  facility owners (removing these breaks the world): {}".format(
+                     len(owners)),
+                 "  listed in a facility roster: {}".format(len(rosters)),
+                 "  area residents: {}".format(len(residents)),
+                 "  referenced by nothing: {} {}".format(
+                     len(unreferenced), unreferenced[:40]),
+                 "  {}=True: {} {}".format(DEAD_FLAG, len(dead), dead[:40]),
+                 "  {}=False/absent: {}".format(DEAD_FLAG, len(alive)),
+                 "  dead but still referenced: {} {}".format(
+                     len(dead_referenced), dead_referenced[:40])]
         if dead and not dead_referenced:
-            write("  -> the game drops the references itself when the flag goes up.")
+            lines.append("  -> the game drops the references itself when the flag goes up.")
         elif dead_referenced:
-            write("  -> the flag alone does NOT unlink them; the rosters keep")
-            write("     the id. Check in game whether they still show up as a")
-            write("     person you can talk to at that facility.")
+            lines.append("  -> the flag alone does NOT unlink them; the rosters keep")
+            lines.append("     the id. Check in game whether they still show up as a")
+            lines.append("     person you can talk to at that facility.")
         else:
-            write("  -> nobody is flagged dead yet; re-run this census after")
-            write("     one dies to get the comparison.")
+            lines.append("  -> nobody is flagged dead yet; re-run this census after")
+            lines.append("     one dies to get the comparison.")
+        write("\n".join(lines))
 
     # 世界が載るのはタイトルで「つづきから」を押した後。
     # `on_ready` の時点ではまだ無いことがあるので、**プレイヤーが何か押すたびに試す**。
@@ -418,10 +504,16 @@ def apply(ctx):
                 # census でしか分からない。
                 characters = getattr(getattr(self, "world", None),
                                      "characters", None)
-                if (isinstance(characters, dict)
-                        and len(characters) != state["counted"]):
+                counted = getattr(sys, COUNT_MARK, None)
+                if not isinstance(characters, dict):
+                    pass
+                elif counted is None:
+                    # 印は立っているが人数が無い ＝ 版2以前がこのプロセスで数えた。
+                    # 注入し直しただけなので取り直さず、今の人数を控えるだけにする（版3）。
+                    setattr(sys, COUNT_MARK, len(characters))
+                elif len(characters) != counted:
                     write("\n[{}] character count {} -> {}; re-running census"
-                          .format(stamp(), state["counted"], len(characters)))
+                          .format(stamp(), counted, len(characters)))
                     census(force=True)
         except Exception:
             ctx.log_exc("character state probe: census retry failed")

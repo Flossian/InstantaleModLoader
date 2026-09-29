@@ -46,6 +46,14 @@
 
 `out/vacation.log`（読む用）と `out/vacation.jsonl`（1画面・1窓=1行、
 突き合わせる用）。
+
+版3: 各段の窓（`Vacation*Manager.execute`）の包みで、本体を呼ぶ前の控え
+（所持金・ログの見出し）を try に入れた。版2ではここが投げると本体が呼ばれずに
+宿泊の段が止まる形だった（実機で踏んだ記録は無い）。
+あわせて全部の包みを、受け取った引数をそのまま本体へ渡す形にした
+（キーワードで来た引数を位置へ直さない。VERIFICATION.md §3.76 の `333_` の件）。
+`change_background_image_to_inn_room` の呼び出し元は窓の外の1行にだけ付ける
+（窓の中は所属する段が分かっている。呼び出し元を組むのは1回あたり約1ms）。
 """
 
 import datetime
@@ -170,20 +178,29 @@ def apply(ctx):
             return result
 
         @ctx.wrap("__main__:{}.execute".format(cls_name), required=False)
-        def manager_execute(orig, self, choice_text=None, *args, **kwargs):
-            """窓の前後の所持金と、窓の間の日数・文言・背景切り替えを1行に。"""
-            app = getattr(self, "app", None) or ui.find_app()
+        def manager_execute(orig, self, *args, **kwargs):
+            """窓の前後の所持金と、窓の間の日数・文言・背景切り替えを1行に。
+
+            `safe=True` を付けないのは、本体が投げた例外を窓の片付けの後にそのまま
+            上げたいため。本体を呼ぶ前の控えは try に入れ、失敗しても本体は必ず1回呼ぶ（版3）。
+            """
+            app = choice_text = gold_before = None
             window = {"cls": cls_name, "texts": [], "days": [], "dots": 0,
                       "overflow": 0, "backgrounds": []}
-            gold_before = ui.gold_of(app)
             started = time.monotonic()
-            state["windows"].append(window)
             try:
+                app = getattr(self, "app", None) or ui.find_app()
+                choice_text = frames.arg(args, kwargs, "choice_text", 0)
+                gold_before = ui.gold_of(app)
+                state["windows"].append(window)
                 write("-" * 72)
                 write("{}.execute: choice={!r} init_args={} gold={}".format(
                     cls_name, choice_text,
                     getattr(self, "_probe_vacation", None), gold_before))
-                return orig(self, choice_text, *args, **kwargs)
+            except Exception:
+                ctx.log_exc("vacation probe: cannot open the window")
+            try:
+                return orig(self, *args, **kwargs)
             finally:
                 try:
                     state["windows"].remove(window)
@@ -235,36 +252,41 @@ def apply(ctx):
 
     # ------------------------------------------------- 窓の間の日数・文言・背景
     @ctx.wrap("__main__:InstantaleApp.elapse_days", required=False, safe=True)
-    def elapse_days(orig, self, days, *args, **kwargs):
+    def elapse_days(orig, self, *args, **kwargs):
         if state["windows"]:
             try:
+                days = frames.arg(args, kwargs, "days", 0)
                 state["windows"][-1]["days"].append(days)
                 write("elapse_days({!r}) in {}".format(
                     days, state["windows"][-1]["cls"]))
             except Exception:
                 pass
-        return orig(self, days, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     @ctx.wrap("__main__:InstantaleApp.change_background_image_to_inn_room",
               required=False, safe=True)
-    def inn_room_background(orig, self, quality=None, *args, **kwargs):
+    def inn_room_background(orig, self, *args, **kwargs):
         """`quality` の実値がここで裸のまま観測できる。窓の外でも録る。"""
         try:
+            quality = frames.arg(args, kwargs, "quality", 0)
             holder = state["windows"][-1]["backgrounds"] if state["windows"] \
                 else None
-            write("change_background_image_to_inn_room(quality={!r}) from {}"
-                  .format(quality, frames.caller()))
             if holder is not None:
+                write("change_background_image_to_inn_room(quality={!r}) in {}"
+                      .format(quality, state["windows"][-1]["cls"]))
                 holder.append(frames.repr_value(quality))
             else:
+                write("change_background_image_to_inn_room(quality={!r}) from {}"
+                      .format(quality, frames.caller()))
                 record({"at": now(), "phase": "inn_background",
                         "quality": frames.repr_value(quality)})
         except Exception:
             ctx.log_exc("vacation probe: cannot record the background")
-        return orig(self, quality, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     @ctx.wrap("__main__:InstantaleApp.add_text", required=False, safe=True)
-    def add_text(orig, self, context=None, *args, **kwargs):
+    def add_text(orig, self, *args, **kwargs):
+        context = frames.arg(args, kwargs, "context", 0) if state["windows"] else None
         if state["windows"] and isinstance(context, str):
             try:
                 window = state["windows"][-1]
@@ -276,7 +298,7 @@ def apply(ctx):
                     window["overflow"] += 1
             except Exception:
                 pass
-        return orig(self, context, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     ctx.log("vacation probe installed; log={} records={}".format(
         log_path, record_path))

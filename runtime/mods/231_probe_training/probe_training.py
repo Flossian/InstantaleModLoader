@@ -26,9 +26,17 @@ r"""計測: 施設での訓練。ゲームは変えない。
     out\training.jsonl    1窓＝1行。後から数える用
 
 対象はすべて `targets.txt` の実在クラス（GAME.md §2.17 の表）。
+
+版3（見直し）:
+  * `TrainingStartManager.execute` / `TrainingPhaseManager.execute` の包みだけ `safe=True` が
+    無かった（orig の前の所持金・日付の読み取りが投げるとゲームへ抜け、orig が呼ばれない）。付けた
+  * 包みは受け取った引数をそのまま `orig` へ渡す形にした（キーワードを位置に直さない）
+  * `__init__` の引数をゲームの Manager の属性（`_probe_training`）に控えていたのを、
+    この probe の弱参照の表に移した
 """
 import datetime
 import time
+import weakref
 
 from instantale_modloader import frames, ui
 
@@ -58,6 +66,26 @@ def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
     record = ctx.jsonl(RECORD_BASENAME)
     state = {"windows": []}
+    #: Manager ごとの `__init__` の引数（版3）。版2まではゲームの Manager に
+    #: `_probe_training` という属性を足して控えていた（読み取りだけの約束の外）。
+    inits = weakref.WeakKeyDictionary()
+    inits_by_id = {}
+
+    def remember_init(manager, init_args):
+        try:
+            inits[manager] = init_args
+        except TypeError:
+            # 弱参照を持てない型。最後の数件だけ id で控える。
+            inits_by_id[id(manager)] = init_args
+            while len(inits_by_id) > 8:
+                inits_by_id.pop(next(iter(inits_by_id)))
+
+    def init_args_of(manager):
+        try:
+            found = inits.get(manager)
+        except TypeError:
+            found = None
+        return found if found is not None else inits_by_id.get(id(manager))
 
     def now():
         return datetime.datetime.now().isoformat(timespec="seconds")
@@ -124,10 +152,11 @@ def apply(ctx):
         return result
 
     @ctx.wrap("__main__:DisplayTrainingChoice.execute", required=False, safe=True)
-    def choice_execute(orig, self, choice_text=None, *args, **kwargs):
+    def choice_execute(orig, self, *args, **kwargs):
         """押された文言（`訓練を受ける((数)G)` の形）と、その後に並ぶもの。"""
+        choice_text = args[0] if args else kwargs.get("choice_text")
         write("DisplayTrainingChoice.execute: choice={!r}".format(choice_text))
-        result = orig(self, choice_text, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
         try:
             app = getattr(self, "app", None) or ui.find_app()
             log_buttons(app, "after the choice")
@@ -143,17 +172,19 @@ def apply(ctx):
             result = orig(self, *args, **kwargs)
             try:
                 # 引数の並びを決め打ちしない。app を除いた位置引数をそのまま控える。
-                self._probe_training = [frames.repr_value(a) for a in args[1:]]
+                init_args = [frames.repr_value(a) for a in args[1:]]
+                remember_init(self, init_args)
                 write("{}.__init__(args={} kwargs={}) from {}".format(
-                    cls_name, self._probe_training, frames.repr_value(kwargs),
+                    cls_name, init_args, frames.repr_value(kwargs),
                     frames.caller()))
             except Exception:
                 pass
             return result
 
-        @ctx.wrap("__main__:{}.execute".format(cls_name), required=False)
-        def manager_execute(orig, self, choice_text=None, *args, **kwargs):
+        @ctx.wrap("__main__:{}.execute".format(cls_name), required=False, safe=True)
+        def manager_execute(orig, self, *args, **kwargs):
             """窓の前後の所持金と日付、窓の間の日数・文言を1行に。"""
+            choice_text = args[0] if args else kwargs.get("choice_text")
             app = getattr(self, "app", None) or ui.find_app()
             window = {"cls": cls_name, "texts": [], "days": [], "dots": 0,
                       "overflow": 0, "inner": []}
@@ -165,8 +196,8 @@ def apply(ctx):
                 write("-" * 72)
                 write("{}.execute: choice={!r} init_args={} gold={} day={}".format(
                     cls_name, choice_text,
-                    getattr(self, "_probe_training", None), gold_before, day_before))
-                return orig(self, choice_text, *args, **kwargs)
+                    init_args_of(self), gold_before, day_before))
+                return orig(self, *args, **kwargs)
             finally:
                 try:
                     state["windows"].remove(window)
@@ -180,7 +211,7 @@ def apply(ctx):
                         "phase": "execute",
                         "cls": cls_name,
                         "choice_text": choice_text,
-                        "init_args": getattr(self, "_probe_training", None),
+                        "init_args": init_args_of(self),
                         "gold_before": gold_before,
                         "gold_after": gold_after,
                         "gold_moved": (gold_before - gold_after)
@@ -242,9 +273,10 @@ def apply(ctx):
 
     # ------------------------------------------------- 日数送りと文言（窓の内外）
     @ctx.wrap("__main__:InstantaleApp.elapse_days", required=False, safe=True)
-    def elapse_days(orig, self, days, *args, **kwargs):
+    def elapse_days(orig, self, *args, **kwargs):
         """窓の中なら窓に足す。外でも呼び出し元つきで残す（Clock で進むビルドの検出）。"""
         try:
+            days = args[0] if args else kwargs.get("days")
             if state["windows"]:
                 state["windows"][-1]["days"].append(days)
                 write("elapse_days({!r}) in {}".format(days, state["windows"][-1]["cls"]))
@@ -253,11 +285,12 @@ def apply(ctx):
                     days, frames.caller()))
         except Exception:
             pass
-        return orig(self, days, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     @ctx.wrap("__main__:InstantaleApp.add_text", required=False, safe=True)
-    def add_text(orig, self, context=None, *args, **kwargs):
-        if state["windows"] and isinstance(context, str):
+    def add_text(orig, self, *args, **kwargs):
+        context = (args[0] if args else kwargs.get("context")) if state["windows"] else None
+        if isinstance(context, str):
             try:
                 window = state["windows"][-1]
                 if context.strip() and not context.strip(".。 　"):
@@ -268,6 +301,6 @@ def apply(ctx):
                     window["overflow"] += 1
             except Exception:
                 pass
-        return orig(self, context, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     ctx.log("training probe: ready ({}, {})".format(LOG_BASENAME, RECORD_BASENAME))

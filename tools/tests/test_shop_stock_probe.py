@@ -10,7 +10,9 @@
   増減     … 増えた鍵・減った鍵・同じ鍵のまま中身が入れ替わった鍵を書き分ける
   雛形     … 施設の goods / stock_tier / stock_update_date と採番台帳を写す
   誕生     … Item.__init__ の id・持ち主・attributes・呼び出し元を写す
-  枠       … 店の外の誕生は ITEM_SAMPLES で止まり、店の場面の中は止まらない
+  枠       … 店の外の誕生は既定で書かず、ITEM_SAMPLES で止まり、店の場面の中は止まらない
+  引数     … 受け取った引数をキーワードのまま orig へ渡す（版3）
+  窓       … 生成の入口の境目は店の場面の中だけ。枠の後は持ち物を写さない（版3）
   安全     … 施設も主も引けない場面で例外を出さない
 """
 import importlib.util
@@ -255,14 +257,82 @@ def main():
     row = [json.loads(line) for line in read(ctx, RECORD_NAME).splitlines()]
     check("記録: jsonl に境目が1件", len(row) == 1, len(row))
     if row:
-        goods = (row[0].get("before") or {}).get("goods") or {}
-        check("雛形: goods を写す", goods.get("goods") == ["乾いた砂の糧食",
-                                                          "砂漠のハーブティー"], goods)
+        # 版3: 前後の持ち物の丸写しをやめ、差分と雛形の要約（品名は件数）だけにした。
+        check("記録: 前後の丸写しを残さない",
+              "before" not in row[0] and "after" not in row[0], sorted(row[0]))
+        check("記録: 差分の文を残す", "+51=乾いた砂の糧食" in row[0].get("changed", ""),
+              row[0].get("changed"))
+        goods = row[0].get("goods") or {}
+        check("雛形: goods の件数を写す", goods.get("goods") == 2, goods)
         check("雛形: stock_update_date と今日を写す",
               goods.get("stock_update_date") == 404 and goods.get("day") == 404,
               goods)
-        check("雛形: 主を写す", row[0]["before"]["shop_who"] == "ハルマン(118)",
-              row[0]["before"]["shop_who"])
+        check("雛形: 主を写す", row[0].get("shop_who") == "ハルマン(118)",
+              row[0].get("shop_who"))
+
+    # ---- 受け取った引数をそのまま渡す（版3。位置に直さない）----------------
+    ctx = fresh(module)
+    app, owner, player = stage()
+    seen_args = []
+
+    def window(self, *args, **kwargs):
+        seen_args.append((args, dict(kwargs)))
+        return "開いた"
+
+    kwargs = {"left_inventory_obtainer": owner, "right_inventory_obtainer": player,
+              "left_label_text": "店", "situation": "shop"}
+    out = ctx.hooks[WINDOW](window, app, **kwargs)
+    check("素通し: キーワードのまま渡す",
+          out == "開いた" and seen_args == [((), kwargs)], seen_args)
+    check("素通し: キーワードでも売買画面を書く", "売買画面: 左=ハルマン(118)" in read(ctx),
+          read(ctx))
+    seen_args[:] = []
+    ctx.hooks[BUY](window, app, item_instance=Item("item_9", "水"))
+    check("素通し: buy_item もキーワードのまま",
+          len(seen_args) == 1 and seen_args[0][0] == ()
+          and list(seen_args[0][1]) == ["item_instance"], seen_args)
+
+    # ---- 生成の入口は店の場面の外では録らない（版3）------------------------
+    ctx = fresh(module)
+    app, owner, player = stage()
+
+    def make_one(self, *args, **kwargs):
+        self.player.inventory["item_70"] = Item("item_70", "拾い物")
+        return None
+
+    ctx.hooks["__main__:InstantaleApp.generate_item_from_dict"](make_one, app, {})
+    check("窓の外: 生成の入口の境目は書かない", "境目" not in read(ctx), read(ctx))
+    check("窓の外: 本体は呼ばれている", "item_70" in player.inventory,
+          sorted(player.inventory))
+
+    def open_shop(self, *args, **kwargs):
+        ctx.hooks["__main__:InstantaleApp.generate_item_from_dict"](
+            lambda s, *a, **k: owner.inventory.__setitem__(
+                "52", Item("52", "乾いた砂の糧食")), app, {})
+        return None
+
+    ctx.hooks[EXECUTE](open_shop, ShoppingStartManagerRemake(app), "売買する")
+    check("窓の中: 生成の入口の境目を書く", "境目 generate_item_from_dict" in read(ctx),
+          read(ctx))
+
+    # ---- 境目の枠を使い切った後は写さずに素通し ----------------------------
+    ctx = fresh(module, BOUNDARY_SAMPLES=0)
+    app, owner, player = stage()
+    reads = []
+    original_snap_target = app.player
+
+    class CountingPlayer(Character):
+        def __getattribute__(self, name):
+            if name == "inventory":
+                reads.append(name)
+            return object.__getattribute__(self, name)
+
+    app.player = CountingPlayer("0", "ミツバ")
+    out = ctx.hooks[BUY](lambda self, *a, **k: "買えた", app, Item("item_9", "水"))
+    check("枠の後: 素通しする", out == "買えた", out)
+    check("枠の後: 持ち物を写さない", reads == [], reads)
+    app.player = original_snap_target
+    fresh(module, BOUNDARY_SAMPLES=400)
 
     # ---- 同じ鍵のまま中身が入れ替わった場合 ----------------------------
     ctx = fresh(module)
@@ -280,19 +350,35 @@ def main():
     # ---- 品の誕生 -------------------------------------------------------
     ctx = fresh(module)
     app, owner, player = stage()
-    born = Item.__new__(Item)
 
     def init(self, *args, **kwargs):
         Item.__init__(self, "51", "乾いた砂の糧食",
                       {"回復": 269, "疲労負荷": 9}, owner)
         return None
 
-    ctx.hooks[ITEM_INIT](init, born)
+    # 版3: 店の外の誕生は既定（ITEM_SAMPLES=0）で録らない。
+    outside = Item.__new__(Item)
+    ctx.hooks[ITEM_INIT](init, outside)
+    check("誕生: 店の外は既定で書かない", "品の誕生" not in read(ctx), read(ctx))
+    check("誕生: 店の外でも本体は走る", outside.id == "51", vars(outside))
+
+    def shop_scene(self, *args, **kwargs):
+        ctx.hooks[ITEM_INIT](init, Item.__new__(Item))
+        return None
+
+    ctx.hooks[EXECUTE](shop_scene, ShoppingStartManagerRemake(app), "売買する")
     log = read(ctx)
+    check("誕生: 店の中は書く", "品の誕生" in log, log)
     check("誕生: id と名前を書く", "id='51'" in log and "乾いた砂の糧食" in log, log)
     check("誕生: 持ち主を書く", "主=ハルマン(118)" in log, log)
     check("誕生: 素の attributes を書く", "'疲労負荷': 9" in log, log)
     check("誕生: 呼び出し元を書く", "呼び出し元:" in log, log)
+    caller_rows = [json.loads(line).get("caller", "")
+                   for line in read(ctx, RECORD_NAME).splitlines()
+                   if json.loads(line).get("phase") == "品の誕生"]
+    check("誕生: 呼び出し元はフォルダを落とす",
+          caller_rows and all("\\" not in c and "/" not in c for c in caller_rows),
+          caller_rows)
 
     # ---- 枠（店の外は ITEM_SAMPLES で止まる）---------------------------
     ctx = fresh(module, ITEM_SAMPLES=2)
@@ -315,7 +401,7 @@ def main():
     check("安全: 例外を出していない", not ctx.errors, ctx.errors)
 
     # 設定を既定へ戻してから終える。
-    fresh(module, ITEM_SAMPLES=200)
+    fresh(module, ITEM_SAMPLES=0)
 
     print("")
     if failures:

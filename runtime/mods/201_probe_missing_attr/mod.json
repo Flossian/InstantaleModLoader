@@ -10,7 +10,7 @@
     "en": "Finds where the missing FreeInputStart attribute is read, via a __getattr__ tripwire",
     "ja": "FreeInputStart の欠落属性を読んでいる箇所を、__getattr__ トリップワイヤで特定する"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "debug": true
 }

@@ -14,6 +14,10 @@ llm_manager はサマライザ5種とファシリテータ4種を公開してお
 全部包んでシーケンス引数の長さを片端から記録する方が早い。
 空であれば呼び出しが成功していても印を付けるので、
 次にクラッシュする前に犯人が浮かび上がる。
+
+版3: 包みを `safe=True` にし、失敗時の書き出し（`format_locals`）を try に入れた。
+版2までは書き出しそのものが投げると、その例外がゲームの素の例外に取って代わっていた。
+原因は §2.40 で決着しているが、記録は1回の呼び出しにつき1行と軽いので残す。
 """
 
 import sys
@@ -96,7 +100,7 @@ def apply(ctx):
         # ループ変数を閉じ込める工場関数。
         # これが無いと全ラッパが最後の name を見る。
         def make_probe(fn_name):
-            @ctx.wrap("{}:{}".format(MODULE, fn_name), required=False)
+            @ctx.wrap("{}:{}".format(MODULE, fn_name), required=False, safe=True)
             def probe(orig, *args, **kwargs):
                 # 計測の失敗で本体の呼び出しを妨げない。
                 try:
@@ -107,8 +111,13 @@ def apply(ctx):
                     return orig(*args, **kwargs)
                 except Exception as exc:
                     # 観測に徹するので、記録したうえで必ず再送出する。
-                    write("!! {} raised {}: {}".format(fn_name, type(exc).__name__, exc))
-                    write(format_locals(exc.__traceback__, depth=3))
+                    # 書き出しの失敗が素の例外に取って代わらないよう囲む（版3）。
+                    try:
+                        write("!! {} raised {}: {}".format(
+                            fn_name, type(exc).__name__, exc))
+                        write(format_locals(exc.__traceback__, depth=3))
+                    except Exception:
+                        pass
                     raise
             return probe
 

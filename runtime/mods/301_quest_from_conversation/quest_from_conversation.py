@@ -175,7 +175,7 @@ ENABLE_GENERATION = True
 # "mod" は既定では使わない。`QuestChoiceManager` の `quest_type` 引数は、
 # クエスト辞書の `quest_type` フィールド（`'normal_quest'` / `'random_quest'`）
 # とは別の語彙で、セーブのフィールド値をそのまま渡すと `KeyError` になり
-# ゲームが落ちる（GAME.md §2.2）。正しい値が `206_` の総当たりで判明するまで封じる。
+# ゲームが落ちる（GAME.md §2.9）。正しい値が `206_` の総当たりで判明するまで封じる。
 LIST_MODE = "game"
 
 # "mod" モードで使う quest_type。

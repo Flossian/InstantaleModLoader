@@ -33,6 +33,17 @@ HP・防御が別々に散っていることまでは読めた（Lv77 で素点 
     それでも呼ぶ前後で全員の HP と状態異常を比べ、動いていたらその場で止めて以後は試さない（`kind: dry_abort`）。
     319 が1手の値を控えるのはゲームの `handle_battle_situation` の間だけなので、戦闘の開始なら控えは空で上書きしない。
     試し打ちの間は、この probe 自身の `act` の記録を止める
+  * 版3の続き（リリース前）: 試し打ちを「副作用なし・最小限」に絞った（版3の実機で問いは決着した。GAME.md §2.10.4）。
+    - ゲームの素点には乱数の揺らぎがあるので、試し打ちがゲームの乱数を引いて乱数の列をずらしていた
+      （戦闘の開始ごとに「人数 × 12通り × 回数」、5人で 180 回）。呼ぶ前に `random` の全体の状態と、
+      numpy の全体の状態（import 済みのときだけ）と、`__main__` / `scripts.functions` が持つ
+      `random.Random` の状態を控え、終わったら戻す（`rng_saved`）
+    - 同じ相手（名前とレベル）は1プロセス1回だけ試す（控えは `sys` の `DRY_SEEN_MARK`。注入し直しても出直さない）
+    - 倍率の2通り（weak の物理の 2 と 0.67）は外した。倍率がこの段に入らないことは版3で決着している
+    - 試し打ちの間は `sys` の `DRY_THREAD_MARK` に自分のスレッドの id を置く。
+      同じ `calculate_battle_effect` を包む他の probe（`222_`）が、これを見て記録を控えられるようにするため
+      （版3の実機では、222 が試し打ちの呼び出しを「手の外の calculate」として約 1,400 行録っていた）
+    - `start_battle` の包みで、try の中で作る値を try の外の試し打ちが使っていたので、先に None で用意した
 
 この probe は読み込み順で `319_` / `333_` より外側に入る。
 `get_instant_damage` の引数（素点と防御）は誰も書き換えないので素の値が録れるが、戻りは 319 が置き換えた後の値。
@@ -43,6 +54,8 @@ HP・防御が別々に散っていることまでは読めた（Lv77 で素点 
 """
 
 import datetime
+import random
+import sys
 import threading
 import time
 
@@ -74,8 +87,61 @@ DRY_REPEAT = 3
 #: 試し打ちの裁き。
 DRY_POWERS = ("weak", "normal", "strong", "very_strong", "extreme")
 DRY_CATEGORIES = ("physical", "magical")
-#: 倍率の掛かり方を見る分（weak の物理だけ）。
-DRY_EXTRA = (("weak", "physical", 2), ("weak", "physical", 0.67))
+#: 倍率の掛かり方を見る分。版3では weak の物理に 2 と 0.67 を足していたが、
+#: 倍率がこの段に入らないと決着したので、版3の続きで外した。
+DRY_EXTRA = ()
+
+#: 試し打ちを済ませた相手（名前とレベル）の控え。1プロセス1回にするため `sys` に置く（版3の続き）。
+DRY_SEEN_MARK = "_instantale_probe_236_dry_seen"
+
+#: 試し打ちの間だけ、試し打ちをしているスレッドの id を置く（版3の続き）。
+#: 同じ関数を包む他の probe は、`getattr(sys, DRY_THREAD_MARK, None) == threading.get_ident()`
+#: のあいだ記録を控えてよい。
+DRY_THREAD_MARK = "_instantale_probe_dry_run_thread"
+
+#: 乱数の控えを探すモジュール（`random.Random` を持っていれば状態を戻す。版3の続き）。
+RNG_MODULES = ("__main__", "scripts.functions")
+
+
+def rng_saved():
+    """いまの乱数の状態を控える。`[(戻す関数, 状態, 名前)]`。"""
+    saved = [(random.setstate, random.getstate(), "random")]
+    numpy = sys.modules.get("numpy")
+    legacy = getattr(getattr(numpy, "random", None), "get_state", None)
+    if callable(legacy):
+        try:
+            saved.append((numpy.random.set_state, legacy(), "numpy.random"))
+        except Exception:
+            pass
+    seen = {id(getattr(random, "_inst", None))}
+    for name in RNG_MODULES:
+        module = sys.modules.get(name)
+        try:
+            items = list(vars(module).items()) if module is not None else []
+        except Exception:
+            items = []
+        for key, value in items:
+            if isinstance(value, random.Random) and id(value) not in seen:
+                seen.add(id(value))
+                saved.append((value.setstate, value.getstate(), "{}.{}".format(name, key)))
+    return saved
+
+
+def rng_restore(saved):
+    for setter, state, _name in saved:
+        try:
+            setter(state)
+        except Exception:
+            pass
+
+
+def dry_seen():
+    """試し打ちを済ませた相手の控え（1プロセスに1つ）。"""
+    found = getattr(sys, DRY_SEEN_MARK, None)
+    if not isinstance(found, set):
+        found = set()
+        setattr(sys, DRY_SEEN_MARK, found)
+    return found
 
 
 def dry_actions(actor, target):
@@ -189,6 +255,8 @@ def apply(ctx):
     @ctx.wrap("__main__:BattleStartManager.start_battle", required=False, safe=True)
     def start_battle(orig, self, *args, **kwargs):
         result = orig(self, *args, **kwargs)
+        # 版3の続き: 試し打ちは try の外で使うので先に用意する（中で投げると NameError になっていた）。
+        app, enemies, allies = None, None, []
         try:
             app = getattr(self, "app", None) or ui.find_app()
             enemies = getattr(app, "current_enemy_dict", None)
@@ -204,7 +272,7 @@ def apply(ctx):
                   allies=[snapshot(c) for c in allies if c is not None])
         except Exception:
             ctx.log_exc("enemy stats probe: recording the battle start failed")
-        if DRY_RUN and not dry_state["stopped"]:
+        if DRY_RUN and not dry_state["stopped"] and app is not None:
             try:
                 dry_run(app, enemies, [c for c in allies if c is not None])
             except Exception:
@@ -216,7 +284,7 @@ def apply(ctx):
         return result
 
     # ------------------------------------------------------------ 素点の試し打ち（版3）
-    dry_state = {"stopped": False}
+    dry_state = {"stopped": False, "rng_noted": False}
 
     def dry_run(app, enemies, allies):
         manager_cls = ui.cls_of("BattlePhaseManager")
@@ -230,26 +298,53 @@ def apply(ctx):
         player_name = str(getattr(allies[0], "name", "")) if allies else ""
         people = [("enemy", str(k), v, player_name) for k, v in enemies.items()]
         people += [("ally", str(getattr(c, "name", "?")), c, first_enemy) for c in allies]
-        before = combatants_state(app)
-        local.dry = True
-        count = 0
+        # 版3の続き: 同じ相手（名前とレベル）は1プロセス1回だけ。
+        seen = dry_seen()
+        fresh = []
         for side, name, person, target in people:
-            for plan, action in dry_actions(person, target):
-                raws = []
-                for _ in range(max(1, DRY_REPEAT)):
-                    local.act = {"calls": []}
-                    got = calculate(manager, action)
-                    first = got[0] if isinstance(got, (list, tuple)) and got else None
-                    raws.append(first.get(target) if isinstance(first, dict) else plain(got))
-                    calls = local.act["calls"]
-                count += 1
-                event("dry", side=side, actor=name,
-                      level=plain(getattr(person, "experience_level", None)),
-                      attack_power=plain(getattr(person, "attack_power", None)),
-                      magic_power=plain(getattr(person, "magic_power", None)),
-                      power=plan[0], category=plan[1], multiplier=plan[2],
-                      raws=raws, calls=calls)
-        local.dry = False
+            key = (side, name, plain(getattr(person, "experience_level", None)))
+            if key not in seen:
+                fresh.append((key, side, name, person, target))
+        if not fresh:
+            return
+        before = combatants_state(app)
+        # 版3の続き: ゲームの素点には乱数が入るので、呼ぶ前の乱数の状態を控えて最後に戻す。
+        rng = rng_saved()
+        local.dry = True
+        setattr(sys, DRY_THREAD_MARK, threading.get_ident())
+        count = 0
+        try:
+            for key, side, name, person, target in fresh:
+                seen.add(key)
+                for plan, action in dry_actions(person, target):
+                    raws = []
+                    calls = []
+                    for _ in range(max(1, DRY_REPEAT)):
+                        local.act = {"calls": []}
+                        got = calculate(manager, action)
+                        first = got[0] if isinstance(got, (list, tuple)) and got else None
+                        raws.append(first.get(target) if isinstance(first, dict) else plain(got))
+                        calls = local.act["calls"]
+                    count += 1
+                    event("dry", side=side, actor=name,
+                          level=plain(getattr(person, "experience_level", None)),
+                          attack_power=plain(getattr(person, "attack_power", None)),
+                          magic_power=plain(getattr(person, "magic_power", None)),
+                          power=plan[0], category=plan[1], multiplier=plan[2],
+                          raws=raws, calls=calls)
+        finally:
+            local.dry = False
+            try:
+                delattr(sys, DRY_THREAD_MARK)
+            except AttributeError:
+                pass
+            rng_restore(rng)
+        if not dry_state["rng_noted"]:
+            dry_state["rng_noted"] = True
+            write("dry run: restored the random state of {}".format(
+                ", ".join(name for _setter, _state, name in rng)))
+        people = [(side, name, person, target)
+                  for _key, side, name, person, target in fresh]
         after = combatants_state(app)
         if after != before:
             dry_state["stopped"] = True

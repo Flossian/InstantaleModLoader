@@ -10,7 +10,7 @@
     "en": "Measures the EVENTLOG / DEDUP / sidecar launch prompt bloat behaviours",
     "ja": "EVENTLOG / DEDUP / サイドカー起動という3つのプロンプト肥大化挙動を実測する"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "debug": true,
   "after": [

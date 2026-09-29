@@ -10,7 +10,7 @@
     "en": "Finds where to hook events triggered by player actions",
     "ja": "プレイヤーの行動をトリガーにしたイベントの差し込み場所を特定する"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "debug": true
 }

@@ -7,10 +7,10 @@
     "ja": "計測: 戦闘BGMの切り替え"
   },
   "description": {
-    "en": "Measures how the battle BGM switches (call sites of play_music_from_src)",
-    "ja": "戦闘 BGM の切り替え経路（play_music_from_src の呼び出し元）を計測する"
+    "en": "Watches BGM play/stop calls and the number of busy mixer channels (regression watch for the battle BGM fix)",
+    "ja": "BGM を鳴らす・止める呼び出しと、鳴っているミキサーの本数を見張る（戦闘BGMの直しが退行していないかの見張り）"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "debug": true,
   "after": [

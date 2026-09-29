@@ -21,6 +21,13 @@ pydantic 内部のトレースバックだけが残ってゲーム側の文脈�
 クラッシュしていないときの正常なスキーマの形も記録に残る。
 
 読み取り専用: アノテーションは検査するだけで一切変更せず、例外はそのまま再送出する。
+
+版3: 3点直した。
+`scripts.llm.llm_manager` がまだ import されていない注入では早々に降りていて、
+保留の見張りも立たなかったので、`required=False` の包みに任せる形にした（`202_` / `204_` と同じ）。
+成功した呼び出しは、同じモデル名で同じ形が既に出ていれば書かない（形が変わったときは出す。
+`Battle.enemies` の選択肢数の推移は GAME.md が引いている）。控えは `sys` に置き、上限を設けた。
+包みは `safe=True` にし、受け取った引数をそのまま `orig` へ渡す。
 """
 
 import sys
@@ -30,6 +37,12 @@ from instantale_modloader.frames import owner_of, repr_value
 
 MODULE = "scripts.llm.llm_manager"
 MAX_SCAN_DEPTH = 6
+
+# 成功した呼び出しで既に書いた (モデル名, 形) の控え。1プロセスで共有する（版3）。
+# 注入し直すとモジュール変数は消えるので `sys` に置く。
+SEEN_ATTR = "_instantale_probe_create_model_seen"
+# 控えの上限。越えたら成功行はもう書かない（空 Literal の行は上限に関係なく書く）。
+MAX_SEEN_SHAPES = 400
 
 
 def _find_empty_literals(annotation, path="", depth=0):
@@ -76,22 +89,31 @@ def _describe(annotation) -> str:
         return "<?>"
 
 
+def _seen_shapes() -> set:
+    """成功行を書いた (モデル名, 形) の控え。プロセスに1つ。"""
+    seen = getattr(sys, SEEN_ATTR, None)
+    if not isinstance(seen, set):
+        seen = set()
+        setattr(sys, SEEN_ATTR, seen)
+    return seen
+
+
 def apply(ctx):
-    module = sys.modules.get(MODULE)
-    # 存在確認は既定値付き getattr で行う（TECH.md §6 の hasattr 禁止）。
-    if module is None or getattr(module, "create_model", None) is None:
-        ctx.log("{}.create_model not available; skipping".format(MODULE), level="WARN")
-        return
+    # 未 import でも降りない（版3）。
+    # `scripts.llm.llm_manager` は最初の LLM リクエストまで import されない（TECH.md §3.4）。
+    # 版2はここで早々に return していて、フックも保留の見張りも立たなかった。
+    # `required=False` で登録しておけば、現れた時点でローダが当て直す。
 
     write = ctx.logger("probes.log")
 
-    @ctx.wrap("{}:create_model".format(MODULE))
-    def create_model(orig, model_name, *args, **field_definitions):
+    def inspect(args, kwargs):
+        """呼び出しを調べて書く。本体の呼び出しとは切り離して、失敗しても素通しにする。"""
+        model_name = args[0] if args else kwargs.get("model_name", kwargs.get("__model_name"))
         empty_fields = []
         summary = []
 
-        for field, definition in field_definitions.items():
-            if field.startswith("__"):
+        for field, definition in kwargs.items():
+            if not isinstance(field, str) or field.startswith("__") or field == "model_name":
                 continue      # __base__ / __config__ などは設定であってフィールドではない
             # pydantic のフィールド定義は (型, デフォルト値) のタプルか型そのもの。
             annotation = definition[0] if isinstance(definition, tuple) and definition else definition
@@ -106,7 +128,8 @@ def apply(ctx):
             # このモデルを要求したゲーム側の関数を名指しする。
             # pydantic 内部のフレームを飛び越し、ゲームのファイルに当たるまで遡る。
             # 段数は数えない（`@ctx.wrap` の層が1段挟まる。frames.caller の説明）。
-            for level in range(1, 12):
+            # 版3で `inspect` と `safe=True` の層が2段増えたので、上限もその分広げた。
+            for level in range(1, 14):
                 try:
                     frame = sys._getframe(level)
                 except ValueError:
@@ -123,11 +146,25 @@ def apply(ctx):
                     for key, value in list(frame.f_locals.items())[:20]:
                         write("      {:<22} = {}".format(key, repr_value(value)))
                     break
-        else:
-            # 正常時の形も記録する。
-            # 異常時に比較する基準が無いと判断できない。
-            write("create_model({!r}): {}".format(model_name, "; ".join(summary) or "no fields"))
+            return
 
-        return orig(model_name, *args, **field_definitions)
+        # 正常時の形も記録する。
+        # 異常時に比較する基準が無いと判断できない。
+        # 版3: 同じモデル名で同じ形は1プロセス1回だけ書く（形が変われば書く）。
+        shape = "; ".join(summary) or "no fields"
+        seen = _seen_shapes()
+        key = (str(model_name), shape)
+        if key in seen or len(seen) >= MAX_SEEN_SHAPES:
+            return
+        seen.add(key)
+        write("create_model({!r}): {}".format(model_name, shape))
 
-    ctx.log("create_model probe installed on {}".format(MODULE))
+    @ctx.wrap("{}:create_model".format(MODULE), required=False, safe=True)
+    def create_model(orig, *args, **kwargs):
+        try:
+            inspect(args, kwargs)
+        except Exception:
+            pass          # 計測の失敗で本体を止めない
+        return orig(*args, **kwargs)
+
+    ctx.log("create_model probe armed on {} (or deferred until it is imported)".format(MODULE))

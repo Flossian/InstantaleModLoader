@@ -24,10 +24,17 @@ recon（`out\recon\targets.txt`）から読めるのは「そこに関数が在�
     out\image_generation.log     読む用
     out\image_generation.jsonl   1呼び出し＝1行。後から数える用
 
-見張りを1本立てて、設定を切り替えた後に現れたモジュールにも当て直す
-（`ctx.superseded()` で降りる。TECH.md §3.6.1）。
+版7までは見張りを1本立てて（5秒ごと）、設定を切り替えた後に現れたモジュールにも当て直していた。
 プロンプトは頭 `PROMPT_HEAD` 字と長さ、それに `<lora:...>` タグだけを残す
 （本文は世界とキャラの中身なので丸ごとは残さない）。
+
+版8（読み取り側は決着した後の見直し。VERIFICATION.md §3.65）:
+  * 5秒ごとの見張りをやめた。毎回 `sys.modules`（約 4,300 件）を全部なめていたが、
+    後から現れる一族は `sys.meta_path` の観測者が import の瞬間に捕まえて当てている
+  * 棚卸し（`inventory`）は1プロセス1回にした（`sys` の `INVENTORY_MARK`）。
+    注入し直しと遅延の当て直しのたびに出ていた（約 350 回、1回 10 行前後）
+  * 呼び出し元を2回組んでいた所（出口・構築・組み立て・import の直後）を1回に
+  * `counts` をワーカースレッドから錠なしで足していたので、錠を付けた
 """
 import datetime
 import inspect
@@ -108,8 +115,8 @@ PROMPT_HEAD = 80
 #: `<lora:名前:重み>` を数える。ゲーム自身が入れている分が Python の層に出るか。
 LORA_TAG = re.compile(r"<lora:[^>]*>")
 
-#: 見張りの間隔（秒）。設定画面での切り替えを跨いで拾うためだけのもの。
-POLL_SECONDS = 5.0
+#: 棚卸しを済ませた印（1プロセス1回。版8）。
+INVENTORY_MARK = "_instantale_probe_230_inventory_done"
 
 
 class _LoaderProxy(object):
@@ -200,12 +207,20 @@ def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
     record = ctx.jsonl(RECORD_BASENAME)
 
-    #: 当てた対象と、棚卸しで見たモジュール。当て直しで二重に包まないため。
-    seen = {"targets": set(), "modules": set()}
+    #: 当てた対象。当て直しで二重に包まないため。
+    seen = {"targets": set()}
 
     #: 数える用。出口1本で漏れが無いかは `manager` と `exit` の差で分かる。
     counts = {"manager": 0, "exit": 0, "exit_unmarked": 0,
               "init": 0, "pipeline": 0}
+    #: 版8: 生成はワーカースレッドで走るので、足すときは錠を取る。
+    counts_lock = threading.Lock()
+
+    def bump(key):
+        """`counts[key]` を1つ足して、足した後の値を返す。"""
+        with counts_lock:
+            counts[key] += 1
+            return counts[key]
 
     def now():
         return datetime.datetime.now().isoformat(timespec="seconds")
@@ -295,9 +310,13 @@ def apply(ctx):
         """上の層が立てた印。立っていなければ None。"""
         return frames.attr(MARKS, "kind", None)
 
-    def kind_from_stack():
-        """呼び出し元のファイル名から種類を決める（印が無いときの予備）。"""
-        chain = frames.caller(depth=4)
+    def kind_from_stack(chain=None):
+        """呼び出し元のファイル名から種類を決める（印が無いときの予備）。
+
+        版8: 組んだ呼び出し元を渡せば使い回す（同じ場所で2回組んでいた）。
+        """
+        if chain is None:
+            chain = frames.caller(depth=4)
         for hint, kind in KIND_HINTS:
             if hint in chain:
                 return kind
@@ -335,7 +354,6 @@ def apply(ctx):
         """今どの一族が載っていて、出口が誰なのかを1回ぶん残す。"""
         backend = config_backend()
         modules = related_modules()
-        seen["modules"] = set(modules)
         rows = []
         for name in managers():
             mod = sys.modules.get(name)
@@ -371,8 +389,12 @@ def apply(ctx):
                 write("        {} = {}".format(key, value))
         record({"at": now(), "event": "inventory", "reason": reason,
                 "backend": backend, "modules": modules, "managers": rows,
-                "counts": dict(counts)})
+                "counts": counts_now()})
         return rows
+
+    def counts_now():
+        with counts_lock:
+            return dict(counts)
 
     # ------------------------------------------------------------------ 包む側
 
@@ -396,10 +418,11 @@ def apply(ctx):
     def make_manager_hook(module_name, fn_name, sig):
         """種類の印を立てて元を呼ぶ。引数（寸法とプロンプト）も残す。"""
         def hook(orig, *args, **kwargs):
-            kind = kind_from_stack() or "?"
+            chain = frames.caller(depth=4)
+            kind = kind_from_stack(chain) or "?"
             before = kind_now()
             MARKS.kind = "{}:{}".format(kind, fn_name)
-            counts["manager"] += 1
+            bump("manager")
             started = time.time()
             try:
                 return orig(*args, **kwargs)
@@ -410,7 +433,7 @@ def apply(ctx):
                        "func": fn_name, "kind": kind, "nested": before,
                        "seconds": round(time.time() - started, 2),
                        "thread": threading.current_thread().name,
-                       "caller": frames.caller(depth=3),
+                       "caller": chain,
                        "width": frames.repr_value(named.get("width")),
                        "height": frames.repr_value(named.get("height")),
                        "positive": text_brief(named.get("positive_prompt")),
@@ -431,15 +454,16 @@ def apply(ctx):
             before_globals = globals_of(mod)
             started = time.time()
             result = orig(*args, **kwargs)
-            counts["pipeline"] += 1
+            call = bump("pipeline")
+            chain = frames.caller(depth=4)
             mod = sys.modules.get(module_name)
             after = type_of(frames.attr(mod, "txt2img_pipe", None))
             changed = (before or {}).get("id") != (after or {}).get("id")
             after_globals = globals_of(mod)
             write("-" * 72)
             write("load_sd_pipeline #{} in {} ({:.1f}s) rebuilt={}".format(
-                counts["pipeline"], module_name, time.time() - started, changed))
-            write("    from {}".format(frames.caller(depth=4)))
+                call, module_name, time.time() - started, changed))
+            write("    from {}".format(chain))
             write("    pipe {} -> {}".format(
                 json.dumps(before, ensure_ascii=False),
                 json.dumps(after, ensure_ascii=False)))
@@ -448,10 +472,10 @@ def apply(ctx):
                 if old != new:
                     write("    {}: {} -> {}".format(key, old, new))
             record({"at": now(), "event": "load_sd_pipeline",
-                    "module": module_name, "call": counts["pipeline"],
+                    "module": module_name, "call": call,
                     "seconds": round(time.time() - started, 2),
                     "thread": threading.current_thread().name,
-                    "caller": frames.caller(depth=4),
+                    "caller": chain,
                     "pipe_before": before, "pipe_after": after,
                     "rebuilt": changed,
                     "globals_before": before_globals,
@@ -466,7 +490,8 @@ def apply(ctx):
         def hook(orig, self, *args, **kwargs):
             started = time.time()
             result = orig(self, *args, **kwargs)
-            counts["init"] += 1
+            call = bump("init")
+            chain = frames.caller(depth=4)
             named, positional = params_of(sig, (self,) + tuple(args), kwargs)
             got = {}
             for key in INIT_KEYS:
@@ -474,15 +499,14 @@ def apply(ctx):
                     got[key] = frames.repr_value(named.get(key))
             write("-" * 72)
             write("{} built #{} ({:.1f}s) from {}".format(
-                label, counts["init"], time.time() - started,
-                frames.caller(depth=4)))
+                label, call, time.time() - started, chain))
             for key, value in sorted(got.items()):
                 write("    {} = {}".format(key, value))
             record({"at": now(), "event": "pipe_init", "target": label,
-                    "call": counts["init"],
+                    "call": call,
                     "seconds": round(time.time() - started, 2),
                     "thread": threading.current_thread().name,
-                    "caller": frames.caller(depth=4),
+                    "caller": chain,
                     "kwargs": got, "positional": positional})
             return result
         return hook
@@ -490,16 +514,16 @@ def apply(ctx):
     def make_exit_hook(label, method, sig):
         """出口。印（種類）ごと引数一式を残す。ゲームへは素通し。"""
         def hook(orig, self, *args, **kwargs):
-            counts["exit"] += 1
+            call = bump("exit")
             kind = kind_now()
             if kind is None:
-                counts["exit_unmarked"] += 1
+                bump("exit_unmarked")
             # **元を呼ぶ前にも1行残す。**
             # ネイティブ側で落ちるとプロセスごと消えて、
             # 返ってから書く記録は何も残らない（実機: SDXL で1回）。
             before = params_of(sig, (self,) + tuple(args), kwargs)[0]
             write("exit #{} {} kind={} {}x{} lora={} ...".format(
-                counts["exit"], method, kind,
+                call, method, kind,
                 frames.repr_value(before.get("width")),
                 frames.repr_value(before.get("height")),
                 text_brief(before.get("prompt")).get("lora")))
@@ -510,12 +534,13 @@ def apply(ctx):
             for key in PARAM_KEYS:
                 if key in named:
                     params[key] = frames.repr_value(named.get(key))
+            chain = frames.caller(depth=4)
             row = {"at": now(), "event": "exit", "target": label,
-                   "method": method, "call": counts["exit"], "kind": kind,
-                   "stack_kind": kind_from_stack(),
+                   "method": method, "call": call, "kind": kind,
+                   "stack_kind": kind_from_stack(chain),
                    "seconds": round(time.time() - started, 2),
                    "thread": threading.current_thread().name,
-                   "caller": frames.caller(depth=4),
+                   "caller": chain,
                    "params": params,
                    "positive": text_brief(named.get("prompt")),
                    "negative": text_brief(named.get("negative_prompt")),
@@ -523,9 +548,9 @@ def apply(ctx):
                    "mask_image": image_brief(named.get("mask_image")),
                    "returned": frames.repr_value(result),
                    "positional": positional,
-                   "counts": dict(counts)}
+                   "counts": counts_now()}
             write("exit #{} {} kind={} {}x{} {}/{}/{} {:.1f}s lora={}".format(
-                counts["exit"], method, kind,
+                call, method, kind,
                 params.get("width"), params.get("height"),
                 params.get("sample_method"), params.get("sample_steps"),
                 params.get("cfg_scale"), row["seconds"],
@@ -620,15 +645,15 @@ def apply(ctx):
         try:
             pipe = frames.attr(module, "txt2img_pipe", None)
             built = pipe is not None
+            chain = frames.caller(depth=4)
             write("import done: {} (txt2img_pipe {}) from {}".format(
-                name, "already built" if built else "not built yet",
-                frames.caller(depth=4)))
+                name, "already built" if built else "not built yet", chain))
             record({"at": now(), "event": "import_done", "module": name,
                     "pipe": type_of(pipe), "built_during_import": built,
                     "globals": globals_of(module),
                     "has_loader": frames.attr(module, PIPELINE_FUNC, None) is not None,
                     "thread": threading.current_thread().name,
-                    "caller": frames.caller(depth=4)})
+                    "caller": chain})
             if attach("import of {}".format(name)):
                 ctx.refresh_status()
         except Exception:
@@ -677,34 +702,10 @@ def apply(ctx):
     # --------------------------------------------------------------------- 本体
 
     install_observer()
-    inventory("apply")
+    # 版8: 棚卸しは1プロセス1回（注入し直しと遅延の当て直しでは出直さない）。
+    if not getattr(sys, INVENTORY_MARK, False):
+        setattr(sys, INVENTORY_MARK, True)
+        inventory("apply")
     attach("apply")
-
-    def start_poll():
-        """設定を切り替えた後に現れた一族にも当て直す（TECH.md §3.6.1）。"""
-        try:
-            from kivy.clock import Clock
-        except Exception:
-            ctx.log("image generation probe: no kivy Clock; polling disabled",
-                    level="WARN")
-            return
-
-        def poll(_dt):
-            if ctx.superseded():
-                return False
-            try:
-                modules = set(related_modules())
-                if modules != seen["modules"]:
-                    fresh = sorted(modules - seen["modules"])
-                    write("new module(s): {}".format(", ".join(fresh) or "(none)"))
-                    inventory("new modules")
-                    if attach("new modules"):
-                        ctx.refresh_status()
-            except Exception:
-                ctx.log_exc("image generation probe: poll failed")
-            return True
-
-        Clock.schedule_interval(poll, POLL_SECONDS)
-
-    ctx.on_ready(start_poll,
-                 key="230_probe_image_generation:poll:{}".format(ctx.generation))
+    # 版7までの5秒ごとの見張り（`sys.modules` の総なめ）は外した。
+    # 後から現れる一族は観測者の `on_import_done` が当てる。

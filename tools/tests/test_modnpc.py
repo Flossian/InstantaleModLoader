@@ -659,6 +659,28 @@ def main():
     ok &= check("登録簿が空", modnpc.registry() == {})
     ok &= check("世界からも降りた", npc_id not in world3.characters)
 
+    # 保存の間に名簿から隠すかはローダの設定（`settings/loader.json`）で決める。
+    # 元は `229_` の設定がモジュールの旗を書き換えていた。
+    import tempfile
+    with tempfile.TemporaryDirectory() as base:
+        runtime = os.path.join(base, "runtime")
+        os.makedirs(os.path.join(base, "settings"))
+        flag_ctx = FakeCtx(os.path.join(base, "state"))
+        flag_ctx.runtime_dir = runtime
+        modnpc._read_lift_roster(flag_ctx, None)
+        ok &= check("loader.json が無ければ隠す", modnpc.LIFT_ROSTER is True)
+        with io.open(os.path.join(base, "settings", "loader.json"), "w",
+                     encoding="utf-8") as fh:
+            json.dump({"modnpc_lift_roster": False}, fh)
+        modnpc._read_lift_roster(flag_ctx, None)
+        ok &= check("loader.json で切れる", modnpc.LIFT_ROSTER is False)
+        with io.open(os.path.join(base, "settings", "loader.json"), "w",
+                     encoding="utf-8") as fh:
+            json.dump({"modnpc_lift_roster": "no"}, fh)
+        modnpc._read_lift_roster(flag_ctx, None)
+        ok &= check("真偽値でなければ既定へ戻る", modnpc.LIFT_ROSTER is True)
+    modnpc.LIFT_ROSTER = True
+
     print("PASS" if ok else "FAIL")
     return 0 if ok else 1
 

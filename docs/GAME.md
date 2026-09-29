@@ -697,6 +697,11 @@ MOD からの書き方はこうなる。
 - `quest_type` は `'settlement_quest'`。
   クエスト辞書の `quest_type` フィールド（`'normal_quest'` など）とは別の語彙で、
   セーブの値をそのまま渡すと `KeyError` で落ちる
+- `QuestChoiceManager.__init__` は `'settlement_quest'` なら `world.quests` を引き、
+  **それ以外の語はすべて `story_quests` を引く**（`206_` の総当たり。ストーリー依頼の id は12語とも通った）。
+  掲示板の物語の依頼は `'story_quest'` で来るとみられる（exe の定数の並びからの推定。実プレイの値は未測定）。
+  `story_quests` の id は 0〜4 で、`world.quests` の id と重なる。
+  id だけで `world.quests` を引くと別の依頼を取り違える（`318_` の版3までがそうだった）
 - 依頼生成の入口は `QuestSearchManager`。
   `DisplayQuestChoice.generate_random_quest()` はエリアの生成・採番・登録まで面倒を見る内側の入口。
   内容に手を入れたいならさらに内側の
@@ -1249,6 +1254,14 @@ NPC（敵・仲間）の魔法   2 × magic_power × k
 全員について `instant_damage` を1本だけ持つ行動を作り、ゲームの `calculate_battle_effect` に渡して素点を録る。
 `BattlePhaseManager` は空の実体に `app` だけ持たせて呼べた。
 呼ぶ前後で全員の HP と状態異常を比べ、変わらなかった（`dry_abort` は出ていない）。
+
+素点には ±5% ほどの乱数が入るので、試し打ちはゲームの乱数を引く（どの乱数源かは測っていない）。
+版3の続きで、呼ぶ前に `random` の全体・numpy.random（読まれていれば）・`__main__` と
+`scripts.functions` が持つ `random.Random` の状態を控え、終わったら戻すようにした。
+あわせて、同じ相手（陣営・名前・レベル）は1プロセス1回だけ試し、
+この段に入らないと分かった倍率の2通りを外した（1人12通り → 10通り）。
+試し打ちの間は `sys._instantale_probe_dry_run_thread` にそのスレッドの id を置き、
+`222_probe_battle_mechanics` はその間の計算を記録しない。
 
 ##### 記録に残らないもの
 

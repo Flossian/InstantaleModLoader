@@ -162,6 +162,23 @@ ctx.rows[:] = []
 app.in_battle = False
 PLAY(real_play, manager, app, "click")
 check("within が空", ctx.rows and ctx.rows[0]["within"] == [], ctx.rows)
+
+print("呼び出し元は音ごとに最初の数回だけ（版2）")
+ctx.rows[:] = []
+for _ in range(MOD.CALLER_SAMPLES + 2):
+    PLAY(real_play, manager, app, "step")
+steps = [r for r in ctx.rows if r["kind"] == "sound"]
+check("鳴った回数ぶん行はある", len(steps) == MOD.CALLER_SAMPLES + 2, len(steps))
+check("最初の数回は呼び出し元がある",
+      all("caller" in r for r in steps[:MOD.CALLER_SAMPLES]), steps[:MOD.CALLER_SAMPLES])
+check("その後は呼び出し元を組まず、回数が残る",
+      all("caller" not in r for r in steps[MOD.CALLER_SAMPLES:])
+      and steps[-1]["count"] == MOD.CALLER_SAMPLES + 2, steps[-1])
+ctx.rows[:] = []
+TURN(lambda self: None, object())
+check("手の行は呼び出し元を組まない",
+      [r for r in ctx.rows if r["kind"] == "turn"]
+      and "caller" not in [r for r in ctx.rows if r["kind"] == "turn"][0], ctx.rows)
 check("例外を残さない", ctx.errors == [], ctx.errors)
 shutil.rmtree(out_dir, ignore_errors=True)
 

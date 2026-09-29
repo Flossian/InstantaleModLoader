@@ -72,9 +72,9 @@
 | --- | --- |
 | `World.__init__` | セーブを読み込んだ直後。**世界じゅうの土地をまとめて寄せ直す** |
 | `DisplayQuestChoice.generate_random_quest` | 生まれた依頼をその場で上げる。頼み文へ渡す難易度も上げる |
-| `QuestChoiceManager.__init__` | 受注の直前 |
+| `QuestChoiceManager.__init__` | 受注の直前（通常依頼だけ） |
 | `DisplayQuestChoice.__init__` | 掲示板を開いた土地（設定を変えた直後もここで揃う） |
-| `QuestEndManager.execute` | その依頼の土地のクリア回数を +1 して、寄せ直す |
+| `QuestEndManager.execute` | その依頼の土地のクリア回数を +1 して、寄せ直す（通常依頼だけ） |
 
 ロードの1回で世界ぜんぶを寄せるのが要。
 掲示板を開いた土地だけ直していると、
@@ -103,9 +103,24 @@
 `ROLLBACK` はいま動いているゲームを戻すための逃げ道で、
 セーブを片付けるためのものではない。
 
-続きを持っているのは `state/area_difficulty/<世界名>.json` のほう
+続きを持っているのは `state/area_difficulty/<世界名>×<主人公>.json` のほう
 （クリア回数と素の難易度）。ここが消えると進みが戻る ―
 `state/` の約束どおり（TECH.md §3.11）。
+
+版4: 受注の直前の寄せ直しを、`quest_type` が `'settlement_quest'` の回だけにした。
+版3までは `quest_type` を見ずに `world.quests` を同じ id で引いていた。
+`QuestChoiceManager` は `'settlement_quest'` なら `world.quests`、
+それ以外なら `story_quests` を引く（`206_` の総当たりで `world.quests` の id は
+`'settlement_quest'` でしか通らず、`story_quests` の id は全候補で通った）ので、
+物語の依頼（id 0〜4）を受けると、同じ id の通常依頼の土地を寄せ直していた
+（通常依頼の id は訪ねた順に振られるので、id 0〜4 は最初の2つの町の初期依頼に当たることが多い）。
+物語の依頼の土地は掲示板を開いた時点で寄せ直してあるので、受注の直前には何もしない。
+あわせて、物語の依頼を片付けてもクリア回数に数えないようにした（本人の判断）。
+版3までは `current_quest_data` の `neighboring_settlement_id` だけを見て、物語の依頼もその土地の1回に数えていた。
+控えの鍵も世界名から周回の鍵（世界×主人公。`WorldStore.playthrough`）へ移した。
+世界名だけの鍵では、主人公が死んで同じ世界で作り直すと前の主人公のクリア回数と素の難易度（`base`）を引き継ぎ、
+`base` の依頼 id が今の遊びの別の依頼を指していた。
+世界名だけの控えは、見つかったときに遊んでいる主人公の周回へ移す（ローダの `adopt`。本人の判断）。
 """
 
 import random
@@ -114,8 +129,7 @@ import threading
 import time
 
 from instantale_modloader import ui
-from instantale_modloader.state import (UNKNOWN_WORLD, WorldStore,
-                                        world_key, world_key_of_dict)
+from instantale_modloader.state import UNKNOWN_WORLD, WorldStore
 
 LOG_BASENAME = "area_difficulty.log"
 STATE_DIRNAME = "area_difficulty"
@@ -131,6 +145,14 @@ INJECT_TTL = 300.0
 #: 引けなかったときの落とし先で、引ければそちらが優先。
 GAME_DIFFICULTY_MAX = 76
 GAME_DIFFICULTY_MIN = 0
+
+#: `QuestChoiceManager(app, quest_type, quest_id)` が `world.quests` を引く `quest_type`。
+#: 掲示板の通常依頼はこれで来る（GAME.md §2.9.1）。
+#: 他の値は `story_quests` 側の分岐に落ちるので、同じ id でも別の依頼を指す。
+SETTLEMENT_QUEST_TYPE = "settlement_quest"
+
+#: 依頼の辞書の `quest_type` 欄で、物語の依頼に付く値（上の引数とは別の語彙）。
+STORY_QUEST_FIELD = "story_quest"
 
 # GUI から変えられる値（同じ名前と既定値が mod.json にもある。TECH.md §3.8）。
 STEP_MIN = 3
@@ -450,6 +472,23 @@ def apply(ctx):
                   .format(area_id, record["cleared"], low, high, drawn, after))
             return after > before
 
+    def story_reason(app, quest):
+        """物語の依頼なら数えない理由の文、通常依頼なら None。
+
+        物語の依頼はセーブで `quest_type: 'story_quest'` を持つ（実セーブ7本。1件だけ欠けていた）。
+        欠けていても、id が通常依頼の一覧に無ければ通常依頼ではない。
+        id だけで決めないのは、物語の依頼の id（0〜4）が通常依頼の id と重なるため。
+        """
+        kind = ui.quest_value(quest, "quest_type", None)
+        if kind == STORY_QUEST_FIELD:
+            return "quest_type {!r}".format(kind)
+        quest_id = ui.quest_value(quest, "id", None)
+        store = live_store(getattr(app, "world", None))
+        if quest_id is not None and isinstance(store, dict) \
+                and str(quest_id) not in store:
+            return "id {} は通常依頼の一覧に無い".format(quest_id)
+        return None
+
     # ------------------------------------------------------------ フック
     @ctx.wrap("__main__:World.__init__", required=False, safe=True)
     def world_loaded(orig, self, save_data_dict, app, *args, **kwargs):
@@ -464,10 +503,10 @@ def apply(ctx):
         """
         result = orig(self, save_data_dict, app, *args, **kwargs)
         try:
-            key = world_key_of_dict(save_data_dict, None) or world_key(app)
+            key = worlds.playthrough(app, save_data_dict)
             if key and key != UNKNOWN_WORLD:
                 touched = reconcile_all(self, key, "load")
-                write("load: 世界 {!r} を寄せ直した（{}件）".format(key, touched))
+                write("load: 周回 {!r} を寄せ直した（{}件）".format(key, touched))
         except Exception:
             ctx.log_exc("area difficulty: ロード直後に寄せ直せなかった")
         return result
@@ -481,16 +520,20 @@ def apply(ctx):
         """
         app = getattr(self, "app", None) or ui.find_app()
         area_id = None
+        story = None
         try:
             quest = getattr(app, "current_quest_data", None) if app is not None else None
             if quest is not None:
                 area_id = area_of_quest(quest)
+                story = story_reason(app, quest)
         except Exception:
             ctx.log_exc("area difficulty: 終わる依頼を読めなかった")
         result = orig(self, *args, **kwargs)
         try:
-            if app is not None and area_id is not None:
-                key = world_key(app)
+            if story is not None:
+                write("clear: 依頼は通常依頼ではない（{}。数えない）".format(story))
+            elif app is not None and area_id is not None:
+                key = worlds.playthrough(app)
                 raised = count_clear(key, area_id)
                 reconcile(getattr(app, "world", None), key, area_id, "clear")
                 if raised and ANNOUNCE:
@@ -516,7 +559,7 @@ def apply(ctx):
         try:
             area_id = ui.area_id_of(ui.current_area(app))
             if area_id:
-                reconcile(getattr(app, "world", None), world_key(app),
+                reconcile(getattr(app, "world", None), worlds.playthrough(app),
                           area_id, "board")
         except Exception:
             ctx.log_exc("area difficulty: 掲示板で寄せ直せなかった")
@@ -537,7 +580,7 @@ def apply(ctx):
         try:
             before = set(live_store(getattr(app, "world", None)) or {})
             area_id = ui.area_id_of(ui.current_area(app))
-            bonus = bonus_of(world_key(app), area_id) if area_id else 0
+            bonus = bonus_of(worlds.playthrough(app), area_id) if area_id else 0
             if bonus:
                 state["inject"] = bonus
                 state["inject_at"] = time.monotonic()
@@ -547,7 +590,7 @@ def apply(ctx):
         state["inject"] = None
         try:
             world = getattr(app, "world", None)
-            key = world_key(app)
+            key = worlds.playthrough(app)
             store = live_store(world) or {}
             born = [qid for qid in list(store) if qid not in before]
             areas = []
@@ -569,14 +612,22 @@ def apply(ctx):
 
         掲示板を通らずに受ける経路（`301_` の会話からの受注、
         `307_` の道中）もここを通る。
+
+        寄せ直すのは `quest_type` が `SETTLEMENT_QUEST_TYPE` の回だけ。
+        それ以外は `story_quests` の id で、`world.quests` を同じ id で引くと
+        関係の無い通常依頼（とその土地）を指してしまう。
         """
+        if quest_type != SETTLEMENT_QUEST_TYPE:
+            write("accept: quest_type {!r} の依頼 {} は通常依頼ではない（寄せ直さない）"
+                  .format(quest_type, quest_id))
+            return orig(self, app, quest_type, quest_id, *args, **kwargs)
         try:
             world = getattr(app, "world", None)
             store = live_store(world) or {}
             quest = store.get(str(quest_id))
             area_id = area_of_quest(quest) if quest is not None else None
             if area_id is not None:
-                reconcile(world, world_key(app), area_id, "accept")
+                reconcile(world, worlds.playthrough(app), area_id, "accept")
         except Exception:
             ctx.log_exc("area difficulty: 受注の前に寄せ直せなかった")
         return orig(self, app, quest_type, quest_id, *args, **kwargs)

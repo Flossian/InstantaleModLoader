@@ -41,13 +41,12 @@
 200番台の約束どおり読み取りだけ。
 値は書かず、記録に失敗しても本体は必ず呼ぶ。
 
-例外が1つある。
-`get_phase_class(name)` をこちらから呼ぶ（下の `probe_phase_classes`）。
-これは名前からクラスを引くだけの純粋な参照で、副作用が無い。
+版2までは例外が1つあった（版3で外した。末尾の版3を参照）。
+`get_phase_class(name)` をこちらから呼んでいた（`probe_phase_classes`）。
+名前からクラスを引くだけの参照で副作用は無い、という前提で置いていた。
 `CALL_PHASE_ALLOWED` の各名前が実際に引けるかどうかは、
 呼んでみる以外に確かめようがなく、しかも「MOD が
-`PhaseSpec` にこれらの名前を書けるか」（`305_` が踏んだ制約）に直結する。
-呼ぶのはこの1関数だけで、戻り値は記録するだけで使わない。
+`PhaseSpec` にこれらの名前を書けるか」（`305_` が踏んだ制約）に直結していた。
 
 ##### 引数の並びを決め打ちしない
 
@@ -69,9 +68,20 @@
 前者はモジュールさえ在ればよく、後者は `app` が要る。
 1つの印にまとめると、`app` がまだ無い回にダンプが走っただけで「調査済み」になり、
 世界の調査が永久に行われない。
+
+版3: 問いは決着済み（VERIFICATION_LOG.md §2.29 / §2.30・GAME.md §2.21）なので、見張りは残したまま次を直した。
+
+- 定数のダンプは中身の指紋を取り、同じ指紋が既にログに在れば1行で済ませる。
+  版2はプロセスに1回とはいえ、同じ 49KB 前後を起動のたびに全文で書いていた
+  （1か月で 178 回・約 8.7MB、このログの9割）
+- `get_phase_class` を自分から呼ぶのをやめた。
+  副作用が無いことを確かめる手段が無く（ソースは読めない）、
+  答え（5つとも `__main__.X` に解決する）は GAME.md に記録済み
+- 本体を呼ぶ前の記録を try に入れた
 """
 
 import datetime
+import hashlib
 import json
 import sys
 
@@ -173,9 +183,19 @@ def apply(ctx):
                 except Exception:
                     pass
         try:
-            return json.dumps(value, ensure_ascii=False, indent=2, default=repr)
+            return json.dumps(value, ensure_ascii=False, indent=2, default=plain)
         except Exception:
             return repr(value)
+
+    def plain(value):
+        """JSON にならない値。集合は並べ替えた配列にする（版3）。
+
+        版2は `repr` に任せていて、集合の並びが起動ごとに変わった（文字列のハッシュは起動ごとに違う）。
+        それでは定数のダンプの指紋が毎回変わる。
+        """
+        if isinstance(value, (set, frozenset)):
+            return sorted(value, key=str)
+        return repr(value)
 
     def full_repr(value):
         """定数は切らずに出す。
@@ -259,46 +279,57 @@ def apply(ctx):
             ctx.log_exc("free facility probe: flag store record failed")
         return store
 
-    def step_event(label, payload):
+    def step_event(label, payload_of):
+        """実行記録を1行。`payload_of` は上限の内側でだけ呼ぶ（版3）。
+
+        本体を呼ぶ前に走るので、例外はここで握る（版3。版2は try の外だった）。
+        """
         if state["steps"] >= MAX_STEP_EVENTS:
             return
-        state["steps"] += 1
-        write("[{}] {} {}".format(stamp(), label, payload))
+        try:
+            state["steps"] += 1
+            write("[{}] {} {}".format(stamp(), label, payload_of()))
+        except Exception:
+            ctx.log_exc("free facility probe: step record failed")
 
     @ctx.wrap(MODULE + ":FreeFacilityManager._do_elapse", required=False)
     def do_elapse(orig, self, *args, **kwargs):
         # `307_` は日数送りが `elapse_days` を通らないビルドを踏んでいる。
         # ここで実際に呼ばれるかどうかを見る（宣言ではなく実測）。
-        step_event("_do_elapse", frames.repr_value(first_arg(args, kwargs, "step")))
+        step_event("_do_elapse",
+                   lambda: frames.repr_value(first_arg(args, kwargs, "step")))
         return orig(self, *args, **kwargs)
 
     @ctx.wrap(MODULE + ":FreeFacilityManager._effect_item_add", required=False)
     def effect_item_add(orig, self, *args, **kwargs):
-        step_event("_effect_item_add", frames.repr_value(args))
+        step_event("_effect_item_add", lambda: frames.repr_value(args))
         return orig(self, *args, **kwargs)
 
     @ctx.wrap(MODULE + ":FreeFacilityManager._effect_exp_add", required=False)
     def effect_exp_add(orig, self, *args, **kwargs):
-        step_event("_effect_exp_add", frames.repr_value(args))
+        step_event("_effect_exp_add", lambda: frames.repr_value(args))
         return orig(self, *args, **kwargs)
 
     @ctx.wrap(MODULE + ":FreeFacilityManager._do_llm", required=False)
     def do_llm(orig, self, *args, **kwargs):
         # LLM ステップの出力モード（fields / choice / text）が実際にどう使われるか。
         # 「AI に描写させ、進行はスクリプトが持つ」形の実例になる。
-        step_event("_do_llm", frames.repr_value(args[1:2] or args))
+        step_event("_do_llm", lambda: frames.repr_value(args[1:2] or args))
         return orig(self, *args, **kwargs)
 
     @ctx.wrap(MODULE + ":FreeFacilityManager.execute", required=False)
     def execute(orig, self, *args, **kwargs):
-        step_event("execute", "choice_text=" + frames.repr_value(
+        step_event("execute", lambda: "choice_text=" + frames.repr_value(
             first_arg(args, kwargs, "choice_text")))
         return orig(self, *args, **kwargs)
 
     @ctx.wrap(GEN_MODULE + ":generate_program", required=False)
     def generate_program(orig, *args, **kwargs):
-        write("\n[{}] generate_program(args={} kwargs={})".format(
-            stamp(), frames.repr_value(args), frames.repr_value(kwargs)))
+        try:
+            write("\n[{}] generate_program(args={} kwargs={})".format(
+                stamp(), frames.repr_value(args), frames.repr_value(kwargs)))
+        except Exception:
+            ctx.log_exc("free facility probe: generate_program record failed")
         program = orig(*args, **kwargs)
         try:
             write("[{}] generate_program -> {}".format(
@@ -322,25 +353,50 @@ def apply(ctx):
             return
         setattr(sys, DUMP_MARK, True)
 
-        write("\n" + "#" * 72)
-        write("# {}  free facility engine dump".format(stamp()))
-        write("# file={}".format(getattr(module, "__file__", "?")))
-        write("#" * 72)
-
+        # 版3: 先に本文を組んで指紋を取り、同じ指紋がログに既に在れば全文を書かない。
+        # 版2は同じ中身を起動のたびに全文で書いていた。
+        body = []
+        emit = body.append
+        emit("# file={}".format(getattr(module, "__file__", "?")))
         for name in SHORT_CONSTANTS:
             value = getattr(module, name, frames.MISSING)
             if value is frames.MISSING:
                 continue
             if name == "EFFECTS" and isinstance(value, dict):
                 # 中身は関数なので、名前だけ並べたほうが読める。
-                write("{:<28} = {}".format(name, sorted(value)))
+                emit("{:<28} = {}".format(name, sorted(value)))
                 continue
-            write("{:<28} = {}".format(name, full_repr(value)))
+            emit("{:<28} = {}".format(name, full_repr(value)))
+        dump_generator(emit)
+        # `get_phase_class` を呼ぶ `probe_phase_classes` は版3で外した（docstring の版3）。
 
-        dump_generator()
-        probe_phase_classes(module)
+        text = "\n".join(body)
+        fingerprint = hashlib.sha1(
+            text.encode("utf-8", "replace")).hexdigest()[:16]
+        marker = "# fingerprint={}".format(fingerprint)
+        if logged_before(marker):
+            write("\n[{}] free facility engine dump unchanged ({}; "
+                  "the full dump is earlier in this log)".format(
+                      stamp(), marker[2:]))
+            return
+        write("\n".join(["", "#" * 72,
+                         "# {}  free facility engine dump".format(stamp()),
+                         marker, "#" * 72, text]))
 
-    def dump_generator():
+    def logged_before(marker):
+        """同じ指紋のダンプがこのログに既に在るか（版3）。
+
+        ログを1世代送った後は無いので、全文をもう一度書くことになる（それが正しい）。
+        読めなければ「無い」として全文を書く。
+        """
+        try:
+            with open(ctx.out_path(LOG_BASENAME), "rb") as handle:
+                return marker.encode("ascii") in handle.read()
+        except Exception:
+            return False
+
+    def dump_generator(write):
+        """生成側の定数を `write` へ出す（版3で書き出し先を引数にした。指紋を取るため）。"""
         gen = sys.modules.get(GEN_MODULE)
         if gen is None:
             write("\n{} not imported yet".format(GEN_MODULE))
@@ -391,27 +447,6 @@ def apply(ctx):
                     write(as_json(schema()))
                 except Exception:
                     ctx.log_exc("free facility probe: schema dump failed")
-
-    def probe_phase_classes(module):
-        """`call_phase` の許可リストが実際に引けるかを見る。
-
-        呼ぶのは名前からクラスを引くだけの `get_phase_class` で、副作用は無い。
-        `PhaseSpec` に書ける名前かどうかは `305_` が踏んだ制約に直結する。
-        """
-        resolver = getattr(module, "get_phase_class", None)
-        allowed = getattr(module, "CALL_PHASE_ALLOWED", ())
-        if not callable(resolver) or not allowed:
-            return
-        write("\n--- get_phase_class(CALL_PHASE_ALLOWED) ---")
-        for name in sorted(allowed):
-            try:
-                found = resolver(name)
-                write("    {:<32} -> {}.{}".format(
-                    name, getattr(found, "__module__", "?"),
-                    getattr(found, "__name__", repr(found))))
-            except Exception as exc:
-                write("    {:<32} -> ERROR {}: {}".format(
-                    name, type(exc).__name__, exc))
 
     # ------------------------------------------------------------------
     # 世界の調査（`app` が要るので on_ready 側。1プロセスに1回）
