@@ -10,7 +10,7 @@
     "en": "After each turn, a background LLM call updates a persistent profile formed from what conversations reveal about that NPC, plus a separate record of how that NPC sees the player. Both are appended to the NPC profile in every later conversation",
     "ja": "会話1ターンごとに裏で LLM を呼び、会話で分かったことから人物プロフィールと、その人物から見たプレイヤーの記録を更新する。どちらも以降の会話で、ゲーム本体のプロフィール欄に毎回載る"
   },
-  "version": "5",
+  "version": "6",
   "author": "yoshinari/tomotomo-y, R01/Flossian",
   "settings": {
     "CONVERSATION_TURNS": {

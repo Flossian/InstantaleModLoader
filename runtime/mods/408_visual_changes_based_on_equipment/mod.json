@@ -1,0 +1,31 @@
+{
+  "entry": "visual_changes_based_on_equipment.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Portrait changes from equipment",
+    "ja": "装備品に応じた立ち絵の追加描写"
+  },
+  "description": {
+    "ja": "立ち絵を再生成するとき、装備品の見た目を英語の短い語にしてその回の画像プロンプトへ足す。LLMに聞くのは装備が変わったときだけ",
+    "en": "When a portrait is regenerated, adds short English words describing the equipment to that one image prompt. The LLM is asked only when the equipment changes"
+  },
+  "version": "3",
+  "author": "MoririnJP",
+  "settings": {
+    "EQUIPMENT_PROMPT_COUNT": {
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 3,
+      "label": {
+        "ja": "追加する装備プロンプト数",
+        "en": "Number of equipment prompt items"
+      },
+      "note": {
+        "ja": "装備が変わったときにLLMへ作らせる、画像生成用の短い英語の要素の最大数。0なら追記しない。元のプロンプトで画像生成の枠がほぼ埋まっているため上限は3",
+        "en": "Maximum number of short English image-prompt items generated after an equipment change. 0 adds nothing. Capped at 3 because the original prompt already fills most of the image model's token window"
+      }
+    }
+  }
+}

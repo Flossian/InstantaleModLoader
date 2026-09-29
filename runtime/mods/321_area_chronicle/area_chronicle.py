@@ -531,12 +531,13 @@ def apply(ctx):
 
     # 編纂は背景で1件ずつ（LLM を待つのでゲームのスレッドでは回せない）。
     # `compile_area` が出来た後でないと組めないのでここで組む。
-    worker = store["worker"] = (
+    # 注入し直したときは、捨てたときのログも今の世代へ付け替える。
+    worker = store["worker"] = jobs.rebind(
         store["worker"]
         or jobs.Worker(ctx, compile_area, name="area_chronicle",
                        label="area chronicle", key=job_key,
-                       max_pending=MAX_PENDING, on_drop=note_dropped)
-    ).rebind(ctx, compile_area, write)
+                       max_pending=MAX_PENDING, on_drop=note_dropped),
+        ctx, compile_area, write, on_drop=note_dropped)
 
     # ---------------------------------------------------- 第一声への差し込み
     def with_mention(args, kwargs):

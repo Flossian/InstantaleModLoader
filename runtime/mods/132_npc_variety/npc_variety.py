@@ -34,6 +34,12 @@ VERIFICATION_LOG.md §2.82）。
         VERIFICATION_LOG.md §2.82）
   町    「【NPCの生成要素】」と `settlement_name:` の両方
 
+単体でも、名前か概要が人でない存在（人形・魔物・竜・精霊・亡霊など）を指すなら種を付けない。
+表の種は人の外見と来歴なので、付けると人形が人の髪・肌・来歴を持つ人物になり、
+ゲームの category は人の10種しか無いので立ち絵も人の姿で描かれる。
+仲間と見分けの付かない敵が出た（VERIFICATION.md §3.77 の `132_` の行）。
+語で見るので、「人形師」「竜騎士」のような人にも付かないことがある（素のゲームと同じになるだけ）。
+
 表は MOD フォルダの `seeds.default.json`。
 同じフォルダに `seeds.json` を置けばそちらが優先される（`120_` の名簿と同じ）。
 効くのは新しく生まれる NPC だけ。既に世界に居る NPC は変わらない。
@@ -74,6 +80,11 @@ MARK_SINGLE_NAME = "- 名前:"                    # 衛兵・闘技場の頼み�
 MARK_SINGLE_SUMMARY = "- 概要:"
 #: 衛兵・闘技場の敵の頼み文にある語。見えたら触らない（名前の有無と二重に見る）。
 NOT_SINGLE_WORDS = ("衛兵NPC", "闘技場で戦う")
+#: 単体生成の名前か概要にこれがあれば人でないとみなし、種を付けない。
+NON_HUMAN_WORDS = ("人形", "ゴーレム", "オートマタ", "からくり", "機械", "魔導兵",
+                   "魔物", "魔獣", "幻獣", "召喚獣", "使い魔", "怪物", "モンスター",
+                   "ドラゴン", "竜", "スライム", "精霊", "悪魔", "亡霊", "幽霊", "死霊",
+                   "骸骨", "スケルトン", "アンデッド", "ゾンビ")
 MARK_TOWN = "【NPCの生成要素】"
 MARK_TOWN_DATA = "settlement_name:"
 HEAD_SINGLE = "【この人物について決まっていること】"
@@ -357,6 +368,27 @@ def classify(texts):
     return None
 
 
+def non_human_word(text):
+    """単体生成の本文の名前と概要の行から、人でない存在を指す語を返す。無ければ None。"""
+    start = text.find(MARK_SINGLE)
+    if start < 0:
+        return None
+    subject = " ".join(line.strip() for line in text[start:].splitlines()
+                       if line.strip().startswith((MARK_SINGLE_NAME, MARK_SINGLE_SUMMARY)))
+    for word in NON_HUMAN_WORDS:
+        if word in subject:
+            return word
+    return None
+
+
+def skipped_word(texts):
+    """単体生成なのに人でないので種を付けない回なら、その語。記録用。"""
+    found = classify(texts)
+    if found is None or found[0] != "single":
+        return None
+    return non_human_word(texts[found[1]])
+
+
 def inject(texts, tables, rng=None, *, chance=None, residents=None, adventurers=None,
            look_axes=None, personality_axes=None, description_axes=None):
     """本文の並びに種を足す。`(新しい並び or None, 付けた種の [(呼び方, 文)])`。
@@ -375,6 +407,8 @@ def inject(texts, tables, rng=None, *, chance=None, residents=None, adventurers=
         description_axes=description_axes, role=role)
     seeds = []
     if kind == "single":
+        if non_human_word(texts[index]):
+            return None, []
         if wants_seed(rng, chance):
             line = compose("single")
             if line:
@@ -416,6 +450,9 @@ def apply(ctx):
         started = time.monotonic()
         new_texts, made = inject(texts, tables)
         if new_texts is None:
+            word = skipped_word(texts)
+            if word and LOG_SEEDS:
+                write("[SKIP] {} single | 人でない（{}）ので種を付けない".format(site, word))
             return None
         kind = "single" if len(made) == 1 and made[0][0] == "この人物" else "town"
         count[kind] += 1
@@ -459,6 +496,8 @@ _SAMPLE_SINGLE = ["型: - look_description: 外見", "指示",
                   "【生成するNPC】\n- 名前: 宿屋の主人\n- 概要: 宿を営む\n- 強さのランク: 8\n"]
 _SAMPLE_GUARD = ["型: - look_description: 外見", "衛兵NPCをデザインしろ",
                  "【生成するNPC】\n- 強さのランク: 8\n"]
+_SAMPLE_DOLL = ["型: - look_description: 外見", "指示",
+                "【生成するNPC】\n- 名前: 石の番人\n- 概要: 遺跡を守る古いゴーレム\n- 強さのランク: 30\n"]
 _SAMPLE_TOWN = ["型", "指示", "【NPCの生成要素】\n- 名前\n【生成対象エリアのデータ】\n"
                              "- settlement_name: 風の村\n"]
 
@@ -477,6 +516,9 @@ def _verify(ctx):
         return
     if inject(_SAMPLE_GUARD, _SAMPLE_TABLES, rng, chance=100)[0] is not None:
         ctx.log("VERIFY FAILED: guard prompt was touched", level="ERROR")
+        return
+    if inject(_SAMPLE_DOLL, _SAMPLE_TABLES, rng, chance=100)[0] is not None:
+        ctx.log("VERIFY FAILED: non-human prompt was seeded", level="ERROR")
         return
     got, made = inject(_SAMPLE_TOWN, _SAMPLE_TABLES, rng, chance=100,
                        residents=2, adventurers=1)

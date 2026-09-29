@@ -108,9 +108,10 @@ ENEMY_DISPLAY_TARGET = "scripts.hud.new_hud:InstanTaleHUD.update_enemy_display"
 SURRENDER_GUARD_SECONDS = 10
 
 #: 切り上げた戦闘に付ける印と、その後は飛ばす戦闘の手（`after_surrender`）。
+#: 敵の手番の `enemy_turn_separate` は `battle` の中の関数でクラスの属性ではないので包めない
+#: （GAME.md §2.10「1手ぶんの内訳」）。
 SURRENDERED_MARK = MARK + "_surrendered"
-AFTER_SURRENDER_STEPS = ("enemy_turn_separate", "handle_battle_situation",
-                         "reduce_status_turns_and_log")
+AFTER_SURRENDER_STEPS = ("handle_battle_situation", "reduce_status_turns_and_log")
 
 #: `app.party` の主人公の鍵（仲間は id。実機のログ `party=['player', '78']`）。
 PLAYER_KEY = "player"

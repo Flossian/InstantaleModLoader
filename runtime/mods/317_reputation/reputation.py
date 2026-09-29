@@ -979,12 +979,13 @@ def apply(ctx):
 
     # 編纂は背景で1件ずつ（LLM を待つのでゲームのスレッドでは回せない）。
     # 土地の仕事が先に並ぶので、直列のワーカーが評判を編んでから二つ名がそれを読める。
-    worker = store["worker"] = (
+    # 注入し直したときは、捨てたときのログも今の世代へ付け替える。
+    worker = store["worker"] = jobs.rebind(
         store["worker"]
         or jobs.Worker(ctx, compile_job, name="reputation", label="reputation",
                        key=job_key, max_pending=MAX_PENDING,
-                       on_drop=note_dropped)
-    ).rebind(ctx, compile_job, write)
+                       on_drop=note_dropped),
+        ctx, compile_job, write, on_drop=note_dropped)
 
     # ------------------------------------------------------------------ 注入
     def block_for(app):

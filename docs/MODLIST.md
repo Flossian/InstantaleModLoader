@@ -8,9 +8,9 @@
 手で書き換えても次の生成で消える。
 直す先は各 MOD の `mod.json` か MODS.md の見出し。
 
-同梱 116 本（基盤 2 / 修正 39 / 追加 38 / 計測 37）。
-うち 11 本は外部の MOD 作者からの提供（下の「提供を受けた MOD」）。
-ほかに 2 本は自作だが、外部からの提案を取り込んでいる（下の「提案を取り込んだ MOD」）。
+同梱 120 本（基盤 2 / 修正 40 / 追加 41 / 計測 37）。
+うち 13 本は外部の MOD 作者からの提供（下の「提供を受けた MOD」）。
+ほかに 3 本は自作だが、外部からの提案を取り込んでいる（下の「提案を取り込んだ MOD」）。
 
 並びはフォルダ名順。
 適用順はこれとは別で、GUI の `順` 列（`load_order.json`）が持つ。
@@ -37,7 +37,7 @@
 
 ---
 
-## 修正（39本）
+## 修正（40本）
 
 ゲームのバグ・不便を直す。
 
@@ -81,11 +81,12 @@
 | [`135_fix_inn_button_order`](MODS.md#135_fix_inn_button_order-宿屋の選択肢を他の施設と同じ順にする) | 宿屋の選択肢を他の施設と同じ順にする | 宿屋の選択肢を他の施設と同じ順にする | - |  |
 | [`136_cloud_model_override`](MODS.md#136_cloud_model_override-クラウドのモデルを差し替える) | クラウドモデルの差し替え | クラウドのモデルを差し替える | 7 |  |
 | [`137_fix_npc_skill_uses`](MODS.md#137_fix_npc_skill_uses-仲間と敵は使い切ったスキルと効果中の強化弱体を使わず宿で休むと回数が戻る) | 仲間と敵は使い切ったスキルと効果中の強化・弱体を使わず、宿で休むと回数が戻る | 仲間と敵は使い切ったスキルと効果中の強化・弱体を使わず、宿で休むと回数が戻る | - |  |
+| [`138_fix_character_image_refresh`](MODS.md#138_fix_character_image_refresh-再生成した立ち絵と顔がその場で表示に反映される) | 再生成した立ち絵と顔がその場で表示に反映される | 再生成した立ち絵と顔がその場で表示に反映される | - |  |
 | [`406_gemini_user_role_fix`](MODS.md#406_gemini_user_role_fix-クラウド-api-の-gemini-で-user-role-の無い依頼を補う) | Geminiの無応答の防止 | クラウド API の Gemini で user role の無い依頼を補う | - |  |
 
 ---
 
-## 追加（38本）
+## 追加（41本）
 
 ゲームに無かった遊びを足す。
 
@@ -108,7 +109,7 @@
 | [`316_bounty_hunter`](MODS.md#316_bounty_hunter-手配されていると追手が来る) | 賞金稼ぎが襲ってくる | 手配されていると追手が来る | 15 |  |
 | [`317_reputation`](MODS.md#317_reputation-評判と二つ名) | 評判と二つ名 | 評判と二つ名 | 8 |  |
 | [`318_area_difficulty_growth`](MODS.md#318_area_difficulty_growth-土地が育つ依頼の難易度が上がる) | 依頼クリアで難易度上昇 | 土地が育つ（依頼の難易度が上がる） | 7 |  |
-| [`319_battle_tactics`](MODS.md#319_battle_tactics-戦闘を複数手の駆け引きにする) | 戦闘の数値とバフ・デバフの作り直し | 戦闘を複数手の駆け引きにする | 12 |  |
+| [`319_battle_tactics`](MODS.md#319_battle_tactics-戦闘を複数手の駆け引きにする) | 戦闘の数値とバフ・デバフの作り直し | 戦闘を複数手の駆け引きにする | 18 |  |
 | [`320_guild_adventurer_recruit`](MODS.md#320_guild_adventurer_recruit-ギルドの冒険者の補充) | ギルドの冒険者の補充 | ギルドの冒険者の補充 | 2 |  |
 | [`321_area_chronicle`](MODS.md#321_area_chronicle-エリアの状況を更新依頼クリアで案内文が変わる) | 功績による土地の案内文の書き換え | エリアの状況を更新（依頼クリアで案内文が変わる） | 4 |  |
 | [`322_battle_bgm`](MODS.md#322_battle_bgm-戦闘bgmを置いた曲から選んで鳴らす) | 戦闘BGMの選曲 | 戦闘BGMを置いた曲から選んで鳴らす | 2 |  |
@@ -124,11 +125,14 @@
 | [`332_training_custom`](MODS.md#332_training_custom-訓練所の代金修行の量1段の期間再訓練の可否を変える) | 訓練所のカスタマイズ | 訓練所の代金・修行の量・1段の期間・再訓練の可否を変える | 13 |  |
 | [`333_equipment_slots`](MODS.md#333_equipment_slots-インベントリに装備枠を追加) | インベントリに装備枠を追加 | インベントリに装備枠を追加 | 4 |  |
 | [`334_colosseum_custom`](MODS.md#334_colosseum_custom-闘技場の相手の強さと懸賞金を決める) | 闘技場のカスタマイズ | 闘技場の相手の強さと懸賞金を決める | 13 |  |
+| [`335_player_portrait_regenerate`](MODS.md#335_player_portrait_regenerate-人物欄から主人公の立ち絵を描き直せる) | 人物欄から主人公の立ち絵を描き直せる | 人物欄から主人公の立ち絵を描き直せる | - |  |
 | [`401_battle_character_context`](MODS.md#401_battle_character_context-戦闘の審判へ同行者の人物と装備を見せる) | 戦闘の審判への仲間の情報補完 | 戦闘の審判へ同行者の人物と装備を見せる | - |  |
 | [`402_party_inventory_transfer`](MODS.md#402_party_inventory_transfer-仲間とアイテムを受け渡しできる) | 仲間とのアイテム受け渡し | 仲間とアイテムを受け渡しできる | - |  |
 | [`403_npc_social_memory`](MODS.md#403_npc_social_memory-npc同士がお互いを認知し関係を覚える) | NPC同士の認知と関係記憶 | NPC同士がお互いを認知し、関係を覚える | 5 |  |
 | [`404_party_talk`](MODS.md#404_party_talk-パーティーメンバー全員と話す) | パーティーメンバーと話す | パーティーメンバー全員と話す | 7 |  |
 | [`405_regional_economy`](MODS.md#405_regional_economy-街ごとの需給表示特産品) | 地域毎に物価が変動する | 街ごとの需給・表示・特産品 | 11 |  |
+| [`407_npc_starting_equipment`](MODS.md#407_npc_starting_equipment-パーティーに加わった-npc-に初期装備を一度だけ持たせる) | NPC初期装備 | パーティーに加わった NPC に初期装備を一度だけ持たせる | - |  |
+| [`408_visual_changes_based_on_equipment`](MODS.md#408_visual_changes_based_on_equipment-立ち絵を再生成すると装備の見た目が描き足される) | 装備品に応じた立ち絵の追加描写 | 立ち絵を再生成すると装備の見た目が描き足される | 1 |  |
 
 ---
 
@@ -180,7 +184,7 @@
 
 ## 提供を受けた MOD
 
-外部の MOD 作者から提供を受けて同梱している 11 本。
+外部の MOD 作者から提供を受けて同梱している 13 本。
 
 番号の帯では数えられない。
 いま提供を取り込む先は出どころの帯（`4xx`）だが、
@@ -204,12 +208,14 @@
 | [`404_party_talk`](MODS.md#404_party_talk-パーティーメンバー全員と話す) | MoririnJP 様 | 提供者と共同 |
 | [`405_regional_economy`](MODS.md#405_regional_economy-街ごとの需給表示特産品) | MoririnJP 様 | 提供者と共同 |
 | [`406_gemini_user_role_fix`](MODS.md#406_gemini_user_role_fix-クラウド-api-の-gemini-で-user-role-の無い依頼を補う) | MoririnJP 様 | そのまま取り込み |
+| [`407_npc_starting_equipment`](MODS.md#407_npc_starting_equipment-パーティーに加わった-npc-に初期装備を一度だけ持たせる) | MoririnJP 様 | そのまま取り込み |
+| [`408_visual_changes_based_on_equipment`](MODS.md#408_visual_changes_based_on_equipment-立ち絵を再生成すると装備の見た目が描き足される) | MoririnJP 様 | そのまま取り込み |
 
 ---
 
 ## 提案を取り込んだ MOD
 
-MOD 自体はこちらの著作物で、機能の一部を外部からの提案（PR）で取り込んだ 2 本。
+MOD 自体はこちらの著作物で、機能の一部を外部からの提案（PR）で取り込んだ 3 本。
 上の「提供を受けた MOD」とは分けてある（出どころが違う）。
 
 権利の所在は [NOTICE](../NOTICE) が持つ。
@@ -218,3 +224,4 @@ MOD 自体はこちらの著作物で、機能の一部を外部からの提案�
 |---|---|
 | [`130_currency_unit`](MODS.md#130_currency_unit-通貨の呼び名と所持金の表示を変える) | MoririnJP 様 |
 | [`314_area_move_custom`](MODS.md#314_area_move_custom-エリア移動の日数料金文言を変える) | MoririnJP 様 |
+| [`335_player_portrait_regenerate`](MODS.md#335_player_portrait_regenerate-人物欄から主人公の立ち絵を描き直せる) | MoririnJP 様 |

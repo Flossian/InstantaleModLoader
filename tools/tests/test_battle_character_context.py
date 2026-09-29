@@ -286,10 +286,10 @@ shutil.rmtree(out_dir, ignore_errors=True)
 shutil.rmtree(out_dir2, ignore_errors=True)
 
 
-# ---------------------------------------------------------------- 装備欄（ローダの窓口 combat.gear）
+# ---------------------------------------------------------------- 装備欄（ローダの窓口 equipment.gear）
 # 装備欄の MOD（333_）が答えれば、weapon / wearable の代わりに部位ごとに書く。主人公も装備の行だけ載せる
 print("装備欄の全部位")
-from instantale_modloader import combat  # noqa: E402
+from instantale_modloader import equipment  # noqa: E402
 app = party_of(1)
 app.player = app.world.characters["player"]
 app.in_battle = True
@@ -300,7 +300,7 @@ worn = {
            ("accessory1", {"name": "古びた真鍮の指輪", "description": "くすんでいる。"})],
     "player": [("head", {"name": "革の兜"}), ("right_hand", {"name": "鋼の剣", "description": "重い。"})],
 }
-combat.declare(combat.GEAR, lambda a, holder: worn.get(str(holder.id)), owner="test_slots")
+equipment.declare(equipment.GEAR, lambda a, holder: worn.get(str(holder.id)), owner="test_slots")
 ctx, send, sent, out_dir = build(app)
 send("referee_npc", user_message())
 block = appended_block(sent)
@@ -327,7 +327,7 @@ check("仲間が居なくても主人公の枠は載る",
       "- player: 主人公" in appended_block(sent3) and "パーティーメンバーなし" in appended_block(sent3),
       appended_block(sent3))
 
-combat.forget("test_slots")                                    # 装備欄の MOD が居ない
+equipment.forget("test_slots")                                    # 装備欄の MOD が居ない
 npc.inventory = {"item_212": {"name": "星詠みの魔導杖", "description": "星が宿る。"}}
 ctx4, send, sent, out_dir4 = build(app)                           # 偽ゲームを app へ戻す（build(solo) で切り替わった）
 send("referee_npc", user_message())

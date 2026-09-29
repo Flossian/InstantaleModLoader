@@ -81,6 +81,17 @@ k は審判の power で決まる（weak 1.0 〜 extreme 約 2.45）。
     改名した text はセーブに焼かれうるが、MOD 無しで読んでも押せば普通に
     スキル一覧が開き、次の画面の組み直しで素の名前に戻る）
 
+## 4. 回避と見切り（版18）
+
+素のゲームは必中で、主人公の敏捷・判断（賢さ）は戦闘の数に効いていなかった。
+受ける側の敏捷が高いほど攻撃を完全にかわし（回避）、判断が高いほど半分で済ませる（見切り）。
+格下の攻撃は容易く、格上の攻撃は避けにくい。既定は味方だけで、敵も避ける設定がある。
+
+審判の描写と数を合わせるため、**審判を呼ぶ前に**対象になりうる全員ぶんを振り、
+かわす者を頼み文の末尾に「確定済み」として書き足す（`llm.wrap_outgoing`。手番の者の名前入りの目印「である'<名前>'の行動ターン」を含む送信だけ）。
+攻撃の重さでは率を変えない（重さで分けると、当てたい審判が大技へ寄る）。
+その手のダメージは同じ判定で 0 か半分にし、地の文の後ろに「（〇〇は攻撃をかわした）」を出す。
+
 ## 触らないもの
 
 即時回復・逃走・`physical_integrity`・経験値・戦利品はゲームのまま。
@@ -88,8 +99,12 @@ k は審判の power で決まる（weak 1.0 〜 extreme 約 2.45）。
 """
 
 import math
+import random
 
 from instantale_modloader import combat, frames, llm, ui
+
+# 回避の判定の乱数。グローバルの `random` から引くとゲーム自身の乱数列がずれる（TECH.md §6.1）。
+_RNG = random.Random()
 
 LOG_BASENAME = "battle_tactics.log"
 LOG_TAG = "battle tactics"
@@ -152,7 +167,32 @@ GUARD_BUTTON = True
 # 敵の体力と敵の一撃の強さの既定値は重ねない出し方で決めたので、この頼みと組で効く。
 STEADY_BASIC_ATTACK = True
 
+# 回避と見切り。受ける側の敏捷が攻める側より高いほど攻撃を完全にかわし（回避）、
+# 判断（賢さ）が高いほど急所を外して半分で済ませる（見切り）。素のゲームは必中で、
+# 主人公の敏捷・判断は戦闘の数に1つも効いていなかった（防御は防具の値そのもの）。
+#     率 ＝ min(能力差の上限, 能力差1あたり × 能力差) ＋ レベル差1あたり × 格下のレベル差
+#     格上の攻撃は同じ率で避けにくくなる（EVASION_UPHILL）。合計は 0〜EVASION_CEILING
+# 2.5% で、敏捷と判断を 30 に振った作りと耐久を 30 に振った作りが同じくらい戦いやすい
+# （VERIFICATION.md §3.77 の試算）。能力差の上限 50% で回避だけの無敵は作れない。
+# 格下の攻撃はレベル差で加算して容易く避ける（10 下で3回に1回）。
+EVASION = True                 # 味方が回避・見切りをする
+ENEMY_EVASION = False          # 敵も回避・見切りをする
+EVASION_PER_POINT = 2.5        # 能力差1あたり（%）
+EVASION_STAT_CAP = 50          # 能力差の部分の上限（%）
+EVASION_PER_LEVEL = 3.0        # レベル差1あたり（%）
+EVASION_UPHILL = True          # 格上の攻撃は避けにくい
+
 # ---------------------------------------------------------------- 定数
+# 回避・見切りの合計の天井。どれだけ差があっても1割は当たる。
+EVASION_CEILING = 0.90
+
+# 攻撃の重さ（power）では率を変えない。重さで分けると審判に「大技は当たる」と伝えることになり、
+# 当てたい審判が大技へ寄る。ボスの大技は使用回数（`137_fix_npc_skill_uses`）と
+# ボス自身の高い敏捷・判断で既に絞られている（VERIFICATION.md §3.77）。
+
+# 見切りで残るダメージの割合。
+GRAZE_KEEP = 0.5
+
 # ゲームの素点の係数 k（power → 倍率。GAME.md §2.10.4 の実測）。
 # 同じ相手に裁きが2本あると、ゲームは最後の1本の素点しか残さないので、
 # 素点を k で割り戻して1本ずつ組み直すのに使う。
@@ -305,6 +345,51 @@ def hit_damage(entries, raw, defense, defender_max_hp,
     if defender_max_hp > 0:
         damage = max(damage, defender_max_hp * MIN_FRACTION)
     return max(1, int(round(damage)))
+
+
+def evasion_chance(defender_stat, attacker_stat, defender_level=None, attacker_level=None):
+    """回避（敏捷）か見切り（判断）の率 [0, EVASION_CEILING]。能力値とレベルが読めなければ 0 として扱う。"""
+    diff = _number(defender_stat, 0.0) - _number(attacker_stat, 0.0)
+    stat = min(EVASION_STAT_CAP / 100.0, max(0.0, EVASION_PER_POINT / 100.0 * diff))
+    gap = level_gap(defender_level, attacker_level)          # 正 ＝ 攻める側が格下
+    if gap < 0 and not EVASION_UPHILL:
+        gap = 0
+    return max(0.0, min(EVASION_CEILING, stat + EVASION_PER_LEVEL / 100.0 * gap))
+
+
+def evasion_outcome(roll):
+    """先に振った判定 `roll`（`(u_回避, u_見切り, 回避率, 見切り率)`）から結果を出す。
+
+    "evade"（0）・"graze"（半分）・None（当たる）。攻撃の重さでは変えない。
+    """
+    u_evade, u_graze, evade, graze = roll
+    if u_evade < evade:
+        return "evade"
+    if u_graze < graze:
+        return "graze"
+    return None
+
+
+# 審判に伝える文。
+EVASION_WORDS = {"evade": "身のこなしで完全にかわす（傷を負わない）",
+                 "graze": "見切って急所を外し、浅い傷で済ませる"}
+
+
+def evasion_hint(name, roll):
+    """1人ぶんの審判への指示。何も起きなければ None。"""
+    outcome = evasion_outcome(roll)
+    if outcome is None:
+        return None
+    return "- {}: この手番に受ける攻撃は{}".format(name, EVASION_WORDS[outcome])
+
+
+# 審判の頼み文の目印（手番の者の名前入り。`output_data` の実記録の文面）。回避の文はこれを含む送信にだけ足す。
+NPC_TURN_MARKER = "である'{}'の行動ターン"
+PLAYER_TURN_MARKER = "今、プレイヤーである{}は"
+
+EVASION_HEADER = ("【回避の判定（ゲームが確定済み。必ずこのとおりに描写する）】\n"
+                  "この手番の攻撃の対象になった者のうち、次の者は攻撃をかわすか浅い傷で済ませる。"
+                  "対象に選ぶかどうかはいつもどおり判断してよい。")
 
 
 def ally_gear_bonus(ability, weapon, percent=None):
@@ -516,6 +601,19 @@ def apply(ctx):
         "input_spec_logged": False,
         # スキル一覧を組んでいる最中か（防御を差し込む場面の印）。
         "skill_screen": False,
+        # 回避の判定。審判を呼ぶ前に対象になりうる全員ぶん振り、その者の1手で使う。
+        # {"actor": 手番の者, "rolls": {表示名: (u_回避, u_見切り, 回避率, 見切り率)}}
+        "evasion": None,
+        # 審判へ足す文。{頼み文の目印: 文}。目印はその手番の者の名前を含む一文
+        # （審判の送信は審判を呼んだのとは別のスレッドで走るので、スレッドでは見分けられない。実機）
+        "hints": {},
+        # 防御ボタンを押してから次のスキル一覧が出るまで。二度目の押下は捨てる
+        "guard_pending": False,
+        # 防御ボタンの手番の者。その手のダメージは入れない（審判が敵の攻撃を描いて、
+        # そのダメージを主人公の手の結果として出すことがある。自分へ 282・敵へ 568 が実機で出た）
+        "guard_turn": None,
+        # 1手の終わりに画面へ出す行（地の文の後ろ、`308_` の数字の前に付く）
+        "notes": [],
     }
 
     screen = ui.Screen(ctx, write, tag=LOG_TAG, mark=MARK)
@@ -657,6 +755,54 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("battle tactics: add_text failed")
 
+    # ------------------------------------------------------------ 回避
+    def ability(holder, key):
+        scores = frames.attr(holder, "ability_scores", None)
+        return scores.get(key) if isinstance(scores, dict) else None
+
+    def prepare_evasion(actor, marker):
+        """審判を呼ぶ前に、`actor` の攻撃の対象になりうる全員の回避・見切りを振る。
+
+        結果は審判への文（`state["hints"][marker]`）と、その手のダメージ（`state["evasion"]`）の両方に使う。
+        `marker` はその審判の頼み文にだけある一文（手番の者の名前入り）。
+        味方は `EVASION`、敵は `ENEMY_EVASION` が ON のときだけ振る。
+        """
+        state["evasion"] = None
+        app = ui.find_app()
+        if app is None or actor is None:
+            return
+        enemies = list((enemy_dict(app) or {}).values())
+        actor_is_enemy = any(holder is actor for holder in enemies)
+        if actor_is_enemy and not EVASION:
+            return
+        if not actor_is_enemy and not ENEMY_EVASION:
+            return
+        wanted = ALLY_SIDE if actor_is_enemy else ENEMY_SIDE
+        rolls, lines = {}, []
+        for side, _key, name, holder in combatants(app):
+            if side != wanted or name in rolls:
+                continue
+            level, own = frames.attr(holder, "experience_level", None), frames.attr(actor, "experience_level", None)
+            roll = (_RNG.random(), _RNG.random(),
+                    evasion_chance(ability(holder, "dexterity"), ability(actor, "dexterity"), level, own),
+                    evasion_chance(ability(holder, "wisdom"), ability(actor, "wisdom"), level, own))
+            rolls[name] = roll
+            line = evasion_hint(name, roll)
+            if line:
+                lines.append(line)
+        state["evasion"] = {"actor": actor, "rolls": rolls}
+        if lines and marker:
+            state["hints"][marker] = EVASION_HEADER + "\n" + "\n".join(lines)
+            write("evasion rolled for {}'s turn: {}".format(name_of(actor), "; ".join(
+                "{} evade {:.0%} graze {:.0%}".format(n, r[2], r[3]) for n, r in rolls.items())))
+
+    def evasion_for(attacker, defender_name):
+        """この手の攻め手に振ってあった、受け側の判定。無ければ None。"""
+        evasion = state["evasion"]
+        if not evasion or evasion["actor"] is not attacker:
+            return None
+        return evasion["rolls"].get(defender_name)
+
     # ------------------------------------------------------------ 1手の文脈
     def open_action(app, character_key, character_side):
         side = ENEMY_SIDE if character_side == "敵側" else ALLY_SIDE
@@ -679,6 +825,14 @@ def apply(ctx):
         action = state["action"]
         state["action"] = None
         state["last_defense"] = None
+        # 回避の行は地の文の後ろに出す（ダメージの計算中に言うと地の文より先に出る）
+        notes, state["notes"] = state["notes"], []
+        if action is not None and notes:
+            say(action["app"], "\n".join(notes))
+        if action is not None and state["evasion"] and state["evasion"]["actor"] is action["attacker"]:
+            state["evasion"] = None
+        if action is not None and state["guard_turn"] is not None                 and state["guard_turn"] is action["attacker"]:
+            state["guard_turn"] = None
         # 構えを立てた手が閉じた。ここから次の自分の手まで構えが生きる。
         if action is not None:
             guard = state["guards"].get(action["actor_name"])
@@ -830,6 +984,20 @@ def apply(ctx):
                                attacker_level=attacker_level,
                                defender_level=defender_level,
                                enemy=enemy, bonus=bonus)
+            guard_turn = state["guard_turn"] is not None and attacker is state["guard_turn"]
+            if guard_turn:
+                final = 0
+                gear_note += " GUARD-TURN"
+            roll = None if guard_turn else evasion_for(attacker, defender_name)
+            dodge = evasion_outcome(roll) if roll else None
+            if dodge == "evade":
+                final = 0
+                state["notes"].append("（{}は攻撃をかわした）".format(defender_name))
+                gear_note += " EVADED"
+            elif dodge == "graze":
+                final = max(1, int(round(final * GRAZE_KEEP)))
+                state["notes"].append("（{}は攻撃を見切り、傷を浅くした）".format(defender_name))
+                gear_note += " grazed"
             write("hit: {} -> {} {} raw={:g} def={:g} vanilla={} lv={}->{} "
                   "final={} ({:.0%} of {}){}{}{}".format(
                       attacker_name, defender_name,
@@ -962,23 +1130,51 @@ def apply(ctx):
         say(app, "（{}は防御の構えを取った。次の行動まで受けるダメージが減る）"
             .format(name))
 
-    def watch_free_input(target):
+    def watch_referee(target, actor_index, command_index=None, name_index=None):
+        """審判の呼び出しを包む。呼ぶ前に回避を振って頼み文へ足し、自由入力なら防御の言葉を拾う。
+
+        引数は名前を付け替えずにそのまま渡す（キーワードで呼ばれても二重にならない）。
+        頼み文の目印は、NPC なら「である'<actor_name>'の行動ターン」、主人公なら
+        「今、プレイヤーである<名前>は」（`output_data` の実記録の文面）。
+        """
+        def pick(args, kwargs, index, name):
+            return args[index] if len(args) > index else kwargs.get(name)
+
         @ctx.wrap("scripts.llm.llm_manager_battle:{}".format(target),
                   required=False, safe=True)
-        def referee(orig, combat_log=None, actor=None, command=None,
-                    *args, **kwargs):
-            result = orig(combat_log, actor, command, *args, **kwargs)
+        def referee(orig, *args, **kwargs):
+            actor = pick(args, kwargs, actor_index, "actor")
+            if name_index is not None:
+                marker = NPC_TURN_MARKER.format(pick(args, kwargs, name_index, "actor_name"))
+            else:
+                marker = PLAYER_TURN_MARKER.format(name_of(actor))
             try:
-                if actor is not None and isinstance(command, str) \
-                        and any(word in command for word in GUARD_WORDS):
-                    begin_guard(ui.find_app(), actor, "free input")
+                prepare_evasion(actor, marker)
             except Exception:
-                ctx.log_exc("battle tactics: cannot read the free input")
+                ctx.log_exc("battle tactics: cannot roll the evasion")
+            try:
+                result = orig(*args, **kwargs)
+            finally:
+                state["hints"].pop(marker, None)
+            if command_index is not None:
+                command = pick(args, kwargs, command_index, "command")
+                if isinstance(command, str) and command.strip() == GUARD_COMMAND and actor is not None:
+                    state["guard_turn"] = actor
+                try:
+                    if actor is not None and isinstance(command, str) \
+                            and any(word in command for word in GUARD_WORDS):
+                        begin_guard(ui.find_app(), actor, "free input")
+                except Exception:
+                    ctx.log_exc("battle tactics: cannot read the free input")
             return result
         return referee
 
-    watch_free_input("referee_player_any_input_new_new")
-    watch_free_input("referee_player_any_input_new_new_with_skill")
+    # 審判の入口（GAME.md §2.10.1）。仲間と敵は referee_npc、主人公は通常攻撃・スキル・自由入力
+    watch_referee("referee_npc", 3, name_index=2)
+    watch_referee("referee_player_attack_new_new", 1)
+    watch_referee("referee_player_skill_new_new", 1)
+    watch_referee("referee_player_any_input_new_new", 1, command_index=2)
+    watch_referee("referee_player_any_input_new_new_with_skill", 1, command_index=2)
 
     # ---------------------------------------------------------------- ボタン
     def in_battle_screen(app):
@@ -994,6 +1190,7 @@ def apply(ctx):
               required=False, safe=True)
     def display_skill_choices(orig, self, *args, **kwargs):
         state["skill_screen"] = True
+        state["guard_pending"] = False        # 新しいスキル一覧 ＝ 次の手番。防御をまた押せる
         return orig(self, *args, **kwargs)
 
     @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False)
@@ -1060,6 +1257,13 @@ def apply(ctx):
         entry = ui.pressed_entry(self, button_index)
         if screen.mark_of(entry) != "guard":
             return orig(self, button_index, *args, **kwargs)
+        if state["guard_pending"]:
+            # 前の押下の手番がまだ動いている。ゲームのボタンは本体が連打を止めるが、
+            # 防御は本体を通さないので自前で捨てる（0.18 秒差の2発で1巡が丸ごと2回走り、
+            # 並んだ2つの手番が1手の控えを奪い合った。実機）
+            write("guard button ignored: the previous press is still running")
+            return None
+        state["guard_pending"] = True
         write("guard button pressed")
         player = getattr(self, "player", None)
         try:
@@ -1094,6 +1298,8 @@ def apply(ctx):
             state["guards"] = {}
             state["input_spec_logged"] = False
             state["skill_screen"] = False
+            state["guard_pending"] = False
+            state["guard_turn"] = None
             # 前の戦闘の敵の帳簿を落とす（同名の敵が別の戦闘で出るため）。
             # いま居る者（プレイヤー・仲間の残留状態異常）の分は残す。
             alive = set(name for _s, _k, name, _h in combatants(app))
@@ -1132,19 +1338,25 @@ def apply(ctx):
 
     # ================================================================ 通常攻撃の頼み
     def rewrite_outgoing(texts, site):
-        if not STEADY_BASIC_ATTACK:
-            return None
-        result = [steady_basic_attack(t) for t in texts]
-        if result == list(texts):
-            return None
-        write("basic attack: asked the referee to weigh the blow by modifications ({})".format(site))
-        return result
+        result = list(texts)
+        if STEADY_BASIC_ATTACK:
+            result = [steady_basic_attack(t) for t in result]
+            if result != list(texts):
+                write("basic attack: asked the referee to weigh the blow by modifications ({})".format(site))
+        # 回避の判定は、その手番の者の審判の送信にだけ足す（末尾の本文へ。再送で二重にしない）
+        for marker, hint in list(state["hints"].items()):
+            if result and any(marker in text for text in result) and hint not in result[-1]:
+                result[-1] = result[-1] + "\n\n" + hint
+                write("evasion: told the referee ({}, {})".format(marker, site))
+        return None if result == list(texts) else result
 
     llm.wrap_outgoing(ctx, rewrite_outgoing, label=LOG_TAG)
 
     ctx.log("battle tactics: enemy_hp={}% enemy_damage={}% level={}/{}/{} x{}%/x{}% "
-            "guard_cut={}% ally_gear={}% restore={} button={} steady_attack={} (log -> {})".format(
+            "guard_cut={}% ally_gear={}% restore={} button={} steady_attack={} "
+            "evasion={}/{} {}%/pt cap={}% {}%/lv uphill={} (log -> {})".format(
                 ENEMY_HP, ENEMY_DAMAGE, LEVEL_FAIR_GAP, LEVEL_ELITE_GAP, LEVEL_OUTCLASS_GAP,
                 LEVEL_ELITE_MULT, LEVEL_OUTCLASS_MULT, GUARD_CUT, ALLY_GEAR_PERCENT,
                 RESTORE_EFFECTS, GUARD_BUTTON, STEADY_BASIC_ATTACK,
-                ctx.out_path(LOG_BASENAME)))
+                EVASION, ENEMY_EVASION, EVASION_PER_POINT, EVASION_STAT_CAP, EVASION_PER_LEVEL,
+                EVASION_UPHILL, ctx.out_path(LOG_BASENAME)))

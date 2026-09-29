@@ -610,6 +610,18 @@ def run():
     os.remove(reroll_path)
     os.remove(epi_path)
 
+    print("\n[引き直しの位置] 二つ名の直後、箱の右端より右へは出さない")
+    # 実測の枠（幅 1200）で、文字 300px・余白 11・間 8 なら x = 0.03 + 319/1200。
+    pos = sheet.reroll_pos(300, 11, 1200, 8)
+    check("文字の直後に置く",
+          abs(pos["x"] - (0.03 + 319 / 1200.0)) < 1e-9
+          and pos["center_y"] == sheet.REROLL_POS["center_y"], pos)
+    check("箱の右端より右へは出さない",
+          sheet.reroll_pos(5000, 11, 1200, 8) == sheet.REROLL_POS)
+    check("測れなければ元の位置",
+          sheet.reroll_pos(None, 11, 1200, 8) == sheet.REROLL_POS
+          and sheet.reroll_pos(300, 11, 0, 8) == sheet.REROLL_POS)
+
     print("\n[表] 箱同士が重ならない")
     boxes = []
     for name, (size_hint, pos_hint) in sheet.BOXES.items():

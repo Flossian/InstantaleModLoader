@@ -434,6 +434,154 @@ check("turn: the hero's blow applies the referee's multiplier to the ratio",
 check("turn: both blows are logged", _log().count("hit: ") == 2, _log())
 check("turn: nothing was swallowed", not _ctx.errors, _ctx.errors)
 
+# ---------------------------------------------------------------- 回避と見切り
+check("evasion: 2.5% per point of Dexterity over the attacker",
+      abs(mod.evasion_chance(30, 12, 20, 20) - 0.45) < 1e-9)
+check("evasion: the stat part stops at its cap, weaker foes add on top, the total stops at 90%",
+      mod.evasion_chance(40, 10, 20, 20) == 0.5
+      and abs(mod.evasion_chance(40, 10, 30, 20) - 0.8) < 1e-9
+      and mod.evasion_chance(40, 10, 40, 20) == 0.9)
+check("evasion: a stronger attacker takes the same rate away (uphill)",
+      abs(mod.evasion_chance(30, 12, 20, 30) - 0.15) < 1e-9
+      and mod.evasion_chance(13, 12, 20, 30) == 0.0)
+_saved = mod.EVASION_UPHILL
+mod.EVASION_UPHILL = False
+check("evasion: uphill OFF leaves the stat part alone",
+      abs(mod.evasion_chance(30, 12, 20, 30) - 0.45) < 1e-9)
+mod.EVASION_UPHILL = _saved
+check("evasion: unreadable stats count as no edge",
+      mod.evasion_chance(None, None, None, None) == 0.0)
+_roll = (0.3, 0.1, 0.45, 0.25)
+check("evasion outcome: dodge first, then graze, else the blow lands",
+      mod.evasion_outcome(_roll) == "evade"
+      and mod.evasion_outcome((0.5, 0.1, 0.45, 0.25)) == "graze"
+      and mod.evasion_outcome((0.5, 0.3, 0.45, 0.25)) is None)
+check("evasion hint: one sentence for the referee",
+      mod.evasion_hint("エリス", _roll) == "- エリス: この手番に受ける攻撃は身のこなしで完全にかわす（傷を負わない）"
+      and mod.evasion_hint("エリス", (0.5, 0.1, 0.45, 0.25))
+      == "- エリス: この手番に受ける攻撃は見切って急所を外し、浅い傷で済ませる",
+      mod.evasion_hint("エリス", _roll))
+check("evasion hint: nothing to say when nothing happens",
+      mod.evasion_hint("エリス", (0.9, 0.9, 0.45, 0.25)) is None)
+
+# 審判を呼ぶ前に振り、頼み文へ足し、同じ判定でその手のダメージを 0 にする。
+_ctx = _fresh()
+_goblin = types.SimpleNamespace(name="ゴブリン", experience_level=20, max_hp=568, current_hp=568,
+                                status={}, ability_scores={"dexterity": 12, "wisdom": 12})
+_hero = types.SimpleNamespace(name="エリス", experience_level=20, max_hp=300, current_hp=300,
+                              status={}, ability_scores={"dexterity": 30, "wisdom": 13})
+_said = []
+_app = types.SimpleNamespace(current_enemy_dict={"ゴブリン1": _goblin}, player=_hero,
+                             add_text=_said.append)
+_phase = types.SimpleNamespace(app=_app)
+_chat = _ctx.hooks[_ml.llm.CHAT_TARGET]
+_sent = {}
+
+
+class _Rolls(object):
+    def __init__(self, values):
+        self.values = list(values)
+
+    def random(self):
+        return self.values.pop(0)
+
+
+def _enemy_referee(player, combat_log, actor_name, actor, side, party, enemies):
+    _chat(lambda self, model, messages, *a, **k: _sent.setdefault("messages", messages),
+          None, "model", [{"role": "system", "content": "今、プレイヤーの**敵側**である'ゴブリン'の行動ターンです。"},
+                     {"role": "user", "content": "本文"}])
+    return {"skill": "通常攻撃"}
+
+
+def _enemy_turn(*args, **kwargs):
+    action = {"instant_damage": [{"target": "エリス", "power": "normal", "multiplier": 1,
+                                  "category": "physical"}]}
+    _ctx.hooks["__main__:BattlePhaseManager.calculate_battle_effect"](
+        lambda self, a: [{"エリス": 137}] + [{}] * 7, _phase, action)
+    _sent["damage"] = _ctx.hooks["scripts.functions:get_instant_damage"](lambda a, d: a - d, 137, 89)
+
+
+_saved_rng, _saved_find_app = mod._RNG, _ui.find_app
+mod._RNG = _Rolls([0.1, 0.9])            # エリスの回避 0.1 < 45%
+_ui.find_app = lambda: _app
+try:
+    _ctx.hooks["scripts.llm.llm_manager_battle:referee_npc"](
+        _enemy_referee, None, "log", "ゴブリン", _goblin, "敵側", {}, {})
+    _outside = _chat(lambda self, model, messages, *a, **k: messages, None, "model",
+                     [{"role": "user", "content": "別の頼み"}])
+    _ctx.hooks["__main__:BattlePhaseManager.handle_battle_situation"](
+        _enemy_turn, _phase, "ゴブリン1", "敵側", None)
+finally:
+    mod._RNG, _ui.find_app = _saved_rng, _saved_find_app
+_last = _sent.get("messages", [{}])[-1].get("content", "")
+check("evasion: the referee is told before it writes the turn",
+      mod.EVASION_HEADER in _last and "- エリス:" in _last and _last.startswith("本文"), _last)
+check("evasion: other requests are left alone", _outside[-1]["content"] == "別の頼み", _outside)
+check("evasion: the same roll makes the blow miss", _sent.get("damage") == 0, _sent)
+check("evasion: the line comes after the turn", _said == ["（エリスは攻撃をかわした）"], _said)
+check("evasion: logged", "EVADED" in _log() and "evasion: told the referee" in _log(), _log())
+check("evasion: nothing was swallowed", not _ctx.errors, _ctx.errors)
+
+# 既定では敵は避けない（主人公の手では振らない）。
+_ctx = _fresh()
+mod._RNG = _Rolls([])
+_ui.find_app = lambda: _app
+try:
+    _ctx.hooks["scripts.llm.llm_manager_battle:referee_player_attack_new_new"](
+        lambda *a, **k: "attacked", "log", _hero, {}, {})
+finally:
+    mod._RNG, _ui.find_app = _saved_rng, _saved_find_app
+check("evasion: enemies do not dodge by default", "evasion rolled" not in _log(), _log())
+
+# 防御ボタンの連打。2発目は捨て、次のスキル一覧が出たらまた押せる（実機で 0.18 秒差の2発が1巡を2回走らせた）。
+_ctx = _fresh()
+_chosen = []
+_guard_app = types.SimpleNamespace(
+    player=_hero, current_enemy_dict={}, add_text=lambda text: None,
+    buttons=[{"text": "防御", mod.MARK: "guard"}], display_button_map=None,
+    function_correspond_to_input=None,
+    process_choice=lambda manager, text: _chosen.append(text))
+_press = _ctx.hooks["__main__:InstantaleApp.on_button_press"]
+_press(lambda *a, **k: None, _guard_app, 0)
+_press(lambda *a, **k: None, _guard_app, 0)
+check("guard: a second press while the turn runs is ignored",
+      "guard button ignored" in _log() and _log().count("guard button pressed") == 1, _log())
+_ctx.hooks["__main__:SkillChoicePhaseManager.display_skill_choices"](lambda self: None, object())
+_press(lambda *a, **k: None, _guard_app, 0)
+check("guard: the next skill list lets it be pressed again", _log().count("guard button pressed") == 2, _log())
+
+# 防御ボタンの手番は、審判が出したダメージを入れない（敵の攻撃を描いて主人公の手の結果にすることがある。実機）。
+_ctx = _fresh()
+_got = {}
+
+
+def _guard_turn(*args, **kwargs):
+    action = {"instant_damage": [{"target": "エリス", "power": "normal", "multiplier": 1,
+                                  "category": "physical"}]}
+    _ctx.hooks["__main__:BattlePhaseManager.calculate_battle_effect"](
+        lambda self, a: [{"エリス": 644}] + [{}] * 7, _phase, action)
+    _got["self"] = _ctx.hooks["scripts.functions:get_instant_damage"](lambda a, d: a - d, 644, 201)
+
+
+_ui.find_app = lambda: _app
+try:
+    _ctx.hooks["scripts.llm.llm_manager_battle:referee_player_any_input_new_new"](
+        lambda *a, **k: {"narration": "..."}, "log", _hero, mod.GUARD_COMMAND, {}, {})
+    _ctx.hooks["__main__:BattlePhaseManager.handle_battle_situation"](
+        _guard_turn, _phase, "エリス", "味方陣営", None)
+finally:
+    _ui.find_app = _saved_find_app
+check("guard turn: the hero's own guard deals no damage", _got.get("self") == 0, _got)
+check("guard turn: logged", "GUARD-TURN" in _log(), _log())
+_ctx2 = _fresh()
+_ui.find_app = lambda: _app
+try:
+    _ctx2.hooks["scripts.llm.llm_manager_battle:referee_player_any_input_new_new"](
+        lambda *a, **k: {}, "log", _hero, "盾を構えつつ斬りかかる", {}, {})
+finally:
+    _ui.find_app = _saved_find_app
+check("guard turn: a free input with guard words is not a guard turn", "GUARD-TURN" not in _log())
+
 # ---------------------------------------------------------------- 通常攻撃の頼み
 # 通常攻撃の審判の頼み文にだけ一文を足す。仲間・敵の審判の似た行には当てない（実記録の文面）。
 _attack = ("【生成要素】\n- modifications: これまでの戦闘の流れから、今回の効果に対してもっともらしい修正がある場合にそれを記入する。\n"

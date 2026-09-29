@@ -48,6 +48,28 @@ DEFAULT_MAX_PENDING = 8
 DEFAULT_IDLE = 30.0
 
 
+def rebind(worker, ctx, run=None, write=None, *, on_drop=None, on_done=None):
+    """`worker.rebind` を呼ぶ。前の版のローダが作った Worker でも on_drop / on_done を付け替える。
+
+        worker = store["worker"] = jobs.rebind(
+            store["worker"] or jobs.Worker(ctx, run, name="...", on_done=note),
+            ctx, run, write, on_done=note)
+
+    Worker はプロセスに残るので、同じゲームへ注入し直すと、前の版のローダの
+    クラスで作られたものが手元に来る。その `rebind` は on_drop / on_done を
+    受けない（渡すと TypeError で `apply()` ごと落ちる）ので、受けなければ属性へ直接入れる。
+    """
+    try:
+        return worker.rebind(ctx, run, write, on_drop=on_drop, on_done=on_done)
+    except TypeError:
+        worker.rebind(ctx, run, write)
+        if on_drop is not None:
+            worker.on_drop = on_drop
+        if on_done is not None:
+            worker.on_done = on_done
+        return worker
+
+
 class Worker(object):
     """仕事を1本の背景スレッドで順番にこなす。
 
@@ -110,7 +132,8 @@ class Worker(object):
 
     # -- 世代 ---------------------------------------------------------------
 
-    def rebind(self, ctx, run=None, write=None) -> "Worker":
+    def rebind(self, ctx, run=None, write=None, *, on_drop=None,
+               on_done=None) -> "Worker":
         """注入し直した世代の `ctx` と仕事の中身へ繋ぎ替える。自分自身を返す。
 
         ワーカーはプロセス側に置く（`apply()` のたびに作ると背景スレッドが増える）。
@@ -118,10 +141,13 @@ class Worker(object):
         置いたままにすると**前の世代のコードが動き続ける**:
 
         ```python
-        store["worker"] = (store.get("worker")
-                           or jobs.Worker(ctx, compile_area, name="...")
-                           ).rebind(ctx, compile_area, write)
+        store["worker"] = jobs.rebind(
+            store.get("worker") or jobs.Worker(ctx, compile_area, name="..."),
+            ctx, compile_area, write)
         ```
+
+        MOD からはこのメソッドではなく関数の `jobs.rebind` を呼ぶ
+        （前の版のローダが作った Worker でも落ちない）。
 
         新しい `run` になるのは、繋ぎ替えた後に**取り出す**1件から。
         既に走り出している1件は最後まで旧世代の `run` でこなす
@@ -129,12 +155,21 @@ class Worker(object):
         あとはその関数の中に居る）。
         錠を足してもこの境は動かない。走っている1件を止める手立ては持たない。
         パッチの世代管理と同じで、**後から当てた方が次から勝つ**。
+
+        `on_drop` / `on_done` も `apply()` の中の閉包なので、作るときに渡したなら
+        ここでも渡す。渡さなければ前の世代のものが残る
+        （`408_` で、終わった後の処理が最初に注入した版のまま動き、
+        新しい版の読み直しが一度も走らなかった。VERIFICATION.md の 408 の行）。
         """
         self.ctx = ctx
         if run is not None:
             self.run = run
         if write is not None:
             self.write = write
+        if on_drop is not None:
+            self.on_drop = on_drop
+        if on_done is not None:
+            self.on_done = on_done
         return self
 
     # -- 出し入れ -----------------------------------------------------------

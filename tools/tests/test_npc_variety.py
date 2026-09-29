@@ -12,6 +12,8 @@
   町         必須施設の主5人＋住民＋冒険者を番号で名指しし、人数は設定どおり
   表         同梱の表が読める。手元の seeds.json が優先される。壊れた句はその1件だけ捨てる。
              知らない鍵は無視。表が無ければ何も足さない。ファイルが変わったら読み直す
+  人でない   単体生成の名前か概要が人形・魔物・竜などを指すなら触らない（[SKIP] を残す）。
+             見るのは名前と概要の行だけ
   経路       偽の LlamaCppClient の chat に流すと user 本文だけが伸び、system は変わらず、
              送られた本文に種があり、[SEED] がログに残る。自己検証が通る
 """
@@ -88,6 +90,9 @@ TOWN = ["必ず日本語で、以下のjson形式で出力すること: {'$defs'
         "エリアの詳細を生成してください。\n【NPCの生成要素】\n- 名前: NPCの名前を記入。\n"
         "【生成対象エリアのデータ】\n- settlement_name: 風の村\n- settlement_size: village\n"]
 QUEST = ["型", "指示", "【生成対象エリアのデータ】\n- settlement_name: 風の村\n依頼を作れ"]
+# 自由入力の generate_npc から来る単体生成。名前か概要が人でない存在を指す。
+DOLL = SINGLE[:2] + ["【生成するNPC】\n- 名前: 石の番人\n- 概要: 遺跡を守る古いゴーレム。\n- 強さのランク: 30\n"]
+DOLL_BY_NAME = SINGLE[:2] + ["【生成するNPC】\n- 名前: 戦闘用人形\n- 概要: 剣の稽古の相手をする。\n- 強さのランク: 30\n"]
 RECRUIT = ["あなたはRPGの世界に新しく登場する冒険者NPCを1人考える係です。\n- look_description: 日本語。見た目"]
 
 TABLES = {
@@ -257,6 +262,15 @@ def main():
     check("表が空なら触らない", mod.inject(SINGLE, {"look": [], "personality": [],
                                                     "description": []}, random.Random(1)) == (None, []))
     check("衛兵は触らない", mod.inject(GUARD, TABLES, random.Random(1)) == (None, []))
+    check("概要が人でない存在なら触らない", mod.inject(DOLL, TABLES, random.Random(1)) == (None, []))
+    check("名前が人でない存在なら触らない", mod.inject(DOLL_BY_NAME, TABLES, random.Random(1)) == (None, []))
+    check("人でない語を返す", mod.non_human_word(DOLL[2]) == "ゴーレム"
+          and mod.non_human_word(DOLL_BY_NAME[2]) == "人形", mod.non_human_word(DOLL[2]))
+    check("人なら語は無い", mod.non_human_word(SINGLE[2]) is None)
+    check("名前と概要の行の外は見ない（前置きやランクの後の語で止めない）",
+          mod.non_human_word("魔物の出る村\n【生成するNPC】\n- 名前: 宿屋の主人\n- 概要: 宿を営む\n"
+                             "- 強さのランク: 8\n竜を倒せる強さ") is None)
+    check("町は人でない語を見ない", mod.skipped_word(TOWN) is None and mod.skipped_word(DOLL) == "ゴーレム")
 
     # -- 町 --------------------------------------------------------------------
     print("\n[町]")
@@ -398,6 +412,9 @@ def main():
         check("chat: 元の messages は変わらない", messages[2]["content"] == SINGLE[2])
         client.chat("m", [{"role": "user", "content": GUARD[2]}, {"role": "system", "content": GUARD[0]}])
         check("chat: 衛兵はそのまま", client.sent[-1][0]["content"] == GUARD[2])
+        client.chat("m", [{"role": "system", "content": DOLL[0]}, {"role": "system", "content": DOLL[1]},
+                          {"role": "user", "content": DOLL[2]}])
+        check("chat: 人でない単体はそのまま", client.sent[-1][2]["content"] == DOLL[2])
         town_messages = [{"role": "system", "content": TOWN[0]}, {"role": "system", "content": TOWN[1]},
                          {"role": "user", "content": TOWN[2]}]
         client.chat("m", town_messages)
@@ -406,7 +423,8 @@ def main():
         with io.open(os.path.join(out_dir, mod.LOG_BASENAME), encoding="utf-8") as fh:
             log = fh.read()
         check("[SEED] が残る（単体1・町1）", log.count("[SEED]") == 2 and "single" in log and "town" in log, log[-400:])
-        check("[SEED] に種の文", "宿屋(inn)の owner:" in log and "この人物:" in log, log[-400:])
+        check("[SKIP] が残る（人でない単体1）", log.count("[SKIP]") == 1 and "ゴーレム" in log, log[-400:])
+        check("[SEED] に種の文","宿屋(inn)の owner:" in log and "この人物:" in log, log[-400:])
         check("例外を握り潰していない", not ctx.errors, ctx.errors)
     finally:
         for name, fn in _PRISTINE.items():

@@ -35,7 +35,7 @@ mod.json の `after` で 301 より後に読み込み、ゲームと 301 が選�
 1行記録して無視する（本体は無条件に辞書を引くため、食い違い状態では必ず落ちる）。
 
 装備欄の MOD（`333_`）が居るときは、仲間の `equipments` はそちらだけが書く。ローダの窓口
-`combat.equipped` が答える持ち主の品では、解除も掃除もしない（DOC.md「「装備する」ボタンは記録を書く」）。
+`equipment.equipped` が答える持ち主の品では、解除も掃除もしない（DOC.md「「装備する」ボタンは記録を書く」）。
 
 ## 仲間の装備
 
@@ -55,7 +55,7 @@ MOD 専用の「装備する／外す」ボタンを 1 つ出し、その NPC �
 popup と装備欄の中身まで写す観測は `223_probe_party_equipment` に分けてある。
 """
 
-from instantale_modloader import combat, frames, ui
+from instantale_modloader import equipment, frames, ui
 from instantale_modloader.ids import claim
 
 
@@ -368,7 +368,7 @@ def apply(ctx):
         # ここで外すと書き手が 2 本になり、装備欄から主人公側へ引いた品が仲間の持ち物にも残った
         # （DOC.md「「装備する」ボタンは記録を書く」）。窓口が None なら装備欄は無く、ここで外す
         app = ui.find_app()
-        slots_answer = combat.equipped(app, old_owner, item_instance) if app is not None else None
+        slots_answer = equipment.equipped(app, old_owner, item_instance) if app is not None else None
 
         # 装備中なら、obtainer も equipments もまだ揃っているこの時点で
         # 本体の Item.unequip() に外させる。辞書だけ直すと、本体が解除時に行う
@@ -680,7 +680,7 @@ def apply(ctx):
                 value = getattr(template, name, None)
                 if value is not None:
                     kwargs[name] = value
-        equipped = combat.equipped(app, npc, item_instance)        # 装備欄の MOD が居ればそちらの記録
+        equipped = equipment.equipped(app, npc, item_instance)        # 装備欄の MOD が居ればそちらの記録
         if equipped is None:
             equipped = is_equipped_by(npc, item_instance, getattr(widget, "item_id", None))
         button = Button(text="外す" if equipped else "装備", **kwargs)
@@ -716,7 +716,7 @@ def apply(ctx):
 
         def pressed(*_):
             write("npc equipment button pressed: {!r}".format(button.text))
-            done = combat.toggle(app, npc, item_instance)              # 装備欄の MOD が居ればそちらが移す
+            done = equipment.toggle(app, npc, item_instance)              # 装備欄の MOD が居ればそちらが移す
             if done is None:
                 apply_npc_equipment(app, npc, widget, item_instance)
             else:

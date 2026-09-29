@@ -7,8 +7,8 @@
     "ja": "戦闘の数値とバフ・デバフの作り直し"
   },
   "description": {
-    "en": "Stops evenly-matched battles from ending in one hit. Damage still comes from the game's own attack and defense, but defense now divides instead of subtracting (defense equal to the attack lets half through), and a stronger enemy really does hit harder. Enemies get 2.5 times their health, so a mook takes about three blows and a boss lasts as long as its health deserves. Solo, level-appropriate gear loses the war of attrition; one step better gear or some training gets you through, and with a companion a quest costs about a third of your health. Foes 15 levels above you are fearsome and 20 above is no contest. Poison, curses and stat drops the referee describes now change the numbers, and a Guard entry in the skill list (or typing something defensive) halves what you take until your next move",
-    "ja": "互角の戦闘が一撃で終わらなくなる。ダメージはゲーム自身の攻撃と防御から出すまま、防御を引き算から割り算に替える（防御が攻撃と同じなら半分が通る）。敵の筋力の差もそのまま効く。敵の体力は2.5倍になり、雑魚は3発前後、ボスは体力なりに長持ちする。ソロはレベル相応の装備では削り負け、一段強い装備か訓練で通る。仲間を連れていれば1回の依頼で体力の3割ほどを失う。レベルが15上の相手は強敵、20上は勝負にならない。審判が語ってくる毒や能力低下も数字に効く。スキル一覧に「防御」が加わり、次に自分が動くまで被ダメージを半分にできる（自由入力で防御的に動いても同じ構えになる）"
+    "en": "Stops evenly-matched battles from ending in one hit. Damage still comes from the game's own attack and defense, but defense now divides instead of subtracting (defense equal to the attack lets half through), and a stronger enemy really does hit harder. Enemies get 2.5 times their health, so a mook takes about three blows and a boss lasts as long as its health deserves. Solo, level-appropriate gear loses the war of attrition; one step better gear or some training gets you through, and with a companion a quest costs about a third of your health. Foes 15 levels above you are fearsome and 20 above is no contest. Attacks no longer always land: high Dexterity dodges enemy blows and high Wisdom turns them into grazes (easy against weaker foes, hard against stronger ones). Poison, curses and stat drops the referee describes now change the numbers, and a Guard entry in the skill list (or typing something defensive) halves what you take until your next move",
+    "ja": "互角の戦闘が一撃で終わらなくなる。ダメージはゲーム自身の攻撃と防御から出すまま、防御を引き算から割り算に替える（防御が攻撃と同じなら半分が通る）。敵の筋力の差もそのまま効く。敵の体力は2.5倍になり、雑魚は3発前後、ボスは体力なりに長持ちする。ソロはレベル相応の装備では削り負け、一段強い装備か訓練で通る。仲間を連れていれば1回の依頼で体力の3割ほどを失う。レベルが15上の相手は強敵、20上は勝負にならない。攻撃は必中ではなくなり、敏捷が高いほど敵の攻撃をかわし、判断が高いほど傷を浅くする（格下の攻撃は容易く、格上の攻撃は避けにくい）。審判が語ってくる毒や能力低下も数字に効く。スキル一覧に「防御」が加わり、次に自分が動くまで被ダメージを半分にできる（自由入力で防御的に動いても同じ構えになる）"
   },
   "version": "18",
   "author": "R01/Flossian",
@@ -159,6 +159,84 @@
       "note": {
         "ja": "主人公の通常攻撃を裁く AI に、一撃の重さは修正で表し、追加の大ダメージを重ねないよう頼む。ローカルのモデルは通常攻撃のたびに必殺級のダメージを重ねがちで、通常攻撃がスキル並みになる。OFF で素のゲームの頼み文のまま",
         "en": "Asks the AI judging your basic attack to express its weight through modifiers instead of stacking an extra big hit. Local models tend to stack a finisher-class hit on every basic attack, making it as strong as a skill. OFF sends the game's prompt unchanged"
+      }
+    },
+    "EVASION": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "味方が攻撃をかわす",
+        "en": "Allies dodge attacks"
+      },
+      "note": {
+        "ja": "敏捷が高いほど敵の攻撃を完全にかわし、判断（賢さ）が高いほど急所を外して傷を半分にする。格下の攻撃は容易く避け、格上の攻撃は避けにくい。かわすかどうかは審判を呼ぶ前に決めて伝えるので、描写と数字が合う",
+        "en": "The higher your Dexterity, the more often enemy attacks miss outright; the higher your Wisdom, the more often you turn a blow into a graze for half damage. Weaker foes are easy to dodge, stronger ones are harder. The outcome is decided before the AI referee writes the turn, so the story matches the numbers"
+      }
+    },
+    "ENEMY_EVASION": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "敵も攻撃をかわす",
+        "en": "Enemies dodge too"
+      },
+      "note": {
+        "ja": "同じ式で敵も回避・見切りをする。敵の敏捷・判断は 11〜14 前後なので、こちらの敏捷や判断が低いと攻撃が外れることがある",
+        "en": "Enemies dodge and graze by the same rule. Enemy Dexterity and Wisdom sit around 11-14, so with low stats your own blows sometimes miss"
+      }
+    },
+    "EVASION_PER_POINT": {
+      "type": "float",
+      "default": 2.5,
+      "min": 0,
+      "max": 10,
+      "label": {
+        "ja": "能力差1あたりの回避率（%）",
+        "en": "Dodge chance per stat point (%)"
+      },
+      "note": {
+        "ja": "受ける側の敏捷（見切りは判断）が攻める側より1高いごとに、この分だけ避けやすくなる。2.5 で、敏捷と判断を 30 に振った作りが耐久を 30 に振った作りと同じくらい戦いやすい",
+        "en": "Each point of Dexterity (Wisdom for grazes) above the attacker adds this much. At 2.5, putting Dexterity and Wisdom at 30 is worth about as much as Constitution at 30"
+      }
+    },
+    "EVASION_STAT_CAP": {
+      "type": "int",
+      "default": 50,
+      "min": 0,
+      "max": 90,
+      "label": {
+        "ja": "能力差での回避率の上限（%）",
+        "en": "Cap from stats (%)"
+      },
+      "note": {
+        "ja": "能力差の部分はここで頭打ち。格下の相手へのレベル差の加算はこの上に乗る（合計は最大 90%）",
+        "en": "The stat part stops here. The level bonus against weaker foes is added on top (90% at most in total)"
+      }
+    },
+    "EVASION_PER_LEVEL": {
+      "type": "float",
+      "default": 3.0,
+      "min": 0,
+      "max": 10,
+      "label": {
+        "ja": "レベル差1あたりの回避率（%）",
+        "en": "Dodge chance per level (%)"
+      },
+      "note": {
+        "ja": "攻める側が1レベル下なら、この分だけ避けやすくなる。3 で、10 下の雑魚の攻撃は3回に1回かわす",
+        "en": "Each level the attacker is below you adds this much. At 3, a foe ten levels below misses about one attack in three"
+      }
+    },
+    "EVASION_UPHILL": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "格上の攻撃は避けにくい",
+        "en": "Stronger foes are harder to dodge"
+      },
+      "note": {
+        "ja": "攻める側がレベルで上なら、同じ率で避けにくくなる。OFF だと格上でも能力差だけで決まる",
+        "en": "When the attacker is higher level, the same rate is taken away. OFF leaves it to stats alone"
       }
     },
     "ALLY_GEAR_PERCENT": {

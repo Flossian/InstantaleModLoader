@@ -29,7 +29,7 @@ job・tactics・traits・status）の順。
 装備は本体がプレイヤーの装備を書くときの `名前(説明)` の形に寄せ、
 内部属性（attributes）は別の行に分ける。`equipments` の値が id なら持ち物から実体を引く。
 
-装備欄の MOD（`333_`）を入れていれば、ローダの窓口 `combat.gear` に身に着けている品を聞き、
+装備欄の MOD（`333_`）を入れていれば、ローダの窓口 `equipment.gear` に身に着けている品を聞き、
 weapon / wearable の代わりに部位ごと（`right_hand` / `head` / `accessory1` など）の行で書く。
 装備欄の品は持ち物の辞書に居ないので、`equipments` の id からは引けない（id だけの行になった）。
 主人公も装備欄を使っていれば、装備の行だけの `- player:` の枠を足す（本体が渡すのは weapon / wearable の
@@ -49,7 +49,7 @@ NPC の runtime の Character には口調などが載らないことがある�
 タイトルへ戻るときに控えを捨て、別ワールド・別セーブへの持ち越しを防ぐ。
 """
 
-from instantale_modloader import combat, frames, llm, ui
+from instantale_modloader import equipment, frames, llm, ui
 
 
 #: 追記する塊の見出し。同じ message に2度足さないための印でもある（`append_block`）。
@@ -334,7 +334,7 @@ def apply(ctx):
 
         並びがそのまま優先順位。名前とHPは必ず載せ、
         次に戦闘の材料である装備、その後に人物・口調の順で埋める。
-        `worn` は装備欄の答え（`combat.gear`）。あれば weapon / wearable の代わりに部位ごとに書く。
+        `worn` は装備欄の答え（`equipment.gear`）。あれば weapon / wearable の代わりに部位ごとに書く。
         `gear_only` は主人公の枠（名前と装備だけ。HP や人物は本体が渡している）。
         """
         name = text_of(character, "name")
@@ -427,9 +427,9 @@ def apply(ctx):
         人数はログ用。ここで返さないと、同行者の解決が1手につき2回走る。
         """
         members = current_party(app)
-        # 主人公は装備欄を使っているときだけ、装備の行だけの枠を足す（`combat.gear`）
+        # 主人公は装備欄を使っているときだけ、装備の行だけの枠を足す（`equipment.gear`）
         player = getattr(app, "player", None)
-        player_worn = combat.gear(app, player) if player is not None else None
+        player_worn = equipment.gear(app, player) if player is not None else None
         # 合計上限を人数で割って1人ぶんの予算にする。人数が多くて割った値が
         # MEMBER_MIN_CHARS を切るときは下限を優先する（合計は上限を超えるが、
         # 名前と HP だけの仲間を作るよりよい）。
@@ -443,7 +443,7 @@ def apply(ctx):
                         if player_worn else None)
         blocks = []
         for role, character in members:
-            rendered = character_block(character, role, budget, worn=combat.gear(app, character))
+            rendered = character_block(character, role, budget, worn=equipment.gear(app, character))
             if rendered:
                 blocks.append(rendered)
 

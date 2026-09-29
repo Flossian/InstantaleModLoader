@@ -10,7 +10,7 @@
     "en": "Adds concrete, randomly drawn traits (hair, eyes, skin, build, age, a distinguishing mark, clothes, a few personality axes and a past) to the prompts that generate NPCs, so the LLM stops filling every innkeeper with the same grey robe and sharp eyes",
     "ja": "NPC を生成する頼み文に、表から引いた具体の特徴（髪・瞳・肌・体格・年齢・目立つ特徴・服、性格の軸、来歴）を足す。役職の型（宿屋の主人＝皺と灰色のローブ）で埋まるのを止め、人ごとに見分けがつくようにする"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "settings": {
     "SEED_CHANCE": {

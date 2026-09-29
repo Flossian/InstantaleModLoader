@@ -121,6 +121,7 @@ BANDS = (
         "134_balance_item_effects",
         "135_fix_inn_button_order",
         "137_fix_npc_skill_uses",
+        "138_fix_character_image_refresh",
         "130_currency_unit",
         "131_sharp_portrait",
         "132_npc_variety",
@@ -175,6 +176,7 @@ BANDS = (
         "332_training_custom",
         "333_equipment_slots",
         "334_colosseum_custom",
+        "335_player_portrait_regenerate",
     )),
     #: 提供（4xx）は出どころの帯なので kind を固定しない（TECH.md §3.2.2）。
     (None, CONTRIB_HEAD, (
@@ -184,6 +186,8 @@ BANDS = (
         "404_party_talk",
         "405_regional_economy",
         "406_gemini_user_role_fix",
+        "407_npc_starting_equipment",
+        "408_visual_changes_based_on_equipment",
     )),
 )
 

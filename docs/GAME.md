@@ -921,6 +921,11 @@ reduce_status_turns_and_log / check_character_death / check_team_annihilation
 check_battle_end / enemy_delete_animation / convert_llm_output_to_instruction_dict
 ```
 
+敵の手番を回す `enemy_turn_separate` はこの一覧に無い。
+スタックでは `BattlePhaseManager.battle` の下のフレームにクラス名なしで出て（`instantale.py:7720`、VERIFICATION_LOG.md §2.40）、
+`__main__:BattlePhaseManager.enemy_turn_separate` は `UNRESOLVED`（attribute not found）になる。
+`battle` の中で定義された関数と読んでいて、`ctx.wrap` では包めない。
+
 実測（`308_` のログ）:
 
 - **1手 = `handle_battle_situation` 1回**（味方の手も敵の手もここを通る）
@@ -1886,6 +1891,10 @@ ItemPopupMenu.on_consume_item          右クリックの「消費」
 - 本体が読む装備は `equipments` の `weapon` と `wearable` の2つだけ。セーブの形は
   `{"wearable": "item_2", "weapon": "item_0"}`（id の文字列）で、実行時は `Item` オブジェクト。
   書いているのは `ItemPopupMenu` 側で、`Item.equip()` は書かない
+- 仲間の `equipments` は、何を入れてもセーブでは `{}` になる。id の文字列でも実体（`Item`）でも同じで、
+  持ち物（`inventory`）の品はセーブに残る（`407_` の実機で両方を測った。保存の後も実行時の
+  `equipments` は残っていて、`408_` が読めていた）。`333_` が文字列で書く仲間も、セーブは `{}` だった。
+  ロードをまたいで仲間の装備が残るのは、`333_` が自分の控え（`state\equipment_slots\`）から組み直すときだけ
 - 装備の種類は `attributes['item_detail']`（`weapon`: `small_weapon` / `medium_weapon` /
   `long_weapon` / `large_weapon` / `throwable`、`wearable`: `shield` / `clothing` /
   `body_armor` / `accessory` / `legwear` / `leg_armor` / `gauntlets` / `headgear`）。

@@ -108,20 +108,51 @@ def reputation_epithet(data):
 #: 中身は読まれない（在ることが頼み）。
 REROLL_SUFFIX = ".reroll.json"
 
-#: 引き直しボタンの置き場所。二つ名の箱（x 0.43〜0.78）のすぐ右。
+#: 引き直しボタンの置き場所の右端。レベル行の箱（x 0.03〜0.78）のすぐ右。
+#: ふだんは二つ名の文字の直後に置き（`reroll_pos`）、文字の幅を測れないときと、
+#: 文字が箱の右端まで届くときだけここに置く。
+#: 版3まではいつもここで、短い二つ名だと文字から大きく離れて見えた。
 #: 大きさはボタン側の固定値（`ui.make_icon_button` の正方形）を使うので、位置だけ持つ。
 #: 最初の版は箱の割合（幅0.05×高0.06）で置いていて、窓に合わせて横長に潰れていた（実機）。
 REROLL_POS = {"x": 0.79, "center_y": 0.875}
 
-#: 引き直しボタンの絵柄（0〜1 の座標。円弧＋矢尻）。
+#: 二つ名の文字の終わりから引き直しボタンまでの間（upx）。
+REROLL_GAP = 8.0
+
+#: 引き直しボタンの絵柄（0〜1 の座標。角を落としたサイコロの面と3つの目）。
+#: 版3までは円弧＋矢尻で、408 の立ち絵の描き直しボタンと並ぶと
+#: どちらが何を更新するのか見分けが付かなかった。
+#: 目は長さの無い線で、丸い端が点になる。
 #: MOD 固有の絵柄はローダの `icon_strokes` に足さず自分のフォルダに置く決まり。
 REROLL_STROKES = [
-    [(0.35, 0.76), (0.50, 0.80), (0.65, 0.76), (0.76, 0.65), (0.80, 0.50),
-     (0.76, 0.35), (0.65, 0.24), (0.50, 0.20), (0.35, 0.24), (0.24, 0.35),
-     (0.20, 0.50)],
-    [(0.20, 0.50), (0.10, 0.42)],
-    [(0.20, 0.50), (0.32, 0.44)],
+    [(0.28, 0.16), (0.72, 0.16), (0.84, 0.28), (0.84, 0.72), (0.72, 0.84),
+     (0.28, 0.84), (0.16, 0.72), (0.16, 0.28), (0.28, 0.16)],
+    [(0.33, 0.67), (0.34, 0.67)],
+    [(0.50, 0.50), (0.51, 0.50)],
+    [(0.67, 0.33), (0.68, 0.33)],
 ]
+
+
+def reroll_pos(text_width, padding_left, layout_width, gap):
+    """引き直しボタンの `pos_hint`。レベル行の文字（二つ名まで）の直後に置く。
+
+    値はレイアウトに対する割合。レベル行の箱の左端（`BOXES` の x）に、
+    箱の左の余白・文字の幅・間を足す。
+    `REROLL_POS` より右へは出さない（能力値の列に食い込む）。
+    測れない値が1つでもあれば `REROLL_POS`。
+    """
+    try:
+        text_width = float(text_width)
+        padding_left = float(padding_left)
+        layout_width = float(layout_width)
+        gap = float(gap)
+    except (TypeError, ValueError):
+        return dict(REROLL_POS)
+    if text_width <= 0 or layout_width <= 0:
+        return dict(REROLL_POS)
+    left = BOXES["character_sheet_basic_info"][1]["x"]
+    x = left + (padding_left + text_width + gap) / layout_width
+    return {"x": min(x, REROLL_POS["x"]), "center_y": REROLL_POS["center_y"]}
 
 
 def epithet_text(epithet):

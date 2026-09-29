@@ -27,7 +27,7 @@
 装備欄の MOD（`333_equipment_slots`）を入れていれば、装備は `weapon` / `wearable` の 2 行ではなく
 部位ごとの行で書く（版8）。部位の名前は装備欄の MOD のもの（`right_hand` `left_hand` `head` `body` `arms` `legs`
 `accessory1` `accessory2`）で、属性は `right_hand_attributes` のように本文の直後の行に分ける。
-身に着けている品は、ローダの窓口 `combat.gear` に聞く（TECH.md §3.3.5）。
+身に着けている品は、ローダの窓口 `equipment.gear` に聞く（TECH.md §3.3.6）。
 
 ```text
 【パーティーメンバー戦闘情報】

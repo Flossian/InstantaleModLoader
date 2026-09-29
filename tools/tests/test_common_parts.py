@@ -274,6 +274,40 @@ def test_worker(root):
     quick.drain(5.0)
     check("rebind で新しい世代の仕事に切り替わる", later == [3], later)
 
+    # 終わった後の関数も繋ぎ替える。渡さなければ前の世代のものが残る。
+    old_done, new_done = [], []
+    tail = jobs.Worker(ctx, lambda job: None, name="test_done", idle=1.0,
+                       on_done=old_done.append)
+    tail.rebind(ctx, run=lambda job: None)
+    tail.enqueue(1)
+    tail.drain(5.0)
+    check("on_done を渡さない rebind は前のものを残す", old_done == [1], old_done)
+    tail.rebind(ctx, run=lambda job: None, on_done=new_done.append)
+    tail.enqueue(2)
+    tail.drain(5.0)
+    check("rebind で on_done も新しい世代に切り替わる",
+          new_done == [2] and old_done == [1], (old_done, new_done))
+
+    # jobs.rebind は、前の版のローダが作った Worker（on_drop / on_done を受けない）でも付け替える。
+    third = []
+    same = jobs.rebind(tail, ctx, lambda job: None, None, on_done=third.append)
+    tail.enqueue(3)
+    tail.drain(5.0)
+    check("jobs.rebind は Worker をそのまま返して付け替える",
+          same is tail and third == [3], third)
+
+    class OldWorker(object):
+        def rebind(self, ctx, run=None, write=None):
+            self.run, self.write = run, write
+            return self
+
+    old = OldWorker()
+    dropped, done = (lambda job: None), (lambda job: None)
+    got = jobs.rebind(old, ctx, "run", "write", on_drop=dropped, on_done=done)
+    check("前の版の Worker でも on_drop / on_done を入れる",
+          got is old and old.run == "run" and old.write == "write"
+          and old.on_drop is dropped and old.on_done is done)
+
 
 # ----------------------------------------------------------------------- llm
 

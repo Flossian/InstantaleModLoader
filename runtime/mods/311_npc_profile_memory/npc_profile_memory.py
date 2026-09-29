@@ -986,12 +986,13 @@ def apply(ctx):
     # 抽出は背景で1件ずつ（LLM を待つのでゲームのスレッドでは回せない）。
     # 待ち行列・直列のスレッド・溢れたら古い方から捨てる・仕事が無ければ畳む、は
     # ローダの語彙（`jobs.Worker`）。ここに残すのは何をログに出すかだけ。
-    worker = store["worker"] = (
+    # 注入し直したときは、ログを出す2つの関数も今の世代へ付け替える。
+    worker = store["worker"] = jobs.rebind(
         store["worker"]
         or jobs.Worker(ctx, extract, name="npc_profile", label="npc profile",
                        max_pending=MAX_PENDING,
-                       on_drop=note_dropped, on_done=note_finished)
-    ).rebind(ctx, extract, write)
+                       on_drop=note_dropped, on_done=note_finished),
+        ctx, extract, write, on_drop=note_dropped, on_done=note_finished)
 
     def enqueue_extract(app, npc_id):
         snapshot = snapshot_of(app, npc_id)

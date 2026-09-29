@@ -1,0 +1,15 @@
+{
+  "entry": "npc_starting_equipment.py",
+  "api": 1,
+  "kind": "feature",
+  "version": "3",
+  "author": "MoririnJP",
+  "name": {
+    "ja": "NPC初期装備",
+    "en": "NPC starting equipment"
+  },
+  "description": {
+    "ja": "パーティーに加わったNPCへ、人物に見合う武器と防具を1つずつ作って一度だけ装備させる。加入は止めず、装備は後から持たせる",
+    "en": "Gives an NPC who joins the party one weapon and one wearable that fit the character, once. The join itself is not delayed; the equipment arrives afterwards."
+  }
+}

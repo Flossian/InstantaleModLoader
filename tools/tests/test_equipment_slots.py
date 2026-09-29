@@ -488,7 +488,7 @@ w_dagger2 = Widget(dagger, main, (1, 5))
 drop(w_dagger2, 0, 2)                                        # 左手へ。最高値の剣は変わらない
 assert hud.painted == "Atk:432(+806)\nDef:0(+439)", getattr(hud, "painted", None)
 # 窓口 combat: 主人公は装備欄（合算）、仲間は本体の equipments の 1 品
-from instantale_modloader import combat
+from instantale_modloader import combat, equipment
 assert combat.source_of(combat.ATTACK).endswith("equipment_slots")
 assert combat.attack(app, player) == 580 + 451 * 0.5 and combat.defense(app, player) == 439
 mate = Player(); mate.name = "仲間"
@@ -578,15 +578,15 @@ helm2b = Item("h9", "wearable", "headgear", 50)
 mate.give(helm2b)
 w_helm2b = Widget(helm2b, twin, (0, 0))
 # 402_ の「装備」は窓口を通してここへ来る
-assert combat.equipped(app, mate, helm2b) is False and combat.equipped(app, mate, spear) is True
-assert combat.toggle(app, mate, helm2b) == "equipped"
+assert equipment.equipped(app, mate, helm2b) is False and equipment.equipped(app, mate, spear) is True
+assert equipment.toggle(app, mate, helm2b) == "equipped"
 assert "h9" in NSC["container"] and "h9" not in mate.inventory.inventory
 assert mate.equipments == {"weapon": "k1", "wearable": "h9"}, mate.equipments   # 辞書には id で書く
 assert combat.defense(app, mate) == 50 and combat.attack(app, mate) == 300
-assert combat.toggle(app, mate, helm2b) == "unequipped"
+assert equipment.toggle(app, mate, helm2b) == "unequipped"
 assert "h9" not in NSC["container"] and "h9" in mate.inventory.inventory
 assert mate.equipments == {"weapon": "k1"}, mate.equipments
-assert combat.toggle(app, mate, herb) is None                    # 仲間の品でなければ 402_ に任せる
+assert equipment.toggle(app, mate, herb) is None                    # 仲間の品でなければ 402_ に任せる
 # セーブ: 仲間の装備欄の品は npcs[<id>].inventory へ足す。主人公の品は主人公へ
 data = {"world_data": {"name": "世界"}, "player_data": {"inventory": {}}, "npcs": {"78": {"inventory": {}}}}
 written = {}
@@ -596,7 +596,7 @@ assert "k1" not in written["player_data"]["inventory"]
 # 主人公の品は仲間の装備欄へ置けない（渡す前の品）
 w_ring2 = Widget(ring, twin, (1, 0))
 ring.obtainer = player
-assert combat.toggle(app, mate, ring) is None
+assert equipment.toggle(app, mate, ring) is None
 ring.obtainer = player
 
 # 段3: 仲間の装備欄から主人公側へ直接引く。402_ が持ち物の辞書と持ち主を移し（窓口の答えを見て
@@ -621,24 +621,52 @@ assert "k1" not in mate.inventory.inventory, mate.inventory.inventory   # 仲間
 assert player.inventory.inventory.get("k1") is spear
 assert "weapon" not in mate.equipments, mate.equipments                 # 書くのは 333
 assert any("npc:78: 'k1' handed to" in l for l in ctx.lines), ctx.lines[-5:]
-assert combat.equipped(app, mate, spear) is False
+assert equipment.equipped(app, mate, spear) is False
 
-# 段4: 身に着けている品（`combat.gear`）。部位の並び順で、主人公にも答える
-worn = combat.gear(app, player)
+# 段4: 身に着けている品（`equipment.gear`）。部位の並び順で、主人公にも答える
+worn = equipment.gear(app, player)
 assert worn, worn
 assert [r for r, _i in worn] == [r for r in rules.REGIONS if r in dict(worn)], worn
 assert all(item is not None for _r, item in worn)
-assert combat.toggle(app, mate, helm2b) == "equipped"
-assert combat.gear(app, mate) == [("head", helm2b)], combat.gear(app, mate)
+assert equipment.toggle(app, mate, helm2b) == "equipped"
+assert equipment.gear(app, mate) == [("head", helm2b)], equipment.gear(app, mate)
 # ロード直後（窓をまだ開いていない）: 品は持ち物の辞書に居て、装備欄の辞書には無い／古い品が残る
 NSC["container"].clear()
 mate.inventory.inventory["h9"] = helm2b
-assert combat.gear(app, mate) == [("head", helm2b)], combat.gear(app, mate)
+assert equipment.gear(app, mate) == [("head", helm2b)], equipment.gear(app, mate)
 stale = Item("h9", "wearable", "headgear", 50)
 NSC["container"]["h9"] = stale                                    # ロード前の品
-assert combat.gear(app, mate)[0][1] is helm2b                      # 持ち物の辞書を先に引く
+assert equipment.gear(app, mate)[0][1] is helm2b                      # 持ち物の辞書を先に引く
 stranger = Player(); stranger.name = "他人"; stranger.id = "99"
-assert combat.gear(app, stranger) is None                         # 装備欄を使っていなければ None
+assert equipment.gear(app, stranger) is None                         # 装備欄を使っていなければ None
+
+# 段5: 窓を開かずに入れる（`equipment.equip`。407_ の初期装備が呼ぶ）。
+# 窓を開くときと同じ道で、控えに位置を書き、装備欄の辞書へ移し、`equipments` を id で合わせる
+rookie = Player(); rookie.name = "新人"; rookie.id = "81"
+r_sword = Item("r1", "weapon", "small_weapon", 120)
+r_coat = Item("r2", "wearable", "clothing", 40)
+r_knife = Item("r3", "weapon", "small_weapon", 60)
+r_axe = Item("r4", "weapon", "large_weapon", 90)
+r_herb = Item("r5", "healing_item", "herb")
+rookie.give(r_sword, r_coat, r_knife, r_axe, r_herb)
+assert MOD.SCOPE_FOR(app, rookie, create=False) is None             # まだ装備欄を持っていない
+assert equipment.equip(app, rookie, r_sword) == "equipped"
+assert equipment.equip(app, rookie, r_coat) == "equipped"
+RSC = MOD.SCOPE_FOR(app, rookie, create=False)
+assert RSC is not None and set(RSC["container"]) == {"r1", "r2"}, RSC["container"]
+assert "r1" not in rookie.inventory.inventory and "r2" not in rookie.inventory.inventory
+assert rookie.equipments == {"weapon": "r1", "wearable": "r2"}, rookie.equipments
+saved_positions = store.load(MOD.state.playthrough_key(app)).get("npc:81")
+assert set(saved_positions or {}) == {"r1", "r2"}, saved_positions            # 控えに載る＝ロードをまたぐ
+assert [r for r, _i in equipment.gear(app, rookie)] == ["right_hand", "body"], equipment.gear(app, rookie)
+assert any("npc:81: equipped 'r1' into right_hand without the window" in l for l in ctx.lines)
+assert equipment.equip(app, rookie, r_sword) == "equipped"                    # 二度目は何もしない
+assert equipment.equip(app, rookie, r_knife) == "equipped"                    # 右手が埋まれば左手
+assert equipment.equip(app, rookie, r_axe) == "no free slot"                  # 手が両方埋まった
+assert "r4" in rookie.inventory.inventory                                     # 断った品は持ち物のまま
+assert equipment.equip(app, rookie, r_herb) == "not equipment"
+assert equipment.equip(app, player, sword) is None                           # 主人公は窓口の外
+assert combat.attack(app, rookie) == 120 and combat.defense(app, rookie) == 40
 
 # ---------------------------------------------------------------- 同じ世界のロード・別の主人公
 # 装備中の品は装備欄の辞書にだけ居る。ロードでそれを捨てないと、セーブの後に手に入れて装備した品が
@@ -693,7 +721,7 @@ assert not MOD.CONTAINER and set(p3.inventory.inventory) == {"x3"}, (MOD.CONTAIN
 assert c1_loaded.obtainer is p2                                         # 前の主人公の品はそのまま
 other_bucket = store.load(MOD.state.playthrough_key(app_r))
 assert MOD.state.playthrough_key(app_r) == "世界×別人" and "テスト" not in other_bucket, other_bucket
-assert combat.gear(app_r, p3) is None
+assert equipment.gear(app_r, p3) is None
 # 世界名だけの控え（版17まで）は、初めて引いた主人公へ移して元から消す
 store.save("旧世界", {"古参": {"c9": [2, 0]}, "npc:5": {"k9": [4, 2]}, "他人": {"z": [2, 0]}})
 p4 = Player(); p4.name = "古参"

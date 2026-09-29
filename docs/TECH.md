@@ -130,6 +130,8 @@ runtime/instantale_modloader/
     prices.py     値段の2つ。ゲームが決めている額（宿屋の部屋など）の窓口（§3.3.4）と、
                   アイテムの売買額を組む関所（式1枚＋段N枚。書く地点8つを1枚だけ包む。§5.9）
     combat.py     戦闘の数の窓口。人物ごとの装備の攻撃力・防御力を、装備を持つ MOD が置き、戦闘を組む MOD が聞く（§3.3.5）
+    equipment.py  装備欄の窓口。仲間の品の出し入れと身に着けている品を、装備欄を持つ MOD が答え、
+                  仲間の装備を扱う MOD が聞く（§3.3.6）
     sounds.py     曲の置き場所の探し方・戦闘曲の見分け方・重みの読み方（§5.10）
     ids.py        ゲームの採番台帳（`index`）を通した id の採り方（§3.2.3）
     saves.py      ディスクのセーブの読み方（置き場・難読化・世界の一覧。§3.2.3）
@@ -1310,17 +1312,9 @@ combat.declare(combat.DEFENSE, lambda app, holder: ..., owner=owner, write=write
 weapon = combat.attack(app, attacker)      # 仲間の錨 = 従来 + 2×√(能力 × weapon) × 率
 armor = combat.defense(app, defender)      # 仲間の防御 = 本体の値 + armor × 率
 
-# 装備の操作も同じ窓口（402 の「装備／外す」→ 333 の装備欄）。None なら聞く側が自分で書く
-done = combat.toggle(app, npc, item)        # "equipped" / "unequipped" / 断りの文字列 / None
-flag = combat.equipped(app, npc, item)      # True / False / None
-
-# 身に着けている品（401 が審判へ見せる）。主人公にも答える。装備欄を使っていなければ None
-worn = combat.gear(app, holder)             # [(部位, 品), ...] / None
 ```
 
-仲間の `equipments` を書くのは装備欄の MOD だけ。`equipped` が None でない（装備欄の MOD がその持ち主を
-持っている）とき、402 は受け渡しのドラッグでも解除や参照の掃除をしない。書き手が 2 本あると、装備欄から
-主人公側へ引いた品が仲間の持ち物にも残った（VERIFICATION.md §3.70）。
+`combat` は数だけを持つ。装備欄の出し入れと身に着けている品は `equipment`（§3.3.6）。
 
 | 決まり | 理由 |
 |---|---|
@@ -1331,6 +1325,41 @@ worn = combat.gear(app, holder)             # [(部位, 品), ...] / None
 
 公式が NPC に武器を参照させない理由は「審判 LLM の文脈に全員の装備を書くと小規模モデルで壊れる」で、
 数の側の理由ではない（`401_` が文字数の予算で抑えている）。数だけを足す判断は VERIFICATION.md §3.70。
+
+#### 3.3.6 装備欄の出し入れも窓口で持つ（`equipment`）
+
+装備欄を持つ MOD（`333_equipment_slots`）と、仲間の装備を扱う MOD（`402_` の受け渡し・`401_` の審判への文・
+`407_` の初期装備・`408_` の見た目）は互いを import しない。仲間の品を装備欄へ入れる・戻す、
+身に着けている品を答える、を `instantale_modloader/equipment.py` で受け渡す。
+戦闘の数（§3.3.5）とは置き場を分けてある。
+
+```python
+# 置く側（333）
+equipment.declare(equipment.TOGGLE, npc_toggle, owner=owner, write=write)
+equipment.declare(equipment.EQUIP, npc_equip, owner=owner, write=write)
+equipment.declare(equipment.EQUIPPED, npc_equipped, owner=owner, write=write)
+equipment.declare(equipment.GEAR, worn_of, owner=owner, write=write)
+
+# 聞く側。None なら装備欄の MOD が居ない（または答えられない）
+done = equipment.toggle(app, npc, item)     # 開いている窓の上で入れる／戻す（402 の「装備／外す」）
+done = equipment.equip(app, npc, item)      # 窓を開かずに入れる（407 の初期装備）。"equipped" / 断りの文字列 / None
+flag = equipment.equipped(app, npc, item)   # True / False / None
+worn = equipment.gear(app, holder)          # [(部位, 品), ...] / None。主人公にも答える
+```
+
+本体は仲間の `equipments` を保存しない（GAME.md §2.13.3）。ロードをまたいで仲間の装備が残るのは
+装備欄の MOD の控えだけなので、仲間に装備させたい MOD は `equip` を通す。
+`equip` が None のとき（装備欄の MOD が居ない）、`407_` は品を持ち物に渡すだけで終える。
+
+仲間の `equipments` を書くのは装備欄の MOD だけ。`equipped` が None でない（装備欄の MOD がその持ち主を
+持っている）とき、402 は受け渡しのドラッグでも解除や参照の掃除をしない。書き手が 2 本あると、装備欄から
+主人公側へ引いた品が仲間の持ち物にも残った（VERIFICATION.md §3.70）。
+
+| 決まり | 理由 |
+|---|---|
+| `equip` は窓を開くときと同じ道を通す | 控えに位置を書き、装備欄の辞書を組み直し、`equipments` を合わせる。道を分けると、窓を開いたときの組み直しと食い違う |
+| `equip` は先に主人公の装備欄を組む | 仲間の分だけ組むと「今の周回で組んだ」印が立ち、主人公の空の辞書を装備なしと読んで本体の武器と防具を外す（333 版22） |
+| 例外・崩れた形の答えは None | 聞く側は素の読み方（`equipments`）に戻る |
 
 ### 3.4 まだ現れていない対象を狙う（保留と当て直し）
 
@@ -1533,11 +1562,16 @@ UNRESOLVED (1): target not found in the running build
 
 （起動直後に注入し、2段目の当て直しで出た報告。GAME.md §1.7）
 
+`UNRESOLVED` の1件はゲーム更新ではなかった。
+`334_` がスタックに出た関数名をそのままクラスの属性として名指ししていたもので、
+`enemy_turn_separate` は `battle` の中の関数だった（GAME.md §2.10「1手ぶんの内訳」）。
+`334_` 版6で外した。0件のときは節ごと出ない。
+
 | 節 | 意味 | 対処 |
 |---|---|---|
 | `overlapping targets` | 2つ以上の MOD が同じ対象を触っている | 正常なことも多い。§3.2.2 の帯順と突き合わせる |
 | `deferred` | モジュールが未 import。後で当て直す（§3.4） | 待てばよい |
-| `UNRESOLVED` | モジュールは在るが対象が無い | ゲーム更新を最初に疑う。`out/recon/` で名前を取り直す |
+| `UNRESOLVED` | モジュールは在るが対象が無い | ゲーム更新を最初に疑う。`out/recon/` で名前を取り直す。recon の版が変わっていなければ、名指しの誤り（関数の中の関数、打ち間違い）を疑う |
 
 `UNRESOLVED` は `required=True` なら例外にもなるが、**投げる前に記録している**
 （その MOD が `apply-error` で落ちても、何が見つからなかったかは報告に残る）。
@@ -2579,12 +2613,12 @@ LLM を待つような重い処理を、ゲームのスレッドから外して�
 ```python
 from instantale_modloader import jobs
 
-worker = store["worker"] = (
+worker = store["worker"] = jobs.rebind(
     store["worker"]
     or jobs.Worker(ctx, compile_area, name="area_chronicle",
                    label="area chronicle", key=job_key,
-                   max_pending=MAX_PENDING, on_drop=note_dropped)
-).rebind(ctx, compile_area, write)
+                   max_pending=MAX_PENDING, on_drop=note_dropped),
+    ctx, compile_area, write, on_drop=note_dropped)
 
 if worker.enqueue(job):
     write("編纂を予約: ...")
@@ -2602,6 +2636,15 @@ MOD 側に残るのは**何をログに出すか**だけ（`on_drop` / `on_done`
 
 `rebind` で新しい `run` になるのは、繋ぎ替えた後に取り出す1件から。
 既に走り出している1件は最後まで前の世代の `run` でこなす（走っている1件を止める手立ては持たない）。
+
+`on_drop` / `on_done` も `apply()` の中の閉包なので、作るときに渡したものは付け替えるときにも渡す。
+渡さなければ前の世代のものが残り、注入し直しても終わった後の処理だけが古い版のまま動く
+（`408_` で、立ち絵の読み直しが一度も走らなかった。`rebind` がこの2つを受けるようにしたのはその後）。
+
+付け替えはメソッドの `worker.rebind(...)` ではなく関数の `jobs.rebind(worker, ...)` で行う。
+Worker はプロセスに残るので、同じゲームへ注入し直すと前の版のローダのクラスで作られたものが来る。
+そのメソッドは `on_drop` / `on_done` を受けず、渡すと `TypeError` で `apply()` ごと落ちる。
+関数の方は、受けなければ属性へ直接入れる。
 
 `Worker` と `WorldStore` はどちらも `apply()` の外に置くこと。
 `apply()` は1プロセスで何度も呼ばれる（§3.5）ので、
