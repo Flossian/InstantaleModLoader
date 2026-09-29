@@ -215,6 +215,8 @@ def fresh(generation, npcs=None, characters=None):
     sys.modules["scripts.characters"] = types.SimpleNamespace(
         Character=lambda **kw: _build(**kw))
     module = load_mod()
+    # 来訪者の既定は切（版4）。この検査は来訪者を置く経路を通すので入れる。
+    module.PRESENT = True
     saves = FakeSaves(npcs if npcs is not None else {"7": {}},
                       characters if characters is not None else {"7": {}})
     module.saves = saves
@@ -473,6 +475,17 @@ def main():
     # 1回の保存で 登録2件（来訪者と主）× hide / restore の4件。5回保存しても2回ぶん。
     check("at=save も枠の数だけ", len(save_rows) == 2 * 4, [r.get("phase") for r in save_rows])
     module.SAVE_LINES = 20
+
+    # 版4: 来訪者の既定は切。設定を触らずに入れたときは来訪者を登録しない。
+    modnpc.purge()
+    default_module = load_mod()
+    check("来訪者の既定は切", default_module.PRESENT is False, default_module.PRESENT)
+    default_module.saves = FakeSaves({"7": {}}, {"7": {}})
+    default_module.state = types.SimpleNamespace(world_key=lambda app: "測定用の世界")
+    default_module.apply(FakeCtx(OUT_DIR, "g-default"))
+    check("既定のままなら来訪者を登録しない",
+          modnpc.make_id(default_module.OWNER, "visitor") not in modnpc.registry(),
+          sorted(modnpc.registry()))
 
     sys.modules.pop("scripts.llm.llm_manager", None)
     modnpc.purge()

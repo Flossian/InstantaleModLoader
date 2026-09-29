@@ -3992,7 +3992,7 @@ Lv40・少し積む作り・仲間1人、1 レベルあたり 3%（格上は減�
 | `226_probe_item_consume` | 2→3 | 使用の外の上限更新を既定で録らない。控えの文が残り続けるのを直した。引数を受け取った形のまま渡す | 変わらない |
 | `227_probe_shop_stock` | 2→3 | 店の外の品の誕生を既定で録らない。境目は差分だけ。引数を受け取った形のまま渡す | デバッグモードでも §3.76 の `multiple values` が隠れない |
 | `228_probe_area_move_reject` | 3→4 | `safe=True`。読んだ値の `repr` をやめ、小さな値だけ写す（手元では無効） | 有効にしたとき |
-| `229_probe_mod_npc` | 3→4 | `save_game` に `safe=True`。読みの数をインスタンスで数える。保存ごとの記録に上限。設定の `LIFT_ROSTER`（ローダ全体の旗を書き換えていた）を外し、ローダの設定へ移した（手元では無効） | 有効にしたとき。`ready:` の行の `lift_roster=` が `settings\loader.json` の値に従う |
+| `229_probe_mod_npc` | 3→4 | `save_game` に `safe=True`。読みの数をインスタンスで数える。保存ごとの記録に上限。設定の `LIFT_ROSTER`（ローダ全体の旗を書き換えていた）を外し、ローダの設定へ移した。来訪者（`PRESENT`）の既定を切にした（手元では無効） | 有効にしたとき。`ready:` の行の `lift_roster=` が `settings\loader.json` の値に従う |
 | `230_probe_image_generation` | 7→8 | 5秒ごとの `sys.modules` の走査をやめた。棚卸しを1プロセス1回 | 画像生成の記録がこれまでどおり取れる |
 | `231_probe_training` | 2→3 | `safe=True`。ゲームのマネージャに属性を足すのをやめた | 変わらない |
 | `232_probe_facility_choices` | 1→2 | 環境と属性名の行を1プロセス1回 | 変わらない |

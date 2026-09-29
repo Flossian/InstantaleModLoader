@@ -16,14 +16,14 @@
   "settings": {
     "PRESENT": {
       "type": "bool",
-      "default": true,
+      "default": false,
       "label": {
         "ja": "来訪者を居させる",
         "en": "Keep the visitor around"
       },
       "note": {
-        "ja": "切って注入し直すと unregister で片付け、名簿・施設・素データ・主の profile がどうなったかを録る",
-        "en": "Off + re-inject runs unregister and records what remains in the roster, facility, plain data and the owner's profile"
+        "ja": "既定は切。入れると来訪者を置き、施設へ連れて回って主に被せを載せる。入れた後に切って注入し直すと unregister で片付け、名簿・施設・素データ・主の profile がどうなったかを録る",
+        "en": "Off by default. On places the visitor, follows the player and overrides the owner. Turning it off again and re-injecting runs unregister and records what remains in the roster, facility, plain data and the owner's profile"
       }
     },
     "FOLLOW": {
