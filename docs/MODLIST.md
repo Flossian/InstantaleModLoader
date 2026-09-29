@@ -168,11 +168,11 @@
 | `223_probe_party_equipment` | 本体のアイテム popup と `ItemEquipManager` / `ItemUnequipManager` の入口を観測し、素のゲームが実際に誰の `equipments` を書き換えるかを測る |
 | `224_probe_npc_carryover` | ロードのどの地点から世界へ NPC を入れられるかを測る |
 | `225_probe_area_quest_difficulty` | 街を初めて訪ねたとき、依頼の難易度を誰がどう決めるかを録る |
-| `226_probe_item_consume` | 回復アイテムを使ったとき何が起きるかを録る |
+| `226_probe_item_consume` | 回復アイテムを使ったとき、何が誰にどれだけ効くかを録る |
 | `227_probe_shop_stock` | 買った品が店の棚へ戻るのはどこかを録る |
-| `228_probe_area_move_reject` | エリア移動の拒否（`AreaMoveManager.execute` → `area_move_rejector`）が同行者の何を読んで決めているかを録る |
-| `229_probe_mod_npc` | ローダの `instantale_modloader.modnpc`（MOD だけが持つ NPC と、正規 NPC への被せ）を実機に通し、どこまで通るかを録る |
-| `230_probe_image_generation` | 画像生成の出口とバックエンドを録る |
+| `228_probe_area_move_reject` | エリア移動の拒否（`area_move_rejector`）が、同行者の何を読んで決めているかを録る |
+| `229_probe_mod_npc` | ローダの `modnpc`（MOD だけが持つ NPC と、正規 NPC への被せ）を実機に通す |
+| `230_probe_image_generation` | 画像生成のバックエンドと出口を録る |
 | `231_probe_training` | 施設での訓練の暦を録る |
 | `232_probe_facility_choices` | 宿屋だけ `出る` が先頭に並ぶ原因を測る |
 | `233_probe_colosseum` | 闘技場の試合を録る |
