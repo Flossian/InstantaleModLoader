@@ -333,7 +333,44 @@ def pin(shot, widget, x, y):
     widget.pos_hint = {}
     if shot["size"]:
         widget.width, widget.height = shot["size"]
+    move_to(widget, x, y)
+
+
+def move_to(widget, x, y):
+    """`widget` を `(x, y)` へ動かし、**付いてこなかった中身も同じだけ動かす**。
+
+    Kivy の `FloatLayout` が寄せ直すのは `pos_hint` を持つ子だけで、
+    座標で置かれた子（枠の中の `StencilFloatLayout` や立ち絵）は親が動いても元の場所に残る。
+    逆に、親の `pos` に束ねられた子は束ねた側が動かす。
+    どちらの作りかはこちらから分からないので、動かした後に見て、
+    **元の場所に残っている子だけ**を同じ量ずらす（束ねられた子は二重に動かさない）。
+    上の段から順に見るので、親に束ねられた孫は親をずらした時点で付いてきている。
+    """
+    try:
+        dx, dy = float(x) - float(widget.x), float(y) - float(widget.y)
+    except Exception:
+        return
+    if not dx and not dy:
+        return
+    before = []
+
+    def collect(node, depth):
+        for child in children_of(node):
+            spot = numbers(frames.attr(child, "pos"), 2)
+            if spot:
+                before.append((child, spot))
+            if depth < MAX_DEPTH:
+                collect(child, depth + 1)
+
+    collect(widget, 0)
     widget.x, widget.y = x, y
+    for child, (old_x, old_y) in before:
+        now = numbers(frames.attr(child, "pos"), 2)
+        if now and now[0] == old_x and now[1] == old_y:
+            try:
+                child.x, child.y = old_x + dx, old_y + dy
+            except Exception:
+                pass      # 座標を書けない子。見た目がずれるだけで押下は枠が受ける
 
 
 # ---------------------------------------------------------------- 枠を複製する

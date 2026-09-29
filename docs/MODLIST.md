@@ -59,7 +59,7 @@
 | [`113_ui_text_expand`](MODS.md#113_ui_text_expand-本文の表示域をボタンで広げる) | 本文の表示域を広げる | 本文の表示域をボタンで広げる | 10 |  |
 | [`114_ui_input_focus`](MODS.md#114_ui_input_focus-自由入力のあと入力欄にフォーカスを戻す) | 入力欄のフォーカスを保つ | 自由入力のあと入力欄にフォーカスを戻す | 3 |  |
 | [`115_ui_item_list_fit`](MODS.md#115_ui_item_list_fit-はみ出すアイテム一覧を画面内に収める) | アイテム・スキル一覧を画面に収める | はみ出すアイテム一覧を画面内に収める | 3 |  |
-| [`116_ui_party_expand`](MODS.md#116_ui_party_expand-4人目以降の仲間も表示する) | パーティ欄の4人目以降を表示 | 4人目以降の仲間も表示する | 12 |  |
+| [`116_ui_party_expand`](MODS.md#116_ui_party_expand-4人目以降の仲間も表示する) | パーティ欄の4人目以降を表示 | 4人目以降の仲間も表示する | 14 |  |
 | [`117_message_text_integrity`](MODS.md#117_message_text_integrity-長い応答が途中で切れるのを直す) | 長い本文をより多く見せる | 長い応答が途中で切れるのを直す | 1 |  |
 | [`118_batch_message_render`](MODS.md#118_batch_message_render-本文の出し方逐次一括と既読の色を選ぶ) | 本文の一括表示と既読の灰色化 | 本文の出し方（逐次／一括）と既読の色を選ぶ | 4 |  |
 | [`119_fix_crime_attribution`](MODS.md#119_fix_crime_attribution-他人の犯罪が主人公のものになるのを直す) | 他人の犯罪で手配される件の修正 | 他人の犯罪が主人公のものになるのを直す | - |  |

@@ -82,7 +82,37 @@ Kivy の `y` は下端なので、`y` を据え置いて
 帯の高さも同じだけ足す（倍率ではなく足し算。枠線は帯より数 px 大きいので、
 倍率で配ると差まで倍になる）。
 
-窓に入る行数で頭打ちにする（`MAX_ROWS` と窓の高さの小さい方）。
+見せる行数の上限は2通りから選ぶ（`ROWS_LIMIT`）。
+「人数で決める」は `MAX_ROWS` と窓に入る行数の小さい方。
+「窓の高さで決める」は、帯の上端が窓の高さの `MAX_HEIGHT` を越えない行数。
+どちらでも元の行数を下回らない。
+
+## 溢れたらページで送る
+
+上限より仲間が多いときは、枠を仲間全員ぶん作り、見せるのはそのうち1ページぶんにする。
+1ページは見せている行数と同じ数。
+最後のページは後ろへ詰めて空の行を作らない（前のページと一部が重なる）。
+
+中身を差し替えて送るのではなく、**枠の置き場所を入れ替えて送る**。
+ゲームは帯の子を足した順に塗り、押下の相手も `party_cells` の添字で決める。
+中身を差し替える形だと、塗り直しのたびにゲームと取り合いになり、押した相手も食い違う。
+枠の置き場所だけを変えれば、塗るのも押下の行き先を決めるのもゲームのままで済む。
+
+今のページの枠は行に置き、それ以外は窓の外（`OFFSTAGE`）へ出す。
+`opacity` / `disabled` では隠さない。
+Kivy は無効なウィジェットに触れた時点で触りを止めるので、見えない当たり判定が残る。
+
+行の座標は `party_cells` の添字の順に割り当てる。
+最初の3行は元の3枠の実測の位置、その先は一番上の枠の上へ積む。
+1ページ目の並びは広げただけのときと同じで、元の枠は動かない。
+2ページ目以降は元の枠も窓の外へ出る。
+枠の中身は座標で置かれていて親に付いてこないことがあるので、
+付いてこなかった子だけを同じ量ずらす（`panel.move_to`）。
+畳むときは、先に1ページ目の場所へ中身ごと連れ戻してから元の寸法へ戻す。
+
+送るボタン（◀ ▶）は切り替えボタンの左に並べ、ページが2つ以上あるときだけ置く。
+要らないときは隠さずに入れ物から外す（理由は上と同じ）。
+端のページでは、それ以上送れない側を薄くして押せなくする。
 
 枠線・背景は帯とは別のウィジェットが描いていることがあるので、**今その帯と同じ場所に同じ大きさで置かれているもの**を仲間として一緒に伸ばす（`panel.family_of`。
 これが無いと `113_` と同じく「中身だけ広がって枠線が残る」）。
@@ -208,9 +238,20 @@ from . import panel as party_panel
 
 LOG_BASENAME = "party_expand.log"
 
-# 広げたときに何行まで増やすか。
+# 広げる行数の決め方。
+# 「人数で決める」は MAX_ROWS まで（窓に入る行数でも頭打ち）。
+# 「窓の高さで決める」は、帯の上端が窓の高さの MAX_HEIGHT を越えない行数まで。
+BY_COUNT = "人数で決める"
+BY_WINDOW = "窓の高さで決める"
+ROWS_LIMIT = BY_COUNT
+
+# 広げたときに何行まで増やすか（「人数で決める」のとき）。
 # 窓に入る行数と、この値の小さい方で頭打ち。
 MAX_ROWS = 8
+
+# 帯の上端をどこまで上げてよいか（「窓の高さで決める」のとき）。
+# 窓の高さに対する割合で、窓の下端から測る。
+MAX_HEIGHT = 0.6
 
 # 広げている間、帯に重なるボタンを隠して押せなくするか。
 HIDE_COVERED = True
@@ -273,6 +314,12 @@ PANEL_INSET = 8.0
 # 窓の大きさが変わってから、もう一度当て直すまでの秒数。
 RESETTLE_DELAY = 0.3
 
+# 今のページに入らない枠を置く座標（窓の外）。
+# 隠すのに `opacity` / `disabled` を使わない。
+# Kivy は無効なウィジェットに触れると触りを止めるので、見えない当たり判定が残る。
+# 窓の外なら触りが届かない。
+OFFSTAGE = -100000.0
+
 # 仲間が増減してから、もう一度当て直すまでの秒数。
 # 名簿が動いた直後はまだ画面の側（`party_members`）が古く、
 # `InstantaleApp.update_party_member` が 0.1 秒ごとに入れ直している。
@@ -294,6 +341,10 @@ MINE_ATTR = "_instantale_party_mine"
 BUTTON_ATTR = "_instantale_party_button"
 CALLBACK_ATTR = "_instantale_party_callback"
 WINDOW_ATTR = "_instantale_party_on_resize"
+LAYOUT_ATTR = "_instantale_party_layout"
+PAGER_ATTR = "_instantale_party_pagers"
+STEP_ATTR = "_instantale_party_page_step"
+PAGE_ICON_ATTR = "_instantale_party_page_icon"
 
 
 def apply(ctx):
@@ -303,7 +354,8 @@ def apply(ctx):
     state = {"expanded": bool(START_EXPANDED), "synced": False,
             "ask_game": True, "busy": False, "stale": False, 
              "healed": False, "game_paints": False,
-             "hud": None, "fields": None, "anchor": None}
+             "hud": None, "fields": None, "anchor": None,
+             "page": 0, "paging": None}
 
     note = ctx.logger(LOG_BASENAME)
     warn_once = ctx.warner("party expand")
@@ -357,21 +409,33 @@ def apply(ctx):
         note("design: " + party_panel.describe(fresh))
         return fresh
 
-    def rows_for(hud, design):
-        """出したい行数。仲間の人数と、窓に入る行数と、設定の小さい方。"""
+    def row_limit(design):
+        """見せてよい行数の上限。元の行数を下回らない。
+
+        「人数で決める」は MAX_ROWS と窓に入る行数（`MAX_FILL`）の小さい方。
+        「窓の高さで決める」は帯の上端が窓の `MAX_HEIGHT` を越えない行数。
+        帯の下端は動かないので、使えるのは下端から上の残り。
+        """
         base = design["rows"]
-        wanted = len(party_panel.member_ids(hud))
-        if wanted <= base:
-            return base
-        rows = min(wanted, max(int(MAX_ROWS), base))
+        by_window = ROWS_LIMIT == BY_WINDOW
+        rows = None if by_window else max(int(MAX_ROWS), base)
         pitch = party_panel.row_pitch(design)
         _width, height = toggle_button.window_size()
         if height and pitch > 0:
-            # 伸ばせるのは「窓に入る高さ」まで。
-            # 帯の下端は動かないので、使えるのは元の高さぶんを差し引いた残り。
-            room = height * MAX_FILL - float(design["size"][1])
-            rows = min(rows, base + max(int(room // pitch), 0))
-        return rows
+            bottom = float(design["pos"][1]) if design["pos"] else 0.0
+            share = float(MAX_HEIGHT) if by_window else MAX_FILL
+            room = height * share - bottom - float(design["size"][1])
+            fit = base + max(int(room // pitch), 0)
+            rows = fit if rows is None else min(rows, fit)
+        if rows is None:
+            rows = base       # 窓が測れないときは伸ばさない（ページ送りだけにする）
+        return max(rows, base)
+
+    def plan_for(hud, design):
+        """（見せる行数, 枠の総数）。枠は仲間全員ぶん作り、見せるのはそのうちの1ページ。"""
+        base = design["rows"]
+        total = max(len(party_panel.member_ids(hud)), base)
+        return min(total, row_limit(design)), total
 
     # -- 枠を足す -------------------------------------------------------------
     def running_app():
@@ -647,6 +711,7 @@ def apply(ctx):
         own = frames.attr(hud, BUTTON_ATTR)
         if own not in (None, frames.MISSING):
             keep.add(id(own))         # こちらのボタンを隠すと戻す手段が消える
+        keep.update(id(widget) for widget in pagers_of(hud))
         covered = []
         for widget in party_panel.coverable(ui.overlay_host(hud), gained, keep,
                                             toggle_button.window_size(), MAX_HIDE_AREA):
@@ -696,22 +761,44 @@ def apply(ctx):
             pass
 
     # -- 広げる / 戻す --------------------------------------------------------
-    def arrange(design, extras):
-        """枠を並べ直す。**元から在る枠は1 px も動かさない**。
+    def slot_at(design, slot, pitch):
+        """ページの中の `slot` 行目の座標。
 
-        元の枠は実測どおりの座標に釘付けし（`pin`）、足した枠だけを、
-        その上へ行の送り幅ぶんずつ積む。
+        最初の元の行数ぶんは元の枠の実測どおり（`party_cells` の添字の順）。
+        その先は一番上の枠の上へ、行の送り幅ぶんずつ積む。
+        1ページ目はこれで今までと同じ並びになり、元の枠は1 px も動かない。
+        """
+        base = design["rows"]
+        if slot < base:
+            return design["cells"][slot]["pos"]
+        top = design["cells"][design["order"][0]]["pos"]
+        return (top[0], float(top[1]) + (slot - base + 1) * pitch)
+
+    def arrange(design, extras, start, rows):
+        """枠を並べ直す。今のページの枠を行に置き、残りは窓の外へ出す。
+
+        並べ替えはしない。
+        ゲームは帯の子を足した順に塗り、押下の相手も `party_cells` の添字で決めるので、
+        並びを変えると塗る相手と押した相手が食い違う。
+        変えるのは各枠の座標だけ。
+
+        座標は比率ではなく実測で入れる（`pin`）。
         比率（`size_hint` / `pos_hint`）で置き直すと、
         ゲームが使っている 0.33 のような丸めた比率と、
         こちらが割り直した 1/4・1/5 が食い違って元の枠が数 px 動く。
         """
         pitch = party_panel.row_pitch(design)
+        base = design["rows"]
         top = design["cells"][design["order"][0]]
-        for shot in design["cells"]:
-            party_panel.pin(shot, shot["widget"], shot["pos"][0], shot["pos"][1])
-        for step, cell in enumerate(extras):
-            party_panel.pin(top, cell, top["pos"][0],
-                            float(top["pos"][1]) + (step + 1) * pitch)
+        widgets = [shot["widget"] for shot in design["cells"]] + list(extras)
+        for index, widget in enumerate(widgets):
+            shot = design["cells"][index] if index < base else top
+            slot = index - start
+            if 0 <= slot < rows:
+                x, y = slot_at(design, slot, pitch)
+            else:
+                x, y = OFFSTAGE, OFFSTAGE
+            party_panel.pin(shot, widget, x, y)
         return pitch
 
     def align(design, extras):
@@ -727,43 +814,56 @@ def apply(ctx):
                                       ctx.log_exc)
 
     def expand(hud, box, cells, design):
-        rows = rows_for(hud, design)
-        if rows <= design["rows"]:
+        base = design["rows"]
+        rows, total = plan_for(hud, design)
+        if total <= base:
             return collapse(hud, box)      # 全員が元の枠に収まっている
+        # 1ページ＝見せている行数。
+        # 最後のページは後ろへ詰めて、空の行を作らない（前のページと一部が重なる）。
+        pages = -(-total // rows)
+        page = min(max(int(state["page"]), 0), pages - 1)
+        state["page"] = page
+        state["paging"] = (page, pages) if pages > 1 else None
+        start = min(page * rows, total - rows)
+        layout = (page, start, rows)
         pitch = party_panel.row_pitch(design)
-        delta = pitch * (rows - design["rows"])
+        delta = pitch * (rows - base)
         height = float(design["size"][1]) + delta
-        if (rows_now(box) == rows
+        extras = extras_of(box)
+        if (rows_now(box) == rows and len(extras) == total - base
+                and frames.attr(box, LAYOUT_ATTR, None) == layout
                 and ui.close_enough(frames.attr(box, "height"), height)):
             # もう広がっている。
-            # 寸法には触らないが、
-            # 中身の見え方だけは毎回合わせ直す（ゲームが枠を塗り替えると絵の大きさが変わる）。
             # 寸法には触らないが、中身は毎回見直す。
-            # 人数が同じままでも顔ぶれは入れ替わる（1人抜けて1人入る）。
-            extras = extras_of(box)
+            # 人数が同じままでも顔ぶれは入れ替わる（1人抜けて1人入る）し、
+            # ゲームが枠を塗り替えると絵の大きさが変わる。
             fill_extras(hud, cells, extras)
             align(design, extras)
             cover_gap(hud, box, design)   # 板の寸法も毎回合わせ直す
             return False
         for shot in design["family"]:
             party_panel.grow(shot, delta)
-        extras = ensure_extras(hud, box, design, rows - design["rows"])
+        extras = ensure_extras(hud, box, design, total - base)
         if not extras:
             for shot in design["family"]:
                 party_panel.restore(shot, move=False)
+            state["paging"] = None
             return False          # 枠を足せないビルドでは帯も伸ばさない
-        arrange(design, extras)
+        arrange(design, extras, start, rows)
         fill_extras(hud, cells, extras)
         align(design, extras)         # 中身を入れた後に見え方を合わせる
         cover_gap(hud, box, design)   # 新しく覆った場所を黒い板で塞ぐ
         hide_covered(hud, box, design, cells, extras)
         try:
             setattr(box, EXPANDED_ATTR, rows)
+            setattr(box, LAYOUT_ATTR, layout)
         except Exception:
             pass
         schedule(lambda: guarded(lambda: clamp_all(design)))
-        note("expanded to {} row(s), height {:.0f} (design {:.0f}, pitch {:.0f})"
-             .format(rows, height, design["size"][1], pitch))
+        note("expanded to {} row(s) showing #{}-#{} of {} (page {}/{}), "
+             "height {:.0f} (design {:.0f}, pitch {:.0f})"
+             .format(rows, start + 1, start + rows, total, page + 1, pages,
+                     height, design["size"][1], pitch))
         return True
 
     def collapse(hud, box):
@@ -772,9 +872,17 @@ def apply(ctx):
         # 隠したボタンが押せないまま残る。
         unhide(box)
         uncover_gap(box)
+        state["paging"] = None
         design = frames.attr(box, DESIGN_ATTR)
         if not isinstance(design, dict) or rows_now(box) is None:
             return False          # 触っていない帯は戻す必要もない
+        layout = frames.attr(box, LAYOUT_ATTR, None)
+        if isinstance(layout, tuple) and layout[1]:
+            # 別のページを見ていた。
+            # 元の枠が窓の外に居るので、中身ごと1ページ目の場所へ連れ戻してから戻す。
+            # `pos_hint` を戻すだけでは入れ物が寄せ直すのは枠だけで、
+            # 座標で置かれた中身が窓の外に取り残される。
+            arrange(design, [], 0, design["rows"])
         for cell in extras_of(box):
             drop_extra(hud, box, cell)
         try:
@@ -791,6 +899,7 @@ def apply(ctx):
             return False
         try:
             setattr(box, EXPANDED_ATTR, None)
+            setattr(box, LAYOUT_ATTR, None)
         except Exception:
             pass
         note("restored to {} row(s)".format(design["rows"]))
@@ -882,6 +991,9 @@ def apply(ctx):
         if raw is frames.MISSING:
             return        # まだ触ったことのない帯。設定（START_EXPANDED）に従う
         state["expanded"] = isinstance(raw, int)
+        layout = frames.attr(box, LAYOUT_ATTR, None)
+        if isinstance(layout, tuple):
+            state["page"] = layout[0]     # 見ていたページも引き継ぐ
 
     def apply_state(hud):
         """今の意思（広げたいか）を、今の帯に当てる。"""
@@ -960,6 +1072,8 @@ def apply(ctx):
 
     def toggle(hud):
         state["expanded"] = not state["expanded"]
+        if not state["expanded"]:
+            state["page"] = 0     # 次に広げたときは1ページ目から
         note("pressed: {}".format("expand" if state["expanded"] else "restore"))
         apply_state(hud)
         widget = frames.attr(hud, BUTTON_ATTR)
@@ -969,6 +1083,7 @@ def apply(ctx):
             except Exception:
                 ctx.log_exc("party expand: could not relabel the button")
             place_button(hud, widget)     # 帯が動いたぶんを追い、向きも描き直す
+        ensure_pagers(hud)
 
     def place_button(hud, widget):
         """置き直す。塗り直しのたびに呼ぶ（帯は伸び縮みする）。"""
@@ -1081,6 +1196,116 @@ def apply(ctx):
                            or state["expanded"])
         place_button(hud, widget)
 
+    # -- ページ送り ------------------------------------------------------------
+    def pagers_of(hud):
+        pagers = frames.attr(hud, PAGER_ATTR, None)
+        return list(pagers) if isinstance(pagers, tuple) else []
+
+    def detach(widget):
+        parent = frames.attr(widget, "parent")
+        if parent in (None, frames.MISSING):
+            return
+        try:
+            parent.remove_widget(widget)
+        except Exception:
+            ctx.log_exc("party expand: could not detach a page button")
+
+    def turn_page(hud, step):
+        paging = state["paging"]
+        if not state["expanded"] or paging is None:
+            return
+        page = min(max(paging[0] + step, 0), paging[1] - 1)
+        if page == paging[0]:
+            return
+        state["page"] = page
+        note("page {} -> {}".format(paging[0] + 1, page + 1))
+        apply_state(hud)
+        ensure_pagers(hud)
+
+    def ensure_pagers(hud):
+        """◀ ▶ を、ページが2つ以上あるときだけ置く。
+
+        要らないときは隠すのではなく入れ物から外す。
+        `opacity=0` と `disabled=True` で隠すと、Kivy は無効なウィジェットに触れた時点で触りを止めるので、
+        見えないボタンがその下の選択肢への押下を吸う。
+        """
+        pagers = pagers_of(hud)
+        if not state["expanded"] or state["paging"] is None:
+            for widget in pagers:
+                detach(widget)
+            return
+        if len(pagers) != 2:
+            pagers = []
+            for step in (-1, 1):
+                widget = toggle_button.make(None, "", BUTTON_SIZE, "山形", {})
+                if widget is None:
+                    return
+                setattr(widget, STEP_ATTR, step)   # MOD が足したものの印を兼ねる
+                pagers.append(widget)
+            setattr(hud, PAGER_ATTR, tuple(pagers))
+        host = ui.overlay_host(hud)
+        for widget in pagers:
+            if frames.attr(widget, "parent") is host:
+                continue
+            detach(widget)
+            try:
+                host.add_widget(widget)
+            except Exception:
+                ctx.log_exc("party expand: could not add a page button")
+                return
+        for widget in pagers:
+            # 押下先の付け替え（注入し直したとき、古い注入の送りを呼び続けないため）。
+            previous = frames.attr(widget, CALLBACK_ATTR)
+            if previous not in (None, frames.MISSING):
+                try:
+                    widget.unbind(on_release=previous)
+                except Exception:
+                    pass
+
+            def callback(_instance=None, _hud=hud, _step=frames.attr(widget, STEP_ATTR)):
+                return guarded(lambda: turn_page(_hud, _step))
+
+            try:
+                widget.bind(on_release=callback)
+                setattr(widget, CALLBACK_ATTR, callback)
+            except Exception:
+                ctx.log_exc("party expand: could not bind a page button")
+        place_pagers(hud, pagers)
+
+    def place_pagers(hud, pagers):
+        """切り替えボタンの左に ◀ ▶ の順で並べる。左に入らなければ右に並べる。
+
+        端のページでは、それ以上送れない側を薄くして押せなくする。
+        """
+        own = frames.attr(hud, BUTTON_ATTR, None)
+        anchor = party_panel.rect_of(own) if own not in (None, frames.MISSING) else None
+        if anchor is None:
+            return
+        page, pages = state["paging"]
+        gap = toggle_button.upx(PANEL_GAP)
+        width = float(pagers[0].width)
+        left = anchor[0] - 2 * (width + gap)
+        if left < 0:
+            left = anchor[0] + anchor[2] + gap
+        for index, widget in enumerate(pagers):
+            step = frames.attr(widget, STEP_ATTR)
+            usable = 0 <= page + step < pages
+            try:
+                widget.pos_hint = {}
+                widget.x = left + index * (width + gap)
+                widget.y = anchor[1]
+                widget.opacity = 1.0
+                widget.disabled = not usable
+            except Exception:
+                ctx.log_exc("party expand: could not place a page button")
+                continue
+            toggle_button.clamp(widget)
+            ui.paint_icon(widget, toggle_button.page_strokes(step > 0),
+                          attr=PAGE_ICON_ATTR, key=("page", step),
+                          width=ICON_WIDTH,
+                          alpha=ICON_ALPHA if usable else ICON_ALPHA * 0.3,
+                          log_exc=lambda msg: ctx.log_exc("party expand: " + msg))
+
     def upkeep(hud):
         """塗り直しのたびに、ボタンが在ることと、広げたままであることを保つ。"""
         if state["busy"]:
@@ -1092,6 +1317,7 @@ def apply(ctx):
         watch_window()
         apply_state(hud)
         ensure_button(hud)
+        ensure_pagers(hud)
 
     # -- フック --------------------------------------------------------------
     # パーティが変わったとき（雇用・離脱・HP）と、画面が塗り直されたとき。
@@ -1146,6 +1372,9 @@ def apply(ctx):
         party_changed(self, "left")
         return result
 
-    ctx.log("party expand: a button grows the party panel to at most {} row(s) "
-            "so the 4th member onwards is shown ({} corner); details go to out/{}"
-            .format(MAX_ROWS, BUTTON_CORNER, LOG_BASENAME))
+    ctx.log("party expand: a button grows the party panel ({}) so the 4th member "
+            "onwards is shown, paging when they do not fit ({} corner); "
+            "details go to out/{}"
+            .format("up to {} row(s)".format(MAX_ROWS) if ROWS_LIMIT != BY_WINDOW
+                    else "up to {:.0%} of the window".format(float(MAX_HEIGHT)),
+                    BUTTON_CORNER, LOG_BASENAME))

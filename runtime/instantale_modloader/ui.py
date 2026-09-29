@@ -1002,13 +1002,43 @@ def paint_icon(button, strokes, *, attr, key=(), width=2.0, alpha=0.85,
             log_exc("could not draw the icon")
 
 
-def show_widget(widget, visible):
-    """見せる／隠す。隠すときは**押せなくもする**（見えない当たり判定を残さない）。"""
+def _never_hit(*_args, **_kwargs):
+    return False
+
+
+def show_widget(widget, visible, *, block_touch=False):
+    """見せる／隠す。隠すときは**押せなくもし、触りを下へ通す**。
+
+    `opacity=0` と `disabled=True` だけでは、見えない当たり判定が残る。
+    Kivy（2.3.0）の `Widget.on_touch_down` は先頭で
+    `if self.disabled and self.collide_point(*touch.pos): return True` とするので、
+    無効なウィジェットは自分の矩形で触りを止め、下にある選択肢や立ち絵へ届かなくする。
+    そこで隠している間だけ `collide_point` をウィジェット自身の属性で「どこにも当たらない」に差し替える。
+    外したり縮めたりしないので、並び・置き場所・入れ物の組み立ては変わらない。
+
+    `block_touch=True` は差し替えず、隠したものの矩形で触りを止める（隠す前の版の挙動）。
+    下に在るのが自分の入れ物だけで、止めても困らないところで使う。
+    """
     try:
         widget.opacity = 1.0 if visible else 0.0
         widget.disabled = not visible
     except Exception:
         pass
+    try:
+        own = vars(widget)
+    except TypeError:
+        return            # 属性を足せない相手。見た目と無効だけで済ませる
+    if not visible and not block_touch:
+        if own.get("collide_point") is not _never_hit:
+            try:
+                widget.collide_point = _never_hit
+            except Exception:
+                pass
+    elif own.get("collide_point") is _never_hit:
+        try:
+            del widget.collide_point      # クラスの当たり判定に戻す
+        except Exception:
+            pass
 
 
 def busy_signals(app):

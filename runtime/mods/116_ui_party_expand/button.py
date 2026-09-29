@@ -59,6 +59,13 @@ def strokes(icon, expanded):
     return ui.icon_strokes(icon, expanded)
 
 
+def page_strokes(forward):
+    """ページ送りの ◀ / ▶。**この MOD だけの絵柄**なのでローダには置かない。"""
+    if forward:
+        return [[(0.38, 0.22), (0.64, 0.50), (0.38, 0.78)]]
+    return [[(0.62, 0.22), (0.36, 0.50), (0.62, 0.78)]]
+
+
 def paint(button, icon, expanded, width, alpha, log_exc):
     """絵柄を描き直す。**位置・大きさ・向き・絵柄が変わったときだけ**。
 

@@ -8,23 +8,50 @@
   },
   "description": {
     "en": "The party panel only has three slots, so the 4th member onwards is never drawn. Adds a button that grows the panel and copies extra slots for them",
-    "ja": "パーティ欄の枠は3つしか作られず、4人目以降が出ない。ボタンを足し、押すと帯が上へ伸びて足りないぶんの枠が現れる。もう一度押すと元に戻る"
+    "ja": "パーティ欄の枠は3つしか作られず、4人目以降が出ない。ボタンを足し、押すと帯が上へ伸びて足りないぶんの枠が現れる。入り切らない仲間はページを送って出す。もう一度押すと元に戻る"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "settings": {
+    "ROWS_LIMIT": {
+      "type": "choice",
+      "default": "人数で決める",
+      "values": ["人数で決める", "窓の高さで決める"],
+      "label": {
+        "ja": "広げる行数の決め方",
+        "en": "How many rows to show when expanded"
+      },
+      "note": {
+        "ja": "「人数で決める」は下の行数まで。「窓の高さで決める」は窓の大きさに合わせて、帯の上端が下の割合を越えない行数まで。どちらでも入り切らない仲間は ◀ ▶ でページを送って出す",
+        "en": "\"人数で決める\" uses the row count below; \"窓の高さで決める\" follows the window size using the share below. Members that do not fit are paged with the arrow buttons"
+      }
+    },
     "MAX_ROWS": {
       "type": "int",
       "default": 8,
       "min": 3,
       "max": 20,
       "label": {
-        "ja": "広げたときに出す人数の上限",
+        "ja": "広げたときに出す行数の上限",
         "en": "Most rows to show when expanded"
       },
       "note": {
-        "ja": "1人ぶんの高さは変わらない。窓に入る行数のほうが少なければそちらで頭打ちになる",
-        "en": "Each row keeps its original height; capped further by what fits in the window"
+        "ja": "「人数で決める」のとき使う。1人ぶんの高さは変わらない。窓に入る行数のほうが少なければそちらで頭打ちになる",
+        "en": "Used with \"人数で決める\". Each row keeps its original height; capped further by what fits in the window"
+      }
+    },
+    "MAX_HEIGHT": {
+      "type": "float",
+      "default": 0.6,
+      "min": 0.3,
+      "max": 0.98,
+      "label": {
+        "ja": "帯を伸ばしてよい高さ（窓に対する割合）",
+        "en": "How far up the panel may grow (share of the window)"
+      },
+      "note": {
+        "ja": "「窓の高さで決める」のとき使う。窓の下端から測る。0.6 なら帯の上端が窓の下から6割の所を越えない。元の3行より狭くはならない",
+        "en": "Used with \"窓の高さで決める\". Measured from the bottom of the window; never fewer than the original three rows"
       }
     },
     "HIDE_COVERED": {

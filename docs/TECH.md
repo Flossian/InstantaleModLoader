@@ -2289,7 +2289,7 @@ ui.clamp_into_window(widget)          # 置いた後に必ず通す（はみ出�
 ui.make_icon_button(text=, size=, square=, font_name=, pos_hint=)
 ui.icon_strokes(icon, flipped)        # 共有の絵柄（二重山形・山形・矢印・枠）
 ui.paint_icon(button, strokes, attr=, key=, width=, alpha=, log_exc=)
-ui.show_widget(widget, visible)       # 隠すときは押せなくもする
+ui.show_widget(widget, visible)       # 隠すときは押せなくもし、触りを下へ通す（block_touch=True で止める）
 ```
 
 `paint_icon` は**変わったときだけ引き直す**（位置・大きさ・太さ・濃さと `key` を控えて突き合わせる）。

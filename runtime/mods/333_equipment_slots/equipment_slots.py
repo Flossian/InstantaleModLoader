@@ -726,7 +726,9 @@ def apply(ctx):
             for x, y in rules.UNUSED_CELLS:
                 index = y * rules.COLS + x
                 if index < len(slots):
-                    ui.show_widget(slots[index], False)
+                    # 下に在るのは装備欄そのものなので、隠したマスで触りを止めたままにする
+                    # （実機で成立している挙動を変えない）。
+                    ui.show_widget(slots[index], False, block_touch=True)
 
         panel = FloatLayout(size_hint=(None, None), size=(width + 2 * pad, height + 2 * pad))
         panel.add_widget(mine)
