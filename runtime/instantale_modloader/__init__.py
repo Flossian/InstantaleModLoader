@@ -317,6 +317,20 @@ _state: dict = {
     # boot() では数え直さない（上限の判定に使う）。
     # 手で注入し直すとローダごと読み直されるので、そこで 0 に戻る。
     "deferred_boots": 0,
+    # 前の boot までに書いた定型の行（`log_unrepeated`）。この注入の中だけで持つ。
+    # 手で注入し直すとローダごと読み直され、ログも世代送りされるので、そこで空に戻る。
+    "logged_before": set(),
+    # この boot で書いた定型の行。boot の頭で `logged_before` へ移す。
+    "logged_now": set(),
+    # この boot で書かずに済ませた定型の行の数。
+    "repeats": 0,
+    # `log()` が書いた行の数。MOD の適用中に何か書いたかを見るのに使う。
+    "lines_written": 0,
+    # この注入で振った世代（boot ごとに1つ。遅れて当て直す boot の分も並ぶ）。
+    # 手で注入し直すとローダごと読み直されるので、そこで空に戻る。
+    "generations": [],
+    # この boot で置き換えた「同じ注入の前の boot の層」の数（`note_replaced`）。
+    "replaced_own": 0,
 }
 
 # on_ready の「もう実行した」印を置く場所。
@@ -366,6 +380,7 @@ def log(msg: str, *, level: str = "INFO") -> None:
     # 別々に握り潰す。
     # ログのせいでゲームを落とすのは本末転倒なので。
     path = _state.get("log_path")
+    _state["lines_written"] = _state.get("lines_written", 0) + 1
     if path:
         try:
             with open(path, "a", encoding="utf-8") as fh:
@@ -376,6 +391,55 @@ def log(msg: str, *, level: str = "INFO") -> None:
         sys.stderr.write("[modloader] " + line + "\n")
     except Exception:
         pass
+
+
+def log_unrepeated(msg: str, *, level: str = "INFO") -> bool:
+    """定型の行（包んだ・層を置き換えた・別名を張り替えた・設定・適用した・重なり）を書く。書いたかを返す。
+
+    **前の boot で同じ行を書いていれば書かない。**
+    1回の注入で、遅れて当て直す boot が何度か走る（モジュールや `__main__` のクラスが
+    後から揃うたび）。そのたびに全 MOD が当て直され、`wrapped` / `replacing` などが
+    同じ文面で並び直していた（実測。1回の起動で boot 4回・約7,600行・約940KB、
+    2回目以降の boot の行の多くが前の boot と同じ文面）。
+
+    同じ boot の中の重複は書く。`wrapped` の行には MOD の名前が無く、どの MOD の包みかは
+    後ろに続く `applied: <MOD>` の並びで読むので、2本の MOD が同じ対象を包んだ行を
+    1つに潰すと読めなくなる。
+    ERROR と WARN はここを通さない（`log` で毎回書く）。
+    先送り（`defer ...`）も通さない。どの boot でも、その boot で待っているフックを1件ずつ書く。
+    """
+    before = _state.setdefault("logged_before", set())
+    now = _state.setdefault("logged_now", set())
+    if msg in before:
+        _state["repeats"] = _state.get("repeats", 0) + 1
+        return False
+    now.add(msg)
+    log(msg, level=level)
+    return True
+
+
+def _roll_logged_lines() -> None:
+    """boot の頭で呼ぶ。前の boot で書いた定型の行を控えへ移し、数えを0に戻す。"""
+    _state.setdefault("logged_before", set()).update(_state.get("logged_now") or ())
+    _state["logged_now"] = set()
+    _state["repeats"] = 0
+    _state["replaced_own"] = 0
+
+
+def note_replaced(generation) -> bool:
+    """置き換えた層が**この注入の前の boot** のものなら数えて True。
+
+    遅れて当て直す boot は、前の boot で自分が当てた層を全部置き換える。
+    これは当て直しの定義どおりで、対象ごとに書いても読むことが無い
+    （実測。1回の起動で `replacing` が約400行、全部この形だった）。
+    boot の終わりに件数だけ書く。
+    前の注入（手で注入し直す前）の層なら False を返し、呼び側が対象ごとに書く。
+    """
+    earlier = (_state.get("generations") or [])[:-1]
+    if generation is not None and generation in earlier:
+        _state["replaced_own"] = _state.get("replaced_own", 0) + 1
+        return True
+    return False
 
 
 def log_exc(msg: str) -> None:
@@ -1844,6 +1908,7 @@ def _boot(out_dir: str) -> dict:
     _state["out_dir"] = out_dir
     _state["log_path"] = os.path.join(out_dir, "modloader.log")
     _state["boot_count"] += 1
+    _roll_logged_lines()
 
     try:
         os.makedirs(out_dir, exist_ok=True)
@@ -1857,6 +1922,7 @@ def _boot(out_dir: str) -> dict:
     # これが無いと、注入のたびにラッパが入れ子で積み上がってしまう。
     generation = uuid.uuid4().hex[:12]
     _state["generation"] = generation
+    _state.setdefault("generations", []).append(generation)
     from . import patch as _patch
     _patch.set_generation(generation)
 
@@ -1961,6 +2027,9 @@ def _boot(out_dir: str) -> dict:
                 results[fname] = "no-apply"
                 continue
 
+            # この mod の区切りで何か書いたか（`applied:` を省けるかの判定）。
+            written_at_start = _state.get("lines_written", 0)
+
             # 設定は**読み込んだ後・apply() の前**に書き込む。
             # apply() の中で作られる入れ子の関数は定数をモジュールのグローバルとして読むので、
             # この順なら mod のコードに手を入れずに値が効く（config.py）。
@@ -1989,7 +2058,13 @@ def _boot(out_dir: str) -> dict:
             finally:
                 _registry.end_mod()
                 ctx._mod = None
-            log("applied: {}".format(fname))
+            # 前の boot と同じで、この mod が今回1行も書いていなければ省く。
+            # 何か書いたなら、その行がどの mod のものかを読めるよう必ず書く。
+            if _state.get("lines_written", 0) != written_at_start:
+                _state.setdefault("logged_now", set()).add("applied: {}".format(fname))
+                log("applied: {}".format(fname))
+            else:
+                log_unrepeated("applied: {}".format(fname))
             results[fname] = "ok"
 
     _state["mods"] = results
@@ -2023,8 +2098,26 @@ def _boot(out_dir: str) -> dict:
 
     # どの mod がどこへ当てたか、重なりはどこか、解決できなかった対象は何か。
     # ゲーム更新で関数が消えた場合はここの UNRESOLVED に出る。
+    # 重なりの節の各行（`対象 <- MOD, ...`）は前の boot と同じなら書かない（`log_unrepeated`）。
+    # 遅れて当て直す boot では大半が同じ行だった（実測。180行ほどのうち9割以上）。
+    # 今の全体は `status.json` の `patches.conflicts` にある。
+    # 見出しと、保留・見送り・UNRESOLVED の節は毎回書く。
+    section = None
     for line in _registry.format_report():
-        log(line)
+        if not line.startswith("  "):
+            section = line.split(" ", 1)[0]
+            log(line)
+        elif section == "overlapping":
+            log_unrepeated(line)
+        else:
+            log(line)
+    if _state.get("replaced_own"):
+        log("replaced {} patch layer(s) left by the earlier boot(s) of this injection".format(
+            _state["replaced_own"]))
+    if _state.get("repeats"):
+        log("{} line(s) same as an earlier boot of this injection were not repeated "
+            "(wrapped / replacing / rebound / setting / applied / overlapping)"
+            .format(_state["repeats"]))
     log("-" * 70)
 
     # ここまでの結果をファイルへ落とす。

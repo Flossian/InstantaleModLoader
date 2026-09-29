@@ -61,7 +61,7 @@ from __future__ import annotations
 import json
 import os
 
-from . import log, log_exc, write_json
+from . import log, log_exc, log_unrepeated, write_json
 
 # 選んだ値の置き場所。
 # 配布フォルダ直下の settings/（runtime/ の1つ上）。
@@ -372,5 +372,5 @@ def apply_to_module(module, decls: dict, chosen) -> dict:
             log_exc("settings: {!r} を書き込めなかった".format(name))
             effective[name] = current
             continue
-        log("  setting {} = {!r} (default {!r})".format(name, value, current))
+        log_unrepeated("  setting {} = {!r} (default {!r})".format(name, value, current))
     return effective

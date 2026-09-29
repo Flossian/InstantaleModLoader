@@ -214,12 +214,20 @@ def format_report() -> list[str]:
 
     deferred = entries(DEFERRED)
     if deferred:
-        # 対象ごとではなくモジュールごとにまとめる。
-        # 見張りが待つ単位がモジュールなので。
+        # モジュールごとにまとめる。見張りが待つ単位がモジュールなので。
+        # 対象ごとの1行は、先送りした時点で `defer wrap ...` として同じ boot の中に出ている。
+        # 以前はここでも対象ごとに並べ直していて、注入直後の boot では同じ666件が2度出ていた。
         lines.append("deferred ({}): waiting for the module to be imported".format(
             len(deferred)))
-        for _k, target, mod, detail in deferred:
-            lines.append("  {} ({}) <- {}".format(target, detail or "?", mod))
+        groups: dict[str, list] = {}         # 待つモジュール -> [件数, MOD の並び]
+        for _k, _target, mod, detail in deferred:
+            group = groups.setdefault(detail or "?", [0, []])
+            group[0] += 1
+            if mod not in group[1]:
+                group[1].append(mod)
+        for module in sorted(groups):
+            count, owners = groups[module]
+            lines.append("  {}: {} hook(s) <- {}".format(module, count, ", ".join(owners)))
 
     skipped = entries(SKIPPED)
     if skipped:

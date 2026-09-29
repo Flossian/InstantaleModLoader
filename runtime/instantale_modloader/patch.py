@@ -44,7 +44,7 @@ import os
 import sys
 from typing import Any, Callable
 
-from . import GAME_TOPLEVEL, log, log_exc
+from . import GAME_TOPLEVEL, log, log_exc, log_unrepeated
 from . import patch_registry as _registry
 
 # 元に戻すための記録。
@@ -516,7 +516,10 @@ def set_attr(target: str, value: Any, *, alias_scan: Any = True,
     current, descriptor = _current(owner, name)
     original = unwrap_ours(current)
     if original is not current:
-        log("  replacing a previous patch layer on {}".format(target))
+        # 同じ注入の前の boot の層なら数えるだけ。前の注入の層なら対象ごとに書く（`note_replaced`）。
+        from . import note_replaced
+        if not note_replaced(getattr(current, GENERATION_MARK, None)):
+            log_unrepeated("  replacing a previous patch layer on {}".format(target))
 
     # 元々その属性が存在したかどうかも記録しておく。
     # 存在しなかったものは、戻すときに
@@ -543,8 +546,12 @@ def set_attr(target: str, value: Any, *, alias_scan: Any = True,
                 rebound += rebind_aliases(stale, value, skip=skip, scope=scope)
         if rebound:
             unique = list(dict.fromkeys(rebound))
-            log("  rebound {} alias(es): {}".format(
-                len(unique), ", ".join(unique[:8]) + (" ..." if len(unique) > 8 else "")))
+            # 対象の名前を行に入れる。前は直後の `wrapped <対象>` の行で読んでいたが、
+            # 遅れて当て直す boot ではその行を省く（`log_unrepeated`）ので、
+            # 張り替えが次の別の対象の行に付いて見えていた。
+            log_unrepeated("  rebound {} alias(es) of {}: {}".format(
+                len(unique), target,
+                ", ".join(unique[:8]) + (" ..." if len(unique) > 8 else "")))
     return original
 
 
@@ -833,7 +840,7 @@ def wrap(target: str, *, alias_scan: Any = True, required: bool = True,
         set_attr(target, wrapper, alias_scan=alias_scan)
         _registry.record(_registry.APPLIED, target,
                          detail="wrap safe" if safe else "wrap")
-        log("wrapped {} ({!r}){}".format(target, _short(old), " [safe]" if safe else ""))
+        log_unrepeated("wrapped {} ({!r}){}".format(target, _short(old), " [safe]" if safe else ""))
         # ゲームに差し込むのは wrapper だが、返すのは func 自身。
         # こうしておくと、デコレートした名前で mod の中から直接呼べる。
         return func

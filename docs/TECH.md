@@ -1446,6 +1446,8 @@ GUI は件数だけを状態欄に出し、失敗ではないので ⚠ には�
 | `replacing a previous patch layer on ...` | 前回注入の層を剥がした（正常） |
 | （この行が出ない） | 同一 boot 内で後段の MOD が包んだ ＝ 先の層が保持されている |
 | `dropped N layer(s) left by earlier injections: ...` | 今回当て直されなかった前の世代の層を剥がした（切った・伏せた・apply に失敗した MOD） |
+| `N line(s) same as an earlier boot of this injection were not repeated` | 遅れて当て直した boot で、前の boot と同じ文面の定型の行（`wrapped` / `replacing` / `rebound` / `setting` / `applied` / 重なりの一覧）を書かなかった数。前の boot の行を見ればよい。今の全体は `status.json` の `patches`。ERROR・WARN・UNRESOLVED と先送り（`defer`）は毎回書く |
+| `replaced N patch layer(s) left by the earlier boot(s) of this injection` | 遅れて当て直した boot で、同じ注入の前の boot の自分の層を置き換えた数（当て直しの定義どおりで、対象ごとには書かない）。前の注入の層を剥がしたときは `replacing a previous patch layer on ...` を対象ごとに書く |
 
 当て直しで剥がれるのは、今回の世代が同じ対象に当てた場合だけ。
 そこで `boot()` は全 MOD の適用を終えた後、一番上に他の世代の印が残っている対象を素に戻す（`patch.drop_stale_layers`）。
@@ -1559,13 +1561,16 @@ overlapping targets (171):
   __main__:AreaMoveCofirmation.update_button_display <- 314_area_move_custom, 307_area_move_dungeon, 217_probe_area_move
   ...
 deferred (9): waiting for the module to be imported
-  image_generation.sdcppcuda.image_generation_creature:detect_face_coordinates (image_generation.sdcppcuda.image_generation_creature) <- 131_sharp_portrait
-  ...
+  <待っているモジュール>: <件数> hook(s) <- <MOD>, ...
 UNRESOLVED (1): target not found in the running build
   __main__:BattlePhaseManager.enemy_turn_separate <- 334_colosseum_custom (attribute not found)
 ```
 
 （起動直後に注入し、2段目の当て直しで出た報告。GAME.md §1.7）
+
+`deferred` の節は、今はモジュールごとの件数と MOD の1行にまとめる（上の例は書式だけ示した）。
+対象ごとの行は、先送りした時点で `defer wrap <対象> (<MOD>; <理由>)` として同じ boot の中に出ている。
+以前はこの節でも対象ごとに並べ直していて、注入直後の boot では同じ件数が2度出ていた。
 
 `UNRESOLVED` の1件はゲーム更新ではなかった。
 `334_` がスタックに出た関数名をそのままクラスの属性として名指ししていたもので、
