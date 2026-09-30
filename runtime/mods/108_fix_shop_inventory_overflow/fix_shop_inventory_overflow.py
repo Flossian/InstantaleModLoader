@@ -54,19 +54,37 @@ main_024 のアナウンスにこの件（売買画面）が挙がっている�
 落ちた時のグリッドとアイテムの実寸を `out/inventory.log` に出す。
 ここが埋まれば「そもそもなぜ復元位置がはみ出すのか」（グリッドの列数が画面ごとに違うのか、
 ピクセル→マスの変換が別スケールなのか）を、座標を推測せずに次の段で詰められる。
-成功した呼び出しも最初の `SAMPLE_OK` 件だけ同じ形式で残す。
+成功した呼び出しも見本として同じ形式で残す（グリッドの種類ごとに1件、`SAMPLE_OK` 件まで）。
 正常時の寸法が無いと異常の判定ができない。
+
+## 版の記録
+
+版2: 成功の見本を apply ごとに最初の30件まで書いていた。
+遅れて当て直す boot が1回の起動で3〜4回走り、そのたびに数え直していたので、
+`inventory.log` が約40日で3,205行・約1.5MB になり、全行が `ok` だった（はみ出し・諦めは0件）。
+見本の控えを `sys` に置いて1プロセスで数え、グリッドの種類（situation・cols・rows）ごとに
+最初の1件だけ書くようにした。
+注入のときにログが世代送りされたら（ファイルが入れ替わったら）、新しいログにもう一度書く。
+行に時刻が無かったので、`ctx.logger` の既定（時刻付き）に揃えた。
+はみ出し（`OVERFLOW`）と諦め（`GIVEUP`）の行は今までどおり毎回書く。
 """
 
+import os
 import sys
 
 from instantale_modloader import frames
 
 LOG_BASENAME = "inventory.log"
 
-# 正常に置けた呼び出しを何件記録するか。
+# 正常に置けた呼び出しを何件まで記録するか（1プロセス。ログが入れ替わったら数え直す）。
 # 比較用の下地なので少しでいい。
-SAMPLE_OK = 30
+# グリッドの種類（`sample_kind`）ごとに1件で、実ログの種類は7通りだった。
+SAMPLE_OK = 10
+
+# 見本の控え `{"kinds": 書いたグリッドの種類, "file": ログのファイルの身元}`。
+# 1プロセスに1組（遅れて当て直す boot と注入し直しで数え直さない）。
+# MOD のモジュールは boot のたびに読み直されるので、モジュール変数では持てない。
+SAMPLE_STORE_ATTR = "_instantale_shop_inventory_samples"
 
 # グリッド／アイテムから読む属性。
 # dir() を全部舐めると Kivy の property を大量に評価することになるので、
@@ -75,6 +93,41 @@ SAMPLE_OK = 30
 GRID_ATTRS = ("cols", "rows", "situation", "slot_size", "spacing", "size", "pos")
 ITEM_ATTRS = ("item_id", "width_slots", "height_slots", "grid_x", "grid_y",
               "pos", "size", "current_slots")
+
+
+def sample_store():
+    """見本の控え。1プロセスに1組。"""
+    store = getattr(sys, SAMPLE_STORE_ATTR, None)
+    if not isinstance(store, dict) or not isinstance(store.get("kinds"), set):
+        store = {"kinds": set(), "file": None}
+        setattr(sys, SAMPLE_STORE_ATTR, store)
+    return store
+
+
+def file_id(path):
+    """ログのファイルの身元。無ければ None（世代送りで名前を変えられた直後など）。"""
+    try:
+        info = os.stat(path)
+    except OSError:
+        return None
+    return (info.st_dev, info.st_ino)
+
+
+def log_replaced(store, path):
+    """前の apply の後で `path` が入れ替わった（世代送り・削除）なら True。控えは今の身元へ進める。
+
+    世代送りは注入のとき（apply より前）にしか起きないので、apply の頭で見れば足りる。
+    """
+    now = file_id(path)
+    before = store.get("file")
+    store["file"] = now
+    return before is not None and before != now
+
+
+def sample_kind(grid):
+    """見本を分ける単位。売買・戦利品・仲間との受け渡しなどで寸法が違う。"""
+    return tuple(frames.repr_value(frames.attr(grid, k))
+                 for k in ("situation", "cols", "rows"))
 
 
 def apply(ctx):
@@ -102,8 +155,12 @@ def apply(ctx):
                  for n in ("place_new_item", "find_placement_position",
                            "is_valid_placement")]))
 
-    log_path = ctx.out_path(LOG_BASENAME)
-    state = {"ok": 0, "recovered": 0, "failed": 0}
+    log_line = ctx.logger(LOG_BASENAME)
+    store = sample_store()
+    kinds = store["kinds"]
+    if log_replaced(store, ctx.out_path(LOG_BASENAME)):
+        kinds.clear()                       # 新しいログにも見本を残す
+    state = {"recovered": 0, "failed": 0}
 
     def write(kind, grid, item, note=""):
         """グリッドとアイテムの実寸を1行で残す。"""
@@ -117,9 +174,7 @@ def apply(ctx):
                       for k in ITEM_ATTRS]
             if note:
                 parts.append("note=" + note)
-            line = "{:<9} {}\n".format(kind, "  ".join(parts))
-            with open(log_path, "a", encoding="utf-8") as fh:
-                fh.write(line)
+            log_line("{:<9} {}".format(kind, "  ".join(parts)))
         except Exception:
             # 記録のせいでゲームを落とさない。
             # ここは常に握り潰す。
@@ -137,9 +192,14 @@ def apply(ctx):
             ctx.log("place_existing_item overflowed the grid ({}); "
                     "falling back to the game's own placement".format(exc))
         else:
-            if state["ok"] < SAMPLE_OK:
-                state["ok"] += 1
-                write("ok", self, item)
+            if len(kinds) < SAMPLE_OK:
+                try:
+                    kind = sample_kind(self)
+                    if kind not in kinds:
+                        kinds.add(kind)
+                        write("ok", self, item)
+                except Exception:
+                    ctx.log_exc("inventory sample failed")
             return result
 
         # occupy_slots は範囲外に当たる前に何マスか埋めている可能性がある。

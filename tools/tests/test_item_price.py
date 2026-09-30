@@ -17,6 +17,7 @@
   決済     … 表示と違う額で決済されたら差を直す。成立していない取引には
              触らない。所持金は負にしない
   再適用   … 何度当て直しても値段が動かない（べき等）
+  繰り返し … 設定の書き出しは同じ中身なら1回。`skip` は品ごとに1プロセス1回。ログが世代送りされたら書き直す
 
 値段を**書く**のはローダの関所（`instantale_modloader.prices`）で、
 この mod が置くのは式1枚。段の重なり方・保存の前後・地点ごとの `orig` の
@@ -197,6 +198,17 @@ def fresh_mod(**settings):
     for attr in (prices._ITEM_ATTR, prices._ITEM_GATE_ATTR):
         if hasattr(sys, attr):
             delattr(sys, attr)
+    ctx = FakeCtx(OUT_DIR)
+    module.apply(ctx)
+    return module, ctx
+
+
+def reapply(**settings):
+    """同じ注入の中で遅れて当て直す boot の形。mod は読み直すが、控え（`sys`）は残す。"""
+    sys.modules.pop("balance_item_price_mod", None)
+    module = load_mod()
+    for key, value in settings.items():
+        setattr(module, key, value)
     ctx = FakeCtx(OUT_DIR)
     module.apply(ctx)
     return module, ctx
@@ -510,6 +522,51 @@ def main():
     module, ctx = fresh_mod()
     again = buy_price(ctx, weapon(96, "magical"))
     check("当て直しても同じ値段", again == first, (first, again))
+
+    # -- 繰り返し（版3）------------------------------------------------------
+    # 設定の書き出しは同じ注入・同じ中身なら1回。値段が読めない品の `skip` は品ごとに1プロセス1回。
+    log_path = os.path.join(OUT_DIR, "item_price.log")
+    start = os.path.getsize(log_path) if os.path.isfile(log_path) else 0
+
+    def new_lines():
+        with io.open(log_path, encoding="utf-8") as fh:
+            fh.seek(start)
+            return fh.read().splitlines()
+
+    module, ctx = fresh_mod()
+    reapply()                                  # 遅れて当て直す boot（控えはそのまま）
+    installed = [line for line in new_lines() if line.startswith("---- installed")]
+    check("繰り返し: 同じ注入・同じ中身の設定は1回だけ書く", len(installed) == 1, installed)
+
+    for _ in range(3):
+        buy_price(ctx, Item("謎の品", "weapon", {"item_detail": "small_weapon", "買価": 0},
+                            None, "common"))
+    skips = [line for line in new_lines() if line.startswith("skip ")]
+    store = getattr(sys, module.STORE_ATTR)
+    check("繰り返し: 同じ品の skip は1行だけ", len(skips) == 1, skips)
+    check("繰り返し: skip の数は毎回数える", store["skipped"] == 3, store["skipped"])
+    buy_price(ctx, Item("別の謎の品", "weapon", {"item_detail": "small_weapon", "買価": 0},
+                        None, "common"))
+    skips = [line for line in new_lines() if line.startswith("skip ")]
+    check("繰り返し: 別の品の skip は書く", len(skips) == 2, skips)
+
+    reapply(PRICE_SCALE=2.0)
+    installed = [line for line in new_lines() if line.startswith("---- installed")]
+    check("繰り返し: 中身が変われば書く",
+          len(installed) == 2 and "scale=2" in installed[-1], installed)
+
+    # 注入のときにログが世代送りされた形。新しいログに設定と skip を書き直す。
+    os.replace(log_path, log_path + ".1")
+    start = 0
+    reapply(PRICE_SCALE=2.0)
+    buy_price(ctx, Item("謎の品", "weapon", {"item_detail": "small_weapon", "買価": 0},
+                              None, "common"))
+    lines = new_lines()
+    check("繰り返し: 世代送りされたら新しいログに設定を書く",
+          sum(1 for line in lines if line.startswith("---- installed")) == 1, lines)
+    check("繰り返し: 世代送りされたら新しいログに skip を書く",
+          sum(1 for line in lines if line.startswith("skip ")) == 1, lines)
+    os.remove(log_path + ".1")
 
     module, ctx = fresh_mod()
     check("例外を握り潰していない", not ctx.errors, ctx.errors)

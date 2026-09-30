@@ -14,6 +14,8 @@
   読み直し … 手で注入し直すとローダごと読み直されるので、控えは空から始まる
   置き換え … 同じ注入の前の boot の層を置き換えたときは数えるだけ。前の注入の層は対象ごとに書く
   先送り   … 締めの報告の節は待つモジュールごとの件数と MOD（対象ごとの行は `defer` の時点で出ている）
+  MOD の行 … `ctx.log` の INFO 行も前の boot と同じなら書かない。WARN は毎回書く
+  建物と NPC … `modfacility` / `modnpc` の `registered` は同じ持ち主・世代・層の数なら1行。snapshot と関所の行は中身が変わったときだけ
 """
 import os
 import sys
@@ -123,6 +125,59 @@ check("モジュールごとに件数と MOD を1行",
       and "  __main__: 1 hook(s) <- 300_event" in report, report)
 check("対象ごとには並べ直さない", not any("save_area_json:f" in line for line in report), report)
 R.reset()
+
+# MOD の `ctx.log` の INFO 行も、前の boot と同じ文面なら書かない。WARN は毎回書く。
+with tempfile.TemporaryDirectory() as out:
+    path = os.path.join(out, "modloader.log")
+    saved = {key: ml._state.get(key) for key in
+             ("log_path", "logged_before", "logged_now", "repeats")}
+    try:
+        ml._state.update(log_path=path, logged_before=set(), logged_now=set(), repeats=0)
+        ctx = ml.ModContext(out, os.path.join(_ROOT, "runtime"))
+        ml._roll_logged_lines()
+        ctx.log("area move custom: walk=3d")
+        ctx.log("注意", level="WARN")
+        ml._roll_logged_lines()
+        ctx.log("area move custom: walk=3d")
+        ctx.log("注意", level="WARN")
+        written = lines(path)
+        check("ctx.log の INFO 行は前の boot と同じなら書かない",
+              written.count("INFO  area move custom: walk=3d") == 1, written)
+        check("ctx.log の WARN 行は毎回書く", written.count("WARN  注意") == 2, written)
+    finally:
+        for key, value in saved.items():
+            ml._state[key] = value
+
+# modfacility / modnpc の `registered` は、同じ持ち主・同じ世代・同じ層の数なら書かない。
+# `snapshot of … taken` と関所の行は、中身が前に書いたものと同じなら書かない。
+from instantale_modloader import modfacility, modnpc, patch as P    # noqa: E402
+
+for framework, prefix in ((modfacility, "modfacility"), (modnpc, "modnpc")):
+    framework.purge()
+    framework._LAST_WRITTEN.clear()
+    wrote = []
+    saved_generation = getattr(P, "_generation", None)
+    try:
+        P.set_generation("gen-a")
+        framework.register("331_x", key="k", write=wrote.append)
+        framework.register("331_x", key="k", write=wrote.append)
+        check("{}: 同じ世代で同じ登録は1行".format(prefix),
+              sum("registered" in w for w in wrote) == 1, wrote)
+        framework.register("229_y", framework.make_id("331_x", "k"), write=wrote.append)
+        check("{}: 層が増えたら書く".format(prefix),
+              sum("registered" in w for w in wrote) == 2, wrote)
+        P.set_generation("gen-b")
+        framework.register("331_x", key="k", write=wrote.append)
+        check("{}: 世代が変わったら書く".format(prefix),
+              sum("registered" in w for w in wrote) == 3, wrote)
+        check("{}: 顔ぶれが変われば snapshot を書く".format(prefix),
+              framework._changed("snapshot", ("a",)) and framework._changed("snapshot", ("a", "b")))
+        check("{}: 同じ顔ぶれの snapshot は書かない".format(prefix),
+              not framework._changed("snapshot", ("a", "b")))
+    finally:
+        P.set_generation(saved_generation)
+        framework.purge()
+        framework._LAST_WRITTEN.clear()
 
 print()
 if failures:

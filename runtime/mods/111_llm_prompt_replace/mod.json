@@ -10,7 +10,7 @@
     "en": "Rewrites the text sent to the LLM with your replacement rules; reads the same llm_replacements.txt as InstantaleLlmProxy",
     "ja": "LLM に送る文章を置換ルールで書き換える。InstantaleLlmProxy と同じ llm_replacements.txt をそのまま読む"
   },
-  "version": "7",
+  "version": "8",
   "author": "R01/Flossian",
   "tool": {
     "entry": "tool.py",
@@ -48,8 +48,8 @@
         "en": "Log replacements"
       },
       "note": {
-        "ja": "out\\prompt_bloat.log の [REPLACE] / [SKIP]",
-        "en": "[REPLACE] / [SKIP] in out\\prompt_bloat.log"
+        "ja": "out\\prompt_bloat.log の [REPLACE] / [SKIP]。同じ文面は1回の起動で最初の1行だけ書き、以後の回数は [TALLY] にまとめる",
+        "en": "[REPLACE] / [SKIP] in out\\prompt_bloat.log. The same line is written once per game run; later repeats are counted in [TALLY]"
       }
     },
     "LOG_RULES": {

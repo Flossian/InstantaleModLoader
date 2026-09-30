@@ -34,6 +34,12 @@ import sys
 
 from . import log_exc
 
+
+#: 関所を立てた行を最後に書いた中身。同じなら繰り返さない。
+#: 関所は boot ごとに立て直すので、遅れて当て直す boot のたびに同じ行が並んでいた。
+#: 注入し直すとこのモジュールごと読み直されるので、新しいログの頭には必ず出る。
+_gate_written = None
+
 #: 宿屋の宿泊1回。答えは `{"months": int, "days": int|None, "length": str}`。
 #: `months` はゲームの `VacationStartManager(app, months, quality)` に渡す値、
 #: `days` は実際に進む日数（`None` なら `months * 30`）。
@@ -518,6 +524,8 @@ def install(ctx, write=None):
 
     ctx.wrap(DAYS_TARGET, required=False)(elapse_days)
     setattr(sys, _GATE_ATTR, {"generation": generation, "targets": [DAYS_TARGET]})
-    if write:
+    global _gate_written
+    if write and _gate_written != DAYS_TARGET:
+        _gate_written = DAYS_TARGET
         write("durations: the day gate was declared on {}".format(DAYS_TARGET))
     return [DAYS_TARGET]

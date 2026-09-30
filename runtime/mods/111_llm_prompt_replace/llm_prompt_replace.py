@@ -99,16 +99,47 @@ MOD は逆にこちらより外側へ置いて素の本文を見せる（その�
 `[RULES]`（読込）・`[REPLACE]`（置換）・`[SKIP]`（確率で見送り）が出る。
 `102_` / `103_` / `105_` と同じファイルなので、
 置換と圧縮のどちらが先に効いたかを時系列で読める。
+
+## 同じ文面の行は1プロセスで1回（版8）
+
+版7までは LLM を呼ぶたびに、当たった規則ごとに `[REPLACE]` を1行書いていた。
+同じ規則が毎回同じ文面で当たるので、約40日で `[REPLACE]` が12,806行・約2.5MB になり、
+中身は91通りしか無かった（上位3通りで4,701行）。
+`[RULES] 読込` も apply のたびに出ていた（遅れて当て直す boot を含めて1,120回・約200KB）。
+
+版8から:
+
+    [REPLACE] / [SKIP]  同じ文面はこのプロセスで最初の1回だけ書き、以後は規則ごとに数える
+    [TALLY]             数えた回数を1行にまとめる。規則ごとに「この起動の累計(+前の [TALLY] から)」。
+                        書くのは、数えるだけにした推論が TALLY_CALLS 回たまったとき・
+                        最初に数えてから TALLY_SECONDS 秒たった後の推論・apply の頭
+                        （遅れて当て直す boot と注入し直し）
+    [RULES] 読込        同じファイル（場所・更新時刻・大きさ）を読み直しただけなら書かない
+
+控えは `sys` に置く（`LOG_STORE_ATTR`）。
+MOD のモジュールは boot のたびに読み直されるので、モジュール変数では boot ごとに消える。
+注入のときにログが世代送りされたら（`prompt_bloat.log` が入れ替わったら）、書いた文面の控えを捨て、
+新しいログにもう一度書く。数えた回数（累計）はプロセスで持ち続ける。
+
+最後の `[TALLY]` の後に数えた分は、閉じ方ごとに次のように書く（回数を落とさないため）:
+
+    閉じたとき          Kivy の `on_stop` と `atexit` で `[TALLY]` を書く（先に走った方だけ）
+    落ちた・止められた  まだ書いていない回数を推論のたびに `out/prompt_replace_tally.json` へ
+                        上書きしておき、次の起動の最初の apply で `[TALLY]` として書き出して消す
 """
 
+import atexit
 import collections
 import hashlib
+import json
 import os
 import random
 import re
+import sys
 import threading
 import time
 
+from instantale_modloader import ui
 from instantale_modloader.llm import wrap_outgoing
 
 # --------------------------------------------------------------------------
@@ -135,6 +166,16 @@ OFFTAB_PREFIX = "#offtab:"
 SNIP_CHARS = 40              # ログに出す断片の長さ（プロキシの Snip と同じ）
 SLOW_REGEX_SECONDS = 1.0     # 照合にこれ以上かかった正規表現は以後使わない
 SEEN_TEXTS = 64              # 「自分が作った文章」を覚えておく件数
+
+# 同じ文面の [REPLACE] / [SKIP] を数えるだけにした後、[TALLY] を書く間隔（版8）。
+TALLY_CALLS = 50             # 数えるだけにした推論の数
+TALLY_SECONDS = 600          # 最初に数えてからの秒数（次の推論で書く）
+TALLY_SNIP = 16              # [TALLY] に出す断片の長さ。[REPLACE] の行の頭と突き合わせる
+# まだ書いていない回数の控え（`out\` の中）。落ちた・止められた起動の分を次の起動で書く。
+PENDING_NAME = "prompt_replace_tally.json"
+
+#: 書いた行の文面と数えた回数の控え。1プロセスに1組（`log_store`）。
+LOG_STORE_ATTR = "_instantale_llm_prompt_replace_log"
 
 _RNG = random.Random()
 _RNG_LOCK = threading.Lock()
@@ -495,10 +536,197 @@ def apply_chosen(text, chosen):
     return text, hits
 
 
-def snip(text):
-    """ログ用に短く切る（プロキシの Snip と同じ長さ）。改行は見える形にする。"""
+def snip(text, limit=None):
+    """ログ用に短く切る（既定はプロキシの Snip と同じ長さ）。改行は見える形にする。"""
+    limit = SNIP_CHARS if limit is None else limit
     text = text.replace("\r", "").replace("\n", "\\n")
-    return text if len(text) <= SNIP_CHARS else text[:SNIP_CHARS] + "…"
+    return text if len(text) <= limit else text[:limit] + "…"
+
+
+# --------------------------------------------------------------------------
+# 同じ文面の行を繰り返さない（版8）
+# --------------------------------------------------------------------------
+def log_store():
+    """書いた行の文面と数えた回数の控え。1プロセスに1組。
+
+    遅れて当て直す boot と注入し直しをまたいで持つ（`sys` に置く）。
+    鍵が欠けているか型が違えば、その鍵だけ作り直す（版の違う器を握らない）。
+    """
+    store = getattr(sys, LOG_STORE_ATTR, None)
+    if not isinstance(store, dict):
+        store = {}
+        setattr(sys, LOG_STORE_ATTR, store)
+    for name, kind in (("written", set), ("total", dict), ("pending", dict)):
+        if not isinstance(store.get(name), kind):
+            store[name] = kind()
+    for name in ("calls", "since"):
+        if not isinstance(store.get(name), (int, float)):
+            store[name] = 0
+    # `rules` は最後に `[RULES] 読込` を書いたルールファイル、`file` はログのファイルの身元。
+    store.setdefault("rules", None)
+    store.setdefault("file", None)
+    if not hasattr(store.get("lock"), "acquire"):
+        store["lock"] = threading.Lock()
+    return store
+
+
+def file_id(path):
+    """ログのファイルの身元。無ければ None（世代送りで名前を変えられた直後など）。"""
+    try:
+        info = os.stat(path)
+    except OSError:
+        return None
+    return (info.st_dev, info.st_ino)
+
+
+def log_replaced(store, path):
+    """前の apply の後で `path` が入れ替わった（世代送り・削除）なら True。控えは今の身元へ進める。
+
+    世代送りは注入のとき（apply より前）にしか起きないので、apply の頭で見れば足りる。
+    """
+    now = file_id(path)
+    before = store.get("file")
+    store["file"] = now
+    return before is not None and before != now
+
+
+def note_line(store, line, key, now=None):
+    """`[REPLACE]` / `[SKIP]` の行を書くなら True。
+
+    このプロセスで書いた文面なら書かずに、規則（`key`）ごとに数えて False。
+    """
+    now = time.time() if now is None else now
+    with store["lock"]:
+        store["total"][key] = store["total"].get(key, 0) + 1
+        if line not in store["written"]:
+            store["written"].add(line)
+            return True
+        pending = store["pending"]
+        if not pending:
+            store["since"] = now
+        pending[key] = pending.get(key, 0) + 1
+        return False
+
+
+def take_tally(store, quiet_call=False, force=False, now=None):
+    """数えた回数を `[TALLY]` の1行にして返す。まだ書かないなら None。
+
+    `quiet_call` は今の推論で数えるだけにした行があったか。
+    書くのは、そういう推論が `TALLY_CALLS` 回たまったとき、
+    最初に数えてから `TALLY_SECONDS` 秒たったとき、`force`（apply の頭）のとき。
+    規則ごとに「この起動の累計(+前の [TALLY] から)」。
+    """
+    now = time.time() if now is None else now
+    with store["lock"]:
+        if quiet_call:
+            store["calls"] += 1
+        pending = store["pending"]
+        if not pending:
+            return None
+        if (not force and store["calls"] < TALLY_CALLS
+                and now - store["since"] < TALLY_SECONDS):
+            return None
+        total = store["total"]
+        parts = []
+        for key, count in sorted(pending.items(), key=lambda kv: (-kv[1], kv[0])):
+            kind, source, target = key
+            label = ("\"{}\"->\"{}\"".format(snip(source, TALLY_SNIP), snip(target, TALLY_SNIP))
+                     if kind == "REPLACE"
+                     else "\"{}\" 見送り".format(snip(source, TALLY_SNIP)))
+            parts.append("{} {}(+{})".format(label, total.get(key, count), count))
+        quiet = sum(pending.values())
+        store["pending"] = {}
+        store["calls"] = 0
+        store["since"] = now
+    return ("[TALLY] 同じ文面の行を書かずに数えた {}回。規則ごとに この起動の累計(+前の [TALLY] から): {}"
+            .format(quiet, " / ".join(parts)))
+
+
+def save_pending(store):
+    """まだ書いていない回数を控えのファイルへ上書きする。無ければファイルを消す。
+
+    落ちたときや止められたときは `on_stop` も `atexit` も走らないので、推論のたびに残しておく。
+    推論は1回に数秒かかるので、小さな JSON の上書き1回は重さにならない（測ってはいない）。
+    """
+    path = store.get("pending_path")
+    if not path:
+        return
+    with store["lock"]:
+        pending = store["pending"]
+        if not pending:
+            if store.get("pending_saved"):
+                store["pending_saved"] = False
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+            return
+        rows = [[kind, source, target, count, store["total"].get((kind, source, target), count)]
+                for (kind, source, target), count in pending.items()]
+        data = {"pid": os.getpid(),
+                "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                "rows": rows}
+        tmp = path + ".tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as fh:
+                json.dump(data, fh, ensure_ascii=False)
+            os.replace(tmp, path)
+            store["pending_saved"] = True
+        except OSError:
+            pass
+
+
+def take_leftover(path):
+    """前の起動が書けずに残した回数を `[TALLY]` の1行にして返し、控えを消す。無ければ None。
+
+    今のプロセスが残した控え（遅れて当て直す boot）は、手元の回数と同じなので読まない。
+    """
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict) or data.get("pid") == os.getpid():
+        return None
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+    parts = []
+    quiet = 0
+    for row in data.get("rows") or []:
+        try:
+            kind, source, target, count, total = row
+        except (TypeError, ValueError):
+            continue
+        quiet += int(count)
+        label = ("\"{}\"->\"{}\"".format(snip(source, TALLY_SNIP), snip(target, TALLY_SNIP))
+                 if kind == "REPLACE" else "\"{}\" 見送り".format(snip(source, TALLY_SNIP)))
+        parts.append("{} {}(+{})".format(label, total, count))
+    if not parts:
+        return None
+    return ("[TALLY] 前の起動（pid {}・最後に数えたのは {}）で書けずに残った {}回。"
+            "規則ごとに その起動の累計(+前の [TALLY] から): {}".format(
+                data.get("pid"), data.get("at"), quiet, " / ".join(parts)))
+
+
+def flush_at_exit(*_args):
+    """閉じるときに、まだ書いていない回数を `[TALLY]` に書く（`on_stop` と `atexit` から）。
+
+    どちらが先に走っても、2回目は書くものが無いので何もしない。
+    モジュール関数にして `sys` の控えだけを見るので、boot が変わっても最新の書き手で書く。
+    """
+    store = getattr(sys, LOG_STORE_ATTR, None)
+    if not isinstance(store, dict) or not hasattr(store.get("lock"), "acquire"):
+        return
+    write = store.get("write")
+    try:
+        tally = take_tally(store, force=True)
+        if tally and write is not None:
+            write(tally + "（閉じるとき）")
+        save_pending(store)
+    except Exception:
+        pass
 
 
 # --------------------------------------------------------------------------
@@ -594,10 +822,14 @@ class RuleFile(object):
     読む先もその場で切り替わる（`rules_path`）。
     """
 
-    def __init__(self, mod_dir, state_dir, report):
+    def __init__(self, mod_dir, state_dir, report, fresh=None):
         self.mod_dir = mod_dir
         self.state_dir = state_dir
         self.report = report          # ログを出す関数（行, force）
+        # 読んだファイル `(場所, 更新時刻と大きさ)` を渡し、読込の行を書くなら真を返す関数。
+        # apply ごとにこの器を作り直すので、無いと同じファイルでも `[RULES] 読込` が
+        # apply のたびに出ていた（版7まで）。None なら毎回書く。
+        self.fresh = fresh
         self.path = rules_path(mod_dir, state_dir, RULES_PATH)
         self.stamp = None
         self.groups = []
@@ -661,6 +893,9 @@ class RuleFile(object):
             return
         self.groups = group_rules(rules)
         self.count = len(rules)
+        # 同じファイルを読み直しただけなら、警告も読込の行も前に書いたものと同じ。
+        if self.fresh is not None and not self.fresh((self.path, stamp)):
+            return
         for line in warnings:
             self.report("[RULES] " + line, force=True)
         self.report("[RULES] 読込: {} {}パターン / {}グループ".format(
@@ -718,12 +953,52 @@ def apply(ctx):
     seen = Seen()
 
     write = ctx.logger("prompt_bloat.log")
+    store = log_store()
+    if log_replaced(store, log_path):
+        # 世代送りされた新しいログ。書いた文面の控えを捨て、読込の行も書き直す。
+        with store["lock"]:
+            store["written"].clear()
+            store["rules"] = None
 
     def report(line, force=False):
         if force or LOG_RULES:
             write(line)
 
-    rules = RuleFile(mod_dir, state_dir, report)
+    def first_read(signature):
+        """最後に読込の行を書いたファイルと違えば真（控えも進める）。"""
+        if store.get("rules") == signature:
+            return False
+        store["rules"] = signature
+        return True
+
+    # 前の起動が落ちて書けなかった回数（控えのファイル）を先に書き出す。
+    store["pending_path"] = ctx.out_path(PENDING_NAME)
+    leftover = take_leftover(store["pending_path"])
+    if leftover:
+        write(leftover)
+
+    # 前の boot（または前の注入）で数えたまま書いていない回数を、ここで書き出す。
+    if LOG_REPLACE:
+        tally = take_tally(store, force=True)
+        if tally:
+            write(tally)
+        save_pending(store)
+
+    # 閉じるときの書き出し。書き手は boot ごとに新しいものへ差し替え、登録は1プロセス1回。
+    store["write"] = write
+    if not store.get("exit_hooked"):
+        store["exit_hooked"] = True
+        atexit.register(flush_at_exit)
+
+    def bind_on_stop():
+        app = ui.find_app()
+        if app is not None:
+            app.bind(on_stop=flush_at_exit)
+
+    # キーを世代で変えないので、boot をまたいで1回だけ走る（TECH.md §3.6）。
+    ctx.on_ready(bind_on_stop, key="111_llm_prompt_replace:on_stop")
+
+    rules = RuleFile(mod_dir, state_dir, report, fresh=first_read)
 
     def run(texts, site):
         """文章の並びにルールを当てる。変わらなければ None。
@@ -742,33 +1017,51 @@ def apply(ctx):
         # 判定と抽選は**全部を繋いだ文章に対して1回**（プロキシがボディ全体を1回で見ていたのと同じ）。
         # 書き換えは1つずつに当てる。
         chosen, skipped = decide(groups, "\n".join(fresh))
+        quiet = []                            # この推論で数えるだけにした行があったか
+
+        def event(line, key):
+            # 同じ文面はこのプロセスで1回だけ書き、以後は数える（版8）。
+            if note_line(store, line, key):
+                write(line)
+            else:
+                quiet.append(key)
+
         for rule, total, denom, why in skipped:
             if rule.dropped:
                 write("[RULES] 正規表現を捨てた: \"{}\" {}".format(
                     snip(rule.disp_from), why))
             elif LOG_REPLACE:
-                write("[SKIP] {} | \"{}\" {}{}".format(
+                event("[SKIP] {} | \"{}\" {}{}".format(
                     site, snip(rule.disp_from), why,
-                    "" if not total else " ({}/{})".format(total, denom)))
-        if not chosen:
-            return None
+                    "" if not total else " ({}/{})".format(total, denom)),
+                    ("SKIP", rule.disp_from, why))
 
         result = []
         changed = False
-        for text in texts:
-            if not text or text in seen:
-                result.append(text)
-                continue
-            new_text, hits = apply_chosen(text, chosen)
-            for rule, count, denom in hits:
-                if LOG_REPLACE:
-                    write("[REPLACE] {} | \"{}\" -> \"{}\" (確率{}/{}) {}箇所".format(
-                        site, snip(rule.disp_from), snip(rule.disp_to),
-                        rule.prob, denom, count))
-            if new_text != text:
-                seen.add(new_text)
-                changed = True
-            result.append(new_text)
+        if chosen:
+            for text in texts:
+                if not text or text in seen:
+                    result.append(text)
+                    continue
+                new_text, hits = apply_chosen(text, chosen)
+                for rule, count, denom in hits:
+                    if LOG_REPLACE:
+                        event("[REPLACE] {} | \"{}\" -> \"{}\" (確率{}/{}) {}箇所".format(
+                            site, snip(rule.disp_from), snip(rule.disp_to),
+                            rule.prob, denom, count),
+                            ("REPLACE", rule.disp_from, rule.disp_to))
+                if new_text != text:
+                    seen.add(new_text)
+                    changed = True
+                result.append(new_text)
+
+        # 見送りだけの推論（chosen が空）も数えた分があれば区切りを見る。
+        if LOG_REPLACE:
+            tally = take_tally(store, quiet_call=bool(quiet))
+            if tally:
+                write(tally)
+            if quiet or tally:
+                save_pending(store)
         return result if changed else None
 
     # 仕掛ける場所はローダの担当（`instantale_modloader.llm`）。

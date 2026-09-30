@@ -394,7 +394,7 @@ def log(msg: str, *, level: str = "INFO") -> None:
 
 
 def log_unrepeated(msg: str, *, level: str = "INFO") -> bool:
-    """定型の行（包んだ・層を置き換えた・別名を張り替えた・設定・適用した・重なり）を書く。書いたかを返す。
+    """定型の行（包んだ・層を置き換えた・別名を張り替えた・設定・適用した・重なり・MOD の INFO 行）を書く。書いたかを返す。
 
     **前の boot で同じ行を書いていれば書かない。**
     1回の注入で、遅れて当て直す boot が何度か走る（モジュールや `__main__` のクラスが
@@ -416,6 +416,19 @@ def log_unrepeated(msg: str, *, level: str = "INFO") -> bool:
     now.add(msg)
     log(msg, level=level)
     return True
+
+
+def mod_log(msg, *, level: str = "INFO") -> None:
+    """MOD の `ctx.log`。INFO の行は `log_unrepeated` を通す（WARN と ERROR は毎回書く）。
+
+    MOD の多くは apply のたびに設定の要約を1行書く（`… installed; …` / `… state=…`）。
+    遅れて当て直す boot でも同じ文面が並び直していた（実測。2回目の boot で168行中136行、
+    3回目で171行中155行が前の boot と同じ文面。modloader.log の MOD の行は9日で約5.7MB）。
+    """
+    if level == "INFO":
+        log_unrepeated(str(msg))
+    else:
+        log(msg, level=level)
 
 
 def _roll_logged_lines() -> None:
@@ -488,7 +501,7 @@ class ModContext:
         # 引数名を `state_dir` にしないのは、
         # 場所を決める関数 `state_dir()` を中で呼べなくなるため。
         self.state_dir = state_root or state_dir(runtime_dir)
-        self.log = log
+        self.log = mod_log
         self.log_exc = log_exc
         self.api = API
         self.version = __version__
@@ -2116,7 +2129,7 @@ def _boot(out_dir: str) -> dict:
             _state["replaced_own"]))
     if _state.get("repeats"):
         log("{} line(s) same as an earlier boot of this injection were not repeated "
-            "(wrapped / replacing / rebound / setting / applied / overlapping)"
+            "(wrapped / replacing / rebound / setting / applied / overlapping / mod info)"
             .format(_state["repeats"]))
     log("-" * 70)
 

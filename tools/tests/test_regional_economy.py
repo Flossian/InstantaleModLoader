@@ -525,6 +525,56 @@ def main():
         if hasattr(sys, mod.STATE_STORE_ATTR):
             delattr(sys, mod.STATE_STORE_ATTR)
 
+    print("[繰り返し]")
+    # 版4: apply のたびに同じ中身で出ていた `installed:` と関所の `adjusts item prices` は、
+    # 前に書いた中身と同じなら書かない。中身が変わったときと、ログが世代送りされた後は書く。
+    log_path = os.path.join(OUT_DIR, "regional_economy.log")
+    start = [os.path.getsize(log_path) if os.path.isfile(log_path) else 0]
+
+    def counts():
+        with io.open(log_path, encoding="utf-8") as fh:
+            fh.seek(start[0])
+            lines = fh.read().splitlines()
+        return (sum(1 for line in lines if "] installed: " in line),
+                sum(1 for line in lines if "adjusts item prices" in line))
+
+    ctxs = []
+    saved_strong = mod.STRONG_FLUCTUATION_MULTIPLIER
+    # ローダの `prices.adjust` も、同じ持ち主・同じ種類の行は注入1回に1度しか書かない。
+    # 本物では注入し直すとローダごと読み直されて空に戻るので、ここでは手で空にする。
+    from instantale_modloader import prices as loader_prices
+    loader_prices._adjust_written.clear()
+    try:
+        if hasattr(sys, mod.STATE_STORE_ATTR):
+            delattr(sys, mod.STATE_STORE_ATTR)
+        for _ in range(3):                     # 最初の boot と、遅れて当て直す2回
+            ctxs.append(GenCtx())
+            mod.apply(ctxs[-1])
+        check("同じ中身なら当て直しても1回だけ書く", counts() == (1, 1), counts())
+
+        mod.STRONG_FLUCTUATION_MULTIPLIER = saved_strong + 0.5
+        ctxs.append(GenCtx())
+        mod.apply(ctxs[-1])
+        check("中身が変われば書く", counts() == (2, 1), counts())
+
+        # 注入のときにログが世代送りされた形。新しいログに書き直す。
+        os.replace(log_path, log_path + ".1")
+        start[0] = 0
+        loader_prices._adjust_written.clear()    # 注入し直しでローダが読み直された形
+        for _ in range(2):
+            ctxs.append(GenCtx())
+            mod.apply(ctxs[-1])
+        check("世代送りされたら新しいログに1回だけ書く", counts() == (1, 1), counts())
+        os.remove(log_path + ".1")
+        check("例外が出ない", not any(c.errors for c in ctxs),
+              [c.errors for c in ctxs])
+    finally:
+        mod.STRONG_FLUCTUATION_MULTIPLIER = saved_strong
+        for c in ctxs:
+            c.gone = True
+        if hasattr(sys, mod.STATE_STORE_ATTR):
+            delattr(sys, mod.STATE_STORE_ATTR)
+
     print("")
     if failures:
         print("失敗: {}".format(", ".join(failures)))

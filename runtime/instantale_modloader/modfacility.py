@@ -74,6 +74,19 @@ import os
 import sys
 
 from . import log_exc, patch, state, ui
+
+
+#: 前に書いた定型の行の中身（種類 -> 中身）。同じ中身なら繰り返さない（`_changed`）。
+#: 注入し直すとこのモジュールごと読み直されるので空に戻り、新しいログの頭には必ず出る。
+_LAST_WRITTEN = {}
+
+
+def _changed(kind, content) -> bool:
+    """`kind` の行の中身が前に書いたものと違えば控えて True。同じなら False。"""
+    if _LAST_WRITTEN.get(kind) == content:
+        return False
+    _LAST_WRITTEN[kind] = content
+    return True
 # 保存の間だけ成り代わる辞書。名簿と同じく、反復では隠し id では引ける（`veil_plain`）。
 from .modnpc import _RosterView
 
@@ -174,6 +187,7 @@ def _record(facility_id):
             "built_in": None,   # その実体を組んだ世代（注入し直しで組み直すため）
             "snapshot": None,   # 控えから読んだ素データの写し（次の spawn の材料）
             "placed": None,     # (area_id, node_id, hub_id)
+            "logged": {},       # 持ち主 -> (世代, 層の数)。`registered` の行を書いた印
         }
     return record
 
@@ -262,7 +276,13 @@ def register(owner, facility_id=None, *, key=None, fields=None, choices=None,
         # 建物の登録は塗り直しのたびに走ることがあり、そのたび捨てると
         # 街から引き直す手間が毎手ぶん増える。
         record["facility"] = None
-    if write:
+    # 同じ持ち主・同じ世代・同じ層の数なら書かない。
+    # 選択肢が組まれるたびに登録し直す MOD がある（`331_` は毎手、持ち株の全部）ので、
+    # 中身が変わらない登録まで書くと、1分に170行を超えていた（実測）。
+    logged = record.setdefault("logged", {})
+    mark = (getattr(patch, "_generation", None), len(record["layers"]))
+    if write and logged.get(owner) != mark:
+        logged[owner] = mark
         write("modfacility: {} registered {} ({} layer(s))".format(
             owner, facility_id, len(record["layers"])))
     return facility_id
@@ -1183,7 +1203,9 @@ def snapshot_all(app, write=None):
         record["snapshot_dropped"] = dropped
         if _persist(app, owner_of_id(facility_id), facility_id, snapshot=snap):
             done.append(facility_id)
-    if write and done:
+    # 控えは保存のたびに取るが、行は写した顔ぶれが変わったときだけ書く。
+    # ゲームは行動のたびに保存するので、毎回書くと行動の数だけ同じ行が並んでいた。
+    if write and done and _changed("snapshot", tuple(done)):
         write("modfacility: snapshot of {} taken".format(", ".join(done)))
     return done
 
@@ -2612,7 +2634,8 @@ def install(ctx, write=None):
     setattr(sys, INSTALLED_ATTR, {"generation": generation,
                                   "owner": getattr(ctx, "_mod", None),
                                   "targets": targets})
-    if write:
+    # 対象は boot ごとに同じなので、変わったときだけ書く（遅れて当て直す boot で繰り返していた）。
+    if write and _changed("gate", tuple(targets)):
         write("modfacility: the gate was declared on {}".format(", ".join(targets)))
     return targets
 

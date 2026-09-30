@@ -72,6 +72,16 @@
 値段だけ膨らませると逆算側が定義域から外れて
 `KeyError` を出しうる（`get_npc_employ_price` の前例。VERIFICATION_LOG.md §2.2）。
 売買の値段はこの mod、内部の段階計算はゲーム自身、と分ける。
+
+## 版の記録
+
+版3: `item_price.log` の同じ中身の繰り返しを止めた。
+設定の書き出し（`---- installed ...`）は apply のたびに出ていて、遅れて当て直す boot を含めて
+約40日で1,120回・約300KB だった。前に書いた中身と同じなら書かないようにした。
+値段が読めない品の `skip` は同じ品で何度も出ていた（1,085行のうち品は16通り）。
+品ごとに1プロセス1回にした。数（`skipped`）は今までどおり毎回数える。
+控えは `sys` に置き（1プロセス）、注入のときにログが世代送りされたら（ファイルが入れ替わったら）
+設定も `skip` も新しいログに書き直す。
 """
 
 import os
@@ -221,6 +231,26 @@ def _round_nice(price):
     return price
 
 
+def file_id(path):
+    """ログのファイルの身元。無ければ None（世代送りで名前を変えられた直後など）。"""
+    try:
+        info = os.stat(path)
+    except OSError:
+        return None
+    return (info.st_dev, info.st_ino)
+
+
+def log_replaced(store, path):
+    """前の apply の後で `path` が入れ替わった（世代送り・削除）なら True。控えは今の身元へ進める。
+
+    世代送りは注入のとき（apply より前）にしか起きないので、apply の頭で見れば足りる。
+    """
+    now = file_id(path)
+    before = store.get("file")
+    store["file"] = now
+    return before is not None and before != now
+
+
 #: `Item` インスタンスからもセーブの辞書からも同じ形で読む（ローダの語彙）。
 #: 決済の突き合わせ（`price_on_show` / `name_of`）がこれを通る。
 read_item = prices.read_item
@@ -235,7 +265,9 @@ def apply(ctx):
     # 注入し直すと `label not in False` で TypeError になり、
     # 決済の検算だけが黙って死ぬ（`safe=True` なので画面には出ない）。
     # 手での注入し直しはこのプロジェクトの通常の操作なので、実際に踏む。
-    blanks = {"logged": 0, "reconciled": 0, "skipped": 0, "settled": set()}
+    # `skip_seen` は `skip` の行を書いた品（版3）。
+    blanks = {"logged": 0, "reconciled": 0, "skipped": 0, "settled": set(),
+              "skip_seen": set()}
     store = getattr(sys, STORE_ATTR, None)
     if not isinstance(store, dict):
         store = dict(blanks)
@@ -244,7 +276,15 @@ def apply(ctx):
         # 足りない鍵と、型の変わった鍵だけを入れ替える（件数は残したい）。
         for name, blank in blanks.items():
             if name not in store or not isinstance(store[name], type(blank)):
-                store[name] = set() if isinstance(blank, set) else blank
+                store[name] = blank
+    # `installed` は最後に書いた設定の行、`file` はログのファイルの身元（版3）。
+    store.setdefault("installed", None)
+    store.setdefault("file", None)
+
+    # 注入のときにログが世代送りされたら、新しいログに設定と `skip` を書き直す。
+    if log_replaced(store, ctx.out_path(LOG_BASENAME)):
+        store["skip_seen"].clear()
+        store["installed"] = None
 
     write = ctx.logger(LOG_BASENAME, stamp=False)
 
@@ -326,7 +366,11 @@ def apply(ctx):
         price, axis = base_price(item)
         if price is None:
             store["skipped"] += 1
-            note("skip {} ({})".format(name_of(item), axis))
+            # 同じ品は画面を開くたびにここを通る。行は品ごとに1プロセス1回（版3）。
+            line = "skip {} ({})".format(name_of(item), axis)
+            if line not in store["skip_seen"]:
+                store["skip_seen"].add(line)
+                note(line)
             return None
         sell = _round_nice(min(max(price * float(SELL_RATE), float(MIN_PRICE)),
                                float(MAX_PRICE)))
@@ -420,12 +464,16 @@ def apply(ctx):
             return result
 
     base_owner, layers = prices.item_price_sources()
-    write("---- installed  scale={:g} sell_rate={:g} type={} rarity={} "
-          "layers={} ----".format(
-              float(PRICE_SCALE), float(SELL_RATE),
-              {key: round(value, 3) for key, value in sorted(type_mult.items())},
-              {key: round(value, 3) for key, value in sorted(rarity_mult.items())},
-              layers or "-"))
+    installed = ("---- installed  scale={:g} sell_rate={:g} type={} rarity={} "
+                 "layers={} ----".format(
+                     float(PRICE_SCALE), float(SELL_RATE),
+                     {key: round(value, 3) for key, value in sorted(type_mult.items())},
+                     {key: round(value, 3) for key, value in sorted(rarity_mult.items())},
+                     layers or "-"))
+    # 前に書いた中身と同じなら書かない（版3）。
+    if store.get("installed") != installed:
+        store["installed"] = installed
+        write(installed)
     ctx.log("item price: installed (scale={:g}, sell_rate={:g}, on_sight={}, "
             "reconcile={})".format(float(PRICE_SCALE), float(SELL_RATE),
                                    bool(REPRICE_ON_SIGHT), bool(RECONCILE_GOLD)))

@@ -73,6 +73,13 @@ stateファイルは読まない。読み書きは全部ワーカーの中で行
 最終額はいつでも式から組み直せるので、このMODは自分が書いた額を控えない
 （控えていた頃は、保存中に売買画面が先に掛け直すと倍率が積み上がった
  ― 並行テストで 100 が 168万まで伸びた。組み直す形にしてその経路ごと無くなった）。
+
+## 版の記録
+
+版4: apply のたびに同じ中身で出ていた2行（`installed: ...` と、関所が書く
+`prices: '...' adjusts item prices (temporary)`）を、前に書いた中身と同じなら書かないようにした。
+遅れて当て直す boot を含めて約40日で `installed:` が約870行、`prices:` が415行だった。
+控えは `sys` の器に置き（1プロセス）、注入のときにログが世代送りされたら新しいログに書き直す。
 """
 
 import json
@@ -498,6 +505,9 @@ def _store():
         # world_dict と現在セーブの名前が一時的に食い違ったことを、
         # 同じロード中に何度も書かないための控え。
         "world_identity_mismatches": set(),
+        # apply のたびに同じ中身で出る行を、最後に書いた中身で覚える控え（版4）。
+        # `{"file": ログのファイルの身元, "last": {行の種類: 最後に書いた中身}}`。
+        "logged": {"file": None, "last": {}},
     }
     for key, value in defaults.items():
         if key not in found:
@@ -510,7 +520,41 @@ def _store():
         found["classification_pending"] = set()
     if not isinstance(found.get("world_identity_mismatches"), set):
         found["world_identity_mismatches"] = set()
+    logged = found.get("logged")
+    if not isinstance(logged, dict) or not isinstance(logged.get("last"), dict):
+        found["logged"] = {"file": None, "last": {}}
     return found
+
+
+def _file_id(path):
+    """ログのファイルの身元。無ければ None（世代送りで名前を変えられた直後など）。"""
+    try:
+        info = os.stat(path)
+    except OSError:
+        return None
+    return (info.st_dev, info.st_ino)
+
+
+def _forget_if_log_replaced(state, path):
+    """前の apply の後でログが入れ替わった（世代送り・削除）なら、書いた中身の控えを捨てる。
+
+    世代送りは注入のとき（apply より前）にしか起きないので、apply の頭で見れば足りる。
+    MOD のモジュールは遅れて当て直す boot のたびに読み直されるので、控えは `sys` の器に置く。
+    """
+    logged = state["logged"]
+    now = _file_id(path)
+    before = logged.get("file")
+    logged["file"] = now
+    if before is not None and before != now:
+        logged["last"].clear()
+
+
+def _write_changed(state, write, kind, text):
+    """`kind` の行を、前に書いた中身と違うときだけ書く。"""
+    last = state["logged"]["last"]
+    if last.get(kind) != text:
+        last[kind] = text
+        write(text)
 
 
 def _state_path(ctx, world):
@@ -1607,6 +1651,8 @@ def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
     note = ctx.logger(LOG_BASENAME, cap=2000)
     state = _store()
+    # 注入のときにログが世代送りされたら、`installed:` などを新しいログに書き直す（版4）。
+    _forget_if_log_replaced(state, ctx.out_path(LOG_BASENAME))
     jobs = state["jobs"]
     schedule = ui.scheduler(ctx, "regional economy")
     screen = ui.Screen(ctx, write, tag="regional economy",
@@ -2121,10 +2167,19 @@ def apply(ctx):
         multiplier = _regional_multiplier(score)
         return None if multiplier == 1.0 else price * multiplier
 
+    def write_adjust(text):
+        """関所が段を置いたときの1行。前に書いた中身と同じなら書かない（版4）。
+
+        `prices.adjust` は段を置くたびに `prices: '...' adjusts item prices (...)` を書き、
+        遅れて当て直す boot のたびに同じ行が並んでいた（約40日で415行）。
+        関所が `adjust` に渡した書き手を使うのはその1行だけ。
+        """
+        _write_changed(state, write, "prices.adjust", text)
+
     prices.install(ctx, write)
     prices.adjust(os.path.basename(getattr(ctx, "mod_dir", "") or
                                    "405_regional_economy"),
-                  regional_for, temporary=True, write=write)
+                  regional_for, temporary=True, write=write_adjust)
 
     @ctx.wrap(SETTLEMENT_DETAIL_TARGET, required=False, safe=True)
     def create_settlement_detail(orig, world_overview, world_structure,
@@ -2427,8 +2482,11 @@ def apply(ctx):
 
     ctx.log("regional economy: installed profile, downstream economy context, "
             "batch classification, prices, markers, and specialty stock")
-    write("installed: profile + one batch item classification + price overlay + markers"
-          " + one specialty per native stock generation + downstream overview context"
-          " (strong={:g} weak={:g} style={!r})".format(
-              float(STRONG_FLUCTUATION_MULTIPLIER),
-              float(WEAK_FLUCTUATION_MULTIPLIER), MARK_STYLE))
+    installed = ("installed: profile + one batch item classification + price overlay + markers"
+                 " + one specialty per native stock generation + downstream overview context"
+                 " (strong={:g} weak={:g} style={!r})".format(
+                     float(STRONG_FLUCTUATION_MULTIPLIER),
+                     float(WEAK_FLUCTUATION_MULTIPLIER), MARK_STYLE))
+    # 版4: apply のたびに書いていた（遅れて当て直す boot を含めて約40日で約870行）。
+    # 前に書いた中身と同じなら書かない。
+    _write_changed(state, write, "installed", installed)

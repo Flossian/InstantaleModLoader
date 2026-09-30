@@ -18,6 +18,8 @@
   配布     … 手元のファイルが配布物に入らないこと（＝更新で消えない根拠）
   再読込   … ファイルを書き換えると次のリクエストから効くこと
   壊さない … ルールが無い・読めない・例外が出た場合に文章をそのまま送ること
+  繰り返し … 同じ文面の `[REPLACE]` は1プロセスで1行、以後は `[TALLY]` に回数をまとめること。
+             `[RULES] 読込` は同じルールファイルなら繰り返さないこと。ログが世代送りされたら書き直すこと
 
 **確率の抽選は
 `roll` を差し替えて固定する**（乱数のままでは「1回だけ抽選している」ことを確かめられない）。
@@ -203,6 +205,11 @@ class FakeCtx(object):
         import instantale_modloader as _ml
         return _ml.ModContext.logger(self, name, **kw)
 
+    # 閉じるときの `on_stop` をつなぐ処理（版8）。ゲームが無いので控えるだけで走らせない。
+    def on_ready(self, fn, key=None, **kw):
+        self.ready = getattr(self, "ready", [])
+        self.ready.append((key, fn))
+
     def wrap(self, target, required=True):
         name = target.partition(":")[2].rsplit(".", 1)[-1]
 
@@ -261,7 +268,10 @@ def arm(rules_text, out_dir, roll=None, settings=None):
 
     `(client, ctx, rules_path)` を返す。
     `roll` を渡すと抽選を固定する。
+    ログの控え（書いた文面と数えた回数。1プロセスに1組）は捨てて、新しい起動から始める
+    （残すと、前の検査で書いた文面の `[REPLACE]` が数えるだけになる）。
     """
+    fresh_process()
     revert_client()
     mod.LOG_REPLACE = True
     mod.LOG_RULES = True
@@ -288,6 +298,22 @@ def arm(rules_text, out_dir, roll=None, settings=None):
         check("自己検証: apply() の中の _verify が通る", False,
               [line for line in ctx.lines if "VERIFY" in line])
     return client, ctx, rules_path
+
+
+def fresh_process():
+    """ログの控えを捨てる（ゲームを起動し直した形）。"""
+    attr = getattr(mod, "LOG_STORE_ATTR", None)
+    if attr and hasattr(sys, attr):
+        delattr(sys, attr)
+
+
+def reapply(out_dir):
+    """同じ注入の中で遅れて当て直す boot の形。ルールファイルも控えもそのまま。"""
+    revert_client()
+    client = FakeClient()
+    ctx = FakeCtx(client, out_dir)
+    mod.apply(ctx)
+    return client, ctx
 
 
 def read_log(out_dir):
@@ -976,6 +1002,145 @@ def test_harmless(tmp):
           messages[2]["content"] == "前の話", messages[2])
 
 
+def test_tally_left_over(tmp):
+    """最後の `[TALLY]` の後に数えた回数を落とさないこと（版8）。
+
+    閉じたときは `on_stop` / `atexit` から `flush_at_exit` が書く。
+    落ちた・止められたときは推論のたびに控えのファイルへ残し、次の起動の最初の apply で書く。
+    """
+    out_dir = os.path.join(tmp, "left_over")
+    os.makedirs(out_dir, exist_ok=True)
+    pending = os.path.join(out_dir, mod.PENDING_NAME)
+    client, ctx, _path = arm("#tab:t\n前=>後\n", out_dir, roll=lambda d: 0)
+    check("残り: 閉じるときの書き出しを on_ready に積む",
+          any(key == "111_llm_prompt_replace:on_stop" for key, _fn in getattr(ctx, "ready", [])),
+          getattr(ctx, "ready", None))
+    for _ in range(3):
+        client.chat("model", [{"role": "user", "content": "前の話"}])
+    check("残り: 数えるだけにした回数を控えのファイルへ残す", os.path.isfile(pending), pending)
+
+    # 閉じたとき。
+    mod.flush_at_exit()
+    log = read_log(out_dir)
+    closing = [line for line in log.splitlines() if "（閉じるとき）" in line]
+    check("残り: 閉じるときに [TALLY] を書く",
+          len(closing) == 1 and "書かずに数えた 2回" in closing[0], closing)
+    check("残り: 書いたら控えのファイルを消す", not os.path.isfile(pending), pending)
+    mod.flush_at_exit()
+    check("残り: 2回目は何も書かない",
+          read_log(out_dir).count("（閉じるとき）") == 1, read_log(out_dir))
+
+    # 落ちたとき: 前の起動（別の pid）が残した控えを、次の起動の最初の apply で書く。
+    with open(pending, "w", encoding="utf-8") as fh:
+        json.dump({"pid": -1, "at": "2026-09-30T10:00:00",
+                   "rows": [["REPLACE", "前", "後", 5, 12]]}, fh, ensure_ascii=False)
+    arm("#tab:t\n前=>後\n", out_dir, roll=lambda d: 0)
+    log = read_log(out_dir)
+    left =[line for line in log.splitlines() if "前の起動" in line]
+    check("残り: 前の起動の控えを [TALLY] に書く",
+          len(left) == 1 and "pid -1" in left[0] and "5回" in left[0]
+          and "\"前\"->\"後\" 12(+5)" in left[0], left)
+    check("残り: 書いたら前の起動の控えを消す", not os.path.isfile(pending), pending)
+
+    # 同じプロセスの控え（遅れて当て直す boot）は前の起動として読まない。
+    client, _ctx, _path = arm("#tab:t\n前=>後\n", out_dir, roll=lambda d: 0)
+    for _ in range(2):
+        client.chat("model", [{"role": "user", "content": "前の話"}])
+    reapply(out_dir)
+    check("残り: 同じプロセスの控えは前の起動として書かない",
+          read_log(out_dir).count("前の起動") == 1, read_log(out_dir))
+
+
+def test_log_repeats(tmp):
+    """同じ文面の行を繰り返さないこと（版8）。
+
+    版7までは推論のたびに同じ `[REPLACE]` を書き、apply のたびに `[RULES] 読込` を書いていた。
+    """
+    out_dir = os.path.join(tmp, "repeats")
+    os.makedirs(out_dir, exist_ok=True)
+    client, ctx, _path = arm("#tab:t\n前=>後\n", out_dir, roll=lambda d: 0)
+    for _ in range(3):
+        client.chat("model", [{"role": "user", "content": "前の話"}])
+    log = read_log(out_dir)
+    check("繰り返し: 置換は毎回効く", client.sent == ["後の話"] * 3, client.sent)
+    check("繰り返し: 同じ文面の [REPLACE] は1行だけ", log.count("[REPLACE] chat") == 1, log)
+    check("繰り返し: 間隔に届くまで [TALLY] は出ない", "[TALLY]" not in log, log)
+
+    # 件数の違う置き換えは別の文面なので書く。
+    client.chat("model", [{"role": "user", "content": "前の前の話"}])
+    log = read_log(out_dir)
+    check("繰り返し: 文面が違えば書く",
+          log.count("[REPLACE] chat") == 2 and "2箇所" in log, log)
+
+    # 遅れて当て直す boot。数えた2回を頭で書き出し、同じファイルの読込は繰り返さない。
+    client, ctx = reapply(out_dir)
+    log = read_log(out_dir)
+    tally = [line for line in log.splitlines() if "[TALLY]" in line]
+    check("当て直し: 数えた回数を [TALLY] に書き出す",
+          len(tally) == 1 and "書かずに数えた 2回" in tally[0]
+          and "\"前\"->\"後\" 4(+2)" in tally[0], tally)
+    check("当て直し: 同じファイルなら [RULES] 読込 を繰り返さない",
+          log.count("[RULES] 読込") == 1, log)
+    client.chat("model", [{"role": "user", "content": "前の話"}])
+    log = read_log(out_dir)
+    check("当て直し: 前の boot で書いた文面は書かない",
+          log.count("[REPLACE] chat") == 2 and client.sent == ["後の話"], (log, client.sent))
+
+    # 間隔: 数えるだけにした推論が TALLY_CALLS 回たまったら書く。
+    saved = mod.TALLY_CALLS
+    mod.TALLY_CALLS = 3
+    try:
+        for _ in range(2):
+            client.chat("model", [{"role": "user", "content": "前の話"}])
+    finally:
+        mod.TALLY_CALLS = saved
+    tally = [line for line in read_log(out_dir).splitlines() if "[TALLY]" in line]
+    check("間隔: 推論の数が間隔に届いたら [TALLY] を書く",
+          len(tally) == 2 and "\"前\"->\"後\" 7(+3)" in tally[-1], tally)
+
+    # 間隔: 最初に数えてから TALLY_SECONDS 秒たった後の推論で書く。
+    saved = mod.TALLY_SECONDS
+    mod.TALLY_SECONDS = 0
+    try:
+        client.chat("model", [{"role": "user", "content": "前の話"}])
+    finally:
+        mod.TALLY_SECONDS = saved
+    tally = [line for line in read_log(out_dir).splitlines() if "[TALLY]" in line]
+    check("間隔: 時間がたったら次の推論で [TALLY] を書く",
+          len(tally) == 3 and "\"前\"->\"後\" 8(+1)" in tally[-1], tally)
+
+    # 注入し直した形（ログはそのまま）。数えた分が無ければ何も書かない。
+    reapply(out_dir)
+    log = read_log(out_dir)
+    check("注入し直し: 同じログ・同じファイルなら [RULES] 読込 を書かない",
+          log.count("[RULES] 読込") == 1, log)
+    check("注入し直し: 数えた分が無ければ [TALLY] は出ない",
+          sum(1 for line in log.splitlines() if "[TALLY]" in line) == 3, log)
+
+    # ルールファイルを書き換えたら、読込の行を書く。
+    path = os.path.join(out_dir, "mod", "llm_replacements.default.txt")
+    with io.open(path, "w", encoding="utf-8") as fh:
+        fh.write("#tab:t\n前=>後ろ\n")
+    os.utime(path, (os.path.getmtime(path) + 2, os.path.getmtime(path) + 2))
+    client, _ctx = reapply(out_dir)
+    client.chat("model", [{"role": "user", "content": "前の話"}])
+    log = read_log(out_dir)
+    check("書き換え: 中身が変われば [RULES] 読込 を書く", log.count("[RULES] 読込") == 2, log)
+    check("書き換え: 置き換え先が変われば [REPLACE] を書く",
+          log.count("[REPLACE] chat") == 3 and "\"後ろ\"" in log, log)
+
+    # 注入のときにログが世代送りされた形。新しいログに読込の行と最初の [REPLACE] を書き直す。
+    log_path = os.path.join(out_dir, "prompt_bloat.log")
+    os.replace(log_path, log_path + ".1")
+    client, _ctx = reapply(out_dir)
+    for _ in range(2):
+        client.chat("model", [{"role": "user", "content": "前の話"}])
+    log = read_log(out_dir)
+    check("世代送り: 新しいログに [RULES] 読込 を書く", log.count("[RULES] 読込") == 1, log)
+    check("世代送り: 新しいログに最初の [REPLACE] を書く",
+          log.count("[REPLACE] chat") == 1 and "\"後ろ\"" in log, log)
+
+
 def test_settings(tmp):
     out_dir = os.path.join(tmp, "settings_off")
     os.makedirs(out_dir, exist_ok=True)
@@ -1018,6 +1183,8 @@ def main():
         test_real_prompts()
         test_reload(tmp)
         test_harmless(tmp)
+        test_log_repeats(tmp)
+        test_tally_left_over(tmp)
         test_settings(tmp)
     finally:
         revert_client()

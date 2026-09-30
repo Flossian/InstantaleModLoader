@@ -29,6 +29,15 @@ import weakref
 from . import durations
 from . import log_exc
 
+
+#: 関所を立てた行を最後に書いた中身。同じなら繰り返さない。
+#: 関所は boot ごとに立て直すので、遅れて当て直す boot のたびに同じ行が並んでいた。
+#: 注入し直すとこのモジュールごと読み直されるので、新しいログの頭には必ず出る。
+_gate_written = None
+
+#: `adjust` の行を書いた持ち主 -> temporary か。同じなら繰り返さない（`_gate_written` と同じ）。
+_adjust_written = {}
+
 #: 宿屋の部屋1回。置く関数は `fn(app, quality=...)`、答えは `{"price": int}`。
 #: 「ゲームのままでよい」なら `None` を返す（既定へ落ちる）。
 INN_ROOM = "inn_room"
@@ -278,7 +287,9 @@ def adjust(owner, fn, temporary=False, write=None):
         layers = registry["adjust"]
         layers[:] = [layer for layer in layers if layer[0] != name]
         layers.append((name, fn, bool(temporary), write))
-    if write:
+    # apply のたびに段を置き直すので、同じ持ち主・同じ種類なら書かない（注入1回に1度）。
+    if write and _adjust_written.get(name) != bool(temporary):
+        _adjust_written[name] = bool(temporary)
         write("prices: {!r} adjusts item prices ({})".format(
             name, "temporary" if temporary else "saved"))
 
@@ -590,7 +601,9 @@ def install(ctx, write=None):
 
     setattr(sys, _ITEM_GATE_ATTR, {"generation": generation,
                                    "targets": list(targets)})
-    if write:
+    global _gate_written
+    if write and _gate_written != tuple(targets):
+        _gate_written = tuple(targets)
         write("prices: the item price gate was declared on {} target(s)".format(
             len(targets)))
     return targets

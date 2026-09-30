@@ -97,7 +97,20 @@ import copy
 import inspect
 import sys
 
-from . import frames, items, log, log_exc, npcs, patch, state, ui
+from . import frames, items, log, log_exc, log_unrepeated, npcs, patch, state, ui
+
+
+#: 前に書いた定型の行の中身（種類 -> 中身）。同じ中身なら繰り返さない（`_changed`）。
+#: 注入し直すとこのモジュールごと読み直されるので空に戻り、新しいログの頭には必ず出る。
+_LAST_WRITTEN = {}
+
+
+def _changed(kind, content) -> bool:
+    """`kind` の行の中身が前に書いたものと違えば控えて True。同じなら False。"""
+    if _LAST_WRITTEN.get(kind) == content:
+        return False
+    _LAST_WRITTEN[kind] = content
+    return True
 
 #: MOD の NPC の id の接頭辞。
 #: ゲームの採番は整数の連番なので、ここが被ることはない。
@@ -329,6 +342,7 @@ def _record(npc_id):
             "stale_placed": False,  # 名簿の実体が差し替わった。置き直しが要る
             "snapshot": None,    # 控えから読んだ実体の写し（次の spawn の材料）
             "placed": None,      # (area_id, facility_id, 主の元の値, 主か, 一覧に出すか)
+            "logged": {},        # 持ち主 -> (世代, 層の数)。`registered` の行を書いた印
         }
     return record
 
@@ -476,7 +490,12 @@ def register(owner, npc_id=None, *, key=None, fields=None, prompt=None,
         record["character"] = None
         record["built_in"] = None
         record["rebuild"] = True          # 次の `spawn` は名簿に居ても採らず組み直す
-    if write:
+    # 同じ持ち主・同じ世代・同じ層の数なら書かない（`modfacility.register` と同じ。
+    # `331_` は毎手、主人の層を積み直す）。
+    logged = record.setdefault("logged", {})
+    mark = (getattr(patch, "_generation", None), len(record["layers"]))
+    if write and logged.get(owner) != mark:
+        logged[owner] = mark
         write("modnpc: {} registered {} ({} layer(s))".format(
             owner, npc_id, len(record["layers"])))
     return npc_id
@@ -1152,7 +1171,8 @@ def snapshot_all(app, write=None):
         snap = snapshot_of(character)
         if _persist(app, owner_of_id(npc_id), npc_id, snapshot=snap):
             done.append(npc_id)
-    if write and done:
+    # 控えは保存のたびに取るが、行は写した顔ぶれが変わったときだけ書く（`modfacility` と同じ）。
+    if write and done and _changed("snapshot", tuple(done)):
         write("modnpc: snapshot of {} taken".format(", ".join(done)))
     return done
 
@@ -1721,8 +1741,9 @@ def install(ctx, write=None):
     setattr(sys, INSTALLED_ATTR, {"generation": generation,
                                   "owner": getattr(ctx, "_mod", None),
                                   "targets": targets})
-    log("modnpc: the gate was declared on {} target(s)".format(len(targets)))
-    if write:
+    log_unrepeated("modnpc: the gate was declared on {} target(s)".format(len(targets)))
+    # 対象は boot ごとに同じなので、変わったときだけ書く（遅れて当て直す boot で繰り返していた）。
+    if write and _changed("gate", tuple(targets)):
         write("modnpc: the gate was declared on {}".format(", ".join(targets)))
     return targets
 

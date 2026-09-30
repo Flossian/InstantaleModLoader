@@ -1446,7 +1446,7 @@ GUI は件数だけを状態欄に出し、失敗ではないので ⚠ には�
 | `replacing a previous patch layer on ...` | 前回注入の層を剥がした（正常） |
 | （この行が出ない） | 同一 boot 内で後段の MOD が包んだ ＝ 先の層が保持されている |
 | `dropped N layer(s) left by earlier injections: ...` | 今回当て直されなかった前の世代の層を剥がした（切った・伏せた・apply に失敗した MOD） |
-| `N line(s) same as an earlier boot of this injection were not repeated` | 遅れて当て直した boot で、前の boot と同じ文面の定型の行（`wrapped` / `replacing` / `rebound` / `setting` / `applied` / 重なりの一覧）を書かなかった数。前の boot の行を見ればよい。今の全体は `status.json` の `patches`。ERROR・WARN・UNRESOLVED と先送り（`defer`）は毎回書く |
+| `N line(s) same as an earlier boot of this injection were not repeated` | 遅れて当て直した boot で、前の boot と同じ文面の定型の行（`wrapped` / `replacing` / `rebound` / `setting` / `applied` / 重なりの一覧 / MOD が `ctx.log` で書く INFO 行）を書かなかった数。前の boot の行を見ればよい。今の全体は `status.json` の `patches`。ERROR・WARN・UNRESOLVED と先送り（`defer`）は毎回書く |
 | `replaced N patch layer(s) left by the earlier boot(s) of this injection` | 遅れて当て直した boot で、同じ注入の前の boot の自分の層を置き換えた数（当て直しの定義どおりで、対象ごとには書かない）。前の注入の層を剥がしたときは `replacing a previous patch layer on ...` を対象ごとに書く |
 
 当て直しで剥がれるのは、今回の世代が同じ対象に当てた場合だけ。
