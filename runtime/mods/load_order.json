@@ -119,7 +119,8 @@
     "233_probe_colosseum",
     "234_probe_busy_display",
     "235_probe_sound_effects",
-    "236_probe_enemy_stats"
+    "236_probe_enemy_stats",
+    "237_probe_affinity"
   ],
   "disabled": []
 }

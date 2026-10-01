@@ -1,0 +1,68 @@
+{
+  "entry": "conversation_affinity.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Affinity from conversation",
+    "ja": "会話による好感度の変動"
+  },
+  "description": {
+    "en": "When a conversation closes, the LLM judges once (-3 to +3) how the NPC's feelings toward you changed, and their affinity moves: +2 per step up, -4 per step down. Talking alone raises it only up to 60 (\"feels like a companion\"), and only once a day per person. Flattery alone does not count",
+    "ja": "会話を閉じるたびに、相手の気持ちがどう動いたかを LLM が1回だけ -3〜+3 で判定し、好感度が上下する。上がるときは1段 +2、下がるときは1段 -4。会話だけで上がるのは 60（仲間だと感じている）まで、同じ相手から上がるのは1日1回まで。おだてるだけでは上がらない"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "settings": {
+    "GAIN_PER_STEP": {
+      "type": "int",
+      "default": 2,
+      "min": 0,
+      "max": 20,
+      "label": {"ja": "上がる1段あたり", "en": "Gain per step"},
+      "note": {"ja": "判定 +1〜+3 の1段ごとに足す好感度。依頼のクリア1回は同行者に +20",
+               "en": "Affinity added per step (+1 to +3). A quest clear gives companions +20"}
+    },
+    "LOSS_PER_STEP": {
+      "type": "int",
+      "default": 4,
+      "min": 0,
+      "max": 40,
+      "label": {"ja": "下がる1段あたり", "en": "Loss per step"},
+      "note": {"ja": "判定 -1〜-3 の1段ごとに引く好感度",
+               "en": "Affinity taken per step (-1 to -3)"}
+    },
+    "TALK_CEILING": {
+      "type": "int",
+      "default": 60,
+      "min": 0,
+      "max": 200,
+      "label": {"ja": "会話で上げられる上限", "en": "Ceiling for talk"},
+      "note": {"ja": "会話だけではこの好感度より上へは上がらない。60 は「仲間だと感じている」、40 は「多少の好意がある」、100 は「盟友だと思っている」",
+               "en": "Talking never raises affinity past this. 60 = feels like a companion, 40 = somewhat fond, 100 = sworn ally"}
+    },
+    "DAILY_GAIN_ONCE": {
+      "type": "bool",
+      "default": true,
+      "label": {"ja": "上がるのは同じ相手から1日1回", "en": "Gain once a day per person"},
+      "note": {"ja": "日数は宿泊・街の移動でしか進まないので、同じ街で話し続けても稼げない。下がる方は毎回効く",
+               "en": "Days only pass on inn stays and travel, so repeated chats do not farm affinity. Losses always apply"}
+    },
+    "SHOW_CHANGE": {
+      "type": "bool",
+      "default": true,
+      "label": {"ja": "動いたら本文に一言出す", "en": "Show a line when it changes"}
+    },
+    "GAIN_TEXT": {
+      "type": "str",
+      "default": "{name}は{player}に少し心を開いたようだ。",
+      "label": {"ja": "上がったときの一言", "en": "Line when affinity rises"},
+      "note": {"ja": "使える変数: {name} {player}", "en": "Variables: {name} {player}"}
+    },
+    "LOSS_TEXT": {
+      "type": "str",
+      "default": "{name}の機嫌を損ねたようだ。",
+      "label": {"ja": "下がったときの一言", "en": "Line when affinity falls"},
+      "note": {"ja": "使える変数: {name} {player}", "en": "Variables: {name} {player}"}
+    }
+  }
+}

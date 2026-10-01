@@ -1,0 +1,479 @@
+{
+  "entry": "rival_adventurer.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Rival adventurer",
+    "ja": "ライバル冒険者の追加"
+  },
+  "description": {
+    "en": "After you clear a couple of quests, one guild adventurer may become your rival (an LLM-written entrance; uses the 317 epithet if any). The rival marks a quest on the board: clear it first or it is gone when the days run out. The rival starts out scornful and softens as you beat them or grow closer",
+    "ja": "依頼をいくつか片付けると、ギルドの冒険者の1人がライバルとして現れることがある（登場の語りは LLM。317 の二つ名があれば使う）。ライバルは掲示板の依頼に狙いを付け、期限までに先に片付けなければ掲示板から消える。最初は見下しているが、先を越したり親しくなったりすると態度が和らぐ"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "tool": {
+    "entry": "tool.py",
+    "label": {
+      "ja": "ライバル冒険者の設定と様子",
+      "en": "Rival adventurer settings and status"
+    },
+    "note": {
+      "ja": "設定を役割ごとのタブ（登場・張り合い・態度・文面）に分け、文は複数行の欄に見本を添える。様子のタブでライバルの控えを読み、消せる",
+      "en": "Settings split into tabs, with multi-line text fields and samples. The status tab shows (and can delete) the rival record"
+    }
+  },
+  "shares": [
+    "reputation"
+  ],
+  "settings": {
+    "RIVAL_AFTER_QUESTS": {
+      "type": "int",
+      "default": 2,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "ライバルが現れ始める依頼の数",
+        "en": "Quests before a rival can appear"
+      },
+      "note": {
+        "ja": "片付けた依頼（掲示板の依頼の完了数）がこの数に届いたら、依頼を片付けるたびに抽選する",
+        "en": "Once this many quests are cleared, every clear rolls for a rival"
+      }
+    },
+    "RIVAL_CHANCE_PERCENT": {
+      "type": "int",
+      "default": 50,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "ライバルが現れる確率（%）",
+        "en": "Chance a rival appears (%)"
+      },
+      "note": {
+        "ja": "依頼を片付けるたびに引く。外れたら次に片付けたときにまた引く",
+        "en": "Rolled on every quest clear; a miss rolls again next time"
+      }
+    },
+    "INTRO_USE_LLM": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "登場の語りを LLM に書かせる",
+        "en": "Let the LLM write the entrance"
+      },
+      "note": {
+        "ja": "語りと張り合う理由を1回だけ書かせる。切るか失敗したら下の文型を使う",
+        "en": "Written once. Off or failed: the templates below are used"
+      }
+    },
+    "FAILURE_ENABLED": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "ライバルがしくじることがある",
+        "en": "The rival can fail"
+      },
+      "note": {
+        "ja": "切ると、期限が来た依頼をライバルが必ず片付ける",
+        "en": "Off: the rival always clears the quest when the time comes"
+      }
+    },
+    "SUCCESS_BASE_PERCENT": {
+      "type": "int",
+      "default": 60,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "成功率の基準（%）",
+        "en": "Base success chance (%)"
+      },
+      "note": {
+        "ja": "ライバルの Lv と依頼の難易度が同じときの成功率。10〜95% に収める",
+        "en": "When the rival's level equals the quest difficulty. Kept within 10-95%"
+      }
+    },
+    "SUCCESS_SLOPE_PERCENT": {
+      "type": "int",
+      "default": 3,
+      "min": 0,
+      "max": 20,
+      "label": {
+        "ja": "Lv 差1あたりの成功率（%）",
+        "en": "Success chance per level (%)"
+      },
+      "note": {
+        "ja": "Lv が難易度を1上回るごとに足し、1下回るごとに引く",
+        "en": "Added per level above the difficulty, taken per level below"
+      }
+    },
+    "DUE_DAYS_MIN": {
+      "type": "int",
+      "default": 20,
+      "min": 1,
+      "max": 365,
+      "label": {
+        "ja": "挑むまでの日数（下限）",
+        "en": "Days until the rival tries (min)"
+      },
+      "note": {
+        "ja": "狙いを付けてから挑むまで。日数は宿泊・街の移動・自由行動でしか進まない（依頼の最中は進まない）",
+        "en": "Days only pass on inn stays, travel and free actions, not during quests"
+      }
+    },
+    "DUE_DAYS_MAX": {
+      "type": "int",
+      "default": 40,
+      "min": 1,
+      "max": 365,
+      "label": {
+        "ja": "挑むまでの日数（上限）",
+        "en": "Days until the rival tries (max)"
+      }
+    },
+    "COOLDOWN_DAYS": {
+      "type": "int",
+      "default": 10,
+      "min": 0,
+      "max": 365,
+      "label": {
+        "ja": "次に狙うまでの日数",
+        "en": "Days before the next mark"
+      },
+      "note": {
+        "ja": "決着（どちらが片付けても）から次の狙いまで",
+        "en": "After either side clears the quest"
+      }
+    },
+    "INJURY_DAYS": {
+      "type": "int",
+      "default": 30,
+      "min": 0,
+      "max": 365,
+      "label": {
+        "ja": "しくじった後に休む日数",
+        "en": "Days the rival rests after failing"
+      }
+    },
+    "REACH_LEVELS": {
+      "type": "int",
+      "default": 10,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "狙う依頼の難易度の幅",
+        "en": "How far above its level the rival aims"
+      },
+      "note": {
+        "ja": "ライバルの Lv にこの値を足した難易度までの依頼だけを狙う",
+        "en": "Only quests up to the rival's level plus this"
+      }
+    },
+    "LEVEL_STEP": {
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 10,
+      "label": {
+        "ja": "片付けるたびに上がる Lv",
+        "en": "Levels gained per cleared quest"
+      },
+      "note": {
+        "ja": "上げた Lv はセーブに残る。0 で上げない",
+        "en": "Saved with the game. 0 keeps the level"
+      }
+    },
+    "LEVEL_MAX": {
+      "type": "int",
+      "default": 99,
+      "min": 1,
+      "max": 999,
+      "label": {
+        "ja": "ライバルの Lv の上限",
+        "en": "Rival level cap"
+      }
+    },
+    "WINS_PER_STANCE": {
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 20,
+      "label": {
+        "ja": "態度が和らぐ勝ち数",
+        "en": "Wins per softer stance"
+      },
+      "note": {
+        "ja": "狙われた依頼をこの回数先に片付けるごとに、見下す → 一目置く → 認める → 慕う と1段進む。0 で進めない",
+        "en": "Each this many wins moves scorn -> respect -> equal -> admiration. 0 disables"
+      }
+    },
+    "CLEANUP_SOFTENS": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "尻拭いで態度が和らぐ",
+        "en": "Cleaning up softens the rival"
+      },
+      "note": {
+        "ja": "ライバルがしくじった依頼をプレイヤーが片付けると、態度が1段進む（1つのしくじりにつき1度）",
+        "en": "Clearing a quest the rival failed moves the stance one step (once per failure)"
+      }
+    },
+    "AFFINITY_PER_STANCE": {
+      "type": "int",
+      "default": 30,
+      "min": 0,
+      "max": 200,
+      "label": {
+        "ja": "態度が和らぐ好感度の幅",
+        "en": "Affinity per softer stance"
+      },
+      "note": {
+        "ja": "ライバルの好感度（会話で動くゲームの値）がこの幅を越えるごとに1段進む。0 で見ない",
+        "en": "Each step of the rival's affinity (changed by conversations) softens one stage. 0 ignores it"
+      }
+    },
+    "RUMOR_DAYS": {
+      "type": "int",
+      "default": 90,
+      "min": 0,
+      "max": 3650,
+      "label": {
+        "ja": "住人が噂にする日数",
+        "en": "Days the locals gossip"
+      },
+      "note": {
+        "ja": "ライバルが片付けた依頼を、その土地の会話相手が知っている期間。0 で噂にしない",
+        "en": "How long people in that town know about it. 0 turns gossip off"
+      }
+    },
+    "INTRO_FALLBACK": {
+      "type": "str",
+      "default": "ギルドの片隅で、冒険者{name}が{player}を値踏みするように眺めている。{known}を聞きつけ、張り合う気でいるらしい。",
+      "label": {
+        "ja": "登場の語りの文型",
+        "en": "Entrance template"
+      },
+      "note": {
+        "ja": "LLM を使わないときの語り。{known} は二つ名（317）があれば「〈二つ名〉」の二つ名、無ければ活躍の噂。使える変数: {name} {player} {known}",
+        "en": "Used without the LLM. {known} is the epithet from 317 if any. Variables: {name} {player} {known}"
+      }
+    },
+    "REASON_FALLBACK": {
+      "type": "str",
+      "default": "{known}を聞き、格の違いを見せつけてやろうと思っている",
+      "label": {
+        "ja": "張り合う理由の文型",
+        "en": "Reason template"
+      },
+      "note": {
+        "ja": "LLM を使わないときの理由。ライバル本人の会話に渡る。使える変数: {known}",
+        "en": "Used without the LLM; given to the rival. Variable: {known}"
+      }
+    },
+    "TARGET_SUFFIX": {
+      "type": "str",
+      "default": "（{name}が狙っている・あと{days}日）",
+      "label": {
+        "ja": "狙われている依頼の添え字",
+        "en": "Suffix on the marked quest"
+      },
+      "note": {
+        "ja": "掲示板の依頼名の後ろに付ける。使える変数: {name} {days}",
+        "en": "Appended to the quest on the board. Variables: {name} {days}"
+      }
+    },
+    "TARGET_ANNOUNCE": {
+      "type": "str",
+      "default": "冒険者{name}が、掲示板の「{title}」に目を付けたようだ。",
+      "label": {
+        "ja": "狙いを知らせる文",
+        "en": "Line when the rival marks a quest"
+      },
+      "note": {
+        "ja": "その土地で掲示板を開いたときに1度だけ出す。使える変数: {name} {title}",
+        "en": "Shown once when you open the board there. Variables: {name} {title}"
+      }
+    },
+    "TAKEN_ANNOUNCE": {
+      "type": "str",
+      "default": "掲示板から「{title}」の貼り紙が剥がされている。{name}が片付けたらしい。",
+      "label": {
+        "ja": "先を越された文",
+        "en": "Line when the rival cleared a quest"
+      },
+      "note": {
+        "ja": "その土地で掲示板を開いたときに1度だけ出す。使える変数: {name} {title}",
+        "en": "Shown once when you open the board there. Variables: {name} {title}"
+      }
+    },
+    "FAILED_ANNOUNCE": {
+      "type": "str",
+      "default": "「{title}」に挑んだ{name}がしくじって怪我を負ったと、掲示板の前で噂されている。",
+      "label": {
+        "ja": "ライバルがしくじった文",
+        "en": "Line when the rival failed"
+      },
+      "note": {
+        "ja": "その土地で掲示板を開いたときに1度だけ出す。使える変数: {name} {title}",
+        "en": "Shown once when you open the board there. Variables: {name} {title}"
+      }
+    },
+    "WIN_ANNOUNCE": {
+      "type": "str",
+      "default": "{name}が狙っていた依頼を、先に片付けた。",
+      "label": {
+        "ja": "先に片付けた文",
+        "en": "Line when you beat the rival"
+      },
+      "note": {
+        "ja": "使える変数: {name}",
+        "en": "Variable: {name}"
+      }
+    },
+    "CLEANUP_ANNOUNCE": {
+      "type": "str",
+      "default": "{name}がしくじった「{title}」を、代わりに片付けた。",
+      "label": {
+        "ja": "尻拭いの文",
+        "en": "Line when you clean up after the rival"
+      },
+      "note": {
+        "ja": "使える変数: {name} {title}",
+        "en": "Variables: {name} {title}"
+      }
+    },
+    "STANCE_ANNOUNCE_1": {
+      "type": "str",
+      "default": "{name}の態度から、わずかに棘が抜けたようだ。",
+      "label": {
+        "ja": "態度が「一目置く」になった文",
+        "en": "Line when the stance becomes 1"
+      },
+      "note": {
+        "ja": "使える変数: {name} {player}",
+        "en": "Variables: {name} {player}"
+      }
+    },
+    "STANCE_ANNOUNCE_2": {
+      "type": "str",
+      "default": "{name}は、もう{player}を格下とは見ていないらしい。",
+      "label": {
+        "ja": "態度が「認める」になった文",
+        "en": "Line when the stance becomes 2"
+      },
+      "note": {
+        "ja": "使える変数: {name} {player}",
+        "en": "Variables: {name} {player}"
+      }
+    },
+    "STANCE_ANNOUNCE_3": {
+      "type": "str",
+      "default": "{name}は、すっかり{player}に一目置いているようだ。",
+      "label": {
+        "ja": "態度が「慕う」になった文",
+        "en": "Line when the stance becomes 3"
+      },
+      "note": {
+        "ja": "使える変数: {name} {player}",
+        "en": "Variables: {name} {player}"
+      }
+    },
+    "RIVAL_NOTE": {
+      "type": "str",
+      "default": "あなたは同じ冒険者として{player}を張り合う相手と見ている。理由は、{reason}から。依頼の取り合いはこれまで、あなたが{rival_wins}回、{player}が{player_wins}回先に片付けた。",
+      "label": {
+        "ja": "ライバル本人に渡す文",
+        "en": "Note given to the rival"
+      },
+      "note": {
+        "ja": "ライバルと話すとき、会話の文脈に足す（画面には出ない）。使える変数: {player} {reason} {rival_wins} {player_wins}",
+        "en": "Added to the rival's conversation context (not shown). Variables: {player} {reason} {rival_wins} {player_wins}"
+      }
+    },
+    "STANCE_NOTE_0": {
+      "type": "str",
+      "default": "{player}のことは格下だと見下していて、口を開けば嫌味や挑発が出る。",
+      "label": {
+        "ja": "態度「見下す」の文",
+        "en": "Stance 0 note"
+      },
+      "note": {
+        "ja": "ライバル本人の会話の文脈に足す。使える変数: {player}",
+        "en": "Added to the rival's context. Variable: {player}"
+      }
+    },
+    "STANCE_NOTE_1": {
+      "type": "str",
+      "default": "口では張り合っているが、{player}の腕は認め始めていて、嫌味にも以前ほどの棘は無い。",
+      "label": {
+        "ja": "態度「一目置く」の文",
+        "en": "Stance 1 note"
+      },
+      "note": {
+        "ja": "ライバル本人の会話の文脈に足す。使える変数: {player}",
+        "en": "Added to the rival's context. Variable: {player}"
+      }
+    },
+    "STANCE_NOTE_2": {
+      "type": "str",
+      "default": "{player}を対等な好敵手と認め、敬意を持って競い合っている。",
+      "label": {
+        "ja": "態度「認める」の文",
+        "en": "Stance 2 note"
+      },
+      "note": {
+        "ja": "ライバル本人の会話の文脈に足す。使える変数: {player}",
+        "en": "Added to the rival's context. Variable: {player}"
+      }
+    },
+    "STANCE_NOTE_3": {
+      "type": "str",
+      "default": "{player}の実力にすっかり感服していて、張り合うより認められたがり、何かと持ち上げる。",
+      "label": {
+        "ja": "態度「慕う」の文",
+        "en": "Stance 3 note"
+      },
+      "note": {
+        "ja": "ライバル本人の会話の文脈に足す。使える変数: {player}",
+        "en": "Added to the rival's context. Variable: {player}"
+      }
+    },
+    "RIVAL_AIM_NOTE": {
+      "type": "str",
+      "default": "いまは「{title}」を狙っていて、{days}日ほどのうちに片付けるつもりでいる。",
+      "label": {
+        "ja": "ライバル本人に渡す狙いの文",
+        "en": "Rival's note about the current mark"
+      },
+      "note": {
+        "ja": "使える変数: {title} {days}",
+        "en": "Variables: {title} {days}"
+      }
+    },
+    "RIVAL_AWAY_NOTE": {
+      "type": "str",
+      "default": "先日「{title}」にしくじって怪我を負い、あと{days}日ほどは依頼を受けずに休んでいる。",
+      "label": {
+        "ja": "ライバル本人に渡す怪我の文",
+        "en": "Rival's note while hurt"
+      },
+      "note": {
+        "ja": "使える変数: {title} {days}",
+        "en": "Variables: {title} {days}"
+      }
+    },
+    "RUMOR_NOTE": {
+      "type": "str",
+      "default": "この土地では、冒険者{name}が「{title}」を片付けたと噂になっている（{days}日前）。",
+      "label": {
+        "ja": "住人に渡す噂の文",
+        "en": "Gossip note for locals"
+      },
+      "note": {
+        "ja": "その土地で話す相手の会話の文脈に足す（画面には出ない。最大2件）。使える変数: {name} {title} {days}",
+        "en": "Added to conversations in that town (not shown, up to 2). Variables: {name} {title} {days}"
+      }
+    }
+  }
+}

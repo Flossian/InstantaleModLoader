@@ -1,0 +1,16 @@
+{
+  "entry": "probe_affinity.py",
+  "api": 1,
+  "kind": "probe",
+  "name": {
+    "en": "Probe: when NPC affinity changes",
+    "ja": "計測: NPC の好感度が動くとき"
+  },
+  "description": {
+    "en": "Records when and by how much NPCs' affinity toward the player (relationship.player.affinity) changes: before and after a quest clear, a quest retreat, days passing and the end of a conversation (quest and conversation ends are compared again 15 seconds later), with who was in the party. Also records when the emotion text is rebuilt (document_emotion_scores_new: arguments, result and caller). Groundwork for a mod that lets conversations move affinity. Read-only",
+    "ja": "NPC のプレイヤーへの好感度（relationship.player.affinity）がいつ・どれだけ動くかを録る。依頼のクリア・依頼の放棄・日数の送り・会話の終わりの前後で比べ（依頼と会話の終わりは15秒後にもう一度比べる）、動いた人と同行者を残す。感情の文を組み直す document_emotion_scores_new の引数・戻り・呼び出し元も録る。会話で好感度が動く MOD を作るかを決める下調べ。読み取りだけでゲームは変えない"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "debug": true
+}

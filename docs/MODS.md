@@ -1652,6 +1652,7 @@ v2 で、`111_llm_prompt_replace` が使っているのと同じ仕掛け口を�
 | `234_probe_busy_display` | 待機表示（選択肢の枠の「…」）を録る。ゲーム標準の「…」とローダの `ui.Screen.busy_on` の「…」を同じ物差しで並べ、見た目の違いの元を探す。0.2秒ごとに枠の文字と旗を読んで変わったときだけ書き、塗る手・組み直し・背景の差し替えを呼び出し元つきで残す。点送りはひと続きを1行にまとめる。MOD が出した区間は、その MOD のログの `busy on` / `busy off` と時刻で突き合わせる。出力は `out\busy_display.log` / `out\busy_display.jsonl` |
 | `235_probe_sound_effects` | 効果音を録る。鳴らす出口（`SoundManager.play_sound` / `play_sound_from_src`）を包み、鳴らすたびに音の名前、装備の入口や戦闘の1手の中で鳴ったか、呼んだ MOD とゲーム側の呼び出し元を残す。`333_equipment_slots` が装備の音を何度も鳴らしていた件の裏取りに使い、決着（GAME.md §2.11「効果音」）。出力は `out\sound_effects.log` / `out\sound_effects.jsonl` |
 | `236_probe_enemy_stats` | 敵と味方の強さの出どころを録る。`319_battle_tactics` を HP・攻撃・防御で組み直すための下調べ。敵の能力値の生まれ方（`kind: gen`）、戦闘の開始の全員の値（`kind: start`）、1手ごとの裁きと素点（`kind: act`）を残す。設定「素点の試し打ち」（既定 OFF）を入れると、戦闘の開始でゲームの素点の段だけを呼び、相手ごとの素点を録る（`kind: dry`。前後で乱数の状態を戻し、HP か状態異常が動いたら止める）。決着（GAME.md §2.10.4）。出力は `out\enemy_stats.log` / `out\enemy_stats.jsonl` |
+| `237_probe_affinity` | NPC のプレイヤーへの好感度（`relationship.player.affinity`）がいつ・どれだけ動くかを録る。依頼のクリア・依頼の放棄・日数の送り・会話の終わりの前後で好感度を比べ（依頼と会話の終わりは15秒後にもう一度）、動いた人と同行者を残す（`kind: change` / `still` / `late`）。感情の文を組み直す `document_emotion_scores_new` の引数・戻り・呼び出し元も録る（`kind: emotion`）。会話で好感度が動く MOD を作るかを決める下調べ。出力は `out\affinity.log` / `out\affinity.jsonl` |
 
 ---
 
