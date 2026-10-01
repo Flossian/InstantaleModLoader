@@ -14,6 +14,7 @@
   窓      … 最大化中は normal に戻してから寸法を取り、最大化へ戻す。他の覚えごとを落とさない
   書込    … ローダの write_json（tmp → fsync → replace）。tmp を残さない
   無状態  … 1プロセスで2つの MOD を扱っても混ざらない
+  試聴    … 無い曲は理由を返して鳴らさない。鳴っていないときの playing / stop は倒れない
 """
 import io
 import json
@@ -248,6 +249,14 @@ try:
     check("宣言に無い項目は差分に数えない",
           modtool.world_record(decls, {"A": 1}, {"A": 1, "Z": 9}) == {},
           modtool.world_record(decls, {"A": 1}, {"A": 1, "Z": 9}))
+
+    # ---- 試聴（音は出さない。鳴らす前に断る道と、何も鳴っていないときの道だけ）
+    preview = modtool.Preview()
+    reason = preview.play(os.path.join(tmp, "none.mp3"))
+    check("無い曲は理由を返して鳴らさない", reason and not preview.path, (reason, preview.path))
+    check("鳴っていなければ playing は False", preview.playing() is False)
+    preview.stop()
+    check("鳴っていなくても stop は倒れない", preview.path == "")
 
 finally:
     for key in ("IML_ROOT", "IML_STATE_DIR", "IML_GAME_DIR"):

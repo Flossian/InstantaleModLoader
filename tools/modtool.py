@@ -434,6 +434,153 @@ def restore_window(root, mod_dir, window, fallback="900x640"):
     return remembered
 
 
+# ----------------------------------------------------------------- 試聴
+class Preview(object):
+    r"""選曲画面の試聴。曲を1つだけ鳴らす。
+
+    Windows の MCI（`winmm.mciSendStringW`）で鳴らす。
+    道具は配布物に無い pip の部品を使えない（§3.12）ので、OS に在る口を使う。
+    `winsound` は wav しか鳴らせず、ゲームの曲は mp3 が大半なので使わない。
+    `type mpegvideo` は DirectShow を通るので mp3 と wav の両方が鳴る。
+    ogg は Windows の素の構成では開けないことがあり、そのときは `play` が理由を返す。
+
+    MCI は呼んだスレッドに紐づくので、tkinter の主スレッドからだけ呼ぶ。
+    鳴っている曲は1つ。次の曲を鳴らすと前の曲は閉じる。
+    """
+
+    ALIAS = "iml_preview"
+
+    def __init__(self):
+        self.path = ""
+        try:
+            import ctypes
+            self._winmm = ctypes.windll.winmm
+            self._buffer = ctypes.create_unicode_buffer
+        except Exception:
+            self._winmm = None
+
+    @property
+    def available(self):
+        return self._winmm is not None
+
+    def _send(self, command):
+        """(エラー番号, 返り文字列)。"""
+        buf = self._buffer(256)
+        code = self._winmm.mciSendStringW(command, buf, len(buf), 0)
+        return code, buf.value
+
+    def _error(self, code):
+        buf = self._buffer(256)
+        self._winmm.mciGetErrorStringW(code, buf, len(buf))
+        return buf.value or "MCI エラー {}".format(code)
+
+    def play(self, path):
+        """鳴らす。鳴らせたら空文字、鳴らせなければ理由。"""
+        self.stop()
+        if not self.available:
+            return "この環境では試聴できません（Windows の MCI が無い）"
+        if not path or not os.path.isfile(path):
+            return "曲のファイルがありません: {}".format(path)
+        code, _ = self._send('open "{}" type mpegvideo alias {}'.format(path, self.ALIAS))
+        if code:
+            return self._error(code)
+        code, _ = self._send("play {}".format(self.ALIAS))
+        if code:
+            reason = self._error(code)
+            self.stop()
+            return reason
+        self.path = path
+        return ""
+
+    def stop(self):
+        if self.available and self.path:
+            self._send("close {}".format(self.ALIAS))
+        self.path = ""
+
+    def playing(self):
+        """鳴っている途中か。最後まで鳴り終えたら閉じて False。"""
+        if not self.path:
+            return False
+        code, mode = self._send("status {} mode".format(self.ALIAS))
+        if code or mode != "playing":
+            self.stop()
+            return False
+        return True
+
+
+def preview_bar(parent, pick):
+    """試聴の一行（▶ 試聴 / ■ 停止 / 鳴っている曲名）。戻りは (枠, 鳴らす関数)。
+
+    `pick()` は鳴らす曲の (絶対パス, 見せる名前) か None を返す。
+    どの一覧で選んだ曲を鳴らすかは道具が決める（`322_` と `324_` で一覧の形が違う）。
+    鳴らす関数は引数なしで呼ぶと `pick()` の曲を鳴らし、同じ曲が鳴っていれば止める
+    （一覧の Space に結ぶ）。窓を閉じれば止まる。
+    """
+    from tkinter import ttk
+
+    preview = Preview()
+    bar = ttk.Frame(parent)
+    play_button = ttk.Button(bar, text="▶ 試聴", width=8)
+    play_button.pack(side="left")
+    stop_button = ttk.Button(bar, text="■ 停止", width=8)
+    stop_button.pack(side="left", padx=(6, 10))
+    label = ttk.Label(bar, style="Faint.TLabel",
+                      text="一覧で曲を選んで「▶ 試聴」（Space でも鳴らす・止める）" if preview.available
+                      else "この環境では試聴できません（Windows の MCI が無い）")
+    label.pack(side="left", fill="x", expand=True)
+    poll = {"id": None, "name": ""}
+
+    def watch():
+        poll["id"] = None
+        if preview.playing():
+            poll["id"] = bar.after(500, watch)
+        elif poll["name"]:
+            label.configure(text="鳴り終えました: " + poll["name"])
+            poll["name"] = ""
+
+    def stop():
+        if poll["id"]:
+            bar.after_cancel(poll["id"])
+            poll["id"] = None
+        if preview.path:
+            label.configure(text="止めました: " + poll["name"])
+        preview.stop()
+        poll["name"] = ""
+
+    def play(toggle=False):
+        chosen = pick()
+        if not chosen:
+            label.configure(text="一覧で曲を選んでください")
+            return
+        path, name = chosen
+        if toggle and preview.path and os.path.normcase(preview.path) == os.path.normcase(path):
+            stop()
+            return
+        stop()
+        reason = preview.play(path)
+        if reason:
+            label.configure(text="鳴らせません: {}（{}）".format(name, reason.strip()))
+            return
+        poll["name"] = name
+        label.configure(text="試聴中: " + name)
+        poll["id"] = bar.after(500, watch)
+
+    play_button.configure(command=play, state="normal" if preview.available else "disabled")
+    stop_button.configure(command=stop, state="normal" if preview.available else "disabled")
+    def closed(_event=None):
+        # 見張りを残すと、窓が消えた後に `after` が消えた関数を呼んで Tcl のエラーを出す。
+        if poll["id"]:
+            try:
+                bar.after_cancel(poll["id"])
+            except Exception:
+                pass
+            poll["id"] = None
+        preview.stop()
+
+    bar.bind("<Destroy>", closed, add="+")
+    return bar, lambda: play(toggle=True)
+
+
 # ----------------------------------------------------------------- 配色と書体
 def setup_theme(window, root=""):
     r"""配色と書体は設定画面（`tools/gui.py`）のものを借りる。無ければ素の Tk。

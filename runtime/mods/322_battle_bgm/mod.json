@@ -10,7 +10,7 @@
     "en": "Plays a battle track chosen from Assets/sounds/musics/battle and state/musics/battle by weighted random, with separate weights for normal, boss and colosseum battles (state/musics/battle/playlist.json)",
     "ja": "Assets/sounds/musics/battle と state/musics/battle にある曲から、通常・ボス・闘技場ごとの重みで戦闘 BGM を選んで鳴らす。重みは state/musics/battle/playlist.json で指定する"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "tool": {
     "entry": "tool.py",

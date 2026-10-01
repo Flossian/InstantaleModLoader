@@ -1922,6 +1922,7 @@ MOD が自分の画面を持つほうが分かりやすい。
 | 読み込み | `modtool.read_json(path)`（無い・壊れた・辞書でないファイルは空の辞書） |
 | 配色と書体 | `modtool.setup_theme(win, root)`（戻り値は `gui` モジュール。他も借りられる） |
 | ディスクのセーブ | `modtool.saves_module(mod_dir=MOD_DIR)`（＝`instantale_modloader.saves`） |
+| 曲の試聴 | `modtool.preview_bar(parent, pick)`（▶ 試聴 / ■ 停止の一行。`pick()` が `(絶対パス, 名前)` を返す。鳴らすのは Windows の MCI で、mp3 と wav が鳴る。鳴る曲は1つなので1窓に1本） |
 
 `modtool` は**状態を持たない**（`MOD_DIR` は毎回引数）。
 オフラインの検査が1プロセスで複数の `tool.py` を読み込むので、持つと2本目が1本目の場所を掴む。

@@ -28,6 +28,7 @@ TECH.md §3.12 の契約で動く（`322_battle_bgm` の道具と同じ）。
 右がその場所で使う曲（曲名・フォルダ・置き場・重み・確率）。
 左をダブルクリック（または「使う >>」）で右へ入り、右をダブルクリック（または「<< 外す」）で外れる。
 右で選んだ曲の重みは下の欄で変える。
+選んだ曲は「▶ 試聴」（または一覧で Space）で鳴らせる（`modtool.preview_bar`）。
 一覧の上の欄で列ごとに絞り込める（曲名は部分一致、フォルダと置き場は選択、重みは下限）。
 絞り込みは表示だけを変え、値は変えない（「全て使う / 全て外す」は表示中の曲だけに効く）。
 
@@ -344,6 +345,11 @@ class Model(object):
 
     def folders(self):
         return sorted(set(folder_of(key) for key in self.pool))
+
+    def track_path(self, key):
+        """曲の絶対パス。置き場は `pool` のもの（同じ鍵なら state 側）。"""
+        folder = self.state_dir if self.pool.get(key) == "state" else self.asset_dir
+        return os.path.join(folder, *key.split("/"))
 
     def to_json(self):
         """書き出す全体。ファイルにあって曲が無い行は残す。知らない項目も残す。"""
@@ -794,6 +800,19 @@ def build_window(model):
     summary = ttk.Label(bottom, style="Faint.TLabel")
     summary.pack(side="left", fill="x", expand=True)
 
+    # 試聴は最後に選んだ一覧の曲（左右どちらで選んでも鳴らせる）。
+    last_tree = {"tree": None}
+
+    def preview_pick():
+        tree = last_tree["tree"]
+        key = tree.focus() if tree is not None else ""
+        if not key or key not in model.pool:
+            return None
+        return model.track_path(key), name_of(key)
+
+    preview, toggle_preview = modtool.preview_bar(editor, preview_pick)
+    preview.pack(side="bottom", fill="x", pady=(6, 0), before=panes)
+
     def target():
         return current["target"]
 
@@ -977,6 +996,11 @@ def build_window(model):
     pool["tree"].bind("<Double-1>", lambda e: move(pool["tree"].identify_row(e.y), True))
     used["tree"].bind("<Double-1>", lambda e: move(used["tree"].identify_row(e.y), False))
     used["tree"].bind("<<TreeviewSelect>>", on_select)
+    for part in (pool, used):
+        part["tree"].bind("<<TreeviewSelect>>",
+                          lambda _e, tree=part["tree"]: last_tree.update(tree=tree), add="+")
+        part["tree"].bind("<space>", lambda _e, tree=part["tree"]: (
+            last_tree.update(tree=tree), toggle_preview(), "break")[-1])
     weight_var.trace_add("write", on_weight)
     spin.bind("<Return>", on_weight)
 

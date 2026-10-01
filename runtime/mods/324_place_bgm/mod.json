@@ -10,7 +10,7 @@
     "en": "Plays facility and area BGM chosen by weighted random from Assets/sounds/musics and state/musics/place, with a playlist per facility type (inn, guild, shops...) and per area size (town, village, city, dungeon). Weights live in state/musics/place/playlist.json",
     "ja": "宿屋・ギルド・店などの施設の種類ごと、町・村・都市・ダンジョンの土地の種類ごとに、Assets/sounds/musics と state/musics/place にある曲から重みで BGM を選んで鳴らす。重みは state/musics/place/playlist.json で指定する"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "tool": {
     "entry": "tool.py",
