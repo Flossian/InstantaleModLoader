@@ -1137,11 +1137,11 @@ def build_window(model):
     def make_menu(parent, page):
         """行の操作とタブの操作を1つの menu に。右クリックも「…」も同じもの。"""
         menu = tk.Menu(parent, tearoff=0)
-        menu.add_command(label="ルールを追加\tInsert", command=lambda: add_rule(page))
-        menu.add_command(label="ルールを複製\tCtrl+D", command=lambda: dup_rule(page))
-        menu.add_command(label="ルールを削除\tDelete", command=lambda: del_rule(page))
-        menu.add_command(label="上へ\tCtrl+↑", command=lambda: move_rule(page, -1))
-        menu.add_command(label="下へ\tCtrl+↓", command=lambda: move_rule(page, 1))
+        menu.add_command(label="ルールを追加（Insert）", command=lambda: add_rule(page))
+        menu.add_command(label="ルールを複製（Ctrl+D）", command=lambda: dup_rule(page))
+        menu.add_command(label="ルールを削除（Delete）", command=lambda: del_rule(page))
+        menu.add_command(label="上へ（Ctrl+↑）", command=lambda: move_rule(page, -1))
+        menu.add_command(label="下へ（Ctrl+↓）", command=lambda: move_rule(page, 1))
         menu.add_separator()
         menu.add_command(label="タブ追加", command=add_tab)
         menu.add_command(label="タブ名変更", command=rename_tab)
