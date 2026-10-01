@@ -117,10 +117,21 @@ def topics_of(bucket):
 
 
 def push_topic(bucket, kind, title, day, limit):
-    """話の種を1つ積む。同じ種類は新しい方だけ残す。`limit` 件より古いものは落とす。"""
+    """話の種を1つ積む。同じ種類は新しい方だけ残す。`limit` 件より古いものは落とす。
+
+    初対面は数に入れず、落とさない。ライバルが現れたときに1度しか積まれないので、
+    ギルドへ行く前にほかの種が `limit` 件積まれると、名乗らないままになる（種類は4つ、既定の `limit` は3）。
+    """
     topics = [row for row in topics_of(bucket) if row.get("kind") != kind]
     topics.insert(0, {"kind": kind, "title": title, "day": day})
-    bucket["topics"] = topics[:max(0, int(limit))]
+    kept, others = [], 0
+    for row in topics:
+        if row.get("kind") != TOPIC_INTRO:
+            if others >= max(0, int(limit)):
+                continue
+            others += 1
+        kept.append(row)
+    bucket["topics"] = kept
 
 
 def next_topic(bucket):

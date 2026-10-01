@@ -428,7 +428,18 @@ def scene_pure():
         rivalry.push_history(bucket, "依頼{}".format(n), rivalry.RIVAL_WON, n, 3)
     check("記録は新しい順に3件", [r["title"] for r in rivalry.history_of(bucket)]
           == ["依頼4", "依頼3", "依頼2"])
-    pattern = module.suffix_pattern(module.TARGET_SUFFIX)
+    rivalry.push_topic(bucket, rivalry.TOPIC_INTRO, "", 0, 3)
+    for kind in (rivalry.TOPIC_TAKEN, rivalry.TOPIC_LOST, rivalry.TOPIC_CLEANUP):
+        rivalry.push_topic(bucket, kind, "依頼", 1, 3)
+    check("初対面の種はほかの種に押し出されない",
+          [t["kind"] for t in rivalry.topics_of(bucket)] == ["cleanup", "lost", "taken", "intro"]
+          and rivalry.next_topic(bucket)["kind"] == "intro",
+          rivalry.topics_of(bucket))
+    rivalry.push_topic(bucket, rivalry.TOPIC_TAKEN, "依頼2", 2, 2)
+    check("初対面のほかは上限まで（新しい順）",
+          [t["kind"] for t in rivalry.topics_of(bucket)] == ["taken", "cleanup", "intro"],
+          rivalry.topics_of(bucket))
+    pattern =module.suffix_pattern(module.TARGET_SUFFIX)
     marked = "古城（北）の亡霊" + rivalry.format_text(module.TARGET_SUFFIX, name="冒険者11", days=12)
     check("添え字だけ剥がす（題名の括弧は残す）", pattern.sub("", marked) == "古城（北）の亡霊",
           pattern.sub("", marked))
