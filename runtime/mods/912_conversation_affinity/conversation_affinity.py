@@ -95,7 +95,7 @@ def clamp_step(value):
         value = value.strip().lstrip("+")
     try:
         number = int(float(value))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
     return max(-STEP_LIMIT, min(STEP_LIMIT, number))
 
@@ -118,7 +118,8 @@ def plan_change(before, step, *, gain_per_step, loss_per_step, ceiling, gained_t
         if before >= ceiling:
             return before, "ceiling"
         return min(ceiling, before + step * max(0, int(gain_per_step))), "gain"
-    return max(AFFINITY_FLOOR, before + step * max(0, int(loss_per_step))), "loss"
+    # 下限より下に居る相手を下限まで引き上げない（下がる判定で上がらない）。
+    return max(min(before, AFFINITY_FLOOR), before + step * max(0, int(loss_per_step))), "loss"
 
 
 def player_spoke(messages):
@@ -273,6 +274,13 @@ def apply(ctx):
         if step is None:
             write("skip: {} ({}) {}".format(name, npc_id, reason))
             return ""
+        # 判定を待つ間（最長 TIMEOUT 秒）にゲームが足した分（依頼のクリアの +20 など）を消さないよう、
+        # 足す元は判定の後に読み直す。
+        now = affinity_of(character)
+        if now is not None and now != before:
+            write("judge: {} ({}) affinity moved {} -> {} while judging".format(
+                name, npc_id, before, now))
+            before = now
         after, why = plan_change(before, step, gain_per_step=GAIN_PER_STEP,
                                  loss_per_step=LOSS_PER_STEP, ceiling=TALK_CEILING,
                                  gained_today=gained_today)

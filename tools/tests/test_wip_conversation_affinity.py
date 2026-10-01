@@ -212,6 +212,7 @@ def scene_pure():
     module, _ctx, _app = fresh()
     check("段を均す", [module.clamp_step(v) for v in (5, -9, "+2", "1.0", None, True)]
           == [3, -3, 2, 1, None, None])
+    check("無限大は読めない答え", module.clamp_step(float("inf")) is None)
     plan = lambda before, step, today=False: module.plan_change(
         before, step, gain_per_step=2, loss_per_step=4, ceiling=60, gained_today=today)
     check("上がる", plan(10, 2) == (14, "gain"))
@@ -222,6 +223,9 @@ def scene_pure():
     check("上限以上でも下がる", plan(80, -1) == (76, "loss"))
     check("今日はもう上げた", plan(10, 2, True) == (10, "daily"))
     check("下がるのは1日1回の制限を受けない", plan(10, -1, True) == (6, "loss"))
+    check("下限で止まる", plan(-98, -1) == (-100, "loss"))
+    check("下限より下の相手を下がる判定で上げない", plan(-150, -1) == (-150, "loss"),
+          plan(-150, -1))
     check("話したかの見分け", module.player_spoke(SPOKE) and not module.player_spoke(SILENT))
 
 
@@ -263,6 +267,21 @@ def scene_loss_and_ceiling():
     check("上限 60 で止まる", aff(app, "8") == 60, aff(app, "8"))
     close(ctx, app, "9", answer={"change": 3, "reason": "a"})
     check("上限より上の相手は上げない", aff(app, "9") == 80, aff(app, "9"))
+
+    # 判定を待つ間にゲームが好感度を動かした（依頼のクリアの +20）。
+    module, ctx, app = fresh()
+
+    def ask_while_quest_clears(ctx_, name, messages, **kw):
+        ASKED.append(messages[0]["content"])
+        app.world.characters["7"].relationship["player"]["affinity"] += 20
+        return {"change": -1, "reason": "a"}
+
+    llm.ask = ask_while_quest_clears
+    try:
+        close(ctx, app, "7")
+    finally:
+        llm.ask = fake_ask
+    check("判定を待つ間の変化を消さない（0 +20 -4）", aff(app, "7") == 16, aff(app, "7"))
 
 
 def scene_skip():

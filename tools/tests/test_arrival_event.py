@@ -416,6 +416,38 @@ enter(inn)
 enter(inn)
 check("0 にすると毎回出る", len(app.process_choice_calls) == 2,
       app.process_choice_calls)
+
+print("6c. 同じ到着でほかの MOD が先に申し出ていれば譲る（ローダの窓口 arrivals）")
+from instantale_modloader import arrivals  # noqa: E402
+arrivals.reset()
+clock = install_fake_kivy()
+mod, ctx, calls, hooks = setup(override=1.0, COOLDOWN_VISITS=2)
+app.process_choice_calls = []
+
+
+def enter_with(facility, other=None):
+    """移動1回。ローダの包みの番号送りは手で行う（検査の ctx は同じ対象の包みを1つしか持てない）。"""
+    app.player.location = facility
+    arrivals._store()["serial"] += 1
+    do_move(hooks)
+    if other is not None:
+        arrivals.offer(app, other, 10)          # ほかの MOD は移動の後に申し出る
+    clock.tick()
+    clock.run_onces()
+
+
+check("包みが立っている", arrivals.installed() is not None)
+enter_with(inn, other="another_mod")
+check("優先度の高い申し出があれば譲る", not app.process_choice_calls, app.process_choice_calls)
+enter_with(inn)
+check("譲った回は間引きに数えない（次の到着で話しかける）",
+      len(app.process_choice_calls) == 1, app.process_choice_calls)
+check("前の到着の申し出は持ち越さない", arrivals.offers(app) == [("300_event_facility_arrival", 0)],
+      arrivals.offers(app))
+enter_with(inn)
+check("話しかけた後は今までどおり間引く", len(app.process_choice_calls) == 1,
+      app.process_choice_calls)
+arrivals.reset()
 app.player.location = inn
 
 print("7. 会話中・戦闘中は発火しない")

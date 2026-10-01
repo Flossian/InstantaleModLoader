@@ -12,7 +12,7 @@
 | 3. 検証の一覧に載せる行 | `docs\VERIFICATION.md` §1 の `3xx` の表 |
 | 4. 未確認項目と確認手順 | `docs\VERIFICATION.md` §3 の末尾（節番号は振り直す） |
 
-`tools\tests\test_wip_conversation_affinity.py`（31件）も同じ理由で CI の外（`test_wip_*` は CI が除く）。
+`tools\tests\test_wip_conversation_affinity.py`（35件）も同じ理由で CI の外（`test_wip_*` は CI が除く）。
 
 ---
 
@@ -95,7 +95,7 @@
 
 | mod | 内容 | 状態 |
 | --- | --- | --- |
-| `912_conversation_affinity` | 会話の要約（`conversation_resolver`）の前に、相手の気持ちの動きを LLM に -3〜+3 で1回聞き、好感度を上下させる（上がる1段 +2・下がる1段 -4、会話で上げられるのは 60 まで、上がるのは同じ相手から1日1回） | **未実機**（2026-10-01、版1）。オフラインは `tools\tests\test_wip_conversation_affinity.py` 31件 |
+| `912_conversation_affinity` | 会話の要約（`conversation_resolver`）の前に、相手の気持ちの動きを LLM に -3〜+3 で1回聞き、好感度を上下させる（上がる1段 +2・下がる1段 -4、会話で上げられるのは 60 まで、上がるのは同じ相手から1日1回） | **未実機**（2026-10-01、版1）。オフラインは `tools\tests\test_wip_conversation_affinity.py` 35件 |
 
 ---
 

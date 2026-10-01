@@ -247,6 +247,68 @@
         "en": "How long people in that town know about it. 0 turns gossip off"
       }
     },
+    "APPROACH_CHANCE_PERCENT": {
+      "type": "int",
+      "default": 100,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "ギルドで声をかけてくる確率（%）",
+        "en": "Chance the rival speaks first at the guild (%)"
+      },
+      "note": {
+        "ja": "ライバルの居る街のギルドに入ったとき、話の種（初対面・先を越した・越された・尻拭い）があれば引く。0 で声をかけない",
+        "en": "Rolled on entering the guild of the rival's town when there is something to talk about. 0 turns it off"
+      }
+    },
+    "APPROACH_INTRO": {
+      "type": "str",
+      "default": "張り合う相手として{player}の前に初めて現れ、名乗りを上げに来た",
+      "label": {
+        "ja": "用件: 初対面",
+        "en": "Topic: first meeting"
+      },
+      "note": {
+        "ja": "ライバルが声をかけてきた用件として、第一声の頼み文に入る。使える変数: {player} {title}",
+        "en": "Given to the rival's opening line as the reason for speaking. Variables: {player} {title}"
+      }
+    },
+    "APPROACH_TAKEN": {
+      "type": "str",
+      "default": "「{title}」を先に片付けたことを、{player}に見せつけに来た",
+      "label": {
+        "ja": "用件: 先を越した",
+        "en": "Topic: the rival took a quest"
+      },
+      "note": {
+        "ja": "ライバルが声をかけてきた用件として、第一声の頼み文に入る。使える変数: {player} {title}",
+        "en": "Given to the rival's opening line as the reason for speaking. Variables: {player} {title}"
+      }
+    },
+    "APPROACH_LOST": {
+      "type": "str",
+      "default": "狙っていた「{title}」を{player}に先に片付けられ、そのことで声をかけてきた",
+      "label": {
+        "ja": "用件: 先を越された",
+        "en": "Topic: you beat the rival"
+      },
+      "note": {
+        "ja": "ライバルが声をかけてきた用件として、第一声の頼み文に入る。使える変数: {player} {title}",
+        "en": "Given to the rival's opening line as the reason for speaking. Variables: {player} {title}"
+      }
+    },
+    "APPROACH_CLEANUP": {
+      "type": "str",
+      "default": "自分がしくじった「{title}」を{player}が片付けたと聞き、そのことで声をかけてきた",
+      "label": {
+        "ja": "用件: 尻拭いされた",
+        "en": "Topic: you cleaned up after the rival"
+      },
+      "note": {
+        "ja": "ライバルが声をかけてきた用件として、第一声の頼み文に入る。使える変数: {player} {title}",
+        "en": "Given to the rival's opening line as the reason for speaking. Variables: {player} {title}"
+      }
+    },
     "INTRO_FALLBACK": {
       "type": "str",
       "default": "ギルドの片隅で、冒険者{name}が{player}を値踏みするように眺めている。{known}を聞きつけ、張り合う気でいるらしい。",

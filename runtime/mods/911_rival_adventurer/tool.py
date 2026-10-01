@@ -6,12 +6,12 @@ r"""ライバル冒険者の設定画面。設定を役割ごとのタブに分�
 TECH.md §3.12 の契約で動く。ローダの設定画面（`tools/gui.py`）が `mod.json` の `"tool"` を見て
 このファイルを別プロセスで開き、場所は環境変数で渡す。直接起動したときは自分で探す。
 
-なぜ独自の画面か: 宣言の設定は 36 項目で、半分が文面。1行の入力欄に長い日本語を並べると読めず、
+なぜ独自の画面か: 宣言の設定は 41 項目で、半分以上が文面。1行の入力欄に長い日本語を並べると読めず、
 態度の4段の文が8項目にばらける（本人の指摘「34件は既存設定UIでは使いづらい」）。
 
 | タブ | 中身 | 書く先 |
 |---|---|---|
-| 登場 / 張り合い / 態度 / 文面 | 宣言の設定。文は複数行の欄に、使える変数と見本を添える | `settings/mod_settings.json`（`modtool.save_settings`） |
+| 登場 / 張り合い / 態度 / 声かけ / 文面 | 宣言の設定。文は複数行の欄に、使える変数と見本を添える | `settings/mod_settings.json`（`modtool.save_settings`） |
 | 様子 | `state\rival_adventurer\` の控えを読んで並べる。控えを消すボタン | 読むだけ（消すときだけファイルを消す） |
 
 **一括設定だけ。** MOD 本体がモジュールのグローバルしか読まないので、ワールド個別のタブは出さない。
@@ -51,6 +51,11 @@ TABS = (
      "態度は「見下す→一目置く→認める→慕う」の4段で、上がるだけで下がらない。\n"
      "上がる機会は、狙われた依頼を先に片付けたとき・ライバルがしくじった依頼を片付けたとき・"
      "ライバルの好感度が上がったとき（同行してのクリアなど）。"),
+    ("声かけ", ("APPROACH_CHANCE_PERCENT",),
+     ("APPROACH_INTRO", "APPROACH_TAKEN", "APPROACH_LOST", "APPROACH_CLEANUP"),
+     "ライバルの居る街のギルドに入ったとき、話の種があればライバルの方から声をかけてくる。\n"
+     "話の種は、初対面・先を越した・先を越された・尻拭いされたの4つで、1つにつき1回使う。\n"
+     "下の文は、声をかけてきた用件として第一声の頼み文に入る。"),
     ("文面", (), ("TARGET_SUFFIX", "TARGET_ANNOUNCE", "TAKEN_ANNOUNCE", "FAILED_ANNOUNCE",
                   "WIN_ANNOUNCE", "CLEANUP_ANNOUNCE", "RIVAL_NOTE", "RIVAL_AIM_NOTE",
                   "RIVAL_AWAY_NOTE", "RUMOR_NOTE"),
@@ -72,6 +77,8 @@ SAMPLE = {"name": "リオ", "player": "主人公", "title": "古城の亡霊", "
 STANCE_NAMES = ("見下す", "一目置く", "認める", "慕う")
 OUTCOME_WORDS = {"rival": "ライバルが先に片付けた", "player": "プレイヤーが先に片付けた",
                  "failed": "ライバルがしくじった", "cleanup": "しくじった後をプレイヤーが片付けた"}
+TOPIC_WORDS = {"intro": "初対面", "taken": "先を越した", "lost": "先を越された",
+               "cleanup": "尻拭いされた"}
 
 
 def text_keys():
@@ -112,9 +119,15 @@ def state_files(state_dir):
         names = [name for name in os.listdir(folder) if name.endswith(".json")]
     except OSError:
         return []
-    paths = [os.path.join(folder, name) for name in names]
-    paths.sort(key=lambda path: os.path.getmtime(path), reverse=True)
-    return [(os.path.basename(path)[:-5], path) for path in paths]
+    stamped = []
+    for name in names:
+        path = os.path.join(folder, name)
+        try:
+            stamped.append((os.path.getmtime(path), path))
+        except OSError:
+            continue                    # 一覧を取った後に消えた（ゲームや別の窓が消した）
+    stamped.sort(reverse=True)
+    return [(os.path.basename(path)[:-5], path) for _mtime, path in stamped]
 
 
 def describe(bucket):
@@ -159,6 +172,12 @@ def describe(bucket):
                  for row in history if isinstance(row, dict))
     if not history:
         lines.append("  （まだ無い）")
+    topics = [row for row in bucket.get("topics") or [] if isinstance(row, dict)]
+    lines.append("")
+    lines.append("ギルドで声をかけるときの話の種: {}".format(
+        "、".join("{}{}".format(TOPIC_WORDS.get(row.get("kind"), row.get("kind")),
+                               "（「{}」）".format(row.get("title")) if row.get("title") else "")
+                 for row in topics) or "（無し）"))
     taken = bucket.get("taken") or {}
     lines.append("")
     lines.append("ライバルが片付けて掲示板から隠している依頼: {}件".format(len(taken)))

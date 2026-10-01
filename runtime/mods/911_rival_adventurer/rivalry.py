@@ -6,10 +6,11 @@
     {"rival":  {"id", "name", "chosen_day", "stance", "stance_told",
                 "reason", "intro", "intro_told"} か None,
      "target": {"quest", "area", "title", "set_day", "due_day", "told"} か None,
-     "taken":  {依頼id: {"area", "title", "day", "told"}},
+     "taken":  {依頼id: {"area", "title", "day", "told", "by"}},   by は片付けたライバルの名前
      "failure": {"quest", "area", "title", "day", "told"} か None,
      "score":  {"rival", "player", "failed"},
      "history": [{"title", "outcome", "day"}],   最近の取り合い（新しい順）
+     "topics":  [{"kind", "title", "day"}],      ギルドで声をかけるときの話の種（新しい順）
      "away_until": 日 か None,     しくじって休んでいる間
      "next_day":   日 か None}     次に狙いを付けてよい日
 
@@ -17,7 +18,7 @@
 """
 
 #: 台帳の鍵の並び（`state\` の差分を読めるように固定する）。
-BUCKET_KEYS = ("rival", "target", "taken", "failure", "score", "history",
+BUCKET_KEYS = ("rival", "target", "taken", "failure", "score", "history", "topics",
                "away_until", "next_day")
 SCORE_KEYS = ("rival", "player", "failed")
 RIVAL_KEYS = ("id", "name", "chosen_day", "stance", "stance_told", "reason",
@@ -31,10 +32,13 @@ RIVAL_WON, PLAYER_WON, RIVAL_FAILED = "rival", "player", "failed"
 #: ライバルがしくじった依頼をプレイヤーが片付けた（尻拭い）。
 PLAYER_CLEANED = "cleanup"
 
+#: 声をかけるときの話の種（`topics` の `kind`）。初対面は他より先に使う。
+TOPIC_INTRO, TOPIC_TAKEN, TOPIC_LOST, TOPIC_CLEANUP = "intro", "taken", "lost", "cleanup"
+
 
 def new_bucket():
     return {"rival": None, "target": None, "taken": {}, "failure": None,
-            "score": {key: 0 for key in SCORE_KEYS}, "history": [],
+            "score": {key: 0 for key in SCORE_KEYS}, "history": [], "topics": [],
             "away_until": None, "next_day": None}
 
 
@@ -53,10 +57,22 @@ def order_bucket(bucket):
         elif key == "rival" and isinstance(value, dict):
             value = dict([(name, value.get(name)) for name in RIVAL_KEYS] +
                          [(name, value[name]) for name in value if name not in RIVAL_KEYS])
-        elif key == "history":
-            value = [row for row in value if isinstance(row, dict)]                 if isinstance(value, list) else []
+        elif key in ("history", "topics"):
+            value = [row for row in value if isinstance(row, dict)] \
+                if isinstance(value, list) else []
         out[key] = value
     return out
+
+
+def reset_rival(bucket):
+    """ライバルが居なくなった・選び直した。片付けた依頼（`taken`）だけ残して台帳を空にする。
+
+    片付けた依頼は世界の中ではもう片付いているので、掲示板へ戻さない（本人の判断）。
+    勝敗・態度・取り合いの記録・話の種は次のライバルのために空にする。
+    """
+    taken = taken_of(bucket)
+    bucket.update(new_bucket())
+    bucket["taken"] = taken
 
 
 def score_of(bucket):
@@ -90,6 +106,47 @@ def push_history(bucket, title, outcome, day, limit):
     history = history_of(bucket)
     history.insert(0, {"title": title, "outcome": outcome, "day": day})
     del history[max(0, int(limit)):]
+
+
+def topics_of(bucket):
+    topics = bucket.get("topics")
+    if not isinstance(topics, list):
+        topics = []
+        bucket["topics"] = topics
+    return topics
+
+
+def push_topic(bucket, kind, title, day, limit):
+    """話の種を1つ積む。同じ種類は新しい方だけ残す。`limit` 件より古いものは落とす。"""
+    topics = [row for row in topics_of(bucket) if row.get("kind") != kind]
+    topics.insert(0, {"kind": kind, "title": title, "day": day})
+    bucket["topics"] = topics[:max(0, int(limit))]
+
+
+def next_topic(bucket):
+    """次に使う話の種。初対面があればそれ、無ければいちばん新しいもの。無ければ None。"""
+    topics = topics_of(bucket)
+    for row in topics:
+        if row.get("kind") == TOPIC_INTRO:
+            return row
+    return topics[0] if topics else None
+
+
+def drop_topic(bucket, topic):
+    """使った話の種を下げる。"""
+    bucket["topics"] = [row for row in topics_of(bucket) if row is not topic]
+
+
+def drop_topic_like(bucket, topic):
+    """同じ中身（種類・題名・日）の種を下げる。
+
+    会話を始めた後に下げるときは、控えを読み直しているので同じ物（`is`）とは限らない。
+    """
+    if not isinstance(topic, dict):
+        return
+    sign = (topic.get("kind"), topic.get("title"), topic.get("day"))
+    bucket["topics"] = [row for row in topics_of(bucket)
+                        if (row.get("kind"), row.get("title"), row.get("day")) != sign]
 
 
 # ---------------------------------------------------------------- 態度
@@ -274,11 +331,21 @@ def rewind(bucket, day):
         bucket["failure"] = None
         bucket["away_until"] = None
         changed = True
+    topics = topics_of(bucket)
+    kept_topics = [row for row in topics if _int(row.get("day"), 0) <= day]
+    if len(kept_topics) != len(topics):
+        bucket["topics"] = kept_topics
+        changed = True
     history = history_of(bucket)
     kept = [row for row in history if _int(row.get("day"), 0) <= day]
     if len(kept) != len(history):
         bucket["history"] = kept
         changed = True
+    next_day = bucket.get("next_day")
+    if changed and isinstance(next_day, int) and next_day > day:
+        # 次に狙ってよい日は、忘れた決着（片付けた・しくじった・先を越された）が決めたもの。
+        # 残すと、しくじりを忘れた後もライバルが休み続ける。
+        bucket["next_day"] = None
     rival = bucket.get("rival")
     if isinstance(rival, dict) and _int(rival.get("chosen_day"), 0) > day:
         bucket.update(new_bucket())

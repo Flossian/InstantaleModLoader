@@ -84,16 +84,29 @@ NPC ごとに数える。
 プレイヤーが自分から話しかける分には何も変わらない。
 数えた結果は `state/` に世界ごと置く
 （`out/` はログで消してよいもの、`state/` は遊びの続き）。
+
+## ほかの MOD に譲る
+
+施設に着いた直後に会話を始める MOD は、これ1本とは限らない。
+同じ到着で2本が会話を始めると噛み合わないので、ローダの窓口 `arrivals` で分け合う。
+話しかけると決めたら申し出（優先度 `ARRIVAL_PRIORITY`）、会話を始める直前に
+自分より優先度の高い申し出があれば譲る。譲った回は間引きの回数（`COOLDOWN_VISITS`）に数えない。
+
+版3: ローダの窓口 `arrivals` で、同じ到着で会話を始めるほかの MOD に譲るようにした。
 """
 
 import random
 import sys
 import time
 
-from instantale_modloader import frames, llm, modfacility, ui
+from instantale_modloader import arrivals, frames, llm, modfacility, ui
 from instantale_modloader.state import WorldStore, world_key
 
 LOG_BASENAME = "player_events.log"
+
+#: ローダの窓口 `arrivals` に名乗る名前と優先度。0 は「ほかに話しかける MOD が居れば譲る」。
+ARRIVAL_OWNER = "300_event_facility_arrival"
+ARRIVAL_PRIORITY = 0
 
 # "conversation"（立ち絵つきの会話フェーズ） / "narration"（1行だけ足す）
 EVENT_MODE = "conversation"
@@ -401,6 +414,7 @@ def apply(ctx):
             getattr(facility, "name", ""), facility_type, roll, chance,
             getattr(npc, "name", ""), npc_id))
         state["fired_at"][facility_id] = visits
+        arrivals.offer(app, ARRIVAL_OWNER, ARRIVAL_PRIORITY)
         return facility, npc_id, npc
 
     # ================================================================
@@ -443,6 +457,13 @@ def apply(ctx):
             reason = gone()
             if reason:
                 write("launch: {}; cancelled".format(reason))
+                arrivals.withdraw(app, ARRIVAL_OWNER)
+                return
+            top = arrivals.winner(app)
+            if top not in (None, ARRIVAL_OWNER):
+                # 同じ到着でほかの MOD が先に話しかける。譲った回は間引きに数えない。
+                write("launch: yielded to {} ({!r} does not speak)".format(top, npc_name))
+                state["fired_at"].pop(str(getattr(facility, "id", "")), None)
                 return
             if REPHRASE_OPENING:
                 # 第一声を「NPC の方から声をかけた」に読み替える印。
@@ -609,6 +630,8 @@ def apply(ctx):
         return result
 
     # ------------------------------------------------------------------ フック
+    arrivals.install(ctx, write)
+
     @ctx.wrap("__main__:MovePhaseManager.move_phase", required=False)
     def move_phase(orig, self, *args, **kwargs):
         state["move_count"] += 1

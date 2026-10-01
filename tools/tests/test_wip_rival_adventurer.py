@@ -137,6 +137,30 @@ class InstantaleApp:
     def refresh_choice_buttons(self, *args, **kwargs):
         return None
 
+    def process_choice(self, function, choice_text=""):
+        self.chosen = getattr(self, "chosen", [])
+        self.chosen.append((function, choice_text))
+
+
+class ConversationStartManager:
+    """ゲームの会話の始まり。`ui.cls_of` に見つけてもらう。"""
+
+    def __init__(self, app, character_id):
+        self.app = app
+        self.character_id = character_id
+
+
+class Facility:
+    def __init__(self, facility_id, facility_type, name):
+        self.id = facility_id
+        self.facility_type = facility_type
+        self.name = name
+
+
+class Phase:
+    def __init__(self, app):
+        self.app = app
+
 
 class Board:
     """`DisplayQuestChoice` の代役。"""
@@ -642,6 +666,18 @@ def scene_player_wins():
     check("切れば尻拭いでは和らがない", bucket["rival"]["stance"] == 0, bucket["rival"])
     check("切っても尻拭いの文は出る", any("代わりに片付けた" in t for t in app.texts), app.texts)
 
+    print("[掲示板の経路で和らいだ知らせ]")
+    module, ctx, app = ready()
+    open_board(ctx, app)
+    app.world.quests["1"]["config"]["status"] = "completed"   # 依頼の終わりの包みを通らずに片付いた
+    elapse(ctx, app, 1)
+    bucket = bucket_of(module, app)
+    check("先取りに数える", bucket["score"]["player"] == 1 and bucket["rival"]["stance"] == 1,
+          bucket["score"])
+    check("知らせはまだ出していない印のまま", bucket["rival"]["stance_told"] is False, bucket["rival"])
+    open_board(ctx, app)
+    check("次に掲示板を開いたときに知らせる", any("棘が抜けた" in t for t in app.texts), app.texts)
+
     print("[会話で和らぐ]")
     module, ctx, app = ready()
     app.world.characters["11"].relationship = {"player": {"affinity": 65}}
@@ -673,13 +709,27 @@ def scene_party():
 def scene_gone():
     print("[居なくなる]")
     module, ctx, app = ready()
+    open_board(ctx, app)
+    elapse(ctx, app, 45)
+    check("死ぬ前に依頼を1件片付けている", "1" in bucket_of(module, app)["taken"])
+    check("片付けた依頼に名前を残す", bucket_of(module, app)["taken"]["1"].get("by") == "冒険者11")
     app.world.characters["11"].config["is_dead"] = True
     elapse(ctx, app, 1)
-    check("死んだら台帳を空にする", bucket_of(module, app).get("rival") is None)
+    bucket = bucket_of(module, app)
+    check("死んだら台帳を空にする", bucket.get("rival") is None and bucket["score"]["rival"] == 0
+          and bucket["history"] == [], bucket)
+    check("片付けた依頼は残す", "1" in bucket["taken"], bucket["taken"])
+    open_board(ctx, app)
+    check("掲示板には戻らない", not any(t.startswith("古城") for t in board_texts(app)), board_texts(app))
+    rumor = notes_for(app, "10")
+    check("ライバルが居なくても噂は残る", rumor and "冒険者11" in rumor, rumor)
     app.world.quests["87"] = quest("87", "1", "依頼87", 10)
     finish_quest(ctx, module, app, "87")
     rival = bucket_of(module, app).get("rival") or {}
     check("次の片付けで別の冒険者を引く", rival.get("id") in ("10", "12", "13"), rival)
+    check("選び直しても片付けた依頼は残す", "1" in bucket_of(module, app)["taken"])
+    rumor = notes_for(app, "12" if rival.get("id") != "12" else "10")
+    check("噂は片付けた本人の名前のまま", rumor and "冒険者11" in rumor, rumor)
 
 
 def scene_notes():
@@ -712,6 +762,8 @@ def scene_load():
     bucket = bucket_of(module, old)
     check("後の出来事を忘れる", "1" not in bucket.get("taken", {}), bucket.get("taken"))
     check("記録も巻き戻す", bucket.get("history") == [], bucket.get("history"))
+    check("忘れた決着が決めた「次に狙ってよい日」も忘れる", bucket.get("next_day") is None,
+          bucket.get("next_day"))
     check("ライバルは残る", (bucket.get("rival") or {}).get("id") == "11")
 
 
@@ -725,9 +777,104 @@ def scene_store():
     with io.open(path, encoding="utf-8") as fh:
         data = json.load(fh)
     check("鍵の並び", list(data) == ["rival", "target", "taken", "failure", "score", "history",
-                                    "away_until", "next_day"], list(data))
+                                    "topics", "away_until", "next_day"], list(data))
     check("ライバルの鍵の並び", list(data["rival"])[:4] == ["id", "name", "chosen_day", "stance"],
           list(data["rival"]))
+
+
+def arrive(ctx, app, facility, area="0", other=None):
+    """施設に着く。ローダの包みの番号送りは手で行う（検査の ctx の包みは最後の1つしか呼ばない）。"""
+    from instantale_modloader import arrivals
+    app.player.location = facility
+    app.player.current_area = app.world.areas[area]
+    app.buttons = []
+    app.chosen = []
+    arrivals._store()["serial"] += 1
+    if other is not None:
+        arrivals.offer(app, other[0], other[1])
+    ctx.hook("__main__:MovePhaseManager.move_phase")(lambda self: None, Phase(app))
+    return app.chosen
+
+
+def opening(ctx, app, npc_id="11"):
+    """第一声の頼み文に渡る最後の1件。"""
+    seen = {}
+    ctx.hook("scripts.llm.llm_manager:conversation_starter")(
+        lambda messages, *a, **k: seen.setdefault("messages", messages),
+        [{"role": "user", "content": "<行動: 話しかける>"}], {}, app.player,
+        app.world.characters[npc_id])
+    return seen["messages"][-1]["content"]
+
+
+def scene_approach():
+    print("[ギルドで声をかける]")
+    from instantale_modloader import arrivals
+    arrivals.reset()
+    guild = Facility("g0", "guild", "始まりの会館")
+    inn = Facility("i0", "inn", "灯り亭")
+    module, ctx, app = ready()
+    check("初対面の種がある", [t["kind"] for t in bucket_of(module, app)["topics"]] == ["intro"])
+    check("宿では声をかけない", not arrive(ctx, app, inn))
+    chosen = arrive(ctx, app, guild)
+    check("ギルドに入ると声をかける", len(chosen) == 1 and chosen[0][0].character_id == "11"
+          and chosen[0][1] == "冒険者11", chosen)
+    line = opening(ctx, app)
+    check("第一声はライバルの方から", "あなたの方から声をかけた" in line and "名乗りを上げに来た" in line,
+          line)
+    check("読み替えは1回だけ", opening(ctx, app) == "<行動: 話しかける>")
+    check("種は1回で使い切る", bucket_of(module, app)["topics"] == [])
+    check("種が無ければ声をかけない", not arrive(ctx, app, guild))
+    check("ほかの人との会話の第一声は変えない", opening(ctx, app, "10") == "<行動: 話しかける>")
+
+    open_board(ctx, app)
+    finish_quest(ctx, module, app, "1")
+    chosen = arrive(ctx, app, guild)
+    check("先を越されたら言いに来る", len(chosen) == 1, chosen)
+    line = opening(ctx, app)
+    check("用件は先を越された依頼", "古城（北）の亡霊" in line and "先に片付けられ" in line, line)
+
+    print("[声をかけない・譲る]")
+    module, ctx, app = ready()
+    check("ライバルの居ない街のギルドでは声をかけない",
+          not arrive(ctx, app, Facility("g1", "guild", "灰の会館"), area="1"))
+    check("優先度の高いほかの申し出には譲る",
+          not arrive(ctx, app, guild, other=("someone_else", 20)))
+    check("譲ったら種は残る", [t["kind"] for t in bucket_of(module, app)["topics"]] == ["intro"])
+    chosen = arrive(ctx, app, guild, other=("300_event_facility_arrival", 0))
+    check("300 の申し出には勝つ", len(chosen) == 1, chosen)
+    check("勝った後も申し出は残す（300 が後から確かめても譲る）",
+          arrivals.winner(app) == "911_rival_adventurer", arrivals.offers(app))
+
+    print("[声かけの取りこぼし]")
+    module, ctx, app = ready()
+    bucket_of(module, app)["rival"]["intro"] = ""
+    check("登場の語りが書けるまで声をかけない", not arrive(ctx, app, guild))
+    bucket_of(module, app)["rival"]["intro"] = "語り"
+
+    def boom(function, choice_text=""):
+        raise RuntimeError("phase machine said no")
+
+    app.process_choice = boom
+    arrive(ctx, app, guild)
+    check("会話を始められなければ種は残る",
+          [t["kind"] for t in bucket_of(module, app)["topics"]] == ["intro"],
+          bucket_of(module, app)["topics"])
+    del app.process_choice
+    ctx.errors[:] = []
+
+    app.world.characters["11"].config["is_dead"] = True
+    arrive(ctx, app, guild)
+    key = module._store()["worlds"].playthrough(app)
+    path = os.path.join(STATE_DIR, "rival_adventurer", state.world_filename(key))
+    with io.open(path, encoding="utf-8") as fh:
+        check("居なくなったら台帳を書く（声かけの経路でも）", json.load(fh)["rival"] is None)
+
+    module, ctx, app = ready(APPROACH_CHANCE_PERCENT=0)
+    check("確率 0 なら声をかけない", not arrive(ctx, app, guild))
+    module, ctx, app = ready()
+    app.game_variables["party"].append("11")
+    check("仲間にしている間は声をかけない", not arrive(ctx, app, guild))
+    arrivals.reset()
 
 
 def scene_tool():
@@ -752,6 +899,7 @@ def scene_tool():
     text = tool.describe(bucket_of(module, app))
     check("様子に名前と態度", "冒険者11" in text and "1 一目置く" in text, text)
     check("様子に取り合いの記録", "しくじった後をプレイヤーが片付けた" in text, text)
+    check("様子に話の種", "話の種: " in text and "尻拭いされた（「古城（北）の亡霊」）" in text, text)
     files = tool.state_files(STATE_DIR)
     check("様子の控えの一覧", len(files) == 1 and files[0][1].endswith(".json"), files)
 
@@ -771,6 +919,7 @@ def main():
     scene_notes()
     scene_load()
     scene_store()
+    scene_approach()
     scene_tool()
     print()
     if failures:

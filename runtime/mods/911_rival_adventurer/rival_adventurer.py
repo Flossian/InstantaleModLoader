@@ -23,14 +23,19 @@
   ライバル本人には張り合う理由・態度・勝敗・最近の取り合い・今の狙い、その土地の住人には噂
 - 登場の語りは背景の待ち行列で LLM に1回書かせる（`jobs.Worker`）。
   依頼の終わりは要約などで既に長いので、そこで待たせない
+- ライバルの居る街のギルドに入ると、話の種（初対面・先を越した・越された・尻拭い）があれば
+  ライバルの方から声をかける（`300_` と同じ、ゲーム本来の会話の起こし方）。
+  同じ到着で `300_` も話しかけようとしたら、ローダの窓口 `arrivals` で譲ってもらう
 """
 
 import os
 import random
 import re
 import sys
+import time
 
-from instantale_modloader import frames, jobs, llm, modnpc, state as loader_state, ui
+from instantale_modloader import (arrivals, frames, jobs, llm, modfacility, modnpc,
+                                  state as loader_state, ui)
 from instantale_modloader.npcs import npc_stores, save_npcs
 
 from . import rivalry
@@ -54,6 +59,11 @@ WINS_PER_STANCE = 1           # 態度が1段和らぐまでに先に片付け�
 CLEANUP_SOFTENS = True        # ライバルがしくじった依頼を片付けると態度が1段和らぐ
 AFFINITY_PER_STANCE = 30      # 態度が1段和らぐ好感度の幅
 RUMOR_DAYS = 90               # 住人が噂にする日数
+APPROACH_CHANCE_PERCENT = 100 # 話の種があるとき、ギルドでライバルが声をかける確率（%）
+APPROACH_INTRO = "張り合う相手として{player}の前に初めて現れ、名乗りを上げに来た"
+APPROACH_TAKEN = "「{title}」を先に片付けたことを、{player}に見せつけに来た"
+APPROACH_LOST = "狙っていた「{title}」を{player}に先に片付けられ、そのことで声をかけてきた"
+APPROACH_CLEANUP = "自分がしくじった「{title}」を{player}が片付けたと聞き、そのことで声をかけてきた"
 INTRO_FALLBACK = "ギルドの片隅で、冒険者{name}が{player}を値踏みするように眺めている。{known}を聞きつけ、張り合う気でいるらしい。"
 REASON_FALLBACK = "{known}を聞き、格の違いを見せつけてやろうと思っている"
 TARGET_SUFFIX = "（{name}が狙っている・あと{days}日）"
@@ -111,6 +121,16 @@ BUSY_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle",
 LOAD_TARGETS = ("__main__:InstantaleApp.load_game_new",
                 "__main__:InstantaleApp.start_game")
 
+#: 声をかける場所（施設の種類）と、ローダの窓口 `arrivals` での優先度（`300_` は 0）。
+GUILD_TYPE = "guild"
+APPROACH_PRIORITY = 10
+TOPIC_LIMIT = 3                        # 溜めておく話の種の数
+APPROACH_TTL = 60.0                    # 第一声の読み替えの印の寿命（秒）
+#: 第一声の頼み文の最後の1件をこれに差し替える（`300_` と同じ手）。
+APPROACH_LINE = ("<状況: {facility}に入ってきた{player}を見つけ、あなたの方から声をかけた。"
+                 "用件: {topic}。呼び止める第一声を述べよ>")
+STARTER_TARGET = "scripts.llm.llm_manager:conversation_starter"
+
 INTRO_PROMPT = """あなたはファンタジーRPGの語り手です。
 冒険者「{name}」が、同じ冒険者「{player}」を張り合う相手と見定めた場面を書いてください。
 
@@ -134,9 +154,9 @@ def _store():
     store = getattr(sys, STORE_ATTR, None)
     if not isinstance(store, dict):
         store = {"worlds": None, "reputation": None, "worker": None,
-                 "reconcile": False, "rng": random.Random()}
+                 "reconcile": False, "rng": random.Random(), "approach": None}
         setattr(sys, STORE_ATTR, store)
-    for name in ("reputation", "worker"):
+    for name in ("reputation", "worker", "approach"):
         store.setdefault(name, None)
     return store
 
@@ -335,7 +355,7 @@ def apply(ctx):
             return True
         write("rival: {} ({}) is gone; the next rival is drawn on a quest clear".format(
             rival.get("name"), npc_id))
-        bucket.update(rivalry.new_bucket())
+        rivalry.reset_rival(bucket)
         return False
 
     def draw_rival(app, bucket, day):
@@ -357,10 +377,11 @@ def apply(ctx):
         if chosen is None:
             write("draw: hit but no adventurer to choose")
             return False
-        bucket.update(rivalry.new_bucket())
+        rivalry.reset_rival(bucket)
         bucket["rival"] = {"id": chosen, "name": ui.character_name(app, chosen),
                            "chosen_day": day, "stance": 0, "stance_told": True,
                            "reason": "", "intro": "", "intro_told": False}
+        rivalry.push_topic(bucket, rivalry.TOPIC_INTRO, "", day, TOPIC_LIMIT)
         write("draw: chose {} ({}) Lv{} for player Lv{} among {} adventurer(s)".format(
             bucket["rival"]["name"], chosen, level_of(app, chosen), player_level(app),
             len(candidates)))
@@ -558,12 +579,13 @@ def apply(ctx):
         roll = rng.random()
         score = rivalry.score_of(bucket)
         row = {"area": target.get("area"), "title": target.get("title"),
-               "day": day, "told": False}
+               "day": day, "told": False, "by": rival_name(app, bucket)}
         bucket["target"] = None
         if roll < chance:
             rivalry.taken_of(bucket)[quest_id] = row
             score["rival"] += 1
             rivalry.push_history(bucket, row["title"], rivalry.RIVAL_WON, day, HISTORY_LIMIT)
+            rivalry.push_topic(bucket, rivalry.TOPIC_TAKEN, row["title"], day, TOPIC_LIMIT)
             after = raise_level(app, rival_id)
             bucket["next_day"] = day + max(0, int(COOLDOWN_DAYS))
             write("settle: {} cleared quest {} {!r} (Lv{} vs difficulty {}, chance {:.2f}, "
@@ -591,15 +613,15 @@ def apply(ctx):
         score["player"] += 1
         rivalry.push_history(bucket, target.get("title"), rivalry.PLAYER_WON, day,
                              HISTORY_LIMIT)
+        rivalry.push_topic(bucket, rivalry.TOPIC_LOST, target.get("title"), day, TOPIC_LIMIT)
         bucket["target"] = None
         bucket["next_day"] = day + max(0, int(COOLDOWN_DAYS)) if day is not None else None
         write("settle[{}]: player cleared quest {} {!r} before {}".format(
             why, target.get("quest"), target.get("title"), rival_name(app, bucket)))
-        line = soften(app, bucket, rivalry.stance_from_wins(score["player"], WINS_PER_STANCE),
+        # 知らせた印（`stance_told`）は呼び側が付ける。日数送りや掲示板で「既に片付いていた」と
+        # 分かった経路（`settle`）は文を出さないので、印を付けずに次の掲示板（`tell_board`）へ回す。
+        return soften(app, bucket, rivalry.stance_from_wins(score["player"], WINS_PER_STANCE),
                       "player won")
-        if line:
-            bucket["rival"]["stance_told"] = True
-        return line
 
     def cleaned_up(app, bucket, failure, day):
         """ライバルがしくじった依頼をプレイヤーが片付けた（尻拭い）。出す文の並びを返す。
@@ -609,6 +631,7 @@ def apply(ctx):
         failure["cleaned"] = True
         rivalry.push_history(bucket, failure.get("title"), rivalry.PLAYER_CLEANED, day,
                              HISTORY_LIMIT)
+        rivalry.push_topic(bucket, rivalry.TOPIC_CLEANUP, failure.get("title"), day, TOPIC_LIMIT)
         name = rival_name(app, bucket)
         write("cleanup: player cleared quest {} {!r} that {} failed".format(
             failure.get("quest"), failure.get("title"), name))
@@ -716,12 +739,11 @@ def apply(ctx):
         lines = []
         with worlds.lock:
             key, bucket = ledger(app)
-            if not isinstance(bucket.get("rival"), dict):
-                return
-            name = rival_name(app, bucket)
+            name = rival_name(app, bucket) if isinstance(bucket.get("rival"), dict) else ""
             for kind, _quest_id, row in rivalry.untold_in(bucket, area_id):
                 template = TAKEN_ANNOUNCE if kind == "taken" else FAILED_ANNOUNCE
-                text = rivalry.format_text(template, name=name, title=row.get("title"))
+                text = rivalry.format_text(template, name=row.get("by") or name,
+                                           title=row.get("title"))
                 if text:
                     lines.append(text)
                 row["told"] = True
@@ -779,29 +801,129 @@ def apply(ctx):
         if app is None:
             return None
         day = ui.game_day(app)
-        rival = None
         with worlds.lock:
             key, bucket = ledger(app)
             rival = bucket.get("rival")
-            if not isinstance(rival, dict):
-                return None
-            if str(info.get("npc_id")) == str(rival.get("id")):
+            if isinstance(rival, dict) and str(info.get("npc_id")) == str(rival.get("id")):
                 floor = rivalry.stance_from_affinity(affinity_of(app, rival.get("id")),
                                                      AFFINITY_PER_STANCE)
                 if soften(app, bucket, floor, "affinity"):
                     worlds.save(key)
                 return rival_note(app, bucket, day)
-        if in_party(app, rival.get("id")):
+        # 噂はライバルが居なくても出す（居なくなった前のライバルが片付けた依頼の噂も残る）。
+        if isinstance(rival, dict) and in_party(app, rival.get("id")):
             return None
-        name = rival_name(app, bucket)
+        name = rival_name(app, bucket) if isinstance(rival, dict) else ""
         area_id = ui.area_id_of(ui.current_area(app))
         rumors = rivalry.rumors_in(bucket, area_id, day, RUMOR_DAYS)[:RUMOR_LIMIT]
-        lines = [rivalry.format_text(RUMOR_NOTE, name=name, title=row.get("title"), days=ago)
+        lines = [rivalry.format_text(RUMOR_NOTE, name=row.get("by") or name,
+                                     title=row.get("title"), days=ago)
                  for _quest_id, row, ago in rumors]
         return "\n".join(line for line in lines if line) or None
 
     modnpc.install(ctx, write=write)
     modnpc.register(OWNER, modnpc.ANY, notes=notes, write=write)
+
+    # ------------------------------------------------------------ ギルドでの声かけ
+    topic_texts = {rivalry.TOPIC_INTRO: APPROACH_INTRO, rivalry.TOPIC_TAKEN: APPROACH_TAKEN,
+                   rivalry.TOPIC_LOST: APPROACH_LOST, rivalry.TOPIC_CLEANUP: APPROACH_CLEANUP}
+
+    def facility_name(app, facility):
+        name = ui.facility_name(app, facility) if facility is not None else ""
+        return name or "ギルド"
+
+    def gone(app, facility):
+        """声をかける前提が崩れたか。崩れたら理由（申し出も下げる）、無事なら None。"""
+        reason = None
+        if getattr(getattr(app, "player", None), "location", None) is not facility:
+            reason = "player left"
+        elif busy_reason(app):
+            reason = "busy ({})".format(busy_reason(app))
+        elif not modfacility.is_top_screen(getattr(app, "buttons", None)):
+            reason = "not the facility's first screen"
+        if reason:
+            arrivals.withdraw(app, OWNER)
+        return reason
+
+    def decide_approach(app):
+        """ギルドに着いた。話の種があればライバルが声をかける段取りをする。"""
+        facility = getattr(getattr(app, "player", None), "location", None)
+        if facility is None or ui.facility_type_of(facility) != GUILD_TYPE:
+            return
+        with worlds.lock:
+            key, bucket = ledger(app)
+            if not isinstance(bucket.get("rival"), dict):
+                return
+            if not rival_alive(app, bucket):
+                worlds.save(key)        # 居なくなった（台帳を空にした）
+                return
+            rival_id = str(bucket["rival"].get("id"))
+            topic = rivalry.next_topic(bucket)
+            if topic is None or in_party(app, rival_id):
+                return
+            if not bucket["rival"].get("intro"):
+                # 登場の語りが書き上がるまで声をかけない（声かけの後に語りが出ると順番が逆になる）。
+                # LLM が返らなくても文型の語りが入るので、待ち続けることはない。
+                write("approach: waiting for the entrance narration")
+                return
+            here = ui.area_id_of(ui.current_area(app))
+            if here != home_area(app, rival_id):
+                return
+            name = rival_name(app, bucket)
+        if busy_reason(app) or not modfacility.is_top_screen(getattr(app, "buttons", None)):
+            write("approach: {} has {} to say but the player is busy".format(name, topic.get("kind")))
+            return
+        roll = rng.random()
+        if roll >= APPROACH_CHANCE_PERCENT / 100.0:
+            write("approach: {} keeps quiet this time (roll {:.2f})".format(name, roll))
+            return
+        arrivals.offer(app, OWNER, APPROACH_PRIORITY)
+        write("approach: {} will speak about {} at {}".format(
+            name, topic.get("kind"), facility_name(app, facility)))
+        # 待ちきれなくても `start_approach` まで進め、そこで忙しければ申し出を下げる
+        # （下げないと、譲った `300_` もこの到着で話さないまま終わる）。
+        screen.when_idle(app, lambda: start_approach(app, facility, rival_id),
+                         cancel_if=lambda: gone(app, facility), proceed_on_timeout=True,
+                         tag="rival adventurer approach")
+
+    def start_approach(app, facility, rival_id):
+        """手が空いた。ほかの MOD に譲る必要が無ければ、ライバルとの会話を起こす。"""
+        if gone(app, facility):
+            return
+        top = arrivals.winner(app)
+        if top not in (None, OWNER):
+            write("approach: yielded to {}".format(top))
+            return
+        manager_cls = ui.cls_of("ConversationStartManager")
+        if manager_cls is None:
+            write("approach: ConversationStartManager not found")
+            return
+        with worlds.lock:
+            _key, bucket = ledger(app)
+            topic = rivalry.next_topic(bucket)
+            if topic is None:
+                arrivals.withdraw(app, OWNER)
+                return
+            name = rival_name(app, bucket)
+        tell_intro(app)                 # 登場の語りがまだなら、声をかける前に出す
+        text = rivalry.format_text(topic_texts.get(topic.get("kind"), ""),
+                                   player=player_name(app), title=topic.get("title"))
+        store["approach"] = {"npc": str(rival_id), "topic": text, "at": time.monotonic(),
+                             "facility": facility_name(app, facility)}
+        try:
+            app.process_choice(manager_cls(app, rival_id), name)
+        except Exception:
+            store["approach"] = None
+            ctx.log_exc("rival adventurer: cannot start the approach")
+            return
+        # 種を下げるのは会話を始められた後（始められなければ次の到着でまた使う）。
+        with worlds.lock:
+            key, bucket = ledger(app)
+            rivalry.drop_topic_like(bucket, topic)
+            worlds.save(key)
+        write("approach: {} spoke to the player about {}".format(name, topic.get("kind")))
+
+    arrivals.install(ctx, write)
 
     # ------------------------------------------------------------ ロードの突き合わせ
     def reconcile(app):
@@ -891,7 +1013,10 @@ def apply(ctx):
                             and str(target.get("quest")) == quest_id:
                         name = rival_name(app, bucket)
                         lines.append(rivalry.format_text(WIN_ANNOUNCE, name=name))
-                        lines.append(player_won(app, bucket, day, "quest end"))
+                        line = player_won(app, bucket, day, "quest end")
+                        if line:
+                            lines.append(line)
+                            bucket["rival"]["stance_told"] = True
                         worlds.save(key)
                     elif quest_id is not None and isinstance(failure, dict) \
                             and str(failure.get("quest")) == quest_id \
@@ -910,6 +1035,45 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("rival adventurer: cannot score the quest end")
         return result
+
+    @ctx.wrap("__main__:MovePhaseManager.move_phase", required=False, safe=True)
+    def move_phase(orig, self, *args, **kwargs):
+        """施設に着いた後。ギルドならライバルの声かけを段取りする。"""
+        result = orig(self, *args, **kwargs)
+        try:
+            decide_approach(getattr(self, "app", None) or ui.find_app())
+        except Exception:
+            ctx.log_exc("rival adventurer: cannot arrange the approach")
+        return result
+
+    @ctx.wrap(STARTER_TARGET, required=False, safe=True)
+    def conversation_starter(orig, *args, **kwargs):
+        """こちらが起こした会話の第一声だけ、「ライバルの方から声をかけた」に読み替える。
+
+        渡す messages の写しの最後の1件だけを差し替える。ゲームの会話履歴には触らない（`300_` と同じ）。
+        """
+        mark = store["approach"]
+        if mark is None:
+            return orig(*args, **kwargs)
+        character = kwargs.get("character_instance", args[3] if len(args) > 3 else None)
+        if str(getattr(character, "id", "")) != mark["npc"]:
+            return orig(*args, **kwargs)
+        store["approach"] = None
+        messages = kwargs.get("messages", args[0] if args else None)
+        if time.monotonic() - mark["at"] > APPROACH_TTL or not isinstance(messages, list) \
+                or not messages or not isinstance(messages[-1], dict):
+            return orig(*args, **kwargs)
+        app = ui.find_app()
+        replaced = dict(messages[-1])
+        replaced["content"] = APPROACH_LINE.format(
+            facility=mark["facility"], player=player_name(app) if app is not None else "旅人",
+            topic=mark["topic"])
+        new_messages = messages[:-1] + [replaced]
+        write("approach: opening line -> {!r}".format(replaced["content"][:80]))
+        if "messages" in kwargs:
+            kwargs = dict(kwargs, messages=new_messages)
+            return orig(*args, **kwargs)
+        return orig(new_messages, *args[1:], **kwargs)
 
     def make_load(target):
         label = target.rsplit(".", 1)[-1]
