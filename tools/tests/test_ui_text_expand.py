@@ -10,7 +10,9 @@ Kivy（Button・Clock・Window）を差し込んで、次を確認する。
   子の並び … **HUD 自身の子は増やさない**（ゲームの「画面の最初の子」を変えない）
   絵柄     … 背景なし・白い線のアイコン。押すと上下が入れ替わる。どの絵柄も描ける
   文字     … 絵柄に「文字」を選ぶと、今までどおり文字のボタンになる
-  置き場所 … 既定ではキャラの欄（枠の右隣）の上。無ければ立ち絵の上、それも無ければ隅
+  置き場所 … 既定では本文の枠のすぐ上・右端揃えで、枠が伸びると一緒に上がり、
+             窓いっぱいに伸びても窓の内側に収まる。
+             「キャラの上」ではキャラの欄（枠の右隣）の上。無ければ立ち絵の上、それも無ければ隅
   不動     … 会話で立ち絵が差し替わってもボタンは動かない（実機で左へ飛んだ）
   拡張     … 枠が倍率どおりに（上へ）広がる
   幅       … 幅倍率 1.0 では幅・`size_hint_x`・折り返し幅のどれにも触らない
@@ -514,6 +516,7 @@ def run():
     check("hooked update_button_texts",
           "scripts.hud.new_hud:InstanTaleHUD.update_button_texts" in ctx.wrapped)
     wide, tall = mod.WIDTH_SCALE, mod.HEIGHT_SCALE
+    corner = mod.BUTTON_CORNER
 
     # -- ボタンが1枚だけ足される ---------------------------------------------
     hud = FakeHUD()
@@ -561,10 +564,13 @@ def run():
           icon_apex(button))
     check("the button borrows the game's font", button.font_name == GAME_FONT,
           button.font_name)
-    check("the button sits just above the character panel",
-          close(button.x, hud.panel.x)
-          and close(button.y, hud.panel.y + hud.panel.height + mod.PORTRAIT_GAP),
-          (button.pos, hud.panel.pos))
+    def above_frame(button, frame):
+        return (close(button.x + button.width, frame.x + frame.width)
+                and close(button.y, frame.y + frame.height + mod.FRAME_GAP))
+
+    check("by default the button sits just above the frame, flush right",
+          above_frame(button, hud.scroll),
+          (button.pos, hud.scroll.pos, hud.scroll.size))
     # 会話に入ると立ち絵は差し替わる（実機ではここでボタンが画面の左へ飛んだ）。
     where = button.pos
     hud.image_portrait = "portraits/johan.png"
@@ -582,6 +588,8 @@ def run():
           close(frame.height, FRAME_SIZE[1] * tall), frame.size)
     check("pressing flips the icon over",
           (icon_apex(button) or 0) < 0, icon_apex(button))
+    check("the button above the frame rides up with it",
+          above_frame(button, frame), (button.pos, frame.pos, frame.size))
     check("a width scale of 1.0 leaves the width exactly as it was",
           close(frame.width, FRAME_SIZE[0]) and close(hud.border.width,
                                                       FRAME_SIZE[0] + 6.0),
@@ -665,6 +673,12 @@ def run():
     check("a huge scale is capped by the window",
           hud.scroll.width <= WIN_WIDTH * mod.MAX_FILL + 0.01
           and hud.scroll.height <= WIN_HEIGHT * mod.MAX_FILL + 0.01, hud.scroll.size)
+    hud.repaint()
+    button = hud.toggle_button()
+    check("the button above a window-high frame stays inside the window",
+          button.y >= 0 and button.y + button.height <= WIN_HEIGHT
+          and close(button.x + button.width, hud.scroll.x + hud.scroll.width),
+          (button.pos, hud.scroll.pos, hud.scroll.size))
     mod.WIDTH_SCALE, mod.HEIGHT_SCALE = wide, tall
 
     # -- pos_hint を持つ枠では位置に触らない ---------------------------------
@@ -777,7 +791,27 @@ def run():
           all(button.x <= x <= button.x + button.width
               for line in button.canvas.after.lines() for x in line.xs()),
           [line.points for line in button.canvas.after.lines()])
+    mod.BUTTON_CORNER = corner
+
+    # -- キャラの欄の上に置く設定 --------------------------------------------
     mod.BUTTON_CORNER = mod.ON_PORTRAIT
+    install(mod, ctx)
+    hud = FakeHUD()
+    hud.show()
+    button = hud.toggle_button()
+    check("the portrait setting puts the button just above the character panel",
+          close(button.x, hud.panel.x)
+          and close(button.y, hud.panel.y + hud.panel.height + mod.PORTRAIT_GAP),
+          (button.pos, hud.panel.pos))
+    where = button.pos
+    hud.image_portrait = "portraits/johan.png"
+    hud.portrait.source = "portraits/johan.png"
+    hud.portrait.x, hud.portrait.y = 20.0, 700.0
+    hud.portrait.width, hud.portrait.height = 900.0, 700.0
+    hud.show()
+    check("with the portrait setting the button does not move when the portrait changes",
+          button.pos == where, (where, button.pos))
+    mod.BUTTON_CORNER = corner
 
     # -- 古い版が HUD 直下に足したボタン --------------------------------------
     # ゲームを起動したまま新しい版を注入したときに、置き場所が直ること。
@@ -837,6 +871,8 @@ def run():
     # 塗り直しは来ないので、窓の `on_resize` を拾えていないと、
     # ボタンは古い座標に取り残され、枠の控えも古い窓の値のまま残る（VERIFICATION_LOG.md
     # §2.26）。
+    # ここから「隅を直に指定する設定」の前までは「キャラの上」の作りを見る。
+    mod.BUTTON_CORNER = mod.ON_PORTRAIT
     install(mod, ctx)
     hud = FakeHUD()
     hud.show()
@@ -909,7 +945,7 @@ def run():
     check("a corner setting is used as-is",
           hud.toggle_button().pos_hint == mod.CORNERS["左下"],
           hud.toggle_button().pos_hint)
-    mod.BUTTON_CORNER = mod.ON_PORTRAIT
+    mod.BUTTON_CORNER = corner
 
     # -- 本文のラベルが無いビルドでは何もしない ------------------------------
     install(mod, ctx)

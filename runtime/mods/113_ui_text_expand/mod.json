@@ -10,7 +10,7 @@
     "en": "Adds a corner button that widens the narration area so more text fits on screen, and puts it back when pressed again",
     "ja": "画面の隅にボタンを足し、押すと本文の表示域が広がってまとめて読める。もう一度押すと元に戻る"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "settings": {
     "WIDTH_SCALE": {
@@ -43,15 +43,15 @@
     },
     "BUTTON_CORNER": {
       "type": "choice",
-      "default": "キャラの上",
-      "values": ["キャラの上", "枠の右上", "右上", "左上", "右下", "左下"],
+      "default": "枠の上",
+      "values": ["枠の上", "キャラの上", "枠の右上", "右上", "左上", "右下", "左下"],
       "label": {
         "ja": "ボタンの置き場所",
         "en": "Where to put the button"
       },
       "note": {
-        "ja": "既定はキャラの欄（右下の立ち絵とHP）の上。「枠の右上」は本文の枠の内側の右上で、枠が伸びると一緒に上がる",
-        "en": "Default is just above the character panel. \"枠の右上\" puts it inside the narration frame's top-right corner"
+        "ja": "既定は本文の枠のすぐ上・右端揃えで、枠が伸びると一緒に上がる。「キャラの上」はキャラの欄（右下の立ち絵とHP）の上。「枠の右上」は本文の枠の内側の右上",
+        "en": "Default is just above the narration frame, flush with its right edge; it rides up as the frame grows. \"キャラの上\" puts it above the character panel, \"枠の右上\" inside the frame's top-right corner"
       }
     },
     "ICON": {

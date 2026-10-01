@@ -132,7 +132,11 @@ Kivy の canvas に線で描く。
 そのときフォントは本文のラベルから写す。
 Kivy の既定（Roboto）には日本語が無く、写さないとボタンの文字が豆腐になる。
 
-置き場所の既定はキャラの欄の上（画面の隅はどれも既存の表示と重なりやすい）。
+置き場所の既定は本文の枠のすぐ上・右端揃え（画面の隅はどれも既存の表示と重なりやすい）。
+枠が伸びれば一緒に上がる（毎回の塗り直しで枠の矩形から座標を出し直す）。
+`122_` のログのボタンはこのボタンの左に並ぶ。
+
+版2までの既定はキャラの欄の上だった（設定「キャラの上」で今も選べる）。
 その欄は位置から探す（`side_panel_of`）。
 画面下の帯は「左（状態）／入力欄／本文の枠／右（立ち絵と
 HP）」の4つが並んでいるので、キャラの欄は**枠の右端より右に始まる、
@@ -146,7 +150,7 @@ HP）」の4つが並んでいるので、キャラの欄は**枠の右端より
 どちらも無い画面では右上へ落とす。
 
 設定で「枠の右上」（本文の枠の内側）と、画面の四隅も選べる。
-枠の内側に置いた場合は枠が伸びれば一緒に上がる（毎回の塗り直しで枠の矩形から座標を出し直す）。
+枠の内側に置いた場合も枠が伸びれば一緒に上がる。
 
 ## 窓の大きさが変わったとき
 
@@ -190,9 +194,9 @@ WIDTH_SCALE = 1.0
 HEIGHT_SCALE = 4.0
 
 # ボタンの置き場所。
-# 既定はキャラの欄の上（画面の隅は他の表示と重なりやすい）。
+# 既定は本文の枠のすぐ上・右端揃え（画面の隅は他の表示と重なりやすい）。
 # 手がかりが見つからない画面では右上へ落ちる。
-BUTTON_CORNER = "キャラの上"
+BUTTON_CORNER = "枠の上"
 
 # ボタンの絵柄。
 # 線で描くので画像ファイルは要らない（背景なし・白）。
@@ -226,10 +230,12 @@ MAX_FILL = 0.98
 CORNERS = ui.CORNERS
 
 # 隅ではない置き場所（こちらが座標を入れるもの）と、その余白（px）。
+ABOVE_FRAME = "枠の上"
 ON_PORTRAIT = "キャラの上"
 IN_FRAME = "枠の右上"
-PLACEMENTS = (ON_PORTRAIT, IN_FRAME)
+PLACEMENTS = (ABOVE_FRAME, ON_PORTRAIT, IN_FRAME)
 PORTRAIT_GAP = 4.0
+FRAME_GAP = 4.0
 FRAME_INSET = 8.0
 
 # 絵柄に「文字」を選んだときの呼び名。
@@ -966,16 +972,21 @@ def apply(ctx):
         label = label_of(hud)
         box = container_of(hud, label) if label is not None else None
 
-        if BUTTON_CORNER == IN_FRAME:
-            # 本文の枠の内側・右上。
-            # 枠が伸びれば一緒に上がる。
+        if BUTTON_CORNER in (ABOVE_FRAME, IN_FRAME):
+            # 本文の枠のすぐ上（右端揃え）か、枠の内側・右上。
+            # どちらも枠が伸びれば一緒に上がる。
+            # 枠が窓の上端近くまで伸びると、枠の上は `clamp` で枠に重なる位置へ下りる。
             rect = rect_of(box) if box is not None else None
             if rect is not None:
-                inset = upx(FRAME_INSET)
                 try:
                     button.pos_hint = {}
-                    button.x = rect[0] + rect[2] - button.width - inset
-                    button.y = rect[1] + rect[3] - button.height - inset
+                    if BUTTON_CORNER == ABOVE_FRAME:
+                        button.x = rect[0] + rect[2] - button.width
+                        button.y = rect[1] + rect[3] + upx(FRAME_GAP)
+                    else:
+                        inset = upx(FRAME_INSET)
+                        button.x = rect[0] + rect[2] - button.width - inset
+                        button.y = rect[1] + rect[3] - button.height - inset
                 except Exception:
                     ctx.log_exc("text expand: could not place the button in the frame")
                     return
