@@ -53,6 +53,19 @@ spec だけでは区別できないので、`DisplayAdventurerTalkChoice.execute
 終わったら一覧をゲーム自身の `DisplayAdventurerTalkChoice` で開き直す。
 新しい冒険者もゲームが正しい spec で並べてくれる。
 
+##### 改名された名前を控える
+
+`120_` は既存の人物と重なる名前を生成の直前に改名する。
+LLM は同じ頼み文に同じ名前を返しやすく、実機では同じ名前が
+5回続けて返り、5回とも改名された（重なった相手は別の土地の人物で、
+頼み文の既存名には載っていなかった）。
+改名された人物は改名後の名前で既存名に並ぶので、
+LLM の答えそのものは一度も避ける対象として示されない。
+そこで改名前の名前を `state/adventurer_recruit/<周回>.json` に
+REJECTED_MAX 件まで控え、頼み文の「使えない名前」に並べる。
+周回の鍵にするのは、重なる相手がセーブの人物だから
+（同じ世界で作り直せば人物も初めからになる）。
+
 作った冒険者はゲーム自身の `npcs` 項目としてセーブに残る。
 MODを外しても消えない（DOC.md に明記）。
 増えすぎない根拠はボタンの出る条件そのもの ―
@@ -61,7 +74,7 @@ MODを外しても消えない（DOC.md に明記）。
 
 import sys
 
-from instantale_modloader import frames, llm, npcs, ui
+from instantale_modloader import frames, llm, npcs, state as state_api, ui
 from instantale_modloader.npcs import make_npc
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
@@ -80,6 +93,10 @@ DIFFICULTY_FALLBACK = 4             # 土地の水準が読めないときの難
 DIFFICULTY_MAX = 76                 # get_npc_employ_price の定義域（VERIFICATION_LOG.md §2.2）
 NAME_MAX = 24
 TAKEN_NAMES_MAX = 15                # プロンプトに並べる既存名の上限
+REJECTED_MAX = 10                   # 控える改名前の名前の上限（古いものから落とす）
+STATE_DIRNAME = "adventurer_recruit"
+#: 控えを世代をまたいで1つだけ持つ（`state.WorldStore` は apply() の外に置く約束）。
+STATE_STORE_ATTR = "_instantale_adventurer_recruit_store"
 
 #: 冒険者一覧ではありえない spec。
 #: 1つでも見えたら別の画面に移っている（armed を下ろす）。
@@ -98,6 +115,7 @@ PROMPT = (
     "土地の様子: {notes}\n"
     "この土地の冒険者の強さの目安: 難易度{difficulty}（0〜76。大きいほど強い）\n"
     "既にいる人物（名前をかぶらせない）: {taken}\n"
+    "使えない名前（既にいる人物と重なる）: {rejected}\n"
     "\n"
     "次の項目を考えてください。\n"
     "- name: 日本語。通り名と名前を合わせた短い呼び名（例の形式:「鉄拳のグレン」）\n"
@@ -116,6 +134,11 @@ def apply(ctx):
     write = ctx.logger("adventurer_recruit.log")
     state = {"armed": False, "recruiting": False}
     screen = ui.Screen(ctx, write, tag="adventurer recruit", mark=MARK)
+    store = getattr(sys, STATE_STORE_ATTR, None)
+    if not isinstance(store, dict):
+        store = {"worlds": state_api.WorldStore(ctx, STATE_DIRNAME)}
+        setattr(sys, STATE_STORE_ATTR, store)
+    worlds = store["worlds"].rebind(ctx, write)
 
     # ================================================== 冒険者一覧の見分け
     @ctx.wrap("__main__:DisplayAdventurerTalkChoice.execute",
@@ -243,6 +266,22 @@ def apply(ctx):
         names.extend(name for _npc_id, name in made)
         return names[-TAKEN_NAMES_MAX:]
 
+    # ================================================== 改名前の名前の控え
+    def rejected_names(key):
+        """この周回で改名された、LLM の答えそのものの名前（古い順）。"""
+        names = worlds.load(key).get("rejected")
+        if not isinstance(names, list):
+            return []
+        return [name for name in names if isinstance(name, str) and name]
+
+    def remember_rejected(key, name):
+        """改名前の名前を控えの末尾へ。同じ名前は末尾へ移し、上限を超えた分は古いほうから落とす。"""
+        with worlds.lock:
+            names = [old for old in rejected_names(key) if old != name]
+            names.append(name)
+            worlds.load(key)["rejected"] = names[-REJECTED_MAX:]
+            worlds.save(key)
+
     # ================================================== LLMに1人書かせる
     def clean_text(value, limit=400):
         if not isinstance(value, str):
@@ -301,7 +340,7 @@ def apply(ctx):
         # 実測の対（0→7 / 20→24 / 48→51 / 60→69）に沿う近似。
         return min(100, max(1, difficulty + 5))
 
-    def compose(app, area, difficulty, made):
+    def compose(app, area, difficulty, made, key):
         """冒険者1人ぶんの項目。書けなければ None。"""
         structure = llm.create_structure(
             ctx, "ModNewAdventurer",
@@ -314,11 +353,13 @@ def apply(ctx):
             write("生成の部品が無い（send_request / create_model）。募集できない")
             return None
         taken = taken_names(app, area, made)
+        rejected = rejected_names(key)
         prompt = PROMPT.format(
             area=clean_text(getattr(area, "name", None), 60) or "名も無い土地",
             notes=clean_text(area_notes(area), 240) or "（記録なし）",
             difficulty=difficulty,
             taken="、".join(taken) if taken else "（いない）",
+            rejected="、".join(rejected) if rejected else "（なし）",
             categories=" / ".join(CATEGORIES))
         data = llm.ask(ctx, MANAGER_NAME,
                        [{"role": "user", "content": prompt}],
@@ -375,9 +416,10 @@ def apply(ctx):
         difficulty = difficulty_for(app, area)
         write("recruit: area={} guild={} difficulty={} count={}".format(
             area_id, guild_id, difficulty, RECRUIT_COUNT))
+        key = state_api.playthrough_key(app)
         made = []
         for _index in range(max(1, RECRUIT_COUNT)):
-            fields = compose(app, area, difficulty, made)
+            fields = compose(app, area, difficulty, made, key)
             if fields is None:
                 break
             npc_id = make_npc(app, fields, area_id, guild_id,
@@ -392,7 +434,16 @@ def apply(ctx):
                 write("recruit: {} was returned twice; stopping".format(npc_id))
                 break
             enroll(app, area, area_id, npc_id)
-            made.append((npc_id, fields["name"]))
+            # 告知には生まれた後の名前を使う。LLM の答えのままにしない。
+            # `120_` は既存の人物と重なる名前を生成の直前に改名する
+            # （冒頭「改名された名前を控える」）。
+            name = ui.character_name(app, npc_id, fallback=fields["name"])
+            if name != fields["name"]:
+                write("recruit: {} was renamed {!r} -> {!r}; "
+                      "{!r} goes to the unusable names".format(
+                          npc_id, fields["name"], name, fields["name"]))
+                remember_rejected(key, fields["name"])
+            made.append((npc_id, name))
         return made
 
     def reopen_list(app):

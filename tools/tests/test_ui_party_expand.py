@@ -522,6 +522,15 @@ class FakeHUD(FakeWidget):
         """窓の中に置かれている枠（`party_cells` の添字の順）。"""
         return [cell for cell in self.party_cells if cell.x >= 0 and cell.y >= 0]
 
+    def top_down(self):
+        """窓の中の枠を、見た目の上から並べた id。"""
+        return [cell.member_id for cell in
+                sorted(self.onstage(), key=lambda cell: -cell.y)]
+
+    def blocker(self):
+        found = [c for c in self.root.children if isinstance(c, FakeBlocker)]
+        return found[0] if found else None
+
     def extras(self):
         if self.panel is None:
             return []
@@ -774,22 +783,26 @@ def run():
     check("the panel width is left to the game",
           hud.panel.size_hint[0] == 0.2 and close(hud.panel.width, PANEL_SIZE[0]),
           (hud.panel.size_hint, hud.panel.width))
-    # 比率で割り直すと 0.33 と 1/4 の差で元の枠が数 px 動く（実機で確認）。
-    check("not one of the game's own rows moved by a single pixel",
-          [(cell.pos, cell.size) for cell in hud.party_cells[:BASE_ROWS]] == was,
-          (was, [(c.pos, c.size) for c in hud.party_cells[:BASE_ROWS]]))
-    check("the added row sits one pitch above the topmost row",
-          extras and close(extras[0].x, was[0][0][0])
-          and close(extras[0].y, was[0][0][1] + ROW_PITCH)
-          and extras[0].size == was[0][1],
-          extras and (extras[0].pos, extras[0].size)),
+    # 仲間は上の行から順に並ぶ。
+    # 下の3行は元の3枠が居た位置そのもの、その上は送り幅ぶん積む。
+    # 比率で割り直すと 0.33 と 1/4 の差で枠が数 px ずれる（実機で確認）。
+    rows4 = hud.party_cells[:BASE_ROWS] + extras
+    expected = [(was[0][0][0], was[0][0][1] + ROW_PITCH)] + [p for p, _s in was]
+    check("rows run top-down in party order on the measured positions",
+          [c.pos for c in rows4] == expected
+          and all(c.size == was[0][1] for c in rows4),
+          [(c.pos, c.size) for c in rows4])
     check("the added row is given the game's own border",
           extras and extras[0].bordered is True,
           extras and extras[0].bordered)
+    check("the game's portraits travel with their rows",
+          close(hud.party_cells[0].image().y, top_box[0][1] + ROW_PITCH),
+          (hud.party_cells[0].image().pos, top_box))
+    # 4人目は一番下（元の3人目が居た行）。
     check("a wider portrait is aligned to the same box as the game's rows",
           extras and extras[0].image().size == top_box[1]
           and close(extras[0].image().x, top_box[0][0])
-          and close(extras[0].image().y, top_box[0][1] + ROW_PITCH),
+          and close(extras[0].image().y, top_box[0][1] - 2 * ROW_PITCH),
           extras and (extras[0].image().pos, extras[0].image().size, top_box))
     check("the fourth member's portrait is in the added row",
           extras and extras[0].image().source == ROSTER[3][2],
@@ -930,7 +943,7 @@ def run():
     hud.show()
     hud.toggle_button().press()
     extras = hud.extras()
-    rows = extras + hud.party_cells[:BASE_ROWS]
+    rows = hud.party_cells[:BASE_ROWS] + extras      # 上から
     row_height = PANEL_SIZE[1] * CELL_HINT_Y
     check("rows without a pos_hint are stacked the same way",
           all(close(cell.height, row_height) for cell in rows)
@@ -964,17 +977,21 @@ def run():
 
     # -- 溢れた仲間はページで送る --------------------------------------------
     # 窓 1400 では 9 行まで入るので、MAX_ROWS=8 が効いて 8 行。
-    # 20 人なら 8 / 8 / 4 の 3 ページで、最後は後ろへ詰めて 13〜20 人目を出す。
+    # 20 人なら 8 / 8 / 4 の 3 ページ。ページどうしは重ねず、最後のページは 4 行に縮む。
+    ids = list(hud.party_members)
     shown = len(hud.onstage())
+    full_height = PANEL_SIZE[1] + (shown - BASE_ROWS) * ROW_PITCH
     check("every member gets a cell, one page of them is on screen",
           len(hud.party_cells) == 20 and shown == 8,
           (len(hud.party_cells), shown))
     check("the panel is exactly one page tall",
-          close(hud.panel.height, PANEL_SIZE[1] + (shown - BASE_ROWS) * ROW_PITCH),
-          hud.panel.size)
-    check("the first page is laid out as before (the game's rows did not move)",
-          [(cell.pos, cell.size) for cell in hud.party_cells[:BASE_ROWS]] == was,
-          [c.pos for c in hud.party_cells[:BASE_ROWS]])
+          close(hud.panel.height, full_height), hud.panel.size)
+    check("the first page shows members 1 to 8 from the top down",
+          hud.top_down() == ids[:8], hud.top_down())
+    check("its bottom rows sit exactly where the game's rows were",
+          [c.pos for c in hud.party_cells[5:8]] == [p for p, _s in was],
+          [c.pos for c in hud.party_cells[5:8]])
+    page_one = [c.pos for c in hud.party_cells[:8]]
     prev, nxt = (hud.pagers() + [None, None])[:2]
     check("two page buttons appear once there is more than one page",
           prev is not None and nxt is not None and len(hud.pagers()) == 2,
@@ -990,15 +1007,12 @@ def run():
     check("the page buttons are drawn as white lines",
           nxt is not None and bool(nxt.canvas.after.lines()),
           nxt and nxt.canvas.after.instructions)
-    home_image = hud.party_cells[0].image()
-    home_box = (home_image.pos, home_image.size)
     nxt.press()
-    check("forward shows the next page (members 9 to 16)",
-          hud.onstage() == hud.party_cells[8:16], [c.member_id for c in hud.onstage()])
-    check("the page is laid out in the same rows as the first page",
-          [c.pos for c in hud.party_cells[8:11]] == [p for p, _s in was]
-          and close(hud.party_cells[11].y, was[0][0][1] + ROW_PITCH),
-          [c.pos for c in hud.party_cells[8:12]])
+    check("forward shows the next page (members 9 to 16) and nobody from page one",
+          hud.top_down() == ids[8:16], hud.top_down())
+    check("the page uses the same rows as the first page",
+          [c.pos for c in hud.party_cells[8:16]] == page_one,
+          [c.pos for c in hud.party_cells[8:16]])
     check("the game's rows leave the window together with their portraits",
           all(c.x < 0 for c in hud.party_cells[:BASE_ROWS])
           and hud.party_cells[0].image().x < 0,
@@ -1007,9 +1021,8 @@ def run():
     check("rows off the page are moved away, not hidden or disabled",
           all(c.opacity == 1 and c.disabled is False for c in hud.party_cells),
           [(c.opacity, c.disabled) for c in hud.party_cells if c.x < 0])
-    check("the panel keeps its size while paging",
-          close(hud.panel.height, PANEL_SIZE[1] + (shown - BASE_ROWS) * ROW_PITCH),
-          hud.panel.size)
+    check("a full page keeps the panel at full height",
+          close(hud.panel.height, full_height), hud.panel.size)
     check("the game's own choice buttons are still never touched",
           all(c.opacity == 1 and c.disabled is False for c in hud.right_buttons),
           [(c.opacity, c.disabled) for c in hud.right_buttons])
@@ -1018,23 +1031,34 @@ def run():
     check("a row on a later page still routes to its own member",
           RUNNING["app"].pressed == [("index", 9, "m9")], RUNNING["app"].pressed)
     nxt.press()
-    check("the last page is packed to the end (members 13 to 20, no empty row)",
-          hud.onstage() == hud.party_cells[12:20], [c.member_id for c in hud.onstage()])
+    check("the last page shows only the rest (members 17 to 20), from the top",
+          hud.top_down() == ids[16:20], hud.top_down())
+    check("the panel shrinks to the rows that page needs",
+          close(hud.panel.height, PANEL_SIZE[1] + ROW_PITCH)
+          and hud.panel.pos == PANEL_POS,
+          (hud.panel.pos, hud.panel.size))
+    check("the blocker shrinks with it",
+          hud.blocker() is not None and close(hud.blocker().height, ROW_PITCH),
+          hud.blocker() and hud.blocker().size)
+    toggle = hud.toggle_button()
+    check("the toggle and the page buttons follow the panel down",
+          close(toggle.y, hud.panel.y + hud.panel.height + mod.PANEL_GAP)
+          and prev.y == nxt.y == toggle.y,
+          (toggle.pos, prev.pos, hud.panel.size))
     check("on the last page only the back button can be pressed",
           prev.disabled is False and nxt.disabled is True, (prev.disabled, nxt.disabled))
     nxt.press()
     check("forward on the last page does nothing",
-          hud.onstage() == hud.party_cells[12:20], [c.member_id for c in hud.onstage()])
+          hud.top_down() == ids[16:20], hud.top_down())
     hud.show()
-    check("a repaint keeps the page", hud.onstage() == hud.party_cells[12:20],
-          [c.member_id for c in hud.onstage()])
+    check("a repaint keeps the page", hud.top_down() == ids[16:20], hud.top_down())
     install(mod, ctx)
     hud.show()
-    check("re-injecting keeps the page",
-          hud.onstage() == hud.party_cells[12:20], [c.member_id for c in hud.onstage()])
+    check("re-injecting keeps the page", hud.top_down() == ids[16:20], hud.top_down())
     hud.pagers()[0].press()
-    check("back goes to the previous page",
-          hud.onstage() == hud.party_cells[8:16], [c.member_id for c in hud.onstage()])
+    check("back goes to the previous page and grows the panel again",
+          hud.top_down() == ids[8:16] and close(hud.panel.height, full_height),
+          (hud.top_down(), hud.panel.size))
     hud.toggle_button().press()
     check("collapsing from a later page puts the game's rows back",
           [c.pos for c in hud.party_cells] == [p for p, _s in was]
@@ -1043,14 +1067,14 @@ def run():
     # 窓の外（-100000）を往復するぶんの浮動小数の誤差（1e-11 px 程度）は許す。
     back = hud.party_cells[0].image()
     check("with their portraits",
-          close(back.x, home_box[0][0]) and close(back.y, home_box[0][1])
-          and back.size == home_box[1],
-          (back.pos, home_box))
+          close(back.x, top_box[0][0]) and close(back.y, top_box[0][1])
+          and back.size == top_box[1],
+          (back.pos, top_box))
     check("collapsing takes the page buttons away (not just hides them)",
           hud.pagers() == [], len(hud.pagers()))
     hud.toggle_button().press()
     check("expanding again starts from the first page",
-          hud.onstage() == hud.party_cells[:8], [c.member_id for c in hud.onstage()])
+          hud.top_down() == ids[:8], hud.top_down())
     hud.toggle_button().press()
 
     # 人数が上限に収まれば送らない。
@@ -1074,8 +1098,8 @@ def run():
     hud.show()
     check("and keeps doing so after paging",
           [c.member_id for c in hud.party_cells] == ids
-          and hud.onstage() == hud.party_cells[4:12],
-          [c.member_id for c in hud.onstage()])
+          and hud.top_down() == ids[8:12],
+          hud.top_down())
     hud.toggle_button().press()
 
     # -- 窓の高さで行数を決める ----------------------------------------------
@@ -1084,6 +1108,7 @@ def run():
     install(mod, ctx)
     hud = FakeHUD(members=4)
     crowd(hud, 7)
+    ids = list(hud.party_members)
     hud.show()
     hud.toggle_button().press()
     check("the window setting grows the panel as far as the share allows",
@@ -1091,9 +1116,28 @@ def run():
           and hud.panel.y + hud.panel.height <= WIN_HEIGHT * mod.MAX_HEIGHT + 0.01,
           (len(hud.onstage()), hud.panel.size))
     check("and pages the rest", len(hud.pagers()) == 2, len(hud.pagers()))
+    check("the button the grown panel covers is hidden meanwhile",
+          hud.stray.opacity == 0 and hud.stray.disabled is True,
+          (hud.stray.opacity, hud.stray.disabled))
     hud.pagers()[1].press()
-    check("its last page is packed to the end (members 3 to 7)",
-          hud.onstage() == hud.party_cells[2:7], [c.member_id for c in hud.onstage()])
+    # 残りは 2 人。帯は元の 3 行まで縮み、3 行目は空く。
+    check("its last page shows the two left, from the top, over the original rows",
+          hud.top_down() == ids[5:7]
+          and [c.pos for c in hud.party_cells[5:7]] == [p for p, _s in was[:2]],
+          (hud.top_down(), [c.pos for c in hud.party_cells[5:7]]))
+    check("the panel goes back to the game's own height",
+          close(hud.panel.height, PANEL_SIZE[1]), hud.panel.size)
+    # 縮んで覆わなくなった場所に板や隠したボタンを残すと、そこの押下を止め続ける。
+    check("the blocker is taken away once nothing is covered",
+          hud.blocker() is None, hud.blocker() and hud.blocker().size)
+    check("the button it no longer covers comes back",
+          hud.stray.opacity == 1 and hud.stray.disabled is False,
+          (hud.stray.opacity, hud.stray.disabled))
+    hud.pagers()[0].press()
+    check("going back covers and hides it again",
+          hud.blocker() is not None
+          and hud.stray.opacity == 0 and hud.stray.disabled is True,
+          (hud.blocker(), hud.stray.opacity, hud.stray.disabled))
     hud.toggle_button().press()
     # 割合が小さくて元の3行しか入らなくても、ページ送りで全員に届く。
     mod.MAX_HEIGHT = 0.3

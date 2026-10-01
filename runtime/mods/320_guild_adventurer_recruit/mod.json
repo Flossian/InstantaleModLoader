@@ -10,7 +10,7 @@
     "en": "When few adventurers are left to talk to at the guild, adds a button that recruits a new LLM-written adventurer into the guild",
     "ja": "ギルドの「冒険者達と話す」で会話できる冒険者が減ったとき、新しい冒険者を生成してギルドに補充するボタンを出す"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "settings": {
     "RECRUIT_MIN": {

@@ -64,7 +64,7 @@
 中身を入れた後に呼ぶ。
 立ち絵を差し替えると絵の大きさが変わるので、入れる前に合わせても意味が無い。
 
-## 伸びる向き（上だけ）と、元の枠を1 px も動かさないこと
+## 伸びる向き（上だけ）と、行を実測の座標で置くこと
 
 帯の下端は動かさない。
 Kivy の `y` は下端なので、`y` を据え置いて
@@ -76,9 +76,9 @@ Kivy の `y` は下端なので、`y` を据え置いて
 最初は各枠の `size_hint_y` を `1/行数` に割り直していたが、
 ゲームが使っているのは `0.33` という丸めた比率で、
 こちらの `1/4`（＝0.25）と食い違う。
-伸びた帯に当て直すと、その差が **元から在る枠を数 px 動かす**。
-そこで元の枠は測った位置と大きさに釘付けし、
-足した枠だけを行の送り幅（隣り合う枠の y の差。`panel.row_pitch`）ぶんずつ上へ積む。
+伸びた帯に当て直すと、その差で **枠が数 px ずれる**。
+そこで行の座標を実測から作る。
+下の3行は元の3枠が居た位置そのもの、その上は行の送り幅（隣り合う枠の y の差。`panel.row_pitch`）ぶんずつ積む。
 帯の高さも同じだけ足す（倍率ではなく足し算。枠線は帯より数 px 大きいので、
 倍率で配ると差まで倍になる）。
 
@@ -90,8 +90,12 @@ Kivy の `y` は下端なので、`y` を据え置いて
 ## 溢れたらページで送る
 
 上限より仲間が多いときは、枠を仲間全員ぶん作り、見せるのはそのうち1ページぶんにする。
-1ページは見せている行数と同じ数。
-最後のページは後ろへ詰めて空の行を作らない（前のページと一部が重なる）。
+1ページは上限の行数と同じ人数で、ページどうしは重ねない。
+最後のページが1ページに満たなければ、帯をその人数ぶんまで縮める（元の3行よりは縮めない）。
+帯が縮むと黒い板と隠したボタンも合わせ直す（縮んで重ならなくなった相手は戻す）。
+
+最後のページを後ろへ詰めて空の行を作らない形は実機で外した。
+2ページ目に1ページ目の仲間が混ざって見え、送った先に誰が増えたのかが分からない。
 
 中身を差し替えて送るのではなく、**枠の置き場所を入れ替えて送る**。
 ゲームは帯の子を足した順に塗り、押下の相手も `party_cells` の添字で決める。
@@ -102,13 +106,14 @@ Kivy の `y` は下端なので、`y` を据え置いて
 `opacity` / `disabled` では隠さない。
 Kivy は無効なウィジェットに触れた時点で触りを止めるので、見えない当たり判定が残る。
 
-行の座標は `party_cells` の添字の順に割り当てる。
-最初の3行は元の3枠の実測の位置、その先は一番上の枠の上へ積む。
-1ページ目の並びは広げただけのときと同じで、元の枠は動かない。
-2ページ目以降は元の枠も窓の外へ出る。
+どのページも、`party_cells` の添字の順に**上の行から**置く。
+広げると元の3人も帯の上の方へ移り、2ページ目以降は窓の外へ出る。
+下の3行に元の3人を据え置き、4人目以降をその上へ積む形は実機で外した。
+読む順（上から 8,7,6,5,4,1,2,3）とページの順が食い違い、送った先の並びが追えない。
+
 枠の中身は座標で置かれていて親に付いてこないことがあるので、
 付いてこなかった子だけを同じ量ずらす（`panel.move_to`）。
-畳むときは、先に1ページ目の場所へ中身ごと連れ戻してから元の寸法へ戻す。
+畳むときは、先に元の枠を中身ごと元の場所へ連れ戻してから元の寸法へ戻す。
 
 送るボタン（◀ ▶）は切り替えボタンの左に並べ、ページが2つ以上あるときだけ置く。
 要らないときは隠さずに入れ物から外す（理由は上と同じ）。
@@ -574,6 +579,14 @@ def apply(ctx):
         if not callable(painter):
             state["ask_game"] = False
             return False
+        # 前にこちらが入れた id を消してから塗らせる。
+        # 残したままだと、注入し直した後に「ゲームが塗った」と取り違え、
+        # 次に足した枠が空のまま残る。
+        for cell in extras:
+            try:
+                setattr(cell, "member_id", None)
+            except Exception:
+                pass
         state["busy"] = True          # 自分のフックへ戻ってこないように
         try:
             painter()
@@ -610,10 +623,10 @@ def apply(ctx):
             # そのときだけ塗り直しを頼む（ゲームは
             # `party_members` が動いたときしか塗らない。
             # 雇い直しで枠が1つ増えた場面がこれ）。
-            if empty:
-                ask_game(hud, extras)
-            return
-        if ask_game(hud, extras):
+            if not empty or ask_game(hud, extras):
+                return
+            state["game_paints"] = False  # 塗られなかった。ここからはこちらが埋める
+        elif ask_game(hud, extras):
             return
         shown = party_panel.shown_ids(cells)
         remaining = [member_id for member_id in party_panel.member_ids(hud)
@@ -661,6 +674,9 @@ def apply(ctx):
             return
         gained = gained_rect(box, design)
         if gained is None:
+            # 最後のページで帯が元の高さまで縮んだ。
+            # 板を残すと、もう帯の外になった場所で触りを止め続ける。
+            uncover_gap(box)
             return
         blocker = frames.attr(box, BLOCKER_ATTR, None)
         if blocker is None or frames.attr(blocker, "parent") in (None, frames.MISSING):
@@ -761,22 +777,24 @@ def apply(ctx):
             pass
 
     # -- 広げる / 戻す --------------------------------------------------------
-    def slot_at(design, slot, pitch):
-        """ページの中の `slot` 行目の座標。
+    def row_at(design, row, pitch):
+        """下から数えて `row` 行目（0 が一番下）の座標。
 
-        最初の元の行数ぶんは元の枠の実測どおり（`party_cells` の添字の順）。
-        その先は一番上の枠の上へ、行の送り幅ぶんずつ積む。
-        1ページ目はこれで今までと同じ並びになり、元の枠は1 px も動かない。
+        下の元の行数ぶんは元の枠の実測どおり。
+        その上は一番上の元の枠の上へ、行の送り幅ぶんずつ積む。
+        比率で割り直さないので、下の行は元の枠と同じ位置に 1 px も違わず並ぶ。
         """
         base = design["rows"]
-        if slot < base:
-            return design["cells"][slot]["pos"]
-        top = design["cells"][design["order"][0]]["pos"]
-        return (top[0], float(top[1]) + (slot - base + 1) * pitch)
+        order = design["order"]       # 見た目の上から
+        if row < base:
+            return design["cells"][order[base - 1 - row]]["pos"]
+        top = design["cells"][order[0]]["pos"]
+        return (top[0], float(top[1]) + (row - base + 1) * pitch)
 
-    def arrange(design, extras, start, rows):
-        """枠を並べ直す。今のページの枠を行に置き、残りは窓の外へ出す。
+    def arrange(design, extras, start, count, visible):
+        """枠を並べ直す。今のページの枠を上から順に行へ置き、残りは窓の外へ出す。
 
+        `start` から `count` 人を、`visible` 行の帯の一番上の行から順に置く。
         並べ替えはしない。
         ゲームは帯の子を足した順に塗り、押下の相手も `party_cells` の添字で決めるので、
         並びを変えると塗る相手と押した相手が食い違う。
@@ -785,7 +803,7 @@ def apply(ctx):
         座標は比率ではなく実測で入れる（`pin`）。
         比率（`size_hint` / `pos_hint`）で置き直すと、
         ゲームが使っている 0.33 のような丸めた比率と、
-        こちらが割り直した 1/4・1/5 が食い違って元の枠が数 px 動く。
+        こちらが割り直した 1/4・1/5 が食い違って枠が数 px ずれる。
         """
         pitch = party_panel.row_pitch(design)
         base = design["rows"]
@@ -793,9 +811,9 @@ def apply(ctx):
         widgets = [shot["widget"] for shot in design["cells"]] + list(extras)
         for index, widget in enumerate(widgets):
             shot = design["cells"][index] if index < base else top
-            slot = index - start
-            if 0 <= slot < rows:
-                x, y = slot_at(design, slot, pitch)
+            slot = index - start          # ページの中で上から何番目か
+            if 0 <= slot < count:
+                x, y = row_at(design, visible - 1 - slot, pitch)
             else:
                 x, y = OFFSTAGE, OFFSTAGE
             party_panel.pin(shot, widget, x, y)
@@ -818,19 +836,22 @@ def apply(ctx):
         rows, total = plan_for(hud, design)
         if total <= base:
             return collapse(hud, box)      # 全員が元の枠に収まっている
-        # 1ページ＝見せている行数。
-        # 最後のページは後ろへ詰めて、空の行を作らない（前のページと一部が重なる）。
+        # 1ページ＝`rows` 人。ページどうしは重ねない。
+        # 最後のページが1ページに満たなければ、帯をその人数ぶんまで縮める
+        # （元の行数よりは縮めない。足りない行は空のまま）。
         pages = -(-total // rows)
         page = min(max(int(state["page"]), 0), pages - 1)
         state["page"] = page
         state["paging"] = (page, pages) if pages > 1 else None
-        start = min(page * rows, total - rows)
-        layout = (page, start, rows)
+        start = page * rows
+        count = min(rows, total - start)
+        visible = max(count, base)
+        layout = (page, start, count, visible)
         pitch = party_panel.row_pitch(design)
-        delta = pitch * (rows - base)
+        delta = pitch * (visible - base)
         height = float(design["size"][1]) + delta
         extras = extras_of(box)
-        if (rows_now(box) == rows and len(extras) == total - base
+        if (rows_now(box) == visible and len(extras) == total - base
                 and frames.attr(box, LAYOUT_ATTR, None) == layout
                 and ui.close_enough(frames.attr(box, "height"), height)):
             # もう広がっている。
@@ -849,20 +870,24 @@ def apply(ctx):
                 party_panel.restore(shot, move=False)
             state["paging"] = None
             return False          # 枠を足せないビルドでは帯も伸ばさない
-        arrange(design, extras, start, rows)
+        arrange(design, extras, start, count, visible)
         fill_extras(hud, cells, extras)
         align(design, extras)         # 中身を入れた後に見え方を合わせる
         cover_gap(hud, box, design)   # 新しく覆った場所を黒い板で塞ぐ
+        # 帯はページごとに伸び縮みする。
+        # 前に隠したものを一度戻してから、今の帯に重なるものだけ隠し直す。
+        # 戻さずに控えを上書きすると、縮んで重ならなくなった相手が隠れたまま残る。
+        unhide(box)
         hide_covered(hud, box, design, cells, extras)
         try:
-            setattr(box, EXPANDED_ATTR, rows)
+            setattr(box, EXPANDED_ATTR, visible)
             setattr(box, LAYOUT_ATTR, layout)
         except Exception:
             pass
         schedule(lambda: guarded(lambda: clamp_all(design)))
         note("expanded to {} row(s) showing #{}-#{} of {} (page {}/{}), "
              "height {:.0f} (design {:.0f}, pitch {:.0f})"
-             .format(rows, start + 1, start + rows, total, page + 1, pages,
+             .format(visible, start + 1, start + count, total, page + 1, pages,
                      height, design["size"][1], pitch))
         return True
 
@@ -876,13 +901,13 @@ def apply(ctx):
         design = frames.attr(box, DESIGN_ATTR)
         if not isinstance(design, dict) or rows_now(box) is None:
             return False          # 触っていない帯は戻す必要もない
-        layout = frames.attr(box, LAYOUT_ATTR, None)
-        if isinstance(layout, tuple) and layout[1]:
-            # 別のページを見ていた。
-            # 元の枠が窓の外に居るので、中身ごと1ページ目の場所へ連れ戻してから戻す。
-            # `pos_hint` を戻すだけでは入れ物が寄せ直すのは枠だけで、
-            # 座標で置かれた中身が窓の外に取り残される。
-            arrange(design, [], 0, design["rows"])
+        # 広げている間、元の枠は別の行か窓の外に居る。
+        # 中身ごと元の場所へ連れ戻してから寸法を戻す。
+        # `pos_hint` を戻すだけでは入れ物が寄せ直すのは枠だけで、
+        # 座標で置かれた中身が取り残される。
+        for shot in design["cells"]:
+            if shot["pos"]:
+                party_panel.move_to(shot["widget"], *shot["pos"])
         for cell in extras_of(box):
             drop_extra(hud, box, cell)
         try:
@@ -1220,6 +1245,10 @@ def apply(ctx):
         state["page"] = page
         note("page {} -> {}".format(paging[0] + 1, page + 1))
         apply_state(hud)
+        # 最後のページでは帯が縮むので、切り替えボタン（と、その横の ◀ ▶）を帯に付いて動かす。
+        widget = frames.attr(hud, BUTTON_ATTR)
+        if widget not in (None, frames.MISSING):
+            place_button(hud, widget)
         ensure_pagers(hud)
 
     def ensure_pagers(hud):

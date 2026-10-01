@@ -19,12 +19,16 @@
   開き直し … 終わったら一覧をゲーム自身の DisplayAdventurerTalkChoice で
              開き直し、補充後の人数が閾値を超えたらボタンは出ない
   不発     … LLMが読めなければ何も作らず、その旨を画面に流す
+  改名     … 生成の直前に改名されたら、告知は改名後の名前。
+             改名前の名前は周回の控えに残り、次の頼み文の「使えない名前」に
+             並ぶ（注入し直しても残る・上限で古いほうから落ちる・重ねない）
   安全     … ギルドの無い土地では何もしない
 """
 import importlib.util
 import io
 import json
 import os
+import shutil
 import sys
 import types
 
@@ -32,6 +36,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 OUT_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "out", "test"))
+STATE_DIR = os.path.join(OUT_DIR, "state_adventurer_recruit")
 
 if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
@@ -281,6 +286,7 @@ def install_fake_llm():
 class FakeCtx:
     def __init__(self, out_dir):
         self.out_dir = out_dir
+        self.state_dir = STATE_DIR
         self.hooks = {}
         self.errors = []
         self.logs = []
@@ -289,6 +295,17 @@ class FakeCtx:
         path = os.path.join(self.out_dir, *parts)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         return path
+
+    def state_path(self, *parts):
+        path = os.path.join(self.state_dir, *parts)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        return path
+
+    def read_json(self, path, default=None):
+        return ml.read_json(path, default, report=self.log_exc)
+
+    def write_json(self, path, data):
+        return ml.write_json(path, data, report=self.log_exc)
 
     # ログは本物の `ctx.logger` をそのまま借りる（`write_json` と同じ理由）。
     _mod = None
@@ -326,8 +343,13 @@ def load_mod(name="adventurer_recruit_mod"):
     return module
 
 
-def fresh_mod(recruit_min=1, recruit_count=1):
+def fresh_mod(recruit_min=1, recruit_count=1, keep_state=False):
+    """読み込み直す。`keep_state` は再起動に当たる（控えのファイルだけ残す）。"""
     sys.modules.pop("adventurer_recruit_mod", None)
+    if hasattr(sys, "_instantale_adventurer_recruit_store"):
+        delattr(sys, "_instantale_adventurer_recruit_store")
+    if not keep_state:
+        shutil.rmtree(STATE_DIR, ignore_errors=True)
     module = load_mod()
     module.RECRUIT_MIN = recruit_min
     module.RECRUIT_COUNT = recruit_count
@@ -611,6 +633,75 @@ def main():
     name = app.save_data_dict["npcs"]["12"]["name"]
     check("名前: パスに使えない字を落とす（GAME.md §2.15）",
           name == "剣聖アルヴァ", name)
+
+    # -- 生成の直前の改名（120_ の重複直し） ------------------------------
+    def renaming(app, new_names):
+        """120_ と同じく、orig の前に素データの名前を書き換える。"""
+        plain = app.world.generate_character
+        queue = list(new_names)
+
+        def generate(character_id, character_value):
+            if queue:
+                app.save_data_dict["npcs"][character_id]["name"] = queue.pop(0)
+            return plain(character_id, character_value)
+
+        app.world.generate_character = generate
+
+    def last_prompt():
+        return LLM["calls"][-1][1][0]["content"] if LLM["calls"] else ""
+
+    def unusable_line(prompt):
+        for line in prompt.splitlines():
+            if line.startswith("使えない名前"):
+                return line
+        return None
+
+    def recruit_once(module, ctx, app, name):
+        open_list(ctx, app)
+        LLM["queue"] = [answer(name)]
+        press(ctx, app, recruit_index(module, app))
+
+    module, ctx = fresh_mod()
+    app, area = make_world()
+    renaming(app, ["ベルント"])
+    LLM["calls"] = []
+    app.said = []
+    recruit_once(module, ctx, app, "嵐刃のカイ")
+    check("改名: 告知は生まれた後の名前",
+          any("「ベルント」" in (text or "") for text in app.said)
+          and not any("嵐刃のカイ" in (text or "") for text in app.said),
+          app.said)
+    check("改名: 初回の頼み文の「使えない名前」は（なし）",
+          unusable_line(last_prompt()) == "使えない名前（既にいる人物と重なる）: （なし）",
+          unusable_line(last_prompt()))
+    path = os.path.join(STATE_DIR, module.STATE_DIRNAME,
+                        ml.state.world_filename(ml.state.playthrough_key(app)))
+    saved = ml.read_json(path, None)
+    check("改名: 改名前の名前を周回の控えに書く",
+          saved == {"rejected": ["嵐刃のカイ"]}, saved)
+
+    # 再起動に当たる: 控えのファイルだけ残して読み込み直す。
+    module, ctx = fresh_mod(keep_state=True)
+    app.world.characters["12"].config["is_dead"] = True
+    recruit_once(module, ctx, app, "霜月のリオ")
+    check("改名: 読み込み直しても次の頼み文に並ぶ",
+          "嵐刃のカイ" in (unusable_line(last_prompt()) or ""),
+          unusable_line(last_prompt()))
+    check("改名: 改名されなければ控えは増えない",
+          ml.read_json(path, None) == {"rejected": ["嵐刃のカイ"]},
+          ml.read_json(path, None))
+
+    module, ctx = fresh_mod()
+    module.REJECTED_MAX = 2
+    app, area = make_world(adventurers=[])
+    renaming(app, ["改名一", "改名二", "改名三", "改名四"])
+    for name in ("重名のアル", "重名のベル", "重名のアル", "重名のセタ"):
+        recruit_once(module, ctx, app, name)
+        for cid in list(area.adventurer_npcs):
+            app.world.characters[cid].config["is_dead"] = True
+    saved = ml.read_json(path, None)
+    check("改名: 同じ名前は重ねず末尾へ、上限を超えたら古いほうから落とす",
+          saved == {"rejected": ["重名のアル", "重名のセタ"]}, saved)
 
     # -- 安全 ------------------------------------------------------------
     module, ctx = fresh_mod()
