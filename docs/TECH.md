@@ -93,7 +93,7 @@ C コンパイラと管理者権限は要らない。ゲームフォルダは読
 
 ```text
 InstantaleModLoader.bat   GUI を開く（配布物で唯一の入口）
-make_dist.bat             配布物を dist\ に組む（loader / mods / full の3つの zip）
+make_dist.bat             配布物を dist\<版>\ に組む（loader / mods / full の3つの zip）
 tools/gui.py              MOD 一覧・適用順・有効/無効・設定・追加・起動と注入・結果表示
 tools/watch.bat, watcher.py  ゲームの起動を監視して自動注入（GUI 無し）
 tools/injector.py         PE解析 → x64スタブ → CreateRemoteThread（--unload で剥がす）

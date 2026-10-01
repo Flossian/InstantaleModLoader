@@ -46,7 +46,7 @@ rem    make_dist.bat           version comes from runtime\instantale_modloader
 rem    make_dist.bat 1.2.0     override the version string
 rem
 rem  Staging trees are kept under dist\_stage\ for checking. The zips land in
-rem  dist\ directly, and they are the only things meant to be uploaded.
+rem  dist\<ver>\, and they are the only things meant to be uploaded.
 rem
 rem  Python is optional here: if one is found the staged .py files are
 rem  byte-compiled as a syntax check, then the caches are removed again.
@@ -89,9 +89,12 @@ set "LOADER=%STAGE%\loader\%NAME%-%VER%"
 set "MODS=%STAGE%\mods\%MODSNAME%-%VER%"
 set "FULL=%STAGE%\full\%NAME%-%VER%"
 
-set "ZIPLOADER=dist\%NAME%-%VER%.zip"
-set "ZIPMODS=dist\%MODSNAME%-%VER%.zip"
-set "ZIPFULL=dist\%NAME%-%VER%-full.zip"
+rem  The zips go into a folder per version (dist\<ver>\), next to that
+rem  version's release notes, so building one version never touches another.
+set "OUTDIR=dist\%VER%"
+set "ZIPLOADER=%OUTDIR%\%NAME%-%VER%.zip"
+set "ZIPMODS=%OUTDIR%\%MODSNAME%-%VER%.zip"
+set "ZIPFULL=%OUTDIR%\%NAME%-%VER%-full.zip"
 
 echo.
 echo   name    : %NAME%
@@ -107,6 +110,11 @@ if exist "%STAGE%" (
   goto :fail
 )
 for %%z in ("%ZIPLOADER%" "%ZIPMODS%" "%ZIPFULL%") do if exist "%%~z" del /q "%%~z"
+md "%OUTDIR%" 2>nul
+if not exist "%OUTDIR%" (
+  echo   ERROR: could not create %OUTDIR%.
+  goto :fail
+)
 md "%LOADER%" 2>nul
 md "%MODS%" 2>nul
 md "%FULL%" 2>nul
@@ -298,7 +306,7 @@ echo   done.  %MODCOUNT% mod(s) packaged.
 echo.
 for %%z in ("%ZIPFULL%" "%ZIPLOADER%" "%ZIPMODS%") do echo     %%~nxz  (%%~zz bytes)
 echo.
-echo   Upload the three zips in dist\ as separate release assets.
+echo   Upload the three zips in %OUTDIR%\ as separate release assets.
 echo     -full   loader + mods. Unzip anywhere, run InstantaleModLoader.bat.
 echo     loader  loader only.
 echo     mods    add the zip itself with "MOD wo tsuika..." in the manager,

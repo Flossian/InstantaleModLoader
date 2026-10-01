@@ -195,7 +195,7 @@ jobs:
 
           $bad = 0
           foreach ($p in $packages) {
-            $path = Join-Path dist $p.zip
+            $path = Join-Path (Join-Path dist $ver) $p.zip      # make_dist.bat は dist\<版>\ に置く
             if (-not (Test-Path $path)) { Write-Host "  $($p.zip) が作られていない"; $bad++; continue }
             $archive = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $path).Path)
             try { $names = @($archive.Entries | ForEach-Object { $_.FullName }) }
@@ -237,7 +237,7 @@ jobs:
                   -Pattern '^__version__\s*=\s*["'']([^"'']+)["'']').Matches[0].Groups[1].Value
           $dest = Join-Path ([IO.Path]::GetTempPath()) "instantale-dist-$ver"
           if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
-          Expand-Archive -Path "dist/InstantaleModLoader-$ver-full.zip" -DestinationPath $dest
+          Expand-Archive -Path "dist/$ver/InstantaleModLoader-$ver-full.zip" -DestinationPath $dest
           $root = Join-Path $dest "InstantaleModLoader-$ver"
 
           $failed = @()
