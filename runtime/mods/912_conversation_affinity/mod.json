@@ -46,23 +46,6 @@
       "label": {"ja": "上がるのは同じ相手から1日1回", "en": "Gain once a day per person"},
       "note": {"ja": "日数は宿泊・街の移動でしか進まないので、同じ街で話し続けても稼げない。下がる方は毎回効く",
                "en": "Days only pass on inn stays and travel, so repeated chats do not farm affinity. Losses always apply"}
-    },
-    "SHOW_CHANGE": {
-      "type": "bool",
-      "default": true,
-      "label": {"ja": "動いたら本文に一言出す", "en": "Show a line when it changes"}
-    },
-    "GAIN_TEXT": {
-      "type": "str",
-      "default": "{name}は{player}に少し心を開いたようだ。",
-      "label": {"ja": "上がったときの一言", "en": "Line when affinity rises"},
-      "note": {"ja": "使える変数: {name} {player}", "en": "Variables: {name} {player}"}
-    },
-    "LOSS_TEXT": {
-      "type": "str",
-      "default": "{name}の機嫌を損ねたようだ。",
-      "label": {"ja": "下がったときの一言", "en": "Line when affinity falls"},
-      "note": {"ja": "使える変数: {name} {player}", "en": "Variables: {name} {player}"}
     }
   }
 }

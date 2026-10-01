@@ -229,8 +229,22 @@
         "en": "Affinity per softer stance"
       },
       "note": {
-        "ja": "ライバルの好感度（会話で動くゲームの値）がこの幅を越えるごとに1段進む。0 で見ない",
-        "en": "Each step of the rival's affinity (changed by conversations) softens one stage. 0 ignores it"
+        "ja": "ライバルの好感度（同行してのクリアなどで動くゲームの値）がこの幅を越えるごとに1段進む。0 で見ない",
+        "en": "Each step of the rival's affinity (raised by clearing quests together, etc.) softens one stage. 0 ignores it"
+      }
+    },
+    "TALK_AFFINITY_CEILING": {
+      "type": "int",
+      "default": 30,
+      "min": 0,
+      "max": 200,
+      "label": {
+        "ja": "会話で上げられる好感度の上限",
+        "en": "Affinity ceiling from talk"
+      },
+      "note": {
+        "ja": "会話で好感度が上下する MOD を入れたとき、ライバルとの会話だけではこの値より上へ上がらない。既定の 30 は態度1段ぶんで、その先は張り合いと同行で進める。下がる方には関わらない",
+        "en": "With a mod that moves affinity through conversation, talking to the rival never raises it past this. The default 30 is one stance step; the rest comes from rivalry and quests together. Losses are unaffected"
       }
     },
     "RUMOR_DAYS": {

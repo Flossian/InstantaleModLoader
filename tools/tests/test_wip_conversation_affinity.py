@@ -3,16 +3,21 @@
 
     python tools/tests/test_wip_conversation_affinity.py
 
-偽の app / Character / 会話の要約の関数と、決まった答えを返す LLM を差し込み、次を確認する。
+偽の app / Character / 会話の要約の関数 / 送信の境目（`llm_manager:send_request`）と、
+pydantic の代わりの型（`create_model` で子の型を作れる）を差し込み、次を確認する。
 
   部品     … 段は -3〜+3 に均す／上がる幅・下がる幅／会話で上げられる上限／1日1回／
-             プレイヤーが話したかの見分け
-  上がる   … 判定 +2 で好感度 +4。実行時の人物と素データの両方に書く。本文に一言出す
+             プレイヤーが話したかの見分け／system への書き足し／答えを元の型へ戻す
+  相乗り   … 要約の頼みの型に判定の2項目を足し、先頭の system に決まりを書き足す。
+             ゲームの持つ本文は書き換えない。ゲームへは元の型・要約だけで返す
+  上がる   … 判定 +2 で好感度 +4。実行時の人物と素データの両方に書く。本文には何も出さない
   下がる   … 判定 -3 で好感度 -12。1日1回の制限を受けない
   1日1回   … 同じ日に2回目は上がらない。日数が進めばまた上がる
-  上限     … 会話では 60 を越えない。既に越えている相手は上げない
-  聞かない … プレイヤーが話していない会話・MOD の NPC・LLM が答えない／読めない答えでは動かさない
-  素通し   … 要約の関数には受け取った引数をそのまま渡し、戻り値もそのまま返す
+  上限     … 会話では 60 を越えない。既に越えている相手は上げない。
+             ローダの窓口（`talk_affinity`）で他の MOD が狭めた相手はその上限で止まる
+  判定する … プレイヤーが何か言った・開け閉め以外の行動（贈り物・売り買い）をした会話
+  足さない … プレイヤーが話していない会話・MOD の NPC・system の無い頼み・要約以外の送信・要約の外の送信
+  失敗     … 足した形で失敗したら元の頼みで送り直し、要約は返す。読めない答えでは動かさない
 """
 import importlib.util
 import io
@@ -20,6 +25,7 @@ import json
 import os
 import shutil
 import sys
+import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
@@ -31,10 +37,11 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml                      # noqa: E402
-from instantale_modloader import llm, ui               # noqa: E402
+from instantale_modloader import llm, talk_affinity    # noqa: E402
 
 MOD_NAME = "conversation_affinity_mod"
 RESOLVER = "scripts.llm.llm_manager:conversation_resolver"
+SEND = "scripts.llm.llm_manager:send_request"
 
 
 def find_mod(suffix):
@@ -58,6 +65,35 @@ def check(name, cond, detail=""):
           + ((" -- " + str(detail)) if detail and not cond else ""))
     if not cond:
         failures.append(name)
+
+
+# ---------------------------------------------------------------- pydantic の代わり
+class FakeModel:
+    """`create_model` の作る型の代わり。項目が足りなければ作れない（検証に落ちる）。"""
+    fields = ()
+
+    def __init__(self, **data):
+        missing = [name for name in self.fields if name not in data]
+        if missing:
+            raise ValueError("missing {}".format(missing))
+        for name in self.fields:
+            setattr(self, name, data[name])
+
+    @classmethod
+    def model_validate(cls, data):
+        return cls(**data)
+
+    def model_dump(self):
+        return {name: getattr(self, name) for name in self.fields}
+
+
+def create_model(name, __base__=FakeModel, **fields):
+    return type(name, (__base__,), {"fields": tuple(__base__.fields) + tuple(fields)})
+
+
+Result = create_model("Result", summary=(str, ...))
+MANAGER = types.ModuleType("scripts.llm.llm_manager")
+MANAGER.create_model = create_model
 
 
 # ---------------------------------------------------------------- 偽ゲーム
@@ -127,6 +163,12 @@ class FakeCtx:
     def log_exc(self, msg):
         self.errors.append(msg)
 
+    def resolve(self, target):
+        return None, None, object()         # 別名はもう生えている
+
+    def superseded(self):
+        return False
+
     def write_json(self, path, data, *, indent=1):
         return ml.write_json(path, data, indent=indent, report=self.log_exc)
 
@@ -140,19 +182,29 @@ class FakeCtx:
         return decorator
 
 
-ui.Screen.when_idle = lambda self, app, then, **kw: then()
+#: 送信の境目に来た `(manager_name, message, structure)`。
+SENT = []
+#: 判定の答え。`{"change", "reason"}`・None（答えない＝足した型に落ちる）・例外。
 ANSWERS = []
-ASKED = []
-SAVED = (llm.ask, llm.create_structure)
+SYSTEM = {"role": "system", "content": "あなたはRPGのGMです。会話を要約して下さい。\n【門番の情報】性格: 気難しい"}
 
 
-def fake_ask(ctx, name, messages, **kw):
-    ASKED.append(messages[0]["content"])
-    return ANSWERS.pop(0) if ANSWERS else None
+def game_send(manager_name, message, structure, **kw):
+    """ゲームの send_request の代わり。型に判定の項目があれば答えを入れて返す。"""
+    SENT.append((manager_name, message, structure))
+    data = {"summary": "要約"}
+    if "affinity_change" in structure.fields:
+        answer = ANSWERS.pop(0) if ANSWERS else None
+        if isinstance(answer, Exception):
+            raise answer
+        if answer is not None:
+            data.update(affinity_change=answer["change"], affinity_reason=answer["reason"])
+    return structure(**data)
 
 
 def fresh(**settings):
     global APP
+    talk_affinity.reset()
     for name in (MOD_NAME,):
         sys.modules.pop(name, None)
     spec = importlib.util.spec_from_file_location(MOD_NAME, MOD)
@@ -168,7 +220,7 @@ def fresh(**settings):
     ctx = FakeCtx()
     module.apply(ctx)
     APP = InstantaleApp()
-    del ASKED[:]
+    del SENT[:]
     del ANSWERS[:]
     return module, ctx, APP
 
@@ -183,16 +235,21 @@ SILENT = [{"role": "user", "content": "<行動: 話しかける>"},
           {"role": "user", "content": "<行動: 会話を終了する>"}]
 
 
-def close(ctx, app, npc_id, messages=SPOKE, answer=None):
-    """会話を閉じる（要約の関数を呼ぶ）。要約の戻り値を返す。"""
+def close(ctx, app, npc_id, messages=SPOKE, answer=None, character=None, system=True,
+          send=None):
+    """会話を閉じる（要約の関数が送信の境目を通る）。`(要約の戻り値, 見たもの)` を返す。"""
     if answer is not None:
         ANSWERS.append(answer)
-    character = app.world.characters[npc_id]
+    character = character or app.world.characters[npc_id]
     seen = {}
+    prompt = ([SYSTEM] if system else []) + list(messages)
+    seen["prompt_before"] = [dict(turn) for turn in prompt]
 
     def resolver(player, messages_, life_log, character_instance, emotion, worldview):
         seen["args"] = (player, messages_, life_log, character_instance, emotion, worldview)
-        return {"summary": "要約"}
+        result = ctx.hooks[SEND](send or game_send, "conversation_resolver", prompt, Result)
+        seen["prompt_after"] = prompt
+        return result
 
     result = ctx.hooks[RESOLVER](resolver, app.player, messages, {}, character, "警戒心がある", "世界")
     return result, seen
@@ -204,6 +261,10 @@ def aff(app, npc_id):
 
 def saved_aff(app, npc_id):
     return app.save_data_dict["npcs"][npc_id]["relationship"]["player"]["affinity"]
+
+
+def extended_sent():
+    return [structure for _name, _message, structure in SENT if "affinity_change" in structure.fields]
 
 
 # ---------------------------------------------------------------- 場面
@@ -226,21 +287,83 @@ def scene_pure():
     check("下限で止まる", plan(-98, -1) == (-100, "loss"))
     check("下限より下の相手を下がる判定で上げない", plan(-150, -1) == (-150, "loss"),
           plan(-150, -1))
-    check("話したかの見分け", module.player_spoke(SPOKE) and not module.player_spoke(SILENT))
+    check("話したかの見分け", module.player_engaged(SPOKE) and not module.player_engaged(SILENT))
+    engaged = lambda *texts: module.player_engaged([{"role": "user", "content": t} for t in texts])
+    check("贈り物の行動は判定する", engaged("<行動: 話しかける>", "<行動: 花束を渡した。>"))
+    check("売り買いの行動は判定する", engaged("<行動: 錆びたショートソードを購入した。>"))
+    check("全角の印でも読む", engaged("＜行動：花束を渡した＞")
+          and not engaged("＜行動：話しかける＞", "＜行動：会話を終了する＞"))
+    check("取引を終えただけは判定しない",
+          not engaged("<行動: 話しかける>", "<行動: 取引を終了する>", "<行動: 会話を終了する>"))
+    check("行動の中身を読む", module.action_of("<行動: 会話を終了する>") == "会話を終了する"
+          and module.action_of("こんにちは") is None)
+
+    original = [{"role": "user", "content": "a"}, dict(SYSTEM), {"role": "system", "content": "b"}]
+    added = module.with_instruction(original, "足す")
+    check("先頭の system に書き足す", added[1]["content"].endswith("\n\n足す")
+          and added[2]["content"] == "b" and len(added) == 3, added)
+    check("元の本文は書き換えない", original[1]["content"] == SYSTEM["content"])
+    check("system が無ければ足さない", module.with_instruction([{"role": "user", "content": "a"}], "x")
+          is None)
+
+    child = create_model("Result", __base__=Result, affinity_change=(int, ...),
+                         affinity_reason=(str, ...))
+    raw = child(summary="要約", affinity_change=1, affinity_reason="r")
+    back = module.restore(raw, Result)
+    check("型で返れば元の型に戻す", type(back) is Result and back.model_dump() == {"summary": "要約"},
+          type(back))
+    check("辞書で返れば項目を抜く", module.restore(
+        {"summary": "s", "affinity_change": 1, "affinity_reason": "r"}, Result) == {"summary": "s"})
+    check("JSON で返れば項目を抜く", json.loads(module.restore(
+        '{"summary": "s", "affinity_change": 1, "affinity_reason": "r"}', Result)) == {"summary": "s"})
+
+
+def scene_ride():
+    print("[相乗り]")
+    module, ctx, app = fresh()
+    result, seen = close(ctx, app, "7", answer={"change": 2, "reason": "差し入れが嬉しかった"})
+    check("LLM は要約の1回だけ", len(SENT) == 1, len(SENT))
+    name, message, structure = SENT[0]
+    check("足した型で送る", "affinity_change" in structure.fields and issubclass(structure, Result)
+          and structure.fields[0] == "summary", getattr(structure, "fields", None))
+    check("system に判定の決まりを書き足す", "affinity_change" in message[0]["content"]
+          and "門番" in message[0]["content"] and "検査の主人公" in message[0]["content"]
+          and message[0]["content"].startswith(SYSTEM["content"]), message[0]["content"][:80])
+    check("会話の本文はそのまま", message[1:] == SPOKE)
+    check("ゲームの持つ本文は書き換えない", seen["prompt_after"] == seen["prompt_before"])
+    check("ゲームへは元の型で返す", type(result) is Result, type(result))
+    check("要約だけを返す", result.model_dump() == {"summary": "要約"}, result.model_dump())
+    check("要約の引数はそのまま", seen["args"][1] is SPOKE and seen["args"][4] == "警戒心がある")
+
+    close(ctx, app, "7", answer={"change": 1, "reason": "a"})
+    check("足した型は使い回す", extended_sent()[0] is extended_sent()[1])
+
+    # 要約以外の送信・要約の外の送信には触らない。
+    del SENT[:]
+    ctx.hooks[SEND](game_send, "conversation_facilitator", [dict(SYSTEM)], Result)
+    check("要約の外の送信は素通し", SENT[-1][2] is Result
+          and SENT[-1][1][0]["content"] == SYSTEM["content"])
+
+    def resolver_sends_twice(*args):
+        ctx.hooks[SEND](game_send, "something_else", [dict(SYSTEM)], Result)
+        return ctx.hooks[SEND](game_send, "conversation_resolver", [dict(SYSTEM)] + SPOKE, Result)
+
+    del SENT[:]
+    ANSWERS.append({"change": 0, "reason": "a"})
+    ctx.hooks[RESOLVER](resolver_sends_twice, app.player, SPOKE, {},
+                        app.world.characters["8"], "", "")
+    check("要約の中でも別の manager は素通し", SENT[0][2] is Result and SENT[1][2] is not Result,
+          [s[0] for s in SENT])
+    check("例外が無い", not ctx.errors, ctx.errors)
 
 
 def scene_gain():
     print("[上がる]")
     module, ctx, app = fresh()
-    result, seen = close(ctx, app, "7", answer={"change": 2, "reason": "差し入れが嬉しかった"})
+    close(ctx, app, "7", answer={"change": 2, "reason": "差し入れが嬉しかった"})
     check("好感度 +4（実行時）", aff(app, "7") == 4, aff(app, "7"))
     check("好感度 +4（素データ）", saved_aff(app, "7") == 4, saved_aff(app, "7"))
-    check("本文に一言", any("心を開いた" in t for t in app.texts), app.texts)
-    check("頼み文に会話と性格", ASKED and "差し入れを持ってきた" in ASKED[0] and "気難しい" in ASKED[0],
-          ASKED[:1])
-    check("頼み文に今の気持ち", ASKED and "警戒心がある" in ASKED[0])
-    check("要約の戻り値はそのまま", result == {"summary": "要約"})
-    check("要約の引数はそのまま", seen["args"][1] is SPOKE and seen["args"][4] == "警戒心がある")
+    check("本文には何も出さない", not app.texts, app.texts)
 
     close(ctx, app, "7", answer={"change": 3, "reason": "また来た"})
     check("同じ日に2回目は上がらない", aff(app, "7") == 4, aff(app, "7"))
@@ -248,11 +371,10 @@ def scene_gain():
     close(ctx, app, "7", answer={"change": 1, "reason": "顔なじみ"})
     check("日数が進めばまた上がる", aff(app, "7") == 6, aff(app, "7"))
 
-    module, ctx, app = fresh(DAILY_GAIN_ONCE=False, SHOW_CHANGE=False)
+    module, ctx, app = fresh(DAILY_GAIN_ONCE=False)
     close(ctx, app, "7", answer={"change": 1, "reason": "a"})
     close(ctx, app, "7", answer={"change": 1, "reason": "b"})
     check("切れば同じ日でも上がる", aff(app, "7") == 4, aff(app, "7"))
-    check("一言を切れば出さない", not app.texts, app.texts)
     check("例外が無い", not ctx.errors, ctx.errors)
 
 
@@ -262,58 +384,88 @@ def scene_loss_and_ceiling():
     close(ctx, app, "7", answer={"change": 2, "reason": "a"})
     close(ctx, app, "7", answer={"change": -3, "reason": "侮辱された"})
     check("判定 -3 で -12（同じ日でも効く）", aff(app, "7") == -8, aff(app, "7"))
-    check("下がった一言", any("機嫌を損ねた" in t for t in app.texts), app.texts)
     close(ctx, app, "8", answer={"change": 3, "reason": "a"})
     check("上限 60 で止まる", aff(app, "8") == 60, aff(app, "8"))
     close(ctx, app, "9", answer={"change": 3, "reason": "a"})
     check("上限より上の相手は上げない", aff(app, "9") == 80, aff(app, "9"))
 
-    # 判定を待つ間にゲームが好感度を動かした（依頼のクリアの +20）。
+    # 他の MOD が窓口で上限を狭めた相手。
     module, ctx, app = fresh()
 
-    def ask_while_quest_clears(ctx_, name, messages, **kw):
-        ASKED.append(messages[0]["content"])
-        app.world.characters["7"].relationship["player"]["affinity"] += 20
-        return {"change": -1, "reason": "a"}
+    class Owner:
+        def superseded(self):
+            return False
 
-    llm.ask = ask_while_quest_clears
-    try:
-        close(ctx, app, "7")
-    finally:
-        llm.ask = fake_ask
-    check("判定を待つ間の変化を消さない（0 +20 -4）", aff(app, "7") == 16, aff(app, "7"))
+    talk_affinity.limit("another_mod", Owner(), lambda app_, npc_id: 4 if npc_id == "7" else None)
+    close(ctx, app, "7", answer={"change": 3, "reason": "a"})
+    check("窓口で狭めた上限で止まる", aff(app, "7") == 4, aff(app, "7"))
+    close(ctx, app, "8", answer={"change": 1, "reason": "a"})
+    check("狭めていない相手は元の上限", aff(app, "8") == 60, aff(app, "8"))
+    close(ctx, app, "7", answer={"change": -1, "reason": "a"})
+    check("狭めた相手も下がる方は効く", aff(app, "7") == 0, aff(app, "7"))
+    log = io.open(os.path.join(OUT_DIR, module.LOG_BASENAME), encoding="utf-8").read()
+    check("狭めた持ち主をログに残す", "ceiling 4 by another_mod" in log)
+
+    # 要約を待つ間にゲームが好感度を動かした（依頼のクリアの +20）。
+    module, ctx, app = fresh()
+
+    def send_while_quest_clears(manager_name, message, structure, **kw):
+        app.world.characters["7"].relationship["player"]["affinity"] += 20
+        return game_send(manager_name, message, structure, **kw)
+
+    close(ctx, app, "7", answer={"change": -1, "reason": "a"}, send=send_while_quest_clears)
+    check("要約を待つ間の変化を消さない（0 +20 -4）", aff(app, "7") == 16, aff(app, "7"))
 
 
 def scene_skip():
-    print("[聞かない]")
+    print("[足さない・失敗]")
     module, ctx, app = fresh()
-    close(ctx, app, "7", messages=SILENT, answer={"change": 3, "reason": "a"})
-    check("話していない会話は聞かない", not ASKED and aff(app, "7") == 0)
+    result, _seen = close(ctx, app, "7", messages=SILENT, answer={"change": 3, "reason": "a"})
+    check("開け閉めだけの会話には足さない", not extended_sent() and aff(app, "7") == 0)
+    check("そのときも要約は返る", type(result) is Result)
     del ANSWERS[:]
-    close(ctx, app, "7")
-    check("LLM が答えなければ動かさない", aff(app, "7") == 0)
+
+    modnpc_like = Character("mod:331_facility_investment:keeper-0-2", "主人", 40)
+    close(ctx, app, "7", answer={"change": 3, "reason": "a"}, character=modnpc_like)
+    check("MOD の NPC には足さない", not extended_sent()
+          and modnpc_like.relationship["player"]["affinity"] == 40)
+    del ANSWERS[:]
+
+    close(ctx, app, "7", answer={"change": 3, "reason": "a"}, system=False)
+    check("system の無い頼みには足さない", not extended_sent() and aff(app, "7") == 0)
+    del ANSWERS[:]
+
+    del SENT[:]
+    result, _seen = close(ctx, app, "7")       # 答えない＝足した型の検証に落ちる
+    check("足した形で失敗したら元の頼みで送り直す", len(SENT) == 2 and SENT[1][2] is Result,
+          [s[2].fields for s in SENT])
+    check("送り直した要約を返す", type(result) is Result and result.summary == "要約")
+    check("答えが無ければ動かさない", aff(app, "7") == 0)
+
+    del SENT[:]
+    result, _seen = close(ctx, app, "7", answer=TimeoutError("slow"))
+    check("送信の例外でも要約は返る", type(result) is Result and len(SENT) == 2)
+
     close(ctx, app, "7", answer={"change": "たくさん", "reason": "a"})
     check("読めない答えでは動かさない", aff(app, "7") == 0)
-    modnpc_like = Character("mod:331_facility_investment:keeper-0-2", "主人", 40)
-    ANSWERS.append({"change": 3, "reason": "a"})
-    before = len(ASKED)
-    ctx.hooks[RESOLVER](lambda *a: {"summary": "x"}, app.player, SPOKE, {}, modnpc_like, "", "")
-    check("MOD の NPC は対象にしない", len(ASKED) == before
-          and modnpc_like.relationship["player"]["affinity"] == 40)
     check("例外が無い", not ctx.errors, ctx.errors)
 
 
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
-    llm.ask = fake_ask
-    llm.create_structure = lambda *a, **k: object()
+    saved_manager = sys.modules.get(MANAGER.__name__)
+    sys.modules[MANAGER.__name__] = MANAGER
     try:
         scene_pure()
+        scene_ride()
         scene_gain()
         scene_loss_and_ceiling()
         scene_skip()
     finally:
-        llm.ask, llm.create_structure = SAVED
+        if saved_manager is None:
+            sys.modules.pop(MANAGER.__name__, None)
+        else:
+            sys.modules[MANAGER.__name__] = saved_manager
     print()
     if failures:
         print("FAILED: {}".format(failures))

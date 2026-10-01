@@ -43,7 +43,7 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml                      # noqa: E402
-from instantale_modloader import modnpc, state, ui     # noqa: E402
+from instantale_modloader import modnpc, state, talk_affinity, ui  # noqa: E402
 
 
 def find_mod(suffix):
@@ -451,11 +451,14 @@ def scene_pure():
 
 def scene_draw():
     print("[現れる]")
+    talk_affinity.reset()
     module, ctx = fresh_mod()
     app = make_world(cleared=0)
     use(app)
     open_board(ctx, app)
     check("掲示板を開いてもライバルは現れない", bucket_of(module, app).get("rival") is None)
+    check("ライバルが居なければ会話の上限に口を出さない",
+          talk_affinity.ceiling(app, "11", 60) == (60, None))
     app.world.quests["81"] = quest("81", "1", "一件目", 10)
     finish_quest(ctx, module, app, "81")
     check("1件目では抽選しない", bucket_of(module, app).get("rival") is None)
@@ -464,6 +467,11 @@ def scene_draw():
     rival = bucket_of(module, app).get("rival") or {}
     check("2件目で抽選して当たる", rival.get("id") == "11", rival)
     check("最初は見下している", rival.get("stance") == 0, rival)
+    check("ライバルとの会話で上げられるのは 30 まで",
+          talk_affinity.ceiling(app, "11", 60) == (30, module.OWNER),
+          talk_affinity.ceiling(app, "11", 60))
+    check("ライバル以外には口を出さない", talk_affinity.ceiling(app, "12", 60) == (60, None))
+    check("上限は狭めるだけ", talk_affinity.ceiling(app, "11", 20) == (20, None))
 
     module, ctx = fresh_mod(RIVAL_CHANCE_PERCENT=0)
     app = make_world(cleared=5)

@@ -35,7 +35,7 @@ import sys
 import time
 
 from instantale_modloader import (arrivals, frames, jobs, llm, modfacility, modnpc,
-                                  state as loader_state, ui)
+                                  state as loader_state, talk_affinity, ui)
 from instantale_modloader.npcs import npc_stores, save_npcs
 
 from . import rivalry
@@ -58,6 +58,7 @@ LEVEL_MAX = 99                # ライバルの Lv の上限
 WINS_PER_STANCE = 1           # 態度が1段和らぐまでに先に片付ける回数
 CLEANUP_SOFTENS = True        # ライバルがしくじった依頼を片付けると態度が1段和らぐ
 AFFINITY_PER_STANCE = 30      # 態度が1段和らぐ好感度の幅
+TALK_AFFINITY_CEILING = 30    # ライバルとの会話だけで上げられる好感度の上限
 RUMOR_DAYS = 90               # 住人が噂にする日数
 APPROACH_CHANCE_PERCENT = 100 # 話の種があるとき、ギルドでライバルが声をかける確率（%）
 APPROACH_INTRO = "張り合う相手として{player}の前に初めて現れ、名乗りを上げに来た"
@@ -831,6 +832,22 @@ def apply(ctx):
 
     modnpc.install(ctx, write=write)
     modnpc.register(OWNER, modnpc.ANY, notes=notes, write=write)
+
+    # ------------------------------------------------------------ 会話で上がる好感度の上限
+    def rival_talk_ceiling(app, npc_id):
+        """ライバルなら会話で上げられる上限を返す。会話で好感度を動かす MOD が聞きに来る。
+
+        態度は好感度でも和らぐので、会話だけで上がりきると張り合いの機会を飛ばしてしまう。
+        既定の 30 は態度1段（一目置く）ぶんで、その先は張り合いと同行で進める。
+        """
+        with worlds.lock:
+            _key, bucket = ledger(app)
+            rival = bucket.get("rival")
+        if isinstance(rival, dict) and str(rival.get("id")) == str(npc_id):
+            return TALK_AFFINITY_CEILING
+        return None
+
+    talk_affinity.limit(OWNER, ctx, rival_talk_ceiling)
 
     # ------------------------------------------------------------ ギルドでの声かけ
     topic_texts = {rivalry.TOPIC_INTRO: APPROACH_INTRO, rivalry.TOPIC_TAKEN: APPROACH_TAKEN,
