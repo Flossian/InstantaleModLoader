@@ -459,7 +459,7 @@ check("evasion outcome: dodge first, then graze, else the blow lands",
 check("evasion hint: one sentence for the referee",
       mod.evasion_hint("エリス", _roll) == "- エリス: この手番に受ける攻撃は身のこなしで完全にかわす（傷を負わない）"
       and mod.evasion_hint("エリス", (0.5, 0.1, 0.45, 0.25))
-      == "- エリス: この手番に受ける攻撃は見切って急所を外し、浅い傷で済ませる",
+      == "- エリス: この手番に受ける攻撃は当たるが、急所を外して浅い傷で済む（かわしはしない。傷は負う）",
       mod.evasion_hint("エリス", _roll))
 check("evasion hint: nothing to say when nothing happens",
       mod.evasion_hint("エリス", (0.9, 0.9, 0.45, 0.25)) is None)
@@ -521,6 +521,43 @@ check("evasion: the same roll makes the blow miss", _sent.get("damage") == 0, _s
 check("evasion: the line comes after the turn", _said == ["（エリスは攻撃をかわした）"], _said)
 check("evasion: logged", "EVADED" in _log() and "evasion: told the referee" in _log(), _log())
 check("evasion: nothing was swallowed", not _ctx.errors, _ctx.errors)
+
+# 回避した手では画面を揺らさない。1手の中でも、閉じた直後でも。当たった手は揺らす。
+_SHAKE = "scripts.hud.new_hud:InstanTaleHUD.shake_window"
+
+
+def _shake_turn(rolls):
+    """敵の1手を流し、手の中と閉じた直後に揺れを1回ずつ呼ぶ。揺れた回数を返す。"""
+    global _ctx
+    _ctx = _fresh()
+    shaken = []
+
+    def turn(*args, **kwargs):
+        _enemy_turn()
+        _ctx.hooks[_SHAKE](lambda self, root: shaken.append("in"), None, "root")
+
+    mod._RNG = _Rolls(rolls)
+    _ui.find_app = lambda: _app
+    try:
+        _ctx.hooks["scripts.llm.llm_manager_battle:referee_npc"](
+            _enemy_referee, None, "log", "ゴブリン", _goblin, "敵側", {}, {})
+        _ctx.hooks["__main__:BattlePhaseManager.handle_battle_situation"](
+            turn, _phase, "ゴブリン1", "敵側", None)
+        _ctx.hooks[_SHAKE](lambda self, root: shaken.append("after"), None, "root")
+    finally:
+        mod._RNG, _ui.find_app = _saved_rng, _saved_find_app
+    return shaken
+
+
+_said[:] = []
+check("shake: an evaded blow does not shake the screen, in or just after the action",
+      _shake_turn([0.1, 0.9]) == [] and "shake: skipped, all evaded (in the action)" in _log()
+      and "shake: skipped, all evaded (just after the action)" in _log(), _log())
+_said[:] = []
+check("shake: a landed blow still shakes", _shake_turn([0.9, 0.9]) == ["in", "after"], _log())
+_said[:] = []
+check("shake: a grazed blow still shakes", _shake_turn([0.9, 0.0]) == ["in", "after"], _log())
+check("shake: nothing was swallowed", not _ctx.errors, _ctx.errors)
 
 # 既定では敵は避けない（主人公の手では振らない）。
 _ctx = _fresh()

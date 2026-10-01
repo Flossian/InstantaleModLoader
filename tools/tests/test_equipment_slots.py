@@ -667,6 +667,17 @@ assert "r4" in rookie.inventory.inventory                                     # 
 assert equipment.equip(app, rookie, r_herb) == "not equipment"
 assert equipment.equip(app, player, sword) is None                           # 主人公は窓口の外
 assert combat.attack(app, rookie) == 120 and combat.defense(app, rookie) == 40
+# ロードの後、窓を開かずに戦う。仲間の scope は捨てられ、本体は仲間の `equipments` を保存しないので空。
+# それでも控えの位置と持ち物から装備の値を答える（実機で、ロード前に装備させた仲間の武器が数に入らなかった）。
+# 戦闘の計算の中から呼ばれるので、scope は作らず、持ち物の辞書も動かさない
+ctx.hooks["__main__:World.__init__"](lambda self, d, *a: None, object(), {}, app)
+rookie_loaded = Player(); rookie_loaded.name = "新人"; rookie_loaded.id = "81"
+rookie_loaded.give(Item("r1", "weapon", "small_weapon", 120), Item("r2", "wearable", "clothing", 40))
+assert MOD.SCOPE_FOR(app, rookie_loaded, create=False) is None
+assert combat.attack(app, rookie_loaded) == 120 and combat.defense(app, rookie_loaded) == 40
+assert MOD.SCOPE_FOR(app, rookie_loaded, create=False) is None                 # 作っていない
+assert set(rookie_loaded.inventory.inventory) == {"r1", "r2"}                  # 持ち物は動かしていない
+assert combat.attack(app, stranger) is None                                    # 控えの無い人は従来どおり
 
 # ---------------------------------------------------------------- 同じ世界のロード・別の主人公
 # 装備中の品は装備欄の辞書にだけ居る。ロードでそれを捨てないと、セーブの後に手に入れて装備した品が

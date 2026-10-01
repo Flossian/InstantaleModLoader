@@ -2861,6 +2861,7 @@ Lv30 までは 15 上でもう倒れる（ゲームの数値の差が大きい�
 
 かわすかどうかは AI の審判が描写を書く前に決めて、「この者はかわす」と審判に伝える。
 描写と数字が食い違わない。かわしたときは地の文の後ろに「（<名前>は攻撃をかわした）」と出る。
+その手で味方側が全部かわしたときは、被弾の画面の揺れも止める（見切りと被弾は揺れる）。
 
 既定では味方だけがかわす。設定「敵も攻撃をかわす」を ON にすると、敵も同じ式でかわす。
 
@@ -2943,6 +2944,7 @@ MOD を外せば元の「文章だけ」に戻る。セーブに余計なもの�
 | 状態異常が文章のまま | 同じログに `restored ...` が無ければ、審判がその状態異常に中身を付けてこなかった回（無いものは作らない）。設定の「毒や能力低下をちゃんと効かせる」が OFF になっていないかも見る |
 | 通常攻撃が毎回スキル並みに大きい | ローカルのモデルでよく出る。同じログに `basic attack: asked the referee` が出ていれば頼みは届いている（それでも重ねるのはモデルの癖）。出ていなければ設定の「通常攻撃をスキル並みにしない」が OFF になっていないかを見る |
 | かわした描写なのにダメージを受けた（逆も） | 同じログの `evasion rolled for …` にその手の各自の率、`evasion: told the referee` に審判へ伝えたこと、`hit:` の行の末尾に `EVADED` / `grazed` が出る。伝えたのに審判が当たった描写にしたなら、モデルが指示を守らなかった回 |
+| かわしたのに画面が揺れた | 同じログの `shake:` の行。`passed (no recent ally hit)` や `passed (in the action, no ally hit yet)` なら、ゲームが揺らした時機が見分けの範囲（1手の中か、閉じてから 1.5 秒）の外だった |
 | ダメージの数字を画面で見たい | `308_battle_damage_display` を一緒に入れると、1手ごとに増減が並ぶ |
 
 ### `320_guild_adventurer_recruit`: ギルドの冒険者の補充
@@ -5385,8 +5387,8 @@ NPC の `difficulty_level` と `experience_level` から `max(難易度, レベ�
 `python tools\tests\test_npc_starting_equipment.py`。
 偽の app と LLM と装備欄で、加入から保存・印の確定まで、ロード・離脱・不足・身に着けている場面を通す。
 333 の側の `equip` の答えは `tools\tests\test_equipment_slots.py` の段5。
-実機では、加入・LLM の返答・品の画像・持ち物のセーブまで見た（装備欄を通す前の版）。
-装備欄を通す形は実機で測っていない。
+実機では、加入・LLM の返答・品の画像・持ち物のセーブ・装備欄への装備（窓を開かずに入り、起動し直しても残る）まで見た。
+ロードの後に窓を開かないまま戦うと、その仲間の装備が戦闘の数に入っていなかった（`333_` の不具合。直した後は実機で見ていない。VERIFICATION.md §3.77）。
 
 ### `408_visual_changes_based_on_equipment`: 立ち絵を再生成すると装備の見た目が描き足される
 
@@ -5456,7 +5458,7 @@ MOD 同士は呼び合わない。どれも同じ画像生成関数を通るの�
 #### 依存関係
 
 MOD間の直接importは行わない。
-333は`combat`共有窓口、LLMは`instantale_modloader.llm`の`ask`と`create_structure`、設定はmanifest、保存は`state.WorldStore`を使う。
+333は`equipment`共有窓口、LLMは`instantale_modloader.llm`の`ask`と`create_structure`、設定はmanifest、保存は`state.WorldStore`を使う。
 LLMへ送る装備配列には`slot`を含めない。
 
 画像生成関数は、ゲームの`config.json`で選ばれている方式（`sdcpp_cuda` / `sdcpp_vulkan` / `sdcpp_cpu` / `diffusers_openvino`）のものを包む。

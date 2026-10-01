@@ -91,6 +91,7 @@ k は審判の power で決まる（weak 1.0 〜 extreme 約 2.45）。
 かわす者を頼み文の末尾に「確定済み」として書き足す（`llm.wrap_outgoing`。手番の者の名前入りの目印「である'<名前>'の行動ターン」を含む送信だけ）。
 攻撃の重さでは率を変えない（重さで分けると、当てたい審判が大技へ寄る）。
 その手のダメージは同じ判定で 0 か半分にし、地の文の後ろに「（〇〇は攻撃をかわした）」を出す。
+味方側が全部かわした手では、被弾の画面の揺れ（`InstanTaleHUD.shake_window`）も止める。
 
 ## 触らないもの
 
@@ -100,6 +101,7 @@ k は審判の power で決まる（weak 1.0 〜 extreme 約 2.45）。
 
 import math
 import random
+import time
 
 from instantale_modloader import combat, frames, llm, ui
 
@@ -192,6 +194,10 @@ EVASION_CEILING = 0.90
 
 # 見切りで残るダメージの割合。
 GRAZE_KEEP = 0.5
+
+# 1手を閉じた後、何秒までに来た画面の揺れをその手のものとみなすか。
+# 敵の手と次の手の間は LLM の待ちで数秒あるので、隣の手と取り違えない。
+SHAKE_AFTER_ACTION = 1.5
 
 # ゲームの素点の係数 k（power → 倍率。GAME.md §2.10.4 の実測）。
 # 同じ相手に裁きが2本あると、ゲームは最後の1本の素点しか残さないので、
@@ -372,7 +378,8 @@ def evasion_outcome(roll):
 
 # 審判に伝える文。
 EVASION_WORDS = {"evade": "身のこなしで完全にかわす（傷を負わない）",
-                 "graze": "見切って急所を外し、浅い傷で済ませる"}
+                 # 「見切って」と書いた版では、審判が完全にかわした描写にした（10-01 の実機。傷は 10 入った）
+                 "graze": "当たるが、急所を外して浅い傷で済む（かわしはしない。傷は負う）"}
 
 
 def evasion_hint(name, roll):
@@ -614,6 +621,9 @@ def apply(ctx):
         "guard_turn": None,
         # 1手の終わりに画面へ出す行（地の文の後ろ、`308_` の数字の前に付く）
         "notes": [],
+        # 閉じた直後の1手の味方側の被弾。{"at": 時刻, "evaded": 全部かわしたか}。
+        # 揺れが1手を閉じた後に来ても見分けられるように残す
+        "last_ally_hits": None,
     }
 
     screen = ui.Screen(ctx, write, tag=LOG_TAG, mark=MARK)
@@ -793,8 +803,11 @@ def apply(ctx):
         state["evasion"] = {"actor": actor, "rolls": rolls}
         if lines and marker:
             state["hints"][marker] = EVASION_HEADER + "\n" + "\n".join(lines)
-            write("evasion rolled for {}'s turn: {}".format(name_of(actor), "; ".join(
-                "{} evade {:.0%} graze {:.0%}".format(n, r[2], r[3]) for n, r in rolls.items())))
+        if rolls:
+            # 誰もかわさない回も書く（書かないと「振って外れた」と「振っていない」が見分けられない）
+            write("evasion rolled for {}'s turn: {}{}".format(name_of(actor), "; ".join(
+                "{} evade {:.0%} graze {:.0%}".format(n, r[2], r[3]) for n, r in rolls.items()),
+                "" if lines else " (nobody dodges)"))
 
     def evasion_for(attacker, defender_name):
         """この手の攻め手に振ってあった、受け側の判定。無ければ None。"""
@@ -825,6 +838,9 @@ def apply(ctx):
         action = state["action"]
         state["action"] = None
         state["last_defense"] = None
+        if action is not None and action.get("ally_hits"):
+            state["last_ally_hits"] = {"at": time.monotonic(),
+                                       "evaded": all(action["ally_hits"])}
         # 回避の行は地の文の後ろに出す（ダメージの計算中に言うと地の文より先に出る）
         notes, state["notes"] = state["notes"], []
         if action is not None and notes:
@@ -998,6 +1014,9 @@ def apply(ctx):
                 final = max(1, int(round(final * GRAZE_KEEP)))
                 state["notes"].append("（{}は攻撃を見切り、傷を浅くした）".format(defender_name))
                 gear_note += " grazed"
+            if enemy:
+                # 敵の手の味方側の被弾。かわしたかを揺れの判断に使う（`shake_window` の包み）
+                action.setdefault("ally_hits", []).append(dodge == "evade")
             write("hit: {} -> {} {} raw={:g} def={:g} vanilla={} lv={}->{} "
                   "final={} ({:.0%} of {}){}{}{}".format(
                       attacker_name, defender_name,
@@ -1072,6 +1091,38 @@ def apply(ctx):
             except Exception:
                 ctx.log_exc("battle tactics: cannot describe the restored statuses")
         return result
+
+    def shake_verdict():
+        """画面の揺れを止めるか。(止めるか, どこで判断したか)。
+
+        敵の手で味方側の被弾が全部かわした回だけ止める。見切り（傷あり）と被弾は揺らす。
+        ゲームがどの時点で揺らすかは測っていないので、1手の中と、閉じた直後
+        （`SHAKE_AFTER_ACTION` 秒）の両方を見る。
+        """
+        action = state["action"]
+        if action is not None:
+            hits = action.get("ally_hits")
+            if not hits:
+                return False, "in the action, no ally hit yet"
+            return all(hits), "in the action"
+        last = state["last_ally_hits"]
+        if last is not None and time.monotonic() - last["at"] <= SHAKE_AFTER_ACTION:
+            return last["evaded"], "just after the action"
+        return False, "no recent ally hit"
+
+    @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.shake_window",
+              required=False, safe=True)
+    def shake_window(orig, self, *args, **kwargs):
+        """回避した手では画面を揺らさない（攻撃が当たっていないので）。"""
+        try:
+            skip, where = shake_verdict() if EVASION else (False, "evasion off")
+            write("shake: {} ({}) from {}".format(
+                "skipped, all evaded" if skip else "passed", where, frames.caller(depth=6)))
+            if skip:
+                return None
+        except Exception:
+            ctx.log_exc("battle tactics: cannot judge the shake")
+        return orig(self, *args, **kwargs)
 
     @ctx.wrap("__main__:BattlePhaseManager.reduce_status_turns_and_log",
               required=False, safe=True)

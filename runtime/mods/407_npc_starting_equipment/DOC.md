@@ -106,5 +106,5 @@ NPC の `difficulty_level` と `experience_level` から `max(難易度, レベ�
 `python tools\tests\test_npc_starting_equipment.py`。
 偽の app と LLM と装備欄で、加入から保存・印の確定まで、ロード・離脱・不足・身に着けている場面を通す。
 333 の側の `equip` の答えは `tools\tests\test_equipment_slots.py` の段5。
-実機では、加入・LLM の返答・品の画像・持ち物のセーブまで見た（装備欄を通す前の版）。
-装備欄を通す形は実機で測っていない。
+実機では、加入・LLM の返答・品の画像・持ち物のセーブ・装備欄への装備（窓を開かずに入り、起動し直しても残る）まで見た。
+ロードの後に窓を開かないまま戦うと、その仲間の装備が戦闘の数に入っていなかった（`333_` の不具合。直した後は実機で見ていない。VERIFICATION.md §3.77）。

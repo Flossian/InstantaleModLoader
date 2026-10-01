@@ -1086,6 +1086,27 @@ def apply(ctx):
                 defense = found[1]
         return orig(attack, defense, *args, **kwargs)
 
+    def stored_scope(app, holder):
+        """ロードの後で窓をまだ開いていない仲間の、読むだけの scope。控えに位置が無ければ None。
+
+        ロードは仲間の scope を捨て、組み直すのは窓を開くときだけなので、それまで `gear_value` は
+        本体の `equipments`（本体が仲間の分を保存しないので空）を読み、装備が無いと答えていた
+        （実機。ロードの前に装備させた仲間3人の手に `weapon=` が付かず、同じプロセスで装備させた仲間には付いた）。
+        組まずに読むだけにするのは、戦闘の計算の中から呼ばれ、持ち物の辞書を書き換えたくないため
+        （`worn_of` と同じ読み方）。`scopes` には載せない。
+        """
+        if app is None or holder is None or holder is player_of(app):
+            return None
+        cid = getattr(holder, "id", None)
+        if cid is None:
+            return None
+        key = "npc:" + str(cid)
+        _key, bucket = bucket_of(app)
+        if not isinstance(bucket, dict) or not bucket.get(key):
+            return None
+        return {"owner": holder, "key": key, "container": npc_containers.get(key) or {},
+                "situation": SITUATION_TWIN, "player": False}
+
     def gear_value(app, holder, game_key):
         """この人物の装備の値（窓口 `combat` への答え）。装備が無ければ None。
 
@@ -1093,12 +1114,16 @@ def apply(ctx):
         使っていない仲間は本体の `equipments[weapon|wearable]`（402_ が書く id か実体）を持ち物から引いた 1 品。
         """
         stat = dict(rules.GAME_KEYS)[game_key]
-        sc = scope_for(app, holder, create=False)
+        sc = scope_for(app, holder, create=False) or stored_scope(app, holder)
         if sc is not None and (sc["player"] or positions_of(app, sc)[1]):
             found = combined_of(app, sc, game_key)
             if found is not None:
                 return found[1]
-            chosen = rules.best(current_slots(app, sc), sc["container"], game_key)
+            # 品は持ち物の辞書を含めて引く（窓をまだ開いていない仲間の品は持ち物の辞書に居る）
+            items = dict(inventory_of(sc["owner"]) or {})
+            items.update(sc["container"])
+            chosen = rules.best(rules.slots_from_positions(positions_of(app, sc)[1], items),
+                                items, game_key)
             return rules.stat_of(chosen, stat) if chosen is not None else None
         eq = getattr(holder, "equipments", None)
         ref = eq.get(game_key) if isinstance(eq, dict) else None

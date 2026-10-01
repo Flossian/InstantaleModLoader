@@ -66,7 +66,7 @@ MOD 同士は呼び合わない。どれも同じ画像生成関数を通るの�
 ## 依存関係
 
 MOD間の直接importは行わない。
-333は`combat`共有窓口、LLMは`instantale_modloader.llm`の`ask`と`create_structure`、設定はmanifest、保存は`state.WorldStore`を使う。
+333は`equipment`共有窓口、LLMは`instantale_modloader.llm`の`ask`と`create_structure`、設定はmanifest、保存は`state.WorldStore`を使う。
 LLMへ送る装備配列には`slot`を含めない。
 
 画像生成関数は、ゲームの`config.json`で選ばれている方式（`sdcpp_cuda` / `sdcpp_vulkan` / `sdcpp_cpu` / `diffusers_openvino`）のものを包む。

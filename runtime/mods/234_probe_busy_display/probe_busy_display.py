@@ -103,6 +103,11 @@ def apply(ctx):
             return [str(v) for v in list(value)[:TEXT_LIMIT]]
         return frames.repr_value(value)
 
+    def dotless(texts):
+        if not isinstance(texts, list):
+            return texts
+        return ["…" if is_dots(text) else text for text in texts]
+
     def find_hud(app):
         try:
             from instantale_modloader import ui
@@ -137,7 +142,9 @@ def apply(ctx):
             "adding": getattr(app, "is_adding_text", None),
             "left": widgets(hud, "buttons"),
             "right": widgets(hud, "right_buttons"),
-            "display": texts_of(getattr(app, "to_display_buttons", None)),
+            # こちらも点は1字に揃える。版3の最初の形は枠だけ揃えていて、ここの '.' → '..' → '...' を
+            # 変化と見て点送りを1コマごとに閉じていた（実機で全部 ticks=1 だった）
+            "display": dotless(texts_of(getattr(app, "to_display_buttons", None))),
             "choices": len(getattr(app, "buttons", None) or []),
             "send_disabled": getattr(send, "disabled", None) if send is not None else None,
             "picture": picture(getattr(app, "location_image", None)),
