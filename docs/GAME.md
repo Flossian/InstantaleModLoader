@@ -2674,7 +2674,7 @@ npc_id = npcs.make_npc(app, fields, area_id, facility_id, write=write)   # 作�
 > スキルが空のまま敵ターンを迎えると空の `Literal[]` が組まれて落ち
 > （VERIFICATION_LOG.md §2.40）、`image_src` が `None` のままだと
 > `StringProperty` への代入で落ちる（同 §2.42）。
-> 実測で落ちた相手は `make_npc` で作った詳細生成前の NPC（`902_` の容疑者の1件）で、
+> 実測で落ちた相手は `make_npc` で作った詳細生成前の NPC（開発中の MOD が作った容疑者の1件）で、
 > 素の住人が落ちた記録は無い（素の住人は会話の直前に埋まる）。
 > 本体が空を守っていない穴を塞ぐなら VERIFICATION.md §3.6 の1位と2位（どちらも未着手）で、
 > 作る側は先に会話を通させるか `skills` と `image_src` を持たせる。
