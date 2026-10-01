@@ -557,7 +557,8 @@ check("ロード中の NPC は ON でも改名しない",
       [character.name for character in app.world.characters.values()])
 
 # 素データにだけ居る古参（まだ組み立てられていない）も新顔と取り違えない。
-mod, ctx, app = setup({"ALWAYS_RENAME": True})
+# 二つ名は付けない（付くと名前が名簿の名前と一致せず、下の新顔の検査が 10% で落ちる）
+mod, ctx, app = setup({"ALWAYS_RENAME": True, "EPITHET_CHANCE": 0})
 app.save_data_dict["npcs"]["50"] = {"name": "バルガス", "id": "50"}
 app.world_dict["npcs"]["51"] = {"name": "エルミナ", "id": "51"}
 app.load_game_new()
