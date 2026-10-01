@@ -465,7 +465,7 @@ check("物語の依頼の受注では控えを書かない", state_file() == bef
       state_file())
 check("受注の検査で例外を出していない", not ctx.errors, ctx.errors)
 
-# 物語の依頼を片付けてもクリアに数えない（版4。本人の判断）。
+# 物語の依頼を片付けてもクリアに数えない（版4）。
 # 物語の依頼は `quest_type: 'story_quest'` を持つ。欠けていても、id が通常依頼の一覧に無ければ数えない。
 def end_story(quest):
     app.current_quest_data = quest

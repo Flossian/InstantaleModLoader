@@ -129,7 +129,7 @@ TALK_CLS = "DisplayTalkChoice"
 
 #: ゲームが後ろに置く選択肢。自前のボタンはこの手前に入れる。
 #: 素の施設は 操作 → 出る → 会話する の順なので（`232_probe_facility_choices` で実測。
-#: GAME.md §2.2）、MOD の建物もその並びに合わせる（本人の指定）。
+#: GAME.md §2.2）、MOD の建物もその並びに合わせる。
 TAIL_CLASSES = (MOVE_CLS, TALK_CLS)
 
 
@@ -1467,7 +1467,7 @@ def keep_inside(app, facility_id, screen=None, write=None):
     層が1つでも真を返せば中のまま。既定（宣言が無い）は入口へ移す。
 
     **会話や部屋選びの最中でも中のまま。** ゲームは会話の途中を保存して再開できるので、
-    居た場所に戻すのが正しい（本人の指摘）。
+    居た場所に戻すのが正しい。
     版21〜23 はここで入口へ移していたが、再開できなかった原因は
     `modnpc` が会話の相手の id を落としていたことで、場所でも画面でもなかった。
     """
@@ -2202,7 +2202,7 @@ def add_inside_buttons(app, buttons, facility_id, screen=None, write=None):
         value = _press_value(kind, facility_id, choice["key"])
         # 伏せたゲームの選択肢の代わりなら、**その選択肢が居た場所**に出す
         # （`replaces`）。自分の宿の `無料で泊まる` はゲームの `宿泊する` と
-        # 同じ並びで出す（本人の指定）。宣言が無ければ `at`（移動・会話の手前）に足す。
+        # 同じ並びで出す。宣言が無ければ `at`（移動・会話の手前）に足す。
         # 居た場所が `at` と同じでも、その場所に出す
         # （`<` にしていたら、ゲームの並びが `会話する` → `宿泊する` のとき後ろへ落ちた）。
         slot = slots.get(str(choice.get("replaces") or "")) if choice.get("replaces") \

@@ -195,7 +195,7 @@ def world_names(base: str = "") -> list:
 
     全部のセーブを復号するので `list_worlds` より重い（手元の6世界で目に見える差は無い）。
     並べ替えが `casefold` なのは、`lower` では大文字小文字が同じに揃わない
-    言語があるため（世界名は本人が付けるので何が来るか決まらない）。
+    言語があるため（世界名は自由に付けられるので何が来るか決まらない）。
     """
     found = []
     for folder in list_worlds(base):

@@ -1129,7 +1129,7 @@ check("「保管庫をあける」が出る", app.has(module.STORAGE_LABEL), app
 check("ゲームの出口があるときは出口を足さない", not app.has(module.LEAVE_LABEL),
       app.labels())
 # 主を据えるとゲームが `会話する` を出すが、管理人は一覧に出さない人なので誰も並ばない。
-# 大家とは話さない（本人の指定）ので、家では伏せる（`modfacility` の `hide`）。
+# 大家とは話さないので、家では伏せる（`modfacility` の `hide`）。
 check("家では「会話する」を出さない", not app.has(TALK_TEXT), app.labels())
 check("よその施設の「会話する」には触らない",
       TALK_TEXT in [entry.get("text") for entry in app.go(places["inn"])],
@@ -1241,7 +1241,7 @@ check("場面名はゲームに無い名前", app.windows[-1][3] == "real_estate
       app.windows[-1][3])
 check("窓はメインスレッド（Clock）から開く",
       app.windows_from_clock == [True], app.windows_from_clock)
-# 見出しに管理人の名前は出さない（名乗る場面が無いため。本人の指定）。
+# 見出しに管理人の名前は出さない（名乗る場面が無いため）。
 check("右の見出しは建物の名前", app.hud.right_header.text == getattr(home, "name", None),
       app.hud.right_header.text)
 check("見出しに管理人の名前は出さない",

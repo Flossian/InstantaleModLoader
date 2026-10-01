@@ -1513,7 +1513,7 @@ SAVED_SPEC_ATTRS = ("function_correspond_to_input", "input_backup",
 SAVED_ENEMY_ATTRS = ("current_enemy_dict",)
 #: 相手の id を持つ旗。`in_conversation` は真偽ではなく**話している相手の id**が入る
 #: （実機）。**ここは落とさない。** 落とすと会話の途中で保存したセーブが
-#: 会話から再開できなくなる（同日の指摘。`talking_with`）。
+#: 会話から再開できなくなる（同日の実機で分かった。`talking_with`）。
 CONVERSATION_ATTR = "in_conversation"
 #: パーティの id が並ぶ器。`ui.party_stores` は「いまのパーティ」だけを見るが、
 #: セーブには `original_party`（クエスト前の編成）も焼かれる。

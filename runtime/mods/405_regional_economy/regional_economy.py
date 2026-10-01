@@ -1863,7 +1863,7 @@ def apply(ctx):
             setattr(label, "_instantale_regional_text", text)
             setattr(label, "_instantale_regional_plain", base_name)
             # 属性を読むことで、ゲーム側の実際の書体・サイズを経由していることを
-            # 明示する。値は変更せず、ユーザー環境の設定をそのまま使う。
+            # 明示する。値は変更せず、手元の環境の設定をそのまま使う。
             frames.text_of(label, "font_name")
             frames.attr(label, "font_size", None)
         except Exception:

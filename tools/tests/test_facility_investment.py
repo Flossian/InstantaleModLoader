@@ -793,7 +793,7 @@ check("闘技場は窓口に出す（試合の間だけ素データの写しを�
       "colosseum" in cat.enabled_kinds())
 
 print("[種類ごとの設定]")
-# 建設費・1日の売上・最低の規模を種類ごとに動かせる（本人の指定）。
+# 建設費・1日の売上・最低の規模を種類ごとに動かせる。
 # 宣言は `mod.json`、既定は `catalog.KINDS` の表と同じ。
 declared = json.load(io.open(os.path.join(os.path.dirname(MOD), "mod.json"),
                              encoding="utf-8"))["settings"]
@@ -943,7 +943,7 @@ check("建ったことが本文に出る", any("建った" in t for t in app.tex
 check("役場の選択肢に戻る", app.has(EXIT_TEXT), app.labels())
 
 print("[上限]")
-# 上限は種類ごとではなく、その街に建てた合計（本人の指定）。村は1軒。
+# 上限は種類ごとではなく、その街に建てた合計。村は1軒。
 app.press(module.DESK_LABEL)
 check("村は1軒建てたら打ち止め",
       not any(app.has(module.BUILD_LABEL.format(cat.KINDS[k]["label"]))
@@ -963,7 +963,7 @@ check("いまの軒数はこちらが建てた分だけ",
       "合計1軒まで（いま0軒）" in app2.texts[-1], app2.texts[-1:])
 
 print("[主人を作らせる]")
-# 建てるときに1回だけゲームと同じ生成 AI に聞く（本人の指定）。
+# 建てるときに1回だけゲームと同じ生成 AI に聞く。
 # 読めなければ表の12人へ降りる。
 module, ctx, app, world, classes = setup()
 FakeLLM.load([{"name": "サリ", "category": "middle-aged woman",
@@ -1072,7 +1072,7 @@ check("宿屋の絵に MOD は触らない（描かず、頼まない。移動�
 
 print("[ゲームが出す画面との重なり]")
 # `inn` 型ではゲーム自身が `宿泊する(N)` を出す（実機）が、**自分の宿では伏せる**
-# （版40。宿代を取る宿泊を自分の宿に並べる理由が無い。本人の指定）。残るのは「無料で泊まる」。
+# （版40。宿代を取る宿泊を自分の宿に並べる理由が無い）。残るのは「無料で泊まる」。
 # ゲームが組む順は 操作 / 出る / 会話する（`232_probe_facility_choices` で実測。
 # 宿屋だけ `出る` が先頭に来るのは `135_fix_inn_button_order` が直す）。
 app.buttons = [{"text": "宿泊する(4ヵ月)", "spec": PhaseSpec("DisplayVacationChoice", [4])},
@@ -1083,11 +1083,11 @@ CLOCK.settle()
 check("自分の宿ではゲームの「宿泊する」を出さない", not app.has("宿泊する"), app.labels())
 check("「無料で泊まる」は出る", app.has(module.STAY_LABEL), app.labels())
 check("主人との「会話する」は残る", app.has(TALK_TEXT), app.labels())
-# 並びは動かさない。伏せた `宿泊する` が居た場所に `無料で泊まる` を出す（本人の指定）。
+# 並びは動かさない。伏せた `宿泊する` が居た場所に `無料で泊まる` を出す。
 check("「無料で泊まる」はゲームの「宿泊する」が居た場所に出る",
       app.labels().index(module.STAY_LABEL) == 0, app.labels())
 check("売上の選択肢は出る", app.has("売上を受け取る"), app.labels())
-# 素の施設と同じ並びにする（本人の指定）。ゲームは `出る` と `会話する` を後ろに置く。
+# 素の施設と同じ並びにする。ゲームは `出る` と `会話する` を後ろに置く。
 check("素の施設と同じ並び: 操作 → 出る → 会話する",
       app.labels() == [module.STAY_LABEL, "売上を受け取る(まだ無い)", EXIT_TEXT, TALK_TEXT],
       app.labels())
@@ -1594,7 +1594,7 @@ app.go(world_c.areas["2"].nodes["10"].facilities["9"])
 print("[新しい主人公]")
 # 主人公が死んで同じ世界で作り直すと、ゲームは世界を world_data.json から組み直す
 # （初期化された同じ世界）。帳簿は 世界×主人公 で持つので、前の主人公の建物も主人も
-# 新しい主人公には現れない（本人の指定。実機では新しい主人公が前の主人公の
+# 新しい主人公には現れない（実機では新しい主人公が前の主人公の
 # 施設の出資者として迎えられた）。
 before = holdings()
 first_player, first_save = app.player, app.save_data_dict
@@ -1671,7 +1671,7 @@ check("戻した主人は元の主人公を出資者と知っている",
       PLAYER_NAME in (back_note or "") and "二代目" not in (back_note or ""), back_note)
 
 print("[設定画面]")
-# 23 項目を1列に並べると読めないので、種類を行・項目を列にした表の画面を同梱する（本人の指摘）。
+# 23 項目を1列に並べると読めないので、種類を行・項目を列にした表の画面を同梱する。
 # 窓は開かず、純粋な部分（設定名の規則・共通の項目・参考の値札・保存に渡す形）だけ見る。
 TOOLS_DIR = os.path.join(RUNTIME_DIR, os.pardir, "tools")
 for extra in (os.path.normpath(TOOLS_DIR), os.path.dirname(MOD)):

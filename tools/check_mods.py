@@ -233,7 +233,7 @@ def check_manifest(name, manifest):
     # 種別の名乗り（"kind"）。GUI の「種別」列がこれを読む。
     # 無いのは他の表示項目と同じく note（外部の mod が任意の項目で落ちない）。
     # **書いてあるのに語彙の外**は問題 ― ローダが無指定に均すので、
-    # 書いた本人の意図と違って「-」が出続けることになる。
+    # 書いた意図と違って「-」が出続けることになる。
     kind = data.get("kind")
     if kind is None:
         notes.append((path, MANIFEST_NAME,

@@ -129,7 +129,7 @@ PHASE_BUTTON = "{name}({length})"
 PERIOD_WORDING = True
 
 # 卒業した施設でもう一度訓練を受けられるようにするか。
-# **ここだけは既定が素のゲームの値ではない**（本人の指定）。
+# **ここだけは既定が素のゲームの値ではない**。
 # 素のゲームは断る（`十分に学んだ。これ以上ここで得るものはないだろう。` で、
 # 代金も日数も動かない。実測）。
 # 断っている根は施設の**訓練済みの印**（`config["trained"]`。実測）で、
@@ -861,7 +861,7 @@ def apply(ctx):
                 write("WARN phase: no elapse_days call came through this phase; "
                       "the days were left as they are")
             if ALLOW_RETRAIN:
-                # 卒業した段でまた印が立つ。**立たせたままにしない**（本人の指定）。
+                # 卒業した段でまた印が立つ。**立たせたままにしない**。
                 try:
                     fold_trained(app)
                 except Exception:
