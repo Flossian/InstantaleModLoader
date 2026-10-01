@@ -697,7 +697,7 @@ def build_window(model):
     outer.pack(fill="both", expand=True)
 
     # 画面を組む途中の代入で「変えた」と数えないための旗と、画面の控え。
-    state = {"quiet": False, "pages": [], "all": None, "test_open": False}
+    state = {"quiet": False, "pages": [], "all": None, "test_open": False, "editing": None}
 
     def update_title():
         root.title(TITLE + ("（未保存）" if model.dirty() else ""))
@@ -907,8 +907,13 @@ def build_window(model):
                           tags=() if (rule.enabled and page["tab"].enabled) else ("off",))
 
     def load_editor(rule):
-        """選んだ1件を下の欄へ。ここでの代入で「変えた」と数えない。"""
+        """選んだ1件を下の欄へ。ここでの代入で「変えた」と数えない。
+
+        **欄に載せたルールを `state["editing"]` に控える。**
+        書き戻す先（`apply_editor`）は一覧のいまの選択ではなく、この控え。
+        """
         state["quiet"] = True
+        state["editing"] = rule
         try:
             for box in (from_box, to_box, memo_box):
                 box.configure(state="normal")   # disabled のままでは書き換えが通らない
@@ -933,16 +938,20 @@ def build_window(model):
             state["quiet"] = False
 
     def apply_editor(*_args):
-        """欄の内容をルールへ。1文字打つたびに当て、その行だけ描き直す。"""
+        """欄の内容をルールへ。1文字打つたびに当て、その行だけ描き直す。
+
+        書き戻す先は**欄に載せたルール**（`state["editing"]`）。
+        一覧の選択から引いてはいけない。
+        欄から別の行を押すと、欄の `<FocusOut>` が届く時点で一覧の選択は**もう次の行**で、
+        欄の中身はまだ前の行のもの（`<<TreeviewSelect>>` は後から届く）。
+        選択から引くと、前の行の中身が次の行へ書き込まれる。
+        """
         if state["quiet"]:
             return
-        page = current_page()
-        if page is None:
-            return
-        item = page["tree"].focus()
-        rule = page["rules"].get(item)
+        rule = state["editing"]
         if rule is None:
             return
+        page, item = find_row(rule)
         rule.enabled = bool(rule_on.get())
         was_regex = rule.is_regex
         rule.is_regex = bool(rule_regex.get())
@@ -960,12 +969,21 @@ def build_window(model):
         if was_regex != rule.is_regex:
             # 正規表現に変える／やめると置換前の見せ方が変わる（復号するかどうか）。
             load_editor(rule)
-        refresh_row(page, item, rule)
+        if page is not None:
+            refresh_row(page, item, rule)
         update_title()
 
+    def find_row(rule):
+        """そのルールが載っている `(タブの控え, 行)`。一覧に無ければ `(None, None)`。"""
+        for page in state["pages"]:
+            for item, found in page["rules"].items():
+                if found is rule:
+                    return page, item
+        return None, None
+
     def on_prob_blur(_event=None):
-        """打ちかけの確率を、いまルールが持っている値に戻す。"""
-        _tab, rule = selected_rule()
+        """打ちかけの確率を、欄に載せたルールが持っている値に戻す。"""
+        rule = state["editing"]
         if rule is not None and not state["quiet"]:
             state["quiet"] = True
             rule_prob.set(str(rule.prob))
@@ -1376,8 +1394,15 @@ def build_window(model):
         if page is None:
             refresh_all()
             load_editor(None)
-        else:
-            load_editor(page["rules"].get(page["tree"].focus()))
+            return
+        # 行が選ばれていなければ先頭を選ぶ。
+        # 組み直した直後のタブは選択を持たず、そのままだと欄が使えない姿で開く。
+        if not page["tree"].focus():
+            items = page["tree"].get_children()
+            if items:
+                page["tree"].selection_set(items[0])
+                page["tree"].focus(items[0])
+        load_editor(page["rules"].get(page["tree"].focus()))
 
     notebook.bind("<<NotebookTabChanged>>", on_tab_changed)
 
@@ -1404,8 +1429,11 @@ def build_window(model):
         target_label.grid(row=1, column=1, columnspan=2, sticky="w", padx=(8, 0))
         ttk.Label(grid, text="指定").grid(row=2, column=0, sticky="w", pady=(6, 0))
         custom_var = tk.StringVar(value=str(model.settings.get("RULES_PATH") or ""))
-        ttk.Entry(grid, textvariable=custom_var, width=60).grid(
-            row=2, column=1, sticky="ew", padx=(8, 6), pady=(6, 0))
+        custom_entry = ttk.Entry(grid, textvariable=custom_var, width=60)
+        custom_entry.grid(row=2, column=1, sticky="ew", padx=(8, 6), pady=(6, 0))
+        # 開いた時点でフォーカスを中へ入れる。入れないとキーは元の窓へ届き、
+        # 開いてすぐの Enter / Esc が効かない（タブ名の入力窓と同じ扱いにする）。
+        custom_entry.focus_set()
 
         def browse():
             start = os.path.dirname(model.source_path or "") or MOD_DIR
