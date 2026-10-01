@@ -63,6 +63,7 @@
 戻すのは**下がった側だけ**、**追手を出した土地だけ**。
 下がる時機は一定ではない（戦闘の終わりの回と、それより後の回がある）ので、
 戦闘の終わりと、その後に画面が整うたびに見る。逃げて終わった回もここで拾われる。
+見張る回数は戦闘の外の合図だけで数える（手番ごとの合図で尽きないように）。
 
 ##### 押されていないぶんを補う
 
@@ -374,13 +375,19 @@ def apply(ctx):
             why, guard["area"], now_value))
         return False
 
-    def count_signal():
-        """合図が来たときに、控えの寿命を1つずつ進め、抽選の権利を戻す。"""
+    def count_signal(app):
+        """合図が来たときに、控えの寿命を1つずつ進め、抽選の権利を戻す。
+
+        手配度の見張りは**戦闘中の合図では進めない**。
+        合図は戦闘の手番ごとにも来るので、数えると長い戦闘の間に見張りが尽き、
+        手配度が下がる戦闘の後には何も戻らない。
+        """
         memo["rolled"] = False
-        for key, field in (("due", "signals"), ("protect", "signals")):
+        keys = ("due",) if fighting(app) else ("due", "protect")
+        for key in keys:
             record = memo[key]
             if isinstance(record, dict):
-                record[field] = record.get(field, 0) + 1
+                record["signals"] = record.get("signals", 0) + 1
         if memo["phase"] is not None:
             memo["arm_signals"] += 1
 
@@ -615,7 +622,7 @@ def apply(ctx):
         `set_buttons_to_normal` は1〜2秒早く、まだ本文を流している最中なので使わない。
         """
         result = orig(self, *args, **kwargs)
-        count_signal()
+        count_signal(self)
         if memo["repaint"] and battle_screen(self):
             memo["repaint"] = False
             schedule(lambda: repaint_buttons(self))

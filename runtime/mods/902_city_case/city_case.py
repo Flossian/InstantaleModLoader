@@ -17,7 +17,7 @@ AI は描写しかしない。
 同じ轍を踏まないための一番大事な線引き。
 
 2. 真相は最初に決めきる。
-犯人も手がかりの連鎖も事件を組む時点で確定させ、`state/city_case/<世界>.json` に持つ（世界ごとに1ファイル）。
+犯人も手がかりの連鎖も事件を組む時点で確定させ、`state/city_case/<世界>×<主人公>.json` に持つ（周回ごとに1ファイル）。
 後から決めると AI の出力次第で真相が変わる。
 
 3. 開示していない情報は AI に渡さない。
@@ -92,11 +92,12 @@ _RNG = random.Random()
 LOG_BASENAME = "city_case.log"
 
 #: 控えの置き場。`state/` 直下のフォルダで、**MOD 専用の名前**にする。
-#: 中身は世界ごとに1ファイル（`state.WorldStore`）。
-#: 進行中の事件が `<世界>.json`。
+#: 中身は周回（世界×主人公）ごとに1ファイル（`state.WorldStore`）。
+#: 進行中の事件が `<世界>×<主人公>.json`。
+#: 事件も台帳もセーブと同じ寿命なので、同じ世界で主人公を作り直したら引き継がない（TECH.md §5.4）。
 STATE_DIRNAME = "city_case"
 
-#: この MOD が作った NPC の台帳（`<世界>.cast.json`）。
+#: この MOD が作った NPC の台帳（`<世界>×<主人公>.cast.json`）。
 #: セーブの外に持つ（`ledger` の冒頭）。
 #: NPC 自身に印を持たせられないため（項目を足すと33項目の並びが壊れる。
 #: GAME.md §2.23）、掃除の手がかりはここにしか無い。
@@ -341,6 +342,16 @@ TEASE_TEXT = ("【この人物の様子】この人物は町で続いている{c
               "尋ねられていない段階では、何か言いたげな素振りを見せるにとどめ、"
               "見たことの中身は言わないこと。")
 
+#: 容疑者に差し込む匂わせ。
+#: 容疑者は見聞きした者ではなく、疑われて言い分を持つ者（`SUSPECT_TEXT`）。
+#: 証言者と同じ文を渡すと、第一声で目撃を匂わせたのに尋ねても目撃の話が出てこない。
+#: 素振りを見せるところまでは証言者と揃える（DOC.md §1）。
+SUSPECT_TEASE_TEXT = ("【この人物の様子】この者は町で起きた{crime}の件で疑われていて、"
+                      "言い分を持っているが、**尋ねられるまでは自分から詳しく話さない**。"
+                      "尋ねられていない段階では、何か言いたげな素振りを見せるにとどめ、"
+                      "言い分の中身は言わないこと。"
+                      "何かを見聞きしたようには振る舞わないこと。")
+
 KNOWS_TEXT = ("【この人物が必ず話すこと】この人物は、この会話の中で"
               "**自分から**次のことを話す: {fact}。"
               "尋ねられていなくても、世間話のついでに自分から切り出す。"
@@ -464,7 +475,7 @@ def apply(ctx):
 
     write = ctx.logger(LOG_BASENAME, stamp=False)
 
-    # 置き場所の決め方（世界ごとに1ファイル・壊れない書き方・読めなかったときの扱い）は
+    # 置き場所の決め方（周回ごとに1ファイル・壊れない書き方・読めなかったときの扱い）は
     # ローダの語彙（TECH.md §3.2.3）。
     # 以前はこの MOD が1ファイルの中に世界名を持っていて、
     # 別の世界へ移ると進行中の事件をその場で捨てていた。
@@ -495,12 +506,25 @@ def apply(ctx):
         return datetime.datetime.now().isoformat(timespec="milliseconds")
 
     # ------------------------------------------------------------ 控え
+    def key_of(app):
+        """いまの周回の鍵（世界×主人公）。世界名だけの控えが残っていれば先に移す。
+
+        事件を台帳より先に移す。
+        ローダの `other_playthroughs` は `<世界>×<主人公>.cast.json` の語幹を
+        `<主人公>.cast` という別の主人公の周回と読むので、
+        台帳を先に移すと、同じ主人公の事件が「別の周回が在る世界の控え」として移されない。
+        2つを毎回この順で引けば、どちらから使い始めても順番が崩れない。
+        """
+        key = cases.playthrough(app)
+        casts.playthrough(app)
+        return key
+
     def current(app):
-        """いまの世界の事件。控えは世界ごとに分かれている（`WorldStore`）。"""
-        _key, found = cases.of(app)
+        """いまの周回の事件。控えは周回ごとに分かれている（`WorldStore`）。"""
+        found = cases.load(key_of(app))
         name = game.world_name(app)
         if case_mod.is_active(found) and name and not case_mod.belongs_to(found, name):
-            # ファイルが世界ごとなので、ここへ来るのは世界の名前が変わったときだけ。
+            # ファイルの鍵が世界名を含むので、ここへ来るのは世界の名前が変わったときだけ。
             found = drop(app, found, "it belongs to another world ({!r})".format(
                 found.get("world")))
         elif case_mod.is_active(found) and backfill(app, found):
@@ -550,20 +574,19 @@ def apply(ctx):
     def drop(app, found, why):
         write("[{}] dropping the case: {}".format(stamp(), why))
         empty = case_mod.empty()
-        cases.save(loader_state.world_key(app), empty)
+        cases.save(key_of(app), empty)
         return empty
 
     def store(app):
-        cases.save(loader_state.world_key(app))
+        cases.save(key_of(app))
 
     # ------------------------------------------------------------ 台帳と後始末
     def book(app):
-        """この世界で作った NPC の台帳。セーブの外に持つ（`ledger` の冒頭）。"""
-        _key, rows = casts.of(app)
-        return rows
+        """この周回で作った NPC の台帳。セーブの外に持つ（`ledger` の冒頭）。"""
+        return casts.load(key_of(app))
 
     def book_store(app):
-        casts.save(loader_state.world_key(app))
+        casts.save(key_of(app))
 
     def enroll(app, npc_id, name):
         """作った1体を台帳に控える。作った直後に呼ぶ。
@@ -573,25 +596,59 @@ def apply(ctx):
         if ledger.add(book(app), npc_id, name):
             book_store(app)
 
-    def retire(app, npc_ids, why):
+    def retire(app, npc_ids, why, made_now=False):
         """役目を終えた NPC を世界から消して、台帳からも外す。
 
         `set_dead` で印を立てるだけだと、繰り返し遊ぶぶんセーブに溜まり続ける（1件4体・1体あたり 1.4〜8KB）。
         消せる根拠は `world.remove_npc` の冒頭。
+
+        もう本人を指していない id は消さずに台帳から外す（`same_person`）。
+        `remove_npc` は名前を照合しないので、ここで見ないと別人を消す。
+        `made_now` は同じ呼び出しの中で作ったばかりの者を片付けるときに立て、照合しない。
+        作ったばかりなので id が別人に振られる隙は無い。
+        採番が進まず上書きされた者は名前が台帳とずれるので、照合すると消し損ねる（`cast_for`）。
         """
-        done, kept = [], []
+        rows = book(app)
+        npcs = game.save_npcs(app)
+        done, kept, lost = [], [], []
         for npc_id in list(npc_ids):
-            if game.remove_npc(app, npc_id, write=write):
-                ledger.drop(book(app), npc_id)
+            if not made_now and not same_person(npcs, rows, npc_id):
+                ledger.drop(rows, npc_id)
+                lost.append(str(npc_id))
+            elif game.remove_npc(app, npc_id, write=write):
+                ledger.drop(rows, npc_id)
                 done.append(str(npc_id))
             else:
                 kept.append(str(npc_id))
-        if done or kept:
+        if done or kept or lost:
             book_store(app)
-            write("[{}] retired {} npc(s) ({}): {}{}".format(
+            write("[{}] retired {} npc(s) ({}): {}{}{}".format(
                 stamp(), len(done), why, done,
-                "; could not remove {}".format(kept) if kept else ""))
+                "; could not remove {}".format(kept) if kept else "",
+                "; no longer the listed person, dropped from the ledger only "
+                "{}".format(lost) if lost else ""))
         return done
+
+    def same_person(npcs, rows, npc_id):
+        """台帳の id が、いまも控えた本人を指しているか。
+
+        id は使い回される。
+        作った直後に台帳は書くが、セーブはゲームが次の行動で書く（GAME.md §2.16）。
+        その間に落ちると、セーブからは NPC も採番の前進も消えて台帳だけが残る。
+        その id はゲームや他の MOD が後で別人に振りうる。
+        人名は世界で1つにしているので、名前の一致で本人かを見分ける。
+
+        台帳に名前の無い者（名前で拾った置き去り）は、拾った時点で名前が合っている。
+        素データが1つも見えないとき（読み込みの途中など）は判断せず、消しに行く側へ倒す。
+        `remove_npc` が何も見つけなければ台帳に残るので、前の扱いと変わらない。
+        """
+        if not npcs:
+            return True
+        data = npcs.get(str(npc_id))
+        if not isinstance(data, dict):
+            return False
+        listed = ledger.name_of(rows, npc_id)
+        return not listed or data.get("name") == listed
 
     def sweep(app):
         """置き去りを掃除する。進行中の事件のキャストには手を出さない。
@@ -659,12 +716,20 @@ def apply(ctx):
         state["incident"] = found or dict(BUILT_IN["incidents"][0])
         return state["incident"]
 
-    def incident():
+    def incident(found=None):
+        """この事件の題材。
+
+        進行中の事件は控えに入れた題材を先に見る（`case.build` の註）。
+        控えに無ければ `state`、それも無ければ同梱の受け皿。
+        """
+        kept = (found or {}).get("incident")
+        if isinstance(kept, dict) and kept:
+            return kept
         return state.get("incident") or BUILT_IN["incidents"][0]
 
-    def crime():
+    def crime(found=None):
         """文中に差し込む短い語（「盗み」「付け火」）。"""
-        return incident().get("noun", "盗み")
+        return incident(found).get("noun", "盗み")
 
     def whereabouts():
         return (book_of(state.get("app")).get("whereabouts")
@@ -1294,8 +1359,8 @@ def apply(ctx):
             game.world_name(app), area, culprit_id,
             [{"id": m["npc_id"], "tell": m.get("tell", ""),
               "claim": m.get("claim", "")} for m in keep],
-            clues, REWARD_GOLD)
-        cases.save(loader_state.world_key(app), found)
+            clues, REWARD_GOLD, incident=incident())
+        cases.save(key_of(app), found)
         write("\n" + "=" * 72)
         write("[{}] case opened in area {} culprit={} ({})".format(
             stamp(), area, cast[culprit_index]["npc_id"],
@@ -1372,7 +1437,7 @@ def apply(ctx):
             # 作れた分は世界に残る。
             # 消して片付ける。
             # 中途半端な登場人物を町に置きっぱなしにしない。
-            retire(app, made, "the cast could not be completed")
+            retire(app, made, "the cast could not be completed", made_now=True)
             return []
         return made
 
@@ -2094,7 +2159,7 @@ def apply(ctx):
             return
 
         state["writing"] = True
-        state["deadline"] = time.monotonic() + LLM_TIMEOUT + BUSY_GRACE
+        deadline = state["deadline"] = time.monotonic() + LLM_TIMEOUT + BUSY_GRACE
         screen.say(app, WRITING_TEXT)
         # **ゲーム自身と同じ待機表示にする**（`.` → `..` → `...`）。
         # 選択肢が押せるままだと、
@@ -2105,7 +2170,8 @@ def apply(ctx):
         # 必ず解ける保証を先に置く。
         # 書き込みが返ってこなくても、待ち時間を過ぎたら表示を解いて操作を返す。
         # これが無いと、スレッドが固まったときに**選択肢が永久に押せなくなる**。
-        screen.schedule(lambda: give_up(app), LLM_TIMEOUT + BUSY_GRACE)
+        # 予約にはこの書き込みの期限を持たせる（`give_up`）。
+        screen.schedule(lambda: give_up(app, deadline), LLM_TIMEOUT + BUSY_GRACE)
 
         def compose():
             material = None
@@ -2117,7 +2183,7 @@ def apply(ctx):
             # このスレッドは LLM を待つあいだ最長で
             # `LLM_TIMEOUT + BUSY_GRACE` 生き残るので、
             # その間に注入し直されると古い世代の続きが新しい世代と同じ
-            # `state/city_case/<世界>.json` に書き込む。
+            # `state/city_case/<世界>×<主人公>.json` に書き込む。
             # 新しい側は既に控えを読み終えているので、
             # 書いた内容が食い違ったまま残る。
             if ctx.superseded():
@@ -2146,7 +2212,7 @@ def apply(ctx):
         screen.busy_off(app, restore=restore)
         return True
 
-    def give_up(app):
+    def give_up(app, deadline=None):
         """待ち時間を過ぎても返ってこないとき、操作だけ返す。
 
         事件は始めない（書き込みが後から返れば `finish_start` が始める）。
@@ -2155,7 +2221,14 @@ def apply(ctx):
         呼ばれる口が2つある。
         `Clock` の予約と、画面を塗り直すたびの点検（`offer`）。
         予約が飛ばないことがあるので、後者が最後の砦。
+
+        予約は取り消さないので、前の書き込みの予約が後の書き込みの最中に届きうる。
+        予約は自分の書き込みの期限（`deadline`）を持って来て、いまの期限と違えば何もしない。
+        そうしないと、後の書き込みを期限前に解いてしまう。
+        点検の口は `overdue` で期限を見ているので、期限を持たずに呼ぶ。
         """
+        if deadline is not None and state.get("deadline") != deadline:
+            return
         if release(app):
             write("[{}] the material did not come back within {}s; unlocking "
                   "the screen".format(stamp(), LLM_TIMEOUT + BUSY_GRACE))
@@ -2262,7 +2335,10 @@ def apply(ctx):
                 return orig(messages, *args, **kwargs)
             copy = list(messages[:-1])
             replacement = dict(last)
-            replacement["content"] = "{}\n{}".format(last["content"], TEASE_TEXT.format(crime=crime()))
+            # 手がかりの id が無いのは容疑者（`conversation_note`）。
+            tease = TEASE_TEXT if clue_id is not None else SUSPECT_TEASE_TEXT
+            replacement["content"] = "{}\n{}".format(
+                last["content"], tease.format(crime=crime(current(app))))
             copy.append(replacement)
             messages = copy
         except Exception:
@@ -2324,7 +2400,7 @@ def apply(ctx):
         suspect = case_mod.suspect_by_id(found, npc_id)
         if suspect is not None and suspect.get("claim"):
             return SUSPECT_TEXT.format(claim=suspect["claim"],
-                                      crime=crime()), None
+                                      crime=crime(found)), None
         return None, None
 
     def brief(args, kwargs, index, name, where="", character_at=3):

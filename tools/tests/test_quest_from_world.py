@@ -31,6 +31,11 @@ spec.loader.exec_module(MOD)
 for key, spec_ in manifest["settings"].items():
     assert getattr(MOD, key) == spec_["default"], key
 
+# area_description の末尾へ足す側（会話・道のりの指示）より外側に置く。
+# 内側に回ると、当たった回に足した指示ごと差し替えて消してしまう
+for name in ("301_quest_from_conversation", "307_area_move_dungeon", "325_road_opening"):
+    assert name in manifest["after"], name
+
 # roll の両端
 assert not MOD.roll(0, rnd=lambda: 0.0)
 assert MOD.roll(100, rnd=lambda: 0.999)

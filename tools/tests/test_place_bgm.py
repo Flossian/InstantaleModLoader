@@ -509,6 +509,26 @@ try:
     check("log: FAILED is recorded", "FAILED" in log_text)
     check("hook: no unexpected errors",
           all("could not be played" in e for e in ctx.errors), ctx.errors)
+
+    # 14. 世界ファイルが在るのに読めない → 覚えずに鳴らすだけ。ファイルを上書きしない
+    hook2 = ctx2.hooks["scripts.sounds:SoundManager.play_music_from_src"]
+    ward3 = Facility("5", "ward", "桟橋")
+    port = Area("8", "港町", "town", "Assets/sounds/musics/town/calm/x.mp3", [ward3])
+    areas["8"] = port
+    broken = '{"areas": {"7": {"name": "陽光の砦", "playlist": {"town/calm/a.mp3": 100}}'
+    with io.open(world_path, "w", encoding="utf-8") as fh:
+        fh.write(broken)
+    app.player.current_area = port
+    app.player.location = ward3
+    n = len(played)
+    hook2(orig, manager, app, "Assets/sounds/musics/town/calm/x.mp3")
+    with io.open(world_path, encoding="utf-8") as fh:
+        after = fh.read()
+    check("unreadable world file: the area track still plays",
+          len(played) == n + 1 and "/town/calm/" in played[-1].replace("\\", "/"), played[-1:])
+    check("unreadable world file: not overwritten by the remembered track", after == broken, after)
+    check("unreadable world file: the read failure is recorded",
+          any("cannot read" in e for e in ctx2.errors), ctx2.errors)
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 

@@ -60,6 +60,8 @@
 暗い絵・コントラストの低い絵で外れる。
 
 包んで、**ゲームが `None` を返した回だけ**、前処理を変えた絵で同じ関数を呼び直す。
+anime の回の `None` では呼び直さない。ここで拾って返すとゲームの haar の回が来なくなり、
+素の haar で取れた顔を前処理の拾いで置き換える。やり直すのは haar の回（ゲームの最後の試行）が外れた後。
 呼び直すのは包みを全部剥がした素の関数（`patch.unwrap`）で、フックが受け取った `orig` ではない。
 `safe=True` の包みは最後に呼んだ `orig` の結果を本番の答えとして覚えるので、
 探りの呼び出しで投げるとその例外がゲームへ素通しになる（TECH.md §6.1）。
@@ -224,6 +226,15 @@ def apply(ctx):
         if not FACE_RETRY:
             note("顔: ゲームは見つけられず、やり直しは切")
             return None
+        rest = dict(zip(ARG_NAMES, args))
+        rest.update(kwargs)
+        given = str(rest.get("cascade_path") or faces.CASCADES[0])
+        if os.path.basename(given) == faces.CASCADES[0]:
+            # ゲームは1回目（anime）が None なら2回目（haar）を素の絵で呼ぶ（GAME.md §2.30）。
+            # ここで拾って返すと2回目が来ず、素の haar で取れた顔を前処理の拾いで置き換える。
+            # やり直しはゲームの試行が全部外れた後に限る。
+            note("顔: ゲームは {} で見つけられず、ゲームの次の試行に任せる".format(faces.short_name(given)))
+            return None
         raw = raw_detector()
         if raw is None:
             note("顔: ゲームは見つけられず、呼び直す素の関数が引けないのでやり直さない")
@@ -231,16 +242,13 @@ def apply(ctx):
         import cv2
         import numpy as np
         import PIL.Image
-        rest = dict(zip(ARG_NAMES, args))
-        rest.update(kwargs)
         # ゲームがカスケードをどう渡しているか（素の名前か、フォルダ付きか）は
         # ここでしか分からない。1度だけ記録する。
         if not seen_args:
             seen_args.append(True)
             note("顔: ゲームの呼び方 {}".format(rest or "（引数なし。既定のまま）"))
-        # 呼び直しに渡すカスケードは、ゲームが渡して来た形に合わせる。
-        # フォルダ付きで来ていれば同じフォルダの haar、素の名前なら素の名前。
-        given = str(rest.get("cascade_path") or faces.CASCADES[0])
+        # 呼び直しに渡すカスケードは、ゲームが渡して来た形（`given`）に合わせる。
+        # フォルダ付きで来ていれば同じフォルダ、素の名前なら素の名前。
         gray = cv2.cvtColor(np.asarray(image.convert("RGB")), cv2.COLOR_RGB2GRAY)
         tried = []
         for prep in faces.FACE_PREPS:

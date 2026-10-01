@@ -243,6 +243,25 @@ def test_prompt_rewrite():
     facilitator, kind, reason = M.rewrite_texts([M.ARREST_ANCHOR])
     check(kind == "facilitator" and reason == "rewritten", "facilitator rewrite")
     check(M.MARK_PLAYER in facilitator[0], "facilitator marker rule")
+    # 新しい文面の効果（衛兵が現れる）は置き換えた後も残す。
+    check("衛兵が現れ" in facilitator[0], "new arrest effect must survive")
+
+    # 旧い文面も目印として受ける（会話中・クエスト中の facilitator は旧いまま）。
+    old, kind, reason = M.rewrite_texts([M.ARREST_ANCHOR_OLD])
+    check(kind == "facilitator" and reason == "rewritten", "old facilitator rewrite")
+    check(M.ARREST_ANCHOR_OLD not in old[0] and M.MARK_OTHER in old[0],
+          "old anchor must be replaced")
+
+    # 新旧が1つずつ並ぶのは知らない形。
+    _result, kind, reason = M.rewrite_texts([M.ARREST_ANCHOR, M.ARREST_ANCHOR_OLD])
+    check(kind is None and reason == "ambiguous_anchor", "both arrest anchors")
+
+    # 逮捕の説明はあるのに目印が合わない＝ゲームが文面を変えた。
+    # `not_target` に混ぜず、ログに出る理由で返す。
+    drifted = ["- arrest_player: 知らない文面。"]
+    result, kind, reason = M.rewrite_texts(drifted)
+    check(result is drifted and kind is None and reason == "anchor_drift",
+          "anchor drift: {!r}".format(reason))
 
     untouched = ["unrelated"]
     result, kind, reason = M.rewrite_texts(untouched)
@@ -344,6 +363,17 @@ def test_cloud_path(tmp):
     check(len(manager.sent) == 1, "one request must reach the provider")
     check(M.INJECT_MARKER in manager.sent[0][0], "cloud prompt must be rewritten")
     check(M.MARK_PLAYER in manager.sent[0][0], "the marker rule must be sent")
+
+    # 文面のずれは送り口ごとに1度だけログへ残る。
+    for _ in range(2):
+        manager.send_request("m", [{"role": "system",
+                                    "content": "- arrest_player: 知らない文面。"}],
+                             object())
+    drift_log = io.open(os.path.join(tmp, "cloud", M.LOG_BASENAME),
+                        encoding="utf-8").read()
+    check(drift_log.count("anchor_drift") == 1,
+          "anchor drift must be logged once:\n" + drift_log)
+    del manager.sent[1:]
 
     # structure 無しの別名も同じ。
     manager.send_request_with_no_structure(

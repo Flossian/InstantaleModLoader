@@ -215,7 +215,10 @@ def other_playthroughs(state_dir, key) -> list:
             continue
         for name in names:
             stem = os.path.splitext(name)[0]
+            # 同じ周回の副ファイル（`<鍵>.cast.json` / `<鍵>.reroll.json`）は語幹が `<鍵>.cast` になる。
+            # 別の主人公と読むと、その周回の世界名だけの控えがどの MOD でも移らなくなる。
             if stem.startswith(prefix) and stem != own \
+                    and not stem.startswith(own + ".") \
                     and os.path.isfile(os.path.join(path, name)):
                 found.add(stem)
     return sorted(found)
@@ -291,8 +294,8 @@ def world_filename(key, suffix: str = ".json") -> str:
     割に合わないので直さず、ここに書いておく。
 
     > `301_` の `quest_clients.json` はこの心配が無い。
-    > あちらは単一ファイルで、**世界名が中身のキー**になっている
-    > （`data[world_key(app)]`）。
+    > あちらは単一ファイルで、**周回の鍵が中身のキー**になっている
+    > （`data[playthrough_key(app)]`）。
     > 世界ごとにファイルを分ける形（`311_` / `312_` / `122_`）だけが、
     > 名前の一意性に頼っている。
     """

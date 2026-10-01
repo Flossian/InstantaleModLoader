@@ -752,11 +752,12 @@ def apply(ctx):
             return False
         return True
 
-    def apply_holdings(app, world, key, why):
+    def apply_holdings(app, world, key, why, save_data_dict=None):
         """控えの持ち株をこの世界へ当てる。建てた棟数を返す。
 
         ロードの直後と、選択肢が組まれるたびに呼ばれる。既に立っているものは何もしない。
         主人は建物が立った後に置く（フレームワークどうしは順序を約束しない。TECH.md §5.8）。
+        `save_data_dict` はロードの直後だけ渡す（`settle_keeper_names` が今の世界の名前を読む）。
         """
         areas = ui.areas_of_world(world)
         if not areas:
@@ -795,12 +796,12 @@ def apply(ctx):
             state["warned"].discard(("area", key, area_id))
             if not standing:
                 built += 1
-        settle_keeper_names(app, world=world)
+        settle_keeper_names(app, world=world, save_data_dict=save_data_dict)
         if built:
             write("{}: {} building(s) standing in world {!r}".format(why, built, key))
         return built
 
-    def settle_keeper_names(app, world=None):
+    def settle_keeper_names(app, world=None, save_data_dict=None):
         """帳簿に主人の名を控える。重なっていたら後の方を空いている名前へ寄せる。
 
         版24 までは名前を控えず、建てるたびに鍵から選んでいた。候補が6人しかなかったので
@@ -812,10 +813,14 @@ def apply(ctx):
         （素の NPC・他の MOD の人物・プレイヤー。`modnpc.names_in_use`）先に置いてから
         突き合わせる。名前が重なると、ゲームが名前で人を扱う経路
         （立ち絵のフォルダ・LLM へ渡す名前の列挙）で別人に当たるため（VERIFICATION.md §3.68）。
+        数えるのは**今の世界**の名前だけ。ロードの最中は `app.world` も `app` の辞書も
+        前の周回のことがあるので、`world` と引数のセーブ（`save_data_dict`）を渡して読ませる。
+        前の周回の名前で改名された主人は戻さない（帳簿の名前がそのまま続く）。
         """
         own = [str(record.get("keeper")) for record in holdings_of(app)
                if record.get("keeper")]
-        used = list(modnpc.names_in_use(app, skip=own))
+        used = list(modnpc.names_in_use(app, skip=own, world=world,
+                                        save_data_dict=save_data_dict))
         changed = False
         for record in holdings_of(app):
             keeper_id = record.get("keeper")
@@ -1305,24 +1310,62 @@ def apply(ctx):
                            fallback=lambda: run_action(self, action, kind, tier))
         return None
 
+    def register_before_load(app, key):
+        """読む周回の持ち株の層を、`World.__init__` の orig より前に積む。積んだ鍵を返す。
+
+        ローダの関所（内側）は orig の後で控えから建て直すが、戻すのは層の在る id だけ
+        （`restore_world`）。起動して最初のロードでは登録簿が空なので、層を orig の後で積むと
+        建物も主人も控えの写しを使わずに層の初期値から組まれ（試合の進み・主人の記憶が消える）、
+        次の保存でその組み直しが控えの写しを上書きする。立ち位置の救済も建て直しより先に走り、
+        `keep_inside` を名乗っていても中で保存した位置が入口へ移る。
+        先に積めば、同じプロセスで2回目以降に読むときと同じ順になる。
+        """
+        if app is None or not key or key == UNKNOWN_WORLD:
+            return None
+        worlds.forget(key)
+        # 主人の層はロードのたびに積み直す。周回（世界×主人公）が変わると同じ id
+        # （`keeper-<土地>-<番>`）に別の主人が立つので、前の周回の層を残せない。
+        keepers_registered.clear()
+        state["key_override"] = key
+        try:
+            for record in holdings_of(app):
+                register_holding(record)
+        finally:
+            state["key_override"] = None
+        return key
+
     @ctx.wrap("__main__:World.__init__", required=False, safe=True)
     def world_loaded(orig, self, save_data_dict, app, *args, **kwargs):
-        """セーブを読んだ直後。前の世界の覚えを捨て、持ち株を当て直す。"""
+        """セーブを読んだ直後。前の世界の覚えを捨て、持ち株を当て直す。
+
+        層だけは orig の前に積む（`register_before_load`）。
+        """
+        early = None
+        try:
+            early = register_before_load(app, playthrough_key_of_dict(save_data_dict, None))
+        except Exception:
+            ctx.log_exc("investment: cannot register the holdings before the load")
         result = orig(self, save_data_dict, app, *args, **kwargs)
         try:
             key = playthrough_key_of_dict(save_data_dict, None) or playthrough_key(app)
             if app is not None and key and key != UNKNOWN_WORLD:
-                worlds.forget(key)
+                if key != early:
+                    # 先に積めなかったとき（引数のセーブから鍵が決まらない・途中で落ちた）だけ、
+                    # ここで帳簿を読み直して主人の層を積み直す。
+                    worlds.forget(key)
+                    keepers_registered.clear()
                 state["own_stay"] = None
                 state["saved"] = None
                 state["choosing"] = None
                 state["warned"] = set()
                 state["key_override"] = key
-                # 主人の層はロードのたびに積み直す。周回（世界×主人公）が変わると同じ id
-                # （`keeper-<土地>-<番>`）に別の主人が立つので、前の周回の層を残せない。
-                keepers_registered.clear()
                 try:
-                    apply_holdings(app, self, key, "load")
+                    # ローダの関所が立てる控えの鍵は内側の orig の中で消えている。
+                    # 新築・主人の組み立て・配置の控えを読んでいる周回へ書かせるため、
+                    # 同じ鍵をここでも立てる（無いと `app` から決めた前の周回の鍵へ落ちうる）。
+                    with modfacility.keyed(key), modnpc.keyed(key):
+                        apply_holdings(app, self, key, "load",
+                                       save_data_dict=save_data_dict)
                 finally:
                     state["key_override"] = None
                 write("load: the ledger of {!r} has {} holding(s)".format(

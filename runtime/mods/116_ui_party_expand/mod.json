@@ -10,7 +10,7 @@
     "en": "The party panel only has three slots, so the 4th member onwards is never drawn. Adds a button that grows the panel and copies extra slots for them",
     "ja": "パーティ欄の枠は3つしか作られず、4人目以降が出ない。ボタンを足し、押すと帯が上へ伸びて足りないぶんの枠が現れる。入り切らない仲間はページを送って出す。もう一度押すと元に戻る"
   },
-  "version": "3",
+  "version": "4",
   "author": "R01/Flossian",
   "settings": {
     "ROWS_LIMIT": {

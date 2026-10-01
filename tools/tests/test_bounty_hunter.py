@@ -736,6 +736,20 @@ def main():
     check("見張る合図の回数を過ぎたら戻さない",
           app.lawfulness("0") == -35, app.lawfulness("0"))
 
+    app = App({"0": -25})
+    module, ctx = fresh_mod(app, CHANCE_PERCENT=100)
+    arrive(ctx, app)
+    app.current_enemy_dict = {"賞金稼ぎ1": object()}
+    app.buttons = App({"0": -25}, buttons=["BattlePhaseManager"]).buttons
+    for _ in range(module.PROTECT_MAX_SIGNALS + 5):     # 手番ごとに合図が来る長い戦闘
+        ready_screen(ctx, app)
+    app.current_enemy_dict = {}
+    app.buttons = []
+    app.hurt_wanted("0")
+    ready_screen(ctx, app)
+    check("戦闘中の合図では見張りが尽きない（長い戦闘の後も戻す）",
+          app.lawfulness("0") == -25, app.lawfulness("0"))
+
     print("抽選は画面ごとに1回")
     app = App({"0": -25})
     module, ctx = fresh_mod(app, CHANCE_PERCENT=100)

@@ -296,6 +296,20 @@ try:
     check("hook: every battle leaves a [BGMPICK] line", log_text.count("[BGMPICK]") >= 7, log_text.count("[BGMPICK]"))
     check("hook: no unexpected errors",
           all("could not be played" in e for e in ctx.errors), ctx.errors)
+
+    # 在るのに読めない playlist.json は書き戻さない（手で付けた重みを 0 で上書きしない）
+    broken = '{"tracks": {"決戦.mp3": {"normal": 0, "boss": 100,, "colosseum": 0}}}'
+    with io.open(playlist_path, "w", encoding="utf-8") as fh:
+        fh.write(broken)
+    app.in_boss_battle = 1
+    hook(orig, None, app, src)
+    app.in_boss_battle = 0
+    with io.open(playlist_path, encoding="utf-8") as fh:
+        after = fh.read()
+    check("hook: unreadable playlist is left as is", after == broken, after[:80])
+    check("hook: unreadable playlist -> the game's track", played[-1] == src, played[-1:])
+    check("hook: unreadable playlist is reported",
+          any("cannot read" in e for e in ctx.errors), ctx.errors)
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 

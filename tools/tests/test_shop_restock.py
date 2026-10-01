@@ -13,8 +13,10 @@ Clock を差し込み、次を確認する。
   巻戻し   … 古いセーブで日付が戻ったら、控えを付け直すだけで空にしない
   逃げ道   … 空にしても補充されない作りなら、控えを戻して以後は空にしない
   直呼び   … 段(tier)を見たことがあれば set_item_from_world_data を自分で呼ぶ
-  控え     … `state/shop_restock/<世界名>.json` に鍵の並びのまま書かれる。
+  控え     … `state/shop_restock/<世界名×主人公名>.json` に鍵の並びのまま書かれる。
              世界が違えば混ざらない
+  周回     … 世界名だけの控えは見つけた時点の主人公へ移す。同じ世界で作り直した
+             主人公の初めての来店は初回の扱い（前の主人公の控えを読まない）
   安全     … 主が引けない・日数が読めない場面では何もしない（品物は無事）
 """
 import importlib.util
@@ -35,6 +37,7 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml                      # noqa: E402
+from instantale_modloader.state import PLAYTHROUGH_SEP, world_filename   # noqa: E402
 
 
 def find_mod(suffix):
@@ -488,8 +491,14 @@ def module_store(module):
     return getattr(sys, module.STORE_ATTR, {})
 
 
-def state_file(world_name="テスト世界"):
-    path = os.path.join(STATE_DIR, "shop_restock", world_name + ".json")
+def state_path(world_name="テスト世界", player_name="テストプレイヤー"):
+    """控えのファイル。`player_name=None` は世界名だけ（前の版の置き場）。"""
+    key = world_name + PLAYTHROUGH_SEP + player_name if player_name else world_name
+    return os.path.join(STATE_DIR, "shop_restock", world_filename(key))
+
+
+def state_file(world_name="テスト世界", player_name="テストプレイヤー"):
+    path = state_path(world_name, player_name)
     if not os.path.isfile(path):
         return None
     with io.open(path, encoding="utf-8") as fh:
@@ -718,10 +727,14 @@ def main():
     shop(ctx, manager)
     saved_reply, LLM.reply = LLM.reply, None
     app.world.days_elapsed = 200
+    LLM.asked.clear()
     try:
         shop(ctx, manager)
     finally:
         LLM.reply = saved_reply
+    prompt = LLM.asked[0][1][0]["content"] if LLM.asked else ""
+    check("新規生成: 雛形の値が足りなければ順に繰り返す",
+          "[30, 31, 30, 31]" in prompt, prompt)
     names = sorted(v.get("name") for v in owner.inventory.values())
     check("新規生成: LLM が返さなければ雛形の品名で作り直す",
           names == ["剣", "薬"], names)
@@ -787,6 +800,37 @@ def main():
     check("控え: 世界ごとに別のファイル",
           state_file("世界A") is not None and state_file("世界B") is not None,
           os.listdir(os.path.join(STATE_DIR, "shop_restock")))
+
+    # -- 周回の鍵（世界×主人公）------------------------------------------
+    # 前の版が作った世界名だけの控えは、見つけた時点で遊んでいる主人公のものとして移す。
+    reset_state()
+    old_path = state_path(player_name=None)
+    os.makedirs(os.path.dirname(old_path), exist_ok=True)
+    with io.open(old_path, "w", encoding="utf-8") as fh:
+        json.dump({OWNER_ID: {"day": 100, "facility": SHOP_ID, "count": 1,
+                              "tier": None}}, fh, ensure_ascii=False)
+    module, ctx = fresh_mod()
+    app, owner, facility = make_world(days=129, stock={"item_1": {"name": "元の品"}})
+    shop(ctx, ShoppingStartManagerRemake(app))
+    check("周回: 世界名だけの控えを遊んでいる主人公へ移す",
+          (state_file() or {}).get(OWNER_ID, {}).get("day") == 100
+          and not os.path.exists(old_path),
+          os.listdir(os.path.join(STATE_DIR, "shop_restock")))
+    check("周回: 移した控えで日数を数える（未到来のまま）",
+          list(owner.inventory) == ["item_1"], owner.inventory)
+
+    # 同じ世界で作り直した主人公。日数は骨格の値に戻り、店の持ち物も空から。
+    # 前の主人公の控えを読むと「一度開いた店」になり、初回の品揃えまで外してしまう。
+    app2, owner2, _ = make_world(days=30, stock={})
+    app2.player.name = "別の主人公"
+    shop(ctx, ShoppingStartManagerRemake(app2))
+    check("周回: 作り直した主人公の初めての来店は初回の扱い（品揃えを作らせる）",
+          len(owner2.inventory) == 3, owner2.inventory)
+    check("周回: 作り直した主人公の控えは別のファイル",
+          (state_file(player_name="別の主人公") or {}).get(OWNER_ID, {}).get("day") == 30,
+          os.listdir(os.path.join(STATE_DIR, "shop_restock")))
+    check("周回: 前の主人公の控えはそのまま",
+          (state_file() or {}).get(OWNER_ID, {}).get("day") == 100, state_file())
 
     # -- 主が引けない / 日数が読めない -----------------------------------
     reset_state()

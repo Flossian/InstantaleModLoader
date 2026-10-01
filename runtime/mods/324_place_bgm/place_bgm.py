@@ -580,10 +580,22 @@ def apply(ctx):
         track = chosen.get("track")
         return track if in_pool(track, pool) else None
 
+    def unreadable(world):
+        """世界ファイルが在るのに読めないか（破損・一時的なロック）。
+
+        読めなかった回の控えは空に倒れている（`WorldStore.load`）。
+        その上に覚えた曲を足して書くと、設定画面が書いた個別指定と
+        他の土地の覚えた曲が退避されずに消える。
+        """
+        path = worlds.path(world)
+        return os.path.isfile(path) and not isinstance(ctx.read_json(path, None), dict)
+
     def remember(info, level, memory, track):
         if not memory or not info.get("world"):
             return
         with worlds.lock:
+            if unreadable(info["world"]):
+                return              # 覚えずに鳴らすだけ。ファイルが直れば次の選曲から覚える
             bucket = worlds.load(info["world"])
             entry = memory_entry(bucket, memory, create=True)
             if entry is None:

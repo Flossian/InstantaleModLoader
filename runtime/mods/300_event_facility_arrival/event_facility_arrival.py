@@ -92,7 +92,15 @@ NPC ごとに数える。
 話しかけると決めたら申し出（優先度 `ARRIVAL_PRIORITY`）、会話を始める直前に
 自分より優先度の高い申し出があれば譲る。譲った回は間引きの回数（`COOLDOWN_VISITS`）に数えない。
 
-版3: ローダの窓口 `arrivals` で、同じ到着で会話を始めるほかの MOD に譲るようにした。
+分け合うのは conversation モードだけ。
+narration モードのセリフは `move_phase` の内側（入れ子の narrator）で足すので、
+ほかの MOD が申し出るより先に画面へ出ていて、譲りようがない。
+そこで narration モードは申し出も勝者の確認もしない。
+このため narration モードでは、足した1行とほかの MOD が始める到着の会話
+（`911_` のライバルの声かけなど）が同じ到着で重なることがある。
+申し出だけ出すと、同じ優先度で後から申し出たほかの MOD が、会話を始めないこちらに譲って黙ってしまう。
+
+版3: ローダの窓口 `arrivals` で、同じ到着で会話を始めるほかの MOD に譲るようにした（conversation モードのみ）。
 """
 
 import random
@@ -414,7 +422,9 @@ def apply(ctx):
             getattr(facility, "name", ""), facility_type, roll, chance,
             getattr(npc, "name", ""), npc_id))
         state["fired_at"][facility_id] = visits
-        arrivals.offer(app, ARRIVAL_OWNER, ARRIVAL_PRIORITY)
+        if EVENT_MODE == "conversation":
+            # narration モードは分け合いに加わらない（モジュール冒頭「ほかの MOD に譲る」）。
+            arrivals.offer(app, ARRIVAL_OWNER, ARRIVAL_PRIORITY)
         return facility, npc_id, npc
 
     # ================================================================

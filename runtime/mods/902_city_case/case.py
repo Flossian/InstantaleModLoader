@@ -32,7 +32,7 @@
 加えて施設の `config` に書かれてセーブに残る。
 だから状態は `state/` に持ち、**渡すプログラムをその都度組む**。
 
-出し入れはローダの `state.WorldStore` が持つ（`state/city_case/<世界>.json`）。
+出し入れはローダの `state.WorldStore` が持つ（`state/city_case/<世界>×<主人公>.json`）。
 読めなかったときに空へ倒すか記録を残すかの判断も、
 壊れないように書く手順もあちらに1つだけ在る。
 """
@@ -49,7 +49,7 @@ def empty():
     return {"stage": NONE}
 
 
-def build(world_name, area_id, culprit, suspects, clues, reward):
+def build(world_name, area_id, culprit, suspects, clues, reward, incident=None):
     """事件を1件組む。答えは最初に決めきる（Shadow of Doubt 型）。
 
     後から決めると、AI の出力次第で真相が変わってしまう。
@@ -57,6 +57,7 @@ def build(world_name, area_id, culprit, suspects, clues, reward):
 
     `suspects` は `{"id": ..., "tell": ...}` の並び。
     `tell` は見て分かる特徴で、プレイヤーが手がかりと突き合わせる材料になる。
+    `incident` は題材（`patterns/incidents.json` の1件）。
     """
     return {
         "stage": INVESTIGATING,
@@ -78,6 +79,11 @@ def build(world_name, area_id, culprit, suspects, clues, reward):
         "evidence": [],
         "verdict": None,
         "thin": 0,
+        # 題材。
+        # 引いた題材は `apply()` の中の `state` にしか無く、再起動や注入し直しで同梱の受け皿（盗み）に戻る。
+        # 開始時のあらましと会話の差し込みが食い違わないよう、控えに持つ。
+        # これを持たない古い控えは、読む側（`incident`）が受け皿で読む。
+        "incident": dict(incident) if incident else None,
     }
 
 

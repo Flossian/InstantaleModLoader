@@ -102,10 +102,10 @@ HISTORY_WORDS = {"rival": "「{title}」はあなたが先に片付けた",
                  "failed": "「{title}」はあなたがしくじった",
                  "cleanup": "「{title}」はあなたがしくじった後、{player}に片付けられた"}
 HISTORY_NOTE = "最近の取り合い: {items}。"
-#: `301_quest_from_conversation` の控え（世界名 → {依頼id: 依頼人}）。
+#: `301_quest_from_conversation` の控え（周回の鍵（世界×主人公） → {依頼id: 依頼人}）。
 #: 会話から頼んで作ってもらった依頼は狙わない（読むだけ。DOC.md §1）。
 CONVERSATION_QUESTS_FILE = "quest_clients.json"
-#: `317_reputation` の控えのフォルダ（世界名ごと）。二つ名を読むだけ。
+#: `317_reputation` の控えのフォルダ（周回の鍵ごと）。二つ名を読むだけ。
 REPUTATION_DIRNAME = "reputation"
 #: 登場の語りの頼み。`output_data\` に別々に残るよう MOD 専用の名前。
 MANAGER_INTRO = "mod_rival_adventurer_intro"
@@ -219,14 +219,19 @@ def apply(ctx):
                    if quest is not None and is_completed(quest))
 
     def conversation_quests(app):
-        """`301_` が会話から作った依頼の id。読めなければ空。"""
+        """`301_` が会話から作った依頼の id。読めなければ空。
+
+        `301_` の控えは周回の鍵で引く（TECH.md §5.4）。世界名だけの鍵は読まない。
+        移すのは `301_` の仕事で、移す前に読むと同じ世界の前の主人公の依頼 id を除きうる
+        （依頼の id は作り直した周回で振り直される）。移されるまでは除く依頼が無いだけで済む。
+        """
         try:
             path = os.path.join(ctx.state_dir, CONVERSATION_QUESTS_FILE)
             if not os.path.isfile(path):
                 return set()
             data = ctx.read_json(path, {})
-            world = (data or {}).get(loader_state.world_key(app))
-            return {str(qid) for qid in world} if isinstance(world, dict) else set()
+            mine = (data or {}).get(loader_state.playthrough_key(app))
+            return {str(qid) for qid in mine} if isinstance(mine, dict) else set()
         except Exception:
             ctx.log_exc("rival adventurer: cannot read {}".format(CONVERSATION_QUESTS_FILE))
             return set()
@@ -313,9 +318,12 @@ def apply(ctx):
         return ui.character_name(app, rival.get("id"), fallback=rival.get("name") or "")
 
     def epithet_of(app):
-        """`317_` の二つ名。入っていない・まだ編まれていなければ ""。"""
+        """`317_` の二つ名。入っていない・まだ編まれていなければ ""。
+
+        `317_` の控えは周回の鍵で引く（`conversation_quests` と同じく、世界名だけの鍵は読まない）。
+        """
         try:
-            _key, bucket = reputation.of(app, fresh=True)
+            bucket = reputation.load(loader_state.playthrough_key(app), fresh=True)
         except Exception:
             ctx.log_exc("rival adventurer: cannot read the epithet")
             return ""
@@ -899,7 +907,7 @@ def apply(ctx):
             write("approach: ConversationStartManager not found")
             return
         with worlds.lock:
-            _key, bucket = ledger(app)
+            key, bucket = ledger(app)
             topic = rivalry.next_topic(bucket)
             if topic is None:
                 arrivals.withdraw(app, OWNER)
@@ -908,20 +916,29 @@ def apply(ctx):
         tell_intro(app)                 # 登場の語りがまだなら、声をかける前に出す
         text = rivalry.format_text(topic_texts.get(topic.get("kind"), ""),
                                    player=player_name(app), title=topic.get("title"))
+        # 種は印に持たせ、第一声を読み替えられたときに下げる（`conversation_starter`）。
+        # `process_choice` は詳細生成（GAME.md §2.23）を別スレッドへ回して先に戻るので、
+        # 戻った時点で下げると、印が期限切れで捨てられたときに種だけが消える。
         store["approach"] = {"npc": str(rival_id), "topic": text, "at": time.monotonic(),
-                             "facility": facility_name(app, facility)}
+                             "facility": facility_name(app, facility),
+                             "seed": topic, "key": key}
         try:
             app.process_choice(manager_cls(app, rival_id), name)
         except Exception:
             store["approach"] = None
             ctx.log_exc("rival adventurer: cannot start the approach")
             return
-        # 種を下げるのは会話を始められた後（始められなければ次の到着でまた使う）。
-        with worlds.lock:
-            key, bucket = ledger(app)
-            rivalry.drop_topic_like(bucket, topic)
-            worlds.save(key)
-        write("approach: {} spoke to the player about {}".format(name, topic.get("kind")))
+        write("approach: {} will speak to the player about {}".format(name, topic.get("kind")))
+
+    def spend_topic(mark):
+        """第一声を読み替えて会話を始められた。使った種を下げる（始められなければ次の到着でまた使う）。"""
+        try:
+            with worlds.lock:
+                bucket = worlds.load(mark["key"])
+                rivalry.drop_topic_like(bucket, mark["seed"])
+                worlds.save(mark["key"])
+        except Exception:
+            ctx.log_exc("rival adventurer: cannot drop the spent topic")
 
     arrivals.install(ctx, write)
 
@@ -1072,8 +1089,11 @@ def apply(ctx):
         write("approach: opening line -> {!r}".format(replaced["content"][:80]))
         if "messages" in kwargs:
             kwargs = dict(kwargs, messages=new_messages)
-            return orig(*args, **kwargs)
-        return orig(new_messages, *args[1:], **kwargs)
+            result = orig(*args, **kwargs)
+        else:
+            result = orig(new_messages, *args[1:], **kwargs)
+        spend_topic(mark)
+        return result
 
     def make_load(target):
         label = target.rsplit(".", 1)[-1]

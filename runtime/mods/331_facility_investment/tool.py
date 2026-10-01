@@ -206,6 +206,9 @@ def build_window(mod_dir=MOD_DIR):
         var.trace_add("write", refresh_previews)
 
     saved = {"values": {}}
+    # ファイルに在る値。「既定に戻す」の後の比べ先で、保存のたびに差し替える
+    # （起動時の値のままだと、保存した後の「既定に戻す」を変更なしと読む）。
+    last = {"values": current}
 
     def load_values(values):
         table_set(values)
@@ -234,13 +237,14 @@ def build_window(mod_dir=MOD_DIR):
                 config.store_path(runtime), type(exc).__name__, exc), parent=root)
             return False
         saved["values"] = as_shown(values)
+        last["values"] = values
         status.configure(text="保存しました {}  {}".format(
             time.strftime("%H:%M:%S"), config.store_path(runtime)))
         return True
 
     def reset():
         load_values(dict((k, d["default"]) for k, d in found.items()))
-        saved["values"] = as_shown(current)         # 「既定に戻す」は未保存の変更のまま
+        saved["values"] = as_shown(last["values"])  # 「既定に戻す」は未保存の変更のまま
 
     def close():
         modtool.save_window(root_dir, mod_dir, root)

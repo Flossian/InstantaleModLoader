@@ -66,6 +66,10 @@ NPC のセーブ項目にも `memory` / `life_log` / `relationship` /
   1回作ったテキストを両方で使う
 - 照合に使う文字列の葉も `KEEP_CHARS` で切る。
   版5は項目のテキストだけを切っていて、葉は長さの上限なしに控えに残っていた
+
+版7: 会話終了の resolver 判定を NPC の引き当てより先にした。
+世界が変わった回は旧世界の id が新世界に居ないと判定が書かれず、居れば別人を差分として控えていた。
+世界が変わった回は判定だけ書いて NPC を引かない。
 """
 
 import datetime
@@ -571,25 +575,29 @@ def apply(ctx):
         app = ui.find_app()
         characters = getattr(getattr(app, "world", None), "characters", None) \
             if app is not None else None
-        npc = characters.get(npc_id) if isinstance(characters, dict) else None
-        if npc is None:
+        if not isinstance(characters, dict):
+            # 世界が読めないうちは世界の鍵も `"_"` に落ちるので、判定もしない。
             write("[{}] 会話終了: NPC {!r} が world.characters に居ない".format(
                 stamp(), npc_id))
             return
-        npc_name = one_line(flat(getattr(npc, "name", "")), 40) or "?"
         wkey = world_key(app)
         # ★ この会話に要約が走ったかの即時判定。最終ターンより後に
         #   resolver が発火していれば「発火」。不発の閉じ方を特定する
         #   ための行なので、ここだけは太字級に目立たせる。
+        #   判定は NPC の実体を使わないので、NPC を引くより先に書く。
+        #   世界が変わった回の npc_id は旧世界の id で、新世界には居ないことがあるため。
         last_call = state["last_conv_call"]
         last_resolver = state["last_resolver"]
         if state["last_world"] is not None and state["last_world"] != wkey:
             # 会話ターンを見た世界と違う世界で「閉じ」を検出した。
             # 会話を閉じずにタイトル/ロードへ抜けた形で、
             # その会話は要約されていない。
+            # 旧世界の id で新世界を引くと別人を会話終了の差分として控えるので、
+            # NPC は引かずに終える。
             write("[{}] resolver: ★不発★ 会話を閉じないまま世界が変わった"
                   "（{} での会話は要約されずに消えた）".format(
                       stamp(), state["last_world"]))
+            return
         elif last_call is None:
             write("[{}] resolver: 判定不能（この起動で会話ターンを見ていない）"
                   .format(stamp()))
@@ -600,6 +608,12 @@ def apply(ctx):
             write("[{}] resolver: ★不発★ 最終ターン後に要約が走らないまま"
                   "会話が閉じた（この会話はゲーム側のどこにも要約されない）"
                   .format(stamp()))
+        npc = characters.get(npc_id)
+        if npc is None:
+            write("[{}] 会話終了: NPC {!r} が world.characters に居ない".format(
+                stamp(), npc_id))
+            return
+        npc_name = one_line(flat(getattr(npc, "name", "")), 40) or "?"
         remember("{}:{}".format(wkey, npc_id), npc_id, npc_name,
                  capture_fields(npc), "会話終了の後")
 

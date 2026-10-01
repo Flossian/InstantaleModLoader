@@ -40,9 +40,15 @@ NPC の応答が無条件に友好的になる ＝ 交渉も説得も勝手に�
 | 親しさ（`ACQUAINTANCE_STEPS`） | どこまで打ち解けたか | 好感度が浅いほど段を下げる |
 
 ```
-段 = 素の段 + 好み - 親しさの不足
+好みの段 = 素の段 + 好み
+段 = max(min(好みの段, 中立の段), 好みの段 - 親しさの不足)
 親しさの不足 = (max(0, ACQUAINTANCE_STEPS - 好感度の段差) + 1) // 2
 ```
+
+`中立の段` は文の付かない帯（無い並びでは素の段）。
+親しさの不足が下げるのは中立の段までで、中立より下へ動かすのは好みだけ。
+不足をそのまま引くと、魅力が普通のキャラ（素の段が中立）は
+好みにかかわらず初対面の全員から「あまり好みではない」で見られてしまう。
 
 `好感度の段差` は好感度の段が既定（初対面の「警戒心がある」）から何段上かで、
 `ACQUAINTANCE_STEPS` の既定 4 は「多少の好意がある」に当たる。
@@ -60,6 +66,8 @@ NPC の応答が無条件に友好的になる ＝ 交渉も説得も勝手に�
 魅力に振ったキャラでも、初対面の相手からは「魅力を感じている」前後で、
 そこから相手ごとに好みのぶんだけ散る。
 打ち解けた相手にだけ最上段まで届く。
+魅力が普通のキャラは、初対面では好みが -1 の相手だけが1段下に見る。
+好みが +1 の相手が1段上に見るのは、打ち解けてから。
 
 下限は「ひどく醜く思っている」の1つ上に置いてある（素の段がそれより下ならそのまま）。
 好みや親しさで醜いことにはしない。
@@ -127,6 +135,14 @@ Character かどうかは**持ち物で見分ける**（`relationship` が dict 
 どちらでも決まらなければ好みの増減を 0 にし（親しさのぶんだけが効く）、
 **その場のローカルと `self` の中身を、呼び出し元ごとに1度だけ記録に写す** ―
 次に外れたとき、相手がどこに居るのかがログだけで分かるようにするため。
+
+相手が決まらないまま文を作り直す場面が3つある（依頼のクリアで同行者の全員、
+訓練、休暇の交流。`out/charisma_impression.log` の「相手が拾えない」の呼び出し元）。
+ここで好み 0 の値が保存されると、好みで段が変わる相手の文が場面のたびに
+書き換わる。そこでこの3つの入口（`QuestEndManager` / `TrainingPhaseManager` /
+`VacationSocializeResolveManager` の `execute`）を包み、抜けたときに
+作り直された文の魅力の段だけを前の値へ戻す。好感度の段はゲームが作り直した
+ものを残す。前に文が無かった相手は戻す値が無いので、好み 0 の値のまま残す。
 
 好みの増減は「世界名:NPC の id:プレイヤー名」の md5 から決める決定的な値で、
 遊び直しても同じ相手なら同じになる。
@@ -300,7 +316,7 @@ def _edges_of(pairs, index):
 def apply(ctx):
     append = ctx.logger(LOG_BASENAME)
     state = {"lines": 0, "ladders": False, "taste": {},
-             "blind": set(), "talking": {}, "pending": {}}
+             "blind": set(), "talking": {}, "pending": {}, "keeping": {}}
 
     def write(text):
         if state["lines"] >= MAX_LINES:
@@ -696,6 +712,81 @@ def apply(ctx):
             except Exception:
                 pass
 
+    # -- 相手が決まらない場面では保存済みの段を据え置く ------------------------
+    #
+    # 依頼のクリア（同行者全員の好感度 +20）・訓練・休暇の交流は、相手を
+    # 引数に持たないまま感情の文を作り直す（GAME.md §2.25.1）。ここで好み 0 の
+    # 値を返すと、好みで段が変わる相手の文がそのたびに書き換わり、次の会話で
+    # また戻る（「相手ごとに固定」が崩れる）。段を決める側は誰の文かを知らない
+    # ので、入口を包んで抜けたときに魅力の段だけを前の値へ戻す。好感度の段は
+    # ゲームが作り直したものをそのまま残す。
+    #
+    # 前に文が無かった相手（まだ一度も作られていない）は戻す値が無いので、
+    # 好み 0 の値のまま残す。素の値を返すと、魅力に振ったキャラが最上段で
+    # 書かれてしまうため。
+    def stored_texts():
+        """名簿の全員について `(NPC, relationship["player"], 保存済みの文の写し)`。"""
+        characters = frames.attr(world_of(), "characters", None)
+        out = {}
+        if not isinstance(characters, dict):
+            return out
+        for key, npc in list(characters.items()):
+            relation = frames.attr(npc, "relationship", None)
+            entry = relation.get("player") if isinstance(relation, dict) else None
+            texts = entry.get("affinity_text") if isinstance(entry, dict) else None
+            if isinstance(texts, (list, tuple)) and texts:
+                out[key] = (npc, entry, tuple(texts))
+        return out
+
+    def keep_charm(before, site):
+        """包んだ呼び出しの間に作り直された文の、魅力の段だけを前の値へ戻す。"""
+        ladders = state["ladders"]
+        if not ladders:
+            return
+        index = ladders["charm_index"]
+        for npc, entry, old in before.values():
+            texts = entry.get("affinity_text")
+            if not isinstance(texts, (list, tuple)) or tuple(texts) == old:
+                continue
+            kept = old[index] if index < len(old) else None
+            now = texts[index] if index < len(texts) else None
+            if kept == now:
+                continue
+            entry["affinity_text"] = rebuild(texts, index, kept, texts)
+            write("{}: 相手が決まらない呼び出し（{}）なので魅力の段を据え置く "
+                  "{!r} → {!r}".format(frames.text_of(npc, "name") or "?",
+                                        site, now, kept))
+
+    @ctx.wrap("__main__:QuestEndManager.execute", required=False)
+    @ctx.wrap("__main__:TrainingPhaseManager.execute", required=False)
+    @ctx.wrap("__main__:VacationSocializeResolveManager.execute", required=False)
+    def keep_phase(orig, self, *args, **kwargs):
+        # `conversation_phase` と同じ理由で `safe=True` は付けず、後始末まで
+        # 含めて自分で握り潰す。
+        thread, before, mark, saved = None, None, None, None
+        try:
+            thread = threading.get_ident()
+            before = stored_texts()
+            saved = state["keeping"].get(thread)
+            mark = {"blind": False}
+            state["keeping"][thread] = mark
+        except Exception:
+            mark = None
+        try:
+            return orig(self, *args, **kwargs)
+        finally:
+            try:
+                if mark is not None:
+                    if saved is None:
+                        state["keeping"].pop(thread, None)
+                    else:
+                        state["keeping"][thread] = saved
+                    # 相手が決まった呼び出しだけなら、作り直された段が正しい。
+                    if mark["blind"]:
+                        keep_charm(before, type(self).__name__)
+            except Exception:
+                pass
+
     # ------------------------------------------------------------ 段を決める
     def decide(ladders, row, taste):
         """`(新しい段, 覚え書き)`。触らないときは新しい段に None を返す。"""
@@ -712,12 +803,22 @@ def apply(ctx):
             gap = ladders["affinity"].index(affinity_text) - ladders["neutral"]
         else:
             gap = 0                            # 読めない段は初対面と同じに扱う
-        short = (max(0, ACQUAINTANCE_STEPS - gap) + 1) // 2
+        # 0 は「親しさを見ない」。式のままだと初対面より下の段（gap<0）で
+        # 不足が 1 以上残り、最上段の封じも掛かるので、ここで外す。
+        watch = ACQUAINTANCE_STEPS > 0
+        short = (max(0, ACQUAINTANCE_STEPS - gap) + 1) // 2 if watch else 0
 
         top = len(charm) - 1
         floor = min(base, 1)                   # 好み・親しさで醜いことにはしない
-        picked = max(floor, min(top, base + taste - short))
-        if picked == top and (not ALLOW_TOP_RUNG or gap < ACQUAINTANCE_STEPS):
+        # 中立の段は文の付かない帯。無い並びでは素の段を中立とみなす。
+        neutral = charm.index(None) if None in charm else base
+        liked = base + taste
+        # 親しさの不足が下げるのは中立の段まで。中立より下へ動かすのは好みだけ。
+        # 不足をそのまま引くと、文の付かない帯（魅力が普通）のキャラが
+        # 初対面の全員から否定の段で見られる。
+        picked = max(floor, min(top, max(min(liked, neutral), liked - short)))
+        if picked == top and (not ALLOW_TOP_RUNG
+                              or (watch and gap < ACQUAINTANCE_STEPS)):
             picked = max(floor, top - 1)
         note = "好感度={!r}(段差{:+d}) 好み={:+d} 親しさ={:+d} {}段目→{}段目".format(
             affinity_text, gap, taste, -short, base, picked)
@@ -790,6 +891,11 @@ def apply(ctx):
             try:
                 player = player_of()
                 npc, key = find_target(player)
+                if key is None:
+                    # 包んだ入口（`keep_phase`）の中なら、抜けたときに戻す。
+                    mark = state["keeping"].get(threading.get_ident())
+                    if mark is not None:
+                        mark["blind"] = True
                 taste = state["taste"].get(key)
                 if taste is None:
                     taste = _taste_of(key, TASTE_SPREAD)

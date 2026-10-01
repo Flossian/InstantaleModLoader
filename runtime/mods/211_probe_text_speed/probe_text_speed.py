@@ -77,6 +77,9 @@
   本文のラベル以外は判定1つで素通しにし、記録は try の中に置く
 - 最初の `DETAIL_TICKS` 回の1行ずつの記録は1プロセスに1回にした（版5は注入のたびに出ていた）。
   `get_default_text_speed_for_language` は同じ答えを1プロセスに1回だけ書く
+
+版7: 包み3本が引数を名前で受けて位置で渡し直していたのをやめ、受け取った形のまま本体へ渡す。
+`probe installed` の行は、積み順が前回と変わったときだけ書く（版6までは注入のたびに出ていた）。
 """
 
 import sys
@@ -112,9 +115,11 @@ SLOW_MS = 20.0
 MAX_SLOW = 40
 
 # 1プロセスに1回だけにするための印（`sys` に置く。TECH.md §3.6。版6）。
-# `DETAIL_MARK` は1行ずつ出したティックの数、`DEFAULTS_MARK` は書いた既定値の組。
+# `DETAIL_MARK` は1行ずつ出したティックの数、`DEFAULTS_MARK` は書いた既定値の組、
+# `INSTALLED_MARK` は最後に書いた `update_display_text` の積み順（版7）。
 DETAIL_MARK = "_instantale_probe_textspeed_detail"
 DEFAULTS_MARK = "_instantale_probe_textspeed_defaults"
+INSTALLED_MARK = "_instantale_probe_textspeed_installed"
 
 # 要約のカウンタ。flush() が 0 に戻す。
 COUNTERS = ("ticks", "gap_sum", "gap_max", "dt_sum", "dt_max",
@@ -218,10 +223,14 @@ def apply(ctx):
     # 注入し直したとき、版5の見張りは自分から降りる（あちらの `ctx.superseded()`）。
 
     # -- ゲームの打ち出し（1ティック） ---------------------------------------
+    # 引数は受け取った形のまま本体へ渡す（版7）。
+    # 名前で受けて位置で渡し直すと、欠けた `context` に None を補ってしまい、
+    # 内側の厳密な受け手（`118_` / `122_`）が出すはずの TypeError を計測中だけ隠す。
     @ctx.wrap("__main__:InstantaleApp.add_text_display", required=False, safe=True)
-    def add_text_display(orig, self, dt=None, context=None, *args, **kwargs):
+    def add_text_display(orig, self, *args, **kwargs):
         now = time.perf_counter()
         try:
+            dt = frames.arg(args, kwargs, "dt", 0)
             note_speed(self, "tick")
             gap = None
             if state["prev"] is not None:
@@ -259,7 +268,7 @@ def apply(ctx):
                 flush()
         except Exception:
             ctx.log_exc("text speed probe: tick bookkeeping failed")
-        return orig(self, dt, context, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     # -- ラベルのテクスチャの作り直し（フレーム側の代金） -----------------
     # ここが `repaint` に出てこない残りの仕事。
@@ -290,15 +299,16 @@ def apply(ctx):
 
     # -- 1文字ぶんの塗り直し（ゲーム＋内側の MOD 全部） -----------------------
     @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.update_display_text", safe=True)
-    def update_display_text(orig, self, instance=None, value=None, *args, **kwargs):
+    def update_display_text(orig, self, *args, **kwargs):
         # テクスチャの計測対象を覚える（属性を1回読むだけ）。
         label = frames.attr(self, "text_display")
         if label is not frames.MISSING and label is not None:
             state["label"] = label
         start = time.perf_counter()
-        result = orig(self, instance, value, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
         spent = time.perf_counter() - start
         try:
+            value = frames.arg(args, kwargs, "value", 1)
             state["paint_sum"] += spent
             state["paint_max"] = max(state["paint_max"], spent)
             state["paints"] += 1
@@ -324,8 +334,9 @@ def apply(ctx):
     # -- ゲームが既定として計算している速さ ------------------------------------
     @ctx.wrap("scripts.functions:get_default_text_speed_for_language",
               required=False, safe=True)
-    def get_default_text_speed_for_language(orig, language=None, *args, **kwargs):
-        result = orig(language, *args, **kwargs)
+    def get_default_text_speed_for_language(orig, *args, **kwargs):
+        result = orig(*args, **kwargs)
+        language = frames.arg(args, kwargs, "language", 0)
         # 同じ答えは1プロセスに1回（版6。版5は呼ばれるたびに書いていた）。
         seen = getattr(sys, DEFAULTS_MARK, None)
         if not isinstance(seen, set):
@@ -338,11 +349,15 @@ def apply(ctx):
                 language, result))
         return result
 
-    # 誰が同じ場所に乗っているかを1回だけ残す。
+    # 誰が同じ場所に乗っているかを残す。
     # 犯人を絞るときの出発点になる。
+    # 1回の起動で apply は何度も走るので、積み順が前回と同じなら書かない（版7）。
     stacked = (ctx.patches() or {}).get(
         "scripts.hud.new_hud:InstanTaleHUD.update_display_text") or []
-    write("probe installed; update_display_text is wrapped by: {}".format(
-        ", ".join(stacked) or "(nothing else)"))
+    stacked_line = ", ".join(stacked) or "(nothing else)"
+    if getattr(sys, INSTALLED_MARK, None) != stacked_line:
+        setattr(sys, INSTALLED_MARK, stacked_line)
+        write("probe installed; update_display_text is wrapped by: {}".format(
+            stacked_line))
     ctx.log("text speed probe: measuring the typewriter; results go to out/{}".format(
         LOG_BASENAME))

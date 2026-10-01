@@ -287,7 +287,12 @@ def may_aim(bucket, day):
 
 # ---------------------------------------------------------------- 噂
 def rumors_in(bucket, area_id, day, within):
-    """その土地でライバルが片付けた依頼のうち、`within` 日以内のもの。新しい順。"""
+    """その土地でライバルが片付けた依頼のうち、`within` 日以内のもの。新しい順。
+
+    `within` が 0 以下なら噂にしない（当日の決着も含めて出さない。設定の「0 で噂にしない」）。
+    """
+    if int(within) <= 0:
+        return []
     rows = []
     for quest_id, row in taken_of(bucket).items():
         if not isinstance(row, dict) or str(row.get("area")) != str(area_id):
@@ -296,7 +301,7 @@ def rumors_in(bucket, area_id, day, within):
         if when is None or day is None:
             continue
         ago = int(day) - when
-        if 0 <= ago <= max(0, int(within)):
+        if 0 <= ago <= int(within):
             rows.append((ago, str(quest_id), row))
     rows.sort(key=lambda item: (item[0], _id_key(item[1])))
     return [(quest_id, row, ago) for ago, quest_id, row in rows]

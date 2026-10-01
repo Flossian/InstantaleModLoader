@@ -12,6 +12,7 @@
   会話   … 会話の入口を通ると記録が1行ずつ増える
   一覧   … 一覧の窓で名簿の読みを録り、窓の間に写しへ入った書き込みは元の名簿に残る
   変えない … 包んだ本体はどれも1回だけ呼ばれ、戻り値はそのまま通る
+  片付け … 前の世代・前の世界で載せた被せは、注入し直しと世界の読み込みで外れる
 
 背景: `apply()` の中の未定義名は次の起動まで潜伏する。
 probe は実機でしか仕事をしないので、ここで1度通しておかないと
@@ -486,6 +487,56 @@ def main():
     check("既定のままなら来訪者を登録しない",
           modnpc.make_id(default_module.OWNER, "visitor") not in modnpc.registry(),
           sorted(modnpc.registry()))
+
+    print("片付け: 前の世代・前の世界で載せた被せは登録簿から引いて外す（版5）")
+    refresh_target = "__main__:InstantaleApp.refresh_choice_buttons"
+
+    def reinject(app, generation, **settings):
+        """登録簿を残したまま読み直して `apply()` を通し、選択肢の組み直しを1回起こす。"""
+        again = load_mod()
+        again.PRESENT = True
+        for name, value in settings.items():
+            setattr(again, name, value)
+        again.saves = FakeSaves({"7": {}}, {"7": {}})
+        again.state = types.SimpleNamespace(world_key=lambda app: "測定用の世界")
+        again_ctx = FakeCtx(OUT_DIR, generation)
+        again.apply(again_ctx)
+        again_ctx.hooks[refresh_target][0](lambda self, *a, **kw: None, app)
+        return again, again_ctx
+
+    for label, settings in (("OVERRIDE", {"OVERRIDE": False}),
+                            ("FOLLOW", {"FOLLOW": False})):
+        module, ctx, app, saves = fresh("gen5")
+        ctx.hooks[refresh_target][0](lambda self, *a, **kw: None, app)
+        check("{} の前: 主に層が載る".format(label),
+              modnpc._layer_of(module.OWNER, "7") is not None)
+        again, again_ctx = reinject(app, "gen5b", **settings)
+        check("{} を切って注入し直すと前の世代の被せが外れる".format(label),
+              modnpc._layer_of(again.OWNER, "7") is None, modnpc.entries(again.OWNER))
+        check("例外は出ていない（{} の片付け）".format(label),
+              again_ctx.errors == [], again_ctx.errors)
+
+    # 主の違う施設に居るときに注入し直す。新しい世代は前の主を知らない。
+    module, ctx, app, saves = fresh("gen6")
+    ctx.hooks[refresh_target][0](lambda self, *a, **kw: None, app)
+    app.world.characters["8"] = Character("店の主", "8")
+    app.facility.owner = "8"
+    again, again_ctx = reinject(app, "gen6b")
+    check("主の違う施設で注入し直すと前の主の被せが外れる",
+          modnpc._layer_of(again.OWNER, "7") is None, modnpc.entries(again.OWNER))
+    check("今の主には被せが載る", modnpc._layer_of(again.OWNER, "8") is not None,
+          modnpc.entries(again.OWNER))
+
+    # 主の施設に居る間に別のセーブを読む。別の世界の同じ id は別人。
+    modnpc.fire_all("world", app, world=app.world)
+    check("世界が変わると被せが外れる",
+          modnpc._layer_of(again.OWNER, "8") is None, modnpc.entries(again.OWNER))
+    check("来訪者の層は残る",
+          modnpc.make_id(again.OWNER, "visitor") in modnpc.entries(again.OWNER),
+          modnpc.entries(again.OWNER))
+    again_ctx.hooks[refresh_target][0](lambda self, *a, **kw: None, app)
+    check("世界が変わった後の到着で今の主に載せ直す",
+          modnpc._layer_of(again.OWNER, "8") is not None, modnpc.entries(again.OWNER))
 
     sys.modules.pop("scripts.llm.llm_manager", None)
     modnpc.purge()

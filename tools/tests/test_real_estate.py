@@ -2401,6 +2401,49 @@ CLOCK.settle()
 check("宿屋の活動では滞在を締めない", app.stay_ended == ended_before,
       (ended_before, app.stay_ended))
 
+print("[宿屋の宿泊の家賃は宿代の後で]")
+# 宿屋の `execute` は暦を進めてから宿代を引く（GAME.md §2.17）。
+# その間に家賃を引くと、宿代に残してあった金で払い、続く宿代で所持金が足りなくなる。
+
+
+def inn_stay_with_rent_due(short=False):
+    """あと1回の宿泊で期限が来る賃貸を持ったまま、宿屋に1回泊まる。
+
+    `short` は所持金を「家賃と宿代の合計に1足りない」にしておく。
+    """
+    module, ctx, app, places, classes = setup()
+    rent(app, module)
+    term = contract_of(module, app)["term"]
+    months = durations.game_inn_stay(app)["months"]
+    app.elapse_days(term - months * module.DAYS_PER_MONTH)
+    CLOCK.settle()
+    due_before = contract_of(module, app)["due"]
+    app.go(places["inn"])
+    if short:
+        app.player.gold = module.RENT_PRICE + ROOM_PRICE - 1
+    gold_before = app.player.gold
+    app.process_choice(classes["stay"](app, months, "bunk"), "宿泊する")
+    CLOCK.settle()
+    return module, ctx, app, term, due_before, gold_before
+
+
+module, ctx, app, term, due_before, gold_before = inn_stay_with_rent_due()
+check("宿屋の宿泊の最中は家賃を見送る", "rent: postponed" in read_log(),
+      [l for l in read_log().splitlines() if "rent" in l][:3])
+check("宿泊を抜けたら宿代と家賃を1回ずつ引く",
+      app.player.gold == gold_before - ROOM_PRICE - module.RENT_PRICE,
+      (app.player.gold, gold_before, ROOM_PRICE, module.RENT_PRICE))
+check("宿泊の後に期限が1期ぶん延びる",
+      (contract_of(module, app) or {}).get("due") == due_before + term,
+      (contract_of(module, app), due_before, term))
+module, ctx, app, term, due_before, gold_before = inn_stay_with_rent_due(short=True)
+check("払えるかは宿代を引かれた後の所持金で見る（足りなければ切れる）",
+      "lapsed: " in read_log(), [l for l in read_log().splitlines() if "rent" in l
+                                 or "lapsed" in l][:4])
+check("宿代に残してあった金で家賃を払わない（所持金が負にならない）",
+      app.player.gold == gold_before - ROOM_PRICE,
+      (app.player.gold, gold_before, ROOM_PRICE))
+
 print("[滞在の描写に場所を添える]")
 # ゲームは描写を頼むとき、エリアの一覧は渡すのに**どこに泊まったかを渡さない**
 # （実測。GAME.md §2.17）。街に自分の家があると、

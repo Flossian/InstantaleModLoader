@@ -29,7 +29,7 @@ LEDGER_VERSION = 1
 # ---- 台帳 ------------------------------------------------------------------
 
 def new_bucket():
-    """1世界ぶんの台帳の初期形。`WorldStore(default=new_bucket)`。
+    """1周回（世界×主人公）ぶんの台帳の初期形。`WorldStore(default=new_bucket)`。
 
     `trips` は旅の途中の人、`hired` は旅先で雇われて解散待ちの人、
     `rest` は帰ってきて休んでいる人（次に出られる日）、

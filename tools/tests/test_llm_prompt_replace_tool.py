@@ -147,6 +147,18 @@ try:
     check("検査: タブ名の重複",
           "同じ名前" in why(tabs=[tool.Tab("同名", True), tool.Tab("同名", True)]))
     check("検査: 正しい正規表現は通る", why(tool.Rule(True, True, 100, r"HPが(\d+)", "HP $1")) == "")
+    check("検査: 正規表現の置換前に改行",
+          "改行" in why(tool.Rule(True, True, 100, "前\n後", "x")))
+    check("検査: 置換後に改行", "改行" in why(tool.Rule(True, False, 100, "前", "後\r\n")))
+    check("検査: 有効なルールの置換前が # 始まり",
+          "#" in why(tool.Rule(True, False, 100, "## 見出し", "後")))
+    for rule in (tool.Rule(False, False, 100, "## 見出し", "後"),
+                 tool.Rule(True, True, 100, "## 見出し", "後"),
+                 tool.Rule(True, False, 100, r"\u0023# 見出し", "後")):
+        back = tool.Document.parse(tool.TAB_PREFIX + "標準\n" + rule.line() + "\n").tabs[0].rules
+        check("検査: 通した # のルールは読み戻せる（{}）".format(rule.line()),
+              why(rule.copy()) == "" and len(back) == 1
+              and back[0].from_text == rule.from_text and back[0].enabled == rule.enabled)
 
     # ------------------------------------------------------------ 同梱の既定を読んで書き戻す
     default_path = os.path.join(MOD_DIR, tool.DEFAULT_RULES_FILE_NAME)

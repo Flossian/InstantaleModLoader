@@ -47,13 +47,20 @@ id6≈62 / id7≈43 / id8≈70）なので、決め方はゲームのコード�
 街の数×2行が引数の街の設定（説明文入りの辞書）ごと `.jsonl` に積もっていた
 （1か月で約100MB、その9割がこの2本）。
 あわせて経路の `args` は辞書と配列を中身ではなく大きさで写す。街の状態は `before` / `after` にある。
+
+版8: 経路の前後で街の状態を写すときに自分が呼ぶ `get_quest_difficulties` を「関数」の行に
+数えないようにした（版7までは経路1回につき2本、ゲームが呼んだように見える行が混ざっていた）。
+`AreaMoveManager` の `__init__` / `execute` は引数を来た形のまま本体へ渡し、
+控えはゲームの Manager に属性を足さず弱参照の表に置く。
 """
 
 import datetime
 import json
 import random
 import sys
+import threading
 import time
+import weakref
 
 from instantale_modloader import frames, ui
 
@@ -167,6 +174,32 @@ def apply(ctx):
 
     state = {"window": None, "random_seen": 0}
 
+    #: スレッドごとの「自分で `get_quest_difficulties` を呼んでいる最中」の印（版8）。
+    #: `scripts.functions` から引くとこの MOD の `pure` の包みが返り、
+    #: `frames.caller` は MOD のフレームを飛ばすので、印が無いとゲームが呼んだ行に見える。
+    quiet = threading.local()
+
+    #: Manager ごとの `__init__` の控え（版8）。版7まではゲームの Manager に
+    #: `_probe_area_quest_difficulty` という属性を足していた（読み取りだけの約束の外）。
+    inits = weakref.WeakKeyDictionary()
+    inits_by_id = {}
+
+    def remember_init(manager, info):
+        try:
+            inits[manager] = info
+        except TypeError:
+            # 弱参照を持てない型。最後の数件だけ id で控える。
+            inits_by_id[id(manager)] = info
+            while len(inits_by_id) > 8:
+                inits_by_id.pop(next(iter(inits_by_id)))
+
+    def init_of(manager):
+        try:
+            found = inits.get(manager)
+        except TypeError:
+            found = None
+        return found if found is not None else inits_by_id.get(id(manager))
+
     def now():
         return datetime.datetime.now().isoformat(timespec="seconds")
 
@@ -242,10 +275,13 @@ def apply(ctx):
         fn = getattr(functions, "get_quest_difficulties", None) if functions else None
         if fn is None or area is None:
             return None
+        quiet.depth = getattr(quiet, "depth", 0) + 1
         try:
             return list(fn(area, frames.attr(app, "world", None)))
         except Exception as exc:
             return "<{}>".format(type(exc).__name__)
+        finally:
+            quiet.depth = max(getattr(quiet, "depth", 1) - 1, 0)
 
     def log_row(row, line):
         record(row)
@@ -289,7 +325,7 @@ def apply(ctx):
         @ctx.wrap(target, required=False, safe=True)
         def pure(orig, *args, **kwargs):
             result = orig(*args, **kwargs)
-            if state["window"] is None:
+            if state["window"] is None or getattr(quiet, "depth", 0) > 0:
                 return result
             try:
                 log_row({"at": now(), "phase": "関数", "func": name,
@@ -367,20 +403,22 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 到着の移動の窓
     @ctx.wrap("__main__:AreaMoveManager.__init__", required=False, safe=True)
-    def move_init(orig, self, app, target_area_id, mode, *args, **kwargs):
-        result = orig(self, app, target_area_id, mode, *args, **kwargs)
+    def move_init(orig, self, *args, **kwargs):
+        # 引数は来た形のまま渡す（名前で受けて位置で渡すと、内側の包みに届く形が変わる）。
+        result = orig(self, *args, **kwargs)
         try:
-            self._probe_area_quest_difficulty = {"target_id": str(target_area_id),
-                                                 "mode": str(mode)}
+            remember_init(self, {
+                "target_id": str(frames.arg(args, kwargs, "target_area_id", 1)),
+                "mode": str(frames.arg(args, kwargs, "mode", 2))})
         except Exception:
             pass
         return result
 
     @ctx.wrap("__main__:AreaMoveManager.execute", required=False)
-    def move_execute(orig, self, choice_text=None, *args, **kwargs):
+    def move_execute(orig, self, *args, **kwargs):
         """移動の窓。到着先の街が作られるならこの中。前後の街の状態と、間の乱数・関数を写す。"""
         app = frames.attr(self, "app", None) or ui.find_app()
-        info = frames.attr(self, "_probe_area_quest_difficulty", None) or {}
+        info = init_of(self) or {}
         target_id = info.get("target_id")
         window = {"target_id": target_id, "random": []}
         try:
@@ -395,7 +433,7 @@ def apply(ctx):
             ctx.log_exc("area quest difficulty probe: cannot open the move window")
             before = None
         try:
-            return orig(self, choice_text, *args, **kwargs)
+            return orig(self, *args, **kwargs)
         finally:
             state["window"] = None
             try:

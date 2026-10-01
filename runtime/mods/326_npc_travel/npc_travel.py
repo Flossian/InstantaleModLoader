@@ -6,7 +6,7 @@
 このMODは、日数が進むたびに各街のギルドの冒険者から出発する者を引き、
 ゲーム自身の `move_npc_to_facility` で置き直す。
 **動かした者はこのMODが帰す**（同 §2.8 の「戻す責任」）。
-誰がどこへ何日まで、は `state\\npc_travel\\<世界>.json` の台帳に持つ。
+誰がどこへ何日まで、は `state\\npc_travel\\<世界×主人公>.json` の台帳に持つ。
 
 この版の対象は冒険者（`Area.adventurer_npcs` に載っている者）だけ。
 店主や住人へ広げる余地を名前に残してある。
@@ -308,21 +308,32 @@ def apply(ctx):
     worlds = store["worlds"].rebind(ctx, write)
     rng = store["rng"]
 
+    def bucket_of(app):
+        """この周回（世界×主人公）の `(鍵, 台帳)`。
+
+        旅の居場所はセーブに書かれ、同じ世界で主人公を作り直すとセーブは組み直される。
+        世界名だけの鍵だと、前の主人公の旅が新しいセーブの冒険者に当て直される。
+        世界名だけの台帳は `worlds.playthrough` が移す（TECH.md §5.4）。
+        `World.__init__` は包んでいないので、`app` から引いてよい。
+        """
+        key = worlds.playthrough(app)
+        return key, worlds.load(key)
+
     def ledger(app):
-        """この世界の `(鍵, 旅の表)`。"""
-        key, bucket = worlds.of(app)
+        """この周回の `(鍵, 旅の表)`。"""
+        key, bucket = bucket_of(app)
         return key, travel.trips_of(bucket)
 
     def hired_table(app):
-        _key, bucket = worlds.of(app)
+        _key, bucket = bucket_of(app)
         return travel.hired_of(bucket)
 
     def rest_table(app):
-        _key, bucket = worlds.of(app)
+        _key, bucket = bucket_of(app)
         return travel.rest_of(bucket)
 
     def seen_table(app):
-        _key, bucket = worlds.of(app)
+        _key, bucket = bucket_of(app)
         return travel.seen_of(bucket)
 
     def start_rest(app, npc_id, name, day):
@@ -674,7 +685,6 @@ def apply(ctx):
         area_ids = (sorted(towns, key=ui.id_sort_key) if kind == travel.AWAY
                     else local_areas(app, towns))
         changed = False
-        deferred = False
         for area_id in area_ids:
             area = towns.get(area_id)
             if area is None:
@@ -700,6 +710,7 @@ def apply(ctx):
             write("roll[{}]: area {} present={} eligible={} chosen={} "
                   "(chance {:.3f} over {} day(s))".format(
                       kind, area_id, len(present), len(eligible), chosen, chance, window))
+            deferred = False
             for npc_id in chosen:
                 character = ui.character_of(app, npc_id)
                 here = facility_of_character(character) if character is not None else ""
@@ -721,12 +732,13 @@ def apply(ctx):
                     changed = True
                 elif result == "waits":
                     deferred = True
-        if kind == travel.LOCAL and not deferred:
-            # 引いた窓は消費する（当たり外れに関わらず、同じ日数を二度引かない）。
-            # 延期した人が居る間は消費しない ― プレイヤーがその場を離れたら
-            # 同じ窓でもう一度引けるように。
-            seen[str(area_id)] = int(day)
-            changed = True
+            if kind == travel.LOCAL and not deferred:
+                # 引いた窓は消費する（当たり外れに関わらず、同じ日数を二度引かない）。
+                # 延期した人が居る間は消費しない。プレイヤーがその場を離れたら
+                # 同じ窓でもう一度引けるように。延期の有無も控えも街ごとに見る
+                # （ループの外で見ると最後の街だけが控えられ、街が無いと area_id が無い）。
+                seen[str(area_id)] = int(day)
+                changed = True
         if changed:
             worlds.save(key)
         return changed
@@ -755,7 +767,7 @@ def apply(ctx):
         if not trips and not hired_table(app) and not rest_table(app):
             return
         day = ui.game_day(app)
-        write("reconcile: world {!r} day {} trips {}".format(key, day, len(trips)))
+        write("reconcile: playthrough {!r} day {} trips {}".format(key, day, len(trips)))
         changed = False
         for npc_id in sorted(trips, key=ui.id_sort_key):
             trip = trips[npc_id]

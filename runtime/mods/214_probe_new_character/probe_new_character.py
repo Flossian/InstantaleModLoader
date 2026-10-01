@@ -68,6 +68,9 @@
   NPC は判定の前に素通しにし、呼び出し元も組まない
 - 2秒ごとの見張りは、レベルとレベルから決まる値だけを素の値で比べる。
   版2は所持金や HP まで repr して比べていたので、行動のたびに1行出ていた
+
+版4: 見出し・見張りの開始の行を1プロセスに1回にし、見張りが最後に見た値を世代をまたいで引き継ぐ。
+版3までは注入し直しのたびに見出しと開始の行が積もり、プレイヤーが居れば `player appeared` も重なっていた。
 """
 
 import datetime
@@ -171,6 +174,12 @@ POLL_FIELDS = ("experience_level", "max_hp", "original_max_hp",
 # 表の総当たりを1プロセスに1回にするための印（`sys` に置く。TECH.md §3.6）。
 TABLES_MARK = "_instantale_probe_newchar_tables"
 
+# 見出しと見張りの開始の行を1プロセスに1回にする印と、
+# 見張りが最後に見たプレイヤーの値の控え（どちらも `sys` に置く。版4）。
+# 控えを世代をまたいで引き継ぐので、注入し直しても同じプレイヤーを「appeared」と書き直さない。
+ARMED_MARK = "_instantale_probe_newchar_armed"
+LAST_MARK = "_instantale_probe_newchar_last"
+
 
 def apply(ctx):
     state = {
@@ -183,8 +192,6 @@ def apply(ctx):
         "level_events": 0,
         # 総当たりの最中は自分の呼び出しを記録しない。
         "probing": False,
-        # 見張りが最後に見たプレイヤーの値。
-        "last": None,
     }
 
     write = ctx.logger(LOG_BASENAME, stamp=False)
@@ -477,12 +484,13 @@ def apply(ctx):
         finally:
             state["probing"] = False
 
-    def start_poll():
+    def start_poll(announce):
         """プレイヤーの値を見張る。作成の後で書き換わるならここに出る。
 
         メインスレッドで回すため
         `on_ready` 経由（`boot()` は注入したリモートスレッドの上に居る）。
         注入し直したら古い見張りは自分から降りる（TECH.md §3.6.1・`211_` の教訓）。
+        見張りそのものは世代ごとに起こすが、開始の行は `announce` のときだけ書く（版4）。
         """
         try:
             from kivy.clock import Clock
@@ -493,7 +501,8 @@ def apply(ctx):
 
         def poll(_dt):
             if ctx.superseded():
-                write("polling stopped (a newer injection took over)")
+                # 降りたことは書かない（版4）。
+                # 注入し直しのたびに1行ずつ積もり、新しい世代の見張りが続きを引き継ぐので読む材料にならない。
                 return False
             try:
                 # 比べるのはレベル系の素の値だけ（版3）。
@@ -503,26 +512,32 @@ def apply(ctx):
                 if player in (None, frames.MISSING):
                     return True
                 keyed = tuple(frames.attr(player, f) for f in POLL_FIELDS)
-                if state["last"] is None:
+                last = getattr(sys, LAST_MARK, None)
+                if last is None:
                     note_player("player appeared (poll)", app)
-                elif keyed != state["last"]:
+                elif keyed != last:
                     note_player("player changed (poll)", app)
-                state["last"] = keyed
+                setattr(sys, LAST_MARK, keyed)
             except Exception:
                 ctx.log_exc("new character probe: polling failed")
             return True
 
         Clock.schedule_interval(poll, POLL_SECONDS)
-        write("[{}] polling app.player every {}s (gen {})".format(
-            stamp(), POLL_SECONDS, ctx.generation))
+        if announce:
+            write("[{}] polling app.player every {}s (gen {})".format(
+                stamp(), POLL_SECONDS, ctx.generation))
 
     def on_ready():
-        write("")
-        write("=" * 78)
-        write("[{}] new character probe armed (gen {})".format(
-            stamp(), ctx.generation))
+        # 見出しは1プロセスに1回（版4。版3までは注入のたびに出ていた）。
+        first = not getattr(sys, ARMED_MARK, False)
+        if first:
+            setattr(sys, ARMED_MARK, True)
+            write("")
+            write("=" * 78)
+            write("[{}] new character probe armed (gen {})".format(
+                stamp(), ctx.generation))
         dump_tables()
-        start_poll()
+        start_poll(first)
 
     # キーに世代を混ぜる。
     # 混ぜないと2回目以降の注入で積まれず、

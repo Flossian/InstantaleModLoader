@@ -828,6 +828,10 @@ area = press_generate(ctx, app)
 check("311_ が無ければ会話の記録だけを添える", "会話の記録" in area, area[-300:])
 check("311_ が無くても人物像の節は足さない",
       "過去の会話から分かっていること" not in area, area[-300:])
+with io.open(os.path.join(ctx.state_dir, mod.CLIENTS_BASENAME), encoding="utf-8") as fh:
+    made = json.load(fh).get(ml.state.playthrough_key(app)) or {}
+check("作った依頼の依頼人は周回の鍵（世界×主人公）の下に控える",
+      any(record.get("npc_id") == "62" for record in made.values()), made)
 
 # 生成の後の読み直しで投げた回。生成中の印と待機表示を残さない。
 print("=== 生成の途中で投げても後始末は通る ===")
@@ -898,7 +902,7 @@ def seed_client(ctx_obj, app_obj, quest_id, npc_id, npc_name):
     if os.path.isfile(path):
         with io.open(path, encoding="utf-8") as fh:
             data = json.load(fh)
-    data.setdefault(ml.state.world_key(app_obj), {})[str(quest_id)] = {
+    data.setdefault(ml.state.playthrough_key(app_obj), {})[str(quest_id)] = {
         "npc_id": str(npc_id), "npc_name": npc_name}
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with io.open(path, "w", encoding="utf-8") as fh:
@@ -1076,6 +1080,116 @@ finally:
     mod.TELL_COMPLETED_QUESTS = tell
     clear_clients(ctx)
 
+# ================================== 依頼人の控えは周回の鍵で持つ
+# 依頼の id は同じ世界で主人公を作り直すと振り直されるので、控えは世界×主人公の鍵で持つ
+# （TECH.md §5.4）。世界名だけの鍵の分は遊んでいる主人公のものとして移す。
+# 別の主人公の周回が在る世界では移さない。
+# ほかの検査が残した控えと混ざらないよう、ここだけの世界名で見る。
+print("=== 依頼人の控えは周回の鍵 ===")
+
+MOVE_WORLD = "移行の検査世界"
+MOVE_MINE = MOVE_WORLD + ml.state.PLAYTHROUGH_SEP + "テストプレイヤー"
+MOVE_OTHER = MOVE_WORLD + ml.state.PLAYTHROUGH_SEP + "前の主人公"
+MOVE_OLD = {"70": {"npc_id": "62", "npc_name": "テストNPC D"}}
+MOVE_ELSE = {"1": {"npc_id": "9", "npc_name": "よその人"}}
+
+
+def write_clients(ctx_obj, data):
+    path = clients_path(ctx_obj)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with io.open(path, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(data, ensure_ascii=False))
+
+
+def read_clients(ctx_obj):
+    with io.open(clients_path(ctx_obj), encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def move_setup(data):
+    """移行の検査用の世界で、控えを `data` にしてから mod を当てる。"""
+    mod_obj, ctx_obj, app_obj = setup()
+    app_obj.world_dict["world_data"]["world_name"] = MOVE_WORLD
+    add_quest(app_obj, "70", "古井戸の調べ", "completed")
+    write_clients(ctx_obj, data)
+    return mod_obj, ctx_obj, app_obj
+
+
+# -- 世界名だけの分を移し、元の鍵を消す。並びは保つ。
+mod, ctx, app = move_setup({"よその世界": MOVE_ELSE, MOVE_WORLD: MOVE_OLD,
+                            "後ろの世界": MOVE_ELSE})
+try:
+    body = profile_seen(talk_once(ctx, app, app.world.characters["62"]))
+    data = read_clients(ctx)
+    check("世界名だけの分を周回の鍵へ移す", data.get(MOVE_MINE) == MOVE_OLD, data)
+    check("世界名だけの鍵は消す", MOVE_WORLD not in data, list(data))
+    check("鍵の並びを保つ（世界名の位置に周回の鍵）",
+          list(data) == ["よその世界", MOVE_MINE, "後ろの世界"], list(data))
+    check("移した控えで依頼人を引ける", "古井戸の調べ" in body, body)
+    check("移した後もエラーを出さない", not ctx.errors, ctx.errors)
+finally:
+    clear_clients(ctx)
+
+# -- 同じ世界の別の主人公からは、移した控えが見えない。
+mod, ctx, app = move_setup({MOVE_MINE: MOVE_OLD})
+try:
+    app.player.name = "前の主人公"
+    body = profile_seen(talk_once(ctx, app, app.world.characters["62"]))
+    check("別の主人公は前の主人公の依頼人の控えを引かない",
+          "古井戸の調べ" not in body, body)
+finally:
+    clear_clients(ctx)
+
+# -- 控えの中に同じ世界の別の主人公の周回が在れば移さない。
+mod, ctx, app = move_setup({MOVE_WORLD: MOVE_OLD, MOVE_OTHER: MOVE_ELSE})
+try:
+    body = profile_seen(talk_once(ctx, app, app.world.characters["62"]))
+    data = read_clients(ctx)
+    check("控えに別の主人公の周回が在れば移さない",
+          data.get(MOVE_WORLD) == MOVE_OLD and MOVE_MINE not in data, data)
+    check("移さなかった世界名だけの分は引かない", "古井戸の調べ" not in body, body)
+finally:
+    clear_clients(ctx)
+
+# -- state\ のどこかに同じ世界の別の主人公の周回のファイルが在れば移さない。
+other_dir = os.path.join(ctx.state_dir, "quest_offer_test_other")
+other_file = os.path.join(other_dir, ml.state.world_filename(MOVE_OTHER))
+mod, ctx, app = move_setup({MOVE_WORLD: MOVE_OLD})
+try:
+    os.makedirs(other_dir, exist_ok=True)
+    with io.open(other_file, "w", encoding="utf-8") as fh:
+        fh.write("{}")
+    mark = os.path.getsize(os.path.join(ctx.out_dir, mod.LOG_BASENAME)) \
+        if os.path.isfile(os.path.join(ctx.out_dir, mod.LOG_BASENAME)) else 0
+    talk_once(ctx, app, app.world.characters["62"])
+    talk_once(ctx, app, app.world.characters["62"])
+    data = read_clients(ctx)
+    check("別の主人公の周回のファイルが在れば移さない",
+          data.get(MOVE_WORLD) == MOVE_OLD and MOVE_MINE not in data, data)
+    log_path = os.path.join(ctx.out_dir, mod.LOG_BASENAME)
+    with io.open(log_path, encoding="utf-8", errors="replace") as fh:
+        fh.seek(mark)
+        written = fh.read()
+    check("移さなかった理由を1回だけ残す",
+          written.count("left the clients of the world-only key") == 1, written)
+finally:
+    if os.path.isfile(other_file):
+        os.remove(other_file)
+    if os.path.isdir(other_dir) and not os.listdir(other_dir):
+        os.rmdir(other_dir)
+    clear_clients(ctx)
+
+# -- 主人公の名が読めなければ世界名だけの鍵のまま（前と同じ）。
+mod, ctx, app = move_setup({MOVE_WORLD: MOVE_OLD})
+try:
+    app.player.name = ""
+    body = profile_seen(talk_once(ctx, app, app.world.characters["62"]))
+    data = read_clients(ctx)
+    check("主人公の名が読めなければ世界名だけの鍵で引く", "古井戸の調べ" in body, body)
+    check("主人公の名が読めなければ移さない", list(data) == [MOVE_WORLD], data)
+finally:
+    clear_clients(ctx)
+
 # ============================== 仲間になっている NPC は依頼人にしない
 # 同行している相手に依頼を出してもらうと、
 # 受注した時点でその相手はもう隣に居る（依頼人が現地へ付いて来る形になる）。
@@ -1144,6 +1258,83 @@ app.refresh_choice_buttons()
 check("名簿が読めなくてもボタンは消さない", index_of(app, "offer") >= 0,
       [b.get("text") for b in app.buttons])
 check("名簿が読めなくてもエラーにしない", not ctx.errors, ctx.errors)
+
+# ================================================ ロードで再開した会話の相手
+# ロードで会話の途中から再開すると `ConversationStartManager.__init__` は通らない。
+# 相手は開始の控えではなく、ゲームが持っている `in_conversation` から引く。
+print("=== ロードで再開した会話の相手 ===")
+
+
+def generate_label(app_obj):
+    entry = [b for b in app_obj.buttons if b.get(MARK) == "generate"]
+    return entry[0]["text"] if entry else None
+
+
+def resume_conversation(app_obj, partner, talk):
+    """会話中に保存したセーブを開いた状態にする（開始の処理は通らない）。"""
+    app_obj.in_conversation = partner
+    app_obj.buttons = talk_buttons(partner)
+    app_obj.current_conversation_history = talk
+
+
+def end_talk(app_obj):
+    end = mlui.find_spec_button(app_obj.buttons, "ConversationEndManager")
+    app_obj.on_button_press(app_obj.buttons.index(end))
+    clock.settle()
+
+
+# 62 と話し終えて控えが残った後、63 との会話中のセーブを開く。
+clock = install_fake_kivy()
+mod, ctx, app = setup(history=history)
+app.refresh_choice_buttons()
+end_talk(app)
+resume_conversation(app, "63", history)
+app.refresh_choice_buttons()
+label = generate_label(app)
+check("再開した会話では画面の相手の名前が出る",
+      label is not None and "テストNPC E" in label, label)
+check("前に話した相手の名前は出ない",
+      label is None or "テストNPC D" not in label, label)
+
+# 再開した会話に履歴が無ければ、前の相手との話に落とさない。
+clock = install_fake_kivy()
+mod, ctx, app = setup(history=history)
+app.refresh_choice_buttons()
+end_talk(app)
+resume_conversation(app, "63", [])
+app.refresh_choice_buttons()
+check("会話中は前の相手との控えに落とさない", generate_label(app) is None,
+      [b.get("text") for b in app.buttons])
+
+# 62 と会話中のままタイトルへ戻り（終了処理は通らない）、63 との会話中のセーブを開く。
+clock = install_fake_kivy()
+mod, ctx, app = setup(history=history)
+resume_conversation(app, "63", history)
+app.refresh_choice_buttons()
+label = generate_label(app)
+check("開始の控えが古くても画面の相手を取る",
+      label is not None and "テストNPC E" in label, label)
+
+# 控えた話は別の世界では使わない（id は世界ごとに振られる）。
+for world_name, expect in (("テスト世界", True), ("別のテスト世界", False)):
+    clock = install_fake_kivy()
+    mod, ctx, app = setup(history=history)
+    sites = mod.OFFER_SITES
+    try:
+        mod.OFFER_SITES = ("facility",)
+        app.refresh_choice_buttons()
+        end_talk(app)
+        app.world_dict["world_data"]["world_name"] = world_name
+        app.buttons = facility_buttons()
+        app.refresh_choice_buttons()
+        mark = log_mark(ctx)
+        app.on_button_press(index_of(app, "offer"))
+        clock.settle()
+    finally:
+        mod.OFFER_SITES = sites
+    written = log_since(ctx, mark)
+    check("控えた話で絞るのは同じ世界だけ（{}）".format(world_name),
+          ("filtering for" in written) == expect, written[-200:])
 
 print()
 if failures:

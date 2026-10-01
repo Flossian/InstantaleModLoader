@@ -525,6 +525,57 @@ def main():
         if hasattr(sys, mod.STATE_STORE_ATTR):
             delattr(sys, mod.STATE_STORE_ATTR)
 
+    print("[待ちの途中で注入し直された前の世代のワーカー]")
+    # 前の世代のワーカーが `jobs.get` で待っている間に注入し直しが来ると、
+    # 次の世代が積んだ仕事を前の世代が取る。捨てずに待ち行列へ戻して降りる。
+    # 待ちから戻って降りるときは、次の世代のワーカーの登録を消さない。
+    asked2 = []
+    mod._ask_profile = lambda c, w, snap: asked2.append(snap["area_id"]) or None
+    try:
+        if hasattr(sys, mod.STATE_STORE_ATTR):
+            delattr(sys, mod.STATE_STORE_ATTR)
+        old_ctx = GenCtx()
+        mod.apply(old_ctx)
+        old_ctx.hooks[move](lambda self: None, _types.SimpleNamespace(app=app))
+        state = mod._store()
+        state["jobs"].join()                     # 1件目を片付けて、次の仕事を待っている
+        old_worker = state["worker"]
+        check("前の世代のワーカーが待っている",
+              old_worker is not None and old_worker.is_alive() and asked2 == ["0"], asked2)
+        old_ctx.gone = True
+        scope, event = left_over(state, old_ctx, old_worker)
+        old_worker.join(timeout=10)
+        check("前の世代は降りる", not old_worker.is_alive())
+        check("取った仕事を捨てない（Event を立てない）", not event.is_set())
+        check("取った仕事を待ち行列へ戻す",
+              state["jobs"].qsize() == 1 and scope in state["pending"],
+              (state["jobs"].qsize(), state["pending"]))
+        check("前の世代は仕事を処理しない", asked2 == ["0"], asked2)
+
+        new_ctx = GenCtx()
+        mod.apply(new_ctx)
+        new_ctx.hooks[move](lambda self: None, _types.SimpleNamespace(app=app))
+        done = event.wait(timeout=10)
+        check("戻した仕事を次の世代が片付ける", done and asked2 == ["0", "0"], asked2)
+
+        # 次の世代のワーカーを前の世代に見立て、さらに次の世代が登録された形にする。
+        new_worker = state["worker"]
+        newer = threading.Thread(target=threading.Event().wait, args=(15,), daemon=True)
+        newer.start()
+        with state["worker_lock"]:
+            state["worker"] = newer
+        if new_worker is not None:
+            new_worker.join(timeout=10)          # 5秒の待ちが切れて降りる
+        check("待ちから降りても次の世代の登録を消さない", state["worker"] is newer,
+              state["worker"])
+        check("例外が出ない", not new_ctx.errors and not old_ctx.errors,
+              new_ctx.errors + old_ctx.errors)
+        new_ctx.gone = True
+    finally:
+        mod._ask_profile = original_ask
+        if hasattr(sys, mod.STATE_STORE_ATTR):
+            delattr(sys, mod.STATE_STORE_ATTR)
+
     print("[繰り返し]")
     # 版4: apply のたびに同じ中身で出ていた `installed:` と関所の `adjusts item prices` は、
     # 前に書いた中身と同じなら書かない。中身が変わったときと、ログが世代送りされた後は書く。

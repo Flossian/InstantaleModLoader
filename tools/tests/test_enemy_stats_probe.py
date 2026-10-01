@@ -132,6 +132,23 @@ check("スキルは強度と残り回数に縮める",
 check("大きい項目は写さない", "life_log" not in enemy["fields"], sorted(enemy["fields"]))
 check("味方も写す", [a["name"] for a in row["allies"]] == ["アーリ"], row["allies"])
 
+
+class MarkSeen(Character):
+    """写しの `get_npc_defense` が呼ばれた時の印を控える（222_ が記録を控える条件）。"""
+    marks = []
+
+    def get_npc_defense(self):
+        MarkSeen.marks.append(getattr(sys, mod.DRY_THREAD_MARK, None))
+        return Character.get_npc_defense(self)
+
+
+app.current_enemy_dict = {"見張り": MarkSeen("見張り", 10, 5)}
+ctx.hooks["__main__:BattleStartManager.start_battle"](lambda self: "ok", manager)
+check("写しの防御は印の下で呼び、終われば印は消える（版4）",
+      MarkSeen.marks == [threading.get_ident()] and not hasattr(sys, mod.DRY_THREAD_MARK),
+      MarkSeen.marks)
+app.current_enemy_dict = {"ゴーレム": golem}
+
 print("1手")
 action = {"actor": "ゴーレム", "instant_damage": [
     {"target": ["アーリ"], "power": "strong", "multiplier": 1, "category": "physical"}]}

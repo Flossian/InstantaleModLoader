@@ -536,12 +536,31 @@ def run():
     check("その相手のスキルを出す", "影抜き" in skills3, skills3)
 
     print("\n[二つ名] 評判 MOD の控えがあればレベル行に続けて出す")
-    from instantale_modloader.state import world_filename, world_key
+    from instantale_modloader.state import playthrough_key, world_filename, world_key
     info = hud.character_sheet_basic_info
     plain = info.text
+    # 評判 MOD の控えは周回（世界×主人公）ごと。世界名を読める形にして、
+    # 世界名だけの鍵と周回の鍵が別のファイルになるようにする。
+    # MOD が見ている app は `[規模]` の節で入れ替わっている（`ui.find_app`）ので、そちらへ足す。
+    import instantale_modloader.ui as ui_mod
+    app = ui_mod.find_app()
+    app.world_dict = dict(getattr(app, "world_dict", None) or {},
+                          world_data={"world_name": "人物欄の検査世界"})
     epi_path = os.path.join(FakeCtx.STATE_DIR, sheet.REPUTATION_DIRNAME,
-                            world_filename(world_key(app)))
+                            world_filename(playthrough_key(app)))
+    world_only_path = os.path.join(FakeCtx.STATE_DIR, sheet.REPUTATION_DIRNAME,
+                                   world_filename(world_key(app)))
+    check("控えの鍵は世界名×主人公の名",
+          playthrough_key(app) != world_key(app) and "エリス" in playthrough_key(app),
+          playthrough_key(app))
     os.makedirs(os.path.dirname(epi_path), exist_ok=True)
+    with io.open(world_only_path, "w", encoding="utf-8") as fh:
+        json.dump({"areas": {}, "epithet": {"epithet": "前の主人公の名"}}, fh,
+                  ensure_ascii=False)
+    toggle()                                   # 閉じる
+    toggle()                                   # 開き直す
+    check("世界名だけの控えは読まない（移すのは評判 MOD）", info.text == plain, info.text)
+    os.remove(world_only_path)
     with io.open(epi_path, "w", encoding="utf-8") as fh:
         json.dump({"areas": {}, "epithet": {"epithet": "灰の街の盾"}}, fh,
                   ensure_ascii=False)
@@ -598,7 +617,7 @@ def run():
     check("二つ名が出ている間は押せる",
           button.opacity == 1.0 and not button.disabled, vars(button))
     reroll_path = os.path.join(FakeCtx.STATE_DIR, sheet.REPUTATION_DIRNAME,
-                               world_filename(world_key(app),
+                               world_filename(playthrough_key(app),
                                               sheet.REROLL_SUFFIX))
     if os.path.exists(reroll_path):
         os.remove(reroll_path)

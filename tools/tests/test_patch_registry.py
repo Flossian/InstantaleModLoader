@@ -1663,7 +1663,7 @@ def apply(ctx):
 
 _REINJECT_DROP = '''
 import os
-from instantale_modloader import durations, prices
+from instantale_modloader import combat, durations, equipment, prices
 
 
 def apply(ctx):
@@ -1676,6 +1676,16 @@ def apply(ctx):
     durations.claim_days(owner, lambda app, days: 1)
     durations.declare(durations.INN_STAY, lambda app: {"months": 9}, owner=owner)
     prices.adjust(owner, lambda item, key, price: price)
+    combat.declare(combat.ATTACK, lambda app, holder: 1.0, owner=owner)
+    equipment.declare(equipment.GEAR, lambda app, holder: [], owner=owner)
+'''
+
+_REINJECT_LOCAL = '''
+import sys
+
+
+def apply(ctx):
+    sys._instantale_test_mod_dir = ctx.mod_dir
 '''
 
 _REINJECT_BROKEN = '''
@@ -1719,7 +1729,9 @@ def test_reinjection():
     import tempfile
     import threading
     import time
+    from instantale_modloader import combat as CB
     from instantale_modloader import durations as D
+    from instantale_modloader import equipment as EQ
     from instantale_modloader import prices as PR
 
     dist = tempfile.mkdtemp(prefix="instantale_reinject_")
@@ -1772,6 +1784,8 @@ def test_reinjection():
               "（前提）写しも含めて当たっている")
         check("200_drop" in D.owners() and "200_drop" in PR.item_price_sources()[1],
               "（前提）期間・日数・値段の登録簿に 200_drop が居る")
+        check("200_drop" in CB.owners() and "200_drop" in EQ.owners(),
+              "（前提）combat と equipment の窓口に 200_drop が居る")
 
         # 200_drop は今回 apply に失敗し、300_gate は切った。
         put_mod("200_drop", _REINJECT_BROKEN)
@@ -1790,6 +1804,9 @@ def test_reinjection():
         check(D.source_of(D.INN_STAY) == "", "  → 宿泊の期間はゲームの式に戻る")
         check("200_drop" not in PR.item_price_sources()[1],
               "  → 値段の段も一緒に外れる（prices の on_forget）")
+        check(CB.source_of(CB.ATTACK) == "" and EQ.source_of(EQ.GEAR) == "",
+              "  → combat と equipment の窓口も外れる（切った MOD の旧い関数に聞かない）: {} / {}"
+              .format(CB.owners(), EQ.owners()))
         check(P.active(), "剥がした後も記録は残る（unload で素に戻せる）")
 
         print("=== 同時に走る boot（遅延当て直しの最中の再注入） ===")
@@ -1856,20 +1873,45 @@ def test_reinjection():
         finally:
             ml.discover = real_discover
 
+        print("=== local/ の MOD でも ctx.mod_dir は在り処を指す ===")
+        local_mod = os.path.join(dist, "local", "150_local")
+        os.makedirs(os.path.join(local_mod, "data"), exist_ok=True)
+        with open(os.path.join(local_mod, "mod.json"), "w", encoding="utf-8") as fh:
+            json.dump({"entry": "m.py"}, fh)
+        with open(os.path.join(local_mod, "m.py"), "w", encoding="utf-8") as fh:
+            fh.write(_REINJECT_LOCAL)
+        with open(os.path.join(local_mod, "data", "table.json"), "w", encoding="utf-8") as fh:
+            fh.write("{}")
+        put_order(["100_keep", "150_local"])
+        local_result = ml.boot(out)
+        check(local_result.get("150_local") == "ok", "（前提）local/ の MOD が当たる: {}"
+              .format(local_result))
+        seen = getattr(sys, "_instantale_test_mod_dir", None)
+        check(seen is not None and os.path.normcase(seen) == os.path.normcase(local_mod),
+              "apply() 中の mod_dir は local/ の在り処（runtime/mods ではない）: {}".format(seen))
+        check(seen is not None and os.path.isfile(os.path.join(seen, "data", "table.json")),
+              "  → 同梱データを引ける")
+
         print("=== unload: 期間の登録簿も空にする ===")
         D.claim_days("999_leftover", lambda app, days: 1)
+        CB.declare(CB.DEFENSE, lambda app, holder: 1.0, owner="999_leftover")
+        EQ.declare(EQ.EQUIPPED, lambda app, holder, item: True, owner="999_leftover")
         result = ml.unload(out)
         check(game.keep is keep and game.slow1(1) == ("slow", 1),
               "unload で全部素に戻る: {}".format(result))
         check(game.saved is saved, "  → 関所も剥がす（unload は全部戻す）")
         check(D.owners() == [], "日数の望みと期間の登録簿も空になる: {}".format(D.owners()))
+        check(CB.owners() == [] and EQ.owners() == [],
+              "combat と equipment の窓口も空になる: {} / {}".format(CB.owners(), EQ.owners()))
     finally:
         ml._mods_dir, ml.discover = real_mods_dir, real_discover
         ml._state["log_path"] = saved_log
         for name in ("fakegame_reinject", "fakegame_reinject.alias", "instantale_mod_100_keep",
-                     "instantale_mod_200_drop", "instantale_mod_300_gate"):
+                     "instantale_mod_200_drop", "instantale_mod_300_gate",
+                     "instantale_mod_150_local"):
             sys.modules.pop(name, None)
-        for attr in ("_instantale_test_events", "_instantale_test_gate"):
+        for attr in ("_instantale_test_events", "_instantale_test_gate",
+                     "_instantale_test_mod_dir"):
             if hasattr(sys, attr):
                 delattr(sys, attr)
         P.revert_all()

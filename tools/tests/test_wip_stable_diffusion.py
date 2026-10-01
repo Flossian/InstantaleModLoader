@@ -905,6 +905,27 @@ check("取り込んだ規則がそのまま使える",
       RB.rewrite(imported, "portrait", "prompt", "solo, medieval, 1boy, watercolor",
                  "solo, medieval, 1boy, watercolor"))
 
+print("道具画面の固定行（窓抜き）")
+# 固定行に欄の無い種類の行は画面に出ず、保存の組み直しで落ちる。
+# ini の `any = …` は kind=any の行になるので、any の欄が要る。
+_spec = _ilu.spec_from_file_location("stable_diffusion_tool_under_test",
+                                     os.path.join(MOD_DIR, "tool.py"))
+TOOL = _ilu.module_from_spec(_spec)
+_spec.loader.exec_module(TOOL)
+_rule_kinds = [kind for kind, _label in TOOL.RULE_LABELS]
+check("追加・除去・置き換えの固定行は規則の全種類を持つ",
+      sorted(_rule_kinds) == sorted(RB.KINDS), _rule_kinds)
+_, any_rules, _ = INI.convert(INI.parse(
+    "[negative_add]\nany = bad hands\n[prompt_remove]\nany = nsfw\n"
+    "[prompt_replace]\nany = {prompt}, x\n"))
+_shown = [(section, row["text"]) for section in ("add", "remove", "replace")
+          for row in any_rules[section]
+          if row["kind"] in _rule_kinds
+          and TOOL.find_row(any_rules[section], section, row["kind"], row["target"]) is row]
+check("取り込んだ any の行は固定行に出る（保存で消えない）",
+      sorted(_shown) == [("add", "bad hands"), ("remove", "nsfw"),
+                         ("replace", "{prompt}, x")], _shown)
+
 print("生成のたびに読み直す（ホットリロード）")
 from instantale_modloader import config as _config  # noqa: E402
 

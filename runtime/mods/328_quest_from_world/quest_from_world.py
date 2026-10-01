@@ -11,6 +11,9 @@
 `301_quest_from_conversation` より外側に置く（`mod.json` の `after`）。
 外側なら、当たった回でも 301 が `area_description` の末尾へ会話を足す側になるので、
 会話から作る依頼の発端は消えない。
+`307_area_move_dungeon` / `325_road_opening` より外側に置くのも同じ理由。
+あちらは道の依頼の回だけ `area_description` の末尾へ道のりの指示を足すので、
+内側に回すと当たった回に指示ごと消え、道と関係のない依頼で移動や開通が起きる。
 """
 import random
 

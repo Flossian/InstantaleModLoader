@@ -264,24 +264,55 @@ class Model(object):
         """検査の控えを捨てる（世界を遊んだ後に見直すため）。"""
         self._names.clear()
 
+    def reload_pending(self):
+        """`pending.json` を読み直す。
+
+        同じファイルにはゲームの中の本体も書く（ロードで `placed`、保存で `saved`）。
+        画面を開いたままゲームを遊べるので、開いたときの控えで丸ごと書き戻すと
+        その印が消え、次のロードで同じ予約をもう一度果たそうとする。
+        書く前には必ずここを通し、画面の操作はその上に当てる。
+        """
+        self.pending = self.C.load_pending(self.state_dir)
+        return self.pending
+
     def reserve(self, package, world, inherit):
         """予約を1件足す。足したものを返す。"""
         row = self.C.reservation(
             self.C.relative_zip(self.state_dir, package.path), world, inherit)
         row["name"] = package.name
         row["source_world"] = package.source_world
+        self.reload_pending()
         self.pending.append(row)
         self.save_pending()
         return row
 
     def drop(self, rows):
-        """予約を消す。消した数。"""
-        before = len(self.pending)
-        drop = {id(row) for row in rows}
-        self.pending = [row for row in self.pending if id(row) not in drop]
-        if len(self.pending) != before:
+        """予約を消す。消した数。
+
+        `rows` は画面が持っている古い控えの行なので、読み直した一覧の中では
+        中身で探す。本体は行の `status` などを書き換えるので丸ごとの一致では引けない。
+        見分けは zip と置き先で、同じ組が複数あるときは何番目かで当てる
+        （本体は行を足しも消しも並べ替えもしないので、順番は控えと同じ）。
+        """
+        def key(row):
+            return (row.get("zip"), row.get("target_world"))
+
+        marks = []
+        for row in rows:
+            at = next((i for i, old in enumerate(self.pending) if old is row), None)
+            nth = 0 if at is None else sum(
+                1 for old in self.pending[:at] if key(old) == key(row))
+            marks.append((key(row), nth))
+        self.reload_pending()
+        drop = set()
+        for mark, nth in marks:
+            same = [i for i, row in enumerate(self.pending) if key(row) == mark]
+            if nth < len(same):
+                drop.add(same[nth])
+        if drop:
+            self.pending = [row for i, row in enumerate(self.pending) if i not in drop]
             self.save_pending()
-        return before - len(self.pending)
+        return len(drop)
 
     def save_pending(self):
         return self.C.save_pending(self.state_dir, self.pending)
@@ -289,6 +320,7 @@ class Model(object):
     def recheck(self):
         """`pending` の全件を検査し直す。`[(予約, 衝突しているか)]`。"""
         self.forget_names()
+        self.reload_pending()
         out = []
         for row in self.pending:
             if row.get("status") != self.C.PENDING:

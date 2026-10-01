@@ -570,6 +570,9 @@ def install(ctx, write=None):
         # **入れ子を見張る。** `save_game` の中から保存の実体
         # （`write_obfuscated_json_file`）が呼ばれる経路があり、数えずに戻すと
         # 内側の「戻す」が外側の保存の最中に一時の段を書き戻す。
+        # 別スレッドの保存とも重なりうるので、抜けるときは入った値へ書き戻さず
+        # 1つ減らし、最後に抜けた側が戻す。先に入った側が先に抜けても、
+        # まだ書き出し中の保存へ一時の段が入らず、数も 0 へ戻る。
         with _LOCK:
             registry = _item_registry()
             depth = registry.get("saving", 0)
@@ -584,16 +587,19 @@ def install(ctx, write=None):
             return orig(*args, **kwargs)
         finally:
             with _LOCK:
-                _item_registry()["saving"] = depth
-            if depth == 0:
+                registry = _item_registry()
+                left = max(0, registry.get("saving", 0) - 1)
+                registry["saving"] = left
+            if left == 0:
                 try:
                     _rewrite_touched(temporary=True, why="save/restore")
                 except Exception:
                     log_exc("prices: could not restore temporary prices "
                             "after saving")
-                if write and stripped:
-                    write("prices: {} temporary price(s) were kept out of "
-                          "the save".format(stripped))
+            # 剥がした側が記録する。最後に抜けるのが剥がした側とは限らない。
+            if write and stripped:
+                write("prices: {} temporary price(s) were kept out of "
+                      "the save".format(stripped))
 
     for target in SAVE_TARGETS:
         ctx.wrap(target, required=False, safe=True)(saving)

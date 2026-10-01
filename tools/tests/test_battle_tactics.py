@@ -434,6 +434,58 @@ check("turn: the hero's blow applies the referee's multiplier to the ratio",
 check("turn: both blows are logged", _log().count("hit: ") == 2, _log())
 check("turn: nothing was swallowed", not _ctx.errors, _ctx.errors)
 
+# 同名の敵が並ぶ戦闘（`Character.name` に連番は付かない。GAME.md §2.10）。
+# 片方に付いた効果は、もう片方の手番で帳簿ごと消えず、もう片方の与ダメにも掛からない。
+_ctx = _fresh()
+_guard1 = types.SimpleNamespace(name="衛兵", experience_level=20, max_hp=568, current_hp=568,
+                                status={})
+_guard2 = types.SimpleNamespace(name="衛兵", experience_level=20, max_hp=568, current_hp=568,
+                                status={})
+_hero = types.SimpleNamespace(name="エリス", experience_level=20, max_hp=300, current_hp=300,
+                              status={})
+_app = types.SimpleNamespace(current_enemy_dict={"衛兵1": _guard1, "衛兵2": _guard2},
+                             player=_hero, add_text=lambda text: None)
+_phase = types.SimpleNamespace(app=_app)
+_ctx.hooks["__main__:BattlePhaseManager.convert_llm_output_to_instruction_dict"](
+    lambda *a, **k: {}, _phase, None, None,
+    {"additional_effects": [
+        {"type": "text_status", "target": ["衛兵1"], "status_name": "泥の浸食",
+         "description": "...", "duration": 3, "intensity": 3,
+         "effects_per_turn": [{"type": "instant_damage", "target": ["衛兵1"],
+                               "power": "weak"}]},
+        {"type": "reduction", "target": ["衛兵1"], "attribute_type": "str",
+         "power": "strong"}]})
+# text_status はゲームが `resolve_battle_effect` の中で status へ書く
+_guard1.status["泥の浸食"] = {"status_name": "泥の浸食", "description": "...", "duration": 3}
+_tick = _ctx.hooks["__main__:BattlePhaseManager.reduce_status_turns_and_log"]
+_tick(lambda *a, **k: None, _phase, _guard2)
+_tick(lambda *a, **k: None, _phase, _guard1)
+check("same-named enemies: the other one's turn does not drop the per-turn effect",
+      _guard1.current_hp == 568 - mod.per_turn_amount(568, "weak", 3)
+      and _guard2.current_hp == 568, (_guard1.current_hp, _guard2.current_hp))
+_got = {}
+
+
+def _guard_blow(who):
+    def turn(*args, **kwargs):
+        action = {"instant_damage": [{"target": "エリス", "power": "weak", "multiplier": 1,
+                                      "category": "physical"}]}
+        _ctx.hooks["__main__:BattlePhaseManager.calculate_battle_effect"](
+            lambda self, a: [{"エリス": 114}] + [{}] * 7, _phase, action)
+        _got[who] = _ctx.hooks["scripts.functions:get_instant_damage"](lambda a, d: a - d, 114, 89)
+    return turn
+
+
+_turn = _ctx.hooks["__main__:BattlePhaseManager.handle_battle_situation"]
+_turn(_guard_blow("衛兵2"), _phase, "衛兵2", "敵側", None)
+_turn(_guard_blow("衛兵1"), _phase, "衛兵1", "敵側", None)
+check("same-named enemies: a strength drop weakens only the one it was put on",
+      _got.get("衛兵2") == mod.hit_damage([("weak", 1)], 114, 89, 300, enemy=True)
+      and _got.get("衛兵1") == mod.hit_damage([("weak", 1)], 114, 89, 300, out_mult=0.8,
+                                              enemy=True)
+      and _got["衛兵1"] != _got["衛兵2"], repr(_got))
+check("same-named enemies: nothing was swallowed", not _ctx.errors, _ctx.errors)
+
 # ---------------------------------------------------------------- 回避と見切り
 check("evasion: 2.5% per point of Dexterity over the attacker",
       abs(mod.evasion_chance(30, 12, 20, 20) - 0.45) < 1e-9)

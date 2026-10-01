@@ -271,6 +271,14 @@ def apply(ctx):
         """走査して playlist を同期する。戻りは (playlist, found)。"""
         found = scan_tracks(asset_dir, state_dir)
         playlist = ctx.read_json(playlist_path, None)
+        # 在るのに読めない（書き損じ・一時的なロック）か形が違うときは、同期も書き戻しもしない。
+        # 読めなかった控えを土台に作り直すと、手で付けた重みが全部 0 で上書きされて消える。
+        # その回は候補なしとして素の曲に倒し、直れば次の戦闘から元の重みで選ぶ。
+        if os.path.isfile(playlist_path) and not (
+                isinstance(playlist, dict) and isinstance(playlist.get("tracks", {}), dict)):
+            warn_once("unreadable playlist",
+                      "playlist.json が読めないので書き戻さず素の曲を鳴らす: {}".format(playlist_path))
+            return {"tracks": {}}, found
         # 見つけた曲は 0 で載せるだけ。鳴らすかどうかは設定画面で決める。
         playlist, added = sync_playlist(playlist, found.keys(), NEW_TRACK_WEIGHT)
         if added or not os.path.isfile(playlist_path):

@@ -453,6 +453,9 @@ def validate(doc):
             if SEPARATOR in rule.from_text or SEPARATOR in rule.to_text:
                 return tab, rule, "「{}」は置換前にも置換後にも使えません（区切りに読まれます）。".format(
                     SEPARATOR)
+            if any(mark in text for text in (rule.from_text, rule.to_text) for mark in "\r\n"):
+                # ルールは1行1件。改行が残ると行が割れ、後ろ半分が別のルールとして読まれる。
+                return tab, rule, "置換前と置換後に改行は書けません（ファイルの上で行が割れます）。"
             if rule.is_regex:
                 try:
                     re.compile(rule.from_text)
@@ -462,6 +465,13 @@ def validate(doc):
                 return tab, rule, (
                     "置換前を「{}」で始めることはできません"
                     "（ファイルの上で正規表現ルールと区別できなくなります）。".format(REGEX_PREFIX))
+            elif rule.enabled and rule.from_text.startswith("#"):
+                # 有効なルールは接頭辞なしで書くので、行頭が # だと本体も `Document.parse` も
+                # コメントとして読み飛ばす。`\u0023` なら本体が復号した形でも登録するので当たる。
+                return tab, rule, (
+                    "置換前を「#」で始めることはできません"
+                    "（ファイルの上でコメントと区別できなくなります）。"
+                    "「\\u0023」と書いてください。")
     return None, None, ""
 
 
@@ -961,8 +971,11 @@ def build_window(model):
             value = None                      # 打ちかけ。最後に打てた値のままにする
         if value is not None and 0 <= value <= 100:
             rule.prob = value
-        from_text = from_box.get("1.0", "end-1c")
-        rule.from_text = from_text if rule.is_regex else from_display(from_text)
+        # 正規表現のパターンも改行は `\n` の2文字へ戻す。改行のまま持つとファイルの上で
+        # 行が割れ、後ろ半分が別のルールとして効く。パターンの `\n` は改行に当たるので意味は変わらない。
+        # 印を切り替えた直後の欄は切り替える前の見せ方のままだが、どちらの見せ方でも
+        # `from_display` がファイルの形へ戻す（`to_display` は `\n` しか変えない）。
+        rule.from_text = from_display(from_box.get("1.0", "end-1c"))
         rule.to_text = from_display(to_box.get("1.0", "end-1c"))
         memo = memo_box.get("1.0", "end-1c")
         rule.memo = [line for line in memo.split("\n") if line.strip()]

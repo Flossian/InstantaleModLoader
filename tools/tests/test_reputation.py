@@ -23,7 +23,7 @@
   素通し   … 評判が無い／profile が文字列でない／複製できない／app が無い
   情景描写  … 既定 OFF では触らない。ON なら player_profile に足す
   控え    … `state/` に書く。土地は `RECORD_KEYS`、二つ名は `EPITHET_RECORD_KEYS`。
-            印が変わらなければ編纂し直さない
+            印が変わらなければ編纂し直さない。線を下回った土地の控えは外す
   安全    … LLM が返らなくても前の評判・前の名が残る。本体は必ず1回だけ呼ばれる
   名乗り   … mod.json の既定値とコードの定数が一致する
 """
@@ -46,6 +46,7 @@ if RUNTIME_DIR not in sys.path:
 
 import instantale_modloader as ml                                   # noqa: E402
 from instantale_modloader import llm as llm_module                  # noqa: E402
+from instantale_modloader import state as state_module              # noqa: E402
 from instantale_modloader import ui as ui_module                    # noqa: E402
 
 CONV = "scripts.llm.llm_manager:"
@@ -286,12 +287,16 @@ def call_conv(ctx, target, npc, use_kwargs=False, args_before=3):
     return got, seen.get("times", 0), result
 
 
-def cache_file(module, world="テスト世界"):
+#: 控えの鍵。周回（世界×主人公）ごとに持つ（TECH.md §5.4）。`make_app` の主人公は「旅人リン」。
+TEST_KEY = "テスト世界" + state_module.PLAYTHROUGH_SEP + "旅人リン"
+
+
+def cache_file(module, world=TEST_KEY):
     from instantale_modloader.state import world_filename
     return os.path.join(STATE_DIR, module.STATE_DIRNAME, world_filename(world))
 
 
-def read_cache(module, world="テスト世界"):
+def read_cache(module, world=TEST_KEY):
     path = cache_file(module, world)
     if not os.path.exists(path):
         return None
@@ -654,7 +659,7 @@ def run():
     # -- 引き直し（人物欄のボタンが書く頼みのファイル） --
     from instantale_modloader.state import world_filename
     reroll = os.path.join(STATE_DIR, module.STATE_DIRNAME,
-                          world_filename("テスト世界", module.REROLL_SUFFIX))
+                          world_filename(TEST_KEY, module.REROLL_SUFFIX))
     ml.write_json(reroll, {"reroll": True})
     module.llm.replies = [json.dumps({"epithet": "霧払い"}, ensure_ascii=False)]
     asks = len(module.llm.asked)
@@ -847,6 +852,91 @@ def run():
     module3, ctx3 = fresh_mod(other, replies=[AREA_REPLY])
     got, _times, _r = call_conv(ctx3, CONVERSATION_TARGETS[0], npc)
     check("別の世界の評判は湧かない", got is npc, getattr(got, "profile", ""))
+    clear_cache(module)
+    app_w = make_app(achievements=("1件だけ",), lawfulness=-10)
+    module, ctx = fresh_mod(app_w, replies=[AREA_REPLY, EPI_REPLY])
+    trigger(module, ctx, app_w)
+    check("手配だけで立った評判を控える",
+          "3" in (read_cache(module) or {}).get("areas", {}), read_cache(module))
+    app_w.player.area_history["3"]["lawfulness"] = 10      # 役場で手配を解いた
+    trigger(module, ctx, app_w)
+    check("線を下回った土地の控えを外す",
+          "3" not in (read_cache(module) or {}).get("areas", {}), read_cache(module))
+    got, times, _r = call_conv(ctx, CONVERSATION_TARGETS[0], npc)
+    check("線を下回った土地では古い評判を注入しない",
+          got is npc and times == 1, getattr(got, "profile", ""))
+    module.llm.replies = [AREA_REPLY2]
+    app_w.player.area_history["3"]["lawfulness"] = -10     # 同じ素材でまた手配
+    trigger(module, ctx, app_w)
+    check("再び線に届けば印が同じでも編み直す",
+          (read_cache(module) or {}).get("areas", {}).get("3", {}).get("reputation")
+          == "竜を追い払った者と噂されている。", read_cache(module))
+
+    print("周回")
+    # 評判と二つ名は主人公の行いから編むので、控えは世界×主人公の鍵で持つ。
+    # 世界名だけの控えは遊んでいる主人公のものとして移し、元のファイルを消す。
+    # 別の主人公の周回が在る世界では移さない（ローダの `WorldStore.adopt`）。
+    # ほかの検査が残した周回の控えと混ざらないよう、ここだけの世界名で見る。
+    move_world = "移行の検査世界"
+    move_mine = move_world + state_module.PLAYTHROUGH_SEP + "旅人リン"
+    old_cache = {"areas": {"3": {"area": "3", "name": "灰の街", "day": 90,
+                                 "updated": "2000-01-01 00:00:00",
+                                 "reputation": "古井戸を守った者と知られている。",
+                                 "fingerprint": "0" * 16}},
+                 "epithet": {"epithet": "井戸守", "description": "", "day": 90,
+                             "updated": "2000-01-01 00:00:00",
+                             "mark": {"qualifying": ["3"], "wanted": [], "deeds": 2}}}
+
+    def move_app(player_name="旅人リン"):
+        found = make_app()
+        found.world.name = move_world
+        found.world_dict["world_data"]["world_name"] = move_world
+        found.player.name = player_name
+        return found
+
+    def drop_move_files():
+        folder = os.path.join(STATE_DIR, module.STATE_DIRNAME)
+        for name in (os.listdir(folder) if os.path.isdir(folder) else ()):
+            if name.startswith(move_world):
+                os.remove(os.path.join(folder, name))
+
+    drop_move_files()
+    ml.write_json(cache_file(module, move_world), old_cache)
+    app_m = move_app()
+    module, ctx = fresh_mod(app_m)
+    got, _times, _r = call_conv(ctx, CONVERSATION_TARGETS[0], npc)
+    check("世界名だけの控えを遊んでいる主人公の周回へ移して読む",
+          "古井戸を守った者" in getattr(got, "profile", "")
+          and "井戸守" in getattr(got, "profile", ""), getattr(got, "profile", ""))
+    check("移した先は周回の鍵のファイル",
+          read_cache(module, move_mine) == old_cache, read_cache(module, move_mine))
+    check("世界名だけの控えは消す", not os.path.exists(cache_file(module, move_world)))
+    module, ctx = fresh_mod(move_app("前の主人公"))
+    got, _times, _r = call_conv(ctx, CONVERSATION_TARGETS[0], npc)
+    check("同じ世界の別の主人公には前の主人公の評判を注入しない",
+          got is npc, getattr(got, "profile", ""))
+    drop_move_files()
+    ml.write_json(cache_file(module, move_world), old_cache)
+    other_dir = os.path.join(STATE_DIR, "reputation_test_other")
+    other_file = os.path.join(other_dir, state_module.world_filename(
+        move_world + state_module.PLAYTHROUGH_SEP + "前の主人公"))
+    try:
+        ml.write_json(other_file, {})
+        module, ctx = fresh_mod(move_app())
+        got, _times, _r = call_conv(ctx, CONVERSATION_TARGETS[0], npc)
+        check("別の主人公の周回が在る世界の控えは移さない",
+              os.path.exists(cache_file(module, move_world))
+              and read_cache(module, move_mine) is None, read_cache(module, move_mine))
+        check("移さなかった世界名だけの控えは注入しない",
+              got is npc, getattr(got, "profile", ""))
+        check("移さなかった理由をログに残す",
+              any("別の主人公の周回" in line for line in read_log()), read_log()[-3:])
+    finally:
+        if os.path.exists(other_file):
+            os.remove(other_file)
+        if os.path.isdir(other_dir) and not os.listdir(other_dir):
+            os.rmdir(other_dir)
+        drop_move_files()
 
     print("安全")
     clear_cache(module)

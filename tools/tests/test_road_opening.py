@@ -18,6 +18,7 @@ AreaMoveManager / DisplayQuestChoice / QuestStart・End・RetireManager / HUD / 
   ロード … World.__init__ のあとに控えから当て直す。MOD を外せば素のまま
   踏破   … 道中のクエストが距離補正どおりの難易度で作られ、受注で本決まりになり、
            完了で道が開いてその街へ移動する（日数は ARRIVAL_DAYS）。放棄では開かない
+  重ねない … 委託中の道は切り拓けず（候補には残る）、道中の依頼が出ている道には払えない
   共存   … 印のキーと state のフォルダ名が他の MOD と重ならない
 """
 import importlib.util
@@ -986,6 +987,82 @@ press(app, "雪原の街")
 press(app, "自ら切り拓く")
 app.process_choice(classes["move"](app, "1", "on_foot"), "徒歩")
 check("pending dropped when travelling by other means", state_file()["pending"] is None)
+
+# ================================================================ 委託と踏破を重ねない
+print("[委託と踏破]")
+module, ctx, app, classes = setup()
+open_list(app, classes)
+press(app, "新たな道を探す")
+press(app, "黄金の砂漠")
+stale_dungeon = [b for b in app.buttons if b.get("text", "").startswith("自ら切り拓く")][0]
+press(app, "お金を支払い")
+check("commissioned", state_file()["commissions"] and app.player.gold == 6000, app.player.gold)
+press(app, "新たな道を探す")
+check("commissioned town stays a candidate", any(t.startswith("黄金の砂漠") for t in texts(app)),
+      texts(app))
+app.texts = []
+press(app, "黄金の砂漠")
+check("picking a commissioned town refuses with the days left",
+      "（黄金の砂漠への道は開削を委託済み。開通まであと 14日）" in app.texts, app.texts)
+check("back on the move list, no means screen",
+      texts(app)[-2:] == ["新たな道を探す", "やめる"]
+      and not any(t.startswith("自ら切り拓く") for t in texts(app)), texts(app))
+check("means refusal logged", "means: '黄金の砂漠' is already commissioned" in read_log())
+# 支払う前に開いた手段の画面が残っていて、そこから「自ら切り拓く」を押した
+app.buttons = [stale_dungeon]
+app.texts = []
+app.on_button_press(0)
+CLOCK.settle()
+check("stale dungeon press refused while commissioned",
+      any("委託済み" in t for t in app.texts) and not app.generated
+      and state_file()["pending"] is None, (app.texts, app.generated))
+check("gold untouched by the refusals", app.player.gold == 6000, app.player.gold)
+app.elapse_days(14)
+CLOCK.settle()
+check("commission still opens once on the due day",
+      "6" in links(app, "0") and len(state_file()["roads"]) == 1
+      and state_file()["roads"][0]["via"] == "commission", state_file()["roads"])
+
+# 逆の順: 道中の依頼が出ている道には委託できない（受注の前も後も）
+module, ctx, app, classes = setup()
+open_list(app, classes)
+press(app, "新たな道を探す")
+press(app, "雪原の街")
+press(app, "自ら切り拓く")
+qid = max(app.world.quests, key=int)
+check("road quest offered", state_file()["pending"]["stage"] == "offered")
+app.texts = []
+press(app, "お金を支払い")
+check("pay refused while the road quest is offered",
+      app.player.gold == 10000 and not state_file()["commissions"]
+      and "（雪原の街へ抜ける道の依頼が出ている。踏破すれば道が開く）" in app.texts
+      and "has a road quest" in read_log(), (app.player.gold, app.texts))
+check("no save after the refusal", app.saves == [], app.saves)
+app.process_choice(classes["start"](app, "settlement_quest", qid), "受注")
+open_list(app, classes)
+press(app, "新たな道を探す")
+press(app, "雪原の街")
+press(app, "お金を支払い")
+check("pay refused while the road quest is armed",
+      app.player.gold == 10000 and not state_file()["commissions"]
+      and state_file()["pending"]["stage"] == "armed", app.player.gold)
+# 別の街への委託は道中の依頼と関係なく通る
+open_list(app, classes)
+press(app, "新たな道を探す")
+press(app, "陽光の砦")
+press(app, "お金を支払い")
+check("pay to another town goes through", app.player.gold == 7000
+      and [c["to"] for c in state_file()["commissions"]] == ["2"], app.player.gold)
+# 放棄すれば委託できる
+app.process_choice(classes["retire"](app), "放棄")
+CLOCK.settle()
+open_list(app, classes)
+press(app, "新たな道を探す")
+press(app, "雪原の街")
+press(app, "お金を支払い")
+check("pay accepted after retiring the road quest", app.player.gold == 4000
+      and [c["to"] for c in state_file()["commissions"]] == ["2", "8"], app.player.gold)
+check("no errors in the overlap checks", not ctx.errors, ctx.errors)
 
 # ================================================================ 共存
 print("[共存]")

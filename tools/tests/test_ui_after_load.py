@@ -3,7 +3,8 @@
 
 名簿が空の間は待ち、同行者が入ったら 1 度だけ `refresh_choice_buttons()` を呼ぶこと、
 そのとき画面（HUD の `update_button_texts`）にも塗ること、
-2 本の MOD が呼んでも 1 度であること、同行者の居ないセーブでは上限で 1 度呼ぶことを見る。
+2 本の MOD が呼んでも 1 度であること、同行者の居ないセーブでは上限で 1 度呼ぶこと、
+待っている間に待機へ入ったら組み直さずに降りることを見る。
 """
 import os
 import sys
@@ -104,4 +105,17 @@ load_a(lambda self: None, app)
 for _ in range(4):
     FakeClock.tick()
 assert app.refreshed == 2 and not FakeClock.intervals
+
+# 待っている間に待機（点送り）に入った: 組み直さず、点の上に塗らずに降りる
+painted = len(InstanTaleHUD.painted)
+load_a(lambda self: None, app)
+FakeClock.tick()
+app.is_button_enabled = False                            # プレイヤーが選択肢を押した
+app.to_display_buttons = [".", ".", "."]
+for _ in range(4):
+    FakeClock.tick()
+assert app.refreshed == 2 and not FakeClock.intervals, app.refreshed
+assert len(InstanTaleHUD.painted) == painted, InstanTaleHUD.painted
+assert app.to_display_buttons == [".", ".", "."]
+assert any("skipped the refresh after the load (waiting" in l for l in logged), logged
 print("ok")

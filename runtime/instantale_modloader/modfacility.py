@@ -69,6 +69,7 @@ MOD を外せば街は素のまま（建物も、そこへ繋がる道も残ら�
 落ちたときの逃げ場はそちら（`ids.claim`）。
 """
 
+import contextlib
 import copy
 import os
 import sys
@@ -1078,6 +1079,33 @@ _bucket = _stores.bucket            # `(周回の鍵, 控え)` か `(None, None)
 _jsonable = state.jsonable
 
 
+@contextlib.contextmanager
+def keyed(key):
+    """`with modfacility.keyed(key):` の間、控えをその周回の鍵で読み書きする。
+
+    `World.__init__` を MOD が直に包み、orig の後で `spawn` を呼ぶと、
+    ローダの関所（`world_init`）が立てた鍵はもう消えていて、控えは `app` から決めた鍵
+    （前の周回のことがある）へ書かれる。鍵を引数の `save_data_dict` から決めて
+    （`state.playthrough_key_of_dict`）ここで立てれば、読んでいる周回へ書ける。
+    抜けるときは入る前の値へ戻す（入れ子にしても外側の鍵を消さない）。
+    鍵が空なら何も立てない。`modnpc.keyed` と対で使う。
+    """
+    missing = object()
+    previous = getattr(sys, _KEY_OVERRIDE_ATTR, missing)
+    if isinstance(key, str) and key:
+        setattr(sys, _KEY_OVERRIDE_ATTR, key)
+    try:
+        yield key
+    finally:
+        if previous is missing:
+            try:
+                delattr(sys, _KEY_OVERRIDE_ATTR)
+            except AttributeError:
+                pass
+        else:
+            setattr(sys, _KEY_OVERRIDE_ATTR, previous)
+
+
 def _persist(app, owner, facility_id, **changes):
     """1軒ぶんの控えを書く。`snapshot=`（素データの写し）／`spawned=`／`place=`。
 
@@ -1225,9 +1253,8 @@ def restore_world(app, world=None, save_data_dict=None, write=None):
         key = state.playthrough_key(app)
     if not key or key == state.UNKNOWN_WORLD:
         return []
-    setattr(sys, _KEY_OVERRIDE_ATTR, key)
     done = []
-    try:
+    with keyed(key):
         bucket = found.load(key, fresh=True)
         for owner, owned in list((bucket or {}).items()):
             if not isinstance(owned, dict):
@@ -1247,11 +1274,6 @@ def restore_world(app, world=None, save_data_dict=None, write=None):
                     spawn(app, facility_id, spot[0], node_id=spot[1],
                           hub_id=spot[2], world=world, write=write)
                 done.append((owner, facility_id))
-    finally:
-        try:
-            delattr(sys, _KEY_OVERRIDE_ATTR)
-        except AttributeError:
-            pass
     if write and done:
         write("modfacility: restored {} entr(y/ies) from the state of {!r}".format(
             len(done), key))
@@ -2688,23 +2710,17 @@ def _install(ctx, write):
         """
         result = orig(self, save_data_dict, app, *args, **kwargs)
         key = state.playthrough_key_of_dict(save_data_dict, None)
-        if key:
-            setattr(sys, _KEY_OVERRIDE_ATTR, key)
-        try:
-            lift_plain(app)            # 前の世界の素データに写しを残さない
-            forget(write=write)
-            fire_all("world", app, world=self,
-                     args={"save_data_dict": save_data_dict}, write=write)
-            restore_world(app, world=self, save_data_dict=save_data_dict,
-                          write=write)
-            repair_player_location(self, save_data_dict, write=write)
-        except Exception:
-            log_exc("modfacility: cannot rebuild the town after the load")
-        finally:
+        with keyed(key):
             try:
-                delattr(sys, _KEY_OVERRIDE_ATTR)
-            except AttributeError:
-                pass
+                lift_plain(app)            # 前の世界の素データに写しを残さない
+                forget(write=write)
+                fire_all("world", app, world=self,
+                         args={"save_data_dict": save_data_dict}, write=write)
+                restore_world(app, world=self, save_data_dict=save_data_dict,
+                              write=write)
+                repair_player_location(self, save_data_dict, write=write)
+            except Exception:
+                log_exc("modfacility: cannot rebuild the town after the load")
         return result
     targets.append(WORLD_TARGET)
 

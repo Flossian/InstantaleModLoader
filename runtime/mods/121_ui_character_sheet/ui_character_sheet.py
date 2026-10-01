@@ -54,7 +54,7 @@ import os
 import sys
 
 from instantale_modloader import frames, ui
-from instantale_modloader.state import world_filename, world_key
+from instantale_modloader.state import playthrough_key, world_filename
 
 from . import sheet
 
@@ -269,7 +269,7 @@ def apply(ctx):
         if app is None:
             return
         path = os.path.join(ctx.state_dir, sheet.REPUTATION_DIRNAME,
-                            world_filename(world_key(app), sheet.REROLL_SUFFIX))
+                            world_filename(playthrough_key(app), sheet.REROLL_SUFFIX))
         if ctx.write_json(path, {"reroll": True}):
             ctx.log("character sheet: 二つ名の引き直しを頼んだ")
         ui.show_widget(button, False)
@@ -321,12 +321,16 @@ def apply(ctx):
         置き場所は `os.path.join` で組む。`ctx.state_path()` は親フォルダを作るので、
         評判 MOD を使っていない `state/` に空のフォルダを置いてしまう（TECH.md §3.11）。
         二つ名はプレイヤーのものなので、別人の人物欄には出さない。
+        控えは周回（世界×主人公）ごとなので、周回の鍵で引く（TECH.md §5.4）。
+        世界名だけの控えは読まない。移すのは評判 MOD の仕事で、
+        移す前に読むと、同じ世界の前の主人公の二つ名を出しうる。
+        移されるまでの間は二つ名が出ないだけで済む。
         """
         player = frames.attr(app, "player")
         if player is frames.MISSING or player is None or character is not player:
             return ""
         path = os.path.join(ctx.state_dir, sheet.REPUTATION_DIRNAME,
-                            world_filename(world_key(app)))
+                            world_filename(playthrough_key(app)))
         return sheet.epithet_text(
             sheet.reputation_epithet(ctx.read_json(path, None)))
 

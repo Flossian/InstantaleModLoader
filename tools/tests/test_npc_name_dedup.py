@@ -94,6 +94,10 @@ class InstantaleApp:
 
     def load_game_new(self, *args, **kwargs):
         self.loads += 1
+        # ロードの最中に NPC を組む経路（仲間の復元など）を真似る口。
+        during = getattr(self, "during_load", None)
+        if during is not None:
+            during(self)
 
     def start_game(self, *args, **kwargs):
         self.loads += 1
@@ -662,6 +666,26 @@ app.load_game_new()
 reused = born(app, "10", "バルガス")
 check("別の世界を読んだら前の世界の名前は残らない",
       reused.name == "バルガス", reused.name)
+
+# ロードの最中に組まれる NPC を、前の世界の名前と突き合わせない。
+# 控え直しは orig を抜けた後なので、ロードに入る時点で前の世界の控えを捨てておく必要がある。
+mod, ctx, app = setup({"FIX_EXISTING": True})
+born(app, "12", "バルガス")
+app.world.characters.clear()
+app.save_data_dict["npcs"].clear()
+
+
+def build_during_load(app):
+    app.save_data_dict["npcs"]["40"] = {"name": "ヴァルガス", "id": "40"}
+    app.world.generate_character("40", app.save_data_dict["npcs"]["40"])
+
+
+app.during_load = build_during_load
+app.load_game_new()
+check("ロード中の NPC を前の世界の名前との衝突で改名しない",
+      app.world.characters["40"].name == "ヴァルガス"
+      and app.save_data_dict["npcs"]["40"]["name"] == "ヴァルガス",
+      (app.world.characters["40"].name, app.save_data_dict["npcs"]["40"]))
 
 print("\n{} check(s) failed".format(len(failures)) if failures else "\nall ok")
 sys.exit(1 if failures else 0)

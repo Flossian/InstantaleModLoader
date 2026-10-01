@@ -10,7 +10,7 @@
     "en": "Stops evenly-matched battles from ending in one hit. Damage still comes from the game's own attack and defense, but defense now divides instead of subtracting (defense equal to the attack lets half through), and a stronger enemy really does hit harder. Enemies get 2.5 times their health, so a mook takes about three blows and a boss lasts as long as its health deserves. Solo, level-appropriate gear loses the war of attrition; one step better gear or some training gets you through, and with a companion a quest costs about a third of your health. Foes 15 levels above you are fearsome and 20 above is no contest. Attacks no longer always land: high Dexterity dodges enemy blows and high Wisdom turns them into grazes (easy against weaker foes, hard against stronger ones). Poison, curses and stat drops the referee describes now change the numbers, and a Guard entry in the skill list (or typing something defensive) halves what you take until your next move",
     "ja": "互角の戦闘が一撃で終わらなくなる。ダメージはゲーム自身の攻撃と防御から出すまま、防御を引き算から割り算に替える（防御が攻撃と同じなら半分が通る）。敵の筋力の差もそのまま効く。敵の体力は2.5倍になり、雑魚は3発前後、ボスは体力なりに長持ちする。ソロはレベル相応の装備では削り負け、一段強い装備か訓練で通る。仲間を連れていれば1回の依頼で体力の3割ほどを失う。レベルが15上の相手は強敵、20上は勝負にならない。攻撃は必中ではなくなり、敏捷が高いほど敵の攻撃をかわし、判断が高いほど傷を浅くする（格下の攻撃は容易く、格上の攻撃は避けにくい）。審判が語ってくる毒や能力低下も数字に効く。スキル一覧に「防御」が加わり、次に自分が動くまで被ダメージを半分にできる（自由入力で防御的に動いても同じ構えになる）"
   },
-  "version": "18",
+  "version": "19",
   "author": "R01/Flossian",
   "settings": {
     "ENEMY_HP": {

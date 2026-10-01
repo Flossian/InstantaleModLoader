@@ -260,6 +260,33 @@ def main():
     ok &= check("写しの名前で建つ", getattr(rebuilt, "name", "") == "灯火亭（改装）")
     ok &= check("接続も張り直る", fid in entrance2.connections)
 
+    print("鍵: keyed の間だけ控えの鍵が立ち、抜けると元へ戻る")
+    # `World.__init__` を MOD が直に包むと、orig の後ではローダの鍵がもう消えている。
+    # その間の新築を読んでいる周回の控えへ書かせる窓口。
+    app_key = modfacility._current_key(app2)
+    kid = modfacility.register("915_invest", key="keyed1", fields={"name": "鍵の家"})
+    with modfacility.keyed("鍵の検査A"):
+        outer = modfacility._current_key(app2)
+        modfacility.spawn(app2, kid, "1", world=world2)
+        in_keyed = modfacility._persisted_entry(app2, "915_invest", kid)
+        modfacility.restore_world(app2, world=world2,
+                                  save_data_dict=app2.save_data_dict)
+        after_restore = modfacility._current_key(app2)
+        with modfacility.keyed(""):
+            empty = modfacility._current_key(app2)
+    ok &= check("立っている間はその鍵", outer == "鍵の検査A")
+    ok &= check("keyed の間の新築はその鍵の控えへ書く",
+                (in_keyed or {}).get("spawned") is True
+                and (in_keyed or {}).get("place") is not None)
+    ok &= check("app から決まる鍵の控えには書かない",
+                modfacility._persisted_entry(app2, "915_invest", kid) is None)
+    ok &= check("中で建て直しを呼んでも外側の鍵は消えない", after_restore == "鍵の検査A")
+    ok &= check("空の鍵は何も立てない", empty == "鍵の検査A")
+    ok &= check("抜けると鍵は消える", not hasattr(sys, modfacility._KEY_OVERRIDE_ATTR)
+                and modfacility._current_key(app2) == app_key)
+    with modfacility.keyed("鍵の検査A"):
+        modfacility.unregister("915_invest", kid, app=app2)
+
     print("隠す: 保存の間だけ立ち位置が入口へ移る")
     app2.player.location = rebuilt
     app2.buttons = game_buttons(("宿屋", "2"))

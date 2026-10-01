@@ -10,7 +10,7 @@
     "en": "Records, at each moment of the load path, whether the pieces make_npc needs are ready - the world key, the raw npc dicts, the id ledger, and a placeable guild or inn. Read-only",
     "ja": "ロードの道中の各地点で、`make_npc` に要るもの（世界の鍵・素データ・採番台帳・置ける先のギルドか宿）が揃っているかを録る。読み取りだけでゲームは変えない"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "debug": true
 }

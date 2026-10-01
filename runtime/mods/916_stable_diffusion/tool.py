@@ -74,6 +74,11 @@ KIND_LABELS = (("portrait", "立ち絵 (キャラ):"),
 #: 「拡大しない条件」は全体の行も持つ（元 GUI の skip_if と skip_if_<種類>）。
 SKIP_LABELS = (("any", "全種類に効く条件:"),) + KIND_LABELS
 
+#: 追加・除去・置き換えの固定行も全体の行を持つ。規則は `any` の行を全種類に当て、
+#: ini の取り込みも `any = …` をこの行に写す。欄が無いと画面に出ないまま
+#: `gather_rules` が組み直すときに落ち、保存で消える。
+RULE_LABELS = (("any", "全種類:"),) + KIND_LABELS
+
 #: 解像度のタブの GroupBox。
 SIZE_GROUPS = (("立ち絵 (キャラクタ)", ("PORTRAIT_SHORT", "PORTRAIT_MAX_LONG")),
                ("敵・モンスター", ("ENEMY_SHORT", "ENEMY_MAX_LONG")),
@@ -578,10 +583,10 @@ def build_window(rules_in=None, settings_in=None, note=""):
     # ----------------------------------------------------- プロンプト追加
     tab = page("プロンプト追加")
     box = group(tab, "プロンプトへ追加")
-    fixed.append(_FixedRows(box, KIND_LABELS, "add", "prompt",
+    fixed.append(_FixedRows(box, RULE_LABELS, "add", "prompt",
                             rules_now.get("add") or []))
     box = group(tab, "ネガティブプロンプトへ追加")
-    fixed.append(_FixedRows(box, KIND_LABELS, "add", "negative",
+    fixed.append(_FixedRows(box, RULE_LABELS, "add", "negative",
                             rules_now.get("add") or []))
 
     # ------------------------------------------------------- 条件付き追加
@@ -596,19 +601,19 @@ def build_window(rules_in=None, settings_in=None, note=""):
     # ----------------------------------------------------------- タグ除去
     tab = page("タグ除去")
     box = group(tab, "プロンプトから除去")
-    fixed.append(_FixedRows(box, KIND_LABELS, "remove", "prompt",
+    fixed.append(_FixedRows(box, RULE_LABELS, "remove", "prompt",
                             rules_now.get("remove") or []))
     box = group(tab, "ネガティブプロンプトから除去")
-    fixed.append(_FixedRows(box, KIND_LABELS, "remove", "negative",
+    fixed.append(_FixedRows(box, RULE_LABELS, "remove", "negative",
                             rules_now.get("remove") or []))
 
     # ------------------------------------------------------- 完全置き換え
     tab = page("完全置き換え")
     box = group(tab, "プロンプトの置き換え")
-    fixed.append(_FixedRows(box, KIND_LABELS, "replace", "prompt",
+    fixed.append(_FixedRows(box, RULE_LABELS, "replace", "prompt",
                             rules_now.get("replace") or []))
     box = group(tab, "ネガティブプロンプトの置き換え")
-    fixed.append(_FixedRows(box, KIND_LABELS, "replace", "negative",
+    fixed.append(_FixedRows(box, RULE_LABELS, "replace", "negative",
                             rules_now.get("replace") or []))
 
     # --------------------------------------------------------- サンプラー

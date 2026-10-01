@@ -7,7 +7,8 @@
   名前    … 使えない字は潰す。世界の控えと違って**短い印は付けない**（ゲームの
             書いたフォルダ名と同じ文字列でなければ画像が見つからない）
   往復    … 書き出した zip を読み返すと 33項目が同じ順で戻る。画像と記憶も入る
-  予約    … pending.json を書いて読める。同名の検査が効く
+  予約    … pending.json を書いて読める。同名の検査が効く。
+            画面を開いたままでも、本体が書いた placed / saved を古い控えで消さない
   絞込    … 名前は部分一致、エリア・施設・職・分類・親密度は選択、レベルは下限
   立ち絵  … `image_src` は書いた機械の絶対パス。別の機械の世界を持ってきても
             `%LOCALAPPDATA%` から繋ぎ直して見つける
@@ -831,6 +832,41 @@ try:
           any(("始まりの泥濘のギルドへ" in text or "始まりの泥濘の宿へ" in text
                or "灰の交易都市の宿へ" in text) for text in plain_said),
           plain_said)
+
+    print("-- 画面を開いたままゲームが書いたとき")
+    # 本体は同じ pending.json に placed / saved を書く。
+    # 画面が開いたときの控えで丸ごと書き戻すと、その印が消える。
+    kept_rows = json.loads(json.dumps(carryover.load_pending(state_dir)))
+    carryover.save_pending(state_dir, [])
+    model.pending = []
+    model.reserve(lilia, "アルカディア", {"memory": False})
+    model.reserve(lilia, "アルカディア", {"memory": False})     # 同じ組を2つ
+    stale = list(model.pending)
+    game_rows = carryover.load_pending(state_dir)
+    game_rows[0].update(status=carryover.PLACED, npc_id="9",
+                        saved="2026-08-30T15:00:00")
+    game_rows[1].update(status=carryover.SKIPPED, reason="同名の人物が居る")
+    carryover.save_pending(state_dir, game_rows)
+    model.pending = stale
+    model.reserve(hans, "アルカディア", {"memory": False})
+    rows = carryover.load_pending(state_dir)
+    check("予約を足しても本体が書いた印を消さない",
+          [row["status"] for row in rows]
+          == [carryover.PLACED, carryover.SKIPPED, carryover.PENDING]
+          and rows[0].get("saved"), rows)
+    model.pending = stale                    # 画面はまだ古い控えを持っている
+    model.drop([stale[1]])
+    rows = carryover.load_pending(state_dir)
+    check("古い控えの行で消しても、同じ組の何番目かで同じ行を消す",
+          [row["status"] for row in rows] == [carryover.PLACED, carryover.PENDING]
+          and rows[0].get("saved"), rows)
+    model.pending = stale
+    model.recheck()
+    check("検査し直すと読み直す",
+          [row["status"] for row in model.pending]
+          == [carryover.PLACED, carryover.PENDING], model.pending)
+    carryover.save_pending(state_dir, kept_rows)
+    model.pending = kept_rows
 
     check("記録に例外が残っていない", not ctx.errors, ctx.errors)
 finally:

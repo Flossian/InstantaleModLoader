@@ -640,17 +640,66 @@ def main():
     # 場所で別人に当たる。実機。VERIFICATION.md §3.68）。
     app3.player = types.SimpleNamespace(name="主人公")
     app3.save_data_dict["npcs"]["9"] = {"name": "客A"}
-    modnpc.register("330_real_estate", key="keeper-6", fields={"name": "エレン"})
+    ellen = modnpc.register("330_real_estate", key="keeper-6", fields={"name": "エレン"})
     used = modnpc.names_in_use(app3)
     ok &= check("実行時の名簿から拾う", "宿の主" in used)
     ok &= check("セーブの素データからも拾う", "客A" in used)
-    ok &= check("他の MOD の登録からも拾う", "エレン" in used)
     ok &= check("プレイヤーも入る", "主人公" in used)
+    # 層は世界をまたいで残る（前に読んだ周回の人物の層もそのまま）。
+    # 今の世界に居ない人の名前を数えると、今の人物が理由なく改名される。
+    ok &= check("層だけで世界に居ない人は数えない", "エレン" not in used)
+    modnpc.spawn(app3, ellen)
+    used = modnpc.names_in_use(app3)
+    ok &= check("他の MOD の人物も、世界に居れば拾う", "エレン" in used)
     ok &= check("重複は畳む", len(used) == len(set(used)))
-    skipped = modnpc.names_in_use(
-        app3, skip=[modnpc.make_id("330_real_estate", "keeper-6")])
+    hidden_names = modnpc.hide(app3)
+    try:
+        during_save = modnpc.names_in_use(app3)
+    finally:
+        modnpc.restore(app3, hidden_names)
+    ok &= check("保存の間（名簿の反復から隠れていても）拾う", "エレン" in during_save)
+    skipped = modnpc.names_in_use(app3, skip=[ellen])
     ok &= check("skip に渡した id の名前は数えない", "エレン" not in skipped)
-    modnpc.unregister("330_real_estate", modnpc.make_id("330_real_estate", "keeper-6"))
+    app4, _world4, _f4, _plain4 = make_app()
+    app4.player = types.SimpleNamespace(name="前の主人公")
+    ok &= check("別の世界では、前の世界で組んだ人を数えない",
+                "エレン" not in modnpc.names_in_use(app4))
+    # `World.__init__` の中では `app` の名簿・辞書・主人公がまだ前の周回のことがある。
+    newcomer = FakeCharacter(name="新しい住人", original_ability_scores=dict(
+        (key, 10) for key in ABILITY_KEYS))
+    world5 = FakeWorld({"8": newcomer}, {})
+    save5 = {"npcs": {"8": {"name": "新しい住人"}, "10": {"name": "客B"}},
+             "player_data": {"name": "次の主人公"}}
+    loading = modnpc.names_in_use(app4, world=world5, save_data_dict=save5)
+    ok &= check("world= の名簿から拾う", "新しい住人" in loading)
+    ok &= check("save_data_dict= の素データと主人公から拾う",
+                "客B" in loading and "次の主人公" in loading)
+    ok &= check("渡したときは app 側の名簿・素データ・主人公を数えない",
+                "宿の主" not in loading and "前の主人公" not in loading)
+    modnpc.unregister("330_real_estate", ellen, app=app3)
+
+    print("鍵: keyed の間だけ控えの鍵が立ち、抜けると元へ戻る")
+    with modnpc.keyed("鍵の検査A"):
+        outer = modnpc._current_key(app3)
+        with modnpc.keyed("鍵の検査B"):
+            inner = modnpc._current_key(app3)
+        back_to_outer = modnpc._current_key(app3)
+        with modnpc.keyed(None):
+            empty = modnpc._current_key(app3)
+    ok &= check("立っている間はその鍵", outer == "鍵の検査A" and inner == "鍵の検査B")
+    ok &= check("入れ子を抜けると外側の鍵に戻る", back_to_outer == "鍵の検査A")
+    ok &= check("空の鍵は何も立てない", empty == "鍵の検査A")
+    ok &= check("抜けると鍵は消える", not hasattr(sys, modnpc._KEY_OVERRIDE_ATTR))
+    keyed_id = modnpc.register("229_probe", key="keyed", fields={"name": "鍵の人"})
+    with modnpc.keyed("鍵の検査A"):
+        modnpc.spawn(app3, keyed_id)
+        in_keyed = modnpc._persisted_entry(app3, "229_probe", keyed_id)
+    ok &= check("keyed の間の spawn はその鍵の控えへ書く",
+                (in_keyed or {}).get("spawned") is True
+                and os.path.isfile(modnpc.store().path("鍵の検査A")))
+    ok &= check("app から決まる鍵の控えには書かない",
+                modnpc._persisted_entry(app3, "229_probe", keyed_id) is None)
+    modnpc.unregister("229_probe", keyed_id, app=app3)
 
     print("片付け: purge で登録簿が空になる")
     modnpc.register("229_probe", key="clerk", fields={"name": "受付"})

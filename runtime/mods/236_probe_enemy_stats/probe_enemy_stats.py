@@ -44,6 +44,8 @@ HP・防御が別々に散っていることまでは読めた（Lv77 で素点 
       同じ `calculate_battle_effect` を包む他の probe（`222_`）が、これを見て記録を控えられるようにするため
       （版3の実機では、222 が試し打ちの呼び出しを「手の外の calculate」として約 1,400 行録っていた）
     - `start_battle` の包みで、try の中で作る値を try の外の試し打ちが使っていたので、先に None で用意した
+  * 版4: 戦闘の開始の写しで `get_npc_defense()` を呼ぶ間も `DRY_THREAD_MARK` を置く。
+    置いていなかったので、`222_` がこの呼び出しを「手の外の計算」として録り、件数の枠も食っていた
 
 この probe は読み込み順で `319_` / `333_` より外側に入る。
 `get_instant_damage` の引数（素点と防御）は誰も書き換えないので素の値が録れるが、戻りは 319 が置き換えた後の値。
@@ -95,6 +97,7 @@ DRY_EXTRA = ()
 DRY_SEEN_MARK = "_instantale_probe_236_dry_seen"
 
 #: 試し打ちの間だけ、試し打ちをしているスレッドの id を置く（版3の続き）。
+#: 戦闘の開始の写しで `get_npc_defense` を呼ぶ間も置く（版4）。
 #: 同じ関数を包む他の probe は、`getattr(sys, DRY_THREAD_MARK, None) == threading.get_ident()`
 #: のあいだ記録を控えてよい。
 DRY_THREAD_MARK = "_instantale_probe_dry_run_thread"
@@ -263,13 +266,22 @@ def apply(ctx):
             allies = [getattr(app, "player", None)]
             for member_id in ui.party_member_ids(app):
                 allies.append(ui.character_of(app, member_id))
-            event("start",
-                  enemy_type=plain(getattr(self, "enemy_type", None)),
-                  flags=[f for f in BATTLE_FLAGS if getattr(app, f, False)],
-                  area=plain(getattr(ui.current_area(app), "name", None)),
-                  enemies={str(k): snapshot(v) for k, v in (enemies or {}).items()}
-                  if isinstance(enemies, dict) else plain(enemies),
-                  allies=[snapshot(c) for c in allies if c is not None])
+            # 版4: 写しで能動に呼ぶ get_npc_defense も、試し打ちと同じ印の下で呼ぶ。
+            # 印が無いと、同じ関数を包む 222_ がこれを「手の外の計算」として録り、件数の枠も食う。
+            setattr(sys, DRY_THREAD_MARK, threading.get_ident())
+            try:
+                event("start",
+                      enemy_type=plain(getattr(self, "enemy_type", None)),
+                      flags=[f for f in BATTLE_FLAGS if getattr(app, f, False)],
+                      area=plain(getattr(ui.current_area(app), "name", None)),
+                      enemies={str(k): snapshot(v) for k, v in (enemies or {}).items()}
+                      if isinstance(enemies, dict) else plain(enemies),
+                      allies=[snapshot(c) for c in allies if c is not None])
+            finally:
+                try:
+                    delattr(sys, DRY_THREAD_MARK)
+                except AttributeError:
+                    pass
         except Exception:
             ctx.log_exc("enemy stats probe: recording the battle start failed")
         if DRY_RUN and not dry_state["stopped"] and app is not None:

@@ -93,6 +93,7 @@ id で引かれる場所に残さないことを守っているのは、**保存
 MOD を外せば何も戻らない。MOD 固有の続き（例えば出資の帳簿）は `state.WorldStore` で MOD が持つ。
 """
 
+import contextlib
 import copy
 import inspect
 import sys
@@ -382,12 +383,23 @@ def entries(owner=None):
     return sorted(out)
 
 
-def names_in_use(app, skip=()):
+def names_in_use(app, skip=(), world=None, save_data_dict=None):
     """その世界で既に使われている人名。**人を作る前にここを見る。**
 
     集めるのは3つ。実行時の名簿（`world.characters`）・セーブの素データ
     （`npcs.save_npcs`。まだ実体になっていない人も載っている）・
-    登録されている MOD の NPC（持ち主をまたいで全部）。プレイヤーの名も入れる。
+    登録されている MOD の NPC のうち**今の世界に居る**もの（持ち主はまたぐ）。
+    プレイヤーの名も入れる。
+
+    登録簿は `sys` に置かれ、世界が変わっても層は残る（`forget` が捨てるのは実体と
+    置き場所だけ）。層の名前を全部数えると、同じプロセスで前に読んだ周回の人物の名前まで
+    「使用中」になり、今の世界に居ない人と重なったという理由で今の人物が改名される。
+    そこで登録簿からは、名簿に載っているか今の世界のどこかに置かれている id だけを数える。
+
+    `world=` / `save_data_dict=` は `World.__init__` の中から呼ぶためのもの。
+    その時点では `app.world` も `app` の辞書も `app.player` も前の周回を指していることがある
+    （`state.playthrough_key` の注記）。`save_data_dict` を渡すと、素データと主人公の名は
+    `app` からではなくその辞書から読む。
 
     名前が既存の人物と重なると、**名前でしか相手を引けない場所**で別人に当たる
     （ゲームの人物欄は `visible_character_sheet_data` に id を持たず、名前しか渡さない。
@@ -407,22 +419,33 @@ def names_in_use(app, skip=()):
         if name and name not in found:
             found.append(name)
 
-    player = getattr(app, "player", None)
-    add(getattr(player, "name", None))
-    roster = _roster(app) or {}
+    if save_data_dict is not None:
+        add(state.player_name_of_dict(save_data_dict))
+    else:
+        add(getattr(getattr(app, "player", None), "name", None))
+    roster = _roster(app, world) or {}
     for npc_id, character in list(roster.items()):
         if str(npc_id) in skip:
             continue
         add(getattr(character, "name", None))
     try:
-        for npc_id, entry in npcs.save_npcs(app).items():
+        if save_data_dict is not None:
+            plain = save_data_dict.get("npcs") if isinstance(save_data_dict, dict) else None
+            plain = _plain_source(plain) if isinstance(plain, dict) else {}
+        else:
+            plain = npcs.save_npcs(app)
+        for npc_id, entry in list(plain.items()):
             if str(npc_id) in skip or not isinstance(entry, dict):
                 continue
             add(entry.get("name"))
     except Exception:
         log_exc("modnpc: cannot read the plain npc data for the names in use")
+    reg = registry()
     for npc_id in entries():
         if str(npc_id) in skip:
+            continue
+        # 名簿の `in` は `_RosterView` でも隠した分まで答える（保存の最中でも数える）。
+        if npc_id not in roster and not (reg.get(npc_id) or {}).get("placed"):
             continue
         add(fields_of(npc_id).get("name"))
     return found
@@ -1057,6 +1080,33 @@ _bucket = _stores.bucket            # `(周回の鍵, 控え)` か `(None, None)
 _jsonable = state.jsonable
 
 
+@contextlib.contextmanager
+def keyed(key):
+    """`with modnpc.keyed(key):` の間、控えをその周回の鍵で読み書きする。
+
+    `World.__init__` を MOD が直に包み、orig の後で `spawn` / `place` を呼ぶと、
+    ローダの関所（`world_init`）が立てた鍵はもう消えていて、控えは `app` から決めた鍵
+    （前の周回のことがある）へ書かれる。鍵を引数の `save_data_dict` から決めて
+    （`state.playthrough_key_of_dict`）ここで立てれば、読んでいる周回へ書ける。
+    抜けるときは入る前の値へ戻す（入れ子にしても外側の鍵を消さない）。
+    鍵が空なら何も立てない。
+    """
+    missing = object()
+    previous = getattr(sys, _KEY_OVERRIDE_ATTR, missing)
+    if isinstance(key, str) and key:
+        setattr(sys, _KEY_OVERRIDE_ATTR, key)
+    try:
+        yield key
+    finally:
+        if previous is missing:
+            try:
+                delattr(sys, _KEY_OVERRIDE_ATTR)
+            except AttributeError:
+                pass
+        else:
+            setattr(sys, _KEY_OVERRIDE_ATTR, previous)
+
+
 def _persist(app, owner, npc_id, **changes):
     """1人ぶんの控えを書く。`snapshot=`（実体の写し）／`spawned=`／`place=`。書けたら True。
 
@@ -1192,9 +1242,8 @@ def restore_world(app, world=None, save_data_dict=None, write=None):
         key = state.playthrough_key(app)
     if not key or key == state.UNKNOWN_WORLD:
         return []
-    setattr(sys, _KEY_OVERRIDE_ATTR, key)
     done = []
-    try:
+    with keyed(key):
         bucket = found.load(key, fresh=True)
         for owner, owned in list((bucket or {}).items()):
             if not isinstance(owned, dict):
@@ -1216,11 +1265,6 @@ def restore_world(app, world=None, save_data_dict=None, write=None):
                               listed=bool(spot[3]) if len(spot) > 3 else True,
                               world=world, write=write)
                 done.append((owner, npc_id))
-    finally:
-        try:
-            delattr(sys, _KEY_OVERRIDE_ATTR)
-        except AttributeError:
-            pass
     if write and done:
         write("modnpc: restored {} entr(y/ies) from the state of {!r}".format(
             len(done), key))
@@ -1819,20 +1863,14 @@ def _install(ctx, write):
         # `app.world_dict` はこの時点でまだ前の世界を指していることがあり、
         # `on["world"]` の中で MOD が `spawn` すると前の世界の控えに書いてしまう。
         key = state.playthrough_key_of_dict(save_data_dict, None)
-        if key:
-            setattr(sys, _KEY_OVERRIDE_ATTR, key)
-        try:
-            forget(write=write)
-            fire_all("world", app, world=self,
-                     args={"save_data_dict": save_data_dict}, write=write)
-            restore_world(app, world=self, save_data_dict=save_data_dict, write=write)
-        except Exception:
-            log_exc("modnpc: cannot tell the mods that the world changed")
-        finally:
+        with keyed(key):
             try:
-                delattr(sys, _KEY_OVERRIDE_ATTR)
-            except AttributeError:
-                pass
+                forget(write=write)
+                fire_all("world", app, world=self,
+                         args={"save_data_dict": save_data_dict}, write=write)
+                restore_world(app, world=self, save_data_dict=save_data_dict, write=write)
+            except Exception:
+                log_exc("modnpc: cannot tell the mods that the world changed")
         return result
     targets.append(WORLD_TARGET)
 

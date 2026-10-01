@@ -16,6 +16,8 @@
 委託は世界ごとの控えの `commissions` に期日（ゲーム内の日付）で持ち、
 日数が進んだとき（`elapse_days` の後）と画面が組み直されたときに期日を見て開く。
 開通の1行は手が空いてから出す（移動の文の最中に割り込まない）。
+委託と踏破は同じ道に重ねない。委託中の道は自ら切り拓けず、道中の依頼が出ている道には払えない
+（重なると、残った側が期日や完了でもう一度開通させ、払った代金が何も生まない）。
 
 開いた道は両側の `Area.connections` へ対称に足す。
 以後は素の「他の土地へ行く」に普通に並び、徒歩でも馬車でも行ける。
@@ -226,6 +228,7 @@ NO_GOLD_TEXT = "（{price}G に足りない。手持ち {gold}G）"
 ALREADY_TEXT = "（{target}への道はもう開いている）"
 PAID_TEXT = "{price}G を支払い、{target}への道を拓いた。"
 ALREADY_COMMISSIONED_TEXT = "（{target}への道は開削を委託済み。開通まであと {days}日）"
+ALREADY_DUNGEON_TEXT = "（{target}へ抜ける道の依頼が出ている。踏破すれば道が開く）"
 REFUSE_TEXT = "この道を行くには、今は体力が無い。"
 REFUSE_DETAIL = "（体力 {value}/{limit}。休むか、医者にかかるかだ）"
 LOOKING_TEXT = "{target}へ抜ける道の話を聞いている……"
@@ -788,6 +791,11 @@ def apply(ctx):
         if origin is None or target is None:
             screen.say(app, NO_ROAD_TEXT)
             return
+        waiting = commission_of(worlds.playthrough(app), ui.area_id_of(origin), target_id)
+        if waiting is not None:
+            # 候補には残す（選べば開通までの日数が分かる）。払うのも切り拓くのも断る。
+            refuse_commissioned(app, target, waiting, "means")
+            return
         graph = build_graph(ui.world_areas(app))
         offer = offer_of(app, origin, target, hops_between(graph, ui.area_id_of(origin),
                                                            str(target_id)))
@@ -831,12 +839,15 @@ def apply(ctx):
         price = offer["price"]
         waiting = commission_of(worlds.playthrough(app), ui.area_id_of(origin), target_id)
         if waiting is not None:
-            today = ui.game_day(app)
-            left = max(0, int(waiting.get("due_day", 0)) - int(today)) if today is not None else "?"
-            write("pay: {!r} is already commissioned (due day {}); not charging".format(
-                area_name(target, "?"), waiting.get("due_day")))
-            screen.say(app, ALREADY_COMMISSIONED_TEXT.format(
-                target=area_name(target, "その土地"), days=left))
+            refuse_commissioned(app, target, waiting, "pay")
+            return
+        road = dungeon_of(app, ui.area_id_of(origin), target_id)
+        if road is not None:
+            # 道中の依頼が出ている道に委託を重ねると、踏破で開いた後に期日でもう一度開通し、
+            # 代金が何も生まない。受注前（offered）も掲示板から受けられるので断る。
+            write("pay: {!r} has a road quest {!r} ({}); not charging".format(
+                area_name(target, "?"), road.get("quest_id"), road.get("stage")))
+            screen.say(app, ALREADY_DUNGEON_TEXT.format(target=area_name(target, "その土地")))
             settle(app, lambda: reopen_move_list(app))
             return
         if str(target_id) in connections_of(origin):
@@ -902,6 +913,30 @@ def apply(ctx):
             if isinstance(item, dict) and {str(item.get("from")), str(item.get("to"))} == ends:
                 return item
         return None
+
+    def refuse_commissioned(app, target, waiting, why):
+        """期日待ちの委託がある道を断り、行き先の一覧へ戻す。
+
+        二度払いのほか、委託中に自ら切り拓くのも断る。踏破で開いても委託の行は残り、
+        期日にもう一度開通して代金が何も生まないため。
+        """
+        today = ui.game_day(app)
+        left = max(0, int(waiting.get("due_day", 0)) - int(today)) if today is not None else "?"
+        write("{}: {!r} is already commissioned (due day {}); refusing".format(
+            why, area_name(target, "?"), waiting.get("due_day")))
+        screen.say(app, ALREADY_COMMISSIONED_TEXT.format(
+            target=area_name(target, "その土地"), days=left))
+        settle(app, lambda: reopen_move_list(app))
+
+    def dungeon_of(app, origin_id, target_id):
+        """その2つの街の間の道中の控え（受注前と受注後）。無ければ None。"""
+        record = pending_of(app, "offered", "armed")
+        if record is None:
+            return None
+        ends = {str(origin_id), str(target_id)}
+        if {str(record.get("origin_id")), str(record.get("target_id"))} != ends:
+            return None
+        return record
 
     def check_commissions(app, why):
         """期日が来た委託を開く。開いた数を返す。日数が進んだとき・画面が組み直されたときに呼ぶ。"""
@@ -983,6 +1018,11 @@ def apply(ctx):
         target = ui.world_areas(app).get(str(target_id))
         if origin is None or target is None:
             screen.say(app, NO_ROAD_TEXT)
+            return
+        waiting = commission_of(worlds.playthrough(app), ui.area_id_of(origin), target_id)
+        if waiting is not None:
+            # 手段の画面は委託中なら開かないので、ここに来るのは支払う前の古い画面からの押下。
+            refuse_commissioned(app, target, waiting, "dungeon")
             return
         refusal = stamina_refusal(app)
         if refusal is not None:

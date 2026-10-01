@@ -48,6 +48,8 @@ r"""MOD が持つ NPC と、正規 NPC への被せがどこまで通るかを�
     229 を入れている間は ModNPC を使う全 MOD に効いていた。
     旗はローダの設定（`settings/loader.json` の `"modnpc_lift_roster"`）へ移し、229 の設定から外した。
     229 は旗を読んで記録するだけ（本人の判断）
+- 版5: 施設の主への被せを、注入し直し・`OVERRIDE` / `FOLLOW` の切り替え・別のセーブの読み込みでも外すようにした。
+  前の相手を `seen["owner"]` だけで覚えていたので、前の世代や前の世界で載せた層が登録簿に残っていた
 """
 
 import json
@@ -122,7 +124,14 @@ def apply(ctx):
 
     # -- 層のフック ---------------------------------------------------------
     def on_world(info):
-        """セーブを読んだ直後。実体は捨てられているので、次の到着で建て直す。"""
+        """セーブを読んだ直後。実体は捨てられているので、次の到着で建て直す。
+
+        被せの層は世界をまたいで残る（`modnpc.forget` は実体だけ捨てる）。
+        別の世界では同じ id が別人なので、ここで外す。
+        `app` は渡さない。被せは層だけで置いても控えてもおらず、
+        この時点の `app` はまだ前の世界を指していることがある。
+        """
+        undress(None)
         seen["spot"] = None
         seen["owner"] = None
         note("world", npc=info["npc_id"])
@@ -281,7 +290,11 @@ def apply(ctx):
 
     def follow(app):
         """居る施設へ連れて回り、その施設の主に被せを載せる。"""
-        if not FOLLOW or not PRESENT:
+        if not PRESENT:
+            return
+        if not FOLLOW:
+            # 連れて回らない間は被せも載せない。前の世代が載せた層は登録簿に残るので外す。
+            undress(app)
             return
         area_id, facility_id = where(app)
         if area_id is None:
@@ -324,13 +337,13 @@ def apply(ctx):
         複製の末尾に1行足せば「被せが読む側まで届いたか」が `output_data` で分かる。
         """
         if not OVERRIDE:
+            undress(app)
             return
         facility = modnpc.facility_of(app, area_id, facility_id)
         owner_id = str(getattr(facility, "owner", "") or "")
         if owner_id == seen["owner"]:
             return
-        if seen["owner"]:
-            modnpc.unregister(OWNER, seen["owner"], app=app, write=write)
+        undress(app, keep=owner_id)
         seen["owner"] = owner_id or None
         if not owner_id or modnpc.is_mod_npc(owner_id):
             return
@@ -347,6 +360,17 @@ def apply(ctx):
         note("dress", npc=owner_id, chars=len(profile))
         write("the owner {} {!r} wears the mark".format(
             owner_id, frames.short(frames.text_of(character, "name"), 20)))
+
+    def undress(app, keep=None):
+        """正規 NPC に載せた被せを `keep` 以外すべて外す。
+
+        前の相手は `seen["owner"]` では足りない。`seen` は注入ごとに作り直すが、
+        登録簿は注入をまたいで残るので、前の世代が載せた層を今の世代は知らない。
+        登録簿から自分の層を引いて外す。
+        """
+        for npc_id in modnpc.entries(OWNER):
+            if npc_id != keep and not modnpc.is_mod_npc(npc_id):
+                modnpc.unregister(OWNER, npc_id, app=app, write=write)
 
     # -- 話し相手の一覧は何から組まれるか -----------------------------------
     class ReadCountingList(list):

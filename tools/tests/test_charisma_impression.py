@@ -11,7 +11,8 @@
   最上段  … 初対面では誰も最上段にならない
   親密    … 好意を持たれている相手には最上段まで届く
   下限    … 好みや親しさで「ひどく醜く」にはしない
-  低魅力  … 素が最下段のキャラは初対面でも下げない（そのまま）
+  低魅力  … 素が最下段のキャラは初対面でも下げない（親しさで変わらない）
+  中立    … 親しさの不足は文の付かない段より下げない（下げるのは好みだけ）
   好感度  … 戻り値の1つ目（好感度の段）は1文字も触らない
   決定的  … 同じ相手・同じ条件なら何度呼んでも同じ段
   設定    … 好みの幅0 / 最上段を切る / 親しさを見ない、の3つが効く
@@ -22,6 +23,7 @@
   名簿優先 … 相手ではない id（会話の通し番号）より、外側の相手を採る
   受け皿  … フレームが読めなくても、会話の入口で控えた相手で決まる
   終了経路 … 会話の終了（`resolve_conversation` の引数）からも相手が決まる
+  据え置き … 依頼のクリア（相手が決まらない）では保存済みの魅力の段を残す
   診断    … 拾えないときは、その場のローカルと `self` の属性を記録に残す
   空段    … 段が「無い」帯（戻り値が1要素）でも列を壊さない
   言語    … 文言が英語でも同じ結果（段は位置で扱う）
@@ -287,6 +289,33 @@ class Bare(object):
     def run(self, affinity, charisma):
         return sys.modules["scripts.functions"].document_emotion_scores_new(
             affinity, charisma)
+
+
+class QuestEnd(object):
+    """`QuestEndManager` 相当。
+
+    `method_1(self)` は引数が self だけで、同行者全員の好感度を +20 してから
+    感情の文を作り直す（GAME.md §2.25.1）。相手を特定できる手掛かりは無い。
+    """
+
+    def __init__(self, party, charisma):
+        self.party = party
+        self._charisma = charisma
+
+    def execute(self, choice_text=None):
+        return self.method_1()
+
+    def method_1(self):
+        for npc in self.party:
+            entry = npc.relationship.setdefault(
+                "player", {"affinity": 0, "affinity_text": []})
+            entry["affinity"] += 20
+            entry["affinity_text"] = sys.modules[
+                "scripts.functions"].document_emotion_scores_new(
+                    entry["affinity"], self._charisma)
+
+
+QUEST_END_TARGETS = (("__main__:QuestEndManager.execute", "execute"),)
 
 
 class World(object):
@@ -555,9 +584,44 @@ kept = all(call(npc, value, TOP_CHARM)[0] == rung_at(AFFINITY_RUNGS, value)
            for npc in npcs for value in (-60, -20, 0, 30, 40, 150))
 check("好感度: 1つ目の段は1文字も触らない", kept)
 
-low = {npc.name: call(npc, 0, LOW_CHARM) for npc in npcs}
-check("低魅力: 素が最下段なら初対面でも変えない",
-      all(charm_of(row) == "ひどく醜く思っている" for row in low.values()), low)
+low = {npc.name: charm_of(call(npc, 0, LOW_CHARM)) for npc in npcs}
+low_close = {npc.name: charm_of(call(npc, 40, LOW_CHARM)) for npc in npcs}
+check("低魅力: 素が最下段なら初対面でも下げない（親しさで変わらない）",
+      low == low_close
+      and set(low.values()) <= {"ひどく醜く思っている", "あまり好みではない"},
+      (low, low_close))
+
+# ------------------------------------------------------------ 中立の段
+print("\n-- 中立の段")
+ORDINARY_CHARM = 10     # 文の付かない帯（魅力が普通）
+HIGH_CHARM = 15         # 最上段の1つ下（強い魅力を感じている）
+
+
+def taste_of(module, npc):
+    """setup() の世界での、その相手の好み（mod と同じ鍵で引く）。"""
+    return module._taste_of("テストワールド:{}:ヴァン".format(npc_id_of(npc)), 1)
+
+
+mod, ctx, call, npcs = setup(npc_names=NAMES)
+tastes = {npc.name: taste_of(mod, npc) for npc in npcs}
+ordinary = {npc.name: charm_of(call(npc, 0, ORDINARY_CHARM)) for npc in npcs}
+check("中立: 魅力が普通なら初対面の全員が「あまり好みではない」にはならない",
+      set(ordinary.values()) != {"あまり好みではない"}, ordinary)
+# 好みが -1 の相手だけ1段下。+1 のぶんは親しさの不足が中立まで引き戻す。
+check("中立: 魅力が普通なら初対面で下がるのは好みが -1 の相手だけ",
+      all(ordinary[name] == ladder[min(2, 2 + tastes[name])] for name in ordinary)
+      and len(set(tastes.values())) == 3, (ordinary, tastes))
+close_ordinary = {npc.name: charm_of(call(npc, 40, ORDINARY_CHARM)) for npc in npcs}
+check("中立: 打ち解けた相手では好みが +1 なら1段上",
+      all(close_ordinary[name] == ladder[2 + tastes[name]] for name in ordinary),
+      (close_ordinary, tastes))
+high = {npc.name: charm_of(call(npc, 0, HIGH_CHARM)) for npc in npcs}
+check("中立: 魅力が高いと初対面で中立より下にはならない",
+      all(ladder.index(text) >= 2 for text in high.values()), high)
+mod, ctx, call, npcs = setup(npc_names=NAMES, spread=0)
+flat_ordinary = {charm_of(call(npc, 0, ORDINARY_CHARM)) for npc in npcs}
+check("中立: 親しさの不足だけでは中立の段より下げない", flat_ordinary == {None},
+      flat_ordinary)
 
 # ---------------------------------------------------------------- 決定的
 print("\n-- 決定的")
@@ -585,6 +649,11 @@ mod, ctx, call, npcs = setup(npc_names=NAMES, steps=0)
 early = {charm_of(call(npc, 0, TOP_CHARM)) for npc in npcs}
 check("設定: 親しさを見なければ初対面でも満額（最上段が出る）",
       "耐え難いほど魅力的に見えている" in early, early)
+# 初対面より下の段（段差が負）でも親しさの不足を残さない。
+disliked = {npc.name: charm_of(call(npc, -20, TOP_CHARM)) for npc in npcs}
+check("設定: 親しさを見なければ嫌われていても初対面と同じ段",
+      disliked == {npc.name: charm_of(call(npc, 0, TOP_CHARM)) for npc in npcs},
+      disliked)
 
 # -------------------------------------------------------------- 相手なし
 print("\n-- 相手なし")
@@ -666,6 +735,38 @@ check("終了経路: 相手の id とは限らない値は鍵にしない", len(
 check("終了経路: 決まらなかったマネージャの中身が記録に残る",
       "in_conversation_id" in log_text(ctx) and "conv-7" in log_text(ctx),
       log_text(ctx)[-700:])
+
+# 依頼のクリア。相手が決まらないまま全員の文が作り直されるので、
+# 魅力の段は会話で保存された値を据え置く（好み 0 の値で上書きしない）。
+mod, ctx, call, npcs = setup(npc_names=NAMES)
+mod.FRAME_DEPTH_MAX = 1
+manager_cls = install_manager_hooks(ctx)
+quest_cls = install_manager_hooks(ctx, QuestEnd, QUEST_END_TARGETS,
+                                  "QuestEndManager")
+for npc in npcs[:-1]:
+    npc.relationship["player"]["affinity_text"] = call_via_manager(
+        npc, 0, TOP_CHARM, manager_cls)
+stored = {npc.name: charm_of(npc.relationship["player"]["affinity_text"])
+          for npc in npcs[:-1]}
+quest_cls(npcs, TOP_CHARM).execute()
+after_quest = {npc.name: npc.relationship["player"]["affinity_text"]
+               for npc in npcs}
+check("据え置き: 依頼のクリアで魅力の段が会話の値のまま残る",
+      all(charm_of(after_quest[name]) == stored[name] for name in stored)
+      and len(set(stored.values())) >= 2, (after_quest, stored))
+check("据え置き: 好感度の段はゲームが作り直した値になる",
+      all(row[0] == "嫌いではない" for row in after_quest.values()), after_quest)
+newcomer = npcs[-1].name
+check("据え置き: 前に文が無かった相手は好み 0 の値（最上段にはしない）",
+      charm_of(after_quest[newcomer]) == "強い魅力を感じている",
+      after_quest[newcomer])
+check("据え置き: 戻したことが記録に残る", "据え置く" in log_text(ctx),
+      log_text(ctx)[-500:])
+kept_lines = log_text(ctx).count("据え置く")
+for npc in npcs[:-1]:
+    npc.relationship["player"]["affinity_text"] = call_without_npc(40, TOP_CHARM)
+check("据え置き: 包んだ入口を抜けた後は戻さない",
+      log_text(ctx).count("据え置く") == kept_lines, log_text(ctx)[-300:])
 
 # 診断。拾えないときは、その場に何が居たかを記録に残す。
 mod, ctx, call, npcs = setup()

@@ -228,9 +228,13 @@ class World:
         return self.characters[character_id]
 
 
+#: 主人公の名。控えの鍵（世界×主人公）に入る。
+PLAYER_NAME = "テストプレイヤー"
+
+
 class Player:
     def __init__(self, area, location):
-        self.name = "テストプレイヤー"
+        self.name = PLAYER_NAME
         self.current_area = area
         self.location = location
         self.gold = 1000
@@ -675,11 +679,7 @@ def refresh_for(ctx, app):
 
 
 def state_files(ctx, suffix):
-    """`state/city_case/` に在る控えの場所。検査は1世界しか作らない。
-
-    世界の鍵は `app` から採る（`state.world_key`）が、読む側は
-    `app` を持っていない場面が多いので、フォルダの中を見て拾う。
-    """
+    """`state/city_case/` に在る控えの場所（どの世界・周回のものも）。"""
     folder = os.path.join(STATE_DIR, mod.STATE_DIRNAME)
     try:
         names = sorted(os.listdir(folder))
@@ -690,24 +690,44 @@ def state_files(ctx, suffix):
             and (suffix != ".json" or not name.endswith(mod.CAST_SUFFIX))]
 
 
+def playthrough_of(world, player=PLAYER_NAME):
+    """控えの鍵（世界×主人公）。MOD は `state.playthrough_key(app)` で同じものを引く。"""
+    return world + loader_state.PLAYTHROUGH_SEP + player
+
+
+def record_path(world, suffix=".json", player=PLAYER_NAME):
+    """その周回の控え（`suffix` が `CAST_SUFFIX` なら台帳）の場所。"""
+    return os.path.join(STATE_DIR, mod.STATE_DIRNAME, loader_state.world_filename(
+        playthrough_of(world, player), suffix))
+
+
+def read_record(path, kind):
+    if not os.path.exists(path):
+        return None
+    data = json.loads(io.open(path, encoding="utf-8").read())
+    return data if isinstance(data, kind) else None
+
+
 def case_of(ctx):
-    """いまの事件の控え。無ければ空の事件。"""
-    found = state_files(ctx, ".json")
-    if not found:
-        return case_mod.empty()
-    data = json.loads(io.open(found[0], encoding="utf-8").read())
-    return data if isinstance(data, dict) and "stage" in data else case_mod.empty()
+    """いまの事件の控え。無ければ空の事件。
+
+    検査は1世界・1人の主人公しか作らないので、その周回のファイルを名指しで読む。
+    フォルダの先頭を拾うと、移す前の世界名だけの控えが残っていたときにそちらを読む。
+    """
+    data = read_record(record_path("テスト世界"), dict)
+    return data if data is not None and "stage" in data else case_mod.empty()
 
 
-def save_case(ctx, case):
+def save_case(ctx, case, player=PLAYER_NAME):
     """控えを直に書く（古い控えを置いて読ませる検査で使う）。
 
-    置き場所は控え自身が持つ世界名から決める。
-    `app` はまだ無い時点で書くので、`state.world_key` は使えない。
+    置き場所は控え自身が持つ世界名と、検査の主人公の名から決める。
+    `app` はまだ無い時点で書くので、`state.playthrough_key` は使えない。
+    `player=None` は周回の鍵へ切り替える前の、世界名だけの控えとして書く。
     """
     assert case.get("world"), case
-    path = ctx.state_path(mod.STATE_DIRNAME,
-                          loader_state.world_filename(case["world"]))
+    key = case["world"] if player is None else playthrough_of(case["world"], player)
+    path = ctx.state_path(mod.STATE_DIRNAME, loader_state.world_filename(key))
     io.open(path, "w", encoding="utf-8").write(
         json.dumps(case, ensure_ascii=False, indent=2))
     # **プロセス側の棚も捨てる。** これは「MOD が動き出す前からディスクに在った
@@ -718,28 +738,41 @@ def save_case(ctx, case):
     return path
 
 
-def case_of_world(ctx, world):
-    """世界を名指しして控えを読む（複数の世界を並べる検査で使う）。"""
-    path = os.path.join(STATE_DIR, mod.STATE_DIRNAME,
-                        loader_state.world_filename(world))
-    if not os.path.exists(path):
-        return case_mod.empty()
-    return json.loads(io.open(path, encoding="utf-8").read())
+def case_of_world(ctx, world, player=PLAYER_NAME):
+    """世界と主人公を名指しして控えを読む（複数の世界・周回を並べる検査で使う）。"""
+    data = read_record(record_path(world, player=player), dict)
+    return data if data is not None else case_mod.empty()
 
 
-def cast_of(ctx):
-    """この MOD が作った NPC の台帳（世界ごとに1ファイル）。"""
-    found = state_files(ctx, mod.CAST_SUFFIX)
-    if not found:
-        return []
-    data = json.loads(io.open(found[0], encoding="utf-8").read())
-    return data if isinstance(data, list) else []
+def cast_of(ctx, player=PLAYER_NAME):
+    """この MOD が作った NPC の台帳（周回ごとに1ファイル）。"""
+    data = read_record(record_path("テスト世界", mod.CAST_SUFFIX, player), list)
+    return data if data is not None else []
+
+
+def drop_other_playthroughs(world):
+    """`STATE_DIR` のどのフォルダからも、`world` の別の主人公の周回のファイルを消す。
+
+    `out/test/state` は他の検査と共有で、他の検査の主人公の周回が残っている。
+    在ると、世界名だけの控えは移されない（ローダの `WorldStore.adopt`）。
+    この検査の主人公の事件と台帳は残す。
+    """
+    own = playthrough_of(world)
+    for folder in os.listdir(STATE_DIR):
+        path = os.path.join(STATE_DIR, folder)
+        if not os.path.isdir(path):
+            continue
+        for name in os.listdir(path):
+            if name.startswith(world + loader_state.PLAYTHROUGH_SEP) \
+                    and name not in (loader_state.world_filename(own),
+                                     loader_state.world_filename(own, mod.CAST_SUFFIX)):
+                os.remove(os.path.join(path, name))
 
 
 def clean_record(ctx):
     """控えと台帳の両方を消す。**節どうしを独立させる。**
 
-    台帳（`<世界>.cast.json`）も消さないと、
+    台帳（`<世界>×<主人公>.cast.json`）も消さないと、
     前の節が作って決着させずに放り出したキャストが残り、後の節の検査に混ざる。
     実際に混ざった。
 
@@ -924,8 +957,8 @@ check("**全部集めれば1人に絞れる**（詰んだ事件を出さない�
       solvable_when_complete(found), found["clues"])
 check("**施設の主を犯人にしない**",
       found["culprit"] not in ("10", "11", "12"), found["culprit"])
-check("控えが書かれている",
-      bool(state_files(ctx, ".json")))
+check("控えが書かれている（周回の鍵のファイル）",
+      os.path.exists(record_path("テスト世界")), state_files(ctx, ".json"))
 
 app.facility_screen()
 refresh()
@@ -1725,7 +1758,7 @@ check("画面にも出る",
       any("言い分" in str(t) for t in apps.texts), apps.texts)
 
 print("\n[控え] **世界ごとに分かれている**")
-# 控えは `state/city_case/<世界>.json` で世界ごとに1ファイル（`state.WorldStore`）。
+# 控えは `state/city_case/<世界>×<主人公>.json` で周回ごとに1ファイル（`state.WorldStore`）。
 # 以前は1ファイルに世界名を持っていて、別の世界へ移ると
 # 進行中の事件をその場で捨てていた（**遊びの途中が消えていた**）。
 clean_record(FakeCtx())
@@ -1756,6 +1789,71 @@ check("**居る世界の事件が読める**",
       found_w3)
 check("**別の世界の事件を捨てない**", os.path.exists(path_there), path_there)
 clean_record(ctxw3)
+
+print("\n[控え] **世界名だけの控えは、いまの主人公の周回へ移る**")
+# 周回の鍵へ切り替える前の `<世界>.json` / `<世界>.cast.json` は、
+# 見つけた時点で遊んでいる主人公のものとして移す（ローダの `WorldStore.adopt`）。
+# 台帳を先に移すと、ローダは `<世界>×<主人公>.cast` を別の主人公の周回と読み、
+# 同じ主人公の事件を移さない。事件が先に移ることもここで見る。
+ctxa2 = FakeCtx()
+clean_record(ctxa2)
+drop_other_playthroughs("テスト世界")
+legacy_case = case_mod.build("テスト世界", "0", "20", [{"id": "20", "tell": "t"}],
+                             [{"id": "c1", "at_type": INN, "label": "clue_c1",
+                               "intro": "", "ask": "", "prompt": "", "kind": "trait",
+                               "fact": "", "eliminates": []}], 500)
+legacy_case_path = save_case(ctxa2, legacy_case, player=None)
+legacy_cast_path = ctxa2.state_path(mod.STATE_DIRNAME, loader_state.world_filename(
+    "テスト世界", mod.CAST_SUFFIX))
+io.open(legacy_cast_path, "w", encoding="utf-8").write(json.dumps(
+    [{"id": "20", "name": "NPC20"}], ensure_ascii=False))
+mod.apply(ctxa2)
+appa2, _pa2 = fresh_world()
+refresha2 = install(ctxa2, appa2)
+appa2.facility_screen()
+refresha2()
+moved_case = case_of(ctxa2)
+check("**世界名だけの事件が、いまの主人公の周回のファイルへ移る**",
+      case_mod.is_active(moved_case) and moved_case.get("culprit") == "20",
+      moved_case.get("stage"))
+check("**世界名だけの台帳も移る**（事件と一緒に）",
+      ledger_mod.ids(cast_of(ctxa2)) == ["20"], cast_of(ctxa2))
+check("移した後、世界名だけのファイルは残らない（作り直した次の主人公に渡らない）",
+      not os.path.exists(legacy_case_path) and not os.path.exists(legacy_cast_path),
+      state_files(ctxa2, ".json"))
+check("移した事件のキャストは掃除されない", "20" in appa2.world.characters,
+      sorted(appa2.world.characters))
+clean_record(ctxa2)
+
+print("\n[控え] **同じ世界で作り直した主人公は、前の周回の事件と台帳を引き継がない**")
+# 主人公が死ぬと、同じ世界でもう一度主人公を作って遊べる（TECH.md §5.4）。
+# 前の主人公の事件が続いていたり、前の主人公の台帳で今のセーブの NPC を消したりしない。
+ctxp2 = FakeCtx()
+clean_record(ctxp2)
+earlier_case = case_mod.build("テスト世界", "0", "20", [{"id": "20", "tell": "t"}],
+                              [{"id": "c1", "at_type": INN, "label": "clue_c1",
+                                "intro": "", "ask": "", "prompt": "", "kind": "trait",
+                                "fact": "", "eliminates": []}], 500)
+earlier_path = save_case(ctxp2, earlier_case, player="前の主人公")
+earlier_cast = ctxp2.state_path(mod.STATE_DIRNAME, loader_state.world_filename(
+    playthrough_of("テスト世界", "前の主人公"), mod.CAST_SUFFIX))
+io.open(earlier_cast, "w", encoding="utf-8").write(json.dumps(
+    [{"id": "22", "name": "NPC22"}], ensure_ascii=False))
+mod.apply(ctxp2)
+appp2, _pp2 = fresh_world()
+refreshp2 = install(ctxp2, appp2)
+appp2.facility_screen()
+refreshp2()
+check("**前の主人公の事件は続いていない**（新しい噂を聞ける）",
+      not case_mod.is_active(case_of(ctxp2)) and mod.START_LABEL in appp2.labels(),
+      appp2.labels())
+check("**前の主人公の台帳で今の NPC を消さない**", "22" in appp2.world.characters,
+      sorted(appp2.world.characters))
+check("今の主人公の台帳は空から始まる", cast_of(ctxp2) == [], cast_of(ctxp2))
+check("前の主人公の事件と台帳はそのまま残る",
+      case_mod.is_active(case_of_world(ctxp2, "テスト世界", "前の主人公"))
+      and os.path.exists(earlier_cast), earlier_path)
+clean_record(ctxp2)
 
 print("\n[控え] **古い控えに証言者を埋める**")
 # 控えは注入をまたいで残るので、進行中の事件は古い版が作ったものでありうる。
@@ -2855,6 +2953,57 @@ try:
     check("**予約が飛ばなくても、塗り直しの経路で解ける**",
           appd.is_button_enabled is True, appd.is_button_enabled)
     stuck2.set()
+
+    # --- **前の書き込みの予約は、次の書き込みを解かない** ---
+    # 見張りの予約は取り消さないので、1件目が返って事件が始まった後も残る。
+    # 諦めてすぐ受け直すと、2件目の書き込みの最中に1件目の予約が届く。
+    install_fake_llm(prompt_aware)
+    ctxg = FakeCtx()
+    clean_record(ctxg)
+    mod.apply(ctxg)
+    appg, _pg = fresh_world()
+    refreshg = install(ctxg, appg)
+    appg.facility_screen()
+    refreshg()
+    appg.is_button_enabled = True
+    clock.pending = []
+    press(ctxg, appg, mod.START_LABEL)
+    for _ in range(6):
+        if case_mod.is_active(case_of(ctxg)):
+            break
+        time.sleep(0.05)
+        clock.run_due(upto=0)
+    earlier = [(d, f) for d, f in clock.pending if d > 0]
+    check("1件目が始まり、見張りの予約が残っている",
+          case_mod.is_active(case_of(ctxg)) and earlier,
+          (case_of(ctxg).get("stage"), len(earlier)))
+    appg.facility_screen()
+    refreshg()
+    press(ctxg, appg, mod.ACCUSE_LABEL)
+    refreshg()
+    press(ctxg, appg, mod.GIVE_UP_LABEL)
+    refreshg()
+    stuck3 = threading.Event()
+    install_fake_llm(lambda message: stuck3.wait(30) or prompt_aware(message))
+    clock.pending = []
+    appg.facility_screen()
+    refreshg()
+    appg.is_button_enabled = True
+    appg.texts[:] = []
+    press(ctxg, appg, mod.START_LABEL)
+    later = list(clock.pending)
+    clock.pending = list(earlier)      # 1件目の予約だけを届ける
+    clock.run_due()
+    check("**前の予約が届いても、2件目の書き込みはロックされたまま**",
+          appg.is_button_enabled is False, appg.is_button_enabled)
+    check("前の予約では「書き込みが遅い」と出さない",
+          not any(mod.WRITING_SLOW_TEXT in str(t) for t in appg.texts),
+          [str(t) for t in appg.texts])
+    clock.pending = later
+    clock.run_due()
+    check("2件目の予約ではボタンが戻る",
+          appg.is_button_enabled is True, appg.is_button_enabled)
+    stuck3.set()
 finally:
     # **止めた偽物のスレッドが戻り切るのを待つ。**
     # 先に Clock を外すと、戻ってきたスレッドが `schedule` に失敗して検証の出力にトレースバックが流れる（失敗ではないが、
@@ -3068,8 +3217,17 @@ check("**第一声に事実そのものを載せない**",
 
 # --- 容疑者のところへ入って、何も尋ねずに抜ける ---
 appq.texts[:] = []
-greet(ctxq, appq, suspect_q)
+greeted_suspect = str(greet(ctxq, appq, suspect_q).get("messages"))
 end_conversation_with(ctxq, appq, suspect_q)
+# 容疑者は見聞きした者ではない。
+# 証言者と同じ匂わせを渡すと、尋ねても出てこない目撃を第一声で匂わせる。
+check("**容疑者の第一声は疑われている者として匂わせる**",
+      "疑われていて" in greeted_suspect
+      and "見聞きしているが" not in greeted_suspect,
+      greeted_suspect[-200:])
+check("容疑者も尋ねられるまでは詳しく話さない",
+      "尋ねられるまでは自分から詳しく話さない" in greeted_suspect,
+      greeted_suspect[-200:])
 claims_q = case_of(ctxq)
 check("**尋ねずに抜けたら言い分も漏れない**（犯人がタダで割れない）",
       not case_mod.heard_claims(claims_q),
@@ -3092,6 +3250,26 @@ end_conversation_with(ctxq, appq, suspect_q)
 heard_q = case_of(ctxq)
 check("**尋ねれば言い分が聞ける**", case_mod.heard_claims(heard_q),
       [s for s in heard_q["suspects"] if s.get("heard")])
+
+# --- **注入し直しても、題材は事件の控えから読む** ---
+# 題材が `apply()` の中にしか無いと、注入し直した後の差し込みが受け皿（盗み）に戻る。
+# 引いた題材が盗みでも見分けが付くよう、控えの題材を盗み以外に書き換えてから読ませる。
+renamed_q = case_of(ctxq)
+check("事件の控えが題材を持つ",
+      (renamed_q.get("incident") or {}).get("noun"), renamed_q.get("incident"))
+renamed_q["incident"] = dict(renamed_q.get("incident") or {}, noun="付け火")
+save_case(ctxq, renamed_q)
+mod.apply(ctxq)
+refreshq2 = install(ctxq, appq)
+appq.facility_screen()
+refreshq2()
+renewed_q = str(greet(ctxq, appq, suspect_q).get("messages"))
+check("**注入し直した後の第一声も控えの題材で語る**",
+      "付け火" in renewed_q and "盗み" not in renewed_q, renewed_q[-200:])
+renewed_note = str(talk_to(ctxq, appq, suspect_q))
+check("**注入し直した後の言い分も控えの題材で語る**",
+      "付け火" in renewed_note and "盗み" not in renewed_note,
+      renewed_note[-300:])
 
 print("\n[後始末] **繰り返してもセーブが太らない**")
 # 以前は犯人に印を立て、無実の者は町に残していた。
@@ -3177,6 +3355,36 @@ refreshk2()
 check("**進行中の事件のキャストは掃除されない**",
       all(i in appk.world_dict["npcs"] for i in alive),
       [i for i in alive if i not in appk.world_dict["npcs"]])
+
+# **台帳の id がもう本人を指していなければ消さない。**
+# 台帳は作った直後に書くが、セーブはゲームが次の行動で書く。
+# その間に落ちると台帳だけが残り、同じ id が後で別人（店主など）に振られうる。
+# `remove_npc` は名前を照合しないので、照合せずに掃除すると別人を消す。
+ctxw = FakeCtx()
+clean_record(ctxw)
+appw, _pw = fresh_world()
+reused, vanished = "901", "902"
+reused_name = "雑貨屋のトマ"
+appw.world_dict["npcs"][reused] = dict(world_mod.NEW_NPC_TEMPLATE,
+                                       id=reused, name=reused_name)
+appw.world.characters[reused] = types.SimpleNamespace(
+    id=reused, name=reused_name,
+    config={"level_of_detail": 2, "is_player": False,
+            "is_dead": False, "difficulty_level": 4})
+cast_path = ctxw.state_path(mod.STATE_DIRNAME, loader_state.world_filename(
+    loader_state.playthrough_key(appw), mod.CAST_SUFFIX))
+io.open(cast_path, "w", encoding="utf-8").write(json.dumps(
+    [{"id": reused, "name": CAST_POOL[1]["name"]},
+     {"id": vanished, "name": CAST_POOL[2]["name"]}], ensure_ascii=False))
+mod.apply(ctxw)
+refreshw = install(ctxw, appw)
+appw.facility_screen()
+refreshw()
+check("**同じ id を振られた別人は掃除されない**",
+      reused in appw.world_dict["npcs"] and reused in appw.world.characters,
+      sorted(appw.world_dict["npcs"]))
+check("**もう居ない者と別人になった者は台帳から外れる**（残り続けない）",
+      not ledger_mod.ids(cast_of(ctxw)), cast_of(ctxw))
 
 print("\n[後始末] パーティーに居る者は消さない")
 # 容疑者が仲間になる経路は用意していないが、他の MOD やゲーム側の都合で入りうる。

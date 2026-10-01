@@ -15,6 +15,7 @@
   無傷   … グリッドは1つも動かない・大きさも変わらない
   分数   … `pos_hint` を直すので、次のレイアウトで元へ戻らない
   冪等   … 何度当てても、注入し直しても位置が育たない
+  実座標 … 詰めた直後の実座標が、次のレイアウトで置き直す位置と揃う
   透明   … 見えていないグリッドは避ける相手に数えない
   相対   … 座標系がずれていても（`to_window`）結果は同じ
   追従   … 窓の大きさが変わっても、詰めた幅を設計値と取り違えない
@@ -522,6 +523,19 @@ def run():
     open_craft(hud)
     hud.settle()
     check("同じ場所のまま", button.window_rect() == landed, button.window_rect())
+
+    print("\n[実座標] 詰めた直後の実座標が、次のレイアウトの置き直しと揃う")
+    install(mod, ctx)
+    hud = FakeHUD()
+    button = hud.craft_inventory_generate_button
+    hud.toggle_craft_inventory_visibility()
+    CLOCK.pending.pop(0)(0)                      # レイアウトを挟まずに1回だけ当てる
+    interim = button.window_rect()
+    hud.layout()
+    check("詰めている", button.width < BUTTON[2], button.width)
+    check("置き直しの前後で左端が同じ", close(interim[0], button.window_rect()[0]),
+          (interim, button.window_rect()))
+    CLOCK.pending = []
 
     # -- 幅を変えない設定 ----------------------------------------------------
     print("\n[幅固定] 詰めない設定では、入る空きのほうへ滑らせる")

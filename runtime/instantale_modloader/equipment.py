@@ -16,9 +16,11 @@ MOD どうしは import しない（TECH.md §3.2.3）ので、両者はここ�
 
 同じ種類を 2 本の MOD が置いたら後から置いたほうが勝ち、その旨をログに残す（`combat` と同じ）。
 置き場は `sys` の属性で、注入し直しをまたいで残る。
+そのため切った MOD のぶんは、ローダの `boot()` と `unload` が `durations.forget` の片付けとして外す。
 """
 import sys
 
+from . import durations
 from . import log_exc
 
 #: 仲間の品を、開いている受け渡しの窓の上で装備欄へ入れる／戻す。
@@ -68,6 +70,19 @@ def forget(owner, write=None):
     if write and gone:
         write("equipment: {!r} no longer decides {}".format(owner, gone))
     return gone
+
+
+# 片付けの入口は `durations.forget` の1本に保つ（`prices` と同じ）。
+durations.on_forget(forget)
+
+
+def owners():
+    """何かを置いている持ち主の名前。
+
+    ローダの `boot()` が、今回適用されなかった MOD のぶんを外すのに使う
+    （登録簿は注入をまたいで残るので、切った MOD の旧い関数に聞き続けないように）。
+    """
+    return sorted({who for who, _fn in _registry().values()})
 
 
 def source_of(kind):

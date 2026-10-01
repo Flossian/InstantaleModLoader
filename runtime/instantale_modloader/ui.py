@@ -1585,6 +1585,9 @@ def refresh_choices_after_load(ctx, write=None, tries=12, interval=0.25):
     選択肢を足した。実機）。名簿に同行者が入るまで（上限 `tries` 回、`interval` 秒おき）待ってから
     `refresh_choice_buttons()` を 1 度呼び、画面にも塗る（`paint_choices`。組み直すだけでは文字が
     古いままで、押される処理と食い違った。実機）。同行者が居ないセーブでは上限で 1 度呼ぶ（害は無い）。
+    待っている間に待機（`is_button_enabled` が False）に入ったら、組み直さずに降りる。
+    プレイヤーが既に押した後で、ここで組み直すと点の上に一覧が塗られ、点送りも `.` からやり直しになる
+    （GAME.md §2.4）。待機の終わりにゲーム自身が `refresh_choice_buttons` して塗るので、組み直しはそこで済む。
     何本の MOD が呼んでも、1 回のロードで組み直すのは 1 度（後から入った層の見張りが勝つ）。
     Kivy の Clock が無ければ（ゲームの外）何もしない。
     """
@@ -1607,6 +1610,12 @@ def refresh_choices_after_load(ctx, write=None, tries=12, interval=0.25):
         def check(_dt):
             if shared.get("token") is not token:
                 return False                          # 別の層（または次のロード）が引き継いだ
+            if getattr(self, "is_button_enabled", None) is False:
+                shared["token"] = None                # 待機中。終わりにゲームが組み直す
+                if write:
+                    write("skipped the refresh after the load (waiting, party={})".format(
+                        party_ids(self)))
+                return False
             left[0] -= 1
             if not party_member_ids(self) and left[0] > 0:
                 return True

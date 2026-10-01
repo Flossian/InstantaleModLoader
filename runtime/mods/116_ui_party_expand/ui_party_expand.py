@@ -161,6 +161,9 @@ Kivy は `children` を逆順に描くので、ここは「帯より下・ゲー
 これは板より上に描かれるので板では隠れない。
 広げている間は **見えなくし、かつ押せなくする**（`opacity=0` と `disabled=True` の両方。
 片方だけでは「見えないのに押せる」か「押せないのに見える」が残る）。
+加えて当たり判定を「どこにも当たらない」に差し替える（ローダの `ui.show_widget`）。
+隠す相手は帯より手前に居て、隠れる場所は足した行の枠の上になる。
+Kivy は無効なウィジェットの矩形で触りを止めるので、差し替えないとその枠への押下を吸う。
 
 ただし、こうしてよいのは MOD が足したボタンだけ。
 見るのは HUD 直下の入れ物の直接の子だけにする（`panel.coverable`）。
@@ -350,6 +353,39 @@ LAYOUT_ATTR = "_instantale_party_layout"
 PAGER_ATTR = "_instantale_party_pagers"
 STEP_ATTR = "_instantale_party_page_step"
 PAGE_ICON_ATTR = "_instantale_party_page_icon"
+
+
+def has_own_hit_test(widget):
+    """インスタンス自身が `collide_point` を持っているか（持ち主が隠している最中など）。
+
+    持っているなら、それは持ち主の差し替えなので、こちらは足しも外しもしない。
+    """
+    try:
+        return "collide_point" in vars(widget)
+    except TypeError:
+        return True       # 属性を足せない相手。差し替えられないので外す物も無い
+
+
+def conceal(widget):
+    """重なった相手を隠す。見えなく・押せなくし、**触りは下へ通す**。
+
+    `opacity=0` と `disabled=True` だけでは、Kivy は無効なウィジェットの矩形で触りを止める。
+    隠す相手は帯より手前に居て、隠れる場所は足した行の枠の上なので、
+    その枠への押下を吸ってしまう。
+    当たり判定の差し替えはローダの `ui.show_widget` に任せる。
+    控えの3つ目は「差し替えたのがこちらか」で、戻すときに外してよいかを決める。
+    """
+    was = (frames.attr(widget, "opacity", 1.0), frames.attr(widget, "disabled", False),
+           not has_own_hit_test(widget))
+    setattr(widget, HIDDEN_ATTR, was)
+    ui.show_widget(widget, False)
+
+
+def reveal(widget, was):
+    """控え（`conceal` の3つ組。注入をまたいだ古い2つ組も受ける）から戻す。"""
+    if len(was) > 2 and was[2]:
+        ui.show_widget(widget, True)      # こちらが差し替えた当たり判定を外す
+    widget.opacity, widget.disabled = was[:2]
 
 
 def apply(ctx):
@@ -735,11 +771,7 @@ def apply(ctx):
                 covered.append(widget)
                 continue              # もう隠してある（控えを上書きしない）
             try:
-                setattr(widget, HIDDEN_ATTR,
-                        (frames.attr(widget, "opacity", 1.0),
-                         frames.attr(widget, "disabled", False)))
-                widget.opacity = 0.0
-                widget.disabled = True
+                conceal(widget)
             except Exception:
                 ctx.log_exc("party expand: could not hide a covered widget")
                 continue
@@ -758,7 +790,7 @@ def apply(ctx):
             if not isinstance(was, tuple):
                 continue
             try:
-                widget.opacity, widget.disabled = was
+                reveal(widget, was)
             except Exception:
                 ctx.log_exc("party expand: could not show a covered widget again")
             try:
@@ -981,7 +1013,7 @@ def apply(ctx):
             was = frames.attr(widget, HIDDEN_ATTR)
             if isinstance(was, tuple):
                 try:
-                    widget.opacity, widget.disabled = was
+                    reveal(widget, was)
                 except Exception:
                     ctx.log_exc("party expand: could not restore a stranded widget")
                 try:

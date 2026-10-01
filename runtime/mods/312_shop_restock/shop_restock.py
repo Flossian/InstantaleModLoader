@@ -146,9 +146,20 @@ id は採番台帳から採る（`ids.claim`）。
 
 ゲーム内の日付は `app.world.days_elapsed`（世界に1つ。`elapse_days` が進める。
 実セーブでは `world_data.days_elapsed`）。
-店ごとの最後の入れ替え日は `state/shop_restock/<世界名>.json` に置く:
+店ごとの最後の入れ替え日は `state/shop_restock/<世界名×主人公名>.json` に置く:
 
     {"<主の id>": {"day": 3651, "facility": "30", "count": 8, "tier": 2}}
+
+鍵は周回（世界×主人公。`WorldStore.playthrough`。TECH.md §5.4）。
+同じ世界で主人公を作り直すと、ゲームはセーブを `world_data.json` から組み直す
+（日数も骨格の値に戻る。GAME.md §2.32）。
+世界名だけの鍵だと、作り直した主人公が初めて開く店も前の主人公の控えで
+「一度開いた店」と読まれ、初回の扱いが効かない
+（持ち物が空なら、ゲームの作る初回の品揃えを `KEEP_SOLD_OUT` が外してしまう）。
+前の版が作った世界名だけのファイルは、見つけた時点で遊んでいる主人公のものとして移す
+（その世界に別の主人公の周回の控えがあれば移さない。`WorldStore.adopt`）。
+鍵を引くのは店を開いたときだけで、`World.__init__` の中では引かない
+（そこでは `app` の辞書と `player` が前の周回を指していることがある）。
 
 **セーブには独自の項目を足さない**（TECH.md §6）。
 ゲームが自分で持っているのは「主の持ち物」だけで、そこはゲームの形のまま入れ替わる。
@@ -157,14 +168,14 @@ id は採番台帳から採る（`ids.claim`）。
 古いセーブをロードして日付が巻き戻ったときは、
 控えをその日に付け直して入れ替えない（次の来店から数え直す）。
 控えより先に進んだ日数だけで判断するので、
-複数の世界・複数のセーブを行き来しても混ざらない（世界ごとにファイルを分けてある）。
+複数の世界・複数のセーブを行き来しても混ざらない（周回ごとにファイルを分けてある）。
 """
 
 import sys
 import typing
 
 from instantale_modloader import frames, ids, llm, ui
-from instantale_modloader.state import WorldStore, world_key
+from instantale_modloader.state import WorldStore
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
 #      `tools/check_mods.py` が AST で突き合わせる）------------------------
@@ -202,7 +213,7 @@ ITEM_TYPES = {
 }
 RARITIES = ("common", "rare", "magical", "epic", "legendary", "mythic")
 
-# 世界ごとの控えの置き場。
+# 周回ごとの控えの置き場。
 # `state/` の下（消すと入れ替えの間隔が巻き戻る）。
 STATE_DIRNAME = "shop_restock"
 
@@ -236,7 +247,7 @@ def apply(ctx):
     if not isinstance(store, dict):
         store = {
             "tiers": {},        # 主の id -> ゲームが渡した段(tier)
-            # 世界ごとの控え。出し入れはローダの語彙（`state.WorldStore`）で、
+            # 周回ごとの控え。出し入れはローダの語彙（`state.WorldStore`）で、
             # 世代をまたいで持つのでプロセス側に置く（`rebind` で繋ぎ替える）。
             "worlds": WorldStore(ctx, STATE_DIRNAME, order=ordered_bucket),
             "pending": None,    # 空にして結果待ちの1件
@@ -258,13 +269,19 @@ def apply(ctx):
     # `schedule` と例外の握りだけ借りる。
     screen = ui.Screen(ctx, write, tag="shop restock")
 
-    # ------------------------------------------------------------ 世界と控え
+    # ------------------------------------------------------------ 周回と控え
 
     def bucket_of(app):
-        return worlds.of(app)
+        """いまの周回の `(鍵, 控え)`。世界名だけの控えが残っていれば先に移す。
+
+        呼ぶのは店を開いたときだけなので、`app` の辞書と `player` は
+        いまの周回を指している（セーブの辞書を渡すのは `World.__init__` の中だけ）。
+        """
+        key = worlds.playthrough(app)
+        return key, worlds.load(key)
 
     def save_bucket(key, bucket):
-        """1世界分を書き出す。並びは `ordered_bucket`、書き方は `ctx.write_json()`。"""
+        """1周回分を書き出す。並びは `ordered_bucket`、書き方は `ctx.write_json()`。"""
         return worlds.save(key, bucket)
 
     # ------------------------------------------------------------ ゲームを読む
@@ -645,8 +662,10 @@ def apply(ctx):
         entries = goods_entries(pending["facility"]) or []
         values = [e.get("value") for e in entries
                   if isinstance(e.get("value"), int)][:NEW_STOCK_MAX]
+        # 足りない分は雛形の値を頭から順に繰り返す（1つ目の値だけで埋めると価値段階が偏る）。
+        base = list(values)
         while values and len(values) < NEW_STOCK_MIN:
-            values.append(values[len(values) % len(values)])
+            values.append(base[len(values) % len(base)])
         return values
 
     def tidy(row, value):

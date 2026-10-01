@@ -22,7 +22,9 @@
   文脈     … 旅の途中の相手との会話に1文足す（複製に足し、本体は変えない）
   ロード   … 古いセーブなら旅を忘れる。行き先に居なければ置き直す。
              RETURN_ALL_ON_LOAD で全員帰る
-  控え     … state/npc_travel/<世界名>.json
+  控え     … state/npc_travel/<世界名×主人公名>.json
+  周回     … 世界名だけの台帳は見つけた時点の主人公へ移す。作り直した主人公には渡さない。
+             別の主人公の周回が在る世界では移さない
 """
 import importlib.util
 import io
@@ -232,13 +234,14 @@ def load_mod():
 
 # ---------------------------------------------------------------- 舞台作り
 WORLD_NAME = "旅の検査世界"
+HERO_NAME = "旅の主人公"
 G0, I0, S0, E0 = "100", "101", "102", "103"
 G1, I1, S1, E1 = "200", "201", "202", "203"
 G2 = "300"
 
 
 def make_world(days=10, affinities=(10, 25, 30), party_member=None,
-               player_area="0", player_facility=E0, extra_towns=1):
+               player_area="0", player_facility=E0, extra_towns=1, hero=HERO_NAME):
     """街0（ギルド・宿・店・入口）、街1（ギルド・宿）、ダンジョン2、未生成の街3。"""
     guild0 = Facility(G0, "guild", "泥濘の会館")
     inn0 = Facility(I0, "inn", "灯り亭")
@@ -273,6 +276,7 @@ def make_world(days=10, affinities=(10, 25, 30), party_member=None,
                         "current_area": "0", "current_location": G0}
     area0.adventurer_npcs = list(roster)
     save = {"world_data": {"world_name": WORLD_NAME, "days_elapsed": days},
+            "player_data": {"name": hero},
             "npcs": npcs,
             "areas": {area_id: {"size": size, "adventurer_npcs": list(roster) if area_id == "0" else []}
                       for area_id, size in sizes.items()}}
@@ -324,13 +328,15 @@ def moved_player(ctx, app):
     ctx.hooks["__main__:MovePhaseManager.move_phase"](lambda self: None, phase)
 
 
-def ledger_path():
+def ledger_path(hero=HERO_NAME):
+    """台帳のファイル。`hero` が None なら以前の版の世界名だけのファイル。"""
     from instantale_modloader import state
-    return os.path.join(STATE_DIR, "npc_travel", state.world_filename(WORLD_NAME))
+    key = WORLD_NAME if hero is None else WORLD_NAME + state.PLAYTHROUGH_SEP + hero
+    return os.path.join(STATE_DIR, "npc_travel", state.world_filename(key))
 
 
-def read_ledger():
-    path = ledger_path()
+def read_ledger(hero=HERO_NAME):
+    path = ledger_path(hero)
     if not os.path.exists(path):
         return {}
     with io.open(path, encoding="utf-8") as fh:
@@ -578,6 +584,19 @@ def scene_only_here():
     there = {cid: t for cid, t in read_ledger().items() if t["origin_area"] == "1"}
     check("設定を切ると居ない街でも同じ街の移動が起きる",
           any(t["kind"] == "local" for t in there.values()), there)
+    seen = read_seen()
+    check("出発の出た街はどれも日を控える（最後の街だけにしない）",
+          seen.get("0") == 40 and seen.get("1") == 40, seen)
+
+    # 街でない土地に居ると引く街が無い。それでも落ちない。
+    module, ctx = fresh_mod(DEPART_CHANCE_PERCENT=100, LOCAL_CHANCE_PERCENT=100,
+                            LOCAL_ONLY_HERE=True)
+    app, fac = make_world(affinities=(30, 30, 30), player_area="2", player_facility=G2)
+    use(app)
+    elapse(ctx, app, 30)
+    moved_player(ctx, app)
+    check("街でない土地では同じ街の移動を引かない", not read_seen(), read_seen())
+    check("引く街が無くても落ちない", not ctx.errors, ctx.errors)
 
 
 def scene_arrival():
@@ -931,7 +950,9 @@ def scene_load():
 
     # 台帳を戻して、新しいセーブ（出発後・行き先に居ない）を読む → 置き直す。
     module, ctx = fresh_mod(keep_state=True)
-    key, bucket = module._store()["worlds"].of(app)
+    worlds = module._store()["worlds"]
+    key = worlds.playthrough(app)
+    bucket = worlds.load(key)
     bucket["trips"][npc_id] = dict(trip)
     module._store()["worlds"].save(key)
     app3, fac3 = make_world(days=50, affinities=(30, 30, 30))
@@ -965,12 +986,68 @@ def scene_store():
     use(app)
     elapse(ctx, app, 30)
     path = ledger_path()
-    check("state/npc_travel/<世界名>.json に書く", os.path.exists(path), path)
+    check("state/npc_travel/<世界名×主人公名>.json に書く", os.path.exists(path), path)
+    check("世界名だけのファイルは作らない", not os.path.exists(ledger_path(None)))
     with io.open(path, encoding="utf-8") as fh:
         data = json.load(fh)
     row = next(iter(data["trips"].values()))
     check("行の並びは固定", list(row) == list(module.travel.TRIP_FIELDS), list(row))
     check("版が入る", data.get("version") == module.travel.LEDGER_VERSION)
+
+
+def restart(module, **settings):
+    """ゲームを起動し直したのと同じ（控えは残し、プロセスの入れ物だけ捨てる）。"""
+    if hasattr(sys, module.STORE_ATTR):
+        delattr(sys, module.STORE_ATTR)
+    return fresh_mod(keep_state=True, **settings)
+
+
+def scene_playthrough():
+    print("[周回]")
+    module, ctx = fresh_mod(DEPART_CHANCE_PERCENT=100, LOCAL_CHANCE_PERCENT=0)
+    app, fac = make_world(affinities=(30, 30, 30))
+    use(app)
+    elapse(ctx, app, 30)
+    npc_id, trip = next(iter(read_ledger().items()))
+    # 以前の版の置き場所（世界名だけ）へ戻す。
+    os.replace(ledger_path(), ledger_path(None))
+
+    module, ctx = restart(module)
+    app2, fac2 = make_world(days=50, affinities=(30, 30, 30))
+    use(app2)
+    ctx.hooks["__main__:InstantaleApp.load_game_new"](lambda self, name: None, app2, "w")
+    refresh(ctx, app2)
+    check("世界名だけの台帳を遊んでいる主人公へ移す", npc_id in read_ledger(), read_ledger())
+    check("移した後は世界名だけのファイルを消す", not os.path.exists(ledger_path(None)))
+    check("移した旅を当て直す",
+          app2.world.characters[npc_id].location is fac2["1"][trip["dest_facility"]],
+          app2.moved)
+    with io.open(ledger_path(), encoding="utf-8") as fh:
+        before = fh.read()
+
+    # 同じ世界で作り直した主人公。前の主人公の旅は当て直さない。
+    module, ctx = restart(module)
+    app3, fac3 = make_world(days=50, affinities=(30, 30, 30), hero="作り直した主人公")
+    use(app3)
+    ctx.hooks["__main__:InstantaleApp.load_game_new"](lambda self, name: None, app3, "w")
+    refresh(ctx, app3)
+    check("作り直した主人公の台帳は空", not read_ledger("作り直した主人公"),
+          read_ledger("作り直した主人公"))
+    check("前の主人公の旅で冒険者を動かさない", not app3.moved, app3.moved)
+    with io.open(ledger_path(), encoding="utf-8") as fh:
+        check("前の主人公の台帳はそのまま", fh.read() == before)
+
+    # 別の主人公の周回が在る世界の、世界名だけの台帳は移さない（ローダの adopt）。
+    shutil.copyfile(ledger_path(), ledger_path(None))
+    module, ctx = restart(module)
+    app4, fac4 = make_world(days=50, affinities=(30, 30, 30), hero="三人目の主人公")
+    use(app4)
+    ctx.hooks["__main__:InstantaleApp.load_game_new"](lambda self, name: None, app4, "w")
+    refresh(ctx, app4)
+    check("別の主人公が居る世界では移さない",
+          os.path.exists(ledger_path(None)) and not read_ledger("三人目の主人公")
+          and not app4.moved, app4.moved)
+    check("落ちていない", not ctx.errors, ctx.errors)
 
 
 def scene_pure():
@@ -1028,6 +1105,7 @@ def main():
     scene_context()
     scene_load()
     scene_store()
+    scene_playthrough()
     print()
     if failures:
         print("FAILED: {}".format(failures))

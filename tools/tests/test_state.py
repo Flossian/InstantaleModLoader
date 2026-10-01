@@ -420,6 +420,15 @@ def test_adopt_world_file():
               "鍵が世界名だけなら空")
         check(st.other_playthroughs(os.path.join(sandbox, "state"), "岩" + sep + "ミツバ") == [],
               "世界名の頭が同じだけの別の世界は数えない")
+        side = os.path.join(sandbox, "state", "side_files")
+        os.makedirs(side, exist_ok=True)
+        for suffix in (".cast.json", ".reroll.json"):
+            with open(os.path.join(side, "岩の里" + sep + "ミツバ" + suffix), "w",
+                      encoding="utf-8") as handle:
+                handle.write("{}")
+        check(st.other_playthroughs(os.path.join(sandbox, "state"), "岩の里" + sep + "ミツバ")
+              == ["岩の里" + sep + "ムツハ"],
+              "同じ周回の副ファイル（.cast.json / .reroll.json）は別の主人公と読まない")
 
         old = fresh_store()
         old.save("灰の街", {})

@@ -1635,7 +1635,7 @@ def apply(ctx):
 
     # 402_ の「装備／外す」はローダの窓口を通してここへ来る（書く役を 1 本にする。TECH.md §3.3.5）。
     def npc_toggle(app, holder, item):
-        """仲間の品を装備欄へ入れる／戻す。窓口 `equipment.toggle` の答え。装備欄が無ければ None（402_ の直書きに任せる）。"""
+        """仲間の品を装備欄へ入れる／戻す。窓口 `equipment.toggle` の答え。装備欄が無ければ None（402_ は何も書かない）。"""
         sc = scope_for(app, holder, create=False)
         if sc is None or sc["player"]:
             return None

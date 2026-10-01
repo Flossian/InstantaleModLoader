@@ -1719,6 +1719,112 @@ warns = [line for line in read_log().splitlines()
          and "corrected" not in line and "is unknown" not in line]
 check("ログに WARN が無い（網が握った3行と、宿代の帳尻でわざと出した行を除く）", not warns, warns[:3])
 
+print("[起動して最初のロード]")
+# 登録簿が空のまま（起動して注入した直後）セーブを読む。層を orig の後で積むと、
+# ローダの建て直し（`restore_world`）が層の無い id を飛ばし、建物は控えの写しを使わずに
+# 層の初期値から組まれる。次の保存でその組み直しが控えを上書きして、試合の進みが消える。
+snap = (modfacility._persisted_entry(app, module.OWNER, record["facility"]) or {}).get("snapshot") or {}
+check("前提: 控えに試合の進みが在る", (snap.get("config") or {}).get("current_phase") == 1,
+      snap.get("config"))
+module, ctx, app, world, classes = setup(keep_state=True)
+# 実機のタイトル画面には世界が無く、層は1つも積まれていない。
+# `setup` の塗り直しが偽の世界に積んだ分を捨てて、その形にする。
+modfacility.registry().clear()
+modnpc.registry().clear()
+check("前提: 登録簿は空から始まる", not modfacility.entries(module.OWNER),
+      modfacility.entries(module.OWNER))
+world5 = classes["world"](make_save(), app)
+app.world = world5
+fresh_start, _node = building_of(world5, record)
+check("最初のロードでも建物は控えから建ち直る",
+      fresh_start is not None and "modfacility: restored" in read_log(),
+      [line for line in read_log().splitlines() if "modfacility:" in line][-3:])
+check("最初のロードでも試合の進みが戻る",
+      (getattr(fresh_start, "config", None) or {}).get("current_phase") == 1,
+      getattr(fresh_start, "config", None))
+check("最初のロードでも主人が戻る", record.get("keeper") in world5.characters,
+      sorted(world5.characters))
+app.save_game()
+CLOCK.settle()
+snap = (modfacility._persisted_entry(app, module.OWNER, record["facility"]) or {}).get("snapshot") or {}
+check("次の保存でも控えの試合の進みは消えない",
+      (snap.get("config") or {}).get("current_phase") == 1, snap.get("config"))
+check("ctx.log_exc に例外が出ていない（最初のロード）", not ctx.errors, ctx.errors[:3])
+
+print("[前の周回の名前]")
+# 登録簿の層は世界をまたいで残る。前に読んだ周回の人物（層だけ残って今の世界に居ない）や
+# ロードの最中にまだ残っている前の周回の素データと名前が重なっても、今の主人を改名しない。
+
+
+def keeper_name_now():
+    return next((h.get("keeper_name") for h in holdings()
+                 if h.get("keeper") == record.get("keeper")), None)
+
+
+mine_name = keeper_name_now()
+ghost = modnpc.register("330_real_estate", key="keeper-ghost", fields={"name": mine_name})
+renamed_before = read_log().count("was renamed")
+app.go(world5.areas["2"].nodes["10"].facilities["9"])
+check("前の周回の層と同じ名前でも主人は改名されない（塗り直し）",
+      keeper_name_now() == mine_name and read_log().count("was renamed") == renamed_before,
+      (mine_name, keeper_name_now()))
+stale_save = make_save()
+stale_save["npcs"]["77"] = {"name": mine_name}
+app.save_data_dict = stale_save                 # ロードの最中は前の周回の辞書のまま
+fresh_save = make_save()
+world6 = classes["world"](fresh_save, app)
+check("前の周回の層・素データと同じ名前でも主人は改名されない（ロード）",
+      keeper_name_now() == mine_name and read_log().count("was renamed") == renamed_before,
+      (mine_name, keeper_name_now()))
+app.save_data_dict = fresh_save
+app.world = world6
+check("ロードの後も主人はその名前のまま", getattr(world6.characters.get(record.get("keeper")),
+                                                  "name", None) == mine_name,
+      getattr(world6.characters.get(record.get("keeper")), "name", None))
+modnpc.unregister("330_real_estate", ghost)
+
+print("[ロードの控えの鍵]")
+# 控えに項目の無い持ち株はロードの直後に新築される。そのときまだ `app` の辞書と主人公が
+# 前の周回を指していても、控えは読んでいる周回のファイルへ書く。
+heir_key = WORLD_NAME + SEP + "二代目"
+heir_fid = str(heir_holdings[0].get("facility")) if heir_holdings else ""
+with modfacility.keyed(heir_key), modnpc.keyed(heir_key):
+    modfacility._drop_persisted(app, module.OWNER, heir_fid)
+    modnpc._drop_persisted(app, module.OWNER, heir_keeper)
+# 建物と主人の id は 土地-番 なので前の周回の控えにも同じ id の項目が在りうる。
+# 中身の比較では書いたかどうか見分けられないので、控えへ書いた鍵を数える。
+saved_keys = []
+for framework in (modfacility, modnpc):
+    found_store = framework.store()
+
+    def spy_save(key, bucket=None, real=found_store.save, name=framework.STATE_DIRNAME):
+        saved_keys.append((name, key))
+        return real(key, bucket)
+
+    found_store.save = spy_save
+heir_save = make_save()
+heir_save["player_data"] = {"name": "二代目"}
+try:
+    world7 = classes["world"](heir_save, app)  # `app.save_data_dict` と主人公は前の周回のまま
+finally:
+    for framework in (modfacility, modnpc):
+        vars(framework.store()).pop("save", None)
+heir_built, _ = building_of(world7, heir_holdings[0]) if heir_holdings else (None, None)
+check("前提: 控えに無い持ち株がロードで新築される", heir_built is not None,
+      list(world7.areas["2"].nodes["10"].facilities))
+with modfacility.keyed(heir_key), modnpc.keyed(heir_key):
+    heir_facility_entry = modfacility._persisted_entry(app, module.OWNER, heir_fid)
+    heir_keeper_entry = modnpc._persisted_entry(app, module.OWNER, heir_keeper)
+check("新築の控えは読んでいる周回へ書かれる",
+      (heir_facility_entry or {}).get("spawned") is True, heir_facility_entry)
+check("主人の控えも読んでいる周回へ書かれる",
+      (heir_keeper_entry or {}).get("spawned") is True
+      and (heir_keeper_entry or {}).get("place") is not None, heir_keeper_entry)
+first_key = WORLD_NAME + SEP + PLAYER_NAME
+check("前の周回の控えへは書かない", saved_keys
+      and not [one for one in saved_keys if one[1] == first_key], saved_keys)
+check("ctx.log_exc に例外が出ていない（前の周回の名前・控えの鍵）", not ctx.errors, ctx.errors[:3])
+
 print()
 if failures:
     print("FAILED: " + ", ".join(failures))

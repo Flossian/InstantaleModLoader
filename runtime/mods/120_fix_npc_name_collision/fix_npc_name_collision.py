@@ -853,6 +853,12 @@ def apply(ctx):
         def _load(orig, self, *args, **kwargs):
             # ロードの最中に組み立てられる NPC も、その後の控え直しも、
             # どちらも「既に世界に居る人」として裁く。
+            # 外側の1回で前の世界の控えを捨てる。
+            # 残すと、ロードの最中に組まれる NPC を別の世界の名前と突き合わせ、
+            # `FIX_EXISTING` では居もしない相手との衝突で改名してしまう。
+            # 入れ子（start_game の中の load_game_new）では、外側が控えた分を消さない。
+            if loading["depth"] == 0:
+                known.clear()
             loading["depth"] += 1
             try:
                 result = orig(self, *args, **kwargs)

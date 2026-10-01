@@ -439,6 +439,10 @@ def scene_pure():
     check("初対面のほかは上限まで（新しい順）",
           [t["kind"] for t in rivalry.topics_of(bucket)] == ["taken", "cleanup", "intro"],
           rivalry.topics_of(bucket))
+    rivalry.taken_of(bucket)["5"] = {"area": "0", "day": 100, "title": "依頼5"}
+    check("当日の決着は噂になる", [q for q, _row, _ago in rivalry.rumors_in(bucket, "0", 100, 90)]
+          == ["5"])
+    check("日数 0 なら当日の決着も噂にしない", rivalry.rumors_in(bucket, "0", 100, 0) == [])
     pattern =module.suffix_pattern(module.TARGET_SUFFIX)
     marked = "古城（北）の亡霊" + rivalry.format_text(module.TARGET_SUFFIX, name="冒険者11", days=12)
     check("添え字だけ剥がす（題名の括弧は残す）", pattern.sub("", marked) == "古城（北）の亡霊",
@@ -486,13 +490,26 @@ def scene_intro():
     open_board(ctx, app)
     check("語りは1度だけ", not any("値踏み" in t for t in app.texts[before:]), app.texts[before:])
 
-    # 317 の二つ名があれば使う
+    # 317 の二つ名があれば使う。317 の控えは周回（世界×主人公）ごとなので周回の鍵で読む。
+    # 世界名だけの控えは読まない（移すのは 317。移す前に読むと前の主人公の名を使いうる）。
+    # 控えのフォルダは `fresh_mod` が消すので、当て直した後に作る。
+    folder = os.path.join(STATE_DIR, "reputation")
     module, ctx = fresh_mod()
     app = make_world()
     use(app)
-    folder = os.path.join(STATE_DIR, "reputation")
     os.makedirs(folder, exist_ok=True)
     with io.open(os.path.join(folder, state.world_filename(state.world_key(app))), "w",
+                 encoding="utf-8") as fh:
+        json.dump({"epithet": {"epithet": "前の主人公の名"}}, fh, ensure_ascii=False)
+    appear(ctx, module, app)
+    rival = bucket_of(module, app)["rival"]
+    check("世界名だけの 317 の控えは読まない",
+          "前の主人公の名" not in rival.get("intro", ""), rival.get("intro"))
+    module, ctx = fresh_mod()
+    app = make_world()
+    use(app)
+    os.makedirs(folder, exist_ok=True)
+    with io.open(os.path.join(folder, state.world_filename(state.playthrough_key(app))), "w",
                  encoding="utf-8") as fh:
         json.dump({"epithet": {"epithet": "秩序の剣"}}, fh, ensure_ascii=False)
     appear(ctx, module, app)
@@ -559,12 +576,26 @@ def scene_aim():
 
 def scene_skip_conversation_quest():
     print("[会話から作った依頼は狙わない]")
+    # 301 の控えは周回（世界×主人公）の鍵の下を読む。世界名だけの鍵の分は読まない
+    # （移すのは 301。依頼の id は作り直した周回で振り直されるので、前の主人公の分かもしれない）。
+    clients = os.path.join(STATE_DIR, "quest_clients.json")
     module, ctx = fresh_mod()
     app = make_world()
     use(app)
     os.makedirs(STATE_DIR, exist_ok=True)
-    with io.open(os.path.join(STATE_DIR, "quest_clients.json"), "w", encoding="utf-8") as fh:
+    with io.open(clients, "w", encoding="utf-8") as fh:
         json.dump({state.world_key(app): {"1": {"npc_id": "10", "npc_name": "依頼人"}}},
+                  fh, ensure_ascii=False)
+    appear(ctx, module, app)
+    open_board(ctx, app)
+    target = bucket_of(module, app).get("target")
+    check("世界名だけの鍵の 301 の控えは読まない", target is not None, target)
+    module, ctx = fresh_mod()
+    app = make_world()
+    use(app)
+    os.makedirs(STATE_DIR, exist_ok=True)
+    with io.open(clients, "w", encoding="utf-8") as fh:
+        json.dump({state.playthrough_key(app): {"1": {"npc_id": "10", "npc_name": "依頼人"}}},
                   fh, ensure_ascii=False)
     appear(ctx, module, app)
     open_board(ctx, app)
@@ -872,6 +903,14 @@ def scene_approach():
           bucket_of(module, app)["topics"])
     del app.process_choice
     ctx.errors[:] = []
+    arrive(ctx, app, guild)
+    check("第一声の前は種を残す", [t["kind"] for t in bucket_of(module, app)["topics"]] == ["intro"],
+          bucket_of(module, app)["topics"])
+    module._store()["approach"]["at"] -= module.APPROACH_TTL + 1
+    check("印が古ければ第一声は変えない", opening(ctx, app) == "<行動: 話しかける>")
+    check("第一声を読み替えられなければ種は残る",
+          [t["kind"] for t in bucket_of(module, app)["topics"]] == ["intro"],
+          bucket_of(module, app)["topics"])
 
     app.world.characters["11"].config["is_dead"] = True
     arrive(ctx, app, guild)

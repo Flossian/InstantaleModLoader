@@ -82,7 +82,7 @@ RESTYLED = (TRAITS_BOX, "character_sheet_attributes")
 STYLE_SOURCE = "character_sheet_health_condition"
 
 # ---------------------------------------------------------------- 二つ名
-#: 評判 MOD（`317_reputation`）の控えの置き場。`state\reputation\<世界名>.json`。
+#: 評判 MOD（`317_reputation`）の控えの置き場。`state\reputation\<世界×主人公>.json`（周回の鍵）。
 #: 形は MOD をまたいだ取り決め（MODS.md `317_reputation` の「控えの形」）。
 #: MOD どうしは import しない（TECH.md §3.2.3）ので、ファイルを読むことで繋がる。
 #: ファイルが無ければ何も出さない ＝ 評判 MOD を切っていても人物欄は成り立つ。

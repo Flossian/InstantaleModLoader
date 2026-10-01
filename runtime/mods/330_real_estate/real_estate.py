@@ -139,6 +139,8 @@ MOD が自分で起こす滞在（`331_facility_investment` の「無料で泊�
 自分の家の滞在は `VacationStartManager.execute` の中で暦を進めるので、
 その最中に来た期限は見送り（`rent_pending`）、滞在が終わってから1回で払う。
 宿代の前払いと同じ区間で金を動かさないため。
+宿屋の宿泊も同じ `execute` の中で暦を進め、宿代を引くのはその後（GAME.md §2.17）。
+こちらは `execute` を抜けるまで見送り、宿代を引かれた後の所持金で払えるかを見る。
 
 **プレイヤーが建物の中に居るあいだは取り壊さない**（出口の無い施設に立たせないため）。
 その場合は次に外へ出たときに壊す。
@@ -419,6 +421,8 @@ def apply(ctx):
                 "warned": set(),
                 # 滞在の最中に来た家賃の期限（滞在が終わってから精算する）。
                 "rent_pending": False,
+                # 宿屋の宿泊の `execute` の最中（宿代が引かれるまで家賃を見送る）。
+                "inn_stay": False,
                 # 滞在のあいだ主を据える前の値（戻すために控える）。
                 "owner_was": None,
                 # 手が空くのを待っているボタンの足し直し（見張りは同時に1つ）。
@@ -1273,8 +1277,14 @@ def apply(ctx):
         見送ったことだけ `rent_pending` に控え、滞在が終わったら `end_stay` が
         1回呼び直す。滞在が終わらないまま次に暦が進んだときも、
         そちらの `check_leases` が同じ期をまとめて払う（期限は日付で見るので取りこぼさない）。
+
+        宿屋の宿泊（`inn_stay`）も見送る。`execute` の中では暦が進んだ後に宿代が引かれるので
+        （GAME.md §2.17）、ここで引くと宿代に残してあった金で家賃を払い、
+        続く宿代の引き落としで所持金が足りなくなる。
+        宿代を変える MOD の前払いで膨らんだ額で判定してしまうこともある。
+        `execute` を抜けたら `vacation_start` が1回呼び直す。
         """
-        if staying_home(app) is not None:
+        if staying_home(app) is not None or state.get("inn_stay"):
             if not state.get("rent_pending"):
                 state["rent_pending"] = True
                 write("rent: postponed while the stay is running ({})".format(why))
@@ -2202,6 +2212,7 @@ def apply(ctx):
         """日付が進んだら家賃を精算する。日付を動かすのはここ1箇所（GAME.md §2.16）。
 
         滞在の最中に進んだぶんは `check_leases` が見送る（精算は `end_stay` で1回）。
+        宿屋の宿泊の最中も見送る（精算は `vacation_start` が `execute` を抜けてから1回）。
         """
         result = orig(self, days, *args, **kwargs)
         try:
@@ -2284,7 +2295,18 @@ def apply(ctx):
             # 宿屋（か、よその MOD の宿）の宿泊。
             # **実際に何日進んだか**をここで測る（月数×30 とは限らない）。
             day_before = ui.game_day(app) if app is not None else None
-            result = orig(self, choice_text, *args, **kwargs)
+            # 宿代は暦が進んだ後に引かれる（GAME.md §2.17）。
+            # 家賃はその引き落としが済むまで見送り、抜けてから払う（`check_leases`）。
+            state["inn_stay"] = True
+            try:
+                result = orig(self, choice_text, *args, **kwargs)
+            finally:
+                state["inn_stay"] = False
+                if app is not None and state.get("rent_pending"):
+                    try:
+                        check_leases(app, "after the inn stay", idle=True)
+                    except Exception:
+                        ctx.log_exc("real estate: cannot settle the rent after the inn stay")
             try:
                 day_after = ui.game_day(app) if app is not None else None
                 if isinstance(day_before, int) and isinstance(day_after, int) \

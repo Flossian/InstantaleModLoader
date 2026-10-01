@@ -443,7 +443,8 @@ def build_window(model):
                           lambda e: move(category, pool["tree"].identify_row(e.y), True))
         used["tree"].bind("<Double-1>",
                           lambda e: move(category, used["tree"].identify_row(e.y), False))
-        used["tree"].bind("<<TreeviewSelect>>", on_select)
+        # add="+" が無いと、上で足した last_tree の更新が置き換わって試聴が右の選択を追わない。
+        used["tree"].bind("<<TreeviewSelect>>", on_select, add="+")
         weight_var.trace_add("write", on_weight)
         spin.bind("<Return>", on_weight)
 

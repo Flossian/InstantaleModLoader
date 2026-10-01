@@ -12,7 +12,7 @@
         ├─ 到着・日数の経過で印を照合 ─┬─ 土地の印が変われば ── 評判の編纂（LLM 1回）
         │                             └─ 質的な変化があれば ── 二つ名の編纂（LLM 1回）
         │                                     どちらも別スレッド・直列  │
-        │                                          state/reputation/<世界名>.json
+        │                                   state/reputation/<世界×主人公>.json
         │                                                       │
         └─ 会話5関数 / 情景描写 ── 注入するのは**キャッシュ済みの文字列だけ**
 ```
@@ -74,9 +74,20 @@ NPC がどう感じるかは NPC の側（性格・手配度との関係）が�
 
 ## セーブには書かない
 
-キャッシュも二つ名も `state/reputation/<世界名>.json` のみ（TECH.md §3.11）。
+キャッシュも二つ名も `state/reputation/<世界×主人公>.json` のみ（TECH.md §3.11）。
 `area_history` は**読むだけ**で、`lawfulness` を書き換えない
 （手配を動かすのは `309_` と `316_` の仕事）。
+
+## 控えは周回ごと
+
+評判も二つ名も主人公の行いから編んだもので、セーブと同じ寿命を持つ。
+世界名だけの鍵だと、同じ世界で主人公を作り直したとき、
+前の主人公の評判と二つ名が新しい主人公に付いて回る。
+そこで鍵は周回の鍵（世界×主人公）で引く（`WorldStore.playthrough`。TECH.md §5.4）。
+世界名だけのファイルが残っていれば、そのとき遊んでいる主人公のものとして移す
+（その世界に別の主人公の周回が在れば移さない。ローダの `adopt`）。
+引き直しの頼み（`121_` が書く `.reroll.json`）も同じ鍵で読む。
+この MOD は `World.__init__` を包まないので、鍵は `app` から引いてよい。
 """
 
 import copy
@@ -87,7 +98,7 @@ import sys
 import time
 
 from instantale_modloader import frames, jobs, llm, ui
-from instantale_modloader.state import WorldStore, world_filename, world_key
+from instantale_modloader.state import WorldStore, world_filename
 
 from . import material
 
@@ -109,7 +120,7 @@ LOG_BASENAME = "reputation.log"
 # グローバルの `random` から引くとゲーム自身の乱数列がずれる（TECH.md §6.1）。
 _RNG = random.Random()
 
-#: 世界ごとのキャッシュを置くフォルダ（`state/` の下）。
+#: 周回（世界×主人公）ごとのキャッシュを置くフォルダ（`state/` の下）。
 #: ファイル名は `instantale_modloader.state.world_filename` が作る。
 #: 規則をここに写さない（写した版がずれた実例が TECH.md §3.2.3 に在る）。
 STATE_DIRNAME = "reputation"
@@ -191,7 +202,7 @@ EPITHET_DESC_CHARS = 120
 #: **`apply()` の中で作ってはいけない**（TECH.md §3.4）。
 #: `apply()` は再注入と遅延当て直しで何度も走り、そのたびに入れ物が作り直される。
 #: 前の世代のワーカーが生きている間に2本目が起動すると、
-#: 錠が別インスタンスになり、同じ `state/reputation/<世界>.json` を
+#: 錠が別インスタンスになり、同じ `state/reputation/<世界×主人公>.json` を
 #: 排他なしで read-modify-write できてしまう。
 #: `sys` に置けば世代をまたいで同じ1組を共有できる（`311_` / `118_` と同じ手）。
 STATE_STORE_ATTR = "__instantale_reputation_store__"
@@ -660,7 +671,7 @@ def apply(ctx):
                 "last_check": 0.0,     # 素材を照合した時刻（間引き用）
                 "noted": set(),        # 1回だけ出す知らせの鍵
             },
-            # 世界名 -> キャッシュ（書くのはこの MOD だけ）。
+            # 周回の鍵 -> キャッシュ（書くのはこの MOD だけ）。
             # 出し入れと錠はローダの語彙（`state.WorldStore`）。
             "worlds": WorldStore(ctx, STATE_DIRNAME,
                                  normalize=as_bucket, order=stored_bucket),
@@ -711,7 +722,7 @@ def apply(ctx):
         return True
 
     def bucket_of(key):
-        """その世界のキャッシュ `{"areas": 土地別, "epithet": 世界に1つ}`。
+        """その周回のキャッシュ `{"areas": 土地別, "epithet": 世界に1つ}`。
 
         無ければ読み込む。錠は呼び側が持つ。
         読んだものをこの形へ均すのは `as_bucket`、書くときの形は `stored_bucket`。
@@ -742,6 +753,22 @@ def apply(ctx):
                                for aid in sorted(areas, key=ui.id_sort_key)}
             return flush(key, bucket)
 
+    def drop_record(key, area_id):
+        """土地の控えを外す。外したら True、元から無ければ何も書かずに False。
+
+        注入の側（`block_for`）は控えの有無しか見ないので、
+        線を下回った土地の控えを残すと古い評判文が出続ける。
+        残りの土地の並びは保つ（`dict` から1件抜くだけなので崩れない）。
+        """
+        with data_lock:
+            bucket = bucket_of(key)
+            if str(area_id) not in bucket["areas"]:
+                return False
+            areas = dict(bucket["areas"])
+            del areas[str(area_id)]
+            bucket["areas"] = areas
+            return flush(key, bucket)
+
     def save_epithet(key, record):
         with data_lock:
             bucket = bucket_of(key)
@@ -750,7 +777,7 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 素材の照合
     def snapshot(app):
-        """いま居る土地の素材と、その世界の鍵。撮れなければ `None`。"""
+        """いま居る土地の素材と、その周回の鍵。撮れなければ `None`。"""
         area_id = material.current_area_id(app)
         if not area_id:
             return None
@@ -759,7 +786,7 @@ def apply(ctx):
             return None
         return {
             "kind": "area",
-            "world": world_key(app),
+            "world": worlds.playthrough(app),   # 周回の鍵（世界×主人公）
             "area_id": area_id,
             "material": item,
             "player": material.player_name(app),
@@ -835,6 +862,11 @@ def apply(ctx):
                       "{} は素材が薄いので評判を立てない（{}件、{}）".format(
                           item.get("area_name") or shot["area_id"],
                           deeds_count(item), lawfulness_line(item)))
+            # 一度立った評判も、線を下回れば外す（役場で手配を解いた・最低件数を
+            # 引き上げた）。外す側は印を見ない。再び線に届けば印が無いので編み直す。
+            if drop_record(shot["world"], shot["area_id"]):
+                write("{} は線を下回ったので評判の控えを外した（{}）".format(
+                    item.get("area_name") or shot["area_id"], shot["world"]))
             return
         mark = material.fingerprint(item)
         record = record_of(shot["world"], shot["area_id"])
@@ -852,7 +884,7 @@ def apply(ctx):
         """
         if not USE_EPITHET:
             return
-        world = world_key(app)
+        world = worlds.playthrough(app)
         mark = epithet_mark(material.survey(app))
         record = epithet_record_of(world)
         exclude = ""
@@ -993,7 +1025,7 @@ def apply(ctx):
         area_id = material.current_area_id(app)
         if not area_id:
             return ""
-        world = world_key(app)
+        world = worlds.playthrough(app)
         record = record_of(world, area_id)
         if record is None:
             return ""

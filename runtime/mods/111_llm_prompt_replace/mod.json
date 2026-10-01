@@ -10,7 +10,7 @@
     "en": "Rewrites the text sent to the LLM with your replacement rules; reads the same llm_replacements.txt as InstantaleLlmProxy",
     "ja": "LLM に送る文章を置換ルールで書き換える。InstantaleLlmProxy と同じ llm_replacements.txt をそのまま読む"
   },
-  "version": "8",
+  "version": "9",
   "author": "R01/Flossian",
   "tool": {
     "entry": "tool.py",

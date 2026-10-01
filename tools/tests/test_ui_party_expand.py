@@ -21,7 +21,7 @@ Kivy（Button・Clock・Window・App）を差し込んで、次を確認する�
   ページ   … 溢れた仲間は ◀ ▶ で送る。枠は全員ぶん作り、今のページ以外は窓の外へ出す
              （隠さない・無効にしない）。最後のページは後ろへ詰める。畳むと中身ごと戻る
   窓の高さ … 行数を窓の高さの割合で決める設定。元の3行を下回らない
-  隠す     … 伸びた帯に重なるボタンは見えなくなり押せなくなる。戻すと元に戻る
+  隠す     … 伸びた帯に重なるボタンは見えなくなり押せなくなる（触りは下の枠へ通す）。戻すと元に戻る
   自分     … こちらのボタンは隠さない（隠すと戻す手段が無くなる）
   他人     … **ゲームの選択肢ボタンには触らない**（重なっていても）
   目隠し   … 新しく覆った場所は黒い板で塞ぐ（透けない・押しても抜けない）
@@ -827,6 +827,12 @@ def run():
     check("a button the grown panel covers is hidden",
           hud.stray.opacity == 0 and hud.stray.disabled is True,
           (hud.stray.opacity, hud.stray.disabled))
+    # 隠した相手は帯より手前に居て、その場所は足した行の枠の上になる。
+    # Kivy は無効なウィジェットの矩形で触りを止めるので、当たり判定が残ると枠への押下を吸う。
+    check("the hidden button lets touches through to the rows under it",
+          callable(vars(hud.stray).get("collide_point"))
+          and hud.stray.collide_point(hud.stray.x + 1, hud.stray.y + 1) is False,
+          vars(hud.stray).get("collide_point"))
     check("this mod's own button stays visible and pressable",
           button.opacity == 1 and button.disabled is False,
           (button.opacity, button.disabled))
@@ -895,6 +901,8 @@ def run():
     check("pressing again brings the covered button back",
           hud.stray.opacity == 1 and hud.stray.disabled is False,
           (hud.stray.opacity, hud.stray.disabled))
+    check("pressing again gives the covered button its own hit test back",
+          "collide_point" not in vars(hud.stray), vars(hud.stray).get("collide_point"))
     check("pressing again flips the icon back", (icon_apex(button) or 0) > 0,
           icon_apex(button))
     hud.show()
@@ -925,6 +933,20 @@ def run():
     check("and the covered button comes back with it",
           hud.stray.opacity == 1 and hud.stray.disabled is False,
           (hud.stray.opacity, hud.stray.disabled))
+
+    # -- 持ち主が隠していた相手は、持ち主の差し替えを残して戻す --------------
+    install(mod, ctx)
+    hud = FakeHUD(members=4)
+    hud.show()
+    from instantale_modloader import ui as loader_ui
+    loader_ui.show_widget(hud.stray, False)        # 持ち主が自分で隠している
+    owners = vars(hud.stray).get("collide_point")
+    hud.toggle_button().press()
+    hud.toggle_button().press()
+    check("a button its owner had hidden stays hidden and touch-through after restoring",
+          hud.stray.opacity == 0 and hud.stray.disabled is True
+          and vars(hud.stray).get("collide_point") is owners,
+          (hud.stray.opacity, hud.stray.disabled, vars(hud.stray).get("collide_point")))
 
     # -- `party_cells` をなめて塗るビルド ------------------------------------
     install(mod, ctx)

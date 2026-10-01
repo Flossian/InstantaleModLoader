@@ -684,6 +684,20 @@ check("manager 名が mod_arrival_event", calls[0][0] == "mod_arrival_event")
 check("プロンプトに施設名が入る", "テスト宿屋" in calls[0][1][0]["content"])
 check("会話フェーズは起こさない", not app.process_choice_calls)
 
+print("11b. narration モードはローダの窓口 arrivals に申し出ない（譲りようがないため）")
+arrivals.reset()
+clock = install_fake_kivy()
+mod, ctx, calls, hooks = setup(mode="narration", override=1.0, COOLDOWN_VISITS=0)
+app.process_choice_calls = []
+arrivals._store()["serial"] += 1
+out11b = do_move(hooks)
+check("セリフは足される", "「いらっしゃい」" in out11b, out11b)
+check("申し出は出さない", arrivals.offers(app) == [], arrivals.offers(app))
+arrivals.offer(app, "another_mod", 0)
+check("同じ優先度で後から申し出たほかの MOD が勝つ", arrivals.winner(app) == "another_mod",
+      arrivals.winner(app))
+arrivals.reset()
+
 print("12. 移動していなければ足さない（narrator 単独）")
 out12 = hooks["narrate"](lambda *a, **k: "剣を研いだ。")
 check("足されない", out12 == "剣を研いだ。", out12)

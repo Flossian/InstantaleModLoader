@@ -513,6 +513,9 @@ class ModContext:
         # boot() が出し入れする。
         # on_ready の既定のキーに使う。
         self._mod: str | None = None
+        # その mod の在り処（`runtime/mods` か `local/`）。boot() が `_mod` と一緒に出し入れする。
+        # 無ければ `runtime/mods` とみなす。
+        self._mod_root: str | None = None
 
     # -- patch モジュールへの入口 -------------------------------------------
     # ここで遅延 import しているのは循環 import を避けるため。
@@ -909,7 +912,9 @@ class ModContext:
         """
         if self._mod is None:
             return None
-        return os.path.join(self.runtime_dir, "mods", self._mod)
+        # `runtime/mods` を決め打つと、`local/` の mod だけ同梱データが見つからない。
+        root = self._mod_root or os.path.join(self.runtime_dir, "mods")
+        return os.path.join(root, self._mod)
 
     # -- 実行環境の情報 -----------------------------------------------------
     @property
@@ -1894,9 +1899,9 @@ def boot(out_dir: str) -> dict:
 
 
 def _forget_unapplied(results: dict, manifests: dict) -> list[str]:
-    """今回 "ok" にならなかった MOD が置いた期間・日数の望み・値段を外す。外した持ち主を返す。
+    """今回 "ok" にならなかった MOD が置いた期間・日数の望み・値段・装備の窓口を外す。外した持ち主を返す。
 
-    登録簿（`durations` / `prices`）は sys に在って注入をまたぐ。
+    登録簿（`durations` / `prices` / `combat` / `equipment`）は sys に在って注入をまたぐ。
     切った MOD や今回 apply に失敗した MOD の旧い関数が残ると、
     関所がそれに聞き続ける（古いモジュールの設定値を握ったまま）。
     持ち主はフォルダ名（MOD が `ctx.mod_dir` から名乗る）。
@@ -1905,11 +1910,14 @@ def _forget_unapplied(results: dict, manifests: dict) -> list[str]:
     from . import durations as _durations
     # `on_forget` の片付けを、この世代の durations に登録させる。
     # durations は注入のたびに読み直されるので、prices がまだ読まれていない世代では
-    # 値段の片付けが繋がっていない。
+    # 値段の片付けが繋がっていない。combat と equipment も同じ。
     from . import prices as _prices
+    from . import combat as _combat
+    from . import equipment as _equipment
     ok = {name for name, verdict in results.items() if verdict == "ok"}
     base, layers = _prices.item_price_sources()
-    owners = set(manifests) | set(_durations.owners()) | {base} | set(layers)
+    owners = (set(manifests) | set(_durations.owners()) | {base} | set(layers)
+              | set(_combat.owners()) | set(_equipment.owners()))
     gone = []
     for owner in sorted(owners - ok - {""}):
         if _durations.forget(owner, write=log):
@@ -2062,6 +2070,7 @@ def _boot(out_dir: str) -> dict:
             # 戻し忘れると、次に記録されたパッチが前の mod のものとして残る。
             _registry.begin_mod(fname)
             ctx._mod = fname
+            ctx._mod_root = dirs.get(fname, mods_dir)
             try:
                 apply_fn(ctx)
             except BaseException:
@@ -2071,6 +2080,7 @@ def _boot(out_dir: str) -> dict:
             finally:
                 _registry.end_mod()
                 ctx._mod = None
+                ctx._mod_root = None
             # 前の boot と同じで、この mod が今回1行も書いていなければ省く。
             # 何か書いたなら、その行がどの mod のものかを読めるよう必ず書く。
             if _state.get("lines_written", 0) != written_at_start:
@@ -2277,12 +2287,16 @@ def _unload(out_dir: str | None) -> dict:
         return _patch.revert_all()
 
     count = _run_on_main_thread(take_down, UNLOAD_WAIT) or 0
-    # 期間・日数の望み・値段の登録簿も空にする（関所が剥がれた後も sys に残るため）。
+    # 期間・日数の望み・値段・装備の窓口の登録簿も空にする（関所が剥がれた後も sys に残るため）。
     try:
         from . import durations as _durations
         from . import prices as _prices
+        from . import combat as _combat
+        from . import equipment as _equipment
         base, layers = _prices.item_price_sources()
-        for owner in sorted((set(_durations.owners()) | {base} | set(layers)) - {""}):
+        owners = (set(_durations.owners()) | {base} | set(layers)
+                  | set(_combat.owners()) | set(_equipment.owners()))
+        for owner in sorted(owners - {""}):
             _durations.forget(owner, write=log)
     except Exception:
         log_exc("unload: cannot forget the durations")

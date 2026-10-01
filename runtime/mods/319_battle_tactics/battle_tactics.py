@@ -600,7 +600,7 @@ def apply(ctx):
         "action": None,
         # 防御の構え。{表示名: True}。自分の手番が来たら消える。
         "guards": {},
-        # 復元した効果の帳簿。{(表示名, 状態異常名): recipe}
+        # 復元した効果の帳簿。{(持ち主の鍵, 状態異常名): recipe}。鍵は `recipe_owner`
         "recipes": {},
         # get_npc_defense の直近の呼び出し（防御値 → 持ち主の照合用）。
         "last_defense": None,
@@ -715,25 +715,48 @@ def apply(ctx):
                                "duration": int(duration)}
         return True
 
-    def status_mults(name):
-        """表示名 `name` の者にいま乗っている倍率（与える側, 受ける側）。"""
+    def owner_key(side, display, holder):
+        """帳簿の持ち主の鍵。敵は個体ごと、味方は表示名。
+
+        敵の `Character.name` には連番が付かず、同名の敵が並ぶ（GAME.md §2.10）。
+        名前で鍵を付けると、片方に付いた倍率がもう片方にも掛かり、
+        もう片方の手番で帳簿ごと消える。
+        味方は人名が世界で1つなので名前のまま（戦闘をまたいで残る状態異常の帳簿を、
+        実体が作り直されても引き継ぐ）。
+        """
+        return (side, id(holder)) if side == ENEMY_SIDE else (side, display)
+
+    def recipe_owner(app, holder):
+        """戦闘に居る `holder` の帳簿の鍵。居なければ None。"""
+        if holder is None:
+            return None
+        for side, _key, display, found in combatants(app):
+            if found is holder:
+                return owner_key(side, display, found)
+        return None
+
+    def status_mults(app, holder):
+        """`holder` にいま乗っている倍率（与える側, 受ける側）。"""
         out_mult, in_mult = 1.0, 1.0
+        owner = recipe_owner(app, holder)
+        if owner is None:
+            return out_mult, in_mult
         for (target, _status), recipe in state["recipes"].items():
-            if target != name:
+            if target != owner:
                 continue
             out_mult *= recipe.get("out_mult", 1.0)
             in_mult *= recipe.get("in_mult", 1.0)
         return out_mult, in_mult
 
-    def active_recipes(holder):
+    def active_recipes(app, holder):
         """持ち主の status に残っている帳簿だけを返す。消えた分は落とす。"""
         statuses = status_dict(holder)
-        if statuses is None:
+        owner = recipe_owner(app, holder)
+        if statuses is None or owner is None:
             return []
-        name = name_of(holder)
         found, dead = [], []
         for key, recipe in state["recipes"].items():
-            if key[0] != name:
+            if key[0] != owner:
                 continue
             if key[1] in statuses:
                 found.append((key, recipe))
@@ -750,14 +773,15 @@ def apply(ctx):
         （`convert_...` の時点ではまだ無い）ので、その直後に当てる。
         `308_` の報告は `handle_battle_situation` の外側なので、書き換え後の文が出る。
         """
-        for (name, status_name), recipe in list(state["recipes"].items()):
-            if not recipe.get("per_turn"):
+        holders = {owner_key(side, display, holder): holder
+                   for side, _key, display, holder in combatants(app)}
+        for (owner, status_name), recipe in list(state["recipes"].items()):
+            if not recipe.get("per_turn") or owner not in holders:
                 continue
-            for holder in holders_named(app, name):
-                statuses = status_dict(holder)
-                entry = statuses.get(status_name) if statuses else None
-                if isinstance(entry, dict):
-                    entry["description"] = per_turn_description(recipe["per_turn"])
+            statuses = status_dict(holders[owner])
+            entry = statuses.get(status_name) if statuses else None
+            if isinstance(entry, dict):
+                entry["description"] = per_turn_description(recipe["per_turn"])
 
     def say(app, text):
         try:
@@ -971,8 +995,8 @@ def apply(ctx):
             attacker = action["attacker"]
             attacker_name = action["actor_name"]
             defender_name = name_of(holder, target)
-            out_mult, _ = status_mults(attacker_name)
-            _, in_mult = status_mults(defender_name)
+            out_mult, _ = status_mults(app, attacker)
+            _, in_mult = status_mults(app, holder)
             guard = state["guards"].get(defender_name)
             if guard:
                 in_mult *= 1.0 - GUARD_CUT / 100.0
@@ -1053,12 +1077,14 @@ def apply(ctx):
                         continue
                     for target in extra["targets"]:
                         for holder in holders_named(app, target):
-                            key = (name_of(holder, target), extra["status_name"])
-                            state["recipes"][key] = {
+                            owner = recipe_owner(app, holder)
+                            if owner is None:
+                                continue
+                            state["recipes"][(owner, extra["status_name"])] = {
                                 "per_turn": extra["per_turn"],
                                 "intensity": extra["intensity"]}
                             write("restored per-turn effects: {!r} on {} {}x{}"
-                                  .format(extra["status_name"], key[0],
+                                  .format(extra["status_name"], name_of(holder, target),
                                           extra["per_turn"], extra["intensity"]))
                 elif extra["kind"] == "attribute":
                     recipe = attribute_recipe(extra["type"],
@@ -1069,10 +1095,12 @@ def apply(ctx):
                     name, description, book = recipe
                     for target in extra["targets"]:
                         for holder in holders_named(app, target):
-                            if not add_status(holder, name, description,
-                                              extra.get("duration") or ATTR_DURATION):
+                            owner = recipe_owner(app, holder)
+                            if owner is None or not add_status(
+                                    holder, name, description,
+                                    extra.get("duration") or ATTR_DURATION):
                                 continue
-                            state["recipes"][(name_of(holder, target), name)] = book
+                            state["recipes"][(owner, name)] = book
                             # 画面の行は出さない。付与は `308_` が status の差で
                             # 「名前(効果) が付いた」と出す（審判由来と同じ扱い）。
                             write("restored attribute effect: {!r} on {} ({})"
@@ -1132,7 +1160,9 @@ def apply(ctx):
         if RESTORE_EFFECTS and character is not None:
             try:
                 max_hp = max_hp_of(character)
-                for (name, status_name), recipe in active_recipes(character):
+                name = name_of(character)
+                app = getattr(self, "app", None) or ui.find_app()
+                for (_owner, status_name), recipe in active_recipes(app, character):
                     per_turn = recipe.get("per_turn")
                     if not per_turn or max_hp is None:
                         continue
@@ -1351,9 +1381,10 @@ def apply(ctx):
             state["skill_screen"] = False
             state["guard_pending"] = False
             state["guard_turn"] = None
-            # 前の戦闘の敵の帳簿を落とす（同名の敵が別の戦闘で出るため）。
-            # いま居る者（プレイヤー・仲間の残留状態異常）の分は残す。
-            alive = set(name for _s, _k, name, _h in combatants(app))
+            # 前の戦闘の敵の帳簿を落とす（敵は戦闘ごとに別の個体で、消えた個体の id は使い回されうる）。
+            # いま居る味方（プレイヤー・仲間の残留状態異常）の分は残す。
+            alive = set(owner_key(side, name, holder)
+                        for side, _k, name, holder in combatants(app) if side == ALLY_SIDE)
             for key in [k for k in state["recipes"] if k[0] not in alive]:
                 del state["recipes"][key]
         except Exception:

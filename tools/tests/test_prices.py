@@ -11,6 +11,7 @@
 """
 import os
 import sys
+import threading
 import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -393,6 +394,45 @@ def gate_main():
     ok &= check("内側は戻し切らない", nested.get("after_inner") == 800, nested)
     ok &= check("外側が済んでから戻る", item.attributes[prices.BUY] == 1200,
                 item.attributes[prices.BUY])
+
+    print("[別スレッドの保存が重なり、先に入った側が先に抜けても戻しすぎない]")
+    ctx = fresh_gate()
+    prices.declare_base("129", lambda it: {prices.BUY: 800, prices.SELL: 320})
+    prices.adjust("405", lambda it, key, price: price * 1.5, temporary=True)
+    item = Item()
+    price_owner(ctx, item)
+    overlap = {}
+    first_in = threading.Event()
+    second_in = threading.Event()
+    first_out = threading.Event()
+
+    def first(*args, **kwargs):
+        # ゲームの自動保存。書き出しの最中に別の保存が入ってくる。
+        first_in.set()
+        second_in.wait(5)
+
+    def second(*args, **kwargs):
+        # 後から入った保存。先の保存が抜けた後もまだ書き出している。
+        second_in.set()
+        first_out.wait(5)
+        overlap["second"] = item.attributes[prices.BUY]
+
+    worker = threading.Thread(
+        target=lambda: (ctx.hooks[prices.SAVE_TARGETS[0]](first, None),
+                        first_out.set()))
+    worker.start()
+    first_in.wait(5)
+    ctx.hooks[prices.SAVE_TARGETS[0]](second, None)
+    worker.join(5)
+    ok &= check("後の保存にも式だけの額", overlap.get("second") == 800, overlap)
+    ok &= check("両方抜けたら倍率が戻る", item.attributes[prices.BUY] == 1200,
+                item.attributes[prices.BUY])
+    ok &= check("入れ子の数が 0 へ戻る",
+                prices._item_registry().get("saving") == 0,
+                prices._item_registry().get("saving"))
+    prices.refresh("test")
+    ok &= check("以後も refresh で倍率が乗る",
+                item.attributes[prices.BUY] == 1200, item.attributes[prices.BUY])
 
     print("[保存の窓の間に別の地点が通っても一時の段を書き戻さない]")
     ctx = fresh_gate()

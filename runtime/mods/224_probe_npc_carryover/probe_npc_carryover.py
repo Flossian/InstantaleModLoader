@@ -113,8 +113,10 @@ def apply(ctx):
         if not raw:
             missing.append("npc stores")
 
+        # `ids.counter` は台帳が無くても 0 を返すので、有無は台帳そのもので見る。
+        # 値は表示にだけ使う。
         counter = ids.counter(app, "npc")
-        if counter is None:
+        if not [index for _where, index in ids.stores(app) if "npc" in index]:
             missing.append("index['npc']")
 
         world = getattr(app, "world", None)

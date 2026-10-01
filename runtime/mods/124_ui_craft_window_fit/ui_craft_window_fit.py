@@ -593,6 +593,10 @@ def apply(ctx):
                 continue                # 幅を持てない相手。次の空きへ
             left = anchored_left(widget, rect, new_width)
             moved = shift(widget, span[0] - left, 0.0)
+            # 分数はレイアウトが次のフレームで置き直すが、実座標は詰める前の左端に差分を足しただけ。
+            # `center_x` / `right` を保つ相手では、左端が置き直し後より手前に残る。
+            # 記録と、矢印が避けるボタンの矩形はこの実座標から読むので、置き直し後の左端に揃える。
+            widget.x = num(widget.x, 0.0) + (left - rect[0])
             remember(widget, kept)
             return "narrowed {:.0f}->{:.0f} via {} dx={:+.0f} via {}".format(
                 width, new_width, how, span[0] - left, moved)

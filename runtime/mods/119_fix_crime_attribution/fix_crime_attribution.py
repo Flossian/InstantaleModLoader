@@ -77,11 +77,24 @@ INJECT_MARKER = "【犯罪帰属MOD】"
 
 # 置換の目印。
 # ゲーム側の system 文から1字も違わず写したもの。
-# facilitator と summarizer のどちらの並びかも、この2つが何個あるかで見分ける。
+# facilitator と summarizer のどちらの並びかも、目印が何個あるかで見分ける。
 # ゲームがこの文を変えると数が合わなくなり、素通し（`not_target`）へ倒れる。
+#
+# 逮捕の説明はゲームの更新で文面が変わった。
+# 自由行動の facilitator は新しい文面を送る。
+# ゲームの中には旧い文面も3か所残っていて、会話中・クエスト中の facilitator はそちらと見られる。
+# どちらか片方だけでは残りの経路が素通しになるので、新旧の両方を目印にする。
 ARREST_ANCHOR = (
+    "- arrest_player: 衛兵が現れ、プレイヤーを逮捕しにかかる。"
+)
+
+ARREST_ANCHOR_OLD = (
     "- arrest_player: プレイヤーを逮捕する。懲役刑を受けることになる。"
 )
+
+# 目印は合っていないが逮捕の説明はある、を見分けるための頭。
+# ゲームがまた文面を変えたときに `anchor_drift` として記録へ出す。
+ARREST_HEAD = "- arrest_player:"
 
 LAW_ANCHOR = (
     "- lawfulness_loss: プレイヤーの行動結果が犯罪または著しく非道徳的な内容であり、"
@@ -104,16 +117,34 @@ ATTRIBUTION_RULES = (
     "出来事、プレイヤーが観測・叙述・会話・助言しただけの場合は other_or_none とする。\n"
 ).format(marker=INJECT_MARKER)
 
-FACILITATOR_REPLACEMENT = (
-    "- arrest_player: プレイヤー本人が違法行為を実行、共謀、教唆、または強要し、"
-    "逮捕が相応しい場合に限りプレイヤーを逮捕する。NPC や第三者の犯罪、"
-    "プレイヤーが被害者・観測者・叙述者にすぎない場合には使用しない。"
-    + ATTRIBUTION_RULES
-    + "- think の先頭には、判定結果として必ず "
-    + MARK_PLAYER
-    + " または "
-    + MARK_OTHER
-    + " のどちらか一つを付ける。これは一時的な機械判定用マーカーである。\n"
+
+def facilitator_replacement(effect):
+    """逮捕の目印を置き換える本文。
+
+    `effect` は元の文面が書いている逮捕の効果で、目印ごとに違う。
+    新しい文面の「衛兵が現れる」を消すと、ゲームが説明している効果が LLM に届かなくなる。
+    """
+    return (
+        "- arrest_player: プレイヤー本人が違法行為を実行、共謀、教唆、または強要し、"
+        "逮捕が相応しい場合に限り" + effect + "NPC や第三者の犯罪、"
+        "プレイヤーが被害者・観測者・叙述者にすぎない場合には使用しない。"
+        + ATTRIBUTION_RULES
+        + "- think の先頭には、判定結果として必ず "
+        + MARK_PLAYER
+        + " または "
+        + MARK_OTHER
+        + " のどちらか一つを付ける。これは一時的な機械判定用マーカーである。\n"
+    )
+
+
+FACILITATOR_REPLACEMENT = facilitator_replacement("衛兵が現れ、プレイヤーを逮捕しにかかる。")
+
+FACILITATOR_REPLACEMENT_OLD = facilitator_replacement("プレイヤーを逮捕する。")
+
+# 逮捕の目印と、それぞれの置き換え先。
+FACILITATOR_ANCHORS = (
+    (ARREST_ANCHOR, FACILITATOR_REPLACEMENT),
+    (ARREST_ANCHOR_OLD, FACILITATOR_REPLACEMENT_OLD),
 )
 
 SUMMARIZER_REPLACEMENT = (
@@ -261,6 +292,7 @@ def rewrite_texts(texts):
 
     どちらの目印が何個あるかで facilitator / summarizer を見分ける。
     片方がちょうど1つ、もう片方が0のときだけ書き換える。
+    逮捕の目印は新旧の文面を合わせて数える（両方が1つずつなら知らない形）。
     数が合わないものは知らない形なので、素通しして理由を残す。
     """
     if not isinstance(texts, (list, tuple)):
@@ -270,13 +302,19 @@ def rewrite_texts(texts):
     if INJECT_MARKER in blob:
         return texts, None, "already_injected"
 
-    arrest_count = blob.count(ARREST_ANCHOR)
+    arrest_hits = [(anchor, replacement) for anchor, replacement in FACILITATOR_ANCHORS
+                   for _ in range(blob.count(anchor))]
+    arrest_count = len(arrest_hits)
     law_count = blob.count(LAW_ANCHOR)
     if arrest_count == 1 and law_count == 0:
-        anchor, replacement, kind = ARREST_ANCHOR, FACILITATOR_REPLACEMENT, "facilitator"
+        (anchor, replacement), kind = arrest_hits[0], "facilitator"
     elif law_count == 1 and arrest_count == 0:
         anchor, replacement, kind = LAW_ANCHOR, SUMMARIZER_REPLACEMENT, "summarizer"
     elif arrest_count == 0 and law_count == 0:
+        # 逮捕の説明はあるのに目印が合わないのは、ゲームが文面を変えたとき。
+        # `not_target` に混ぜるとログに出ず、効いていないことに気付けない。
+        if ARREST_HEAD in blob:
+            return texts, None, "anchor_drift"
         return texts, None, "not_target"
     else:
         return texts, None, "ambiguous_anchor"
@@ -298,17 +336,25 @@ def apply(ctx):
     log_path = ctx.out_path(LOG_BASENAME)
     # 起動時の自己検査。
     # 目印を1つだけ置いた並びを自分で書き換えてみて、
-    # summarizer として当たること、印が入ること、二度目が素通しになることを確かめる。
-    # 目印はゲームの system 文の写しなので、ゲーム側が文を変えるとここで落ちる。
+    # 目印ごとに見分けた側で当たること、印が入ること、二度目が素通しになることを確かめる。
+    # 逮捕の目印も新旧それぞれ試す（片方だけ当たらない、を起動時に見つけるため）。
     # 落ちたら MOD ごと止める。
     # プロンプトだけ書き換わってマーカーが出ない、という中途半端に効いた状態を作らないため。
-    rewritten, check_kind, check_reason = rewrite_texts([LAW_ANCHOR])
-    verified = (
-        check_kind == "summarizer"
-        and check_reason == "rewritten"
-        and INJECT_MARKER in rewritten[0]
-        and rewrite_texts(rewritten)[2] == "already_injected"
-    )
+    # ゲームが文面を変えたことはここでは分からない。そちらは `anchor_drift` で残す。
+    check_kind, check_reason = None, None
+    verified = True
+    for check_anchor, expected_kind in (
+            (LAW_ANCHOR, "summarizer"),
+            (ARREST_ANCHOR, "facilitator"),
+            (ARREST_ANCHOR_OLD, "facilitator")):
+        rewritten, check_kind, check_reason = rewrite_texts([check_anchor])
+        if not (check_kind == expected_kind
+                and check_reason == "rewritten"
+                and INJECT_MARKER in rewritten[0]
+                and check_anchor not in rewritten[0]
+                and rewrite_texts(rewritten)[2] == "already_injected"):
+            verified = False
+            break
     state = {
         "enabled": verified,    # 自己検査に通ったか。落ちていれば何もしない
         "missing": set(),       # 素通しの理由を残した場所（同じものは二度書かない）

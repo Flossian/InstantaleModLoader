@@ -10,7 +10,7 @@
     "en": "Guild adventurers you know leave on trips: to another town's guild or inn for 1-3 months, or to another facility in the same town for a week. Every town keeps at least two. They come back on their own",
     "ja": "友好度の高いギルドの冒険者が旅に出る。別の街のギルドか宿に1〜3ヶ月、または同じ街の別の施設に7日。各街に必ず2人は残り、期限が来れば帰ってくる"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "settings": {
     "DEPART_CHANCE_PERCENT": {
