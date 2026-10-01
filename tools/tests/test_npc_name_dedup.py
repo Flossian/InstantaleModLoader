@@ -564,8 +564,11 @@ app.load_game_new()
 late = app.world.generate_character("50", app.save_data_dict["npcs"]["50"])
 check("素データにだけ居た古参は改名されない", late.name == "バルガス", late.name)
 check("`world_dict` 側の古参も控える", "51" in app.save_data_dict["npcs"] or True)
-newcomer = born(app, "52", "セラフィナ", category="young woman")
-check("同じ世界でも新顔は付け直される", newcomer.name != "セラフィナ", newcomer.name)
+# 新顔の名前は名簿に無いものにする。名簿の名前（前は「セラフィナ」）だと、引き直しが同じ名前を
+# 引いた回（女性名 600 件の1件）だけ「付け直されていない」と見えて落ちた（CI で1度）
+newcomer = born(app, "52", "エルセリア", category="young woman")
+check("同じ世界でも新顔は付け直される",
+      newcomer.name != "エルセリア" and newcomer.name in ROSTER_NAMES, newcomer.name)
 
 # プレイヤーと敵は ON でも触らない。
 mod, ctx, app = setup({"ALWAYS_RENAME": True})
