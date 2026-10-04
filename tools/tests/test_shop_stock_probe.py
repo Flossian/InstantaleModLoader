@@ -400,6 +400,24 @@ def main():
     check("安全: 施設が無くても素通しする", out == "無事", out)
     check("安全: 例外を出していない", not ctx.errors, ctx.errors)
 
+    # ---- 版4: お金だけ動く buy_item も境目に出る ----------------------------
+    ctx_gold = fresh(module)
+    app_gold, owner_gold, player_gold = stage(shop_stock=(Item("item_7", "水"),))
+    player_gold.gold, owner_gold.gold = 1000, 50
+
+    def pay(self, item_instance, *args, **kwargs):
+        self.player.gold -= 300
+        owner_gold.gold += 300
+        return True
+
+    ctx_gold.hooks[BUY](pay, app_gold, Item("item_7", "水"))
+    log_gold = read(ctx_gold)
+    check("版4: お金だけの buy_item が記録に出る", "境目 buy_item('水')" in log_gold, log_gold)
+    check("版4: 主人公の所持金の前後", "所持金 1000 -> 700" in log_gold, log_gold)
+    check("版4: 店主の所持金の前後", "店主の所持金 50 -> 350" in log_gold, log_gold)
+    check("版4: 呼び出し元を出す", "呼び出し元:" in log_gold, log_gold)
+    check("版4: 例外を出していない", not ctx_gold.errors, ctx_gold.errors)
+
     # 設定を既定へ戻してから終える。
     fresh(module, ITEM_SAMPLES=0)
 

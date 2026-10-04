@@ -7,10 +7,10 @@
     "ja": "計測: 買った品が棚に戻る道"
   },
   "description": {
-    "en": "Records where a bought item comes back onto the shop's shelf (answered: shopping_start_method_1 rebuilds it from the goods template when the shop opens). Items born during a shop scene with id, obtainer, attributes and the game-side caller; the shop path boundaries (ShoppingStartManagerRemake.execute / shopping_start_method_1 / toggle_twin_inventory_window / buy_item / sell_item / close_shopping_window_process, and the generators inside a shop scene) as the keys added to and removed from both inventories; the goods template summary and index['item']. Read-only",
-    "ja": "買った品が店の棚へ戻るのがどこかを録る（決着: 店を開いたときに shopping_start_method_1 が雛形から作り直す）。店の場面の中で生まれた品の id・持ち主・attributes とゲーム側の呼び出し元、店の経路の境目（ShoppingStartManagerRemake.execute / shopping_start_method_1 / toggle_twin_inventory_window / buy_item / sell_item / close_shopping_window_process と、店の場面の中の生成の入口）ごとの主と手持ちの鍵の増減、品揃えの雛形の要約と採番台帳 index['item']。読み取りだけでゲームは変えない"
+    "en": "Records where a bought item comes back onto the shop's shelf (answered: shopping_start_method_1 rebuilds it from the goods template when the shop opens). Items born during a shop scene with id, obtainer, attributes and the game-side caller; the shop path boundaries (ShoppingStartManagerRemake.execute / shopping_start_method_1 / toggle_twin_inventory_window / buy_item / sell_item / close_shopping_window_process, and the generators inside a shop scene) as the keys added to and removed from both inventories; the goods template summary and index['item']. Read-only. Since v4 also the gold of the player and the shopkeeper at each boundary, the caller of buy_item / sell_item, the texts that appear and disappear on screen after a drop or a right click, presses of newly shown buttons with the gold before and after, and which side a right-clicked item is on",
+    "ja": "買った品が店の棚へ戻るのがどこかを録る（決着: 店を開いたときに shopping_start_method_1 が雛形から作り直す）。店の場面の中で生まれた品の id・持ち主・attributes とゲーム側の呼び出し元、店の経路の境目（ShoppingStartManagerRemake.execute / shopping_start_method_1 / toggle_twin_inventory_window / buy_item / sell_item / close_shopping_window_process と、店の場面の中の生成の入口）ごとの主と手持ちの鍵の増減、品揃えの雛形の要約と採番台帳 index['item']。読み取りだけでゲームは変えない。版4 から、境目ごとの主人公と店主の所持金、buy_item / sell_item の呼び出し元、品を落とした後と右クリックの後に画面に出た文字・消えた文字、新しく出たボタンの押下と前後の所持金、右クリックした品の側も録る"
   },
-  "version": "3",
+  "version": "4",
   "author": "R01/Flossian",
   "debug": true,
   "settings": {
@@ -54,6 +54,20 @@
       "note": {
         "ja": "ローダと MOD のフレームは飛ばして、ゲーム側だけを数える",
         "en": "Loader and mod frames are skipped; only game frames are counted"
+      }
+    },
+    "SCREEN_SAMPLES": {
+      "type": "int",
+      "default": 200,
+      "min": 0,
+      "max": 9999,
+      "label": {
+        "ja": "写す画面の出入りの件数",
+        "en": "Screen changes to record"
+      },
+      "note": {
+        "ja": "品を落とした後と右クリックの後に、画面の文字が動いた回だけ数える",
+        "en": "Only drops and right clicks after which the texts on screen changed are counted"
       }
     }
   }

@@ -91,7 +91,7 @@
 
 import random
 
-from instantale_modloader import ui
+from instantale_modloader import ui, wanted
 from instantale_modloader.state import WorldStore, world_key
 
 from . import hunt
@@ -101,6 +101,9 @@ LOG_BASENAME = "bounty_hunter_send.log"
 # 通算日数と最後に追手が来た日の控え。世界ごとに1つ。
 # セーブには書かない（`state/` は遊びの続きの置き場。TECH.md §3.11）。
 STATE_DIRNAME = "bounty_hunter"
+
+# ローダの窓口（`wanted`）での持ち主の名前（フォルダ名）。
+OWNER = "316_bounty_hunter"
 
 # ゲーム自身の衛兵の戦闘を指す語（実測。GAME.md §2.20）。
 # 依頼中の遭遇・ボス（'in_quest'）と闘技場（'colosseum'）は衛兵ではないので数えない。
@@ -270,6 +273,10 @@ def apply(ctx):
             "phase": None, "armed": None, "arm_signals": 0,
             "building": False, "inside": None,
             "protect": None,
+            # 出した追手1回ぶんの中身（難易度と重さ）。戦闘が始まったら `hunting` へ移す。
+            "hunt_plan": None,
+            # いま追手の戦闘の最中か。終わりで窓口（`wanted.hunt_ended`）へ知らせて捨てる。
+            "hunting": None,
             # 「出すと決まった」控え。起こすのは画面が整った合図の中。
             "due": None,
             # 戦闘の選択肢が並んだら1回だけ塗り直す、の印。
@@ -334,6 +341,7 @@ def apply(ctx):
         memo["phase"] = None
         memo["armed"] = None
         memo["inside"] = None
+        memo["hunt_plan"] = None
 
     # -------------------------------------------------- 倒したぶんを戻す
     def protect(app):
@@ -504,6 +512,8 @@ def apply(ctx):
         finally:
             memo["building"] = False
         arm(phase, due["difficulty"])
+        memo["hunt_plan"] = {"difficulty": due["difficulty"], "here": due["here"],
+                             "total": due["total"]}
         protect(app)
         if ANNOUNCE.strip():
             screen.say(app, ANNOUNCE)
@@ -556,6 +566,10 @@ def apply(ctx):
         （クエスト中は暦が進まないので、そのまま日数ぶん追手が来なくなる）。
         """
         result = orig(self, app, enemy_type, enemy_content, *args, **kwargs)
+        if not memo["building"]:
+            # 別の戦闘が始まった。前の追手の戦闘が終わりを通らずに消えていても（負けた・ロードした）、
+            # 次の戦闘の終わりを追手の戦闘と取り違えない。
+            memo["hunting"] = None
         if not memo["building"] and YIELD_TO_GUARDS \
                 and enemy_type == GUARD_ENEMY_TYPE:
             # **1回の遭遇として数える。**
@@ -585,6 +599,7 @@ def apply(ctx):
         if not ours:
             return orig(self, *args, **kwargs)
         memo["inside"] = memo["armed"]
+        memo["hunting"] = memo["hunt_plan"]
         try:
             result = orig(self, *args, **kwargs)
         finally:
@@ -610,8 +625,16 @@ def apply(ctx):
         """
         result = orig(self, *args, **kwargs)
         memo["repaint"] = False
+        app = getattr(self, "app", None) or ui.find_app()
         if memo["protect"] is not None:
-            restore(getattr(self, "app", None) or ui.find_app(), "戦闘終了")
+            restore(app, "戦闘終了")
+        hunt, memo["hunting"] = memo["hunting"], None
+        if hunt is not None:
+            # 追手の戦闘の終わりを窓口へ知らせる（TECH.md §3.3.9）。勝ち負けはゲームの `end_type`。
+            outcome = getattr(self, "end_type", None)
+            reached = wanted.hunt_ended(app, dict(hunt, by=OWNER, outcome=outcome))
+            write("追手の戦闘が終わった: {!r} 難易度{} 知らせた先={}".format(
+                outcome, hunt["difficulty"], reached or "なし"))
         return result
 
     @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False,
@@ -733,6 +756,18 @@ def apply(ctx):
     else:
         ctx.log("verified: should_send / difficulty_of on {} cases / rename / "
                 "sequence on {} cases".format(len(cases), len(scenes)))
+
+    def hunted_line(_app):
+        """全域手配の線（ローダの窓口 `wanted`）。追手が来ない設定なら線は無い。
+
+        設定は呼ばれたときに読む（GUI で変えたら次の問い合わせから効く）。
+        """
+        triggers = (ON_AREA_ARRIVAL, ON_FACILITY_ARRIVAL, ON_DAYS, ON_FREE_ACTION)
+        if CHANCE_PERCENT <= 0 or not any(triggers):
+            return None
+        return max(1, int(START_TOTAL))
+
+    wanted.declare_hunted(OWNER, ctx, hunted_line)
 
     ctx.log("bounty hunter installed; 条件 ここ{}/合計{} 発生率{}% 難易度{}+{}×重さ"
             "(上限{}) 場面={} 名前={} 倒しても手配は増やさない={} log={}".format(

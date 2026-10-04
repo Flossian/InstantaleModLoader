@@ -9,7 +9,7 @@
 ここが持っているのは**数え方**で、それは MOD ごとに違う
 （`309_` は罰金の基準、`220_` は下調べの要約、ここは追手の条件と強さ）。
 
-数え方は3本とも同じ形にしてある:
+数え方は3本とも同じ形にしてある（式はローダの `wanted.weight_of`）:
 
     重さ = 0 - 手配度        （手配度が 0 未満の土地だけ。平常の 10 は数えない）
 
@@ -19,21 +19,18 @@
 「追手が来る手配」を同じ数で比べられる。
 """
 
+from instantale_modloader import wanted
+
 #: 手配とみなす境界。これ未満の手配度が手配（`309_` の既定と同じ）。
 #: 設定にしていないのは、ここを動かすと平常（10）の土地まで手配に数え始めて、
 #: 追手が全世界から来るようになるため。
-WANTED_THRESHOLD = 0
+#: 数え方はローダの窓口 `wanted` が持つ（全域手配の線を読む MOD と同じ物差しにするため）。
+WANTED_THRESHOLD = wanted.WANTED_BELOW
 
 
 def weight_of(lawfulness):
-    """その土地の手配の重さ。手配されていなければ 0。
-
-    読めない値（`None` や文字列）は 0 にする。
-    読めなかったことを手配の重さに変換しない。
-    """
-    if isinstance(lawfulness, bool) or not isinstance(lawfulness, (int, float)):
-        return 0
-    return max(0, WANTED_THRESHOLD - int(lawfulness))
+    """その土地の手配の重さ。手配されていなければ 0（`wanted.weight_of`）。"""
+    return wanted.weight_of(lawfulness)
 
 
 def weights(by_area):

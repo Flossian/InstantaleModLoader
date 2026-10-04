@@ -887,6 +887,46 @@ def clamp_into_window(widget):
         pass          # 座標を持たない相手。置けないだけで害は無い
 
 
+def popup_button(text, template=None):
+    """品の右クリックの popup と同じ見た目のボタン（`402_` で実機から写した描き方）。
+
+    75×37、背景は黒 70%、文字は白 20、下地に暗い矩形、四辺に明るい 2px の縁。
+    `template`（ゲームの `ItemPopupMenu` の中の `Button`）があれば、その大きさと文字・背景を写す。
+    ゲームは店の品や仲間の品に popup を出さない（GAME.md §2.13.3）ので、MOD が同じ形のボタンを置くときに使う。
+    """
+    from kivy.uix.button import Button
+    kwargs = {"size_hint": (None, None), "size": (75, 37), "background_normal": "",
+              "background_color": (0, 0, 0, 0.7), "color": (1, 1, 1, 1), "font_size": 20}
+    if template is not None:
+        kwargs["size"] = tuple(template.size)
+        for name in ("font_size", "font_name", "background_normal", "background_down",
+                     "background_color", "color", "border"):
+            value = getattr(template, name, None)
+            if value is not None:
+                kwargs[name] = value
+    button = Button(text=text, **kwargs)
+    try:
+        from kivy.graphics import Color, Rectangle
+        with button.canvas.before:
+            Color(0.07, 0.06, 0.05, 0.5)
+            shade = Rectangle(pos=button.pos, size=button.size)
+        with button.canvas.after:
+            Color(0.8, 0.78, 0.76, 1.0)
+            edges = [Rectangle() for _ in range(4)]
+
+        def redraw(*_):
+            x, y, w, h = button.x, button.y, button.width, button.height
+            shade.pos, shade.size = (x, y), (w, h)
+            for edge, (pos, size) in zip(edges, (((x, y + h - 2), (w, 2)), ((x, y), (w, 2)),
+                                                ((x, y), (2, h)), ((x + w - 2, y), (2, h)))):
+                edge.pos, edge.size = pos, size
+        redraw()
+        button.bind(pos=redraw, size=redraw)
+    except Exception:
+        pass          # 縁が描けないだけ。ボタンとしては使える
+    return button
+
+
 def icon_strokes(icon, flipped=False):
     """共有の絵柄を **0〜1 の座標**で返す。知らない名前なら空。
 
@@ -1150,7 +1190,7 @@ def area_id_of(area):
 #     area_history = {"0": {"residency": {...}, "achievements": [...],
 #                           "lawfulness": 10}, ...}
 #
-# 平常値は 10 で、小さいほど手配が重く、0 未満で犯罪者（実プレイで -40 を観測）。
+# 平常値は 10 で、小さいほど手配が重く、0 未満で犯罪者（実プレイで -170 まで観測。下限には当たっていない）。
 # ゲーム側に読み書きのヘルパは無いので値を直に触る。
 # ここに置いてあるのは読み方だけで、**いくつから手配とみなすかは MOD の判断**。
 LAWFULNESS_KEY = "lawfulness"
@@ -1228,6 +1268,37 @@ def lawfulness_by_area(character):
         if value is not None:
             values[str(key)] = value
     return values
+
+
+# --------------------------------------------------------------------------
+# 能力値（GAME.md §2.17）
+# --------------------------------------------------------------------------
+#: 能力値の鍵。セーブの `ability_scores` と同じ6つ。
+ABILITY_KEYS = ("strength", "constitution", "dexterity",
+                "intelligence", "wisdom", "charisma")
+
+
+def ability_score(character, name):
+    """その人物の能力値（素の値）。読めなければ `None`。
+
+    実行時の持ち方は1つに決まっていない（`ability_scores` / セーブ由来の
+    `original_ability_scores` / キャラクタシートの `attribute_<名前>`）ので、順に当たる。
+    1つだけ見ると、読めなかったのか 0 だったのかが区別できなくなる。
+    `313_event_ability_check` の `score_of`（素の値の側）と同じ当たり方。
+    """
+    if character is None or name not in ABILITY_KEYS:
+        return None
+    raw = None
+    for holder in ("ability_scores", "original_ability_scores"):
+        table = getattr(character, holder, None)
+        if isinstance(table, dict) and table.get(name) is not None:
+            raw = table.get(name)
+            break
+    if raw is None:
+        raw = getattr(character, "attribute_" + name, None)
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        return None
+    return raw
 
 
 # --------------------------------------------------------------------------

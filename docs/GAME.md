@@ -1747,6 +1747,27 @@ generate_item_in_shopping(item_data, shop_owner_instance, item_stock_tier=2)
 
 - 作るのも採番もゲーム自身（`index['item']` が進む）。鍵は `item_` の付かない裸の数字
 - 走るのは開いたとき。買う操作は `InventoryItem.change_inventory` が売り手から買い手へ移すだけで、品は生まれない。
+  お金が動くのは品を落とした瞬間ではなく、出てくる承認のボタンを押したとき（`227_` 版4。2026-10-04 に買い1回・売り1回）:
+  `buy_item`（`new_hud.py:1017`。`InstantaleApp.buy_item` ではない）→ `Item.buy`（所持金が減る）→ `change_inventory`。
+  売りは `sell_item`（`new_hud.py:1055`）→ `Item.sell` → `change_inventory`。どちらもボタンの `on_touch_down` から呼ばれる。
+  店の品を右クリックしても本体は `ItemPopupMenu`（ボタンは「捨てる」だけ）を作るが親を付けず、画面には出ない（§2.13.3）
+- 確認の窓は品を落とした瞬間（`InventoryItem.on_touch_up`）に、品と同じ親（窓の `FloatLayout`）へ出る。
+  中身は `Label`「品名:額G」と `Button`「売る」（買うときは買う側の文言）・「キャンセル」（2回目の実機。売り1回）。
+  売買まわりの名前（`227_` 版4 の一覧。中身は読めない）:
+
+  ```text
+  InventoryItem(Button): buy_item(self, instance) / sell_item(self, instance) / cancel_buy_item(self, instance)
+                         _has_pending_trade() / _remove_trade_window() / _clear_trade_state()
+                         cancel_trade_confirmation() / cancel_active_trade_confirmation()（引数なし）
+  ConfirmationWindow(FloatLayout)(title_text, button_1_text, button_2_text)
+  ConfirmationModalView(ModalView)(title_text, button_1_text, button_2_text)
+  InstanTaleHUD: popup_confirmation_modalview(*args) / toggle_confirm_window_visibility(instance, value, target_window)
+  Item: buy(self) / sell(self)
+  ```
+
+  売買の確認の窓は、品を落とした後のフレームでゲームが作る `ConfirmationWindow`（直下に `FloatLayout` と `Label`「品名:額G」、`FloatLayout` の下に `Button`「買う」「キャンセル」。ボタンは `on_press` で動く）。落とした呼び出しの中ではまだ出ていない。同じクラスを MOD が自分で作って品と同じ親へ足しても、中のボタンが 40×24 のまま並ばず画面に出ない（`913_` の実機。ゲームはこの窓を別の手順で出していると見られるが測っていない）。`ConfirmationModalView` は開けるが、ボタンが売買の確認より大きく、ModalView の覆いで後ろが暗くなる。ゲームが出した窓の文言を差し替えて借りることはできる（`913_` の盗む確認）
+- 窓の外側を押したときの閉じ方（2026-10-04 に実機で引数を写した）: `InstanTaleHUD._on_backdrop_touch(instance, touch)` が `turnoff_window_visibility(instance, 窓の表示の辞書)`（売買の窓は `hud.visible_twin_inventory_data` そのもの。`{'TorF': True, 'situation': 'shop', …}`）を呼び、続けて `hud.on_backdrop_callback()`（= `app.on_close_window`）で後始末する。後始末を呼ばないと窓は消えるが `is_popup_window_opened` が残る。後始末は `app.buttons_backup_for_shopping`（窓を開いたときの選択肢）を戻すので、窓を開いたまま戦闘を始めて後から閉じると、戦闘のボタンが店の選択肢に置き換わる
+- 戦闘のボタンの形: `攻撃` = `PhaseSpec('BattlePhaseManager', ('攻撃',))`、`スキル・防御` = `SkillChoicePhaseManager()`、`発言する` = `UtteranceChoiceInBattleManager()`、`逃げる` = `BattlePhaseManager('逃げる')`（`206_` の記録と、上の取り違えから戻したときの実機）
   雛形は買っても減らず、`stock_update_date` も動かない
 - 装備は作り直されない。実測7品:
 
@@ -2351,7 +2372,7 @@ player_data["area_history"] = {
 | --- | --- |
 | 在り処 | `Character.__init__` の引数（`area_history=None`）。プレイヤーもNPCも同じ `Character` |
 | 鍵 | エリア id（`player.current_area` と同じ語彙。文字列） |
-| `lawfulness` | 素の平常値は `10`（40エリア全てが 10 の実セーブで確認）。小さいほど手配が重く、0 未満で犯罪者。実プレイで `-40` を観測。上限は未特定 |
+| `lawfulness` | 素の平常値は `10`（40エリア全てが 10 の実セーブで確認）。小さいほど手配が重く、0 未満で犯罪者。実プレイで `-170` まで観測（`317_` の素材ログ）し、下限には当たっていない。上限は未特定 |
 | `residency` | その土地に滞在した日数の累計と、最後に発った日 |
 | `achievements` | その土地で成した事の文章（LLM が書いたもの）の配列 |
 

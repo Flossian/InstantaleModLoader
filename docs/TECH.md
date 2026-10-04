@@ -134,6 +134,7 @@ runtime/instantale_modloader/
                   仲間の装備を扱う MOD が聞く（§3.3.6）
     arrivals.py   施設に着いた場面で誰が話しかけるかを、会話を始める MOD どうしで分け合う窓口（§3.3.7）
     talk_affinity.py  会話で上げられる好感度の上限の窓口。相手を持つ MOD が狭め、会話で好感度を動かす MOD が聞く（§3.3.8）
+    wanted.py     手配の重さの数え方と、全域手配の線・追手の戦闘の終わりの窓口。追手を出す MOD が線を置いて終わりを知らせ、手配を動かす MOD が聞く（§3.3.9）
     sounds.py     曲の置き場所の探し方・戦闘曲の見分け方・重みの読み方（§5.10）
     ids.py        ゲームの採番台帳（`index`）を通した id の採り方（§3.2.3）
     saves.py      ディスクのセーブの読み方（置き場・難読化・世界の一覧。§3.2.3）
@@ -1418,6 +1419,37 @@ value, by = talk_affinity.ceiling(app, npc_id, 自分の上限)   # 好感度を
 | 登録した ctx が用済み（`ctx.superseded()`）なら数えない | 新しい世代でその MOD が外れたとき、前の世代の登録が残って効き続けないように |
 | `fn` が投げたら口を出さなかったものとみなす（`errors` に残す） | 上限を聞けないことで好感度の判定ごと止めない |
 
+#### 3.3.9 全域手配の線と追手の戦闘も窓口で分け合う（`wanted`）
+
+`316_bounty_hunter` は「全ての土地の手配の重さの合計がこれ以上なら、手配されていない土地に居ても追ってくる」線を持つ。
+手配度を時とともに戻すような MOD は、その線を越えて戻して全域手配を解いてしまわないよう、線を知りたい。
+`instantale_modloader/wanted.py` で、線を持つ MOD が置き、手配を動かす MOD が聞く。
+重さの数え方（手配度が 0 からどれだけ下か。手配されていない土地は数えない）も同じモジュールが持ち、`316_` の追手の条件と強さもこれで数える。
+
+```python
+wanted.declare_hunted(owner, ctx, fn)       # 線を持つ側。apply() の中。fn(app) -> 合計の線 / None（いまは全域から追わない）
+line, by = wanted.hunted_line(app)          # 聞く側。誰も置いていなければ (None, None)
+wanted.weight_of(手配度) / wanted.total_of({土地: 手配度}) / wanted.total_weight(character)
+wanted.on_hunt_end(owner, ctx, fn)          # 追手の戦闘の終わりを受ける側。fn(app, hunt)
+wanted.hunt_ended(app, hunt)                # 追手を出した側。戦闘の終わり（BattleEndManager.end_phase の後）
+```
+
+`hunt` は `{"by", "outcome", "difficulty", "here", "total"}`。
+`outcome` はゲームの `BattleEndManager(app, end_type)` の `end_type`（勝ち `'won'`・逃げ `'escaped'`。GAME.md §2.10）をそのまま渡す。
+どの戦闘が追手の戦闘かは、追手を出した MOD にしか分からない（ゲーム自身の衛兵と同じ戦闘を使うので、戦闘の側からは見分けられない）。
+そのため知らせる側は追手を出した MOD に限る。
+`316_` は自分が組んだマネージャの `start_battle` で印を立て、終わりで1回だけ知らせる。
+別の戦闘が始まったら印を捨てる（追手に負けてゲームオーバーになった後の戦闘と取り違えない）。
+
+| 決まり | 理由 |
+|---|---|
+| 線を置く MOD が入っていなければ `(None, None)`。聞く側は全域手配そのものが無いとして扱う | 追手の MOD を切った遊び方で、ありもしない線に止められない |
+| `316_` は発生率 0 か、来る場面を全部切った設定では線を置かない（`None`） | 追手が来ない設定は、入っていないのと同じ |
+| 複数が置いたらいちばん低い線（`by` はそれを置いた持ち主） | どれか1つの条件を満たせば追われる |
+| 登録は持ち主ごとに1つ。登録した ctx が用済みなら数えない。`fn` が投げたら線を置かなかったものとみなす（`errors` に残す） | `talk_affinity`（§3.3.8）と同じ |
+| 設定は聞かれたときに読む（`fn` が関数なのはこのため） | GUI で線を変えたら次の問い合わせから効く |
+| 終わりの受け手には `hunt` の写しを渡し、受け手が投げても残りの受け手へ届ける（`errors` に残す） | 受け手の不具合で追手の MOD の後始末（手配度の戻し）を止めない |
+
 ### 3.4 まだ現れていない対象を狙う（保留と当て直し）
 
 ゲームは `llama_cpp_runtime_completion` と `scripts.llm.llm_manager` を
@@ -2341,15 +2373,27 @@ ui.set_lawfulness(entry, value) / ui.LAWFULNESS_KEY
 **いくつから手配とみなすかは各 MOD の判断**で、ここには置かない
 （`309_` は罰金の基準に、`316_` は追手の条件に、`220_` は下調べの要約に、
 同じ読み方から別の数え方をする）。
+複数の MOD が同じ物差しで比べる重さ（手配度が 0 からどれだけ下か）と全域手配の線は、窓口 `wanted`（§3.3.9）が持つ。
 
 `set_lawfulness` は**読めた記録にしか渡さない**（項目を新設しない）のが呼ぶ側の約束。
 書き戻す MOD は2本ある（`309_` が罰金で平常値へ戻す、`316_` が追手を倒したぶんを戻す）。
+
+**能力値**:
+
+```python
+ui.ability_score(character, "dexterity")   # 素の値。読めなければ None
+ui.ABILITY_KEYS                            # strength / constitution / dexterity / intelligence / wisdom / charisma
+```
+
+実行時の持ち方が1つに決まっていない（`ability_scores` / `original_ability_scores` / `attribute_<名前>`）ので順に当たる。
+`313_` の `score_of` の素の値の側と同じ当たり方（`313_` は負傷で目減りした換算値も選べるので、自前のまま）。
 
 **HUD に足す自前のボタン**:
 
 ```python
 ui.CORNERS / ui.AS_TEXT / ui.upx(value) / ui.window_size()
 ui.clamp_into_window(widget)          # 置いた後に必ず通す（はみ出すと押せない）
+ui.popup_button(text, template=None)  # 品の右クリックの popup と同じ見た目（縁つき）。ゲームが popup を出さない品に足すとき
 ui.make_icon_button(text=, size=, square=, font_name=, pos_hint=)
 ui.icon_strokes(icon, flipped)        # 共有の絵柄（二重山形・山形・矢印・枠）
 ui.paint_icon(button, strokes, attr=, key=, width=, alpha=, log_exc=)

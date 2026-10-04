@@ -16,6 +16,8 @@
              関所が縮めた回も縮めた後の日数で数える。控えは世界ごと
   衛兵     … 数えるのはゲーム自身の衛兵（'guard'）だけ。依頼中と闘技場は数えない
   合図     … 契機は決めるだけで、起こすのは refresh_choice_buttons の中だけ
+  窓口     … 全域手配の線を `wanted` に置く（追手が来ない設定では置かない）。
+             追手の戦闘の終わりだけを勝敗つきで1回知らせる。ゲーム自身の衛兵・途中で別の戦闘に変わった回は知らせない
   変えない … どのフックでも本体が1回だけ呼ばれ、戻り値がそのまま返る
 """
 import importlib.util
@@ -749,6 +751,61 @@ def main():
     ready_screen(ctx, app)
     check("戦闘中の合図では見張りが尽きない（長い戦闘の後も戻す）",
           app.lawfulness("0") == -25, app.lawfulness("0"))
+
+    print("追手の戦闘の終わりを窓口へ知らせる")
+    from instantale_modloader import wanted
+    heard = []
+
+    def listen(app_, hunt):
+        heard.append(hunt)
+
+    def end(app_, end_type):
+        ctx.hooks["__main__:BattleEndManager.end_phase"](
+            counting(None)[0], types.SimpleNamespace(app=app_, end_type=end_type))
+
+    wanted.reset()
+    app = App({"0": -25})
+    module, ctx = fresh_mod(app, CHANCE_PERCENT=100)
+    wanted.on_hunt_end("listener", None, listen)
+    check("全域手配の線を窓口に置く", wanted.hunted_line(app) == (40, "316_bounty_hunter"),
+          wanted.hunted_line(app))
+    arrive(ctx, app)
+    start_of(ctx, app, BattleStartManager.last)
+    end(app, "won")
+    check("勝った追手の戦闘を知らせる（勝敗・難易度・重さ・持ち主）",
+          len(heard) == 1 and heard[0]["outcome"] == "won"
+          and heard[0]["difficulty"] == 45 and heard[0]["here"] == 25
+          and heard[0]["by"] == "316_bounty_hunter", heard)
+    end(app, "won")
+    check("知らせるのは1回だけ", len(heard) == 1, heard)
+
+    del heard[:]
+    app = App({"0": -25})
+    module, ctx = fresh_mod(app, CHANCE_PERCENT=100)
+    arrive(ctx, app)
+    start_of(ctx, app, BattleStartManager.last)
+    end(app, "escaped")
+    check("逃げた回も勝敗つきで知らせる", [h["outcome"] for h in heard] == ["escaped"], heard)
+
+    del heard[:]
+    app = App({"0": -25})
+    module, ctx = fresh_mod(app, CHANCE_PERCENT=100)
+    game_guard(ctx, app)
+    start_of(ctx, app, types.SimpleNamespace(app=app))
+    end(app, "won")
+    check("ゲーム自身の衛兵の戦闘は知らせない", heard == [], heard)
+
+    module, ctx = fresh_mod(app, CHANCE_PERCENT=100)
+    arrive(ctx, app)
+    start_of(ctx, app, BattleStartManager.last)
+    game_guard(ctx, app, "in_quest")          # 追手の戦闘が終わりを通らずに別の戦闘が始まった
+    end(app, "won")
+    check("別の戦闘が始まったら追手の戦闘と取り違えない", heard == [], heard)
+
+    module, ctx = fresh_mod(app, CHANCE_PERCENT=0)
+    check("追手が来ない設定では線を置かない", wanted.hunted_line(app) == (None, None),
+          wanted.hunted_line(app))
+    wanted.reset()
 
     print("抽選は画面ごとに1回")
     app = App({"0": -25})
