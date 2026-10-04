@@ -1,0 +1,26 @@
+{
+  "entry": "fix_quest_generation_runaway.py",
+  "api": 1,
+  "kind": "fix",
+  "name": {
+    "en": "Quest generation runaway fix",
+    "ja": "依頼の生成で敵が増え続ける件の修正"
+  },
+  "description": {
+    "en": "Local LLMs often keep adding enemies while generating a quest until the context runs out, and the game discards the cut-off reply and resends it (about 2 minutes lost each time). Caps the lists in the schema sent to llama.cpp so generation always finishes",
+    "ja": "ローカル LLM が依頼を作るとき、敵の一覧を書き足し続けて窓を使い切り、ゲームが途中で切れた答えを捨てて送り直すことが多い（1回あたり約2分の待ち）。llama.cpp へ渡す型の並びに件数の上限を付け、生成が必ず書き終わるようにする"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "settings": {
+    "ENEMY_LIMIT": {
+      "type": "int",
+      "default": 5,
+      "min": 1,
+      "max": 20,
+      "label": {"ja": "依頼の敵の種類の上限", "en": "Enemy types per quest"},
+      "note": {"ja": "1つの依頼に出る敵（normal と miniboss。ボスは別）の種類の上限。ゲームの頼み文は normal 2〜3種＋miniboss 1種で、受け取った記録の最大は 5",
+               "en": "Most enemy types (normal and miniboss; the boss is separate) per quest. The game asks for 2-3 normal + 1 miniboss; the largest accepted so far is 5"}
+    }
+  }
+}

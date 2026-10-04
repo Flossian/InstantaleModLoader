@@ -7,10 +7,10 @@
     "ja": "計測: LLMリクエストの重なり"
   },
   "description": {
-    "en": "Counts overlapping LLM requests during real play from inside the process (local llama.cpp path only)",
-    "ja": "実プレイ中のLLMリクエストの重なりをプロセス内で数える（ローカル llama.cpp 経路のみ）"
+    "en": "Counts overlapping LLM requests during real play from inside the process (local llama.cpp path only). Also logs each chat reply's length, stop reason and exceptions, and the tail of replies slower than 60s (to see why quest generation fails and gets resent)",
+    "ja": "実プレイ中のLLMリクエストの重なりをプロセス内で数える（ローカル llama.cpp 経路のみ）。chat の応答の字数・止まった理由・例外も1件1行で残し、60秒を超えた回は応答の末尾も写す（依頼の生成が失敗して送り直される原因を見るため）"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "debug": true
 }
