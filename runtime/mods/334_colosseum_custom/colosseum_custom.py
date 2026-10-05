@@ -30,7 +30,7 @@ r"""闘技場の相手の強さと懸賞金を設定で決める。
 | 保存される格 | `ColosseumMatchStart.generate_enemy_data` の戻りの `data.rank` |
 | 懸賞金 | `BattleEndInColosseum.end_phase`。所持金はこの中で動く（`instantale.py:8105`） |
 | 相手の格を告げる | `EntryColosseumMatchManager.method` の後 |
-| 負けても死なない | ローダの窓口 `defeat`（TECH.md §3.3.11。脱獄の決行を持つ `913_` と共有）に、闘技場の試合で倒れたら引き受けると登録する。窓口が `BattlePhaseManager.check_battle_end` の前（ここから `GameOverManager` が作られる）で体力を戻し、ゲーム自身の逃走と同じ状態にして `BattleEndManager(app, 'escaped')` を起こす。試合の途中で倒れた仲間はこの MOD が扱い、終わり方（`BattleEndManager` / `BattleEndInColosseum` の `end_phase`）の前に体力1で預かりへ入れ、後で戻っていなければ手で戻し、空になった居場所も戻す |
+| 負けても死なない | ローダの窓口 `defeat`（TECH.md §3.3.11。脱獄の決行を持つ `336_` と共有）に、闘技場の試合で倒れたら引き受けると登録する。窓口が `BattlePhaseManager.check_battle_end` の前（ここから `GameOverManager` が作られる）で体力を戻し、ゲーム自身の逃走と同じ状態にして `BattleEndManager(app, 'escaped')` を起こす。試合の途中で倒れた仲間はこの MOD が扱い、終わり方（`BattleEndManager` / `BattleEndInColosseum` の `end_phase`）の前に体力1で預かりへ入れ、後で戻っていなければ手で戻し、空になった居場所も戻す |
 | 逃げて手配されない | `ColosseumMatchStart.execute` で手配度を控え、逃げて終わった試合（`BattleEndManager.end_phase`）の後と、その後の画面が整った合図（`refresh_choice_buttons`）で下がっていれば戻す。勝った試合では控えを捨てる |
 | 死なずに退く描写 | 審判（`referee_*`）と試合の要約（`colosseum_battle_summarizer`）の送り口。最後の user message の末尾に一文を足す |
 

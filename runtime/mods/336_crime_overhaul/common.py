@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""913 の機能が共有する土台。ゲームの値の読み方、控え、画面の部品、選択肢と押下と本文の振り分け。
+"""336 の機能が共有する土台。ゲームの値の読み方、控え、画面の部品、選択肢と押下と本文の振り分け。
 
 機能ごとのファイル（`loot` / `law` / `theft` / `office` / `prison`）は `install(env)` を1つ持ち、
-ここの `Env` を受け取る。設定は入口（`crime_incentive.py`）の定数で、`env.cfg.<名前>` をその場で読む
+ここの `Env` を受け取る。設定は入口（`crime_overhaul.py`）の定数で、`env.cfg.<名前>` をその場で読む
 （ローダは apply() の前に入口の定数へ書き込む。後から変えた値も読めるよう、控えない）。
 
-ゲームの同じ入口を913の中で何度も包まないよう、選択肢を組み直した合図（`refresh_choice_buttons`）・
+ゲームの同じ入口を 336 の中で何度も包まないよう、選択肢を組み直した合図（`refresh_choice_buttons`）・
 押下（`on_button_press`）・本文（`add_text`）は入口が1枚だけ包み、ここに登録された処理へ配る。
 """
 import os
@@ -14,9 +14,9 @@ import sys
 from instantale_modloader import guards, ui
 from instantale_modloader import state as loader_state
 
-LOG_BASENAME = "crime_incentive.log"
+LOG_BASENAME = "crime_overhaul.log"
 FUNCTIONS_MODULE = "scripts.functions"
-STATE_DIRNAME = "crime_incentive"
+STATE_DIRNAME = "crime_overhaul"
 STORE_ATTR = "_instantale_crime_incentive"
 #: 押下を横取りする印（他の MOD と別のキー）。
 MARK = "mod_crime_incentive_action"
@@ -48,9 +48,9 @@ class Env(object):
         self.ctx = ctx
         self.cfg = cfg
         self.write = ctx.logger(LOG_BASENAME)
-        self.owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "913_crime_incentive"
+        self.owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "336_crime_overhaul"
         self.screen = ui.Screen(ctx, self.write, tag="crime incentive", mark=MARK)
-        # 控えは `state\crime_incentive\<世界×主人公>.json` に1つ。機能ごとに鍵を分ける
+        # 控えは `state\crime_overhaul\<世界×主人公>.json` に1つ。機能ごとに鍵を分ける
         # （`away` 時効 / `theft` 店で盗む / `underworld` 裏の仕事 / `jail` 脱獄）。
         store = _store()
         if store["worlds"] is None:
@@ -59,15 +59,15 @@ class Env(object):
         self.refresh_handlers = []
         self.press_handlers = []
         self.text_filters = []
-        #: 裁判へ持ち越す介入（その場の買収が突き返されたら `{"bribe": "caught"}`）。次の裁判が始まったら空にする。
+        #: 裁判へ持ち越す介入（衛兵の買収が突き返されたら `{"bribe": "caught"}`）。次の裁判が始まったら空にする。
         self.carry_to_trial = {}
         #: 次の依頼の生成（`random_quest_generator`）へ差し込む指示と難易度。1回で使い切る（`office` が包む）。
         #: 裏の仕事（`office`）と処刑場からの脱出（`rescue`）が使う。
         self.quest_inject = {"brief": None, "difficulty": None, "at": 0.0, "tag": ""}
         #: 品の値段の段。`fn(item, key, price) -> 新しい額 | None`。`law` が置く1枚（`prices.adjust` は持ち主ごとに1枚）の中で、
-        #: 怯える店の後に順に通す。盗品の買い取り額（`theft`）が使う。
+        #: 「店が委縮して値を下げる」の後に順に通す。盗品の買い取り額（`theft`）が使う。
         self.price_layers = []
-        #: 故買屋の売買の窓を開いている間の相手（主の id）。閉じたら None。`opening` は押してから窓が出るまで（`fence`）。
+        #: 盗品買取商の売買の窓を開いている間の相手（主の id）。閉じたら None。`opening` は押してから窓が出るまで（`fence`）。
         self.fence = {"broker": None, "opening": False}
         #: 機能どうしの口（入れたファイルが置く）。`stolen_entry(app, item)` は盗品の控え（`theft`）、
         #: `underworld_banned(app)` は司法取引の締め出しの間か（`office`）。

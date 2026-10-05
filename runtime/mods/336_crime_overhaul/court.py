@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""裁判。釈明の入れ方を知らせ、弁護人・司法取引・判事の買収・情状を足す。仕様は DOC.md「裁判」、決まりは `trial`。
+"""裁判。釈明の入れ方を知らせ、弁護人・司法取引・判事の買収・情状を足す。仕様は DOC.md「裁判の改修」、決まりは `trial`。
 
 素のゲームの裁判は、検察の求刑の後に「わかりました」「濡れ衣だ」の2つのボタンが出るだけに見える。
 実際は、その画面で入力欄に書いて送った言葉がそのまま釈明として判事の頼みに渡る
@@ -55,7 +55,7 @@ def install(env):
 
     def new_trial(key, args):
         effects = {"lawyer": False, "plea": False, "bribe": None}
-        # 捕まる前の出来事（その場の買収が突き返された）を、この裁判へ持ち越す（`encounter`）。
+        # 捕まる前の出来事（衛兵の買収が突き返された）を、この裁判へ持ち越す（`encounter`）。
         effects.update(env.carry_to_trial)
         env.carry_to_trial.clear()
         court.update(key=key, args=list(args), effects=effects, told=False, applied=False)

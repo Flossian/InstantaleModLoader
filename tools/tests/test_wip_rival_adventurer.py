@@ -614,10 +614,10 @@ def scene_skip_conversation_quest():
 
 def scene_kept_off():
     print("[掲示板に出さない依頼（窓口 board）は狙わない・隠さない]")
-    # 913 の裏の仕事のように、他の MOD がギルドの掲示板から隠して自分の入口で受けさせる依頼。
+    # 336 の裏の仕事のように、他の MOD がギルドの掲示板から隠して自分の入口で受けさせる依頼。
     quest_board.reset()
     try:
-        quest_board.declare_kept_off("913_test", None, lambda app: ["1"])
+        quest_board.declare_kept_off("336_test", None, lambda app: ["1"])
         module, ctx = fresh_mod()
         app = make_world()
         use(app)
@@ -634,7 +634,7 @@ def scene_kept_off():
         elapse(ctx, app, 45)
         bucket = bucket_of(module, app)
         check("（前提）窓口が無ければ片付ける", "1" in bucket.get("taken", {}), bucket.get("taken"))
-        quest_board.declare_kept_off("913_test", None, lambda app: ["1"])
+        quest_board.declare_kept_off("336_test", None, lambda app: ["1"])
         open_board(ctx, app)
         check("台帳に残っていても隠さない", any(t.startswith("古城") for t in board_texts(app)),
               board_texts(app))
@@ -646,7 +646,7 @@ def scene_kept_off():
         open_board(ctx, app)
         check("（前提）狙っている", (bucket_of(module, app).get("target") or {}).get("quest") == "1",
               bucket_of(module, app).get("target"))
-        quest_board.declare_kept_off("913_test", None, lambda app: ["1"])
+        quest_board.declare_kept_off("336_test", None, lambda app: ["1"])
         elapse(ctx, app, 1)
         check("窓口に置かれたら狙いを取り下げる", bucket_of(module, app).get("target") is None,
               bucket_of(module, app).get("target"))

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""913_crime_incentive の脱獄の決まり（jailbreak.py）をゲーム抜きで通す。
+"""336_crime_overhaul の脱獄の決まり（jailbreak.py）をゲーム抜きで通す。
 
-    python tools/tests/test_wip_crime_jailbreak.py
+    python tools/tests/test_crime_jailbreak.py
 
   引数   … 「服役する」のボタンの引数（残り年数・罪状・出来事・刑期）を読む。形の違うものは読まない
   延ばす … 残り年数と刑期を同じだけ延ばす。罪状と出来事はそのまま
@@ -25,10 +25,10 @@ if RUNTIME_DIR not in sys.path:
 
 def load_parts():
     """MOD のフォルダを名前の付いたパッケージとして読み、部品だけを取り出す。"""
-    matches = sorted(name for name in os.listdir(MODS_DIR) if name.endswith("_crime_incentive"))
+    matches = sorted(name for name in os.listdir(MODS_DIR) if name.endswith("_crime_overhaul"))
     if len(matches) != 1:
-        raise SystemExit("cannot find exactly one *_crime_incentive: {}".format(matches))
-    package = types.ModuleType("crime_incentive_parts")
+        raise SystemExit("cannot find exactly one *_crime_overhaul: {}".format(matches))
+    package = types.ModuleType("crime_overhaul_parts")
     package.__path__ = [os.path.join(MODS_DIR, matches[0])]
     sys.modules[package.__name__] = package
     return importlib.import_module(package.__name__ + ".jailbreak")

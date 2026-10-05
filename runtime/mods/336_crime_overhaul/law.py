@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""手配への反応。怯える店・時効・首の懐。仕様は DOC.md の同じ名前の節。
+"""手配への反応。店が委縮して値を下げる・時効・追手の前金を奪う。仕様は DOC.md の同じ名前の節。
 
-##### 怯える店（手配中の土地で値段が動く）
+##### 店が委縮して値を下げる（手配中の土地で値段が動く）
 
 - その土地で手配されていると、店の買値が下がり、売値が上がる。率は手配の重さ × 1点あたりの率（上限あり）
 - 値段はローダの関所（`prices.adjust`）へ一時の段として置く。保存の直前には外れる（セーブへ焼き付けない）
@@ -15,7 +15,7 @@
 - 新しい罪は、戻った後の値にそのまま足される（数え直さない）
 - 日数は `elapse_days` の前後の暦の差。エリア移動の日数は出発地からも目的地からも離れていた日数として数える
 
-##### 首の懐（追手を倒すと前金が入る）
+##### 追手の前金を奪う（追手を倒すと前金が入る）
 
 - 追手（`316_`）に勝つと、追手の難易度での依頼1件の報酬 × 割合（既定 30%）の前金が入る。
   手配が重いほど追手は強く（難易度 20〜75）、懐も厚い
@@ -47,7 +47,7 @@ def install(env):
     refresh_gold, area_label = env.refresh_gold, env.area_label
     lock = threading.Lock()
 
-    # -------------------------------------------------- 怯える店
+    # -------------------------------------------------- 店が委縮して値を下げる
     def intimidation(item, key, price):
         """手配中の土地なら率を掛ける。触らないなら None。"""
         if not cfg.INTIMIDATION_ENABLED:
@@ -60,7 +60,7 @@ def install(env):
         return rules.intimidated_price(key, price, rate, cfg.INTIMIDATION_SELL)
 
     def price_layer(item, key, price):
-        """関所の段（913 の1枚）。怯える店の後に、他のファイルの段（`env.price_layers`）を順に通す。触らないなら None。"""
+        """関所の段（336 の1枚）。「店が委縮して値を下げる」の後に、他のファイルの段（`env.price_layers`）を順に通す。触らないなら None。"""
         changed = None
         for layer in [intimidation] + list(env.price_layers):
             try:
@@ -77,7 +77,7 @@ def install(env):
 
     @ctx.wrap(SHOP_TARGET, required=False, safe=True)
     def shop_start(orig, self, *args, **kwargs):
-        """店に入ったときに怯え方を1行知らせ、率をログに残す。"""
+        """店に入ったときに委縮の度合いを1行知らせ、率をログに残す。"""
         try:
             app = getattr(self, "app", None) or ui.find_app()
             if cfg.INTIMIDATION_ENABLED and app is not None:
@@ -190,7 +190,7 @@ def install(env):
             ctx.log_exc("crime incentive: cannot cool down the wanted areas")
         return result
 
-    # -------------------------------------------------- 首の懐
+    # -------------------------------------------------- 追手の前金を奪う
     # どの戦闘が追手の戦闘かは追手を出す MOD（`316_`）しか知らないので、その MOD が窓口へ知らせる。
     def hunt_end(app, hunt):
         if not cfg.BOUNTY_ENABLED:

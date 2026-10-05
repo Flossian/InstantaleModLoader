@@ -13,7 +13,7 @@
       受注画面を通さず `QuestStartManager(app, 'settlement_quest', id)` で始める（GAME.md §2.9 の進行ループ）
     → 帰還（`QuestEndManager`）: 外へ逃れた。報酬は出さず（本文の行を止め、入った額を引く）、捕まった土地の手配度を下げる
     → 撤退（`QuestRetireManager`）: 処刑（`ExecutionPhaseManager`）
-控えは `state\\crime_incentive\\<世界×主人公>.json` の `rescue`（依頼の id・土地・手引きした人）。終われば消す。
+控えは `state\\crime_overhaul\\<世界×主人公>.json` の `rescue`（依頼の id・土地・手引きした人）。終われば消す。
 """
 import time
 

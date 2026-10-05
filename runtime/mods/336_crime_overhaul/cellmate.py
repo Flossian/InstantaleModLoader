@@ -13,7 +13,7 @@
 出所のときに `npcs.enroll` で一覧へ載せる（雇えるのは一覧に載った冒険者。仲間に入れるにも要る）。
 作った直後にゲーム自身の `generate_npc_detail` で HP・スキル・立ち絵を埋める
 （埋めないまま戦闘に出すと落ちる。GAME.md §2.23）。
-控えは `state\\crime_incentive\\<世界×主人公>.json` の `cellmates`（{id: {name, crime, area, guild, status, years}}）。
+控えは `state\\crime_overhaul\\<世界×主人公>.json` の `cellmates`（{id: {name, crime, area, guild, status, years}}）。
 `status` は "jailed"（牢の中）/ "breaking"（決行の戦闘に加勢中）/ "party"（一緒に外へ出て仲間）/ "free"（ギルドの冒険者）/
 "dead"（決行の戦闘で倒れた。ゲームは倒れた仲間を死なせる（`config['is_dead']`。GAME.md §2.22）。実機）。
 """

@@ -18,7 +18,7 @@ MOD がするのは、このマネージャを組んで `process_choice` に乗�
 時間で開けておくと、その間にゲーム自身が出した衛兵まで強くしてしまう（`316_` が以前に踏んだ）。
 組んだマネージャには弱参照で印を付けるので、起こさずに捨てたマネージャの印は残らない。
 
-`316_bounty_hunter`（追手）と `913_crime_incentive`（脱獄の決行）が使う。
+`316_bounty_hunter`（追手）と `336_crime_overhaul`（脱獄の決行）が使う。
 """
 import sys
 import weakref

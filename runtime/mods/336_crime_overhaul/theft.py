@@ -6,8 +6,8 @@
   大きい品・高い品・レア度の高い品ほど抜き取りにくい（本人の決定）
 - 盗んだ品は、盗んだ店では売れない（売ろうとすると主人公が自分で気づいて取りやめる。本人の決定）。どの店から盗んだかは、
   手持ちの品の鍵（ゲームの採番の数。GAME.md §2.13.1）ごとに控える（`stolen`）。手放した品の控えは売り買いのときに捨てる
-- よその店では盗品の買い取り額が正規の半分、裏の事務所の故買屋（`fence`）では7割（本人の決定）。
-  額は 913 の値段の段（`law` が置く1枚の中。`env.price_layers`）で `売価` に掛ける。故買屋は盗品しか買わない
+- よその店では盗品の買い取り額が正規の半分、裏の事務所の盗品買取商（`fence`）では7割（本人の決定）。
+  額は 336 の値段の段（`law` が置く1枚の中。`env.price_layers`）で `売価` に掛ける。盗品買取商は盗品しか買わない
 - 版1の途中までは施設の選択肢の「盗みを働く」だった（棚から無作為に1つ、同じ店は1日1回）。
   売買画面の右クリックへ移すので外した（セーブに焼かれた残骸を消すためラベルだけ残す。`office.OUR_LABELS`）
 """
@@ -34,7 +34,7 @@ STEAL_YES = "はい"
 STEAL_NO = "いいえ"
 #: 盗んだ店に売ろうとしたとき。主人公が自分で気づいて取りやめる形（店主には言わせない）。
 REFUSE_TEXT = "……いや、{item}はこの店で盗んだ品だ。\nここで売れば、盗んだことがばれてしまう。"
-#: 故買屋に盗品でない品を売ろうとしたとき。
+#: 盗品買取商に盗品でない品を売ろうとしたとき。
 FENCE_REFUSE_TEXT = "{broker}は{item}を押し返した。\n「堅気の品なら表の店へ持っていきな」"
 #: 所持品のマスの単位（64px ＋ 隙間 1px。ゲームはこの固定の単位で置き、落とした座標も同じ単位で割る。GAME.md §2.13.3）。
 CELL_PX = 65
@@ -330,7 +330,7 @@ def install(env):
             w, h = Window._get_effective_size()
         except Exception:
             w, h = Window.size
-        touch = MouseMotionEvent("mouse", "mod_crime_incentive_buy",
+        touch = MouseMotionEvent("mouse", "mod_crime_overhaul_buy",
                                  [start[0] / float(w), start[1] / float(h), "left"],
                                  is_touch=True, type_id="touch")
         EventLoop.post_dispatch_input("begin", touch)
@@ -591,7 +591,7 @@ def install(env):
         return entry if entry.get("shop") == shop_key(app, found[0]) else None
 
     def stolen_price(item, key, price):
-        """値段の段。手持ちの盗品の `売価` を、故買屋なら7割・それ以外の店なら半分にする（既定）。"""
+        """値段の段。手持ちの盗品の `売価` を、盗品買取商なら7割・それ以外の店なら半分にする（既定）。"""
         app = ui.find_app()
         if key != rules.SELL or app is None or stolen_entry(app, item) is None:
             return None
@@ -608,7 +608,7 @@ def install(env):
 
     @ctx.wrap("scripts.hud.new_hud:InventoryItem.sell_item", required=False, safe=True)
     def sell_item(orig, self, *args, **kwargs):
-        """売りの承認。盗んだ店に盗んだ品・故買屋に盗品でない品を売ろうとしたら、売らずに品を手持ちへ戻す。"""
+        """売りの承認。盗んだ店に盗んだ品・盗品買取商に盗品でない品を売ろうとしたら、売らずに品を手持ちへ戻す。"""
         try:
             app = ui.find_app()
             item = getattr(self, "item_instance", None)
@@ -631,7 +631,7 @@ def install(env):
             return orig(self, *args, **kwargs)
         cancel_sale(self)
         if refuse == "fence":
-            broker = getattr(ui.character_of(app, str(broker_id)), "name", None) or "故買屋"
+            broker = getattr(ui.character_of(app, str(broker_id)), "name", None) or "盗品買取商"
             write("fence: refused {!r} (not stolen)".format(name))
             screen.say(app, FENCE_REFUSE_TEXT.format(broker=broker, item=name))
             return None

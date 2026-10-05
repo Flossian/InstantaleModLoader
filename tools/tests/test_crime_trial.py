@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
-"""913_crime_incentive の裁判への介入の決まり（trial.py）をゲーム抜きで通す。
+"""336_crime_overhaul の裁判への介入の決まり（trial.py）をゲーム抜きで通す。
 
-    python tools/tests/test_wip_crime_trial.py
+    python tools/tests/test_crime_trial.py
 
   判決   … 判決の画面のボタンから死刑か懲役の年数を読む
   求刑   … 検察の求刑の年数を読む。死刑の求刑は None
   改め方 … 弁護人・司法取引・買収の成功で死刑を外し、求刑に掛けた年数を上限にする。
              判事がそれより軽ければ判事のまま。露見は年数を足す。何も無ければ変えない
   頼み   … 判事への一文、情状の段、壊れた人生の記録の置き換え
-  捕まる前後 … その場の買収の確率（encounter.py）、処刑場からの脱出の難易度と手引きする人（rescue.py）
-  盗品   … よその店・故買屋での買い取り額（rules.stolen_sell_price）、故買屋の台詞の割合（fence.rate_label）
+  捕まる前後 … 衛兵の買収の確率（encounter.py）、処刑場からの脱出の難易度と手引きする人（rescue.py）
+  盗品   … よその店・盗品買取商での買い取り額（rules.stolen_sell_price）、盗品買取商の台詞の割合（fence.rate_label）
 """
 import importlib
 import os
@@ -25,21 +25,21 @@ if RUNTIME_DIR not in sys.path:
 
 
 def load_parts():
-    matches = sorted(name for name in os.listdir(MODS_DIR) if name.endswith("_crime_incentive"))
+    matches = sorted(name for name in os.listdir(MODS_DIR) if name.endswith("_crime_overhaul"))
     if len(matches) != 1:
-        raise SystemExit("cannot find exactly one *_crime_incentive: {}".format(matches))
-    package = types.ModuleType("crime_incentive_trial_parts")
+        raise SystemExit("cannot find exactly one *_crime_overhaul: {}".format(matches))
+    package = types.ModuleType("crime_overhaul_trial_parts")
     package.__path__ = [os.path.join(MODS_DIR, matches[0])]
     sys.modules[package.__name__] = package
     return importlib.import_module(package.__name__ + ".trial")
 
 
 trial = load_parts()
-encounter = importlib.import_module("crime_incentive_trial_parts.encounter")
-rescue = importlib.import_module("crime_incentive_trial_parts.rescue")
-rules = importlib.import_module("crime_incentive_trial_parts.rules")
-fence = importlib.import_module("crime_incentive_trial_parts.fence")
-cellmate = importlib.import_module("crime_incentive_trial_parts.cellmate")
+encounter = importlib.import_module("crime_overhaul_trial_parts.encounter")
+rescue = importlib.import_module("crime_overhaul_trial_parts.rescue")
+rules = importlib.import_module("crime_overhaul_trial_parts.rules")
+fence = importlib.import_module("crime_overhaul_trial_parts.fence")
+cellmate = importlib.import_module("crime_overhaul_trial_parts.cellmate")
 failures = []
 CUTS = {"lawyer": 30, "plea": 50, "bribe": 70}
 
@@ -146,7 +146,7 @@ class Person(object):
 
 
 def scene_capture():
-    print("== 捕まる前後（その場の買収・処刑場からの脱出）")
+    print("== 捕まる前後（衛兵の買収・処刑場からの脱出）")
     check("買収: 魅力15・手配なしで基準の確率", encounter.chance(15, 50, 3, 0, 0.5) == 50)
     check("買収: 手配の重さで下がる", encounter.chance(15, 50, 3, 20, 0.5) == 40)
     check("買収: 上限 95%", encounter.chance(30, 50, 3, 0, 0.5) == 95)
@@ -175,7 +175,7 @@ def scene_capture():
 def scene_stolen():
     print("== 盗品の値段（theft / fence）")
     check("よその店は半分", rules.stolen_sell_price(rules.SELL, 2553.3, 50) == 1276.65)
-    check("故買屋は7割", abs(rules.stolen_sell_price(rules.SELL, 2553.3, 70) - 1787.31) < 0.001)
+    check("盗品買取商は7割", abs(rules.stolen_sell_price(rules.SELL, 2553.3, 70) - 1787.31) < 0.001)
     check("買価には掛けない", rules.stolen_sell_price(rules.BUY, 2553.3, 50) is None)
     check("100% なら触らない", rules.stolen_sell_price(rules.SELL, 2553.3, 100) is None)
     check("額が無ければ触らない", rules.stolen_sell_price(rules.SELL, None, 50) is None)

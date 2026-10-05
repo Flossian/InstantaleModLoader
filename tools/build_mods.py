@@ -178,6 +178,7 @@ BANDS = (
         "333_equipment_slots",
         "334_colosseum_custom",
         "335_player_portrait_regenerate",
+        "336_crime_overhaul",
     )),
     #: 提供（4xx）は出どころの帯なので kind を固定しない（TECH.md §3.2.2）。
     (None, CONTRIB_HEAD, (

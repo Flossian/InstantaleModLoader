@@ -1230,10 +1230,10 @@ check("同行していない相手には今までどおり出す", index_of(app,
       [b.get("text") for b in app.buttons])
 
 # 主人公が閉じ込められている間（牢の中の会話。ローダの窓口 `confinement`）は出さない。
-# 依頼を受ければ牢から出られてしまう（913 の同房の囚人との会話で起きた）。
+# 依頼を受ければ牢から出られてしまう（336 の同房の囚人との会話で起きた）。
 from instantale_modloader import confinement as _confinement   # noqa: E402
 _confinement.reset()
-_confinement.declare("913_test", None, lambda app: "牢の中")
+_confinement.declare("336_test", None, lambda app: "牢の中")
 try:
     mod, ctx, app = setup(history=history, party=["63"])
     app.refresh_choice_buttons()

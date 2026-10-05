@@ -1,14 +1,14 @@
 {
-  "entry": "crime_incentive.py",
+  "entry": "crime_overhaul.py",
   "api": 1,
   "kind": "feature",
   "name": {
-    "en": "Expanded crime and trials, plus jailbreaks",
-    "ja": "犯罪・裁判の拡充と脱獄の追加"
+    "en": "Crime overhaul",
+    "ja": "犯罪まわりの全面改修"
   },
   "description": {
-    "en": "Free-action theft now pays a predictable amount: the LLM judges the size of the haul (0-4) alongside its usual summary, and the money is set from this area's quest reward (raised if the LLM gave little or nothing, cut if it gave too much). Getting away unseen still counts. In areas where you are wanted, shopkeepers are afraid of you: buy prices drop and sell prices rise with how wanted you are. While you stay away from an area where you are wanted, its lawfulness recovers by 10 every 3 months back to normal. While you are hunted everywhere (total wanted -40 or worse), it stops once the total reaches -40; beyond that, pay the fine. Beating bounty hunters yields the advance on your bounty they were carrying. In the trade window you can right-click a shop item to steal it after seeing the odds (dexterity to lift, wisdom to back off in time; harder when repeated and for bigger, pricier or rarer items). Underworld offices hand out illegal jobs (smuggling, grave robbing, sabotage, jailbreak, robbery, assassination) unlocked by how wanted you are; they pay 5-10x and get you wanted in that town. In prison, each year you can prepare a jailbreak (dig, bribe a guard, scout) at the risk of being found out, then break out by fighting the guards (weaker the more you prepared); falling drags you back with a longer sentence. At trial, whatever you type is your plea, and you can hire a lawyer, cut a plea deal by selling out the underworld office, or bribe the judge; the prosecutor and judge also hear your circumstances",
-    "ja": "自由行動の盗みの稼ぎが読めるようになる。行動の締めの要約で LLM が盗んだ規模（0〜4）を判定し、その土地の依頼の報酬を目安に額を整える（LLM が出さなかった・少なすぎたら足し、多すぎたら削る）。見つからずに済んだ盗みも数える。手配されている土地では店主が怯え、手配が重いほど買値が下がり売値が上がる。手配された土地を離れている間は、3ヵ月ごとに手配度が10戻り、平常まで戻る。ただし全域手配（全ての土地の合計 -40 以下）の間は、合計が -40 に届いたところで止まる（そこから先は罰金）。追手に勝つと、懐から賞金の前金が手に入る。売買画面では店の品を右クリックして盗める（率を見てから決める。器用で抜き取り、しくじっても判断で気づけば手を引ける。続けるほど・大きく高くレア度の高い品ほど難しい）。裏の事務所では、手配の重さに応じて密輸・盗掘・破壊工作・脱獄の手引き・強盗・暗殺の裏の仕事を受けられ、報酬は表の相場の5〜10倍、片付けるとその街で手配される。服役中は毎年、壁を削る・看守を手懐ける・抜け道を探るで脱獄に備えられ（露見すると刑期が延びる）、決行すると看守と戦う（備えるほど相手は弱い）。勝てば外へ、倒れれば牢へ戻され刑期が延びる。裁判では入力欄の言葉が釈明になり、弁護人を雇う・裏の事務所を売る司法取引・判事への袖の下で刑を軽くできる。検察と判事には情状（手配の重さ・活躍・人生の記録）も渡る"
+    "en": "Reworks crime and everything around it. Free-action theft now pays a predictable amount: the LLM judges the size of the haul (0-4) alongside its usual summary, and the money is set from this area's quest reward. Getting away unseen still counts. In areas where you are wanted, shops are cowed by you: buy prices drop and sell prices rise with how wanted you are. While you stay away from an area where you are wanted, its lawfulness recovers by 10 every 3 months back to normal (while you are hunted everywhere, it stops at a total of -40; beyond that, pay the fine). Beating bounty hunters yields the advance on your bounty they were carrying. In the trade window you can right-click a shop item to steal it after seeing the odds. Stolen goods can't be sold back to the shop you took them from, fetch half price at other shops, and 70% at the fence in the underworld office. The underworld office's job board offers illegal jobs (smuggling, grave robbing, sabotage, jailbreak, robbery, assassination) unlocked by how wanted you are; they pay 5-10x and get you wanted in that town. When guards catch you, you can try to pay them off (a charisma check). At trial, whatever you type is your plea, and you can hire a lawyer, cut a plea deal by selling out the underworld office, or bribe the judge; the prosecutor and judge also hear your circumstances. In prison, each year \"Attempt a jailbreak\" lets you prepare (dig, bribe a guard, scout) at the risk of being found out, then break out by fighting the guards (weaker the more you prepared); falling there is game over. A new cellmate may join you when your sentence starts: talk to them and they grow closer each year, they fight beside you in the breakout, and after release you can hire them at the town guild. Sentenced to death, someone who trusts you enough can help you try to escape the execution ground",
+    "ja": "犯罪とその周りに手を入れる。自由行動の盗みの稼ぎが読めるようになる（行動の締めの要約で LLM が盗んだ規模を0〜4で判定し、その土地の依頼の報酬を目安に額を整える。見つからずに済んだ盗みも数える）。手配されている土地では店が委縮し、手配が重いほど買値が下がり売値が上がる。手配された土地を離れている間は、3ヵ月ごとに手配度が10戻る（全域手配の間は合計 -40 で止まり、そこから先は罰金）。追手に勝つと、懐から賞金の前金が手に入る。売買画面では店の品を右クリックして盗める（率を見てから決める）。盗んだ品は盗んだ店では売れず、よその店では半額、裏の事務所の盗品買取商なら7割で売れる。裏の事務所の「裏の依頼掲示板」では、手配の重さに応じて密輸・盗掘・破壊工作・脱獄の手引き・強盗・暗殺の裏の仕事を受けられ、報酬は表の相場の5〜10倍、片付けるとその街で手配される。衛兵に見つかったときは、金を握らせて見逃してもらえる（魅力の判定）。裁判では入力欄の言葉が釈明になり、弁護人を雇う・裏の事務所を売る司法取引・判事への袖の下で刑を軽くできる。検察と判事には情状（手配の重さ・活躍・人生の記録）も渡る。服役中は毎年「脱獄を試みる」から、壁を削る・看守を手懐ける・抜け道を探るで備え（露見すると刑期が延びる）、決行すると看守と戦う（備えるほど相手は弱い。倒れたらゲームオーバー）。懲役の始まりに確率で同房の囚人が入る。話せて、年ごとに親しくなり、決行に加勢し、出所後は街のギルドで雇える。死刑の判決が出ても、好感度の高い人物がいれば、その手引きで処刑場からの脱出を試みられる"
   },
   "version": "1",
   "author": "R01/Flossian",
@@ -86,7 +86,7 @@
     "INTIMIDATION_ENABLED": {
       "type": "bool",
       "default": true,
-      "label": {"ja": "手配中の土地で店が怯える", "en": "Shops fear wanted players"},
+      "label": {"ja": "手配中の土地で店が委縮して値を下げる", "en": "Shops cut prices for wanted players"},
       "note": {"ja": "その土地で手配されている（手配度が 0 未満）と、店の値段が動く",
                "en": "Prices move in areas where you are wanted (lawfulness below 0)"}
     },
@@ -117,7 +117,7 @@
       "type": "bool",
       "default": true,
       "label": {"ja": "店に入ったら知らせる", "en": "Announce at the shop"},
-      "note": {"ja": "怯えているときだけ1行出す", "en": "One line, only while the shop is afraid"}
+      "note": {"ja": "委縮しているときだけ1行出す", "en": "One line, only while the shop is cowed"}
     },
     "STATUTE_ENABLED": {
       "type": "bool",
@@ -275,7 +275,7 @@
       "default": 70,
       "min": 0,
       "max": 100,
-      "label": {"ja": "故買屋の買い取り額（%）", "en": "Fence price (%)"},
+      "label": {"ja": "盗品買取商の買い取り額（%）", "en": "Fence price (%)"},
       "note": {"ja": "正規の買い取り額に対する割合",
                "en": "As a share of the normal price"}
     },
@@ -648,6 +648,17 @@
       "default": true,
       "label": {"ja": "手配が戻ったら知らせる", "en": "Announce cooldown"},
       "note": {"ja": "戻った土地ごとに本文へ1行出す", "en": "One line per area that cooled down"}
+    }
+  },
+  "tool": {
+    "entry": "tool.py",
+    "label": {
+      "ja": "機能ごとの設定",
+      "en": "Settings by feature"
+    },
+    "note": {
+      "ja": "機能を左に並べ、選んだ機能の項目だけを右に出す。一覧に機能ごとの入切と既定から変えた項目の数が出る。どの世界でも効く",
+      "en": "Lists the features on the left and shows only the chosen feature's settings on the right, with each feature's on/off state and how many settings differ from the defaults. Applies to every world"
     }
   }
 }

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""故買屋。裏の事務所で盗品を売る。仕様は DOC.md「店で盗む」の盗品の項。
+"""盗品買取商。裏の事務所で盗品を売る。仕様は DOC.md「店で盗む」の盗品の項。
 
-本人の決定（2026-10-05）: 故買屋は裏の事務所に置き、盗品の買い取り額は正規の7割。それ以外の店では正規の半分
+本人の決定（2026-10-05）: 盗品買取商は裏の事務所に置き、盗品の買い取り額は正規の7割。それ以外の店では正規の半分
 （額の段は `theft.stolen_price`。盗んだ店では今までどおり売れない）。
 
 - 事務所の選択肢に「盗品を売る」（盗品を持っているときだけ）。押すと、事務所の主を相手に
@@ -25,7 +25,7 @@ from . import common, office
 LABEL = "盗品を売る"
 MARK = "fence:open"
 #: 売買の窓の左の見出し。ゲームは短い語しか出さない（主の名前を渡すと末尾だけが出た。実機）。
-WINDOW_LABEL = "故買"
+WINDOW_LABEL = "買取"
 WINDOW_SITUATION = "shop"
 OPEN_TEXT = "{broker}が帳場の奥から顔を上げた。\n「盗品なら引き取ってやる。相場の{rate}だ」"
 NO_BUY_TEXT = "{broker}は品を引き寄せた。\n「買い取った品は売り物じゃねえ」"
@@ -150,7 +150,7 @@ def install(env):
         write("fence: opened with {!r} ({})".format(getattr(broker, "name", None), broker_id))
 
     def restore_choices(app):
-        """事務所の選択肢に戻す（ゲーム自身の `set_buttons_to_normal`。選択肢を組み直す合図で 913 のボタンも付き直る）。"""
+        """事務所の選択肢に戻す（ゲーム自身の `set_buttons_to_normal`。選択肢を組み直す合図で 336 のボタンも付き直る）。"""
         normal = getattr(app, "set_buttons_to_normal", None)
         if callable(normal):
             normal()
@@ -181,7 +181,7 @@ def install(env):
 
     @ctx.wrap("__main__:InstantaleApp.on_close_window", required=False, safe=True)
     def on_close_window(orig, self, *args, **kwargs):
-        """窓の後始末（外側を押したとき・HUD の `on_backdrop_callback`）。故買屋の窓なら、主の持ち物を片付ける。
+        """窓の後始末（外側を押したとき・HUD の `on_backdrop_callback`）。盗品買取商の窓なら、主の持ち物を片付ける。
 
         選択肢の組み直しの合図だけに頼ると、閉じても片付かない回があった（会話の画面の上で閉じた回。実機）。
         """
@@ -196,7 +196,7 @@ def install(env):
 
     @ctx.wrap("scripts.hud.new_hud:InventoryItem.buy_item", required=False, safe=True)
     def buy_item(orig, self, *args, **kwargs):
-        """故買屋の窓では、主の棚から買わせない。"""
+        """盗品買取商の窓では、主の棚から買わせない。"""
         broker_id = env.fence.get("broker")
         if not broker_id:
             return orig(self, *args, **kwargs)
