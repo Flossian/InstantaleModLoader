@@ -660,6 +660,29 @@ def scene_failure():
     check("本人はしくじった依頼を覚えている",
           note and "「古城（北）の亡霊」はあなたがしくじった" in note, note)
 
+    # 休み明けに同じ依頼を狙い直して片付けた。しくじりの記録は残さない。
+    module, ctx, app = ready(roll=0.99)
+    open_board(ctx, app)
+    elapse(ctx, app, 45)
+    bucket = bucket_of(module, app)
+    check("しくじりを控える", (bucket.get("failure") or {}).get("quest") == "1", bucket.get("failure"))
+    module._store()["rng"].value = 0.0      # 次は成功させる
+    elapse(ctx, app, 200)      # 休み明け。狙い直す
+    elapse(ctx, app, 60)       # 期限が来て片付ける
+    bucket = bucket_of(module, app)
+    check("同じ依頼を後で片付けた", "1" in bucket.get("taken", {}), bucket.get("taken"))
+    check("片付けたらしくじりの記録を消す", bucket.get("failure") is None, bucket.get("failure"))
+    app.texts[:] = []
+    open_board(ctx, app)
+    check("掲示板でしくじった文を出さない", not any("しくじって" in t for t in app.texts), app.texts)
+
+    # 前の版の控え（片付けた依頼にしくじりの記録が残っている）でも、しくじりは知らせない。
+    rivalry = sys.modules[MOD_NAME + ".rivalry"]
+    stale = {"taken": {"1": {"area": "0", "title": "t", "day": 1, "told": True}},
+             "failure": {"quest": "1", "area": "0", "title": "t", "day": 1, "told": False}}
+    check("前の版の控えでも、片付けた依頼のしくじりは知らせない", rivalry.untold_in(stale, "0") == [],
+          rivalry.untold_in(stale, "0"))
+
     module, ctx, app = ready(roll=0.99, FAILURE_ENABLED=False)
     open_board(ctx, app)
     elapse(ctx, app, 45)

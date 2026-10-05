@@ -316,8 +316,11 @@ def untold_in(bucket, area_id):
                 and str(row.get("area")) == str(area_id):
             found.append(("taken", quest_id, row))
     failure = bucket.get("failure")
+    # しくじった依頼を後で自分で片付けていれば、しくじりは知らせない
+    # （片付けたときに消すようにする前の控えに残っている）。
     if isinstance(failure, dict) and not failure.get("told") \
-            and str(failure.get("area")) == str(area_id):
+            and str(failure.get("area")) == str(area_id) \
+            and str(failure.get("quest")) not in taken_of(bucket):
         found.append(("failure", str(failure.get("quest")), failure))
     return found
 

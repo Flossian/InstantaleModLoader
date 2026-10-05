@@ -592,6 +592,10 @@ def apply(ctx):
         bucket["target"] = None
         if roll < chance:
             rivalry.taken_of(bucket)[quest_id] = row
+            failure = bucket.get("failure")
+            if isinstance(failure, dict) and str(failure.get("quest")) == quest_id:
+                # しくじった依頼を休み明けに自分で片付けた。しくじりの知らせと尻拭いの機会はもう無い。
+                bucket["failure"] = None
             score["rival"] += 1
             rivalry.push_history(bucket, row["title"], rivalry.RIVAL_WON, day, HISTORY_LIMIT)
             rivalry.push_topic(bucket, rivalry.TOPIC_TAKEN, row["title"], day, TOPIC_LIMIT)
