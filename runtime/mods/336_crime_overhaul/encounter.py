@@ -6,8 +6,13 @@
 判定は LLM 任せで率も見えない）。ここに率の見える「金を握らせる」を足す。
 
 - 成功: 衛兵が見逃す。ゲーム自身の `set_buttons_to_normal` で、居る場所の選択肢に戻す（実機で確かめた）
-- 失敗: そのまま連行（「大人しく捕まる」と同じマネージャを起こす）。贈賄を試みたことは裁判に持ち越す（`court`）
+- 失敗: ゲームの「大人しく捕まる／抵抗する！」に戻す（金を握らせるは出さない）。
+  大人しく捕まれば、贈賄を試みたことを裁判に持ち越す（`court`）。
+  抵抗すればゲーム自身の衛兵戦で、勝てば外、倒れればゲームオーバーなので裁判は来ない（持ち越さない）
 - 額は払う（受け取られても突き返されても）
+
+「大人しく捕まる」はゲームのボタンを写して印を付ける（spec はゲームの `TrialStartManager` のまま）。
+セーブで印が落ちても、ゲーム自身の「大人しく捕まる」に戻るだけ（贈賄の罰が付かない）。
 """
 from instantale_modloader import ui, wanted
 
@@ -19,6 +24,8 @@ OK_TEXT = "衛兵の手に{cost}ゴールドを握らせた。\n「……今日�
 FAIL_TEXT = "{cost}ゴールドは突き返された。\n「役人を買おうとは、いい度胸だ。来い」"
 SURRENDER_SPEC = "TrialStartManager"
 MARK = "encounter:bribe"
+#: 突き返された後の「大人しく捕まる」（押したら贈賄を裁判へ持ち越して連行）。
+SURRENDER_MARK = "encounter:surrender"
 
 
 def chance(score, base_pct, per_point_pct, weight, per_weight_pct):
@@ -35,6 +42,17 @@ def surrender_entry(buttons):
     return None
 
 
+def refusal_buttons(buttons, resist):
+    """突き返された後に並べる2つ（ゲームの「大人しく捕まる」の写しと「抵抗する！」）。
+
+    写しは呼び出し側が印を付ける。どちらかが無ければ None。
+    """
+    surrender = surrender_entry(buttons)
+    if surrender is None or resist is None:
+        return None
+    return [dict(surrender), resist]
+
+
 def install(env):
     write, screen, cfg = env.write, env.screen, env.cfg
 
@@ -47,11 +65,19 @@ def install(env):
         return chance(ui.ability_score(player, "charisma"), cfg.GUARD_BRIBE_BASE_PCT,
                       cfg.GUARD_BRIBE_PER_POINT, weight, cfg.GUARD_BRIBE_WANTED_PCT)
 
+    #: 突き返された場面か（その場面の間は金を握らせるを出さない）。衛兵の画面を離れたら下ろす。
+    refused = {"on": False}
+
     def on_refresh(app, buttons):
-        if not cfg.GUARD_BRIBE_ENABLED or ui.guard_encounter(buttons) is None:
+        if ui.guard_encounter(buttons) is None:
+            refused["on"] = False
+            return
+        if not cfg.GUARD_BRIBE_ENABLED:
             return
         buttons[:] = [entry for entry in buttons if screen.mark_of(entry) != MARK]
         screen.prune_stale(buttons, (LABEL_HEAD,))
+        if refused["on"] or any(screen.mark_of(entry) == SURRENDER_MARK for entry in buttons):
+            return              # 突き返された後は、捕まるか抵抗するかだけ
         cost = cost_of(app)
         gold = ui.gold_of(app)
         if cost <= 0 or not isinstance(gold, int) or gold < cost:
@@ -85,12 +111,36 @@ def install(env):
                 normal()
             return
         screen.say(app, ui.rewrite_coins(FAIL_TEXT.format(cost=ui.money(cost))))
-        # 裁判へ持ち越す（突き返された袖の下と同じく刑が延び、裁判の袖の下は出ない）。
+        entries = refusal_buttons(buttons, ui.guard_encounter(buttons))
+        if entries is None:
+            write("WARN encounter: cannot rebuild the encounter choices; arresting")
+            arrest(app, surrender)
+            return
+        if screen.mark:
+            entries[0][screen.mark] = SURRENDER_MARK
+        refused["on"] = True
+        screen.apply_buttons(app, entries, "encounter")
+
+    def arrest(app, surrender):
+        """贈賄を裁判へ持ち越して連行する（突き返された袖の下と同じく刑が延び、裁判の袖の下は出ない）。"""
         env.carry_to_trial["bribe"] = "caught"
         phase = screen.instantiate_spec(app, surrender)
         if phase is None or not screen.start_phase(app, phase, surrender.get("text") or "大人しく捕まる"):
+            env.carry_to_trial.pop("bribe", None)
             write("WARN encounter: cannot start the arrest; leaving the encounter screen")
             screen.apply_buttons(app, None, "encounter")
 
+    def press_surrender(app, action):
+        entry = next((e for e in (getattr(app, "buttons", None) or [])
+                      if screen.mark_of(e) == SURRENDER_MARK), None)
+        if entry is None:
+            write("WARN encounter: the surrender button is gone")
+            screen.apply_buttons(app, None, "encounter")
+            return
+        write("encounter: surrendered after the bribe was refused")
+        refused["on"] = False
+        arrest(app, entry)
+
     env.on_refresh(on_refresh)
     env.on_press(MARK, press)
+    env.on_press(SURRENDER_MARK, press_surrender)

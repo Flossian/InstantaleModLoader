@@ -152,6 +152,23 @@ def scene_capture():
     check("買収: 上限 95%", encounter.chance(30, 50, 3, 0, 0.5) == 95)
     check("買収: 下限 5%", encounter.chance(5, 50, 3, 200, 0.5) == 5)
     check("買収: 重さが負でも率を上げない", encounter.chance(15, 50, 3, -10, 0.5) == 50)
+
+    class Spec(object):
+        def __init__(self, cls_name, args=()):
+            self.cls_name, self.args = cls_name, list(args)
+
+    surrender = {"text": "大人しく捕まる", "spec": Spec("TrialStartManager", ["罪状", "出来事"])}
+    resist = {"text": "抵抗する！", "spec": Spec("BattleStartManager", ["guard", None])}
+    bribe = {"text": "金を握らせる（1G・成功率 50%）", "spec": Spec("JustSetButtonToNormalPhase"),
+             "mod_crime_incentive_action": "encounter:bribe"}
+    after = encounter.refusal_buttons([surrender, resist, bribe], resist)
+    check("突き返された後: 大人しく捕まる・抵抗する！の2つだけ",
+          [e["text"] for e in after or []] == ["大人しく捕まる", "抵抗する！"], after)
+    check("突き返された後: 捕まるは写し（ゲームのボタンに印を書き込まない）",
+          after is not None and after[0] is not surrender and after[0]["spec"] is surrender["spec"])
+    check("突き返された後: 抵抗する！はゲームのボタンそのまま", after is not None and after[1] is resist)
+    check("突き返された後: 捕まるが無ければ組まない", encounter.refusal_buttons([resist, bribe], resist) is None)
+    check("突き返された後: 抵抗する！が無ければ組まない", encounter.refusal_buttons([surrender], None) is None)
     check("脱出: 土地とレベルの高いほう ＋ 上乗せ", rescue.rescue_difficulty(76, 80, 10) == 90)
     check("脱出: 土地の難易度が高ければそちら", rescue.rescue_difficulty(76, 40, 10) == 86)
     check("脱出: 片方だけ読めればそれを使う", rescue.rescue_difficulty(None, 30, 10) == 40)

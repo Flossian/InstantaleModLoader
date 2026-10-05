@@ -530,8 +530,8 @@
       "type": "bool",
       "default": true,
       "label": {"ja": "衛兵にその場で金を握らせられる", "en": "Bribe guards on the spot"},
-      "note": {"ja": "衛兵に見つかった場面に「金を握らせる」が出る。魅力の判定で見逃してもらえれば、居る場所の選択肢に戻る。突き返されればそのまま連行され、裁判で刑が延びる。額はどちらでも払う",
-               "en": "Adds a bribe to the guard encounter. A charisma check: success lets you go on, failure means arrest and a longer sentence at trial. You pay either way"}
+      "note": {"ja": "衛兵に見つかった場面に「金を握らせる」が出る。魅力の判定で見逃してもらえれば、居る場所の選択肢に戻る。突き返されたら、大人しく捕まる（裁判で刑が延びる）か抵抗するかを選ぶ。額はどちらでも払う",
+               "en": "Adds a bribe to the guard encounter. A charisma check: success lets you go on; on failure you choose to go quietly (a longer sentence at trial) or resist. You pay either way"}
     },
     "GUARD_BRIBE_PCT": {
       "type": "int",
