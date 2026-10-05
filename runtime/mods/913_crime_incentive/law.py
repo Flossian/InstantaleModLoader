@@ -49,7 +49,7 @@ def install(env):
 
     # -------------------------------------------------- 怯える店
     def intimidation(item, key, price):
-        """関所の段。手配中の土地なら率を掛ける。触らないなら None。"""
+        """手配中の土地なら率を掛ける。触らないなら None。"""
         if not cfg.INTIMIDATION_ENABLED:
             return None
         app = ui.find_app()
@@ -59,8 +59,21 @@ def install(env):
                                        cfg.INTIMIDATION_CAP)
         return rules.intimidated_price(key, price, rate, cfg.INTIMIDATION_SELL)
 
+    def price_layer(item, key, price):
+        """関所の段（913 の1枚）。怯える店の後に、他のファイルの段（`env.price_layers`）を順に通す。触らないなら None。"""
+        changed = None
+        for layer in [intimidation] + list(env.price_layers):
+            try:
+                got = layer(item, key, price)
+            except Exception:
+                ctx.log_exc("crime incentive: a price layer failed")
+                continue
+            if got is not None:
+                price = changed = got
+        return changed
+
     prices.install(ctx, write)
-    prices.adjust(owner, intimidation, temporary=True, write=write)
+    prices.adjust(owner, price_layer, temporary=True, write=write)
 
     @ctx.wrap(SHOP_TARGET, required=False, safe=True)
     def shop_start(orig, self, *args, **kwargs):

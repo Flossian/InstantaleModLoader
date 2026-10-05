@@ -59,6 +59,36 @@ class Env(object):
         self.refresh_handlers = []
         self.press_handlers = []
         self.text_filters = []
+        #: 裁判へ持ち越す介入（その場の買収が突き返されたら `{"bribe": "caught"}`）。次の裁判が始まったら空にする。
+        self.carry_to_trial = {}
+        #: 次の依頼の生成（`random_quest_generator`）へ差し込む指示と難易度。1回で使い切る（`office` が包む）。
+        #: 裏の仕事（`office`）と処刑場からの脱出（`rescue`）が使う。
+        self.quest_inject = {"brief": None, "difficulty": None, "at": 0.0, "tag": ""}
+        #: 品の値段の段。`fn(item, key, price) -> 新しい額 | None`。`law` が置く1枚（`prices.adjust` は持ち主ごとに1枚）の中で、
+        #: 怯える店の後に順に通す。盗品の買い取り額（`theft`）が使う。
+        self.price_layers = []
+        #: 故買屋の売買の窓を開いている間の相手（主の id）。閉じたら None。`opening` は押してから窓が出るまで（`fence`）。
+        self.fence = {"broker": None, "opening": False}
+        #: 機能どうしの口（入れたファイルが置く）。`stolen_entry(app, item)` は盗品の控え（`theft`）、
+        #: `underworld_banned(app)` は司法取引の締め出しの間か（`office`）。
+        self.stolen_entry = lambda app, item: None
+        self.underworld_banned = lambda app: False
+        #: 牢の出来事を受ける関数（`cellmate` が受ける）。`prison` / `rescue` が `prison_event` で知らせる。
+        #: "break"（決行の戦闘を起こす直前）/
+        #: "exit"（牢を出た。how は "release" / "escape" / "rescue"）。
+        self.prison_handlers = {"break": [], "exit": []}
+
+    def on_prison(self, kind, handler):
+        """牢の出来事 `kind` で `handler(app, **kw)` を呼ぶ。"""
+        self.prison_handlers[kind].append(handler)
+
+    def prison_event(self, kind, app, **kw):
+        """牢の出来事を知らせる。受けた側の例外は握る（知らせる側の流れを止めない）。"""
+        for handler in list(self.prison_handlers.get(kind) or []):
+            try:
+                handler(app, **kw)
+            except Exception:
+                self.ctx.log_exc("crime incentive: a prison handler failed ({})".format(kind))
 
     # ---------------------------------------------------- 振り分けの登録
     def on_refresh(self, handler):

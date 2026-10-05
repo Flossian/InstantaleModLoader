@@ -277,6 +277,15 @@ app.refresh_choice_buttons(reset_page=True)
 > 判定は「`mod_` で始まるキーが1つも無い」で行う（`ui.MARK_PREFIX` / `marked_by_a_mod`）。
 > 掃除に使うラベルも、その MOD にしか無い文言だけにすること。
 
+選択肢が左の4つに収まらないときは右の欄（`hud.right_button_layout`）が開く。
+戦闘の情報欄（`hud.top_info_layout_battle`）と同じ矩形で、開いたまま戦闘に入ると敵の HP の表示に重なる。
+戦闘に入った後で開いた右の欄は、戦闘の4つの選択肢を塗っても（`update_ui` → `update_button_texts`、`display_button_load(0)` でも）閉じず、
+戦闘の終わりまで重なったままだった（2026-10-05 の実機。閉じたのは、次の場面を起こしたときの待機表示（`process_choice` の点送り）の始まり）。
+戦闘の外で `display_button_load` が右の欄を閉じた記録はある（VERIFICATION_LOG.md §2.60）。
+場面の終わりの合図（`refresh_choice_buttons`）はワーカーのスレッドから来て、ゲームはその後のフレームで `update_ui` を通して選択肢を塗る。
+合図の直後に MOD が `process_choice` で次の場面を起こすと、遅れて来た塗りが前の場面の選択肢を描き、右の欄が開いたまま残る。
+起こす前に `ui.choices_painted(app)`（HUD の `button_texts` が `to_display_buttons` と揃ったか）を待つ。
+
 ### 2.3 選択肢を変える手順
 
 この3点を外すと、データは正しいのに画面が変わらない。
@@ -1779,6 +1788,14 @@ generate_item_in_shopping(item_data, shop_owner_instance, item_stock_tier=2)
 
   売買の確認の窓は、品を落とした後のフレームでゲームが作る `ConfirmationWindow`（直下に `FloatLayout` と `Label`「品名:額G」、`FloatLayout` の下に `Button`「買う」「キャンセル」。ボタンは `on_press` で動く）。落とした呼び出しの中ではまだ出ていない。同じクラスを MOD が自分で作って品と同じ親へ足しても、中のボタンが 40×24 のまま並ばず画面に出ない（`913_` の実機。ゲームはこの窓を別の手順で出していると見られるが測っていない）。`ConfirmationModalView` は開けるが、ボタンが売買の確認より大きく、ModalView の覆いで後ろが暗くなる。ゲームが出した窓の文言を差し替えて借りることはできる（`913_` の盗む確認）
 - 窓の外側を押したときの閉じ方（2026-10-04 に実機で引数を写した）: `InstanTaleHUD._on_backdrop_touch(instance, touch)` が `turnoff_window_visibility(instance, 窓の表示の辞書)`（売買の窓は `hud.visible_twin_inventory_data` そのもの。`{'TorF': True, 'situation': 'shop', …}`）を呼び、続けて `hud.on_backdrop_callback()`（= `app.on_close_window`）で後始末する。後始末を呼ばないと窓は消えるが `is_popup_window_opened` が残る。後始末は `app.buttons_backup_for_shopping`（窓を開いたときの選択肢）を戻すので、窓を開いたまま戦闘を始めて後から閉じると、戦闘のボタンが店の選択肢に置き換わる
+- 店でない施設でも、`toggle_twin_inventory_window(相手, 主人公, 見出し, 'shop')` で売買の窓が開く（2026-10-05、`913_` の故買屋。相手は裏の事務所の主で、持ち物は空）。
+  ドラッグ・確認の窓・`Item.sell` の支払い・「〈品〉を売却した。」はゲームのまま動き、売った品は相手の持ち物へ積まれる。
+  値段は開く前に `normalize_shop_inventory_prices(相手, 主人公)` で付ける。
+  見出しは短い語しか出ない（主の名前を渡すと末尾の2字だけが出た）。
+  この開き方では、閉じたときの後始末が選択肢を戻さなかった（`buttons_backup_for_shopping` に事務所の6つを置き、選択肢を2つに絞って開いた回、閉じた後も2つのまま）。
+  戻すにはゲームの `set_buttons_to_normal` が効いた（居る施設の選択肢を組み直し、MOD の選択肢を組み直す合図も通る）。
+  窓を開いている間でも、売るとゲームは選択肢を塗り直す。開く前に右の欄（§2.2）が開いていると、塗り直しで右の欄だけが窓の上に戻る（左の欄は隠れたまま）。
+  画面へ塗る一覧（`to_display_buttons`）は `refresh_choice_buttons` を通すまで組み直されず、`app.buttons` だけを減らすと、塗り直しは前の一覧の位置のまま描いた
 - 戦闘のボタンの形: `攻撃` = `PhaseSpec('BattlePhaseManager', ('攻撃',))`、`スキル・防御` = `SkillChoicePhaseManager()`、`発言する` = `UtteranceChoiceInBattleManager()`、`逃げる` = `BattlePhaseManager('逃げる')`（`206_` の記録と、上の取り違えから戻したときの実機）
   雛形は買っても減らず、`stock_update_date` も動かない
 - 装備は作り直されない。実測7品:
@@ -2423,12 +2440,14 @@ ImprisonmentEndManager(app, 刑期)
 
 | 項目 | 分かっていること |
 | --- | --- |
+| 釈明 | 裁判の画面では自由入力の行き先（`function_correspond_to_input`）が `TrialPhaseManager` で、送った文はボタンの文言と同じく `get_sentence` に渡り、判事の頼みに「'〈主人公〉'の釈明は'〈文〉'です」として載る（2026-10-05。`output_data\unknown\unknown\sentence_generator\N.json`）。画面にはそのことが出ない |
+| 判事の頼みの欠け | 頼みの「人生ログの全体象」に、文ではなく `<scripts.characters.Character object at 0x…>`（人物の実体の表記）が入っている。人生の記録は判事に渡っていない（ゲームの不具合。プロフィールと特質は渡る）。検察の頼み（`get_sentence_sought`）も同じ。`913_` が `context_manager.get_life_log_text` の文に置き換える |
 | 判決 | 求刑は3回とも懲役15年。判決は3回のうち2回が死刑、1回が懲役15年（主人公の経歴「軍を脱走」を判事が重く見た）。判事の頼み文は、ふざけていれば「懲役300年」や「死刑」にし、反省していれば情状酌量してよいと指示している |
 | 死刑 | 「嫌だ！」の画面で釈明を打ち込んでも処刑される。ゲームオーバーで `savedata.json` が消える |
 | 1年の進み | `服役する` 1回で `elapse_days(365)` が1回、年齢 +1。段ごとに `save_game` が1回（裁判の段も） |
 | 寿命 | 獄中死は `DieFromOldAgePrison`。語りの頼み文は「60歳で寿命を迎えた」（自由の身は65歳）。実際の閾値は未計測 |
 | 服役中 | 居場所は捕まった場所のまま。所持金・持ち物・装備は動かない（釈放の「かつての所持品」は文だけ）。同行者がいるときは未計測 |
-| 釈放 | その土地の入口へ移り、その土地の手配度が平常（10）へ戻る。他の土地の手配度は未計測（今回は他に手配が無かった） |
+| 釈放 | その土地の入口へ移り、その土地の手配度が平常（10）へ戻る。他の土地の手配度はそのまま（2026-10-05、-5 と -20 の土地が残った） |
 | 年齢の独り言 | 服役中に「冒険者としてはもう高齢だ...」が混ざる（49歳） |
 
 #### 役場（`administrative_office`）の選択肢（実測）

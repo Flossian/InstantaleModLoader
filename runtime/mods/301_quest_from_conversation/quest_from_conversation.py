@@ -100,7 +100,7 @@ import sys
 import threading
 import time
 
-from instantale_modloader import frames, ui
+from instantale_modloader import confinement, frames, ui
 from instantale_modloader.state import (PLAYTHROUGH_SEP, UNKNOWN_WORLD, other_playthroughs,
                                         playthrough_key, world_filename, world_key)
 
@@ -1448,7 +1448,17 @@ def apply(ctx):
                 # 相手は画面の「会話を終了する」から読む（`302_` の手。`ui.conversation_partner`）。
                 # `state["npc_id"]` でも引けるが、
                 # いま並んでいるボタンから読む方が画面と食い違わない。
-                if where == "conversation":
+                confined, by = confinement.why(self)
+                if confined:
+                    # 主人公が閉じ込められている（牢の中の会話など。ローダの窓口 `confinement`）。
+                    # 依頼を受ければ牢から出られてしまうので、どちらも出さない。
+                    at = None
+                    stale = [b for b in buttons
+                             if isinstance(b, dict) and b.get(MARK) in ("offer", "generate")]
+                    if stale:
+                        buttons[:] = [b for b in buttons if not any(b is d for d in stale)]
+                    note_skip("confined by {} ({}): no quest offer".format(by, confined))
+                elif where == "conversation":
                     partner, _entry = ui.conversation_partner(buttons)
                     if is_party_member(self, partner):
                         note_skip("party member {!r} ({}): not a client".format(

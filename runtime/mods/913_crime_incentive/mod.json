@@ -3,12 +3,12 @@
   "api": 1,
   "kind": "feature",
   "name": {
-    "en": "Crime incentives",
-    "ja": "犯罪の見返りの追加"
+    "en": "Expanded crime and trials, plus jailbreaks",
+    "ja": "犯罪・裁判の拡充と脱獄の追加"
   },
   "description": {
-    "en": "Free-action theft now pays a predictable amount: the LLM judges the size of the haul (0-4) alongside its usual summary, and the money is set from this area's quest reward (raised if the LLM gave little or nothing, cut if it gave too much). Getting away unseen still counts. In areas where you are wanted, shopkeepers are afraid of you: buy prices drop and sell prices rise with how wanted you are. While you stay away from an area where you are wanted, its lawfulness recovers by 10 every 3 months back to normal. While you are hunted everywhere (total wanted -40 or worse), it stops once the total reaches -40; beyond that, pay the fine. Beating bounty hunters yields the advance on your bounty they were carrying. In the trade window you can right-click a shop item to steal it after seeing the odds (dexterity to lift, wisdom to back off in time; harder when repeated and for bigger, pricier or rarer items). Underworld offices hand out illegal jobs (smuggling, grave robbing, sabotage, jailbreak, robbery, assassination) unlocked by how wanted you are; they pay 5-10x and get you wanted in that town. In prison, each year you can prepare a jailbreak (dig, bribe a guard, scout) at the risk of being found out, then break out by fighting the guards (weaker the more you prepared); falling drags you back with a longer sentence",
-    "ja": "自由行動の盗みの稼ぎが読めるようになる。行動の締めの要約で LLM が盗んだ規模（0〜4）を判定し、その土地の依頼の報酬を目安に額を整える（LLM が出さなかった・少なすぎたら足し、多すぎたら削る）。見つからずに済んだ盗みも数える。手配されている土地では店主が怯え、手配が重いほど買値が下がり売値が上がる。手配された土地を離れている間は、3ヵ月ごとに手配度が10戻り、平常まで戻る。ただし全域手配（全ての土地の合計 -40 以下）の間は、合計が -40 に届いたところで止まる（そこから先は罰金）。追手に勝つと、懐から賞金の前金が手に入る。売買画面では店の品を右クリックして盗める（率を見てから決める。器用で抜き取り、しくじっても判断で気づけば手を引ける。続けるほど・大きく高くレア度の高い品ほど難しい）。裏の事務所では、手配の重さに応じて密輸・盗掘・破壊工作・脱獄の手引き・強盗・暗殺の裏の仕事を受けられ、報酬は表の相場の5〜10倍、片付けるとその街で手配される。服役中は毎年、壁を削る・看守を手懐ける・抜け道を探るで脱獄に備えられ（露見すると刑期が延びる）、決行すると看守と戦う（備えるほど相手は弱い）。勝てば外へ、倒れれば牢へ戻され刑期が延びる"
+    "en": "Free-action theft now pays a predictable amount: the LLM judges the size of the haul (0-4) alongside its usual summary, and the money is set from this area's quest reward (raised if the LLM gave little or nothing, cut if it gave too much). Getting away unseen still counts. In areas where you are wanted, shopkeepers are afraid of you: buy prices drop and sell prices rise with how wanted you are. While you stay away from an area where you are wanted, its lawfulness recovers by 10 every 3 months back to normal. While you are hunted everywhere (total wanted -40 or worse), it stops once the total reaches -40; beyond that, pay the fine. Beating bounty hunters yields the advance on your bounty they were carrying. In the trade window you can right-click a shop item to steal it after seeing the odds (dexterity to lift, wisdom to back off in time; harder when repeated and for bigger, pricier or rarer items). Underworld offices hand out illegal jobs (smuggling, grave robbing, sabotage, jailbreak, robbery, assassination) unlocked by how wanted you are; they pay 5-10x and get you wanted in that town. In prison, each year you can prepare a jailbreak (dig, bribe a guard, scout) at the risk of being found out, then break out by fighting the guards (weaker the more you prepared); falling drags you back with a longer sentence. At trial, whatever you type is your plea, and you can hire a lawyer, cut a plea deal by selling out the underworld office, or bribe the judge; the prosecutor and judge also hear your circumstances",
+    "ja": "自由行動の盗みの稼ぎが読めるようになる。行動の締めの要約で LLM が盗んだ規模（0〜4）を判定し、その土地の依頼の報酬を目安に額を整える（LLM が出さなかった・少なすぎたら足し、多すぎたら削る）。見つからずに済んだ盗みも数える。手配されている土地では店主が怯え、手配が重いほど買値が下がり売値が上がる。手配された土地を離れている間は、3ヵ月ごとに手配度が10戻り、平常まで戻る。ただし全域手配（全ての土地の合計 -40 以下）の間は、合計が -40 に届いたところで止まる（そこから先は罰金）。追手に勝つと、懐から賞金の前金が手に入る。売買画面では店の品を右クリックして盗める（率を見てから決める。器用で抜き取り、しくじっても判断で気づけば手を引ける。続けるほど・大きく高くレア度の高い品ほど難しい）。裏の事務所では、手配の重さに応じて密輸・盗掘・破壊工作・脱獄の手引き・強盗・暗殺の裏の仕事を受けられ、報酬は表の相場の5〜10倍、片付けるとその街で手配される。服役中は毎年、壁を削る・看守を手懐ける・抜け道を探るで脱獄に備えられ（露見すると刑期が延びる）、決行すると看守と戦う（備えるほど相手は弱い）。勝てば外へ、倒れれば牢へ戻され刑期が延びる。裁判では入力欄の言葉が釈明になり、弁護人を雇う・裏の事務所を売る司法取引・判事への袖の下で刑を軽くできる。検察と判事には情状（手配の重さ・活躍・人生の記録）も渡る"
   },
   "version": "1",
   "author": "R01/Flossian",
@@ -254,12 +254,37 @@
       "note": {"ja": "レア度の段1つごとに引く（common 0・rare 1・magical 2・epic 3・legendary 4・mythic 5）",
                "en": "Subtracted per rarity rank (common 0, rare 1, magical 2, epic 3, legendary 4, mythic 5)"}
     },
+    "STOLEN_SELL_PCT": {
+      "type": "int",
+      "default": 50,
+      "min": 0,
+      "max": 100,
+      "label": {"ja": "盗品の買い取り額（%）", "en": "Stolen goods price at shops (%)"},
+      "note": {"ja": "盗んだ品を、盗んだ店以外の店で売るときの額。正規の買い取り額に対する割合（盗んだ店では売れない）",
+               "en": "What other shops pay for stolen goods, as a share of the normal price (the shop you stole from will not buy them)"}
+    },
+    "FENCE_ENABLED": {
+      "type": "bool",
+      "default": true,
+      "label": {"ja": "裏の事務所で盗品を売れる", "en": "Fence at underworld offices"},
+      "note": {"ja": "裏の事務所に「盗品を売る」が出る（盗品を持っているときだけ）。事務所の主が盗品だけを買い取る",
+               "en": "Underworld offices offer \"Sell stolen goods\" while you carry any; the broker buys stolen goods only"}
+    },
+    "FENCE_PCT": {
+      "type": "int",
+      "default": 70,
+      "min": 0,
+      "max": 100,
+      "label": {"ja": "故買屋の買い取り額（%）", "en": "Fence price (%)"},
+      "note": {"ja": "正規の買い取り額に対する割合",
+               "en": "As a share of the normal price"}
+    },
     "UNDERWORLD_ENABLED": {
       "type": "bool",
       "default": true,
       "label": {"ja": "裏の事務所で裏の仕事を受けられる", "en": "Underworld jobs"},
-      "note": {"ja": "裏の事務所に「裏の仕事を探す」が出る。種類は手配の重さの合計で解禁（密輸・盗掘は誰でも、破壊工作・脱獄の手引きは10、強盗は20、暗殺は40）",
-               "en": "Adds a job search to underworld offices. Kinds unlock with your total wanted weight (smuggling and grave robbing for anyone, sabotage and jailbreak at 10, robbery at 20, assassination at 40)"}
+      "note": {"ja": "裏の事務所の「裏の依頼掲示板」（公式は未実装）から裏の仕事を受けられる。種類は手配の重さの合計で解禁（密輸・盗掘は誰でも、破壊工作・脱獄の手引きは10、強盗は20、暗殺は40）",
+               "en": "Underworld offices' \"underworld board\" (not yet implemented by the game) offers jobs. Kinds unlock with your total wanted weight (smuggling and grave robbing for anyone, sabotage and jailbreak at 10, robbery at 20, assassination at 40)"}
     },
     "UNDERWORLD_REWARD_PCT": {
       "type": "int",
@@ -287,6 +312,15 @@
       "label": {"ja": "解禁に要る手配の重さの調整（%）", "en": "Unlock threshold scale (%)"},
       "note": {"ja": "種類ごとの解禁の重さに掛ける。0 なら全種類を最初から受けられる",
                "en": "Scales the per-kind unlock weights. 0 opens every kind from the start"}
+    },
+    "UNDERWORLD_SEARCH_BELOW": {
+      "type": "int",
+      "default": 2,
+      "min": 1,
+      "max": 10,
+      "label": {"ja": "裏の仕事を探せる件数", "en": "Job search below"},
+      "note": {"ja": "その街の片付けていない裏の仕事がこの数より少ないと、裏の依頼掲示板に「裏の仕事を探す」が出る（素の掲示板の「クエストを探す」と同じ 2）",
+               "en": "\"Look for a job\" appears on the underworld board while the town has fewer open jobs than this (2, like the game's quest board)"}
     },
     "JAILBREAK_ENABLED": {
       "type": "bool",
@@ -367,6 +401,205 @@
       "note": {"ja": "企てが露見したとき・決行で倒れて牢へ戻されたときに延びる",
                "en": "Added when found out or when you fall in the break-out and are dragged back"}
     },
+    "TRIAL_HINT": {
+      "type": "bool",
+      "default": true,
+      "label": {"ja": "裁判で釈明の入れ方を知らせる", "en": "Trial plea hint"},
+      "note": {"ja": "裁判の画面で、入力欄に書いて送った言葉がそのまま判事への釈明になると1度知らせる（素のゲームでも届くが、画面に出ない）",
+               "en": "On the trial screen, says once that whatever you type is passed to the judge as your plea (the base game already does this but never says so)"}
+    },
+    "TRIAL_CONTEXT": {
+      "type": "bool",
+      "default": true,
+      "label": {"ja": "裁判に情状を渡す", "en": "Trial circumstances"},
+      "note": {"ja": "検察と判事の頼みに、手配の重さ・この土地での活躍を足し、ゲームの不具合で抜けている人生の記録を補う",
+               "en": "Adds your wanted weight and deeds in this area to the prosecutor's and judge's requests, and restores the life record the base game fails to pass"}
+    },
+    "TRIAL_LAWYER_ENABLED": {
+      "type": "bool",
+      "default": true,
+      "label": {"ja": "裁判で弁護人を雇える", "en": "Hire a lawyer"},
+      "note": {"ja": "裁判の画面に「弁護人を雇う」が出る。死刑は懲役に改まり、刑は求刑より軽くなる",
+               "en": "Adds a lawyer to the trial screen. Death becomes prison and the term stays below the prosecution's demand"}
+    },
+    "TRIAL_LAWYER_PCT": {
+      "type": "int",
+      "default": 100,
+      "min": 0,
+      "max": 1000,
+      "label": {"ja": "弁護人の額（%）", "en": "Lawyer fee (%)"},
+      "note": {"ja": "その土地の依頼1件の報酬に対する割合",
+               "en": "Share of this area's quest reward"}
+    },
+    "TRIAL_LAWYER_CUT_PCT": {
+      "type": "int",
+      "default": 30,
+      "min": 0,
+      "max": 100,
+      "label": {"ja": "弁護人で減る刑（%）", "en": "Lawyer reduction (%)"},
+      "note": {"ja": "求刑（死刑の求刑なら基の年数）から減らす割合。判事がそれより軽くしていれば判事のまま",
+               "en": "Cut from the prosecution's demand (or the base years for a death demand). A lighter judge's term stands"}
+    },
+    "TRIAL_PLEA_ENABLED": {
+      "type": "bool",
+      "default": true,
+      "label": {"ja": "司法取引を持ちかけられる", "en": "Plea deal"},
+      "note": {"ja": "裏の仕事を1つでも片付けたことがあれば、裁判で裏の事務所を売れる。死刑は懲役に改まり、刑が軽くなる。代わりにしばらく裏の仕事が回ってこない",
+               "en": "If you have finished an underworld job, you can sell the office out at trial. Death becomes prison and the term drops, but no underworld jobs for a while"}
+    },
+    "TRIAL_PLEA_CUT_PCT": {
+      "type": "int",
+      "default": 50,
+      "min": 0,
+      "max": 100,
+      "label": {"ja": "司法取引で減る刑（%）", "en": "Plea reduction (%)"},
+      "note": {"ja": "求刑から減らす割合",
+               "en": "Cut from the prosecution's demand"}
+    },
+    "TRIAL_PLEA_BAN_DAYS": {
+      "type": "int",
+      "default": 360,
+      "min": 0,
+      "max": 3650,
+      "label": {"ja": "司法取引の後に締め出される日数", "en": "Plea shut-out (days)"},
+      "note": {"ja": "牢を出てから（釈放・脱獄）この日数のあいだ、どの裏の事務所も仕事を回さない",
+               "en": "After you leave prison (release or escape), no underworld office gives you jobs for this many days"}
+    },
+    "TRIAL_BRIBE_ENABLED": {
+      "type": "bool",
+      "default": true,
+      "label": {"ja": "判事に袖の下を渡せる", "en": "Bribe the judge"},
+      "note": {"ja": "裁判の画面に「判事に袖の下を渡す」が出る。魅力の判定で受け取られれば刑がごく軽くなり、突き返されれば刑が延びる。額はどちらでも払う",
+               "en": "Adds a bribe to the trial screen. A charisma check: accepted means a very light sentence, refused adds years. You pay either way"}
+    },
+    "TRIAL_BRIBE_PCT": {
+      "type": "int",
+      "default": 200,
+      "min": 0,
+      "max": 2000,
+      "label": {"ja": "袖の下の額（%）", "en": "Bribe amount (%)"},
+      "note": {"ja": "その土地の依頼1件の報酬に対する割合",
+               "en": "Share of this area's quest reward"}
+    },
+    "TRIAL_BRIBE_BASE_PCT": {
+      "type": "int",
+      "default": 40,
+      "min": 5,
+      "max": 95,
+      "label": {"ja": "判事が受け取る確率（%）", "en": "Bribe chance (%)"},
+      "note": {"ja": "魅力 15 のとき",
+               "en": "At charisma 15"}
+    },
+    "TRIAL_BRIBE_PER_POINT": {
+      "type": "int",
+      "default": 3,
+      "min": 0,
+      "max": 10,
+      "label": {"ja": "魅力1点ごとの確率（%）", "en": "Chance per charisma point (%)"},
+      "note": {"ja": "魅力が 15 から1点離れるごとに動く",
+               "en": "How much each point above or below 15 moves the chance"}
+    },
+    "TRIAL_BRIBE_CUT_PCT": {
+      "type": "int",
+      "default": 70,
+      "min": 0,
+      "max": 100,
+      "label": {"ja": "袖の下で減る刑（%）", "en": "Bribe reduction (%)"},
+      "note": {"ja": "受け取られたとき、求刑から減らす割合",
+               "en": "Cut from the prosecution's demand when accepted"}
+    },
+    "TRIAL_BRIBE_PENALTY_YEARS": {
+      "type": "int",
+      "default": 5,
+      "min": 0,
+      "max": 50,
+      "label": {"ja": "突き返されたときに延びる刑（年）", "en": "Refused bribe penalty (years)"},
+      "note": {"ja": "懲役に足す年数（死刑のときは死刑のまま）",
+               "en": "Years added to a prison term (a death sentence stays)"}
+    },
+    "TRIAL_DEATH_YEARS": {
+      "type": "int",
+      "default": 20,
+      "min": 1,
+      "max": 100,
+      "label": {"ja": "死刑を改めるときの年数", "en": "Years when death is commuted"},
+      "note": {"ja": "求刑が死刑だったとき、懲役に改める基の年数",
+               "en": "Base prison years when the prosecution demanded death"}
+    },
+    "GUARD_BRIBE_ENABLED": {
+      "type": "bool",
+      "default": true,
+      "label": {"ja": "衛兵にその場で金を握らせられる", "en": "Bribe guards on the spot"},
+      "note": {"ja": "衛兵に見つかった場面に「金を握らせる」が出る。魅力の判定で見逃してもらえれば、居る場所の選択肢に戻る。突き返されればそのまま連行され、裁判で刑が延びる。額はどちらでも払う",
+               "en": "Adds a bribe to the guard encounter. A charisma check: success lets you go on, failure means arrest and a longer sentence at trial. You pay either way"}
+    },
+    "GUARD_BRIBE_PCT": {
+      "type": "int",
+      "default": 100,
+      "min": 0,
+      "max": 2000,
+      "label": {"ja": "握らせる額（%）", "en": "Guard bribe amount (%)"},
+      "note": {"ja": "その土地の依頼1件の報酬に対する割合", "en": "Share of this area's quest reward"}
+    },
+    "GUARD_BRIBE_BASE_PCT": {
+      "type": "int",
+      "default": 50,
+      "min": 5,
+      "max": 95,
+      "label": {"ja": "見逃してもらえる確率（%）", "en": "Guard bribe chance (%)"},
+      "note": {"ja": "魅力 15 のとき", "en": "At charisma 15"}
+    },
+    "GUARD_BRIBE_PER_POINT": {
+      "type": "int",
+      "default": 3,
+      "min": 0,
+      "max": 10,
+      "label": {"ja": "魅力1点ごとの確率（%）", "en": "Chance per charisma point (%)"},
+      "note": {"ja": "魅力が 15 から1点離れるごとに動く", "en": "How much each point above or below 15 moves the chance"}
+    },
+    "GUARD_BRIBE_WANTED_PCT": {
+      "type": "float",
+      "default": 0.5,
+      "min": 0.0,
+      "max": 5.0,
+      "label": {"ja": "手配の重さ1あたりに下がる確率（%）", "en": "Chance lost per wanted point (%)"},
+      "note": {"ja": "その土地の手配が重いほど見逃してもらいにくい。手配度 -20 なら 0.5 × 20 = 10% 下がる",
+               "en": "The more wanted you are here, the harder. At -20: 0.5 x 20 = 10% lower"}
+    },
+    "RESCUE_ENABLED": {
+      "type": "bool",
+      "default": true,
+      "label": {"ja": "処刑場からの脱出に挑める", "en": "Escape from the execution"},
+      "note": {"ja": "死刑の判決の後、好感度の高い人物がいれば「〈名前〉の手引きに賭ける」が出る。脱出はダンジョンで、撤退すれば処刑される",
+               "en": "After a death sentence, if someone likes you enough, you can gamble on their help. The escape is a dungeon; retreating means execution"}
+    },
+    "RESCUE_AFFINITY": {
+      "type": "int",
+      "default": 60,
+      "min": 0,
+      "max": 300,
+      "label": {"ja": "手引きしてくれる好感度", "en": "Affinity needed for a rescue"},
+      "note": {"ja": "この好感度以上の人物（仲間・知人）のうち、いちばん好感度の高い人が手引きする。60 は「仲間だと感じている」",
+               "en": "The person with the highest affinity at or above this leads the escape. 60 is \"sees you as a comrade\""}
+    },
+    "RESCUE_DIFFICULTY_PLUS": {
+      "type": "int",
+      "default": 10,
+      "min": 0,
+      "max": 50,
+      "label": {"ja": "脱出の難易度の上乗せ", "en": "Escape difficulty bonus"},
+      "note": {"ja": "土地の難易度とパーティの平均レベルの高いほうに足す。クリアを前提にしない強さ",
+               "en": "Added to the higher of the area difficulty and the party's average level. Not meant to be an easy clear"}
+    },
+    "RESCUE_LOSS": {
+      "type": "int",
+      "default": 30,
+      "min": 0,
+      "max": 100,
+      "label": {"ja": "脱出で下がる手配度", "en": "Wanted loss for escaping execution"},
+      "note": {"ja": "脱出したとき、捕まった土地で下がる手配度",
+               "en": "Lawfulness lost in the area you escaped from"}
+    },
     "JAILBREAK_LOSS": {
       "type": "int",
       "default": 20,
@@ -375,6 +608,40 @@
       "label": {"ja": "脱獄で下がる手配度", "en": "Wanted loss for escaping"},
       "note": {"ja": "脱獄したとき、捕まった土地で下がる手配度（衛兵と戦った分の -10 はゲームが別に引く）",
                "en": "Lawfulness lost in the area you escaped from (the game takes its own 10 for fighting guards)"}
+    },
+    "CELLMATE_ENABLED": {
+      "type": "bool",
+      "default": true,
+      "label": {"ja": "同房の囚人が現れる", "en": "Cellmates"},
+      "note": {"ja": "懲役が始まると、確率で新しい囚人が同じ房に入る。牢の中で話せ、年ごとに親しくなり、親しければ脱獄の決行に加勢する。出所後は街のギルドで雇える",
+               "en": "When a prison term starts, a new prisoner may share your cell. You can talk, grow closer each year, and a close cellmate joins the break out. After you leave, they can be hired at the town guild"}
+    },
+    "CELLMATE_PCT": {
+      "type": "int",
+      "default": 50,
+      "min": 0,
+      "max": 100,
+      "label": {"ja": "同房の囚人が現れる確率（%）", "en": "Cellmate chance (%)"},
+      "note": {"ja": "懲役が始まるたびに引く",
+               "en": "Rolled each time a prison term starts"}
+    },
+    "CELLMATE_AFFINITY_PER_YEAR": {
+      "type": "int",
+      "default": 10,
+      "min": 0,
+      "max": 100,
+      "label": {"ja": "1年ごとに上がる好感度", "en": "Affinity per year"},
+      "note": {"ja": "同じ房で1年過ごすたびに上がる（60 で「仲間だと感じている」）",
+               "en": "Gained for each year in the same cell (60 is \"feels like a comrade\")"}
+    },
+    "CELLMATE_ASSIST_AFFINITY": {
+      "type": "int",
+      "default": 40,
+      "min": 0,
+      "max": 200,
+      "label": {"ja": "決行に加勢する好感度", "en": "Affinity to join the break out"},
+      "note": {"ja": "この好感度以上なら、脱獄の決行で仲間に加わって戦う（40 は「多少の好意がある」）",
+               "en": "At or above this affinity the cellmate joins your party for the break out (40 is \"somewhat fond\")"}
     },
     "STATUTE_NOTICE": {
       "type": "bool",

@@ -4,6 +4,10 @@
 - 器用で抜き取り、しくじったら判断で店主の視線に気づけば手を引ける。
   気づけなければゲーム自身の衛兵戦。回数の制限は無く、同じ店で同じ日に続けるほど、
   大きい品・高い品・レア度の高い品ほど抜き取りにくい（本人の決定）
+- 盗んだ品は、盗んだ店では売れない（売ろうとすると主人公が自分で気づいて取りやめる。本人の決定）。どの店から盗んだかは、
+  手持ちの品の鍵（ゲームの採番の数。GAME.md §2.13.1）ごとに控える（`stolen`）。手放した品の控えは売り買いのときに捨てる
+- よその店では盗品の買い取り額が正規の半分、裏の事務所の故買屋（`fence`）では7割（本人の決定）。
+  額は 913 の値段の段（`law` が置く1枚の中。`env.price_layers`）で `売価` に掛ける。故買屋は盗品しか買わない
 - 版1の途中までは施設の選択肢の「盗みを働く」だった（棚から無作為に1つ、同じ店は1日1回）。
   売買画面の右クリックへ移すので外した（セーブに焼かれた残骸を消すためラベルだけ残す。`office.OUR_LABELS`）
 """
@@ -28,6 +32,10 @@ STEAL_LABEL = "盗む"
 STEAL_CONFIRM_TEXT = "{item}を盗む\n成功率 {hand}%　被発見率 {caught}%"
 STEAL_YES = "はい"
 STEAL_NO = "いいえ"
+#: 盗んだ店に売ろうとしたとき。主人公が自分で気づいて取りやめる形（店主には言わせない）。
+REFUSE_TEXT = "……いや、{item}はこの店で盗んだ品だ。\nここで売れば、盗んだことがばれてしまう。"
+#: 故買屋に盗品でない品を売ろうとしたとき。
+FENCE_REFUSE_TEXT = "{broker}は{item}を押し返した。\n「堅気の品なら表の店へ持っていきな」"
 #: 所持品のマスの単位（64px ＋ 隙間 1px。ゲームはこの固定の単位で置き、落とした座標も同じ単位で割る。GAME.md §2.13.3）。
 CELL_PX = 65
 #: 売買の窓の表示の状態を持つ HUD の辞書（`turnoff_window_visibility` の2つ目の引数）。
@@ -246,6 +254,7 @@ def install(env):
                 screen.say(app, THEFT_FAILED_TEXT)
                 return "failed"
             write(head + " -> stole")
+            remember_stolen(app, item, key, name)
             screen.say(app, THEFT_SUCCESS_TEXT.format(item=name))
             return "stole"
         count_attempt(app, key)
@@ -527,6 +536,111 @@ def install(env):
         except Exception:
             ctx.log_exc("crime incentive: cannot schedule the shop menu")
         return result
+
+    # ---- 盗んだ店には売れない
+    def player_key(app, item):
+        return key_in(items.inventory_of(getattr(app, "player", None)), item)
+
+    def remember_stolen(app, item, shop, name):
+        """盗んだ品の鍵と、盗んだ店を控える。"""
+        key = player_key(app, item)
+        if key is None:
+            write("WARN theft: cannot find the stolen item {!r} among the belongings".format(name))
+            return
+        playthrough = worlds.playthrough(app)
+        with worlds.lock:
+            bucket = worlds.load(playthrough)
+            stolen = dict(bucket.get("stolen") or {})
+            stolen[str(key)] = {"shop": shop, "name": name}
+            bucket["stolen"] = stolen
+            worlds.save(playthrough)
+
+    def stolen_entry(app, item):
+        """手持ちのこの品が盗品なら、その控え `{shop, name}`。違えば None（読むだけ）。"""
+        if app is None or item is None:
+            return None
+        key = player_key(app, item)
+        if key is None:
+            return None
+        with worlds.lock:
+            stolen = worlds.load(worlds.playthrough(app)).get("stolen") or {}
+            entry = stolen.get(str(key))
+        return dict(entry) if isinstance(entry, dict) else None
+
+    def prune_stolen(app):
+        """手放した品の控えを捨てる。"""
+        held = {str(key) for key in (items.inventory_of(getattr(app, "player", None)) or {})}
+        playthrough = worlds.playthrough(app)
+        with worlds.lock:
+            bucket = worlds.load(playthrough)
+            stolen = bucket.get("stolen") or {}
+            kept = {k: v for k, v in stolen.items() if k in held}
+            if len(kept) != len(stolen):
+                if kept:
+                    bucket["stolen"] = kept
+                else:
+                    bucket.pop("stolen", None)
+                worlds.save(playthrough)
+
+    def stolen_here(app, item):
+        """この品をいま居る店から盗んでいたら、その控え。違えば None。"""
+        found = shop_of(app)
+        entry = stolen_entry(app, item)
+        if found is None or entry is None:
+            return None
+        return entry if entry.get("shop") == shop_key(app, found[0]) else None
+
+    def stolen_price(item, key, price):
+        """値段の段。手持ちの盗品の `売価` を、故買屋なら7割・それ以外の店なら半分にする（既定）。"""
+        app = ui.find_app()
+        if key != rules.SELL or app is None or stolen_entry(app, item) is None:
+            return None
+        pct = cfg.FENCE_PCT if env.fence.get("broker") else cfg.STOLEN_SELL_PCT
+        return rules.stolen_sell_price(key, price, pct)
+
+    def cancel_sale(widget):
+        cancel = getattr(widget, "cancel_trade_confirmation", None)
+        if callable(cancel):
+            try:
+                cancel()
+            except Exception:
+                ctx.log_exc("crime incentive: cannot cancel the sale")
+
+    @ctx.wrap("scripts.hud.new_hud:InventoryItem.sell_item", required=False, safe=True)
+    def sell_item(orig, self, *args, **kwargs):
+        """売りの承認。盗んだ店に盗んだ品・故買屋に盗品でない品を売ろうとしたら、売らずに品を手持ちへ戻す。"""
+        try:
+            app = ui.find_app()
+            item = getattr(self, "item_instance", None)
+            broker_id = env.fence.get("broker")
+            if app is not None and item is not None:
+                prune_stolen(app)
+            if broker_id:
+                entry = stolen_entry(app, item)
+                refuse = "fence" if entry is None and item is not None else None
+            else:
+                entry = stolen_here(app, item) if app is not None and item is not None else None
+                refuse = "shop" if entry is not None else None
+        except Exception:
+            ctx.log_exc("crime incentive: cannot check the stolen goods")
+            refuse = None
+        name = getattr(item, "name", None) or "その品"
+        if refuse is None:
+            if env.fence.get("broker"):
+                write("fence: sold {!r} ({})".format(name, (getattr(item, "attributes", None) or {}).get(rules.SELL)))
+            return orig(self, *args, **kwargs)
+        cancel_sale(self)
+        if refuse == "fence":
+            broker = getattr(ui.character_of(app, str(broker_id)), "name", None) or "故買屋"
+            write("fence: refused {!r} (not stolen)".format(name))
+            screen.say(app, FENCE_REFUSE_TEXT.format(broker=broker, item=name))
+            return None
+        write("theft: refused to buy back {!r} at {}".format(entry.get("name"), entry.get("shop")))
+        screen.say(app, REFUSE_TEXT.format(item=name))
+        return None
+
+    env.stolen_entry = stolen_entry
+    env.price_layers.append(stolen_price)
 
     def mute_purchase(context):
         """盗みで借りた `Item.buy` の「〈品〉を購入した。」は出さない。"""

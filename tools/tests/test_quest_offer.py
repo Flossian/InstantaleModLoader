@@ -1229,6 +1229,28 @@ app.refresh_choice_buttons()
 check("同行していない相手には今までどおり出す", index_of(app, "offer") >= 0,
       [b.get("text") for b in app.buttons])
 
+# 主人公が閉じ込められている間（牢の中の会話。ローダの窓口 `confinement`）は出さない。
+# 依頼を受ければ牢から出られてしまう（913 の同房の囚人との会話で起きた）。
+from instantale_modloader import confinement as _confinement   # noqa: E402
+_confinement.reset()
+_confinement.declare("913_test", None, lambda app: "牢の中")
+try:
+    mod, ctx, app = setup(history=history, party=["63"])
+    app.refresh_choice_buttons()
+    check("閉じ込められている間は「依頼を受ける」を出さない", index_of(app, "offer") < 0,
+          [b.get("text") for b in app.buttons])
+    check("閉じ込められている間は「この話から依頼を作る」も出さない",
+          index_of(app, "generate") < 0, [b.get("text") for b in app.buttons])
+    check("閉じ込められていても会話を終了するは残る",
+          any(mlui.spec_cls_name(b) == "ConversationEndManager" for b in app.buttons),
+          [b.get("text") for b in app.buttons])
+finally:
+    _confinement.reset()
+mod, ctx, app = setup(history=history, party=["63"])
+app.refresh_choice_buttons()
+check("閉じ込めが解ければ今までどおり出す", index_of(app, "offer") >= 0,
+      [b.get("text") for b in app.buttons])
+
 # 会話を閉じても書き起こしを控えない（施設側から拾えないようにする）。
 mod, ctx, app = setup(history=history, party=["62"])
 app.refresh_choice_buttons()

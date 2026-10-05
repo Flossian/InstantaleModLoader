@@ -50,6 +50,7 @@ TARGETS = (
     "__main__:InstantaleApp.elapse_days",
     "__main__:InstantaleApp.refresh_choice_buttons",
     "scripts.llm.llm_manager:master_ai_facilitator",
+    "__main__:ImprisonmentEndManager.execute",
 )
 
 LOG_NAME = "bounty_hunter_send.log"
@@ -212,6 +213,10 @@ class FakeUI(object):
 
     def cls_of(self, name):
         return self.manager if name == "BattleStartManager" else None
+
+    def choices_painted(self, app):
+        """選択肢が塗り終わったか。`choices_shown` を偽にすると、塗り終わるまで追手を起こさない。"""
+        return getattr(app, "choices_shown", True)
 
 
 class FakeCtx(object):
@@ -459,6 +464,55 @@ def main():
     check("戦闘中は出さない",
           not BattleStartManager.built
           and any("in_battle" in line for line in read_log()), read_log()[-2:])
+
+    painting = App({"0": -25})
+    painting.choices_shown = False            # ゲームの塗りがまだ（偽の画面ではずっと塗り終わらない）
+    module, ctx = fresh_mod(painting, CHANCE_PERCENT=100)
+    arrive(ctx, painting)
+    check("塗り終わらなくても、待つフレームの上限で起こす",
+          BattleStartManager.built == [("guard", None)]
+          and any("塗り終わらないまま" in line for line in read_log()), read_log()[-2:])
+    painted = App({"0": -25})
+    module, ctx = fresh_mod(painted, CHANCE_PERCENT=100)
+    seen = len(read_log())
+    arrive(ctx, painted)
+    check("塗り終わっていればすぐ起こす（待った記録は出ない）",
+          BattleStartManager.built == [("guard", None)]
+          and not any("塗り終わらないまま" in line for line in read_log()[seen:]),
+          read_log()[seen:])
+
+    print("釈放と、決まった後に軽くなった手配")
+    app = App({"0": -25})
+    module, ctx = fresh_mod(app, CHANCE_PERCENT=100)
+    arrive(ctx, app, ready=False)                 # 服役の年に追手が決まった（控えがある）
+    ctx.hooks["__main__:ImprisonmentEndManager.execute"](
+        lambda self: "釈放", types.SimpleNamespace(app=app))
+    ready_screen(ctx, app)
+    check("釈放されたら決まっていた追手を落とす",
+          not BattleStartManager.built
+          and any("決まっていた追手を落とし" in line for line in read_log()), read_log()[-2:])
+    arrive(ctx, app)
+    check("釈放の後は追手の間を数え直す（すぐには来ない）",
+          not BattleStartManager.built
+          and any("日空ける" in line for line in read_log()), read_log()[-2:])
+
+    app = App({"0": -25})
+    module, ctx = fresh_mod(app, CHANCE_PERCENT=100)
+    arrive(ctx, app, ready=False)
+    app.player.area_history["0"]["lawfulness"] = 10      # 決まった後に罰金を納めた など
+    ready_screen(ctx, app)
+    check("決まった後に手配が軽くなったら出さない",
+          not BattleStartManager.built
+          and any("決まった後に手配が軽くなった" in line for line in read_log()), read_log()[-2:])
+
+    app = App({"0": -25})
+    module, ctx = fresh_mod(app, CHANCE_PERCENT=100)
+    arrive(ctx, app, ready=False)
+    app.player.area_history["0"]["lawfulness"] = -60     # 決まった後にさらに罪を重ねた
+    ready_screen(ctx, app)
+    check("出すときの強さは今の手配の重さで決め直す",
+          BattleStartManager.built == [("guard", None)]
+          and any("難易度75" in line for line in read_log()), read_log()[-2:])
 
     print("強さ")
     app = App({"0": -30})            # 合計30 -> 難易度 20 + 30 = 50

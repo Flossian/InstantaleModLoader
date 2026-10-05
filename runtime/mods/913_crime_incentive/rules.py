@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""犯罪の見返りの決まり（ゲームに触らない部品）。
+"""盗みの稼ぎ・怯える店・時効・店で盗むの決まり（ゲームに触らない部品）。
 
 本体（`crime_incentive.py`）が読んだ値を受け取り、額と率だけを返す。
 設定はモジュールのグローバルへ書き込まれるので（TECH.md §3.8.1）、本体が持って引数で渡す。
@@ -246,6 +246,13 @@ def intimidation_rate(lawfulness, per_point, cap_pct):
         return 0.0
     pct = min(max(0.0, float(cap_pct)), depth * max(0.0, float(per_point)))
     return pct / 100.0
+
+
+def stolen_sell_price(key, price, pct):
+    """盗品を売るときの額（売りに出したプレイヤーの品の `売価` だけ）。触らないなら None。"""
+    if key != SELL or price is None or pct is None or float(pct) == 100.0:
+        return None
+    return price * max(0.0, float(pct)) / 100.0
 
 
 def intimidated_price(key, price, rate, sell_too):

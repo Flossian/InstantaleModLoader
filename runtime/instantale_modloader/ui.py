@@ -1097,6 +1097,25 @@ def is_idle(app):
     return not busy_signals(app)
 
 
+def choices_painted(app):
+    """いまの選択肢（`app.to_display_buttons`）が HUD に塗り終わっているか。読めなければ True。
+
+    場面の終わりの合図（`refresh_choice_buttons`）はワーカーのスレッドから来て、
+    ゲームはその後のフレームで `update_ui` を通して選択肢を塗る。
+    その前に `process_choice` で次の場面を起こすと、遅れて来た塗りが前の場面の選択肢を描き、
+    5つ以上なら右の欄が開いたまま次の場面（戦闘の情報欄）に重なった（`316_` の実機。VERIFICATION.md §3.83）。
+    """
+    hud = find_hud(app)
+    shown = getattr(hud, "button_texts", None) if hud is not None else None
+    wanted = getattr(app, "to_display_buttons", None)
+    if shown is None or wanted is None:
+        return True
+    try:
+        return list(shown) == list(wanted)
+    except Exception:
+        return True
+
+
 # --------------------------------------------------------------------------
 # ゲーム内の日付（GAME.md §2.16）
 # --------------------------------------------------------------------------

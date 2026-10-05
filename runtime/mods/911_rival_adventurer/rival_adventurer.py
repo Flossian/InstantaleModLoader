@@ -14,6 +14,9 @@
   `317_` は `completed` の依頼をプレイヤーの手柄として評判に編む（DOC.md §2.1）ので、
   片付けた依頼は台帳（`state\\rival_adventurer\\`）に控え、掲示板から隠すだけにする。
   MOD を外せば依頼は掲示板に戻る
+- 掲示板に出さない依頼（他の MOD がローダの窓口 `board` に置いたもの。`913_` の裏の仕事など）は、
+  狙わない・隠さない・未完了の数から引かない。窓口が無いころは裏の仕事を狙って片付けたことにし、
+  裏の依頼掲示板からも消していた（2026-10-05 の実機）
 - 掲示板は「未完了の依頼が2件以上あると『クエストを探す』を出さない」
   （206 の記録94回。DOC.md §2.2）。隠した依頼もゲームは未完了として数えるので、
   `DisplayQuestChoice.get_active_quest_count` の答えからも引く
@@ -36,6 +39,7 @@ import time
 
 from instantale_modloader import (arrivals, frames, jobs, llm, modfacility, modnpc,
                                   state as loader_state, talk_affinity, ui)
+from instantale_modloader import board as quest_board   # 包みの関数 `board`（掲示板を開く）と名前が重なるので別名
 from instantale_modloader.npcs import npc_stores, save_npcs
 
 from . import rivalry
@@ -241,11 +245,11 @@ def apply(ctx):
         """その土地でライバルが狙える依頼 `[(id, 難易度)]`。
 
         掲示板に出る条件（その土地の依頼で未完了）から、物語の依頼・隠した依頼・
-        プレイヤーが受けている依頼・会話から作った依頼を除く。
+        プレイヤーが受けている依頼・会話から作った依頼・掲示板に出さない依頼（窓口 `board`）を除く。
         """
         taken = rivalry.taken_of(bucket)
         current = ui.current_quest_id(app)
-        skip = conversation_quests(app)
+        skip = conversation_quests(app) | quest_board.kept_off(app)
         rows = []
         for quest_id, quest in live_quests(app).items():
             quest_id = str(quest_id)
@@ -568,6 +572,10 @@ def apply(ctx):
         if is_completed(quest):
             player_won(app, bucket, day, "found completed")
             return True
+        if quest_id in quest_board.kept_off(app):
+            bucket["target"] = None
+            write("settle: quest {} is kept off the board by another mod; target dropped".format(quest_id))
+            return True
         if in_party(app, rival_id):
             # 同行中は張り合えない。狙いは取り下げる。
             bucket["target"] = None
@@ -688,11 +696,14 @@ def apply(ctx):
             return set()
         _key, bucket = ledger(app)
         quests = live_quests(app)
+        kept_off = quest_board.kept_off(app)
         found = set()
         for quest_id, row in rivalry.taken_of(bucket).items():
             quest = quests.get(str(quest_id))
             if quest is None or is_completed(quest):
                 continue
+            if str(quest_id) in kept_off:
+                continue        # 掲示板に出さない依頼は、その MOD の入口に任せる（台帳に残っていても隠さない）
             if str(ui.quest_value(quest, "neighboring_settlement_id", "")) == str(area_id):
                 found.add(str(quest_id))
         return found

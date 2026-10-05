@@ -45,6 +45,8 @@
 | 多段の場面（宿泊・訓練・賭博ほか） | 並んでいる選択肢のクラス名（`SEQUENCE_MARKS`）。旗でも手待ちでも捕まらない。`Display...Choice` は品書きなので数えない |
 | 戦闘 | 旗と `current_enemy_dict`。戦闘中は控えすら置かない（置くと戦闘の直後に次の戦闘が始まる） |
 | ゲーム自身の衛兵 | `BattleStartManager.__init__` を包み、自分が組んだぶん（`memo["building"]`）以外で `enemy_type='guard'` のものを数える。出たら控えを落とし、1回の遭遇として数える。依頼中の戦闘と闘技場は数えない（数えるとクエスト1回で追手が止まる） |
+| 服役明け | `ImprisonmentEndManager.execute`（釈放）の後に控えを落とし、追手の間を数え直す。服役の年は暦が進むので、その間に追手が決まり、釈放の直後に出ていた（実機） |
+| 決まった後に軽くなった | 起こす直前に手配を測り直し、出す条件を割っていたら出さない（釈放でその土地が平常に戻った・罰金を納めた など） |
 
 ##### 作り替えるのは自分の戦闘の中だけ
 
@@ -83,7 +85,8 @@
 秒で区切ると、待っている間にゲームが何をしていたかと無関係に時間だけが過ぎる
 （実機で踏んだ不具合はどれも「秒は経ったが場面は終わっていない」形だった）。
 
-`Clock.schedule_once(..., 0)` を1回だけ使うが、これは待ちではなく次のフレームまで譲るもの。
+`Clock.schedule_once(..., 0)` を使うが、これは待ちではなく次のフレームまで譲るもの。
+追手を起こす前に、ゲームが選択肢を塗り終えるまでフレームを譲ることがある（上限は `PAINT_WAIT_FRAMES`）。
 
 ##### 記録
 
@@ -117,6 +120,7 @@ _RNG = random.Random()
 DUE_MAX_SIGNALS = 20        # 決めたのに出せないまま過ぎたら捨てる
 ARM_MAX_SIGNALS = 20        # 出したのに戦闘が始まらないまま過ぎたら控えを降ろす
 PROTECT_MAX_SIGNALS = 10    # 倒したぶんの手配度を見張る間（長いと戦闘の外の罪まで戻す）
+PAINT_WAIT_FRAMES = 60      # 追手を起こす前に、選択肢が塗り終わるのを待つフレームの数
 
 # `process_choice` に渡す文字列（押されたボタンの文字の代わり）。
 # 画面のボタンとしては使わない（TECH.md §6.2）。
@@ -492,6 +496,14 @@ def apply(ctx):
             # まだ場面の中。控えは残すので、次に画面が整ったときに出る。
             return
         memo["due"] = None
+        # 決めてから起こすまでの間に手配が軽くなっていれば出さない。強さは今の重さで決め直す。
+        here, total = measure(app)
+        if not hunt.should_send(here, total, START_WANTED, START_TOTAL):
+            write("{}: 決まった後に手配が軽くなった（ここ{} 合計{}）。出さない".format(
+                due["trigger"], here, total))
+            return
+        due = dict(due, here=here, total=total, difficulty=hunt.difficulty_of(
+            total, DIFFICULTY_BASE, DIFFICULTY_PER_WANTED, DIFFICULTY_MAX))
         memo["building"] = True
         try:
             phase = guards.build(app)
@@ -516,6 +528,21 @@ def apply(ctx):
         else:
             disarm()
             write("{}: 戦闘を起こせなかった。控えを降ろした".format(due["trigger"]))
+
+    @ctx.wrap("__main__:ImprisonmentEndManager.execute", required=False, safe=True)
+    def released(orig, self, *args, **kwargs):
+        """釈放。刑を務めた区切りなので、決まっていた追手を落とし、追手の間を数え直す。"""
+        result = orig(self, *args, **kwargs)
+        app = getattr(self, "app", None) or ui.find_app()
+        if app is not None:
+            load_memo(app)
+            dropped = memo["due"] is not None
+            memo["due"] = None
+            memo["last"] = memo["days"]
+            save_memo(app)
+            write("釈放された。{}追手の間を数え直す（次は{}日後から）".format(
+                "決まっていた追手を落とし、" if dropped else "", COOLDOWN_DAYS))
+        return result
 
     @ctx.wrap("__main__:BattleStartManager.__init__", required=False, safe=True)
     def battle_start_init(orig, self, app=None, enemy_type=None, enemy_content=None,
@@ -562,6 +589,10 @@ def apply(ctx):
         if not ours:
             return orig(self, *args, **kwargs)
         memo["hunting"] = memo["hunt_plan"]
+        # 塗り直すのは選択肢が戦闘のものになってから。印は `orig` の前に立てる。
+        # 戦闘の選択肢が並んだ合図は `orig` の中（`finish_button_load`）で来ることがあり、
+        # 後で立てると最初の1手が終わるまで右の欄が戦闘の情報欄に重なったままになった（実機）。
+        memo["repaint"] = True
         result = orig(self, *args, **kwargs)
         app = getattr(self, "app", None) or ui.find_app()
         enemies = getattr(app, "current_enemy_dict", None)
@@ -571,7 +602,6 @@ def apply(ctx):
             "（{}体を{}に改名）".format(renamed, HUNTER_NAME.strip())
             if renamed else ""))
         disarm()
-        memo["repaint"] = True      # 塗り直すのは選択肢が戦闘のものになってから
         return result
 
     @ctx.wrap("__main__:BattleEndManager.end_phase", required=False, safe=True)
@@ -615,8 +645,24 @@ def apply(ctx):
         if memo["due"] is not None:
             # 1フレーム置く。今はゲームが選択肢を描き終えた直後で、
             # ここから `process_choice` に入ると同じ流れの中で画面を2度触ることになる。
-            schedule(lambda: launch(self))
+            # さらに、ゲームが選択肢を塗り終えるまで待つ（`launch_when_painted`）。
+            schedule(lambda: launch_when_painted(self, PAINT_WAIT_FRAMES))
         return result
+
+    def launch_when_painted(app, frames_left):
+        """ゲームがこの画面の選択肢を塗り終えてから追手を起こす。待つのはフレームの数だけ。
+
+        合図はワーカーのスレッドから来て、ゲームの塗り（`update_ui`）はその後のフレームで走る。
+        先に起こすと遅れた塗りが前の画面の選択肢を描き、5つ以上だと右の欄が開いたまま
+        戦闘の情報欄に最後まで重なった（実機。釈放の直後に追手が来た回。VERIFICATION.md §3.83）。
+        """
+        if ui.choices_painted(app) or frames_left <= 0:
+            if frames_left <= 0:
+                write("選択肢が塗り終わらないまま{}フレーム過ぎた。そのまま起こす".format(
+                    PAINT_WAIT_FRAMES))
+            launch(app)
+            return
+        schedule(lambda: launch_when_painted(app, frames_left - 1))
 
     # ------------------------------------------------------------ 出す場面（4つ）
     @ctx.wrap("__main__:AreaMoveManager.execute", required=False, safe=True)

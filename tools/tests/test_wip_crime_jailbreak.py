@@ -114,11 +114,14 @@ def scene_labels():
     print("画面")
     texts = [prep["label"].format(chance=50, detect=10, cost="1,000") for prep in jailbreak.PREPS]
     texts.append(jailbreak.BREAK_LABEL.format(prep=0, max=5))
+    texts.append(jailbreak.MENU_LABEL.format(prep=0, max=5))
     check("どの文言も残骸の頭のどれかで始まる",
           all(any(text.startswith(head) for head in jailbreak.LABEL_HEADS) for text in texts),
           texts)
     check("ゲームの「服役する」は残骸の頭に含まれない",
           not any(jailbreak.SERVE_TEXT.startswith(head) for head in jailbreak.LABEL_HEADS))
+    check("他の画面にもある「やめる」は残骸の頭に含まれない",
+          not any(jailbreak.BACK_LABEL.startswith(head) for head in jailbreak.LABEL_HEADS))
 
 
 def main():

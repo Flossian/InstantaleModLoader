@@ -44,6 +44,7 @@ if RUNTIME_DIR not in sys.path:
 
 import instantale_modloader as ml                      # noqa: E402
 from instantale_modloader import modnpc, state, talk_affinity, ui  # noqa: E402
+from instantale_modloader import board as quest_board  # noqa: E402
 
 
 def find_mod(suffix):
@@ -611,6 +612,49 @@ def scene_skip_conversation_quest():
     check("301 の依頼しか届かないので狙わない", target is None, target)
 
 
+def scene_kept_off():
+    print("[掲示板に出さない依頼（窓口 board）は狙わない・隠さない]")
+    # 913 の裏の仕事のように、他の MOD がギルドの掲示板から隠して自分の入口で受けさせる依頼。
+    quest_board.reset()
+    try:
+        quest_board.declare_kept_off("913_test", None, lambda app: ["1"])
+        module, ctx = fresh_mod()
+        app = make_world()
+        use(app)
+        appear(ctx, module, app)
+        open_board(ctx, app)
+        target = bucket_of(module, app).get("target")
+        check("窓口に置かれた依頼しか届かないので狙わない", target is None, target)
+        check("例外が無い", not ctx.errors, ctx.errors)
+
+        # 窓口ができる前に片付けたことにしていた依頼（台帳に残っている）は、隠さず数からも引かない
+        quest_board.reset()
+        module, ctx, app = ready()
+        open_board(ctx, app)
+        elapse(ctx, app, 45)
+        bucket = bucket_of(module, app)
+        check("（前提）窓口が無ければ片付ける", "1" in bucket.get("taken", {}), bucket.get("taken"))
+        quest_board.declare_kept_off("913_test", None, lambda app: ["1"])
+        open_board(ctx, app)
+        check("台帳に残っていても隠さない", any(t.startswith("古城") for t in board_texts(app)),
+              board_texts(app))
+        check("未完了の数から引かない", active_count(ctx, app) == 2, active_count(ctx, app))
+
+        # 狙っていた依頼が後から窓口に置かれたら、狙いを取り下げる
+        quest_board.reset()
+        module, ctx, app = ready()
+        open_board(ctx, app)
+        check("（前提）狙っている", (bucket_of(module, app).get("target") or {}).get("quest") == "1",
+              bucket_of(module, app).get("target"))
+        quest_board.declare_kept_off("913_test", None, lambda app: ["1"])
+        elapse(ctx, app, 1)
+        check("窓口に置かれたら狙いを取り下げる", bucket_of(module, app).get("target") is None,
+              bucket_of(module, app).get("target"))
+        check("例外が無い（取り下げ）", not ctx.errors, ctx.errors)
+    finally:
+        quest_board.reset()
+
+
 def scene_taken():
     print("[先を越す]")
     module, ctx, app = ready()
@@ -992,6 +1036,7 @@ def main():
     scene_intro()
     scene_aim()
     scene_skip_conversation_quest()
+    scene_kept_off()
     scene_taken()
     scene_failure()
     scene_player_wins()
