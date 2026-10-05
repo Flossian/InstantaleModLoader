@@ -49,6 +49,16 @@
 - 報酬は種類ごとの倍率（5〜10倍）、片付けると依頼の街の手配度が下がる。ギルドの掲示板からは隠す
 - 事務所の公式の「裏の依頼掲示板」（`NotImplementedManager`）と同じ役割なので、公式が未実装のあいだだけ
   別のボタンとして出す（本人の判断で方針の例外）。公式が実装したら出さない。公式のボタンには触らない
+
+##### 脱獄（服役中の毎年の画面）
+
+- 「服役する」の横に、壁を削る（器用）・看守を手懐ける（金）・抜け道を探る（判断）と「脱獄を決行する」を足す。
+  備えはその年の服役と引き換え（ゲームの服役を同じ引数で1年進める）。器用・判断の備えは年ごとに露見しうる。
+  露見すれば備えは潰れ、刑期が延びる
+- 決行はゲームの衛兵の戦闘。相手は備えの数だけ弱い。勝つか逃げれば牢の外（捕まった場所）へ出て、
+  その土地の手配度が下がる。倒れたら死なせず、逃走と同じ終わり方で切り上げて牢へ戻し、刑期を延ばす
+  （`334_` の負けの切り上げと同じ手順。GAME.md §2.10）
+- 服役の流れは GAME.md §2.20「逮捕・裁判・服役」（`238_probe_prison` の実機）
 """
 
 import os
@@ -60,7 +70,7 @@ import time
 from instantale_modloader import frames, ids, items, llm, prices, ui, wanted
 from instantale_modloader import state as loader_state
 
-from . import rules, underworld
+from . import jailbreak, rules, underworld
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
 #      `tools/check_mods.py` が AST で突き合わせる）------------------------
@@ -98,6 +108,16 @@ UNDERWORLD_ENABLED = True     # 裏の事務所で裏の仕事を受けられる
 UNDERWORLD_REWARD_PCT = 100   # 種類ごとの報酬の倍率（暗殺10倍など）に掛ける調整（%）
 UNDERWORLD_LOSS_PCT = 100     # 種類ごとの手配度の下がり幅に掛ける調整（%）
 UNDERWORLD_UNLOCK_PCT = 100   # 種類ごとの解禁に要る手配の重さに掛ける調整（%）
+JAILBREAK_ENABLED = True      # 服役中の毎年の画面で脱獄に備え、決行できる
+JAILBREAK_PREP_MAX = 5        # 備えの上限
+JAILBREAK_PREP_BASE_PCT = 50  # 能力値 15 のときに備えが実る確率（壁を削る＝器用・抜け道を探る＝判断）
+JAILBREAK_PER_POINT = 3       # 能力値1点ごとに動く確率（%）
+JAILBREAK_DETECT_PCT = 10     # 備えの年に企てが露見する確率（%）
+JAILBREAK_DETECT_PER_PREP = 5 # 積んだ備え1つごとに露見の確率に足す（%）
+JAILBREAK_BRIBE_PCT = 50      # 看守を手懐ける額。その土地の依頼1件の報酬に対する %
+JAILBREAK_EASE_PCT = 15       # 備え1つごとに、決行の戦闘の相手を弱くする（%）
+JAILBREAK_EXTEND_YEARS = 2    # 露見したとき・決行で倒れたときに延びる刑期（年）
+JAILBREAK_LOSS = 20           # 脱獄したとき、その土地で下がる手配度
 
 # ---- 設定にしない定数 ----------------------------------------------------
 LOG_BASENAME = "crime_incentive.log"
@@ -204,6 +224,17 @@ STEAL_CONFIRM_TEXT = "{item}を盗む\n成功率 {hand}%　被発見率 {caught}
 STEAL_YES = "はい"
 STEAL_NO = "いいえ"
 #: 所持品のマスの単位（64px ＋ 隙間 1px。ゲームはこの固定の単位で置き、落とした座標も同じ単位で割る。GAME.md §2.13.3）。
+#: 脱獄の決行の戦闘（GAME.md §2.10「逃げたときと倒れたとき」。`334_` と同じ値）。
+END_MANAGER_CLS = "BattleEndManager"
+ESCAPED_END_TYPE = "escaped"
+PLAYER_KEY = "player"
+SURVIVE_HP = 1
+#: 切り上げた `BattlePhaseManager` の実体に付ける印と、その後に飛ばす手（`334_` の実機）。
+JAIL_SURRENDERED_MARK = "_mod_crime_incentive_surrendered"
+AFTER_SURRENDER_STEPS = ("handle_battle_situation", "reduce_status_turns_and_log")
+ENEMY_DISPLAY_TARGET = "scripts.hud.new_hud:InstanTaleHUD.update_enemy_display"
+SURRENDER_GUARD_SECONDS = 10
+
 CELL_PX = 65
 #: 売買の窓の表示の状態を持つ HUD の辞書（`turnoff_window_visibility` の2つ目の引数）。
 TWIN_WINDOW_DATA = "visible_twin_inventory_data"
@@ -1477,6 +1508,389 @@ def apply(ctx):
                 if screen.is_busy():
                     screen.busy_off(self.app)
 
+    # -------------------------------------------------- 脱獄
+    # 服役中の毎年の画面（ゲームの「服役する」＝ `ImprisonmentPhaseManager`）に備えと決行を足す
+    # （本人の決定。DOC.md「脱獄」）。服役の流れは GAME.md §2.20「逮捕・裁判・服役」。
+    #   備え: 判定してから、ゲームの服役を「服役する」と同じ引数で1年進める。
+    #         露見したら備えを潰し、残り年数と刑期を延ばして進める。
+    #   決行: ゲームの衛兵の戦闘（難易度は備えの数だけ下げる。316_ と同じ2か所で差し替える）。
+    #         勝つか逃げれば、その場（捕まった場所）の画面へ戻る＝牢の外。
+    #         倒れたら死なせず、逃走と同じ終わり方で切り上げ（334_ と同じ手順）、「服役する」を延ばして置き直す。
+    # 備えの数は世界×主人公の控え（`jail`）。刑期の残りはゲームのボタンが持つので控えない。
+    jail = {"battle": None, "inside": None, "removed_player": None, "surrendered_at": None}
+
+    def serve_entry(buttons):
+        """選択肢の中のゲームの「服役する」。無ければ None。"""
+        for entry in buttons or []:
+            if ui.spec_cls_name(entry) == jailbreak.SERVE_SPEC:
+                return entry
+        return None
+
+    def jail_prep(app):
+        with worlds.lock:
+            bucket = worlds.load(worlds.playthrough(app))
+            value = (bucket.get("jail") or {}).get("prep")
+        return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    def set_jail_prep(app, value):
+        playthrough = worlds.playthrough(app)
+        with worlds.lock:
+            bucket = worlds.load(playthrough)
+            if value:
+                bucket["jail"] = {"prep": int(value)}
+            else:
+                bucket.pop("jail", None)     # 服役していない間は何も残さない
+            worlds.save(playthrough)
+
+    def jail_odds(app):
+        """`(備え, 露見の率, {備えの鍵: 実る率}, 看守を手懐ける額)`。画面に出すのも判定もこの値。"""
+        player = getattr(app, "player", None)
+        prep = jail_prep(app)
+        detect = jailbreak.detect_chance(prep, JAILBREAK_DETECT_PCT, JAILBREAK_DETECT_PER_PREP)
+        chances = {prep_def["key"]: jailbreak.prep_chance(
+            ui.ability_score(player, prep_def["ability"]), JAILBREAK_PREP_BASE_PCT,
+            JAILBREAK_PER_POINT) for prep_def in jailbreak.PREPS if prep_def["ability"]}
+        cost = jailbreak.bribe_cost(quest_reward(area_difficulty(app)), JAILBREAK_BRIBE_PCT)
+        return prep, detect, chances, cost
+
+    def insert_jail_buttons(app, buttons):
+        """「服役する」の後ろに備えと決行を足す。備えが上限なら決行だけ。"""
+        serve = serve_entry(buttons)
+        if not JAILBREAK_ENABLED or serve is None \
+                or jailbreak.serve_args(ui.spec_args(serve)) is None:
+            return
+        prep, detect, chances, cost = jail_odds(app)
+        texts = []
+        if prep < JAILBREAK_PREP_MAX:
+            for prep_def in jailbreak.PREPS:
+                if prep_def["ability"] is None:
+                    gold = ui.gold_of(app)
+                    if cost <= 0 or not isinstance(gold, int) or gold < cost:
+                        continue        # 払えない回は出さない
+                    texts.append((prep_def["key"], ui.rewrite_coins(
+                        prep_def["label"].format(cost=ui.money(cost)))))
+                else:
+                    texts.append((prep_def["key"], prep_def["label"].format(
+                        chance=chances[prep_def["key"]], detect=detect)))
+        texts.append(("break", jailbreak.BREAK_LABEL.format(prep=prep, max=JAILBREAK_PREP_MAX)))
+        entries = [screen.button(text, mark="jail:" + key) for key, text in texts]
+        at = buttons.index(serve) + 1
+        buttons[at:at] = [entry for entry in entries if entry is not None]
+
+    def serve_year(app, args):
+        """ゲームの服役を1年進める（「服役する」を押したのと同じマネージャと引数）。"""
+        cls = ui.cls_of(jailbreak.SERVE_SPEC)
+        if cls is None:
+            write("WARN jailbreak: {} is not available".format(jailbreak.SERVE_SPEC))
+            return False
+        try:
+            phase = cls(app, *args)
+        except Exception:
+            ctx.log_exc("crime incentive: cannot build the prison year")
+            return False
+        return screen.start_phase(app, phase, jailbreak.SERVE_TEXT)
+
+    def prepare_year(app, key, args):
+        """備えの1年。判定して本文に1行出し、ゲームの服役を1年進める。"""
+        prep_def = jailbreak.PREP_BY_KEY[key]
+        prep, detect, chances, cost = jail_odds(app)
+        next_args = list(args)
+        if prep_def["ability"] is None:
+            gold = ui.gold_of(app)
+            if cost <= 0 or not isinstance(gold, int) or gold < cost \
+                    or ui.add_gold(app, -cost) is None:
+                write("jailbreak: cannot pay {} for the guard (gold {})".format(cost, gold))
+                return False
+            new, result = jailbreak.roll_prep(_RNG, prep, JAILBREAK_PREP_MAX, None, 0)
+            line = prep_def["ok"].format(cost=ui.money(cost))
+        else:
+            chance = chances[key]
+            new, result = jailbreak.roll_prep(_RNG, prep, JAILBREAK_PREP_MAX, chance, detect)
+            if result == "detected":
+                next_args = jailbreak.extended(args, JAILBREAK_EXTEND_YEARS)
+                line = jailbreak.DETECTED_TEXT.format(years=JAILBREAK_EXTEND_YEARS)
+            else:
+                line = prep_def[result]
+        if result == "ok":
+            line += jailbreak.PREP_TEXT.format(prep=new, max=JAILBREAK_PREP_MAX)
+        set_jail_prep(app, new)
+        write("jailbreak: {} -> {} (prep {} -> {}, chance {} detect {} cost {}); serve {}".format(
+            key, result, prep, new, chances.get(key), detect,
+            cost if prep_def["ability"] is None else "-", next_args[:1] + next_args[3:]))
+        refresh_gold(app)
+        screen.say(app, ui.rewrite_coins(line))
+        return serve_year(app, next_args)
+
+    def break_out(app, args):
+        """決行。ゲームの衛兵の戦闘を、備えの数だけ弱くして起こす。"""
+        manager = ui.cls_of("BattleStartManager")
+        if manager is None:
+            write("WARN jailbreak: BattleStartManager is not available")
+            return False
+        prep = jail_prep(app)
+        base = area_difficulty(app)
+        difficulty = jailbreak.eased_difficulty(base, prep, JAILBREAK_EASE_PCT)
+        try:
+            phase = manager(app, GUARD_ENEMY_TYPE, None)
+        except Exception:
+            ctx.log_exc("crime incentive: cannot build the jailbreak battle")
+            return False
+        jail["battle"] = {"phase": phase, "args": list(args), "prep": prep, "started": False,
+                          "difficulty": difficulty, "recapture": False,
+                          "area": ui.area_id_of(ui.current_area(app))}
+        jail["removed_player"] = None
+        screen.say(app, jailbreak.BREAK_TEXT)
+        if not screen.start_phase(app, phase, GUARD_CHOICE_TEXT):
+            jail["battle"] = None
+            return False
+        write("jailbreak: break out with prep {} (difficulty {} -> {}); sentence {}".format(
+            prep, base, difficulty, args[:1] + args[3:]))
+        return True
+
+    def press_jail(app, key):
+        serve = serve_entry(getattr(app, "buttons", None))
+        args = jailbreak.serve_args(ui.spec_args(serve)) if serve is not None else None
+        if args is None:
+            write("WARN jailbreak: no serve button to follow ({})".format(key))
+            return False
+        if key == "break":
+            return break_out(app, args)
+        if key in jailbreak.PREP_BY_KEY:
+            return prepare_year(app, key, args)
+        return False
+
+    @ctx.wrap("__main__:BattleStartManager.start_battle", required=False, safe=True)
+    def jail_start_battle(orig, self, *args, **kwargs):
+        """決行の戦闘の敵を組む間だけ難易度を差し替える。別の戦闘が始まったら控えを捨てる。"""
+        battle = jail["battle"]
+        if battle is None:
+            return orig(self, *args, **kwargs)
+        if self is not battle["phase"]:
+            if battle["started"]:
+                write("jailbreak: another battle started; dropping the jailbreak battle")
+                jail["battle"] = None
+            return orig(self, *args, **kwargs)
+        battle["started"] = True
+        jail["inside"] = battle["difficulty"]
+        try:
+            return orig(self, *args, **kwargs)
+        finally:
+            jail["inside"] = None
+
+    @ctx.wrap("scripts.llm.llm_manager:guard_npc_generator", required=False, safe=True)
+    def jail_guard_generator(orig, area=None, world=None, npc_difficulty_level=None,
+                             *args, **kwargs):
+        """決行の相手の姿と説明（難易度は文章の強さに効く。`316_` と同じ口）。"""
+        difficulty = jail["inside"]
+        if difficulty is not None and jailbreak.is_number(npc_difficulty_level):
+            write("jailbreak: guard difficulty {} -> {} (description)".format(
+                npc_difficulty_level, difficulty))
+            npc_difficulty_level = difficulty
+        return orig(area, world, npc_difficulty_level, *args, **kwargs)
+
+    @ctx.wrap("__main__:InstantaleApp.generate_enemy_instance_from_quest_dict",
+              required=False, safe=True)
+    def jail_enemy_instance(orig, self, enemy_dict=None, *args, **kwargs):
+        """決行の相手の実体（難易度からレベルと能力値が決まる。`316_` と同じ口）。"""
+        difficulty = jail["inside"]
+        if difficulty is not None:
+            numbers = [index for index, value in enumerate(args) if jailbreak.is_number(value)]
+            index = numbers[0] if len(numbers) == 1 else (4 if 4 in numbers else None)
+            if index is None:
+                write("jailbreak: cannot find the difficulty among {} argument(s)".format(len(args)))
+            else:
+                args = args[:index] + (difficulty,) + args[index + 1:]
+        return orig(self, enemy_dict, *args, **kwargs)
+
+    def in_jail_battle():
+        battle = jail["battle"]
+        return battle is not None and battle["started"]
+
+    @ctx.wrap("__main__:InstantaleApp.remove_party_member", required=False, safe=True)
+    def jail_remove_party_member(orig, self, member_id=None, *args, **kwargs):
+        """決行の戦闘で倒れた主人公を控える（切り上げで一覧へ戻すため。`334_` と同じ）。"""
+        try:
+            if in_jail_battle() and member_id == PLAYER_KEY:
+                party = getattr(self, "party", None)
+                if isinstance(party, dict) and member_id in party:
+                    jail["removed_player"] = party[member_id]
+        except Exception:
+            ctx.log_exc("crime incentive: cannot keep the player leaving the party")
+        return orig(self, member_id, *args, **kwargs)
+
+    def prepare_escape(app):
+        """ゲーム自身の逃走と同じ状態にする（敵の一覧を空に、外された主人公を預かりへ。`334_`）。"""
+        enemies = getattr(app, "current_enemy_dict", None)
+        if isinstance(enemies, dict) and enemies:
+            enemies.clear()
+        party = getattr(app, "party", None)
+        if isinstance(party, dict) and PLAYER_KEY in party:
+            return
+        removed = jail["removed_player"]
+        escaped = getattr(app, "escaped_member_in_battle", None)
+        if removed is not None and isinstance(escaped, dict):
+            escaped[PLAYER_KEY] = removed
+        else:
+            write("WARN jailbreak: the player left the party and cannot be handed back")
+
+    def ensure_player_back(app):
+        party = getattr(app, "party", None)
+        removed, jail["removed_player"] = jail["removed_player"], None
+        if not isinstance(party, dict) or PLAYER_KEY in party or removed is None:
+            return
+        party[PLAYER_KEY] = removed
+        escaped = getattr(app, "escaped_member_in_battle", None)
+        if isinstance(escaped, dict):
+            escaped.pop(PLAYER_KEY, None)
+        write("WARN jailbreak: the game did not bring the player back; put back by hand")
+
+    def recapture(app):
+        """倒れた決行を、逃走と同じ終わり方で切り上げる。起こせたら True。"""
+        cls = ui.cls_of(END_MANAGER_CLS)
+        if cls is None:
+            return False
+        try:
+            manager = cls(app, ESCAPED_END_TYPE)
+        except Exception:
+            ctx.log_exc("crime incentive: cannot build the battle end manager")
+            return False
+        write("jailbreak: fell in the break out; ending the battle as an escape")
+        jail["surrendered_at"] = time.monotonic()
+        jail["battle"]["recapture"] = True
+        try:
+            prepare_escape(app)
+        except Exception:
+            ctx.log_exc("crime incentive: cannot prepare the escape")
+        try:
+            manager.execute("")
+        except Exception:
+            ctx.log_exc("crime incentive: the escape ending failed")
+            return False
+        try:
+            ensure_player_back(app)
+        except Exception:
+            ctx.log_exc("crime incentive: cannot put the player back")
+        return True
+
+    @ctx.wrap("__main__:BattlePhaseManager.check_battle_end", required=False, safe=True)
+    def jail_check_battle_end(orig, self, *args, **kwargs):
+        """決行で倒れたら死なせない。ゲームオーバーはこの判定の中で作られる（`334_` の実機）。"""
+        if getattr(self, JAIL_SURRENDERED_MARK, False):
+            return True
+        try:
+            battle = jail["battle"]
+            if in_jail_battle() and not battle["recapture"]:
+                app = getattr(self, "app", None) or ui.find_app()
+                player = getattr(app, "player", None)
+                hp = getattr(player, "current_hp", None)
+                if jailbreak.is_number(hp) and hp <= 0:
+                    player.current_hp = SURVIVE_HP
+                    if recapture(app):
+                        setattr(self, JAIL_SURRENDERED_MARK, True)
+                        return True
+                    write("WARN jailbreak: hp {} -> {} but the battle goes on".format(
+                        hp, SURVIVE_HP))
+        except Exception:
+            ctx.log_exc("crime incentive: cannot end the break out as a loss")
+        return orig(self, *args, **kwargs)
+
+    def install_after_surrender(name):
+        @ctx.wrap("__main__:BattlePhaseManager.{}".format(name), required=False)
+        def after_surrender(orig, self, *args, **kwargs):
+            """切り上げた戦闘の残りの手を飛ばす（消えた敵を引いて落ちる。`334_` の実機）。"""
+            if getattr(self, JAIL_SURRENDERED_MARK, False):
+                return None
+            return orig(self, *args, **kwargs)
+
+    for _step in AFTER_SURRENDER_STEPS:
+        install_after_surrender(_step)
+
+    @ctx.wrap(ENEMY_DISPLAY_TARGET, required=False)
+    def jail_enemy_display(orig, *args, **kwargs):
+        """切り上げた直後の敵の欄の更新の 0 除算だけを握る（`334_` の実機）。"""
+        try:
+            return orig(*args, **kwargs)
+        except ZeroDivisionError:
+            since = jail["surrendered_at"]
+            if since is None or time.monotonic() - since > SURRENDER_GUARD_SECONDS:
+                raise
+            write("jailbreak: skipped an enemy panel update after the battle ended")
+            return None
+
+    @ctx.wrap("__main__:BattleEndManager.end_phase", required=False, safe=True)
+    def jail_battle_end(orig, self, *args, **kwargs):
+        result = orig(self, *args, **kwargs)
+        battle = jail["battle"]
+        if battle is None or not battle["started"]:
+            return result
+        jail["battle"] = None
+        app = getattr(self, "app", None) or ui.find_app()
+        try:
+            if battle["recapture"]:
+                back_to_cell(app, battle)
+            else:
+                set_free(app, battle, getattr(self, "end_type", None))
+        except Exception:
+            ctx.log_exc("crime incentive: cannot settle the break out")
+        return result
+
+    def set_free(app, battle, end_type):
+        """勝つか逃げた。牢の外（ゲームが戻した場所の画面）。その土地の手配度を下げる。"""
+        set_jail_prep(app, 0)
+        write("jailbreak: escaped ({!r}) from area {}".format(end_type, battle["area"]))
+
+        def settle():
+            lines = [jailbreak.ESCAPED_TEXT]
+            entry = ui.area_record(getattr(app, "player", None), battle["area"])
+            before = ui.lawfulness_of(entry)
+            loss = max(0, int(JAILBREAK_LOSS))
+            if before is not None and loss and ui.set_lawfulness(entry, before - loss):
+                town = getattr(ui.world_areas(app).get(battle["area"]), "name", None) or "この街"
+                write("jailbreak: lawfulness of {} {} -> {}".format(
+                    battle["area"], before, before - loss))
+                lines.append(jailbreak.ESCAPED_LAW_TEXT.format(town=town, before=before,
+                                                               after=before - loss))
+            for line in lines:
+                screen.say(app, line)
+        screen.when_idle(app, settle, proceed_on_timeout=True, tag="jailbreak free")
+
+    def back_to_cell(app, battle):
+        """倒れて取り押さえられた。「服役する」を延ばして置き直す（備えは潰れる）。"""
+        set_jail_prep(app, 0)
+        args = jailbreak.extended(battle["args"], JAILBREAK_EXTEND_YEARS)
+        write("jailbreak: recaptured; sentence {} -> {}".format(
+            battle["args"][:1] + battle["args"][3:], args[:1] + args[3:]))
+        spec = screen.make_spec(jailbreak.SERVE_SPEC, args)
+
+        def settle():
+            screen.say(app, jailbreak.RECAPTURED_TEXT.format(years=JAILBREAK_EXTEND_YEARS))
+            if spec is not None:
+                screen.apply_buttons(app, [{"text": jailbreak.SERVE_TEXT, "spec": spec}],
+                                     "jailbreak recaptured")
+        screen.when_idle(app, settle, proceed_on_timeout=True, tag="jailbreak recaptured")
+
+    @ctx.wrap("__main__:ImprisonmentStartManager.execute", required=False, safe=True)
+    def imprisonment_start(orig, self, *args, **kwargs):
+        """新しい刑期。前の服役の備えは持ち越さない。"""
+        try:
+            app = getattr(self, "app", None) or ui.find_app()
+            if app is not None and jail_prep(app):
+                set_jail_prep(app, 0)
+        except Exception:
+            ctx.log_exc("crime incentive: cannot reset the jailbreak preparation")
+        return orig(self, *args, **kwargs)
+
+    @ctx.wrap("__main__:ImprisonmentEndManager.execute", required=False, safe=True)
+    def imprisonment_end(orig, self, *args, **kwargs):
+        """刑期を務め上げた。備えは捨てる。"""
+        try:
+            app = getattr(self, "app", None) or ui.find_app()
+            if app is not None and jail_prep(app):
+                set_jail_prep(app, 0)
+        except Exception:
+            ctx.log_exc("crime incentive: cannot drop the jailbreak preparation")
+        return orig(self, *args, **kwargs)
+
     @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False)
     def refresh_choice_buttons(orig, self, reset_page=False, *args, **kwargs):
         try:
@@ -1486,6 +1900,10 @@ def apply(ctx):
                     screen.prune_stale(buttons, OUR_LABELS)
                     if not any(screen.mark_of(entry) for entry in buttons):
                         insert_office_buttons(self, buttons)
+                elif serve_entry(buttons) is not None:
+                    screen.prune_stale(buttons, jailbreak.LABEL_HEADS)
+                    if not any(screen.mark_of(entry) for entry in buttons):
+                        insert_jail_buttons(self, buttons)
                 else:
                     hide_from_board(self, buttons)
         except Exception:
@@ -1507,6 +1925,12 @@ def apply(ctx):
             write("pressed the job {}".format(quest_id))
             if not open_acceptance(self, quest_id):
                 back_to_shop(self, "acceptance failed")
+            return None
+        if isinstance(action, str) and action.startswith("jail:"):
+            key = action[len("jail:"):]
+            write("pressed the jailbreak {!r}".format(key))
+            if not press_jail(self, key):
+                screen.apply_buttons(self, None, "jailbreak failed")
             return None
         return orig(self, button_index, *args, **kwargs)
 

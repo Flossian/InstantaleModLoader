@@ -2397,10 +2397,39 @@ player_data["area_history"] = {
 - **読み書きするヘルパは無い**（`lawfulness` を名前に含む関数が存在しない）。値を直接触るしかない
 - 減らしているのは LLM の判定側（プロンプトのスキーマに `lawfulness_loss` がある）。
   どの行為でいくつ減るかは未特定
-- 関連しそうなクラス（`ImprisonmentStartManager` / `DisplayCitizenshipChoice` /
-  `GetCitizenshipManager` / `DieFromOldAgePrison` ほか）との繋がりは未確認
+- 市民権のクラス（`DisplayCitizenshipChoice` / `GetCitizenshipManager` ほか）との繋がりは未確認。
+  投獄との繋がりは下の「逮捕・裁判・服役」
 - **手配度を直接書き換えてもゲーム側の帳尻は崩れない**
   （`-10` → `10` に書き換えたあと普通に遊び、ゲーム自身のセーブに両方そのまま残った）
+
+#### 逮捕・裁判・服役（実測）
+
+`238_probe_prison` の記録（衛兵に見つかって「大人しく捕まる」を選んだ3回）。
+
+```text
+衛兵の呼び止め  「大人しく捕まる」→ TrialStartManager(app, '指名手配者としての逮捕', '周辺地域で罪を重ね、指名手配されていた。')
+                「抵抗する！」    → BattleStartManager（衛兵戦）
+TrialStartManager     LLM が検察の求刑を書く → ボタン「わかりました」「濡れ衣だ」
+                      args = [{'prosecutor_statement': '<台詞>', 'sentencing_request': {'type': 'imprisonment', 'years': 15}}, 罪状, 出来事]
+TrialPhaseManager     LLM が判事の判決を書く（押した文言が釈明として渡る。自由入力も通る）
+   懲役 → 「はい」「嫌だ...」どちらも ImprisonmentStartManager(app, 年数, 罪状, 出来事)
+   死刑 → 「嫌だ！」→ ExecutionPhaseManager →「あなたの処刑は当日中に執行された...」→ GameOverManager
+ImprisonmentStartManager   「こうなってはもう、どうしようもない。」→「服役する」
+ImprisonmentPhaseManager(app, 残り年数, 罪状, 出来事, 刑期)   1押し＝1年
+   「1年を牢獄で過ごした...」、残りが0なら「釈放の時だ。」→「出る」
+ImprisonmentEndManager(app, 刑期)
+   「出口まで同行した看守が、あなたの足元にかつての所持品を投げてよこした。」「自由の身だ...」
+```
+
+| 項目 | 分かっていること |
+| --- | --- |
+| 判決 | 求刑は3回とも懲役15年。判決は3回のうち2回が死刑、1回が懲役15年（主人公の経歴「軍を脱走」を判事が重く見た）。判事の頼み文は、ふざけていれば「懲役300年」や「死刑」にし、反省していれば情状酌量してよいと指示している |
+| 死刑 | 「嫌だ！」の画面で釈明を打ち込んでも処刑される。ゲームオーバーで `savedata.json` が消える |
+| 1年の進み | `服役する` 1回で `elapse_days(365)` が1回、年齢 +1。段ごとに `save_game` が1回（裁判の段も） |
+| 寿命 | 獄中死は `DieFromOldAgePrison`。語りの頼み文は「60歳で寿命を迎えた」（自由の身は65歳）。実際の閾値は未計測 |
+| 服役中 | 居場所は捕まった場所のまま。所持金・持ち物・装備は動かない（釈放の「かつての所持品」は文だけ）。同行者がいるときは未計測 |
+| 釈放 | その土地の入口へ移り、その土地の手配度が平常（10）へ戻る。他の土地の手配度は未計測（今回は他に手配が無かった） |
+| 年齢の独り言 | 服役中に「冒険者としてはもう高齢だ...」が混ざる（49歳） |
 
 #### 役場（`administrative_office`）の選択肢（実測）
 

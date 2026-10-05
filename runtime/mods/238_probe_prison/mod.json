@@ -1,0 +1,16 @@
+{
+  "entry": "probe_prison.py",
+  "api": 1,
+  "kind": "probe",
+  "name": {
+    "en": "Probe: arrest, trial and prison",
+    "ja": "計測: 逮捕・裁判・服役"
+  },
+  "description": {
+    "en": "Records where an arrest starts the trial, the sentence values, how many days each prison year advances, whether the game saves during the sentence, and the location, party, gold, belongings and wanted levels before and after each phase. Read-only",
+    "ja": "逮捕がどこから裁判を始めるか・求刑と判決の値・服役の1年で暦が何日進むか・服役中にセーブするか・各段の前後の居場所・仲間・所持金・持ち物・手配度を録る。読み取りだけでゲームは変えない"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "debug": true
+}

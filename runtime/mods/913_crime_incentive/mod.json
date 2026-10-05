@@ -7,8 +7,8 @@
     "ja": "犯罪の見返りの追加"
   },
   "description": {
-    "en": "Free-action theft now pays a predictable amount: the LLM judges the size of the haul (0-4) alongside its usual summary, and the money is set from this area's quest reward (raised if the LLM gave little or nothing, cut if it gave too much). Getting away unseen still counts. In areas where you are wanted, shopkeepers are afraid of you: buy prices drop and sell prices rise with how wanted you are. While you stay away from an area where you are wanted, its lawfulness recovers by 10 every 3 months back to normal. While you are hunted everywhere (total wanted -40 or worse), it stops once the total reaches -40; beyond that, pay the fine. Beating bounty hunters yields the advance on your bounty they were carrying. In the trade window you can right-click a shop item to steal it after seeing the odds (dexterity to lift, wisdom to back off in time; harder when repeated and for bigger, pricier or rarer items). Underworld offices hand out illegal jobs (smuggling, grave robbing, sabotage, jailbreak, robbery, assassination) unlocked by how wanted you are; they pay 5-10x and get you wanted in that town",
-    "ja": "自由行動の盗みの稼ぎが読めるようになる。行動の締めの要約で LLM が盗んだ規模（0〜4）を判定し、その土地の依頼の報酬を目安に額を整える（LLM が出さなかった・少なすぎたら足し、多すぎたら削る）。見つからずに済んだ盗みも数える。手配されている土地では店主が怯え、手配が重いほど買値が下がり売値が上がる。手配された土地を離れている間は、3ヵ月ごとに手配度が10戻り、平常まで戻る。ただし全域手配（全ての土地の合計 -40 以下）の間は、合計が -40 に届いたところで止まる（そこから先は罰金）。追手に勝つと、懐から賞金の前金が手に入る。売買画面では店の品を右クリックして盗める（率を見てから決める。器用で抜き取り、しくじっても判断で気づけば手を引ける。続けるほど・大きく高くレア度の高い品ほど難しい）。裏の事務所では、手配の重さに応じて密輸・盗掘・破壊工作・脱獄の手引き・強盗・暗殺の裏の仕事を受けられ、報酬は表の相場の5〜10倍、片付けるとその街で手配される"
+    "en": "Free-action theft now pays a predictable amount: the LLM judges the size of the haul (0-4) alongside its usual summary, and the money is set from this area's quest reward (raised if the LLM gave little or nothing, cut if it gave too much). Getting away unseen still counts. In areas where you are wanted, shopkeepers are afraid of you: buy prices drop and sell prices rise with how wanted you are. While you stay away from an area where you are wanted, its lawfulness recovers by 10 every 3 months back to normal. While you are hunted everywhere (total wanted -40 or worse), it stops once the total reaches -40; beyond that, pay the fine. Beating bounty hunters yields the advance on your bounty they were carrying. In the trade window you can right-click a shop item to steal it after seeing the odds (dexterity to lift, wisdom to back off in time; harder when repeated and for bigger, pricier or rarer items). Underworld offices hand out illegal jobs (smuggling, grave robbing, sabotage, jailbreak, robbery, assassination) unlocked by how wanted you are; they pay 5-10x and get you wanted in that town. In prison, each year you can prepare a jailbreak (dig, bribe a guard, scout) at the risk of being found out, then break out by fighting the guards (weaker the more you prepared); falling drags you back with a longer sentence",
+    "ja": "自由行動の盗みの稼ぎが読めるようになる。行動の締めの要約で LLM が盗んだ規模（0〜4）を判定し、その土地の依頼の報酬を目安に額を整える（LLM が出さなかった・少なすぎたら足し、多すぎたら削る）。見つからずに済んだ盗みも数える。手配されている土地では店主が怯え、手配が重いほど買値が下がり売値が上がる。手配された土地を離れている間は、3ヵ月ごとに手配度が10戻り、平常まで戻る。ただし全域手配（全ての土地の合計 -40 以下）の間は、合計が -40 に届いたところで止まる（そこから先は罰金）。追手に勝つと、懐から賞金の前金が手に入る。売買画面では店の品を右クリックして盗める（率を見てから決める。器用で抜き取り、しくじっても判断で気づけば手を引ける。続けるほど・大きく高くレア度の高い品ほど難しい）。裏の事務所では、手配の重さに応じて密輸・盗掘・破壊工作・脱獄の手引き・強盗・暗殺の裏の仕事を受けられ、報酬は表の相場の5〜10倍、片付けるとその街で手配される。服役中は毎年、壁を削る・看守を手懐ける・抜け道を探るで脱獄に備えられ（露見すると刑期が延びる）、決行すると看守と戦う（備えるほど相手は弱い）。勝てば外へ、倒れれば牢へ戻され刑期が延びる"
   },
   "version": "1",
   "author": "R01/Flossian",
@@ -287,6 +287,94 @@
       "label": {"ja": "解禁に要る手配の重さの調整（%）", "en": "Unlock threshold scale (%)"},
       "note": {"ja": "種類ごとの解禁の重さに掛ける。0 なら全種類を最初から受けられる",
                "en": "Scales the per-kind unlock weights. 0 opens every kind from the start"}
+    },
+    "JAILBREAK_ENABLED": {
+      "type": "bool",
+      "default": true,
+      "label": {"ja": "服役中に脱獄できる", "en": "Jailbreak"},
+      "note": {"ja": "服役中の毎年の画面に、壁を削る（器用）・看守を手懐ける（金）・抜け道を探る（判断）と「脱獄を決行する」が出る。備えはその年の服役と引き換え",
+               "en": "Each prison year offers digging (dexterity), bribing a guard (gold), scouting (wisdom) and breaking out. Preparing uses up that year"}
+    },
+    "JAILBREAK_PREP_MAX": {
+      "type": "int",
+      "default": 5,
+      "min": 1,
+      "max": 10,
+      "label": {"ja": "備えの上限", "en": "Preparation cap"},
+      "note": {"ja": "上限まで積むと、備えのボタンは出なくなり決行だけが残る",
+               "en": "At the cap only the break-out button remains"}
+    },
+    "JAILBREAK_PREP_BASE_PCT": {
+      "type": "int",
+      "default": 50,
+      "min": 5,
+      "max": 95,
+      "label": {"ja": "備えが実る確率（%）", "en": "Preparation chance (%)"},
+      "note": {"ja": "能力値 15 のとき。壁を削るは器用、抜け道を探るは判断で動く",
+               "en": "At ability 15. Digging uses dexterity, scouting uses wisdom"}
+    },
+    "JAILBREAK_PER_POINT": {
+      "type": "int",
+      "default": 3,
+      "min": 0,
+      "max": 10,
+      "label": {"ja": "能力値1点ごとの確率（%）", "en": "Chance per ability point (%)"},
+      "note": {"ja": "能力値が 15 から1点離れるごとに、備えが実る確率が動く",
+               "en": "How much each point above or below 15 moves the preparation chance"}
+    },
+    "JAILBREAK_DETECT_PCT": {
+      "type": "int",
+      "default": 10,
+      "min": 0,
+      "max": 90,
+      "label": {"ja": "露見する確率（%）", "en": "Detection chance (%)"},
+      "note": {"ja": "壁を削る・抜け道を探るの年に企てが露見する確率。露見すると備えは潰れ、刑期が延びる。看守を手懐けるは露見しない",
+               "en": "Chance a digging or scouting year is found out, wiping the preparation and lengthening the sentence. Bribing is never found out"}
+    },
+    "JAILBREAK_DETECT_PER_PREP": {
+      "type": "int",
+      "default": 5,
+      "min": 0,
+      "max": 30,
+      "label": {"ja": "備え1つごとに上がる露見の確率（%）", "en": "Detection per preparation (%)"},
+      "note": {"ja": "積んだ備えが多いほど隠しにくい",
+               "en": "The more you have prepared, the harder it is to hide"}
+    },
+    "JAILBREAK_BRIBE_PCT": {
+      "type": "int",
+      "default": 50,
+      "min": 0,
+      "max": 500,
+      "label": {"ja": "看守を手懐ける額（%）", "en": "Bribe cost (%)"},
+      "note": {"ja": "その土地の依頼1件の報酬に対する割合。0 なら看守を手懐けるは出ない",
+               "en": "Share of this area's quest reward. 0 removes the bribe"}
+    },
+    "JAILBREAK_EASE_PCT": {
+      "type": "int",
+      "default": 15,
+      "min": 0,
+      "max": 30,
+      "label": {"ja": "備え1つごとに弱くなる看守（%）", "en": "Guard weakening per preparation (%)"},
+      "note": {"ja": "決行の戦闘の相手の難易度を、その土地の難易度からこの割合ずつ下げる（下限は2割）",
+               "en": "Lowers the break-out battle's difficulty from the area's by this much per preparation (never below 20%)"}
+    },
+    "JAILBREAK_EXTEND_YEARS": {
+      "type": "int",
+      "default": 2,
+      "min": 0,
+      "max": 10,
+      "label": {"ja": "延びる刑期（年）", "en": "Sentence added (years)"},
+      "note": {"ja": "企てが露見したとき・決行で倒れて牢へ戻されたときに延びる",
+               "en": "Added when found out or when you fall in the break-out and are dragged back"}
+    },
+    "JAILBREAK_LOSS": {
+      "type": "int",
+      "default": 20,
+      "min": 0,
+      "max": 100,
+      "label": {"ja": "脱獄で下がる手配度", "en": "Wanted loss for escaping"},
+      "note": {"ja": "脱獄したとき、捕まった土地で下がる手配度（衛兵と戦った分の -10 はゲームが別に引く）",
+               "en": "Lawfulness lost in the area you escaped from (the game takes its own 10 for fighting guards)"}
     },
     "STATUTE_NOTICE": {
       "type": "bool",
