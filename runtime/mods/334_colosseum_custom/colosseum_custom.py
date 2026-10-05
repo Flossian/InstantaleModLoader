@@ -30,7 +30,7 @@ r"""闘技場の相手の強さと懸賞金を設定で決める。
 | 保存される格 | `ColosseumMatchStart.generate_enemy_data` の戻りの `data.rank` |
 | 懸賞金 | `BattleEndInColosseum.end_phase`。所持金はこの中で動く（`instantale.py:8105`） |
 | 相手の格を告げる | `EntryColosseumMatchManager.method` の後 |
-| 負けても死なない | `BattlePhaseManager.check_battle_end` の前（ここから `GameOverManager` が作られる）。体力を戻したうえで、逃げたときと同じ `BattleEndManager(app, 'escaped')` を起こして試合を切り上げる。起こす前にゲーム自身の逃走と同じ状態にする（敵の一覧を空にし、倒れて一覧から外された主人公を `escaped_member_in_battle` に預けてゲームに戻させる）。`True` を返して戦闘の繰り返しを抜けさせる。試合の途中で倒れた仲間も、終わり方（`BattleEndManager` / `BattleEndInColosseum` の `end_phase`）の前に体力1で預かりへ入れ、後で戻っていなければ手で戻し、空になった居場所も戻す |
+| 負けても死なない | ローダの窓口 `defeat`（TECH.md §3.3.11。脱獄の決行を持つ `913_` と共有）に、闘技場の試合で倒れたら引き受けると登録する。窓口が `BattlePhaseManager.check_battle_end` の前（ここから `GameOverManager` が作られる）で体力を戻し、ゲーム自身の逃走と同じ状態にして `BattleEndManager(app, 'escaped')` を起こす。試合の途中で倒れた仲間はこの MOD が扱い、終わり方（`BattleEndManager` / `BattleEndInColosseum` の `end_phase`）の前に体力1で預かりへ入れ、後で戻っていなければ手で戻し、空になった居場所も戻す |
 | 逃げて手配されない | `ColosseumMatchStart.execute` で手配度を控え、逃げて終わった試合（`BattleEndManager.end_phase`）の後と、その後の画面が整った合図（`refresh_choice_buttons`）で下がっていれば戻す。勝った試合では控えを捨てる |
 | 死なずに退く描写 | 審判（`referee_*`）と試合の要約（`colosseum_battle_summarizer`）の送り口。最後の user message の末尾に一文を足す |
 
@@ -76,10 +76,12 @@ r"""闘技場の相手の強さと懸賞金を設定で決める。
 import sys
 import time
 
-from instantale_modloader import frames, llm, ui
+from instantale_modloader import defeat, frames, llm, ui
 
 LOG_BASENAME = "colosseum_custom.log"
 MARK = "_mod_colosseum_custom"
+#: ローダの窓口（`defeat`）での持ち主の名前（フォルダ名）。
+OWNER = "334_colosseum_custom"
 
 #: 試合1回ぶんの控えの置き場（`sys` の属性名）。注入し直しをまたいで残す。
 STATE_STORE_ATTR = "__instantale_colosseum_custom_state__"
@@ -96,22 +98,8 @@ ANNOUNCE_TEXT = "受付: 次の相手は{word}。腕試しにはちょうどい�
 ANNOUNCE_RISK_TEXT = "受付: 次の相手は{word}。あんたの腕では命がいくつあっても足りんぞ。"
 DEFEAT_TEXT = "膝をついた。これ以上は続けられない。門番に肩を借り、闘技場の外へ退いた。"
 
-#: 負けを認めるときにゲームへ渡す終わり方と、そのマネージャ（実機で採取）。
-#: 勝ったときは `'won'` が渡る。倒れた後に残す体力。
-END_MANAGER_CLS = "BattleEndManager"
-ESCAPED_END_TYPE = "escaped"
+#: 倒れた仲間を預かりへ入れるときに残す体力。
 SURVIVE_HP = 1
-
-#: 切り上げた後、敵の欄の更新で起きる 0 除算を握っている秒数（`enemy_display`）。
-#: 実機では終わってから約 1 秒後に来た。
-ENEMY_DISPLAY_TARGET = "scripts.hud.new_hud:InstanTaleHUD.update_enemy_display"
-SURRENDER_GUARD_SECONDS = 10
-
-#: 切り上げた戦闘に付ける印と、その後は飛ばす戦闘の手（`after_surrender`）。
-#: 敵の手番の `enemy_turn_separate` は `battle` の中の関数でクラスの属性ではないので包めない
-#: （GAME.md §2.10「1手ぶんの内訳」）。
-SURRENDERED_MARK = MARK + "_surrendered"
-AFTER_SURRENDER_STEPS = ("handle_battle_situation", "reduce_status_turns_and_log")
 
 #: `app.party` の主人公の鍵（仲間は id。実機のログ `party=['player', '78']`）。
 PLAYER_KEY = "player"
@@ -316,8 +304,6 @@ def apply(ctx):
     #: 試合1回ぶんの控え。`reward` は `end_phase` の間、
     #: `window` は相手を仕込んでいる間だけ入る。
     #: `summarizing` は試合の要約を頼んでいる最中の深さ。
-    #: `surrendered_at` は負けとして切り上げた時刻（`time.monotonic()`）。
-    #: `removed_player` は試合中に一覧から外された主人公の値（切り上げで戻す）。
     #:
     #: 置き場は `sys`（`332_` と同じ理由）。当て直しは最初の LLM の呼び出しのときに背景スレッドの
     #: `boot()` から来るので、相手を仕込んでいる最中に挟まることがある。ここで作り直した空の器を
@@ -328,9 +314,7 @@ def apply(ctx):
         state = {}
         setattr(sys, STATE_STORE_ATTR, state)
     for _name, _value in (("survived", False), ("reward", None), ("window", None),
-                          ("summarizing", 0), ("surrendered_at", None),
-                          ("removed_player", None), ("fallen", {}),
-                          ("lawful_guard", None), ("surrendering", False)):
+                          ("summarizing", 0), ("fallen", {}), ("lawful_guard", None)):
         state.setdefault(_name, _value)
 
     # ------------------------------------------------------------------ 設定
@@ -609,7 +593,6 @@ def apply(ctx):
         """1試合ぶんの札を戻し、相手を仕込む窓を開ける。"""
         app = getattr(self, "app", None) or ui.find_app()
         state["survived"] = False
-        state["removed_player"] = None
         state["fallen"].clear()
         try:
             guard_lawfulness(app)
@@ -623,54 +606,21 @@ def apply(ctx):
             raise
 
     # ------------------------------------------------------------ 倒れたとき
-    def fallen(app):
-        """闘技場の試合でプレイヤーが倒れているか。"""
-        if not getattr(app, "in_colosseum_battle", False):
-            return False
-        hp = getattr(getattr(app, "player", None), "current_hp", None)
-        return (not isinstance(hp, bool) and isinstance(hp, (int, float)) and hp <= 0)
+    # 死なせずに逃走と同じ終わり方で切り上げるのはローダの窓口 `defeat`（TECH.md §3.3.11）。
+    # 逃げた扱いなので `current_phase` は進まず、懸賞金も出ない。
+    # 次に申し込むと同じ格の相手が作り直される（素のゲームで撤退したときと同じ）。
+    defeat.install(ctx)
 
-    def surrender(app):
-        """負けを認めて試合を切り上げる。起こせたら `True`。
-
-        ゲームが逃げたときに通るのと**同じマネージャを同じ引数で**起こす。
-        実機の並びは `check_battle_end` → `BattleEndManager(app, 'escaped')` →
-        2ミリ秒後に `execute("")` → `end_phase`（`233_probe_colosseum` のログ）。
-        勝ったときの `end_type` は `'won'` で、こちらは使わない。
-
-        逃げた扱いなので `current_phase` は進まず、懸賞金も出ない。
-        次に申し込むと同じ格の相手が作り直される（素のゲームで撤退したときと同じ）。
-        """
-        cls = ui.cls_of(END_MANAGER_CLS)
-        if cls is None:
-            write("WARN surrender: {} が見つからない".format(END_MANAGER_CLS))
-            return False
-        try:
-            manager = cls(app, ESCAPED_END_TYPE)
-        except Exception:
-            ctx.log_exc("colosseum: cannot build the battle end manager")
-            return False
-        # 落ちても何をしようとしていたかが残るよう、起こす前に書く。
+    def spare(app):
+        """闘技場の試合で倒れたら引き受ける（1試合に1度）。"""
+        if not SURVIVE_DEFEAT or state["survived"] \
+                or not getattr(app, "in_colosseum_battle", False):
+            return None
+        state["survived"] = True
         write("surrender: ending the match as an escape")
-        state["surrendered_at"] = time.monotonic()
-        try:
-            prepare_escape(app)
-        except Exception:
-            ctx.log_exc("colosseum: cannot prepare the escape")
-        state["surrendering"] = True
-        try:
-            manager.execute("")
-        except Exception:
-            ctx.log_exc("colosseum: the escape ending failed")
-            state["surrendering"] = False
-            return False
-        state["surrendering"] = False
-        try:
-            ensure_player_back(app)
-        except Exception:
-            ctx.log_exc("colosseum: cannot put the player back in the party")
-        restore_lawfulness(app, "surrendered")
-        return True
+        return {"text": DEFEAT_TEXT, "then": lambda app: restore_lawfulness(app, "surrendered")}
+
+    defeat.declare(OWNER, ctx, spare)
 
     # ---------------------------------------------- 負けて手配されないように
     def guard_lawfulness(app):
@@ -701,9 +651,9 @@ def apply(ctx):
         guard = state.get("lawful_guard")
         if guard is None:
             return
-        if state.get("surrendering") and SURVIVE_DEFEAT:
+        if defeat.surrendering() and SURVIVE_DEFEAT:
             guard["armed"], guard["why"] = True, "losing the match"
-        elif NO_WANTED_ON_ESCAPE and not state.get("surrendering"):
+        elif NO_WANTED_ON_ESCAPE and not defeat.surrendering():
             guard["armed"], guard["why"] = True, "fleeing the match"
         else:
             state["lawful_guard"] = None        # この終わり方では戻さない
@@ -742,63 +692,11 @@ def apply(ctx):
             restore_lawfulness(self, "screen settled")
         return result
 
-    def prepare_escape(app):
-        """ゲーム自身の逃走と同じ状態にしてから終わり方を起こす（`233_` 版3 の実機の比較）。
-
-        ゲームが逃げたとき:
-          判定の中で敵の一覧を空にする（1 → 0）。
-          逃げた者は `app.party` から外して `escaped_member_in_battle` に預け、
-          終わり方の実行の中でゲームが `app.party` へ戻す（party 0 → 1、預かり 1 → 0）。
-        倒れたとき（こちらが切り上げる前）:
-          ゲームが主人公を `app.party` から外すだけで、どこにも預けない。
-          そのまま終わり方を起こすと、主人公が一覧に戻らず画面から消え、
-          敵も一覧に残って 331 の闘技場の出口が足されなかった（実機）。
-        なので外された主人公を預かりに入れ、敵の一覧を空にする（仕組みは GAME.md §2.10）。
-        """
-        enemies = getattr(app, "current_enemy_dict", None)
-        if isinstance(enemies, dict) and enemies:
-            names = list(enemies)
-            enemies.clear()
-            write("surrender: cleared {} enem{} like the game's own escape ({})".format(
-                len(names), "y" if len(names) == 1 else "ies", ", ".join(names)))
-        party = getattr(app, "party", None)
-        removed = state.get("removed_player")
-        if isinstance(party, dict) and PLAYER_KEY in party:
-            return                          # まだ一覧に居る（外されていない）
-        if removed is None:
-            write("WARN surrender: the player left the party but nothing was kept to bring back")
-            return
-        escaped = getattr(app, "escaped_member_in_battle", None)
-        if isinstance(escaped, dict):
-            escaped[PLAYER_KEY] = removed
-            write("surrender: handed the player to escaped_member_in_battle "
-                  "for the game to bring back ({})".format(type(removed).__name__))
-        else:
-            write("WARN surrender: escaped_member_in_battle is {} -- will put the player "
-                  "back by hand".format(type(escaped).__name__))
-
-    def ensure_player_back(app):
-        """ゲームが主人公を一覧へ戻さなかったときだけ、控えた値で戻す。"""
-        party = getattr(app, "party", None)
-        removed = state.pop("removed_player", None)
-        if not isinstance(party, dict) or PLAYER_KEY in party:
-            if isinstance(party, dict):
-                write("surrender: the player is back in the party")
-            return
-        if removed is None:
-            write("WARN surrender: the player is not in the party and cannot be put back")
-            return
-        party[PLAYER_KEY] = removed
-        escaped = getattr(app, "escaped_member_in_battle", None)
-        if isinstance(escaped, dict):
-            escaped.pop(PLAYER_KEY, None)
-        write("WARN surrender: the game did not bring the player back; put back by hand")
-
     @ctx.wrap("__main__:InstantaleApp.remove_party_member", required=False, safe=True)
     def remove_party_member(orig, self, member_id=None, *args, **kwargs):
-        """闘技場の試合で一覧から外される者の値を控える（試合の終わりに戻すため）。
+        """闘技場の試合で一覧から外される仲間の値を控える（試合の終わりに戻すため）。
 
-        主人公は切り上げで、仲間は試合の終わり方の前後で戻す。
+        主人公はローダの `defeat` が控えて切り上げで戻す。仲間は試合の終わり方の前後で戻す。
         仲間は倒れると一覧から外されたままで、一覧に居る仲間はもともと居場所を持たないので、
         世界のどこにも居なくなった（実機。素のゲームでも同じ。GAME.md §2.10）。
         外される前の居場所も控えるが、普段は空で使われない。
@@ -807,15 +705,13 @@ def apply(ctx):
         try:
             if SURVIVE_DEFEAT and getattr(self, "in_colosseum_battle", False):
                 party = getattr(self, "party", None)
-                if isinstance(party, dict) and member_id in party:
+                if isinstance(party, dict) and member_id in party \
+                        and member_id != PLAYER_KEY:
                     value = party[member_id]
-                    if member_id == PLAYER_KEY:
-                        state["removed_player"] = value
-                    else:
-                        state["fallen"][member_id] = {
-                            "value": value,
-                            "places": dict((name, getattr(value, name, None))
-                                           for name in MEMBER_PLACE_ATTRS)}
+                    state["fallen"][member_id] = {
+                        "value": value,
+                        "places": dict((name, getattr(value, name, None))
+                                       for name in MEMBER_PLACE_ATTRS)}
         except Exception:
             ctx.log_exc("colosseum: cannot keep a member leaving the party")
         return orig(self, member_id, *args, **kwargs)
@@ -885,80 +781,6 @@ def apply(ctx):
                 except Exception:
                     ctx.log_exc("colosseum: cannot bring the fallen members back")
                 restore_lawfulness(app, "escaped")
-
-    @ctx.wrap("__main__:BattlePhaseManager.check_battle_end", required=False, safe=True)
-    def check_battle_end(orig, self, *args, **kwargs):
-        """闘技場で倒れたら、死なずに「負けて退いた」で試合を終える。
-
-        ゲームオーバーはこの関数の中から作られる（`instantale.py:7791`。実機の呼び出し元）。
-        体力を戻すのは**その判定より前**でないと間に合わないので、ここで先回りする。
-
-        体力を戻しただけでは試合が続いてしまう（次の一撃で結局倒れる）ので、
-        続けて逃走と同じ終わり方を起こす。起こせたらゲームの判定は通さない
-        （試合はもう終わっている）。起こせなかったときは素の判定へ落とし、
-        少なくとも**その一撃では死なない**状態にしておく。
-        """
-        if getattr(self, SURRENDERED_MARK, False):
-            return True                     # こちらが終わらせた戦闘。もう判定しない
-        try:
-            if SURVIVE_DEFEAT and not state["survived"]:
-                app = getattr(self, "app", None) or ui.find_app()
-                if fallen(app):
-                    player = getattr(app, "player", None)
-                    hp = getattr(player, "current_hp", None)
-                    player.current_hp = SURVIVE_HP
-                    state["survived"] = True
-                    screen.say(app, DEFEAT_TEXT)
-                    if surrender(app):
-                        setattr(self, SURRENDERED_MARK, True)
-                        write("surrender: hp {} -> {}; ended the match as an escape"
-                              .format(hp, SURVIVE_HP))
-                        return True
-                    write("WARN surrender: hp {} -> {} but the match goes on"
-                          .format(hp, SURVIVE_HP))
-        except Exception:
-            ctx.log_exc("colosseum: cannot end the match as a loss")
-        return orig(self, *args, **kwargs)
-
-    def install_after_surrender(name):
-        @ctx.wrap("__main__:BattlePhaseManager.{}".format(name), required=False)
-        def after_surrender(orig, self, *args, **kwargs):
-            """こちらが切り上げた戦闘の、残りの手を飛ばす。
-
-            切り上げた後もゲームの戦闘の繰り返しが止まらず、敵の次の手を処理しようとして、
-            一覧から消えた敵を引いて `KeyError`（`resolve_opponents`、`instantale.py:7266`）で
-            ワーカースレッドが死んだ（実機）。`check_battle_end` が `True` を返せば止まるのかは
-            確かめていないので、止まらなかったときの受けとしてここで止める。
-            触るのは切り上げた `BattlePhaseManager` だけ（印は実体に付ける）。
-            """
-            if getattr(self, SURRENDERED_MARK, False):
-                write("surrender: skipped {} after the match ended".format(name))
-                return None
-            return orig(self, *args, **kwargs)
-
-    for _name in AFTER_SURRENDER_STEPS:
-        install_after_surrender(_name)
-
-    @ctx.wrap(ENEMY_DISPLAY_TARGET, required=False)
-    def enemy_display(orig, *args, **kwargs):
-        """切り上げた直後の敵の欄の更新で起きる 0 除算だけを握る。
-
-        こちらは敵の手番の途中で試合を終わらせる（体力が尽きるのは敵の一撃）。
-        その一撃の演出が予約した敵の欄の更新が、戦闘の欄が畳まれた（大きさ 0）後に走り、
-        `new_hud.py:2306` の `ZeroDivisionError` で落ちた（実機。終わってから約 1 秒後）。
-        ゲーム自身の「逃げる」は自分の手番なので、この予約が残らない。
-        戦闘はもう終わっていて敵の欄は要らないので、描かないのが正しい。
-        切り上げてから `SURRENDER_GUARD_SECONDS` 秒の間の、この例外だけを握る。
-        """
-        try:
-            return orig(*args, **kwargs)
-        except ZeroDivisionError:
-            since = state.get("surrendered_at")
-            if since is None or time.monotonic() - since > SURRENDER_GUARD_SECONDS:
-                raise
-            write("surrender: skipped an enemy panel update after the match ended "
-                  "(ZeroDivisionError)")
-            return None
 
     # -------------------------------------------------------------- 懸賞金
     @ctx.wrap("__main__:InstantaleApp.add_text", required=False, safe=True)

@@ -37,6 +37,8 @@ STATE_DIR = os.path.join(OUT_DIR, "state")
 if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
+from instantale_modloader import guards  # noqa: E402
+
 TARGETS = (
     "scripts.llm.llm_manager:guard_npc_generator",
     "__main__:InstantaleApp.generate_enemy_instance_from_quest_dict",
@@ -250,8 +252,15 @@ class FakeCtx(object):
         self.errors.append(msg)
 
     def wrap(self, target, **kw):
+        """同じ対象を2度包んだら、後の包みを外側に重ねる（ローダの窓口 `guards` も同じ対象を包む）。"""
         def decorator(func):
-            self.hooks[target] = func
+            inner = self.hooks.get(target)
+            if inner is None:
+                self.hooks[target] = func
+            else:
+                def layered(orig, *args, **kwargs):
+                    return func(lambda *a, **k: inner(orig, *a, **k), *args, **kwargs)
+                self.hooks[target] = layered
             return func
         return decorator
 
@@ -277,6 +286,9 @@ def fresh_mod(app, screen_cls=FakeScreen, **settings):
     BattleStartManager.last = None
     module = load_mod()
     module.ui = FakeUI(app, screen_cls)
+    # 衛兵の戦闘を組むのと強さの差し替えはローダの窓口 `guards`。偽の画面を同じに見せ、包みは当て直す。
+    guards.reset()
+    guards.ui = module.ui
     module._RNG = types.SimpleNamespace(random=lambda: 0.0)   # 抽選は必ず当たる
     for name, value in settings.items():
         setattr(module, name, value)

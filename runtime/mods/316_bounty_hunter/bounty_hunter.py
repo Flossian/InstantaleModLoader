@@ -17,6 +17,7 @@
 
 強さも同じで、`create_guard_enemies` の中から呼ばれる2箇所に届く**難易度の数1つ**を
 差し替えるだけ。式は発明しない（レベルも能力値もゲームがそこから決める）。
+組むのと差し替えはローダの窓口 `guards`（TECH.md §3.3.10。脱獄の決行を起こす `913_` と共有）。
 
 ##### 契機は「決める」だけ。起こすのは画面が整った合図の中
 
@@ -48,7 +49,7 @@
 ##### 作り替えるのは自分の戦闘の中だけ
 
 難易度の差し替えも改名も、**自分が組んだマネージャの `start_battle` の中**でしか開かない
-（`memo["phase"]` と同一のインスタンスか）。
+（改名は `memo["phase"]` と同一のインスタンスか、難易度は `guards` が組んだマネージャに付けた印で見る）。
 以前は時間で開けていて、その窓の中でゲームが出した衛兵まで強くして改名していた。
 
 改名は敵が揃った直後（最初の1手より前）。
@@ -91,7 +92,7 @@
 
 import random
 
-from instantale_modloader import ui, wanted
+from instantale_modloader import guards, ui, wanted
 from instantale_modloader.state import WorldStore, world_key
 
 from . import hunt
@@ -270,8 +271,7 @@ def apply(ctx):
     memo = {"world": None, "days": 0.0, "last": None,
             # 追手の1回ぶん。`phase` は自分が組んだマネージャそのもので、
             # ゲーム自身の衛兵と取り違えないための唯一の手がかり。
-            "phase": None, "armed": None, "arm_signals": 0,
-            "building": False, "inside": None,
+            "phase": None, "arm_signals": 0, "building": False,
             "protect": None,
             # 出した追手1回ぶんの中身（難易度と重さ）。戦闘が始まったら `hunting` へ移す。
             "hunt_plan": None,
@@ -306,10 +306,13 @@ def apply(ctx):
                         {"days": memo["days"], "last": memo["last"]})
 
     # ------------------------------------------------------ 難易度の差し替え
+    # 差し替えはローダの `guards`（組んだマネージャの `start_battle` の中だけ開く）。
+    guards.install(ctx)
+
     def arm(phase, difficulty):
         """この追手1回ぶんを開く。**目印は組んだマネージャそのもの**。"""
         memo["phase"] = phase
-        memo["armed"] = difficulty
+        guards.arm(phase, difficulty)
         memo["arm_signals"] = 0
 
     def in_flight():
@@ -328,19 +331,10 @@ def apply(ctx):
             return False
         return True
 
-    def armed():
-        """今この瞬間、差し替えてよい難易度。`None` なら触らない。
-
-        **開くのは自分が組んだマネージャの `start_battle` の中だけ**（`memo["inside"]`）。
-        時間で開けておくと、その間にゲーム自身が出した衛兵まで
-        強くして名前まで変えてしまう。
-        """
-        return memo["inside"]
-
     def disarm():
+        if memo["phase"] is not None:
+            guards.arm(memo["phase"], None)
         memo["phase"] = None
-        memo["armed"] = None
-        memo["inside"] = None
         memo["hunt_plan"] = None
 
     # -------------------------------------------------- 倒したぶんを戻す
@@ -497,20 +491,15 @@ def apply(ctx):
         if reason:
             # まだ場面の中。控えは残すので、次に画面が整ったときに出る。
             return
-        manager = ui.cls_of("BattleStartManager")
-        if manager is None:
-            memo["due"] = None
-            write("BattleStartManager が見つからない。追手は出せない")
-            return
         memo["due"] = None
         memo["building"] = True
         try:
-            phase = manager(app, GUARD_ENEMY_TYPE, None)
-        except Exception:
-            ctx.log_exc("bounty hunter: BattleStartManager を組めなかった")
-            return
+            phase = guards.build(app)
         finally:
             memo["building"] = False
+        if phase is None:
+            write("BattleStartManager を組めなかった。追手は出せない")
+            return
         arm(phase, due["difficulty"])
         memo["hunt_plan"] = {"difficulty": due["difficulty"], "here": due["here"],
                              "total": due["total"]}
@@ -527,32 +516,6 @@ def apply(ctx):
         else:
             disarm()
             write("{}: 戦闘を起こせなかった。控えを降ろした".format(due["trigger"]))
-
-    # ------------------------------------------------- 難易度を差し替える2箇所
-    @ctx.wrap("scripts.llm.llm_manager:guard_npc_generator", required=False,
-              safe=True)
-    def guard_npc_generator(orig, area=None, world=None, npc_difficulty_level=None,
-                            *args, **kwargs):
-        """敵の姿と説明。難易度は文章の強さ（プロンプト）に効く。"""
-        difficulty = armed()
-        if difficulty is not None and _is_number(npc_difficulty_level):
-            write("難易度 {} -> {}（姿と説明）".format(npc_difficulty_level, difficulty))
-            npc_difficulty_level = difficulty
-        return orig(area, world, npc_difficulty_level, *args, **kwargs)
-
-    @ctx.wrap("__main__:InstantaleApp.generate_enemy_instance_from_quest_dict",
-              required=False, safe=True)
-    def enemy_instance(orig, self, enemy_dict=None, *args, **kwargs):
-        """敵の実体。難易度からレベルと能力値が決まる。"""
-        difficulty = armed()
-        if difficulty is not None:
-            index = _difficulty_index(args)
-            if index is None:
-                write("難易度の位置が分からない（引数 {}件）。素のまま作らせる".format(
-                    len(args)))
-            else:
-                args = args[:index] + (difficulty,) + args[index + 1:]
-        return orig(self, enemy_dict, *args, **kwargs)
 
     @ctx.wrap("__main__:BattleStartManager.__init__", required=False, safe=True)
     def battle_start_init(orig, self, app=None, enemy_type=None, enemy_content=None,
@@ -588,7 +551,7 @@ def apply(ctx):
 
     @ctx.wrap("__main__:BattleStartManager.start_battle", required=False, safe=True)
     def start_battle(orig, self, *args, **kwargs):
-        """敵が揃ったら名前を付け替える。**難易度を開くのはこの中だけ**。
+        """敵が揃ったら名前を付け替える（難易度は、この中で `guards` が差し替える）。
 
         ここが最初の1手より前の唯一の足場で、
         `create_guard_enemies` はこの中から呼ばれる（実測）。
@@ -598,12 +561,8 @@ def apply(ctx):
         ours = memo["phase"] is not None and self is memo["phase"]
         if not ours:
             return orig(self, *args, **kwargs)
-        memo["inside"] = memo["armed"]
         memo["hunting"] = memo["hunt_plan"]
-        try:
-            result = orig(self, *args, **kwargs)
-        finally:
-            memo["inside"] = None
+        result = orig(self, *args, **kwargs)
         app = getattr(self, "app", None) or ui.find_app()
         enemies = getattr(app, "current_enemy_dict", None)
         renamed = rename_enemies(enemies, HUNTER_NAME.strip())
@@ -784,17 +743,3 @@ def apply(ctx):
 def _is_number(value):
     """数として読める値か。`bool` は弾く（`True` を1日・難易度1にしない）。"""
     return isinstance(value, (int, float)) and not isinstance(value, bool)
-
-
-def _difficulty_index(args):
-    """残りの引数のうち難易度の位置。
-
-    実測の並びでは難易度だけが数なので、**数が1つだけならそれを採る**
-    （引数が増減しても追随する）。複数あるときだけ実測の位置（5番目）に戻る。
-    """
-    numbers = [index for index, value in enumerate(args) if _is_number(value)]
-    if len(numbers) == 1:
-        return numbers[0]
-    if 4 in numbers:
-        return 4
-    return None

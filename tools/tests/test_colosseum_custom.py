@@ -32,6 +32,7 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml                      # noqa: E402
+from instantale_modloader import defeat                  # noqa: E402
 
 failures = []
 
@@ -126,8 +127,15 @@ class FakeCtx(object):
         self.errors.append(msg)
 
     def wrap(self, target, **kw):
+        """同じ対象を2度包んだら、後の包みを外側に重ねる（ローダの窓口 `defeat` も同じ対象を包む）。"""
         def decorator(func):
-            self.hooks[target] = func
+            inner = self.hooks.get(target)
+            if inner is None:
+                self.hooks[target] = func
+            else:
+                def layered(orig, *args, **kwargs):
+                    return func(lambda *a, **k: inner(orig, *a, **k), *args, **kwargs)
+                self.hooks[target] = layered
             return func
         return decorator
 
@@ -145,12 +153,21 @@ def load_mod():
     return module, manifest
 
 
+#: 窓口 `defeat` の記録（実機では modloader.log へ出る）。
+DEFEAT_LOG = []
+defeat._write = DEFEAT_LOG.append
+
+
 def fresh(app):
     shutil.rmtree(OUT_DIR, ignore_errors=True)
     os.makedirs(OUT_DIR, exist_ok=True)
     module, manifest = load_mod()
     module.ui = FakeUI(app, ml.ui)
     module.llm = FakeLLM()
+    # 倒れた試合の切り上げはローダの窓口 `defeat`。偽の画面を同じに見せ、包みは当て直す。
+    defeat.reset()
+    defeat.ui = module.ui
+    del DEFEAT_LOG[:]
     ctx = FakeCtx(OUT_DIR)
     module.apply(ctx)
     hook = ctx.hooks["__main__:InstantaleApp.add_text"]
@@ -431,6 +448,9 @@ arena.config["enemy_data"] = {}
 
 # ------------------------------------------------------------ 踏みとどまり
 print("倒れたら負けとして試合を切り上げる")
+# 窓口 `defeat` への登録は持ち主ごとに1つで、上の当て直し（`module_next`）が差し替えている。
+# 実機では古い世代は用済みになるので、この節は読み直した MOD で確かめる。
+module, ctx, manifest = fresh(app)
 hook = ctx.hooks["__main__:BattlePhaseManager.check_battle_end"]
 
 
@@ -492,7 +512,7 @@ check("別の戦闘では同じ試合で2度は起こさない（素の判定へ
 
 # 切り上げた後もゲームの戦闘の繰り返しが敵の次の手を処理しようとして、消えた敵で落ちた（実機）。
 fighting = Manager(app)
-for step in module.AFTER_SURRENDER_STEPS:
+for step in defeat.AFTER_SURRENDER_STEPS:
     target = "__main__:BattlePhaseManager." + step
     check("切り上げた戦闘の " + step + " を飛ばす",
           ctx.hooks[target](lambda self, *a: "ran", battle) is None)
@@ -500,7 +520,7 @@ for step in module.AFTER_SURRENDER_STEPS:
           ctx.hooks[target](lambda self, *a: "ran", fighting) == "ran")
 
 # 切り上げた後、敵の一撃の演出が予約した敵の欄の更新が畳まれた欄で 0 除算になる（実機）。
-display = ctx.hooks[module.ENEMY_DISPLAY_TARGET]
+display = ctx.hooks[defeat.ENEMY_DISPLAY_TARGET]
 
 
 def collapsed_panel(self, *args):
@@ -509,17 +529,16 @@ def collapsed_panel(self, *args):
 
 check("切り上げた直後の敵の欄の 0 除算は握る",
       display(collapsed_panel, object()) is None)
-check("握ったことが残る", any("skipped an enemy panel update" in line for line in io.open(
-    os.path.join(OUT_DIR, module.LOG_BASENAME), encoding="utf-8")))
+check("握ったことが残る", any("skipped an enemy panel update" in line for line in DEFEAT_LOG))
 check("普段の敵の欄の更新は素通し", display(lambda self: "drawn", object()) == "drawn")
-module.SURRENDER_GUARD_SECONDS = -1
+defeat.SURRENDER_GUARD_SECONDS = -1
 try:
     display(collapsed_panel, object())
     raised = False
 except ZeroDivisionError:
     raised = True
 check("切り上げから時間が経っていれば握らない（よその不具合を隠さない）", raised)
-module.SURRENDER_GUARD_SECONDS = 10
+defeat.SURRENDER_GUARD_SECONDS = 10
 
 print("ゲーム自身の逃走と同じ状態にしてから切り上げる")
 
@@ -563,7 +582,7 @@ check("主人公がゲームの手で一覧に戻る", app.party.get("player") i
 check("預かりは空に戻る", app.escaped_member_in_battle == {}, app.escaped_member_in_battle)
 check("敵の一覧を空にする（出口を足す側が忙しいと見ない）", app.current_enemy_dict == {},
       app.current_enemy_dict)
-lines = io.open(os.path.join(OUT_DIR, module.LOG_BASENAME), encoding="utf-8").read()
+lines = "\n".join(DEFEAT_LOG)
 check("預けたことと戻ったことが残る",
       "handed the player to escaped_member_in_battle" in lines
       and "the player is back in the party" in lines, lines[-600:])
@@ -571,8 +590,7 @@ check("預けたことと戻ったことが残る",
 battle = fall_in_arena(ForgetfulEnd)
 hook(lambda self: "checked", battle)
 check("ゲームが戻さなければ控えた値で戻す", app.party.get("player") is app.player, app.party)
-check("手で戻したことは WARN で残る", "put back by hand" in io.open(
-    os.path.join(OUT_DIR, module.LOG_BASENAME), encoding="utf-8").read())
+check("手で戻したことは WARN で残る", any("put back by hand" in line for line in DEFEAT_LOG))
 
 print("倒れた仲間も連れて戻る")
 
@@ -749,8 +767,7 @@ result = hook(lambda self: "checked", Manager(app))
 check("素の判定へ落とす", result == "checked", result)
 check("それでもその一撃では死なない", app.player.current_hp == 1, app.player.current_hp)
 check("WARN を残す",
-      any("the match goes on" in line for line in io.open(
-          os.path.join(OUT_DIR, module.LOG_BASENAME), encoding="utf-8")))
+      any("the battle goes on" in line for line in DEFEAT_LOG))
 module.ui.classes = {"BattleEndManager": FakeEnd}
 
 print("触らない場面")
