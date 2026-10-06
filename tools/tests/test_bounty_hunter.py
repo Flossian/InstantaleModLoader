@@ -51,6 +51,9 @@ TARGETS = (
     "__main__:InstantaleApp.refresh_choice_buttons",
     "scripts.llm.llm_manager:master_ai_facilitator",
     "__main__:ImprisonmentEndManager.execute",
+    # ローダの窓口 `choices`（組み直しの後の合図を預けた）が、押下と保存も包む。
+    "__main__:InstantaleApp.on_button_press",
+    "__main__:InstantaleApp.save_game",
 )
 
 LOG_NAME = "bounty_hunter_send.log"
@@ -191,6 +194,10 @@ class FakeUI(object):
         self.set_lawfulness = real.set_lawfulness
         self.spec_cls_name = real.spec_cls_name
         self.game_day = real.game_day
+        self.gold_of = real.gold_of
+        self.add_gold = real.add_gold
+        self.money = real.money
+        self.rewrite_coins = real.rewrite_coins
 
     def scheduler(self, ctx, tag="mod"):
         """本物と同じく「次のフレーム」。ゲームの外ではその場で実行する。"""
@@ -409,6 +416,9 @@ def main():
     check("日数が足りなければ出さない", not hunt.ready(5, 0, 10))
     check("ちょうど空けば出す", hunt.ready(10, 0, 10))
     check("クールダウン 0 なら毎回", hunt.ready(0, 0, 0))
+    check("前金は依頼1件の報酬 × 割合", hunt.purse(4500, 30) == 1350 and hunt.purse(1001, 50) == 500)
+    check("報酬が引けない・割合が 0 なら前金は 0",
+          hunt.purse(None, 30) == 0 and hunt.purse(4500, 0) == 0 and hunt.purse(True, 30) == 0)
 
     print("出す")
     app = App({"0": -22, "1": 10, "2": -18})
@@ -852,6 +862,42 @@ def main():
     start_of(ctx, app, BattleStartManager.last)
     end(app, "escaped")
     check("逃げた回も勝敗つきで知らせる", [h["outcome"] for h in heard] == ["escaped"], heard)
+
+    print("追手に勝つと前金")
+    functions = types.ModuleType("scripts.functions")
+    functions.get_quest_reward = lambda difficulty: difficulty * 100
+    saved_functions = sys.modules.get("scripts.functions")
+    sys.modules["scripts.functions"] = functions
+
+    def hunt_once(end_type, **settings):
+        app_ = App({"0": -25})
+        app_.player.gold = 1000
+        module_, ctx_ = fresh_mod(app_, CHANCE_PERCENT=100, **settings)
+        arrive(ctx_, app_)
+        start_of(ctx_, app_, BattleStartManager.last)
+        ctx_.hooks["__main__:BattleEndManager.end_phase"](
+            counting(None)[0], types.SimpleNamespace(app=app_, end_type=end_type))
+        return app_
+
+    won = hunt_once("won")
+    check("勝てば難易度での依頼1件の報酬 × 30% が入る（難易度45 → 4500 × 30%）",
+          won.player.gold == 1000 + 1350, won.player.gold)
+    check("本文に前金の1行", any("1,350" in text for text in won.said), won.said)
+    check("逃げた回は入らない", hunt_once("escaped").player.gold == 1000)
+    check("切ってあれば入らない", hunt_once("won", BOUNTY_ENABLED=False).player.gold == 1000)
+    check("割合を変えられる", hunt_once("won", BOUNTY_PURSE_PCT=10).player.gold == 1450)
+    guard_app = App({"0": -25})
+    guard_app.player.gold = 1000
+    _module, guard_ctx = fresh_mod(guard_app, CHANCE_PERCENT=100)
+    game_guard(guard_ctx, guard_app)
+    start_of(guard_ctx, guard_app, types.SimpleNamespace(app=guard_app))
+    guard_ctx.hooks["__main__:BattleEndManager.end_phase"](
+        counting(None)[0], types.SimpleNamespace(app=guard_app, end_type="won"))
+    check("ゲーム自身の衛兵に勝っても入らない", guard_app.player.gold == 1000, guard_app.player.gold)
+    if saved_functions is None:
+        sys.modules.pop("scripts.functions", None)
+    else:
+        sys.modules["scripts.functions"] = saved_functions
 
     del heard[:]
     app = App({"0": -25})

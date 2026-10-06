@@ -251,7 +251,8 @@ app.refresh_choice_buttons(reset_page=True)
 （注入はプロセスと一緒に消えるので、これは必ず起きる）。
 
 自前ボタンの作り方は、無害な既存クラス（`JustSetButtonToNormalPhase`）を spec に持たせ、
-押下は `InstantaleApp.on_button_press` を包んでボタン辞書の独自キーで横取りする。
+押下は `InstantaleApp.on_button_press` を包んでボタン辞書の独自キーで横取りする
+（MOD は自分で包まず、ローダの窓口 `choices` に預ける。TECH.md §3.3.14）。
 **文字列ではなく印で見る**のは、同じ文字列のゲーム側ボタンを巻き込まないため。
 
 自前で組む `PhaseSpec` は、引数の値まで実測で確かめたものに限る。
@@ -266,7 +267,8 @@ app.refresh_choice_buttons(reset_page=True)
 しかも復元された方は spec が `JustSetButtonToNormalPhase` なので押しても無反応
 ＝ 見た目は同じなのに片方だけ効かないという、最も分かりにくい壊れ方になる。
 
-差し込む前に `ui.Screen.prune_stale(buttons, ラベル一覧)` を通す。
+ローダの窓口 `choices` は、保存の直前に印の付いたボタンを控え、ロードの後に同じ画面のボタンへ印を付け直す（TECH.md §3.3.14）。
+付け直せなかったとき（窓口の控えが無い・画面が違う）の備えとして、差し込む前に `ui.Screen.prune_stale(buttons, ラベル一覧)` を通す。
 「自分のラベル（前方一致）」かつ「どの MOD の印も無い」かつ「無害 spec」の
 3つが揃ったものだけを落とす。
 
@@ -309,6 +311,11 @@ app.refresh_choice_buttons(reset_page=True)
 `game_variables["buttons"]` に焼かれている選択肢をそのまま戻すだけなので、
 保存の瞬間に選択肢が空だった画面はロードしても空のままで、そこから動けない。
 立ち位置を書き換える MOD は、その場所の選択肢も一緒に置く（TECH.md §5.8）。
+
+ロードの途中にも組み直し（`refresh_choice_buttons`）は走るが、その時点では人物（`world.characters`）がまだ 0 人で、
+名簿もまだ空（2026-10-06、裏の事務所と死刑の判決の画面で保存したセーブで実測）。主人公の持ち物と依頼の一覧（`world.quests`）は揃っている。
+人物や同行者を見て出すボタンは、この組み直しでは出ない。揃った後に組み直すのはローダの窓口 `choices`（TECH.md §3.3.14）。
+MOD のボタンを押しても、ゲームは保存しない（押下の処理を横取りしているため）。
 
 仲間欄も同じ構図で、`app.party` を書き換えただけでは変わらない。
 塗るのは `InstantaleApp.update_party_member(dt)` と `InstanTaleHUD.update_party_display(*args)` の
@@ -473,6 +480,7 @@ Clock で見張り、手が空いてから実行する（`ui.Screen.when_idle`�
 戦闘・会話中かを見るフラグは6つ。
 `in_battle` / `in_boss_battle` / `in_colosseum_battle` /
 `in_conversation` / `in_free_input` / `in_action_in_conversation`。
+誰が立てて誰が下ろすかは、この節の末尾の「旗を誰が立てて誰が下ろすか」。
 
 **いま見えている背景も焼かれる**（`game_variables["location_image"]` に絵のフルパス。実セーブで確認）。
 `location_image` は画面の背景そのもので、ゲームの背景替え（`change_background_image_*`）はこれを書き、後から `update_ui` が HUD の `update_image_source` で塗る（`234_probe_busy_display` 版2 の実機。呼び出しから塗りまで約2秒）。保存のあいだだけ書き換えて戻すと、そのたびに背景が切り替わって見える（`330_` の滞在で実機）。
@@ -499,6 +507,26 @@ Clock で見張り、手が空いてから実行する（`ui.Screen.when_idle`�
 > `in_shopping` は店の外を往復しているだけの移動でも True のまま残る
 > （買い物窓が開いているかは `is_popup_window_opened` で見る）。
 > `in_battle` も経路によって下ろし忘れがある（§2.10）。
+
+#### 旗を誰が立てて誰が下ろすか
+
+`239_probe_game_flags` の実機（2026-10-06。店・会話・自由入力・移動・ロード・闘技場の勝ちと撤退・自由入力と会話からの戦闘・雇う。VERIFICATION_LOG.md §2.89）。
+旗はどれも `app` のインスタンス属性で（Kivy のプロパティではない）、7つともセーブの `game_variables` に焼かれ、ロードで `load_game_new` が書き戻す。
+
+| 旗 | 立てる | 下ろす | ゲームが条件に読む |
+|---|---|---|---|
+| `in_shopping` | 「売買する」（`ShoppingStartManagerRemake.shopping_start_method_1`。旗を False にしてから押すと False → True） | **どこも下ろさない**。窓を閉じる処理（窓の外側を押す → `close_shopping_window_process`）・店を出る・移動のどれも書き込まない（False から測った）。窓に閉じるボタンは無い。False なのは、その世界でまだ一度も売買の窓を開いていない間だけ | 読まない（読むのは `save_game` が焼くときだけ） |
+| `in_conversation` | 会話の開始（`ConversationStartManager.conversation_start_method_1`。相手の id） | 会話の終わり（`ConversationEndManager.finish_conversation`）。会話から戦闘に入ると、戦闘の後にゲームが自分で会話を終える。「雇う」の後は会話が続く | 会話の開始と終わり・自由入力の開始・売買の窓を閉じる処理・ロード・`update_ui` |
+| `in_action_in_conversation` | 会話の上の欄の「行動」（`toggle_to_action_in_conversation`）。この版ではその欄が大きさ 0 で画面に出ない | 会話の終わり（`finish_conversation` が毎回 False を書く） | 読まない |
+| `in_free_input` | 自由入力の開始（`FreeInputStart.method`） | 同じ処理の終わり（`FreeInputStart.end_process`。会話の中なら `end_process_in_conversation`）。自由行動から戦闘に入ると、戦闘の間は立ったままで、戦闘の後の続きが終わるときに下りる | 読まない |
+| `in_battle` | 戦闘の開始（`BattleStartManager.start_battle`。値は 'normal' のような種類） | 闘技場の勝ち（`BattleEndInColosseum`）・撤退（`BattleEndManager`）・自由行動の戦闘（`BattleEndInFreeAction`）のどれでもゲームが下ろす | ロードの曲の選び分けと `update_ui` |
+| `in_colosseum_battle` | 試合の開始（`ColosseumMatchStart.method`） | 勝ちはゲーム（`BattleEndInColosseum`）。**撤退では残る**（§2.10。`107_` が下ろす） | 戦闘の終わり方の選び分け（`BattlePhaseManager.check_battle_end`） |
+| `in_boss_battle` | 測っていない（§2.10） | 測っていない | 戦闘の外では読まない |
+
+ゲームが `in_shopping` を条件に使っていないので、立ちっぱなしでもゲームの動きは変わらない。
+変わるのはこれを読む MOD だけで、ローダは `ui.BUSY_FLAGS` に入れず、MOD が読むと `tools/check_mods.py` が落とす（TECH.md §2.3）。
+旗そのものは `107_fix_battle_flag_stuck` 版6が、窓を閉じた後・ロードの後・注入の時点で下ろす。
+ボス戦と、逮捕で会話や自由入力が終わる経路は測っていない（VERIFICATION.md §3.86）。
 
 ### 2.7 世界のデータ構造
 
@@ -873,6 +901,7 @@ MOD 側でも「戦闘中は出さない」条件に使われるので、残骸�
 （`331_` の闘技場での試合。`322_` のログで2秒差）。
 **ただし戻るのは勝ったときだけで、撤退すると立ったまま残る**（`233_probe_colosseum` の実機。
 撤退は `BattleEndManager(end_type='escaped')` を通り、そこでは誰も下ろさない）。
+2026-10-06 の版でも同じだった（`239_` の実機。撤退で `in_battle` だけが下り、`in_colosseum_battle` は `107_` が下ろした。VERIFICATION_LOG.md §2.89）。
 `BattleEndManager(app, end_type)` の `end_type` で観測できている値は
 `'won'`（通常の戦闘・ボス戦に勝ったとき）と `'escaped'`（逃げたとき）の2つ。
 どちらも呼び出し元は `BattlePhaseManager.check_battle_end`。
@@ -3420,7 +3449,15 @@ Epic 版の `instantale.exe` の隣に `saves` も `worlds` も無かった。
 `image_src` は**書いた機械の絶対パス**で入っている。
 別の機械で作られた世界を持ってくると、他人のユーザー名を指したまま存在しない
 （ある世界では 95人中 93人が `C:\Users\<ユーザー名>\...` だった）。
-`worlds` から後ろだけを残して手元のデータの場所へ繋ぎ直せば当たる。
+`worlds` から後ろだけを残して手元のデータの場所へ繋ぎ直せば当たる（`323_` の `carryover.local_path`）。
+
+ゲーム自身も、その人物に話しかけたとき（会話の始まり）に経路を手元の場所へ繋ぎ直し、それを保存する。
+読み込みのときにまとめて直すことはしない（2026-10-06。別の機械で作られた世界で2回。向こうの経路のままの人物に話しかけると、会話の画面が出た時点で手元の経路になっていた。画像は作り直していない。世界の 98 人のうち手元の経路は 11 人で、ほかは向こうのユーザーフォルダのままだった。11 人がみな会話した人物かは数えていない）。
+仲間に入るのは会話の中（「雇いたい」）なので、素のゲームの仲間は加わる前に必ず直っている。
+向こうの経路のまま仲間に居るのは、会話を経ずに名簿へ入れた人物だけで、同梱の MOD にその経路は無い
+（`add_party_member` を呼ぶのは `336_` の同房の囚人だけで、こちらで新しく作る人物なので経路は最初から手元のもの）。
+台本で名簿へ入れて試したときに、ゲーム自身のパーティー欄の顔が白い枠になり、`404_` の立ち絵が場面を覆う白い板になった（VERIFICATION_LOG.md §2.90）。
+発生が限られるので、`404_` は手当てしていない（2026-10-06 の判断）。
 
 `face_image.png` の大きさは揃っていない。
 実データ194件のうち 144件が 165×165、**40件は 32×64**、残り10件はまちまち。

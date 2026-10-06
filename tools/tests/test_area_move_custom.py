@@ -840,6 +840,48 @@ check("行き先が無ければ補正なし",
       durations.area_move(app)["walk_days"] == 90, durations.area_move(app))
 check("エラーなし", not ctx.errors, ctx.errors)
 
+# ================================================================ ロード
+print("[ロード] 保存された確認画面の文言を今の設定で付け直す")
+
+
+def restored(module_ctx_app, texts):
+    """ロードで戻った確認画面。文言はセーブに残ったまま、`update_button_display` は走らない。"""
+    _module, ctx_, app_ = module_ctx_app
+    refresh = ctx_.hooks.get("__main__:InstantaleApp.refresh_choice_buttons")
+    app_.buttons = [
+        {"text": texts[0], "spec": PhaseSpec("AreaMoveManager", ["9", WALK_MODE])},
+        {"text": texts[1], "spec": PhaseSpec("AreaMoveManager", ["9", CARRIAGE_MODE])},
+        {"text": "やめる", "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}]
+    refresh(BASES["app"].refresh_choice_buttons, app_, reset_page=True)
+    CLOCK.settle()
+    return texts_of(app_)
+
+
+module, ctx, app, confirm_cls, move_cls = setup()
+check("組み直しを窓口に預けている",
+      ctx.hooks.get("__main__:InstantaleApp.refresh_choice_buttons") is not None, sorted(ctx.hooks))
+check("前の設定で保存した文言は、素のままの設定に戻る",
+      restored((module, ctx, app), ["徒歩(30日)", "馬車(50G・7日)"])[:2] == [WALK_TEXT, CARRIAGE_SHOWN],
+      texts_of(app))
+module, ctx, app, confirm_cls, move_cls = setup(configure=full)
+check("設定を変えた後に素の頃のセーブを読むと、変えた文言になる",
+      restored((module, ctx, app), [WALK_TEXT, CARRIAGE_SHOWN])[:2] == ["徒歩(30日)", "竜車(500G・7日)"],
+      texts_of(app))
+check("同じ設定のまま組み直しても変わらない",
+      restored((module, ctx, app), ["徒歩(30日)", "竜車(500G・7日)"])[:2] == ["徒歩(30日)", "竜車(500G・7日)"],
+      texts_of(app))
+gold = app.player.gold
+press(app, "竜車(500G・7日)")
+check("付け直した文言の運賃で引かれる", app.player.gold == gold - 500, (gold, app.player.gold))
+module2, ctx2, app2, _c, _m = setup()
+check("ゲームの書式の文言からは素の運賃を読む（素が 1200G のビルド）",
+      restored((module2, ctx2, app2), [WALK_TEXT, "馬車(1200G)"])[1] == "馬車(1200G・14日)",
+      texts_of(app2))
+check("自分の書いた文言からは素の運賃を読まない",
+      restored((module2, ctx2, app2), [WALK_TEXT, "馬車(50G・7日)"])[1] == "馬車(1200G・14日)",
+      texts_of(app2))
+check("エラーなし", not ctx.errors, ctx.errors)
+
 # ================================================================ まとめ
 print()
 if failures:

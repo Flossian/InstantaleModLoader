@@ -108,3 +108,16 @@ def ready(day, last_day, cooldown_days):
         return (float(day) - float(last_day)) >= cooldown
     except (TypeError, ValueError):
         return True
+
+
+def purse(quest_reward, pct):
+    """追手の懐の前金。依頼1件の報酬 × 割合（%）。報酬が引けない・割合が 0 以下なら 0。"""
+    if isinstance(quest_reward, bool) or not isinstance(quest_reward, (int, float))             or quest_reward <= 0:
+        return 0
+    try:
+        pct = float(pct)
+    except (TypeError, ValueError):
+        return 0
+    if pct <= 0:
+        return 0
+    return int(round(quest_reward * pct / 100.0))

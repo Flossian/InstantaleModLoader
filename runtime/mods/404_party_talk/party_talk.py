@@ -42,7 +42,9 @@ MOD 専用プロンプトで LLM を1回だけ呼ぶ。返答のうちアンカ�
   真のまま残るので見ない（`300_` の註）。
 - パーティー会話の間は `302_`（ここで別れる）と `402_`（アイテムの受け渡し）の選択肢を落とす。
   どちらも「相手が仲間なら」で差してくるが、全員と話している場面では相手が1人に定まらない。
-  この MOD が `refresh_choice_buttons` の一番外側に居る前提なので、mod.json の `after` で宣言する。
+  302 / 402 より後に読み込む（mod.json の `after`）。ローダの窓口 `choices` は、組み直しの前の処理を
+  後から読み込んだ MOD から、後の処理を先に読み込んだ MOD から呼ぶので、この MOD の前の処理は一番先、
+  後の処理（402 が後から差した選択肢を落とす）は一番後に走る（包みを重ねていたときの一番外側と同じ）。
 
 もとは MoririnJP 氏の `404_party_talk` v6（提供元の README.txt は work フォルダ）。
 """
@@ -50,7 +52,7 @@ import random
 import sys
 import typing
 
-from instantale_modloader import frames, llm, ui
+from instantale_modloader import choices, frames, llm, ui
 from instantale_modloader.state import WorldStore, world_key
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
@@ -100,9 +102,9 @@ PORTRAIT_COPY_ATTRS = ("size_hint", "size_hint_x", "size_hint_y",
                        "allow_stretch", "keep_ratio", "fit_mode", "color")
 # 施設・街路の根のメニューの目印。出口（`MovePhaseManager`）は必ず並ぶ（`309_` と同じ）。
 ROOT_MENU_SPEC = "MovePhaseManager"
-# 選択肢を足さない状態。`ui.BUSY_FLAGS` から `in_shopping` を外したもの。
-# `in_shopping` は店を出た後も真のまま残るので（`300_` の註）、入れると店に寄った後ずっと出なくなる。
-BUSY_FLAGS = tuple(flag for flag in ui.BUSY_FLAGS if flag != "in_shopping")
+# 選択肢を足さない状態。表はローダが持つ（`in_shopping` は入っていない。
+# 店を出た後も真のまま残り、入れると店に寄った後ずっと出なくなる。`ui.BUSY_FLAGS` の註）。
+BUSY_FLAGS = ui.BUSY_FLAGS
 # そのうち戦闘の旗（GAME.md §2.6）。`safe_normal` はこれと会話中・クエスト中だけを見る。
 BATTLE_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle")
 # 会話の状態を置く `sys` の属性名（TECH.md §3.4。apply() が走り直しても続きが分かる）。
@@ -961,9 +963,8 @@ def apply(ctx):
         st["talk_list"] = False
         return orig(self, choice_text, *args, **kwargs)
 
-    @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False, safe=True)
-    def refresh(orig, self, reset_page=False, *args, **kwargs):
-        """ゲームが並べ終えたボタンを、描く前に整える（`320_` と同じ順）。
+    def refresh(self, _buttons):
+        """ゲームが並べ終えたボタンを、描く前に整える（`320_` と同じ順。窓口 `choices` から、組み直しの前に）。
 
         パーティー会話の最中: 「会話を終了する」を END_LABEL に描き替え、立ち絵の並べ直しを予約。
         それ以外: 残骸を掃除し、相手一覧なら「やめる」の手前に START_LABEL を差す。
@@ -998,13 +999,16 @@ def apply(ctx):
                                 TALK_LABEL, len(buttons)))
         except Exception:
             ctx.log_exc("party talk: refresh failed")
-        result = orig(self, reset_page, *args, **kwargs)
+
+    def after_refresh(self):
+        """組み直しの後（窓口 `choices` の `after`。404 は 402 より後に読み込むので、402 の後ろの処理より後に走る）。"""
         if st["active"]:
+            args, kwargs = choices.refreshing() or ((), {})
+            reset_page = kwargs.get("reset_page", args[0] if args else False)
             try:
                 hide_other_party_choices(self, reset_page)
             except Exception:
                 ctx.log_exc("party talk: cannot hide the other party choices")
-        return result
 
     def hide_other_party_choices(app, reset_page):
         """パーティー会話の間、302 / 402 の選択肢を外す。
@@ -1029,27 +1033,23 @@ def apply(ctx):
         raw(app, reset_page)
         write("hid the party-only choices of other mods ({} left)".format(len(buttons)))
 
-    @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False, safe=True)
-    def press(orig, self, button_index, *args, **kwargs):
-        """自前の選択肢だけ横取りする。他は本体へ。
+    def press(self, action):
+        """自前の選択肢が押された（窓口 `choices` の `presses`）。
 
         会話の開始は次のフレームへ予約する（押下の処理の中で phase を切り替えると
         本体が同じ押下の後始末で上書きするため）。
-        引数名は本体と同じにする（キーワードで渡されても二重にならない。版9）。
         """
-        try:
-            action = screen.mark_of(ui.pressed_entry(self, button_index))
-        except Exception:
-            action = None
         if action == TALK_MARK:
             write("pressed own {!r}".format(TALK_LABEL))
             open_own_talk_list(self)
             return None
-        if action != START_MARK:
-            return orig(self, button_index, *args, **kwargs)
         write("pressed {!r}".format(START_LABEL))
         screen.schedule(lambda: open_talk(self), 0)
         return None
+
+    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
+    choices.provide(ctx, screen, refresh=refresh, after=after_refresh,
+                    presses={TALK_MARK: press, START_MARK: press})
 
     @ctx.wrap("scripts.llm.llm_manager:conversation_facilitator", required=False)
     def facilitator(orig, *args, **kwargs):

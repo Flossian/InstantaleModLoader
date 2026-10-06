@@ -106,7 +106,7 @@ import random
 import sys
 import time
 
-from instantale_modloader import durations, ui
+from instantale_modloader import choices, durations, ui
 from instantale_modloader.state import UNKNOWN_WORLD, WorldStore
 
 
@@ -1301,13 +1301,9 @@ def apply(ctx):
             ctx.log_exc("road opening: cannot add the search button")
         return result
 
-    @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False)
-    def on_button_press(orig, self, button_index, *args, **kwargs):
+    def on_button_press(self, action):
         """自前のボタンだけ横取りする。印が無ければ必ず素通し。"""
-        entry = ui.pressed_entry(self, button_index)
-        action = screen.mark_of(entry)
-        if action is None:
-            return orig(self, button_index, *args, **kwargs)
+        entry = choices.pressed()
         if state["acting"] or state["generating"]:
             # 前の押下がまだ動いている。連打の2発目は捨てる（支払いの二重を防ぐ）。
             write("ignored {!r}: the previous press is still running".format(
@@ -1333,8 +1329,7 @@ def apply(ctx):
             ctx.log_exc("road opening: cannot re-apply the roads on load")
         return result
 
-    @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False, safe=True)
-    def refresh_choice_buttons(orig, self, reset_page=False, *args, **kwargs):
+    def refresh_choice_buttons(self, _buttons):
         """集落の選択肢に戻ったら、待っている移動を起こす（保険の経路。`307_` と同じ）。"""
         try:
             observe_quest(self)
@@ -1356,7 +1351,9 @@ def apply(ctx):
                                  tag="arrive")
         except Exception:
             ctx.log_exc("road opening: cannot start the pending move")
-        return orig(self, reset_page, *args, **kwargs)
+
+    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
+    choices.provide(ctx, screen, refresh=refresh_choice_buttons, presses={"": on_button_press})
 
     @ctx.wrap("__main__:QuestStartManager.__init__", required=False, safe=True)
     def quest_start(orig, self, app, quest_type, quest_id, *args, **kwargs):

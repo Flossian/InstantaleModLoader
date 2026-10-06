@@ -44,7 +44,7 @@ GAME.md §2.2）。
   この MOD を外しても、焼かれた並びは次に施設へ入り直すまで残るだけで害は無い
 """
 
-from instantale_modloader import ui
+from instantale_modloader import choices, ui
 
 LOG_BASENAME = "inn_button_order.log"
 
@@ -97,9 +97,7 @@ def apply(ctx):
         return [entry.get("text") if isinstance(entry, dict) else str(entry)
                 for entry in buttons]
 
-    @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False,
-              safe=True)
-    def refresh_buttons(orig, self, *args, **kwargs):
+    def refresh_buttons(self, _buttons):
         """描かれる直前に、宿屋の `宿泊する` を `出る` の前へ動かす。"""
         try:
             buttons = getattr(self, "buttons", None)
@@ -111,6 +109,8 @@ def apply(ctx):
                     write("reordered: {} -> {}".format(before, after))
         except Exception:
             ctx.log_exc("inn button order: cannot reorder the buttons")
-        return orig(self, *args, **kwargs)
+
+    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
+    choices.provide(ctx, None, refresh=refresh_buttons)
 
     ctx.log("inn button order: {} goes before {} at inns".format(STAY_CLS, MOVE_CLS))

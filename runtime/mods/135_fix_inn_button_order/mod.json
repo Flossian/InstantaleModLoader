@@ -10,6 +10,6 @@
     "en": "Only at inns the game lists 'Leave' first (Leave / Stay / Talk), while every other facility lists its own action first (Buy / Leave / Talk, Train / Leave / Talk). Moves the inn's Stay button in front of Leave so inns line up with the rest. Does nothing when the order is already right",
     "ja": "宿屋だけゲームが `出る` を先頭に並べる（出る／宿泊する／会話する）。店や道場は自分の操作が先（売買する／出る／会話する）なので、宿屋の `宿泊する` を `出る` の前へ動かして他の施設と揃える。並びが揃っていれば何もしない"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian"
 }

@@ -59,7 +59,7 @@ import re
 import sys
 import time
 
-from instantale_modloader import durations, llm, ui
+from instantale_modloader import choices, durations, llm, ui
 from instantale_modloader.state import UNKNOWN_WORLD, WorldStore, world_key
 
 LOG_BASENAME = "training_custom.log"
@@ -982,8 +982,7 @@ def apply(ctx):
     llm.wrap_outgoing(ctx, rewrite_outgoing, label="training custom")
 
     # ============================================================ 手持ちの確認
-    @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False)
-    def on_button_press(orig, self, button_index, *args, **kwargs):
+    def on_button_press(self, entry, button_index):
         """設定した代金に手持ちが満たないときは、押された時点で断る。
 
         ゲームのボタンは触らず押下だけ握る。画面はそのまま残るので選び直せる。
@@ -1001,10 +1000,13 @@ def apply(ctx):
                             int(TRAINING_PRICE), gold))
                         screen.say(self, fmt(REFUSE_TEXT,
                                              price=int(TRAINING_PRICE), gold=gold))
-                        return None
+                        return True
         except Exception:
             ctx.log_exc("training custom: the price check failed")
-        return orig(self, button_index, *args, **kwargs)
+        return False
+
+    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
+    choices.provide(ctx, screen, intercept=on_button_press)
 
     # ------------------------------------------------------------ 自己検証
     # 実経路は訓練所で1回訓練するまで通らない。

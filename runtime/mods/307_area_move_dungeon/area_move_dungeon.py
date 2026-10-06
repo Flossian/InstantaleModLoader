@@ -105,7 +105,7 @@ import os
 import random
 import time
 
-from instantale_modloader import durations, ui
+from instantale_modloader import choices, durations, ui
 
 from . import world
 from .journey import Journey
@@ -750,22 +750,17 @@ def apply(ctx):
             ctx.log_exc("road travel: cannot add the road button")
         return result
 
-    @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False)
-    def on_button_press(orig, self, button_index, *args, **kwargs):
-        """自前のボタンだけ横取りする。印が無ければ必ず素通し。"""
-        entry = ui.pressed_entry(self, button_index)
-        action = screen.mark_of(entry)
-        if action is None:
-            return orig(self, button_index, *args, **kwargs)
+    def on_button_press(self, action):
+        """自前のボタンが押された（窓口 `choices` の `presses`）。"""
+        entry = choices.pressed()
         text = (entry.get("text") if isinstance(entry, dict) else None) or ROAD_LABEL
         write("pressed {!r} ({})".format(text, action))
         screen.start_phase(self, RoadPhase(self), text,
                            fallback=lambda: start_road(self, text))
         return None
 
-    @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False)
-    def refresh_choice_buttons(orig, self, reset_page=False, *args, **kwargs):
-        """集落の選択肢に戻ったら、待っている移動を起こす（保険の経路）。
+    def refresh_choice_buttons(self, _buttons):
+        """集落の選択肢に戻ったら、待っている移動を起こす（保険の経路。窓口 `choices` から、組み直しの前に）。
 
         本来は完了した瞬間に動く（`quest_end`）。
         ここが働くのは、完了の瞬間を捉えられなかったとき。
@@ -794,7 +789,9 @@ def apply(ctx):
                                  tag="arrive")
         except Exception:
             ctx.log_exc("road travel: cannot start the pending move")
-        return orig(self, reset_page, *args, **kwargs)
+
+    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
+    choices.provide(ctx, screen, refresh=refresh_choice_buttons, presses={"": on_button_press})
 
     @ctx.wrap("__main__:QuestStartManager.__init__", required=False)
     def quest_start(orig, self, app, quest_type, quest_id, *args, **kwargs):

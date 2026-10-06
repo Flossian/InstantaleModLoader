@@ -27,6 +27,8 @@
     再配布される**。MIT は著作権表示が複製に付いて回ることを要求する）
   * MOD どうしで名前がぶつかっている（ボタンの印・ウィジェットの属性・`state/` の
     フォルダ名。**例外は出ず、片方の機能が黙って効かなくなる**）
+  * 名前のとおりに動かないゲームの旗（`in_shopping`）を条件に読んでいる
+    （**店に寄った後、機能が黙って出なくなる**）
 
 探索と適用順の判定は**ローダ本体の `discover()` を呼ぶ**。
 以前はここに同じ規則を書き写していたので、片方だけ直すと検査と実際の適用順がずれた。
@@ -132,6 +134,51 @@ def check_file(path):
                     problems.append((path, node.name,
                                      "wrap({!r}) はメソッドなので (orig, self, ...) "
                                      "が要る。今は {}".format(target, args[:3])))
+    return problems
+
+
+#: 名前のとおりに動かないゲームの旗と、代わりに見るもの。
+#: 読むと条件が立ちっぱなしになり、機能が黙って出なくなる。
+#: `in_shopping` は店を出ても下りず、セーブにも焼かれる（GAME.md §2.6 / §2.7）。
+#: これを「忙しい」と読んで店に寄った後に黙る不具合を、5本が1本ずつ踏んだ。
+UNTRUSTED_FLAGS = {
+    "in_shopping": "店を出ても下りず、セーブにも焼かれる（GAME.md §2.6）。"
+                   "忙しさは ui.BUSY_FLAGS、売買の窓は is_popup_window_opened で見る",
+}
+
+#: 旗を条件にせず、下ろして戻すだけの行に付ける印（`330_` の保存の前後）。
+FLAG_OK_MARK = "untrusted-flag-ok"
+
+
+def check_flag_reads(path):
+    """当てにならない旗を MOD が読んでいないか。
+
+    捕まえるのは属性の読み（`app.in_shopping`）と、名前の文字列
+    （`getattr(app, "in_shopping")`・旗の表への追加・表からの差し引き）。
+    代入（`app.in_shopping = False`）は読みではないので通す。
+    計測 MOD（`"debug": true`）は旗を記録するのが仕事なので、呼び出し側で外す。
+    """
+    tree, _problem = _parse(path)
+    if tree is None:
+        return []                 # 構文の問題は `check_file` が出す
+    lines = io.open(path, encoding="utf-8").read().splitlines()
+    problems = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Load):
+            flag = node.attr
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            flag = node.value
+        else:
+            continue
+        if flag not in UNTRUSTED_FLAGS:
+            continue
+        line = lines[node.lineno - 1] if node.lineno <= len(lines) else ""
+        if FLAG_OK_MARK in line:
+            continue
+        problems.append((path, "line {}".format(node.lineno),
+                         "旗 {!r} を読んでいる。{}。下ろして戻すだけなら行に "
+                         "'# {}' を付ける".format(flag, UNTRUSTED_FLAGS[flag],
+                                                FLAG_OK_MARK)))
     return problems
 
 
@@ -511,8 +558,11 @@ def main():
     problems, notes = [], []
     for name in mods:
         mod_problems, mod_notes = check_manifest(name, found["manifests"][name])
+        probe = bool((found["manifests"][name] or {}).get("debug"))
         for path in _mod_files(name):
             mod_problems += check_file(path)
+            if not probe:
+                mod_problems += check_flag_reads(path)
         # 開発中の mod（9xx。TECH.md §2.6）は**見るが、赤にはしない**。
         # 配布物にも `load_order.json` にも入らないものなので、
         # 書きかけの一本で CI が止まると、リリースする側の検査が使えなくなる。
@@ -525,6 +575,12 @@ def main():
             problems += mod_problems
             notes += mod_notes
     if not only:
+        # ローダ本体も旗を読まない。`ui.BUSY_FLAGS` に入っていた頃は、
+        # 表を写した MOD が静的には何も読まずに踏んでいた（309_）。
+        loader_dir = os.path.dirname(os.path.abspath(ml.__file__))
+        for filename in sorted(os.listdir(loader_dir)):
+            if filename.endswith(".py"):
+                problems += check_flag_reads(os.path.join(loader_dir, filename))
         # ここから下は**全体を見る検査**。`--only` のときは走らせない
         # （1本だけ見ても答えが出ない。`_only` の説明を参照）。
         for check in (check_order, check_notice, check_namespaces):

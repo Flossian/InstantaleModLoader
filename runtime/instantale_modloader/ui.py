@@ -485,13 +485,15 @@ def close_enough(value, wanted):
 # プレイヤーの所持金と、画面を出してはいけない状態
 # --------------------------------------------------------------------------
 #: ゲームが「別のこと」をしている最中を表す旗。
-#: ここが真の間は施設の選択肢を足さない（`309_` / `902_` が共有）。
-#: `300_` は **`in_shopping` を外した** ものを使う
-#: ― 店の外を往復しているだけでも真のままなので、
-#: イベントの抑止条件に使うと店系の施設でほとんど出なくなる（あちらの註を参照）。
+#: ここが真の間は施設の選択肢を足さない（`309_` / `404_` / `902_` / ModFacility が使う）。
+#:
+#: **`in_shopping` は入れない。** 店を出ても下りず、セーブにも焼かれる（GAME.md §2.6 / §2.7）。
+#: 入れていた頃は、これを写した MOD が店に寄った後ずっと黙る不具合を
+#: `300_` / `404_` / `309_` / `336_` / ModFacility で1本ずつ踏んでいた。
+#: 売買の窓が開いているかは `is_popup_window_opened`（`busy_signals`）で見る。
+#: MOD が旗を読むと `tools/check_mods.py` が落とす（`check_flag_reads`）。
 BUSY_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle",
-              "in_conversation", "in_free_input", "in_action_in_conversation",
-              "in_shopping")
+              "in_conversation", "in_free_input", "in_action_in_conversation")
 
 
 def money(value):
@@ -1665,10 +1667,34 @@ def button_load_pending(app):
 
 
 _AFTER_LOAD_ATTR = "_instantale_after_load"
+AFTER_LOAD_DEPRECATED = (
+    "ui.refresh_choices_after_load is kept only for backward compatibility (called by {mod}). "
+    "Register the choices with the loader window `choices` instead "
+    "(choices.provide(ctx, screen, refresh=..., presses=...); TECH.md §3.3.14). "
+    "The window refreshes once the characters have arrived after a load, "
+    "and does not rely on the load_game_new wrap, which may miss a load that began before it was installed.")
+
+
+def _warn_after_load_deprecated(ctx):
+    """`refresh_choices_after_load` を呼んだ MOD に、窓口 `choices` への移行を促す（WARN は毎回書かれる）。"""
+    log = getattr(ctx, "log", None)
+    if not callable(log):
+        return
+    message = AFTER_LOAD_DEPRECATED.format(mod=getattr(ctx, "_mod", None) or "a mod")
+    try:
+        log(message, level="WARN")
+    except TypeError:
+        log("WARN " + message)        # level を受けない ctx（検査の偽物など）
 
 
 def refresh_choices_after_load(ctx, write=None, tries=12, interval=0.25):
     """ロードのあと、名簿（party）が復元されてから選択肢を 1 度組み直す。
+
+    **後方互換のために残している口**（公開している I/F なので外さない）。
+    v2.0.0（API を上げる版）で外す。TECH.md §3.9「次の API（v2.0.0）で外すもの」。
+    同梱の MOD はもう使っていない。新しく書く MOD はローダの窓口 `choices`（TECH.md §3.3.14）を使うこと。
+    窓口は人物が揃うのも待ち、ロードの包みに頼らない（この口は、包みが付く前に始まったロードでは走らないことがあった）。
+    両方が同じロードで走っても、組み直しが2回になるだけで害は無い。
 
     ロード中に本体が選択肢を組む時点では `app.party` がまだ `['player']` で、同行者との会話を
     復元しても相手が仲間だと分からない（`302_` が「ここで別れる」を落とし、`301_` が依頼の
@@ -1680,7 +1706,10 @@ def refresh_choices_after_load(ctx, write=None, tries=12, interval=0.25):
     （GAME.md §2.4）。待機の終わりにゲーム自身が `refresh_choice_buttons` して塗るので、組み直しはそこで済む。
     何本の MOD が呼んでも、1 回のロードで組み直すのは 1 度（後から入った層の見張りが勝つ）。
     Kivy の Clock が無ければ（ゲームの外）何もしない。
+
+    呼ばれるたびに `modloader.log` へ WARN で移行を促す（呼んだ MOD の名前つき）。
     """
+    _warn_after_load_deprecated(ctx)
     shared = getattr(sys, _AFTER_LOAD_ATTR, None)
     if not isinstance(shared, dict):
         shared = {"token": None}

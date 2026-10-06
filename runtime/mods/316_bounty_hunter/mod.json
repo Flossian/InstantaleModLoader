@@ -7,8 +7,8 @@
     "ja": "賞金稼ぎが襲ってくる"
   },
   "description": {
-    "en": "While the player is wanted, hunters come after them across land borders. They are the game's own guard encounter (BattleStartManager with enemy_type 'guard'), started by this mod at the moment you choose - arriving in a land, arriving at a facility, days passing, or a free action - with the difficulty scaled to how heavily you are wanted. Two conditions start it: the wanted level in the land you are in, and the total of every land's wanted level, so hunters keep coming even where you are clean",
-    "ja": "手配されている間、土地を跨いで追手が来る。追手にはゲーム自身の衛兵の戦闘（enemy_type='guard'）をそのまま使い、設定でONにした場面（土地への到着・施設への到着・日数の経過・自由行動）でこの MOD が起こす。強さは手配の重さに合わせて渡す。始まる条件は2つあり、今いる土地の手配度と、全ての土地の手配度の合計。合計の側があるので、手配されていない土地へ逃げても追ってくる"
+    "en": "While the player is wanted, hunters come after them across land borders. They are the game's own guard encounter (BattleStartManager with enemy_type 'guard'), started by this mod at the moment you choose - arriving in a land, arriving at a facility, days passing, or a free action - with the difficulty scaled to how heavily you are wanted. Two conditions start it: the wanted level in the land you are in, and the total of every land's wanted level, so hunters keep coming even where you are clean. Beating them yields the advance on your bounty they were carrying",
+    "ja": "手配されている間、土地を跨いで追手が来る。追手にはゲーム自身の衛兵の戦闘（enemy_type='guard'）をそのまま使い、設定でONにした場面（土地への到着・施設への到着・日数の経過・自由行動）でこの MOD が起こす。強さは手配の重さに合わせて渡す。始まる条件は2つあり、今いる土地の手配度と、全ての土地の手配度の合計。合計の側があるので、手配されていない土地へ逃げても追ってくる。追手に勝つと、懐から賞金の前金が手に入る"
   },
   "version": "3",
   "author": "R01/Flossian",
@@ -184,6 +184,32 @@
       "note": {
         "ja": "既定 ON。ゲームは衛兵との戦闘で手配度を 10 下げるので、追手を出した土地の手配度を控えておき、戦闘後に下がっていたら戻す。切ると追手を倒すたびに手配が重くなる",
         "en": "Default ON. The game lowers lawfulness by 10 after a guard battle, so the mod remembers the value and puts it back afterwards. Turn it off and every hunt makes you more wanted"
+      }
+    },
+    "BOUNTY_ENABLED": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "追手を倒すと前金が手に入る",
+        "en": "Hunters carry a purse"
+      },
+      "note": {
+        "ja": "追手に勝ったときだけ。逃げた・負けた回と、ゲーム自身の衛兵では何も無い",
+        "en": "Only when you beat the hunters. Nothing if you flee or lose, or against the game's own guards"
+      }
+    },
+    "BOUNTY_PURSE_PCT": {
+      "type": "int",
+      "default": 30,
+      "min": 0,
+      "max": 1000,
+      "label": {
+        "ja": "前金の額（%）",
+        "en": "Purse (%)"
+      },
+      "note": {
+        "ja": "追手の難易度での依頼1件の報酬に対する割合。追手は手配が重いほど強く（難易度20〜75）、前金も増える",
+        "en": "Percent of one quest reward at the hunters' difficulty. Heavier wanted levels bring stronger hunters (difficulty 20-75) and bigger purses"
       }
     },
     "YIELD_TO_GUARDS": {

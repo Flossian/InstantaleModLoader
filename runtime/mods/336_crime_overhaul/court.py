@@ -11,6 +11,10 @@
   効き目は判事の頼みへの一文と、判決のボタンの直し（`trial.adjust`）の両方で確かにする
 - 情状: 検察と判事の頼みに手配の重さとこの土地での活躍を足し、壊れた「人生ログの全体象」をゲーム自身の
   `context_manager.get_life_log_text` の文に置き換える
+
+いまの裁判の効き目は、世界×主人公の控え（`court`）にも持つ。ゲームは裁判の段ごとに保存するので、
+メモリだけだと、払った後や裁判が始まった後にロードすると効き目が消え、ボタンがまた出た。
+介入を押した後と判決を直した後は、ゲーム自身の保存を呼ぶ（払った額・効き目・直した判決を同じ保存に入れる）。
 """
 import sys
 
@@ -50,15 +54,36 @@ def life_log_text(app, character):
 
 def install(env):
     ctx, write, screen, worlds, cfg = env.ctx, env.write, env.screen, env.worlds, env.cfg
-    #: いまの裁判。`key` は求刑ごとに変わる（同じ裁判の画面が組み直されても同じ）。
+    save_soon = ui.saver(ctx, write, "court")
+    #: いまの裁判。`key` は求刑ごとに変わる（同じ裁判の画面が組み直されても同じ）。控えの `court` と同じ中身。
     court = {"key": None, "args": None, "effects": {}, "told": False, "applied": False}
 
-    def new_trial(key, args):
+    def load_court(app):
+        """ロードでメモリが空になっていたら、控えから戻す。"""
+        if court["key"] is not None:
+            return
+        with worlds.lock:
+            stored = worlds.load(worlds.playthrough(app)).get("court")
+        if isinstance(stored, dict) and stored.get("key") is not None:
+            court.update(key=stored.get("key"), args=list(stored.get("args") or []),
+                         effects=dict(stored.get("effects") or {}),
+                         told=bool(stored.get("told")), applied=bool(stored.get("applied")))
+            write("court: restored the trial from the record (effects {})".format(court["effects"]))
+
+    def store_court(app):
+        playthrough = worlds.playthrough(app)
+        with worlds.lock:
+            bucket = worlds.load(playthrough)
+            bucket["court"] = {"key": court["key"], "args": court["args"], "effects": court["effects"],
+                               "told": court["told"], "applied": court["applied"]}
+            worlds.save(playthrough)
+
+    def new_trial(app, key, args):
         effects = {"lawyer": False, "plea": False, "bribe": None}
         # 捕まる前の出来事（衛兵の買収が突き返された）を、この裁判へ持ち越す（`encounter`）。
-        effects.update(env.carry_to_trial)
-        env.carry_to_trial.clear()
+        effects.update(env.take_carry(app))
         court.update(key=key, args=list(args), effects=effects, told=False, applied=False)
+        store_court(app)
 
     def fee_of(app, pct):
         return trial.fee(env.quest_reward(env.area_difficulty(app)), pct)
@@ -99,11 +124,13 @@ def install(env):
         buttons.extend(entry for entry in entries if entry is not None)
 
     def on_trial_screen(app, buttons, args):
+        load_court(app)
         key = repr(args)[:400]
         if key != court["key"]:
-            new_trial(key, args)
+            new_trial(app, key, args)
         if cfg.TRIAL_HINT and not court["told"]:
             court["told"] = True
+            store_court(app)
             write("court: told how to plead ({})".format(
                 (args[0] or {}).get("sentencing_request") if args and isinstance(args[0], dict)
                 else None))
@@ -116,10 +143,12 @@ def install(env):
 
     # ---------------------------------------------------- 判決の画面
     def on_verdict_screen(app, buttons, verdict):
+        load_court(app)
         effects = court["effects"]
         if court["applied"] or court["args"] is None or not any(effects.values()):
             return
         court["applied"] = True
+        store_court(app)
         kind, years = verdict
         sought, charges, details = (court["args"] + [None, None, None])[:3]
         new_kind, new_years, reasons = trial.adjust(
@@ -144,6 +173,7 @@ def install(env):
         line = trial.verdict_line(kind, years, new_kind, new_years, reasons,
                                   cfg.TRIAL_BRIBE_PENALTY_YEARS)
         screen.schedule(lambda: screen.say(app, line))
+        save_soon(app, "verdict adjusted")      # 直した判決のボタンを保存に入れる（控えの「直した」と揃える）
 
     def on_refresh(app, buttons):
         args = trial_args(buttons)
@@ -156,6 +186,7 @@ def install(env):
 
     # ---------------------------------------------------- 介入を押した
     def press(app, action):
+        load_court(app)
         key = action[len(MARK_HEAD):]
         effects = court["effects"]
         line = None
@@ -185,9 +216,12 @@ def install(env):
                 write("court: bribe {} (chance {}%)".format(effects["bribe"], chance))
         write("court: pressed {} -> effects {}".format(key, effects))
         if line:
+            store_court(app)
             env.refresh_gold(app)
             screen.say(app, ui.rewrite_coins(line))
         screen.apply_buttons(app, None, "court")
+        if line:
+            save_soon(app, "court " + key)
 
     # ---------------------------------------------------- 検察と判事の頼み
     def rewrite_message(message, app, judge):

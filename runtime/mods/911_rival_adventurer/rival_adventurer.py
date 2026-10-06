@@ -37,7 +37,7 @@ import re
 import sys
 import time
 
-from instantale_modloader import (arrivals, frames, jobs, llm, modfacility, modnpc,
+from instantale_modloader import (arrivals, choices, frames, jobs, llm, modfacility, modnpc,
                                   state as loader_state, talk_affinity, ui)
 from instantale_modloader import board as quest_board   # 包みの関数 `board`（掲示板を開く）と名前が重なるので別名
 from instantale_modloader.npcs import npc_stores, save_npcs
@@ -1143,8 +1143,7 @@ def apply(ctx):
     for target in LOAD_TARGETS:
         make_load(target)
 
-    @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False, safe=True)
-    def refresh_choice_buttons(orig, self, *args, **kwargs):
+    def refresh_choice_buttons(self, _buttons):
         """ロードの後の突き合わせと、掲示板の手当て。"""
         if store["reconcile"]:
             characters = getattr(getattr(self, "world", None), "characters", None)
@@ -1160,7 +1159,9 @@ def apply(ctx):
                 fix_board(self, buttons)
         except Exception:
             ctx.log_exc("rival adventurer: cannot fix the quest board")
-        return orig(self, *args, **kwargs)
+
+    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
+    choices.provide(ctx, screen, refresh=refresh_choice_buttons)
 
     ctx.log("rival adventurer: installed (rival after {} clears at {}%, intro {}, "
             "failure {}, success {}%+{}%/Lv, due {}..{} days, state {})".format(

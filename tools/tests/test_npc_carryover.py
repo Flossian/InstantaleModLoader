@@ -174,8 +174,15 @@ class FakeCtx:
                                            .splitlines()[-1]))
 
     def wrap(self, target, **kw):
+        """本物と同じく包みを重ねる（後から包んだものが外側）。ローダの窓口 `choices` も保存を包むため。"""
         def decorator(func):
-            self.hooks[target] = func
+            inner = self.hooks.get(target)
+            if inner is None:
+                self.hooks[target] = func
+            else:
+                def layered(orig, *args, _outer=func, _inner=inner, **kwargs):
+                    return _outer(lambda *a, **k: _inner(orig, *a, **k), *args, **kwargs)
+                self.hooks[target] = layered
             return func
         return decorator
 

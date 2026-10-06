@@ -88,14 +88,23 @@
 `Clock.schedule_once(..., 0)` を使うが、これは待ちではなく次のフレームまで譲るもの。
 追手を起こす前に、ゲームが選択肢を塗り終えるまでフレームを譲ることがある（上限は `PAINT_WAIT_FRAMES`）。
 
+##### 倒すと前金（`336_` から移した）
+
+追手に勝つと、追手の難易度での依頼1件の報酬（ゲームの `get_quest_reward`）× 割合の前金が入る。
+勝ったかどうかはゲームの `end_type`（`'won'`）で見る。逃げた回（`'escaped'`）は何も無い。
+もとは `336_crime_overhaul` が窓口 `wanted.hunt_ended` で受けて払っていたが、
+追手が来なければ働かない機能なので、追手を出すこの MOD が持つ（2026-10-06）。
+窓口へ知らせるのはそのまま続ける（ほかの MOD が追手の戦闘に何かを足せる）。
+
 ##### 記録
 
 `out/bounty_hunter_send.log`。来た回も、来なかった回とその理由も1行ずつ。
 """
 
 import random
+import sys
 
-from instantale_modloader import guards, ui, wanted
+from instantale_modloader import choices, guards, ui, wanted
 from instantale_modloader.state import WorldStore, world_key
 
 from . import hunt
@@ -141,7 +150,16 @@ ON_FREE_ACTION = False
 ANNOUNCE = "首にかけられた賞金を目当てに、追手が行く手を塞いだ。"
 HUNTER_NAME = "賞金稼ぎ"
 KEEP_WANTED = True
+BOUNTY_ENABLED = True
+BOUNTY_PURSE_PCT = 30
 YIELD_TO_GUARDS = True
+
+#: 追手に勝ったときの1行。
+BOUNTY_TEXT = "倒した追手の懐から、賞金の前金{amount}ゴールドを抜き取った。"
+#: ゲームの `BattleEndManager(app, end_type)` で勝ったときの `end_type`（GAME.md §2.10）。
+WON_END_TYPE = "won"
+#: 依頼の報酬を引くゲームのヘルパの置き場（`get_quest_reward(難易度)`）。
+FUNCTIONS_MODULE = "scripts.functions"
 
 # 追手を出せない状態。ゲーム自身の旗で、既に別の場面が進んでいることの合図。
 # 全部は見ない（`in_shopping` はロード後に立ちっぱなしのことがある。GAME.md §2.7）。
@@ -624,16 +642,56 @@ def apply(ctx):
             reached = wanted.hunt_ended(app, dict(hunt, by=OWNER, outcome=outcome))
             write("追手の戦闘が終わった: {!r} 難易度{} 知らせた先={}".format(
                 outcome, hunt["difficulty"], reached or "なし"))
+            try:
+                pay_purse(app, hunt, outcome)
+            except Exception:
+                ctx.log_exc("bounty hunter: 前金を渡せなかった")
         return result
 
-    @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False,
-              safe=True)
-    def refresh_choice_buttons(orig, self, *args, **kwargs):
+    def quest_reward(difficulty):
+        """その難易度の依頼1件の報酬（ゲームのヘルパ）。引けなければ None。"""
+        reward = getattr(sys.modules.get(FUNCTIONS_MODULE), "get_quest_reward", None)
+        if not callable(reward) or isinstance(difficulty, bool)                 or not isinstance(difficulty, (int, float)):
+            return None
+        value = reward(max(1, int(round(difficulty))))
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        return int(value)
+
+    def pay_purse(app, plan, outcome):
+        """追手に勝ったら前金を渡す。逃げた・負けた回は何もしない。"""
+        if not BOUNTY_ENABLED or app is None:
+            return
+        difficulty = plan.get("difficulty")
+        if outcome != WON_END_TYPE:
+            write("前金: {!r} で終わったので無し（難易度{}）".format(outcome, difficulty))
+            return
+        reward = quest_reward(difficulty)
+        amount = hunt.purse(reward, BOUNTY_PURSE_PCT)
+        if amount <= 0:
+            write("前金: 0G（難易度{} 依頼1件の報酬{} の {}%）".format(
+                difficulty, reward, BOUNTY_PURSE_PCT))
+            return
+        before = ui.gold_of(app)
+        after = ui.add_gold(app, amount)
+        if after is None:
+            write("前金: {}G を足せなかった".format(amount))
+            return
+        write("前金: 難易度{} 依頼1件の報酬{} の {}% = {}G。所持金 {} -> {}".format(
+            difficulty, reward, BOUNTY_PURSE_PCT, amount, before, after))
+
+        def show():
+            updater = getattr(app, "update_ui", None)
+            if callable(updater):
+                updater()
+            screen.say(app, ui.rewrite_coins(BOUNTY_TEXT.format(amount=ui.money(amount))))
+        schedule(show)
+
+    def refresh_choice_buttons(self):
         """**画面が整った合図**。追手を起こすのはここだけ（VERIFICATION_LOG.md §2.56）。
 
         `set_buttons_to_normal` は1〜2秒早く、まだ本文を流している最中なので使わない。
         """
-        result = orig(self, *args, **kwargs)
         count_signal(self)
         if memo["repaint"] and battle_screen(self):
             memo["repaint"] = False
@@ -647,7 +705,9 @@ def apply(ctx):
             # ここから `process_choice` に入ると同じ流れの中で画面を2度触ることになる。
             # さらに、ゲームが選択肢を塗り終えるまで待つ（`launch_when_painted`）。
             schedule(lambda: launch_when_painted(self, PAINT_WAIT_FRAMES))
-        return result
+
+    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
+    choices.provide(ctx, screen, after=refresh_choice_buttons)
 
     def launch_when_painted(app, frames_left):
         """ゲームがこの画面の選択肢を塗り終えてから追手を起こす。待つのはフレームの数だけ。

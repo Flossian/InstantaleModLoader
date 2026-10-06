@@ -50,6 +50,14 @@ def install(env):
         data = getattr(ui.find_hud(app), TWIN_WINDOW_DATA, None)
         return isinstance(data, dict) and bool(data.get("TorF"))
 
+    def in_office(app):
+        """いま裏の事務所に居るか。ボタンを出すのはこれだけで決める（主は押したときに引く）。
+
+        ロードの途中の組み直しでは人物（`world.characters`）がまだ空で、主が引けない（実機）。
+        主まで条件に入れると、事務所で保存したセーブを読んだときにボタンが出なかった。
+        """
+        return ui.facility_type_of(env.current_facility(app)) == office.OFFICE_FACILITY_TYPE
+
     def broker_here(app):
         """いま居る裏の事務所の `(主の id, 主)`。事務所でなければ None。"""
         facility = env.current_facility(app)
@@ -62,26 +70,34 @@ def install(env):
         return str(owner_id), broker
 
     def holds_stolen(app):
-        player = getattr(app, "player", None)
-        return any(env.stolen_entry(app, item) is not None
-                   for item in list((getattr(player, "inventory", None) or {}).values()))
+        inventory = getattr(getattr(app, "player", None), "inventory", None)
+        if not isinstance(inventory, dict):
+            return False
+        return any(env.stolen_entry(app, item) is not None for item in list(inventory.values()))
 
     def clear_bought(app):
-        """主の持ち物から、窓を開く前に無かった品（売った盗品）を外す。控えの `fence` も消す。"""
+        """主の持ち物から、窓を開く前に無かった品（売った盗品）を外す。控えの `fence` も消す。
+
+        主が引けないとき（ロードの途中は人物がまだ空）は、控えを残して次の組み直しに回す。
+        先に控えを捨てると、売った品が主の持ち物に残り続ける。
+        """
         env.fence.update(broker=None, opening=False)
         playthrough = worlds.playthrough(app)
         with worlds.lock:
-            bucket = worlds.load(playthrough)
-            record = bucket.pop("fence", None)
-            if record is not None:
-                worlds.save(playthrough)
+            record = worlds.load(playthrough).get("fence")
         if not isinstance(record, dict):
+            if record is not None:
+                with worlds.lock:
+                    worlds.load(playthrough).pop("fence", None)
+                    worlds.save(playthrough)
             return
         broker = ui.character_of(app, str(record.get("broker")))
         inventory = getattr(broker, "inventory", None)
         if not isinstance(inventory, dict):
-            write("WARN fence: cannot find the broker {!r} to clear".format(record.get("broker")))
-            return
+            return              # 人物がまだ揃っていない。控えを残す
+        with worlds.lock:
+            worlds.load(playthrough).pop("fence", None)
+            worlds.save(playthrough)
         keep = {str(key) for key in record.get("keep") or []}
         gone = [key for key in list(inventory) if str(key) not in keep]
         names = [getattr(inventory.pop(key), "name", None) for key in gone]
@@ -98,7 +114,7 @@ def install(env):
         screen.prune_stale(buttons, (LABEL,))
         if not common.is_facility_screen(buttons) or getattr(app, "in_conversation", False):
             return              # 施設の最初の画面だけ（入ったときの話しかけの選択肢には足さない。実機）
-        if not cfg.FENCE_ENABLED or broker_here(app) is None or env.underworld_banned(app):
+        if not cfg.FENCE_ENABLED or not in_office(app) or env.underworld_banned(app):
             return
         if not holds_stolen(app):
             return

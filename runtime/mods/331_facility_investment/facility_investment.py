@@ -65,7 +65,7 @@ r"""機能追加: 街に施設を建てる（出資する）。
 import datetime
 import sys
 
-from instantale_modloader import (durations, frames, llm, modfacility, modnpc,
+from instantale_modloader import (choices, durations, frames, llm, modfacility, modnpc,
                                   prices, ui)
 from instantale_modloader.state import (UNKNOWN_WORLD, WorldStore, playthrough_key,
                                         playthrough_key_of_dict)
@@ -1276,28 +1276,21 @@ def apply(ctx):
         screen.apply_buttons(app, None, "office")
 
     # ================================================================ フック
-    @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False, safe=True)
-    def refresh_choice_buttons(orig, self, reset_page=False, *args, **kwargs):
+    def refresh_choice_buttons(self):
         """選択肢が組み直されるたびに、建物を当て直して自前のボタンを足す。
 
         最後にローダの塗り直しをもう一度呼ぶ（どちらの関所が内側かは適用順で変わる）。
         """
-        result = orig(self, reset_page, *args, **kwargs)
         try:
             apply_holdings(self, getattr(self, "world", None), current_key(self), "screen")
             maintain_buttons(self)
             modfacility.maintain_buttons(self, write=write)
         except Exception:
             ctx.log_exc("investment: cannot maintain the choices")
-        return result
 
-    @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False)
-    def on_button_press(orig, self, button_index, *args, **kwargs):
+    def on_button_press(self, action):
         """自前のボタンだけ横取りする。印が無ければ必ず素通し。"""
-        entry = ui.pressed_entry(self, button_index)
-        action = screen.mark_of(entry)
-        if action is None:
-            return orig(self, button_index, *args, **kwargs)
+        entry = choices.pressed()
         if state["acting"]:
             write("ignored {!r}: the previous press is still running".format(
                 entry.get("text") if isinstance(entry, dict) else None))
@@ -1309,6 +1302,9 @@ def apply(ctx):
         screen.start_phase(self, InvestPhase(self, action, kind, tier), text,
                            fallback=lambda: run_action(self, action, kind, tier))
         return None
+
+    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
+    choices.provide(ctx, screen, after=refresh_choice_buttons, presses={"": on_button_press})
 
     def register_before_load(app, key):
         """読む周回の持ち株の層を、`World.__init__` の orig より前に積む。積んだ鍵を返す。

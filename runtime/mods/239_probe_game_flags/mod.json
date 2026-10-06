@@ -1,0 +1,16 @@
+{
+  "entry": "probe_game_flags.py",
+  "api": 1,
+  "kind": "probe",
+  "name": {
+    "en": "Probe: the game's in-progress flags",
+    "ja": "計測: ゲームの「〜の最中」の旗"
+  },
+  "description": {
+    "en": "Records who sets and clears the seven in_* flags (battle, boss battle, colosseum battle, conversation, free input, action in conversation, shopping), which game functions read them, their values after a load and before a save, and changes that bypass the attribute. Read-only",
+    "ja": "7つの in_ 旗（戦闘・ボス戦・闘技場の試合・会話・自由入力・会話中の行動・売買）を誰が立てて誰が下ろすか、ゲームのどの関数が読むか、ロード後と保存前の値、属性を通らない書き換えを録る。読み取りだけでゲームは変えない"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "debug": true
+}

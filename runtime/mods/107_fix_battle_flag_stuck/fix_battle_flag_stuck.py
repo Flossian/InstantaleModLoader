@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
-"""修正: 戦闘が終わっても `in_battle` が 1 のまま残るのを直す。
+"""修正: 戦闘と売買が終わっても旗が立ったまま残るのを直す。
+
+戦闘の旗（`in_battle` / `in_colosseum_battle`）と売買の旗（`in_shopping`）。
+売買の旗は v6 で足した（下の「売買の窓の旗」）。
 
 ## 原因（GAME.md §2.10 / VERIFICATION_LOG.md §2.6）
 
@@ -72,6 +75,21 @@ mod を入れる前に保存したもの）、読み込み直後に立ってい�
 なので**ロードの後に並んだボタンが戦闘のものなら触らない**。
 そうでなければ旗を下ろし、残っている敵も空にする（戦闘を普通に終えたときのゲームと同じ状態）。
 戦闘の最中のセーブの中身とロード後の2通りは GAME.md §2.10。
+
+## 売買の窓の旗（v6）
+
+`in_shopping` は「売買する」（`ShoppingStartManagerRemake.shopping_start_method_1`）で立ち、
+**ゲームはどこでも下ろさない**。窓を閉じる処理（窓の外側を押す →
+`close_shopping_window_process`）・店を出る・移動のどれも書き込まない
+（旗を False にしてから測った。GAME.md §2.6・VERIFICATION_LOG.md §2.89）。
+セーブに焼かれ、ロードで True のまま戻るので、一度売買した世界ではずっと立つ。
+
+ゲーム自身は条件に読まない（読むのは `save_game` が焼くときだけ）ので、ゲームの動きは変わらない。
+旗を読む MOD が「店に寄った後ずっと黙る」を5本が踏んだ（`ui.BUSY_FLAGS` の註）。
+旗をその名のとおりに戻しておく。
+
+下ろすのは、窓を閉じる処理の後と、ロードの後（ロードの直後に窓は開いていない）。
+注入した時点でも、窓が開いていなければ下ろす。
 """
 
 import sys
@@ -96,6 +114,12 @@ REPORT_FLAGS = ("in_boss_battle",)
 BATTLE_BUTTON_CLASSES = ("BattlePhaseManager", "SkillChoicePhaseManager",
                          "UtteranceChoiceInBattleManager", "UtteranceInBattleManager",
                          "CancelBattleActionManager")
+
+# 売買の窓の旗。窓を閉じる処理の後とロードの後に下ろす（v6）。
+SHOP_FLAG = "in_shopping"  # 下ろすために名前を持つ。untrusted-flag-ok
+
+# 売買の窓を閉じる処理。窓の外側を押すとゲームが呼ぶ（閉じるボタンは無い）。
+SHOP_CLOSE_TARGET = "__main__:InstantaleApp.close_shopping_window_process"
 
 # `app.party` の主人公の鍵（仲間は id）。
 PLAYER_KEY = "player"
@@ -136,6 +160,18 @@ def apply(ctx):
             # 出たら設計を見直す材料になる。
             write("{}: {} still set -- not touching (never observed being cleared)"
                   .format(where, ", ".join(others)))
+
+    def clear_shop(app, where):
+        """売買の旗が立っていれば下ろす。下ろしたら True。"""
+        if app is None or not getattr(app, SHOP_FLAG, False):
+            return False
+        try:
+            setattr(app, SHOP_FLAG, False)
+        except Exception:
+            ctx.log_exc("shop flag: could not clear {}".format(SHOP_FLAG))
+            return False
+        write("{}: cleared {} (the game left it set)".format(where, SHOP_FLAG))
+        return True
 
     def in_real_battle(app):
         """敵が居るか（本物の戦闘の最中か）。残骸のときは `current_enemy_dict` が空（実測）。"""
@@ -249,6 +285,12 @@ def apply(ctx):
         def _load(orig, self, *args, **kwargs):
             result = orig(self, *args, **kwargs)
             try:
+                # 売買の旗は戦闘の画面かどうかに関わらず下ろす（ロードの直後に窓は開いていない）。
+                clear_shop(self if frames.attr(self, SHOP_FLAG) is not frames.MISSING
+                           else find_app(), label)
+            except Exception:
+                ctx.log_exc("shop flag: clear failed")
+            try:
                 # `hasattr` は使わない。
                 # 失敗するルックアップを1回起こすので
                 # `__getattr__` トリップワイヤ（`201_`）を自己発火させる。
@@ -277,6 +319,16 @@ def apply(ctx):
         on_load("__main__:InstantaleApp.load_game_new", "load_game_new")
         on_load("__main__:InstantaleApp.start_game", "start_game")
 
+    # ----------------------------------------------------- 売買の窓を閉じた後
+    @ctx.wrap(SHOP_CLOSE_TARGET, required=False)
+    def close_shopping_window_process(orig, self, *args, **kwargs):
+        result = orig(self, *args, **kwargs)
+        try:
+            clear_shop(self, "close_shopping_window_process")
+        except Exception:
+            ctx.log_exc("shop flag: clear failed")
+        return result
+
     # ------------------------------------------------------------- 注入した時点
     # 既にこの mod 無しで戦闘を終えているセッションには、
     # 残骸が立ったままになっている。
@@ -290,8 +342,12 @@ def apply(ctx):
             elif app is not None and getattr(app, "in_battle", False):
                 write("injection: in_battle is set and enemies are present "
                       "-- looks like a real battle; not touching")
+            # 売買の窓が開いている最中の注入は巻き込まない（閉じたときに下ろす）。
+            if app is not None and not getattr(app, "is_popup_window_opened", False):
+                clear_shop(app, "injection")
         except Exception:
             ctx.log_exc("battle flag: boot clear failed")
 
-    ctx.log("battle flag fix: clearing {} at battle end{} log={}".format(
-        "/".join(CLEAR_FLAGS), " and on load" if CLEAR_ON_LOAD else "", log_path))
+    ctx.log("battle flag fix: clearing {} at battle end{}, {} after the trade window "
+            "closes log={}".format("/".join(CLEAR_FLAGS), " and on load" if CLEAR_ON_LOAD else "",
+                                   SHOP_FLAG, log_path))

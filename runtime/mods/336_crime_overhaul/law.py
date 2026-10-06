@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""手配への反応。店が委縮して値を下げる・時効・追手の前金を奪う。仕様は DOC.md の同じ名前の節。
+"""手配への反応。店が委縮して値を下げる・時効。仕様は DOC.md の同じ名前の節。
 
 ##### 店が委縮して値を下げる（手配中の土地で値段が動く）
 
@@ -15,11 +15,7 @@
 - 新しい罪は、戻った後の値にそのまま足される（数え直さない）
 - 日数は `elapse_days` の前後の暦の差。エリア移動の日数は出発地からも目的地からも離れていた日数として数える
 
-##### 追手の前金を奪う（追手を倒すと前金が入る）
-
-- 追手（`316_`）に勝つと、追手の難易度での依頼1件の報酬 × 割合（既定 30%）の前金が入る。
-  手配が重いほど追手は強く（難易度 20〜75）、懐も厚い
-- 追手の戦闘が終わったことは `316_` がローダの窓口（`wanted.hunt_ended`）で知らせる。逃げた・負けた回は何も無い
+追手を倒したときの前金は `316_bounty_hunter` へ移した（追手を出す MOD が、その戦闘の報酬も持つ）。
 """
 import threading
 
@@ -35,16 +31,12 @@ DAYS_PER_MONTH = 30
 SHOP_NOTICE_TEXT = "手配書の顔に気づいた店主は、怯えたように値を改めた。（買値 -{pct}%{sell}）"
 SHOP_NOTICE_SELL = "・売値 +{pct}%"
 STATUTE_TEXT = "{area}では、騒ぎのほとぼりが冷めつつある。（手配度 {before} → {after}）"
-BOUNTY_TEXT = "倒した追手の懐から、賞金の前金{amount}ゴールドを抜き取った。"
-#: ゲームの `BattleEndManager(app, end_type)` で勝ったときの `end_type`（GAME.md §2.10）。
-WON_END_TYPE = "won"
 
 
 def install(env):
     ctx, write, screen, worlds, cfg = env.ctx, env.write, env.screen, env.worlds, env.cfg
     owner = env.owner
-    here_lawfulness, quest_reward = env.here_lawfulness, env.quest_reward
-    refresh_gold, area_label = env.refresh_gold, env.area_label
+    here_lawfulness, area_label = env.here_lawfulness, env.area_label
     lock = threading.Lock()
 
     # -------------------------------------------------- 店が委縮して値を下げる
@@ -189,38 +181,3 @@ def install(env):
         except Exception:
             ctx.log_exc("crime incentive: cannot cool down the wanted areas")
         return result
-
-    # -------------------------------------------------- 追手の前金を奪う
-    # どの戦闘が追手の戦闘かは追手を出す MOD（`316_`）しか知らないので、その MOD が窓口へ知らせる。
-    def hunt_end(app, hunt):
-        if not cfg.BOUNTY_ENABLED:
-            return
-        outcome, difficulty = hunt.get("outcome"), hunt.get("difficulty")
-        if outcome != WON_END_TYPE:
-            write("bounty: {!r} by {} (difficulty {}); no purse".format(
-                outcome, hunt.get("by"), difficulty))
-            return
-        if isinstance(difficulty, bool) or not isinstance(difficulty, (int, float)):
-            write("WARN bounty: unreadable difficulty {!r}".format(difficulty))
-            return
-        reward = quest_reward(max(1, int(round(difficulty))))
-        amount = rules.guide_amount(reward, cfg.BOUNTY_PURSE_PCT)
-        if amount <= 0:
-            write("bounty: won (difficulty {} reward {}) but the purse is 0".format(
-                difficulty, reward))
-            return
-        before = ui.gold_of(app)
-        after = ui.add_gold(app, amount)
-        if after is None:
-            write("WARN bounty: cannot add {} gold".format(amount))
-            return
-        write("bounty: won by {} difficulty {} (here {} total {}) reward {} -> purse {}, "
-              "gold {} -> {}".format(hunt.get("by"), difficulty, hunt.get("here"),
-                                     hunt.get("total"), reward, amount, before, after))
-
-        def show():
-            refresh_gold(app)
-            screen.say(app, ui.rewrite_coins(BOUNTY_TEXT.format(amount=ui.money(amount))))
-        screen.schedule(show)
-
-    wanted.on_hunt_end(owner, ctx, hunt_end)

@@ -123,7 +123,8 @@
     "235_probe_sound_effects",
     "236_probe_enemy_stats",
     "237_probe_affinity",
-    "238_probe_prison"
+    "238_probe_prison",
+    "239_probe_game_flags"
   ],
   "disabled": []
 }

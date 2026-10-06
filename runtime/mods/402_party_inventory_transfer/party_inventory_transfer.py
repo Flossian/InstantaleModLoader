@@ -56,7 +56,7 @@ MOD 専用の「装備する／外す」ボタンを 1 つ出し、ローダの�
 popup と装備欄の中身まで写す観測は `223_probe_party_equipment` に分けてある。
 """
 
-from instantale_modloader import equipment, frames, ui
+from instantale_modloader import choices, equipment, frames, ui
 from instantale_modloader.ids import claim
 
 
@@ -815,8 +815,7 @@ def apply(ctx):
         state["npc_id"] = None
         return orig(self, *args, **kwargs)
 
-    @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False)
-    def refresh_choice_buttons(orig, self, reset_page=False, *args, **kwargs):
+    def refresh_choice_buttons(self):
         """選択肢を描き直すたびに呼ばれる本体の関数。ここで受け渡しボタンを維持する。
 
         本体は `app.buttons` を組んでからこの関数で画面に並べる。ロード直後・
@@ -826,19 +825,18 @@ def apply(ctx):
         # ゲーム本体＋このhookより内側のMODに先に一覧を組ませる。
         # mod.json の after=["301_quest_from_conversation"] により、
         # 301の会話選択肢が先に存在する状態を狙う。
-        result = orig(self, reset_page, *args, **kwargs)
 
         try:
             buttons = getattr(self, "buttons", None)
             if not isinstance(buttons, list):
-                return result
+                return
 
             # タイトル→ロードで印を失った旧402/403/現行ボタンの残骸を掃除。
             screen.prune_stale(buttons, OUR_LABELS)
 
             # 現在の会話相手がparty memberでなければ出さない。
             if current_party_npc(self) is None:
-                return result
+                return
 
             # insert_transfer_button は ConversationEndManager を探し、
             # その直前へ入れる。301の依頼系ボタンが既に並んでいれば自然にその下になる。
@@ -848,22 +846,14 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("party inventory/equipment: cannot maintain transfer button")
 
-        return result
 
-    @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False)
-    def on_button_press(orig, self, button_index, *args, **kwargs):
-        """選択肢が押されたとき。押されたのが受け渡しボタンなら本体へ渡さず窓を開く。"""
-        try:
-            entry = pressed_entry(self, button_index)
-            action = screen.mark_of(entry)
-        except Exception:
-            action = None
-
-        if action != "transfer":
-            return orig(self, button_index, *args, **kwargs)
-
+    def on_button_press(self, action):
+        """受け渡しボタンが押された（窓口 `choices` の `presses`）。本体へ渡さず窓を開く。"""
         open_transfer(self)
         return None
+
+    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
+    choices.provide(ctx, screen, after=refresh_choice_buttons, presses={"transfer": on_button_press})
 
     @ctx.wrap(
         "scripts.hud.new_hud:InventoryItem.change_inventory",

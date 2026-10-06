@@ -628,7 +628,15 @@ def install(env):
         if refuse is None:
             if env.fence.get("broker"):
                 write("fence: sold {!r} ({})".format(name, (getattr(item, "attributes", None) or {}).get(rules.SELL)))
-            return orig(self, *args, **kwargs)
+            result = orig(self, *args, **kwargs)
+            # 売れた品の控えはその場で捨てる（次の売り買いまで残さない）。
+            try:
+                app = ui.find_app()
+                if app is not None:
+                    prune_stolen(app)
+            except Exception:
+                ctx.log_exc("crime incentive: cannot prune the stolen goods")
+            return result
         cancel_sale(self)
         if refuse == "fence":
             broker = getattr(ui.character_of(app, str(broker_id)), "name", None) or "盗品買取商"

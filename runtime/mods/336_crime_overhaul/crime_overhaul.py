@@ -3,12 +3,13 @@
 
 素のゲームの犯罪は、自由行動のその場で LLM が出す金品しか見返りが無く、
 額も出すかどうかも LLM 任せだった。手配はリスクだけを積む（衛兵・懲役、`309_` の罰金、`316_` の追手）。
-見返りは機能ごとのファイルに分けてある。ここは設定と、ゲームの入口を1枚だけ包んで配る役。
+見返りは機能ごとのファイルに分けてある。ここは設定と、ゲームの入口（本文）を1枚だけ包んで配る役。
+選択肢と押下は、ローダの窓口 `choices` に預ける。
 
 | ファイル | 機能 |
 |---|---|
 | `loot` | 盗みの稼ぎ（自由行動の盗みの額に床と天井を付ける） |
-| `law` | 手配への反応（店が委縮して値を下げる・時効・追手の前金を奪う） |
+| `law` | 手配への反応（店が委縮して値を下げる・時効） |
 | `theft` | 店で盗む（売買画面の右クリック）。盗んだ店には売れず、よその店では買い取り額が半分 |
 | `fence` | 盗品買取商（裏の事務所で盗品を売る） |
 | `office` | 裏の仕事（裏の事務所の違法な依頼）。種類の表は `underworld` |
@@ -23,7 +24,7 @@
 
 import random
 
-from instantale_modloader import ui, wanted
+from instantale_modloader import choices, wanted
 
 from . import cellmate, common, court, encounter, fence, law, loot, office, prison, rescue, theft
 
@@ -48,8 +49,6 @@ STATUTE_STEP = 10             # 1回に戻る手配度
 STATUTE_RESTORE_TO = 10       # ここまで戻る（素の平常値）
 STATUTE_HOLD_HUNTED = True    # 全域手配の間は、合計がその線に届いたところで止める（追手は続く）
 STATUTE_NOTICE = True         # 戻ったときに1行出す
-BOUNTY_ENABLED = True         # 追手を倒すと懐の前金が手に入る
-BOUNTY_PURSE_PCT = 30         # 前金。追手の難易度での依頼1件の報酬に対する %
 THEFT_ENABLED = True          # 売買画面で店の品を右クリックすると「盗む」が出る
 THEFT_BASE_PCT = 30           # 能力値 15 のときの確率（器用で抜き取る・判断で視線に気づく、の両方）
 THEFT_PER_POINT = 3           # 能力値1点ごとに動く確率（%）
@@ -140,27 +139,16 @@ def apply(ctx):
                 return None
         return orig(self, context, *args, **kwargs)
 
-    @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False)
-    def refresh_choice_buttons(orig, self, reset_page=False, *args, **kwargs):
-        try:
-            buttons = getattr(self, "buttons", None)
-            if isinstance(buttons, list) and buttons:
-                for handler in env.refresh_handlers:
-                    handler(self, buttons)
-        except Exception:
-            ctx.log_exc("crime incentive: cannot add the choices")
-        return orig(self, reset_page, *args, **kwargs)
+    # ---- 選択肢と押下は、ローダの窓口 `choices`（TECH.md §3.3.14）に預ける ---------------------
+    # 組み直しへの差し込み、押下の振り分け、セーブで落ちた印の付け直し、ロードの後の組み直し
+    # （人物が揃ってから）は窓口が1か所で引き受ける。ここは機能の処理を読み込んだ順に渡すだけ。
+    def refresh(app, buttons):
+        if not isinstance(buttons, list) or not buttons:
+            return
+        for handler in env.refresh_handlers:
+            handler(app, buttons)
 
-    @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False)
-    def on_button_press(orig, self, button_index, *args, **kwargs):
-        """自前のボタンだけ横取りする。印が無ければ必ず素通し。"""
-        action = screen.mark_of(ui.pressed_entry(self, button_index))
-        if isinstance(action, str):
-            for prefix, handler in env.press_handlers:
-                if action.startswith(prefix):
-                    handler(self, action)
-                    return None
-        return orig(self, button_index, *args, **kwargs)
+    choices.provide(ctx, screen, refresh=refresh, presses=dict(env.press_handlers))
 
     ctx.log("crime incentive: installed (loot {} shares {} floor {}% ceiling {}%; "
             "intimidation {} {}%/pt cap {}% sell {}; statute {} +{} per {} month(s) up to {}, "

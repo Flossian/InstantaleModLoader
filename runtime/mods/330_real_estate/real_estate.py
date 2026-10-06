@@ -155,7 +155,7 @@ import copy
 import datetime
 import sys
 
-from instantale_modloader import (durations, frames, llm, modfacility, modnpc,
+from instantale_modloader import (choices, durations, frames, llm, modfacility, modnpc,
                                   npcs, prices, ui)
 from instantale_modloader.state import (UNKNOWN_WORLD, WorldStore, playthrough_key,
                                         playthrough_key_of_dict)
@@ -2031,8 +2031,7 @@ def apply(ctx):
             write("WARN unknown action {!r}".format(action))
 
     # ================================================================ フック
-    @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False, safe=True)
-    def refresh_choice_buttons(orig, self, reset_page=False, *args, **kwargs):
+    def refresh_choice_buttons(self):
         """選択肢が組み直されるたびに、建物を当て直して自前のボタンを足す。
 
         最後にローダの塗り直しをもう一度呼ぶ。
@@ -2041,7 +2040,6 @@ def apply(ctx):
         先に走られると、建物を当て直す前の画面で判断されてしまう。
         二度呼んでも増えない作りなので、ここで順序を確かめる。
         """
-        result = orig(self, reset_page, *args, **kwargs)
         try:
             cover_after_activity(self)
         except Exception:
@@ -2055,7 +2053,6 @@ def apply(ctx):
             modfacility.maintain_buttons(self, write=write)
         except Exception:
             ctx.log_exc("real estate: cannot maintain the choices")
-        return result
 
     def flush_demolitions(app):
         """中に居たせいで残っていた取り壊しを、外に出た後で片付ける。"""
@@ -2091,13 +2088,9 @@ def apply(ctx):
             write("{}: swept {} lapsed contract(s)".format(why, done))
         return done
 
-    @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False)
-    def on_button_press(orig, self, button_index, *args, **kwargs):
+    def on_button_press(self, action):
         """自前のボタンだけ横取りする。印が無ければ必ず素通し。"""
-        entry = ui.pressed_entry(self, button_index)
-        action = screen.mark_of(entry)
-        if action is None:
-            return orig(self, button_index, *args, **kwargs)
+        entry = choices.pressed()
         if state["acting"]:
             write("ignored {!r}: the previous press is still running".format(
                 entry.get("text") if isinstance(entry, dict) else None))
@@ -2108,6 +2101,9 @@ def apply(ctx):
         screen.start_phase(self, EstatePhase(self, action, kind), text,
                            fallback=lambda: run_action(self, action, kind))
         return None
+
+    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
+    choices.provide(ctx, screen, after=refresh_choice_buttons, presses={"": on_button_press})
 
     @ctx.wrap("__main__:World.__init__", required=False, safe=True)
     def world_loaded(orig, self, save_data_dict, app, *args, **kwargs):
@@ -2149,7 +2145,7 @@ def apply(ctx):
         """
         if state.get("storage") is None:
             return None
-        was = getattr(app, "in_shopping", None)
+        was = getattr(app, "in_shopping", None)  # 戻すために控える。untrusted-flag-ok
         if not was:
             return None
         try:

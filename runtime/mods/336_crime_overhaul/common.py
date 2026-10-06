@@ -5,8 +5,9 @@
 ここの `Env` を受け取る。設定は入口（`crime_overhaul.py`）の定数で、`env.cfg.<名前>` をその場で読む
 （ローダは apply() の前に入口の定数へ書き込む。後から変えた値も読めるよう、控えない）。
 
-ゲームの同じ入口を 336 の中で何度も包まないよう、選択肢を組み直した合図（`refresh_choice_buttons`）・
-押下（`on_button_press`）・本文（`add_text`）は入口が1枚だけ包み、ここに登録された処理へ配る。
+ゲームの同じ入口を 336 の中で何度も包まないよう、機能はここに登録し、入口が配る。
+選択肢を組み直した合図（`refresh_choice_buttons`）と押下（`on_button_press`）はローダの窓口 `choices`
+（TECH.md §3.3.14）を通して、本文（`add_text`）は入口が1枚だけ包んで配る。
 """
 import os
 import sys
@@ -60,6 +61,7 @@ class Env(object):
         self.press_handlers = []
         self.text_filters = []
         #: 裁判へ持ち越す介入（衛兵の買収が突き返されたら `{"bribe": "caught"}`）。次の裁判が始まったら空にする。
+        #: ロードを挟んでも続くよう、世界×主人公の控え（`carry_to_trial`）にも持つ（`carry` / `take_carry`）。
         self.carry_to_trial = {}
         #: 次の依頼の生成（`random_quest_generator`）へ差し込む指示と難易度。1回で使い切る（`office` が包む）。
         #: 裏の仕事（`office`）と処刑場からの脱出（`rescue`）が使う。
@@ -77,6 +79,34 @@ class Env(object):
         #: "break"（決行の戦闘を起こす直前）/
         #: "exit"（牢を出た。how は "release" / "escape" / "rescue"）。
         self.prison_handlers = {"break": [], "exit": []}
+
+    def carry(self, app, key, value):
+        """裁判へ持ち越す介入を置く（`value` が None なら外す）。メモリと控えの両方。"""
+        if value is None:
+            self.carry_to_trial.pop(key, None)
+        else:
+            self.carry_to_trial[key] = value
+        playthrough = self.worlds.playthrough(app)
+        with self.worlds.lock:
+            bucket = self.worlds.load(playthrough)
+            if self.carry_to_trial:
+                bucket["carry_to_trial"] = dict(self.carry_to_trial)
+            else:
+                bucket.pop("carry_to_trial", None)
+            self.worlds.save(playthrough)
+
+    def take_carry(self, app):
+        """持ち越した介入を受け取って空にする（裁判が始まったとき）。ロードで消えたメモリは控えから補う。"""
+        playthrough = self.worlds.playthrough(app)
+        with self.worlds.lock:
+            bucket = self.worlds.load(playthrough)
+            stored = bucket.pop("carry_to_trial", None)
+            if stored is not None:
+                self.worlds.save(playthrough)
+        taken = dict(stored) if isinstance(stored, dict) else {}
+        taken.update(self.carry_to_trial)
+        self.carry_to_trial.clear()
+        return taken
 
     def on_prison(self, kind, handler):
         """牢の出来事 `kind` で `handler(app, **kw)` を呼ぶ。"""

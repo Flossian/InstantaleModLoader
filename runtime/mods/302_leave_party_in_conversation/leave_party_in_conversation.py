@@ -94,7 +94,7 @@ id の配列）。
 import sys
 import time
 
-from instantale_modloader import frames, ui
+from instantale_modloader import choices, frames, ui
 from instantale_modloader.frames import repr_value
 
 LOG_BASENAME = "party_leave.log"
@@ -208,7 +208,6 @@ def apply(ctx):
     # ここで確かめた「描画は HUD 側を直接呼ぶ」「差し替えは次のフレーム」もそこに入っているので、他の
     # mod からも同じものが使える。
     screen = ui.Screen(ctx, write, tag="party leave", mark=MARK)
-    ui.refresh_choices_after_load(ctx, write)      # ロード直後は名簿が空。復元されてから組み直す
 
     spec_cls_name = ui.spec_cls_name
     pressed_entry = ui.pressed_entry
@@ -749,9 +748,8 @@ def apply(ctx):
                       describe_stores(app)))
 
     # ================================================================ フック
-    @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False)
-    def refresh_choice_buttons(orig, self, reset_page=False, *args, **kwargs):
-        """会話相手が仲間なら「ここで別れる」を「会話を終了する」の手前に足す。
+    def refresh_choice_buttons(self, _buttons):
+        """会話相手が仲間なら「ここで別れる」を「会話を終了する」の手前に足す（窓口 `choices` から、組み直しの前に）。
 
         判定は文字列ではなく spec のクラス名と `args[0]`（相手の id）。
         表記や言語設定に依存せず、仲間以外との会話には出ない。
@@ -794,19 +792,14 @@ def apply(ctx):
                             name_of(self, member_id), reason))
         except Exception:
             ctx.log_exc("party leave: cannot add the farewell button")
-        return orig(self, reset_page, *args, **kwargs)
 
-    @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False)
-    def on_button_press(orig, self, button_index, *args, **kwargs):
-        """自前のボタンだけ横取りする。印が無ければ必ず素通しする。
+    def on_button_press(self, action):
+        """自前のボタンが押された（窓口の `presses`）。
 
         印のキーは `301_` と別（`MARK`）。
         共有すると、向こうが知らない action を握り潰してしまう。
         """
-        entry = pressed_entry(self, button_index)
-        action = entry.get(MARK) if isinstance(entry, dict) else None
-        if action is None:
-            return orig(self, button_index, *args, **kwargs)
+        entry = choices.pressed() or {}
         member_id = entry.get("mod_party_member") or state["pending"]
         text = entry.get("text") or LEAVE_LABEL
         write("pressed {!r} ({}) member={!r}".format(text, action, member_id))
@@ -820,6 +813,9 @@ def apply(ctx):
         # でないと画面が塗り替わらない（LeavePhase の説明）。
         start_phase(self, action, member_id, text)
         return None
+
+    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
+    choices.provide(ctx, screen, refresh=refresh_choice_buttons, presses={"": on_button_press})
 
     # ------------------------------------------------- 見張り（読み取りのみ）
     @ctx.wrap("__main__:InstantaleApp.move_npc_to_facility", required=False)

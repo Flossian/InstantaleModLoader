@@ -8,7 +8,7 @@
 手で書き換えても次の生成で消える。
 直す先は各 MOD の `mod.json` か MODS.md の見出し。
 
-同梱 124 本（基盤 2 / 修正 41 / 追加 42 / 計測 39）。
+同梱 125 本（基盤 2 / 修正 41 / 追加 42 / 計測 40）。
 うち 13 本は外部の MOD 作者からの提供（下の「提供を受けた MOD」）。
 ほかに 3 本は自作だが、外部からの提案を取り込んでいる（下の「提案を取り込んだ MOD」）。
 
@@ -50,7 +50,7 @@
 | [`104_balance_area_bgm`](MODS.md#104_balance_area_bgm-新しいエリアのbgmの偏りを均す) | エリアBGMの偏りの均し | 新しいエリアのBGMの偏りを均す | 1 |  |
 | [`105_fix_schema_compact`](MODS.md#105_fix_schema_compact-llm-へ送るスキーマ説明を圧縮する) | スキーマ説明の圧縮 | LLM へ送るスキーマ説明を圧縮する | - |  |
 | [`106_fix_battle_bgm_restore`](MODS.md#106_fix_battle_bgm_restore-戦闘後にbgmが戻らないのを直す) | 戦闘後の戦闘BGMの停止 | 戦闘後にBGMが戻らないのを直す | 1 | 取込済 main_024 |
-| [`107_fix_battle_flag_stuck`](MODS.md#107_fix_battle_flag_stuck-闘技場から撤退した後に次の戦闘が固まるのを直す) | 戦闘後の後始末漏れの修正 | 闘技場から撤退した後に次の戦闘が固まるのを直す | - |  |
+| [`107_fix_battle_flag_stuck`](MODS.md#107_fix_battle_flag_stuck-戦闘と売買の後に残る最中の印を下ろす) | 戦闘と売買の後始末漏れの修正 | 戦闘と売買の後に残る「最中」の印を下ろす | - |  |
 | [`108_fix_shop_inventory_overflow`](MODS.md#108_fix_shop_inventory_overflow-売買画面を開くと落ちるのを直す) | 売買画面クラッシュの修正 | 売買画面を開くと落ちるのを直す | - | 取込済 main_024 |
 | [`109_fix_item_detail_autosize`](MODS.md#109_fix_item_detail_autosize-アイテムの説明が途中で切れるのを直す) | アイテム説明欄の拡張 | アイテムの説明が途中で切れるのを直す | 1 |  |
 | [`110_fix_character_name_path`](MODS.md#110_fix_character_name_path-名前のせいでnpcの画像が作れないのを直す) | 画像生成に通らない名前の置き換え | 名前のせいでNPCの画像が作れないのを直す | - | 取込済 main_024 |
@@ -107,7 +107,7 @@
 | [`313_event_ability_check`](MODS.md#313_event_ability_check-行動の成否判定に能力値を効かせる) | 行動判定に能力値を効かせる | 行動の成否判定に能力値を効かせる | 9 |  |
 | [`314_area_move_custom`](MODS.md#314_area_move_custom-エリア移動の日数料金文言を変える) | 街移動のカスタマイズ | エリア移動の日数・料金・文言を変える | 16 |  |
 | [`315_vacation_custom`](MODS.md#315_vacation_custom-宿の宿泊期間部屋宿代を変える) | 宿泊のカスタマイズ | 宿の宿泊期間・部屋・宿代を変える | 14 |  |
-| [`316_bounty_hunter`](MODS.md#316_bounty_hunter-手配されていると追手が来る) | 賞金稼ぎが襲ってくる | 手配されていると追手が来る | 15 |  |
+| [`316_bounty_hunter`](MODS.md#316_bounty_hunter-手配されていると追手が来る) | 賞金稼ぎが襲ってくる | 手配されていると追手が来る | 17 |  |
 | [`317_reputation`](MODS.md#317_reputation-評判と二つ名) | 評判と二つ名 | 評判と二つ名 | 8 |  |
 | [`318_area_difficulty_growth`](MODS.md#318_area_difficulty_growth-土地が育つ依頼の難易度が上がる) | 依頼クリアで難易度上昇 | 土地が育つ（依頼の難易度が上がる） | 7 |  |
 | [`319_battle_tactics`](MODS.md#319_battle_tactics-戦闘を複数手の駆け引きにする) | 戦闘の数値とバフ・デバフの作り直し | 戦闘を複数手の駆け引きにする | 18 |  |
@@ -127,7 +127,7 @@
 | [`333_equipment_slots`](MODS.md#333_equipment_slots-インベントリに装備枠を追加) | インベントリに装備枠を追加 | インベントリに装備枠を追加 | 4 |  |
 | [`334_colosseum_custom`](MODS.md#334_colosseum_custom-闘技場の相手の強さと懸賞金を決める) | 闘技場のカスタマイズ | 闘技場の相手の強さと懸賞金を決める | 13 |  |
 | [`335_player_portrait_regenerate`](MODS.md#335_player_portrait_regenerate-人物欄から主人公の立ち絵を描き直せる) | 人物欄から主人公の立ち絵を描き直せる | 人物欄から主人公の立ち絵を描き直せる | - |  |
-| [`336_crime_overhaul`](MODS.md#336_crime_overhaul-犯罪まわりの全面改修) | 犯罪まわりの全面改修 | 犯罪まわりの全面改修 | 76 |  |
+| [`336_crime_overhaul`](MODS.md#336_crime_overhaul-犯罪まわりの全面改修) | 犯罪まわりの全面改修 | 犯罪まわりの全面改修 | 74 |  |
 | [`401_battle_character_context`](MODS.md#401_battle_character_context-戦闘の審判へ同行者の人物と装備を見せる) | 戦闘の審判への仲間の情報補完 | 戦闘の審判へ同行者の人物と装備を見せる | - |  |
 | [`402_party_inventory_transfer`](MODS.md#402_party_inventory_transfer-仲間とアイテムを受け渡しできる) | 仲間とのアイテム受け渡し | 仲間とアイテムを受け渡しできる | - |  |
 | [`403_npc_social_memory`](MODS.md#403_npc_social_memory-npc同士がお互いを認知し関係を覚える) | NPC同士の認知と関係記憶 | NPC同士がお互いを認知し、関係を覚える | 5 |  |
@@ -138,7 +138,7 @@
 
 ---
 
-## 計測（39本）
+## 計測（40本）
 
 ゲームは変えない。`out\` にログを残すだけ。デバッグモードのときだけ読み込まれる。
 
@@ -183,6 +183,7 @@
 | `236_probe_enemy_stats` | 敵と味方の強さの出どころを録る |
 | `237_probe_affinity` | NPC のプレイヤーへの好感度（`relationship.player.affinity`）がいつ・どれだけ動くかを録る |
 | `238_probe_prison` | 逮捕・裁判・服役・釈放の流れを録る |
+| `239_probe_game_flags` | ゲームの「〜の最中」の旗 7 つ（`in_battle` / `in_boss_battle` / `in_colosseum_battle` / `in_conversation` / `in_free_input` / `in_action_in_conversation` / `in_shopping`）を録る |
 
 ---
 

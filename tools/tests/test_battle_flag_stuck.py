@@ -10,6 +10,7 @@
   ボス     … `in_boss_battle` は下ろさず、立っていたら記録だけ
   ロード   … 焼き付いた印を読み込み直後に下ろす
   巻き込み … 敵が居る（本物の戦闘中）注入では触らない
+  売買     … `in_shopping` を窓を閉じた後・ロードの後・注入の時点で下ろす（窓が開いている最中の注入では触らない）
 """
 import importlib.util
 import io
@@ -296,6 +297,47 @@ check("敵が居るなら触らない", app.in_battle == 1 and app.in_colosseum_
       (app.in_battle, app.in_colosseum_battle))
 check("触らなかった理由が残る",
       any("looks like a real battle" in line for line in lines()), lines())
+
+print("売買の窓の旗（v6）")
+SHOP_CLOSE = "__main__:InstantaleApp.close_shopping_window_process"
+app = App()
+module, ctx, _manifest = fresh(app)
+check("包む: " + SHOP_CLOSE, SHOP_CLOSE in ctx.hooks, sorted(ctx.hooks))
+app.in_shopping = True                 # 「売買する」でゲームが立てる
+app.is_popup_window_opened = False
+result = ctx.hooks[SHOP_CLOSE](lambda self: "closed", app)
+check("窓を閉じる処理の戻りをそのまま返す", result == "closed", result)
+check("窓を閉じた後に下ろす", app.in_shopping is False, app.in_shopping)
+check("下ろしたことが1行残る",
+      any("close_shopping_window_process: cleared in_shopping" in line for line in lines()),
+      lines())
+before = len(lines())
+ctx.hooks[SHOP_CLOSE](lambda self: None, app)
+check("立っていなければ書かない", len(lines()) == before, lines()[before:])
+
+app = App()
+app.in_shopping = True                 # セーブに焼かれた値がロードで戻る
+app.buttons = buttons("MovePhaseManager")
+module, ctx, _manifest = fresh(app)    # 注入の時点で窓が開いていない → 下ろす
+check("注入の時点で窓が開いていなければ下ろす", app.in_shopping is False, app.in_shopping)
+app.in_shopping = True
+ctx.hooks["__main__:InstantaleApp.load_game_new"](lambda self: None, app)
+check("ロードの後に下ろす", app.in_shopping is False, app.in_shopping)
+
+app = App(battle="normal", enemies={"敵": object()})
+app.in_shopping = True
+app.buttons = buttons("BattlePhaseManager")
+module, ctx, _manifest = fresh(app)
+app.in_shopping = True
+ctx.hooks["__main__:InstantaleApp.load_game_new"](lambda self: None, app)
+check("戦闘の画面に戻ったロードでも売買の旗は下ろす（窓は開いていない）",
+      app.in_shopping is False and app.in_battle == "normal", (app.in_shopping, app.in_battle))
+
+app = App()
+app.in_shopping = True
+app.is_popup_window_opened = True      # 窓を開いている最中に注入した
+module, ctx, _manifest = fresh(app)
+check("窓が開いている最中の注入では触らない", app.in_shopping is True, app.in_shopping)
 
 print("値が読めないとき")
 module, ctx, _manifest = fresh(None)

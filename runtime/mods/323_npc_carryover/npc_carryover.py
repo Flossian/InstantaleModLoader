@@ -83,7 +83,7 @@ import os
 import random
 import sys
 
-from instantale_modloader import frames, npcs, state as loader_state, ui
+from instantale_modloader import choices, frames, npcs, state as loader_state, ui
 from instantale_modloader.npcs import make_npc
 
 from . import carryover
@@ -633,9 +633,7 @@ def apply(ctx):
             ctx.log_exc("npc carryover: cannot record the save")
         return result
 
-    @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons",
-              required=False, safe=True)
-    def refresh_choice_buttons(orig, self, *args, **kwargs):
+    def refresh_choice_buttons(self, _buttons):
         # 言付けはロードの直後ではなく、画面が出来てから出す。
         if pending_words:
             words, pending_words[:] = list(pending_words), []
@@ -644,7 +642,9 @@ def apply(ctx):
                     self.add_text(text)
                 except Exception:
                     ctx.log_exc("npc carryover: cannot say it in game")
-        return orig(self, *args, **kwargs)
+
+    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
+    choices.provide(ctx, None, refresh=refresh_choice_buttons)
 
     ctx.log("npc carryover: installed (state: {})".format(
         carryover.carryover_dir(state_dir)))

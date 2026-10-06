@@ -71,7 +71,7 @@ import sys
 import re
 import time
 
-from instantale_modloader import durations, llm, prices, ui
+from instantale_modloader import choices, durations, llm, prices, ui
 
 LOG_BASENAME = "vacation_custom.log"
 
@@ -430,9 +430,7 @@ def apply(ctx):
             write("label: {!r} -> {!r} (stay {})".format(old, new,
                                                          stay["length"]))
 
-    @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False,
-              safe=True)
-    def refresh_buttons(orig, self, *args, **kwargs):
+    def refresh_buttons(self, _buttons):
         """ボタンが描かれる直前の1か所で、宿泊まわりのラベルだけ書き直す。
 
         宿の画面を描く入口はここに集まる（部屋選びも施設のメニューも、
@@ -456,11 +454,9 @@ def apply(ctx):
                             relabel_stay(entry, stay)
         except Exception:
             ctx.log_exc("vacation custom: cannot relabel the buttons")
-        return orig(self, *args, **kwargs)
 
     # ============================================================ 手持ちの確認
-    @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False)
-    def on_button_press(orig, self, button_index, *args, **kwargs):
+    def on_button_press(self, entry, button_index):
         """設定した宿代に手持ちが満たないときは、押された時点で断る。
 
         ゲームのボタンは触らず押下だけ握る。
@@ -484,10 +480,13 @@ def apply(ctx):
                             screen.say(self, fmt(
                                 REFUSE_TEXT, name=conf["name"],
                                 price=conf["price"], gold=gold))
-                            return None
+                            return True
         except Exception:
             ctx.log_exc("vacation custom: price check failed")
-        return orig(self, button_index, *args, **kwargs)
+        return False
+
+    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
+    choices.provide(ctx, screen, refresh=refresh_buttons, intercept=on_button_press)
 
     # ============================================================ 宿泊期間
     @ctx.wrap("__main__:DisplayVacationChoice.__init__", required=False, safe=True)

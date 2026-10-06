@@ -74,7 +74,7 @@ MODを外しても消えない（DOC.md に明記）。
 
 import sys
 
-from instantale_modloader import frames, llm, npcs, state as state_api, ui
+from instantale_modloader import choices, frames, llm, npcs, state as state_api, ui
 from instantale_modloader.npcs import make_npc
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
@@ -176,8 +176,7 @@ def apply(ctx):
         write("offered {!r} (adventurers listed: {})".format(
             RECRUIT_LABEL, count))
 
-    @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False)
-    def refresh_choice_buttons(orig, self, reset_page=False, *args, **kwargs):
+    def refresh_choice_buttons(self, _buttons):
         try:
             buttons = getattr(self, "buttons", None)
             if isinstance(buttons, list):
@@ -186,7 +185,6 @@ def apply(ctx):
                 offer(self, buttons)
         except Exception:
             ctx.log_exc("adventurer recruit: cannot offer the button")
-        return orig(self, reset_page, *args, **kwargs)
 
     # ================================================== 押されたら募集する
     class RecruitPhase(object):
@@ -202,12 +200,9 @@ def apply(ctx):
         def execute(self, choice_text):
             return recruit(self.app)
 
-    @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False)
-    def on_button_press(orig, self, button_index, *args, **kwargs):
-        entry = ui.pressed_entry(self, button_index)
-        action = screen.mark_of(entry)
-        if action is None:
-            return orig(self, button_index, *args, **kwargs)
+    def on_button_press(self, action):
+        """自前のボタンが押された（窓口 `choices` の `presses`）。"""
+        entry = choices.pressed()
         if state["recruiting"]:
             return None                 # 連打。生成中は無反応でよい
         write("pressed {!r}".format(entry.get("text")))
@@ -215,6 +210,9 @@ def apply(ctx):
                            entry.get("text") or RECRUIT_LABEL,
                            fallback=lambda: recruit(self))
         return None
+
+    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
+    choices.provide(ctx, screen, refresh=refresh_choice_buttons, presses={"": on_button_press})
 
     # ================================================== 土地の水準を読む
     def difficulty_for(app, area):

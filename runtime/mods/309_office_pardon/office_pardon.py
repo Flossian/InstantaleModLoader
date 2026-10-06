@@ -59,7 +59,7 @@
 """
 
 
-from instantale_modloader import ui
+from instantale_modloader import choices, ui
 
 from . import record
 
@@ -126,8 +126,8 @@ FAILED_TEXT = "（帳面は書き換えられなかった）"
 #: 戦闘中・会話中など。
 #: 「手が空いているか」（テキストの流し込み中・ポップアップが開いている）は
 #: `ui.busy_signals` 側。
-# ここが真の間は選択肢を足さない。
-#: 表はローダが持つ（`902_` と共有）。
+#: 表はローダが持つ。`in_shopping` は入っていない（店に寄った後の役場で
+#: ボタンが出なかった。`ui.BUSY_FLAGS` の註）。
 BUSY_FLAGS = ui.BUSY_FLAGS
 
 #: 施設の選択肢だと見なす目印。
@@ -389,8 +389,7 @@ def apply(ctx):
                 ctx.log_exc("office pardon: phase failed ({})".format(self.action))
 
     # ================================================================ フック
-    @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False)
-    def refresh_choice_buttons(orig, self, reset_page=False, *args, **kwargs):
+    def refresh_choice_buttons(self, _buttons):
         """役場の選択肢が組まれるたびに、条件が揃っていればボタンを1つ足す。
 
         `orig` の前に挿すので、ゲーム自身がそのまま
@@ -404,20 +403,18 @@ def apply(ctx):
             insert_button(self)
         except Exception:
             ctx.log_exc("office pardon: cannot offer the pardon")
-        return orig(self, reset_page, *args, **kwargs)
 
-    @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False)
-    def on_button_press(orig, self, button_index, *args, **kwargs):
+    def on_button_press(self, action):
         """自前のボタンだけ横取りする。印が無ければ必ず素通し。"""
-        entry = ui.pressed_entry(self, button_index)
-        action = screen.mark_of(entry)
-        if action not in ACTIONS:
-            return orig(self, button_index, *args, **kwargs)
+        entry = choices.pressed()
         text = (entry.get("text") if isinstance(entry, dict) else None) or action
         write("pressed {!r} ({})".format(text, action))
         screen.start_phase(self, PardonPhase(self, action), text,
                            fallback=lambda: ACTIONS[action](self))
         return None
+
+    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
+    choices.provide(ctx, screen, refresh=refresh_choice_buttons, presses=dict.fromkeys(ACTIONS, on_button_press))
 
     ctx.log("office pardon: {}G per point, threshold {}, restore to {}, log={}"
             .format(PRICE_PER_POINT, WANTED_THRESHOLD, RESTORE_TO, log_path))

@@ -70,7 +70,7 @@ import random
 import re
 import sys
 
-from instantale_modloader import state as loader_state, ui
+from instantale_modloader import choices, state as loader_state, ui
 from instantale_modloader.npcs import npc_stores, save_npcs
 
 from . import travel
@@ -1028,8 +1028,7 @@ def apply(ctx):
     for target in LOAD_TARGETS:
         make_load(target)
 
-    @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False, safe=True)
-    def refresh_choice_buttons(orig, self, *args, **kwargs):
+    def refresh_choice_buttons(self, _buttons):
         """ロードの後の突き合わせと、冒険者の一覧の手当て。"""
         try:
             buttons = getattr(self, "buttons", None)
@@ -1046,7 +1045,9 @@ def apply(ctx):
                         reconcile(self)
                 except Exception:
                     ctx.log_exc("npc travel: reconcile failed")
-        return orig(self, *args, **kwargs)
+
+    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
+    choices.provide(ctx, screen, refresh=refresh_choice_buttons)
 
     def make_conversation(target, label):
         @ctx.wrap(target, required=False)

@@ -1997,9 +1997,8 @@ def is_facility_screen(buttons):
 #: 部屋選び（`VacationStartManager` ＋ やめる）や会話相手の一覧
 #: （`ConversationStartManager` ＋ やめる）にはこれらが無い。
 #: ゲームが「別のこと」をしている最中の旗。ここが真の間は建物の選択肢を足さない。
-#: `in_shopping` は外す ― 店の外を往復しているだけでも真のままで（`ui.BUSY_FLAGS` の註）、
-#: 自分の店の中でこちらの選択肢が出なくなる。
-BUSY_FLAGS = tuple(flag for flag in ui.BUSY_FLAGS if flag != "in_shopping")
+#: 表はローダの1か所（`in_shopping` を入れない理由も `ui.BUSY_FLAGS` の註）。
+BUSY_FLAGS = ui.BUSY_FLAGS
 
 
 #: 戦闘の旗。ゲームはこれを下ろし忘れる経路を持っている（`107_` の表）。

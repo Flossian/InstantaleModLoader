@@ -100,7 +100,7 @@ import sys
 import threading
 import time
 
-from instantale_modloader import confinement, frames, ui
+from instantale_modloader import choices, confinement, frames, ui
 from instantale_modloader.state import (PLAYTHROUGH_SEP, UNKNOWN_WORLD, other_playthroughs,
                                         playthrough_key, world_filename, world_key)
 
@@ -313,7 +313,6 @@ def apply(ctx):
     # 特に **画面を塗るのは `refresh_choice_buttons` ではなく HUD 側**という
     # `302_` の実測結果は、この mod にも要る（下の `apply_buttons`）。
     screen = ui.Screen(ctx, write, tag="quest offer", mark=MARK)
-    ui.refresh_choices_after_load(ctx, write)      # ロード直後は名簿が空。復元されてから組み直す
 
     find_app = ui.find_app
     cls_of = ui.cls_of
@@ -1407,9 +1406,8 @@ def apply(ctx):
         buttons.insert(max(0, min(at, len(buttons))), entry)
         return True
 
-    @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False)
-    def refresh_choice_buttons(orig, self, reset_page=False, *args, **kwargs):
-        """施設の選択肢に「依頼を受ける」を「会話する」の隣へ足す。
+    def refresh_choice_buttons(self, _buttons):
+        """施設の選択肢に「依頼を受ける」を「会話する」の隣へ足す（ローダの窓口 `choices` から、組み直しの前に呼ばれる）。
 
         会話中の「行動」への切り替えが画面のどこにあるか未確認なので、
         必ず見える経路をもう1本用意する。
@@ -1465,7 +1463,7 @@ def apply(ctx):
                             ui.character_name(self, partner), partner))
                         at = None
                         # ロード直後は名簿が空で相手を仲間と見なせず、依頼の選択肢を足してしまう。
-                        # 名簿が復元されて組み直されたとき（`ui.refresh_choices_after_load`）に落とす
+                        # 名簿が復元されて組み直されたとき（窓口 `choices` のロードの後の組み直し）に落とす
                         stale = [b for b in buttons
                                  if isinstance(b, dict) and b.get(MARK) in ("offer", "generate")]
                         if stale:
@@ -1487,20 +1485,12 @@ def apply(ctx):
                             buttons[at].get("text"), where, len(buttons)))
         except Exception:
             ctx.log_exc("quest offer: cannot add offer button")
-        return orig(self, reset_page, *args, **kwargs)
 
-    @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False)
-    def on_button_press(orig, self, button_index, *args, **kwargs):
-        """自前のボタンだけ横取りする。
-
-        判定に使うのは文字列ではなくボタン辞書に付けた印。
-        同じ文字列のゲーム側ボタンを巻き込まないため。
-        印が無ければ必ず素通しする。
-        """
+    def look_at_press(self, entry, _button_index):
+        """どのボタンが押されても先に通る（窓口の `intercept`）。押下は握らない。"""
         # 何を押してもその画面からは離れる。
         # 掲示板の印はここで降ろす（受注画面まで間引きを持ち込まないため）。
         state["board_open"] = False
-        entry = pressed_entry(self, button_index)
         action = entry.get(MARK) if isinstance(entry, dict) else None
         if action is None:
             # ゲーム本来の「クエスト掲示板」が押されたら絞り込みを解く。
@@ -1508,7 +1498,11 @@ def apply(ctx):
             if spec_cls_name(entry) == "DisplayQuestChoice" and state["filter_npc"]:
                 write("filter cleared: the game's own quest board was opened")
                 state["filter_npc"] = None
-            return orig(self, button_index, *args, **kwargs)
+        return False
+
+    def on_button_press(self, action):
+        """自前のボタンが押された（窓口の `presses`）。判定は文字列ではなくボタン辞書に付けた印。"""
+        entry = choices.pressed() or {}
         if action == "busy":
             # 待機表示の「…」。
             # 押されても何もしない ＝ 生成中は操作させない。
@@ -1521,6 +1515,10 @@ def apply(ctx):
         # OfferPhase の説明を参照。
         start_phase(self, action, text)
         return None
+
+    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
+    choices.provide(ctx, screen, refresh=refresh_choice_buttons, presses={"": on_button_press},
+                    intercept=look_at_press)
 
     @ctx.wrap("__main__:InstantaleApp.toggle_to_action_in_conversation", required=False)
     def toggle_to_action(orig, self, *args, **kwargs):

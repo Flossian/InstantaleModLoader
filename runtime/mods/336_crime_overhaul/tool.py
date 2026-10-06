@@ -46,8 +46,6 @@ GROUPS = (
      "手配されている土地では、手配が重いほど買値が下がり売値が上がる"),
     ("statute", "時効", "STATUTE_ENABLED", ("STATUTE_",),
      "離れている土地の手配度が、時とともに平常へ戻る"),
-    ("bounty", "追手の前金を奪う", "BOUNTY_ENABLED", ("BOUNTY_",),
-     "追手（316_bounty_hunter）に勝つと、懐から賞金の前金が手に入る"),
     ("theft", "店で盗む・盗品", "THEFT_ENABLED", ("THEFT_", "STOLEN_"),
      "売買画面で店の品を右クリックして盗む。盗品は盗んだ店では売れず、よその店では値が下がる"),
     ("fence", "盗品買取商", "FENCE_ENABLED", ("FENCE_",),

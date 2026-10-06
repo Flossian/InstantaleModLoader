@@ -63,7 +63,7 @@
 import random
 import sys
 
-from instantale_modloader import frames, llm, ui
+from instantale_modloader import choices, frames, llm, ui
 from instantale_modloader.state import WorldStore
 
 LOG_BASENAME = "inn_quality.log"
@@ -387,9 +387,7 @@ def apply(ctx):
         state["partner"] = None
         return orig(self, choice_text, *args, **kwargs)
 
-    @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False,
-              safe=True)
-    def refresh_buttons(orig, self, *args, **kwargs):
+    def refresh_buttons(self, _buttons):
         """描かれる直前に、活動の一覧を写す／残りがあれば並べ直す。"""
         try:
             buttons = getattr(self, "buttons", None)
@@ -412,7 +410,9 @@ def apply(ctx):
                         state["stay"]["left"]))
         except Exception:
             ctx.log_exc("inn quality: cannot rebuild the activity menu")
-        return orig(self, *args, **kwargs)
+
+    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
+    choices.provide(ctx, screen, refresh=refresh_buttons)
 
     # ============================================================ 常連
     def remember(app, quality):

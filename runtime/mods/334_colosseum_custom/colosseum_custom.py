@@ -76,7 +76,7 @@ r"""闘技場の相手の強さと懸賞金を設定で決める。
 import sys
 import time
 
-from instantale_modloader import defeat, frames, llm, ui
+from instantale_modloader import choices, defeat, frames, llm, ui
 
 LOG_BASENAME = "colosseum_custom.log"
 MARK = "_mod_colosseum_custom"
@@ -683,14 +683,14 @@ def apply(ctx):
             ctx.log_exc("colosseum: cannot put the lawfulness back")
             state["lawful_guard"] = None
 
-    @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False, safe=True)
-    def refresh_choice_buttons(orig, self, *args, **kwargs):
+    def refresh_choice_buttons(self):
         """画面が整った合図。逃げて終わった後、下がった手配度をここで拾う（316 と同じ時機）。"""
-        result = orig(self, *args, **kwargs)
         guard = state.get("lawful_guard")
         if guard is not None and guard.get("armed"):
             restore_lawfulness(self, "screen settled")
-        return result
+
+    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
+    choices.provide(ctx, screen, after=refresh_choice_buttons)
 
     @ctx.wrap("__main__:InstantaleApp.remove_party_member", required=False, safe=True)
     def remove_party_member(orig, self, member_id=None, *args, **kwargs):

@@ -103,7 +103,7 @@ import math
 import random
 import time
 
-from instantale_modloader import combat, frames, llm, ui
+from instantale_modloader import choices, combat, frames, llm, ui
 
 # 回避の判定の乱数。グローバルの `random` から引くとゲーム自身の乱数列がずれる（TECH.md §6.1）。
 _RNG = random.Random()
@@ -1274,8 +1274,7 @@ def apply(ctx):
         state["guard_pending"] = False        # 新しいスキル一覧 ＝ 次の手番。防御をまた押せる
         return orig(self, *args, **kwargs)
 
-    @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False)
-    def refresh_choice_buttons(orig, self, reset_page=False, *args, **kwargs):
+    def refresh_choice_buttons(self, _buttons):
         if GUARD_BUTTON:
             try:
                 buttons = getattr(self, "buttons", None)
@@ -1328,16 +1327,17 @@ def apply(ctx):
                                     ui.spec_args({"spec": spec})))
             except Exception:
                 ctx.log_exc("battle tactics: cannot place the guard button")
-        return orig(self, reset_page, *args, **kwargs)
 
-    @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False)
-    def on_button_press(orig, self, button_index, *args, **kwargs):
+    def look_at_press(self, entry, _button_index):
+        """どのボタンが押されても先に通る（窓口 `choices` の `intercept`）。押下は握らない。"""
         # どのボタンでも、押した時点でスキル一覧の場面は終わる
         # （スキルを選んだ・防御した・やめた、のどれでも）。
         state["skill_screen"] = False
-        entry = ui.pressed_entry(self, button_index)
-        if screen.mark_of(entry) != "guard":
-            return orig(self, button_index, *args, **kwargs)
+        return False
+
+    def on_button_press(self, action):
+        """自前のボタンが押された（窓口 `choices` の `presses`）。"""
+        entry = choices.pressed()
         if state["guard_pending"]:
             # 前の押下の手番がまだ動いている。ゲームのボタンは本体が連打を止めるが、
             # 防御は本体を通さないので自前で捨てる（0.18 秒差の2発で1巡が丸ごと2回走り、
@@ -1369,6 +1369,9 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("battle tactics: the guard button failed")
         return None
+
+    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
+    choices.provide(ctx, screen, refresh=refresh_choice_buttons, presses={"guard": on_button_press}, intercept=look_at_press)
 
     # ---------------------------------------------------------------- 節目
     @ctx.wrap("__main__:BattleStartManager.start_battle", required=False, safe=True)
