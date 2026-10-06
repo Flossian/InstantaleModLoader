@@ -28,11 +28,12 @@ from instantale_modloader import patch
 
 
 def apply(ctx):
-    import sys
-
-    functions = sys.modules.get("scripts.functions")
+    # 無ければローダの保留に積んで降りる（`patch.await_module`）。来たらローダが当て直す。
+    # `sys.modules` を見て自分で降りると保留に載らず、ほかに保留が無い構成ではその起動で一度も当たらない。
+    functions = patch.await_module("scripts.functions", "clamp_npc_difficulty_value",
+                                   "get_npc_employ_price")
     if functions is None:
-        ctx.log("scripts.functions not loaded; skipping", level="WARN")
+        ctx.log("scripts.functions not loaded yet; waiting for it")
         return
 
     clamp = getattr(functions, "clamp_npc_difficulty_value", None)

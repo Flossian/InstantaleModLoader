@@ -104,7 +104,7 @@ def use_utf8_console() -> None:
 # --------------------------------------------------------------------------
 # DLL から関数のアドレスを調べる
 # --------------------------------------------------------------------------
-_rva_cache: dict[tuple[str, tuple[str, ...]], dict[str, int]] = {}
+_rva_cache: dict[tuple, dict[str, int]] = {}
 
 
 def export_rvas(dll_path: str, wanted: tuple[str, ...]) -> dict[str, int]:
@@ -114,7 +114,10 @@ def export_rvas(dll_path: str, wanted: tuple[str, ...]) -> dict[str, int]:
     実際のアドレスはロードされた先の base に足せば求まる。
     base は動いているプロセスから取得するので、ASLR があっても問題ない。
     """
-    cache_key = (dll_path, tuple(wanted))
+    # 鍵にファイルの更新時刻と大きさも入れる。GUI や watch.bat を開いたままゲームが更新され
+    # DLL が替わると、パスだけの鍵では古い RVA でリモートスレッドを起こしてゲームを落とす。
+    st = os.stat(dll_path)
+    cache_key = (dll_path, st.st_mtime_ns, st.st_size, tuple(wanted))
     if cache_key in _rva_cache:
         return _rva_cache[cache_key]
 

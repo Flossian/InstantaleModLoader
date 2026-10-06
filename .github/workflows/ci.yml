@@ -60,6 +60,16 @@ jobs:
       - name: compileall runtime (3.10)
         run: python -m compileall -q runtime -x "mods.9[0-9][0-9]_"
 
+      # compileall は構文しか見ないので、3.11 以降で入った標準ライブラリの関数・属性・モジュール
+      # （`datetime.UTC`・`tomllib` など）を使っても通ってしまう。注入するまで分からず、
+      # フックの中ならその経路を遊ぶまで出ない。vermin で「使っている機能の最低の版」を静的に調べる。
+      # 検査（tools/tests）を 3.10 で流す代わりの安い手（数秒。版による振る舞いの違いは拾わない）。
+      # 版は固定する（上げると判定が変わりうるので、上げるときは手元で runtime を通してから）。
+      - name: vermin runtime (3.10)
+        run: |
+          python -m pip install --quiet vermin==1.8.0
+          vermin --target=3.10- --no-tips --violations --exclude-regex "mods[\\/]9[0-9][0-9]_" runtime
+
   # ------------------------------------------------------------------
   # 配った先の環境（3.13）で、静的検査とオフライン検証を通す。
   # ------------------------------------------------------------------

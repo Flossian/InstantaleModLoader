@@ -10,7 +10,7 @@
     "en": "Captures the character sheet's widget tree and the values it could show (wanted level, skills, traits)",
     "ja": "プレイヤーの人物欄（プロフィール画面）の実寸と組み立てを写し取り、載せられる値（手配度・スキル・特性）の在り処を確かめる"
   },
-  "version": "3",
+  "version": "4",
   "author": "R01/Flossian",
   "debug": true
 }

@@ -73,9 +73,13 @@ def _as_address(value):
 def apply(ctx):
     import sys
 
-    wm_common = sys.modules.get("kivy.input.providers.wm_common")
+    from instantale_modloader import patch
+
+    # 無ければローダの保留に積んで降りる（`patch.await_module`）。来たらローダが当て直す。
+    # `sys.modules` を見て自分で降りると保留に載らず、ほかに保留が無い構成ではその起動で一度も当たらない。
+    wm_common = patch.await_module("kivy.input.providers.wm_common")
     if wm_common is None:
-        ctx.log("kivy.input.providers.wm_common not loaded; nothing to patch", level="WARN")
+        ctx.log("kivy.input.providers.wm_common not loaded yet; waiting for it")
         return
 
     # 本来は wm_common が持っている定数。

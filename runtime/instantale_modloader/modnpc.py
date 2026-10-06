@@ -1791,6 +1791,7 @@ def install(ctx, write=None):
     立てた MOD が外されていても、`apply()` は注入のたびに全 MOD で走るので
     次の世代では別の MOD が立てる。
     """
+    patch.note_gate_writer("modnpc", write)
     bind_store(ctx, write)
     _read_lift_roster(ctx, write)
     generation = getattr(ctx, "generation", None)

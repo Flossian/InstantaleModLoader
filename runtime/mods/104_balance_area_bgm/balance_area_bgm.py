@@ -485,6 +485,33 @@ def apply(ctx):
 
     _seen = seen_store()
 
+    def area_name(area):
+        return area.get("name") if isinstance(area, dict) else None
+
+    def known_of(world, areas, hook):
+        """そのワールドで前に見たエリア（id → 名前）。初めて見るなら None。
+
+        控えはワールドの名前を鍵にプロセスの間持つので、同じ名前の別のワールド（消して同じ名前で
+        作り直した・名前の重なる別のフォルダ）を読むと、前のワールドの控えで新旧を決めていた。
+        控えた id の名前が今のエリアと食い違えば別のワールドとみなし、初めて見たことにする。
+        """
+        known = _seen.get(world)
+        if known is None:
+            return None
+        if not isinstance(known, dict):            # 名前を控える前の版の控え（id の集合）
+            known = _seen[world] = {k: None for k in known}
+        for k, name in known.items():
+            if name is not None and k in areas and area_name(areas[k]) != name:
+                write("[BALANCE] {} {!r} is a different world with the same name; "
+                      "starting over".format(hook, world))
+                _seen.pop(world, None)
+                return None
+        return known
+
+    def remember(known, areas, keys):
+        for k in keys:
+            known[k] = area_name(areas.get(k))
+
     def handle_named_area(hook, world_dict, area_id):
         """対象のエリア id が分かるフック用。そのエリアだけを選び直す。"""
         areas = areas_of(world_dict)
@@ -495,7 +522,7 @@ def apply(ctx):
         if key not in areas:
             return
         world = world_key(world_dict)
-        known = _seen.get(world)
+        known = known_of(world, areas, hook)
         if known is None:
             # **このワールドを見るのが初めて。**
             # 今あるエリアは対象外として記録するが、**いま生まれたこのエリアだけは
@@ -506,7 +533,8 @@ def apply(ctx):
             # `handle_world` が「初めてではない」と判断して保護を飛ばし、
             # **残り全エリアを新しいエリアとして選び直す**（既存の町の曲が
             # まとめて変わり、`area["bgm"]` はその場で書き換わるのでセーブに残る）。
-            known = set(areas) - {key}
+            known = {}
+            remember(known, areas, set(areas) - {key})
             _seen[world] = known
             write("[BALANCE] {} first sight of {!r}: {} existing area(s) "
                   "grandfathered".format(hook, world, len(known)))
@@ -515,7 +543,7 @@ def apply(ctx):
             return                      # 注入より前からあるエリア。触らない
         # このエリアは今この瞬間に現れた。
         # 後から「既存エリア」として除外されないよう、ここで記録しておく。
-        known.add(key)
+        remember(known, areas, [key])
         result = balance_area(areas, key, pool)
         if result:
             note(hook, [(key, result[0], result[1])])
@@ -526,17 +554,18 @@ def apply(ctx):
         if areas is None:
             return
         key = world_key(container)
-        known = _seen.get(key)
+        known = known_of(key, areas, hook)
         if known is None:
             # このワールドを見るのが初めて。
             # 今あるエリアは全て対象外として記録し、
             # 次回以降に増えた分だけを新しいエリアとして扱う。
-            _seen[key] = set(areas)
+            _seen[key] = {}
+            remember(_seen[key], areas, areas)
             write("[BALANCE] {} first sight of {!r}: {} existing area(s) "
                   "grandfathered".format(hook, key, len(areas)))
             return
-        fresh = set(areas) - known
-        _seen[key] = set(areas) | known
+        fresh = set(areas) - set(known)
+        remember(known, areas, fresh)
         if not fresh:
             return
         changes = balance_world(areas, pool, only=fresh)

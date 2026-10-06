@@ -10,7 +10,7 @@
     "en": "A newly created character is handed experience_level 60 with no experience, while the rest of the same character (its stamina cap) is built for level 1. Puts the level back to 1 so HP is computed for level 1 too. Only fires on that exact inconsistency, so it stops doing anything once the game itself is fixed",
     "ja": "新規作成したキャラクタが経験値0のままレベル60で渡される。同じキャラの体力上限はレベル1で計算されており本体の中で食い違っているので、レベルを1に戻して HP もレベル1で計算させる。この食い違いが揃ったときだけ効くので、本体が直れば自動的に何もしなくなる"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "superseded": "main_025",
   "settings": {

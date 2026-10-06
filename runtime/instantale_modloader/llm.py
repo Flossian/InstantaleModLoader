@@ -445,6 +445,27 @@ def watch_aliases(ctx, targets, install, *, label="llm", on_arm=None):
             unarmed.append(target)
     if not unarmed:
         return []
+    # 遅れて当てる包みの帰属（呼んだ MOD）。見張りのスレッドでは `ctx._mod` はもう空。
+    owner = getattr(ctx, "_mod", None)
+
+    def arm(target):
+        """boot の錠の中で、まだ今の世代かを確かめてから当てる。当てたら真。
+
+        錠の外で当てると、確かめた直後に次の boot が始まったとき、古い世代の閉包が
+        新しい世代の印で当たり（`ctx.wrap` は今の `patch` を引く）、新しい世代の包みと二重に掛かった。
+        帰属もその瞬間に適用中の別の MOD になっていた。
+        """
+        from . import _boot_lock
+        from . import patch_registry as _registry
+        with _boot_lock():
+            if ctx.superseded():
+                return False
+            _registry.begin_mod(owner or "<loader>")
+            try:
+                install(target)
+            finally:
+                _registry.end_mod()
+        return True
 
     def loop():
         deadline = time.monotonic() + ALIAS_WATCH_SECONDS
@@ -453,7 +474,8 @@ def watch_aliases(ctx, targets, install, *, label="llm", on_arm=None):
             for target in list(remaining):
                 if not can_resolve(target):
                     continue
-                install(target)
+                if not arm(target):
+                    break
                 remaining.remove(target)
                 ctx.log("{}: late-armed on {} (the alias appeared)".format(
                     label, target))

@@ -41,6 +41,7 @@
 """
 
 import sys
+import threading
 
 from instantale_modloader import ui
 
@@ -205,12 +206,16 @@ def apply(ctx):
             # 一覧を開き直したとき「自分の書いたラベルを素の名前と取り違えない」ため、
             # そして押された文字列を素の名前へ戻すため。
             "labels": {},
-            # いま `AreaMoveCofirmation.execute` の中に居るかの窓。
-            "confirm": None,
+            # いま `AreaMoveCofirmation.execute` の中に居るかの窓。スレッドの id → 窓。
+            # 開いたスレッドの `add_text` だけに効かせる
+            # （1枠だと、同じ間に別のスレッドが書いた無関係な本文にも帯が付きうる。`125_` と同じ）。
+            "confirm": {},
             # 落とし所（自前走査）へ下がったことを一度だけ書く印。
             "scan_warned": False,
         }
         setattr(sys, STATE_STORE_ATTR, state)
+    if not isinstance(state.get("confirm"), dict):
+        state["confirm"] = {}       # 1枠だった前の版が残した控え（注入し直したとき）
 
     # ============================================================ 帯を引く
     def difficulties_of(app, area):
@@ -372,14 +377,14 @@ def apply(ctx):
                 if label is not None:
                     window = {"name": name, "label": label, "values": values,
                               "seen": 0}
-                    state["confirm"] = window
+                    state["confirm"][threading.get_ident()] = window
         except Exception:
             ctx.log_exc("area difficulty label: cannot open the confirmation window")
             window = None
         try:
             return orig(self, choice_text, *args, **kwargs)
         finally:
-            state["confirm"] = None
+            state["confirm"].pop(threading.get_ident(), None)
             if window is not None and CONFIRM_TEXT and not window["seen"]:
                 try:
                     line = fmt(CONFIRM_TEXT, **window["values"])
@@ -394,7 +399,7 @@ def apply(ctx):
     def add_text(orig, self, context=None, *args, **kwargs):
         """確認画面の窓の間だけ、土地の名前を含む文言に帯を添える。"""
         try:
-            window = state["confirm"]
+            window = state["confirm"].get(threading.get_ident())
             if window is not None and isinstance(context, str) and context.strip():
                 name = window["name"]
                 label = window["label"]

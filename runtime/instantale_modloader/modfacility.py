@@ -2646,6 +2646,7 @@ def install(ctx, write=None):
     > 済ませたいときは、**MOD の側が `on["world"]` で置く**こと
     > （フレームワークどうしは順序を約束しない）。
     """
+    patch.note_gate_writer("modfacility", write)
     bind_store(ctx, write)
     generation = getattr(ctx, "generation", None)
     done = installed()

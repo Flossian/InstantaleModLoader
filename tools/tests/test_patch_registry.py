@@ -620,6 +620,82 @@ def main():
         del sys.modules["kivy.clock"], sys.modules["kivy"]
         ml._state["ready"] = []
 
+    print("=== await_module: apply の中でモジュールの中身を使う MOD の保留 ===")
+    absent = "fakegame_not_yet_imported"
+    sys.modules.pop(absent, None)
+    check(P.await_module(absent, "x") is None and absent in P.pending_modules(),
+          "まだ import されていなければ None で、モジュールの保留に積む")
+    loading = types.ModuleType("fakegame_loading")
+    loading.__spec__ = types.SimpleNamespace(_initializing=True)
+    sys.modules["fakegame_loading"] = loading
+    try:
+        check(P.await_module("fakegame_loading", "Later") is None
+              and "fakegame_loading:Later" in P.pending_owners(),
+              "読み込みの途中で要る属性がまだ無ければ None で、その属性を待つ")
+        loading.Later = object()
+        check(P.await_module("fakegame_loading", "Later") is loading,
+              "途中でも要る属性が揃っていればモジュールを返す")
+        loading.__spec__ = types.SimpleNamespace(_initializing=False)
+        check(P.await_module("fakegame_loading", "Missing") is loading,
+              "読み終えたモジュールは属性が欠けていても返す（欠けは本物の問題）")
+    finally:
+        sys.modules.pop("fakegame_loading", None)
+    check(P.await_module("sys") is sys, "読み込み済みならそのまま返す")
+
+    print("=== on_ready(delay): 走る前に次の boot が来たら古い世代は走らない ===")
+    # delay の間に注入し直す・遅れた当て直しが走る並び。
+    # 古い世代の関数（読み直す前のコード）は走らせず、新しい世代が積み直した分だけが走る。
+    class _HeldClock:
+        later = []
+
+        @staticmethod
+        def schedule_once(fn, delay):
+            _HeldClock.later.append(fn)
+
+    fake = types.ModuleType("kivy.clock")
+    fake.Clock = _HeldClock
+    sys.modules["kivy"] = types.ModuleType("kivy")
+    sys.modules["kivy.clock"] = fake
+    saved_generation = ml._state.get("generation")
+    try:
+        held = []
+        ml._state["generation"] = "gen_old"
+        ml._state["ready"] = []
+        check(ctx.on_ready(lambda: held.append("old"), key="heal", delay=5.0) is True,
+              "古い世代で積まれる")
+        ml._dispatch_ready()
+        old_call = _HeldClock.later.pop()
+        ml._state["generation"] = "gen_new"          # 次の boot
+        ml._state["ready"] = []
+        check(ctx.on_ready(lambda: held.append("new"), key="heal", delay=5.0) is True,
+              "前の世代が走る前なら、同じキーでも新しい世代が積み直す")
+        check(ctx.on_ready(lambda: held.append("new"), key="heal", delay=5.0) is False,
+              "同じ世代の2回目は捨てられる")
+        ml._dispatch_ready()
+        new_call = _HeldClock.later.pop()
+        old_call()
+        new_call()
+        check(held == ["new"], "走るのは新しい世代の1回だけ: {}".format(held))
+        check(ctx.on_ready(lambda: held.append("again"), key="heal") is False,
+              "走った後は積まれない")
+
+        # 新しい世代が積み直さなかった（MOD を切った・条件が外れた）なら、古い世代は捨てられ、印も外れる。
+        ml._state["generation"] = "gen_a"
+        ml._state["ready"] = []
+        ctx.on_ready(lambda: held.append("dropped"), key="gone", delay=5.0)
+        ml._dispatch_ready()
+        stale = _HeldClock.later.pop()
+        ml._state["generation"] = "gen_b"
+        stale()
+        check("dropped" not in held, "積み直されなかった古い世代も走らない: {}".format(held))
+        ml._state["ready"] = []
+        check(ctx.on_ready(lambda: held.append("later"), key="gone") is True,
+              "走らずに捨てた分は、次の boot で積める")
+    finally:
+        del sys.modules["kivy.clock"], sys.modules["kivy"]
+        ml._state["ready"] = []
+        ml._state["generation"] = saved_generation
+
     print("=== フォルダ構成の探索と読み込み ===")
     import shutil
     import tempfile
@@ -1062,6 +1138,22 @@ def main():
         raise RuntimeError("差し替えた側が壊れた")
 
     check(victim.plain(4) == ("original", 4), "patch でも元の実装に落ちる")
+
+    # safe=True の置換関数からも `__original__` で元を呼べる（TECH.md §3.1.3）。
+    # 下に別の層があっても、1段飛ばさずにすぐ下を呼ぶ。
+    P.set_generation("gen_safe_original")
+    victim.chain = lambda x: ("raw", x)
+
+    @P.wrap("fakegame:chain")
+    def lower(orig, x):
+        return ("lower",) + orig(x)
+
+    @P.patch("fakegame:chain", safe=True)
+    def upper(x):
+        return ("upper",) + upper.__original__(x)
+
+    check(victim.chain(6) == ("upper", "lower", "raw", 6),
+          "safe=True の patch の __original__ はすぐ下の層: {!r}".format(victim.chain(6)))
 
     # メソッドを対象にした場合（self が絡む経路）
     P.set_generation("gen_safe_method")
@@ -1952,23 +2044,57 @@ def test_main_thread_job():
         if queue:
             queue.pop()()                       # メインループが次のフレームで呼ぶ
         worker.join(10)
-        check(ran_on == [threading.main_thread()] and result == [7],
+        check(ran_on == [threading.main_thread()] and result == [(True, 7)],
               "仕事はメインスレッドで走り、戻り値が注入のスレッドへ返る")
 
-        # メインループが止まっていたら、待ち切った後でその場で走らせる（1回だけ）。
-        del ran_on[:], result[:], queue[:]
-        worker = threading.Thread(
-            target=lambda: result.append(ml._run_on_main_thread(job, 0.2)))
-        worker.start()
-        worker.join(10)
-        check(len(ran_on) == 1 and ran_on[0] is not threading.main_thread()
-              and result == [7], "Clock が回らなければ待ち切ってからその場で走らせる")
-        for late in list(queue):
-            late()                              # 後から Clock が呼んでも
-        check(len(ran_on) == 1, "  → 2回は走らない: {}".format(len(ran_on)))
+        # メインループが回っていて手が空かないだけなら、この場では走らせずに待つ。
+        # 待っている間に Clock が取れば、メインスレッドで走る。
+        saved_state = ml._main_loop_state
+        ml._main_loop_state = lambda: (True, "the main thread is busy in test")
+        try:
+            del ran_on[:], result[:], queue[:]
+            worker = threading.Thread(
+                target=lambda: result.append(ml._run_on_main_thread(job, 0.05, 5.0)))
+            worker.start()
+            time.sleep(0.3)                     # 何回か様子を見るあいだ
+            check(ran_on == [] and worker.is_alive(),
+                  "手が空かないだけなら、この場で走らせずに待ち続ける")
+            if queue:
+                queue.pop()()
+            worker.join(10)
+            check(ran_on == [threading.main_thread()] and result == [(True, 7)],
+                  "  → 手が空けばメインスレッドで走る")
+
+            # 上限まで待っても取られなければ、走らせずに諦める。後から Clock が呼んでも走らない。
+            del ran_on[:], result[:], queue[:]
+            worker = threading.Thread(
+                target=lambda: result.append(ml._run_on_main_thread(job, 0.05, 0.2)))
+            worker.start()
+            worker.join(10)
+            check(ran_on == [] and result == [(False, None)], "上限を過ぎたら走らせずに諦める")
+            for late in list(queue):
+                late()
+            check(ran_on == [], "  → 諦めた後に Clock が呼んでも走らない: {}".format(len(ran_on)))
+
+            # メインループが止まっていたら（ゲームが終わる途中）、待たずに諦める。
+            ml._main_loop_state = lambda: (False, "the kivy event loop is not running")
+            del ran_on[:], result[:], queue[:]
+            began = time.monotonic()
+            worker = threading.Thread(
+                target=lambda: result.append(ml._run_on_main_thread(job, 0.05, 60.0)))
+            worker.start()
+            worker.join(10)
+            check(ran_on == [] and result == [(False, None)] and time.monotonic() - began < 5,
+                  "メインループが止まっていたら、上限を待たずに走らせずに諦める")
+        finally:
+            ml._main_loop_state = saved_state
+
+        state = ml._main_loop_state()
+        check(isinstance(state, tuple) and len(state) == 2 and isinstance(state[1], str),
+              "メインループの様子を (回っているか, 説明) で返す: {!r}".format(state))
 
         del ran_on[:], queue[:]
-        check(ml._run_on_main_thread(job, 10.0) == 7 and not queue
+        check(ml._run_on_main_thread(job, 10.0) == (True, 7) and not queue
               and ran_on == [threading.main_thread()],
               "既にメインスレッドに居れば Clock に載せずにその場で走らせる")
     finally:

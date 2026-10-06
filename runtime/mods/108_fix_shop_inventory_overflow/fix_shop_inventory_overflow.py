@@ -72,7 +72,7 @@ main_024 のアナウンスにこの件（売買画面）が挙がっている�
 import os
 import sys
 
-from instantale_modloader import frames
+from instantale_modloader import frames, patch
 
 LOG_BASENAME = "inventory.log"
 
@@ -131,9 +131,11 @@ def sample_kind(grid):
 
 
 def apply(ctx):
-    new_hud = sys.modules.get("scripts.hud.new_hud")
+    # 無ければローダの保留に積んで降りる（`patch.await_module`）。来たらローダが当て直す。
+    # `sys.modules` を見て自分で降りると保留に載らず、ほかに保留が無い構成ではその起動で一度も当たらない。
+    new_hud = patch.await_module("scripts.hud.new_hud", "InventoryGrid")
     if new_hud is None:
-        ctx.log("scripts.hud.new_hud not loaded; skipping", level="WARN")
+        ctx.log("scripts.hud.new_hud not loaded yet; waiting for it")
         return
 
     grid_cls = getattr(new_hud, "InventoryGrid", None)

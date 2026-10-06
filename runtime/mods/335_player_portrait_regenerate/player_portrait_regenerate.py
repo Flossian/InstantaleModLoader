@@ -18,6 +18,13 @@ from instantale_modloader import frames, imagegen, jobs, llm, state, ui
 
 
 CREATE_LOOK_MODULE = "scripts.llm.llm_manager_character_create"
+# ゲームの送り口。`create_look` が呼ぶ。ゲーム側の `timeout` の既定は無期限なので（GAME.md §2.12）、
+# 外見を作らせている間だけ時間切れを付ける（`336_` の盗みの稼ぎと同じく、後から生える別名を見張って包む）。
+SEND_TARGET = "scripts.llm.llm_manager:send_request"
+#: 外見を作らせる1回の待ちの上限（秒）。返らなければ描き直しを取りやめ、ボタンを戻す。
+LOOK_TIMEOUT = 120.0
+# いま外見を作らせているスレッドの印（`_player_look` が立て、送り口の包みが読む）。
+_LOOK_CALL = threading.local()
 STORE_ATTR = "_instantale_335_player_portrait_store"
 WORKER_ATTR = "_instantale_335_player_portrait_worker"
 RUNTIME_ATTR = "_instantale_335_player_portrait_runtime"
@@ -237,8 +244,14 @@ def _player_look(store, write, app, player):
     if not callable(create):
         write("skipped: create_look unavailable")
         return None
-    got = create(_text(player, "name"), _gender_of(player),
-                 _text(player, "profile"), desc)
+    # 時間切れの例外は描き直しの仕事ごと終わらせる（Worker が記録し、on_done がボタンを戻す）。
+    # 付けないと、1回返らないだけで描き直しの仕事が鍵を握ったまま残り、ゲームを閉じるまで押しても何も起きない。
+    _LOOK_CALL.active = True
+    try:
+        got = create(_text(player, "name"), _gender_of(player),
+                     _text(player, "profile"), desc)
+    finally:
+        _LOOK_CALL.active = False
     words = _look_words(got)
     if not words:
         write("skipped: create_look returned {!r}".format(repr(got)[:200]))
@@ -317,6 +330,16 @@ def apply(ctx):
 
     for name in names:
         count_inflight("{}:{}".format(name, FUNC))
+
+    def install_send(target):
+        @ctx.wrap(target, required=False, safe=True)
+        def send_request(orig, *args, **kwargs):
+            if getattr(_LOOK_CALL, "active", False) and frames.arg(args, kwargs, "timeout", 5) is None:
+                args, kwargs, _done = frames.replace_arg(args, kwargs, "timeout", 5, LOOK_TIMEOUT,
+                                                         insert=True)
+            return orig(*args, **kwargs)
+
+    llm.watch_aliases(ctx, [SEND_TARGET], install_send, label="player portrait")
 
     def finish_job(job):
         app = job.get("app") if isinstance(job, dict) else None

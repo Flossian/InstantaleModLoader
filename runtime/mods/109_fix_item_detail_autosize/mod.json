@@ -10,7 +10,7 @@
     "en": "Grows the item detail box only when a long name or description will not fit",
     "ja": "アイテム説明欄を、長い名前・説明が入り切らないときだけ広げる"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "settings": {
     "WIDEST": {

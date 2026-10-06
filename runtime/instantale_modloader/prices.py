@@ -508,6 +508,8 @@ def install(ctx, write=None):
     ここが8つの対象を1枚だけ包む。**地点ごとの `orig` の前後はここが引き受ける**
     ので、式を置く側も段を置く側も層のことを考えなくてよい。
     """
+    from . import patch as _patch
+    _patch.note_gate_writer("prices", write)
     with _LOCK:
         _item_registry()["write"] = write
     generation = getattr(ctx, "generation", None)

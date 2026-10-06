@@ -83,6 +83,7 @@ import os
 import random
 import sys
 
+import instantale_modloader as loader
 from instantale_modloader import choices, frames, npcs, state as loader_state, ui
 from instantale_modloader.npcs import make_npc
 
@@ -448,22 +449,19 @@ def apply(ctx):
             if not os.path.isdir(folder):
                 continue                # その MOD を入れていない
             path = os.path.join(folder, loader_state.world_filename(world))
-            try:
-                with io.open(path, encoding="utf-8") as fh:
-                    data = json.load(fh)
-            except (OSError, ValueError):
-                data = {}
-            if not isinstance(data, dict):
-                data = {}
+            # 「無い」と「在るのに読めない（一時のロック・壊れた）」を分ける。読めないのに空とみなして書くと、
+            # その世界の全員の記憶が持ち込んだ1人だけになる。読めなければ書かずに見送る。
+            exists = os.path.exists(path)
+            data = loader.read_json(path, None, report=ctx.log_exc)
+            if exists and not isinstance(data, dict):
+                write("    memory: cannot read {}; {} was not written".format(path, dirname))
+                continue
+            data = data if isinstance(data, dict) else {}
             data[str(npc_id)] = record
-            try:
-                tmp = path + ".writing"
-                with io.open(tmp, "w", encoding="utf-8") as fh:
-                    json.dump(data, fh, ensure_ascii=False, indent=1)
-                os.replace(tmp, path)
+            if loader.write_json(path, data, report=ctx.log_exc):
                 done.append(dirname)
-            except OSError as exc:
-                write("    memory: cannot write {}: {}".format(path, exc))
+            else:
+                write("    memory: cannot write {}".format(path))
         if done:
             write("    memory: carried {} for {}".format(", ".join(done), npc_id))
         return done

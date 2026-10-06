@@ -331,16 +331,31 @@ def extract_release(zip_path: str, dest: str = ROOT) -> int:
     # 書き先は絶対パスにして dest の中かを確かめる（`install_from_zip` と同じ）。
     # `..` を見るだけでは、Windows でドライブ名（`C:`）や `\` を含む名前が dest の外を指す。
     base = os.path.abspath(dest)
+    # 比べる頭は区切りで終わる形にする（`base + os.sep` は、ドライブ直下では区切りが2つ続いて何にも当たらず、全部を飛ばした）。
+    prefix = os.path.join(base, "")
     # 配布物の `load_order.json` は上書きされるので、手元の入切と足した MOD を先に控える。
+    # 控えはファイルにも置く。展開が途中で落ちると `load_order.json` は新しい版に替わっているので、
+    # やり直したときにそれを「前の版」と読むと、入切と足した MOD が戻らない。
     order_file = os.path.join(base, "runtime", "mods", ml.ORDER_NAME)
-    old_order = _read_order(order_file)
+    carried = os.path.join(base, "out", UPDATE_ORDER_NAME)
+    old_order = _read_order(carried)
+    if old_order is None:
+        old_order = _read_order(order_file)
     with zipfile.ZipFile(zip_path) as z:
+        # 壊れた要素は書き始める前に見つける（途中で落ちると新旧が混ざる）。
+        broken = z.testzip()
+        if broken is not None:
+            raise RuntimeError("zip の中身が壊れています: {}".format(broken))
+        if old_order is not None and not os.path.isfile(carried):
+            os.makedirs(os.path.dirname(carried), exist_ok=True)
+            if not ml.write_json(carried, old_order, indent=2):
+                raise OSError("cannot write {}".format(carried))
         for info in z.infolist():
             parts = info.filename.split("/")[1:]
             if info.is_dir() or not parts or ".." in parts:
                 continue
             path = os.path.abspath(os.path.join(base, *parts))
-            if not path.startswith(base + os.sep):
+            if not path.startswith(prefix):
                 continue
             os.makedirs(os.path.dirname(path), exist_ok=True)
             keep_edited_default(path)
@@ -349,7 +364,15 @@ def extract_release(zip_path: str, dest: str = ROOT) -> int:
             count += 1
     if old_order is not None:
         carry_order(order_file, old_order)
+    try:
+        os.remove(carried)
+    except OSError:
+        pass
     return count
+
+
+#: 更新の展開の前に控える順序ファイルの写し（`out\` の下）。展開を終えたら消す。
+UPDATE_ORDER_NAME = "update_order.json"
 
 
 def _read_order(path: str):
@@ -377,10 +400,12 @@ def carry_order(path: str, old: dict) -> bool:
     if new is None:
         return False
     mods_dir = os.path.dirname(path)
+    # `local\` の MOD も順序ファイルに載らないと読まれない（`discover`）。
+    homes = (mods_dir, ml._local_mods_dir(mods_dir))
 
     def present(name):
-        return name in new["order"] or os.path.isfile(
-            os.path.join(mods_dir, name, ml.MANIFEST_NAME))
+        return name in new["order"] or any(
+            os.path.isfile(os.path.join(home, name, ml.MANIFEST_NAME)) for home in homes)
 
     order = list(new["order"])
     order += [name for name in old["order"] if name not in order and present(name)]
@@ -2886,7 +2911,10 @@ class App(ttk.Frame):
         try:
             if game_path:
                 report("ゲームを起動中…")
-                subprocess.Popen([game_path], cwd=os.path.dirname(game_path))
+                # `InstantaleModLoader.bat` が GUI のために立てる `PYTHONUTF8` はゲームへ渡さない
+                # （Epic から起動したときと同じ環境で動かす）。
+                env = {k: v for k, v in os.environ.items() if k.upper() != "PYTHONUTF8"}
+                subprocess.Popen([game_path], cwd=os.path.dirname(game_path), env=env)
 
             report("ゲームのプロセスを検索中…")
             pid = None
@@ -3131,7 +3159,8 @@ class App(ttk.Frame):
                     open(path, "wb") as f:
                 shutil.copyfileobj(r, f)
             self.events.put(("status", "展開中…"))
-            extract_release(path)
+            if extract_release(path) == 0:
+                raise RuntimeError("zip に展開できるファイルがありません")
             os.remove(path)
         except Exception as e:
             self.events.put(("error", "更新に失敗しました: {}".format(e)))

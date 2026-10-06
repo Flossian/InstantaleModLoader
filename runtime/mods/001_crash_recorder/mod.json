@@ -10,6 +10,6 @@
     "en": "Records full tracebacks and frame locals to out/live_crashes.log. The game still writes its own crash_log.txt, but the upload to the author's server is stopped, because a traceback with modloader and mod frames in it is not a report about the plain game",
     "ja": "クラッシュ時のトレースバックとフレーム変数を、省略なしで out/live_crashes.log に残す。本体の crash_log.txt もそのまま書かれるが、作者のサーバへの送信だけは止める（MOD の枠が混ざったトレースバックを、素のゲームの不具合報告として送らないため）"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian"
 }

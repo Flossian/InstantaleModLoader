@@ -10,7 +10,7 @@
     "en": "Prevents the KeyError in NPC hire pricing by using the game's own clamp",
     "ja": "NPC 雇用価格の KeyError を、ゲーム自身のクランプ関数を通して防ぐ"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "superseded": "main_024"
 }

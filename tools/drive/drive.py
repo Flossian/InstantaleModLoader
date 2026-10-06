@@ -22,29 +22,37 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 import injector  # noqa: E402
 
+# ゲームの `__main__` に名前を残さない（TECH.md §1.1）。全部を1つの関数に入れ、呼んだら消す。
 PAYLOAD = r'''
-import json as _json
-import traceback as _tb
-def _drive():
-    _out = open({result!r}, "w", encoding="utf-8")
-    def say(text):
-        if _out.closed:
-            return
-        _out.write(str(text) + "\n"); _out.flush()
-        if text == "<done>":
-            _out.close()
-    ns ={{"__name__": "drive", "ARGS": _json.loads({args!r}), "say": say}}
-    try:
-        exec(open({lib!r}, encoding="utf-8").read(), ns)
-        exec(open({script!r}, encoding="utf-8").read(), ns)
-        ns["main"](say)
-    except Exception:
-        say(_tb.format_exc())
-    finally:
-        if not ns.get("KEEP_OPEN"):
-            say("<done>")
-from kivy.clock import Clock as _Clock
-_Clock.schedule_once(lambda _dt: _drive(), 0)
+def _iml_drive():
+    import json
+    import traceback
+    from kivy.clock import Clock
+
+    def run():
+        out = open({result!r}, "w", encoding="utf-8")
+
+        def say(text):
+            if out.closed:
+                return
+            out.write(str(text) + "\n"); out.flush()
+            if text == "<done>":
+                out.close()
+        ns = {{"__name__": "drive", "ARGS": json.loads({args!r}), "say": say}}
+        try:
+            exec(open({lib!r}, encoding="utf-8").read(), ns)
+            exec(open({script!r}, encoding="utf-8").read(), ns)
+            ns["main"](say)
+        except Exception:
+            say(traceback.format_exc())
+        finally:
+            if not ns.get("KEEP_OPEN"):
+                say("<done>")
+    Clock.schedule_once(lambda _dt: run(), 0)
+try:
+    _iml_drive()
+finally:
+    del _iml_drive
 '''
 
 
@@ -78,6 +86,11 @@ def main():
     pids = injector.find_processes(injector.TARGET_EXE)
     if not pids:
         print("ERROR: {} is not running.".format(injector.TARGET_EXE))
+        return 1
+    if len(pids) > 1:
+        # どれに流すかを決めつけない（`injector.py` と同じ）。
+        print("ERROR: {} game processes are running: {}".format(
+            len(pids), ", ".join(str(pid) for pid, _name in pids)))
         return 1
     rc = injector.inject(pids[0][0], payload.encode("ascii") + b"\0")
     if rc != 0:

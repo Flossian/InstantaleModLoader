@@ -350,6 +350,21 @@ def _once_store() -> set:
     return store
 
 
+# 積んだがまだ走っていない on_ready（キー → 積んだ世代）。印と同じ理由で sys に置く。
+# 印は積んだ時点で立つので、`delay` の間に注入し直すと、新しい世代は「済み」として積まず、
+# 古い世代の関数（読み直す前のコード）だけが後から走っていた。キーに世代を混ぜる MOD では両方が走った。
+# 走る時点で世代が替わっていたら捨て、新しい世代はここを見て積み直す（`on_ready` / `_dispatch_ready`）。
+_PENDING_ATTR = "__instantale_ready_pending__"
+
+
+def _pending_store() -> dict:
+    store = getattr(sys, _PENDING_ATTR, None)
+    if not isinstance(store, dict):
+        store = {}
+        setattr(sys, _PENDING_ATTR, store)
+    return store
+
+
 def reset_once(prefix: str | None = None) -> int:
     """`on_ready` の「もう実行した」印を捨てる。**開発中の逃げ道**。
 
@@ -601,15 +616,22 @@ class ModContext:
             self._mod or "<loader>",
             getattr(fn, "__qualname__", None) or getattr(fn, "__name__", repr(fn)))
         store = _once_store()
+        pending = _pending_store()
+        generation = _state.get("generation")
         # 印を「積んだ時点」で付ける。
         # 実行時に付けると、実行前にもう一度
         # boot() が走ったときに二重に積まれる（Clock はまだ流していない）。
+        # ただし前の世代が積んでまだ走っていないものは、その世代が捨てるので積み直す。
+        waiting = pending.get(name)
         if name in store and not force:
-            log("on_ready: {} already done in this process; skipped".format(name))
-            return False
-        if force and name in store:
+            if waiting is None or waiting == generation:
+                log("on_ready: {} already done in this process; skipped".format(name))
+                return False
+            log("on_ready: {} was still waiting from an earlier boot; queued again".format(name))
+        elif force and name in store:
             log("on_ready: {} forced (the once-mark was set)".format(name), level="WARN")
         store.add(name)
+        pending[name] = generation
         _state["ready"].append((name, fn, delay))
         return True
 
@@ -1325,17 +1347,19 @@ def _order(mods_dir: str, found: list[str],
     return ordered + extra, listed, skipped, problems, notes
 
 
-def _load_mod_file(path: str):
+def _load_mod_file(path: str, folder: str | None = None):
     """mod をパス指定で読み込む。ゲームのモジュール名とは隔離する。
 
-    `path` は `mod.json` の "entry" が指すファイル。
+    `path` は `mod.json` の "entry" が指すファイル、`folder` は MOD のフォルダ名。
     **パッケージとして**読み込むので、入口の名前が何であれ、
     mod の中から `from . import prompts` で隣を引ける。
     """
     # 専用の接頭辞を付けた名前で sys.modules に登録する。
     # ゲーム側のモジュール名とぶつかると、どちらかが壊れるため。
     mod_dir = os.path.dirname(path)
-    name = "instantale_mod_" + os.path.basename(mod_dir)
+    # 名前は MOD のフォルダ名から作る（`instantale_mod_<フォルダ名>`。`state.py` と各 MOD が前提にしている形）。
+    # 入口のあるフォルダから作ると、"entry" が `src/main.py` の MOD が2本あったとき同じ名前を奪い合った。
+    name = "instantale_mod_" + (folder or os.path.basename(mod_dir))
     # submodule_search_locations を渡すとパッケージ扱いになる。
     # これが無いと mod の中の相対 import が「親パッケージが無い」で落ちる。
     spec = importlib.util.spec_from_file_location(
@@ -1666,11 +1690,24 @@ def _dispatch_ready() -> None:
     log("on_ready: {} task(s){}".format(
         len(entries), "" if Clock else " (no kivy Clock; running inline)"))
 
+    generation = _state.get("generation")
     for name, fn, delay in entries:
         # 既定引数で束縛する。
         # ループ変数のまま閉じ込めると、
         # Clock が呼ぶ頃には最後の1件を全員が指している。
         def call(_dt=None, name=name, fn=fn):
+            pending = _pending_store()
+            if _superseded(generation):
+                # 待っている間に別の boot（注入し直し・遅れた当て直し）が走った。
+                # 古い世代のコードは走らせない。新しい世代が積み直していなければ（MOD を切った・
+                # 条件が外れた・外した）、印も外して次の boot で積めるようにする。
+                if pending.get(name) == generation:
+                    pending.pop(name, None)
+                    _once_store().discard(name)
+                log("on_ready: {} from an earlier boot skipped (gen {})".format(name, generation))
+                return
+            if pending.get(name) == generation:
+                pending.pop(name, None)
             try:
                 fn()
                 log("on_ready: {} done".format(name))
@@ -1689,6 +1726,7 @@ def _dispatch_ready() -> None:
             # 印は「実行した」ではなく「実行したか、Clock に渡ってもう走る」の意。
             # ここで残すと、走らないまま二度と積まれない一件が生まれる。
             _once_store().discard(name)
+            _pending_store().pop(name, None)
             log_exc("on_ready: could not schedule {} (will retry next boot)".format(name))
 
 
@@ -1934,30 +1972,39 @@ def _keep_save_gates(ctx) -> list[str]:
     （`save_game` など）を包むと、`wrap` が前の世代の層をまとめて剥がすので関所も消える。
     ローダが今の世代の層として立て直せば、誰に包まれても剥がれない。
     中身は前の世代で残していた層と同じ（同じ部品の `install`）。
+
+    `boot()` は MOD の適用の**前**に呼ぶ。適用の後だと、最初に `save_game` を包む MOD（`129_`）から
+    関所を立てる MOD（`336_` / `330_`）までの約1秒、関所の無い時間ができ、その間の保存に
+    MOD の人物・施設が混ざりえた（遅れて当て直す boot はメインスレッドの外で走る）。
+    立て直した後に MOD が呼ぶ `install` は、同じ世代なので何もしない（関所は1つのまま）。
+    適用の後にもう一度呼ぶのは念のため（その時点では何もしない）。
     """
     from . import modfacility as _modfacility
     from . import modnpc as _modnpc
+    from . import patch as _patch
     from . import patch_registry as _registry
     from . import prices as _prices
     generation = _state.get("generation")
     rebuilt = []
-    for name, done, install in (("modnpc", _modnpc.installed, _modnpc.install),
-                                ("modfacility", _modfacility.installed, _modfacility.install),
-                                ("prices", _prices.item_gate, _prices.install)):
+    # 並びは同梱の適用順で関所を立てる順（129 の prices → 336 の modnpc → 330 の modfacility）。
+    for name, done, install in (("prices", _prices.item_gate, _prices.install),
+                                ("modnpc", _modnpc.installed, _modnpc.install),
+                                ("modfacility", _modfacility.installed, _modfacility.install)):
         try:
             record = done()
             if record is None or record.get("generation") == generation:
                 continue
             _registry.begin_mod("(loader)")
             try:
-                install(ctx, write=log)
+                # 書き手は中継にする（関所の行は、その世代で `install` を呼んだ MOD のログへ）。
+                install(ctx, write=_patch.gate_writer(name, log))
             finally:
                 _registry.end_mod()
             rebuilt.append(name)
         except BaseException:
             log_exc("cannot keep the save gate of {}".format(name))
     if rebuilt:
-        log_unrepeated("kept the save gate(s) no mod raised this time: {}".format(", ".join(rebuilt)))
+        log_unrepeated("raised the save gate(s) of the earlier boot again: {}".format(", ".join(rebuilt)))
     return rebuilt
 
 
@@ -2046,6 +2093,11 @@ def _boot(out_dir: str) -> dict:
         if from_local:
             log("{} of them from {}: {}".format(
                 len(from_local), _local_mods_dir(mods_dir), ", ".join(from_local)))
+        # 前の世代の保存の関所を、MOD が `save_game` を包み始める前に今の世代で立て直す。
+        try:
+            _keep_save_gates(ctx)
+        except BaseException:
+            log_exc("cannot keep the save gates")
         for fname in names:
             manifest = manifests[fname]
 
@@ -2072,7 +2124,7 @@ def _boot(out_dir: str) -> dict:
                 results[fname] = "no-entry"
                 continue
             try:
-                module = _load_mod_file(path)
+                module = _load_mod_file(path, fname)
             except BaseException:
                 log_exc("load failed: {}".format(fname))
                 results[fname] = "load-error"
@@ -2258,15 +2310,48 @@ def unload(out_dir: str | None = None) -> dict:
 #: `unload` が、NPC を降ろしてパッチを剥がすのをメインスレッドで待つ上限（秒）。
 UNLOAD_WAIT = 10.0
 
+#: `unload` がメインスレッドの手が空くのを待つ上限（秒）。超えたら何も剥がさずに諦める。
+UNLOAD_GIVE_UP = 300.0
 
-def _run_on_main_thread(fn, timeout: float):
-    """`fn()` をメインスレッド（Kivy の Clock）で走らせ、終わるまで待って戻り値を返す。
+
+def _main_loop_state():
+    """メインループの様子。`(回っているか, 人が読む説明)`。
+
+    Kivy の `EventLoop.mainloop` は `not quit and status == 'started'` の間だけ回る（Kivy 2.3.0 の
+    `kivy/base.py`）。回っていて手が空かないなら、メインスレッドは Clock の1つの呼び出しの中で
+    処理を続けている（止まってはいない）。そのときはメインスレッドが今いる関数を添える。
+    """
+    main = threading.main_thread()
+    if not main.is_alive():
+        return False, "the main thread has ended"
+    try:
+        from kivy.base import EventLoop
+        status = getattr(EventLoop, "status", None)
+        if getattr(EventLoop, "quit", False) or status != "started":
+            return False, "the kivy event loop is not running (status {!r})".format(status)
+    except BaseException:
+        pass
+    frame = sys._current_frames().get(main.ident)
+    if frame is None:
+        return True, "the main thread is busy"
+    return True, "the main thread is busy in {} ({}:{})".format(
+        frame.f_code.co_name, os.path.basename(frame.f_code.co_filename), frame.f_lineno)
+
+
+def _run_on_main_thread(fn, timeout: float, give_up: float | None = None):
+    """`fn()` をメインスレッド（Kivy の Clock）で走らせ、終わるまで待つ。`(走ったか, 戻り値)` を返す。
 
     注入のリモートスレッドからゲームの状態を書き換えると、メインスレッドが
     同じ辞書を反復している最中に "dictionary changed size" が起こりうる（TECH.md §6.2）。
-    Clock が無い（ゲームの外）・既にメインスレッドに居る・`timeout` 秒待っても
-    走らない（メインループが止まっている）ときは、この場で走らせる。
-    どちらで走っても1回だけ（先に始めた側が取る）。
+    Clock が無い（ゲームの外）・既にメインスレッドに居るときは、この場で走らせる。
+
+    待ちが長いときは、`timeout` 秒ごとにメインループの様子を見る（`_main_loop_state`）。
+    回っていれば、メインスレッドは別の処理の中に居て、終われば Clock がこの仕事を取る。
+    そのときはこの場で走らせない（メインスレッドと同時に世界を書き換えることになる）。
+    前は `timeout` 秒で「止まっている」とみなしてこの場で走らせていたが、手が空かないだけなのか、
+    本当に止まっているのかを見分けていなかった。
+    メインループが止まっていたら（ゲームが終わる途中）、Clock はもう回らないので走らせずに諦める。
+    `give_up` 秒（既定 `timeout` の 30 倍）待っても取られなければ諦める。諦めたら、後から Clock が呼んでも走らない。
     """
     claim = threading.Lock()
     done = threading.Event()
@@ -2276,6 +2361,7 @@ def _run_on_main_thread(fn, timeout: float):
         if not claim.acquire(False):
             return
         try:
+            box["ran"] = True
             box["result"] = fn()
         except BaseException:
             # Clock の中で投げるとゲームが落ちる。
@@ -2290,14 +2376,26 @@ def _run_on_main_thread(fn, timeout: float):
             clock.schedule_once(run, 0)
         except BaseException:
             clock = None
-    if clock is not None and done.wait(timeout):
-        return box.get("result")
-    if clock is not None:
-        log("the main thread did not take the job in {:.0f}s; running it here"
-            .format(timeout), level="WARN")
-    run()
-    done.wait()       # Clock の側が先に取って走っている最中なら、終わるのを待つ
-    return box.get("result")
+    if clock is None:
+        run()
+        return bool(box.get("ran")), box.get("result")
+    limit = give_up if give_up is not None else timeout * 30
+    waited = 0.0
+    while not done.wait(timeout):
+        waited += timeout
+        running, why = _main_loop_state()
+        if running and waited < limit:
+            log("the main thread has not taken the job in {:.0f}s; waiting ({})".format(
+                waited, why), level="WARN")
+            continue
+        if claim.acquire(False):
+            # まだ誰も取っていない。後から Clock が呼んでも走らないよう、ここで取って捨てる。
+            log("gave up the job after {:.0f}s without running it ({})".format(waited, why),
+                level="ERROR")
+            return False, None
+        done.wait()   # ちょうど Clock の側が取って走っている。終わるのを待つ
+        break
+    return bool(box.get("ran")), box.get("result")
 
 
 def _unload(out_dir: str | None) -> dict:
@@ -2335,7 +2433,20 @@ def _unload(out_dir: str | None) -> dict:
             log_exc("unload: cannot take the mod facilities off the towns")
         return _patch.revert_all()
 
-    count = _run_on_main_thread(take_down, UNLOAD_WAIT) or 0
+    ran, count = _run_on_main_thread(take_down, UNLOAD_WAIT, UNLOAD_GIVE_UP)
+    if not ran:
+        # 何も剥がしていない（メインループが止まっている・手が空かないまま上限を過ぎた）。
+        # 窓口の登録簿や台帳も今のまま残す。投げて `bootstrap.log` に失敗を残す（GUI はそれを読む）。
+        log("unload: nothing was reverted; try again when the game is idle", level="ERROR")
+        raise RuntimeError("unload gave up: the main thread did not take the job")
+    count = count or 0
+    # 積んだまま走っていない on_ready は、古い世代として走らずに捨てられる（`_dispatch_ready`）。
+    # 印も外して、次の注入で積めるようにする。
+    pending = _pending_store()
+    if pending:
+        _once_store().difference_update(pending)
+        log("unload: {} on_ready task(s) still waiting were dropped".format(len(pending)))
+        pending.clear()
     # 期間・日数の望み・値段・装備の窓口の登録簿も空にする（関所が剥がれた後も sys に残るため）。
     try:
         from . import durations as _durations

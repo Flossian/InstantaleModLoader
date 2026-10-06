@@ -198,6 +198,13 @@ class Ctx(object):
             return fn
         return decorator
 
+    def resolve(self, target):
+        # 送り口は最初から在る形（`watch_aliases` がその場で包む）。
+        return None, None, (lambda *a, **k: None)
+
+    def superseded(self):
+        return False
+
 
 hook_store = FakeStore()
 mod._store = lambda ctx, write: hook_store
@@ -218,6 +225,28 @@ mod.ui.find_app = lambda: app
 
 ctx = Ctx()
 mod.apply(ctx)
+
+# 外見を作らせている間だけ、ゲームの送り口に時間切れを付ける（ゲーム側の既定は無期限）。
+send = ctx.wraps.get(mod.SEND_TARGET)
+seen = []
+
+
+def fake_send(*args, **kwargs):
+    seen.append((args, kwargs))
+
+
+check("送り口を包む", send is not None, sorted(ctx.wraps))
+if send is not None:
+    send(fake_send, "character_create", "msg", None)
+    mod._LOOK_CALL.active = True
+    try:
+        send(fake_send, "character_create", "msg", None)
+        send(fake_send, "character_create", "msg", None, None, 30000, 15)
+    finally:
+        mod._LOOK_CALL.active = False
+    check("外見を作らせていない送りは触らない", "timeout" not in seen[0][1] and len(seen[0][0]) == 3, seen[0])
+    check("外見を作らせている間は時間切れを足す", seen[1][1].get("timeout") == mod.LOOK_TIMEOUT, seen[1])
+    check("呼ぶ側が渡した時間切れはそのまま", seen[2][0][5] == 15 and "timeout" not in seen[2][1], seen[2])
 target = "image_generation.sdcppcuda.image_generation_creature:generate_character_image"
 check("選ばれた方式の関数を包む（生成中の数え）",
       target in ctx.wraps and len([t for t in ctx.wraps if "image_generation" in t]) == 1,

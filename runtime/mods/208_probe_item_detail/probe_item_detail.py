@@ -90,10 +90,8 @@ def _state() -> dict:
 
 
 def apply(ctx):
-    new_hud = sys.modules.get("scripts.hud.new_hud")
-    if new_hud is None:
-        ctx.log("scripts.hud.new_hud not loaded; skipping", level="WARN")
-        return
+    # モジュールがまだ読み込まれていなくても降りない。`ctx.wrap` が保留に積み、現れたら当て直す
+    # （TECH.md §3.4）。自分で降りると保留に載らず、ほかに保留が無い構成ではその起動で一度も当たらない。
 
     state = _state()
 

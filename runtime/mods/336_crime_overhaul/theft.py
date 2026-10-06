@@ -48,6 +48,9 @@ def install(env):
     ctx, write, screen, worlds, cfg = env.ctx, env.write, env.screen, env.worlds, env.cfg
     refresh_gold, current_facility = env.refresh_gold, env.current_facility
     call_guards = env.call_guards
+    # 盗んだ品の控えはその場でファイルになるが、品の移りはメモリの中だけで、この押下ではゲームは保存しない。
+    # 保存せずに終えるかロードすると、控えだけが残り、同じ番号で作り直された正規の品が盗品扱いになる。
+    save_soon = ui.saver(ctx, write, "theft")
 
     # -------------------------------------------------- 店で盗む
     # 売買画面で店の品を右クリックし、「購入」か「盗む」を選ぶ（DOC.md「店で盗む」）。判定は2段:
@@ -259,6 +262,7 @@ def install(env):
                 return "failed"
             write(head + " -> stole")
             remember_stolen(app, item, key, name)
+            save_soon(app, "stole")
             screen.say(app, THEFT_SUCCESS_TEXT.format(item=name))
             return "stole"
         count_attempt(app, key)

@@ -58,6 +58,7 @@ import threading
 import time
 import traceback
 
+from instantale_modloader import frames
 from instantale_modloader.frames import format_locals
 
 LOG_BASENAME = "live_crashes.log"
@@ -146,12 +147,17 @@ def apply(ctx):
             except Exception:
                 ctx.log_exc("crash recorder failed while recording")
 
-        @ctx.wrap("__main__:report_crash")
-        def report_crash(orig, exc_type, exc_value, exc_traceback, title="CRASH"):
+        @ctx.wrap("__main__:report_crash", safe=True)
+        def report_crash(orig, *args, **kwargs):
             # 自前の記録を取ってから、必ず元の処理を呼ぶ。
             # 本体の crash_log.txt はそのまま書かれる。
-            record(exc_type, exc_value, exc_traceback, title)
-            return orig(exc_type, exc_value, exc_traceback, title)
+            # 引数は受け取った形のまま渡す。並びを決め打つと、ゲームの更新で引数が変わったとき
+            # クラッシュの処理の最中に TypeError になり、自前の記録も本体の crash_log.txt も失う。
+            record(frames.arg(args, kwargs, "exc_type", 0),
+                   frames.arg(args, kwargs, "exc_value", 1),
+                   frames.arg(args, kwargs, "exc_traceback", 2),
+                   frames.arg(args, kwargs, "title", 3, "CRASH"))
+            return orig(*args, **kwargs)
 
         @ctx.wrap("__main__:send_crash_log_to_server", required=False)
         def send_crash_log_to_server(orig, *args, **kwargs):

@@ -10,7 +10,7 @@
 """
 import threading
 
-from instantale_modloader import llm, ui
+from instantale_modloader import llm, state, ui
 
 from . import rules
 
@@ -104,7 +104,7 @@ def install(env):
     area_difficulty, quest_reward, refresh_gold = env.area_difficulty, env.quest_reward, env.refresh_gold
     lock = threading.Lock()
     #: いまの行動。最初の facilitator で開き、要約で閉じる。
-    action = {"open": False, "gold": None, "claimed": 0, "calls": 0}
+    action = {"open": False, "gold": None, "claimed": 0, "calls": 0, "key": None}
     #: 要約の関数から send_request へ「この要約に判定を足す」を渡す。同じスレッドで降りてくる。
     pending = threading.local()
     #: 元の型 -> 足した型。鍵の型も持って id の使い回しを避ける。
@@ -115,7 +115,8 @@ def install(env):
         with lock:
             if not action["open"]:
                 action.update(open=True, gold=ui.gold_of(app) if app is not None else None,
-                              claimed=0, calls=0)
+                              claimed=0, calls=0,
+                              key=state.playthrough_key(app) if app is not None else None)
 
     def note_claims(result):
         claimed = rules.gold_claims(rules._get(result, "process"))
@@ -127,8 +128,38 @@ def install(env):
     def close_action():
         with lock:
             taken = dict(action)
-            action.update(open=False, gold=None, claimed=0, calls=0)
+            action.update(open=False, gold=None, claimed=0, calls=0, key=None)
         return taken
+
+    def drop_open_action(why):
+        """要約まで届かずに開いたままの行動を閉じる（戦闘から逃げた・倒れた後など）。
+
+        開いたままだと、行動の始めの所持金が次の行動まで持ち越され、その間の売却や
+        別の周回の所持金まで「盗んだ額」に数えて、上限を超えた分を削っていた。
+        店に入る・ロードするのは行動の途中では起きないので、そこで閉じる。
+        """
+        taken = close_action()
+        if taken["open"]:
+            write("loot: closed the action left open ({}; gold at its start {})".format(
+                why, taken["gold"]))
+
+    @ctx.wrap("__main__:ShoppingStartManagerRemake.execute", required=False, safe=True)
+    def shop_closes_action(orig, self, *args, **kwargs):
+        if cfg.LOOT_ENABLED:
+            try:
+                drop_open_action("a shop opened")
+            except Exception:
+                ctx.log_exc("crime incentive: cannot close the action")
+        return orig(self, *args, **kwargs)
+
+    @ctx.wrap("__main__:InstantaleApp.load_game_new", required=False, safe=True)
+    def load_closes_action(orig, self, *args, **kwargs):
+        if cfg.LOOT_ENABLED:
+            try:
+                drop_open_action("a save was loaded")
+            except Exception:
+                ctx.log_exc("crime incentive: cannot close the action")
+        return orig(self, *args, **kwargs)
 
     def wrap_facilitator(name):
         @ctx.wrap("{}:{}".format(MANAGER, name), required=False, safe=True)
@@ -227,6 +258,9 @@ def install(env):
         reason = str(answer.get(REASON_FIELD) or "").strip()[:80]
         loss = rules._get(result, LAW_FIELD)
         app = ui.find_app()
+        if taken.get("key") and app is not None and state.playthrough_key(app) != taken["key"]:
+            write("skip: {} the action began in another playthrough ({!r})".format(name, taken["key"]))
+            return
         now = ui.gold_of(app) if app is not None else None
         gained = now - taken["gold"] if now is not None and taken["gold"] is not None else None
         if scale is None:

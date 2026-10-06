@@ -10,7 +10,7 @@
     "en": "Evens out BGM for newly generated areas so unused tracks get played too",
     "ja": "新しく生成されるエリアの BGM の偏りを均し、使われていなかった曲も出るようにする"
   },
-  "version": "3",
+  "version": "4",
   "author": "R01/Flossian",
   "settings": {
     "FILL_MISSING": {

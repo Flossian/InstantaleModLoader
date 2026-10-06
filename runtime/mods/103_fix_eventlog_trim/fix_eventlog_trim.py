@@ -58,11 +58,13 @@ def trim_event_log(text, keep=KEEP_TURNS):
 
 
 def apply(ctx):
-    import sys
+    from instantale_modloader import patch
 
-    module = sys.modules.get("scripts.llm.llm_manager")
+    # 無ければローダの保留に積んで降りる（`patch.await_module`）。来たらローダが当て直す。
+    # `sys.modules` を見て自分で降りると保留に載らず、ほかに保留が無い構成ではその起動で一度も当たらない。
+    module = patch.await_module("scripts.llm.llm_manager", *TARGETS)
     if module is None:
-        ctx.log("scripts.llm.llm_manager not loaded; skipping", level="WARN")
+        ctx.log("scripts.llm.llm_manager not loaded yet; waiting for it")
         return
 
     state = {"trims": 0}

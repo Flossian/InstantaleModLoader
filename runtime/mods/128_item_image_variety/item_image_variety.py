@@ -43,6 +43,7 @@ import os
 import sys
 import threading
 
+from instantale_modloader import patch
 from instantale_modloader.state import (UNKNOWN_WORLD, world_filename,
                                         world_key)
 
@@ -62,9 +63,11 @@ EMBEDDING_MODULE = "Embedding.get_similar_id"
 
 
 def apply(ctx):
-    emb_mod = sys.modules.get(EMBEDDING_MODULE)
+    # 無ければローダの保留に積んで降りる（`patch.await_module`）。来たらローダが当て直す。
+    # `sys.modules` を見て自分で降りると保留に載らず、ほかに保留が無い構成ではその起動で一度も当たらない。
+    emb_mod = patch.await_module(EMBEDDING_MODULE, "text_to_embedding", "get_similar_embedding_id")
     if emb_mod is None:
-        ctx.log("{} not loaded; skipping".format(EMBEDDING_MODULE), level="WARN")
+        ctx.log("{} not loaded yet; waiting for it".format(EMBEDDING_MODULE))
         return
 
     log = ctx.logger("item_image.log")

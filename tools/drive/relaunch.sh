@@ -44,9 +44,10 @@ fi
 (cd "$GAME" && ./instantale.exe </dev/null >/dev/null 2>&1 &) </dev/null >/dev/null 2>&1
 stamp "launched"
 
-# 注入: 通るまで試し直す（ゲームの Python が立ち上がる前は失敗する）
+# 注入: GUI と同じく、ゲームの Python の初期化と窓の出現を待ってから流す（watcher.py --once）。
+# 待たずに流すと、初期化の前に PyGILState_Ensure を呼びうる。プロセスがまだ無ければ 1 で返るので試し直す。
 n=0
-until (cd "$ROOT" && timeout 60 python tools/injector.py >/dev/null 2>&1); do
+until (cd "$ROOT" && timeout 240 python tools/watcher.py --once >/dev/null 2>&1); do
   n=$((n + 1)); [ $n -ge 60 ] && { stamp "inject gave up"; exit 1; }; sleep 2
 done
 stamp "injected"

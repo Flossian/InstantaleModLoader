@@ -88,7 +88,8 @@ def wait_until_ready(pid: int, timeout: float = READY_TIMEOUT) -> bool:
     deadline = time.monotonic() + timeout
     reported_interp = False
     while time.monotonic() < deadline:
-        if not injector.find_processes(injector.TARGET_EXE):
+        # 待っている pid そのものを見る（どれか1つが生きているかでは、再起動で替わった後も待ち続けた）。
+        if pid not in {p for p, _name in injector.find_processes(injector.TARGET_EXE)}:
             return False  # 待っている間にゲームが終了した
         if injector.interpreter_ready(pid):
             # 段階が進んだことは1回だけ知らせる。

@@ -72,7 +72,6 @@ instantale.py:885   physical_integrity              = get_max_physical_integrity
 見えていない経路を推測で書き換えないため。
 """
 
-import sys
 
 from instantale_modloader import frames, patch, ui
 
@@ -119,12 +118,14 @@ def apply(ctx):
         state["lines"] += 1
         append(text)
 
-    functions = sys.modules.get(FUNCTIONS_MODULE)
+    # 無ければローダの保留に積んで降りる（`patch.await_module`）。来たらローダが当て直す。
+    # `sys.modules` を見て自分で降りると保留に載らず、ほかに保留が無い構成ではその起動で一度も当たらない。
+    functions = patch.await_module(FUNCTIONS_MODULE, "get_max_physical_integrity")
     if functions is None:
         # 体力上限の照合ができない＝食い違いを検出できない。
         # 推測で書き換えるより何もしないほうがよい（この
         # mod の唯一の判断材料がこれ）。
-        ctx.log("{} not loaded; skipping".format(FUNCTIONS_MODULE), level="WARN")
+        ctx.log("{} not loaded yet; waiting for it".format(FUNCTIONS_MODULE))
         return
 
     level_min = getattr(functions, "CHARACTER_LEVEL_MIN", FALLBACK_LEVEL_MIN)

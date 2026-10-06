@@ -216,6 +216,24 @@ def main():
         check("包みを通らずに増えたエリアを次の保存で選び直す",
               any("write_obfuscated_json_file area 3:" in line for line in after), after)
         check("例外を握り潰していない（boot の後）", not ctx2.errors, ctx2.errors)
+
+        # 同じ名前の別のワールド。前のワールドの控えで新旧を決めない（エリアの名前で見分ける）。
+        def town(name):
+            return {"name": name, "size": "town",
+                    "bgm": "Assets/sounds/musics/town/calm/a.mp3"}
+
+        first = {"world_data": {"world_name": "同名の世界"}, "areas": {"1": town("港町")}}
+        save(lambda *a, **k: None, "save.json", first)
+        second = {"world_data": {"world_name": "同名の世界"},
+                  "areas": {"1": town("山村"), "2": town("谷の村")}}
+        before = len(read_log(out_dir))
+        save(lambda *a, **k: None, "save.json", second)
+        after = read_log(out_dir)[before:]
+        check("同じ名前の別のワールドは初めて見たものとして扱う",
+              any("different world with the same name" in line for line in after)
+              and any("first sight" in line for line in after), after)
+        check("  → 別のワールドの既存のエリアを選び直さない",
+              not any("write_obfuscated_json_file area 2:" in line for line in after), after)
     finally:
         for attr in (POOL_LOG_ATTR, SEEN_ATTR):
             if hasattr(sys, attr):

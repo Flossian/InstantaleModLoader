@@ -2195,6 +2195,9 @@ def apply(ctx):
         # 予約にはこの書き込みの期限を持たせる（`give_up`）。
         screen.schedule(lambda: give_up(app, deadline), LLM_TIMEOUT + BUSY_GRACE)
 
+        # 書かせ始めた周回と土地。待ちを諦めた後に遅れて返った結果は、ここと違えば使わない。
+        origin = (key_of(app), area)
+
         def compose():
             material = None
             try:
@@ -2214,7 +2217,7 @@ def apply(ctx):
                 return
             # 戻るのはメインスレッド。
             # ここで画面に触らない。
-            screen.schedule(lambda: finish_start(app, members, facts, material))
+            screen.schedule(lambda: finish_start(app, members, facts, material, origin))
 
         thread = threading.Thread(target=compose, name="city_case_writer",
                                   daemon=True)
@@ -2256,8 +2259,15 @@ def apply(ctx):
                   "the screen".format(stamp(), LLM_TIMEOUT + BUSY_GRACE))
             screen.say(app, WRITING_SLOW_TEXT)
 
-    def finish_start(app, members, facts, material):
+    def finish_start(app, members, facts, material, origin=None):
         """書かせ終わってから事件を始める（メインスレッド）。"""
+        if origin is not None and origin != (key_of(app), game.area_id(app)):
+            # 待ちを諦めた後に、別の周回を読んだか別の土地へ移っていた。顔ぶれと事実は書かせ始めた
+            # 土地のものなので、今の土地で事件を始めない。
+            release(app)
+            write("[{}] the material came back after the player left {!r}; dropping it".format(
+                stamp(), origin))
+            return
         # 塗り直させない。
         # この直後に事件の文と選択肢を出すので、
         # ここで元の選択肢を塗ると一瞬だけ古い画面が見える。
