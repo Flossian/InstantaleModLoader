@@ -1,9 +1,9 @@
-# 台本の共通部分。ほかの台本が `.` で読む（直には走らせない）。
+# シェルスクリプトの共通部分。ほかのシェルスクリプトが `.` で読む（直には走らせない）。
 #
 # 決めるもの:
 #   DRIVE  このフォルダ        ROOT  リポジトリ        OUT  out/drive（結果と控えの一時置き場）
 #   DATA   ゲームのデータの場所（IML_INSTANTALE_DATA、無ければ %LOCALAPPDATA%\Darmabeko\Instantale）
-# 使う環境変数（台本ごとに要るものだけ）:
+# 使う環境変数（スクリプトごとに要るものだけ）:
 #   IML_DRIVE_WORLD   遊ぶ世界の saves\ の下のフォルダ名（世界の一覧の札にもこの名前が出る前提）
 #   IML_GAME_DIR      instantale.exe の在るフォルダ（設定画面が MOD の道具に渡すのと同じ名前）
 #   IML_DRIVE_BACKUP  relaunch.sh restore が戻す控え（backup.sh が作ったフォルダ）

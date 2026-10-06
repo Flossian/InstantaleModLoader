@@ -109,7 +109,7 @@ tools/npc_variety_probe.py  ローカル LLM で NPC を生成させ、外見・
 tools/rebalance_saved_bgm.py  既存セーブの BGM を後からまとめて均す（104_ 用）
 tools/mods_meta.py        mod.json の author の読み方。build_mods / list_mods / check_mods が共用
 tools/tests/test_*.py     ゲーム抜きで走る検査。開発用で配布物には入らない
-tools/drive/              動いているゲームを外から操作する台本（押す・待つ・状態を作る・控えと戻し・写真。§2.2）。開発用で配布物には入らない
+tools/drive/              動いているゲームを外から操作する道具（押す・待つ・状態を作る・控えと戻し・写真。§2.2）。開発用で配布物には入らない
 runtime/instantale_modloader/
     __init__.py   boot() / discover() / ログ / 世代発行 / 遅延設置の監視 / on_ready
                   / API 契約 / status.json の書き出し / unload()
@@ -300,7 +300,7 @@ type out\status.json                 # 適用結果・台帳・効いている�
 `reset_once("300_")` で印を落とす。
 どちらも開発中の逃げ道で、配布する MOD に `force=True` を書いてはいけない。
 
-実機の確認で画面を押す・待つ・遊びの状態（手配度・所持金・MOD の設定値）を作るのは `tools/drive/` の台本で行う。
+実機の確認で画面を押す・待つ・遊びの状態（手配度・所持金・MOD の設定値）を作るのは `tools/drive/` の道具で行う。
 試す前の控え（`backup.sh`）と戻し（`relaunch.sh restore`）も同じ所にある。使い方は `tools/drive/README.md`。
 
 ### 2.3 静的検査（`tools/check_mods.py`）は必ず通す
@@ -3141,7 +3141,7 @@ MOD の NPC の素データは保存の直前に隠すので、加入したま�
   `modnpc.is_mod_npc(id)` で飛ばせるが、既存の MOD は知らない。
   名前を本物と重複させない（`120_` が改名の対象にする）、
   ゲームに残る器へ id を渡す MOD と併用しない、で避ける
-- **`unload` は剥がす前に MOD の NPC を降ろす**（§3.10）。関所だけ消えると次の保存で焼かれる
+- **`unload` は剥がす前に MOD の NPC を降ろす**（§3.10）。関所だけ消えると次の保存で焼かれる。降ろすと登録簿は空になるので、読み直さずに注入し直したときは `spawn` がこの周回の控えの写しから組む（宣言時の初期値に戻さない）
 
 `npc_id` に `modnpc.ANY`（`"*"`）を渡すと**誰と話していても効く層**になる。
 `311_` / `317_` / `321_` / `403_` は「相手を複製して `profile` に足し、引数を差し替える」手順を

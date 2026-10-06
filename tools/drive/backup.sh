@@ -4,7 +4,11 @@
 #
 #   out/backup/<名前>_<日時>/save/savedata.json     遊んでいる世界のセーブ
 #   out/backup/<名前>_<日時>/world/world_data.json  世界の骨格（ゲームはセーブのたびにここも書く）
+#   out/backup/<名前>_<日時>/world/characters.txt   その時に在った立ち絵のフォルダの名前（画像は写さない）
 #   out/backup/<名前>_<日時>/state/…                state\ のうち models\ を除いたもの
+#
+# 立ち絵のフォルダの名前は、relaunch.sh restore が「控えの後にできたフォルダ」を見分けるのに使う。
+# 更新時刻で見分けると、控えの前から居る人物（主人公など）を描き直したフォルダまで移してしまう。
 #
 # state\models\ は画像生成のモデル（数 GB）で、遊びの状態ではないので写さない（写すと控え1つで十数 GB になった）。
 # ゲームは行動のたびに上書き保存するので、取るのはゲームを閉じたときか、手が空いているときにする。
@@ -17,6 +21,8 @@ WORLD="$DATA/worlds/$IML_DRIVE_WORLD/world_data.json"
 mkdir -p "$B/save" "$B/world" "$B/state"
 cp -p "$SAVE" "$B/save/savedata.json"
 [ -f "$WORLD" ] && cp -p "$WORLD" "$B/world/world_data.json"
+CHARS="$DATA/worlds/$IML_DRIVE_WORLD/characters"
+[ -d "$CHARS" ] && (cd "$CHARS" && find . -mindepth 1 -maxdepth 1 -type d | sed 's|^\./||') > "$B/world/characters.txt"
 (cd "$ROOT/state" && find . -path ./models -prune -o -type f -print) | while read -r f; do
   mkdir -p "$B/state/$(dirname "$f")"; cp -p "$ROOT/state/$f" "$B/state/$f"
 done

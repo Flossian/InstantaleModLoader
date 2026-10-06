@@ -23,7 +23,14 @@ if [ "$1" = "restore" ]; then
   cp -p "$B/save/savedata.json" "$S/savedata.json"
   if [ -f "$B/world/world_data.json" ]; then
     cmp -s "$B/world/world_data.json" "$W/world_data.json" || { cp -p "$B/world/world_data.json" "$W/world_data.json"; echo "restored world_data.json"; }
-    find "$W/characters" -mindepth 1 -maxdepth 1 -type d -newer "$B/world/world_data.json" | while read -r d; do
+    # 移すのは控えの時に無かった立ち絵のフォルダだけ（backup.sh の characters.txt）。
+    # 名前の一覧が無い古い控えは、更新時刻で見分ける（控えの前から居る人物を描き直したフォルダも移る）。
+    find "$W/characters" -mindepth 1 -maxdepth 1 -type d | while read -r d; do
+      if [ -f "$B/world/characters.txt" ]; then
+        grep -qxF "$(basename "$d")" "$B/world/characters.txt" && continue
+      else
+        [ "$d" -nt "$B/world/world_data.json" ] || continue
+      fi
       mkdir -p "$LEFT/characters"; mv "$d" "$LEFT/characters/$(basename "$d")_$(date +%H%M%S)" && echo "moved portrait $(basename "$d")"; done
   fi
   cd "$ROOT" || exit 1
@@ -33,7 +40,7 @@ if [ "$1" = "restore" ]; then
     mkdir -p "$LEFT/$(dirname "$f")"; mv "$f" "$LEFT/${f}_$(date +%H%M%S)" && echo "moved new state $f"; done
 fi
 
-# 入出力を切り離して起動する。切り離さないと、この台本の出力をパイプへ流したとき、ゲームが流し先を握って台本が終わらない。
+# 入出力を切り離して起動する。切り離さないと、このスクリプトの出力をパイプへ流したとき、ゲームが流し先を握ってスクリプトが終わらない。
 (cd "$GAME" && ./instantale.exe </dev/null >/dev/null 2>&1 &) </dev/null >/dev/null 2>&1
 stamp "launched"
 

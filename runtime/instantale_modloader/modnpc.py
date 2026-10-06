@@ -714,6 +714,11 @@ def spawn(app, npc_id, *, world=None, write=None):
         # 写しはゲームの保存と同じ時点の実体なので、記憶も HP も死もそこから戻る。
         fields = dict(fields_of(npc_id))
         snapshot = record.get("snapshot")
+        if not isinstance(snapshot, dict):
+            # 登録簿に写しが無い（`unload` の `purge` が登録簿を空にした後、読み直さずに注入し直した）なら、
+            # この周回の控えの写しを使う。控えは層を外すと消える（`unregister`）ので、同じ id の別人は拾わない。
+            entry = _persisted_entry(app, owner_of_id(npc_id), npc_id)
+            snapshot = entry.get("snapshot") if entry is not None else None
         if isinstance(snapshot, dict):
             fields.update(copy.deepcopy(snapshot))
         data = plain_data(fields, npc_id)
