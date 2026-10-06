@@ -29,7 +29,7 @@ PREPS = (
 PREP_BY_KEY = {prep["key"]: prep for prep in PREPS}
 
 BREAK_LABEL = "脱獄を決行する（備え {prep}/{max}）"
-#: 年ごとの画面に1つだけ足す入口。押すと備えと決行の一覧（本人の指示。2026-10-05）。
+#: 年ごとの画面に1つだけ足す入口。押すと備えと決行の一覧（2026-10-05）。
 MENU_LABEL = "脱獄を試みる（備え {prep}/{max}）"
 #: 一覧から年ごとの画面へ戻る。
 BACK_LABEL = "やめる"

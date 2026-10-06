@@ -1512,8 +1512,8 @@ defeat.surrendering()                    # 切り上げの終わり方を起こ�
 #### 3.3.12 掲示板に出さない依頼も窓口で（`board`）
 
 ゲーム自身の依頼の生成で依頼を作り、ギルドの掲示板からは隠して自分の入口から受けさせる MOD がある（`336_crime_overhaul` の裏の仕事・処刑場からの脱出）。
-掲示板の依頼を拾う MOD（`911_rival_adventurer` のライバルの狙い）は、世界の依頼の一覧から「その土地の未完了の依頼」を選ぶ。
-窓口が無かったころは、ライバルが裏の仕事を狙って片付けたことにし、裏の依頼掲示板からも消していた（2026-10-05 の実機）。
+掲示板の依頼を拾って片付ける MOD は、世界の依頼の一覧から「その土地の未完了の依頼」を選ぶ。
+窓口が無いと、隠した依頼まで拾って片付けたことにし、裏の依頼掲示板からも消してしまう（2026-10-05 の実機）。
 
 ```python
 board.declare_kept_off(owner, ctx, fn)   # 隠す側。apply() の中。fn(app) -> 掲示板に出さない依頼の id の並び
@@ -1950,7 +1950,7 @@ GUI の1行に収めると「JSON を手で書く欄」になり、コードを�
 | `apply(ctx)` に渡る `ctx` | §3.1 / §3.6 / §3.8 / §3.11 |
 | `mod.json` の鍵 | §3.1 / §3.2 / §3.8 / §3.9 / §3.12 |
 | §5 の共通部品（`ui` / `frames` / `llm` / `state` / `jobs` / `modnpc` / `modfacility` / `prices` / `sounds`） | §5 |
-| 使い方を書いた窓口（`durations` / `prices` / `combat` / `ids` / `npcs` / `saves` / `wanted` / `guards` / `defeat` / `board` / `confinement` / `choices`） | §3.2.3 / §3.3 |
+| 使い方を書いた窓口（`durations` / `prices` / `combat` / `equipment` / `arrivals` / `talk_affinity` / `ids` / `npcs` / `saves` / `wanted` / `guards` / `defeat` / `board` / `confinement` / `choices`） | §3.2.3 / §3.3 |
 
 これ以外は内部で、予告なく変わる。
 `patch.py` の `_defer_if_*` や `__init__.py` の `_order()` のような
@@ -2430,7 +2430,11 @@ ui.find_app() / ui.find_hud(app) / ui.cls_of(...) / ui.IDLE_SIGNALS / ui.SAFE_CL
 ui.current_area(app) / ui.world_areas(...) / ui.nodes_of(...) / ui.facilities_of(...)
 ui.find_guild(area) / ui.find_facility(area, id) / ui.facility_name(app, facility)
 ui.facility_type_of(...) / ui.GUILD_FACILITY_TYPE
+ui.choices_painted(app)   # いまの選択肢（`app.to_display_buttons`）を HUD が塗り終えたか。読めなければ True
 ```
+
+場面の終わりの合図の直後に `process_choice` で次の場面を起こすと、ゲームが遅れて前の場面の選択肢を塗る（GAME.md §2.2）。
+ボタンを押さずに場面を起こす MOD は、`choices_painted` が True になるまでフレームごとに待ってから起こす（`316_` は上限 60 フレーム）。
 
 ボタンを出さない MOD が「次のフレーム・メインスレッド」だけ要るときは `ui.scheduler`
 （Kivy が無ければその場で実行するので、オフライン検証でも同じ経路を通る。

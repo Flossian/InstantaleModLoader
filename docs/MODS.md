@@ -247,7 +247,8 @@ Gemini は `send_request` の中で足すので境界の外、OpenAI / Claude �
 #### 直し方
 
 LLM へ渡す型の写しの並びに、件数の上限を付ける。
-llama.cpp の grammar が「上限を超える要素を書き始めること」をトークン単位で禁じるので、最後の要素は書き終えてから並びが閉じ、続きの欄（ボス・舞台・イベント）は普通に書かれる。
+llama.cpp の grammar は「上限を超える要素を書き始めること」をトークン単位で禁じる。
+そのため最後の要素は書き終えてから並びが閉じ、続きの欄（ボス・舞台・イベント）は普通に書かれる。
 上限で打ち切った回も、ボスの技と落とす品、舞台の説明、イベントまでそろっていた（上の表の上限 3 の8回）。
 ゲームの受け取り（pydantic の型）には上限が無いので、そのまま読める。
 
@@ -1718,7 +1719,7 @@ v4 で、ゲームの更新で変わった逮捕の説明文に合わせ、新�
 | `224_probe_npc_carryover` | ロードのどの地点から世界へ NPC を入れられるかを測る。見るのは `load_game_new` / `start_game` の前後・ロード後の最初の選択肢・注入時の4地点。NPC を作るのに要るもの（世界の鍵・素データの `npcs` 辞書・採番台帳 `index['npc']`・`generate_character`・`move_npc_to_facility`・ダンジョン以外のギルドか宿）が揃っているかを数え、地点ごとに `READY` / `NOT READY` を残す。台帳と実在 id の食い違いも同じ行に控える |
 | `225_probe_area_quest_difficulty` | 街を初めて訪ねたとき、依頼の難易度を誰がどう決めるかを録る。`settlement_quest_generator` に渡る `quest_difficulties` の実値・呼び出し元・そのローカル変数、stat↔難易度の変換、街が作られる経路の順と前後の `level_of_detail`、到着までの移動の間の `random.*`。`133_ui_area_difficulty` が未訪問の街に帯を出す材料（VERIFICATION.md §3.49 #5。結果は VERIFICATION_LOG.md §2.84） |
 | `226_probe_item_consume` | 回復アイテムを使ったとき、何が誰にどれだけ効くかを録る。押された項目と `usable` の実値、使用の前後の HP・スタミナ・上限・`status`・持ち物の数と足された文、回復量を出す純関数の対応表が対象。`134_balance_item_effects` が本体を呼ぶか全部書くかを決める材料（結果は GAME.md §2.13.2）。出力は `out\item_consume.log` / `out\item_consume.jsonl` |
-| `227_probe_shop_stock` | 買った品が店の棚へ戻るのはどこかを録る。決着済みで、棚の品はゲームが店を開くたびに雛形 `config['goods']` から作り直した別の現物だった（GAME.md §2.13.1.3。対処は `312_shop_restock`）。店の場面で生まれた品の id・持ち主・呼び出し元と、店の経路の境目ごとの持ち物と所持金の増減（差分だけ）を残す。店の外の品の誕生は `ITEM_SAMPLES` を決めたときだけ録る。版4 から、買うときにお金がいつ・どこで動くかも録る（`336_` の売買画面の中の購入と盗みのため）。`buy_item` / `sell_item` の呼び出し元、品を落とした後と右クリックの後に画面に出た文字と消えた文字（`画面 …: 出た=… 消えた=…`）、新しく出たボタンの押下と前後の所持金（`押された: …`）、右クリックした品の側と本体の popup の親（`右クリック(…): popup=… 親=…`）。出力は `out\shop_stock.log` / `out\shop_stock.jsonl` |
+| `227_probe_shop_stock` | 買った品が店の棚へ戻るのはどこかを録る。決着済みで、棚の品はゲームが店を開くたびに雛形 `config['goods']` から作り直した別の現物だった（GAME.md §2.13.1.3。対処は `312_shop_restock`）。店の場面で生まれた品の id・持ち主・呼び出し元と、店の経路の境目ごとの持ち物と所持金の増減（差分だけ）を残す。店の外の品の誕生は `ITEM_SAMPLES` を決めたときだけ録る。版4 から、買うときにお金がいつ・どこで動くかも録る（`336_` の売買画面の中の購入と盗みのため）。録るのは `buy_item` / `sell_item` の呼び出し元、品を落とした後と右クリックの後に画面に出た文字と消えた文字（`画面 …: 出た=… 消えた=…`）、新しく出たボタンの押下と前後の所持金（`押された: …`）、右クリックした品の側と本体の popup の親（`右クリック(…): popup=… 親=…`）。出力は `out\shop_stock.log` / `out\shop_stock.jsonl` |
 | `228_probe_area_move_reject` | エリア移動の拒否（`area_move_rejector`）が、同行者の何を読んで決めているかを録る。`AreaMoveManager.execute` の窓の間だけ、同行者の `Character`・`relationship`・名簿を読みを記録する写しに差し替え、読まれた順に `out\area_move_reject.log` へ残す（窓を閉じたら元へ戻し、セーブには書かない）。`329_` の当て推量が2度外れた後の材料で、決着（GAME.md §2.18 / VERIFICATION.md §3.56） |
 | `229_probe_mod_npc` | ローダの `modnpc`（MOD だけが持つ NPC と、正規 NPC への被せ）を実機に通す。設定の「来訪者を居させる」を入れると、文字列の id の来訪者を1人組んでプレイヤーの居る施設へ連れて回り、同じ施設の主に被せを載せる（既定は切で、切っている間は来訪者も被せも出さない）。施設への配置・保存の関所・書かれたセーブへの漏れ（`leaked`）・会話・頼み文への載り方・詳細生成・立ち絵を、`out\mod_npc.jsonl` の `at` ごとに録る。測りたいのは、来訪者がセーブに残らず、読み直しで記憶ごと戻ること。戦闘とパーティー加入は触らない（スキルと立ち絵が空のまま戦闘に入るとゲームが落ちる。VERIFICATION_LOG.md §2.40 / §2.42）。結果は VERIFICATION.md §3.59 と GAME.md §2.23 |
 | `230_probe_image_generation` | 画像生成のバックエンドと出口を録る。画像の強化を DLL の差し替えからローダの MOD へ移すための下調べで、(1) 選ばれた方式だけが import されるか、(2) 生成の出口は1つか、(3) チェックポイント・TAESD・VAE がいつ決まり、設定を変えたら組み直されるか、を測る。上の層（アニメ・写実・img2img）で印を立て、下の出口で引数を残す。方式は名指しせず、`sys.modules` と import の瞬間の観測者から引く。出力は `out\image_generation.log` / `out\image_generation.jsonl`。読み取りは決着（GAME.md §2.33、VERIFICATION_LOG.md §2.86）、書き込み側の手順は VERIFICATION.md §3.65 |
