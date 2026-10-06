@@ -45,7 +45,8 @@
 | 多段の場面（宿泊・訓練・賭博ほか） | 並んでいる選択肢のクラス名（`SEQUENCE_MARKS`）。旗でも手待ちでも捕まらない。`Display...Choice` は品書きなので数えない |
 | 戦闘 | 旗と `current_enemy_dict`。戦闘中は控えすら置かない（置くと戦闘の直後に次の戦闘が始まる） |
 | ゲーム自身の衛兵 | `BattleStartManager.__init__` を包み、自分が組んだぶん（`memo["building"]`）以外で `enemy_type='guard'` のものを数える。出たら控えを落とし、1回の遭遇として数える。依頼中の戦闘と闘技場は数えない（数えるとクエスト1回で追手が止まる） |
-| 服役明け | `ImprisonmentEndManager.execute`（釈放）の後に控えを落とし、追手の間を数え直す。服役の年は暦が進むので、その間に追手が決まり、釈放の直後に出ていた（実機） |
+| 服役中 | 刑が始まったら（`ImprisonmentStartManager.execute`）決まっていた追手を落とし、牢を出るまで抽選も起こすこともしない。牢の中は、服役の選択肢が並んでいるか、ほかの MOD がローダの窓口 `confinement` で知らせているか（`336_` の脱獄の一覧）で見る。服役の年は暦が進むので、見ないとその間に追手が決まり、脱獄の一覧を開いた画面で起きた |
+| 服役明け | `ImprisonmentEndManager.execute`（釈放）の後に追手の間を数え直す。釈放を通らずに牢の外へ出たとき（`336_` の脱獄）は、牢の外の画面に戻ったところで服役中の印を下ろす |
 | 決まった後に軽くなった | 起こす直前に手配を測り直し、出す条件を割っていたら出さない（釈放でその土地が平常に戻った・罰金を納めた など） |
 
 ##### 作り替えるのは自分の戦闘の中だけ
@@ -104,7 +105,7 @@
 import random
 import sys
 
-from instantale_modloader import choices, guards, ui, wanted
+from instantale_modloader import choices, confinement, guards, ui, wanted
 from instantale_modloader.state import WorldStore, world_key
 
 from . import hunt
@@ -169,6 +170,9 @@ BLOCKING_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle",
 # そのうち戦闘の旗。**戦闘中は控えすら置かない**
 # （置くと、その戦闘が終わった瞬間に次の戦闘が始まる）。
 BATTLE_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle")
+
+# 服役の選択肢の目印（`ImprisonmentStartManager` / `ImprisonmentPhaseManager` / `ImprisonmentEndManager`。GAME.md §2.20）。
+IMPRISONMENT_MARK = "Imprisonment"
 
 
 # **多段の場面**の目印（選択肢のクラス名に含まれる語。GAME.md §2.2）。
@@ -304,7 +308,9 @@ def apply(ctx):
             # 戦闘の選択肢が並んだら1回だけ塗り直す、の印。
             "repaint": False,
             # この画面で抽選を1回済ませたか（1つの行動で何度も回さない）。
-            "rolled": False}
+            "rolled": False,
+            # 刑が始まってから牢を出るまで。立っている間は抽選も起こすこともしない。
+            "jailed": False}
 
     # ------------------------------------------------------------ 控えの出し入れ
     # 控えの出し入れ（場所・読み・キャッシュ・書き）は `state.WorldStore` に
@@ -318,10 +324,29 @@ def apply(ctx):
             return
         saved = memo_store.load(key)
         memo["world"] = key
+        memo["jailed"] = False          # 別の世界・読み直した世界。牢の中なら画面から拾い直す（`imprisoned`）
         memo["days"] = saved.get("days", 0.0) or 0.0
         memo["last"] = saved.get("last")
         write("控えを読んだ: 世界={} 通算={}日 前回={}".format(
             key, memo["days"], memo["last"]))
+
+    def jail_reason(app):
+        """いま牢の中だと画面か窓口から分かるなら、その理由。"""
+        names = [ui.spec_cls_name(entry) for entry in (getattr(app, "buttons", None) or [])]
+        if any(name and IMPRISONMENT_MARK in name and not name.startswith("Display") for name in names):
+            return "服役の選択肢が並んでいる"
+        why, by = confinement.why(app)
+        if why:
+            return "{}（{}）".format(why, by)
+        return None
+
+    def imprisoned(app):
+        """服役中なら理由。刑が始まってから牢を出るまで、追手は決めないし起こさない。"""
+        reason = jail_reason(app)
+        if reason:
+            memo["jailed"] = True       # ロードで戻った牢の中も、ここで拾い直す
+            return reason
+        return "服役中" if memo["jailed"] else None
 
     def save_memo(app):
         memo_store.save(world_key(app),
@@ -442,6 +467,12 @@ def apply(ctx):
         （`refresh_choice_buttons`）。
         契機の瞬間はまだ本文も場面も動いている最中でありうる。
         """
+        jailed = imprisoned(app)
+        if jailed:
+            if memo["due"] is not None:
+                memo["due"] = None
+                write("{}: {}。決まっていた追手を落とした".format(trigger, jailed))
+            return
         here, total = measure(app)
         if not hunt.should_send(here, total, START_WANTED, START_TOTAL):
             return
@@ -509,6 +540,11 @@ def apply(ctx):
             write("{}: 画面が{}回変わっても出せなかった。今回は出さない".format(
                 due["trigger"], DUE_MAX_SIGNALS))
             return
+        jailed = imprisoned(app)
+        if jailed:
+            memo["due"] = None
+            write("{}: {}。追手は出さない".format(due["trigger"], jailed))
+            return
         reason = standing_down(app)
         if reason:
             # まだ場面の中。控えは残すので、次に画面が整ったときに出る。
@@ -547,6 +583,20 @@ def apply(ctx):
             disarm()
             write("{}: 戦闘を起こせなかった。控えを降ろした".format(due["trigger"]))
 
+    @ctx.wrap("__main__:ImprisonmentStartManager.execute", required=False, safe=True)
+    def sentenced(orig, self, *args, **kwargs):
+        """刑が始まった。牢を出るまで追手は決めない。決まっていた追手も落とす。"""
+        result = orig(self, *args, **kwargs)
+        app = getattr(self, "app", None) or ui.find_app()
+        if app is not None:
+            load_memo(app)
+            dropped = memo["due"] is not None
+            memo["due"] = None
+            memo["jailed"] = True
+            write("刑が始まった。{}牢を出るまで追手は来ない".format(
+                "決まっていた追手を落とし、" if dropped else ""))
+        return result
+
     @ctx.wrap("__main__:ImprisonmentEndManager.execute", required=False, safe=True)
     def released(orig, self, *args, **kwargs):
         """釈放。刑を務めた区切りなので、決まっていた追手を落とし、追手の間を数え直す。"""
@@ -556,6 +606,7 @@ def apply(ctx):
             load_memo(app)
             dropped = memo["due"] is not None
             memo["due"] = None
+            memo["jailed"] = False
             memo["last"] = memo["days"]
             save_memo(app)
             write("釈放された。{}追手の間を数え直す（次は{}日後から）".format(
@@ -693,6 +744,12 @@ def apply(ctx):
         `set_buttons_to_normal` は1〜2秒早く、まだ本文を流している最中なので使わない。
         """
         count_signal(self)
+        if memo["jailed"] and getattr(self, "buttons", None) and not jail_reason(self) \
+                and not fighting(self) and not sequence_on_screen(self):
+            # 釈放を通らずに牢の外の普段の画面へ戻った（`336_` の脱獄）。ここから追手が来うる。
+            # 会話・戦闘などの場面の最中は下ろさない（牢の中の会話もここに入る）
+            memo["jailed"] = False
+            write("牢の外の画面に戻った。服役中の印を下ろす")
         if memo["repaint"] and battle_screen(self):
             memo["repaint"] = False
             schedule(lambda: repaint_buttons(self))

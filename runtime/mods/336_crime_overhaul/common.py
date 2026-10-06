@@ -63,6 +63,8 @@ class Env(object):
         #: 裁判へ持ち越す介入（衛兵の買収が突き返されたら `{"bribe": "caught"}`）。次の裁判が始まったら空にする。
         #: ロードを挟んでも続くよう、世界×主人公の控え（`carry_to_trial`）にも持つ（`carry` / `take_carry`）。
         self.carry_to_trial = {}
+        #: `carry_to_trial` がどの周回のものか。周回が替わったらメモリの分は持ち越さない。
+        self.carry_playthrough = None
         #: 次の依頼の生成（`random_quest_generator`）へ差し込む指示と難易度。1回で使い切る（`office` が包む）。
         #: 裏の仕事（`office`）と処刑場からの脱出（`rescue`）が使う。
         self.quest_inject = {"brief": None, "difficulty": None, "at": 0.0, "tag": ""}
@@ -82,11 +84,14 @@ class Env(object):
 
     def carry(self, app, key, value):
         """裁判へ持ち越す介入を置く（`value` が None なら外す）。メモリと控えの両方。"""
+        playthrough = self.worlds.playthrough(app)
+        if playthrough != self.carry_playthrough:
+            self.carry_to_trial.clear()         # 別の周回のメモリを混ぜない
+            self.carry_playthrough = playthrough
         if value is None:
             self.carry_to_trial.pop(key, None)
         else:
             self.carry_to_trial[key] = value
-        playthrough = self.worlds.playthrough(app)
         with self.worlds.lock:
             bucket = self.worlds.load(playthrough)
             if self.carry_to_trial:
@@ -104,7 +109,8 @@ class Env(object):
             if stored is not None:
                 self.worlds.save(playthrough)
         taken = dict(stored) if isinstance(stored, dict) else {}
-        taken.update(self.carry_to_trial)
+        if playthrough == self.carry_playthrough:
+            taken.update(self.carry_to_trial)
         self.carry_to_trial.clear()
         return taken
 

@@ -31,7 +31,7 @@
 
 ## ボタンの出し方
 
-`InstantaleApp.refresh_choice_buttons` を包み、**ゲームが選択肢を組み終える前に** 自前のボタンを1つ差し込む。
+ローダの窓口 `choices`（TECH.md §3.3.14）の組み直しの前（`refresh`）で、**ゲームが選択肢を組み終える前に** 自前のボタンを1つ差し込む。
 役場の選択肢そのものはゲームが持っているので、こちらは足すだけで組み直さない。
 差し込む条件は全部揃ったときだけ:
 
@@ -45,7 +45,7 @@
 ## 自前のクラス名を `PhaseSpec` に書かない
 
 ボタンはセーブに焼かれうる（`PhaseSpec.to_dict()`）。
-無害な既存クラスを持たせ、押下は `on_button_press` を包んで印で横取りする。
+無害な既存クラスを持たせ、押下は窓口 `choices` が印で振り分けて渡す。
 印のキーは他の MOD と別にすること（`301_`=mod_action / `302_`=mod_party_action /
 `305_`=mod_mini_action / `307_`=mod_road_action / ここ=mod_pardon_action）。
 
@@ -405,7 +405,7 @@ def apply(ctx):
             ctx.log_exc("office pardon: cannot offer the pardon")
 
     def on_button_press(self, action):
-        """自前のボタンだけ横取りする。印が無ければ必ず素通し。"""
+        """自前のボタンが押された（窓口 `choices` の `presses`。印で振り分けた後に呼ばれる）。"""
         entry = choices.pressed()
         text = (entry.get("text") if isinstance(entry, dict) else None) or action
         write("pressed {!r} ({})".format(text, action))

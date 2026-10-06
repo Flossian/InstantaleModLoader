@@ -105,10 +105,13 @@ def hunted_line(app):
             store["errors"].append("{}: {}: {}".format(owner, type(exc).__name__, exc))
             del store["errors"][:-20]
             continue
-        if isinstance(got, bool) or not isinstance(got, (int, float)) or got <= 0:
+        if isinstance(got, bool) or not isinstance(got, (int, float)):
+            continue
+        got = int(got)      # 弾く判定も比べるのも、返す値（切り捨てた整数）で行う
+        if got <= 0:
             continue
         if line is None or got < line:
-            line, by = int(got), owner
+            line, by = got, owner
     return line, by
 
 

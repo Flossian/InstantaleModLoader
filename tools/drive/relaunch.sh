@@ -44,14 +44,6 @@ until (cd "$ROOT" && timeout 60 python tools/injector.py >/dev/null 2>&1); do
 done
 stamp "injected"
 
-wait_stage() {   # $1 = 待つ段、$2 = 上限（回）
-  i=0
-  while [ $i -lt "$2" ]; do
-    s=$(stage); case "$s" in "STAGE $1"*) echo "$s"; return 0;; esac
-    i=$((i + 1)); sleep 1
-  done
-  echo "timeout waiting for $1 (last: $s)"; return 1
-}
 wait_stage title 90 >/dev/null || exit 1
 drive clicktext.py --wait 30 --args "$(jarg texts '["開始する"]')" >/dev/null
 stamp "title -> 開始する"

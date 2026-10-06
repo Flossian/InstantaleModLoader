@@ -24,10 +24,11 @@ r"""計測: NPC の好感度（`relationship.player.affinity`）がいつ・ど�
 録るもの（1件＝1行）
 
     change    窓の前後で好感度が動いた。窓の名前、動いた人（id・名前・同行中か）、前後の値と差、
-              同行者の一覧、窓の秒数。動いた人が居なければ `still`（窓の名前・見た人数・同行者）
+              同行者の一覧、窓の秒数。動いた人が居なければ `still`（窓の名前・見た人数・同行者。
+              窓ごとに最初の1回だけ。以後は動かなかった回は書かない）
     late      窓が閉じた `LATE_SECONDS` 秒後に、直後から動いた分
     emotion   感情の文を組み直した。引数（好感度・魅力）、戻り、呼び出し元
-              （呼び出し元ごとに最初の `CALLER_SAMPLES` 回だけ。以後は回数だけ）
+              （呼び出し元ごとに最初の `CALLER_SAMPLES` 回だけ。以後は書かない）
 
     out\affinity.log     読む用
     out\affinity.jsonl   後から数える用
@@ -117,6 +118,9 @@ def apply(ctx):
             app = owner
         return app or ui.find_app()
 
+    #: `still` を書いた窓。
+    still_seen = set()
+
     def watch(name, late):
         def wrapper(orig, self, *args, **kwargs):
             app = None
@@ -138,7 +142,9 @@ def apply(ctx):
                         if rows:
                             event("change", window=name, changed=rows, party=party,
                                   seconds=seconds)
-                        else:
+                        elif name not in still_seen:
+                            # 日数送りのたびに来るので、動かなかった回は窓ごとに最初の1回だけ書く
+                            still_seen.add(name)
                             event("still", window=name, seen=len(after), party=party,
                                   seconds=seconds)
                         if late:

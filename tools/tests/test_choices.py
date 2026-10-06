@@ -355,6 +355,10 @@ ctx_c = Ctx("700_a", "g2")
 choices.provide(ctx_c, screen_a, refresh=refresh_a, presses={"a:": press_a})
 check("世代が変われば包み直す", choices.REFRESH_TARGET in ctx_c.hooks, sorted(ctx_c.hooks))
 check("差し替えた後の持ち主の数は2つのまま", len(choices.providers()) == 2, choices.providers())
+# 注入し直しで適用順が変わった（b を a より先に読む）。並びは新しい世代の登録の順になる。
+choices.provide(Ctx("701_b", "g3"), screen_b, refresh=refresh_b, after=after_b)
+choices.provide(Ctx("700_a", "g3"), screen_a, refresh=refresh_a, presses={"a:": press_a})
+check("注入し直すと並びは新しい世代の適用順", choices.providers() == ["701_b", "700_a"], choices.providers())
 
 choices.reset()
 shutil.rmtree(STATE, ignore_errors=True)

@@ -92,7 +92,6 @@ def apply(ctx):
 
     # 選択肢の dict から spec のクラス名を読む／押された index の dict を引く（ローダ共通）。
     spec_cls_name = ui.spec_cls_name
-    pressed_entry = ui.pressed_entry
 
     # ------------------------------------------------------------ 補助
 

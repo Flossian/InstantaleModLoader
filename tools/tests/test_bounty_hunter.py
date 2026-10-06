@@ -37,7 +37,7 @@ STATE_DIR = os.path.join(OUT_DIR, "state")
 if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
-from instantale_modloader import guards  # noqa: E402
+from instantale_modloader import confinement, guards  # noqa: E402
 
 TARGETS = (
     "scripts.llm.llm_manager:guard_npc_generator",
@@ -50,6 +50,7 @@ TARGETS = (
     "__main__:InstantaleApp.elapse_days",
     "__main__:InstantaleApp.refresh_choice_buttons",
     "scripts.llm.llm_manager:master_ai_facilitator",
+    "__main__:ImprisonmentStartManager.execute",
     "__main__:ImprisonmentEndManager.execute",
     # ローダの窓口 `choices`（組み直しの後の合図を預けた）が、押下と保存も包む。
     "__main__:InstantaleApp.on_button_press",
@@ -523,6 +524,47 @@ def main():
     check("出すときの強さは今の手配の重さで決め直す",
           BattleStartManager.built == [("guard", None)]
           and any("難易度75" in line for line in read_log()), read_log()[-2:])
+
+    print("服役中")
+    app = App({"0": -25})
+    module, ctx = fresh_mod(app, CHANCE_PERCENT=100)
+    arrive(ctx, app, ready=False)                 # 逮捕の前に追手が決まっていた
+    ctx.hooks["__main__:ImprisonmentStartManager.execute"](
+        lambda self: "刑", types.SimpleNamespace(app=app))
+    app.buttons = [{"spec": types.SimpleNamespace(cls_name="ImprisonmentPhaseManager", args=[])}]
+    ready_screen(ctx, app)
+    check("刑が始まったら決まっていた追手を落とす",
+          not BattleStartManager.built
+          and any("刑が始まった。決まっていた追手を落とし" in line for line in read_log()), read_log()[-2:])
+    seen = len(read_log())
+    ctx.hooks["__main__:InstantaleApp.elapse_days"](counting(None)[0], app, 365)
+    ready_screen(ctx, app)
+    check("服役の年は追手を決めない",
+          not BattleStartManager.built
+          and not any("追手が決まった" in line for line in read_log()[seen:]), read_log()[seen:])
+
+    app = App({"0": -25}, buttons=("ImprisonmentPhaseManager",))     # 服役中のセーブを読んだ
+    module, ctx = fresh_mod(app, CHANCE_PERCENT=100)
+    ctx.hooks["__main__:InstantaleApp.elapse_days"](counting(None)[0], app, 365)
+    check("服役の選択肢が並んでいれば、刑の始まりを見ていなくても決めない",
+          not any("追手が決まった" in line for line in read_log()), read_log()[-3:])
+
+    # 脱獄の一覧（ゲームの服役のボタンが無い画面）は、閉じ込める側の MOD が窓口で知らせる
+    confinement.reset()
+    confinement.declare("336_test", ctx, lambda app_: "牢の中で脱獄の備えを選んでいる")
+    app.buttons = [{"spec": types.SimpleNamespace(cls_name="JustSetButtonToNormalPhase", args=[])}]
+    ctx.hooks["__main__:InstantaleApp.elapse_days"](counting(None)[0], app, 365)
+    ready_screen(ctx, app)
+    check("脱獄の一覧の間も追手を決めず、起こさない",
+          not BattleStartManager.built
+          and not any("追手が決まった" in line for line in read_log()), read_log()[-3:])
+    confinement.reset()
+    app.buttons = [{"spec": types.SimpleNamespace(cls_name="MovePhaseManager", args=[])}]
+    ready_screen(ctx, app)                        # 脱獄して牢の外の画面に戻った
+    check("牢の外の画面に戻ったら服役中の印を下ろす",
+          any("牢の外の画面に戻った" in line for line in read_log()), read_log()[-2:])
+    arrive(ctx, app)
+    check("牢を出た後は追手が来る", BattleStartManager.built == [("guard", None)], read_log()[-3:])
 
     print("強さ")
     app = App({"0": -30})            # 合計30 -> 難易度 20 + 30 = 50

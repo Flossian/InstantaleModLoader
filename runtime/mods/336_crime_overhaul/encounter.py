@@ -32,7 +32,10 @@ SURRENDER_MARK = "encounter:surrender"
 
 def chance(score, base_pct, per_point_pct, weight, per_weight_pct):
     """見逃してもらえる確率（%）。魅力 15 で `base_pct`。その土地の手配が重いほど下がる。"""
-    pct = rules.ability_chance(score, base_pct, per_point_pct) - max(0, weight) * per_weight_pct
+    # 丸めるのは手配の分を引いた後の1回だけ（先に 95% で頭打ちにすると、高い魅力で手配の分を打ち消せない）。
+    if isinstance(score, bool) or not isinstance(score, (int, float)):
+        score = rules.ABILITY_PIVOT
+    pct = base_pct + (score - rules.ABILITY_PIVOT) * per_point_pct - max(0, weight) * per_weight_pct
     return int(round(max(rules.CHANCE_FLOOR, min(rules.CHANCE_CEILING, pct))))
 
 

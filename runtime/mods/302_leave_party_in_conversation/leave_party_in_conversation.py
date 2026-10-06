@@ -210,7 +210,6 @@ def apply(ctx):
     screen = ui.Screen(ctx, write, tag="party leave", mark=MARK)
 
     spec_cls_name = ui.spec_cls_name
-    pressed_entry = ui.pressed_entry
     say = screen.say
 
     def button(text, mark=None, member_id=None):

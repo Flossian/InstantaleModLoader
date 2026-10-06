@@ -196,7 +196,7 @@ def theft_penalties(record, shelf, streak, streak_step, cell_step, price_step, p
 
     - 連続: その店で今日すでに試した回数 × `streak_step`
     - 大きさ: 1マスを超えた分 × `cell_step`
-    - 値段: 棚の買価の中央値から倍になるごとに `price_step`（上限 `price_cap`）。
+    - 値段: 棚の買価の中央値の2倍で `price_step`、4倍で2倍（log2 で比例。上限 `price_cap`）。
       世界ごとに物価の桁が違うので、絶対額ではなくその店の棚と比べる
     - レア度: 段（common 0 〜 mythic 5）× `rarity_step`
     """

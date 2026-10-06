@@ -173,6 +173,9 @@ def install(env):
     #: 盗みの間だけ本文を止める（`Item.buy` の購入の文）。
     muted = {"buy": False}
 
+    def number(value):
+        return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
     def take(app, widget, keeper):
         """盗んだ品を手持ちへ移す。`(品の名前, 理由)`。
 
@@ -190,7 +193,7 @@ def install(env):
         if free_cell(grid, width, height) is None:
             return None, "no room"
         name = getattr(item, "name", None) or "品"
-        gold, keeper_gold = getattr(app_player, "gold", None), getattr(keeper, "gold", None)
+        gold, keeper_gold = number(getattr(app_player, "gold", None)), number(getattr(keeper, "gold", None))
         # `Item.buy` は本文に「〈品〉を購入した。」も出す（実機）。盗みなので、その間の本文は止める。
         muted["buy"] = True
         try:
@@ -199,11 +202,12 @@ def install(env):
             ctx.log_exc("crime incentive: Item.buy failed while stealing")
         finally:
             muted["buy"] = False
-        paid = (gold - app_player.gold) if isinstance(gold, int) else None
-        # 払った額を戻す（盗んだのでお金は動かない）。
-        if isinstance(gold, int):
-            app_player.gold = gold
-        if isinstance(keeper_gold, int):
+        now = number(getattr(app_player, "gold", None))
+        paid = (gold - now) if gold is not None and now is not None else None
+        # 払った額を戻す（盗んだのでお金は動かない）。所持金は float のこともあるので型ごと戻す。
+        if gold is not None:
+            ui.set_gold(app, gold, on_error=write)
+        if keeper_gold is not None:
             keeper.gold = keeper_gold
         if getattr(item, "obtainer", None) is not app_player:
             # 所持金が足りずにゲームが断った、など。持ち主だけはこちらで合わせる。

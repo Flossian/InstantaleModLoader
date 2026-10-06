@@ -19,7 +19,8 @@ r"""計測: ゲームの「〜の最中」の旗 7 つ。ゲームは変えな�
               ローダと MOD の読みも出す）
     ロード    `load_game_new` / `start_game` の後の旗（セーブから戻った値）
     保存      `save_game` の前の旗（セーブに焼かれる値）と並んでいる選択肢のクラス、
-              見張りを通らずに変わった旗（ゲームが `__dict__` を直に書いていれば、ここで分かる）
+              見張りを通らずに変わった旗（ゲームが `__dict__` を直に書いていれば、ここで分かる）。
+              ゲームは行動のたびに保存するので、旗・居場所・選択肢が直前の保存の行と同じなら書かない
 
     out\game_flags.log      読む用
     out\game_flags.jsonl    1件＝1行。後から数える用
@@ -47,7 +48,7 @@ APP_CLASS = "InstantaleApp"
 STORE = "__instantale_probe_game_flags__"
 
 #: 見張りの作り。中身を変えたら上げる（古い見張りを置き直す）。
-WATCH_VERSION = 1
+WATCH_VERSION = 2
 
 #: 呼び出し元の連鎖を何段まで書くか。
 CALLER_DEPTH = 6
@@ -60,15 +61,17 @@ LOAD_TARGETS = ("__main__:InstantaleApp.load_game_new",
                 "__main__:InstantaleApp.start_game")
 SAVE_TARGET = "__main__:InstantaleApp.save_game"
 
-_MISSING = object()
-
-
 def _store():
     store = getattr(sys, STORE, None)
     if not isinstance(store, dict):
         store = {"sink": None, "reader": None, "version": None, "installed": []}
         setattr(sys, STORE, store)
     return store
+
+
+#: 「値が無い」の番人。注入し直すとモジュールは読み直されるが、クラスに残った見張りは前の番人を握っている。
+#: プロセスで1つにしないと、前の版の見張りが渡す「無い」を、今の版の読み方が値として扱う。
+_MISSING = _store().setdefault("missing", object())
 
 
 def _make_watch(store):
@@ -112,7 +115,17 @@ def _make_watch(store):
                     pass
 
         def __delete__(self, obj):
-            obj.__dict__.pop(self.name, None)
+            # 素のゲームと同じく、無い旗の del は AttributeError。消したことも書き手へ渡す。
+            try:
+                old = obj.__dict__.pop(self.name)
+            except KeyError:
+                raise AttributeError(self.name)
+            sink = store.get("sink")
+            if sink is not None:
+                try:
+                    sink(obj, self.name, old, _MISSING)
+                except Exception:
+                    pass
 
     return FlagWatch
 
@@ -167,18 +180,21 @@ def apply(ctx):
                                    filename, frame.f_lineno)
 
     def sink(app, name, old, new):
+        if ctx.superseded():
+            return      # 外した・切って注入し直した後の古い書き手（見張りはクラスに残る）
         known[name] = new
         try:
             changed = old is _MISSING or old != new
         except Exception:
             changed = old is not new
-        caller = frames.caller(depth=CALLER_DEPTH)
         if not changed:
             # 書き直しは直近の呼び出し元で数える（外側の連鎖まで比べると同じ場所が何度も出る）。
-            key = (name, show(new), caller.split(" <- ", 1)[0])
+            # 判定は連鎖を組む前に、直近の1段だけで行う。
+            key = (name, show(new), frames.caller(depth=1))
             if key in seen["rewrites"]:
                 return
             seen["rewrites"].add(key)
+        caller = frames.caller(depth=CALLER_DEPTH)
         entry = {
             "at": now(), "kind": "set" if changed else "rewrite", "flag": name,
             "old": show(old), "new": show(new),
@@ -195,7 +211,7 @@ def apply(ctx):
 
     def reader(name, frame, value):
         key = (name, frame.f_code)
-        if key in seen["reads"]:
+        if key in seen["reads"] or ctx.superseded():
             return
         seen["reads"].add(key)
         site = site_of(frame)
@@ -246,9 +262,17 @@ def apply(ctx):
                 names.append(name)
         return names
 
+    #: 直前の保存の行の中身（同じなら書かない）。
+    last_save = {"key": None}
+
     def snapshot_line(kind, app, extra=None):
         entry = {"at": now(), "kind": kind, "flags": flags_of(app), "where": where(app),
                  "screen": screen_of(app)}
+        if kind == "save":
+            key = repr((entry["flags"], entry["where"], entry["screen"]))
+            if key == last_save["key"] and not extra:
+                return
+            last_save["key"] = key
         if extra:
             entry.update(extra)
         record(entry)
@@ -280,6 +304,7 @@ def apply(ctx):
                 value = vars(self).get(name, _MISSING)
                 if value is not known[name] and value != known[name]:
                     bypass[name] = "{} -> {}".format(show(known[name]), show(value))
+                    known[name] = value      # 同じ迂回を次の保存で数え直さない
             snapshot_line("save", self, {"bypass": bypass} if bypass else None)
         except Exception:
             ctx.log_exc("probe game flags: cannot record the save")

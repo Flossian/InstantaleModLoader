@@ -14,7 +14,7 @@
 
 | 何を変えるか | どこで変えるか |
 |---|---|
-| 部屋の名前・ボタンの表示 | `InstantaleApp.refresh_choice_buttons` の前に `text` だけ書き換える |
+| 部屋の名前・ボタンの表示 | ローダの窓口 `choices` の組み直しの前（`InstantaleApp.refresh_choice_buttons` の `orig` の前）に `text` だけ書き換える |
 | 宿代 | ゲームが引き落とす前に差額ぶん所持金をずらす（`314_` と同じ前払い調整） |
 | 宿泊期間（月単位） | `DisplayVacationChoice.__init__` に渡る `period_months` を差し替える |
 | 宿泊期間（週単位） | `period_months` は 1 にして、宿泊の窓の間だけローダの日数送りの関所へ「残りは何日か」を出す |

@@ -77,11 +77,15 @@ def add(rows, npc_id, name):
     """作った1体を控える。作った直後に呼ぶこと。
 
     事件の控えに書く前に落ちても掃除できるように、`make_npc` が通ったその場で足す。
-    二重に足さない。
+    二重に足さない。同じ id で名前が違えば、作り直した別人として名前を合わせる。
     """
-    if any(isinstance(row, dict) and str(row.get("id")) == str(npc_id)
-           for row in rows):
-        return False
+    for index, row in enumerate(rows):
+        if isinstance(row, dict) and str(row.get("id")) == str(npc_id):
+            if name and row.get("name") != name:
+                # 同じ id で作り直した別人。名前を合わせないと、決着で別人と見て消し損ねる（`same_person`）
+                rows[index] = {"id": str(npc_id), "name": name}
+                return True
+            return False
     rows.append({"id": str(npc_id), "name": name})
     return True
 

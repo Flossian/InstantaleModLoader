@@ -56,14 +56,16 @@ def install(env):
     ctx, write, screen, worlds, cfg = env.ctx, env.write, env.screen, env.worlds, env.cfg
     save_soon = ui.saver(ctx, write, "court")
     #: いまの裁判。`key` は求刑ごとに変わる（同じ裁判の画面が組み直されても同じ）。控えの `court` と同じ中身。
-    court = {"key": None, "args": None, "effects": {}, "told": False, "applied": False}
+    court = {"key": None, "args": None, "effects": {}, "told": False, "applied": False, "playthrough": None}
 
     def load_court(app):
-        """ロードでメモリが空になっていたら、控えから戻す。"""
-        if court["key"] is not None:
+        """ロードでメモリが空になっていたら、控えから戻す。周回が替わっていたら、その周回の控えを読み直す。"""
+        playthrough = worlds.playthrough(app)
+        if court["key"] is not None and court["playthrough"] == playthrough:
             return
+        court.update(key=None, args=None, effects={}, told=False, applied=False, playthrough=playthrough)
         with worlds.lock:
-            stored = worlds.load(worlds.playthrough(app)).get("court")
+            stored = worlds.load(playthrough).get("court")
         if isinstance(stored, dict) and stored.get("key") is not None:
             court.update(key=stored.get("key"), args=list(stored.get("args") or []),
                          effects=dict(stored.get("effects") or {}),
@@ -82,7 +84,8 @@ def install(env):
         effects = {"lawyer": False, "plea": False, "bribe": None}
         # 捕まる前の出来事（衛兵の買収が突き返された）を、この裁判へ持ち越す（`encounter`）。
         effects.update(env.take_carry(app))
-        court.update(key=key, args=list(args), effects=effects, told=False, applied=False)
+        court.update(key=key, args=list(args), effects=effects, told=False, applied=False,
+                     playthrough=worlds.playthrough(app))
         store_court(app)
 
     def fee_of(app, pct):
@@ -151,14 +154,18 @@ def install(env):
         store_court(app)
         kind, years = verdict
         sought, charges, details = (court["args"] + [None, None, None])[:3]
+        # 死刑の求刑は年数を持たないので、判決が懲役でも `TRIAL_DEATH_YEARS` を基に数える（DOC.md「裁判の改修」）。
+        requested = trial.requested_years(sought)
+        if requested is None and trial.demanded_death(sought):
+            requested = int(cfg.TRIAL_DEATH_YEARS)
         new_kind, new_years, reasons = trial.adjust(
-            kind, years, trial.requested_years(sought), effects,
+            kind, years, requested, effects,
             {"lawyer": cfg.TRIAL_LAWYER_CUT_PCT, "plea": cfg.TRIAL_PLEA_CUT_PCT,
              "bribe": cfg.TRIAL_BRIBE_CUT_PCT},
             cfg.TRIAL_DEATH_YEARS, cfg.TRIAL_BRIBE_PENALTY_YEARS)
         write("court: verdict {} -> {} (effects {}; requested {})".format(
             trial.sentence_text(kind, years), trial.sentence_text(new_kind, new_years),
-            effects, trial.requested_years(sought)))
+            effects, requested))
         if not reasons:
             return
         if new_kind == "imprisonment":
@@ -251,6 +258,8 @@ def install(env):
                     record.get("achievements") if isinstance(record, dict) else None)
                 changed = True
             if judge:
+                if app is not None:
+                    load_court(app)         # 別の周回の介入を判事に渡さない
                 notes = trial.judge_notes(court["effects"])
                 if notes:
                     content = content.rstrip() + "\n\n" + notes

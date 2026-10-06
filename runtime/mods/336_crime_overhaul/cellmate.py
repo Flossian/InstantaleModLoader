@@ -43,6 +43,9 @@ NO_ACTION_TEXT = "（牢の中では、話すことしかできない）"
 #: 牢の中の会話から外すゲームの選択肢（雇う）。spec は `ConversationPhaseManager(app, '雇いたい')`。
 HIRE_TEXT = "雇いたい"
 CONFINED_TEXT = "牢の中で同房の囚人と話している"
+JAIL_SCREEN_TEXT = "牢の中で脱獄の備えを選んでいる"
+#: 脱獄の画面のボタンの印の頭（`prison`）。
+JAIL_MARK_PREFIX = "jail:"
 ASSIST_TEXT = "{name}が隣で身を起こした。置いていくなと言わんばかりに、拳を固めている。"
 ASSIST_FREE_TEXT = "{name}も共に牢を抜け出した。"
 ASSIST_DEAD_TEXT = "{name}は看守たちの刃に倒れ、もう起き上がらなかった。"
@@ -126,13 +129,32 @@ def install(env):
         return playthrough, found
 
     def jailed(app, statuses=("jailed",)):
-        """牢の中（または決行に加勢中）の同房の囚人 `(id, 控え)`。いなければ None。"""
+        """牢の中（または決行に加勢中）の同房の囚人 `(id, 控え)`。いなければ None。
+
+        世界に居ない人物の控えは数えない（ゲームオーバーの後に同じ名前で作り直すと、
+        前の周回の控えが同じ鍵に残る。`drop_absent`）。
+        """
         with worlds.lock:
             _key, found = mates(app)
             for npc_id, mate in found.items():
-                if isinstance(mate, dict) and mate.get("status") in statuses:
+                if isinstance(mate, dict) and mate.get("status") in statuses \
+                        and ui.character_of(app, str(npc_id)) is not None:
                     return str(npc_id), dict(mate)
         return None
+
+    def drop_absent(app):
+        """牢の中・加勢中のまま世界に居ない人物の控えを捨てる。人物が揃っている刑の始まりでだけ呼ぶ。"""
+        with worlds.lock:
+            key, found = mates(app)
+            gone = [npc_id for npc_id, mate in found.items()
+                    if isinstance(mate, dict) and mate.get("status") in ("jailed", "breaking")
+                    and ui.character_of(app, str(npc_id)) is None]
+            for npc_id in gone:
+                found.pop(npc_id, None)
+            if gone:
+                worlds.save(key)
+        if gone:
+            write("cellmate: dropped the record(s) of {} (not in this world; a previous playthrough)".format(gone))
 
     def is_dead(app, npc_id):
         config = getattr(ui.character_of(app, npc_id), "config", None)
@@ -283,6 +305,8 @@ def install(env):
         made = None
         try:
             app = getattr(self, "app", None) or ui.find_app()
+            if app is not None:
+                drop_absent(app)
             if cfg.CELLMATE_ENABLED and app is not None and jailed(app, ("jailed", "breaking")) is None:
                 roll = cfg._RNG.random() * 100
                 write("cellmate: roll {:.0f} < {}%?".format(roll, cfg.CELLMATE_PCT))
@@ -322,9 +346,24 @@ def install(env):
         found = jailed(app)
         return found is not None and str(getattr(app, "in_conversation", "")) == found[0]
 
+    def jail_screen(app):
+        """脱獄の画面（「脱獄を試みる」の一覧）が出ているか。一覧にはゲームの服役のボタンが無い。"""
+        for entry in getattr(app, "buttons", None) or []:
+            action = screen.mark_of(entry)
+            if isinstance(action, str) and action.startswith(JAIL_MARK_PREFIX):
+                return True
+        return False
+
     def confined(app):
-        """ローダの窓口 `confinement` に置く。牢の中の会話の間は、他の MOD も場を動かす選択肢を足さない。"""
-        return CONFINED_TEXT if talking_in_cell(app) else None
+        """ローダの窓口 `confinement` に置く。
+
+        牢の中の会話の間は、他の MOD も場を動かす選択肢を足さない（`301_`）。
+        脱獄の一覧の間も牢の中だと知らせる。一覧はゲームの服役のボタンを持たないので、
+        知らせないと選択肢から服役中と読む MOD（`316_` の追手）が牢の外と取り違える。
+        """
+        if talking_in_cell(app):
+            return CONFINED_TEXT
+        return JAIL_SCREEN_TEXT if jail_screen(app) else None
 
     confinement.declare(env.owner, ctx, confined)
 

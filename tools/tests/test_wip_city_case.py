@@ -1144,6 +1144,7 @@ check("手がかりも消えていない",
 
 culprit = found["culprit"]
 cast_ids = list(case_mod.suspect_ids(found))
+learn_all(ctx, app, case_of(ctx))     # 手がかり2つでは絞れない組み立てもある（全部集めて初めて1人に絞れる）
 gold_before = app.player.gold
 accuse(ctx, app, culprit)
 found = case_of(ctx)

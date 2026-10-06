@@ -43,3 +43,13 @@ need() {   # need 変数名 …: 空なら止める
     [ -n "$value" ] || { echo "ERROR: set $name (see tools/drive/README.md)" >&2; return 1; }
   done
 }
+
+# 起動の段が $1 になるまで待つ（1秒ごとに見る。上限 $2 回）。relaunch.sh / reload.sh が使う。
+wait_stage() {   # $1 = 待つ段、$2 = 上限（回）
+  i=0
+  while [ $i -lt "$2" ]; do
+    s=$(stage); case "$s" in "STAGE $1"*) echo "$s"; return 0;; esac
+    i=$((i + 1)); sleep 1
+  done
+  echo "timeout waiting for $1 (last: $s)"; return 1
+}

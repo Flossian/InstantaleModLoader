@@ -298,7 +298,7 @@ def main():
     ap.add_argument("--record", default="latest", help="output_data の記録の番号（1,2,3 のように並べてよい） / latest / all")
     ap.add_argument("--no-replace", action="store_true", help="111_ の置換を当てない（比較用）")
     ap.add_argument("--max-items", action="store_true",
-                    help="139_ と同じ件数の上限を型の並びに付けて送る")
+                    help="139_ と同じ件数の上限を型の並びに付けて送る（上限は 139_ の既定値。設定画面で変えた値は読まない。変えるなら --enemies）")
     ap.add_argument("--enemies", type=int, default=None,
                     help="--max-items の敵の上限（139_ の設定 ENEMY_LIMIT）を差し替える（わざと打ち切らせる試し）")
     ap.add_argument("--save-all", action="store_true", help="成功した回の出力も全文を保存する")

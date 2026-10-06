@@ -443,10 +443,12 @@ def apply(ctx):
         manager_cls = getattr(main, "ConversationStartManager", None) if main else None
         if manager_cls is None:
             write("launch: ConversationStartManager not found")
+            arrivals.withdraw(app, ARRIVAL_OWNER)       # 始めない申し出は下げる（残すと後から申し出た MOD が譲って黙る）
             return
         npc_name = getattr(npc, "name", None)
         if not npc_name:
             write("launch: speaker has no name")
+            arrivals.withdraw(app, ARRIVAL_OWNER)
             return
 
         def gone():
@@ -484,6 +486,7 @@ def apply(ctx):
             except Exception:
                 ctx.log_exc("launch: cannot build ConversationStartManager")
                 state["rephrase"] = None
+                arrivals.withdraw(app, ARRIVAL_OWNER)
                 return
             write("launch: process_choice(ConversationStartManager, {!r}) npc_id={!r}"
                   .format(npc_name, npc_id))
@@ -492,6 +495,7 @@ def apply(ctx):
             except Exception:
                 ctx.log_exc("launch: process_choice failed")
                 state["rephrase"] = None
+                arrivals.withdraw(app, ARRIVAL_OWNER)
                 return
             # ここから会話の終わりまでを見届ける。
             # 返事が1つも無いまま終わったら、その相手の控えを1つ進める。

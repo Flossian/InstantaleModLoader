@@ -596,6 +596,9 @@ def apply(ctx):
         with worlds.lock:
             if unreadable(info["world"]):
                 return              # 覚えずに鳴らすだけ。ファイルが直れば次の選曲から覚える
+            # 読めなかった回の空の控えがキャッシュに残っていることがある（ロックが解けても
+            # 更新時刻と大きさは変わらないので、fresh でも読み直さない）。書く前に読み直す。
+            worlds.forget(info["world"])
             bucket = worlds.load(info["world"])
             entry = memory_entry(bucket, memory, create=True)
             if entry is None:

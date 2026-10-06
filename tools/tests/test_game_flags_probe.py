@@ -102,6 +102,10 @@ class FakeCtx(object):
         self.out_dir = out_dir
         self.hooks = {}
         self.errors = []
+        self.retired = False
+
+    def superseded(self):
+        return self.retired
 
     def out_path(self, *parts):
         path = os.path.join(self.out_dir, *parts)
@@ -224,6 +228,39 @@ result = ctx.hooks["__main__:InstantaleApp.load_game_new"](InstantaleApp.load_ga
 loads = records("load")
 check("ロードの戻り値はそのまま", result == "loaded")
 check("ロードの後の旗が出る", loads and loads[-1]["flags"].get("in_shopping") == "True", loads)
+
+print("迂回は1回")
+count = len(records("save"))
+vars(app)["in_shopping"] = False    # 見張りを通らない書き換え
+ctx.hooks["__main__:InstantaleApp.save_game"](InstantaleApp.save_game, app)
+ctx.hooks["__main__:InstantaleApp.save_game"](InstantaleApp.save_game, app)
+saves = records("save")[count:]
+check("同じ迂回は次の保存で数え直さない",
+      len([r for r in saves if "in_shopping" in (r.get("bypass") or {})]) == 1, saves)
+check("旗・居場所・選択肢が直前と同じ保存は書かない", len(saves) == 1, saves)
+
+print("del")
+vars(app).pop("in_combat_dummy", None)
+app.in_battle = 0
+count = len(records("set"))
+del app.in_battle
+check("有る旗の del は記録される", len(records("set")) == count + 1
+      and records("set")[-1]["new"] == "<unset>", records("set")[-1:])
+try:
+    del app.in_battle
+    raised = False
+except AttributeError:
+    raised = True
+check("無い旗の del は素と同じく AttributeError", raised)
+app.in_battle = 0
+
+print("外した後")
+ctx.retired = True
+count = len(records())
+touch_shopping(app, True)
+check("用済みの書き手は書かない", len(records()) == count, records()[count:])
+check("値は書かれる", app.in_shopping is True)
+module, ctx = apply(app)
 
 print("例外")
 store = getattr(sys, module.STORE)

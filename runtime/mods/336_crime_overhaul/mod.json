@@ -217,8 +217,8 @@
       "min": 0,
       "max": 50,
       "label": {"ja": "高い品で下がる確率（%）", "en": "Penalty per price doubling (%)"},
-      "note": {"ja": "買価がその店の棚の中央値の倍になるごとに引く。世界ごとの物価の桁に左右されないよう、その店の棚と比べる",
-               "en": "Subtracted each time the price doubles over the median of that shop's shelf, so it does not depend on the world's price scale"}
+      "note": {"ja": "買価がその店の棚の中央値の2倍でこの値、4倍でその2倍を引く（間は比例。中央値以下は引かない）。世界ごとの物価の桁に左右されないよう、その店の棚と比べる",
+               "en": "Subtracted at twice the median price of that shop's shelf, twice as much at four times (proportional in between; nothing at or below the median), so it does not depend on the world's price scale"}
     },
     "THEFT_PRICE_CAP": {
       "type": "int",
@@ -382,8 +382,8 @@
       "min": 0,
       "max": 10,
       "label": {"ja": "延びる刑期（年）", "en": "Sentence added (years)"},
-      "note": {"ja": "企てが露見したとき・決行で倒れて牢へ戻されたときに延びる",
-               "en": "Added when found out or when you fall in the break-out and are dragged back"}
+      "note": {"ja": "壁を削る・抜け道を探るの企てが露見したときに延びる",
+               "en": "Added when a digging or scouting plot is found out"}
     },
     "TRIAL_HINT": {
       "type": "bool",

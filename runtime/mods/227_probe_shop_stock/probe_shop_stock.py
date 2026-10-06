@@ -104,6 +104,7 @@ import inspect
 import re
 import sys
 import threading
+import weakref
 
 from instantale_modloader import frames, ui
 
@@ -118,9 +119,8 @@ CALLER_DEPTH = 5
 # 版4: 画面の文字の出入りを写す件数（品を落とした後・右クリックの後）。
 SCREEN_SAMPLES = 200
 
-# 版4: 画面の文字を拾う深さ（Window から数えた段数）と、新しいボタンの押下に付ける印。
+# 版4: 画面の文字を拾う深さ（Window から数えた段数）。
 SCREEN_DEPTH = 40
-PRESS_MARK = "_probe_shop_stock_press"
 # 押した後の所持金を読むまでの秒数と、出入りを見るまでの秒数。
 PRESS_AFTER = 0.5
 SCREEN_AFTER = 0.3
@@ -162,7 +162,9 @@ def arg_of(args, kwargs, index, name):
 
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
-    seen = {"items": 0, "boundaries": 0, "screens": 0}
+    seen = {"items": 0, "boundaries": 0, "screens": 0, "presses": 0}
+    #: 観測者を付けたボタン。ゲームのウィジェットには印を付けない（読み取りだけの約束）。
+    watched = weakref.WeakSet()
     state = {"in_shop": 0}
 
     # 1件1行の JSON。読む用のログとは別に、後から数えるために残す。
@@ -573,14 +575,17 @@ def apply(ctx):
         Kivy は後から付けた観測者を先に呼ぶので、押す前の所持金はゲームの処理より先に読める。
         戻り値は None（押下を止めない）。
         """
-        if getattr(widget, PRESS_MARK, False):
-            return
         try:
-            setattr(widget, PRESS_MARK, True)
-        except Exception:
+            if widget in watched:
+                return
+            watched.add(widget)
+        except TypeError:
             return
 
         def pressed(event):
+            # 外した・注入し直した後の古い観測者は書かない。件数にも上限を置く。
+            if ctx.superseded() or not take("presses", SCREEN_SAMPLES):
+                return
             try:
                 app = ui.find_app()
                 text = frames.short(getattr(widget, "text", ""), 40)

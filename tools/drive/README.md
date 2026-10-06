@@ -28,6 +28,10 @@ sh tools/drive/relaunch.sh               # ゲームを閉じて起動し直し�
 p 出る && w '<次の画面の選択肢>' 30       # 押して、その選択肢が並ぶまで待つ
 s '{"law": {"6": -5}, "gold": 1000}'     # 手配度（土地の id ごと）と所持金を書き換える
 m 314_ COACH_PRICE 50                    # MOD の定数（GUI の設定値）を書き換える
+here 62                                  # 今いる所と日数、人物 62 の居場所と好感度
+a 'いつも助かっている。礼を言わせてくれ'    # 会話で発言する（送って返事を待つ）。閉じるのは p 会話を終了する
+tx 剥がされ しくじ                        # 本文から知らせの文を拾う
+sh tools/drive/reload.sh                 # 閉じずに題の画面へ戻って読み直す（保存とロードをまたぐ確認）
 shot 名前                                # 窓の写真を out/drive/名前.png に
 sh tools/drive/relaunch.sh restore       # 試した後、控えへ戻して起動し直す
 ```
@@ -36,8 +40,17 @@ sh tools/drive/relaunch.sh restore       # 試した後、控えへ戻して起�
 |---|---|
 | `relaunch.sh [restore]` | 閉じて起動し直し、注入・題の画面・世界の一覧・遊べる画面を段ごとに待つ。`restore` で先に控えへ戻す（控えの後にできた立ち絵のフォルダと state\ のファイルは `out/backup/test_leftovers/` へ移す） |
 | `backup.sh [名前]` | セーブ・世界の骨格・state\ を `out/backup/<名前>_<日時>/` へ写す。`state\models\`（画像生成のモデル）は写さない |
-| `nav.sh` | `p` / `w` / `s` / `m` / `d` / `shot`（中の説明を参照） |
+| `reload.sh` | 閉じずに題の画面へ戻り（`totitle.py`）、同じ世界を読み直して遊べる画面まで段ごとに待つ。ゲームは行動のたびに保存しているので、戻る前の状態が読み直される |
+| `nav.sh` | `p` / `w` / `s` / `m` / `d` / `here` / `a` / `tx` / `shot`（中の説明を参照） |
 | `waitchoice.sh 文字 [回]` | その選択肢が並ぶまで待つ。押す前と違う画面で落ち着いたら `OTHER` で返す（終了コード 3） |
+
+ゲームの外で走る道具（`python tools/drive/<名前>.py …`）:
+
+| 道具 | すること |
+|---|---|
+| `toolshot.py MOD タブ [--out]` | MOD の設定画面を組み、指定のタブ（名前か番号）を選んで撮る。`check_tool_screens.py` は最初のタブしか撮れないので、様子のタブなどはこちら |
+| `modsettings.py MOD show / set 名=値 … / reset` | `settings/mod_settings.json` の MOD の欄を書き換える。次の注入から効き、注入し直しても残る（`m` は動いている定数だけで、注入し直すと消える）。試し終えたら `reset` |
+| `records.py manager [-n 件] [--system]` | ゲームが残した LLM の入出力の記録を新しい順に読む（会話の頼み文に何が載ったか・返答の項目）。`out/drive/records_<manager>.txt` にも書く |
 
 手順（`python tools/drive/drive.py <手順> --args '<JSON>' --wait <秒>`）:
 
@@ -47,7 +60,10 @@ sh tools/drive/relaunch.sh restore       # 試した後、控えへ戻して起�
 | `press.py` | `text` | 画面の選択肢を1つ押す |
 | `choices.py` | | 画面とデータの選択肢、手待ちの旗 |
 | `clicktext.py` | `texts`・`contains`・`pause` | 選択肢の欄の外の文字（題の画面・世界の札）を押す |
-| `setstate.py` | `law`・`gold`・`elapse`・`save` | 遊びの状態を書き換える |
+| `setstate.py` | `law`・`gold`・`affinity`・`elapse`・`save` | 遊びの状態を書き換える（`affinity` は `{人物の id: 好感度}`） |
+| `where.py` | `npcs` | 今いる所・日数・会話の相手・手待ち、並べた人物の居場所と好感度・感情の文 |
+| `texts.py` | `contains`・`last` | 画面の本文から語を含む行を拾う（色の印は外す） |
+| `totitle.py` | | 閉じずに題の画面へ戻る（`reload.sh` が使う） |
 | `setmod.py` | `mod`・`name`・`value` | MOD の定数を書き換える |
 | `act.py` | `text`・`timeout` | 入力欄に書いて送り、手が空くまで待つ（自由行動・会話） |
 | `trade.py` | `do`（open / close / status / prices） | 売買の窓。`prices` は手持ちの品の売価を値段の表の段ごとに並べる |

@@ -55,7 +55,7 @@ THEFT_PER_POINT = 3           # 能力値1点ごとに動く確率（%）
 THEFT_MAX_PCT = 90            # 確率の上限（%）
 THEFT_STREAK_STEP = 10        # 同じ店で同じ日に試した回数1回ごとに、抜き取る確率から引く（%）
 THEFT_CELL_STEP = 5           # 品が1マスを超えたマス1つごとに引く（%）
-THEFT_PRICE_STEP = 10         # 買価がその店の棚の中央値の倍になるごとに引く（%）
+THEFT_PRICE_STEP = 10         # 買価がその店の棚の中央値の2倍で引く（%）。4倍でその2倍、間は比例
 THEFT_PRICE_CAP = 30          # 値段で引く分の上限（%）
 THEFT_RARITY_STEP = 5         # レア度の段（common 0 〜 mythic 5）1つごとに引く（%）
 STOLEN_SELL_PCT = 50          # 盗品を盗んだ店以外の店で売るときの額（正規の買い取り額に対する %）
@@ -125,7 +125,7 @@ class _Settings(object):
 
 def apply(ctx):
     env = common.Env(ctx, _Settings())
-    write, screen = env.write, env.screen
+    screen = env.screen
     for feature in (loot, law, theft, office, fence, prison, cellmate, court, rescue, encounter):
         feature.install(env)
 

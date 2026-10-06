@@ -100,7 +100,7 @@ def loot_shares(cfg):
 
 
 def install(env):
-    ctx, write, screen, worlds, cfg = env.ctx, env.write, env.screen, env.worlds, env.cfg
+    ctx, write, screen, cfg = env.ctx, env.write, env.screen, env.cfg
     area_difficulty, quest_reward, refresh_gold = env.area_difficulty, env.quest_reward, env.refresh_gold
     lock = threading.Lock()
     #: いまの行動。最初の facilitator で開き、要約で閉じる。
@@ -138,7 +138,12 @@ def install(env):
                     open_action()
                 except Exception:
                     ctx.log_exc("crime incentive: cannot open the action")
-            result = orig(*args, **kwargs)
+            try:
+                result = orig(*args, **kwargs)
+            except Exception:
+                if cfg.LOOT_ENABLED:
+                    close_action()      # 要約まで届かない行動の所持金を、次の行動へ持ち越さない
+                raise
             if cfg.LOOT_ENABLED:
                 try:
                     note_claims(result)
@@ -271,6 +276,9 @@ def install(env):
             pending.request = request
             try:
                 result = orig(*args, **kwargs)
+            except Exception:
+                close_action()
+                raise
             finally:
                 pending.request = previous
             try:

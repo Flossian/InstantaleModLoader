@@ -60,7 +60,10 @@ def rescuer_of(app, threshold):
     if not isinstance(characters, dict):
         return None
     for npc_id, character in list(characters.items()):
-        if str(npc_id) == "player" or getattr(character, "is_dead", False):
+        # 死の印はゲームの人物では `config['is_dead']`（GAME.md §2.22）。`is_dead` の属性は modnpc の人物だけが持つ。
+        config = getattr(character, "config", None)
+        if str(npc_id) == "player" or getattr(character, "is_dead", False) \
+                or (isinstance(config, dict) and config.get("is_dead")):
             continue
         value = affinity_of(character)
         name = getattr(character, "name", None)
@@ -108,9 +111,42 @@ def install(env):
                 bucket.pop("rescue", None)
             worlds.save(playthrough)
 
+    #: 撤退の後の処刑を予約したか（同じプロセスで二重に予約しない）。
+    pending = {"execution": False}
+
+    def execute_retired(app):
+        """撤退した脱出の処刑を起こす。控えの印は処刑を起こす直前に消す。
+
+        印は撤退からここまで控えに残す。撤退の語りの間にゲームを閉じて読み直しても、
+        読み直した後の最初の組み直しで、ここをもう一度通す（`on_refresh`）。
+        """
+        pending["execution"] = False
+        rescue = load_rescue(app)
+        if not rescue or not rescue.get("retired"):
+            return
+        cls = ui.cls_of(DEATH_SPEC)
+        if cls is None:
+            write("WARN rescue: ExecutionPhaseManager is not available")
+            return
+        save_rescue(app, None)
+        screen.say(app, RETIRE_TEXT)
+        screen.start_phase(app, cls(app), "嫌だ！")
+
+    def schedule_execution(app):
+        if pending["execution"]:
+            return
+        pending["execution"] = True
+        screen.when_idle(app, lambda: execute_retired(app), proceed_on_timeout=True, tag="rescue execution")
+
     # ---------------------------------------------------- 死刑の画面に手を足す
     def on_refresh(app, buttons):
         if not cfg.RESCUE_ENABLED:
+            return
+        rescue = load_rescue(app)
+        if rescue and rescue.get("retired"):
+            # 撤退の後、処刑の前にゲームを閉じて読み直した。処刑を起こし直す
+            write("rescue: the execution after the retreat from quest {} is still due".format(rescue.get("quest")))
+            schedule_execution(app)
             return
         if not any(ui.spec_cls_name(entry) == DEATH_SPEC for entry in buttons or []):
             return
@@ -249,17 +285,9 @@ def install(env):
         if rescue is None or str(ui.current_quest_id(app)) != str(rescue.get("quest")):
             return orig(self, *args, **kwargs)
         result = orig(self, *args, **kwargs)
-        save_rescue(app, None)
+        save_rescue(app, dict(rescue, retired=True))
         write("rescue: retreated from quest {}; the execution goes ahead".format(rescue.get("quest")))
-
-        def execute_now():
-            cls = ui.cls_of(DEATH_SPEC)
-            if cls is None:
-                write("WARN rescue: ExecutionPhaseManager is not available")
-                return
-            screen.say(app, RETIRE_TEXT)
-            screen.start_phase(app, cls(app), "嫌だ！")
-        screen.when_idle(app, execute_now, proceed_on_timeout=True, tag="rescue execution")
+        schedule_execution(app)
         return result
 
     env.on_refresh(on_refresh)

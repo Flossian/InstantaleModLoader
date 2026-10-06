@@ -80,6 +80,11 @@ def scene_verdict():
     check("死刑の求刑は None", trial.requested_years(
         {"sentencing_request": {"type": "death_penalty"}}) is None)
     check("読めない求刑は None", trial.requested_years(None) is None)
+    check("死刑の求刑を見分ける", trial.demanded_death(
+        {"sentencing_request": {"type": "death_penalty"}}))
+    check("懲役の求刑は死刑ではない", not trial.demanded_death(
+        {"sentencing_request": {"type": "imprisonment", "years": 25}}))
+    check("読めない求刑は死刑ではない", not trial.demanded_death(None))
 
 
 def scene_adjust():
@@ -92,6 +97,9 @@ def scene_adjust():
           and reasons == [trial.REASON_LAWYER], (kind, years, reasons))
     kind, years, _ = adjust("death", None, None, effects(lawyer=True), CUTS, 20, 5)
     check("死刑の求刑なら基の年数から（20の7割＝14年）", (kind, years) == ("imprisonment", 14))
+    # 死刑の求刑で判事が懲役30年: court が基の年数（20）を求刑として渡す
+    kind, years, _ = adjust("imprisonment", 30, 20, effects(lawyer=True), CUTS, 20, 5)
+    check("死刑の求刑で判事が懲役30年でも基の年数から（14年）", (kind, years) == ("imprisonment", 14), years)
     kind, years, _ = adjust("imprisonment", 25, 25, effects(plea=True), CUTS, 20, 5)
     check("司法取引で懲役25年は半分（13年）", (kind, years) == ("imprisonment", 13), years)
     check("判事が既に軽ければ判事のまま", adjust("imprisonment", 5, 25, effects(lawyer=True),

@@ -145,12 +145,15 @@ def install(env):
                 app.normalize_shop_inventory_prices(broker, player)
             except Exception:
                 ctx.log_exc("crime incentive: cannot price the goods for the fence")
-            screen.say(app, OPEN_TEXT.format(broker=getattr(broker, "name", None) or "事務所の主",
-                                             rate=rate_label(cfg.FENCE_PCT)))
-            # ゲームのマネージャと同じく、終わりに選択肢を組み直す合図を出す。出さないと画面へ塗る一覧
-            # （`to_display_buttons`）が絞る前の6つのまま残り、売った後の塗り直しで右の欄に「出る」「会話する」が出た（実機）。
-            screen.refresh(app)
-            screen.schedule(lambda: open_window(app, self.broker_id))
+            try:
+                screen.say(app, OPEN_TEXT.format(broker=getattr(broker, "name", None) or "事務所の主",
+                                                 rate=rate_label(cfg.FENCE_PCT)))
+                # ゲームのマネージャと同じく、終わりに選択肢を組み直す合図を出す。出さないと画面へ塗る一覧
+                # （`to_display_buttons`）が絞る前の6つのまま残り、売った後の塗り直しで右の欄に「出る」「会話する」が出た（実機）。
+                screen.refresh(app)
+            finally:
+                # 開くのに失敗しても `open_window` が `opening` を下ろして片付ける。下ろさないとどの店でも売り買いが止まる
+                screen.schedule(lambda: open_window(app, self.broker_id))
 
     def open_window(app, broker_id):
         broker = ui.character_of(app, broker_id)
@@ -193,7 +196,10 @@ def install(env):
         app.buttons = [entry for entry in (getattr(app, "buttons", None) or [])
                        if ui.spec_cls_name(entry) in KEEP_WHILE_OPEN]
         app.buttons_backup_for_shopping = list(app.buttons)
-        screen.start_phase(app, FencePhase(app, broker_id), LABEL)
+        if not screen.start_phase(app, FencePhase(app, broker_id), LABEL):
+            env.fence["opening"] = False
+            clear_bought(app)
+            restore_choices(app)
 
     @ctx.wrap("__main__:InstantaleApp.on_close_window", required=False, safe=True)
     def on_close_window(orig, self, *args, **kwargs):

@@ -69,6 +69,10 @@ def verdict_of(buttons, spec_name, spec_args):
     return None
 
 
+#: 求刑の型（ゲームの `get_sentence_sought` のスキーマの `DeathPenalty.type` の const）。
+DEATH_PENALTY_TYPE = "death_penalty"
+
+
 def requested_years(sought):
     """検察の求刑の年数。死刑の求刑・読めなければ None。"""
     request = (sought or {}).get("sentencing_request") if isinstance(sought, dict) else None
@@ -76,6 +80,12 @@ def requested_years(sought):
     if isinstance(years, (int, float)) and not isinstance(years, bool) and years > 0:
         return int(years)
     return None
+
+
+def demanded_death(sought):
+    """検察が死刑を求めたか。ゲームの型では `{"type": "death_penalty"}`（年数は無い）。"""
+    request = (sought or {}).get("sentencing_request") if isinstance(sought, dict) else None
+    return isinstance(request, dict) and request.get("type") == DEATH_PENALTY_TYPE
 
 
 def adjust(kind, years, requested, effects, cuts, death_years, penalty_years):

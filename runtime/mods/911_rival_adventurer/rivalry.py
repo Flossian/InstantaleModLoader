@@ -367,7 +367,7 @@ def rewind(bucket, day):
         bucket["next_day"] = None
     rival = bucket.get("rival")
     if isinstance(rival, dict) and _int(rival.get("chosen_day"), 0) > day:
-        bucket.update(new_bucket())
+        reset_rival(bucket)          # セーブの日付までに片付けた依頼（taken）は掲示板へ戻さない
         changed = True
     return changed
 

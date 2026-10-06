@@ -284,9 +284,10 @@ def install(env):
         playthrough = worlds.playthrough(app)
         with worlds.lock:
             bucket = worlds.load(playthrough)
-            days = bucket.pop("underworld_ban_after", None)
+            days = bucket.get("underworld_ban_after")
             if not isinstance(days, int) or day is None:
-                return
+                return      # 日付が読めないときは控えを残す（次に牢を出たときに数え直す）
+            bucket.pop("underworld_ban_after", None)
             bucket["underworld_ban"] = int(day) + days
             worlds.save(playthrough)
         write("court: shut out of the underworld until day {} ({} day(s) from leaving prison)".format(

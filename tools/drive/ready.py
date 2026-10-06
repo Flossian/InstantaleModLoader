@@ -15,9 +15,13 @@ def main(say):
     loc = getattr(player, "location", None) if player is not None else None
     texts = {getattr(n, "text", None) for n in ui.walk_widgets(Window)} if a is not None else set()
     world = ARGS.get("world") or ""
+    # 題の画面へ戻った後も、前の世界・居場所・選択肢は app に残る（`totitle.py`）。
+    # 遊ぶ画面かは HUD が画面に付いているかで見る（題の画面では外れて parent が None）。
+    h = hud() if a is not None else None
+    in_game = h is not None and getattr(h, "parent", None) is not None
     if a is not None and gameover():
         say("STAGE gameover")
-    elif loc is not None and getattr(a, "world", None) is not None and idle():
+    elif in_game and loc is not None and getattr(a, "world", None) is not None and idle():
         say("STAGE playing {}".format(choices()))
     elif "開始する" in texts:
         say("STAGE title")

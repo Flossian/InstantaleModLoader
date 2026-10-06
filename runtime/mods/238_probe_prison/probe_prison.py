@@ -17,11 +17,13 @@ r"""計測: 逮捕・裁判・服役・釈放。ゲームは変えない。
 
 録り方は `231_probe_training` と同じ。マネージャの `execute` を窓にして、
 窓の前後の様子と、窓の間の `elapse_days`・`save_game`・文言・次に並ぶボタンを1行にまとめる。
+窓はスレッドをまたいで数えるので、`elapse_days`・`save_game` はどのスレッドから来たかも残す（別の処理の保存が混ざりうる）。
 
     out\prison.log      読む用
     out\prison.jsonl    1窓＝1行。後から数える用
 """
 import datetime
+import threading
 import time
 import weakref
 
@@ -151,8 +153,11 @@ def apply(ctx):
         def manager_execute(orig, self, *args, **kwargs):
             choice_text = args[0] if args else kwargs.get("choice_text")
             app = getattr(self, "app", None) or ui.find_app()
+            # 窓はスレッドをまたいで数える（段が自前のスレッドへ仕事を投げても落とさない）。
+            # 別のスレッドの保存なども混ざるので、どのスレッドから来たかを残して読み分ける。
             window = {"cls": cls_name, "texts": [], "days": [], "saves": 0,
-                      "dots": 0, "overflow": 0, "inner": []}
+                      "dots": 0, "overflow": 0, "inner": [],
+                      "thread": threading.current_thread().name, "day_threads": [], "save_threads": []}
             before = None
             started = time.monotonic()
             state["windows"].append(window)
@@ -178,14 +183,20 @@ def apply(ctx):
                         "before": before, "after": after,
                         "elapse_days_calls": window["days"],
                         "save_game_calls": window["saves"],
+                        "window_thread": window["thread"],
+                        "elapse_days_threads": window["day_threads"],
+                        "save_game_threads": window["save_threads"],
                         "texts": window["texts"], "texts_dropped": window["overflow"],
                         "loading_dots": window["dots"], "inner": window["inner"],
                         "buttons_after": buttons_brief(app),
                         "seconds": round(time.monotonic() - started, 1),
                     }
-                    write("{} done in {}s: elapse_days={} save_game={} texts={} dots={}".format(
+                    others = sorted(set(name for name in window["day_threads"] + window["save_threads"]
+                                        if name != window["thread"]))
+                    write("{} done in {}s: elapse_days={} save_game={} texts={} dots={}{}".format(
                         cls_name, row["seconds"], window["days"], window["saves"],
-                        len(window["texts"]), window["dots"]))
+                        len(window["texts"]), window["dots"],
+                        "  (window on {}; also from {})".format(window["thread"], others) if others else ""))
                     write("    after  {}".format(after))
                     for text in window["texts"]:
                         write("    text: {!r}".format(text))
@@ -227,6 +238,7 @@ def apply(ctx):
             if state["windows"]:
                 days = args[0] if args else kwargs.get("days")
                 state["windows"][-1]["days"].append(frames.repr_value(days))
+                state["windows"][-1]["day_threads"].append(threading.current_thread().name)
         except Exception:
             pass
         return orig(self, *args, **kwargs)
@@ -237,6 +249,7 @@ def apply(ctx):
         try:
             if state["windows"]:
                 state["windows"][-1]["saves"] += 1
+                state["windows"][-1]["save_threads"].append(threading.current_thread().name)
         except Exception:
             pass
         return orig(self, *args, **kwargs)

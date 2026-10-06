@@ -24,7 +24,7 @@ MOD を1つも当てない状態でも同じで、原因はゲームの側にあ
 
 ##### 直し方
 
-`InstantaleApp.refresh_choice_buttons` を包み、**描く前に** `app.buttons` を並べ直す。
+ローダの窓口 `choices`（TECH.md §3.3.14）の組み直しの前（`refresh`）で、**描く前に** `app.buttons` を並べ直す。
 `出る`（`MovePhaseManager`）より前に `宿泊する`（`DisplayVacationChoice`）が無いときだけ、
 `宿泊する` を `出る` の前へ動かす。
 それ以外の画面（部屋選び・活動の選択肢・よその施設）は spec の辞書引きだけで素通りする。

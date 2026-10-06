@@ -2089,7 +2089,7 @@ def apply(ctx):
         return done
 
     def on_button_press(self, action):
-        """自前のボタンだけ横取りする。印が無ければ必ず素通し。"""
+        """自前のボタンが押された（窓口 `choices` の `presses`。印で振り分けた後に呼ばれる）。"""
         entry = choices.pressed()
         if state["acting"]:
             write("ignored {!r}: the previous press is still running".format(

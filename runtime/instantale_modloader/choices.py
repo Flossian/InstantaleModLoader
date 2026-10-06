@@ -47,6 +47,7 @@ MOD が選択肢にボタンを足すとき、守ることが多い（どれか1
 置き場は `sys` の属性（`_instantale_choices`）。注入し直しをまたいで残る。
 """
 import sys
+import weakref
 
 from . import ui
 
@@ -69,6 +70,24 @@ def _store():
                  "restore": None, "after": {"token": None}, "worlds": None, "log": []}
         setattr(sys, STORE_ATTR, store)
     return store
+
+
+def _world_mark(world):
+    """世界の見分けの印。番地（`id`）は前の世界が解放されると次の世界に使い回されうるので、弱参照で持つ。"""
+    if world is None:
+        return None
+    try:
+        return weakref.ref(world)
+    except TypeError:
+        return id(world)
+
+
+def _same_world(mark, world):
+    if mark is None or world is None:
+        return mark is None and world is None
+    if isinstance(mark, int):           # 弱参照を作れない世界と、前の版が控えた番地
+        return mark == id(world)
+    return mark() is world
 
 
 def _alive(ctx):
@@ -112,8 +131,15 @@ def provide(ctx, screen=None, refresh=None, after=None, presses=None, intercept=
     handlers = list((presses or {}).items())
     key = _owner_of(ctx, owner, [fn for fn in (refresh, after, intercept) if fn is not None]
                     + [handler for _prefix, handler in handlers])
-    if key not in store["order"]:
+    # その世代で初めての登録なら末尾へ付け直す。前の世代の並びを持ち越すと、注入し直しで足した・
+    # 並べ替えた MOD の呼ぶ順が適用順とずれる。全部が登録し直せば、並びはこの世代の apply の順になる。
+    generation = getattr(ctx, "generation", None)
+    seen = store.setdefault("order_generation", {})
+    if key not in store["order"] or (generation is not None and seen.get(key) != generation):
+        if key in store["order"]:
+            store["order"].remove(key)
         store["order"].append(key)
+    seen[key] = generation
     store["providers"][key] = {
         "ctx": ctx, "screen": screen, "refresh": refresh, "after": after,
         "presses": handlers, "intercept": intercept,
@@ -251,7 +277,8 @@ def arm_after_load(ctx, app):
     if after["token"] is not None:
         return False
     token = after["token"] = object()
-    left = {"wait": WAIT_TICKS, "party": PARTY_TICKS, "world": id(getattr(app, "world", None)), "count": None}
+    left = {"wait": WAIT_TICKS, "party": PARTY_TICKS, "world": _world_mark(getattr(app, "world", None)),
+            "count": None}
 
     def check(_dt):
         # 用済みの世代でも降りない（降りると、新しい世代はロードの途中の組み直しを見ていないので誰も組み直さない。実機）。
@@ -263,9 +290,9 @@ def arm_after_load(ctx, app):
             _log(ctx, "after load: the characters never settled; no refresh")
             return False
         # 仕掛けた後に世界がまた入れ替わった（続けて読み込んだ）なら、その世界で待ち直す。
-        world = id(getattr(app, "world", None))
-        if world != left["world"]:
-            left.update(world=world, count=None, party=PARTY_TICKS)
+        world = getattr(app, "world", None)
+        if not _same_world(left["world"], world):
+            left.update(world=_world_mark(world), count=None, party=PARTY_TICKS)
             return True
         if not ready(app):
             return True
@@ -378,8 +405,8 @@ def on_refresh(ctx, app):
     store = _store()
     buttons = getattr(app, "buttons", None)
     world = getattr(app, "world", None)
-    if world is not None and id(world) != store["world"]:
-        store["world"] = id(world)
+    if world is not None and not _same_world(store["world"], world):
+        store["world"] = _world_mark(world)
         store["restore"] = True          # 世界が入れ替わった＝ロード（か新しく始めた）
     if store["restore"] and isinstance(buttons, list) and buttons:
         store["restore"] = None

@@ -219,9 +219,14 @@ def apply(ctx):
         return isinstance(config, dict) and config.get("status") == COMPLETED
 
     def cleared_count(app):
-        """プレイヤーが片付けた依頼の数（`world.quests` の `completed`）。"""
-        return sum(1 for quest in live_quests(app).values()
-                   if quest is not None and is_completed(quest))
+        """プレイヤーが片付けた掲示板の依頼の数（`world.quests` の `completed`）。
+
+        物語の依頼・会話から作った依頼・掲示板に出さない依頼（窓口 `board`）は数えない（DOC.md「決まり」）。
+        """
+        skip = conversation_quests(app) | quest_board.kept_off(app)
+        return sum(1 for quest_id, quest in live_quests(app).items()
+                   if quest is not None and is_completed(quest) and str(quest_id) not in skip
+                   and ui.quest_value(quest, "quest_type", None) != STORY_QUEST_FIELD)
 
     def conversation_quests(app):
         """`301_` が会話から作った依頼の id。読めなければ空。
@@ -937,6 +942,7 @@ def apply(ctx):
         manager_cls = ui.cls_of("ConversationStartManager")
         if manager_cls is None:
             write("approach: ConversationStartManager not found")
+            arrivals.withdraw(app, OWNER)       # 始めない申し出は下げる（残すと 300 が譲って誰も話しかけない）
             return
         with worlds.lock:
             key, bucket = ledger(app)
@@ -958,6 +964,7 @@ def apply(ctx):
             app.process_choice(manager_cls(app, rival_id), name)
         except Exception:
             store["approach"] = None
+            arrivals.withdraw(app, OWNER)
             ctx.log_exc("rival adventurer: cannot start the approach")
             return
         write("approach: {} will speak to the player about {}".format(name, topic.get("kind")))

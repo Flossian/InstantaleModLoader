@@ -1337,7 +1337,6 @@ def apply(ctx):
 
     def on_button_press(self, action):
         """自前のボタンが押された（窓口 `choices` の `presses`）。"""
-        entry = choices.pressed()
         if state["guard_pending"]:
             # 前の押下の手番がまだ動いている。ゲームのボタンは本体が連打を止めるが、
             # 防御は本体を通さないので自前で捨てる（0.18 秒差の2発で1巡が丸ごと2回走り、

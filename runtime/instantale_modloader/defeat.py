@@ -3,7 +3,7 @@
 
 ゲームは主人公が倒れると `BattlePhaseManager.check_battle_end` の中で `GameOverManager` を作る
 （ゲームオーバーでセーブが消える。GAME.md §2.10）。
-闘技場の負け（`334_colosseum_custom`）や脱獄の決行（`336_crime_overhaul`）のように、
+闘技場の負け（`334_colosseum_custom`）のように、
 倒れても話を続けたい戦闘を持つ MOD がここに登録する。
 
     defeat.install(ctx)                   # apply() の中。何本の MOD が呼んでも1つの世代に1回だけ包む
