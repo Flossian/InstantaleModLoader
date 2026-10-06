@@ -59,6 +59,7 @@ GUI の1行で編集できる形に収まらず、無理に載せると「JSON �
 from __future__ import annotations
 
 import json
+import math
 import os
 
 from . import log, log_exc, log_unrepeated, write_json
@@ -183,6 +184,9 @@ def coerce(decl: dict, value):
             out = int(str(value).strip()) if not isinstance(value, bool) else int(value)
         elif kind == "float":
             out = float(str(value).strip()) if not isinstance(value, bool) else float(value)
+            # `nan` は大小の比較を全部すり抜けるので、下の上限・下限では弾けない（GUI の入力欄に打てば届く）。
+            if not math.isfinite(out):
+                return False, None, "有限の数ではありません: {!r}".format(value)
         elif kind == "str":
             out = str(value)
         elif kind == "choice":

@@ -543,6 +543,9 @@ class WorldStore(object):
         移したら `old_key` のファイルは消す。残すと、同じ世界で作り直した次の主人公にもう一度渡る。
         主人公の名が読めず `key` が世界名のままのときと、世界名が読めないときは何もしない。
         1つの鍵につき確かめるのはプロセスで1度だけ（鍵を引くたびにディスクを叩かない）。
+        ただし「確かめた」とするのは、`key` の控えが在る（もう移す機会が無い）か、`old_key` の控えを
+        見つけて移しにかかったときだけ。どちらも無い間は次の呼び出しでまた見る
+        （前は最初の1回で印を付け、後から現れた世界名だけの控えを二度と移さなかった）。
         """
         if not self.own or not key or not old_key or key == old_key \
                 or UNKNOWN_WORLD in (key, old_key):
@@ -552,12 +555,13 @@ class WorldStore(object):
             checked = self.__dict__.setdefault("_adopted", set())
             if key in checked:
                 return False
-            checked.add(key)
             if self._buckets.get(key) or os.path.exists(self.path(key)):
+                checked.add(key)
                 return False
             old_path = self.path(old_key)
             if not os.path.isfile(old_path):
                 return False
+            checked.add(key)
             bucket = self.load(old_key)
             if not bucket:
                 return False

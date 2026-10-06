@@ -454,6 +454,14 @@ def test_adopt_world_file():
         old.save("霧の谷", {"y": 2})
         check(not worlds.adopt("霧の谷" + sep + "ミツバ", "霧の谷") and exists("霧の谷"),
               "同じ鍵を確かめるのはプロセスで1度だけ")
+
+        # どちらの控えもまだ無い間は「確かめた」にしない（後から現れた世界名だけの控えも移す）。
+        worlds = fresh_store()
+        check(not worlds.adopt("星の丘" + sep + "ミツバ", "星の丘"), "（前提）どちらも無ければ移さない")
+        old = fresh_store()
+        old.save("星の丘", {"z": 3})
+        check(worlds.adopt("星の丘" + sep + "ミツバ", "星の丘") and not exists("星の丘"),
+              "どちらも無かった鍵は、後から現れた世界名だけの控えを移す")
     finally:
         shutil.rmtree(sandbox, ignore_errors=True)
 

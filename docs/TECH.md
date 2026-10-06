@@ -806,6 +806,11 @@ safe hook on __main__:AreaMoveManager.execute: the original raised KeyError: '37
 例外は `ERROR` としてログに残るので、**`safe hook failed` を見たら直すこと**
 （`safe=True` は直すべき不具合を見えなくもする）。
 
+上の表は `wrap` のもの。`wrap` は `orig` をローダが渡すので、どこまで走ったかを見られる。
+`patch(safe=True)` は置換関数が `__original__` で元を呼んだかをローダが見られないので、壊れたら必ず
+「`orig` を呼ぶ前」として元の関数を呼ぶ。置換関数が元を呼んだ後で投げると、元の関数が2回走る。
+元を呼ぶ置換は `patch` でなく `wrap` で書くこと。
+
 #### 3.1.6 名乗り（`mod.json`）
 
 `entry` 以外は任意。

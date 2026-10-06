@@ -1056,6 +1056,9 @@ def main():
     check(C.coerce(decls["RATE"], None) == (True, None, ""),
           "allow_null なら null を通す（CHANCE_OVERRIDE の形）")
     check(C.coerce(decls["COUNT"], None)[0] is False, "allow_null でなければ null は撥ねる")
+    check(all(C.coerce(decls["RATE"], v)[0] is False for v in ("nan", "inf", "-inf", float("nan"))),
+          "数でない float（nan / inf）は撥ねる（nan は上限・下限の比較をすり抜ける）")
+    check(C.coerce(decls["RATE"], "0.25") == (True, 0.25, ""), "  → 普通の数は通す")
 
     resolved = C.resolve(decls, {"COUNT": 5, "MODE": "z", "GHOST": 1})
     check(resolved["COUNT"] == 5, "有効な選択は効く")
