@@ -109,6 +109,7 @@ tools/npc_variety_probe.py  ローカル LLM で NPC を生成させ、外見・
 tools/rebalance_saved_bgm.py  既存セーブの BGM を後からまとめて均す（104_ 用）
 tools/mods_meta.py        mod.json の author の読み方。build_mods / list_mods / check_mods が共用
 tools/tests/test_*.py     ゲーム抜きで走る検査。開発用で配布物には入らない
+tools/drive/              動いているゲームを外から操作する台本（押す・待つ・状態を作る・控えと戻し・写真。§2.2）。開発用で配布物には入らない
 runtime/instantale_modloader/
     __init__.py   boot() / discover() / ログ / 世代発行 / 遅延設置の監視 / on_ready
                   / API 契約 / status.json の書き出し / unload()
@@ -297,6 +298,9 @@ type out\status.json                 # 適用結果・台帳・効いている�
 その初期化自体を直しているときは `ctx.on_ready(fn, force=True)` を一時的に使うか
 `reset_once("300_")` で印を落とす。
 どちらも開発中の逃げ道で、配布する MOD に `force=True` を書いてはいけない。
+
+実機の確認で画面を押す・待つ・遊びの状態（手配度・所持金・MOD の設定値）を作るのは `tools/drive/` の台本で行う。
+試す前の控え（`backup.sh`）と戻し（`relaunch.sh restore`）も同じ所にある。使い方は `tools/drive/README.md`。
 
 ### 2.3 静的検査（`tools/check_mods.py`）は必ず通す
 
