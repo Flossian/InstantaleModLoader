@@ -10,7 +10,7 @@
     "en": "Watches the item detail box's opacity to see why it stays after closing (plus its geometry for the first few items)",
     "ja": "アイテム説明欄の opacity の上げ下げを見張り、閉じた後も残る原因を測る（寸法は最初の数品だけ写す）"
   },
-  "version": "3",
+  "version": "4",
   "author": "R01/Flossian",
   "debug": true,
   "after": [

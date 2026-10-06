@@ -325,6 +325,8 @@ def apply(ctx):
         saved = memo_store.load(key)
         memo["world"] = key
         memo["jailed"] = False          # 別の世界・読み直した世界。牢の中なら画面から拾い直す（`imprisoned`）
+        memo["due"] = None              # 前の世界で決まった追手を持ち越さない
+        memo["protect"] = None          # 前の世界の手配度の見張りを持ち越さない（同じ id の土地へ書き戻しうる）
         memo["days"] = saved.get("days", 0.0) or 0.0
         memo["last"] = saved.get("last")
         write("控えを読んだ: 世界={} 通算={}日 前回={}".format(
@@ -532,6 +534,7 @@ def apply(ctx):
 
     def launch(app):
         """ゲームの衛兵の戦闘を起こす。**画面が整った合図の中からだけ呼ぶ。**"""
+        load_memo(app)                  # 決まった後に別の世界を読んでいたら、ここで控えを落とす
         due = memo["due"]
         if due is None:
             return
@@ -581,6 +584,7 @@ def apply(ctx):
                       due["difficulty"], memo["days"]))
         else:
             disarm()
+            memo["protect"] = None      # 戦闘が無いので、手配度の見張りも閉じる（残すと後の罪を戻してしまう）
             write("{}: 戦闘を起こせなかった。控えを降ろした".format(due["trigger"]))
 
     @ctx.wrap("__main__:ImprisonmentStartManager.execute", required=False, safe=True)
@@ -756,6 +760,7 @@ def apply(ctx):
         if memo["protect"] is not None:
             # 戦闘の終わりで捕まえ損ねた手配度をここで拾う
             # （下がる時機が一定でないため。逃げて終わった回もここに来る）。
+            load_memo(self)
             restore(self, "画面が整った")
         if memo["due"] is not None:
             # 1フレーム置く。今はゲームが選択肢を描き終えた直後で、

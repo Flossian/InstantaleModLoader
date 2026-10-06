@@ -374,12 +374,14 @@ def apply(ctx):
                         app)
         except Exception:
             ctx.log_exc("battle mechanics: cannot open the action")
-        result = orig(self, *args, **kwargs)
         try:
-            close_action(app)
-        except Exception:
-            ctx.log_exc("battle mechanics: cannot close the action")
-        return result
+            return orig(self, *args, **kwargs)
+        finally:
+            # 本体が投げても手を閉じる（開いたまま残ると、次の手まで手の外の計算が古い手に積まれる）
+            try:
+                close_action(app)
+            except Exception:
+                ctx.log_exc("battle mechanics: cannot close the action")
 
     # `calculate_battle_effect` の戻り値が「語彙 → 数」の変換結果そのもの。
     # 開いている手にぶら下げる（手の外で呼ばれたらそれ自体を1行にする）。
@@ -420,13 +422,14 @@ def apply(ctx):
                                      "-", None, app)
         except Exception:
             ctx.log_exc("battle mechanics: cannot open the status turn")
-        result = orig(self, *args, **kwargs)
-        if opened:
-            try:
-                close_action(app)
-            except Exception:
-                ctx.log_exc("battle mechanics: cannot close the status turn")
-        return result
+        try:
+            return orig(self, *args, **kwargs)
+        finally:
+            if opened:
+                try:
+                    close_action(app)
+                except Exception:
+                    ctx.log_exc("battle mechanics: cannot close the status turn")
 
     # ================================================================ 名簿
     def roster_entry(side, key, holder):

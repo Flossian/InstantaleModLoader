@@ -243,8 +243,19 @@ def _item_registry():
     if not isinstance(found, dict) or not isinstance(found.get("adjust"), list):
         found = {"base": None, "adjust": [], "ledger": _Ledger()}
         setattr(sys, _ITEM_ATTR, found)
-    if not isinstance(found.get("ledger"), _Ledger):
-        found["ledger"] = _Ledger()
+    ledger = found.get("ledger")
+    if not isinstance(ledger, _Ledger):
+        # 注入し直すとこのモジュールごと読み直され、前の世代の台帳は別のクラスの実体になる。
+        # 中身は引き継ぐ（捨てると、一時の段を掛けた額を素の額として控え直して段が二重に掛かり、
+        # 保存の前の外しからも漏れてセーブに焼き付いた）。
+        fresh = _Ledger()
+        weak = getattr(ledger, "weak", None)
+        if isinstance(weak, weakref.WeakKeyDictionary):
+            fresh.weak = weak
+            strong = getattr(ledger, "strong", None)
+            fresh.strong = strong if isinstance(strong, dict) else {}
+            fresh.mode = getattr(ledger, "mode", None)
+        found["ledger"] = fresh
     return found
 
 

@@ -32,16 +32,6 @@
         "en": "Offer \"make a quest from this talk\""
       }
     },
-    "MAX_LISTED": {
-      "type": "int",
-      "default": 8,
-      "min": 1,
-      "max": 20,
-      "label": {
-        "ja": "一覧に並べる依頼の数",
-        "en": "Quests listed at once"
-      }
-    },
     "CONVERSATION_TURNS": {
       "type": "int",
       "default": 12,

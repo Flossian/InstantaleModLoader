@@ -178,6 +178,14 @@ def is_llama_server(argv):
     return False
 
 
+#: llama-server の短い綴り。設定画面のサーバーパラメータ欄に書かれることがある（`-np 2` を残すと統合 KV に戻らなかった）。
+FLAG_ALIASES = {"--parallel": ("-np",), "--ctx-size": ("-c",)}
+
+
+def _flag_names(flag):
+    return (flag,) + FLAG_ALIASES.get(flag, ())
+
+
 def set_flag(argv, flag, value):
     """`flag` の値を `value` にする。無ければ末尾に足す。戻り値は (新しい列, 前の値)。
 
@@ -187,6 +195,10 @@ def set_flag(argv, flag, value):
     """
     out = list(argv)
     text = str(value)
+    alias_value = None
+    for alias in FLAG_ALIASES.get(flag, ()):
+        out, removed = drop_flag(out, alias)      # 短い綴りは長い綴りへまとめる（1つだけ持つ）
+        alias_value = alias_value if removed is None else removed
     for i, item in enumerate(out):
         if str(item) != flag:
             continue
@@ -199,12 +211,13 @@ def set_flag(argv, flag, value):
         out.append(text)
         return out, None
     out.extend([flag, text])
-    return out, None
+    return out, alias_value
 
 
 def has_flag(argv, flag):
     """`flag` が既に argv にあるか。設定欄からの指定を上書きしないための確認。"""
-    return any(str(item) == flag for item in argv)
+    names = _flag_names(flag)
+    return any(str(item) in names for item in argv)
 
 
 def flag_value(argv, flag):
@@ -217,13 +230,14 @@ def flag_value(argv, flag):
     高く外すと VRAM から溢れ、エラーは出ないまま桁で遅くなる。
     """
     items = [str(item) for item in argv]
+    names = _flag_names(flag)
     for index, item in enumerate(items):
-        if item == flag and index + 1 < len(items):
+        if item in names and index + 1 < len(items):
             try:
                 return int(items[index + 1])
             except (TypeError, ValueError):
                 return None
-        if item.startswith(flag + "="):
+        if any(item.startswith(name + "=") for name in names):
             try:
                 return int(item.split("=", 1)[1])
             except (TypeError, ValueError):
@@ -242,11 +256,12 @@ def drop_flag(argv, flag):
     out = []
     removed = None
     skip = False
+    names = _flag_names(flag)
     for i, item in enumerate(argv):
         if skip:
             skip = False
             continue
-        if str(item) == flag:
+        if str(item) in names:
             if i + 1 < len(argv):
                 removed = str(argv[i + 1])
                 skip = True

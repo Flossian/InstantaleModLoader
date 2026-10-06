@@ -92,6 +92,9 @@ MARK = "mod_facility_investment"
 KIND_KEY = "mod_facility_investment_kind"
 TIER_KEY = "mod_facility_investment_tier"
 
+#: 帳簿の1件に立てる「主人の好感度を初期値まで上げた」印（`heal_keeper`）。
+WARMED_KEY = "keeper_warmed"
+
 #: 役場の `facility_type`（実セーブで確認。GAME.md §2.7）。
 OFFICE_FACILITY_TYPE = "administrative_office"
 
@@ -645,11 +648,13 @@ def apply(ctx):
                 write=write)
         return facility_id
 
-    def heal_keeper(app, keeper_id, world=None):
-        """版4以前に生まれた主人の `experience_level` を埋める。
+    def heal_keeper(app, keeper_id, world=None, record=None):
+        """版4以前に生まれた主人の `experience_level` を埋める。好感度の引き上げは建物ごとに1回だけ。
 
         控えの写しは層の初期値より勝つので（`modnpc.spawn`）、None のまま写った主人は
         建て直しても None のまま。詳細生成がこれを掛け算に使って落ちる（VERIFICATION.md §3.63）。
+        好感度は帳簿の `WARMED_KEY` で1回に限る。毎回上げると、遊んで下がった好感度が
+        ロードのたびに初期値へ戻る。
         """
         handle = modnpc.get(app, keeper_id, world=world)
         if handle is None:
@@ -661,10 +666,14 @@ def apply(ctx):
                 write("keeper: {} had no experience_level; set to {}".format(
                     keeper_id, catalog.KEEPER_LEVEL))
                 healed = True
-            if warm_keeper(handle):
-                write("keeper: {} now holds the investor in some regard (affinity {})".format(
-                    keeper_id, catalog.KEEPER_AFFINITY))
-                healed = True
+            if record is None or not record.get(WARMED_KEY):
+                if warm_keeper(handle):
+                    write("keeper: {} now holds the investor in some regard (affinity {})".format(
+                        keeper_id, catalog.KEEPER_AFFINITY))
+                    healed = True
+                if record is not None:
+                    record[WARMED_KEY] = True
+                    save(app)
         except Exception:
             ctx.log_exc("investment: cannot heal the keeper {}".format(keeper_id))
         return healed
@@ -790,7 +799,7 @@ def apply(ctx):
             if not keeper_at(app, keeper_id, facility, world=world):
                 modnpc.place(app, keeper_id, area_id, facility_id, owner=True,
                              world=world, write=write)
-            heal_keeper(app, keeper_id, world=world)
+            heal_keeper(app, keeper_id, world=world, record=record)
             note_keeper(app, record, facility, world=world)
             state["warned"].discard(("hub", key, area_id))
             state["warned"].discard(("area", key, area_id))
@@ -945,7 +954,7 @@ def apply(ctx):
             return False
         if modnpc.spawn(app, keeper_id, write=write) is not None:
             modnpc.place(app, keeper_id, area_id, facility_id, owner=True, write=write)
-            heal_keeper(app, keeper_id)
+            heal_keeper(app, keeper_id, record=record)
         else:
             write("WARN build: the keeper {} did not spawn; the building has no owner"
                   .format(keeper_id))

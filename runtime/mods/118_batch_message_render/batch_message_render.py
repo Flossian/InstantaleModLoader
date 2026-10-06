@@ -666,7 +666,12 @@ def apply(ctx):
         # 消えない先頭が何度も再表示された。
         # 実機で踏んだ。
         _owner, before = canonical_text(app, None)
+        started = store.get("starts", 0)
         result = orig(app, dt, context, len(context))
+        if store.get("starts", 0) != started:
+            # 終端がその場で次の本文を始めた。見せるのは次の本文の reveal に任せる
+            # （ここで見ると次の本文を「末尾が重複した」と読み、reveal も2本走る）
+            return result
         _owner, after = canonical_text(app, None)
         if before is not None and before != after and not warned.get("tail"):
             # 終端の

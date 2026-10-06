@@ -10,7 +10,7 @@
     "en": "Clearing a quest raises the difficulty of the quests that land offers. Every clear draws a random step and adds it, up to a cap. Nothing else is touched: the game already derives the shop stock, the item prices, the enemies, the rewards and the talent points from that one number, so they all follow. A land raised to 23 produced level 24 enemies, and its shop stocked items of a value the plain save cannot produce",
     "ja": "依頼を1つ片付けるたびに、その土地で受けられる依頼の難易度が上がる。上がる量は毎回ランダムで、上限まで積み上がる。触るのはその1つの数だけで、店の在庫・値段・敵・報酬・才能はゲーム自身がそこから決めているので後から付いてくる。難易度を23まで上げた土地ではレベル24の敵が出て、その土地の店に素のセーブからは出ない value 33 の品が並んだ"
   },
-  "version": "4",
+  "version": "5",
   "author": "R01/Flossian",
   "after": [
     "307_area_move_dungeon",
@@ -97,8 +97,8 @@
         "en": "Put the difficulties back"
       },
       "note": {
-        "ja": "入れると、次にその土地の掲示板を開いた時点で控えてある素の難易度へ戻し、控えも消す。全部の土地を戻すには、それぞれの掲示板を一度ずつ開くこと。MOD を消すだけでは上がった難易度がセーブに残る",
-        "en": "Restores the difficulty this mod recorded the first time it touched each land, the next time you open that land's quest board, and drops the record. Visit every board once to undo the whole world. Simply deleting the mod leaves the raised difficulties in the save"
+        "ja": "入れると、次にセーブを読み込んだとき（または掲示板を開いたとき）、この MOD が上げた依頼を控えてある素の難易度へ戻し、その土地の控えを消す。読み込みの時点で依頼のある土地はまとめて戻り、積んだ育ちも消える。依頼の難易度はセーブに残らないので、MOD を外すだけでもセーブは素のまま",
+        "en": "The next time you load a save (or open a quest board), puts the quests this mod raised back to the recorded original difficulty and drops that land's record. Every land with quests is put back at load time, and the accumulated growth is lost. Quest difficulties are not kept in the save, so simply removing the mod also leaves the save untouched"
       }
     },
     "ANNOUNCE": {

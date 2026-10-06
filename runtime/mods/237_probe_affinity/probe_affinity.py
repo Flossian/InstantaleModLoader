@@ -175,10 +175,15 @@ def apply(ctx):
     def emotion(orig, *args, **kwargs):
         result = orig(*args, **kwargs)
         try:
-            caller = frames.caller(CALLER_DEPTH)
-            key = repr(caller)
+            # 鍵は生のフレームのコードの並び（安い）。連鎖の文字列（1回 1ms ほど）は書く回だけ組む
+            frame, codes = sys._getframe(1), []
+            while frame is not None and len(codes) < 12:
+                codes.append(frame.f_code)
+                frame = frame.f_back
+            key = tuple(codes)
             seen_callers[key] = seen_callers.get(key, 0) + 1
             if seen_callers[key] <= CALLER_SAMPLES:
+                caller = frames.caller(CALLER_DEPTH)
                 event("emotion", args=[frames.short(repr(a), 40) for a in args],
                       kwargs={k: frames.short(repr(v), 40) for k, v in kwargs.items()},
                       result=frames.short(repr(result), 80), caller=caller,

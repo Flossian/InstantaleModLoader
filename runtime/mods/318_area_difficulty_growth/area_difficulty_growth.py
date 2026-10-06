@@ -384,7 +384,8 @@ def apply(ctx):
                         # 初見の依頼の素の値。**そのまま控える。**
                         # 新しく生まれた依頼も素の帯で来る（§2.66）ので、
                         # ここで上昇量を引くと素の値が沈む。
-                        base[quest_id] = _clip(difficulty, low, high)
+                        # 上限で切らない（切ると、上限を戻した後も切った値を素とみなして書き下げ続ける）。
+                        base[quest_id] = int(difficulty)
                 target = _clip(base[quest_id] + want, low, high)
                 if target != base[quest_id] + want:
                     hit_cap = True

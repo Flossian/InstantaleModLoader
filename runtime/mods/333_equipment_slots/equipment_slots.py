@@ -1173,6 +1173,10 @@ def apply(ctx):
         """
         if not isinstance(data, dict):
             return 0
+        if not isinstance(data.get("player_data"), dict):
+            # セーブ以外の書き出し（世界の骨格 world_data.json。`player_data` を持たない。GAME.md）には足さない。
+            # 足すと仲間の装備欄の品が骨格に焼かれ、同じ世界で作り直した周回の NPC に出た
+            return 0
         held = getattr(sys, CONTAINER_ATTR + "_world", None)
         if held is not None and state.world_key_of_dict(data, held) != held:
             return 0                              # 別の世界のセーブ。辞書の品はこの世界の物ではない
@@ -1428,6 +1432,12 @@ def apply(ctx):
                     held = current_slots(app, sc).get(name)
                     old = next((w for w in item_widgets(app, sc["owner"]) if key_of(w) == held), None)
                     if old is not None:
+                        if not main_has_room(main, instance_of(old)):
+                            # 外した品の置き場が所持品に無い（置換・外す・捨てると同じく、空きが無ければ何もしない）。
+                            # 見ずに戻すと範囲の外の座標のまま所持品に入り、開き直すと置けずに落ちうる
+                            write("popup equip {!r} ignored: no room in the inventory for {!r}".format(
+                                item_key, held))
+                            return "no room"
                         try:
                             move_back(app, old, main)
                             write("popup equip: {!r} leaves {} for {!r}".format(held, name, item_key))
@@ -1653,7 +1663,8 @@ def apply(ctx):
             move_back(app, widget, main)
             write("{}: unequipped {!r} via the window".format(sc["key"], key))
             return "unequipped"
-        do_equip(app, sc, widget)
+        if do_equip(app, sc, widget) == "no room":
+            return "no room"
         return "equipped" if is_mine(frames.attr(widget, "inventory", None)) else "not equipment"
 
     def npc_equip(app, holder, item):

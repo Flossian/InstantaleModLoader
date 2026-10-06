@@ -6,46 +6,26 @@
 描き終わった後に、その人物のフォルダを指している HUD 上の画像を読み直す。
 """
 
-import io
-import json
-import os
 import re
 
-from instantale_modloader import frames, saves, ui
+from instantale_modloader import frames, imagegen, ui
 
 
 LOG_BASENAME = "character_image_refresh.log"
 
-# 人物の絵を描く関数。画像生成の方式ごとに別のモジュールに居る（GAME.md §2.33）。
-# 4つは排他で、ゲームは config.json で選ばれた1つだけを import する。
-# 名前は組み立てられない（sdcpp_* は下線が落ち、diffusers_openvino は残る）。
-FAMILIES = {
-    "sdcpp_cuda": "sdcppcuda",
-    "sdcpp_vulkan": "sdcppvulkan",
-    "sdcpp_cpu": "sdcppcpu",
-    "diffusers_openvino": "diffusers_openvino",
-}
+# 人物の絵を描く関数。画像生成の方式ごとに別のモジュールに居るが、どの方式かはローダの
+# `imagegen` が吸収する（GAME.md §2.33）。
+FAMILIES = imagegen.FAMILIES
 FUNCS = ("generate_character_image", "generate_character_image_from_enemy")
 
-
-def config_backend(path=None):
-    """ゲームが選んでいる画像生成の方式（`sd_backend.name`）。読めなければ None。"""
-    path = path or os.path.join(saves.data_dir(), "config.json")
-    try:
-        with io.open(path, encoding="utf-8") as fh:
-            data = json.load(fh)
-        return data["ai_setting"]["local_model_setting"]["sd_backend"]["name"]
-    except Exception:
-        return None
+#: ゲームが選んでいる画像生成の方式。読めなければ None（ローダの `imagegen.backend`）。
+config_backend = imagegen.backend
 
 
 def targets_for(backend):
     """包む対象。方式が分からなければ4つとも（入っていない方式は待つだけ）。"""
-    family = FAMILIES.get(backend)
-    families = [family] if family else list(FAMILIES.values())
-    return tuple(
-        "image_generation.{}.image_generation_creature:{}".format(family, func)
-        for family in families for func in FUNCS)
+    return tuple(module + ":" + func
+                 for module in imagegen.creature_modules(backend) for func in FUNCS)
 
 # 立ち絵を出している HUD の画像。人物欄の右の立ち絵と、会話の立ち絵。
 # 木のどこに居るかに頼らず名前でも引く。

@@ -10,7 +10,7 @@
     "en": "Quest completion no longer disbands the party. The balance built around disbanding changes",
     "ja": "クエストクリアでパーティを解散しない。解散を前提にしたゲームバランスは変わる"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "after": [
     "303_quest_end_party_to_guild"

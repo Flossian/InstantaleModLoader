@@ -10,7 +10,7 @@
     "ja": "立ち絵を再生成するとき、装備品の見た目を英語の短い語にしてその回の画像プロンプトへ足す。LLMに聞くのは装備が変わったときだけ",
     "en": "When a portrait is regenerated, adds short English words describing the equipment to that one image prompt. The LLM is asked only when the equipment changes"
   },
-  "version": "3",
+  "version": "4",
   "author": "MoririnJP",
   "settings": {
     "EQUIPMENT_PROMPT_COUNT": {

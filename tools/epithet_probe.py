@@ -335,7 +335,7 @@ def main():
                  # MAX_TOKENS を全部思考に使い切って本文が空になる（VERIFICATION_LOG.md §2.63）。
                  "--reasoning-budget", "0"],
                 stdout=handle, stderr=subprocess.STDOUT)
-            if not wait_ready(args.port, 300):
+            if not wait_ready(args.port, 300, proc):   # 落ちたサーバを300秒待たない
                 print("  起動しなかった。{} を読むこと。".format(logfile))
                 return 1
             base_url = "http://127.0.0.1:{}/v1".format(args.port)

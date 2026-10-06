@@ -265,6 +265,9 @@ def apply(ctx):
         widget = input_of(hud)
         if widget is None:
             return False
+        window_of = frames.attr(widget, "get_root_window", None)
+        if callable(window_of) and window_of() is None:
+            return False          # 窓に出ていない（画面が替わった後の古い HUD。世界作りの入力欄から鍵盤を奪わない）
         if frames.attr(widget, "focus", False) is True:
             return False          # もう持っている
         now = time.monotonic()
@@ -280,8 +283,7 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("input focus: could not focus the input box")
             return False
-        note("refocused after {}".format(why))
-        return True
+        return True               # 戻すたびには書かない（書くのは見つけたときと手を引いたときだけ）
 
     def request(hud, why):
         """次のフレーム（＋わずかな待ち）で戻す。

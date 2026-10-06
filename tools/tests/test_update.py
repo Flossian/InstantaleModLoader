@@ -14,6 +14,7 @@
              配った版のままなら残さない。SHIPPED_DEFAULTS は git の履歴と一致する
   配る tools … make_dist.bat の一覧にあるファイルが読む tools\\ のモジュールも一覧にある
 """
+import json
 import os
 import subprocess
 import sys
@@ -139,6 +140,27 @@ with tempfile.TemporaryDirectory() as tmp:
         f.writestr("InstantaleModLoader-9.9.9/tools/ok.txt", "ok")
     assert gui.extract_release(z2, dest) == 1
     assert open(os.path.join(dest, "tools", "ok.txt")).read() == "ok"
+
+# 順序ファイルは上書きされるが、手元の入切と手で入れた MOD は書き戻す（並べ替えは戻さない）。
+with tempfile.TemporaryDirectory() as tmp:
+    z = os.path.join(tmp, "full.zip")
+    with zipfile.ZipFile(z, "w") as f:
+        f.writestr("InstantaleModLoader-9.9.9/runtime/mods/load_order.json", json.dumps(
+            {"order": ["100_a", "101_b", "102_c", "103_new"], "disabled": ["102_c"]}))
+    dest = os.path.join(tmp, "dest")
+    mods = os.path.join(dest, "runtime", "mods")
+    for name in ("100_a", "101_b", "901_mine"):
+        os.makedirs(os.path.join(mods, name))
+        with open(os.path.join(mods, name, "mod.json"), "w") as f:
+            f.write("{}")
+    with open(os.path.join(mods, "load_order.json"), "w") as f:
+        json.dump({"order": ["101_b", "100_a", "901_mine", "099_gone"],
+                   "disabled": ["101_b", "099_gone"]}, f)
+    gui.extract_release(z, dest)
+    with open(os.path.join(mods, "load_order.json"), encoding="utf-8") as f:
+        carried = json.load(f)
+    assert carried == {"order": ["100_a", "101_b", "102_c", "103_new", "901_mine"],
+                       "disabled": ["101_b", "102_c"]}, carried
 
 # MOD の追加（install_from_zip）。展開先は偽の mods/ に差し替える。
 with tempfile.TemporaryDirectory() as tmp:

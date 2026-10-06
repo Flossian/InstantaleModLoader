@@ -1501,6 +1501,12 @@ def build_window(model):
                 else:
                     status.configure(style="Warn.TLabel",
                                      text="読む先が変わった。「再読込」で読み直す（未保存の変更は消える）")
+            if model.settings.get("RULES_PATH") != before.get("RULES_PATH"):
+                # 本体は置き場を注入の時点で決める（設定は apply の時点）。動いているゲームは前の置き場を読み続ける
+                messagebox.showinfo(
+                    "置き場を変えました",
+                    "動いているゲームが新しい置き場を読むのは、注入し直してからです。\n"
+                    "それまでは前の置き場のルールが使われます。", parent=root)
 
         def cancel(_event=None):
             model.settings.clear()

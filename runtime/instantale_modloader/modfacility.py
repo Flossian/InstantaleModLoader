@@ -1648,13 +1648,15 @@ def _spec_mentions(value, mod_ids):
     """`PhaseSpec`（またはその辞書）の `args` が MOD の施設を指しているか。
 
     実行時は `PhaseSpec` のオブジェクト、セーブから復元された直後は辞書のことがある。
+    ボタンの辞書（`{"text", "spec"}`）にも、裸の spec（自由入力の行き先 `SAVED_SPEC_ATTRS`）にも来る。
+    どれでも読む（`ui.spec_args` はボタンの辞書しか読まず、裸の spec では一度も当たらなかった）。
     """
-    args = ui.spec_args(value)
-    if not args:
-        data = value.get("spec") if isinstance(value, dict) else None
-        if isinstance(data, dict):
-            args = data.get("args") or []
-    return any(str(a) in mod_ids for a in (args or ()))
+    spec = value.get("spec") if isinstance(value, dict) and "spec" in value else value
+    data = spec if isinstance(spec, dict) and "cls_name" in spec else ui.spec_data(spec)
+    args = data.get("args") if isinstance(data, dict) else None
+    if not isinstance(args, (list, tuple)):
+        return False
+    return any(str(a) in mod_ids for a in args)
 
 
 def scrub_saved_refs(app, mod_ids, write=None, undo=None):

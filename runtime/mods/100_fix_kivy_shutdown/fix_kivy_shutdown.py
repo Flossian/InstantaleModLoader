@@ -124,6 +124,11 @@ def apply(ctx):
             ctx.log_exc("  raw SetWindowLongPtrW fallback failed too; swallowing")
             return None
 
+        if not previous:
+            # SetWindowLongPtrW は失敗すると 0 を返す（戻したと書くと、終了時の調べの材料が食い違う）
+            ctx.log("  raw fallback did not restore WndProc (last error {})".format(
+                ctypes.get_last_error()), level="WARN")
+            return previous
         ctx.log("  raw fallback restored WndProc (previous=0x{:X})".format(previous & (2 ** 64 - 1)))
         return previous
 

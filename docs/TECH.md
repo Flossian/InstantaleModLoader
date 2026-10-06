@@ -143,6 +143,7 @@ runtime/instantale_modloader/
     confinement.py  主人公が閉じ込められている（牢の中など）ことの窓口。閉じ込める MOD が置き、選択肢を足す MOD が引く（§3.3.13）
     choices.py    選択肢のボタンの窓口。組み直しと押下の包み、印の持ち越し、ロードの後の組み直し、押した後の保存（§3.3.14）
     sounds.py     曲の置き場所の探し方・戦闘曲の見分け方・重みの読み方（§5.10）
+    imagegen.py   画像生成の方式（sdcpp の cuda / vulkan / cpu と diffusers_openvino）を隠して、人物の絵を描く関数を包む（§5.11）
     ids.py        ゲームの採番台帳（`index`）を通した id の採り方（§3.2.3）
     saves.py      ディスクのセーブの読み方（置き場・難読化・世界の一覧。§3.2.3）
     recon.py      実行時リコン（モジュール構造ダンプ）
@@ -984,6 +985,7 @@ MOD 同梱の設定画面（`tool.py`。§3.12）は**ゲームの中では走�
 | 所持金を型を保って書く | `ui.set_gold`（`add_gold` も同じ書き方に直した。§5.1.3） | 3本。ローダの `add_gold` だけが float の所持金を int に変えていた |
 | 位置でもキーワードでも来うる引数の読み書き | `frames.arg` / `replace_arg`（§5.2） | 5本 / 2本。届かなかったときの振る舞いが `327_` と `324_` で違った |
 | 曲の置き場所と戦闘曲の見分け方 | `sounds`（§5.10） | 4本。docstring が「`106_` と同じ判定」と互いを参照していた |
+| 画像生成の方式の読み取りと包む先 | `imagegen`（§5.11） | 4本。方式の表と `config.json` の読み取りが1字違わず写され、`131_` だけは cuda に決め打ちで vulkan / cpu では効かなかった |
 | ウィジェット木の辿り方 | `ui.walk_widgets` / `children_of`（§5.1.3） | 5本 / 3本。兄弟を出す順が2通りあり、どちらも実機で確かめた順なので引数で残した |
 | 寸法とウィジェットの見分け | `ui.rect_of` / `same_rect` / `numbers` / `close_enough` / `is_label` / `is_scroller`（§5.1.3） | 2〜3本 |
 | ゲームの「やめる」の位置 | `ui.Screen.back_button_index` | 3本 |
@@ -1694,6 +1696,8 @@ GUI は件数だけを状態欄に出し、失敗ではないので ⚠ には�
 そこで `boot()` は全 MOD の適用を終えた後、一番上に他の世代の印が残っている対象を素に戻す（`patch.drop_stale_layers`）。
 例外は保存の関所（`modnpc` / `modfacility` / `prices`）で、使う MOD を全部切っても残す。
 世界に置いた持ち物は残るので、関所だけ剥がすと次の保存でセーブに焼き付く。
+ただし今の世代の別の MOD が同じ関数（`save_game` など）を包むと、`wrap` が前の世代の層をまとめて剥がし、関所も消える。
+そこで、前の世代で立っていて今回どの MOD も立てなかった関所は、ローダが剥がす前に今の世代の層として立て直す（`_keep_save_gates`。行は `kept the save gate(s) no mod raised this time: ...`）。
 期間・日数の望み・値段の登録簿（§3.3.2〜§3.3.4）も同じ時点で、今回 `ok` にならなかった MOD のぶんを `forget` する。
 
 `boot()` と `unload()` は `sys` に置いた錠で1本ずつ走る。
@@ -1955,7 +1959,7 @@ GUI の1行に収めると「JSON を手で書く欄」になり、コードを�
 |---|---|
 | `apply(ctx)` に渡る `ctx` | §3.1 / §3.6 / §3.8 / §3.11 |
 | `mod.json` の鍵 | §3.1 / §3.2 / §3.8 / §3.9 / §3.12 |
-| §5 の共通部品（`ui` / `frames` / `llm` / `state` / `jobs` / `modnpc` / `modfacility` / `prices` / `sounds`） | §5 |
+| §5 の共通部品（`ui` / `frames` / `llm` / `state` / `jobs` / `modnpc` / `modfacility` / `prices` / `sounds` / `imagegen`） | §5 |
 | 使い方を書いた窓口（`durations` / `prices` / `combat` / `equipment` / `arrivals` / `talk_affinity` / `ids` / `npcs` / `saves` / `wanted` / `guards` / `defeat` / `board` / `confinement` / `choices`） | §3.2.3 / §3.3 |
 
 これ以外は内部で、予告なく変わる。
@@ -1997,7 +2001,9 @@ python tools/injector.py --unload      # GUI なら「MOD を外す」
 当てたときに張り替えた複製束縛（`from x import y` のコピー）はラッパを指したままで、
 そこから呼ばれる経路が生き残る（当てたときと同じ範囲を逆向きに張り替える。§4.1）。
 
-MOD の NPC を降ろすのと剥がすのは、メインスレッド（Kivy の Clock）で続けて行う。
+剥がす前に MOD の NPC と施設を世界から降ろす（`modnpc.purge` / `modfacility.purge`）。
+保存の関所だけ消えて世界に残ると、次の保存でセーブ（施設は世界の骨格にも）に焼かれる。
+降ろすのと剥がすのは、メインスレッド（Kivy の Clock）で続けて行う。
 注入のリモートスレッドから世界の辞書を書き換えると、メインスレッドの反復と重なりうる（§6.2）。
 メインループが 10秒待っても取らなければ、その場で行う。
 期間・日数の望み・値段の登録簿（§3.3.2〜§3.3.4）も空にする。
@@ -3477,6 +3483,31 @@ sounds.EXTENSIONS / sounds.MUSIC_SUBDIR / sounds.BATTLE_DIR_MARK
 曲の一覧の作り方（`list_tracks`）は置いていない。
 `322_` はフォルダ直下だけ、`324_` は再帰で `battle/` を除き、名前が同じだけで仕様が違う。
 設定画面（`tool.py`）はローダを import できないことがあるので、あちらの `EXTENSIONS` は各自で持つ。
+
+### 5.11 `instantale_modloader.imagegen`（画像生成の方式）
+
+```python
+from instantale_modloader import imagegen
+
+@imagegen.wrap_creature(ctx, "generate_character_image", safe=True)   # 選ばれた方式の同じ関数を包む
+def generated(orig, *args, **kwargs): ...
+
+imagegen.backend()                         # config.json の sd_backend.name。読めなければ None
+imagegen.creature_targets("pixel_art_process")   # 包む対象（`モジュール:関数`）の一覧
+imagegen.creature_module()                 # 読み込まれている方の image_generation_creature。無ければ None
+imagegen.FAMILIES / imagegen.CREATURE_FORMAT
+```
+
+人物・敵・モンスターの絵を描くモジュールは方式ごとに別のパッケージに居て、ゲームは選ばれた1つだけを import する（GAME.md §2.33）。
+パッケージ名は方式の名前から組み立てられない（`sdcpp_*` は下線が落ち、`diffusers_openvino` は残る）ので表で持つ。
+MOD は関数の名前だけを渡し、方式は意識しない。
+
+方式が読めない・知らない方式なら4つとも包む（入っていない方式は保留のまま待つだけ）。
+`required` を渡さなければ、方式が分かっているときだけ立つ（その方式に関数が無ければ知らせる）。
+方式を切り替えるとゲームは再起動するので、方式を読むのは注入のときの1回で足りる。
+
+使う MOD は `131_` / `138_` / `335_` / `408_`。
+`230_` の probe と `916_` の設定画面は方式の名前のほかに画質の項目も読むので、`config.json` を自分で読む。
 
 ---
 

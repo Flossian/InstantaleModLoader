@@ -10,6 +10,6 @@
     "en": "Stops the crash on exit and unmasks the real exception hidden behind it",
     "ja": "ゲーム終了時に Kivy が落ちるのを抑え、隠れていた本来の例外を表に出す"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian"
 }

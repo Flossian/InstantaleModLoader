@@ -119,6 +119,7 @@ SHIPPED_DEFAULTS = {
         "eed09e88fadb113baf3e96b795c53a0b00c1e447",     # v1.4.0
         "91d670b9ca9f81c0fdd453ba2b1007a1afcca6cb",     # v1.6.0
         "cab6170e4b537e29014cbe171703bf047c2f9b36",     # v1.7.1
+        "2f67004e1b1fba4541ab38608e29847f5c8c07e7",     # v1.15.0
     },
     "npc.default.json": {                               # 120_
         "3986fdec474b1280e5acf34f6727b3706a8ebc71",     # v1.3.1
@@ -330,6 +331,9 @@ def extract_release(zip_path: str, dest: str = ROOT) -> int:
     # 書き先は絶対パスにして dest の中かを確かめる（`install_from_zip` と同じ）。
     # `..` を見るだけでは、Windows でドライブ名（`C:`）や `\` を含む名前が dest の外を指す。
     base = os.path.abspath(dest)
+    # 配布物の `load_order.json` は上書きされるので、手元の入切と足した MOD を先に控える。
+    order_file = os.path.join(base, "runtime", "mods", ml.ORDER_NAME)
+    old_order = _read_order(order_file)
     with zipfile.ZipFile(zip_path) as z:
         for info in z.infolist():
             parts = info.filename.split("/")[1:]
@@ -343,7 +347,50 @@ def extract_release(zip_path: str, dest: str = ROOT) -> int:
             with z.open(info) as src, open(path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
             count += 1
+    if old_order is not None:
+        carry_order(order_file, old_order)
     return count
+
+
+def _read_order(path: str):
+    """順序ファイルを `{"order", "disabled"}` で読む。無い・読めなければ None。"""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    return {key: [name for name in data.get(key) or [] if isinstance(name, str)]
+            for key in ("order", "disabled")}
+
+
+def carry_order(path: str, old: dict) -> bool:
+    """展開し直した `load_order.json` へ、前のファイルの入切と手元で足した MOD を書き戻す。書いたら真。
+
+    `"disabled"` は前に切っていて今も在る MOD を足す（新しい版で配る側が切ったものはそのまま）。
+    前の `"order"` にだけ在る名前（手で入れた MOD。9xx は順序ファイルに載らないと読まれない）は、
+    フォルダが在れば末尾へ足す。
+    並べ替えは戻さない。配る側が順序を直した版では、前の並びが新しい `after` の宣言とぶつかる。
+    """
+    new = _read_order(path)
+    if new is None:
+        return False
+    mods_dir = os.path.dirname(path)
+
+    def present(name):
+        return name in new["order"] or os.path.isfile(
+            os.path.join(mods_dir, name, ml.MANIFEST_NAME))
+
+    order = list(new["order"])
+    order += [name for name in old["order"] if name not in order and present(name)]
+    off = set(new["disabled"]) | {name for name in old["disabled"] if present(name)}
+    # `write_order` と同じく、無効一覧は順序の並びで書く（順序に無い名前は後ろ）。
+    disabled = [name for name in order if name in off]
+    disabled += sorted(off - set(disabled))
+    if order == new["order"] and set(disabled) == set(new["disabled"]):
+        return False
+    return ml.write_json(path, {"order": order, "disabled": disabled}, indent=2)
 
 
 FIND_POLL = 1.0      # ゲームのプロセスを探す間隔（秒）
@@ -1001,6 +1048,7 @@ def install_from_zip(zip_path: str) -> list[str]:
                 if not target.startswith(dest + os.sep) and target != dest:
                     continue
                 os.makedirs(os.path.dirname(target), exist_ok=True)
+                keep_edited_default(target)     # 書き換えた同梱の既定を手元の名前へ逃がす（更新と同じ）
                 with zf.open(member) as src, open(target, "wb") as out:
                     shutil.copyfileobj(src, out)
             installed.append(folder)
@@ -1017,7 +1065,10 @@ def install_from_folder(src: str) -> str:
     dest = os.path.join(MODS_DIR, folder)
     if os.path.abspath(dest) == src:
         return folder      # もう mods/ の中にある
-    shutil.copytree(src, dest, dirs_exist_ok=True)
+    def copy(source, target, *, follow_symlinks=True):
+        keep_edited_default(target)     # 書き換えた同梱の既定を手元の名前へ逃がす（更新と同じ）
+        return shutil.copy2(source, target, follow_symlinks=follow_symlinks)
+    shutil.copytree(src, dest, dirs_exist_ok=True, copy_function=copy)
     return folder
 
 
@@ -2886,8 +2937,12 @@ class App(ttk.Frame):
             payload = injector.make_bootstrap(
                 injector.RUNTIME_DIR, injector.OUT_DIR, injector.BOOT_LOG,
                 action="unload")
+            mark = injector.boot_log_size()
             rc = injector.inject(pid, payload)
-            if rc == 0:
+            if rc == 0 and injector.boot_failed_since(mark):
+                self.events.put(("error", f"pid {pid}: 解除に失敗しました"
+                                          "（out/bootstrap.log を確認してください）"))
+            elif rc == 0:
                 self.events.put(("done", f"pid {pid}: MOD を外しました"))
             elif rc == injector.INJECT_PENDING:
                 self.events.put(("pending", f"pid {pid}: 解除の完了待ちです"

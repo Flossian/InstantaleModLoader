@@ -931,8 +931,13 @@ def drop_stale_layers() -> list[str]:
                 value = getattr(value, "__original__", None)
             if value is current:
                 continue
-            if value is None and not existed:
-                delattr(owner, name)        # 前の世代が新設した名前
+            bottom = value is None or not any(hasattr(value, mark) for mark in _LEGACY_MARKS)
+            if bottom and not existed:
+                # 前の世代が新設した名前か、継承しただけの属性に置いた層。持ち主の辞書から消す
+                # （基底の写しを置くと、基底に今の世代が当てた層をサブクラスだけ素通りする）
+                if _had_own(owner, name):
+                    delattr(owner, name)
+                value = _current(owner, name)[0]
             elif descriptor is None:
                 setattr(owner, name, value)
             else:

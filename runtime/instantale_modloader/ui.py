@@ -1048,6 +1048,16 @@ def _never_hit(*_args, **_kwargs):
     return False
 
 
+#: 差し替えた当たり判定の印。注入し直すと ui ごと読み直されて `_never_hit` が別の関数になるので、
+#: 同一性ではなく印で見分ける（同一性で見ていたころは、前の世代で隠したウィジェットを見せても押せなかった）。
+_NEVER_HIT_MARK = "_instantale_never_hit"
+setattr(_never_hit, _NEVER_HIT_MARK, True)
+
+
+def _is_never_hit(fn):
+    return getattr(fn, _NEVER_HIT_MARK, False) is True
+
+
 def show_widget(widget, visible, *, block_touch=False):
     """見せる／隠す。隠すときは**押せなくもし、触りを下へ通す**。
 
@@ -1071,12 +1081,12 @@ def show_widget(widget, visible, *, block_touch=False):
     except TypeError:
         return            # 属性を足せない相手。見た目と無効だけで済ませる
     if not visible and not block_touch:
-        if own.get("collide_point") is not _never_hit:
+        if not _is_never_hit(own.get("collide_point")):
             try:
                 widget.collide_point = _never_hit
             except Exception:
                 pass
-    elif own.get("collide_point") is _never_hit:
+    elif _is_never_hit(own.get("collide_point")):
         try:
             del widget.collide_point      # クラスの当たり判定に戻す
         except Exception:

@@ -286,7 +286,11 @@ def load_replace_rules():
     module = importlib.util.module_from_spec(spec)
     sys.modules["prompt_replace_mod"] = module
     spec.loader.exec_module(module)
-    path = module.rules_path(folder)
+    # ゲームと同じ置き場から読む（設定の RULES_PATH → state\<MOD>\ → MOD フォルダ → 同梱の既定）
+    import instantale_modloader as ml
+    from instantale_modloader import config as loader_config
+    custom = (loader_config.load_store(RUNTIME_DIR).get(matches[0]) or {}).get("RULES_PATH", "")
+    path = module.rules_path(folder, ml.state_dir(RUNTIME_DIR), custom if isinstance(custom, str) else "")
     if not path or not os.path.isfile(path):
         return None
     with io.open(path, encoding="utf-8") as fh:
@@ -613,7 +617,7 @@ def main():
                  # 思考を吐くモデルは切らないと上限を思考で使い切る（VERIFICATION_LOG.md §2.63）。
                  "--reasoning-budget", "0"],
                 stdout=handle, stderr=subprocess.STDOUT)
-            if not wait_ready(args.port, 300):
+            if not wait_ready(args.port, 300, proc):   # 落ちたサーバを300秒待たない
                 print("  起動しなかった。{} を読むこと。".format(logfile))
                 return 1
             base_url = "http://127.0.0.1:{}/v1".format(args.port)

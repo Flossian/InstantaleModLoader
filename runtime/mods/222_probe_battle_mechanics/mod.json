@@ -10,7 +10,7 @@
     "en": "Records how the battle referee's vocabulary (power enums, buffs, debuffs, status effects) is converted into numbers. Each action becomes one record: the battle_action, every damage/defense calculation that ran inside it with its caller chain, and a full attribute diff of every combatant (so we learn where AttributeEffect and TextStatusEffect actually land without guessing attribute names). The two numeric functions can also be called on a grid of representative values once per game launch (off by default: the table is already known and never varied). Read-only",
     "ja": "審判 LLM の語彙（power の列挙・バフ・デバフ・状態異常）が数へ変換されるところを録る。1手を1件にして、battle_action と、その手の中で走ったダメージ・防御の計算（呼び出し元の連鎖つき）と、戦闘に居る全員の属性の差分を残す（バフがどの属性へ書かれるかを、属性名を推測せずに見つけるため）。数値だけを取る2関数は、起動ごとに1回、代表値の格子で呼ぶこともできる（表は取り終えていて結果が一度も揺れなかったので、既定では呼ばない）。読み取りだけでゲームは変えない"
   },
-  "version": "3",
+  "version": "4",
   "author": "R01/Flossian",
   "debug": true,
   "shares": ["_instantale_probe_dry_run_thread"],

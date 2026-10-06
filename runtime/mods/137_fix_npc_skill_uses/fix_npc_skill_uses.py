@@ -197,7 +197,8 @@ def apply(ctx):
 
     @ctx.wrap(REST_TARGET, required=False, safe=True)
     def rest(orig, self, *args, **kwargs):
-        result = orig(self, *args, **kwargs)
+        # 戻すのは orig の前。この行動の保存（orig の中）に戻した回数を載せる
+        # （後で戻すと、休んでそのまま終えたセーブでは減ったまま残りうる）。休養は日数も金も動かさないので先に戻してよい
         try:
             app = getattr(self, "app", None) or ui.find_app()
             for member_id in ui.party_member_ids(app):
@@ -209,7 +210,7 @@ def apply(ctx):
                         for name, before, after in changed)))
         except Exception:
             ctx.log_exc("npc skill uses: cannot refill the party's skills")
-        return result
+        return orig(self, *args, **kwargs)
 
     ctx.log("npc skill uses: spent skills and lingering buffs/debuffs are hidden from referee_npc; "
             "party refills at rest (log -> {})".format(ctx.out_path(LOG_BASENAME)))

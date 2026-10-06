@@ -130,8 +130,10 @@ HUD_GOLD_MARK = "Gold:"
 #: ここでは `Gold` と綴られている。呼び名を変えたらここも変える。
 HUD_GOLD_WORD = "Gold"
 
-#: 見出しからその行の終わりまで。欄は改行で区切られている。
-HUD_GOLD_RE = re.compile(re.escape(HUD_GOLD_MARK) + r"([^\n]*)")
+#: 見出しと、その後ろのゲームの素の数字（行の終わりまで）。欄は改行で区切られている。
+#: 数字だけを拾うので、組み直した行（`Gold:1,116,472G` など見出しを残す書式）は二度拾わない
+#: （行の終わりまで拾っていたころは、塗り直すたびに末尾が `GG` と重なった）。
+HUD_GOLD_RE = re.compile(re.escape(HUD_GOLD_MARK) + r"(-?[0-9][0-9.,]*)(?=\n|$)")
 
 #: 塗り終えた文字列を持つラベル（実測。`206_probe_quest_flow` が読んでいる）。
 HUD_STATUS_LABEL = "status_label"

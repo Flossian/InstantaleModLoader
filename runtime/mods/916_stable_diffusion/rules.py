@@ -189,6 +189,7 @@ def remove_tags(body, spec):
         return body
     kept = []
     carry = ""                              # 落とした区画の先頭の括弧
+    hit = False
     for tag in split_tags(body):
         if not tag:
             continue
@@ -197,6 +198,7 @@ def remove_tags(body, spec):
             kept.append(carry + tag)
             carry = ""
             continue
+        hit = True
         if opening and closing:
             continue                        # 括弧が閉じている1区画。丸ごと落とす
         if opening:
@@ -206,7 +208,8 @@ def remove_tags(body, spec):
                 carry = ""                  # 開きも閉じも落とした区画。括弧ごと消える
             elif kept:
                 kept[-1] += closing
-    return ", ".join(kept)
+    # 何も消さなかったら本文はそのまま返す（組み直すと `a,b` が `a, b` に均される）
+    return ", ".join(kept) if hit else body
 
 
 def remap_lora(body, pairs):
@@ -283,8 +286,9 @@ def rewrite(rules, kind, target, body, original):
     touched = False
 
     for row in active(rules, "remove", kind, target):
-        now = remove_tags(now, row.get("text"))
-        touched = True
+        got = remove_tags(now, row.get("text"))
+        if got != now:                      # 当たった規則だけを「触った」に数える
+            now, touched = got, True
 
     for row in active(rules, "replace", kind, target):
         text = str(row.get("text") or "")
@@ -296,8 +300,9 @@ def rewrite(rules, kind, target, body, original):
         pairs = [(row.get("from"), row.get("to"))
                  for row in active(rules, "lora_map")]
         if pairs:
-            now = remap_lora(now, pairs)
-            touched = True
+            got = remap_lora(now, pairs)
+            if got != now:
+                now, touched = got, True
 
     additions = [str(row.get("text") or "")
                  for row in active(rules, "add", kind, target)

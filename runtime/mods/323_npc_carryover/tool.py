@@ -255,8 +255,19 @@ class Model(object):
         self._names[world] = found
         return found
 
-    def collides(self, name, world):
-        """置き先に同名が居るか。`True` / `False` / `None`（検査できない）。"""
+    def collides(self, name, world, exclude=None):
+        """置き先に同名が居るか。`True` / `False` / `None`（検査できない）。
+
+        セーブに居る人のほか、同じ置き先への予約（待機・配置済み）も同名として数える
+        （セーブしか見ていなかったころは、二度押しで同じ人を2回予約でき、ゲーム内で
+        「同名の人物が居るため現れなかった」になった）。`exclude` はその行自身。
+        """
+        queued = any(row is not exclude and row.get("name") == name
+                     and row.get("target_world") == world
+                     and row.get("status") in (self.C.PENDING, self.C.PLACED)
+                     for row in self.pending)
+        if queued:
+            return True
         names = self.names_in(world)
         return None if names is None else (name in names)
 
@@ -326,7 +337,7 @@ class Model(object):
             if row.get("status") != self.C.PENDING:
                 out.append((row, False))
                 continue
-            hit = self.collides(row.get("name") or "", row.get("target_world") or "")
+            hit = self.collides(row.get("name") or "", row.get("target_world") or "", exclude=row)
             out.append((row, bool(hit)))
         return out
 
@@ -971,12 +982,15 @@ def build_window(model):
                     model.C.SKIPPED: "見送り"}.get(status, str(status))
             if status == model.C.PLACED:
                 tag = "done"
-                if row.get("placed_at"):
+                if not row.get("saved"):
+                    # 置いた後、ゲームがまだ保存していない（本体は保存が通ったときに `saved` を書く）
+                    text = "配置済み（未保存）"
+                elif row.get("placed_at"):
                     text = "配置済み（{}）".format(row["placed_at"])
             elif status == model.C.SKIPPED:
                 tag = "warn"
                 text = "見送り: {}".format(row.get("reason") or "")
-            elif model.collides(row.get("name") or "", row.get("target_world") or ""):
+            elif model.collides(row.get("name") or "", row.get("target_world") or "", exclude=row):
                 tag = "warn"
                 text = "同名の人物が居る"
                 warned += 1
@@ -1084,8 +1098,10 @@ def build_window(model):
 
     def on_plan_select(*_args):
         row = selected_row()
+        # 置いたがまだ保存していない行は消させない（消すと次のロードで置き直されず、その NPC が失われる）
+        unsaved = row is not None and row.get("status") == model.C.PLACED and not row.get("saved")
         drop_button.configure(text=drop_label(row),
-                              state="normal" if row is not None else "disabled")
+                              state="normal" if row is not None and not unsaved else "disabled")
 
     def do_drop():
         row = selected_row()

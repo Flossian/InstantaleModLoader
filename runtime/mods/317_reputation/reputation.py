@@ -822,7 +822,7 @@ def apply(ctx):
         ここに残すのは**何をログに出すか**だけ。
         """
         if not worker.enqueue(job):
-            return
+            return False
         if job.get("kind") == "epithet":
             write("二つ名の編纂を予約: {}（評判の立つ土地 {}、契機 {}）".format(
                 job["world"], len(job["mark"]["qualifying"]), job["why"]))
@@ -830,6 +830,7 @@ def apply(ctx):
             write("編纂を予約: {} / {}（{}件の記録、印 {}、契機 {}）".format(
                 job["world"], job["area_id"], deeds_count(job["material"]),
                 job["fingerprint"], job["why"]))
+        return True
 
     def check(app, why):
         """素材が変わっていれば編纂を予約する。**呼ばれても大半は何もしない。**
@@ -888,7 +889,8 @@ def apply(ctx):
         mark = epithet_mark(material.survey(app))
         record = epithet_record_of(world)
         exclude = ""
-        if take_reroll(world):
+        reroll = os.path.exists(reroll_path(world))
+        if reroll:
             # 人物欄のボタンからの引き直し。質的な変化が無くても編み直す。
             # いまの名を除く指示で渡す（据え置きの指示と入れ替わる）。
             exclude = clean_epithet((record or {}).get(KEY_EPITHET, ""))
@@ -897,12 +899,16 @@ def apply(ctx):
             due, reason = epithet_due(record, mark)
             if not due:
                 return
-        enqueue({"kind": "epithet", "world": world,
-                 "player": material.player_name(app),
-                 "day": material.game_day(app),
-                 "mark": mark, "exclude": exclude,
-                 "sources": epithet_sources(app, mark),
-                 "why": "{}: {}".format(why, reason)})
+        queued = enqueue({"kind": "epithet", "world": world,
+                          "player": material.player_name(app),
+                          "day": material.game_day(app),
+                          "mark": mark, "exclude": exclude,
+                          "sources": epithet_sources(app, mark),
+                          "why": "{}: {}".format(why, reason)})
+        if reroll and queued:
+            # 積めたときだけ頼みを消す。編纂の最中・待ちの間は同じ鍵を積まないので、
+            # 先に消すと頼みが黙って消えていた。残せば次の照合で積み直す
+            take_reroll(world)
 
     # ------------------------------------------------------------------ 編纂
     def compile_area(job):

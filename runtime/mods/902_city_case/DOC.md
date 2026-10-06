@@ -60,7 +60,7 @@
 | 3. 検証の記録 | `docs\VERIFICATION_LOG.md` §2 の末尾（節番号は振り直す。ここの `3.x` は `docs\` の節番号ではない） |
 | 4. ゲーム構造・作り方の知見 | `docs\GAME.md` / `docs\TECH.md` の該当箇所 |
 
-検査は `tools\tests\test_wip_city_case.py`（427件）。
+検査は `tools\tests\test_wip_city_case.py`（429件）。
 `local\` から戻したときに一緒に移した。
 
 ---

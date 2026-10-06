@@ -325,9 +325,18 @@ def apply(ctx):
     }
 
     def road_of(app, *stages):
-        """いま有効な控え。段階が合わなければ None。"""
-        return journey.current(world.world_key(app) if app is not None else None,
-                               stages)
+        """いま有効な控え。段階か周回が合わなければ None。
+
+        鍵は周回（世界×主人公）。同じ世界で主人公を作り直すと依頼の id が振り直され、
+        前の周回の控えが別の依頼を道として扱う。
+        世界名だけの鍵は v1.15.0 より前の版が書いた控えで、同じ世界なら受ける。
+        """
+        record = journey.current(None, stages)
+        if record is None or app is None or not record.get("world"):
+            return record
+        if record.get("world") in (world.playthrough_key(app), world.world_key(app)):
+            return record
+        return None
 
     def drop_road(app, why, clear_note=True):
         """道の紐付けを外す。依頼概要に足した一文もここで消す。
@@ -459,7 +468,7 @@ def apply(ctx):
                 "origin_area_id": origin_id,
                 "origin_area_name": origin_name,
                 "difficulty": difficulty,
-                "world": world.world_key(app),
+                "world": world.playthrough_key(app),
                 "at": time.time(),
                 # 最後の移動でゲームへ渡した日数。0 のまま着いたら
                 # `elapse_days` を通らなかった合図（`arrived_check` が WARN に出す）。
@@ -645,7 +654,7 @@ def apply(ctx):
             return False
         write("arrived: {!r} reached; the road took {} day(s) (set to {})".format(
             record.get("target_area_name"), journey.days_spent(), TRAVEL_DAYS))
-        if not journey.days_spent():
+        if not record.get("days_noted") and not journey.days_spent():
             # 日数の差し替えが効いていない可能性そのもの。
             # ここは黙って通さない。
             write("WARN arrived: elapse_days was never seen; "
@@ -808,7 +817,8 @@ def apply(ctx):
             journey.sync()
             record = road_of(app, "offered", "armed")
             if record is not None:
-                if str(quest_id) == record.get("quest_id"):
+                # 物語の依頼（`story_quests`）の id は `world.quests` の id と重なる（GAME.md §2.9.1）。種類も見る
+                if str(quest_id) == record.get("quest_id") and quest_type == QUEST_TYPE:
                     journey.advance("armed", at=time.time())
                     write("armed: quest {!r} started; {!r} is waiting at the end"
                           .format(quest_id, record.get("target_area_name")))
@@ -944,8 +954,8 @@ def apply(ctx):
         if record is None:
             return None
         spent = journey.days_spent()
-        if spent > 0:
-            # この道ではもう渡している
+        if record.get("days_noted") or spent > 0:
+            # この道ではもう渡している（0 日を渡した回も含む。日数だけでは「まだ」と見分けられない）
             # ＝これはエリア移動の日数送りではない。素通しする。
             write("days: {} left alone (the road to {!r} already took "
                   "{} day(s))".format(
@@ -957,9 +967,9 @@ def apply(ctx):
     def days_note(app, days, granted):
         """道が実際に取った日数を控える（`arrived_check` が読む）。"""
         record = road_of(app, "moving")
-        if record is None or journey.days_spent() > 0:
+        if record is None or record.get("days_noted") or journey.days_spent() > 0:
             return
-        journey.advance("moving", days_spent=max(0, int(granted)))
+        journey.advance("moving", days_spent=max(0, int(granted)), days_noted=True)
         write("road: the road to {!r} takes {} day(s)".format(
             record.get("target_area_name"), granted))
 

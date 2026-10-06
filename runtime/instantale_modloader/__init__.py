@@ -1925,6 +1925,42 @@ def _forget_unapplied(results: dict, manifests: dict) -> list[str]:
     return gone
 
 
+def _keep_save_gates(ctx) -> list[str]:
+    """前の世代で立っていて、今の世代でどの MOD も立てなかった保存の関所を立て直す。立て直した部品を返す。
+
+    `modnpc` / `modfacility` / `prices` の関所は、使う MOD を全部切った世代でも残す
+    （世界に置いた持ち物は残るので。`patch._KEEP_ACROSS_GENERATIONS`）。
+    `drop_stale_layers` はその層を剥がさないが、今の世代の別の MOD が同じ関数
+    （`save_game` など）を包むと、`wrap` が前の世代の層をまとめて剥がすので関所も消える。
+    ローダが今の世代の層として立て直せば、誰に包まれても剥がれない。
+    中身は前の世代で残していた層と同じ（同じ部品の `install`）。
+    """
+    from . import modfacility as _modfacility
+    from . import modnpc as _modnpc
+    from . import patch_registry as _registry
+    from . import prices as _prices
+    generation = _state.get("generation")
+    rebuilt = []
+    for name, done, install in (("modnpc", _modnpc.installed, _modnpc.install),
+                                ("modfacility", _modfacility.installed, _modfacility.install),
+                                ("prices", _prices.item_gate, _prices.install)):
+        try:
+            record = done()
+            if record is None or record.get("generation") == generation:
+                continue
+            _registry.begin_mod("(loader)")
+            try:
+                install(ctx, write=log)
+            finally:
+                _registry.end_mod()
+            rebuilt.append(name)
+        except BaseException:
+            log_exc("cannot keep the save gate of {}".format(name))
+    if rebuilt:
+        log_unrepeated("kept the save gate(s) no mod raised this time: {}".format(", ".join(rebuilt)))
+    return rebuilt
+
+
 def _boot(out_dir: str) -> dict:
     _state["out_dir"] = out_dir
     _state["log_path"] = os.path.join(out_dir, "modloader.log")
@@ -2097,6 +2133,11 @@ def _boot(out_dir: str) -> dict:
     # 今回当て直されなかった前の世代のフックと、登録簿に残った前の世代の関数を片付ける。
     # 「切ったのに効いている」を残さない（`config.debug_mode` の「切り替えが効くのは
     # 次の注入から」もこれで成り立つ）。
+    # 剥がす前に、残すはずの保存の関所を今の世代で立て直す（別の MOD の包みが剥がしていることがある）。
+    try:
+        _keep_save_gates(ctx)
+    except BaseException:
+        log_exc("cannot keep the save gates")
     try:
         _patch.drop_stale_layers()
     except BaseException:
@@ -2202,9 +2243,10 @@ def unload(out_dir: str | None = None) -> dict:
         mod がゲームの状態そのものに書いた値（パーティの名簿・依頼）
         mod が立てたスレッドや Clock の予約
 
-    例外が1つある。`modnpc` の NPC は**剥がす前に世界から降ろす**（`modnpc.purge`）。
+    例外が1つある。`modnpc` の NPC と `modfacility` の施設は**剥がす前に世界から降ろす**
+    （`modnpc.purge` / `modfacility.purge`）。
     あれは「セーブに残さない」ことを保存の関所1箇所で守っているので、
-    関所だけ消して名簿に残すと、次の保存でセーブに焼かれてしまう。
+    関所だけ消して世界に残すと、次の保存でセーブに焼かれてしまう。
 
     そのため「入れ忘れた状態に戻す」用途ではなく、**mod を疑うときの切り分け**に使うもの。
     素のゲームで確かめたいなら、注入せずに起動し直すのが確実。
@@ -2272,9 +2314,9 @@ def _unload(out_dir: str | None) -> dict:
     log("unload: reverting patches (gen={})".format(_state.get("generation")))
 
     def take_down():
-        # パッチを剥がす前に MOD の NPC を世界から降ろす。
-        # 剥がした後だと保存の関所が無くなり、名簿に残った `mod:` の id が
-        # 次の保存でセーブに焼かれる（`modnpc` の約束はそこが守っている）。
+        # パッチを剥がす前に MOD の NPC と施設を世界から降ろす。
+        # 剥がした後だと保存の関所が無くなり、名簿や街に残った `mod:` の id が
+        # 次の保存でセーブ（施設は世界の骨格にも）に焼かれる（`modnpc` / `modfacility` の約束はそこが守っている）。
         # どちらもゲームの状態を書き換えるので、メインスレッドで続けて行う
         # （間に保存が挟まらない）。
         try:
@@ -2284,6 +2326,13 @@ def _unload(out_dir: str | None) -> dict:
                 _modnpc.purge(_ui.find_app())
         except Exception:
             log_exc("unload: cannot take the mod npcs off the world")
+        try:
+            from . import modfacility as _modfacility
+            if _modfacility.registry():
+                from . import ui as _ui
+                _modfacility.purge(_ui.find_app())
+        except Exception:
+            log_exc("unload: cannot take the mod facilities off the towns")
         return _patch.revert_all()
 
     count = _run_on_main_thread(take_down, UNLOAD_WAIT) or 0
@@ -2334,7 +2383,9 @@ def status() -> dict:
     """
     from . import patch_registry as _registry
     snapshot = dict(_state)
-    snapshot.pop("ready", None)
+    # 内部の控え（定型の行の集合）は読む側が無く、文字列にすると数百 KB になる
+    for key in ("ready", "logged_before", "logged_now"):
+        snapshot.pop(key, None)
     snapshot["ready_pending"] = len(_state.get("ready") or [])
     snapshot["patches"] = _registry.summary()
     snapshot["written_at"] = datetime.datetime.now().isoformat(timespec="seconds")

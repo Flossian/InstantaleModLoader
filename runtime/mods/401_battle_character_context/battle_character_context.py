@@ -49,7 +49,12 @@ NPC の runtime の Character には口調などが載らないことがある�
 タイトルへ戻るときに控えを捨て、別ワールド・別セーブへの持ち越しを防ぐ。
 """
 
+import sys
+
 from instantale_modloader import equipment, frames, llm, ui
+
+#: 控えの置き場（`sys` の属性。注入をまたぐ）。
+STATE_ATTR = "_instantale_battle_character_context"
 
 
 #: 追記する塊の見出し。同じ message に2度足さないための印でもある（`append_block`）。
@@ -113,11 +118,16 @@ BATTLE_MANAGERS = {
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME, tag="battle context:")
 
-    # apply() の外へ持ち出さない控え。どちらもタイトルへ戻るときに空にする。
-    state = {
-        "saved_character": {},   # character_id -> ロード時の保存辞書の写し（runtime に欠ける項目の拠り所）
-        "noted_flags": set(),    # `in_battle` 以外の戦闘フラグを記録済みか（同じ NOTE を毎手書かない）
-    }
+    # 控え。どちらもタイトルへ戻るときに空にする。
+    # `sys` に置いて注入をまたぐ（apply() の中に置くと、注入し直したときに次のロードまで補いが効かない。
+    # TECH.md §3.4。`403_` と同じ）。
+    state = getattr(sys, STATE_ATTR, None)
+    if not isinstance(state, dict):
+        state = {
+            "saved_character": {},   # character_id -> ロード時の保存辞書の写し（runtime に欠ける項目の拠り所）
+            "noted_flags": set(),    # `in_battle` 以外の戦闘フラグを記録済みか（同じ NOTE を毎手書かない）
+        }
+        setattr(sys, STATE_ATTR, state)
 
     def note_other_battle_flags(app):
         """`in_battle` が立たない戦闘があるかを確かめるための1行。

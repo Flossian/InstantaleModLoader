@@ -10,7 +10,7 @@
     "en": "Starts llama-server with one dedicated slot instead of four shared ones. Same window, less KV memory, faster responses. Can also widen the window",
     "ja": "llama-server を共有4スロットではなく専用1スロットで起こす。1リクエストが使える窓（トークン数）は同じまま KV が減って応答が速くなる。窓を広げることもできる"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "settings": {
     "CTX_SIZE": {

@@ -298,7 +298,7 @@ def apply(ctx):
             name = entry["name"]
             # 名前も入っていることを確かめる（同じ場面で他人の離脱が流れても巻き込まないため）。
             if name and name in context:
-                return KEEP_TEXT.format(name=name)
+                return ui.fill_template(KEEP_TEXT, name=name)   # 書き間違えた設定の文でも落とさない
         return None
 
     ctx.log("quest-end keep: log -> {}".format(log_path))

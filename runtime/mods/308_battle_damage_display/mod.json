@@ -115,7 +115,7 @@
         "en": "Hide changes smaller than this"
       },
       "note": {
-        "ja": "0 にすると 0 点の行まで出る",
+        "ja": "0 にすると 1 未満の端数の増減も出る（増減が無い者の行は出ない）",
         "en": "0 shows even zero-point lines"
       }
     }

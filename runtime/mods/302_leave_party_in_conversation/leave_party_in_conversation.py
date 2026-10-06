@@ -133,7 +133,8 @@ SAVE_AFTER_LEAVE = True
 # 別れた仲間をどこへ置くか。
 #   True  雇用された場所（`initial_location`）へ戻す。ただし**土地を跨いで
 #         別れた場合**は、いまの町のギルドへ置く
-#   False ゲーム自身の `get_party_leave_facility` に任せる（元の挙動）
+#   False ゲーム自身の `get_party_leave_facility` に任せる（元の挙動）。ゲームが置き場所を
+#         返さないときだけ、いまの町のギルドへ置く（どこにも居なくなるのを防ぐ）
 RETURN_TO_INITIAL_LOCATION = True
 
 # 「町のギルド」を見分ける facility_type。
@@ -508,6 +509,12 @@ def apply(ctx):
                 return facility, node, "initial location"
             write("destination: facility {!r} is not in area {!r} any more".format(
                 home_facility_id, here_id))
+
+        if not RETURN_TO_INITIAL_LOCATION:
+            # ゲーム任せ（設定を切ったとき）。ゲームが置き場所を返さないときだけ、下のギルドへ置く
+            facility, node = game_destination(app, character)
+            if facility is not None:
+                return facility, node, "the game's own get_party_leave_facility"
 
         if here is not None:
             facility, node = find_guild(here)

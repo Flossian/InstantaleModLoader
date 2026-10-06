@@ -265,7 +265,8 @@ def tools_of(only=""):
     """`"tool"` を宣言している MOD。`discover()` が唯一の出所（§1.3）。"""
     found = ml.discover()
     rows = []
-    for name in found.get("order") or sorted(found.get("manifests") or {}):
+    # 無効にした MOD・伏せた MOD の道具も撮る（`order` は今読み込む MOD だけ）
+    for name in found.get("listed") or found.get("order") or sorted(found.get("manifests") or {}):
         manifest = (found.get("manifests") or {}).get(name) or {}
         tool = manifest.get("tool") or {}
         if not tool.get("entry"):

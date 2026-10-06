@@ -360,9 +360,11 @@ def apply(ctx):
                 if target_id is not None else None
             if SHOW and area is not None:
                 name = getattr(area, "name", None) or ""
-                if isinstance(choice_text, str) and name \
-                        and choice_text == state["labels"].get(str(target_id)) \
-                        and choice_text != name:
+                # ロードで戻った一覧はセーブの文言のままで、控え（`labels`）は起動し直すと空になる。
+                # この spec でゲームが書く文言は土地の名前そのものなので、名前を含む別の文字列は自分の帯付きとみなす
+                if isinstance(choice_text, str) and name and choice_text != name \
+                        and (choice_text == state["labels"].get(str(target_id))
+                             or name in choice_text):
                     write("choice text {!r} -> {!r} (our label, restored)".format(
                         choice_text, name))
                     choice_text = name
@@ -415,7 +417,10 @@ def apply(ctx):
     empty = band_text(band_values([], 1))
     guess = band_text(estimate_values("8", 1))
     survives = fmt("{name}と{typo}", name="砦")
-    if ranged == "21〜30" and single == "8" and empty == (BAND_UNKNOWN or None) \
+    # 期待値も設定の表記から組む（固定の文字列で比べると、帯の表記を変えた人に毎回 ERROR が出た）
+    if ranged == fmt(BAND, lv_min=21, lv_max=30, min=20, max=29, count=3) \
+            and single == fmt(BAND_SINGLE, lv_min=8, lv_max=8, min=7, max=7, count=1) \
+            and empty == (BAND_UNKNOWN or None) \
             and guess == fmt(BAND_ESTIMATE, lv_min=68, lv_max=77, min=67, max=76,
                              count=0) \
             and survives == "砦と{typo}":

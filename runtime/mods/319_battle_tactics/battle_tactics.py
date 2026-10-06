@@ -739,10 +739,13 @@ def apply(ctx):
         """`holder` にいま乗っている倍率（与える側, 受ける側）。"""
         out_mult, in_mult = 1.0, 1.0
         owner = recipe_owner(app, holder)
-        if owner is None:
+        statuses = status_dict(holder)
+        if owner is None or statuses is None:
             return out_mult, in_mult
-        for (target, _status), recipe in state["recipes"].items():
-            if target != owner:
+        for (target, status_name), recipe in state["recipes"].items():
+            # 状態異常が持ち主にもう無い帳簿は掛けない（帳簿を落とすのは次の期限の減算なので、
+            # 見ないと期限0で消えた上げ下げが次の番まで、味方なら次の戦闘まで効き続けた）
+            if target != owner or status_name not in statuses:
                 continue
             out_mult *= recipe.get("out_mult", 1.0)
             in_mult *= recipe.get("in_mult", 1.0)

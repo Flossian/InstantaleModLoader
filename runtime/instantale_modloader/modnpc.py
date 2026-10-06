@@ -948,6 +948,14 @@ def _place(app, npc_id, area_id, facility_id, *, owner, listed, world, write,
     2回書き込み、間で落ちると控えに `place=None` が残る。
     """
     npc_id = str(npc_id)
+    # 置いたままもう一度置かれた。別の場所なら前の置き場所（名簿・主・`.location`）を先に戻す。
+    # 同じ場所なら元の主と元の居場所の控えを引き継ぐ（取り直すと自分を「元の主」に控え、
+    # `unplace` で主が戻らなかった）。
+    previous = _spot_of(_record(npc_id)["placed"]) if _record(npc_id).get("placed") else None
+    again = previous is not None and (str(previous[0]), str(previous[1])) == (str(area_id), str(facility_id))
+    if previous is not None and not again:
+        _unplace(app, npc_id, world=world, write=None, persist=False)
+    kept_was_at = _record(npc_id).get("was_at") if again else None
     areas = ui.areas_of_world(world) if world is not None else ui.world_areas(app)
     area = areas.get(str(area_id))
     facility, node = None, None
@@ -976,8 +984,9 @@ def _place(app, npc_id, area_id, facility_id, *, owner, listed, world, write,
         # `.location` を据えない＝「会話する」の一覧に出ない（主にはなる）。
         character = None
     if character is not None:
-        was_at = {name: getattr(character, name, None)
-                  for name in ("location", "current_node", "current_area")}
+        was_at = kept_was_at if isinstance(kept_was_at, dict) else {
+            name: getattr(character, name, None)
+            for name in ("location", "current_node", "current_area")}
         for name, value in (("location", facility), ("current_node", node),
                             ("current_area", area)):
             try:
@@ -987,6 +996,8 @@ def _place(app, npc_id, area_id, facility_id, *, owner, listed, world, write,
     owner_was = None
     if owner:
         owner_was = getattr(facility, "owner", None)
+        if again and previous[3] and str(owner_was) == npc_id:
+            owner_was = previous[2]         # 置き直し。自分を「元の主」にしない
         try:
             facility.owner = npc_id
         except Exception as exc:

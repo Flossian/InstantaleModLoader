@@ -59,6 +59,7 @@
 import datetime
 import json
 import time
+import weakref
 
 from instantale_modloader import frames, ui
 
@@ -163,6 +164,26 @@ def apply(ctx):
             ctx.log_exc("vacation probe: cannot record the room choice")
         return result
 
+    # マネージャの引数の控え。ゲームの実体に属性を足さない（読み取りだけの約束。`231_` と同じ形）。
+    inits = weakref.WeakKeyDictionary()
+    inits_by_id = {}
+
+    def remember_init(manager, init_args):
+        try:
+            inits[manager] = init_args
+        except TypeError:
+            # 弱参照を持てない型。最後の数件だけ id で控える。
+            inits_by_id[id(manager)] = init_args
+            while len(inits_by_id) > 8:
+                inits_by_id.pop(next(iter(inits_by_id)))
+
+    def init_args_of(manager):
+        try:
+            found = inits.get(manager)
+        except TypeError:
+            found = None
+        return found if found is not None else inits_by_id.get(id(manager))
+
     # ------------------------------------------------------------ 各段の窓
     def install_windows(cls_name):
         @ctx.wrap("__main__:{}.__init__".format(cls_name), required=False,
@@ -172,7 +193,7 @@ def apply(ctx):
             try:
                 # 引数の並びを決め打ちしない（`209_` と同じ受け方）。
                 # app を除いた位置引数をそのまま控える。
-                self._probe_vacation = [frames.repr_value(a) for a in args[1:]]
+                remember_init(self, [frames.repr_value(a) for a in args[1:]])
             except Exception:
                 pass
             return result
@@ -196,7 +217,7 @@ def apply(ctx):
                 write("-" * 72)
                 write("{}.execute: choice={!r} init_args={} gold={}".format(
                     cls_name, choice_text,
-                    getattr(self, "_probe_vacation", None), gold_before))
+                    init_args_of(self), gold_before))
             except Exception:
                 ctx.log_exc("vacation probe: cannot open the window")
             try:
@@ -213,7 +234,7 @@ def apply(ctx):
                         "phase": "execute",
                         "cls": cls_name,
                         "choice_text": choice_text,
-                        "init_args": getattr(self, "_probe_vacation", None),
+                        "init_args": init_args_of(self),
                         "gold_before": gold_before,
                         "gold_after": gold_after,
                         "gold_moved": (gold_before - gold_after)

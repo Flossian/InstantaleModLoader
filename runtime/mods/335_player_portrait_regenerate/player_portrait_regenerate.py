@@ -9,15 +9,12 @@
 """
 
 import hashlib
-import io
-import json
-import os
 import re
 import sys
 import threading
 import time
 
-from instantale_modloader import frames, jobs, llm, saves, state, ui
+from instantale_modloader import frames, imagegen, jobs, llm, state, ui
 
 
 CREATE_LOOK_MODULE = "scripts.llm.llm_manager_character_create"
@@ -27,15 +24,10 @@ RUNTIME_ATTR = "_instantale_335_player_portrait_runtime"
 STORE_DIRNAME = "player_portrait"
 LOG_BASENAME = "player_portrait.log"
 
-# 人物の絵を描く関数は画像生成の方式ごとに別のモジュールに居る（GAME.md §2.33）。
-# ゲームは config.json で選ばれた1つだけを import する。
-FAMILIES = {
-    "sdcpp_cuda": "sdcppcuda",
-    "sdcpp_vulkan": "sdcppvulkan",
-    "sdcpp_cpu": "sdcppcpu",
-    "diffusers_openvino": "diffusers_openvino",
-}
-MODULE_FORMAT = "image_generation.{}.image_generation_creature"
+# 人物の絵を描く関数は画像生成の方式ごとに別のモジュールに居るが、どの方式かはローダの
+# `imagegen` が吸収する（GAME.md §2.33）。
+FAMILIES = imagegen.FAMILIES
+MODULE_FORMAT = imagegen.CREATURE_FORMAT
 FUNC = "generate_character_image"
 
 # SD1.5 へ渡す1要素の形。英小文字・数字・空白・ハイフン・アポストロフィだけ。
@@ -152,22 +144,13 @@ def _text(obj, name):
     return value.strip() if isinstance(value, str) else ""
 
 
-def config_backend(path=None):
-    """ゲームが選んでいる画像生成の方式（`sd_backend.name`）。読めなければ None。"""
-    path = path or os.path.join(saves.data_dir(), "config.json")
-    try:
-        with io.open(path, encoding="utf-8") as fh:
-            data = json.load(fh)
-        return data["ai_setting"]["local_model_setting"]["sd_backend"]["name"]
-    except Exception:
-        return None
+#: ゲームが選んでいる画像生成の方式。読めなければ None（ローダの `imagegen.backend`）。
+config_backend = imagegen.backend
 
 
 def module_names(backend):
     """人物の絵を描くモジュールの名前。方式が分からなければ4つとも。"""
-    family = FAMILIES.get(backend)
-    families = [family] if family else list(FAMILIES.values())
-    return [MODULE_FORMAT.format(family) for family in families]
+    return imagegen.creature_modules(backend)
 
 
 def _generator(names):

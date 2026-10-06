@@ -721,12 +721,12 @@ def apply(ctx):
             # 既に世界に居る人。
             # 重複だけを、しかも許しがあるときだけ直す。
             wanted = found is not None and FIX_EXISTING
-            why = "already in the world"
         else:
             # これから生まれる人。
             # `ALWAYS_RENAME` なら重複していなくても付け直す。
             wanted = ALWAYS_RENAME or found is not None
-            why = "no free name in the roster"
+        # 直そうとして名簿が尽きたのか、既にいる人なので直さなかったのか
+        why = "no free name in the roster" if wanted else "already in the world"
 
         fresh = rename_to(name, cid, context) if wanted else None
         if fresh is None:
@@ -736,9 +736,7 @@ def apply(ctx):
             if found is not None and mark not in seen:
                 seen.add(mark)
                 write("{}: id={!r} {!r} clashes with id={!r} {!r} -- left as it is ({})"
-                      .format(where, cid, name, found[0], found[1],
-                              why if wanted or loading["depth"] > 0
-                              else "no free name in the roster"))
+                      .format(where, cid, name, found[0], found[1], why))
             return None
 
         remember(cid, canonical(fresh), fresh)
@@ -800,9 +798,10 @@ def apply(ctx):
                 if str(cid) in known or not isinstance(entry, dict):
                     continue
                 raw = entry.get("name")
-                key = canonical(raw) if isinstance(raw, str) else ()
-                if key:
-                    remember(cid, key, raw)
+                if isinstance(raw, str):
+                    # 突き合わせにも通す（控えるだけだと、片方が未組み立ての既存の重複を記録も改名もしなかった。
+                    # 組み立てた後は `resolve` の番人が素通しにする）。
+                    resolve(cid, raw, where, app, entry)
         return fixed
 
     # -------------------------------------------------- 本命: 素データを直す

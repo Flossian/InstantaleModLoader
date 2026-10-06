@@ -632,6 +632,8 @@ def apply(ctx):
 
     def on_import_seen(name, spec):
         """spec を作らせた直後（本体はまだ走っていない）。"""
+        if ctx.superseded():
+            return          # 切って注入し直した後の古い観測者は動かない
         try:
             record({"at": now(), "event": "import_seen", "module": name,
                     "found": spec is not None,
@@ -642,6 +644,8 @@ def apply(ctx):
 
     def on_import_done(name, module):
         """モジュールの本体が走り終えた直後。**MOD が値を差し替えられる時点**。"""
+        if ctx.superseded():
+            return          # 切って注入し直した後に、古い閉包が包みを当て直さない
         try:
             pipe = frames.attr(module, "txt2img_pipe", None)
             built = pipe is not None

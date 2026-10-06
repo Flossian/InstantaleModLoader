@@ -489,11 +489,12 @@ def apply(ctx):
         key = key[:INFER_TEXT_MAX]
         if key in state["inferred"]:
             return state["inferred"][key]
+        # 控えの鍵は行動文だけ、問う中身は行動文と think（行動文だけでは 32%、think を足して 56%）
         found = None
         if FREE_ACTION_MODE == "llm":
-            found = ask_llm(key)
+            found = ask_llm(text[:INFER_TEXT_MAX])
         if found is None:
-            found = infer_by_keywords(key)
+            found = infer_by_keywords(text)
         if len(state["inferred"]) >= INFER_CACHE_MAX:
             state["inferred"].clear()
         state["inferred"][key] = found
@@ -591,8 +592,11 @@ def apply(ctx):
                 # 加点が付かない回も残す。
                 # 既定は底上げ0で、能力値が基準以下だと何も起きない。
                 # そのとき記録まで空だと「MOD が動いていない」のと見分けが付かない。
-                write("補正なし: {}={} (基準 {} 以下) 確率 {}% のまま".format(
-                    attribute, score, PIVOT, percent_of(credibility)))
+                write("補正なし: {}={} ({}) 確率 {}% のまま".format(
+                    attribute, score,
+                    "上限で頭打ち" if isinstance(score, (int, float)) and score > PIVOT
+                    else "基準 {} 以下".format(PIVOT),
+                    percent_of(credibility)))
                 return result
 
             installed = install(result_type, value, credibility)

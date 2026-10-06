@@ -489,6 +489,8 @@ def apply(ctx):
     casts = shelf["casts"].rebind(ctx, write)
 
     screen = ui.Screen(ctx, write, tag="city case", mark=MARK)
+    # MOD のボタンではゲームは保存しない。事件の控え・台帳とセーブ（NPC・報酬）を揃えるため、自分で保存を呼ぶ
+    save_soon = ui.saver(ctx, write, "city case")
     # `accusing` は告発の画面に居るか。
     # `accused` が None なら相手を選ぶ段、入っていれば根拠を選ぶ段。
     # `picks` は根拠として挙げた材料の id（`case.evidence` の id）。
@@ -665,9 +667,10 @@ def apply(ctx):
         事件の最中に人が消えると何が起きたか分からなくなる。
         """
         name = game.world_name(app)
-        if not name or state["swept"] == name:
+        key = key_of(app)       # 台帳と事件の控えは周回の鍵で分かれているので、掃除済みの印も周回で持つ
+        if not name or state["swept"] == key:
             return
-        state["swept"] = name
+        state["swept"] = key
         found = current(app)
         active = set(case_mod.suspect_ids(found)) if case_mod.is_active(found) else set()
 
@@ -739,6 +742,11 @@ def apply(ctx):
         return whereabouts().get("alibi_fact")
 
     # ------------------------------------------------------------ 事件を組む
+    def world_names(app):
+        """世界に居る人物の名前（人名は世界で1つ。立ち絵は名前のフォルダで使い回される）。"""
+        return {data.get("name") for data in (game.save_npcs(app) or {}).values()
+                if isinstance(data, dict) and data.get("name")}
+
     def build_cast(app, area):
         """事件ごとに顔ぶれと特徴を組み直す。
 
@@ -807,7 +815,9 @@ def apply(ctx):
         # 2本あれば2段階で絞れる。
         least = min(2, wanted - 1)
         draw_incident(app)
-        pool = book_of(app).get("cast") or []
+        # 人名は世界で1つ（立ち絵は名前のフォルダで使い回される）。世界に居る名前は使わない
+        taken = world_names(app)
+        pool = [p for p in (book_of(app).get("cast") or []) if p.get("name") not in taken]
         drawn = draw_axes(app)
         for _attempt in range(CAST_ATTEMPTS):
             picks = _RNG.sample(list(pool), min(wanted, len(pool)))
@@ -1256,6 +1266,11 @@ def apply(ctx):
             write("[{}] the response did not carry a usable cast; using the "
                   "built-in one".format(stamp()))
             return None
+        clash = [p["name"] for p in written if p.get("name") in world_names(app)]
+        if clash:
+            write("[{}] the response reused name(s) already in this world {}; using the "
+                  "built-in cast".format(stamp(), clash))
+            return None
         material = {"people": written,
                     "premise": writer.read_premise(payload),
                     "facts": writer.read_facts(payload, orders, write=write)}
@@ -1355,10 +1370,14 @@ def apply(ctx):
                       stamp(), len(drop), [m["name"] for m in drop]))
             retire(app, [m["npc_id"] for m in drop], "not part of the case")
 
+        # 犯人はキャストの先頭（`culprit_index = 0`）。並びのまま控えると、容疑者の一覧・
+        # 告発の相手・言い分の先頭が毎回犯人になり、一覧を見るだけで割れた
+        listed = list(keep)
+        _RNG.shuffle(listed)
         found = case_mod.build(
             game.world_name(app), area, culprit_id,
             [{"id": m["npc_id"], "tell": m.get("tell", ""),
-              "claim": m.get("claim", "")} for m in keep],
+              "claim": m.get("claim", "")} for m in listed],
             clues, REWARD_GOLD, incident=incident())
         cases.save(key_of(app), found)
         write("\n" + "=" * 72)
@@ -1390,6 +1409,7 @@ def apply(ctx):
                    or incident().get("premise") or OPENED_TEXT)
         say_roster(app, found)
         say_lead(app, found, first=True)
+        save_soon(app, "case opened")
 
     def cast_for(app, area, specs):
         """事件のキャストを作る。必ず生成する。
@@ -1678,6 +1698,7 @@ def apply(ctx):
         if gone:
             screen.say(app, DEPARTED_TEXT)
         drop(app, found, "the player gave up on it")
+        save_soon(app, "case abandoned")
         repaint(app, "case abandoned")
 
     def leave_accusation():
@@ -1892,6 +1913,7 @@ def apply(ctx):
         gone = retire(app, leaving, "the case is closed")
         if gone:
             screen.say(app, DEPARTED_TEXT)
+        save_soon(app, "case closed")
 
     # ------------------------------------------------------------ ボタン
     def is_facility_screen(buttons):

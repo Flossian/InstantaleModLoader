@@ -260,11 +260,15 @@ class InstantaleApp:
         self.conversations = []
         self.is_button_enabled = True
         self.is_adding_text = False
+        self.saves = 0              # MOD のボタンの後に呼ばれた保存（事件の開始・決着・打ち切り）
         self.is_popup_window_opened = False
         for flag in ("in_battle", "in_boss_battle", "in_colosseum_battle",
                      "in_conversation", "in_free_input",
                      "in_action_in_conversation", "in_shopping"):
             setattr(self, flag, False)
+
+    def save_game(self):
+        self.saves += 1
 
     def add_text(self, context):
         self.texts.append(context)
@@ -1146,7 +1150,10 @@ culprit = found["culprit"]
 cast_ids = list(case_mod.suspect_ids(found))
 learn_all(ctx, app, case_of(ctx))     # 手がかり2つでは絞れない組み立てもある（全部集めて初めて1人に絞れる）
 gold_before = app.player.gold
+saves_before = app.saves
 accuse(ctx, app, culprit)
+check("決着の後にゲームの保存を呼ぶ（MOD のボタンではゲームは保存しない）",
+      app.saves > saves_before, (saves_before, app.saves))
 found = case_of(ctx)
 check("決着した", found["stage"] == case_mod.CLOSED, found["stage"])
 # **決着したらキャストは世界から消える**（印を立てて残すのではなく）。

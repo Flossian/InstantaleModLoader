@@ -197,8 +197,17 @@ PAY_LABEL_NOW = "お金を支払い委託する（{price}G）"
 BACK_LABEL = "やめる"
 
 #: セーブから復元された残骸を見分けるための、こちらのラベルの前方一致（`prune_stale`）。
-#: 汎用語（「やめる」）は入れない。
+#: 汎用語（「やめる」）は入れない。既定の文言のもの（後方互換で残す）。使うのは `our_label_prefixes()`。
 OUR_LABEL_PREFIXES = (SEARCH_LABEL, "お金を支払い委託する（", "自ら切り拓く（")
+
+
+def our_label_prefixes():
+    """今の設定の文言から組んだ前方一致（読み込みの時点に固めると、文言を設定で変えた後の残骸を掃除できない）。
+
+    `{` より前を頭にする。頭が短すぎるもの（空や1字）は、ほかのボタンまで巻き込むので使わない。
+    """
+    heads = [SEARCH_LABEL] + [str(label).split("{")[0] for label in (PAY_LABEL, PAY_LABEL_NOW, DUNGEON_LABEL)]
+    return tuple(dict.fromkeys(head for head in heads if isinstance(head, str) and len(head) >= 2))
 
 #: 行き先一覧の1行の spec のクラス名と、`args` の並び `[target_area_id]`
 #: （`133_` の実測。GAME.md §2.18）。
@@ -486,10 +495,13 @@ def apply(ctx):
         record = bucket.get("pending")
         if not isinstance(record, dict):
             return None
-        if time.time() - float(record.get("at") or 0) > PENDING_TTL:
+        stale = time.time() - float(record.get("at") or 0) > PENDING_TTL
+        if stale and record.get("stage") == "armed" \
+                and str(ui.current_quest_id(app)) == str(record.get("quest_id")):
+            stale = False       # ゲームがまだその依頼を進めている（ダンジョンの途中で長く中断した）
+        if stale:
             write("pending: dropped a stale record ({})".format(describe_pending(record)))
-            bucket["pending"] = None
-            worlds.save(key)
+            drop_pending(app, "stale record")      # 依頼概要に足した一文も消す
             return None
         if record.get("stage") == "moving" and \
                 time.time() - float(record.get("moving_at") or 0) > MOVE_TIMEOUT:
@@ -664,11 +676,22 @@ def apply(ctx):
         used = int(ISOLATED_HOPS) if isolated else int(hops)
         origin_level = level_of(app, origin)
         target_level = level_of(app, target)
+        # 抜き出しの難易度（`between`）は乱数なので、同じ日の同じ道は1回だけ引いて使い回す
+        # （一覧・手段の画面・受注で毎回引くと、「難易度 9」の道を選ぶとボタンは 21、依頼は 27 になった）
+        rolls = state.setdefault("difficulty_rolls", {})
+        roll_key = (worlds.playthrough(app), ui.area_id_of(origin), ui.area_id_of(target),
+                    origin_level, target_level, used, ui.game_day(app),
+                    DIFFICULTY_MODE, DIFFICULTY_PER_HOP, DIFFICULTY_OFFSET, MIN_DIFFICULTY)
+        difficulty = rolls.get(roll_key)
+        if difficulty is None:
+            if len(rolls) > 256:
+                rolls.clear()
+            difficulty = rolls[roll_key] = difficulty_for(origin_level, target_level, used)
         return {
             "hops": used,
             "isolated": isolated,
             "price": price_for(used),
-            "difficulty": difficulty_for(origin_level, target_level, used),
+            "difficulty": difficulty,
             "origin_level": origin_level,
             "target_level": target_level,
         }
@@ -1148,7 +1171,7 @@ def apply(ctx):
             return False
         write("arrived: {!r} reached; the move took {} day(s) (set to {})".format(
             record.get("target_name"), record.get("days_spent"), ARRIVAL_DAYS))
-        if not record.get("days_spent"):
+        if not record.get("days_noted") and not record.get("days_spent"):
             write("WARN arrived: elapse_days was never seen; "
                   "the {}-day setting did not apply to this build".format(ARRIVAL_DAYS))
         drop_pending(app, "arrived", clear_note=False)
@@ -1284,7 +1307,7 @@ def apply(ctx):
                 write("WARN list: the game did not list the opened road to {!r}; "
                       "added the button myself (the game reads connections from "
                       "somewhere other than Area.connections)".format(other))
-            screen.prune_stale(buttons, OUR_LABEL_PREFIXES)
+            screen.prune_stale(buttons, our_label_prefixes())
             if any(screen.mark_of(entry) for entry in buttons):
                 return result
             if not candidates_of(app, origin):
@@ -1477,7 +1500,8 @@ def apply(ctx):
         record = pending_of(app, "moving")
         if record is None:
             return None
-        if int(record.get("days_spent") or 0) > 0:
+        if record.get("days_noted") or int(record.get("days_spent") or 0) > 0:
+            # この道ではもう渡している（0 日を渡した回も含む。日数だけでは「まだ」と見分けられない）
             write("days: {} left alone (the road to {!r} already took {} day(s))"
                   .format(days, record.get("target_name"), record.get("days_spent")))
             return None
@@ -1487,9 +1511,9 @@ def apply(ctx):
     def days_note(app, days, granted):
         """道が実際に取った日数を控える（到着の検算が読む）。"""
         record = pending_of(app, "moving")
-        if record is None or int(record.get("days_spent") or 0) > 0:
+        if record is None or record.get("days_noted") or int(record.get("days_spent") or 0) > 0:
             return
-        advance(app, "moving", days_spent=max(0, int(granted)))
+        advance(app, "moving", days_spent=max(0, int(granted)), days_noted=True)
         write("road: the road to {!r} takes {} day(s)".format(
             record.get("target_name"), granted))
 

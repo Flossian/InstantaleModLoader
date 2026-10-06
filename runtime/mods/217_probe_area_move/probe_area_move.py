@@ -48,6 +48,7 @@ GAME.md §2.18 の実測には穴が残っている（すべて `徒歩` 側の1
 import datetime
 import json
 import time
+import weakref
 
 from instantale_modloader import frames, ui
 
@@ -128,14 +129,34 @@ def apply(ctx):
             ctx.log_exc("area move probe: cannot record the restriction")
         return orig(self, *args, **kwargs)
 
+    # マネージャの引数の控え。ゲームの実体に属性を足さない（読み取りだけの約束。`231_` と同じ形）。
+    inits = weakref.WeakKeyDictionary()
+    inits_by_id = {}
+
+    def remember_init(manager, init_args):
+        try:
+            inits[manager] = init_args
+        except TypeError:
+            # 弱参照を持てない型。最後の数件だけ id で控える。
+            inits_by_id[id(manager)] = init_args
+            while len(inits_by_id) > 8:
+                inits_by_id.pop(next(iter(inits_by_id)))
+
+    def init_args_of(manager):
+        try:
+            found = inits.get(manager)
+        except TypeError:
+            found = None
+        return found if found is not None else inits_by_id.get(id(manager))
+
     # ------------------------------------------------------------ 移動そのもの
     @ctx.wrap("__main__:AreaMoveManager.__init__", required=False, safe=True)
     def move_init(orig, self, *args, **kwargs):
         result = orig(self, *args, **kwargs)
         try:
-            self._probe_area_move = {
+            remember_init(self, {
                 "target_id": str(frames.arg(args, kwargs, "target_area_id", 1)),
-                "mode": str(frames.arg(args, kwargs, "mode", 2))}
+                "mode": str(frames.arg(args, kwargs, "mode", 2))})
         except Exception:
             pass
         return result
@@ -152,7 +173,7 @@ def apply(ctx):
         started = time.monotonic()
         try:
             app = getattr(self, "app", None) or ui.find_app()
-            info = getattr(self, "_probe_area_move", None) or {}
+            info = init_args_of(self) or {}
             choice_text = frames.arg(args, kwargs, "choice_text", 0)
             gold_before = ui.gold_of(app)
             origin = area_brief(app)

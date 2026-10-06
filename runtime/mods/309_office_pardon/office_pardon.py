@@ -234,6 +234,7 @@ def apply(ctx):
         if any(screen.mark_of(entry) for entry in buttons):
             return False        # 既に在る（塗り直しで増やさない）
         if not at_office(app):
+            state["announced"] = None   # 役場を出たら、次に入ったときに知らせ直す
             return False
         blocked = busy(app)
         if blocked:

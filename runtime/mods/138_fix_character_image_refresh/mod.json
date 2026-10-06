@@ -10,6 +10,6 @@
     "en": "The game overwrites a character's portrait and face images at the same file paths, and the screen keeps showing the cached old pictures. After regenerating an NPC the party panel still shows the old face until the game is reloaded. Once a character's images are drawn, every image on screen that points to that character's folder (the character sheet portrait, the conversation portrait and the party panel face) is reloaded",
     "ja": "ゲームは人物の立ち絵と顔を同じファイルへ上書きし、画面はキャッシュの古い絵を出し続ける。NPC を再生成しても、パーティー欄の顔はゲームを読み込み直すまで古いまま残る。人物の絵を描き終えたら、その人物のフォルダを指している画面上の画像（人物欄の立ち絵・会話の立ち絵・パーティー欄の顔）をすべて読み直す"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian"
 }

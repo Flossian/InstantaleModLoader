@@ -50,7 +50,7 @@
   **読むだけ**で使う（`WorldStore(own=False)`。TECH.md §3.2.3）。
   いまの接続で BFS し直さないのは、開いた道自体が辺になっていて必ず「隣」に
   なってしまうため。`325_` が無ければ挟む街の数は常に 0 ＝ 素の移動は不変。
-  距離補正で日数が**増える**方向（90 → 270）は、こちらが決める側に回った回に効く。
+  距離補正で日数が**増える**方向（上限を上げたときの 90 → 270）は、こちらが決める側に回った回に効く。
   他の MOD が起こした移動（`307_` の危険な道）では決める側にならないので、
   そこでは頭打ちだけになる
 
@@ -408,9 +408,11 @@ def apply(ctx):
         """
         origin = ui.area_id_of(ui.current_area(app)) if app is not None else ""
         hops = road_hops(app, origin, target_area_id) if target_area_id else 0
+        # 0 日も答えの1つ（設定の下限は 0）。`or` で素の値へ倒すと、0 日の移動を素の日数と答えた
+        walk, coach = days_limit("walk", hops), days_limit("coach", hops)
         return {
-            "walk_days": days_limit("walk", hops) or GAME_WALK_DAYS,
-            "coach_days": days_limit("coach", hops) or GAME_COACH_DAYS,
+            "walk_days": GAME_WALK_DAYS if walk is None else walk,
+            "coach_days": GAME_COACH_DAYS if coach is None else coach,
             "coach_fare": fare_for(hops),
         }
 

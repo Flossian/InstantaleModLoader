@@ -189,7 +189,7 @@ LIST_MODE = "game"
 # None のままなら "mod" を指定しても "game" に落ちる。
 QUEST_TYPE_FOR_CHOICE = None
 
-# 一覧に並べる既存依頼の上限。
+# 一覧に並べる既存依頼の上限。読むのは LIST_MODE が "mod" のときだけなので、設定画面には出さない。
 # 実データでは1つの集落につき3件なので通常これに当たることは無い。
 # ページ送りの挙動を実測できていない間は、1ページへ収まる範囲に抑えておく。
 MAX_LISTED = 8
@@ -298,6 +298,8 @@ def apply(ctx):
         # 依頼が0件だと依頼ボタンの有無では掲示板だと判定できないので、印で持つ。
         # 何か押されたら降りる（押せばその画面からは離れる）。
         "board_open": False,
+        # 直前の押下が依頼ボタンだったか。次の画面（受ける / やめとく）の押下では絞り込みを残す。
+        "quest_pressed": False,
         # 会話への注入の結末。同じ結末が続く間はログに書かない。
         # 会話の LLM は1ターンに何度も回るので、
         # 毎回書くとこのログが会話で埋まる（`311_` の `note_inject` と同じ手）。
@@ -787,7 +789,7 @@ def apply(ctx):
                                       say(app, "（今は依頼の話を切り出せない）")),
             poll=END_POLL, timeout=END_TIMEOUT)
 
-    def open_quest_board(app, choice_text=OFFER_LABEL):
+    def open_quest_board(app, choice_text=OFFER_LABEL, client=None):
         """「依頼を受ける」が押されたとき。ゲーム自身の掲示板を開く。
 
         自前で `PhaseSpec('QuestChoiceManager', [quest_type, id])` を並べる実装はゲームを落とした（冒頭の
@@ -809,8 +811,13 @@ def apply(ctx):
             # 待機表示を出したまま繋いで隠す。
             # 出すのはゲーム自身と同じ点のアニメーションなので、
             # 割り込みが挟まったようには見えない。
+            # 絞り込む相手は閉じる前に決める。閉じた後の控えは、書き起こしが空のときや
+            # 控えを残さない設定（KEEP_TRANSCRIPT_MOVES=0）では前の会話の相手か空になる
+            partner = talking_partner(app)
+            client = ((partner, frames.short(getattr(npc_of(app, partner), "name", ""), 40))
+                      if partner else None)
             show_busy(app)
-            end_conversation_then(app, lambda a: open_quest_board(a, choice_text))
+            end_conversation_then(app, lambda a: open_quest_board(a, choice_text, client))
             return
 
         if LIST_MODE == "mod" and QUEST_TYPE_FOR_CHOICE is None:
@@ -830,7 +837,10 @@ def apply(ctx):
         # ゲーム本来の「クエスト掲示板」から開いたときは None のままなので、
         # そちらは全件のまま何も変わらない。
         if FILTER_BY_NPC:
-            _t, filter_id, filter_name = current_talk(app)
+            if client is not None:
+                filter_id, filter_name = client
+            else:
+                _t, filter_id, filter_name = current_talk(app)
             if filter_id or filter_name:
                 state["filter_npc"] = {"npc_id": filter_id, "npc_name": filter_name}
                 write("open board: filtering for {!r} (id={!r})".format(
@@ -1492,11 +1502,21 @@ def apply(ctx):
         # 掲示板の印はここで降ろす（受注画面まで間引きを持ち込まないため）。
         state["board_open"] = False
         action = entry.get(MARK) if isinstance(entry, dict) else None
+        after_quest = state["quest_pressed"]
+        state["quest_pressed"] = False
         if action is None:
             # ゲーム本来の「クエスト掲示板」が押されたら絞り込みを解く。
             # そちらは全件が出るべきで、こちらの都合を持ち込まない。
             if spec_cls_name(entry) == "DisplayQuestChoice" and state["filter_npc"]:
                 write("filter cleared: the game's own quest board was opened")
+                state["filter_npc"] = None
+            elif quest_id_of_button(entry) is not None:
+                # 一覧の依頼を押した。次の受注画面の押下までは同じ一覧の中に居る。
+                state["quest_pressed"] = True
+            elif not after_quest and state["filter_npc"]:
+                # 一覧の外（「やめる」で戻った先など）の押下。残すと、後で開いた別の掲示板
+                # （`336_` の裏の依頼掲示板など）まで会話の相手で絞られ、「やめる」だけになる。
+                write("filter cleared: pressed outside the board")
                 state["filter_npc"] = None
         return False
 

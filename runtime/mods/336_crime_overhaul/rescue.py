@@ -101,6 +101,18 @@ def install(env):
             value = worlds.load(worlds.playthrough(app)).get("rescue")
         return dict(value) if isinstance(value, dict) else None
 
+    def is_ours(app, rescue):
+        """いま進めている依頼がこの脱出か。
+
+        依頼の id はゲームオーバーの後に同じ名前で作り直した周回で使い回されうるので、題も見る
+        （全滅して控えが残ったまま、別の依頼に脱出の帰還が当たらないように）。
+        """
+        if rescue is None or str(ui.current_quest_id(app)) != str(rescue.get("quest")):
+            return False
+        title = rescue.get("title")
+        return not title or ui.quest_value(
+            ui.quest_of(app, str(rescue.get("quest"))), "quest_title", "") == title
+
     def save_rescue(app, value):
         playthrough = worlds.playthrough(app)
         with worlds.lock:
@@ -211,7 +223,8 @@ def install(env):
             screen.apply_buttons(app, None, "rescue")
             return
         quest_id = added[-1]
-        save_rescue(app, {"quest": quest_id, "area": area_id, "name": name})
+        title = ui.quest_value(ui.quest_of(app, quest_id), "quest_title", "")
+        save_rescue(app, {"quest": quest_id, "area": area_id, "name": name, "title": title})
         write("rescue: {} (affinity {}) leads the escape; quest {} {!r} difficulty {}".format(
             name, affinity, quest_id, ui.quest_value(ui.quest_of(app, quest_id), "quest_title", ""),
             difficulty))
@@ -242,7 +255,7 @@ def install(env):
     def quest_end(orig, self, *args, **kwargs):
         app = getattr(self, "app", None) or ui.find_app()
         rescue = load_rescue(app) if app is not None else None
-        if rescue is None or str(ui.current_quest_id(app)) != str(rescue.get("quest")):
+        if not is_ours(app, rescue):
             return orig(self, *args, **kwargs)
         before_gold = ui.gold_of(app)
         ending["on"] = True
@@ -282,7 +295,7 @@ def install(env):
     def quest_retire(orig, self, *args, **kwargs):
         app = getattr(self, "app", None) or ui.find_app()
         rescue = load_rescue(app) if app is not None else None
-        if rescue is None or str(ui.current_quest_id(app)) != str(rescue.get("quest")):
+        if not is_ours(app, rescue):
             return orig(self, *args, **kwargs)
         result = orig(self, *args, **kwargs)
         save_rescue(app, dict(rescue, retired=True))

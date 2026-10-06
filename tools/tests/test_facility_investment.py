@@ -1287,16 +1287,31 @@ plain = app.world_dict["areas"]["2"]["nodes"]["10"]["facilities"][record["facili
 check("写しの config は実体と同じ辞書", plain["config"] is arena.config)
 check("写しは8項目・同じ並び", list(plain) == list(modfacility.FACILITY_FIELDS), list(plain))
 check("写しの主は主人", plain.get("owner") == record.get("keeper"))
-# 版12 までの主人（警戒心がある）は、当て直しで好意を持つ。
+# 建てた主人は引き上げ済みの印を持つ。遊んで下がった好感度は当て直しで戻さない。
+check("新築の帳簿に引き上げ済みの印", record.get(module.WARMED_KEY) is True, record)
 arena_keeper = world.characters.get(record.get("keeper"))
 arena_keeper.relationship = {"player": {"affinity": 0, "affinity_text": "警戒心がある",
                                         "relationship": ["初対面"], "conversation_count": 0}}
 app.refresh_choice_buttons(reset_page=True)
 CLOCK.settle()
+check("下がった好感度は戻さない", arena_keeper.relationship["player"]["affinity"] == 0,
+      arena_keeper.relationship)
+# 版12 までの主人（警戒心がある・印の無い帳簿）は、当て直しで1回だけ好意を持つ。
+live = [h for buckets in getattr(sys, module.STATE_STORE_ATTR)["worlds"]._buckets.values()
+        for h in buckets.get("holdings") or [] if h.get("facility") == record.get("facility")]
+for holding in live:
+    holding.pop(module.WARMED_KEY, None)
+app.refresh_choice_buttons(reset_page=True)
+CLOCK.settle()
 check("古い主人の好感度が初期値まで上がる",
-      arena_keeper.relationship["player"]["affinity"] == cat.KEEPER_AFFINITY
+      live and arena_keeper.relationship["player"]["affinity"] == cat.KEEPER_AFFINITY
       and "出資者" in arena_keeper.relationship["player"]["relationship"],
       arena_keeper.relationship)
+arena_keeper.relationship["player"]["affinity"] = 10
+app.refresh_choice_buttons(reset_page=True)
+CLOCK.settle()
+check("引き上げは1回だけ", arena_keeper.relationship["player"]["affinity"] == 10
+      and all(h.get(module.WARMED_KEY) for h in live), arena_keeper.relationship)
 arena_keeper.relationship["player"]["affinity"] = 90
 app.refresh_choice_buttons(reset_page=True)
 CLOCK.settle()

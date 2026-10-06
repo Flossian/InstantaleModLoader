@@ -374,6 +374,10 @@ def apply(ctx):
     prices.declare(prices.INN_ROOM, room_price_for, owner=owner, write=write)
 
     # ============================================================ ボタンの表示
+    def game_label(slot, price):
+        """ゲーム自身が出す部屋のボタンの文言（`犬小屋(0G)` … `高級個室(1000G)`。通貨の表記は今のもの）。"""
+        return ui.rewrite_coins("{}({}G)".format(GAME_NAMES[slot], price))
+
     def relabel_room(entry):
         """部屋のボタン。描かれる前に `text` だけ書き直し、素の料金を対に控える。
 
@@ -400,7 +404,13 @@ def apply(ctx):
                           "(the game may have changed its rooms)".format(
                               old, quality))
                 return
-            if state["price_by_quality"].get(quality) != price:
+            # ロードで戻ったボタンは、保存した時に自分が書いた文言のまま（起動し直すと `our_labels` は空）。
+            # 素の料金は、ゲームの書式で、しかも今の設定で自分が書く文言ではないものからだけ控える
+            # （自分の文言から読むと、設定した額を素の額と取り違えて前払いの調整が狂った）。
+            conf = room_conf(slot)
+            ours_now = old == fmt(ROOM_BUTTON, name=conf["name"], price=conf["price"])
+            game_like = old == game_label(slot, price)
+            if game_like and not ours_now and state["price_by_quality"].get(quality) != price:
                 state["price_by_quality"][quality] = price
                 write("room: quality {!r} shows {}G -> {}".format(
                     quality, price, slot))
@@ -408,7 +418,12 @@ def apply(ctx):
         if slot is None:
             return
         if not (name_changed(slot) or price_changed(slot)):
-            return                          # 素のままの部屋には触らない
+            # 素のままの部屋。ロードで戻った自分の文言が残っていれば、ゲームの文言へ戻す
+            plain = game_label(slot, state["price_by_quality"].get(quality, GAME_PRICES[slot]))
+            if old != plain and ui.parse_coin(old) is not None:
+                entry["text"] = plain
+                write("label: {!r} -> {!r} ({}; back to the game's own)".format(old, plain, slot))
+            return
         conf = room_conf(slot)
         new = fmt(ROOM_BUTTON, name=conf["name"], price=conf["price"])
         if new != old:

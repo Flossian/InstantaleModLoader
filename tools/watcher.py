@@ -117,10 +117,15 @@ def inject_pid(pid: int) -> str:
     戻り値は `INJECTED` / `PENDING` / `FAILED`。
     """
     payload = injector.make_bootstrap(injector.RUNTIME_DIR, injector.OUT_DIR, injector.BOOT_LOG)
+    mark = injector.boot_log_size()
     try:
         rc = injector.inject(pid, payload)
     except Exception as exc:
         log(f"  pid {pid}: injection error: {type(exc).__name__}: {exc}")
+        return FAILED
+    if rc == 0 and injector.boot_failed_since(mark):
+        # ブートストラップは例外を握るので、PyRun_SimpleString は 0 を返す。成否はログで読む
+        log(f"  pid {pid}: the bootstrap raised; see {injector.BOOT_LOG}")
         return FAILED
     if rc == 0:
         log(f"  pid {pid}: injected, mods applied (see modloader.log)")

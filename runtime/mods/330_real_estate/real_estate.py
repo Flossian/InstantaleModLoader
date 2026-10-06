@@ -1199,6 +1199,8 @@ def apply(ctx):
         最後の1軒を失ったときだけ、開く手段が無くなるので役場へ移す。
         """
         if STORAGE_SHARED:
+            # 建物ごとに預けたまま共有へ寄せていない品を先に寄せる（寄せないと、契約ごと消えて品が無くなる）
+            gather_into_shared(app)
             others = [c for c in contracts_of(current_key(app))
                       if c is not record and not c.get("lapsed")]
             if others:

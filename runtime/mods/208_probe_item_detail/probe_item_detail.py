@@ -45,6 +45,7 @@
 
 import datetime
 import sys
+import weakref
 
 from instantale_modloader import frames
 
@@ -198,8 +199,8 @@ def apply(ctx):
     def update_content(orig, self, *args, **kwargs):
         result = orig(self, *args, **kwargs)
         try:
-            # 箱はホバーのたびに作り直されるので、
-            # 見張りもそのたびに掛け直す（同じ箱には二度掛からないよう印を持たせてある）。
+            # 箱はプロセスに1つ（VERIFICATION.md §3.11）。見張りは箱ごとに1つで、
+            # 注入し直した後は今の世代の見張りに掛け替える（`watch_opacity`）。
             watch_opacity(self)
             dump(self, frames.arg(args, kwargs, "item", 0))
         except Exception:
@@ -219,14 +220,20 @@ def apply(ctx):
     # size/pos しか触らないので、この計測に `109_` の書き込みが混ざることは無い）。
     # ------------------------------------------------------------------
     def watch_opacity(box):
-        if getattr(box, "_mod_opacity_watched", False):
-            return
+        # 掛けた見張りは箱をキーに控える。ゲームの箱に印の属性は足さない（読み取りだけの約束）。
+        # 前の世代の見張りが残っていれば外して、今の世代の見張りに掛け替える。
+        watched = state.setdefault("watched", {})
         try:
-            setattr(box, "_mod_opacity_watched", True)
-        except Exception:
+            key = weakref.ref(box)
+        except TypeError:
+            key = id(box)
+        previous = watched.get(key)
+        if previous is not None and not previous[0].superseded():
             return
 
         def on_opacity(instance, value):
+            if ctx.superseded():
+                return
             # 版3: 数えは1プロセスで共有する（版2は注入ごとの閉包に持っていた）。
             if state["opacity"] >= MAX_OPACITY_EVENTS:
                 return
@@ -246,7 +253,10 @@ def apply(ctx):
                 ctx.log_exc("item detail probe: opacity record failed")
 
         try:
+            if previous is not None:
+                box.unbind(opacity=previous[1])
             box.bind(opacity=on_opacity)
+            watched[key] = (ctx, on_opacity)
         except Exception:
             ctx.log_exc("item detail probe: cannot watch opacity")
 

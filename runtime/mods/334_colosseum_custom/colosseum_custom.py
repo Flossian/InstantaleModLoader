@@ -623,6 +623,28 @@ def apply(ctx):
     defeat.declare(OWNER, ctx, spare)
 
     # ---------------------------------------------- 負けて手配されないように
+    def after_load(orig, self, *args, **kwargs):
+        """ロード（と新しく始めたとき）。試合ごとの控えを作り直す。
+
+        試合の途中のセーブから再開すると `ColosseumMatchStart.execute` を通らない（§3.63 #10e の実機）。
+        前の試合の控えが残ると、負けの切り上げを済ませた印で次の負けをゲームオーバーにしたり、
+        前の世界の手配度を書き戻したりした。闘技場の戦闘の途中なら、ここで手配度を控え直す。
+        """
+        state["survived"] = False
+        state["fallen"].clear()
+        state["lawful_guard"] = None
+        close_window()
+        result = orig(self, *args, **kwargs)
+        try:
+            if getattr(self, "in_colosseum_battle", False):
+                guard_lawfulness(self)
+        except Exception:
+            ctx.log_exc("colosseum: cannot keep the lawfulness after the load")
+        return result
+
+    for _target in ("__main__:InstantaleApp.load_game_new", "__main__:InstantaleApp.start_game"):
+        ctx.wrap(_target, required=False, safe=True)(after_load)
+
     def guard_lawfulness(app):
         """申し込んだ時点のこの土地の手配度を控える（逃げて終わったら、下がった分を戻すため）。
 

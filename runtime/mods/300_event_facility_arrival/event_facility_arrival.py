@@ -216,6 +216,9 @@ STATE_DIRNAME = "arrival_event"
 # 途中でゲームを閉じた場合などに、次の会話へ持ち越さないための保険。
 WATCH_TTL = 1800.0
 
+#: MOD のボタンで閉じた会話に付ける印（`ConversationEndManager` の実体に）。無視と数えない。
+MOD_CLOSE_ATTR = "_instantale_300_mod_close"
+
 # 注入した瞬間に、今いる施設で narration モードのセリフを1本作ってログにだけ出す。
 # 画面には出さないし状態も変えない（会話フェーズは開始しない）。
 SELFTEST_ON_BOOT = False
@@ -750,13 +753,20 @@ def apply(ctx):
             return
         mark["responded"] = True
 
-    def settle_watch(app):
-        """会話が終わった。返事の有無で控えを進めるか、0 に戻す。"""
+    def settle_watch(app, partner=None):
+        """会話が終わった。返事の有無で控えを進めるか、0 に戻す。
+
+        `partner` は終わった会話の相手。見届けている相手と違えば、その見届けは捨てる
+        （声をかけた会話がロードなどで消え、別の人との会話の終わりを無視と数えないため）。
+        """
         mark = watching_now()
         if mark is None:
             return
         state["watching"] = None
         npc_id, name = mark["npc_id"], mark["name"]
+        if isinstance(partner, str) and partner and partner != npc_id:
+            write("watch: the talk that ended was with {!r}, not {!r}; forgotten".format(partner, name))
+            return
         store = ignores(app)
         if mark["responded"]:
             if store.pop(npc_id, None) is not None:
@@ -783,12 +793,41 @@ def apply(ctx):
             ctx.log_exc("watch: cannot note the response")
         return orig(self, choice_text, *args, **kwargs)
 
+    @ctx.wrap("__main__:ConversationEndManager.__init__", required=False)
+    def conversation_end_init(orig, self, *args, **kwargs):
+        """MOD のボタンで閉じる会話か（`end_text` が画面の「会話を終了する」と違うか）を控える。値には触らない。
+
+        MOD が会話を閉じるときは、画面のボタンの args を写して `end_text` だけ差し替える（GAME.md §2.5）。
+        組み立てる時点では、画面にゲーム自身の「会話を終了する」がまだ並んでいる。
+        言語で変わる文言を決め打ちしないよう、そのボタンの `end_text` と比べる。
+        """
+        result = orig(self, *args, **kwargs)
+        try:
+            # `self` の後ろは app, in_conversation_id, finisher, end_text の順。
+            end_text = frames.arg(args, kwargs, "end_text", 3)
+            app = frames.arg(args, kwargs, "app", 0) or find_app()
+            _partner, entry = ui.conversation_partner(getattr(app, "buttons", None))
+            native = ui.spec_args(entry) if entry is not None else None
+            if isinstance(end_text, str) and native and len(native) >= 3                     and end_text != native[2]:
+                setattr(self, MOD_CLOSE_ATTR, True)
+        except Exception:
+            pass
+        return result
+
     @ctx.wrap("__main__:ConversationEndManager.finish_conversation", required=False)
     def finish_conversation(orig, self, *args, **kwargs):
         """会話の終わり。ここで数える。"""
+        app = getattr(self, "app", None) or find_app()
+        partner = getattr(app, "in_conversation", None)     # 終わると下りるので先に読む
+        # 「会話を終了する」以外の閉じ方は、MOD のボタン（依頼の話・別れ話など）を押した＝返事をした。
+        if getattr(self, MOD_CLOSE_ATTR, False):
+            try:
+                note_response(partner)
+            except Exception:
+                ctx.log_exc("watch: cannot note the response")
         result = orig(self, *args, **kwargs)
         try:
-            settle_watch(getattr(self, "app", None) or find_app())
+            settle_watch(app, partner)
         except Exception:
             ctx.log_exc("watch: cannot settle")
         return result

@@ -138,9 +138,19 @@ def install(env):
             _key, found = mates(app)
             for npc_id, mate in found.items():
                 if isinstance(mate, dict) and mate.get("status") in statuses \
-                        and ui.character_of(app, str(npc_id)) is not None:
+                        and same_person(app, npc_id, mate):
                     return str(npc_id), dict(mate)
         return None
+
+    def same_person(app, npc_id, mate):
+        """控えの囚人が、今の世界のその id の人物か。
+
+        ゲームオーバーの後に同じ名前で作り直すと、前の周回の控えが同じ鍵に残り、
+        id は新しい周回の別の人物に使い回されうるので、名前も見る。
+        """
+        character = ui.character_of(app, str(npc_id))
+        name = mate.get("name") if isinstance(mate, dict) else None
+        return character is not None and (not name or getattr(character, "name", None) == name)
 
     def drop_absent(app):
         """牢の中・加勢中のまま世界に居ない人物の控えを捨てる。人物が揃っている刑の始まりでだけ呼ぶ。"""
@@ -148,7 +158,7 @@ def install(env):
             key, found = mates(app)
             gone = [npc_id for npc_id, mate in found.items()
                     if isinstance(mate, dict) and mate.get("status") in ("jailed", "breaking")
-                    and ui.character_of(app, str(npc_id)) is None]
+                    and not same_person(app, npc_id, mate)]
             for npc_id in gone:
                 found.pop(npc_id, None)
             if gone:
@@ -424,7 +434,7 @@ def install(env):
         with worlds.lock:
             _key, found = mates(app)
             mate = dict(found.get(npc_id) or {})
-        if not mate:
+        if not mate or not same_person(app, npc_id, mate):
             return None
         town = getattr(ui.world_areas(app).get(str(mate.get("area"))), "name", None) or "この街"
         player = getattr(getattr(app, "player", None), "name", None) or "主人公"

@@ -62,6 +62,8 @@ START_LABEL = "パーティーメンバーと話す"
 
 # パーティー会話の間だけ「会話を終了する」をこう描く
 END_LABEL = "話し合いを終了する"
+#: ゲーム自身の「会話を終了する」の文言（パーティー会話でないときに戻す先）。
+GAME_END_LABEL = "会話を終了する"
 
 # 名簿の先頭から数えて何人まで載せるか
 MAX_PARTICIPANTS = 6
@@ -981,6 +983,12 @@ def apply(ctx):
                         schedule_layout(self)
                         end_entry["text"] = END_LABEL
                 else:
+                    # ボタンはセーブに残る。パーティー会話の途中でロードすると、1対1で再開した会話の
+                    # 「会話を終了する」が END_LABEL のまま残るので、ゲームの文言へ戻す
+                    _partner, end_entry = ui.conversation_partner(buttons)
+                    if isinstance(end_entry, dict) and end_entry.get("text") == END_LABEL:
+                        end_entry["text"] = GAME_END_LABEL
+                        write("restored {!r} to {!r} (not a party talk)".format(END_LABEL, GAME_END_LABEL))
                     screen.prune_stale(buttons, OUR_LABELS)
                     at = talk_list_slot(buttons)
                     if (at is not None and safe_normal(self) and enough_members(self)

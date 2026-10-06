@@ -13,14 +13,12 @@ SD1.5 へ渡すものは英語の短い語だけにする（DOC.md「SD1.5 へ�
 """
 
 import hashlib
-import io
 import json
-import os
 import re
 import sys
 import typing
 
-from instantale_modloader import equipment, frames, items, llm, saves, state, ui
+from instantale_modloader import equipment, frames, imagegen, items, llm, state, ui
 
 
 # GUI 設定と同じ名前・既定値。ローダが apply() 前に上書きする。
@@ -30,15 +28,10 @@ EQUIPMENT_PROMPT_COUNT = 1
 # CLIP の1塊（75 トークン）に残る余地は 6〜16 トークンしかない。
 MAX_PROMPT_COUNT = 3
 
-# 人物の絵を描く関数は画像生成の方式ごとに別のモジュールに居る（GAME.md §2.33）。
-# ゲームは config.json で選ばれた1つだけを import する。
-FAMILIES = {
-    "sdcpp_cuda": "sdcppcuda",
-    "sdcpp_vulkan": "sdcppvulkan",
-    "sdcpp_cpu": "sdcppcpu",
-    "diffusers_openvino": "diffusers_openvino",
-}
-IMAGE_TARGET_FORMAT = "image_generation.{}.image_generation_creature:generate_character_image"
+# 人物の絵を描く関数は画像生成の方式ごとに別のモジュールに居るが、どの方式かはローダの
+# `imagegen` が吸収する（GAME.md §2.33）。
+FAMILIES = imagegen.FAMILIES
+IMAGE_FUNC = "generate_character_image"
 STORE_ATTR = "_instantale_408_equipment_visual_store"
 STORE_DIRNAME = "equipment_visuals"
 LOG_BASENAME = "408_equipment_visuals.log"
@@ -64,22 +57,13 @@ def _store(ctx, write):
     return found
 
 
-def config_backend(path=None):
-    """ゲームが選んでいる画像生成の方式（`sd_backend.name`）。読めなければ None。"""
-    path = path or os.path.join(saves.data_dir(), "config.json")
-    try:
-        with io.open(path, encoding="utf-8") as fh:
-            data = json.load(fh)
-        return data["ai_setting"]["local_model_setting"]["sd_backend"]["name"]
-    except Exception:
-        return None
+#: ゲームが選んでいる画像生成の方式。読めなければ None（ローダの `imagegen.backend`）。
+config_backend = imagegen.backend
 
 
 def image_targets(backend):
     """包む対象。方式が分からなければ4つとも（入っていない方式は待つだけ）。"""
-    family = FAMILIES.get(backend)
-    families = [family] if family else list(FAMILIES.values())
-    return [IMAGE_TARGET_FORMAT.format(family) for family in families]
+    return imagegen.creature_targets(IMAGE_FUNC, backend)
 
 
 def _value(obj, name, default=None):

@@ -116,11 +116,18 @@ load_playlist = modtool.read_json
 
 
 def weight_of(entry, category):
+    value = (entry or {}).get(category, 0)
+    # 本体（`sounds.coerce_weight`）と同じく、小数と `true`（=100）も受ける。
+    # 整数に切り捨てていたころは、保存で 0.5 を 0（＝使わない）に、`true` を 1 に書き換えた
+    if isinstance(value, bool):
+        return 100 if value else 0
     try:
-        value = float((entry or {}).get(category, 0))
+        value = float(value)
     except (TypeError, ValueError):
         return 0
-    return int(value) if value > 0 else 0
+    if not value > 0:
+        return 0
+    return int(value) if value.is_integer() else value
 
 
 def matches(name, where, weight, name_filter, where_filter, min_weight):

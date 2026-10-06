@@ -727,6 +727,17 @@ check("描写の三年間はそのまま",
       in app.texts, app.texts)
 check("別の意味の年には当てない",
       module.reword("三年後には一人前になれるだろう。", "simple", phase=True) is None)
+# 実機の卒業のセリフ（training_custom.log）。行頭でも、ゲームの段の結果の語尾が続かない AI の文には当てない
+check("AI の卒業のセリフの行頭の年は触らない",
+      module.reword("二年間、実に精進されましたな。", "simple", phase=True) is None)
+check("段の結果の種類は語尾から引く（技を磨く段）",
+      module.reword("二年間、技を磨くことに費やした。", "simple", phase=True)
+      == module.reword("二年間、技を磨くことに費やした。", "train_skill", phase=True))
+# 頼み文の【訓練の記録】は漢数字（実際の training_conversation_starter）
+record = module.reprompt("【訓練の記録】\n二年間、技を磨くことに費やした。一年間、ひたすら鍛錬した。",
+                         phase=True)
+check("頼み文の訓練の記録の漢数字の年も直す", record is not None and "二年間" not in record
+      and "一年間" not in record, record)
 check("エラーなし", not ctx.errors, ctx.errors)
 
 print("[文言] 切れば素のゲームの言い方のまま")

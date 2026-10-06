@@ -53,6 +53,31 @@ RUNTIME_DIR = os.path.join(ROOT, "runtime")
 OUT_DIR = os.path.join(ROOT, "out")
 BOOT_LOG = os.path.join(OUT_DIR, "bootstrap.log")
 
+
+def boot_log_size() -> int:
+    """`bootstrap.log` の今の大きさ。注入の前に控え、`boot_failed_since` に渡す。"""
+    try:
+        return os.path.getsize(BOOT_LOG)
+    except OSError:
+        return 0
+
+
+def boot_failed_since(offset: int) -> bool:
+    """`offset` より後に `bootstrap.log` へ足された行に失敗の記録があるか。
+
+    ブートストラップは例外を握って `bootstrap FAILED` を書くだけなので、
+    `PyRun_SimpleString` は失敗しても 0 を返す（投げ直すとゲームの `sys.excepthook` を通って危ない）。
+    成否はここで読む。
+    """
+    try:
+        with open(BOOT_LOG, "rb") as fh:
+            if os.path.getsize(BOOT_LOG) < offset:
+                offset = 0          # 世代送りで入れ替わった
+            fh.seek(offset)
+            return b"bootstrap FAILED" in fh.read()
+    except OSError:
+        return False
+
 TARGET_EXE = "instantale.exe"
 PYTHON_DLL = "python310.dll"
 NEEDED_EXPORTS = ("PyGILState_Ensure", "PyRun_SimpleString", "PyGILState_Release")
@@ -639,10 +664,14 @@ def main() -> int:
         rotate_logs(args.log_rotate, log=lambda msg: print(f"  {msg}"))
 
     payload = make_bootstrap(RUNTIME_DIR, OUT_DIR, BOOT_LOG, action=action)
+    mark = boot_log_size()
     rc = inject(pid, payload, dry_run=args.dry_run)
 
     if args.dry_run:
         return 0
+    if rc == 0 and boot_failed_since(mark):
+        print(f"\nFAILED: the bootstrap raised; check {BOOT_LOG}.")
+        return 1
     if rc == 0:
         print("\nOK: PyRun_SimpleString returned 0.")
         if args.unload:
