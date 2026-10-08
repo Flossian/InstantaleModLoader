@@ -2783,6 +2783,14 @@ hooks.armed()          # 今その名前がある対象（起動直後はクラ�
 クラウド境界で見えるのは呼び出し側が渡した `message` だけで、
 `send_request` の中で足される部分（Gemini のスキーマ文など）には当たらない（GAME.md §1.8）。
 
+SDK のクライアント（`openai._base_client` / `anthropic._base_client` の `SyncAPIClient.post`）を包むときは、
+資源（`client.messages` など）が作られたときに掴んだ手のままになる（GAME.md §2.12）。
+ローダは注入の終わり（前の世代の層を剥がした後）とローダを外した後に `llm.rebind_cloud_resources()` を呼び、
+生きている資源の `_get` / `_post` / `_patch` / `_put` / `_delete` / `_get_api_list` を、クライアントの今の手に掴み直させる。
+掴み直したときは `rebound N cloud SDK call(s) to the current hooks` が出る。
+これが無かったときは、注入し直しても前の世代の包みが使われ続け、
+`136_` の差し替えを切っても前の宛先へ送り、設定の変更もゲームを閉じるまで効かなかった。
+
 #### MOD から LLM に1問だけ聞く（`llm.ask`）
 
 ```python

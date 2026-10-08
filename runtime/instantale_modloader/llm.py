@@ -160,6 +160,60 @@ def is_cloud_runtime() -> bool:
     return any(name != LOCAL_REQUEST_MODULE for name in request_modules())
 
 
+#: クラウドの SDK（openai / anthropic）の資源の基底クラスが居るモジュール。
+SDK_RESOURCE_MODULES = ("openai._resource", "anthropic._resource")
+
+#: 資源が作られたときにクライアントから掴む送りの手（`SyncAPIResource.__init__`）。
+SDK_RESOURCE_VERBS = ("_get", "_post", "_patch", "_put", "_delete", "_get_api_list")
+
+
+def rebind_cloud_resources() -> int:
+    """クラウドの SDK の資源が掴んでいる送りの手を、クライアントの今の手に掴み直させる。
+
+    SDK の資源（`client.messages` など）は、作られたときに `self._post = client.post` と
+    その時点の関数を掴む。注入でクラスの `post` を包み直しても、作られた後の資源は
+    前の世代の包みを呼び続け、切った MOD の差し替えもゲームを閉じるまで効いたままになる
+    （`136_` で、差し替えを切って注入し直しても前の宛先へ送り続けた。VERIFICATION.md §3.88）。
+    注入の終わりとローダを外すときに呼ぶ。掴み直した手の数を返す。
+    SDK を読み込んでいなければ何もしない。
+    """
+    import gc
+
+    classes = []
+    for name in SDK_RESOURCE_MODULES:
+        module = sys.modules.get(name)
+        cls = getattr(module, "SyncAPIResource", None) if module is not None else None
+        if isinstance(cls, type):
+            classes.append(cls)
+    if not classes:
+        return 0
+    kinds = tuple(classes)
+    count = 0
+    for obj in gc.get_objects():
+        try:
+            if not isinstance(obj, kinds):
+                continue
+        except Exception:
+            continue                       # 消えかけの弱参照の代理など
+        client = getattr(obj, "_client", None)
+        held_by = getattr(obj, "__dict__", None)
+        if client is None or not isinstance(held_by, dict):
+            continue
+        for verb in SDK_RESOURCE_VERBS:
+            held = held_by.get(verb)
+            fresh = getattr(client, verb[1:], None)
+            if held is None or fresh is None:
+                continue
+            if getattr(held, "__func__", None) is getattr(fresh, "__func__", None):
+                continue
+            try:
+                setattr(obj, verb, fresh)
+                count += 1
+            except Exception:
+                continue
+    return count
+
+
 #: `config.json` の `ai_setting.llm_inference` で、API キーでクラウドを使う値。
 CLOUD_API_KEY = "cloud_api_key"
 

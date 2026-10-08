@@ -1574,6 +1574,23 @@ scripts.llm.llm_manager:*                                                    マ
 | 既定モデル | `gemini-3.5-flash` | `gpt-5.4-nano` / `claude-sonnet-5` |
 | 特徴 | ストリーミング収集（`_stream_and_collect`）、pydantic 検証に失敗した部分木だけを修復するループ（最大3周）、**`SCHEMA_IN_PROMPT = True` でスキーマ文を `send_request` の中で足す** | 修復ループもスキーマ埋め込みも無い（構造化出力を API に任せる） |
 
+- **Claude では依頼の生成（`random_quest_generator`）が通らない**（2026-10-08 の実機。anthropic 0.105.2）。
+  型（`QuestStructure`）は `output_config.format` に約 9000 字の JSON Schema として載り、
+  API が `400 The compiled grammar is too large` で断る。
+  ゲームの既定の `claude-sonnet-5`（`136_` の差し替えを切った状態）でも、`claude-haiku-5-5` でも同じ。
+  ゲームは1回の頼みで約30回送り直し、その後「リクエストを再実行」のボタンを出して待機のまま止まる。
+  型は世界に依らず（`$defs` 17個。`ItemData.item_category` の6択と `Skill.effects` の3択の `anyOf`、上限の無い配列の入れ子）、
+  掲示板の「クエストを探す」も同じ関数なので同じく止まるはず（掲示板からは試していない）。
+  OpenAI（Luna）では通っている。
+  中身を決めない object（`{"type": "object"}`）は API が断り（`additionalProperties` を false にせよ）、
+  3択を1つの object にまとめる形と深い選択肢を外す形も文法が大きすぎた。
+  効果の3択（`$defs/Skill/properties/effects/items`）を文字列の欄にすると通る。
+  `136_` がこの形で送り直し、応答をゲームの型で読む前（SDK の `post_parser` の前）に object へ戻す
+- **SDK の資源は、作られたときのクライアントの送りの手を掴む**（Stainless 製の openai / anthropic 共通）。
+  `client.messages` は `SyncAPIResource.__init__` で `self._post = client.post` を持つので、
+  後からクラスの `post` を包み直しても、作られた後の資源は前の関数を呼び続ける。
+  ゲームはクライアントを使い回すので、ローダは注入の終わりに掴み直させる（TECH.md §5.3）
+
 #### プロバイダに依存しない仕掛け方（`111_` v4 のパターン）
 
 送信モジュールを名指しせず、`llm_manager:send_request` /

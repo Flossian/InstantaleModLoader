@@ -7,8 +7,8 @@
     "ja": "クラウドモデルの差し替え"
   },
   "description": {
-    "en": "Uses an OpenAI or Claude model that is not in the game's built-in list, picked from a list. The model name is swapped on the wire just before the request goes out, and parameters the new model rejects are fixed up. Can also choose where prompt caching marks the request",
-    "ja": "ゲームの選択肢に無い OpenAI / Claude のモデルを、一覧から選んで使う。送信直前にモデル名を差し替え、差し替え先が受け付けない引数も直す。プロンプトキャッシュの印の置き方も選べる"
+    "en": "Uses an OpenAI or Claude model that is not in the game's built-in list, picked from a list. The model name is swapped on the wire just before the request goes out, and parameters the new model rejects are fixed up. Can also choose where prompt caching marks the request. Also gets quest generation through on Claude, which rejects the game's quest format as too large",
+    "ja": "ゲームの選択肢に無い OpenAI / Claude のモデルを、一覧から選んで使う。送信直前にモデル名を差し替え、差し替え先が受け付けない引数も直す。プロンプトキャッシュの印の置き方も選べる。Claude がゲームの依頼の型を大きすぎるとして断り、依頼が作られないのも直す"
   },
   "version": "4",
   "author": "R01/Flossian",

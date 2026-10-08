@@ -90,7 +90,8 @@ assert any("cache stable" in line and "cache 5m" in line for line in ctx.lines),
 MOD.OPENAI_CACHE, MOD.CLAUDE_CACHE = "keep", "off"
 ctx = Ctx()
 MOD.apply(ctx)
-assert OA.POST in ctx.hooks and CL.POST not in ctx.hooks
+# Claude 側は差し替えもキャッシュも切っていても包む（文法が大きすぎるときの迂回）
+assert OA.POST in ctx.hooks and CL.POST in ctx.hooks
 post = ctx.hooks[OA.POST]
 
 body = {"model": "gpt-5", "input": [], "reasoning": {"effort": "minimal"}}
@@ -157,11 +158,15 @@ sent = ctx.hooks[OA.POST](orig, OPENAI, "/responses",
 assert sent == {"model": "gpt-5.5", "reasoning": {"effort": "low"}}, sent
 MOD.OPENAI_EFFORT, MOD.OPENAI_CUSTOM = "keep", ""
 
-# off なら送信を包まない（タイトル画面の包みは、前の1行を外すために残る）
+# off なら OpenAI の送信を包まない（タイトル画面の包みは、前の1行を外すために残る）。
+# Claude は文法が大きすぎるときの迂回のために包み、型の無い要求は本文をそのまま渡す
 MOD.OPENAI_MODEL = "off"
 ctx = Ctx()
 MOD.apply(ctx)
-assert OA.POST not in ctx.hooks and CL.POST not in ctx.hooks, ctx.hooks
+assert OA.POST not in ctx.hooks and CL.POST in ctx.hooks, ctx.hooks
+plain = {"model": "claude-sonnet-5", "max_tokens": 10, "messages": []}
+assert ctx.hooks[CL.POST](orig, OPENAI, "/v1/messages", body=plain) == plain
+assert not any("[claude]" in line for line in ctx.lines), ctx.lines
 MOD.OPENAI_MODEL = "gpt-6-luna"
 
 # ---------------------------------------------------------------- Claude
@@ -402,5 +407,104 @@ with tempfile.TemporaryDirectory() as tmp:
             "cloud_llm_provider": "Claude API", "cloud_llm": "claude-sonnet-5"}}}, fh)
     assert llm.game_choice(path) == cloud, llm.game_choice(path)
     assert llm.game_choice(os.path.join(tmp, "missing.json")) is None
+
+# ---------------------------------------------------------------- 文法が大きすぎるときの迂回
+GR = sys.modules[NAME + ".claude_grammar"]
+EFFECT_SHAPES = [{"$ref": "#/$defs/Damage"}, {"$ref": "#/$defs/Buff"}]
+QUEST = {
+    "type": "object", "additionalProperties": False, "required": ["title", "enemies"],
+    "properties": {
+        "title": {"type": "string"},
+        "enemies": {"type": "array", "items": {"$ref": "#/$defs/Enemy"}},
+        "loot": {"anyOf": [{"$ref": "#/$defs/Damage"}, {"type": "string"}]}},
+    "$defs": {
+        "Enemy": {"type": "object", "additionalProperties": False, "properties": {
+            "skills": {"type": "array", "items": {"$ref": "#/$defs/Skill"}}}},
+        "Skill": {"type": "object", "additionalProperties": False, "properties": {
+            "effects": {"type": "array", "items": {"anyOf": EFFECT_SHAPES}}}},
+        "Damage": {"type": "object", "title": "Damage", "additionalProperties": False,
+                   "properties": {"type": {"type": "string", "enum": ["damage"]}}},
+        "Buff": {"type": "object", "title": "Buff", "additionalProperties": False,
+                 "properties": {"type": {"type": "string", "enum": ["buff"]},
+                                "turns": {"type": "integer"}}}}}
+
+# 深い選択肢（効果の2択）が先、浅い選択肢（loot）が後
+order = GR.candidates(QUEST)
+assert order == [("$defs", "Skill", "properties", "effects", "items"), ("properties", "loot")], order
+narrow = GR.loosen(QUEST, order[:1])
+item = narrow["$defs"]["Skill"]["properties"]["effects"]["items"]
+assert item["type"] == "string" and item["description"].startswith(GR.MARK), item
+assert '"enum":["buff"]' in item["description"] and "title" not in item["description"], item
+assert "Buff" not in narrow["$defs"] and "Damage" in narrow["$defs"], sorted(narrow["$defs"])  # loot が Damage を使う
+assert "anyOf" in QUEST["$defs"]["Skill"]["properties"]["effects"]["items"]  # 元の型は変えない
+
+# 読み戻し: 印の欄だけ object に戻す。読めない文字列はそのまま
+answer = {"title": "{\"not\": \"decoded\"}", "enemies": [{"skills": [
+    {"effects": ["{\"type\": \"buff\", \"turns\": 3}", "broken{"]}]}]}
+back = GR.decode(json.loads(json.dumps(answer)), narrow, narrow)
+assert back["enemies"][0]["skills"][0]["effects"] == [{"type": "buff", "turns": 3}, "broken{"], back
+assert back["title"] == answer["title"], back
+
+
+class Block(object):
+    def __init__(self, text):
+        self.type, self.text = "text", text
+
+
+class Message(object):
+    def __init__(self, text):
+        self.content = [Block(text)]
+        self.usage = None
+
+
+class Api(object):
+    """文法の上限を真似る。効果の選択肢が残っていたら断り、通れば効果を文字列で返す。"""
+
+    def __init__(self):
+        self.calls = []
+
+    def __call__(self, self_, path, *args, **kwargs):
+        schema = kwargs["body"]["output_config"]["format"]["schema"]
+        self.calls.append(schema)
+        if "anyOf" in json.dumps(schema["$defs"]["Skill"]):
+            raise RuntimeError("Error code: 400 - The compiled grammar is too large, which would cause ...")
+        reply = Message(json.dumps(answer))
+        parser = kwargs.get("options", {}).get("post_parser")
+        return parser(reply) if callable(parser) else reply
+
+
+MOD.CLAUDE_MODEL, MOD.CLAUDE_CACHE = "off", "off"
+ctx = Ctx()
+MOD.apply(ctx)
+post = ctx.hooks[CL.POST]
+api = Api()
+parsed = []
+request = {"model": "claude-haiku-5-5", "max_tokens": 100, "messages": [],
+           "output_config": {"format": {"type": "json_schema", "schema": QUEST}}}
+reply = post(api, OPENAI, "/v1/messages", body=request,
+             options={"post_parser": lambda message: parsed.append(json.loads(message.content[0].text)) or "parsed"})
+assert reply == "parsed" and len(api.calls) == 2, (reply, len(api.calls))
+assert parsed[0]["enemies"][0]["skills"][0]["effects"][0] == {"type": "buff", "turns": 3}, parsed
+assert any("grammar too large; sent with 1 choice(s)" in line for line in ctx.lines), ctx.lines
+assert request["output_config"]["format"]["schema"] is QUEST  # 呼び出し側の本文は変えない
+# 同じ型の2回目は最初から置き換えて送る（断られない）
+api.calls[:] = []
+post(api, OPENAI, "/v1/messages", body=request, options={})
+assert len(api.calls) == 1 and "anyOf" not in json.dumps(api.calls[0]["$defs"]["Skill"]), api.calls
+
+
+# 別の理由の 400 は送り直さない。型の無い要求も送り直さない
+def other_error(self_, path, *args, **kwargs):
+    raise RuntimeError("Error code: 400 - max_tokens is too large")
+
+
+fresh = dict(request, output_config={"format": {"type": "json_schema", "schema": dict(QUEST, title="Other")}})
+try:
+    post(other_error, OPENAI, "/v1/messages", body=fresh, options={})
+    raise AssertionError("別の理由の 400 を握った")
+except RuntimeError as exc:
+    assert "max_tokens" in str(exc)
+MOD.CLAUDE_MODEL, MOD.CLAUDE_CACHE = "claude-opus-5-5", "5m"
+
 
 print("ok")

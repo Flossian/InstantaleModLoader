@@ -19,10 +19,17 @@ Opus 5 / Haiku 5.5 / Sonnet 5.5 は、effort が `xhigh` / `max` だと思考を
 設定で、前回の同じ種類の頼みと先頭から一致した所に印を付ける（`mark_shared_prefix`。
 置き方の理由は `prefix_cache.py`。system の末尾では、末尾が毎回変わるので当たらない）。
 差し替え先を `off` にしていても、キャッシュだけを効かせられる。
+
+## 文法が大きすぎるとき
+
+構造化出力の型が大きすぎて API に断られた要求は、型の選択肢を文字列の欄に置き換えて送り直す
+（`claude_grammar.py`。依頼の生成がゲームの既定のモデルでも断られるため）。
+差し替えもキャッシュも切っていても、これだけは効かせる。
 """
 
 import json
 
+from . import claude_grammar
 from .prefix_cache import Prefixes
 
 #: SDK で、全リクエストが最後に通る1点。
@@ -263,15 +270,16 @@ def usage_line(result):
 
 
 def install(ctx, target, effort, cache, log):
-    """送信の1点を包む。差し替えもキャッシュも無ければ何も仕掛けない。
+    """送信の1点を包む。
 
     `cache` は設定の値（`off` / `5m` / `1h`）。`CACHE_TTL` に無い値は `off` と同じ。
+    差し替えもキャッシュも切っていても包む（文法が大きすぎるときの迂回のため）。
     required / safe の理由は `openai_side.install` と同じ。
     """
     caching = cache in CACHE_TTL
-    if not (target or caching):
-        return
     prefixes = Prefixes()
+    #: 型ごとに、通った置き換え（選択肢の在り処の列）。
+    loosened = {}
 
     @ctx.wrap(POST, required=False, safe=True, alias_scan=False)
     def claude_post(orig, self, path=None, *args, **kwargs):
@@ -287,10 +295,23 @@ def install(ctx, target, effort, cache, log):
             changed += fix(body, target, effort)
         if caching:
             changed += mark_shared_prefix(body, prefixes, CACHE_TTL[cache])
-        if source == sent_to and not changed:
-            return orig(self, path, *args, **kwargs)
-        log.swap("claude", source, sent_to, path, changed)
-        result = orig(self, path, *args, **dict(kwargs, body=body))
+        schema = claude_grammar.schema_of(body)
+        key = claude_grammar.schema_key(schema) if schema is not None else None
+        known = loosened.get(key) if key is not None else None
+        call_kwargs = kwargs
+        if known:
+            narrow = claude_grammar.loosen(schema, known)
+            body = claude_grammar.with_schema(body, narrow)
+            call_kwargs = claude_grammar.with_decoder(kwargs, narrow)
+            changed.append("grammar: {} choice(s) as string".format(len(known)))
+        if source != sent_to or changed:
+            log.swap("claude", source, sent_to, path, changed)
+        try:
+            result = orig(self, path, *args, **dict(call_kwargs, body=body))
+        except Exception as exc:
+            if schema is None or known or not claude_grammar.too_large(exc):
+                raise
+            result = resend_loosened(orig, self, path, args, kwargs, body, schema, key, exc)
         if caching and log.wants("usage"):
             # 当たったかは応答の usage でしか分からない。
             # ここで投げると safe=True が素の送信をやり直し、同じ頼みを2回払うので握る。
@@ -301,3 +322,27 @@ def install(ctx, target, effort, cache, log):
             if line:
                 log.write("usage", "[claude] usage: " + line)
         return result
+
+    def resend_loosened(orig, self, path, args, kwargs, body, schema, key, first):
+        """選択肢を深いものから1つずつ文字列の欄にして送り直す。通ったら覚える。"""
+        paths = []
+        last = first
+        for place in claude_grammar.candidates(schema)[:claude_grammar.MAX_STEPS]:
+            paths.append(place)
+            narrow = claude_grammar.loosen(schema, paths)
+            try:
+                result = orig(self, path, *args, **dict(
+                    claude_grammar.with_decoder(kwargs, narrow),
+                    body=claude_grammar.with_schema(body, narrow)))
+            except Exception as exc:
+                if not claude_grammar.too_large(exc):
+                    raise
+                last = exc
+                continue
+            loosened[key] = list(paths)
+            ctx.log("cloud model override: [claude] grammar too large; sent with {} choice(s)"
+                    " as string: {}".format(len(paths), ", ".join("/".join(map(str, p)) for p in paths)))
+            return result
+        ctx.log("cloud model override: [claude] grammar still too large after {} choice(s)"
+                " as string".format(len(paths)), level="WARN")
+        raise last

@@ -1963,6 +1963,21 @@ def _forget_unapplied(results: dict, manifests: dict) -> list[str]:
     return gone
 
 
+def _rebind_cloud_resources() -> None:
+    """クラウドの SDK の資源に、クライアントの今の送りの手を掴み直させる（`llm.rebind_cloud_resources`）。
+
+    注入の終わり（前の世代の層を剥がした後）とローダを外した後に呼ぶ。
+    呼ばないと、資源が作られた時の世代の包みが、ゲームを閉じるまで使われ続ける。
+    """
+    try:
+        from . import llm as _llm
+        count = _llm.rebind_cloud_resources()
+        if count:
+            log("rebound {} cloud SDK call(s) to the current hooks".format(count))
+    except BaseException:
+        log_exc("cannot rebind the cloud SDK resources")
+
+
 def _keep_save_gates(ctx) -> list[str]:
     """前の世代で立っていて、今の世代でどの MOD も立てなかった保存の関所を立て直す。立て直した部品を返す。
 
@@ -2194,6 +2209,7 @@ def _boot(out_dir: str) -> dict:
         _patch.drop_stale_layers()
     except BaseException:
         log_exc("cannot drop the stale patch layers")
+    _rebind_cloud_resources()
     try:
         _forget_unapplied(results, manifests)
     except BaseException:
@@ -2431,7 +2447,9 @@ def _unload(out_dir: str | None) -> dict:
                 _modfacility.purge(_ui.find_app())
         except Exception:
             log_exc("unload: cannot take the mod facilities off the towns")
-        return _patch.revert_all()
+        reverted = _patch.revert_all()
+        _rebind_cloud_resources()
+        return reverted
 
     ran, count = _run_on_main_thread(take_down, UNLOAD_WAIT, UNLOAD_GIVE_UP)
     if not ran:
