@@ -184,6 +184,26 @@ def generation(model):
     return int(head) if head.isdigit() else 0
 
 
+#: ゲームが responses の経路で組む推論量（上の経路の表。モデル名で決まる）。
+GAME_EFFORT_MINIMAL = ("gpt-5", "gpt-5-mini", "gpt-5-nano")
+GAME_EFFORT_NONE = ("gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.2", "gpt-5.1")
+
+
+def sent_effort(target, game_model, setting):
+    """実際に送る推論量（タイトル画面に出す）。推論量を送らない経路なら None。
+
+    `setting` が keep ならゲームが組む値（`game_model` で決まる）に、差し替え先の読み替えを通す。
+    chat.completions の経路（上の表の「それ以外」）は、指定が無ければ推論量を送らない。
+    """
+    if setting and setting != "keep":
+        return _effort(target, setting)
+    if game_model in GAME_EFFORT_MINIMAL:
+        return _effort(target, "minimal")
+    if game_model in GAME_EFFORT_NONE:
+        return _effort(target, "none")
+    return None
+
+
 def _effort(target, value):
     """差し替え先が受ける推論量に寄せる。"""
     if value == "minimal" and target not in MINIMAL_OK:

@@ -49,7 +49,8 @@ SDK が呼び出し側の dict をそのまま握っている場合に、
 ## タイトル画面の1行
 
 ゲームの設定画面には、ゲームが選んだモデルが出る（差し替え先は出ない）。
-実際に送っているモデルが分かるよう、タイトル画面の右上に `LLM: <表示名>` を1行出す。
+実際に送っているモデルが分かるよう、タイトル画面の右上に `LLM: <表示名> / effort: <推論量>` を1行出す。
+推論量は実際に送る値（OpenAI で keep ならゲームが組む値に読み替えを通したもの）。
 どの LLM が選ばれているかは `config.json` から読む（`llm.game_choice`。切り替えるとゲームが起動し直すので、
 注入の時に1回読めば足りる）。
 置き方は `126_` と同じローダの部品（`ui.on_title_screen` / `ui.corner_label`）で、
@@ -182,19 +183,33 @@ def model_names(mod_dir):
     return names
 
 
-def title_text(choice, openai_target, claude_target, names):
-    """タイトル画面に出す1行。出さないときは None。
+#: 推論量が keep で、送る値がこの MOD から分からないとき（Claude）に出す言葉。
+EFFORT_KEEP_TEXT = "ゲームのまま"
+
+
+def title_text(choice, openai_target, claude_target, names,
+               openai_effort="keep", claude_effort="keep"):
+    """タイトル画面に出す1行（`LLM: <表示名> / effort: <推論量>`）。出さないときは None。
 
     出すのは、ゲームが API キーでクラウドを使っていて（`llm.game_choice`）、
     そのプロバイダの差し替え先がこの MOD で決まっているときだけ。
+    推論量は実際に送る値（各ファイルの `sent_effort`）。送らない経路なら付けない。
     """
     if not choice or choice.get("inference") != llm.CLOUD_API_KEY:
         return None
-    target = {PROVIDER_OPENAI: openai_target,
-              PROVIDER_CLAUDE: claude_target}.get(choice.get("provider"))
-    if not target:
+    provider = choice.get("provider")
+    if provider == PROVIDER_OPENAI and openai_target:
+        target = openai_target
+        effort = openai_side.sent_effort(target, choice.get("model"), openai_effort)
+    elif provider == PROVIDER_CLAUDE and claude_target:
+        target = claude_target
+        effort = claude_side.sent_effort(target, claude_effort)
+    else:
         return None
-    return "LLM: " + names.get(target, target)
+    text = "LLM: " + names.get(target, target)
+    if effort:
+        text += " / effort: " + (EFFORT_KEEP_TEXT if effort == "keep" else effort)
+    return text
 
 
 def apply(ctx):
@@ -213,7 +228,7 @@ def apply(ctx):
 
     # タイトル画面の右上。出さないときも包んでおき、注入し直す前の1行を外す（設定を切ったときに残さない）。
     shown = title_text(llm.game_choice(), openai_target, claude_target,
-                       model_names(ctx.mod_dir)) if TITLE_MODEL else None
+                       model_names(ctx.mod_dir), openai_effort, claude_effort) if TITLE_MODEL else None
 
     def decorate(screen):
         if shown is None:

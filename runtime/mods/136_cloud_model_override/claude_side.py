@@ -241,6 +241,16 @@ def mark_shared_prefix(body, prefixes, ttl):
     return ["cache mark {}/{}{}".format(shared, total, " " + ttl if ttl else "")]
 
 
+def sent_effort(target, setting):
+    """実際に送る推論量（タイトル画面に出す）。推論量を受けないモデル（Haiku 4.5）なら None。
+
+    keep は「ゲームの組んだ値のまま」で、その値はここでは分からないので keep のまま返す。
+    """
+    if not traits(target)["effort"]:
+        return None
+    return setting or "keep"
+
+
 def usage_line(result):
     """応答の usage から、キャッシュの書き込みと読み出しの数を1行にする。読めなければ None。"""
     usage = getattr(result, "usage", None)

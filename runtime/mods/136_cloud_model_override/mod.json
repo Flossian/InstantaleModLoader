@@ -272,8 +272,8 @@
         "en": "Show the model in use on the title screen"
       },
       "note": {
-        "ja": "タイトル画面の右上に「LLM: Claude Sonnet 5.5」のように1行出す。ゲームが API キーでクラウドを使っていて、そのプロバイダをこの MOD で差し替えているときだけ出る",
-        "en": "Shows one line such as \"LLM: Claude Sonnet 5.5\" in the title screen's top right. Only when the game uses a cloud provider with an API key and this mod swaps that provider's model"
+        "ja": "タイトル画面の右上に「LLM: Claude Haiku 5.5 / effort: medium」のように、モデルと推論量を1行出す。ゲームが API キーでクラウドを使っていて、そのプロバイダをこの MOD で差し替えているときだけ出る",
+        "en": "Shows one line such as \"LLM: Claude Haiku 5.5 / effort: medium\" (model and effort) in the title screen's top right. Only when the game uses a cloud provider with an API key and this mod swaps that provider's model"
       }
     }
   }

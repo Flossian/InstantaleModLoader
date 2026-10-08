@@ -364,9 +364,23 @@ assert "prompt_cache_options" not in ask(SHARED + "一回目", model="gpt-6-luna
 NAMES = MOD.model_names(folder)
 assert NAMES["claude-sonnet-5-5"] == "Claude Sonnet 5.5" and NAMES["gpt-6.1-sol"] == "GPT-6.1 Sol"
 cloud = {"inference": "cloud_api_key", "provider": "Claude API", "model": "claude-sonnet-5"}
-assert MOD.title_text(cloud, "gpt-6-luna", "claude-sonnet-5-5", NAMES) == "LLM: Claude Sonnet 5.5"
-assert MOD.title_text(dict(cloud, provider="OpenAI API"), "gpt-6-luna", None, NAMES) == "LLM: GPT-6 Luna"
-assert MOD.title_text(cloud, "gpt-6-luna", "my-claude", NAMES) == "LLM: my-claude", "一覧に無い名前はそのまま"
+t = MOD.title_text(cloud, "gpt-6-luna", "claude-haiku-5-5", NAMES, claude_effort="medium")
+assert t == "LLM: Claude Haiku 5.5 / effort: medium", t
+t = MOD.title_text(cloud, "gpt-6-luna", "claude-sonnet-5-5", NAMES)
+assert t == "LLM: Claude Sonnet 5.5 / effort: ゲームのまま", t
+assert MOD.title_text(cloud, None, "claude-haiku-4-5", NAMES, claude_effort="low") ==     "LLM: Claude Haiku 4.5", "推論量を受けないモデルには付けない"
+openai_cloud = dict(cloud, provider="OpenAI API", model="gpt-5.5")
+t = MOD.title_text(openai_cloud, "gpt-6-luna", None, NAMES)
+assert t == "LLM: GPT-6 Luna / effort: none", "keep ならゲームが組む値（gpt-5.5 は none）"
+t = MOD.title_text(openai_cloud, "gpt-6-astra", None, NAMES)
+assert t == "LLM: GPT-6 Astra / effort: low", "差し替え先の読み替え（Astra は none を断る）を通す"
+t = MOD.title_text(dict(openai_cloud, model="gpt-5"), "gpt-6-luna", None, NAMES)
+assert t == "LLM: GPT-6 Luna / effort: none", "gpt-5 の minimal も読み替える"
+t = MOD.title_text(dict(openai_cloud, model="gpt-4.1"), "gpt-6-luna", None, NAMES)
+assert t == "LLM: GPT-6 Luna", "推論量を送らない経路では付けない"
+t = MOD.title_text(openai_cloud, "gpt-6-luna", None, NAMES, openai_effort="high")
+assert t == "LLM: GPT-6 Luna / effort: high", t
+assert MOD.title_text(cloud, "gpt-6-luna", "my-claude", NAMES, claude_effort="low") ==     "LLM: my-claude / effort: low", "一覧に無い名前はそのまま"
 assert MOD.title_text(cloud, "gpt-6-luna", None, NAMES) is None, "そのプロバイダを差し替えていなければ出さない"
 assert MOD.title_text(dict(cloud, inference="local"), "gpt-6-luna", "claude-sonnet-5-5", NAMES) is None
 assert MOD.title_text(dict(cloud, provider="Gemini API(Experimental)"), "gpt-6-luna", "x", NAMES) is None
