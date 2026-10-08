@@ -27,7 +27,7 @@ Claude の送信が1度も走らないため。
 | --- | --- | --- |
 | OpenAI: 実際に送るモデル | `gpt-6-luna` | 一覧から選ぶ。`off` で差し替えない |
 | OpenAI: 一覧に無いモデル | 空 | 書けば一覧より優先 |
-| OpenAI: 推論量 | `keep` | `keep` はゲームの値のまま（gpt-5.5 などを選んでいれば `none`）。`gpt-6-astra` へは `low` 以上で送る |
+| OpenAI: 推論量 | `keep` | `keep` はゲームの値のまま（gpt-5.5 などを選んでいれば `none`）。`gpt-6-astra` と `gpt-6.1-sol` へは `low` 以上で送る |
 | Claude: 実際に送るモデル | `off` | 一覧から選ぶ。`off` で差し替えない |
 | Claude: 一覧に無いモデル | 空 | 書けば一覧より優先 |
 | Claude: 推論量 | `low` | `output_config.effort`。Opus 5.5 は思考を切れず既定が `medium` なので、low にしないと応答が遅い |
@@ -35,8 +35,8 @@ Claude の送信が1度も走らないため。
 
 一覧の中身:
 
-- OpenAI: `gpt-6-astra` / `gpt-6-sol` / `gpt-6-luna` / `gpt-5.6-sol` / `gpt-5.6-terra` / `gpt-5.6-luna` / `gpt-5.5` / `gpt-5.4` / `gpt-5.4-mini` / `gpt-5.4-nano`
-- Claude: `claude-opus-5-5` / `claude-opus-5` / `claude-sonnet-5` / `claude-haiku-4-5` / `claude-fable-5-1` / `claude-opus-4-8` / `claude-sonnet-4-6`
+- OpenAI: `gpt-6-astra` / `gpt-6.1-sol` / `gpt-6-sol` / `gpt-6-luna` / `gpt-5.6-sol` / `gpt-5.6-terra` / `gpt-5.6-luna` / `gpt-5.5` / `gpt-5.4` / `gpt-5.4-mini` / `gpt-5.4-nano`
+- Claude: `claude-opus-5-5` / `claude-sonnet-5-5` / `claude-haiku-5-5` / `claude-opus-5` / `claude-sonnet-5` / `claude-haiku-4-5` / `claude-fable-5-1` / `claude-opus-4-8` / `claude-sonnet-4-6`
 
 OpenAI 互換の別サーバー（任意互換 / Alibaba）も `openai` の SDK を通るので、
 **宛先が `api.openai.com` のときだけ**差し替える。
@@ -73,11 +73,13 @@ anthropic._base_client:SyncAPIClient.post    Claude
 | 差し替え先 | 直すもの |
 | --- | --- |
 | OpenAI（GPT-5 無印以外） | `effort="minimal"` → `"none"` |
-| OpenAI GPT-6 Astra | `effort="none"` → `"low"`（`none` を受け付けない） |
+| OpenAI GPT-6 Astra / GPT-6.1 Sol | `effort="none"` → `"low"`（`none` を受け付けない） |
 | OpenAI GPT-5 以降 | `temperature` / `top_p` / `top_logprobs` を外す。chat.completions の `max_tokens` → `max_completion_tokens` |
-| Claude Opus 4.7 以降 / Sonnet 5 / Opus 5 / Fable | `temperature` / `top_p` / `top_k` を外す。`thinking` の `enabled`（budget_tokens）→ `adaptive` |
+| Claude Opus 4.7 以降 / Sonnet 5 以降 / Haiku 5.5 / Fable | `temperature` / `top_p` / `top_k` を外す。`thinking` の `enabled`（budget_tokens）→ `adaptive` |
 | Claude Opus 5.5 / Fable 5 / Fable 5.1 | 上に加えて `thinking: disabled` を外す（思考を切れない） |
-| Claude Opus 5.5 / Fable 5.1 | 上に加えて `tool_choice` の `any` / `tool` → `auto` |
+| Claude Sonnet 5.5 | 「Opus 4.7 以降」の行に加えて `thinking: disabled` → `between_tools`（同じく思考を切る指定） |
+| Claude Opus 5 / Sonnet 5.5 / Haiku 5.5 | 推論量が `xhigh` / `max` のときは思考を切る指定を受け付けないので、`thinking: disabled` を外す |
+| Claude Opus 5.5 / Sonnet 5.5 / Fable 5.1 | `tool_choice` の `any` / `tool` → `auto` |
 | Claude Haiku 4.5 | `output_config.effort` を外す（受け付けない） |
 
 一覧に無い名前（「一覧に無いモデル」の欄）には、**いちばん厳しい側**の直しを当てる。
@@ -90,5 +92,5 @@ anthropic._base_client:SyncAPIClient.post    Claude
 | 差し替わっていない | ログに `cloud model override: [...]` の行が出ているか。出ていなければ、ゲーム側のプロバイダとこの MOD で設定した側が合っていない（「ゲーム側で選ぶもの」）か、ゲームがローカル LLM で動いている |
 | API がモデル名を知らないと返す | 一覧に無いモデルの欄の綴り。鍵の側でそのモデルが使えるかも見る |
 | 400 で引数を断られる | ログの `fixed:` に何が載っているか。ゲームが新しい引数を送り始めた可能性がある。エラー文にある引数名を添えて報告する |
-| 応答が遅い | 推論量を下げる（OpenAI は `none`、Claude は `low`）。`gpt-6-astra` は `none` にできないので、速さが要るなら `gpt-6-luna` / `gpt-6-sol` |
+| 応答が遅い | 推論量を下げる（OpenAI は `none`、Claude は `low`）。`gpt-6-astra` と `gpt-6.1-sol` は `none` にできないので、速さが要るなら `gpt-6-luna` / `gpt-6-sol` |
 | ゲーム内のコスト表示が合わない | 仕様。価格はゲームが選んだモデルの単価で計算される（表示だけで、実際の課金には関わらない） |

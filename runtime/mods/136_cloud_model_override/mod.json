@@ -10,7 +10,7 @@
     "en": "Uses an OpenAI or Claude model that is not in the game's built-in list, picked from a list. The model name is swapped on the wire just before the request goes out, and parameters the new model rejects are fixed up",
     "ja": "ゲームの選択肢に無い OpenAI / Claude のモデルを、一覧から選んで使う。送信直前にモデル名を差し替え、差し替え先が受け付けない引数も直す"
   },
-  "version": "3",
+  "version": "4",
   "author": "R01/Flossian",
   "settings": {
     "OPENAI_MODEL": {
@@ -18,6 +18,7 @@
       "values": [
         "off",
         "gpt-6-astra",
+        "gpt-6.1-sol",
         "gpt-6-sol",
         "gpt-6-luna",
         "gpt-5.6-sol",
@@ -65,8 +66,8 @@
         "en": "OpenAI: reasoning effort"
       },
       "note": {
-        "ja": "keep はゲームが組み立てた値のまま（gpt-5.5 などを選んでいれば none）。上げると賢くなるが応答が遅くなる。gpt-6-astra は none を受け付けないので low に上げて送る",
-        "en": "keep = whatever the game built (none for gpt-5.5 and similar). Higher is smarter but slower. gpt-6-astra rejects none, so low is sent instead"
+        "ja": "keep はゲームが組み立てた値のまま（gpt-5.5 などを選んでいれば none）。上げると賢くなるが応答が遅くなる。gpt-6-astra と gpt-6.1-sol は none を受け付けないので low に上げて送る",
+        "en": "keep = whatever the game built (none for gpt-5.5 and similar). Higher is smarter but slower. gpt-6-astra and gpt-6.1-sol reject none, so low is sent instead"
       }
     },
     "CLAUDE_MODEL": {
@@ -74,6 +75,8 @@
       "values": [
         "off",
         "claude-opus-5-5",
+        "claude-sonnet-5-5",
+        "claude-haiku-5-5",
         "claude-opus-5",
         "claude-sonnet-5",
         "claude-haiku-4-5",

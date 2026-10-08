@@ -84,6 +84,11 @@ assert fixed["reasoning"] == {"effort": "none"}, fixed
 fixed = {"model": "gpt-4.1", "messages": [], "reasoning_effort": "none"}
 MOD._fix_openai(fixed, "gpt-6-astra", "keep", "/chat/completions")
 assert fixed["reasoning_effort"] == "low", fixed
+# GPT-6.1 Sol も none を断る（GPT-6 Sol は受ける）
+fixed = {"model": "gpt-5.5", "input": [], "reasoning": {"effort": "none"}}
+MOD._fix_openai(fixed, "gpt-6.1-sol", "keep", "/responses")
+assert fixed["reasoning"] == {"effort": "low"}, fixed
+assert MOD.openai_generation("gpt-6.1-sol") == 6
 assert MOD.openai_generation("gpt-6-sol") == 6 and MOD.openai_generation("gpt-5.6-luna") == 5
 assert MOD.openai_generation("gpt-4.1") == 4 and MOD.openai_generation("o3") == 0
 
@@ -127,6 +132,29 @@ assert fixed == {"model": "claude-sonnet-5", "thinking": {"type": "adaptive"}}, 
 fixed = {"model": "x", "thinking": {"type": "disabled"}}
 MOD._fix_claude(fixed, "claude-opus-4-8", "keep")
 assert fixed["thinking"] == {"type": "disabled"}
+
+# Sonnet 5.5 は disabled を between_tools で言い直す。xhigh / max では受けないので外す
+fixed = {"model": "x", "thinking": {"type": "disabled"}, "temperature": 0.7,
+         "tool_choice": {"type": "any"}}
+MOD._fix_claude(fixed, "claude-sonnet-5-5", "low")
+assert fixed == {"model": "claude-sonnet-5-5", "thinking": {"type": "between_tools"},
+                 "tool_choice": {"type": "auto"}, "output_config": {"effort": "low"}}, fixed
+fixed = {"model": "x", "thinking": {"type": "disabled"}, "output_config": {"effort": "max"}}
+MOD._fix_claude(fixed, "claude-sonnet-5-5", "keep")
+assert "thinking" not in fixed, fixed
+assert MOD.claude_traits("claude-sonnet-5")["between_tools"] is False
+
+# Haiku 5.5 は disabled と強制ツール指定を受けるが、sampling は断る。xhigh / max では disabled も断る
+fixed = {"model": "x", "thinking": {"type": "disabled"}, "temperature": 0.7,
+         "tool_choice": {"type": "any"}}
+MOD._fix_claude(fixed, "claude-haiku-5-5", "low")
+assert fixed == {"model": "claude-haiku-5-5", "thinking": {"type": "disabled"},
+                 "tool_choice": {"type": "any"}, "output_config": {"effort": "low"}}, fixed
+for target in ("claude-haiku-5-5", "claude-opus-5"):
+    fixed = {"model": "x", "thinking": {"type": "disabled"}, "output_config": {"effort": "xhigh"}}
+    MOD._fix_claude(fixed, target, "keep")
+    assert "thinking" not in fixed, (target, fixed)
+assert MOD.claude_traits("claude-haiku-4-5")["sampling"] is False
 
 # 古い世代は sampling を残し、Haiku 4.5 には effort を送らない
 fixed = {"model": "x", "temperature": 0.5, "output_config": {"effort": "high"}}

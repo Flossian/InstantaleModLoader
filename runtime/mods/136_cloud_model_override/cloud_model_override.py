@@ -49,12 +49,14 @@ SDK が呼び出し側の dict をそのまま握っている場合に、
 差し替え先が断る引数だけを直してから送る（`_fix_openai` / `_fix_claude`）。
 
   * OpenAI: `effort="minimal"` は GPT-5（無印）系だけのもの。他へ送るなら `"none"` に読み替える。
-    GPT-6 Astra は `"none"` も断るので `"low"` に上げる。
+    GPT-6 Astra と GPT-6.1 Sol は `"none"` も断るので `"low"` に上げる。
     GPT-5 以降は `temperature` / `top_p` / `top_logprobs` を断り、
     古い経路（chat.completions）の `max_tokens` は `max_completion_tokens` に移す
   * Claude: 新しい世代は `temperature` / `top_p` / `top_k` と
     `thinking.budget_tokens` を断る。Opus 5.5 / Fable 系は思考を切れず、
-    強制ツール指定（`tool_choice` の `any` / `tool`）も断る
+    強制ツール指定（`tool_choice` の `any` / `tool`）も断る。
+    Sonnet 5.5 も `disabled` を断るが、`between_tools` で思考を切れる。
+    Opus 5 / Haiku 5.5 / Sonnet 5.5 は、effort が `xhigh` / `max` だと思考を切る指定を断る
 
 ## 割り切り
 
@@ -109,7 +111,7 @@ OPENAI_HOST = "api.openai.com"
 OPENAI_MINIMAL_OK = ("gpt-5", "gpt-5-mini", "gpt-5-nano")
 
 #: effort="none" を断るモデル（前方一致）。いちばん浅い "low" に上げる。
-OPENAI_NO_NONE = ("gpt-6-astra",)
+OPENAI_NO_NONE = ("gpt-6-astra", "gpt-6.1-sol")
 
 #: 推論モデル（GPT-5 以降）が断るサンプリング系の引数。
 OPENAI_SAMPLING = ("temperature", "top_p", "top_logprobs")
@@ -137,26 +139,34 @@ def _openai_effort(target, value):
 # sampling:     temperature / top_p / top_k を断る
 # budget:       thinking {type: enabled, budget_tokens} を断る
 # no_disable:   thinking {type: disabled} を断る（思考を切れない）
+# between_tools: disabled の代わりに thinking {type: between_tools} で思考を切れる
+# off_upto_high: 思考を切る指定（disabled / between_tools）は effort が high 以下のときだけ受ける
 # no_forced:    tool_choice の any / tool を断る
 # effort:       output_config.effort を受ける
 _STRICT = {"sampling": True, "budget": True, "no_disable": True,
-           "no_forced": True, "effort": True}
+           "between_tools": False, "off_upto_high": False, "no_forced": True, "effort": True}
 _CLAUDE_TRAITS = (
     # 前方一致なので、長い名前を先に並べる。
     ("claude-opus-5-5", _STRICT),
+    ("claude-sonnet-5-5", dict(_STRICT, between_tools=True, off_upto_high=True)),
+    ("claude-haiku-5-5", dict(_STRICT, no_disable=False, off_upto_high=True,
+                              no_forced=False)),
     ("claude-fable-5-1", _STRICT),
     ("claude-mythos-5-1", _STRICT),
     ("claude-fable-5", dict(_STRICT, no_forced=False)),
     ("claude-mythos-5", dict(_STRICT, no_forced=False)),
-    ("claude-opus-5", dict(_STRICT, no_disable=False, no_forced=False)),
+    ("claude-opus-5", dict(_STRICT, no_disable=False, off_upto_high=True, no_forced=False)),
     ("claude-sonnet-5", dict(_STRICT, no_disable=False, no_forced=False)),
     ("claude-opus-4-8", dict(_STRICT, no_disable=False, no_forced=False)),
     ("claude-opus-4-7", dict(_STRICT, no_disable=False, no_forced=False)),
     ("claude-opus-4-6", {"sampling": False, "budget": False, "no_disable": False,
+                         "between_tools": False, "off_upto_high": False,
                          "no_forced": False, "effort": True}),
     ("claude-sonnet-4-6", {"sampling": False, "budget": False, "no_disable": False,
+                           "between_tools": False, "off_upto_high": False,
                            "no_forced": False, "effort": True}),
     ("claude-haiku-4-5", {"sampling": False, "budget": False, "no_disable": False,
+                          "between_tools": False, "off_upto_high": False,
                           "no_forced": False, "effort": False}),
 )
 
@@ -245,11 +255,23 @@ def _fix_claude(body, target, effort):
                 new["display"] = thinking["display"]
             body["thinking"] = new
             changed.append("thinking enabled->adaptive")
-        elif kind == "disabled" and traits["no_disable"]:
-            # 切れないモデルには指定ごと外す（既定で adaptive になる）。
-            # 速さは effort で抑える。
-            del body["thinking"]
-            changed.append("-thinking disabled")
+        elif kind == "disabled" and (traits["no_disable"] or traits["off_upto_high"]):
+            config = body.get("output_config")
+            sent = effort if effort != "keep" else (
+                config.get("effort") if isinstance(config, dict) else None)
+            if traits["off_upto_high"] and sent in ("xhigh", "max"):
+                # この推論量では切る指定そのものを断る。
+                del body["thinking"]
+                changed.append("-thinking disabled")
+            elif traits["between_tools"]:
+                # 切り方が別の名前になっただけ。ゲームの「考えない」をそのまま通す。
+                body["thinking"] = {"type": "between_tools"}
+                changed.append("thinking disabled->between_tools")
+            elif traits["no_disable"]:
+                # 切れないモデルには指定ごと外す（既定で adaptive になる）。
+                # 速さは effort で抑える。
+                del body["thinking"]
+                changed.append("-thinking disabled")
 
     choice = body.get("tool_choice")
     if (traits["no_forced"] and isinstance(choice, dict)
