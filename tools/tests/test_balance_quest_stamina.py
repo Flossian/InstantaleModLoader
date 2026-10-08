@@ -6,7 +6,7 @@
 確認するもの:
 
   割合     … 易しい・適正・上位と、その間の直線
-  クリア   … ゲームの引き算の後に、クリア前の体力から決め直した量を引いた値へ置き直す
+  クリア   … ゲームの引き算の後に、クリア前のスタミナから決め直した量を引いた値へ置き直す
   被弾     … 依頼の最中の保存ごとに減った分を足す（回復で減らない）。数えていなくても最大 HP の不足を使う
   同行者   … 本人のレベルと被弾で決める。PARTY_TOO を切るとゲームのまま
   後始末   … exhausted を上限の半分以下で立て直し、update_max_hp を呼ぶ。ゲームが引かなかった人には触らない
@@ -255,7 +255,7 @@ print("ゲームが引かなかった")
 app, module, ctx = setup(party=False)
 start(app, ctx, 72)
 ctx.hooks[QUEST_END](lambda self: "nothing", Manager(app))
-check("体力に触らない", app.player.physical_integrity == 49 and app.player.max_hp_updates == 0)
+check("スタミナに触らない", app.player.physical_integrity == 49 and app.player.max_hp_updates == 0)
 
 print("ゲームの値")
 app, module, ctx = setup(FAIR_PERCENT=50, EASY_PERCENT=50, HARD_PERCENT=50, DAMAGE_PERCENT=0)

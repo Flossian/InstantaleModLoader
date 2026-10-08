@@ -68,7 +68,7 @@ import time
 import traceback
 import uuid
 
-__version__ = "1.14.0"
+__version__ = "1.15.0"
 
 # mod との契約。`mod.json` の "api" がこれと突き合わされる。
 #

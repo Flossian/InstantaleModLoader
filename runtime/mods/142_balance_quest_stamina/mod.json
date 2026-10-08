@@ -4,11 +4,11 @@
   "kind": "fix",
   "name": {
     "en": "Quest clears cost stamina by difficulty and damage taken",
-    "ja": "依頼のクリアで減る体力を難易度と被弾で変える"
+    "ja": "依頼のクリアで減るスタミナを難易度と被弾で変える"
   },
   "description": {
     "en": "A quest clear takes half of your maximum stamina no matter how easy the quest was, and you cannot take a quest at half stamina or below, so every clear sends you back to the inn. This decides the cost from how far the quest's difficulty is from your level (easy quests cost little, fair ones about a third, harder ones half or more) and adds more the more HP you lost during the quest. Party members follow the same rule with their own level and damage",
-    "ja": "依頼をクリアすると、易しい依頼でも体力が上限の半分減る。体力が半分以下だと依頼を受けられないので、1件ごとに宿で休むしかない。減る量を、依頼の難易度とレベルの差（易しい依頼は少し、適正は約3分の1、上位は半分以上）で決め、依頼の間に HP を多く失うほど上乗せする。同行者も本人のレベルと被弾で同じように決める"
+    "ja": "依頼をクリアすると、易しい依頼でもスタミナが上限の半分減る。スタミナが半分以下だと依頼を受けられないので、1件ごとに宿で休むしかない。減る量を、依頼の難易度とレベルの差（易しい依頼は少し、適正は約3分の1、上位は半分以上）で決め、依頼の間に HP を多く失うほど上乗せする。同行者も本人のレベルと被弾で同じように決める"
   },
   "version": "1",
   "author": "R01/Flossian",
@@ -19,7 +19,7 @@
       "min": 0,
       "max": 100,
       "label": {
-        "ja": "適正の依頼で減る体力（上限の %）",
+        "ja": "適正の依頼で減るスタミナ（上限の %）",
         "en": "Stamina spent on a fair quest (% of max)"
       },
       "note": {
@@ -33,7 +33,7 @@
       "min": 0,
       "max": 100,
       "label": {
-        "ja": "易しい依頼で減る体力（上限の %）",
+        "ja": "易しい依頼で減るスタミナ（上限の %）",
         "en": "Stamina spent on an easy quest (% of max)"
       },
       "note": {
@@ -47,7 +47,7 @@
       "min": 0,
       "max": 100,
       "label": {
-        "ja": "上位の依頼で減る体力（上限の %）",
+        "ja": "上位の依頼で減るスタミナ（上限の %）",
         "en": "Stamina spent on a harder quest (% of max)"
       },
       "note": {
@@ -75,7 +75,7 @@
       "min": 0,
       "max": 100,
       "label": {
-        "ja": "被弾で上乗せする体力（上限の %）",
+        "ja": "被弾で上乗せするスタミナ（上限の %）",
         "en": "Extra stamina for damage taken (% of max)"
       },
       "note": {

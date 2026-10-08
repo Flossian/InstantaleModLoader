@@ -85,7 +85,7 @@
 | [`139_fix_quest_generation_runaway`](MODS.md#139_fix_quest_generation_runaway-依頼の生成が終わらずに失敗するのを直す) | 依頼の生成で敵が増え続ける件の修正 | 依頼の生成が終わらずに失敗するのを直す | 1 |  |
 | [`140_fix_busy_dots_speed`](MODS.md#140_fix_busy_dots_speed-待機表示のを普段の速さで流す) | 待機表示の「…」を普段の速さで流す | 待機表示の「…」を普段の速さで流す | - |  |
 | [`141_ui_free_input_echo`](MODS.md#141_ui_free_input_echo-会話の外で送った文も本文に残す) | 会話の外で送った文も本文に残す | 会話の外で送った文も本文に残す | - |  |
-| [`142_balance_quest_stamina`](MODS.md#142_balance_quest_stamina-依頼のクリアで減る体力を難易度と被弾で変える) | 依頼のクリアで減る体力を難易度と被弾で変える | 依頼のクリアで減る体力を難易度と被弾で変える | 7 |  |
+| [`142_balance_quest_stamina`](MODS.md#142_balance_quest_stamina-依頼のクリアで減るスタミナを難易度と被弾で変える) | 依頼のクリアで減るスタミナを難易度と被弾で変える | 依頼のクリアで減るスタミナを難易度と被弾で変える | 7 |  |
 | [`406_gemini_user_role_fix`](MODS.md#406_gemini_user_role_fix-クラウド-api-の-gemini-で-user-role-の無い依頼を補う) | Geminiの無応答の防止 | クラウド API の Gemini で user role の無い依頼を補う | - |  |
 
 ---
@@ -188,7 +188,7 @@
 | `237_probe_affinity` | NPC のプレイヤーへの好感度（`relationship.player.affinity`）がいつ・どれだけ動くかを録る |
 | `238_probe_prison` | 逮捕・裁判・服役・釈放の流れを録る |
 | `239_probe_game_flags` | ゲームの「〜の最中」の旗 7 つ（`in_battle` / `in_boss_battle` / `in_colosseum_battle` / `in_conversation` / `in_free_input` / `in_action_in_conversation` / `in_shopping`）を録る |
-| `240_probe_stamina` | 主人公と同行者の体力（`physical_integrity` / `max_physical_integrity`）と疲労の旗（`exhausted`）が変わるたびに、呼び出し元の連鎖と、依頼や戦闘の最中かを録る |
+| `240_probe_stamina` | 主人公と同行者のスタミナ（`physical_integrity` / `max_physical_integrity`）と疲労の旗（`exhausted`）が変わるたびに、呼び出し元の連鎖と、依頼や戦闘の最中かを録る |
 
 ---
 
