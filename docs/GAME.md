@@ -3122,6 +3122,10 @@ retrieval を待たず第一声から載る。
 - 会話を閉じた192回のうち、好感度が動いたのは1回（0 → 4。原因は未特定）。
   会話の LLM の返答（`conversation_facilitator`）にも要約（`conversation_resolver`）にも好感度の欄は無い
 - 日数の送り（`elapse_days`）では動かない（1回・122人）
+- 会話の終わりの感情の文の作り直しは、要約（`conversation_resolver`）が返った**後**（同じ `resolve_conversation` の中）。
+  要約の関数を包んで返った直後に好感度を書くと、その会話の終わりにもう新しい値の文になる（`337_` の実機。書き込みの2ミリ秒後に作り直した）
+- 要約の頼みの返却型は `Result{summary: str}` の1項目。スキーマ文は `llm_manager:send_request` の中で型から作られる
+  （入口の本文は4件、`output_data` の記録は5件）ので、型を差し替えると足した項目もスキーマ文と grammar に出る（`337_` が使う）
 
 ### 2.26 クエストの外の判定（マスターAI の `roll_the_dice`）
 

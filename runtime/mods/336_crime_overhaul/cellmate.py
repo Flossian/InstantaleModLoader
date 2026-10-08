@@ -187,7 +187,7 @@ def install(env):
         return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
     def write_affinity(app, npc_id, value):
-        """実行時の人物と素データの両方へ書く（`912_` と同じ。保存のときゲームは実行時の値を写す）。"""
+        """実行時の人物と素データの両方へ書く（`337_` と同じ。保存のときゲームは実行時の値を写す）。"""
         targets = [getattr(ui.character_of(app, npc_id), "relationship", None)]
         for where, holder in npcs.npc_stores(app):
             if "characters" in where.rsplit(".", 1)[-1]:

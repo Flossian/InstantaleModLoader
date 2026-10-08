@@ -7,8 +7,8 @@
     "ja": "会話による好感度の変動"
   },
   "description": {
-    "en": "When a conversation closes, the LLM judges once (-3 to +3) how the NPC's feelings toward you changed, and their affinity moves: +2 per step up, -4 per step down. Talking alone raises it only up to 60 (\"feels like a companion\"), and only once a day per person. Flattery alone does not count",
-    "ja": "会話を閉じるたびに、相手の気持ちがどう動いたかを LLM が1回だけ -3〜+3 で判定し、好感度が上下する。上がるときは1段 +2、下がるときは1段 -4。会話だけで上がるのは 60（仲間だと感じている）まで、同じ相手から上がるのは1日1回まで。おだてるだけでは上がらない"
+    "en": "When a conversation closes, the game's own summary request also judges (-3 to +3) how the NPC's feelings toward you changed, and their affinity moves: +2 per step up, -4 per step down. Talking alone raises it only up to 60 (\"feels like a companion\"), and only once a day per person. Flattery alone does not count",
+    "ja": "会話を閉じるたびに、相手の気持ちがどう動いたかを -3〜+3 で判定し、好感度が上下する。判定はゲームの会話の要約に相乗りさせるので、LLM を呼ぶ回数は増えない。上がるときは1段 +2、下がるときは1段 -4。会話だけで上がるのは 60（仲間だと感じている）まで、同じ相手から上がるのは1日1回まで。おだてるだけでは上がらない"
   },
   "version": "1",
   "author": "R01/Flossian",

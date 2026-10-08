@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""912_conversation_affinity をゲーム抜きで通す。
+"""337_conversation_affinity をゲーム抜きで通す。
 
-    python tools/tests/test_wip_conversation_affinity.py
+    python tools/tests/test_conversation_affinity.py
 
 偽の app / Character / 会話の要約の関数 / 送信の境目（`llm_manager:send_request`）と、
 pydantic の代わりの型（`create_model` で子の型を作れる）を差し込み、次を確認する。

@@ -2,7 +2,7 @@
 """盗みの稼ぎ。自由行動の盗みの額に床と天井を付ける。仕様は DOC.md「盗みの稼ぎ」。
 
 - 行動の締めの要約（`master_ai_process_summarizer*`。`lawfulness_loss` を返す側）の頼みに、
-  「プレイヤーが不法に得た金銭の規模」を 0〜4 で答える項目を相乗りさせる（`912_` と同じ形。LLM を別に呼ばない）
+  「プレイヤーが不法に得た金銭の規模」を 0〜4 で答える項目を相乗りさせる（`337_` と同じ形。LLM を別に呼ばない）
 - 規模ごとの目安は、その土地の依頼1件の報酬（ゲームの `get_quest_reward(土地の平均難易度)`）× 割合
 - 行動の最初の facilitator の前に所持金を控え、要約の後の所持金との差を「LLM が渡した額」とする。
   0 なら目安を渡し、幅（目安の下限%〜上限%）の外なら幅の端へ寄せる
@@ -62,7 +62,7 @@ def has_field(structure, name):
 
 
 def with_instruction(message, text):
-    """先頭の system の本文に `text` を書き足した写し。system が無ければ None（`912_` と同じ）。"""
+    """先頭の system の本文に `text` を書き足した写し。system が無ければ None（`337_` と同じ）。"""
     if not isinstance(message, list):
         return None
     for index, turn in enumerate(message):
@@ -79,7 +79,7 @@ def without_added(data):
 
 
 def restore(raw, structure):
-    """足した型で返ってきた答えを元の型の形に戻す（`912_` と同じ。要約の記録とセーブに判定を混ぜない）。"""
+    """足した型で返ってきた答えを元の型の形に戻す（`337_` と同じ。要約の記録とセーブに判定を混ぜない）。"""
     if isinstance(raw, dict):
         return without_added(raw)
     if isinstance(raw, str):
