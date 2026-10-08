@@ -1048,6 +1048,36 @@ def main():
     })
     check(sorted(decls) == ["COUNT", "MODE", "ON", "RATE"],
           "壊れた宣言は落とす（type 不明 / choice に values 無し）: {}".format(sorted(decls)))
+    grouped = C.normalize_decls({
+        "A": {"type": "int", "default": 1, "label": {"ja": "推論量", "en": "Effort"},
+              "group": {"ja": "Claude API", "en": "Claude API"}},
+        "B": {"type": "int", "default": 1, "label": "Count", "group": "Common"},
+    })
+    check(grouped["A"]["group"] == {"ja": "Claude API", "en": "Claude API"}
+          and grouped["B"]["group"] == {"ja": "Common", "en": "Common"}
+          and decls["COUNT"]["group"] == {"ja": "", "en": ""},
+          "見出し（group）は名乗りと同じ形に均す。書かなければ空: {}".format(grouped))
+    check(C.full_label(grouped["A"]) == "Claude API / 推論量"
+          and C.full_label(grouped["A"], "en") == "Claude API / Effort"
+          and C.full_label(decls["COUNT"]) == "COUNT",
+          "エラー文の名前には見出しを添える。見出しが無ければ名前だけ")
+    named = C.normalize_decls({
+        "MODEL": {"type": "choice", "values": ["off", "claude-opus-5-5"], "default": "off",
+                  "value_labels": {"claude-opus-5-5": "Claude Opus 5.5", "typo-model": "X"}},
+    })["MODEL"]
+    check(named["value_labels"] == {"claude-opus-5-5": {"en": "Claude Opus 5.5",
+                                                        "ja": "Claude Opus 5.5"}},
+          "選択肢の表示名は名乗りと同じ形に均し、選択肢に無い値への表示名は落とす: {}"
+          .format(named["value_labels"]))
+    check(C.choice_text(named, "claude-opus-5-5") == "Claude Opus 5.5"
+          and C.choice_text(named, "off") == "off",
+          "表示名があれば表示名、無ければ値の綴りのまま")
+    check(C.choice_value(named, "Claude Opus 5.5") == "claude-opus-5-5"
+          and C.choice_value(named, "off") == "off"
+          and C.coerce(named, C.choice_value(named, "Claude Opus 5.5")) == (True, "claude-opus-5-5", ""),
+          "画面の表示名は値に戻り、そのまま coerce を通る（保存するのは値）")
+    check(decls["MODE"]["value_labels"] == {} and decls["COUNT"]["value_labels"] == {},
+          "value_labels を書かなければ空")
     check(C.coerce(decls["COUNT"], "7") == (True, 7, ""),
           "文字列から拾う（GUI の入力欄も手書きの JSON も同じ経路）")
     check(C.coerce(decls["COUNT"], "99")[0] is False, "上限を外れた値は撥ねる")

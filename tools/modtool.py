@@ -305,7 +305,7 @@ def coerce_all(mod_dir, raw, root=""):
     for key, decl in decls(mod_dir, root).items():
         ok, value, why = config.coerce(decl, raw.get(key))
         if not ok:
-            return None, "{}: {}".format(decl["label"]["ja"], why)
+            return None, "{}: {}".format(config.full_label(decl), why)
         values[key] = value
     return values, ""
 
@@ -619,15 +619,34 @@ def setup_theme(window, root=""):
 #  道具側は `world_settings_main(MOD_DIR)` を呼ぶだけ。
 # ==========================================================================
 
-def shown(value):
-    """説明に添える値の見せ方。空は（空）、真偽は ON / OFF、他はそのまま。
+def shown(value, decl=None):
+    """説明に添える値の見せ方。空は（空）、真偽は ON / OFF、表示名のある選択肢は表示名、他はそのまま。
 
     空文字をそのまま出すと説明が「既定: 」で終わって、
     値が無いのか説明が切れているのか分からない。
     """
     if isinstance(value, bool):
         return "ON" if value else "OFF"
-    return "（空）" if value == "" else str(value)
+    if value == "":
+        return "（空）"
+    if decl is not None and decl["type"] == "choice":
+        return _choice_text(decl, value)
+    return str(value)
+
+
+def _choice_text(decl, value):
+    """choice の値 -> 画面の文字（`config.choice_text`）。
+
+    宣言（`decls`）を読んだ時点でローダは `sys.path` に載っているので、ここでは引くだけ。
+    """
+    from instantale_modloader import config
+    return config.choice_text(decl, value)
+
+
+def _choice_value(decl, text):
+    """画面の文字 -> choice の値の文字列（`config.choice_value`）。"""
+    from instantale_modloader import config
+    return config.choice_value(decl, text)
 
 
 def world_store_path(root, state_dir, mod_dir, world):
@@ -801,16 +820,31 @@ class _Form(object):
         # 1列目（入力欄）だけ伸ばす。0列目のラベルは字の幅のまま。
         parent.columnconfigure(1, weight=1)
         # 1項目で2行使う（入力欄の行と、その下の説明の行）。だから row は 2 ずつ進む。
+        # 見出し（`"group"`）が変わる所では、その前に見出しの1行を挟む。
         row = 0
+        group = ""
         for key, decl in found.items():
+            heading = decl.get("group", {}).get("ja", "")
+            if heading and heading != group:
+                # 2つ目からは線も引く（`gui.SettingsDialog` と同じ見え方）。
+                if row:
+                    ttk.Separator(parent).grid(row=row, column=0, columnspan=2,
+                                               sticky="ew", pady=(14, 6))
+                    row += 1
+                ttk.Label(parent, text=heading, style="Group.TLabel").grid(
+                    row=row, column=0, columnspan=2, sticky="w")
+                row += 1
+            group = heading
             ttk.Label(parent, text=decl["label"]["ja"]).grid(
                 row=row, column=0, sticky="nw", padx=(0, 12), pady=(6, 0))
             if decl["type"] == "bool":
                 var = tk.BooleanVar()
                 ttk.Checkbutton(parent, variable=var).grid(row=row, column=1, sticky="w", pady=(6, 0))
             elif decl["type"] == "choice":
+                # 欄には表示名（`value_labels`）を出す。値との行き来は `get` / `set`。
                 var = tk.StringVar()
-                ttk.Combobox(parent, textvariable=var, values=decl["values"],
+                ttk.Combobox(parent, textvariable=var,
+                             values=[_choice_text(decl, v) for v in decl["values"]],
                              state="readonly").grid(row=row, column=1, sticky="ew", pady=(6, 0))
             else:
                 var = tk.StringVar()
@@ -826,8 +860,10 @@ class _Form(object):
             row += 2
 
     def get(self):
-        """入力欄のいまの値。`bool` 以外は文字列（`coerce_all` に渡す形）。"""
-        return dict((key, var.get()) for key, var in self.vars.items())
+        """入力欄のいまの値。`bool` 以外は文字列（`coerce_all` に渡す形）。choice は表示名を値に戻す。"""
+        return dict((key, _choice_value(self.decls[key], var.get())
+                     if self.decls[key]["type"] == "choice" else var.get())
+                    for key, var in self.vars.items())
 
     def set(self, values):
         """値を入力欄に流し込む。`bool` はそのまま、他は文字列にして入れる。
@@ -837,7 +873,12 @@ class _Form(object):
         """
         import tkinter as tk
         for key, var in self.vars.items():
-            var.set(values[key] if isinstance(var, tk.BooleanVar) else str(values[key]))
+            if isinstance(var, tk.BooleanVar):
+                var.set(values[key])
+            elif self.decls[key]["type"] == "choice":
+                var.set(_choice_text(self.decls[key], values[key]))
+            else:
+                var.set(str(values[key]))
 
 
 def build_world_settings_window(mod_dir, title="", blurb=""):
@@ -907,7 +948,7 @@ def build_world_settings_window(mod_dir, title="", blurb=""):
     bulk_bottom.pack(side="bottom", fill="x", pady=(6, 0))
     body = ttk.Frame(bulk, padding=(0, 0, 6, 0))    # 入力欄は grid、外は pack。混ぜないための子枠
     body.pack(fill="both", expand=True)
-    shared_form = _Form(_scrollable(body), found, lambda k: "既定: " + shown(found[k]["default"]))
+    shared_form = _Form(_scrollable(body), found, lambda k: "既定: " + shown(found[k]["default"], found[k]))
     shared_form.set(shared)
     ttk.Button(bulk_bottom, text="既定に戻す", command=lambda: shared_form.set(
         dict((k, d["default"]) for k, d in found.items()))).pack(side="right")
@@ -933,7 +974,7 @@ def build_world_settings_window(mod_dir, title="", blurb=""):
                            if worlds else "世界が見つかりません: " + store)
     body = ttk.Frame(per_world, padding=(0, 0, 6, 0))
     body.pack(fill="both", expand=True)
-    world_form = _Form(_scrollable(body), found, lambda k: "一括設定: " + shown(shared[k]))
+    world_form = _Form(_scrollable(body), found, lambda k: "一括設定: " + shown(shared[k], found[k]))
     ttk.Button(world_bottom, text="一括設定に戻す",
                command=lambda: world_form.set(shared)).pack(side="right")
 

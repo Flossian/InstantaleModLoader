@@ -109,6 +109,52 @@ def _label(value, fallback: str) -> dict:
     return {"en": en, "ja": ja or en}
 
 
+def full_label(decl: dict, lang: str = "ja") -> str:
+    """見出しを添えた設定の名前（`Claude / 推論量`）。エラー文など、見出しから離れて出す所で使う。
+
+    見出しの下では項目名を短くできる（`推論量`）ので、名前だけだと同じ名前が2つ並びうる。
+    """
+    group = (decl.get("group") or {}).get(lang) or ""
+    label = decl["label"][lang]
+    return "{} / {}".format(group, label) if group else label
+
+
+def _value_labels(raw, values, name) -> dict:
+    """choice の `"value_labels"`（値 -> 表示名）を `{str(値): {"en", "ja"}}` に均す。
+
+    選択肢に無い値への表示名は落とす（綴りの誤りは `tools/check_mods.py` が報告する）。
+    """
+    if not isinstance(raw, dict) or not values:
+        return {}
+    known = set(str(v) for v in values)
+    out = {}
+    for key, label in raw.items():
+        if str(key) not in known:
+            log("settings: {!r} の value_labels に選択肢に無い値 {!r}".format(name, key),
+                level="WARN")
+            continue
+        out[str(key)] = _label(label, str(key))
+    return out
+
+
+def choice_text(decl: dict, value, lang: str = "ja") -> str:
+    """choice の値を画面に出す文字にする。表示名が無ければ値そのもの。"""
+    key = "" if value is None else str(value)
+    label = (decl.get("value_labels") or {}).get(key)
+    return label[lang] if label else key
+
+
+def choice_value(decl: dict, text, lang: str = "ja"):
+    """画面の文字を choice の値（の文字列）に戻す。表示名でなければそのまま返す。
+
+    戻りは文字列で、型は `coerce` が選択肢と突き合わせて戻す。
+    """
+    for key, label in (decl.get("value_labels") or {}).items():
+        if label[lang] == text:
+            return key
+    return text
+
+
 def normalize_decls(raw) -> dict:
     """`mod.json` の "settings" を扱いやすい形に均す。壊れた宣言は落とす。
 
@@ -149,6 +195,10 @@ def normalize_decls(raw) -> dict:
             "max": spec.get("max"),
             "label": _label(spec.get("label"), name),
             "note": _label(spec.get("note"), ""),
+            # 設定画面の見出し。続けて並んだ同じ見出しの項目を1つの区切りにまとめる。
+            "group": _label(spec.get("group"), ""),
+            # choice の選択肢の表示名。保存するのは値のまま（画面だけ読みやすくする）。
+            "value_labels": _value_labels(spec.get("value_labels"), values, name),
         }
     return decls
 

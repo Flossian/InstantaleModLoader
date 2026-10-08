@@ -7,8 +7,8 @@
     "ja": "クラウドモデルの差し替え"
   },
   "description": {
-    "en": "Uses an OpenAI or Claude model that is not in the game's built-in list, picked from a list. The model name is swapped on the wire just before the request goes out, and parameters the new model rejects are fixed up",
-    "ja": "ゲームの選択肢に無い OpenAI / Claude のモデルを、一覧から選んで使う。送信直前にモデル名を差し替え、差し替え先が受け付けない引数も直す"
+    "en": "Uses an OpenAI or Claude model that is not in the game's built-in list, picked from a list. The model name is swapped on the wire just before the request goes out, and parameters the new model rejects are fixed up. Can also choose where prompt caching marks the request",
+    "ja": "ゲームの選択肢に無い OpenAI / Claude のモデルを、一覧から選んで使う。送信直前にモデル名を差し替え、差し替え先が受け付けない引数も直す。プロンプトキャッシュの印の置き方も選べる"
   },
   "version": "4",
   "author": "R01/Flossian",
@@ -30,9 +30,26 @@
         "gpt-5.4-nano"
       ],
       "default": "gpt-6-luna",
+      "value_labels": {
+        "gpt-6-astra": "GPT-6 Astra",
+        "gpt-6.1-sol": "GPT-6.1 Sol",
+        "gpt-6-sol": "GPT-6 Sol",
+        "gpt-6-luna": "GPT-6 Luna",
+        "gpt-5.6-sol": "GPT-5.6 Sol",
+        "gpt-5.6-terra": "GPT-5.6 Terra",
+        "gpt-5.6-luna": "GPT-5.6 Luna",
+        "gpt-5.5": "GPT-5.5",
+        "gpt-5.4": "GPT-5.4",
+        "gpt-5.4-mini": "GPT-5.4 mini",
+        "gpt-5.4-nano": "GPT-5.4 nano"
+      },
+      "group": {
+        "ja": "OpenAI API",
+        "en": "OpenAI API"
+      },
       "label": {
-        "ja": "OpenAI: 実際に送るモデル",
-        "en": "OpenAI: model actually sent"
+        "ja": "実際に送るモデル",
+        "en": "Model actually sent"
       },
       "note": {
         "ja": "ゲームの設定画面でプロバイダを OpenAI にしているときだけ効く。モデルは OpenAI の中から何を選んでいてもよい（速い経路を組み立てる gpt-5.5 などを推奨）。off で差し替えない",
@@ -42,9 +59,13 @@
     "OPENAI_CUSTOM": {
       "type": "str",
       "default": "",
+      "group": {
+        "ja": "OpenAI API",
+        "en": "OpenAI API"
+      },
       "label": {
-        "ja": "OpenAI: 一覧に無いモデル",
-        "en": "OpenAI: model not in the list"
+        "ja": "一覧に無いモデル",
+        "en": "Model not in the list"
       },
       "note": {
         "ja": "書いてあれば上の一覧より優先する。空なら一覧の選択を使う",
@@ -61,13 +82,52 @@
         "high"
       ],
       "default": "keep",
+      "group": {
+        "ja": "OpenAI API",
+        "en": "OpenAI API"
+      },
       "label": {
-        "ja": "OpenAI: 推論量",
-        "en": "OpenAI: reasoning effort"
+        "ja": "推論量",
+        "en": "Reasoning effort"
       },
       "note": {
-        "ja": "keep はゲームが組み立てた値のまま（gpt-5.5 などを選んでいれば none）。上げると賢くなるが応答が遅くなる。gpt-6-astra と gpt-6.1-sol は none を受け付けないので low に上げて送る",
-        "en": "keep = whatever the game built (none for gpt-5.5 and similar). Higher is smarter but slower. gpt-6-astra and gpt-6.1-sol reject none, so low is sent instead"
+        "ja": "keep はゲームが組み立てた値のまま（gpt-5.5 などを選んでいれば none）。上げると賢くなるが応答が遅くなる。GPT-6 Astra と GPT-6.1 Sol は none を受け付けないので low に上げて送る",
+        "en": "keep = whatever the game built (none for gpt-5.5 and similar). Higher is smarter but slower. GPT-6 Astra and GPT-6.1 Sol reject none, so low is sent instead"
+      }
+    },
+    "OPENAI_CACHE": {
+      "type": "choice",
+      "values": [
+        "keep",
+        "off",
+        "stable"
+      ],
+      "default": "stable",
+      "value_labels": {
+        "keep": {
+          "ja": "ゲームのまま",
+          "en": "As the game sends"
+        },
+        "off": {
+          "ja": "使わない",
+          "en": "Off"
+        },
+        "stable": {
+          "ja": "前回と同じ所まで控える",
+          "en": "Cache the shared part"
+        }
+      },
+      "group": {
+        "ja": "OpenAI API",
+        "en": "OpenAI API"
+      },
+      "label": {
+        "ja": "プロンプトキャッシュ",
+        "en": "Prompt caching"
+      },
+      "note": {
+        "ja": "GPT-5.6 以降（GPT-6 系を含む）だけに効く。ゲームのままだと末尾に自動で印が付き、入力を毎回 1.25 倍で書き込むのに当たらない。使わないにすると割増しが無くなる。前回と同じ所まで控えるは、前の頼みと先頭から同じ部分だけを控え、2回目から 0.1 倍で読む",
+        "en": "Only for GPT-5.6 and later (including GPT-6). As the game sends, the marker goes at the end and every request is written at 1.25x without hits. Off removes that surcharge. Cache the shared part caches only what matches the previous request, read at 0.1x from the second time"
       }
     },
     "CLAUDE_MODEL": {
@@ -85,9 +145,24 @@
         "claude-sonnet-4-6"
       ],
       "default": "off",
+      "value_labels": {
+        "claude-opus-5-5": "Claude Opus 5.5",
+        "claude-sonnet-5-5": "Claude Sonnet 5.5",
+        "claude-haiku-5-5": "Claude Haiku 5.5",
+        "claude-opus-5": "Claude Opus 5",
+        "claude-sonnet-5": "Claude Sonnet 5",
+        "claude-haiku-4-5": "Claude Haiku 4.5",
+        "claude-fable-5-1": "Claude Fable 5.1",
+        "claude-opus-4-8": "Claude Opus 4.8",
+        "claude-sonnet-4-6": "Claude Sonnet 4.6"
+      },
+      "group": {
+        "ja": "Claude API",
+        "en": "Claude API"
+      },
       "label": {
-        "ja": "Claude: 実際に送るモデル",
-        "en": "Claude: model actually sent"
+        "ja": "実際に送るモデル",
+        "en": "Model actually sent"
       },
       "note": {
         "ja": "ゲームの設定画面でプロバイダを Claude にし、Anthropic の API キーを入れているときだけ効く（OpenAI のままでは Claude へは送れない）。モデルは Claude の中から何を選んでいてもよい。off で差し替えない（推論量の指定も効かない）",
@@ -97,9 +172,13 @@
     "CLAUDE_CUSTOM": {
       "type": "str",
       "default": "",
+      "group": {
+        "ja": "Claude API",
+        "en": "Claude API"
+      },
       "label": {
-        "ja": "Claude: 一覧に無いモデル",
-        "en": "Claude: model not in the list"
+        "ja": "一覧に無いモデル",
+        "en": "Model not in the list"
       },
       "note": {
         "ja": "書いてあれば上の一覧より優先する。知らない名前には最新世代の制約（temperature 等を外す）を当てる",
@@ -115,13 +194,52 @@
         "high"
       ],
       "default": "low",
+      "group": {
+        "ja": "Claude API",
+        "en": "Claude API"
+      },
       "label": {
-        "ja": "Claude: 推論量",
-        "en": "Claude: effort"
+        "ja": "推論量",
+        "en": "Effort"
       },
       "note": {
-        "ja": "Opus 5.5 / Fable 5.1 は思考を切れないので、low にしないと応答が遅い。claude-haiku-4-5 には送らない（受け付けないため）",
-        "en": "Opus 5.5 / Fable 5.1 cannot turn thinking off, so anything above low is slow. Never sent to claude-haiku-4-5 (it rejects it)"
+        "ja": "Opus 5.5 / Fable 5.1 は思考を切れないので、low にしないと応答が遅い。Claude Haiku 4.5 には送らない（受け付けないため）",
+        "en": "Opus 5.5 / Fable 5.1 cannot turn thinking off, so anything above low is slow. Never sent to Claude Haiku 4.5 (it rejects it)"
+      }
+    },
+    "CLAUDE_CACHE": {
+      "type": "choice",
+      "values": [
+        "off",
+        "5m",
+        "1h"
+      ],
+      "default": "5m",
+      "value_labels": {
+        "off": {
+          "ja": "使わない",
+          "en": "Off"
+        },
+        "5m": {
+          "ja": "5分",
+          "en": "5 minutes"
+        },
+        "1h": {
+          "ja": "1時間",
+          "en": "1 hour"
+        }
+      },
+      "group": {
+        "ja": "Claude API",
+        "en": "Claude API"
+      },
+      "label": {
+        "ja": "プロンプトキャッシュ",
+        "en": "Prompt caching"
+      },
+      "note": {
+        "ja": "ゲームは付けていない。5分 / 1時間 にすると、前の頼みと先頭から同じ部分をその時間だけ控えさせる。同じ部分が続けば 2回目から入力の料金が下がる。書き込む回は 5分 で 1.25 倍、1時間 で 2 倍。同じ部分が短い頼みでは何も起きない。上のモデルを off にしていても効く",
+        "en": "The game sends none. 5 minutes / 1 hour caches the part that matches the previous request for that long. Input gets cheaper from the second time. Writes cost 1.25x (5 minutes) or 2x (1 hour). Requests with a short shared part are left alone. Works even when the model above is off"
       }
     },
     "LOG_LIMIT": {
@@ -129,6 +247,10 @@
       "default": 3,
       "min": 0,
       "max": 999,
+      "group": {
+        "ja": "共通",
+        "en": "Common"
+      },
       "label": {
         "ja": "差し替えをログに出す回数",
         "en": "How many swaps to log"

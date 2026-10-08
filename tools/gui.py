@@ -1166,7 +1166,20 @@ class SettingsDialog(tk.Toplevel):
             row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
 
         row = 1
+        group = ""
         for name, decl in mod["settings"].items():
+            # 見出し（`"group"`）が変わる所で区切る。同じ見出しは並んでいる間だけまとまる。
+            heading = decl.get("group", {}).get("ja", "")
+            if heading and heading != group:
+                # 2つ目からは線も引く。見出しの字は控えめなので、字だけだと境目が弱い。
+                if row > 1:
+                    ttk.Separator(frame).grid(row=row, column=0, columnspan=2,
+                                              sticky="ew", pady=(12, 6))
+                    row += 1
+                ttk.Label(frame, text=heading, style="Group.TLabel").grid(
+                    row=row, column=0, columnspan=2, sticky="w", pady=(0, 2))
+                row += 1
+            group = heading
             value = chosen.get(name, decl["default"])
             ttk.Label(frame, text=decl["label"]["ja"]).grid(
                 row=row, column=0, sticky="w", padx=(0, 10), pady=3)
@@ -1182,7 +1195,12 @@ class SettingsDialog(tk.Toplevel):
                 row += 1
             # 既定値を必ず見せる。
             # 「元に戻したい」ときに何に戻すのかが分かるように。
-            ttk.Label(frame, text="既定: {!r}".format(decl["default"]),
+            # 表示名のある選択肢は、欄と同じ表示名で見せる（値の綴りと見比べさせない）。
+            default_text = repr(decl["default"])
+            if decl["type"] == "choice" and \
+                    C.choice_text(decl, decl["default"]) != str(decl["default"]):
+                default_text = C.choice_text(decl, decl["default"])
+            ttk.Label(frame, text="既定: " + default_text,
                       style="Faint.TLabel").grid(row=row, column=1, sticky="w")
             row += 1
 
@@ -1266,9 +1284,10 @@ class SettingsDialog(tk.Toplevel):
             var = tk.BooleanVar(value=bool(value))
             return ttk.Checkbutton(parent, variable=var), var
         if kind == "choice":
-            var = tk.StringVar(value="" if value is None else str(value))
+            # 欄には表示名（`value_labels`）を出す。値へ戻すのは `_ok` の `choice_value`。
+            var = tk.StringVar(value=C.choice_text(decl, value))
             box = ttk.Combobox(parent, textvariable=var, state="readonly",
-                               values=[str(v) for v in decl["values"]])
+                               values=[C.choice_text(decl, v) for v in decl["values"]])
             return box, var
         # int / float / str。
         # int / float の空欄は「未指定」（allow_null の設定で許される）。
@@ -1281,6 +1300,8 @@ class SettingsDialog(tk.Toplevel):
             default = decl["default"]
             if decl["type"] == "bool":
                 var.set(bool(default))
+            elif decl["type"] == "choice":
+                var.set(C.choice_text(decl, default))
             else:
                 var.set("" if default is None else str(default))
 
@@ -1288,6 +1309,8 @@ class SettingsDialog(tk.Toplevel):
         chosen, bad = {}, []
         for name, (decl, var) in self.vars.items():
             raw = var.get()
+            if decl["type"] == "choice":
+                raw = C.choice_value(decl, raw)
             if isinstance(raw, str) and raw.strip() == "" \
                     and decl["type"] != "str":
                 # 空欄 = 未指定。
@@ -1298,7 +1321,7 @@ class SettingsDialog(tk.Toplevel):
                 raw = None
             ok, value, why = C.coerce(decl, raw)
             if not ok:
-                bad.append("{}: {}".format(decl["label"]["ja"], why))
+                bad.append("{}: {}".format(C.full_label(decl), why))
                 continue
             # 既定と同じなら書かない（上記の docstring 参照）。
             if value != decl["default"]:

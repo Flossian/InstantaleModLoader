@@ -324,6 +324,16 @@ def check_settings(name, raw, manifest, entry_path):
         if key not in decls:
             problems.append((path, MANIFEST_NAME,
                              '設定 {!r} の宣言が読めない（type / values を確認）'.format(key)))
+            continue
+        # 選択肢に無い値への表示名は均すときに落ちる＝画面には値の綴りのまま出る。
+        labels = (declared_raw[key] or {}).get("value_labels")
+        if isinstance(labels, dict):
+            known = set(str(v) for v in (decls[key]["values"] or []))
+            for value in labels:
+                if str(value) not in known:
+                    problems.append((path, MANIFEST_NAME,
+                                     '設定 {!r} の value_labels に選択肢に無い値 {!r}'
+                                     .format(key, value)))
 
     if not entry_path or not os.path.isfile(entry_path):
         return problems      # 入口が無いことは既に報告済み
