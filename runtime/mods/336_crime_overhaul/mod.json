@@ -385,6 +385,22 @@
       "note": {"ja": "壁を削る・抜け道を探るの企てが露見したときに延びる",
                "en": "Added when a digging or scouting plot is found out"}
     },
+    "JAILBREAK_IMPROVISED": {
+      "type": "bool",
+      "default": true,
+      "label": {"ja": "決行は即席の武器・防具で戦う", "en": "Improvised gear for the break-out"},
+      "note": {"ja": "押収された装備の代わりに研いだ鉄片と囚人服を持って看守と戦う。戦闘が終われば元の装備に戻る。切ると今の装備のまま戦う",
+               "en": "Fight the guards with a sharpened shard and prison clothes instead of your confiscated gear. Your own gear comes back after the battle. Off keeps your gear"}
+    },
+    "JAILBREAK_IMPROVISED_PCT": {
+      "type": "int",
+      "default": 30,
+      "min": 1,
+      "max": 100,
+      "label": {"ja": "即席の武器・防具の強さ（%）", "en": "Improvised gear strength (%)"},
+      "note": {"ja": "今の装備の攻撃力・防御力に対する割合。持っていない種類（素手・防具なし）は持たせない",
+               "en": "Share of your current gear's attack and defense. Nothing is given for a slot you have empty"}
+    },
     "TRIAL_HINT": {
       "type": "bool",
       "default": true,

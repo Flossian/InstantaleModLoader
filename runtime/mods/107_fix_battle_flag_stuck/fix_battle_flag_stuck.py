@@ -109,12 +109,6 @@ CLEAR_FLAGS = ("in_battle", "in_colosseum_battle")
 # ボス戦の旗は戦闘の後に自分で 0 へ戻るところまで観測できている。
 REPORT_FLAGS = ("in_boss_battle",)
 
-# ロード直後に「戦闘の画面に戻った」と見なすボタンのクラス（`攻撃` / `スキル・防御` /
-# `発言する` と、スキルを選んでいる最中の `やめる`）。
-BATTLE_BUTTON_CLASSES = ("BattlePhaseManager", "SkillChoicePhaseManager",
-                         "UtteranceChoiceInBattleManager", "UtteranceInBattleManager",
-                         "CancelBattleActionManager")
-
 # 売買の窓の旗。窓を閉じる処理の後とロードの後に下ろす（v6）。
 SHOP_FLAG = "in_shopping"  # 下ろすために名前を持つ。untrusted-flag-ok
 
@@ -177,17 +171,6 @@ def apply(ctx):
         """敵が居るか（本物の戦闘の最中か）。残骸のときは `current_enemy_dict` が空（実測）。"""
         enemies = getattr(app, "current_enemy_dict", None) if app is not None else None
         return isinstance(enemies, dict) and bool(enemies)
-
-    def battle_on_screen(app):
-        """いま並んでいるボタンが戦闘のものか。ロード直後の見分けに使う。
-
-        ロードでは敵を見ても分からない。ゲームは戦闘の最中に保存したセーブの敵を、
-        戦闘の画面に戻らなかったときも `current_enemy_dict` に持ち続ける（実機）。
-        """
-        buttons = getattr(app, "buttons", None) if app is not None else None
-        if not isinstance(buttons, list):
-            return False
-        return any(ui.spec_cls_name(entry) in BATTLE_BUTTON_CLASSES for entry in buttons)
 
     def clear_stale_enemies(app, where):
         """戦闘の画面でないのに残っている敵を空にする（戦闘を終えたときのゲームと同じ状態）。"""
@@ -298,7 +281,7 @@ def apply(ctx):
                 # §6.3）。
                 owner = self if frames.attr(self, "in_battle") is not frames.MISSING \
                     else find_app()
-                if battle_on_screen(owner):
+                if ui.battle_on_screen(owner):   # ロードの直後の見分けはローダの1か所
                     write("{}: the battle screen came back -- the save was made "
                           "mid-battle; not touching".format(label))
                     return result

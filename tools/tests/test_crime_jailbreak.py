@@ -9,6 +9,7 @@
   相手   … 決行の相手は備え1つごとに弱く、下限は2割、難易度は1未満にならない
   判定   … 露見は実るかより先に引く。金で買う備えは露見せず必ず実る。備えは上限で止まる
   画面   … ボタンの文言の頭が、残骸を見分ける頭と揃っている
+  即席   … 即席の品の強さは今の装備の割合で1以上、装備の無い種類は持たせない。品はセーブの1件と同じ形
 """
 import importlib
 import os
@@ -124,6 +125,26 @@ def scene_labels():
           not any(jailbreak.BACK_LABEL.startswith(head) for head in jailbreak.LABEL_HEADS))
 
 
+def scene_improvised():
+    print("即席")
+    check("今の装備の割合", jailbreak.improvised_value(800, 30) == 240)
+    check("1未満にならない", jailbreak.improvised_value(2, 30) == 1)
+    check("装備が無ければ持たせない",
+          jailbreak.improvised_value(0, 30) is None and jailbreak.improvised_value(None, 30) is None)
+    check("真偽値は数とみなさない", jailbreak.improvised_value(True, 30) is None)
+    fields = ("name", "item_type", "attributes", "description", "value", "rarity", "skill",
+              "upgrade_level", "width_slots", "height_slots", "image_src", "grid_pos")
+    for spec in jailbreak.IMPROVISED:
+        data = jailbreak.improvised_data(spec, 240)
+        check("{} はセーブの1件と同じ12項目".format(spec["key"]), tuple(data) == fields, list(data))
+        check("{} の種類と能力値".format(spec["key"]),
+              data["item_type"] == spec["key"] and data["attributes"][spec["stat"]] == 240
+              and data["attributes"]["item_detail"] == spec["detail"], data["attributes"])
+    check("武器と防具の2つ", [spec["key"] for spec in jailbreak.IMPROVISED] == ["weapon", "wearable"])
+    check("鍵は持ち物の鍵（item_N）と重ならない",
+          not jailbreak.IMPROVISED_KEY.format("weapon").startswith("item_"))
+
+
 def main():
     scene_args()
     scene_extend()
@@ -131,6 +152,7 @@ def main():
     scene_ease()
     scene_roll()
     scene_labels()
+    scene_improvised()
     print()
     if failures:
         print("FAILED: {}".format(failures))

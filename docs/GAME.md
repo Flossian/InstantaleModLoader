@@ -284,6 +284,20 @@ app.refresh_choice_buttons(reset_page=True)
 戦闘に入った後で開いた右の欄は、戦闘の4つの選択肢を塗っても（`update_ui` → `update_button_texts`、`display_button_load(0)` でも）閉じず、
 戦闘の終わりまで重なったままだった（2026-10-05 の実機。閉じたのは、次の場面を起こしたときの待機表示（`process_choice` の点送り）の始まり）。
 戦闘の外で `display_button_load` が右の欄を閉じた記録はある（VERIFICATION_LOG.md §2.60）。
+
+閉じない理由は HUD 自身の旗（2026-10-08 の実機。VERIFICATION.md §3.91）:
+
+- 右の欄を開け閉めするのは HUD の `update_button_texts`（`new_hud.py:2126`。戦闘の後に閉じた回の呼び出し元）。
+  ただし HUD の `in_battle`（Kivy の BooleanProperty。見張りは付いていない。`app.in_battle` とは別物）が
+  立っている間は右の欄に触らない
+- 戦闘に入るときはこの旗が、前の画面の右の欄を閉じるより先に立つ。だから直前の選択肢が5つ以上だと、
+  MOD が起こしてもゲームが起こしても右の欄が残る（VERIFICATION_LOG.md §2.59 の「どちらでも起きる」）。
+  戦闘の1手（`攻撃`）では opacity は一度も動かず、閉じたのは戦闘が終わって旗が下りた後の `update_button_texts`
+- 戦闘中に `app.in_battle` を下ろして呼んでも閉じない。HUD の `in_battle` をその1回だけ下ろして
+  `update_button_texts(app, 今の選択肢)` を呼ぶと閉じ、敵の欄が元どおり見えた。ゲームが閉じるときも、
+  中のボタン（`right_buttons`）は opacity 1・有効のままで、欄の `opacity` だけが 0 になる
+- ローダの窓口 `choices` は、組み直しのたびに塗り終わりを待って、この形で畳み直す（TECH.md §3.3.14）
+
 場面の終わりの合図（`refresh_choice_buttons`）はワーカーのスレッドから来て、ゲームはその後のフレームで `update_ui` を通して選択肢を塗る。
 合図の直後に MOD が `process_choice` で次の場面を起こすと、遅れて来た塗りが前の場面の選択肢を描き、右の欄が開いたまま残る。
 起こす前に `ui.choices_painted(app)`（HUD の `button_texts` が `to_display_buttons` と揃ったか）を待つ。
@@ -1654,6 +1668,29 @@ alias_scan が同じ関数を持つ全モジュールを張り替え、どのプ
 
 - `ast.literal_eval` は使えない（式1個しか受け取れず終端位置を返さないので、
   プロンプトの途中から読み始めて置換範囲を決められない）。再帰下降パーサが要る
+
+#### 送信と待ち（実測。2026-10-09、Claude）
+
+`send_request` / `send_request_with_no_structure` はどのプロバイダの送信モジュールでも同じ形で、送信を別スレッドに出して自分は待つ。
+入れ子の関数の閉包は、gc から引いた関数の `__closure__` で読めた（生きたフレームの `f_locals` は空。TECH.md §6.3）。
+
+| 入れ子の関数 | 閉包 | 役目 |
+|---|---|---|
+| `send_request_on_id` | `abandoned` / `finished_event` / `hide_llm_regenerate_button` / `on_invalid_api_key` / `send_request_on_id_main_body` | 送信スレッドの target（スレッド名 `Thread-N (send_request_on_id)`）。本体を呼ぶ |
+| `send_request_on_id_main_body`（`backoff` の包み） | `target` / `giveup` / `max_tries` / `wait_gen` / `wait_gen_kwargs` ほか | `backoff.on_exception(expo, Exception, max_tries=32, giveup=should_give_up, base=1, factor=1.1)`。`giveup` は送信モジュールの `should_give_up` を頼みのたびに引く |
+| `send_request_on_id_main_body`（素の本体） | `current_request_id` / `message` / `response_from_llm` | SDK を呼び、答えを `response_from_llm` に書く |
+| `count_request_wait` | `current_request_id` / `finished_event` / `show_llm_regenerate_button` | 時間内に `finished_event` が立たなければ「リクエストを再実行」を出す |
+| `show_llm_regenerate_button` | `raise_regenerate_flag` | ボタンを出す。押すと `raise_regenerate_flag` |
+| `raise_regenerate_flag` | `regenerate_flag` | 送り直しの旗を立てる |
+
+- **待っている側が見ているのは `response_from_llm`**。
+  外からセルに値を書くと、待ちはすぐ返った。
+  `finished_event` は再実行のボタンの時計の旗で、立てても待ちは返らず、ボタンが出なくなるだけだった
+- 待っている側は、答えを添字で引いてから返す（`request_llm_inference_claude.py:220`。答えの代わりの物を書くと `TypeError`）
+- 送信スレッドが例外で死ぬと `response_from_llm` は空のままで、待ちは再実行のボタンを押すまで続く。
+  ボタンは同じ文章を送り直すので、直らない誤りでは同じ所で止まる
+- `should_give_up` は 4xx でも偽を返す（404 の `model: ...` を32回まで送り直す作り）。
+  ローダの `stalls` が 4xx を3回目で打ち切り、待ちを起こして行動を中断させる（TECH.md §5.12）
 
 #### クエスト1件に関わるマネージャ
 

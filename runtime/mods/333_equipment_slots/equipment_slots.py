@@ -308,6 +308,10 @@ def apply(ctx):
         if not sc["player"]:
             sync_npc(app, sc)
             return
+        if equipment.loan(app, sc["owner"]) is not None:
+            # 貸しの間（`336_` の脱獄の決行）は貸した品で戦う。組み直すのは貸しが終わった後
+            # （窓口が呼ぶ本体の Manager の後の `resync_after_native`）
+            return
         if not container_ready(app, sc):
             return
         player = sc["owner"]
@@ -1024,8 +1028,8 @@ def apply(ctx):
         窓を開いていなくても引けるよう、控えの位置と持ち物＋装備欄の辞書から組む
         （ロード直後は装備欄の品も持ち物の辞書に居る）。
         """
-        if not COMBINE_SLOTS or sc is None:
-            return None
+        if not COMBINE_SLOTS or sc is None or equipment.loan(app, sc["owner"]) is not None:
+            return None                                   # 貸しの間は合算しない（貸した品の値だけ）
         items = dict(inventory_of(sc["owner"]) or {})
         items.update(sc["container"])
         _key, positions = positions_of(app, sc)

@@ -2205,6 +2205,16 @@ def _boot(out_dir: str) -> dict:
         _keep_save_gates(ctx)
     except BaseException:
         log_exc("cannot keep the save gates")
+    # 作業スレッドが死んだときに待機のまま止めない（stalls.py）。MOD の層より後に当てる。
+    try:
+        from . import stalls as _stalls
+        _registry.begin_mod("(loader)")
+        try:
+            _stalls.install(ctx)
+        finally:
+            _registry.end_mod()
+    except BaseException:
+        log_exc("cannot install the stall guard")
     try:
         _patch.drop_stale_layers()
     except BaseException:

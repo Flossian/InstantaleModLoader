@@ -11,6 +11,7 @@ MOD どうしは import しない（TECH.md §3.2.3）ので、両者はここ�
 答えは**装備の側の値だけ**（武器の攻撃力・防具の防御力。合算するならその結果）。
 本人の能力や体力と組み合わせて 1 発の数にするのは聞く側の仕事。
 `None` は「誰も置いていない」か「その人物は何も装備していない」で、聞く側はゲームのままにする。
+その人物に品を貸している間（`equipment.lend`）は、置いた MOD に聞かず貸した品の値を答える。
 
 素のゲームでは、プレイヤーの武器・防具だけが数に入る（GAME.md §2.10.2）。仲間の装備を
 数に入れるのは MOD の判断（VERIFICATION.md §3.70）で、公式が NPC に武器を参照させない理由は
@@ -24,7 +25,7 @@ MOD どうしは import しない（TECH.md §3.2.3）ので、両者はここ�
 """
 import sys
 
-from . import durations
+from . import durations, equipment
 from . import log_exc
 
 #: 装備の攻撃力。答えは float。
@@ -91,8 +92,14 @@ def source_of(kind):
 
 
 def _ask(kind, app, holder):
+    if holder is None:
+        return None
+    # 貸しの間は貸した品の値（窓口 `equipment` の貸し。装備欄の MOD の答えより先）
+    lent = equipment.loan_value(app, holder, "weapon" if kind == ATTACK else "wearable")
+    if lent is not None:
+        return lent if lent > 0 else None
     entry = _registry().get(str(kind))
-    if entry is None or holder is None:
+    if entry is None:
         return None
     owner, fn = entry
     try:

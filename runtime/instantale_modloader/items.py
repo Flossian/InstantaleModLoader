@@ -104,6 +104,37 @@ def to_records(owner, write=None):
     return records, lost
 
 
+def make_loose(app, owner, data, key, write=None):
+    """セーブと同じ形の辞書から品を1つ作り、**持ち物には入れずに**返す。作れなければ None。
+
+    作るのはゲーム自身の `generate_item_from_dict`。持ち物へ直に入れる実装（`rebuild`）なら、
+    入った品を抜いて元に戻す。窓口 `equipment.lend` で貸す品を作るのに使う。
+    """
+    make = getattr(app, "generate_item_from_dict", None) if app is not None else None
+    if not callable(make) or not isinstance(data, dict):
+        if write:
+            write("WARN items: generate_item_from_dict is not available")
+        return None
+    key = str(key)
+    inv = inventory_of(owner)
+    before = inv.get(key) if inv is not None else None
+    try:
+        item = make(dict(data), key, owner)
+    except Exception:
+        log_exc("items: cannot make {}".format(key))
+        return None
+    inv = inventory_of(owner)
+    landed = inv.get(key) if inv is not None else None
+    if landed is not None and landed is not before:
+        if item is None:
+            item = landed
+        if before is None:
+            inv.pop(key, None)
+        else:
+            inv[key] = before
+    return item
+
+
 def rebuild(app, owner, records, write=None):
     """控えから持ち主の持ち物を作り直す。作れた件数を返す。
 

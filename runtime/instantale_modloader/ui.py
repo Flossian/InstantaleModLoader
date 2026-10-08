@@ -217,6 +217,25 @@ def find_spec_button(buttons, cls_name):
     return None
 
 
+#: 戦闘の画面のボタンが呼ぶクラス（`攻撃` / `スキル・防御` / `発言する` と、スキルを選んでいる最中の `やめる`）。
+BATTLE_BUTTON_CLASSES = ("BattlePhaseManager", "SkillChoicePhaseManager",
+                         "UtteranceChoiceInBattleManager", "UtteranceInBattleManager",
+                         "CancelBattleActionManager")
+
+
+def battle_on_screen(app):
+    """いま並んでいるボタンが戦闘のものか。
+
+    ロードの直後に「戦闘の続きに戻った」かを見分けるのに使う。戦闘の最中のセーブを読むと、
+    戦闘のボタンが戻る回と場所のボタンが出る回がある。ゲームはどちらの回でもセーブの敵を
+    `current_enemy_dict` に持つので、敵の有無では見分けられない（GAME.md §2.10「戦闘の最中のセーブ」）。
+    """
+    buttons = getattr(app, "buttons", None) if app is not None else None
+    if not isinstance(buttons, list):
+        return False
+    return any(spec_cls_name(entry) in BATTLE_BUTTON_CLASSES for entry in buttons)
+
+
 def conversation_partner(buttons):
     """会話画面なら `(相手の id, 「会話を終了する」ボタン)` を返す。
 
@@ -1741,6 +1760,50 @@ def party_member_ids(app):
     """プレイヤーを除いた同行者の id。順序は名簿のまま。"""
     return [member_id for member_id in party_ids(app)
             if member_id and member_id != PLAYER_ID]
+
+
+def right_panel_left_open(app):
+    """右の欄（溢れた選択肢を出す欄）が、選択肢が左の欄に収まるのに開いたままか。
+
+    右の欄 `right_button_layout` は戦闘の情報欄 `top_info_layout_battle` と同じ矩形で、
+    開いたまま戦闘に入ると情報欄に空の枠が重なる。開け閉めするのは HUD の `update_button_texts` だが、
+    HUD 自身の `in_battle` が立っている間は右の欄に触らない。戦闘に入るときはこの旗が、前の画面の
+    右の欄を閉じるより先に立つので、直前の選択肢が5つ以上だと、誰が戦闘を起こしても取り残される
+    （VERIFICATION.md §3.91。§2.59 の「MOD かゲームかでは割れない」もこれ）。
+    読めなければ False（触らない）。
+    """
+    hud = find_hud(app)
+    panel = getattr(hud, "right_button_layout", None) if hud is not None else None
+    left = getattr(hud, "buttons", None) if hud is not None else None
+    texts = getattr(app, "to_display_buttons", None) if app is not None else None
+    opacity = getattr(panel, "opacity", None)
+    if not isinstance(opacity, (int, float)) or not isinstance(left, list) or not left \
+            or not isinstance(texts, list):
+        return False
+    return opacity > 0 and len(texts) <= len(left)
+
+
+def fold_right_panel(app):
+    """取り残された右の欄を、ゲーム自身の `update_button_texts` で畳み直す。呼んだら True。
+
+    HUD の `in_battle` をその1回の呼び出しの間だけ下ろし、今の選択肢を渡す（ゲームが戦闘の外で
+    するのと同じ開け閉めが走る）。座標も `opacity` も MOD からは触らない。`in_battle` は Kivy の
+    BooleanProperty で、見張りは付いていない（実機）。待機中（点送りの最中）は呼ばない
+    （枠は点で塗られている。`paint_choices` と同じ）。
+    """
+    if not right_panel_left_open(app) or getattr(app, "is_button_enabled", None) is False:
+        return False
+    hud = find_hud(app)
+    update = getattr(hud, "update_button_texts", None)
+    if not callable(update):
+        return False
+    flag = getattr(hud, "in_battle", False)
+    try:
+        hud.in_battle = False
+        update(app, list(app.to_display_buttons))
+    finally:
+        hud.in_battle = flag
+    return True
 
 
 def paint_choices(app, texts, oops=None):

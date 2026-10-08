@@ -75,10 +75,7 @@
 こちらは押さずに起こすのでその1手が抜け、
 選択肢の多い画面から入ると**右の欄（溢れたぶんを出す欄）が開いたまま**残り、
 戦闘の情報欄と重なる。
-
-`app.display_button_load(0)` を1回通す（座標も `opacity` も触らない）。
-通すのは**選択肢が戦闘のものになった最初の合図**。
-敵が揃った時点では早すぎて、読み込みが延びた回はまだ戦闘前の選択肢が並んでいる。
+版4から、取り残された右の欄はローダの窓口 `choices` がどの場面でも畳み直す（TECH.md §3.3.14）。
 
 ##### 時計を見ない
 
@@ -264,17 +261,6 @@ def fighting(app):
     return reasons
 
 
-def battle_screen(app):
-    """今並んでいるのが戦闘の選択肢か。
-
-    敵が揃っていても選択肢がまだ戦闘のものでないことがある（読み込みが延びた回）。
-    その時点で塗り直すと、戦闘前の選択肢の数で右の欄が決まってしまう。
-    """
-    names = [ui.spec_cls_name(entry)
-             for entry in (getattr(app, "buttons", None) or [])]
-    return any(name and "Battle" in name for name in names)
-
-
 def blocked_by(app):
     """追手を出せない理由。空なら出せる。"""
     reasons = [name for name in BLOCKING_FLAGS if getattr(app, name, False)]
@@ -305,8 +291,6 @@ def apply(ctx):
             "hunting": None,
             # 「出すと決まった」控え。起こすのは画面が整った合図の中。
             "due": None,
-            # 戦闘の選択肢が並んだら1回だけ塗り直す、の印。
-            "repaint": False,
             # この画面で抽選を1回済ませたか（1つの行動で何度も回さない）。
             "rolled": False,
             # 刑が始まってから牢を出るまで。立っている間は抽選も起こすこともしない。
@@ -509,24 +493,6 @@ def apply(ctx):
         write("{}: 追手が決まった。手配 ここ{} 合計{} 難易度{}。"
               "画面が整うのを待つ".format(trigger, here, total, difficulty))
 
-    def repaint_buttons(app):
-        """選択肢をゲーム自身の手で塗り直す。**座標は触らない。**
-
-        右の欄（溢れた選択肢を出す欄）は戦闘の情報欄と同じ矩形を使っていて、
-        欄の出し入れを決めているのは `display_button_load` の系統
-        （VERIFICATION_LOG.md §2.59 / §2.60）。
-        """
-        loader = getattr(app, "display_button_load", None)
-        if not callable(loader):
-            write("display_button_load が無い。選択肢の塗り直しはできない")
-            return
-        try:
-            loader(0)
-        except Exception:
-            ctx.log_exc("bounty hunter: 選択肢を塗り直せなかった")
-            return
-        write("選択肢を塗り直した（右の欄の畳み直し）")
-
     def standing_down(app):
         """起こすのをやめる理由。無ければ `None`。"""
         reasons = blocked_by(app)
@@ -662,10 +628,6 @@ def apply(ctx):
         if not ours:
             return orig(self, *args, **kwargs)
         memo["hunting"] = memo["hunt_plan"]
-        # 塗り直すのは選択肢が戦闘のものになってから。印は `orig` の前に立てる。
-        # 戦闘の選択肢が並んだ合図は `orig` の中（`finish_button_load`）で来ることがあり、
-        # 後で立てると最初の1手が終わるまで右の欄が戦闘の情報欄に重なったままになった（実機）。
-        memo["repaint"] = True
         result = orig(self, *args, **kwargs)
         app = getattr(self, "app", None) or ui.find_app()
         enemies = getattr(app, "current_enemy_dict", None)
@@ -686,7 +648,6 @@ def apply(ctx):
         後の段で下がるなら2回目で戻る）。
         """
         result = orig(self, *args, **kwargs)
-        memo["repaint"] = False
         app = getattr(self, "app", None) or ui.find_app()
         if memo["protect"] is not None:
             restore(app, "戦闘終了")
@@ -754,9 +715,6 @@ def apply(ctx):
             # 会話・戦闘などの場面の最中は下ろさない（牢の中の会話もここに入る）
             memo["jailed"] = False
             write("牢の外の画面に戻った。服役中の印を下ろす")
-        if memo["repaint"] and battle_screen(self):
-            memo["repaint"] = False
-            schedule(lambda: repaint_buttons(self))
         if memo["protect"] is not None:
             # 戦闘の終わりで捕まえ損ねた手配度をここで拾う
             # （下がる時機が一定でないため。逃げて終わった回もここに来る）。

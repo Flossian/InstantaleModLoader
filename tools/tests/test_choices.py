@@ -360,6 +360,77 @@ choices.provide(Ctx("701_b", "g3"), screen_b, refresh=refresh_b, after=after_b)
 choices.provide(Ctx("700_a", "g3"), screen_a, refresh=refresh_a, presses={"a:": press_a})
 check("注入し直すと並びは新しい世代の適用順", choices.providers() == ["701_b", "700_a"], choices.providers())
 
+print("[右の欄]")
+
+
+class PanelHUD(InstanTaleHUD):
+    """ゲームの HUD の右の欄の開け閉め（実機）: `in_battle` の間は右の欄に触らない。"""
+
+    def __init__(self, opacity, left=4):
+        self.right_button_layout = types.SimpleNamespace(opacity=opacity)
+        self.buttons = [object()] * left
+        self.button_texts = None             # 塗り終わりの比べ先が無ければ「塗り終わった」
+        self.in_battle = True
+        self.calls = []
+
+    def update_button_texts(self, instance, value):
+        self.calls.append((self.in_battle, list(value)))
+        if not self.in_battle:
+            self.right_button_layout.opacity = 1 if len(value) > len(self.buttons) else 0
+
+
+class PanelApp(object):
+    def __init__(self, opacity, texts, enabled=True):
+        self.root = PanelHUD(opacity)
+        self.to_display_buttons = list(texts)
+        self.is_button_enabled = enabled
+
+    @property
+    def loads(self):
+        """畳み直しの呼び出し（旗を下ろした update_button_texts）の回数。"""
+        return [value for flag, value in self.root.calls if flag is False]
+
+
+FakeClock.intervals[:] = []
+battle = ["攻撃", "スキル・防御", "発言する", "逃げる"]
+left_open = PanelApp(1, battle)
+check("左に収まるのに開いている右の欄は取り残し", ui.right_panel_left_open(left_open))
+check("溢れた選択肢を出している右の欄は取り残しではない",
+      not ui.right_panel_left_open(PanelApp(1, battle + ["やめる"])))
+check("閉じている右の欄は取り残しではない", not ui.right_panel_left_open(PanelApp(0, battle)))
+check("右の欄が読めなければ触らない", not ui.right_panel_left_open(types.SimpleNamespace()))
+waiting = PanelApp(1, battle, enabled=False)
+check("待機中は畳まない（点送りが増える）", not ui.fold_right_panel(waiting) and waiting.loads == [])
+
+ctx_p = Ctx("702_p", "g3")
+choices.arm_fold(ctx_p, waiting)
+FakeClock.tick()
+check("待機中は見張りを続ける", waiting.loads == [] and len(FakeClock.intervals) == 1, waiting.loads)
+waiting.is_button_enabled = True
+FakeClock.tick()
+check("手が空いたら1度だけ畳み直す（旗を下ろしてゲームの update_button_texts を今の選択肢で）",
+      waiting.loads == [battle] and not FakeClock.intervals, (waiting.loads, FakeClock.intervals))
+check("畳み直した後は右の欄が閉じ、HUD の in_battle は元に戻る",
+      waiting.root.right_button_layout.opacity == 0 and waiting.root.in_battle is True)
+stuck = PanelHUD(1)
+stuck.update_button_texts(None, battle)
+check("旗を立てたままのゲームの呼び出しでは閉じない（実機の取り残しの形）",
+      stuck.right_button_layout.opacity == 1)
+closed = PanelApp(0, battle)
+choices.arm_fold(ctx_p, closed)
+FakeClock.tick()
+check("閉じていれば何もしない", closed.loads == [] and not FakeClock.intervals, closed.loads)
+first, second = PanelApp(1, battle, enabled=False), PanelApp(1, battle)
+choices.arm_fold(ctx_p, first)
+choices.arm_fold(ctx_p, second)
+FakeClock.tick()
+FakeClock.tick()
+check("新しい組み直しが前の見張りを差し替える", first.loads == [] and second.loads == [battle],
+      (first.loads, second.loads))
+check("偽の HUD に右の欄が無ければ見張らない",
+      choices.arm_fold(ctx_p, types.SimpleNamespace(root=InstanTaleHUD())) is False)
+FakeClock.intervals[:] = []
+
 choices.reset()
 shutil.rmtree(STATE, ignore_errors=True)
 print()

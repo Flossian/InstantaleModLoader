@@ -61,6 +61,10 @@ POLL = 0.25
 WAIT_TICKS = 240
 #: 人物が揃った後、名簿（同行者）が戻るのを待つ回数（同行者の居ないセーブでは待ち切ってから組み直す）。
 PARTY_TICKS = 12
+#: 組み直しの後、塗り終わって手が空くのを待って右の欄を見る見張り（0.1 秒おき、最長 30 秒）。
+#: 戦闘の1手は審判を待つ間ずっと待機中なので、長めに待つ。次の組み直しが来れば差し替わる。
+FOLD_POLL = 0.1
+FOLD_TICKS = 300
 
 
 def _store():
@@ -69,6 +73,7 @@ def _store():
         store = {"providers": {}, "order": [], "installed": None, "world": None,
                  "restore": None, "after": {"token": None}, "worlds": None, "log": []}
         setattr(sys, STORE_ATTR, store)
+    store.setdefault("fold", {"token": None})     # 前の版のローダが作った入れ物にも足す
     return store
 
 
@@ -327,6 +332,47 @@ def arm_after_load(ctx, app):
     return True
 
 
+def arm_fold(ctx, app):
+    """組み直しの後、ゲームが選択肢を塗り終えたら、取り残された右の欄を1度だけ畳み直す見張り。
+
+    戦闘に入ると、前の画面の右の欄が閉じられずに残ることがある（`ui.right_panel_left_open`）。
+    MOD のボタンでもゲーム自身のボタンでも組み直しはここを通るので、ここで1か所に見る。組み直しの合図は
+    ワーカーのスレッドから来て、塗りはその後のフレームなので、塗り終わり（`ui.choices_painted`）と
+    手が空く（待機中でない）のを待ってから見る。前の見張りは新しい組み直しで差し替える。
+    """
+    if getattr(ui.find_hud(app), "right_button_layout", None) is None:
+        return False                     # 右の欄が読めない（HUD の無い場面・ゲーム抜きの検査）
+    fold = _store()["fold"]
+    token = fold["token"] = object()
+    left = {"ticks": FOLD_TICKS}
+
+    def check(_dt):
+        if fold["token"] is not token:
+            return False
+        left["ticks"] -= 1
+        if left["ticks"] <= 0:
+            fold["token"] = None
+            return False
+        if not ui.choices_painted(app) or getattr(app, "is_button_enabled", None) is False:
+            return True
+        fold["token"] = None
+        try:
+            if ui.fold_right_panel(app):
+                _log(ctx, "folded the right panel left open over {} choice(s): {}".format(
+                    len(getattr(app, "to_display_buttons", None) or []),
+                    "still open" if ui.right_panel_left_open(app) else "closed"))
+        except Exception:
+            log_exc = getattr(ctx, "log_exc", None)
+            if callable(log_exc):
+                log_exc("choices: cannot fold the right panel")
+        return False
+
+    if not _schedule_interval(check, FOLD_POLL):
+        fold["token"] = None
+        return False
+    return True
+
+
 # ---------------------------------------------------------------- 配る
 def _each(field, reverse):
     store = _store()
@@ -455,6 +501,10 @@ def install(ctx):
                 _call_after(self)
             except Exception:
                 ctx.log_exc("choices: the after-refresh failed")
+            try:
+                arm_fold(ctx, self)
+            except Exception:
+                ctx.log_exc("choices: cannot watch the right panel")
             return result
         finally:
             store["refreshing"] = previous

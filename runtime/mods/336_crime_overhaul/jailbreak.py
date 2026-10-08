@@ -46,6 +46,20 @@ ESCAPED_LAW_TEXT = "{town}の官憲が、脱獄囚を追い始めた。（手配
 #: 決行の戦闘の相手の強さの下限（土地の難易度に対する %）。備えをいくら積んでもここより弱くしない。
 EASE_FLOOR_PCT = 20
 
+#: 決行の戦闘のあいだ持たせる即席の品（2026-10-08）。押収された装備は詰所にあり、牢から持ち出せない。
+#: 能力値は今の装備の値から決める（`improvised_value`）。持っていない種類は持たせない。
+#: 品は持ち物に入れない（ローダの窓口 `equipment.lend` で貸し、戦闘が終われば引き上げる）。
+IMPROVISED = (
+    {"key": "weapon", "stat": "攻撃力", "detail": "small_weapon", "name": "研いだ鉄片",
+     "description": "牢の壁から剥がした鉄の欠片を、石で研いで刃にしたもの。"},
+    {"key": "wearable", "stat": "防御力", "detail": "clothing", "name": "囚人服",
+     "description": "粗い麻の囚人服。身を守る役にはほとんど立たない。"},
+)
+#: 貸す品の鍵（持ち物の鍵と重ならない名前。持ち物にもセーブにも入れない）。
+IMPROVISED_KEY = "jailbreak_{}"
+IMPROVISED_TEXT = "押収された装備は看守の詰所にある。手にあるのは{items}だけだ。"
+RECOVERED_TEXT = "逃げる途中で詰所に押し入り、押収されていた装備を取り戻した。"
+
 
 def is_number(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool)
@@ -88,6 +102,23 @@ def eased_difficulty(difficulty, prep, ease_pct):
         return None
     pct = max(EASE_FLOOR_PCT, 100 - max(0, int(prep)) * max(0, ease_pct))
     return max(1, int(round(difficulty * pct / 100.0)))
+
+
+def improvised_value(worn, pct):
+    """即席の品の能力値。今の装備の値 × `pct`%（1 以上）。装備が無ければ None（その種類は持たせない）。"""
+    if not is_number(worn) or worn <= 0:
+        return None
+    return max(1, int(round(worn * max(0, pct) / 100.0)))
+
+
+def improvised_data(spec, value):
+    """即席の品1つを、セーブの1件と同じ形の辞書にする（ゲームの `generate_item_from_dict` に渡す）。"""
+    return {"name": spec["name"], "item_type": spec["key"],
+            "attributes": {"item_detail": spec["detail"], spec["stat"]: value},
+            "description": spec["description"], "value": 0, "rarity": "common", "skill": None,
+            "upgrade_level": 0, "width_slots": 1, "height_slots": 1,
+            "image_src": "Assets/images/item_candidates_dark/{}/1.png".format(spec["detail"]),
+            "grid_pos": [0, 0]}
 
 
 def bribe_cost(quest_reward, pct):

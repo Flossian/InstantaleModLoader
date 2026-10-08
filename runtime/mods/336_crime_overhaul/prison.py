@@ -3,7 +3,7 @@
 
 服役の流れは GAME.md §2.20「逮捕・裁判・服役」（`238_probe_prison` の実機）。
 """
-from instantale_modloader import guards, ui
+from instantale_modloader import combat, equipment, guards, items, ui
 
 from . import common, jailbreak
 
@@ -21,11 +21,58 @@ def install(env):
     #   決行: ゲームの衛兵の戦闘（難易度は備えの数だけ下げる。差し替えはローダの `guards`）。
     #         勝つか逃げれば、その場（捕まった場所）の画面へ戻る＝牢の外。
     #         倒れたらゲーム自身のゲームオーバー（2026-10-05。前は死なせず牢へ戻していた）。
+    #         戦闘のあいだは即席の武器・防具で戦う（2026-10-08。ローダの窓口 `equipment` の貸し）。
     # 備えの数は世界×主人公の控え（`jail`）。刑期の残りはゲームのボタンが持つので控えない。
     #: `battle` は決行の戦闘、`serve` は一覧を開いたときの「服役する」のボタン（引数を持つ）、
     #: `year` は一覧を開く前の年ごとの画面の選択肢（「やめる」で戻す）。
     jail = {"battle": None, "serve": None, "year": None}
     guards.install(ctx)
+    equipment.install(ctx)
+
+    def worn_value(app, player, key):
+        """今の装備の値。装備欄の MOD が居ればその答え（窓口 `combat`）、居なければ本体の `equipments` の1品。"""
+        value = (combat.attack if key == "weapon" else combat.defense)(app, player)
+        if value is not None:
+            return value
+        ref = (getattr(player, "equipments", None) or {}).get(key)
+        if isinstance(ref, (str, int)):
+            ref = (items.inventory_of(player) or {}).get(str(ref))
+        attrs = getattr(ref, "attributes", None) if ref is not None else None
+        stat = next(spec["stat"] for spec in jailbreak.IMPROVISED if spec["key"] == key)
+        try:
+            return float((attrs if isinstance(attrs, dict) else {}).get(stat, 0) or 0)
+        except (TypeError, ValueError):
+            return None
+
+    def lend_improvised(app):
+        """押収された装備の代わりに、即席の武器・防具を持たせる。持たせた品の名前の一覧を返す。"""
+        player = getattr(app, "player", None)
+        if not cfg.JAILBREAK_IMPROVISED or player is None:
+            return []
+        loans, names = {}, {}
+        for spec in jailbreak.IMPROVISED:
+            worn = worn_value(app, player, spec["key"])
+            value = jailbreak.improvised_value(worn, cfg.JAILBREAK_IMPROVISED_PCT)
+            if value is None:
+                continue                    # 持っていない種類は持たせない
+            item = items.make_loose(app, player, jailbreak.improvised_data(spec, value),
+                                    jailbreak.IMPROVISED_KEY.format(spec["key"]), write=write)
+            if item is None:
+                write("WARN jailbreak: cannot make the improvised {}".format(spec["key"]))
+                continue
+            loans[spec["key"]] = item
+            names[spec["key"]] = spec["name"]
+            write("jailbreak: improvised {} {} (worn {:g} x {}%)".format(
+                spec["key"], value, worn, cfg.JAILBREAK_IMPROVISED_PCT))
+        lent = equipment.lend(app, player, loans, owner=env.owner, write=write) if loans else []
+        return [names[key] for key in lent]
+
+    def take_back_improvised(app):
+        """即席の品を引き上げ、元の装備に戻す。戻したら真。"""
+        player = getattr(app, "player", None) if app is not None else None
+        if player is None or equipment.lender(app, player) != env.owner:
+            return False
+        return bool(equipment.end_loan(app, player, write=write))
 
     def serve_entry(buttons):
         """選択肢の中のゲームの「服役する」。無ければ None。"""
@@ -48,6 +95,26 @@ def install(env):
                 bucket["jail"] = {"prep": int(value)}
             else:
                 bucket.pop("jail", None)     # 服役していない間は何も残さない
+            worlds.save(playthrough)
+
+    def breaking(app):
+        """決行の戦闘の控え `{"area": 捕まった場所, "prep": 備え}`。決行していなければ None。
+
+        戦闘の最中のセーブを読むと、ゲームは戦闘の続きに戻ることがある（GAME.md §2.10）。
+        メモリの `jail["battle"]` はロードで消えるので、牢を出た後の始末と即席の品のために控えに持つ。
+        """
+        with worlds.lock:
+            value = worlds.load(worlds.playthrough(app)).get("jail_break")
+        return value if isinstance(value, dict) else None
+
+    def set_breaking(app, value):
+        playthrough = worlds.playthrough(app)
+        with worlds.lock:
+            bucket = worlds.load(playthrough)
+            if value:
+                bucket["jail_break"] = dict(value)
+            elif bucket.pop("jail_break", None) is None:
+                return
             worlds.save(playthrough)
 
     def jail_odds(app):
@@ -167,14 +234,65 @@ def install(env):
             return False
         jail["battle"] = {"phase": phase, "args": list(args), "prep": prep, "started": False,
                           "area": ui.area_id_of(ui.current_area(app))}
+        improvised = lend_improvised(app)
+        if improvised:
+            screen.say(app, jailbreak.IMPROVISED_TEXT.format(items="と".join(improvised)))
         screen.say(app, jailbreak.BREAK_TEXT)
         env.prison_event("break", app)          # 同房の囚人の加勢（`cellmate`）
         if not screen.start_phase(app, phase, common.GUARD_CHOICE_TEXT):
             jail["battle"] = None
+            take_back_improvised(app)
             return False
+        set_breaking(app, {"area": jail["battle"]["area"], "prep": prep})
         write("jailbreak: break out with prep {} (difficulty {} -> {}); sentence {}".format(
             prep, base, difficulty, args[:1] + args[3:]))
         return True
+
+    @ctx.wrap("__main__:GameOverManager.__init__", required=False, safe=True)
+    def jail_game_over(orig, self, *args, **kwargs):
+        """ゲームオーバー（決行で倒れた・処刑・寿命）。決行と備えの控えを片付ける。
+
+        倒れた戦闘は `BattleEndManager.end_phase` を通らない。ゲームはこの後セーブを消すので、
+        控えが残るとセーブの無い周回の state にだけ残る（実機。§3.91）。
+        即席の品は返さない（暗転した画面で装備の効果音が鳴る）。貸しは次のロード・新規開始でローダが捨てる。
+        """
+        result = orig(self, *args, **kwargs)
+        jail["battle"] = None
+        try:
+            app = getattr(self, "app", None) or ui.find_app()
+            if app is not None and (breaking(app) is not None or jail_prep(app)):
+                set_breaking(app, None)
+                set_jail_prep(app, 0)
+                write("jailbreak: game over; dropped the break-out marks")
+        except Exception:
+            ctx.log_exc("crime incentive: cannot drop the jailbreak marks at the game over")
+        return result
+
+    @ctx.wrap("__main__:InstantaleApp.load_game_new", required=False, safe=True)
+    def jail_after_load(orig, self, *args, **kwargs):
+        """ロード。決行の戦闘の最中のセーブで戦闘の続きに戻ったら、即席の品を持たせ直し、始末を待つ。"""
+        jail["battle"] = None                   # 前の周回の決行は持ち越さない
+        result = orig(self, *args, **kwargs)
+        try:
+            resume_break(self)
+        except Exception:
+            ctx.log_exc("crime incentive: cannot resume the break out after the load")
+        return result
+
+    def resume_break(app):
+        saved = breaking(app)
+        if saved is None:
+            return
+        if not ui.battle_on_screen(app):
+            # 戦闘の続きに戻らなかった（ゲームが場所の画面を出した）。決行は無かったことになる
+            set_breaking(app, None)
+            write("jailbreak: the load did not return to the break-out battle; dropped the mark")
+            return
+        jail["battle"] = {"phase": None, "args": [], "prep": saved.get("prep", 0), "started": True,
+                          "area": saved.get("area")}
+        improvised = lend_improvised(app)
+        write("jailbreak: back in the break-out battle after a load (improvised: {})".format(
+            ", ".join(improvised) or "none"))
 
     def press_jail(app, key):
         if key == "menu":
@@ -203,30 +321,42 @@ def install(env):
             elif battle["started"]:
                 write("jailbreak: another battle started; dropping the jailbreak battle")
                 jail["battle"] = None
+                app = getattr(self, "app", None) or ui.find_app()
+                if app is not None:
+                    set_breaking(app, None)
         return orig(self, *args, **kwargs)
 
     @ctx.wrap("__main__:BattleEndManager.end_phase", required=False, safe=True)
     def jail_battle_end(orig, self, *args, **kwargs):
         result = orig(self, *args, **kwargs)
+        app = getattr(self, "app", None) or ui.find_app()
+        # 即席の品はどの戦闘の終わりでも引き上げる（注入し直しで決行の控えを失っていても、貸しは残っている）
+        recovered = False
+        try:
+            recovered = take_back_improvised(app)
+        except Exception:
+            ctx.log_exc("crime incentive: cannot take back the improvised equipment")
         battle = jail["battle"]
         if battle is None or not battle["started"]:
             return result
         jail["battle"] = None
-        app = getattr(self, "app", None) or ui.find_app()
         try:
-            set_free(app, battle, getattr(self, "end_type", None))
+            set_free(app, battle, getattr(self, "end_type", None), recovered)
         except Exception:
             ctx.log_exc("crime incentive: cannot settle the break out")
         return result
 
-    def set_free(app, battle, end_type):
+    def set_free(app, battle, end_type, recovered=False):
         """勝つか逃げた。牢の外（ゲームが戻した場所の画面）。その土地の手配度を下げる。"""
         set_jail_prep(app, 0)
+        set_breaking(app, None)
         start_ban(app)
         write("jailbreak: escaped ({!r}) from area {}".format(end_type, battle["area"]))
 
         def settle():
             lines = [jailbreak.ESCAPED_TEXT]
+            if recovered:
+                lines.append(jailbreak.RECOVERED_TEXT)
             entry = ui.area_record(getattr(app, "player", None), battle["area"])
             before = ui.lawfulness_of(entry)
             loss = max(0, int(cfg.JAILBREAK_LOSS))
@@ -257,6 +387,8 @@ def install(env):
             app = getattr(self, "app", None) or ui.find_app()
             if app is not None and jail_prep(app):
                 set_jail_prep(app, 0)
+            if app is not None:
+                set_breaking(app, None)
         except Exception:
             ctx.log_exc("crime incentive: cannot reset the jailbreak preparation")
         return orig(self, *args, **kwargs)
@@ -269,6 +401,7 @@ def install(env):
             if app is not None and jail_prep(app):
                 set_jail_prep(app, 0)
             if app is not None:
+                set_breaking(app, None)
                 start_ban(app)
         except Exception:
             ctx.log_exc("crime incentive: cannot drop the jailbreak preparation")
