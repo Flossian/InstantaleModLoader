@@ -35,11 +35,19 @@ MOD が出している「…」の区間は、その MOD のログの `busy on` 
 見張りの間隔も 0.05 秒から 0.2 秒へ広げた（点のコマを捕まえる必要が無くなったため）。
 包みは受け取った引数をそのまま `orig` へ渡す形にした（キーワードを位置に直さない）。
 
+版4: 点送りの始め手を録る。
+待機中に点送りが2本・4本と並んで回り、点が倍の速さで進む区間が戦闘・会話の始まりなどで出ていた
+（版3の `dots` の行で、`display_button_load` が1秒に約7回・約14回。1本なら約3.4回）。
+`Clock.schedule_once` に `display_button_load` が渡されたとき、点送りの続き（Clock から呼ばれた
+`display_button_load` が自分を予約し直す）でなければ、その時点で載っていた本数と呼び出しの段
+（ローダと MOD のフレームも飛ばさない）を `dots_start` として1行書く。
+
     out\busy_display.log     読む用
     out\busy_display.jsonl   1件＝1行。後から数える用
 """
 import datetime
 import os
+import sys
 import threading
 import time
 
@@ -61,10 +69,67 @@ TEXT_LIMIT = 8
 #: 点だけの文字とみなす字（`add_text_dots` と同じ）。
 DOT_CHARS = ".。…・ 　"
 
+#: 点送りの始め手の記録に並べる段数（版4）。
+START_DEPTH = 10
+
+#: `Clock.schedule_once` の包みを置く印（版4）。1プロセスに1枚で、世代が変わったら中身だけ差し替える。
+SCHEDULE_HOLDER = "_iml_234_schedule_holder"
+
 
 def is_dots(text):
     """点だけの文字か（空は点ではない）。"""
     return isinstance(text, str) and bool(text.strip()) and not text.strip(DOT_CHARS)
+
+
+def call_stack(start, depth=START_DEPTH):
+    """`start` 段上から、呼び出しの段を (ファイル名, 関数名, 行) で並べる。どのフレームも飛ばさない。"""
+    chain, index = [], start
+    while len(chain) < depth:
+        try:
+            frame = sys._getframe(index)
+        except ValueError:
+            break
+        index += 1
+        code = frame.f_code
+        chain.append((code.co_filename, code.co_name, frame.f_lineno))
+    return chain
+
+
+def is_continuation(chain):
+    """点送りの続きの予約か。
+
+    続きは、Clock（`kivy\\clock.py` の `post_idle`）から呼ばれた `display_button_load` が
+    自分を予約し直す形。間に挟まる包み（ローダと MOD のフレーム）は飛ばして見る。
+    """
+    if not chain or chain[0][1] != "display_button_load":
+        return False
+    for filename, name, _line in chain[1:]:
+        if name == "display_button_load" or frames.is_ours(filename):
+            continue
+        return os.path.basename(filename) == "clock.py"
+    return False
+
+
+def format_stack(chain):
+    return " <- ".join("{} ({}:{})".format(name, os.path.basename(filename), line)
+                       for filename, name, line in chain) or "?"
+
+
+def pending_loads(clock):
+    """Clock に載っている `display_button_load` の予約の数。読めなければ None。"""
+    try:
+        events = clock.get_events()
+    except Exception:
+        return None
+    count = 0
+    for event in events or ():
+        try:
+            callback = event.get_callback()
+        except Exception:
+            callback = getattr(event, "callback", None)
+        if getattr(callback, "__name__", "") == "display_button_load":
+            count += 1
+    return count
 
 
 def all_dots(values):
@@ -219,6 +284,49 @@ def apply(ctx):
 
         Clock.schedule_interval(poll, POLL_SECONDS)
         write("polling the screen every {}s (gen {})".format(POLL_SECONDS, ctx.generation))
+        hook_schedule(Clock)
+
+    # ------------------------------------------------------------ 点送りの始め手（版4）
+    def note_schedule(clock, callback, args):
+        # 0 call_stack / 1 ここ / 2 note / 3 schedule_once の包み / 4 予約した手
+        chain = call_stack(4)
+        if is_continuation(chain):
+            return
+        app = getattr(callback, "__self__", None)
+        event("dots_start", pending=pending_loads(clock),
+              enabled=getattr(app, "is_button_enabled", None),
+              timeout=args[0] if args else None, stack=format_stack(chain))
+
+    def hook_schedule(clock):
+        """`Clock.schedule_once` を包む。包みはプロセスに1枚で、書く先だけ世代ごとに差し替える。"""
+        holder = getattr(clock, SCHEDULE_HOLDER, None)
+        if holder is None:
+            original = clock.schedule_once
+            holder = {"note": None}
+
+            def schedule_once(callback, *args, **kwargs):
+                note = holder["note"]
+                if note is not None and getattr(callback, "__name__", "") == "display_button_load":
+                    try:
+                        note(clock, callback, args)
+                    except Exception:
+                        pass
+                return original(callback, *args, **kwargs)
+
+            try:
+                clock.schedule_once = schedule_once
+                setattr(clock, SCHEDULE_HOLDER, holder)
+            except Exception:
+                ctx.log_exc("busy display probe: cannot wrap Clock.schedule_once")
+                return
+
+        def note(clock, callback, args):
+            if ctx.superseded():
+                return
+            note_schedule(clock, callback, args)
+
+        holder["note"] = note
+        write("watching who starts the dots (Clock.schedule_once)")
 
     ctx.on_ready(start_poll, key="234_probe_busy_display:poll:{}".format(ctx.generation))
 

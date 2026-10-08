@@ -107,6 +107,8 @@ python tools/drive/drive.py <ファイル> --args '<JSON>' --wait <秒>
 | `where.py` | `npcs` | 今いる所・日数・会話の相手・手待ち、並べた人物の居場所と好感度 |
 | `texts.py` | `contains`・`last` | 画面の本文から語を含む行を拾う |
 | `totitle.py` | | 閉じずに題の画面へ戻る（`reload.sh` が使う） |
+| `autoplay.py` | `prefer`・`avoid`・`stop`・`steps`・`timeout` | 手が空くたびに選択肢を選んで進める（戦闘は攻撃）。ゲームの中で回すので押す間が空かない。依頼の中から始めたら、依頼を出たところで止まる。依頼1件を `--wait 1500` で |
+| `talkto.py` | `npc` | 人物に話しかけて会話を始める（ゲーム自身の `ConversationStartManager`）。一覧に出ない相手（仲間が1人だけのときの仲間など）に |
 | `setmod.py` | `mod`・`name`・`value` | MOD の定数を書き換える |
 | `act.py` | `text`・`timeout` | 入力欄に書いて送り、手が空くまで待つ |
 | `trade.py` | `do`（open / close / status / prices） | 売買の窓。`prices` は手持ちの品の売値を、値段の計算の段ごとに並べる |

@@ -10,7 +10,7 @@
     "en": "The injected loader changes nothing you can see, so a stock title screen and a modded one look identical. Puts a small line in the title screen's corner naming the loader and its version",
     "ja": "注入で入るローダは見た目を何も変えないので、素のタイトル画面と MOD 入りの画面が見分けられない。タイトル画面の隅に、ローダの名前と版を小さく出す"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "settings": {
     "TEXT": {

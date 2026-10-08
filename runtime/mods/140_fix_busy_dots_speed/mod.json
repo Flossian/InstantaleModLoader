@@ -1,0 +1,15 @@
+{
+  "entry": "fix_busy_dots_speed.py",
+  "api": 1,
+  "kind": "fix",
+  "name": {
+    "en": "Waiting dots at their normal speed",
+    "ja": "待機表示の「…」を普段の速さで流す"
+  },
+  "description": {
+    "en": "While the game is waiting, the dots on the choice buttons sometimes run two to seven times faster than usual. The game starts a new run of dots each time it begins a wait step (start and continuation of a conversation, start and end of a battle, the referee, quest search, and more), and the runs pile up within one wait. Keeps a single run going, so the dots move at their normal pace",
+    "ja": "待機中に選択肢の枠の「…」が、普段の2倍から7倍ほどの速さで流れることがある。ゲームは待機の段を始めるたびに点送りを1本ずつ始め（会話の始まりと続き・戦闘の始めと終わり・審判・依頼探しなど）、1回の待機の中で本数が積み重なるため。点送りを1本に保ち、普段の速さで流す"
+  },
+  "version": "1",
+  "author": "R01/Flossian"
+}

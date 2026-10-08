@@ -405,6 +405,19 @@ display_button_load(dt)             True を見て今の一覧を塗り、予約
 - **`process_choice` は旗を下ろして、自分で点送りを1本始める**。
   別の点送りが回っているところで場面を起こすと2本になり、点が速く進む
   （実機 2026-09-25。締めの場面の間だけ 0.1 秒刻みになった）
+- **ゲーム自身も、1回の待機の中で点送りを何本も始める**（`234_probe_busy_display` 版4の実機、2026-10-08）。
+  点送りを始めているのは `scripts.functions.button_load` で、待機の段ごとに呼ばれ、そのたびに
+  `Clock.schedule_once(display_button_load, 0)` を1本足す。前の本が回っていても止めない。
+  2本目以降を始めた手は39件で、どれもゲーム本体の `button_load` だった（MOD から始めたものは0件）。
+  呼んでいた段は、会話の始まり（`conversation_start_method_0` の中から `_1` がもう1本）・
+  会話の続き（`conversation_continued`）・戦闘の始め（`start_battle` → `sb_1`）と終わり（`end_phase`）・
+  戦闘の手番（`battle`）・審判（`quest_referee_phase`）・依頼探し（`search_quest`）など。
+  戦闘の締めでは7本並び、点が1秒に約24コマ進んだ（1本なら約3.4コマ）。
+  MOD を当てない状態では測っていないが、呼んでいるのはゲームのコードなので同じはず。
+  `140_fix_busy_dots_speed` が余った本を止めて1本に戻す
+- Clock は1回きりの予約を、呼び出す前に一覧（`Clock.get_events()`）から外す
+  （Kivy 2.3.0 の `ClockEvent.tick`。`if not self.loop: self.cancel()` の後で呼ぶ）。
+  Clock から呼ばれた `display_button_load` の中で一覧に見える `display_button_load` は、ほかの本だけ
 - 待機を終えるときは、ワーカーで `is_button_enabled = True` → `refresh_choice_buttons` と進み、
   **次のフレーム**で今の一覧を塗る。
   そこを覆いたいなら、組んだその場（ワーカー）で旗を下ろし、一覧を点にしておく

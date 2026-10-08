@@ -123,6 +123,7 @@ BANDS = (
         "135_fix_inn_button_order",
         "137_fix_npc_skill_uses",
         "138_fix_character_image_refresh",
+        "140_fix_busy_dots_speed",
         "130_currency_unit",
         "131_sharp_portrait",
         "132_npc_variety",

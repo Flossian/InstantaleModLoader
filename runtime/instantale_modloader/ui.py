@@ -892,6 +892,166 @@ def clamp_into_window(widget):
         pass          # 座標を持たない相手。置けないだけで害は無い
 
 
+# --------------------------------------------------------------------------
+# タイトル画面の隅に出す1行（`126_` / `136_` が共有する）
+# --------------------------------------------------------------------------
+#: タイトル画面。`StartScreen.__init__` で組み上がる。
+TITLE_MODULE = "scripts.hud.hud_start"
+TITLE_CLASS = "StartScreen"
+TITLE_INIT = TITLE_MODULE + ":" + TITLE_CLASS + ".__init__"
+
+#: 隅のラベルを縦に積む箱の印。値は隅の名前（`CORNERS` の鍵）。
+CORNER_STACK_ATTR = MOD_WIDGET_PREFIX + "corner_stack"
+
+#: 積んだラベルの並び順の印（小さいほど縁に近い）。
+CORNER_ORDER_ATTR = MOD_WIDGET_PREFIX + "corner_order"
+
+#: Kivy の既定フォント。日本語を持たないので、写す相手には選ばない。
+KIVY_DEFAULT_FONT = "Roboto"
+
+
+def title_screens(max_depth=12):
+    """今出ているタイトル画面。型で見分ける（まだ import されていなければ空）。"""
+    module = sys.modules.get(TITLE_MODULE)
+    cls = frames.attr(module, TITLE_CLASS, None) if module is not None else None
+    if not isinstance(cls, type):
+        return []
+    try:
+        from kivy.core.window import Window
+
+        roots = list(Window.children)
+    except Exception:
+        return []          # Kivy が引けない環境（オフライン検証）
+    found = []
+    for root in roots:
+        found.extend(widget for widget in walk_widgets(root, max_depth=max_depth)
+                     if isinstance(widget, cls))
+    return found
+
+
+def font_from(screen, max_depth=4):
+    """画面のウィジェットからフォント名を写す。日本語を出すため（既定の Roboto は豆腐になる）。
+
+    取れなければ None（既定のままにする）。
+    """
+    import os
+
+    for widget in walk_widgets(screen, max_depth=max_depth):
+        name = frames.text_of(widget, "font_name")
+        if name and os.path.basename(name).split(".")[0] != KIVY_DEFAULT_FONT:
+            return name
+    return None
+
+
+def on_title_screen(ctx, decorate, *, key):
+    """タイトル画面に飾りを付ける。`decorate(画面)` を、今出ている画面と、後で組まれる画面の両方へ呼ぶ。
+
+    注入はウィンドウが出てから行われるので、注入した時点のタイトル画面はもう組み上がっている
+    （TECH.md §1.4）。`StartScreen.__init__` を包むだけでは目の前の画面に出ないので、
+    `on_ready` で開いている画面も探して呼ぶ。
+    `key` は MOD ごとに違う名前にする。世代を混ぜて `on_ready` の鍵にするので、
+    注入し直すと目の前の飾りも新しい版へ置き直される（TECH.md §3.6.1）。
+    `decorate` は何度呼ばれても1枚に置き直す作りにすること（`corner_label` はそうなっている）。
+    戻りは `on_ready` に積めたか（同じ世代で2回目なら False）。
+    """
+    @ctx.wrap(TITLE_INIT, safe=True)
+    def title_init(orig, self, *args, **kwargs):
+        result = orig(self, *args, **kwargs)
+        decorate(self)      # ここで壊れても safe=True が画面を守る
+        return result
+
+    def decorate_open():
+        screens = title_screens()
+        for screen in screens:
+            decorate(screen)
+        ctx.log("{}: {} title screen(s) already open".format(key, len(screens)))
+
+    return ctx.on_ready(decorate_open, key="{}:title:{}".format(key, ctx.generation))
+
+
+def _corner_stack(screen, corner, BoxLayout):
+    """画面のその隅の箱。無ければ作って足す。"""
+    for child in children_of(screen):
+        if frames.attr(child, CORNER_STACK_ATTR, None) == corner:
+            return child
+    stack = BoxLayout(orientation="vertical", size_hint=(None, None),
+                      pos_hint=dict(CORNERS.get(corner, CORNERS["右上"])))
+    setattr(stack, CORNER_STACK_ATTR, corner)
+    screen.add_widget(stack)
+    return stack
+
+
+def _refit_stack(stack, *_args):
+    """箱の大きさを、積んだラベルの文字の箱に合わせる（隅からはみ出させない）。"""
+    width = height = 0.0
+    for label in children_of(stack):
+        size = frames.attr(label, "texture_size", None) or (0, 0)
+        try:
+            label.size = size
+        except Exception:
+            pass
+        width = max(width, float(size[0]))
+        height += float(size[1])
+    try:
+        stack.size = (width, height)
+    except Exception:
+        pass
+
+
+def remove_corner_label(screen, attr):
+    """自分が前に置いたラベル（`attr` の印が付いたもの）を外す。画面の直下と隅の箱の中の両方から。"""
+    for holder in [screen] + [child for child in children_of(screen)
+                              if frames.attr(child, CORNER_STACK_ATTR, None) is not None]:
+        for child in list(children_of(holder)):
+            if frames.attr(child, attr, None) is None:
+                continue
+            try:
+                holder.remove_widget(child)
+            except Exception:
+                pass
+        if holder is not screen:
+            _refit_stack(holder)
+
+
+def corner_label(screen, attr, text, *, corner="右上", order=0, font_size=14, alpha=0.55):
+    """画面の隅に1行のラベルを置く。前に置いた同じ印のラベルは外してから置く（重ね置きしない）。
+
+    同じ隅に置いたラベルは縦に積み、`order` の小さいものほど縁に近くなる
+    （右上なら上、右下なら下）。右の隅は右寄せ、左の隅は左寄せ。
+    Kivy が引けない環境では何もしない（None を返す）。
+    """
+    try:
+        from kivy.uix.boxlayout import BoxLayout
+        from kivy.uix.label import Label
+    except Exception:
+        return None
+    remove_corner_label(screen, attr)
+    corner = corner if corner in CORNERS else "右上"
+    label = Label(text=text, size_hint=(None, None), color=(1.0, 1.0, 1.0, float(alpha)),
+                  pos_hint={"right": 1} if "右" in corner else {"x": 0})
+    font = font_from(screen)
+    if font:
+        label.font_name = font
+    label.font_size = upx(font_size)
+    setattr(label, attr, True)
+    setattr(label, CORNER_ORDER_ATTR, order)
+    stack = _corner_stack(screen, corner, BoxLayout)
+    # 縦の BoxLayout は先に足したものほど上に置く。下の隅は縁（下）に近い方を後に足す。
+    from_edge = "上" in corner
+    labels = sorted(children_of(stack) + [label],
+                    key=lambda widget: frames.attr(widget, CORNER_ORDER_ATTR, 0) or 0,
+                    reverse=not from_edge)
+    for child in list(children_of(stack)):
+        stack.remove_widget(child)
+    for child in labels:
+        stack.add_widget(child)
+    # 文字が描き直されたら箱を合わせ直す。前から居たラベルは置いたときに結んである。
+    label.bind(texture_size=lambda *_a, box=stack: _refit_stack(box))
+    label.texture_update()
+    _refit_stack(stack)
+    return label
+
+
 def popup_button(text, template=None):
     """品の右クリックの popup と同じ見た目のボタン（`402_` で実機から写した描き方）。
 

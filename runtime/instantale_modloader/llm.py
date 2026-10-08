@@ -160,6 +160,34 @@ def is_cloud_runtime() -> bool:
     return any(name != LOCAL_REQUEST_MODULE for name in request_modules())
 
 
+#: `config.json` の `ai_setting.llm_inference` で、API キーでクラウドを使う値。
+CLOUD_API_KEY = "cloud_api_key"
+
+
+def game_choice(path=None):
+    """ゲームの設定画面で選ばれている LLM。`{"inference", "provider", "model"}`。読めなければ None。
+
+    `inference` は `local` / `cloud_api_key` など、`provider` は `OpenAI API` / `Claude API` など
+    （ゲームの設定画面の表記そのまま）、`model` はゲームの一覧の名前。
+    切り替えるとゲームが起動し直すので、注入の時に1回読めば足りる（`imagegen.backend` と同じ読み方）。
+    """
+    import io
+    import os
+
+    from . import saves
+
+    path = path or os.path.join(saves.data_dir(), "config.json")
+    try:
+        with io.open(path, encoding="utf-8-sig") as fh:
+            setting = json.load(fh)["ai_setting"]
+        cloud = setting.get("cloud_model_setting") or {}
+        return {"inference": setting.get("llm_inference"),
+                "provider": cloud.get("cloud_llm_provider"),
+                "model": cloud.get("cloud_llm")}
+    except Exception:
+        return None
+
+
 def content_of(message):
     """メッセージの本文。dict でなければ None（＝触らない）。"""
     try:

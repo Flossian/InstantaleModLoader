@@ -15,7 +15,10 @@ import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-MODS_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime", "mods"))
+RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
+MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
+if RUNTIME_DIR not in sys.path:
+    sys.path.insert(0, RUNTIME_DIR)
 folder = [n for n in os.listdir(MODS_DIR) if n.endswith("_cloud_model_override")][0]
 folder = os.path.join(MODS_DIR, folder)
 manifest = json.load(io.open(os.path.join(folder, "mod.json"), encoding="utf-8"))
@@ -41,9 +44,17 @@ for key in ("OPENAI_MODEL", "CLAUDE_MODEL"):
 
 
 class Ctx(object):
+    generation = "gen1"
+    mod_dir = folder
+
     def __init__(self):
         self.hooks = {}
         self.lines = []
+        self.ready = []
+
+    def on_ready(self, fn, *, key=None, **kwargs):
+        self.ready.append((key, fn))
+        return True
 
     def log(self, text):
         self.lines.append(text)
@@ -146,11 +157,11 @@ sent = ctx.hooks[OA.POST](orig, OPENAI, "/responses",
 assert sent == {"model": "gpt-5.5", "reasoning": {"effort": "low"}}, sent
 MOD.OPENAI_EFFORT, MOD.OPENAI_CUSTOM = "keep", ""
 
-# off なら仕掛けない
+# off なら送信を包まない（タイトル画面の包みは、前の1行を外すために残る）
 MOD.OPENAI_MODEL = "off"
 ctx = Ctx()
 MOD.apply(ctx)
-assert not ctx.hooks
+assert OA.POST not in ctx.hooks and CL.POST not in ctx.hooks, ctx.hooks
 MOD.OPENAI_MODEL = "gpt-6-luna"
 
 # ---------------------------------------------------------------- Claude
@@ -347,5 +358,35 @@ MOD.OPENAI_MODEL, MOD.OPENAI_CACHE = "gpt-6-luna", "keep"
 ctx = Ctx()
 MOD.apply(ctx)
 assert "prompt_cache_options" not in ask(SHARED + "一回目", model="gpt-6-luna")
+
+# ---------------------------------------------------------------- タイトル画面の1行
+# 出すのは、API キーでクラウドを使っていて、そのプロバイダを差し替えているときだけ
+NAMES = MOD.model_names(folder)
+assert NAMES["claude-sonnet-5-5"] == "Claude Sonnet 5.5" and NAMES["gpt-6.1-sol"] == "GPT-6.1 Sol"
+cloud = {"inference": "cloud_api_key", "provider": "Claude API", "model": "claude-sonnet-5"}
+assert MOD.title_text(cloud, "gpt-6-luna", "claude-sonnet-5-5", NAMES) == "LLM: Claude Sonnet 5.5"
+assert MOD.title_text(dict(cloud, provider="OpenAI API"), "gpt-6-luna", None, NAMES) == "LLM: GPT-6 Luna"
+assert MOD.title_text(cloud, "gpt-6-luna", "my-claude", NAMES) == "LLM: my-claude", "一覧に無い名前はそのまま"
+assert MOD.title_text(cloud, "gpt-6-luna", None, NAMES) is None, "そのプロバイダを差し替えていなければ出さない"
+assert MOD.title_text(dict(cloud, inference="local"), "gpt-6-luna", "claude-sonnet-5-5", NAMES) is None
+assert MOD.title_text(dict(cloud, provider="Gemini API(Experimental)"), "gpt-6-luna", "x", NAMES) is None
+assert MOD.title_text(None, "gpt-6-luna", None, NAMES) is None
+
+# apply() はタイトル画面を包み、開いている画面へは on_ready で付ける。世代を鍵に混ぜる
+ctx = Ctx()
+MOD.apply(ctx)
+from instantale_modloader import llm, ui
+assert ui.TITLE_INIT in ctx.hooks
+assert ctx.ready and ctx.ready[-1][0] == "136_cloud_model_override:title:gen1", ctx.ready
+
+# 設定を読む部品（ローダの llm.game_choice）
+import tempfile
+with tempfile.TemporaryDirectory() as tmp:
+    path = os.path.join(tmp, "config.json")
+    with io.open(path, "w", encoding="utf-8-sig") as fh:
+        json.dump({"ai_setting": {"llm_inference": "cloud_api_key", "cloud_model_setting": {
+            "cloud_llm_provider": "Claude API", "cloud_llm": "claude-sonnet-5"}}}, fh)
+    assert llm.game_choice(path) == cloud, llm.game_choice(path)
+    assert llm.game_choice(os.path.join(tmp, "missing.json")) is None
 
 print("ok")

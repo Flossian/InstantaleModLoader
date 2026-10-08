@@ -46,12 +46,28 @@ SDK が呼び出し側の dict をそのまま握っている場合に、
 ゲームが組み立てた要求は**ゲームが選んだモデル向け**なので、
 差し替え先が 400 で断る引数を直してから送る（各ファイルの `fix`）。
 
+## タイトル画面の1行
+
+ゲームの設定画面には、ゲームが選んだモデルが出る（差し替え先は出ない）。
+実際に送っているモデルが分かるよう、タイトル画面の右上に `LLM: <表示名>` を1行出す。
+どの LLM が選ばれているかは `config.json` から読む（`llm.game_choice`。切り替えるとゲームが起動し直すので、
+注入の時に1回読めば足りる）。
+置き方は `126_` と同じローダの部品（`ui.on_title_screen` / `ui.corner_label`）で、
+右上では `126_` の版の行の下に積む。
+表示名は `mod.json` の `value_labels` から引き、設定画面と同じ名前にする。
+
 ## 割り切り
 
   * ゲーム内のコスト表示はずれる。価格計算はゲームが選んだモデルの
     単価で行う。表示だけの話で、実際の課金には関わらない
   * 設定画面の表示もゲームが選んだモデルのまま
 """
+
+import io
+import json
+import os
+
+from instantale_modloader import llm, ui
 
 from . import claude_side, openai_side
 
@@ -97,6 +113,20 @@ CLAUDE_CACHE = "5m"
 # 毎回出すとログが埋まるので先頭だけ。
 LOG_LIMIT = 3
 
+# タイトル画面の右上に、実際に送っているモデルを出すか。
+# 出すのは、ゲームが API キーでクラウドを使っていて、そのプロバイダをこの MOD で差し替えているときだけ。
+TITLE_MODEL = True
+
+#: タイトル画面に足すラベルの印と、右上に積む中での並び（`126_` の版の行が 0）。
+TITLE_LABEL_ATTR = ui.MOD_WIDGET_PREFIX + "cloud_model"
+TITLE_ORDER = 10
+TITLE_FONT_SIZE = 14
+TITLE_ALPHA = 0.55
+
+#: ゲームの設定画面のプロバイダ名（`config.json` の `cloud_llm_provider`）と、差し替えの設定の対応。
+PROVIDER_OPENAI = "OpenAI API"
+PROVIDER_CLAUDE = "Claude API"
+
 
 def _pick(custom, chosen):
     """一覧に無い名前が書いてあればそちら、無ければ一覧の選択。"off" は None。"""
@@ -132,6 +162,41 @@ class _Log(object):
             " fixed: " + ", ".join(changed) if changed else ""))
 
 
+def model_names(mod_dir):
+    """`mod.json` の一覧の表示名（`value_labels`）を、モデル ID -> 表示名 の表にする。読めなければ空。
+
+    表示名は設定画面と同じものを出したいので、`mod.json` を1か所の元にする。
+    `ctx.mod_dir` は apply() の間しか引けないので、apply() の中で読んでおく。
+    """
+    names = {}
+    try:
+        with io.open(os.path.join(mod_dir, "mod.json"), encoding="utf-8") as fh:
+            settings = json.load(fh).get("settings") or {}
+    except Exception:
+        return names
+    for key in ("OPENAI_MODEL", "CLAUDE_MODEL"):
+        for model, label in ((settings.get(key) or {}).get("value_labels") or {}).items():
+            text = label.get("ja") if isinstance(label, dict) else label
+            if isinstance(text, str) and text:
+                names[model] = text
+    return names
+
+
+def title_text(choice, openai_target, claude_target, names):
+    """タイトル画面に出す1行。出さないときは None。
+
+    出すのは、ゲームが API キーでクラウドを使っていて（`llm.game_choice`）、
+    そのプロバイダの差し替え先がこの MOD で決まっているときだけ。
+    """
+    if not choice or choice.get("inference") != llm.CLOUD_API_KEY:
+        return None
+    target = {PROVIDER_OPENAI: openai_target,
+              PROVIDER_CLAUDE: claude_target}.get(choice.get("provider"))
+    if not target:
+        return None
+    return "LLM: " + names.get(target, target)
+
+
 def apply(ctx):
     openai_target = _pick(OPENAI_CUSTOM, OPENAI_MODEL)
     openai_effort = _setting(OPENAI_EFFORT, "keep")
@@ -146,6 +211,19 @@ def apply(ctx):
     openai_side.install(ctx, openai_target, openai_effort, openai_cache, log)
     claude_side.install(ctx, claude_target, claude_effort, claude_cache, log)
 
+    # タイトル画面の右上。出さないときも包んでおき、注入し直す前の1行を外す（設定を切ったときに残さない）。
+    shown = title_text(llm.game_choice(), openai_target, claude_target,
+                       model_names(ctx.mod_dir)) if TITLE_MODEL else None
+
+    def decorate(screen):
+        if shown is None:
+            ui.remove_corner_label(screen, TITLE_LABEL_ATTR)
+            return False
+        return ui.corner_label(screen, TITLE_LABEL_ATTR, shown, corner="右上", order=TITLE_ORDER,
+                               font_size=TITLE_FONT_SIZE, alpha=TITLE_ALPHA) is not None
+
+    ui.on_title_screen(ctx, decorate, key="136_cloud_model_override")
+
     ctx.log("cloud model override: openai={} (effort {}, cache {}) / claude={} (effort {}, cache {})"
-            .format(openai_target or OFF, openai_effort, openai_cache,
-                    claude_target or OFF, claude_effort, claude_cache))
+            " / title {!r}".format(openai_target or OFF, openai_effort, openai_cache,
+                                   claude_target or OFF, claude_effort, claude_cache, shown))

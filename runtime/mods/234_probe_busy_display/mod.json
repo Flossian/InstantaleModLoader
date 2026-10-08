@@ -7,10 +7,10 @@
     "ja": "計測: 待機表示と背景"
   },
   "description": {
-    "en": "Records the waiting display (the animated dots on the choice buttons), both the game's own and the one mods show through the loader: the button texts, enabled flags and send button every 0.2 seconds (only when something other than the dots changes), and every call that paints or rebuilds the choices, with its thread and caller. Version 2 also records the background picture (`location_image`) and the calls that change it. Since version 3 the dot frames are only counted and summarised as one line per run of dots. Read-only",
-    "ja": "待機表示（選択肢の枠の「…」）を、ゲーム標準のものと MOD がローダ経由で出すものの両方について録る。0.2秒ごとに選択肢の枠の文字・押せるか・送信ボタンを読み（点が進んだ以外の変化があったときだけ書く）、選択肢を塗る手と組み直す手の呼び出しをスレッドと呼び出し元つきで残す。版2では背景の絵（`location_image`）と、背景を替える手（`change_background_image_*` と HUD の `update_image_source`）も録る。版3から点のコマは数だけ数え、ひと続きの点送りを1行にまとめる。読み取りだけでゲームは変えない"
+    "en": "Records the waiting display (the animated dots on the choice buttons), both the game's own and the one mods show through the loader: the button texts, enabled flags and send button every 0.2 seconds (only when something other than the dots changes), and every call that paints or rebuilds the choices, with its thread and caller. Version 2 also records the background picture (`location_image`) and the calls that change it. Since version 3 the dot frames are only counted and summarised as one line per run of dots. Version 4 records who starts a run of dots (a `display_button_load` scheduled from anywhere but its own continuation), with the number already running and the full call stack. Read-only",
+    "ja": "待機表示（選択肢の枠の「…」）を、ゲーム標準のものと MOD がローダ経由で出すものの両方について録る。0.2秒ごとに選択肢の枠の文字・押せるか・送信ボタンを読み（点が進んだ以外の変化があったときだけ書く）、選択肢を塗る手と組み直す手の呼び出しをスレッドと呼び出し元つきで残す。版2では背景の絵（`location_image`）と、背景を替える手（`change_background_image_*` と HUD の `update_image_source`）も録る。版3から点のコマは数だけ数え、ひと続きの点送りを1行にまとめる。版4では点送りを始めた手（点送りの続き以外から `display_button_load` を予約した手）を、その時点で回っていた本数と呼び出しの全段つきで録る。読み取りだけでゲームは変えない"
   },
-  "version": "3",
+  "version": "4",
   "author": "R01/Flossian",
   "debug": true
 }

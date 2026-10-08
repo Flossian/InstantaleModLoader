@@ -10,7 +10,8 @@
   組み直し   … 後から組まれるタイトル画面にも足す（タイトルへ戻る経路）
   重ね置き   … 注入し直しても、ラベルは1枚のまま置き換わる
   文字       … {version} と {mods} が実際の値に置き換わる
-  置き場所   … 設定した隅が pos_hint に出る。知らない名前なら右上へ落ちる
+  置き場所   … 設定した隅が隅の箱の pos_hint に出る。知らない名前なら右上へ落ちる
+  積み       … 同じ隅の他の MOD の1行（`136_`）と同じ箱に縦に積み、この行が縁側
   フォント   … 画面のウィジェットからフォント名を写す（日本語が豆腐にならない）
   大きさ     … ラベルの箱を文字の大きさに合わせる（既定の 100x100 のままにしない）
   無傷       … ゲームが組んだ子には触らない。Kivy が引けなければ何もしない
@@ -105,6 +106,10 @@ class FakeLabel(FakeWidget):
             callback(self, self.texture_size)
 
 
+class FakeBoxLayout(FakeWidget):
+    """`BoxLayout`。縦に積む箱（`ui.corner_label` が隅ごとに1つ作る）。"""
+
+
 class FakeButton(FakeWidget):
     """タイトルのボタン。フォントを写す相手になる。"""
 
@@ -157,11 +162,14 @@ def install_fake_kivy():
     uix = types.ModuleType("kivy.uix")
     label_mod = types.ModuleType("kivy.uix.label")
     label_mod.Label = FakeLabel
+    box_mod = types.ModuleType("kivy.uix.boxlayout")
+    box_mod.BoxLayout = FakeBoxLayout
     core = types.ModuleType("kivy.core")
     window_mod = types.ModuleType("kivy.core.window")
     window_mod.Window = FakeWindow
     for name, module in (("kivy", kivy), ("kivy.uix", uix),
-                         ("kivy.uix.label", label_mod), ("kivy.core", core),
+                         ("kivy.uix.label", label_mod), ("kivy.uix.boxlayout", box_mod),
+                         ("kivy.core", core),
                          ("kivy.core.window", window_mod)):
         sys.modules[name] = module
 
@@ -238,9 +246,14 @@ def install(generation="gen1", **settings):
     return module, ctx
 
 
-def labels_of(screen, mod):
-    return [child for child in screen.children
-            if getattr(child, mod.LABEL_ATTR, None) is not None]
+def labels_of(screen, mod, attr=None):
+    """画面の隅の箱に積まれた、この MOD のラベル。"""
+    attr = attr or mod.LABEL_ATTR
+    found = []
+    for holder in [screen] + list(screen.children):
+        found.extend(child for child in holder.children
+                     if getattr(child, attr, None) is not None)
+    return found
 
 
 def run():
@@ -266,8 +279,8 @@ def run():
           found and found[0].text)
     check("ゲームが組んだ子はそのまま残る",
           open_screen.children[1:] == open_screen.built, open_screen.children)
-    check("足すのはいちばん手前（描画は最後）",
-          bool(found) and open_screen.children[0] is found[0])
+    check("足すのはいちばん手前の隅の箱（描画は最後）",
+          bool(found) and open_screen.children[0] is found[0].parent)
     check("on_ready のキーに世代が入っている",
           bool(ctx.ready) and ctx.ready[0][0].endswith(":gen1"), ctx.ready)
     check("握り潰された例外は無い", not ctx.errors, ctx.errors)
@@ -303,16 +316,17 @@ def run():
 
     mod, ctx = install(CORNER="左下", FONT_SIZE=20, ALPHA=0.3)
     corner = labels_of(FakeStartScreen(), mod)[0]
-    check("設定した隅が pos_hint に出る", corner.pos_hint == ui.CORNERS["左下"],
-          corner.pos_hint)
+    check("設定した隅が隅の箱の pos_hint に出る", corner.parent.pos_hint == ui.CORNERS["左下"],
+          corner.parent.pos_hint)
+    check("左の隅は左寄せ", corner.pos_hint == {"x": 0}, corner.pos_hint)
     check("濃さと大きさが効く",
           corner.color == (1.0, 1.0, 1.0, 0.3) and corner.font_size == 20.0,
           (corner.color, corner.font_size))
 
     mod, ctx = install(CORNER="まんなか")
     fallback = labels_of(FakeStartScreen(), mod)[0]
-    check("知らない隅の名前は右上へ落ちる", fallback.pos_hint == ui.CORNERS["右上"],
-          fallback.pos_hint)
+    check("知らない隅の名前は右上へ落ちる", fallback.parent.pos_hint == ui.CORNERS["右上"],
+          fallback.parent.pos_hint)
 
     print("\n[フォントと大きさ]")
     mod, ctx = install()
@@ -321,6 +335,25 @@ def run():
           label.font_name == FONT, label.font_name)
     check("箱を文字の大きさに合わせる（既定の 100x100 で隅に寄らない）",
           label.size == label.texture_size, (label.size, label.texture_size))
+
+    # -- 同じ隅の他の MOD の1行と積む -----------------------------------------
+    print("\n[積み]")
+    mod, ctx = install()
+    screen = FakeStartScreen()
+    other = ui.corner_label(screen, "_instantale_other", "LLM: X", corner="右上", order=10)
+    mine = labels_of(screen, mod)[0]
+    check("同じ隅の1行は同じ箱に入る", other.parent is mine.parent, screen.children)
+    check("この MOD の行が縁側（上の隅なら上＝先に足した側）",
+          mine.parent.children[-1] is mine, [c.text for c in mine.parent.children])
+    check("右の隅は右寄せ", mine.pos_hint == {"right": 1}, mine.pos_hint)
+    box = mine.parent
+    check("箱は2行を収める大きさ",
+          box.size == (max(mine.size[0], other.size[0]), mine.size[1] + other.size[1]), box.size)
+    ui.corner_label(screen, mod.LABEL_ATTR, "again", corner="右上")
+    check("置き直しても1枚のまま、他の MOD の行は残る",
+          len(labels_of(screen, mod)) == 1 and other.parent is box, box.children)
+    ui.remove_corner_label(screen, "_instantale_other")
+    check("他の MOD が外すと自分の行だけ残る", len(box.children) == 1, box.children)
 
     # -- Kivy が引けない環境 -------------------------------------------------
     print("\n[無傷]")

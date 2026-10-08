@@ -10,6 +10,7 @@
     "104_balance_area_bgm",
     "105_fix_schema_compact",
     "139_fix_quest_generation_runaway",
+    "140_fix_busy_dots_speed",
     "106_fix_battle_bgm_restore",
     "107_fix_battle_flag_stuck",
     "108_fix_shop_inventory_overflow",

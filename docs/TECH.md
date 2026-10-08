@@ -2621,6 +2621,21 @@ ui.paint_icon(button, strokes, attr=, key=, width=, alpha=, log_exc=)
 ui.show_widget(widget, visible)       # 隠すときは押せなくもし、触りを下へ通す（block_touch=True で止める）
 ```
 
+**タイトル画面の隅に出す1行**（`126_` / `136_`）:
+
+```python
+ui.on_title_screen(ctx, decorate, key="<MOD のフォルダ名>")   # 今出ている画面と、後で組まれる画面の両方へ decorate(画面)
+ui.corner_label(screen, attr, text, corner="右上", order=0, font_size=14, alpha=0.55)
+ui.remove_corner_label(screen, attr)   # 出さない設定にしたとき、前に置いた1行を外す
+ui.title_screens() / ui.font_from(screen)
+```
+
+注入はウィンドウが出てから行われるので、注入した時点のタイトル画面はもう組み上がっている（§1.4）。
+`on_title_screen` は `StartScreen.__init__` を包むのと、`on_ready`（鍵に世代を混ぜる）で開いている画面に付けるのを1回で行う。
+`corner_label` は同じ隅の1行を縦に積む箱に入れ、`order` の小さいものほど縁に近くする（`126_` の版が 0、`136_` のモデルが 10）。
+同じ `attr` の前の1行は外してから置くので、何度呼んでも1枚になる。
+フォントはタイトル画面から写す（Kivy の既定は日本語を持たない）。
+
 `paint_icon` は**変わったときだけ引き直す**（位置・大きさ・太さ・濃さと `key` を控えて突き合わせる）。
 本文は1文字ずつ増え、パーティ欄は HP が動くたびに塗り直されるので、毎回引くと無駄が積み上がる。
 
@@ -2818,6 +2833,18 @@ violation = llm.truthy(data.get("content_violation"), unknown=False)  # 判ら�
 `parse_json` はその後ろに「文章から JSON を1つ拾う」を足したもの
 （構造化経路と非構造化経路の**出口を1つにする**ために使う。
 2つの経路それぞれに検証を書くと、片方だけ直したときに黙ってすり抜ける）。
+
+#### ゲームが選んでいる LLM（`game_choice`）
+
+```python
+llm.game_choice()   # {"inference": "cloud_api_key", "provider": "Claude API", "model": "claude-sonnet-5"}。読めなければ None
+llm.CLOUD_API_KEY   # inference の「API キーでクラウド」の値
+```
+
+`config.json` の `ai_setting` を読む（`imagegen.backend` と同じ読み方。§5.11）。
+`provider` と `model` はゲームの設定画面の表記そのまま。
+LLM を切り替えるとゲームが起動し直すので、注入の時に1回読めば足りる。
+`is_cloud_runtime()` と違い、最初の LLM リクエストを待たずに分かる（`136_` がタイトル画面に出すのに使う）。
 
 ### 5.4 `instantale_modloader.state`
 

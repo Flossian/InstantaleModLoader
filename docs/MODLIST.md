@@ -8,7 +8,7 @@
 手で書き換えても次の生成で消える。
 直す先は各 MOD の `mod.json` か MODS.md の見出し。
 
-同梱 125 本（基盤 2 / 修正 41 / 追加 42 / 計測 40）。
+同梱 126 本（基盤 2 / 修正 42 / 追加 42 / 計測 40）。
 うち 13 本は外部の MOD 作者からの提供（下の「提供を受けた MOD」）。
 ほかに 3 本は自作だが、外部からの提案を取り込んでいる（下の「提案を取り込んだ MOD」）。
 
@@ -37,7 +37,7 @@
 
 ---
 
-## 修正（41本）
+## 修正（42本）
 
 ゲームのバグ・不便を直す。
 
@@ -79,10 +79,11 @@
 | [`133_ui_area_difficulty`](MODS.md#133_ui_area_difficulty-移動先に適正レベル帯を出す) | 移動先の適正レベル帯の表示 | 移動先に適正レベル帯を出す | 9 |  |
 | [`134_balance_item_effects`](MODS.md#134_balance_item_effects-アイテムの効果を分類ごとに作り直す) | アイテム効果の調整 | アイテムの効果を分類ごとに作り直す | 18 |  |
 | [`135_fix_inn_button_order`](MODS.md#135_fix_inn_button_order-宿屋の選択肢を他の施設と同じ順にする) | 宿屋の選択肢を他の施設と同じ順にする | 宿屋の選択肢を他の施設と同じ順にする | - |  |
-| [`136_cloud_model_override`](MODS.md#136_cloud_model_override-クラウドのモデルを差し替える) | クラウドモデルの差し替え | クラウドのモデルを差し替える | 9 |  |
+| [`136_cloud_model_override`](MODS.md#136_cloud_model_override-クラウドのモデルを差し替える) | クラウドモデルの差し替え | クラウドのモデルを差し替える | 10 |  |
 | [`137_fix_npc_skill_uses`](MODS.md#137_fix_npc_skill_uses-仲間と敵は使い切ったスキルと効果中の強化弱体を使わず宿で休むと回数が戻る) | 仲間と敵は使い切ったスキルと効果中の強化・弱体を使わず、宿で休むと回数が戻る | 仲間と敵は使い切ったスキルと効果中の強化・弱体を使わず、宿で休むと回数が戻る | - |  |
 | [`138_fix_character_image_refresh`](MODS.md#138_fix_character_image_refresh-再生成した立ち絵と顔がその場で表示に反映される) | 再生成した立ち絵と顔がその場で表示に反映される | 再生成した立ち絵と顔がその場で表示に反映される | - |  |
 | [`139_fix_quest_generation_runaway`](MODS.md#139_fix_quest_generation_runaway-依頼の生成が終わらずに失敗するのを直す) | 依頼の生成で敵が増え続ける件の修正 | 依頼の生成が終わらずに失敗するのを直す | 1 |  |
+| [`140_fix_busy_dots_speed`](MODS.md#140_fix_busy_dots_speed-待機表示のを普段の速さで流す) | 待機表示の「…」を普段の速さで流す | 待機表示の「…」を普段の速さで流す | - |  |
 | [`406_gemini_user_role_fix`](MODS.md#406_gemini_user_role_fix-クラウド-api-の-gemini-で-user-role-の無い依頼を補う) | Geminiの無応答の防止 | クラウド API の Gemini で user role の無い依頼を補う | - |  |
 
 ---

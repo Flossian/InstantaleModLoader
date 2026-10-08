@@ -970,6 +970,10 @@ def update_config(**values) -> None:
 # 1000x620 では、選んだ瞬間に説明が伸びて一覧が潰れ、窓の下が詰まっていた。
 GEOMETRY_DEFAULT = "1180x760"
 
+#: 設定ダイアログの高さを決めるときに、画面の高さとして見る上限。
+#: ダイアログの高さはこれと画面の高さの低いほうの 85% まで。超える分は巻き取りで見せる。
+DIALOG_SCREEN_CAP = 1080
+
 
 def _on_screen(root: tk.Misc, geom: str) -> bool:
     """`WxH+X+Y` が画面の中に居るか。
@@ -1259,7 +1263,10 @@ class SettingsDialog(tk.Toplevel):
         self.update_idletasks()
 
         natural = self.winfo_reqheight()        # 余白 + 中身 + ボタンの列
-        limit = int(self.winfo_screenheight() * 0.85)
+        # 画面が高くても、縦 1080 の画面と同じ高さで止める。
+        # 画面の高さだけで決めていたので、縦 1440 の画面では 1224 まで伸び、
+        # 設定の多い MOD は窓が縦 1080 を超えていた。
+        limit = int(min(self.winfo_screenheight(), DIALOG_SCREEN_CAP) * 0.85)
         if natural <= limit:
             self.scroll.grid_remove()
             return natural
