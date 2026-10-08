@@ -2548,6 +2548,7 @@ ImprisonmentEndManager(app, 刑期)
 | 釈明 | 裁判の画面では自由入力の行き先（`function_correspond_to_input`）が `TrialPhaseManager` で、送った文はボタンの文言と同じく `get_sentence` に渡り、判事の頼みに「'〈主人公〉'の釈明は'〈文〉'です」として載る（2026-10-05。`output_data\unknown\unknown\sentence_generator\N.json`）。画面にはそのことが出ない |
 | 判事の頼みの欠け | 頼みの「人生ログの全体象」に、文ではなく `<scripts.characters.Character object at 0x…>`（人物の実体の表記）が入っている。人生の記録は判事に渡っていない（ゲームの不具合。プロフィールと特質は渡る）。検察の頼み（`get_sentence_sought`）も同じ。`336_` が `context_manager.get_life_log_text` の文に置き換える |
 | 判決 | 求刑は3回とも懲役15年。判決は3回のうち2回が死刑、1回が懲役15年（主人公の経歴「軍を脱走」を判事が重く見た）。判事の頼み文は、ふざけていれば「懲役300年」や「死刑」にし、反省していれば情状酌量してよいと指示している |
+| 判決の型 | `sentence_generator` の型は `Verdict {statement: 文字列, sentence: PrisonSentence | DeathSentence}`。`PrisonSentence` は `{type: "imprisonment", years: 整数}` で、年数に下限が無い。`DeathSentence` は `{type: "death"}`。無罪の型は無い（2026-10-08。動いているゲームで判事の頼みを組ませ、送る直前で止めて型を写した）。懲役0年が返ると、ゲームは0年の服役に進む。`336_` は無罪の道を開いた回に限り、0年を無罪として扱う |
 | 死刑 | 「嫌だ！」の画面で釈明を打ち込んでも処刑される。ゲームオーバーで `savedata.json` が消える |
 | 1年の進み | `服役する` 1回で `elapse_days(365)` が1回、年齢 +1。段ごとに `save_game` が1回（裁判の段も） |
 | 寿命 | 獄中死は `DieFromOldAgePrison`。語りの頼み文は「60歳で寿命を迎えた」（自由の身は65歳）。実際の閾値は未計測 |

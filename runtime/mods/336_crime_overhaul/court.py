@@ -56,20 +56,24 @@ def install(env):
     ctx, write, screen, worlds, cfg = env.ctx, env.write, env.screen, env.worlds, env.cfg
     save_soon = ui.saver(ctx, write, "court")
     #: いまの裁判。`key` は求刑ごとに変わる（同じ裁判の画面が組み直されても同じ）。控えの `court` と同じ中身。
-    court = {"key": None, "args": None, "effects": {}, "told": False, "applied": False, "playthrough": None}
+    #: `acquit` は無罪の道（None: 閉じている / "open": 判事に無罪の一文を渡した / "done": 無罪放免を出した）。
+    court = {"key": None, "args": None, "effects": {}, "told": False, "applied": False, "acquit": None,
+             "playthrough": None}
 
     def load_court(app):
         """ロードでメモリが空になっていたら、控えから戻す。周回が替わっていたら、その周回の控えを読み直す。"""
         playthrough = worlds.playthrough(app)
         if court["key"] is not None and court["playthrough"] == playthrough:
             return
-        court.update(key=None, args=None, effects={}, told=False, applied=False, playthrough=playthrough)
+        court.update(key=None, args=None, effects={}, told=False, applied=False, acquit=None,
+                     playthrough=playthrough)
         with worlds.lock:
             stored = worlds.load(playthrough).get("court")
         if isinstance(stored, dict) and stored.get("key") is not None:
             court.update(key=stored.get("key"), args=list(stored.get("args") or []),
                          effects=dict(stored.get("effects") or {}),
-                         told=bool(stored.get("told")), applied=bool(stored.get("applied")))
+                         told=bool(stored.get("told")), applied=bool(stored.get("applied")),
+                         acquit=stored.get("acquit"))
             write("court: restored the trial from the record (effects {})".format(court["effects"]))
 
     def store_court(app):
@@ -77,14 +81,14 @@ def install(env):
         with worlds.lock:
             bucket = worlds.load(playthrough)
             bucket["court"] = {"key": court["key"], "args": court["args"], "effects": court["effects"],
-                               "told": court["told"], "applied": court["applied"]}
+                               "told": court["told"], "applied": court["applied"], "acquit": court["acquit"]}
             worlds.save(playthrough)
 
     def new_trial(app, key, args):
         effects = {"lawyer": False, "plea": False, "bribe": None}
         # 捕まる前の出来事（衛兵の買収が突き返された）を、この裁判へ持ち越す（`encounter`）。
         effects.update(env.take_carry(app))
-        court.update(key=key, args=list(args), effects=effects, told=False, applied=False,
+        court.update(key=key, args=list(args), effects=effects, told=False, applied=False, acquit=None,
                      playthrough=worlds.playthrough(app))
         store_court(app)
 
@@ -148,11 +152,14 @@ def install(env):
     def on_verdict_screen(app, buttons, verdict):
         load_court(app)
         effects = court["effects"]
+        kind, years = verdict
+        if not court["applied"] and court["acquit"] == "open" and trial.acquitted(kind, years):
+            acquit_screen(app, buttons)
+            return
         if court["applied"] or court["args"] is None or not any(effects.values()):
             return
         court["applied"] = True
         store_court(app)
-        kind, years = verdict
         sought, charges, details = (court["args"] + [None, None, None])[:3]
         # 死刑の求刑は年数を持たないので、判決が懲役でも `TRIAL_DEATH_YEARS` を基に数える（DOC.md「裁判の改修」）。
         requested = trial.requested_years(sought)
@@ -182,6 +189,44 @@ def install(env):
         screen.schedule(lambda: screen.say(app, line))
         save_soon(app, "verdict adjusted")      # 直した判決のボタンを保存に入れる（控えの「直した」と揃える）
 
+    def acquit_screen(app, buttons):
+        """判事が懲役0年（無罪）を返した。判決のボタンを「無罪放免」1つに差し替える。"""
+        entry = screen.button(trial.ACQUIT_LABEL, mark=MARK_HEAD + "acquit")
+        if entry is None:
+            write("WARN court: cannot build the acquittal button; leaving the game's")
+            return
+        buttons[:] = [entry]
+        court["applied"] = True
+        court["acquit"] = "done"
+        store_court(app)
+        write("court: acquitted (the judge gave 0 years)")
+        save_soon(app, "acquitted")
+
+    def release(app):
+        """無罪放免。この土地の手配度を平常へ戻し（同じ罪は二度と問われない）、居る場所の画面へ戻す。"""
+        player = getattr(app, "player", None)
+        area = ui.current_area(app)
+        area_id = ui.area_id_of(area)
+        entry = ui.area_record(player, area_id) if area_id else None
+        before = ui.lawfulness_of(entry)
+        after = before
+        if before is not None and before < trial.NORMAL_LAWFULNESS \
+                and ui.set_lawfulness(entry, trial.NORMAL_LAWFULNESS):
+            after = trial.NORMAL_LAWFULNESS
+        write("court: released; area {} lawfulness {} -> {}".format(area_id, before, after))
+        court["acquit"] = None
+        store_court(app)
+        screen.say(app, trial.ACQUIT_TEXT.format(area=env.area_label(app, area_id), before=before, after=after))
+        redraw = getattr(app, "change_background_image_to_current_location", None)
+        normal = getattr(app, "set_buttons_to_normal", None)
+        for step, name in ((redraw, "background"), (normal, "buttons")):
+            if callable(step):
+                try:
+                    step()
+                except Exception:
+                    ctx.log_exc("crime incentive: the game's {} reset failed after the acquittal".format(name))
+        save_soon(app, "released")
+
     def on_refresh(app, buttons):
         args = trial_args(buttons)
         if args is not None:
@@ -195,6 +240,9 @@ def install(env):
     def press(app, action):
         load_court(app)
         key = action[len(MARK_HEAD):]
+        if key == "acquit":
+            release(app)
+            return
         effects = court["effects"]
         line = None
         if key == "lawyer" and not effects.get("lawyer"):
@@ -261,6 +309,15 @@ def install(env):
                 if app is not None:
                     load_court(app)         # 別の周回の介入を判事に渡さない
                 notes = trial.judge_notes(court["effects"])
+                if cfg.TRIAL_ACQUITTAL_ENABLED and app is not None:
+                    sought = (court["args"] or [None])[0]
+                    is_open, why = trial.acquittal_open(trial.plea_of(content), sought, court["effects"],
+                                                        cfg.TRIAL_ACQUITTAL_MIN_CHARS)
+                    write("court: acquittal {} ({})".format("open" if is_open else "closed", why))
+                    if is_open:
+                        notes = "\n".join(note for note in (notes, trial.NOTE_ACQUIT) if note)
+                        court["acquit"] = "open"
+                        store_court(app)
                 if notes:
                     content = content.rstrip() + "\n\n" + notes
                     changed = True

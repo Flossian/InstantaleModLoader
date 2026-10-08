@@ -55,6 +55,55 @@ NOTE_CAUGHT = ("【贈賄】被告は役人に賄賂を渡そうとして露見�
                "贈賄の分の刑は別に加えるので、求刑を大きく超えて重くしないこと。")
 
 
+#: 無罪。ゲームの判決の型は懲役と死刑だけ（GAME.md §2.20）なので、判事が懲役0年を返したら無罪として扱う。
+#: 道を開くのは、入力欄で書いた釈明があり、死刑の求刑でも贈賄の露見でもない回だけ（甘くなりすぎないように）。
+#: 弁護人・司法取引・袖の下は刑を軽くするだけで、無罪の根拠にはしない。
+ACQUIT_LABEL = "無罪放免"
+ACQUIT_TEXT = ("判決は無罪。被告は放免された。\n"
+               "{area}でのこの罪が再び問われることはない。（手配度 {before} → {after}）")
+NOTE_ACQUIT = ("【無罪の判断】被告の釈明が、罪そのものを覆す確かな根拠（濡れ衣であることの具体的な証明・正当防衛・"
+               "やむを得ない事情の裏付けなど）を示し、裁判官として疑いの余地なく得心した場合に限り、"
+               "懲役0年とすること。懲役0年は無罪を意味する。"
+               "反省・同情・謝罪・根拠の無い否認・言い逃れでは無罪にしないこと。"
+               "弁護人・司法取引・賄賂は無罪の根拠にならない。")
+#: 素の裁判の画面のボタン（押した文言も釈明として判事に渡る）。これだけでは無罪の道を開かない。
+PLEA_BUTTON_TEXTS = ("わかりました", "濡れ衣だ")
+#: 判事の頼みの中の釈明（`'〈主人公〉'の釈明は'〈文〉'です`。GAME.md §2.20）。
+PLEA_RE = re.compile(r"の釈明は'(.*?)'です", re.S)
+#: 無罪で戻す手配度（ゲームの平常の値。釈放のときもここへ戻る。GAME.md §2.20）。
+NORMAL_LAWFULNESS = 10
+
+
+def plea_of(text):
+    """判事の頼みから釈明の文を取り出す。無ければ None。"""
+    if not isinstance(text, str):
+        return None
+    found = PLEA_RE.findall(text)
+    return found[-1].strip() if found else None
+
+
+def acquittal_open(plea, sought, effects, min_chars):
+    """無罪の道を開くか。`(開くか, 理由)`。
+
+    入力欄で書いた釈明が `min_chars` 字以上あり（素のボタンの文言だけでは開かない）、
+    死刑の求刑でも、贈賄の露見でもないこと。
+    """
+    if not plea or plea in PLEA_BUTTON_TEXTS:
+        return False, "no written plea"
+    if len(plea) < max(0, int(min_chars)):
+        return False, "plea shorter than {}".format(min_chars)
+    if demanded_death(sought):
+        return False, "death was demanded"
+    if (effects or {}).get("bribe") == "caught":
+        return False, "bribery was caught"
+    return True, "open"
+
+
+def acquitted(kind, years):
+    """判事の判決が無罪（懲役0年）か。"""
+    return kind == "imprisonment" and years == 0
+
+
 def verdict_of(buttons, spec_name, spec_args):
     """判決の画面なら `("death", None)` か `("imprisonment", 年数)`。違えば None。"""
     for entry in buttons or []:

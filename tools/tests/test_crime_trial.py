@@ -220,9 +220,35 @@ def scene_cellmate():
           == ["young woman", "red hair", "scar"])
 
 
+def scene_acquittal():
+    print("無罪")
+    judge = "【裁判】\n'主人公'の釈明は'あの夜は宿に居た。宿の主人が証人だ'です。\n判決を下してください。"
+    check("判事の頼みから釈明を取り出す", trial.plea_of(judge) == "あの夜は宿に居た。宿の主人が証人だ",
+          trial.plea_of(judge))
+    check("釈明が無ければ None", trial.plea_of("判決を下してください") is None and trial.plea_of(None) is None)
+    prison = {"sentencing_request": {"type": "imprisonment", "years": 15}}
+    death = {"sentencing_request": {"type": trial.DEATH_PENALTY_TYPE}}
+    plea = "あの夜は宿に居た。宿の主人が証人だ"
+    check("書いた釈明があり懲役の求刑なら開く", trial.acquittal_open(plea, prison, effects(), 10)[0])
+    check("素のボタンの文言だけでは開かない",
+          not trial.acquittal_open("濡れ衣だ", prison, effects(), 0)[0]
+          and not trial.acquittal_open("わかりました", prison, effects(), 0)[0])
+    check("字数が足りなければ開かない", not trial.acquittal_open("無実だ", prison, effects(), 10)[0])
+    check("死刑の求刑では開かない", not trial.acquittal_open(plea, death, effects(), 10)[0])
+    check("贈賄が露見した回は開かない", not trial.acquittal_open(plea, prison, effects(bribe="caught"), 10)[0])
+    check("弁護人・司法取引・受け取られた袖の下は無罪の道に関わらない",
+          trial.acquittal_open(plea, prison, effects(lawyer=True, plea=True, bribe="ok"), 10)[0])
+    check("懲役0年が無罪", trial.acquitted("imprisonment", 0)
+          and not trial.acquitted("imprisonment", 1) and not trial.acquitted("death", None))
+    check("懲役0年の判決の画面を読める", trial.verdict_of(
+        [button(trial.PRISON_SPEC, [0, "罪", "出来事"])], spec_name, spec_args) == ("imprisonment", 0))
+    check("判事への一文は弁護人を無罪の根拠にしない", "弁護人" in trial.NOTE_ACQUIT and "根拠にならない" in trial.NOTE_ACQUIT)
+
+
 def main():
     scene_verdict()
     scene_adjust()
+    scene_acquittal()
     scene_prompt()
     scene_capture()
     scene_stolen()

@@ -130,7 +130,7 @@
 | [`333_equipment_slots`](MODS.md#333_equipment_slots-インベントリに装備枠を追加) | インベントリに装備枠を追加 | インベントリに装備枠を追加 | 4 |  |
 | [`334_colosseum_custom`](MODS.md#334_colosseum_custom-闘技場の相手の強さと懸賞金を決める) | 闘技場のカスタマイズ | 闘技場の相手の強さと懸賞金を決める | 13 |  |
 | [`335_player_portrait_regenerate`](MODS.md#335_player_portrait_regenerate-人物欄から主人公の立ち絵を描き直せる) | 人物欄から主人公の立ち絵を描き直せる | 人物欄から主人公の立ち絵を描き直せる | - |  |
-| [`336_crime_overhaul`](MODS.md#336_crime_overhaul-犯罪まわりの全面改修) | 犯罪まわりの全面改修 | 犯罪まわりの全面改修 | 74 |  |
+| [`336_crime_overhaul`](MODS.md#336_crime_overhaul-犯罪まわりの全面改修) | 犯罪まわりの全面改修 | 犯罪まわりの全面改修 | 76 |  |
 | [`337_conversation_affinity`](MODS.md#337_conversation_affinity-会話による好感度の変動) | 会話による好感度の変動 | 会話による好感度の変動 | 4 |  |
 | [`401_battle_character_context`](MODS.md#401_battle_character_context-戦闘の審判へ同行者の人物と装備を見せる) | 戦闘の審判への仲間の情報補完 | 戦闘の審判へ同行者の人物と装備を見せる | - |  |
 | [`402_party_inventory_transfer`](MODS.md#402_party_inventory_transfer-仲間とアイテムを受け渡しできる) | 仲間とのアイテム受け渡し | 仲間とアイテムを受け渡しできる | - |  |

@@ -7,10 +7,10 @@
     "ja": "犯罪まわりの全面改修"
   },
   "description": {
-    "en": "Reworks crime and everything around it. Free-action theft now pays a predictable amount: the LLM judges the size of the haul (0-4) alongside its usual summary, and the money is set from this area's quest reward. Getting away unseen still counts. In areas where you are wanted, shops are cowed by you: buy prices drop and sell prices rise with how wanted you are. While you stay away from an area where you are wanted, its lawfulness recovers by 10 every 3 months back to normal (while you are hunted everywhere, it stops at a total of -40; beyond that, pay the fine). In the trade window you can right-click a shop item to steal it after seeing the odds. Stolen goods can't be sold back to the shop you took them from, fetch half price at other shops, and 70% at the fence in the underworld office. The underworld office's job board offers illegal jobs (smuggling, grave robbing, sabotage, jailbreak, robbery, assassination) unlocked by how wanted you are; they pay 5-10x and get you wanted in that town. When guards catch you, you can try to pay them off (a charisma check). At trial, whatever you type is your plea, and you can hire a lawyer, cut a plea deal by selling out the underworld office, or bribe the judge; the prosecutor and judge also hear your circumstances. In prison, each year \"Attempt a jailbreak\" lets you prepare (dig, bribe a guard, scout) at the risk of being found out, then break out by fighting the guards (weaker the more you prepared); falling there is game over. A new cellmate may join you when your sentence starts: talk to them and they grow closer each year, they fight beside you in the breakout, and after release you can hire them at the town guild. Sentenced to death, someone who trusts you enough can help you try to escape the execution ground",
-    "ja": "犯罪とその周りに手を入れる。自由行動の盗みの稼ぎが読めるようになる（行動の締めの要約で LLM が盗んだ規模を0〜4で判定し、その土地の依頼の報酬を目安に額を整える。見つからずに済んだ盗みも数える）。手配されている土地では店が委縮し、手配が重いほど買値が下がり売値が上がる。手配された土地を離れている間は、3ヵ月ごとに手配度が10戻る（全域手配の間は合計 -40 で止まり、そこから先は罰金）。売買画面では店の品を右クリックして盗める（率を見てから決める）。盗んだ品は盗んだ店では売れず、よその店では半額、裏の事務所の盗品買取商なら7割で売れる。裏の事務所の「裏の依頼掲示板」では、手配の重さに応じて密輸・盗掘・破壊工作・脱獄の手引き・強盗・暗殺の裏の仕事を受けられ、報酬は表の相場の5〜10倍、片付けるとその街で手配される。衛兵に見つかったときは、金を握らせて見逃してもらえる（魅力の判定）。裁判では入力欄の言葉が釈明になり、弁護人を雇う・裏の事務所を売る司法取引・判事への袖の下で刑を軽くできる。検察と判事には情状（手配の重さ・活躍・人生の記録）も渡る。服役中は毎年「脱獄を試みる」から、壁を削る・看守を手懐ける・抜け道を探るで備え（露見すると刑期が延びる）、決行すると看守と戦う（備えるほど相手は弱い。倒れたらゲームオーバー）。懲役の始まりに確率で同房の囚人が入る。話せて、年ごとに親しくなり、決行に加勢し、出所後は街のギルドで雇える。死刑の判決が出ても、好感度の高い人物がいれば、その手引きで処刑場からの脱出を試みられる"
+    "en": "Reworks crime and everything around it. Free-action theft now pays a predictable amount: the LLM judges the size of the haul (0-4) alongside its usual summary, and the money is set from this area's quest reward. Getting away unseen still counts. In areas where you are wanted, shops are cowed by you: buy prices drop and sell prices rise with how wanted you are. While you stay away from an area where you are wanted, its lawfulness recovers by 10 every 3 months back to normal (while you are hunted everywhere, it stops at a total of -40; beyond that, pay the fine). In the trade window you can right-click a shop item to steal it after seeing the odds. Stolen goods can't be sold back to the shop you took them from, fetch half price at other shops, and 70% at the fence in the underworld office. The underworld office's job board offers illegal jobs (smuggling, grave robbing, sabotage, jailbreak, robbery, assassination) unlocked by how wanted you are; they pay 5-10x and get you wanted in that town. When guards catch you, you can try to pay them off (a charisma check). At trial, whatever you type is your plea, and you can hire a lawyer, cut a plea deal by selling out the underworld office, or bribe the judge to shorten the term, and a plea that convinces the judge the charge is false gets you acquitted and clears that area's wanted level; the prosecutor and judge also hear your circumstances. In prison, each year \"Attempt a jailbreak\" lets you prepare (dig, bribe a guard, scout) at the risk of being found out, then break out by fighting the guards (weaker the more you prepared); falling there is game over. A new cellmate may join you when your sentence starts: talk to them and they grow closer each year, they fight beside you in the breakout, and after release you can hire them at the town guild. Sentenced to death, someone who trusts you enough can help you try to escape the execution ground",
+    "ja": "犯罪とその周りに手を入れる。自由行動の盗みの稼ぎが読めるようになる（行動の締めの要約で LLM が盗んだ規模を0〜4で判定し、その土地の依頼の報酬を目安に額を整える。見つからずに済んだ盗みも数える）。手配されている土地では店が委縮し、手配が重いほど買値が下がり売値が上がる。手配された土地を離れている間は、3ヵ月ごとに手配度が10戻る（全域手配の間は合計 -40 で止まり、そこから先は罰金）。売買画面では店の品を右クリックして盗める（率を見てから決める）。盗んだ品は盗んだ店では売れず、よその店では半額、裏の事務所の盗品買取商なら7割で売れる。裏の事務所の「裏の依頼掲示板」では、手配の重さに応じて密輸・盗掘・破壊工作・脱獄の手引き・強盗・暗殺の裏の仕事を受けられ、報酬は表の相場の5〜10倍、片付けるとその街で手配される。衛兵に見つかったときは、金を握らせて見逃してもらえる（魅力の判定）。裁判では入力欄の言葉が釈明になり、弁護人を雇う・裏の事務所を売る司法取引・判事への袖の下で刑を軽くできる。釈明が罪そのものを覆すと判事が得心すれば無罪になり、その土地の手配度が平常に戻る。検察と判事には情状（手配の重さ・活躍・人生の記録）も渡る。服役中は毎年「脱獄を試みる」から、壁を削る・看守を手懐ける・抜け道を探るで備え（露見すると刑期が延びる）、決行すると看守と戦う（備えるほど相手は弱い。倒れたらゲームオーバー）。懲役の始まりに確率で同房の囚人が入る。話せて、年ごとに親しくなり、決行に加勢し、出所後は街のギルドで雇える。死刑の判決が出ても、好感度の高い人物がいれば、その手引きで処刑場からの脱出を試みられる"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "after": [
     "119_fix_crime_attribution",
@@ -509,6 +509,22 @@
       "label": {"ja": "死刑を改めるときの年数", "en": "Years when death is commuted"},
       "note": {"ja": "求刑が死刑だったとき、懲役に改める基の年数",
                "en": "Base prison years when the prosecution demanded death"}
+    },
+    "TRIAL_ACQUITTAL_ENABLED": {
+      "type": "bool",
+      "default": true,
+      "label": {"ja": "釈明しだいで無罪", "en": "Acquittal on a convincing plea"},
+      "note": {"ja": "入力欄で書いた釈明が罪そのものを覆すと判事が得心したら無罪になり、その土地の手配度が平常に戻る（同じ罪は二度と問われない）。死刑の求刑・贈賄の露見の回は無罪にならない。弁護人・司法取引・袖の下は刑を軽くするだけ",
+               "en": "If the judge is convinced that the plea you typed overturns the charge itself, you are acquitted and that area's wanted level returns to normal. Not when death was demanded or a bribe was caught. A lawyer, a plea deal or a bribe only shortens the term"}
+    },
+    "TRIAL_ACQUITTAL_MIN_CHARS": {
+      "type": "int",
+      "default": 10,
+      "min": 0,
+      "max": 200,
+      "label": {"ja": "無罪の道を開く釈明の字数", "en": "Plea length for acquittal"},
+      "note": {"ja": "入力欄で書いた釈明がこの字数以上のときだけ、判事に無罪の判断を許す。ボタンの「濡れ衣だ」「わかりました」だけでは開かない",
+               "en": "The judge may acquit only when the typed plea is at least this long. Pressing the trial buttons alone never opens it"}
     },
     "GUARD_BRIBE_ENABLED": {
       "type": "bool",

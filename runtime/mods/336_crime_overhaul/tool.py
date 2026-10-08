@@ -55,7 +55,7 @@ GROUPS = (
     ("guard", "衛兵の買収", "GUARD_BRIBE_ENABLED", ("GUARD_BRIBE_",),
      "衛兵に見つかったとき、金を握らせて見逃してもらう"),
     ("trial", "裁判の改修", None, ("TRIAL_",),
-     "釈明の知らせ・情状・弁護人・司法取引・袖の下。手ごとに入切がある"),
+     "釈明の知らせ・情状・弁護人・司法取引・袖の下・釈明しだいで無罪。手ごとに入切がある"),
     ("jailbreak", "脱獄", "JAILBREAK_ENABLED", ("JAILBREAK_",),
      "服役中に備えを積み、看守との戦闘で牢を破る"),
     ("cellmate", "同房の囚人", "CELLMATE_ENABLED", ("CELLMATE_",),
