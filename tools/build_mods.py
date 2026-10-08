@@ -140,6 +140,7 @@ BANDS = (
         "121_ui_character_sheet",
         "118_batch_message_render",
         "122_ui_conversation_log",
+        "141_ui_free_input_echo",
         "133_ui_area_difficulty",
         "119_fix_crime_attribution",
     )),

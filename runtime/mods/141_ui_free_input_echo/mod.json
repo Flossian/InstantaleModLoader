@@ -1,0 +1,15 @@
+{
+  "entry": "ui_free_input_echo.py",
+  "api": 1,
+  "kind": "fix",
+  "name": {
+    "en": "Show what you typed outside conversations",
+    "ja": "会話の外で送った文も本文に残す"
+  },
+  "description": {
+    "en": "Text you send from the input box during free actions, battles, trials and similar screens is not shown anywhere, so reading back you cannot tell what you did. Adds it to the text as its own line, without your name so it does not read as speech",
+    "ja": "自由行動・戦闘・裁判などで入力欄から送った文は本文のどこにも出ず、読み返すと自分が何をしたのか分からない。送った文をそのまま1行で本文に足す。発言に見えないよう名前は付けない"
+  },
+  "version": "1",
+  "author": "R01/Flossian"
+}
