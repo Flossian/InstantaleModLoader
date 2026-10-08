@@ -2499,10 +2499,13 @@ ui.quest_stores(app) / ui.quest_ids(app) / ui.quest_of(app, id)
 ui.quest_value(quest, name, default) / ui.set_quest_value(app, id, name, value, on_error=...)
 ui.id_sort_key            # id を数として並べる鍵
 ui.current_quest_id(app)  # いま進めているクエストの id（`app.current_quest_data`）。クエスト中でなければ None
-ui.world_overview(app)    # 世界観の文（`world_data.overview` を600字で切る）。無ければ空
+ui.world_overview(app, limit=None)  # 世界観の文（`world_data.overview`）。既定は切らない。無ければ空
 ```
 
 `world_overview` は `save_data_dict` → `world_dict` の順に見る。
+既定で切らないのは、ゲーム自身の頼み文が長さに関わらず全文を載せるから。
+MOD の側だけで切ると、長い世界観では後ろの設定が MOD の生成にだけ届かなくなる（v1.14.0 までは600字で切っていた）。
+`limit` に数を渡せば、その字数で切って末尾に `…` を付ける。
 `405_` は遊んでいる世界の控えと `app.world` まで見る別の読み方で、こちらには寄せていない。
 
 `id_sort_key` を通すのは、ゲームの id が採番順の**文字列**だから。

@@ -134,8 +134,9 @@ MANAGER_NAME = "mod_regional_economy"
 SPECIALTY_MANAGER_NAME = MANAGER_NAME
 STATE_STORE_ATTR = "__instantale_regional_economy_store__"
 
-WORLD_OVERVIEW_CHARS = 2400
-AREA_OVERVIEW_CHARS = 2400
+# None は切らない。ゲーム自身の頼み文も世界とエリアの概要を全文で載せる。
+WORLD_OVERVIEW_CHARS = None
+AREA_OVERVIEW_CHARS = None
 LIST_ITEM_CHARS = 240
 ITEM_DESCRIPTION_CHARS = 1200
 # 売買の窓だけに掛ける。所持品は None、402の受け渡しは "party_transfer"
@@ -300,7 +301,9 @@ def _short(value, limit):
     if not isinstance(value, str):
         value = str(value)
     value = value.strip()
-    return frames.short(value, limit) if value else ""
+    if not value or limit is None:
+        return value
+    return frames.short(value, limit)
 
 
 def _overview_only(value, limit):

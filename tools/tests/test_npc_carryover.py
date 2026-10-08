@@ -626,6 +626,87 @@ try:
     model.pending = kept_rows
     del mod._store()["words"][:]
 
+    print("-- 元の世界で死んでいた人・仲間だった人")
+    # 死んでいた人は生き返らせず、見送って1度知らせる。仲間だった人は「同行中」を外して置く。
+    # 予約は書き出した zip から読み直されるので、zip の中の npc.json を書き換える。
+    import zipfile
+
+    def edit_zip(path, edit):
+        with zipfile.ZipFile(path) as zf:
+            entries = [(info.filename, zf.read(info.filename)) for info in zf.infolist()]
+        out = []
+        for name, data in entries:
+            if name == "npc.json":
+                wrapper = json.loads(data.decode("utf-8"))
+                edit(wrapper["npc"])
+                data = json.dumps(wrapper, ensure_ascii=False).encode("utf-8")
+            out.append((name, data))
+        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for name, data in out:
+                zf.writestr(name, data)
+
+    kept_rows = json.loads(json.dumps(carryover.load_pending(state_dir)))
+    original_zip = open(lilia.path, "rb").read()
+
+    def fresh_app():
+        app_ = build_app({"0": npc_record("先住のバルガス", 0)}, index={"npc": 1, "item": 5})
+        app_.world_dict["world_data"] = {"world_name": "アルカディア"}
+        app_.save_data_dict["world_data"] = {"world_name": "アルカディア"}
+        app_.world.characters.clear()
+        return app_
+
+    try:
+        edit_zip(lilia.path, lambda npc: npc["config"].update(is_dead=True))
+        carryover.save_pending(state_dir, [])
+        model.pending = []
+        model.forget_names()
+        model.reserve(lilia, "アルカディア", {"memory": False})
+        dead_app = fresh_app()
+        hook(lambda _self, *a, **k: None, dead_app)
+        check("死んでいた人は作らない", list(dead_app.save_data_dict["npcs"]) == ["0"],
+              sorted(dead_app.save_data_dict["npcs"]))
+        died = [row for row in carryover.load_pending(state_dir)
+                if row["status"] == carryover.SKIPPED and row.get("reason") == "死亡"]
+        check("見送りの理由を「死亡」で残す", len(died) == 1, carryover.load_pending(state_dir))
+        ctx.hooks["__main__:InstantaleApp.refresh_choice_buttons"](
+            lambda _self, *a, **k: None, dead_app)
+        check("ゲーム内に1度知らせる",
+              any("亡くなっている" in (text or "") for text in dead_app.said), dead_app.said)
+
+        open(lilia.path, "wb").write(original_zip)
+        edit_zip(lilia.path, lambda npc: npc["relationship"]["player"].update(
+            relationship=["同行中", "仲間"]))
+        carryover.save_pending(state_dir, [])
+        model.pending = []
+        model.forget_names()
+        model.reserve(lilia, "アルカディア", {"memory": False})
+        party_app = fresh_app()
+        hook(lambda _self, *a, **k: None, party_app)
+        placed = [n for n in party_app.save_data_dict["npcs"].values()
+                  if n.get("name") == "星読みのリリア"]
+        marks = [n["relationship"]["player"]["relationship"] for n in placed]
+        check("仲間だった人も置く", len(placed) == 1, sorted(party_app.save_data_dict["npcs"]))
+        check("関係から「同行中」を外し、ほかの印は残す",
+              bool(marks) and "同行中" not in marks[0] and "仲間" in marks[0], marks)
+        open(lilia.path, "wb").write(original_zip)
+        edit_zip(lilia.path, lambda npc: npc["relationship"]["player"].update(
+            relationship=["同行中"]))
+        carryover.save_pending(state_dir, [])
+        model.pending = []
+        model.forget_names()
+        model.reserve(lilia, "アルカディア", {"memory": False})
+        only_app = fresh_app()
+        hook(lambda _self, *a, **k: None, only_app)
+        marks = [n["relationship"]["player"]["relationship"]
+                 for n in only_app.save_data_dict["npcs"].values()
+                 if n.get("name") == "星読みのリリア"]
+        check("外して空になったら「初対面」", marks == [["初対面"]], marks)
+    finally:
+        open(lilia.path, "wb").write(original_zip)
+        carryover.save_pending(state_dir, kept_rows)
+        model.pending = kept_rows
+        del mod._store()["words"][:]
+
     print("-- 社会関係の付け替え")
     # `403_` の記録は相手の id を鍵に持つ。元の世界の id のまま写すと、
     # 置き先では別人（か不在）を指す。名前で引き直して付け替える。

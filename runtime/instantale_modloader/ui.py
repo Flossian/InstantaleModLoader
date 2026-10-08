@@ -755,10 +755,12 @@ def quest_of(app, quest_id):
     return None
 
 
-def world_overview(app, limit=600):
+def world_overview(app, limit=None):
     """世界観の文（`world_data.overview`）。LLM への頼み文に入れる。無ければ空。
 
-    `save_data_dict` → `world_dict` の順に見て、先に読めた方を `limit` 字で切る。
+    `save_data_dict` → `world_dict` の順に見て、先に読めた方を返す。
+    既定では切らない。ゲーム自身の頼み文も長さに関わらず全文を載せるので、
+    MOD の側だけ設定の後ろを落とさない。`limit` に数を渡せばその字数で切る。
     `330_` / `331_` に同じ本体が写されていた。
     `405_` は別の読み方（遊んでいる世界の控えと `app.world` まで見る）なので寄せていない。
     """
@@ -767,7 +769,8 @@ def world_overview(app, limit=600):
         data = holder.get("world_data") if isinstance(holder, dict) else None
         text = data.get("overview") if isinstance(data, dict) else None
         if isinstance(text, str) and text.strip():
-            return frames.short(text.strip(), limit)
+            text = text.strip()
+            return text if limit is None else frames.short(text, limit)
     return ""
 
 

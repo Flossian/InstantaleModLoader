@@ -579,7 +579,10 @@ def test_widgets():
     app = types.SimpleNamespace(save_data_dict={"world_data": {"overview": "  "}},
                                 world_dict={"world_data": {"overview": " 世界 " + "あ" * 700}})
     text = ui.world_overview(app)
-    check("world_overview は空を飛ばして次を読み、切り詰める",
+    check("world_overview は空を飛ばして次を読み、既定では切らない",
+          text == "世界 " + "あ" * 700, len(text))
+    text = ui.world_overview(app, limit=600)
+    check("world_overview は limit を渡せば切り詰める",
           text.startswith("世界") and len(text) <= 601, len(text))
     check("world_overview が無ければ空", ui.world_overview(types.SimpleNamespace()) == "")
 
