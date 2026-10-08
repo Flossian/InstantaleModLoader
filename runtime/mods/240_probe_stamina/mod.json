@@ -1,0 +1,16 @@
+{
+  "entry": "probe_stamina.py",
+  "api": 1,
+  "kind": "probe",
+  "name": {
+    "en": "Probe: when stamina is spent",
+    "ja": "計測: 体力がいつ減るか"
+  },
+  "description": {
+    "en": "Records every change to the stamina (physical_integrity / max_physical_integrity) and the exhausted flag of the player and party members with the caller chain, whether it happened during a quest or a battle, and the values around a quest start, a quest clear (QuestEndManager.execute) and a quest retreat: quest difficulty and type, level, stamina, HP, body part injuries, and the HP lost and healed during the quest. Groundwork for a mod that scales the stamina spent on a quest clear by difficulty and damage taken. Read-only",
+    "ja": "主人公と同行者の体力（physical_integrity / max_physical_integrity）と疲労の旗（exhausted）が変わるたびに、呼び出し元の連鎖と、依頼や戦闘の最中かを録る。依頼に出たとき・クリア（QuestEndManager.execute）・放棄の前後で、依頼の難易度と種類、レベル、体力、HP、部位の怪我、依頼の間に減った HP と回復した HP を並べる。クリアで減る体力を難易度と被弾で変える MOD の下調べ。読み取りだけでゲームは変えない"
+  },
+  "version": "2",
+  "author": "R01/Flossian",
+  "debug": true
+}

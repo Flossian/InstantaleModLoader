@@ -42,6 +42,7 @@
     "141_ui_free_input_echo",
     "133_ui_area_difficulty",
     "134_balance_item_effects",
+    "142_balance_quest_stamina",
     "135_fix_inn_button_order",
     "137_fix_npc_skill_uses",
     "200_probe_bug_sites",
@@ -127,7 +128,8 @@
     "236_probe_enemy_stats",
     "237_probe_affinity",
     "238_probe_prison",
-    "239_probe_game_flags"
+    "239_probe_game_flags",
+    "240_probe_stamina"
   ],
   "disabled": []
 }

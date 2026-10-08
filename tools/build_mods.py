@@ -120,6 +120,7 @@ BANDS = (
         "128_item_image_variety",
         "129_balance_item_price",
         "134_balance_item_effects",
+        "142_balance_quest_stamina",
         "135_fix_inn_button_order",
         "137_fix_npc_skill_uses",
         "138_fix_character_image_refresh",

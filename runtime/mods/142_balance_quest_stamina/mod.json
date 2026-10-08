@@ -1,0 +1,113 @@
+{
+  "entry": "balance_quest_stamina.py",
+  "api": 1,
+  "kind": "fix",
+  "name": {
+    "en": "Quest clears cost stamina by difficulty and damage taken",
+    "ja": "依頼のクリアで減る体力を難易度と被弾で変える"
+  },
+  "description": {
+    "en": "A quest clear takes half of your maximum stamina no matter how easy the quest was, and you cannot take a quest at half stamina or below, so every clear sends you back to the inn. This decides the cost from how far the quest's difficulty is from your level (easy quests cost little, fair ones about a third, harder ones half or more) and adds more the more HP you lost during the quest. Party members follow the same rule with their own level and damage",
+    "ja": "依頼をクリアすると、易しい依頼でも体力が上限の半分減る。体力が半分以下だと依頼を受けられないので、1件ごとに宿で休むしかない。減る量を、依頼の難易度とレベルの差（易しい依頼は少し、適正は約3分の1、上位は半分以上）で決め、依頼の間に HP を多く失うほど上乗せする。同行者も本人のレベルと被弾で同じように決める"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "settings": {
+    "FAIR_PERCENT": {
+      "type": "int",
+      "default": 33,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "適正の依頼で減る体力（上限の %）",
+        "en": "Stamina spent on a fair quest (% of max)"
+      },
+      "note": {
+        "ja": "依頼の難易度がレベルと同じときに減る割合。ゲームのままは 50",
+        "en": "Spent when the quest's difficulty equals your level. The game uses 50"
+      }
+    },
+    "EASY_PERCENT": {
+      "type": "int",
+      "default": 10,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "易しい依頼で減る体力（上限の %）",
+        "en": "Stamina spent on an easy quest (% of max)"
+      },
+      "note": {
+        "ja": "難易度がレベルより「レベル差」以上低い依頼で減る割合。その間は適正の割合へ直線でつなぐ。ゲームのままは 50",
+        "en": "Spent when the difficulty is at least the level gap below your level; in between it slides toward the fair value. The game uses 50"
+      }
+    },
+    "HARD_PERCENT": {
+      "type": "int",
+      "default": 50,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "上位の依頼で減る体力（上限の %）",
+        "en": "Stamina spent on a harder quest (% of max)"
+      },
+      "note": {
+        "ja": "難易度がレベルより「レベル差」以上高い依頼で減る割合。ゲームのままは 50",
+        "en": "Spent when the difficulty is at least the level gap above your level. The game uses 50"
+      }
+    },
+    "LEVEL_GAP": {
+      "type": "int",
+      "default": 20,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "易しい・上位の割合に届くレベル差",
+        "en": "Level gap that reaches the easy / harder value"
+      },
+      "note": {
+        "ja": "0 にすると、レベルより低い依頼はすべて易しい、高い依頼はすべて上位の割合になる",
+        "en": "0 makes every quest below your level easy and every quest above it harder"
+      }
+    },
+    "DAMAGE_PERCENT": {
+      "type": "int",
+      "default": 20,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "被弾で上乗せする体力（上限の %）",
+        "en": "Extra stamina for damage taken (% of max)"
+      },
+      "note": {
+        "ja": "依頼の間に失った HP が「満額になる被弾」に届いたときに足す割合。それより少なければ失った量に比例する。0 で被弾を見ない（ゲームのまま）",
+        "en": "Added once the HP you lost during the quest reaches the full-damage point; less damage adds a proportional share. 0 ignores damage (as the game does)"
+      }
+    },
+    "DAMAGE_FULL_AT": {
+      "type": "int",
+      "default": 50,
+      "min": 1,
+      "max": 300,
+      "label": {
+        "ja": "上乗せが満額になる被弾（最大 HP の %）",
+        "en": "HP lost for the full extra (% of max HP)"
+      },
+      "note": {
+        "ja": "依頼の間に失った HP の合計がこれに届くと上乗せが満額になる。回復を挟んで失った分も足すので、100 を超える値も置ける（100 は回復しなければ倒れる量）",
+        "en": "The full extra applies once the HP you lost during the quest adds up to this. HP lost between heals counts too, so values above 100 are allowed (100 means falling without healing)"
+      }
+    },
+    "PARTY_TOO": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "同行者にも同じ決め方を使う",
+        "en": "Use the same rule for party members"
+      },
+      "note": {
+        "ja": "切ると同行者はゲームのまま上限の半分減る",
+        "en": "Off leaves party members on the game's half"
+      }
+    }
+  }
+}
