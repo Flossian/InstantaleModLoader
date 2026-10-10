@@ -38,15 +38,20 @@ SCALE_FIELD = "loot_scale"
 REASON_FIELD = "loot_reason"
 ADDED_FIELDS = (SCALE_FIELD, REASON_FIELD)
 INSTRUCTION = """【追加の判定】
-要約とは別に、この行動でプレイヤー本人が不法に手に入れた金銭の規模を判定し、loot_scale に 0〜4 の整数で答えること。
-- 0: 金銭を不法に得ていない。暴行・殺人・器物損壊のように金を奪っていない犯罪、品物だけを盗んだ場合、正当な報酬や売買も 0
+要約とは別に、この行動でプレイヤー本人が金銭を手に入れた手段を判定し、loot_reason と loot_scale に答えること。
+loot_reason: この行動の中で、プレイヤーが金銭を誰からどうやって受け取ったか（売った代金・稼ぎ・報酬・盗んだ・奪った など）を1文で書くこと。
+loot_scale: 0〜4 の整数。1〜4 にするのは、この行動の中で、プレイヤーが盗み・すり・強盗・ゆすりによって、金銭そのものを相手の意に反して取ったときだけ。
+- 0: 金銭を不法に得ていない。次はすべて 0 とすること
+  - 品物を売った代金。代金は買い手が納得して払った金なので、売った品物が盗品・略奪品・倒した相手から奪った物でも 0。品物を盗んだこと自体は、盗んだときの行動で裁かれている
+  - 入力文の乱暴な言い回し（奪い取ってきた・血塗られた 等）は問わない。この行動で金銭を受け取った手段だけを見る
+  - 物を作って売った売上、働いた稼ぎ、依頼の報酬
+  - 暴行・殺人・器物損壊のように金を取っていない犯罪、品物だけを盗んだ場合
+  - NPC や第三者が奪った場合、プレイヤーが試みて失敗した場合
 - 1: 小銭（財布を一つすった、少額をゆすった）
 - 2: まとまった額（店のレジ、一人の有り金）
 - 3: 大金（商店の金庫、裕福な屋敷、商隊の売上）
 - 4: 財産（銀行や領主の宝物庫、大商会の蓄え）
 発覚したかどうかは問わない。隠しおおせた盗みも数える。
-NPC や第三者が奪った場合と、プレイヤーが試みて失敗した場合は 0 とすること。
-loot_reason には判定の理由を1文で書くこと。
 summary にはこの判定のことを書かないこと。"""
 LOOT_TOTAL_TEXT = "盗みの稼ぎは合わせて{total}ゴールドになった。"
 LOOT_CUT_TEXT = "奪った金のうち、手元に残ったのは{total}ゴールドだった。"
@@ -191,8 +196,9 @@ def install(env):
         factory = getattr(module, "create_model", None) if module is not None else None
         if not callable(factory):
             return None
+        # 理由（金をどう受け取ったか）を規模より先に書かせる。売買を盗みと取り違えにくくなる（VERIFICATION.md §3.84）
         child = factory(getattr(structure, "__name__", "Structure"), __base__=structure,
-                        **{SCALE_FIELD: (int, ...), REASON_FIELD: (str, ...)})
+                        **{REASON_FIELD: (str, ...), SCALE_FIELD: (int, ...)})
         extended_types[id(structure)] = (structure, child)
         return child
 
