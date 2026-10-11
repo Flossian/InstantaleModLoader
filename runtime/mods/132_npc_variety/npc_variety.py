@@ -33,6 +33,10 @@ VERIFICATION_LOG.md §2.82）。
         名前と概要は無く「- 強さのランク」だけ。実機で衛兵に種が1回付いてから直した。
         VERIFICATION_LOG.md §2.82）
   町    「【NPCの生成要素】」と `settlement_name:` の両方
+  主人公 キャラを作る画面のさいころ（`create_character`）。
+        「プレイヤーキャラクター」「ランダムに」「才能点」の3語が同じ本文にある。
+        版3で足した（ゲームが世界も種も渡さず、同じ型の傭兵ばかりが出ていた。GAME.md §2.35）。
+        世界観を渡すのは `143_` で、ここは表の種だけを足す
 
 単体でも、名前か概要が人でない存在（人形・魔物・竜・精霊・亡霊など）を指すなら種を付けない。
 表の種は人の外見と来歴なので、付けると人形が人の髪・肌・来歴を持つ人物になり、
@@ -87,12 +91,30 @@ NON_HUMAN_WORDS = ("人形", "ゴーレム", "オートマタ", "からくり", 
                    "骸骨", "スケルトン", "アンデッド", "ゾンビ")
 MARK_TOWN = "【NPCの生成要素】"
 MARK_TOWN_DATA = "settlement_name:"
+#: キャラを作る画面のさいころ（`create_character`）。3語とも同じ本文にある（GAME.md §2.35）。
+MARK_PLAYER = ("プレイヤーキャラクター", "ランダムに", "才能点")
 HEAD_SINGLE = "【この人物について決まっていること】"
 HEAD_TOWN = "【人物について決まっていること】"
+#: 版3の途中まで、表の句は中世の村を思わせるもの（羊飼い・写字生・寺院・薬草採り）を含んでいた。
+#: 世界に無いものは置き換えさせ、置き換えられなければ使わせない。「置き換えてよい」と許すだけだと、
+#: 魔法も剣も無い世界の主人公が羊を追って育ち、特質が「羊追いの勘」になった（VERIFICATION.md §3.93）。
+#: 「置き換えて書く」だけでも、羊の句を「海面上昇で沈んだ牧場」とこじつけて残したので、
+#: 同梱の表から舞台の物を外した（同 §3.93）。この添え書きは、手元の seeds.json の句の受け皿として残す。
+#: 外した後の句（「雇われの戦い手」「信仰の組織」）は、ファンタジーの世界でもそのまま本文に写ったので、
+#: 世界での呼び名に直させる一文を足した（同 §3.93）。
+FOOT_FIT = ("句のうち、この世界の概要と雰囲気から自然に連想できない生き物・職業・場所・道具は、"
+            "連想できるものに置き換えて書く。こじつけて残さない。置き換えられない句は使わない。"
+            "句の言い回しはそのまま写さず、この世界で使われる具体的な呼び名・物・場所に直して書く。")
 FOOT_SINGLE = ("これらを description・personality・look_description の文章に溶かして書くこと。"
-               "見出しや「=」の形は書かない。")
+               "見出しや「=」の形は書かない。" + FOOT_FIT)
+FOOT_PLAYER = ("これらを backstory と look（description・image_generation_prompt）に溶かして書くこと。"
+               "見出しや「=」の形は書かない。" + FOOT_FIT + "スキルと特質も、置き換えた後の内容に合わせる。")
+#: 町の頼み文は image_generation_prompt を英語で書かせる。種を付けた町では、Gemma4 26B A4B 系が
+#: look_description まで英語で書く回があった（種を付けない町では0。VERIFICATION.md §3.93）。
+FOOT_TOWN_LANG = "look_description は日本語の文で書く（英語で書くのは image_generation_prompt だけ）。"
 FOOT_TOWN = ("次の人物は、それぞれ決まっていることを description・personality・look_description "
-             "の文章に溶かして書くこと。見出しや「=」の形は書かない。ここに無い人物は自由でよい。")
+             "の文章に溶かして書くこと。見出しや「=」の形は書かない。" + FOOT_FIT + FOOT_TOWN_LANG
+             + "ここに無い人物は自由でよい。")
 
 #: 町の必須施設。ゲームの頼み文が「必ずそれぞれ一つずつ存在する」と言う5種。
 #: 種別で名指しできる（GAME.md §2.28）。
@@ -139,7 +161,8 @@ def read_seeds(path):
     （`{"not_for": {"owner": ["まだ子どもと言ってよい年頃"]}}` で、施設の主に子どもを出さない）。
     句の並びの代わりに `true` を書くと、その役にはその軸ごと付けない
     （単体生成は概要に年齢が書かれているので、年齢の軸を渡すと食い違う）。
-    役は `owner`（町の必須施設の主）/ `resident` / `adventurer` / `single`（単体生成）。
+    役は `owner`（町の必須施設の主）/ `resident` / `adventurer` / `single`（単体生成）/
+    `player`（さいころの主人公）。
     知らない鍵は無視する。軸の名前は表示に使わない（並びの順と `drops` の宛先にだけ使う）。
     句の重複は1度だけ数える。`drops` は `tables["_drops"][section][(軸名, 句)]`、
     `not_for` は `tables["_not_for"][section][軸名][役]` に入る。
@@ -347,12 +370,15 @@ def role_class(key):
 def classify(texts):
     """1回の推論の本文の並びから、対象の種類と user 本文の位置を返す。無ければ None。
 
-    `("single", index)` / `("town", index)`。
+    `("single", index)` / `("town", index)` / `("player", index)`。
     既に種が付いている（同じ本文が2度通った）ときも None。
     """
     joined = "\n".join(texts)
     if HEAD_SINGLE in joined or HEAD_TOWN in joined:
         return None
+    for index, text in enumerate(texts):
+        if all(word in text for word in MARK_PLAYER):
+            return "player", index
     if not any(word in joined for word in NOT_SINGLE_WORDS):
         for index, text in enumerate(texts):
             start = text.find(MARK_SINGLE)
@@ -416,6 +442,14 @@ def inject(texts, tables, rng=None, *, chance=None, residents=None, adventurers=
         if not seeds:
             return None, []
         block = "{}\n{}\n{}\n".format(HEAD_SINGLE, seeds[0][1], FOOT_SINGLE)
+    elif kind == "player":
+        if wants_seed(rng, chance):
+            line = compose("player")
+            if line:
+                seeds.append(("主人公", line))
+        if not seeds:
+            return None, []
+        block = "{}\n{}\n{}\n".format(HEAD_SINGLE, seeds[0][1], FOOT_PLAYER)
     else:
         for key, label in town_roles(residents, adventurers):
             if not wants_seed(rng, chance):
@@ -454,8 +488,9 @@ def apply(ctx):
             if word and LOG_SEEDS:
                 write("[SKIP] {} single | 人でない（{}）ので種を付けない".format(site, word))
             return None
-        kind = "single" if len(made) == 1 and made[0][0] == "この人物" else "town"
-        count[kind] += 1
+        kind = {"この人物": "single", "主人公": "player"}.get(
+            made[0][0], "town") if len(made) == 1 else "town"
+        count[kind] = count.get(kind, 0) + 1
         if LOG_SEEDS:
             write("[SEED] {} {} | {}人 ({:.1f}ms)".format(
                 site, kind, len(made), (time.monotonic() - started) * 1000))
@@ -489,7 +524,8 @@ _SAMPLE_TABLES = {
              ("特徴", ["片目に眼帯"], 0), ("年齢", ["まだ子ども"], 100)],
     "personality": [("口数", ["無口"], 100)],
     "description": [("出自", ["川向こうの漁村の生まれ"], 100)],
-    "_not_for": {"look": {"年齢": {"single": {"まだ子ども"}, "owner": {"まだ子ども"}}},
+    "_not_for": {"look": {"年齢": {"single": {"まだ子ども"}, "owner": {"まだ子ども"},
+                                  "player": "*"}},
                  "personality": {}, "description": {}},
 }
 _SAMPLE_SINGLE = ["型: - look_description: 外見", "指示",
@@ -498,6 +534,9 @@ _SAMPLE_GUARD = ["型: - look_description: 外見", "衛兵NPCをデザインし
                  "【生成するNPC】\n- 強さのランク: 8\n"]
 _SAMPLE_DOLL = ["型: - look_description: 外見", "指示",
                 "【生成するNPC】\n- 名前: 石の番人\n- 概要: 遺跡を守る古いゴーレム\n- 強さのランク: 30\n"]
+_SAMPLE_PLAYER = ["あなたはキャラクター生成AIです。",
+                  "**1体のプレイヤーキャラクター**を**ランダムに**生成してください。\n"
+                  "- 今回利用可能な才能点：**30**\n"]
 _SAMPLE_TOWN = ["型", "指示", "【NPCの生成要素】\n- 名前\n【生成対象エリアのデータ】\n"
                              "- settlement_name: 風の村\n"]
 
@@ -527,6 +566,11 @@ def _verify(ctx):
             or any("まだ子ども" in line for label, line in made if "owner" in label) \
             or not all("まだ子ども" in line for label, line in made if "owner" not in label):
         ctx.log("VERIFY FAILED: town injection {!r}".format(got), level="ERROR")
+        return
+    got, made = inject(_SAMPLE_PLAYER, _SAMPLE_TABLES, rng, chance=100)
+    if got is None or len(made) != 1 or made[0][0] != "主人公" or FOOT_PLAYER not in got[1] \
+            or "鳶色の瞳" not in got[1] or "まだ子ども" in got[1] or got[0] != _SAMPLE_PLAYER[0]:
+        ctx.log("VERIFY FAILED: player injection {!r}".format(got), level="ERROR")
         return
     if inject(_SAMPLE_TOWN, _SAMPLE_TABLES, rng, chance=0)[0] is not None:
         ctx.log("VERIFY FAILED: chance 0 still injected", level="ERROR")

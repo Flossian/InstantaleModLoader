@@ -3311,6 +3311,26 @@ story = {world_situation, story_flow, current_rumor, current_story_phase}
 > 「保存されるのは書き直しの方」は実セーブで見える
 > （実セーブの `world_data["overview"]` は1段落の要約文）。
 
+入力した文章をそのまま世界にするには `145_fix_world_overview`。
+あの MOD は差し替えた後に `world_data.json` を読み返して照合するので、
+ここの読みが外れていれば `out\world_overview.log` に `WARN` が出る。
+概要を入れた生成が `create_world_overview_from_plot` を通ること、差し替えた概要が物語・集落・依頼まで届くことは実機で確かめた（VERIFICATION.md §3.96）。
+
+**`generate_new_world` を包んでも呼ばれないことがある。**
+画面はこの関数を**引数で受け取って控える**:
+
+```text
+scripts.hud.hud_world_generate:WorldGenerateScreen.__init__(
+    self, screen_manager, generate_new_world_callback, **kwargs)
+```
+
+控えを取った後にモジュールの属性を差し替えても、控えの方には届かない。
+画面はタイトルへ着くより前に組み上がっているので（`out\events.log` の
+`app.world_generate_screen`）、遅延 import を待ってから当てる包みは間に合わないことがある
+（外部の1回は2秒差で間に合わず、手元の3回は間に合った）。
+世界生成に仕掛けるなら、呼ぶ側が毎回モジュールを引く地点を選ぶこと
+（保存なら `save_world_json:write_obfuscated_json_file`。VERIFICATION.md §3.4）。
+
 ### 2.28 素データの辞書は2つあり、遊んでいる最中の追加は片方に届かない
 
 ```text
@@ -3731,6 +3751,100 @@ AIManager.set_ai_models (instantale.py:510〜516)   一族を import する行�
 > 上の実測はプロキシが入っていない状態で録ったもので、
 > 3つのバックエンドとも `stable-diffusion.dll` は退避されている `-real.dll` とハッシュが一致していた
 > （入っているかどうかはこの比較で分かる。`-real.dll` の有無では分からない）。
+
+### 2.35 キャラを作る画面のさいころは世界を渡さない。絵の前置きには medieval が付く（`143_` の作業より）
+
+キャラを作る画面は `scripts.create_world:StoryApp(screen_manager, start_game_callback, world_name, generate_character_image_callback)`。
+世界名は受け取っていて、`self.world_name` に持つ（2026-10-11 の実機。さいころの押下の包みで読めた）。
+さいころ（`on_dice_press` → `generate_random_character`）が呼ぶのは
+`scripts.llm.llm_manager_character_create:create_character(talent_point_left)` で、引数は才能点だけ。
+
+`output_data\unknown\unknown\create_character\` の4件（2026-09-20〜10-11）で見た頼み文:
+
+- system は「あなたは大人向けの無骨で無慈悲なダークファンタジーRPG『Instantale』のキャラクター生成AIです。」の1文
+- user は「**1体のプレイヤーキャラクター**を**ランダムに**生成してください」で始まり、才能点・年齢・能力値・スキル・特質の決まりと
+  「[medieval, masterpiece, high quality, full body, standing, black background] は自動で追加される」が続く
+- 世界の名前・概要・情勢は1字も入っていない。保存先も世界名と主人公名の段が `unknown`
+- 4件とも、北方の出の傭兵で、顔に傷があり、革か鉄の鎧を着ていた（うち2件は元坑夫）
+
+さいころの返答から約1〜2秒後に、`create_look(name, gender, profile, look)` が続いて送られる（4件とも。`create_look\` の時刻）。
+日本語の外見文から category と立ち絵の英語の要素（8要素以下）を作り直す頼みで、
+system は「世界観と背景に基づき」と言うが、渡すのは名前・性別・出自・外見だけで、世界は入っていない。
+頭に `[medieval, masterpiece, high quality, full body, standing, black background, {category}]` を足すと書いてある。
+主人公の立ち絵に使われるのはこちらの要素（さいころの返答にも `image_generation_prompt` があるが、立ち絵のフォルダの `prompts.json` に載っていたのは `create_look` の要素だった。2026-10-11）。
+
+作成画面のスキル・特質の枠から生成するときは `create_skill(character_data, skill_request)` / `create_trait(character_data, trait_request)`。
+どちらも世界を渡さない。頼み文は exe の定数で読んだ（記録は無い）:
+
+- system はどちらも「あなたは大人向けの無骨で無慈悲なダークファンタジーRPGのキャラクター生成AIです。」で始まり、
+  「**キャラクターに追加する1つのアクティブスキル**を生成してください」/「**キャラクターに追加する1つの特質（…）の獲得に必要な消費ポイント量**を生成してください」と続く
+- user は「【キャラクターのデータ】- …」と「【スキルのリクエスト】- …」/「【特質のリクエスト】- …」
+- スキルの属性の例は「火、水、毒、闇など」（さいころの頼みも同じ）
+- 特質の【その他】は「この世界の誰もが魔法、精霊、神、悪魔、自然の力を借りた大いなる術を唱えられるわけでは無し、…」で、魔法のある世界を前提にしている
+
+窓の「生成」をスクリプトから押しても（`click`・`on_press` / `on_release` の発火とも）頼みは送られなかった（2026-10-11）。押下の先は測っていない。
+
+さいころに渡る才能点（`talent_point_left`）は、貯まっている才能点（`common_savedata.json` の `talent_point`）そのもの。
+手元では 2497 で、頼み文は「10 で貧弱・30 で一端の冒険者・60 で名の知れた実力者・150 で伝説」「概ねスキル・能力・年齢で 1/3 ずつ」と目安を書く。
+13 件の返答では、能力値の補正は +5 まで、スキルは1つで有用度 5〜26、年齢は 31〜46 に収まった（使えるのは 2172〜2497 点）。
+年齢の目安は 44 歳が 0 点で、若くするほど高い（40 歳 1・33 歳 4・30 歳 7・25 歳 23・20 歳 66。45 歳から上は1歳ごとに1点戻る）。
+画面が実際に数える式（`StoryApp.set_point_use`）は読めない。
+数えた結果は作成画面の「残り才能: 2497(-61)」の文字にだけ出る（括弧の中がこのキャラの使う点）。`StoryApp` は残りを属性に持たない（在るのは `talent_point` / `get_talent_point` / `set_point_use`）。
+物語を始めても、貯まっている才能点は減らなかった（2026-10-11、使う点 31 のキャラ。`common_savedata.json` が 2497 のまま）。
+頼み文に「およそ N 点使う」と目安を足しても、生成 AI は能力値・スキル・特質に 10〜30 点ほどしか使わなかった（6回。VERIFICATION.md §3.93）。
+
+#### 絵の前置き（`image_generation.<方式>.image_generation_creature` / `image_generation_background`）
+
+立ち絵も背景も、要素の前後にゲームの決まった文字列が付く（exe の定数と、描いたフォルダの `prompts.json`）。
+
+| 絵 | 前 | 後 |
+| --- | --- | --- |
+| 人物（`generate_character_image(world_name, name, category, prompt)`） | `full-body, masterpiece,high quality, detailed face, medieval, dark fantasy, watercolor, standing,shabby, ` ＋ category | `empty background,black background,wallpaper` |
+| 背景（`generate_background_image(world_name, location, prompt)`） | `masterpiece, best quality, watercolor, fantasy setting, medieval, highly detailed, ` | なし（否定に `photoreal, modern, urban, ...`） |
+
+頼み文が「自動で足す」と書く一覧（`[medieval, masterpiece, high quality, full body, standing, black background]`）は実際の前置きと同じではない。
+人物は組み立てた文を `prompts.json` に書いてから、方式ごとの描く関数（`generate_image_anime` / `generate_upscaled_image_anime` / `generate_image_real_lcm` など。最初の引数が前置き込みの文）を呼ぶ。
+背景は `generate_and_save_background(world_name, location, positive_prompt, negative_prompt)` が `prompts.json` を書いて描く。
+背景の頼み文（`background_image_creator`）の system は「あなたは中世ファンタジーRPGビジュアルノベルの背景画像の生成担当です」で始まる。
+敵・モンスターの絵は `prompts.json` を残さず、前置きは見ていない。
+
+NPC を作る頼み（`create_settlement_detail` など）は `【世界のデータ】` に世界の概要と地図の構造を載せている。
+渡していないのは主人公を作る2つだけ。
+
+世界の文の在り処は `world_dict["world_data"]` の `overview`（概要）と `story.world_situation`（情勢）。
+作成画面の時点の `app.world_dict` は作成中の世界ではなかった（2026-10-11 の実機。9回とも世界名が食い違った）。
+`143_` は画面が受け取った `world_name` で `worlds\<世界名>\world_data.json`（§2.16 の XOR）を読む。
+
+### 2.36 頼み文の世界観の決め打ち（`144_` の作業より）
+
+`output_data` に残る頼みを種類ごとに1件ずつ（いちばん新しいもの）読んだ（2026-10-11。ゲームの頼み 58種と MOD の頼み 17種）。
+世界に関係なく同じ文が入るもののうち、ジャンルや世界の暮らしを決めているものは5種類あった。
+
+**役の一文。** ゲームの頼みの 29種が「あなたは」で始まるジャンルの一文を持つ。書き方は次のとおり。
+
+| 書き出し | 例 |
+| --- | --- |
+| `あなたはダークファンタジーTRPGの〜` | 語り（`quest_starter` / `quest_summarizer` / `quest_referee_event_resolve` / `field_event_evaluator` など）・休暇・訓練・内部処理（`life_detail_setter`） |
+| `あなたはダークファンタジーRPGの〜` | NPC の生成（`master_ai_npc_generater` / `npc_detail_generater` / `guard_npc_generator` / `colosseum_enemy_generator`）・語り（`narrator` / `narrator_initial`）・世界と町の生成 |
+| `あなたは大人向けの無骨で無慈悲なダークファンタジーRPG『Instantale』の〜` | さいころ（`create_character`） |
+| `あなたはいわゆる大人向けのダークファンタジーRPGの〜` | `create_look` / `check_illegal_content` |
+| `あなたは中世ファンタジーRPGビジュアルノベルの〜` | 背景（`background_image_creator`） |
+| `あなたはダークファンタジーTRPGシステムのベースモデルとして` | `quest_referee_with_free_action` |
+
+同梱の MOD にも同じ書き出しを写したものがある（`300_` / `330_` / `331_` の頼み）。
+29種のうち20種は、頼みのどこにも世界の情報（`世界の概要`・`【世界の情報】`・`world_overview`）が無い。
+語り・依頼の進行と要約・休暇・訓練・NPC の詳細・背景・キャラの審査がそれで、生成 AI が知る世界観は役の一文だけになる。
+
+**会話の調子。** 会話の4種（`conversation_facilitator` など）の「この世界は救いのないダークファンタジーであり、優等生的・現代的な言い回しや不要な気遣いはしない。」は、ゲームの文ではなく `111_` の同梱ルール（`llm_replacements.default.txt` の「生成文言改変」）が足している。
+
+**許可の理由。** 会話・自由行動（`master_ai_facilitator`）・世界の審査（`check_world_content_violation`）が「ダークファンタジーであるため、窃盗、暴力、暗殺、戦闘などの犯罪行為は許可する。」と書く。
+キャラの審査（`check_illegal_content`）は「ダークファンタジーであるため、殺人者、盗賊、奴隷、生贄などの設定は許可される。」。
+
+**【共通世界観】。** 世界の生成（`create_world_overview`）・ストーリー（`create_story`）・町の生成（`create_settlement_detail`）が同じ塊を持つ。
+後ろに「- エリア:」の項が続くのは町の生成だけで、世界とストーリーの生成では冒険者の項の後にすぐ【予め指定済みの設定】【手順】が来る（ストーリーの方は項の中に改行もある）。
+冒険者の項は「この世界にはギルドとそれに属する職業冒険者たちがいるが、夢のある仕事ではない。社会的立場は低いし…元奴隷。そして多くは…死ぬか、何らかの後遺を負って引退する。…」で、エリアの項（エリアごとに拠点が1つ）はゲームの仕組みの説明。
+
+**絵の前置き。** §2.35 の表。人物の `medieval, dark fantasy, ... shabby`、背景の `fantasy setting, medieval` と否定の `modern, urban`。
 
 ---
 

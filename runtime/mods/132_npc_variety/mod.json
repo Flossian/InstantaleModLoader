@@ -7,10 +7,10 @@
     "ja": "NPC の外見・性格・経歴の多様化"
   },
   "description": {
-    "en": "Adds concrete, randomly drawn traits (hair, eyes, skin, build, age, a distinguishing mark, clothes, a few personality axes and a past) to the prompts that generate NPCs, so the LLM stops filling every innkeeper with the same grey robe and sharp eyes",
-    "ja": "NPC を生成する頼み文に、表から引いた具体の特徴（髪・瞳・肌・体格・年齢・目立つ特徴・服、性格の軸、来歴）を足す。役職の型（宿屋の主人＝皺と灰色のローブ）で埋まるのを止め、人ごとに見分けがつくようにする"
+    "en": "Adds concrete, randomly drawn traits (hair, eyes, skin, build, age, a distinguishing mark, clothes, a few personality axes and a past) to the prompts that generate NPCs, so the LLM stops filling every innkeeper with the same grey robe and sharp eyes. The character rolled with the dice on the creation screen gets seeds from the same table",
+    "ja": "NPC を生成する頼み文に、表から引いた具体の特徴（髪・瞳・肌・体格・年齢・目立つ特徴・服、性格の軸、来歴）を足す。役職の型（宿屋の主人＝皺と灰色のローブ）で埋まるのを止め、人ごとに見分けがつくようにする。キャラを作る画面のさいころで作る主人公にも同じ表から付ける"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "settings": {
     "SEED_CHANCE": {

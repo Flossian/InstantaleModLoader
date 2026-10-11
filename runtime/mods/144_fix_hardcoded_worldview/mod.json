@@ -1,0 +1,92 @@
+{
+  "entry": "hardcoded_worldview.py",
+  "api": 1,
+  "kind": "fix",
+  "name": {
+    "en": "Remove the hardcoded worldview from requests and images",
+    "ja": "頼み文と絵の世界観の決め打ちを外す"
+  },
+  "description": {
+    "en": "Many of the game's LLM requests open with 'You are the GM of a dark fantasy TRPG' whatever the world is, and every image gets 'medieval' and 'dark fantasy' in its fixed prefix. This removes the genre from those role lines (adding the world's name and overview to requests that carry no world information), turns 'because this is dark fantasy' into 'because this is a game', trims the adventurer lore of the common worldview, and drops medieval / dark fantasy / shabby / fantasy setting (and the 'modern, urban' negatives) from image prompts",
+    "ja": "ゲームの頼み文の多くは、世界に関係なく「あなたはダークファンタジーTRPGのゲームマスターである」で始まり、絵の前置きには必ず medieval や dark fantasy が付く。役の一文からジャンルを外し（世界の情報が無い頼みには世界の名前と概要を足す）、「ダークファンタジーであるため」を「ゲームであるため」にし、【共通世界観】の冒険者の暗い設定を外し、絵の前置きから medieval・dark fantasy・shabby・fantasy setting を、背景の否定から modern・urban を抜く"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "before": [
+    "111_llm_prompt_replace"
+  ],
+  "settings": {
+    "ROLE_LINE": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "役の一文からジャンルを外す",
+        "en": "Remove the genre from role lines"
+      },
+      "note": {
+        "ja": "「あなたはダークファンタジーTRPGの〜」「あなたは中世ファンタジーRPGの〜」を「あなたはTRPGの〜」に。111 の同梱ルールが会話に足す「この世界は救いのないダークファンタジーであり」も外す",
+        "en": "'You are ... of a dark fantasy TRPG' becomes '... of a TRPG'. Also removes the 'this world is a hopeless dark fantasy' line that 111's bundled rule adds to conversations"
+      }
+    },
+    "ADD_WORLD": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "世界の情報が無い頼みに世界の概要を足す",
+        "en": "Add the world overview where a request has none"
+      },
+      "note": {
+        "ja": "語り・依頼の進行・休暇・訓練など、役の一文を外した頼みに世界の名前と概要が無ければ足す。頼みが長くなるぶん、ローカル LLM では少し遅くなる",
+        "en": "Narration, quest progress, vacations, training and so on carry no world information. Adds the world's name and overview there; requests get longer, so a local LLM gets a little slower"
+      }
+    },
+    "POLICY_REASON": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "許可の理由を「ゲームであるため」にする",
+        "en": "Give 'because this is a game' as the reason for permissions"
+      },
+      "note": {
+        "ja": "「ダークファンタジーであるため、窃盗、暴力…は許可する」の理由だけを変える。許可そのものは残す",
+        "en": "Only the reason changes; the permissions themselves stay"
+      }
+    },
+    "COMMON_WORLD": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "【共通世界観】の冒険者の設定を外す",
+        "en": "Trim the adventurer lore of the common worldview"
+      },
+      "note": {
+        "ja": "世界・ストーリー・町を作る頼みにある「冒険者は夢のある仕事ではない…」を、ギルドと冒険者がいることだけにする。新しく作る世界と町から効く",
+        "en": "Keeps only 'there is a guild and adventurers'. Affects worlds and towns made from now on"
+      }
+    },
+    "IMAGE_PREFIX": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "絵の前置きから決め打ちの語を抜く",
+        "en": "Remove hardcoded words from image prompts"
+      },
+      "note": {
+        "ja": "人物・背景・敵の前置きから medieval・dark fantasy・shabby・fantasy setting を、否定から modern・urban を抜く。描き直した絵から効く",
+        "en": "Drops medieval, dark fantasy, shabby and fantasy setting from prefixes and modern, urban from negatives. Affects newly drawn images"
+      }
+    },
+    "LOG_DETAIL": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "したことを記録する",
+        "en": "Log what was done"
+      },
+      "note": {
+        "ja": "out\\hardcoded_worldview.log の [TEXT] と [IMAGE]",
+        "en": "[TEXT] and [IMAGE] lines in out\\hardcoded_worldview.log"
+      }
+    }
+  }
+}

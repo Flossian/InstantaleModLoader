@@ -5,8 +5,11 @@
 
 確認するもの:
 
-  見分け     単体（【生成するNPC】＋型に look_description）と町（【NPCの生成要素】＋settlement_name）だけ。
-             衛兵・闘技場（型が look）と 320 の募集は触らない。種が付いた本文は2度目は触らない
+  見分け     単体（【生成するNPC】＋型に look_description）と町（【NPCの生成要素】＋settlement_name）と
+             さいころの主人公（プレイヤーキャラクター・ランダムに・才能点）だけ。
+             衛兵・闘技場（型が look）と 320 の募集、さいころの後の立ち絵の要素は触らない。
+             種が付いた本文は2度目は触らない
+  主人公     同梱の表では年齢と、土地に住む人の軸（ここにいる理由・今の悩み・町での評判）が付かない
   組み立て   外見→性格→来歴の順で、各節の中は順が混ざる。鍵=値の形も軸の名前も載らない。
              軸の本数は設定どおり。割合 0 で何も足さない
   町         必須施設の主5人＋住民＋冒険者を番号で名指しし、人数は設定どおり
@@ -94,6 +97,13 @@ QUEST = ["型", "指示", "【生成対象エリアのデータ】\n- settlement
 DOLL = SINGLE[:2] + ["【生成するNPC】\n- 名前: 石の番人\n- 概要: 遺跡を守る古いゴーレム。\n- 強さのランク: 30\n"]
 DOLL_BY_NAME = SINGLE[:2] + ["【生成するNPC】\n- 名前: 戦闘用人形\n- 概要: 剣の稽古の相手をする。\n- 強さのランク: 30\n"]
 RECRUIT = ["あなたはRPGの世界に新しく登場する冒険者NPCを1人考える係です。\n- look_description: 日本語。見た目"]
+# キャラを作る画面のさいころ（create_character）。実機の頼み文の書き出しと才能点の行。
+PLAYER = ["あなたは大人向けの無骨で無慈悲なダークファンタジーRPG『Instantale』のキャラクター生成AIです。\n",
+          "以下の仕様に基づいて、**1体のプレイヤーキャラクター**を**ランダムに**生成してください。\n"
+          "【指示】\n- キャラクターの作成は「才能点」を消費して行われます。\n- 今回利用可能な才能点：**30**\n"]
+# さいころの後に来る立ち絵の要素の頼み（create_look）。種は付けない。
+PLAYER_LOOK = ["あなたはダークファンタジーRPGの管理者です。物語の主人公の外見のカテゴリと立ち絵の英語の画像生成プロンプトを設定してください。",
+               "【設定】- 主人公の名前: 見本\n- 外見: 見本の外見\n"]
 
 TABLES = {
     "look": [("髪", ["赤茶の髪を短く刈っている"], 100), ("瞳", ["鳶色の瞳"], 100), ("肌", ["色白"], 100)],
@@ -188,6 +198,22 @@ def main():
           mod.classify(["- look_description:", "指示", "【生成するNPC】\n- 名前: x\n- 強さのランク: 8\n"]) is None)
     check("依頼生成は触らない（settlement_name だけ）", mod.classify(QUEST) is None)
     check("320 の募集は触らない", mod.classify(RECRUIT) is None)
+    check("さいころの主人公", mod.classify(PLAYER) == ("player", 1), mod.classify(PLAYER))
+    check("さいころの後の立ち絵の要素は触らない", mod.classify(PLAYER_LOOK) is None)
+    seeded_player, made_player = mod.inject(PLAYER, TABLES, random.Random(1))
+    check("主人公: 種と添え書きが user 本文に付き、system は変わらない",
+          seeded_player is not None and made_player and made_player[0][0] == "主人公"
+          and mod.FOOT_PLAYER in seeded_player[1] and "赤茶の髪" in seeded_player[1]
+          and seeded_player[0] == PLAYER[0], seeded_player)
+    check("主人公: 種が付いた本文は2度目は触らない", mod.classify(seeded_player) is None)
+    check("主人公: 世界に無いものは置き換え、置き換えられない句は使わないと言い切る",
+          "連想できるものに置き換えて書く。こじつけて残さない。置き換えられない句は使わない。" in seeded_player[1]
+          and "スキルと特質も、置き換えた後の内容に合わせる" in seeded_player[1]
+          and "置き換えてよい" not in seeded_player[1], seeded_player[1][-200:])
+    seeded_single, _m = mod.inject(SINGLE, TABLES, random.Random(1))
+    seeded_town, _m = mod.inject(TOWN, TABLES, random.Random(1))
+    check("単体と町にも同じ置き換えの添え書き", mod.FOOT_FIT in seeded_single[2] and mod.FOOT_FIT in seeded_town[2])
+    check("主人公: 割合 0 なら触らない", mod.inject(PLAYER, TABLES, random.Random(1), chance=0)[0] is None)
     seeded, made = mod.inject(SINGLE, TABLES, random.Random(1))
     check("種が付いた本文は2度目は触らない", mod.classify(seeded) is None)
     check("空の並び", mod.classify([]) is None)
@@ -310,6 +336,16 @@ def main():
     check("同梱: 単体生成には年齢の軸が付かない",
           not any(w in l for l in singles for w in ("まだ子ども", "十代半ば", "二十歳", "三十路", "四十路", "五十路", "老いて", "読めない顔")))
     check("同梱: 施設の主には年齢が付く", any("三十路" in l or "五十路" in l for l in owners))
+    players = [mod.compose_person(bundled, random.Random(i), role="player") for i in range(300)]
+    place_rows = {p for axis, rows, _c in bundled["description"]
+                  if axis in ("ここにいる理由", "今の悩み", "町での評判") for p in rows}
+    check("同梱: さいころの主人公には年齢の軸が付かない",
+          not any(w in l for l in players for w in ("まだ子ども", "十代半ば", "二十歳", "三十路", "四十路", "五十路", "老いて", "読めない顔")))
+    check("同梱: さいころの主人公には土地に住む人の軸（ここにいる理由・今の悩み・町での評判）が付かない",
+          len(place_rows) > 60 and not any(p in l.split("。") for l in players for p in place_rows),
+          [l for l in players if any(p in l.split("。") for p in place_rows)][:2])
+    check("同梱: さいころの主人公にも外見と来歴は付く",
+          all(l for l in players) and any("瞳" in l for l in players) and any("元は" in l for l in players))
     check("同梱: 住民には子どもが出る", any("まだ子ども" in l for l in bundled_lines))
     got, made = mod.inject(TOWN, bundled, random.Random(4), chance=100, residents=4, adventurers=3)
     check("町: owner の行に子どもが無い",
@@ -420,9 +456,13 @@ def main():
         client.chat("m", town_messages)
         check("chat: 町は12人ぶん", client.sent[-1][2]["content"].count("\n- ") >= 12 + 2,
               client.sent[-1][2]["content"][-300:])
+        client.chat("m", [{"role": "system", "content": PLAYER[0]}, {"role": "user", "content": PLAYER[1]}])
+        check("chat: さいころの主人公に種が載る", mod.FOOT_PLAYER in client.sent[-1][1]["content"],
+              client.sent[-1][1]["content"][-300:])
         with io.open(os.path.join(out_dir, mod.LOG_BASENAME), encoding="utf-8") as fh:
             log = fh.read()
-        check("[SEED] が残る（単体1・町1）", log.count("[SEED]") == 2 and "single" in log and "town" in log, log[-400:])
+        check("[SEED] が残る（単体1・町1・主人公1）", log.count("[SEED]") == 3 and "single" in log
+              and "town" in log and "player" in log, log[-400:])
         check("[SKIP] が残る（人でない単体1）", log.count("[SKIP]") == 1 and "ゴーレム" in log, log[-400:])
         check("[SEED] に種の文","宿屋(inn)の owner:" in log and "この人物:" in log, log[-400:])
         check("例外を握り潰していない", not ctx.errors, ctx.errors)

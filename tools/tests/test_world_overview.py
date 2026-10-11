@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""905_fix_world_overview をゲーム抜きで通す。
+"""145_fix_world_overview をゲーム抜きで通す。
 
-    python tools/tests/test_wip_world_overview.py
+    python tools/tests/test_world_overview.py
 
 偽の `llm_manager_world_generate`（入力を無視して自分の文章を返す）と偽の
 `save_world_json`（応答の `overview` を `write_obfuscated_json_file` で保存する）を
@@ -20,13 +20,12 @@
   無事故    … どの経路でも ctx.log_exc が呼ばれない
 
 二段目は `save_world_json:write_obfuscated_json_file` に載る。
-`generate_new_world` ではない理由は入口ファイルの docstring と DOC.md §3。
+`generate_new_world` ではない理由は入口ファイルの docstring と VERIFICATION.md §3.96。
 偽ゲーム側も**保存を `write_obfuscated_json_file` 経由にしてある**ので、
 包みの通り道は本番と同じ。
 
 差し替えの根拠（`World` の項目名・呼び出しの順）は
-この MOD の `DOC.md` §1 と、入口ファイルの docstring。
-開発中（9xx）なので CI では走らない（TECH.md §2.6）。
+GAME.md §2.27 と、入口ファイルの docstring。
 """
 import importlib.util
 import io
@@ -52,12 +51,6 @@ if RUNTIME_DIR not in sys.path:
 
 def find_mod(suffix):
     """mod を **番号を除いた名前** で探す（番号は振り直されることがある）。"""
-    # この検査は mod と同じフォルダに置いてある（`local/` へ移した後の形）。
-    # 隣に `mod.json` が在るならそれが対象。`runtime/mods` は見ない。
-    here_manifest = os.path.join(HERE, "mod.json")
-    if os.path.isfile(here_manifest):
-        with io.open(here_manifest, encoding="utf-8") as fh:
-            return os.path.join(HERE, json.load(fh)["entry"])
     matches = sorted(name for name in os.listdir(MODS_DIR)
                      if name.endswith(suffix)
                      and os.path.isfile(os.path.join(MODS_DIR, name, "mod.json")))
@@ -326,7 +319,7 @@ def saved_overview(world_name):
 # ==================================================== 仕掛け口
 # ここだけは振る舞いではなく**どこに載せたか**を見る。
 # `generate_new_world` は画面へ関数のまま渡されて控えられるので、
-# モジュールの属性を差し替えても控えには届かない（DOC.md §3）。
+# モジュールの属性を差し替えても控えには届かない（VERIFICATION.md §3.96）。
 # 戻すと検査は全部通ったまま実機で二段目だけ黙るので、載せ先を直接縛る。
 print("\n-- 仕掛け口 --")
 mod, ctx, game, save_world = setup()

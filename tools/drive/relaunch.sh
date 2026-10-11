@@ -1,9 +1,10 @@
 #!/bin/sh
 # ゲームを閉じて起動し直し、世界を読み込んで遊べる画面まで進める。決め打ちの待ちはせず、段ごとに状態を見る。
-# 使い方: sh tools/drive/relaunch.sh [restore]
+# 使い方: sh tools/drive/relaunch.sh [restore|title]
 #   要るもの: IML_GAME_DIR・IML_DRIVE_WORLD（restore なら IML_DRIVE_BACKUP も）
 #   restore を付けると、起動の前にセーブ・世界の骨格・state\ を控え（backup.sh が作ったもの）へ戻す。
 #   控えの後にできた立ち絵のフォルダと state\ のファイルは消さず、out/backup/test_leftovers/ へ移す。
+#   title を付けると、題の画面が出たところで止め、世界は選ばない（キャラのまだ居ない世界へ自分で進むとき）。
 . "$(dirname "$0")/common.sh"
 need IML_GAME_DIR IML_DRIVE_WORLD || exit 1
 GAME=$(cygpath -u "$IML_GAME_DIR" 2>/dev/null || echo "$IML_GAME_DIR")
@@ -53,6 +54,7 @@ done
 stamp "injected"
 
 wait_stage title 90 >/dev/null || exit 1
+[ "$1" = "title" ] && { stamp "title"; exit 0; }
 drive clicktext.py --wait 30 --args "$(jarg texts '["開始する"]')" >/dev/null
 stamp "title -> 開始する"
 wait_stage worlds 60 >/dev/null || exit 1
