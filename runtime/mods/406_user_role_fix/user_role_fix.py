@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
-"""Geminiの売買・エピローグ・自由施設の要約に不足しているuser roleを補う。"""
+"""Gemini・Claudeの売買・エピローグ・自由施設の要約に不足しているuser roleを補う。
+
+素のゲームはこの4件をsystem roleだけで組んで送る。
+Geminiは返答が無く裏で落ち、Claudeはsystemを別の欄へ移すのでmessagesが空になり400で断られる
+（DOC.md）。
+"""
 
 from instantale_modloader import llm
 
@@ -11,12 +16,15 @@ USER_TEXTS = {
     "epilogue_generator": "＜エピローグを生成する＞",
     "free_facility_summary": "＜行動記録を要約する＞",
 }
+# user roleが無いと返答できない送信モジュール（名前の一部）。GPT系はsystemだけでも返答できるので入れない。
+NEEDS_USER = ("gemini", "claude")
+LABEL = "406_user_role_fix"
 
 
-def _is_gemini_runtime():
-    """Gemini送信時だけ補正し、ローカルLLMには触れない。"""
+def _needs_user_runtime():
+    """GeminiかClaudeで送るときだけ補正し、ローカルLLMとGPT系には触れない。"""
     try:
-        return any("gemini" in name.lower() for name in llm.request_modules())
+        return any(part in name.lower() for name in llm.request_modules() for part in NEEDS_USER)
     except Exception:
         return False
 
@@ -59,7 +67,7 @@ def apply(ctx):
     def install(target):
         @ctx.wrap(target, required=False, safe=True)
         def manager_send(orig, *args, **kwargs):
-            if llm.is_local_runtime() or not _is_gemini_runtime():
+            if llm.is_local_runtime() or not _needs_user_runtime():
                 return orig(*args, **kwargs)
 
             manager_name = args[0] if args else kwargs.get("manager_name")
@@ -79,9 +87,7 @@ def apply(ctx):
                     args, kwargs, new_message, where
                 )
                 ctx.log(
-                    "406_gemini_user_role_fix: inserted user role for {}".format(
-                        manager_name
-                    )
+                    "{}: inserted user role for {}".format(LABEL, manager_name)
                 )
 
             return orig(*args, **kwargs)
@@ -91,5 +97,5 @@ def apply(ctx):
         ctx,
         [MANAGER_TARGET],
         install,
-        label="406_gemini_user_role_fix",
+        label=LABEL,
     )

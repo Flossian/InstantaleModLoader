@@ -86,10 +86,10 @@
 | [`140_fix_busy_dots_speed`](MODS.md#140_fix_busy_dots_speed-待機表示のを普段の速さで流す) | 待機表示の「…」を普段の速さで流す | 待機表示の「…」を普段の速さで流す | - |  |
 | [`141_ui_free_input_echo`](MODS.md#141_ui_free_input_echo-会話の外で送った文も本文に残す) | 会話の外で送った文も本文に残す | 会話の外で送った文も本文に残す | - |  |
 | [`142_balance_quest_stamina`](MODS.md#142_balance_quest_stamina-依頼のクリアで減るスタミナを難易度と被弾で変える) | 依頼のクリアで減るスタミナを難易度と被弾で変える | 依頼のクリアで減るスタミナを難易度と被弾で変える | 7 |  |
-| [`406_gemini_user_role_fix`](MODS.md#406_gemini_user_role_fix-クラウド-api-の-gemini-で-user-role-の無い依頼を補う) | Geminiの無応答の防止 | クラウド API の Gemini で user role の無い依頼を補う | - |  |
 | [`143_fix_random_character`](MODS.md#143_fix_random_character-さいころで作るキャラを世界観に合わせ作りもばらつかせる) | さいころで作るキャラを世界観に合わせ、作りもばらつかせる | さいころで作るキャラを世界観に合わせ、作りもばらつかせる | 6 |  |
 | [`144_fix_hardcoded_worldview`](MODS.md#144_fix_hardcoded_worldview-頼み文と絵の世界観の決め打ちを外す) | 頼み文と絵の世界観の決め打ちを外す | 頼み文と絵の世界観の決め打ちを外す | 6 |  |
 | [`145_fix_world_overview`](MODS.md#145_fix_world_overview-入力した世界の概要をそのまま使う) | 入力した世界の概要をそのまま使う | 入力した世界の概要をそのまま使う | 1 |  |
+| [`406_user_role_fix`](MODS.md#406_user_role_fix-クラウド-api-の-geminiclaude-でuser-role-の無い依頼が返らない断られるのを防ぐ) | Gemini・Claudeの無応答の防止 | クラウド API の Gemini・Claude で、user role の無い依頼が返らない・断られるのを防ぐ | - |  |
 
 ---
 
@@ -220,7 +220,7 @@
 | [`403_npc_social_memory`](MODS.md#403_npc_social_memory-npc同士がお互いを認知し関係を覚える) | MoririnJP 様 | そのまま取り込み |
 | [`404_party_talk`](MODS.md#404_party_talk-パーティーメンバー全員と話す) | MoririnJP 様 | 提供者と共同 |
 | [`405_regional_economy`](MODS.md#405_regional_economy-街ごとの需給表示特産品) | MoririnJP 様 | 提供者と共同 |
-| [`406_gemini_user_role_fix`](MODS.md#406_gemini_user_role_fix-クラウド-api-の-gemini-で-user-role-の無い依頼を補う) | MoririnJP 様 | そのまま取り込み |
+| [`406_user_role_fix`](MODS.md#406_user_role_fix-クラウド-api-の-geminiclaude-でuser-role-の無い依頼が返らない断られるのを防ぐ) | MoririnJP 様 | 提供者と共同 |
 | [`407_npc_starting_equipment`](MODS.md#407_npc_starting_equipment-パーティーに加わった-npc-に初期装備を一度だけ持たせる) | MoririnJP 様 | そのまま取り込み |
 | [`408_visual_changes_based_on_equipment`](MODS.md#408_visual_changes_based_on_equipment-立ち絵を再生成すると装備の見た目が描き足される) | MoririnJP 様 | そのまま取り込み |
 

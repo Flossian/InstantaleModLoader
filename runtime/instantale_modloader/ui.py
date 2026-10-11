@@ -781,6 +781,65 @@ def quest_of(app, quest_id):
     return None
 
 
+def remove_quest(app, quest_id, with_area=True):
+    """MOD が作らせた依頼を世界から片付ける。消した所の名前の並びを返す（何も無ければ空）。
+
+    消す先は5か所（GAME.md §2.9「掲示板で作った依頼と、それを消す」の実測）:
+
+        app.world.quests[id]                      遊んでいる間の一覧
+        app.save_data_dict['quests'][id]          残すと読み直しで依頼が戻る
+        依頼の街の Area.quests の並び            （素データの並びにもあれば消す）
+        ダンジョンの土地 app.world.areas[...]     with_area のとき。ほかの依頼が同じ土地を指していれば残す
+        app.save_data_dict['areas'][...]          同上
+
+    雛形（`world_dict`）には触らない（掲示板で作った依頼はそこに現れない）。
+    受けている最中の依頼は消さない（呼ぶ側が帰還を待つ）。保存は呼ぶ側の次の保存に任せる。
+    """
+    quest_id = str(quest_id)
+    if current_quest_id(app) == quest_id:
+        return []
+    quest = quest_of(app, quest_id)
+    if quest is None:
+        return []
+    town = str(quest_value(quest, "neighboring_settlement_id", "") or "")
+    dungeon = str(quest_value(quest, "quest_area_id", "") or "")
+    gone = []
+    live = frames.attr(frames.attr(app, "world", None), "quests", None)
+    if isinstance(live, dict) and live.pop(quest_id, None) is not None:
+        gone.append("world.quests")
+    save_data = frames.attr(app, "save_data_dict", None)
+    if not isinstance(save_data, dict):
+        save_data = {}
+    saved = save_data.get("quests")
+    if isinstance(saved, dict) and saved is not live and saved.pop(quest_id, None) is not None:
+        gone.append("save_data_dict.quests")
+    saved_areas = save_data.get("areas") if isinstance(save_data.get("areas"), dict) else {}
+    area = world_areas(app).get(town) if town else None
+    for where, row in (("Area.quests", frames.attr(area, "quests", None)),
+                       ("save_data_dict.areas.quests",
+                        (saved_areas.get(town) or {}).get("quests")
+                        if isinstance(saved_areas.get(town), dict) else None)):
+        if isinstance(row, list):
+            before = len(row)
+            row[:] = [value for value in row if str(value) != quest_id]
+            if len(row) != before:
+                gone.append(where)
+    if with_area and dungeon:
+        still_used = any(str(quest_value(other, "quest_area_id", "")) == dungeon
+                         for store in quest_stores(app) for other in store.values())
+        holder = frames.attr(frames.attr(app, "world", None), "areas", None)
+        size = (saved_areas.get(dungeon) or {}).get("size") \
+            if isinstance(saved_areas.get(dungeon), dict) else None
+        if size not in (None, "dungeon"):
+            still_used = True           # 街を指していた（依頼のダンジョンではない）。消さない
+        if not still_used:
+            if isinstance(holder, dict) and holder.pop(dungeon, None) is not None:
+                gone.append("world.areas")
+            if saved_areas.pop(dungeon, None) is not None:
+                gone.append("save_data_dict.areas")
+    return gone
+
+
 def world_overview(app, limit=None):
     """世界観の文（`world_data.overview`）。LLM への頼み文に入れる。無ければ空。
 

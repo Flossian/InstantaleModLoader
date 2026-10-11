@@ -44,6 +44,10 @@
 `on_button_press` を2回包んでいたのを1つにまとめた。
 包みはすべて `safe=True` にし、受け取った引数をそのまま `orig` へ渡す。
 HUD の文字はメインスレッドの上でだけ読む。
+
+版4: `generate_random_quest` の前後で増えた依頼を、生きた一覧と雛形の合併で数えるようにした
+（前は雛形だけを見ていて、掲示板で作った依頼が毎回 `[]` だった）。
+いまいる土地、増えた依頼の `neighboring_settlement_id` / `quest_area_id`、増えた土地も書く。
 """
 
 import os
@@ -600,33 +604,55 @@ def apply(ctx):
 
         def before():
             box["ids"] = _quest_ids(app)
+            box["areas"] = sorted(ui.world_areas(app), key=str)
+            here = ui.current_area(app)
+            box["here"] = ui.area_id_of(here)
             write("=" * 78)
-            write("DisplayQuestChoice.generate_random_quest() start; quests={}".format(
-                len(box["ids"])))
+            write("DisplayQuestChoice.generate_random_quest() start; quests={} areas={} "
+                  "here={!r} ({})".format(len(box["ids"]), len(box["areas"]), box["here"],
+                                          getattr(here, "name", None)))
         note(before)
         result = orig(self, *args, **kwargs)
 
         def after():
             added = sorted(set(_quest_ids(app)) - set(box.get("ids", [])), key=str)
+            new_areas = sorted(set(ui.world_areas(app)) - set(box.get("areas", [])), key=str)
             write("generate_random_quest -> {}".format(repr_value(result)))
-            write("  quest ids added: {}".format(added))
+            write("  quest ids added: {}  area ids added: {}".format(added, new_areas))
             for qid in added:
-                dump_quest(_quest_of(app, qid), "new quest {!r}".format(qid))
+                quest = _quest_of(app, qid)
+                stores = [name for name, store in _named_stores(app) if qid in store]
+                write("  quest {!r} in {}: neighboring_settlement_id={!r} quest_area_id={!r} "
+                      "(here was {!r})".format(
+                          qid, stores, _field(quest, "neighboring_settlement_id"),
+                          _field(quest, "quest_area_id"), box.get("here")))
+                dump_quest(quest, "new quest {!r}".format(qid))
         note(after)
         return result
 
-    def _quests_of(app):
+    # 版4: 前は雛形（`world_dict`）があればそちらだけを見ていた。
+    # 掲示板で作った依頼は雛形に現れない（GAME.md §2.9.1）ので、`quest ids added` が毎回空だった。
+    # 生きた一覧と雛形の合併で数える（`ui.quest_ids`）。
+    def _named_stores(app):
+        out = []
+        quests = getattr(getattr(app, "world", None), "quests", None)
+        if isinstance(quests, dict):
+            out.append(("world.quests", quests))
         world_dict = getattr(app, "world_dict", None) if app is not None else None
         if isinstance(world_dict, dict) and isinstance(world_dict.get("quests"), dict):
-            return world_dict["quests"]
-        quests = getattr(getattr(app, "world", None), "quests", None)
-        return quests if isinstance(quests, dict) else {}
+            out.append(("world_dict", world_dict["quests"]))
+        return out
+
+    def _field(quest, name):
+        if isinstance(quest, dict):
+            return quest.get(name)
+        return getattr(quest, name, None)
 
     def _quest_ids(app):
-        return list(_quests_of(app))
+        return ui.quest_ids(app)
 
     def _quest_of(app, qid):
-        return _quests_of(app).get(qid)
+        return ui.quest_of(app, qid)
 
     # --- 受注そのもの。
     # 300_ の process_choice 経由で起こせる形かを確かめる。

@@ -129,7 +129,7 @@ runtime/instantale_modloader/
     modfacility.py  MOD だけが持つ施設（街に建てて MOD が管理する。§5.8）
     durations.py  ゲームの期間（宿泊1回の長さなど）の窓口。変える MOD が答えを置き、合わせたい MOD が聞く（§3.3.2）。
                   日数送り（elapse_days）を包むのもここ1枚で、当てる MOD は望みを出すだけ（§3.3.3）
-    prices.py     値段の2つ。ゲームが決めている額（宿屋の部屋など）の窓口（§3.3.4）と、
+    prices.py     値段の2つ。ゲームが決めている額（宿屋の部屋など）の窓口と宿代の段・関所（§3.3.4）と、
                   アイテムの売買額を組む関所（式1枚＋段N枚。書く地点8つを1枚だけ包む。§5.9）
     combat.py     戦闘の数の窓口。人物ごとの装備の攻撃力・防御力を、装備を持つ MOD が置き、戦闘を組む MOD が聞く（§3.3.5）
     equipment.py  装備欄の窓口。仲間の品の出し入れと身に着けている品を、装備欄を持つ MOD が答え、
@@ -142,6 +142,7 @@ runtime/instantale_modloader/
     board.py      ギルドの掲示板に出さない依頼の窓口。隠す MOD が置き、掲示板の依頼を拾う MOD が外す（§3.3.12）
     confinement.py  主人公が閉じ込められている（牢の中など）ことの窓口。閉じ込める MOD が置き、選択肢を足す MOD が引く（§3.3.13）
     choices.py    選択肢のボタンの窓口。組み直しと押下の包み、印の持ち越し、ロードの後の組み直し、押した後の保存（§3.3.14）
+    hudicons.py   画面左下のゲームのアイコンの列に MOD のアイコンを足す窓口。並べ直しはここ1か所（§3.3.15）
     sounds.py     曲の置き場所の探し方・戦闘曲の見分け方・重みの読み方（§5.10）
     imagegen.py   画像生成の方式（sdcpp の cuda / vulkan / cpu と diffusers_openvino）を隠して、人物の絵を描く関数を包む（§5.11）
     stalls.py     作業スレッドが死んだときに本文の欄へ出して待機を終える。LLM の 4xx の送り直しを早めに打ち切る（§5.12）
@@ -1307,14 +1308,35 @@ def days_note(app, days, granted):     # 決まった後に必ず来る（勝っ
 ```python
 # 値段を変える側（`315_vacation_custom`）
 prices.declare(prices.INN_ROOM, room_price_for, owner=owner, write=write)
+prices.install_inn(ctx, write)                       # 宿代の関所（下）
+
+# 額へ倍率を掛ける側（`918_town_incidents` の街の出来事）。何枚でも重なる
+prices.adjust_inn(owner, fn, write=write)            # fn(app, quality, price) -> 新しい額 | None
+prices.install_inn(ctx, write)
 
 # 値段を先に知りたい側（`330_real_estate` / `331_facility_investment`）
-price = prices.inn_room(app, quality, write=write)   # int か None
+price = prices.inn_room(app, quality, write=write)   # 段まで通した額。int か None
+base = prices.inn_room_base(app, quality)            # 段を掛ける前の額（v1.15.0 までの inn_room）
 ```
 
 | 種類 | 答え | 素の値（実測） | 置いている MOD |
 |---|---|---|---|
-| `INN_ROOM` | `{"price": int}` | 犬小屋 0 / 簡易寝台 10 / 個室 100 / 高級個室 1000（GAME.md §2.17） | `315_vacation_custom` |
+| `INN_ROOM` | `{"price": int}`。`"name"`（部屋の呼び名）と `"label"`（ボタンの形。既定 `{name}({price}G)`）を足してよい | 犬小屋 0 / 簡易寝台 10 / 個室 100 / 高級個室 1000（GAME.md §2.17） | `315_vacation_custom` |
+
+**宿代の関所**（`install_inn`。v1.15.1）。
+宿代をゲームに効かせる処理は、v1.15.0 までは `315_` が自分で持っていた。
+宿代へ段を掛ける MOD が増えると、315 が入っていないときに誰も効かせなくなるので、ローダへ移した（中身は 315 の版の形のまま）。
+1つの世代につき包みは1組で、何本の MOD が呼んでも同じ。
+
+| 関所がすること | 中身 |
+|---|---|
+| 部屋のボタン | `VacationStartManager` の spec のボタンの `text` を、呼び名と段まで通した額で書き直す。素の呼び名で素の額ならゲームの文言のまま。spec と `args` は触らない（窓口 `choices` の組み直し） |
+| 手持ちの断り | 額が素の額と違い、手持ちが額に満たなければ、押した時点で断る（部屋選びは残る。窓口 `choices` の `intercept`） |
+| 前払い調整 | ゲームが引く前に「素の額 − 決めた額」を所持金に足す。引き落としは1回でちょうど決めた額になる。ゲームが引かなかったビルドでは返す |
+| 部屋の見分け | `quality` の実値（`GAME_ROOM_PRICES`）。語彙が変わったビルドのために、画面のラベルの素の額と `quality` の対も控える。どちらにも当たらなければ、表示も額も全部ゲームのまま |
+
+段の関数が受け取る `quality` はゲームの語彙に直したもの（`kennel` / `bunk` / `private_room` / `luxury_suite`）。
+段を外すのは `durations.forget(owner)`（品の段・期間と一緒に外れる）か `prices.forget_inn_prices(owner)`。
 
 知らない `quality` では None を返す。
 「分からない」と「0」を別の答えにしてあるのは、
@@ -1646,6 +1668,37 @@ choices.ready(app)         # 人物が揃っているか（ロードの途中は
 乗せ替えは、包みの中身を前と後ろに分けて関数にするだけで、処理は変えていない。
 ゲーム自身のボタンを spec で見て断る押下（`314_` の馬車・`315_` の部屋・`332_` の訓練の代金）は `intercept`、
 どのボタンでも手前で場面の印を降ろす押下（`301_` の掲示板・`319_` のスキル一覧）は `intercept` と `presses` に分けた。
+
+#### 3.3.15 画面左下のアイコンの列に足すのも窓口で（`hudicons`）
+
+ゲームは能力値の欄の下端に、持ち物・設定・キャラ情報・クラフトの4つのアイコンを並べている（`InstanTaleHUD.icon_button_layout`。GAME.md §2.34）。
+そこに MOD のアイコンを足すときは、並べ方をローダの1か所に任せる。
+MOD どうしが別々に足すと、互いの位置を知らずに重なる。
+
+```python
+hudicons.add(ctx, key, on_press, strokes=None, images=None, order=0, write=None)
+#   on_press(app)   押されたとき
+#   strokes         `ui.paint_icon` と同じ 0〜1 の座標の線（絵柄）
+#   images          (普段, 押した時) の画像のパス。strokes とどちらか。どちらも無ければ key の頭1字
+#   order           足したアイコンどうしの並び（小さいほど左）。同じなら key の順
+hudicons.withdraw(key)
+hudicons.positions(left, count, layout_width, icon_width)   # 並べる x の比率（検査用にも出してある）
+```
+
+| 並べ方 | 中身 |
+|---|---|
+| 余白 | 列の左の余白（ゲームの一番左のアイコンの x の比率）を、右にも同じだけ取る |
+| 並び | その間に、ゲームの4つ・足したアイコンの順で、絵の見えている部分どうしの間が等しくなるよう置く。見えている部分は、普段の絵（`normal_image`）のファイルで、暗い背景に溶けない明るさのドットがある列（絵ごとに1回数えて覚える。乗せた時の絵では数えないので、マウスの位置で並びが揺れない）。読めなければボタンの箱どうしの等間隔。大きさはゲームのアイコンに揃える |
+| 窓の大きさ | 大きさは px の固定で位置は比率なので、列の幅が変わるたびに比率を出し直す（列の `width` に結ぶ） |
+| 外したとき | 足したアイコンが1つも無くなったら、ゲームの4つを元の `pos_hint` に戻す |
+| 塗り直し | HUD の `update_button_texts` / `update_status_texts` の後に並べ直す（1つの世代につき包みは1組） |
+| ボタンの型 | `images` が3枚なら、ゲームと同じ `HoverableButton(普段, 乗せた時, 押した時)` で作る。押した時・離した時の絵は型が自分で切り替える |
+| 乗せた時 | ゲームの HUD は自分の4つにしか「乗せた・外れた」を知らせない（GAME.md §2.34）。窓のマウスの位置に1本だけ結び、足したアイコンの `on_hover` を、変わったときだけ呼ぶ。ゲームと同じく、場面（窓が開いている・処理の最中）では止めない |
+| 音 | 窓口では鳴らさない。押したときに何を鳴らすか（開くときだけ鳴らすなど）は MOD が決める。ゲームの口は `app.sound_manager.play_sound_from_src(app, パス)` |
+
+1980 幅の窓で、アイコン1つを足すと間は 51px から 35px になる。
+隣どうしの間が 4px より狭くなったら、1回だけ WARN を書く。
+置き場は `sys` の属性（`_instantale_hud_icons`）で、注入し直しをまたいで残る。同じ `key` は差し替える。
 
 ### 3.4 まだ現れていない対象を狙う（保留と当て直し）
 
@@ -2493,7 +2546,7 @@ screen.paint(app) / screen.paint_party(app) / screen.refresh(app) / screen.say(a
 | `start_phase` | 自前フェーズを `PhaseSpec` に載せずに起こす。待機中なら回っている点送りを外してから（`process_choice` が自分で1本始めるので、残すと2本になる。GAME.md §2.4） |
 | `end_conversation` | 画面のボタンの args を写し `end_text` だけ差し替えて閉じ、閉じ終わってから続きを実行 |
 | `when_idle` | `is_adding_text` / `is_button_enabled` / `is_popup_window_opened` を見張る |
-| `busy_on` / `busy_off` | LLM を待つ間の待機表示（ゲーム自身と同じ形。GAME.md §2.4）。点はゲームが送る。こちらは旗を下ろし、回っていなければ1回だけ回し始める。枠に点が出ていればその点を一覧に書く（ゲームが待機を終えた直後の塗りも点になる）。直に触るのは旗と一覧だけなので、ワーカースレッドからも呼べる。`busy_off(restore=False)` は「この後すぐ別の画面を出す」経路用 |
+| `busy_on` / `busy_off` | LLM を待つ間の待機表示（ゲーム自身と同じ形。GAME.md §2.4）。点はゲームが送る。こちらは旗を下ろし、回っていなければ1回だけ回し始める。枠に点が出ていればその点を一覧に書く（ゲームが待機を終えた直後の塗りも点になる）。直に触るのは旗と一覧だけなので、ワーカースレッドからも呼べる。`busy_off(restore=False)` は「この後すぐ別の画面を出す」経路用。ゲーム自身の `execute` の中（押された選択肢の処理の途中）では重ねない。ゲームが旗を下ろして点を送っている最中なので、`busy_on` は下ろされた旗を覚え、`busy_off` がそれを戻し、画面が出た後も選択肢が押せないまま残る（`918_` の DOC.md §2.5） |
 
 `Screen` の操作はゲームのスレッド（Kivy のメインスレッド）から呼ぶこと。
 `when_idle` は1回目の状態確認を、`end_conversation` は `app.process_choice` を、呼んだスレッドでその場で行う
@@ -2540,7 +2593,14 @@ ui.quest_value(quest, name, default) / ui.set_quest_value(app, id, name, value, 
 ui.id_sort_key            # id を数として並べる鍵
 ui.current_quest_id(app)  # いま進めているクエストの id（`app.current_quest_data`）。クエスト中でなければ None
 ui.world_overview(app, limit=None)  # 世界観の文（`world_data.overview`）。既定は切らない。無ければ空
+ui.remove_quest(app, id, with_area=True)  # MOD が作らせた依頼を世界から片付ける。消した所の名前の並び
 ```
+
+`remove_quest` が消すのは5か所（GAME.md §2.9「掲示板で作った依頼と、それを消す」の実測）。
+生きた一覧・`save_data_dict['quests']`（残すと読み直しで依頼が戻る）・街の `Area.quests` の並び（素データの並びにもあれば）・
+ダンジョンの土地（`world.areas` と `save_data_dict['areas']`）。
+ほかの依頼が同じ土地を指しているとき、指す土地の素データの規模が `dungeon` でないときは、土地は残す。
+受けている最中の依頼は消さない（呼ぶ側が帰還を待つ）。雛形には触らない。保存は呼ぶ側の次の保存に任せる。
 
 `world_overview` は `save_data_dict` → `world_dict` の順に見る。
 既定で切らないのは、ゲーム自身の頼み文が長さに関わらず全文を載せるから。
@@ -2873,6 +2933,7 @@ violation = llm.truthy(data.get("content_violation"), unknown=False)  # 判ら�
 `truthy` の `unknown` は**項目の意味で決まる**ので、既定に任せずに考えること。
 `changed` を False へ倒すと抽出した内容を黙って捨て、
 `content_violation` を True へ倒すと普通の台詞が消える。
+偽と読む語に「いいえ」を足した（v1.15.1。`918_` が「はい／いいえ」で答えさせるため。前は「いいえ」が `unknown` へ倒れていた）。
 
 `as_dict` との違いは、相手が**物**か**文章**か。
 `as_dict` は返ってきた物（pydantic のモデル・辞書・素の JSON 文字列）を均すもので、

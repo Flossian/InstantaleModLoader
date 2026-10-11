@@ -2535,6 +2535,7 @@ LLM を待つ間はゲームと同じ待機表示（点のアニメーション�
 | 入れ替えても品揃えが減る | `out\shop_restock.log` の `built missing:` が出ているか。出ずに `kept in stock:` なら生成の入口が無く、元の品を戻している |
 | 買い占めた店が空のまま | 「買った品を作り直させない」が効いている（`kept sold out:` の行）。品揃えは入れ替えの日が来ると戻る。すぐ戻したいなら日数を短くするか、この設定を切る |
 | 買った品がまだ棚に戻る | 同じログに `kept sold out:` が出ていないか。出ていなければ設定が切れているか、その店が「初めて開いた店」の扱い（`state\shop_restock\<世界名×主人公名>.json` に控えが無い） |
+| 何も買っていない店が空のまま | 版4までは、初めて開いたときに品揃えの生成が落ちた店（LLM の失敗）を売り切れと読み、次に開いたときにゲームが作った品揃えを全部外していた（買っていないのに `kept sold out:` が出る）。版5で直した。版4のうちに空になった店は、入れ替えの日に品揃えが戻る |
 | 主が引けないと出る | `skip: cannot resolve the shop owner`。主のいない施設（通路・入口）では何もしない。店で出るなら、その施設に `owner` が設定されていない |
 | 売った品を買い戻したい | 入れ替えの日を跨ぐと消える。日数を長くするか、売ったその足で買い戻す |
 
@@ -5355,7 +5356,7 @@ LLM が渡した額が目安の 50% に満たなければそこまで足し（1�
 `mod.json` の `"kind"` が名乗る（提供された計測 MOD は 2xx に入る。`223_` がそれ）。
 取り込みの際にこちらの環境へ合わせて調整しており、経緯は各 MOD の説明にある。
 
-この節の8本は MoririnJP 様の提供。うち `404_party_talk`・`405_regional_economy` はこちらとの共同。
+この節の8本は MoririnJP 様の提供。うち `404_party_talk`・`405_regional_economy`・`406_user_role_fix` はこちらとの共同。
 
 ### `401_battle_character_context`: 戦闘の審判へ同行者の人物と装備を見せる
 
@@ -5987,10 +5988,13 @@ scoreは1～5で、1・2が供給過多、3が等倍、4・5が不足・需要�
 待機表示の後始末が効いているかはこの2行で分かる。
 `summary saved`、`regional overlay`、`specialty generated`が主な確認箇所。
 
-### `406_gemini_user_role_fix`: クラウド API の Gemini で user role の無い依頼を補う
+### `406_user_role_fix`: クラウド API の Gemini・Claude で、user role の無い依頼が返らない・断られるのを防ぐ
 
-クラウド API で Gemini を使うと、system role だけで組まれた依頼に返答が無く、裏で落ちる。
-素のゲームには system role だけで送る依頼が4件あり、この MOD はその4件へ最小限の user role を1件足す。
+素のゲームには、system role だけで組んで送る依頼が4件ある。
+クラウド API で Gemini を使うと、この4件に返答が無く、裏で落ちる。
+Claude を使うと、API が system を別の欄へ移すので送る会話（messages）が空になり、`400 messages: at least one message is required` で断られる。
+店では品揃えが作られず、売買の画面が開かないまま止まる。
+この MOD はその4件へ最小限の user role を1件足す。
 system role の本文には触れない。
 GPT 系は system role だけでも返答できるので素通し、ローカル（llama.cpp）も素通しする。
 公式で直ったら外してよい。
@@ -6005,16 +6009,17 @@ GPT 系は system role だけでも返答できるので素通し、ローカル
 #### どう動くか
 
 - 共有部品の `llm.watch_aliases` で、後から生える `llm_manager:send_request` を見張って包む
-- Gemini の送信モジュールが読み込まれているときだけ効く。それ以外と、ローカル実行では何もしない
+- Gemini か Claude の送信モジュールが読み込まれているときだけ効く。それ以外と、ローカル実行では何もしない
 - 対象の依頼に user role が1件も無いときだけ、最初の system の直後へ足す。既に user があれば触らない
-- 足したときは `out\modloader.log` に `406_gemini_user_role_fix: inserted user role for <manager>` が残る
+- 足したときは `out\modloader.log` に `406_user_role_fix: inserted user role for <manager>` が残る
 
 #### 困ったとき
 
 | 症状 | やること |
 |---|---|
-| Gemini で店の品揃え・エピローグ・自由施設の要約が返ってこない | `out\modloader.log` に `inserted user role` が出ているか見る。出ていなければ送信モジュール名に `gemini` が含まれていない |
-| 上の4件以外の依頼が Gemini で返ってこない | 対象表に無い依頼。ゲームの `output_data` の記録で user role が無いのはこの4件だけだった（85 種を確認） |
+| Gemini・Claude で店の品揃え・エピローグ・自由施設の要約が返ってこない | `out\modloader.log` に `inserted user role` が出ているか見る。出ていなければ送信モジュール名に `gemini` も `claude` も含まれていない |
+| 上の4件以外の依頼が Gemini・Claude で返ってこない | 対象表に無い依頼。ゲームの `output_data` の記録で user role が無いのはこの4件だけだった（85 種を確認） |
+| 前の版から上書きで入れ直した | 古いフォルダ `406_gemini_user_role_fix` が残っていれば消す（版3でフォルダの名前を変えた）。残っていても、user role がもうある依頼には足さないので二重には足さない |
 
 ### `407_npc_starting_equipment`: パーティーに加わった NPC に初期装備を一度だけ持たせる
 

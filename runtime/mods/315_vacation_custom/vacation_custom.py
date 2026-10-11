@@ -10,12 +10,11 @@
 そのままなら挙動は何も変わらない。
 変えた項目だけが効く。
 
-変更点は5つ。
+変更点は4つ。
 
 | 何を変えるか | どこで変えるか |
 |---|---|
-| 部屋の名前・ボタンの表示 | ローダの窓口 `choices` の組み直しの前（`InstantaleApp.refresh_choice_buttons` の `orig` の前）に `text` だけ書き換える |
-| 宿代 | ゲームが引き落とす前に差額ぶん所持金をずらす（`314_` と同じ前払い調整） |
+| 部屋の名前・宿代・ボタンの表示 | ローダの窓口 `prices` に答え（額・呼び名・ボタンの形）を置く。ボタンの書き直し・手持ちの断り・前払い調整はローダの宿代の関所（`prices.install_inn`。TECH.md §3.3.4）が持つ |
 | 宿泊期間（月単位） | `DisplayVacationChoice.__init__` に渡る `period_months` を差し替える |
 | 宿泊期間（週単位） | `period_months` は 1 にして、宿泊の窓の間だけローダの日数送りの関所へ「残りは何日か」を出す |
 | LLM の描写の月数 | 窓の間だけ、出ていく本文の `数ヵ月の宿泊` を実際の期間へ（`llm.wrap_outgoing`） |
@@ -47,15 +46,10 @@
   ローカルもクラウドも同じ1か所で、
   `LlamaCppClient.chat` だけに仕掛けるとクラウド実行で丸ごと落ちる（`119_` が踏んだ）。
   当たらなかった本文はその一節だけログへ残す
-- **部屋の見分けは `quality` の実値**（`GAME_QUALITIES`）。
-  語彙が変わったビルドのために、部屋選びの画面が並んだ瞬間にラベルの料金と
-  `quality` の対も控えて保険にする。
-  どちらにも当たらなければ表示も料金も全部ゲームのままにしてログへ。
-  ラベルの料金は前払い調整の基準（素の宿代）も兼ねるので、値上げしたビルドでも合う
-- 宿代は前払い調整（`314_` の馬車と同じ）。
-  徴収が別の場所のビルドでは設定は効かないが、
-  精算で差額を返すので所持金は1Gも狂わない。
-  そのとき `price:` の行が `the game did not charge` になる（`218_` の出番）
+- 部屋の見分け・ラベルの素の料金の控え・前払い調整・精算は、v1.15.1 でローダの宿代の関所へ移した
+  （`prices.install_inn`。中身は移す前のこの MOD の形のまま）。
+  街の出来事（`918_`）のような宿代へ倍率を掛ける MOD が、この MOD の答えの上に段を重ねられるようにするため。
+  こちらは部屋ごとの答え（額・呼び名・ボタンの形）を置くだけで、素のままの部屋では答えない
 - **ボタンは `text` だけ触る**（spec と `args` はゲーム自身のものを残す）ので、
   この MOD を外しても押下の挙動は壊れない。
   `refresh_choice_buttons` が描く前に書くため、
@@ -168,9 +162,6 @@ WEEK_DAYS = 7
 GAME_QUALITIES = {"kennel": "kennel", "bunk": "simple",
                   "private_room": "private", "luxury_suite": "luxury"}
 
-# ラベルの料金 → 部屋 の照合表（語彙が変わったビルドでの保険）。
-# 値はすべて実測（`out/vacation.log` の部屋選びのボタン。犬小屋の 0G を含む）。
-GAME_ROOMS = {0: "kennel", 10: "simple", 100: "private", 1000: "luxury"}
 GAME_NAMES = {"kennel": "犬小屋", "simple": "簡易寝台", "private": "個室",
               "luxury": "高級個室"}
 GAME_PRICES = {"kennel": 0, "simple": 10, "private": 100, "luxury": 1000}
@@ -210,10 +201,6 @@ STAY_WINDOW_MANAGERS = (
     "VacationBeggingManager",
     "VacationEndManager",
 )
-
-# 手持ちが設定した宿代に足りないときの一言。
-REFUSE_TEXT = "（{name}の宿代{price}Gに足りない ― 手持ち{gold}G）"
-
 
 #: 設定のテンプレートを埋める（知らない変数名は残し、通貨の表記を今の表記へ直す）。
 #: ローダの語彙（`314_` / `315_` / `332_` で共有）。
@@ -298,8 +285,6 @@ def apply(ctx):
     state = getattr(sys, STATE_STORE_ATTR, None)
     if state is None:
         state = {
-            # いま `VacationStartManager.execute` の中に居るかの窓（宿代）。
-            "window": None,
             # 週単位の宿泊の、いまの1泊ぶんの日数の予算。
             # {"left": 残り日数, "spent": 消費, "length": "2週間"}。
             # 月単位・デフォルトでは None。
@@ -309,34 +294,17 @@ def apply(ctx):
             # 予算と文言の置き換えはこの窓の中でしか使わない（窓の外の日数送り・文言には
             # 1バイトも触らない）。
             "depth": 0,
-            # 画面で観測した「quality → ラベルの素の料金」の対。
-            # 部屋の見分けはこの対だけで行う（モジュール docstring を参照）。
-            "price_by_quality": {},
-            # 自分が書いたラベル。
-            # 組み直さない画面でもう一度来たとき、
-            # 設定後の料金を素の料金として読み込まないための目印（`314_` と同じ）。
-            "our_labels": set(),
-            # 一度ログに残した印（毎フレーム書かないため）。
-            "logged_unknown": set(),
             "age_warned": False,
         }
         setattr(sys, STATE_STORE_ATTR, state)
 
     def slot_of_quality(quality):
-        """部屋を見分ける。当たらなければ None（＝何も触らない）。
+        """部屋を見分ける。当たらなければ None（＝答えない）。
 
-        **実測した `quality` の語彙が第一**（`GAME_QUALITIES`）。
-        語彙が変わったビルドのために、画面で観測した「quality
-        → ラベルの素の料金」の対も保険として見る。
-        どちらにも当たらなければ表示も宿代も全部ゲームのままにして、
-        ログに残す（`314_` の `kind_of_mode` と同じ約束。
-        ラベルの文字列だけで緩く当てて食い違いを作らない）。
+        `quality` はローダの宿代の関所がゲームの語彙へ直して渡す
+        （語彙が変わったビルドの保険＝画面のラベルの素の額との対も、関所が持つ）。
         """
-        slot = GAME_QUALITIES.get(str(quality))
-        if slot is not None:
-            return slot
-        price = state["price_by_quality"].get(str(quality))
-        return GAME_ROOMS.get(price)
+        return GAME_QUALITIES.get(str(quality))
 
     def player_age(app):
         """年齢。読めなければ None（加算なしに倒し、1回だけログに残す）。"""
@@ -362,75 +330,22 @@ def apply(ctx):
     durations.declare(durations.INN_STAY, stay_for, owner=owner, write=write)
 
     # 宿代も同じ約束でローダの窓口へ置く（`prices`）。
+    # 答えは額・呼び名・ボタンの形。ボタンの書き直し・手持ちの断り・前払い調整は
+    # ローダの宿代の関所が引き受ける（TECH.md §3.3.4）。街の出来事（`918_`）のような段は、この額の上に掛かる。
     # 自分の建物での滞在を無料にする MOD は、ゲームに引かせてから返すのではなく、
-    # ここで聞いた額を先に足しておく（前払い調整。TECH.md §3.3.4）。
+    # 窓口で聞いた額を先に足しておく（前払い調整）。
     # 部屋が見分けられないときは None を返し、窓口がゲームの値へ落とす。
     def room_price_for(app, quality=None):
         slot = slot_of_quality(quality)
         if slot is None:
             return None
-        return {"price": int(room_conf(slot)["price"])}
+        conf = room_conf(slot)
+        return {"price": int(conf["price"]), "name": conf["name"], "label": str(ROOM_BUTTON)}
 
     prices.declare(prices.INN_ROOM, room_price_for, owner=owner, write=write)
+    prices.install_inn(ctx, write)
 
     # ============================================================ ボタンの表示
-    def game_label(slot, price):
-        """ゲーム自身が出す部屋のボタンの文言（`犬小屋(0G)` … `高級個室(1000G)`。通貨の表記は今のもの）。"""
-        return ui.rewrite_coins("{}({}G)".format(GAME_NAMES[slot], price))
-
-    def relabel_room(entry):
-        """部屋のボタン。描かれる前に `text` だけ書き直し、素の料金を対に控える。
-
-        ラベルに料金が無いボタン（連泊の `まだ宿泊する`）には触らない。
-        料金が 10/100/1000 のどれでもないビルドも触らない（ログにだけ残す）。
-        """
-        argv = ui.spec_args(entry)
-        if not argv or len(argv) < 2:
-            return
-        quality = str(argv[1])
-        old = entry.get("text") or ""
-        if old not in state["our_labels"]:
-            price = ui.parse_coin(old)
-            if price is None:
-                return                      # 料金の無いラベル（まだ宿泊する 等）
-            # 素の料金はここで控える（前払い調整の基準）。
-            # **実際に画面へ出ている値**を使うので、
-            # ゲームが値上げしたビルドでも合う。
-            slot = GAME_QUALITIES.get(quality) or GAME_ROOMS.get(price)
-            if slot is None:
-                if quality not in state["logged_unknown"]:
-                    state["logged_unknown"].add(quality)
-                    write("unknown room {!r} (quality {!r}); leaving it alone "
-                          "(the game may have changed its rooms)".format(
-                              old, quality))
-                return
-            # ロードで戻ったボタンは、保存した時に自分が書いた文言のまま（起動し直すと `our_labels` は空）。
-            # 素の料金は、ゲームの書式で、しかも今の設定で自分が書く文言ではないものからだけ控える
-            # （自分の文言から読むと、設定した額を素の額と取り違えて前払いの調整が狂った）。
-            conf = room_conf(slot)
-            ours_now = old == fmt(ROOM_BUTTON, name=conf["name"], price=conf["price"])
-            game_like = old == game_label(slot, price)
-            if game_like and not ours_now and state["price_by_quality"].get(quality) != price:
-                state["price_by_quality"][quality] = price
-                write("room: quality {!r} shows {}G -> {}".format(
-                    quality, price, slot))
-        slot = slot_of_quality(quality)
-        if slot is None:
-            return
-        if not (name_changed(slot) or price_changed(slot)):
-            # 素のままの部屋。ロードで戻った自分の文言が残っていれば、ゲームの文言へ戻す
-            plain = game_label(slot, state["price_by_quality"].get(quality, GAME_PRICES[slot]))
-            if old != plain and ui.parse_coin(old) is not None:
-                entry["text"] = plain
-                write("label: {!r} -> {!r} ({}; back to the game's own)".format(old, plain, slot))
-            return
-        conf = room_conf(slot)
-        new = fmt(ROOM_BUTTON, name=conf["name"], price=conf["price"])
-        if new != old:
-            entry["text"] = new
-            state["our_labels"].add(new)
-            write("label: {!r} -> {!r} ({})".format(old, new, slot))
-
     def relabel_stay(entry, stay):
         """`宿泊する(3ヵ月)` のボタン。期間を変えたときだけ書き直す。
 
@@ -446,10 +361,8 @@ def apply(ctx):
                                                          stay["length"]))
 
     def refresh_buttons(self, _buttons):
-        """ボタンが描かれる直前の1か所で、宿泊まわりのラベルだけ書き直す。
+        """ボタンが描かれる直前の1か所で、宿泊の期間のラベルだけ書き直す（部屋のボタンは関所）。
 
-        宿の画面を描く入口はここに集まる（部屋選びも施設のメニューも、
-        組んだボタンはこの呼び出しで表に出る）。
         spec で名指しして触るので、宿と無関係な画面では辞書引きだけで素通りする。
         """
         try:
@@ -459,10 +372,7 @@ def apply(ctx):
                 for entry in buttons:
                     if not isinstance(entry, dict):
                         continue
-                    cls_name = ui.spec_cls_name(entry)
-                    if cls_name == "VacationStartManager":
-                        relabel_room(entry)
-                    elif cls_name == "DisplayVacationChoice":
+                    if ui.spec_cls_name(entry) == "DisplayVacationChoice":
                         if stay is None:
                             stay = stay_for(self) or ()
                         if stay:
@@ -470,38 +380,8 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("vacation custom: cannot relabel the buttons")
 
-    # ============================================================ 手持ちの確認
-    def on_button_press(self, entry, button_index):
-        """設定した宿代に手持ちが満たないときは、押された時点で断る。
-
-        ゲームのボタンは触らず押下だけ握る。
-        部屋選びの画面はそのまま残るので、別の部屋を選び直せる。
-        対に無い quality は通す（値が読めないことを理由に遊びを止めない。
-        `314_` の断り方と同じ）。
-        """
-        try:
-            entry = ui.pressed_entry(self, button_index)
-            if isinstance(entry, dict) \
-                    and ui.spec_cls_name(entry) == "VacationStartManager":
-                argv = ui.spec_args(entry)
-                if argv and len(argv) >= 2:
-                    slot = slot_of_quality(argv[1])
-                    if slot is not None and price_changed(slot):
-                        conf = room_conf(slot)
-                        gold = ui.gold_of(self)
-                        if gold is not None and gold < conf["price"]:
-                            write("refused: {} price {} > gold {}".format(
-                                slot, conf["price"], gold))
-                            screen.say(self, fmt(
-                                REFUSE_TEXT, name=conf["name"],
-                                price=conf["price"], gold=gold))
-                            return True
-        except Exception:
-            ctx.log_exc("vacation custom: price check failed")
-        return False
-
-    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
-    choices.provide(ctx, screen, refresh=refresh_buttons, intercept=on_button_press)
+    # 選択肢はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
+    choices.provide(ctx, screen, refresh=refresh_buttons)
 
     # ============================================================ 宿泊期間
     @ctx.wrap("__main__:DisplayVacationChoice.__init__", required=False, safe=True)
@@ -550,51 +430,13 @@ def apply(ctx):
             pass
         return result
 
-    def settle_price(app, window):
-        """宿泊の開始が終わった時点の帳尻（`314_` の `settle_fare` と同じ形）。
-
-        前払い調整が入っていれば、
-        ゲームの引き落としは既にちょうど設定額になっている。
-        ここで見るのは**引き落としが本当に起きたか**だけ: 起きていなければ（徴収が別の場所のビルド）、
-        前払いで積んだ差額をそのまま返す。
-        想定外の値になっていたら触らずに WARN を残す。
-        """
-        before = window.get("gold_before")
-        prepaid = window.get("prepaid")
-        if before is None or prepaid is None:
-            return
-        after = ui.gold_of(app)
-        if after is None:
-            write("WARN price: cannot re-read the gold; leaving it as is")
-            return
-        conf = room_conf(window["slot"])
-        expected = before - conf["price"]
-        if after == expected:
-            write("price: charged {} in one deduction; gold {} -> {} ({})".format(
-                conf["price"], before, after, window["slot"]))
-        elif after == prepaid:
-            ui.set_gold(app, before,
-                        on_error=lambda msg: write("WARN price: " + msg))
-            write("price: the game did not charge inside execute; gold back to "
-                  "{} ({}) -- the charge happens elsewhere in this build; "
-                  "run 218_probe_vacation".format(before, window["slot"]))
-        else:
-            write("WARN price: gold ended at {} (adjusted {}, expected {}); "
-                  "leaving it as is ({})".format(
-                      after, prepaid, expected, window["slot"]))
-
     @ctx.wrap("__main__:VacationStartManager.execute", required=False)
     def start_execute(orig, self, choice_text=None, *args, **kwargs):
-        """宿泊の開始の間だけ窓を開ける。宿代の前払い調整と、週単位の予算の
-        積み直しはこの窓の中だけ。
+        """宿泊の開始の間だけ窓を開け、週単位の予算を積み直す（宿代は関所が持つ）。
 
-        徴収箇所は未実測なので、前払い＋精算の形で「引くビルドなら設定額ちょうど、
-        引かないビルドなら1Gも狂わない」に倒す（モジュール docstring を参照）。
-        連泊（`まだ宿泊する`）も同じ窓を通るので、
-        再徴収するビルドなら2周目も設定額になり、週単位の予算も積み直る。
+        連泊（`まだ宿泊する`）も同じ窓を通るので、週単位の予算も積み直る。
         """
         app = getattr(self, "app", None) or ui.find_app()
-        window = None
         info = getattr(self, "_mod_vacation_custom", None) or {}
         # ---- 週単位の予算。ゲームに渡した月数（=1）の宿泊にだけ積む。
         #      設定を途中で変えた・素の宿泊が進行中、という月数が合わない
@@ -619,56 +461,11 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("vacation custom: cannot open the day budget")
             state["block"] = None
-        # ---- 宿代の窓。
-        try:
-            slot = slot_of_quality(info.get("quality"))
-            if slot is not None and price_changed(slot):
-                window = {
-                    "slot": slot,
-                    "gold_before": ui.gold_of(app),
-                    "prepaid": None,
-                    "game_price": state["price_by_quality"].get(
-                        str(info.get("quality")), GAME_PRICES[slot]),
-                }
-                write("stay: slot={} quality={!r} months={!r} choice={!r} "
-                      "gold={}".format(slot, info.get("quality"),
-                                       info.get("months"), choice_text,
-                                       window["gold_before"]))
-            state["window"] = window
-        except Exception:
-            ctx.log_exc("vacation custom: cannot open the stay window")
-            window = None
-        # 前払い調整は窓が立ってから最後に行う。
-        # `prepaid` を入れるのは所持金を実際に書けた後。
-        # ここで何が起きても `finally` の帳尻が見る。
-        # 手持ちが設定額以上なら、調整後は必ず素の宿代以上になるので、
-        # ゲームの残高チェックには弾かれない（設定額未満は押された時点で断っている）。
-        if window is not None and window["gold_before"] is not None:
-            try:
-                conf = room_conf(window["slot"])
-                pre = window["gold_before"] + window["game_price"] \
-                    - conf["price"]
-                if ui.set_gold(app, pre) is None:
-                    write("WARN price: cannot write the gold; not pre-adjusted")
-                else:
-                    window["prepaid"] = pre
-                    write("price: gold {} -> {} before the game charges {} "
-                          "(ours is {}; one deduction, no refund)".format(
-                              window["gold_before"], pre, window["game_price"],
-                              conf["price"]))
-            except Exception:
-                ctx.log_exc("vacation custom: cannot pre-adjust the price")
         state["depth"] += 1
         try:
             return orig(self, choice_text, *args, **kwargs)
         finally:
             state["depth"] -= 1
-            state["window"] = None
-            if window is not None:
-                try:
-                    settle_price(app, window)
-                except Exception:
-                    ctx.log_exc("vacation custom: cannot settle the price")
 
     # ------------------------------------------------ 週単位の予算が効く窓
     def install_stay_window(cls_name):

@@ -64,22 +64,359 @@ def game_inn_room(quality):
     return GAME_ROOM_PRICES.get(str(quality))
 
 
-def inn_room(app, quality, write=None):
-    """宿屋の部屋1回の値段。**分からなければ None**（呼ぶ側が別の道へ落とす）。
+def inn_room_base(app, quality, write=None):
+    """宿屋の部屋1回の値段のうち、段（`adjust_inn`）を掛ける前の額。分からなければ None。
 
-    知らない `quality` で None を返すのは、ゲームの更新で語彙が変わったときに
-    **当て推量の額を前払いしない**ため。0 と「分からない」は別の答えにする。
+    `declare(INN_ROOM, …)` の答え（`315_vacation_custom` の設定額）か、無ければゲームの値。
+    v1.15.0 までの `inn_room` の答えがこれ。
     """
     answer = durations.ask(INN_ROOM, app, write=write, quality=quality)
     if answer is None:
-        return game_inn_room(quality)
+        return _game_price_of(quality)
     price = answer.get("price")
     if isinstance(price, bool) or not isinstance(price, (int, float)):
         if write:
             write("WARN prices: inn_room from {!r} returned {!r}, not a number; "
                   "using the game's own value".format(source_of(INN_ROOM), price))
-        return game_inn_room(quality)
+        return _game_price_of(quality)
     return max(0, int(price))
+
+
+def inn_room(app, quality, write=None):
+    """宿屋の部屋1回の値段。**分からなければ None**（呼ぶ側が別の道へ落とす）。
+
+    知らない `quality` で None を返すのは、ゲームの更新で語彙が変わったときに
+    **当て推量の額を前払いしない**ため。0 と「分からない」は別の答えにする。
+
+    v1.15.1 から段（`adjust_inn`）を掛けた後の額を返す。ゲームが実際に引く額と同じ
+    （宿代の関所がその額になるよう前払いで合わせる）。
+    """
+    base = inn_room_base(app, quality, write=write)
+    if base is None:
+        return None
+    return _inn_layered(app, quality, base, write)
+
+
+# ---------------------------------------------------------------------------
+# 宿代の段と関所（TECH.md §3.3.4）
+# ---------------------------------------------------------------------------
+#
+# 宿代は2つの層で決まる。
+#
+#     declare(INN_ROOM, fn)   1枚だけ。部屋1回の額と呼び名（`315_vacation_custom` の設定）
+#     adjust_inn(owner, fn)   何枚でも乗る。その額へ倍率を掛ける（`918_town_incidents` の街の出来事）
+#
+# ゲームに効かせるのは関所（`install_inn`）の1か所で、v1.15.0 までは `315_` が自分で持っていた。
+# 段を置く MOD が増えると、`315_` が入っていないときに誰も効かせなくなるので、ローダへ移した。
+# 関所がすること（どれも `315_` の版から形を変えていない）:
+#
+# - 部屋のボタン（`VacationStartManager` の spec）の `text` を、呼び名と額で書き直す
+#   （素の呼び名で素の額なら、ゲームの文言のまま）。spec と `args` には触らない
+# - 手持ちが額に満たなければ、押した時点で断る（部屋選びは残る）
+# - ゲームが引く前に、差額ぶん所持金をずらす（前払い調整）。引かなかったビルドでは返す
+#
+# 部屋の見分けは `quality` の実値（`GAME_ROOM_PRICES`）。語彙が変わったビルドのために、
+# 画面のラベルの素の額と `quality` の対も控えて保険にする。どちらにも当たらなければ
+# 表示も額も全部ゲームのまま（表示だけ変わる食い違いを作らない）。
+
+#: 素のゲームの部屋の呼び名（`quality` の実値 → 名前。実測。GAME.md §2.17）。
+GAME_ROOM_NAMES = {"kennel": "犬小屋", "bunk": "簡易寝台", "private_room": "個室",
+                   "luxury_suite": "高級個室"}
+
+#: 部屋のボタンの既定の形（ゲーム自身の書式。通貨の表記は `ui.fill_template` が今のものへ直す）。
+ROOM_LABEL = "{name}({price}G)"
+
+#: 手持ちが宿代に足りないときの一言（ゲーム画面の文。`315_` の版と同じ）。
+INN_REFUSE_TEXT = "（{name}の宿代{price}Gに足りない ― 手持ち{gold}G）"
+
+INN_START = "VacationStartManager"
+_INN_ATTR = "_instantale_inn_prices"
+_INN_MARK = "_instantale_inn_room"
+_INN_OWNER = "prices:inn"
+
+
+def _inn_store():
+    found = getattr(sys, _INN_ATTR, None)
+    if not isinstance(found, dict) or not isinstance(found.get("adjust"), list):
+        found = {"adjust": [], "observed": {}, "ours": set(), "unknown": set(),
+                 "write": None, "generation": None, "installed": False}
+        setattr(sys, _INN_ATTR, found)
+    return found
+
+
+def adjust_inn(owner, fn, write=None):
+    """宿代へ乗せる段を足す。**同じ持ち主は1枚まで**（再注入で重ねない）。
+
+    `fn(app, quality, price)` は新しい額か、**触らないなら None** を返す。
+    `quality` はゲームの語彙（`kennel` / `bunk` / `private_room` / `luxury_suite`）、
+    `price` はそこまでの段を通した額。段は登録順に重なる。
+    段を置いた MOD は `install_inn(ctx, write)` も呼ぶ（呼ばないとゲームに効かない）。
+    """
+    if not callable(fn):
+        raise TypeError("adjust_inn() needs a callable, got {!r}".format(type(fn)))
+    name = str(owner or "")
+    with _LOCK:
+        layers = _inn_store()["adjust"]
+        fresh = name not in [layer[0] for layer in layers]
+        layers[:] = [layer for layer in layers if layer[0] != name]
+        layers.append((name, fn))
+    if write and fresh:
+        write("prices: {!r} adjusts the inn room price".format(name))
+
+
+def inn_price_sources():
+    """いま宿代を決めている持ち主。`("答えの持ち主", ["段の持ち主", ...])`。"""
+    with _LOCK:
+        return (source_of(INN_ROOM), [layer[0] for layer in _inn_store()["adjust"]])
+
+
+def forget_inn_prices(owner, write=None):
+    """その持ち主が置いた宿代の段を外す。外したら `["inn_room_adjust"]`。"""
+    name = str(owner or "")
+    with _LOCK:
+        layers = _inn_store()["adjust"]
+        if not any(layer[0] == name for layer in layers):
+            return []
+        layers[:] = [layer for layer in layers if layer[0] != name]
+    if write:
+        write("prices: {!r} no longer adjusts the inn room price".format(name))
+    return ["inn_room_adjust"]
+
+
+durations.on_forget(forget_inn_prices)
+
+
+def _quality_of_price(price):
+    for quality, value in GAME_ROOM_PRICES.items():
+        if value == price:
+            return quality
+    return None
+
+
+def canonical_quality(quality):
+    """ゲームの語彙の `quality`。語彙に無ければ、画面で控えた額から引く。当たらなければ None。"""
+    quality = str(quality)
+    if quality in GAME_ROOM_PRICES:
+        return quality
+    observed = _inn_store()["observed"].get(quality)
+    return _quality_of_price(observed) if observed is not None else None
+
+
+def _game_price_of(quality):
+    """ゲームがその部屋で引く額。画面のラベルで控えた額を先に、無ければ実測の表。"""
+    observed = _inn_store()["observed"].get(str(quality))
+    if observed is not None:
+        return observed
+    canon = canonical_quality(quality)
+    return GAME_ROOM_PRICES.get(canon) if canon is not None else None
+
+
+def _inn_layered(app, quality, price, write=None):
+    canon = canonical_quality(quality) or str(quality)
+    with _LOCK:
+        layers = list(_inn_store()["adjust"])
+    for owner, fn in layers:
+        try:
+            got = _price_number(fn(app, canon, price))
+        except Exception:
+            log_exc("prices: the inn adjust from {!r} failed".format(owner))
+            continue
+        if got is not None:
+            price = got
+    return max(0, int(round(price)))
+
+
+def _room_answer(app, quality, write=None):
+    """部屋1つの `{"price", "name", "label", "game_price", "game_name"}`。見分けられなければ None。"""
+    canon = canonical_quality(quality)
+    if canon is None:
+        return None
+    game_price = _game_price_of(quality)
+    if game_price is None:
+        return None
+    answer = durations.ask(INN_ROOM, app, write=write, quality=canon) or {}
+    name = answer.get("name")
+    label = answer.get("label")
+    price = inn_room(app, canon, write=write)
+    if price is None:
+        return None
+    return {"price": price, "game_price": game_price, "game_name": GAME_ROOM_NAMES[canon],
+            "name": name if isinstance(name, str) and name else GAME_ROOM_NAMES[canon],
+            "label": label if isinstance(label, str) and label else ROOM_LABEL}
+
+
+def _game_label(ui, canon, price):
+    return ui.rewrite_coins("{}({}G)".format(GAME_ROOM_NAMES[canon], price))
+
+
+def _relabel_room(ui, app, entry, write):
+    """部屋のボタン1つ。描かれる前に `text` だけ書き直し、素の額を対に控える。"""
+    argv = ui.spec_args(entry)
+    if not argv or len(argv) < 2:
+        return
+    quality = str(argv[1])
+    old = entry.get("text") or ""
+    store = _inn_store()
+    if old not in store["ours"]:
+        price = ui.parse_coin(old)
+        if price is None:
+            return                      # 額の無いラベル（まだ宿泊する 等）
+        canon = quality if quality in GAME_ROOM_PRICES else _quality_of_price(price)
+        if canon is None:
+            if quality not in store["unknown"]:
+                store["unknown"].add(quality)
+                if write:
+                    write("unknown room {!r} (quality {!r}); leaving it alone "
+                          "(the game may have changed its rooms)".format(old, quality))
+            return
+        # 素の額は、ゲームの書式で、しかも今の答えで自分が書く文言ではないものからだけ控える
+        # （ロードで戻ったボタンは保存したときに書いた文言のまま。自分の文言から読むと
+        # 設定した額を素の額と取り違え、前払いが狂った。`315_` の版で踏んだ）。
+        answer = _room_answer(app, quality)
+        ours_now = answer is not None and old == ui.fill_template(
+            answer["label"], name=answer["name"], price=answer["price"])
+        if old == _game_label(ui, canon, price) and not ours_now \
+                and store["observed"].get(quality) != price:
+            store["observed"][quality] = price
+            if write:
+                write("room: quality {!r} shows {}G -> {}".format(quality, price, canon))
+    answer = _room_answer(app, quality)
+    if answer is None:
+        return
+    canon = canonical_quality(quality)
+    if answer["price"] == answer["game_price"] and answer["name"] == answer["game_name"]:
+        plain = _game_label(ui, canon, answer["game_price"])
+        if old != plain and ui.parse_coin(old) is not None:
+            entry["text"] = plain
+            if write:
+                write("label: {!r} -> {!r} ({}; back to the game's own)".format(old, plain, canon))
+        return
+    new = ui.fill_template(answer["label"], name=answer["name"], price=answer["price"])
+    if new != old:
+        entry["text"] = new
+        store["ours"].add(new)
+        if write:
+            write("label: {!r} -> {!r} ({})".format(old, new, canon))
+
+
+def install_inn(ctx, write=None):
+    """宿代の関所を立てる。宿代の答えか段を置いた MOD が `apply()` の中で呼ぶ。
+
+    何本の MOD が呼んでも、1つの世代につき包みは1組（`install` と同じ形）。
+    記録は最後に呼んだ MOD のログへ書く。
+    """
+    from . import choices as _choices
+    from . import ui as _ui
+    store = _inn_store()
+    store["write"] = write
+    screen = _ui.Screen(ctx, write, tag="inn price", mark="mod_inn_price")
+
+    def log(line):
+        target = store.get("write")
+        if target:
+            target(line)
+
+    def refresh(app, buttons):
+        try:
+            if isinstance(buttons, (list, tuple)):
+                for entry in buttons:
+                    if isinstance(entry, dict) and _ui.spec_cls_name(entry) == INN_START:
+                        _relabel_room(_ui, app, entry, log)
+        except Exception:
+            log_exc("prices: cannot relabel the inn rooms")
+
+    def intercept(app, entry, button_index):
+        """手持ちが宿代に満たないときは、押した時点で断る（部屋選びはそのまま残る）。"""
+        try:
+            if not isinstance(entry, dict) or _ui.spec_cls_name(entry) != INN_START:
+                return False
+            argv = _ui.spec_args(entry)
+            if not argv or len(argv) < 2:
+                return False
+            answer = _room_answer(app, argv[1])
+            if answer is None or answer["price"] == answer["game_price"]:
+                return False
+            gold = _ui.gold_of(app)
+            if gold is not None and gold < answer["price"]:
+                log("refused: {} price {} > gold {}".format(argv[1], answer["price"], gold))
+                screen.say(app, _ui.fill_template(INN_REFUSE_TEXT, name=answer["name"],
+                                                  price=answer["price"], gold=gold))
+                return True
+        except Exception:
+            log_exc("prices: inn price check failed")
+        return False
+
+    _choices.provide(ctx, screen, refresh=refresh, intercept=intercept, owner=_INN_OWNER)
+
+    generation = getattr(ctx, "generation", None)
+    if store.get("generation") == generation and store.get("installed"):
+        return
+    store["generation"] = generation
+    store["installed"] = True
+
+    def start_init(orig, self, app=None, months=None, quality=None, *args, **kwargs):
+        """`execute` には引数が来ないので、部屋をここで自分に控える（ゲームのデータには書かない）。"""
+        result = orig(self, app, months, quality, *args, **kwargs)
+        try:
+            setattr(self, _INN_MARK, str(quality))
+        except Exception:
+            pass
+        return result
+
+    def settle(app, window):
+        """宿泊の開始が終わった時点の帳尻。引き落としが本当に起きたかだけを見る。"""
+        before, prepaid, price = window["gold_before"], window["prepaid"], window["price"]
+        if prepaid is None:
+            return
+        after = _ui.gold_of(app)
+        if after is None:
+            log("WARN price: cannot re-read the gold; leaving it as is")
+        elif after == before - price:
+            log("price: charged {} in one deduction; gold {} -> {} ({})".format(
+                price, before, after, window["quality"]))
+        elif after == prepaid:
+            _ui.set_gold(app, before, on_error=lambda msg: log("WARN price: " + msg))
+            log("price: the game did not charge inside execute; gold back to {} ({}) "
+                "-- the charge happens elsewhere in this build; run 218_probe_vacation".format(
+                    before, window["quality"]))
+        else:
+            log("WARN price: gold ended at {} (adjusted {}, expected {}); leaving it as is "
+                "({})".format(after, prepaid, before - price, window["quality"]))
+
+    def start_execute(orig, self, *args, **kwargs):
+        """宿泊の開始の間だけ、宿代の前払い調整をする（連泊の `まだ宿泊する` も同じ窓を通る）。"""
+        app = getattr(self, "app", None) or _ui.find_app()
+        window = None
+        try:
+            quality = getattr(self, _INN_MARK, None)
+            answer = _room_answer(app, quality) if quality is not None else None
+            if answer is not None and answer["price"] != answer["game_price"]:
+                before = _ui.gold_of(app)
+                if before is not None:
+                    window = {"quality": quality, "gold_before": before, "prepaid": None,
+                              "price": answer["price"]}
+                    pre = before + answer["game_price"] - answer["price"]
+                    if _ui.set_gold(app, pre) is None:
+                        log("WARN price: cannot write the gold; not pre-adjusted")
+                    else:
+                        window["prepaid"] = pre
+                        log("price: gold {} -> {} before the game charges {} (ours is {}; "
+                            "one deduction, no refund)".format(
+                                before, pre, answer["game_price"], answer["price"]))
+        except Exception:
+            log_exc("prices: cannot pre-adjust the inn price")
+        try:
+            return orig(self, *args, **kwargs)
+        finally:
+            if window is not None:
+                try:
+                    settle(app, window)
+                except Exception:
+                    log_exc("prices: cannot settle the inn price")
+
+    ctx.wrap("__main__:{}.__init__".format(INN_START), required=False, safe=True)(start_init)
+    ctx.wrap("__main__:{}.execute".format(INN_START), required=False)(start_execute)
+    log("prices: the inn price gate was declared")
 
 
 # ---------------------------------------------------------------------------

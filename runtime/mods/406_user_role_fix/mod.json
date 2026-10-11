@@ -1,0 +1,15 @@
+{
+  "entry": "user_role_fix.py",
+  "api": 1,
+  "kind": "fix",
+  "name": {
+    "en": "User Role Fix (Gemini / Claude)",
+    "ja": "Gemini・Claudeの無応答の防止"
+  },
+  "description": {
+    "en": "Dummy supplement for missing user role that causes unresponsiveness in Gemini lineage and request rejection in Claude when using the cloud API.",
+    "ja": "クラウドAPI使用時のGemini系統で応答不能になり、Claudeで依頼を断られる、user roleの欠落をダミーで補完します。"
+  },
+  "version": "3",
+  "author": "MoririnJP, R01/Flossian"
+}

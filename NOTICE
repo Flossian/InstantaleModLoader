@@ -38,7 +38,7 @@ MIT で配っているが、著作権表示（LICENSE の Copyright 行）は提
         403_npc_social_memory
         404_party_talk          （提供を受けたものを共同で仕上げた）
         405_regional_economy    （提供を受けたものを共同で仕上げた）
-        406_gemini_user_role_fix
+        406_user_role_fix       （提供を受けたものを共同で仕上げた）
 
 **MOD そのものの提供とは別に、既にあるこちらの MOD へ機能の提案（PR）を
 頂いたものがある。** MOD 自体はこちらの著作物だが、取り込んだコードの
@@ -151,7 +151,7 @@ AUTHORS OF THE BUNDLED MODS
                              403_npc_social_memory,
                              404_party_talk (finished jointly),
                              405_regional_economy (finished jointly),
-                             406_gemini_user_role_fix
+                             406_user_role_fix (finished jointly)
 
   Separately, some mods of this project's own took in a proposed improvement
   (a pull request) from an outside author. The mod itself is this project's

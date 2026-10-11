@@ -264,12 +264,17 @@ class ShoppingStartManagerRemake:
                 shop_owner_instance.inventory[
                     "item_{}".format(1000 + self.counter[0])] = {"name": name}
             return None
+        made = []
         for index in range(3):
             self.counter[0] += 1
             item_id = "item_{}".format(1000 + self.counter[0])
             name = (goods[index % len(goods)] if goods
                     else "生成品" + str(self.counter[0]))
             shop_owner_instance.inventory[item_id] = {"name": name, "value": 3}
+            made.append(name)
+        # 素のゲームは初めて品揃えを作るときに雛形を書く（作る前の施設には鍵が無い）。
+        if isinstance(getattr(location, "config", None), dict) and "goods" not in location.config:
+            location.config["goods"] = [{"name": name} for name in made]
         return None
 
 
@@ -773,6 +778,27 @@ def main():
           owner.inventory)
     check("初回の空の店: 外した記録は出ない",
           "kept sold out" not in read_log(module), read_log(module))
+
+    # -- 初めて開いたときに生成が落ちた店は、次に開いたときに作らせる ----
+    reset_state()
+    module, ctx = fresh_mod()
+    app, owner, facility = make_world(days=100, stock={})
+    facility.config = {"level_of_detail": 1}    # 作る前の施設には雛形の鍵が無い
+    manager = ShoppingStartManagerRemake(app, refills=False)
+    shop(ctx, manager)                      # 初回（控えだけ残り、品揃えはできない）
+    check("生成が落ちた店: 初回は空のまま（前提）", owner.inventory == {}, owner.inventory)
+    check("生成が落ちた店: 控えは残る（前提）", OWNER_ID in (state_file() or {}), state_file())
+    manager.refills = True
+    shop(ctx, manager)
+    check("生成が落ちた店: 次に開いたときの品揃えを外さない", len(owner.inventory) == 3,
+          owner.inventory)
+    check("生成が落ちた店: 外した記録は出ない",
+          "kept sold out" not in read_log(module), read_log(module))
+    check("生成が落ちた店: 雛形ができる（前提）", bool(facility.config.get("goods")), facility.config)
+    owner.inventory.clear()                 # その後に買い占めた
+    shop(ctx, manager)
+    check("生成が落ちた店: 雛形ができた後の買い占めは空のまま", owner.inventory == {},
+          owner.inventory)
 
     # -- 一度開いた店を買い占めたら空のまま ------------------------------
     reset_state()

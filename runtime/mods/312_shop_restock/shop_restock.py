@@ -440,7 +440,10 @@ def apply(ctx):
         雛形からの作り直し（同じ品名）は外さないと、新旧が混ざる。
 
         素通しするのは1つだけ:
-        **初めて開く店で、持ち物がまだ空のとき**（品揃えを作らせる回）。
+        **初めて品揃えを作る店で、持ち物がまだ空のとき**（品揃えを作らせる回）。
+        初めて開く店（控えが無い）のほか、初めて開いたときに品揃えの生成が落ちた店
+        （控えはあるが雛形がまだ無い）も入れる。売り切れと読むと、次に作られた品揃えを
+        全部外して店が空のままになる（DOC.md）。
         既に品を持っている店は、控えがあってもなくても止める側に入れる
         （古いセーブから始めた場合も、増えたぶんだけを外せる）。
         """
@@ -453,9 +456,9 @@ def apply(ctx):
         inventory = inventory_of(owner)
         if inventory is None:
             return None
-        if not inventory and store["fresh"]:
-            return None
         facility = facility_of(app)
+        if not inventory and (store["fresh"] or never_stocked(facility)):
+            return None
         return {"app": app, "owner_id": owner_id, "owner": owner,
                 "facility": facility, "keys": set(inventory),
                 "goods": goods_names(facility)}
@@ -474,6 +477,16 @@ def apply(ctx):
         if entries is None:
             return None
         return {entry.get("name") for entry in entries}
+
+    def never_stocked(facility):
+        """ゲームがまだ品揃えを作っていない店か。
+
+        ゲームは初めて品揃えを作るときに雛形（`config["goods"]`）を書く。
+        作る前の施設の `config` には鍵そのものが無い。
+        `config` が読めないときは False（売り切れを守る側）。
+        """
+        config = frames.attr(facility, "config", None)
+        return isinstance(config, dict) and not config.get("goods")
 
     def goods_entries(facility):
         """雛形の1件ずつ。読めなければ None。名前の無い行は数えない。"""

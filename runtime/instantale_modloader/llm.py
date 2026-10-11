@@ -339,7 +339,7 @@ def as_dict(raw):
 #: 「変更なし」と読む語。**大文字小文字と前後の空白は問わない。**
 #: 素の文字列で返るのは、構造化出力を通さない経路と、
 #: `create_structure` が bool を str で受けている項目（共通 API の規約）。
-FALSE_WORDS = ("false", "no", "0", "", "なし", "無し", "変更なし", "none")
+FALSE_WORDS = ("false", "no", "0", "", "なし", "無し", "変更なし", "none", "いいえ")
 
 #: 「そうだ」と読む語。
 TRUE_WORDS = ("true", "yes", "on", "1", "はい", "あり")

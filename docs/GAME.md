@@ -2012,6 +2012,20 @@ scripts.items:Item.__init__(self, name, item_type, attributes, description,
 > `sub_type` と `item_detail` は綴りが揃っていない（`weapon/small` は `small_weapon`、
 > `herb` は `plant`）。**表の鍵にするなら `item_detail` のほうを取る**（アイテムに書かれているのはこちら）。
 
+食べ物は、`consumable` ではなく大半が `healing_item` に入っている。
+2026-10-10 にテストワールドの全員の持ち物（98品）を数えた:
+
+| `item_type` | 品数 | `item_detail` |
+| --- | --- | --- |
+| `healing_item` | 32 | food 8 / potion 8 / plant 7 / drink 5 / medicine 4 |
+| `wearable` | 26 | body_armor 18 / clothing 6 / accessory 2 |
+| `weapon` | 25 | small_weapon 11 / medium_weapon 10 / long_weapon 2 / large_weapon 2 |
+| `material` | 7 | metal・treasure・creature_part・liquid_material・scrap・relic が1つずつ |
+| `utility` | 6 | tool 4 / document 2 |
+| `consumable` | 2 | food 2 |
+
+「食べ物」と「薬」を分けたいときは `item_detail`（food / drink）まで見る（`918_` の値段の区分）。
+
 `value` はその品が出たクエストの難易度と一致する（実セーブの21種類すべてが
 その世界の `quests[*].difficulty` かより深い土地の難度に対応）。
 この段階を返すのは `get_equipment_price(quest_difficulty)` / `get_heal_item_price` /
@@ -3783,6 +3797,36 @@ AIManager.set_ai_models (instantale.py:510〜516)   一族を import する行�
 > 上の実測はプロキシが入っていない状態で録ったもので、
 > 3つのバックエンドとも `stable-diffusion.dll` は退避されている `-real.dll` とハッシュが一致していた
 > （入っているかどうかはこの比較で分かる。`-real.dll` の有無では分からない）。
+
+### 2.34 画面左下のアイコンの列（`icon_button_layout`）
+
+画面左下の能力値の欄の下端に、ゲーム自身のアイコンが4つ並ぶ。
+2026-10-10 にテストワールドで、窓 1980×1080（dpi 96）のときの値を読んだ（読むだけ）。
+
+| 番号 | 絵（`Assets/images/icons/interface/`） | 開くもの | `pos_hint` |
+| --- | --- | --- | --- |
+| 0 | `dark_icon_inventory.png`（袋） | 持ち物 | `{'x': 0.07, 'y': 0.03}` |
+| 1 | `dark_icon_book.png`（本） | タイトルに戻るなどの設定 | `{'x': 0.30, 'y': 0.03}` |
+| 2 | `dark_icon_scroll.png`（羊皮紙） | キャラ情報 | `{'x': 0.53, 'y': 0.03}` |
+| 3 | `dark_icon_hammer.png`（ハンマー） | クラフト | `{'x': 0.76, 'y': 0.03}` |
+
+- 入れ物は `InstanTaleHUD.icon_button_layout`。FloatLayout で、`size_hint` (1, 1)。
+  このときは pos (39.6, 37.8)、大きさ 396×332.6 で、親（FloatLayout。能力値の Label と並ぶ）と同じ箱
+- ボタンは `icon_buttons`（HoverableButton）。`size_hint` は (None, None)、大きさは 40×40 の固定。
+  絵は `normal_image` / `hover_image` / `click_image` の3枚（`_hover` / `_click` の付いた名前）で、`icon_button_images` にも同じ組がある
+- 押下は `set_icon_button_callback(icon_index, callback)` で番号ごとに結ばれ、`InstantaleApp.on_icon_btn_press(icon_index)` に届く（`out\recon\game_modules.txt`）
+- 位置は比率（`pos_hint`）、大きさはピクセルの固定値。窓を狭めると間だけが詰まる。
+  1980 幅では間が 51px、ハンマーの右から欄の枠までが 55px 空いている
+- `116_ui_party_expand` は `icon_buttons` を「触らない相手」に数えている（`panel.py` の `game_buttons`）
+- ボタンの型は `scripts.hud.new_hud:HoverableButton(normal_image, hover_image, click_image, **kwargs)`
+  （ButtonBehavior ＋ `NearestNeighborImage`。リコンの一覧）。絵は `source` を差し替えて切り替える
+- 乗せた時の絵は、ボタン自身ではなく HUD の画面（`Screen 'hud'` の `on_mouse_pos`。`Window.mouse_pos` に結んである）が切り替える。
+  切り替えるのは自分の4つだけで、同じ型のボタンを列に足しても、乗せた・外れたは届かない（2026-10-10 に `Window.mouse_pos` を動かして確かめた）。
+  `is_popup_window_opened` / `is_button_enabled` / `is_adding_text` / `in_battle` / `disabled` のどれを立てても、乗せれば切り替わった
+- 押した時（`on_press`）は押した時の絵、離した時（`on_release`）はマウスが上にあれば乗せた時の絵、外れていれば普段の絵（型が自分で切り替える）
+- 押すと効果音が鳴る。音は `Assets/sounds/sounds/ui/常時/` の `アイコン_鞄.wav`（持ち物）・`アイコン_キャラシート.wav`（キャラ情報）・
+  `アイコン_クラフト.wav`（クラフト）。キャラ情報は開くときだけ鳴り、閉じるときは鳴らなかった（開いて閉じて1回）。
+  鳴らす口は `app.sound_manager.play_sound_from_src(app, パス)`
 
 ### 2.35 キャラを作る画面のさいころは世界を渡さない。絵の前置きには medieval が付く（`143_` の作業より）
 

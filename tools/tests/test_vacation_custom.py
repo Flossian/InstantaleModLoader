@@ -901,6 +901,39 @@ press(app, "簡易寝台(5G)")
 check("素の10Gに満たなくても泊まれて、5だけ引かれる", app.player.gold == 3,
       (app.player.gold, app.texts))
 
+# ================================================================ 宿代の段（ローダ）
+print("[段] 宿代の段（prices.adjust_inn）が設定額の上に掛かる")
+prices = ml.prices
+module, ctx, app, choice_cls, start_cls = setup(configure=luxury300)
+prices.adjust_inn("test_layer", lambda _app, quality, price: price * 1.5
+                  if quality in ("luxury_suite", "private_room") else None)
+press(app, STAY_TEXT)
+check("設定額 300 の 1.5 倍で表示", texts_of(app)[3] == "王侯の間(450G)", texts_of(app))
+check("素の部屋にも段が掛かる（個室 100 → 150）", texts_of(app)[2] == "個室(150G)",
+      texts_of(app))
+check("段の掛からない部屋はゲームのまま", texts_of(app)[1] == "簡易寝台(10G)", texts_of(app))
+check("窓口の答えも段を通した額", prices.inn_room(app, "luxury_suite") == 450
+      and prices.inn_room_base(app, "luxury_suite") == 300,
+      (prices.inn_room(app, "luxury_suite"), prices.inn_room_base(app, "luxury_suite")))
+press(app, "個室(150G)")
+check("1回でちょうど段を通した額（150）が引かれる", app.player.gold == 4850, app.player.gold)
+check("支払いの瞬間から差し引き後の値", app.gold_after_payment == 4850, app.gold_after_payment)
+prices.forget_inn_prices("test_layer")
+check("段を外すと答えは設定額へ戻る", prices.inn_room(app, "luxury_suite") == 300,
+      prices.inn_room(app, "luxury_suite"))
+
+print("[段] 段で上がった額に手持ちが足りなければ断る")
+module, ctx, app, choice_cls, start_cls = setup()
+prices.adjust_inn("test_layer", lambda _app, quality, price: price * 3)
+app.player.gold = 250
+press(app, STAY_TEXT)
+check("素の個室が 300 で表示", texts_of(app)[2] == "個室(300G)", texts_of(app))
+press(app, "個室(300G)")
+check("宿泊を起こさない", not app.stays, app.stays)
+check("断りの一言が出る", any("足りない" in t for t in app.texts), app.texts)
+check("所持金はそのまま", app.player.gold == 250, app.player.gold)
+prices.forget_inn_prices("test_layer")
+
 # ================================================================ まとめ
 print()
 if failures:

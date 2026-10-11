@@ -194,7 +194,7 @@ BANDS = (
         "403_npc_social_memory",
         "404_party_talk",
         "405_regional_economy",
-        "406_gemini_user_role_fix",
+        "406_user_role_fix",
         "407_npc_starting_equipment",
         "408_visual_changes_based_on_equipment",
     )),
