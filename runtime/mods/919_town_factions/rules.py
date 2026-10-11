@@ -94,13 +94,76 @@ def normalize(text):
     return _SPACE.sub("", str(text or ""))
 
 
+#: 根拠の途中を省いた印。省いた根拠は切れ目ごとに照合する（2026-10-11、Haiku 5.5 が「機関:... 教会と敵対」と返した）。
+_ELLIPSIS = re.compile(r"(?:\.{2,}|…+|‥+)")
+
+
 def evidence_ok(evidence, material):
-    """根拠の原文が材料の中に本当にあるか。空白と括弧は無視する。短すぎる根拠は認めない。"""
-    quote = normalize(evidence)
-    return len(quote) >= EVIDENCE_MIN_CHARS and quote in normalize(material)
+    """根拠の原文が材料の中に本当にあるか。空白と括弧は無視する。短すぎる根拠は認めない。
+
+    途中を「...」「…」で省いた根拠は、切れ目ごとに材料にあれば通す。
+    ただし切れ目のうち一番長いものが `EVIDENCE_MIN_CHARS` の2倍に届かなければ認めない
+    （短い語をつないで原文に無い文を作れないように）。
+    """
+    flat = normalize(material)
+    pieces = [normalize(p) for p in _ELLIPSIS.split(str(evidence or ""))]
+    pieces = [p for p in pieces if p]
+    if not pieces:
+        return False
+    if len(pieces) == 1:
+        return len(pieces[0]) >= EVIDENCE_MIN_CHARS and pieces[0] in flat
+    return max(len(p) for p in pieces) >= EVIDENCE_MIN_CHARS * 2 and all(p in flat for p in pieces)
+
+
+#: 抽出の name_type で「一般の呼び名」を表す答え。
+GENERAL_NAME = "一般"
+#: 「冒険者に当たる人々」を名指しする言い方。
+ADVENTURER_STAND_IN = ("冒険者の代わり", "冒険者に当たる", "冒険者にあたる")
+_SENTENCE = re.compile(r"[。\n]")
+
+
+def is_adventurer_stand_in(name, material):
+    """設定が、その名前の人々を冒険者に当たる者か、冒険者のギルドとして書いているか。
+
+    同じ文に名前と「冒険者の代わり」などの言い方がある、
+    または同じ文に「冒険者」があって名前の直前が「ギルド」（「ギルド『〇〇』の支部」）。
+    """
+    key = normalize(name)
+    for sentence in _SENTENCE.split(str(material or "")):
+        flat = normalize(sentence)
+        if not key or key not in flat:
+            continue
+        if any(word in flat for word in ADVENTURER_STAND_IN):
+            return True
+        if "冒険者" in flat and ("ギルド" + key) in flat:
+            return True                 # 生成した世界の案内文で、冒険者ギルドに名前が付いた（2026-10-11 の実機）
+    return False
 
 
 # ============================================================ 台帳を組む
+#: 名前の後ろの括弧書き（「霧送りの御堂（祈祷教団）」の「（祈祷教団）」）。
+_TRAILING_NOTE = re.compile(r"\s*[（(][^（）()]*[)）]\s*$")
+
+
+def faction_id_of(by_name, text):
+    """LLM が返した勢力の名前を台帳の id に引く。引けなければ None。
+
+    名前の後ろに種類を括弧で付けて返すことがある（頼みの一覧を写した。2026-10-11 の実機）ので、
+    括弧書きを外して引き直し、それでもだめなら空白と括弧を無視して比べる。
+    """
+    text = str(text or "").strip()
+    if text in by_name:
+        return by_name[text]
+    bare = _TRAILING_NOTE.sub("", text).strip()
+    if bare in by_name:
+        return by_name[bare]
+    key = normalize(bare)
+    for name, faction_id in by_name.items():
+        if key and normalize(name) == key:
+            return faction_id
+    return None
+
+
 def pair_key(a, b):
     return "|".join(sorted((str(a), str(b))))
 
@@ -125,6 +188,19 @@ def build_ledger(extracted, material, town_ids, *, day=None):
         if not evidence_ok(row.get("evidence"), material):
             dropped.append("faction {!r}: evidence not found".format(name))
             continue
+        if normalize(name) not in normalize(material):
+            # 街の説明から組み立てた呼び名（「〇〇の支配勢力」など）を落とす（2026-10-11 の実機）
+            dropped.append("faction {!r}: the name is not in the setting".format(name))
+            continue
+        if str(row.get("name_type") or "").strip().startswith(GENERAL_NAME):
+            # 業種・職業の呼び名は勢力にしない（2026-10-11 に決めた。DOC.md §2.1）。
+            # 「数えない」と書くだけでは残ったので、勢力ごとに答えさせて落とす
+            dropped.append("faction {!r}: a general name, not one organization".format(name))
+            continue
+        if is_adventurer_stand_in(name, material):
+            # 「冒険者の代わりに〜がいる」の〜は主人公の仕事。頼み文で外させても残った（2026-10-11 の実機）
+            dropped.append("faction {!r}: the setting calls them the adventurers".format(name))
+            continue
         faction = {"id": "f{}".format(len(factions) + 1), "name": name,
                    "kind": str(row.get("kind") or "").strip(),
                    "note": str(row.get("note") or "").strip(),
@@ -144,11 +220,16 @@ def build_ledger(extracted, material, town_ids, *, day=None):
         if not isinstance(row, dict):
             continue
         town = str(row.get("town_id") or "").strip()
-        faction_id = by_name.get(str(row.get("faction") or "").strip())
+        faction_id = faction_id_of(by_name, row.get("faction"))
         if town not in known_towns or faction_id is None:
             continue
         if not evidence_ok(row.get("evidence"), material):
             dropped.append("town {}: evidence not found".format(town))
+            continue
+        name = next(f["name"] for f in factions if f["id"] == faction_id)
+        if normalize(name) not in normalize(row.get("evidence")):
+            # 勢力の名前の無い根拠から推して割り振ったもの（2026-10-11、Haiku 5.5 が「聖者の遺構」から教会の街とした）
+            dropped.append("town {}: the evidence does not name {!r}".format(town, name))
             continue
         ledger["towns"][town] = {"faction": faction_id,
                                  "evidence": str(row.get("evidence") or "").strip()}
@@ -161,8 +242,8 @@ def build_ledger(extracted, material, town_ids, *, day=None):
     for row in (extracted or {}).get("relations") or []:
         if not isinstance(row, dict):
             continue
-        a = by_name.get(str(row.get("a") or "").strip())
-        b = by_name.get(str(row.get("b") or "").strip())
+        a = faction_id_of(by_name, row.get("a"))
+        b = faction_id_of(by_name, row.get("b"))
         stage = to_int(row.get("stage"), RELATION_MIN, RELATION_MAX)
         if a is None or b is None or a == b or stage is None:
             continue
@@ -179,21 +260,175 @@ def build_ledger(extracted, material, town_ids, *, day=None):
     return ledger, dropped
 
 
+def title_of(row):
+    """判定の答えの呼び名。段階の名前（「信頼」など）をそのまま返したものは呼び名にしない（2026-10-11、ローカル）。"""
+    title = str((row or {}).get("title") or "").strip()[:20]
+    return "" if title in STANDING_NAMES.values() else title
+
+
 def apply_initial_standing(ledger, judged):
     """初回の判定（勢力ごとの段・呼び名・理由）を点数に起こす。判定の無い勢力は中立のまま。"""
     names = {f["name"]: f["id"] for f in ledger["factions"]}
     for row in (judged or {}).get("standings") or []:
         if not isinstance(row, dict):
             continue
-        faction_id = names.get(str(row.get("faction") or "").strip())
+        faction_id = faction_id_of(names, row.get("faction"))
         stage = to_int(row.get("stage"), -2, 2)
         if faction_id is None or stage is None:
             continue
-        title = str(row.get("title") or "").strip()[:20]
+        title = title_of(row)
         ledger["standing"][faction_id] = {
             "score": STANDING_CENTER[stage], "title": title if stage else "",
             "title_stage": stage if title and stage else None,
             "reason": str(row.get("reason") or "").strip()[:200]}
+    return ledger
+
+
+def build_designed_ledger(designed, town_ids, *, day=None, peaceful=False):
+    """設計の答え（設定に勢力が無い世界に、後から設けた組織）から台帳を組む。
+
+    根拠の照合はしない（設定に無いものを作らせているので）。名前の重複・知らない街・
+    二つの組織に属する街（先に挙げた方が勝つ）は捨てる。組織が2つ未満なら status は NONE。
+    設計した関係は、設定に書かれた関係と同じく動きにくくする（世界に足した設定として扱う）。
+    """
+    ledger = empty_ledger()
+    ledger["made_day"] = day
+    ledger["peaceful"] = bool(peaceful)
+    known_towns = set(str(t) for t in town_ids)
+    factions, by_name = [], {}
+    for row in (designed or {}).get("factions") or []:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("name") or "").strip()
+        if not name or name in by_name or len(factions) >= 4:
+            continue
+        faction = {"id": "f{}".format(len(factions) + 1), "name": name,
+                   "kind": str(row.get("kind") or "").strip(),
+                   "note": str(row.get("note") or "").strip(), "evidence": "", "source": "designed"}
+        factions.append(faction)
+        by_name[name] = faction["id"]
+        for town in row.get("towns") or []:
+            town = str(town).strip()
+            if town in known_towns and town not in ledger["towns"]:
+                ledger["towns"][town] = {"faction": faction["id"], "evidence": ""}
+    if len(factions) < 2:
+        ledger["status"] = NONE
+        ledger["why"] = "the design gave {} organization(s)".format(len(factions))
+        return ledger
+    ledger["status"] = READY
+    ledger["factions"] = factions
+    for a in factions:
+        for b in factions:
+            if a["id"] < b["id"]:
+                ledger["relations"][pair_key(a["id"], b["id"])] = {
+                    "stage": 0, "push": 0, "from_setting": True, "evidence": "", "updated_day": day}
+    for row in (designed or {}).get("relations") or []:
+        if not isinstance(row, dict):
+            continue
+        a = faction_id_of(by_name, row.get("a"))
+        b = faction_id_of(by_name, row.get("b"))
+        stage = to_int(row.get("stage"), RELATION_MIN, RELATION_MAX)
+        if a is None or b is None or a == b or stage is None:
+            continue
+        if ledger["peaceful"]:
+            stage = max(PEACEFUL_FLOOR, stage)
+        ledger["relations"][pair_key(a, b)]["stage"] = stage
+    for faction in factions:
+        ledger["standing"][faction["id"]] = {"score": 0, "title": "", "title_stage": None,
+                                            "reason": ""}
+    return ledger
+
+
+# ============================================================ 最初の立ち位置
+#: 新しいキャラとみなす滞在日数の合計（これ未満で、功績も手配も無ければ出自だけで決める）。
+NEW_CHARACTER_DAYS = 90
+#: 土台の点数（途中導入）。組織の街での功績1件ごと・上限・顔なじみの日数・手配。
+DEED_POINTS = 10
+DEED_CAP = 50
+FAMILIAR_DAYS = 90
+FAMILIAR_POINTS = 10
+#: 手配は功績で打ち消さない（DOC.md §2.3）。手配されていれば警戒より上へ行かず、重い手配は功績によらず敵視。
+WANTED_POINTS = -40
+WANTED_CEILING = -21
+HEAVILY_WANTED_AT = -40
+HEAVILY_WANTED_POINTS = -80
+
+
+def town_records(area_history):
+    """`{街の id: {"deeds": [功績の文], "days": 滞在日数, "law": 手配度 / None}}`。"""
+    records = {}
+    for town_id, row in (area_history or {}).items():
+        if not isinstance(row, dict):
+            continue
+        residency = row.get("residency") if isinstance(row.get("residency"), dict) else {}
+        days = residency.get("total_days")
+        law = row.get("lawfulness")
+        records[str(town_id)] = {
+            "deeds": [str(t) for t in row.get("achievements") or [] if t],
+            "days": int(days) if isinstance(days, (int, float)) and not isinstance(days, bool) else 0,
+            "law": law if isinstance(law, (int, float)) and not isinstance(law, bool) else None}
+    return records
+
+
+def is_new_character(records):
+    """新しく始めたキャラか（功績も手配も無く、滞在の合計が短い）。出自だけで最初の立ち位置を決める。"""
+    deeds = sum(len(r["deeds"]) for r in records.values())
+    wanted = any(r["law"] is not None and r["law"] < 0 for r in records.values())
+    days = sum(r["days"] for r in records.values())
+    return not deeds and not wanted and days < NEW_CHARACTER_DAYS
+
+
+def baseline_scores(ledger, records):
+    """途中導入の土台の点数。その勢力の街での功績・滞在・手配から規則で決める。
+
+    `{勢力: (点数, {"deeds", "days", "law", "cap"})}`。組織の名前が記録に無くても、
+    その街を治める組織ならそこで起きたことは知っている、という読み。
+    `cap` は手配で決まる段階の上限（手配されていなければ None）。調整もこれより上へ動かさない。
+    """
+    out = {}
+    for faction in ledger.get("factions") or []:
+        towns = [t for t, row in (ledger.get("towns") or {}).items()
+                 if row.get("faction") == faction["id"]]
+        deeds = sum(len(records.get(t, {}).get("deeds") or []) for t in towns)
+        days = sum(records.get(t, {}).get("days") or 0 for t in towns)
+        laws = [records[t]["law"] for t in towns if t in records and records[t]["law"] is not None]
+        worst = min(laws) if laws else None
+        score = min(DEED_CAP, deeds * DEED_POINTS) + (FAMILIAR_POINTS if days >= FAMILIAR_DAYS else 0)
+        cap = None
+        if worst is not None and worst <= HEAVILY_WANTED_AT:
+            score, cap = HEAVILY_WANTED_POINTS, -2
+        elif worst is not None and worst < 0:
+            score, cap = min(WANTED_CEILING, score + WANTED_POINTS), -1
+        out[faction["id"]] = (clamp_score(score),
+                              {"deeds": deeds, "days": days, "law": worst, "cap": cap})
+    return out
+
+
+def apply_adjusted_standing(ledger, baseline, judged):
+    """土台の点数に、LLM の調整（-1 / 0 / +1 段階）を掛ける。動くのは1段階まで。
+
+    調整が 0 なら土台の点数のまま。動いたら、動いた先の段階の真ん中の点数にする。
+    手配の上限（`cap`）より上へは動かさない。
+    呼び名は最後の段階が中立でなければ付ける。
+    """
+    names = {f["name"]: f["id"] for f in ledger["factions"]}
+    rows = {}
+    for row in (judged or {}).get("standings") or []:
+        faction_id = faction_id_of(names, row.get("faction")) if isinstance(row, dict) else None
+        if faction_id:
+            rows[faction_id] = row
+    for faction_id, (score, facts) in baseline.items():
+        row = rows.get(faction_id) or {}
+        adjust = to_int(row.get("adjust"), -1, 1) or 0
+        stage = standing_stage(score)
+        cap = (facts or {}).get("cap")
+        final = max(-2, min(2 if cap is None else cap, stage + adjust))
+        title = title_of(row)
+        ledger["standing"][faction_id] = {
+            "score": score if final == stage else STANDING_CENTER[final],
+            "title": title if final else "", "title_stage": final if title and final else None,
+            "reason": str(row.get("reason") or "").strip()[:200], "baseline": score,
+            "adjust": final - stage}
     return ledger
 
 
@@ -218,13 +453,38 @@ def relation_stage(ledger, a, b):
 
 #: 張り合う勢力への響き。好かれた点数の何割を、相手の勢力から引くか（関係の段ごと）。
 RIVAL_ECHO = {-2: 0.5, -1: 0.25}
+#: 点数がこれ以下になったら、その勢力の敵視は外れない（上がっても敵視の上端で止まる。DOC.md §2.12）。
+ENEMY_LOCK_AT = -81
+#: 敵視の上端。
+ENEMY_CEILING = -61
 
 
-def plan_talk(ledger, faction_id, step, *, gain_per_step, loss_per_step, gained_today):
+def gain_ceiling(ledger, faction_id, laws):
+    """上がる動きの上限の点数。`laws` は `{街の id: 手配度}`（いまの主人公の記録）。
+
+    敵視が外れなくなった勢力と、その勢力の街で手配度 -40 以下なら敵視の上端。
+    その勢力の街で手配されていれば警戒の上端。どちらでもなければ上限なし。
+    """
+    row = (ledger.get("standing") or {}).get(faction_id)
+    towns = [t for t, r in (ledger.get("towns") or {}).items() if r.get("faction") == faction_id]
+    found = [laws[t] for t in towns if isinstance(laws, dict) and isinstance(laws.get(t), (int, float))
+             and not isinstance(laws.get(t), bool)]
+    worst = min(found) if found else None
+    if (isinstance(row, dict) and row.get("locked")) \
+            or (worst is not None and worst <= HEAVILY_WANTED_AT):
+        return ENEMY_CEILING
+    if worst is not None and worst < 0:
+        return WANTED_CEILING
+    return STANDING_MAX
+
+
+def plan_talk(ledger, faction_id, step, *, gain_per_step, loss_per_step, gained_today,
+              ceiling=STANDING_MAX):
     """会話の判定（-2〜+2）を点数の動きに起こす。`[(勢力, 前, 後, 理由)]` を返す。
 
     上がるのは同じ勢力から1日1回（`gained_today`）。下がる方は毎回効く。
     上がったときは、その勢力と敵対・緊張している勢力から一部を引く（`RIVAL_ECHO`）。
+    上がる先は `ceiling`（`gain_ceiling`）まで。
     """
     row = (ledger.get("standing") or {}).get(faction_id)
     if not isinstance(row, dict) or not step:
@@ -233,36 +493,60 @@ def plan_talk(ledger, faction_id, step, *, gain_per_step, loss_per_step, gained_
     if step > 0:
         if gained_today:
             return [(faction_id, before, before, "daily")]
-        return plan_gain(ledger, faction_id, step * max(0, int(gain_per_step)))
+        return plan_gain(ledger, faction_id, step * max(0, int(gain_per_step)), ceiling=ceiling)
     after = clamp_score(before + step * max(0, int(loss_per_step)))
     return [(faction_id, before, after, "loss")]
 
 
-def plan_gain(ledger, faction_id, gain, why="gain"):
-    """`gain` 点上げる動き。敵対・緊張している勢力からは一部を引く（`RIVAL_ECHO`）。"""
+def plan_gain(ledger, faction_id, gain, why="gain", *, ceiling=STANDING_MAX):
+    """`gain` 点上げる動き。敵対・緊張している勢力からは一部を引く（`RIVAL_ECHO`）。
+
+    上がる先は `ceiling` まで（もう上限にいれば動かさず、理由は "capped"）。
+    響きは実際に上がった分から引く。
+    """
     row = (ledger.get("standing") or {}).get(faction_id)
     if not isinstance(row, dict) or gain <= 0:
         return []
     before = row.get("score", 0)
-    moves = [(faction_id, before, clamp_score(before + gain), why)]
+    after = max(before, min(clamp_score(before + gain), ceiling))
+    if after == before:
+        return [(faction_id, before, before, "capped")]
+    moves = [(faction_id, before, after, why)]
     for other in ledger.get("factions") or []:
         other_id = other.get("id")
         share = RIVAL_ECHO.get(relation_stage(ledger, faction_id, other_id))
         other_row = (ledger.get("standing") or {}).get(other_id)
         if other_id == faction_id or not share or not isinstance(other_row, dict):
             continue
-        lost = int(round(gain * share))
+        lost = int(round((after - before) * share))
         if lost:
             was = other_row.get("score", 0)
             moves.append((other_id, was, clamp_score(was - lost), "echo"))
     return moves
 
 
+def is_locked(ledger, faction_id):
+    row = (ledger.get("standing") or {}).get(faction_id)
+    return isinstance(row, dict) and bool(row.get("locked"))
+
+
+def lift_lock(ledger, faction_id):
+    """敵視が外れない印を外す。外したら True。会話で相手を納得させたときだけ呼ぶ（DOC.md §2.12）。"""
+    row = (ledger.get("standing") or {}).get(faction_id)
+    if not isinstance(row, dict) or not row.get("locked"):
+        return False
+    row.pop("locked", None)
+    return True
+
+
 def apply_moves(ledger, moves):
+    """動きを点数に書く。`ENEMY_LOCK_AT` 以下になった勢力は敵視が外れない印を付ける（外すのは `lift_lock`）。"""
     for faction_id, _before, after, _why in moves:
         row = ledger["standing"].get(faction_id)
         if isinstance(row, dict):
             row["score"] = after
+            if after <= ENEMY_LOCK_AT:
+                row["locked"] = True
 
 
 def stance_text(ledger, faction_id, player):

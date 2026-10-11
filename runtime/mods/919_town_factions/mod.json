@@ -42,6 +42,30 @@
         "en": "In a world where this is on, the factions are read from the world setting when it loads (the first time takes a while). For a world already in play, each faction's view of you is judged from your history so far"
       }
     },
+    "ORGANIZE_NEW_WORLDS": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "新しく作る世界に組織を設ける",
+        "en": "Give new worlds organizations"
+      },
+      "note": {
+        "ja": "世界を作るときに、世界観に合った組織を2〜4つ設け、地理の説明と街の案内文に書き込ませる。作った世界では勢力が最初から有効になる。全部の世界に共通の設定で、世界ごとの設定では効かない。組織を自分で決めたいときは、世界を作るときの概要に書けばよい",
+        "en": "When a world is generated, 2-4 organizations fitting it are written into its geography and town descriptions, and factions are turned on for that world. Shared setting only; it has no effect per world. To choose the organizations yourself, write them in the world overview instead"
+      }
+    },
+    "ADD_ORGANIZATIONS": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "この世界に組織を設ける",
+        "en": "Give this world organizations"
+      },
+      "note": {
+        "ja": "世界の設定から勢力が2つ以上読み取れないとき、今の世界の文に合う組織を2〜4つ設けて勢力にする。組織は勢力の仕組みの中だけにあり、ゲームの依頼や街の案内文には出てこない。遊び途中の世界では、それまで物語に出てこなかった組織が急に現れることになる。世界ごとのタブで入れる",
+        "en": "When fewer than two factions can be read from the world setting, design 2-4 organizations fitting the current world and use them as factions. They exist only inside this mod, not in the game's quests or town descriptions. Turn it on per world"
+      }
+    },
     "GAIN_PER_STEP": {
       "type": "int",
       "default": 5,

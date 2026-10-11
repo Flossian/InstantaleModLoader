@@ -35,7 +35,12 @@ if [ "$1" = "restore" ]; then
       mkdir -p "$LEFT/characters"; mv "$d" "$LEFT/characters/$(basename "$d")_$(date +%H%M%S)" && echo "moved portrait $(basename "$d")"; done
   fi
   cd "$ROOT" || exit 1
-  for f in $(cd "$B" && find state -type f); do cmp -s "$B/$f" "$f" || { mkdir -p "$(dirname "$f")"; cp -p "$B/$f" "$f"; echo "restored $f"; }; done
+  # 戻すのは試した世界（IML_DRIVE_WORLD で始まる名前）の控えだけ。
+  # 全部を戻すと、控えの後に別のセッションが遊んだ別の世界の控えまで控えの時点へ巻き戻す（2026-10-11 に踏みかけた）。
+  # 名前に空白を含む控え（世界×主人公）があるので、find の出力は1行ずつ読む（for で回すと空白で切れる）。
+  (cd "$B" && find state -name "${IML_DRIVE_WORLD}*" -type f) | while read -r f; do
+    cmp -s "$B/$f" "$f" && continue
+    mkdir -p "$(dirname "$f")" && cp -p "$B/$f" "$f" && echo "restored $f"; done
   find state -path state/models -prune -o -name "${IML_DRIVE_WORLD}*" -type f -newer "$B/save/savedata.json" -print | while read -r f; do
     [ -f "$B/$f" ] && continue
     mkdir -p "$LEFT/$(dirname "$f")"; mv "$f" "$LEFT/${f}_$(date +%H%M%S)" && echo "moved new state $f"; done

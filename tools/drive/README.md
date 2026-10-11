@@ -88,6 +88,8 @@ sh tools/drive/relaunch.sh restore        # 4. 控えへ戻して起動し直す
 | `nav.sh` | 上のコマンドを読み込む |
 | `common.sh` | ほかのシェルスクリプトが読む共通部分。直には動かさない |
 
+`relaunch.sh restore` が `state\` から戻すのは、試した世界（`IML_DRIVE_WORLD` で始まる名前）の控えだけ。
+ほかの世界の控えは、控えの後に別のセッションが遊んでいても触らない。
 `relaunch.sh restore` は、控えの後にできたものを消さずに `out/backup/test_leftovers/` へ移す。
 移すのは、控えの時に無かった立ち絵のフォルダと、控えの後にできた `state\` のファイル。
 
@@ -102,7 +104,7 @@ python tools/drive/drive.py <ファイル> --args '<JSON>' --wait <秒>
 | `ready.py` | `world` | 今どの段か（title / worlds / playing / gameover / busy） |
 | `press.py` | `text` | 画面の選択肢を1つ押す |
 | `choices.py` | | 画面とデータの選択肢、手が空いているかの旗 |
-| `clicktext.py` | `texts`・`contains`・`pause` | 選択肢の欄の外の文字（題の画面・世界の札）を押す |
+| `clicktext.py` | `texts`・`contains`・`pause` | 選択肢の欄の外の文字（題の画面・世界の札）を押す。一覧の中の札は、画面の中ほどまで送ってから押す |
 | `setstate.py` | `law`・`gold`・`affinity`・`elapse`・`save` | 遊びの状態を書き換える |
 | `where.py` | `npcs` | 今いる所・日数・会話の相手・手待ち、並べた人物の居場所と好感度 |
 | `texts.py` | `contains`・`last` | 画面の本文から語を含む行を拾う |
