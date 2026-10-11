@@ -1,0 +1,116 @@
+{
+  "entry": "town_factions.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Town factions",
+    "ja": "街の勢力"
+  },
+  "description": {
+    "en": "Factions written in the world setting get a standing toward you, and NPCs of each faction treat you with that bias. Talks move your standing, solving a town's incident pleases its faction, and relations between factions shift on their own as days pass (heard as rumors). Worlds whose setting names fewer than two factions get none. Turn it on per world",
+    "ja": "世界の設定に書かれた勢力ごとに主人公の見られ方を持ち、その勢力の NPC は見られ方に応じた態度で接する。見られ方は会話の中身で動き、街の出来事を片付けるとその街の勢力に好かれる。勢力どうしの仲も日数が進むにつれて動き、噂として聞こえてくる。設定に勢力が2つ以上書かれていない世界では何もしない。世界ごとに有効にする"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "shares": [
+    "town_incidents"
+  ],
+  "after": [
+    "337_conversation_affinity"
+  ],
+  "tool": {
+    "entry": "tool.py",
+    "label": {
+      "ja": "街の勢力の設定（世界ごと）",
+      "en": "Town factions settings (per world)"
+    },
+    "note": {
+      "ja": "全部の世界に共通の設定と、世界ごとの設定を変える。勢力は世界ごとに有効にする",
+      "en": "Settings for all worlds and per world. Factions are turned on per world"
+    }
+  },
+  "settings": {
+    "ENABLED": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "勢力を有効にする",
+        "en": "Use factions"
+      },
+      "note": {
+        "ja": "有効にした世界では、読み込んだときに世界の設定から勢力を読み取る（初回だけ少し時間がかかる）。遊んでいる途中の世界では、それまでの経歴や手配の状況から各勢力の見方を決める",
+        "en": "In a world where this is on, the factions are read from the world setting when it loads (the first time takes a while). For a world already in play, each faction's view of you is judged from your history so far"
+      }
+    },
+    "GAIN_PER_STEP": {
+      "type": "int",
+      "default": 5,
+      "min": 0,
+      "max": 50,
+      "label": {
+        "ja": "会話で好かれたときに上がる量",
+        "en": "Gain from a talk"
+      },
+      "note": {
+        "ja": "会話の中身が勢力の考えに沿っていたとき、その勢力からの見られ方が上がる量（判定の強さ1つあたり。最大で2倍）。同じ勢力から上がるのは1日1回。見られ方は -100〜100 で、20 以上で好意、60 以上で信頼",
+        "en": "How much your standing rises per step when a talk pleases the faction (up to twice this). Once a day per faction. Standing runs -100 to 100: 20+ is fond, 60+ is trusted"
+      }
+    },
+    "LOSS_PER_STEP": {
+      "type": "int",
+      "default": 8,
+      "min": 0,
+      "max": 50,
+      "label": {
+        "ja": "会話で嫌われたときに下がる量",
+        "en": "Loss from a talk"
+      },
+      "note": {
+        "ja": "会話の中身が勢力の考えに反していたとき、その勢力からの見られ方が下がる量（判定の強さ1つあたり。最大で2倍）。回数の制限は無い。-20 以下で警戒、-60 以下で敵視",
+        "en": "How much your standing falls per step when a talk offends the faction (up to twice this). No daily limit. -20 or below is wary, -60 or below is hostile"
+      }
+    },
+    "INCIDENT_GAIN": {
+      "type": "int",
+      "default": 10,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "街の出来事を片付けたときに上がる量",
+        "en": "Gain from solving an incident"
+      },
+      "note": {
+        "ja": "街の出来事の MOD（918）を入れているとき、出来事を片付けた街の勢力からの見られ方が上がる量。対立している勢力からは少し下がる",
+        "en": "With the town incidents mod, your standing with the town's faction rises this much when you solve its incident. Rival factions think a little less of you"
+      }
+    },
+    "TREND_DAYS": {
+      "type": "int",
+      "default": 30,
+      "min": 0,
+      "max": 3650,
+      "label": {
+        "ja": "勢力どうしの情勢が動く間隔（日）",
+        "en": "Days between shifts in relations"
+      },
+      "note": {
+        "ja": "宿泊や移動で日数が進み、この日数が経つたびに、勢力どうしのあいだで何かが起きるかを1回決める。起きたことは噂として聞こえてくる。一度に何日進んでも1回だけ。0 で動かない",
+        "en": "Every this many days, one decision on what happens between factions; it is heard as a rumor. Once per day-advance at most. 0 turns it off"
+      }
+    },
+    "RUMOR_DAYS": {
+      "type": "int",
+      "default": 90,
+      "min": 0,
+      "max": 3650,
+      "label": {
+        "ja": "情勢の噂が聞こえる日数",
+        "en": "Days a rumor lasts"
+      },
+      "note": {
+        "ja": "勢力どうしの間で起きたことを、NPC が噂として知っている日数",
+        "en": "How many days NPCs know the latest rumor about the factions"
+      }
+    }
+  }
+}

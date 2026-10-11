@@ -136,6 +136,7 @@ runtime/instantale_modloader/
                   仲間の装備を扱う MOD が聞く（§3.3.6）
     arrivals.py   施設に着いた場面で誰が話しかけるかを、会話を始める MOD どうしで分け合う窓口（§3.3.7）
     talk_affinity.py  会話で上げられる好感度の上限の窓口。相手を持つ MOD が狭め、会話で好感度を動かす MOD が聞く（§3.3.8）
+    talk_summary.py  会話を閉じるときのゲームの要約の頼みに、MOD の判定の項目を相乗りさせる窓口。包みはここ1組（§3.3.16）
     wanted.py     手配の重さの数え方と、全域手配の線・追手の戦闘の終わりの窓口。追手を出す MOD が線を置いて終わりを知らせ、手配を動かす MOD が聞く（§3.3.9）
     guards.py     ゲームの衛兵の戦闘を MOD が起こす窓口。組んだ戦闘の強さ（難易度）だけを差し替える（§3.3.10）
     defeat.py     倒れた戦闘を死なせずに逃走と同じ終わり方で終える窓口。倒れても続けたい戦闘を持つ MOD が引き受けを登録する（§3.3.11）
@@ -1700,6 +1701,40 @@ hudicons.positions(left, count, layout_width, icon_width)   # 並べる x の比
 隣どうしの間が 4px より狭くなったら、1回だけ WARN を書く。
 置き場は `sys` の属性（`_instantale_hud_icons`）で、注入し直しをまたいで残る。同じ `key` は差し替える。
 
+#### 3.3.16 会話の要約に判定を相乗りさせるのも窓口で（`talk_summary`）
+
+ゲームは会話を閉じるとき、会話の全文を要約させる（`llm_manager:conversation_resolver` → 同じスレッドで `send_request("conversation_resolver", message, Result{summary})`。GAME.md §2.25）。
+その頼みには相手の人物像・プレイヤーへの今の感情・会話の全文がもう載っているので、会話の中身から何かを判定したい MOD は、LLM を別に呼ばずに項目を足せる。
+ゲームは要約が終わるまで会話を閉じきらないので（GAME.md §2.5）、別に呼ぶとその待ちがそのぶん延びる（`337_` の版1で測った）。
+乗る MOD が2本になると、各々が `send_request` を包んで頼みの型と本文を重ねて書き換え、足した形が失敗したときの送り直しも MOD の数だけ走る。
+包みは `instantale_modloader/talk_summary.py` の1組にまとめる。
+
+```python
+talk_summary.install(ctx, write)                          # 包み。何本の MOD が呼んでも1つの世代につき1組
+talk_summary.ride(owner, ctx, begin, settle, fields)      # apply() の中
+#   begin(talk) -> 書き足す決まりの文 / None（この会話には乗らない）
+#   settle(talk, answer)   要約が返った後。answer はその MOD の項目だけの辞書 / None（答えが無い）
+#   fields      {"項目名": 型}（int / str）
+```
+
+`talk` は1回の要約につき1つの辞書で、乗った MOD の全部に同じものが渡る。
+鍵は `app` / `character` / `messages`（要約の関数の引数）・`npc_id` / `name` / `player`・`status`・`detail`。
+`status` は `"answered"` のほか、答えが無かった理由（`"not_sent"` / `"no_structure"` / `"no_system"` / `"cannot_extend"` / `"retried"` / `"unreadable"`）。
+会話の見分けに使う部品（`player_engaged`：プレイヤーが何か言ったか、開け閉め以外の行動をしたか）も窓口に置いてある。
+
+| 決まり | 理由 |
+|---|---|
+| 決まりの文は先頭の system に、乗った順に書き足す | system を先頭にしか置けないチャットテンプレートがある |
+| 頼みの型は「元の型＋乗った MOD の項目全部」の子の型1つ。同じ顔ぶれなら使い回す | 足した項目はスキーマ文と grammar の両方に出る（`send_request` の中で型から作られる） |
+| 足した形が失敗したら、元の頼みで1回だけ送り直す | 要約を落とさないのが先。送り直しは乗った MOD の数によらず1回 |
+| ゲームへは元の型の形で返す（足した項目を抜く） | 判定を要約の記録・会話の記憶・セーブに混ぜない |
+| 項目名が先に乗った MOD と重なった MOD は、その回は乗せない（`errors` に残す） | 答えの持ち主が決まらない |
+| `settle` は `conversation_resolver` の `orig` の後に呼ぶ | ゲームは同じ `resolve_conversation` の中で、その後に感情の文を作り直す。好感度のように感情の文に効く値は、ここで書けばその会話の終わりに反映される（`337_`） |
+| 登録は持ち主ごとに1つ。登録した ctx が用済みなら数えない。`begin` / `settle` が投げたら、その MOD だけ降りる | `talk_affinity`（§3.3.8）と同じ |
+
+置き場は `sys` の属性（`_instantale_talk_summary`）で、注入し直しをまたいで残る。
+検査は `tools\tests\test_talk_summary.py`。
+
 ### 3.4 まだ現れていない対象を狙う（保留と当て直し）
 
 ゲームは `llama_cpp_runtime_completion` と `scripts.llm.llm_manager` を
@@ -2077,7 +2112,7 @@ GUI の1行に収めると「JSON を手で書く欄」になり、コードを�
 | `apply(ctx)` に渡る `ctx` | §3.1 / §3.6 / §3.8 / §3.11 |
 | `mod.json` の鍵 | §3.1 / §3.2 / §3.8 / §3.9 / §3.12 |
 | §5 の共通部品（`ui` / `frames` / `llm` / `state` / `jobs` / `modnpc` / `modfacility` / `prices` / `sounds` / `imagegen`） | §5 |
-| 使い方を書いた窓口（`durations` / `prices` / `combat` / `equipment` / `arrivals` / `talk_affinity` / `ids` / `npcs` / `saves` / `wanted` / `guards` / `defeat` / `board` / `confinement` / `choices`） | §3.2.3 / §3.3 |
+| 使い方を書いた窓口（`durations` / `prices` / `combat` / `equipment` / `arrivals` / `talk_affinity` / `talk_summary` / `ids` / `npcs` / `saves` / `wanted` / `guards` / `defeat` / `board` / `confinement` / `choices` / `hudicons`） | §3.2.3 / §3.3 |
 
 これ以外は内部で、予告なく変わる。
 `patch.py` の `_defer_if_*` や `__init__.py` の `_order()` のような

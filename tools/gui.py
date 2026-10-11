@@ -127,6 +127,7 @@ SHIPPED_DEFAULTS = {
     },
     "seeds.default.json": {                             # 132_
         "285b98a366715f380345f9de53a9da29357187b0",     # v1.10.0
+        "953f661242a0386c611af7ffc92a3c4b8f08398e",     # v1.16.0
     },
 }
 
