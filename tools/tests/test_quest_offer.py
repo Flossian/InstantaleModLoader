@@ -199,9 +199,9 @@ class DisplayQuestChoice:
                       client_name="テスト依頼人A", difficulty=41,
                       neighboring_settlement_id="7")
         self.app.world.quests[new_id] = quest
-        self.app.world_dict["quests"][new_id] = {"id": new_id,
-                                                 "quest_title": "こぼれ話の依頼",
-                                                 "client_name": "テスト依頼人A"}
+        self.app.save_data_dict["quests"][new_id] = {"id": new_id,
+                                                     "quest_title": "こぼれ話の依頼",
+                                                     "client_name": "テスト依頼人A"}
         return quest
 
 
@@ -210,6 +210,7 @@ class InstantaleApp:
         self.world = world
         self.world_dict = {"world_data": {"world_name": "テスト世界"},
                            "quests": {}}
+        self.save_data_dict = {"quests": {}}
         # 名簿。セーブでは game_variables['party'] で、必ず 'player' を含む
         # （GAME.md §2.8）。同行者を足すときはここへ id を入れる。
         self.game_variables = {"party": ["player"]}
@@ -832,6 +833,12 @@ with io.open(os.path.join(ctx.state_dir, mod.CLIENTS_BASENAME), encoding="utf-8"
     made = json.load(fh).get(ml.state.playthrough_key(app)) or {}
 check("作った依頼の依頼人は周回の鍵（世界×主人公）の下に控える",
       any(record.get("npc_id") == "62" for record in made.values()), made)
+saved = app.save_data_dict["quests"]
+newest = max(saved, key=int) if saved else None
+check("依頼人の上書きはセーブ側（`save_data_dict['quests']`）にも届く",
+      newest is not None and saved[newest].get("client_name") == "テストNPC D", saved)
+check("雛形（`world_dict['quests']`）には書かない",
+      app.world_dict["quests"] == {}, app.world_dict["quests"])
 
 # 生成の後の読み直しで投げた回。生成中の印と待機表示を残さない。
 print("=== 生成の途中で投げても後始末は通る ===")

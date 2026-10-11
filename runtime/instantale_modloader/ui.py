@@ -734,14 +734,20 @@ def add_gold(app, amount, on_error=None):
 # クエストの格納先（`301_` / `305_` / `307_` が共有する）
 # --------------------------------------------------------------------------
 def quest_stores(app):
-    """クエストが入っている**2つ**の場所（`206_` の計測。GAME.md §2.9）。
+    """クエストが入っている**2つ**の場所（GAME.md §2.9.1）。
 
-        app.world.quests          {id: Quest インスタンス}  ゲームが遊ぶときに読む
-        app.world_dict['quests']  {id: dict}                セーブに出るのはこちら
+        app.world.quests              {id: Quest インスタンス}  ゲームが遊ぶときに読む
+        app.save_data_dict['quests']  {id: dict}                セーブに書き出される
 
     **読むのはどちらでもよいが、書くときは必ず両方。**
-    片方だけ直すと画面の表示と保存内容がずれる。
+    生きた一覧だけに書くと、画面には出るが読み直すと素の値へ戻る
+    （生きた一覧へ書いた難易度は、受注・クリア・保存をまたいでもセーブへ写らなかった）。
     どちらに登録されるかを決め打ちしないので、無い側は黙って落ちる。
+
+    v1.15.0 までは2つ目を雛形（`app.world_dict['quests']`）としていた。
+    雛形はセーブではなく世界のファイル（`world_data.json`）で、
+    掲示板で作った依頼はそこに現れないため、書けていたのは生きた一覧だけだった。
+    雛形へは書かない（同じ世界で始めた別のキャラクタにまで乗る）。
 
     この4つは `301_` / `305_` / `307_` に1字違わず写されていた。
     写して回るものはローダの語彙（TECH.md §3.2.3）。
@@ -750,9 +756,10 @@ def quest_stores(app):
     quests = frames.attr(frames.attr(app, "world", None), "quests", None)
     if isinstance(quests, dict):
         stores.append(quests)
-    world_dict = frames.attr(app, "world_dict", None)
-    if isinstance(world_dict, dict) and isinstance(world_dict.get("quests"), dict):
-        stores.append(world_dict["quests"])
+    save_data = frames.attr(app, "save_data_dict", None)
+    saved = save_data.get("quests") if isinstance(save_data, dict) else None
+    if isinstance(saved, dict) and saved is not quests:
+        stores.append(saved)
     return stores
 
 
@@ -833,7 +840,7 @@ def quest_value(quest, name, default=None):
 
 
 def set_quest_value(app, quest_id, name, value, on_error=None):
-    """**両方の格納先に**書く。書けた数を返す。
+    """**両方の格納先に**書く。書けた数を返す（`len(quest_stores(app))` が満額）。
 
     片方だけに書くと、画面に出ているものとセーブされるものがずれる。
     書けなかったことは `on_error(メッセージ)` に渡す（無ければ黙る）。

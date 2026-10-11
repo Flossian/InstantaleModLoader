@@ -43,7 +43,7 @@ mod が無ければ、残骸のボタンは「選択肢を元に戻す」だけ�
 
 ゲーム自身の `DisplayQuestChoice.generate_random_quest()` をそのまま呼ぶ。
 これは「いまこの土地に依頼を1件作って登録する」入口で、
-クエストエリアの生成・id の採番・`world_dict['quests']` への登録・セーブまで面倒を見てくれる（自前で
+クエストエリアの生成・id の採番・依頼の一覧への登録・セーブまで面倒を見てくれる（自前で
 `index['quest']` を進めたりエリアを作ったりする必要が無い）。
 
 その内側で走る `llm_manager_world_generate:random_quest_generator` を包み、

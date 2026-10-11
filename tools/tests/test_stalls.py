@@ -14,6 +14,8 @@
   諦め         … ゲームの判定が真なら真。4xx は同じスレッドで3回目に真。5xx は偽のまま
   待機の終わり … 待機を持つスレッドの死で本文に出して `finish_button_load` を呼ぶ。それ以外は出すだけ。
                   ボタンが生きていれば終わりを呼ばない。同じ文は続けて出さない
+  世界作成の画面 … 世界の生成・概要の審査のスレッドの死で、画面の文の欄に理由を出し、画面自身の
+                  `finish_button_load` を呼ぶ。その画面での送信の死も文の欄へ（`add_text` は落ちる）
   切り替え     … `loader.json` の `stall_guard` が false なら取り付けない
 """
 import json
@@ -444,6 +446,92 @@ body = make_body()
 stalls.begin_call("random_quest")
 crash_in("Thread-7 (send_request_on_id)", anthropic_400, send_traceback(body))
 check("送信スレッドの死は送信の扱いへ", stalls.is_failed(response_of(body)) and not finished)
+
+
+# --------------------------------------------------------------------------
+print("世界作成の画面")
+
+
+class Widget(object):
+    def __init__(self, text="", disabled=False):
+        self.text = text
+        self.disabled = disabled
+
+
+class WorldScreen(object):
+    """世界作成の画面。本文の欄は無く、文の欄と自分の待機の終わりを持つ。"""
+    name = "world_generate_screen"
+
+    def __init__(self):
+        self.world_generate_button = Widget("生成する", disabled=True)
+        self.world_generate_check_label = Widget("世界を生成しています…")
+        self.loading_narration_label = True
+        self.finished = 0
+
+    def finish_button_load(self, *args):
+        # 実機で戻るのは「生成する」だけ（「戻る」・文の欄には触らない）。
+        self.finished += 1
+        self.world_generate_button.disabled = False
+
+    def update_world_generate_check_label_text(self, text, *args):
+        self.world_generate_check_label.text = text
+
+
+class WorldApp(App):
+    def __init__(self, current="world_generate_screen"):
+        super().__init__(enabled=False)
+        self.world_generate_screen = WorldScreen()
+        self.root = types.SimpleNamespace(current=current)
+
+    def add_text(self, text):
+        # 世界作成の画面では本文の欄が無い（実機の AttributeError）。
+        raise AttributeError("'InstantaleApp' object has no attribute 'to_save_texts'")
+
+
+reset()
+finished[:] = []
+APP["app"] = WorldApp()
+screen = APP["app"].world_generate_screen
+crash_in("Thread-58 (generate_world)",
+         stalls.LLMRequestFailed("create_settlement_detail", "ValidationError: 8 validation errors"))
+check("世界の生成の死で画面自身の待機の終わりを呼ぶ", screen.finished == 1, screen.finished)
+check("  → 「生成する」が押せる", screen.world_generate_button.disabled is False)
+check("  → 理由を画面の文の欄に出す（待機の終わりに消されない）",
+      "世界の生成を中断した（create_settlement_detail）" in screen.world_generate_check_label.text
+      and "ValidationError" in screen.world_generate_check_label.text,
+      screen.world_generate_check_label.text)
+check("  → どの行にも書き出しの印",
+      all(line.startswith(stalls.PREFIX)
+          for line in screen.world_generate_check_label.text.split("\n")),
+      screen.world_generate_check_label.text)
+check("  → 遊ぶ画面の待機の終わりは呼ばない", not finished)
+
+reset()
+APP["app"] = WorldApp()
+screen = APP["app"].world_generate_screen
+crash_in("Thread-9 (check_violation_thread)", KeyError("overview"))
+check("概要の審査の死でも待機を終える",
+      screen.finished == 1 and "世界の生成が途中で止まった: KeyError" in
+      screen.world_generate_check_label.text, screen.world_generate_check_label.text)
+
+reset()
+APP["app"] = WorldApp()
+screen = APP["app"].world_generate_screen
+body = make_body()
+stalls.begin_call("create_settlement_detail")
+crash_in("Thread-64 (send_request_on_id)", anthropic_400,
+         send_traceback(body, manager="create_settlement_detail"))
+check("世界作成の画面での送信の死は文の欄に出す（add_text で落ちない）",
+      "LLM への依頼が失敗した" in screen.world_generate_check_label.text and not screen.finished,
+      screen.world_generate_check_label.text)
+
+reset()
+finished[:] = []
+APP["app"] = WorldApp(current="game_screen")
+crash_in("Thread-10 (generate_images)", TypeError("cannot unpack"))
+check("世界作成の画面が出ていなければ本文の欄へ",
+      APP["app"].world_generate_screen.world_generate_check_label.text == "世界を生成しています…"
+      and not APP["app"].world_generate_screen.finished)
 
 
 # --------------------------------------------------------------------------

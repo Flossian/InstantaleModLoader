@@ -20,6 +20,9 @@
   * **待機を持つスレッドが死んだら** … 何で止まったか（例外と、経由した MOD）を本文の欄に出し、
     ゲーム自身の待機の終わり（`scripts.functions.finish_button_load`）を呼んで選択肢を返す。
     状態は途中まで書き換わったままになる。それでも理由が見えて操作が返るほうを採る
+  * **世界作成の画面のスレッドが死んだら** … 画面の文の欄に理由を出し、画面自身の
+    `finish_button_load` を呼んで「生成する」を押せる形に戻す。あの画面には本文の欄が無く、
+    `add_text` は落ちる。死んだのが `execute` ではないので、前は待機がそのまま残っていた
   * **それ以外のスレッドが死んだら**（画像の生成など）… 本文の欄に出すだけ
   * **4xx の送り直しを早めに打ち切る** … ゲームは送信を `backoff` で包み、諦める条件を
     送信モジュールの `should_give_up(e)` に聞く。4xx（408 / 409 / 429 を除く）も約30回送り直していた
@@ -52,6 +55,15 @@ THREAD_TITLE = "THREAD CRASH"
 SEND_THREADS = ("send_request_on_id", "send_request_with_no_structure_on_id")
 #: 死ぬと待機が残るスレッド。行動1つ（`execute`）と、会話の直前の人物の詳細生成。
 WAIT_THREADS = ("execute", "generate_npc_detail_and_ready")
+#: 世界作成の画面で回るスレッド。生成（`generate_world`）と概要の審査（`check_violation_thread`）。
+#: 死ぬと画面が「世界を生成しています…」のまま「生成する」が押せない。
+WORLD_THREADS = ("generate_world", "check_violation_thread")
+#: 世界作成の画面（`app.world_generate_screen`）。本文の欄が無く `add_text` は落ちるので、
+#: 画面の文の欄（`update_world_generate_check_label_text`）に出し、画面自身の `finish_button_load` で待機を終える。
+WORLD_SCREEN_ATTR = "world_generate_screen"
+WORLD_TEXT_NAME = "update_world_generate_check_label_text"
+#: 待機を終えてから画面の様子を記録するまでの秒数（画面の動きが後から文を書き換えないかを見る）。
+WORLD_CHECK_SECONDS = 2.0
 
 #: 待機の終わり。ゲーム自身が作業スレッドの終わりで呼ぶ（GAME.md §2.4）。
 FINISH_MODULE = "scripts.functions"
@@ -301,14 +313,64 @@ def claim_call(manager_name, summary):
 # --------------------------------------------------------------------------
 # 画面
 # --------------------------------------------------------------------------
-def _on_main(fn):
+def _on_main(fn, delay=0):
     try:
         from kivy.clock import Clock
-        Clock.schedule_once(lambda _dt: fn(), 0)
+        Clock.schedule_once(lambda _dt: fn(), delay)
         return True
     except Exception:
         log_exc("stall guard: cannot schedule on the main thread")
         return False
+
+
+def world_screen(app):
+    """世界作成の画面。無ければ None。"""
+    return getattr(app, WORLD_SCREEN_ATTR, None) if app is not None else None
+
+
+def on_world_screen(app) -> bool:
+    """いま出ているのが世界作成の画面なら真（画面の切り替えの `current` と画面の名前で見る）。"""
+    screen = world_screen(app)
+    name = getattr(screen, "name", None)
+    if not name:
+        return False
+    current = getattr(getattr(app, "root", None), "current", None)
+    if current is None:
+        current = getattr(getattr(screen, "manager", None), "current", None)
+    return current == name
+
+
+def _world_state(screen):
+    button = getattr(screen, "world_generate_button", None)
+    label = getattr(screen, "world_generate_check_label", None)
+    return "generate button disabled={!r}, loading={!r}, label={!r}".format(
+        getattr(button, "disabled", None), getattr(screen, "loading_narration_label", None),
+        (getattr(label, "text", "") or "")[:80])
+
+
+def _show_on_world_screen(screen, text, fresh, end_wait):
+    """世界作成の画面に出す。`end_wait` なら先に画面自身の待機の終わりを呼ぶ（文を消されないよう、文は後）。"""
+    if end_wait:
+        finish = getattr(screen, FINISH_NAME, None)
+        if callable(finish):
+            try:
+                finish()
+            except Exception:
+                log_exc("stall guard: the world screen's {} failed".format(FINISH_NAME))
+        else:
+            log("stall guard: the world screen has no {}; the wait stays".format(FINISH_NAME),
+                level="WARN")
+    if fresh:
+        put = getattr(screen, WORLD_TEXT_NAME, None)
+        try:
+            put(text)
+        except Exception:
+            log_exc("stall guard: {} failed".format(WORLD_TEXT_NAME))
+    if not end_wait:
+        return
+    log("stall guard: ended the wait on the world screen ({})".format(_world_state(screen)))
+    _on_main(lambda: log("stall guard: the world screen {:.0f}s later ({})".format(
+        WORLD_CHECK_SECONDS, _world_state(screen))), WORLD_CHECK_SECONDS)
 
 
 def _fresh(text) -> bool:
@@ -325,8 +387,11 @@ def _fresh(text) -> bool:
     return True
 
 
-def show(text, *, end_wait=False):
-    """本文の欄に出す。`end_wait` なら、待機中のときだけゲームの待機の終わりも呼ぶ。"""
+def show(text, *, end_wait=False, world=False):
+    """本文の欄に出す。`end_wait` なら、待機中のときだけゲームの待機の終わりも呼ぶ。
+
+    `world` か、いま世界作成の画面が出ていれば、そちらの文の欄に出して画面の待機を終える。
+    """
     # 一文一行で出すので、どの行もゲームの文と見分けられるよう行ごとに印を付ける。
     text = "\n".join(PREFIX + line for line in text.split("\n"))
     fresh = _fresh(text)
@@ -335,6 +400,10 @@ def show(text, *, end_wait=False):
         app = ui.find_app()
         if app is None:
             log("stall guard: no app; not shown: {}".format(text), level="WARN")
+            return
+        screen = world_screen(app)
+        if screen is not None and (world or on_world_screen(app)):
+            _show_on_world_screen(screen, text, fresh, end_wait)
             return
         if fresh:
             try:
@@ -375,6 +444,9 @@ def on_thread_crash(exc_type, exc_value, exc_traceback):
         return
     via = mod_of(tb)
     via_text = "（{} を経由）".format(via) if via else ""
+    if target in WORLD_THREADS:
+        on_world_crash(thread, exc_value, via, via_text)
+        return
     if getattr(exc_value, FAILED_MARK, False):
         log("stall guard: {} stopped after the failed llm request {}".format(
             thread, getattr(exc_value, "manager_name", "?")))
@@ -388,6 +460,24 @@ def on_thread_crash(exc_type, exc_value, exc_traceback):
             summary, via_text), end_wait=True)
     else:
         show("裏の処理が止まった: {}{}。".format(summary, via_text))
+
+
+def on_world_crash(thread, exc, via, via_text):
+    """世界作成の画面のスレッドが死んだ。理由をその画面に出し、「生成する」を押せる形に戻す。
+
+    画面の文の欄は1行ずつ上書きなので、送信の失敗の理由もここで一緒に出す。
+    """
+    if getattr(exc, FAILED_MARK, False):
+        summary = getattr(exc, "summary", None) or "?"
+        log("stall guard: {} stopped after the failed llm request {}".format(
+            thread, getattr(exc, "manager_name", "?")))
+        text = "世界の生成を中断した（{}）: {}".format(getattr(exc, "manager_name", "?"), summary)
+    else:
+        summary = summary_of(exc)
+        log("stall guard: {} died: {}{}".format(thread, summary, " via " + via if via else ""),
+            level="WARN")
+        text = "世界の生成が途中で止まった: {}{}".format(summary, via_text)
+    show(text + "\n「生成する」を押し直せる。", end_wait=True, world=True)
 
 
 def on_send_crash(thread, exc, tb):

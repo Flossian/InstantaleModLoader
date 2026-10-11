@@ -11,7 +11,7 @@
     player.area_history[エリアid]["achievements"]   その土地で成した事の文章
     player.area_history[エリアid]["lawfulness"]     手配度（平常 10、0 未満で犯罪者）
     player.area_history[エリアid]["residency"]      滞在日数の累計と最後に発った日
-    world.quests / world_dict["quests"]             完了した依頼
+    world.quests / save_data_dict["quests"]         完了した依頼（`ui.quest_stores`）
 
 `area_history` の読み方はローダの語彙（`ui.area_record` ほか）。
 ここに写さないのは `309_` / `316_` と同じ表を3枚持つことになるため（TECH.md §3.2.3）。

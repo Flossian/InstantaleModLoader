@@ -285,9 +285,10 @@ def apply(ctx):
     def live_store(world):
         """難易度を読み書きする先 ＝ **生きた一覧だけ**（`world.quests`）。
 
-        `ui.quest_stores` は雛形（`app.world_dict['quests']`）も返すが、
-        そちらへ書くと世界のファイルに焼かれて、
-        同じ世界で新しく始めた別のキャラクタにまで乗る（GAME.md §2.9.1）。
+        `ui.quest_stores` はセーブの中身（`app.save_data_dict['quests']`）も返すが、
+        この MOD は上げた難易度をセーブに残さない（MOD を外せば素のまま。GAME.md §2.9.1）。
+        雛形（`app.world_dict['quests']`）へ書くと世界のファイルに焼かれて、
+        同じ世界で新しく始めた別のキャラクタにまで乗る。
         生きた一覧が引けないビルドでは、雛形しか無いので諦めて一度だけ知らせる。
 
         `app` ではなく `world` を受けるのは、`World.__init__` を包む場面では

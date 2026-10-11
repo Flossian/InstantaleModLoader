@@ -561,7 +561,7 @@ def apply(ctx):
     def write_difficulty(app, quest_id, difficulty, first=False):
         """選んだ難易度を両方の格納先へ書く（片方だけだと表示と保存がずれる）。
 
-        生成した直後は `world_dict['quests']` にまだ現れていないことがある。
+        生成した直後はセーブの中身（`save_data_dict['quests']`）にまだ現れていないことがある。
         だから受注の時点でもう一度書く。
         同じ値を書くだけなので何度でも安全。
         """

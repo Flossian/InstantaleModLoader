@@ -11,7 +11,7 @@ QuestStart・End・RetireManager / HUD / Clock を差し込み、次を確認す
   押下   … 印で横取りしてゲームの経路（`process_choice`）に乗せる。
            `PhaseSpec` に自前クラス名を書かない
   難易度 … 移動元と移動先の**間**から選ばれ、生成にもクエスト辞書にも同じ値が入る
-           （`world.quests` と `world_dict['quests']` の両方）
+           （`world.quests` と `save_data_dict['quests']` の両方）
   生成   … `area_description` に道中の性質が足され、元の記述は残る
   受注   … ゲーム本来の受注画面（`QuestChoiceManager`）へ渡す
   踏破   … クリアしただけでは動かず、**集落の画面に戻ってから**移動が起きる
@@ -271,8 +271,8 @@ class DisplayQuestChoice:
     #: ゲーム自身が付ける難易度。
     #: mod がこれを自分の値で上書きする。
     game_difficulty = 4
-    #: 生成の直後に `world_dict['quests']` にも現れるか。
-    #: **実機では現れなかった**（`1 store(s)`）ので、既定は False。
+    #: 生成の直後に `save_data_dict['quests']` にも現れるか。
+    #: 実機では測っていないので、後から現れる側（False）を既定にする。
     in_both_stores = False
 
     def __init__(self, app):
@@ -297,16 +297,16 @@ class DisplayQuestChoice:
                       neighboring_settlement_id="7")
         self.app.world.quests[new_id] = quest
         if type(self).in_both_stores:
-            self.app.world_dict["quests"][new_id] = {
+            self.app.save_data_dict["quests"][new_id] = {
                 "id": new_id, "quest_title": type(self).next_title,
                 "request_summary": type(self).next_summary,
                 "difficulty": type(self).game_difficulty}
         return quest
 
     def register_in_save(self, quest_id):
-        """`world_dict['quests']` に後から現れる（実機の並びを真似る）。"""
+        """`save_data_dict['quests']` に後から現れる（遅いほうの並びを真似る）。"""
         quest = self.app.world.quests[str(quest_id)]
-        self.app.world_dict["quests"][str(quest_id)] = {
+        self.app.save_data_dict["quests"][str(quest_id)] = {
             "id": str(quest_id), "quest_title": quest.quest_title,
             "request_summary": type(self).next_summary,
             "difficulty": type(self).game_difficulty}
@@ -317,6 +317,7 @@ class InstantaleApp:
         self.world = world
         self.world_dict = {"world_data": {"world_name": "テスト世界"},
                            "quests": {}}
+        self.save_data_dict = {"quests": {}}
         self.player = Player(world.areas["7"])
         self.buttons = []
         self.display_button_map = None
@@ -641,7 +642,7 @@ def setup(configure=None, levels=None, keep_state=False, mod=None):
     world = World({"7": Area("7", "風鳴りの村"), "9": Area("9", "陽光の砦")},
                   {"39": Quest(id="39", quest_title="水底の警備")})
     app = app_cls(world)
-    app.world_dict["quests"] = {"39": {"id": "39"}}
+    app.save_data_dict["quests"] = {"39": {"id": "39"}}
     main.current_app = app
 
     raw = ctx.hooks.get(
@@ -928,12 +929,14 @@ classes[1](app).register_in_save(quest_id)
 classes[4](app, "settlement_quest", quest_id).execute("受ける")
 CLOCK.settle()
 check("**セーブ側の辞書にも**同じ値が入る（受注の時点で揃える）",
-      app.world_dict["quests"][quest_id]["difficulty"] == rolled,
-      app.world_dict["quests"][quest_id])
+      app.save_data_dict["quests"][quest_id]["difficulty"] == rolled,
+      app.save_data_dict["quests"][quest_id])
 check("クエスト辞書に独自キーを足さない",
-      set(app.world_dict["quests"][quest_id])
+      set(app.save_data_dict["quests"][quest_id])
       <= {"id", "quest_title", "request_summary", "difficulty"},
-      app.world_dict["quests"][quest_id])
+      app.save_data_dict["quests"][quest_id])
+check("雛形（`world_dict['quests']`）には書かない",
+      app.world_dict["quests"] == {}, app.world_dict["quests"])
 
 mod, ctx, app, classes = setup(
     configure=lambda m: setattr(m, "DIFFICULTY_MODE", "destination"))
@@ -979,8 +982,8 @@ classes[1](app).register_in_save(quest_id)
 classes[4](app, "settlement_quest", quest_id).execute("受ける")
 CLOCK.settle()
 check("**セーブ側の辞書にも**入る",
-      "移動します" in app.world_dict["quests"][quest_id]["request_summary"],
-      app.world_dict["quests"][quest_id])
+      "移動します" in app.save_data_dict["quests"][quest_id]["request_summary"],
+      app.save_data_dict["quests"][quest_id])
 check("二重に足さない（受注でもう一度呼んでも1回だけ）",
       getattr(app.world.quests[quest_id], "request_summary").count("移動します") == 1,
       getattr(app.world.quests[quest_id], "request_summary"))
@@ -1016,8 +1019,8 @@ check("  → LLM の本文は残す",
       summary_of(app, quest_id) == "涸れ谷を抜けて隣の土地へ至る。",
       summary_of(app, quest_id))
 check("  → セーブ側からも消す",
-      "移動します" not in app.world_dict["quests"][quest_id]["request_summary"],
-      app.world_dict["quests"][quest_id])
+      "移動します" not in app.save_data_dict["quests"][quest_id]["request_summary"],
+      app.save_data_dict["quests"][quest_id])
 check("  → 記録に残す", "note: removed the arrival line" in read_log(),
       read_log()[-500:])
 
@@ -1133,7 +1136,7 @@ quest_id = new_quest_id(app)
 # ここで注入し直し（新しい層は控えをファイルから読む）。
 mod2, ctx2, app2, classes2 = setup(keep_state=True)
 app2.world.quests[quest_id] = app.world.quests[quest_id]
-app2.world_dict["quests"][quest_id] = app.world_dict["quests"].get(quest_id, {})
+app2.save_data_dict["quests"][quest_id] = app.save_data_dict["quests"].get(quest_id, {})
 classes2[4](app2, "settlement_quest", quest_id).execute("受ける")
 CLOCK.settle()
 LootPhaseManager(app2).execute("漁る")
