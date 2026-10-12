@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""919_town_factions の頼み文を、実際のローカル LLM と実セーブで通して確かめる。
+"""339_town_factions の頼み文を、実際のローカル LLM と実セーブで通して確かめる。
 
     python tools\\faction_probe.py                         # llama-server を起こして全世界を測る
     python tools\\faction_probe.py --runs 3               # 世界ごとの回数
@@ -74,7 +74,7 @@ FACTION_OVERVIEW = (
 
 
 def load_mod():
-    """919 を検査と同じ形で読む（パッケージとして。`material` と `rules` を使う）。"""
+    """339 を検査と同じ形で読む（パッケージとして。`material` と `rules` を使う）。"""
     matches = sorted(name for name in os.listdir(MODS_DIR)
                      if name.endswith("_town_factions")
                      and os.path.isfile(os.path.join(MODS_DIR, name, "mod.json")))
@@ -239,7 +239,8 @@ def run_world(name, save, material, rules, args, ask, leak_words):
             print("    {} run {}: 抽出が読めない（{}s）".format(name, index + 1, seconds), flush=True)
             continue
         ledger, dropped = rules.build_ledger(extracted, text, [t[0] for t in towns],
-                                             day=(save.get("world_data") or {}).get("days_elapsed"))
+                                             day=(save.get("world_data") or {}).get("days_elapsed"),
+                                             town_names={t[0]: t[1] for t in towns})
         offered = sum(len(extracted.get(key) or []) for key in ("factions", "towns", "relations"))
         row.update(status=ledger["status"], dropped=dropped, offered=offered,
                    factions=[f["name"] for f in ledger["factions"]],
@@ -258,7 +259,7 @@ def run_world(name, save, material, rules, args, ask, leak_words):
                 row.update(status=ledger["status"], factions=[f["name"] for f in ledger["factions"]],
                            towns={t: r["faction"] for t, r in ledger["towns"].items()}, designed=True)
         if ledger["status"] == rules.READY:
-            # 最初の立ち位置は MOD と同じ分け方（新しいキャラは出自、途中導入は規則の土台＋調整。DOC.md §2.3）
+            # 最初の立ち位置は MOD と同じ分け方（新しいキャラは出自、途中導入は規則の土台＋調整。VERIFICATION.md §3.98「最初の見られ方」）
             p = player_material(save)
             records = rules.town_records((save.get("player_data") or {}).get("area_history") or {})
             if rules.is_new_character(records):
@@ -307,7 +308,7 @@ def run_world(name, save, material, rules, args, ask, leak_words):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="919_town_factions の頼み文をローカル LLM で通す。")
+    ap = argparse.ArgumentParser(description="339_town_factions の頼み文をローカル LLM で通す。")
     ap.add_argument("--runs", type=int, default=DEFAULT_RUNS)
     ap.add_argument("--world", action="append", help="測る世界（saves の下のフォルダ名）。省くと全部")
     ap.add_argument("--add-factions", action="append", default=[],

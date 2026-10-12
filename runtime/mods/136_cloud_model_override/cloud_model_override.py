@@ -9,7 +9,8 @@ OpenAI API と Claude API の両方に対応する。
     cloud_model_override.py   入口。設定の定数・ログ・apply()
     openai_side.py            OpenAI API 宛ての直し・キャッシュ・包み
     claude_side.py            Claude API 宛ての直し・キャッシュ・包み
-    claude_grammar.py         Claude API で型の文法が大きすぎて断られたときの迂回
+    claude_grammar.py         Claude API で型の文法が大きすぎて断られたときの迂回・SDK が外した const を戻す
+    claude_bounds.py          Claude API の応答の数を、SDK が外した型の範囲に寄せる
     prefix_cache.py           キャッシュの印をどこに置くか（両方が使う）
 
 設定の定数は入口に置く（ローダが値を書き込むのは入口のモジュールで、

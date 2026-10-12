@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""918_town_incidents をゲーム抜きで通す。
+"""338_town_incidents をゲーム抜きで通す。
 
-    python tools/tests/test_wip_town_incidents.py
+    python tools/tests/test_town_incidents.py
 
 確認するもの:
 

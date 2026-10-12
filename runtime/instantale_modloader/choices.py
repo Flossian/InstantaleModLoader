@@ -171,6 +171,18 @@ def refreshing():
     return _store().get("refreshing")
 
 
+def from_save():
+    """いま配っている組み直しが、ロードで戻った選択肢のものか（`refresh` の中で読む）。外では False。
+
+    世界が入れ替わってから、人物が揃った後の最初の組み直し（それも含む）までが真。
+    そのあいだの選択肢の文言はセーブに焼かれていたもので、前の起動で MOD が書き換えた文言のことがある。
+    人物が揃う前の組み直しでは MOD が文言を書き直せないことがあり、書き直すのは揃った後の組み直し
+    （ロードの後の組み直し）になるので、そこまで含める。
+    ゲームが描いた文言として読む（素の値を控える）MOD は、真のあいだは控えない。
+    """
+    return bool(_store().get("from_save"))
+
+
 def pressed():
     """いま押下を配っているボタン（`handler` / `intercept` の中で読む）。外では None。"""
     return _store().get("pressed")
@@ -454,7 +466,8 @@ def on_refresh(ctx, app):
     if world is not None and not _same_world(store["world"], world):
         store["world"] = _world_mark(world)
         store["restore"] = True          # 世界が入れ替わった＝ロード（か新しく始めた）
-    if store["restore"] and isinstance(buttons, list) and buttons:
+    loaded = bool(store["restore"] and isinstance(buttons, list) and buttons)
+    if loaded:
         store["restore"] = None
         # 印の持ち越しは付け足しの働き。ここが失敗しても、MOD の処理は必ず呼ぶ（失敗は1度だけ残す）。
         try:
@@ -468,7 +481,15 @@ def on_refresh(ctx, app):
                     log_exc("choices: cannot restore the marks after the load")
         if restored:
             _log(ctx, "restored the marks of {} button(s) after the load".format(restored))
-    _call_refresh(app, buttons)
+    if loaded:
+        store["save_pending"] = True
+    store["from_save"] = bool(store.get("save_pending"))
+    try:
+        _call_refresh(app, buttons)
+    finally:
+        store["from_save"] = False
+    if store.get("save_pending") and ready(app):
+        store["save_pending"] = False
     if isinstance(buttons, list) and buttons and not ready(app):
         arm_after_load(ctx, app)
 

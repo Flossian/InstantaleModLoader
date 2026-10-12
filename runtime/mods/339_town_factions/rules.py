@@ -2,7 +2,7 @@
 """街の勢力の規則。ゲームには触らない（ゲーム抜きの検査で全部通せる）。
 
 段の数と名前・見られ方の点数と段の対応・関係の動かし方・根拠の照合・控えの形を持つ。
-決めた仕様と根拠は DOC.md。
+決めた仕様と根拠は VERIFICATION.md §3.98。
 
 LLM に論理は渡さない（`902_city_case` と同じ考え）。
 LLM が決めるのは「設定に何が書いてあるか」「どちらへ動いたか」と文章だけで、
@@ -140,6 +140,22 @@ def is_adventurer_stand_in(name, material):
     return False
 
 
+#: 文の中で名指しを探すときの、名前の最短の字数（1字の名前は別の語の一部に紛れる）。
+NAME_MIN_CHARS = 2
+
+
+def sentence_naming(material, *names):
+    """材料の中で、`names` をすべて含む最初の一文（原文のまま）。無ければ None。空白と括弧は無視して探す。"""
+    keys = [normalize(name) for name in names]
+    if not keys or any(len(key) < NAME_MIN_CHARS for key in keys):
+        return None
+    for sentence in _SENTENCE.split(str(material or "")):
+        flat = normalize(sentence)
+        if len(flat) >= EVIDENCE_MIN_CHARS and all(key in flat for key in keys):
+            return sentence.strip()
+    return None
+
+
 # ============================================================ 台帳を組む
 #: 名前の後ろの括弧書き（「霧送りの御堂（祈祷教団）」の「（祈祷教団）」）。
 _TRAILING_NOTE = re.compile(r"\s*[（(][^（）()]*[)）]\s*$")
@@ -168,13 +184,14 @@ def pair_key(a, b):
     return "|".join(sorted((str(a), str(b))))
 
 
-def build_ledger(extracted, material, town_ids, *, day=None):
+def build_ledger(extracted, material, town_ids, *, day=None, town_names=None):
     """抽出の答えから台帳を組む。根拠が材料に無いものは捨てる。
 
     `extracted` は LLM の答え（辞書）。`material` は渡した材料の全文（根拠の照合に使う）。
-    `town_ids` はこの世界の街の id（文字列）。
+    `town_ids` はこの世界の街の id（文字列）。`town_names` は街の id → 名前（無くてもよい）。
     返すのは `(台帳, 捨てたものの説明の並び)`。勢力が2つ未満なら台帳の status は NONE。
     """
+    town_names = {str(k): str(v) for k, v in (town_names or {}).items()}
     ledger = empty_ledger()
     ledger["made_day"] = day
     dropped = []
@@ -193,7 +210,7 @@ def build_ledger(extracted, material, town_ids, *, day=None):
             dropped.append("faction {!r}: the name is not in the setting".format(name))
             continue
         if str(row.get("name_type") or "").strip().startswith(GENERAL_NAME):
-            # 業種・職業の呼び名は勢力にしない（2026-10-11 に決めた。DOC.md §2.1）。
+            # 業種・職業の呼び名は勢力にしない（VERIFICATION.md §3.98「勢力は設定に書かれたものだけ」）。
             # 「数えない」と書くだけでは残ったので、勢力ごとに答えさせて落とす
             dropped.append("faction {!r}: a general name, not one organization".format(name))
             continue
@@ -223,16 +240,22 @@ def build_ledger(extracted, material, town_ids, *, day=None):
         faction_id = faction_id_of(by_name, row.get("faction"))
         if town not in known_towns or faction_id is None:
             continue
-        if not evidence_ok(row.get("evidence"), material):
-            dropped.append("town {}: evidence not found".format(town))
-            continue
         name = next(f["name"] for f in factions if f["id"] == faction_id)
-        if normalize(name) not in normalize(row.get("evidence")):
-            # 勢力の名前の無い根拠から推して割り振ったもの（2026-10-11、Haiku 5.5 が「聖者の遺構」から教会の街とした）
-            dropped.append("town {}: the evidence does not name {!r}".format(town, name))
-            continue
-        ledger["towns"][town] = {"faction": faction_id,
-                                 "evidence": str(row.get("evidence") or "").strip()}
+        evidence = str(row.get("evidence") or "").strip()
+        found = evidence_ok(evidence, material)
+        if not found or normalize(name) not in normalize(evidence):
+            # 根拠が原文に無いもの・勢力の名前の無い根拠から推して割り振ったもの
+            # （Haiku 5.5 が「聖者の遺構」から教会の街とした）は捨てる。
+            # ただし設定に勢力と街を1文で結ぶ文があれば、それを根拠にする。ローカルの LLM は、
+            # 「〇〇と△△を治める『白翼騎士団』」と書いた世界でも、根拠に街の案内文を選ぶか言い換えて、
+            # 街がほとんど落ちていた（VERIFICATION.md §3.98「勢力は設定に書かれたものだけ」）
+            named = sentence_naming(material, name, town_names.get(town, ""))
+            if named is None:
+                dropped.append("town {}: evidence not found".format(town) if not found else
+                               "town {}: the evidence does not name {!r}".format(town, name))
+                continue
+            evidence = named
+        ledger["towns"][town] = {"faction": faction_id, "evidence": evidence}
     for a in factions:
         for b in factions:
             if a["id"] < b["id"]:
@@ -347,7 +370,7 @@ DEED_POINTS = 10
 DEED_CAP = 50
 FAMILIAR_DAYS = 90
 FAMILIAR_POINTS = 10
-#: 手配は功績で打ち消さない（DOC.md §2.3）。手配されていれば警戒より上へ行かず、重い手配は功績によらず敵視。
+#: 手配は功績で打ち消さない（VERIFICATION.md §3.98「最初の見られ方」）。手配されていれば警戒より上へ行かず、重い手配は功績によらず敵視。
 WANTED_POINTS = -40
 WANTED_CEILING = -21
 HEAVILY_WANTED_AT = -40
@@ -453,7 +476,7 @@ def relation_stage(ledger, a, b):
 
 #: 張り合う勢力への響き。好かれた点数の何割を、相手の勢力から引くか（関係の段ごと）。
 RIVAL_ECHO = {-2: 0.5, -1: 0.25}
-#: 点数がこれ以下になったら、その勢力の敵視は外れない（上がっても敵視の上端で止まる。DOC.md §2.12）。
+#: 点数がこれ以下になったら、その勢力の敵視は外れない（上がっても敵視の上端で止まる。VERIFICATION.md §3.98「手配と敵視の上限」）。
 ENEMY_LOCK_AT = -81
 #: 敵視の上端。
 ENEMY_CEILING = -61
@@ -531,7 +554,7 @@ def is_locked(ledger, faction_id):
 
 
 def lift_lock(ledger, faction_id):
-    """敵視が外れない印を外す。外したら True。会話で相手を納得させたときだけ呼ぶ（DOC.md §2.12）。"""
+    """敵視が外れない印を外す。外したら True。会話で相手を納得させたときだけ呼ぶ（VERIFICATION.md §3.98「手配と敵視の上限」）。"""
     row = (ledger.get("standing") or {}).get(faction_id)
     if not isinstance(row, dict) or not row.get("locked"):
         return False

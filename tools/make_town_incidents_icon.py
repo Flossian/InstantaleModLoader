@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""918_town_incidents の窓のアイコン（注意の標識）を描く。開発用。
+"""338_town_incidents の窓のアイコン（注意の標識）を描く。開発用。
 
     python tools/make_town_incidents_icon.py
 
@@ -20,7 +20,7 @@ import random
 from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT_DIR = os.path.normpath(os.path.join(HERE, os.pardir, "runtime", "mods", "918_town_incidents"))
+OUT_DIR = os.path.normpath(os.path.join(HERE, os.pardir, "runtime", "mods", "338_town_incidents"))
 SIZE = 32
 #: 書き出す大きさ（ゲームの左下のボタンの大きさ。GAME.md §2.34）。
 OUT_SIZE = 40

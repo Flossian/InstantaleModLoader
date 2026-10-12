@@ -434,7 +434,7 @@ assert order == [("$defs", "Skill", "properties", "effects", "items"), ("propert
 narrow = GR.loosen(QUEST, order[:1])
 item = narrow["$defs"]["Skill"]["properties"]["effects"]["items"]
 assert item["type"] == "string" and item["description"].startswith(GR.MARK), item
-assert '"enum":["buff"]' in item["description"] and "title" not in item["description"], item
+assert '"const":"buff"' in item["description"] and "title" not in item["description"], item
 assert "Buff" not in narrow["$defs"] and "Damage" in narrow["$defs"], sorted(narrow["$defs"])  # loot が Damage を使う
 assert "anyOf" in QUEST["$defs"]["Skill"]["properties"]["effects"]["items"]  # 元の型は変えない
 
@@ -504,6 +504,113 @@ try:
     raise AssertionError("別の理由の 400 を握った")
 except RuntimeError as exc:
     assert "max_tokens" in str(exc)
+
+# ---------------------------------------------------------------- SDK が説明文へ移した const を戻す
+# SDK は Literal の1値（const）を外して説明文に `{const: ward}` と書く。そのままだと自由な文字列として縛られる
+AREA = {
+    "type": "object", "additionalProperties": False, "required": ["places"],
+    "properties": {"places": {"type": "array", "items": {"anyOf": [
+        {"$ref": "#/$defs/Ward"}, {"$ref": "#/$defs/Place"}]}}},
+    "$defs": {
+        "Ward": {"type": "object", "properties": {
+            "type": {"type": "string", "title": "Type", "description": "{const: ward}"},
+            "name": {"type": "string", "description": "区画の名前"}}},
+        "Place": {"type": "object", "properties": {
+            "type": {"type": "string", "description": "場所の種類\n\n{const: location}"},
+            "level": {"type": "integer", "description": "{const: 3}"},
+            "size": {"type": "integer", "description": "{maximum: 10, minimum: 1}"},
+            "kind": {"type": "string", "enum": ["a"], "description": "{const: b}"}}}}}
+fixed_area, restored = GR.restore_const(AREA)
+ward_type = fixed_area["$defs"]["Ward"]["properties"]["type"]
+place = fixed_area["$defs"]["Place"]["properties"]
+assert restored == 2, restored
+assert ward_type == {"type": "string", "title": "Type", "enum": ["ward"]}, ward_type
+assert place["type"] == {"type": "string", "description": "場所の種類", "enum": ["location"]}, place["type"]
+assert "enum" not in place["level"] and "enum" not in place["size"], place  # 文字列の欄だけ・const だけ
+assert place["kind"]["enum"] == ["a"], place["kind"]  # 縛りのある欄は触らない
+assert "enum" not in AREA["$defs"]["Ward"]["properties"]["type"]  # 元の型は変えない
+assert GR.restore_const(QUEST) == (QUEST, 0)  # 戻すものが無ければ元のまま
+
+MOD.CLAUDE_MODEL, MOD.CLAUDE_CACHE = "off", "off"
+ctx = Ctx()
+MOD.apply(ctx)
+sent = []
+post = ctx.hooks[CL.POST]
+area_request = {"model": "claude-haiku-5-5", "max_tokens": 100, "messages": [],
+                "output_config": {"format": {"type": "json_schema", "schema": AREA}}}
+post(lambda self_, path, *args, **kwargs: sent.append(kwargs["body"]), OPENAI, "/v1/messages",
+     body=area_request, options={})
+assert sent[0]["output_config"]["format"]["schema"] == fixed_area, sent
+assert any("const->enum 2" in line for line in ctx.lines), ctx.lines  # 差し替えが off でも戻す
+assert area_request["output_config"]["format"]["schema"] is AREA  # 呼び出し側の本文は変えない
+
+# ---------------------------------------------------------------- SDK が説明文へ移した数の範囲に寄せる
+BD = sys.modules[NAME + ".claude_bounds"]
+assert BD.bounds({"description": "回数\n\n{maximum: 10, minimum: 1}"}) == {"maximum": 10, "minimum": 1}
+assert BD.bounds({"description": "{example: 火}"}) == {} and BD.bounds({"description": "回数"}) == {}
+SKILLS = {
+    "type": "object", "additionalProperties": False, "required": ["skills", "tags"],
+    "properties": {
+        "skills": {"type": "array", "items": {"$ref": "#/$defs/Skill"}},
+        "tags": {"type": "array", "items": {"type": "string"}, "description": "{maxItems: 2, minItems: 2}"},
+        "loose": {"anyOf": [{"type": "integer", "description": "{minimum: 0}"}, {"type": "null"}]}},
+    "$defs": {
+        "Skill": {"type": "object", "additionalProperties": False, "required": ["max_uses", "effects"],
+                  "properties": {
+                      "max_uses": {"type": "integer", "description": "{maximum: 10, minimum: 1}"},
+                      "effects": {"type": "array", "items": {"anyOf": [
+                          {"$ref": "#/$defs/Status"}, {"$ref": "#/$defs/Buff"}]}}}},
+        "Status": {"type": "object", "additionalProperties": False, "required": ["type", "duration"],
+                   "properties": {"type": {"type": "string", "description": "{const: status}"},
+                                  "duration": {"type": "integer", "description": "{maximum: 5, minimum: 3}"},
+                                  "flag": {"type": "boolean", "description": "{minimum: 1}"}}},
+        "Buff": {"type": "object", "additionalProperties": False, "required": ["type", "duration"],
+                 "properties": {"type": {"type": "string", "description": "{const: buff}"},
+                                "duration": {"type": "integer", "description": "{maximum: 5, minimum: 2}"},
+                                "rate": {"type": "number", "description": "{exclusiveMaximum: 1}"}}}}}
+SKILLS, _ = GR.restore_const(SKILLS)
+assert BD.has_bounds(SKILLS) and not BD.has_bounds(QUEST)
+changes = []
+got = BD.clamp({"skills": [{"max_uses": 12, "effects": [
+    {"type": "status", "duration": 2, "flag": False},   # 選択肢が status に決まるので 3 へ
+    {"type": "buff", "duration": 2, "rate": 1.5},        # buff の範囲では 2 は内側。number の exclusive は触らない
+    {"type": "other", "duration": 0}]}],                  # 選択肢が決まらないので触らない
+    "tags": ["a", "b", "c"], "loose": -1}, SKILLS, SKILLS, changes)
+skill = got["skills"][0]
+assert skill["max_uses"] == 10, skill
+assert [e["duration"] for e in skill["effects"]] == [3, 2, 0], skill
+assert skill["effects"][0]["flag"] is False and skill["effects"][1]["rate"] == 1.5, skill
+assert got["tags"] == ["a", "b"] and got["loose"] == 0, got
+assert changes == ["12->10", "2->3", "items 3->2", "-1->0"], changes
+assert BD.clamp({"tags": ["a"]}, SKILLS, SKILLS, []) == {"tags": ["a"]}  # 下限に足りない配列は触らない
+
+# 送信口: 文字列にした欄も、読み戻した後に寄せる。寄せたことはログに出る
+class SkillApi(object):
+    def __init__(self):
+        self.calls = 0
+
+    def __call__(self, self_, path, *args, **kwargs):
+        self.calls += 1
+        schema = kwargs["body"]["output_config"]["format"]["schema"]
+        if "anyOf" in json.dumps(schema["$defs"]["Skill"]):
+            raise RuntimeError("Error code: 400 - The compiled grammar is too large, which would cause ...")
+        reply = Message(json.dumps({"skills": [{"max_uses": 0, "effects": [
+            json.dumps({"type": "status", "duration": 9})]}], "tags": []}))
+        return kwargs["options"]["post_parser"](reply)
+
+
+MOD.CLAUDE_MODEL, MOD.CLAUDE_CACHE = "off", "off"
+ctx = Ctx()
+MOD.apply(ctx)
+parsed = []
+skill_api = SkillApi()
+ctx.hooks[CL.POST](skill_api, OPENAI, "/v1/messages",
+                   body={"model": "claude-haiku-5-5", "max_tokens": 100, "messages": [],
+                         "output_config": {"format": {"type": "json_schema", "schema": SKILLS}}},
+                   options={"post_parser": lambda message: parsed.append(json.loads(message.content[0].text))})
+assert skill_api.calls == 2, skill_api.calls
+assert parsed[0]["skills"][0] == {"max_uses": 1, "effects": [{"type": "status", "duration": 5}]}, parsed
+assert any("clamped to the type's range: 0->1, 9->5" in line for line in ctx.lines), ctx.lines
 MOD.CLAUDE_MODEL, MOD.CLAUDE_CACHE = "claude-opus-5-5", "5m"
 
 

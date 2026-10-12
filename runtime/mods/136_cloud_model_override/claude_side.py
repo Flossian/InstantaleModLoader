@@ -24,12 +24,15 @@ Opus 5 / Haiku 5.5 / Sonnet 5.5 は、effort が `xhigh` / `max` だと思考を
 
 構造化出力の型が大きすぎて API に断られた要求は、型の選択肢を文字列の欄に置き換えて送り直す
 （`claude_grammar.py`。依頼の生成がゲームの既定のモデルでも断られるため）。
-差し替えもキャッシュも切っていても、これだけは効かせる。
+SDK が説明文へ書き移した `const` も、送る前に `enum` へ戻す（同じファイル。町の生成の送り直しを減らす）。
+同じく書き移された数の範囲（`minimum` / `maximum` / `maxItems`）は API が縛らないので、
+応答をゲームの型で読む前に範囲へ寄せる（`claude_bounds.py`）。
+差し替えもキャッシュも切っていても、この3つは効かせる。
 """
 
 import json
 
-from . import claude_grammar
+from . import claude_bounds, claude_grammar
 from .prefix_cache import Prefixes
 
 #: SDK で、全リクエストが最後に通る1点。
@@ -296,8 +299,15 @@ def install(ctx, target, effort, cache, log):
         if caching:
             changed += mark_shared_prefix(body, prefixes, CACHE_TTL[cache])
         schema = claude_grammar.schema_of(body)
+        if schema is not None:
+            schema, restored = claude_grammar.restore_const(schema)
+            if restored:
+                body = claude_grammar.with_schema(body, schema)
+                changed.append("const->enum {}".format(restored))
         key = claude_grammar.schema_key(schema) if schema is not None else None
         known = loosened.get(key) if key is not None else None
+        if schema is not None and claude_bounds.has_bounds(schema):
+            kwargs = claude_bounds.with_clamp(kwargs, schema, report_clamp)
         call_kwargs = kwargs
         if known:
             narrow = claude_grammar.loosen(schema, known)
@@ -322,6 +332,13 @@ def install(ctx, target, effort, cache, log):
             if line:
                 log.write("usage", "[claude] usage: " + line)
         return result
+
+    def report_clamp(changes):
+        # ゲームの型で読む直前に呼ばれる。ここで投げると safe=True が素の送信をやり直すので握る。
+        try:
+            log.write("clamp", "[claude] clamped to the type's range: " + ", ".join(changes[:8]))
+        except Exception:
+            pass
 
     def resend_loosened(orig, self, path, args, kwargs, body, schema, key, first):
         """選択肢を深いものから1つずつ文字列の欄にして送り直す。通ったら覚える。"""

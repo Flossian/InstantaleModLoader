@@ -104,7 +104,7 @@ def inn_room(app, quality, write=None):
 # 宿代は2つの層で決まる。
 #
 #     declare(INN_ROOM, fn)   1枚だけ。部屋1回の額と呼び名（`315_vacation_custom` の設定）
-#     adjust_inn(owner, fn)   何枚でも乗る。その額へ倍率を掛ける（`918_town_incidents` の街の出来事）
+#     adjust_inn(owner, fn)   何枚でも乗る。その額へ倍率を掛ける（`338_town_incidents` の街の出来事）
 #
 # ゲームに効かせるのは関所（`install_inn`）の1か所で、v1.15.0 までは `315_` が自分で持っていた。
 # 段を置く MOD が増えると、`315_` が入っていないときに誰も効かせなくなるので、ローダへ移した。
@@ -272,10 +272,15 @@ def _relabel_room(ui, app, entry, write):
         # 素の額は、ゲームの書式で、しかも今の答えで自分が書く文言ではないものからだけ控える
         # （ロードで戻ったボタンは保存したときに書いた文言のまま。自分の文言から読むと
         # 設定した額を素の額と取り違え、前払いが狂った。`315_` の版で踏んだ）。
+        # ロードで戻った選択肢の組み直し（`choices.from_save`）では控えない。前の起動で段を掛けた文言は、保存の後に
+        # 設定や段が変わると「今の答えの文言」とも食い違い、ゲームの書式のまま素の額に見える
+        # （VERIFICATION.md §3.97「宿代」）。
+        from . import choices as _choices
         answer = _room_answer(app, quality)
         ours_now = answer is not None and old == ui.fill_template(
             answer["label"], name=answer["name"], price=answer["price"])
         if old == _game_label(ui, canon, price) and not ours_now \
+                and not _choices.from_save() \
                 and store["observed"].get(quality) != price:
             store["observed"][quality] = price
             if write:

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""919_town_factions をゲーム抜きで通す。
+"""339_town_factions をゲーム抜きで通す。
 
-    python tools/tests/test_wip_town_factions.py
+    python tools/tests/test_town_factions.py
 
 確認するもの:
 
@@ -9,12 +9,12 @@
              ／台帳を組む（根拠の無い勢力・街・関係は捨てる・勢力が2つ未満なら作らない・平和な世界の下限）
              ／初回の判定を点数に起こす（呼び名は判定した段のときだけ）／会話の判定（1日1回・敵対する勢力へ響く）
              ／情勢（1段まで・設定の関係は2回押されて動く・逆向きで数え直す・平和な世界の下限）
-  材料     … 街だけを拾う・素の案内文と周辺の土地の文を入れる・918 の出来事を「前回から」で読む
+  材料     … 街だけを拾う・素の案内文と周辺の土地の文を入れる・338 の出来事を「前回から」で読む
   流れ     … 世界ごとに有効にするまで何もしない／読み込みで台帳を作る（抽出 → 初回の判定）
              ／勢力が1つの世界では作らず、読み込みのたびに作り直さない
              ／会話の構え（相手の名簿の街の勢力・仲間には足さない・中立には足さない）と情勢の噂
              ／要約に相乗りして見られ方を動かす（337 と同じ要約に2本乗っても送信は1回）
-             ／日数が進むと、918 の出来事を片付けた街の勢力が上がり、間隔が来たら情勢を進める
+             ／日数が進むと、338 の出来事を片付けた街の勢力が上がり、間隔が来たら情勢を進める
 """
 import importlib.util
 import io
@@ -141,6 +141,31 @@ check("街の勢力（知らない街・知らない勢力・根拠の無い街�
                           "7": {"faction": "f1", "evidence": "白の教団は遺物を罪"}}, ledger["towns"])
 check("勢力の名前の無い根拠の街は捨てる", any(d.startswith("town 0:") and "does not name" in d
                                             for d in dropped), dropped)
+NAMED = MATERIAL + "\nカスティアとヴァルガルドを治める「灰の結社」は、秩序を重んじる。\n東の港町ミストルは霧に包まれている。"
+by_town = dict(EXTRACTED, towns=[
+    {"town_id": "2", "faction": "灰の結社", "evidence": "東の港町ミストルは霧に包まれている"},
+    {"town_id": "3", "faction": "灰の結社", "evidence": "東の港町ミストルは霧に包まれている"},
+    {"town_id": "5", "faction": "白の教団", "evidence": "東の港町ミストルは霧に包まれている"}])
+named, dropped4 = rules.build_ledger(by_town, NAMED, ["2", "3", "5"], day=1,
+                                     town_names={"2": "カスティア", "3": "ヴァルガルド", "5": "ミストル"})
+check("根拠に勢力の名前が無くても、設定に勢力と街を1文で結ぶ文があればそれを根拠にする",
+      named["towns"].get("2") == {"faction": "f2",
+                                  "evidence": "カスティアとヴァルガルドを治める「灰の結社」は、秩序を重んじる"}
+      and named["towns"].get("3", {}).get("faction") == "f2", (named["towns"], dropped4))
+check("勢力と街を結ぶ文が無ければ、今までどおり捨てる",
+      "5" not in named["towns"] and any(d.startswith("town 5:") and "does not name" in d
+                                        for d in dropped4), dropped4)
+check("街の名前が渡されなければ救わない（今までの形）",
+      rules.build_ledger(by_town, NAMED, ["2", "3", "5"], day=1)[0]["towns"] == {})
+check("1字の名前では文を探さない", rules.sentence_naming(NAMED, "灰の結社", "カ") is None)
+reworded = dict(EXTRACTED, towns=[
+    {"town_id": "2", "faction": "灰の結社", "evidence": "カスティアは結社の支配下にある"},
+    {"town_id": "5", "faction": "灰の結社", "evidence": "ミストルは結社の支配下にある"}])
+named2, dropped5 = rules.build_ledger(reworded, NAMED, ["2", "5"], day=1,
+                                      town_names={"2": "カスティア", "5": "ミストル"})
+check("言い換えた根拠でも、勢力と街を1文で結ぶ文があれば救う",
+      named2["towns"].get("2", {}).get("faction") == "f2" and "5" not in named2["towns"]
+      and any(d == "town 5: evidence not found" for d in dropped5), (named2["towns"], dropped5))
 check("設定の関係", ledger["relations"]["f1|f2"]["stage"] == -2
       and ledger["relations"]["f1|f2"]["from_setting"], ledger["relations"])
 check("見られ方は中立から", all(r["score"] == 0 for r in ledger["standing"].values()))
@@ -481,7 +506,7 @@ def close(ctx, character, answer):
         return structure(**data)
 
     def resolver(player, messages_, life_log, character_instance, emotion, worldview):
-        # 同じ送信の境目には 919 の世界の生成の包みも載る。要約の窓口の包み（最初に載せたもの）を呼ぶ
+        # 同じ送信の境目には 339 の世界の生成の包みも載る。要約の窓口の包み（最初に載せたもの）を呼ぶ
         return ctx.hooks[talk_summary.SEND_TARGET][0](game_send, "conversation_resolver",
                                                       [dict(SYSTEM)] + SPOKE, Result)
 

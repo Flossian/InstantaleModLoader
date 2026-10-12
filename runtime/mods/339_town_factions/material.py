@@ -3,7 +3,7 @@
 
 材料はセーブの辞書（`save_data_dict`）から取る。
 街の案内文は `321_area_chronicle` が実行中だけ書き換えるので、実行時の `Area.descriptions` ではなく
-セーブの辞書の素の文を読む（DOC.md §2.2）。
+セーブの辞書の素の文を読む（VERIFICATION.md §3.98「元の案内文を読む」）。
 """
 from . import rules
 
@@ -194,7 +194,7 @@ def standing_material(save_data_dict, ledger, *, player_name, profile, lawfulnes
     """初回の判定に渡す材料の文。
 
     `lawfulness` は `{街の id: 手配度}`、`achievements` は `{街の id: [文]}`。
-    ライフログを読むのは、この初回の判定の1回だけ（DOC.md §2.3）。
+    ライフログを読むのは、この初回の判定の1回だけ（VERIFICATION.md §3.98「最初の見られ方」）。
     """
     towns = towns_of(save_data_dict)
     names = {town_id: name for town_id, name, _size, _d in towns}
@@ -255,7 +255,7 @@ def standing_messages(material):
 
 
 def incidents_since(incidents_bucket, since_day, towns):
-    """918 の控えから、`since_day` より後に起きた・終わった出来事を読む。`[文]`。"""
+    """338 の控えから、`since_day` より後に起きた・終わった出来事を読む。`[文]`。"""
     names = {town_id: name for town_id, name, _size, _d in towns}
     lines = []
     for event in (incidents_bucket or {}).get("events") or []:

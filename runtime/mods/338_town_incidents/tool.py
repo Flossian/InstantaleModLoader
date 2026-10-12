@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 r"""街の出来事の設定画面。設定を役割ごとのタブに分け、一覧の見本と控えの様子も見せる。
 
-    python runtime/mods/918_town_incidents/tool.py
+    python runtime/mods/338_town_incidents/tool.py
 
 TECH.md §3.12 の契約で動く。ローダの設定画面（`tools/gui.py`）が `mod.json` の `"tool"` を見て
 このファイルを別プロセスで開き、場所は環境変数で渡す。直接起動したときは自分で探す。

@@ -2,7 +2,7 @@
 """街の出来事の規則。ゲームには触らない（ゲーム抜きの検査で全部通せる）。
 
 表・起こり方・段の進み方・値段の率・控えの形を持つ。
-仕様は DOC.md、控えの形は他の MOD との取り決め（DOC.md「控えの形」）。
+遊び方は DOC.md、決めた仕様と控えの形（他の MOD との取り決め）は VERIFICATION.md §3.97。
 """
 
 BUY = "買価"
@@ -440,7 +440,7 @@ def end(bucket, event, day, by, rest_days=None):
 
 
 def trim(bucket, limit=HISTORY_LIMIT):
-    """終わった出来事は直近の `limit` 件だけ残す（勢力 MOD が「前回から」を読むため。DOC.md）。"""
+    """終わった出来事は直近の `limit` 件だけ残す（`339_` が「前回から」を読むため。VERIFICATION.md §3.97「控えの形」）。"""
     events = events_of(bucket)
     ended = [event for event in events if event.get("status") == ENDED]
     if len(ended) <= limit:

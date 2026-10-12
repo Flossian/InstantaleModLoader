@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
-"""街の勢力（開発中）。
+"""街の勢力。
 
 世界の設定に書かれた勢力を台帳に起こし、勢力ごとに主人公の見られ方を持つ。
 見られ方は NPC の会話の構えに出る（どこでも誰にでも同じに好かれるのを避ける）。
-遊び方と決まりは DOC.md §1、決めた仕様と根拠は DOC.md §2。
+遊び方と決まりは DOC.md、決めた仕様と根拠は VERIFICATION.md §3.98。
 
 | 場面 | すること |
 |---|---|
 | 世界を読み込んだ・会話・日数が進んだ | 台帳が無ければ作る（背景で LLM を2回。抽出と初回の判定） |
 | 会話の頼み（5関数） | 相手の街の勢力の構えと、最近の情勢の噂を足す（ローダの `modnpc` の `notes`） |
 | 会話を閉じたときの要約 | 見られ方がどう動いたかを相乗りで判定させる（ローダの `talk_summary`） |
-| 日数が進んだ | 918 の出来事を主人公が片付けていれば、その街の勢力の見られ方を上げる。間隔が来たら情勢を1回進める（背景で LLM を1回） |
+| 日数が進んだ | 338 の出来事を主人公が片付けていれば、その街の勢力の見られ方を上げる。間隔が来たら情勢を1回進める（背景で LLM を1回） |
 
-勢力が2つ以上書かれていない世界（統一された世界・勢力の話が無い世界）では台帳を作らない（DOC.md §2.1）。
+勢力が2つ以上書かれていない世界（統一された世界・勢力の話が無い世界）では台帳を作らない（VERIFICATION.md §3.98「勢力は設定に書かれたものだけ」）。
 """
 
 import os
@@ -29,7 +29,7 @@ from . import material, rules
 ENABLED = False               # この世界で勢力を使う（ワールド個別で入れる）
 GAIN_PER_STEP = 5             # 会話の判定 +1 あたりに上がる点
 LOSS_PER_STEP = 8             # 会話の判定 -1 あたりに下がる点
-INCIDENT_GAIN = 10            # 918 の出来事を主人公が片付けたとき、その街の勢力に上がる点
+INCIDENT_GAIN = 10            # 338 の出来事を主人公が片付けたとき、その街の勢力に上がる点
 TREND_DAYS = 30               # 情勢を進める間隔（日）。0 で進めない
 RUMOR_DAYS = 90               # 情勢の噂を会話に足しておく日数
 ORGANIZE_NEW_WORLDS = False   # 新しく作る世界に組織を設ける（全世界共通。世界ごとの設定では効かない）
@@ -39,14 +39,14 @@ SETTING_NAMES = ("ENABLED", "ADD_ORGANIZATIONS", "GAIN_PER_STEP", "LOSS_PER_STEP
                  "TREND_DAYS", "RUMOR_DAYS")
 
 # ---- 設定にしない定数 ----------------------------------------------------
-OWNER = "919_town_factions"
+OWNER = "339_town_factions"
 LOG_BASENAME = "town_factions.log"
 #: 周回の控え（世界×主人公）。ワールド個別の設定とは別のフォルダに置く
 #: （同じフォルダだと、周回の鍵へ移す処理が `<世界>.json` の設定を控えとして移してしまう）。
 STATE_DIRNAME = "town_factions_ledger"
 #: ワールド個別の設定（`tools\modtool.py` がフォルダ名から決める名前）。
 SETTINGS_DIRNAME = "town_factions"
-#: 918 の控え（読むだけ。918 の DOC.md「控えの形」）。
+#: 338 の控え（読むだけ。VERIFICATION.md §3.97「控えの形」）。
 INCIDENTS_DIRNAME = "town_incidents"
 STORE_ATTR = "_instantale_town_factions"
 SETTINGS_STORE_ATTR = "_instantale_town_factions_settings"
@@ -81,7 +81,7 @@ faction_change に -2〜+2 の整数で答えること。
 faction_reason には判定の理由を1文で書くこと。
 faction_reconcile は、下に指示が無ければ "false" にすること。
 summary にはこの判定のことを書かないこと。"""
-#: 敵視が外れなくなった勢力の相手と話すときだけ足す（DOC.md §2.12）。
+#: 敵視が外れなくなった勢力の相手と話すときだけ足す（VERIFICATION.md §3.98「手配と敵視の上限」）。
 RECONCILE_INSTRUCTION = """
 {faction}の者たちは、{player}を許しがたい敵とみなしている。
 この会話で{player}が、{faction}がその敵意を改めるに足る理由（誤解を解く確かな証し・償い・{faction}のためになした行い・筋の通った説得など）を示し、
@@ -240,11 +240,12 @@ def apply(ctx):
             store["failed"].add(key)
             write("build: {} failed (no answer); will try again after the next load".format(key))
             return
-        ledger, dropped = rules.build_ledger(extracted, text, [t[0] for t in towns], day=day)
+        ledger, dropped = rules.build_ledger(extracted, text, [t[0] for t in towns], day=day,
+                                             town_names={t[0]: t[1] for t in towns})
         for line in dropped:
             write("build: dropped {}".format(line))
         if ledger["status"] == rules.NONE and ADD_ORGANIZATIONS:
-            # 設定に勢力が無い世界に、組織を後から設ける（世界ごとの設定。DOC.md §2.11）
+            # 設定に勢力が無い世界に、組織を後から設ける（世界ごとの設定。VERIFICATION.md §3.98「設定に勢力が無い既存の世界に組織を設ける」）
             designed = ask(MANAGER_DESIGN, material.design_messages(text), "design")
             if designed is None:
                 write("build: {} the design did not answer; no factions this time".format(key))
@@ -461,7 +462,7 @@ def apply(ctx):
         day = ui.game_day(app)
         key = worlds.playthrough(app)
         laws = ui.lawfulness_by_area(getattr(app, "player", None))
-        # 敵視が外れない印は、印のある相手に聞いたときの "true" でだけ外す（DOC.md §2.12）
+        # 敵視が外れない印は、印のある相手に聞いたときの "true" でだけ外す（VERIFICATION.md §3.98「手配と敵視の上限」）
         reconciled = bool(talk.get("locked")) and llm.truthy(answer.get(RECONCILE_FIELD), unknown=False)
         with worlds.lock:
             ledger = load(key)
@@ -488,7 +489,7 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 日数が進んだ後
     def credit_incidents(app, key, ledger):
-        """918 の出来事を主人公が片付けていれば、その街の勢力の見られ方を上げる。"""
+        """338 の出来事を主人公が片付けていれば、その街の勢力の見られ方を上げる。"""
         bucket = incidents_store.load(key, fresh=True) or {}
         seen = ledger["trend"].setdefault("incidents", {})
         laws = ui.lawfulness_by_area(getattr(app, "player", None))
@@ -604,7 +605,7 @@ def apply(ctx):
 
     @ctx.wrap(WORLD_SAVE_TARGET, required=False, safe=True)
     def write_world(orig, *args, **kwargs):
-        """組織を設けて作った世界は、919 の世界ごとの設定を有効にしておく。"""
+        """組織を設けて作った世界は、339 の世界ごとの設定を有効にしておく。"""
         result = orig(*args, **kwargs)
         if not store.get("organized"):
             return result

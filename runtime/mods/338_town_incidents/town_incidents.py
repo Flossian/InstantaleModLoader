@@ -4,7 +4,7 @@
 日数が進むと、訪れたことのあるギルドのある街に、表（`incidents.KINDS`）の出来事が起きることがある。
 放っておくと 兆し → 悪化 → 深刻 と進み、最後は自然に収まる。その街の掲示板の依頼で片付けられ、
 `911_rival_adventurer` のライバルが先に片付けることもある。
-仕様は DOC.md、控えの形は他の MOD との取り決め（DOC.md「控えの形」）。
+遊び方は DOC.md、決めた仕様と控えの形（他の MOD との取り決め）は VERIFICATION.md §3.97。
 
 ##### ゲームのどこに触るか
 
@@ -76,7 +76,7 @@ BRIEF = ("\n\n【この街でいま起きている出来事】{name}（{stage}�
          "今回の依頼は、次の内容にすること: {quest}。")
 
 # ---- コード側の決まり -------------------------------------------------------
-OWNER = "918_town_incidents"
+OWNER = "338_town_incidents"
 LOG_BASENAME = "town_incidents.log"
 STATE_DIRNAME = "town_incidents"
 RIVAL_DIRNAME = "rival_adventurer"
@@ -551,7 +551,7 @@ def apply(ctx):
             brief = BRIEF.format(name=name_of(event), stage=stage_name(event), what=kind["what"],
                                  quest=incidents.text_of(event, "quest").rstrip("。"))
         # 掲示板の `execute` の中なので、待機の表示はゲームが出している（GAME.md §2.4）。
-        # `screen.busy_on` / `busy_off` は重ねない（DOC.md §2.5）。
+        # `screen.busy_on` / `busy_off` は重ねない（VERIFICATION.md §3.97「依頼を作らせる間の待機の表示はゲームに任せる」）。
         inject.update(brief=brief, at=time.monotonic())
         before = set(ui.quest_ids(app))
         try:
@@ -590,7 +590,7 @@ def apply(ctx):
                     target = event.get("id") if event is not None and needs_quest(app, event) else None
                     name = name_of(event) if event is not None else ""
                 if target is not None and make_quest(app, target) is not None:
-                    # 作らせた回は、この掲示板の続き（`orig`）を呼ばず、手が空いてから開き直す（DOC.md §2.5）。
+                    # 作らせた回は、この掲示板の続き（`orig`）を呼ばず、手が空いてから開き直す（VERIFICATION.md §3.97「依頼を作らせる間の待機の表示はゲームに任せる」）。
                     screen.say(app, BOARD_TEXT.format(name=name))
                     reopen = getattr(self, "__class__", None)
                     choice = args[0] if args else kwargs.get("choice_text", "")

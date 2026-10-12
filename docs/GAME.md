@@ -2024,7 +2024,7 @@ scripts.items:Item.__init__(self, name, item_type, attributes, description,
 | `utility` | 6 | tool 4 / document 2 |
 | `consumable` | 2 | food 2 |
 
-「食べ物」と「薬」を分けたいときは `item_detail`（food / drink）まで見る（`918_` の値段の区分）。
+「食べ物」と「薬」を分けたいときは `item_detail`（food / drink）まで見る（`338_` の値段の区分）。
 
 `value` はその品が出たクエストの難易度と一致する（実セーブの21種類すべてが
 その世界の `quests[*].difficulty` かより深い土地の難度に対応）。

@@ -113,9 +113,10 @@ python tools/drive/drive.py <ファイル> --args '<JSON>' --wait <秒>
 | `talkto.py` | `npc` | 人物に話しかけて会話を始める（ゲーム自身の `ConversationStartManager`）。一覧に出ない相手（仲間が1人だけのときの仲間など）に |
 | `setmod.py` | `mod`・`name`・`value` | MOD の定数を書き換える |
 | `act.py` | `text`・`timeout` | 入力欄に書いて送り、手が空くまで待つ |
-| `trade.py` | `do`（open / close / status / prices） | 売買の窓。`prices` は手持ちの品の売値を、値段の計算の段ごとに並べる |
+| `trade.py` | `do`（open / close / status / prices / shop） | 売買の窓。`prices` は手持ちの品の売値を、`shop` は棚の品の買値を、値段の計算の段ごとに並べる |
 | `sell.py` | `item` | 開いている売買の窓で、手持ちの品を1つ売る |
 | `steal.py` | `mode`・`enter` | `336_crime_overhaul` の店で盗む（乱数をその間だけ固定する） |
+| `incident.py` | `kind`・`area`・`elapse`・`force` | `338_town_incidents` の出来事を、決めた街（id か名前。省くといまいる街）に決めた種類で起こす。次の1回の抽選だけ候補を絞り、日数を送る。`force` でその街の収まった後の休みを外す |
 | `typein.py` | `fields` | 入力欄に文字を書く（押さない）。欄は `hint_text` の一部で選ぶ（世界を作る画面の「名前」「概要」など） |
 | `clickimage.py` | `image` | 文字の無い絵のボタンを、絵のファイル名の一部で押す（キャラを作る画面のさいころ `dice_1` など） |
 | `screenwait.py` | `leave`・`texts`・`enabled`・`timeout` | 遊ぶ画面の手待ちで見分けられない段を待つ。画面の名前が変わる・文字が見える・ボタンが押せるようになる、のどれか |
@@ -137,6 +138,7 @@ python tools/drive/drive.py screenwait.py --args '{"enabled":"人生を始める
 python tools/drive/drive.py clicktext.py --args '{"texts":["人生を始める"]}'
 ```
 
+- `typein.py` は世界を作る画面が出きってから流し、返事が `field '名前': 1 hit(s)` と `field '概要': 1 hit(s)` の両方であることを確かめてから「生成する」を押す。画面が出きる前に流すと欄が空のまま生成が走り、ゲームが自前の名前と概要で世界を作る
 - 世界の生成は終わっても画面が変わらない。同じ画面に「世界'<名前>'を生成し保存しました。」が出るのを待つ（約3〜4分）
 - 世界の名前は、生成した世界の `saves\` と `worlds\` のフォルダ名になる。キャラを作った後は `IML_DRIVE_WORLD` に入れれば `relaunch.sh` が使える
 - さいころは名前・出自・外見・能力・立ち絵を作る。押せるようになった「人生を始める」で始まる

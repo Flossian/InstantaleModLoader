@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Claude API の構造化出力で、型から組む文法が大きすぎて断られたときの迂回。`claude_side.py` から使う。
+"""Claude API の構造化出力で、型から組む文法が大きすぎて断られたときの迂回と、SDK が外した const の戻し。`claude_side.py` から使う。
 
 ## 何が起きているか
 
@@ -22,11 +22,20 @@ API が `400 The compiled grammar is too large` で断る（GAME.md §2.12）。
 読み戻せなければ文字列のまま渡し、ゲームの型の検証で失敗して、ゲームのいつもの送り直しに乗る。
 
 通った置き換えは型ごとに覚え、同じ型の次の要求は最初から置き換えて送る（毎回 400 を踏まない）。
+
+## 1つの値に限る欄（const）を戻す
+
+ゲームの型は、選択肢の見分けに1つの値に限る欄を使う（土地の区画の `type` が `ward`、場所が `location` など）。
+SDK は型を送る前に `const` を外し、説明文に `{const: ward}` と書き移す。
+API はこの欄を自由な文字列として縛るので、Claude が `facility` のような別の値を書くと、
+ゲームの型の検証で落ちて送り直しになる（町の生成で1つの世界に数回〜十数回。VERIFICATION.md §3.71）。
+送る前に、この書き移しを値1つの `enum` に戻す（`restore_const`）。
 """
 
 import copy
 import hashlib
 import json
+import re
 
 #: API の断りの文言（この文言のときだけ迂回する）。
 TOO_LARGE = "compiled grammar is too large"
@@ -36,6 +45,39 @@ MARK = "[json-in-string]"
 
 #: 1つの要求で置き換えてみる選択肢の数の上限（送り直しの回数の上限）。
 MAX_STEPS = 4
+
+
+#: SDK が `const` を書き移した説明文（末尾に `{const: <値>}`。元の説明文があればその後に空行を挟む）。
+CONST_NOTE = re.compile(r"(?:\n\n)?\{const: ([^{}:,\n]*)\}\Z")
+
+
+def restore_const(schema):
+    """説明文に書き移された `const` を、値1つの `enum` に戻した写しと戻した数を返す。
+
+    戻すのは文字列の欄だけ（数や真偽は説明文から型を読み分けられない）。戻すものが無ければ元の型を返す。
+    """
+    count = [0]
+
+    def walk(node):
+        if isinstance(node, dict):
+            text = node.get("description")
+            found = CONST_NOTE.search(text) if isinstance(text, str) else None
+            if (found and node.get("type") == "string"
+                    and "enum" not in node and "const" not in node):
+                rest = text[:found.start()]
+                node = {key: value for key, value in node.items() if key != "description"}
+                if rest:
+                    node["description"] = rest
+                node["enum"] = [found.group(1)]
+                count[0] += 1
+                return node
+            return {key: walk(value) for key, value in node.items()}
+        if isinstance(node, list):
+            return [walk(value) for value in node]
+        return node
+
+    out = walk(schema)
+    return (out, count[0]) if count[0] else (schema, 0)
 
 
 def too_large(exc):
@@ -110,12 +152,20 @@ def candidates(schema):
 
 
 def _inline(schema, node, stack=()):
-    """`$ref` を中へ展開し、`title` を落とした写し（説明文に書く形）。"""
+    """`$ref` を中へ展開し、`title` を落とした写し（説明文に書く形）。
+
+    値1つの `enum` は `const` で書く。`"enum":["material"]` のままだと、
+    Claude が欄そのものの選択肢と読み、object の代わりに `material` とだけ書くことがある
+    （同じ頼みの送り比べで 15回中4回。VERIFICATION.md §3.71）。
+    """
     node = _resolve(schema, node) if isinstance(node, dict) and "$ref" in node else node
     if isinstance(node, dict):
         ref_key = id(node)
         if ref_key in stack:
             return {}
+        enum = node.get("enum")
+        if isinstance(enum, list) and len(enum) == 1 and "const" not in node:
+            node = dict({key: value for key, value in node.items() if key != "enum"}, const=enum[0])
         out = {}
         for key, value in node.items():
             if key == "title":

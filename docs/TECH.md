@@ -1311,7 +1311,7 @@ def days_note(app, days, granted):     # 決まった後に必ず来る（勝っ
 prices.declare(prices.INN_ROOM, room_price_for, owner=owner, write=write)
 prices.install_inn(ctx, write)                       # 宿代の関所（下）
 
-# 額へ倍率を掛ける側（`918_town_incidents` の街の出来事）。何枚でも重なる
+# 額へ倍率を掛ける側（`338_town_incidents` の街の出来事）。何枚でも重なる
 prices.adjust_inn(owner, fn, write=write)            # fn(app, quality, price) -> 新しい額 | None
 prices.install_inn(ctx, write)
 
@@ -1630,6 +1630,8 @@ choices.provide(ctx, screen, refresh=fn, after=fn2, presses={"印の頭": handle
 #                          手前で何かする MOD のため）。True を返すと押下を握る（ゲームへ流さない）
 choices.pressed()          # いま押下を配っているボタン（handler / intercept の中で読む）
 choices.refreshing()       # いま配っている組み直しの (args, kwargs)（refresh / after の中で読む。`reset_page` など）
+choices.from_save()        # ロードで戻った選択肢の組み直しか（refresh の中で読む）。世界が入れ替わってから、人物が揃った後の最初の組み直しまで真。
+                           # 文言はセーブに焼かれた物で、前の起動で MOD が書き換えたことがある。ゲームの文言として素の値を控える MOD は、真の間は控えない（prices の宿代）
 choices.ready(app)         # 人物が揃っているか（ロードの途中は False）
 ```
 
@@ -2968,7 +2970,7 @@ violation = llm.truthy(data.get("content_violation"), unknown=False)  # 判ら�
 `truthy` の `unknown` は**項目の意味で決まる**ので、既定に任せずに考えること。
 `changed` を False へ倒すと抽出した内容を黙って捨て、
 `content_violation` を True へ倒すと普通の台詞が消える。
-偽と読む語に「いいえ」を足した（v1.15.1。`918_` が「はい／いいえ」で答えさせるため。前は「いいえ」が `unknown` へ倒れていた）。
+偽と読む語に「いいえ」を足した（v1.15.1。`338_` が「はい／いいえ」で答えさせるため。前は「いいえ」が `unknown` へ倒れていた）。
 
 `as_dict` との違いは、相手が**物**か**文章**か。
 `as_dict` は返ってきた物（pydantic のモデル・辞書・素の JSON 文字列）を均すもので、

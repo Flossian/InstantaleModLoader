@@ -186,6 +186,8 @@ BANDS = (
         "335_player_portrait_regenerate",
         "336_crime_overhaul",
         "337_conversation_affinity",
+        "338_town_incidents",
+        "339_town_factions",
     )),
     #: 提供（4xx）は出どころの帯なので kind を固定しない（TECH.md §3.2.2）。
     (None, CONTRIB_HEAD, (

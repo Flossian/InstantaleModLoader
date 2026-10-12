@@ -934,6 +934,38 @@ check("断りの一言が出る", any("足りない" in t for t in app.texts), a
 check("所持金はそのまま", app.player.gold == 250, app.player.gold)
 prices.forget_inn_prices("test_layer")
 
+print("[段] ロードで戻った段つきの文言を、起動し直した後に素の額と取り違えない")
+# 部屋選びの画面で保存したセーブには段を掛けた文言（個室(125G)）が残る。
+# 起動し直して段が外れた（設定を変えた・MOD を切った）状態で読むと、ゲームの書式のままなので
+# 素の額 125 と控え、ゲームが引く 100 との差 25 を前払いで足していた（実機で 75 しか減らなかった）。
+module, ctx, app, choice_cls, start_cls = setup()
+prices.adjust_inn("test_layer", lambda _app, quality, price: price * 1.25
+                  if quality == "private_room" else None)
+press(app, STAY_TEXT)
+check("段の掛かった文言で保存される", texts_of(app)[2] == "個室(125G)", texts_of(app))
+saved = [dict(entry) for entry in app.buttons]
+prices.forget_inn_prices("test_layer")
+inn_store = prices._inn_store()
+inn_store["observed"].clear()            # 起動し直した（控えはプロセスの中だけ）
+inn_store["ours"].clear()
+loaded_world = type("World", (), {})()   # 世界の読み込み（choices が見分ける）
+loaded_world.characters = {}             # 実機と同じく、読み込みの途中の組み直しでは人物が 0 人
+app.world = loaded_world
+app.buttons = saved
+app.refresh_choice_buttons(reset_page=True)
+CLOCK.settle()
+loaded_world.characters = {"1": object()}   # 人物が揃った後の組み直し（実機ではここで書き直して控えていた）
+app.refresh_choice_buttons(reset_page=True)
+CLOCK.settle()
+check("段つきの額を素の額として控えない", "private_room" not in inn_store["observed"],
+      dict(inn_store["observed"]))
+check("文言は素の額へ戻る", texts_of(app)[2] == "個室(100G)", texts_of(app))
+gold = app.player.gold
+press(app, "個室(100G)")
+check("素の額 100 がちょうど引かれる", app.player.gold == gold - 100, (gold, app.player.gold))
+check("人物が揃った後の組み直しで印は下りる", ml.choices.from_save() is False
+      and not ml.choices._store().get("save_pending"), ml.choices._store().get("save_pending"))
+
 # ================================================================ まとめ
 print()
 if failures:

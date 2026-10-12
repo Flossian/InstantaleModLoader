@@ -104,7 +104,7 @@
         "en": "Gain from solving an incident"
       },
       "note": {
-        "ja": "街の出来事の MOD（918）を入れているとき、出来事を片付けた街の勢力からの見られ方が上がる量。対立している勢力からは少し下がる",
+        "ja": "街の出来事の MOD（338）を入れているとき、出来事を片付けた街の勢力からの見られ方が上がる量。対立している勢力からは少し下がる",
         "en": "With the town incidents mod, your standing with the town's faction rises this much when you solve its incident. Rival factions think a little less of you"
       }
     },
