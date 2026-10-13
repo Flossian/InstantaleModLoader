@@ -17,7 +17,7 @@ Instantale（Epic版）に、ゲームのファイルを一切書き換えずに
 - [MODS.md](MODS.md)：MOD 一本ずつの説明・設定・困ったとき
 - [TECH.md](TECH.md)：ローダの仕組みと MOD の書き方
 - [GAME.md](GAME.md)：ゲーム自身の内部構造（MOD を作る人向け）
-- [VERIFICATION.md](VERIFICATION.md) / [VERIFICATION_LOG.md](VERIFICATION_LOG.md)：どこまで確かめてあるかと、その記録
+- [VERIFICATION.md](VERIFICATION.md) / [VERIFICATION_LOG.md](VERIFICATION_LOG.md)：どこまで確かめてあるかと、その記録の目次（本文は [verification/](verification/) に1節1ファイル）
 - [CONTRIBUTING.md](CONTRIBUTING.md)：作った MOD を同梱に入れてほしいとき
 
 ---

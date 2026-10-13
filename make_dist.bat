@@ -191,6 +191,10 @@ if not exist "docs\README.md" (
   goto :fail
 )
 copy /y "docs\*.md" "%LOADER%\docs\" >nul || goto :copyfail
+rem  The verification records are one file per section under docs\verification\
+rem  (VERIFICATION.md and VERIFICATION_LOG.md only hold their index).
+md "%LOADER%\docs\verification" 2>nul
+copy /y "docs\verification\*.md" "%LOADER%\docs\verification\" >nul || goto :copyfail
 
 rem ===========================================================================
 rem  mods

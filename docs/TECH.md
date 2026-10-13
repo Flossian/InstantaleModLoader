@@ -14,8 +14,9 @@ Instantale（Epic版 / Nuitka standalone / CPython 3.10）に外部から Python
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 作った MOD を同梱に入れてほしいとき。ライセンス・送るときに揃えるもの・取り込みで何が起きるか |
 | [MODS.md](MODS.md) | 同梱している MOD 一本ずつの説明・設定・困ったとき。`tools/build_mods.py` が各 MOD の `DOC.md` から綴じる |
 | [MODLIST.md](MODLIST.md) | 同梱 MOD の早見表。`tools/list_mods.py` が `mod.json` から組む |
-| [VERIFICATION.md](VERIFICATION.md) | 検証状況・未確認項目・その確認手順（§1 / §3 / §4） |
-| [VERIFICATION_LOG.md](VERIFICATION_LOG.md) | 実機・実データでの検証記録（§2） |
+| [VERIFICATION.md](VERIFICATION.md) | 検証状況・未確認項目の目次・運用の取り決め（§1 / §3 / §4） |
+| [VERIFICATION_LOG.md](VERIFICATION_LOG.md) | 実機・実データでの検証記録の目次（§2） |
+| [verification/](verification/) | §2 と §3 の本文。1節1ファイル（`§3.88` は `3.88.md`）。目次は `tools/build_verification.py` が組む |
 
 GAME.md と分けているのは、**ゲームが更新されて食い違うのはあちら側だけ**だから。
 疑う場所が1つになる。同じ理由で置き場所を決めてある:
@@ -103,6 +104,7 @@ tools/check_tool_screens.py  同梱の設定画面を実際に開いて撮る（
 tools/modtool.py          MOD 同梱の設定画面が共有する土台（§3.12）。配布物に入る
 tools/build_mods.py       docs/MODS.md を各 MOD の DOC.md から綴じる（--check で照合）
 tools/list_mods.py        docs/MODLIST.md を mod.json から組む（--check で照合）
+tools/build_verification.py  VERIFICATION*.md の目次を docs/verification/ から組み、§ 参照の行き先を確かめる（--check で照合）
 tools/llm_ctx_probe.bat, llm_ctx_probe.py  ローカル LLM の窓を実測して最適値を出す（127_ 用）
 tools/epithet_probe.py    ローカル LLM で二つ名を引いて偏りを測る（317_ 用）
 tools/npc_variety_probe.py  ローカル LLM で NPC を生成させ、外見・性格・経歴の偏りを測る（頼み文の写しは npc_variety_prompts.json）
@@ -165,6 +167,7 @@ discontinued/     開発を終了した MOD（§2.6.1）。git には残るが�
 local/            配る予定の無い MOD（§2.6.2）。ローダだけが読む。git 管理外
 docs/             README.md / MODS.md / MODLIST.md / TECH.md / GAME.md
                   / VERIFICATION*.md / CONTRIBUTING.md
+docs/verification/  検証の記録の本文（§2 / §3）。1節1ファイル
 ```
 
 ### 1.3 探索と適用順は `discover()` が1箇所で決める
@@ -271,6 +274,7 @@ python -m compileall -q runtime tools
 python tools/check_mods.py
 python tools/build_mods.py --check   # docs/MODS.md が DOC.md とずれていないか（§2.7）
 python tools/list_mods.py --check    # docs/MODLIST.md が mod.json とずれていないか
+python tools/build_verification.py --check  # 検証の目次と § 参照の行き先
 
 # 2. オフライン検証（ゲーム不要）。CI と同じく全件を走らせる
 Get-ChildItem tools/tests/test_*.py | Sort-Object Name | ForEach-Object {
@@ -347,7 +351,7 @@ Windows で動かすのは、このプロジェクトが Windows 専用だから
 | ジョブ | Python | 見るもの |
 |---|---|---|
 | `game-python` | 3.10 | `compileall runtime` と `vermin --target=3.10- runtime`。ゲームの中に入るコードが本物の 3.10 で通るか、3.11 以降の機能を使っていないか（検査を 3.10 で流す代わりの安い手。版による振る舞いの違いは拾わない） |
-| `checks` | 3.13 | `compileall` / `check_mods.py --strict` / 生成物の照合（`build_mods.py --check` / `list_mods.py --check`）/ `tools/tests/test_*.py` 全件 |
+| `checks` | 3.13 | `compileall` / `check_mods.py --strict` / 生成物の照合（`build_mods.py --check` / `list_mods.py --check` / `build_verification.py --check`）/ `tools/tests/test_*.py` 全件 |
 | `packaging` | 3.13 | `make_dist.bat` が通ること、3本の zip に `LICENSE` / `NOTICE` が入っていて手元版（`*.default.*` の `.default` を抜いた名前）が入っていないこと、展開した full で配った tools が全部 import でき `check_mods.py --strict` が通ること |
 
 - 除外一覧は置いていない。1本でも落ちたら CI が失敗する

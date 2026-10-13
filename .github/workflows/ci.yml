@@ -103,6 +103,12 @@ jobs:
       - name: list_mods --check
         run: python tools/list_mods.py --check
 
+      # 検証の記録は1節1ファイル（docs/verification/）で、VERIFICATION.md と
+      # VERIFICATION_LOG.md の目次は生成物。節を足して生成し忘れると目次から漏れる。
+      # ソースと docs の `VERIFICATION.md §3.x` が実在する節を指しているかも見る。
+      - name: build_verification --check
+        run: python tools/build_verification.py --check
+
       # tools/tests/test_*.py は全てゲーム不要（偽のゲームを差し込んで走る）。
       # **1本でも落ちたら失敗**。除外一覧は置かない ― 一度置くと、そこに
       # 積まれたものが直ったかどうか誰も見なくなる。
@@ -190,7 +196,9 @@ jobs:
                           Sort-Object -Unique)
           # docs\ に在るものは全部配布物に入る。名前を並べて写していた頃、
           # 足した文書が並びから漏れても誰も気付かなかった（VERIFICATION_LOG.md）。
-          $docs = @(Get-ChildItem docs/*.md | Sort-Object Name | ForEach-Object { "docs/$($_.Name)" })
+          $docs = @(Get-ChildItem docs/*.md | Sort-Object Name | ForEach-Object { "docs/$($_.Name)" }) +
+                  @(Get-ChildItem docs/verification/*.md | Sort-Object Name |
+                    ForEach-Object { "docs/verification/$($_.Name)" })
           $loader = @('LICENSE', 'NOTICE', 'InstantaleModLoader.bat', 'tools/gui.py',
                       'runtime/instantale_modloader/__init__.py',
                       'runtime/mods/_template/mod.json') + $docs
