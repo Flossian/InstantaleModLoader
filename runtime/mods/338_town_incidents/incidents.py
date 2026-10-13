@@ -23,196 +23,269 @@ ENDED = "ended"
 HISTORY_LIMIT = 20
 BUCKET_KEYS = ("events", "seq", "next_roll_day", "cooldown", "cleanup")
 EVENT_KEYS = ("id", "area", "area_name", "kind", "stage", "status", "started", "stage_day",
-              "ended", "end_by", "quest", "goods", "tries", "text", "told")
-TEXT_KEYS = ("name", "summary", "arrive_1", "arrive_2", "arrive_3", "shop", "settled", "quest", "rumor")
+              "ended", "end_by", "quest", "goods", "tries", "text", "told", "good", "stage_name")
+#: `summary` は版1 の1文（段に依らない）。版2 からは段ごとの `summary_<段>` を書かせる
+TEXT_KEYS = ("name", "summary", "summary_1", "summary_2", "summary_3", "summary_4",
+             "arrive_1", "arrive_2", "arrive_3", "arrive_4", "shop", "settled", "quest", "rumor")
 
 ALL = None      # 効き目の品の種類で「全品」
 GOODS = "goods"  # 効き目の品の種類で「発生のときに選んだ1種」
 
-# 1つの出来事:
+#: 出来事の表の置き場所。同梱は `incidents.default.json`（同じフォルダに `incidents.json` があればそちらを読む。
+#: `120_` の名簿・`132_` の種と同じ）、足す出来事は `kinds\` に1ファイル1出来事。
+#: 書き方は DOC.md「出来事を足す」、読み方の決まりは VERIFICATION.md §3.97「出来事の表」。
+DEFAULT_FILE = "incidents.default.json"
+USER_FILE = "incidents.json"
+EXTRA_DIRNAME = "kinds"
+SIZES = ("village", "town", "city")
+TONES = ("good", "bad", "calm")
+GOODS_KEYS = ("all", "random")
+
+# 1つの出来事（ファイルを読んだ後の形。窓・段・値段の処理はこれだけを見る）:
 #   key       控えに書く英名（世界観に依らない。取り決め）
 #   name      抽象の呼び名（LLM が書けなかったとき・窓の既定）
 #   what      LLM に渡す説明（何が起きたか）
-#   examples  世界ごとの例（LLM に渡す。中世／西部劇／サイバーパンク／ポストアポカリプスの順）
-#   effects   値段の効き目 [(品の種類の並び or ALL or GOODS, "buy"/"sell"/"both", (1段, 2段, 3段) の %)]
-#   inn       宿代の効き目（1段, 2段, 3段）の % か None
-#   size      起こりやすさが 3 になる規模（village/town/city）。"any" はどの規模でも 2
+#   examples  世界ごとの例（LLM に渡す）
+#   size      起こりやすさが 3 になる規模（village/town/city の並び）。"any" はどの規模でも 2
+#   weight    起こりやすさの倍率
+#   quest     解決の依頼の中身（LLM が書けなかったとき）。None なら依頼を作らない（良い出来事）
+#   stages    段の名前の並び。into はその段へ移るときの言い方、tones は窓の色の調子
+#   effects   値段の効き目 [(品の種類の並び or ALL or GOODS, "buy"/"sell", (段ごとの %))]
+#   inn       宿代の効き目（段ごとの %）か None
 #   arrive    街に着いたときの1行（段ごと。LLM が書けなかったときの文）
-#   shop / settled / quest / rumor   同上
-KINDS = (
-    {"key": "outlaws", "name": "無法者の横行",
-     "what": "武装した無法者の一団が街の周りで荷や旅人を襲っている",
-     "examples": "盗賊団／無法者の一味／ギャング／略奪者",
-     "effects": [(ALL, "buy", (10, 20, 35))], "inn": None, "size": ("town",),
-     "arrive": ("街道で荷が襲われたという話が、街のあちこちで囁かれている。",
-                "武装した無法者の一団が街の周りを荒らし、人々は日暮れ前に戸を閉ざしている。",
-                "無法者が街の外を我が物顔で行き来し、荷はほとんど届かなくなっている。"),
-     "shop": "無法者に荷を奪われ、品の値が上がっている。",
-     "settled": "街を荒らしていた無法者の一団は、どこかへ流れていったらしい。",
-     "quest": "この街の周りで荷や旅人を襲う無法者の一団を討伐する依頼",
-     "rumor": "{town}の周りで、無法者の一団が荷を襲っているらしい。"},
-    {"key": "epidemic", "name": "感染症の流行",
-     "what": "街で病が広がり、人々が倒れている",
-     "examples": "疫病／コレラ／生体ウイルス／変異病",
-     "effects": [(("medicine",), "buy", (25, 50, 100)), (("food",), "buy", (10, 20, 30))],
-     "inn": None, "size": ("city",),
-     "arrive": ("咳き込む人の姿が、街のあちこちで目に付く。",
-                "病に倒れる者が相次ぎ、通りには人影がまばらになっている。",
-                "病が街じゅうに広がり、閉ざされた家の戸口には印が付けられている。"),
-     "shop": "病が流行り、薬の類が飛ぶように売れて値が上がっている。",
-     "settled": "街に広がっていた病は、ようやく下火になったらしい。",
-     "quest": "この街に広がる病の源を突き止めて断つ依頼",
-     "rumor": "{town}で病が流行り、倒れる者が相次いでいるらしい。"},
-    {"key": "invaders", "name": "外敵の襲来",
-     "what": "人ではない脅威の群れが街の周りに現れ、人や家畜を襲っている",
-     "examples": "魔物の群れ／狼やコヨーテの群れ／暴走した戦闘ドローン／変異生物の群れ",
-     "effects": [(("weapon", "wearable"), "both", (15, 30, 50))], "inn": None, "size": ("village",),
-     "arrive": ("街の外で、得体の知れない群れを見たという者がいる。",
-                "群れが街の外れを襲い、人々は武器を手放さなくなっている。",
-                "群れが街を取り巻き、門の外へ出る者はほとんどいない。"),
-     "shop": "群れに備えて武具を求める者が多く、武具の値が上がっている。",
-     "settled": "街を脅かしていた群れは、どこかへ去っていったらしい。",
-     "quest": "この街を襲う群れの長か、群れの湧き出る元を断つ依頼",
-     "rumor": "{town}の周りに、人を襲う群れが出ているらしい。"},
-    {"key": "unrest", "name": "騒乱",
-     "what": "住民の不満が爆発し、街で騒ぎや衝突が起きている",
-     "examples": "一揆／鉱夫のストライキ／暴動／配給を巡る騒ぎ",
-     "effects": [(ALL, "sell", (-10, -20, -35)), (ALL, "buy", (5, 10, 15))], "inn": None,
-     "size": ("city",),
-     "arrive": ("広場で声を荒げる人々の姿がある。",
-                "街のあちこちで住民と取り締まる側がぶつかり合っている。",
-                "騒ぎが街じゅうに広がり、打ち壊された店先が目立つ。"),
-     "shop": "騒ぎで先行きが見えず、店は品の買い取りを渋っている。",
-     "settled": "街を揺るがした騒ぎは、ひとまず鎮まったらしい。",
-     "quest": "この街の騒ぎを煽る者を捕らえるか、争いの元を収める依頼",
-     "rumor": "{town}で住民の騒ぎが起きているらしい。"},
-    {"key": "shortage", "name": "物資の途絶",
-     "what": "街を支える物資の供給が断たれ、食べ物や日々の物が足りなくなっている",
-     "examples": "凶作／旱魃／工場の停止・物流の断絶／水源の汚染",
-     "effects": [(("food",), "buy", (20, 40, 80))], "inn": (20, 40, 80),
-     "size": ("village",),
-     "arrive": ("店先の品が、いつもより目に見えて少ない。",
-                "食べ物や日々の物が足りず、人々は分け合って凌いでいる。",
-                "物資が尽きかけ、街には飢えと苛立ちが広がっている。"),
-     "shop": "物資が届かず、食べ物の類の値が上がっている。",
-     "settled": "途絶えていた物資は、再び街へ届くようになったらしい。",
-     "quest": "この街への物資を断っている原因を突き止めて取り除く依頼",
-     "rumor": "{town}では物資が足りず、人々が困っているらしい。"},
-    {"key": "aftermath", "name": "災害の後",
-     "what": "街を大きな災害が襲い、建物や設備が壊れたまま復旧が進んでいない",
-     "examples": "大火／竜巻／大規模な停電・設備の崩落／砂嵐・地震",
-     "effects": [(("material", "utility"), "both", (15, 30, 50))], "inn": None, "size": "any",
-     "arrive": ("災害の爪痕が、街のあちこちに残っている。",
-                "崩れたままの建物が多く、復旧の手が足りていない。",
-                "街の一角はいまも瓦礫に埋もれ、人々は仮の住まいで暮らしている。"),
-     "shop": "復旧に使う資材や道具が足りず、値が上がっている。",
-     "settled": "災害で傷んだ街は、少しずつ元の姿を取り戻しつつあるらしい。",
-     "quest": "この街の復旧に要るものを集めるか、災害の元を始末する依頼",
-     "rumor": "{town}が災害に見舞われ、復旧が進んでいないらしい。"},
-    {"key": "counterfeit", "name": "通貨の信用の揺らぎ",
-     "what": "偽の通貨や支払いの手段が出回り、店が客の支払いを疑っている",
-     "examples": "偽金／偽札／決済の改竄・クレジットの偽造／配給札の偽造",
-     "effects": [(ALL, "sell", (-10, -20, -35))], "inn": None, "size": ("city",),
-     "arrive": ("偽の金が出回っているという噂がある。",
-                "店主たちは客の支払いを一つ一つ疑ってかかっている。",
-                "偽の金が街にあふれ、まともな取引が成り立たなくなりつつある。"),
-     "shop": "偽の金が出回っていて、店は買い取りの額を渋っている。",
-     "settled": "出回っていた偽の金は、もう見かけなくなったらしい。",
-     "quest": "この街に偽の通貨を流している元締めを摘発する依頼",
-     "rumor": "{town}で偽の金が出回っているらしい。"},
-    {"key": "hoarding", "name": "買い占め",
-     "what": "一部の者が品を買い占めて値を吊り上げている",
-     "examples": "商人の結託／鉄道会社の独占／企業の独占／水を握った一派",
-     "effects": [(GOODS, "buy", (30, 60, 120))], "inn": None, "size": ("town",),
-     "arrive": ("ある品だけが、どの店でも妙に高い。",
-                "買い占めた者が値を吊り上げ、人々は手が出せずにいる。",
-                "買い占めは街じゅうの店に及び、人々の怒りが募っている。"),
-     "shop": "{goods}が買い占められ、値が吊り上がっている。",
-     "settled": "品の買い占めは崩れ、値は落ち着いたらしい。",
-     "quest": "この街で品を買い占めて値を吊り上げている黒幕を摘発する依頼",
-     "rumor": "{town}で品が買い占められ、値が吊り上がっているらしい。"},
-    {"key": "anomaly", "name": "不可解な怪事",
-     "what": "説明のつかない出来事が街で続き、人々が怯えている",
-     "examples": "怪異／幽霊話／謎の信号・電脳の幽霊／異常地帯の拡大",
-     "effects": [(("utility",), "buy", (15, 30, 50))], "inn": (10, 25, 50), "size": "any",
-     "arrive": ("夜な夜な不可解なことが起きると、街の人々が声を潜めて話している。",
-                "説明のつかない出来事が続き、日が落ちると誰も外へ出ようとしない。",
-                "怪事は昼にまで及び、街を捨てて出ていく者も出始めている。"),
-     "shop": "怪事を恐れて身を守る道具を求める者が多く、値が上がっている。",
-     "settled": "街を騒がせていた怪事は、ぱったりと止んだらしい。",
-     "quest": "この街で続く説明のつかない出来事の源を突き止める依頼",
-     "rumor": "{town}で説明のつかない出来事が続いているらしい。"},
-    {"key": "abductions", "name": "失踪の続発",
-     "what": "街の人々が次々と姿を消している",
-     "examples": "人さらい／人狩り／臓器狩り／奴隷狩り",
-     "effects": [], "inn": (20, 40, 80), "size": ("village",),
-     "arrive": ("姿を消した者がいると、街の人々が不安げに話している。",
-                "失踪が相次ぎ、人々は一人で出歩かなくなっている。",
-                "失踪は止まず、宿も用心棒を雇わねば客を泊められなくなっている。"),
-     "shop": "",
-     "settled": "相次いでいた失踪は、ようやく止まったらしい。",
-     "quest": "この街で人々をさらっている一味の根城を突き止める依頼",
-     "rumor": "{town}で人が次々と姿を消しているらしい。"},
-    {"key": "contraband", "name": "闇物資の氾濫",
-     "what": "出所の怪しい品が街に大量に出回っている",
-     "examples": "密輸品／密造酒／違法な改造部品／略奪品の横流し",
-     "effects": [(ALL, "both", (-10, -15, -25))], "inn": None, "size": ("city",),
-     "arrive": ("出所の怪しい品が、裏通りで安く売られている。",
-                "闇の品が表の店にまで並び、値が崩れている。",
-                "闇の品が街にあふれ、まともな商いが立ち行かなくなっている。"),
-     "shop": "出所の怪しい安物が出回り、品の値が崩れている。",
-     "settled": "出回っていた闇の品は、締め付けで消えたらしい。",
-     "quest": "この街に出所の怪しい品を流している一味を摘発する依頼",
-     "rumor": "{town}に出所の怪しい品が出回っているらしい。"},
-    {"key": "crackdown", "name": "締め付けの強化",
-     "what": "街を治める側が取り締まりを強め、人々の出入りや持ち物を厳しく調べている",
-     "examples": "衛兵の検問／保安官の締め付け／企業警備の戒厳／軍閥の統制",
-     "effects": [(("weapon", "wearable"), "buy", (20, 40, 60)), (ALL, "sell", (-5, -10, -15))],
-     "inn": None, "size": ("city",),
-     "arrive": ("街の入口で、持ち物を調べられている者がいる。",
-                "取り締まりが厳しくなり、人々は顔を伏せて足早に通り過ぎる。",
-                "街は締め付けで息苦しく、些細なことで連れて行かれる者もいる。"),
-     "shop": "取り締まりで武具の持ち込みが絞られ、値が上がっている。",
-     "settled": "厳しかった取り締まりは、ようやく緩んだらしい。",
-     "quest": "この街の締め付けを敷いた者の不正を暴くか、締め付けの元になった脅威を除く依頼",
-     "rumor": "{town}では取り締まりが厳しくなっているらしい。"},
-    {"key": "power_vacuum", "name": "権力の空白",
-     "what": "街を治めていた者が突然いなくなり、後釜を巡って争いが起きている",
-     "examples": "領主の急死／保安官の殺害／企業幹部の暗殺／首領の死",
-     "effects": [(ALL, "buy", (5, 10, 20)), (ALL, "sell", (-5, -10, -20))], "inn": None,
-     "size": ("city",),
-     "arrive": ("街を治めていた者がいなくなったという話で持ちきりだ。",
-                "後釜を巡る争いが表に出て、街の空気が張り詰めている。",
-                "後釜争いが血を見るまでになり、街は二つに割れている。"),
-     "shop": "先行きが読めず、店は値を守りに入っている。",
-     "settled": "街を治める次の者が決まり、争いは収まったらしい。",
-     "quest": "この街の後釜争いを収める依頼（後継の護衛か、刺客の捕縛など）",
-     "rumor": "{town}では治めていた者がいなくなり、後釜争いが起きているらしい。"},
-    {"key": "influx", "name": "人の流入",
-     "what": "よそから大勢の人が流れ込み、街が受け止めきれずにいる",
-     "examples": "難民／開拓民／移民／避難民",
-     "effects": [(("food",), "buy", (10, 25, 50))], "inn": (25, 50, 100), "size": ("town",),
-     "arrive": ("見慣れない顔の旅人が、街にいつもより多い。",
-                "よそから流れ込んだ人々で、宿も通りもあふれている。",
-                "流れ込んだ人々と住民の間で、いさかいが絶えなくなっている。"),
-     "shop": "人があふれて食べ物の類が足りず、値が上がっている。",
-     "settled": "流れ込んだ人々は、それぞれの落ち着き先を見つけたらしい。",
-     "quest": "この街で流れ込んだ人々と住民のもめ事を収めるか、人々を追い立てた元を断つ依頼",
-     "rumor": "{town}によそから大勢の人が流れ込んでいるらしい。"},
-    {"key": "boom", "name": "にわか景気",
-     "what": "思わぬ富の種が見つかり、一攫千金を狙う者が街に押し寄せている",
-     "examples": "新しい鉱脈／ゴールドラッシュ／技術の流行／遺物の発見",
-     "effects": [(ALL, "buy", (10, 20, 30)), (ALL, "sell", (10, 25, 40))], "inn": None,
-     "size": ("town",),
-     "arrive": ("一儲けの噂を聞きつけた者が、街に集まり始めている。",
-                "一攫千金を狙う者が押し寄せ、街は浮き足立っている。",
-                "景気に群がった荒くれ者が街を我が物顔で歩き、喧嘩が絶えない。"),
-     "shop": "景気に沸いて、品の値も買い取りの額も上がっている。",
-     "settled": "街を沸かせたにわか景気は、熱が冷めて落ち着いたらしい。",
-     "quest": "この街のにわか景気に群がった荒くれ者を鎮める依頼",
-     "rumor": "{town}がにわか景気に沸いているらしい。"},
-)
-KIND_BY_KEY = {kind["key"]: kind for kind in KINDS}
+#   end / ended / shop / settled / rumor   収まるまでの言い方・終わった欄の言い方・LLM が書けなかったときの文
+
+
+def _text(value):
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _number(value):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return int(round(value))
+
+
+def parse_kind(data, where=""):
+    """ファイルの1件を読む。`(出来事 or None, 読めなかった理由の並び)`。
+
+    `{"key": …, "enabled": false}` だけのものは「止める」印として `(None, [])` ではなく
+    `({"key": …, "enabled": False}, [])` を返す（同梱の出来事を止めるのに使う）。
+    """
+    problems = []
+    if not isinstance(data, dict):
+        return None, ["{}: 出来事は {{…}} で書く".format(where)]
+    key = _text(data.get("key"))
+    if not key or not all(ch.isascii() and (ch.isalnum() or ch == "_") for ch in key):
+        return None, ["{}: key は英数字と _ で書く（{!r}）".format(where, data.get("key"))]
+    where = "{} {}".format(where, key).strip()
+    enabled = data.get("enabled", True) is not False
+    if not enabled and set(data) <= {"key", "enabled"}:
+        return {"key": key, "enabled": False}, []
+    for field in ("name", "what"):
+        if not _text(data.get(field)):
+            problems.append("{}: {} が無い".format(where, field))
+    size = data.get("size", "any")
+    if size != "any":
+        size = [s for s in (size if isinstance(size, list) else [size]) if s in SIZES]
+        if not size:
+            problems.append("{}: size は any か village / town / city の並び".format(where))
+    weight = data.get("weight", 1)
+    if isinstance(weight, bool) or not isinstance(weight, (int, float)) or weight < 0:
+        problems.append("{}: weight は 0 以上の数".format(where))
+        weight = 1
+    stages = data.get("stages")
+    if not isinstance(stages, list) or not stages:
+        problems.append("{}: stages に段を1つ以上書く".format(where))
+        stages = []
+    count = len(stages)
+    names, into, tones, arrive, inn = [], [], [], [], []
+    effects = {}
+    for index, stage in enumerate(stages):
+        at = "{} の {}段目".format(where, index + 1)
+        if not isinstance(stage, dict):
+            problems.append("{}: 段は {{…}} で書く".format(at))
+            continue
+        names.append(_text(stage.get("name")))
+        if not names[-1]:
+            problems.append("{}: name が無い".format(at))
+        tone = stage.get("tone")
+        if tone not in TONES:
+            problems.append("{}: tone は good / bad / calm".format(at))
+        tones.append(tone if tone in TONES else "bad")
+        verb = _text(stage.get("into"))
+        if index and not verb:
+            problems.append("{}: into（この段へ移るときの言い方）が無い".format(at))
+        into.append(verb or None)
+        arrive.append(_text(stage.get("arrive")))
+        if not arrive[-1]:
+            problems.append("{}: arrive が無い".format(at))
+        rate = _number(stage.get("inn", 0))
+        inn.append(rate if rate is not None else 0)
+        for entry in stage.get("prices") or []:
+            goods = entry.get("goods") if isinstance(entry, dict) else None
+            if goods == "all":
+                target = ALL
+            elif goods == "random":
+                target = GOODS
+            elif isinstance(goods, list) and goods and all(g in CATEGORIES for g in goods):
+                target = tuple(goods)
+            else:
+                problems.append("{}: prices の goods は all / random / 品の種類の並び（{}）".format(
+                    at, "・".join(CATEGORIES)))
+                continue
+            for side in ("buy", "sell"):
+                if side not in entry:
+                    continue
+                rate = _number(entry.get(side))
+                if rate is None:
+                    problems.append("{}: prices の {} は数".format(at, side))
+                    continue
+                rates = effects.setdefault((target, side), [0] * count)
+                rates[index] += rate
+    if problems:
+        return None, problems
+    quest = data.get("quest")
+    kind = {"key": key, "enabled": enabled, "name": _text(data.get("name")), "what": _text(data.get("what")),
+            "examples": _text(data.get("examples")), "size": size if size == "any" else tuple(size),
+            "weight": float(weight), "quest": _text(quest) or None,
+            "stages": tuple(names), "into": tuple(into), "tones": tuple(tones),
+            "effects": [(target, side, tuple(rates)) for (target, side), rates in effects.items()],
+            "inn": tuple(inn) if any(inn) else None, "arrive": tuple(arrive),
+            "end": _text(data.get("end")) or "収まる", "ended": _text(data.get("ended")) or "自然に収まった",
+            "shop": _text(data.get("shop")), "settled": _text(data.get("settled")), "rumor": _text(data.get("rumor"))}
+    return kind, []
+
+
+def _read_json(path):
+    import json
+    with open(path, encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def load_kinds(default_path, extra_dir=None):
+    """同梱の表と、足した出来事のフォルダを読む。`(出来事の並び, 読めなかった理由の並び)`。
+
+    足した出来事は同じ key の同梱の出来事を差し替え、`enabled: false` だけのものは止める。
+    読めなかった出来事だけを飛ばし、ほかはふだんどおり使う。
+    """
+    import os
+    problems = []
+    kinds = {}
+    try:
+        rows = _read_json(default_path)
+    except (OSError, ValueError) as exc:
+        rows = []
+        problems.append("{}: 読めない（{}）".format(os.path.basename(default_path), exc))
+    for index, row in enumerate(rows if isinstance(rows, list) else []):
+        kind, found = parse_kind(row, "{} の{}件目".format(os.path.basename(default_path), index + 1))
+        problems += found
+        if kind is not None:
+            kinds[kind["key"]] = kind
+    names = []
+    if extra_dir and os.path.isdir(extra_dir):
+        names = sorted(name for name in os.listdir(extra_dir) if name.lower().endswith(".json"))
+    for name in names:
+        try:
+            data = _read_json(os.path.join(extra_dir, name))
+        except (OSError, ValueError) as exc:
+            problems.append("kinds\\{}: 読めない（{}）".format(name, exc))
+            continue
+        kind, found = parse_kind(data, "kinds\\{}".format(name))
+        problems += found
+        if kind is None:
+            continue
+        if "stages" not in kind:                    # 止める印だけ
+            if kind["key"] in kinds:
+                kinds[kind["key"]] = dict(kinds[kind["key"]], enabled=False)
+            continue
+        kinds[kind["key"]] = kind
+    return [kind for kind in kinds.values() if kind.get("enabled", True)], problems
+
+
+KINDS = []
+KIND_BY_KEY = {}
+PROBLEMS = []
+
+
+def use_kinds(kinds, problems=()):
+    """読んだ表を使う（同じリスト・辞書を書き換えるので、先に import した側にも効く）。"""
+    KINDS[:] = list(kinds)
+    KIND_BY_KEY.clear()
+    KIND_BY_KEY.update((kind["key"], kind) for kind in KINDS)
+    PROBLEMS[:] = list(problems)
+
+
+def reload_kinds(mod_dir):
+    """MOD のフォルダの表（手元の `incidents.json` か同梱の既定）と `kinds\\` を読み直して使う。
+    読めなかった理由の並びを返す。"""
+    import os
+    table = os.path.join(mod_dir, USER_FILE)
+    if not os.path.isfile(table):
+        table = os.path.join(mod_dir, DEFAULT_FILE)
+    kinds, problems = load_kinds(table, os.path.join(mod_dir, EXTRA_DIRNAME))
+    use_kinds(kinds, problems)
+    return problems
+
+
+def kind_of(event_or_kind):
+    if isinstance(event_or_kind, dict) and "stages" in event_or_kind:
+        return event_or_kind
+    if isinstance(event_or_kind, dict):
+        return KIND_BY_KEY.get(event_or_kind.get("kind"))
+    return None
+
+
+def last_stage(event_or_kind):
+    kind = kind_of(event_or_kind)
+    return len(kind["stages"]) if kind else STAGES[-1]
+
+
+def stage_name(event):
+    """いまの段の名前（「兆し」「盛況」など）。表に無い出来事は控えに書いた名前。"""
+    kind = kind_of(event)
+    if kind is None:
+        return event.get("stage_name") or STAGE_NAMES.get(_int(event.get("stage"), 1), "")
+    stage = min(max(_int(event.get("stage"), 1), 1), len(kind["stages"]))
+    return kind["stages"][stage - 1]
+
+
+def is_good(event_or_kind):
+    """良い出来事か（解決の依頼を作らない）。"""
+    kind = kind_of(event_or_kind)
+    if kind is None:
+        return bool(event_or_kind.get("good")) if isinstance(event_or_kind, dict) else False
+    return kind.get("quest") is None
+
+
+def stage_tones(event_or_kind):
+    """段ごとの窓の色の調子（`good1`・`bad3`・`calm` など）。同じ調子が続く段は、後ろほど濃い番号。
+
+    困り事の3段は bad1・bad2・bad3（黄・橙・赤）、良い出来事は good1・good2 の後に calm。
+    1つだけの bad は一番重い色（バブルの崩壊）。
+    """
+    kind = kind_of(event_or_kind)
+    tones = kind["tones"] if kind else ("bad",) * STAGES[-1]
+    out = []
+    for tone in tones:
+        if tone == "calm":
+            out.append("calm")
+            continue
+        total = tones.count(tone)
+        rank = sum(1 for prev in out if prev.startswith(tone)) + 1
+        out.append("{}{}".format(tone, 3 - total + rank if tone == "bad" else min(rank, 2)))
+    return tuple(out)
+
+
+def mark_stage(event):
+    """控えに、良い出来事かといまの段の名前を書く（`339_` が段の名前を決め打ちせずに読むため）。"""
+    event["good"] = is_good(event)
+    event["stage_name"] = stage_name(event)
+
+
+reload_kinds(__import__("os").path.dirname(__import__("os").path.abspath(__file__)))
+
+
 GOODS_NAMES = {"weapon": "武器", "wearable": "防具", "medicine": "薬の類",
                "food": "食べ物の類", "utility": "道具", "material": "素材"}
 
@@ -304,13 +377,14 @@ def weights(kinds, size, by_size=True):
     out = []
     for kind in kinds:
         if not by_size:
-            out.append((kind, 1))
+            weight = 1
         elif kind["size"] == "any":
-            out.append((kind, 2))
+            weight = 2
         elif size in kind["size"]:
-            out.append((kind, 3))
+            weight = 3
         else:
-            out.append((kind, 1))
+            weight = 1
+        out.append((kind, weight * kind.get("weight", 1)))
     return out
 
 
@@ -378,6 +452,7 @@ def start(bucket, day, area, name, kind, rng):
              "told": {}}
     if any(target == GOODS for target, _side, _rates in kind["effects"]):
         event["goods"] = CATEGORIES[int(rng.random() * len(CATEGORIES)) % len(CATEGORIES)]
+    mark_stage(event)
     bucket.setdefault("events", []).append(event)
     return event
 
@@ -389,6 +464,7 @@ def change_kind(event, kind, rng):
     event["goods"] = None
     if any(target == GOODS for target, _side, _rates in kind["effects"]):
         event["goods"] = CATEGORIES[int(rng.random() * len(CATEGORIES)) % len(CATEGORIES)]
+    mark_stage(event)
 
 
 def drop(bucket, event):
@@ -412,8 +488,9 @@ def advance(bucket, day, *, stage_days, settle_days, steps_per_elapse, rest_days
         while True:
             since = day - _int(event.get("stage_day"), day)
             stage = _int(event.get("stage"), 1)
-            due_stage = stage < STAGES[-1] and since >= max(1, int(stage_days))
-            due_end = stage >= STAGES[-1] and since >= max(1, int(settle_days))
+            last = last_stage(event)
+            due_stage = stage < last and since >= max(1, int(stage_days))
+            due_end = stage >= last and since >= max(1, int(settle_days))
             if not (due_stage or due_end):
                 break
             if steps >= cap:
@@ -426,6 +503,7 @@ def advance(bucket, day, *, stage_days, settle_days, steps_per_elapse, rest_days
                 break
             event["stage"] = stage + 1
             event["stage_day"] = _int(event.get("stage_day"), day) + max(1, int(stage_days))
+            mark_stage(event)
             changes.append((event, "stage", stage + 1))
     return changes
 
@@ -452,11 +530,11 @@ def trim(bucket, limit=HISTORY_LIMIT):
 
 
 def days_to_next(event, day, stage_days, settle_days):
-    """次に段が変わるまでの日数（3段なら収まるまで）。読めなければ None。"""
+    """次に段が変わるまでの日数（最後の段なら収まるまで）。読めなければ None。"""
     if day is None or event.get("status") != ACTIVE:
         return None
     since = day - _int(event.get("stage_day"), day)
-    limit = settle_days if _int(event.get("stage"), 1) >= STAGES[-1] else stage_days
+    limit = settle_days if _int(event.get("stage"), 1) >= last_stage(event) else stage_days
     return max(0, int(limit) - since)
 
 
@@ -504,14 +582,14 @@ def price_rate(event, category, key, strength_percent=100):
     kind = KIND_BY_KEY.get(event.get("kind")) if isinstance(event, dict) else None
     if kind is None or event.get("status") != ACTIVE:
         return 0
-    stage = min(max(_int(event.get("stage"), 1), 1), STAGES[-1])
+    stage = min(max(_int(event.get("stage"), 1), 1), last_stage(event))
     total = 0
     for target, side, rates in kind["effects"]:
         types = _targets(target, event)
         if types is not None and category not in types:
             continue
         if side == "both" or (side == "buy" and key == BUY) or (side == "sell" and key == SELL):
-            total += rates[stage - 1]
+            total += rates[min(stage, len(rates)) - 1]
     return total * max(0, int(strength_percent)) / 100.0
 
 
@@ -519,8 +597,9 @@ def inn_rate(event, strength_percent=100):
     kind = KIND_BY_KEY.get(event.get("kind")) if isinstance(event, dict) else None
     if kind is None or event.get("status") != ACTIVE or not kind.get("inn"):
         return 0
-    stage = min(max(_int(event.get("stage"), 1), 1), STAGES[-1])
-    return kind["inn"][stage - 1] * max(0, int(strength_percent)) / 100.0
+    stage = min(max(_int(event.get("stage"), 1), 1), last_stage(event))
+    inn = kind["inn"]
+    return inn[min(stage, len(inn)) - 1] * max(0, int(strength_percent)) / 100.0
 
 
 def scaled(price, rate_percent):
@@ -534,7 +613,13 @@ def scaled(price, rate_percent):
 def text_of(event, name, **fields):
     """LLM が書いた文、無ければ表の文。`{town}` と `{goods}` を埋める。"""
     kind = KIND_BY_KEY.get(event.get("kind"), {})
-    written = (event.get("text") or {}).get(name)
+    text = event.get("text") or {}
+    if name == "summary":
+        # 概要は段ごと（`summary_<段>`）。書かれていない段は版1 の1文（`summary`）か最初の段の文
+        written = (text.get("summary_{}".format(_int(event.get("stage"), 1)))
+                   or text.get("summary") or text.get("summary_1"))
+    else:
+        written = text.get(name)
     if not written:
         if name == "name":
             written = kind.get("name", "")
@@ -600,18 +685,26 @@ def ago_in_words(days):
     return "だいぶ前"
 
 
-def effect_parts(event, strength_percent=100, mode=EFFECTS_NUMBER):
-    """その出来事のいまの段の値段の効き目を、窓に出す短い句の並びにする。出さないなら空。"""
+#: 影響の数字が主人公にとって得か損か（窓で数字に色を付ける）。
+GOOD, BAD, MIXED = "good", "bad", "mixed"
+
+
+def effect_items(event, strength_percent=100, mode=EFFECTS_NUMBER):
+    """その出来事のいまの段の値段の効き目を `[(句, 数字, 得か損か)]` で返す。出さないなら空。
+
+    数字は「数字」の出し方のときだけ（「言葉」なら空）。得か損かは主人公から見て:
+    買値が上がる・売値が下がる・宿代が上がるは損、その逆は得。売り買いが同じ向きに動くのは半々。
+    """
     if mode == EFFECTS_HIDDEN:
         return []
     kind = KIND_BY_KEY.get(event.get("kind")) if isinstance(event, dict) else None
     if kind is None:
         return []
-    stage = min(max(_int(event.get("stage"), 1), 1), STAGES[-1])
+    stage = min(max(_int(event.get("stage"), 1), 1), last_stage(event))
     scale = max(0, int(strength_percent)) / 100.0
-    parts = []
+    items = []
     for target, side, rates in kind["effects"]:
-        rate = int(round(rates[stage - 1] * scale))
+        rate = int(round(rates[min(stage, len(rates)) - 1] * scale))
         if not rate:
             continue
         if target is ALL:
@@ -620,21 +713,54 @@ def effect_parts(event, strength_percent=100, mode=EFFECTS_NUMBER):
             what = GOODS_NAMES.get(event.get("goods"), "ある品")
         else:
             what = "・".join(GOODS_NAMES.get(name, name) for name in target)
+        up = rate > 0
+        tone = {"buy": BAD if up else GOOD, "sell": GOOD if up else BAD, "both": MIXED}[side]
         if mode == EFFECTS_WORDS:
-            up = rate > 0
-            parts.append({"buy": "{}が値上がり" if up else "{}が値下がり",
-                          "sell": "{}が高く売れる" if up else "{}が安くしか売れない",
-                          "both": "{}が値上がり（売っても高い）" if up
-                          else "{}が値下がり（売っても安い）"}[side].format(what))
+            items.append(({"buy": "{}が値上がり" if up else "{}が値下がり",
+                           "sell": "{}が高く売れる" if up else "{}が安くしか売れない",
+                           "both": "{}が値上がり（売っても高い）" if up
+                           else "{}が値下がり（売っても安い）"}[side].format(what), "", tone))
         else:
             label = {"buy": "の買値", "sell": "の売値", "both": "の売り買い"}[side]
-            parts.append("{}{} {:+d}%".format(what, label, rate))
+            items.append(("{}{}".format(what, label), "{:+d}%".format(rate), tone))
     inn = kind.get("inn")
     if inn:
-        rate = int(round(inn[stage - 1] * scale))
+        rate = int(round(inn[min(stage, len(inn)) - 1] * scale))
         if rate:
-            parts.append("宿代が値上がり" if mode == EFFECTS_WORDS else "宿代 {:+d}%".format(rate))
-    return parts
+            tone = BAD if rate > 0 else GOOD
+            items.append(("宿代が値上がり" if rate > 0 else "宿代が値下がり", "", tone) if mode == EFFECTS_WORDS
+                         else ("宿代", "{:+d}%".format(rate), tone))
+    return items
+
+
+def effect_parts(event, strength_percent=100, mode=EFFECTS_NUMBER):
+    """その出来事のいまの段の値段の効き目を、窓に出す短い句の並びにする。出さないなら空。"""
+    return [text + (" " + number if number else "")
+            for text, number, _tone in effect_items(event, strength_percent, mode)]
+
+
+def next_verb(event):
+    """次に起きることの言い方。最後の段なら収まるときの言い方（「悪化する」「盛り上がる」「収まる」）。"""
+    kind = kind_of(event)
+    stage = _int(event.get("stage"), 1)
+    if kind is None:
+        return "収まる" if stage >= STAGES[-1] else "悪化する"
+    if stage >= len(kind["stages"]):
+        return kind.get("end") or "収まる"
+    return kind["into"][stage] or "移る"
+
+
+def ended_words(event, rival_name=""):
+    """終わった欄の言い方。"""
+    by = event.get("end_by")
+    if by == END_PLAYER:
+        return "解決した"
+    if by == END_RIVAL:
+        return "冒険者{}が解決した".format(rival_name or "")
+    if by == END_NATURAL:
+        kind = kind_of(event)
+        return (kind or {}).get("ended") or "自然に収まった"
+    return "終わった"
 
 
 def view_lines(events, day, rival, *, stage_days, settle_days, ended_days, in_words=False,
@@ -655,15 +781,14 @@ def view_lines(events, day, rival, *, stage_days, settle_days, ended_days, in_wo
     if active:
         lines.append("進行中")
     for event in active:
-        stage = _int(event.get("stage"), 1)
         lines.append("{}　{}（{}）".format(event.get("area_name") or "?", text_of(event, "name"),
-                                       STAGE_NAMES.get(stage, "")))
+                                       stage_name(event)))
         summary = text_of(event, "summary")
         if summary:
             lines.append("概要: {}{}".format(summary, "" if summary.endswith("。") else "。"))
         since = (day - _int(event.get("started"), day)) if day is not None else None
         left = days_to_next(event, day, stage_days, settle_days)
-        what = "収まる" if stage >= STAGES[-1] else "悪化する"
+        what = next_verb(event)
         if in_words:
             lines.append("{}。{}{}かもしれない。".format(since_in_words(since), days_in_words(left), what))
         else:
@@ -673,11 +798,13 @@ def view_lines(events, day, rival, *, stage_days, settle_days, ended_days, in_wo
         if parts:
             lines.append("影響: {}。".format("、".join(parts)))
         quest = event.get("quest")
-        if not quest:
+        if is_good(event):
+            pass                                    # 良い出来事は依頼を作らない
+        elif not quest:
             guild = guild_names.get(str(event.get("area"))) or "その街のギルド"
             lines.append("依頼: まだ出ていない（{}で掲示板を開くと出る）。".format(guild))
         elif target and str(target.get("quest")) == str(quest):
-            lines.append("依頼: 掲示板に出ている。冒険者{}が狙っている。".format(rival_name or "誰か"))
+            lines.append("依頼: 掲示板に出ている。冒険者{}が解決に向けて動き始めた。".format(rival_name or "誰か"))
         elif quest_status is not None and quest_status(quest) is None:
             lines.append("依頼: 掲示板から消えている。")
         else:
@@ -689,9 +816,7 @@ def view_lines(events, day, rival, *, stage_days, settle_days, ended_days, in_wo
     if ended:
         lines.append("この1年に終わったもの")
     for event in ended:
-        how = {END_PLAYER: "解決した",
-               END_RIVAL: "冒険者{}が解決した".format(rival_name or ""),
-               END_NATURAL: "自然に収まった"}.get(event.get("end_by"), "終わった")
+        how = ended_words(event, rival_name)
         ended_day = _int(event.get("ended"))
         if in_words:
             when = ago_in_words(day - ended_day if day is not None and ended_day is not None else None)
@@ -702,3 +827,83 @@ def view_lines(events, day, rival, *, stage_days, settle_days, ended_days, in_wo
     while lines and not lines[-1]:
         lines.pop()
     return lines
+
+
+#: 窓の依頼の行の調子（描く側が色を決める）。
+QUEST_PLAIN, QUEST_PENDING, QUEST_RIVAL, QUEST_GONE = "plain", "pending", "rival", "gone"
+
+
+def view_model(events, day, rival, *, stage_days, settle_days, ended_days, in_words=False,
+               quest_status=None, effects=EFFECTS_NUMBER, strength_percent=100, guild_names=None,
+               here=None):
+    """各地の出来事の窓の中身。`view_lines` と同じ材料・同じ設定から、札の形に組む（ゲームにも Kivy にも触らない）。
+
+    返す形:
+
+        {"here": いまいる街の名前と、その街の出来事（無ければ空）,
+         "cards": [{"town", "name", "stage", "stage_name", "stages": [段の名前], "tones": [段の調子],
+                    "days", "summary", "quest": (文, 調子) or None（良い出来事）,
+                    "effects": [(文, 得か損か or None)]}],   # 数字だけ GOOD / BAD / MIXED
+         "ended": [{"when", "town", "name", "how", "by"}]}   # by は END_PLAYER / END_RIVAL / END_NATURAL
+    """
+    guild_names = guild_names if isinstance(guild_names, dict) else {}
+    rival = rival if isinstance(rival, dict) else {}
+    target = rival.get("target") if isinstance(rival.get("target"), dict) else {}
+    rival_name = (rival.get("rival") or {}).get("name") if isinstance(rival.get("rival"), dict) else ""
+    active = sorted(events_of({"events": events}, ACTIVE),
+                    key=lambda event: (-(_int(event.get("stage"), 1)), _int(event.get("started"), 0)))
+    cards = []
+    for event in active:
+        stage = _int(event.get("stage"), 1)
+        since = (day - _int(event.get("started"), day)) if day is not None else None
+        left = days_to_next(event, day, stage_days, settle_days)
+        what = next_verb(event)
+        if in_words:
+            days = "{}。{}{}かもしれない。".format(since_in_words(since), days_in_words(left), what)
+        else:
+            days = "発生から{}日。{}まで約{}日。".format(since if since is not None else "?", what,
+                                                  left if left is not None else "?")
+        effect = []
+        for text, number, tone in effect_items(event, strength_percent, effects):
+            effect += ([("、", None)] if effect else []) + (
+                [(text + " ", None), (number, tone)] if number else [(text, None)])
+        quest = event.get("quest")
+        if is_good(event):
+            line = None                             # 良い出来事は依頼を作らない（窓に依頼の行を出さない）
+        elif not quest:
+            guild = guild_names.get(str(event.get("area"))) or "その街のギルド"
+            line = ("まだ出ていない（{}で掲示板を開くと出る）。".format(guild), QUEST_PENDING)
+        elif target and str(target.get("quest")) == str(quest):
+            line = ("冒険者{}が解決に向けて動き始めた。".format(rival_name or "誰か"), QUEST_RIVAL)
+        elif quest_status is not None and quest_status(quest) is None:
+            line = ("掲示板から消えている。", QUEST_GONE)
+        else:
+            line = ("掲示板に出ている。", QUEST_PLAIN)
+        summary = text_of(event, "summary")
+        kind = kind_of(event)
+        names = list(kind["stages"]) if kind else [STAGE_NAMES[s] for s in STAGES]
+        cards.append({"town": event.get("area_name") or "?", "name": text_of(event, "name"), "stage": stage,
+                      "stage_name": stage_name(event), "stages": names, "tones": list(stage_tones(event)),
+                      "days": days, "summary": summary if not summary or summary.endswith("。") else summary + "。",
+                      "effects": effect, "quest": line, "area": str(event.get("area"))})
+    ended = [event for event in events_of({"events": events}, ENDED)
+             if day is None or day - _int(event.get("ended"), day) <= ended_days]
+    ended.sort(key=lambda event: -_int(event.get("ended"), 0))
+    rows = []
+    for event in ended:
+        by = event.get("end_by")
+        how = ended_words(event, rival_name)
+        ended_day = _int(event.get("ended"))
+        ago = day - ended_day if day is not None and ended_day is not None else None
+        if in_words:
+            when = ago_in_words(ago)
+        else:
+            when = "今日" if ago is not None and ago <= 0 else ("{}日前".format(ago) if ago is not None else "?")
+        rows.append({"when": when, "town": event.get("area_name") or "?", "name": text_of(event, "name"),
+                     "how": how, "by": by})
+    here_text = ""
+    if here is not None:
+        here_cards = [card for card in cards if card["area"] == str(here)]
+        here_text = "（この街で{}が進行中）".format("・".join(c["name"] for c in here_cards)) if here_cards \
+            else "（この街で進行中の出来事はない）"
+    return {"here": here_text, "cards": cards, "ended": rows}

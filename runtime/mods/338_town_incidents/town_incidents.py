@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""街に盗賊や疫病などの出来事が起き、放っておくと悪化する。
+"""街に盗賊や疫病などの困り事や、祝祭や豊作などの良い出来事が起き、日を追って移り変わる。
 
-日数が進むと、訪れたことのあるギルドのある街に、表（`incidents.KINDS`）の出来事が起きることがある。
-放っておくと 兆し → 悪化 → 深刻 と進み、最後は自然に収まる。その街の掲示板の依頼で片付けられ、
-`911_rival_adventurer` のライバルが先に片付けることもある。
+日数が進むと、訪れたことのあるギルドのある街に、表（`incidents.default.json` と `kinds\\`）の出来事が起きることがある。
+困り事は放っておくと 兆し → 悪化 → 深刻 と進み、最後は自然に収まる。その街の掲示板の依頼で片付けられ、
+`911_rival_adventurer` のライバルが先に片付けることもある。良い出来事は依頼を作らず、出来事ごとの段を進んで収まる。
 遊び方は DOC.md、決めた仕様と控えの形（他の MOD との取り決め）は VERIFICATION.md §3.97。
 
 ##### ゲームのどこに触るか
@@ -20,13 +20,14 @@
 
 import os
 import random
+import re
 import sys
 import time
 
-from instantale_modloader import (choices, frames, hudicons, jobs, llm, modnpc, prices,
+from instantale_modloader import (choices, hudicons, jobs, llm, modnpc, prices,
                                   state as loader_state, ui)
 
-from . import incidents
+from . import incidents, window
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
 #      `tools/check_mods.py` が AST で突き合わせる）------------------------
@@ -46,21 +47,6 @@ GUIDE_NOTICE = True            # 様子の1行に、ギルドへの案内を添�
 SHOP_NOTICE = True             # 店に入ったときに値段の理由の1行を出す
 WINDOW_DAYS = "日数"           # 窓の日付の出し方（日数／あいまい）
 WINDOW_EFFECTS = "数字"        # 窓に出す値段の影響（数字／言葉／出さない）
-KIND_OUTLAWS = True
-KIND_EPIDEMIC = True
-KIND_INVADERS = True
-KIND_UNREST = True
-KIND_SHORTAGE = True
-KIND_AFTERMATH = True
-KIND_COUNTERFEIT = True
-KIND_HOARDING = True
-KIND_ANOMALY = True
-KIND_ABDUCTIONS = True
-KIND_CONTRABAND = True
-KIND_CRACKDOWN = True
-KIND_POWER_VACUUM = True
-KIND_INFLUX = True
-KIND_BOOM = True
 
 # ---- 文（ゲーム画面の文は常体）--------------------------------------------
 BOARD_TEXT = "掲示板に、{name}にまつわる依頼が新しく貼り出されている。"
@@ -100,15 +86,15 @@ LOAD_TARGETS = ("__main__:InstantaleApp.load_game_new",)
 BUSY_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle", "in_conversation")
 #: 窓のアイコン（注意の標識）。普段・乗せた時・押した時。描き方は `tools\make_town_incidents_icon.py`。
 ICON_FILES = ("icon_caution.png", "icon_caution_hover.png", "icon_caution_click.png")
+#: 左下の一覧での並び（`339_` の勢力と情勢より前）。
+ICON_ORDER = 10
 #: 窓を開くときの音。キャラ情報と同じ（ゲームは開くときだけ鳴らし、閉じるときは鳴らさない）。
-OPEN_SOUND = "Assets/sounds/sounds/ui/常時/アイコン_キャラシート.wav"
 VIEW_TITLE = "各地の出来事"
-VIEW_SIZE_HINT = (0.7, 0.8)
-VIEW_PAD = 12
-VIEW_BG = (0.06, 0.06, 0.08, 0.96)
-VIEW_BORDER_WIDTH = 1.5
-VIEW_BORDER_ALPHA = 0.8
-VIEW_EMPTY = "いま、各地で目立った出来事は起きていない。"
+
+#: 起こさない出来事の英名（カンマ区切り）。設定画面の「出来事の種類」タブが書く。
+DISABLED_KINDS = ""
+#: 版1 の出来事ごとの設定（`KIND_OUTLAWS` など）で切ってあった英名。起動のときに設定の控えから読んで足す。
+_LEGACY_DISABLED = set()
 
 TEXT_PROMPT = """あなたは RPG の語り手です。
 次の世界の街「{town}」で起きた出来事を、この世界の言葉で書いてください。
@@ -126,11 +112,11 @@ TEXT_PROMPT = """あなたは RPG の語り手です。
 # 書くこと
 - fits: この出来事がこの世界とこの街で起こりうるなら「はい」、世界観に合わないなら「いいえ」。迷ったら「はい」
 - name: この世界での出来事の呼び名。12字まで
-- summary: この街で何が起き、誰がどう困っているかの概要を1文で（遊ぶ人が一覧で読む）
-- arrive_1 / arrive_2 / arrive_3: 街に着いたときの情景を1文ずつ。1は兆し、2は悪化、3は深刻
+{summary_rule}
+{arrive_rule}
 - shop: 店に入ったときの1文。{shop_hint}
 - settled: 出来事が自然に収まったと耳にする1文（「〜らしい」で終える）
-- quest: この街のギルド（依頼を仲介する所）に出る、この出来事を解決する依頼の中身を1文で
+{quest_rule}
 - rumor: よその街で聞く噂の1文（「〜らしい」で終える）。街の名前「{town}」を入れる
 
 # 決まり
@@ -138,8 +124,32 @@ TEXT_PROMPT = """あなたは RPG の語り手です。
 - 世界の設定のうち、住人が知らないはずのこと（秘密や真相）は書かない
 - 主人公の台詞や行動は書かない
 """
-TEXT_FIELDS = ("fits", "name", "summary", "arrive_1", "arrive_2", "arrive_3", "shop", "settled",
-               "quest", "rumor")
+TEXT_FIELDS = ("fits", "name", "summary_1", "summary_2", "summary_3", "summary_4",
+               "arrive_1", "arrive_2", "arrive_3", "arrive_4", "shop", "settled", "quest", "rumor")
+SUMMARY_TROUBLE = "その段階のときに、この街で何が起き、誰がどう困っているかの概要を1文ずつ（遊ぶ人が一覧で読む）"
+SUMMARY_GOOD = "その段階のときに、この街で何が起き、街がどうなっているかの概要を1文ずつ（遊ぶ人が一覧で読む）"
+ARRIVE_RULE = "街に着いたときの情景を1文ずつ"
+QUEST_TROUBLE = "- quest: この街のギルド（依頼を仲介する所）に出る、この出来事を解決する依頼の中身を1文で"
+QUEST_GOOD = "- quest: 空にする（この出来事には依頼を出さない）"
+
+
+def stage_rule(prefix, what, kind):
+    """頼み文の段ごとの欄（`summary_*` / `arrive_*`）の決まり。段の数だけ書かせ、残りは空にさせる。"""
+    names = kind["stages"]
+    fields = [n for n in TEXT_FIELDS if n.startswith(prefix + "_")]
+    rule = "- {}: {}。{}".format(
+        " / ".join(fields[:len(names)]), what, "、".join("{}は{}".format(i + 1, n) for i, n in enumerate(names)))
+    if len(names) < len(fields):
+        rule += "\n- {}: 空にする".format(" / ".join(fields[len(names):]))
+    return rule
+
+
+def arrive_rule(kind):
+    return stage_rule("arrive", ARRIVE_RULE, kind)
+
+
+def summary_rule(kind):
+    return stage_rule("summary", SUMMARY_GOOD if incidents.is_good(kind) else SUMMARY_TROUBLE, kind)
 
 
 def _store():
@@ -152,10 +162,22 @@ def _store():
     return store
 
 
+def disabled_keys():
+    words = re.split(r"[\s,、]+", DISABLED_KINDS) if isinstance(DISABLED_KINDS, str) else []
+    return {word.strip() for word in words if word.strip()} | set(_LEGACY_DISABLED)
+
+
 def enabled_kinds():
-    values = globals()
-    return [kind for kind in incidents.KINDS
-            if values.get("KIND_" + kind["key"].upper(), True)]
+    disabled = disabled_keys()
+    return [kind for kind in incidents.KINDS if kind["key"] not in disabled]
+
+
+def legacy_disabled(raw):
+    """設定の控え（この MOD の分の辞書）から、版1 の `KIND_*` で切ってあった英名を拾う。"""
+    if not isinstance(raw, dict):
+        return set()
+    return {name[len("KIND_"):].lower() for name, value in raw.items()
+            if isinstance(name, str) and name.startswith("KIND_") and value is False}
 
 
 def effect_hint(kind, goods=None):
@@ -180,6 +202,17 @@ def effect_hint(kind, goods=None):
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
     store = _store()
+    # 出来事の表は同梱の `incidents.default.json` と `kinds\`（足した出来事）から読む（VERIFICATION.md §3.97「出来事の表」）
+    mod_dir = getattr(ctx, "mod_dir", None) or os.path.dirname(os.path.abspath(__file__))
+    for problem in incidents.reload_kinds(mod_dir):
+        write("WARN kinds: {}".format(problem))
+    try:
+        from instantale_modloader import config as loader_config
+        raw = loader_config.load_store(os.path.dirname(os.path.dirname(mod_dir))).get(os.path.basename(mod_dir))
+        _LEGACY_DISABLED.clear()
+        _LEGACY_DISABLED.update(legacy_disabled(raw))
+    except Exception:
+        ctx.log_exc("town incidents: cannot read the old per-kind settings")
     if store["worlds"] is None:
         store["worlds"] = loader_state.WorldStore(
             ctx, STATE_DIRNAME, default=incidents.new_bucket,
@@ -222,7 +255,7 @@ def apply(ctx):
 
     def guide_line(app, event):
         """様子の1行に添えるギルドへの案内。依頼がもう掲示板に出ていれば空（くどくしない）。"""
-        if not GUIDE_NOTICE or event is None or event.get("quest"):
+        if not GUIDE_NOTICE or event is None or event.get("quest") or incidents.is_good(event):
             return ""
         area = (ui.world_areas(app) or {}).get(str(event.get("area")))
         name = ui.facility_name(app, guild_of(area)) if area is not None else ""
@@ -249,7 +282,7 @@ def apply(ctx):
         return text.strip() if isinstance(text, str) and text.strip() else "（不明）"
 
     def stage_name(event):
-        return incidents.STAGE_NAMES.get(event.get("stage"), "")
+        return incidents.stage_name(event)
 
     def name_of(event):
         return incidents.text_of(event, "name")
@@ -286,7 +319,10 @@ def apply(ctx):
         prompt = TEXT_PROMPT.format(
             town=event.get("area_name") or "その街", world=ui.world_overview(app) or "（不明）",
             overview=area_overview(app, event.get("area")), what=kind["what"],
-            examples=kind["examples"], shop_hint=effect_hint(kind, event.get("goods")))
+            examples=kind["examples"], shop_hint=effect_hint(kind, event.get("goods")),
+            summary_rule=summary_rule(kind),
+            arrive_rule=arrive_rule(kind),
+            quest_rule=QUEST_GOOD if incidents.is_good(kind) else QUEST_TROUBLE)
         return [{"role": "user", "content": prompt}]
 
     def clean_line(value, limit):
@@ -361,6 +397,7 @@ def apply(ctx):
             write("start: {} #{} {} at {} ({}) stage 1 day {} text {}".format(
                 event.get("kind"), event_id, name_of(event), event.get("area_name"),
                 event.get("area"), event.get("started"), "llm" if text else "table"))
+            hudicons.notify(ICON_KEY)       # 左下の MOD 用のボタンと一覧の行に印（一覧の行を押すと消える）
             here = here_id(app) == event.get("area")
             line = incidents.arrive_text(event) if here else ""
             guide = guide_line(app, event) if here else ""
@@ -427,6 +464,7 @@ def apply(ctx):
                 if what == "stage":
                     write("stage: #{} {} at {} -> {} day {}".format(
                         event.get("id"), name_of(event), event.get("area_name"), stage, day))
+                    hudicons.notify(ICON_KEY)
                 else:
                     write("end: #{} {} at {} settled by itself day {}".format(
                         event.get("id"), name_of(event), event.get("area_name"), day))
@@ -528,6 +566,8 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 依頼
     def needs_quest(app, event):
+        if incidents.is_good(event):
+            return False                    # 良い出来事は依頼を作らない
         quest = event.get("quest")
         if not quest:
             return True
@@ -704,7 +744,7 @@ def apply(ctx):
         return orig(self, *args, **kwargs)
 
     # ------------------------------------------------------------ 状況を見る窓
-    def view_text(app):
+    def view_model(app):
         day = ui.game_day(app)
         with worlds.lock:
             _key, bucket = ledger(app)
@@ -717,12 +757,16 @@ def apply(ctx):
             name = ui.facility_name(app, guild_of(area)) if area is not None else ""
             if name:
                 guilds[str(event.get("area"))] = name
-        return incidents.view_lines(events, day, rival, stage_days=STAGE_DAYS, guild_names=guilds,
-                                    settle_days=SETTLE_DAYS, ended_days=ENDED_SHOWN_DAYS,
-                                    in_words=(WINDOW_DAYS == incidents.DAYS_VAGUE),
-                                    quest_status=lambda qid: quest_status(app, qid),
-                                    effects=WINDOW_EFFECTS,
-                                    strength_percent=PRICE_STRENGTH_PERCENT)
+        here = here_id(app)
+        model = incidents.view_model(events, day, rival, stage_days=STAGE_DAYS, guild_names=guilds,
+                                     settle_days=SETTLE_DAYS, ended_days=ENDED_SHOWN_DAYS,
+                                     in_words=(WINDOW_DAYS == incidents.DAYS_VAGUE),
+                                     quest_status=lambda qid: quest_status(app, qid),
+                                     effects=WINDOW_EFFECTS, strength_percent=PRICE_STRENGTH_PERCENT,
+                                     here=here)
+        area = areas.get(str(here)) if here is not None else None
+        model["here_name"] = str(getattr(area, "name", "") or "") if area is not None else ""
+        return model
 
     def close_view():
         view = store.get("view")
@@ -740,89 +784,15 @@ def apply(ctx):
         if app is None:
             return
         try:
-            from kivy.uix.boxlayout import BoxLayout
-            from kivy.uix.button import Button
-            from kivy.uix.label import Label
-            from kivy.uix.modalview import ModalView
-            from kivy.uix.scrollview import ScrollView
-            from kivy.graphics import Color, Line, Rectangle
-        except Exception:
-            write("WARN view: kivy is not available")
-            return
-        hud = ui.find_hud(app)
-        status = frames.attr(hud, "status_label", None) if hud is not None else None
-        font_name = frames.text_of(status, "font_name") if status is not None else None
-        font_size = frames.attr(status, "font_size", None) if status is not None else None
-        view = ModalView(size_hint=VIEW_SIZE_HINT, auto_dismiss=True)
-        for name in ("background_color", "overlay_color"):
-            try:
-                setattr(view, name, (0, 0, 0, 0.5))
-            except Exception:
-                pass
-        root = BoxLayout(orientation="vertical", padding=ui.upx(VIEW_PAD), spacing=ui.upx(VIEW_PAD))
-        with root.canvas.before:
-            Color(*VIEW_BG)
-            panel = Rectangle(pos=root.pos, size=root.size)
-        # 枠線は中身の後（`canvas.after`）に引く（`122_` の窓と同じ白い線）。
-        with root.canvas.after:
-            Color(1, 1, 1, VIEW_BORDER_ALPHA)
-            frame = Line(rectangle=(root.x, root.y, root.width, root.height),
-                         width=ui.upx(VIEW_BORDER_WIDTH))
-
-        def redraw(*_args):
-            panel.pos, panel.size = root.pos, root.size
-            frame.rectangle = (root.x, root.y, root.width, root.height)
-
-        root.bind(pos=redraw, size=redraw)
-        head = BoxLayout(orientation="horizontal", size_hint_y=None, height=ui.upx(36))
-        title = Label(text=VIEW_TITLE, halign="left", valign="middle")
-        close = Button(text="×", size_hint=(None, None), size=(ui.upx(36), ui.upx(36)))
-        for widget in (title, close):
-            if isinstance(font_name, str) and font_name:
-                widget.font_name = font_name
-        if isinstance(font_size, (int, float)):
-            title.font_size = font_size
-        title.bind(size=lambda instance, value: setattr(instance, "text_size", value))
-        close.bind(on_release=lambda *_a: close_view())
-        head.add_widget(title)
-        head.add_widget(close)
-        scroll = ScrollView(do_scroll_x=False)
-        body = Label(text="\n".join(view_text(app)) or VIEW_EMPTY, halign="left", valign="top",
-                     size_hint_y=None, markup=False)
-        if isinstance(font_name, str) and font_name:
-            body.font_name = font_name
-        if isinstance(font_size, (int, float)):
-            body.font_size = font_size
-        body.line_height = 1.4
-        body.bind(width=lambda instance, value: setattr(instance, "text_size", (value, None)),
-                  texture_size=lambda instance, value: setattr(instance, "height", value[1]))
-        scroll.add_widget(body)
-        root.add_widget(head)
-        root.add_widget(scroll)
-        view.add_widget(root)
-        view.bind(on_dismiss=lambda *_a: store.update({"view": None}))
-        store["view"] = view
-        try:
-            view.open()
+            store["view"] = window.open_window(app, view_model(app), write=write,
+                                               on_dismiss=lambda: store.update({"view": None}))
         except Exception:
             store["view"] = None
             ctx.log_exc("town incidents: could not open the window")
-            return
-        play_open_sound(app)
-
-    def play_open_sound(app):
-        """ゲーム自身の効果音の出口で鳴らす（音量の設定もゲームのものが効く）。"""
-        manager = getattr(app, "sound_manager", None)
-        play = getattr(manager, "play_sound_from_src", None)
-        if callable(play):
-            try:
-                play(app, OPEN_SOUND)
-            except Exception:
-                ctx.log_exc("town incidents: cannot play the open sound")
 
     # 絵のパスは apply() の間に組む（`ctx.mod_dir` はフックの中では読めない）。
     icon_dir = getattr(ctx, "mod_dir", None) or os.path.dirname(os.path.abspath(__file__))
-    hudicons.add(ctx, ICON_KEY, toggle_view,
+    hudicons.add(ctx, ICON_KEY, toggle_view, order=ICON_ORDER, label=VIEW_TITLE,
                  images=tuple(os.path.join(icon_dir, name) for name in ICON_FILES), write=write)
 
     # ------------------------------------------------------------ ロードの突き合わせ

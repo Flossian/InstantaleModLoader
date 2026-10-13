@@ -36,11 +36,14 @@ rem  does and does not cover (game-derived strings, GAME.md, the EULA question).
 rem
 rem  Never shipped: out\, state\ and settings\ (all three made at
 rem  runtime), __pycache__ / *.pyc, tools\tests\test_*.py and the one-off save fixers, and
-rem  llm_replacements.txt / npc.json / seeds.json -- those three are the
+rem  llm_replacements.txt / npc.json / seeds.json / incidents.json -- those are the
 rem  player's own copy of a mod's data file, so only the shipped *.default.*
 rem  versions go in. The names are the *.default.* ones with ".default"
 rem  dropped (SHIPPED_DEFAULTS and user_name() in tools\gui.py);
 rem  tools\tests\test_llm_prompt_replace.py checks the /XF list against them.
+rem  338_town_incidents\kinds\ holds incidents the player added, so it is not
+rem  shipped either. /XD takes it as a full path (%CD%\...): a relative path there
+rem  matched nothing and the folder was copied.
 rem
 rem    make_dist.bat           version comes from runtime\instantale_modloader
 rem    make_dist.bat 1.2.0     override the version string
@@ -193,7 +196,7 @@ rem ===========================================================================
 rem  mods
 rem ===========================================================================
 echo   [mods] copying ...
-robocopy "runtime\mods" "%MODS%" /E /XD "__pycache__" "_template" /XF "*.pyc" "llm_replacements.txt" "npc.json" "seeds.json" "load_order.json" "load_order.local.json" /NFL /NDL /NJH /NJS /NP >nul
+robocopy "runtime\mods" "%MODS%" /E /XD "__pycache__" "_template" "%CD%\runtime\mods\338_town_incidents\kinds" /XF "*.pyc" "llm_replacements.txt" "npc.json" "seeds.json" "incidents.json" "load_order.json" "load_order.local.json" /NFL /NDL /NJH /NJS /NP >nul
 if errorlevel 8 (
   echo   ERROR: robocopy failed on runtime\mods ^(code %ERRORLEVEL%^).
   goto :fail

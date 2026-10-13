@@ -129,6 +129,9 @@ SHIPPED_DEFAULTS = {
         "285b98a366715f380345f9de53a9da29357187b0",     # v1.10.0
         "953f661242a0386c611af7ffc92a3c4b8f08398e",     # v1.16.0
     },
+    "incidents.default.json": {                         # 338_
+        "76a134d36f37e00dae3b1d51f9cc78ea53b3a253",     # v1.16.0
+    },
 }
 
 

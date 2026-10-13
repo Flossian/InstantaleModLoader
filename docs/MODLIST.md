@@ -135,7 +135,7 @@
 | [`335_player_portrait_regenerate`](MODS.md#335_player_portrait_regenerate-人物欄から主人公の立ち絵を描き直せる) | 人物欄から主人公の立ち絵を描き直せる | 人物欄から主人公の立ち絵を描き直せる | - |  |
 | [`336_crime_overhaul`](MODS.md#336_crime_overhaul-犯罪まわりの全面改修) | 犯罪まわりの全面改修 | 犯罪まわりの全面改修 | 78 |  |
 | [`337_conversation_affinity`](MODS.md#337_conversation_affinity-会話による好感度の変動) | 会話による好感度の変動 | 会話による好感度の変動 | 4 |  |
-| [`338_town_incidents`](MODS.md#338_town_incidents-街に盗賊や疫病などの出来事が起き放っておくと悪化する) | 街の出来事 | 街に盗賊や疫病などの出来事が起き、放っておくと悪化する | 31 |  |
+| [`338_town_incidents`](MODS.md#338_town_incidents-街に盗賊や疫病などの困り事や祝祭や豊作などの良い出来事が起き日を追って移り変わる) | 街の出来事 | 街に盗賊や疫病などの困り事や、祝祭や豊作などの良い出来事が起き、日を追って移り変わる | 17 |  |
 | [`339_town_factions`](MODS.md#339_town_factions-勢力ごとに主人公の見られ方が変わりその勢力の-npc-の態度に表れる) | 街の勢力 | 勢力ごとに主人公の見られ方が変わり、その勢力の NPC の態度に表れる | 8 |  |
 | [`401_battle_character_context`](MODS.md#401_battle_character_context-戦闘の審判へ同行者の人物と装備を見せる) | 戦闘の審判への仲間の情報補完 | 戦闘の審判へ同行者の人物と装備を見せる | - |  |
 | [`402_party_inventory_transfer`](MODS.md#402_party_inventory_transfer-仲間とアイテムを受け渡しできる) | 仲間とのアイテム受け渡し | 仲間とアイテムを受け渡しできる | - |  |

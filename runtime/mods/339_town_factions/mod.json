@@ -10,7 +10,7 @@
     "en": "Factions written in the world setting get a standing toward you, and NPCs of each faction treat you with that bias. Talks move your standing, solving a town's incident pleases its faction, and relations between factions shift on their own as days pass (heard as rumors). Worlds whose setting names fewer than two factions get none. Turn it on per world",
     "ja": "世界の設定に書かれた勢力ごとに主人公の見られ方を持ち、その勢力の NPC は見られ方に応じた態度で接する。見られ方は会話の中身で動き、街の出来事を片付けるとその街の勢力に好かれる。勢力どうしの仲も日数が進むにつれて動き、噂として聞こえてくる。設定に勢力が2つ以上書かれていない世界では何もしない。世界ごとに有効にする"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "shares": [
     "town_incidents"
@@ -76,7 +76,7 @@
         "en": "Gain from a talk"
       },
       "note": {
-        "ja": "会話の中身が勢力の考えに沿っていたとき、その勢力からの見られ方が上がる量（判定の強さ1つあたり。最大で2倍）。同じ勢力から上がるのは1日1回。見られ方は -100〜100 で、20 以上で好意、60 以上で信頼",
+        "ja": "会話の中身が勢力の考えに沿っていたとき、その勢力からの見られ方が上がる量（判定の強さ1つあたり。最大で2倍）。同じ勢力から上がるのは1日1回。見られ方は -100〜100 で、20 以上で友好、60 以上で盟友",
         "en": "How much your standing rises per step when a talk pleases the faction (up to twice this). Once a day per faction. Standing runs -100 to 100: 20+ is fond, 60+ is trusted"
       }
     },
@@ -90,7 +90,7 @@
         "en": "Loss from a talk"
       },
       "note": {
-        "ja": "会話の中身が勢力の考えに反していたとき、その勢力からの見られ方が下がる量（判定の強さ1つあたり。最大で2倍）。回数の制限は無い。-20 以下で警戒、-60 以下で敵視",
+        "ja": "会話の中身が勢力の考えに反していたとき、その勢力からの見られ方が下がる量（判定の強さ1つあたり。最大で2倍）。回数の制限は無い。-21 以下で緊張、-61 以下で敵対",
         "en": "How much your standing falls per step when a talk offends the faction (up to twice this). No daily limit. -20 or below is wary, -60 or below is hostile"
       }
     },

@@ -15,14 +15,15 @@
 勢力が2つ以上書かれていない世界（統一された世界・勢力の話が無い世界）では台帳を作らない（VERIFICATION.md §3.98「勢力は設定に書かれたものだけ」）。
 """
 
+import json
 import os
 import sys
 
-from instantale_modloader import choices, frames, jobs, llm, modnpc, talk_summary, ui
+from instantale_modloader import choices, frames, hudicons, jobs, llm, modnpc, talk_summary, ui
 from instantale_modloader import state as loader_state
 from instantale_modloader.state import UNKNOWN_WORLD, WorldStore, world_key
 
-from . import material, rules
+from . import material, rules, view, window
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
 #      `tools/check_mods.py` が AST で突き合わせる）------------------------
@@ -65,6 +66,10 @@ CHANGE_FIELD = "faction_change"
 REASON_FIELD = "faction_reason"
 RECONCILE_FIELD = "faction_reconcile"
 REASON_CHARS = 80
+#: 画面左下の MOD 用のボタンの一覧に出す行（ローダの `hudicons`）。並びは 338 の「各地の出来事」の後。
+ICON_KEY = "town_factions"
+ICON_FILES = ("icon_flag.png", "icon_flag_hover.png", "icon_flag_click.png")
+ICON_ORDER = 20
 #: 抽出の並びの件数の上限（ローカル LLM が書き足し続けないように。139 と同じ穴）。ローカルのときだけ付ける。
 LIST_LIMITS = {"factions": 8, "towns": 40, "relations": 28, "standings": 8}
 
@@ -81,12 +86,17 @@ faction_change に -2〜+2 の整数で答えること。
 faction_reason には判定の理由を1文で書くこと。
 faction_reconcile は、下に指示が無ければ "false" にすること。
 summary にはこの判定のことを書かないこと。"""
-#: 敵視が外れなくなった勢力の相手と話すときだけ足す（VERIFICATION.md §3.98「手配と敵視の上限」）。
+#: 敵対が外れなくなった勢力の相手と話すときだけ足す（VERIFICATION.md §3.98「手配と敵対の上限」）。
 RECONCILE_INSTRUCTION = """
 {faction}の者たちは、{player}を許しがたい敵とみなしている。
 この会話で{player}が、{faction}がその敵意を改めるに足る理由（誤解を解く確かな証し・償い・{faction}のためになした行い・筋の通った説得など）を示し、
 {name}が{faction}の者として本当に納得したと言えるときだけ、faction_reconcile を "true" にすること。
 謝罪や言い訳だけ、口先の約束、媚び、脅しでは "false" にすること。迷ったら "false"。"""
+
+
+def json_copy(value):
+    """台帳の写し（窓に渡す。鍵の外で読んでも、背景の仕事の書き込みと混ざらない）。"""
+    return json.loads(json.dumps(value, ensure_ascii=False))
 
 
 def _store():
@@ -367,6 +377,8 @@ def apply(ctx):
                                      "rumor": rumor,
                                      "reason": str(answer.get("reason") or "").strip()[:200]})
             worlds.save(key)
+        if rumor:
+            hudicons.notify(ICON_KEY)
         write("trend: day {} {}-{} {:+d} {} -> {} ({}) rumor: {}".format(
             day, a, b, direction, rules.RELATION_NAMES[plan["before"]],
             rules.RELATION_NAMES[plan["after"]], plan["why"], rumor))
@@ -462,7 +474,7 @@ def apply(ctx):
         day = ui.game_day(app)
         key = worlds.playthrough(app)
         laws = ui.lawfulness_by_area(getattr(app, "player", None))
-        # 敵視が外れない印は、印のある相手に聞いたときの "true" でだけ外す（VERIFICATION.md §3.98「手配と敵視の上限」）
+        # 敵対が外れない印は、印のある相手に聞いたときの "true" でだけ外す（VERIFICATION.md §3.98「手配と敵対の上限」）
         reconciled = bool(talk.get("locked")) and llm.truthy(answer.get(RECONCILE_FIELD), unknown=False)
         with worlds.lock:
             ledger = load(key)
@@ -470,11 +482,19 @@ def apply(ctx):
                 return
             if reconciled:
                 reconciled = rules.lift_lock(ledger, faction_id)
+            if reconciled:
+                score = (ledger["standing"].get(faction_id) or {}).get("score", 0)
+                rules.add_history(ledger, {"day": day, "faction": faction_id, "before": score,
+                                           "after": score, "kind": rules.RECONCILE, "by": None,
+                                           "reason": reason, "incident": ""})
             gained_today = day is not None and ledger["gained"].get(faction_id) == day
             moves = rules.plan_talk(ledger, faction_id, step, gain_per_step=GAIN_PER_STEP,
                                     loss_per_step=LOSS_PER_STEP, gained_today=gained_today,
                                     ceiling=rules.gain_ceiling(ledger, faction_id, laws))
             rules.apply_moves(ledger, moves)
+            _written, changed = rules.record_moves(ledger, moves, day=day, kind=rules.TALK, reason=reason)
+            if changed or reconciled:
+                hudicons.notify(ICON_KEY)
             if any(why == "gain" for _f, _b, _a, why in moves) and day is not None:
                 ledger["gained"][faction_id] = day
             worlds.save(key)
@@ -506,6 +526,12 @@ def apply(ctx):
             moves = rules.plan_gain(ledger, faction_id, INCIDENT_GAIN, "incident",
                                     ceiling=rules.gain_ceiling(ledger, faction_id, laws))
             rules.apply_moves(ledger, moves)
+            name = str((event.get("text") or {}).get("name") or "出来事")
+            _written, changed = rules.record_moves(
+                ledger, moves, day=ui.game_day(app), kind=rules.INCIDENT,
+                incident="{}の{}".format(event.get("area_name") or "街", name))
+            if changed:
+                hudicons.notify(ICON_KEY)
             write("incident: {} in {} solved by the player: {}".format(
                 event.get("kind"), event.get("area"),
                 ", ".join("{} {} {}->{}".format(f, why, b, a) for f, b, a, why in moves)))
@@ -534,6 +560,64 @@ def apply(ctx):
             ctx.log_exc("town factions: after elapse_days failed")
         return result
 
+    # ------------------------------------------------------------ 勢力と情勢の窓
+    # 絵のパスは apply() の間に組む（`ctx.mod_dir` はフックの中では読めない）。
+    icon_dir = getattr(ctx, "mod_dir", None) or os.path.dirname(os.path.abspath(__file__))
+    icon_images = tuple(os.path.join(icon_dir, name) for name in ICON_FILES)
+
+    def close_view():
+        current = store.get("view")
+        store["view"] = None
+        if current is not None:
+            try:
+                current.dismiss()
+            except Exception:
+                ctx.log_exc("town factions: could not close the window")
+
+    def view_model(app):
+        key = worlds.playthrough(app)
+        with worlds.lock:
+            ledger = json_copy(load(key))
+        areas = ui.world_areas(app) or {}
+        names = {str(area_id): str(getattr(area, "name", "") or area_id) for area_id, area in areas.items()}
+        return view.build(ledger, day=ui.game_day(app), here=ui.area_id_of(ui.current_area(app)),
+                          area_names=names, laws=ui.lawfulness_by_area(getattr(app, "player", None)))
+
+    def toggle_view(app):
+        if store.get("view") is not None:
+            close_view()
+            return
+        if app is None:
+            return
+        ensure(app)
+        try:
+            store["view"] = window.open_window(app, view_model(app), write=write,
+                                               on_dismiss=lambda: store.update({"view": None}))
+        except Exception:
+            store["view"] = None
+            ctx.log_exc("town factions: could not open the window")
+
+    def listed(app):
+        """一覧に「勢力と情勢」の行を出すか（いまの世界で有効か）。ローダが並べるたびに聞く。
+
+        世界ごとの設定はファイルから読むので、注入の世代と周回ごとに1回だけ読んで覚える（読み込み直したら読み直す）。
+        """
+        if app is None:
+            return False
+        key = worlds.playthrough(app)
+        if key == UNKNOWN_WORLD:
+            return False
+        # 覚えは注入の世代ごと（設定を変えるとローダが注入し直すので、そのときに読み直す）
+        stamp = (getattr(ctx, "generation", None), key)
+        known = store.get("listed")
+        if not (isinstance(known, tuple) and known[0] == stamp):
+            known = (stamp, enabled(app))
+            store["listed"] = known
+        return known[1]
+
+    hudicons.add(ctx, ICON_KEY, toggle_view, images=icon_images, order=ICON_ORDER, label=window.TITLE,
+                 write=write, visible=listed)
+
     # ------------------------------------------------------------ ロード
     def make_load(target):
         @ctx.wrap(target, required=False, safe=True)
@@ -542,7 +626,9 @@ def apply(ctx):
             worlds.forget()
             store["failed"].clear()         # 作れなかった台帳は、読み込み直したらもう一度試す
             store["checked"] = None
+            store["listed"] = None          # 一覧の行を出すかは、次に聞かれたときに読み直す
             try:
+                close_view()
                 ensure(self)                # 読み込んだらすぐ作り始める（会話や日数の経過を待たない）
             except Exception:
                 ctx.log_exc("town factions: cannot check the ledger after loading")

@@ -113,10 +113,84 @@ weights = dict((kind["key"], weight) for kind, weight in rules.weights(kinds, "v
 check("村: 外敵・物資の途絶・失踪が 3", weights["invaders"] == 3 and weights["shortage"] == 3
       and weights["abductions"] == 3, weights)
 check("どの規模でも 2（災害の後・不可解な怪事）", weights["aftermath"] == 2 and weights["anomaly"] == 2)
-check("ほかは 1", weights["epidemic"] == 1 and weights["boom"] == 1, weights)
-flat = set(weight for _kind, weight in rules.weights(kinds, "city", by_size=False))
-check("規模で変えないなら全部 1", flat == {1}, flat)
-check("表は15種", len(kinds) == 15 and len(rules.KIND_BY_KEY) == 15, len(kinds))
+check("ほかは 1（良い出来事は表の倍率 0.5 を掛ける）", weights["epidemic"] == 1 and weights["boom"] == 0.5, weights)
+flat = [(kind["key"], weight) for kind, weight in rules.weights(kinds, "city", by_size=False)]
+check("規模で変えないなら表の倍率だけ", all(weight == rules.KIND_BY_KEY[key]["weight"] for key, weight in flat), flat)
+check("表は18種（困り事15・良い出来事3とにわか景気）", len(kinds) == 18 and len(rules.KIND_BY_KEY) == 18
+      and sorted(k["key"] for k in kinds if rules.is_good(k)) == ["boom", "festival", "harvest", "trade"],
+      [k["key"] for k in kinds])
+
+print("[規則] 出来事の表（ファイル）")
+check("同梱の表は読めない出来事が無い", rules.PROBLEMS == [], rules.PROBLEMS)
+boom = rules.KIND_BY_KEY["boom"]
+check("にわか景気は4段（予兆・過熱・崩壊・収束）で依頼なし", boom["stages"] == ("予兆", "過熱", "崩壊", "収束")
+      and rules.is_good(boom) and rules.stage_tones(boom) == ("good1", "good2", "bad3", "calm"), boom["stages"])
+check("困り事の色の調子は黄・橙・赤の順", rules.stage_tones(rules.KIND_BY_KEY["epidemic"]) == ("bad1", "bad2", "bad3"))
+check("良い出来事は兆し・盛況・収束", rules.KIND_BY_KEY["harvest"]["stages"] == ("兆し", "盛況", "収束")
+      and rules.stage_tones(rules.KIND_BY_KEY["harvest"]) == ("good1", "good2", "calm"))
+check("同じ品の買値と売値は別の効き目", ((rules.ALL, "buy", (5, 15, -10, -5)) in boom["effects"]
+                                     and (rules.ALL, "sell", (10, 30, -25, -10)) in boom["effects"]), boom["effects"])
+bad, why = rules.parse_kind({"key": "x y", "name": "a"})
+check("key が英数字でなければ読まない", bad is None and "key" in why[0], why)
+bad, why = rules.parse_kind({"key": "oops", "name": "a", "what": "b",
+                             "stages": [{"name": "一", "tone": "wow", "arrive": "a"},
+                                        {"name": "二", "tone": "bad", "arrive": "b"}]})
+check("tone と into の書き間違いを理由に挙げる", bad is None and any("tone" in w for w in why)
+      and any("into" in w for w in why), why)
+bad, why = rules.parse_kind({"key": "oops", "name": "a", "what": "b",
+                             "stages": [{"name": "一", "tone": "bad", "arrive": "a",
+                                         "prices": [{"goods": ["gold"], "buy": 5}]}]})
+check("品の種類の書き間違い", bad is None and any("goods" in w for w in why), why)
+extra = os.path.join(OUT_DIR, "kinds_extra")
+os.makedirs(extra, exist_ok=True)
+for name, data in (("plague.json", {"key": "epidemic", "name": "大疫", "what": "病が広がる", "quest": "病を断つ依頼",
+                                    "stages": [{"name": "流行", "tone": "bad", "arrive": "咳が聞こえる。"}]}),
+                   ("stop.json", {"key": "outlaws", "enabled": False}),
+                   ("new.json", {"key": "meteor", "name": "星降り", "what": "空から光が降る", "size": ["town"],
+                                 "stages": [{"name": "兆し", "tone": "good", "arrive": "空が明るい。"},
+                                            {"name": "見頃", "tone": "good", "into": "見頃を迎える",
+                                             "prices": [{"goods": "random", "sell": 10}], "arrive": "星が降る。"}]}),
+                   ("broken.json", None)):
+    with io.open(os.path.join(extra, name), "w", encoding="utf-8") as fh:
+        fh.write("{ not json" if data is None else json.dumps(data, ensure_ascii=False))
+loaded, why = rules.load_kinds(os.path.join(rules.__file__.rsplit(os.sep, 1)[0], rules.DEFAULT_FILE), extra)
+by_key = {kind["key"]: kind for kind in loaded}
+check("同じ key は差し替える", by_key["epidemic"]["stages"] == ("流行",) and by_key["epidemic"]["name"] == "大疫")
+check("enabled: false だけのファイルで止める", "outlaws" not in by_key)
+check("新しい出来事を足す（random の品・依頼なし）", "meteor" in by_key and rules.is_good(by_key["meteor"])
+      and by_key["meteor"]["effects"] == [(rules.GOODS, "sell", (0, 10))], by_key.get("meteor"))
+check("読めないファイルは飛ばして理由を残す", len(loaded) == 18 and any("broken.json" in w for w in why), why)
+mine = os.path.join(OUT_DIR, "kinds_mine")
+os.makedirs(mine, exist_ok=True)
+with io.open(os.path.join(mine, rules.USER_FILE), "w", encoding="utf-8") as fh:
+    fh.write(json.dumps([{"key": "only", "name": "一つ", "what": "x", "quest": "q",
+                          "stages": [{"name": "一", "tone": "bad", "arrive": "a"}]}], ensure_ascii=False))
+saved = list(rules.KINDS)
+rules.reload_kinds(mine)
+check("手元の incidents.json があれば同梱の既定より先に読む", [k["key"] for k in rules.KINDS] == ["only"],
+      [k["key"] for k in rules.KINDS])
+rules.use_kinds(saved)
+saved = list(rules.KINDS)
+rules.use_kinds(loaded)
+event = rules.start(rules.new_bucket(), 10, "0", "町", by_key["meteor"], FixedRng(0.0))
+check("起きたときに良い出来事かと段の名前を控えに書く", event["good"] is True and event["stage_name"] == "兆し"
+      and event["goods"] in rules.CATEGORIES, event)
+event["status"] = rules.ACTIVE
+rules.advance({"events": [event]}, 70, stage_days=60, settle_days=90, steps_per_elapse=1)
+check("段が進めば段の名前も書き直す", event["stage"] == 2 and event["stage_name"] == "見頃", event)
+check("最後の段の次は収まる", rules.next_verb(event) == "収まる" and rules.days_to_next(event, 70, 60, 90) == 90)
+rules.use_kinds(saved)
+bubble = {"id": 9, "area": "3", "area_name": "鉱山町", "kind": "boom", "stage": 2, "status": rules.ACTIVE,
+          "started": 100, "stage_day": 160, "quest": None, "text": {}}
+lines = "\n".join(rules.view_lines([bubble], 175, {}, stage_days=60, settle_days=90, ended_days=360))
+check("良い出来事の窓の行（段の名前・次の言い方・依頼の行なし）", "鉱山町　にわか景気（過熱）" in lines
+      and "弾けるまで約45日" in lines and "依頼" not in lines, lines)
+model = rules.view_model([bubble, dict(bubble, id=10, status=rules.ENDED, ended=170, end_by=rules.END_NATURAL)],
+                         175, {}, stage_days=60, settle_days=90, ended_days=360)
+card = model["cards"][0]
+check("窓の札: 段の並び・調子・依頼なし", card["stages"] == ["予兆", "過熱", "崩壊", "収束"] and card["quest"] is None
+      and card["tones"] == ["good1", "good2", "bad3", "calm"] and card["stage_name"] == "過熱", card)
+check("終わった欄は出来事の言い方", model["ended"][0]["how"] == "収束した", model["ended"])
 
 print("[規則] 段の進み方")
 bucket = rules.new_bucket()
@@ -186,7 +260,7 @@ check("真偽はローダの語で読む（いいえ は偽）", llm.truthy("は
 print("[規則] 窓の行")
 events = [{"id": 1, "area": "0", "area_name": "始まりの町", "kind": "epidemic", "stage": 2,
            "status": rules.ACTIVE, "started": 100, "stage_day": 160, "quest": "57", "text": {}},
-          {"id": 2, "area": "1", "area_name": "灰の都", "kind": "boom", "stage": 1,
+          {"id": 2, "area": "1", "area_name": "灰の都", "kind": "influx", "stage": 1,
            "status": rules.ACTIVE, "started": 170, "stage_day": 170, "quest": None, "text": {}},
           {"id": 3, "area": "2", "area_name": "北の村", "kind": "unrest", "stage": 3,
            "status": rules.ENDED, "started": 10, "stage_day": 50, "ended": 150,
@@ -196,7 +270,7 @@ lines = rules.view_lines(events, 175, rival, stage_days=60, settle_days=90, ende
 text = "\n".join(lines)
 check("進行中の見出しと段", "進行中" in text and "始まりの町　感染症の流行（悪化）" in text, text)
 check("悪化までの日数", "発生から75日。悪化するまで約45日。" in text, text)
-check("ライバルが狙っている依頼", "冒険者ガランが狙っている" in text, text)
+check("ライバルが動き始めた依頼", "冒険者ガランが解決に向けて動き始めた" in text, text)
 check("依頼がまだの出来事", "まだ出ていない（その街のギルドで掲示板を開くと出る）" in text, text)
 check("概要は表の説明（LLM の文が無いとき）",
       "概要: " + rules.KIND_BY_KEY["epidemic"]["what"] + "。" in text, text)
@@ -206,16 +280,58 @@ named = "\n".join(rules.view_lines(
     stage_days=60, settle_days=90, ended_days=360, guild_names={"1": "傭兵仲介所『鉄の手』"}))
 check("概要は LLM の文を先に使い、句点を足す", "概要: にわかの鉱脈景気で、街に人と金が流れ込んでいる。" in named, named)
 check("依頼の行にその街のギルドの名前", "傭兵仲介所『鉄の手』で掲示板を開くと出る" in named, named)
+staged = {"summary_1": "鉱脈の噂が広まり始めた", "summary_2": "人が押し寄せ値が跳ね上がっている",
+          "summary_3": "鉱脈が尽きて人が去り、値が崩れている"}
+check("概要は今の段の文", rules.text_of({"kind": "boom", "stage": 3, "text": staged}, "summary")
+      == staged["summary_3"])
+check("段の文が無ければ最初の段の文", rules.text_of({"kind": "boom", "stage": 4, "text": staged}, "summary")
+      == staged["summary_1"])
+check("版1 の1文（summary）は段に依らず使う",
+      rules.text_of({"kind": "boom", "stage": 2, "text": {"summary": "旧"}}, "summary") == "旧")
 check("終わったもの", "北の村　騒乱　自然に収まった（150日目）" in text, text)
 check("段の重いものが先", lines[1].startswith("始まりの町"), lines)
 check("影響（数字）: 疫病の2段", "影響: 薬の類の買値 +50%、食べ物の類の買値 +20%。" in text, text)
+model = rules.view_model(events, 175, rival, stage_days=60, settle_days=90, ended_days=360, here="0",
+                         guild_names={"1": "傭兵仲介所『鉄の手』"})
+cards = model["cards"]
+check("窓の札: 段の重いものが先・街・名前・段", [(c["town"], c["stage"]) for c in cards]
+      == [("始まりの町", 2), ("灰の都", 1)] and cards[0]["name"] == "感染症の流行", cards)
+check("窓の札: 日数・概要（句点つき）・影響", cards[0]["days"] == "発生から75日。悪化するまで約45日。"
+      and cards[0]["summary"].endswith("。")
+      and "".join(t for t, _ in cards[0]["effects"]) == "薬の類の買値 +50%、食べ物の類の買値 +20%", cards[0])
+check("窓の影響: 数字だけに得か損か（買値が上がるのは損）",
+      [(t, tone) for t, tone in cards[0]["effects"] if tone] == [("+50%", rules.BAD), ("+20%", rules.BAD)],
+      cards[0]["effects"])
+tone_kind, _ = rules.parse_kind({"key": "_tone_test", "name": "x", "what": "x", "stages": [
+    {"name": "一", "tone": "bad", "arrive": "a", "inn": 20,
+     "prices": [{"goods": ["medicine"], "buy": -10}, {"goods": ["food"], "sell": 20},
+                {"goods": ["weapon"], "sell": -5}, {"goods": ["material"], "buy": 10, "sell": 10}]}]})
+rules.KIND_BY_KEY["_tone_test"] = tone_kind
+tones = [tone for _t, _n, tone in rules.effect_items({"kind": "_tone_test", "stage": 1})]
+words = rules.effect_items({"kind": "_tone_test", "stage": 1}, mode=rules.EFFECTS_WORDS)
+del rules.KIND_BY_KEY["_tone_test"]
+check("影響の得か損か（買値が下がる・売値が上がる＝得、売値が下がる・買値が上がる・宿代が上がる＝損）",
+      tones == [rules.GOOD, rules.GOOD, rules.BAD, rules.BAD, rules.GOOD, rules.BAD], tones)
+check("言葉の出し方では数字を付けない", all(number == "" for _t, number, _tone in words), words)
+check("窓の札: 依頼の行の調子", cards[0]["quest"] == ("冒険者ガランが解決に向けて動き始めた。", rules.QUEST_RIVAL)
+      and cards[1]["quest"] == ("まだ出ていない（傭兵仲介所『鉄の手』で掲示板を開くと出る）。", rules.QUEST_PENDING),
+      [c["quest"] for c in cards])
+check("窓の終わったもの: 何日前と終わり方", model["ended"] == [
+    {"when": "25日前", "town": "北の村", "name": "騒乱", "how": "自然に収まった", "by": rules.END_NATURAL}],
+      model["ended"])
+check("窓の現在地: その街の出来事", model["here"] == "（この街で感染症の流行が進行中）", model["here"])
+calm = rules.view_model(events, 175, {}, stage_days=60, settle_days=90, ended_days=360, here="9",
+                        in_words=True, effects=rules.EFFECTS_HIDDEN)
+check("窓: 何も起きていない街・あいまいな日付・影響を出さない", calm["here"] == "（この街で進行中の出来事はない）"
+      and calm["cards"][0]["days"].startswith("長く続いている。") and calm["cards"][0]["effects"] == []
+      and calm["ended"][0]["when"] == "最近", calm)
 words = "\n".join(rules.view_lines(events, 175, {}, stage_days=60, settle_days=90,
                                    ended_days=360, in_words=True, effects=rules.EFFECTS_WORDS))
 check("日付はあいまい: 残り", "しばらく先に悪化するかもしれない" in words, words)
 check("日付はあいまい: 発生から", "長く続いている。" in words and "発生から" not in words, words)
 check("日付はあいまい: 終わった日", "自然に収まった（最近）" in words and "日目" not in words, words)
 check("影響（言葉）", "影響: 薬の類が値上がり、食べ物の類が値上がり。" in words
-      and "全品が値上がり、全品が高く売れる。" in words, words)
+      and "影響: 食べ物の類が値上がり、宿代が値上がり。" in words, words)
 hidden = "\n".join(rules.view_lines(events, 175, {}, stage_days=60, settle_days=90,
                                     ended_days=360, effects=rules.EFFECTS_HIDDEN))
 check("影響を出さない", "影響" not in hidden, hidden)
@@ -230,7 +346,7 @@ check("宿代と下がる向き", inn == ["食べ物の類の買値 +50%", "宿�
 print("[規則] 巻き戻しと控えの並び")
 bucket = rules.new_bucket()
 old = rules.start(bucket, 100, "0", "町", rules.KIND_BY_KEY["outlaws"], FixedRng(0.0))
-new = rules.start(bucket, 300, "1", "都", rules.KIND_BY_KEY["boom"], FixedRng(0.0))
+new = rules.start(bucket, 300, "1", "都", rules.KIND_BY_KEY["influx"], FixedRng(0.0))
 old["status"] = rules.ACTIVE
 rules.end(bucket, old, 280, rules.END_PLAYER)
 check("古いセーブなら後で起きたことを外す", rules.rewind(bucket, 250)
@@ -421,6 +537,7 @@ def fresh(**settings):
     module._store()["rng"] = FixedRng(0.0)
     ctx = FakeCtx()
     module.apply(ctx)
+    module._LEGACY_DISABLED.clear()             # 開発機の設定の控えに左右されないように
     worker = module._store()["worker"]
     worker.enqueue = lambda job: worker.run(job)
     APP = InstantaleApp()
@@ -528,6 +645,51 @@ check("片付けたら終わる（プレイヤー）", ev["status"] == rules.END
 check("収まった一言", any("これで収まるだろう" in t for t in app.texts), app.texts)
 check("片付けた依頼は世界に残る（手柄）", "50" in app.world.quests)
 check("エラーなし", not ctx.errors, ctx.errors)
+
+print("[流れ] 良い出来事は依頼を作らず、案内も添えない")
+module, ctx, app = fresh()
+bucket_store = module._store()["worlds"]
+key = bucket_store.playthrough(app)
+bucket = bucket_store.load(key)
+ev = rules.start(bucket, 100, "0", "始まりの町", rules.KIND_BY_KEY["festival"], FixedRng(0.0))
+ev["status"] = rules.ACTIVE
+bucket_store.save(key)
+board = ctx.hook("__main__:DisplayQuestChoice.execute")
+DisplayQuestChoice.prompts = []
+next_quest = app.next_quest
+result = board(lambda self, *a: self.execute(*a), DisplayQuestChoice(app), "クエスト掲示板")
+check("掲示板を開いても依頼を作らせない", result == "board" and app.next_quest == next_quest
+      and not DisplayQuestChoice.prompts and rules.live_in(bucket_of(module, app), "0")["quest"] is None,
+      (result, app.next_quest, DisplayQuestChoice.prompts))
+check("ギルドへの案内を添えない", not any("ギルドに行けば" in t for t in app.texts), app.texts)
+check("エラーなし", not ctx.errors, ctx.errors)
+
+print("[流れ] 起こさない出来事（DISABLED_KINDS と版1 の設定）")
+module, ctx, app = fresh(DISABLED_KINDS="epidemic, outlaws、 boom")
+keys = [kind["key"] for kind in module.enabled_kinds()]
+check("カンマ・読点・空白で区切った英名を外す", not {"epidemic", "outlaws", "boom"} & set(keys)
+      and len(keys) == len(rules.KINDS) - 3, keys)
+check("版1 の KIND_* で False の分だけ拾う",
+      module.legacy_disabled({"KIND_FIRE": False, "KIND_FLOOD": True, "USE_LLM": False}) == {"fire"}
+      and module.legacy_disabled(None) == set())
+module._LEGACY_DISABLED.update({"fire"})
+check("版1 の分も合わせて外す", "fire" not in [kind["key"] for kind in module.enabled_kinds()])
+module._LEGACY_DISABLED.clear()
+
+print("[流れ] 頼み文の決まりは段の数と良い悪いで変わる")
+rule = module.arrive_rule(rules.KIND_BY_KEY["boom"])
+check("4段なら arrive_4 まで書かせる", "arrive_1 / arrive_2 / arrive_3 / arrive_4" in rule
+      and "4は収束" in rule and "空にする" not in rule, rule)
+rule = module.summary_rule(rules.KIND_BY_KEY["boom"])
+check("概要も段ごとに書かせる（にわか景気は4段）", "summary_1 / summary_2 / summary_3 / summary_4" in rule
+      and "3は崩壊" in rule and "賑わ" not in rule and "空にする" not in rule, rule)
+rule = module.summary_rule(rules.KIND_BY_KEY["epidemic"])
+check("困り事の概要は「誰がどう困っているか」で、summary_4 は空にさせる", "困っている" in rule
+      and "summary_4: 空にする" in rule, rule)
+check("頼み文に段ごとの概要の欄がある", all("summary_{}".format(i) in module.TEXT_FIELDS for i in (1, 2, 3, 4))
+      and "summary" not in module.TEXT_FIELDS)
+rule = module.arrive_rule(rules.KIND_BY_KEY["harvest"])
+check("3段なら arrive_4 を空にさせる", "1は兆し、2は盛況、3は収束" in rule and "arrive_4: 空にする" in rule, rule)
 
 print("[流れ] 自然に収まったら依頼を世界から片付ける")
 module, ctx, app = fresh(STAGE_DAYS=10, SETTLE_DAYS=10, STEPS_PER_ELAPSE=3)

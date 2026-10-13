@@ -47,7 +47,7 @@ STANDING_SYSTEM = """あなたは物語の語り手です。
 - 材料が乏しい勢力は 0（中立）にする
 - 設定の中に「出力しない」「秘密」などと書かれた内容は、title と reason に書かないこと
 
-standings: 勢力ごとに faction（勢力の name）、stage（-2 敵視 / -1 警戒 / 0 中立 / 1 好意 / 2 信頼）、
+standings: 勢力ごとに faction（勢力の name）、stage（-2 敵対 / -1 緊張 / 0 中立 / 1 友好 / 2 盟友）、
 title（その勢力の者たちのあいだでの主人公の短い呼び名。stage が 0 なら空）、reason（判定の理由を1文）"""
 
 DESIGN_SYSTEM = """あなたは物語の設定を作る編集者です。
@@ -269,13 +269,15 @@ def incidents_since(incidents_bucket, since_day, towns):
         text = event.get("text") if isinstance(event.get("text"), dict) else {}
         what = text.get("name") or event.get("kind") or "出来事"
         where = names.get(str(event.get("area")), event.get("area_name") or "ある街")
+        good = event.get("good") is True             # 338 版2 から。依頼の無い良い出来事
         if event.get("status") == "ended":
             how = {"player": "冒険者が片付けた", "rival": "別の冒険者が片付けた",
-                   "natural": "自然に収まった"}.get(event.get("end_by"), "収まった")
+                   "natural": "落ち着いた" if good else "自然に収まった"}.get(event.get("end_by"), "収まった")
             lines.append("- {}の{}は{}".format(where, what, how))
         else:
-            stage = {1: "兆し", 2: "悪化", 3: "深刻"}.get(event.get("stage"), "")
-            lines.append("- {}で{}（{}）".format(where, what, stage or "起きている"))
+            stage = event.get("stage_name") or {1: "兆し", 2: "悪化", 3: "深刻"}.get(event.get("stage"), "")
+            lines.append("- {}で{}（{}{}）".format(where, what, "良い出来事・" if good else "",
+                                                 stage or "起きている"))
     return lines
 
 

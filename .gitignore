@@ -25,6 +25,9 @@ __pycache__/
 /runtime/mods/*/llm_replacements.txt
 /runtime/mods/*/npc.json
 /runtime/mods/*/seeds.json
+/runtime/mods/*/incidents.json
+# 338 に手元で足した出来事（1ファイル1出来事）。make_dist.bat の /XD と揃える。
+/runtime/mods/338_town_incidents/kinds/
 
 # ---- ローカル環境ファイル ----
 /InstantaleModLoader.code-workspace

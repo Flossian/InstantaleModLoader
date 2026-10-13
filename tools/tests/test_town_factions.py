@@ -34,7 +34,7 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml                      # noqa: E402
-from instantale_modloader import llm, modnpc, talk_summary, ui  # noqa: E402
+from instantale_modloader import hudicons, llm, modnpc, talk_summary, ui  # noqa: E402
 
 
 def find_mod(suffix):
@@ -76,6 +76,7 @@ def load_package():
 module = load_package()
 rules = sys.modules[MOD_NAME + ".rules"]
 material = sys.modules[MOD_NAME + ".material"]
+view = sys.modules[MOD_NAME + ".view"]
 
 # ================================================================ 規則
 print("[規則] 点数と段")
@@ -185,7 +186,7 @@ rules.apply_initial_standing(ledger, {"standings": [
 check("段の真ん中の点数", ledger["standing"]["f1"]["score"] == -80
       and ledger["standing"]["f2"]["score"] == 0, ledger["standing"])
 check("中立には呼び名を持たせない", ledger["standing"]["f2"]["title"] == "")
-check("段階の名前は呼び名にしない", rules.title_of({"title": "信頼"}) == ""
+check("段階の名前は呼び名にしない", rules.title_of({"title": "盟友"}) == ""
       and rules.title_of({"title": " 異端の拾い屋 "}) == "異端の拾い屋")
 stance = rules.stance_text(ledger, "f1", "検査の主人公")
 check("構えの文と呼び名", "白の教団に属する者" in stance and "敵とみなして" in stance
@@ -208,7 +209,7 @@ check("0 は動かない", rules.plan_talk(ledger, "f2", 0, gain_per_step=5, los
 ledger["standing"]["f2"]["score"] = 98
 check("上限で止まる", rules.plan_gain(ledger, "f2", 10)[0] == ("f2", 98, 100, "gain"))
 
-print("[規則] 手配と敵視の上限")
+print("[規則] 手配と敵対の上限")
 cap_book = {"factions": [{"id": "f1"}, {"id": "f2"}],
             "towns": {"0": {"faction": "f1"}, "1": {"faction": "f2"}},
             "relations": {"f1|f2": {"stage": -2}},
@@ -218,7 +219,7 @@ check("上がる先の上限（手配なし・手配・手配度 -40 以下）",
       == [100, -21, -61, 100])
 moves = rules.plan_talk(cap_book, "f1", 2, gain_per_step=15, loss_per_step=8, gained_today=False,
                         ceiling=rules.gain_ceiling(cap_book, "f1", {"0": -5}))
-check("手配されていれば警戒の上端で止まり、響きは上がった分から", moves
+check("手配されていれば緊張の上端で止まり、響きは上がった分から", moves
       == [("f1", -40, -21, "gain"), ("f2", 0, -10, "echo")], moves)
 cap_book["standing"]["f1"]["score"] = -21
 check("上限にいれば動かない（響きも無い）",
@@ -226,11 +227,11 @@ check("上限にいれば動かない（響きも無い）",
 cap_book["standing"]["f1"]["score"] = -76
 rules.apply_moves(cap_book, rules.plan_talk(cap_book, "f1", -1, gain_per_step=5, loss_per_step=8,
                                             gained_today=False))
-check("-81 以下で敵視が外れない印", cap_book["standing"]["f1"]["score"] == -84
+check("-81 以下で敵対が外れない印", cap_book["standing"]["f1"]["score"] == -84
       and cap_book["standing"]["f1"].get("locked") and not cap_book["standing"]["f2"].get("locked"))
 rules.apply_moves(cap_book, rules.plan_gain(cap_book, "f1", 30,
                                             ceiling=rules.gain_ceiling(cap_book, "f1", {"0": 10})))
-check("手配が無くなっても敵視の上端まで", cap_book["standing"]["f1"]["score"] == -61
+check("手配が無くなっても敵対の上端まで", cap_book["standing"]["f1"]["score"] == -61
       and rules.standing_stage(-61) == -2, cap_book["standing"])
 
 print("[規則] 情勢")
@@ -286,6 +287,14 @@ INCIDENTS = {"events": [
 lines = material.incidents_since(INCIDENTS, 100, towns)
 check("前回からの出来事だけ", lines == ["- 東の村の盗賊の横行は冒険者が片付けた", "- 北の巡礼町で疫病（悪化）"],
       lines)
+GOOD_EVENTS = {"events": [
+    {"area": "7", "kind": "boom", "status": "active", "stage": 2, "stage_name": "過熱", "good": True,
+     "started": 120, "text": {"name": "銀の熱"}},
+    {"area": "1", "kind": "festival", "status": "ended", "end_by": "natural", "good": True,
+     "started": 90, "ended": 130, "text": {"name": "灯の祭"}}]}
+lines = material.incidents_since(GOOD_EVENTS, 100, towns)
+check("良い出来事は段の名前と「落ち着いた」で読む（338 版2）",
+      lines == ["- 北の巡礼町で銀の熱（良い出来事・過熱）", "- 東の村の灯の祭は落ち着いた"], lines)
 
 # ================================================================ 流れ
 class Area:
@@ -468,7 +477,6 @@ def fresh(enable=True):
     worker.enqueue = lambda job: worker.run(job)
     if enable:
         settings = getattr(sys, module.SETTINGS_STORE_ATTR)
-        world = ui.world_key(APP) if hasattr(ui, "world_key") else None
         from instantale_modloader.state import world_key
         record = settings.load(world_key(APP))
         record["ENABLED"] = True
@@ -513,12 +521,85 @@ def close(ctx, character, answer):
     return ctx.hook(talk_summary.RESOLVER_TARGET)(resolver, APP.player, SPOKE, {}, character, "", "")
 
 
+print("[窓] 中身を組む")
+written, changed = rules.record_moves(
+    {"history": []}, [("f2", 40, 50, "gain"), ("f1", -80, -85, "echo")], day=3, kind="talk", reason="r")
+check("段階が変わらない動きは changed にならない", (written, changed) == (2, False))
+book = {"history": []}
+written, changed = rules.record_moves(book, [("f2", 50, 62, "gain"), ("f2", 62, 62, "capped")], day=3,
+                                      kind="incident", incident="ゼニスの疫病")
+check("段階が変わる動きと、動かなかった回を書かないこと", (written, changed) == (1, True)
+      and book["history"][0]["incident"] == "ゼニスの疫病")
+book = {"history": []}
+for i in range(rules.HISTORY_LIMIT + 5):
+    rules.add_history(book, {"day": i})
+check("来歴は新しい40件まで", len(book["history"]) == rules.HISTORY_LIMIT and book["history"][0]["day"] == 5)
+LEDGER = {
+    "status": rules.READY, "peaceful": False,
+    "factions": [{"id": "f1", "name": "白翼騎士団", "kind": "軍事組織", "note": "異端を許さない。"},
+                 {"id": "f2", "name": "黄金商会", "kind": "商人の連合", "note": ""},
+                 {"id": "f3", "name": "霧の船団", "kind": "海賊", "note": ""}],
+    "towns": {"0": {"faction": "f1"}, "1": {"faction": "f2"}, "2": {"faction": "f3"}},
+    "relations": {"f1|f3": {"stage": -2}, "f1|f2": {"stage": 1}, "f2|f3": {"stage": -1}},
+    "standing": {"f1": {"score": -21}, "f2": {"score": 40, "title": "有能な傭兵", "title_stage": 1},
+                 "f3": {"score": -85, "locked": True, "title": "裏切り者", "title_stage": -1}},
+    "events": [
+        {"day": -400, "a": "f1", "b": "f2", "direction": 1, "before": 0, "after": 0, "rumor": "古い噂"},
+        {"day": -30, "a": "f1", "b": "f3", "direction": -1, "before": -2, "after": -2, "rumor": "没収したらしい"},
+        {"day": 50, "a": "f2", "b": "f3", "direction": 1, "before": -1, "after": -1, "rumor": "歩み寄ったらしい"},
+        {"day": 60, "a": "f1", "b": "f2", "direction": 1, "before": 0, "after": 1, "rumor": "援護したらしい"}],
+    "history": [
+        {"day": 40, "faction": "f2", "before": 15, "after": 25, "kind": "incident", "incident": "オーラムの疫病"},
+        {"day": 40, "faction": "f3", "before": -60, "after": -65, "kind": "echo", "by": "f2"},
+        {"day": 97, "faction": "f3", "before": -45, "after": -85, "kind": "talk", "reason": "掟を嘲った"},
+        {"day": 98, "faction": "f3", "before": -85, "after": -85, "kind": "reconcile"}]}
+model = view.build(LEDGER, day=100, here="0", area_names={"0": "ヴァルガルド", "1": "オーラム", "2": "ミストル"},
+                   laws={"0": -5})
+cards = {c["name"]: c for c in model["cards"]}
+check("現在地と影響下の勢力", model["here"] == "ヴァルガルド（白翼騎士団の影響下）", model["here"])
+check("札の段階・影響下の街・他勢力との関係（悪い順）", cards["白翼騎士団"]["stage"] == -1
+      and cards["白翼騎士団"]["towns"] == ["ヴァルガルド"]
+      and cards["白翼騎士団"]["relations"] == [("霧の船団", -2), ("黄金商会", 1)], cards["白翼騎士団"])
+check("手配の上限に届いていれば手配の行", cards["白翼騎士団"]["cautions"] == [view.WANTED_TEXT])
+check("縛りの行。呼び名は付けた段階と違えば出さない", cards["霧の船団"]["cautions"] == [view.LOCKED_TEXT]
+      and cards["霧の船団"]["title"] == "" and cards["黄金商会"]["title"] == "有能な傭兵", cards["霧の船団"])
+low = view.build(dict(LEDGER, standing=dict(LEDGER["standing"], f1={"score": -50})), day=100,
+                 area_names={}, laws={"0": -5})
+check("上限に届く前は手配の行を出さない", low["cards"][0]["cautions"] == [], low["cards"][0])
+rumors = model["rumors"]
+check("噂は新しい順で、1年より前は出さない", [r["text"] for r in rumors]
+      == ["援護したらしい", "歩み寄ったらしい", "没収したらしい"], [r["text"] for r in rumors])
+check("段が変わった噂は関係を段の色で", rumors[0]["when"] == "40日前" and rumors[0]["follow"]
+      == [("これにより、白翼騎士団と黄金商会は", None), ("友好関係", 1), ("となったようだ。", None)], rumors[0])
+check("1回目で段が変わらないときは兆し", rumors[1]["follow"]
+      == [("これにより、黄金商会と霧の船団の関係には改善の兆しが見えるようだ。", None)], rumors[1])
+check("端にいるときは溝が深まった", rumors[2]["follow"]
+      == [("これにより、白翼騎士団と霧の船団の溝は一層深まったようだ。", None)], rumors[2])
+history = model["history"]
+check("来歴は新しい順", [h["when"] for h in history] == ["2日前", "3日前", "60日前", "60日前"], history)
+check("縛りが解けた来歴", history[0]["pieces"] == [("説得が実り、霧の船団の敵意に和らぐ余地が生まれたようだ。", None)])
+check("会話で段階が変わった来歴は段階の色と理由", history[1]["pieces"]
+      == [("会話により、霧の船団の態度は", None), ("敵対", -2), ("となった。", None)]
+      and history[1]["reason"] == "掟を嘲った", history[1])
+check("響きの来歴", history[2]["pieces"] == [("黄金商会への働きが伝わり、霧の船団の態度は", None), ("敵対", -2),
+                                            ("となった。", None)], history[2])
+check("出来事の来歴（段階が変わったとき）", history[3]["pieces"]
+      == [("オーラムの疫病を解決したことで、黄金商会の態度は", None), ("友好", 1), ("となった。", None)], history[3])
+check("段階が変わらなければ評価が上がった・下がった",
+      view.pieces_of(LEDGER, {"faction": "f2", "before": 40, "after": 45, "kind": "talk"})
+      == [("会話により、黄金商会の評価が上がった。", None)])
+check("作っている途中・勢力が無い・作れなかったときは一文", [view.build({"status": st})["message"]
+                                                     for st in (None, rules.NONE, rules.FAILED)]
+      == [view.MESSAGES[None], view.MESSAGES[rules.NONE], view.MESSAGES[rules.FAILED]])
+
 print("[流れ] 有効にするまで何もしない")
 module, ctx, app = fresh(enable=False)
 for fn in ctx.ready:
     fn()
 check("台帳を作らない", not ASKED and ledger_of(app).get("status") is None, ASKED)
 check("会話に足さない", notes_fn()({"app": app, "npc_id": "37"}) is None)
+check("左下の一覧に行を出さない（登録はしてあり、出すかはその場で聞く）", module.ICON_KEY in hudicons.keys()
+      and module.ICON_KEY not in [e["key"] for e in hudicons.menu_entries(app)], hudicons.keys())
 
 print("[流れ] 読み込みで台帳を作る")
 module, ctx, app = fresh()
@@ -528,6 +609,9 @@ book = ledger_of(app)
 check("抽出 → 初回の判定の順に2回聞く",
       [m for m, _ in ASKED] == [module.MANAGER_EXTRACT, module.MANAGER_STANDING], [m for m, _ in ASKED])
 check("台帳ができる", book["status"] == rules.READY and book["towns"]["7"]["faction"] == "f1", book)
+rows = [e for e in hudicons.menu_entries(app) if e["key"] == module.ICON_KEY]
+check("有効な世界では左下の一覧に「勢力と情勢」の行", rows and rows[0]["label"] == "勢力と情勢"
+      and rows[0]["images"][0].endswith("icon_flag.png"), rows)
 check("途中導入は土台に調整（教団は手配 -160 で -80 のまま、結社は功績1件 +10 から +1 段階で 40）",
       book["standing"]["f1"]["score"] == -80 and book["standing"]["f2"]["score"] == 40
       and book["standing"]["f2"]["baseline"] == 10 and book["standing"]["f2"]["adjust"] == 1,
@@ -536,7 +620,7 @@ check("情勢の起点は作った日", book["trend"]["last_day"] == 100)
 standing_prompt = ASKED[1][1][1]["content"]
 check("調整の材料（経歴・土台・その街の功績と手配）", "白の教団に故郷を追われた" in standing_prompt
       and "手配度 -160" in standing_prompt and "遺物を回収した" in standing_prompt
-      and "土台の段階: 敵視" in standing_prompt, standing_prompt)
+      and "土台の段階: 敵対" in standing_prompt, standing_prompt)
 check("調整の頼みを使う", ASKED[1][1][0]["content"] == material.ADJUST_SYSTEM)
 del ASKED[:]
 for fn in ctx.ready:
@@ -547,7 +631,7 @@ check("作った後は聞かない", not ASKED)
 print("[流れ] 会話の構えと噂")
 notes = notes_fn()
 text = notes({"app": app, "npc_id": "37", "site": "conversation_starter"}) or ""
-check("白の教団の町の住人は敵視", "白の教団に属する者" in text and "「異端の拾い屋」" in text, text)
+check("白の教団の町の住人は敵対", "白の教団に属する者" in text and "「異端の拾い屋」" in text, text)
 text = notes({"app": app, "npc_id": "31"}) or ""
 check("灰の結社の村の住人は好意", "灰の結社に属する者" in text and "好意" in text, text)
 check("勢力の無い町の住人には足さない", notes({"app": app, "npc_id": "30"}) is None)
@@ -570,10 +654,16 @@ check("同じ日に2回目は上がらない", ledger_of(app)["standing"]["f2"][
 close(ctx, Character("31", "東の村の番人"), {"faction_change": -1, "faction_reason": "侮辱"})
 check("下がる方は効く", ledger_of(app)["standing"]["f2"]["score"] == 42)
 check("-81 以下になった勢力に印", ledger_of(app)["standing"]["f1"].get("locked") is True)
+history = ledger_of(app)["history"]
+check("会話の来歴（上がった・響き・下がった。1日1回で止まった回は書かない）",
+      [(h["kind"], h["faction"], h["before"], h["after"]) for h in history]
+      == [("talk", "f2", 40, 50), ("echo", "f1", -80, -85), ("talk", "f2", 50, 42)], history)
+check("会話の来歴に理由、響きに上がった勢力", history[0]["reason"] == "灰の結社に協力的"
+      and history[1]["by"] == "f2" and history[1]["reason"] == "", history)
 app.world.days_elapsed += 1
 app.player.area_history["1"]["lawfulness"] = -5
 close(ctx, Character("31", "東の村の番人"), {"faction_change": 2, "faction_reason": "協力的"})
-check("手配されている街の勢力は警戒より上へ上がらない（もう上にいれば動かず、響きも無い）",
+check("手配されている街の勢力は緊張より上へ上がらない（もう上にいれば動かず、響きも無い）",
       ledger_of(app)["standing"]["f2"]["score"] == 42 and ledger_of(app)["standing"]["f1"]["score"] == -85,
       ledger_of(app)["standing"])
 app.player.area_history["1"]["lawfulness"] = 10
@@ -616,6 +706,9 @@ del ASKED[:]
 ctx.hook(module.DAYS_TARGET)(lambda self, d: self.elapse_days(d), app, 10)
 book = ledger_of(app)
 check("片付けた出来事の街の勢力が上がる", book["standing"]["f2"]["score"] == before + 10, book["standing"])
+check("出来事の来歴に街と出来事の名前", book["history"][-2]["kind"] == "incident"
+      and book["history"][-2]["incident"] == "街の盗賊の横行" and book["history"][-1]["kind"] == "echo",
+      book["history"][-2:])
 check("同じ出来事は二度数えない", set(book["trend"]["incidents"]) == {"1", "2", "3"} or True)
 ctx.hook(module.DAYS_TARGET)(lambda self, d: self.elapse_days(d), app, 1)
 check("二度は上げない", ledger_of(app)["standing"]["f2"]["score"] == before + 10)
@@ -768,14 +861,14 @@ check("名前の後ろの括弧書きを外して引く", rules.faction_id_of(by
       and rules.faction_id_of(by_name, "知らない勢力") is None)
 check("土台の点数（功績は上限 50・顔なじみ +10／手配 -40・重い手配 -80）",
       base["f1"][0] == 60 and base["f2"][0] == -40 and base["f3"][0] == -80, base)
-check("手配は功績で打ち消さない（重い手配は功績5件でも敵視・軽い手配は警戒の上端まで）",
+check("手配は功績で打ち消さない（重い手配は功績5件でも敵対・軽い手配は緊張の上端まで）",
       base["f4"][0] == -80 and base["f4"][1]["cap"] == -2
       and base["f5"][0] == -21 and base["f5"][1]["cap"] == -1 and base["f1"][1]["cap"] is None, base)
 edge = rules.baseline_scores({"factions": [{"id": "f1"}, {"id": "f2"}],
                               "towns": {"0": {"faction": "f1"}, "1": {"faction": "f2"}}},
                              {"0": {"deeds": ["a"] * 5, "days": 100, "law": -40},
                               "1": {"deeds": ["a"] * 5, "days": 100, "law": -39}})
-check("敵視の境目は手配度 -40", edge["f1"][0] == -80 and edge["f2"][0] == -21, edge)
+check("敵対の境目は手配度 -40", edge["f1"][0] == -80 and edge["f2"][0] == -21, edge)
 rules.apply_adjusted_standing(toy, base, {"standings": [
     {"faction": "丁", "adjust": 1, "title": "x", "reason": "x"},
     {"faction": "戊", "adjust": 1, "title": "x", "reason": "x"},
@@ -813,7 +906,7 @@ ctx.hook(module.LOAD_TARGETS[0])(lambda self: None, app)
 check("読み込み直したらすぐもう一度試す", ledger_of(app)["status"] == rules.READY)
 check("例外が無い", not ctx.errors, ctx.errors)
 
-print("[流れ] 敵視が外れない印を会話で外す")
+print("[流れ] 敵対が外れない印を会話で外す")
 module, ctx, app = fresh()
 for fn in ctx.ready:
     fn()
@@ -829,7 +922,7 @@ del SENT[:]
 close(ctx, Character("99", "巡礼町の司祭"), {"faction_change": 2, "faction_reconcile": "false"})
 check("印のある相手には納得の判定を頼む", "faction_reconcile" in SENT[0][2].fields
       and "許しがたい敵" in SENT[0][1][0]["content"], SENT[0][1][0]["content"][-300:])
-check("納得しなければ敵視の上端で止まる", ledger_of(app)["standing"]["f1"]["score"] == -61
+check("納得しなければ敵対の上端で止まる", ledger_of(app)["standing"]["f1"]["score"] == -61
       and ledger_of(app)["standing"]["f1"].get("locked"), ledger_of(app)["standing"])
 app.world.days_elapsed += 1
 close(ctx, Character("99", "巡礼町の司祭"), {"faction_change": 2, "faction_reconcile": "true"})

@@ -6,8 +6,10 @@ r"""街の出来事の設定画面。設定を役割ごとのタブに分け、�
 TECH.md §3.12 の契約で動く。ローダの設定画面（`tools/gui.py`）が `mod.json` の `"tool"` を見て
 このファイルを別プロセスで開き、場所は環境変数で渡す。直接起動したときは自分で探す。
 
-なぜ独自の画面か: 宣言の設定は 30 項目あり、半分（15）が出来事ごとの ON/OFF。
-1列に並べると、起こり方・段の進み方・一覧の見え方の設定が出来事の並びに埋もれる。
+なぜ独自の画面か: 設定を役割ごとに分けたいのと、出来事の種類の ON/OFF をファイルから読んだ表
+（同梱の `incidents.default.json` と、足した出来事の `kinds\`）で並べるため。
+ON/OFF は1つの設定 `DISABLED_KINDS`（起こさない英名のカンマ区切り）に書く。
+版1 の出来事ごとの設定（`KIND_OUTLAWS` など）で切ってあった種類は、チェックを外した状態で出す（保存すると移る）。
 
 | タブ | 中身 | 書く先 |
 |---|---|---|
@@ -53,17 +55,19 @@ TABS = (
      "日数が進むと、通算で抽選の間隔が経つたびに世界全体で1回だけ抽選し、当たれば1つ起きる。\n"
      "起きるのは、訪れたことがありギルドのある村・町・都市だけ。1つの街に起きるのは1つまで。"),
     ("進み方", ("STAGE_DAYS", "SETTLE_DAYS", "STEPS_PER_ELAPSE"),
-     "放っておくと 兆し → 悪化 → 深刻 と段階が進み、深刻からしばらくで自然に収まる。\n"
+     "放っておくと段階が進み（困り事は 兆し → 悪化 → 深刻、良い出来事は 兆し → 盛況 → 収束 など出来事ごと）、"
+     "最後の段階からしばらくで自然に収まる。\n"
      "日数が進むのは宿泊・街の移動・自由行動だけ（依頼の最中は進まない）。宿の1泊は30日、徒歩の移動は90日。"),
     ("値段と文章", ("PRICE_STRENGTH_PERCENT", "ARRIVAL_NOTICE", "GUIDE_NOTICE", "SHOP_NOTICE",
                     "USE_LLM", "FIT_CHECK"),
      "出来事の起きている街に居る間だけ、値段と宿代が動く（セーブには残らない）。\n"
      "呼び名や街の様子の文章は、起きたときにLLMがその世界の言葉で1回だけ書く。"),
     ("一覧", ("WINDOW_DAYS", "WINDOW_EFFECTS"),
-     "画面左下の注意の標識のアイコンから開く「各地の出来事」の一覧の見え方。下の見本は、いまの欄の値で描いている。"),
-    ("出来事の種類", tuple("KIND_" + kind["key"].upper() for kind in rules.KINDS),
+     "画面左下の MOD 用のボタン（歯車）の一覧から開く「各地の出来事」の窓の見え方。下の見本は、いまの欄の値で描いている。"),
+    ("出来事の種類", ("DISABLED_KINDS",),
      "チェックの付いた出来事だけが起きる。外すと新しく起きなくなる（起きている出来事はそのまま進む）。\n"
-     "呼び名と中身は世界ごとにLLMが書く（中世なら盗賊団、西部劇なら無法者の一味、のように）。"),
+     "呼び名と中身は世界ごとにLLMが書く（中世なら盗賊団、西部劇なら無法者の一味、のように）。\n"
+     "出来事は MOD のフォルダの kinds に1ファイル1出来事で足せる（書き方は説明書の「出来事を足す」）。"),
 )
 
 #: 一覧の見本に使う出来事（呼び名は表の名前。LLM の文は使わない）。日付は 430 日目の世界。
@@ -78,6 +82,62 @@ SAMPLE_EVENTS = (
     {"id": 4, "area_name": "岩の町", "kind": "boom", "stage": 2, "status": rules.ENDED,
      "started": 300, "stage_day": 360, "ended": 380, "end_by": rules.END_PLAYER, "text": {}},
 )
+
+
+def kind_line(kind):
+    """種類のタブの1行（呼び名・英名・段の筋・依頼の有無）。"""
+    stages = "→".join(kind["stages"])
+    return "{}（{}）　{}{}".format(kind["name"], kind["key"], stages,
+                                  "　依頼なし" if rules.is_good(kind) else "")
+
+
+def split_keys(text):
+    import re
+    return {word for word in re.split(r"[\s,、]+", str(text or "")) if word}
+
+
+def legacy_disabled(root_dir, config):
+    """版1 の `KIND_*` で切ってあった英名（設定の控えから）。"""
+    try:
+        raw = config.load_store(os.path.join(root_dir, "runtime")).get(modtool.mod_name(MOD_DIR))
+    except Exception:
+        return set()
+    if not isinstance(raw, dict):
+        return set()
+    return {name[len("KIND_"):].lower() for name, value in raw.items()
+            if isinstance(name, str) and name.startswith("KIND_") and value is False}
+
+
+class KindsForm:
+    """出来事の種類のチェックの欄。`modtool._Form` と同じ口（vars / get / set）で、値は `DISABLED_KINDS`。"""
+
+    def __init__(self, parent, kinds):
+        import tkinter as tk
+        from tkinter import ttk
+        self.kinds = list(kinds)
+        self.checks = {}
+        self.vars = {"DISABLED_KINDS": tk.StringVar(value="")}
+        for row, kind in enumerate(self.kinds):
+            var = tk.BooleanVar(value=True)
+            ttk.Checkbutton(parent, text=kind_line(kind), variable=var,
+                            command=self._sync).grid(row=row, column=0, sticky="w", pady=1)
+            self.checks[kind["key"]] = var
+
+    def _sync(self):
+        off = sorted(key for key, var in self.checks.items() if not var.get())
+        extra = sorted(split_keys(self.vars["DISABLED_KINDS"].get()) - set(self.checks))
+        self.vars["DISABLED_KINDS"].set(", ".join(off + extra))
+
+    def get(self):
+        return {"DISABLED_KINDS": self.vars["DISABLED_KINDS"].get()}
+
+    def set(self, values):
+        text = values.get("DISABLED_KINDS", "")
+        off = split_keys(text)
+        for key, var in self.checks.items():
+            var.set(key not in off)
+        self.vars["DISABLED_KINDS"].set(str(text or ""))
+        self._sync()
 
 
 def setting_keys():
@@ -231,6 +291,16 @@ def build_window(mod_dir=MOD_DIR):
         notebook.add(page, text=name)
         ttk.Label(page, text=blurb, style="Sub.TLabel", wraplength=920, justify="left").pack(
             anchor="w", pady=(0, 6))
+        if name == "出来事の種類":
+            if rules.PROBLEMS:
+                # 一覧（左に詰めて並ぶ枠）より先に下の端へ置く。後に置くと一覧の右に並んで切れる
+                ttk.Label(page, style="Sub.TLabel", wraplength=920, justify="left",
+                          text="読めなかった出来事（飛ばしている）:\n" + "\n".join(rules.PROBLEMS)
+                          ).pack(side="bottom", anchor="w", fill="x", pady=(6, 0))
+            body = modtool._scrollable(page)
+            form = KindsForm(body, rules.KINDS)
+            forms.append(form)
+            continue
         if name == "一覧":
             holder = ttk.Frame(page)
             holder.pack(fill="x")
@@ -324,6 +394,10 @@ def build_window(mod_dir=MOD_DIR):
         saved["values"] = as_shown(dict((k, values[k]) for k in found))
         show_preview()
 
+    legacy = legacy_disabled(root_dir, config)
+    if legacy:
+        current = dict(current, DISABLED_KINDS=", ".join(
+            sorted(split_keys(current.get("DISABLED_KINDS")) | legacy)))
     load_values(current)
     reload_state()
 

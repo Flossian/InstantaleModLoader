@@ -1,32 +1,46 @@
 # -*- coding: utf-8 -*-
-"""画面左下のゲームのアイコンの列に、MOD のアイコンを足す窓口。TECH.md §3.3.15。
+"""画面左下のゲームのアイコンの列に、MOD の機能の入口を足す窓口。TECH.md §3.3.15。
 
-    hudicons.add(ctx, key, on_press, strokes=None, images=None, order=0, write=None)
+    hudicons.add(ctx, key, on_press, strokes=None, images=None, order=0, write=None, label=None,
+                 visible=None)
+    hudicons.notify(key, on=True)
     hudicons.withdraw(key)
 
 ゲームは能力値の欄の下端に、持ち物・設定・キャラ情報・クラフトの4つのアイコンを並べている
 （`InstanTaleHUD.icon_button_layout`。FloatLayout で、位置は比率、大きさは固定の px。GAME.md §2.34）。
-足したアイコンはその4つの右に並べ、全部が欄に収まるよう、ゲームの4つも含めて左へ詰める。
+MOD が足した機能は、その4つの右に置く **MOD 用のボタン1つ** にまとめる。
+押すとボタンの上に一覧が開き、行（MOD の絵と名前）を選ぶと、その MOD の `on_press(app)` を呼ぶ。
+登録が1つでも一覧を出す（2026-10-13 に決めた）。
+
+MOD ごとにアイコンを並べていた形（v1.15.1）は、MOD が増えるほど列が詰まり、1280×720 では
+6つ目で箱が重なる計算だった。ボタン1つなら、MOD の数によらず列は5つで変わらない。
 
 並べ方:
 
 - 列の左の余白（ゲームの一番左のアイコンの x）を、右にも同じだけ取る
-- その間に、ゲームの4つ・足したアイコンの順で等間隔に置く。足したアイコンどうしは `order`、同じなら `key` の順
+- その間に、ゲームの4つ・MOD 用のボタンの順で、絵の見えている部分どうしの間が等しくなるよう置く
 - 大きさはゲームのアイコンに揃える
 - 比率は列の幅から毎回出し直す（大きさが px の固定なので、窓の大きさが変わると比率も変わる）
-- 足したアイコンが1つも無くなったら、ゲームの4つを元の位置へ戻す
+- 登録が1つも無くなったら、MOD 用のボタンを外し、ゲームの4つを元の位置へ戻す
 
-並べ方を MOD に書かせないのは、2本目の MOD が足したときに互いの位置を知らずに重なるため
-（画面の判断はローダの1か所）。
+一覧の行の並びは `order`、同じなら `key` の順。行の名前は `label`（無ければ `key`）。
+`images` は画像のパスで、1枚目（普段の絵）を行の頭に小さく出す。`strokes` は v1.15.1 の形の名残で、
+行には出さない（絵の無い行は名前だけ）。
 
-`on_press(app)` は押されたときに呼ぶ。`strokes` は `ui.paint_icon` と同じ 0〜1 の座標の線、
-`images` は画像のパスで、`(普段, 乗せた時, 押した時)` の3枚ならゲーム自身のアイコンと同じ型のボタンで作る
-（乗せた時の絵も効く）。`(普段, 押した時)` の2枚なら普通のボタン。どちらも無ければ `key` の頭1字を出す。
-置き場は `sys` の属性（`_instantale_hud_icons`）。注入し直しをまたいで残り、同じ `key` は差し替える。
+`visible(app)` を渡すと、ボタンを並べるときと一覧を開くときにその場で聞き、偽なら行を出さない
+（世界ごとに有効にする MOD 向け）。読み込みや注入の瞬間に出し入れを決める形は、世界をまだ読み終えていない
+瞬間や注入の世代の入れ替わりに左右され、行が次の操作まで出なかった（2026-10-13 の実機）。
+
+`notify(key)` は「見てほしいことがある」印。MOD 用のボタンの右上と、その行に赤い点を出す。
+行を押すと消える（MOD が `notify(key, False)` で消してもよい）。
+
+置き場は `sys` の属性（`_instantale_hud_icons`）。注入し直しをまたいで残り、同じ `key` は差し替える
+（差し替えても知らせの印は残る）。
 """
+import os
 import sys
 
-from . import frames, log_exc, ui
+from . import frames, log_exc, panels, ui
 
 STORE_ATTR = "_instantale_hud_icons"
 #: HUD に足したボタンの控え（`{key: Button}`）。
@@ -35,7 +49,6 @@ HUD_ATTR = ui.MOD_WIDGET_PREFIX + "hud_icons"
 HOME_ATTR = ui.MOD_WIDGET_PREFIX + "hud_icon_home"
 #: 列の大きさの変化に結んだ手。
 BIND_ATTR = ui.MOD_WIDGET_PREFIX + "hud_icon_bound"
-PAINT_ATTR = ui.MOD_WIDGET_PREFIX + "hud_icon_paint"
 CALLBACK_ATTR = ui.MOD_WIDGET_PREFIX + "hud_icon_press"
 #: 窓（`kivy.core.window.Window`）に結んだマウスの位置の見張りと、ボタンごとの「乗っているか」。
 HOVER_ATTR = ui.MOD_WIDGET_PREFIX + "hud_icon_hover"
@@ -47,12 +60,36 @@ TARGETS = ("scripts.hud.new_hud:InstanTaleHUD.update_button_texts",
 #: 隣どうしの間がこれより狭くなったら1回だけ記録する（px）。
 TIGHT_GAP = 4.0
 
+#: MOD 用のボタンの控えの名前（`HUD_ATTR` の中の鍵。MOD の `key` とは被らない形）。
+ROOT_KEY = "__mods__"
+ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
+#: MOD 用のボタンの絵（普段・乗せた時・押した時）。`tools\draw_hud_icons.py` が描き出す。
+ROOT_IMAGES = tuple(os.path.join(ASSETS_DIR, "hud_mods{}.png".format(suffix))
+                    for suffix in ("", "_hover", "_click"))
+#: 一覧の見た目（`338_` の窓に揃える。px は `ui.upx` で縮尺を掛ける）。
+LIST_BG = (0.06, 0.06, 0.08, 1)        # 下の字が 4% 透けて読めたので不透明に（2026-10-13 の実機）
+LIST_PAD = 8
+LIST_ROW_HEIGHT = 40
+LIST_ICON = 28
+LIST_GAP = 6                 # ボタンの上端と一覧の下端の間
+LIST_MIN_WIDTH = 200
+ROW_HOVER = (1, 1, 1, 0.12)
+DOT_COLOR = (0.87, 0.25, 0.2, 1)
+DOT_SIZE = 9
+#: 一覧を開いたときの音（ゲームのアイコンで窓を開くときと同じ）。
+OPEN_SOUND = "Assets/sounds/sounds/ui/常時/アイコン_キャラシート.wav"
+LIST_ATTR = ui.MOD_WIDGET_PREFIX + "hud_icon_list"
+DOT_ATTR = ui.MOD_WIDGET_PREFIX + "hud_icon_dot"
+
 
 def _store():
     store = getattr(sys, STORE_ATTR, None)
     if not isinstance(store, dict) or not isinstance(store.get("icons"), dict):
-        store = {"icons": {}, "generation": None, "write": None, "said": set()}
+        store = {"icons": {}, "generation": None, "write": None, "said": set(), "attention": set(),
+                 "list": None}
         setattr(sys, STORE_ATTR, store)
+    store.setdefault("attention", set())
+    store.setdefault("list", None)
     return store
 
 
@@ -69,14 +106,18 @@ def _once(key, line):
         _log(line)
 
 
-def add(ctx, key, on_press, strokes=None, images=None, order=0, write=None):
-    """アイコンを1つ足す（同じ `key` は差し替え）。HUD がもう在れば次のフレームで並べ直す。"""
+def add(ctx, key, on_press, strokes=None, images=None, order=0, write=None, label=None,
+        visible=None):
+    """一覧に機能を1つ足す（同じ `key` は差し替え）。HUD がもう在れば次のフレームで並べ直す。"""
     if not callable(on_press):
         raise TypeError("hudicons.add() needs a callable on_press, got {!r}".format(type(on_press)))
+    if visible is not None and not callable(visible):
+        raise TypeError("hudicons.add() needs a callable visible, got {!r}".format(type(visible)))
     store = _store()
     store["icons"][str(key)] = {"key": str(key), "on_press": on_press, "ctx": ctx,
                                 "strokes": list(strokes or []), "images": images,
-                                "order": order}
+                                "order": order, "label": str(label) if label else str(key),
+                                "visible": visible}
     if write is not None:
         store["write"] = write
     install(ctx)
@@ -91,8 +132,11 @@ def add(ctx, key, on_press, strokes=None, images=None, order=0, write=None):
 
 
 def withdraw(key):
-    """アイコンを外す。次に並べ直すときに HUD からも外れる。"""
-    _store()["icons"].pop(str(key), None)
+    """一覧から外す。登録が無くなれば MOD 用のボタンも外れる。"""
+    store = _store()
+    store["icons"].pop(str(key), None)
+    store["attention"].discard(str(key))
+    close_list()
     hud = ui.find_hud(ui.find_app())
     if hud is not None:
         try:
@@ -103,6 +147,57 @@ def withdraw(key):
 
 def keys():
     return sorted(_store()["icons"])
+
+
+def notify(key, on=True):
+    """`key` の行に「見てほしいことがある」印を付ける（`on=False` で外す）。登録の前でもよい。
+
+    背景のスレッド（LLM の答えを待つ仕事）から呼んでもよい。点を描くのは表のスレッドへ回す。
+    """
+    store = _store()
+    key = str(key)
+    if on:
+        store["attention"].add(key)
+    else:
+        store["attention"].discard(key)
+
+    def repaint(*_args):
+        hud = ui.find_hud(ui.find_app())
+        root = (frames.attr(hud, HUD_ATTR, None) or {}).get(ROOT_KEY) if hud is not None else None
+        if root is not None:
+            _paint_dot(root)
+
+    try:
+        from kivy.clock import Clock
+    except Exception:
+        return                                  # ゲームの外（検査）
+    try:
+        Clock.schedule_once(repaint, 0)
+    except Exception:
+        log_exc("hud icons: cannot schedule the notice dot")
+
+
+def _shown(entry, app):
+    visible = entry.get("visible")
+    if visible is None:
+        return True
+    try:
+        return bool(visible(app))
+    except Exception:
+        log_exc("hud icons: the visible check of {!r} failed".format(entry["key"]))
+        return False
+
+
+def menu_entries(app=None):
+    """一覧に並べる登録（生きていて、`visible(app)` が真のものだけ。`order`・`key` の順）。"""
+    return sorted((entry for entry in _store()["icons"].values() if _alive(entry) and _shown(entry, app)),
+                  key=lambda entry: (entry.get("order", 0), entry["key"]))
+
+
+def has_attention(app=None):
+    """一覧に並ぶ登録のどれかに知らせの印が付いているか。"""
+    attention = _store()["attention"]
+    return any(entry["key"] in attention for entry in menu_entries(app))
 
 
 def _alive(entry):
@@ -183,13 +278,6 @@ def _bind_press(button, entry):
         setattr(button, CALLBACK_ATTR, pressed)
     except Exception:
         log_exc("hud icons: cannot bind {!r}".format(entry["key"]))
-
-
-def _paint(button, entry):
-    strokes = entry.get("strokes")
-    if strokes:
-        ui.paint_icon(button, strokes, attr=PAINT_ATTR, key=(entry["key"],),
-                      log_exc=lambda msg: log_exc("hud icons: " + msg))
 
 
 def positions(left, count, layout_width, icon_width):
@@ -293,8 +381,16 @@ def optical_positions(spans, layout_width, left, box_width):
     return xs
 
 
+def _root_entry():
+    """MOD 用のボタンの登録（絵が無ければ「M」の字のボタン）。"""
+    images = ROOT_IMAGES if all(os.path.isfile(path) for path in ROOT_IMAGES) else None
+    if images is None:
+        _once("no-root-images", "WARN hud icons: the button images are missing in {}".format(ASSETS_DIR))
+    return {"key": "MOD", "on_press": toggle_list, "images": images, "strokes": []}
+
+
 def arrange(hud):
-    """足したアイコンを置き、ゲームの4つと一緒に並べ直す。何度呼んでも同じ形になる。"""
+    """MOD 用のボタンを置き、ゲームの4つと一緒に並べ直す。何度呼んでも同じ形になる。"""
     layout = frames.attr(hud, LAYOUT_NAME, None)
     game = frames.attr(hud, BUTTONS_NAME, None)
     if layout in (None, frames.MISSING) or not isinstance(game, (list, tuple)) or not game:
@@ -311,9 +407,10 @@ def arrange(hud):
     if not isinstance(placed, dict):
         placed = {}
         setattr(hud, HUD_ATTR, placed)
-    entries = sorted((entry for entry in _store()["icons"].values() if _alive(entry)),
-                     key=lambda entry: (entry.get("order", 0), entry["key"]))
-    wanted = {entry["key"] for entry in entries}
+    # 置くのは MOD 用のボタン1つだけ（登録が1つでもあれば）。v1.15.1 の形で MOD ごとに置いたボタンが
+    # 前の世代から残っていれば、ここで外れる。
+    entries = [_root_entry()] if menu_entries(ui.find_app()) else []
+    wanted = {ROOT_KEY} if entries else set()
     for key in list(placed):
         if key not in wanted:
             button = placed.pop(key)
@@ -329,28 +426,28 @@ def arrange(hud):
                 button.pos_hint = dict(home)
         return
     size = tuple(frames.attr(game[0], "size", (40, 40)) or (40, 40))
-    for entry in entries:
-        button = placed.get(entry["key"])
+    entry = entries[0]
+    button = placed.get(ROOT_KEY)
+    if button is None:
+        button = _make_button(entry, size, game[0])
         if button is None:
-            button = _make_button(entry, size, game[0])
-            if button is None:
-                _once("no-kivy", "WARN hud icons: kivy Button unavailable")
-                return
-            placed[entry["key"]] = button
-            _log("hud icons: added {!r}".format(entry["key"]))
-        if button.parent is not layout:
-            try:
-                if button.parent is not None:
-                    button.parent.remove_widget(button)
-                layout.add_widget(button)
-            except Exception:
-                log_exc("hud icons: cannot add {!r}".format(entry["key"]))
-                continue
+            _once("no-kivy", "WARN hud icons: kivy Button unavailable")
+            return
+        placed[ROOT_KEY] = button
+        _log("hud icons: added the MOD button")
+    if button.parent is not layout:
         try:
-            button.size = size
+            if button.parent is not None:
+                button.parent.remove_widget(button)
+            layout.add_widget(button)
         except Exception:
-            pass
-        _bind_press(button, entry)
+            log_exc("hud icons: cannot add the MOD button")
+            return
+    try:
+        button.size = size
+    except Exception:
+        pass
+    _bind_press(button, entry)
     order = sorted(zip(game, homes), key=lambda pair: _number(pair[1].get("x"), 0.0))
     left = min(_number(home.get("x"), 0.0) for home in homes)
     y = _number(order[0][1].get("y"), 0.03)
@@ -360,8 +457,7 @@ def arrange(hud):
     _watch(layout, hud)     # 幅が決まったら（窓の大きさが変わったら）並べ直す
     if not xs:
         return              # 列の幅がまだ決まっていない（組み立ての途中）。決まったときに `_watch` が呼ぶ
-    widgets = [button for button, _home in order] + [placed[entry["key"]] for entry in entries
-                                                      if entry["key"] in placed]
+    widgets = [game_button for game_button, _home in order] + [button]
     # 絵の見えている部分が読めれば、見えている部分どうしの間で揃える（読めなければ箱の等間隔のまま）。
     spans = [optical_span(widget) for widget in widgets]
     if len(spans) == len(xs) and all(spans):
@@ -375,26 +471,224 @@ def arrange(hud):
     if len(xs) > 1 and (xs[1] - xs[0]) * width - icon_width < TIGHT_GAP:
         _once(("tight", int(width)), "WARN hud icons: the row is {:.0f}px wide; the icons "
                                      "are almost touching".format(width))
-    for entry in entries:
-        button = placed.get(entry["key"])
-        if button is not None:
-            _paint(button, entry)
-            _follow(button, entry)
+    _paint_dot(button)
+    _follow(button)
 
 
-def _follow(button, entry):
-    """動いたら線を引き直す（列が並べ直されると、比率の変化で位置が動く）。"""
+def _follow(button):
+    """動いたら知らせの点を描き直す（列が並べ直されると、比率の変化で位置が動く）。"""
     if frames.attr(button, BIND_ATTR, None) not in (None, frames.MISSING):
         return
 
     def moved(*_args):
-        _paint(button, entry)
+        _paint_dot(button)
 
     try:
         button.bind(pos=moved, size=moved)
         setattr(button, BIND_ATTR, moved)
     except Exception:
         pass
+
+
+def _paint_dot(widget, on=None):
+    """右上の知らせの点を描く・消す。`on` を省くと、一覧のどれかに印があるかで決める。"""
+    if on is None:
+        on = has_attention(ui.find_app())
+    group = frames.attr(widget, DOT_ATTR, None)
+    try:
+        from kivy.graphics import Color, InstructionGroup, Rectangle
+    except Exception:
+        return                                  # ゲームの外（検査）
+    try:
+        if group in (None, frames.MISSING):
+            group = InstructionGroup()
+            widget.canvas.after.add(group)
+            setattr(widget, DOT_ATTR, group)
+        group.clear()
+        if on:
+            # 角の無い四角の点（ゲームのドット絵の絵柄に合わせる）
+            size = ui.upx(DOT_SIZE)
+            group.add(Color(*DOT_COLOR))
+            group.add(Rectangle(pos=(widget.right - size - ui.upx(1), widget.top - size - ui.upx(1)),
+                                size=(size, size)))
+    except Exception:
+        log_exc("hud icons: cannot draw the notice dot")
+
+
+# ------------------------------------------------------------------ 一覧
+def close_list():
+    """一覧が開いていれば閉じる。"""
+    store = _store()
+    view = store.get("list")
+    store["list"] = None
+    if view is None:
+        return
+    try:
+        view.dismiss()
+    except Exception:
+        log_exc("hud icons: cannot close the list")
+
+
+def toggle_list(app):
+    """MOD 用のボタンを押した。一覧が開いていれば閉じ、閉じていればボタンの上に開く。"""
+    if _store().get("list") is not None:
+        close_list()
+        return
+    hud = ui.find_hud(app)
+    button = (frames.attr(hud, HUD_ATTR, None) or {}).get(ROOT_KEY) if hud is not None else None
+    if button is None:
+        return
+    try:
+        open_list(app, hud, button)
+    except Exception:
+        close_list()
+        log_exc("hud icons: cannot open the list")
+
+
+def list_size(rows, row_height, gap, pad, widest, icon, min_width, slack):
+    """一覧の枠の大きさ `(幅, 高さ)`（px）。`widest` は名前の文字の幅の最大、`icon` は行の絵の幅（無ければ 0）。"""
+    width = max(min_width, widest + icon + slack + 2 * pad)
+    height = row_height * rows + gap * max(0, rows - 1) + 2 * pad
+    return width, height
+
+
+def list_position(anchor, size, window, margin, lift):
+    """一覧の枠の左下 `(x, y)`。`anchor` はボタンの左上（窓の座標）。枠はボタンの真上に出し、窓からはみ出さない。"""
+    (bx, by), (width, height), (win_w, win_h) = anchor, size, window
+    x = max(margin, min(bx, win_w - width - margin))
+    y = min(by + lift, win_h - height - margin)
+    return x, max(margin, y)
+
+
+def open_list(app, hud, button):
+    from kivy.core.window import Window
+    from kivy.graphics import Color, Rectangle
+    from kivy.uix.behaviors import ButtonBehavior
+    from kivy.uix.boxlayout import BoxLayout
+    from kivy.uix.floatlayout import FloatLayout
+    from kivy.uix.image import Image
+    from kivy.uix.label import Label
+    from kivy.uix.modalview import ModalView
+    from kivy.uix.widget import Widget
+
+    class Row(ButtonBehavior, BoxLayout):
+        pass
+
+    store = _store()
+    status = frames.attr(hud, "status_label", None)
+    font_name = frames.text_of(status, "font_name") if status is not None else None
+    font_size = frames.attr(status, "font_size", None) if status is not None else None
+    pad, row_height, icon = ui.upx(LIST_PAD), ui.upx(LIST_ROW_HEIGHT), ui.upx(LIST_ICON)
+    gap = ui.upx(2)
+    entries = menu_entries(app)
+    if not entries:
+        return
+    # 窓全体を覆う透明な面に一覧の枠を置く。枠の外を押したら閉じる（下のゲームの画面には押下を通さない）。
+    view = ModalView(size_hint=(1, 1), auto_dismiss=False)
+    for name in ("background_color", "overlay_color"):
+        try:
+            setattr(view, name, (0, 0, 0, 0))
+        except Exception:
+            pass
+    cover = FloatLayout()
+    panel = BoxLayout(orientation="vertical", padding=pad, spacing=gap, size_hint=(None, None))
+    with panel.canvas.before:
+        Color(*LIST_BG)
+        panel_bg = Rectangle(pos=panel.pos, size=panel.size)
+    panel.bind(pos=lambda _w, value: setattr(panel_bg, "pos", value),
+               size=lambda _w, value: setattr(panel_bg, "size", value))
+    panels.border(panel)                # ゲームの画面の枠と同じ 2px の灰白（TECH.md §3.3.17）
+    rows, widest = [], 0.0
+    attention = store["attention"]
+    has_images = any(entry.get("images") for entry in entries)
+    for entry in entries:
+        row = Row(orientation="horizontal", size_hint_y=None, height=row_height, spacing=ui.upx(10),
+                  padding=(ui.upx(6), 0))
+        with row.canvas.before:
+            shade = Color(1, 1, 1, 0)
+            row_bg = Rectangle(pos=row.pos, size=row.size)
+        row.bind(pos=lambda _w, value, r=row_bg: setattr(r, "pos", value),
+                 size=lambda _w, value, r=row_bg: setattr(r, "size", value))
+        images = tuple(entry.get("images") or ())
+        if images:
+            picture = Image(source=images[0], size_hint=(None, None), size=(icon, icon),
+                            pos_hint={"center_y": 0.5})
+            try:
+                picture.texture.mag_filter = "nearest"      # ドット絵をぼかさない
+            except Exception:
+                pass
+            row.add_widget(picture)
+        elif has_images:
+            row.add_widget(Widget(size_hint=(None, None), size=(icon, icon)))
+        label = Label(text=entry.get("label") or entry["key"], halign="left", valign="middle")
+        if isinstance(font_name, str) and font_name:
+            label.font_name = font_name
+        if isinstance(font_size, (int, float)):
+            label.font_size = font_size
+        label.bind(size=lambda widget, value: setattr(widget, "text_size", value))
+        label.texture_update()
+        widest = max(widest, label.texture_size[0])
+        row.add_widget(label)
+        dot = Widget(size_hint=(None, None), size=(ui.upx(DOT_SIZE), ui.upx(DOT_SIZE)),
+                     pos_hint={"center_y": 0.5})
+        if entry["key"] in attention:
+            with dot.canvas:
+                Color(*DOT_COLOR)
+                mark = Rectangle(pos=dot.pos, size=dot.size)
+            dot.bind(pos=lambda _w, value, m=mark: setattr(m, "pos", value))
+        row.add_widget(dot)
+
+        def chosen(_row, entry=entry):
+            close_list()
+            notify(entry["key"], False)
+            try:
+                entry["on_press"](app)
+            except Exception:
+                log_exc("hud icons: the press handler of {!r} failed".format(entry["key"]))
+
+        row.bind(on_release=chosen)
+        rows.append((row, shade))
+        panel.add_widget(row)
+    panel.size = list_size(len(entries), row_height, gap, pad, widest, icon if has_images else 0,
+                           ui.upx(LIST_MIN_WIDTH), ui.upx(60))
+    panel.pos = list_position(button.to_window(button.x, button.top), panel.size,
+                              (Window.width, Window.height), ui.upx(4), ui.upx(LIST_GAP))
+    cover.add_widget(panel)
+
+    def touched(_cover, touch):
+        if panel.collide_point(*touch.pos):
+            return False                # 行へ渡す
+        close_list()
+        return True
+
+    cover.bind(on_touch_down=touched)
+
+    def hovered(_window, pos):
+        for row, shade in rows:
+            try:
+                inside = row.collide_point(*row.to_widget(*pos))
+            except Exception:
+                inside = False
+            shade.rgba = ROW_HOVER if inside else (1, 1, 1, 0)
+
+    Window.bind(mouse_pos=hovered)
+    view.add_widget(cover)
+
+    def dismissed(*_args):
+        Window.unbind(mouse_pos=hovered)
+        if store.get("list") is view:
+            store["list"] = None
+
+    view.bind(on_dismiss=dismissed)
+    store["list"] = view
+    view.open()
+    manager = getattr(app, "sound_manager", None)
+    play = getattr(manager, "play_sound_from_src", None)
+    if callable(play):
+        try:
+            play(app, OPEN_SOUND)
+        except Exception:
+            log_exc("hud icons: cannot play the open sound")
 
 
 def _watch(layout, hud):

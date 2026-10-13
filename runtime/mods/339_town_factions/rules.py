@@ -16,7 +16,8 @@ STANDING_MIN = -100
 STANDING_MAX = 100
 #: (この点数より下なら, 段)。最後は上限なし。
 STANDING_BOUNDS = ((-60, -2), (-20, -1), (20, 0), (60, 1))
-STANDING_NAMES = {-2: "敵視", -1: "警戒", 0: "中立", 1: "好意", 2: "信頼"}
+#: 勢力どうしの仲（`RELATION_NAMES`）と同じ言葉に揃え、主人公ひとりに合わない「同盟」だけ「盟友」にした（DOC.md §1）。
+STANDING_NAMES = {-2: "敵対", -1: "緊張", 0: "中立", 1: "友好", 2: "盟友"}
 #: 初回の判定の段を点数に起こすときの値（段の真ん中）。
 STANDING_CENTER = {-2: -80, -1: -40, 0: 0, 1: 40, 2: 80}
 
@@ -49,13 +50,15 @@ READY = "ready"         # 台帳がある
 NONE = "none"           # 設定に勢力が2つ以上書かれていない（作らない。読み込みのたびに作り直さない）
 FAILED = "failed"       # 作れなかった（次の読み込みでまた試す）
 EVENT_LIMIT = 30
+#: 見られ方が動いた来歴を台帳に持つ件数（新しいほうから）。
+HISTORY_LIMIT = 40
 
 
 def empty_ledger():
     return {"version": LEDGER_VERSION, "status": None, "why": "", "made_day": None,
             "peaceful": False, "factions": [], "towns": {}, "relations": {},
             "standing": {}, "events": [], "trend": {"last_day": None, "incidents": {}},
-            "gained": {}}
+            "gained": {}, "history": []}
 
 
 # ============================================================ 数の均し
@@ -284,7 +287,7 @@ def build_ledger(extracted, material, town_ids, *, day=None, town_names=None):
 
 
 def title_of(row):
-    """判定の答えの呼び名。段階の名前（「信頼」など）をそのまま返したものは呼び名にしない（2026-10-11、ローカル）。"""
+    """判定の答えの呼び名。段階の名前（「盟友」など）をそのまま返したものは呼び名にしない（2026-10-11、ローカル）。"""
     title = str((row or {}).get("title") or "").strip()[:20]
     return "" if title in STANDING_NAMES.values() else title
 
@@ -370,7 +373,7 @@ DEED_POINTS = 10
 DEED_CAP = 50
 FAMILIAR_DAYS = 90
 FAMILIAR_POINTS = 10
-#: 手配は功績で打ち消さない（VERIFICATION.md §3.98「最初の見られ方」）。手配されていれば警戒より上へ行かず、重い手配は功績によらず敵視。
+#: 手配は功績で打ち消さない（VERIFICATION.md §3.98「最初の見られ方」）。手配されていれば緊張より上へ行かず、重い手配は功績によらず敵対。
 WANTED_POINTS = -40
 WANTED_CEILING = -21
 HEAVILY_WANTED_AT = -40
@@ -476,17 +479,17 @@ def relation_stage(ledger, a, b):
 
 #: 張り合う勢力への響き。好かれた点数の何割を、相手の勢力から引くか（関係の段ごと）。
 RIVAL_ECHO = {-2: 0.5, -1: 0.25}
-#: 点数がこれ以下になったら、その勢力の敵視は外れない（上がっても敵視の上端で止まる。VERIFICATION.md §3.98「手配と敵視の上限」）。
+#: 点数がこれ以下になったら、その勢力の敵対は外れない（上がっても敵対の上端で止まる。VERIFICATION.md §3.98「手配と敵対の上限」）。
 ENEMY_LOCK_AT = -81
-#: 敵視の上端。
+#: 敵対の上端。
 ENEMY_CEILING = -61
 
 
 def gain_ceiling(ledger, faction_id, laws):
     """上がる動きの上限の点数。`laws` は `{街の id: 手配度}`（いまの主人公の記録）。
 
-    敵視が外れなくなった勢力と、その勢力の街で手配度 -40 以下なら敵視の上端。
-    その勢力の街で手配されていれば警戒の上端。どちらでもなければ上限なし。
+    敵対が外れなくなった勢力と、その勢力の街で手配度 -40 以下なら敵対の上端。
+    その勢力の街で手配されていれば緊張の上端。どちらでもなければ上限なし。
     """
     row = (ledger.get("standing") or {}).get(faction_id)
     towns = [t for t, r in (ledger.get("towns") or {}).items() if r.get("faction") == faction_id]
@@ -554,7 +557,7 @@ def is_locked(ledger, faction_id):
 
 
 def lift_lock(ledger, faction_id):
-    """敵視が外れない印を外す。外したら True。会話で相手を納得させたときだけ呼ぶ（VERIFICATION.md §3.98「手配と敵視の上限」）。"""
+    """敵対が外れない印を外す。外したら True。会話で相手を納得させたときだけ呼ぶ（VERIFICATION.md §3.98「手配と敵対の上限」）。"""
     row = (ledger.get("standing") or {}).get(faction_id)
     if not isinstance(row, dict) or not row.get("locked"):
         return False
@@ -563,7 +566,7 @@ def lift_lock(ledger, faction_id):
 
 
 def apply_moves(ledger, moves):
-    """動きを点数に書く。`ENEMY_LOCK_AT` 以下になった勢力は敵視が外れない印を付ける（外すのは `lift_lock`）。"""
+    """動きを点数に書く。`ENEMY_LOCK_AT` 以下になった勢力は敵対が外れない印を付ける（外すのは `lift_lock`）。"""
     for faction_id, _before, after, _why in moves:
         row = ledger["standing"].get(faction_id)
         if isinstance(row, dict):
@@ -629,6 +632,39 @@ def apply_trend(ledger, a, b, plan, *, day):
 def add_event(ledger, event):
     ledger["events"].append(event)
     del ledger["events"][:-EVENT_LIMIT]
+
+
+# ============================================================ 見られ方の来歴
+#: 来歴の種類。
+TALK, INCIDENT, ECHO, RECONCILE = "talk", "incident", "echo", "reconcile"
+
+
+def add_history(ledger, entry):
+    """来歴を1件足す（古いものから捨てる）。前の版の台帳には `history` が無いので作る。"""
+    history = ledger.setdefault("history", [])
+    history.append(entry)
+    del history[:-HISTORY_LIMIT]
+
+
+def record_moves(ledger, moves, *, day, kind, reason="", incident=""):
+    """点数の動き（`plan_talk` / `plan_gain` の答え）を来歴に書く。動かなかったもの（上限・1日1回）は書かない。
+
+    響き（`echo`）は、上がった勢力（動きの先頭）を `by` に持つ。
+    書いた件数を返す（段階が変わったものがあれば `changed` も真）。
+    """
+    source = moves[0][0] if moves else None
+    written, changed = 0, False
+    for faction_id, before, after, why in moves:
+        if after == before or why in ("daily", "capped"):
+            continue
+        echo = why == "echo"
+        add_history(ledger, {"day": day, "faction": faction_id, "before": before, "after": after,
+                             "kind": ECHO if echo else kind, "by": source if echo else None,
+                             "reason": "" if echo else str(reason or "")[:200],
+                             "incident": "" if echo else str(incident or "")[:60]})
+        written += 1
+        changed = changed or standing_stage(before) != standing_stage(after)
+    return written, changed
 
 
 def trend_due(last_day, day, every):

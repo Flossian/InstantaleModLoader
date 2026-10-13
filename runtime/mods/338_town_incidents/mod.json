@@ -7,10 +7,10 @@
     "ja": "街の出来事"
   },
   "description": {
-    "en": "Bandits, epidemics, raids and other incidents break out in towns as days pass. Left alone they worsen in two stages and finally settle; a quest on that town's board solves them. Prices, conversations and scene narration reflect the situation; an icon next to the game's bottom-left icons opens an overview",
-    "ja": "日数が進むと、各地の街に盗賊や疫病などの出来事が起きる。放っておくと 兆し → 悪化 → 深刻 と進んで最後は自然に収まり、その街の掲示板の依頼で片付けられる。値段・会話・情景描写に街の様子が出る。画面左下のアイコンから各地の出来事の一覧を見られる"
+    "en": "Bandits, epidemics and other troubles, or good events such as festivals and harvests, happen in towns as days pass. Troubles worsen in two stages and finally settle; a quest on that town's board solves them. Good events need no quest and run their own stages. Prices, conversations and scene narration reflect the situation; the mods button at the bottom left opens an overview. More kinds can be added as files",
+    "ja": "日数が進むと、各地の街に盗賊や疫病などの困り事や、祝祭や豊作などの良い出来事が起きる。困り事は放っておくと 兆し → 悪化 → 深刻 と進んで最後は自然に収まり、その街の掲示板の依頼で片付けられる。良い出来事は依頼が出ず、出来事ごとの段階を進んで収まる。値段・会話・情景描写に街の様子が出る。画面左下の MOD 用のボタンから各地の出来事の一覧を見られる。出来事はファイルで足せる"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "shares": [
     "rival_adventurer"
@@ -95,12 +95,12 @@
       "min": 1,
       "max": 3650,
       "label": {
-        "ja": "悪化する間隔（日）",
+        "ja": "段階が進む間隔（日）",
         "en": "Days per stage"
       },
       "note": {
-        "ja": "放っておくと、この日数ごとに 兆し → 悪化 → 深刻 と1段階ずつ進む",
-        "en": "Left alone, the incident worsens one stage every this many days"
+        "ja": "放っておくと、この日数ごとに1段階ずつ進む（困り事は 兆し → 悪化 → 深刻、良い出来事は 兆し → 盛況 → 収束 など出来事ごと）",
+        "en": "Left alone, the incident moves one stage every this many days"
       }
     },
     "SETTLE_DAYS": {
@@ -109,12 +109,12 @@
       "min": 1,
       "max": 3650,
       "label": {
-        "ja": "深刻になってから収まるまで（日）",
+        "ja": "最後の段階から収まるまで（日）",
         "en": "Days until it settles"
       },
       "note": {
-        "ja": "深刻の段階になってからこの日数が経つと、出来事は自然に収まる",
-        "en": "Days after stage 3 before the incident settles by itself"
+        "ja": "最後の段階（困り事は深刻）になってからこの日数が経つと、出来事は自然に収まる",
+        "en": "Days after the last stage before the incident settles by itself"
       }
     },
     "STEPS_PER_ELAPSE": {
@@ -153,7 +153,7 @@
         "en": "Weight by town size"
       },
       "note": {
-        "ja": "ON だと、村は外敵の襲来・物資の途絶・失踪の続発、町は無法者の横行・買い占め・人の流入・にわか景気、都市は感染症の流行・騒乱・通貨の信用の揺らぎ・闇物資の氾濫・締め付けの強化・権力の空白が起きやすい",
+        "ja": "ON だと、出来事ごとに決めた規模の街で起きやすい（同梱の出来事なら、村は外敵の襲来・物資の途絶・失踪の続発、町は無法者の横行・買い占め・人の流入、都市は感染症の流行・騒乱・通貨の信用の揺らぎ・闇物資の氾濫・締め付けの強化・権力の空白）",
         "en": "Villages, towns and cities each favor their own incidents"
       }
     },
@@ -201,7 +201,7 @@
         "en": "Point to the guild"
       },
       "note": {
-        "ja": "街の様子の1行のあとに「〈ギルドの名前〉に行けば、この件で人手を求める依頼が出ているかもしれない。」を添える。その出来事の依頼が掲示板に出た後は添えない。街に着いたときに様子を知らせる設定が OFF なら出ない",
+        "ja": "街の様子の1行のあとに「〈ギルドの名前〉に行けば、この件で人手を求める依頼が出ているかもしれない。」を添える。その出来事の依頼が掲示板に出た後と、依頼の出ない良い出来事には添えない。街に着いたときに様子を知らせる設定が OFF なら出ない",
         "en": "Adds a line pointing to the town's guild until the quest is on its board"
       }
     },
@@ -250,184 +250,16 @@
         "en": "Show each incident's price effects as numbers, in words, or not at all"
       }
     },
-    "KIND_OUTLAWS": {
-      "type": "bool",
-      "default": true,
+    "DISABLED_KINDS": {
+      "type": "str",
+      "default": "",
       "label": {
-        "ja": "無法者の横行",
-        "en": "Outlaws"
+        "ja": "起こさない出来事",
+        "en": "Disabled kinds"
       },
       "note": {
-        "ja": "武装した無法者の一団が街の周りで荷や旅人を襲っている（例: 盗賊団／無法者の一味／ギャング／略奪者）。値段（兆し / 悪化 / 深刻）: 全品の買値 +10 / +20 / +35%",
-        "en": "Off: this kind never happens"
-      }
-    },
-    "KIND_EPIDEMIC": {
-      "type": "bool",
-      "default": true,
-      "label": {
-        "ja": "感染症の流行",
-        "en": "Epidemic"
-      },
-      "note": {
-        "ja": "街で病が広がり、人々が倒れている（例: 疫病／コレラ／生体ウイルス／変異病）。値段（兆し / 悪化 / 深刻）: 薬の類の買値 +25 / +50 / +100%、食べ物の類の買値 +10 / +20 / +30%",
-        "en": "Off: this kind never happens"
-      }
-    },
-    "KIND_INVADERS": {
-      "type": "bool",
-      "default": true,
-      "label": {
-        "ja": "外敵の襲来",
-        "en": "Invaders"
-      },
-      "note": {
-        "ja": "人ではない脅威の群れが街の周りに現れ、人や家畜を襲っている（例: 魔物の群れ／狼やコヨーテの群れ／暴走した戦闘ドローン／変異生物の群れ）。値段（兆し / 悪化 / 深刻）: 武器・防具の売り買い +15 / +30 / +50%",
-        "en": "Off: this kind never happens"
-      }
-    },
-    "KIND_UNREST": {
-      "type": "bool",
-      "default": true,
-      "label": {
-        "ja": "騒乱",
-        "en": "Unrest"
-      },
-      "note": {
-        "ja": "住民の不満が爆発し、街で騒ぎや衝突が起きている（例: 一揆／鉱夫のストライキ／暴動／配給を巡る騒ぎ）。値段（兆し / 悪化 / 深刻）: 全品の売値 -10 / -20 / -35%、全品の買値 +5 / +10 / +15%",
-        "en": "Off: this kind never happens"
-      }
-    },
-    "KIND_SHORTAGE": {
-      "type": "bool",
-      "default": true,
-      "label": {
-        "ja": "物資の途絶",
-        "en": "Shortage"
-      },
-      "note": {
-        "ja": "街を支える物資の供給が断たれ、食べ物や日々の物が足りなくなっている（例: 凶作／旱魃／工場の停止・物流の断絶／水源の汚染）。値段（兆し / 悪化 / 深刻）: 食べ物の類の買値 +20 / +40 / +80%、宿代 +20 / +40 / +80%",
-        "en": "Off: this kind never happens"
-      }
-    },
-    "KIND_AFTERMATH": {
-      "type": "bool",
-      "default": true,
-      "label": {
-        "ja": "災害の後",
-        "en": "Aftermath"
-      },
-      "note": {
-        "ja": "街を大きな災害が襲い、建物や設備が壊れたまま復旧が進んでいない（例: 大火／竜巻／大規模な停電・設備の崩落／砂嵐・地震）。値段（兆し / 悪化 / 深刻）: 素材・道具の売り買い +15 / +30 / +50%",
-        "en": "Off: this kind never happens"
-      }
-    },
-    "KIND_COUNTERFEIT": {
-      "type": "bool",
-      "default": true,
-      "label": {
-        "ja": "通貨の信用の揺らぎ",
-        "en": "Counterfeit"
-      },
-      "note": {
-        "ja": "偽の通貨や支払いの手段が出回り、店が客の支払いを疑っている（例: 偽金／偽札／決済の改竄・クレジットの偽造／配給札の偽造）。値段（兆し / 悪化 / 深刻）: 全品の売値 -10 / -20 / -35%",
-        "en": "Off: this kind never happens"
-      }
-    },
-    "KIND_HOARDING": {
-      "type": "bool",
-      "default": true,
-      "label": {
-        "ja": "買い占め",
-        "en": "Hoarding"
-      },
-      "note": {
-        "ja": "一部の者が品を買い占めて値を吊り上げている（例: 商人の結託／鉄道会社の独占／企業の独占／水を握った一派）。値段（兆し / 悪化 / 深刻）: 選んだ1種の買値 +30 / +60 / +120%",
-        "en": "Off: this kind never happens"
-      }
-    },
-    "KIND_ANOMALY": {
-      "type": "bool",
-      "default": true,
-      "label": {
-        "ja": "不可解な怪事",
-        "en": "Anomaly"
-      },
-      "note": {
-        "ja": "説明のつかない出来事が街で続き、人々が怯えている（例: 怪異／幽霊話／謎の信号・電脳の幽霊／異常地帯の拡大）。値段（兆し / 悪化 / 深刻）: 道具の買値 +15 / +30 / +50%、宿代 +10 / +25 / +50%",
-        "en": "Off: this kind never happens"
-      }
-    },
-    "KIND_ABDUCTIONS": {
-      "type": "bool",
-      "default": true,
-      "label": {
-        "ja": "失踪の続発",
-        "en": "Abductions"
-      },
-      "note": {
-        "ja": "街の人々が次々と姿を消している（例: 人さらい／人狩り／臓器狩り／奴隷狩り）。値段（兆し / 悪化 / 深刻）: 宿代 +20 / +40 / +80%",
-        "en": "Off: this kind never happens"
-      }
-    },
-    "KIND_CONTRABAND": {
-      "type": "bool",
-      "default": true,
-      "label": {
-        "ja": "闇物資の氾濫",
-        "en": "Contraband"
-      },
-      "note": {
-        "ja": "出所の怪しい品が街に大量に出回っている（例: 密輸品／密造酒／違法な改造部品／略奪品の横流し）。値段（兆し / 悪化 / 深刻）: 全品の売り買い -10 / -15 / -25%",
-        "en": "Off: this kind never happens"
-      }
-    },
-    "KIND_CRACKDOWN": {
-      "type": "bool",
-      "default": true,
-      "label": {
-        "ja": "締め付けの強化",
-        "en": "Crackdown"
-      },
-      "note": {
-        "ja": "街を治める側が取り締まりを強め、人々の出入りや持ち物を厳しく調べている（例: 衛兵の検問／保安官の締め付け／企業警備の戒厳／軍閥の統制）。値段（兆し / 悪化 / 深刻）: 武器・防具の買値 +20 / +40 / +60%、全品の売値 -5 / -10 / -15%",
-        "en": "Off: this kind never happens"
-      }
-    },
-    "KIND_POWER_VACUUM": {
-      "type": "bool",
-      "default": true,
-      "label": {
-        "ja": "権力の空白",
-        "en": "Power vacuum"
-      },
-      "note": {
-        "ja": "街を治めていた者が突然いなくなり、後釜を巡って争いが起きている（例: 領主の急死／保安官の殺害／企業幹部の暗殺／首領の死）。値段（兆し / 悪化 / 深刻）: 全品の買値 +5 / +10 / +20%、全品の売値 -5 / -10 / -20%",
-        "en": "Off: this kind never happens"
-      }
-    },
-    "KIND_INFLUX": {
-      "type": "bool",
-      "default": true,
-      "label": {
-        "ja": "人の流入",
-        "en": "Influx"
-      },
-      "note": {
-        "ja": "よそから大勢の人が流れ込み、街が受け止めきれずにいる（例: 難民／開拓民／移民／避難民）。値段（兆し / 悪化 / 深刻）: 食べ物の類の買値 +10 / +25 / +50%、宿代 +25 / +50 / +100%",
-        "en": "Off: this kind never happens"
-      }
-    },
-    "KIND_BOOM": {
-      "type": "bool",
-      "default": true,
-      "label": {
-        "ja": "にわか景気",
-        "en": "Boom"
-      },
-      "note": {
-        "ja": "思わぬ富の種が見つかり、一攫千金を狙う者が街に押し寄せている（例: 新しい鉱脈／ゴールドラッシュ／技術の流行／遺物の発見）。値段（兆し / 悪化 / 深刻）: 全品の買値 +10 / +20 / +30%、全品の売値 +10 / +25 / +40%",
-        "en": "Off: this kind never happens"
+        "ja": "起こさない出来事の英名をカンマで区切って書く（例: epidemic, boom）。設定画面の「出来事の種類」タブのチェックで書き換わる。出来事の表は incidents.default.json と kinds フォルダから読む",
+        "en": "Keys of kinds that never happen, comma separated"
       }
     }
   }
