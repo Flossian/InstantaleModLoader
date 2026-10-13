@@ -61,6 +61,7 @@ import datetime
 import importlib.util
 import json
 import os
+import shutil
 import sys
 import tempfile
 import threading
@@ -1021,6 +1022,48 @@ def order_path(mods_dir: str) -> str:
     """
     local = os.path.join(mods_dir, ORDER_LOCAL_NAME)
     return local if os.path.isfile(local) else os.path.join(mods_dir, ORDER_NAME)
+
+
+#: 改名した MOD（古いフォルダ名 → 新しいフォルダ名）。
+#: 更新の zip も手で展開した zip も古いフォルダを消さないので、残ると「順序ファイルに無い MOD」として
+#: 新しい名前と一緒に読み込まれ、一覧に2つ並ぶ。前に切っていた入切も古い名前にしか残らない。
+RENAMED_MODS = {
+    "406_gemini_user_role_fix": "406_user_role_fix",        # v1.16.0（Claude でも効くようにした）
+}
+
+
+def drop_renamed(mods_dir: str) -> list[str]:
+    """改名した MOD の古いフォルダを消し、順序ファイルの入切を新しい名前へ移す。消した古い名前を返す。
+
+    新しい名前のフォルダ（`mod.json`）が無ければ何もしない（古い版の zip で戻したときなど）。
+    古い名前を切っていたら新しい名前も切り、順序ファイルから古い名前を外す。
+    GUI の起動・更新の展開・watcher の起動で呼ぶ。v1.15.0 の GUI の更新はこれを持たないので、
+    更新の後に開き直した GUI が片付ける。
+    """
+    dropped = []
+    for old, new in RENAMED_MODS.items():
+        if not os.path.isfile(os.path.join(mods_dir, new, MANIFEST_NAME)):
+            continue
+        source = os.path.join(mods_dir, old)
+        if os.path.isdir(source):
+            try:
+                shutil.rmtree(source)
+            except OSError:
+                log_exc("cannot remove the renamed mod {}".format(source))
+                continue
+            dropped.append(old)
+        path = order_path(mods_dir)
+        data = read_json(path)
+        if not isinstance(data, dict):
+            continue
+        order = [name for name in data.get("order") or [] if name != old]
+        disabled = list(data.get("disabled") or [])
+        if old in disabled:
+            disabled = [new if name == old else name for name in disabled]
+            disabled = [name for i, name in enumerate(disabled) if name not in disabled[:i]]
+        if order != (data.get("order") or []) or disabled != (data.get("disabled") or []):
+            write_json(path, dict(data, order=order, disabled=disabled), indent=2)
+    return dropped
 
 
 

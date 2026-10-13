@@ -155,6 +155,12 @@ def main() -> int:
     log("watcher started; polling every {}s for {}".format(args.interval, injector.TARGET_EXE))
     if not logrotate.enabled(args.log_rotate):
         log("log rotate: disabled; out/*.log and *.jsonl will keep growing")
+    # 改名した MOD の古いフォルダを消す（GUI を通さずに遊ぶときのため。GUI は起動のときに消す）。
+    if injector.RUNTIME_DIR not in sys.path:
+        sys.path.insert(0, injector.RUNTIME_DIR)
+    import instantale_modloader as ml
+    for name in ml.drop_renamed(os.path.join(injector.RUNTIME_DIR, "mods")):
+        log("removed the old folder of a renamed mod: {}".format(name))
 
     handled: set[int] = set()
     # 監視を始めた時点で既に動いていたゲーム。

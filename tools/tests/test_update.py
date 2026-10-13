@@ -195,9 +195,9 @@ with tempfile.TemporaryDirectory() as tmp:
     assert carried == {"order": ["100_a", "905_mine"], "disabled": ["905_mine"]}, carried
     assert not os.path.exists(os.path.join(dest, "out", gui.UPDATE_ORDER_NAME))
 
-# 改名した MOD の古いフォルダは退け、切っていたら新しい名前も切る（一覧に2つ並ばない）。
+# 改名した MOD の古いフォルダは消し、切っていたら新しい名前も切る（一覧に2つ並ばない）。
 with tempfile.TemporaryDirectory() as tmp:
-    old_name, new_name = next(iter(gui.RENAMED_MODS.items()))
+    old_name, new_name = next(iter(gui.ml.RENAMED_MODS.items()))
     z = os.path.join(tmp, "full.zip")
     with zipfile.ZipFile(z, "w") as f:
         f.writestr("InstantaleModLoader-9.9.9/runtime/mods/load_order.json", json.dumps(
@@ -216,8 +216,7 @@ with tempfile.TemporaryDirectory() as tmp:
         carried = json.load(f)
     assert carried == {"order": ["100_a", new_name], "disabled": [new_name]}, carried
     assert not os.path.exists(os.path.join(mods, old_name))
-    backups = os.listdir(os.path.join(dest, "out", gui.RENAMED_BACKUP_DIR))
-    assert len(backups) == 1 and backups[0].startswith(old_name + "_"), backups
+    assert not os.path.exists(os.path.join(dest, "out", "backup"))
 
     # 新しい名前が届かない zip（古い版で戻した）では古いフォルダに触らない
     z_old = os.path.join(tmp, "old.zip")
@@ -229,6 +228,30 @@ with tempfile.TemporaryDirectory() as tmp:
     os.makedirs(os.path.join(dest2, "runtime", "mods", "100_a"))
     gui.extract_release(z_old, dest2)
     assert os.path.isdir(os.path.join(dest2, "runtime", "mods", old_name))
+    assert gui.ml.drop_renamed(os.path.join(dest2, "runtime", "mods")) == []
+
+# 前の版の GUI で更新した後（古いフォルダが残り、順序の末尾に足され、古い名前で切ってある）は、
+# 開き直した GUI の `drop_renamed` が片付ける。手元用の順序ファイルがあればそちらを直す。
+for local in (False, True):
+    with tempfile.TemporaryDirectory() as tmp:
+        old_name, new_name = next(iter(gui.ml.RENAMED_MODS.items()))
+        mods = os.path.join(tmp, "runtime", "mods")
+        for name in ("100_a", new_name, old_name):
+            os.makedirs(os.path.join(mods, name, "__pycache__"))
+            with open(os.path.join(mods, name, "mod.json"), "w") as f:
+                f.write("{}")
+        before = {"order": ["100_a", new_name, old_name], "disabled": [old_name]}
+        name = "load_order.local.json" if local else "load_order.json"
+        with open(os.path.join(mods, name), "w") as f:
+            json.dump(before, f)
+        assert gui.ml.drop_renamed(mods) == [old_name]
+        assert not os.path.exists(os.path.join(mods, old_name))
+        with open(os.path.join(mods, name), encoding="utf-8") as f:
+            after = json.load(f)
+        assert after == {"order": ["100_a", new_name], "disabled": [new_name]}, after
+        # 2回目は何もしない
+        assert gui.ml.drop_renamed(mods) == []
+        assert gui.ml.discover(mods, debug=False)["order"] == ["100_a"]
 
 # 壊れた zip は1つも書かずに止める（途中で落ちて新旧が混ざらない）。
 with tempfile.TemporaryDirectory() as tmp:
