@@ -58,6 +58,8 @@ PROTECT = re.compile(r"`[^`]*`|\[[^\]]*\]\([^)]*\)")
 #: 節のファイルを指すリンクの行き先。
 SECTION_LINK = re.compile(r"\]\((?:verification/)?(\d+\.\d+)\.md\)")
 FENCE = re.compile(r"^\s*(```|~~~)")
+#: 番号の直後の見出しの名前（`§3.98「最初の見られ方」`）。リンクにした後の `](…)` も越える。
+NAMED = re.compile(r"(?:\]\([^)]*\))?\s*「([^」]+)」")
 
 
 def load_sections():
@@ -159,6 +161,20 @@ def resolve(number, sections, chapters):
     return any(pat.match(ln) for ln in entry[2])
 
 
+def has_heading(number, name, sections):
+    """§3.98「最初の見られ方」の名前が、その節の見出しにあるか。§1「…」は本体の見出しを見る。"""
+    if "." not in number:
+        lines = []
+        for doc, _ in INDEXES:
+            with open(os.path.join(DOCS_DIR, doc), encoding="utf-8") as f:
+                lines += f.read().split("\n")
+    else:
+        major, minor = number.split(".")[:2]
+        entry = sections.get((int(major), int(minor)))
+        lines = entry[2] if entry else []
+    return any(ln.startswith("#") and name in ln for ln in lines)
+
+
 def refs_in(line, default):
     """行の中の、検証の文書を指す § 参照を (match, 確か) で返す。
 
@@ -230,8 +246,14 @@ def check_refs(sections, chapters):
         default = "VERIFICATION" if series else None
         for lineno, line in enumerate(text.split("\n"), 1):
             for m, sure in refs_in(line, default):
-                if sure and not resolve(m.group(3), sections, chapters):
+                if not sure:
+                    continue
+                if not resolve(m.group(3), sections, chapters):
                     bad.append(f"{rel}:{lineno}: §{m.group(3)} の行き先が無い")
+                    continue
+                named = NAMED.match(line, m.end())
+                if named and not has_heading(m.group(3), named.group(1), sections):
+                    bad.append(f"{rel}:{lineno}: §{m.group(3)}「{named.group(1)}」の見出しが無い")
             if series:
                 for m in SECTION_LINK.finditer(line):
                     major, minor = m.group(1).split(".")
