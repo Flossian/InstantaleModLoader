@@ -157,7 +157,7 @@
         "en": "Keep basic attacks below skills"
       },
       "note": {
-        "ja": "主人公の通常攻撃を裁く AI に、一撃の重さは修正で表し、追加の大ダメージを重ねないよう頼む。ローカルのモデルは通常攻撃のたびに必殺級のダメージを重ねがちで、通常攻撃がスキル並みになる。OFF で素のゲームの頼み文のまま",
+        "ja": "主人公の通常攻撃を裁く AI に、一撃の重さは修正で表し、追加の大ダメージを重ねないよう頼む。ローカルのモデルは通常攻撃のたびに必殺級のダメージを重ねがちで、通常攻撃がスキル並みになる。OFF で素のゲームのプロンプトのまま",
         "en": "Asks the AI judging your basic attack to express its weight through modifiers instead of stacking an extra big hit. Local models tend to stack a finisher-class hit on every basic attack, making it as strong as a skill. OFF sends the game's prompt unchanged"
       }
     },

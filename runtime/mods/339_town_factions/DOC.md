@@ -65,6 +65,6 @@
 | 症状 | 見るところ |
 |---|---|
 | 態度が変わらない | `out\town_factions.log`。`build: … ready:` の行に、読み取った勢力・街・見られ方が出る。`no factions` なら、その世界の設定から勢力が2つ以上読み取れなかった |
-| 勢力の読み取りがおかしい | `output_data\<世界>\<主人公>\mod_town_factions_extract\` に頼み文と返答がそのまま残る。根拠の原文が設定に見つからなかった項目は `build: dropped` の行に出る |
+| 勢力の読み取りがおかしい | `output_data\<世界>\<主人公>\mod_town_factions_extract\` にプロンプトと返答がそのまま残る。根拠の原文が設定に見つからなかった項目は `build: dropped` の行に出る |
 | 見られ方の動き | 同じログの `judge:`（会話）・`incident:`（街の出来事）・`trend:`（情勢）の行 |
 | 作り直したい | `state\town_factions_ledger\<世界×主人公>.json` を消すと、次に読み込んだときに作り直す |

@@ -86,8 +86,8 @@
 | [`140_fix_busy_dots_speed`](MODS.md#140_fix_busy_dots_speed-待機表示のを普段の速さで流す) | 待機表示の「…」を普段の速さで流す | 待機表示の「…」を普段の速さで流す | - |  |
 | [`141_ui_free_input_echo`](MODS.md#141_ui_free_input_echo-会話の外で送った文も本文に残す) | 会話の外で送った文も本文に残す | 会話の外で送った文も本文に残す | - |  |
 | [`142_balance_quest_stamina`](MODS.md#142_balance_quest_stamina-依頼のクリアで減るスタミナを難易度と被弾で変える) | 依頼のクリアで減るスタミナを難易度と被弾で変える | 依頼のクリアで減るスタミナを難易度と被弾で変える | 7 |  |
-| [`143_fix_random_character`](MODS.md#143_fix_random_character-さいころで作るキャラを世界観に合わせ作りもばらつかせる) | さいころで作るキャラを世界観に合わせ、作りもばらつかせる | さいころで作るキャラを世界観に合わせ、作りもばらつかせる | 6 |  |
-| [`144_fix_hardcoded_worldview`](MODS.md#144_fix_hardcoded_worldview-頼み文と絵の世界観の決め打ちを外す) | 頼み文と絵の世界観の決め打ちを外す | 頼み文と絵の世界観の決め打ちを外す | 6 |  |
+| [`143_fix_random_character`](MODS.md#143_fix_random_character-ランダムで作るキャラを世界観に合わせ作りもばらつかせる) | ランダムで作るキャラを世界観に合わせ、作りもばらつかせる | ランダムで作るキャラを世界観に合わせ、作りもばらつかせる | 6 |  |
+| [`144_fix_hardcoded_worldview`](MODS.md#144_fix_hardcoded_worldview-プロンプトと絵の世界観の決め打ちを外す) | プロンプトと絵の世界観の決め打ちを外す | プロンプトと絵の世界観の決め打ちを外す | 6 |  |
 | [`145_fix_world_overview`](MODS.md#145_fix_world_overview-入力した世界の概要をそのまま使う) | 入力した世界の概要をそのまま使う | 入力した世界の概要をそのまま使う | 1 |  |
 | [`406_user_role_fix`](MODS.md#406_user_role_fix-クラウド-api-の-geminiclaude-でuser-role-の無い依頼が返らない断られるのを防ぐ) | Gemini・Claudeの無応答の防止 | クラウド API の Gemini・Claude で、user role の無い依頼が返らない・断られるのを防ぐ | - |  |
 

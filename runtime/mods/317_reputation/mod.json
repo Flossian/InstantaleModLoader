@@ -45,7 +45,7 @@
         "en": "Use epithets"
       },
       "note": {
-        "ja": "二つ名は世界に1つ。各地の評判文から編み、質的な変化（評判の立つ土地の増減・手配の反転・行いの倍増）のときだけ編み直す。頼み文にいままでの名を渡すので、覆す材料が無ければ同じ名が続く。OFF にすると評判文だけを注入し、二つ名の編纂も止まる",
+        "ja": "二つ名は世界に1つ。各地の評判文から編み、質的な変化（評判の立つ土地の増減・手配の反転・行いの倍増）のときだけ編み直す。プロンプトにいままでの名を渡すので、覆す材料が無ければ同じ名が続く。OFF にすると評判文だけを注入し、二つ名の編纂も止まる",
         "en": "One epithet per world, coined from the per-land reputations and re-coined only on qualitative shifts (lands gained or lost, a wanted flip, deeds doubling). The prompt carries the current name, so it stays unless clearly overturned. Off injects reputations only and stops epithet compilation"
       }
     },
@@ -71,7 +71,7 @@
         "en": "Randomize epithet length"
       },
       "note": {
-        "ja": "編纂のたびに狙う長さを3字から上限までの間で引き、頼み文に「〜字くらい」と載せる。上限は毎回守らせる。OFF なら毎回「上限以内」だけを頼む（同じ長さ帯に寄りやすい）",
+        "ja": "編纂のたびに狙う長さを3字から上限までの間で引き、プロンプトに「〜字くらい」と載せる。上限は毎回守らせる。OFF なら毎回「上限以内」だけを頼む（同じ長さ帯に寄りやすい）",
         "en": "Each compile draws a target between 3 and the cap and asks for roughly that many characters; the cap itself always holds. Off asks only for the cap, which tends to converge on similar lengths"
       }
     },

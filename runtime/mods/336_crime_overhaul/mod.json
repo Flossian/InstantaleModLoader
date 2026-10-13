@@ -412,7 +412,7 @@
       "type": "bool",
       "default": true,
       "label": {"ja": "裁判に情状を渡す", "en": "Trial circumstances"},
-      "note": {"ja": "検察と判事の頼みに、手配の重さ・この土地での活躍を足し、ゲームの不具合で抜けている人生の記録を補う",
+      "note": {"ja": "検察と判事のプロンプトに、手配の重さ・この土地での活躍を足し、ゲームの不具合で抜けている人生の記録を補う",
                "en": "Adds your wanted weight and deeds in this area to the prosecutor's and judge's requests, and restores the life record the base game fails to pass"}
     },
     "TRIAL_LAWYER_ENABLED": {

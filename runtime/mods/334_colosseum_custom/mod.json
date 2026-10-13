@@ -175,7 +175,7 @@
         "en": "Stop the same fighter from returning"
       },
       "note": {
-        "ja": "ゲームが相手を作る頼み文には前に出た相手が載らないので、同じ闘技場では同じ人物に収束することがある。入れると、既に出た闘士の名前を頼み文の末尾に足す（`331_facility_investment` が自分の闘技場でやっているのと同じ手を、どの闘技場にも効かせる）",
+        "ja": "ゲームが相手を作るプロンプトには前に出た相手が載らないので、同じ闘技場では同じ人物に収束することがある。入れると、既に出た闘士の名前をプロンプトの末尾に足す（`331_facility_investment` が自分の闘技場でやっているのと同じ手を、どの闘技場にも効かせる）",
         "en": "The game's prompt never mentions earlier opponents, so the same person keeps showing up. This appends the names already seen, the same trick 331_facility_investment uses in your own arena"
       }
     },
@@ -187,7 +187,7 @@
         "en": "Nobody dies in the match narration"
       },
       "note": {
-        "ja": "素のゲームは、闘技場の試合でも依頼の戦闘と同じ頼み方で描写させるので、体力の尽きた相手が息絶えたり惨殺されたりする。入れると、1手ごとの描写と試合後の締めの頼み文に「殺し合いではない。倒れた者は気を失う・降参するなどして退く」という一文を足す。変わるのは文章だけで、勝ち負けや数値には触らない",
+        "ja": "素のゲームは、闘技場の試合でも依頼の戦闘と同じプロンプトの書き方で描写させるので、体力の尽きた相手が息絶えたり惨殺されたりする。入れると、1手ごとの描写と試合後の締めのプロンプトに「殺し合いではない。倒れた者は気を失う・降参するなどして退く」という一文を足す。変わるのは文章だけで、勝ち負けや数値には触らない",
         "en": "The game narrates arena matches the same way as any other fight, so beaten opponents often die on the page. With this on, the per-turn narration and the post-match summary are asked to have the fallen faint, yield or withdraw instead. Only the text changes"
       }
     }

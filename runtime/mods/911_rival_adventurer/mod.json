@@ -283,7 +283,7 @@
         "en": "Topic: first meeting"
       },
       "note": {
-        "ja": "ライバルが声をかけてきた用件として、第一声の頼み文に入る。使える変数: {player} {title}",
+        "ja": "ライバルが声をかけてきた用件として、第一声のプロンプトに入る。使える変数: {player} {title}",
         "en": "Given to the rival's opening line as the reason for speaking. Variables: {player} {title}"
       }
     },
@@ -295,7 +295,7 @@
         "en": "Topic: the rival took a quest"
       },
       "note": {
-        "ja": "ライバルが声をかけてきた用件として、第一声の頼み文に入る。使える変数: {player} {title}",
+        "ja": "ライバルが声をかけてきた用件として、第一声のプロンプトに入る。使える変数: {player} {title}",
         "en": "Given to the rival's opening line as the reason for speaking. Variables: {player} {title}"
       }
     },
@@ -307,7 +307,7 @@
         "en": "Topic: you beat the rival"
       },
       "note": {
-        "ja": "ライバルが声をかけてきた用件として、第一声の頼み文に入る。使える変数: {player} {title}",
+        "ja": "ライバルが声をかけてきた用件として、第一声のプロンプトに入る。使える変数: {player} {title}",
         "en": "Given to the rival's opening line as the reason for speaking. Variables: {player} {title}"
       }
     },
@@ -319,7 +319,7 @@
         "en": "Topic: you cleaned up after the rival"
       },
       "note": {
-        "ja": "ライバルが声をかけてきた用件として、第一声の頼み文に入る。使える変数: {player} {title}",
+        "ja": "ライバルが声をかけてきた用件として、第一声のプロンプトに入る。使える変数: {player} {title}",
         "en": "Given to the rival's opening line as the reason for speaking. Variables: {player} {title}"
       }
     },

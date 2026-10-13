@@ -46,7 +46,7 @@ LLM を待つ間もゲームは止めない。待機表示も出さない。
 | `item_type` | `weapon` / `wearable`。頼んだ種類だけを受ける |
 | `item_name` | 日本語の品名 |
 | `description` | 日本語の説明。ゲームの説明欄にそのまま出る |
-| `item_sub_type` | 細分。頼み文に一覧を見せて選ばせる |
+| `item_sub_type` | 細分。プロンプトに一覧を見せて選ばせる |
 | `rarity` | `common` 〜 `mythic`。外れたら `common` |
 | `item_appearance` | 英語の短い1文。ゲームが画像を選ぶ手掛かり |
 

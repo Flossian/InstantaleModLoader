@@ -56,7 +56,7 @@ TABS = (
      ("APPROACH_INTRO", "APPROACH_TAKEN", "APPROACH_LOST", "APPROACH_CLEANUP"),
      "ライバルの居る街のギルドに入ったとき、話の種があればライバルの方から声をかけてくる。\n"
      "話の種は、初対面・先を越した・先を越された・尻拭いされたの4つで、1つにつき1回使う。\n"
-     "下の文は、声をかけてきた用件として第一声の頼み文に入る。"),
+     "下の文は、声をかけてきた用件として第一声のプロンプトに入る。"),
     ("文面", (), ("TARGET_SUFFIX", "TARGET_ANNOUNCE", "TAKEN_ANNOUNCE", "FAILED_ANNOUNCE",
                   "WIN_ANNOUNCE", "CLEANUP_ANNOUNCE", "RIVAL_NOTE", "RIVAL_AIM_NOTE",
                   "RIVAL_AWAY_NOTE", "RUMOR_NOTE"),
@@ -108,7 +108,7 @@ def sample_of(template):
 
 
 def one_line(text):
-    """欄の中の改行を落とす（文型は1行の文。改行はそのまま頼み文に入ってしまう）。"""
+    """欄の中の改行を落とす（文型は1行の文。改行はそのままプロンプトに入ってしまう）。"""
     return "".join(str(text).splitlines()).strip()
 
 

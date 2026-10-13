@@ -126,7 +126,7 @@
         "en": "Prompt caching"
       },
       "note": {
-        "ja": "GPT-5.6 以降（GPT-6 系を含む）だけに効く。ゲームのままだと末尾に自動で印が付き、入力を毎回 1.25 倍で書き込むのに当たらない。使わないにすると割増しが無くなる。前回と同じ所まで控えるは、前の頼みと先頭から同じ部分だけを控え、2回目から 0.1 倍で読む",
+        "ja": "GPT-5.6 以降（GPT-6 系を含む）だけに効く。ゲームのままだと末尾に自動で印が付き、入力を毎回 1.25 倍で書き込むのに当たらない。使わないにすると割増しが無くなる。前回と同じ所まで控えるは、前のプロンプトと先頭から同じ部分だけを控え、2回目から 0.1 倍で読む",
         "en": "Only for GPT-5.6 and later (including GPT-6). As the game sends, the marker goes at the end and every request is written at 1.25x without hits. Off removes that surcharge. Cache the shared part caches only what matches the previous request, read at 0.1x from the second time"
       }
     },
@@ -238,7 +238,7 @@
         "en": "Prompt caching"
       },
       "note": {
-        "ja": "ゲームは付けていない。5分 / 1時間 にすると、前の頼みと先頭から同じ部分をその時間だけ控えさせる。同じ部分が続けば 2回目から入力の料金が下がる。書き込む回は 5分 で 1.25 倍、1時間 で 2 倍。同じ部分が短い頼みでは何も起きない。上のモデルを off にしていても効く",
+        "ja": "ゲームは付けていない。5分 / 1時間 にすると、前のプロンプトと先頭から同じ部分をその時間だけ控えさせる。同じ部分が続けば 2回目から入力の料金が下がる。書き込む回は 5分 で 1.25 倍、1時間 で 2 倍。同じ部分が短いプロンプトでは何も起きない。上のモデルを off にしていても効く",
         "en": "The game sends none. 5 minutes / 1 hour caches the part that matches the previous request for that long. Input gets cheaper from the second time. Writes cost 1.25x (5 minutes) or 2x (1 hour). Requests with a short shared part are left alone. Works even when the model above is off"
       }
     },

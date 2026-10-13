@@ -966,6 +966,37 @@ check("素の額 100 がちょうど引かれる", app.player.gold == gold - 100
 check("人物が揃った後の組み直しで印は下りる", ml.choices.from_save() is False
       and not ml.choices._store().get("save_pending"), ml.choices._store().get("save_pending"))
 
+for after, label in ((200, "設定を別の額に変えた"), (100, "設定を素の額へ戻した")):
+    print("[部屋] 部屋選びの画面で保存し、{}後に起動し直して読んでも、保存時の額を素の額と取り違えない".format(label))
+    # 315 だけの経路。部屋の名前は変えず宿代だけ 150 にしていると、保存した文言（個室(150G)）は
+    # ゲームの書式のままで、起動し直した後の設定（200 や素の 100）で 315 が書く文言とも違う。
+    # v1.15.0 の 315 はこれを素の額 150 と控え、ゲームが引く 100 との差を前払いで足していた。
+    module, ctx, app, choice_cls, start_cls = setup(configure=lambda m: setattr(m, "PRIVATE_PRICE", 150))
+    press(app, STAY_TEXT)
+    check("315 の額の文言で保存される", texts_of(app)[2] == "個室(150G)", texts_of(app))
+    saved = [dict(entry) for entry in app.buttons]
+    inn_store = prices._inn_store()
+    inn_store["observed"].clear()            # 起動し直した（控えはプロセスの中だけ）
+    inn_store["ours"].clear()
+    module.PRIVATE_PRICE = after             # 起動し直す間に設定を変えた
+    loaded_world = type("World", (), {})()
+    loaded_world.characters = {}
+    app.world = loaded_world
+    app.buttons = saved
+    app.refresh_choice_buttons(reset_page=True)
+    CLOCK.settle()
+    loaded_world.characters = {"1": object()}
+    app.refresh_choice_buttons(reset_page=True)
+    CLOCK.settle()
+    check("保存時の額を素の額として控えない", inn_store["observed"].get("private_room") in (None, 100),
+          dict(inn_store["observed"]))
+    shown = "個室({}G)".format(after)
+    check("文言は今の設定の額", texts_of(app)[2] == shown, texts_of(app))
+    gold = app.player.gold
+    press(app, shown)
+    check("今の設定の額 {} がちょうど引かれる".format(after), app.player.gold == gold - after,
+          (gold, app.player.gold))
+
 # ================================================================ まとめ
 print()
 if failures:

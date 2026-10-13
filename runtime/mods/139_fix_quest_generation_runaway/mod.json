@@ -19,7 +19,7 @@
       "min": 1,
       "max": 20,
       "label": {"ja": "依頼の敵の種類の上限", "en": "Enemy types per quest"},
-      "note": {"ja": "1つの依頼に出る敵（normal と miniboss。ボスは別）の種類の上限。ゲームの頼み文は normal 2〜3種＋miniboss 1種で、受け取った記録の最大は 5",
+      "note": {"ja": "1つの依頼に出る敵（normal と miniboss。ボスは別）の種類の上限。ゲームのプロンプトは normal 2〜3種＋miniboss 1種で、受け取った記録の最大は 5",
                "en": "Most enemy types (normal and miniboss; the boss is separate) per quest. The game asks for 2-3 normal + 1 miniboss; the largest accepted so far is 5"}
     }
   }

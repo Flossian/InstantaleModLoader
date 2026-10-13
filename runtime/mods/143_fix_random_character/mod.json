@@ -4,11 +4,11 @@
   "kind": "fix",
   "name": {
     "en": "Dice-rolled characters fit the world and vary",
-    "ja": "さいころで作るキャラを世界観に合わせ、作りもばらつかせる"
+    "ja": "ランダムで作るキャラを世界観に合わせ、作りもばらつかせる"
   },
   "description": {
     "en": "The dice on the character creation screen sends no world information to the LLM and always lands on similar talent spending and age. This adds the world's name, overview and situation to the dice request and the portrait-tag request, and adds a talent budget, age and strongest/weakest abilities rolled for each press",
-    "ja": "キャラを作る画面のさいころは、LLM に世界の情報を渡さず、才能点の使い方と年齢もいつも似たところに落ちる。さいころの頼みと立ち絵の要素の頼みに世界の名前・概要・情勢を足し、押すたびに引いた才能点・年齢・高い能力値と低い能力値の目安を渡す"
+    "ja": "キャラを作る画面のランダム作成は、LLM に世界の情報を渡さず、才能点の使い方と年齢もいつも似たところに落ちる。ランダム作成のプロンプトと立ち絵の要素のプロンプトに世界の名前・概要・情勢を足し、押すたびに引いた才能点・年齢・高い能力値と低い能力値の目安を渡す"
   },
   "version": "1",
   "author": "R01/Flossian",
@@ -20,7 +20,7 @@
       "type": "bool",
       "default": true,
       "label": {
-        "ja": "さいころと立ち絵の要素の頼みに世界を渡す",
+        "ja": "ランダム作成と立ち絵の要素のプロンプトに世界を渡す",
         "en": "Pass the world to the dice and portrait-tag requests"
       },
       "note": {
@@ -44,7 +44,7 @@
       "type": "bool",
       "default": true,
       "label": {
-        "ja": "才能点・年齢・能力値をさいころで引く",
+        "ja": "才能点・年齢・能力値をランダム作成のたびに引く",
         "en": "Roll talent spending, age and abilities"
       },
       "note": {
@@ -58,11 +58,11 @@
       "min": 0,
       "max": 1000,
       "label": {
-        "ja": "さいころで使う才能点の下限",
+        "ja": "ランダム作成で使う才能点の下限",
         "en": "Minimum talent spent by the dice"
       },
       "note": {
-        "ja": "ゲームの頼み文の目安は 10 で貧弱・30 で一端の冒険者・60 で名の知れた実力者・150 で伝説",
+        "ja": "ゲームのプロンプトの目安は 10 で貧弱・30 で一端の冒険者・60 で名の知れた実力者・150 で伝説",
         "en": "The game's own scale: 10 weak, 30 a proper adventurer, 60 well known, 150 legendary"
       }
     },
@@ -72,7 +72,7 @@
       "min": 0,
       "max": 5000,
       "label": {
-        "ja": "さいころで使う才能点の上限",
+        "ja": "ランダム作成で使う才能点の上限",
         "en": "Maximum talent spent by the dice"
       },
       "note": {

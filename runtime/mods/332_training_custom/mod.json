@@ -182,11 +182,11 @@
       "type": "bool",
       "default": true,
       "label": {
-        "ja": "AI に渡す頼み文の年数も直す",
+        "ja": "AI に渡すプロンプトの年数も直す",
         "en": "Match the AI's prompt to the real length"
       },
       "note": {
-        "ja": "ゲームは頼み文にも年数を焼き込む（「残り訓練年数: 3年」「費用と3年の時間を費やす」など）ので、切っていると画面は3ヵ月なのに師範のセリフだけが「三年間」と言う。ON だと訓練の頼み文の年数だけを実際の期間に直す。人生ログ（「3年間の過酷な基礎訓練を終え」）や土地との縁（「合計2年暮らしている」）は過去の記録なので触らない",
+        "ja": "ゲームはプロンプトにも年数を焼き込む（「残り訓練年数: 3年」「費用と3年の時間を費やす」など）ので、切っていると画面は3ヵ月なのに師範のセリフだけが「三年間」と言う。ON だと訓練のプロンプトの年数だけを実際の期間に直す。人生ログ（「3年間の過酷な基礎訓練を終え」）や土地との縁（「合計2年暮らしている」）は過去の記録なので触らない",
         "en": "The game bakes the years into its prompts (残り訓練年数: 3年 and so on), so with this off the trainer's own lines still say three years even when the screen says three months. On, only the training prompt's years are rewritten; the life log and the years someone has lived in a town are records of the past and are never touched"
       }
     },
