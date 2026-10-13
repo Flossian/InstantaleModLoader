@@ -520,10 +520,24 @@ def arrange(hud):
     _follow(button)
 
 
+def _current(previous):
+    """前に結んだ手が、いま読み込まれているこのモジュールのものか（注入し直した後は前の世代の手が残る）。"""
+    return previous not in (None, frames.MISSING) and getattr(previous, "__globals__", None) is globals()
+
+
 def _follow(button):
-    """動いたら知らせの点を描き直す（列が並べ直されると、比率の変化で位置が動く）。"""
-    if frames.attr(button, BIND_ATTR, None) not in (None, frames.MISSING):
+    """動いたら知らせの点を描き直す（列が並べ直されると、比率の変化で位置が動く）。
+
+    結ぶのは1本だけ。前の世代の手が残っていれば外して結び直す（残すと、注入し直した後も前の世代の描き方で描く）。
+    """
+    previous = frames.attr(button, BIND_ATTR, None)
+    if _current(previous):
         return
+    if previous not in (None, frames.MISSING):
+        try:
+            button.unbind(pos=previous, size=previous)
+        except Exception:
+            pass
 
     def moved(*_args):
         _paint_dot(button)
@@ -554,7 +568,10 @@ def _paint_dot(widget, on=None):
             # 角の無い四角の点（ゲームのドット絵の絵柄に合わせる）
             size = ui.upx(DOT_SIZE)
             group.add(Color(*DOT_COLOR))
-            group.add(Rectangle(pos=(widget.right - size - ui.upx(1), widget.top - size - ui.upx(1)),
+            # `right` / `top` は使わない。`pos` の知らせ（`_follow`）の中では、まだ動く前の値が返る
+            # （読み込みでボタンが y=0 から 48 へ動いたとき、点が y=0 のときの位置に残った。2026-10-13 の実機）
+            right, top = widget.x + widget.width, widget.y + widget.height
+            group.add(Rectangle(pos=(right - size - ui.upx(1), top - size - ui.upx(1)),
                                 size=(size, size)))
     except Exception:
         log_exc("hud icons: cannot draw the notice dot")
@@ -828,10 +845,15 @@ def remove_all():
 
 
 def _watch(layout, hud):
-    """列の幅が変わったら並べ直す（窓の大きさが変わったとき）。結ぶのは1本だけ。"""
+    """列の幅が変わったら並べ直す（窓の大きさが変わったとき）。結ぶのは1本だけ（前の世代の手は外して結び直す）。"""
     previous = frames.attr(layout, BIND_ATTR, None)
-    if previous not in (None, frames.MISSING):
+    if _current(previous):
         return
+    if previous not in (None, frames.MISSING):
+        try:
+            layout.unbind(width=previous)
+        except Exception:
+            pass
 
     def resized(*_args):
         try:

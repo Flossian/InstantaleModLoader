@@ -171,6 +171,15 @@ finally:
 check("押すと一覧を開く口につながる（ボタンの上に開く）", opened == [root], opened)
 hudicons.arrange(hud)
 check("何度並べても1つ", len(hud.icon_button_layout.children) == 5)
+stale_follow = lambda *_a: None                         # 前の世代のモジュールが結んだ手の代わり（別の globals）
+setattr(root, hudicons.BIND_ATTR, stale_follow)
+root.bound["pos"] = stale_follow
+hudicons.arrange(hud)
+follow = getattr(root, hudicons.BIND_ATTR)
+check("点を付いて来させる手は、前の世代のものなら結び直す", follow is not stale_follow
+      and follow.__globals__ is vars(hudicons) and root.bound.get("pos") is follow, follow)
+hudicons.arrange(hud)
+check("今の世代の手なら結び直さない", getattr(root, hudicons.BIND_ATTR) is follow)
 for key in ("zz_plain", "338_town_incidents", "339_town_factions"):
     hudicons.withdraw(key)
 check("登録が無くなればボタンを外す", root.parent is None and len(hud.icon_button_layout.children) == 4)

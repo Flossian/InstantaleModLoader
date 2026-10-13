@@ -88,8 +88,9 @@ sh tools/drive/relaunch.sh restore        # 4. 控えへ戻して起動し直す
 | `nav.sh` | 上のコマンドを読み込む |
 | `common.sh` | ほかのシェルスクリプトが読む共通部分。直には動かさない |
 
-`relaunch.sh restore` が `state\` から戻すのは、試した世界（`IML_DRIVE_WORLD` で始まる名前）の控えだけ。
-ほかの世界の控えは、控えの後に別のセッションが遊んでいても触らない。
+`relaunch.sh restore` が `state\` から戻すのは、試した世界の控え（`<世界>.json`・`<世界>.jsonl` など名前の後ろが `.` のものと、周回の `<世界>×<主人公>.json`）だけ。
+ほかの世界の控えは、控えの後に別のセッションが遊んでいても触らない（名前が似た世界も、前方一致では拾わない）。
+世界をまたいで1つのファイル（`state\city_case.json` など）も戻さない。
 `relaunch.sh restore` は、控えの後にできたものを消さずに `out/backup/test_leftovers/` へ移す。
 移すのは、控えの時に無かった立ち絵のフォルダと、控えの後にできた `state\` のファイル。
 
