@@ -337,6 +337,14 @@ def install(env):
         except Exception:
             ctx.log_exc("crime incentive: cannot take back the improvised equipment")
         battle = jail["battle"]
+        if battle is None and app is not None:
+            # 決行の戦闘の最中に注入し直してメモリの控えを失った。決行の控え（`breaking`）は start の後にしか
+            # 立たないので、残っていればこの戦闘が決行の戦闘（牢を出た後の始末を飛ばさない）
+            saved = breaking(app)
+            if saved is not None:
+                battle = {"phase": None, "args": [], "prep": saved.get("prep", 0), "started": True,
+                          "area": saved.get("area")}
+                write("jailbreak: the break-out battle ended after a reinjection; settling from the record")
         if battle is None or not battle["started"]:
             return result
         jail["battle"] = None
@@ -412,7 +420,7 @@ def install(env):
         return result
 
     def start_ban(app):
-        """牢を出た。司法取引で裏の事務所を売っていれば、ここから締め出しの日数を数える（`court` / `office`）。"""
+        """牢を出た（無罪放免を含む）。司法取引で裏の事務所を売っていれば、ここから締め出しの日数を数える（`court` / `office`）。"""
         day = ui.game_day(app)
         playthrough = worlds.playthrough(app)
         with worlds.lock:
@@ -423,8 +431,11 @@ def install(env):
             bucket.pop("underworld_ban_after", None)
             bucket["underworld_ban"] = int(day) + days
             worlds.save(playthrough)
-        write("court: shut out of the underworld until day {} ({} day(s) from leaving prison)".format(
+        write("court: shut out of the underworld until day {} ({} day(s) from leaving custody)".format(
             int(day) + days, days))
+
+    # 無罪放免（`court`）も牢を出たのと同じに数える（司法取引で事務所を売った事実は、無罪でも消えない）
+    env.start_ban = start_ban
 
     def on_refresh(app, buttons):
         """服役の画面なら「脱獄を試みる」を足す。"""

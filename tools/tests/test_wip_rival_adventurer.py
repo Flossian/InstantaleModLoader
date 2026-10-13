@@ -609,6 +609,25 @@ def scene_urgent():
     done = quest_claims.claim_of(app, "5")
     check("片付けたら片付けた行になる（名前つき）", done and done["state"] == quest_claims.DONE
           and done["by"] == "冒険者11", done)
+    import threading
+    import time
+    worlds = module._store()["worlds"]
+    held, release = threading.Event(), threading.Event()
+
+    def hold_lock():
+        with worlds.lock:                   # 別のスレッドが控えを書いている最中
+            held.set()
+            release.wait(5)
+
+    holder = threading.Thread(target=hold_lock)
+    holder.start()
+    held.wait(5)
+    started = time.monotonic()
+    copied = quest_claims.claim_of(app, "5")
+    release.set()
+    holder.join(5)
+    check("ほかのスレッドが錠を持っていても待たず、前の写しで答える", time.monotonic() - started < 1
+          and copied and copied["state"] == quest_claims.DONE, copied)
     check("例外が無い", not ctx.errors, ctx.errors)
 
     quest_claims.reset()

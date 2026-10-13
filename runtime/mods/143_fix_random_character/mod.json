@@ -7,8 +7,8 @@
     "ja": "ランダムで作るキャラを世界観に合わせ、作りもばらつかせる"
   },
   "description": {
-    "en": "The dice on the character creation screen sends no world information to the LLM and always lands on similar talent spending and age. This adds the world's name, overview and situation to the dice request and the portrait-tag request, and adds a talent budget, age and strongest/weakest abilities rolled for each press",
-    "ja": "キャラを作る画面のランダム作成は、LLM に世界の情報を渡さず、才能点の使い方と年齢もいつも似たところに落ちる。ランダム作成のプロンプトと立ち絵の要素のプロンプトに世界の名前・概要・情勢を足し、押すたびに引いた才能点・年齢・高い能力値と低い能力値の目安を渡す"
+    "en": "The dice on the character creation screen sends no world information to the LLM and always lands on similar talent spending and age. This adds the world's name, overview and situation to the dice request, the portrait-tag request and the skill and trait generation on that screen, and adds a talent budget, age and strongest/weakest abilities rolled for each press",
+    "ja": "キャラを作る画面のランダム作成は、LLM に世界の情報を渡さず、才能点の使い方と年齢もいつも似たところに落ちる。ランダム作成・立ち絵の要素・作成画面のスキルと特質の生成のプロンプトに世界の名前・概要・情勢を足し、押すたびに引いた才能点・年齢・高い能力値と低い能力値の目安を渡す"
   },
   "version": "1",
   "author": "R01/Flossian",
@@ -20,12 +20,12 @@
       "type": "bool",
       "default": true,
       "label": {
-        "ja": "ランダム作成と立ち絵の要素のプロンプトに世界を渡す",
-        "en": "Pass the world to the dice and portrait-tag requests"
+        "ja": "ランダム作成・立ち絵の要素・スキルと特質の生成のプロンプトに世界を渡す",
+        "en": "Pass the world to the dice, portrait-tag, skill and trait requests"
       },
       "note": {
-        "ja": "世界の名前・概要と、出自・生業・装い・立ち絵の要素を世界に合わせる指示",
-        "en": "The world's name and overview, with instructions to fit background, trade, clothing and portrait tags to it"
+        "ja": "世界の名前・概要と、出自・生業・装い・立ち絵の要素・スキル・特質を世界に合わせる指示",
+        "en": "The world's name and overview, with instructions to fit background, trade, clothing, portrait tags, skills and traits to it"
       }
     },
     "ADD_SITUATION": {
@@ -88,8 +88,8 @@
         "en": "Log what was done"
       },
       "note": {
-        "ja": "out\random_character.log の [SCREEN] / [WORLD] / [BUILD] / [COST]。世界が読めなかった [SKIP] は切っても残る",
-        "en": "[SCREEN] / [WORLD] / [BUILD] / [COST] lines in out\random_character.log. [SKIP] is always written"
+        "ja": "out\\random_character.log の [SCREEN] / [WORLD] / [BUILD] / [COST]。世界が読めなかった [SKIP] は切っても残る",
+        "en": "[SCREEN] / [WORLD] / [BUILD] / [COST] lines in out\\random_character.log. [SKIP] is always written"
       }
     }
   }

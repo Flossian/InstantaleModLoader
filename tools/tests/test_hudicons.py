@@ -161,7 +161,14 @@ xs = [b.pos_hint["x"] for b in hud.icon_buttons] + [root.pos_hint["x"]]
 expected = hudicons.positions(0.07, 5, 396.0, 40.0)
 check("ゲームの4つ・MOD 用のボタンの順に等間隔", all(abs(a - round(b, 4)) < 1e-9 for a, b in zip(xs, expected)),
       (xs, expected))
-check("押すと一覧を開く口につながる", callable(root.bound.get("on_release")))
+opened = []
+real_open = hudicons.open_list
+hudicons.open_list = lambda app, hud_, button: opened.append(button)
+try:
+    root.bound["on_release"](root)
+finally:
+    hudicons.open_list = real_open
+check("押すと一覧を開く口につながる（ボタンの上に開く）", opened == [root], opened)
 hudicons.arrange(hud)
 check("何度並べても1つ", len(hud.icon_button_layout.children) == 5)
 for key in ("zz_plain", "338_town_incidents", "339_town_factions"):
@@ -191,6 +198,62 @@ try:
     check("visible は関数だけ", False)
 except TypeError:
     check("visible は関数だけ", True)
+
+print("[知らせ] 周回ごとの印")
+reset()
+PLAYTHROUGH = ["世界A×主人公"]
+real_key = hudicons._state_keys.playthrough_key
+hudicons._state_keys.playthrough_key = lambda app: PLAYTHROUGH[0]
+try:
+    hudicons.add(ctx, "338_town_incidents", lambda app: None)
+    hudicons.notify("338_town_incidents", playthrough="世界A×主人公")
+    check("付けた周回では印がある", hudicons.has_attention("app"))
+    PLAYTHROUGH[0] = "世界B×主人公"
+    check("別の周回では印を出さない", not hudicons.has_attention("app"))
+    hudicons.notify("338_town_incidents", False, playthrough="世界B×主人公")
+    PLAYTHROUGH[0] = "世界A×主人公"
+    check("別の周回で外しても、付けた周回の印は残る", hudicons.has_attention("app"))
+    hudicons.notify("338_town_incidents", False, playthrough="世界A×主人公")
+    check("付けた周回で外せば消える", not hudicons.has_attention("app")
+          and "338_town_incidents" not in hudicons._store()["attention"])
+    hudicons.notify("338_town_incidents")
+    PLAYTHROUGH[0] = "世界B×主人公"
+    check("周回を省いた印はどの周回でも出る", hudicons.has_attention("app"))
+    hudicons.notify("338_town_incidents", False)
+    check("周回を省いて外すと全部消える", not hudicons.has_attention("app"))
+    setattr(sys, hudicons.STORE_ATTR, {"icons": {}, "generation": None, "write": None, "said": set(),
+                                       "attention": {"old"}, "list": None})
+    check("前の版の印（集合）は周回を問わない印へ移す",
+          hudicons._store()["attention"] == {"old": {hudicons.ANY_PLAYTHROUGH}}, hudicons._store()["attention"])
+finally:
+    hudicons._state_keys.playthrough_key = real_key
+
+print("[片付け] 登録した MOD を全部切って注入し直した")
+reset()
+old = FakeCtx(generation=1)
+hudicons.add(old, "338_town_incidents", lambda app: None)
+hud = FakeHud()
+HUD[0] = hud
+hudicons.arrange(hud)
+check("前の世代では MOD 用のボタンがある", len(hud.icon_button_layout.children) == 5)
+old._superseded = True                  # 次の世代の注入で、誰も add を呼ばなかった
+ran = []
+real_main = hudicons._on_main
+hudicons._on_main = lambda fn: (ran.append(fn), fn())
+try:
+    gone = hudicons.settle()
+finally:
+    hudicons._on_main = real_main
+check("用済みの登録を外す", gone == ["338_town_incidents"] and not hudicons._store()["icons"], gone)
+check("MOD 用のボタンを外し、ゲームの4つを元の位置へ戻す", len(hud.icon_button_layout.children) == 4
+      and [b.pos_hint["x"] for b in hud.icon_buttons] == [0.07 + 0.22 * i for i in range(4)],
+      [b.pos_hint for b in hud.icon_buttons])
+check("外すものが無ければ何もしない", hudicons.settle() == [])
+hudicons.add(FakeCtx(generation=2), "339_town_factions", lambda app: None)
+hudicons.arrange(hud)
+hudicons.remove_all()
+check("ローダを外すと登録を空にしてボタンも外す", not hudicons._store()["icons"]
+      and len(hud.icon_button_layout.children) == 4)
 
 print("[枠]")
 width, height = hudicons.list_size(2, 40, 2, 8, 120.0, 28, 200, 60)

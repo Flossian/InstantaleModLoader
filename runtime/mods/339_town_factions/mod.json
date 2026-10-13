@@ -91,7 +91,7 @@
       },
       "note": {
         "ja": "会話の中身が勢力の考えに反していたとき、その勢力からの見られ方が下がる量（判定の強さ1つあたり。最大で2倍）。回数の制限は無い。-21 以下で緊張、-61 以下で敵対",
-        "en": "How much your standing falls per step when a talk offends the faction (up to twice this). No daily limit. -20 or below is wary, -60 or below is hostile"
+        "en": "How much your standing falls per step when a talk offends the faction (up to twice this). No daily limit. -21 or below is wary, -61 or below is hostile"
       }
     },
     "INCIDENT_GAIN": {

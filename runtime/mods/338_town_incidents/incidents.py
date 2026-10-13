@@ -26,7 +26,7 @@ EVENT_KEYS = ("id", "area", "area_name", "kind", "stage", "status", "started", "
               "ended", "end_by", "end_by_name", "quest", "goods", "tries", "text", "told", "good", "stage_name")
 #: `summary` は版1 の1文（段に依らない）。版2 からは段ごとの `summary_<段>` を書かせる
 TEXT_KEYS = ("name", "summary", "summary_1", "summary_2", "summary_3", "summary_4",
-             "arrive_1", "arrive_2", "arrive_3", "arrive_4", "shop", "settled", "quest", "rumor")
+             "arrive_1", "arrive_2", "arrive_3", "arrive_4", "shop", "shop_turn", "settled", "quest", "rumor")
 
 ALL = None      # 効き目の品の種類で「全品」
 GOODS = "goods"  # 効き目の品の種類で「発生のときに選んだ1種」
@@ -53,7 +53,8 @@ GOODS_KEYS = ("all", "random")
 #   effects   値段の効き目 [(品の種類の並び or ALL or GOODS, "buy"/"sell", (段ごとの %))]
 #   inn       宿代の効き目（段ごとの %）か None
 #   arrive    街に着いたときの1行（段ごと。LLM が書けなかったときの文）
-#   end / ended / shop / settled / rumor   収まるまでの言い方・終わった欄の言い方・LLM が書けなかったときの文
+#   end / ended / shop / shop_turn / settled / rumor   収まるまでの言い方・終わった欄の言い方・LLM が書けなかったときの文
+#             （`shop_turn` は値段の向きが途中で変わる出来事の、変わった後の店の1行。無ければ `shop`）
 
 
 def _text(value):
@@ -153,7 +154,8 @@ def parse_kind(data, where=""):
             "effects": [(target, side, tuple(rates)) for (target, side), rates in effects.items()],
             "inn": tuple(inn) if any(inn) else None, "arrive": tuple(arrive),
             "end": _text(data.get("end")) or "収まる", "ended": _text(data.get("ended")) or "自然に収まった",
-            "shop": _text(data.get("shop")), "settled": _text(data.get("settled")), "rumor": _text(data.get("rumor"))}
+            "shop": _text(data.get("shop")), "shop_turn": _text(data.get("shop_turn")),
+            "settled": _text(data.get("settled")), "rumor": _text(data.get("rumor"))}
     return kind, []
 
 
@@ -167,6 +169,8 @@ def load_kinds(default_path, extra_dir=None):
     """同梱の表と、足した出来事のフォルダを読む。`(出来事の並び, 読めなかった理由の並び)`。
 
     足した出来事は同じ key の同梱の出来事を差し替え、`enabled: false` だけのものは止める。
+    止めた出来事も `enabled: False` で並びに残す（新しくは起こさないが、進行中の分は最後まで進む。
+    設定画面で切ったときと同じ。`use_kinds` が起こす候補から外す）。
     読めなかった出来事だけを飛ばし、ほかはふだんどおり使う。
     """
     import os
@@ -200,20 +204,28 @@ def load_kinds(default_path, extra_dir=None):
                 kinds[kind["key"]] = dict(kinds[kind["key"]], enabled=False)
             continue
         kinds[kind["key"]] = kind
-    return [kind for kind in kinds.values() if kind.get("enabled", True)], problems
+    return list(kinds.values()), problems
 
 
+#: 起こす候補（止めた出来事を除く）。
 KINDS = []
+#: 英名 → 出来事。止めた出来事も入る（進行中の分の段・値段・文を引くため）。
 KIND_BY_KEY = {}
 PROBLEMS = []
 
 
 def use_kinds(kinds, problems=()):
     """読んだ表を使う（同じリスト・辞書を書き換えるので、先に import した側にも効く）。"""
-    KINDS[:] = list(kinds)
+    kinds = list(kinds)
+    KINDS[:] = [kind for kind in kinds if kind.get("enabled", True)]
     KIND_BY_KEY.clear()
-    KIND_BY_KEY.update((kind["key"], kind) for kind in KINDS)
+    KIND_BY_KEY.update((kind["key"], kind) for kind in kinds)
     PROBLEMS[:] = list(problems)
+
+
+def known(event):
+    """控えの出来事の種類が表にあるか（`kinds\\` から消した出来事は無い）。"""
+    return isinstance(event, dict) and event.get("kind") in KIND_BY_KEY
 
 
 def reload_kinds(mod_dir):
@@ -558,6 +570,11 @@ def rewind(bucket, day):
         ended = _int(event.get("ended"))
         if ended is not None and ended > day:
             event["status"], event["ended"], event["end_by"] = ACTIVE, None, None
+            event.pop("end_by_name", None)
+            # 終わったときの知らせの印も戻す（もう一度収まったら、着いたときにまた知らせる）
+            told = event.get("told")
+            if isinstance(told, dict):
+                told.pop("settled", None)
             changed = True
         if _int(event.get("stage_day"), 0) > day:
             event["stage_day"] = day
@@ -629,9 +646,12 @@ def text_of(event, name, **fields):
         elif name == "summary":
             written = kind.get("what", "") + "。" if kind.get("what") else ""
         elif name.startswith("arrive_"):
-            stage = _int(int(name[-1]) if name[-1].isdigit() else 1, 1)
+            digits = name[len("arrive_"):]
+            stage = max(1, int(digits)) if digits.isdigit() else 1
             arrive = kind.get("arrive") or ("",)
             written = arrive[min(stage, len(arrive)) - 1]
+        elif name == "shop_turn":
+            written = kind.get("shop_turn") or kind.get("shop", "")
         else:
             written = kind.get(name, "")
     fields.setdefault("town", event.get("area_name") or "その街")
@@ -734,6 +754,64 @@ def effect_items(event, strength_percent=100, mode=EFFECTS_NUMBER):
             items.append(("宿代が値上がり" if rate > 0 else "宿代が値下がり", "", tone) if mode == EFFECTS_WORDS
                          else ("宿代", "{:+d}%".format(rate), tone))
     return items
+
+
+def stage_signs(kind, stage):
+    """その段の値段の向き。効き目ごとの符号（+1 / -1 / 0）と、最後に宿代の符号。"""
+    signs = []
+    for _target, _side, rates in kind["effects"]:
+        rate = rates[min(stage, len(rates)) - 1]
+        signs.append((rate > 0) - (rate < 0))
+    inn = kind.get("inn")
+    rate = inn[min(stage, len(inn)) - 1] if inn else 0
+    signs.append((rate > 0) - (rate < 0))
+    return tuple(signs)
+
+
+def _fits(signs, pattern):
+    """向きが食い違わないか（どちらかが 0 の位置は問わない）。"""
+    return all(not s or not p or s == p for s, p in zip(signs, pattern))
+
+
+def shop_patterns(kind):
+    """店の1行を書き分ける値段の向きの組（2つまで）。
+
+    1つ目は値段が最初に動く段の向き、2つ目はそれと逆に動く最初の段の向き（にわか景気の崩れなど）。
+    どの位置も、その組に入る段のうち最初に動いた向きで埋める（1段目が 0 の出来事は2段目から読む）。
+    """
+    patterns = []
+    for stage in range(1, len(kind["stages"]) + 1):
+        signs = stage_signs(kind, stage)
+        if not any(signs):
+            continue
+        for index, pattern in enumerate(patterns):
+            if _fits(signs, pattern):
+                patterns[index] = tuple(p or s for p, s in zip(pattern, signs))
+                break
+        else:
+            patterns.append(signs)
+    return patterns[:2]
+
+
+def shop_field(event, strength_percent=100):
+    """いまの段で店に入ったときの1行の欄（`shop` / `shop_turn`）。値段が動いていない段は None。"""
+    kind = kind_of(event)
+    if kind is None or event.get("status") != ACTIVE or max(0, int(strength_percent)) <= 0:
+        return None
+    stage = min(max(_int(event.get("stage"), 1), 1), last_stage(event))
+    signs = stage_signs(kind, stage)
+    if not any(signs):
+        return None
+    for index, pattern in enumerate(shop_patterns(kind)):
+        if _fits(signs, pattern):
+            return ("shop", "shop_turn")[index]
+    return None
+
+
+def shop_text(event, strength_percent=100):
+    """店に入ったときの1行。いまの段で値段が動いていなければ空。"""
+    field = shop_field(event, strength_percent)
+    return text_of(event, field) if field else ""
 
 
 def effect_parts(event, strength_percent=100, mode=EFFECTS_NUMBER):

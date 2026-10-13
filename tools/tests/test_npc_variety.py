@@ -401,7 +401,7 @@ def main():
         whole = [mod.compose_person(tables, random.Random(i), role="single") for i in range(20)]
         check("not_for: 軸ごと省かれ、他の軸は残る", all(l == "色白。" for l in whole), whole[:3])
         check("壊れた節は空、知らない鍵は無視", tables["personality"] == [] and tables["description"] == []
-              and set(tables) == set(mod.SECTIONS) | {"_drops", "_not_for"}, tables)
+              and set(tables) == set(mod.SECTIONS) | {"_drops", "_not_for", "_roles"}, tables)
         with io.open(os.path.join(tmp, "seeds.json"), "w", encoding="utf-8") as fh:
             json.dump({"look": {"髪": ["手元の髪"]}}, fh, ensure_ascii=False)
         check("手元の seeds.json が優先", mod.seeds_path(tmp).endswith("seeds.json")
@@ -423,6 +423,32 @@ def main():
         empty = seed_file.current()
         check("SeedFile: 表が消えたら空になり記録が残る", mod.table_size(empty) == (0, 0)
               and "表が無い" in reports[-1], reports[-1])
+        # v1.15.0 までの同梱の表（player の指定が無い）を書き換えて seeds.json にしていた場合
+        shutil.copy(os.path.join(MOD_DIR, mod.DEFAULT_SEEDS_FILE_NAME), os.path.join(tmp, "seeds.default.json"))
+        with io.open(os.path.join(MOD_DIR, mod.DEFAULT_SEEDS_FILE_NAME), encoding="utf-8") as fh:
+            old_style = json.load(fh)
+        for section in mod.SECTIONS:
+            for rows in (old_style.get(section) or {}).values():
+                if isinstance(rows, dict) and isinstance(rows.get("not_for"), dict):
+                    rows["not_for"].pop("player", None)
+        with io.open(os.path.join(tmp, "seeds.json"), "w", encoding="utf-8") as fh:
+            json.dump(old_style, fh, ensure_ascii=False)
+        reports = []
+        tables = mod.SeedFile(tmp, reports.append).current()
+        check("player を書いていない手元の表には、同梱の表の主人公の指定を同じ名前の軸に当てる",
+              tables["_not_for"]["look"].get("年齢の見え方", {}).get("player") == "*"
+              and any("player" in line and "当てた" in line for line in reports), reports)
+        players = [mod.compose_person(tables, random.Random(i), role="player") for i in range(40)]
+        check("当てた後は主人公に年齢の句が付かない", not any(
+            row in line for line in players for row in dict(
+                (axis, rows) for axis, rows, _c in tables["look"])["年齢の見え方"]), players[:3])
+        old_style["look"]["年齢の見え方"].setdefault("not_for", {})["player"] = []
+        with io.open(os.path.join(tmp, "seeds.json"), "w", encoding="utf-8") as fh:
+            json.dump(old_style, fh, ensure_ascii=False)
+        reports = []
+        tables = mod.SeedFile(tmp, reports.append).current()
+        check("player を一度でも書いていれば手元の表どおり（補わない）",
+              not any("当てた" in line for line in reports), reports)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

@@ -297,8 +297,32 @@ def check_manifest(name, manifest):
                 problems.append((path, MANIFEST_NAME,
                                  '"{}" が自分自身を指している'.format(key)))
 
+    # 文字列の中の制御文字。`"out\random.log"` のように `\` を1つで書くと、JSON は `\r` を復帰として
+    # 黙って読み、設定画面の注記が崩れる（143 の注記で起きた）。改行（`\n`）は意図して使うので除く。
+    for where, text in _strings_of(data):
+        bad = sorted({repr(ch) for ch in text if ch in CONTROL_CHARS})
+        if bad:
+            problems.append((path, MANIFEST_NAME,
+                             "{} に制御文字 {}（パスの \\ は \\\\ と書く）".format(where, ", ".join(bad))))
+
     problems += check_settings(name, data, manifest, entry_path)
     return problems, notes
+
+
+#: mod.json の文字列に紛れると表示が崩れる制御文字（改行は除く）。
+CONTROL_CHARS = set(chr(code) for code in range(32)) - {"\n"}
+
+
+def _strings_of(value, where=""):
+    """入れ子の JSON の中の文字列を `(場所, 文字列)` で並べる。"""
+    if isinstance(value, dict):
+        for key, item in value.items():
+            yield from _strings_of(item, "{}.{}".format(where, key) if where else str(key))
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            yield from _strings_of(item, "{}[{}]".format(where, index))
+    elif isinstance(value, str):
+        yield where, value
 
 
 def check_settings(name, raw, manifest, entry_path):

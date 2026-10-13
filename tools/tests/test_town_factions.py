@@ -709,7 +709,8 @@ check("片付けた出来事の街の勢力が上がる", book["standing"]["f2"]
 check("出来事の来歴に街と出来事の名前", book["history"][-2]["kind"] == "incident"
       and book["history"][-2]["incident"] == "街の盗賊の横行" and book["history"][-1]["kind"] == "echo",
       book["history"][-2:])
-check("同じ出来事は二度数えない", set(book["trend"]["incidents"]) == {"1", "2", "3"} or True)
+check("終わった出来事を数えた印に残す（進行中は残さない）",
+      book["trend"]["incidents"] == {"1": "player", "3": "natural"}, book["trend"]["incidents"])
 ctx.hook(module.DAYS_TARGET)(lambda self, d: self.elapse_days(d), app, 1)
 check("二度は上げない", ledger_of(app)["standing"]["f2"]["score"] == before + 10)
 check("間隔の前は情勢を進めない", not any(m == module.MANAGER_TREND for m, _ in ASKED))
@@ -933,6 +934,147 @@ app.player.current_area = "0"
 close(ctx, Character("31", "東の村の番人"), {"faction_change": 0, "faction_reconcile": "true"})
 check("印の無い相手には頼まない", "許しがたい敵" not in SENT[0][1][0]["content"])
 check("例外が無い（印）", not ctx.errors, ctx.errors)
+
+print("[規則] 関係の根拠は両方の勢力の名前を含む原文")
+LOOSE = "白の教団は遺物を罪の証として排除する。\n灰の結社は古代文明を崇拝し、遺跡を守る。\n【街の一覧】"
+loose_answer = {"factions": EXTRACTED["factions"][:2], "towns": [], "peaceful": "false",
+                "relations": [{"a": "白の教団", "b": "灰の結社", "stage": -2, "evidence": "【街の一覧】"}]}
+loose, dropped6 = rules.build_ledger(loose_answer, LOOSE, ["1"], day=1)
+check("無関係な原文（材料の見出し）を根拠にした関係は捨てる", not loose["relations"]["f1|f2"]["from_setting"]
+      and loose["relations"]["f1|f2"]["stage"] == 0
+      and any("does not name both" in d for d in dropped6), (loose["relations"], dropped6))
+one_name = dict(loose_answer, relations=[dict(loose_answer["relations"][0], evidence="白の教団は遺物を罪の証として排除する")])
+check("片方の名前だけの根拠も捨てる", not rules.build_ledger(one_name, LOOSE, ["1"], day=1)[0]
+      ["relations"]["f1|f2"]["from_setting"])
+BOTH = LOOSE + "\n白の教団と灰の結社は長く争っている。"
+rescued, _d = rules.build_ledger(loose_answer, BOTH, ["1"], day=1)
+check("設定に2つの名前を1文で結ぶ文があれば、それを根拠にする",
+      rescued["relations"]["f1|f2"]["from_setting"]
+      and rescued["relations"]["f1|f2"]["evidence"] == "白の教団と灰の結社は長く争っている", rescued["relations"])
+
+print("[規則] 暦が台帳より前に戻った")
+book = rules.empty_ledger()
+book.update(status=rules.READY, made_day=100, factions=[{"id": "f1", "name": "甲"}, {"id": "f2", "name": "乙"}],
+            standing={"f1": {"score": -90, "locked": True}, "f2": {"score": 10}},
+            relations={"f1|f2": {"stage": -1, "push": 0}}, gained={"f2": 250})
+book["history"] = [{"day": 150, "faction": "f2", "before": 0, "after": 10, "kind": rules.TALK},
+                   {"day": 250, "faction": "f1", "before": -70, "after": -90, "kind": rules.TALK}]
+book["events"] = [{"day": 260, "a": "f1", "b": "f2", "direction": -1, "before": 0, "after": -1,
+                   "rumor": "争いが始まったらしい"}]
+book["trend"]["last_day"] = 260
+check("戻っていなければ何もしない", rules.rewind(book, 300) is False)
+check("戻ったら後で起きたことを外す", rules.rewind(book, 200) is True)
+check("見られ方を来歴の前へ戻す（その動きで付いた敵対の印も外す）",
+      book["standing"]["f1"] == {"score": -70} and book["standing"]["f2"]["score"] == 10, book["standing"])
+check("勢力どうしの関係も戻し、噂も外す", book["relations"]["f1|f2"]["stage"] == 0 and book["events"] == [])
+check("情勢の起点と1日1回の印も戻す", book["trend"]["last_day"] == 200 and book["gained"] == {}
+      and [h["day"] for h in book["history"]] == [150], book)
+check("台帳がその日より後に作られていれば作り直す", rules.rewind(dict(book, made_day=300), 200) == "rebuild")
+
+print("[流れ] 勢力の無い世界に、後から組織を設ける設定を入れた")
+module, ctx, app = fresh()
+ANSWERS[module.MANAGER_EXTRACT] = {"factions": [], "towns": [], "relations": [], "peaceful": "false"}
+for fn in ctx.ready:
+    fn()
+check("切っている間は勢力なし", ledger_of(app)["status"] == rules.NONE
+      and not ledger_of(app)["organize_asked"])
+ANSWERS[module.MANAGER_DESIGN] = None
+settings = getattr(sys, module.SETTINGS_STORE_ATTR)
+record = settings.load(world_key(app))
+record["ADD_ORGANIZATIONS"] = True
+settings.save(world_key(app))
+del ASKED[:]
+ctx.hook(module.LOAD_TARGETS[0])(lambda self: None, app)
+check("設定を入れて読み込み直したら設計を聞く", [m for m, _ in ASKED] == [
+    module.MANAGER_EXTRACT, module.MANAGER_DESIGN], [m for m, _ in ASKED])
+check("設計が答えなければ「勢力なし」で固めず、失敗の印", ledger_of(app)["status"] == rules.FAILED)
+ANSWERS[module.MANAGER_DESIGN] = {"factions": [
+    {"name": "灯守の会", "kind": "結社", "note": "灯を守る", "towns": ["0"]},
+    {"name": "潮騒商会", "kind": "商会", "note": "港を握る", "towns": ["7"]}],
+    "relations": [], "peaceful": "false"}
+ANSWERS[module.MANAGER_STANDING] = {"standings": []}
+ctx.hook(module.LOAD_TARGETS[0])(lambda self: None, app)
+check("読み込み直したら試し直して組織を設ける", ledger_of(app)["status"] == rules.READY
+      and [f["name"] for f in ledger_of(app)["factions"]] == ["灯守の会", "潮騒商会"], ledger_of(app))
+ANSWERS[module.MANAGER_DESIGN] = {"factions": [], "relations": [], "peaceful": "false"}
+module, ctx, app = fresh()
+ANSWERS[module.MANAGER_EXTRACT] = {"factions": [], "towns": [], "relations": [], "peaceful": "false"}
+ANSWERS[module.MANAGER_DESIGN] = {"factions": [], "relations": [], "peaceful": "false"}
+settings = getattr(sys, module.SETTINGS_STORE_ATTR)
+record = settings.load(world_key(app))
+record["ADD_ORGANIZATIONS"] = True
+settings.save(world_key(app))
+for fn in ctx.ready:
+    fn()
+del ASKED[:]
+ctx.hook(module.LOAD_TARGETS[0])(lambda self: None, app)
+check("設計を聞いて組織が2つに満たなければ、読み込み直しても聞き直さない",
+      ledger_of(app)["status"] == rules.NONE and ledger_of(app)["organize_asked"] and not ASKED, ASKED)
+
+print("[流れ] 台帳を作る前に終わった出来事は数えない")
+module, ctx, app = fresh()
+store = module._store()["worlds"]
+key = store.playthrough(app)
+incidents_dir = os.path.join(STATE_DIR, "town_incidents")
+os.makedirs(incidents_dir, exist_ok=True)
+with io.open(os.path.join(incidents_dir, key + ".json"), "w", encoding="utf-8") as fh:
+    json.dump(INCIDENTS, fh, ensure_ascii=False)
+for fn in ctx.ready:
+    fn()
+before = ledger_of(app)["standing"]["f2"]["score"]
+check("作ったときに、終わっている出来事を数えた印に入れる",
+      ledger_of(app)["trend"]["incidents"] == {"1": "player", "3": "natural"}, ledger_of(app)["trend"])
+ctx.hook(module.DAYS_TARGET)(lambda self, d: self.elapse_days(d), app, 1)
+check("最初の日数送りでまとめて上げない", ledger_of(app)["standing"]["f2"]["score"] == before
+      and not [h for h in ledger_of(app)["history"] if h["kind"] == "incident"], ledger_of(app)["history"])
+revived = json.loads(json.dumps(INCIDENTS))
+revived["events"][0].update(status="active", ended=None, end_by=None)
+with io.open(os.path.join(incidents_dir, key + ".json"), "w", encoding="utf-8") as fh:
+    json.dump(revived, fh, ensure_ascii=False)
+ctx.hook(module.DAYS_TARGET)(lambda self, d: self.elapse_days(d), app, 1)
+check("古いセーブで進行中へ戻った出来事は、数えた印を外す（もう一度片付けたら数える）",
+      "1" not in ledger_of(app)["trend"]["incidents"], ledger_of(app)["trend"]["incidents"])
+
+print("[流れ] 答えを待つ間に別のセーブを読んだ")
+module, ctx, app = fresh()
+
+
+def switched(_message):
+    app.save_data_dict["player_data"]["name"] = "別の主人公"
+    return EXTRACT_ANSWER
+
+
+ANSWERS[module.MANAGER_EXTRACT] = switched
+for fn in ctx.ready:
+    fn()
+app.save_data_dict["player_data"]["name"] = "検査の主人公"
+check("前の周回の台帳を、いまの app の主人公と日付で書かない", ledger_of(app)["status"] is None
+      and module.MANAGER_STANDING not in [m for m, _ in ASKED], ledger_of(app)["status"])
+ANSWERS[module.MANAGER_EXTRACT] = EXTRACT_ANSWER
+ctx.hook(module.LOAD_TARGETS[0])(lambda self: None, app)
+check("その周回を読み込み直したら作る", ledger_of(app)["status"] == rules.READY)
+
+print("[流れ] 世界の生成が途中で止まった後に、別の世界を遊ぶ")
+module, ctx, app = fresh(enable=False)
+module.ORGANIZE_NEW_WORLDS = True
+send_hook = ctx.hook(module.SEND_TARGET)
+send_hook(world_send, "create_world_overview", [{"role": "user", "content": WORLD_PROMPT}], None)
+existing = os.path.join(OUT_DIR, "worlds", "既存の世界", "world_data.json")
+os.makedirs(os.path.dirname(existing), exist_ok=True)
+with io.open(existing, "w", encoding="utf-8") as fh:
+    fh.write("{}")
+ctx.hook(module.WORLD_SAVE_TARGET)(lambda file_path, data: None, existing,
+                                   {"world_data": {"name": "既存の世界"}})
+settings = getattr(sys, module.SETTINGS_STORE_ATTR)
+check("遊んでいる世界の保存では、その世界の勢力を有効にしない",
+      settings.load("既存の世界", fresh=True).get("ENABLED") is not True)
+module.ORGANIZE_NEW_WORLDS = False
+send_hook(world_send, "create_world_overview", [{"role": "user", "content": WORLD_PROMPT}], None)
+ctx.hook(module.WORLD_SAVE_TARGET)(lambda file_path, data: None, "C:/x/worlds/次の世界/world_data.json",
+                                   {"world_data": {"name": "次の世界"}})
+check("設定を切って作った次の新しい世界にも、前の印を持ち越さない",
+      settings.load("次の世界", fresh=True).get("ENABLED") is not True)
+check("例外が無い（後から足した場面）", not ctx.errors, ctx.errors)
 
 print()
 if failures:

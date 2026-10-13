@@ -327,7 +327,8 @@ def extract_release(zip_path: str, dest: str = ROOT) -> int:
     zip に無いものは消さない ― 手元で作っている MOD を巻き込むので。
     書き換えられた `*.default.*` は上書きの前に手元の名前へ改名して残す（`keep_edited_default`）。
     新しい版で無くなった MOD は、配る側がデバッグモード限定か読み込まない形にして
-    出す約束（消す判断をここでしない）。
+    出す約束（消す判断をここでしない）。ただし改名した MOD（`RENAMED_MODS`）の古いフォルダは、
+    新しい名前のフォルダが届いたら `out\\backup\\` へ退け、入切を新しい名前へ移す（`retire_renamed`）。
 
     開発の作業ツリーで押すと、配布物の中身で作業中の変更が上書きされる
     （実際に起きた。git で戻せるが、戻す前に何を失ったか見ること）。
@@ -367,6 +368,7 @@ def extract_release(zip_path: str, dest: str = ROOT) -> int:
             with z.open(info) as src, open(path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
             count += 1
+    retire_renamed(base, old_order)
     if old_order is not None:
         carry_order(order_file, old_order)
     try:
@@ -378,6 +380,40 @@ def extract_release(zip_path: str, dest: str = ROOT) -> int:
 
 #: 更新の展開の前に控える順序ファイルの写し（`out\` の下）。展開を終えたら消す。
 UPDATE_ORDER_NAME = "update_order.json"
+
+#: 改名した MOD（古いフォルダ名 → 新しいフォルダ名）。更新の zip は古いフォルダを消さないので、
+#: 残ると前の順序から引き継がれて古い版も読み込まれ、一覧に2つ並ぶ。前に切っていた入切も古い名前にしか残らない。
+RENAMED_MODS = {
+    "406_gemini_user_role_fix": "406_user_role_fix",        # v1.16.0（Claude でも効くようにした）
+}
+#: 退けた古いフォルダの置き場（`out\` の下）。
+RENAMED_BACKUP_DIR = "backup"
+
+
+def retire_renamed(base: str, old_order) -> list[str]:
+    """改名した MOD の古いフォルダを退け、前の順序の入切を新しい名前へ移す。退けた古い名前を返す。
+
+    新しい名前のフォルダ（`mod.json`）が届いていなければ何もしない（古い版の zip で戻したときなど）。
+    古い名前を切っていたら新しい名前も切る。前の順序から古い名前は外す（`carry_order` が末尾へ足さないように）。
+    """
+    mods_dir = os.path.join(base, "runtime", "mods")
+    moved = []
+    for old, new in RENAMED_MODS.items():
+        if not os.path.isfile(os.path.join(mods_dir, new, ml.MANIFEST_NAME)):
+            continue
+        source = os.path.join(mods_dir, old)
+        if os.path.isdir(source):
+            target = os.path.join(base, "out", RENAMED_BACKUP_DIR,
+                                  "{}_{}".format(old, time.strftime("%Y%m%d_%H%M%S")))
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            shutil.move(source, target)
+            moved.append(old)
+        if isinstance(old_order, dict):
+            if old in old_order.get("disabled", []) and new not in old_order["disabled"]:
+                old_order["disabled"].append(new)
+            for key in ("order", "disabled"):
+                old_order[key] = [name for name in old_order.get(key, []) if name != old]
+    return moved
 
 
 def _read_order(path: str):

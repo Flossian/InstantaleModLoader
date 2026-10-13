@@ -114,6 +114,7 @@ TEXT_PROMPT = """あなたは RPG の語り手です。
 {summary_rule}
 {arrive_rule}
 - shop: 店に入ったときの1文。{shop_hint}
+{shop_turn_rule}
 - settled: 出来事が自然に収まったと耳にする1文（「〜らしい」で終える）
 {quest_rule}
 - rumor: よその街で聞く噂の1文（「〜らしい」で終える）。街の名前「{town}」を入れる
@@ -124,12 +125,14 @@ TEXT_PROMPT = """あなたは RPG の語り手です。
 - 主人公の台詞や行動は書かない
 """
 TEXT_FIELDS = ("fits", "name", "summary_1", "summary_2", "summary_3", "summary_4",
-               "arrive_1", "arrive_2", "arrive_3", "arrive_4", "shop", "settled", "quest", "rumor")
+               "arrive_1", "arrive_2", "arrive_3", "arrive_4", "shop", "shop_turn", "settled", "quest", "rumor")
 SUMMARY_TROUBLE = "その段階のときに、この街で何が起き、誰がどう困っているかの概要を1文ずつ（遊ぶ人が一覧で読む）"
 SUMMARY_GOOD = "その段階のときに、この街で何が起き、街がどうなっているかの概要を1文ずつ（遊ぶ人が一覧で読む）"
 ARRIVE_RULE = "街に着いたときの情景を1文ずつ"
 QUEST_TROUBLE = "- quest: この街のギルド（依頼を仲介する所）に出る、この出来事を解決する依頼の中身を1文で"
 QUEST_GOOD = "- quest: 空にする（この出来事には依頼を出さない）"
+SHOP_TURN_RULE = "- shop_turn: 値段の向きが途中で変わった後に店に入ったときの1文。{hint}"
+SHOP_TURN_NONE = "- shop_turn: 空にする"
 
 
 def stage_rule(prefix, what, kind):
@@ -158,6 +161,7 @@ def _store():
         store = {"worlds": None, "worker": None, "reconcile": False,
                  "rng": random.Random(), "inject": {}, "view": None, "here": None}
         setattr(sys, STORE_ATTR, store)
+    store.setdefault("urgent", {})
     return store
 
 
@@ -179,22 +183,39 @@ def legacy_disabled(raw):
             if isinstance(name, str) and name.startswith("KIND_") and value is False}
 
 
-def effect_hint(kind, goods=None):
-    """頼み文の `shop` の手掛かり。値段の動きを言葉にする。"""
+def pattern_words(kind, pattern, goods=None):
+    """値段の向きの組（`incidents.shop_patterns` の1つ）を言葉にする。"""
     parts = []
-    for target, side, rates in kind["effects"]:
+    for (target, side, _rates), sign in zip(kind["effects"], pattern):
+        if not sign:
+            continue
         if target is incidents.ALL:
             what = "品"
         elif target == incidents.GOODS:
             what = incidents.GOODS_NAMES.get(goods, "ある品")
         else:
             what = "・".join(incidents.GOODS_NAMES.get(name, name) for name in target)
-        way = "上がる" if rates[0] > 0 else "下がる"
         side_text = {"buy": "店の売る値が", "sell": "店の買い取る値が", "both": "売り買いの値が"}[side]
-        parts.append("{}の{}{}".format(what, side_text, way))
-    if not parts:
-        return "店の値段は動かないので、空でよい"
-    return "値段の動き（{}）の理由になる、店の様子を書く".format("、".join(parts))
+        parts.append("{}の{}{}".format(what, side_text, "上がる" if sign > 0 else "下がる"))
+    if pattern and pattern[-1]:
+        parts.append("宿代が{}".format("上がる" if pattern[-1] > 0 else "下がる"))
+    return "、".join(parts)
+
+
+def effect_hint(kind, goods=None):
+    """プロンプトの `shop` / `shop_turn` の手掛かり `(shop の手掛かり, shop_turn の決まり)`。
+
+    値段の向きが途中で変わる出来事（にわか景気の崩れなど）は、変わった後の1文を `shop_turn` に書かせる。
+    店では、いまの段の向きに合う方を出す（`incidents.shop_field`）。
+    """
+    patterns = incidents.shop_patterns(kind)
+    if not patterns:
+        return "店の値段は動かないので、空でよい", SHOP_TURN_NONE
+    first = "値段の動き（{}）の理由になる、店の様子を書く".format(pattern_words(kind, patterns[0], goods))
+    if len(patterns) < 2:
+        return first, SHOP_TURN_NONE
+    turn = "値段の動き（{}）の理由になる、店の様子を書く".format(pattern_words(kind, patterns[1], goods))
+    return first, SHOP_TURN_RULE.format(hint=turn)
 
 
 # ============================================================ 本体
@@ -224,6 +245,15 @@ def apply(ctx):
     def ledger(app):
         key = worlds.playthrough(app)
         return key, worlds.load(key)
+
+    def save(key, bucket):
+        """控えを書き、急ぎの依頼の写しを作り直す（錠が取れないときに窓口 `quest_claims` へ答える写し）。"""
+        worlds.save(key)
+        store["urgent"][key] = urgent_rows(bucket)
+
+    def same_world(app, key):
+        """背景の仕事を積んだときの周回のままか（LLM を待つ間に別のセーブを読んでいないか）。"""
+        return loader_state.playthrough_key(app) == key
 
     # ------------------------------------------------------------ 世界を読む
     def save_areas(app):
@@ -313,10 +343,11 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 文を書かせる
     def text_messages(app, event, kind):
+        shop_hint, shop_turn_rule = effect_hint(kind, event.get("goods"))
         prompt = TEXT_PROMPT.format(
             town=event.get("area_name") or "その街", world=ui.world_overview(app) or "（不明）",
             overview=area_overview(app, event.get("area")), what=kind["what"],
-            examples=kind["examples"], shop_hint=effect_hint(kind, event.get("goods")),
+            examples=kind["examples"], shop_hint=shop_hint, shop_turn_rule=shop_turn_rule,
             summary_rule=summary_rule(kind),
             arrive_rule=arrive_rule(kind),
             quest_rule=QUEST_GOOD if incidents.is_good(kind) else QUEST_TROUBLE)
@@ -331,14 +362,25 @@ def apply(ctx):
         app, key, event_id = job["app"], job["key"], job["event"]
         answer = None
         for _attempt in range(FIT_TRIES + 1):
+            if not same_world(app, key):
+                # 別の世界を読み込んだ。その世界の材料で書かせない（答え待ちのまま残し、読み込み直したときに頼み直す）
+                write("text: #{} left pending (another save was loaded)".format(event_id))
+                return
             with worlds.lock:
                 bucket = worlds.load(key)
                 event = incidents.event_by_id(bucket, event_id)
                 if event is None or event.get("status") != incidents.PENDING:
                     return
                 kind = incidents.KIND_BY_KEY.get(event.get("kind"))
+                if kind is None:
+                    retire(bucket, event, ui.game_day(app))
+                    save(key, bucket)
+                    return
                 messages = text_messages(app, event, kind)
             answer = ask_text(messages)
+            if not same_world(app, key):
+                write("text: #{} left pending (another save was loaded)".format(event_id))
+                return
             if answer is None:
                 break                       # LLM が使えない。表の文で始める
             raw_fits = str(answer.get("fits") or "").strip().rstrip("。")
@@ -357,10 +399,10 @@ def apply(ctx):
                     if other and len(event.get("tries") or ()) <= FIT_TRIES else "dropped"))
                 if other is None or len(event.get("tries") or ()) > FIT_TRIES:
                     incidents.drop(bucket, event)
-                    worlds.save(key)
+                    save(key, bucket)
                     return
                 incidents.change_kind(event, other, rng)
-                worlds.save(key)
+                save(key, bucket)
             answer = None
         activate(app, key, event_id, answer)
 
@@ -390,12 +432,12 @@ def apply(ctx):
                         text[name] = line
             event["text"] = text
             event["status"] = incidents.ACTIVE
-            worlds.save(key)
+            save(key, bucket)
             write("start: {} #{} {} at {} ({}) stage 1 day {} text {}".format(
                 event.get("kind"), event_id, name_of(event), event.get("area_name"),
                 event.get("area"), event.get("started"), "llm" if text else "table"))
-            hudicons.notify(ICON_KEY)       # 左下の MOD 用のボタンと一覧の行に印（一覧の行を押すと消える）
-            here = here_id(app) == event.get("area")
+            hudicons.notify(ICON_KEY, playthrough=key)  # 左下の MOD 用のボタンと一覧の行に印（一覧の行を押すと消える）
+            here = same_world(app, key) and here_id(app) == event.get("area")
             line = incidents.arrive_text(event) if here else ""
             guide = guide_line(app, event) if here else ""
         prices.refresh("town incidents start")
@@ -426,25 +468,65 @@ def apply(ctx):
             by = row.get("by") or ""
             # 名前は終えたときのものを残す（後で片付ける人が替わっても、終わった欄はこの名前で書く）
             incidents.end(bucket, event, day, incidents.END_RIVAL, REST_DAYS, by_name=by)
+            # 依頼は世界から片付ける（自然に収まったときと同じ。片付けた側の MOD を外しても掲示板に戻らない）
+            if quest_status(app, quest) != COMPLETED:
+                bucket.setdefault("cleanup", []).append(str(quest))
             write("end: #{} {} at {} was taken by {} ({}, quest {})".format(
                 event.get("id"), name_of(event), event.get("area_name"), by or "someone",
                 row.get("owner"), quest))
             done.append((event, by))
         return done
 
-    def urgent_quests(app):
-        """困り事の依頼（窓口 `quest_claims` の急ぎ）。放っておくと段階が進む依頼を、ほかの冒険者に先に狙わせる。"""
-        # 錠は取らない（ほかの MOD が自分の錠を持ったまま窓口に聞きに来る。窓口の決まり）
+    def urgent_rows(bucket):
         rows = []
-        _key, bucket = ledger(app)
-        for event in list(incidents.events_of(bucket, incidents.ACTIVE)):
+        for event in incidents.events_of(bucket, incidents.ACTIVE):
             quest = event.get("quest")
             if quest and not incidents.is_good(event):
                 rows.append({"quest": str(quest), "area": str(event.get("area")),
                              "why": "{}（{}）".format(name_of(event), stage_name(event))})
         return rows
 
+    def urgent_quests(app):
+        """困り事の依頼（窓口 `quest_claims` の急ぎ）。放っておくと段階が進む依頼を、ほかの冒険者に先に狙わせる。
+
+        錠を待たない（ほかの MOD が自分の錠を持ったまま窓口に聞きに来る。窓口の決まり）。待たずに取れたとき
+        （ほかのスレッドが控えを書いていない・このスレッドが持っている）だけ控えを読む。取れなければ、
+        控えを書くたびに作る写し（`save`）で答える（別のスレッドと錠を逆の順に取り合って固まらないように）。
+        """
+        key = loader_state.playthrough_key(app)
+        if worlds.lock.acquire(blocking=False):
+            try:
+                store["urgent"][key] = urgent_rows(worlds.load(key))
+            finally:
+                worlds.lock.release()
+        return [dict(row) for row in store["urgent"].get(key) or []]
+
     quest_claims.declare_urgent(OWNER, ctx, urgent_quests)
+
+    def retire(bucket, event, day):
+        """表から消した出来事（`kinds\\` のファイルを消した）。種類の中身が無いので続けられない。
+
+        進行中なら自然に収まった扱いで終え、依頼は片付ける。文を書かせる前なら捨てる
+        （VERIFICATION.md §3.97「出来事の表」）。
+        """
+        if event.get("status") == incidents.PENDING:
+            incidents.drop(bucket, event)
+            write("retire: dropped pending #{} ({} is no longer in the table)".format(
+                event.get("id"), event.get("kind")))
+            return
+        incidents.end(bucket, event, day, incidents.END_NATURAL, REST_DAYS)
+        event.setdefault("told", {})["settled"] = True      # 種類の文が無いので「収まった」は知らせない
+        if event.get("quest"):
+            bucket.setdefault("cleanup", []).append(str(event["quest"]))
+        write("retire: ended #{} ({} is no longer in the table)".format(event.get("id"), event.get("kind")))
+
+    def retire_unknown(bucket, day):
+        """表に無い種類の出来事を片付ける。片付けたら真。"""
+        gone = [event for event in incidents.events_of(bucket)
+                if event.get("status") in (incidents.PENDING, incidents.ACTIVE) and not incidents.known(event)]
+        for event in gone:
+            retire(bucket, event, day)
+        return bool(gone)
 
     def clean_up(app, bucket):
         """自然に収まった出来事の依頼を世界から片付ける。受けている最中なら次の機会へ回す。"""
@@ -468,6 +550,7 @@ def apply(ctx):
         refresh = False
         with worlds.lock:
             key, bucket = ledger(app)
+            refresh = retire_unknown(bucket, day)
             for event, by in check_rival(app, bucket, day):
                 refresh = True
                 if here_id(app) == event.get("area"):
@@ -480,7 +563,7 @@ def apply(ctx):
                 if what == "stage":
                     write("stage: #{} {} at {} -> {} day {}".format(
                         event.get("id"), name_of(event), event.get("area_name"), stage, day))
-                    hudicons.notify(ICON_KEY)
+                    hudicons.notify(ICON_KEY, playthrough=key)
                 else:
                     write("end: #{} {} at {} settled by itself day {}".format(
                         event.get("id"), name_of(event), event.get("area_name"), day))
@@ -498,7 +581,7 @@ def apply(ctx):
             if new is not None:
                 write("roll: {} at {} ({}) day {}; asking for the text".format(
                     new.get("kind"), new.get("area_name"), new.get("area"), day))
-            worlds.save(key)
+            save(key, bucket)
         if new is not None:
             ask_later(app, key, new["id"])
         if refresh:
@@ -603,7 +686,9 @@ def apply(ctx):
             event = incidents.event_by_id(bucket, event_id)
             if event is None:
                 return None
-            kind = incidents.KIND_BY_KEY[event["kind"]]
+            kind = incidents.KIND_BY_KEY.get(event.get("kind"))
+            if kind is None:
+                return None                 # 表から消した出来事（次の日数送りで片付く）
             brief = BRIEF.format(name=name_of(event), stage=stage_name(event), what=kind["what"],
                                  quest=incidents.text_of(event, "quest").rstrip("。"))
         # 掲示板の `execute` の中なので、待機の表示はゲームが出している（GAME.md §2.4）。
@@ -626,7 +711,7 @@ def apply(ctx):
             event = incidents.event_by_id(bucket, event_id)
             if event is not None:
                 event["quest"] = quest_id
-                worlds.save(key)
+                save(key, bucket)
         write("quest: made {} {!r} for #{}".format(
             quest_id, ui.quest_value(ui.quest_of(app, quest_id), "quest_title", ""), event_id))
         return quest_id
@@ -641,7 +726,7 @@ def apply(ctx):
                     key, bucket = ledger(app)
                     for event, _by in check_rival(app, bucket, ui.game_day(app)):
                         pass
-                    worlds.save(key)
+                    save(key, bucket)
                     event = incidents.live_in(bucket, here_id(app))
                     target = event.get("id") if event is not None and needs_quest(app, event) else None
                     name = name_of(event) if event is not None else ""
@@ -699,7 +784,7 @@ def apply(ctx):
                                                         name=name_of(event)))
                 bucket["cleanup"] = [qid for qid in bucket.get("cleanup") or []
                                      if str(qid) != str(quest_id)]
-                worlds.save(key)
+                save(key, bucket)
             if lines:
                 prices.refresh("town incidents solved")
                 say_when_idle(app, lines, "solved")
@@ -740,7 +825,7 @@ def apply(ctx):
                         ended.setdefault("told", {})["settled"] = True
                         if ARRIVAL_NOTICE:
                             lines.append(incidents.text_of(ended, "settled"))
-                worlds.save(key)
+                save(key, bucket)
             say_when_idle(app, lines, "arrival")
         except Exception:
             ctx.log_exc("town incidents: cannot tell the arrival")
@@ -752,7 +837,8 @@ def apply(ctx):
             app = getattr(self, "app", None) or ui.find_app()
             event = live_here(app)
             if SHOP_NOTICE and event is not None:
-                line = incidents.text_of(event, "shop")
+                # いまの段で値段が動いていなければ出さない（強さ 0% のときも）。向きが変わる出来事は段の向きで選ぶ
+                line = incidents.shop_text(event, PRICE_STRENGTH_PERCENT)
                 if line:
                     screen.schedule(lambda: screen.say(app, line))
         except Exception:
@@ -818,7 +904,9 @@ def apply(ctx):
             key, bucket = ledger(app)
             if incidents.rewind(bucket, day):
                 write("reconcile: forgot what happened after day {} (older save)".format(day))
-            worlds.save(key)
+            if retire_unknown(bucket, day):
+                clean_up(app, bucket)
+            save(key, bucket)
             pending = [event["id"] for event in incidents.events_of(bucket, incidents.PENDING)]
         for event_id in pending:
             ask_later(app, key, event_id)       # 文を書き終える前に閉じた。もう一度頼む

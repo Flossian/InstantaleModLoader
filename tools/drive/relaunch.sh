@@ -35,13 +35,15 @@ if [ "$1" = "restore" ]; then
       mkdir -p "$LEFT/characters"; mv "$d" "$LEFT/characters/$(basename "$d")_$(date +%H%M%S)" && echo "moved portrait $(basename "$d")"; done
   fi
   cd "$ROOT" || exit 1
-  # 戻すのは試した世界（IML_DRIVE_WORLD で始まる名前）の控えだけ。
+  # 戻すのは試した世界の控え（`<世界>.json` と、周回の `<世界>×<主人公>.json`）だけ。
   # 全部を戻すと、控えの後に別のセッションが遊んだ別の世界の控えまで控えの時点へ巻き戻す（2026-10-11 に踏みかけた）。
+  # 名前の前方一致にしないのも同じ理由（「テスト」で「テストワールド」の控えまで戻る）。
+  # 世界をまたいで1つのファイル（`state\city_case.json` など）は戻さない。別の世界の遊びも入っている。
   # 名前に空白を含む控え（世界×主人公）があるので、find の出力は1行ずつ読む（for で回すと空白で切れる）。
-  (cd "$B" && find state -name "${IML_DRIVE_WORLD}*" -type f) | while read -r f; do
+  (cd "$B" && find state -type f \( -name "${IML_DRIVE_WORLD}.json" -o -name "${IML_DRIVE_WORLD}×*" \)) | while read -r f; do
     cmp -s "$B/$f" "$f" && continue
     mkdir -p "$(dirname "$f")" && cp -p "$B/$f" "$f" && echo "restored $f"; done
-  find state -path state/models -prune -o -name "${IML_DRIVE_WORLD}*" -type f -newer "$B/save/savedata.json" -print | while read -r f; do
+  find state -path state/models -prune -o -type f \( -name "${IML_DRIVE_WORLD}.json" -o -name "${IML_DRIVE_WORLD}×*" \) -newer "$B/save/savedata.json" -print | while read -r f; do
     [ -f "$B/$f" ] && continue
     mkdir -p "$LEFT/$(dirname "$f")"; mv "$f" "$LEFT/${f}_$(date +%H%M%S)" && echo "moved new state $f"; done
 fi

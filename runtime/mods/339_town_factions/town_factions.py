@@ -228,6 +228,16 @@ def apply(ctx):
         data = getattr(app, "save_data_dict", None)
         return data if isinstance(data, dict) else {}
 
+    def same_world(app, key):
+        """背景の仕事を積んだときの周回のままか（LLM を待つ間に別のセーブを読んでいないか）。"""
+        return loader_state.playthrough_key(app) == key
+
+    def ended_incidents(key):
+        """338 の控えで、もう終わっている出来事 `{id: 終えた人}`（台帳を作る前に終わった分は数えない）。"""
+        bucket = incidents_store.load(key, fresh=True) or {}
+        return {str(event.get("id")): event.get("end_by") for event in bucket.get("events") or []
+                if isinstance(event, dict) and event.get("status") == "ended"}
+
     def build(job):
         """台帳を作る（背景スレッド）。抽出 → 初回の判定。"""
         try:
@@ -237,11 +247,18 @@ def apply(ctx):
 
     def make(job):
         app, key = job["app"], job["key"]
+        if not same_world(app, key):
+            write("build: {} skipped (another save was loaded)".format(key))
+            return
         data = save_data(app)
         text = material.extract_material(data)
         towns = material.towns_of(data)
-        extracted = ask(MANAGER_EXTRACT, material.extract_messages(text), "extract")
         day = ui.game_day(app)
+        extracted = ask(MANAGER_EXTRACT, material.extract_messages(text), "extract")
+        if not same_world(app, key):
+            # 待つ間に別のセーブを読んだ。いまの app の主人公や日付で書かない（その世界を読み込み直したら作り直す）
+            write("build: {} dropped (another save was loaded while asking)".format(key))
+            return
         if extracted is None:
             with worlds.lock:
                 bucket = load(key)
@@ -257,16 +274,29 @@ def apply(ctx):
         if ledger["status"] == rules.NONE and ADD_ORGANIZATIONS:
             # 設定に勢力が無い世界に、組織を後から設ける（世界ごとの設定。VERIFICATION.md §3.98「設定に勢力が無い既存の世界に組織を設ける」）
             designed = ask(MANAGER_DESIGN, material.design_messages(text), "design")
+            if not same_world(app, key):
+                write("build: {} dropped (another save was loaded while asking)".format(key))
+                return
             if designed is None:
-                write("build: {} the design did not answer; no factions this time".format(key))
-            else:
-                ledger = rules.build_designed_ledger(
-                    designed, [t[0] for t in towns], day=day,
-                    peaceful=llm.truthy(extracted.get("peaceful"), unknown=False))
-                write("build: {} designed {} organization(s)".format(key, len(ledger["factions"])))
+                # 答えが無いのは「勢力なし」ではない。読み込み直したら試し直す
+                with worlds.lock:
+                    bucket = load(key)
+                    bucket["status"], bucket["why"] = rules.FAILED, "the design did not answer"
+                    worlds.save(key)
+                store["failed"].add(key)
+                write("build: {} the design did not answer; will try again after the next load".format(key))
+                return
+            ledger = rules.build_designed_ledger(
+                designed, [t[0] for t in towns], day=day,
+                peaceful=llm.truthy(extracted.get("peaceful"), unknown=False))
+            ledger["organize_asked"] = True
+            write("build: {} designed {} organization(s)".format(key, len(ledger["factions"])))
         if ledger["status"] == rules.READY:
-            first_standing(app, key, data, ledger)
+            if not first_standing(app, key, data, ledger):
+                return
             ledger["trend"]["last_day"] = day
+            # 台帳より前に終わった 338 の出来事は数えない（途中導入の土台が功績から出している）
+            ledger["trend"]["incidents"] = ended_incidents(key)
         with worlds.lock:
             bucket = load(key)
             bucket.clear()
@@ -278,7 +308,10 @@ def apply(ctx):
             write("build: {} no factions ({})".format(key, ledger["why"]))
 
     def first_standing(app, key, data, ledger):
-        """最初の立ち位置。新しいキャラは出自だけから、途中導入は規則の土台を LLM が ±1 段階まで動かす。"""
+        """最初の立ち位置。新しいキャラは出自だけから、途中導入は規則の土台を LLM が ±1 段階まで動かす。
+
+        待つ間に別のセーブを読んだら偽（台帳を書かない）。
+        """
         player = getattr(app, "player", None)
         records = rules.town_records(ui.area_history_of(player) or {})
         name = talk_summary.player_name(app)
@@ -287,19 +320,26 @@ def apply(ctx):
             text = material.standing_material(data, ledger, player_name=name, profile=profile,
                                               lawfulness={}, achievements={}, life_log="")
             judged = ask(MANAGER_STANDING, material.standing_messages(text), "standing")
+            if not same_world(app, key):
+                write("build: {} dropped (another save was loaded while asking)".format(key))
+                return False
             rules.apply_initial_standing(ledger, judged)
             write("build: {} first standing from the background{}".format(
                 key, "" if judged is not None else " (no answer; everyone starts neutral)"))
-            return
+            return True
         baseline = rules.baseline_scores(ledger, records)
         text = material.adjust_material(data, ledger, baseline, records, player_name=name,
                                         profile=profile, rules=rules)
         judged = ask(MANAGER_STANDING, material.adjust_messages(text), "adjust")
+        if not same_world(app, key):
+            write("build: {} dropped (another save was loaded while asking)".format(key))
+            return False
         rules.apply_adjusted_standing(ledger, baseline, judged)
         write("build: {} first standing from the deeds: {}{}".format(
             key, ", ".join("{} base {} {:+d}".format(fid, row.get("baseline"), row.get("adjust", 0))
                            for fid, row in ledger["standing"].items()),
             "" if judged is not None else " (no answer; the baseline stays)"))
+        return True
 
     def describe(ledger):
         parts = []
@@ -317,10 +357,27 @@ def apply(ctx):
         if app is None or not enabled(app):
             return None
         key = worlds.playthrough(app)
+        if key == UNKNOWN_WORLD:
+            return None                     # 世界をまだ読んでいない（タイトル画面の注入など）
+        day = ui.game_day(app)
         with worlds.lock:
             bucket = load(key)
             status = bucket.get("status")
-        if status in (rules.READY, rules.NONE):
+            if status == rules.READY:
+                rewound = rules.rewind(bucket, day)
+                if rewound == "rebuild":
+                    bucket.clear()
+                    bucket.update(rules.empty_ledger())
+                    status = None
+                    write("rewind: {} the ledger was made after day {}; building it again".format(key, day))
+                elif rewound:
+                    write("rewind: {} forgot what happened after day {} (older save)".format(key, day))
+                if rewound:
+                    worlds.save(key)
+        if status == rules.READY:
+            return bucket
+        # 勢力の無い世界。組織を設ける設定を後から入れたなら、設計を聞くために作り直す
+        if status == rules.NONE and not (ADD_ORGANIZATIONS and not bucket.get("organize_asked")):
             return bucket
         # 積んである・作っている途中なら積まない。作れなかった周回は、読み込み直すまで試し直さない
         # （LLM が答えない間、会話のたびに聞き直さないように）。
@@ -335,6 +392,9 @@ def apply(ctx):
     def trend(job):
         """情勢を1回進める（背景スレッド）。"""
         app, key, day = job["app"], job["key"], job["day"]
+        if not same_world(app, key):
+            write("trend: {} skipped (another save was loaded)".format(key))
+            return
         with worlds.lock:
             ledger = load(key)
             if ledger.get("status") != rules.READY:
@@ -352,6 +412,10 @@ def apply(ctx):
         text = material.trend_material(data, snapshot, incidents=happened_here, standings=standings)
         days = day - since if isinstance(since, (int, float)) else TREND_DAYS
         answer = ask(MANAGER_TREND, material.trend_messages(text, days), "trend")
+        if not same_world(app, key):
+            # 待つ間に別のセーブを読んだ。前の周回の台帳は動かさない（間隔が来ていれば次の日数送りでまた進める）
+            write("trend: {} dropped (another save was loaded while asking)".format(key))
+            return
         with worlds.lock:
             ledger = load(key)
             ledger["trend"]["last_day"] = day
@@ -378,7 +442,7 @@ def apply(ctx):
                                      "reason": str(answer.get("reason") or "").strip()[:200]})
             worlds.save(key)
         if rumor:
-            hudicons.notify(ICON_KEY)
+            hudicons.notify(ICON_KEY, playthrough=key)
         write("trend: day {} {}-{} {:+d} {} -> {} ({}) rumor: {}".format(
             day, a, b, direction, rules.RELATION_NAMES[plan["before"]],
             rules.RELATION_NAMES[plan["after"]], plan["why"], rumor))
@@ -429,7 +493,7 @@ def apply(ctx):
         day = ui.game_day(app)
         latest = (ledger.get("events") or [])[-1:]
         if latest and latest[0].get("rumor") and day is not None \
-                and day - (latest[0].get("day") or 0) <= RUMOR_DAYS:
+                and 0 <= day - (latest[0].get("day") or 0) <= RUMOR_DAYS:
             lines.append(RUMOR_NOTE.format(rumor=latest[0]["rumor"]))
         return "\n\n".join(lines) or None
 
@@ -494,7 +558,7 @@ def apply(ctx):
             rules.apply_moves(ledger, moves)
             _written, changed = rules.record_moves(ledger, moves, day=day, kind=rules.TALK, reason=reason)
             if changed or reconciled:
-                hudicons.notify(ICON_KEY)
+                hudicons.notify(ICON_KEY, playthrough=key)
             if any(why == "gain" for _f, _b, _a, why in moves) and day is not None:
                 ledger["gained"][faction_id] = day
             worlds.save(key)
@@ -512,6 +576,11 @@ def apply(ctx):
         """338 の出来事を主人公が片付けていれば、その街の勢力の見られ方を上げる。"""
         bucket = incidents_store.load(key, fresh=True) or {}
         seen = ledger["trend"].setdefault("incidents", {})
+        # 古いセーブを読んで 338 が進行中へ戻した出来事は、数えた印を外す（もう一度片付けたら数える）
+        live = {str(event.get("id")) for event in bucket.get("events") or []
+                if isinstance(event, dict) and event.get("status") != "ended"}
+        for event_id in [event_id for event_id in seen if event_id in live]:
+            seen.pop(event_id, None)
         laws = ui.lawfulness_by_area(getattr(app, "player", None))
         for event in bucket.get("events") or []:
             if not isinstance(event, dict) or event.get("status") != "ended":
@@ -531,7 +600,7 @@ def apply(ctx):
                 ledger, moves, day=ui.game_day(app), kind=rules.INCIDENT,
                 incident="{}の{}".format(event.get("area_name") or "街", name))
             if changed:
-                hudicons.notify(ICON_KEY)
+                hudicons.notify(ICON_KEY, playthrough=key)
             write("incident: {} in {} solved by the player: {}".format(
                 event.get("kind"), event.get("area"),
                 ", ".join("{} {} {}->{}".format(f, why, b, a) for f, b, a, why in moves)))
@@ -659,6 +728,9 @@ def apply(ctx):
         def send_request(orig, *args, **kwargs):
             """世界の生成の頼みに【勢力】の段を足す（設定を入れているときだけ）。"""
             manager_name = args[0] if args else kwargs.get("manager_name")
+            if manager_name == WORLD_MANAGER:
+                # 印は世界を作るたびに付け直す（前の生成が途中で止まった印を、次に書く世界へ持ち越さない）
+                store["organized"] = False
             if not ORGANIZE_NEW_WORLDS or manager_name != WORLD_MANAGER:
                 return orig(*args, **kwargs)
             try:
@@ -691,12 +763,20 @@ def apply(ctx):
 
     @ctx.wrap(WORLD_SAVE_TARGET, required=False, safe=True)
     def write_world(orig, *args, **kwargs):
-        """組織を設けて作った世界は、339 の世界ごとの設定を有効にしておく。"""
+        """組織を設けて作った世界は、339 の世界ごとの設定を有効にしておく。
+
+        有効にするのは、まだ無かった `world_data.json` を書いたとき（新しく作った世界）だけ。
+        遊んでいる間の保存も同じ関数を通るので、生成が途中で止まった後に別の世界を遊んでも、その世界を有効にしない。
+        """
+        path = frames.arg(args, kwargs, "file_path", 0) if store.get("organized") else None
+        try:
+            fresh = bool(path) and not os.path.exists(str(path))
+        except Exception:
+            fresh = False
         result = orig(*args, **kwargs)
-        if not store.get("organized"):
+        if not store.get("organized") or not fresh:
             return result
         try:
-            path = frames.arg(args, kwargs, "file_path", 0)
             data = frames.arg(args, kwargs, "data", 1)
             if os.path.basename(str(path or "")) == WORLD_FILE and isinstance(data, dict):
                 name = (data.get("world_data") or {}).get("name")

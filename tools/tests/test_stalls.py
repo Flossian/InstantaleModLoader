@@ -267,10 +267,15 @@ reset()
 old = stalls.begin_call("random_quest")
 new = stalls.begin_call("random_quest")
 other = stalls.begin_call("quest_referee")
-check("同じ名前が2本なら新しいほう", stalls.claim_call("random_quest", "x")
-      and new["failure"] == "x" and old["failure"] is None and other["failure"] is None)
-check("次の死は残りのほう", stalls.claim_call("random_quest", "y") and old["failure"] == "y")
-check("みな受けた後は渡せない", not stalls.claim_call("random_quest", "z"))
+check("同じ名前が2本なら、どちらの送信が死んだか分からないので両方に渡す（名前の違う頼みには渡さない）",
+      stalls.claim_call("random_quest", "x")
+      and new["failure"] == "x" and old["failure"] == "x" and other["failure"] is None)
+check("印を受けた後にもう一度死んでも、待っている呼び出しがあれば起こす（印は最初のまま）",
+      stalls.claim_call("random_quest", "y") and old["failure"] == "x" and new["failure"] == "x")
+stalls.end_call(old)
+stalls.end_call(new)
+check("待っている呼び出しが無ければ渡せない", not stalls.claim_call("random_quest", "z"))
+stalls.end_call(other)
 
 
 # --------------------------------------------------------------------------

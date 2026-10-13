@@ -12,9 +12,6 @@
   },
   "version": "2",
   "author": "R01/Flossian",
-  "shares": [
-    "rival_adventurer"
-  ],
   "after": [
     "405_regional_economy"
   ],

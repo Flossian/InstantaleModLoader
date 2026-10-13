@@ -1954,7 +1954,8 @@ def _forget_unapplied(results: dict, manifests: dict) -> list[str]:
     from . import equipment as _equipment
     ok = {name for name, verdict in results.items() if verdict == "ok"}
     base, layers = _prices.item_price_sources()
-    owners = (set(manifests) | set(_durations.owners()) | {base} | set(layers)
+    _inn_answer, inn_layers = _prices.inn_price_sources()
+    owners = (set(manifests) | set(_durations.owners()) | {base} | set(layers) | set(inn_layers)
               | set(_combat.owners()) | set(_equipment.owners()))
     gone = []
     for owner in sorted(owners - ok - {""}):
@@ -2224,6 +2225,12 @@ def _boot(out_dir: str) -> dict:
         _forget_unapplied(results, manifests)
     except BaseException:
         log_exc("cannot forget the durations of the mods not applied")
+    try:
+        # 左下の MOD 用のボタンの一覧から、今回適用されなかった MOD の行を外す（1つも無ければボタンごと外す）
+        from . import hudicons as _hudicons
+        _hudicons.settle()
+    except BaseException:
+        log_exc("cannot settle the hud icons")
 
     ok = sum(1 for v in results.values() if v == "ok")
     log("-" * 70)
@@ -2457,6 +2464,12 @@ def _unload(out_dir: str | None) -> dict:
                 _modfacility.purge(_ui.find_app())
         except Exception:
             log_exc("unload: cannot take the mod facilities off the towns")
+        try:
+            # 左下の MOD 用のボタンを外し、ゲームの4つのアイコンを元の位置へ戻す
+            from . import hudicons as _hudicons
+            _hudicons.remove_all()
+        except Exception:
+            log_exc("unload: cannot remove the hud icons")
         reverted = _patch.revert_all()
         _rebind_cloud_resources()
         return reverted
@@ -2482,7 +2495,8 @@ def _unload(out_dir: str | None) -> dict:
         from . import combat as _combat
         from . import equipment as _equipment
         base, layers = _prices.item_price_sources()
-        owners = (set(_durations.owners()) | {base} | set(layers)
+        _inn_answer, inn_layers = _prices.inn_price_sources()
+        owners = (set(_durations.owners()) | {base} | set(layers) | set(inn_layers)
                   | set(_combat.owners()) | set(_equipment.owners()))
         for owner in sorted(owners - {""}):
             _durations.forget(owner, write=log)

@@ -632,15 +632,16 @@ def apply(ctx):
 
     # 版4: 前は雛形（`world_dict`）があればそちらだけを見ていた。
     # 掲示板で作った依頼は雛形に現れない（GAME.md §2.9.1）ので、`quest ids added` が毎回空だった。
-    # 生きた一覧と雛形の合併で数える（`ui.quest_ids`）。
+    # 生きた一覧とセーブの辞書の合併で数える（`ui.quest_ids`。見る2つは `ui.quest_stores` と同じ）。
     def _named_stores(app):
         out = []
         quests = getattr(getattr(app, "world", None), "quests", None)
         if isinstance(quests, dict):
             out.append(("world.quests", quests))
-        world_dict = getattr(app, "world_dict", None) if app is not None else None
-        if isinstance(world_dict, dict) and isinstance(world_dict.get("quests"), dict):
-            out.append(("world_dict", world_dict["quests"]))
+        save_data = getattr(app, "save_data_dict", None) if app is not None else None
+        saved = save_data.get("quests") if isinstance(save_data, dict) else None
+        if isinstance(saved, dict) and saved is not quests:
+            out.append(("save_data_dict", saved))
         return out
 
     def _field(quest, name):

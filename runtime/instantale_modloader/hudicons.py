@@ -3,8 +3,10 @@
 
     hudicons.add(ctx, key, on_press, strokes=None, images=None, order=0, write=None, label=None,
                  visible=None)
-    hudicons.notify(key, on=True)
+    hudicons.notify(key, on=True, playthrough=None)
     hudicons.withdraw(key)
+    hudicons.settle()          # ローダが注入の終わりに呼ぶ
+    hudicons.remove_all()      # ローダが外すときに呼ぶ
 
 ゲームは能力値の欄の下端に、持ち物・設定・キャラ情報・クラフトの4つのアイコンを並べている
 （`InstanTaleHUD.icon_button_layout`。FloatLayout で、位置は比率、大きさは固定の px。GAME.md §2.34）。
@@ -33,6 +35,14 @@ MOD ごとにアイコンを並べていた形（v1.15.1）は、MOD が増え�
 
 `notify(key)` は「見てほしいことがある」印。MOD 用のボタンの右上と、その行に赤い点を出す。
 行を押すと消える（MOD が `notify(key, False)` で消してもよい）。
+`playthrough`（周回の鍵。`state.playthrough_key`）を渡すと、その周回を遊んでいる間だけ点を出す
+（世界 A の知らせを世界 B で出さない。背景の仕事が LLM を待つ間に別のセーブを読んでも、積んだ周回へ付く）。
+省くとどの周回でも出す。行を押すと、いまの周回の印と周回を問わない印が消える。
+
+登録した MOD を全部切って注入し直すと、その世代では誰も `add` を呼ばない。ローダが注入の終わりに
+`settle()` を呼び、用済みの登録を外して MOD 用のボタンを片付ける。ローダを外すときは `remove_all()`。
+
+一覧は、枠の外を押すか、MOD 用のボタンをもう一度押すか、ESC で閉じる（ESC は下のゲームへ渡さない）。
 
 置き場は `sys` の属性（`_instantale_hud_icons`）。注入し直しをまたいで残り、同じ `key` は差し替える
 （差し替えても知らせの印は残る）。
@@ -41,6 +51,7 @@ import os
 import sys
 
 from . import frames, log_exc, panels, ui
+from . import state as _state_keys
 
 STORE_ATTR = "_instantale_hud_icons"
 #: HUD に足したボタンの控え（`{key: Button}`）。
@@ -76,6 +87,10 @@ LIST_MIN_WIDTH = 200
 ROW_HOVER = (1, 1, 1, 0.12)
 DOT_COLOR = (0.87, 0.25, 0.2, 1)
 DOT_SIZE = 9
+#: 周回を問わない知らせの印（`notify` で `playthrough` を省いたとき）。
+ANY_PLAYTHROUGH = "*"
+#: 一覧を閉じるキー（ESC）。
+ESCAPE_KEY = 27
 #: 一覧を開いたときの音（ゲームのアイコンで窓を開くときと同じ）。
 OPEN_SOUND = "Assets/sounds/sounds/ui/常時/アイコン_キャラシート.wav"
 LIST_ATTR = ui.MOD_WIDGET_PREFIX + "hud_icon_list"
@@ -85,10 +100,13 @@ DOT_ATTR = ui.MOD_WIDGET_PREFIX + "hud_icon_dot"
 def _store():
     store = getattr(sys, STORE_ATTR, None)
     if not isinstance(store, dict) or not isinstance(store.get("icons"), dict):
-        store = {"icons": {}, "generation": None, "write": None, "said": set(), "attention": set(),
+        store = {"icons": {}, "generation": None, "write": None, "said": set(), "attention": {},
                  "list": None}
         setattr(sys, STORE_ATTR, store)
-    store.setdefault("attention", set())
+    attention = store.get("attention")
+    if not isinstance(attention, dict):
+        # 前の版の形（印の付いた key の集合。周回を問わない印）を移す
+        store["attention"] = {str(key): {ANY_PLAYTHROUGH} for key in (attention or ())}
     store.setdefault("list", None)
     return store
 
@@ -135,7 +153,7 @@ def withdraw(key):
     """一覧から外す。登録が無くなれば MOD 用のボタンも外れる。"""
     store = _store()
     store["icons"].pop(str(key), None)
-    store["attention"].discard(str(key))
+    store["attention"].pop(str(key), None)
     close_list()
     hud = ui.find_hud(ui.find_app())
     if hud is not None:
@@ -149,17 +167,25 @@ def keys():
     return sorted(_store()["icons"])
 
 
-def notify(key, on=True):
+def notify(key, on=True, playthrough=None):
     """`key` の行に「見てほしいことがある」印を付ける（`on=False` で外す）。登録の前でもよい。
 
+    `playthrough` を渡すとその周回だけの印（外すときはその周回の印と、周回を問わない印を外す）。
+    省くと、付けるときはどの周回でも出る印、外すときはその `key` の印を全部外す。
     背景のスレッド（LLM の答えを待つ仕事）から呼んでもよい。点を描くのは表のスレッドへ回す。
     """
     store = _store()
     key = str(key)
+    marks = store["attention"].setdefault(key, set())
     if on:
-        store["attention"].add(key)
+        marks.add(str(playthrough) if playthrough else ANY_PLAYTHROUGH)
+    elif playthrough:
+        marks.discard(str(playthrough))
+        marks.discard(ANY_PLAYTHROUGH)
     else:
-        store["attention"].discard(key)
+        marks.clear()
+    if not marks:
+        store["attention"].pop(key, None)
 
     def repaint(*_args):
         hud = ui.find_hud(ui.find_app())
@@ -194,10 +220,29 @@ def menu_entries(app=None):
                   key=lambda entry: (entry.get("order", 0), entry["key"]))
 
 
+def current_playthrough(app):
+    """いまの周回の鍵。読めなければ None。"""
+    if app is None:
+        return None
+    try:
+        key = _state_keys.playthrough_key(app)
+    except Exception:
+        return None
+    return None if key == _state_keys.UNKNOWN_WORLD else key
+
+
+def marked(key, app=None):
+    """`key` の行に、いまの周回で見せる印があるか。"""
+    marks = _store()["attention"].get(str(key)) or ()
+    if ANY_PLAYTHROUGH in marks:
+        return True
+    current = current_playthrough(app)
+    return current is not None and current in marks
+
+
 def has_attention(app=None):
-    """一覧に並ぶ登録のどれかに知らせの印が付いているか。"""
-    attention = _store()["attention"]
-    return any(entry["key"] in attention for entry in menu_entries(app))
+    """一覧に並ぶ登録のどれかに、いまの周回で見せる知らせの印が付いているか。"""
+    return any(marked(entry["key"], app) for entry in menu_entries(app))
 
 
 def _alive(entry):
@@ -599,7 +644,6 @@ def open_list(app, hud, button):
                size=lambda _w, value: setattr(panel_bg, "size", value))
     panels.border(panel)                # ゲームの画面の枠と同じ 2px の灰白（TECH.md §3.3.17）
     rows, widest = [], 0.0
-    attention = store["attention"]
     has_images = any(entry.get("images") for entry in entries)
     for entry in entries:
         row = Row(orientation="horizontal", size_hint_y=None, height=row_height, spacing=ui.upx(10),
@@ -631,7 +675,7 @@ def open_list(app, hud, button):
         row.add_widget(label)
         dot = Widget(size_hint=(None, None), size=(ui.upx(DOT_SIZE), ui.upx(DOT_SIZE)),
                      pos_hint={"center_y": 0.5})
-        if entry["key"] in attention:
+        if marked(entry["key"], app):
             with dot.canvas:
                 Color(*DOT_COLOR)
                 mark = Rectangle(pos=dot.pos, size=dot.size)
@@ -640,7 +684,7 @@ def open_list(app, hud, button):
 
         def chosen(_row, entry=entry):
             close_list()
-            notify(entry["key"], False)
+            notify(entry["key"], False, playthrough=current_playthrough(app) or ANY_PLAYTHROUGH)
             try:
                 entry["on_press"](app)
             except Exception:
@@ -674,14 +718,25 @@ def open_list(app, hud, button):
     Window.bind(mouse_pos=hovered)
     view.add_widget(cover)
 
+    def keyed(_window, key, *_args):
+        # ESC で閉じ、下のゲームへは渡さない。ModalView 自身は `auto_dismiss=False` なので ESC を見ない
+        # （Kivy 2.3.0 の `_handle_keyboard` は `auto_dismiss` のときだけ閉じる）
+        if key == ESCAPE_KEY and store.get("list") is view:
+            close_list()
+            return True
+        return False
+
     def dismissed(*_args):
         Window.unbind(mouse_pos=hovered)
+        Window.unbind(on_keyboard=keyed)
         if store.get("list") is view:
             store["list"] = None
 
     view.bind(on_dismiss=dismissed)
     store["list"] = view
     view.open()
+    # 開いた後に結ぶ（後から結んだ手が先に呼ばれる。ゲームのキーの手より先に ESC を受ける）
+    Window.bind(on_keyboard=keyed)
     manager = getattr(app, "sound_manager", None)
     play = getattr(manager, "play_sound_from_src", None)
     if callable(play):
@@ -689,6 +744,87 @@ def open_list(app, hud, button):
             play(app, OPEN_SOUND)
         except Exception:
             log_exc("hud icons: cannot play the open sound")
+
+
+def _on_main(fn):
+    """表のスレッドで1回呼ぶ（ゲームの外では何もしない）。"""
+    try:
+        from kivy.clock import Clock
+    except Exception:
+        return False
+    try:
+        Clock.schedule_once(lambda _dt: fn(), 0)
+        return True
+    except Exception:
+        log_exc("hud icons: cannot schedule on the main thread")
+        return False
+
+
+def settle():
+    """注入の終わりにローダが呼ぶ。用済みの世代の登録を外し、HUD を今の登録に合わせる。外した key を返す。
+
+    登録した MOD を全部切って注入し直した世代では、誰も `add` を呼ばないので、並べ直す包みも立たない。
+    ここで外さないと、押しても何も開かない MOD 用のボタンと、右へずれたゲームの4つが残る。
+    """
+    store = _store()
+    gone = sorted(key for key, entry in store["icons"].items() if not _alive(entry))
+    for key in gone:
+        store["icons"].pop(key, None)
+        store["attention"].pop(key, None)
+    if not gone:
+        return gone
+    _log("hud icons: dropped {} (their mods were not applied this time)".format(", ".join(gone)))
+
+    def rearrange():
+        close_list()
+        hud = ui.find_hud(ui.find_app())
+        if hud is not None:
+            try:
+                arrange(hud)
+            except Exception:
+                log_exc("hud icons: cannot rearrange after settling")
+
+    _on_main(rearrange)
+    return gone
+
+
+def remove_all():
+    """ローダを外すとき。登録を空にし、MOD 用のボタンを外してゲームの4つを元の位置へ戻す（表のスレッドで呼ぶ）。"""
+    store = _store()
+    store["icons"].clear()
+    store["attention"].clear()
+    store["generation"] = None
+    close_list()
+    try:
+        from kivy.core.window import Window
+    except Exception:
+        Window = None
+    if Window is not None:
+        previous = frames.attr(Window, HOVER_ATTR, None)
+        if previous not in (None, frames.MISSING):
+            try:
+                Window.unbind(mouse_pos=previous)
+            except Exception:
+                pass
+            try:
+                setattr(Window, HOVER_ATTR, None)
+            except Exception:
+                pass
+    hud = ui.find_hud(ui.find_app())
+    if hud is None:
+        return
+    try:
+        arrange(hud)                    # 登録が無いので、MOD 用のボタンを外して4つを元へ戻す
+    except Exception:
+        log_exc("hud icons: cannot restore the game's icons")
+    layout = frames.attr(hud, LAYOUT_NAME, None)
+    previous = frames.attr(layout, BIND_ATTR, None) if layout not in (None, frames.MISSING) else None
+    if previous not in (None, frames.MISSING):
+        try:
+            layout.unbind(width=previous)
+            setattr(layout, BIND_ATTR, None)
+        except Exception:
+            pass
 
 
 def _watch(layout, hud):

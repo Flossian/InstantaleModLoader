@@ -912,9 +912,22 @@ def apply(ctx):
     def quest_claim_rows(app):
         """窓口 `quest_claims` に置く行（狙っている依頼と、片付けた依頼）。
 
-        錠は取らない（読む側は自分の錠を持ったまま聞きに来る。窓口の決まり）。
+        錠を待たない（読む側は自分の錠を持ったまま聞きに来る。窓口の決まり）。待たずに取れたとき
+        （ほかのスレッドが控えを書いていない・このスレッドが持っている）だけ控えを読み、写しを残す。
+        取れなければ前の写しで答える（別のスレッドと錠を逆の順に取り合って固まらないように）。
         """
-        _key, bucket = ledger(app)
+        key = loader_state.playthrough_key(app)
+        claims_copy = store.setdefault("claims", {})
+        if not worlds.lock.acquire(blocking=False):
+            return [dict(row) for row in claims_copy.get(key) or []]
+        try:
+            rows = claim_rows_of(app, worlds.load(key))
+        finally:
+            worlds.lock.release()
+        claims_copy[key] = [dict(row) for row in rows]
+        return rows
+
+    def claim_rows_of(app, bucket):
         rival = bucket.get("rival")
         name = rival_name(app, bucket) if isinstance(rival, dict) else ""
         rows = []

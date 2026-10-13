@@ -891,6 +891,19 @@ check("画面に出ていた 20G ではなく設定の 5G が引かれる",
 choice_cls.rooms = ROOMS
 GAME_PRICES["bunk"] = 10
 
+print("[語彙] 料金だけ変わったビルドで設定が既定のままなら、ゲームの額のまま")
+module, ctx, app, choice_cls, start_cls = setup()
+choice_cls.rooms = (ROOMS[0], ("簡易寝台(20G)", "bunk", 20)) + ROOMS[2:]
+GAME_PRICES["bunk"] = 20
+press(app, STAY_TEXT)
+check("ラベルはゲームの 20G のまま（既定の 10G へ書き換えない）",
+      texts_of(app)[1] == "簡易寝台(20G)", texts_of(app))
+press(app, "簡易寝台(20G)")
+check("ゲームの 20G が引かれる（前払いで差を埋めない）",
+      app.player.gold == 4980, app.player.gold)
+choice_cls.rooms = ROOMS
+GAME_PRICES["bunk"] = 10
+
 print("[語彙] 手持ちが「設定額以上・素の宿代未満」でも当たった部屋は泊まれる")
 module, ctx, app, choice_cls, start_cls = setup(configure=simple5)
 app.player.gold = 8

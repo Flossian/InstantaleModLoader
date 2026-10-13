@@ -165,7 +165,7 @@ def read_seeds(path):
     `player`（さいころの主人公）。
     知らない鍵は無視する。軸の名前は表示に使わない（並びの順と `drops` の宛先にだけ使う）。
     句の重複は1度だけ数える。`drops` は `tables["_drops"][section][(軸名, 句)]`、
-    `not_for` は `tables["_not_for"][section][軸名][役]` に入る。
+    `not_for` は `tables["_not_for"][section][軸名][役]` に入る。`not_for` に書かれていた役は `tables["_roles"]`。
     """
     empty = {section: [] for section in SECTIONS}
     if not path:
@@ -178,7 +178,8 @@ def read_seeds(path):
     if not isinstance(data, dict):
         return empty
     tables = {"_drops": {section: {} for section in SECTIONS},
-              "_not_for": {section: {} for section in SECTIONS}}
+              "_not_for": {section: {} for section in SECTIONS},
+              "_roles": set()}
     for section in SECTIONS:
         axes = []
         block = data.get(section)
@@ -210,6 +211,7 @@ def read_seeds(path):
                             tables["_drops"][section][(str(axis), row)] = [
                                 str(t) for t in targets if isinstance(t, str)]
                     for role, banned in not_for.items():
+                        tables["_roles"].add(str(role))     # 空の並びでも「書いた」とみなす（`inherit_role_limits`）
                         if banned is True or banned == "*":
                             tables["_not_for"][section].setdefault(str(axis), {})[str(role)] = "*"
                         elif isinstance(banned, list):
@@ -218,6 +220,37 @@ def read_seeds(path):
                                 tables["_not_for"][section].setdefault(str(axis), {})[str(role)] = got
         tables[section] = axes
     return tables
+
+
+def mentions_role(tables, role):
+    """表のどこかの `not_for` に、その役を書いているか（空の並びで書いたものも数える）。"""
+    return role in (tables.get("_roles") or ())
+
+
+def inherit_role_limits(tables, bundled, role):
+    """`role` を一度も書いていない手元の表に、同梱の表のその役の `not_for` を、同じ名前の軸にだけ当てる。
+
+    `player`（ランダムで作る主人公）の指定は v1.16.0 の同梱の表で足した。それより前の表を書き換えて
+    `seeds.json` として使っていると、主人公に年齢の軸が付き、143 の年齢と食い違う。
+    当てた軸の名前を返す（`"節/軸"`）。手元の表が `role` を書いていれば何もしない（手元の表どおり）。
+    """
+    if mentions_role(tables, role):
+        return []
+    done = []
+    for section in SECTIONS:
+        names = {axis: set(rows) for axis, rows, _chance in tables.get(section) or []}
+        source = ((bundled.get("_not_for") or {}).get(section) or {})
+        for axis, roles in source.items():
+            banned = roles.get(role)
+            if axis not in names or not banned:
+                continue
+            if banned != "*":
+                banned = {row for row in banned if row in names[axis]}
+                if not banned:
+                    continue
+            tables.setdefault("_not_for", {}).setdefault(section, {}).setdefault(axis, {})[role] = banned
+            done.append("{}/{}".format(section, axis))
+    return done
 
 
 def table_size(tables):
@@ -255,6 +288,12 @@ class SeedFile(object):
         self.path = path
         self.stamp = stamp
         self.tables = read_seeds(path)
+        bundled = os.path.join(self.mod_dir, DEFAULT_SEEDS_FILE_NAME) if self.mod_dir else None
+        if path and bundled and os.path.normcase(path) != os.path.normcase(bundled):
+            inherited = inherit_role_limits(self.tables, read_seeds(bundled), "player")
+            if inherited:
+                self.report("[TABLE] {} に主人公（player）の指定が無い。同梱の表の指定を同じ名前の軸に当てた: {}".format(
+                    os.path.basename(path), ", ".join(inherited)))
         axes, phrases = table_size(self.tables)
         if not path:
             self.report("[TABLE] 表が無い（{} も {} も無い）。何も足さない".format(

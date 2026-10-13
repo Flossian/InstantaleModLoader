@@ -55,10 +55,11 @@ HISTORY_LIMIT = 40
 
 
 def empty_ledger():
+    # organize_asked: 設定に勢力が無い世界で、組織を設ける設計を聞いたか（聞く前の NONE は、設定を入れたら作り直す）
     return {"version": LEDGER_VERSION, "status": None, "why": "", "made_day": None,
             "peaceful": False, "factions": [], "towns": {}, "relations": {},
             "standing": {}, "events": [], "trend": {"last_day": None, "incidents": {}},
-            "gained": {}, "history": []}
+            "gained": {}, "history": [], "organize_asked": False}
 
 
 # ============================================================ 数の均し
@@ -265,6 +266,7 @@ def build_ledger(extracted, material, town_ids, *, day=None, town_names=None):
                 ledger["relations"][pair_key(a["id"], b["id"])] = {
                     "stage": 0, "push": 0, "from_setting": False, "evidence": "",
                     "updated_day": day}
+    name_of = {faction["id"]: faction["name"] for faction in factions}
     for row in (extracted or {}).get("relations") or []:
         if not isinstance(row, dict):
             continue
@@ -273,13 +275,22 @@ def build_ledger(extracted, material, town_ids, *, day=None, town_names=None):
         stage = to_int(row.get("stage"), RELATION_MIN, RELATION_MAX)
         if a is None or b is None or a == b or stage is None:
             continue
-        if not evidence_ok(row.get("evidence"), material):
-            dropped.append("relation {}-{}: evidence not found".format(a, b))
-            continue
+        evidence = str(row.get("evidence") or "").strip()
+        found = evidence_ok(evidence, material)
+        flat = normalize(evidence)
+        if not found or normalize(name_of[a]) not in flat or normalize(name_of[b]) not in flat:
+            # 根拠は両方の勢力の名前を含む原文に限る（街の割り振りと同じ穴。材料の見出しのような
+            # 無関係な原文を根拠に、設定に無い関係を入れさせない）。設定に2つの名前を1文で結ぶ文があれば、それを根拠にする
+            named = sentence_naming(material, name_of[a], name_of[b])
+            if named is None:
+                dropped.append("relation {}-{}: evidence not found".format(a, b) if not found else
+                               "relation {}-{}: the evidence does not name both".format(a, b))
+                continue
+            evidence = named
         if ledger["peaceful"]:
             stage = max(PEACEFUL_FLOOR, stage)
         ledger["relations"][pair_key(a, b)].update(
-            stage=stage, from_setting=True, evidence=str(row.get("evidence") or "").strip())
+            stage=stage, from_setting=True, evidence=evidence)
     for faction in factions:
         ledger["standing"][faction["id"]] = {"score": 0, "title": "", "title_stage": None,
                                             "reason": ""}
@@ -665,6 +676,71 @@ def record_moves(ledger, moves, *, day, kind, reason="", incident=""):
         written += 1
         changed = changed or standing_stage(before) != standing_stage(after)
     return written, changed
+
+
+def _day(value):
+    return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
+def needs_rewind(ledger, day):
+    """暦が台帳より前にあるか（保存の前に落ちて古いセーブを読んだ・同じ名前で作り直した）。"""
+    if day is None or not isinstance(ledger, dict):
+        return False
+    days = [_day(ledger.get("made_day")), _day((ledger.get("trend") or {}).get("last_day"))]
+    days += [_day(row.get("day")) for row in ledger.get("events") or [] if isinstance(row, dict)]
+    days += [_day(row.get("day")) for row in ledger.get("history") or [] if isinstance(row, dict)]
+    return any(d is not None and d > day for d in days)
+
+
+def rewind(ledger, day):
+    """その日より後に起きたことを台帳から外す。`"rebuild"`（台帳がその日より後に作られた）/ 真（外した）/ 偽。
+
+    見られ方は来歴を新しいほうから戻し（`before` へ）、勢力どうしの関係は情勢の出来事を戻す。
+    設定由来の関係の押し（`push`）は戻さない（来歴に残っていない）。
+    """
+    if not needs_rewind(ledger, day):
+        return False
+    made = _day(ledger.get("made_day"))
+    if made is not None and made > day:
+        return "rebuild"
+    standing = ledger.get("standing") or {}
+    history = [row for row in ledger.get("history") or [] if isinstance(row, dict)]
+    keep = []
+    for row in reversed(history):
+        when = _day(row.get("day"))
+        if when is None or when <= day:
+            keep.append(row)
+            continue
+        state = standing.get(row.get("faction"))
+        if not isinstance(state, dict):
+            continue
+        if row.get("kind") == RECONCILE:
+            state["locked"] = True          # 外した印を戻す
+        before = row.get("before")
+        if isinstance(before, (int, float)):
+            if state.get("score", 0) <= ENEMY_LOCK_AT < before:
+                state.pop("locked", None)   # この動きで付いた印
+            state["score"] = clamp_score(before)
+    ledger["history"] = list(reversed(keep))
+    relations = ledger.get("relations") or {}
+    events = [row for row in ledger.get("events") or [] if isinstance(row, dict)]
+    keep = []
+    for row in reversed(events):
+        when = _day(row.get("day"))
+        if when is None or when <= day:
+            keep.append(row)
+            continue
+        pair = relations.get(pair_key(row.get("a"), row.get("b")))
+        if isinstance(pair, dict) and isinstance(row.get("before"), int):
+            pair["stage"] = row["before"]
+    ledger["events"] = list(reversed(keep))
+    trend = ledger.setdefault("trend", {"last_day": None, "incidents": {}})
+    if _day(trend.get("last_day")) is not None and trend["last_day"] > day:
+        trend["last_day"] = day
+    gained = ledger.get("gained") or {}
+    for faction_id in [f for f, when in gained.items() if _day(when) is not None and when > day]:
+        gained.pop(faction_id, None)
+    return True
 
 
 def trend_due(last_day, day, every):

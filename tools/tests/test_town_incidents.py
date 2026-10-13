@@ -20,6 +20,8 @@ import os
 import random
 import shutil
 import sys
+import threading
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
@@ -116,7 +118,7 @@ check("どの規模でも 2（災害の後・不可解な怪事）", weights["af
 check("ほかは 1（良い出来事は表の倍率 0.5 を掛ける）", weights["epidemic"] == 1 and weights["boom"] == 0.5, weights)
 flat = [(kind["key"], weight) for kind, weight in rules.weights(kinds, "city", by_size=False)]
 check("規模で変えないなら表の倍率だけ", all(weight == rules.KIND_BY_KEY[key]["weight"] for key, weight in flat), flat)
-check("表は18種（困り事15・良い出来事3とにわか景気）", len(kinds) == 18 and len(rules.KIND_BY_KEY) == 18
+check("表は18種（困り事14・良い出来事3とにわか景気）", len(kinds) == 18 and len(rules.KIND_BY_KEY) == 18
       and sorted(k["key"] for k in kinds if rules.is_good(k)) == ["boom", "festival", "harvest", "trade"],
       [k["key"] for k in kinds])
 
@@ -156,10 +158,11 @@ for name, data in (("plague.json", {"key": "epidemic", "name": "大疫", "what":
 loaded, why = rules.load_kinds(os.path.join(rules.__file__.rsplit(os.sep, 1)[0], rules.DEFAULT_FILE), extra)
 by_key = {kind["key"]: kind for kind in loaded}
 check("同じ key は差し替える", by_key["epidemic"]["stages"] == ("流行",) and by_key["epidemic"]["name"] == "大疫")
-check("enabled: false だけのファイルで止める", "outlaws" not in by_key)
+check("enabled: false だけのファイルで止める（中身は残す）", by_key["outlaws"]["enabled"] is False
+      and by_key["outlaws"]["stages"] == rules.KIND_BY_KEY["outlaws"]["stages"], by_key.get("outlaws"))
 check("新しい出来事を足す（random の品・依頼なし）", "meteor" in by_key and rules.is_good(by_key["meteor"])
       and by_key["meteor"]["effects"] == [(rules.GOODS, "sell", (0, 10))], by_key.get("meteor"))
-check("読めないファイルは飛ばして理由を残す", len(loaded) == 18 and any("broken.json" in w for w in why), why)
+check("読めないファイルは飛ばして理由を残す", len(loaded) == 19 and any("broken.json" in w for w in why), why)
 mine = os.path.join(OUT_DIR, "kinds_mine")
 os.makedirs(mine, exist_ok=True)
 with io.open(os.path.join(mine, rules.USER_FILE), "w", encoding="utf-8") as fh:
@@ -172,6 +175,13 @@ check("手元の incidents.json があれば同梱の既定より先に読む", 
 rules.use_kinds(saved)
 saved = list(rules.KINDS)
 rules.use_kinds(loaded)
+check("止めた出来事は起こす候補から外す", "outlaws" not in [k["key"] for k in rules.KINDS])
+stopped = {"id": 5, "area": "0", "kind": "outlaws", "stage": 2, "status": rules.ACTIVE, "text": {}}
+check("止めた出来事も進行中の分は段・値段・文が引ける（設定画面で切ったときと同じ）",
+      rules.known(stopped) and rules.price_rate(stopped, "weapon", rules.BUY) != 0
+      and rules.stage_name(stopped) == rules.KIND_BY_KEY["outlaws"]["stages"][1]
+      and rules.arrive_text(stopped), stopped)
+check("表から消した出来事は known が偽", not rules.known({"kind": "no_such_kind"}))
 event = rules.start(rules.new_bucket(), 10, "0", "町", by_key["meteor"], FixedRng(0.0))
 check("起きたときに良い出来事かと段の名前を控えに書く", event["good"] is True and event["stage_name"] == "兆し"
       and event["goods"] in rules.CATEGORIES, event)
@@ -255,6 +265,39 @@ check("LLM の文を先に使う", rules.text_of(event, "name") == "黒狼団の
       and rules.arrive_text(event) == "黒狼団の旗が街道に翻っている。")
 hoard = {"kind": "hoarding", "goods": "weapon", "area_name": "町", "text": {}}
 check("買い占めの店の文に品の名前", "武器" in rules.text_of(hoard, "shop"), rules.text_of(hoard, "shop"))
+long_kind = dict(rules.KIND_BY_KEY["outlaws"], key="long_one",
+                 arrive=tuple("段{}".format(i) for i in range(1, 13)),
+                 stages=tuple("名{}".format(i) for i in range(1, 13)))
+rules.KIND_BY_KEY["long_one"] = long_kind
+try:
+    check("段が10以上でも着いたときの文の段を取り違えない",
+          [rules.arrive_text({"kind": "long_one", "stage": s, "text": {}}) for s in (10, 12)] == ["段10", "段12"])
+finally:
+    rules.KIND_BY_KEY.pop("long_one", None)
+
+print("[規則] 店の1行は段の値段の向きで選ぶ")
+boom = rules.KIND_BY_KEY["boom"]
+check("向きが途中で変わる出来事は2組", rules.shop_patterns(boom) == [(1, 1, 0), (-1, -1, 0)],
+      rules.shop_patterns(boom))
+booming = {"kind": "boom", "stage": 2, "status": rules.ACTIVE, "area_name": "町",
+           "text": {"shop": "値が上がっている。", "shop_turn": "値が崩れている。"}}
+check("値上がりの段は shop", rules.shop_text(booming) == "値が上がっている。")
+booming["stage"] = 3
+check("崩れた段は shop_turn", rules.shop_text(booming) == "値が崩れている。")
+booming["text"] = {"shop": "値が上がっている。"}
+check("shop_turn が無い古い出来事は表の文（向きを言わない）", rules.shop_text(booming)
+      == boom["shop"], rules.shop_text(booming))
+check("強さ 0% なら出さない", rules.shop_text(dict(booming, stage=2), 0) == "")
+feud = {"key": "feud", "stages": ("一", "二"), "effects": [(("food",), "buy", (0, 20))], "inn": None,
+        "shop": "", "text": {}}
+check("1段目が 0 の出来事は2段目の向きで読む", rules.shop_patterns(feud) == [(1, 0)], rules.shop_patterns(feud))
+rules.KIND_BY_KEY["feud"] = feud
+try:
+    check("値段の動かない段では出さない",
+          rules.shop_field({"kind": "feud", "stage": 1, "status": rules.ACTIVE}) is None
+          and rules.shop_field({"kind": "feud", "stage": 2, "status": rules.ACTIVE}) == "shop")
+finally:
+    rules.KIND_BY_KEY.pop("feud", None)
 check("真偽はローダの語で読む（いいえ は偽）", llm.truthy("はい") is True and llm.truthy("いいえ") is False)
 
 print("[規則] 窓の行")
@@ -348,10 +391,13 @@ bucket = rules.new_bucket()
 old = rules.start(bucket, 100, "0", "町", rules.KIND_BY_KEY["outlaws"], FixedRng(0.0))
 new = rules.start(bucket, 300, "1", "都", rules.KIND_BY_KEY["influx"], FixedRng(0.0))
 old["status"] = rules.ACTIVE
-rules.end(bucket, old, 280, rules.END_PLAYER)
+rules.end(bucket, old, 280, rules.END_RIVAL, by_name="ガラン")
+old["told"] = {"settled": True}
 check("古いセーブなら後で起きたことを外す", rules.rewind(bucket, 250)
       and new not in rules.events_of(bucket) and old["status"] == rules.ACTIVE
       and old["end_by"] is None, rules.events_of(bucket))
+check("進行中へ戻した出来事は、終わったときの名前と知らせの印も外す",
+      "end_by_name" not in old and not old["told"].get("settled"), old)
 ordered = rules.order_bucket(bucket)
 check("控えの鍵の並び", list(ordered) == list(rules.BUCKET_KEYS), list(ordered))
 check("出来事の鍵の並び", list(ordered["events"][0]) == list(rules.EVENT_KEYS),
@@ -691,6 +737,18 @@ check("頼み文に段ごとの概要の欄がある", all("summary_{}".format(i
 rule = module.arrive_rule(rules.KIND_BY_KEY["harvest"])
 check("3段なら arrive_4 を空にさせる", "1は兆し、2は盛況、3は収束" in rule and "arrive_4: 空にする" in rule, rule)
 
+print("[流れ] 店の1行の手掛かりは値段の向きの組ごと")
+up, turn = module.effect_hint(rules.KIND_BY_KEY["boom"])
+check("プロンプトは前半を shop、崩れた後を shop_turn に書かせる", "上がる" in up and "下がる" not in up
+      and turn.startswith("- shop_turn:") and "下がる" in turn and "上がる" not in turn, (up, turn))
+up, turn = module.effect_hint(rules.KIND_BY_KEY["epidemic"])
+check("向きが変わらない出来事は shop_turn を空にさせる", turn == module.SHOP_TURN_NONE, turn)
+feud = {"key": "feud", "stages": ("一", "二"), "effects": [(("food",), "buy", (0, 20))], "inn": None}
+check("1段目が 0 の出来事は2段目の向きで書かせる（下がると書かせない）", "上がる" in module.effect_hint(feud)[0]
+      and "下がる" not in module.effect_hint(feud)[0], module.effect_hint(feud))
+check("宿代だけ動く出来事も宿代の向きを書かせる", "宿代が上がる" in module.effect_hint(rules.KIND_BY_KEY["abductions"])[0])
+check("プロンプトに shop_turn の欄がある", "shop_turn" in module.TEXT_FIELDS and "{shop_turn_rule}" in module.TEXT_PROMPT)
+
 print("[流れ] 自然に収まったら依頼を世界から片付ける")
 module, ctx, app = fresh(STAGE_DAYS=10, SETTLE_DAYS=10, STEPS_PER_ELAPSE=3)
 ui.current_quest_id = lambda _app: None
@@ -758,11 +816,32 @@ key = bucket_store.playthrough(app)
 bucket = bucket_store.load(key)
 ev = rules.start(bucket, 100, "0", "始まりの町", rules.KIND_BY_KEY["outlaws"], FixedRng(0.0))
 ev["status"] = rules.ACTIVE
-ev["quest"] = "77"
 bucket_store.save(key)
+DisplayQuestChoice.prompts = []
+ctx.hook("__main__:DisplayQuestChoice.execute")(lambda self, *a: self.execute(*a), DisplayQuestChoice(app),
+                                                "クエスト掲示板")
+rival_quest = rules.live_in(bucket_of(module, app), "0")["quest"]
 urgent = quest_claims.urgent(app)
 check("困り事の依頼を急ぎとして窓口に置く", [(r["quest"], r["area"], r["owner"]) for r in urgent]
-      == [("77", "0", "338_town_incidents")] and "（" in urgent[0]["why"], urgent)
+      == [(rival_quest, "0", "338_town_incidents")] and "（" in urgent[0]["why"], urgent)
+held, release = threading.Event(), threading.Event()
+
+
+def hold_lock():
+    with bucket_store.lock:                 # 別のスレッドが控えを書いている最中
+        held.set()
+        release.wait(5)
+
+
+holder = threading.Thread(target=hold_lock)
+holder.start()
+held.wait(5)
+started = time.monotonic()
+urgent = quest_claims.urgent(app)
+release.set()
+holder.join(5)
+check("ほかのスレッドが錠を持っていても待たず、写しで答える", time.monotonic() - started < 1
+      and [r["quest"] for r in urgent] == [rival_quest], urgent)
 
 
 class Owner:
@@ -770,12 +849,15 @@ class Owner:
         return False
 
 
-claim_rows = [{"quest": "77", "area": "0", "title": "依頼", "by": "ガラン", "state": quest_claims.DONE,
+claim_rows = [{"quest": rival_quest, "area": "0", "title": "依頼", "by": "ガラン", "state": quest_claims.DONE,
                "day": 120}]
 quest_claims.declare("another_mod", Owner(), lambda app_: claim_rows)
 elapse(ctx, app, 1)
 ev = rules.events_of(bucket_of(module, app))[0]
 check("ほかの冒険者が片付けたので終わる", ev["status"] == rules.ENDED and ev["end_by"] == rules.END_RIVAL, ev)
+check("片付けられた出来事の依頼は世界から片付ける（片付けた側の MOD を外しても掲示板に戻らない）",
+      rival_quest not in app.world.quests and rival_quest not in app.save_data_dict["quests"],
+      sorted(app.world.quests))
 check("片付けた人の名前を出来事に残す", ev.get("end_by_name") == "ガラン", ev)
 check("いまいる街なら一言", any("ガラン" in t for t in app.texts), app.texts)
 check("終わった出来事は急ぎに置かない", quest_claims.urgent(app) == [], quest_claims.urgent(app))
@@ -800,8 +882,46 @@ try:
     check("合わないと言われたら別の種類で書かせ直す", len(ev["tries"]) == 2
           and ev["tries"][0] != ev["tries"][1], ev["tries"])
     check("LLM の呼び名で始まる", ev["status"] == rules.ACTIVE and ev["text"].get("name") == "黒い咳", ev)
+
+    module, ctx, app = fresh(USE_LLM=True)
+    app.world_dict["world_data"] = {"world_name": "出来事の検査世界"}     # 周回の鍵を世界×主人公にする
+    elapse(ctx, app, 0)
+
+    def load_another_save(*_a, **_k):
+        app.save_data_dict["player_data"]["name"] = "別の主人公"      # 答えを待つ間に別のセーブを読んだ
+        return {"fits": "はい", "name": "別の世界で書いた名前"}
+
+    llm.ask = load_another_save
+    elapse(ctx, app, 30)
+    app.save_data_dict["player_data"]["name"] = "検査の主人公"
+    ev = rules.events_of(bucket_of(module, app))[0]
+    check("答えを待つ間に別のセーブを読んだら書かず、答え待ちのまま残す（読み込み直したら頼み直す）",
+          ev["status"] == rules.PENDING and not ev.get("text"), ev)
 finally:
     llm.create_structure, llm.ask = saved
+
+print("[流れ] 表から消した出来事は収まった扱いで片付ける")
+module, ctx, app = fresh()
+bucket_store = module._store()["worlds"]
+key = bucket_store.playthrough(app)
+bucket = bucket_store.load(key)
+gone = rules.start(bucket, 100, "0", "始まりの町", rules.KIND_BY_KEY["outlaws"], FixedRng(0.0))
+gone["status"] = rules.ACTIVE
+gone["kind"] = "deleted_kind"
+waiting = rules.start(bucket, 100, "1", "灰の都", rules.KIND_BY_KEY["influx"], FixedRng(0.0))
+waiting["kind"] = "deleted_too"
+bucket_store.save(key)
+DisplayQuestChoice.prompts = []
+ctx.hook("__main__:DisplayQuestChoice.execute")(lambda self, *a: self.execute(*a), DisplayQuestChoice(app),
+                                                "クエスト掲示板")
+check("掲示板を開いても落ちない（依頼は作らない）", not ctx.errors and not DisplayQuestChoice.prompts, ctx.errors)
+module.ROLL_PERCENT = 0
+elapse(ctx, app, 1)
+events = {event["id"]: event for event in rules.events_of(bucket_of(module, app))}
+check("進行中は自然に収まった扱いで終える", events[gone["id"]]["status"] == rules.ENDED
+      and events[gone["id"]]["end_by"] == rules.END_NATURAL, events.get(gone["id"]))
+check("文を書かせる前のものは捨てる", waiting["id"] not in events, sorted(events))
+check("エラーなし", not ctx.errors, ctx.errors)
 ui.current_quest_id = ui_current
 
 # ================================================================ 設定画面（窓は開かない）

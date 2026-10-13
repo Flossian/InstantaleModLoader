@@ -298,15 +298,20 @@ def claim_call(manager_name, summary):
     """送信が死んだ頼みを待っている呼び出しに失敗を渡す。渡せたら真。
 
     送信スレッドから呼んだ側のスレッドは引けないので、頼みの名前で突き合わせる。
-    同じ名前が2本待っていたら新しいほう（死んだ送信は、まだ失敗を受けていないものの中で後から始まった頼みのはず）。
+    同じ名前が2本以上待っていたら、どれの送信が死んだかは分からない。まだ失敗を受けていない全部に渡す
+    （印は、呼び出しが例外で抜けたときにだけ読まれる。答えを受けて抜けた呼び出しには効かない）。
+    前は新しい1本にだけ渡していたので、死んだのが古い方だと別の呼び出しに印が付き、その呼び出しの送信が
+    後で死んでも「待っている呼び出しが無い」となって待ちが残った。
+    印を受けた後にもう一度死んだ送信も、待っている呼び出しがあれば起こす。
     """
     state = _state()
     with state["lock"]:
-        waiting = [t for t in state["inflight"]
-                   if t["manager"] == manager_name and t["failure"] is None]
+        waiting = [t for t in state["inflight"] if t["manager"] == manager_name]
         if not waiting:
             return False
-        max(waiting, key=lambda t: t["started"])["failure"] = summary
+        for token in waiting:
+            if token["failure"] is None:
+                token["failure"] = summary
     return True
 
 

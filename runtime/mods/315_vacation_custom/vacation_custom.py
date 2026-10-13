@@ -334,10 +334,11 @@ def apply(ctx):
     # ローダの宿代の関所が引き受ける（TECH.md §3.3.4）。街の出来事（`338_`）のような段は、この額の上に掛かる。
     # 自分の建物での滞在を無料にする MOD は、ゲームに引かせてから返すのではなく、
     # 窓口で聞いた額を先に足しておく（前払い調整）。
-    # 部屋が見分けられないときは None を返し、窓口がゲームの値へ落とす。
+    # 部屋が見分けられないときと、額も呼び名も素のままの部屋では None を返し、窓口がゲームの値へ落とす
+    # （素の額は窓口がラベルから控える。ここで設定の額を答えると、ゲームが額を変えた版で旧い額へ書き換えてしまう）。
     def room_price_for(app, quality=None):
         slot = slot_of_quality(quality)
-        if slot is None:
+        if slot is None or not (price_changed(slot) or name_changed(slot)):
             return None
         conf = room_conf(slot)
         return {"price": int(conf["price"]), "name": conf["name"], "label": str(ROOM_BUTTON)}

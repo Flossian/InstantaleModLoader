@@ -135,6 +135,12 @@ def install(env):
         key = repr(args)[:400]
         if key != court["key"]:
             new_trial(app, key, args)
+        elif court["applied"] or court["acquit"] is not None:
+            # 判決の後に、同じ裁判の画面のセーブを読んだ。判決はまだ出ていないので、出し直しを受けられる形に戻す
+            # （使った介入はそのまま。`applied` が残ると、判事がまた0年を返しても無罪放免へ差し替えない）
+            court.update(applied=False, acquit=None)
+            store_court(app)
+            write("court: back on the trial screen; the verdict will be read again")
         if cfg.TRIAL_HINT and not court["told"]:
             court["told"] = True
             store_court(app)
@@ -216,6 +222,10 @@ def install(env):
         write("court: released; area {} lawfulness {} -> {}".format(area_id, before, after))
         court["acquit"] = None
         store_court(app)
+        # 司法取引を持ちかけていれば、締め出しは放免の日から数える（服役の後と同じ。`prison.start_ban`）
+        start_ban = getattr(env, "start_ban", None)
+        if callable(start_ban):
+            start_ban(app)
         screen.say(app, trial.ACQUIT_TEXT.format(area=env.area_label(app, area_id), before=before, after=after))
         redraw = getattr(app, "change_background_image_to_current_location", None)
         normal = getattr(app, "set_buttons_to_normal", None)
@@ -317,6 +327,10 @@ def install(env):
                     if is_open:
                         notes = "\n".join(note for note in (notes, trial.NOTE_ACQUIT) if note)
                         court["acquit"] = "open"
+                        store_court(app)
+                    elif court["acquit"] == "open":
+                        # 前の送り（落ちる前・読み直す前）で開いた道は、今回の判事には渡していない
+                        court["acquit"] = None
                         store_court(app)
                 if notes:
                     content = content.rstrip() + "\n\n" + notes
