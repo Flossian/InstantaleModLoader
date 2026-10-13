@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""検証の記録（`docs/verification/`）の目次を作り、`§` 参照の行き先を確かめる。
+"""検証の記録（`docs/verification/`）の目次とリンクを作り、`§` 参照の行き先を確かめる。
 
-    python tools/build_verification.py           目次を書き出す
-    python tools/build_verification.py --check   目次のずれと行き先の無い参照があれば 1 で終わる（書かない）
+    python tools/build_verification.py           目次とリンクを書き出す
+    python tools/build_verification.py --check   目次・リンクのずれと行き先の無い参照があれば 1 で終わる（書かない）
 
 §2（実機・実データの記録）と §3（未確認項目と確認手順）は1節1ファイルで
 `docs/verification/<番号>.md` に置く。1冊に積むと際限なく伸びて、読むにも
@@ -12,6 +12,11 @@
 
 目次は `docs/VERIFICATION_LOG.md`（§2）と `docs/VERIFICATION.md`（§3）の
 印の間に書く。手で書き換えても次の生成で消える。
+
+検証の文書（その2冊と節のファイル）の中の `§2.x` / `§3.x` は、その節のファイルへの
+リンク `[§3.98](3.98.md)` に置き換える。書くときは番号だけでよい。
+`§3.2.2` のような深い番号は `3.2.md` へ繋ぐ（見出しのアンカーは表示する側ごとに
+作り方が違うので付けない）。見出し・コード・既にあるリンクの中は触らない。
 
 参照の検査は、git が管理するテキストの中の `VERIFICATION.md §3.x` /
 `VERIFICATION_LOG.md §2.x` と、検証の文書の中の文書名の無い `§2.x` / `§3.x` を
@@ -48,6 +53,12 @@ CHAIN = re.compile(r"^[\s/・、，,（(のとや:：〜~-]{0,6}$")
 SERIES = ("VERIFICATION", "VERIFICATION_LOG")
 TEXT_EXT = (".md", ".py", ".bat", ".sh", ".yml", ".json", ".txt", ".ps1")
 
+#: リンクを貼らない所（コードスパンと、既にあるリンク）。
+PROTECT = re.compile(r"`[^`]*`|\[[^\]]*\]\([^)]*\)")
+#: 節のファイルを指すリンクの行き先。
+SECTION_LINK = re.compile(r"\]\((?:verification/)?(\d+\.\d+)\.md\)")
+FENCE = re.compile(r"^\s*(```|~~~)")
+
 
 def load_sections():
     """番号 → (ファイル名の幹, 1行目, 本文の行) と、問題の一覧を返す。"""
@@ -76,6 +87,14 @@ def load_sections():
                 problems.append(f"verification/{name}: §{key[0]}.{key[1]} が {sections[key][0]}.md と重なる")
             sections[key] = (stem, lines[0][2:].strip(), lines)
     return sections, problems
+
+
+def load_chapters():
+    chapters = set()
+    for name, _ in INDEXES:
+        with open(os.path.join(DOCS_DIR, name), encoding="utf-8") as f:
+            chapters |= {int(m.group(1)) for m in map(CHAPTER.match, f) if m}
+    return chapters
 
 
 def index_lines(sections, chapter):
@@ -116,6 +135,13 @@ def tracked_files():
     return sorted({n.replace("\\", "/") for n in names if n.endswith(TEXT_EXT)})
 
 
+def series_files():
+    """検証の文書の (docs からの相対パス, 節の幹か None)。"""
+    out = [(name, None) for name, _ in INDEXES]
+    out += [(f"verification/{n}", n[:-3]) for n in sorted(os.listdir(SECTIONS_DIR)) if n.endswith(".md")]
+    return out
+
+
 def in_series(rel):
     return rel in ("docs/VERIFICATION.md", "docs/VERIFICATION_LOG.md") or rel.startswith("docs/verification/")
 
@@ -133,11 +159,61 @@ def resolve(number, sections, chapters):
     return any(pat.match(ln) for ln in entry[2])
 
 
-def check_refs(sections):
-    chapters = set()
-    for name, _ in INDEXES:
-        with open(os.path.join(DOCS_DIR, name), encoding="utf-8") as f:
-            chapters |= {int(m.group(1)) for m in map(CHAPTER.match, f) if m}
+def refs_in(line, default):
+    """行の中の、検証の文書を指す § 参照を (match, 確か) で返す。
+
+    確かでないのは、文書名の無い番号が、同じ行で先に別の文書を挙げた後に離れて続くもの
+    （`TECH.md §3.3.10）と `defeat`（§3.3.11）`）。そちらの続きとも読めるので、
+    行き先が無くても咎めず、リンクも貼らない。
+    """
+    ctx, prev_end, other = default, 0, False
+    for m in TOKEN.finditer(line):
+        doc = m.group(1) or m.group(2)
+        if doc:
+            ctx, prev_end = doc, m.end()
+            other = other or doc not in SERIES
+            continue
+        explicit = bool(CHAIN.match(line[prev_end:m.start()])) and ctx != default
+        if not explicit:
+            ctx = default
+        prev_end = m.end()
+        if ctx in SERIES:
+            yield m, explicit or not other
+
+
+def link_line(line, here, prefix, sections, chapters):
+    spans = [(m.start(), m.end()) for m in PROTECT.finditer(line)]
+    out, last = [], 0
+    for m, sure in refs_in(line, "VERIFICATION"):
+        number = m.group(3)
+        if not sure or "." not in number or any(a <= m.start() < b for a, b in spans):
+            continue
+        if not resolve(number, sections, chapters):
+            continue
+        major, minor = number.split(".")[:2]
+        stem = sections[(int(major), int(minor))][0]
+        if stem == here:
+            continue
+        out += [line[last:m.start()], f"[§{number}]({prefix}{stem}.md)"]
+        last = m.end()
+    return "".join(out) + line[last:]
+
+
+def link_text(text, here, prefix, sections, chapters):
+    lines, fenced, in_index = text.split("\n"), False, False
+    for i, line in enumerate(lines):
+        if line.startswith(BEGIN):
+            in_index = True
+        elif line.startswith(END):
+            in_index = False
+        elif FENCE.match(line):
+            fenced = not fenced
+        elif not (fenced or in_index or line.startswith("#")) and "§" in line:
+            lines[i] = link_line(line, here, prefix, sections, chapters)
+    return "\n".join(lines)
+
+
+def check_refs(sections, chapters):
     bad = []
     for rel in tracked_files():
         path = os.path.join(ROOT, rel)
@@ -148,55 +224,52 @@ def check_refs(sections):
                 text = f.read()
         except UnicodeDecodeError:
             continue
-        if "§" not in text:
+        series = in_series(rel)
+        if "§" not in text and not series:
             continue
-        default = "VERIFICATION" if in_series(rel) else None
+        default = "VERIFICATION" if series else None
         for lineno, line in enumerate(text.split("\n"), 1):
-            ctx, prev_end, other = default, 0, False
-            for m in TOKEN.finditer(line):
-                doc = m.group(1) or m.group(2)
-                if doc:
-                    ctx, prev_end = doc, m.end()
-                    other = other or doc not in SERIES
-                    continue
-                explicit = CHAIN.match(line[prev_end:m.start()]) and ctx != default
-                if not explicit:
-                    ctx = default
-                prev_end = m.end()
-                if ctx not in SERIES or resolve(m.group(3), sections, chapters):
-                    continue
-                # 文書名の無い番号は、同じ行で先に別の文書を挙げていればそちらの続きと読む
-                # （`TECH.md §3.3.10）と `defeat`（§3.3.11）`）。行き先が在れば上で通っている。
-                if not explicit and other:
-                    continue
-                bad.append(f"{rel}:{lineno}: §{m.group(3)} の行き先が無い")
+            for m, sure in refs_in(line, default):
+                if sure and not resolve(m.group(3), sections, chapters):
+                    bad.append(f"{rel}:{lineno}: §{m.group(3)} の行き先が無い")
+            if series:
+                for m in SECTION_LINK.finditer(line):
+                    major, minor = m.group(1).split(".")
+                    if sections.get((int(major), int(minor)), ("",))[0] != m.group(1):
+                        bad.append(f"{rel}:{lineno}: リンク先 {m.group(1)}.md が無い")
     return bad
 
 
 def main(argv):
     check = "--check" in argv
     sections, problems = load_sections()
+    chapters = load_chapters()
+    indexes = dict(INDEXES)
     stale = []
-    for name, chapter in INDEXES:
-        path = os.path.join(DOCS_DIR, name)
+    for rel, here in series_files():
+        path = os.path.join(DOCS_DIR, rel)
         with open(path, encoding="utf-8", newline="") as f:
             text = f.read()
-        new = render(text, index_lines(sections, chapter))
-        if new is None:
-            problems.append(f"{name}: 目次の印（{BEGIN} / {END}）が無い")
-            continue
+        new = text
+        if rel in indexes:
+            new = render(text, index_lines(sections, indexes[rel]))
+            if new is None:
+                problems.append(f"{rel}: 目次の印（{BEGIN} / {END}）が無い")
+                continue
+        prefix = "" if here else "verification/"
+        new = link_text(new, here, prefix, sections, chapters)
         if new == text:
             continue
         if check:
-            stale.append(name)
+            stale.append(rel)
         else:
             with open(path, "w", encoding="utf-8", newline="") as f:
                 f.write(new)
-            print(f"  wrote docs/{name}")
+            print(f"  wrote docs/{rel}")
     if stale:
-        problems.append("目次が古い: " + ", ".join(stale)
-                        + "（python tools/build_verification.py で作り直す）")
-    problems += check_refs(sections)
+        shown = ", ".join(stale[:5]) + (f" ほか {len(stale) - 5} 件" if len(stale) > 5 else "")
+        problems.append(f"目次かリンクが古い: {shown}（python tools/build_verification.py で作り直す）")
+    problems += check_refs(sections, chapters)
     count = len({v[0] for v in sections.values()})
     for p in problems:
         print("  " + p)

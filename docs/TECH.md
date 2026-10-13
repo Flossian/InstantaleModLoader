@@ -16,7 +16,7 @@ Instantale（Epic版 / Nuitka standalone / CPython 3.10）に外部から Python
 | [MODLIST.md](MODLIST.md) | 同梱 MOD の早見表。`tools/list_mods.py` が `mod.json` から組む |
 | [VERIFICATION.md](VERIFICATION.md) | 検証状況・未確認項目の目次・運用の取り決め（§1 / §3 / §4） |
 | [VERIFICATION_LOG.md](VERIFICATION_LOG.md) | 実機・実データでの検証記録の目次（§2） |
-| [verification/](verification/) | §2 と §3 の本文。1節1ファイル（`§3.88` は `3.88.md`）。目次は `tools/build_verification.py` が組む |
+| [verification/](verification/) | §2 と §3 の本文。1節1ファイル（`§3.88` は `3.88.md`）。目次と本文の § のリンクは `tools/build_verification.py` が組む |
 
 GAME.md と分けているのは、**ゲームが更新されて食い違うのはあちら側だけ**だから。
 疑う場所が1つになる。同じ理由で置き場所を決めてある:
@@ -104,7 +104,7 @@ tools/check_tool_screens.py  同梱の設定画面を実際に開いて撮る（
 tools/modtool.py          MOD 同梱の設定画面が共有する土台（§3.12）。配布物に入る
 tools/build_mods.py       docs/MODS.md を各 MOD の DOC.md から綴じる（--check で照合）
 tools/list_mods.py        docs/MODLIST.md を mod.json から組む（--check で照合）
-tools/build_verification.py  VERIFICATION*.md の目次を docs/verification/ から組み、§ 参照の行き先を確かめる（--check で照合）
+tools/build_verification.py  VERIFICATION*.md の目次と節どうしのリンクを組み、§ 参照の行き先を確かめる（--check で照合）
 tools/llm_ctx_probe.bat, llm_ctx_probe.py  ローカル LLM の窓を実測して最適値を出す（127_ 用）
 tools/epithet_probe.py    ローカル LLM で二つ名を引いて偏りを測る（317_ 用）
 tools/npc_variety_probe.py  ローカル LLM で NPC を生成させ、外見・性格・経歴の偏りを測る（頼み文の写しは npc_variety_prompts.json）
