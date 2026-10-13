@@ -49,6 +49,8 @@ def main():
     os.environ["IML_STATE_DIR"] = ml.state_dir(os.path.join(ROOT, "runtime"))
     os.environ["IML_GAME_DIR"] = os.environ.get("IML_GAME_DIR") or cts.game_dir()
     os.environ["IML_MOD_SETTINGS"] = os.path.join(ROOT, "settings", "mod_settings.json")
+    if opts.out:
+        opts.out = os.path.abspath(opts.out)    # 道具の作法どおり MOD のフォルダへ移るので、その前に決める
     os.chdir(mod_dir)
     spec = importlib.util.spec_from_file_location("drive_tool", os.path.join(mod_dir, entry))
     tool = importlib.util.module_from_spec(spec)

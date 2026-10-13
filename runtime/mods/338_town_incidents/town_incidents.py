@@ -3,7 +3,7 @@
 
 日数が進むと、訪れたことのあるギルドのある街に、表（`incidents.default.json` と `kinds\\`）の出来事が起きることがある。
 困り事は放っておくと 兆し → 悪化 → 深刻 と進み、最後は自然に収まる。その街の掲示板の依頼で片付けられ、
-`911_rival_adventurer` のライバルが先に片付けることもある。良い出来事は依頼を作らず、出来事ごとの段を進んで収まる。
+ほかの冒険者（ライバルなど）が先に片付けることもある（ローダの窓口 `quest_claims`）。良い出来事は依頼を作らず、出来事ごとの段を進んで収まる。
 遊び方は DOC.md、決めた仕様と控えの形（他の MOD との取り決め）は VERIFICATION.md §3.97。
 
 ##### ゲームのどこに触るか
@@ -24,7 +24,7 @@ import re
 import sys
 import time
 
-from instantale_modloader import (choices, hudicons, jobs, llm, modnpc, prices,
+from instantale_modloader import (choices, hudicons, jobs, llm, modnpc, prices, quest_claims,
                                   state as loader_state, ui)
 
 from . import incidents, window
@@ -33,7 +33,7 @@ from . import incidents, window
 #      `tools/check_mods.py` が AST で突き合わせる）------------------------
 ROLL_DAYS = 30                 # 抽選の間隔（日）
 ROLL_PERCENT = 25              # 抽選で起きる確率（%）
-MAX_ACTIVE = 2                 # 世界で同時に起きる数の上限
+MAX_ACTIVE = 3                 # 世界で同時に起きる数の上限
 REST_DAYS = 180                # 収まった街が次に起きるまでの休み（日）
 STAGE_DAYS = 60                # 段が上がる間隔（日）
 SETTLE_DAYS = 90               # 3段目から自然に収まるまで（日）
@@ -51,7 +51,7 @@ WINDOW_EFFECTS = "数字"        # 窓に出す値段の影響（数字／言葉
 # ---- 文（ゲーム画面の文は常体）--------------------------------------------
 BOARD_TEXT = "掲示板に、{name}にまつわる依頼が新しく貼り出されている。"
 SOLVED_TEXT = "{town}の{name}は、これで収まるだろう。"
-RIVAL_SOLVED_TEXT = "{town}の{name}は、冒険者{rival}が片付けたらしい。"
+RIVAL_SOLVED_TEXT = "{town}の{name}は、冒険者の{rival}が片付けたらしい。"
 OUTBREAK_TEXT = "{line}"
 GUIDE_TEXT = "{guild}に行けば、この件で人手を求める依頼が出ているかもしれない。"
 GUILD_FALLBACK = "ギルド"
@@ -65,7 +65,6 @@ BRIEF = ("\n\n【この街でいま起きている出来事】{name}（{stage}�
 OWNER = "338_town_incidents"
 LOG_BASENAME = "town_incidents.log"
 STATE_DIRNAME = "town_incidents"
-RIVAL_DIRNAME = "rival_adventurer"
 STORE_ATTR = "_instantale_town_incidents"
 MARK = "mod_town_incidents"
 ICON_KEY = "town_incidents"
@@ -156,7 +155,7 @@ def _store():
     """世代をまたぐ入れ物。プロセスに1つ（TECH.md §3.5）。"""
     store = getattr(sys, STORE_ATTR, None)
     if not isinstance(store, dict):
-        store = {"worlds": None, "rival": None, "worker": None, "reconcile": False,
+        store = {"worlds": None, "worker": None, "reconcile": False,
                  "rng": random.Random(), "inject": {}, "view": None, "here": None}
         setattr(sys, STORE_ATTR, store)
     return store
@@ -218,9 +217,6 @@ def apply(ctx):
             ctx, STATE_DIRNAME, default=incidents.new_bucket,
             order=incidents.order_bucket, write=write)
     worlds = store["worlds"].rebind(ctx, write)
-    if store["rival"] is None:
-        store["rival"] = loader_state.WorldStore(ctx, RIVAL_DIRNAME, own=False)
-    rival_store = store["rival"].rebind(ctx)
     rng = store["rng"]
     screen = ui.Screen(ctx, write, tag="town incidents", mark=MARK)
     inject = store["inject"]
@@ -287,12 +283,13 @@ def apply(ctx):
     def name_of(event):
         return incidents.text_of(event, "name")
 
-    def rival_bucket(app):
-        try:
-            return rival_store.load(loader_state.playthrough_key(app), fresh=True) or {}
-        except Exception:
-            ctx.log_exc("town incidents: cannot read the rival record")
-            return {}
+    def claims_by_quest(app):
+        """ほかの冒険者が狙っている・片付けた依頼 `{依頼 id: {"state", "by"}}`（窓口 `quest_claims`）。"""
+        found = {}
+        for row in quest_claims.claims(app):
+            if row["quest"] not in found or row.get("state") == quest_claims.DONE:
+                found[row["quest"]] = {"state": row.get("state"), "by": row.get("by") or ""}
+        return found
 
     def quest_status(app, quest_id):
         quest = ui.quest_of(app, str(quest_id)) if quest_id else None
@@ -416,19 +413,38 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 日数が進んだ
     def check_rival(app, bucket, day):
-        """ライバルが片付けた依頼（911 の控えの `taken`）の出来事を終える。終えた出来事の並び。"""
-        taken = rival_bucket(app).get("taken")
-        if not isinstance(taken, dict):
+        """ほかの冒険者が片付けた依頼（窓口 `quest_claims` の DONE）の出来事を終える。`[(出来事, 片付けた人)]`。"""
+        done_rows = {row["quest"]: row for row in quest_claims.claims(app, quest_claims.DONE)}
+        if not done_rows:
             return []
         done = []
         for event in incidents.events_of(bucket, incidents.ACTIVE):
             quest = event.get("quest")
-            if quest and str(quest) in taken:
-                incidents.end(bucket, event, day, incidents.END_RIVAL, REST_DAYS)
-                write("end: #{} {} at {} was taken by the rival (quest {})".format(
-                    event.get("id"), name_of(event), event.get("area_name"), quest))
-                done.append((event, (taken.get(str(quest)) or {}).get("by") or ""))
+            row = done_rows.get(str(quest)) if quest else None
+            if row is None:
+                continue
+            by = row.get("by") or ""
+            # 名前は終えたときのものを残す（後で片付ける人が替わっても、終わった欄はこの名前で書く）
+            incidents.end(bucket, event, day, incidents.END_RIVAL, REST_DAYS, by_name=by)
+            write("end: #{} {} at {} was taken by {} ({}, quest {})".format(
+                event.get("id"), name_of(event), event.get("area_name"), by or "someone",
+                row.get("owner"), quest))
+            done.append((event, by))
         return done
+
+    def urgent_quests(app):
+        """困り事の依頼（窓口 `quest_claims` の急ぎ）。放っておくと段階が進む依頼を、ほかの冒険者に先に狙わせる。"""
+        # 錠は取らない（ほかの MOD が自分の錠を持ったまま窓口に聞きに来る。窓口の決まり）
+        rows = []
+        _key, bucket = ledger(app)
+        for event in list(incidents.events_of(bucket, incidents.ACTIVE)):
+            quest = event.get("quest")
+            if quest and not incidents.is_good(event):
+                rows.append({"quest": str(quest), "area": str(event.get("area")),
+                             "why": "{}（{}）".format(name_of(event), stage_name(event))})
+        return rows
+
+    quest_claims.declare_urgent(OWNER, ctx, urgent_quests)
 
     def clean_up(app, bucket):
         """自然に収まった出来事の依頼を世界から片付ける。受けている最中なら次の機会へ回す。"""
@@ -749,7 +765,7 @@ def apply(ctx):
         with worlds.lock:
             _key, bucket = ledger(app)
             events = [dict(event) for event in incidents.events_of(bucket)]
-        rival = rival_bucket(app)
+        claims = claims_by_quest(app)
         areas = ui.world_areas(app) or {}
         guilds = {}
         for event in events:
@@ -758,7 +774,7 @@ def apply(ctx):
             if name:
                 guilds[str(event.get("area"))] = name
         here = here_id(app)
-        model = incidents.view_model(events, day, rival, stage_days=STAGE_DAYS, guild_names=guilds,
+        model = incidents.view_model(events, day, claims, stage_days=STAGE_DAYS, guild_names=guilds,
                                      settle_days=SETTLE_DAYS, ended_days=ENDED_SHOWN_DAYS,
                                      in_words=(WINDOW_DAYS == incidents.DAYS_VAGUE),
                                      quest_status=lambda qid: quest_status(app, qid),

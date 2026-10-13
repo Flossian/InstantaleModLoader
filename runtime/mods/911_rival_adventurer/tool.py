@@ -33,6 +33,12 @@ for _tools in ([os.path.join(_IML_ROOT, "tools")] if _IML_ROOT else []) + [
 
 import modtool  # noqa: E402
 
+# 台帳の扱い（選び直し・並べ方）は本体と同じ `rivalry.py` を使う。道具は単独で起動されるので場所から読む。
+import importlib.util as _importlib_util  # noqa: E402
+_spec = _importlib_util.spec_from_file_location("rival_adventurer_rivalry", os.path.join(MOD_DIR, "rivalry.py"))
+rivalry = _importlib_util.module_from_spec(_spec)
+_spec.loader.exec_module(rivalry)
+
 #: 控えのフォルダ（本体の `STATE_DIRNAME`）。
 STATE_DIRNAME = "rival_adventurer"
 
@@ -44,7 +50,7 @@ TABS = (
      "当たったら、登場の語りと張り合う理由をLLMに1回書かせる（下の文型はLLMを使わないとき）。"),
     ("張り合い", ("FAILURE_ENABLED", "SUCCESS_BASE_PERCENT", "SUCCESS_SLOPE_PERCENT",
                   "DUE_DAYS_MIN", "DUE_DAYS_MAX", "COOLDOWN_DAYS", "INJURY_DAYS",
-                  "REACH_LEVELS", "LEVEL_STEP", "LEVEL_MAX", "RUMOR_DAYS"), (),
+                  "REACH_LEVELS", "URGENT_FIRST", "LEVEL_STEP", "LEVEL_MAX", "RUMOR_DAYS"), (),
      "ライバルは掲示板の依頼に狙いを付け、期限が来たら挑む。\n"
      "成功率はLvと難易度の差で決まり、10〜95%に収める。"),
     ("態度", ("WINS_PER_STANCE", "CLEANUP_SOFTENS", "AFFINITY_PER_STANCE",
@@ -136,8 +142,12 @@ def describe(bucket):
     if not isinstance(bucket, dict):
         return "（読めませんでした）"
     rival = bucket.get("rival")
+    declined = rivalry.declined_of(bucket)
+    tail = "\n選び直した人（二度と選ばない）: {}人".format(len(declined)) if declined else ""
     if not isinstance(rival, dict):
-        return "ライバルはまだ現れていない。\n依頼を片付けるたびに抽選する（設定の「登場」）。"
+        if bucket.get("redraw"):
+            return "ライバルを選び直す。次にこの世界を読み込んだとき、別の冒険者を選ぶ。" + tail
+        return "ライバルはまだ現れていない。\n依頼を片付けるたびに抽選する（設定の「登場」）。" + tail
     lines = []
     stance = rival.get("stance") if isinstance(rival.get("stance"), int) else 0
     stance = max(0, min(len(STANCE_NAMES) - 1, stance))
@@ -185,7 +195,7 @@ def describe(bucket):
     lines.extend("  依頼 {} 「{}」（土地 {}・{}日目）".format(qid, row.get("title"), row.get("area"),
                                                          row.get("day"))
                  for qid, row in taken.items() if isinstance(row, dict))
-    return "\n".join(lines)
+    return "\n".join(lines) + tail
 
 
 # ---------------------------------------------------------------- 窓
@@ -298,7 +308,7 @@ def build_window(mod_dir=MOD_DIR):
     ttk.Label(page, style="Sub.TLabel", wraplength=920, justify="left",
               text="ライバルの控え（世界×主人公ごとに1つ）。\n"
                    "ゲームを起動している間は、MODが覚えている内容が次に書かれるまでファイルは古いままのことがある。\n"
-                   "「控えを消す」はゲームを閉じてから使う（起動中に消すと、次の保存で書き戻される）。"
+                   "「ライバルを選び直す」「控えを消す」はゲームを閉じてから使う（起動中に変えると、次の保存で書き戻される）。"
               ).pack(anchor="w", pady=(0, 6))
     picker_row = ttk.Frame(page)
     picker_row.pack(fill="x")
@@ -329,6 +339,27 @@ def build_window(mod_dir=MOD_DIR):
             picked.set(names[0] if names else "")
         show_state()
 
+    def redraw_state():
+        path = dict(status_files["rows"]).get(picked.get())
+        if path is None:
+            return
+        bucket = modtool.read_json(path)
+        if not isinstance(bucket, dict) or not isinstance(bucket.get("rival"), dict):
+            messagebox.showinfo("ライバルを選び直す", "この控えには、まだライバルがいません。", parent=root)
+            return
+        name = bucket["rival"].get("name") or "今のライバル"
+        if not messagebox.askyesno(
+                "ライバルを選び直す",
+                "「{}」をライバルから外し、次にこの世界を読み込んだときに別の冒険者を選びます。\n"
+                "{}は二度と選びません。勝敗・態度・取り合いの記録は最初に戻ります"
+                "（ライバルが片付けた依頼は片付いたまま）。\n"
+                "ゲームは閉じていますか？".format(name, name), parent=root):
+            return
+        rivalry.decline_rival(bucket)
+        if not modtool.write_json(_IML_ROOT, path, rivalry.order_bucket(bucket)):
+            messagebox.showerror("書けませんでした", path, parent=root)
+        reload_state()
+
     def delete_state():
         path = dict(status_files["rows"]).get(picked.get())
         if path is None:
@@ -348,6 +379,7 @@ def build_window(mod_dir=MOD_DIR):
     buttons.pack(fill="x", pady=(6, 0))
     ttk.Button(buttons, text="読み直す", command=reload_state).pack(side="left")
     ttk.Button(buttons, text="控えを消す", command=delete_state).pack(side="right")
+    ttk.Button(buttons, text="ライバルを選び直す", command=redraw_state).pack(side="right", padx=(0, 8))
     reload_state()
 
     # ---- 値の出し入れ

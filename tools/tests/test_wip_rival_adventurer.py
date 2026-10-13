@@ -577,10 +577,54 @@ def scene_aim():
     redraw(ctx, app)
     check("描き直しても添え字は1つ", board_texts(app)[0].count("が狙っている") == 1, board_texts(app))
     check("狙いを知らせる文が出る", any("目を付けた" in t for t in app.texts), app.texts)
+    check("名前の前は「冒険者の」", any(t.startswith("冒険者の冒険者11が、掲示板の") for t in app.texts), app.texts)
     before = len(app.texts)
     open_board(ctx, app)
     check("知らせる文は1度だけ", len(app.texts) == before, app.texts[before:])
     check("例外が無い", not ctx.errors, ctx.errors)
+
+
+class _Owner:
+    def superseded(self):
+        return False
+
+
+def scene_urgent():
+    print("[急ぎの依頼を先に狙う・窓口 quest_claims]")
+    from instantale_modloader import quest_claims
+    quest_claims.reset()
+    module, ctx, app = ready()
+    urgent = [{"quest": "5", "area": "1", "why": "疫病（悪化）"}]
+    quest_claims.declare_urgent("events", _Owner(), lambda app_: urgent)
+    open_board(ctx, app)
+    target = bucket_of(module, app).get("target") or {}
+    check("いる街ではなく、急ぎの依頼（よその街）を狙う", target.get("quest") == "5"
+          and target.get("area") == "1", target)
+    check("いる街の掲示板には添え字が付かない", not any("が狙っている" in t for t in board_texts(app)),
+          board_texts(app))
+    rows = quest_claims.claims(app)
+    check("狙っている依頼を窓口に置く", [(r["quest"], r["state"], r["by"]) for r in rows]
+          == [("5", quest_claims.AIMING, "冒険者11")], rows)
+    elapse(ctx, app, 45)
+    done = quest_claims.claim_of(app, "5")
+    check("片付けたら片付けた行になる（名前つき）", done and done["state"] == quest_claims.DONE
+          and done["by"] == "冒険者11", done)
+    check("例外が無い", not ctx.errors, ctx.errors)
+
+    quest_claims.reset()
+    module, ctx, app = ready()
+    quest_claims.declare_urgent("events", _Owner(), lambda app_: [{"quest": "4", "area": "0", "why": "x"}])
+    open_board(ctx, app)
+    target = bucket_of(module, app).get("target") or {}
+    check("手の届かない急ぎは狙わず、いつもの狙いに戻る", target.get("quest") == "1", target)
+
+    quest_claims.reset()
+    module, ctx, app = ready(URGENT_FIRST=False)
+    quest_claims.declare_urgent("events", _Owner(), lambda app_: urgent)
+    open_board(ctx, app)
+    target = bucket_of(module, app).get("target") or {}
+    check("切れば急ぎを見ない", target.get("quest") == "1", target)
+    quest_claims.reset()
 
 
 def scene_skip_conversation_quest():
@@ -894,7 +938,7 @@ def scene_store():
     with io.open(path, encoding="utf-8") as fh:
         data = json.load(fh)
     check("鍵の並び", list(data) == ["rival", "target", "taken", "failure", "score", "history",
-                                    "topics", "away_until", "next_day"], list(data))
+                                    "topics", "away_until", "next_day", "declined", "redraw"], list(data))
     check("ライバルの鍵の並び", list(data["rival"])[:4] == ["id", "name", "chosen_day", "stance"],
           list(data["rival"]))
 
@@ -1029,12 +1073,70 @@ def scene_tool():
     check("様子の控えの一覧", len(files) == 1 and files[0][1].endswith(".json"), files)
 
 
+def scene_redraw():
+    print("[選び直す（設定画面）]")
+    spec = importlib.util.spec_from_file_location("rival_tool", os.path.join(MOD_DIR, "tool.py"))
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    rivalry = tool.rivalry
+    empty = rivalry.new_bucket()
+    check("ライバルが居なければ名前は無く、印だけ立つ", rivalry.decline_rival(empty) is None
+          and empty["redraw"] is True and empty["declined"] == [])
+
+    module, ctx, app = ready()
+    open_board(ctx, app)
+    elapse(ctx, app, 45)
+    check("片付けた状態", "1" in bucket_of(module, app).get("taken", {}))
+    # 設定画面のボタンと同じ処理（ゲームは閉じている）
+    files = tool.state_files(STATE_DIR)
+    bucket = tool.modtool.read_json(files[0][1])
+    name = rivalry.decline_rival(bucket)
+    tool.modtool.write_json("", files[0][1], rivalry.order_bucket(bucket))
+    written = tool.modtool.read_json(files[0][1])
+    check("今のライバルを外し、二度と選ばない人に入れる", name == "冒険者11" and written["rival"] is None
+          and written["declined"] == ["11"] and written["redraw"] is True, written)
+    check("片付けた依頼は残す", "1" in written.get("taken", {}), written.get("taken"))
+    check("様子の文に選び直しの印", "選び直す" in tool.describe(written)
+          and "選び直した人（二度と選ばない）: 1人" in tool.describe(written), tool.describe(written))
+
+    # ゲームを起動し直して読み込む（覚えていた中身は捨てる）
+    delattr(sys, module.STORE_ATTR)
+    module, ctx = fresh_mod(keep_state=True)
+    again = make_world(days=200)
+    use(again)
+    ctx.hook("__main__:InstantaleApp.load_game_new")(lambda self: None, again)
+    redraw(ctx, again)
+    bucket = bucket_of(module, again)
+    rival = bucket.get("rival") or {}
+    check("読み込んだらすぐ別の冒険者を選ぶ", rival.get("id") not in (None, "11"), rival)
+    check("選び直しの印は下ろす・外した人は覚えたまま", bucket.get("redraw") is False
+          and bucket.get("declined") == ["11"], bucket)
+    check("片付けた依頼はそのまま", "1" in bucket.get("taken", {}), bucket.get("taken"))
+    check("初対面の話の種が付く", any(t.get("kind") == "intro" for t in bucket.get("topics") or []),
+          bucket.get("topics"))
+    log = io.open(os.path.join(OUT_DIR, module.LOG_BASENAME), encoding="utf-8").read()
+    check("ログに選び直しの印", "draw[redraw]: chose" in log and "1 declined" in log)
+    check("例外が無い", not ctx.errors, ctx.errors)
+
+    # 普段の抽選でも、外した人は選ばない
+    module, ctx, app = ready()
+    bucket = bucket_of(module, app)
+    bucket["declined"] = ["11", "13"]
+    rivalry.reset_rival(bucket)
+    check("台帳を空にしても外した人は残る", bucket["declined"] == ["11", "13"], bucket)
+    app.world.quests["81"] = quest("81", "0", "追加の依頼", 10)
+    finish_quest(ctx, module, app, "81")
+    rival = bucket_of(module, app).get("rival") or {}
+    check("普段の抽選でも外した人は選ばない", rival.get("id") not in (None, "11", "13"), rival)
+
+
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     scene_pure()
     scene_draw()
     scene_intro()
     scene_aim()
+    scene_urgent()
     scene_skip_conversation_quest()
     scene_kept_off()
     scene_taken()
@@ -1047,6 +1149,7 @@ def main():
     scene_store()
     scene_approach()
     scene_tool()
+    scene_redraw()
     print()
     if failures:
         print("FAILED: {}".format(failures))

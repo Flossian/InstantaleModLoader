@@ -265,12 +265,12 @@ events = [{"id": 1, "area": "0", "area_name": "始まりの町", "kind": "epidem
           {"id": 3, "area": "2", "area_name": "北の村", "kind": "unrest", "stage": 3,
            "status": rules.ENDED, "started": 10, "stage_day": 50, "ended": 150,
            "end_by": rules.END_NATURAL, "text": {}}]
-rival = {"rival": {"name": "ガラン"}, "target": {"quest": "57"}}
+rival = {"57": {"state": "aiming", "by": "ガラン"}}     # 窓口 quest_claims から組む形
 lines = rules.view_lines(events, 175, rival, stage_days=60, settle_days=90, ended_days=360)
 text = "\n".join(lines)
 check("進行中の見出しと段", "進行中" in text and "始まりの町　感染症の流行（悪化）" in text, text)
 check("悪化までの日数", "発生から75日。悪化するまで約45日。" in text, text)
-check("ライバルが動き始めた依頼", "冒険者ガランが解決に向けて動き始めた" in text, text)
+check("ライバルが動き始めた依頼", "冒険者のガランが解決に向けて動き始めた" in text, text)
 check("依頼がまだの出来事", "まだ出ていない（その街のギルドで掲示板を開くと出る）" in text, text)
 check("概要は表の説明（LLM の文が無いとき）",
       "概要: " + rules.KIND_BY_KEY["epidemic"]["what"] + "。" in text, text)
@@ -313,7 +313,7 @@ del rules.KIND_BY_KEY["_tone_test"]
 check("影響の得か損か（買値が下がる・売値が上がる＝得、売値が下がる・買値が上がる・宿代が上がる＝損）",
       tones == [rules.GOOD, rules.GOOD, rules.BAD, rules.BAD, rules.GOOD, rules.BAD], tones)
 check("言葉の出し方では数字を付けない", all(number == "" for _t, number, _tone in words), words)
-check("窓の札: 依頼の行の調子", cards[0]["quest"] == ("冒険者ガランが解決に向けて動き始めた。", rules.QUEST_RIVAL)
+check("窓の札: 依頼の行の調子", cards[0]["quest"] == ("冒険者のガランが解決に向けて動き始めた。", rules.QUEST_RIVAL)
       and cards[1]["quest"] == ("まだ出ていない（傭兵仲介所『鉄の手』で掲示板を開くと出る）。", rules.QUEST_PENDING),
       [c["quest"] for c in cards])
 check("窓の終わったもの: 何日前と終わり方", model["ended"] == [
@@ -749,7 +749,9 @@ check("依頼が出た後は案内を添えない", app.texts and not any("人�
       app.texts)
 check("エラーなし", not ctx.errors, ctx.errors)
 
-print("[流れ] ライバルが片付けたら終わる（911 の控えの taken）")
+print("[流れ] ほかの冒険者が片付けたら終わる（窓口 quest_claims）")
+from instantale_modloader import quest_claims  # noqa: E402
+quest_claims.reset()
 module, ctx, app = fresh()
 bucket_store = module._store()["worlds"]
 key = bucket_store.playthrough(app)
@@ -758,18 +760,31 @@ ev = rules.start(bucket, 100, "0", "始まりの町", rules.KIND_BY_KEY["outlaws
 ev["status"] = rules.ACTIVE
 ev["quest"] = "77"
 bucket_store.save(key)
-rival_path = os.path.join(STATE_DIR, "rival_adventurer")
-os.makedirs(rival_path, exist_ok=True)
-rival_store = module._store()["rival"]
-with io.open(rival_store.path_for(key) if hasattr(rival_store, "path_for")
-             else os.path.join(rival_path, ml.state.safe_name(key) + ".json")
-             if hasattr(ml.state, "safe_name") else os.path.join(rival_path, key + ".json"),
-             "w", encoding="utf-8") as fh:
-    json.dump({"taken": {"77": {"area": "0", "title": "依頼", "day": 120, "by": "ガラン"}}}, fh)
+urgent = quest_claims.urgent(app)
+check("困り事の依頼を急ぎとして窓口に置く", [(r["quest"], r["area"], r["owner"]) for r in urgent]
+      == [("77", "0", "338_town_incidents")] and "（" in urgent[0]["why"], urgent)
+
+
+class Owner:
+    def superseded(self):
+        return False
+
+
+claim_rows = [{"quest": "77", "area": "0", "title": "依頼", "by": "ガラン", "state": quest_claims.DONE,
+               "day": 120}]
+quest_claims.declare("another_mod", Owner(), lambda app_: claim_rows)
 elapse(ctx, app, 1)
 ev = rules.events_of(bucket_of(module, app))[0]
-check("ライバルが片付けたので終わる", ev["status"] == rules.ENDED and ev["end_by"] == rules.END_RIVAL, ev)
+check("ほかの冒険者が片付けたので終わる", ev["status"] == rules.ENDED and ev["end_by"] == rules.END_RIVAL, ev)
+check("片付けた人の名前を出来事に残す", ev.get("end_by_name") == "ガラン", ev)
 check("いまいる街なら一言", any("ガラン" in t for t in app.texts), app.texts)
+check("終わった出来事は急ぎに置かない", quest_claims.urgent(app) == [], quest_claims.urgent(app))
+claim_rows[0]["by"] = "別の冒険者"
+check("終わった欄は終えたときの名前で書く", rules.ended_words(ev) == "冒険者のガランが解決した",
+      rules.ended_words(ev))
+check("名前の無い古い出来事は「ほかの冒険者」", rules.ended_words({"end_by": rules.END_RIVAL})
+      == "ほかの冒険者が解決した")
+quest_claims.reset()
 
 print("[流れ] LLM の文と、合わないときの引き直し")
 answers = [{"fits": "いいえ"}, {"fits": "はい", "name": "黒い咳", "arrive_1": "咳が聞こえる。",

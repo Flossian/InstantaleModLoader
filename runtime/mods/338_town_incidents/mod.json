@@ -63,7 +63,7 @@
     },
     "MAX_ACTIVE": {
       "type": "int",
-      "default": 2,
+      "default": 3,
       "min": 0,
       "max": 9,
       "label": {

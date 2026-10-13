@@ -23,7 +23,7 @@ ENDED = "ended"
 HISTORY_LIMIT = 20
 BUCKET_KEYS = ("events", "seq", "next_roll_day", "cooldown", "cleanup")
 EVENT_KEYS = ("id", "area", "area_name", "kind", "stage", "status", "started", "stage_day",
-              "ended", "end_by", "quest", "goods", "tries", "text", "told", "good", "stage_name")
+              "ended", "end_by", "end_by_name", "quest", "goods", "tries", "text", "told", "good", "stage_name")
 #: `summary` は版1 の1文（段に依らない）。版2 からは段ごとの `summary_<段>` を書かせる
 TEXT_KEYS = ("name", "summary", "summary_1", "summary_2", "summary_3", "summary_4",
              "arrive_1", "arrive_2", "arrive_3", "arrive_4", "shop", "settled", "quest", "rumor")
@@ -508,10 +508,13 @@ def advance(bucket, day, *, stage_days, settle_days, steps_per_elapse, rest_days
     return changes
 
 
-def end(bucket, event, day, by, rest_days=None):
+def end(bucket, event, day, by, rest_days=None, by_name=None):
+    """出来事を終える。`by_name` は片付けた冒険者の名前（`END_RIVAL` のとき。終わった欄に出す）。"""
     event["status"] = ENDED
     event["ended"] = day
     event["end_by"] = by
+    if by_name:
+        event["end_by_name"] = by_name
     if rest_days is not None and day is not None:
         bucket.setdefault("cooldown", {})[str(event.get("area"))] = day + max(0, int(rest_days))
     trim(bucket)
@@ -750,31 +753,43 @@ def next_verb(event):
     return kind["into"][stage] or "移る"
 
 
-def ended_words(event, rival_name=""):
-    """終わった欄の言い方。"""
+def ended_words(event):
+    """終わった欄の言い方。片付けた冒険者の名前は、終えたときに出来事へ残した `end_by_name`。"""
     by = event.get("end_by")
     if by == END_PLAYER:
         return "解決した"
     if by == END_RIVAL:
-        return "冒険者{}が解決した".format(rival_name or "")
+        name = event.get("end_by_name")
+        # 名前を残す前に終えた出来事は、名前が無い
+        return "冒険者の{}が解決した".format(name) if name else "ほかの冒険者が解決した"
     if by == END_NATURAL:
         kind = kind_of(event)
         return (kind or {}).get("ended") or "自然に収まった"
     return "終わった"
 
 
-def view_lines(events, day, rival, *, stage_days, settle_days, ended_days, in_words=False,
+def aiming_of(claims, quest):
+    """その依頼を狙っている冒険者の名前。狙っていなければ None。
+
+    `claims` は `{依頼 id: {"state", "by"}}`（ローダの窓口 `quest_claims` から組む。`state` は "aiming" / "done"）。
+    """
+    row = (claims or {}).get(str(quest)) if quest else None
+    if isinstance(row, dict) and row.get("state") == "aiming":
+        return row.get("by") or ""
+    return None
+
+
+def view_lines(events, day, claims, *, stage_days, settle_days, ended_days, in_words=False,
                quest_status=None, effects=EFFECTS_NUMBER, strength_percent=100, guild_names=None):
     """状況を見る窓の行。進行中（答え待ちは出さない）と、`ended_days` 日以内に終わったもの。
+
+    `claims` は依頼を狙っている・片付けた冒険者（`aiming_of` を参照）。
 
     `in_words` が真なら日付をあいまいな言葉にする（設定 `WINDOW_DAYS`）。
     `effects` は値段の効き目の出し方（`EFFECTS_NUMBER` / `EFFECTS_WORDS` / `EFFECTS_HIDDEN`）。
     `guild_names` は `{土地 id: ギルドの名前}`。無い街は「その街のギルド」と書く。
     """
     guild_names = guild_names if isinstance(guild_names, dict) else {}
-    rival = rival if isinstance(rival, dict) else {}
-    target = rival.get("target") if isinstance(rival.get("target"), dict) else {}
-    rival_name = (rival.get("rival") or {}).get("name") if isinstance(rival.get("rival"), dict) else ""
     active = sorted(events_of({"events": events}, ACTIVE),
                     key=lambda event: (-(_int(event.get("stage"), 1)), _int(event.get("started"), 0)))
     lines = []
@@ -803,8 +818,9 @@ def view_lines(events, day, rival, *, stage_days, settle_days, ended_days, in_wo
         elif not quest:
             guild = guild_names.get(str(event.get("area"))) or "その街のギルド"
             lines.append("依頼: まだ出ていない（{}で掲示板を開くと出る）。".format(guild))
-        elif target and str(target.get("quest")) == str(quest):
-            lines.append("依頼: 掲示板に出ている。冒険者{}が解決に向けて動き始めた。".format(rival_name or "誰か"))
+        elif aiming_of(claims, quest) is not None:
+            lines.append("依頼: 掲示板に出ている。冒険者の{}が解決に向けて動き始めた。".format(
+                aiming_of(claims, quest) or "誰か"))
         elif quest_status is not None and quest_status(quest) is None:
             lines.append("依頼: 掲示板から消えている。")
         else:
@@ -816,7 +832,7 @@ def view_lines(events, day, rival, *, stage_days, settle_days, ended_days, in_wo
     if ended:
         lines.append("この1年に終わったもの")
     for event in ended:
-        how = ended_words(event, rival_name)
+        how = ended_words(event)
         ended_day = _int(event.get("ended"))
         if in_words:
             when = ago_in_words(day - ended_day if day is not None and ended_day is not None else None)
@@ -833,7 +849,7 @@ def view_lines(events, day, rival, *, stage_days, settle_days, ended_days, in_wo
 QUEST_PLAIN, QUEST_PENDING, QUEST_RIVAL, QUEST_GONE = "plain", "pending", "rival", "gone"
 
 
-def view_model(events, day, rival, *, stage_days, settle_days, ended_days, in_words=False,
+def view_model(events, day, claims, *, stage_days, settle_days, ended_days, in_words=False,
                quest_status=None, effects=EFFECTS_NUMBER, strength_percent=100, guild_names=None,
                here=None):
     """各地の出来事の窓の中身。`view_lines` と同じ材料・同じ設定から、札の形に組む（ゲームにも Kivy にも触らない）。
@@ -847,9 +863,6 @@ def view_model(events, day, rival, *, stage_days, settle_days, ended_days, in_wo
          "ended": [{"when", "town", "name", "how", "by"}]}   # by は END_PLAYER / END_RIVAL / END_NATURAL
     """
     guild_names = guild_names if isinstance(guild_names, dict) else {}
-    rival = rival if isinstance(rival, dict) else {}
-    target = rival.get("target") if isinstance(rival.get("target"), dict) else {}
-    rival_name = (rival.get("rival") or {}).get("name") if isinstance(rival.get("rival"), dict) else ""
     active = sorted(events_of({"events": events}, ACTIVE),
                     key=lambda event: (-(_int(event.get("stage"), 1)), _int(event.get("started"), 0)))
     cards = []
@@ -873,8 +886,8 @@ def view_model(events, day, rival, *, stage_days, settle_days, ended_days, in_wo
         elif not quest:
             guild = guild_names.get(str(event.get("area"))) or "その街のギルド"
             line = ("まだ出ていない（{}で掲示板を開くと出る）。".format(guild), QUEST_PENDING)
-        elif target and str(target.get("quest")) == str(quest):
-            line = ("冒険者{}が解決に向けて動き始めた。".format(rival_name or "誰か"), QUEST_RIVAL)
+        elif aiming_of(claims, quest) is not None:
+            line = ("冒険者の{}が解決に向けて動き始めた。".format(aiming_of(claims, quest) or "誰か"), QUEST_RIVAL)
         elif quest_status is not None and quest_status(quest) is None:
             line = ("掲示板から消えている。", QUEST_GONE)
         else:
@@ -892,7 +905,7 @@ def view_model(events, day, rival, *, stage_days, settle_days, ended_days, in_wo
     rows = []
     for event in ended:
         by = event.get("end_by")
-        how = ended_words(event, rival_name)
+        how = ended_words(event)
         ended_day = _int(event.get("ended"))
         ago = day - ended_day if day is not None and ended_day is not None else None
         if in_words:

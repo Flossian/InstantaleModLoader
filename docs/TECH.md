@@ -141,6 +141,7 @@ runtime/instantale_modloader/
     guards.py     ゲームの衛兵の戦闘を MOD が起こす窓口。組んだ戦闘の強さ（難易度）だけを差し替える（§3.3.10）
     defeat.py     倒れた戦闘を死なせずに逃走と同じ終わり方で終える窓口。倒れても続けたい戦闘を持つ MOD が引き受けを登録する（§3.3.11）
     board.py      ギルドの掲示板に出さない依頼の窓口。隠す MOD が置き、掲示板の依頼を拾う MOD が外す（§3.3.12）
+    quest_claims.py  主人公以外が狙い・片付けた依頼と、急ぎの依頼の窓口。片付ける人物を持つ MOD と出来事を持つ MOD が置き、互いに聞く（§3.3.18）
     confinement.py  主人公が閉じ込められている（牢の中など）ことの窓口。閉じ込める MOD が置き、選択肢を足す MOD が引く（§3.3.13）
     choices.py    選択肢のボタンの窓口。組み直しと押下の包み、印の持ち越し、ロードの後の組み直し、押した後の保存（§3.3.14）
     hudicons.py   画面左下に MOD 用のボタン1つと一覧を置く窓口。MOD は行と知らせの印を足す（§3.3.15）
@@ -1780,6 +1781,28 @@ panels.markup([(文, 色 or 鍵)], 鍵→色)         # 語ごとに色を付け
 | アイコン | 足さない。字の大きさ・色・目盛り・枠で分ける（2026-10-13 に決めた） |
 | Kivy | 関数の中でだけ読む。中身を組む部分（MOD の `view` など）は Kivy に触らず、検査で通す |
 
+#### 3.3.18 主人公以外が依頼を狙う・片付けるのも窓口で（`quest_claims`）
+
+掲示板の依頼を片付ける人物を持つ MOD（ライバルの冒険者など）と、依頼の行方を見て世界を動かす MOD（街の出来事など）がある。
+後者が前者の控えのファイルを直に読むと、控えの形を変えたときや片付ける人物が増えたときに、黙って読めなくなる。
+`instantale_modloader/quest_claims.py` で、どちらの向きの話もここを通す。
+
+```python
+quest_claims.declare(owner, ctx, fn)          # 片付ける側。fn(app) -> [{"quest", "area", "title", "by", "state", "day"}]
+quest_claims.declare_urgent(owner, ctx, fn)   # 急ぎを置く側。fn(app) -> [{"quest", "area", "why"}]
+rows = quest_claims.claims(app, state=None)   # 読む側。state は AIMING（狙っている）/ DONE（片付けた）
+row = quest_claims.claim_of(app, quest_id)    # その依頼の行（片付けた行を先に）
+rows = quest_claims.urgent(app)               # 急ぎの行
+```
+
+| 決まり | 理由 |
+|---|---|
+| 行には持ち主（`owner`）を足して返し、依頼の id と土地は文字列にそろえる | 読む側が「誰の MOD が置いたか」でログを書け、id の型の違いで取りこぼさない |
+| 1つの依頼に狙っている行と片付けた行が重なったら、`claim_of` は片付けた行を先に返す | 片付けた事実のほうが強い。狙っている行は古いことがある |
+| 置く関数は控えの錠を取らずに読むだけにする | 読む側は自分の控えの錠を持ったまま聞きに来る（ライバルが狙いを決める最中など）。置く側も錠を取ると、2つの MOD が互いの錠を逆の順に取り合う |
+| 片付けた人の名前は、読む側が自分の控えに写して持つ | 片付ける人物が後で入れ替わっても（ライバルの選び直し）、終わった出来事の言い方が変わらない |
+| 登録は持ち主ごとに1つ。登録した ctx が用済みなら数えない。`fn` が投げたら何も置かなかったものとみなす（`errors` に残す） | `talk_affinity`（§3.3.8）・`board`（§3.3.12）と同じ |
+
 ### 3.4 まだ現れていない対象を狙う（保留と当て直し）
 
 ゲームは `llama_cpp_runtime_completion` と `scripts.llm.llm_manager` を
@@ -2157,7 +2180,7 @@ GUI の1行に収めると「JSON を手で書く欄」になり、コードを�
 | `apply(ctx)` に渡る `ctx` | §3.1 / §3.6 / §3.8 / §3.11 |
 | `mod.json` の鍵 | §3.1 / §3.2 / §3.8 / §3.9 / §3.12 |
 | §5 の共通部品（`ui` / `frames` / `llm` / `state` / `jobs` / `modnpc` / `modfacility` / `prices` / `sounds` / `imagegen`） | §5 |
-| 使い方を書いた窓口（`durations` / `prices` / `combat` / `equipment` / `arrivals` / `talk_affinity` / `talk_summary` / `ids` / `npcs` / `saves` / `wanted` / `guards` / `defeat` / `board` / `confinement` / `choices` / `hudicons`） | §3.2.3 / §3.3 |
+| 使い方を書いた窓口（`durations` / `prices` / `combat` / `equipment` / `arrivals` / `talk_affinity` / `talk_summary` / `ids` / `npcs` / `saves` / `wanted` / `guards` / `defeat` / `board` / `confinement` / `choices` / `hudicons` / `quest_claims`） | §3.2.3 / §3.3 |
 
 これ以外は内部で、予告なく変わる。
 `patch.py` の `_defer_if_*` や `__init__.py` の `_order()` のような

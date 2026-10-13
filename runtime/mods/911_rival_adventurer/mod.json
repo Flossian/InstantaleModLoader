@@ -169,6 +169,18 @@
         "en": "Only quests up to the rival's level plus this"
       }
     },
+    "URGENT_FIRST": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "急ぎの依頼を先に狙う",
+        "en": "Go for urgent quests first"
+      },
+      "note": {
+        "ja": "街の出来事のように放っておくと悪くなる依頼が掲示板に出ていれば、どの土地のものでも先に狙う（手の届く難易度のものだけ）。切ると、いる土地とライバルの本拠の土地の依頼だけから選ぶ",
+        "en": "If a quest that worsens when left alone (such as a town incident) is posted anywhere, the rival goes for it first, within reach. Off: only quests in the player's town and the rival's home town"
+      }
+    },
     "LEVEL_STEP": {
       "type": "int",
       "default": 1,
@@ -325,7 +337,7 @@
     },
     "INTRO_FALLBACK": {
       "type": "str",
-      "default": "ギルドの片隅で、冒険者{name}が{player}を値踏みするように眺めている。{known}を聞きつけ、張り合う気でいるらしい。",
+      "default": "ギルドの片隅で、冒険者の{name}が{player}を値踏みするように眺めている。{known}を聞きつけ、張り合う気でいるらしい。",
       "label": {
         "ja": "登場の語りの文型",
         "en": "Entrance template"
@@ -361,7 +373,7 @@
     },
     "TARGET_ANNOUNCE": {
       "type": "str",
-      "default": "冒険者{name}が、掲示板の「{title}」に目を付けたようだ。",
+      "default": "冒険者の{name}が、掲示板の「{title}」に目を付けたようだ。",
       "label": {
         "ja": "狙いを知らせる文",
         "en": "Line when the rival marks a quest"
@@ -541,7 +553,7 @@
     },
     "RUMOR_NOTE": {
       "type": "str",
-      "default": "この土地では、冒険者{name}が「{title}」を片付けたと噂になっている（{days}日前）。",
+      "default": "この土地では、冒険者の{name}が「{title}」を片付けたと噂になっている（{days}日前）。",
       "label": {
         "ja": "住人に渡す噂の文",
         "en": "Gossip note for locals"

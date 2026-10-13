@@ -38,7 +38,7 @@ import sys
 import time
 
 from instantale_modloader import (arrivals, choices, frames, jobs, llm, modfacility, modnpc,
-                                  state as loader_state, talk_affinity, ui)
+                                  quest_claims, state as loader_state, talk_affinity, ui)
 from instantale_modloader import board as quest_board   # 包みの関数 `board`（掲示板を開く）と名前が重なるので別名
 from instantale_modloader.npcs import npc_stores, save_npcs
 
@@ -57,6 +57,7 @@ DUE_DAYS_MAX = 40             # 同 上限
 COOLDOWN_DAYS = 10            # 片付けてから次に狙うまでの日数
 INJURY_DAYS = 30              # しくじったあと休む日数
 REACH_LEVELS = 10             # 狙う依頼の難易度の上限（ライバルの Lv + この値）
+URGENT_FIRST = True           # 急ぎの依頼（街の出来事など）があれば、どの土地のものでも先に狙う
 LEVEL_STEP = 1                # 片付けるたびに上がる Lv
 LEVEL_MAX = 99                # ライバルの Lv の上限
 WINS_PER_STANCE = 1           # 態度が1段和らぐまでに先に片付ける回数
@@ -69,10 +70,10 @@ APPROACH_INTRO = "張り合う相手として{player}の前に初めて現れ、
 APPROACH_TAKEN = "「{title}」を先に片付けたことを、{player}に見せつけに来た"
 APPROACH_LOST = "狙っていた「{title}」を{player}に先に片付けられ、そのことで声をかけてきた"
 APPROACH_CLEANUP = "自分がしくじった「{title}」を{player}が片付けたと聞き、そのことで声をかけてきた"
-INTRO_FALLBACK = "ギルドの片隅で、冒険者{name}が{player}を値踏みするように眺めている。{known}を聞きつけ、張り合う気でいるらしい。"
+INTRO_FALLBACK = "ギルドの片隅で、冒険者の{name}が{player}を値踏みするように眺めている。{known}を聞きつけ、張り合う気でいるらしい。"
 REASON_FALLBACK = "{known}を聞き、格の違いを見せつけてやろうと思っている"
 TARGET_SUFFIX = "（{name}が狙っている・あと{days}日）"
-TARGET_ANNOUNCE = "冒険者{name}が、掲示板の「{title}」に目を付けたようだ。"
+TARGET_ANNOUNCE = "冒険者の{name}が、掲示板の「{title}」に目を付けたようだ。"
 TAKEN_ANNOUNCE = "掲示板から「{title}」の貼り紙が剥がされている。{name}が片付けたらしい。"
 FAILED_ANNOUNCE = "「{title}」に挑んだ{name}がしくじって怪我を負ったと、掲示板の前で噂されている。"
 WIN_ANNOUNCE = "{name}が狙っていた依頼を、先に片付けた。"
@@ -88,7 +89,7 @@ STANCE_NOTE_2 = "{player}を対等な好敵手と認め、敬意を持って競�
 STANCE_NOTE_3 = "{player}の実力にすっかり感服していて、張り合うより認められたがり、何かと持ち上げる。"
 RIVAL_AIM_NOTE = "いまは「{title}」を狙っていて、{days}日ほどのうちに片付けるつもりでいる。"
 RIVAL_AWAY_NOTE = "先日「{title}」にしくじって怪我を負い、あと{days}日ほどは依頼を受けずに休んでいる。"
-RUMOR_NOTE = "この土地では、冒険者{name}が「{title}」を片付けたと噂になっている（{days}日前）。"
+RUMOR_NOTE = "この土地では、冒険者の{name}が「{title}」を片付けたと噂になっている（{days}日前）。"
 
 # ---- 設定にしない定数 ----------------------------------------------------
 OWNER = "911_rival_adventurer"         # modnpc の層の持ち主（フォルダ名）
@@ -376,20 +377,26 @@ def apply(ctx):
         rivalry.reset_rival(bucket)
         return False
 
-    def draw_rival(app, bucket, day):
-        """依頼を片付けたときの抽選。当たってライバルを選べたら True。"""
+    def draw_rival(app, bucket, day, forced=False):
+        """依頼を片付けたときの抽選。当たってライバルを選べたら True。
+
+        `forced` は設定画面で選び直した後の読み込み（`redraw`）。件数と確率の抽選を飛ばしてすぐ選ぶ。
+        選び直した人（`declined`）はどちらでも選ばない。
+        """
         clears = cleared_count(app)
-        if not rivalry.may_draw(clears, RIVAL_AFTER_QUESTS):
-            write("draw: {} quest(s) cleared, waiting for {}".format(clears, RIVAL_AFTER_QUESTS))
-            return False
-        roll = rng.random()
-        if roll >= RIVAL_CHANCE_PERCENT / 100.0:
-            write("draw: missed ({:.2f} >= {}%), {} quest(s) cleared".format(
-                roll, RIVAL_CHANCE_PERCENT, clears))
-            return False
+        if not forced:
+            if not rivalry.may_draw(clears, RIVAL_AFTER_QUESTS):
+                write("draw: {} quest(s) cleared, waiting for {}".format(clears, RIVAL_AFTER_QUESTS))
+                return False
+            roll = rng.random()
+            if roll >= RIVAL_CHANCE_PERCENT / 100.0:
+                write("draw: missed ({:.2f} >= {}%), {} quest(s) cleared".format(
+                    roll, RIVAL_CHANCE_PERCENT, clears))
+                return False
         party = {str(member) for member in ui.party_member_ids(app)}
+        declined = set(rivalry.declined_of(bucket))
         candidates = [(npc_id, level_of(app, npc_id)) for npc_id in adventurers(app)
-                      if npc_id not in party and exists(app, npc_id)
+                      if npc_id not in party and npc_id not in declined and exists(app, npc_id)
                       and not is_dead(app, npc_id)]
         chosen = rivalry.pick_rival(candidates, player_level(app), rng)
         if chosen is None:
@@ -400,9 +407,10 @@ def apply(ctx):
                            "chosen_day": day, "stance": 0, "stance_told": True,
                            "reason": "", "intro": "", "intro_told": False}
         rivalry.push_topic(bucket, rivalry.TOPIC_INTRO, "", day, TOPIC_LIMIT)
-        write("draw: chose {} ({}) Lv{} for player Lv{} among {} adventurer(s)".format(
-            bucket["rival"]["name"], chosen, level_of(app, chosen), player_level(app),
-            len(candidates)))
+        write("draw{}: chose {} ({}) Lv{} for player Lv{} among {} adventurer(s){}".format(
+            "[redraw]" if forced else "", bucket["rival"]["name"], chosen, level_of(app, chosen),
+            player_level(app), len(candidates),
+            ", {} declined".format(len(declined)) if declined else ""))
         return True
 
     # ------------------------------------------------------------ 登場の語り
@@ -541,15 +549,46 @@ def apply(ctx):
         return after
 
     # ------------------------------------------------------------ 狙う・挑む
+    def urgent_targets(app, bucket):
+        """急ぎの依頼（窓口 `quest_claims`）のうち、ライバルが狙える依頼 `[(id, 難易度, 土地)]`。
+
+        狙える条件は普段の狙いと同じ（`open_quests`）。土地は問わない（出来事は世界各地で起きる）。
+        """
+        rows = []
+        open_by_area = {}
+        for row in quest_claims.urgent(app):
+            area = row.get("area")
+            if not area:
+                continue
+            if area not in open_by_area:
+                open_by_area[area] = dict(open_quests(app, area, bucket))
+            if row["quest"] in open_by_area[area]:
+                rows.append((row["quest"], open_by_area[area][row["quest"]], area))
+        return rows
+
     def aim(app, bucket, day, area_id, why):
-        """その土地の依頼に狙いを付ける。付けたら True。"""
+        """依頼に狙いを付ける。付けたら True。
+
+        急ぎの依頼（`URGENT_FIRST`）があれば、`area_id` に関わらずそちらを先に狙う。
+        無ければ `area_id` の土地の依頼から選ぶ。
+        """
         if not area_id or not rivalry.may_aim(bucket, day):
             return False
         rival_id = str((bucket.get("rival") or {}).get("id") or "")
         if not rival_id or in_party(app, rival_id):
             return False
-        quests = open_quests(app, area_id, bucket)
-        quest_id = rivalry.pick_target(quests, level_of(app, rival_id), REACH_LEVELS, rng)
+        level = level_of(app, rival_id)
+        quest_id = None
+        if URGENT_FIRST:
+            urgent = urgent_targets(app, bucket)
+            quest_id = rivalry.pick_target([(qid, diff) for qid, diff, _area in urgent],
+                                           level, REACH_LEVELS, rng)
+            if quest_id is not None:
+                area_id = {qid: area for qid, _diff, area in urgent}[quest_id]
+                why = "{}+urgent".format(why)
+        if quest_id is None:
+            quests = open_quests(app, area_id, bucket)
+            quest_id = rivalry.pick_target(quests, level, REACH_LEVELS, rng)
         if quest_id is None:
             return False
         quest = live_quests(app).get(quest_id)
@@ -869,6 +908,30 @@ def apply(ctx):
 
     talk_affinity.limit(OWNER, ctx, rival_talk_ceiling)
 
+    # ------------------------------------------------------------ 狙い・片付けた依頼を窓口へ
+    def quest_claim_rows(app):
+        """窓口 `quest_claims` に置く行（狙っている依頼と、片付けた依頼）。
+
+        錠は取らない（読む側は自分の錠を持ったまま聞きに来る。窓口の決まり）。
+        """
+        _key, bucket = ledger(app)
+        rival = bucket.get("rival")
+        name = rival_name(app, bucket) if isinstance(rival, dict) else ""
+        rows = []
+        target = bucket.get("target")
+        if isinstance(target, dict) and name:
+            rows.append({"quest": target.get("quest"), "area": target.get("area"),
+                         "title": target.get("title"), "by": name,
+                         "state": quest_claims.AIMING, "day": target.get("set_day")})
+        for quest_id, row in list(rivalry.taken_of(bucket).items()):
+            if isinstance(row, dict):
+                rows.append({"quest": quest_id, "area": row.get("area"), "title": row.get("title"),
+                             "by": row.get("by") or name, "state": quest_claims.DONE,
+                             "day": row.get("day")})
+        return rows
+
+    quest_claims.declare(OWNER, ctx, quest_claim_rows)
+
     # ------------------------------------------------------------ ギルドでの声かけ
     topic_texts = {rivalry.TOPIC_INTRO: APPROACH_INTRO, rivalry.TOPIC_TAKEN: APPROACH_TAKEN,
                    rivalry.TOPIC_LOST: APPROACH_LOST, rivalry.TOPIC_CLEANUP: APPROACH_CLEANUP}
@@ -989,9 +1052,17 @@ def apply(ctx):
             if rivalry.rewind(bucket, day):
                 write("reconcile: forgot what happened after day {} (older save)".format(day))
                 worlds.save(key)
+            if bucket.get("redraw"):
+                # 設定画面で選び直した。抽選を飛ばしてすぐ別の人を選ぶ（選び直した人は選ばない）。
+                bucket["redraw"] = False
+                if not isinstance(bucket.get("rival"), dict) and draw_rival(app, bucket, day, forced=True):
+                    write("reconcile: chose a new rival after the settings screen asked for it")
+                elif not isinstance(bucket.get("rival"), dict):
+                    write("reconcile: asked to choose a new rival, but no adventurer is left to choose")
+                worlds.save(key)
             rival = bucket.get("rival")
             if isinstance(rival, dict) and not rival.get("intro"):
-                # 語りを書き終える前に閉じた。もう一度頼む。
+                # 語りを書き終える前に閉じた（選び直した直後もここで頼む）。もう一度頼む。
                 ask_intro(app, key, rival.get("id"))
 
     # ================================================================ フック

@@ -12,14 +12,16 @@
      "history": [{"title", "outcome", "day"}],   最近の取り合い（新しい順）
      "topics":  [{"kind", "title", "day"}],      ギルドで声をかけるときの話の種（新しい順）
      "away_until": 日 か None,     しくじって休んでいる間
-     "next_day":   日 か None}     次に狙いを付けてよい日
+     "next_day":   日 か None,     次に狙いを付けてよい日
+     "declined":   [人物の id],    設定画面で選び直した人（二度と選ばない）
+     "redraw":     真偽}           次に読み込んだとき、抽選を飛ばしてすぐ選び直す
 
 設計の経緯は DOC.md。
 """
 
 #: 台帳の鍵の並び（`state\` の差分を読めるように固定する）。
 BUCKET_KEYS = ("rival", "target", "taken", "failure", "score", "history", "topics",
-               "away_until", "next_day")
+               "away_until", "next_day", "declined", "redraw")
 SCORE_KEYS = ("rival", "player", "failed")
 RIVAL_KEYS = ("id", "name", "chosen_day", "stance", "stance_told", "reason",
               "intro", "intro_told")
@@ -39,7 +41,7 @@ TOPIC_INTRO, TOPIC_TAKEN, TOPIC_LOST, TOPIC_CLEANUP = "intro", "taken", "lost", 
 def new_bucket():
     return {"rival": None, "target": None, "taken": {}, "failure": None,
             "score": {key: 0 for key in SCORE_KEYS}, "history": [], "topics": [],
-            "away_until": None, "next_day": None}
+            "away_until": None, "next_day": None, "declined": [], "redraw": False}
 
 
 def order_bucket(bucket):
@@ -60,19 +62,53 @@ def order_bucket(bucket):
         elif key in ("history", "topics"):
             value = [row for row in value if isinstance(row, dict)] \
                 if isinstance(value, list) else []
+        elif key == "declined":
+            value = declined_of({"declined": value})
+        elif key == "redraw":
+            value = bool(value)
         out[key] = value
     return out
 
 
 def reset_rival(bucket):
-    """ライバルが居なくなった・選び直した。片付けた依頼（`taken`）だけ残して台帳を空にする。
+    """ライバルが居なくなった・選び直した。片付けた依頼（`taken`）と選び直した人（`declined`）だけ残して台帳を空にする。
 
     片付けた依頼は世界の中ではもう片付いているので、掲示板へ戻さない。
     勝敗・態度・取り合いの記録・話の種は次のライバルのために空にする。
     """
     taken = taken_of(bucket)
+    declined = declined_of(bucket)
     bucket.update(new_bucket())
     bucket["taken"] = taken
+    bucket["declined"] = declined
+
+
+def declined_of(bucket):
+    """選び直した人の id（文字列・重なり無し・選び直した順）。"""
+    value = bucket.get("declined") if isinstance(bucket, dict) else None
+    out = []
+    for npc_id in value if isinstance(value, list) else []:
+        if npc_id not in (None, "") and str(npc_id) not in out:
+            out.append(str(npc_id))
+    return out
+
+
+def decline_rival(bucket):
+    """設定画面の「ライバルを選び直す」。今のライバルを二度と選ばない人に入れ、台帳を空にして選び直しの印を立てる。
+
+    片付けた依頼は残す（`reset_rival`）。今のライバルの名前を返す（居なければ None）。
+    """
+    rival = bucket.get("rival")
+    name = None
+    declined = declined_of(bucket)
+    if isinstance(rival, dict):
+        name = rival.get("name")
+        if rival.get("id") not in (None, "") and str(rival["id"]) not in declined:
+            declined.append(str(rival["id"]))
+    bucket["declined"] = declined
+    reset_rival(bucket)
+    bucket["redraw"] = True
+    return name
 
 
 def score_of(bucket):
