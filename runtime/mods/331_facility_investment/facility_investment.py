@@ -29,7 +29,10 @@ r"""機能追加: 街に施設を建てる（出資する）。
 どちらもセーブには残らず、控え（`state\`）から建て直す。
 この MOD が持つのは**出資の帳簿**だけ（`state\facility_investment\<世界名>.json`）。
 
-    持ち株  = {area, facility, keeper, kind, tier, size, name, built, collected}
+    持ち株  = {area, facility, keeper, kind, tier, size, name, built, collected, received}
+
+`received` はこれまでに受け取った売上の合計（版45 から）。それより前に受け取った分は額が残っていないので、
+版45 より前の持ち株は最初に受け取ったときに `received_partial` を立てる（「家と施設」の窓は「以上」と書く）。
 
 主人は施設を建てたときに一緒に生まれ、その施設の主として立つ。
 雇っているわけではない（表現の問題で、実際にどこかで雇うわけではない）。
@@ -65,8 +68,8 @@ r"""機能追加: 街に施設を建てる（出資する）。
 import datetime
 import sys
 
-from instantale_modloader import (choices, durations, frames, llm, modfacility, modnpc,
-                                  prices, ui)
+from instantale_modloader import (choices, durations, frames, holdings, llm, modfacility,
+                                  modnpc, prices, ui)
 from instantale_modloader.state import (UNKNOWN_WORLD, WorldStore, playthrough_key,
                                         playthrough_key_of_dict)
 
@@ -140,6 +143,9 @@ DAYS_PER_MONTH = 30
 COST_SCALE = 100
 INCOME_SCALE = 100
 HOLD_DAYS = 360
+
+#: 「家と施設」の窓の等級の札の色（ローダの `holdings` の色の段）。
+TIER_TONES = {"basic": "plain", "standard": "fair", "advanced": "good"}
 STAY_QUALITY = "private_room"
 
 #: 種類ごとの建設費と1日の売上、建てられる最低の規模。
@@ -332,6 +338,7 @@ def apply(ctx):
     # 帳簿はその場でファイルになるが、所持金がセーブに入るのは次の保存のとき。
     # 保存しないまま落ちると、建物がタダで残り、受け取った売上は消えて `collected` だけ進む。
     save_soon = ui.saver(ctx, write, "investment")
+    later = ui.scheduler(ctx, "investment")
 
     # 建物と主人はローダが持つ。関所は何本の MOD が呼んでも1つしか立たない。
     modfacility.install(ctx, write=write)
@@ -923,6 +930,7 @@ def apply(ctx):
             "price": price,
             "built": day,
             "collected": day,
+            "received": 0,
             "at": datetime.datetime.now().isoformat(timespec="seconds"),
         }
         # 主人を先に決める（帳簿に控える）。`register_holding` はそれを使う。
@@ -979,6 +987,16 @@ def apply(ctx):
                              role=spec.get("keeper_role", "主人")))
         return True
 
+    def add_received(record, gold, before):
+        """受け取った額を足す。版45 より前の持ち株は、一度も受け取っていなければ 0 から数える。"""
+        got = record.get("received")
+        if isinstance(got, int) and not isinstance(got, bool):
+            record["received"] = got + int(gold)
+            return
+        record["received"] = int(gold)
+        if before != record.get("built"):
+            record["received_partial"] = True     # 前に受け取った額は残っていない
+
     def collect(app, facility_id):
         """溜まった売上を受け取る。受け取った額を返す。"""
         record = holding_of(app, facility_id)
@@ -996,7 +1014,9 @@ def apply(ctx):
             screen.say(app, NO_CHARGE_TEXT)
             return 0
         today = ui.game_day(app)
-        record["collected"] = today if today is not None else record.get("collected")
+        before = record.get("collected")
+        record["collected"] = today if today is not None else before
+        add_received(record, gold, before)
         save(app)
         save_soon(app, "collect")
         write("collected: {}G for {} day(s) at {!r}".format(gold, days, record.get("name")))
@@ -1292,6 +1312,7 @@ def apply(ctx):
         """
         try:
             apply_holdings(self, getattr(self, "world", None), current_key(self), "screen")
+            notice_full(self)
             maintain_buttons(self)
             modfacility.maintain_buttons(self, write=write)
         except Exception:
@@ -1375,6 +1396,9 @@ def apply(ctx):
                     state["key_override"] = None
                 write("load: the ledger of {!r} has {} holding(s)".format(
                     key, len(bucket_of(key).get("holdings") or [])))
+                # 読み込んだ直後は選択肢が組み直されない（焼かれたボタンを戻すだけ）ので、
+                # 保管上限に届いたままのセーブでも赤い点が付くよう、読み終えてから1度確かめる
+                later(lambda: notice_full(app), delay=1.0)
         except Exception:
             ctx.log_exc("investment: cannot rebuild the holdings on load")
         return result
@@ -1540,6 +1564,67 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("investment: cannot close the stay")
         return result
+
+    # ------------------------------------------------------------ 家と施設の窓
+    def received_text(record):
+        """建設費の後ろの括弧の中身。"""
+        got = record.get("received")
+        if isinstance(got, int) and not isinstance(got, bool):
+            if got <= 0 and not record.get("received_partial"):
+                return "まだ受け取っていない"
+            return "受け取り済み {}G{}".format(ui.money(got), " 以上" if record.get("received_partial") else "")
+        if record.get("collected") == record.get("built"):
+            return "まだ受け取っていない"
+        return "受け取った額の記録なし"
+
+    def notice_full(app):
+        """売上が保管上限に届いた建物があれば「家と施設」の行に赤い点を付ける（届くたびに1度）。"""
+        key = current_key(app)
+        if not key or key == UNKNOWN_WORLD or not int(HOLD_DAYS):
+            return
+        noticed = state.setdefault("full_noticed", set())
+        for record in holdings_of(app):
+            gold, days = owed(app, record)
+            mark = (key, str(record.get("facility")), record.get("collected"))
+            if days >= int(HOLD_DAYS) and mark not in noticed:
+                noticed.add(mark)
+                holdings.notify(playthrough=key)
+                write("full: {!r} holds {} day(s) of income ({}G)".format(record.get("name"), days, gold))
+
+    def holdings_side(app):
+        """ローダの「家と施設」の窓に出す施設の側（TECH.md §3.3.19）。帳簿は読むだけで書かない。"""
+        key = current_key(app)
+        if not key or key == UNKNOWN_WORLD:
+            return None
+        here = ui.area_id_of(ui.current_area(app))
+        hold = int(HOLD_DAYS)
+        rows = [(record,) + owed(app, record) for record in holdings_of(app)]
+        rows.sort(key=lambda row: -row[2])                 # 保管上限に近い順
+        cards, here_names, income = [], [], 0
+        for record, gold, days in rows:
+            spec = catalog.kind_of(record.get("kind")) or {}
+            tier = record.get("tier")
+            full = hold > 0 and days >= hold
+            card = {"name": record.get("name") or "", "caption": "等級",
+                    "where": "{}・{}".format(spec.get("label") or record.get("kind") or "",
+                                            record.get("area_name") or ""),
+                    "badge": (catalog.TIER_LABEL.get(tier, tier or ""), TIER_TONES.get(tier, "plain")),
+                    "rows": [("主人", keeper_name(app, record)),
+                             ("溜まった売上", "{}G（{}日ぶん）".format(ui.money(gold), days))],
+                    "meter_after": 2,
+                    "meter": {"ratio": days / float(hold) if hold > 0 else 0, "tone": "bad" if full else "fair",
+                              "left": "前に受け取った日",
+                              "right": "保管上限 {}日".format(hold) if full else "保管上限まであと{}日".format(hold - days)},
+                    "notes": ["1日の売上 {}G　建設費 {}G（{}）".format(
+                        ui.money(per_day(record)), ui.money(record.get("price") or 0), received_text(record))],
+                    "cautions": [("売上が保管上限に届いている。受け取りに行くまで、これ以上売上は保管できない。", "bad")] if full else []}
+            cards.append(card)
+            income += int(gold)
+            if here and str(record.get("area")) == here:
+                here_names.append(record.get("name") or "")
+        return {"cards": cards, "count": len(cards), "income": income, "here": here_names}
+
+    holdings.provide(ctx, holdings.FACILITIES, holdings_side, write=write)
 
     write("applied: kinds={} scales cost={}% income={}% hold={}d".format(
         catalog.enabled_kinds(), COST_SCALE, INCOME_SCALE, HOLD_DAYS))

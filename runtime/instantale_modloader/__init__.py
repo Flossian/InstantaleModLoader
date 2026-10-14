@@ -2513,6 +2513,12 @@ def _unload(out_dir: str | None) -> dict:
             _hudicons.remove_all()
         except Exception:
             log_exc("unload: cannot remove the hud icons")
+        try:
+            # 「家と施設」の窓を閉じ、330/331 が置いた側を外す
+            from . import holdings as _holdings
+            _holdings.remove_all()
+        except Exception:
+            log_exc("unload: cannot remove the holdings window")
         reverted = _patch.revert_all()
         _rebind_cloud_resources()
         return reverted

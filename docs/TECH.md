@@ -148,6 +148,7 @@ runtime/instantale_modloader/
     choices.py    選択肢のボタンの窓口。組み直しと押下の包み、印の持ち越し、ロードの後の組み直し、押した後の保存（§3.3.14）
     hudicons.py   画面左下に MOD 用のボタン1つと一覧を置く窓口。MOD は行と知らせの印を足す（§3.3.15）
     panels.py     MOD の窓をゲームの画面と同じ作りで描く部品（地と枠・字の4段・札・目盛り・スクロール。§3.3.17）
+    holdings.py   330 の家と 331 の施設を1つの窓「家と施設」に並べる窓口。2本は札の中身を渡すだけ（§3.3.19）
     sounds.py     曲の置き場所の探し方・戦闘曲の見分け方・重みの読み方（§5.10）
     imagegen.py   画像生成の方式（sdcpp の cuda / vulkan / cpu と diffusers_openvino）を隠して、人物の絵を描く関数を包む（§5.11）
     stalls.py     作業スレッドが死んだときに本文の欄へ出して待機を終える。LLM の 4xx の送り直しを早めに打ち切る（§5.12）
@@ -1774,7 +1775,7 @@ talk_summary.ride(owner, ctx, begin, settle, fields)      # apply() の中
 #### 3.3.17 MOD の窓はゲームの画面と同じ作りの部品で（`panels`）
 
 画面左下の一覧（§3.3.15）から開く状況の窓などを、ゲームの画面と同じ作りで描く部品。
-`338_` の各地の出来事と `339_` の勢力と情勢が同じ部品を使うので、片方を直せばもう片方も揃う。
+`338_` の各地の出来事・`339_` の勢力と情勢・ローダの家と施設（§3.3.19）が同じ部品を使うので、1つを直せばほかも揃う。
 
 ```python
 view = panels.open_window(app, "勢力と情勢", build, subtitle="現在地　…", on_dismiss=…, log_exc=…)
@@ -1786,6 +1787,9 @@ kit.gauge(段の名前の並び, 今の位置, 色, lit=薄く塗る段か)     
 kit.barred(字, 色)                           # 左に縦の帯（噂の引用・注意の行）
 kit.dated(日付, 中身)                         # 左に一定の幅の日付
 kit.section(見出し, 行の並び, 空のとき)        # 見出しつきの枠。中身はスクロール
+kit.labeled(見出し, 中身, 色)                  # 薄い見出しと中身の1行
+kit.meter(割合, 色, left=左の添え, right=右の添え)   # 段の無い量の棒（期限・溜まり）
+kit.flowing(札の並び)                         # 左の列を上から埋め、入らない札から右の列へ。右に入らなければ右だけスクロール
 kit.column() / kit.stack() / kit.scroller(中身) / kit.framed(ウィジェット)
 panels.border(ウィジェット)                # 2px の枠だけ（左下の一覧の枠もこれ）
 panels.markup([(文, 色 or 鍵)], 鍵→色)         # 語ごとに色を付けた markup
@@ -1798,6 +1802,8 @@ panels.markup([(文, 色 or 鍵)], 鍵→色)         # 語ごとに色を付け
 | 色 | 本文は白、添え書きは灰。段階の色は MOD が決めて渡す（窓口は持たない） |
 | アイコン | 足さない。字の大きさ・色・目盛り・枠で分ける（2026-10-13 に決めた） |
 | Kivy | 関数の中でだけ読む。中身を組む部分（MOD の `view` など）は Kivy に触らず、検査で通す |
+| 見出しの片 | `open_window` の `subtitle` は文字列か `[(文, 色 or None)]` の並び。色の無い片は薄い字（家と施設の窓で、街の名前と売上の合計だけを濃くする） |
+| 流し込み | `kit.flowing` の分け目は札の高さが出そろってから決め、窓の大きさが変わるたびに決め直す。2つの列は同じ幅なので、札をどちらに置いても高さは変わらず、分け目が行き来しない。分け目の計算は `panels.flow_split`（Kivy 抜きで検査する） |
 
 #### 3.3.18 主人公以外が依頼を狙う・片付けるのも窓口で（`quest_claims`）
 
@@ -1820,6 +1826,37 @@ rows = quest_claims.urgent(app)               # 急ぎの行
 | 置く関数は控えの錠を待たない。待たずに取れたとき（`lock.acquire(blocking=False)`。同じスレッドが持っていれば取れる）だけ控えを読み、写しを残す。取れなければ前の写しで答える | 読む側は自分の控えの錠を持ったまま聞きに来る（ライバルが狙いを決める最中など）。置く側が錠を待つと、別々のスレッドで2つの MOD が互いの錠を逆の順に取り合って固まる。錠を取らずに控えを読むと、書いている最中の辞書を回して落ちることがある |
 | 片付けた人の名前は、読む側が自分の控えに写して持つ | 片付ける人物が後で入れ替わっても（ライバルの選び直し）、終わった出来事の言い方が変わらない |
 | 登録は持ち主ごとに1つ。登録した ctx が用済みなら数えない。`fn` が投げたら何も置かなかったものとみなす（`errors` に残す） | `talk_affinity`（§3.3.8）・`board`（§3.3.12）と同じ |
+
+#### 3.3.19 家と施設を1つの窓に並べるのも窓口で（`holdings`）
+
+`330_real_estate` の家と `331_facility_investment` の出資した施設は、どちらも街ごとに散らばり、期限や保管している売上が日数で動く。
+2本を1つの窓に並べたいが、どちらかの MOD が窓を持つと、その MOD を切ったときにもう片方の札が出せなくなる。
+窓はローダが持ち（`instantale_modloader/holdings.py`）、2本は札の中身を渡すだけにする（2026-10-14 に決めた）。
+
+```python
+holdings.provide(ctx, holdings.HOUSES, build, write=write)       # 330。build(app) -> 側の形 or None
+holdings.provide(ctx, holdings.FACILITIES, build, write=write)   # 331
+holdings.notify(playthrough=key)     # 「家と施設」の行に赤い点（家の期限の知らせ・施設の売上が保管上限に届いた）
+holdings.collect(app)                # {側: 側の形 or None}（窓を開くときと検査で使う）
+holdings.subtitle(model, 街の名前)    # 上の欄の片の並び
+holdings.remove_all()                # ローダを外すときに呼ぶ
+```
+
+側の形は `{"cards": [札], "count": 軒数, "income": 受け取れる売上 or None, "here": [いまいる街の自分の建物]}`。
+札は `{"name", "where", "badge": (文, 色の段), "caption", "meter": {"ratio", "tone", "left", "right"}, "meter_after": 目盛りの前に置く行の数, "rows": [(見出し, 中身)], "notes", "cautions": [(文, 色の段)], "frame", "title_tone"}`。
+色の段は `good`・`fair`・`warn`・`bad`・`plain`。札の並び（家は期限の近い順、施設は売上の保管上限に近い順）は MOD が決める。
+
+| 決まり | 中身 |
+|---|---|
+| 入口 | 画面左下の一覧（§3.3.15）に「家と施設」の行を1つ（並びは 338・339 の後）。どちらかの側が置かれていて、世界を遊んでいる最中だけ出す。行の絵（家）は `tools\draw_hud_icons.py` が描く |
+| 並べ方 | 両方あるときは左に家、右に施設で、どちらの列もスクロールする。片方だけのときは窓の幅を2列に使い、左の列を上から埋め、入らない札から右の列へ、右の列にも入らなければ右の列だけスクロールする（`panels.Kit.flowing`）。窓の名前は片方だけでも「家と施設」 |
+| 上の欄 | 現在地と、その街にある自分の建物の名前、軒数（「家 3軒・施設 3軒」）、受け取れる売上の合計 |
+| 通貨 | 札の文は素のゲームの言い方（`G`）で書いてよい。描く前に `ui.rewrite_coins` を通す |
+| 用済みの側 | その世代で適用されなかった MOD の側は `ctx.superseded()` で見分けて出さない。行は最後に置いた MOD の ctx で登録するので、2本とも切れば `hudicons.settle()` が行を外す |
+| 落ちた側 | `build` が投げたら、その側は「記録を読めなかった。」の1行にして、もう片方は出す。その MOD のログに `WARN holdings:` を書く |
+| 見るだけ | 窓からは売上の受け取りも家賃の支払いもしない。控えは読むだけで書かない |
+
+検査は `tools\tests\test_holdings.py`（側・一覧・中身・上の欄・並べ方・知らせ）と、`test_real_estate.py`・`test_facility_investment.py` の「家と施設の窓」の項。
 
 ### 3.4 まだ現れていない対象を狙う（保留と当て直し）
 
@@ -2199,7 +2236,7 @@ GUI の1行に収めると「JSON を手で書く欄」になり、コードを�
 | `apply(ctx)` に渡る `ctx` | §3.1 / §3.6 / §3.8 / §3.11 |
 | `mod.json` の鍵 | §3.1 / §3.2 / §3.8 / §3.9 / §3.12 |
 | §5 の共通部品（`ui` / `frames` / `llm` / `state` / `jobs` / `modnpc` / `modfacility` / `prices` / `sounds` / `imagegen`） | §5 |
-| 使い方を書いた窓口（`durations` / `prices` / `combat` / `equipment` / `arrivals` / `talk_affinity` / `talk_summary` / `ids` / `npcs` / `saves` / `wanted` / `guards` / `defeat` / `board` / `confinement` / `choices` / `hudicons` / `quest_claims`） | §3.2.3 / §3.3 |
+| 使い方を書いた窓口（`durations` / `prices` / `combat` / `equipment` / `arrivals` / `talk_affinity` / `talk_summary` / `ids` / `npcs` / `saves` / `wanted` / `guards` / `defeat` / `board` / `confinement` / `choices` / `hudicons` / `quest_claims` / `holdings`） | §3.2.3 / §3.3 |
 
 これ以外は内部で、予告なく変わる。
 `patch.py` の `_defer_if_*` や `__init__.py` の `_order()` のような

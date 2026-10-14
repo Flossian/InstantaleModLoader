@@ -114,8 +114,8 @@
 | `327_inn_quality` | 実機3回で活動の数・常連・社交の相手が成立。残るは感情の反映・簡易寝台・#6〜#9（[§3.54](verification/3.54.md)） |
 | `328_quest_from_world` | #1・#2・#4 は成立。残るは `301_` の会話から作る依頼（#3）（[§3.55](verification/3.55.md)） |
 | `329_area_move_with_party` | 版3 で成立。残るは所持金不足と `326_` との併用（[§3.56](verification/3.56.md)） |
-| `330_real_estate` | 管理人まで成立。残るは4件と別件1つ（[§3.62](verification/3.62.md)） |
-| `331_facility_investment` | 6種類とも成立。残るは無料の宿泊の前払いの食い違い・#11a・#14・手放す経路（[§3.63](verification/3.63.md)） |
+| `330_real_estate` | 管理人まで成立。残るは4件と別件1つ、家と施設の窓（一部実機）（[§3.62](verification/3.62.md)） |
+| `331_facility_investment` | 6種類とも成立。残るは無料の宿泊の前払いの食い違い・#11a・#14・手放す経路・家と施設の窓（一部実機）（[§3.63](verification/3.63.md)） |
 | `332_training_custom` | 代金・期間・倍率・表示・文言・頼み文・再訓練は成立。残るはワールド個別（#8）と #14（[§3.64](verification/3.64.md)） |
 | `333_equipment_slots` | 成立（版17〜25）。残るのは所持品が満杯のとき（[§3.70](verification/3.70.md) / [§3.77](verification/3.77.md) / [§3.91](verification/3.91.md)） |
 | `334_colosseum_custom` | 15項目とも成立（危ない側の口上は 10-07。[§3.69](verification/3.69.md) / [§3.88](verification/3.88.md)） |

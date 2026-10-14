@@ -155,8 +155,8 @@ import copy
 import datetime
 import sys
 
-from instantale_modloader import (choices, durations, frames, llm, modfacility, modnpc,
-                                  npcs, prices, ui)
+from instantale_modloader import (choices, durations, frames, holdings, llm, modfacility,
+                                  modnpc, npcs, prices, ui)
 from instantale_modloader.state import (UNKNOWN_WORLD, WorldStore, playthrough_key,
                                         playthrough_key_of_dict)
 
@@ -1344,6 +1344,7 @@ def apply(ctx):
             if NOTICE_DAYS and left <= int(NOTICE_DAYS) and record.get("notified") != due:
                 record["notified"] = due
                 save(app)
+                holdings.notify(playthrough=current_key(app))   # 「家と施設」の行に赤い点
                 announce(app, _fmt(NOTICE_TEXT, name=record.get("name") or "家",
                                    days=left), idle=idle)
 
@@ -2551,6 +2552,69 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("real estate: cannot close the storage")
         return orig(self, *args, **kwargs)
+
+    # ------------------------------------------------------ 家と施設の窓
+    def holdings_side(app):
+        """ローダの「家と施設」の窓に出す家の側（TECH.md §3.3.19）。控えは読むだけで書かない。"""
+        key = current_key(app)
+        if not key or key == UNKNOWN_WORLD:
+            return None
+        bucket = worlds.load(key)
+        records = [r for r in bucket.get("contracts") or [] if isinstance(r, dict) and not r.get("lapsed")]
+        day = ui.game_day(app)
+        here = ui.area_id_of(ui.current_area(app))
+
+        def left_of(record):
+            due = record.get("due")
+            if _is_lease(record) and isinstance(due, int) and isinstance(day, int):
+                return due - day
+            return None
+
+        # 期限の近い順。期限の無い持ち家は後ろ
+        records.sort(key=lambda r: (left_of(r) is None, left_of(r) if left_of(r) is not None else 0))
+        cards, here_names, shared_count = [], [], 0
+        for record in records:
+            items = record.get("storage") if isinstance(record.get("storage"), dict) else {}
+            shared_count += len(items)            # 世界で1つに移す前の分（次に保管庫を開くと移る）
+            lease = _is_lease(record)
+            name = record.get("name") or (RENT_NAME if lease else OWNED_NAME)
+            card = {"name": name, "where": record.get("area_name") or "", "caption": "契約",
+                    "badge": ("賃貸", "warn") if lease else ("持ち家", "good"), "meter": None,
+                    "rows": [], "notes": [], "cautions": []}
+            left = left_of(record)
+            term = int(record.get("term") or 0)
+            if lease and left is not None and term > 0:
+                near = bool(NOTICE_DAYS) and left <= int(NOTICE_DAYS)
+                ratio = 1.0 - max(0, left) / float(term)
+                card["meter"] = {"ratio": ratio, "tone": "bad" if near else ("warn" if ratio >= 0.75 else "fair"),
+                                 "left": "契約の始め", "right": "次の支払い（あと{}日）".format(max(0, left))}
+                if near:
+                    card["cautions"].append((
+                        "契約はあと{}日で切れる。支払いの日に所持金が足りなければ、建物は消え、"
+                        "保管庫の品は役場の預かりになる。".format(max(0, left)), "bad"))
+            # 大家・管理人はゲームの中に出てこない（話す相手にならない）ので、名前も出さない
+            if lease:
+                card["rows"].append(("家賃", "{}G／1期 {}日".format(ui.money(record.get("rent") or 0), term)))
+            else:
+                card["rows"].append(("家賃", "なし（買い取り済み）"))
+            if not STORAGE_SHARED:
+                card["rows"].append(("保管庫", "{}品".format(len(items)) if items else "空"))
+            cards.append(card)
+            if here and str(record.get("area")) == here:
+                here_names.append(name)
+        if STORAGE_SHARED and records:
+            shared = bucket.get("shared") if isinstance(bucket.get("shared"), dict) else {}
+            count = shared_count + len(shared)
+            cards.append({"name": STORAGE_NAME, "where": "どの家からも同じ中身", "badge": None,
+                          "rows": [("中身", "{}品".format(count) if count else "空")]})
+        seized = bucket.get("seized") if isinstance(bucket.get("seized"), dict) else {}
+        if seized:
+            cards.append({"name": "役場の預かり", "title_tone": "warn", "frame": "warn",
+                          "rows": [("預けてある品", "{}品".format(len(seized)))],
+                          "notes": ["どこの役場でも、引き取り料 {}G で戻る。".format(ui.money(int(RECLAIM_FEE)))]})
+        return {"cards": cards, "count": len(records), "income": None, "here": here_names}
+
+    holdings.provide(ctx, holdings.HOUSES, holdings_side, write=write)
 
     ctx.log("real estate: ready (rent {} per {} stay(s), buy {}, "
             "auto_renew={})".format(RENT_PRICE, RENT_STAYS, PURCHASE_PRICE,

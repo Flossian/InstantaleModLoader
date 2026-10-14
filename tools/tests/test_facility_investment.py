@@ -47,6 +47,7 @@ if RUNTIME_DIR not in sys.path:
 
 import instantale_modloader as ml                              # noqa: E402
 from instantale_modloader import durations, modfacility, modnpc  # noqa: E402
+from instantale_modloader import holdings as holdings_window, hudicons  # noqa: E402
 from instantale_modloader import state as loader_state          # noqa: E402
 
 
@@ -1129,8 +1130,12 @@ check("渡せなかった回は受け取った日を進めない（売上が消�
       holdings()[0].get("collected") == collected_before, holdings()[0])
 app.go(building)
 saves_before = len(app.saved)
+received_before = holdings()[0].get("received")
 app.press_like("売上を受け取る")
 CLOCK.settle()
+check("受け取った額が帳簿に積まれる（建てたときは 0 から）",
+      isinstance(received_before, int) and holdings()[0].get("received") == received_before + 30 * per_day
+      and not holdings()[0].get("received_partial"), (received_before, holdings()[0].get("received")))
 check("30日ぶんが入る", app.player.gold == gold_before + 30 * per_day,
       (gold_before, app.player.gold, per_day))
 check("受け取った後にゲームの保存が走る", len(app.saved) > saves_before,
@@ -1141,11 +1146,48 @@ app.go(building)
 check("受け取った直後は無い", app.has(module.COLLECT_EMPTY_LABEL), app.labels())
 app.elapse_days(module.HOLD_DAYS + 500)
 app.go(building)
+check("売上が保管上限に届くと「家と施設」の行に知らせの印",
+      bool(hudicons._store()["attention"].get(holdings_window.ICON_KEY)),
+      hudicons._store()["attention"])
+_side = holdings_window.collect(app).get(holdings_window.FACILITIES)
+_card = (_side or {}).get("cards", [{}])[0]
+check("窓の施設の札: 保管上限に届いた目盛りと注意の行",
+      _card.get("meter", {}).get("tone") == "bad" and _card.get("meter", {}).get("right") == "保管上限 {}日".format(module.HOLD_DAYS)
+      and _card.get("cautions") and _card.get("badge") == ("上等", "fair"), _card)
+check("窓の施設の札: 建設費の後ろに受け取った額",
+      "受け取り済み {}G".format(ml.ui.money(holdings()[0]["received"])) in (_card.get("notes") or [""])[0], _card.get("notes"))
+check("窓の施設の側: 受け取れる売上の合計と軒数",
+      _side.get("income") == module.HOLD_DAYS * per_day and _side.get("count") == len(holdings()), _side)
 gold_before = app.player.gold
 app.press_like("売上を受け取る")
 check("溜まりは HOLD_DAYS で頭打ち",
       app.player.gold == gold_before + module.HOLD_DAYS * per_day,
       (app.player.gold - gold_before, module.HOLD_DAYS * per_day))
+
+print("[版45 より前の帳簿]")
+_live = getattr(sys, "__instantale_facility_investment_store__")["worlds"].load(
+    loader_state.playthrough_key(app))["holdings"][0]
+
+
+def _received_note():
+    side = holdings_window.collect(app).get(holdings_window.FACILITIES) or {}
+    return ((side.get("cards") or [{}])[0].get("notes") or [""])[0]
+
+
+_live.pop("received", None)
+_live["collected"] = _live["built"]
+check("額の無い帳簿でも、一度も受け取っていなければ「まだ受け取っていない」", "（まだ受け取っていない）" in _received_note(),
+      _received_note())
+_live["collected"] = _live["built"] + 1
+check("額の無い帳簿で受け取ったことがあれば「記録なし」", "（受け取った額の記録なし）" in _received_note(), _received_note())
+_live["collected"] = world.days_elapsed - 30
+app.go(building)
+app.press_like("売上を受け取る")
+CLOCK.settle()
+check("最初に受け取ると、その額から数えて「以上」を付ける",
+      holdings()[0].get("received") == 30 * per_day and holdings()[0].get("received_partial") is True
+      and "受け取り済み {}G 以上".format(ml.ui.money(30 * per_day)) in _received_note(),
+      (holdings()[0].get("received"), _received_note()))
 
 print("[宿泊]")
 app.go(building)

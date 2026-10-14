@@ -6,7 +6,7 @@
 
 見た目はゲームの画面に揃える: 黒地を細い白の枠で区切り、字はゲームの本文の字（HUD の `status_label` の
 字体と大きさ）。字の大きさは4段（見出し・名前・本文・添え書き）、段階の色と目盛りで分ける。
-`338_` と `339_` の窓が同じ部品を使うので、片方を直せばもう片方も揃う。
+`338_` の各地の出来事・`339_` の勢力と情勢・ローダの家と施設（`holdings`）の窓が同じ部品を使うので、1つを直せばほかも揃う。
 
 Kivy はゲームの中でだけ読む（関数の中で import する）。
 """
@@ -219,6 +219,83 @@ class Kit:
         row.add_widget(content)
         return row
 
+    def labeled(self, head, text, color=TEXT):
+        """見出し（薄い字）と中身の1行。中身が長ければ折り返す。"""
+        return self.label(markup([(head, DIM), ("　" + text, color)]), use_markup=True)
+
+    def meter(self, ratio, color, left="", right=""):
+        """割合の棒（0〜1）と、その下の左右の添え書き。期限や保管している売上のように段の無い量を出す。"""
+        from kivy.graphics import Color, Line, Rectangle
+        from kivy.uix.boxlayout import BoxLayout
+        from kivy.uix.widget import Widget
+        ratio = max(0.0, min(1.0, float(ratio or 0)))
+        box = self.stack(spacing=3)
+        bar = Widget(size_hint_y=None, height=self.px(9))
+        with bar.canvas:
+            Color(0.27, 0.27, 0.27, 1)
+            outline = Line(rectangle=(bar.x, bar.y, bar.width, bar.height), width=1)
+            Color(*color)
+            fill = Rectangle(pos=bar.pos, size=(0, 0))
+
+        def follow(w, _value):
+            outline.rectangle = (w.x, w.y, w.width, w.height)
+            fill.pos, fill.size = w.pos, (w.width * ratio, w.height)
+
+        bar.bind(pos=follow, size=follow)
+        box.add_widget(bar)
+        if left or right:
+            ticks = BoxLayout(orientation="horizontal", size_hint_y=None, height=self.base * TICK * 1.5)
+            for text in (left, None, right):
+                if text is None:
+                    ticks.add_widget(Widget())
+                    continue
+                tick = self.label(text, TICK, FAINT, wrap=False)
+                tick.pos_hint = {"center_y": 0.5}
+                ticks.add_widget(tick)
+            box.add_widget(ticks)
+        return box
+
+    def flowing(self, widgets, spacing=10, gap=16):
+        """左の列を上から埋め、入らない札から右の列へ。右の列にも入らなければ右の列だけスクロールする。
+
+        札の高さは列の幅で決まり、2つの列は同じ幅なので、どちらの列に置いても高さは変わらない。
+        高さが出そろってから（と、窓の大きさが変わるたびに）分け目を決め直す。
+        1枚目は入らなくても左に置く（左の列もスクロールできる）。
+        """
+        from kivy.clock import Clock
+        from kivy.uix.boxlayout import BoxLayout
+        widgets = list(widgets)
+        row = BoxLayout(orientation="horizontal", spacing=self.px(gap))
+        columns = [self.column(spacing), self.column(spacing)]
+        views = [self.scroller(column) for column in columns]
+        for view in views:
+            row.add_widget(view)
+        for widget in widgets:
+            columns[0].add_widget(widget)
+        placed = {"split": len(widgets)}
+
+        def place(*_args):
+            room = views[0].height
+            if room <= 0:
+                return
+            split = flow_split([w.height for w in widgets], room, self.px(spacing))
+            if split == placed["split"]:
+                return
+            placed["split"] = split
+            for column in columns:
+                column.clear_widgets()
+            for widget in widgets[:split]:
+                columns[0].add_widget(widget)
+            for widget in widgets[split:]:
+                columns[1].add_widget(widget)
+
+        trigger = Clock.create_trigger(place, 0)
+        views[0].bind(height=trigger)
+        for widget in widgets:
+            widget.bind(height=trigger)
+        trigger()
+        return row
+
     def section(self, title, items, empty):
         """見出しつきの枠。中身はスクロールする。"""
         from kivy.uix.boxlayout import BoxLayout
@@ -231,9 +308,23 @@ class Kit:
         return box
 
 
+def flow_split(heights, room, spacing):
+    """左の列に入る札の数。左から順に積み、`room` を超える札から右へ回す（1枚目は必ず左）。"""
+    used = 0
+    for index, height in enumerate(heights):
+        need = height + (spacing if index else 0)
+        if index and used + need > room:
+            return index
+        used += need
+    return len(heights)
+
+
 def open_window(app, title, build, *, subtitle="", on_dismiss=None, size_hint=SIZE_HINT, sound=True,
                 log_exc=None):
-    """見出し・閉じるボタン・本文の窓を開いて返す。本文は `build(kit)` が返すウィジェット。"""
+    """見出し・閉じるボタン・本文の窓を開いて返す。本文は `build(kit)` が返すウィジェット。
+
+    `subtitle` は文字列か、`[(文, 色 or None)]` の並び（色の無い片は薄い字）。
+    """
     from kivy.uix.boxlayout import BoxLayout
     from kivy.uix.button import Button
     from kivy.uix.modalview import ModalView
@@ -255,7 +346,10 @@ def open_window(app, title, build, *, subtitle="", on_dismiss=None, size_hint=SI
     close.bind(on_release=lambda *_a: view.dismiss())
     head.add_widget(close)
     root.add_widget(head)
-    if subtitle:
+    if isinstance(subtitle, (list, tuple)) and subtitle:
+        pieces = [(text, color if color is not None else DIM) for text, color in subtitle]
+        root.add_widget(kit.label(markup(pieces), META, DIM, use_markup=True))
+    elif subtitle:
         root.add_widget(kit.label(subtitle, META, DIM))
     root.add_widget(build(kit))
     view.add_widget(root)

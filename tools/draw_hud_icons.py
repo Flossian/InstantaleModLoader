@@ -107,10 +107,41 @@ def flag():
     return g
 
 
+def house():
+    """ローダの「家と施設」の行の絵（家。赤茶の屋根・木の壁・扉と灯りの窓）。"""
+    g = Grid()
+    roof = (160, 74, 56)
+    wall = (176, 140, 98)
+    door = (104, 70, 46)
+    lamp = (226, 190, 96)
+    for y in range(4, 10):                        # 煙突（屋根の右の斜面から出る）
+        for x in (21, 22):
+            g.put(x, y, (130, 112, 104), 1.0 if x == 21 else 0.8)
+    for y in range(15, 29):                       # 壁
+        for x in range(8, 25):
+            g.put(x, y, wall, 1.08 - 0.022 * (x - 8) - 0.012 * (y - 15))
+    for y in range(4, 16):                        # 屋根（左上から光）
+        half = (y - 3) * 1.05
+        for x in range(int(round(16 - half)), int(round(16 + half)) + 1):
+            g.put(x, y, roof, 1.18 - 0.03 * (x - 4) if x < 16 else 0.92 - 0.012 * (x - 16))
+    for y in range(20, 29):                       # 扉
+        for x in range(14, 19):
+            g.put(x, y, door, 0.95 if x < 17 else 0.78)
+    g.put(17, 24, GOLD, 1.1)                      # 扉の取っ手
+    for y in range(18, 22):                       # 灯りの窓
+        for x in range(9, 13):
+            g.put(x, y, lamp, 1.15 if (x, y) == (9, 18) else 1.0)
+    for y in range(18, 22):
+        for x in range(21, 25):
+            g.put(x, y, lamp, 0.95)
+    return g
+
+
 #: (書き出す先の頭（拡張子と _hover / _click の前まで）, 絵, 乱数の種)
 ICONS = (
     (os.path.join(ROOT, "runtime", "instantale_modloader", "assets", "hud_mods"), gear, 11),
     (os.path.join(ROOT, "runtime", "mods", "339_town_factions", "icon_flag"), flag, 7),
+    (os.path.join(ROOT, "runtime", "instantale_modloader", "assets", "holdings"), house, 13),
 )
 
 

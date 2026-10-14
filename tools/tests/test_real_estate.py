@@ -47,6 +47,7 @@ if RUNTIME_DIR not in sys.path:
 
 import instantale_modloader as ml                      # noqa: E402
 from instantale_modloader import durations            # noqa: E402
+from instantale_modloader import holdings as holdings_window, hudicons  # noqa: E402
 from instantale_modloader import llm as loader_llm    # noqa: E402
 from instantale_modloader import modfacility            # noqa: E402
 from instantale_modloader import modnpc                 # noqa: E402
@@ -1333,6 +1334,27 @@ record = contract_of(module, app)
 check("飛んだ期の分はまとめて払う",
       app.player.gold == gold_before - module.RENT_PRICE * 3, app.player.gold)
 
+print("[家と施設の窓]")
+_side = holdings_window.collect(app).get(holdings_window.HOUSES) or {}
+_card = (_side.get("cards") or [{}])[0]
+check("窓の家の札: 賃貸の札・目盛り・家賃・保管庫",
+      _card.get("badge") == ("賃貸", "warn") and _card.get("meter", {}).get("left") == "契約の始め"
+      and ("家賃", "{}G／1期 {}日".format(ml.ui.money(module.RENT_PRICE), term)) in _card.get("rows", [])
+      and ("保管庫", "1品") in _card.get("rows", []) and not _card.get("cautions"), _card)
+check("窓の家の側: 軒数", _side.get("count") == 1 and _side.get("income") is None, _side)
+check("窓の家の札: 大家・管理人の名前は出さない（ゲームの中に出てこない人のため）",
+      not any(head in ("大家", "管理人") for head, _text in _card.get("rows", [])), _card.get("rows"))
+hudicons.notify(holdings_window.ICON_KEY, on=False)
+_left = contract_of(module, app).get("due") - app.world.days_elapsed
+app.elapse_days(_left - 3)
+CLOCK.settle()
+check("期限の知らせが出ると「家と施設」の行に知らせの印",
+      bool(hudicons._store()["attention"].get(holdings_window.ICON_KEY)), hudicons._store()["attention"])
+_card = ((holdings_window.collect(app).get(holdings_window.HOUSES) or {}).get("cards") or [{}])[0]
+check("窓の家の札: 期限が近いと赤い目盛りと注意の行",
+      _card.get("meter", {}).get("tone") == "bad" and _card.get("meter", {}).get("right") == "次の支払い（あと3日）"
+      and _card.get("cautions") and _card["cautions"][0][0].startswith("契約はあと3日で切れる"), _card)
+
 print("[期限切れ]")
 app.go(places["office"])
 app.player.gold = 0
@@ -1348,6 +1370,11 @@ check("入口の道も外れる",
       places["entrance"].connections)
 check("保管庫の中身は役場が預かる", len(data.get("seized") or {}) == 1,
       data.get("seized"))
+_side = holdings_window.collect(app).get(holdings_window.HOUSES) or {}
+check("窓: 家が無くなり、役場の預かりの札だけが残る",
+      _side.get("count") == 0 and len(_side.get("cards") or []) == 1
+      and _side["cards"][0].get("name") == "役場の預かり" and _side["cards"][0].get("frame") == "warn"
+      and ("預けてある品", "1品") in _side["cards"][0].get("rows", []), _side)
 
 print("[引き取り]")
 app.player.gold = 10000
