@@ -70,7 +70,7 @@
 | [`124_ui_craft_window_fit`](MODS.md#124_ui_craft_window_fit-クラフト画面の枠の重なりを直す) | クラフト画面の枠の重なりを直す | クラフト画面の枠の重なりを直す | 3 |  |
 | [`125_balance_charisma_impression`](MODS.md#125_balance_charisma_impression-魅力だけで全員に好かれるのを直す) | 魅力だけで全員に好かれるのを直す | 魅力だけで全員に好かれるのを直す | 3 |  |
 | [`126_ui_title_version`](MODS.md#126_ui_title_version-タイトル画面にローダの版を出す) | タイトル画面にローダの版を出す | タイトル画面にローダの版を出す | 4 |  |
-| [`127_llm_response_speed`](MODS.md#127_llm_response_speed-ローカル-llm-の応答を速くする) | ローカルLLMの応答を速くする | ローカル LLM の応答を速くする | 3 |  |
+| [`127_llm_response_speed`](MODS.md#127_llm_response_speed-ローカル-llm-の応答を速くする) | ローカルLLMの応答を速くする | ローカル LLM の応答を速くする | 5 |  |
 | [`128_item_image_variety`](MODS.md#128_item_image_variety-アイテム画像の偏りを均す) | アイテム画像の均し | アイテム画像の偏りを均す | 3 |  |
 | [`129_balance_item_price`](MODS.md#129_balance_item_price-アイテムの値段を付け直す) | アイテムの値付けの調整 | アイテムの値段を付け直す | 19 |  |
 | [`130_currency_unit`](MODS.md#130_currency_unit-通貨の呼び名と所持金の表示を変える) | 通貨の表記を変更する | 通貨の呼び名と所持金の表示を変える | 4 |  |

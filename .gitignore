@@ -1,6 +1,8 @@
 # ---- 生成物 / ローカル状態（ルート直下のみ） ----
 /out/
 /state/
+# ゲームの版ごとのリコンの控え（000_recon）。取り直せないので out/ の外に置く。
+/recon_history/
 /dist/
 /graphify-out/
 /settings/

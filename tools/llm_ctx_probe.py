@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import http.client
 import json
+import os
 import re
 import subprocess
 import sys
@@ -74,6 +75,18 @@ def read_live_config(game_dir: Path) -> dict:
         except (OSError, ValueError):
             continue
     return {}
+
+
+def popen_server(cmd: list, **kwargs) -> subprocess.Popen:
+    """llama-server をゲームが起こすのと同じ場所から起こす。
+
+    b10642 の CUDA 版のフォルダには `cudart64_12.dll` などが無く、ゲームのフォルダ直下にだけある。
+    そのフォルダを PATH に入れずに起こすと、CUDA を読めずに黙って CPU で動く（VERIFICATION.md §3.100）。
+    ゲームのフォルダは実行ファイルの `<ゲーム>\\bin\\<版>\\llama-server.exe` から辿る。
+    """
+    game_dir = Path(cmd[0]).resolve().parents[2]
+    env = dict(os.environ, PATH=str(game_dir) + os.pathsep + os.environ.get("PATH", ""))
+    return subprocess.Popen(cmd, cwd=str(game_dir), env=env, **kwargs)
 
 
 def pick_build_dir(game_dir: Path, backend: str) -> Path:
@@ -211,7 +224,7 @@ def probe(server: Path, model: Path, ctx: int, parallel: int | None,
         cmd += ["--parallel", str(parallel)]
 
     handle = logfile.open("w", encoding="utf-8", errors="replace")
-    proc = _current = subprocess.Popen(cmd, stdout=handle, stderr=subprocess.STDOUT)
+    proc = _current = popen_server(cmd, stdout=handle, stderr=subprocess.STDOUT)
     try:
         if not wait_ready(port, load_timeout, proc):
             log("        サーバが起動しなかった（%s）。" % logfile.name)

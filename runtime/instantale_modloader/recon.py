@@ -24,6 +24,8 @@ import hashlib
 import inspect
 import json
 import os
+import re
+import shutil
 import sys
 import types
 import zipfile
@@ -40,16 +42,32 @@ MAX_CONST_ITEMS = 40
 #: 毎回書き出すファイル。
 #: 退避（zip）に詰めるのもこの一式。
 OUTPUT_FILES = ("summary.txt", "modules.json", "game_modules.txt",
-                "targets.txt", "bug_sites.txt")
+                "targets.txt", "bug_sites.txt", "signatures.json")
+
+#: 関数の変化を見るための控え。`{"module:qualname": "(引数)"}`。ゲーム自身の関数だけ。
+SIGNATURES_NAME = "signatures.json"
+
+#: MOD とローダが定義した関数の `__module__` の頭。`signatures.json` から除く。
+MOD_ORIGINS = ("instantale_mod", "instantale_modloader")
+
+#: 退避先の中の、今のビルドの基準のダンプ（そのビルドで見た中でいちばん多くのモジュールを読み込んだ回）。
+#: 版が変わった・関数が変わった・特異な変化があったときは、これを zip にして退避する。
+CURRENT_DIR_NAME = "current"
+
+#: 退避した理由を zip に添えるファイル。
+REASON_NAME = "archive_reason.txt"
 
 #: その回のリコンが「どのビルドを見たものか」を書き添える控え。
 #: `out/recon/` の中に置くので、退避したときは zip の中にそのまま入る（zip 自身が何の版のものか、
 #: 開ければ分かる）。
 BUILD_NAME = "build.json"
 
-#: 退避先。
-#: `out/recon_snapshots/<版>_YYYYMMDD.zip` の形で溜まる。
-SNAPSHOT_DIR_NAME = "recon_snapshots"
+#: 退避先。配布フォルダ直下（`out/` と並ぶ位置）に `recon_history/<版>_YYYYMMDD.zip` の形で溜まる。
+#: 版ごとの履歴で取り直せないので、「消してよい」置き場の `out/` には置かない（GAME.md §1.1）。
+SNAPSHOT_DIR_NAME = "recon_history"
+
+#: 前の退避先（`out/recon_snapshots/`）。中身は `dump()` が新しい退避先へ移す。
+OLD_SNAPSHOT_DIR_NAME = "recon_snapshots"
 
 #: 退避を残す本数の上限。古いものから消す。
 #: 版の判定は**安全側に倒してある**（読めない版は「別のビルド」。
@@ -57,6 +75,9 @@ SNAPSHOT_DIR_NAME = "recon_snapshots"
 #: 素性が読めるようになる前後で1回の起動から2つ以上できることがある。
 #: 実測では同じ版のまま 109 個 / 23MB まで溜まっていた。
 #: `tools/logrotate.py` は `out/` 直下の `*.log` と `*.jsonl` しか回さないので、ここで刈る。
+#: **版ごとの1本（`_keepers`）は数に入れず、消さない。** 上限で数えるのは同じ版の2本目以降だけ。
+#: 前は版を問わず古い順に消したので、同じ版の退避が溜まると前の版の控えが押し出された
+#: （main_024 の控えはこれで失われた。VERIFICATION.md §3.100）。
 SNAPSHOT_KEEP = 20
 
 
@@ -333,7 +354,15 @@ def probe_bug_sites() -> list[str]:
 # なっていることがあり、更新で動いたのか起動で動いたのか区別が付かない。
 # 判定に混ぜると毎回退避が走りかねないので、控えとして `build.json` には
 # 書くが比較には入れない。
-IDENTITY_KEYS = ("app_version", "game_version", "exe_size")
+IDENTITY_KEYS = ("app_version", "game_version", "exe_size", "python", "kivy", "llama_builds")
+
+#: IDENTITY_KEYS のうち、取れないことがある鍵。どちらかが None なら比べない。
+#: `game_version` はゲームの中に問い合わせて取るので、注入の時機によっては取れない。
+#: `exe_size` は起動直後の注入で実行ファイルの場所が読めず None になったことがある（`_exe_path`）。
+#: 版の変化は `app_version` が見る（こちらは読めなければ別のビルド扱いのまま）。
+#: `python` / `kivy` / `llama_builds` は 2026-10-14 に足した鍵で、それより前の控えには無い
+#: （「特異な変化」を拾うため。同梱の llama-server が替わって 127_ が落ちた。VERIFICATION.md §3.100）。
+LATE_KEYS = ("game_version", "exe_size", "python", "kivy", "llama_builds")
 
 #: Epic Games Launcher が置いているマニフェスト。
 #: `AppVersionString` がここにある。
@@ -401,7 +430,7 @@ def build_identity() -> dict:
     どの項目も取れなくてよい（取れなければ None が入る）。
     ここで例外を投げると、素性が分からないというだけでリコン全体が止まってしまう。
     """
-    exe = sys.executable or ""
+    exe = _exe_path()
     size = mtime = None
     try:
         stat = os.stat(exe)
@@ -421,7 +450,50 @@ def build_identity() -> dict:
         "exe_size": size,
         "exe_mtime": mtime,        # 控えるだけ。IDENTITY_KEYS には入れない
         "python": sys.version.split()[0],
+        "kivy": _kivy_version(),
+        "llama_builds": _llama_builds(exe),
     }
+
+
+def _exe_path() -> str:
+    """今動いているプロセスの実行ファイル。
+
+    起動直後の注入では `sys.executable` が在りもしない `<ゲームのフォルダ>\\python.exe` を指していて、
+    同じダンプの途中で `instantale.exe` に変わった（2026-10-15 の実機。Nuitka の起動処理の途中）。
+    そのまま使うと `exe_size` が取れず、同じ版を別のビルドと見なして退避した。
+    Windows ではプロセスの実体を `GetModuleFileNameW` で聞く。聞けなければ `sys.executable`。
+    """
+    try:
+        import ctypes
+        buffer = ctypes.create_unicode_buffer(32768)
+        length = ctypes.windll.kernel32.GetModuleFileNameW(None, buffer, len(buffer))
+        if length and os.path.isfile(buffer.value):
+            return buffer.value
+    except Exception:
+        pass
+    return sys.executable or ""
+
+
+def _kivy_version() -> str | None:
+    """ゲームに同梱の Kivy の版。読み込まれていなければ None（ゲームの外）。"""
+    kivy = sys.modules.get("kivy")
+    version = getattr(kivy, "__version__", None) if kivy is not None else None
+    return str(version) if version else None
+
+
+def _llama_builds(exe: str) -> str | None:
+    """ゲームに同梱の llama-server の版（`bin\\llama-b10642-bin-win-cuda-12.4-x64` などのフォルダ名を並べたもの）。
+
+    ゲームの外・`bin\\` が無いときは None。
+    """
+    if not exe or not os.path.basename(exe).lower().startswith("instantale"):
+        return None
+    try:
+        names = sorted(name for name in os.listdir(os.path.join(os.path.dirname(exe), "bin"))
+                       if name.lower().startswith("llama-"))
+    except Exception:
+        return None
+    return ",".join(names) if names else None
 
 
 def _same_build(old: dict, new: dict) -> bool:
@@ -434,7 +506,16 @@ def _same_build(old: dict, new: dict) -> bool:
     """
     if not old:
         return False
-    return all(old.get(key) == new.get(key) for key in IDENTITY_KEYS)
+    for key in IDENTITY_KEYS:
+        before, now = old.get(key), new.get(key)
+        # ゲームに問い合わせる鍵は、注入が `__main__` の組み上がりより早いと取れない（None）。
+        # 取れなかった側があるときは比べない。比べると同じ版でも注入のたびに退避が2本ずつ増え、
+        # 上限で古い版の控えが押し出される（GAME.md §1.1）。
+        if key in LATE_KEYS and (before is None or now is None):
+            continue
+        if before != now:
+            return False
+    return True
 
 
 def _digest(path: str) -> str | None:
@@ -492,7 +573,48 @@ def _unique_zip_path(snap_dir: str, base: str) -> str:
     return path
 
 
-def archive_previous(recon_dir: str, identity: dict) -> str | None:
+def snapshot_dir(out_dir: str) -> str:
+    """退避先。`out/` の1つ上（配布フォルダ直下）の `recon_history/`。"""
+    return os.path.join(os.path.dirname(os.path.abspath(out_dir)), SNAPSHOT_DIR_NAME)
+
+
+def migrate_old_snapshots(out_dir: str, snap_dir: str) -> int:
+    """前の退避先 `out/recon_snapshots/` の中身を `snap_dir` へ移す。移した数を返す。**例外は投げない。**
+
+    名前が埋まっていれば `_unique_zip_path` と同じく `_2` … を足して、どちらも残す。
+    空になったら前の退避先を消す。
+    """
+    old_dir = os.path.join(out_dir, OLD_SNAPSHOT_DIR_NAME)
+    if not os.path.isdir(old_dir):
+        return 0
+    moved = 0
+    try:
+        os.makedirs(snap_dir, exist_ok=True)
+        for name in sorted(os.listdir(old_dir)):
+            source = os.path.join(old_dir, name)
+            if name.endswith(".zip"):
+                target = _unique_zip_path(snap_dir, name[:-len(".zip")])
+            else:
+                target = os.path.join(snap_dir, name)
+                index = 2
+                while os.path.exists(target):
+                    target = os.path.join(snap_dir, "{}_{}".format(name, index))
+                    index += 1
+            try:
+                os.replace(source, target)
+                moved += 1
+            except Exception:
+                log_exc("recon: cannot move {} out of {}".format(name, old_dir))
+        if not os.listdir(old_dir):
+            os.rmdir(old_dir)
+        if moved:
+            log("recon: moved {} snapshot(s) from {} to {}".format(moved, old_dir, snap_dir))
+    except Exception:
+        log_exc("recon: cannot move the old snapshots")
+    return moved
+
+
+def archive_previous(recon_dir: str, identity: dict, snap_dir: str = None) -> str | None:
     """`out/recon/` に残っている前回のダンプを、別ビルドのものなら zip で退避する。
 
     **上書きする前に呼ぶこと。**
@@ -524,7 +646,8 @@ def archive_previous(recon_dir: str, identity: dict) -> str | None:
             old.get("app_version") or old.get("game_version") or "?"))
         return None
 
-    snap_dir = os.path.join(os.path.dirname(recon_dir), SNAPSHOT_DIR_NAME)
+    if snap_dir is None:
+        snap_dir = snapshot_dir(os.path.dirname(recon_dir))
     tmp = None
     try:
         os.makedirs(snap_dir, exist_ok=True)
@@ -551,9 +674,160 @@ def archive_previous(recon_dir: str, identity: dict) -> str | None:
     return path
 
 
+def identity_changes(old: dict, new: dict) -> list:
+    """素性の違い（`app_version: main_025 -> main_026` の形の行）。`_same_build` と同じく、取れなかった鍵は比べない。"""
+    lines = []
+    for key in IDENTITY_KEYS:
+        before, now = old.get(key), new.get(key)
+        if key in LATE_KEYS and (before is None or now is None):
+            continue
+        if before != now:
+            lines.append("{}: {} -> {}".format(key, before, now))
+    return lines
+
+
+def _load_signatures(dump_dir: str) -> dict | None:
+    """`signatures.json` を読む。無い・読めなければ None（2026-10-14 より前のダンプ）。"""
+    try:
+        with open(os.path.join(dump_dir, SIGNATURES_NAME), "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else None
+    except Exception:
+        return None
+
+
+def function_changes(old: dict, new: dict) -> list:
+    """関数の変化（`removed` / `added` / `changed` の行）。
+
+    比べるのは `old` に在ったモジュールの中だけ。
+    LLM や画像生成のモジュールは遊び始めるまで読み込まれないので、`new` にだけ在るモジュールは
+    「増えた」のではなく「まだ読んでいなかった」ことがある。
+    """
+    modules = {key.split(":", 1)[0] for key in old}
+    lines = []
+    for key in sorted(old):
+        if key not in new:
+            lines.append("removed {}{}".format(key, old[key]))
+        elif new[key] != old[key]:
+            lines.append("changed {}{} -> {}".format(key, old[key], new[key]))
+    for key in sorted(new):
+        if key not in old and key.split(":", 1)[0] in modules:
+            lines.append("added {}{}".format(key, new[key]))
+    return lines
+
+
+def _read_build(dump_dir: str) -> dict:
+    try:
+        with open(os.path.join(dump_dir, BUILD_NAME), "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _zip_dump(dump_dir: str, snap_dir: str, build: dict, reasons: list) -> str | None:
+    """`dump_dir` の一式を `<版>_<日付>.zip` に固めて `snap_dir` へ置く。理由を `REASON_NAME` に添える。"""
+    tmp = None
+    try:
+        os.makedirs(snap_dir, exist_ok=True)
+        path = _unique_zip_path(snap_dir, _snapshot_name(dump_dir, build))
+        tmp = path + ".tmp"
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as archive:
+            for name in list(OUTPUT_FILES) + [BUILD_NAME]:
+                source = os.path.join(dump_dir, name)
+                if os.path.isfile(source):
+                    archive.write(source, name)
+            archive.writestr(REASON_NAME, "\n".join(reasons) + "\n")
+        os.replace(tmp, path)
+        _prune_snapshots(snap_dir)
+        return path
+    except Exception:
+        log_exc("recon: cannot archive {}".format(dump_dir))
+        if tmp:
+            try:
+                os.remove(tmp)
+            except Exception:
+                pass
+        return None
+
+
+def update_current(recon_dir: str, snap_dir: str) -> str | None:
+    """書き終えたダンプを、今のビルドの基準（`snap_dir/current/`）と比べる。退避したら zip のパスを返す。**例外は投げない。**
+
+    - 基準が無い: 今回のダンプを基準にする
+    - 素性が違う（版・同梱の llama-server・Python・Kivy などが替わった）: 基準を退避し、今回のダンプを基準にする
+    - 素性が同じで、今回のほうが読み込んだモジュールが同じか多い: 関数を比べ、変わっていれば基準を退避する。今回のダンプを基準にする
+    - 今回のほうが少ない（起動直後で読み込みの途中）: 比べない。基準はそのまま
+
+    退避するのは基準のほう（そのビルドでいちばん多く読み込んだ回）で、`out/recon/` の起動直後の少ないダンプではない。
+    """
+    current = os.path.join(snap_dir, CURRENT_DIR_NAME)
+    new = _read_build(recon_dir)
+    old = _read_build(current)
+    reasons: list = []
+    replace = True
+    if old:
+        if not _same_build(old, new):
+            reasons = ["build changed"] + identity_changes(old, new)
+        elif (new.get("modules") or 0) >= (old.get("modules") or 0):
+            before, after = _load_signatures(current), _load_signatures(recon_dir)
+            if before is not None and after is not None:
+                changes = function_changes(before, after)
+                # 今回のほうが多く読み込んでいて「増えた」だけなら、読み込みの途中だった基準と比べただけ
+                # （起動直後は `__main__` を組み立てている途中）。消えた・変わったが1つでもあれば退避する。
+                more_loaded = (new.get("modules") or 0) > (old.get("modules") or 0)
+                if changes and not (more_loaded and all(line.startswith("added ") for line in changes)):
+                    reasons = ["functions changed ({})".format(len(changes))] + changes
+        else:
+            replace = False
+    archived = None
+    if reasons:
+        archived = _zip_dump(current, snap_dir, old, reasons)
+        if archived:
+            log("recon: archived the reference dump to {} ({})".format(archived, reasons[0]))
+    if replace:
+        try:
+            staging = current + ".tmp"
+            if os.path.isdir(staging):
+                shutil.rmtree(staging)
+            os.makedirs(staging)
+            for name in list(OUTPUT_FILES) + [BUILD_NAME]:
+                source = os.path.join(recon_dir, name)
+                if os.path.isfile(source):
+                    shutil.copy2(source, os.path.join(staging, name))
+            if os.path.isdir(current):
+                shutil.rmtree(current)
+            os.replace(staging, current)
+        except Exception:
+            log_exc("recon: cannot update the reference dump")
+    return archived
+
+
+def _snapshot_version(name: str) -> str:
+    """退避の名前（`<版>_YYYYMMDD[_N].zip`）から版を取り出す。形が違えば名前そのもの（それだけで1つの版と数える）。"""
+    match = re.match(r"^(.+)_\d{8}(?:_\d+)?\.zip$", name)
+    return match.group(1) if match else name
+
+
+def _keepers(paths: list) -> set:
+    """版ごとに消さない1本。いちばん大きい zip（＝いちばん多くのモジュールを見たダンプ）、同じ大きさなら新しいほう。
+
+    同じ版でも、起動直後の注入で取ったダンプはゲームの読み込みの途中で中身が少ない（main_026 で 65 KB と 350 KB）。
+    新しい順で選ぶと、少ないほうが残ることがある。
+    """
+    best = {}
+    for path in paths:
+        version = _snapshot_version(os.path.basename(path))
+        key = (os.path.getsize(path), os.path.getmtime(path), path)
+        if version not in best or key > best[version][0]:
+            best[version] = (key, path)
+    return {path for _key, path in best.values()}
+
+
 def _prune_snapshots(snap_dir: str, keep: int = None) -> int:
     """古い退避を落とす。落とした数を返す。**例外は投げない。**
 
+    版ごとの1本（`_keepers`）は消さない。上限 `keep` で数えて落とすのは、それ以外（同じ版の2本目以降）の古いものから。
     退避は調査のための控えなので、消せなくても支障は無い。
     ここで投げると、書けたばかりの退避を「失敗」に見せてしまう。
     """
@@ -564,11 +838,13 @@ def _prune_snapshots(snap_dir: str, keep: int = None) -> int:
         entries = [os.path.join(snap_dir, name)
                    for name in os.listdir(snap_dir)
                    if name.endswith(".zip")]
-        if len(entries) <= keep:
+        protected = _keepers(entries)
+        spare = [path for path in entries if path not in protected]
+        if len(spare) <= keep:
             return 0
-        entries.sort(key=lambda path: (os.path.getmtime(path), path))
+        spare.sort(key=lambda path: (os.path.getmtime(path), path))
         dropped = 0
-        for path in entries[:len(entries) - keep]:
+        for path in spare[:len(spare) - keep]:
             try:
                 os.remove(path)
                 dropped += 1
@@ -607,7 +883,7 @@ def dump(out_dir: str, *, backup: bool = True) -> str:
     """out_dir/recon/ に成果物一式を書き出し、そのパスを返す。
 
     `backup=True` なら、前回のダンプが**別のビルドを見たものだった場合に限り** 上書きする前に
-    `out/recon_snapshots/<版>_<日付>.zip` へ退避する（ビルドの見分け方と、
+    `recon_history/<版>_<日付>.zip`（`out/` の1つ上）へ退避する（ビルドの見分け方と、
     中身の差を引き金にしない理由は「退避」の節にある）。
     """
     recon_dir = os.path.join(out_dir, "recon")
@@ -617,10 +893,14 @@ def dump(out_dir: str, *, backup: bool = True) -> str:
     # 退避の判定に使うので、**上書きより先**でなければ前回の
     # `build.json` がもう残っていない。
     identity = build_identity()
+    snap_dir = snapshot_dir(out_dir)
     if backup:
-        archived = archive_previous(recon_dir, identity)
-        if archived:
-            log("recon: archived the previous dump to {}".format(archived))
+        migrate_old_snapshots(out_dir, snap_dir)
+        # 基準（`update_current`）がまだ無い頃は、前回のダンプを素性だけで見て退避する。
+        if not os.path.isfile(os.path.join(snap_dir, CURRENT_DIR_NAME, BUILD_NAME)):
+            archived = archive_previous(recon_dir, identity, snap_dir)
+            if archived:
+                log("recon: archived the previous dump to {}".format(archived))
 
     # 走査の途中で sys.modules が変化しても壊れないよう、先にコピーを取る。
     # 以降は `sys.modules` を直に引かず、この写し（`modules_by_name`）から引く。
@@ -728,6 +1008,22 @@ def dump(out_dir: str, *, backup: bool = True) -> str:
         "#     @ctx.patch(\"module:qualname\")",
         "",
     ]
+    # 関数の変化を見るための控え（`signatures.json`）。MOD とローダが足した関数は入れない
+    # （MOD を入れ替えただけで「関数が変わった」と見なさないため）。
+    signatures: dict[str, str] = {}
+
+    def own(value, expected: str) -> bool:
+        """比べる対象か。MOD・ローダが足した関数と、その場所で定義されていない関数（後から代入された関数、
+        よそから import した関数）は外す。ゲームは遊び始めてから `Item.set_callback` で `Item` に関数を
+        代入するので、読み込みの量で「増えた」に見えた（2026-10-14 の実物）。
+        ローダの包みは `functools.wraps` で元の名前を写すので、包まれた関数は外れない。
+        """
+        if str(getattr(value, "__module__", "") or "").startswith(MOD_ORIGINS):
+            return False
+        qualname = getattr(value, "__qualname__", None) or getattr(
+            getattr(value, "__func__", None), "__qualname__", None)
+        return qualname is None or qualname == expected or qualname.endswith("." + expected)
+
     for name in game_names:
         module = modules_by_name[name]
         try:
@@ -738,7 +1034,10 @@ def dump(out_dir: str, *, backup: bool = True) -> str:
             if attr.startswith("__"):
                 continue
             if inspect.isroutine(value):
-                targets.append(f"{name}:{attr}{safe_signature(value)}")
+                signature = safe_signature(value)
+                targets.append(f"{name}:{attr}{signature}")
+                if own(value, attr) and getattr(value, "__module__", name) in (name, None):
+                    signatures[f"{name}:{attr}"] = signature
             # __module__ が None のクラスも拾う。
             # Nuitka では欠けていることがある。
             elif inspect.isclass(value) and getattr(value, "__module__", "") in (name, None):
@@ -747,10 +1046,14 @@ def dump(out_dir: str, *, backup: bool = True) -> str:
                         # 特殊メソッドは対象にしないが、__init__ だけは残す。
                         if inspect.isroutine(mvalue) and not (
                                 mname.startswith("__") and mname != "__init__"):
-                            targets.append(f"{name}:{attr}.{mname}{safe_signature(mvalue)}")
+                            signature = safe_signature(mvalue)
+                            targets.append(f"{name}:{attr}.{mname}{signature}")
+                            if own(mvalue, f"{attr}.{mname}"):
+                                signatures[f"{name}:{attr}.{mname}"] = signature
                 except Exception:
                     pass
     _write(os.path.join(recon_dir, "targets.txt"), targets)
+    write_json(os.path.join(recon_dir, SIGNATURES_NAME), signatures, indent=0)
 
     # -- bug_sites.txt -----------------------------------------------------
     try:
@@ -766,6 +1069,8 @@ def dump(out_dir: str, *, backup: bool = True) -> str:
                  {"modules": len(snapshot), "game_modules": len(game_names)})
 
     log("recon: wrote {} file(s) to {}".format(len(OUTPUT_FILES) + 1, recon_dir))
+    if backup:
+        update_current(recon_dir, snap_dir)
     return recon_dir
 
 

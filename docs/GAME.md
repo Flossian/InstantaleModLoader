@@ -38,9 +38,24 @@ TECH.md と分けているのは読む理由が違うから。
 
 `out/recon/` は毎回上書きされるが、`build.json` と突き合わせて
 **`IDENTITY_KEYS`（`app_version` / `game_version` / `exe_size`）が1つでも違えば
-上書き前に `out/recon_snapshots/<版>_<日付>.zip` へ退避される**
-（控えが無いときも「別のビルド」扱い。退避は `SNAPSHOT_KEEP = 20` 本まで残し、古いものから消す。
-`recon.py` の `_same_build`）。
+上書き前に `recon_history/<版>_<日付>.zip`（`out/` の外、配布フォルダ直下）へ退避される**
+（控えが無いときも「別のビルド」扱い。`recon.py` の `_same_build`）。
+素性には 2026-10-14 から、同梱の llama-server の版（`bin\llama-*` のフォルダ名）・Python・Kivy の版も入る。
+
+退避の元は `recon_history/current/`（基準）で、今のビルドで見た中でいちばん多くのモジュールを読み込んだダンプを置く（`recon.update_current`）。
+次のどれかのとき、基準を `<版>_<日付>.zip` に固めて退避する。理由は zip の中の `archive_reason.txt` にある。
+
+| 理由（`archive_reason.txt` の1行目） | 条件 |
+| --- | --- |
+| `build changed` | 素性の鍵が1つでも違う（版の表記が同じでも、同梱の llama-server・Python・Kivy が替われば入る） |
+| `functions changed (N)` | 素性が同じで、今回のダンプが基準と同じかそれ以上に読み込んでいて、基準にあったモジュールの中で関数が消えた・引数が変わった・増えた。今回のほうが多く読み込んでいて「増えた」だけのときは入れない（起動直後の基準は `__main__` を組み立てている途中のため） |
+
+関数は `signatures.json`（ゲーム自身の関数の `{"module:qualname": "(引数)"}`）で比べる。
+MOD・ローダが足した関数と、その場所で定義されていない関数（ゲームが遊び始めてから `Item.set_callback` で代入するものなど）は入れない。
+退避は版ごとに1本（いちばん大きい zip）を必ず残し、同じ版の2本目以降を `SNAPSHOT_KEEP = 20` 本まで残して古いものから消す。
+前は版を問わず古い順に消したので、main_024 の控えは押し出されて失われた（VERIFICATION.md §3.100）。
+`game_version` だけはゲームに問い合わせて取るので、起動直後の注入では取れない（None）。
+どちらかが None なら `game_version` は比べない（VERIFICATION.md §3.100）。
 更新の前後で `targets.txt` を突き合わせれば、増えた対象・消えた対象がそのまま出る。
 
 ### 1.2 ゲーム自身のモジュール
@@ -86,7 +101,7 @@ Epic の `AppVersion` は
 ### 1.5 更新の記録
 
 `game_version` は main_023 以降 `014` のまま据え置きで、
-上がっているのは Epic の `AppVersion` だけ（`main_023` → `024` → `025`）。
+上がっているのは Epic の `AppVersion` だけ（`main_023` → `024` → `025` → `026`）。
 `python310.dll` は更新の前後で変わっていないので**注入基盤は無傷**。
 
 | 版 | ゲーム側の変化 | MOD 側 |
@@ -94,6 +109,7 @@ Epic の `AppVersion` は
 | main_022 → 023 | `targets.txt` 1466 → 1585。自由生成施設（§2.21）・`scripts.save_codec`・Steam 認証・装備強化が増えた | 対応不要。28/28 適用、警告0 |
 | main_023 → 024 | 賭博2種（ハイアンドロー / ロシアンルーレット）で 68 ターゲット増。起動処理の変更で満額到達が 80秒 → 41秒 | 6件が「Reported by ModLoader」として取り込まれた（下記） |
 | main_024 → 025 | `InstantaleApp.start_game` の 876 行が `experience_level=60` → `1` | `123_` が何もしなくなった（VERIFICATION_LOG.md §2.36） |
+| main_025 → 026 | `targets.txt` 1644 → 1736（名前で数えて4件減・96件増）。雇用の交渉が `ConversationPhaseManager.resolve_employment` へ移り、`ConversationEmployManager` / `EmployEndManager` は `__init__` だけになった。増えたのは仲間の成長（`award_companion_growth`）・世界の一括生成（`scripts.llm.batch_worker`）・ロシア語（`scripts.llm.output_language`）・新しい提供元 Jev（`scripts.jev`）。同梱の llama-server が b7054 → b10642 で `--checkpoint-every-n-tokens` が無くなった | `127_` の旗で llama-server が起きずに落ちたので版4で直した。136/136 適用（VERIFICATION.md §3.100） |
 
 #### 本体に取り込まれた修正の判定
 

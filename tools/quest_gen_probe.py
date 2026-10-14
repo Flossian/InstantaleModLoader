@@ -55,19 +55,19 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 from epithet_probe import read_sampling                              # noqa: E402
-from llm_ctx_probe import (find_game_dir, http_json, pick_build_dir,  # noqa: E402
+from llm_ctx_probe import (find_game_dir, http_json, pick_build_dir, popen_server,  # noqa: E402
                            read_live_config, running, wait_ready)
 from npc_variety_probe import apply_replacements, load_replace_rules  # noqa: E402
 
 MANAGER = "random_quest_generator"
 #: ゲームが渡す出力の上限（216_ の実測 `options={n_predict=16384}`）。
 N_PREDICT = 16384
-#: 127_ が書き換えた後の起動引数（`out\\llm_speed.log` の REWRITE と同じ）。サンプリングは config.json から。
+#: ゲームが渡す起動引数（`out\\llm_speed.log` の LAUNCH と同じ）。サンプリングは config.json から。
+#: 127_ の書き換え（`--parallel` とチェックポイント）は 127_ 自身の `rewrite_argv` を通して足す。
 CTX_SIZE = 16384
 SERVER_FLAGS = ["--ctx-size", str(CTX_SIZE), "--reasoning-budget", "0",
                 "--chat-template-kwargs", '{"enable_thinking": false}',
-                "--no-mmproj", "--n-gpu-layers", "999", "--cache-reuse", "256",
-                "--parallel", "1", "--checkpoint-every-n-tokens", "256"]
+                "--no-mmproj", "--n-gpu-layers", "999", "--cache-reuse", "256"]
 TAIL_CHARS = 600
 
 # ------------------------------------------------------------------ 頼み
@@ -134,6 +134,18 @@ def load_runaway_module():
     with io.open(os.path.join(folder, "mod.json"), encoding="utf-8") as fh:
         entry = json.load(fh)["entry"]
     spec = importlib.util.spec_from_file_location("quest_runaway_mod", os.path.join(folder, entry))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_speed_module():
+    """`127_` を読む（起動引数は MOD と同じ関数で書き換える。旗をサーバが知っているかも MOD が見る）。"""
+    matches = sorted(name for name in os.listdir(MODS_DIR) if name.endswith("_llm_response_speed"))
+    folder = os.path.join(MODS_DIR, matches[0])
+    with io.open(os.path.join(folder, "mod.json"), encoding="utf-8") as fh:
+        entry = json.load(fh)["entry"]
+    spec = importlib.util.spec_from_file_location("llm_speed_mod", os.path.join(folder, entry))
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -360,7 +372,8 @@ def main():
             command = [str(server), "-m", model, "--host", "127.0.0.1", "--port", str(args.port),
                        "--temp", str(sampling["temperature"]), "--top-p", str(sampling["top_p"]),
                        "--top-k", str(sampling["top_k"])] + SERVER_FLAGS
-            proc = subprocess.Popen(command, stdout=handle, stderr=subprocess.STDOUT)
+            command, _changes = load_speed_module().rewrite_argv(command)
+            proc = popen_server(command, stdout=handle, stderr=subprocess.STDOUT)
             if not wait_ready(args.port, 600, proc):
                 print("  起動しなかった。{} を読むこと。".format(base_name + "_server.log"))
                 return 1

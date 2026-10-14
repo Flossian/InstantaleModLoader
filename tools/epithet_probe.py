@@ -63,7 +63,7 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 # サーバの起こし方・ゲームの見つけ方は文脈長プローブと共通。
-from llm_ctx_probe import (find_game_dir, find_model, http_json,  # noqa: E402
+from llm_ctx_probe import (find_game_dir, find_model, http_json, popen_server,  # noqa: E402
                            pick_build_dir, read_live_config, running,
                            wait_ready)
 
@@ -326,7 +326,7 @@ def main():
             print("  起動中（読み込みに数分かかることがある）…", flush=True)
             logfile = os.path.join(OUT_DIR, "epithet_probe_server.log")
             handle = io.open(logfile, "w", encoding="utf-8", errors="replace")
-            proc = subprocess.Popen(
+            proc = popen_server(
                 [str(server), "-m", str(model),
                  "--host", "127.0.0.1", "--port", str(args.port),
                  "--ctx-size", str(CTX_SIZE), "--n-gpu-layers", "999",

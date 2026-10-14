@@ -19,11 +19,11 @@
         "ja": "ゲーム更新時に前回の走査結果を退避する"
       },
       "note": {
-        "en": "Zips out/recon/ into out/recon_snapshots/<version>_<date>.zip before overwriting it, so the two builds can be compared. Only runs when the build changed.",
-        "ja": "上書きする前に out\\recon\\ を out\\recon_snapshots\\<版>_<日付>.zip へ固め、前の版と見比べられるようにする。版が変わったときだけ走る"
+        "en": "Zips out/recon/ into recon_history/<version>_<date>.zip (next to out/) before overwriting it, so the two builds can be compared. Only runs when the build changed. One archive per version is always kept.",
+        "ja": "上書きする前に out\\recon\\ を recon_history\\<版>_<日付>.zip（out\\ の隣）へ固め、前の版と見比べられるようにする。版が変わったときだけ走る。版ごとに1本は必ず残す"
       }
     }
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian"
 }

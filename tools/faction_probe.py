@@ -53,7 +53,7 @@ if RUNTIME_DIR not in sys.path:
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
-from llm_ctx_probe import (find_game_dir, find_model, http_json,  # noqa: E402
+from llm_ctx_probe import (find_game_dir, find_model, http_json, popen_server,  # noqa: E402
                            pick_build_dir, read_live_config, running, wait_ready)
 from epithet_probe import read_sampling  # noqa: E402
 from instantale_modloader import llm, saves  # noqa: E402
@@ -388,7 +388,7 @@ def main():
             print("  モデル: {}（起動中）".format(label), flush=True)
             handle = io.open(os.path.join(OUT_DIR, "faction_probe_server.log"), "w",
                              encoding="utf-8", errors="replace")
-            proc = subprocess.Popen(
+            proc = popen_server(
                 [str(server), "-m", str(model), "--host", "127.0.0.1", "--port", str(args.port),
                  "--ctx-size", str(CTX_SIZE), "--n-gpu-layers", "999", "--cache-reuse", "256",
                  "--parallel", "1", "--no-mmproj", "--reasoning-budget", "0"],

@@ -70,7 +70,7 @@ if HERE not in sys.path:
 
 from instantale_modloader.llm import parse_json                      # noqa: E402
 from epithet_probe import read_sampling                              # noqa: E402
-from llm_ctx_probe import (find_game_dir, find_model, http_json,     # noqa: E402
+from llm_ctx_probe import (find_game_dir, find_model, http_json, popen_server,     # noqa: E402
                            pick_build_dir, read_live_config, running,
                            wait_ready)
 
@@ -609,7 +609,7 @@ def main():
             print("  起動中（読み込みに数分かかることがある）…", flush=True)
             logfile = os.path.join(OUT_DIR, "npc_variety_probe_server.log")
             handle = io.open(logfile, "w", encoding="utf-8", errors="replace")
-            proc = subprocess.Popen(
+            proc = popen_server(
                 [str(server), "-m", str(model),
                  "--host", "127.0.0.1", "--port", str(args.port),
                  "--ctx-size", str(CTX_SIZE), "--n-gpu-layers", "999",

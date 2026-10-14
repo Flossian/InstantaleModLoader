@@ -49,6 +49,7 @@ MOD ごとにアイコンを並べていた形（v1.15.1）は、MOD が増え�
 """
 import os
 import sys
+import threading
 
 from . import frames, log_exc, panels, ui
 from . import state as _state_keys
@@ -550,14 +551,25 @@ def _follow(button):
 
 
 def _paint_dot(widget, on=None):
-    """右上の知らせの点を描く・消す。`on` を省くと、一覧のどれかに印があるかで決める。"""
-    if on is None:
-        on = has_attention(ui.find_app())
-    group = frames.attr(widget, DOT_ATTR, None)
+    """右上の知らせの点を描く・消す。`on` を省くと、一覧のどれかに印があるかで決める。
+
+    描くのは表のスレッドだけ。ボタンの位置が背景のスレッドで動くと `_follow` の知らせもそのスレッドで来て、
+    Kivy が `Cannot change graphics instruction outside the main Kivy thread` で弾いた（VERIFICATION.md §3.100）。
+    """
     try:
         from kivy.graphics import Color, InstructionGroup, Rectangle
     except Exception:
         return                                  # ゲームの外（検査）
+    if threading.current_thread() is not threading.main_thread():
+        try:
+            from kivy.clock import Clock
+            Clock.schedule_once(lambda _dt: _paint_dot(widget, on), 0)
+        except Exception:
+            log_exc("hud icons: cannot schedule the notice dot")
+        return
+    if on is None:
+        on = has_attention(ui.find_app())
+    group = frames.attr(widget, DOT_ATTR, None)
     try:
         if group in (None, frames.MISSING):
             group = InstructionGroup()
