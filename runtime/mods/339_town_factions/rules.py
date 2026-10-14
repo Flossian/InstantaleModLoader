@@ -56,10 +56,11 @@ HISTORY_LIMIT = 40
 
 def empty_ledger():
     # organize_asked: 設定に勢力が無い世界で、組織を設ける設計を聞いたか（聞く前の NONE は、設定を入れたら作り直す）
+    # people: 勢力の街の住人の立場 `{npc_id: {town, faction, role, reason}}`（版3 から。無い台帳は判定前とみなす）
     return {"version": LEDGER_VERSION, "status": None, "why": "", "made_day": None,
             "peaceful": False, "factions": [], "towns": {}, "relations": {},
             "standing": {}, "events": [], "trend": {"last_day": None, "incidents": {}},
-            "gained": {}, "history": [], "organize_asked": False}
+            "gained": {}, "history": [], "organize_asked": False, "people": {}}
 
 
 # ============================================================ 数の均し
@@ -586,20 +587,166 @@ def apply_moves(ledger, moves):
                 row["locked"] = True
 
 
-def stance_text(ledger, faction_id, player):
-    """会話に足す構えの文。中立なら空。呼び名は判定したときと同じ段のときだけ添える。"""
+def stance_text(ledger, faction_id, player, role=None):
+    """会話に足す構えの文。立場（`role`。既定は一員）で書き分ける。足すことが無ければ空。
+
+    一員と他の勢力寄りは、中立なら空。呼び名は判定したときと同じ段のときだけ添える。
+    """
+    role = role or MEMBER
+    if role == INDIFFERENT:
+        return ""
     faction = faction_by_id(ledger, faction_id)
     row = (ledger.get("standing") or {}).get(faction_id)
     if faction is None or not isinstance(row, dict):
         return ""
     stage = standing_stage(row.get("score", 0))
+    name = faction["name"]
+    if role == FOLLOWER:
+        return FOLLOWER_TEXT.format(faction=name, player=player, view=STANDING_VIEWS[stage]) if stage else ""
+    if role == DISSENTER:
+        text = DISSENTER_TEXT.format(faction=name)
+        if stage:
+            text += (DISSENTER_COLD if stage < 0 else DISSENTER_WARM).format(
+                faction=name, player=player, view=STANDING_VIEWS[stage])
+        return text + DISSENTER_HIDE
     template = STANCE_TEXTS.get(stage)
-    if not template:
+    if role == OTHER:
+        text = OTHER_TEXT.format(faction=name)
+        if template:
+            text += template.format(faction=name, player=player)
+        return text
+    if role == OTHER_OPEN:
+        text = OTHER_OPEN_TEXT.format(faction=name)
+        if not template:
+            return text
+        text += template.format(faction=name, player=player)
+    elif not template:
         return ""
-    text = template.format(faction=faction["name"], player=player)
+    else:
+        text = template.format(faction=name, player=player)
     if row.get("title") and row.get("title_stage") == stage:
-        text += TITLE_TEXT.format(faction=faction["name"], player=player, title=row["title"])
+        text += TITLE_TEXT.format(faction=name, player=player, title=row["title"])
     return text
+
+
+# ============================================================ 住人の立場
+#: 立場の英名（台帳と答えの形）。判定と根拠は VERIFICATION.md §3.98「住人の立場」。
+MEMBER = "member"             # 勢力の一員
+FOLLOWER = "follower"         # 一員ではないが治める側に従う普通の住人
+DISSENTER = "dissenter"       # 表向き従い、内心では反感（面従腹背）
+INDIFFERENT = "indifferent"   # 権威に関心が無く、損得と自分の暮らしで動く
+OTHER = "other"               # 別の勢力の側にいる（台帳の `open` で公然か隠しているかを分ける）
+ROLES = (MEMBER, FOLLOWER, DISSENTER, INDIFFERENT, OTHER)
+#: 他の勢力寄りのうち、その勢力の者だと周りに知られている者（台帳には書かない。`role_for` が返す）。
+OTHER_OPEN = "other_open"
+#: 答えに日本語で書かれたときの読み替え。
+ROLE_WORDS = {"一員": MEMBER, "構成員": MEMBER, "従う住人": FOLLOWER, "従う": FOLLOWER, "住人": FOLLOWER,
+              "面従腹背": DISSENTER, "反感": DISSENTER, "無関心": INDIFFERENT,
+              "他の勢力寄り": OTHER, "他勢力": OTHER, "別の勢力": OTHER}
+#: 見られ方を会話で動かせる立場（その勢力の者として主人公を見ている）。
+JUDGING_ROLES = (MEMBER, OTHER, OTHER_OPEN)
+#: 段ごとの見られ方の言い方（従う住人・面従腹背の文に入れる）。
+STANDING_VIEWS = {-2: "敵とみなしている", -1: "信用していない", 0: "とくに気にしていない",
+                  1: "好意的に見ている", 2: "身内も同然に信頼している"}
+FOLLOWER_TEXT = ("この街を治める{faction}の者たちは、{player}を{view}。"
+                 "あなたは{faction}の一員ではないが、この街で暮らす者としてそれを知っており、{faction}の目を気にしている。")
+DISSENTER_TEXT = "あなたは表向き{faction}に従っているが、内心では{faction}に反感を持っている。"
+DISSENTER_COLD = "{faction}の者たちが{player}を{view}ことは、あなたが{player}を嫌う理由にはならない。"
+DISSENTER_WARM = "{faction}の者たちが{player}を{view}ことは、あなたが{player}に好意を持つ理由にはならない。"
+DISSENTER_HIDE = "人目のある所では本音を出さない。"
+OTHER_TEXT = "あなたはこの街に暮らしているが、心は{faction}の側にあり、それを表には出さない。"
+OTHER_OPEN_TEXT = "あなたは{faction}の者としてこの街にいて、周りもそれを知っている。"
+#: 答えの `open` で「公然」と読む語。
+OPEN_WORDS = ("true", "yes", "はい", "公然", "知られて")
+PERSON_REASON_CHARS = 80
+
+
+def person_of(ledger, npc_id):
+    """台帳に書いた住人の立場 `{"town", "faction", "role", "reason"}`。判定前なら None。"""
+    row = (ledger.get("people") or {}).get(str(npc_id))
+    return row if isinstance(row, dict) and row.get("role") in ROLES else None
+
+
+def role_for(ledger, npc_id, town_faction):
+    """相手の `(勢力の id, 立場)`。判定前・名簿に無い相手は、街の勢力に従う住人。"""
+    row = person_of(ledger, npc_id)
+    if row is None:
+        return town_faction, FOLLOWER
+    if row["role"] == OTHER:
+        return row.get("faction") or None, OTHER_OPEN if row.get("open") else OTHER
+    if row["role"] == INDIFFERENT:
+        return town_faction, INDIFFERENT
+    return town_faction, row["role"]
+
+
+def read_role(text):
+    word = str(text or "").strip().lower()
+    if word in ROLES:
+        return word
+    for key, role in ROLE_WORDS.items():
+        if key in str(text or ""):
+            return role
+    return None
+
+
+def read_people(answer, ledger, town_id, npc_ids):
+    """住人の立場の答えを台帳の形に起こす。`({npc_id: 行}, 読めなかった理由の並び)`。
+
+    答えに無い住人は、従う住人として書く（聞き直し続けないように）。
+    """
+    town_faction = faction_of_town(ledger, town_id)
+    by_name = {f["name"]: f["id"] for f in ledger.get("factions") or []}
+    wanted = [str(x) for x in npc_ids]
+    rows, problems = {}, []
+    for item in (answer or {}).get("people") or []:
+        if not isinstance(item, dict):
+            continue
+        npc_id = str(item.get("id") or "").strip()
+        if npc_id not in wanted:
+            problems.append("unknown id {!r}".format(item.get("id")))
+            continue
+        role = read_role(item.get("role"))
+        faction = faction_id_of(by_name, item.get("faction")) if item.get("faction") else None
+        if role is None:
+            problems.append("{}: unreadable role {!r}".format(npc_id, item.get("role")))
+            role = FOLLOWER
+        said_open = str(item.get("open") or "").strip().lower()
+        is_open = any(word in said_open for word in OPEN_WORDS)
+        if faction and faction != town_faction and role != OTHER:
+            # 別の勢力との結び付きを答えた（役の選び方より勢力の欄を信じる。役が割れた。2026-10-14、Haiku 5.5）。
+            # 一員と答えた者は、隠していると答えなければ公然
+            is_open = is_open or (role == MEMBER and said_open in ("", "none", "null"))
+            role = OTHER
+        if role == OTHER and (not faction or faction == town_faction):
+            problems.append("{}: other without a faction {!r}".format(npc_id, item.get("faction")))
+            role, faction = FOLLOWER, None
+        rows[npc_id] = {"town": str(town_id), "faction": faction if role == OTHER else town_faction,
+                        "role": role,
+                        "reason": str(item.get("reason") or "").strip()[:PERSON_REASON_CHARS]}
+        if role == OTHER:
+            rows[npc_id]["open"] = is_open
+    for npc_id in wanted:
+        if npc_id not in rows:
+            rows[npc_id] = {"town": str(town_id), "faction": town_faction, "role": FOLLOWER,
+                            "reason": "", "missing": True}
+    return rows, problems
+
+
+def unjudged(ledger, residents):
+    """まだ立場を決めていない住人 `{town_id: [npc_id]}`。`residents` は `{town_id: [npc_id]}`。勢力の街だけ。
+
+    別の街で決めた住人（住まいが変わった）も、いまの街で決め直す。
+    """
+    people = ledger.get("people") or {}
+    out = {}
+    for town_id, ids in residents.items():
+        if not faction_of_town(ledger, town_id):
+            continue
+        rest = [str(x) for x in ids if not isinstance(people.get(str(x)), dict)
+                or str(people[str(x)].get("town")) != str(town_id)]
+        if rest:
+            out[str(town_id)] = rest
+    return out
 
 
 # ============================================================ 勢力どうしの関係（趨勢）

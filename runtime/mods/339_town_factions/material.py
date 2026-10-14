@@ -254,6 +254,85 @@ def standing_messages(material):
             {"role": "user", "content": material}]
 
 
+# ============================================================ 住人の立場
+PEOPLE_SYSTEM = """あなたは物語の設定を読む編集者です。
+ある街の住人一人ひとりが、その街で力を持つ勢力とどういう関係にあるかを、住人の人物紹介から判断します。
+
+people: 住人ごとに id（住人の一覧の id）、reason、role、faction、open
+reason: 人物紹介のどこから、その街の勢力とどういう関係だと読んだかを1文（先に書き、role はこれに合わせる）
+role は次のどれか1つ（英語のまま書く）:
+- member: その街の勢力（【街】に書いた勢力）に属し、一員として振る舞う（勢力での役目・務め・信仰・忠誠などで結び付いている）。別の勢力に属する者は member ではなく other
+- follower: 一員ではないが、治める側として受け入れて従っている。とくに反感も心酔も書かれていない普通の住人
+- dissenter: 表向きは従っているが、内心ではその勢力そのものに反感・不満・疑いを持っている（追われた・虐げられた・腐敗を嫌うなど）
+- indifferent: その勢力の権威や考えに関心がなく、損得や自分の暮らし・好きなことだけで動く
+- other: その街の勢力ではなく、別の勢力に属している・仕えている・通じている（別の勢力の一員としてこの街に置かれた者も、ひそかに通じる者も）
+faction: この住人が属している・仕えている・通じている勢力の name を【勢力】から書く（その街の勢力でも、別の勢力でも）。どの勢力とも結び付きが書かれていなければ空
+open: faction が別の勢力のときだけ、その勢力の者だと周りに知られている（公然とその勢力の者としてこの街にいる）なら "true"、隠しているなら "false"。ほかは空
+
+決まり:
+- 人物紹介に書かれたことだけで判断する。勢力との関わりが読み取れない住人は follower
+- 職業や施設の主であることだけで member にしない（その街の店主や宿の主でも、勢力の一員とは限らない）
+- 勢力の務めに就いている者は、自分自身への迷いや負い目があっても member（勢力そのものへの反感が書かれているときだけ dissenter）
+- other と別の勢力の faction は、別の勢力との結び付き（属する・仕える・務める・通じる）が人物紹介に書かれているときだけ。考えや好みが近いだけ、過去に属していて今は離れた（出奔した・追われた・除籍された）だけでは書かない
+- 反感や不満が書かれていなければ dissenter にしない
+- dissenter の反感は、その街の勢力そのもの、またはその勢力の役人・教え・やり方・要求に向いたもの（態度や行いに表れていればよい）。【勢力】のどれでもない組織や個人への恨みは数えない
+- 一覧のすべての住人について1つずつ書く"""
+PERSON_PROFILE_LIMIT = 400
+
+
+def home_of(save_data_dict, npc_id):
+    """住人の街。名簿（住人・冒険者）に載っていればその街、無ければ生まれた街（`initial_location.area`）。
+
+    名簿に載るのは冒険者だけで、店や施設の主は載らない（2026-10-14 にセーブで確かめた）。
+    """
+    npc_id = str(npc_id)
+    for area_id, area in ((save_data_dict or {}).get("areas") or {}).items():
+        if not isinstance(area, dict):
+            continue
+        ids = list(area.get("resident_npcs") or []) + list(area.get("adventurer_npcs") or [])
+        if npc_id in [str(x) for x in ids]:
+            return str(area_id)
+    npc = ((save_data_dict or {}).get("npcs") or {}).get(npc_id)
+    where = npc.get("initial_location") if isinstance(npc, dict) else None
+    area = where.get("area") if isinstance(where, dict) else None
+    return str(area) if area not in (None, "") else ""
+
+
+def residents_of(save_data_dict):
+    """街ごとの住人 `{town_id: [npc_id]}`（`home_of` の分け方）。"""
+    out = {}
+    for npc_id in ((save_data_dict or {}).get("npcs") or {}):
+        home = home_of(save_data_dict, npc_id)
+        if home:
+            out.setdefault(home, []).append(str(npc_id))
+    return out
+
+
+def people_material(save_data_dict, ledger, towns, town_id, npc_ids):
+    """住人の立場を聞く材料（勢力の一覧・街・住人の人物紹介）。"""
+    names = {t_id: name for t_id, name, _size, _d in towns}
+    faction = rules.faction_by_id(ledger, rules.faction_of_town(ledger, town_id)) or {}
+    npcs = (save_data_dict or {}).get("npcs") or {}
+    lines = [factions_block(ledger, towns), "",
+             "【街】{}（この街で力を持つ勢力: {}）".format(names.get(str(town_id), town_id), faction.get("name", "")),
+             "", "【住人】"]
+    for npc_id in npc_ids:
+        npc = npcs.get(str(npc_id)) if isinstance(npcs, dict) else None
+        if not isinstance(npc, dict):
+            continue
+        lines.append("- id {}: {}（{}）".format(npc_id, npc.get("name") or "?", npc.get("job") or ""))
+        for key, label in (("profile", "人物"), ("personality", "性格")):
+            text = _cut(str(npc.get(key) or "").strip(), PERSON_PROFILE_LIMIT)
+            if text:
+                lines.append("  {}: {}".format(label, text))
+    return "\n".join(lines)
+
+
+def people_messages(material):
+    return [{"role": "system", "content": PEOPLE_SYSTEM},
+            {"role": "user", "content": material}]
+
+
 def incidents_since(incidents_bucket, since_day, towns):
     """338 の控えから、`since_day` より後に起きた・終わった出来事を読む。`[文]`。"""
     names = {town_id: name for town_id, name, _size, _d in towns}

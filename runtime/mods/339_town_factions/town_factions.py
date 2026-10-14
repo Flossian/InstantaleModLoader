@@ -10,6 +10,7 @@
 | 世界を読み込んだ・会話・日数が進んだ | 台帳が無ければ作る（背景で LLM を2回。抽出と初回の判定） |
 | 会話の頼み（5関数） | 相手の街の勢力の構えと、最近の情勢の噂を足す（ローダの `modnpc` の `notes`） |
 | 会話を閉じたときの要約 | 見られ方がどう動いたかを相乗りで判定させる（ローダの `talk_summary`） |
+| 台帳ができた・住人が増えた | 勢力の街の住人の立場（一員・従う住人・面従腹背・無関心・他の勢力寄り）を街ごとに決める（背景で LLM を街ごとに1回） |
 | 日数が進んだ | 338 の出来事を主人公が片付けていれば、その街の勢力の見られ方を上げる。間隔が来たら情勢を1回進める（背景で LLM を1回） |
 
 勢力が2つ以上書かれていない世界（統一された世界・勢力の話が無い世界）では台帳を作らない（VERIFICATION.md §3.98「勢力は設定に書かれたものだけ」）。
@@ -55,6 +56,7 @@ MANAGER_EXTRACT = "mod_town_factions_extract"
 MANAGER_STANDING = "mod_town_factions_standing"
 MANAGER_TREND = "mod_town_factions_trend"
 MANAGER_DESIGN = "mod_town_factions_design"
+MANAGER_PEOPLE = "mod_town_factions_people"
 DAYS_TARGET = "__main__:InstantaleApp.elapse_days"
 SEND_TARGET = "scripts.llm.llm_manager:send_request"
 WORLD_MANAGER = "create_world_overview"       # 世界の生成の頼み（概要の有無によらずこの名前。GAME.md §2.27）
@@ -70,8 +72,10 @@ REASON_CHARS = 80
 ICON_KEY = "town_factions"
 ICON_FILES = ("icon_flag.png", "icon_flag_hover.png", "icon_flag_click.png")
 ICON_ORDER = 20
+#: 住人の立場を1回に聞く人数（街の住人がこれより多ければ分けて聞く）。
+PEOPLE_BATCH = 20
 #: 抽出の並びの件数の上限（ローカル LLM が書き足し続けないように。139 と同じ穴）。ローカルのときだけ付ける。
-LIST_LIMITS = {"factions": 8, "towns": 40, "relations": 28, "standings": 8}
+LIST_LIMITS = {"factions": 8, "towns": 40, "relations": 28, "standings": 8, "people": PEOPLE_BATCH}
 
 RUMOR_NOTE = "【各地の噂】{rumor}\nこれは各地に広まっている噂で、あなたも耳にしている。"
 
@@ -195,6 +199,11 @@ def apply(ctx):
                 row = factory("FactionAdjust", faction=(str, ...), adjust=(int, ...),
                               title=(str, ...), reason=(str, ...))
                 made = factory("FactionAdjusts", standings=listed(row, "standings"))
+            elif name == "people":
+                # 理由を先に書かせる（役の後に理由を書かせると、理由と役が食い違った。2026-10-14、Haiku 5.5）
+                person = factory("FactionPerson", id=(str, ...), reason=(str, ...), role=(str, ...),
+                                 faction=(str, ...), open=(str, ...))
+                made = factory("FactionPeople", people=listed(person, "people"))
             elif name == "design":
                 organization = factory("Organization", name=(str, ...), kind=(str, ...),
                                        note=(str, ...), towns=(list[str], ...))
@@ -375,6 +384,7 @@ def apply(ctx):
                 if rewound:
                     worlds.save(key)
         if status == rules.READY:
+            queue_people(app, key, bucket)
             return bucket
         # 勢力の無い世界。組織を設ける設定を後から入れたなら、設計を聞くために作り直す
         if status == rules.NONE and not (ADD_ORGANIZATIONS and not bucket.get("organize_asked")):
@@ -447,8 +457,68 @@ def apply(ctx):
             day, a, b, direction, rules.RELATION_NAMES[plan["before"]],
             rules.RELATION_NAMES[plan["after"]], plan["why"], rumor))
 
+    # ------------------------------------------------------------ 住人の立場
+    def queue_people(app, key, ledger):
+        """立場を決めていない住人がいれば、決める仕事を積む（周回に1つ。住人の数が変わったときだけ数え直す）。"""
+        npcs = save_data(app).get("npcs")
+        count = len(npcs) if isinstance(npcs, dict) else 0
+        mark = (key, count, len(ledger.get("people") or {}))
+        if store.get("people_checked") == mark:
+            return
+        store["people_checked"] = mark
+        failed = store.setdefault("people_failed", set())
+        pending = {town: ids for town, ids in
+                   rules.unjudged(ledger, material.residents_of(save_data(app))).items()
+                   if (key, town) not in failed}
+        if pending:
+            write("people: {} queued {} town(s) {}".format(
+                key, len(pending), {town: len(ids) for town, ids in pending.items()}))
+            worker.enqueue({"kind": "people", "app": app, "key": key})
+
+    def judge_people(job):
+        """勢力の街ごとに、住人の立場を LLM に決めさせる（背景スレッド）。"""
+        app, key = job["app"], job["key"]
+        failed = store.setdefault("people_failed", set())
+        while same_world(app, key):
+            data = save_data(app)
+            with worlds.lock:
+                ledger = load(key)
+                if ledger.get("status") != rules.READY:
+                    return
+                snapshot = json_copy(ledger)
+            pending = [(town, ids) for town, ids in sorted(
+                rules.unjudged(snapshot, material.residents_of(data)).items())
+                if (key, town) not in failed]
+            if not pending:
+                return
+            town, ids = pending[0]
+            ids = ids[:PEOPLE_BATCH]
+            towns = material.towns_of(data)
+            answer = ask(MANAGER_PEOPLE, material.people_messages(
+                material.people_material(data, snapshot, towns, town, ids)), "people")
+            if not same_world(app, key):
+                write("people: {} dropped (another save was loaded while asking)".format(key))
+                return
+            if answer is None:
+                # 答えが無い街は、読み込み直すまで聞き直さない（会話のたびに聞き直さないように）
+                failed.add((key, town))
+                write("people: {} town {} no answer; will try again after the next load".format(key, town))
+                continue
+            rows, problems = rules.read_people(answer, snapshot, town, ids)
+            with worlds.lock:
+                ledger = load(key)
+                if ledger.get("status") != rules.READY:
+                    return
+                ledger.setdefault("people", {}).update(rows)
+                worlds.save(key)
+            counts = {}
+            for row in rows.values():
+                counts[row["role"]] = counts.get(row["role"], 0) + 1
+            write("people: {} town {} {}{}".format(key, town, counts,
+                                                   " problems {}".format(problems) if problems else ""))
+
     def run(job):
-        (build if job["kind"] == "build" else trend)(job)
+        {"build": build, "trend": trend, "people": judge_people}[job["kind"]](job)
 
     worker = store["worker"] = jobs.rebind(
         store["worker"] or jobs.Worker(ctx, run, name="town_factions", label="town factions",
@@ -457,22 +527,33 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 相手の勢力
     def home_town(app, npc_id):
-        """相手が住人・冒険者として名簿に載っている街。無ければ空。"""
+        """相手の街。住人・冒険者として名簿に載っている街、無ければ生まれた街（店や施設の主は名簿に載らない）。"""
         for area_id, area in (ui.world_areas(app) or {}).items():
             ids = list(getattr(area, "resident_npcs", None) or []) \
                 + list(getattr(area, "adventurer_npcs", None) or [])
             if str(npc_id) in [str(x) for x in ids]:
                 return str(area_id)
-        return ""
+        return material.home_of(save_data(app), npc_id)
 
     def faction_for(app, ledger, npc_id):
-        """相手の勢力の id。名簿の街が無ければ、主人公がいま居る街の勢力。"""
+        """相手の `(勢力の id, 立場)`。勢力と関わらない相手は `(None, None)`。
+
+        街は名簿か生まれた街、どちらも無ければ主人公がいま居る街。立場は台帳の住人の立場
+        （判定前・その街の住人でない相手は従う住人。VERIFICATION.md §3.98「住人の立場」）。
+        """
         if not npc_id or modnpc.is_mod_npc(npc_id) or npc_id == "player":
-            return None
+            return None, None
         if npc_id in [str(x) for x in ui.party_member_ids(app)]:
-            return None                     # 仲間は主人公を個人として知っている
-        town = home_town(app, npc_id) or ui.area_id_of(ui.current_area(app))
-        return rules.faction_of_town(ledger, town)
+            return None, None               # 仲間は主人公を個人として知っている
+        home = home_town(app, npc_id)
+        town_faction = rules.faction_of_town(ledger, home or ui.area_id_of(ui.current_area(app)))
+        row = rules.person_of(ledger, npc_id)
+        if row is not None and row.get("town") != home:
+            row = None                      # 別の街で決めた立場（住まいが変わった）
+        if row is None:
+            return (town_faction, rules.FOLLOWER) if town_faction else (None, None)
+        faction_id, role = rules.role_for(ledger, npc_id, town_faction)
+        return (faction_id, role) if faction_id else (None, None)
 
     # ------------------------------------------------------------ 会話の構えと噂
     def notes(info):
@@ -483,13 +564,13 @@ def apply(ctx):
         npc_id = str(info.get("npc_id") or "")
         player = talk_summary.player_name(app)
         lines = []
-        faction_id = faction_for(app, ledger, npc_id)
+        faction_id, role = faction_for(app, ledger, npc_id)
         if faction_id:
-            stance = rules.stance_text(ledger, faction_id, player)
+            stance = rules.stance_text(ledger, faction_id, player, role)
             if stance:
                 lines.append(stance)
-                quiet("stance: {} ({}) {} -> {}".format(
-                    info.get("site"), npc_id, faction_id, stance[:40]))
+                quiet("stance: {} ({}) {} {} -> {}".format(
+                    info.get("site"), npc_id, faction_id, role, stance[:40]))
         day = ui.game_day(app)
         latest = (ledger.get("events") or [])[-1:]
         if latest and latest[0].get("rumor") and day is not None \
@@ -506,8 +587,9 @@ def apply(ctx):
         ledger = ensure(app)
         if not ledger or ledger.get("status") != rules.READY:
             return None
-        faction_id = faction_for(app, ledger, talk["npc_id"])
-        if not faction_id or not talk_summary.player_engaged(talk["messages"]):
+        faction_id, role = faction_for(app, ledger, talk["npc_id"])
+        # 勢力の者として主人公を見ている相手（一員・他の勢力寄り）との会話だけが見られ方を動かす
+        if not faction_id or role not in rules.JUDGING_ROLES                 or not talk_summary.player_engaged(talk["messages"]):
             return None
         faction = rules.faction_by_id(ledger, faction_id)
         talk["faction"] = faction_id
@@ -694,6 +776,8 @@ def apply(ctx):
             result = orig(self, *args, **kwargs)
             worlds.forget()
             store["failed"].clear()         # 作れなかった台帳は、読み込み直したらもう一度試す
+            store.setdefault("people_failed", set()).clear()    # 答えの無かった街の住人も聞き直す
+            store["people_checked"] = None
             store["checked"] = None
             store["listed"] = None          # 一覧の行を出すかは、次に聞かれたときに読み直す
             try:

@@ -20,6 +20,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 import shutil
 import sys
 import types
@@ -271,7 +272,20 @@ SAVE = {
                     "descriptions": {"overview": "灰の結社の監視が行き届いた村。"}},
               "7": {"name": "北の巡礼町", "size": "town",
                     "descriptions": {"overview": "白の教団が管理する巡礼の町。"}},
-              "20": {"name": "地下墓地", "size": "dungeon", "descriptions": {"overview": "暗い"}}}}
+              "20": {"name": "地下墓地", "size": "dungeon", "descriptions": {"overview": "暗い"}}},
+    # 店や施設の主は名簿に載らず、生まれた街（initial_location）で住まいが分かる
+    "npcs": {"30": {"name": "中央の町の宿屋", "job": "inn", "profile": "街道の宿を営む。",
+                    "initial_location": {"area": "0", "facility": "1"}},
+             "31": {"name": "東の村の番人", "job": "guard", "profile": "灰の結社の監視役。",
+                    "initial_location": {"area": "1", "facility": "2"}},
+             "37": {"name": "北の巡礼町の司祭", "job": "church", "profile": "白の教団の司祭。",
+                    "initial_location": {"area": "7", "facility": "3"}},
+             "38": {"name": "酒場の主", "job": "inn", "profile": "教団の説教を嫌う。", "personality": "皮肉屋。",
+                    "initial_location": {"area": "7", "facility": "4"}},
+             "39": {"name": "古物商", "job": "general_store", "profile": "金にしか興味が無い。",
+                    "initial_location": {"area": "7", "facility": "5"}},
+             "40": {"name": "結社の使い", "job": "adventure", "profile": "灰の結社に通じている。",
+                    "initial_location": {"area": "7", "facility": "6"}}}}
 towns = material.towns_of(SAVE)
 check("街だけを拾う", [t[0] for t in towns] == ["0", "1", "7"], towns)
 text = material.extract_material(SAVE)
@@ -432,6 +446,16 @@ ASKED = []
 ANSWERS = {}
 
 
+#: 住人の立場の答え（頼みに並んだ id ごと。書いていない id は一員）。
+PEOPLE_ROLES = {"38": ("dissenter", ""), "39": ("indifferent", ""), "40": ("other", "灰の結社")}
+
+
+def people_answer(message):
+    ids = re.findall(r"^- id (\S+):", message[1]["content"], re.M)
+    return {"people": [{"id": npc_id, "reason": "人物紹介から", "role": PEOPLE_ROLES.get(npc_id, ("member", ""))[0],
+                        "faction": PEOPLE_ROLES.get(npc_id, ("member", ""))[1]} for npc_id in ids]}
+
+
 def fake_ask(ctx, manager_name, message, *, timeout, structure=None, **kw):
     ASKED.append((manager_name, message))
     answer = ANSWERS.get(manager_name)
@@ -469,7 +493,8 @@ def fresh(enable=True):
     talk_summary.reset()
     del ASKED[:]
     ANSWERS.clear()
-    ANSWERS.update({module.MANAGER_EXTRACT: EXTRACT_ANSWER, module.MANAGER_STANDING: STANDING_ANSWER})
+    ANSWERS.update({module.MANAGER_EXTRACT: EXTRACT_ANSWER, module.MANAGER_STANDING: STANDING_ANSWER,
+                    module.MANAGER_PEOPLE: people_answer})
     APP = InstantaleApp()
     ctx = FakeCtx()
     module.apply(ctx)
@@ -625,7 +650,20 @@ check("調整の頼みを使う", ASKED[1][1][0]["content"] == material.ADJUST_S
 del ASKED[:]
 for fn in ctx.ready:
     fn()
-check("作った後は聞かない", not ASKED)
+check("作った後は台帳を聞き直さず、勢力の街ごとに住人の立場を1回ずつ聞く",
+      [m for m, _ in ASKED] == [module.MANAGER_PEOPLE, module.MANAGER_PEOPLE], [m for m, _ in ASKED])
+people_prompt = ASKED[1][1][1]["content"]
+check("立場の材料は街の勢力と住人の人物紹介（名簿に無い店の主も生まれた街で拾う）",
+      "この街で力を持つ勢力: 白の教団" in people_prompt and "- id 38: 酒場の主（inn）" in people_prompt
+      and "教団の説教を嫌う" in people_prompt and "中央の町の宿屋" not in people_prompt, people_prompt)
+book = ledger_of(app)
+check("住人の立場を台帳に書く", {k: (v["role"], v["faction"]) for k, v in book["people"].items()}
+      == {"31": ("member", "f2"), "37": ("member", "f1"), "38": ("dissenter", "f1"),
+          "39": ("indifferent", "f1"), "40": ("other", "f2")}, book["people"])
+del ASKED[:]
+for fn in ctx.ready:
+    fn()
+check("決めた後は聞かない", not ASKED, ASKED)
 
 
 print("[流れ] 会話の構えと噂")
@@ -636,7 +674,27 @@ text = notes({"app": app, "npc_id": "31"}) or ""
 check("灰の結社の村の住人は好意", "灰の結社に属する者" in text and "好意" in text, text)
 check("勢力の無い町の住人には足さない", notes({"app": app, "npc_id": "30"}) is None)
 app.player.current_area = "7"
-check("名簿に無い相手はいま居る街の勢力", "白の教団に属する者" in (notes({"app": app, "npc_id": "99"}) or ""))
+text = notes({"app": app, "npc_id": "99"}) or ""
+check("住まいの分からない相手は、いま居る街の勢力に従う住人", "この街を治める白の教団の者たちは、検査の主人公を敵とみなしている" in text
+      and "一員ではない" in text, text)
+text = notes({"app": app, "npc_id": "38"}) or ""
+check("面従腹背の住人は、内心の反感と、勢力の敵意を嫌う理由にしないこと", "表向き白の教団に従っているが" in text
+      and "嫌う理由にはならない" in text and "本音を出さない" in text and "属する者" not in text, text)
+check("無関心の住人には足さない", notes({"app": app, "npc_id": "39"}) is None)
+text = notes({"app": app, "npc_id": "40"}) or ""
+check("他の勢力寄りは、その勢力からの見られ方を表に出さない形で", "心は灰の結社の側にあり" in text
+      and "灰の結社に属する者として" in text and "白の教団" not in text, text)
+worlds = module._store()["worlds"]
+with worlds.lock:
+    worlds.load(worlds.playthrough(app))["people"]["40"]["open"] = True
+    worlds.save(worlds.playthrough(app))
+text = notes({"app": app, "npc_id": "40"}) or ""
+check("公然と他の勢力の者なら、その勢力の者として周りも知っている形で（呼び名も）",
+      "灰の結社の者としてこの街にいて、周りもそれを知っている" in text and "心は" not in text
+      and "「腕利きの拾い屋」" in text, text)
+with worlds.lock:
+    worlds.load(worlds.playthrough(app))["people"]["40"]["open"] = False
+    worlds.save(worlds.playthrough(app))
 app.party.append("37")
 check("仲間には足さない", notes({"app": app, "npc_id": "37"}) is None)
 app.party.remove("37")
@@ -671,6 +729,60 @@ app.world.days_elapsed -= 1
 del SENT[:]
 close(ctx, Character("30", "中央の町の宿屋"), {"faction_change": 2})
 check("勢力の無い相手の要約には足さない", SENT[0][2] is Result)
+before = {k: v["score"] for k, v in ledger_of(app)["standing"].items()}
+for npc_id, name in (("38", "酒場の主"), ("39", "古物商"), ("99", "通りすがり")):
+    del SENT[:]
+    close(ctx, Character(npc_id, name), {"faction_change": -2})
+    check("一員でない相手（{}）との会話は見られ方を動かさない".format(name), SENT[0][2] is Result)
+check("動いていない", {k: v["score"] for k, v in ledger_of(app)["standing"].items()} == before)
+app.world.days_elapsed += 1
+del SENT[:]
+close(ctx, Character("40", "結社の使い"), {"faction_change": 1, "faction_reason": "結社の理念に共感"})
+check("他の勢力寄りの相手は、その勢力の者として判定する", "灰の結社に属している" in SENT[0][1][0]["content"]
+      and ledger_of(app)["standing"]["f2"]["score"] == before["f2"] + 5, ledger_of(app)["standing"])
+app.world.days_elapsed -= 1
+
+print("[規則] 住人の立場")
+people_ledger = {"factions": [{"id": "f1", "name": "白の教団"}, {"id": "f2", "name": "灰の結社"}],
+                 "towns": {"7": {"faction": "f1"}}, "standing": {"f1": {"score": -50}}}
+rows, problems = rules.read_people({"people": [
+    {"id": "1", "role": "member", "faction": ""},
+    {"id": "2", "role": "member", "faction": "灰の結社"},
+    {"id": "3", "role": "other", "faction": "貴族"},
+    {"id": "4", "role": "面従腹背", "faction": ""},
+    {"id": "9", "role": "member", "faction": ""},
+    {"id": "5", "role": "wizard", "faction": ""}]}, people_ledger, "7", ["1", "2", "3", "4", "5", "6"])
+check("別の勢力の一員と答えたら他の勢力寄り", rows["2"]["role"] == "other" and rows["2"]["faction"] == "f2")
+check("無い勢力の他の勢力寄りは従う住人", rows["3"]["role"] == "follower" and rows["3"]["faction"] == "f1")
+check("日本語の立場も読む", rows["4"]["role"] == "dissenter")
+check("一員と答えて勢力が別なら公然の他の勢力寄り", rows["2"].get("open") is True)
+by_field, _ = rules.read_people({"people": [
+    {"id": "1", "role": "follower", "faction": "灰の結社", "open": ""},
+    {"id": "2", "role": "other", "faction": "灰の結社", "open": "true"},
+    {"id": "3", "role": "member", "faction": "灰の結社", "open": "false"},
+    {"id": "4", "role": "member", "faction": "白の教団", "open": ""}]}, people_ledger, "7", ["1", "2", "3", "4"])
+check("勢力の欄が別の勢力なら、役が何でも他の勢力寄り（役より勢力の欄を信じる）",
+      [(by_field[i]["role"], by_field[i]["faction"], by_field[i].get("open")) for i in "1234"]
+      == [("other", "f2", False), ("other", "f2", True), ("other", "f2", False), ("member", "f1", None)], by_field)
+check("公然の他の勢力寄りは会話で見られ方を動かす立場", rules.OTHER_OPEN in rules.JUDGING_ROLES)
+check("公然の他の勢力寄りは中立でも、その勢力の者だと足す", rules.stance_text(
+    dict(people_ledger, standing={"f2": {"score": 0}}), "f2", "主人公", rules.OTHER_OPEN)
+      == "あなたは灰の結社の者としてこの街にいて、周りもそれを知っている。")
+check("読めない立場と答えに無い住人は従う住人（聞き直さない）", rows["5"]["role"] == "follower"
+      and rows["6"]["role"] == "follower" and rows["6"].get("missing") is True)
+check("頼んでいない id は書かない", "9" not in rows and any("unknown id" in p for p in problems), problems)
+check("決めていない住人は勢力の街だけ数える",
+      rules.unjudged({"towns": {"7": {"faction": "f1"}}, "people": {"1": {"town": "7"}}}, {"7": ["1", "2"], "0": ["3"]})
+      == {"7": ["2"]})
+check("住まいが変わった住人は決め直す",
+      rules.unjudged({"towns": {"7": {"faction": "f1"}, "1": {"faction": "f2"}},
+                      "people": {"1": {"town": "1", "role": "member"}}}, {"7": ["1"]}) == {"7": ["1"]})
+check("従う住人は中立なら足さない", rules.stance_text(dict(people_ledger, standing={"f1": {"score": 0}}),
+                                             "f1", "主人公", rules.FOLLOWER) == "")
+check("面従腹背は中立でも内心を足す", "表向き白の教団に従っているが" in rules.stance_text(
+    dict(people_ledger, standing={"f1": {"score": 0}}), "f1", "主人公", rules.DISSENTER))
+text = rules.stance_text(dict(people_ledger, standing={"f1": {"score": 50}}), "f1", "主人公", rules.DISSENTER)
+check("勢力が好意的なら、それを好く理由にしない", "好意を持つ理由にはならない" in text, text)
 
 print("[流れ] 337 と同じ要約に乗る")
 affinity_dir = [n for n in os.listdir(MODS_DIR) if n.endswith("_conversation_affinity")][0]
@@ -920,13 +1032,13 @@ with worlds.lock:
     book["standing"]["f1"].update(score=-70, locked=True)
     worlds.save(key)
 del SENT[:]
-close(ctx, Character("99", "巡礼町の司祭"), {"faction_change": 2, "faction_reconcile": "false"})
+close(ctx, Character("37", "巡礼町の司祭"), {"faction_change": 2, "faction_reconcile": "false"})
 check("印のある相手には納得の判定を頼む", "faction_reconcile" in SENT[0][2].fields
       and "許しがたい敵" in SENT[0][1][0]["content"], SENT[0][1][0]["content"][-300:])
 check("納得しなければ敵対の上端で止まる", ledger_of(app)["standing"]["f1"]["score"] == -61
       and ledger_of(app)["standing"]["f1"].get("locked"), ledger_of(app)["standing"])
 app.world.days_elapsed += 1
-close(ctx, Character("99", "巡礼町の司祭"), {"faction_change": 2, "faction_reconcile": "true"})
+close(ctx, Character("37", "巡礼町の司祭"), {"faction_change": 2, "faction_reconcile": "true"})
 check("納得させたら印が外れ、上限なしで上がる", ledger_of(app)["standing"]["f1"]["score"] == -51
       and not ledger_of(app)["standing"]["f1"].get("locked"), ledger_of(app)["standing"])
 del SENT[:]
