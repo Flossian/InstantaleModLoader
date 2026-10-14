@@ -40,12 +40,18 @@ def _sandbox():
     return tempfile.mkdtemp(prefix="recon_archive_")
 
 
-def _plant(recon_dir, marker, build=None):
-    """前回のダンプが在ることにする。`marker` が中身の見分けになる。"""
+def _plant(recon_dir, marker, build=None, function=None):
+    """前回のダンプが在ることにする。`marker` が中身の見分けになる。
+
+    `function`（`"m:f(x)"` の形）を渡すと、`targets.txt` の2行目に足す。重複の判定は関数で見るので、
+    中身の違うダンプとして扱わせたいときに要る。
+    """
     os.makedirs(recon_dir, exist_ok=True)
     for name in recon.OUTPUT_FILES:
         with io.open(os.path.join(recon_dir, name), "w", encoding="utf-8") as fh:
             fh.write(marker + "\n")
+            if function and name == "targets.txt":
+                fh.write(function + "\n")
     path = os.path.join(recon_dir, recon.BUILD_NAME)
     if build is None:
         # 控えの無い（この仕組みが入る前の）ダンプを作る。
@@ -158,7 +164,7 @@ def test_archive_previous():
 
         # ビルドが変わった。
         # ここが本命。
-        _plant(recon_dir, "main_024 の最後の1回", build=old)
+        _plant(recon_dir, "main_024 の最後の1回", build=old, function="m:first(a)")
         path = recon.archive_previous(recon_dir, dict(new))
         check(path is not None and os.path.isfile(path), "ビルドが変われば退避する")
         check(_zips(snap_dir) == ["main_024_20260805.zip"],
@@ -168,8 +174,8 @@ def test_archive_previous():
             names = sorted(archive.namelist())
             expected = sorted(list(recon.OUTPUT_FILES) + [recon.BUILD_NAME])
             check(names == expected, "  成果物5つと build.json が入っている")
-            check(archive.read("targets.txt").decode("utf-8").strip()
-                  == "main_024 の最後の1回",
+            check(archive.read("targets.txt").decode("utf-8").replace("\r\n", "\n").strip()
+                  == "main_024 の最後の1回\nm:first(a)",
                   "  中身は上書きされる前の（＝前の版の）ダンプ")
             check(json.loads(archive.read(recon.BUILD_NAME).decode("utf-8"))["app_version"]
                   == "main_024",
@@ -177,10 +183,16 @@ def test_archive_previous():
 
         # 同じ版・同じ日にもう一度。
         # 滅多に無いが、黙って上書きしてはいけない。
-        _plant(recon_dir, "main_024 のもう1回", build=old)
+        _plant(recon_dir, "main_024 のもう1回", build=old, function="m:second(b)")
         recon.archive_previous(recon_dir, dict(new))
         check(_zips(snap_dir) == ["main_024_20260805.zip", "main_024_20260805_2.zip"],
               "名前が埋まっていれば _2 を足す（先の退避を消さない）")
+
+        # 同じビルドで中身も同じダンプは、もう1本作らない。
+        _plant(recon_dir, "main_024 の3回目", build=old, function="m:second(b)")
+        check(recon.archive_previous(recon_dir, dict(new)) is None
+              and _zips(snap_dir) == ["main_024_20260805.zip", "main_024_20260805_2.zip"],
+              "同じビルドで関数も同じなら退避しない")
 
         # 控えの無い（この仕組みが入る前の）ダンプ。
         # 確かめられない＝残す。
@@ -351,6 +363,10 @@ def test_function_changes():
     check(lines == ["changed m:a(x) -> (x, z=None)", "removed m:b(y)", "added m:d()"],
           "引数の変化・消えた・増えた（前に無かったモジュールの関数は数えない）: {}".format(lines))
     check(recon.function_changes(old, dict(old)) == [], "同じなら空")
+    check(recon.function_changes(dict(old, **{"__main__:_instantale_modloader_bootstrap": "()"}), old) == [],
+          "ローダが置いた名前（_instantale…）は消えても数えない")
+    check(recon._parse_targets("# x\n__main__:_instantale_modloader_bootstrap()\nm:a(x)\n") == {"m:a": "(x)"},
+          "重複の判定でもローダが置いた名前を外す")
     base = {"app_version": "main_026", "game_version": "014", "exe_size": 1,
             "python": "3.10.11", "kivy": "2.3.0", "llama_builds": "llama-b10642"}
     check(recon.identity_changes(base, dict(base, llama_builds="llama-b11000"))
@@ -451,6 +467,44 @@ def test_prune_keeps_each_version():
         shutil.rmtree(sandbox, ignore_errors=True)
 
 
+def test_redundant():
+    print("=== _redundant: 重複した記録だけを落とす ===")
+    sandbox = _sandbox()
+    try:
+        snap_dir = os.path.join(sandbox, recon.SNAPSHOT_DIR_NAME)
+        os.makedirs(snap_dir)
+        build = {"app_version": "main_026", "game_version": "014", "exe_size": 1}
+        full = ["m:a(x)", "m:b(y)", "__main__:Item.cb(i)"]
+
+        def zipped(name, lines, build=build, pad=0):
+            path = os.path.join(snap_dir, name)
+            with zipfile.ZipFile(path, "w") as archive:
+                archive.writestr("targets.txt", "# header\n" + "\n".join(lines) + "\n" + "#" * pad)
+                if build is not None:
+                    archive.writestr(recon.BUILD_NAME, json.dumps(build))
+            return path
+
+        zipped("main_026_20261014.zip", full[:1], dict(build, game_version=None))   # 起動直後（読み込み途中）
+        zipped("main_026_20261014_2.zip", full, pad=10)                             # 全部読み込んだ
+        zipped("main_026_20261014_3.zip", full)                                     # 中身が同じで小さい
+        zipped("main_026_20261015.zip", ["m:a(x, z=None)", "m:b(y)"])               # 関数が変わった
+        zipped("main_027_20261101.zip", full[:1], dict(build, app_version="main_027"))  # 別のビルド
+        zipped("unknown_20260801.zip", full[:1], build=None)                        # build.json が無い
+        paths = [os.path.join(snap_dir, n) for n in sorted(os.listdir(snap_dir))]
+        drop = sorted(os.path.basename(p) for p in recon._redundant(paths))
+        check(drop == ["main_026_20261014.zip", "main_026_20261014_3.zip"],
+              "読み込み途中の記録と、中身が同じで小さい記録だけ落とす: {}".format(drop))
+        recon._prune_snapshots(snap_dir)
+        left = sorted(os.listdir(snap_dir))
+        check(left == ["main_026_20261014_2.zip", "main_026_20261015.zip",
+                       "main_027_20261101.zip", "unknown_20260801.zip"],
+              "  刈り込みでも同じものが落ちる: {}".format(left))
+        check(recon._duplicate_of(os.path.join(snap_dir, "main_026_20261015.zip"), snap_dir) is None,
+              "  関数が変わった記録は、ほかの記録の重複ではない")
+    finally:
+        shutil.rmtree(sandbox, ignore_errors=True)
+
+
 def test_migrate_old_snapshots():
     print("=== migrate_old_snapshots: 前の退避先（out/recon_snapshots）から移す ===")
     sandbox = _sandbox()
@@ -483,6 +537,7 @@ def main():
     test_snapshot_name()
     test_archive_previous()
     test_prune_keeps_each_version()
+    test_redundant()
     test_migrate_old_snapshots()
     test_function_changes()
     test_signatures_scope()

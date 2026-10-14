@@ -50,6 +50,11 @@ SIGNATURES_NAME = "signatures.json"
 #: MOD とローダが定義した関数の `__module__` の頭。`signatures.json` から除く。
 MOD_ORIGINS = ("instantale_mod", "instantale_modloader")
 
+#: ローダと MOD がゲームのモジュールやクラスに置く名前の頭。関数の比べと重複の判定から除く。
+#: 注入のときに `__main__` へ置く `_instantale_modloader_bootstrap` は、ある回と無い回がある
+#: （2026-10-15 の実物。比べに入れると、版が同じでも「関数が消えた」と見える）。
+MOD_NAME_PREFIXES = ("_instantale", "__instantale")
+
 #: 退避先の中の、今のビルドの基準のダンプ（そのビルドで見た中でいちばん多くのモジュールを読み込んだ回）。
 #: 版が変わった・関数が変わった・特異な変化があったときは、これを zip にして退避する。
 CURRENT_DIR_NAME = "current"
@@ -648,6 +653,11 @@ def archive_previous(recon_dir: str, identity: dict, snap_dir: str = None) -> st
 
     if snap_dir is None:
         snap_dir = snapshot_dir(os.path.dirname(recon_dir))
+    kept = _duplicate_of(recon_dir, snap_dir)
+    if kept:
+        log("recon: the previous dump is already kept as {}; not archiving again".format(
+            os.path.basename(kept)))
+        return None
     tmp = None
     try:
         os.makedirs(snap_dir, exist_ok=True)
@@ -703,6 +713,12 @@ def function_changes(old: dict, new: dict) -> list:
     LLM や画像生成のモジュールは遊び始めるまで読み込まれないので、`new` にだけ在るモジュールは
     「増えた」のではなく「まだ読んでいなかった」ことがある。
     """
+    def ours(key):
+        return key.rsplit(":", 1)[-1].rsplit(".", 1)[-1].startswith(MOD_NAME_PREFIXES)
+
+    # 2026-10-15 より前に書いた `signatures.json` には、ローダの置いた名前が入っていることがある。
+    old = {key: value for key, value in old.items() if not ours(key)}
+    new = {key: value for key, value in new.items() if not ours(key)}
     modules = {key.split(":", 1)[0] for key in old}
     lines = []
     for key in sorted(old):
@@ -782,9 +798,15 @@ def update_current(recon_dir: str, snap_dir: str) -> str | None:
             replace = False
     archived = None
     if reasons:
-        archived = _zip_dump(current, snap_dir, old, reasons)
-        if archived:
-            log("recon: archived the reference dump to {} ({})".format(archived, reasons[0]))
+        # 同じビルドで中身を全部含む記録が既にあれば、もう1本は作らない。
+        kept = _duplicate_of(current, snap_dir)
+        if kept:
+            log("recon: the reference dump is already kept as {} ({}); not archiving again".format(
+                os.path.basename(kept), reasons[0]))
+        else:
+            archived = _zip_dump(current, snap_dir, old, reasons)
+            if archived:
+                log("recon: archived the reference dump to {} ({})".format(archived, reasons[0]))
     if replace:
         try:
             staging = current + ".tmp"
@@ -809,6 +831,97 @@ def _snapshot_version(name: str) -> str:
     return match.group(1) if match else name
 
 
+def _parse_targets(text: str) -> dict:
+    """`targets.txt` の中身を `{"module:qualname": "(引数)"}` にする。"""
+    functions = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        cut = line.find("(")
+        if cut > 0:
+            name = line[:cut]
+            if name.rsplit(":", 1)[-1].rsplit(".", 1)[-1].startswith(MOD_NAME_PREFIXES):
+                continue                        # ローダ・MOD が置いた名前（MOD_NAME_PREFIXES）
+            functions[name] = line[cut:]
+    return functions
+
+
+def _dump_summary(source: str):
+    """記録（zip かフォルダ）の (build.json, 関数の一覧)。読めなければ None。
+
+    関数は `targets.txt` で比べる。`signatures.json` は 2026-10-14 より前の記録に無いので、
+    古い記録と並べて比べられない。
+    """
+    try:
+        if source.endswith(".zip"):
+            with zipfile.ZipFile(source) as archive:
+                names = set(archive.namelist())
+                build = json.loads(archive.read(BUILD_NAME).decode("utf-8")) if BUILD_NAME in names else {}
+                text = archive.read("targets.txt").decode("utf-8")
+        else:
+            build = _read_build(source)
+            with open(os.path.join(source, "targets.txt"), "r", encoding="utf-8") as fh:
+                text = fh.read()
+    except Exception:
+        return None
+    return (build if isinstance(build, dict) else {}), _parse_targets(text)
+
+
+def _covers(bigger: dict, smaller: dict) -> bool:
+    """`smaller` の関数が全部、同じ引数で `bigger` にあるか。"""
+    return all(bigger.get(key) == value for key, value in smaller.items())
+
+
+def _duplicate_of(source: str, snap_dir: str, summary=None):
+    """`source` と同じビルドで、関数を全部（同じ引数で）含む記録が `snap_dir` に既にあれば、その zip を返す。"""
+    mine = summary or _dump_summary(source)
+    if not mine or not mine[0]:
+        return None
+    try:
+        names = sorted(os.listdir(snap_dir))
+    except OSError:
+        return None
+    for name in names:
+        path = os.path.join(snap_dir, name)
+        if not name.endswith(".zip") or os.path.abspath(path) == os.path.abspath(source):
+            continue
+        theirs = _dump_summary(path)
+        if theirs and theirs[0] and _same_build(theirs[0], mine[0]) and _covers(theirs[1], mine[1]):
+            return path
+    return None
+
+
+def _redundant(paths: list) -> set:
+    """重複している記録。同じビルドの別の記録に、関数が全部（同じ引数で）含まれているもの。
+
+    起動直後の読み込み途中の記録（全部読み込んだ記録に含まれる）と、中身の同じ記録が当たる。
+    関数が消えた・変わった記録はどちらにも含まれないので残る。
+    中身が同じ記録どうしは、大きいほう（同じなら新しいほう）を残す。
+    build.json の無い記録は比べない（残す）。
+    """
+    infos = {path: _dump_summary(path) for path in paths}
+
+    def rank(path):
+        return (os.path.getsize(path), os.path.getmtime(path), path)
+
+    drop = set()
+    for a in paths:
+        info_a = infos[a]
+        if not info_a or not info_a[0]:
+            continue
+        for b in paths:
+            info_b = infos[b]
+            if b == a or not info_b or not info_b[0]:
+                continue
+            if not (_same_build(info_a[0], info_b[0]) and _covers(info_b[1], info_a[1])):
+                continue
+            if info_a[1] != info_b[1] or rank(b) > rank(a):
+                drop.add(a)
+                break
+    return drop
+
+
 def _keepers(paths: list) -> set:
     """版ごとに消さない1本。いちばん大きい zip（＝いちばん多くのモジュールを見たダンプ）、同じ大きさなら新しいほう。
 
@@ -827,7 +940,8 @@ def _keepers(paths: list) -> set:
 def _prune_snapshots(snap_dir: str, keep: int = None) -> int:
     """古い退避を落とす。落とした数を返す。**例外は投げない。**
 
-    版ごとの1本（`_keepers`）は消さない。上限 `keep` で数えて落とすのは、それ以外（同じ版の2本目以降）の古いものから。
+    先に重複（`_redundant`）を落とす。
+    残りのうち版ごとの1本（`_keepers`）は消さない。上限 `keep` で数えて落とすのは、それ以外（同じ版の2本目以降）の古いものから。
     退避は調査のための控えなので、消せなくても支障は無い。
     ここで投げると、書けたばかりの退避を「失敗」に見せてしまう。
     """
@@ -838,20 +952,29 @@ def _prune_snapshots(snap_dir: str, keep: int = None) -> int:
         entries = [os.path.join(snap_dir, name)
                    for name in os.listdir(snap_dir)
                    if name.endswith(".zip")]
+        dropped = 0
+        duplicates = _redundant(entries)
+        for path in sorted(duplicates):
+            try:
+                os.remove(path)
+                dropped += 1
+            except Exception:
+                pass
+        if duplicates:
+            log("recon: dropped {} duplicate snapshot(s)".format(len(duplicates)))
+        entries = [path for path in entries if path not in duplicates]
         protected = _keepers(entries)
         spare = [path for path in entries if path not in protected]
         if len(spare) <= keep:
-            return 0
+            return dropped
         spare.sort(key=lambda path: (os.path.getmtime(path), path))
-        dropped = 0
         for path in spare[:len(spare) - keep]:
             try:
                 os.remove(path)
                 dropped += 1
             except Exception:
                 pass
-        if dropped:
-            log("recon: pruned {} old snapshot(s); keeping {}".format(dropped, keep))
+        log("recon: pruned old snapshot(s); keeping {}".format(keep))
         return dropped
     except Exception:
         log_exc("recon: cannot prune the snapshots")
@@ -1019,6 +1142,8 @@ def dump(out_dir: str, *, backup: bool = True) -> str:
         ローダの包みは `functools.wraps` で元の名前を写すので、包まれた関数は外れない。
         """
         if str(getattr(value, "__module__", "") or "").startswith(MOD_ORIGINS):
+            return False
+        if expected.rsplit(".", 1)[-1].startswith(MOD_NAME_PREFIXES):
             return False
         qualname = getattr(value, "__qualname__", None) or getattr(
             getattr(value, "__func__", None), "__qualname__", None)
