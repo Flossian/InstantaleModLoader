@@ -171,9 +171,20 @@ class FakeCtx(object):
     テストがその中身に左右される（同梱ルールは `test_real_prompts` で当てる）。
     """
 
+    #: 真なら、部品（`llm_manager_battle` など）ごとに別の送信口を持つ（main_026 の形。各部品の
+    #: `send_request` を言語の包みで包み直すので別の関数になる）。偽なら全部が `manager` を指す（main_025 まで）。
+    SPLIT = False
+
+    def manager_for(self, target):
+        module = target.partition(":")[0]
+        if not self.SPLIT or module == "scripts.llm.llm_manager":
+            return self.manager
+        return self.managers.setdefault(module, FakeLlmManager())
+
     def __init__(self, client, out_dir, mod_dir=None):
         self.client = client
         self.manager = FakeLlmManager()     # llm_manager の別名（クラウド経路）
+        self.managers = {}                  # SPLIT のときの部品ごとの送信口
         self.out_dir = out_dir
         self.runtime_dir = os.path.join(out_dir, "runtime")
         self.mod_dir = mod_dir or os.path.join(out_dir, "mod")
@@ -216,7 +227,7 @@ class FakeCtx(object):
         # llm_manager の別名はモジュール関数なので self を差し込まず、
         # インスタンス（＝偽モジュール）の属性を入れ替える。
         if "llm_manager" in target:
-            manager = self.manager
+            manager = self.manager_for(target)
 
             def decorate_manager(fn):
                 original = getattr(manager, name)
@@ -224,6 +235,10 @@ class FakeCtx(object):
                 def wrapper(*args, **kwargs):
                     return fn(original, *args, **kwargs)
 
+                # 本物のローダと同じく、包んだ先の名前を印に付ける。偽物の部品はどれも同じ送信口を指すので
+                # （main_025 までと同じ形）、ローダはこの印で別名を見分けて二重に包まない。
+                setattr(wrapper, "__instantale_patch__", target)
+                wrapper.__original__ = original
                 setattr(manager, name, wrapper)
                 return fn
             return decorate_manager
@@ -241,7 +256,8 @@ class FakeCtx(object):
     def resolve(self, target):
         name = target.partition(":")[2].rsplit(".", 1)[-1]
         if "llm_manager" in target:
-            return self.manager, name, getattr(self.manager, name, None)
+            manager = self.manager_for(target)
+            return manager, name, getattr(manager, name, None)
         return type(self.client), name, getattr(type(self.client), name, None)
 
     def superseded(self):
@@ -504,6 +520,69 @@ def test_paths(tmp):
     client3, _ctx3, _path = arm(RULES, out_dir, roll=lambda d: 0)
     client3._post_with_model_loading_retry("/completion", {"prompt": "古い言い方"})
     check("経路: payload 単体でも替わる", client3.sent == ["新しい言い方"], client3.sent)
+
+
+def test_cloud_split_senders(tmp):
+    """main_026 の形: 部品ごとに `send_request` が別の関数でも、戦闘・世界の生成・キャラの作成の頼みが替わる。
+
+    ローダは前は `llm_manager` だけを包み、同じ関数を指す別名を掴み直していた。
+    部品ごとに別の関数になると、`llm_manager` を通らない頼みに届かなかった（VERIFICATION.md §3.100）。
+    """
+    out_dir = os.path.join(tmp, "cloud_split")
+    os.makedirs(out_dir, exist_ok=True)
+    FakeCtx.SPLIT = True
+    try:
+        _client, ctx, _path = arm(RULES, out_dir, roll=lambda d: 0)
+        for module in ("scripts.llm.llm_manager_battle", "scripts.llm.llm_manager_world_generate",
+                       "scripts.llm.llm_manager_character_create"):
+            sender = ctx.manager_for(module + ":send_request")
+            sender.send_request("x", [{"role": "user", "content": "古い言い方をする"}], object())
+            check("クラウド（部品ごとに別の送信口）: {} の頼みが替わる".format(module.rsplit(".", 1)[-1]),
+                  sender.sent == [["新しい言い方をする"]], sender.sent)
+        battle = ctx.manager_for("scripts.llm.llm_manager_battle:send_request")
+        battle.send_request_with_no_structure("x", [{"role": "user", "content": "古い言い方"}])
+        check("クラウド（部品ごとに別の送信口）: 戦闘の send_request_with_no_structure も替わる",
+              battle.sent[-1] == ["新しい言い方"], battle.sent[-1])
+        ctx.manager.send_request("x", [{"role": "user", "content": "古い言い方"}], object())
+        check("クラウド（部品ごとに別の送信口）: llm_manager の頼みは1回だけ替わる",
+              ctx.manager.sent == [["新しい言い方"]], ctx.manager.sent)
+    finally:
+        FakeCtx.SPLIT = False
+
+
+def test_cloud_senders_rebuilt(tmp):
+    """ゲームが `set_ai_models` で送り口を新しい関数に置き直しても、ローダが包み直して頼みが替わる。
+
+    main_026 は「開始する」のたびに4つの部品の `send_request*` を作り直すので、当てた包みが外れていた
+    （2回目からキャラの作成の頼みに MOD の書き換えが届かなかった。VERIFICATION.md §3.100）。
+    """
+    out_dir = os.path.join(tmp, "cloud_rebuilt")
+    os.makedirs(out_dir, exist_ok=True)
+    FakeCtx.SPLIT = True
+    ml_llm._WATCHES[:] = []
+    try:
+        _client, ctx, _path = arm(RULES, out_dir, roll=lambda d: 0)
+        senders = [ctx.manager] + [ctx.manager_for(m + ":send_request") for m in (
+            "scripts.llm.llm_manager_battle", "scripts.llm.llm_manager_world_generate",
+            "scripts.llm.llm_manager_character_create")]
+        for sender in senders:
+            FakeLlmManager.__init__(sender)        # 作り直し: 包みの無い新しい関数に置き直す
+        creator = senders[-1]
+        creator.send_request("x", [{"role": "user", "content": "古い言い方"}], object())
+        check("作り直し: 包み直す前はキャラの作成の頼みが替わらない（直す前の形）",
+              creator.sent == [["古い言い方"]], creator.sent)
+        count = ml_llm.rearm_watches(ctx)
+        check("作り直し: 7つの送り口を包み直す", count == 7, (count, ctx.lines[-3:]))
+        for sender in senders:
+            del sender.sent[:]
+            sender.send_request("x", [{"role": "user", "content": "古い言い方"}], object())
+            check("作り直し: 包み直した後は頼みが1回だけ替わる",
+                  sender.sent == [["新しい言い方"]], sender.sent)
+        check("作り直し: もう一度呼んでも二重に包まない", ml_llm.rearm_watches(ctx) == 0)
+        check("作り直し: 例外を握り潰していない", not ctx.errors, ctx.errors)
+    finally:
+        FakeCtx.SPLIT = False
+        ml_llm._WATCHES[:] = []
 
 
 def test_cloud_path(tmp):
@@ -1175,6 +1254,8 @@ def main():
         test_probability()
         test_paths(tmp)
         test_cloud_path(tmp)
+        test_cloud_split_senders(tmp)
+        test_cloud_senders_rebuilt(tmp)
         test_alias_appears_late(tmp)
         test_single_pass(tmp)
         test_self_contained(tmp)

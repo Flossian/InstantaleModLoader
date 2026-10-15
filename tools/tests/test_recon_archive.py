@@ -363,6 +363,8 @@ def test_function_changes():
     check(lines == ["changed m:a(x) -> (x, z=None)", "removed m:b(y)", "added m:d()"],
           "引数の変化・消えた・増えた（前に無かったモジュールの関数は数えない）: {}".format(lines))
     check(recon.function_changes(old, dict(old)) == [], "同じなら空")
+    check(recon.function_changes(dict(old, **{"llama_cpp_runtime_completion:LlamaCppClient.chat": "(self)"}), old) == [],
+          "今回読み込まれていないモジュールの関数は消えたと数えない（ローカルからクラウドへ替えた回）")
     check(recon.function_changes(dict(old, **{"__main__:_instantale_modloader_bootstrap": "()"}), old) == [],
           "ローダが置いた名前（_instantale…）は消えても数えない")
     check(recon._parse_targets("# x\n__main__:_instantale_modloader_bootstrap()\nm:a(x)\n") == {"m:a": "(x)"},
@@ -532,6 +534,64 @@ def test_migrate_old_snapshots():
         shutil.rmtree(sandbox, ignore_errors=True)
 
 
+def test_build_changes():
+    print("=== build_changes: 前の版の記録と今の基準の関数を比べる（drift が読む） ===")
+    sandbox = _sandbox()
+    try:
+        snap_dir = os.path.join(sandbox, recon.SNAPSHOT_DIR_NAME)
+        os.makedirs(snap_dir)
+        old_build = {"app_version": "main_025", "exe_size": 1, "llama_builds": "b7054"}
+        new_build = {"app_version": "main_026", "exe_size": 2, "llama_builds": "b10642"}
+
+        def zipped(name, lines, build):
+            path = os.path.join(snap_dir, name)
+            with zipfile.ZipFile(path, "w") as archive:
+                archive.writestr("targets.txt", "# header\n" + "\n".join(lines) + "\n")
+                archive.writestr(recon.BUILD_NAME, json.dumps(build))
+            return path
+
+        zipped("main_024_20261001.zip", ["m:a(x)"], dict(old_build, app_version="main_024"))
+        older = zipped("main_025_20261014.zip", ["m:a(x)"], old_build)               # 読み込みの少ない回
+        os.utime(older, (1, 1))
+        zipped("main_025_20261014_2.zip", ["m:a(x)", "m:b(y)", "m:c(z)"], old_build)  # 前の版でいちばん多い回
+        zipped("main_026_20261014.zip", ["m:a(x)"], new_build)                        # 今の版の退避（比べない）
+        check(recon.build_changes(snap_dir) is None, "基準が無ければ比べない")
+
+        current = os.path.join(snap_dir, recon.CURRENT_DIR_NAME)
+        _plant(current, "# now", new_build, function="m:a(x, area_difficulty=None)")
+        with io.open(os.path.join(current, "targets.txt"), "a", encoding="utf-8") as fh:
+            fh.write("m:c(z)\nm:d(w)\n")
+        changes = recon.write_build_changes(snap_dir)
+        kinds = sorted((item["kind"], item["key"]) for item in changes["functions"])
+        check(changes["since"] == "main_025_20261014_2.zip",
+              "比べる相手は直前の版のうち関数のいちばん多い記録: {}".format(changes["since"]))
+        check(kinds == [("added", "m:d"), ("changed", "m:a"), ("removed", "m:b")],
+              "  変わった・消えた・増えたを分ける: {}".format(kinds))
+        check(changes["build"] == recon.build_key(new_build) == "main_026|2|b10642",
+              "  版の鍵は build_key: {}".format(changes["build"]))
+        check(os.path.isfile(os.path.join(current, recon.CHANGES_NAME)), "  基準に changes.json を添える")
+        first = changes["detected_at"]
+        again = recon.write_build_changes(snap_dir, {"since": changes["since"], "detected_at": "2000-01-01T00:00:00"})
+        check(again["detected_at"] == "2000-01-01T00:00:00" and first != again["detected_at"],
+              "  同じ相手との比べなら、見つけた日時を引き継ぐ")
+        check(recon.build_key({"app_version": None, "exe_size": None, "llama_builds": None}) is None,
+              "  素性が何も取れなければ鍵は None")
+
+        # 基準を置き換えない回（読み込みが少ない）でも、まだ比べていなければ比べる
+        os.remove(os.path.join(current, recon.CHANGES_NAME))
+        recon_dir = os.path.join(sandbox, "out", "recon")
+        _plant(recon_dir, "# small", new_build)
+        with io.open(os.path.join(recon_dir, recon.BUILD_NAME), "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(dict(new_build, modules=1)))
+        with io.open(os.path.join(current, recon.BUILD_NAME), "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(dict(new_build, modules=99)))
+        recon.update_current(recon_dir, snap_dir)
+        check(os.path.isfile(os.path.join(current, recon.CHANGES_NAME)),
+              "  置き換えない回でも、changes.json が無ければ書く")
+    finally:
+        shutil.rmtree(sandbox, ignore_errors=True)
+
+
 def main():
     test_same_build()
     test_snapshot_name()
@@ -540,6 +600,7 @@ def main():
     test_redundant()
     test_migrate_old_snapshots()
     test_function_changes()
+    test_build_changes()
     test_signatures_scope()
     test_dump_end_to_end()
     test_dump_module_vanishes()

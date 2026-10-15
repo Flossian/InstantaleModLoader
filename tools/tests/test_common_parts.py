@@ -919,6 +919,133 @@ def test_watch_aliases_superseded():
         llm.ALIAS_POLL_SECONDS = old_poll
 
 
+def test_rebuild_hook():
+    print("llm.install_rebuild_hook（ゲームが送り口を作り直したら包み直す。作り直しの途中は当てさせない）")
+    import instantale_modloader as ml
+    from instantale_modloader import patch as P
+    lines = []
+    game = {"send": lambda m: ("raw", m)}
+    hooks = {}
+
+    def resolve(target):
+        name = target.partition(":")[2]
+        return game, name, game.get(name)
+
+    def wrap(target, required=True):
+        def decorate(fn):
+            if target == llm.REBUILD_TARGET:
+                hooks["set_ai_models"] = fn
+                return fn
+            name = target.partition(":")[2]
+            old = game[name]
+
+            def wrapper(*args, **kwargs):
+                return fn(old, *args, **kwargs)
+            wrapper.__original__ = old
+            setattr(wrapper, P.PATCH_MARK, target)
+            setattr(wrapper, P.SELF_MARK, wrapper)
+            game[name] = wrapper
+            return fn
+        return decorate
+
+    ctx = types.SimpleNamespace(
+        resolve=resolve, wrap=wrap, superseded=lambda: False,
+        log=lambda msg, level="INFO": lines.append(msg),
+        log_exc=lambda msg: lines.append("EXC " + msg))
+    llm._WATCHES[:] = []
+    try:
+        def install(target):
+            @ctx.wrap(target, required=False)
+            def send(orig, m):
+                return ("hooked",) + orig(m)
+
+        llm.watch_aliases(ctx, ["m:send"], install, label="rebuild test")
+        llm.install_rebuild_hook(ctx)
+        check("最初は当たっている", game["send"]("x") == ("hooked", "raw", "x"), game["send"]("x"))
+        seen = {}
+
+        def rebuild():
+            game["send"] = lambda m: ("fresh", m)       # ゲームが新しい関数で置き直す
+            box = []
+            probe = threading.Thread(target=lambda: box.append(ml._boot_lock().acquire(blocking=False)))
+            probe.start()
+            probe.join()
+            seen["other_thread_got_lock"] = box[0]
+            if box[0]:
+                ml._boot_lock().release()
+
+        hooks["set_ai_models"](rebuild)
+        check("作り直しの間は別のスレッドが錠を取れない（見張りが途中を掴まない）",
+              seen.get("other_thread_got_lock") is False, seen)
+        check("作り直しの直後に包み直す", game["send"]("x") == ("hooked", "fresh", "x"),
+              game["send"]("x"))
+
+        # 遅れて当て直す boot が錠を持っている間に作り直しが重なった（2026-10-15 の実機）
+        provider = types.ModuleType(llm.REQUEST_MODULE_PREFIX + "fake")
+        raw_provider = provider.send_request = lambda m: ("provider", m)
+
+        def direct(m):                                  # プロバイダの関数を直に包んだ層（計測の 205_ の形）
+            return ("probe",) + raw_provider(m)
+        direct.__original__ = raw_provider
+        setattr(direct, P.PATCH_MARK, provider.__name__ + ":send_request")
+        setattr(direct, P.SELF_MARK, direct)
+
+        def polluted(m):                                # 送り口を包んだ層が張り替えで載った形
+            return ("hooked",) + direct(m)
+        polluted.__original__ = direct
+        setattr(polluted, P.PATCH_MARK, "scripts.llm.llm_manager:send_request")
+        setattr(polluted, P.SELF_MARK, polluted)
+        game["send"] = raw_provider
+        install("m:send")                               # 途中の素の関数を包んでしまった形
+        provider.send_request = polluted
+        sys.modules[provider.__name__] = provider
+        late = {}
+
+        def rebuild_during_boot():
+            late["rebuilding"] = llm.rebuilding()
+            # boot #2 の MOD の適用が作り直しの最中に走った
+            late["unarmed"] = llm.watch_aliases(ctx, ["m:send"], install, label="boot2 test")
+            game["send"] = lambda m: ("fresh2", m)
+
+        lock = ml._boot_lock()
+        lock.acquire()                                  # 別の boot が錠を持っている
+        holder = threading.Thread(target=lambda: hooks["set_ai_models"](rebuild_during_boot))
+        holder.start()
+        holder.join(5)
+        lock.release()
+        deadline = time.monotonic() + 5.0
+        while game["send"]("x")[:2] != ("hooked", "hooked") and time.monotonic() < deadline:
+            time.sleep(0.01)
+        check("作り直しの最中と分かる", late.get("rebuilding") is True, late)
+        check("最中に適用した MOD は包まずに後へ回す", late.get("unarmed") == ["m:send"], late)
+        check("錠が空いたら両方の登録を包み直す",
+              game["send"]("x") == ("hooked", "hooked", "fresh2", "x"), game["send"]("x"))
+        check("プロバイダの属性から、送り口の層だけを剥がす（直に包んだ層は残す）",
+              provider.send_request is direct, provider.send_request)
+        check("作り直しが終われば旗を下ろす", llm.rebuilding() is False)
+
+        # 部品の送り口と同じ関数（別名の張り替えでそうなった正規の形）なら触らない
+        part = types.ModuleType("scripts.llm.llm_manager")
+        saved_part = sys.modules.get(part.__name__)
+        sys.modules[part.__name__] = part
+        part.send_request = provider.send_request = game["send"]
+        hooks["set_ai_models"](lambda: None)
+        check("部品と同じ関数なら、プロバイダの属性はそのまま", provider.send_request is part.send_request)
+        if saved_part is None:
+            sys.modules.pop(part.__name__, None)
+        else:
+            sys.modules[part.__name__] = saved_part
+        sys.modules.pop(provider.__name__, None)
+        check("包み直したことが記録に残る",
+              any("rebuilt the senders" in line and "rebuild test" in line for line in lines), lines)
+        hooks["set_ai_models"](lambda: None)            # 作り直さない呼び出し
+        check("置き直されていなければ二重に包まない", game["send"]("x") == ("hooked", "hooked", "fresh2", "x"),
+              game["send"]("x"))
+        check("例外を出していない", not any(line.startswith("EXC") for line in lines), lines)
+    finally:
+        llm._WATCHES[:] = []
+
+
 def main():
     root = tempfile.mkdtemp(prefix="instantale_common_")
     try:
@@ -937,6 +1064,7 @@ def main():
         test_gold()
         test_clock_guard(root)
         test_watch_aliases_superseded()
+        test_rebuild_hook()
     finally:
         shutil.rmtree(root, ignore_errors=True)
     if FAILURES:

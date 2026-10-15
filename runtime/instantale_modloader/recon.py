@@ -71,6 +71,12 @@ BUILD_NAME = "build.json"
 #: 版ごとの履歴で取り直せないので、「消してよい」置き場の `out/` には置かない（GAME.md §1.1）。
 SNAPSHOT_DIR_NAME = "recon_history"
 
+#: 基準（`current/`）に添える、前の版からの関数の変化（`build_changes`）。
+CHANGES_NAME = "changes.json"
+
+#: `recon_history/` の下で recon が触らないフォルダ（`drift` の控え）。刈り込みは zip しか見ない。
+DRIFT_DIR_NAME = "drift"
+
 #: 前の退避先（`out/recon_snapshots/`）。中身は `dump()` が新しい退避先へ移す。
 OLD_SNAPSHOT_DIR_NAME = "recon_snapshots"
 
@@ -460,6 +466,24 @@ def build_identity() -> dict:
     }
 
 
+#: 版の鍵（`build_key`）に使う素性。注入の時点でいつも取れるものだけ
+#: （`game_version` はゲームの組み上がりの前だと取れず、Kivy は読み込みの前だと取れない）。
+#: Python と Kivy は exe に入っているので、変われば `exe_size` も変わる。
+BUILD_KEY_KEYS = ("app_version", "exe_size", "llama_builds")
+
+
+def build_key(identity: dict | None = None) -> str | None:
+    """版を表す短い鍵。ほかの部品（`drift`）が版ごとの控えの見出しに使う。どれも取れなければ None。
+
+    「同じビルドか」の判定（`_same_build`）と食い違わないよう、ここに1つだけ置く。
+    """
+    identity = identity if identity is not None else build_identity()
+    values = [identity.get(key) for key in BUILD_KEY_KEYS]
+    if all(value is None for value in values):
+        return None
+    return "|".join("?" if value is None else str(value) for value in values)
+
+
 def _exe_path() -> str:
     """今動いているプロセスの実行ファイル。
 
@@ -707,7 +731,20 @@ def _load_signatures(dump_dir: str) -> dict | None:
 
 
 def function_changes(old: dict, new: dict) -> list:
-    """関数の変化（`removed` / `added` / `changed` の行）。
+    """関数の変化（`removed` / `added` / `changed` の行）。`function_diff` を行にしたもの。"""
+    lines = []
+    for item in function_diff(old, new):
+        if item["kind"] == "changed":
+            lines.append("changed {}{} -> {}".format(item["key"], item["before"], item["now"]))
+        elif item["kind"] == "removed":
+            lines.append("removed {}{}".format(item["key"], item["before"]))
+        else:
+            lines.append("added {}{}".format(item["key"], item["now"]))
+    return lines
+
+
+def function_diff(old: dict, new: dict) -> list:
+    """関数の変化を `{"kind": removed/added/changed, "key", "before", "now"}` の並びで返す。
 
     比べるのは `old` に在ったモジュールの中だけ。
     LLM や画像生成のモジュールは遊び始めるまで読み込まれないので、`new` にだけ在るモジュールは
@@ -720,16 +757,20 @@ def function_changes(old: dict, new: dict) -> list:
     old = {key: value for key, value in old.items() if not ours(key)}
     new = {key: value for key, value in new.items() if not ours(key)}
     modules = {key.split(":", 1)[0] for key in old}
-    lines = []
+    loaded = {key.split(":", 1)[0] for key in new}
+    items = []
     for key in sorted(old):
+        # 今回読み込まれていないモジュールの関数は「消えた」と数えない。LLM の接続先で読み込むモジュールが違う
+        # （ローカルの回だけ `llama_cpp_runtime_completion` が載る）。2026-10-15 にクラウドへ替えた回で40件を誤って数えた。
         if key not in new:
-            lines.append("removed {}{}".format(key, old[key]))
+            if key.split(":", 1)[0] in loaded:
+                items.append({"kind": "removed", "key": key, "before": old[key], "now": None})
         elif new[key] != old[key]:
-            lines.append("changed {}{} -> {}".format(key, old[key], new[key]))
+            items.append({"kind": "changed", "key": key, "before": old[key], "now": new[key]})
     for key in sorted(new):
         if key not in old and key.split(":", 1)[0] in modules:
-            lines.append("added {}{}".format(key, new[key]))
-    return lines
+            items.append({"kind": "added", "key": key, "before": None, "now": new[key]})
+    return items
 
 
 def _read_build(dump_dir: str) -> dict:
@@ -807,7 +848,10 @@ def update_current(recon_dir: str, snap_dir: str) -> str | None:
             archived = _zip_dump(current, snap_dir, old, reasons)
             if archived:
                 log("recon: archived the reference dump to {} ({})".format(archived, reasons[0]))
+    detected = None
     if replace:
+        previous_changes = _read_json_file(os.path.join(current, CHANGES_NAME))
+        detected = previous_changes if isinstance(previous_changes, dict) else None
         try:
             staging = current + ".tmp"
             if os.path.isdir(staging):
@@ -822,7 +866,91 @@ def update_current(recon_dir: str, snap_dir: str) -> str | None:
             os.replace(staging, current)
         except Exception:
             log_exc("recon: cannot update the reference dump")
+    # 前の版との比べは、基準を置き換えたときと、まだ比べていないとき（この仕組みより前に作った基準）に行う。
+    # 置き換えない回（起動直後で読み込みが少ない）でも、`changes.json` が無ければ今の基準で比べる。
+    if replace or not os.path.isfile(os.path.join(current, CHANGES_NAME)):
+        try:
+            write_build_changes(snap_dir, detected)
+        except Exception:
+            log_exc("recon: cannot compare with the previous build")
     return archived
+
+
+def _read_json_file(path: str):
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception:
+        return None
+
+
+def previous_build(snap_dir: str, build: dict):
+    """`build` と別のビルドの記録のうち、いちばん新しく退避された版の、関数をいちばん多く含む記録。
+
+    `(zip のパス, build.json, 関数の一覧)` か None。古い形の記録（フォルダ）は見ない。
+    """
+    try:
+        names = [name for name in os.listdir(snap_dir) if name.endswith(".zip")]
+    except OSError:
+        return None
+    groups: dict = {}
+    for name in names:
+        path = os.path.join(snap_dir, name)
+        summary = _dump_summary(path)
+        if not summary or not summary[0] or _same_build(summary[0], build):
+            continue
+        key = build_key(summary[0]) or name
+        groups.setdefault(key, []).append((path, summary))
+    if not groups:
+        return None
+
+    def when(path):
+        # 名前の日付（`<版>_<日付>[_N].zip`）を先に見る。更新時刻だけだと、同じ秒に作った記録の順が揺れる
+        found = re.search(r"_(\d{8})(?:_\d+)?\.zip$", os.path.basename(path))
+        return (found.group(1) if found else "", os.path.getmtime(path))
+
+    newest = max(groups.values(), key=lambda group: max(when(p) for p, _s in group))
+    path, (old_build, functions) = max(newest, key=lambda item: len(item[1][1]))
+    return path, old_build, functions
+
+
+def build_changes(snap_dir: str) -> dict | None:
+    """今の基準（`current/`）と前の版の記録の関数を比べる。前の版の記録が無ければ None。
+
+    比べるのは `targets.txt`（どの記録にもある。`signatures.json` は 2026-10-14 より前の記録に無い）。
+    """
+    current = os.path.join(snap_dir, CURRENT_DIR_NAME)
+    mine = _dump_summary(current)
+    if not mine or not mine[0]:
+        return None
+    found = previous_build(snap_dir, mine[0])
+    if not found:
+        return None
+    path, old_build, functions = found
+    return {"since": os.path.basename(path),
+            "since_build": {key: old_build.get(key) for key in IDENTITY_KEYS},
+            "build": build_key(mine[0]),
+            "identity": identity_changes(old_build, mine[0]),
+            "functions": function_diff(functions, mine[1])}
+
+
+def write_build_changes(snap_dir: str, before: dict | None = None) -> dict | None:
+    """`build_changes` を `current/changes.json` に書く。前と同じ版との比べなら、見つけた日時（`detected_at`）を引き継ぐ。"""
+    changes = build_changes(snap_dir)
+    if changes is None:
+        return None
+    if before and before.get("since") == changes["since"] and before.get("detected_at"):
+        changes["detected_at"] = before["detected_at"]
+    else:
+        changes["detected_at"] = datetime.datetime.now().isoformat(timespec="seconds")
+    write_json(os.path.join(snap_dir, CURRENT_DIR_NAME, CHANGES_NAME), changes, indent=1)
+    counts = {}
+    for item in changes["functions"]:
+        counts[item["kind"]] = counts.get(item["kind"], 0) + 1
+    log("recon: compared with {}: {}".format(
+        changes["since"], ", ".join("{} {}".format(n, kind) for kind, n in sorted(counts.items()))
+        or "no function changed"))
+    return changes
 
 
 def _snapshot_version(name: str) -> str:

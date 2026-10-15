@@ -69,7 +69,7 @@ import time
 import traceback
 import uuid
 
-__version__ = "1.16.1"
+__version__ = "1.16.2"
 
 # mod との契約。`mod.json` の "api" がこれと突き合わされる。
 #
@@ -2105,6 +2105,19 @@ def _boot(out_dir: str) -> dict:
     from . import config as _config
     from . import patch_registry as _registry
 
+    # ゲームが送り口を作り直したら、MOD とローダの包みを当て直す（llm.py の `REBUILD_TARGET`）。
+    # MOD の適用より前に据える。MOD が `set_ai_models` を包むと前の世代の層が剥がれるので、後に据えると
+    # そこから据わるまでの間の作り直しを見逃した（遅れて当て直す boot の最中に「開始する」を押した実機）。
+    try:
+        from . import llm as _llm
+        _registry.begin_mod("(loader)")
+        try:
+            _llm.install_rebuild_hook(ctx)
+        finally:
+            _registry.end_mod()
+    except BaseException:
+        log_exc("cannot install the sender rebuild hook")
+
     results: dict[str, str] = {}
     settings: dict[str, dict] = {}
     _state["ready"] = []      # 前回の boot で流し残した分は持ち越さない
@@ -2264,6 +2277,13 @@ def _boot(out_dir: str) -> dict:
     except BaseException:
         log_exc("cannot drop the stale patch layers")
     _rebind_cloud_resources()
+    # ゲームの更新で MOD が効かなくなったのを、遊んでいる間に見つける（drift.py）。
+    # 包みの控え（`patch.placements()`）が揃った後に立てる。
+    try:
+        from . import drift as _drift
+        _drift.start(ctx, out_dir)
+    except BaseException:
+        log_exc("cannot start the drift watch")
     try:
         _forget_unapplied(results, manifests)
     except BaseException:
@@ -2519,6 +2539,12 @@ def _unload(out_dir: str | None) -> dict:
             _holdings.remove_all()
         except Exception:
             log_exc("unload: cannot remove the holdings window")
+        try:
+            # 剥がした包みを見回りが付け直さないよう、先に止める
+            from . import drift as _drift
+            _drift.stop()
+        except Exception:
+            log_exc("unload: cannot stop the drift watch")
         reverted = _patch.revert_all()
         _rebind_cloud_resources()
         return reverted
@@ -2590,6 +2616,11 @@ def status() -> dict:
         snapshot.pop(key, None)
     snapshot["ready_pending"] = len(_state.get("ready") or [])
     snapshot["patches"] = _registry.summary()
+    try:
+        from . import drift as _drift
+        snapshot["drift"] = _drift.report()
+    except Exception:
+        snapshot["drift"] = {}
     snapshot["written_at"] = datetime.datetime.now().isoformat(timespec="seconds")
     return snapshot
 

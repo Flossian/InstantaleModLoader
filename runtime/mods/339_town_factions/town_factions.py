@@ -59,6 +59,9 @@ MANAGER_DESIGN = "mod_town_factions_design"
 MANAGER_PEOPLE = "mod_town_factions_people"
 DAYS_TARGET = "__main__:InstantaleApp.elapse_days"
 SEND_TARGET = "scripts.llm.llm_manager:send_request"
+# 世界の生成の頼みは `llm_manager_world_generate` から送られる。main_026 から部品ごとに別の関数になり、
+# `llm_manager` だけを包む形では届かなくなった（VERIFICATION.md §3.100）。同じ関数なら二重には包まない（llm.watch_aliases）。
+GENERATE_TARGETS = (SEND_TARGET, "scripts.llm.llm_manager_world_generate:send_request")
 WORLD_MANAGER = "create_world_overview"       # 世界の生成の頼み（概要の有無によらずこの名前。GAME.md §2.27）
 WORLD_SAVE_TARGET = "save_world_json:write_obfuscated_json_file"
 WORLD_FILE = "world_data.json"
@@ -843,7 +846,7 @@ def apply(ctx):
                 ctx.log_exc("town factions: cannot add the organizations to the world generation")
             return orig(*args, **kwargs)
 
-    llm.watch_aliases(ctx, [SEND_TARGET], install_generate, label="town factions")
+    llm.watch_aliases(ctx, list(GENERATE_TARGETS), install_generate, label="town factions")
 
     @ctx.wrap(WORLD_SAVE_TARGET, required=False, safe=True)
     def write_world(orig, *args, **kwargs):

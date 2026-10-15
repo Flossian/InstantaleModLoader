@@ -21,6 +21,9 @@ CREATE_LOOK_MODULE = "scripts.llm.llm_manager_character_create"
 # ゲームの送り口。`create_look` が呼ぶ。ゲーム側の `timeout` の既定は無期限なので（GAME.md §2.12）、
 # 外見を作らせている間だけ時間切れを付ける（`336_` の盗みの稼ぎと同じく、後から生える別名を見張って包む）。
 SEND_TARGET = "scripts.llm.llm_manager:send_request"
+# `create_look` は `llm_manager_character_create` の送り口から送る。main_026 から部品ごとに別の関数になり、
+# `llm_manager` だけを包む形では届かなくなった（VERIFICATION.md §3.100）。同じ関数なら二重には包まない（llm.watch_aliases）。
+SEND_TARGETS = (SEND_TARGET, CREATE_LOOK_MODULE + ":send_request")
 #: 外見を作らせる1回の待ちの上限（秒）。返らなければ描き直しを取りやめ、ボタンを戻す。
 LOOK_TIMEOUT = 120.0
 # いま外見を作らせているスレッドの印（`_player_look` が立て、送り口の包みが読む）。
@@ -339,7 +342,7 @@ def apply(ctx):
                                                          insert=True)
             return orig(*args, **kwargs)
 
-    llm.watch_aliases(ctx, [SEND_TARGET], install_send, label="player portrait")
+    llm.watch_aliases(ctx, list(SEND_TARGETS), install_send, label="player portrait")
 
     def finish_job(job):
         app = job.get("app") if isinstance(job, dict) else None

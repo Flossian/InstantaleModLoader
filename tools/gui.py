@@ -2315,6 +2315,22 @@ class App(ttk.Frame):
             else:
                 lines.append("前回の注入で対象が見つからなかったフック {} 件"
                              "（ゲームが更新された可能性があります）".format(len(unresolved)))
+        # 名前は残っているのに効かなくなったもの（ローダの drift.py。詳しくは modloader.log の drift: の行）
+        drift = self.status.get("drift") or {}
+        lost = drift.get("lost") or []
+        if lost:
+            healed = sum(1 for item in lost if item.get("healed"))
+            lines.append("遊んでいる途中でゲームが関数を差し替え、MOD の処理が外れた箇所 {} 件"
+                         "（うち付け直した {} 件）".format(len(lost), healed))
+        signatures = drift.get("signatures") or []
+        if signatures:
+            lines.append("MOD が手を入れている箇所のうち、前の版から引数が変わった・無くなったもの {} 件"
+                         "（MOD が想定どおりに動かないおそれがあります）".format(len(signatures)))
+        rewrites = drift.get("rewrites") or []
+        if rewrites:
+            lines.append("前の版では効いていたプロンプトの書き換えが、今の版で効いていない MOD {} 件"
+                         "（ゲームのプロンプトが変わった可能性があります）".format(
+                             len({item.get("label") for item in rewrites})))
         self.warn.configure(text="\n".join("⚠ " + line for line in lines))
 
     def _refresh(self, keep: str | None = None) -> None:

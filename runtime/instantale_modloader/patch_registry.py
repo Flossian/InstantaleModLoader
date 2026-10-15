@@ -59,6 +59,11 @@ def begin_mod(name: str) -> None:
     _current = name
 
 
+def current_mod() -> str | None:
+    """いま apply() に入っている MOD（ローダ自身が当てているときは None）。"""
+    return _current
+
+
 def end_mod() -> None:
     """apply() を抜ける。
 

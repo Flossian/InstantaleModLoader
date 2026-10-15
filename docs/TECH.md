@@ -43,7 +43,7 @@ GAME.md と分けているのは、**ゲームが更新されて食い違うの�
 | 台帳／設定／API 番号／剥がし方／`out/` と `state/` | §3.7 〜 §3.11 |
 | MOD 同梱の設定画面（`"tool"`。設定ダイアログに収まらない設定） | §3.12 |
 | Nuitka で効くもの・効かないもの | §4 |
-| 画面・選択肢・会話・LLM・世界ごとの控え・背景ワーカー・MOD が持つ NPC と施設・アイテムの値段の既製部品／作業スレッドが死んだときの待機 | §5 |
+| 画面・選択肢・会話・LLM・世界ごとの控え・背景ワーカー・MOD が持つ NPC と施設・アイテムの値段の既製部品／作業スレッドが死んだときの待機／ゲームの更新の見張り | §5 |
 | **踏んだ罠の一覧（守るべきルール）** | §6 |
 | 近い手口の既存 MOD を探す | §7 |
 | このローダでできないこと | §8 |
@@ -152,6 +152,7 @@ runtime/instantale_modloader/
     sounds.py     曲の置き場所の探し方・戦闘曲の見分け方・重みの読み方（§5.10）
     imagegen.py   画像生成の方式（sdcpp の cuda / vulkan / cpu と diffusers_openvino）を隠して、人物の絵を描く関数を包む（§5.11）
     stalls.py     作業スレッドが死んだときに本文の欄へ出して待機を終える。LLM の 4xx の送り直しを早めに打ち切る（§5.12）
+    drift.py      ゲームの更新で MOD が効かなくなったのを見つける（包みの外れ・引数の変化・書き換えの空振り。§5.13）
     ids.py        ゲームの採番台帳（`index`）を通した id の採り方（§3.2.3）
     saves.py      ディスクのセーブの読み方（置き場・難読化・世界の一覧。§3.2.3）
     recon.py      実行時リコン（モジュール構造ダンプ）
@@ -1143,7 +1144,7 @@ MOD から import された時点で、ここは `API = 1` と同格の約束に
 GUI の `gui.json` ではない（あれは GUI しか読まないが、この値はゲームの中で `discover()` が読む）。
 `mod_settings.json` にも混ぜない（あちらの形は「MOD フォルダ名 → 値」）。
 
-`loader.json` には、ほかに `log_rotate`（ログの世代送り）と `modnpc_lift_roster`（保存の間に MOD の NPC を名簿の反復から隠すか。§5.7）と `stall_guard`（作業スレッドが死んだときに待機を終えるか。§5.12）がある。
+`loader.json` には、ほかに `log_rotate`（ログの世代送り）と `modnpc_lift_roster`（保存の間に MOD の NPC を名簿の反復から隠すか。§5.7）と `stall_guard`（作業スレッドが死んだときに待機を終えるか。§5.12）と `drift_watch` / `drift_heal`（ゲームの更新の見張りと、外れた包みの付け直し。§5.13）がある。
 どれもローダ全体に効く値で、1本の MOD の設定には置かない（`229_` が一時そうしていて、229 を入れている間は ModNPC を使う全 MOD に効いた）。
 
 稼働の制御は `order` から外すだけで足りる。伏せかたで効くのは次の3点:
@@ -3017,16 +3018,28 @@ hooks.armed()          # 今その名前がある対象（起動直後はクラ�
 | ローカル | `LlamaCppClient.chat` | `chat` |
 | ローカル | `LlamaCppClient._apply_chat_template` | `template` |
 | ローカル | `LlamaCppClient._post_with_model_loading_retry` | `payload` |
-| クラウド | `llm_manager:send_request` / `_with_no_structure` | プロバイダ名 / `+_ns` |
+| クラウド | `llm_manager` / `llm_manager_battle` / `llm_manager_world_generate` / `llm_manager_character_create` の `send_request` / `_with_no_structure`（`llm.MANAGER_SEND_TARGETS`） | プロバイダ名 / `+_ns` |
 
 引き受けているのは次の4つ。
 **MOD ごとに書くと必ずどれかが抜ける**（`119_` は最初の1つしか知らず、クラウドで丸ごと素通しだった）:
 
-- クラウドはモジュール名で名指ししない。
-  どの経路でも import される `llm_manager` の別名を包む（alias_scan が持ち主を全部張り替える）
+- クラウドはプロバイダのモジュール名で名指ししない。
+  どの経路でも import される送り口（`llm_manager` など4つの部品の `send_request*`）を包む。
+  main_025 までは4つとも同じ関数で、`llm_manager` を包めば alias_scan が残りを張り替えていた。
+  main_026 からは部品ごとに言語の包みで包み直された別の関数なので、部品ごとに包む（GAME.md §2.12「送り口は部品ごとに別の関数」）。
+  同じ関数のままなら、`watch_aliases` が別名として見分けて二重には包まない。
+  MOD が `llm_manager:send_request` を直に包むときも同じで、見たい頼みを送る部品の送り口を並べて `watch_aliases` に渡す（`335_` / `339_`）
 - その別名は初期化時に後から生える。
   ローダの保留はモジュール単位なので属性の後生えは拾わない ＝ 見張って当てる。
   見張りのスレッドが当てるときは boot の錠の中で、まだ今の世代かを確かめてから当てる（錠の外だと、確かめた直後に次の boot が始まったとき、古い世代の包みが新しい世代の印で当たって二重に掛かった）。帰属は見張りを頼んだ MOD
+- ゲームは `AIManager.set_ai_models`（「開始する」と世界の生成の画面に入るたび）で送り口を新しい関数に置き直す（GAME.md §2.12）。
+  ローダは boot の始めに `set_ai_models` を包み（`llm.install_rebuild_hook`。MOD の適用より前に据えないと、MOD が包み直すときに前の世代の仕掛けが剥がれてから据わるまでの間を見逃す）、
+  終わった直後に `watch_aliases` の登録を登録した順に包み直す（`rearm_watches`。登録は sys に置き、前の世代の仕掛けからも今の世代の登録を包み直す）。
+  走っている間は旗（`llm.rebuilding()`）を立て、MOD の適用も見張りも送り口を包まない（`LATER` で後へ回す）。
+  途中の素の関数を包むと、別名の張り替えでプロバイダの関数まで包みに替わった（起動の約6秒後に走る boot #2 と「開始する」が重なった実機）。
+  入るときにプロバイダの関数にローダの包みが残っていれば素の関数に戻す
+- ローダの包みは自分自身を指す印（`patch.SELF_MARK`）を持つ。
+  ゲームが `functools.wraps` でローダの包みを包むと印が写るので、層の見分けは `patch.is_ours` で行う（写しは印が自分を指さない）
 - ローカル実行では `llm_manager` 境界に触らない。
   `send_request` は内部で別スレッドに降りてから `chat` を呼ぶため、印が届かず二重に当たる
 - 入れ子で通る地点は内側を素通しする（印は `wrap_outgoing` の呼び出しごとに別なので、
@@ -3875,7 +3888,7 @@ MOD が呼ぶ口は無い。
 2. 本体の閉包の `response_from_llm` のセルに失敗の印（`stalls.FailedResponse`）を書く。
    セルが空のとき、見捨てた頼み（`abandoned` か、番号が今の頼みでない）でないとき、包んだ呼び出しが待っているときに限る
 3. 待っている側は印を受けて返る途中で、印を添字で引いて `TypeError` になる。
-   `llm_manager` の別名の包み（このモジュールが当てる）が、失敗を受けた呼び出しのこの例外と、印そのものが返ったときを `stalls.LLMRequestFailed` に置き換えて投げる。
+   送り口（`llm.MANAGER_SEND_TARGETS` の4つの部品の `send_request*`）の包み（このモジュールが当てる）が、失敗を受けた呼び出しのこの例外と、印そのものが返ったときを `stalls.LLMRequestFailed` に置き換えて投げる。
    メインスレッドでは投げない（ゲームごと落ちる）。
    どの呼び出しが失敗を受けたかは、頼みの名前で突き合わせる（呼んだ側のスレッドは送信スレッドから引けない）。
    同じ名前の頼みが2本以上待っていたら、どれの送信が死んだか分からないので、まだ印の無い全部に失敗の要約を付ける。
@@ -3891,6 +3904,35 @@ MOD が呼ぶ口は無い。
 
 切るには `settings/loader.json` を `{"stall_guard": false}` にする（§3.2.5。次の注入から）。
 検証は VERIFICATION.md §3.92、検査は `tools/tests/test_stalls.py`。
+
+### 5.13 `instantale_modloader.drift`（ゲームの更新の見張り）
+
+MOD が呼ぶ口は無い。
+ローダが boot の終わり（MOD の適用の後）に自分で立てる。
+
+ゲームの更新で MOD が黙って効かなくなる道のうち、起動時の台帳（§3.7 の unresolved。対象の名前が見つからない）に出ないものを拾う。
+どれも名前は残っている。
+
+| 見張り | いつ | 何を見るか | 見つけたら |
+|---|---|---|---|
+| 包みの外れ | `AUDIT_SECONDS`（5秒）ごと | この世代で被せた包み（`patch.placements()`）が、対象の今の値の鎖に残っているか。ゲームの包みは `__wrapped__` と閉包のセルもたどる（中に残っていれば効いている） | 2回続けて同じ値で外れていたら、控えた当て方で付け直す（`patch.reapply`。対象ごとに `HEAL_LIMIT` 回まで）。1回目は控えるだけ（差し替えの途中を包まないため） |
+| 引数の変化・対象の消失 | 起動のたび | recon が書いた前の版からの関数の変化（`recon_history/current/changes.json`。GAME.md §1.1）のうち、MOD が包んだ対象 | 出すだけ。recon が版の変化を見つけてから `REPORT_DAYS`（7日）の間 |
+| 書き換えの空振り | 頼みのたび数え、`FLUSH_SECONDS`（60秒）ごとに比べる | `llm.wrap_outgoing` の書き換えが当たった数を、MOD と頼みの種類（クラウドは `manager_name`、ローカルは `*`）ごと・版ごとに `recon_history/drift/rewrites.json` へ | 前の版で3回以上当たり、前の版の割合で5回以上当たる見込みなのに、今の版で1回も当たらなければ出す |
+
+- 出す先は `modloader.log` の `drift:` の行と `status.json` の `drift`（`lost` / `signatures` / `rewrites`）。GUI は警告の欄に件数を出す
+- 包みの控えは `patch.wrap` / `patch.patch` が残す。鍵は（対象, MOD, フックのモジュール, フックの名前）で、同じ鍵で当て直すと置き換わる。
+  `watch_aliases` の包み直し（§5.3）も同じ鍵で見るので、見回りと二重にならない
+- ゲーム側の事実（版の鍵 `recon.build_key`、前の版からの関数の変化）は recon が持ち、ここは MOD との突き合わせだけをする（GAME.md §1.1 の役割の表）
+- 書き換えの空振りが出るのは、この仕組みを入れてから2つ目の版から（前の版の数が要る）。引数の変化は、recon の控えに前の版の zip があれば初めから出る
+- `unload`（§3.10）は剥がす前に見回りを止める（剥がした包みを付け直さない）
+
+入れて最初に動かしたとき（2026-10-15、ローカル）に、ローダ自身の不具合を2つ見つけた。
+ローダの見張り（`stalls`）の包みの持ち主の名前が、起動時は `(loader)`、包み直しでは `<loader>` と食い違い、同じ包みを2枚に重ねていた。
+プロバイダの関数を素に戻す処理（§5.3）が、計測の `205_` がプロバイダの関数を直に包んだ層まで剥がしていた。
+どちらも直した（VERIFICATION.md §3.100）。
+
+切るには `settings/loader.json` を `{"drift_watch": false}`、付け直しだけ切るなら `{"drift_heal": false}`（次の注入から）。
+検査は `tools/tests/test_drift.py`（版をまたいだ比べは `tools/tests/test_recon_archive.py`）。
 
 ---
 

@@ -188,6 +188,10 @@ class FakeCtx(object):
                 def wrapper(*args, **kwargs):
                     return fn(original, *args, **kwargs)
 
+                # 本物のローダと同じく、包んだ先の名前を印に付ける。偽物の部品はどれも同じ送り口を指すので
+                # （main_025 までと同じ形）、ローダはこの印で別名を見分けて二重に包まない。
+                setattr(wrapper, "__instantale_patch__", target)
+                wrapper.__original__ = original
                 setattr(manager, name, wrapper)
                 return fn
             return decorate_manager

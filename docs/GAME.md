@@ -62,6 +62,23 @@ LLM の接続先が違う回（ローカルとクラウド）は、読み込ま�
 どちらかが None なら `game_version` は比べない（VERIFICATION.md §3.100）。
 更新の前後で `targets.txt` を突き合わせれば、増えた対象・消えた対象がそのまま出る。
 
+版をまたいだ比べは、基準を置き換えるたびに recon が自分で行う（`recon.build_changes`。2026-10-15 から）。
+相手は、別のビルドの記録のうち最も新しく退避された版の、関数をいちばん多く含む zip。
+比べるのは `targets.txt`（古い zip には `signatures.json` が無いため）で、読み込まれていないモジュールの関数は「消えた」と数えない（`function_diff`）。
+結果は `recon_history/current/changes.json`（`since`・`identity`・`functions` の `kind` / `key` / `before` / `now`・`detected_at`）に置く。
+`detected_at` は同じ相手との比べが続くかぎり引き継ぐ。
+main_025 → main_026 を実物で比べると、消えた10・変わった13・増えた15で、MOD が包んでいる対象は11件だった
+（§1.5 の8件に加え、4つの部品の送り口の引数。`model=None` が `max_tokens` の前に入った）。
+
+役割の分け方:
+
+| 持ち主 | 持つもの |
+| --- | --- |
+| recon（`recon.py`・`000_recon`） | ゲーム側の事実。どの版か（`build_identity` / `build_key`）、版ごとの全関数の控え、前の版からの関数の変化（`changes.json`） |
+| drift（`drift.py`） | MOD との突き合わせと遊んでいる間の見張り。`changes.json` を MOD が包んだ対象で絞って知らせる・包みの外れ・プロンプトの書き換えの空振り（TECH.md §5.13） |
+
+`recon_history/drift/` は drift の控え（版ごとの書き換えの当たり数）。recon は zip と `current/` 以外に触らない。
+
 ### 1.2 ゲーム自身のモジュール
 
 ```python
@@ -490,6 +507,10 @@ display_button_load(dt)             True を見て今の一覧を塗り、予約
   そこは自由記述なので、事情を書けば会話の要約とライフログに残る
 - 閉じ終わるまで待つ（要約で LLM が回るため最大120秒程度）。
   `app.in_conversation` が落ちるのを Clock で見張る
+- 閉じると、会話を始めたときに控えた選択肢（`app.buttons_backup`）をそのまま戻す。組み直さない。
+  main_026 からは雇用が会話の中で決まり（`ConversationPhaseManager.resolve_employment`）、雇った後も会話が続くので、
+  ギルドで雇って会話を閉じると、雇った人物が載ったままの冒険者の一覧に戻る。
+  一覧に入り直すと、雇った人物は消えて組み直される（2026-10-15 の実機。MOD の作用ではなく本体の動き）
 
 #### 画面の見分けは文字列ではなく spec のクラス名で
 
@@ -1620,6 +1641,42 @@ scripts.llm.request_llm_inference_any_server:send_request*                   任
 scripts.llm.llm_manager:*                                                    マネージャ群
 ```
 
+#### 送り口は部品ごとに別の関数（main_026 から）
+
+`scripts.llm.llm_manager` / `llm_manager_battle` / `llm_manager_world_generate` / `llm_manager_character_create` は、
+それぞれプロバイダの `send_request*` を持つ。
+main_025 までは、どれもプロバイダの関数をそのまま from-import した同じ関数だった。
+main_026 からは、部品ごとに `scripts.llm.output_language.localized_request`（ロシア語のとき出力言語の指示を足す包み）で包み直すので、
+**部品ごとに別の関数**になった（`__wrapped__` をたどると同じプロバイダの関数。2026-10-15 にゲームの中で id を比べた）。
+
+| 頼み | 送る部品 |
+| --- | --- |
+| 会話・語り・依頼の進行・売買・エピローグなど | `llm_manager` |
+| 戦闘の審判 | `llm_manager_battle` |
+| 世界の生成（`create_world_overview` / `create_story` / `create_settlement_detail` / `settlement_quest_generator`） | `llm_manager_world_generate` |
+| キャラの作成（`create_character` / `create_look`） | `llm_manager_character_create` |
+
+`llm_manager:send_request` だけを包んで同じ関数の別名を掴み直す形では、戦闘・世界の生成・キャラの作成の頼みに届かない。
+ローダの `llm.MANAGER_SEND_TARGETS` は部品ごとに包む（VERIFICATION.md §3.100）。
+ローカル（llama.cpp）の頼みは、どの部品から送っても `LlamaCppClient` を通る。
+
+送り口は `AIManager.set_ai_models` のたびに作り直される（2026-10-15 にゲームの中で前後の id を比べた）。
+
+- `set_ai_models` は、題の画面の「開始する」と世界の生成の画面に入るたびに、メインスレッドで走る。
+  7つの送り口をすべて新しい言語の包みで置き直すので、前に当てた包みは外れる。
+  言語の包みは `set_ai_models` の中（`instantale.py:519`）で、部品ごとに1回ずつ掛かる
+- 途中では、送り口にまだプロバイダの素の関数が入っている。
+  そこを包んで同じ関数の別名を張り替えると、プロバイダの属性（`request_llm_inference_*.send_request`）まで包みに替わる。
+  続く言語の包みはそれを包むので、以後の作り直しでも包みが中に残る
+- 言語の包みは `functools.wraps` で、包んだ関数の `__dict__` を写す。
+  ローダの包みを包むと、ローダの印（`__instantale_patch__` など）と `__original__` が写り、ゲームの関数がローダの層に見える
+- main_025 までは、ローダが張り替えたプロバイダの関数が作り直しのたびに入り直したので、包みが外れなかった
+- ローカル（llama.cpp）は、起動して題の画面に着いた時点で、4つの部品の `send_request` がプロバイダの素の関数そのもの（同じ関数）だった。
+  「開始する」の後は、クラウドと同じく部品ごとの言語の包みになる。
+  `send_request_with_no_structure` は「開始する」の後も、`llm_manager`・`llm_manager_battle`・プロバイダの属性が同じ関数のままだった（2026-10-15）
+
+ローダは `set_ai_models` の直後に包み直し、途中は包まない（TECH.md §5.3）。
+
 #### プロバイダは1つだけ import される
 
 **外部APIキー（クラウド）はプロバイダごとの `request_llm_inference_*` を通り、
@@ -2393,6 +2450,24 @@ Character.calculate_current_required_exp_on_display() / _gained_exp_on_display(g
   （`get_training_experience_point` / `get_days_elapsed_experience_point`（点数ではなく率）/
   `get_enemy_exp_lvl` / `training_efficiency_ratio`）。
   **式を再現するより、支給された点数を写すほうが確実**（`306_`）
+
+#### 依頼を終えた仲間の成長は日数をかけて入る（main_026 から）
+
+```text
+InstantaleApp.award_companion_growth(difficulty, member_ids)   依頼を終えたとき。仲間ごとに保留を積む
+InstantaleApp.release_companion_growth(days)                    日数を送るたび。保留から日割りで入れる
+npcs[id].config.companion_quest_growth = {xp, base, days, stage}
+```
+
+2026-10-15 にクラウド（Haiku 5.5）で測った（主人公 Lv1、仲間は Lv8・経験値0のヴァルト、難易度4の依頼）。
+
+- 依頼を終えると `award_companion_growth(4, ['player', '5'])` が呼ばれ、戻り値は
+  `{'xp': 75.5, 'base': 0.42, 'stat_budget': 2.2, 'difficulty': 4, 'next_difficulty': 5}`。
+  経験値はすぐには入らず、`companion_quest_growth = {xp: 75.5, base: 0.42, days: 180, stage: 3}` に積まれる
+- 30日送ると `release_companion_growth(30)` が `xp 12.58`（75.5 × 30/180）と `base 0.07` を入れ、
+  経験値が 0 → 12.58、保留は `xp 62.9`・`days 150` に減った
+- `member_ids` には `'player'` も入るが、戻り値に並ぶのは仲間の分だけだった
+- `base` と `stat_budget` が何に効くか（能力値か）は測っていない
 
 #### 訓練・休暇のマネージャ（すべて `__main__`）
 
@@ -3396,6 +3471,29 @@ scripts.hud.hud_world_generate:WorldGenerateScreen.__init__(
 （外部の1回は2秒差で間に合わず、手元の3回は間に合った）。
 世界生成に仕掛けるなら、呼ぶ側が毎回モジュールを引く地点を選ぶこと
 （保存なら `save_world_json:write_obfuscated_json_file`。VERIFICATION.md §3.4）。
+
+#### 一括生成（main_026 から）
+
+```text
+題の画面「世界」→「一括生成」 → InstantaleApp.show_world_bulk_screen
+InstantaleApp.run_world_bulk_generation(world_path, stop_event, progress)
+scripts.llm.batch_worker（RequestWorker / batch_requests）
+```
+
+画面の説明は「既存の世界の存在しない部分を一括で生成します」。
+世界を選んで「開始／再開」を押すと、遊ぶ前にまだ作っていない部分（集落の詳細・集落の依頼・人物の詳細など）の頼みを流し、作ったものを世界に書く。
+2026-10-15 に2回動かした（どちらもクラウドの Haiku 5.5）。
+
+| 回 | 世界 | 流れた頼み |
+| --- | --- | --- |
+| 01:52〜01:56 | 検証ワールド（作った直後） | `npc_detail_generater` 58件（`llm_manager`）・`settlement_quest_generator` 5件（`llm_manager_world_generate`） |
+| 11:48〜11:55 で中断 | 検証ワールド2（主人公で30日遊んだ後） | `create_settlement_detail` 6件・`settlement_quest_generator` 5件（どちらも `llm_manager_world_generate`） |
+
+- 始めるときに `set_ai_models` が走り、送り口が作り直される（§2.12）
+- 画面にはエリアの名前と「完了 N 件 ／ 残り N 件 ／ 失敗 N 件」が出る。2回目の回は残りが 374 から 420 に増えた（集落の詳細を作ると、その中の人物や依頼が残りに足されるとみられる）
+- 「中断する」で止まり、「中断しました。次回は残りから再開できます。」と出る
+- 2回目の回は約6分で6件しか進まなかった。全部流すと数時間と相応の推論費用がかかる見込み
+- 頼みは遊んでいるときと同じ部品の送り口を通り、MOD の書き換えが届いた（`144_` の役の一文・`132_` の住人の外見の種・`111_` の規則。VERIFICATION.md §3.100）
 
 ### 2.28 素データの辞書は2つあり、遊んでいる最中の追加は片方に届かない
 

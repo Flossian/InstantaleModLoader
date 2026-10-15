@@ -69,6 +69,27 @@ PATCH_MARK = "__instantale_patch__"
 GENERATION_MARK = "__instantale_gen__"
 _LEGACY_MARKS = (PATCH_MARK, "__wrapper_of__")
 
+# 包みが自分自身を指す印。
+# ゲームがこちらの包みを `functools.wraps` で包み直すと、`__dict__` ごと上の印が写る
+# （main_026 の言語の包み `localized_request`。llm.py の `REBUILD_TARGET`）。
+# 写しではこの印が自分を指さないので、こちらの層と見分けられる（`is_ours`）。
+SELF_MARK = "__instantale_self__"
+_NO_SELF = object()
+
+
+def is_ours(value: Any) -> bool:
+    """こちらが被せた層か。こちらの印を写し取っただけのゲームの関数は偽。
+
+    自分を指す印が無い層は、印を足す前の版のローダが被せたものとして真にする。
+    """
+    try:
+        if not any(hasattr(value, mark) for mark in _LEGACY_MARKS):
+            return False
+        owner = getattr(value, SELF_MARK, _NO_SELF)
+    except Exception:
+        return False
+    return owner is _NO_SELF or owner is value
+
 # フックを書いたモジュールの名前（`func.__module__`）。
 # `drop_stale_layers` が、前の世代の層を剥がしてよいかを決めるのに見る。
 HOOK_MODULE_MARK = "__instantale_hook_module__"
@@ -107,9 +128,95 @@ _pending_modules: set[str] = set()
 _pending_owners: set[str] = set()
 
 
+# 被せた包みの控え。鍵 -> 当て方（`drift` の見回りが、外れたかを見て付け直すのに使う）。
+# 鍵は (対象, MOD, フックを書いたモジュール, フックの名前)。同じ鍵で当て直すと置き換わる
+# （`watch_aliases` の包み直しは同じ install で作り直すので、鍵が同じになる）。
+# 世代と同じ寿命。
+KEY_MARK = "__instantale_key__"
+_placements: dict = {}
+
+
+def _place(target: str, installed: Any, func: Callable, kind: str, *, safe: bool,
+           alias_scan: Any, original: Any, hook_module: str | None) -> None:
+    key = (target, _registry.current_mod() or "<loader>", hook_module or "?",
+           getattr(func, "__qualname__", None) or "?")
+    try:
+        setattr(installed, KEY_MARK, key)
+    except Exception:
+        return
+    _placements.pop(key, None)       # 当て直しは並びの末尾へ（付け直す順を当てた順に揃える）
+    _placements[key] = {"key": key, "target": target, "kind": kind, "func": func,
+                        "safe": safe, "alias_scan": alias_scan, "original": original,
+                        "mod": key[1]}
+
+
+def placements() -> list[dict]:
+    """この世代で被せた包みの控え（当てた順）。"""
+    return list(_placements.values())
+
+
+_UNSET = object()
+
+
+def chain(value: Any, limit: int = 256):
+    """`value` から下の層を順に返す（こちらの層は `__original__`、ゲームの包みは `__wrapped__` と閉包のセル）。"""
+    stack, seen = [value], set()
+    while stack and len(seen) < limit:
+        value = stack.pop()
+        if value is None or id(value) in seen:
+            continue
+        seen.add(id(value))
+        yield value
+        if is_ours(value):
+            stack.append(getattr(value, "__original__", None))
+            continue
+        try:
+            stack.append(getattr(value, "__wrapped__", None))
+            for cell in getattr(value, "__closure__", None) or ():
+                try:
+                    inner = cell.cell_contents
+                except Exception:
+                    continue
+                if callable(inner) and not isinstance(inner, type):
+                    stack.append(inner)
+        except Exception:
+            continue
+
+
+def layer_present(target: str, key: Any, value: Any = _UNSET) -> bool | None:
+    """`target` の今の値の鎖に、鍵 `key` の今の世代の包みが残っているか。対象が引けなければ None。
+
+    ゲームがこちらの包みを包み直しても、中に残っていれば効いているので真。
+    `value` を渡せば、対象を引かずにその値から見る。
+    """
+    if value is _UNSET:
+        try:
+            owner, name, _value = resolve(target)
+            value = _current(owner, name)[0]
+        except Exception:
+            return None
+    for node in chain(value):
+        if is_ours(node) and getattr(node, KEY_MARK, None) == key and                 getattr(node, GENERATION_MARK, None) == _generation:
+            return True
+    return False
+
+
+def reapply(placement: dict) -> bool:
+    """控えた当て方でもう一度当てる。当たったら真。呼ぶ側が boot の錠を持つこと。"""
+    decorate = wrap if placement["kind"] == "wrap" else patch
+    _registry.begin_mod(placement["mod"])
+    try:
+        decorate(placement["target"], alias_scan=placement["alias_scan"], required=False,
+                 safe=placement["safe"])(placement["func"])
+    finally:
+        _registry.end_mod()
+    return layer_present(placement["target"], placement["key"]) is True
+
+
 def set_generation(generation: str) -> None:
     global _generation
     _generation = generation
+    _placements.clear()
     # 保留は boot ごとに数え直す。
     # 前回の注入で保留だったものが今回は載っている、
     # という場合に古い名前が残っていると見張りが終わらない。
@@ -331,8 +438,8 @@ def unwrap_ours(value: Any) -> Any:
     # 32 回で打ち切っているのは、
     # __original__ の連鎖が壊れていた場合に無限ループしないようにするため。
     for _ in range(32):
-        if not any(hasattr(value, mark) for mark in _LEGACY_MARKS):
-            return value      # こちらが付けたものではない＝素の関数
+        if not is_ours(value):
+            return value      # こちらが付けたものではない＝素の関数（印を写しただけのゲームの包みも）
         if getattr(value, GENERATION_MARK, None) == _generation:
             return value      # 今回の注入で付けたもの＝残す
         original = getattr(value, "__original__", None)
@@ -372,8 +479,7 @@ def unwrap(func, *, limit: int = 32):
         if deeper is None:
             break
         func, depth = deeper, depth + 1
-    still_ours = any(getattr(func, mark, None) is not None
-                     for mark in _LEGACY_MARKS)
+    still_ours = is_ours(func)
     return func, depth, still_ours
 
 
@@ -657,6 +763,9 @@ def patch(target: str, *, alias_scan: Any = True, required: bool = True,
         setattr(installed, PATCH_MARK, target)
         setattr(installed, GENERATION_MARK, _generation)
         setattr(installed, HOOK_MODULE_MARK, hook_module)
+        setattr(installed, SELF_MARK, installed)
+        _place(target, installed, func, "patch", safe=safe, alias_scan=alias_scan,
+               original=old, hook_module=hook_module)
         set_attr(target, installed, alias_scan=alias_scan)
         _registry.record(_registry.APPLIED, target,
                          detail="patch safe" if safe else "patch")
@@ -878,6 +987,9 @@ def wrap(target: str, *, alias_scan: Any = True, required: bool = True,
         setattr(wrapper, PATCH_MARK, target)
         setattr(wrapper, GENERATION_MARK, _generation)
         setattr(wrapper, HOOK_MODULE_MARK, getattr(func, "__module__", None))
+        setattr(wrapper, SELF_MARK, wrapper)
+        _place(target, wrapper, func, "wrap", safe=safe, alias_scan=alias_scan,
+               original=old, hook_module=getattr(func, "__module__", None))
         set_attr(target, wrapper, alias_scan=alias_scan)
         _registry.record(_registry.APPLIED, target,
                          detail="wrap safe" if safe else "wrap")
@@ -962,7 +1074,7 @@ def drop_stale_layers() -> list[str]:
             current, descriptor = _current(owner, name)
             value = current
             for _ in range(32):
-                if value is None or not any(hasattr(value, mark) for mark in _LEGACY_MARKS):
+                if value is None or not is_ours(value):
                     break       # 素の関数（または属性が無い）
                 if getattr(value, GENERATION_MARK, None) == _generation:
                     break
@@ -972,7 +1084,7 @@ def drop_stale_layers() -> list[str]:
                 value = getattr(value, "__original__", None)
             if value is current:
                 continue
-            bottom = value is None or not any(hasattr(value, mark) for mark in _LEGACY_MARKS)
+            bottom = value is None or not is_ours(value)
             if bottom and not existed:
                 # 前の世代が新設した名前か、継承しただけの属性に置いた層。持ち主の辞書から消す
                 # （基底の写しを置くと、基底に今の世代が当てた層をサブクラスだけ素通りする）

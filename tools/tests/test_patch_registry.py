@@ -1501,6 +1501,41 @@ def main():
     check(reverted == 3 and victim.legacy is legacy_target,
           "剥がした後の revert_all も失敗せず全部戻す: {}".format(reverted))
 
+    print("=== 印を写し取ったゲームの包みはこちらの層と見なさない（is_ours）===")
+    # main_026 の言語の包み（`localized_request`）は `functools.wraps` で、包んだ関数の `__dict__` を写す。
+    # こちらの包みを包むと、印も `__original__` も写る（VERIFICATION.md §3.100）。
+    import functools
+    P.set_generation("gen_copy")
+    raw_sender = victim.sender = lambda m: ("raw", m)
+
+    @P.wrap("fakegame:sender")
+    def hook_sender(orig, m):
+        return ("hook",) + orig(m)
+    ours = victim.sender
+
+    def localize(fn):
+        @functools.wraps(fn)
+        def localized(m):
+            return ("localized",) + fn(m)
+        return localized
+    copy = localize(ours)
+    check(getattr(copy, P.PATCH_MARK, None) == "fakegame:sender",
+          "前提: 写しにもこちらの印が写っている")
+    check(P.is_ours(ours) and not P.is_ours(copy), "こちらの包みは真、写しは偽")
+    victim.sender = copy                           # ゲームが作り直して写しを置いた
+    check(P.unwrap_ours(copy) is copy, "unwrap_ours は写しを素の関数として返す")
+    P.set_generation("gen_copy2")
+    check(P.unwrap_ours(copy) is copy,
+          "世代が変わっても写しの __original__ をたどらない（言語の包みを剥がさない）")
+
+    @P.wrap("fakegame:sender")
+    def hook_again(orig, m):
+        return ("again",) + orig(m)
+    check(victim.sender("x") == ("again", "localized", "hook", "raw", "x"),
+          "写しの上に重ね、写しが包んだ層も残る: {}".format(victim.sender("x")))
+    P.revert_all()
+    check(victim.sender is raw_sender, "戻すと素の関数に戻る")
+
     print("=== 同梱 mod は全て名乗っている ===")
     mods_dir = os.path.join(_ROOT, "runtime", "mods")
     survey_result = survey(mods_dir)

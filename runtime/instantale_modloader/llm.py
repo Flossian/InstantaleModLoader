@@ -101,9 +101,18 @@ POST_TARGET = "llama_cpp_runtime_completion:LlamaCppClient._post_with_model_load
 #: クラウド（APIキー）経路。
 #: 第2要素は `send_request_with_no_structure` か（site 名に
 #: `_ns` を付けて見分ける）。
+#: main_026 から、ゲームは部品ごとに `send_request` を言語の包み（`scripts.llm.output_language.localized_request`）
+#: で包み直すので、部品ごとに別の関数になった。`llm_manager` だけを包んで別名を掴み直す形では、
+#: 戦闘・世界の生成・キャラの作成の頼みに届かなかった（VERIFICATION.md §3.100）。部品ごとに包む。
+#: 前の版のように同じ関数を指していれば、`watch_aliases` が別名として見分けて二重には包まない。
 MANAGER_SEND_TARGETS = (
     ("scripts.llm.llm_manager:send_request", False),
     ("scripts.llm.llm_manager:send_request_with_no_structure", True),
+    ("scripts.llm.llm_manager_battle:send_request", False),
+    ("scripts.llm.llm_manager_battle:send_request_with_no_structure", True),
+    ("scripts.llm.llm_manager_world_generate:send_request", False),
+    ("scripts.llm.llm_manager_world_generate:send_request_with_no_structure", True),
+    ("scripts.llm.llm_manager_character_create:send_request", False),
 )
 
 #: 送信の別名が集まる場所。
@@ -127,6 +136,11 @@ LOCAL_ONLY_MODULES = ("llama_cpp_runtime_completion", LOCAL_REQUEST_MODULE)
 #: 「別名の後生え」の見張り。
 ALIAS_POLL_SECONDS = 5.0
 ALIAS_WATCH_SECONDS = 3600.0
+
+#: ゲームが送り口を作り直す所。題の画面の「開始する」と世界の生成の画面に入るたびに、メインスレッドで走る。
+#: main_026 から、4つの部品の `send_request*` をその都度新しい関数で置き直すので、当てた包みが外れる
+#: （main_025 までは置き直してもローダが張り替えたプロバイダの関数が入った。GAME.md §2.12）。
+REBUILD_TARGET = "__main__:AIManager.set_ai_models"
 
 
 def is_local_runtime() -> bool:
@@ -492,6 +506,148 @@ def ask(ctx, manager_name: str, message, *, timeout, structure=None,
     return result
 
 
+#: `watch_aliases` の登録（ctx, label, rearm）。作り直しの後に、並んだ順に包み直す。
+#: boot ごとにローダは読み直されるので sys に置く。遅れて当て直す boot の最中は、前の世代の
+#: `set_ai_models` の包みが据わったままで、そこから今の世代の登録を包み直す。
+_WATCHES = vars(sys).setdefault("__instantale_llm_watches__", [])
+_WATCHES_LOCK = vars(sys).setdefault("__instantale_llm_watches_lock__", threading.Lock())
+
+#: `set_ai_models` が走っている間の旗。遅れて当て直す boot は別の世代のローダから走るので、sys に置く。
+_REBUILDING_ATTR = "__instantale_llm_rebuilding__"
+
+#: `watch_aliases` の当て方が「作り直しの最中なので後で当てる」と返すときの値。
+LATER = "later"
+
+
+def _rebuilding_state():
+    return vars(sys).setdefault(_REBUILDING_ATTR, {"depth": 0})
+
+
+def rebuilding():
+    """ゲームが送り口を作り直している最中か（`set_ai_models` の中）。"""
+    try:
+        return _rebuilding_state()["depth"] > 0
+    except Exception:
+        return False
+
+
+def _clean_provider_senders(ctx):
+    """プロバイダの送り口に残ったこちらの包みを外し、素の関数に戻す。外した数。
+
+    作り直しの途中を包むと、同じ関数を持つプロバイダの属性までこちらの包みに張り替わり、
+    以後の作り直しで言語の包みがそれを包み続けた（VERIFICATION.md §3.100）。
+    ローカルは起動直後に4つの部品がプロバイダの関数そのもので、別名の張り替えで同じ形になる。
+    包みは1回ずつ通るので働きは変わらないが、ここで戻して部品ごとの形に揃える。
+    main_026 は部品ごとに包むので、プロバイダの属性にこちらの包みは要らない。
+    部品の送り口と同じ関数なら、別名の張り替えでそうなった正規の形なので触らない
+    （ローカルの `send_request_with_no_structure` は言語の包みが掛からず、プロバイダの関数そのもの）。
+    """
+    from . import patch as _patch
+    sender_targets = {target for target, _ns in MANAGER_SEND_TARGETS}
+    parts = set()
+    for target, _ns in MANAGER_SEND_TARGETS:
+        module_name, _, attr = target.partition(":")
+        part = sys.modules.get(module_name)
+        if part is not None and getattr(part, attr, None) is not None:
+            parts.add(id(getattr(part, attr)))
+    count = 0
+    for name, module in list(sys.modules.items()):
+        if module is None or not name.startswith(REQUEST_MODULE_PREFIX):
+            continue
+        for attr in ("send_request", "send_request_with_no_structure"):
+            value = getattr(module, attr, None)
+            if value is None or id(value) in parts:
+                continue
+            # 剥がすのは、送り口を包んだ層が別名の張り替えで載ったものだけ。
+            # プロバイダの関数を直に包んだ層（計測の `205_` など）は残す。
+            below = value
+            while below is not None and _patch.is_ours(below) and                     getattr(below, _patch.PATCH_MARK, None) in sender_targets:
+                below = getattr(below, "__original__", None)
+            if below is value or below is None:
+                continue
+            setattr(module, attr, below)
+            count += 1
+            ctx.log("llm: put the plain {}.{} back before the game rebuilds the senders".format(name, attr))
+    return count
+
+
+def _register_watch(ctx, label, rearm):
+    with _WATCHES_LOCK:
+        _WATCHES[:] = [w for w in _WATCHES if not _superseded(w[0])]
+        _WATCHES.append((ctx, label, rearm))
+
+
+def _superseded(ctx):
+    try:
+        return bool(ctx.superseded())
+    except Exception:
+        return True
+
+
+def rearm_watches(ctx):
+    """ゲームが送り口を作り直した後に、今の世代の `watch_aliases` の登録を順に包み直す。包み直した数。"""
+    with _WATCHES_LOCK:
+        watches = [w for w in _WATCHES if not _superseded(w[0])]
+    count, labels = 0, []
+    for _wctx, label, rearm in watches:
+        try:
+            done = rearm()
+        except Exception:
+            ctx.log_exc("{}: cannot wrap the rebuilt senders again".format(label))
+            continue
+        if done:
+            count += len(done)
+            labels.append(label)
+    if count:
+        ctx.log("llm: the game rebuilt the senders; wrapped {} again for {} watch(es): {}".format(
+            count, len(labels), ", ".join(labels)))
+    return count
+
+
+def install_rebuild_hook(ctx):
+    """`set_ai_models` の直後に `rearm_watches` を呼ぶ。boot が MOD の適用の後に1回呼ぶ。
+
+    `set_ai_models` が走っている間は旗（`rebuilding`）を立て、boot の錠も取れれば持つ。旗の間は、
+    遅れて当て直す boot の適用も見張りも送り口を包まない（`watch_aliases` の `LATER`）。
+    途中では送り口にまだプロバイダの素の関数が入っていて、それを包むと、同じ関数を持つ
+    プロバイダの属性までこちらの包みに張り替わった。続く言語の包みがそれを包み、こちらの印を写し取った
+    （2026-10-15 の実機。起動の約6秒後に走る boot #2 と「開始する」が重なった。VERIFICATION.md §3.100）。
+    作り直しの直後から頼みが出ていくことがあるので、見張りの間隔（`ALIAS_POLL_SECONDS`）を待たず同じスレッドで当てる。
+    別の boot が錠を持っているときは、画面を止めないよう待たずに走らせ、別スレッドで当てる。
+    """
+    from . import _boot_lock
+
+    def run():
+        try:
+            rearm_watches(ctx)
+        except Exception:
+            ctx.log_exc("llm: cannot wrap the rebuilt senders again")
+
+    @ctx.wrap(REBUILD_TARGET, required=False)
+    def set_ai_models(orig, *args, **kwargs):
+        try:
+            _clean_provider_senders(ctx)
+        except Exception:
+            ctx.log_exc("llm: cannot check the provider senders")
+        lock = _boot_lock()
+        held = lock.acquire(blocking=False)
+        state = _rebuilding_state()
+        state["depth"] += 1
+        try:
+            return orig(*args, **kwargs)
+        finally:
+            state["depth"] -= 1
+            # この包みが前の世代のものでも走らせる（包み直すのは今の世代の登録だけ）
+            try:
+                if held:
+                    run()
+                else:
+                    threading.Thread(target=run, name="llm_rearm", daemon=True).start()
+            finally:
+                if held:
+                    lock.release()
+
+
 def watch_aliases(ctx, targets, install, *, label="llm", on_arm=None):
     """**後から生える別名**を見張って、現れた時点で `install(target)` を呼ぶ。
 
@@ -511,6 +667,9 @@ def watch_aliases(ctx, targets, install, *, label="llm", on_arm=None):
     **降りるときは必ず何か残す**（黙って死ぬと、
     残りが一生当たらないのに追う手がかりが1つも無い）。
 
+    ゲームは `set_ai_models` のたびに送り口を新しい関数で置き直す（main_026 から。GAME.md §2.12）。
+    置き直された対象は、ローダが `set_ai_models` の直後に、登録した順に包み直す（`rearm_watches`）。
+
     戻り値は「見張りに回した対象」の並び（すぐ当たったものは入らない）。
     """
     def can_resolve(target):
@@ -519,20 +678,77 @@ def watch_aliases(ctx, targets, install, *, label="llm", on_arm=None):
         except Exception:
             return False
 
+    def alias_of_armed(target):
+        """`target` の今の関数が、同じ並びの**別の**対象に当てた包みの別名か。
+
+        包むと同じ関数を指す別名もローダが張り替えるので、別名をもう一度包むと二重になる
+        （main_025 までは `llm_manager_battle.send_request` などが `llm_manager.send_request` と同じ関数だった）。
+        """
+        from . import patch as _patch
+        try:
+            current = ctx.resolve(target)[2]
+        except Exception:
+            return False
+        if not _patch.is_ours(current):
+            return False      # ゲームの関数（こちらの印を写し取っただけの言語の包みも）
+        mark = getattr(current, _patch.PATCH_MARK, None)
+        return bool(mark) and mark != target and mark in targets
+
+    # 対象 → この見張りが当てた包みの鍵（`patch.KEY_MARK`）。今の値の鎖に残っていなければ、ゲームが作り直した。
+    # 鍵で見るので、`drift` の見回りが同じ包みを付け直した後も二重にしない。
+    placed = {}
+
+    def top_of(target):
+        try:
+            return ctx.resolve(target)[2]
+        except Exception:
+            return None
+
+    def holds(target):
+        """`target` の今の値の鎖に、この見張りが当てた包みが残っているか。"""
+        from . import patch as _patch
+        mine = placed.get(target)
+        if mine is None:
+            return False
+        kind, mark = mine
+        value = top_of(target)
+        if kind == "key":
+            return _patch.layer_present(target, mark, value) is True
+        return any(node is mark for node in _patch.chain(value))
+
+    def install_once(target):
+        """当てたら真。もう当たっている・別名だったら偽。作り直しの最中なら `LATER`（後で当てる）。"""
+        from . import patch as _patch
+        if rebuilding():
+            return LATER
+        if holds(target) or alias_of_armed(target):
+            return False
+        before = top_of(target)
+        install(target)
+        after = top_of(target)
+        if after is None or after is before:
+            placed.pop(target, None)
+        elif getattr(after, _patch.KEY_MARK, None) is not None:
+            placed[target] = ("key", getattr(after, _patch.KEY_MARK))
+        else:
+            placed[target] = ("obj", after)      # 鍵の無い包み（検査の偽物など）はそのもので見る
+        return True
+
+    # 遅れて当てる包みの帰属（呼んだ MOD）。見張りのスレッドでは `ctx._mod` はもう空なので、呼ばれた時点で控える。
+    # ローダ自身の見張り（`stalls`）は boot が `(loader)` で当てている。当て直しでも同じ名前にしないと、
+    # 包みの鍵（`patch.KEY_MARK`）が変わり、`drift` の見回りが別の包みと見て二重に付け直した。
+    from . import patch_registry as _registry_now
+    owner = getattr(ctx, "_mod", None) or _registry_now.current_mod()
+
     unarmed = []
     for target in targets:
-        if can_resolve(target):
-            install(target)
-        else:
+        if not can_resolve(target) or install_once(target) is LATER:
             unarmed.append(target)
-    if not unarmed:
-        return []
-    # 遅れて当てる包みの帰属（呼んだ MOD）。見張りのスレッドでは `ctx._mod` はもう空。
-    owner = getattr(ctx, "_mod", None)
 
     def arm(target):
-        """boot の錠の中で、まだ今の世代かを確かめてから当てる。当てたら真。
+        """boot の錠の中で、まだ今の世代かを確かめてから当てる。
 
+        当てたら真、当てるまでもなかったら偽、作り直しの最中なら `LATER`、用済みの世代なら None。
         錠の外で当てると、確かめた直後に次の boot が始まったとき、古い世代の閉包が
         新しい世代の印で当たり（`ctx.wrap` は今の `patch` を引く）、新しい世代の包みと二重に掛かった。
         帰属もその瞬間に適用中の別の MOD になっていた。
@@ -541,13 +757,37 @@ def watch_aliases(ctx, targets, install, *, label="llm", on_arm=None):
         from . import patch_registry as _registry
         with _boot_lock():
             if ctx.superseded():
-                return False
+                return None
             _registry.begin_mod(owner or "<loader>")
             try:
-                install(target)
+                return install_once(target)
             finally:
                 _registry.end_mod()
-        return True
+
+    def notify(target):
+        if on_arm is not None:
+            try:
+                on_arm(target)
+            except Exception:
+                ctx.log_exc("{}: on_arm failed".format(label))
+
+    def rearm():
+        """ゲームが送り口を作り直した後に呼ばれる（`rearm_watches`）。包み直した対象の並び。"""
+        done = []
+        for target in targets:
+            if not can_resolve(target):
+                continue
+            armed = arm(target)
+            if armed is None:
+                break
+            if armed is True:
+                done.append(target)
+                notify(target)
+        return done
+
+    _register_watch(ctx, label, rearm)
+    if not unarmed:
+        return []
 
     def loop():
         deadline = time.monotonic() + ALIAS_WATCH_SECONDS
@@ -556,16 +796,18 @@ def watch_aliases(ctx, targets, install, *, label="llm", on_arm=None):
             for target in list(remaining):
                 if not can_resolve(target):
                     continue
-                if not arm(target):
+                armed = arm(target)
+                if armed is None:
                     break
+                if armed is LATER:
+                    continue
                 remaining.remove(target)
+                if not armed:
+                    # 作り直しの後に `rearm` が先に当てたか、別名だった
+                    continue
                 ctx.log("{}: late-armed on {} (the alias appeared)".format(
                     label, target))
-                if on_arm is not None:
-                    try:
-                        on_arm(target)
-                    except Exception:
-                        ctx.log_exc("{}: on_arm failed".format(label))
+                notify(target)
             if not remaining:
                 return
             if time.monotonic() > deadline:
@@ -653,14 +895,21 @@ def wrap_outgoing(ctx, rewrite, *, label="llm", local=True, cloud=True,
     def rewrite_texts(texts, site):
         """`rewrite` を呼んで、長さが合う並びだけを受け取る。"""
         result = rewrite(texts, site)
-        if result is None:
-            return None
-        result = list(result)
-        if len(result) != len(texts):
-            ctx.log("{}: {} returned {} text(s) for {} (ignored)".format(
-                label, site, len(result), len(texts)), level="WARN")
-            return None
-        return result if result != texts else None
+        if result is not None:
+            result = list(result)
+            if len(result) != len(texts):
+                ctx.log("{}: {} returned {} text(s) for {} (ignored)".format(
+                    label, site, len(result), len(texts)), level="WARN")
+                result = None
+            elif result == texts:
+                result = None
+        # 当たった数を版ごとに控える（ゲームの文面が変わって当たらなくなったのを見つける。drift.py）
+        try:
+            from . import drift
+            drift.note_rewrite(label, getattr(pass_local, "manager", None), result is not None)
+        except Exception:
+            pass
+        return result
 
     def rewrite_messages(messages, site):
         """messages の本文を書き換える。**元のリストは書き換えない**。
@@ -771,9 +1020,14 @@ def wrap_outgoing(ctx, rewrite, *, label="llm", local=True, cloud=True,
             try:
                 if not previous:
                     site = provider_of(orig) + ("_ns" if ns else "")
-                    args, kwargs = safely(
-                        site, lambda: rewrite_message_arg(site, args, kwargs),
-                        (args, kwargs))
+                    manager = args[0] if args and isinstance(args[0], str)                         else kwargs.get("manager_name")
+                    pass_local.manager = manager if isinstance(manager, str) else None
+                    try:
+                        args, kwargs = safely(
+                            site, lambda: rewrite_message_arg(site, args, kwargs),
+                            (args, kwargs))
+                    finally:
+                        pass_local.manager = None
                 return orig(*args, **kwargs)
             finally:
                 end_pass(previous)
