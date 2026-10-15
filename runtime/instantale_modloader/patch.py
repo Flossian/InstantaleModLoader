@@ -305,7 +305,10 @@ def await_module(mod_name: str, *needs: str):
         _registry.record(_registry.DEFERRED, mod_name + ":", detail=mod_name)
         log("defer {} (not imported yet)".format(mod_name))
         return None
-    if _still_loading(mod_name):
+    # `__main__` は読み込み中の印（`__spec__._initializing`）を持たないので、組み上がったかで見る
+    # （`_defer_if_owner_not_ready` と同じ）。見ないと、起動直後に `__main__` のクラスを待つ MOD が
+    # 「本物の欠け」として降り、保留に載らなかった（`201_` の `FreeInputStart`）。
+    if _still_loading(mod_name) or (mod_name == "__main__" and not _main_is_built()):
         missing = [name for name in needs if getattr(module, name, None) is None]
         if missing:
             for name in missing:
@@ -334,6 +337,17 @@ def _still_loading(mod_name: str) -> bool:
         return False
     spec = getattr(module, "__spec__", None)
     return bool(getattr(spec, "_initializing", False))
+
+
+def still_loading(mod_name: str) -> bool:
+    """そのモジュールが読み込みの途中か（`__main__` は組み上がる前か）。
+
+    MOD が「名前が無い」を本物の欠け（方式の違い・ゲームの更新）と決める前に聞く口。
+    途中なら、名前が無いのはまだ来ていないだけ。
+    """
+    if mod_name == "__main__":
+        return not _main_is_built()
+    return _still_loading(mod_name)
 
 
 def _defer_if_still_loading(target: str, kind: str, why: str) -> bool:

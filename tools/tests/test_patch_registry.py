@@ -642,6 +642,27 @@ def main():
         sys.modules.pop("fakegame_loading", None)
     check(P.await_module("sys") is sys, "読み込み済みならそのまま返す")
 
+    # `__main__` は読み込み中の印を持たない。組み上がった（`InstantaleApp` の実体が在る）かで見る
+    real_main = sys.modules["__main__"]
+    building = types.ModuleType("__main__")
+    sys.modules["__main__"] = building
+    try:
+        check(P.await_module("__main__", "FreeInputStart") is None
+              and "__main__:FreeInputStart" in P.pending_owners(),
+              "__main__ を組み上げている途中でクラスがまだ無ければ None で、そのクラスを待つ")
+
+        class InstantaleApp(object):
+            pass
+        building.InstantaleApp = InstantaleApp
+        building.instantale_app = InstantaleApp()
+        check(P.await_module("__main__", "FreeInputStart") is building,
+              "組み上がった後は欠けていても返す（欠けは本物の問題）")
+        check(P.still_loading("__main__") is False, "still_loading: 組み上がった __main__ は途中ではない")
+        del building.instantale_app
+        check(P.still_loading("__main__") is True, "still_loading: 組み上がる前の __main__ は途中")
+    finally:
+        sys.modules["__main__"] = real_main
+
     print("=== on_ready(delay): 走る前に次の boot が来たら古い世代は走らない ===")
     # delay の間に注入し直す・遅れた当て直しが走る並び。
     # 古い世代の関数（読み直す前のコード）は走らせず、新しい世代が積み直した分だけが走る。

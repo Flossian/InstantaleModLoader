@@ -24,10 +24,15 @@ hasattr() は従来どおり False を返し、既存のコード経路は以前
 この MOD を無効にしても、仕掛けた罠はそのプロセスが終わるまで残る
 （読むだけで挙動は変えないので、残っても害は無い。外したければゲームを起動し直す）。
 コードの動きは版2から変えていない（この注意書きを足しただけ）。
+
+版4: `__main__` のクラスはローダの `patch.await_module` で待つ。
+起動直後の注入では `FreeInputStart` がまだ組み上がっておらず、版3までは
+「見つからない」と WARN を出して降り、遅れて当て直す boot で仕掛けていた（当て直しが無い起動では一度も仕掛からない）。
 """
 
 import sys
 
+from instantale_modloader import patch
 from instantale_modloader.frames import repr_value
 
 WATCH_CLASSES = ("FreeInputStart",)
@@ -39,9 +44,9 @@ DUNDER_NOISE_PREFIX = "__"
 
 
 def apply(ctx):
-    main = sys.modules.get("__main__")
+    # 起動直後は `__main__` を組み上げている途中なので、クラスが揃うまで待つ（来たらローダが当て直す）
+    main = patch.await_module("__main__", *WATCH_CLASSES)
     if main is None:
-        ctx.log("__main__ not available; skipping", level="WARN")
         return
 
     write = ctx.logger("probes.log")

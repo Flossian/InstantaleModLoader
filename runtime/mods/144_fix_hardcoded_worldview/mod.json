@@ -10,7 +10,7 @@
     "en": "Many of the game's LLM requests open with 'You are the GM of a dark fantasy TRPG' whatever the world is, and every image gets 'medieval' and 'dark fantasy' in its fixed prefix. This removes the genre from those role lines (adding the world's name and overview to requests that carry no world information), turns 'because this is dark fantasy' into 'because this is a game', trims the adventurer lore of the common worldview, and drops medieval / dark fantasy / shabby / fantasy setting (and the 'modern, urban' negatives) from image prompts",
     "ja": "ゲームのプロンプトの多くは、世界に関係なく「あなたはダークファンタジーTRPGのゲームマスターである」で始まり、絵の前置きには必ず medieval や dark fantasy が付く。役の一文からジャンルを外し（世界の情報が無いプロンプトには世界の名前と概要を足す）、「ダークファンタジーであるため」を「ゲームであるため」にし、【共通世界観】の冒険者の暗い設定を外し、絵の前置きから medieval・dark fantasy・shabby・fantasy setting を、背景の否定から modern・urban を抜く"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "before": [
     "111_llm_prompt_replace"

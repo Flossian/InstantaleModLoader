@@ -71,6 +71,9 @@
 
 版4: 見出し・見張りの開始の行を1プロセスに1回にし、見張りが最後に見た値を世代をまたいで引き継ぐ。
 版3までは注入し直しのたびに見出しと開始の行が積もり、プレイヤーが居れば `player appeared` も重なっていた。
+
+版5: 作成画面の「人生を始める」の対象を `scripts.hud.hud_charamake` に直した。
+main_025 で画面のクラスがこのモジュールへ移り、版4までの `scripts.create_world` の名前では包めていなかった。
 """
 
 import datetime
@@ -292,7 +295,7 @@ def apply(ctx):
             ctx.log_exc("new character probe: to_dict record failed")
         return result
 
-    @ctx.wrap("scripts.create_world:CharacterCreateScreen.start_story",
+    @ctx.wrap("scripts.hud.hud_charamake:CharacterCreateScreen.start_story",
               required=False, safe=True)
     def start_story(orig, self, *args, **kwargs):
         open_window("CharacterCreateScreen.start_story")

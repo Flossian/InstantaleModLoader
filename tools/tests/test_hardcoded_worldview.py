@@ -31,6 +31,7 @@ import os
 import shutil
 import sys
 import tempfile
+import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
@@ -367,7 +368,21 @@ def main():
             setattr(FakeClient, name, fn)
         client = FakeClient()
         ctx = FakeCtx(client, out_dir, MOD_DIR)
-        mod.apply(ctx)
+        # 読み込まれた方式（sdcppcuda）には `generate_upscaled_image_anime` が無い（main_023 から）
+        loaded_name = mod.imagegen.CREATURE_FORMAT.format("sdcppcuda")
+        loaded = types.ModuleType(loaded_name)
+        loaded.generate_image_anime = lambda positive, negative, **k: None
+        sys.modules[loaded_name] = loaded
+        try:
+            mod.apply(ctx)
+        finally:
+            sys.modules.pop(loaded_name, None)
+        check("読み込まれた方式に無い関数は包まない（台帳の「見つからない」に載せない）",
+              loaded_name + ":generate_upscaled_image_anime" not in ctx.hooks
+              and loaded_name + ":generate_image_anime" in ctx.hooks, sorted(ctx.hooks))
+        check("  読み込まれる前の方式はローダの保留に任せて包む",
+              mod.imagegen.CREATURE_FORMAT.format("diffusers_openvino") + ":generate_upscaled_image_anime"
+              in ctx.hooks)
         check("自己検証が通る", any("self-check passed" in l for l in ctx.lines)
               and not any("VERIFY FAILED" in l for l in ctx.lines), ctx.lines)
         check("仕掛かった記録", any("hardcoded worldview: armed on" in l for l in ctx.lines), ctx.lines)

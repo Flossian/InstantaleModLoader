@@ -46,9 +46,15 @@ b10642 は RAM のプロンプトキャッシュ（`--cache-ram`、既定 8192 M
 そこで起こす実行ファイルの `--help` を見て、`CHECKPOINT_FLAGS` の先頭から知っている旗を1つ足す。
 どれも知らない・`--help` が読めないときは足さない（足し損ねても遅くなるだけで、落ちはしない）。
 
-## MTP の下書き役を自動で付ける
+## MTP を使えるモデルでは自動で使う
 
-b10642 は MTP（複数トークン予測）の下書き役を受け付ける。
+b10642 は MTP（複数トークン予測）を受け付ける。
+使い方はモデルで2通りあり、この MOD がモデルを見て選ぶ。
+
+- 本体の GGUF に MTP の層がある（Qwen3.8-27B など）: `--spec-type draft-mtp` だけで、本体の層を下書きに使う（`builtin_mtp`）。
+  Qwen3.8-27B で生成が 1.6〜1.8 倍、VRAM は +約 1.1 GB。別に配られている下書き役を渡すより軽い（渡すと基準より遅くなった。VERIFICATION.md §3.100）
+- 本体に無い: 別の下書き役を `--model-draft` で渡す（下の通り）
+
 Gemma 4 26B A4B 系に Gemma の下書き役（`mtp-gemma-4-26B-A4B-it.gguf`、252 MB）を付けると、
 戦闘の頼みで生成が約 1.5 倍、全体が約 2 割速い（ゲームと同じ温度 1.0。温度 0 では 1.7 倍・3 割）。Fenrir-X のような調整済みのモデルにも当たる（VERIFICATION.md §3.100）。
 ゲームは `--model-draft` を渡さないので、ここで足す。
@@ -59,6 +65,12 @@ Gemma 4 26B A4B 系に Gemma の下書き役（`mtp-gemma-4-26B-A4B-it.gguf`、2
 - 付けて起きなかったら（VRAM に入らないなど）、`AIManager.set_ai_models` の包みが外して1回だけ起こし直す。
   その組はプロセスの間は付けない
 - 設定欄に投機の旗（`--spec-type` など）があれば触らない
+
+MTP を付けるときは `ngram-mod`（頼みの文や書いた分の繰り返しを写して下書きする）も重ねる（`MTP_NGRAM`）。
+Fenrir-X・温度 1.0 で、MTP だけと比べて戦闘の頼みの生成が +5%、それ以外の頼みは +1%。VRAM は増えない。
+Qwen3.8-27B では −2% / +1% で、効かないが害も無い（VERIFICATION.md §3.100）。
+下書き役が無いモデルに `ngram-mod` だけを付けることはしない（測っていない）。
+起きなかったときは MTP ごと外して起こし直す。
 
 設定画面の「サーバーパラメータ」欄からでは窓を変えられない。
 **ゲームは追加パラメータを繋ぐ前に `--ctx-size` を取り除く**（実測・GAME.md
@@ -167,13 +179,17 @@ SLOTS = 1
 # `mod.json` の "default" と揃えること。
 OBSERVE_ONLY = False
 
-# MTP（複数トークン予測）の下書き役を自動で付ける。
+# MTP（複数トークン予測）を使えるモデルでは自動で使う（本体の層か、`mtp\` の下書き役）。
 # `mod.json` の "default" と揃えること。
 MTP = True
 
 # MTP で1回に下書きするトークンの数（`--spec-draft-n-max`）。
 # `mod.json` の "default" と揃えること。
 MTP_DRAFT_MAX = 4
+
+# MTP に ngram-mod を重ねる（`--spec-type draft-mtp,ngram-mod`）。MTP を付けるときだけ効く。
+# `mod.json` の "default" と揃えること。
+MTP_NGRAM = True
 
 LOG_BASENAME = "llm_speed.log"
 
@@ -215,6 +231,9 @@ SPEC_TYPE_FLAG = "--spec-type"
 SPEC_MAX_FLAG = "--spec-draft-n-max"
 MTP_TYPE = "draft-mtp"
 
+#: MTP に重ねる投機。頼みの文や書いた分の繰り返しを写して下書きする（下書き役は要らない）。
+NGRAM_TYPE = "ngram-mod"
+
 #: 設定欄に投機の旗が1つでも書いてあれば、MTP には触らない（欄の指定を尊重する）。
 SPEC_FLAGS = (DRAFT_FLAG, "-md", SPEC_TYPE_FLAG, "--spec-default", SPEC_MAX_FLAG)
 
@@ -230,6 +249,13 @@ MTP_SAME_KEYS = ("attention.head_count", "attention.key_length", "attention.valu
 
 #: GGUF の先頭の情報の控え。鍵は (パス, 大きさ, 更新時刻)。
 _META_CACHE = {}
+
+#: MTP の層の重みの名前に入る印（`blk.64.nextn.eh_proj.weight` など）と、その数を控える鍵（GGUF のキーと被らない名前）。
+NEXTN_MARK = ".nextn."
+NEXTN_TENSORS_KEY = "(127) nextn tensors"
+
+#: 本体の MTP の層を使うときに、下書き役の代わりにログと控えへ書く名前。
+BUILTIN_DRAFT = "本体の MTP の層"
 
 #: MTP を付けて起こせなかった (モデル, 下書き役)。プロセスにつき1つの表（注入し直しても残す）。
 _MTP_STATE = sys.modules.setdefault("instantale_127_mtp_state", types.ModuleType("instantale_127_mtp_state"))
@@ -448,6 +474,14 @@ def gguf_meta(path):
                     name = _gguf_string(fh)
                     (kind,) = struct.unpack("<I", fh.read(4))
                     meta[name] = _gguf_value(fh, kind)
+                # テンソルの一覧は情報のすぐ後ろに並ぶ。名前だけ見て、MTP の層の重みの数を数える。
+                nextn = 0
+                for _ in range(_tensors):
+                    if NEXTN_MARK in _gguf_string(fh):
+                        nextn += 1
+                    (dims,) = struct.unpack("<I", fh.read(4))
+                    fh.seek(dims * 8 + 4 + 8, 1)                       # 形・型・置き場所
+                meta[NEXTN_TENSORS_KEY] = nextn
     except Exception:
         meta = None
     _META_CACHE[key] = meta
@@ -479,6 +513,23 @@ def mtp_matches(target, draft):
         if target.get(name) is None or target.get(name) != draft.get(name):
             return False, "語彙が合わない"
     return True, "合う"
+
+
+def builtin_mtp(argv):
+    """起動するモデルの本体に MTP の層があるか。戻り値は (あるか, 理由)。
+
+    層の数（`<構造>.nextn_predict_layers`）と、その重み（名前に `.nextn.` が入るテンソル）の両方が要る。
+    Qwen3.8-27B は本体に1層を持ち、`--spec-type draft-mtp` だけで使える（VERIFICATION.md §3.100）。
+    """
+    model = model_path(argv)
+    meta = gguf_meta(model) if model else None
+    if not meta:
+        return False, "モデルの情報が読めない"
+    if not meta.get("{}.nextn_predict_layers".format(meta.get("general.architecture"))):
+        return False, "本体に MTP の層が無い"
+    if not meta.get(NEXTN_TENSORS_KEY):
+        return False, "本体に MTP の層の重みが無い"
+    return True, BUILTIN_DRAFT
 
 
 def model_path(argv):
@@ -599,8 +650,10 @@ def rewrite_argv(argv, ctx_size=None, slots=None, knows=None, drafter=None):
 
 
 def _add_mtp(argv, new_argv, changes, knows, drafter):
-    """合う MTP の下書き役があれば `--model-draft` と `--spec-type draft-mtp` を足す。足した列を返す。
+    """MTP を使えるモデルなら `--spec-type draft-mtp` を足す。足した列を返す。
 
+    本体に MTP の層があればそれを使い（`builtin_mtp`）、無ければ合う下書き役を `--model-draft` で渡す（`find_drafter`）。
+    `MTP_NGRAM` が立っていてサーバが ngram-mod を知っていれば、`--spec-type draft-mtp,ngram-mod` にする。
     足さないときも、理由を `changes` に1行残す（効いていないことをログで分かるように）。
     `_MTP_STATE.last` に足した組を控える。起動に失敗したら `set_ai_models` の包みが外して起こし直す。
     """
@@ -610,19 +663,35 @@ def _add_mtp(argv, new_argv, changes, knows, drafter):
     if any(has_flag(argv, flag) for flag in SPEC_FLAGS):
         changes.append(("MTP", None, "(付けない: 欄で投機の旗が指定済み)"))
         return new_argv
-    if not (knows(argv, DRAFT_FLAG) and knows(argv, MTP_TYPE)):
+    if not knows(argv, MTP_TYPE):
         changes.append(("MTP", None, "(付けない: このサーバは MTP を知らない)"))
         return new_argv
-    path, why = drafter(argv)
-    if not path:
-        changes.append(("MTP", None, "(付けない: {})".format(why)))
-        return new_argv
-    pair = (model_path(argv), path)
+    # 本体に MTP の層があればそれを使う。別の下書き役より軽い（Qwen3.8 で、別ファイルを渡すと基準より遅くなった）。
+    builtin, why_builtin = builtin_mtp(argv)
+    path = None
+    if not builtin:
+        if not knows(argv, DRAFT_FLAG):
+            changes.append(("MTP", None, "(付けない: {}。このサーバは下書き役を受け付けない)".format(why_builtin)))
+            return new_argv
+        path, why = drafter(argv)
+        if not path:
+            changes.append(("MTP", None, "(付けない: {}。{})".format(why_builtin, why)))
+            return new_argv
+    pair = (model_path(argv), path or BUILTIN_DRAFT)
     if pair in _MTP_STATE.failed:
         changes.append(("MTP", None, "(付けない: この組はさっき起きなかった)"))
         return new_argv
-    new_argv = list(new_argv) + [DRAFT_FLAG, path, SPEC_TYPE_FLAG, MTP_TYPE, SPEC_MAX_FLAG, str(MTP_DRAFT_MAX)]
-    changes.append(("MTP", None, "{}（下書き {}）".format(os.path.basename(path), MTP_DRAFT_MAX)))
+    spec_types, note = MTP_TYPE, ""
+    if MTP_NGRAM:
+        # 知らない種類を渡すとサーバが起きないので、知っているときだけ重ねる。
+        if knows(argv, NGRAM_TYPE):
+            spec_types, note = "{},{}".format(MTP_TYPE, NGRAM_TYPE), "、{} を重ねる".format(NGRAM_TYPE)
+        else:
+            note = "、{} は重ねない: このサーバは知らない".format(NGRAM_TYPE)
+    new_argv = (list(new_argv) + ([DRAFT_FLAG, path] if path else [])
+                + [SPEC_TYPE_FLAG, spec_types, SPEC_MAX_FLAG, str(MTP_DRAFT_MAX)])
+    changes.append(("MTP", None, "{}（下書き {}{}）".format(
+        os.path.basename(path) if path else BUILTIN_DRAFT, MTP_DRAFT_MAX, note)))
     _MTP_STATE.last = pair
     return new_argv
 
@@ -694,7 +763,7 @@ def apply(ctx):
                 raise
             _MTP_STATE.failed.add(pair)
             _MTP_STATE.last = None
-            message = "MTP の下書き役 {} を付けた llama-server が起きなかった（{}）。MTP を外して起こし直す".format(
+            message = "MTP（{}）を付けた llama-server が起きなかった（{}）。MTP を外して起こし直す".format(
                 os.path.basename(pair[1]), error)
             write("[MTP] " + message)
             ctx.log("llm speed: " + message, level="WARN")

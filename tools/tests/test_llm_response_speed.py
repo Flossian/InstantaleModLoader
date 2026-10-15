@@ -337,11 +337,18 @@ module, ctx = fresh_mod()
 module.server_help = lambda exe: MTP_HELP
 module.find_drafter = lambda argv: (DRAFT_PATH, "合う")
 argv = passed_argv(launch(ctx, list(GAME_ARGV)))
-check("合う下書き役があれば --model-draft と draft-mtp を足す",
-      flag_value(argv, "--model-draft") == DRAFT_PATH and flag_value(argv, "--spec-type") == "draft-mtp"
+check("合う下書き役があれば --model-draft と draft-mtp を足し、ngram-mod を重ねる",
+      flag_value(argv, "--model-draft") == DRAFT_PATH and flag_value(argv, "--spec-type") == "draft-mtp,ngram-mod"
       and flag_value(argv, "--spec-draft-n-max") == "4", argv)
 check("  チェックポイントと --parallel 1 も残る",
       flag_value(argv, "--checkpoint-min-step") == "256" and flag_value(argv, "--parallel") == "1", argv)
+module.server_help = lambda exe: NEW_HELP + "-md, --model-draft FNAME\n--spec-type none,draft-simple,draft-mtp\n"
+argv = passed_argv(launch(ctx, list(GAME_ARGV)))
+check("ngram-mod を知らないサーバには draft-mtp だけを渡す",
+      flag_value(argv, "--model-draft") == DRAFT_PATH and flag_value(argv, "--spec-type") == "draft-mtp", argv)
+check("  重ねなかった理由をログに残す",
+      any("ngram-mod は重ねない" in after for _f, _b, after in module.rewrite_argv(list(GAME_ARGV))[1]))
+module.server_help = lambda exe: MTP_HELP
 argv = passed_argv(launch(ctx, GAME_ARGV + ["--spec-type", "ngram-mod"]))
 check("欄で投機の旗が指定済みなら MTP に触らない",
       "--model-draft" not in argv and argv.count("--spec-type") == 1, argv)
@@ -357,6 +364,32 @@ module.server_help = lambda exe: MTP_HELP
 module.find_drafter = lambda argv: (DRAFT_PATH, "合う")
 argv = passed_argv(launch(ctx, list(GAME_ARGV)))
 check("設定で切れば足さない", "--model-draft" not in argv, argv)
+module, ctx = fresh_mod(MTP_NGRAM=False)
+module.server_help = lambda exe: MTP_HELP
+module.find_drafter = lambda argv: (DRAFT_PATH, "合う")
+argv = passed_argv(launch(ctx, list(GAME_ARGV)))
+check("重ねるのを切れば draft-mtp だけ", flag_value(argv, "--spec-type") == "draft-mtp", argv)
+
+print("本体の MTP の層")
+module, ctx = fresh_mod()
+module.server_help = lambda exe: MTP_HELP
+module.builtin_mtp = lambda argv: (True, module.BUILTIN_DRAFT)
+module.find_drafter = lambda argv: (DRAFT_PATH, "合う")
+argv = passed_argv(launch(ctx, list(GAME_ARGV)))
+check("本体に層があれば、下書き役があっても --model-draft を渡さず draft-mtp を足す",
+      "--model-draft" not in argv and flag_value(argv, "--spec-type") == "draft-mtp,ngram-mod"
+      and flag_value(argv, "--spec-draft-n-max") == "4", argv)
+module.server_help = lambda exe: NEW_HELP + "--spec-type none,draft-mtp,ngram-mod\n"
+argv = passed_argv(launch(ctx, list(GAME_ARGV)))
+check("  --model-draft を知らないサーバでも、本体の層なら使う", flag_value(argv, "--spec-type") == "draft-mtp,ngram-mod", argv)
+module.builtin_mtp = lambda argv: (False, "本体に MTP の層が無い")
+argv = passed_argv(launch(ctx, list(GAME_ARGV)))
+check("  本体に層が無く --model-draft も知らなければ足さない", "--spec-type" not in argv, argv)
+module, ctx = fresh_mod(MTP=False)
+module.server_help = lambda exe: MTP_HELP
+module.builtin_mtp = lambda argv: (True, module.BUILTIN_DRAFT)
+argv = passed_argv(launch(ctx, list(GAME_ARGV)))
+check("  設定で切れば本体の層も使わない", "--spec-type" not in argv, argv)
 
 print("MTP を付けて起きなかったら外して起こし直す")
 module, ctx = fresh_mod()
@@ -398,12 +431,33 @@ except RuntimeError:
 check("MTP を付けていない失敗はそのまま上げる（握り潰さない）", raised)
 module._MTP_STATE.failed.clear()
 
+module, ctx = fresh_mod()
+module.server_help = lambda exe: MTP_HELP
+module.builtin_mtp = lambda argv: (True, module.BUILTIN_DRAFT)
+started = []
+
+
+def fake_builtin_fail(*_args, **_kwargs):
+    started.append(passed_argv(launch(ctx, list(GAME_ARGV))))
+    if "--spec-type" in started[-1]:
+        raise RuntimeError("同梱llama-serverが起動しませんでした")
+    return "ok"
+
+
+result = ctx.hooks["__main__:AIManager.set_ai_models"](fake_builtin_fail, "manager")
+check("本体の層で起きなかったときも MTP を外して起こし直す",
+      result == "ok" and len(started) == 2 and "--spec-type" in started[0] and "--spec-type" not in started[1], started)
+check("  WARN に本体の層と書く", any(level == "WARN" and module.BUILTIN_DRAFT in msg for level, msg in ctx.logs), ctx.logs)
+module._MTP_STATE.failed.clear()
+
 print("GGUF の情報を読む")
 import struct as _struct  # noqa: E402
 
+module = fresh_mod()[0]
 
-def gguf_bytes(pairs):
-    out = [b"GGUF", _struct.pack("<I", 3), _struct.pack("<QQ", 0, len(pairs))]
+
+def gguf_bytes(pairs, tensors=()):
+    out = [b"GGUF", _struct.pack("<I", 3), _struct.pack("<QQ", len(tensors), len(pairs))]
     for key, kind, value in pairs:
         raw = key.encode("utf-8")
         out.append(_struct.pack("<Q", len(raw)) + raw + _struct.pack("<I", kind))
@@ -417,6 +471,10 @@ def gguf_bytes(pairs):
             for item in value:
                 data = item.encode("utf-8")
                 out.append(_struct.pack("<Q", len(data)) + data)
+    for name, dims in tensors:                         # 名前・次元の数・形・型・置き場所
+        raw = name.encode("utf-8")
+        out.append(_struct.pack("<Q", len(raw)) + raw + _struct.pack("<I", len(dims))
+                   + b"".join(_struct.pack("<Q", d) for d in dims) + _struct.pack("<IQ", 0, 0))
     return b"".join(out)
 
 
@@ -428,7 +486,23 @@ with open(path, "wb") as fh:
 meta = module.gguf_meta(path)
 check("構造の名前・数・長い語彙の並び（数だけ）を読む",
       meta == {"general.architecture": "gemma4", "gemma4.embedding_length": 2816,
-               "tokenizer.ggml.tokens": ("array", 100)}, meta)
+               "tokenizer.ggml.tokens": ("array", 100), module.NEXTN_TENSORS_KEY: 0}, meta)
+check("  本体に MTP の層が無ければ builtin_mtp は無しと答える", module.builtin_mtp(["llama-server", "-m", path])[0] is False)
+with open(path, "wb") as fh:
+    fh.write(gguf_bytes([("general.architecture", 8, "qwen35"), ("qwen35.nextn_predict_layers", 4, 1)],
+                        [("blk.0.attn_q.weight", (5120, 6144)), ("blk.64.nextn.eh_proj.weight", (10240, 5120)),
+                         ("blk.64.nextn.enorm.weight", (5120,))]))
+module._META_CACHE.clear()
+meta = module.gguf_meta(path)
+check("テンソルの名前を読み、MTP の層の重みを数える", meta.get(module.NEXTN_TENSORS_KEY) == 2, meta)
+check("  層の数と重みがあれば builtin_mtp は有りと答える", module.builtin_mtp(["llama-server", "-m", path])[0] is True)
+with open(path, "wb") as fh:
+    fh.write(gguf_bytes([("general.architecture", 8, "qwen35"), ("qwen35.nextn_predict_layers", 4, 1)],
+                        [("blk.0.attn_q.weight", (5120, 6144))]))
+module._META_CACHE.clear()
+check("  層の数があっても重みが無ければ無し",
+      module.builtin_mtp(["llama-server", "-m", path]) == (False, "本体に MTP の層の重みが無い"))
+module._META_CACHE.clear()
 with open(path, "wb") as fh:
     fh.write(b"NOPE")
 module._META_CACHE.clear()
