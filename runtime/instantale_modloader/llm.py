@@ -468,13 +468,18 @@ def ask(ctx, manager_name: str, message, *, timeout, structure=None,
     |---|---|
     | `manager_name` | 記録の分かれ目。MOD 専用の名前にする（`output_data/` に別々に残る） |
     | `message` | **必ずリスト**（`[{"role": "user", "content": ...}]`）。素の文字列は `TypeError` になる（GAME.md §2.12） |
-    | `timeout` | **キーワードで必ず渡す。** 既定値は置いていない ― ゲーム側の既定は無期限で、1回返らないと呼んだ側が永久に止まる |
+    | `timeout` | **キーワードで必ず渡す。** 既定値は置いていない ― ゲーム側の既定は無期限で、1回返らないと呼んだ側が永久に止まる。待ちはここで打ち切る（下） |
     | `write` | MOD 自身のログ関数（かかった秒数と結果を1行）。無くてよい |
     | `errors` | list を渡すと、送信が投げた例外をそこへ積む。None の理由（呼べなかった `TypeError` か、タイムアウト・通信エラーか）を呼び側で分けたいときに使う。無くてよい |
 
     `timeout` を受け付けない未実測のプロバイダでは `TypeError` で失敗して
     None を返す（呼び側は LLM を使わない道へ降りる）。
     渡さずに呼び直さないのは、**止まらないことのほうが大事**だから。
+
+    ゲームの送り口は `timeout` を受け取るが、待ちを打ち切らない（main_026 で、クラウドもローカルも
+    `timeout=0.5` で返事を最後まで待った。VERIFICATION.md §3.101）。
+    そこで送り口は別のスレッドで呼び、ここで `timeout` 秒だけ待つ。過ぎたら None を返し、
+    `errors` には `TimeoutError` を積む。頼み自体は止まらずに走り切り、答えは捨てる（推論の費用はかかる）。
     """
     name = "send_request" if structure is not None else "send_request_with_no_structure"
     send, where = resolve_send(name)
@@ -490,13 +495,33 @@ def ask(ctx, manager_name: str, message, *, timeout, structure=None,
     if structure is not None:
         args += (structure,)
     started = time.monotonic()
-    try:
-        raw = send(*args, **kwargs)
-    except Exception as exc:
-        ctx.log_exc("{}: {} failed via {}".format(label, manager_name, where))
+    box = {}
+
+    def call():
+        try:
+            box["raw"] = send(*args, **kwargs)
+        except Exception as exc:
+            box["exc"] = exc
+
+    worker = threading.Thread(target=call, name="llm_ask:{}".format(manager_name), daemon=True)
+    worker.start()
+    worker.join(timeout)
+    if worker.is_alive():
+        ctx.log("{}: gave up waiting for {} via {} after {}s (the game does not stop a request "
+                "on its timeout; the answer will be dropped)".format(label, manager_name, where, timeout),
+                level="WARN")
         if errors is not None:
-            errors.append(exc)
+            errors.append(TimeoutError("{} did not return within {}s".format(manager_name, timeout)))
         return None
+    if "exc" in box:
+        try:
+            raise box["exc"]
+        except Exception:
+            ctx.log_exc("{}: {} failed via {}".format(label, manager_name, where))
+        if errors is not None:
+            errors.append(box["exc"])
+        return None
+    raw = box.get("raw")
     result = as_dict(raw) if structure is not None else raw
     if write is not None:
         write("{}: {:.1f}s via {}{} -> {!r}".format(

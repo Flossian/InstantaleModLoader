@@ -548,6 +548,29 @@ def main():
         check(LLM.ask(ctx, "mod_q", [{"role": "user", "content": "x"}],
                       timeout=1.0) is None,
               "プロバイダが落ちても例外を通さない（None に倒す）")
+
+        # ゲームの送り口は timeout で待ちを打ち切らない（main_026 の実測）。ask が自分で打ち切る
+        import threading as _threading
+        import time as _time
+        release = _threading.Event()
+
+        def slow(manager_name, message, max_tokens=None, timeout=None):
+            release.wait(5.0)
+            return "遅い答え"
+
+        manager.send_request_with_no_structure = slow
+        errors = []
+        started = _time.monotonic()
+        got = LLM.ask(ctx, "mod_q", [{"role": "user", "content": "x"}], timeout=0.2, errors=errors)
+        waited = _time.monotonic() - started
+        release.set()
+        check(got is None and waited < 2.0,
+              "送り口が timeout を守らなくても、timeout 秒で打ち切って None: {!r} {:.2f}s".format(got, waited))
+        check(errors and isinstance(errors[0], TimeoutError), "errors に TimeoutError を積む: {}".format(errors))
+        errors = []
+        manager.send_request_with_no_structure = angry
+        LLM.ask(ctx, "mod_q", [{"role": "user", "content": "x"}], timeout=1.0, errors=errors)
+        check(errors and isinstance(errors[0], RuntimeError), "送り口の例外は今までどおり errors へ: {}".format(errors))
     finally:
         sys.modules.pop(unknown, None)
         sys.modules.pop(LLM.MANAGER_MODULE, None)

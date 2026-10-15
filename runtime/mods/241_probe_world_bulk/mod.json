@@ -1,0 +1,16 @@
+{
+  "entry": "probe_world_bulk.py",
+  "api": 1,
+  "kind": "probe",
+  "name": {
+    "en": "Probe: how long each world bulk generation task takes",
+    "ja": "計測: 世界の一括生成の仕事ごとの時間"
+  },
+  "description": {
+    "en": "Records, for the world bulk generation (Worlds -> Generate all), how many tasks remain by kind (area, fixed quest, NPC details, shop goods, NPC images, backgrounds, monster images), how long each task takes and how that time splits into drawing images (GPU), CPU and waiting (mostly the LLM), whether tasks run one at a time, the time spent between tasks on re-planning and saving, and an estimate of the time left for the rest. Groundwork for speeding up the bulk generation. Read-only",
+    "ja": "世界の一括生成（世界→一括生成）で、残りの仕事の種類ごとの件数（エリア・固定の依頼・人物の詳細・店の品・人物の絵・背景・モンスターの絵）、仕事1件の時間と、そのうち絵を描いた時間（GPU）・CPU・待ち（主に LLM）、仕事が1件ずつ流れているか、仕事の間の並べ直しと保存の時間、残りを全部流すのに掛かる時間の見込みを録る。一括生成を速くする手立ての下調べ。読み取りだけでゲームは変えない"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "debug": true
+}

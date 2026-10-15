@@ -249,12 +249,29 @@ def _player_look(store, write, app, player):
         return None
     # 時間切れの例外は描き直しの仕事ごと終わらせる（Worker が記録し、on_done がボタンを戻す）。
     # 付けないと、1回返らないだけで描き直しの仕事が鍵を握ったまま残り、ゲームを閉じるまで押しても何も起きない。
-    _LOOK_CALL.active = True
-    try:
-        got = create(_text(player, "name"), _gender_of(player),
-                     _text(player, "profile"), desc)
-    finally:
-        _LOOK_CALL.active = False
+    # ゲームの送り口は `timeout` を受け取っても待ちを打ち切らない（VERIFICATION.md §3.101）ので、
+    # 外見の頼みは別のスレッドで呼び、ここで `LOOK_TIMEOUT` 秒だけ待つ。頼みは走り切り、答えは捨てる。
+    box = {}
+
+    def call():
+        _LOOK_CALL.active = True
+        try:
+            box["got"] = create(_text(player, "name"), _gender_of(player),
+                                _text(player, "profile"), desc)
+        except Exception as exc:
+            box["exc"] = exc
+        finally:
+            _LOOK_CALL.active = False
+
+    caller = threading.Thread(target=call, name="335_create_look", daemon=True)
+    caller.start()
+    caller.join(LOOK_TIMEOUT)
+    if caller.is_alive():
+        write("gave up: create_look did not return within {}s".format(LOOK_TIMEOUT))
+        raise TimeoutError("create_look did not return within {}s".format(LOOK_TIMEOUT))
+    if "exc" in box:
+        raise box["exc"]
+    got = box.get("got")
     words = _look_words(got)
     if not words:
         write("skipped: create_look returned {!r}".format(repr(got)[:200]))

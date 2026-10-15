@@ -130,6 +130,35 @@ check("英語が取れなければ None",
       mod._player_look(FakeStore(), write, None, dict(player, look_description="z")) is None)
 check("外見文が無ければ None",
       mod._player_look(FakeStore(), write, None, dict(player, look_description="")) is None)
+
+# ゲームの送り口は timeout で待ちを打ち切らない（main_026 の実測）。335 が自分で LOOK_TIMEOUT 秒で打ち切る
+import threading as _threading
+import time as _time
+_release = _threading.Event()
+_flags = []
+
+
+def _slow_look(*a):
+    _flags.append(getattr(mod._LOOK_CALL, "active", False))
+    _release.wait(5.0)
+    return ["late"]
+
+
+fake.create_look = _slow_look
+_saved_timeout, mod.LOOK_TIMEOUT = mod.LOOK_TIMEOUT, 0.2
+_started = _time.monotonic()
+try:
+    mod._player_look(FakeStore(), write, None, dict(player, look_description="slow"))
+    _raised = None
+except TimeoutError as exc:
+    _raised = exc
+_waited = _time.monotonic() - _started
+_release.set()
+mod.LOOK_TIMEOUT = _saved_timeout
+check("外見の頼みが返らなければ LOOK_TIMEOUT 秒で TimeoutError（仕事ごと終わらせる）",
+      _raised is not None and _waited < 2.0, (_raised, round(_waited, 2)))
+check("外見を作らせている印は、頼みを呼ぶスレッドに立つ", _flags == [True], _flags)
+
 del sys.modules[mod.CREATE_LOOK_MODULE]
 check("create_look が無ければ None",
       mod._player_look(FakeStore(), write, None, dict(player, look_description="w")) is None)

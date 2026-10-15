@@ -134,7 +134,8 @@
     "237_probe_affinity",
     "238_probe_prison",
     "239_probe_game_flags",
-    "240_probe_stamina"
+    "240_probe_stamina",
+    "241_probe_world_bulk"
   ],
   "disabled": []
 }

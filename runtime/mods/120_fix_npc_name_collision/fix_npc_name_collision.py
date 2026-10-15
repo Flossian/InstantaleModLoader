@@ -25,6 +25,8 @@ NPC の名前は LLM が生成する。
 | `__main__:World.generate_character` | 本命。`character_value` の `name` を `orig` の前に直す。ここで直せば `Character` は最初から新しい名前で生まれる |
 | `scripts.characters:Character.__init__` | 受け皿。`generate_character` を通らない経路があっても捕まえる |
 | `__main__:InstantaleApp.load_game_new` / `start_game` | 名簿を控え直す（世界が変わったら突き合わせ相手も変わる） |
+| `save_area_json:write_area_data_to_world_dict`（一括生成の間だけ） | 遊ぶ前に書かれた住人を、その世界の住人と突き合わせて直す（下の節） |
+| `__main__:InstantaleApp.run_world_bulk_generation` | 一括生成が走っている間の印 |
 
 `Character.__init__` は名前の唯一の入口（`110_` が確かめた）だが、
 そこだけでは足りない。
@@ -193,6 +195,20 @@ id が毎回同じ名前になる**。
 名簿が読めないとき・名簿が全部使われているときは、
 `110_` と同じ立場で記録だけして元の名前のまま通す。
 名前を発明する経路は持たない。
+
+## 一括生成で書かれる住人（版8）
+
+街の住人は、その街に初めて入ったときに `write_area_data_to_world_dict` が素データに書き、
+遊んでいる途中で `World.generate_character` が組み立てる（GAME.md §2.23）。ここで改名していた。
+一括生成（main_026。GAME.md §2.27）は同じ書き込みを遊ぶ前にまとめて走らせ、組み立ては起きない。
+次に読み込んだときには「既に世界に居る人」になるので、既定では直さず、重複がそのまま残っていた
+（VERIFICATION.md §3.101）。
+
+一括生成が走っている間（`run_world_bulk_generation` の中）の書き込みでは、書いた後の素データから
+新しく増えた住人を見つけ、その世界の住人（書く前から居た人と、先に裁いた新しい人）と突き合わせて直す。
+並べて走るので、突き合わせは1つずつ順に行う。
+遊んでいる間の書き込みは今までどおり `generate_character` で裁く（二重に裁かない）。
+主人公は一括生成の世界の素データに居ないので、突き合わせの相手に入らない。
 """
 
 import io
@@ -201,6 +217,7 @@ import os
 import random
 import re
 import sys
+import threading
 import unicodedata
 
 from instantale_modloader import frames, ui
@@ -668,9 +685,9 @@ def apply(ctx):
                 touched += 1
         return touched
 
-    def clash_with(key, cid):
-        """名簿の中で `key` と同じ人に見える相手。無ければ None。"""
-        for other_id, (other_key, other_name) in known.items():
+    def clash_with(key, cid, roster=None):
+        """名簿（既定は今の世界の控え `known`）の中で `key` と同じ人に見える相手。無ければ None。"""
+        for other_id, (other_key, other_name) in (known if roster is None else roster).items():
             if str(other_id) == str(cid):
                 continue
             if too_close(key, other_key):
@@ -680,7 +697,7 @@ def apply(ctx):
     def remember(cid, key, name):
         known[str(cid)] = (key, name)
 
-    def rename_to(name, cid, context):
+    def rename_to(name, cid, context, roster=None):
         """名簿から、まだ使われていない名前を選ぶ。選べなければ None。
 
         名簿は男女で分かれているので、片方が尽きたらもう片方も見る（尽きるほど NPC が居る世界で、
@@ -693,7 +710,7 @@ def apply(ctx):
             for candidate in candidates(names.get(pool_name) or []):
                 fresh = head + candidate
                 key = canonical(fresh)
-                if not key or clash_with(key, cid) is not None:
+                if not key or clash_with(key, cid, roster) is not None:
                     continue
                 return fresh
         return None
@@ -877,6 +894,69 @@ def apply(ctx):
 
     on_load("__main__:InstantaleApp.load_game_new", "load_game_new")
     on_load("__main__:InstantaleApp.start_game", "start_game")
+
+    # ------------------------------------- 一括生成で書かれる住人（版8。docstring の節）
+    bulk = {"depth": 0}
+    bulk_lock = threading.Lock()
+
+    @ctx.wrap("__main__:InstantaleApp.run_world_bulk_generation", required=False)
+    def run_world_bulk_generation(orig, self, *args, **kwargs):
+        bulk["depth"] += 1
+        try:
+            return orig(self, *args, **kwargs)
+        finally:
+            bulk["depth"] -= 1
+
+    def fix_written(npcs, before, area_id):
+        """`npcs` に新しく増えた住人を、その世界の住人と突き合わせて直す。直した数。"""
+        roster = {}
+        fresh_ids = [cid for cid in npcs if cid not in before]
+        for cid, entry in npcs.items():
+            if cid in fresh_ids or not isinstance(entry, dict):
+                continue
+            name = entry.get("name")
+            key = canonical(name) if isinstance(name, str) else ()
+            if key:
+                roster[str(cid)] = (key, name)
+        fixed = 0
+        for cid in sorted(fresh_ids, key=lambda value: (len(str(value)), str(value))):
+            entry = npcs.get(cid)
+            name = entry.get("name") if isinstance(entry, dict) else None
+            key = canonical(name) if isinstance(name, str) else ()
+            if not key:
+                continue
+            found = clash_with(key, cid, roster)
+            fresh = rename_to(name, cid, entry, roster) if (ALWAYS_RENAME or found is not None) else None
+            if fresh is None:
+                roster[str(cid)] = (key, name)
+                if found is not None:
+                    write("bulk area {}: id={!r} {!r} clashes with id={!r} {!r} -- left as it is "
+                          "(no free name in the roster)".format(area_id, cid, name, found[0], found[1]))
+                continue
+            entry["name"] = fresh
+            roster[str(cid)] = (canonical(fresh), fresh)
+            fixed += 1
+            write("bulk area {}: id={!r} {!r} -> {!r}  ({})".format(
+                area_id, cid, name, fresh,
+                "clashed with id={!r} {!r}".format(*found) if found is not None else "always renaming"))
+        return fixed
+
+    @ctx.wrap("save_area_json:write_area_data_to_world_dict", required=False)
+    def write_area_data_to_world_dict(orig, world_dict, *args, **kwargs):
+        if not bulk["depth"]:
+            return orig(world_dict, *args, **kwargs)
+        npcs = world_dict.get("npcs") if isinstance(world_dict, dict) else None
+        before = set(npcs) if isinstance(npcs, dict) else set()
+        result = orig(world_dict, *args, **kwargs)
+        try:
+            npcs = world_dict.get("npcs") if isinstance(world_dict, dict) else None
+            if isinstance(npcs, dict):
+                with bulk_lock:
+                    fix_written(npcs, before, frames.arg(args, kwargs, "area_id", 0))
+        except Exception:
+            # 名前のために一括生成を落とさない
+            ctx.log_exc("npc name: could not check the residents written by the bulk generation")
+        return result
 
     # 注入した時点で世界が動いていれば、そこから名簿を作る。
     loading["depth"] += 1

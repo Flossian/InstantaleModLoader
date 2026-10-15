@@ -687,5 +687,48 @@ check("ロード中の NPC を前の世界の名前との衝突で改名しな�
       and app.save_data_dict["npcs"]["40"]["name"] == "ヴァルガス",
       (app.world.characters["40"].name, app.save_data_dict["npcs"]["40"]))
 
+# ============================================================ 一括生成（版8）
+print("\n-- 一括生成で書かれる住人 --")
+mod, ctx, app = setup({"EPITHET_CHANCE": 0})
+write_hook = ctx.hooks.get("save_area_json:write_area_data_to_world_dict")
+bulk_hook = ctx.hooks.get("__main__:InstantaleApp.run_world_bulk_generation")
+check("書き込みと一括生成の本体を包む", write_hook is not None and bulk_hook is not None)
+
+bulk_world = {"world_data": {"name": "一括の世界"},
+              "npcs": {"4": {"name": "セリム・オーウェン", "id": "4", "category": "young man"}}}
+
+
+def write_area(world_dict, area_id):
+    """ゲームが街を作るときと同じく、素データの npcs に住人を足す。"""
+    added = {"12": [("11", "セリム", "young man"), ("13", "ガルド", "old man"), ("14", "ミラ", "young woman")],
+             "13": [("31", "ガルド・ソレイル", "middle-aged man")]}[area_id]
+    for cid, name, category in added:
+        world_dict["npcs"][cid] = {"name": name, "id": cid, "category": category}
+    return None
+
+
+def run_bulk(self, *args, **kwargs):
+    write_hook(write_area, bulk_world, "12")
+    write_hook(write_area, bulk_world, "13")
+
+
+bulk_hook(run_bulk, app, "path", None, None)
+names = {cid: entry["name"] for cid, entry in bulk_world["npcs"].items()}
+check("先に居た住人と重複する新しい住人を名簿の名前に直す",
+      names["11"] != "セリム" and names["11"] in ROSTER_NAMES, names)
+check("重複しない新しい住人と、先に居た住人はそのまま",
+      names["4"] == "セリム・オーウェン" and names["13"] == "ガルド" and names["14"] == "ミラ", names)
+check("別の街の書き込みでも、先に書いた街の住人と突き合わせる",
+      names["31"] != "ガルド・ソレイル" and names["31"] in ROSTER_NAMES, names)
+check("直した名前どうしも重ならない", len(set(names.values())) == len(names), names)
+check("素データの項目の並びは動かない",
+      list(bulk_world["npcs"]["11"]) == ["name", "id", "category"], list(bulk_world["npcs"]["11"]))
+
+# 遊んでいる間の書き込みは、今までどおり人物を組み立てるところで裁く（ここでは触らない）
+live_world = {"npcs": {"4": {"name": "セリム・オーウェン", "id": "4"}}}
+write_hook(write_area, live_world, "12")
+check("一括生成の外の書き込みは触らない", live_world["npcs"]["11"]["name"] == "セリム",
+      live_world["npcs"]["11"])
+
 print("\n{} check(s) failed".format(len(failures)) if failures else "\nall ok")
 sys.exit(1 if failures else 0)

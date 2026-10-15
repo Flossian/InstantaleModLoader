@@ -1800,6 +1800,10 @@ alias_scan が同じ関数を持つ全モジュールを張り替え、どのプ
   ボタンは同じ文章を送り直すので、直らない誤りでは同じ所で止まる
 - `should_give_up` は 4xx でも偽を返す（404 の `model: ...` を32回まで送り直す作り）。
   ローダの `stalls` が 4xx を3回目で打ち切り、待ちを起こして行動を中断させる（TECH.md §5.12）
+- 送り口の `timeout` は待ちを打ち切らない。
+  2026-10-15（main_026）に、長い返事になる頼みを `timeout=0.5` で送ると、クラウド（Haiku 5.5）は 7.86 秒、ローカル（llama.cpp）は 5.83 秒後に返事を最後まで返した。
+  クラウドで送ったのは1回で、時間切れの送り直しも無かった。
+  待ちを打ち切りたい側は、送り口を別のスレッドで呼んで自分で待つ（ローダの `llm.ask`、`335_`。TECH.md §5.3）
 
 #### クエスト1件に関わるマネージャ
 
@@ -2467,7 +2471,9 @@ npcs[id].config.companion_quest_growth = {xp, base, days, stage}
 - 30日送ると `release_companion_growth(30)` が `xp 12.58`（75.5 × 30/180）と `base 0.07` を入れ、
   経験値が 0 → 12.58、保留は `xp 62.9`・`days 150` に減った
 - `member_ids` には `'player'` も入るが、戻り値に並ぶのは仲間の分だけだった
-- `base` と `stat_budget` が何に効くか（能力値か）は測っていない
+- `base` は6つの能力値すべてに同じだけ足される。上の依頼の後に180日送ると、ヴァルトの6つの能力値がどれも +0.423（筋力 10 → 10.42 など。小数のまま持つ）、経験値が +75.5 になった（2026-10-15、クラウド）
+- `stat_budget`（2.2）は、6つに配った量の合計（2.54）とも合わず、何を表すかは分かっていない
+- Lv72 の仲間2人（テストワールド、難易度の釣り合う依頼）では、`xp` も `base` も 0 で `stage` が 13 だった。レベルが高いと入らない
 
 #### 訓練・休暇のマネージャ（すべて `__main__`）
 
@@ -3477,8 +3483,17 @@ scripts.hud.hud_world_generate:WorldGenerateScreen.__init__(
 ```text
 題の画面「世界」→「一括生成」 → InstantaleApp.show_world_bulk_screen
 InstantaleApp.run_world_bulk_generation(world_path, stop_event, progress)
-scripts.llm.batch_worker（RequestWorker / batch_requests）
+  scripts.world_bulk_generation:BulkGenerator.run → _run
+    plan_tasks(world, root)                       仕事の並び
+    GameGenerationBackend.generate(task, world)   仕事1件（scripts.world_bulk_backend）
+    atomic_world_write(path, world)               仕事ごとに世界を書く
+  scripts.hud.hud_world_bulk:WorldBulkScreen.update_progress(state)   画面の「完了／残り／失敗」
+scripts.llm.batch_worker（RequestWorker / batch_requests）   送信の失敗を呼んだ側へ投げる
 ```
+
+`scripts.world_bulk_*` は「開始／再開」を押した後に読み込まれる。
+ローダはそれを待って MOD を当て直すが、そのとき `BulkGenerator.run` はもう走っている。
+実行の始まりと終わりを包むなら、起動時から在る `run_world_bulk_generation` を選ぶこと（`241_` がそうしている）。
 
 画面の説明は「既存の世界の存在しない部分を一括で生成します」。
 世界を選んで「開始／再開」を押すと、遊ぶ前にまだ作っていない部分（集落の詳細・集落の依頼・人物の詳細など）の頼みを流し、作ったものを世界に書く。
@@ -3493,7 +3508,35 @@ scripts.llm.batch_worker（RequestWorker / batch_requests）
 - 画面にはエリアの名前と「完了 N 件 ／ 残り N 件 ／ 失敗 N 件」が出る。2回目の回は残りが 374 から 420 に増えた（集落の詳細を作ると、その中の人物や依頼が残りに足されるとみられる）
 - 「中断する」で止まり、「中断しました。次回は残りから再開できます。」と出る
 - 2回目の回は約6分で6件しか進まなかった。全部流すと数時間と相応の推論費用がかかる見込み
+- 住人は街を作るのと同じ `save_area_json:write_area_data_to_world_dict` で素データへ書かれるが、遊ぶ前なので人物の組み立て（`World.generate_character`）は起きない。組み立てで名前の重複を直していた `120_` は、版8から一括生成の間の書き込みも裁く（作られた39人に重複2組が残っていた。VERIFICATION.md §3.101）
 - 頼みは遊んでいるときと同じ部品の送り口を通り、MOD の書き換えが届いた（`144_` の役の一文・`132_` の住人の外見の種・`111_` の規則。VERIFICATION.md §3.100）
+
+##### 仕事の種類と時間（`241_probe_world_bulk`）
+
+仕事は1件ずつ順に流れる。
+`world_bulk_generation` の定数にあるスレッドの部品は `Event` と `Lock` だけで、実機でも同時に走った仕事は最大1件だった。
+`batch_worker` は並列化の部品ではない。
+説明文は「Propagate provider worker errors to non-interactive generation jobs」で、遊んでいるときの再試行ボタンの代わりに、失敗を一括生成へ投げる。
+
+2026-10-15 夜に、検証ワールド3 の残りを最後まで流した。
+LLM はローカル（Fenrir-X-26B-A4B、llama-server の `--parallel 1`）、絵は手元の sdcpp_cuda で、`916_stable_diffusion` の解像度とサンプラーの上書きが効いている。
+21:11〜22:40 の 89 分で 632 件。失敗は0件。
+
+| 仕事 | 件数 | 1件 | うち絵（GPU） | 絵の枚数 | 1件で何が起きるか |
+| --- | --- | --- | --- | --- | --- |
+| `area` | 2 | 44秒 | 0 | 0 | 集落の詳細と依頼。1件で残りが約60件増える（背景・モンスター・人物・店） |
+| `story` | 5 | 15秒 | 0 | 0 | 固定の依頼。1件で背景5件・モンスター4〜6件増える |
+| `npc` | 71 | 1.5秒 | 0 | 0 | 人物の詳細 |
+| `shop` | 60 | 3.1秒 | 0 | 0 | 店の品。1軒を `(1/3)`〜`(3/3)` の3件に分ける |
+| `portrait` | 71 | 12.0秒 | 9.0秒 | 2枚（素描 1.9秒・仕上げ 7.7秒） | 人物の立ち絵。5件は絵を描かずに済んだ |
+| `background` | 316 | 7.2秒 | 6.3秒 | 1枚 | 背景 |
+| `monster` | 107 | 14.3秒 | 10.3秒 | 1枚 | モンスターの絵 |
+
+- 合計 5346 秒のうち、仕事の中が 5107 秒。絵が 3746 秒（73%）、絵の外（主に LLM の待ち）が 1361 秒
+- 仕事の間は 239 秒（4%）。並べ直しが 632 回で 141 秒（世界が育つほど1回が重くなる）、保存が 24 秒
+- 並びは 21:09 の回（エリア1件で中断）の始めに 410 件。エリアと固定の依頼を作るたびに増え、最大 638 件になった
+- `plan_tasks` の並びは残りではない。モンスターは描き終えても並びに残り（107件描いた後も 111件）、本体がその後で外す。終わった世界で「開始／再開」を押すと 0.9 秒で「完了0／残り0」になり、描き直さない
+- クラウドの回（11:48、Haiku 5.5）はエリア1件が 46〜52秒で、ローカルと同じくらいだった
 
 ### 2.28 素データの辞書は2つあり、遊んでいる最中の追加は片方に届かない
 

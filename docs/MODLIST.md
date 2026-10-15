@@ -8,7 +8,7 @@
 手で書き換えても次の生成で消える。
 直す先は各 MOD の `mod.json` か MODS.md の見出し。
 
-同梱 135 本（基盤 2 / 修正 47 / 追加 45 / 計測 41）。
+同梱 136 本（基盤 2 / 修正 47 / 追加 45 / 計測 42）。
 うち 13 本は外部の MOD 作者からの提供（下の「提供を受けた MOD」）。
 ほかに 3 本は自作だが、外部からの提案を取り込んでいる（下の「提案を取り込んだ MOD」）。
 
@@ -147,7 +147,7 @@
 
 ---
 
-## 計測（41本）
+## 計測（42本）
 
 ゲームは変えない。`out\` にログを残すだけ。デバッグモードのときだけ読み込まれる。
 
@@ -194,6 +194,7 @@
 | `238_probe_prison` | 逮捕・裁判・服役・釈放の流れを録る |
 | `239_probe_game_flags` | ゲームの「〜の最中」の旗 7 つ（`in_battle` / `in_boss_battle` / `in_colosseum_battle` / `in_conversation` / `in_free_input` / `in_action_in_conversation` / `in_shopping`）を録る |
 | `240_probe_stamina` | 主人公と同行者のスタミナ（`physical_integrity` / `max_physical_integrity`）と疲労の旗（`exhausted`）が変わるたびに、呼び出し元の連鎖と、依頼や戦闘の最中かを録る |
+| `241_probe_world_bulk` | 世界の一括生成（main_026 から、世界→一括生成）で、残りの仕事の種類ごとの件数、仕事1件の時間と、そのうち絵を描いた時間（GPU）・CPU・待ち（主に LLM）を録る |
 
 ---
 
