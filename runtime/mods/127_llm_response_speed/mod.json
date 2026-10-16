@@ -8,7 +8,7 @@
   },
   "description": {
     "en": "Starts llama-server with one dedicated slot instead of four shared ones. Same window, less KV memory, faster responses. Also uses MTP automatically when the model has MTP layers or a matching drafter sits in the model folder's mtp\\. Can also widen the window",
-    "ja": "llama-server を共有4スロットではなく専用1スロットで起こす。1リクエストが使える窓（トークン数）は同じまま KV が減って応答が速くなる。モデルに MTP の層があるか、モデルのフォルダの mtp\\ に合う下書き役があれば、MTP を自動で使う。窓を広げることもできる"
+    "ja": "llama-server を共有4スロットではなく専用1スロットで起こす。1リクエストが使える窓（トークン数）は同じまま KV が減って応答が速くなる。MTP 内蔵のモデルか、モデルのフォルダの mtp\\ に合う MTP 用の .gguf があれば、MTP を自動で使う。窓を広げることもできる"
   },
   "version": "5",
   "author": "R01/Flossian",
@@ -49,7 +49,7 @@
         "en": "Use MTP automatically"
       },
       "note": {
-        "ja": "モデルに MTP の層があればそれを使う（Qwen3.8-27B など。生成が約1.7倍、VRAM を約1.1GB余分に使う）。無ければ、モデルのフォルダの mtp\\ に合う下書き役（mtp-*.gguf）を渡す（Gemma 4 26B A4B 系。生成が約1.5倍、VRAM を約300MB余分に使う）。数字はどちらも実測。起きなかったときは MTP を外して起こし直す",
+        "ja": "MTP 内蔵のモデルならそれを使う（Qwen3.8-27B など。生成が約1.7倍、VRAM を約1.1GB余分に使う）。内蔵でなければ、モデルのフォルダの mtp\\ に置いた MTP 用の .gguf のうち合うものを使う（Gemma 4 26B A4B 系。生成が約1.5倍、VRAM を約300MB余分に使う）。数字はどちらも実測。起きなかったときは MTP を外して起こし直す",
         "en": "Uses the model's own MTP layers when it has them (e.g. Qwen3.8-27B: about 1.7x generation speed, about 1.1GB more VRAM). Otherwise hands llama-server a matching drafter (mtp-*.gguf) from the model folder's mtp\\ (Gemma 4 26B A4B models: about 1.5x, about 300MB more VRAM). Both measured. Falls back without MTP if the server fails to start"
       }
     },
@@ -59,11 +59,11 @@
       "min": 1,
       "max": 8,
       "label": {
-        "ja": "MTP で一度に下書きするトークン",
+        "ja": "MTP で一度に予測するトークン",
         "en": "MTP draft tokens per step"
       },
       "note": {
-        "ja": "4 が既定（下書き役の配布元の推奨）",
+        "ja": "4 が既定（MTP 用の .gguf の配布元の推奨）",
         "en": "4 by default (the drafter's recommended value)"
       }
     },
@@ -75,7 +75,7 @@
         "en": "Stack ngram-mod on MTP"
       },
       "note": {
-        "ja": "MTP を使うときに、プロンプトや書いた分の繰り返しを写す下書き（ngram-mod）も重ねる。戦闘の文の生成が MTP だけよりさらに約5%速い（実測）。VRAM は増えない。MTP を使わないときは何もしない",
+        "ja": "MTP を使うときに、ngram-mod も一緒に使う（プロンプトやそれまでに書いた文に出てきた言い回しを手掛かりに、続きを予測する仕組み）。戦闘の文の生成が MTP だけよりさらに約5%速い（実測）。VRAM は増えない。MTP を使わないときは何もしない",
         "en": "When MTP is in use, also draft by copying repeats from the prompt and the text so far (ngram-mod). About 5% faster battle text generation than MTP alone (measured). No extra VRAM. Does nothing when MTP is not in use"
       }
     },

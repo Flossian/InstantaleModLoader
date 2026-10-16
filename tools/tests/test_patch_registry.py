@@ -549,24 +549,28 @@ def main():
                       timeout=1.0) is None,
               "プロバイダが落ちても例外を通さない（None に倒す）")
 
-        # ゲームの送り口は timeout で待ちを打ち切らない（main_026 の実測）。ask が自分で打ち切る
-        import threading as _threading
+        # ゲームの送り口は timeout で待ちを打ち切らない（main_026 の実測）。ask も打ち切らず、過ぎたらログに出す
+        # （遅い環境で MOD の働きが毎回消えないように。VERIFICATION.md §3.101）
         import time as _time
-        release = _threading.Event()
 
         def slow(manager_name, message, max_tokens=None, timeout=None):
-            release.wait(5.0)
+            _time.sleep(0.6)
             return "遅い答え"
 
         manager.send_request_with_no_structure = slow
         errors = []
-        started = _time.monotonic()
-        got = LLM.ask(ctx, "mod_q", [{"role": "user", "content": "x"}], timeout=0.2, errors=errors)
-        waited = _time.monotonic() - started
-        release.set()
-        check(got is None and waited < 2.0,
-              "送り口が timeout を守らなくても、timeout 秒で打ち切って None: {!r} {:.2f}s".format(got, waited))
-        check(errors and isinstance(errors[0], TimeoutError), "errors に TimeoutError を積む: {}".format(errors))
+        logged = []
+        real_log = ctx.log
+        ctx.log = lambda msg, level="INFO": logged.append((level, msg))
+        try:
+            got = LLM.ask(ctx, "mod_q", [{"role": "user", "content": "x"}], timeout=0.2, errors=errors)
+        finally:
+            ctx.log = real_log
+        check(got == "遅い答え" and not errors,
+              "timeout 秒を過ぎても打ち切らず、返事を受け取る: {!r} {}".format(got, errors))
+        warns = [msg for level, msg in logged if level == "WARN"]
+        check(len(warns) == 2 and "still waiting" in warns[0] and "returned after" in warns[1],
+              "過ぎたときと返ったときに WARN を出す: {}".format(warns))
         errors = []
         manager.send_request_with_no_structure = angry
         LLM.ask(ctx, "mod_q", [{"role": "user", "content": "x"}], timeout=1.0, errors=errors)

@@ -131,32 +131,27 @@ check("英語が取れなければ None",
 check("外見文が無ければ None",
       mod._player_look(FakeStore(), write, None, dict(player, look_description="")) is None)
 
-# ゲームの送り口は timeout で待ちを打ち切らない（main_026 の実測）。335 が自分で LOOK_TIMEOUT 秒で打ち切る
-import threading as _threading
+# ゲームの送り口は timeout で待ちを打ち切らない（main_026 の実測）。335 も打ち切らず、LOOK_TIMEOUT 秒を過ぎたらログに出す
 import time as _time
-_release = _threading.Event()
 _flags = []
 
 
 def _slow_look(*a):
     _flags.append(getattr(mod._LOOK_CALL, "active", False))
-    _release.wait(5.0)
+    _time.sleep(0.6)
     return ["late"]
 
 
 fake.create_look = _slow_look
 _saved_timeout, mod.LOOK_TIMEOUT = mod.LOOK_TIMEOUT, 0.2
-_started = _time.monotonic()
+del logs[:]
 try:
-    mod._player_look(FakeStore(), write, None, dict(player, look_description="slow"))
-    _raised = None
-except TimeoutError as exc:
-    _raised = exc
-_waited = _time.monotonic() - _started
-_release.set()
-mod.LOOK_TIMEOUT = _saved_timeout
-check("外見の頼みが返らなければ LOOK_TIMEOUT 秒で TimeoutError（仕事ごと終わらせる）",
-      _raised is not None and _waited < 2.0, (_raised, round(_waited, 2)))
+    _got = mod._player_look(FakeStore(), write, None, dict(player, look_description="slow"))
+finally:
+    mod.LOOK_TIMEOUT = _saved_timeout
+check("外見の頼みが LOOK_TIMEOUT 秒を過ぎても打ち切らず、返った外見を使う", _got == ["late"], _got)
+check("  過ぎたときと返ったときにログに出す",
+      any(line.startswith("slow:") for line in logs) and any("returned after" in line for line in logs), logs)
 check("外見を作らせている印は、頼みを呼ぶスレッドに立つ", _flags == [True], _flags)
 
 del sys.modules[mod.CREATE_LOOK_MODULE]

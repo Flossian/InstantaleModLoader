@@ -24,7 +24,7 @@ SEND_TARGET = "scripts.llm.llm_manager:send_request"
 # `create_look` は `llm_manager_character_create` の送り口から送る。main_026 から部品ごとに別の関数になり、
 # `llm_manager` だけを包む形では届かなくなった（VERIFICATION.md §3.100）。同じ関数なら二重には包まない（llm.watch_aliases）。
 SEND_TARGETS = (SEND_TARGET, CREATE_LOOK_MODULE + ":send_request")
-#: 外見を作らせる1回の待ちの上限（秒）。返らなければ描き直しを取りやめ、ボタンを戻す。
+#: 外見を作らせる1回の待ちの目安（秒）。過ぎたらログに出し、返事が来るまで待つ（打ち切らない。遅い環境で毎回取りやめないため）。
 LOOK_TIMEOUT = 120.0
 # いま外見を作らせているスレッドの印（`_player_look` が立て、送り口の包みが読む）。
 _LOOK_CALL = threading.local()
@@ -247,10 +247,8 @@ def _player_look(store, write, app, player):
     if not callable(create):
         write("skipped: create_look unavailable")
         return None
-    # 時間切れの例外は描き直しの仕事ごと終わらせる（Worker が記録し、on_done がボタンを戻す）。
-    # 付けないと、1回返らないだけで描き直しの仕事が鍵を握ったまま残り、ゲームを閉じるまで押しても何も起きない。
-    # ゲームの送り口は `timeout` を受け取っても待ちを打ち切らない（VERIFICATION.md §3.101）ので、
-    # 外見の頼みは別のスレッドで呼び、ここで `LOOK_TIMEOUT` 秒だけ待つ。頼みは走り切り、答えは捨てる。
+    # ゲームの送り口は `timeout` を受け取っても待ちを打ち切らない（VERIFICATION.md §3.101）。
+    # ここでも打ち切らず、`LOOK_TIMEOUT` 秒を過ぎたらログに出して待ち続ける（ローダの `llm.ask` と同じ）。
     box = {}
 
     def call():
@@ -265,10 +263,12 @@ def _player_look(store, write, app, player):
 
     caller = threading.Thread(target=call, name="335_create_look", daemon=True)
     caller.start()
+    started = time.monotonic()
     caller.join(LOOK_TIMEOUT)
     if caller.is_alive():
-        write("gave up: create_look did not return within {}s".format(LOOK_TIMEOUT))
-        raise TimeoutError("create_look did not return within {}s".format(LOOK_TIMEOUT))
+        write("slow: create_look has not returned after {}s; still waiting".format(LOOK_TIMEOUT))
+        caller.join()
+        write("create_look returned after {:.1f}s".format(time.monotonic() - started))
     if "exc" in box:
         raise box["exc"]
     got = box.get("got")
