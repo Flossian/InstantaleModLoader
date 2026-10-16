@@ -2355,6 +2355,11 @@ journey_path = ctx.state_path("road_travel.json")  # 続きに要るデータ
 `ctx.read_json()` は前者だけを黙って `default` に倒し、後者は記録してから倒す
 （**倒した先が読めることより、消えたことが後から追えることが要点**）。
 
+BOM 付きの UTF-8 も読む（`utf-8-sig`）。
+控えと設定は手で直せるので、エディタが BOM を付けて保存すると読めず、`default` から作り直して上書きしていた（`339_` の台帳。10-16）。
+書くほうは BOM を付けない。
+設定の `mod_settings.json`・`loader.json`、設定画面の `modtool.read_json`、GUI の `config.json`・`load_order.json` の読み込みも同じ。
+
 やっているのは3つ。
 隣に書くたび別の名前の一時ファイル（`名前.<印>.tmp`）を書く → `flush` + `fsync` でディスクまで落とす → `os.replace` で差し替える。
 一時ファイルの名前を固定すると、同じ path へ2本が同時に書いたときに片方の書きかけが正本に入る。

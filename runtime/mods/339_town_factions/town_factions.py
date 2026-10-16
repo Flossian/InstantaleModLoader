@@ -386,6 +386,12 @@ def apply(ctx):
                     write("rewind: {} forgot what happened after day {} (older save)".format(key, day))
                 if rewound:
                     worlds.save(key)
+            if status == rules.READY:
+                # 手で直した台帳の書き漏らし（組・見られ方）を埋める（rules.repair）
+                fixed = rules.repair(bucket)
+                if fixed:
+                    worlds.save(key)
+                    write("repair: {} {}".format(key, "; ".join(fixed)))
         if status == rules.READY:
             queue_people(app, key, bucket)
             return bucket
@@ -447,6 +453,10 @@ def apply(ctx):
                 write("trend: day {} nothing happened ({!r})".format(day, answer))
                 return
             plan = rules.plan_trend(ledger, a, b, direction)
+            if plan is None:
+                worlds.save(key)
+                write("trend: day {} no relation between {} and {}".format(day, a, b))
+                return
             rules.apply_trend(ledger, a, b, plan, day=day)
             rumor = str(answer.get("rumor") or "").strip()[:200]
             rules.add_event(ledger, {"day": day, "a": a, "b": b, "direction": direction,
@@ -595,6 +605,8 @@ def apply(ctx):
         if not faction_id or role not in rules.JUDGING_ROLES                 or not talk_summary.player_engaged(talk["messages"]):
             return None
         faction = rules.faction_by_id(ledger, faction_id)
+        if faction is None:
+            return None
         talk["faction"] = faction_id
         text = TALK_INSTRUCTION.format(
             name=talk["name"], player=talk["player"], faction=faction["name"],

@@ -291,7 +291,7 @@ def load_store(runtime_dir: str) -> dict:
     """`mod_settings.json` を `{mod フォルダ名: {設定名: 値}}` として返す。"""
     path = store_path(runtime_dir)
     try:
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, "r", encoding="utf-8-sig") as fh:     # 手で直して BOM が付いても読む
             data = json.load(fh)
     except FileNotFoundError:
         return {}
@@ -314,7 +314,7 @@ def load_store_for_write(runtime_dir: str) -> dict:
     """
     path = store_path(runtime_dir)
     try:
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, "r", encoding="utf-8-sig") as fh:     # 手で直して BOM が付いても読む
             data = json.load(fh)
     except FileNotFoundError:
         return {}
@@ -337,7 +337,7 @@ def load_flags(runtime_dir: str) -> dict:
     """
     path = flags_path(runtime_dir)
     try:
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, "r", encoding="utf-8-sig") as fh:     # 手で直して BOM が付いても読む
             data = json.load(fh)
     except FileNotFoundError:
         return {}

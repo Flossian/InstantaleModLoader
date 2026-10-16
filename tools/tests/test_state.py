@@ -17,6 +17,7 @@
 以前は MOD ごとに写していて、実際に `312_` がずれた。
 """
 
+import codecs
 import json
 import os
 import shutil
@@ -489,6 +490,30 @@ def test_world_key_of_dict():
           "app 経由と辞書経由で同じ鍵が出る")
 
 
+def test_read_json_with_bom():
+    print("=== 手で直した控え（BOM 付きの UTF-8） ===")
+    sandbox = tempfile.mkdtemp(prefix="instantale_state_")
+    try:
+        ctx = ml.ModContext(os.path.join(sandbox, "out"),
+                            os.path.join(_ROOT, "runtime"),
+                            os.path.join(sandbox, "state"))
+        bom = codecs.BOM_UTF8
+        target = ctx.state_path("bom.json")
+        with open(target, "wb") as fh:
+            fh.write(bom + json.dumps({"name": "勢力"}, ensure_ascii=False).encode("utf-8"))
+        # エディタが BOM を付けて保存すると読めず、default から作り直して上書きしていた
+        check(ctx.read_json(target, None) == {"name": "勢力"}, "BOM 付きでも読める")
+        store = st.WorldStore(ctx, "bomstore")
+        with open(store.path("灰の街"), "wb") as fh:
+            fh.write(bom + b'{"a": 1}')
+        check(store.load("灰の街") == {"a": 1}, "世界ごとの控えも BOM 付きで読める")
+        ctx.write_json(target, {"name": "勢力"})
+        with open(target, "rb") as fh:
+            check(not fh.read().startswith(bom), "書くときは BOM を付けない")
+    finally:
+        shutil.rmtree(sandbox, ignore_errors=True)
+
+
 def main():
     test_world_key()
     test_playthrough_key()
@@ -497,6 +522,7 @@ def main():
     test_world_filename_is_injective()
     test_plain_names_keep_their_file()
     test_safe_writes()
+    test_read_json_with_bom()
     test_store_survives_reload()
     test_adopt_world_file()
     print()

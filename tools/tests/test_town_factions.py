@@ -258,6 +258,35 @@ check("知らない組", rules.plan_trend(loose, "f1", "f9", 1) is None)
 check("間隔", rules.trend_due(100, 130, 30) and not rules.trend_due(100, 129, 30)
       and not rules.trend_due(None, 500, 30) and not rules.trend_due(100, 500, 0))
 
+print("[規則] 手で直した台帳")
+hand = rules.empty_ledger()
+hand.update(status=rules.READY, made_day=5, factions=[
+    {"id": "f1", "name": "魔王の軍勢"}, {"id": "f2", "name": "ルミナ王国"}, {"id": "f3", "name": "黄昏の商会"},
+    {"id": "f3", "name": "二つ目の f3"}, {"id": "", "name": "id の無い勢力"}],
+    standing={"f1": {"score": "-40"}, "f2": {"score": 150}},
+    relations={"f2|f1": {"stage": -2, "push": 0, "from_setting": True}, "f1|f9": {"stage": 1}},
+    towns={"1": {"faction": "f2"}, "2": {"faction": "f9"}},
+    people={"30": {"town": "1", "faction": "f9", "role": "other"}, "31": {"town": "1", "faction": "f2", "role": "member"}})
+fixed = rules.repair(hand)
+check("同じ id・id の無い勢力を外す", [f["name"] for f in hand["factions"]] == ["魔王の軍勢", "ルミナ王国", "黄昏の商会"],
+      hand["factions"])
+check("見られ方の無い勢力は中立で足し、点数は範囲の整数に均す",
+      hand["standing"]["f3"]["score"] == 0 and hand["standing"]["f1"]["score"] == -40
+      and hand["standing"]["f2"]["score"] == 100, hand["standing"])
+check("全部の組を揃える（並びを直し、無い組は中立、知らない勢力の組は外す）",
+      sorted(hand["relations"]) == ["f1|f2", "f1|f3", "f2|f3"] and hand["relations"]["f1|f2"]["stage"] == -2
+      and hand["relations"]["f1|f2"]["from_setting"] is True
+      and hand["relations"]["f1|f3"] == {"stage": 0, "push": 0, "from_setting": False, "evidence": "",
+                                         "updated_day": 5}, hand["relations"])
+check("知らない勢力を指す街と住人を外す", hand["towns"] == {"1": {"faction": "f2"}}
+      and list(hand["people"]) == ["31"], (hand["towns"], hand["people"]))
+check("直したことを並べる", len(fixed) >= 8 and any("f1|f9" in line for line in fixed), fixed)
+plan = rules.plan_trend(hand, "f3", "f1", -1)
+rules.apply_trend(hand, "f3", "f1", plan, day=40)
+check("足した組で情勢が動く", hand["relations"]["f1|f3"]["stage"] == -1, hand["relations"]["f1|f3"])
+check("揃った台帳は直さない", rules.repair(hand) == [])
+check("作る前の台帳には触らない", rules.repair(rules.empty_ledger()) == [])
+
 # ================================================================ 材料
 print("[材料]")
 SAVE = {
@@ -861,6 +890,38 @@ check("組み直しで台帳を作る", ledger_of(app)["status"] == rules.READY
       and [m for m, _ in ASKED] == [module.MANAGER_EXTRACT, module.MANAGER_STANDING])
 provider["refresh"](app, [])
 check("同じ周回では二度確かめない", len(ASKED) == 2)
+
+print("[流れ] 手で直した台帳")
+# ゲームを閉じて台帳を手で直し、BOM 付きで保存した形。組の書き漏らしは情勢で落ちていた
+store = module._store()["worlds"]
+key = store.playthrough(app)
+book = json.loads(json.dumps(ledger_of(app)))
+book["factions"].append({"id": "f3", "name": "黒鉄の商会", "kind": "商人の組合", "note": "", "evidence": "",
+                         "source": "manual"})
+book["relations"] = {"f3|f1": {"stage": -2, "push": 0, "from_setting": True, "evidence": "", "updated_day": 0}}
+book["towns"]["9"] = {"faction": "f9", "evidence": ""}
+with io.open(store.path(key), "wb") as fh:
+    fh.write(b"\xef\xbb\xbf" + json.dumps(book, ensure_ascii=False, indent=1).encode("utf-8"))
+with store.lock:
+    store._buckets.pop(key, None)          # 起動し直した形（読んだ控えを持っていない）
+del ASKED[:]
+notes_fn()({"app": app, "npc_id": "30"})
+book = ledger_of(app)
+check("BOM 付きでも作り直さない", book["status"] == rules.READY
+      and module.MANAGER_EXTRACT not in [m for m, _ in ASKED]
+      and [f["id"] for f in book["factions"]] == ["f1", "f2", "f3"], ([m for m, _ in ASKED], book["factions"]))
+check("読み込みで組と見られ方を埋めて書き戻す", sorted(book["relations"]) == ["f1|f2", "f1|f3", "f2|f3"]
+      and book["relations"]["f1|f3"]["stage"] == -2 and book["standing"]["f3"]["score"] == 0
+      and "9" not in book["towns"], (book["relations"], book["standing"], book["towns"]))
+with io.open(store.path(key), encoding="utf-8") as fh:
+    check("書き戻したファイルは BOM なしで揃っている", sorted(json.load(fh)["relations"]) == ["f1|f2", "f1|f3", "f2|f3"])
+ANSWERS[module.MANAGER_TREND] = {"happened": "true", "a": "黒鉄の商会", "b": "灰の結社", "direction": "-1",
+                                 "rumor": "黒鉄の商会が灰の結社との取引を絞ったらしい", "reason": "x"}
+ctx.hook(module.DAYS_TARGET)(lambda self, d: self.elapse_days(d), app, 40)
+book = ledger_of(app)
+check("足した勢力の組でも情勢が進む", book["events"] and book["events"][-1]["a"] in ("f2", "f3")
+      and book["relations"]["f2|f3"]["stage"] == -1, (book["events"], book["relations"]))
+check("例外が無い（手で直した台帳）", not ctx.errors, ctx.errors)
 
 print("[世界を作るとき]")
 WORLD_PROMPT = "面白そうな世界の概要を生成してください。\n【構造のルール】\n- 3層\n\n【注意】\n- 命名において…"

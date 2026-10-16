@@ -273,9 +273,13 @@ def read_json(path: str, default=None, *, report=None):
     mod を止めるほうが損害が大きい。
     `load_order.json` が壊れていても必ず動かすのと同じ判断）。
     変わるのは**消えたことが後から分かる**ことだけ。
+
+    BOM 付きの UTF-8 も読む（`utf-8-sig`）。控えと設定は手で直せるので、
+    エディタが BOM を付けて保存すると読めず、`default` から作り直されて上書きされていた。
+    書くほうは BOM を付けない（`write_json`）。
     """
     try:
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, "r", encoding="utf-8-sig") as fh:
             return json.load(fh)
     except FileNotFoundError:
         return default

@@ -385,7 +385,7 @@ UPDATE_ORDER_NAME = "update_order.json"
 def _read_order(path: str):
     """順序ファイルを `{"order", "disabled"}` で読む。無い・読めなければ None。"""
     try:
-        with open(path, encoding="utf-8") as fh:
+        with open(path, encoding="utf-8-sig") as fh:         # 手で直して BOM が付いても読む
             data = json.load(fh)
     except (OSError, ValueError):
         return None
@@ -802,7 +802,7 @@ def check_images(master: tk.Misc) -> tuple[tk.PhotoImage, tk.PhotoImage]:
 
 def _read_json(path: str):
     try:
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, "r", encoding="utf-8-sig") as fh:    # 手で直して BOM が付いても読む
             return json.load(fh)
     except Exception:
         return None

@@ -377,6 +377,101 @@ def build_designed_ledger(designed, town_ids, *, day=None, peaceful=False):
     return ledger
 
 
+# ============================================================ 手で直した台帳
+def _ranged(value, low, high):
+    """範囲の整数ならそのまま、そうでなければ均した値（読めなければ 0）。"""
+    if type(value) is int and low <= value <= high:
+        return value
+    return to_int(value, low, high) or 0
+
+
+def repair(ledger):
+    """台帳の中の食い違いを埋める。直したことの説明の並びを返す（直さなければ空）。
+
+    台帳は手で直せる（DOC.md「勢力を手で直す」）。組を書き漏らすと、情勢がその組を選んだときに
+    落ちていた（`apply_trend` が組を引く）。見られ方の無い勢力・関係の無い組は中立で足し、
+    鍵の並びの違う組は並べ直す。知らない勢力を指す関係・街・住人は外す
+    （会話の構えで勢力を引けずに落ちる）。段と点数は範囲の整数に均す。
+    """
+    if not isinstance(ledger, dict) or ledger.get("status") != READY:
+        return []
+    fixed = []
+    listed = ledger.get("factions") if isinstance(ledger.get("factions"), list) else []
+    factions, ids = [], []
+    for faction in listed:
+        faction_id = faction.get("id") if isinstance(faction, dict) else None
+        if not isinstance(faction_id, str) or not faction_id or "|" in faction_id \
+                or not str(faction.get("name") or "").strip():
+            fixed.append("faction {!r}: dropped (no id or name)".format(faction_id))
+        elif faction_id in ids:
+            fixed.append("faction {}: dropped (the id is used twice)".format(faction_id))
+        else:
+            factions.append(faction)
+            ids.append(faction_id)
+    ledger["factions"] = factions
+    known = set(ids)
+
+    standing = ledger.get("standing") if isinstance(ledger.get("standing"), dict) else {}
+    for faction_id in ids:
+        row = standing.get(faction_id)
+        if not isinstance(row, dict):
+            standing[faction_id] = {"score": 0, "title": "", "title_stage": None, "reason": ""}
+            fixed.append("standing {}: added as neutral".format(faction_id))
+            continue
+        raw = row.get("score", 0)
+        score = _ranged(raw, STANDING_MIN, STANDING_MAX)
+        if type(raw) is not int or score != raw:
+            row["score"] = score
+            fixed.append("standing {}: score set to {}".format(faction_id, score))
+    ledger["standing"] = standing
+
+    old = ledger.get("relations") if isinstance(ledger.get("relations"), dict) else {}
+    relations = {}
+    for key, row in old.items():
+        parts = str(key).split("|")
+        if len(parts) != 2 or parts[0] == parts[1] or not set(parts) <= known \
+                or not isinstance(row, dict):
+            fixed.append("relation {}: dropped (unknown faction)".format(key))
+            continue
+        pair = pair_key(*parts)
+        if pair in relations:
+            fixed.append("relation {}: dropped (written twice)".format(key))
+            continue
+        if key != pair:
+            fixed.append("relation {}: renamed to {}".format(key, pair))
+        raw = row.get("stage", 0)
+        stage = _ranged(raw, RELATION_MIN, RELATION_MAX)
+        if type(raw) is not int or stage != raw:
+            row["stage"] = stage
+            fixed.append("relation {}: stage set to {}".format(pair, stage))
+        if type(row.get("push", 0)) is not int:
+            row["push"] = 0
+        relations[pair] = row
+    for i, a in enumerate(ids):
+        for b in ids[i + 1:]:
+            pair = pair_key(a, b)
+            if pair not in relations:
+                relations[pair] = {"stage": 0, "push": 0, "from_setting": False, "evidence": "",
+                                   "updated_day": ledger.get("made_day")}
+                fixed.append("relation {}: added as neutral".format(pair))
+    ledger["relations"] = relations
+
+    towns = ledger.get("towns") if isinstance(ledger.get("towns"), dict) else {}
+    for town in [t for t, row in towns.items()
+                 if not isinstance(row, dict) or row.get("faction") not in known]:
+        towns.pop(town)
+        fixed.append("town {}: dropped (unknown faction)".format(town))
+    ledger["towns"] = towns
+
+    # 住人の立場は版3 から（無い台帳は判定前。足さない）
+    people = ledger.get("people") if isinstance(ledger.get("people"), dict) else {}
+    for npc_id in [n for n, row in people.items() if isinstance(row, dict)
+                   and row.get("faction") and row.get("faction") not in known]:
+        people.pop(npc_id)
+        fixed.append("person {}: dropped (unknown faction)".format(npc_id))
+    return fixed
+
+
 # ============================================================ 最初の立ち位置
 #: 新しいキャラとみなす滞在日数の合計（これ未満で、功績も手配も無ければ出自だけで決める）。
 NEW_CHARACTER_DAYS = 90

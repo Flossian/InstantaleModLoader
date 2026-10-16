@@ -319,7 +319,7 @@ def read_json(path):
     壊れたファイルで道具が開かないより、空から始めるほうがよい。
     """
     try:
-        with io.open(path, encoding="utf-8") as fh:
+        with io.open(path, encoding="utf-8-sig") as fh:      # 手で直して BOM が付いても読む
             data = json.load(fh)
     except (OSError, ValueError):
         return {}
@@ -669,7 +669,7 @@ def load_world_settings(found, path, base):
     """
     values = dict(base)
     try:
-        with io.open(path, encoding="utf-8") as fh:
+        with io.open(path, encoding="utf-8-sig") as fh:      # 手で直して BOM が付いても読む
             record = json.load(fh)
     except (OSError, ValueError):
         # 控えが無いのが普通の状態（その世界を一度も触っていない）。
