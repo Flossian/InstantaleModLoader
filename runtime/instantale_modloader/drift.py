@@ -18,12 +18,16 @@ r"""ゲームの更新で MOD が効かなくなったことを、遊んでい�
     `llm.wrap_outgoing` の書き換えが当たった回数を、MOD と頼みの種類ごと・版ごとに控え（`drift\rewrites.json`）、
     前の版では当たっていたのに今の版で当たらなくなったものを出す
 
+このほか、recon が版の変化を見つけてから `REPORT_DAYS` 日の間は「ゲームが更新された」こと自体を出す（`check_update`）。
+中身だけの更新では上の3つのどれにも当たらないことが多く、遊ぶ側に更新が見えないため。
+版の見分けには exe のハッシュも入るので、大きさも版の名前も変わらない更新でも出る。
+
 役割の分け方: ゲーム側の事実（どの版か・前の版から関数がどう変わったか）は recon が持ち、ここは
 MOD との突き合わせと、遊んでいる間の見張りだけを持つ。版の鍵も `recon.build_key` を使う。
 書き換えの数の控えは `out\` の外の `recon_history\drift\` に置く（recon は zip と `current\` 以外に触らない）。
 書き換えの見張りが効くのは、この仕組みを入れてから2つ目の版から（前の版の数が要る）。
 
-見つけたものは `modloader.log`（`drift:` の行）と `status.json` の `drift` に出す。GUI は警告の欄に数を出す。
+見つけたものは `modloader.log`（`drift:` の行）と `status.json` の `drift` に出す。GUI はデバッグモードのときだけ警告の欄に数を出す。
 
 切るには `settings/loader.json` を `{"drift_watch": false}` にする（見張りごと）。
 付け直しだけ切るなら `{"drift_heal": false}`（次の注入から）。
@@ -91,13 +95,13 @@ def enabled(runtime_dir, flag=FLAG) -> bool:
 # --------------------------------------------------------------------------
 # 版と控えの置き場
 # --------------------------------------------------------------------------
-def build_key() -> str | None:
+def build_key(out_dir: str | None = None) -> str | None:
     """今の版の鍵（`recon.build_key`）。取れなければ None（比べない）。"""
     st = _state()
     if "build" not in st:
         try:
             from . import recon
-            st["build"] = recon.build_key()
+            st["build"] = recon.build_key(snap_dir=recon.snapshot_dir(out_dir) if out_dir else None)
         except Exception:
             log_exc("drift: cannot tell the build")
             st["build"] = None
@@ -159,19 +163,50 @@ def _previous(data: dict, key: str) -> dict | None:
 # --------------------------------------------------------------------------
 # 引数の変化・対象の消失
 # --------------------------------------------------------------------------
-def check_signatures(out_dir: str) -> list:
-    """recon が見つけた前の版からの関数の変化のうち、この世代で包んだ対象のものを出す。並びを返す。"""
-    from . import patch, patch_registry, recon
+def recent_update(out_dir: str) -> dict | None:
+    """recon が `REPORT_DAYS` 日のうちに見つけた版の変化（`changes.json`）。無ければ None。"""
+    from . import recon
     path = os.path.join(recon.snapshot_dir(out_dir), recon.CURRENT_DIR_NAME, recon.CHANGES_NAME)
     changes = _read(path)
-    if not changes or not changes.get("functions"):
-        return []
+    if not changes:
+        return None
     try:
         detected = datetime.datetime.fromisoformat(changes.get("detected_at"))
         if (datetime.datetime.now() - detected).days >= REPORT_DAYS:
-            return []
+            return None
     except Exception:
         pass
+    return changes
+
+
+def check_update(out_dir: str) -> dict | None:
+    """ゲームが更新されたことを出す（引数の変化が無くても。中身だけの更新に気づく合図）。"""
+    from . import recon
+    changes = recent_update(out_dir)
+    st = _state()
+    if not changes:
+        st.pop("update", None)
+        return None
+    since = changes.get("since_build") or {}
+    functions = changes.get("functions") or []
+    update = {"since": since.get("app_version") or recon._snapshot_version(str(changes.get("since") or "?")),
+              "detected_at": changes.get("detected_at"),
+              "identity": changes.get("identity") or [],
+              "changed": sum(1 for item in functions if item.get("kind") in ("changed", "removed"))}
+    if st.get("update") != update:
+        log("drift: the game was updated since {} (found {}; {}; {} function(s) changed or gone)".format(
+            update["since"], update["detected_at"], ", ".join(update["identity"]) or "identity unchanged",
+            update["changed"]), level="WARN")
+    st["update"] = update
+    return update
+
+
+def check_signatures(out_dir: str) -> list:
+    """recon が見つけた前の版からの関数の変化のうち、この世代で包んだ対象のものを出す。並びを返す。"""
+    from . import patch, patch_registry
+    changes = recent_update(out_dir)
+    if not changes or not changes.get("functions"):
+        return []
     hooked = {placement["target"] for placement in patch.placements()}
     by_target = patch_registry.by_target()
     st = _state()
@@ -213,7 +248,7 @@ def note_rewrite(label: str, manager, changed: bool) -> None:
 
 def flush_rewrites(out_dir: str) -> list:
     """このプロセスの数を今の版の控えへ足し、空振りを調べる。新しく見つけた空振りの並びを返す。"""
-    key = build_key()
+    key = build_key(out_dir)
     st = _state()
     if not key:
         return []
@@ -341,6 +376,7 @@ def report() -> dict:
     except Exception:
         pass
     return {"build": st.get("build"),
+            "update": st.get("update"),
             "lost": list(st["lost"].values()),
             "signatures": list(st["signatures"]),
             "rewrites": list(st["rewrites"].values())}
@@ -352,6 +388,10 @@ def start(ctx, out_dir: str) -> bool:
         log("drift: {} is off; nothing watches for game updates".format(FLAG), level="WARN")
         return False
     heal = enabled(ctx.runtime_dir, HEAL_FLAG)
+    try:
+        check_update(out_dir)
+    except Exception:
+        log_exc("drift: cannot tell whether the game was updated")
     try:
         check_signatures(out_dir)
     except Exception:
@@ -389,7 +429,7 @@ def start(ctx, out_dir: str) -> bool:
     threading.Thread(target=loop, name="drift_watch", daemon=True).start()
     from . import patch
     log("drift: watching {} wrap(s) on build {} (heal {})".format(
-        len(patch.placements()), build_key(), "on" if heal else "off"))
+        len(patch.placements()), build_key(out_dir), "on" if heal else "off"))
     return True
 
 

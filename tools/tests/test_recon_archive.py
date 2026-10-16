@@ -14,6 +14,7 @@
 GAME.md §1.5）。
 """
 
+import datetime
 import io
 import json
 import os
@@ -104,6 +105,56 @@ def test_same_build():
           "起動直後に exe_size が取れなくても、他が揃えば同じビルド")
     exe = recon._exe_path()
     check(os.path.isfile(exe), "実行ファイルの場所は実在のファイル: {}".format(exe))
+
+    # 版の名前が取れず（Steam など）、大きさも変わらない更新（中身だけの直し）は exe のハッシュで見分ける。
+    check(not recon._same_build(dict(base, exe_sha256="a" * 64), dict(base, exe_sha256="b" * 64)),
+          "版の名前と大きさが同じでも、exe のハッシュが違えば別のビルド")
+    check(recon._same_build(dict(base), dict(base, exe_sha256="b" * 64)),
+          "ハッシュを足す前の控えとは、ほかが揃えば同じビルド")
+    check(recon.build_key(dict(base, llama_builds="b1", exe_sha256="0123456789abcdef")) == "main_025|716076544|b1|0123456789ab"
+          and recon.build_key(dict(base, llama_builds="b1")) == "main_025|716076544|b1",
+          "版の鍵はハッシュが取れたときだけ頭の12文字を足す（足す前の鍵の形は変えない）")
+
+
+def test_exe_digest():
+    print("=== exe_digest: exe のハッシュを控えで使い回す ===")
+    sandbox = _sandbox()
+    real_digest = recon._digest
+    calls = []
+
+    def counting(path):
+        calls.append(path)
+        return real_digest(path)
+
+    saved = getattr(sys, recon._DIGEST_ATTR, None)
+    try:
+        exe = os.path.join(sandbox, "instantale.exe")
+        with open(exe, "wb") as fh:
+            fh.write(b"build one")
+        snap_dir = os.path.join(sandbox, recon.SNAPSHOT_DIR_NAME)
+        recon._digest = counting
+        vars(sys).pop(recon._DIGEST_ATTR, None)
+        first = recon.exe_digest(exe, os.stat(exe), snap_dir)
+        check(first == real_digest(exe) and len(calls) == 1, "初回は数えて控える")
+        check(os.path.isfile(os.path.join(snap_dir, recon.EXE_DIGEST_NAME)), "  控えを recon_history に置く")
+        recon.exe_digest(exe, os.stat(exe), snap_dir)
+        check(len(calls) == 1, "  同じプロセスでは数え直さない")
+        vars(sys).pop(recon._DIGEST_ATTR, None)
+        check(recon.exe_digest(exe, os.stat(exe), snap_dir) == first and len(calls) == 1,
+              "  次の起動（プロセスの控えが無い）でも、場所・大きさ・更新時刻が同じなら控えを使う")
+        stat = os.stat(exe)
+        with open(exe, "wb") as fh:
+            fh.write(b"build two")                         # 同じ大きさで中身だけ違う
+        os.utime(exe, ns=(stat.st_atime_ns, stat.st_mtime_ns + 10 ** 9))
+        second = recon.exe_digest(exe, os.stat(exe), snap_dir)
+        check(second != first and len(calls) == 2, "  更新時刻が動けば数え直し、大きさが同じでも違いが出る")
+    finally:
+        recon._digest = real_digest
+        if saved is not None:
+            setattr(sys, recon._DIGEST_ATTR, saved)
+        else:
+            vars(sys).pop(recon._DIGEST_ATTR, None)
+        shutil.rmtree(sandbox, ignore_errors=True)
 
 
 def test_snapshot_name():
@@ -553,7 +604,9 @@ def test_build_changes():
         zipped("main_024_20261001.zip", ["m:a(x)"], dict(old_build, app_version="main_024"))
         older = zipped("main_025_20261014.zip", ["m:a(x)"], old_build)               # 読み込みの少ない回
         os.utime(older, (1, 1))
-        zipped("main_025_20261014_2.zip", ["m:a(x)", "m:b(y)", "m:c(z)"], old_build)  # 前の版でいちばん多い回
+        biggest = zipped("main_025_20261014_2.zip", ["m:a(x)", "m:b(y)", "m:c(z)"], old_build)  # 前の版でいちばん多い回
+        switched = 1_760_000_000                                                       # 版が替わって退避した時刻
+        os.utime(biggest, (switched, switched))
         zipped("main_026_20261014.zip", ["m:a(x)"], new_build)                        # 今の版の退避（比べない）
         check(recon.build_changes(snap_dir) is None, "基準が無ければ比べない")
 
@@ -571,6 +624,8 @@ def test_build_changes():
               "  版の鍵は build_key: {}".format(changes["build"]))
         check(os.path.isfile(os.path.join(current, recon.CHANGES_NAME)), "  基準に changes.json を添える")
         first = changes["detected_at"]
+        check(first == datetime.datetime.fromtimestamp(switched).isoformat(timespec="seconds"),
+              "  初めて書くときの見つけた日時は、前の版を退避した時刻（ローダを入れ替えた日ではない）: {}".format(first))
         again = recon.write_build_changes(snap_dir, {"since": changes["since"], "detected_at": "2000-01-01T00:00:00"})
         check(again["detected_at"] == "2000-01-01T00:00:00" and first != again["detected_at"],
               "  同じ相手との比べなら、見つけた日時を引き継ぐ")
@@ -588,6 +643,15 @@ def test_build_changes():
         recon.update_current(recon_dir, snap_dir)
         check(os.path.isfile(os.path.join(current, recon.CHANGES_NAME)),
               "  置き換えない回でも、changes.json が無ければ書く")
+
+        # ハッシュを足す前の基準は、置き換えない回でもハッシュを書き足す
+        with io.open(os.path.join(recon_dir, recon.BUILD_NAME), "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(dict(new_build, modules=1, exe_sha256="c" * 64)))
+        recon.update_current(recon_dir, snap_dir)
+        with io.open(os.path.join(current, recon.BUILD_NAME), encoding="utf-8") as fh:
+            kept = json.load(fh)
+        check(kept.get("exe_sha256") == "c" * 64 and kept.get("modules") == 99,
+              "  置き換えない回でも、ハッシュの無い基準には書き足す（ほかはそのまま）")
     finally:
         shutil.rmtree(sandbox, ignore_errors=True)
 
@@ -605,6 +669,7 @@ def main():
     test_dump_end_to_end()
     test_dump_module_vanishes()
     test_build_identity()
+    test_exe_digest()
     print()
     if _FAILS:
         print("{} 件失敗: {}".format(len(_FAILS), _FAILS))

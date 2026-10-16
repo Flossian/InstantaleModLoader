@@ -184,6 +184,36 @@ def test_signatures(tmp):
           drift.check_signatures(out_dir) == [])
 
 
+def test_update_notice(tmp):
+    print("ゲームが更新されたこと自体を出す（引数の変化が無くても）")
+    import datetime
+    import json as _json
+    from instantale_modloader import recon
+    out_dir = os.path.join(tmp, "upd", "out")
+    current = os.path.join(recon.snapshot_dir(out_dir), recon.CURRENT_DIR_NAME)
+    os.makedirs(current)
+    path = os.path.join(current, recon.CHANGES_NAME)
+
+    def plant(detected, since_build):
+        with open(path, "w", encoding="utf-8") as fh:
+            _json.dump({"since": "main_026_20261020.zip", "since_build": since_build, "detected_at": detected,
+                        "identity": ["exe_sha256: aaaaaaaaaaaa -> bbbbbbbbbbbb"], "functions": []}, fh)
+
+    fresh()
+    check("recon の比べが無ければ出さない", drift.check_update(out_dir) is None and drift.report()["update"] is None)
+    now = datetime.datetime.now().isoformat(timespec="seconds")
+    plant(now, {"app_version": "main_026", "exe_size": 1, "exe_sha256": "a" * 64})
+    update = drift.check_update(out_dir)
+    check("中身だけの更新（関数の変化0件）でも出す",
+          update and update["since"] == "main_026" and update["changed"] == 0
+          and drift.report()["update"] == update, update)
+    plant(now, {"app_version": None})
+    check("前の版の名前が取れなければ記録の名前から取る", drift.check_update(out_dir)["since"] == "main_026")
+    plant("2000-01-01T00:00:00", {"app_version": "main_026"})
+    check("{} 日を過ぎたら出さない".format(drift.REPORT_DAYS),
+          drift.check_update(out_dir) is None and drift.report()["update"] is None)
+
+
 def test_rewrites(tmp):
     print("書き換えの空振り")
     out_dir = os.path.join(tmp, "rw", "out")
@@ -227,6 +257,7 @@ def main():
         test_limit_and_off()
         test_loader_watch_rearm()
         test_signatures(tmp)
+        test_update_notice(tmp)
         test_rewrites(tmp)
     finally:
         P.revert_all()

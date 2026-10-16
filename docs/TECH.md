@@ -3928,11 +3928,12 @@ MOD が呼ぶ口は無い。
 
 | 見張り | いつ | 何を見るか | 見つけたら |
 |---|---|---|---|
+| 更新されたこと | 起動のたび | recon が書いた前の版からの変化（`changes.json`）があるか。版の見分けには exe のハッシュも入る（GAME.md §1.1） | 出すだけ。引数の変化が0件でも出す（中身だけの更新は下の3つのどれにも当たらないことが多い）。`REPORT_DAYS`（7日）の間 |
 | 包みの外れ | `AUDIT_SECONDS`（5秒）ごと | この世代で被せた包み（`patch.placements()`）が、対象の今の値の鎖に残っているか。ゲームの包みは `__wrapped__` と閉包のセルもたどる（中に残っていれば効いている） | 2回続けて同じ値で外れていたら、控えた当て方で付け直す（`patch.reapply`。対象ごとに `HEAL_LIMIT` 回まで）。1回目は控えるだけ（差し替えの途中を包まないため） |
 | 引数の変化・対象の消失 | 起動のたび | recon が書いた前の版からの関数の変化（`recon_history/current/changes.json`。GAME.md §1.1）のうち、MOD が包んだ対象 | 出すだけ。recon が版の変化を見つけてから `REPORT_DAYS`（7日）の間 |
 | 書き換えの空振り | 頼みのたび数え、`FLUSH_SECONDS`（60秒）ごとに比べる | `llm.wrap_outgoing` の書き換えが当たった数を、MOD と頼みの種類（クラウドは `manager_name`、ローカルは `*`）ごと・版ごとに `recon_history/drift/rewrites.json` へ | 前の版で3回以上当たり、前の版の割合で5回以上当たる見込みなのに、今の版で1回も当たらなければ出す |
 
-- 出す先は `modloader.log` の `drift:` の行と `status.json` の `drift`（`lost` / `signatures` / `rewrites`）。GUI は警告の欄に件数を出す
+- 出す先は `modloader.log` の `drift:` の行と `status.json` の `drift`（`update` / `lost` / `signatures` / `rewrites`）。GUI は、デバッグモードのときだけ、警告の欄に更新されたこと（前の版と見つけた日）と件数を出す（作る側が確かめるためのもので、普段の遊びでは出さない）
 - 包みの控えは `patch.wrap` / `patch.patch` が残す。鍵は（対象, MOD, フックのモジュール, フックの名前）で、同じ鍵で当て直すと置き換わる。
   `watch_aliases` の包み直し（§5.3）も同じ鍵で見るので、見回りと二重にならない
 - ゲーム側の事実（版の鍵 `recon.build_key`、前の版からの関数の変化）は recon が持ち、ここは MOD との突き合わせだけをする（GAME.md §1.1 の役割の表）

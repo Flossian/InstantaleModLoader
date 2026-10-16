@@ -2315,8 +2315,15 @@ class App(ttk.Frame):
             else:
                 lines.append("前回の注入で対象が見つからなかったフック {} 件"
                              "（ゲームが更新された可能性があります）".format(len(unresolved)))
-        # 名前は残っているのに効かなくなったもの（ローダの drift.py。詳しくは modloader.log の drift: の行）
-        drift = self.status.get("drift") or {}
+        # 名前は残っているのに効かなくなったもの（ローダの drift.py。詳しくは modloader.log の drift: の行）。
+        # 確かめて直すのは作る側なので、デバッグモードのときだけ出す（普段の遊びでは不安を煽るだけ）
+        drift = (self.status.get("drift") or {}) if self.debug_mode else {}
+        update = drift.get("update")
+        if update:
+            # 引数の変化が0件でも出す（中身だけの更新でも、前と同じに動くかを確かめる合図）
+            lines.append("ゲームが更新されました（{} から。{} に検出）。"
+                         "MOD が前と同じに動くか確かめてください".format(
+                             update.get("since") or "前の版", str(update.get("detected_at") or "?")[:10]))
         lost = drift.get("lost") or []
         if lost:
             healed = sum(1 for item in lost if item.get("healed"))

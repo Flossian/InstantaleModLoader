@@ -365,7 +365,10 @@ def probe_bug_sites() -> list[str]:
 # なっていることがあり、更新で動いたのか起動で動いたのか区別が付かない。
 # 判定に混ぜると毎回退避が走りかねないので、控えとして `build.json` には
 # 書くが比較には入れない。
-IDENTITY_KEYS = ("app_version", "game_version", "exe_size", "python", "kivy", "llama_builds")
+#
+# `exe_sha256` は exe の中身のハッシュ。版の名前が取れない入手経路（Steam など）で、
+# 大きさの変わらない更新（中身だけの直し）も見分けるために足した（2026-10-16）。
+IDENTITY_KEYS = ("app_version", "game_version", "exe_size", "python", "kivy", "llama_builds", "exe_sha256")
 
 #: IDENTITY_KEYS のうち、取れないことがある鍵。どちらかが None なら比べない。
 #: `game_version` はゲームの中に問い合わせて取るので、注入の時機によっては取れない。
@@ -373,7 +376,13 @@ IDENTITY_KEYS = ("app_version", "game_version", "exe_size", "python", "kivy", "l
 #: 版の変化は `app_version` が見る（こちらは読めなければ別のビルド扱いのまま）。
 #: `python` / `kivy` / `llama_builds` は 2026-10-14 に足した鍵で、それより前の控えには無い
 #: （「特異な変化」を拾うため。同梱の llama-server が替わって 127_ が落ちた。VERIFICATION.md §3.100）。
-LATE_KEYS = ("game_version", "exe_size", "python", "kivy", "llama_builds")
+#: `exe_sha256` は 2026-10-16 に足した鍵で、それより前の控えには無い。
+LATE_KEYS = ("game_version", "exe_size", "python", "kivy", "llama_builds", "exe_sha256")
+
+#: exe のハッシュの控え（`recon_history\exe_digest.json`）。exe は 700MB ほどあり、ハッシュに1秒ほどかかるので、
+#: 場所・大きさ・更新時刻が控えと同じなら控えの値を使う。
+EXE_DIGEST_NAME = "exe_digest.json"
+_DIGEST_ATTR = "__instantale_exe_digest__"
 
 #: Epic Games Launcher が置いているマニフェスト。
 #: `AppVersionString` がここにある。
@@ -435,14 +444,16 @@ def game_version() -> str | None:
         return None
 
 
-def build_identity() -> dict:
+def build_identity(snap_dir: str | None = None) -> dict:
     """今動いているビルドの素性。`build.json` に書き、退避の判定にも使う。
 
     どの項目も取れなくてよい（取れなければ None が入る）。
     ここで例外を投げると、素性が分からないというだけでリコン全体が止まってしまう。
+    `snap_dir` を渡すと、exe のハッシュの控えをそこに置いて次の起動で使う。
     """
     exe = _exe_path()
     size = mtime = None
+    stat = None
     try:
         stat = os.stat(exe)
         size = stat.st_size
@@ -463,25 +474,52 @@ def build_identity() -> dict:
         "python": sys.version.split()[0],
         "kivy": _kivy_version(),
         "llama_builds": _llama_builds(exe),
+        "exe_sha256": exe_digest(exe, stat, snap_dir) if stat is not None else None,
     }
+
+
+def exe_digest(exe: str, stat, snap_dir: str | None = None) -> str | None:
+    """exe の sha256。同じプロセスでは1回だけ数える。`snap_dir` の控えと場所・大きさ・更新時刻が同じなら控えを使う。"""
+    key = [os.path.normcase(exe), stat.st_size, stat.st_mtime_ns]
+    cache = getattr(sys, _DIGEST_ATTR, None)
+    if isinstance(cache, dict) and cache.get("key") == key:
+        return cache.get("sha256")
+    path = os.path.join(snap_dir, EXE_DIGEST_NAME) if snap_dir else None
+    stored = _read_json_file(path) if path else None
+    if isinstance(stored, dict) and stored.get("key") == key and stored.get("sha256"):
+        digest = stored["sha256"]
+    else:
+        digest = _digest(exe)
+        if digest and path:
+            try:
+                os.makedirs(snap_dir, exist_ok=True)
+                write_json(path, {"key": key, "sha256": digest}, indent=1)
+            except Exception:
+                log_exc("recon: cannot keep the exe digest")
+    if digest:
+        setattr(sys, _DIGEST_ATTR, {"key": key, "sha256": digest})
+    return digest
 
 
 #: 版の鍵（`build_key`）に使う素性。注入の時点でいつも取れるものだけ
 #: （`game_version` はゲームの組み上がりの前だと取れず、Kivy は読み込みの前だと取れない）。
-#: Python と Kivy は exe に入っているので、変われば `exe_size` も変わる。
+#: Python と Kivy は exe に入っているので、変われば `exe_size` と `exe_sha256` も変わる。
+#: `exe_sha256` は取れたときだけ頭の12文字を末尾に足す（足す前の控えの鍵と形を変えないため）。
 BUILD_KEY_KEYS = ("app_version", "exe_size", "llama_builds")
 
 
-def build_key(identity: dict | None = None) -> str | None:
+def build_key(identity: dict | None = None, snap_dir: str | None = None) -> str | None:
     """版を表す短い鍵。ほかの部品（`drift`）が版ごとの控えの見出しに使う。どれも取れなければ None。
 
     「同じビルドか」の判定（`_same_build`）と食い違わないよう、ここに1つだけ置く。
     """
-    identity = identity if identity is not None else build_identity()
+    identity = identity if identity is not None else build_identity(snap_dir)
     values = [identity.get(key) for key in BUILD_KEY_KEYS]
-    if all(value is None for value in values):
+    digest = identity.get("exe_sha256")
+    if all(value is None for value in values) and not digest:
         return None
-    return "|".join("?" if value is None else str(value) for value in values)
+    key = "|".join("?" if value is None else str(value) for value in values)
+    return "{}|{}".format(key, str(digest)[:12]) if digest else key
 
 
 def _exe_path() -> str:
@@ -716,6 +754,8 @@ def identity_changes(old: dict, new: dict) -> list:
         if key in LATE_KEYS and (before is None or now is None):
             continue
         if before != now:
+            if key == "exe_sha256":
+                before, now = str(before)[:12], str(now)[:12]
             lines.append("{}: {} -> {}".format(key, before, now))
     return lines
 
@@ -837,6 +877,14 @@ def update_current(recon_dir: str, snap_dir: str) -> str | None:
                     reasons = ["functions changed ({})".format(len(changes))] + changes
         else:
             replace = False
+            # 置き換えない回でも、ハッシュを持たない基準（2026-10-16 より前に作った基準）には書き足す。
+            # 基準は長く遊んだ回のもので、起動直後の走査では置き換わらないので、書き足さないと次の版で
+            # ハッシュを比べられない（大きさの変わらない更新を見落とす）。
+            if old.get("exe_sha256") is None and new.get("exe_sha256"):
+                try:
+                    write_json(os.path.join(current, BUILD_NAME), dict(old, exe_sha256=new["exe_sha256"]), indent=1)
+                except Exception:
+                    log_exc("recon: cannot add the exe digest to the reference dump")
     archived = None
     if reasons:
         # 同じビルドで中身を全部含む記録が既にあれば、もう1本は作らない。
@@ -889,6 +937,15 @@ def previous_build(snap_dir: str, build: dict):
 
     `(zip のパス, build.json, 関数の一覧)` か None。古い形の記録（フォルダ）は見ない。
     """
+    group = _previous_group(snap_dir, build)
+    if not group:
+        return None
+    path, (old_build, functions) = max(group, key=lambda item: len(item[1][1]))
+    return path, old_build, functions
+
+
+def _previous_group(snap_dir: str, build: dict) -> list | None:
+    """`previous_build` の版の記録すべて（`[(zip のパス, (build.json, 関数の一覧)), ...]`）。"""
     try:
         names = [name for name in os.listdir(snap_dir) if name.endswith(".zip")]
     except OSError:
@@ -909,9 +966,7 @@ def previous_build(snap_dir: str, build: dict):
         found = re.search(r"_(\d{8})(?:_\d+)?\.zip$", os.path.basename(path))
         return (found.group(1) if found else "", os.path.getmtime(path))
 
-    newest = max(groups.values(), key=lambda group: max(when(p) for p, _s in group))
-    path, (old_build, functions) = max(newest, key=lambda item: len(item[1][1]))
-    return path, old_build, functions
+    return max(groups.values(), key=lambda group: max(when(p) for p, _s in group))
 
 
 def build_changes(snap_dir: str) -> dict | None:
@@ -923,26 +978,34 @@ def build_changes(snap_dir: str) -> dict | None:
     mine = _dump_summary(current)
     if not mine or not mine[0]:
         return None
-    found = previous_build(snap_dir, mine[0])
-    if not found:
+    group = _previous_group(snap_dir, mine[0])
+    if not group:
         return None
-    path, old_build, functions = found
+    path, (old_build, functions) = max(group, key=lambda item: len(item[1][1]))
+    # 前の版の記録のうち最後に作ったもの（版が替わった最初の起動で退避した記録）の時刻
+    archived = max(os.path.getmtime(p) for p, _s in group)
     return {"since": os.path.basename(path),
             "since_build": {key: old_build.get(key) for key in IDENTITY_KEYS},
             "build": build_key(mine[0]),
             "identity": identity_changes(old_build, mine[0]),
-            "functions": function_diff(functions, mine[1])}
+            "functions": function_diff(functions, mine[1]),
+            "archived_at": datetime.datetime.fromtimestamp(archived).isoformat(timespec="seconds")}
 
 
 def write_build_changes(snap_dir: str, before: dict | None = None) -> dict | None:
-    """`build_changes` を `current/changes.json` に書く。前と同じ版との比べなら、見つけた日時（`detected_at`）を引き継ぐ。"""
+    """`build_changes` を `current/changes.json` に書く。
+
+    見つけた日時（`detected_at`）は、前と同じ版との比べなら引き継ぐ。初めて書くときは前の版の記録を退避した時刻
+    （版が替わった最初の起動）にする。`changes.json` より前のローダで更新をまたいだときに、
+    ローダを入れ替えた日を「更新された日」と取り違えないため。
+    """
     changes = build_changes(snap_dir)
     if changes is None:
         return None
     if before and before.get("since") == changes["since"] and before.get("detected_at"):
         changes["detected_at"] = before["detected_at"]
     else:
-        changes["detected_at"] = datetime.datetime.now().isoformat(timespec="seconds")
+        changes["detected_at"] = changes.get("archived_at") or datetime.datetime.now().isoformat(timespec="seconds")
     write_json(os.path.join(snap_dir, CURRENT_DIR_NAME, CHANGES_NAME), changes, indent=1)
     counts = {}
     for item in changes["functions"]:
@@ -1143,8 +1206,8 @@ def dump(out_dir: str, *, backup: bool = True) -> str:
     # 素性は書き出す前に取る。
     # 退避の判定に使うので、**上書きより先**でなければ前回の
     # `build.json` がもう残っていない。
-    identity = build_identity()
     snap_dir = snapshot_dir(out_dir)
+    identity = build_identity(snap_dir)
     if backup:
         migrate_old_snapshots(out_dir, snap_dir)
         # 基準（`update_current`）がまだ無い頃は、前回のダンプを素性だけで見て退避する。

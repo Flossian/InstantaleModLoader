@@ -41,6 +41,11 @@ TECH.md と分けているのは読む理由が違うから。
 上書き前に `recon_history/<版>_<日付>.zip`（`out/` の外、配布フォルダ直下）へ退避される**
 （控えが無いときも「別のビルド」扱い。`recon.py` の `_same_build`）。
 素性には 2026-10-14 から、同梱の llama-server の版（`bin\llama-*` のフォルダ名）・Python・Kivy の版も入る。
+2026-10-16 から exe の sha256（`exe_sha256`）も入る。
+Epic 以外の入手経路では版の名前が取れず、大きさの変わらない更新（中身だけの直し）を `exe_size` では見分けられないため。
+exe は約700MB で、ハッシュに0.5〜1秒かかるので、場所・大きさ・更新時刻が同じなら `recon_history/exe_digest.json` の控えを使う（`recon.exe_digest`）。
+それより前の控えには無いので、無い側があれば比べない。
+基準（下）にハッシュが無ければ、置き換えない回でも書き足す（基準は長く遊んだ回のもので、起動直後の走査では置き換わらないため）。
 
 退避の元は `recon_history/current/`（基準）で、今のビルドで見た中でいちばん多くのモジュールを読み込んだダンプを置く（`recon.update_current`）。
 次のどれかのとき、基準を `<版>_<日付>.zip` に固めて退避する。理由は zip の中の `archive_reason.txt` にある。
@@ -67,6 +72,8 @@ LLM の接続先が違う回（ローカルとクラウド）は、読み込ま�
 比べるのは `targets.txt`（古い zip には `signatures.json` が無いため）で、読み込まれていないモジュールの関数は「消えた」と数えない（`function_diff`）。
 結果は `recon_history/current/changes.json`（`since`・`identity`・`functions` の `kind` / `key` / `before` / `now`・`detected_at`）に置く。
 `detected_at` は同じ相手との比べが続くかぎり引き継ぐ。
+初めて書くときは、前の版の記録のうち最後に退避した zip の更新時刻（版が替わった最初の起動）にする。
+`changes.json` より前のローダで更新をまたいだときに、ローダを入れ替えた日を更新の日と取り違えないため。
 main_025 → main_026 を実物で比べると、消えた10・変わった13・増えた15で、MOD が包んでいる対象は11件だった
 （§1.5 の8件に加え、4つの部品の送り口の引数。`model=None` が `max_tokens` の前に入った）。
 
@@ -75,7 +82,7 @@ main_025 → main_026 を実物で比べると、消えた10・変わった13・
 | 持ち主 | 持つもの |
 | --- | --- |
 | recon（`recon.py`・`000_recon`） | ゲーム側の事実。どの版か（`build_identity` / `build_key`）、版ごとの全関数の控え、前の版からの関数の変化（`changes.json`） |
-| drift（`drift.py`） | MOD との突き合わせと遊んでいる間の見張り。`changes.json` を MOD が包んだ対象で絞って知らせる・包みの外れ・プロンプトの書き換えの空振り（TECH.md §5.13） |
+| drift（`drift.py`） | MOD との突き合わせと遊んでいる間の見張り。`changes.json` から更新されたこと自体と、MOD が包んだ対象の引数の変化を知らせる・包みの外れ・プロンプトの書き換えの空振り（TECH.md §5.13） |
 
 `recon_history/drift/` は drift の控え（版ごとの書き換えの当たり数）。recon は zip と `current/` 以外に触らない。
 
