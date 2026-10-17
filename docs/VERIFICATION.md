@@ -59,7 +59,7 @@
 | `125_balance_charisma_impression` | 魅力に振ると全員から最上段で見られる | 決着（確認5件。閾値 8/11/14/17/20） | [§3.23](verification/3.23.md) |
 | `126_ui_title_version` | MOD が効いているか画面から分からない | 決着 | [§2.47](verification/2.47.md) / [§3.24](verification/3.24.md) |
 | `127_llm_response_speed` | ローカル LLM の応答速度 | 起動15回とも書き換えが成立。残るは4点 | [§2.48](verification/2.48.md) / [§3.25](verification/3.25.md) |
-| `128_item_image_variety` | アイテム画像が同じ絵に集中する | 選定と散りは成立。版6 の「外見文→絵」の対応表は未 | [§3.26](verification/3.26.md) |
+| `128_item_image_variety` | アイテム画像が同じ絵に集中する | 選定と散りは成立。版9 の銃の絵はクラウドで成立。版9 のイベントの外見文を英語で頼む手当てはゲーム抜きで成立。版6 の「外見文→絵」の対応表は未 | [§3.26](verification/3.26.md) |
 | `129_balance_item_price` | レア度が値段に反映されない | 決着（決済まで、`reconcile` 0行） | [§3.19](verification/3.19.md) |
 | `130_currency_unit` | 通貨の呼び名と所持金の表示 | 成立（版5 の書式も）。残るのは古いセーブの文。ワールド個別（版4）は未 | [§3.37](verification/3.37.md) / [§3.57](verification/3.57.md) / [§3.88](verification/3.88.md) |
 | `131_sharp_portrait` | NPC の絵が縮められ、顔の検出も外れる | 決着。残るのは誤検出率・旗がスレッドを跨がないこと・敵の除外 | [§3.43](verification/3.43.md) / [§2.80](verification/2.80.md) |
@@ -96,7 +96,7 @@
 | `308_battle_damage_display` | 成立（出どころ行も）。版4 で `319_` の外側へ（[§3.77](verification/3.77.md)）。残るのはコロシアムと味方が倒れた／逃げた場合（[§3.14](verification/3.14.md)） |
 | `309_office_pardon` | 成立（版3 も [§3.88](verification/3.88.md)）。残るのは投獄・市民権との関係（[§3.15](verification/3.15.md)） |
 | `311_npc_profile_memory` | 発火（3世界）。受け答えが変わったかは未評価（[§2.38](verification/2.38.md)） |
-| `312_shop_restock` | 前提・売り切れを保つ（版3）・生成が落ちた店（版5）は成立。残るのは偏りと品数が痩せないか（[§3.16](verification/3.16.md) / [§3.52](verification/3.52.md) / [§3.94](verification/3.94.md)） |
+| `312_shop_restock` | 前提・売り切れを保つ（版3）・生成が落ちた店（版5）は成立。版6 の外見文を英語で頼む直しはゲーム抜きで成立（[§3.26](verification/3.26.md)）。残るのは偏りと品数が痩せないか（[§3.16](verification/3.16.md) / [§3.52](verification/3.52.md) / [§3.94](verification/3.94.md)） |
 | `313_event_ability_check` | 自由入力は加点まで成立（[§3.18](verification/3.18.md)）、フィールドイベントも23件発火（[§3.17](verification/3.17.md)） |
 | `314_area_move_custom` | 成立（往復4移動・前払い3回・所持金0・距離補正）。残るのは「設定額以上・1000G未満」の帯と、開いた道を徒歩で行く1回（[§3.27](verification/3.27.md)）。ワールド個別（版2）は未（[§3.57](verification/3.57.md)）。日数は関所で成立（[§3.60](verification/3.60.md)） |
 | `315_vacation_custom` | 実機3回で成立。残るのは年齢加算 ON と犬小屋の宿代変更（[§3.28](verification/3.28.md)）。日数は関所で成立（[§3.60](verification/3.60.md)） |
@@ -240,7 +240,7 @@ crash_log.txt の 114 件のうち、35件が `llama-server` 起動失敗、40�
 - [3.23 魅力の一律反映（`125_`）: 決着](verification/3.23.md)
 - [3.24 タイトル画面の版表示（`126_`）: 決着](verification/3.24.md)
 - [3.25 ローカルLLMの応答速度（`127_`）: 決着・残るは4点（他の GPU・短縮形の別名・窓縮小・`-c` の素通り）](verification/3.25.md)
-- [3.26 アイテム画像の偏り（`128_`）: 均しは成立・版6の対応表が実機未確認](verification/3.26.md)
+- [3.26 アイテム画像の偏り（`128_`）: 均しは成立・版9の銃の絵はクラウドで実機成立・版6の対応表は実機未確認](verification/3.26.md)
 - [3.27 エリア移動の日数・料金・文言（`314_`）: 実機3回で成立・残るは3点](verification/3.27.md)
 - [3.28 宿の宿泊期間・部屋・宿代（`315_`）: 実機3回で成立・残るは4点](verification/3.28.md)
 - [3.29 長い本文の載せ替え（`117_`）: `prefix` を控える理由と、その穴](verification/3.29.md)

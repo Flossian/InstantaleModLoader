@@ -77,6 +77,16 @@ MIT で配っているが、著作権表示（LICENSE の Copyright 行）は提
 手順は docs/CONTRIBUTING.md にある。
 
 --------------------------------------------------------------------------
+生成 AI で作った画像
+--------------------------------------------------------------------------
+
+**128_item_image_variety の images/ の下の絵（武器・防具と服と装身具・消耗品・素材・道具など）は、
+作者が画像生成 AI で作った一枚絵から切り出し・縮小・減色したもの。** ほかの同梱物と同じく MIT で配る。
+生成 AI の出力にどこまで著作権が生じるかは国によって扱いが異なる。
+ここでは、作者が持つ範囲を超えて権利を主張しない。
+元の一枚絵はリポジトリの assets/item_images/ に置いてあり、同じく MIT で扱う（配布の zip には入れていない）。
+
+--------------------------------------------------------------------------
 MIT が及ばないもの
 --------------------------------------------------------------------------
 
@@ -181,6 +191,16 @@ INBOUND LICENSE FOR CONTRIBUTIONS
   If a contribution arrives without a stated license, that is settled before
   it is bundled. Anything that cannot be settled is not bundled, because it
   cannot be undone once shipped. See docs/CONTRIBUTING.md.
+
+AI-GENERATED IMAGES
+  The images under images/ in 128_item_image_variety (weapons, armor,
+  clothing and jewelry, consumables, materials, tools and more) were cut out,
+  scaled and recoloured from sprite sheets
+  the author made with an image-generation AI. They ship under the MIT
+  License like everything else here. How far copyright subsists in AI output
+  differs between jurisdictions; this project claims no rights beyond those
+  the author holds. The original sheets are kept in assets/item_images/ in
+  the repository under the same terms; they are not part of the release zips.
 
 NOT COVERED
   Instantale itself, its executables, its assets (images, audio, text), and

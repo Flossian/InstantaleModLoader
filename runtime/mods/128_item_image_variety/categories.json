@@ -1,0 +1,686 @@
+[
+ {
+  "id": "gun_cyber",
+  "setting": "SET_GUN_CYBER",
+  "group": "銃",
+  "label": "銃_サイバーパンク",
+  "source": "guns/gun_cyber.png",
+  "sheet": "cyber",
+  "default": "separate"
+ },
+ {
+  "id": "gun_fantasy",
+  "setting": "SET_GUN_FANTASY",
+  "group": "銃",
+  "label": "銃_ファンタジー",
+  "source": "guns/gun_fantasy.png",
+  "sheet": "fantasy",
+  "default": "separate"
+ },
+ {
+  "id": "gun_future",
+  "setting": "SET_GUN_FUTURE",
+  "group": "銃",
+  "label": "銃_未来型",
+  "source": "guns/gun_future.png",
+  "sheet": "future",
+  "default": "separate"
+ },
+ {
+  "id": "gun_modern",
+  "setting": "SET_GUN_MODERN",
+  "group": "銃",
+  "label": "銃_現代",
+  "source": "guns/gun_modern.png",
+  "sheet": "modern",
+  "default": "separate"
+ },
+ {
+  "id": "gun_flintlock",
+  "setting": "SET_GUN_FLINTLOCK",
+  "group": "銃",
+  "label": "銃_前装式",
+  "source": "guns/gun_flintlock.png",
+  "sheet": "flintlock",
+  "default": "separate"
+ },
+ {
+  "id": "gun_shotgun",
+  "setting": "SET_GUN_SHOTGUN",
+  "group": "銃",
+  "label": "銃_ショットガン",
+  "source": "guns/gun_shotgun.png",
+  "sheet": "shotgun2",
+  "default": "separate"
+ },
+ {
+  "id": "gun_sniper",
+  "setting": "SET_GUN_SNIPER",
+  "group": "銃",
+  "label": "銃_スナイパーライフル",
+  "source": "guns/gun_sniper.png",
+  "sheet": "sniper",
+  "default": "separate"
+ },
+ {
+  "id": "gun_explosive",
+  "setting": "SET_GUN_EXPLOSIVE",
+  "group": "銃",
+  "label": "銃_爆発物",
+  "source": "guns/gun_explosive.png",
+  "sheet": "explosive",
+  "default": "separate"
+ },
+ {
+  "id": "med_onehanded",
+  "setting": "SET_MED_ONEHANDED",
+  "group": "中世の武器と防具",
+  "label": "中世武器_片手武器",
+  "source": "medieval_weapons/med_onehanded.png",
+  "sheet": "m1",
+  "default": "mix"
+ },
+ {
+  "id": "med_twohanded",
+  "setting": "SET_MED_TWOHANDED",
+  "group": "中世の武器と防具",
+  "label": "中世武器_両手武器",
+  "source": "medieval_weapons/med_twohanded.png",
+  "sheet": "m2",
+  "default": "mix"
+ },
+ {
+  "id": "med_polearm",
+  "setting": "SET_MED_POLEARM",
+  "group": "中世の武器と防具",
+  "label": "中世武器_長柄武器",
+  "source": "medieval_weapons/med_polearm.png",
+  "sheet": "m3",
+  "default": "mix"
+ },
+ {
+  "id": "med_blunt_staff",
+  "setting": "SET_MED_BLUNT_STAFF",
+  "group": "中世の武器と防具",
+  "label": "中世武器_打撃武器と杖",
+  "source": "medieval_weapons/med_blunt_staff.png",
+  "sheet": "m4",
+  "default": "mix"
+ },
+ {
+  "id": "med_short_throwing",
+  "setting": "SET_MED_SHORT_THROWING",
+  "group": "中世の武器と防具",
+  "label": "中世武器_短い武器と投げ物",
+  "source": "medieval_weapons/med_short_throwing.png",
+  "sheet": "m5",
+  "default": "mix"
+ },
+ {
+  "id": "med_bow",
+  "setting": "SET_MED_BOW",
+  "group": "中世の武器と防具",
+  "label": "中世武器_弓とクロスボウ",
+  "source": "medieval_weapons/med_bow.png",
+  "sheet": "m6",
+  "default": "mix"
+ },
+ {
+  "id": "med_shield_armor",
+  "setting": "SET_MED_SHIELD_ARMOR",
+  "group": "中世の武器と防具",
+  "label": "中世武器_盾と胴鎧",
+  "source": "medieval_weapons/med_shield_armor.png",
+  "sheet": "m7",
+  "default": "mix"
+ },
+ {
+  "id": "mag_onehanded",
+  "setting": "SET_MAG_ONEHANDED",
+  "group": "魔法武器",
+  "label": "魔法武器_片手武器",
+  "source": "magic_weapons/mag_onehanded.png",
+  "sheet": "x1",
+  "default": "mix"
+ },
+ {
+  "id": "mag_twohanded",
+  "setting": "SET_MAG_TWOHANDED",
+  "group": "魔法武器",
+  "label": "魔法武器_両手武器",
+  "source": "magic_weapons/mag_twohanded.png",
+  "sheet": "x2",
+  "default": "mix"
+ },
+ {
+  "id": "mag_staff_polearm",
+  "setting": "SET_MAG_STAFF_POLEARM",
+  "group": "魔法武器",
+  "label": "魔法武器_杖と長柄武器",
+  "source": "magic_weapons/mag_staff_polearm.png",
+  "sheet": "x3",
+  "default": "mix"
+ },
+ {
+  "id": "sf_onehanded",
+  "setting": "SET_SF_ONEHANDED",
+  "group": "SF武器",
+  "label": "SF武器_片手武器",
+  "source": "sf_weapons/sf_onehanded.png",
+  "sheet": "s1",
+  "default": "separate"
+ },
+ {
+  "id": "sf_twohanded",
+  "setting": "SET_SF_TWOHANDED",
+  "group": "SF武器",
+  "label": "SF武器_両手武器",
+  "source": "sf_weapons/sf_twohanded.png",
+  "sheet": "s2",
+  "default": "separate"
+ },
+ {
+  "id": "sf_polearm",
+  "setting": "SET_SF_POLEARM",
+  "group": "SF武器",
+  "label": "SF武器_長柄武器",
+  "source": "sf_weapons/sf_polearm.png",
+  "sheet": "s3",
+  "default": "separate"
+ },
+ {
+  "id": "sf_short_throwing",
+  "setting": "SET_SF_SHORT_THROWING",
+  "group": "SF武器",
+  "label": "SF武器_短い武器と投げ物",
+  "source": "sf_weapons/sf_short_throwing.png",
+  "sheet": "s4",
+  "default": "separate"
+ },
+ {
+  "id": "sf_melee",
+  "setting": "SET_SF_MELEE",
+  "group": "SF武器",
+  "label": "SF武器_近接武器",
+  "source": "sf_weapons/sf_melee.png",
+  "sheet": "s5",
+  "default": "separate"
+ },
+ {
+  "id": "part_sf",
+  "setting": "SET_PART_SF",
+  "group": "機械部品",
+  "label": "機械部品_SF",
+  "source": "parts/part_sf.png",
+  "sheet": "i1",
+  "default": "separate"
+ },
+ {
+  "id": "part_steampunk",
+  "setting": "SET_PART_STEAMPUNK",
+  "group": "機械部品",
+  "label": "機械部品_スチームパンク",
+  "source": "parts/part_steampunk.png",
+  "sheet": "i2",
+  "default": "separate"
+ },
+ {
+  "id": "food_ration",
+  "setting": "SET_FOOD_RATION",
+  "group": "食料",
+  "label": "食料_携行食",
+  "source": "food/food_ration.png",
+  "sheet": "i3",
+  "default": "separate"
+ },
+ {
+  "id": "food_general",
+  "setting": "SET_FOOD_GENERAL",
+  "group": "食料",
+  "label": "食料_食材と料理",
+  "source": "food/food_general.png",
+  "sheet": "i4",
+  "default": "mix"
+ },
+ {
+  "id": "food_travel",
+  "setting": "SET_FOOD_TRAVEL",
+  "group": "食料",
+  "label": "食料_旅の食料",
+  "source": "food/food_travel.png",
+  "sheet": "i7",
+  "default": "mix"
+ },
+ {
+  "id": "food_sweets",
+  "setting": "SET_FOOD_SWEETS",
+  "group": "食料",
+  "label": "食料_菓子",
+  "source": "food/food_sweets.png",
+  "sheet": "i8",
+  "default": "separate"
+ },
+ {
+  "id": "food_meat",
+  "setting": "SET_FOOD_MEAT",
+  "group": "食料",
+  "label": "食料_肉料理",
+  "source": "food/food_meat.png",
+  "sheet": "i9",
+  "default": "separate"
+ },
+ {
+  "id": "food_seafood",
+  "setting": "SET_FOOD_SEAFOOD",
+  "group": "食料",
+  "label": "食料_魚介料理",
+  "source": "food/food_seafood.png",
+  "sheet": "i10",
+  "default": "separate"
+ },
+ {
+  "id": "food_seasia",
+  "setting": "SET_FOOD_SEASIA",
+  "group": "食料",
+  "label": "食料_東南アジア料理",
+  "source": "food/food_seasia.png",
+  "sheet": "i11",
+  "default": "separate"
+ },
+ {
+  "id": "food_western",
+  "setting": "SET_FOOD_WESTERN",
+  "group": "食料",
+  "label": "食料_西洋料理",
+  "source": "food/food_western.png",
+  "sheet": "i12",
+  "default": "separate"
+ },
+ {
+  "id": "medic_fantasy",
+  "setting": "SET_MEDIC_FANTASY",
+  "group": "医療品",
+  "label": "医療品_ファンタジー",
+  "source": "medical/medic_fantasy.png",
+  "sheet": "i5",
+  "default": "mix"
+ },
+ {
+  "id": "medic_modern",
+  "setting": "SET_MEDIC_MODERN",
+  "group": "医療品",
+  "label": "医療品_現代とSF",
+  "source": "medical/medic_modern.png",
+  "sheet": "i6",
+  "default": "separate"
+ },
+ {
+  "id": "magic_essence",
+  "setting": "SET_MAGIC_ESSENCE",
+  "group": "魔法素材",
+  "label": "魔法素材_芯と精髄",
+  "source": "magic_materials/magic_essence.png",
+  "sheet": "i13",
+  "default": "mix"
+ },
+ {
+  "id": "magic_relic",
+  "setting": "SET_MAGIC_RELIC",
+  "group": "魔法素材",
+  "label": "魔法素材_遺物と古書",
+  "source": "magic_materials/magic_relic.png",
+  "sheet": "i14",
+  "default": "mix"
+ },
+ {
+  "id": "treasure_coin",
+  "setting": "SET_TREASURE_COIN",
+  "group": "宝物",
+  "label": "宝物_硬貨と記章",
+  "source": "treasure/treasure_coin.png",
+  "sheet": "i15",
+  "default": "mix"
+ },
+ {
+  "id": "tool_travel",
+  "setting": "SET_TOOL_TRAVEL",
+  "group": "道具",
+  "label": "道具_旅の道具と残骸",
+  "source": "tools/tool_travel.png",
+  "sheet": "i16",
+  "default": "mix"
+ },
+ {
+  "id": "creature_material",
+  "setting": "SET_CREATURE_MATERIAL",
+  "group": "魔物素材",
+  "label": "魔物素材_鱗と臓器",
+  "source": "monster_materials/creature_material.png",
+  "sheet": "i17",
+  "default": "mix"
+ },
+ {
+  "id": "wa_swords",
+  "setting": "SET_WA_SWORDS",
+  "group": "和風",
+  "label": "和風_刀剣",
+  "source": "japanese/wa_swords.png",
+  "sheet": "i18",
+  "default": "separate"
+ },
+ {
+  "id": "wa_weapons",
+  "setting": "SET_WA_WEAPONS",
+  "group": "和風",
+  "label": "和風_長柄と飛び道具",
+  "source": "japanese/wa_weapons.png",
+  "sheet": "i19",
+  "default": "separate"
+ },
+ {
+  "id": "wa_goods",
+  "setting": "SET_WA_GOODS",
+  "group": "和風",
+  "label": "和風_小物と素材",
+  "source": "japanese/wa_goods.png",
+  "sheet": "i20",
+  "default": "separate"
+ },
+ {
+  "id": "modern_gear",
+  "setting": "SET_MODERN_GEAR",
+  "group": "現代とSF",
+  "label": "現代とSF_盾と小型武器",
+  "source": "modern_sf/modern_gear.png",
+  "sheet": "i21",
+  "default": "separate"
+ },
+ {
+  "id": "modern_document",
+  "setting": "SET_MODERN_DOCUMENT",
+  "group": "現代とSF",
+  "label": "現代とSF_文書と記録媒体",
+  "source": "modern_sf/modern_document.png",
+  "sheet": "i22",
+  "default": "separate"
+ },
+ {
+  "id": "modern_medicine",
+  "setting": "SET_MODERN_MEDICINE",
+  "group": "現代とSF",
+  "label": "現代とSF_薬と飲み物",
+  "source": "modern_sf/modern_medicine.png",
+  "sheet": "i23",
+  "default": "separate"
+ },
+ {
+  "id": "modern_treasure",
+  "setting": "SET_MODERN_TREASURE",
+  "group": "現代とSF",
+  "label": "現代とSF_宝物",
+  "source": "modern_sf/modern_treasure.png",
+  "sheet": "i24",
+  "default": "separate"
+ },
+ {
+  "id": "modern_industrial",
+  "setting": "SET_MODERN_INDUSTRIAL",
+  "group": "現代とSF",
+  "label": "現代とSF_工業素材と金属",
+  "source": "modern_sf/modern_industrial.png",
+  "sheet": "i25",
+  "default": "separate"
+ },
+ {
+  "id": "wa_armor",
+  "setting": "SET_WA_ARMOR",
+  "group": "和風",
+  "label": "和風_防具と長い刀",
+  "source": "japanese/wa_armor.png",
+  "sheet": "i26",
+  "default": "separate"
+ },
+ {
+  "id": "sf_armor",
+  "setting": "SET_SF_ARMOR",
+  "group": "現代とSF",
+  "label": "現代とSF_籠手と装甲",
+  "source": "modern_sf/sf_armor.png",
+  "sheet": "i27",
+  "default": "separate"
+ },
+ {
+  "id": "wasteland_gear",
+  "setting": "SET_WASTELAND_GEAR",
+  "group": "現代とSF",
+  "label": "現代とSF_荒野の手製の武器と小道具",
+  "source": "modern_sf/wasteland_gear.png",
+  "sheet": "i28",
+  "default": "separate"
+ },
+ {
+  "id": "creature_mutant",
+  "setting": "SET_CREATURE_MUTANT",
+  "group": "魔物素材",
+  "label": "魔物素材_変異生物と虫",
+  "source": "monster_materials/creature_mutant.png",
+  "sheet": "i29",
+  "default": "mix"
+ },
+ {
+  "id": "treasure_crown",
+  "setting": "SET_TREASURE_CROWN",
+  "group": "宝物",
+  "label": "宝物_冠と宝石と指輪",
+  "source": "treasure/treasure_crown.png",
+  "sheet": "i30",
+  "default": "mix"
+ },
+ {
+  "id": "tool_oddities",
+  "setting": "SET_TOOL_ODDITIES",
+  "group": "道具",
+  "label": "道具_神話の鎧と変わった品",
+  "source": "tools/tool_oddities.png",
+  "sheet": "i31",
+  "default": "mix"
+ },
+ {
+  "id": "wear_sf",
+  "setting": "SET_WEAR_SF",
+  "group": "防具類",
+  "label": "防具類_SF",
+  "source": "wear/wear_sf.png",
+  "sheet": "w00",
+  "default": "separate"
+ },
+ {
+  "id": "wear_accessory",
+  "setting": "SET_WEAR_ACCESSORY",
+  "group": "防具類",
+  "label": "防具類_アクセサリー",
+  "source": "wear/wear_accessory.png",
+  "sheet": "w01",
+  "default": "mix"
+ },
+ {
+  "id": "wear_cyber1",
+  "setting": "SET_WEAR_CYBER1",
+  "group": "防具類",
+  "label": "防具類_サイバーパンク1",
+  "source": "wear/wear_cyber1.png",
+  "sheet": "w02",
+  "default": "separate"
+ },
+ {
+  "id": "wear_cyber2",
+  "setting": "SET_WEAR_CYBER2",
+  "group": "防具類",
+  "label": "防具類_サイバーパンク2",
+  "source": "wear/wear_cyber2.png",
+  "sheet": "w03",
+  "default": "separate"
+ },
+ {
+  "id": "wear_steampunk",
+  "setting": "SET_WEAR_STEAMPUNK",
+  "group": "防具類",
+  "label": "防具類_スチームパンク",
+  "source": "wear/wear_steampunk.png",
+  "sheet": "w04",
+  "default": "separate"
+ },
+ {
+  "id": "wear_darkfantasy1",
+  "setting": "SET_WEAR_DARKFANTASY1",
+  "group": "防具類",
+  "label": "防具類_ダークファンタジー1",
+  "source": "wear/wear_darkfantasy1.png",
+  "sheet": "w05",
+  "default": "mix"
+ },
+ {
+  "id": "wear_darkfantasy2",
+  "setting": "SET_WEAR_DARKFANTASY2",
+  "group": "防具類",
+  "label": "防具類_ダークファンタジー2",
+  "source": "wear/wear_darkfantasy2.png",
+  "sheet": "w06",
+  "default": "mix"
+ },
+ {
+  "id": "wear_highfantasy",
+  "setting": "SET_WEAR_HIGHFANTASY",
+  "group": "防具類",
+  "label": "防具類_ハイファンタジー",
+  "source": "wear/wear_highfantasy.png",
+  "sheet": "w07",
+  "default": "mix"
+ },
+ {
+  "id": "wear_postapoc",
+  "setting": "SET_WEAR_POSTAPOC",
+  "group": "防具類",
+  "label": "防具類_ポストアポカリプス",
+  "source": "wear/wear_postapoc.png",
+  "sheet": "w08",
+  "default": "separate"
+ },
+ {
+  "id": "wear_medieval_clothes",
+  "setting": "SET_WEAR_MEDIEVAL_CLOTHES",
+  "group": "防具類",
+  "label": "防具類_中世服装",
+  "source": "wear/wear_medieval_clothes.png",
+  "sheet": "w09",
+  "default": "mix"
+ },
+ {
+  "id": "wear_medieval_armor",
+  "setting": "SET_WEAR_MEDIEVAL_ARMOR",
+  "group": "防具類",
+  "label": "防具類_中世防具",
+  "source": "wear/wear_medieval_armor.png",
+  "sheet": "w10",
+  "default": "mix"
+ },
+ {
+  "id": "wear_japanese",
+  "setting": "SET_WEAR_JAPANESE",
+  "group": "防具類",
+  "label": "防具類_和風",
+  "source": "wear/wear_japanese.png",
+  "sheet": "w11",
+  "default": "separate"
+ },
+ {
+  "id": "wear_school",
+  "setting": "SET_WEAR_SCHOOL",
+  "group": "防具類",
+  "label": "防具類_学園もの",
+  "source": "wear/wear_school.png",
+  "sheet": "w12",
+  "default": "separate"
+ },
+ {
+  "id": "wear_school_girls",
+  "setting": "SET_WEAR_SCHOOL_GIRLS",
+  "group": "防具類",
+  "label": "防具類_学生服(女性)",
+  "source": "wear/wear_school_girls.png",
+  "sheet": "w13",
+  "default": "separate"
+ },
+ {
+  "id": "wear_school_boys",
+  "setting": "SET_WEAR_SCHOOL_BOYS",
+  "group": "防具類",
+  "label": "防具類_学生服(男性)",
+  "source": "wear/wear_school_boys.png",
+  "sheet": "w14",
+  "default": "separate"
+ },
+ {
+  "id": "wear_modern_casual",
+  "setting": "SET_WEAR_MODERN_CASUAL",
+  "group": "防具類",
+  "label": "防具類_現代(カジュアル)",
+  "source": "wear/wear_modern_casual.png",
+  "sheet": "w15",
+  "default": "separate"
+ },
+ {
+  "id": "wear_modern_hard",
+  "setting": "SET_WEAR_MODERN_HARD",
+  "group": "防具類",
+  "label": "防具類_現代(硬派)",
+  "source": "wear/wear_modern_hard.png",
+  "sheet": "w16",
+  "default": "separate"
+ },
+ {
+  "id": "wear_western",
+  "setting": "SET_WEAR_WESTERN",
+  "group": "防具類",
+  "label": "防具類_西部劇",
+  "source": "wear/wear_western.png",
+  "sheet": "w17",
+  "default": "separate"
+ },
+ {
+  "id": "wear_military",
+  "setting": "SET_WEAR_MILITARY",
+  "group": "防具類",
+  "label": "防具類_軍服・儀礼服",
+  "source": "wear/wear_military.png",
+  "sheet": "w18",
+  "default": "separate"
+ },
+ {
+  "id": "wear_earlymodern_clothes",
+  "setting": "SET_WEAR_EARLYMODERN_CLOTHES",
+  "group": "防具類",
+  "label": "防具類_近世服装",
+  "source": "wear/wear_earlymodern_clothes.png",
+  "sheet": "w19",
+  "default": "mix"
+ },
+ {
+  "id": "wear_earlymodern_armor",
+  "setting": "SET_WEAR_EARLYMODERN_ARMOR",
+  "group": "防具類",
+  "label": "防具類_近世防具",
+  "source": "wear/wear_earlymodern_armor.png",
+  "sheet": "w20",
+  "default": "mix"
+ },
+ {
+  "id": "wear_wizard",
+  "setting": "SET_WEAR_WIZARD",
+  "group": "防具類",
+  "label": "防具類_魔法使い",
+  "source": "wear/wear_wizard.png",
+  "sheet": "w21",
+  "default": "mix"
+ }
+]

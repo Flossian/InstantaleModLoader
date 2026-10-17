@@ -654,7 +654,8 @@ def apply(ctx):
             "- item_type と item_sub_type: 次の組から選ぶ。{types}\n"
             "- value: アイテムの価値。次の値を順に1つずつ使う: {values}。"
             "この世界における最低が1で最高が70。高いほど強力であったり、特別であったりする。\n"
-            "- item_appearance: 見た目を日本語で短く（画像の選択に使う）。\n"
+            "- item_appearance: 英語で短い一文、画像の選択に使う。"
+            "(例:['A rusted longsword with a chipped blade and worn leather grip.'])\n"
             "- rarity: {rarities} のいずれか。value が低いほど common。\n"
             "- 前の品揃え（同じ名前を作らない）: {old}\n"
         ).format(

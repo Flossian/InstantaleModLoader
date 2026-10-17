@@ -1,0 +1,2504 @@
+itm_i1_r0_00	scrap	A black circuit board.
+itm_i1_r0_01	scrap	A black circuit board.
+itm_i1_r0_02	scrap	A blue circuit board.
+itm_i1_r0_03	scrap	A black circuit board.
+itm_i1_r0_04	scrap	A black circuit board.
+itm_i1_r0_05	scrap	A black circuit board.
+itm_i1_r0_06	scrap	A black circuit board.
+itm_i1_r0_07	scrap	A black circuit board.
+itm_i1_r0_08	scrap	A black circuit board.
+itm_i1_r0_09	scrap	A blue circuit board.
+itm_i1_r0_10	scrap	A black circuit board.
+itm_i1_r0_11	scrap	A black circuit board.
+itm_i1_r0_12	scrap	A black circuit board with a cooling fan.
+itm_i1_r0_13	scrap	A black burnt circuit board.
+itm_i1_r1_00	magical_material	A black energy cell.
+itm_i1_r1_01	magical_material	A black energy cell.
+itm_i1_r1_02	magical_material	A blue energy cell.
+itm_i1_r1_03	magical_material	A black energy cell.
+itm_i1_r1_04	magical_material	A black energy cell.
+itm_i1_r1_05	magical_material	A black energy cell.
+itm_i1_r1_06	magical_material	A blue energy cell with a faint blue glow.
+itm_i1_r1_07	magical_material	A black power core canister.
+itm_i1_r1_08	magical_material	A brown energy cell.
+itm_i1_r1_09	magical_material	A brown energy cell.
+itm_i1_r1_10	magical_material	A blue energy cell.
+itm_i1_r1_11	magical_material	A black energy cell.
+itm_i1_r1_12	magical_material	A brown energy cell.
+itm_i1_r1_13	magical_material	A black energy cell.
+itm_i1_r1_14	magical_material	A black energy cell.
+itm_i1_r1_15	magical_material	A blue glowing energy orb.
+itm_i1_r1_16	magical_material	A brown energy cell.
+itm_i1_r1_17	magical_material	A blue energy cell with a faint blue glow.
+itm_i1_r2_00	tool	A black rugged data pad.
+itm_i1_r2_01	tool	A black rugged data pad.
+itm_i1_r2_02	tool	A black rugged data pad.
+itm_i1_r2_03	tool	A black rugged data pad.
+itm_i1_r2_04	tool	A black broken handheld scanner.
+itm_i1_r2_05	tool	A black cracked data pad.
+itm_i1_r2_06	tool	A black handheld scanner.
+itm_i1_r2_07	tool	A black cracked data pad.
+itm_i1_r2_08	tool	A black cracked data pad.
+itm_i1_r2_09	tool	A black handheld terminal.
+itm_i1_r2_10	tool	A black handheld radio terminal.
+itm_i1_r2_11	tool	A black shattered data pad.
+itm_i1_r2_12	tool	A grey compact laptop.
+itm_i1_r2_13	tool	A black handheld terminal.
+itm_i1_r3_00	scrap	A black robotic joint part.
+itm_i1_r3_01	scrap	A black robotic joint part.
+itm_i1_r3_02	scrap	A black robotic joint part.
+itm_i1_r3_03	scrap	A black robotic joint part.
+itm_i1_r3_04	scrap	A black cybernetic joint part.
+itm_i1_r3_05	scrap	A black cybernetic limb part.
+itm_i1_r3_06	scrap	A black hydraulic actuator.
+itm_i1_r3_07	scrap	A black robotic joint part.
+itm_i1_r3_08	scrap	A black wired power cell.
+itm_i1_r3_09	scrap	A black bundle of wires.
+itm_i1_r3_10	scrap	A black bundle of wires.
+itm_i1_r3_11	scrap	A black bundle of wires.
+itm_i1_r3_12	scrap	A black bundle of wires.
+itm_i1_r3_13	scrap	A black bundle of wires.
+itm_i1_r3_14	scrap	A brown bundle of wires.
+itm_i1_r4_00	other_material	A grey electric motor.
+itm_i1_r4_01	other_material	A black electric motor.
+itm_i1_r4_02	other_material	A black electric motor.
+itm_i1_r4_03	other_material	A black electric motor.
+itm_i1_r4_04	other_material	A black cooling fan.
+itm_i1_r4_05	other_material	A brown filter cartridge.
+itm_i1_r4_06	other_material	A black filter cartridge.
+itm_i1_r4_07	other_material	A grey filter cartridge.
+itm_i1_r4_08	other_material	A black compact engine module.
+itm_i1_r4_09	other_material	A black power module.
+itm_i1_r4_10	other_material	A black sensor module.
+itm_i1_r4_11	other_material	A black sensor module.
+itm_i1_r4_12	other_material	A grey camera sensor.
+itm_i1_r4_13	other_material	A black camera lens module.
+itm_i1_r4_14	other_material	A black radiator panel.
+itm_i1_r5_00	scrap	A grey pile of scrap metal.
+itm_i1_r5_01	scrap	A brown pile of scrap metal.
+itm_i1_r5_02	scrap	A brown pile of scrap metal.
+itm_i1_r5_03	scrap	A black pile of scrap metal.
+itm_i1_r5_04	scrap	A brown pile of scrap metal.
+itm_i1_r5_05	scrap	A brown pile of scrap metal.
+itm_i1_r5_06	scrap	A black pile of scrap metal.
+itm_i1_r5_07	scrap	A black pile of scrap metal.
+itm_i1_r5_08	scrap	A grey pile of scrap metal.
+itm_i1_r5_09	scrap	A black pile of scrap metal.
+itm_i1_r5_10	scrap	A black pile of scrap metal.
+itm_i1_r5_11	scrap	A black pile of scrap metal.
+itm_i2_r0_00	tool	A brass steam engine model.
+itm_i2_r0_01	tool	A brass armillary sphere.
+itm_i2_r0_02	tool	A brass globe mechanism.
+itm_i2_r0_03	tool	A brass orrery.
+itm_i2_r0_04	tool	A brass clockwork machine.
+itm_i2_r0_05	tool	A brass gyroscope.
+itm_i2_r0_06	tool	A brass telescope on a tripod.
+itm_i2_r0_07	tool	A brass sextant.
+itm_i2_r0_08	tool	A brass sextant.
+itm_i2_r0_09	tool	A brass surveying instrument.
+itm_i2_r0_10	tool	A brass steam engine.
+itm_i2_r0_11	tool	A brass steam engine.
+itm_i2_r1_00	tool	A brass oil lantern.
+itm_i2_r1_01	tool	A brass oil lantern.
+itm_i2_r1_02	tool	A brass oil lantern.
+itm_i2_r1_03	tool	A brass oil lantern.
+itm_i2_r1_04	tool	A brass oil lantern.
+itm_i2_r1_05	tool	A brass oil lantern.
+itm_i2_r1_06	tool	A brass oil lantern.
+itm_i2_r1_07	tool	A brass oil lantern.
+itm_i2_r1_08	tool	A brass oil lantern.
+itm_i2_r1_09	tool	A brass oil lantern.
+itm_i2_r1_10	tool	A brass oil lantern.
+itm_i2_r1_11	tool	A brass oil lantern.
+itm_i2_r1_12	tool	A brass oil lantern.
+itm_i2_r2_00	tool	A brass pocket watch.
+itm_i2_r2_01	tool	A brass pocket watch.
+itm_i2_r2_02	tool	A brass pocket watch.
+itm_i2_r2_03	tool	A brass clockwork mechanism.
+itm_i2_r2_04	tool	A brass clockwork box.
+itm_i2_r2_05	tool	A brass mantel clock.
+itm_i2_r2_06	tool	A brass hourglass.
+itm_i2_r2_07	tool	A brass hourglass.
+itm_i2_r2_08	tool	A wooden hourglass.
+itm_i2_r2_09	tool	A brass clockwork device.
+itm_i2_r2_10	tool	A brass clockwork cage.
+itm_i2_r2_11	tool	A brass clockwork wheel.
+itm_i2_r3_00	other_material	A brass gear.
+itm_i2_r3_01	other_material	A pair of brass gears.
+itm_i2_r3_02	other_material	An iron steam boiler.
+itm_i2_r3_03	other_material	A brass steam engine part.
+itm_i2_r3_04	other_material	A brass engine component.
+itm_i2_r3_05	other_material	A brass coil.
+itm_i2_r3_06	other_material	An iron flywheel engine.
+itm_i2_r3_07	other_material	An iron steam valve.
+itm_i2_r3_08	other_material	A steam valve assembly.
+itm_i2_r3_09	other_material	A brass pressure tank with a gauge.
+itm_i2_r3_10	other_material	An iron steam engine block.
+itm_i2_r3_11	other_material	A brass steam cylinder.
+itm_i2_r4_00	tool	A brass camera lens.
+itm_i2_r4_01	tool	A brass binoculars.
+itm_i2_r4_02	tool	A brass spyglass.
+itm_i2_r4_03	tool	A brass spyglass.
+itm_i2_r4_04	tool	A brass bellows camera.
+itm_i2_r4_05	tool	A brass box camera.
+itm_i2_r4_06	tool	A brass spyglass.
+itm_i2_r4_07	tool	A brass microscope.
+itm_i2_r4_08	tool	A brass magnifying glass on a stand.
+itm_i2_r4_09	tool	A brass lens on a stand.
+itm_i2_r4_10	tool	A brass dish antenna.
+itm_i2_r4_11	tool	A brass box camera.
+itm_i2_r4_12	tool	A brass bellows camera.
+itm_i2_r5_00	relic	A brass relic box.
+itm_i2_r5_01	relic	An engraved brass cylinder.
+itm_i2_r5_02	relic	A brass clockwork puzzle box.
+itm_i2_r5_03	relic	A brass caged crystal orb.
+itm_i2_r5_04	relic	A brass lantern holding a crystal.
+itm_i2_r5_05	relic	A brass puzzle cube with crystals.
+itm_i2_r5_06	relic	A crystal sealed in a glass capsule.
+itm_i2_r5_07	relic	A brass armillary holding a crystal.
+itm_i2_r5_08	relic	A stone monolith with a brass gear.
+itm_i2_r5_09	relic	A stone shrine with clockwork.
+itm_i2_r5_10	relic	A stone obelisk with clockwork.
+itm_i2_r5_11	relic	A stone tablet with a brass gear.
+itm_i2_r5_12	relic	A stone sphere bound in brass.
+itm_i3_r0_00	food	A brown nutrition bar.
+itm_i3_r0_01	food	A brown nutrition bar.
+itm_i3_r0_02	food	A blue nutrition bar with a faint blue glow.
+itm_i3_r0_03	food	A brown nutrition bar.
+itm_i3_r0_04	food	A red nutrition bar.
+itm_i3_r0_05	food	A black nutrition bar.
+itm_i3_r0_06	food	A pink nutrition bar.
+itm_i3_r0_07	food	A brown chocolate bar.
+itm_i3_r0_08	food	A white nutrition bar.
+itm_i3_r0_09	food	A brown nutrition bar.
+itm_i3_r0_10	food	A grey nutrition bar.
+itm_i3_r0_11	food	A brown nutrition bar.
+itm_i3_r0_12	food	A white nutrition bar.
+itm_i3_r0_13	food	A brown chocolate bar.
+itm_i3_r0_14	food	A white fruit and nut bar.
+itm_i3_r0_15	food	A golden nutrition bar.
+itm_i3_r1_00	food	A grey tube of nutrient paste.
+itm_i3_r1_01	food	A beige tube of nutrient paste.
+itm_i3_r1_02	food	A grey tube of nutrient paste.
+itm_i3_r1_03	food	A brown tube of nutrient paste.
+itm_i3_r1_04	food	A brown tube of nutrient paste.
+itm_i3_r1_05	food	A brown food pouch with a spout.
+itm_i3_r1_06	food	A brown food pouch with a spout.
+itm_i3_r1_07	food	A grey food pouch with a spout.
+itm_i3_r1_08	food	A red food pouch with a spout.
+itm_i3_r1_09	food	A white food pouch with a spout.
+itm_i3_r1_10	food	A grey food pouch with a spout.
+itm_i3_r1_11	food	A grey food pouch with a spout.
+itm_i3_r1_12	food	A pink food pouch with a spout.
+itm_i3_r1_13	food	A white food pouch with a spout.
+itm_i3_r1_14	food	A grey food pouch with a spout.
+itm_i3_r1_15	food	A grey food pouch with a spout.
+itm_i3_r2_00	food	A black canned food.
+itm_i3_r2_01	food	A red canned food.
+itm_i3_r2_02	food	A black canned food.
+itm_i3_r2_03	food	A brown open can of sardines.
+itm_i3_r2_04	food	A brown canned food.
+itm_i3_r2_05	food	A grey canned food.
+itm_i3_r2_06	food	A black open can of stew.
+itm_i3_r2_07	food	A black open can of stew.
+itm_i3_r2_08	food	A black open can of stew.
+itm_i3_r2_09	food	A brown canned food.
+itm_i3_r2_10	food	A black open can of sardines.
+itm_i3_r2_11	food	A black open can of sardines.
+itm_i3_r2_12	food	A brown canned food.
+itm_i3_r2_13	food	A grey canned meat tin.
+itm_i3_r3_00	drink	A black military canteen.
+itm_i3_r3_01	drink	A green canteen.
+itm_i3_r3_02	drink	A black metal canteen.
+itm_i3_r3_03	drink	A blue plastic water bottle.
+itm_i3_r3_04	drink	A blue plastic water bottle.
+itm_i3_r3_05	drink	A black canteen in a canvas cover.
+itm_i3_r3_06	drink	A black metal hip flask.
+itm_i3_r3_07	drink	A black thermos flask.
+itm_i3_r3_08	drink	A black thermos flask.
+itm_i3_r3_09	drink	A black thermos flask.
+itm_i3_r3_10	drink	A black thermos flask.
+itm_i3_r3_11	drink	A black thermos flask.
+itm_i3_r3_12	drink	A red thermos flask.
+itm_i3_r4_00	food	A golden military ration pack.
+itm_i3_r4_01	food	A brown military ration pack.
+itm_i3_r4_02	food	A grey military ration pack.
+itm_i3_r4_03	food	A beige vacuum-sealed food pack.
+itm_i3_r4_04	food	A black military ration pack.
+itm_i3_r4_05	food	A grey vacuum-sealed food pack.
+itm_i3_r4_06	food	A brown compressed food cubes.
+itm_i3_r4_07	food	A white vacuum-sealed food pack.
+itm_i3_r4_08	food	A grey vacuum-sealed food pack.
+itm_i3_r4_09	food	A grey vacuum-sealed food pack.
+itm_i3_r4_10	food	A brown vacuum-sealed food pack.
+itm_i3_r4_11	food	A beige compressed food block.
+itm_i3_r4_12	food	A beige compressed food block.
+itm_i3_r4_13	food	A brown vacuum-sealed food pack.
+itm_i3_r4_14	food	A brown vacuum-sealed food pack.
+itm_i3_r5_00	food	A white jar of nutrition tablets.
+itm_i3_r5_01	food	A white jar of nutrition tablets.
+itm_i3_r5_02	food	A grey jar of nutrition tablets.
+itm_i3_r5_03	food	A white jar of nutrition tablets.
+itm_i3_r5_04	food	A white jar of nutrition tablets.
+itm_i3_r5_05	food	A brown jar of nutrition tablets.
+itm_i3_r5_06	food	A black capsule of nutrition pills.
+itm_i3_r5_07	food	A brown capsule of nutrition pills.
+itm_i3_r5_08	food	A black capsule of nutrition pills.
+itm_i3_r5_09	food	A blue capsule of nutrition pills with a faint blue glow.
+itm_i3_r5_10	food	A grey capsule of nutrition pills.
+itm_i3_r5_11	drink	A golden drink cartridge.
+itm_i3_r5_12	drink	A red drink cartridge.
+itm_i3_r5_13	drink	A blue drink cartridge with a faint blue glow.
+itm_i3_r5_14	drink	A golden drink cartridge.
+itm_i3_r5_15	drink	A black drink cartridge.
+itm_i3_r5_16	drink	A green drink cartridge.
+itm_i3_r5_17	drink	A brown drink cartridge.
+itm_i3_r5_18	drink	A red drink cartridge.
+itm_i4_r0_00	food	A loaf of bread.
+itm_i4_r0_01	food	A sliced bread.
+itm_i4_r0_02	food	A round loaf of bread.
+itm_i4_r0_03	food	A baguette.
+itm_i4_r0_04	food	A croissant.
+itm_i4_r0_05	food	A bread rolls.
+itm_i4_r0_06	food	A burger bun.
+itm_i4_r0_07	food	A pretzel.
+itm_i4_r0_08	food	A blueberry muffin.
+itm_i4_r0_09	food	A stack of pancakes.
+itm_i4_r0_10	food	A pie.
+itm_i4_r0_11	food	A quiche.
+itm_i4_r0_12	food	A pizza.
+itm_i4_r1_00	food	A red apple.
+itm_i4_r1_01	food	A green apple.
+itm_i4_r1_02	food	An orange.
+itm_i4_r1_03	food	A lemon.
+itm_i4_r1_04	food	A lime.
+itm_i4_r1_05	food	A bunch of bananas.
+itm_i4_r1_06	food	A bunch of purple grapes.
+itm_i4_r1_07	food	A bunch of green grapes.
+itm_i4_r1_08	food	A strawberries.
+itm_i4_r1_09	food	A blueberries.
+itm_i4_r1_10	food	A cherries.
+itm_i4_r1_11	food	A peach.
+itm_i4_r1_12	food	A pear.
+itm_i4_r1_13	food	A pomegranate.
+itm_i4_r2_00	food	A tomato.
+itm_i4_r2_01	food	A cherry tomatoes on the vine.
+itm_i4_r2_02	food	An onion.
+itm_i4_r2_03	food	A red onion.
+itm_i4_r2_04	food	A garlic bulb.
+itm_i4_r2_05	food	A potatoes.
+itm_i4_r2_06	food	A carrots.
+itm_i4_r2_07	food	A daikon radish.
+itm_i4_r2_08	food	A cabbage.
+itm_i4_r2_09	food	A lettuce.
+itm_i4_r2_10	food	A broccoli.
+itm_i4_r2_11	food	A red bell pepper.
+itm_i4_r2_12	food	A yellow bell pepper.
+itm_i4_r2_13	food	An eggplant.
+itm_i4_r3_00	mushroom	A brown mushrooms.
+itm_i4_r3_01	mushroom	A white mushrooms.
+itm_i4_r3_02	mushroom	An oyster mushrooms.
+itm_i4_r3_03	mushroom	An enoki mushrooms.
+itm_i4_r3_04	food	A spinach.
+itm_i4_r3_05	food	A napa cabbage.
+itm_i4_r3_06	food	An asparagus.
+itm_i4_r3_07	food	An ear of corn.
+itm_i4_r3_08	food	A celery.
+itm_i4_r3_09	food	A leek.
+itm_i4_r3_10	food	A ginger root.
+itm_i4_r3_11	plant	A sprig of parsley.
+itm_i4_r3_12	plant	A basil leaves.
+itm_i4_r3_13	plant	A mint leaves.
+itm_i4_r4_00	food	A raw beef steak.
+itm_i4_r4_01	food	A raw marbled beef.
+itm_i4_r4_02	food	A raw pork shoulder.
+itm_i4_r4_03	food	A raw chicken drumsticks.
+itm_i4_r4_04	food	A raw whole chicken.
+itm_i4_r4_05	food	A ground meat.
+itm_i4_r4_06	food	A ring sausage.
+itm_i4_r4_07	food	A sausages.
+itm_i4_r4_08	food	A raw bacon strips.
+itm_i4_r4_09	food	A raw lamb chops.
+itm_i4_r4_10	food	A raw beef slab.
+itm_i4_r5_00	food	A raw mackerel.
+itm_i4_r5_01	food	A raw red sea bream.
+itm_i4_r5_02	food	A raw saury.
+itm_i4_r5_03	food	A salmon steak.
+itm_i4_r5_04	food	A raw flatfish.
+itm_i4_r5_05	food	A tuna block.
+itm_i4_r5_06	food	A squid.
+itm_i4_r5_07	food	An octopus.
+itm_i4_r5_08	food	A shrimp.
+itm_i4_r5_09	food	A crab.
+itm_i4_r5_10	food	A scallop.
+itm_i4_r5_11	food	A clams.
+itm_i4_r5_12	food	An oyster.
+itm_i4_r6_00	drink	A jug of milk.
+itm_i4_r6_01	drink	A glass of milk.
+itm_i4_r6_02	food	A wedge of cheese.
+itm_i4_r6_03	food	A block of butter.
+itm_i4_r6_04	food	A wheel of soft cheese.
+itm_i4_r6_05	food	A wedge of blue cheese.
+itm_i4_r6_06	food	A jar of yogurt.
+itm_i4_r6_07	food	A bowl of cream.
+itm_i4_r6_08	food	A brown egg.
+itm_i4_r6_09	food	A white egg.
+itm_i4_r6_10	food	A quail eggs.
+itm_i4_r6_11	food	A jar of honey.
+itm_i4_r6_12	food	A green olives.
+itm_i4_r6_13	food	A black olives.
+itm_i4_r6_14	food	A bottle of olive oil.
+itm_i4_r7_00	food	A bowl of rice.
+itm_i4_r7_01	food	A bowl of barley.
+itm_i4_r7_02	food	A bowl of oats.
+itm_i4_r7_03	food	A sack of flour.
+itm_i4_r7_04	food	An ears of wheat.
+itm_i4_r7_05	food	A bowl of red beans.
+itm_i4_r7_06	food	A bowl of soybeans.
+itm_i4_r7_07	food	A bowl of lentils.
+itm_i4_r7_08	food	A bowl of peppercorns.
+itm_i4_r7_09	food	A bowl of salt.
+itm_i4_r7_10	food	A bowl of brown sugar.
+itm_i4_r7_11	food	A block of chocolate.
+itm_i4_r7_12	food	A scoop of salt.
+itm_i4_r8_00	food	A bowl of salad.
+itm_i4_r8_01	food	A bowl of stew.
+itm_i4_r8_02	food	A curry and rice.
+itm_i4_r8_03	food	A plate of spaghetti.
+itm_i4_r8_04	food	A plate of pasta.
+itm_i4_r8_05	food	A bowl of soup.
+itm_i4_r8_06	food	A bowl of beef stew.
+itm_i4_r8_07	food	A bowl of vegetable stew.
+itm_i4_r8_08	food	A grilled fish.
+itm_i4_r8_09	food	A grilled steak plate.
+itm_i4_r8_10	food	An omelette rice.
+itm_i4_r8_11	food	A sandwich.
+itm_i4_r8_12	food	A rice ball.
+itm_i4_r9_00	food	A custard pudding.
+itm_i4_r9_01	food	A slice of strawberry shortcake.
+itm_i4_r9_02	food	A slice of chocolate cake.
+itm_i4_r9_03	food	A cream puff.
+itm_i4_r9_04	food	A pink frosted donut with a faint magenta glow.
+itm_i4_r9_05	food	A chocolate chip cookies.
+itm_i4_r9_06	food	A macarons.
+itm_i4_r9_07	food	A strawberry parfait.
+itm_i4_r9_08	food	An ice cream sundae.
+itm_i4_r9_09	food	A skewered dumplings.
+itm_i4_r9_10	drink	A cup of coffee.
+itm_i4_r9_11	drink	A cup of tea.
+itm_i4_r9_12	drink	A mug of beer.
+itm_i4_r9_13	drink	A glass of red wine.
+itm_i5_r0_00	medicine	A white rolled linen bandage.
+itm_i5_r0_01	medicine	A black rolled linen bandage.
+itm_i5_r0_02	medicine	A brown rolled linen bandage.
+itm_i5_r0_03	medicine	A brown rolled linen bandage.
+itm_i5_r0_04	medicine	A brown rolled linen bandage.
+itm_i5_r0_05	medicine	A grey rolled linen bandage.
+itm_i5_r0_06	medicine	A red rolled linen bandage.
+itm_i5_r0_07	medicine	A brown rolled linen bandage.
+itm_i5_r0_08	medicine	A golden rolled linen bandage.
+itm_i5_r0_09	medicine	A white rolled linen bandage.
+itm_i5_r0_10	medicine	A brown rolled linen bandage.
+itm_i5_r0_11	medicine	A brown rolled linen bandage.
+itm_i5_r0_12	medicine	A brown rolled linen bandage.
+itm_i5_r1_00	medicine	A brown ointment jar.
+itm_i5_r1_01	medicine	A brown ointment jar.
+itm_i5_r1_02	medicine	A brown ointment jar.
+itm_i5_r1_03	medicine	A brown ointment jar.
+itm_i5_r1_04	medicine	A brown ointment jar.
+itm_i5_r1_05	medicine	A brown ointment jar.
+itm_i5_r1_06	medicine	A black ointment jar.
+itm_i5_r1_07	medicine	A black ointment jar.
+itm_i5_r1_08	medicine	A brown ointment jar.
+itm_i5_r1_09	medicine	A brown ointment jar.
+itm_i5_r1_10	medicine	A brown ointment jar.
+itm_i5_r1_11	medicine	A black ointment jar.
+itm_i5_r1_12	medicine	A brown ointment jar.
+itm_i5_r1_13	medicine	A brown ointment jar.
+itm_i5_r1_14	medicine	A brown ointment jar.
+itm_i5_r2_00	medicine	A white paper-wrapped powder medicine.
+itm_i5_r2_01	medicine	A brown cloth pouch of medicine.
+itm_i5_r2_02	medicine	A brown paper packet of pills.
+itm_i5_r2_03	medicine	A brown wooden box of pills.
+itm_i5_r2_04	medicine	A brown cloth pouch of pills.
+itm_i5_r2_05	medicine	A brown paper-wrapped pills.
+itm_i5_r2_06	medicine	A brown wooden box of pills.
+itm_i5_r2_07	medicine	A brown paper twist of powder medicine.
+itm_i5_r2_08	medicine	A red cloth pouch of pills.
+itm_i5_r2_09	medicine	A brown paper packet of pills.
+itm_i5_r2_10	medicine	A brown sack of pills.
+itm_i5_r2_11	medicine	A white paper packet of black pills.
+itm_i5_r2_12	medicine	A brown paper-wrapped medicine.
+itm_i5_r2_13	medicine	A brown wooden box of green pills.
+itm_i5_r3_00	medicine	A brown corked bottle of herbal decoction.
+itm_i5_r3_01	medicine	A brown corked bottle of herbal decoction.
+itm_i5_r3_02	medicine	A brown corked bottle of herbal decoction.
+itm_i5_r3_03	medicine	A brown corked bottle of herbal decoction.
+itm_i5_r3_04	medicine	A brown corked bottle of herbal decoction.
+itm_i5_r3_05	medicine	A brown corked bottle of herbal decoction.
+itm_i5_r3_06	medicine	A brown corked bottle of herbal decoction.
+itm_i5_r3_07	medicine	A brown corked bottle of herbal decoction.
+itm_i5_r3_08	medicine	A brown corked bottle of herbal decoction.
+itm_i5_r3_09	medicine	A brown corked bottle of herbal decoction.
+itm_i5_r3_10	medicine	A white ceramic jug of tonic.
+itm_i5_r3_11	medicine	A brown corked bottle of herbal decoction.
+itm_i5_r3_12	medicine	A brown corked bottle of herbal decoction.
+itm_i5_r3_13	medicine	A brown corked bottle of herbal decoction.
+itm_i5_r3_14	medicine	A brown corked bottle of herbal decoction.
+itm_i5_r3_15	medicine	A brown corked bottle of herbal decoction.
+itm_i5_r4_00	plant	An olive bundle of dried herbs.
+itm_i5_r4_01	plant	A purple bundle of dried herbs.
+itm_i5_r4_02	plant	A brown bundle of dried herbs.
+itm_i5_r4_03	plant	A golden bundle of dried herbs.
+itm_i5_r4_04	plant	A brown bundle of dried herbs.
+itm_i5_r4_05	plant	A black bundle of dried herbs.
+itm_i5_r4_06	plant	A brown bundle of dried herbs.
+itm_i5_r4_07	plant	An olive bundle of dried herbs.
+itm_i5_r4_08	plant	A brown bundle of dried herbs.
+itm_i5_r4_09	plant	A brown bundle of dried herbs.
+itm_i5_r4_10	plant	An olive bundle of dried herbs.
+itm_i5_r4_11	plant	A brown bundle of dried herbs.
+itm_i5_r4_12	plant	A brown bundle of dried herbs.
+itm_i5_r4_13	plant	A golden bundle of dried herbs.
+itm_i5_r5_00	small_weapon	A brown surgical scalpel.
+itm_i5_r5_01	small_weapon	A brown surgical scalpel.
+itm_i5_r5_02	tool	A brown surgical scissors.
+itm_i5_r5_03	tool	A black tweezers.
+itm_i5_r5_04	tool	A brown bone saw.
+itm_i5_r5_05	tool	A black surgical forceps.
+itm_i5_r5_06	tool	A black suture needles.
+itm_i5_r5_07	tool	A brown spool of suture thread.
+itm_i5_r5_08	tool	A black metal mortar and pestle.
+itm_i5_r5_09	tool	A black stone mortar and pestle.
+itm_i5_r5_10	tool	A black metal medicine scoop.
+itm_i5_r5_11	tool	A brown leather instrument roll.
+itm_i5_r5_12	tool	A brown surgical chain hook.
+itm_i5_r5_13	tool	A black brass syringe.
+itm_i6_r0_00	medicine	A black first aid kit.
+itm_i6_r0_01	medicine	A red first aid kit.
+itm_i6_r0_02	medicine	A brown first aid kit.
+itm_i6_r0_03	medicine	A black first aid kit.
+itm_i6_r0_04	medicine	A brown first aid kit.
+itm_i6_r0_05	medicine	A grey first aid kit.
+itm_i6_r0_06	medicine	A grey first aid kit.
+itm_i6_r0_07	medicine	A grey first aid kit.
+itm_i6_r0_08	medicine	A black first aid kit.
+itm_i6_r0_09	medicine	A brown first aid kit.
+itm_i6_r0_10	medicine	A black first aid kit.
+itm_i6_r0_11	medicine	A grey first aid kit.
+itm_i6_r1_00	medicine	A grey pill bottle.
+itm_i6_r1_01	medicine	A grey blister pack of pills.
+itm_i6_r1_02	medicine	A white pill bottle.
+itm_i6_r1_03	medicine	A white blister pack of pills.
+itm_i6_r1_04	medicine	A grey pill bottle.
+itm_i6_r1_05	medicine	A grey blister pack of pills.
+itm_i6_r1_06	medicine	A grey pill bottle.
+itm_i6_r1_07	medicine	A grey blister pack of pills.
+itm_i6_r1_08	medicine	A brown blister pack of pills.
+itm_i6_r1_09	medicine	A grey blister pack of pills.
+itm_i6_r1_10	medicine	A grey pill bottle.
+itm_i6_r1_11	medicine	A beige blister pack of pills.
+itm_i6_r1_12	medicine	A brown pill bottle.
+itm_i6_r1_13	medicine	A white blister pack of pills.
+itm_i6_r1_14	medicine	A grey pill bottle.
+itm_i6_r1_15	medicine	A white pill bottle.
+itm_i6_r1_16	medicine	A grey blister pack of pills.
+itm_i6_r1_17	medicine	A brown blister pack of pills.
+itm_i6_r2_00	medicine	A grey syringe.
+itm_i6_r2_01	medicine	A grey syringe.
+itm_i6_r2_02	medicine	A brown syringe.
+itm_i6_r2_03	medicine	A white auto-injector pen.
+itm_i6_r2_04	medicine	A white auto-injector pen.
+itm_i6_r2_05	medicine	A black auto-injector pen.
+itm_i6_r2_06	medicine	A black syringe.
+itm_i6_r2_07	medicine	A blue high-tech injector.
+itm_i6_r2_08	medicine	A black auto-injector pen.
+itm_i6_r2_09	medicine	A grey high-tech injector.
+itm_i6_r2_10	medicine	An olive syringe.
+itm_i6_r2_11	medicine	A black high-tech injector.
+itm_i6_r2_12	medicine	A blue syringe.
+itm_i6_r3_00	medicine	A white roll of bandage.
+itm_i6_r3_01	medicine	A white elastic bandage roll.
+itm_i6_r3_02	medicine	A white roll of bandage.
+itm_i6_r3_03	medicine	A white folded bandage.
+itm_i6_r3_04	medicine	A white elastic bandage roll.
+itm_i6_r3_05	medicine	A white roll of bandage.
+itm_i6_r3_06	medicine	A white roll of medical tape.
+itm_i6_r3_07	medicine	A white gauze pads.
+itm_i6_r3_08	medicine	A white sealed sterile gauze pack.
+itm_i6_r3_09	medicine	A white roll of bandage.
+itm_i6_r3_10	medicine	A white folded gauze pads.
+itm_i6_r3_11	medicine	A white bandage roll and gauze pad.
+itm_i6_r3_12	medicine	A beige roll of medical tape.
+itm_i6_r3_13	medicine	A grey sealed sterile gauze pack.
+itm_i6_r4_00	medicine	A brown glass ampoule.
+itm_i6_r4_01	medicine	A grey glass ampoule.
+itm_i6_r4_02	medicine	A blue glass ampoule.
+itm_i6_r4_03	medicine	A brown glass ampoule.
+itm_i6_r4_04	medicine	A blue medicine vial.
+itm_i6_r4_05	medicine	A black medicine cartridge.
+itm_i6_r4_06	medicine	A blue medicine cartridge with a faint cyan glow.
+itm_i6_r4_07	medicine	A green medicine vial.
+itm_i6_r4_08	medicine	A brown glass ampoule.
+itm_i6_r4_09	medicine	A black medicine cartridge.
+itm_i6_r4_10	medicine	A blue medicine cartridge with a faint cyan glow.
+itm_i6_r4_11	medicine	A grey plastic medicine bottle.
+itm_i6_r4_12	medicine	A white IV bag.
+itm_i6_r4_13	medicine	A grey IV bag.
+itm_i6_r4_14	medicine	A red IV bag.
+itm_i6_r4_15	medicine	A grey IV bag.
+itm_i6_r4_16	medicine	A grey IV bag.
+itm_i6_r5_00	small_weapon	A grey surgical scalpel.
+itm_i6_r5_01	small_weapon	A grey surgical scalpel.
+itm_i6_r5_02	small_weapon	A grey surgical scalpel.
+itm_i6_r5_03	small_weapon	A brown surgical scalpel.
+itm_i6_r5_04	small_weapon	A black surgical scalpel.
+itm_i6_r5_05	small_weapon	A black laser scalpel with a faint cyan glow.
+itm_i6_r5_06	small_weapon	A grey surgical scalpel.
+itm_i6_r5_07	small_weapon	A grey surgical scalpel.
+itm_i6_r5_08	small_weapon	A black laser scalpel.
+itm_i6_r5_09	small_weapon	A black laser scalpel.
+itm_i6_r5_10	small_weapon	A black surgical scalpel.
+itm_i6_r5_11	small_weapon	A black laser scalpel.
+itm_i6_r5_12	small_weapon	A grey laser scalpel.
+itm_i7_r0_00	food	A brown bundle of dried meat.
+itm_i7_r0_01	food	A brown bundle of jerky.
+itm_i7_r0_02	food	A brown stack of jerky.
+itm_i7_r0_03	food	A brown jerky in a paper wrap.
+itm_i7_r0_04	food	A brown netted cured ham.
+itm_i7_r0_05	food	A brown smoked fish on leaves.
+itm_i7_r0_06	food	A brown dried meat in a paper wrap.
+itm_i7_r0_07	food	A brown string of sausages.
+itm_i7_r0_08	food	A brown smoked fish.
+itm_i7_r0_09	food	A brown bundle of jerky.
+itm_i7_r0_10	food	A brown dried meat in a paper wrap.
+itm_i7_r0_11	food	A brown bundle of jerky sticks.
+itm_i7_r0_12	food	A brown smoked fish on leaves.
+itm_i7_r0_13	food	A brown wrapped cured sausage.
+itm_i7_r1_00	food	A brown stack of hardtack.
+itm_i7_r1_01	food	A brown hardtack biscuits.
+itm_i7_r1_02	food	A brown stack of crackers.
+itm_i7_r1_03	food	A brown bundle of hardtack tied with twine.
+itm_i7_r1_04	food	A brown slices of rye bread.
+itm_i7_r1_05	food	A white wheel of cheese.
+itm_i7_r1_06	food	A brown cheese wedge wrapped in cloth.
+itm_i7_r1_07	food	A brown cheese and blue cheese.
+itm_i7_r1_08	food	A brown cheese wedges.
+itm_i7_r1_09	food	A brown cloth-wrapped cheese.
+itm_i7_r1_10	food	A brown dark bread and hardtack.
+itm_i7_r1_11	food	A brown brown biscuit.
+itm_i7_r1_12	food	A brown stack of crackers.
+itm_i7_r1_13	food	A brown crackers.
+itm_i7_r2_00	food	A brown sack of oats.
+itm_i7_r2_01	food	A brown sack of grain.
+itm_i7_r2_02	food	A brown sack of oats.
+itm_i7_r2_03	food	A brown sack of grain.
+itm_i7_r2_04	food	A brown sack of mixed grain.
+itm_i7_r2_05	food	A brown sack of grain and a loaf of bread.
+itm_i7_r2_06	food	A brown sack of seeds.
+itm_i7_r2_07	food	A white sack of flour.
+itm_i7_r2_08	food	A brown basket of red beans.
+itm_i7_r2_09	food	A brown basket of grain and corn.
+itm_i7_r2_10	food	A brown sack of grain.
+itm_i7_r2_11	food	A brown sack of oats.
+itm_i7_r2_12	food	A brown embroidered sack of beans.
+itm_i7_r2_13	food	A brown sack of mixed grain.
+itm_i7_r3_00	drink	A brown leather waterskin.
+itm_i7_r3_01	drink	A brown gourd canteen.
+itm_i7_r3_02	drink	A brown leather-bound waterskin.
+itm_i7_r3_03	drink	A brown ceramic flask.
+itm_i7_r3_04	drink	A brown small wooden water keg.
+itm_i7_r3_05	drink	A brown iron canteen.
+itm_i7_r3_06	drink	A black metal flask.
+itm_i7_r3_07	drink	A brown barrel-shaped canteen.
+itm_i7_r3_08	drink	A brown leather-wrapped bottle.
+itm_i7_r3_09	drink	A brown metal canteen.
+itm_i7_r3_10	drink	A brown wicker-wrapped bottle.
+itm_i7_r3_11	drink	A brown metal flask.
+itm_i7_r3_12	drink	A brown leather gourd flask.
+itm_i7_r4_00	drink	A brown wooden tankard.
+itm_i7_r4_01	drink	A brown ceramic mug of milk.
+itm_i7_r4_02	drink	A black metal cup.
+itm_i7_r4_03	drink	A brown cup of tea.
+itm_i7_r4_04	drink	A brown wooden cup.
+itm_i7_r4_05	drink	A brown mug of milk.
+itm_i7_r4_06	drink	A brown wooden bowl of broth.
+itm_i7_r4_07	food	A brown bowl of cream soup.
+itm_i7_r4_08	drink	A red glass of red wine.
+itm_i7_r4_09	drink	A brown wooden mug.
+itm_i7_r4_10	food	A brown bowl of stew.
+itm_i7_r4_11	drink	A black metal cup.
+itm_i7_r4_12	food	A brown bowl of herb soup.
+itm_i7_r5_00	food	An olive leaf-wrapped food.
+itm_i7_r5_01	food	A white cloth-wrapped food bundle.
+itm_i7_r5_02	food	A brown leaf-wrapped rice.
+itm_i7_r5_03	food	A brown leather-wrapped food.
+itm_i7_r5_04	food	A brown paper-wrapped meat pie.
+itm_i7_r5_05	food	An olive leaf-wrapped food.
+itm_i7_r5_06	food	A white leaf-wrapped rice ball.
+itm_i7_r5_07	food	A golden leaf-wrapped bread.
+itm_i7_r5_08	food	A brown leaf-wrapped food roll.
+itm_i7_r5_09	food	A white cloth-wrapped food bundle.
+itm_i7_r5_10	food	A brown patterned cloth-wrapped bundle.
+itm_i7_r5_11	food	A brown twine-tied food pack.
+itm_i7_r5_12	food	A brown cloth-wrapped bread roll.
+itm_i7_r6_00	food	An olive leaf-wrapped food.
+itm_i7_r6_01	food	A brown paper-wrapped food bundle.
+itm_i7_r6_02	food	A black blue cloth-wrapped bundle.
+itm_i7_r6_03	food	A brown sandwich in a paper wrap.
+itm_i7_r6_04	food	An olive leaf-wrapped food.
+itm_i7_r6_05	food	A brown paper-wrapped dried meat.
+itm_i7_r6_06	food	A golden leaf-wrapped flatbread.
+itm_i7_r6_07	food	A brown cloth-wrapped meat pie.
+itm_i7_r6_08	food	An olive leaf-wrapped rice.
+itm_i7_r6_09	food	A brown paper-wrapped bundle.
+itm_i7_r6_10	food	A brown leaf-wrapped food pack.
+itm_i7_r6_11	food	A brown paper-wrapped rice roll.
+itm_i26_r0_00	body_armor	A brown red lacquered samurai do armor.
+itm_i26_r0_01	body_armor	A brown black lamellar samurai do armor.
+itm_i26_r0_02	body_armor	A brown brown okegawa do armor.
+itm_i26_r0_03	body_armor	A red red lacquered samurai do armor.
+itm_i26_r0_04	body_armor	A brown navy laced samurai do armor.
+itm_i26_r0_05	body_armor	A brown plain leather samurai do armor.
+itm_i26_r0_06	body_armor	A brown black and gold samurai do armor.
+itm_i26_r0_07	body_armor	A brown red lacquered samurai do armor.
+itm_i26_r0_08	body_armor	A blue navy laced samurai do armor.
+itm_i26_r0_09	body_armor	A brown worn leather samurai do armor.
+itm_i26_r1_00	gauntlets	A brown pair of chain kote gauntlets.
+itm_i26_r1_01	gauntlets	A brown pair of red lacquered kote gauntlets.
+itm_i26_r1_02	gauntlets	A brown pair of leather kote gauntlets.
+itm_i26_r1_03	gauntlets	A black pair of black kote gauntlets.
+itm_i26_r1_04	gauntlets	A brown pair of iron kote gauntlets.
+itm_i26_r1_05	gauntlets	A brown pair of laced kote gauntlets.
+itm_i26_r1_06	legwear	A brown iron suneate shin guard.
+itm_i26_r1_07	legwear	A brown iron suneate shin guard.
+itm_i26_r1_08	legwear	A brown black suneate shin guard.
+itm_i26_r1_09	legwear	A brown leather suneate shin guard.
+itm_i26_r1_10	legwear	A red pair of red suneate shin guards.
+itm_i26_r2_00	headgear	A brown horned samurai kabuto helmet.
+itm_i26_r2_01	headgear	A red red kabuto helmet with a demon mask.
+itm_i26_r2_02	headgear	A brown blue kabuto helmet with golden crest.
+itm_i26_r2_03	headgear	A brown plain iron kabuto helmet.
+itm_i26_r2_04	headgear	A brown kabuto helmet with a red face mask.
+itm_i26_r2_05	headgear	A brown blue and gold kabuto helmet.
+itm_i26_r2_06	headgear	A brown red kabuto helmet with antler crest.
+itm_i26_r2_07	headgear	A brown iron menpo face mask.
+itm_i26_r2_08	headgear	A brown red oni mask.
+itm_i26_r2_09	headgear	A brown white fox mask.
+itm_i26_r2_10	headgear	A brown jingasa conical helmet.
+itm_i26_r3_00	long_weapon	A brown tachi long sword.
+itm_i26_r3_01	long_weapon	A black tachi long sword.
+itm_i26_r3_02	long_weapon	A brown tachi long sword.
+itm_i26_r3_03	long_weapon	A brown tachi long sword.
+itm_i26_r3_04	long_weapon	A black rusted tachi long sword.
+itm_i26_r3_05	long_weapon	A red blood-stained tachi long sword.
+itm_i26_r3_06	long_weapon	A brown tachi long sword.
+itm_i26_r3_07	long_weapon	A white tachi long sword with a wavy hamon.
+itm_i26_r3_08	long_weapon	A brown blood-stained tachi long sword.
+itm_i26_r3_09	long_weapon	A black tachi long sword.
+itm_i26_r3_10	long_weapon	A brown tachi long sword.
+itm_i26_r3_11	long_weapon	A brown tachi long sword.
+itm_i26_r3_12	long_weapon	A brown tachi long sword.
+itm_i26_r3_13	long_weapon	A brown rusted tachi long sword.
+itm_i26_r3_14	long_weapon	A white blood-stained tachi long sword.
+itm_i26_r3_15	long_weapon	A brown tachi long sword with a frost hamon.
+itm_i26_r3_16	long_weapon	A brown tachi long sword.
+itm_i26_r3_17	long_weapon	A brown rusted tachi long sword.
+itm_i26_r3_18	long_weapon	A grey tachi long sword.
+itm_i26_r4_00	medium_weapon	A brown nata cleaver.
+itm_i26_r4_01	medium_weapon	A brown nata cleaver.
+itm_i26_r4_02	medium_weapon	A brown yamagatana machete.
+itm_i26_r4_03	medium_weapon	A brown wrapped nata cleaver.
+itm_i26_r4_04	medium_weapon	A black nata cleaver.
+itm_i26_r4_05	medium_weapon	A brown sheathed nata cleaver.
+itm_i26_r4_06	medium_weapon	A brown yamagatana machete.
+itm_i26_r4_07	medium_weapon	A black broad nata cleaver.
+itm_i26_r4_08	medium_weapon	A brown broad nata cleaver.
+itm_i26_r4_09	medium_weapon	A black nata cleaver.
+itm_i26_r4_10	medium_weapon	A brown yamagatana machete.
+itm_i26_r4_11	medium_weapon	A brown woodcutter ono axe.
+itm_i26_r4_12	medium_weapon	A black woodcutter ono axe.
+itm_i26_r4_13	medium_weapon	A brown hatchet.
+itm_i26_r4_14	medium_weapon	A brown woodcutter ono axe.
+itm_i27_r0_00	gauntlets	A black sci-fi gauntlet with glowing blue conduits.
+itm_i27_r0_01	gauntlets	A white white sci-fi gauntlet.
+itm_i27_r0_02	gauntlets	A red red gauntlet with a power core.
+itm_i27_r0_03	gauntlets	A brown yellow utility gauntlet with tools.
+itm_i27_r0_04	gauntlets	A white white armored gauntlet.
+itm_i27_r0_05	gauntlets	A black black gauntlet with red lights.
+itm_i27_r0_06	gauntlets	A brown olive work gauntlet.
+itm_i27_r0_07	gauntlets	A blue blue gauntlet with a power core with a faint cyan glow.
+itm_i27_r0_08	gauntlets	A brown white and orange gauntlet.
+itm_i27_r0_09	gauntlets	A brown yellow magnetic gauntlet.
+itm_i27_r1_00	gauntlets	A black chrome prosthetic arm.
+itm_i27_r1_01	gauntlets	A black black prosthetic arm with cyan lights.
+itm_i27_r1_02	gauntlets	A red red combat prosthetic arm.
+itm_i27_r1_03	gauntlets	A red skeletal prosthetic arm with exposed wires.
+itm_i27_r1_04	gauntlets	A white white prosthetic arm with blue lights.
+itm_i27_r1_05	gauntlets	A purple purple neon prosthetic arm.
+itm_i27_r1_06	gauntlets	A brown golden skeletal prosthetic arm.
+itm_i27_r1_07	gauntlets	A black black prosthetic arm with orange lights.
+itm_i27_r1_08	gauntlets	A white white prosthetic arm.
+itm_i27_r1_09	gauntlets	A red red clawed prosthetic arm.
+itm_i27_r2_00	body_armor	A brown black composite armor vest.
+itm_i27_r2_01	body_armor	A brown white armor vest with blue lights.
+itm_i27_r2_02	body_armor	A brown olive tactical armor vest.
+itm_i27_r2_03	body_armor	A brown hazard striped armor vest.
+itm_i27_r2_04	body_armor	A brown scratched composite armor vest.
+itm_i27_r2_05	body_armor	A brown red hexagonal armor vest.
+itm_i27_r2_06	body_armor	A blue blue hexagonal armor vest.
+itm_i27_r2_07	body_armor	A grey white power armor chestplate.
+itm_i27_r2_08	body_armor	A brown tan tactical armor vest.
+itm_i27_r2_09	body_armor	A red black armor vest with red lights.
+itm_i27_r3_00	clothing	A brown orange jumpsuit with utility harness.
+itm_i27_r3_01	clothing	A black navy crew jumpsuit.
+itm_i27_r3_02	clothing	A brown white pressure suit.
+itm_i27_r3_03	clothing	A brown black jumpsuit with harness.
+itm_i27_r3_04	clothing	A black black and red bodysuit.
+itm_i27_r3_05	clothing	A brown olive work jumpsuit.
+itm_i27_r3_06	clothing	A blue blue crew jumpsuit with harness.
+itm_i27_r3_07	clothing	A brown yellow work jumpsuit with harness.
+itm_i27_r3_08	clothing	A black black ballistic long coat.
+itm_i27_r3_09	clothing	A brown white ballistic long coat.
+itm_i27_r4_00	headgear	A white white helmet with blue visor.
+itm_i27_r4_01	headgear	A black black helmet with red visor and respirator.
+itm_i27_r4_02	headgear	A brown night vision helmet.
+itm_i27_r4_03	headgear	A brown orange visor helmet.
+itm_i27_r4_04	headgear	A black gas mask helmet.
+itm_i27_r4_05	headgear	A grey white helmet with blue visor.
+itm_i27_r4_06	headgear	A red red helmet with goggles and respirator.
+itm_i27_r4_07	headgear	A brown hooded mask with yellow goggles.
+itm_i27_r4_08	headgear	A black helmet with green night vision lenses.
+itm_i27_r4_09	headgear	A brown white helmet with gold visor.
+itm_i28_r0_00	long_weapon	A black pipe spear.
+itm_i28_r0_01	long_weapon	A brown pipe spear with cloth wrapping.
+itm_i28_r0_02	long_weapon	A black pipe spear.
+itm_i28_r0_03	long_weapon	A brown knife-tied spear.
+itm_i28_r0_04	long_weapon	A brown pipe spear.
+itm_i28_r0_05	long_weapon	A brown taped pipe spear.
+itm_i28_r0_06	long_weapon	A brown road sign spear.
+itm_i28_r0_07	long_weapon	A brown rebar spear.
+itm_i28_r0_08	long_weapon	A brown pipe spear.
+itm_i28_r0_09	long_weapon	A brown taped pipe spear.
+itm_i28_r0_10	long_weapon	A black pipe spear.
+itm_i28_r0_11	long_weapon	A brown barbed wire spear.
+itm_i28_r0_12	long_weapon	A brown taped pipe spear.
+itm_i28_r0_13	long_weapon	A brown pipe spear.
+itm_i28_r0_14	long_weapon	A brown rebar spear.
+itm_i28_r1_00	medium_weapon	A brown chain-wrapped sledgehammer.
+itm_i28_r1_01	medium_weapon	A brown road sign axe.
+itm_i28_r1_02	medium_weapon	A brown striped sign axe.
+itm_i28_r1_03	large_weapon	A brown spiked pipe mace.
+itm_i28_r1_04	medium_weapon	A brown scrap hammer.
+itm_i28_r1_05	medium_weapon	A brown engine block hammer.
+itm_i28_r1_06	medium_weapon	A brown saw blade hammer.
+itm_i28_r1_07	medium_weapon	A brown red sign hammer.
+itm_i28_r1_08	medium_weapon	A brown chain-wrapped saw axe.
+itm_i28_r1_09	medium_weapon	A brown chain-wrapped scrap hammer.
+itm_i28_r1_10	medium_weapon	A red red sign axe.
+itm_i28_r1_11	medium_weapon	A brown saw blade wheel hammer.
+itm_i28_r1_12	medium_weapon	A brown spiked scrap hammer.
+itm_i28_r1_13	medium_weapon	A brown chained sign hammer.
+itm_i28_r2_00	medium_weapon	A brown nail-studded club.
+itm_i28_r2_01	medium_weapon	A brown nail-studded bat.
+itm_i28_r2_02	medium_weapon	A brown wrench club.
+itm_i28_r2_03	medium_weapon	A brown saw blade club.
+itm_i28_r2_04	medium_weapon	A red pipe wrench axe.
+itm_i28_r2_05	medium_weapon	A brown pipe axe.
+itm_i28_r2_06	medium_weapon	A brown pipe hatchet.
+itm_i28_r2_07	medium_weapon	A brown spiked pipe club.
+itm_i28_r2_08	medium_weapon	A brown saw blade club.
+itm_i28_r2_09	medium_weapon	A brown saw blade club.
+itm_i28_r2_10	medium_weapon	A brown nail-studded club.
+itm_i28_r2_11	medium_weapon	A brown hooked pipe club.
+itm_i28_r2_12	medium_weapon	A brown cleaver on a pipe.
+itm_i28_r2_13	medium_weapon	A brown spiked pipe.
+itm_i28_r2_14	medium_weapon	A brown pipe axe.
+itm_i28_r2_15	medium_weapon	A brown cleaver on a pipe.
+itm_i28_r3_00	tool	A brown bunch of keys.
+itm_i28_r3_01	tool	A black keys with tags.
+itm_i28_r3_02	tool	A brown bunch of keys with tags.
+itm_i28_r3_03	tool	A grey single key.
+itm_i28_r3_04	tool	A brown keys with tags.
+itm_i28_r3_05	tool	A brown car key.
+itm_i28_r3_06	tool	A brown bunch of keys.
+itm_i28_r3_07	tool	A blue blue key card.
+itm_i28_r3_08	tool	A brown keys on a carabiner.
+itm_i28_r3_09	tool	A brown padlock.
+itm_i28_r3_10	tool	A red keys with a red tag.
+itm_i28_r3_11	tool	A brown yellow key tag.
+itm_i28_r3_12	tool	A blue keys with a blue tag.
+itm_i28_r3_13	tool	A brown brass padlock.
+itm_i28_r3_14	tool	A brown keys on a chain.
+itm_i28_r3_15	tool	A brown steel padlock.
+itm_i28_r4_00	tool	A brown flashlight.
+itm_i28_r4_01	tool	A brown olive flashlight.
+itm_i28_r4_02	tool	A brown red flashlight.
+itm_i28_r4_03	tool	A black metal lantern.
+itm_i28_r4_04	tool	A brown red multi-tool.
+itm_i28_r4_05	tool	A brown folding knife multi-tool.
+itm_i28_r4_06	tool	A brown multi-tool.
+itm_i28_r4_07	tool	A brown red dot scope.
+itm_i28_r4_08	tool	A brown brass scope.
+itm_i28_r4_09	tool	A brown gas mask filter.
+itm_i28_r4_10	tool	A brown water filter cartridge.
+itm_i28_r4_11	tool	A black handheld radio.
+itm_i28_r4_12	tool	A black handheld radio.
+itm_i28_r4_13	tool	A brown handheld radio.
+itm_i28_r4_14	tool	A brown field radio.
+itm_i29_r0_00	creature_part	A brown purple chitin plate.
+itm_i29_r0_01	creature_part	A brown brown scaled plate.
+itm_i29_r0_02	creature_part	A brown dark chitin plate.
+itm_i29_r0_03	creature_part	A brown spiked chitin plate.
+itm_i29_r0_04	creature_part	A brown green chitin plate.
+itm_i29_r0_05	creature_part	A red red chitin plate.
+itm_i29_r0_06	creature_part	A brown spiked green carapace.
+itm_i29_r0_07	creature_part	A purple spiked purple carapace.
+itm_i29_r0_08	creature_part	A brown sand-colored scale plate.
+itm_i29_r0_09	creature_part	A black dark scale plate.
+itm_i29_r0_10	creature_part	A brown spiked red carapace.
+itm_i29_r0_11	creature_part	A brown perforated chitin plate.
+itm_i29_r0_12	creature_part	A brown iridescent chitin plate.
+itm_i29_r1_00	creature_part	A brown yellow stinger.
+itm_i29_r1_01	creature_part	A brown red pincer.
+itm_i29_r1_02	creature_part	A brown black mandible.
+itm_i29_r1_03	creature_part	A red red stinger.
+itm_i29_r1_04	creature_part	A brown mandible skull.
+itm_i29_r1_05	creature_part	A brown brown stinger.
+itm_i29_r1_06	creature_part	A brown brown stinger.
+itm_i29_r1_07	creature_part	A brown spiked tail tip.
+itm_i29_r1_08	creature_part	A red red mandible.
+itm_i29_r1_09	creature_part	A brown segmented scorpion tail.
+itm_i29_r1_10	creature_part	A brown green scorpion stinger.
+itm_i29_r1_11	creature_part	A brown spiked stinger.
+itm_i29_r1_12	creature_part	A brown red pincer.
+itm_i29_r1_13	creature_part	A brown black scorpion tail.
+itm_i29_r1_14	creature_part	A purple purple stinger.
+itm_i29_r1_15	creature_part	A brown orange hairy stinger.
+itm_i29_r1_16	creature_part	A brown red spiked horn.
+itm_i29_r2_00	creature_part	A white glowing blue fang.
+itm_i29_r2_01	creature_part	A brown bone horn.
+itm_i29_r2_02	creature_part	A brown bone spike.
+itm_i29_r2_03	creature_part	A brown twisted horn.
+itm_i29_r2_04	creature_part	A purple purple glowing horn.
+itm_i29_r2_05	creature_part	A brown olive horn.
+itm_i29_r2_06	creature_part	A brown black horn.
+itm_i29_r2_07	creature_part	A brown bone spike.
+itm_i29_r2_08	creature_part	A brown spiral horn.
+itm_i29_r2_09	creature_part	A brown green glowing fang.
+itm_i29_r2_10	creature_part	A brown bone spike.
+itm_i29_r2_11	creature_part	A black black twisted horn.
+itm_i29_r2_12	creature_part	A brown red horn.
+itm_i29_r2_13	creature_part	A brown pale horn.
+itm_i29_r2_14	creature_part	A brown green glowing fang.
+itm_i29_r2_15	creature_part	A brown small fang.
+itm_i29_r2_16	creature_part	A brown curved fang.
+itm_i29_r2_17	creature_part	A brown fungus-covered lump.
+itm_i29_r3_00	creature_part	A brown iridescent insect wing.
+itm_i29_r3_01	creature_part	A blue blue insect wing.
+itm_i29_r3_02	creature_part	A brown brown beetle wing.
+itm_i29_r3_03	creature_part	A golden black beetle wing.
+itm_i29_r3_04	creature_part	A brown red beetle wing.
+itm_i29_r3_05	creature_part	A brown butterfly wing.
+itm_i29_r3_06	creature_part	A blue dragonfly wing.
+itm_i29_r3_07	creature_part	A brown jointed insect leg.
+itm_i29_r3_08	creature_part	A brown purple insect leg.
+itm_i29_r3_09	creature_part	A brown golden insect leg.
+itm_i29_r3_10	creature_part	A brown red insect leg.
+itm_i29_r3_11	creature_part	A brown brown spider leg.
+itm_i29_r3_12	creature_part	A purple purple spider leg.
+itm_i29_r3_13	creature_part	A brown green beetle wing.
+itm_i29_r3_14	creature_part	A brown black spider leg.
+itm_i29_r3_15	creature_part	A blue membrane wing.
+itm_i29_r4_00	creature_part	A red red jelly flesh lump.
+itm_i29_r4_01	creature_part	A brown cluster of purple eggs.
+itm_i29_r4_02	creature_part	A brown cluster of translucent eggs.
+itm_i29_r4_03	creature_part	A brown hive pod.
+itm_i29_r4_04	creature_part	A pink purple egg cluster.
+itm_i29_r4_05	creature_part	A red orange egg cluster.
+itm_i29_r4_06	creature_part	A brown mud flesh lump.
+itm_i29_r4_07	creature_part	A brown red egg cluster.
+itm_i29_r4_08	creature_part	A golden green egg cluster.
+itm_i29_r4_09	creature_part	A brown cluster of clear eggs.
+itm_i29_r4_10	creature_part	A brown spiked fungal pod.
+itm_i29_r4_11	creature_part	A purple purple egg cluster.
+itm_i29_r4_12	creature_part	A brown fungus-covered lump.
+itm_i29_r5_00	creature_part	A brown pouch of silver flakes.
+itm_i29_r5_01	creature_part	A blue jar of blue scale dust with a faint blue glow.
+itm_i29_r5_02	creature_part	A brown iridescent shell shard.
+itm_i29_r5_03	creature_part	A brown iridescent shell fragment.
+itm_i29_r5_04	creature_part	A brown jar of glowing amber dust.
+itm_i29_r5_05	creature_part	A purple iridescent scales with a faint blue glow.
+itm_i29_r5_06	creature_part	A brown golden shell shard.
+itm_i29_r5_07	creature_part	A blue jar of teal scale dust with a faint cyan glow.
+itm_i29_r5_08	creature_part	A blue blue shell shard with a faint blue glow.
+itm_i29_r5_09	creature_part	A brown golden cocoon.
+itm_i29_r5_10	creature_part	An olive jar of green scale dust.
+itm_i29_r5_11	creature_part	A brown purple shell.
+itm_i29_r5_12	creature_part	A purple jar of purple scale dust with a faint purple glow.
+itm_i29_r5_13	creature_part	A blue blue shell fragment.
+itm_i29_r5_14	creature_part	A brown golden cocoon.
+itm_i29_r5_15	creature_part	A brown jar of golden scale dust.
+itm_i30_r0_00	headgear	A brown iron crown.
+itm_i30_r0_01	headgear	A black obsidian crown.
+itm_i30_r0_02	headgear	A white crown of light.
+itm_i30_r0_03	headgear	A grey tarnished silver crown.
+itm_i30_r0_04	headgear	A brown golden jeweled crown.
+itm_i30_r0_05	headgear	A brown crown of thorns.
+itm_i30_r0_06	headgear	A brown ash-covered crown.
+itm_i30_r0_07	headgear	A purple dark amethyst crown.
+itm_i30_r0_08	headgear	A brown golden crown.
+itm_i30_r0_09	headgear	A brown broken stone crown.
+itm_i30_r1_00	headgear	A brown royal crown.
+itm_i30_r1_01	headgear	A brown golden laurel wreath.
+itm_i30_r1_02	headgear	A brown golden circlet.
+itm_i30_r1_03	headgear	A grey silver moon circlet.
+itm_i30_r1_04	headgear	A brown horned crown.
+itm_i30_r1_05	headgear	A brown bone crown.
+itm_i30_r1_06	headgear	A brown flower circlet.
+itm_i30_r1_07	headgear	A brown golden gem circlet.
+itm_i30_r1_08	headgear	A grey silver pearl tiara.
+itm_i30_r1_09	headgear	A purple dark amethyst tiara.
+itm_i30_r2_00	gem	A white misty pearl.
+itm_i30_r2_01	gem	A purple black pearl.
+itm_i30_r2_02	gem	A blue sapphire with a faint blue glow.
+itm_i30_r2_03	gem	A red ruby.
+itm_i30_r2_04	gem	A green emerald.
+itm_i30_r2_05	gem	A purple amethyst with a faint purple glow.
+itm_i30_r2_06	gem	A brown topaz.
+itm_i30_r2_07	gem	A blue teardrop sapphire with a faint blue glow.
+itm_i30_r2_08	gem	A red pink gem.
+itm_i30_r2_09	gem	A green green gem.
+itm_i30_r2_10	gem	A blue galaxy sapphire orb.
+itm_i30_r2_11	gem	A red dark red gem.
+itm_i30_r3_00	gem	A grey clear crystal cluster.
+itm_i30_r3_01	gem	A red red crystal cluster.
+itm_i30_r3_02	gem	A blue blue crystal cluster with a faint blue glow.
+itm_i30_r3_03	gem	A brown golden crystal cluster.
+itm_i30_r3_04	gem	A purple purple crystal cluster.
+itm_i30_r3_05	gem	A blue pale blue crystal cluster with a faint blue glow.
+itm_i30_r3_06	gem	An olive green crystal cluster.
+itm_i30_r3_07	gem	A brown orange crystal cluster.
+itm_i30_r3_08	gem	A brown pouch of crystal dust.
+itm_i30_r3_09	gem	A brown pouch of gold dust.
+itm_i30_r3_10	gem	A black pile of black crystal dust.
+itm_i30_r3_11	gem	A blue iridescent crystal.
+itm_i30_r4_00	accessory	A brown plain iron ring.
+itm_i30_r4_01	accessory	A brown silver ring with a sapphire.
+itm_i30_r4_02	accessory	A brown gold ring with a ruby.
+itm_i30_r4_03	accessory	A grey silver ring with an amethyst.
+itm_i30_r4_04	accessory	A brown ring with a pearl.
+itm_i30_r4_05	accessory	A brown gold ring with a sapphire.
+itm_i30_r4_06	accessory	A brown ring with a broken red gem.
+itm_i30_r4_07	accessory	A brown bone ring.
+itm_i30_r4_08	accessory	A brown gold ring with an opal.
+itm_i30_r4_09	accessory	A brown silver moon earring.
+itm_i30_r4_10	accessory	A brown golden sun earring.
+itm_i30_r4_11	accessory	A purple amethyst earring with a faint purple glow.
+itm_i31_r0_00	body_armor	A brown glowing ember breastplate.
+itm_i31_r0_01	body_armor	A brown star-studded breastplate.
+itm_i31_r0_02	body_armor	A brown holy silver breastplate.
+itm_i31_r0_03	body_armor	A grey fish scale breastplate.
+itm_i31_r0_04	body_armor	A brown brass gear breastplate.
+itm_i31_r0_05	body_armor	A brown spiked dark breastplate.
+itm_i31_r0_06	body_armor	A brown golden sun breastplate.
+itm_i31_r0_07	body_armor	A blue teal scale breastplate.
+itm_i31_r0_08	body_armor	A brown dark gold breastplate.
+itm_i31_r0_09	body_armor	A brown red holy breastplate.
+itm_i31_r0_10	body_armor	A brown bone breastplate.
+itm_i31_r0_11	body_armor	A purple gravity void breastplate.
+itm_i31_r1_00	medium_weapon	A brown anchor.
+itm_i31_r1_01	long_weapon	A brown harpoon.
+itm_i31_r1_02	large_weapon	A brown shepherd crook.
+itm_i31_r1_03	medium_weapon	A brown blue anchor.
+itm_i31_r1_04	long_weapon	A brown shepherd crook.
+itm_i31_r1_05	large_weapon	A blue harpoon.
+itm_i31_r1_06	long_weapon	A brown hook staff with a chain.
+itm_i31_r1_07	long_weapon	A brown shepherd crook.
+itm_i31_r1_08	long_weapon	A brown boat hook.
+itm_i31_r1_09	medium_weapon	A brown anchor with a bell.
+itm_i31_r1_10	long_weapon	A brown harpoon with a chain.
+itm_i31_r1_11	large_weapon	A brown shepherd crook.
+itm_i31_r1_12	medium_weapon	A brown anchor.
+itm_i31_r1_13	long_weapon	A brown shepherd crook.
+itm_i31_r1_14	medium_weapon	A grey anchor.
+itm_i31_r2_00	long_weapon	A brown longsword.
+itm_i31_r2_01	long_weapon	A blue rapier crackling with lightning.
+itm_i31_r2_02	long_weapon	A brown rusted longsword.
+itm_i31_r2_03	long_weapon	A brown longsword.
+itm_i31_r2_04	long_weapon	A brown broken silver longsword.
+itm_i31_r2_05	long_weapon	A purple rapier crackling with purple lightning.
+itm_i31_r2_06	long_weapon	A brown notched longsword.
+itm_i31_r2_07	long_weapon	A brown blood-stained longsword.
+itm_i31_r2_08	long_weapon	A grey silver longsword.
+itm_i31_r2_09	long_weapon	A brown red longsword.
+itm_i31_r2_10	long_weapon	A brown longsword.
+itm_i31_r2_11	long_weapon	A brown blood-stained longsword.
+itm_i31_r2_12	long_weapon	A purple misty longsword.
+itm_i31_r2_13	large_weapon	A brown golden longsword.
+itm_i31_r2_14	large_weapon	A brown silver longsword.
+itm_i31_r2_15	long_weapon	A brown blood-stained longsword.
+itm_i31_r2_16	long_weapon	A purple purple longsword.
+itm_i31_r3_00	tool	A white silver flute.
+itm_i31_r3_01	tool	A brown horn.
+itm_i31_r3_02	tool	A brown war horn.
+itm_i31_r3_03	tool	A brown lyre.
+itm_i31_r3_04	tool	A brown lyre.
+itm_i31_r3_05	tool	A brown golden lyre.
+itm_i31_r3_06	tool	A brown bell with a tassel.
+itm_i31_r3_07	tool	A brown red drum.
+itm_i31_r3_08	tool	A brown cluster of bells.
+itm_i31_r3_09	tool	A brown brass bell.
+itm_i31_r3_10	tool	A brown drum.
+itm_i31_r3_11	tool	A brown string of bells.
+itm_i31_r3_12	tool	A brown bells with tassels.
+itm_i31_r3_13	tool	A brown hurdy-gurdy.
+itm_i31_r3_14	tool	A brown pan flute.
+itm_i31_r3_15	tool	A beige tambourine drum.
+itm_i31_r4_00	other_material	A brown jar of mud.
+itm_i31_r4_01	other_material	A black black jar of sludge.
+itm_i31_r4_02	other_material	A brown clay jar.
+itm_i31_r4_03	other_material	A brown dark blue jar.
+itm_i31_r4_04	other_material	A brown black urn.
+itm_i31_r4_05	other_material	A grey grey mud-soaked cloth.
+itm_i31_r4_06	other_material	A black dark cloth.
+itm_i31_r4_07	other_material	A brown red embroidered cloth.
+itm_i31_r4_08	other_material	A black grey rag.
+itm_i31_r4_09	other_material	A brown torn rag.
+itm_i31_r4_10	other_material	A brown grey folded cloth.
+itm_i31_r4_11	other_material	A brown clay urn.
+itm_i31_r4_12	other_material	A red red folded cloth.
+itm_i31_r4_13	other_material	A purple purple cloth.
+itm_i31_r5_00	relic	A brown orb of liquid fire in a cage.
+itm_i31_r5_01	relic	A blue humming machine core.
+itm_i31_r5_02	relic	A brown golden armillary core.
+itm_i31_r5_03	relic	A blue blue cube core with a faint blue glow.
+itm_i31_r5_04	relic	A brown golden geometric relic.
+itm_i31_r5_05	relic	A purple purple orb in a cage.
+itm_i31_r5_06	relic	A blue orbiting crystal core.
+itm_i31_r5_07	relic	A blue black orb with rings.
+itm_i31_r5_08	relic	A brown carved divine fragment.
+itm_i31_r5_09	relic	A blue floating crystal fragments.
+itm_i31_r5_10	relic	A blue blue machine core.
+itm_i31_r5_11	tool	A brown training mannequin head.
+itm_i31_r5_12	tool	A white training mannequin head.
+itm_i31_r5_13	relic	A brown golden jeweled orb.
+itm_i31_r5_14	relic	A brown red core ring.
+itm_i8_r0_00	food	A slice of strawberry shortcake.
+itm_i8_r0_01	food	A slice of chocolate cake.
+itm_i8_r0_02	food	A slice of cheesecake.
+itm_i8_r0_03	food	A slice of fruit cake.
+itm_i8_r0_04	food	A slice of layered chocolate cake.
+itm_i8_r0_05	food	A raspberry mousse cake.
+itm_i8_r0_06	food	A slice of matcha cake.
+itm_i8_r0_07	food	A blueberry tart.
+itm_i8_r0_08	food	A mont blanc.
+itm_i8_r0_09	food	A cream puff.
+itm_i8_r0_10	food	A chocolate roll cake.
+itm_i8_r0_11	food	A mille-feuille.
+itm_i8_r1_00	food	A strawberry shortcake.
+itm_i8_r1_01	food	A chocolate cake.
+itm_i8_r1_02	food	A fruit tart.
+itm_i8_r1_03	food	A blueberry cheesecake.
+itm_i8_r1_04	food	A chocolate layer cake.
+itm_i8_r1_05	food	A berry mousse cake.
+itm_i8_r1_06	food	A matcha mousse cake.
+itm_i8_r1_07	food	A berry tart with a faint magenta glow.
+itm_i8_r1_08	food	A meringue tart.
+itm_i8_r1_09	food	A chocolate dome cake.
+itm_i8_r1_10	food	A custard pudding.
+itm_i8_r1_11	food	A raspberry mille-feuille.
+itm_i8_r2_00	food	A wrapped red candy.
+itm_i8_r2_01	food	A wrapped orange candy.
+itm_i8_r2_02	food	A wrapped yellow candy.
+itm_i8_r2_03	food	A wrapped green candy with a faint green glow.
+itm_i8_r2_04	food	A wrapped blue candy with a faint blue glow.
+itm_i8_r2_05	food	A wrapped purple candy with a faint purple glow.
+itm_i8_r2_06	food	A red swirl candy with a faint magenta glow.
+itm_i8_r2_07	food	A blue swirl candy with a faint cyan glow.
+itm_i8_r2_08	food	A green swirl candy with a faint green glow.
+itm_i8_r2_09	food	An orange swirl candy.
+itm_i8_r2_10	food	A pink heart candy.
+itm_i8_r2_11	food	A blue star candy with a faint blue glow.
+itm_i8_r3_00	food	A red jelly bean.
+itm_i8_r3_01	food	An orange jelly bean.
+itm_i8_r3_02	food	A yellow jelly bean.
+itm_i8_r3_03	food	A green jelly bean with a faint green glow.
+itm_i8_r3_04	food	A blue jelly bean with a faint blue glow.
+itm_i8_r3_05	food	A purple jelly bean with a faint purple glow.
+itm_i8_r3_06	food	A pink gumdrop with a faint magenta glow.
+itm_i8_r3_07	food	An orange gumdrop.
+itm_i8_r3_08	food	A yellow gumdrop.
+itm_i8_r3_09	food	A green gumdrop with a faint green glow.
+itm_i8_r3_10	food	An orange slice gummy.
+itm_i8_r3_11	food	A lemon slice gummy.
+itm_i8_r3_12	food	A green gummy bear.
+itm_i8_r4_00	food	A chocolate square.
+itm_i8_r4_01	food	A heart-shaped chocolate.
+itm_i8_r4_02	food	A chocolate truffle.
+itm_i8_r4_03	food	A nut-covered chocolate truffle.
+itm_i8_r4_04	food	A white chocolate truffle.
+itm_i8_r4_05	food	A chocolate cube with gold flakes.
+itm_i8_r4_06	food	A ruby chocolate.
+itm_i8_r4_07	food	A white chocolate bonbon.
+itm_i8_r4_08	food	A matcha chocolate.
+itm_i8_r4_09	food	A dark chocolate gem.
+itm_i8_r4_10	food	An almond chocolate cup.
+itm_i8_r4_11	food	A chocolate cup.
+itm_i8_r5_00	food	A chocolate chip cookie.
+itm_i8_r5_01	food	A butter cookie.
+itm_i8_r5_02	food	A checkerboard cookie.
+itm_i8_r5_03	food	A jam cookie.
+itm_i8_r5_04	food	A madeleine.
+itm_i8_r5_05	food	A financier.
+itm_i8_r5_06	food	A pink macaron.
+itm_i8_r5_07	food	A chocolate macaron.
+itm_i8_r5_08	food	A green macaron.
+itm_i8_r5_09	food	A yellow macaron.
+itm_i8_r5_10	food	A cream sandwich cookie.
+itm_i8_r5_11	food	A heart-shaped palmier.
+itm_i8_r5_12	food	A waffle cookie.
+itm_i8_r6_00	food	A pink frosted donut.
+itm_i8_r6_01	food	A chocolate donut.
+itm_i8_r6_02	food	A white frosted donut.
+itm_i8_r6_03	food	A matcha donut.
+itm_i8_r6_04	food	A powdered donut.
+itm_i8_r6_05	food	A french cruller.
+itm_i8_r6_06	food	A chocolate cruller.
+itm_i8_r6_07	food	A cinnamon roll.
+itm_i8_r6_08	food	A cherry danish.
+itm_i8_r6_09	food	A blueberry danish.
+itm_i8_r6_10	food	An apple danish.
+itm_i8_r6_11	food	A glazed donut.
+itm_i8_r7_00	food	A three-colored dango skewer.
+itm_i8_r7_01	food	A sakura mochi.
+itm_i8_r7_02	food	A dorayaki.
+itm_i8_r7_03	food	A taiyaki.
+itm_i8_r7_04	food	A sweet bean bun.
+itm_i8_r7_05	food	A pink wagashi.
+itm_i8_r7_06	food	A purple wagashi.
+itm_i8_r7_07	food	A green wagashi.
+itm_i8_r7_08	food	A pink mochi.
+itm_i8_r7_09	food	A strawberry daifuku.
+itm_i8_r7_10	food	A chocolate cube.
+itm_i8_r7_11	food	A glass of anmitsu.
+itm_i9_r0_00	food	A grilled steak.
+itm_i9_r0_01	food	A grilled ribeye steak.
+itm_i9_r0_02	food	A T-bone steak.
+itm_i9_r0_03	food	A roast beef.
+itm_i9_r0_04	food	A rack of lamb.
+itm_i9_r0_05	food	A herb-crusted roast beef.
+itm_i9_r0_06	food	A sliced roast beef.
+itm_i9_r0_07	food	A roast pork.
+itm_i9_r0_08	food	A sliced roast meat.
+itm_i9_r0_09	food	A glazed roast pork.
+itm_i9_r0_10	food	A sliced beef.
+itm_i9_r1_00	food	A roast chicken.
+itm_i9_r1_01	food	A roast chicken leg.
+itm_i9_r1_02	food	A plate of roast chicken.
+itm_i9_r1_03	food	A roast chicken with potatoes.
+itm_i9_r1_04	food	A plate of roast chicken.
+itm_i9_r1_05	food	A plate of roast chicken.
+itm_i9_r1_06	food	A roast pork loin.
+itm_i9_r1_07	food	A roast ham.
+itm_i9_r1_08	food	A sliced glazed ham.
+itm_i9_r1_09	food	A roast turkey.
+itm_i9_r1_10	food	A roast meatloaf.
+itm_i9_r2_00	food	A hamburger patty.
+itm_i9_r2_01	food	A meatballs.
+itm_i9_r2_02	food	A barbecue ribs.
+itm_i9_r2_03	food	A barbecue ribs.
+itm_i9_r2_04	food	A braised pork belly.
+itm_i9_r2_05	food	A meat skewers.
+itm_i9_r2_06	food	A chicken skewers.
+itm_i9_r2_07	food	A beef skewers.
+itm_i9_r2_08	food	A meat and vegetable skewers.
+itm_i9_r2_09	food	A grilled sausages.
+itm_i9_r2_10	food	A white sausages.
+itm_i9_r3_00	food	A sliced ham.
+itm_i9_r3_01	food	A ham steak.
+itm_i9_r3_02	food	A prosciutto.
+itm_i9_r3_03	food	A salami.
+itm_i9_r3_04	food	A sliced salami.
+itm_i9_r3_05	food	A meat terrine.
+itm_i9_r3_06	food	A pate.
+itm_i9_r3_07	food	A meatloaf.
+itm_i9_r3_08	food	A bacon strips.
+itm_i9_r3_09	food	A grilled sausages.
+itm_i9_r3_10	food	A bowl of beef stew.
+itm_i9_r4_00	food	A bowl of beef stew.
+itm_i9_r4_01	food	A bowl of cream stew.
+itm_i9_r4_02	food	A bowl of goulash.
+itm_i9_r4_03	food	A bowl of chili.
+itm_i9_r4_04	food	A bowl of meatballs in sauce.
+itm_i9_r4_05	food	A braised beef.
+itm_i9_r4_06	food	A pot roast.
+itm_i9_r4_07	food	A bowl of braised meat.
+itm_i9_r4_08	food	A bowl of meat stew.
+itm_i9_r4_09	food	A bowl of chili con carne.
+itm_i9_r5_00	food	A pork cutlet.
+itm_i9_r5_01	food	A fried chicken.
+itm_i9_r5_02	food	A fried chicken leg.
+itm_i9_r5_03	food	A croquettes.
+itm_i9_r5_04	food	A plate of pork cutlet.
+itm_i9_r5_05	food	A plate of meat-filled bread.
+itm_i9_r5_06	food	A plate of fried chicken.
+itm_i9_r5_07	food	A plate of chicken cutlet.
+itm_i9_r5_08	food	A plate of schnitzel.
+itm_i9_r5_09	food	A plate of braised meat.
+itm_i9_r6_00	food	A cheeseburger.
+itm_i9_r6_01	food	A pulled pork burger.
+itm_i9_r6_02	food	A bacon burger.
+itm_i9_r6_03	food	A hot dog.
+itm_i9_r6_04	food	A roast beef sandwich.
+itm_i9_r6_05	food	A steak sandwich.
+itm_i9_r6_06	food	A kebab wrap.
+itm_i9_r6_07	food	A burrito.
+itm_i9_r6_08	food	A meat wrap.
+itm_i9_r6_09	food	A meat-filled bun.
+itm_i9_r7_00	food	A meat pie.
+itm_i9_r7_01	food	A meat pastries.
+itm_i9_r7_02	food	A meat dumplings.
+itm_i9_r7_03	food	A steamed meat bun.
+itm_i9_r7_04	food	A rice bowl with egg.
+itm_i9_r7_05	food	A bowl of minced meat.
+itm_i9_r7_06	food	A spaghetti bolognese.
+itm_i9_r7_07	food	A lasagna.
+itm_i9_r7_08	food	A shepherd's pie.
+itm_i9_r7_09	food	A kebab skewer.
+itm_i10_r0_00	food	A plate of sashimi.
+itm_i10_r0_01	food	A plate of sashimi.
+itm_i10_r0_02	food	A plate of sashimi.
+itm_i10_r0_03	food	A plate of sashimi.
+itm_i10_r0_04	food	A tuna sushi.
+itm_i10_r0_05	food	A salmon sushi.
+itm_i10_r0_06	food	A shrimp sushi.
+itm_i10_r0_07	food	An eel sushi.
+itm_i10_r0_08	food	A mackerel sushi.
+itm_i10_r0_09	food	A seafood rice bowl.
+itm_i10_r0_10	food	A salmon roe rice bowl.
+itm_i10_r0_11	food	A seafood rice bowl.
+itm_i10_r1_00	food	A grilled fish.
+itm_i10_r1_01	food	A grilled mackerel.
+itm_i10_r1_02	food	A grilled salmon.
+itm_i10_r1_03	food	A grilled fish with butter.
+itm_i10_r1_04	food	A simmered fish.
+itm_i10_r1_05	food	A bowl of simmered fish.
+itm_i10_r1_06	food	A bowl of fish stew.
+itm_i10_r1_07	food	A grilled eel on rice.
+itm_i10_r1_08	food	A bowl of fish soup.
+itm_i10_r1_09	food	A bowl of fish soup.
+itm_i10_r2_00	food	A grilled salmon with lemon.
+itm_i10_r2_01	food	A fish baked in foil.
+itm_i10_r2_02	food	A grilled fish fillets.
+itm_i10_r2_03	food	A grilled whole fish.
+itm_i10_r2_04	food	A seafood carpaccio.
+itm_i10_r2_05	food	A marinated mackerel.
+itm_i10_r2_06	food	A fish sashimi platter.
+itm_i10_r2_07	food	A grilled fish skewers.
+itm_i10_r2_08	food	A grilled eel skewers.
+itm_i10_r2_09	food	A sliced marinated fish.
+itm_i10_r3_00	food	A plate of sashimi.
+itm_i10_r3_01	food	A plate of sashimi.
+itm_i10_r3_02	food	A plate of sashimi.
+itm_i10_r3_03	food	A plate of sashimi.
+itm_i10_r3_04	food	A plate of sashimi.
+itm_i10_r3_05	food	A plate of sashimi.
+itm_i10_r3_06	food	A boiled octopus.
+itm_i10_r3_07	food	A dried squid.
+itm_i10_r3_08	food	A dried fish.
+itm_i10_r3_09	food	A fish head.
+itm_i10_r3_10	food	A bowl of seafood salad.
+itm_i10_r4_00	food	A fried fish.
+itm_i10_r4_01	food	A fried oysters.
+itm_i10_r4_02	food	A fried fish cutlets.
+itm_i10_r4_03	food	An oyster on the shell.
+itm_i10_r4_04	food	A shrimp tempura.
+itm_i10_r4_05	food	A baked scallop.
+itm_i10_r4_06	food	A baked scallop.
+itm_i10_r4_07	food	A baked mussels.
+itm_i10_r4_08	food	A seafood gratin.
+itm_i10_r4_09	food	A grilled fish.
+itm_i10_r4_10	food	A bowl of clam soup.
+itm_i10_r5_00	food	A bowl of fish dumplings.
+itm_i10_r5_01	food	A bowl of fried fish.
+itm_i10_r5_02	food	A bowl of seafood salad.
+itm_i10_r5_03	food	A bowl of salmon.
+itm_i10_r5_04	food	A grilled lobster.
+itm_i10_r5_05	food	A bowl of mussels.
+itm_i10_r5_06	food	A seafood salad.
+itm_i10_r5_07	food	A fried shrimp.
+itm_i10_r5_08	food	A fried fish.
+itm_i10_r5_09	food	A boiled crab legs.
+itm_i10_r5_10	food	A tin of fish soup.
+itm_i10_r6_00	food	A bowl of fish chowder.
+itm_i10_r6_01	food	A bowl of fish soup.
+itm_i10_r6_02	food	A bowl of miso fish soup.
+itm_i10_r6_03	food	A boiled shrimp.
+itm_i10_r6_04	food	A seafood rice bowl.
+itm_i10_r6_05	food	A bowl of cream chowder.
+itm_i10_r6_06	food	A bowl of mussel soup.
+itm_i10_r6_07	food	A pot of seafood stew.
+itm_i10_r6_08	food	A seafood bowl.
+itm_i10_r6_09	food	A fried tofu with seafood.
+itm_i10_r6_10	food	A fried tofu with shrimp.
+itm_i10_r7_00	food	A bowl of fish roe.
+itm_i10_r7_01	food	A bowl of simmered fish.
+itm_i10_r7_02	food	A sardines in sauce.
+itm_i10_r7_03	food	A seafood salad.
+itm_i10_r7_04	food	A seafood gratin.
+itm_i10_r7_05	food	A simmered fish with lemon.
+itm_i10_r7_06	food	A bowl of tuna.
+itm_i10_r7_07	food	A seafood risotto.
+itm_i10_r7_08	food	A boiled crayfish.
+itm_i10_r7_09	food	A grilled clams.
+itm_i10_r8_00	food	A grilled salmon fillet.
+itm_i10_r8_01	food	A grilled fish skewers.
+itm_i10_r8_02	food	A grilled whole fish.
+itm_i10_r8_03	food	A grilled fish with tofu.
+itm_i10_r8_04	food	A grilled eel.
+itm_i10_r8_05	food	A grilled fish.
+itm_i10_r8_06	food	A sliced raw fish.
+itm_i10_r8_07	food	A grilled sardines.
+itm_i10_r8_08	food	A tin of sardines.
+itm_i10_r8_09	food	A plate of shredded fish.
+itm_i11_r0_00	food	A plate of pad thai.
+itm_i11_r0_01	food	A papaya salad.
+itm_i11_r0_02	food	A bowl of beef noodle soup.
+itm_i11_r0_03	food	A bowl of chicken noodle soup.
+itm_i11_r0_04	food	A bowl of shrimp noodle soup.
+itm_i11_r0_05	food	A bowl of spicy noodle soup with egg.
+itm_i11_r0_06	food	A bowl of curry noodle soup.
+itm_i11_r0_07	food	A plate of fried rice with egg.
+itm_i11_r0_08	food	A plate of shrimp fried rice.
+itm_i11_r0_09	food	A pineapple fried rice.
+itm_i11_r1_00	food	A bowl of green curry.
+itm_i11_r1_01	food	A bowl of red curry.
+itm_i11_r1_02	food	A bowl of yellow curry.
+itm_i11_r1_03	food	A bowl of tom yum soup.
+itm_i11_r1_04	food	A bowl of coconut soup.
+itm_i11_r1_05	food	A bowl of fish soup.
+itm_i11_r1_06	food	A bowl of seafood soup.
+itm_i11_r1_07	food	A bowl of chicken soup.
+itm_i11_r1_08	food	A bowl of meatball soup.
+itm_i11_r1_09	food	A bowl of noodles.
+itm_i11_r2_00	food	A chicken satay with peanut sauce.
+itm_i11_r2_01	food	A grilled pork skewers.
+itm_i11_r2_02	food	A grilled prawns.
+itm_i11_r2_03	food	A grilled fish with sauce.
+itm_i11_r2_04	food	A leaf-wrapped grilled fish.
+itm_i11_r2_05	food	A grilled sausage plate.
+itm_i11_r2_06	food	A fresh spring rolls.
+itm_i11_r2_07	food	A fresh spring rolls.
+itm_i11_r2_08	food	A fried spring rolls.
+itm_i11_r2_09	food	A fried spring rolls.
+itm_i11_r3_00	food	A noodles with roast pork.
+itm_i11_r3_01	food	A bowl of shrimp noodles.
+itm_i11_r3_02	food	A crispy noodles with pork.
+itm_i11_r3_03	food	A bowl of beef noodles.
+itm_i11_r3_04	food	A bowl of curry noodles.
+itm_i11_r3_05	food	A bowl of rice noodles with pork.
+itm_i11_r3_06	food	A bowl of rice noodles with spring rolls.
+itm_i11_r3_07	food	A bowl of stir-fried noodles.
+itm_i11_r3_08	food	A bowl of chicken noodles.
+itm_i11_r4_00	food	A chicken rice.
+itm_i11_r4_01	food	A roast duck rice.
+itm_i11_r4_02	food	A nasi lemak.
+itm_i11_r4_03	food	A shrimp fried rice.
+itm_i11_r4_04	food	A fried rice with egg.
+itm_i11_r4_05	food	A yellow rice with chicken.
+itm_i11_r4_06	food	A rice with beef rendang.
+itm_i11_r4_07	food	A rice with roast chicken.
+itm_i11_r4_08	food	A grilled meat skewers.
+itm_i11_r5_00	food	A roti with curry.
+itm_i11_r5_01	food	A leaf-wrapped sticky rice.
+itm_i11_r5_02	food	A leaf-wrapped rice.
+itm_i11_r5_03	food	A layered jelly cake with a faint magenta glow.
+itm_i11_r5_04	food	A leaf-wrapped dumplings.
+itm_i11_r5_05	food	A mango sticky rice.
+itm_i11_r5_06	food	A basket of steamed buns.
+itm_i11_r5_07	food	A bowl of mung bean dessert.
+itm_i11_r5_08	food	A bowl of grass jelly.
+itm_i11_r5_09	food	A bowl of tapioca dessert.
+itm_i11_r5_10	food	A bowl of fruit dessert.
+itm_i11_r5_11	food	A fried chicken.
+itm_i11_r6_00	food	A sliced mango.
+itm_i11_r6_01	food	A durian.
+itm_i11_r6_02	food	A rambutan.
+itm_i11_r6_03	food	A mangosteen.
+itm_i11_r6_04	food	A dragon fruit with a faint magenta glow.
+itm_i11_r6_05	food	A passion fruit.
+itm_i11_r6_06	food	A longan.
+itm_i11_r6_07	food	A salak fruit.
+itm_i11_r6_08	food	A jackfruit.
+itm_i11_r6_09	food	A star fruit.
+itm_i11_r6_10	food	A bananas.
+itm_i11_r6_11	food	A papaya.
+itm_i11_r6_12	food	A lime and lychees.
+itm_i11_r7_00	drink	A glass of thai iced tea.
+itm_i11_r7_01	drink	A glass of iced coffee.
+itm_i11_r7_02	drink	A glass of milk tea.
+itm_i11_r7_03	drink	A fresh coconut with a straw.
+itm_i11_r7_04	drink	A glass of limeade.
+itm_i11_r7_05	drink	A glass of iced tea.
+itm_i11_r7_06	drink	A glass of green drink.
+itm_i11_r7_07	drink	A glass of taro milk.
+itm_i11_r7_08	drink	A glass of bubble tea.
+itm_i11_r7_09	drink	A glass of red fruit drink.
+itm_i11_r7_10	drink	A glass of lemon iced tea.
+itm_i11_r7_11	drink	A glass of beer.
+itm_i11_r7_12	drink	A glass of beer.
+itm_i11_r7_13	drink	A glass of sugarcane juice.
+itm_i11_r7_14	food	A sugarcane stalks.
+itm_i12_r0_00	food	A plate of steak with butter.
+itm_i12_r0_01	food	A plate of lamb chops.
+itm_i12_r0_02	food	A plate of grilled steak.
+itm_i12_r0_03	food	A plate of roast chicken.
+itm_i12_r0_04	food	A plate of roast pork.
+itm_i12_r0_05	food	A beef wellington.
+itm_i12_r0_06	food	A roast chicken.
+itm_i12_r0_07	food	A roast chicken with oranges.
+itm_i12_r0_08	food	A roast duck.
+itm_i12_r0_09	food	A rack of lamb.
+itm_i12_r1_00	food	A pot of stew.
+itm_i12_r1_01	food	A bowl of chowder.
+itm_i12_r1_02	food	A pot of onion soup.
+itm_i12_r1_03	food	A pot of minestrone.
+itm_i12_r1_04	food	A bowl of mushroom soup.
+itm_i12_r1_05	food	A bowl of borscht.
+itm_i12_r1_06	food	A pot of gratin soup.
+itm_i12_r1_07	food	A pot of seafood stew.
+itm_i12_r1_08	food	A pot of cream stew.
+itm_i12_r1_09	food	A pot of goulash.
+itm_i12_r2_00	food	A bowl of caesar salad.
+itm_i12_r2_01	food	A bowl of greek salad.
+itm_i12_r2_02	food	A caprese salad.
+itm_i12_r2_03	food	A bowl of potato salad.
+itm_i12_r2_04	food	A bowl of coleslaw.
+itm_i12_r2_05	food	A bowl of beet salad with a faint magenta glow.
+itm_i12_r2_06	food	A bowl of peas.
+itm_i12_r2_07	food	A nicoise salad.
+itm_i12_r2_08	food	A plate of pickles.
+itm_i12_r2_09	food	A bowl of pickles.
+itm_i12_r2_10	food	A melon with ham.
+itm_i12_r3_00	food	A baguette.
+itm_i12_r3_01	food	A round loaf of bread.
+itm_i12_r3_02	food	A sliced rye bread.
+itm_i12_r3_03	food	A pretzels.
+itm_i12_r3_04	food	A pain au chocolat.
+itm_i12_r3_05	food	A loaf of bread.
+itm_i12_r3_06	food	A bread rolls.
+itm_i12_r3_07	food	A ham baguette sandwich.
+itm_i12_r3_08	food	A sandwich.
+itm_i12_r3_09	food	A croque monsieur.
+itm_i12_r3_10	food	A grilled sandwich.
+itm_i12_r4_00	food	A spaghetti bolognese.
+itm_i12_r4_01	food	A spaghetti carbonara.
+itm_i12_r4_02	food	A pasta with pesto.
+itm_i12_r4_03	food	A lasagna.
+itm_i12_r4_04	food	A penne with tomato.
+itm_i12_r4_05	food	A fettuccine alfredo.
+itm_i12_r4_06	food	A gnocchi.
+itm_i12_r4_07	food	A ravioli.
+itm_i12_r4_08	food	A seafood pasta.
+itm_i12_r4_09	food	A mushroom risotto.
+itm_i12_r5_00	food	A baked gratin.
+itm_i12_r5_01	food	A fish and chips.
+itm_i12_r5_02	food	A baked fish.
+itm_i12_r5_03	food	A grilled salmon with asparagus.
+itm_i12_r5_04	food	A pot of mussels.
+itm_i12_r5_05	food	A beef stroganoff.
+itm_i12_r5_06	food	A schnitzel.
+itm_i12_r5_07	food	A meatballs.
+itm_i12_r5_08	food	A sausages with sauerkraut.
+itm_i12_r5_09	food	A roast pork with cabbage.
+itm_i12_r6_00	food	A quiche.
+itm_i12_r6_01	food	A slice of quiche.
+itm_i12_r6_02	food	A meat pie.
+itm_i12_r6_03	food	A chicken pot pie.
+itm_i12_r6_04	food	A pot of ratatouille.
+itm_i12_r6_05	food	A baked casserole.
+itm_i12_r6_06	food	A cabbage rolls.
+itm_i12_r6_07	food	A coq au vin.
+itm_i12_r6_08	food	A beef stew.
+itm_i12_r6_09	food	A ratatouille.
+itm_i12_r7_00	food	A cheese board.
+itm_i12_r7_01	food	A charcuterie plate.
+itm_i12_r7_02	food	A bowl of olives.
+itm_i12_r7_03	food	A terrine with pickles.
+itm_i12_r7_04	food	A smoked salmon.
+itm_i12_r7_05	food	An escargots.
+itm_i12_r7_06	food	A bruschetta.
+itm_i12_r7_07	food	A bowl of marinated vegetables.
+itm_i12_r7_08	food	A pickles and cheese.
+itm_i12_r7_09	food	A bowl of mustard.
+itm_i12_r7_10	food	A pickled cucumbers.
+itm_i12_r8_00	food	An apple pie.
+itm_i12_r8_01	food	A berry tart.
+itm_i12_r8_02	food	A creme brulee.
+itm_i12_r8_03	food	A tiramisu.
+itm_i12_r8_04	food	A slice of cheesecake.
+itm_i12_r8_05	food	A chocolate lava cake.
+itm_i12_r8_06	food	An apple strudel.
+itm_i12_r8_07	food	A strudel.
+itm_i12_r8_08	food	An ice cream sundae.
+itm_i12_r8_09	food	A panna cotta.
+itm_i12_r8_10	drink	A glass of red wine.
+itm_i12_r8_11	drink	A glass of white wine.
+itm_i12_r8_12	drink	A mug of beer.
+itm_i13_r0_00	magical_material	A brown magical core in a golden cage.
+itm_i13_r0_01	magical_material	A blue blue crystal core in a silver setting with a faint blue glow.
+itm_i13_r0_02	magical_material	A purple purple core in a spiked shell with a faint purple glow.
+itm_i13_r0_03	magical_material	A brown amber core inside brass rings.
+itm_i13_r0_04	magical_material	A blue blue crystal shard core with a faint cyan glow.
+itm_i13_r0_05	magical_material	A red red crystal core in a spiked shell.
+itm_i13_r0_06	magical_material	An olive green core covered in thorns.
+itm_i13_r0_07	magical_material	A pink pink crystal core in a metal frame with a faint magenta glow.
+itm_i13_r0_08	magical_material	A brown orange core inside a brass gear frame.
+itm_i13_r0_09	magical_material	A purple purple crystal core with a faint purple glow.
+itm_i13_r0_10	magical_material	A blue blue light core on a stand with a faint blue glow.
+itm_i13_r0_11	magical_material	An olive green core covered in thorns.
+itm_i13_r1_00	magical_material	A purple swirling purple mist in a glass vial with a faint purple glow.
+itm_i13_r1_01	magical_material	A blue white vapor in a glass vial.
+itm_i13_r1_02	magical_material	A red red mist in a glass vial.
+itm_i13_r1_03	magical_material	A brown golden sparkling dust in a glass vial.
+itm_i13_r1_04	magical_material	A blue blue magical mist in a glass vial with a faint blue glow.
+itm_i13_r1_05	magical_material	A green green mist in a glass vial with a faint green glow.
+itm_i13_r1_06	magical_material	A pink pink swirling mist in a glass vial with a faint magenta glow.
+itm_i13_r1_07	magical_material	A brown orange mist in a glass vial.
+itm_i13_r1_08	magical_material	A black grey smoke in a glass vial.
+itm_i13_r1_09	magical_material	A purple purple starry mist in a glass vial with a faint purple glow.
+itm_i13_r1_10	magical_material	A blue cyan mist in a glass vial with a faint cyan glow.
+itm_i13_r1_11	magical_material	A brown golden swirling pollen in a glass vial.
+itm_i13_r2_00	magical_material	A blue crystal ball with a blue light with a faint blue glow.
+itm_i13_r2_01	magical_material	A brown crystal ball with golden flames.
+itm_i13_r2_02	magical_material	A purple crystal ball with purple mist with a faint purple glow.
+itm_i13_r2_03	magical_material	A blue blue crystal on a pedestal with a faint blue glow.
+itm_i13_r2_04	magical_material	A green green crystal ball.
+itm_i13_r2_05	magical_material	A red red orb in a brass cage.
+itm_i13_r2_06	magical_material	A grey crystal ball with a swirling galaxy.
+itm_i13_r2_07	magical_material	A pink pink crystal with a faint magenta glow.
+itm_i13_r2_08	magical_material	A blue blue crystal ball with a swirl with a faint blue glow.
+itm_i13_r2_09	magical_material	A brown golden crystal cluster.
+itm_i13_r2_10	magical_material	An olive green crystal ball.
+itm_i13_r2_11	magical_material	A purple purple crystal ball with a faint purple glow.
+itm_i13_r3_00	magical_material	A black jar of green slime.
+itm_i13_r3_01	magical_material	A red jar of red slime.
+itm_i13_r3_02	magical_material	A black jar of black sludge.
+itm_i13_r3_03	magical_material	A grey jar of grey residue.
+itm_i13_r3_04	magical_material	A blue jar of cyan slime with a faint cyan glow.
+itm_i13_r3_05	magical_material	A purple jar of purple slime.
+itm_i13_r3_06	magical_material	An olive jar of green bubbling slime.
+itm_i13_r3_07	magical_material	A brown jar of brown sludge.
+itm_i13_r3_08	magical_material	A brown jar of dark sludge.
+itm_i13_r3_09	magical_material	A grey jar of white slime.
+itm_i13_r3_10	magical_material	A brown clay pot of mossy mud.
+itm_i13_r3_11	magical_material	A purple jar of purple starry liquid.
+itm_i13_r4_00	magical_material	A red pouch of red glowing dust.
+itm_i13_r4_01	magical_material	A blue pouch of blue glowing dust.
+itm_i13_r4_02	magical_material	A brown pouch of golden dust.
+itm_i13_r4_03	magical_material	A brown pouch of white ash.
+itm_i13_r4_04	magical_material	A purple pouch of purple glowing dust.
+itm_i13_r4_05	magical_material	A brown pouch of black ash.
+itm_i13_r4_06	magical_material	A brown pouch of golden dust.
+itm_i13_r4_07	magical_material	A red pouch of crimson dust.
+itm_i13_r4_08	magical_material	A black pouch of pale green dust.
+itm_i13_r4_09	magical_material	A purple pouch of violet dust with a faint purple glow.
+itm_i13_r4_10	magical_material	A brown pouch of orange dust.
+itm_i13_r4_11	magical_material	A black pouch of pale blue dust.
+itm_i13_r5_00	magical_material	A brown bundle of golden glowing silk threads.
+itm_i13_r5_01	magical_material	A blue bundle of blue glowing silk threads.
+itm_i13_r5_02	magical_material	A red bundle of red silk threads.
+itm_i13_r5_03	magical_material	A blue bundle of pale glowing silk threads.
+itm_i13_r5_04	magical_material	A black bundle of dark green threads.
+itm_i13_r5_05	creature_part	A white iridescent scale with a faint blue glow.
+itm_i13_r5_06	creature_part	A red red scale.
+itm_i13_r5_07	creature_part	A blue blue scale with a faint blue glow.
+itm_i13_r5_08	creature_part	A brown golden scale.
+itm_i13_r5_09	magical_material	A blue fragment of frozen mist.
+itm_i13_r5_10	creature_part	A purple black scale.
+itm_i13_r5_11	creature_part	A white pearly white scale.
+itm_i14_r0_00	relic	A white white crystal shard.
+itm_i14_r0_01	relic	A black black crystal shard that bends the light.
+itm_i14_r0_02	relic	A brown golden crystal shard.
+itm_i14_r0_03	relic	A blue blue crystal shard with a faint blue glow.
+itm_i14_r0_04	relic	A red red crystal shard.
+itm_i14_r0_05	relic	A purple purple crystal shard with a faint purple glow.
+itm_i14_r0_06	relic	A brown golden light crystal.
+itm_i14_r0_07	relic	A black dark grey crystal shard.
+itm_i14_r0_08	relic	A blue teal crystal shard with a faint cyan glow.
+itm_i14_r0_09	relic	A white clear crystal with a light inside.
+itm_i14_r0_10	relic	A brown golden crystal cluster.
+itm_i14_r0_11	relic	A white iridescent crystal shard with a faint blue glow.
+itm_i14_r1_00	relic	A blue white marble fragment glowing blue.
+itm_i14_r1_01	relic	A purple purple glowing stone fragment.
+itm_i14_r1_02	relic	A red red stone fragment.
+itm_i14_r1_03	relic	A white grey stone fragment with faint runes.
+itm_i14_r1_04	relic	A blue blue glowing crystal stone.
+itm_i14_r1_05	relic	A blue dark green stone fragment with a faint cyan glow.
+itm_i14_r1_06	relic	A purple purple crystal stone with a faint purple glow.
+itm_i14_r1_07	relic	A brown cracked grey stone with golden veins.
+itm_i14_r1_08	relic	A red red crystal stone.
+itm_i14_r1_09	relic	A white white marble fragment with blue veins with a faint cyan glow.
+itm_i14_r1_10	relic	A purple dark stone with a purple glow.
+itm_i14_r1_11	relic	A brown stone fragment with a golden sigil.
+itm_i14_r2_00	relic	A red crystal heart in a golden cage.
+itm_i14_r2_01	relic	A blue blue crystal heart with a faint blue glow.
+itm_i14_r2_02	relic	A purple purple crystal heart with a faint purple glow.
+itm_i14_r2_03	relic	A brown golden heart-shaped engine.
+itm_i14_r2_04	relic	A brown blue crystal heart in a brass frame with a faint blue glow.
+itm_i14_r2_05	relic	A red red crystal heart with spikes.
+itm_i14_r2_06	relic	A brown purple heart in a dark cage with a faint purple glow.
+itm_i14_r2_07	relic	A brown golden glowing heart.
+itm_i14_r2_08	relic	A brown teal crystal in a brass frame.
+itm_i14_r2_09	relic	A brown red crystal heart in brass.
+itm_i14_r2_10	relic	A brown blue glowing brass organ.
+itm_i14_r2_11	relic	A brown green crystal heart in brass.
+itm_i14_r3_00	relic	A brown golden divine crystal fragments.
+itm_i14_r3_01	relic	A brown broken golden sword with divine engravings.
+itm_i14_r3_02	relic	A black silver shield fragment with a holy emblem.
+itm_i14_r3_03	relic	A brown broken golden sun wheel.
+itm_i14_r3_04	relic	A brown golden light fragment.
+itm_i14_r3_05	relic	A brown golden divine shards.
+itm_i14_r3_06	relic	A brown golden ancient dial fragment.
+itm_i14_r3_07	relic	A brown broken golden arc relic.
+itm_i14_r3_08	relic	A brown golden cross-shaped sword fragment.
+itm_i14_r3_09	relic	A brown white stone tablet with a golden sun.
+itm_i14_r3_10	relic	A brown broken silver shield with a holy emblem.
+itm_i14_r3_11	relic	A brown golden sun shard.
+itm_i14_r4_00	relic	A brown brass relic with a blue core.
+itm_i14_r4_01	relic	A blue blue orb inside brass machinery with a faint blue glow.
+itm_i14_r4_02	relic	A brown golden armillary with a blue light.
+itm_i14_r4_03	relic	A brown red fiery orb in a brass frame.
+itm_i14_r4_04	relic	A brown brass gear ring with a blue light.
+itm_i14_r4_05	relic	A brown glowing golden cube relic.
+itm_i14_r4_06	relic	A brown golden armillary with a blue star with a faint blue glow.
+itm_i14_r4_07	relic	A brown red orb in golden rings.
+itm_i14_r4_08	relic	A brown purple glowing brass relic.
+itm_i14_r4_09	relic	A brown golden gear wheel relic.
+itm_i14_r4_10	relic	A brown blue crystal in a golden cage with a faint blue glow.
+itm_i14_r4_11	relic	A brown brass cylinder with a blue light with a faint blue glow.
+itm_i14_r5_00	document	A blue stone tablet with glowing cyan runes.
+itm_i14_r5_01	document	A brown golden metal tablet with geometric patterns.
+itm_i14_r5_02	document	A grey crystal tablet with a swirling galaxy.
+itm_i14_r5_03	document	A blue blue tablet with a star map with a faint blue glow.
+itm_i14_r5_04	document	A brown golden engraved tome.
+itm_i14_r5_05	document	A brown leather tome with a blue gem.
+itm_i14_r5_06	document	A brown chained ancient book.
+itm_i14_r5_07	document	A red red holy book.
+itm_i14_r5_08	document	A brown green engraved tome.
+itm_i14_r5_09	document	A purple purple tome with a swirling galaxy.
+itm_i14_r5_10	document	A brown white holy book with a golden cross.
+itm_i14_r5_11	document	A brown dark tome with a silver sigil.
+itm_i15_r0_00	relic	A brown ancient coin with green patina.
+itm_i15_r0_01	relic	A grey silver coin with a star.
+itm_i15_r0_02	relic	A brown golden coin with a star.
+itm_i15_r0_03	relic	A brown bronze coin with a hole.
+itm_i15_r0_04	relic	A brown silver coin with an eagle.
+itm_i15_r0_05	relic	A brown golden coin with a lily.
+itm_i15_r0_06	relic	A black green patina coin with a star.
+itm_i15_r0_07	relic	A brown chipped silver coin.
+itm_i15_r0_08	relic	A brown copper coin with a sun.
+itm_i15_r0_09	relic	A brown golden coin with ornate engravings.
+itm_i15_r0_10	relic	A brown golden coin with ornate engravings.
+itm_i15_r0_11	relic	A grey silver coin with a tower.
+itm_i15_r0_12	relic	A black ancient coin with green patina.
+itm_i15_r1_00	relic	A brown golden eagle medal with a faint blue glow.
+itm_i15_r1_01	relic	A brown golden star medal with a ribbon.
+itm_i15_r1_02	relic	A purple star medal with a purple gem.
+itm_i15_r1_03	relic	A brown golden gear medal.
+itm_i15_r1_04	relic	A brown bronze cross medal with a red gem.
+itm_i15_r1_05	relic	A grey silver star medal.
+itm_i15_r1_06	relic	A brown golden laurel medal.
+itm_i15_r1_07	relic	A brown golden star medal with a purple gem.
+itm_i15_r1_08	relic	A brown golden gear medal.
+itm_i15_r1_09	relic	A brown bronze gear medal.
+itm_i15_r1_10	relic	A brown winged medal with a green gem.
+itm_i15_r1_11	relic	A brown star medal with a red gem.
+itm_i15_r1_12	relic	A brown golden cross medal.
+itm_i15_r2_00	relic	A brown golden shield emblem with an eagle.
+itm_i15_r2_01	relic	A black silver shield emblem with a griffin.
+itm_i15_r2_02	relic	A brown red shield emblem with a lion.
+itm_i15_r2_03	relic	A brown blue round emblem with a griffin.
+itm_i15_r2_04	relic	A brown golden star emblem.
+itm_i15_r2_05	relic	A black iron shield emblem with a tower.
+itm_i15_r2_06	relic	A brown bronze lion head emblem.
+itm_i15_r2_07	relic	A black silver crescent moon emblem.
+itm_i15_r2_08	relic	A brown silver star emblem with a blue gem.
+itm_i15_r2_09	relic	A brown golden winged emblem with a red gem.
+itm_i15_r2_10	relic	A brown bronze stag head emblem.
+itm_i15_r2_11	relic	A black silver cross shield emblem.
+itm_i15_r3_00	accessory	A brown red signet ring.
+itm_i15_r3_01	accessory	A brown green signet ring.
+itm_i15_r3_02	accessory	A brown blue signet ring.
+itm_i15_r3_03	accessory	A brown silver signet ring.
+itm_i15_r3_04	document	A brown silver eagle tag on a chain.
+itm_i15_r3_05	document	A black iron tag with a star.
+itm_i15_r3_06	document	A brown golden tag with a star.
+itm_i15_r3_07	document	A black iron tag with a wheel.
+itm_i15_r3_08	document	A brown bronze tag with a star.
+itm_i15_r3_09	document	A grey silver tag with a crescent moon.
+itm_i15_r3_10	document	A brown golden tag with a cross.
+itm_i15_r3_11	document	A grey silver tag with a cross.
+itm_i15_r3_12	document	A brown rusted round tag with a star.
+itm_i15_r4_00	accessory	A brown silver ring with a red gem.
+itm_i15_r4_01	accessory	A brown golden ring with a blue gem.
+itm_i15_r4_02	accessory	A black dark ring with a purple gem.
+itm_i15_r4_03	accessory	A brown plain bronze band.
+itm_i15_r4_04	accessory	A brown golden ring with a green gem.
+itm_i15_r4_05	accessory	A black silver ring with a blue gem.
+itm_i15_r4_06	accessory	A brown golden ring with a red gem.
+itm_i15_r4_07	accessory	A brown bronze ring with a pearl.
+itm_i15_r4_08	accessory	A brown silver ring with a purple gem with a faint purple glow.
+itm_i15_r4_09	accessory	A brown golden ring with a star.
+itm_i15_r4_10	accessory	A brown patina ring with a green gem.
+itm_i15_r4_11	accessory	A brown small chain ring.
+itm_i15_r4_12	accessory	A brown golden ring with a pearl.
+itm_i15_r5_00	accessory	A brown golden star brooch with a blue gem.
+itm_i15_r5_01	accessory	A black silver crescent moon brooch.
+itm_i15_r5_02	accessory	A brown golden sun brooch with a red gem.
+itm_i15_r5_03	accessory	A purple purple crystal flower brooch with a faint purple glow.
+itm_i15_r5_04	accessory	A grey silver feather brooch.
+itm_i15_r5_05	accessory	A brown golden leaf brooch with pearls.
+itm_i15_r5_06	accessory	A brown white flower brooch with a pearl.
+itm_i15_r5_07	accessory	A red red crystal flower brooch.
+itm_i15_r5_08	tool	A brown small brass candlestick.
+itm_i15_r5_09	accessory	A brown lantern pendant with a blue crystal with a faint blue glow.
+itm_i15_r5_10	accessory	A brown red gem pendant.
+itm_i15_r5_11	accessory	A brown winged pendant with a blue gem.
+itm_i15_r5_12	tool	A black small silver bell.
+itm_i16_r0_00	tool	A grey whetstone.
+itm_i16_r0_01	tool	A brown tinderbox with a striker.
+itm_i16_r0_02	tool	A brown brass oil lamp.
+itm_i16_r0_03	tool	A brown candle in a brass holder.
+itm_i16_r0_04	tool	A grey hand mirror.
+itm_i16_r0_05	tool	A black silver bell.
+itm_i16_r0_06	tool	A brown brass compass.
+itm_i16_r0_07	tool	A brown leather pouch.
+itm_i16_r0_08	tool	A brown brass spyglass.
+itm_i16_r0_09	tool	A brown brass pocket watch.
+itm_i16_r0_10	tool	A brown wooden spyglass.
+itm_i16_r0_11	tool	A brown red cloth pouch.
+itm_i16_r1_00	tool	A white neatly folded white cloth.
+itm_i16_r1_01	tool	A golden folded oilcloth.
+itm_i16_r1_02	tool	A brown rolled blanket.
+itm_i16_r1_03	tool	A brown rolled red blanket.
+itm_i16_r1_04	tool	A brown cloth bundle tied with twine.
+itm_i16_r1_05	tool	A blue blue cloth bundle.
+itm_i16_r1_06	tool	A brown linen cloth bundle.
+itm_i16_r1_07	tool	A brown muddy green cloth.
+itm_i16_r1_08	tool	A brown folded red cloth.
+itm_i16_r1_09	tool	A brown dark folded cloth.
+itm_i16_r1_10	tool	A brown white cloth bundle tied with rope.
+itm_i16_r1_11	tool	A brown rolled striped blanket.
+itm_i16_r2_00	tool	A brown rune spike with a blue gem with a faint blue glow.
+itm_i16_r2_01	tool	A red dark rune spike with a red gem.
+itm_i16_r2_02	tool	A brown hand mirror reflecting strange colors with a faint blue glow.
+itm_i16_r2_03	tool	A blue teal rune spike.
+itm_i16_r2_04	tool	A brown silver bell that absorbs light.
+itm_i16_r2_05	tool	A brown blue crystal in a brass cage with a faint blue glow.
+itm_i16_r2_06	tool	A purple purple orb in a brass cage with a faint purple glow.
+itm_i16_r2_07	tool	A brown golden geometric object.
+itm_i16_r2_08	tool	A brown blue crystal lantern with a faint blue glow.
+itm_i16_r2_09	tool	A brown golden sun relic with a pearl.
+itm_i16_r2_10	tool	A brown rune vial with a green crystal.
+itm_i16_r2_11	tool	A brown spiked red gem relic.
+itm_i16_r3_00	scrap	A grey grey stone fragment with faint runes.
+itm_i16_r3_01	scrap	A blue blue crystal stone fragment with a faint blue glow.
+itm_i16_r3_02	scrap	A red dark stone with red runes.
+itm_i16_r3_03	scrap	An olive mossy stone with cyan runes.
+itm_i16_r3_04	scrap	A brown sandstone fragment with runes.
+itm_i16_r3_05	scrap	A purple purple rune stone with a faint purple glow.
+itm_i16_r3_06	scrap	A blue white marble fragment with blue runes.
+itm_i16_r3_07	scrap	A black mossy stone with green runes.
+itm_i16_r3_08	scrap	A blue white marble fragment glowing blue.
+itm_i16_r3_09	scrap	A red red rune stone.
+itm_i16_r3_10	scrap	A brown golden rune stone.
+itm_i16_r3_11	scrap	A purple purple crystal rune stone with a faint purple glow.
+itm_i16_r4_00	scrap	A brown rusted broken sword fragment.
+itm_i16_r4_01	scrap	A black notched steel blade fragment.
+itm_i16_r4_02	scrap	A brown rusted broken knife.
+itm_i16_r4_03	scrap	A brown rusted iron helmet fragment.
+itm_i16_r4_04	scrap	A brown dented iron armor piece.
+itm_i16_r4_05	scrap	A brown dented golden armor piece.
+itm_i16_r4_06	scrap	A brown piece of chainmail.
+itm_i16_r4_07	scrap	A brown broken red shield fragment.
+itm_i16_r4_08	scrap	A brown broken golden sword hilt.
+itm_i16_r4_09	scrap	A brown dented iron vambrace.
+itm_i16_r4_10	scrap	A brown torn red armor piece.
+itm_i16_r4_11	scrap	A brown golden armor fragment.
+itm_i16_r5_00	scrap	A brown rusted gear with missing teeth.
+itm_i16_r5_01	scrap	A brown brass spring with oil stains.
+itm_i16_r5_02	scrap	A brown bent silver fishhook.
+itm_i16_r5_03	scrap	A brown old leather collar.
+itm_i16_r5_04	scrap	A brown broken ship rudder wheel.
+itm_i16_r5_05	scrap	A brown brass key part.
+itm_i16_r5_06	scrap	A brown iron gear.
+itm_i16_r5_07	scrap	A brown coiled iron spring.
+itm_i16_r5_08	scrap	A brown broken iron shackle.
+itm_i16_r5_09	scrap	A brown corroded green metal fitting.
+itm_i16_r5_10	scrap	A black iron hook.
+itm_i16_r5_11	scrap	A brown broken wooden wheel.
+itm_i17_r0_00	creature_part	A brown glowing orange dragon scale.
+itm_i17_r0_01	creature_part	A brown golden scale.
+itm_i17_r0_02	creature_part	A white iridescent scale.
+itm_i17_r0_03	creature_part	A brown dark grey scale.
+itm_i17_r0_04	creature_part	A black silver scale.
+itm_i17_r0_05	creature_part	A red red and black scale.
+itm_i17_r0_06	creature_part	A blue blue scale with a faint blue glow.
+itm_i17_r0_07	creature_part	A golden green scale.
+itm_i17_r0_08	creature_part	A brown bone-white scale.
+itm_i17_r0_09	creature_part	A purple purple scale with a faint purple glow.
+itm_i17_r0_10	creature_part	A grey black scale.
+itm_i17_r0_11	creature_part	A brown golden bronze scale.
+itm_i17_r1_00	creature_part	A red pulsing red organ.
+itm_i17_r1_01	creature_part	An olive sac of green fluid.
+itm_i17_r1_02	creature_part	A red purple fleshy mass.
+itm_i17_r1_03	creature_part	A brown glowing orange sac.
+itm_i17_r1_04	creature_part	A brown pale coiled organ.
+itm_i17_r1_05	creature_part	A red dark veined organ.
+itm_i17_r1_06	creature_part	A brown cluster of amber eggs.
+itm_i17_r1_07	creature_part	A purple cluster of purple eggs.
+itm_i17_r1_08	creature_part	A red red beating heart.
+itm_i17_r1_09	creature_part	An olive pair of green sacs.
+itm_i17_r1_10	creature_part	A brown pale spotted egg cluster.
+itm_i17_r1_11	creature_part	A pink dark fleshy mass.
+itm_i17_r2_00	creature_part	An olive green poison needle.
+itm_i17_r2_01	creature_part	A brown curved fang.
+itm_i17_r2_02	creature_part	A brown large curved claw.
+itm_i17_r2_03	creature_part	A brown spiked horn.
+itm_i17_r2_04	creature_part	A red red spiked tail tip.
+itm_i17_r2_05	creature_part	A purple purple stinger with a faint purple glow.
+itm_i17_r2_06	creature_part	A brown large fang.
+itm_i17_r2_07	creature_part	A brown hooked claw.
+itm_i17_r2_08	creature_part	A blue blue crystal stinger with a faint blue glow.
+itm_i17_r2_09	creature_part	A brown spiked brown horn.
+itm_i17_r2_10	creature_part	A brown ivory fang.
+itm_i17_r2_11	creature_part	A red red spiked tail.
+itm_i17_r3_00	creature_part	A brown spool of spider silk.
+itm_i17_r3_01	creature_part	A grey bundle of white silk threads.
+itm_i17_r3_02	creature_part	A red lock of red hair.
+itm_i17_r3_03	creature_part	A brown patch of brown fur.
+itm_i17_r3_04	creature_part	A blue blue feathers with a faint blue glow.
+itm_i17_r3_05	creature_part	A brown patch of cream fur.
+itm_i17_r3_06	creature_part	A brown red fur.
+itm_i17_r3_07	creature_part	A pink purple fur.
+itm_i17_r3_08	creature_part	A brown tan fur pelt.
+itm_i17_r3_09	creature_part	An olive green fur.
+itm_i17_r3_10	creature_part	A grey white fur.
+itm_i17_r3_11	creature_part	A red dark red feather.
+itm_i17_r4_00	creature_part	A grey cracked vial of grey liquid.
+itm_i17_r4_01	creature_part	An olive vial of green poison.
+itm_i17_r4_02	creature_part	A red vial of red blood.
+itm_i17_r4_03	creature_part	A blue vial of blue glowing fluid.
+itm_i17_r4_04	creature_part	A brown vial of amber fluid.
+itm_i17_r4_05	creature_part	A purple vial of purple fluid with a faint purple glow.
+itm_i17_r4_06	creature_part	A grey vial of pale fluid.
+itm_i17_r4_07	creature_part	A red vial of dark red blood.
+itm_i17_r4_08	creature_part	A green vial of teal fluid.
+itm_i17_r4_09	creature_part	A brown vial of orange eggs.
+itm_i17_r4_10	creature_part	A brown vial of black blood.
+itm_i17_r4_11	creature_part	A purple vial of purple glowing fluid.
+itm_i17_r5_00	creature_part	An olive green thorned core.
+itm_i17_r5_01	creature_part	A red red crystal cluster.
+itm_i17_r5_02	creature_part	A brown black magic stone in bone.
+itm_i17_r5_03	creature_part	A blue blue crystal cluster with a faint blue glow.
+itm_i17_r5_04	creature_part	A brown fiery red core.
+itm_i17_r5_05	creature_part	A purple purple gem in bone with a faint purple glow.
+itm_i17_r5_06	creature_part	A brown blue gem in a bone cage.
+itm_i17_r5_07	creature_part	A red red crystal in a dark shell.
+itm_i17_r5_08	creature_part	An olive green glowing core.
+itm_i17_r5_09	creature_part	A brown blue gem in bone with a faint blue glow.
+itm_i17_r5_10	creature_part	A red red crystal core.
+itm_i17_r5_11	creature_part	A brown purple gem in a bone ring with a faint purple glow.
+itm_i18_r0_00	medium_weapon	A white katana.
+itm_i18_r0_01	medium_weapon	A white katana.
+itm_i18_r0_02	medium_weapon	A white katana.
+itm_i18_r0_03	medium_weapon	A white katana.
+itm_i18_r0_04	medium_weapon	A brown katana with a visible hamon.
+itm_i18_r0_05	medium_weapon	A white katana with a visible hamon.
+itm_i18_r0_06	medium_weapon	A black katana.
+itm_i18_r0_07	medium_weapon	A white katana.
+itm_i18_r0_08	medium_weapon	A white katana.
+itm_i18_r0_09	medium_weapon	A black katana.
+itm_i18_r0_10	medium_weapon	A white katana.
+itm_i18_r0_11	medium_weapon	A white katana.
+itm_i18_r0_12	medium_weapon	A black rusted katana.
+itm_i18_r0_13	medium_weapon	A brown worn katana.
+itm_i18_r1_00	small_weapon	A white wakizashi short sword.
+itm_i18_r1_01	small_weapon	A black wakizashi short sword.
+itm_i18_r1_02	small_weapon	A black wakizashi short sword.
+itm_i18_r1_03	small_weapon	A white wakizashi short sword.
+itm_i18_r1_04	small_weapon	A grey wakizashi short sword.
+itm_i18_r1_05	small_weapon	A black wakizashi short sword.
+itm_i18_r1_06	small_weapon	A white wakizashi short sword.
+itm_i18_r1_07	small_weapon	A brown wakizashi short sword.
+itm_i18_r1_08	small_weapon	A black wakizashi short sword.
+itm_i18_r1_09	small_weapon	A grey ninja straight sword.
+itm_i18_r1_10	small_weapon	A black ninja straight sword.
+itm_i18_r1_11	small_weapon	A black wakizashi short sword.
+itm_i18_r1_12	small_weapon	A black wakizashi short sword.
+itm_i18_r2_00	large_weapon	A white odachi great sword.
+itm_i18_r2_01	large_weapon	A white odachi great sword.
+itm_i18_r2_02	large_weapon	A black cursed odachi with red veins.
+itm_i18_r2_03	large_weapon	A purple odachi great sword.
+itm_i18_r2_04	large_weapon	A black odachi great sword.
+itm_i18_r2_05	large_weapon	A black odachi great sword.
+itm_i18_r2_06	large_weapon	A brown notched odachi.
+itm_i18_r2_07	large_weapon	A brown odachi great sword.
+itm_i18_r2_08	large_weapon	A brown golden odachi.
+itm_i18_r2_09	large_weapon	A black cursed odachi with red veins.
+itm_i18_r2_10	large_weapon	A brown nodachi.
+itm_i18_r2_11	large_weapon	A grey nodachi.
+itm_i19_r0_00	long_weapon	A brown yari spear.
+itm_i19_r0_01	long_weapon	A red yari spear.
+itm_i19_r0_02	long_weapon	A brown jumonji cross spear.
+itm_i19_r0_03	long_weapon	A blue yari spear.
+itm_i19_r0_04	long_weapon	A red jumonji cross spear.
+itm_i19_r0_05	long_weapon	A brown naginata.
+itm_i19_r0_06	long_weapon	A red yari spear.
+itm_i19_r0_07	long_weapon	A brown naginata.
+itm_i19_r0_08	long_weapon	A red jumonji cross spear.
+itm_i19_r0_09	long_weapon	A brown yari spear.
+itm_i19_r0_10	long_weapon	A brown kama yari sickle spear.
+itm_i19_r0_11	long_weapon	A brown naginata.
+itm_i19_r0_12	long_weapon	A brown yari spear.
+itm_i19_r0_13	long_weapon	A red naginata.
+itm_i19_r0_14	long_weapon	A brown jumonji cross spear.
+itm_i19_r0_15	long_weapon	A brown yari spear.
+itm_i19_r0_16	long_weapon	A brown naginata.
+itm_i19_r1_00	long_weapon	A brown japanese yumi longbow.
+itm_i19_r1_01	long_weapon	A brown japanese yumi longbow.
+itm_i19_r1_02	long_weapon	A brown japanese yumi longbow.
+itm_i19_r1_03	long_weapon	A brown japanese yumi longbow.
+itm_i19_r1_04	long_weapon	A brown japanese yumi longbow.
+itm_i19_r1_05	long_weapon	A brown japanese yumi longbow.
+itm_i19_r1_06	long_weapon	A brown japanese yumi longbow.
+itm_i19_r1_07	long_weapon	A brown japanese yumi longbow.
+itm_i19_r1_08	long_weapon	A brown japanese yumi longbow.
+itm_i19_r1_09	long_weapon	A brown japanese yumi longbow.
+itm_i19_r1_10	long_weapon	A brown japanese yumi longbow.
+itm_i19_r1_11	long_weapon	A brown japanese yumi longbow.
+itm_i19_r2_00	small_weapon	A red tanto dagger.
+itm_i19_r2_01	small_weapon	A white tanto dagger.
+itm_i19_r2_02	small_weapon	A brown kaiken dagger.
+itm_i19_r2_03	small_weapon	A red kunai.
+itm_i19_r2_04	small_weapon	A black kunai.
+itm_i19_r2_05	small_weapon	A black tanto dagger.
+itm_i19_r2_06	small_weapon	A brown kaiken dagger.
+itm_i19_r2_07	small_weapon	A brown kunai.
+itm_i19_r2_08	small_weapon	A blue tanto dagger.
+itm_i19_r2_09	small_weapon	A brown kunai.
+itm_i19_r2_10	small_weapon	A brown kunai.
+itm_i19_r2_11	small_weapon	A brown kaiken dagger.
+itm_i19_r3_00	throwable_weapon	A black four-pointed shuriken.
+itm_i19_r3_01	throwable_weapon	A black four-pointed shuriken.
+itm_i19_r3_02	throwable_weapon	A brown eight-pointed shuriken.
+itm_i19_r3_03	throwable_weapon	A black eight-pointed shuriken.
+itm_i19_r3_04	throwable_weapon	A grey bo shuriken throwing spike.
+itm_i19_r3_05	throwable_weapon	A black throwing spike.
+itm_i19_r3_06	throwable_weapon	A black four-pointed shuriken.
+itm_i19_r3_07	throwable_weapon	A brown eight-pointed shuriken.
+itm_i19_r3_08	medium_weapon	A brown kanabo iron club.
+itm_i19_r3_09	medium_weapon	A brown kanabo iron club.
+itm_i19_r3_10	medium_weapon	A black kanabo iron club.
+itm_i19_r3_11	medium_weapon	A brown kanabo iron club.
+itm_i19_r3_12	throwable_weapon	A black four-pointed shuriken.
+itm_i19_r3_13	small_weapon	A red iron war fan tessen.
+itm_i19_r3_14	small_weapon	A brown folded iron war fan.
+itm_i19_r3_15	small_weapon	A brown iron war fan tessen.
+itm_i20_r0_00	accessory	A beige paper ofuda talisman.
+itm_i20_r0_01	accessory	A brown paper talisman with a bell.
+itm_i20_r0_02	accessory	A brown wooden talisman plaque.
+itm_i20_r0_03	accessory	A white paper talisman with a bell.
+itm_i20_r0_04	accessory	A brown paper talisman with a bell.
+itm_i20_r0_05	accessory	A brown wooden talisman plaque.
+itm_i20_r0_06	accessory	A brown paper ofuda talisman.
+itm_i20_r0_07	accessory	A brown omamori charm bag.
+itm_i20_r0_08	accessory	A brown paper ofuda talisman.
+itm_i20_r0_09	accessory	A pink omamori charm bag.
+itm_i20_r0_10	accessory	A brown golden omamori charm bag.
+itm_i20_r0_11	accessory	A brown paper ofuda talisman.
+itm_i20_r0_12	accessory	A brown omamori charm bag.
+itm_i20_r1_00	accessory	A brown wooden prayer beads.
+itm_i20_r1_01	accessory	A grey crystal prayer beads.
+itm_i20_r1_02	accessory	A green jade prayer beads.
+itm_i20_r1_03	accessory	A purple purple prayer beads.
+itm_i20_r1_04	accessory	A brown black prayer beads with a skull.
+itm_i20_r1_05	accessory	A grey jade magatama.
+itm_i20_r1_06	accessory	A red red magatama.
+itm_i20_r1_07	accessory	A brown white magatama.
+itm_i20_r1_08	accessory	A green green magatama.
+itm_i20_r1_09	accessory	A red black magatama.
+itm_i20_r1_10	accessory	A brown white magatama.
+itm_i20_r1_11	accessory	A brown jade magatama.
+itm_i20_r1_12	accessory	A brown dark magatama.
+itm_i20_r2_00	scroll	A brown japanese handscroll.
+itm_i20_r2_01	scroll	A brown japanese scroll with a tassel.
+itm_i20_r2_02	scroll	A brown letter tied with red cord.
+itm_i20_r2_03	scroll	A brown rolled letters.
+itm_i20_r2_04	scroll	A brown blue japanese handscroll.
+itm_i20_r2_05	scroll	A brown green japanese handscroll.
+itm_i20_r2_06	scroll	A brown scroll and letter tied with red cord.
+itm_i20_r2_07	scroll	A white folded letter tied with cord.
+itm_i20_r2_08	scroll	A brown blue bound scroll.
+itm_i20_r2_09	scroll	A brown red wrapped letter.
+itm_i20_r2_10	scroll	A beige folded paper letter.
+itm_i20_r2_11	scroll	A brown scroll with a talisman.
+itm_i20_r2_12	scroll	A brown letter tied with red cord.
+itm_i20_r3_00	accessory	A brown lacquered inro case.
+itm_i20_r3_01	accessory	A brown cat netsuke.
+itm_i20_r3_02	accessory	A brown oni mask netsuke.
+itm_i20_r3_03	accessory	A brown gourd netsuke.
+itm_i20_r3_04	accessory	A brown red folding fan.
+itm_i20_r3_05	accessory	A brown blue folding fan.
+itm_i20_r3_06	accessory	A brown black folding fan.
+itm_i20_r3_07	tool	A brown kiseru tobacco pipe.
+itm_i20_r3_08	tool	A brown kiseru tobacco pipe.
+itm_i20_r3_09	accessory	A black hand mirror.
+itm_i20_r3_10	accessory	A brown bronze hand mirror.
+itm_i20_r3_11	accessory	A brown hand mirror.
+itm_i20_r3_12	accessory	A brown lacquered comb.
+itm_i20_r3_13	accessory	A brown golden comb.
+itm_i20_r4_00	creature_part	A red oni horn.
+itm_i20_r4_01	creature_part	A brown large fang.
+itm_i20_r4_02	creature_part	A brown demon claw.
+itm_i20_r4_03	creature_part	A brown bone horn.
+itm_i20_r4_04	creature_part	A brown spiked demon horn.
+itm_i20_r4_05	creature_part	A brown tengu feather.
+itm_i20_r4_06	creature_part	A brown red tengu feather.
+itm_i20_r4_07	creature_part	A black blue tengu feather.
+itm_i20_r4_08	creature_part	A brown fox tail fur.
+itm_i20_r4_09	creature_part	A black black fox tail fur.
+itm_i20_r4_10	creature_part	A black serpent scales.
+itm_i20_r4_11	creature_part	A brown blue serpent scales.
+itm_i20_r4_12	creature_part	A brown red serpent scales.
+itm_i20_r4_13	creature_part	A brown kappa plate.
+itm_i20_r4_14	creature_part	A brown broken blue scale.
+itm_i20_r4_15	creature_part	A brown woven straw bundle.
+itm_i20_r5_00	medicine	A brown small pot of pills.
+itm_i20_r5_01	medicine	A brown small pot of pills.
+itm_i20_r5_02	medicine	A brown bowl of round pills.
+itm_i20_r5_03	plant	A brown herbs wrapped in washi paper.
+itm_i20_r5_04	drink	A golden bamboo water canteen.
+itm_i20_r5_05	drink	A brown bamboo water canteen.
+itm_i20_r5_06	drink	A brown gourd canteen.
+itm_i20_r5_07	drink	A brown bamboo canteen.
+itm_i20_r5_08	food	A brown rice ball wrapped in bamboo leaf.
+itm_i20_r5_09	food	A brown rice ball.
+itm_i20_r5_10	food	A brown rice ball wrapped in bamboo leaf.
+itm_i20_r5_11	food	A brown dried persimmon skewer.
+itm_i20_r5_12	food	A brown dried fish skewer.
+itm_i20_r5_13	food	A brown dried persimmon skewer.
+itm_i20_r5_14	food	A brown cloth food bundle.
+itm_i21_r0_00	shield	A blue clear riot shield.
+itm_i21_r0_01	shield	A black black ballistic shield with a viewport.
+itm_i21_r0_02	shield	A grey cracked riot shield.
+itm_i21_r0_03	shield	A black black ballistic shield with a viewport.
+itm_i21_r0_04	shield	A golden olive ballistic shield with a viewport.
+itm_i21_r0_05	shield	A black small arm shield.
+itm_i21_r0_06	shield	A black perforated steel shield.
+itm_i21_r0_07	shield	A black black ballistic shield with a viewport.
+itm_i21_r0_08	shield	A brown tan armored shield.
+itm_i21_r0_09	shield	A black dark armored shield.
+itm_i21_r0_10	shield	A black steel shield with a mesh window.
+itm_i21_r1_00	shield	A blue energy barrier shield with a faint blue glow.
+itm_i21_r1_01	shield	A blue crystal energy shield.
+itm_i21_r1_02	shield	A black round tech shield.
+itm_i21_r1_03	shield	A grey hexagonal armored shield.
+itm_i21_r1_04	shield	A black hexagonal armored shield.
+itm_i21_r1_05	shield	A blue energy barrier shield with a faint blue glow.
+itm_i21_r1_06	shield	A grey folding arm shield with a faint blue glow.
+itm_i21_r1_07	shield	A blue glowing tech shield.
+itm_i21_r1_08	shield	A red red hexagonal energy shield.
+itm_i21_r1_09	shield	A black round tech shield.
+itm_i21_r2_00	shield	A brown rusted car door shield.
+itm_i21_r2_01	shield	A brown corrugated metal shield.
+itm_i21_r2_02	shield	A brown wooden plank shield.
+itm_i21_r2_03	shield	A brown tire shield.
+itm_i21_r2_04	shield	A brown stop sign shield.
+itm_i21_r2_05	shield	A brown hazard stripe shield.
+itm_i21_r2_06	shield	A brown scrap metal shield.
+itm_i21_r2_07	shield	A brown pot lid shield.
+itm_i21_r2_08	shield	A brown riveted scrap shield.
+itm_i21_r2_09	shield	A brown scrap cage shield.
+itm_i21_r3_00	small_weapon	A black telescopic baton.
+itm_i21_r3_01	small_weapon	A black rubber baton.
+itm_i21_r3_02	small_weapon	A black police baton.
+itm_i21_r3_03	small_weapon	A brown telescopic baton.
+itm_i21_r3_04	small_weapon	A black side-handle baton.
+itm_i21_r3_05	small_weapon	A black side-handle baton.
+itm_i21_r3_06	small_weapon	A black police baton.
+itm_i21_r3_07	small_weapon	A black side-handle baton.
+itm_i21_r3_08	small_weapon	A blue blue stun baton with a faint blue glow.
+itm_i21_r3_09	small_weapon	A black police baton.
+itm_i21_r3_10	small_weapon	A black side-handle baton.
+itm_i21_r3_11	small_weapon	A red red stun baton.
+itm_i21_r4_00	small_weapon	A black taser with a faint blue glow.
+itm_i21_r4_01	small_weapon	A brown taser.
+itm_i21_r4_02	small_weapon	A black taser.
+itm_i21_r4_03	small_weapon	A black taser with a faint blue glow.
+itm_i21_r4_04	small_weapon	A brown stun gun.
+itm_i21_r4_05	small_weapon	A black pepper spray.
+itm_i21_r4_06	small_weapon	A red pepper spray.
+itm_i21_r4_07	small_weapon	A brown pepper spray.
+itm_i21_r4_08	small_weapon	A brown pepper spray.
+itm_i21_r4_09	small_weapon	A brown folding knife.
+itm_i21_r4_10	small_weapon	A black folding knife.
+itm_i21_r4_11	small_weapon	A brown karambit knife.
+itm_i21_r4_12	small_weapon	A black folding knife.
+itm_i21_r4_13	small_weapon	A brown brass knuckles.
+itm_i21_r4_14	small_weapon	A black black brass knuckles.
+itm_i21_r4_15	small_weapon	A red spiked brass knuckles.
+itm_i21_r4_16	small_weapon	A grey spiked brass knuckles.
+itm_i22_r0_00	document	A grey data chip.
+itm_i22_r0_01	document	A black glowing data chip.
+itm_i22_r0_02	document	A black green data chip.
+itm_i22_r0_03	document	A blue memory card.
+itm_i22_r0_04	document	A red red memory card.
+itm_i22_r0_05	document	A black usb flash drive.
+itm_i22_r0_06	document	A blue usb flash drive.
+itm_i22_r0_07	document	A brown usb key on a ring.
+itm_i22_r0_08	document	A grey data card.
+itm_i22_r0_09	document	A brown glowing data module.
+itm_i22_r0_10	document	A black cassette tape.
+itm_i22_r0_11	document	A black tape reel.
+itm_i22_r1_00	document	A grey id card.
+itm_i22_r1_01	document	A white red id card.
+itm_i22_r1_02	document	A grey worn id card.
+itm_i22_r1_03	document	A grey id card.
+itm_i22_r1_04	document	A black black key card.
+itm_i22_r1_05	document	A brown military insignia badge.
+itm_i22_r1_06	document	A brown golden star badge.
+itm_i22_r1_07	document	A red skull gang badge.
+itm_i22_r1_08	document	A black dog tag.
+itm_i22_r1_09	document	A brown golden badge.
+itm_i22_r1_10	document	A brown bronze badge.
+itm_i22_r1_11	document	A brown gear emblem badge.
+itm_i22_r1_12	document	A brown red shield badge.
+itm_i22_r2_00	document	A grey crumpled paper.
+itm_i22_r2_01	document	A white torn note.
+itm_i22_r2_02	document	A brown torn note.
+itm_i22_r2_03	document	A white sealed envelope.
+itm_i22_r2_04	document	A white airmail envelope.
+itm_i22_r2_05	document	A white photograph.
+itm_i22_r2_06	document	A grey old photograph.
+itm_i22_r2_07	document	A brown newspaper clipping.
+itm_i22_r2_08	document	A beige ticket.
+itm_i22_r2_09	document	A red red ticket.
+itm_i22_r2_10	document	A white printed receipt.
+itm_i22_r2_11	document	A brown burnt paper.
+itm_i22_r2_12	document	A brown note with red marks.
+itm_i22_r3_00	document	A blue blueprint.
+itm_i22_r3_01	document	A white crumpled blueprint.
+itm_i22_r3_02	document	A blue blueprint.
+itm_i22_r3_03	document	A brown folded city map.
+itm_i22_r3_04	document	A brown folded map.
+itm_i22_r3_05	document	A brown newspaper.
+itm_i22_r3_06	document	A brown hand-drawn map.
+itm_i22_r3_07	document	A blue blueprint booklet.
+itm_i22_r3_08	document	A black folded city map.
+itm_i22_r3_09	document	A brown wasteland hand-drawn map.
+itm_i22_r3_10	document	A blue glowing holographic blueprint.
+itm_i22_r3_11	document	A blue blueprint booklet.
+itm_i22_r4_00	document	A brown leather notebook.
+itm_i22_r4_01	document	A black spiral notebook.
+itm_i22_r4_02	document	A red red notebook.
+itm_i22_r4_03	document	A brown paper folder.
+itm_i22_r4_04	document	A brown spiral notebook.
+itm_i22_r4_05	document	A brown green notebook.
+itm_i22_r4_06	document	A brown clipboard.
+itm_i22_r4_07	document	A brown paper folder.
+itm_i22_r4_08	document	A blue blue notebook.
+itm_i22_r4_09	document	A red passport booklet.
+itm_i22_r4_10	document	A brown leather notebook.
+itm_i22_r4_11	document	A black metal folder.
+itm_i22_r4_12	document	A black electronic notebook.
+itm_i22_r5_00	document	A black cracked tablet.
+itm_i22_r5_01	document	A blue tablet.
+itm_i22_r5_02	document	A blue cracked tablet.
+itm_i22_r5_03	document	A blue glowing tablet.
+itm_i22_r5_04	document	A brown rugged tablet.
+itm_i22_r5_05	document	A red red tablet.
+itm_i22_r5_06	document	A blue holographic disc with a faint blue glow.
+itm_i22_r5_07	document	A brown orange holographic disc.
+itm_i22_r5_08	document	A blue data capsule with a faint cyan glow.
+itm_i22_r5_09	document	A brown orange data capsule.
+itm_i22_r5_10	document	A brown spherical recorder.
+itm_i22_r5_11	document	A red red black box.
+itm_i22_r5_12	document	A blue blue black box with a faint blue glow.
+itm_i23_r0_00	medicine	A red syringe.
+itm_i23_r0_01	medicine	A brown auto-injector.
+itm_i23_r0_02	medicine	A brown syringe.
+itm_i23_r0_03	medicine	A blue syringe with a faint blue glow.
+itm_i23_r0_04	medicine	A black syringe.
+itm_i23_r0_05	medicine	A brown auto-injector pen.
+itm_i23_r0_06	medicine	A grey auto-injector pen.
+itm_i23_r0_07	medicine	A brown syringe.
+itm_i23_r0_08	medicine	A grey syringe.
+itm_i23_r0_09	medicine	A brown syringe.
+itm_i23_r0_10	medicine	A grey auto-injector pen.
+itm_i23_r0_11	medicine	A white auto-injector pen.
+itm_i23_r0_12	medicine	A red auto-injector pen.
+itm_i23_r0_13	medicine	A blue syringe with a faint blue glow.
+itm_i23_r1_00	medicine	A white spray can of medicine.
+itm_i23_r1_01	medicine	A red spray can of medicine.
+itm_i23_r1_02	medicine	An olive spray can of medicine.
+itm_i23_r1_03	medicine	A white spray can of medicine.
+itm_i23_r1_04	medicine	A brown spray can of medicine.
+itm_i23_r1_05	medicine	A brown spray can of medicine.
+itm_i23_r1_06	medicine	A white spray can with a trigger.
+itm_i23_r1_07	medicine	A blue inhaler.
+itm_i23_r1_08	medicine	A white spray can of medicine.
+itm_i23_r1_09	medicine	A brown spray can of medicine.
+itm_i23_r1_10	medicine	A blue spray can of medicine.
+itm_i23_r1_11	medicine	A red spray can of medicine.
+itm_i23_r1_12	medicine	A brown small spray bottle.
+itm_i23_r1_13	medicine	A white spray can of medicine.
+itm_i23_r1_14	medicine	A white spray can with a trigger.
+itm_i23_r1_15	medicine	A white spray can of medicine.
+itm_i23_r2_00	drink	A red can of energy drink.
+itm_i23_r2_01	drink	A blue can of energy drink with a faint blue glow.
+itm_i23_r2_02	drink	A brown can of energy drink.
+itm_i23_r2_03	drink	A brown can of energy drink.
+itm_i23_r2_04	drink	A red crushed can of energy drink.
+itm_i23_r2_05	drink	A green can of energy drink.
+itm_i23_r2_06	drink	A white can of energy drink.
+itm_i23_r2_07	drink	A grey can of energy drink.
+itm_i23_r2_08	drink	A brown can of energy drink.
+itm_i23_r2_09	drink	A purple can of energy drink with a faint purple glow.
+itm_i23_r2_10	drink	A red can of energy drink.
+itm_i23_r2_11	drink	A black can of energy drink.
+itm_i23_r2_12	drink	A brown crushed can of energy drink.
+itm_i23_r2_13	drink	A brown can of energy drink.
+itm_i23_r2_14	drink	A blue can of energy drink with a faint blue glow.
+itm_i23_r2_15	drink	A brown dented rusty can.
+itm_i23_r3_00	drink	A blue plastic water bottle.
+itm_i23_r3_01	drink	A blue plastic water bottle with a faint blue glow.
+itm_i23_r3_02	drink	A brown plastic juice bottle.
+itm_i23_r3_03	drink	A green plastic bottle.
+itm_i23_r3_04	drink	A brown glass bottle of liquor.
+itm_i23_r3_05	drink	A brown bottle of murky water.
+itm_i23_r3_06	drink	A brown bottle of moonshine.
+itm_i23_r3_07	drink	A brown bottle of murky water.
+itm_i23_r3_08	drink	A brown bottle of wine.
+itm_i23_r3_09	drink	A brown bottle of liquor.
+itm_i23_r3_10	drink	A golden glass bottle.
+itm_i23_r3_11	drink	A brown bottle of moonshine.
+itm_i23_r3_12	drink	A brown bottle of murky water.
+itm_i23_r3_13	drink	A brown bottle of liquor.
+itm_i23_r3_14	drink	A brown flask bottle.
+itm_i23_r3_15	drink	A brown bottle of murky water.
+itm_i23_r4_00	liquid_material	A red flask of red chemical.
+itm_i23_r4_01	liquid_material	A blue flask of blue chemical with a faint blue glow.
+itm_i23_r4_02	liquid_material	A red test tube of red chemical.
+itm_i23_r4_03	liquid_material	A green beaker of green chemical.
+itm_i23_r4_04	liquid_material	A brown bottle of amber chemical.
+itm_i23_r4_05	liquid_material	A purple flask of purple chemical with a faint purple glow.
+itm_i23_r4_06	liquid_material	A green test tube of green chemical with a faint green glow.
+itm_i23_r4_07	liquid_material	A blue test tube of blue chemical with a faint blue glow.
+itm_i23_r4_08	liquid_material	A brown test tube of yellow chemical.
+itm_i23_r4_09	liquid_material	A blue jar of blue chemical.
+itm_i23_r4_10	liquid_material	A purple test tube of purple chemical.
+itm_i23_r4_11	liquid_material	A green test tube of green chemical with a faint green glow.
+itm_i23_r4_12	liquid_material	A brown beaker of orange chemical.
+itm_i23_r4_13	liquid_material	A purple jar of purple chemical with a faint purple glow.
+itm_i23_r4_14	liquid_material	A golden bottle of yellow chemical.
+itm_i23_r4_15	liquid_material	A brown jar of specimen.
+itm_i23_r5_00	liquid_material	A blue glowing blue fluid cartridge.
+itm_i23_r5_01	liquid_material	A red glowing red fluid cartridge.
+itm_i23_r5_02	liquid_material	A green glowing green fluid cartridge.
+itm_i23_r5_03	liquid_material	A white glowing blue fluid cartridge.
+itm_i23_r5_04	liquid_material	A white glowing fluid cartridge.
+itm_i23_r5_05	other_material	A red coolant canister.
+itm_i23_r5_06	other_material	An olive green fuel jerrycan.
+itm_i23_r5_07	other_material	A brown hazard fuel jerrycan.
+itm_i23_r5_08	other_material	A brown grey fuel jerrycan.
+itm_i23_r5_09	other_material	A golden glowing fuel cell.
+itm_i23_r5_10	other_material	A red red fuel jerrycan.
+itm_i23_r5_11	other_material	A brown olive fuel jerrycan.
+itm_i23_r5_12	other_material	A red red fuel canister.
+itm_i23_r5_13	other_material	A brown yellow fuel jerrycan.
+itm_i23_r5_14	other_material	A brown fuel canister.
+itm_i24_r0_00	treasure	A brown stack of banknotes.
+itm_i24_r0_01	treasure	A brown rolled banknotes.
+itm_i24_r0_02	treasure	A brown rolled banknotes.
+itm_i24_r0_03	treasure	A brown roll of coins.
+itm_i24_r0_04	treasure	A brown rolled banknotes.
+itm_i24_r0_05	treasure	A brown bag of gold coins.
+itm_i24_r0_06	treasure	A brown bundle of banknotes.
+itm_i24_r0_07	treasure	A brown bundle of banknotes.
+itm_i24_r0_08	treasure	A brown rolled banknotes.
+itm_i24_r0_09	treasure	A brown roll of coins.
+itm_i24_r0_10	treasure	A brown bag of coins.
+itm_i24_r0_11	treasure	A brown stack of banknotes.
+itm_i24_r0_12	treasure	A brown bag of coins.
+itm_i24_r0_13	treasure	A brown silk bag of coins.
+itm_i24_r1_00	treasure	A blue credit chip card.
+itm_i24_r1_01	treasure	A blue credit chip card with a faint blue glow.
+itm_i24_r1_02	treasure	A black data vault with a faint blue glow.
+itm_i24_r1_03	treasure	A red red credit card.
+itm_i24_r1_04	treasure	A brown hexagonal tokens.
+itm_i24_r1_05	treasure	A brown data safe cube.
+itm_i24_r1_06	treasure	A brown golden credit card.
+itm_i24_r1_07	treasure	A blue glowing credit card.
+itm_i24_r1_08	treasure	A brown hexagonal tokens.
+itm_i24_r1_09	treasure	A brown credit vault with a faint blue glow.
+itm_i24_r1_10	treasure	A blue glowing credit card.
+itm_i24_r1_11	treasure	A brown credit vault with a faint blue glow.
+itm_i24_r1_12	treasure	A black red hexagonal tokens.
+itm_i24_r2_00	treasure	A brown gold bar.
+itm_i24_r2_01	treasure	A brown bag of gold dust.
+itm_i24_r2_02	treasure	A brown gold nugget.
+itm_i24_r2_03	treasure	A brown gold nugget.
+itm_i24_r2_04	treasure	A grey silver ore nugget.
+itm_i24_r2_05	treasure	A brown silver bar.
+itm_i24_r2_06	treasure	A brown gold nugget.
+itm_i24_r2_07	treasure	A grey platinum bar.
+itm_i24_r2_08	treasure	A brown gold nugget.
+itm_i24_r2_09	treasure	A blue iridescent ore chunk.
+itm_i24_r2_10	treasure	A brown gold bar.
+itm_i24_r2_11	treasure	A black silver nugget.
+itm_i24_r2_12	treasure	A brown copper nugget.
+itm_i24_r2_13	treasure	A black silver bar.
+itm_i24_r3_00	accessory	A brown wristwatch.
+itm_i24_r3_01	accessory	A black wristwatch.
+itm_i24_r3_02	accessory	A brown golden wristwatch.
+itm_i24_r3_03	accessory	A brown pocket watch.
+itm_i24_r3_04	tool	A black steel lighter.
+itm_i24_r3_05	tool	A brown brass lighter.
+itm_i24_r3_06	tool	A red red lighter.
+itm_i24_r3_07	tool	A brown brass lighter.
+itm_i24_r3_08	tool	A brown engraved lighter.
+itm_i24_r3_09	treasure	A red ring in a red box.
+itm_i24_r3_10	treasure	A blue ring in a blue box.
+itm_i24_r3_11	treasure	A black ring in a black box.
+itm_i24_r3_12	accessory	A brown blue gem necklace with a faint blue glow.
+itm_i24_r3_13	accessory	A brown red gem necklace.
+itm_i24_r3_14	accessory	A brown red gem pendant.
+itm_i24_r3_15	accessory	A brown fang necklace.
+itm_i24_r3_16	accessory	A brown blue gem pendant.
+itm_i24_r3_17	accessory	A brown tech pendant on a chain.
+itm_i24_r4_00	treasure	A brown string of bottle caps.
+itm_i24_r4_01	treasure	A red string of bottle caps.
+itm_i24_r4_02	relic	A brown old war medal.
+itm_i24_r4_03	relic	A brown old star medal.
+itm_i24_r4_04	relic	A brown old silver medal.
+itm_i24_r4_05	food	A brown stack of canned food.
+itm_i24_r4_06	food	A brown open can of food.
+itm_i24_r4_07	other_material	A brown ammo box.
+itm_i24_r4_08	other_material	A brown open case of bullets.
+itm_i24_r4_09	other_material	A brown military crate.
+itm_i24_r4_10	medicine	A brown jar of water purification tablets.
+itm_i24_r4_11	medicine	A blue jar of blue pills with a faint blue glow.
+itm_i24_r4_12	treasure	A brown leather wallet.
+itm_i24_r4_13	medicine	A brown jar of pills.
+itm_i24_r4_14	medicine	A brown bottle of pills.
+itm_i24_r5_00	relic	A brown alien artifact orb.
+itm_i24_r5_01	relic	A blue blue crystal core.
+itm_i24_r5_02	relic	A blue purple crystal cluster.
+itm_i24_r5_03	relic	A red red crystal core.
+itm_i24_r5_04	relic	A brown golden pyramid relic.
+itm_i24_r5_05	relic	A brown golden armillary relic.
+itm_i24_r5_06	relic	A brown glowing tech cube.
+itm_i24_r5_07	relic	A blue blue crystal capsule with a faint blue glow.
+itm_i24_r5_08	relic	A brown orange crystal capsule.
+itm_i24_r5_09	relic	A red red sealed case.
+itm_i24_r5_10	relic	A blue artifact in a glass case.
+itm_i24_r5_11	relic	A brown ancient tech pillar.
+itm_i24_r5_12	relic	A brown black orb relic.
+itm_i24_r5_13	relic	A brown ornate metal egg.
+itm_i24_r5_14	relic	A brown angel statuette trophy.
+itm_i25_r0_00	metal	A grey bent alloy plate.
+itm_i25_r0_01	metal	A grey steel plate with bolt holes.
+itm_i25_r0_02	metal	A brown scorched armor plate.
+itm_i25_r0_03	metal	A red red painted car body panel.
+itm_i25_r0_04	metal	A brown olive painted metal plate.
+itm_i25_r0_05	metal	A brown rusted steel plate.
+itm_i25_r0_06	metal	A brown riveted steel plate.
+itm_i25_r0_07	metal	A blue blue painted metal panel.
+itm_i25_r0_08	metal	A brown yellow painted metal plate.
+itm_i25_r0_09	metal	A black steel plate with slots.
+itm_i25_r0_10	metal	A black hexagonal armor plate.
+itm_i25_r0_11	metal	A grey perforated steel plate.
+itm_i25_r0_12	metal	A brown rusted metal panel.
+itm_i25_r1_00	metal	A grey steel bar.
+itm_i25_r1_01	metal	A brown rusted steel bar.
+itm_i25_r1_02	metal	A white aluminum ingot.
+itm_i25_r1_03	metal	A black scratched steel bar.
+itm_i25_r1_04	metal	A grey polished metal bar.
+itm_i25_r1_05	metal	A black threaded rebar.
+itm_i25_r1_06	metal	A grey steel pipe.
+itm_i25_r1_07	metal	A brown rusted steel pipe.
+itm_i25_r1_08	metal	A white steel pipe.
+itm_i25_r1_09	metal	A brown bronze pipe.
+itm_i25_r1_10	metal	A brown lump of molten metal.
+itm_i25_r1_11	metal	A brown lump of molten gold.
+itm_i25_r1_12	metal	A grey lump of silver metal.
+itm_i25_r1_13	metal	A brown lump of molten copper.
+itm_i25_r1_14	metal	A black lump of black slag.
+itm_i25_r2_00	scrap	A brown engine piston.
+itm_i25_r2_01	scrap	A brown rusted engine piston.
+itm_i25_r2_02	scrap	A black crankshaft.
+itm_i25_r2_03	scrap	A black hydraulic joint.
+itm_i25_r2_04	scrap	A brown bronze hydraulic coupling.
+itm_i25_r2_05	scrap	A brown heavy gearbox part.
+itm_i25_r2_06	scrap	A brown metal gearbox.
+itm_i25_r2_07	scrap	A black steel gearbox.
+itm_i25_r2_08	scrap	A brown rusted gearbox.
+itm_i25_r2_09	scrap	A brown black coil spring.
+itm_i25_r2_10	scrap	A brown dark coil spring.
+itm_i25_r2_11	scrap	A red red coil spring.
+itm_i25_r2_12	scrap	A black steel coil spring.
+itm_i25_r2_13	scrap	A brown brass coil spring.
+itm_i25_r3_00	scrap	A black gun barrel.
+itm_i25_r3_01	scrap	A black gun barrel with a muzzle brake.
+itm_i25_r3_02	scrap	A black perforated gun barrel.
+itm_i25_r3_03	scrap	A black gun barrel.
+itm_i25_r3_04	scrap	A black rifle receiver.
+itm_i25_r3_05	scrap	A black black rifle magazine.
+itm_i25_r3_06	scrap	A white tan rifle magazine.
+itm_i25_r3_07	scrap	A black steel magazine.
+itm_i25_r3_08	scrap	A black drum magazine.
+itm_i25_r3_09	scrap	A grey rifle scope.
+itm_i25_r3_10	scrap	A black red dot sight.
+itm_i25_r3_11	scrap	A black scope sight.
+itm_i25_r3_12	scrap	A black green holographic sight.
+itm_i25_r3_13	other_material	A brown open ammo box.
+itm_i25_r3_14	other_material	A brown green ammo crate.
+itm_i25_r3_15	other_material	A brown open case of bullets.
+itm_i25_r3_16	other_material	A black black ammo box.
+itm_i25_r3_17	other_material	A brown yellow ammo box.
+itm_i25_r4_00	other_material	A brown spool of black cable.
+itm_i25_r4_01	other_material	A red spool of red cable.
+itm_i25_r4_02	other_material	A blue spool of blue cable with a faint blue glow.
+itm_i25_r4_03	other_material	A brown bundle of copper wire.
+itm_i25_r4_04	other_material	A brown bundle of frayed wire.
+itm_i25_r4_05	other_material	A brown coil of rope cable.
+itm_i25_r4_06	other_material	A black coil of black cable.
+itm_i25_r4_07	other_material	A black steel chain.
+itm_i25_r4_08	other_material	A brown rusted chain.
+itm_i25_r4_09	other_material	A brown brass chain.
+itm_i25_r4_10	other_material	A brown heavy steel chain.
+itm_i25_r4_11	other_material	A black coil of steel wire rope.
+itm_i25_r4_12	other_material	A red coil of red hose.
+itm_i25_r4_13	other_material	A blue coil of blue hose with a faint blue glow.
+itm_i25_r4_14	other_material	A brown black flexible hose.
+itm_i25_r4_15	other_material	A brown black flexible hose.
+itm_i25_r5_00	other_material	A brown orange fuel rod.
+itm_i25_r5_01	other_material	A blue blue fuel rod with a faint blue glow.
+itm_i25_r5_02	other_material	A red red fuel rod.
+itm_i25_r5_03	other_material	An olive green fuel rod.
+itm_i25_r5_04	other_material	A red red fuel jerrycan.
+itm_i25_r5_05	other_material	A golden olive fuel jerrycan.
+itm_i25_r5_06	other_material	A blue coolant canister with a faint cyan glow.
+itm_i25_r5_07	other_material	A black silver coolant canister.
+itm_i25_r5_08	magical_material	A blue blue crystal chunk with a faint blue glow.
+itm_i25_r5_09	magical_material	A red red crystal chunk.
+itm_i25_r5_10	magical_material	A purple purple crystal chunk with a faint purple glow.
+itm_i25_r5_11	magical_material	A brown golden crystal chunk.
+itm_i25_r5_12	magical_material	A black black crystal chunk.
+itm_i25_r5_13	other_material	A grey bundle of carbon fiber rods.
+itm_i25_r5_14	other_material	A black bundle of carbon fiber tubes.
+itm_i25_r5_15	other_material	A brown orange resin block.
+itm_i25_r5_16	other_material	A blue blue resin block with a faint blue glow.

@@ -1,0 +1,252 @@
+# -*- coding: utf-8 -*-
+"""中世の武器・防具・魔法武器・SF武器の一枚絵 → ゲームの寸法の絵と追加埋め込み辞書（一枚絵ごとの分類）。
+
+切り抜き・寸法合わせ・色の測り方は build_guns.py と同じ部品を使う。違うのは:
+
+- 出力先は元画像1枚ごとの分類（../categories.json）のフォルダ（../images/<分類>/…・../data/<分類>/<品種>.json）
+- 鍵は組の頭（`med_` / `mag_` / `sf_`）で始める
+- キャプションはゲームの外見文と同じ形で結ぶ（`, a gun.` を付けない）。刃物は色を素材の言葉に直し、
+  魔法武器は差し色から属性（炎・氷・闇・自然・聖）を書く。SF武器は光る色か刃の材質を書く
+- SF武器の一枚絵は少し傾いて描かれているので、±20 度の中で幅が最小の向きに立てる（`build_guns.stand_up`）
+- 防具（盾・胴鎧・服・装身具）の寸法も扱う
+- 表の `whole` が真の品は、箱の中の塊を全部取る（2〜3本の投げナイフや矢の束のように、離れて描かれた1組）
+
+入力はリポジトリの assets/item_images の下の一枚絵（作者が画像生成 AI で作ったもの。場所は categories.json の source）と、
+1枚ごとの 鍵・品種の希望・一枚絵の上の箱・種類の名前を書いた表（medieval.json / magic.json / sf.json）。
+
+    python build_medieval.py [--set medieval|magic|sf|item] [--sheets <一枚絵のフォルダ>] [--preview <見比べ用の一覧 PNG>]
+"""
+import argparse
+import colorsys
+import json
+import os
+import sys
+from collections import Counter
+from pathlib import Path
+
+import numpy as np
+from PIL import Image
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import build_guns as b  # noqa: E402
+from minibert import MiniLM  # noqa: E402
+
+SETS = {"medieval": ("medieval.json", "med_", ("中世の武器と防具",)), "magic": ("magic.json", "mag_", ("魔法武器",)),
+        "sf": ("sf.json", "sf_", ("SF武器",)), "item": ("items.json", "itm_", ("機械部品", "食料", "医療品", "魔法素材", "宝物", "道具", "魔物素材",
+                                         "和風", "現代とSF"))}
+SHEETS = b.SHEETS  # 一枚絵の置き場所は categories.json から（build_guns.SHEETS）
+# 消耗品と素材の部位。ゲームの素材と同じくどれも 32x32
+ITEMS = ("food", "drink", "medicine", "plant", "mushroom", "tool", "relic", "scrap", "magical_material", "other_material",
+         "creature_part", "document", "scroll", "liquid_material", "treasure", "metal", "gem", "ore")
+# 防具の寸法はゲームの素材と同じ（盾・胴鎧は 2x2 マスの 64x64、服と装身具は 32x32）
+SIZES = dict(b.SIZES, shield=(64, 64), body_armor=(64, 64), clothing=(32, 32), accessory=(32, 32), **{f: (32, 32) for f in ITEMS})
+SQUARE = ("shield", "body_armor", "clothing", "accessory", "headgear", "gauntlets", "legwear") + ITEMS
+# 消耗品と部品の組（item）の防具は、防具類と同じく 64x64（作者の指示。中世の服だけは 32x32 のまま）
+ITEM_WEAR = {f: (64, 64) for f in ("clothing", "headgear", "gauntlets", "legwear")}
+# 刃や金属の頭を持つ種類。色を素材の言葉に直す
+METAL = ("sword", "sabre", "rapier", "axe", "hammer", "maul", "mace", "morning star", "spear", "halberd",
+         "flail", "dagger", "stiletto", "knife", "cleaver", "machete", "sickle", "scythe", "trident",
+         "hauberk", "cuirass", "scale armor", "brigandine", "breastplate", "kite shield", "tower shield")
+# 柄が木のことが多い種類。茶色はここでは木の柄、刀剣では革巻きの握り
+HAFTED = ("axe", "hammer", "maul", "mace", "morning star", "club", "spear", "halberd", "flail", "scythe", "trident", "staff")
+# 木でできた種類（茶色が多ければ wooden と書く）と、防具（茶色は革の帯）
+WOODISH = ("staff", "bow", "club", "shield")
+ARMOR = ("hauberk", "cuirass", "scale armor", "brigandine", "breastplate", "gambeson", "tunic", "jerkin")
+ELEMENT = {"red": "fire", "orange": "fire", "blue": "frost", "cyan": "frost", "purple": "shadow",
+           "magenta": "shadow", "green": "nature"}
+
+
+def extract_whole(folder, src):
+    """箱の中にほぼ収まる塊を全部取る（離れて描かれた1組の品）。縁の暗い画素も 1px 取り込む。"""
+    name, _, box = src.partition("@")
+    x0, y0, x1, y1 = map(int, box.split(","))
+    rgb_all, lab_all, boxes = b.sheet_of(folder, name)
+    lab = lab_all[y0:y1, x0:x1]
+    keep = np.zeros(lab.shape, bool)
+    for i in np.unique(lab[lab > 0]):
+        cx0, cy0, cx1, cy1 = boxes[i]
+        if cx0 >= x0 - 6 and cy0 >= y0 - 6 and cx1 <= x1 + 6 and cy1 <= y1 + 6:
+            keep |= lab == i
+    return Image.fromarray(np.dstack([rgb_all[y0:y1, x0:x1], np.where(b.grow(keep, b.RING), 255, 0).astype(np.uint8)]))
+
+
+def join(parts):
+    return parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
+
+
+def caption_for(entry, im, magic):
+    names = b.color_names(im)
+    total = max(1, sum(names.values()))
+    body = [k for k, _ in names.most_common() if not k.startswith("glow:") and k != "wood"]
+    main = body[0] if body else "grey"
+    typ, _, own = entry["type"].partition(" with ")
+    extras = [own] if own else []
+    metal = any(w in typ for w in METAL)
+    woodish = any(w in typ for w in WOODISH) and not metal
+    wooden = woodish and names["wood"] / total >= 0.12
+    if metal:
+        word = {"grey": "steel", "white": "polished steel", "black": "blackened iron", "tan": "bronze",
+                "brass": "gilded", "red": "red-lacquered", "blue": "blued steel"}.get(main, main)
+    elif wooden:
+        word = "wooden"
+    elif "quiver" in typ:
+        word = "leather"
+    else:
+        word = {"brass": "gilded"}.get(main, main)
+        if names["wood"] / total >= 0.35:
+            word = "brown"
+    if magic:
+        colors = [k[5:] if k.startswith("glow:") else k for k, n in names.most_common()
+                  if (k.startswith("glow:") or k in ELEMENT) and n / total >= 0.03]
+        color = next((c for c in colors if c in ELEMENT), None)
+        element = ELEMENT.get(color) or ("holy" if names["brass"] + names["white"] > 0.2 * total else "arcane")
+        word = "%s-enchanted" % element
+        if color:
+            extras.append("a glowing %s gem" % color)
+    elif names["wood"] / total >= 0.12 and not wooden and word not in ("brown", "leather"):
+        if any(w in typ for w in ARMOR):
+            extras.append("leather straps")
+        elif any(w in typ for w in HAFTED):
+            extras.append("a wooden haft")
+        elif metal:
+            extras.append("a leather-wrapped grip")
+    if not magic and main != "brass" and names["brass"] / total >= 0.04:
+        extras.append("gold fittings")
+    if not magic:
+        accent = [k for k in body[1:] if k in ("red", "blue", "green", "purple") and names[k] / total >= 0.04]
+        if accent:
+            extras.append("%s details" % accent[0])
+    text = "%s %s" % (word, typ) if word not in typ else typ
+    if extras:
+        text += " with " + join(extras)
+    return "%s %s." % ("An" if text[0] in "aeiou" else "A", text)
+
+
+SF_MATERIAL = {"grey": "steel", "white": "polished alloy", "black": "black alloy", "tan": "bronze", "brass": "gold-plated"}
+
+
+def caption_sf(entry, im):
+    """SF武器: 光る部分があればその色、無ければ刃や頭の材質。差し色も足す。"""
+    names = b.color_names(im)
+    total = max(1, sum(names.values()))
+    typ = entry["type"]
+    part = ("blade" if any(w in typ for w in ("sword", "dagger", "knife", "machete")) else
+            "head" if any(w in typ for w in ("hammer", "axe", "mace", "spear", "scythe", "halberd", "tomahawk",
+                                             "hatchet", "pick", "shovel", "wrench")) else
+            "edge" if any(w in typ for w in ("disc", "star", "throwing blade")) else
+            "core" if any(w in typ for w in ("stun", "shock")) else
+            "shaft" if any(w in typ for w in ("baton", "bat", "club", "crowbar", "pry bar")) else "core")
+    glow = Counter({k[5:]: n for k, n in names.items() if k.startswith("glow:")})
+    # color_names は赤と橙を光として数えないので、鮮やかで明るい赤・橙をここで数える
+    a = np.asarray(im).astype(np.float32) / 255
+    px = a[a[..., 3] > 0.5][:, :3]
+    glowing = any(w in typ for w in ("energy", "plasma", "stun", "shock"))
+    for r, g, bl in px[:: max(1, len(px) // 4000)] if glowing else ():   # 赤く塗った斧やレンチは光らせない
+        h, s, v = colorsys.rgb_to_hsv(r, g, bl)
+        if s > 0.5 and v > 0.85 and (h * 360 < 40 or h * 360 >= 345):
+            glow["red" if h * 360 < 15 or h * 360 >= 345 else "orange"] += 1
+    glow = [k for k, n in glow.most_common() if n / total >= 0.02]
+    body = [k for k, _ in names.most_common() if not k.startswith("glow:")]
+    if not glow and "energy" in typ:
+        # 光る刃の芯は白く飛び、色は縁にだけ残る。縁の色を光の色とする
+        glow = [k for k in body if k in ("red", "orange", "blue", "green", "purple", "magenta")][:1]
+    extras = []
+    if glow:
+        extras.append("a glowing %s %s" % (glow[0], part))
+    else:
+        main = next((k for k in body if k in SF_MATERIAL or k == "wood"), "grey")
+        word = "wooden" if main == "wood" or (main == "tan" and "bat" in typ) else SF_MATERIAL[main]
+        extras.append("a %s %s" % (word, part))
+    accent = [k for k in body if k in ("red", "orange", "brass", "blue", "green", "purple") and names[k] / total >= 0.04
+              and k not in glow[:1] and not (glow[:1] == ["cyan"] and k == "blue")]
+    if accent:
+        extras.append("%s details" % {"brass": "yellow"}.get(accent[0], accent[0]))
+    text = "%s with %s" % (typ, join(extras))
+    return "%s %s." % ("An" if text[0] in "aeiou" else "A", text)
+
+
+ITEM_COLOR = {"grey": "grey", "white": "white", "black": "black", "tan": "beige", "brass": "golden", "wood": "brown",
+              "red": "red", "orange": "orange", "olive green": "olive", "green": "green", "blue": "blue", "purple": "purple",
+              "magenta": "pink"}
+
+
+def caption_item(entry, im):
+    """消耗品と部品: 「色 + 種類の名前」。光る部分があれば光る色を足す。表の plain が真の品は種類の名前だけ（名前に色や材質が入っている）。"""
+    names = b.color_names(im)
+    total = max(1, sum(names.values()))
+    text = entry["type"]
+    if not entry.get("plain"):
+        body = [k for k, _ in names.most_common() if not k.startswith("glow:") and k in ITEM_COLOR]
+        if body:
+            text = "%s %s" % (ITEM_COLOR[body[0]], text)
+    glow = [k[5:] for k, n in names.most_common() if k.startswith("glow:") and n / total >= 0.03]
+    if glow and "glow" not in text:
+        text += " with a faint %s glow" % glow[0]
+    return "%s %s." % ("An" if text[0] in "aeiou" else "A", text)
+
+
+def choose(entry, im):
+    if entry["pref"] in SQUARE:
+        return entry["pref"]
+    return b.choose_folder(entry["pref"], im)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--set", default="medieval", choices=sorted(SETS))
+    ap.add_argument("--sheets", default=str(b.ASSET_ROOT))
+    ap.add_argument("--preview")
+    args = ap.parse_args()
+    table, prefix, groups = SETS[args.set]
+    magic = args.set == "magic"
+    sf = args.set == "sf"
+    item = args.set == "item"
+
+    b.SHEETS.update(SHEETS)
+    entries = json.load(open(HERE / table, encoding="utf-8"))
+    keys = [e["key"] for e in entries]
+    assert len(keys) == len(set(keys)), "鍵が重なっている"
+    assert all(k.startswith(prefix) for k in keys), "鍵は %s で始める" % prefix
+    made = {}
+    for e in entries:
+        im = (extract_whole if e.get("whole") else b.extract)(args.sheets, e["src"])
+        im = im.crop(im.getbbox())  # 縦向きの絵はもともと刃が上（依頼の決まり）。斜めの絵はそのまま
+        if e.get("diag"):
+            # 縦に描かれた短い武器と投げナイフは、ゲームの小型・投擲と同じく刃先を右上へ 45 度に倒す（32x32 に大きく入る）
+            im = b.stand_up(im, 0).rotate(-45, resample=Image.BICUBIC, expand=True)
+            im = im.crop(im.getbbox())
+        elif e.get("rot"):
+            # 斜めに描かれた長い品（和風の金棒）を立てる。rot は左回りの角度で、±20 度の中で幅が最小の向きに寄せる
+            im = b.stand_up(im, e["rot"])
+        elif sf and e["pref"] != "throwable":
+            im = b.stand_up(im, 0)
+        e["folder"] = choose(e, im)
+        e["caption"] = caption_item(e, im) if item else caption_sf(e, im) if sf else caption_for(e, im, magic)
+        box_w, box_h = (ITEM_WEAR.get(e["folder"]) if item else None) or SIZES[e["folder"]]
+        made[e["key"]] = Image.fromarray(b.shrink(im, box_w, box_h, 32))
+    b.write_categories(entries, made, [c["id"] for c in b.CATEGORIES if c["group"] in groups])
+    with open(HERE / ("%s_captions.txt" % args.set), "w", encoding="utf-8", newline="\n") as fh:
+        for e in entries:
+            fh.write("%s\t%s\t%s\n" % (e["key"], e["folder"], e["caption"]))
+
+    if args.preview:
+        cols = 20
+        rows = {}
+        for e in entries:
+            rows.setdefault(e["folder"], []).append(made[e["key"]])
+        step = {f: max(36, SIZES[f][0] + 4) for f in SIZES}
+        height = sum(((len(v) + cols - 1) // cols) * (SIZES[f][1] + 4) for f, v in rows.items())
+        sheet = Image.new("RGBA", (cols * 68, height), (40, 40, 40, 255))
+        y = 0
+        for folder in SIZES:
+            tiles = rows.get(folder, [])
+            for i, t in enumerate(tiles):
+                sheet.alpha_composite(t, ((i % cols) * step[folder] + 2, y + (i // cols) * (SIZES[folder][1] + 4) + 2))
+            y += ((len(tiles) + cols - 1) // cols) * (SIZES[folder][1] + 4)
+        sheet.resize((sheet.width * 2, sheet.height * 2), Image.NEAREST).save(args.preview)
+    print("done")
+
+
+if __name__ == "__main__":
+    main()

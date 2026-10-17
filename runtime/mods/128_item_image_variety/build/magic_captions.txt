@@ -1,0 +1,91 @@
+mag_x1_r0_00	medium_weapon	A frost-enchanted magic longsword with runes on the blade and a glowing blue gem.
+mag_x1_r0_01	medium_weapon	A fire-enchanted magic longsword with runes on the blade and a glowing red gem.
+mag_x1_r0_02	medium_weapon	A frost-enchanted magic longsword with runes on the blade and a glowing blue gem.
+mag_x1_r0_03	medium_weapon	A shadow-enchanted magic longsword with runes on the blade and a glowing purple gem.
+mag_x1_r0_04	medium_weapon	A nature-enchanted magic longsword with runes on the blade and a glowing green gem.
+mag_x1_r0_05	medium_weapon	A frost-enchanted magic longsword with runes on the blade and a glowing blue gem.
+mag_x1_r0_06	medium_weapon	A holy-enchanted magic longsword with runes on the blade.
+mag_x1_r0_07	medium_weapon	A shadow-enchanted magic longsword with runes on the blade and a glowing purple gem.
+mag_x1_r0_08	medium_weapon	A frost-enchanted magic longsword with runes on the blade and a glowing blue gem.
+mag_x1_r0_09	medium_weapon	A shadow-enchanted magic longsword with runes on the blade and a glowing purple gem.
+mag_x1_r0_10	medium_weapon	A frost-enchanted magic longsword with runes on the blade and a glowing blue gem.
+mag_x1_r0_11	medium_weapon	A frost-enchanted magic longsword with runes on the blade and a glowing blue gem.
+mag_x1_r0_12	medium_weapon	A shadow-enchanted magic longsword with runes on the blade and a glowing purple gem.
+mag_x1_r1_00	medium_weapon	A fire-enchanted elemental sword with a glowing red gem.
+mag_x1_r1_01	medium_weapon	A frost-enchanted elemental sword with a glowing blue gem.
+mag_x1_r1_02	medium_weapon	A frost-enchanted elemental sword with a glowing blue gem.
+mag_x1_r1_03	medium_weapon	A nature-enchanted elemental sword with a glowing green gem.
+mag_x1_r1_04	medium_weapon	A holy-enchanted elemental sword.
+mag_x1_r1_05	medium_weapon	A shadow-enchanted elemental sword with a glowing purple gem.
+mag_x1_r1_06	medium_weapon	A fire-enchanted elemental sword with a glowing red gem.
+mag_x1_r1_07	medium_weapon	A frost-enchanted elemental sword with a glowing blue gem.
+mag_x1_r1_08	medium_weapon	A nature-enchanted elemental sword with a glowing green gem.
+mag_x1_r1_09	medium_weapon	A holy-enchanted elemental sword.
+mag_x1_r1_10	medium_weapon	A shadow-enchanted elemental sword with a glowing purple gem.
+mag_x1_r1_11	medium_weapon	A fire-enchanted elemental sword with a glowing red gem.
+mag_x1_r2_00	medium_weapon	A frost-enchanted magic battle axe with a glowing blue gem.
+mag_x1_r2_01	medium_weapon	A fire-enchanted magic battle axe with a glowing red gem.
+mag_x1_r2_02	medium_weapon	A frost-enchanted magic mace with a crystal head and a glowing blue gem.
+mag_x1_r2_03	medium_weapon	A shadow-enchanted magic battle axe with a glowing purple gem.
+mag_x1_r2_04	medium_weapon	A nature-enchanted magic battle axe with a glowing green gem.
+mag_x1_r2_05	medium_weapon	A frost-enchanted magic mace with a crystal head and a glowing blue gem.
+mag_x1_r2_06	medium_weapon	A fire-enchanted magic war hammer with a glowing red gem.
+mag_x1_r2_07	medium_weapon	A shadow-enchanted magic mace with a crystal head and a glowing purple gem.
+mag_x1_r2_08	medium_weapon	A shadow-enchanted magic war hammer with a glowing purple gem.
+mag_x1_r2_09	medium_weapon	A nature-enchanted magic war hammer with a glowing green gem.
+mag_x1_r2_10	medium_weapon	A frost-enchanted magic mace with a crystal head and a glowing blue gem.
+mag_x1_r2_11	medium_weapon	A shadow-enchanted magic mace with a crystal head and a glowing purple gem.
+mag_x2_r0_00	large_weapon	A frost-enchanted magic greatsword with a glowing blue gem.
+mag_x2_r0_01	large_weapon	A fire-enchanted magic greatsword with a glowing red gem.
+mag_x2_r0_02	large_weapon	A holy-enchanted magic greatsword.
+mag_x2_r0_03	large_weapon	A frost-enchanted magic greatsword with a glowing blue gem.
+mag_x2_r0_04	large_weapon	A fire-enchanted magic greatsword with a glowing red gem.
+mag_x2_r0_05	large_weapon	A shadow-enchanted magic greatsword with a glowing purple gem.
+mag_x2_r0_06	large_weapon	An arcane-enchanted magic greatsword.
+mag_x2_r0_07	large_weapon	A frost-enchanted magic greatsword with a glowing blue gem.
+mag_x2_r0_08	large_weapon	A fire-enchanted magic greatsword with a glowing red gem.
+mag_x2_r0_09	large_weapon	A shadow-enchanted magic greatsword with a glowing purple gem.
+mag_x2_r1_00	large_weapon	A fire-enchanted magic great axe with a glowing red gem.
+mag_x2_r1_01	large_weapon	A frost-enchanted magic great axe with a glowing blue gem.
+mag_x2_r1_02	large_weapon	A fire-enchanted magic great axe with a glowing red gem.
+mag_x2_r1_03	medium_weapon	A fire-enchanted magic scythe with a glowing red gem.
+mag_x2_r1_04	medium_weapon	A shadow-enchanted magic scythe with a glowing purple gem.
+mag_x2_r1_05	medium_weapon	A fire-enchanted magic scythe with a glowing red gem.
+mag_x2_r1_06	large_weapon	An arcane-enchanted magic great axe.
+mag_x2_r1_07	medium_weapon	A nature-enchanted magic scythe with a glowing green gem.
+mag_x2_r1_08	medium_weapon	A fire-enchanted magic scythe with a glowing red gem.
+mag_x2_r1_09	medium_weapon	A frost-enchanted magic scythe with a glowing blue gem.
+mag_x2_r2_00	large_weapon	A frost-enchanted magic maul with a crystal head and a glowing blue gem.
+mag_x2_r2_01	large_weapon	A fire-enchanted magic maul with a crystal head and a glowing red gem.
+mag_x2_r2_02	large_weapon	A frost-enchanted magic maul with a crystal head and a glowing blue gem.
+mag_x2_r2_03	large_weapon	A shadow-enchanted magic maul with a crystal head and a glowing purple gem.
+mag_x2_r2_04	medium_weapon	A nature-enchanted magic maul with a crystal head and a glowing green gem.
+mag_x2_r2_05	large_weapon	A frost-enchanted magic maul with a crystal head and a glowing blue gem.
+mag_x2_r2_06	large_weapon	A fire-enchanted magic maul with a crystal head and a glowing red gem.
+mag_x2_r2_07	medium_weapon	A frost-enchanted magic maul with a crystal head and a glowing blue gem.
+mag_x2_r2_08	medium_weapon	A nature-enchanted magic maul with a crystal head and a glowing green gem.
+mag_x2_r2_09	medium_weapon	A shadow-enchanted magic maul with a crystal head and a glowing purple gem.
+mag_x3_r0_00	long_weapon	A fire-enchanted magic staff with a glowing orb and a glowing red gem.
+mag_x3_r0_01	long_weapon	A frost-enchanted magic staff with a glowing orb and a glowing blue gem.
+mag_x3_r0_02	long_weapon	A frost-enchanted magic staff with a glowing orb and a glowing blue gem.
+mag_x3_r0_03	long_weapon	A shadow-enchanted magic staff with a glowing orb and a glowing purple gem.
+mag_x3_r0_04	long_weapon	A nature-enchanted magic staff with a glowing orb and a glowing green gem.
+mag_x3_r0_05	long_weapon	A fire-enchanted magic staff with a glowing orb and a glowing red gem.
+mag_x3_r0_06	long_weapon	A fire-enchanted magic staff with a glowing orb and a glowing red gem.
+mag_x3_r0_07	long_weapon	A frost-enchanted magic staff with a glowing orb and a glowing blue gem.
+mag_x3_r0_08	long_weapon	A shadow-enchanted magic staff with a glowing orb and a glowing purple gem.
+mag_x3_r0_09	long_weapon	A holy-enchanted magic staff with a glowing orb.
+mag_x3_r0_10	long_weapon	A frost-enchanted magic staff with a glowing orb and a glowing blue gem.
+mag_x3_r0_11	long_weapon	A shadow-enchanted magic staff with a glowing orb and a glowing purple gem.
+mag_x3_r1_00	long_weapon	A frost-enchanted magic spear with a crystal head and a glowing blue gem.
+mag_x3_r1_01	long_weapon	A fire-enchanted magic spear with a crystal head and a glowing red gem.
+mag_x3_r1_02	long_weapon	A frost-enchanted magic spear with a crystal head and a glowing blue gem.
+mag_x3_r1_03	long_weapon	A frost-enchanted magic spear with a crystal head and a glowing blue gem.
+mag_x3_r1_04	long_weapon	A shadow-enchanted magic halberd with a glowing purple gem.
+mag_x3_r1_05	long_weapon	A nature-enchanted magic spear with a crystal head and a glowing green gem.
+mag_x3_r1_06	long_weapon	A fire-enchanted magic halberd with a glowing red gem.
+mag_x3_r1_07	long_weapon	A frost-enchanted magic trident with a glowing blue gem.
+mag_x3_r1_08	long_weapon	A frost-enchanted magic halberd with a glowing blue gem.
+mag_x3_r1_09	long_weapon	A fire-enchanted magic halberd with a glowing red gem.
+mag_x3_r1_10	long_weapon	A frost-enchanted magic trident with a glowing blue gem.
+mag_x3_r1_11	long_weapon	A shadow-enchanted magic spear with a crystal head and a glowing purple gem.

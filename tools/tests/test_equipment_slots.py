@@ -241,6 +241,21 @@ assert rules.best({}, items, "wearable") is None
 assert rules.fit_scale(ring, "accessory1") == 2 and rules.fit_scale(sword, "right_hand") == 1
 assert rules.fit_scale(shield, "left_hand") == 2                       # 偽の盾は 1×1 なので 2 倍
 assert rules.fit_scale(Item("q", "wearable", "clothing", 1, size=(1, 2)), "body") == 2
+# 自由枠: 腕と脚の下。手（武器・盾）以外の防具なら何でも入る（ズボンと靴を両方履ける）
+pants = Item("p1", "wearable", "legwear", 50)
+boots = Item("b1", "wearable", "leg_armor", 80)
+assert rules.region_at(0, 8) == "free1" and rules.region_at(3, 9) == "free2"
+assert rules.UNUSED_CELLS == ((0, 0), (1, 0), (4, 0), (5, 0), (0, 1), (1, 1), (4, 1), (5, 1))
+assert rules.accepts(boots, 0, 8, {"legs": "p1"}) is None
+assert rules.accepts(ring, 2, 8, {}) is None and rules.accepts(helm, 2, 8, {}) is None
+assert rules.accepts(dagger, 0, 8, {}) == "wrong region free1 for hand"
+assert rules.accepts(shield, 2, 8, {}) == "wrong region free2 for hand"
+assert rules.accepts(boots, 0, 8, {"free1": "x"}) == "region free1 occupied"
+items2 = {"p1": pants, "b1": boots}
+slots2 = rules.slots_from_positions({"p1": [2, 6], "b1": [0, 8]}, items2)
+assert slots2 == {"legs": "p1", "free1": "b1"}, slots2
+assert rules.best(slots2, items2, "wearable") is boots
+assert rules.combined(slots2, items2, "wearable", 10) == (boots, 85.0)
 
 # ---------------------------------------------------------------- 画面と本体の偽物
 root = tempfile.mkdtemp()
@@ -382,6 +397,19 @@ assert player.equipments["wearable"] is helm                  # 盾 300 < 兜 43
 # 右クリックの「外す」: 兜を外すと防具は盾へ
 popup_unequip(None, types.SimpleNamespace(item=w_helm))
 assert w_helm.inventory is main and player.equipments["wearable"] is shield
+# 右クリックの「装備」: 脚が埋まっていれば2つ目の脚の防具は自由枠へ。外せば所持品へ戻る
+player.give(pants)
+player.give(boots)
+w_pants = Widget(pants, main, (4, 4))
+w_boots = Widget(boots, main, (5, 4))
+popup_equip(None, types.SimpleNamespace(item=w_pants))
+popup_equip(None, types.SimpleNamespace(item=w_boots))
+assert w_pants.inventory is mine and w_boots.inventory is mine
+assert saved_positions()["p1"] == [2, 6] and saved_positions()["b1"] == [0, 8], saved_positions()
+popup_unequip(None, types.SimpleNamespace(item=w_pants))
+popup_unequip(None, types.SimpleNamespace(item=w_boots))
+assert w_pants.inventory is main and w_boots.inventory is main
+assert "p1" not in saved_positions() and "b1" not in saved_positions()
 # 装備でない品はプレイヤーの品なので MOD が受けて何もしない。他人の品は本体へ素通し
 passed = []
 popup_equip(lambda self: passed.append(self), types.SimpleNamespace(item=Widget(herb, main)))

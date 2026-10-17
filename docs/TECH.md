@@ -108,6 +108,7 @@ tools/build_verification.py  VERIFICATION*.md の目次と節どうしのリン�
 tools/llm_ctx_probe.bat, llm_ctx_probe.py  ローカル LLM の窓を実測して最適値を出す（127_ 用）
 tools/epithet_probe.py    ローカル LLM で二つ名を引いて偏りを測る（317_ 用）
 tools/npc_variety_probe.py  ローカル LLM で NPC を生成させ、外見・性格・経歴の偏りを測る（頼み文の写しは npc_variety_prompts.json）
+tools/item_image_probe.py  Claude かローカル LLM に品を作らせ、外見文の言語と 128_ の選ぶ絵を10のジャンルの世界で録る（128_ / 312_ 用）
 tools/rebalance_saved_bgm.py  既存セーブの BGM を後からまとめて均す（104_ 用）
 tools/mods_meta.py        mod.json の author の読み方。build_mods / list_mods / check_mods が共用
 tools/tests/test_*.py     ゲーム抜きで走る検査。開発用で配布物には入らない
@@ -2571,6 +2572,10 @@ python tools/check_tool_screens.py --only 322   名前に 322 を含む MOD だ�
 `filecmp` で同一性を、`test_modtool.py` が中身を検査している。
 
 次に要るときも `tool.py` を写さず、シムを1枚置いて `world_settings_main` を呼ぶこと。
+
+設定の2段に加えて**見るだけのタブ**が要るときは、`build_world_settings_window(MOD_DIR, extra_tabs=関数)` に
+タブを足す関数（`関数(tabs, root_dir)`）を渡す。窓・保存・世界の選び方は共通のまま、MOD は自分のタブだけを書く。
+`128_item_image_variety` が絵の一覧に使っている（`tools\tests\test_item_image_tool.py`）。
 
 シムで足りないのは**項目が表の形をしているとき**。`331_facility_investment` は種類6×3項目＋共通5の 23 項目で、
 1列に並べると読めないので、種類を行・項目を列にした独自の画面を持つ（`tool.py`）。

@@ -866,7 +866,7 @@ def apply(ctx):
             return None
         taken = occupied_except(app, sc, item_key)
         for name, (rx, ry, _rw, _rh) in rules.REGIONS.items():
-            if rules.KIND_OF[name] == kind and not taken.get(name):
+            if rules.takes(name, kind) and not taken.get(name):
                 return name, rx, ry
         return None
 
@@ -941,7 +941,7 @@ def apply(ctx):
         for item_key in list(positions):
             item = item_of(item_key)
             name = rules.fits(item, int(positions[item_key][0]), int(positions[item_key][1]))
-            if rules.KIND_OF[name] != rules.kind_of(item) or name in seen:
+            if not rules.takes(name, rules.kind_of(item)) or name in seen:
                 positions.pop(item_key)
                 write("dropped {!r}: {} does not take it (or already holds {!r})".format(
                     item_key, name, seen.get(name)))
@@ -1237,7 +1237,7 @@ def apply(ctx):
         if getattr(item, "obtainer", None) is not sc["owner"]:
             return False
         name = rules.fits(item, gx, y_top)
-        if name is None or rules.KIND_OF[name] != rules.kind_of(item):
+        if name is None or not rules.takes(name, rules.kind_of(item)):
             return False
         held = current_slots(app, sc).get(name)
         item_key = key_of(widget)
@@ -1432,7 +1432,7 @@ def apply(ctx):
         if found is None:
             kind = rules.kind_of(item_instance)
             for name, (rx, ry, _rw, _rh) in rules.REGIONS.items():
-                if rules.KIND_OF[name] == kind:
+                if rules.takes(name, kind):
                     held = current_slots(app, sc).get(name)
                     old = next((w for w in item_widgets(app, sc["owner"]) if key_of(w) == held), None)
                     if old is not None:

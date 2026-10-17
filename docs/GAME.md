@@ -2100,6 +2100,14 @@ scripts.items:Item.__init__(self, name, item_type, attributes, description,
 > `sub_type` と `item_detail` は綴りが揃っていない（`weapon/small` は `small_weapon`、
 > `herb` は `plant`）。**表の鍵にするなら `item_detail` のほうを取る**（アイテムに書かれているのはこちら）。
 
+品の絵は `get_similar_embedding_id(外見文, item_sub_type)` が返す鍵から
+`Assets/images/item_candidates_dark/` ＋ 品種 ＋ `/` ＋ 鍵 ＋ `.png` と組まれ（exe の定数の並び）、
+`image_src` にこの相対パスのまま入る。
+絵の寸法は品のマス数に合わせてあり、武器は小型 32x32・中型 32x64・大型 32x96・長物 32x128（縦向き）、
+`body_armor` と `shield` は 64x64、ほかの大半は 32x32。
+`item_candidates` は `_dark` と同じ番号・同じ枚数の明るい版で、exe の定数に出てくるのは `_dark` のほうだけ。
+素材に銃は無い（`128_` が銃の絵を足す。VERIFICATION.md §3.26）。
+
 食べ物は、`consumable` ではなく大半が `healing_item` に入っている。
 2026-10-10 にテストワールドの全員の持ち物（98品）を数えた:
 

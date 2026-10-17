@@ -3,14 +3,14 @@
   "api": 1,
   "kind": "fix",
   "name": {
-    "en": "Item image variety",
-    "ja": "アイテム画像の均し"
+    "en": "Item image expansion",
+    "ja": "アイテム画像の拡充"
   },
   "description": {
-    "en": "Spreads item icons across similar candidates instead of always picking the single best match, and adds 305 images missing from the embedding dictionaries",
-    "ja": "アイテム画像を「最も似た1枚」固定でなく似た候補の中で使用回数最少から選び、埋め込み辞書に無かった305枚も選択肢に加える"
+    "en": "Spreads item icons across similar candidates instead of always the single best match, and adds weapon, armor, clothing and jewelry images the stock assets lack, with per-category settings for all worlds or per world",
+    "ja": "アイテム画像を「最も似た1枚」固定でなく似た候補から散らして選び、素材に無い武器・防具・服・装身具の絵を足す。足した絵は元画像ごとの分類で、使い方を一括とワールド個別で決められる。"
   },
-  "version": "8",
+  "version": "9",
   "author": "R01/Flossian",
   "settings": {
     "TOP_K": {
@@ -23,8 +23,12 @@
         "en": "Max candidate images"
       },
       "note": {
-        "ja": "1 にすると素のゲームと同じ（最も似た1枚に固定）",
+        "ja": "1 で素のゲームと同じ（いちばん似た1枚に固定）",
         "en": "1 = same as vanilla (always the single best match)"
+      },
+      "group": {
+        "ja": "選び方",
+        "en": "How images are picked"
       }
     },
     "SIM_FLOOR": {
@@ -37,8 +41,12 @@
         "en": "Similarity floor (relative to top1)"
       },
       "note": {
-        "ja": "上げるほど見た目に忠実、下げるほど多様。0.8 なら、clothing のように類似度が急に落ちる品種では候補が自動的に絞られる",
-        "en": "Higher = closer look, lower = more variety. 0.8 auto-narrows folders where similarity falls off fast"
+        "ja": "上げるほど見た目に忠実、下げるほど散る",
+        "en": "Higher = closer look, lower = more variety"
+      },
+      "group": {
+        "ja": "選び方",
+        "en": "How images are picked"
       }
     },
     "USE_EXTRA_DICT": {
@@ -49,9 +57,2144 @@
         "en": "Use bundled extra dictionaries"
       },
       "note": {
-        "ja": "document/creature_part/mushroom/accessory の、素の辞書に無い305枚を選択肢に加える",
-        "en": "Adds 305 images (document/creature_part/mushroom/accessory) absent from the stock dictionaries"
+        "ja": "素のゲームが一度も選ばない305枚（書類・魔物の素材・茸など）も候補にする",
+        "en": "Also offer 305 stock images the game never picks (documents, creature parts, mushrooms)"
+      },
+      "group": {
+        "ja": "選び方",
+        "en": "How images are picked"
       }
+    },
+    "GENRE_FANTASY": {
+      "type": "float",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "label": {
+        "ja": "ファンタジー",
+        "en": "Fantasy"
+      },
+      "note": {
+        "ja": "剣と魔法の中世。ゲームの素の絵はここ",
+        "en": "Fantasy"
+      },
+      "group": {
+        "ja": "ジャンルの重み",
+        "en": "Genre weights"
+      }
+    },
+    "GENRE_WA": {
+      "type": "float",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "label": {
+        "ja": "和風",
+        "en": "Japanese"
+      },
+      "note": {
+        "ja": "侍・妖怪",
+        "en": "Japanese"
+      },
+      "group": {
+        "ja": "ジャンルの重み",
+        "en": "Genre weights"
+      }
+    },
+    "GENRE_EARLYMODERN": {
+      "type": "float",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "label": {
+        "ja": "近世",
+        "en": "Early modern"
+      },
+      "note": {
+        "ja": "蒸気機関・前装式の銃・西部劇",
+        "en": "Early modern"
+      },
+      "group": {
+        "ja": "ジャンルの重み",
+        "en": "Genre weights"
+      }
+    },
+    "GENRE_MODERN": {
+      "type": "float",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "label": {
+        "ja": "現代",
+        "en": "Modern"
+      },
+      "note": {
+        "ja": "今の日本や都市",
+        "en": "Modern"
+      },
+      "group": {
+        "ja": "ジャンルの重み",
+        "en": "Genre weights"
+      }
+    },
+    "GENRE_SF": {
+      "type": "float",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "label": {
+        "ja": "SF",
+        "en": "Sci-fi"
+      },
+      "note": {
+        "ja": "宇宙・未来技術",
+        "en": "Sci-fi"
+      },
+      "group": {
+        "ja": "ジャンルの重み",
+        "en": "Genre weights"
+      }
+    },
+    "GENRE_CYBER": {
+      "type": "float",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "label": {
+        "ja": "サイバーパンク",
+        "en": "Cyberpunk"
+      },
+      "note": {
+        "ja": "近未来の超高層都市",
+        "en": "Cyberpunk"
+      },
+      "group": {
+        "ja": "ジャンルの重み",
+        "en": "Genre weights"
+      }
+    },
+    "GENRE_POSTAPOC": {
+      "type": "float",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "label": {
+        "ja": "ポストアポカリプス",
+        "en": "Post-apocalyptic"
+      },
+      "note": {
+        "ja": "文明崩壊後の荒野",
+        "en": "Post-apocalyptic"
+      },
+      "group": {
+        "ja": "ジャンルの重み",
+        "en": "Genre weights"
+      }
+    },
+    "GENRE_BONUS": {
+      "type": "float",
+      "default": 0.15,
+      "min": 0.0,
+      "max": 0.5,
+      "label": {
+        "ja": "重み1のときに足す類似度",
+        "en": "Similarity added at weight 1"
+      },
+      "note": {
+        "ja": "世界のジャンルの重み×分類のジャンル内の重み×この値を、絵の類似度に足して選ぶ",
+        "en": "world genre weight × category weight × this value is added to the similarity"
+      },
+      "group": {
+        "ja": "ジャンルの重み",
+        "en": "Genre weights"
+      }
+    },
+    "SET_GUN_CYBER": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：銃",
+        "en": "Added images: Guns"
+      },
+      "label": {
+        "ja": "銃_サイバーパンク",
+        "en": "gun_cyber"
+      },
+      "note": {
+        "ja": "93枚",
+        "en": "93 images"
+      }
+    },
+    "SET_GUN_FANTASY": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：銃",
+        "en": "Added images: Guns"
+      },
+      "label": {
+        "ja": "銃_ファンタジー",
+        "en": "gun_fantasy"
+      },
+      "note": {
+        "ja": "70枚",
+        "en": "70 images"
+      }
+    },
+    "SET_GUN_FUTURE": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：銃",
+        "en": "Added images: Guns"
+      },
+      "label": {
+        "ja": "銃_未来型",
+        "en": "gun_future"
+      },
+      "note": {
+        "ja": "91枚",
+        "en": "91 images"
+      }
+    },
+    "SET_GUN_MODERN": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：銃",
+        "en": "Added images: Guns"
+      },
+      "label": {
+        "ja": "銃_現代",
+        "en": "gun_modern"
+      },
+      "note": {
+        "ja": "94枚",
+        "en": "94 images"
+      }
+    },
+    "SET_GUN_FLINTLOCK": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：銃",
+        "en": "Added images: Guns"
+      },
+      "label": {
+        "ja": "銃_前装式",
+        "en": "gun_flintlock"
+      },
+      "note": {
+        "ja": "75枚",
+        "en": "75 images"
+      }
+    },
+    "SET_GUN_SHOTGUN": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：銃",
+        "en": "Added images: Guns"
+      },
+      "label": {
+        "ja": "銃_ショットガン",
+        "en": "gun_shotgun"
+      },
+      "note": {
+        "ja": "60枚",
+        "en": "60 images"
+      }
+    },
+    "SET_GUN_SNIPER": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：銃",
+        "en": "Added images: Guns"
+      },
+      "label": {
+        "ja": "銃_スナイパーライフル",
+        "en": "gun_sniper"
+      },
+      "note": {
+        "ja": "55枚",
+        "en": "55 images"
+      }
+    },
+    "SET_GUN_EXPLOSIVE": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：銃",
+        "en": "Added images: Guns"
+      },
+      "label": {
+        "ja": "銃_爆発物",
+        "en": "gun_explosive"
+      },
+      "note": {
+        "ja": "36枚",
+        "en": "36 images"
+      }
+    },
+    "SET_MED_ONEHANDED": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：中世の武器と防具",
+        "en": "Added images: Medieval weapons and armor"
+      },
+      "label": {
+        "ja": "中世武器_片手武器",
+        "en": "med_onehanded"
+      },
+      "note": {
+        "ja": "40枚",
+        "en": "40 images"
+      }
+    },
+    "SET_MED_TWOHANDED": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：中世の武器と防具",
+        "en": "Added images: Medieval weapons and armor"
+      },
+      "label": {
+        "ja": "中世武器_両手武器",
+        "en": "med_twohanded"
+      },
+      "note": {
+        "ja": "30枚",
+        "en": "30 images"
+      }
+    },
+    "SET_MED_POLEARM": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：中世の武器と防具",
+        "en": "Added images: Medieval weapons and armor"
+      },
+      "label": {
+        "ja": "中世武器_長柄武器",
+        "en": "med_polearm"
+      },
+      "note": {
+        "ja": "26枚",
+        "en": "26 images"
+      }
+    },
+    "SET_MED_BLUNT_STAFF": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：中世の武器と防具",
+        "en": "Added images: Medieval weapons and armor"
+      },
+      "label": {
+        "ja": "中世武器_打撃武器と杖",
+        "en": "med_blunt_staff"
+      },
+      "note": {
+        "ja": "30枚",
+        "en": "30 images"
+      }
+    },
+    "SET_MED_SHORT_THROWING": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：中世の武器と防具",
+        "en": "Added images: Medieval weapons and armor"
+      },
+      "label": {
+        "ja": "中世武器_短い武器と投げ物",
+        "en": "med_short_throwing"
+      },
+      "note": {
+        "ja": "48枚",
+        "en": "48 images"
+      }
+    },
+    "SET_MED_BOW": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：中世の武器と防具",
+        "en": "Added images: Medieval weapons and armor"
+      },
+      "label": {
+        "ja": "中世武器_弓とクロスボウ",
+        "en": "med_bow"
+      },
+      "note": {
+        "ja": "33枚",
+        "en": "33 images"
+      }
+    },
+    "SET_MED_SHIELD_ARMOR": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：中世の武器と防具",
+        "en": "Added images: Medieval weapons and armor"
+      },
+      "label": {
+        "ja": "中世武器_盾と胴鎧",
+        "en": "med_shield_armor"
+      },
+      "note": {
+        "ja": "32枚",
+        "en": "32 images"
+      }
+    },
+    "SET_MAG_ONEHANDED": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：魔法武器",
+        "en": "Added images: Magic weapons"
+      },
+      "label": {
+        "ja": "魔法武器_片手武器",
+        "en": "mag_onehanded"
+      },
+      "note": {
+        "ja": "37枚",
+        "en": "37 images"
+      }
+    },
+    "SET_MAG_TWOHANDED": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：魔法武器",
+        "en": "Added images: Magic weapons"
+      },
+      "label": {
+        "ja": "魔法武器_両手武器",
+        "en": "mag_twohanded"
+      },
+      "note": {
+        "ja": "30枚",
+        "en": "30 images"
+      }
+    },
+    "SET_MAG_STAFF_POLEARM": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：魔法武器",
+        "en": "Added images: Magic weapons"
+      },
+      "label": {
+        "ja": "魔法武器_杖と長柄武器",
+        "en": "mag_staff_polearm"
+      },
+      "note": {
+        "ja": "24枚",
+        "en": "24 images"
+      }
+    },
+    "SET_SF_ONEHANDED": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：SF武器",
+        "en": "Added images: Sci-fi weapons"
+      },
+      "label": {
+        "ja": "SF武器_片手武器",
+        "en": "sf_onehanded"
+      },
+      "note": {
+        "ja": "39枚",
+        "en": "39 images"
+      }
+    },
+    "SET_SF_TWOHANDED": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：SF武器",
+        "en": "Added images: Sci-fi weapons"
+      },
+      "label": {
+        "ja": "SF武器_両手武器",
+        "en": "sf_twohanded"
+      },
+      "note": {
+        "ja": "30枚",
+        "en": "30 images"
+      }
+    },
+    "SET_SF_POLEARM": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：SF武器",
+        "en": "Added images: Sci-fi weapons"
+      },
+      "label": {
+        "ja": "SF武器_長柄武器",
+        "en": "sf_polearm"
+      },
+      "note": {
+        "ja": "26枚",
+        "en": "26 images"
+      }
+    },
+    "SET_SF_SHORT_THROWING": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：SF武器",
+        "en": "Added images: Sci-fi weapons"
+      },
+      "label": {
+        "ja": "SF武器_短い武器と投げ物",
+        "en": "sf_short_throwing"
+      },
+      "note": {
+        "ja": "34枚",
+        "en": "34 images"
+      }
+    },
+    "SET_SF_MELEE": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：SF武器",
+        "en": "Added images: Sci-fi weapons"
+      },
+      "label": {
+        "ja": "SF武器_近接武器",
+        "en": "sf_melee"
+      },
+      "note": {
+        "ja": "54枚",
+        "en": "54 images"
+      }
+    },
+    "SET_PART_SF": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：機械部品",
+        "en": "Added images: Machine parts"
+      },
+      "label": {
+        "ja": "機械部品_SF",
+        "en": "part_sf"
+      },
+      "note": {
+        "ja": "88枚",
+        "en": "88 images"
+      }
+    },
+    "SET_PART_STEAMPUNK": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：機械部品",
+        "en": "Added images: Machine parts"
+      },
+      "label": {
+        "ja": "機械部品_スチームパンク",
+        "en": "part_steampunk"
+      },
+      "note": {
+        "ja": "75枚",
+        "en": "75 images"
+      }
+    },
+    "SET_FOOD_RATION": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：食料",
+        "en": "Added images: Food"
+      },
+      "label": {
+        "ja": "食料_携行食",
+        "en": "food_ration"
+      },
+      "note": {
+        "ja": "93枚",
+        "en": "93 images"
+      }
+    },
+    "SET_FOOD_GENERAL": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：食料",
+        "en": "Added images: Food"
+      },
+      "label": {
+        "ja": "食料_食材と料理",
+        "en": "food_general"
+      },
+      "note": {
+        "ja": "134枚",
+        "en": "134 images"
+      }
+    },
+    "SET_FOOD_TRAVEL": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：食料",
+        "en": "Added images: Food"
+      },
+      "label": {
+        "ja": "食料_旅の食料",
+        "en": "food_travel"
+      },
+      "note": {
+        "ja": "93枚",
+        "en": "93 images"
+      }
+    },
+    "SET_FOOD_SWEETS": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：食料",
+        "en": "Added images: Food"
+      },
+      "label": {
+        "ja": "食料_菓子",
+        "en": "food_sweets"
+      },
+      "note": {
+        "ja": "98枚",
+        "en": "98 images"
+      }
+    },
+    "SET_FOOD_MEAT": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：食料",
+        "en": "Added images: Food"
+      },
+      "label": {
+        "ja": "食料_肉料理",
+        "en": "food_meat"
+      },
+      "note": {
+        "ja": "84枚",
+        "en": "84 images"
+      }
+    },
+    "SET_FOOD_SEAFOOD": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：食料",
+        "en": "Added images: Food"
+      },
+      "label": {
+        "ja": "食料_魚介料理",
+        "en": "food_seafood"
+      },
+      "note": {
+        "ja": "96枚",
+        "en": "96 images"
+      }
+    },
+    "SET_FOOD_SEASIA": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：食料",
+        "en": "Added images: Food"
+      },
+      "label": {
+        "ja": "食料_東南アジア料理",
+        "en": "food_seasia"
+      },
+      "note": {
+        "ja": "88枚",
+        "en": "88 images"
+      }
+    },
+    "SET_FOOD_WESTERN": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：食料",
+        "en": "Added images: Food"
+      },
+      "label": {
+        "ja": "食料_西洋料理",
+        "en": "food_western"
+      },
+      "note": {
+        "ja": "96枚",
+        "en": "96 images"
+      }
+    },
+    "SET_MEDIC_FANTASY": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：医療品",
+        "en": "Added images: Medical supplies"
+      },
+      "label": {
+        "ja": "医療品_ファンタジー",
+        "en": "medic_fantasy"
+      },
+      "note": {
+        "ja": "86枚",
+        "en": "86 images"
+      }
+    },
+    "SET_MEDIC_MODERN": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：医療品",
+        "en": "Added images: Medical supplies"
+      },
+      "label": {
+        "ja": "医療品_現代とSF",
+        "en": "medic_modern"
+      },
+      "note": {
+        "ja": "87枚",
+        "en": "87 images"
+      }
+    },
+    "SET_MAGIC_ESSENCE": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：魔法素材",
+        "en": "Added images: Magic materials"
+      },
+      "label": {
+        "ja": "魔法素材_芯と精髄",
+        "en": "magic_essence"
+      },
+      "note": {
+        "ja": "72枚",
+        "en": "72 images"
+      }
+    },
+    "SET_MAGIC_RELIC": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：魔法素材",
+        "en": "Added images: Magic materials"
+      },
+      "label": {
+        "ja": "魔法素材_遺物と古書",
+        "en": "magic_relic"
+      },
+      "note": {
+        "ja": "72枚",
+        "en": "72 images"
+      }
+    },
+    "SET_TREASURE_COIN": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：宝物",
+        "en": "Added images: Treasures"
+      },
+      "label": {
+        "ja": "宝物_硬貨と記章",
+        "en": "treasure_coin"
+      },
+      "note": {
+        "ja": "77枚",
+        "en": "77 images"
+      }
+    },
+    "SET_TOOL_TRAVEL": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：道具",
+        "en": "Added images: Tools"
+      },
+      "label": {
+        "ja": "道具_旅の道具と残骸",
+        "en": "tool_travel"
+      },
+      "note": {
+        "ja": "72枚",
+        "en": "72 images"
+      }
+    },
+    "SET_CREATURE_MATERIAL": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：魔物素材",
+        "en": "Added images: Monster materials"
+      },
+      "label": {
+        "ja": "魔物素材_鱗と臓器",
+        "en": "creature_material"
+      },
+      "note": {
+        "ja": "72枚",
+        "en": "72 images"
+      }
+    },
+    "SET_WA_SWORDS": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：和風",
+        "en": "Added images: Japanese"
+      },
+      "label": {
+        "ja": "和風_刀剣",
+        "en": "wa_swords"
+      },
+      "note": {
+        "ja": "39枚",
+        "en": "39 images"
+      }
+    },
+    "SET_WA_WEAPONS": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：和風",
+        "en": "Added images: Japanese"
+      },
+      "label": {
+        "ja": "和風_長柄と飛び道具",
+        "en": "wa_weapons"
+      },
+      "note": {
+        "ja": "57枚",
+        "en": "57 images"
+      }
+    },
+    "SET_WA_GOODS": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：和風",
+        "en": "Added images: Japanese"
+      },
+      "label": {
+        "ja": "和風_小物と素材",
+        "en": "wa_goods"
+      },
+      "note": {
+        "ja": "84枚",
+        "en": "84 images"
+      }
+    },
+    "SET_MODERN_GEAR": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：現代とSF",
+        "en": "Added images: Modern and sci-fi"
+      },
+      "label": {
+        "ja": "現代とSF_盾と小型武器",
+        "en": "modern_gear"
+      },
+      "note": {
+        "ja": "60枚",
+        "en": "60 images"
+      }
+    },
+    "SET_MODERN_DOCUMENT": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：現代とSF",
+        "en": "Added images: Modern and sci-fi"
+      },
+      "label": {
+        "ja": "現代とSF_文書と記録媒体",
+        "en": "modern_document"
+      },
+      "note": {
+        "ja": "76枚",
+        "en": "76 images"
+      }
+    },
+    "SET_MODERN_MEDICINE": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：現代とSF",
+        "en": "Added images: Modern and sci-fi"
+      },
+      "label": {
+        "ja": "現代とSF_薬と飲み物",
+        "en": "modern_medicine"
+      },
+      "note": {
+        "ja": "93枚",
+        "en": "93 images"
+      }
+    },
+    "SET_MODERN_TREASURE": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：現代とSF",
+        "en": "Added images: Modern and sci-fi"
+      },
+      "label": {
+        "ja": "現代とSF_宝物",
+        "en": "modern_treasure"
+      },
+      "note": {
+        "ja": "89枚",
+        "en": "89 images"
+      }
+    },
+    "SET_MODERN_INDUSTRIAL": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：現代とSF",
+        "en": "Added images: Modern and sci-fi"
+      },
+      "label": {
+        "ja": "現代とSF_工業素材と金属",
+        "en": "modern_industrial"
+      },
+      "note": {
+        "ja": "93枚",
+        "en": "93 images"
+      }
+    },
+    "SET_WA_ARMOR": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：和風",
+        "en": "Added images: Japanese"
+      },
+      "label": {
+        "ja": "和風_防具と長い刀",
+        "en": "wa_armor"
+      },
+      "note": {
+        "ja": "66枚",
+        "en": "66 images"
+      }
+    },
+    "SET_SF_ARMOR": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：現代とSF",
+        "en": "Added images: Modern and sci-fi"
+      },
+      "label": {
+        "ja": "現代とSF_籠手と装甲",
+        "en": "sf_armor"
+      },
+      "note": {
+        "ja": "50枚",
+        "en": "50 images"
+      }
+    },
+    "SET_WASTELAND_GEAR": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：現代とSF",
+        "en": "Added images: Modern and sci-fi"
+      },
+      "label": {
+        "ja": "現代とSF_荒野の手製の武器と小道具",
+        "en": "wasteland_gear"
+      },
+      "note": {
+        "ja": "76枚",
+        "en": "76 images"
+      }
+    },
+    "SET_CREATURE_MUTANT": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：魔物素材",
+        "en": "Added images: Monster materials"
+      },
+      "label": {
+        "ja": "魔物素材_変異生物と虫",
+        "en": "creature_mutant"
+      },
+      "note": {
+        "ja": "93枚",
+        "en": "93 images"
+      }
+    },
+    "SET_TREASURE_CROWN": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：宝物",
+        "en": "Added images: Treasures"
+      },
+      "label": {
+        "ja": "宝物_冠と宝石と指輪",
+        "en": "treasure_crown"
+      },
+      "note": {
+        "ja": "56枚",
+        "en": "56 images"
+      }
+    },
+    "SET_TOOL_ODDITIES": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：道具",
+        "en": "Added images: Tools"
+      },
+      "label": {
+        "ja": "道具_神話の鎧と変わった品",
+        "en": "tool_oddities"
+      },
+      "note": {
+        "ja": "89枚",
+        "en": "89 images"
+      }
+    },
+    "SET_WEAR_SF": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：防具類",
+        "en": "Added images: Armor, clothing and jewelry"
+      },
+      "label": {
+        "ja": "SF",
+        "en": "wear_sf"
+      },
+      "note": {
+        "ja": "123枚",
+        "en": "123 images"
+      }
+    },
+    "SET_WEAR_ACCESSORY": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：防具類",
+        "en": "Added images: Armor, clothing and jewelry"
+      },
+      "label": {
+        "ja": "アクセサリー",
+        "en": "wear_accessory"
+      },
+      "note": {
+        "ja": "172枚",
+        "en": "172 images"
+      }
+    },
+    "SET_WEAR_CYBER1": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：防具類",
+        "en": "Added images: Armor, clothing and jewelry"
+      },
+      "label": {
+        "ja": "サイバーパンク1",
+        "en": "wear_cyber1"
+      },
+      "note": {
+        "ja": "121枚",
+        "en": "121 images"
+      }
+    },
+    "SET_WEAR_CYBER2": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：防具類",
+        "en": "Added images: Armor, clothing and jewelry"
+      },
+      "label": {
+        "ja": "サイバーパンク2",
+        "en": "wear_cyber2"
+      },
+      "note": {
+        "ja": "122枚",
+        "en": "122 images"
+      }
+    },
+    "SET_WEAR_STEAMPUNK": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：防具類",
+        "en": "Added images: Armor, clothing and jewelry"
+      },
+      "label": {
+        "ja": "スチームパンク",
+        "en": "wear_steampunk"
+      },
+      "note": {
+        "ja": "109枚",
+        "en": "109 images"
+      }
+    },
+    "SET_WEAR_DARKFANTASY1": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：防具類",
+        "en": "Added images: Armor, clothing and jewelry"
+      },
+      "label": {
+        "ja": "ダークファンタジー1",
+        "en": "wear_darkfantasy1"
+      },
+      "note": {
+        "ja": "126枚",
+        "en": "126 images"
+      }
+    },
+    "SET_WEAR_DARKFANTASY2": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：防具類",
+        "en": "Added images: Armor, clothing and jewelry"
+      },
+      "label": {
+        "ja": "ダークファンタジー2",
+        "en": "wear_darkfantasy2"
+      },
+      "note": {
+        "ja": "107枚",
+        "en": "107 images"
+      }
+    },
+    "SET_WEAR_HIGHFANTASY": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：防具類",
+        "en": "Added images: Armor, clothing and jewelry"
+      },
+      "label": {
+        "ja": "ハイファンタジー",
+        "en": "wear_highfantasy"
+      },
+      "note": {
+        "ja": "116枚",
+        "en": "116 images"
+      }
+    },
+    "SET_WEAR_POSTAPOC": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：防具類",
+        "en": "Added images: Armor, clothing and jewelry"
+      },
+      "label": {
+        "ja": "ポストアポカリプス",
+        "en": "wear_postapoc"
+      },
+      "note": {
+        "ja": "125枚",
+        "en": "125 images"
+      }
+    },
+    "SET_WEAR_MEDIEVAL_CLOTHES": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：防具類",
+        "en": "Added images: Armor, clothing and jewelry"
+      },
+      "label": {
+        "ja": "中世服装",
+        "en": "wear_medieval_clothes"
+      },
+      "note": {
+        "ja": "104枚",
+        "en": "104 images"
+      }
+    },
+    "SET_WEAR_MEDIEVAL_ARMOR": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：防具類",
+        "en": "Added images: Armor, clothing and jewelry"
+      },
+      "label": {
+        "ja": "中世防具",
+        "en": "wear_medieval_armor"
+      },
+      "note": {
+        "ja": "110枚",
+        "en": "110 images"
+      }
+    },
+    "SET_WEAR_JAPANESE": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：防具類",
+        "en": "Added images: Armor, clothing and jewelry"
+      },
+      "label": {
+        "ja": "和風",
+        "en": "wear_japanese"
+      },
+      "note": {
+        "ja": "146枚",
+        "en": "146 images"
+      }
+    },
+    "SET_WEAR_SCHOOL": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：防具類",
+        "en": "Added images: Armor, clothing and jewelry"
+      },
+      "label": {
+        "ja": "学園もの",
+        "en": "wear_school"
+      },
+      "note": {
+        "ja": "139枚",
+        "en": "139 images"
+      }
+    },
+    "SET_WEAR_SCHOOL_GIRLS": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：防具類",
+        "en": "Added images: Armor, clothing and jewelry"
+      },
+      "label": {
+        "ja": "学生服(女性)",
+        "en": "wear_school_girls"
+      },
+      "note": {
+        "ja": "125枚",
+        "en": "125 images"
+      }
+    },
+    "SET_WEAR_SCHOOL_BOYS": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：防具類",
+        "en": "Added images: Armor, clothing and jewelry"
+      },
+      "label": {
+        "ja": "学生服(男性)",
+        "en": "wear_school_boys"
+      },
+      "note": {
+        "ja": "137枚",
+        "en": "137 images"
+      }
+    },
+    "SET_WEAR_MODERN_CASUAL": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：防具類",
+        "en": "Added images: Armor, clothing and jewelry"
+      },
+      "label": {
+        "ja": "現代(カジュアル)",
+        "en": "wear_modern_casual"
+      },
+      "note": {
+        "ja": "123枚",
+        "en": "123 images"
+      }
+    },
+    "SET_WEAR_MODERN_HARD": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：防具類",
+        "en": "Added images: Armor, clothing and jewelry"
+      },
+      "label": {
+        "ja": "現代(硬派)",
+        "en": "wear_modern_hard"
+      },
+      "note": {
+        "ja": "131枚",
+        "en": "131 images"
+      }
+    },
+    "SET_WEAR_WESTERN": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：防具類",
+        "en": "Added images: Armor, clothing and jewelry"
+      },
+      "label": {
+        "ja": "西部劇",
+        "en": "wear_western"
+      },
+      "note": {
+        "ja": "92枚",
+        "en": "92 images"
+      }
+    },
+    "SET_WEAR_MILITARY": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：防具類",
+        "en": "Added images: Armor, clothing and jewelry"
+      },
+      "label": {
+        "ja": "軍服・儀礼服",
+        "en": "wear_military"
+      },
+      "note": {
+        "ja": "122枚",
+        "en": "122 images"
+      }
+    },
+    "SET_WEAR_EARLYMODERN_CLOTHES": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：防具類",
+        "en": "Added images: Armor, clothing and jewelry"
+      },
+      "label": {
+        "ja": "近世服装",
+        "en": "wear_earlymodern_clothes"
+      },
+      "note": {
+        "ja": "129枚",
+        "en": "129 images"
+      }
+    },
+    "SET_WEAR_EARLYMODERN_ARMOR": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：防具類",
+        "en": "Added images: Armor, clothing and jewelry"
+      },
+      "label": {
+        "ja": "近世防具",
+        "en": "wear_earlymodern_armor"
+      },
+      "note": {
+        "ja": "108枚",
+        "en": "108 images"
+      }
+    },
+    "SET_WEAR_WIZARD": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：防具類",
+        "en": "Added images: Armor, clothing and jewelry"
+      },
+      "label": {
+        "ja": "魔法使い",
+        "en": "wear_wizard"
+      },
+      "note": {
+        "ja": "112枚",
+        "en": "112 images"
+      }
+    }
+  },
+  "tool": {
+    "entry": "tool.py",
+    "label": {
+      "ja": "絵の分類と一覧",
+      "en": "Image categories and gallery"
+    },
+    "note": {
+      "ja": "足した絵の分類ごとに使い方を、一括とワールド個別で決める。分類ごとの絵の一覧も見られる",
+      "en": "Choose how each added image category is used, for all worlds or per world, and browse each category"
     }
   }
 }

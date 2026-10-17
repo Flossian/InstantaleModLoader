@@ -1,0 +1,183 @@
+sf_s1_r0_00	medium_weapon	A futuristic energy sword with a glowing cyan blade.
+sf_s1_r0_01	medium_weapon	A futuristic energy sword with a glowing red blade.
+sf_s1_r0_02	medium_weapon	A futuristic energy sword with a glowing green blade.
+sf_s1_r0_03	medium_weapon	A futuristic energy sword with a glowing purple blade.
+sf_s1_r0_04	medium_weapon	A futuristic energy sword with a glowing orange blade.
+sf_s1_r0_05	medium_weapon	A futuristic energy sword with a glowing blue blade.
+sf_s1_r0_06	medium_weapon	A futuristic energy sword with a glowing blue blade.
+sf_s1_r0_07	medium_weapon	A futuristic energy sword with a glowing blue blade.
+sf_s1_r0_08	medium_weapon	A futuristic energy sword with a glowing red blade.
+sf_s1_r0_09	medium_weapon	A futuristic energy sword with a glowing red blade.
+sf_s1_r0_10	medium_weapon	A futuristic energy sword with a glowing cyan blade.
+sf_s1_r0_11	medium_weapon	A futuristic energy sword with a glowing blue blade.
+sf_s1_r0_12	medium_weapon	A futuristic energy sword with a glowing red blade.
+sf_s1_r1_00	medium_weapon	A futuristic vibro-blade sword with a black alloy blade.
+sf_s1_r1_01	medium_weapon	A futuristic vibro-blade sword with a black alloy blade and red details.
+sf_s1_r1_02	medium_weapon	A futuristic vibro-blade sword with a polished alloy blade.
+sf_s1_r1_03	medium_weapon	A futuristic vibro-blade sword with a black alloy blade and red details.
+sf_s1_r1_04	medium_weapon	A futuristic vibro-blade sword with a steel blade and blue details.
+sf_s1_r1_05	medium_weapon	A futuristic vibro-blade sword with a steel blade.
+sf_s1_r1_06	medium_weapon	A futuristic vibro-blade sword with a steel blade.
+sf_s1_r1_07	medium_weapon	A futuristic vibro-blade sword with a black alloy blade.
+sf_s1_r1_08	medium_weapon	A futuristic vibro-blade sword with a black alloy blade.
+sf_s1_r1_09	medium_weapon	A futuristic vibro-blade sword with a black alloy blade.
+sf_s1_r1_10	medium_weapon	A futuristic vibro-blade sword with a black alloy blade.
+sf_s1_r1_11	medium_weapon	A futuristic vibro-blade sword with a steel blade.
+sf_s1_r1_12	medium_weapon	A futuristic vibro-blade sword with a steel blade.
+sf_s1_r2_00	medium_weapon	A futuristic stun baton with a black alloy core.
+sf_s1_r2_01	medium_weapon	A futuristic stun baton with a glowing blue core.
+sf_s1_r2_02	medium_weapon	A futuristic stun baton with a black alloy core.
+sf_s1_r2_03	medium_weapon	A futuristic stun baton with a black alloy core and red details.
+sf_s1_r2_04	medium_weapon	A futuristic stun baton with a black alloy core and blue details.
+sf_s1_r2_05	medium_weapon	A futuristic stun baton with a black alloy core.
+sf_s1_r2_06	medium_weapon	A futuristic stun baton with a black alloy core.
+sf_s1_r2_07	medium_weapon	A futuristic stun baton with a black alloy core.
+sf_s1_r2_08	medium_weapon	A futuristic shock mace with a black alloy head and red details.
+sf_s1_r2_09	medium_weapon	A futuristic stun baton with a black alloy core.
+sf_s1_r2_10	medium_weapon	A futuristic shock mace with a black alloy head.
+sf_s1_r2_11	medium_weapon	A futuristic stun baton with a black alloy core and purple details.
+sf_s1_r2_12	medium_weapon	A futuristic shock mace with a wooden head and red details.
+sf_s2_r0_00	large_weapon	A futuristic energy greatsword with a glowing cyan blade.
+sf_s2_r0_01	large_weapon	A futuristic energy greatsword with a glowing red blade and orange details.
+sf_s2_r0_02	large_weapon	A futuristic energy greatsword with a glowing green blade.
+sf_s2_r0_03	large_weapon	A futuristic energy greatsword with a glowing purple blade.
+sf_s2_r0_04	large_weapon	A futuristic energy greatsword with a glowing orange blade and yellow details.
+sf_s2_r0_05	large_weapon	A futuristic energy greatsword with a glowing blue blade.
+sf_s2_r0_06	large_weapon	A futuristic energy greatsword with a glowing cyan blade.
+sf_s2_r0_07	large_weapon	A futuristic energy greatsword with a glowing red blade.
+sf_s2_r0_08	large_weapon	A futuristic energy greatsword with a glowing purple blade.
+sf_s2_r0_09	large_weapon	A futuristic energy greatsword with a glowing orange blade.
+sf_s2_r1_00	large_weapon	A futuristic heavy greatsword with a black alloy blade.
+sf_s2_r1_01	large_weapon	A futuristic heavy greatsword with a black alloy blade.
+sf_s2_r1_02	large_weapon	A futuristic heavy greatsword with a steel blade and blue details.
+sf_s2_r1_03	large_weapon	A futuristic heavy greatsword with a steel blade and red details.
+sf_s2_r1_04	large_weapon	A futuristic heavy greatsword with a steel blade.
+sf_s2_r1_05	large_weapon	A futuristic chainsword with a black alloy blade and red details.
+sf_s2_r1_06	large_weapon	A futuristic chainsword with a black alloy blade.
+sf_s2_r1_07	large_weapon	A futuristic heavy greatsword with a black alloy blade.
+sf_s2_r1_08	large_weapon	A futuristic heavy greatsword with a steel blade.
+sf_s2_r1_09	large_weapon	A futuristic chainsword with a black alloy blade and red details.
+sf_s2_r2_00	medium_weapon	A futuristic power hammer with a glowing blue head.
+sf_s2_r2_01	medium_weapon	A futuristic power hammer with a black alloy head and red details.
+sf_s2_r2_02	medium_weapon	A futuristic power hammer with a black alloy head.
+sf_s2_r2_03	medium_weapon	A futuristic power hammer with a wooden head.
+sf_s2_r2_04	medium_weapon	A futuristic power hammer with a black alloy head and blue details.
+sf_s2_r2_05	medium_weapon	A futuristic power hammer with a black alloy head and purple details.
+sf_s2_r2_06	medium_weapon	A futuristic power axe with a glowing blue head.
+sf_s2_r2_07	medium_weapon	A futuristic power axe with a black alloy head and red details.
+sf_s2_r2_08	medium_weapon	A futuristic power axe with a black alloy head.
+sf_s2_r2_09	medium_weapon	A futuristic power axe with a steel head and blue details.
+sf_s3_r0_00	long_weapon	A futuristic energy spear with a glowing blue head.
+sf_s3_r0_01	long_weapon	A futuristic energy spear with a glowing red head.
+sf_s3_r0_02	long_weapon	A futuristic energy spear with a glowing green head.
+sf_s3_r0_03	long_weapon	A futuristic energy spear with a glowing purple head.
+sf_s3_r0_04	long_weapon	A futuristic energy spear with a glowing orange head.
+sf_s3_r0_05	long_weapon	A futuristic energy spear with a glowing blue head.
+sf_s3_r0_06	long_weapon	A futuristic spear with a steel head and red details.
+sf_s3_r0_07	long_weapon	A futuristic spear with a black alloy head.
+sf_s3_r0_08	long_weapon	A futuristic energy spear with a glowing cyan head.
+sf_s3_r0_09	long_weapon	A futuristic energy spear with a glowing red head.
+sf_s3_r0_10	long_weapon	A futuristic spear with a black alloy head.
+sf_s3_r0_11	long_weapon	A futuristic energy spear with a glowing green head.
+sf_s3_r0_12	long_weapon	A futuristic energy spear with a glowing purple head and blue details.
+sf_s3_r1_00	long_weapon	A futuristic energy scythe with a glowing blue head.
+sf_s3_r1_01	long_weapon	A futuristic energy scythe with a glowing red head.
+sf_s3_r1_02	long_weapon	A futuristic scythe with a steel head.
+sf_s3_r1_03	long_weapon	A futuristic energy scythe with a glowing purple head.
+sf_s3_r1_04	long_weapon	A futuristic energy halberd with a glowing orange head.
+sf_s3_r1_05	long_weapon	A futuristic energy halberd with a glowing blue head.
+sf_s3_r1_06	long_weapon	A futuristic energy halberd with a glowing red head.
+sf_s3_r1_07	long_weapon	A futuristic halberd with a black alloy head.
+sf_s3_r1_08	long_weapon	A futuristic energy polearm axe with a glowing green head.
+sf_s3_r1_09	long_weapon	A futuristic shock staff with a glowing blue core.
+sf_s3_r1_10	long_weapon	A futuristic shock staff with a wooden core.
+sf_s3_r1_11	long_weapon	A futuristic shock staff with a glowing purple core and blue details.
+sf_s3_r1_12	long_weapon	A futuristic shock staff with a black alloy core and blue details.
+sf_s4_r0_00	small_weapon	A high-tech plasma dagger with a glowing blue blade.
+sf_s4_r0_01	small_weapon	A high-tech plasma dagger with a glowing red blade.
+sf_s4_r0_02	small_weapon	A high-tech plasma dagger with a glowing green blade.
+sf_s4_r0_03	small_weapon	A high-tech plasma dagger with a glowing purple blade.
+sf_s4_r0_04	small_weapon	A high-tech plasma dagger with a glowing orange blade.
+sf_s4_r0_05	small_weapon	A high-tech plasma dagger with a polished alloy blade and blue details.
+sf_s4_r0_06	small_weapon	A high-tech plasma dagger with a glowing cyan blade.
+sf_s4_r0_07	small_weapon	A high-tech plasma dagger with a glowing red blade.
+sf_s4_r0_08	small_weapon	A high-tech plasma dagger with a black alloy blade and green details.
+sf_s4_r0_09	small_weapon	A high-tech plasma dagger with a glowing purple blade.
+sf_s4_r0_10	small_weapon	A high-tech plasma dagger with a glowing orange blade.
+sf_s4_r0_11	small_weapon	A high-tech plasma dagger with a polished alloy blade and blue details.
+sf_s4_r1_00	small_weapon	A futuristic combat knife with a black alloy blade.
+sf_s4_r1_01	small_weapon	A futuristic combat knife with a steel blade.
+sf_s4_r1_02	small_weapon	A futuristic combat knife with a black alloy blade.
+sf_s4_r1_03	small_weapon	A futuristic combat knife with a steel blade.
+sf_s4_r1_04	small_weapon	A futuristic combat knife with a steel blade.
+sf_s4_r1_05	small_weapon	A futuristic combat knife with a black alloy blade.
+sf_s4_r1_06	small_weapon	A futuristic combat knife with a black alloy blade and red details.
+sf_s4_r1_07	small_weapon	A futuristic combat knife with a steel blade.
+sf_s4_r1_08	small_weapon	A futuristic combat knife with a black alloy blade.
+sf_s4_r1_09	small_weapon	A futuristic combat knife with a black alloy blade and red details.
+sf_s4_r1_10	small_weapon	A futuristic combat knife with a steel blade.
+sf_s4_r1_11	small_weapon	A futuristic combat knife with a black alloy blade.
+sf_s4_r2_00	throwable_weapon	A high-tech plasma throwing knife with a glowing blue blade.
+sf_s4_r2_01	throwable_weapon	A high-tech plasma throwing knife with a glowing red blade.
+sf_s4_r2_02	throwable_weapon	A high-tech plasma throwing knife with a glowing green blade.
+sf_s4_r2_03	throwable_weapon	A high-tech plasma throwing knife with a glowing purple blade.
+sf_s4_r2_04	throwable_weapon	A high-tech plasma throwing knife with a polished alloy blade.
+sf_s4_r2_05	throwable_weapon	A futuristic throwing disc with a glowing blue edge.
+sf_s4_r2_06	throwable_weapon	A futuristic bladed throwing star with a steel edge and red details.
+sf_s4_r2_07	throwable_weapon	A futuristic throwing disc with a wooden edge and orange details.
+sf_s4_r2_08	throwable_weapon	A futuristic throwing star with a glowing blue edge.
+sf_s4_r2_09	throwable_weapon	A futuristic crescent throwing blade with a glowing purple edge.
+sf_s5_r0_00	medium_weapon	A rubber police baton with a black alloy shaft and blue details.
+sf_s5_r0_01	medium_weapon	A telescoping tactical baton with a black alloy shaft and blue details.
+sf_s5_r0_02	medium_weapon	A telescoping tactical baton with a black alloy shaft and blue details.
+sf_s5_r0_03	medium_weapon	A telescoping tactical baton with a black alloy shaft and blue details.
+sf_s5_r0_04	medium_weapon	A side-handle police baton with a black alloy shaft.
+sf_s5_r0_05	medium_weapon	A police baton with a black alloy shaft.
+sf_s5_r0_06	medium_weapon	A tactical stun baton with a glowing blue core.
+sf_s5_r0_07	medium_weapon	A tactical stun baton with a glowing red core and blue details.
+sf_s5_r0_08	medium_weapon	A police baton with a black alloy shaft.
+sf_s5_r0_09	medium_weapon	A police baton with a black alloy shaft.
+sf_s5_r0_10	medium_weapon	A spiked tactical baton with a black alloy shaft.
+sf_s5_r0_11	medium_weapon	A tactical stun baton with a glowing purple core and blue details.
+sf_s5_r0_12	medium_weapon	A tactical stun baton with a glowing orange core.
+sf_s5_r0_13	medium_weapon	A tactical stun baton with a glowing blue core.
+sf_s5_r0_14	medium_weapon	A tactical stun baton with a glowing blue core.
+sf_s5_r1_00	small_weapon	A tactical combat knife with a steel blade.
+sf_s5_r1_01	small_weapon	A tactical combat knife with a black alloy blade.
+sf_s5_r1_02	small_weapon	A tactical combat knife with a black alloy blade.
+sf_s5_r1_03	small_weapon	A tactical combat knife with a steel blade.
+sf_s5_r1_04	small_weapon	A tactical combat knife with a steel blade.
+sf_s5_r1_05	small_weapon	A tactical combat knife with a black alloy blade and red details.
+sf_s5_r1_06	small_weapon	A tactical combat knife with a steel blade.
+sf_s5_r1_07	small_weapon	A tactical combat knife with a black alloy blade.
+sf_s5_r1_08	small_weapon	A tactical combat knife with a black alloy blade.
+sf_s5_r1_09	small_weapon	A tactical cleaver knife with a steel blade.
+sf_s5_r1_10	small_weapon	A tactical cleaver knife with a steel blade.
+sf_s5_r1_11	small_weapon	A tactical combat knife with a steel blade.
+sf_s5_r1_12	small_weapon	A tactical combat knife with a black alloy blade.
+sf_s5_r1_13	small_weapon	A tactical kukri knife with a steel blade.
+sf_s5_r2_00	medium_weapon	A tactical tomahawk with a black alloy head.
+sf_s5_r2_01	medium_weapon	A tactical tomahawk with a black alloy head.
+sf_s5_r2_02	medium_weapon	A tactical tomahawk with a black alloy head.
+sf_s5_r2_03	medium_weapon	A wood-handled hatchet with a wooden head.
+sf_s5_r2_04	medium_weapon	A tactical tomahawk with a black alloy head.
+sf_s5_r2_05	medium_weapon	A tactical pick hammer with a steel head.
+sf_s5_r2_06	medium_weapon	A breaching hammer with a steel head and blue details.
+sf_s5_r2_07	medium_weapon	A red fire axe with a black alloy head and red details.
+sf_s5_r2_08	medium_weapon	A tactical tomahawk with a black alloy head and red details.
+sf_s5_r2_09	medium_weapon	A steel pry bar with a black alloy shaft and red details.
+sf_s5_r2_10	medium_weapon	A steel pry bar with a black alloy shaft and orange details.
+sf_s5_r2_11	medium_weapon	A hooked pry bar with a black alloy shaft.
+sf_s5_r3_00	medium_weapon	A steel sledgehammer with a black alloy head.
+sf_s5_r3_01	medium_weapon	A spiked steel mace with a black alloy head.
+sf_s5_r3_02	medium_weapon	A baseball bat studded with nails with a wooden shaft.
+sf_s5_r3_03	medium_weapon	A baseball bat wrapped in barbed wire with a wooden shaft.
+sf_s5_r3_04	medium_weapon	A steel pipe club with a black alloy shaft.
+sf_s5_r3_05	medium_weapon	A red crowbar with a wooden shaft and orange details.
+sf_s5_r3_06	medium_weapon	A steel crowbar with a black alloy shaft.
+sf_s5_r3_07	medium_weapon	A steel shovel with a black alloy head.
+sf_s5_r3_08	medium_weapon	A folding entrenching shovel with a black alloy head.
+sf_s5_r3_09	medium_weapon	A folding entrenching shovel with a black alloy head.
+sf_s5_r3_10	medium_weapon	A pickaxe shovel with a black alloy head and blue details.
+sf_s5_r3_11	medium_weapon	A red pipe wrench with a black alloy head and red details.
+sf_s5_r3_12	medium_weapon	A hooked machete with a black alloy blade.

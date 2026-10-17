@@ -881,11 +881,14 @@ class _Form(object):
                 var.set(str(values[key]))
 
 
-def build_world_settings_window(mod_dir, title="", blurb=""):
+def build_world_settings_window(mod_dir, title="", blurb="", extra_tabs=None):
     """ワールド別設定の窓を組んで返す（`mainloop()` は呼ばない）。
 
     `title` と `blurb` を省くと `mod.json` の `name` / `description` から取る
     ― **MOD ごとに違うのはこの2つだけ**なので、道具側に書くことは何も残らない。
+
+    `extra_tabs(tabs, root_dir)` を渡すと、2つのタブの後ろに MOD が自分のタブを足せる
+    （`128_` の画像一覧。設定の保存とは関わらない見るだけのタブに使う）。
     """
     # tkinter は関数の中で import する。
     # `modtool` を import しただけで tkinter を要求しないため（`--dump` の道など）。
@@ -1031,6 +1034,9 @@ def build_world_settings_window(mod_dir, title="", blurb=""):
     world_box.bind("<<ComboboxSelected>>", on_world)
     load_into_form(world_var.get())
 
+    if extra_tabs is not None:
+        extra_tabs(tabs, root_dir)
+
     status = ttk.Label(footer, style="Faint.TLabel",
                        text="一括設定は次にゲームへ注入したときから、"
                             "ワールド個別設定は次にその世界を開いたときから効く")
@@ -1107,7 +1113,7 @@ def build_world_settings_window(mod_dir, title="", blurb=""):
     return root
 
 
-def world_settings_main(mod_dir):
+def world_settings_main(mod_dir, extra_tabs=None):
     """道具の入口。窓を組んで回す。
 
     各 `tool.py` はこれを呼ぶだけの数行で済む（§3.12.1）。
@@ -1115,4 +1121,4 @@ def world_settings_main(mod_dir):
     窓を組んで中を数えたいことがあるため（`tools/tests/` と
     `tools/check_tool_screens.py`）。
     """
-    build_world_settings_window(mod_dir).mainloop()
+    build_world_settings_window(mod_dir, extra_tabs=extra_tabs).mainloop()
