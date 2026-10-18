@@ -179,7 +179,8 @@ jobs:
       # 配布物に LICENSE / NOTICE が入っていなければ、それは配れない zip。
       # make_dist.bat 自身も欠けていれば止まるが、**組み上がった中身**を
       # 見るのはここだけ。make_dist.bat は「全部の zip に入れる」と言っているので、
-      # 3本とも見る（loader 単体・mods 単体の欠けは full を見ても分からない）。
+      # 3本とも見る（full・lite・assets）。lite には大きいアセットと指紋の控え（runtime/assets.json）が無く、
+      # assets はアセットと控えと LICENSE / NOTICE だけで、控えの指紋は zip の名前と同じ。
       # 名前は版から組む。手元に古い版の zip が残っていても、そちらを検査しない。
       - name: zip の中身
         shell: pwsh
@@ -202,13 +203,17 @@ jobs:
           $loader = @('LICENSE', 'NOTICE', 'InstantaleModLoader.bat', 'tools/gui.py',
                       'runtime/instantale_modloader/__init__.py',
                       'runtime/mods/_template/mod.json') + $docs
+          $assetDirs = @('runtime/mods/128_item_image_variety/images/', 'runtime/mods/128_item_image_variety/data/')
+          $assetZip = @(Get-ChildItem (Join-Path dist $ver) -Filter "InstantaleModLoader-$ver-assets-*.zip")
+          if ($assetZip.Count -ne 1) { Write-Host "  assets の zip が1本でない: $($assetZip.Count)"; exit 1 }
+          $digest = ($assetZip[0].Name -replace '^.*-assets-([0-9a-f]+)\.zip$', '$1')
           $packages = @(
-            @{ zip = "InstantaleModLoader-$ver-full.zip"; mods = 'runtime/mods/'
-               want = $loader + @('runtime/mods/load_order.json'); deny = @() },
-            @{ zip = "InstantaleModLoader-$ver.zip"; mods = $null
-               want = $loader; deny = @('runtime/mods/load_order.json') },
-            @{ zip = "InstantaleMods-$ver.zip"; mods = ''
-               want = @('LICENSE', 'NOTICE'); deny = @('load_order.json', '_template/mod.json') }
+            @{ zip = "InstantaleModLoader-$ver-full.zip"; mods = 'runtime/mods/'; assets = $true
+               want = $loader + @('runtime/mods/load_order.json', 'runtime/assets.json'); deny = @() },
+            @{ zip = "InstantaleModLoader-$ver-lite.zip"; mods = 'runtime/mods/'; assets = $false
+               want = $loader + @('runtime/mods/load_order.json'); deny = @('runtime/assets.json') },
+            @{ zip = $assetZip[0].Name; mods = $null; assets = $true; only = $true
+               want = @('LICENSE', 'NOTICE', 'runtime/assets.json'); deny = @('tools/gui.py', 'runtime/mods/load_order.json') }
           )
 
           $bad = 0
@@ -233,6 +238,23 @@ jobs:
             foreach ($leak in @($rel | Where-Object { $userCopies -contains ($_ -split '/')[-1] })) {
               Write-Host "    手元版が入っている: $leak"; $bad++
             }
+            $inAssets = @($rel | Where-Object { $r = $_; @($assetDirs | Where-Object { $r.StartsWith($_) }).Count -gt 0 })
+            if ($p.assets -and $inAssets.Count -eq 0) { Write-Host "    大きいアセットが入っていない"; $bad++ }
+            if (-not $p.assets -and $inAssets.Count -gt 0) { Write-Host "    大きいアセットが入っている: $($inAssets[0])"; $bad++ }
+            if ($p.only) {
+              $extra = @($rel | Where-Object { $inAssets -notcontains $_ -and @('LICENSE', 'NOTICE', 'runtime/assets.json') -notcontains $_ })
+              if ($extra) { Write-Host "    アセットの外のファイル: $($extra[0])"; $bad++ }
+            }
+            if ($rel -contains 'runtime/assets.json') {
+              $archive = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $path).Path)
+              try {
+                $entry = $archive.Entries | Where-Object { ($_.FullName -split '/', 2)[-1] -eq 'runtime/assets.json' }
+                $reader = New-Object IO.StreamReader($entry.Open())
+                $manifest = $reader.ReadToEnd() | ConvertFrom-Json
+                $reader.Dispose()
+              } finally { $archive.Dispose() }
+              if ($manifest.digest -ne $digest) { Write-Host "    指紋が assets の zip の名前と違う: $($manifest.digest) / $digest"; $bad++ }
+            }
             if ($null -ne $p.mods) {
               $pattern = '^' + [regex]::Escape($p.mods) + '[^/_][^/]*/mod\.json$'
               $count = @($rel | Where-Object { $_ -match $pattern }).Count
@@ -241,7 +263,7 @@ jobs:
             }
           }
           if ($bad) { exit 1 }
-          Write-Host "  ok    3本とも中身が揃っている"
+          Write-Host "  ok    3本とも中身が揃っている（アセットの指紋 $digest）"
 
       # 配った tools が配布物の中で動くか。一覧（make_dist.bat）は許可制なので、
       # 配ったファイルが読む tools\ のモジュールを入れ忘れると、配布物でだけ

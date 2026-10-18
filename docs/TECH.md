@@ -94,7 +94,7 @@ C コンパイラと管理者権限は要らない。ゲームフォルダは読
 
 ```text
 InstantaleModLoader.bat   GUI を開く（配布物で唯一の入口）
-make_dist.bat             配布物を dist\<版>\ に組む（loader / mods / full の3つの zip）
+make_dist.bat             配布物を dist\<版>\ に組む（full・lite・assets の3つの zip。大きいアセットの指紋を runtime\assets.json に書く）
 tools/gui.py              MOD 一覧・適用順・有効/無効・設定・追加・起動と注入・結果表示
 tools/watch.bat, watcher.py  ゲームの起動を監視して自動注入（GUI 無し）
 tools/injector.py         PE解析 → x64スタブ → CreateRemoteThread（--unload で剥がす）
@@ -113,6 +113,7 @@ tools/rebalance_saved_bgm.py  既存セーブの BGM を後からまとめて均
 tools/mods_meta.py        mod.json の author の読み方。build_mods / list_mods / check_mods が共用
 tools/tests/test_*.py     ゲーム抜きで走る検査。開発用で配布物には入らない
 tools/drive/              動いているゲームを外から操作する道具（押す・待つ・状態を作る・控えと戻し・写真。§2.2）。開発用で配布物には入らない
+assets/item_images/       128_ の絵の元の一枚絵（作者が画像生成 AI で作ったもの）。作る道具が読む。リポジトリだけで配布物には入らない
 runtime/instantale_modloader/
     __init__.py   boot() / discover() / ログ / 世代発行 / 遅延設置の監視 / on_ready
                   / API 契約 / status.json の書き出し / unload()

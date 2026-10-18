@@ -102,6 +102,9 @@ RELEASES_API = ("https://api.github.com/repos/Flossian/InstantaleModLoader"
                 "/releases?per_page=30")
 # 更新の zip を落とすときの、1回の読みを待つ上限（秒）。全体の所要時間の上限ではない。
 UPDATE_TIMEOUT = 30
+# 大きいアセット（128_ の絵と辞書）の指紋の控え。full と assets の zip に入り、lite には入らない（make_dist.bat）。
+# 手元に在るのは、いま入っているアセットの指紋。
+ASSETS_MANIFEST = os.path.join(RUNTIME_DIR, "assets.json")
 # 上書きで消えないもの。確認の文に出す（zip に入らないので展開は触らない）。
 UPDATE_KEEPS = ("settings\\・state\\・local\\・手元で足した MOD\n"
                 "（書き換えた *.default.txt / *.default.json は "
@@ -171,9 +174,45 @@ def _vtuple(ver: str) -> tuple[int, ...]:
     return tuple(int(x) for x in re.findall(r"\d+", ver))
 
 
-def newer_release(current: str = ml.__version__) -> tuple[str, str] | None:
-    """GitHub の最新 Release が今より新しければ (版, full zip の URL)。無ければ None。
+def local_assets_digest(path: str = ASSETS_MANIFEST) -> str | None:
+    """手元のアセットの指紋（`runtime\\assets.json` の digest）。無い・読めないなら None。"""
+    data = ml.read_json(path, default=None)
+    digest = data.get("digest") if isinstance(data, dict) else None
+    return digest if isinstance(digest, str) and digest else None
 
+
+def pick_package(assets: list, local_digest: str | None) -> dict | None:
+    """Release の添付から落とす zip を選ぶ: `{"kind", "url", "size"}`。full が無ければ None。
+
+    アセットの zip（`…-assets-<指紋>.zip`）の指紋が手元と同じで、lite が在れば lite。
+    それ以外（手元に指紋が無い・違う・lite が無い）は full。
+    """
+    full = lite = None
+    remote = None
+    for asset in assets or []:
+        name = str(asset.get("name", ""))
+        if name.endswith("-full.zip"):
+            full = asset
+        elif name.endswith("-lite.zip"):
+            lite = asset
+        else:
+            m = re.search(r"-assets-([0-9a-f]+)\.zip$", name)
+            if m:
+                remote = m.group(1)
+    if full is None:
+        return None
+    chosen, kind = full, "full"
+    if lite is not None and remote and local_digest == remote:
+        chosen, kind = lite, "lite"
+    return {"kind": kind, "url": chosen["browser_download_url"], "size": int(chosen.get("size") or 0)}
+
+
+def newer_release(current: str = ml.__version__,
+                  local_digest: str | None = None) -> tuple[str, dict] | None:
+    """GitHub の最新 Release が今より新しければ (版, 落とす zip)。無ければ None。
+
+    落とす zip は `pick_package`（アセットが変わっていなければ lite、変わっていれば full）。
+    `local_digest` を渡さなければ手元の `runtime\\assets.json` を読む。
     ネットが無い・API の形が違う・版が数字でない、はどれも例外のまま返す。
     呼ぶ側（別スレッド）が握って黙る。
     """
@@ -183,10 +222,15 @@ def newer_release(current: str = ml.__version__) -> tuple[str, str] | None:
     ver = str(data["tag_name"]).lstrip("v")
     if _vtuple(ver) <= _vtuple(current):
         return None
-    for asset in data.get("assets", []):
-        if asset["name"].endswith("-full.zip"):
-            return ver, asset["browser_download_url"]
-    return None
+    if local_digest is None:
+        local_digest = local_assets_digest()
+    package = pick_package(data.get("assets", []), local_digest)
+    return (ver, package) if package else None
+
+
+def _mb(size: int) -> str:
+    """確認の文に出す大きさ（MB、小数1桁）。"""
+    return "{:.1f}MB".format(size / 2 ** 20)
 
 
 def pick_notes(releases: list, since: str | None,
@@ -1575,7 +1619,7 @@ class App(ttk.Frame):
         self.busy = False
         # 新しい版（版, full zip の URL）。
         # `update` と名付けると tkinter の `Misc.update()` を覆うので別の名前にする。
-        self.available_update: tuple[str, str] | None = None
+        self.available_update: tuple[str, dict] | None = None
         self._status_text = ""            # 状態表示に今出ている文言
         self.shown_count = 0              # 絞り込みの結果、一覧に出ている数
         # デバッグモード。
@@ -3195,19 +3239,24 @@ class App(ttk.Frame):
     def _update(self) -> None:
         if self.busy or not self.available_update:
             return
-        ver, url = self.available_update
+        ver, package = self.available_update
+        if package["kind"] == "lite":
+            what = ("絵と辞書（大きいアセット）は変わっていないので、\n"
+                    "それを除いた版（{}）を落とします。".format(_mb(package["size"])))
+        else:
+            what = "全部入りの版（{}）を落とします。".format(_mb(package["size"]))
         if not messagebox.askokcancel(
                 "更新",
                 "v{} をダウンロードしてこのフォルダへ上書きし、\n"
-                "このウィンドウを開き直します。\n\n"
+                "このウィンドウを開き直します。\n{}\n\n"
                 "{} は残ります。\n"
                 "新しい版に無くなった MOD のフォルダも消しません。".format(
-                    ver, UPDATE_KEEPS)):
+                    ver, what, UPDATE_KEEPS)):
             return
-        self._start(self._update_worker, url)
+        self._start(self._update_worker, package["url"])
 
     def _update_worker(self, url: str) -> None:
-        """別スレッド。full zip を out\\ へ落として展開し、開き直しを頼む。
+        """別スレッド。full か lite の zip を out\\ へ落として展開し、開き直しを頼む。
 
         動いている .py を上書きしても平気（Windows は .py をロックしない。
         読み込み済みのものはメモリの上で動いている）。

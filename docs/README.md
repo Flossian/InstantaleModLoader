@@ -39,6 +39,17 @@ Python は、3.13 の python.org の既定の場所（`C:\Users\<ユーザー名
 どこでも動く。
 ゲームフォルダの中に入れる必要は無い。
 
+GitHub の Release には zip が3つある。初めて入れるときは full を落とす。
+
+| zip | 中身 |
+| --- | --- |
+| `InstantaleModLoader-<版>-full.zip` | 全部入り。初めて入れるときはこれ |
+| `InstantaleModLoader-<版>-lite.zip` | full から大きいアセット（`128_item_image_variety` の絵と辞書）を除いたもの |
+| `InstantaleModLoader-<版>-assets-<指紋>.zip` | 大きいアセットだけ |
+
+更新は GUI の更新ボタンが、要るほうを選んで落とす（§3.6）。
+手で更新するときは lite を上書きし、assets の指紋が前の版と違うときだけ assets も上書きする。
+
 ### 1.3 初回の起動
 
 1. `InstantaleModLoader.bat` をダブルクリックする。MOD の一覧ウィンドウが開く
@@ -232,7 +243,13 @@ Windows Defender や各種セキュリティソフトが警告・ブロックす
 ### 3.6 更新機能 (v1.11.0から)
 
 右上に `更新 (vX.Y.Z)` が出ていれば、GitHub に新しいバージョンがある。
-押すと full 版をダウンロードしてこのフォルダへ上書きし、ウィンドウを開き直す。
+押すと新しい版をダウンロードしてこのフォルダへ上書きし、ウィンドウを開き直す。
+
+落とすのは full か lite のどちらか（§1.2）。
+大きいアセット（`128_item_image_variety` の絵と辞書）は、絵を足した版でしか変わらない。
+そこで、手元のアセットの指紋（`runtime\assets.json`）と新しい版の指紋が同じなら、アセットを除いた lite（数 MB）を落とす。
+違うとき・手元に指紋が無いときは full を落とす。
+どちらを落とすかと大きさは、押した後の確認に出る。
 
 開き直した後、上げた版の更新内容（GitHub の Release と同じ文）が別の窓に出る。
 何版か飛ばして上げたときは、間の版も新しい順に続けて出る。
@@ -268,6 +285,8 @@ zip を手で上書きした場合も、次にウィンドウを開いたとき�
 | `InstantaleModLoader.bat` | これをダブルクリックする |
 | `runtime\instantale_modloader\` | ローダ本体（注入・パッチ管理） |
 | `runtime\mods\` | MOD 本体。`load_order.json` が適用順と無効一覧、`_template\` が雛形（読み込まれない） |
+| `runtimessets.json` | 入っている大きいアセットの指紋。更新ボタンが lite と full のどちらを落とすかをこれで決める。消すと次の更新は full になる |
+| `runtime\assets.json` | 入っている大きいアセットの指紋。更新ボタンが lite と full のどちらを落とすかをこれで決める。消すと次の更新は full になる |
 | `local\` | 配らない MOD の置き場所（無くてよい）。置き方は [TECH.md](TECH.md) §2.6.2 |
 | `settings\` | 自分で決めたこと。`mod_settings.json`（MOD の設定）、`gui.json`（ゲームの場所・ウィンドウ・更新内容を出した版）、`loader.json`（デバッグモード・ログ） |
 | `out\` | 記録。ログ各種と `status.json`（前回の注入の結果）、`release_notes.json`（更新内容の控え）。消してよい |

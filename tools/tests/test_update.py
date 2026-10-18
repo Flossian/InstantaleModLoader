@@ -13,6 +13,8 @@
   同梱の既定 … 書き換えた *.default.* は手元の名前に改名して残す（111/120/132/338）。
              配った版のままなら残さない。SHIPPED_DEFAULTS は git の履歴と一致する
   配る tools … make_dist.bat の一覧にあるファイルが読む tools\\ のモジュールも一覧にある
+  落とす zip … アセットの zip の指紋が手元（runtime\\assets.json）と同じなら lite、違う・無いなら full。
+             make_dist.bat の大きいアセットの一覧はリポジトリに在り、ローダだけ・MOD だけの zip は作らない
 """
 import json
 import os
@@ -424,5 +426,39 @@ for name in sorted(shipped):
     assert not missing, "{} が読むのに配らない: {}".format(name, sorted(missing))
 with open(os.path.join(ROOT, "InstantaleModLoader.bat"), encoding="utf-8") as f:
     assert "tools\\gui.py" in f.read()
+
+# 落とす zip（pick_package）。指紋が同じなら lite、違う・手元に無い・lite が無いなら full。
+REL = [{"name": "InstantaleModLoader-9.9.9-full.zip", "browser_download_url": "u/full", "size": 30 * 2 ** 20},
+       {"name": "InstantaleModLoader-9.9.9-lite.zip", "browser_download_url": "u/lite", "size": 4 * 2 ** 20},
+       {"name": "InstantaleModLoader-9.9.9-assets-44dc455def15.zip", "browser_download_url": "u/assets", "size": 26 * 2 ** 20}]
+assert gui.pick_package(REL, "44dc455def15") == {"kind": "lite", "url": "u/lite", "size": 4 * 2 ** 20}
+assert gui.pick_package(REL, "000000000000")["kind"] == "full"
+assert gui.pick_package(REL, None)["kind"] == "full"
+assert gui.pick_package([REL[0], REL[2]], "44dc455def15")["kind"] == "full"      # lite が無い
+assert gui.pick_package(REL[1:], "44dc455def15") is None                         # full が無い
+# v1.16.2 までの Release（full・ローダだけ・MOD だけ）からも full を選ぶ
+OLD = [{"name": "InstantaleModLoader-1.16.2-full.zip", "browser_download_url": "u/old"},
+       {"name": "InstantaleModLoader-1.16.2.zip", "browser_download_url": "u/loader"},
+       {"name": "InstantaleMods-1.16.2.zip", "browser_download_url": "u/mods"}]
+assert gui.pick_package(OLD, "44dc455def15") == {"kind": "full", "url": "u/old", "size": 0}
+with tempfile.TemporaryDirectory() as tmp:
+    manifest = os.path.join(tmp, "assets.json")
+    assert gui.local_assets_digest(manifest) is None
+    with open(manifest, "w", encoding="utf-8") as f:
+        json.dump({"digest": "44dc455def15", "files": 1, "dirs": []}, f)
+    assert gui.local_assets_digest(manifest) == "44dc455def15"
+    with open(manifest, "w", encoding="utf-8") as f:
+        f.write("[]")
+    assert gui.local_assets_digest(manifest) is None
+
+# make_dist.bat の大きいアセット。一覧のフォルダはリポジトリに在り、lite から外して assets に入れる。
+# ローダだけ・MOD だけの zip はもう作らない（片方だけ更新すると、両方に跨る直しで動かなくなる）。
+dirs = re.search(r'set "ASSETDIRS=([^"]+)"', script)
+assert dirs, "make_dist.bat に ASSETDIRS が無い"
+for d in dirs.group(1).split():
+    assert os.path.isdir(os.path.join(ROOT, d)), "ASSETDIRS のフォルダが無い: " + d
+for name in ("-full.zip", "-lite.zip", "-assets-%DIGEST%.zip"):
+    assert name in script, name
+assert "MODSNAME" not in script and "ZIPLOADER" not in script
 
 print("ok")

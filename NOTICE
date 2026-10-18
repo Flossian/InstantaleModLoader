@@ -85,6 +85,8 @@ MIT で配っているが、著作権表示（LICENSE の Copyright 行）は提
 生成 AI の出力にどこまで著作権が生じるかは国によって扱いが異なる。
 ここでは、作者が持つ範囲を超えて権利を主張しない。
 元の一枚絵はリポジトリの assets/item_images/ に置いてあり、同じく MIT で扱う（配布の zip には入れていない）。
+同じ MOD の data/ の下の数値（絵を選ぶための埋め込み）は、ゲームに同梱の文の埋め込みモデル
+（all-MiniLM-L6-v2、Apache License 2.0）で、作者が書いた説明文から計算したもの。モデルの重みは含めない。
 
 --------------------------------------------------------------------------
 MIT が及ばないもの
@@ -201,6 +203,10 @@ AI-GENERATED IMAGES
   differs between jurisdictions; this project claims no rights beyond those
   the author holds. The original sheets are kept in assets/item_images/ in
   the repository under the same terms; they are not part of the release zips.
+  The numbers under data/ in the same mod (embeddings used to pick images)
+  were computed from the author's captions with the sentence-embedding model
+  bundled with the game (all-MiniLM-L6-v2, Apache License 2.0); the model
+  weights are not included.
 
 NOT COVERED
   Instantale itself, its executables, its assets (images, audio, text), and
