@@ -87,7 +87,7 @@
 | mod | 状態 |
 | --- | --- |
 | `300_event_facility_arrival` | 成立（両モード。[§2.8](verification/2.8.md)）。版3 で同じ到着の会話をほかの MOD に譲る形は未（[§3.80](verification/3.80.md)） |
-| `301_quest_from_conversation` | 成立（[§2.13](verification/2.13.md) / [§2.62](verification/2.62.md)）。版3 のロード後の組み直しも成立。自由入力の経路と、仲間を依頼人から外す設定は未発火（[§3.2](verification/3.2.md)） |
+| `301_quest_from_conversation` | 成立（[§2.13](verification/2.13.md) / [§2.62](verification/2.62.md)）。版3 のロード後の組み直しも成立。自由入力の経路は未発火（[§3.2](verification/3.2.md)）。仲間を依頼人から外す設定はログで発火。版6 の人物が揃う前は出さない形は実機で成立（[§3.102](verification/3.102.md)） |
 | `302_leave_party_in_conversation` | 成立。土地を跨いで別れる経路も 10-06 に成立（[§3.88](verification/3.88.md)）。版2 のロード後も成立 |
 | `303_quest_end_party_to_guild` | 発火。置く側は未発火（`304_` が仲間を残すため。[§2.50](verification/2.50.md) / [§3.3](verification/3.3.md)） |
 | `304_quest_end_keep_party` | 成立（[§2.50](verification/2.50.md)） |
@@ -315,6 +315,7 @@ crash_log.txt の 114 件のうち、35件が `llama-server` 起動失敗、40�
 - [3.99 v1.15.0 から v1.16.0 までの変更のコードレビューの指摘を直した版: 12項目は実機で成立・知らせの点の位置を実機で直した・残りはオフラインのみ](verification/3.99.md)
 - [3.100 ゲーム本体 main_026 の影響: 127 の旗で llama-server が起きずに落ちたのを直した・旗を版で選び b10642 では `--checkpoint-min-step 256` にした（実測）・同じ版でも recon が退避され続けたのを直した・送り口が部品ごとに分かれ「開始する」のたびに作り直されて MOD の書き換えが届かなかったのを直した（実機）](verification/3.100.md)
 - [3.101 ゲームの更新の見張り（drift）をローダに入れた: 包みの外れ・引数の変化・書き換えの空振りを遊んでいる間に見つける・recon と役割を分けた・入れて最初の実機でローダの不具合を2つ見つけて直した・送り口の `timeout` が待ちを打ち切らないと分かり、`llm.ask` と 335 は打ち切らずにログに出すことにした・一括生成の住人の名前の重複を 120 で直した](verification/3.101.md)
+- [3.102 仲間との会話中のセーブを読むと「依頼を受ける」「この話から依頼を作る」が残る（`301_` 版6・窓口 `choices`）: 原因はロードの途中の人物の数だけで揃ったと見たこと・実機で成立](verification/3.102.md)
 <!-- verification-index: end -->
 
 ---

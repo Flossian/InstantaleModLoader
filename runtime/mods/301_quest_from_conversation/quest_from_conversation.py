@@ -1468,18 +1468,24 @@ def apply(ctx):
                     note_skip("confined by {} ({}): no quest offer".format(by, confined))
                 elif where == "conversation":
                     partner, _entry = ui.conversation_partner(buttons)
-                    if is_party_member(self, partner):
-                        note_skip("party member {!r} ({}): not a client".format(
-                            ui.character_name(self, partner), partner))
+                    # ロードの途中は人物も名簿もまだ揃わず、仲間かどうかも相手の名前も引けない。
+                    # 揃うまでは出さない（揃った後の組み直しは窓口 `choices` がする。VERIFICATION.md §3.102）
+                    waiting = not choices.ready(self)
+                    if waiting or is_party_member(self, partner):
+                        if waiting:
+                            note_skip("{}: the characters are not loaded yet".format(partner))
+                        else:
+                            note_skip("party member {!r} ({}): not a client".format(
+                                ui.character_name(self, partner), partner))
                         at = None
-                        # ロード直後は名簿が空で相手を仲間と見なせず、依頼の選択肢を足してしまう。
-                        # 名簿が復元されて組み直されたとき（窓口 `choices` のロードの後の組み直し）に落とす
+                        # セーブから戻った依頼の選択肢（窓口が印を付け直す）も、仲間と分かった・まだ見分けられない間は落とす
                         stale = [b for b in buttons
                                  if isinstance(b, dict) and b.get(MARK) in ("offer", "generate")]
                         if stale:
                             buttons[:] = [b for b in buttons if not any(b is d for d in stale)]
-                            write("dropped {} offer button(s): {!r} is a party member".format(
-                                len(stale), ui.character_name(self, partner)))
+                            write("dropped {} offer button(s): {}".format(
+                                len(stale), "the characters are not loaded yet" if waiting
+                                else "{!r} is a party member".format(ui.character_name(self, partner))))
                 if at is not None:
                     # 会話画面には「この話から依頼を作る」も置く。
                     # 掲示板を経由しないので会話を閉じずに生成できる。

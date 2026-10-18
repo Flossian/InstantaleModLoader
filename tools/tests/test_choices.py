@@ -350,6 +350,24 @@ for _ in range(choices.PARTY_TICKS + 4):
 check("待ち直した後に1度だけ組み直す", app.refreshed == before + 1 and not FakeClock.intervals,
       (app.refreshed, FakeClock.intervals))
 
+# 会話中のセーブを読んだ途中は、人物が1件だけ居て会話の相手がまだ居ないことがある（VERIFICATION.md §3.102）。
+app.world = World({"1": object()})
+app.in_conversation = "95"
+app.buttons = [{"text": "会話を終了する", "spec": Spec("ConversationEndManager", ["95"])}]
+check("会話の相手が人物に居なければ揃っていない", choices.ready(app) is False, app.world.characters)
+choices.on_refresh(ctx_a, app)
+check("会話の相手が居ないうちは見張りを仕掛ける", len(FakeClock.intervals) == 1, FakeClock.intervals)
+app.world.characters["95"] = object()
+app.party[:] = ["player", "95"]
+before = app.refreshed
+for _ in range(4):
+    FakeClock.tick()
+check("相手が揃ったら1度だけ組み直す", app.refreshed == before + 1 and not FakeClock.intervals,
+      (app.refreshed, FakeClock.intervals))
+check("会話の相手が居れば揃っている", choices.ready(app) is True, app.world.characters)
+app.in_conversation = False
+app.party[:] = ["player"]
+
 print("[包み]")
 ctx_c = Ctx("700_a", "g2")
 choices.provide(ctx_c, screen_a, refresh=refresh_a, presses={"a:": press_a})

@@ -1280,6 +1280,54 @@ try:
 finally:
     mod.EXCLUDE_PARTY_MEMBERS = excluded
 
+# 仲間との会話中のセーブを読んだ途中。人物はほぼ空（相手が居ない）で、名簿もまだ空。
+# 仲間かどうかを見分けられないので出さない。セーブから戻った依頼の選択肢も落とす（VERIFICATION.md §3.102）。
+mod, ctx, app = setup(history=history, party=["62"])
+app.refresh_choice_buttons()
+loading = app.world.characters
+app.world.characters = {"63": loading["63"]}
+app.game_variables["party"] = []
+app.buttons = talk_buttons("62")
+app.buttons[0:0] = [{"text": "依頼を受ける（話を切り上げる）", "spec": PhaseSpec("JustSetButtonToNormalPhase", []),
+                     MARK: "offer"},
+                    {"text": "この話から依頼を作る", "spec": PhaseSpec("JustSetButtonToNormalPhase", []),
+                     MARK: "generate"}]
+mark = log_mark(ctx)
+app.refresh_choice_buttons()
+check("人物が揃う前は「依頼を受ける」を出さない", index_of(app, "offer") < 0,
+      [b.get("text") for b in app.buttons])
+check("人物が揃う前は「この話から依頼を作る」も出さない", index_of(app, "generate") < 0,
+      [b.get("text") for b in app.buttons])
+check("落とした理由が残る", "the characters are not loaded yet" in log_since(ctx, mark),
+      log_since(ctx, mark)[-200:])
+app.world.characters = loading
+app.game_variables["party"] = ["player", "62"]
+app.refresh_choice_buttons()
+check("揃った後も仲間には出さない", index_of(app, "offer") < 0 and index_of(app, "generate") < 0,
+      [b.get("text") for b in app.buttons])
+app.game_variables["party"] = ["player"]
+app.refresh_choice_buttons()
+check("揃った後、仲間でなければ出す", index_of(app, "offer") >= 0,
+      [b.get("text") for b in app.buttons])
+# 設定を切っていても、揃うまでは待つ（揃う前に足すと「この話から依頼を作る」に相手の名前が付かない）。
+mod, ctx, app = setup(history=history, party=["62"])
+loading = app.world.characters
+app.world.characters = {"63": loading["63"]}
+excluded = mod.EXCLUDE_PARTY_MEMBERS
+try:
+    mod.EXCLUDE_PARTY_MEMBERS = False
+    app.refresh_choice_buttons()
+    check("設定を切っても人物が揃う前は出さない", index_of(app, "offer") < 0,
+          [b.get("text") for b in app.buttons])
+    app.world.characters = loading
+    app.refresh_choice_buttons()
+    check("設定を切ると揃った後は仲間にも名前付きで出す",
+          index_of(app, "offer") >= 0 and index_of(app, "generate") >= 0
+          and "テストNPC D" in app.buttons[index_of(app, "generate")]["text"],
+          [b.get("text") for b in app.buttons])
+finally:
+    mod.EXCLUDE_PARTY_MEMBERS = excluded
+
 # 名簿がどこにも無い世界。**消す側に倒さない**。
 mod, ctx, app = setup(history=history)
 del app.game_variables

@@ -5,7 +5,7 @@ MOD が選択肢にボタンを足すとき、守ることが多い（どれか1
 
 - 組み直し（`refresh_choice_buttons`）は `to_display_buttons` までで、画面には塗らない
 - セーブはボタンの `text` と `spec` だけを書き、MOD の印（`mod_…`）は落ちる。ロードすると印の無い残骸が戻る
-- ロードの途中の組み直しでは、人物（`world.characters`）がまだ 0 人、名簿もまだ空（`336_` の実機）
+- ロードの途中の組み直しでは、人物（`world.characters`）がまだ 0 人かほぼ空、名簿もまだ空（`336_` / `301_` の実機）
 - MOD のボタンを押しても、ゲームは保存しない（払った額や控えだけが進んだ形が残る）
 
 これらを MOD ごとに書くのをやめ、ここで1か所に引き受ける。MOD が登録するのは処理だけ:
@@ -36,7 +36,7 @@ MOD が選択肢にボタンを足すとき、守ることが多い（どれか1
 2. 印の持ち越し。ゲームの保存の直前に、印の付いたボタンの `(text, spec, 印)` を
    世界×主人公の控え（`state\\choices\\`）に書く。ロードの後の最初の組み直しで、同じ `(text, spec)` の
    ボタンに印を付け直す（`ui` の `MARK_PREFIX` で始まる印なら、登録していない MOD の印も戻る）
-3. ロードの後。組み直しが人物 0 人のまま走った（＝ロードの途中）ら見張りを仕掛け、
+3. ロードの後。組み直しが人物の揃わないまま走った（＝ロードの途中。`ready`）ら見張りを仕掛け、
    人物が揃い切り（数が2回続けて同じ）、名簿も少し待ち、手が空いていたら1度だけ組み直して塗る。
    ロードの包み（`load_game_new`）には頼らない（包みが付く前に始まったロードでは、包みの後ろの処理が走らなかった。実機）。
    印の付け直しは「`app.world` が入れ替わった後の最初の組み直し」で行う
@@ -189,9 +189,17 @@ def pressed():
 
 
 def ready(app):
-    """人物が揃っているか（ロードの途中の組み直しでは 0 人）。"""
+    """人物が揃っているか（ロードの途中の組み直しでは 0 人か、ほぼ空）。
+
+    会話中なら、その相手が人物に居ることまで見る。ロードの途中は人物が1件だけ居ることがあり、
+    数だけでは揃ったと見誤って見張りを仕掛けない（会話中のセーブで、仲間に `301_` の依頼のボタンが残った。
+    VERIFICATION.md §3.102）。
+    """
     characters = getattr(getattr(app, "world", None), "characters", None)
-    return isinstance(characters, dict) and bool(characters)
+    if not isinstance(characters, dict) or not characters:
+        return False
+    partner = getattr(app, "in_conversation", None)
+    return not (isinstance(partner, str) and partner and partner not in characters)
 
 
 # ---------------------------------------------------------------- 印の持ち越し
