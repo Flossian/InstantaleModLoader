@@ -50,6 +50,17 @@ def category_of(entry):
     return CATEGORY_OF_SHEET[entry["src"].partition("@")[0]]
 
 
+def save_palette(im, path):
+    """色の数だけのパレットを持つ PNG で書く（画素はそのまま。32色に減色した絵なので 256 色に必ず収まる）。
+    フルカラーの PNG の約3分の1の大きさになる。ゲームの Kivy（SDL2）で読むと元と同じ画素になる（VERIFICATION.md §3.26）。"""
+    a = np.asarray(im.convert("RGBA"))
+    colors, index = np.unique(a.reshape(-1, 4), axis=0, return_inverse=True)
+    assert len(colors) <= 256, (path, len(colors))
+    pal = Image.fromarray(index.reshape(a.shape[:2]).astype(np.uint8), "P")
+    pal.putpalette(colors[:, :3].flatten().tolist())
+    pal.save(path, "PNG", optimize=True, transparency=bytes(colors[:, 3].tolist()))
+
+
 def write_categories(entries, made, owned):
     """絵を `images/<分類>/Assets/images/item_candidates_dark/<品種>/<鍵>.png` に、
     埋め込みを `data/<分類>/<品種>.json`（同じキャプションのベクトルを1つにまとめた形、小数4桁）に書く。
@@ -67,7 +78,7 @@ def write_categories(entries, made, owned):
         assert cid in owned, (e["key"], cid)
         out = MOD / "images" / cid / "Assets" / "images" / "item_candidates_dark" / e["folder"] / (e["key"] + ".png")
         out.parent.mkdir(parents=True, exist_ok=True)
-        made[e["key"]].save(out, optimize=True)
+        save_palette(made[e["key"]], out)
         groups.setdefault((cid, e["folder"]), []).append(e)
     counts = {}
     for (cid, folder), group in sorted(groups.items()):

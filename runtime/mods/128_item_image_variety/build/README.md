@@ -14,7 +14,7 @@
 作者が画像生成 AI で作った元の一枚絵は、リポジトリの `assets/item_images/` に置く（配布の zip には入らない。make_dist は `runtime\` だけを詰める）。
 フォルダは分類のまとまりごと（`guns/`・`medieval_weapons/`・`magic_weapons/`・`sf_weapons/`・`wear/`・`parts/`・`food/`・`medical/`・`magic_materials/`・`treasure/`・`tools/`・`monster_materials/`・`japanese/`・`modern_sf/`）、ファイル名は分類の id（`guns/gun_cyber.png` など）。
 分類ごとの一枚絵は `categories.json` の `source`（`assets/item_images/` の下の相対パス）。道具はどれもここを読む。別の場所を読ませるときは `--sheets` か環境変数 `ITEM_IMAGE_ASSETS`。
-PNG は画素を変えずに詰め直してある。一枚絵を足す・描き直すときは、このフォルダに置いて `categories.json` を直す（`tools\tests\test_item_image_sets.py` が、どの分類の一枚絵も在るかを見る）。
+元の一枚絵の PNG は画素を変えずに詰め直してある。切り出した絵は、色の数だけのパレットを持つ PNG で書く（`build_guns.save_palette`。画素は同じで大きさは約3分の1）。一枚絵を足す・描き直すときは、このフォルダに置いて `categories.json` を直す（`tools\tests\test_item_image_sets.py` が、どの分類の一枚絵も在るかを見る）。
 
 ## 手順
 

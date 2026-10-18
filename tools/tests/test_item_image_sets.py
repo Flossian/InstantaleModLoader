@@ -13,7 +13,7 @@
 - `images/` と `data/` の直下のフォルダは分類だけ（分類の外に置いた絵は探し先に入らない）
 - 実行時に `images/<分類>` を Kivy の探し先へ足している
 
-Pillow を使わない（CI に無い）。寸法は PNG の IHDR を読む。
+Pillow を使わない（CI に無い）。寸法と色の型（パレット形式）は PNG の IHDR を読む。
 """
 import ast
 import json
@@ -27,9 +27,11 @@ WEAPON = {"small_weapon": (32, 32), "medium_weapon": (32, 64), "large_weapon": (
 
 
 def png_size(path):
+    """寸法。足した絵はパレット形式（IHDR の色の型 3。build_guns.save_palette）で書く。"""
     with open(path, "rb") as fh:
-        head = fh.read(24)
+        head = fh.read(26)
     assert head[:8] == b"\x89PNG\r\n\x1a\n" and head[12:16] == b"IHDR", path
+    assert head[25] == 3, ("パレット形式でない", path)
     return struct.unpack(">II", head[16:24])
 
 
