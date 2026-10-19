@@ -116,23 +116,29 @@ def fix(body, target, effort):
                 new["display"] = thinking["display"]
             body["thinking"] = new
             changed.append("thinking enabled->adaptive")
-        elif kind == "disabled" and (found["no_disable"] or found["off_upto_high"]):
+        elif kind in ("disabled", "between_tools"):
+            # 思考を切る指定。ゲームは Sonnet 5.5 を選んでいると between_tools で送る（main_026）。
+            # 差し替え先が受けない書き方なら、受ける書き方へ直すか外す（Haiku 5.5 は between_tools を 400 で断った）
             config = body.get("output_config")
             sent = effort if effort != "keep" else (
                 config.get("effort") if isinstance(config, dict) else None)
             if found["off_upto_high"] and sent in ("xhigh", "max"):
                 # この推論量では切る指定そのものを断る。
                 del body["thinking"]
-                changed.append("-thinking disabled")
+                changed.append("-thinking " + kind)
             elif found["between_tools"]:
                 # 切り方が別の名前になっただけ。ゲームの「考えない」をそのまま通す。
-                body["thinking"] = {"type": "between_tools"}
-                changed.append("thinking disabled->between_tools")
+                if kind != "between_tools":
+                    body["thinking"] = {"type": "between_tools"}
+                    changed.append("thinking disabled->between_tools")
             elif found["no_disable"]:
                 # 切れないモデルには指定ごと外す（既定で adaptive になる）。
                 # 速さは effort で抑える。
                 del body["thinking"]
-                changed.append("-thinking disabled")
+                changed.append("-thinking " + kind)
+            elif kind == "between_tools":
+                body["thinking"] = {"type": "disabled"}
+                changed.append("thinking between_tools->disabled")
 
     choice = body.get("tool_choice")
     if (found["no_forced"] and isinstance(choice, dict)

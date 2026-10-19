@@ -208,6 +208,25 @@ fixed = {"model": "x", "thinking": {"type": "disabled"}, "output_config": {"effo
 CL.fix(fixed, "claude-sonnet-5-5", "keep")
 assert "thinking" not in fixed, fixed
 assert CL.traits("claude-sonnet-5")["between_tools"] is False
+# ゲームで Sonnet 5.5 を選ぶと、ゲーム自身が between_tools で送る（main_026）。
+# 受けない差し替え先には disabled へ戻す（Haiku 5.5 は 400 で断った。実機）。切れない先には外す。受ける先はそのまま
+game_sonnet55 = {"model": "claude-sonnet-5-5", "thinking": {"type": "between_tools"}, "output_config": {"effort": "low"}}
+fixed = dict(game_sonnet55)
+changed = CL.fix(fixed, "claude-haiku-5-5", "medium")
+assert fixed["thinking"] == {"type": "disabled"} and "thinking between_tools->disabled" in changed, (fixed, changed)
+fixed = dict(game_sonnet55, output_config={"effort": "max"})
+CL.fix(fixed, "claude-haiku-5-5", "keep")
+assert "thinking" not in fixed, fixed
+for target in ("claude-opus-5", "claude-sonnet-4-6", "claude-haiku-4-5"):
+    fixed = dict(game_sonnet55)
+    CL.fix(fixed, target, "keep")
+    assert fixed["thinking"] == {"type": "disabled"}, (target, fixed)
+for target in ("claude-opus-5-5", "claude-fable-5-1", "my-new-claude"):
+    fixed = dict(game_sonnet55)
+    CL.fix(fixed, target, "keep")
+    assert "thinking" not in fixed, (target, fixed)
+fixed = dict(game_sonnet55)
+assert CL.fix(fixed, "claude-sonnet-5-5", "keep") == [] and fixed == game_sonnet55, fixed
 
 # Haiku 5.5 は disabled と強制ツール指定を受けるが、sampling は断る。xhigh / max では disabled も断る
 fixed = {"model": "x", "thinking": {"type": "disabled"}, "temperature": 0.7,

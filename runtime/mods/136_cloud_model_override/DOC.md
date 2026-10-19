@@ -104,6 +104,7 @@ anthropic._base_client:SyncAPIClient.post    Claude
 | Claude Sonnet 5.5 | 「Opus 4.7 以降」の行に加えて `thinking: disabled` → `between_tools`（同じく思考を切る指定） |
 | Claude Opus 5 / Sonnet 5.5 / Haiku 5.5 | 推論量が `xhigh` / `max` のときは思考を切る指定を受け付けないので、`thinking: disabled` を外す |
 | Claude Opus 5.5 / Sonnet 5.5 / Fable 5.1 | `tool_choice` の `any` / `tool` → `auto` |
+| Sonnet 5.5 以外（ゲームで Sonnet 5.5 を選んでいるとき） | ゲームが送る `thinking: between_tools` → `disabled`（思考を切れないモデルには外す。Haiku 5.5 などは `between_tools` を断る） |
 | Claude Haiku 4.5 | `output_config.effort` を外す（受け付けない） |
 
 一覧に無い名前（「一覧に無いモデル」の欄）には、**いちばん厳しい側**の直しを当てる。
