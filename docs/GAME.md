@@ -2128,6 +2128,12 @@ scripts.items:Item.__init__(self, name, item_type, attributes, description,
 
 「食べ物」と「薬」を分けたいときは `item_detail`（food / drink）まで見る（`338_` の値段の区分）。
 
+`consumable` の飲食物・薬は、店の品揃え・人物の持ち物・クラフトのどれからも出る（2026-10-19 に全セーブ7つを数えた。大半は店の品揃え）。
+クラフトの型（`item_craft_generator`）にも `HealingItem` と `Consumable` の両方があり、どちらにするかは LLM が選ぶ。
+`consumable` の品には `回復` と `疲労負荷` が書かれない（`134_` が作り直した品だけが持つ）。
+右クリックの「消費」が出るのは `healing_item` だけで（`new_hud` の定数に `consumable` が無い。実機でも `healing_item` に直した品にだけ出た）、`consumable` の品は使う手段が無い。
+`409_` が `healing_item` に直す（VERIFICATION.md §3.104）。
+
 `value` はその品が出たクエストの難易度と一致する（実セーブの21種類すべてが
 その世界の `quests[*].difficulty` かより深い土地の難度に対応）。
 この段階を返すのは `get_equipment_price(quest_difficulty)` / `get_heal_item_price` /

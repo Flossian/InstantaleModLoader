@@ -8,8 +8,8 @@
 手で書き換えても次の生成で消える。
 直す先は各 MOD の `mod.json` か MODS.md の見出し。
 
-同梱 136 本（基盤 2 / 修正 47 / 追加 45 / 計測 42）。
-うち 13 本は外部の MOD 作者からの提供（下の「提供を受けた MOD」）。
+同梱 137 本（基盤 2 / 修正 48 / 追加 45 / 計測 42）。
+うち 14 本は外部の MOD 作者からの提供（下の「提供を受けた MOD」）。
 ほかに 3 本は自作だが、外部からの提案を取り込んでいる（下の「提案を取り込んだ MOD」）。
 
 並びはフォルダ名順。
@@ -37,7 +37,7 @@
 
 ---
 
-## 修正（47本）
+## 修正（48本）
 
 ゲームのバグ・不便を直す。
 
@@ -90,6 +90,7 @@
 | [`144_fix_hardcoded_worldview`](MODS.md#144_fix_hardcoded_worldview-プロンプトと絵の世界観の決め打ちを外す) | プロンプトと絵の世界観の決め打ちを外す | プロンプトと絵の世界観の決め打ちを外す | 6 |  |
 | [`145_fix_world_overview`](MODS.md#145_fix_world_overview-入力した世界の概要をそのまま使う) | 入力した世界の概要をそのまま使う | 入力した世界の概要をそのまま使う | 1 |  |
 | [`406_user_role_fix`](MODS.md#406_user_role_fix-クラウド-api-の-geminiclaude-でuser-role-の無い依頼が返らない断られるのを防ぐ) | Gemini・Claudeの無応答の防止 | クラウド API の Gemini・Claude で、user role の無い依頼が返らない・断られるのを防ぐ | - |  |
+| [`409_fix_crafted_item_type`](MODS.md#409_fix_crafted_item_type-クラフトで作った飲食物薬を消費で使えるようにする) | クラフトで作った飲食物・薬を「消費」で使えるようにする | クラフトで作った飲食物・薬を「消費」で使えるようにする | 1 |  |
 
 ---
 
@@ -200,7 +201,7 @@
 
 ## 提供を受けた MOD
 
-外部の MOD 作者から提供を受けて同梱している 13 本。
+外部の MOD 作者から提供を受けて同梱している 14 本。
 
 番号の帯では数えられない。
 いま提供を取り込む先は出どころの帯（`4xx`）だが、
@@ -226,6 +227,7 @@
 | [`406_user_role_fix`](MODS.md#406_user_role_fix-クラウド-api-の-geminiclaude-でuser-role-の無い依頼が返らない断られるのを防ぐ) | MoririnJP 様 | 提供者と共同 |
 | [`407_npc_starting_equipment`](MODS.md#407_npc_starting_equipment-パーティーに加わった-npc-に初期装備を一度だけ持たせる) | MoririnJP 様 | そのまま取り込み |
 | [`408_visual_changes_based_on_equipment`](MODS.md#408_visual_changes_based_on_equipment-立ち絵を再生成すると装備の見た目が描き足される) | MoririnJP 様 | そのまま取り込み |
+| [`409_fix_crafted_item_type`](MODS.md#409_fix_crafted_item_type-クラフトで作った飲食物薬を消費で使えるようにする) | わさの 様 | 提供者と共同 |
 
 ---
 

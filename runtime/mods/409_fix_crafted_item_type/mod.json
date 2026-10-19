@@ -1,0 +1,29 @@
+{
+  "entry": "fix_crafted_item_type.py",
+  "api": 1,
+  "kind": "fix",
+  "name": {
+    "en": "Crafted food and medicine can be consumed",
+    "ja": "クラフトで作った飲食物・薬を「消費」で使えるようにする"
+  },
+  "description": {
+    "en": "Crafted food, drinks and medicine can come out as 'consumable', so the right-click menu never shows Consume and their effects can't fire. Rewrites their item_type to 'healing_item' when they are made, and fixes items already in the save when they appear on screen. Items without a recovery value get the same values the game gives shop healing items",
+    "ja": "クラフトで作った飲食物・薬は種別が consumable になることがあり、右クリックに「消費」が出ず効果を発動できない。作られた時点で healing_item に書き換え、セーブに残っている品も画面に出た時点で直す。回復量の無い品には、店の回復アイテムと同じ値をゲームの計算で付ける"
+  },
+  "version": "2",
+  "author": "わさの, R01/Flossian",
+  "settings": {
+    "FIX_ON_SIGHT": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "古いセーブの品も開いたときに直す",
+        "en": "Fix items already in the save when shown"
+      },
+      "note": {
+        "ja": "切ると、これから作られる品だけが直る（セーブに残っている作成品はそのまま）",
+        "en": "When off, only newly crafted items are fixed; items already in the save keep the wrong type"
+      }
+    }
+  }
+}

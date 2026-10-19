@@ -199,6 +199,7 @@ BANDS = (
         "406_user_role_fix",
         "407_npc_starting_equipment",
         "408_visual_changes_based_on_equipment",
+        "409_fix_crafted_item_type",
     )),
 )
 

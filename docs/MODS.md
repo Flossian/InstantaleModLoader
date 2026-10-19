@@ -5946,7 +5946,7 @@ LLM が渡した額が目安の 50% に満たなければそこまで足し（1�
 `mod.json` の `"kind"` が名乗る（提供された計測 MOD は 2xx に入る。`223_` がそれ）。
 取り込みの際にこちらの環境へ合わせて調整しており、経緯は各 MOD の説明にある。
 
-この節の8本は MoririnJP 様の提供。うち `404_party_talk`・`405_regional_economy`・`406_user_role_fix` はこちらとの共同。
+この節の `401_battle_character_context`・`402_party_inventory_transfer`・`403_npc_social_memory`・`404_party_talk`・`405_regional_economy`・`406_user_role_fix`・`407_npc_starting_equipment`・`408_visual_changes_based_on_equipment` は MoririnJP 様の提供。うち `404_party_talk`・`405_regional_economy`・`406_user_role_fix` はこちらとの共同。 この節の `409_fix_crafted_item_type` は わさの 様の提供（こちらとの共同）。
 
 ### `401_battle_character_context`: 戦闘の審判へ同行者の人物と装備を見せる
 
@@ -6800,3 +6800,29 @@ LLMへ送る装備配列には`slot`を含めない。
 
 `python tools\tests\test_visual_changes_based_on_equipment.py`。
 偽の app・LLM・画像生成関数で、SD1.5 へ渡す語の絞り込み、足し方、控え、NPC の再生成と主人公の絵の経路を通す。
+
+### `409_fix_crafted_item_type`: クラフトで作った飲食物・薬を「消費」で使えるようにする
+
+ゲームのままだと、クラフトで作った食べ物・飲み物・薬・ポーションを右クリックしても「消費」が出ず、使えないことがある。
+クラフトの生成 AI が、飲食物や薬にも「消耗品」（`consumable`）という種別を付けることがあり、「消費」が出るのは「回復アイテム」（`healing_item`）の品だけだからだ。
+店で買った同じ種類の品は回復アイテムになっている。
+
+この MOD は、種別が消耗品で、細分が食べ物・飲み物・医薬品・ポーション・薬草・きのこの品を回復アイテムに直す。
+巻物は回復アイテムではないので消耗品のまま。
+
+- これから作られる品は、作られた時点で直る
+- セーブに残っている品は、持ち物の画面や説明欄に出た時点で直る。一度直った品は、次のセーブからも回復アイテムのまま
+
+消耗品には回復量（`回復`）とスタミナの消費（`疲労負荷`）が書かれていないので、どちらも無い品には、店の回復アイテムと同じ値をゲームの計算で付ける。
+`134_balance_item_effects` も入っていれば、効き目はそちらが作り直す（食料・飲み物はスタミナ回復、医薬品は最大 HP の割合で回復など）。
+
+| 設定 | 意味 |
+| --- | --- |
+| 古いセーブの品も開いたときに直す | 既定 ON。切ると、これから作られる品だけが直る |
+
+#### 困ったとき
+
+- 直ったかどうか: `out\crafted_item_type.log` に `consumable -> healing_item` の行が出る
+- 作った品にまだ「消費」が出ない: 持ち物の画面を開き直す（直すのは画面に出た時点）。
+  それでも出ない品は、細分が上の6つ以外（ログに行が出ていないはず）
+- 使っても効かない: この MOD は「消費」を出すだけ。効き目は `134_balance_item_effects` の `out\item_effects.log`（`consumed` / `refused`）を見る

@@ -137,6 +137,7 @@
 | `406_user_role_fix` | 版3 の Claude の店は成立（[§3.94](verification/3.94.md)）。Gemini は実機の記録が無い（`inserted user role for <manager>` を見る） |
 | `407_npc_starting_equipment` | 成立（仲間3人、窓口 `equipment.equip`、起動し直しても残る）。ロード後の戦闘の数は `333_` で直して成立（[§3.77](verification/3.77.md) / [§3.88](verification/3.88.md)） |
 | `408_visual_changes_based_on_equipment` | 一通り成立（仲間と `335_` の描き直しに装備の語）。取り込みと切り出しの経緯は [§2.94](verification/2.94.md) |
+| `409_fix_crafted_item_type` | 店の `consumable` の品に「消費」が出て使えた。鍵を足した品を `134_` 抜きで使うのとクラフトの経路は未（[§3.104](verification/3.104.md)） |
 
 ### ローダ
 
@@ -317,6 +318,7 @@ crash_log.txt の 114 件のうち、35件が `llama-server` 起動失敗、40�
 - [3.101 ゲームの更新の見張り（drift）をローダに入れた: 包みの外れ・引数の変化・書き換えの空振りを遊んでいる間に見つける・recon と役割を分けた・入れて最初の実機でローダの不具合を2つ見つけて直した・送り口の `timeout` が待ちを打ち切らないと分かり、`llm.ask` と 335 は打ち切らずにログに出すことにした・一括生成の住人の名前の重複を 120 で直した](verification/3.101.md)
 - [3.102 仲間との会話中のセーブを読むと「依頼を受ける」「この話から依頼を作る」が残る（`301_` 版6・窓口 `choices`）: 原因はロードの途中の人物の数だけで揃ったと見たこと・実機で成立](verification/3.102.md)
 - [3.103 v1.16.2 から v1.17.0 までの変更のコードレビューの指摘を直したもの: オフラインで通過・333 の自由枠と 128 の設定の窓と候補の下限は実機で成立（10-18）](verification/3.103.md)
+- [3.104 `409_fix_crafted_item_type`（わさの 様の提供）の取り込みとレビュー: 店の消耗品の霧茸に「消費」が出て使えた（10-19）・鍵を足す経路は 134 を外した実機が未](verification/3.104.md)
 <!-- verification-index: end -->
 
 ---
