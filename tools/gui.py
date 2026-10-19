@@ -175,7 +175,12 @@ def _vtuple(ver: str) -> tuple[int, ...]:
 
 
 def local_assets_digest(path: str = ASSETS_MANIFEST) -> str | None:
-    """手元のアセットの指紋（`runtime\\assets.json` の digest）。無い・読めないなら None。"""
+    """手元のアセットの指紋（`runtime\\assets.json` の digest）。無い・読めないなら None。
+
+    手元のファイルは数えも測りもしない（作者の決め）。`128_` は要らない分類の絵と辞書を消してよいことにしていて、
+    手元を見ると、消した人が更新のたびに full を落とす（消した絵も戻る）。
+    絵が欠けて戻したいときは `assets.json` を消せば、次の更新は full になる（README §3.6）。
+    """
     data = ml.read_json(path, default=None)
     digest = data.get("digest") if isinstance(data, dict) else None
     return digest if isinstance(digest, str) and digest else None
@@ -185,10 +190,10 @@ def pick_package(assets: list, local_digest: str | None) -> dict | None:
     """Release の添付から落とす zip を選ぶ: `{"kind", "url", "size"}`。full が無ければ None。
 
     アセットの zip（`…-assets-<指紋>.zip`）の指紋が手元と同じで、lite が在れば lite。
-    それ以外（手元に指紋が無い・違う・lite が無い）は full。
+    それ以外（手元に指紋が無い・違う・lite が無い・アセットの zip の指紋が2種類以上）は full。
     """
     full = lite = None
-    remote = None
+    remotes = set()
     for asset in assets or []:
         name = str(asset.get("name", ""))
         if name.endswith("-full.zip"):
@@ -198,11 +203,12 @@ def pick_package(assets: list, local_digest: str | None) -> dict | None:
         else:
             m = re.search(r"-assets-([0-9a-f]+)\.zip$", name)
             if m:
-                remote = m.group(1)
+                remotes.add(m.group(1))
     if full is None:
         return None
     chosen, kind = full, "full"
-    if lite is not None and remote and local_digest == remote:
+    # 指紋が2種類以上（前の版のアセットの zip の消し忘れ）なら、どれが今の版のものか分からないので full。
+    if lite is not None and len(remotes) == 1 and local_digest in remotes:
         chosen, kind = lite, "lite"
     return {"kind": kind, "url": chosen["browser_download_url"], "size": int(chosen.get("size") or 0)}
 
@@ -365,7 +371,7 @@ def markdown_runs(body: str) -> list[tuple[str, tuple[str, ...]]]:
 
 
 def extract_release(zip_path: str, dest: str = ROOT) -> int:
-    """full zip を dest へ上書き展開して、書いたファイルの数を返す。
+    """Release の zip（full か lite）を dest へ上書き展開して、書いたファイルの数を返す。
 
     zip の頭一段（`InstantaleModLoader-<ver>/`）は剥がす。
     zip に無いものは消さない ― 手元で作っている MOD を巻き込むので。
@@ -400,7 +406,11 @@ def extract_release(zip_path: str, dest: str = ROOT) -> int:
             os.makedirs(os.path.dirname(carried), exist_ok=True)
             if not ml.write_json(carried, old_order, indent=2):
                 raise OSError("cannot write {}".format(carried))
-        for info in z.infolist():
+        # アセットの指紋（`runtime/assets.json`）は最後に書く。
+        # 先に書いて途中で落ちると、絵と辞書が古いまま指紋だけ新しくなり、次の更新から lite が選ばれて直らない。
+        members = sorted(z.infolist(),
+                         key=lambda i: i.filename.split("/")[1:] == ["runtime", "assets.json"])
+        for info in members:
             parts = info.filename.split("/")[1:]
             if info.is_dir() or not parts or ".." in parts:
                 continue
@@ -1617,7 +1627,7 @@ class App(ttk.Frame):
         self.drag: str | None = None      # ドラッグ中の mod のフォルダ名
         self.dirty = False
         self.busy = False
-        # 新しい版（版, full zip の URL）。
+        # 新しい版（版, 落とす zip。`pick_package` の dict）。
         # `update` と名付けると tkinter の `Misc.update()` を覆うので別の名前にする。
         self.available_update: tuple[str, dict] | None = None
         self._status_text = ""            # 状態表示に今出ている文言

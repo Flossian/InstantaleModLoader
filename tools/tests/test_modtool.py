@@ -206,6 +206,23 @@ try:
           sorted(gui_json(root)["tool_window"]) == ["801_first_mod", "802_second_mod"],
           sorted(gui_json(root)["tool_window"]))
     window.destroy()
+    # 外したモニタの位置（負の座標）が残っていても、画面の外へは開かない。位置を捨てて大きさだけ
+    one = (0, 0, 1920, 1080)
+    check("画面の外の位置は捨てる",
+          modtool.visible_geometry("1030x867+-1105+469", one) == "1030x867"
+          and modtool.visible_geometry("900x640+2500+100", one) == "900x640"
+          and modtool.visible_geometry("900x640+100+1070", one) == "900x640")
+    two = (-1920, 0, 3840, 1080)
+    check("画面の中（2枚目のモニタを含む）はそのまま",
+          modtool.visible_geometry("1030x867+-1105+469", two) == "1030x867+-1105+469"
+          and modtool.visible_geometry("900x640+100+50", one) == "900x640+100+50")
+    real_screen, modtool.virtual_screen = modtool.virtual_screen, lambda: None
+    try:
+        check("壊れた値と画面の分からないときはそのまま",
+              modtool.visible_geometry("zoomed", one) == "zoomed"
+              and modtool.visible_geometry("900x640+-5000+0") == "900x640+-5000+0")
+    finally:
+        modtool.virtual_screen = real_screen
 
     print("[壊れた gui.json]")
     with io.open(os.path.join(root, "settings", "gui.json"), "w", encoding="utf-8") as fh:

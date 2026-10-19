@@ -359,11 +359,51 @@ def write_json(root, path, data, indent=1):
 
 
 # ----------------------------------------------------------------- 窓の記憶
+def virtual_screen():
+    """仮想デスクトップ（モニタ全体）の `(x, y, 幅, 高さ)`。取れなければ None。左と上は負にもなる。"""
+    try:
+        import ctypes
+        metric = ctypes.windll.user32.GetSystemMetrics
+        x, y, w, h = metric(76), metric(77), metric(78), metric(79)    # SM_X/YVIRTUALSCREEN, SM_CX/CYVIRTUALSCREEN
+    except Exception:
+        return None
+    return (x, y, w, h) if w > 0 and h > 0 else None
+
+
+def visible_geometry(geom, screen=None):
+    """`WxH+X+Y` が画面の外なら位置を捨てて `WxH` にする。画面が分からないとき・壊れた値はそのまま。
+
+    モニタを外した後は、覚えた位置のままだと**画面の外へ出て見えない窓**になる
+    （2枚目のモニタの負の座標が残っていた。実機）。GUI 本体の窓（`gui._on_screen`）と同じ判定で、
+    タイトルバーを掴める程度に見えていれば良しとする。
+    """
+    screen = screen or virtual_screen()
+    if not screen or not isinstance(geom, str):
+        return geom
+    try:
+        size, x, y = geom.replace("+-", "+~").split("+")
+        x, y = int(x.replace("~", "-")), int(y.replace("~", "-"))
+        w = int(size.split("x")[0])
+    except Exception:
+        return geom
+    vx, vy, vw, vh = screen
+    if vx - w + 120 <= x <= vx + vw - 120 and vy <= y <= vy + vh - 60:
+        return geom
+    return size
+
+
 def load_window(root, mod_dir):
-    """前回の窓の大きさと位置。`{"geometry": "WxH+X+Y", "maximized": bool}`。無ければ空。"""
+    """前回の窓の大きさと位置。`{"geometry": "WxH+X+Y", "maximized": bool}`。無ければ空。
+
+    位置が今の画面の外なら、位置を捨てて大きさだけ返す（`visible_geometry`）。
+    """
     windows = read_json(gui_config_path(root)).get(WINDOW_KEY)
     entry = windows.get(mod_name(mod_dir)) if isinstance(windows, dict) else None
-    return entry if isinstance(entry, dict) else {}
+    if not isinstance(entry, dict):
+        return {}
+    if entry.get("geometry"):
+        entry = dict(entry, geometry=visible_geometry(entry["geometry"]))
+    return entry
 
 
 def save_window(root, mod_dir, window):

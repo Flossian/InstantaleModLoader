@@ -254,8 +254,11 @@ assert rules.accepts(boots, 0, 8, {"free1": "x"}) == "region free1 occupied"
 items2 = {"p1": pants, "b1": boots}
 slots2 = rules.slots_from_positions({"p1": [2, 6], "b1": [0, 8]}, items2)
 assert slots2 == {"legs": "p1", "free1": "b1"}, slots2
-assert rules.best(slots2, items2, "wearable") is boots
-assert rules.combined(slots2, items2, "wearable", 10) == (boots, 85.0)
+# 自由枠の品は能力値に数えない（本体に渡す1つにも合算にも入らない）。防御の高い靴があっても脚のズボン
+assert rules.best(slots2, items2, "wearable") is pants
+assert rules.combined(slots2, items2, "wearable", 10) == (pants, 50.0)
+assert rules.best({"free1": "b1"}, items2, "wearable") is None
+assert rules.combined({"free1": "b1"}, items2, "wearable", 10) == (None, 0.0)
 
 # ---------------------------------------------------------------- 画面と本体の偽物
 root = tempfile.mkdtemp()

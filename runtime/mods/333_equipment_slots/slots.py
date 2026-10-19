@@ -57,6 +57,10 @@ KIND_OF = {
 }
 
 
+#: 能力値（本体に渡す1つ・合算・窓口 `combat`）に数える部位。自由枠は着けるだけで数えない（作者の決め）。
+STAT_REGIONS = tuple(name for name in REGIONS if KIND_OF[name] != FREE)
+
+
 def takes(name, kind):
     """部位 `name` に種類 `kind` の品が入るか。"""
     region_kind = KIND_OF.get(name)
@@ -180,7 +184,7 @@ def combined(slots, items, game_key, percent):
     if chosen is None:
         return None, 0.0
     rest = 0.0
-    for name in REGIONS:
+    for name in STAT_REGIONS:
         item = items.get(slots.get(name))
         if item is None or item is chosen or getattr(item, "item_type", None) != game_key:
             continue
@@ -212,12 +216,12 @@ def best(slots, items, game_key):
     """本体の `equipments[game_key]` に渡す1つ。合算せず最高値のみ。
 
     `weapon` は手にある武器の中で攻撃力が最高のもの。
-    `wearable` は全部位の防具（盾を含む）の中で防御力が最高のもの。
+    `wearable` は自由枠を除く全部位の防具（盾を含む）の中で防御力が最高のもの。
     候補が無ければ None。同点は REGIONS の並びで先のもの。
     """
     stat = dict(GAME_KEYS)[game_key]
     chosen, top = None, None
-    for name in REGIONS:
+    for name in STAT_REGIONS:
         item = items.get(slots.get(name))
         if item is None or getattr(item, "item_type", None) != game_key:
             continue

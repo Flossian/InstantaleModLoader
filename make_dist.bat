@@ -88,8 +88,9 @@ rem  Each package is staged inside its own wrapper folder, so the folder the
 rem  player ends up with keeps the name we want no matter what the zip is
 rem  called -- the full package still unpacks to InstantaleModLoader-<ver>\,
 rem  the same as every release so far.
-rem  All three unpack to InstantaleModLoader-<ver>\, so the lite and assets
-rem  packages can be unpacked on top of an install by hand.
+rem  All three unpack to InstantaleModLoader-<ver>\, so to update by hand the
+rem  contents of that folder in the lite and assets packages are copied over
+rem  an install.
 set "STAGE=dist\_stage"
 set "FULL=%STAGE%\full\%NAME%-%VER%"
 set "LITE=%STAGE%\lite\%NAME%-%VER%"

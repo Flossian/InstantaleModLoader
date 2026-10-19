@@ -44,6 +44,66 @@
    "sf": 0.5,
    "cyber": 1.0
   },
+  "gun_cyber2": {
+   "sf": 0.5,
+   "cyber": 1.0
+  },
+  "gun_corp_white": {
+   "cyber": 1.0,
+   "sf": 0.8
+  },
+  "gun_corp_heavy": {
+   "cyber": 1.0,
+   "sf": 0.8,
+   "postapoc": 0.3
+  },
+  "gun_corp_cheap": {
+   "cyber": 1.0,
+   "postapoc": 0.8,
+   "modern": 0.5
+  },
+  "gun_corp_bullpup": {
+   "cyber": 1.0,
+   "sf": 0.8,
+   "modern": 0.3
+  },
+  "gun_corp_laser": {
+   "sf": 1.0,
+   "cyber": 1.0
+  },
+  "gun_corp_military": {
+   "modern": 1.0,
+   "postapoc": 0.8,
+   "sf": 0.3
+  },
+  "gun_corp_rail": {
+   "sf": 1.0,
+   "cyber": 0.5
+  },
+  "gun_corp_bio": {
+   "sf": 1.0,
+   "cyber": 0.5
+  },
+  "gun_corp_luxury": {
+   "cyber": 1.0,
+   "modern": 0.5,
+   "earlymodern": 0.3
+  },
+  "gun_corp_space": {
+   "sf": 1.0
+  },
+  "gun_corp_print": {
+   "cyber": 1.0,
+   "postapoc": 0.5
+  },
+  "gun_corp_yakuza": {
+   "cyber": 1.0,
+   "wa": 0.5
+  },
+  "gun_corp_melee": {
+   "cyber": 1.0,
+   "sf": 0.8
+  },
   "gun_fantasy": {
    "fantasy": 1.0,
    "earlymodern": 0.5
@@ -109,6 +169,30 @@
   },
   "mag_staff_polearm": {
    "fantasy": 1.0
+  },
+  "mag_extra": {
+   "fantasy": 1.0
+  },
+  "mag_sf": {
+   "sf": 1.0,
+   "fantasy": 0.5
+  },
+  "mag_cyber": {
+   "cyber": 1.0,
+   "fantasy": 0.5
+  },
+  "mag_steam": {
+   "earlymodern": 1.0,
+   "fantasy": 0.5
+  },
+  "mag_wa": {
+   "wa": 1.0,
+   "fantasy": 0.5
+  },
+  "mag_postapoc": {
+   "postapoc": 1.0,
+   "modern": 0.5,
+   "fantasy": 0.5
   },
   "sf_onehanded": {
    "sf": 1.0,
@@ -252,6 +336,26 @@
   "tool_oddities": {
    "fantasy": 1.0
   },
+  "tool_modern": {
+   "modern": 1.0,
+   "postapoc": 0.5,
+   "cyber": 0.5
+  },
+  "tool_postapoc": {
+   "postapoc": 1.0,
+   "modern": 0.3
+  },
+  "tool_sf": {
+   "sf": 1.0,
+   "cyber": 1.0
+  },
+  "tool_wa": {
+   "wa": 1.0
+  },
+  "tool_western": {
+   "earlymodern": 1.0,
+   "postapoc": 0.3
+  },
   "wear_sf": {
    "sf": 1.0,
    "cyber": 0.5
@@ -328,6 +432,25 @@
   },
   "wear_wizard": {
    "fantasy": 1.0
+  },
+  "wear_wa_armor": {
+   "wa": 1.0
+  },
+  "wear_western_armor": {
+   "earlymodern": 1.0,
+   "postapoc": 0.3
+  },
+  "wear_modern_armor": {
+   "modern": 1.0,
+   "postapoc": 0.5,
+   "cyber": 0.3
+  },
+  "wear_postapoc_armor": {
+   "postapoc": 1.0
+  },
+  "wear_sf_armor": {
+   "sf": 1.0,
+   "cyber": 0.8
   }
  }
 }

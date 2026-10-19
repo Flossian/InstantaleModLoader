@@ -2502,3 +2502,63 @@ itm_i25_r5_13	other_material	A grey bundle of carbon fiber rods.
 itm_i25_r5_14	other_material	A black bundle of carbon fiber tubes.
 itm_i25_r5_15	other_material	A brown orange resin block.
 itm_i25_r5_16	other_material	A blue blue resin block with a faint blue glow.
+itm_i32_r0_00	tool	A black binoculars with a leather strap.
+itm_i32_r0_01	tool	A black folded umbrella.
+itm_i32_r0_02	tool	A brown brass compass with cracked glass.
+itm_i32_r0_03	tool	A black flashlight.
+itm_i32_r0_04	tool	A black handheld radio with an antenna.
+itm_i32_r0_05	tool	A grey adjustable wrench.
+itm_i32_r0_06	tool	A brown wire cutters.
+itm_i32_r0_07	tool	A grey multi-blade folding knife.
+itm_i32_r0_08	tool	A grey roll of cloth tape.
+itm_i32_r0_09	tool	A black metal lighter.
+itm_i32_r0_10	tool	A brown padlock with keys.
+itm_i32_r0_11	tool	A black smartphone with a dark screen.
+itm_i33_r0_00	tool	A brown rusty binoculars with cracked lenses.
+itm_i33_r0_01	tool	A black rubber gas mask with twin filter canisters.
+itm_i33_r0_02	tool	A brown geiger counter.
+itm_i33_r0_03	tool	A black hand-crank radio.
+itm_i33_r0_04	tool	A blue portable water filter.
+itm_i33_r0_05	tool	A brown rusty taped wrench.
+itm_i33_r0_06	tool	A brown coil of rope.
+itm_i33_r0_07	tool	A brown ring of rusted keys.
+itm_i33_r0_08	tool	A brown makeshift cloth torch.
+itm_i33_r0_09	tool	A black cracked welding mask.
+itm_i33_r0_10	tool	A brown improvised detonator box with wires.
+itm_i33_r0_11	tool	A brown plastic bottle canteen wrapped in cloth.
+itm_i34_r0_00	tool	A blue coiled translucent medical cable with silver connectors.
+itm_i34_r0_01	tool	A black data tablet.
+itm_i34_r0_02	tool	A grey magnetic grip tool.
+itm_i34_r0_03	tool	A black hacking device with exposed wiring.
+itm_i34_r0_04	tool	A grey holo projector disc.
+itm_i34_r0_05	accessory	A black cybernetic eye.
+itm_i34_r0_06	accessory	A blue circuit chip implant.
+itm_i34_r0_07	tool	A black neural link cable with plugs.
+itm_i34_r0_08	accessory	A black metal prosthetic finger.
+itm_i34_r0_09	accessory	A blue wrist display.
+itm_i34_r0_10	tool	A black folded repair drone.
+itm_i34_r0_11	other_material	A blue sealed sample canister with a faint cyan glow.
+itm_i35_r0_00	tool	A brown bundle of straw rope tied with black cloth.
+itm_i35_r0_01	tool	A brown folded paper lantern.
+itm_i35_r0_02	tool	A black flint and fire striker.
+itm_i35_r0_03	tool	A black calligraphy brush and inkstone.
+itm_i35_r0_04	tool	A brown abacus.
+itm_i35_r0_05	tool	A black old iron padlock and key.
+itm_i35_r0_06	tool	A golden bamboo water flask.
+itm_i35_r0_07	tool	A black small iron pot.
+itm_i35_r0_08	tool	A brown wooden bucket.
+itm_i35_r0_09	tool	A brown sickle.
+itm_i35_r0_10	tool	A brown pair of straw sandals.
+itm_i35_r0_11	tool	A blue cloth-wrapped bundle.
+itm_i36_r0_00	tool	A brown leather pouch bulging with gold coins.
+itm_i36_r0_01	tool	A brown leather pouch branded with a bull skull.
+itm_i36_r0_02	accessory	A grey silver earring with turquoise.
+itm_i36_r0_03	accessory	A brown silver pendant with bone and turquoise on a braided cord.
+itm_i36_r0_04	accessory	A brown red stone amulet carved with a sun.
+itm_i36_r0_05	tool	A brown coiled lasso.
+itm_i36_r0_06	tool	A black horseshoe.
+itm_i36_r0_07	accessory	A brown star-shaped sheriff badge.
+itm_i36_r0_08	accessory	A brown open pocket watch.
+itm_i36_r0_09	tool	A brown kerosene lantern.
+itm_i36_r0_10	tool	A brown spur.
+itm_i36_r0_11	tool	A black small tobacco tin.

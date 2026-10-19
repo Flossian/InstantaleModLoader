@@ -185,6 +185,194 @@ gun_cyber_088	large_weapon	A blue energy rifle with glowing coils and glowing bl
 gun_cyber_090	large_weapon	A blue futuristic minigun with purple details, a gun.
 gun_cyber_091	large_weapon	A blue futuristic minigun with purple details, a gun.
 gun_cyber_092	large_weapon	A blue futuristic launcher, a gun.
+gun_cyber2_000	small_weapon	A black heavy futuristic pistol with blue details and glowing cyan lights, a gun.
+gun_cyber2_001	small_weapon	A black slim pistol with a neon strip along the slide and glowing magenta lights, a gun.
+gun_cyber2_002	small_weapon	A black heavy revolver with a large glowing cylinder, a gun.
+gun_cyber2_003	small_weapon	A white bulky futuristic pistol with blue details and glowing blue lights, a gun.
+gun_cyber2_004	small_weapon	A black pistol with a red dot sight and red details, a gun.
+gun_cyber2_005	small_weapon	A black pistol with a long suppressor, a gun.
+gun_cyber2_006	small_weapon	A black long-barreled revolver with a glowing cylinder, a gun.
+gun_cyber2_007	small_weapon	A black long-slide pistol with green details and glowing green lights, a gun.
+gun_cyber2_008	small_weapon	A red pistol with a ribbed slide, a gun.
+gun_cyber2_009	small_weapon	A blue revolver with a skeletal frame and a glowing cylinder and glowing cyan lights, a gun.
+gun_cyber2_010	medium_weapon	A black submachine gun with a magazine laid on top, a gun.
+gun_cyber2_011	medium_weapon	A grey bullpup submachine gun, a gun.
+gun_cyber2_012	medium_weapon	A black stockless submachine gun with a vertical foregrip and red details, a gun.
+gun_cyber2_013	medium_weapon	A black submachine gun with a drum magazine, a gun.
+gun_cyber2_014	medium_weapon	A black submachine gun with an integrated suppressor and blue details, a gun.
+gun_cyber2_015	medium_weapon	A black boxy stamped-metal submachine gun, a gun.
+gun_cyber2_016	medium_weapon	A black submachine gun with a side-mounted magazine and red details, a gun.
+gun_cyber2_017	medium_weapon	A black submachine gun with a folding wire stock, a gun.
+gun_cyber2_018	medium_weapon	A black submachine gun with twin magazines and magenta details, a gun.
+gun_cyber2_019	medium_weapon	A grey submachine gun with an angled bent frame, a gun.
+gun_cyber2_020	medium_weapon	A black machine pistol with a shoulder stock, a gun.
+gun_cyber2_021	medium_weapon	A black submachine gun with a helical magazine on top and red details, a gun.
+gun_cyber2_022	medium_weapon	A black submachine gun with glowing coolant tubes, blue details and glowing cyan lights, a gun.
+gun_cyber2_023	medium_weapon	A black boxy smart submachine gun with a sensor, a gun.
+gun_cyber2_024	medium_weapon	A red twin-barreled submachine gun, a gun.
+gun_cyber2_025	medium_weapon	A white corporate security submachine gun, a gun.
+gun_cyber2_026	medium_weapon	A black makeshift street submachine gun with exposed wiring and a wooden stock, a gun.
+gun_cyber2_027	medium_weapon	A black needle submachine gun with bundled tubes, a gun.
+gun_cyber2_028	medium_weapon	A black submachine gun with three rotating barrels, a gun.
+gun_cyber2_029	medium_weapon	A black folding box submachine gun with a carry handle, a gun.
+gun_cyber2_030	large_weapon	A black automatic shotgun with a drum magazine and blue details, a gun.
+gun_cyber2_031	large_weapon	A blue pump-action shotgun with glowing cyan lights, a gun.
+gun_cyber2_032	large_weapon	A black revolving-cylinder shotgun, a gun.
+gun_cyber2_033	large_weapon	A black sawed-off double-barreled shotgun with red details, a gun.
+gun_cyber2_034	large_weapon	A grey boxy bullpup shotgun with blue details, a gun.
+gun_cyber2_035	large_weapon	A black shotgun with twin glowing magazine tubes and blue details, a gun.
+gun_cyber2_036	large_weapon	A grey shotgun with a wide flared muzzle and blue details, a gun.
+gun_cyber2_037	large_weapon	A black automatic shotgun with a box magazine and a foregrip, a gun.
+gun_cyber2_038	large_weapon	A black stockless pump-action shotgun, a gun.
+gun_cyber2_039	large_weapon	A black shotgun with a large cylindrical scope, a gun.
+gun_cyber2_040	large_weapon	A black bullpup assault rifle, a gun.
+gun_cyber2_041	large_weapon	A black short carbine with a telescoping stock and blue details, a gun.
+gun_cyber2_042	large_weapon	A black assault rifle with a carry handle and a large scope, a gun.
+gun_cyber2_043	large_weapon	A black assault rifle with an underbarrel grenade launcher, a gun.
+gun_cyber2_044	large_weapon	A black assault rifle with a long heat shield, a gun.
+gun_cyber2_045	large_weapon	A black assault rifle with a top-angled magazine, a gun.
+gun_cyber2_046	large_weapon	A white corporate assault rifle, a gun.
+gun_cyber2_047	large_weapon	A black old assault rifle with added electronics and a wooden stock, a gun.
+gun_cyber2_048	large_weapon	A black assault rifle with a skeletal stock, a gun.
+gun_cyber2_049	large_weapon	A black assault rifle with a battery pack in the stock, a gun.
+gun_cyber2_050	medium_weapon	A black light machine gun with an ammo box and a bipod, a gun.
+gun_cyber2_051	large_weapon	A black handheld rotary minigun, a gun.
+gun_cyber2_052	large_weapon	A black revolving grenade launcher, a gun.
+gun_cyber2_053	large_weapon	A black shoulder-fired rocket launcher, a gun.
+gun_cyber2_054	large_weapon	A black flamethrower with a fuel tank and red details, a gun.
+gun_cyber2_055	large_weapon	A blue coilgun rifle with exposed coils and glowing blue lights, a gun.
+gun_cyber2_056	large_weapon	A blue energy cannon with glowing power cells and glowing cyan lights, a gun.
+gun_cyber2_057	large_weapon	A black machine gun with a disc magazine on top, a gun.
+gun_cyber2_058	long_weapon	A black anti-materiel rifle with a large scope and a bipod, a gun.
+gun_cyber2_059	long_weapon	A white slim bullpup sniper rifle, a gun.
+gun_cyber2_060	long_weapon	A blue railgun rifle with twin rails and glowing blue lights, a gun.
+gun_cyber2_061	long_weapon	A black suppressed sniper rifle with a perforated shroud and blue details, a gun.
+gun_cyber2_062	long_weapon	A black bolt-action sniper rifle with a neon scope and a wooden stock, a gun.
+gun_cyber2_063	long_weapon	A blue gauss rifle with coils along the barrel, a gun.
+gun_cyber2_064	long_weapon	A grey smart sniper rifle with a sensor cluster, a gun.
+gun_cyber2_065	long_weapon	A black folding takedown sniper rifle, a gun.
+gun_corpwhite_000	small_weapon	A sleek white pistol with a cyan light line, a gun.
+gun_corpwhite_001	small_weapon	A compact white executive pistol, a gun.
+gun_corpwhite_002	medium_weapon	A sleek white submachine gun with glowing cyan lights, a gun.
+gun_corpwhite_003	medium_weapon	A sleek white PDW with a magazine on top, a gun.
+gun_corpwhite_004	large_weapon	A sleek white assault rifle, a gun.
+gun_corpwhite_005	large_weapon	A sleek white semi-automatic shotgun, a gun.
+gun_corpwhite_006	long_weapon	A sleek white sniper rifle, a gun.
+gun_corpwhite_009	long_weapon	A sleek white marksman rifle with a scope, a gun.
+gun_corpheavy_000	small_weapon	A black heavy armored large-caliber pistol with hazard stripes, a gun.
+gun_corpheavy_001	small_weapon	A black heavy machine pistol with a thick barrel and hazard stripes, a gun.
+gun_corpheavy_002	medium_weapon	A black heavy submachine gun with a drum magazine and hazard stripes, a gun.
+gun_corpheavy_003	medium_weapon	A black armor-plated PDW with hazard stripes, a gun.
+gun_corpheavy_004	large_weapon	A black heavy assault rifle with a thick barrel and hazard stripes, a gun.
+gun_corpheavy_005	large_weapon	A black heavy automatic shotgun with a large drum magazine, a gun.
+gun_corpheavy_006	long_weapon	A black heavy anti-materiel rifle with a bipod, a gun.
+gun_corpheavy_007	large_weapon	A black non-lethal heavy shock maul with hazard stripes.
+gun_corpheavy_008	large_weapon	A black heavy light machine gun with an ammo box, a gun.
+gun_corpheavy_009	large_weapon	A black heavy grenade launcher with a thick tube, a gun.
+gun_corpcheap_000	small_weapon	A black cheap plastic pistol, a gun.
+gun_corpcheap_001	small_weapon	A white cheap disposable single-shot pistol with tape on the grip, a gun.
+gun_corpcheap_002	small_weapon	A black cheap revolver, a gun.
+gun_corpcheap_003	medium_weapon	A black cheap stamped sheet-metal submachine gun with a folding stock, a gun.
+gun_corpcheap_004	medium_weapon	A grey cheap boxy PDW, a gun.
+gun_corpcheap_005	large_weapon	A black cheap assault rifle with tape repairs and tan details, a gun.
+gun_corpcheap_006	large_weapon	A black cheap short pump-action shotgun with tape repairs, a gun.
+gun_corpcheap_007	long_weapon	A black cheap sniper rifle with a woodgrain plastic stock, a gun.
+gun_corpcheap_009	small_weapon	A grey cheap mass-produced knife with a plastic grip.
+gun_corpbullpup_000	small_weapon	A black bullpup pistol with the magazine behind the grip and blue details, a gun.
+gun_corpbullpup_001	medium_weapon	A black bullpup submachine gun with blue details, a gun.
+gun_corpbullpup_002	medium_weapon	A black bullpup PDW with blue details, a gun.
+gun_corpbullpup_003	large_weapon	A black bullpup assault rifle with blue details, a gun.
+gun_corpbullpup_004	large_weapon	A black bullpup shotgun with blue details, a gun.
+gun_corpbullpup_005	long_weapon	A black bullpup sniper rifle with a scope and blue details, a gun.
+gun_corpbullpup_006	large_weapon	A black bullpup light machine gun, a gun.
+gun_corpbullpup_007	large_weapon	A black bullpup grenade launcher with blue details, a gun.
+gun_corpbullpup_008	medium_weapon	A black bullpup crossbow with blue details.
+gun_corplaser_000	small_weapon	A blue laser pistol with glowing cyan lights, a gun.
+gun_corplaser_001	small_weapon	A blue compact laser pistol with purple details and glowing magenta lights, a gun.
+gun_corplaser_002	medium_weapon	A blue rapid-fire laser submachine gun with glowing magenta lights, a gun.
+gun_corplaser_003	medium_weapon	A blue laser PDW with a power cell on top, purple details and glowing cyan lights, a gun.
+gun_corplaser_004	large_weapon	A blue laser assault rifle with glowing cyan lights, a gun.
+gun_corplaser_005	large_weapon	A blue wide-emitter spread laser gun with purple details and glowing purple lights, a gun.
+gun_corplaser_006	long_weapon	A blue long-range laser sniper rifle with a scope and glowing cyan lights, a gun.
+gun_corplaser_009	large_weapon	A blue large beam cannon with purple details and glowing purple lights, a gun.
+gun_corpmilitary_000	small_weapon	A black military pistol with chipped olive paint, a gun.
+gun_corpmilitary_001	small_weapon	A black military flare pistol with a wide barrel and tan details, a gun.
+gun_corpmilitary_002	medium_weapon	A black military submachine gun with a folding stock, a gun.
+gun_corpmilitary_003	medium_weapon	A black short-barreled military PDW with a cloth sling and brass details, a gun.
+gun_corpmilitary_004	large_weapon	A black old military assault rifle with wooden furniture, a gun.
+gun_corpmilitary_005	large_weapon	A black military shotgun with a magazine tube and a shell holder and brass details, a gun.
+gun_corpmilitary_006	long_weapon	A black old military sniper rifle with a scope and a sling and tan details, a gun.
+gun_corpmilitary_008	large_weapon	A black military squad automatic weapon with a bipod and an ammo box, a gun.
+gun_corpmilitary_009	long_weapon	A black military rifle with a fixed bayonet and a wooden stock, a gun.
+gun_corprail_000	small_weapon	A black twin-rail railgun pistol with white details, a gun.
+gun_corprail_001	small_weapon	A black coilgun pistol with copper coils and white details, a gun.
+gun_corprail_002	medium_weapon	A black railgun submachine gun with white details, a gun.
+gun_corprail_003	medium_weapon	A black coilgun PDW with a battery and white details, a gun.
+gun_corprail_004	large_weapon	A black railgun assault rifle with white details, a gun.
+gun_corprail_005	large_weapon	A black four-rail railgun shotgun with white details and glowing cyan lights, a gun.
+gun_corprail_006	long_weapon	A black long twin-rail railgun sniper rifle with a scope, white details and glowing cyan lights, a gun.
+gun_corprail_008	large_weapon	A black large coil cannon with copper coils, a gun.
+gun_corprail_009	medium_weapon	A black magnetic nail gun with a spike, a gun.
+gun_corpbio_000	small_weapon	A black carapace-covered organic pistol with red details, a gun.
+gun_corpbio_001	small_weapon	A white bone-barreled organic pistol with tan details, a gun.
+gun_corpbio_002	medium_weapon	A red organic submachine gun with pulsing tubes, a gun.
+gun_corpbio_003	medium_weapon	A red organic PDW with an insect-belly magazine, a gun.
+gun_corpbio_004	large_weapon	A red organic assault rifle with a spine-like barrel, a gun.
+gun_corpbio_005	large_weapon	A red organic shotgun with a fanged mouth muzzle and tan details, a gun.
+gun_corpbio_006	long_weapon	A red organic sniper rifle with a long horn barrel and a scope, a gun.
+gun_corpbio_008	large_weapon	A white organic sword lined with fangs and tan details.
+gun_corpbio_009	large_weapon	A black organic acid gun with an egg sac, a gun.
+gun_corpluxury_000	small_weapon	A black gold-engraved luxury pistol with a ruby, a gun.
+gun_corpluxury_001	small_weapon	A white compact pistol with a pearl grip, a gun.
+gun_corpluxury_002	small_weapon	A black inlaid luxury revolver with an amethyst, a gun.
+gun_corpluxury_003	medium_weapon	A black luxury submachine gun with an ebony stock and gold inlay, a gun.
+gun_corpluxury_004	medium_weapon	A black gold-trimmed luxury PDW with an emerald, a gun.
+gun_corpluxury_005	large_weapon	A black engraved luxury assault rifle with a wooden stock, a gun.
+gun_corpluxury_006	large_weapon	A black engraved side-by-side double-barreled shotgun, a gun.
+gun_corpluxury_007	long_weapon	A black luxury sniper rifle with gold inlay and a scope, a gun.
+gun_corpspace_000	small_weapon	A white space pistol with orange hazard stripes, a gun.
+gun_corpspace_001	small_weapon	A white space distress flare pistol, a gun.
+gun_corpspace_002	medium_weapon	A white sealed space submachine gun with orange stripes, a gun.
+gun_corpspace_003	medium_weapon	A black compact shipboard PDW with white details, a gun.
+gun_corpspace_004	large_weapon	A white space military assault rifle with orange stripes, a gun.
+gun_corpspace_005	large_weapon	A white low-velocity shipboard shotgun, a gun.
+gun_corpspace_006	long_weapon	A white space sniper rifle with a scope, a gun.
+gun_corpspace_008	medium_weapon	A white EVA cutting torch.
+gun_corpspace_009	small_weapon	A black grappling hook gun with a cable and white details, a gun.
+gun_corpprint_000	small_weapon	An olive green neon 3D-printed plastic pistol, a gun.
+gun_corpprint_001	small_weapon	An orange small 3D-printed single-shot pistol, a gun.
+gun_corpprint_002	small_weapon	A black neon 3D-printed revolver with magenta details and glowing magenta lights, a gun.
+gun_corpprint_003	medium_weapon	An olive green neon 3D-printed submachine gun, a gun.
+gun_corpprint_004	medium_weapon	An orange boxy 3D-printed PDW, a gun.
+gun_corpprint_005	large_weapon	A magenta neon 3D-printed assault rifle with glowing magenta lights, a gun.
+gun_corpprint_006	large_weapon	An olive green 3D-printed single-shot shotgun, a gun.
+gun_corpprint_007	long_weapon	An orange 3D-printed sniper rifle with a scope, a gun.
+gun_corpprint_008	medium_weapon	A magenta non-lethal 3D-printed stun baton with red details and glowing magenta lights.
+gun_corpprint_009	small_weapon	An olive green 3D-printed plastic knife.
+gun_corpyakuza_000	small_weapon	A black lacquered pistol with cherry blossoms and a tassel, a gun.
+gun_corpyakuza_001	small_weapon	A red small pistol hidden in a tanto sheath, a gun.
+gun_corpyakuza_002	medium_weapon	A black lacquered submachine gun with gold lines, a gun.
+gun_corpyakuza_003	medium_weapon	A black compact lacquered submachine gun with cherry blossoms, a gun.
+gun_corpyakuza_004	medium_weapon	A red lacquered PDW with a braided cord, a gun.
+gun_corpyakuza_005	large_weapon	A black lacquered assault rifle with a wrapped grip and red details, a gun.
+gun_corpyakuza_006	large_weapon	A red double-barreled shotgun with cherry blossom patterns, a gun.
+gun_corpyakuza_007	long_weapon	A black lacquered sniper rifle with a scope, a gun.
+gun_corpyakuza_009	large_weapon	A white katana with a glowing cherry blossom blade and red details.
+gun_corpyakuza_010	medium_weapon	A red wakizashi with a glowing cherry blossom blade.
+gun_corpmelee_000	medium_weapon	A blue non-lethal electric stun baton with blue lightning and glowing blue lights.
+gun_corpmelee_001	medium_weapon	A slim white high-frequency blade with a cyan light line and glowing cyan lights.
+gun_corpmelee_002	medium_weapon	A black non-lethal cheap taped stun baton with a tassel and orange details.
+gun_corpmelee_003	medium_weapon	A black non-lethal stun baton with a battery behind the grip and blue details.
+gun_corpmelee_004	medium_weapon	A blue non-lethal glowing neon stun baton with glowing blue lights.
+gun_corpmelee_005	medium_weapon	A magenta sword with a blade of pink light and glowing magenta lights.
+gun_corpmelee_006	medium_weapon	A black non-lethal military rubber baton with a wrist strap and brass details.
+gun_corpmelee_007	medium_weapon	A black non-lethal plain rubber baton.
+gun_corpmelee_008	medium_weapon	A black non-lethal forked electrode stun baton with white details.
+gun_corpmelee_009	medium_weapon	A red non-lethal stinging organic tentacle whip with tan details.
+gun_corpmelee_010	medium_weapon	A white non-lethal jeweled cane stun baton with glowing blue lights.
+gun_corpmelee_011	medium_weapon	A white sword cane with a ruby handle.
+gun_corpmelee_012	medium_weapon	A white non-lethal space stun baton with a glowing tip and orange stripes and glowing blue lights.
+gun_corpmelee_013	medium_weapon	A red non-lethal lacquered jitte stun baton with a tassel and orange details.
 gun_future_000	small_weapon	A black futuristic pistol, a gun.
 gun_future_001	small_weapon	A blue futuristic pistol, a gun.
 gun_future_002	small_weapon	A white futuristic pistol, a gun.

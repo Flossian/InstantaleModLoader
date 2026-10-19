@@ -19,7 +19,6 @@
 import argparse
 import colorsys
 import json
-import os
 import sys
 from collections import Counter
 from pathlib import Path
@@ -30,7 +29,6 @@ from PIL import Image
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import build_guns as b  # noqa: E402
-from minibert import MiniLM  # noqa: E402
 
 SETS = {"medieval": ("medieval.json", "med_", ("中世の武器と防具",)), "magic": ("magic.json", "mag_", ("魔法武器",)),
         "sf": ("sf.json", "sf_", ("SF武器",)), "item": ("items.json", "itm_", ("機械部品", "食料", "医療品", "魔法素材", "宝物", "道具", "魔物素材",
@@ -55,20 +53,6 @@ WOODISH = ("staff", "bow", "club", "shield")
 ARMOR = ("hauberk", "cuirass", "scale armor", "brigandine", "breastplate", "gambeson", "tunic", "jerkin")
 ELEMENT = {"red": "fire", "orange": "fire", "blue": "frost", "cyan": "frost", "purple": "shadow",
            "magenta": "shadow", "green": "nature"}
-
-
-def extract_whole(folder, src):
-    """箱の中にほぼ収まる塊を全部取る（離れて描かれた1組の品）。縁の暗い画素も 1px 取り込む。"""
-    name, _, box = src.partition("@")
-    x0, y0, x1, y1 = map(int, box.split(","))
-    rgb_all, lab_all, boxes = b.sheet_of(folder, name)
-    lab = lab_all[y0:y1, x0:x1]
-    keep = np.zeros(lab.shape, bool)
-    for i in np.unique(lab[lab > 0]):
-        cx0, cy0, cx1, cy1 = boxes[i]
-        if cx0 >= x0 - 6 and cy0 >= y0 - 6 and cx1 <= x1 + 6 and cy1 <= y1 + 6:
-            keep |= lab == i
-    return Image.fromarray(np.dstack([rgb_all[y0:y1, x0:x1], np.where(b.grow(keep, b.RING), 255, 0).astype(np.uint8)]))
 
 
 def join(parts):
@@ -210,11 +194,12 @@ def main():
     assert all(k.startswith(prefix) for k in keys), "鍵は %s で始める" % prefix
     made = {}
     for e in entries:
-        im = (extract_whole if e.get("whole") else b.extract)(args.sheets, e["src"])
+        im = (b.extract_whole if e.get("whole") else b.extract)(args.sheets, e["src"])
         im = im.crop(im.getbbox())  # 縦向きの絵はもともと刃が上（依頼の決まり）。斜めの絵はそのまま
         if e.get("diag"):
             # 縦に描かれた短い武器と投げナイフは、ゲームの小型・投擲と同じく刃先を右上へ 45 度に倒す（32x32 に大きく入る）
-            im = b.stand_up(im, 0).rotate(-45, resample=Image.BICUBIC, expand=True)
+            # rot があれば先に回す（逆さに描かれた苦無は rot: 180）
+            im = b.stand_up(im, e.get("rot", 0)).rotate(-45, resample=Image.BICUBIC, expand=True)
             im = im.crop(im.getbbox())
         elif e.get("rot"):
             # 斜めに描かれた長い品（和風の金棒）を立てる。rot は左回りの角度で、±20 度の中で幅が最小の向きに寄せる
@@ -224,7 +209,7 @@ def main():
         e["folder"] = choose(e, im)
         e["caption"] = caption_item(e, im) if item else caption_sf(e, im) if sf else caption_for(e, im, magic)
         box_w, box_h = (ITEM_WEAR.get(e["folder"]) if item else None) or SIZES[e["folder"]]
-        made[e["key"]] = Image.fromarray(b.shrink(im, box_w, box_h, 32))
+        made[e["key"]] = Image.fromarray(b.shrink(im, box_w, box_h, 255))
     b.write_categories(entries, made, [c["id"] for c in b.CATEGORIES if c["group"] in groups])
     with open(HERE / ("%s_captions.txt" % args.set), "w", encoding="utf-8", newline="\n") as fh:
         for e in entries:

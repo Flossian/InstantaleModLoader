@@ -190,10 +190,9 @@ def body_module():
     """本体（`item_image_variety.py`）。ジャンルの表の読み方と定数を本体と同じものにする。"""
     import importlib.util
     root, _state_dir, _game_dir = modtool.locate(MOD_DIR)
-    runtime = os.path.join(root, "runtime")
-    if runtime not in sys.path:
-        sys.path.insert(0, runtime)
-    spec = importlib.util.spec_from_file_location("item_image_variety_tool", os.path.join(MOD_DIR, "item_image_variety.py"))
+    # `IML_ROOT` の下に `runtime\` が無いときは同梱のローダへ倒れる
+    modtool.add_loader_path(root, MOD_DIR)
+    spec =importlib.util.spec_from_file_location("item_image_variety_tool", os.path.join(MOD_DIR, "item_image_variety.py"))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -294,9 +293,16 @@ def genre_tab(tabs, root_dir):
             messagebox.showerror("ジャンル内の重み", "0〜1 の数でない欄があります。", parent=page)
             return
         diff = genre_diff(got[0], got[1], base_stock, base_weights)
-        os.makedirs(os.path.dirname(user_path), exist_ok=True)
-        with io.open(user_path, "w", encoding="utf-8", newline="\n") as fh:
-            json.dump(diff, fh, ensure_ascii=False, indent=1)
+        # 別のファイルに書いてから差し替える。本体は品を選ぶたびに読み直すので、書きかけを読ませない
+        tmp = user_path + ".tmp"
+        try:
+            os.makedirs(os.path.dirname(user_path), exist_ok=True)
+            with io.open(tmp, "w", encoding="utf-8", newline="\n") as fh:
+                json.dump(diff, fh, ensure_ascii=False, indent=1)
+            os.replace(tmp, user_path)
+        except OSError as e:
+            messagebox.showerror("ジャンル内の重み", "保存できませんでした: {}".format(e), parent=page)
+            return
         changed = sum(len(t) for t in diff.get("weights", {}).values()) + len(diff.get("stock", {}))
         status.configure(text="保存しました（既定と違う値 {} 件）".format(changed))
 
@@ -310,9 +316,21 @@ def genre_tab(tabs, root_dir):
     ttk.Button(bottom, text="重みを保存", command=save).pack(side="right")
 
 
+def failed_tab(tabs, title, error):
+    """組めなかったタブの代わり。設定のタブは開けるようにする（例外を窓まで通すと窓ごと開かない）。"""
+    from tkinter import ttk
+    page = ttk.Frame(tabs, padding=(6, 8, 6, 6))
+    tabs.add(page, text="  {}  ".format(title))
+    ttk.Label(page, text="このタブを開けませんでした: {!r}".format(error),
+              wraplength=860, justify="left").pack(anchor="w")
+
+
 def extra_tabs(tabs, root_dir):
-    gallery_tab(tabs, root_dir)
-    genre_tab(tabs, root_dir)
+    for title, build in (("画像一覧", gallery_tab), ("ジャンル内の重み", genre_tab)):
+        try:
+            build(tabs, root_dir)
+        except Exception as e:
+            failed_tab(tabs, title, e)
 
 
 #: 窓の頭の一言。3つの使い方の説明はここに一度だけ置く（分類ごとの欄には枚数だけ）
@@ -322,8 +340,8 @@ BLURB = ("足した絵を、元画像ごとの分類で使い分ける。"
          "ジャンルの重みを世界ごとに置くと、そのジャンルに合う分類の絵が選ばれやすくなる。")
 
 
-def build_window():
-    return modtool.build_world_settings_window(MOD_DIR, blurb=BLURB, extra_tabs=extra_tabs)
+def build_window(mod_dir=MOD_DIR):
+    return modtool.build_world_settings_window(mod_dir, blurb=BLURB, extra_tabs=extra_tabs)
 
 
 def main():

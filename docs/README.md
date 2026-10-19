@@ -48,7 +48,9 @@ GitHub の Release には zip が3つある。初めて入れるときは full �
 | `InstantaleModLoader-<版>-assets-<指紋>.zip` | 大きいアセットだけ |
 
 更新は GUI の更新ボタンが、要るほうを選んで落とす（§3.6）。
-手で更新するときは lite を上書きし、assets の指紋が前の版と違うときだけ assets も上書きする。
+手で更新するときは、lite の中の `InstantaleModLoader-<版>` フォルダの中身を、入れてあるフォルダへ上書きで写す。
+assets の zip の名前の指紋が、手元の `runtime\assets.json` の `digest` と違うとき（ファイルが無いときも）は、assets も同じように写す。
+lite だけでは絵と辞書が無いので、初めて入れるときには使えない。
 
 ### 1.3 初回の起動
 
@@ -249,6 +251,8 @@ Windows Defender や各種セキュリティソフトが警告・ブロックす
 大きいアセット（`128_item_image_variety` の絵と辞書）は、絵を足した版でしか変わらない。
 そこで、手元のアセットの指紋（`runtime\assets.json`）と新しい版の指紋が同じなら、アセットを除いた lite（数 MB）を落とす。
 違うとき・手元に指紋が無いときは full を落とす。
+手元の絵と辞書のファイルは見ないので、要らない分類の絵を消していても lite のまま（消した絵は戻らない）。
+絵が欠けたので戻したいときは、`runtime\assets.json` を消してから更新すると full になる。
 どちらを落とすかと大きさは、押した後の確認に出る。
 
 開き直した後、上げた版の更新内容（GitHub の Release と同じ文）が別の窓に出る。
@@ -285,7 +289,6 @@ zip を手で上書きした場合も、次にウィンドウを開いたとき�
 | `InstantaleModLoader.bat` | これをダブルクリックする |
 | `runtime\instantale_modloader\` | ローダ本体（注入・パッチ管理） |
 | `runtime\mods\` | MOD 本体。`load_order.json` が適用順と無効一覧、`_template\` が雛形（読み込まれない） |
-| `runtimessets.json` | 入っている大きいアセットの指紋。更新ボタンが lite と full のどちらを落とすかをこれで決める。消すと次の更新は full になる |
 | `runtime\assets.json` | 入っている大きいアセットの指紋。更新ボタンが lite と full のどちらを落とすかをこれで決める。消すと次の更新は full になる |
 | `local\` | 配らない MOD の置き場所（無くてよい）。置き方は [TECH.md](TECH.md) §2.6.2 |
 | `settings\` | 自分で決めたこと。`mod_settings.json`（MOD の設定）、`gui.json`（ゲームの場所・ウィンドウ・更新内容を出した版）、`loader.json`（デバッグモード・ログ） |

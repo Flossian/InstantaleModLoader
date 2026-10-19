@@ -9,6 +9,132 @@
   "default": "separate"
  },
  {
+  "id": "gun_cyber2",
+  "setting": "SET_GUN_CYBER2",
+  "group": "銃",
+  "label": "銃_サイバーパンク2",
+  "source": "guns/gun_cyber2.png",
+  "sheet": "cyber2",
+  "default": "separate"
+ },
+ {
+  "id": "gun_corp_white",
+  "setting": "SET_GUN_CORP_WHITE",
+  "group": "銃",
+  "label": "銃_企業_白の高級",
+  "source": "guns/gun_corp_white.png",
+  "sheet": "corpwhite",
+  "default": "separate"
+ },
+ {
+  "id": "gun_corp_heavy",
+  "setting": "SET_GUN_CORP_HEAVY",
+  "group": "銃",
+  "label": "銃_企業_重火力",
+  "source": "guns/gun_corp_heavy.png",
+  "sheet": "corpheavy",
+  "default": "separate"
+ },
+ {
+  "id": "gun_corp_cheap",
+  "setting": "SET_GUN_CORP_CHEAP",
+  "group": "銃",
+  "label": "銃_企業_量産型",
+  "source": "guns/gun_corp_cheap.png",
+  "sheet": "corpcheap",
+  "default": "separate"
+ },
+ {
+  "id": "gun_corp_bullpup",
+  "setting": "SET_GUN_CORP_BULLPUP",
+  "group": "銃",
+  "label": "銃_企業_ブルパップ",
+  "source": "guns/gun_corp_bullpup.png",
+  "sheet": "corpbullpup",
+  "default": "separate"
+ },
+ {
+  "id": "gun_corp_laser",
+  "setting": "SET_GUN_CORP_LASER",
+  "group": "銃",
+  "label": "銃_企業_レーザー",
+  "source": "guns/gun_corp_laser.png",
+  "sheet": "corplaser",
+  "default": "separate"
+ },
+ {
+  "id": "gun_corp_military",
+  "setting": "SET_GUN_CORP_MILITARY",
+  "group": "銃",
+  "label": "銃_企業_軍の払い下げ",
+  "source": "guns/gun_corp_military.png",
+  "sheet": "corpmilitary",
+  "default": "separate"
+ },
+ {
+  "id": "gun_corp_rail",
+  "setting": "SET_GUN_CORP_RAIL",
+  "group": "銃",
+  "label": "銃_企業_電磁加速",
+  "source": "guns/gun_corp_rail.png",
+  "sheet": "corprail",
+  "default": "separate"
+ },
+ {
+  "id": "gun_corp_bio",
+  "setting": "SET_GUN_CORP_BIO",
+  "group": "銃",
+  "label": "銃_企業_生体兵器",
+  "source": "guns/gun_corp_bio.png",
+  "sheet": "corpbio",
+  "default": "separate"
+ },
+ {
+  "id": "gun_corp_luxury",
+  "setting": "SET_GUN_CORP_LUXURY",
+  "group": "銃",
+  "label": "銃_企業_高級工房",
+  "source": "guns/gun_corp_luxury.png",
+  "sheet": "corpluxury",
+  "default": "separate"
+ },
+ {
+  "id": "gun_corp_space",
+  "setting": "SET_GUN_CORP_SPACE",
+  "group": "銃",
+  "label": "銃_企業_宇宙軍",
+  "source": "guns/gun_corp_space.png",
+  "sheet": "corpspace",
+  "default": "separate"
+ },
+ {
+  "id": "gun_corp_print",
+  "setting": "SET_GUN_CORP_PRINT",
+  "group": "銃",
+  "label": "銃_企業_3Dプリント",
+  "source": "guns/gun_corp_print.png",
+  "sheet": "corpprint",
+  "default": "separate"
+ },
+ {
+  "id": "gun_corp_yakuza",
+  "setting": "SET_GUN_CORP_YAKUZA",
+  "group": "銃",
+  "label": "銃_企業_極道",
+  "source": "guns/gun_corp_yakuza.png",
+  "sheet": "corpyakuza",
+  "default": "separate"
+ },
+ {
+  "id": "gun_corp_melee",
+  "setting": "SET_GUN_CORP_MELEE",
+  "group": "銃",
+  "label": "銃_企業_近接武器",
+  "source": "guns/gun_corp_melee.png",
+  "sheet": "corpmelee",
+  "default": "separate"
+ },
+ {
   "id": "gun_fantasy",
   "setting": "SET_GUN_FANTASY",
   "group": "銃",
@@ -160,6 +286,60 @@
   "source": "magic_weapons/mag_staff_polearm.png",
   "sheet": "x3",
   "default": "mix"
+ },
+ {
+  "id": "mag_extra",
+  "setting": "SET_MAG_EXTRA",
+  "group": "魔法武器",
+  "label": "魔法武器_追加",
+  "source": "magic_weapons/mag_extra.png",
+  "sheet": "x4",
+  "default": "mix"
+ },
+ {
+  "id": "mag_sf",
+  "setting": "SET_MAG_SF",
+  "group": "魔法武器",
+  "label": "魔法武器_魔法とSF",
+  "source": "magic_weapons/mag_sf.png",
+  "sheet": "x5",
+  "default": "separate"
+ },
+ {
+  "id": "mag_cyber",
+  "setting": "SET_MAG_CYBER",
+  "group": "魔法武器",
+  "label": "魔法武器_魔法とサイバーパンク",
+  "source": "magic_weapons/mag_cyber.png",
+  "sheet": "x6",
+  "default": "separate"
+ },
+ {
+  "id": "mag_steam",
+  "setting": "SET_MAG_STEAM",
+  "group": "魔法武器",
+  "label": "魔法武器_魔法とスチームパンク",
+  "source": "magic_weapons/mag_steam.png",
+  "sheet": "x7",
+  "default": "separate"
+ },
+ {
+  "id": "mag_wa",
+  "setting": "SET_MAG_WA",
+  "group": "魔法武器",
+  "label": "魔法武器_魔法と和風",
+  "source": "magic_weapons/mag_wa.png",
+  "sheet": "x8",
+  "default": "separate"
+ },
+ {
+  "id": "mag_postapoc",
+  "setting": "SET_MAG_POSTAPOC",
+  "group": "魔法武器",
+  "label": "魔法武器_魔法とポストアポカリプス",
+  "source": "magic_weapons/mag_postapoc.png",
+  "sheet": "x9",
+  "default": "separate"
  },
  {
   "id": "sf_onehanded",
@@ -486,6 +666,51 @@
   "default": "mix"
  },
  {
+  "id": "tool_modern",
+  "setting": "SET_TOOL_MODERN",
+  "group": "道具",
+  "label": "道具_現代の道具",
+  "source": "tools/tool_modern.png",
+  "sheet": "i32",
+  "default": "separate"
+ },
+ {
+  "id": "tool_postapoc",
+  "setting": "SET_TOOL_POSTAPOC",
+  "group": "道具",
+  "label": "道具_荒野の道具",
+  "source": "tools/tool_postapoc.png",
+  "sheet": "i33",
+  "default": "separate"
+ },
+ {
+  "id": "tool_sf",
+  "setting": "SET_TOOL_SF",
+  "group": "道具",
+  "label": "道具_SFとサイバーの道具",
+  "source": "tools/tool_sf.png",
+  "sheet": "i34",
+  "default": "separate"
+ },
+ {
+  "id": "tool_wa",
+  "setting": "SET_TOOL_WA",
+  "group": "道具",
+  "label": "道具_和風の道具",
+  "source": "tools/tool_wa.png",
+  "sheet": "i35",
+  "default": "separate"
+ },
+ {
+  "id": "tool_western",
+  "setting": "SET_TOOL_WESTERN",
+  "group": "道具",
+  "label": "道具_西部劇の小物",
+  "source": "tools/tool_western.png",
+  "sheet": "i36",
+  "default": "separate"
+ },
+ {
   "id": "wear_sf",
   "setting": "SET_WEAR_SF",
   "group": "防具類",
@@ -682,5 +907,50 @@
   "source": "wear/wear_wizard.png",
   "sheet": "w21",
   "default": "mix"
+ },
+ {
+  "id": "wear_wa_armor",
+  "setting": "SET_WEAR_WA_ARMOR",
+  "group": "防具類",
+  "label": "防具類_和風の胴",
+  "source": "wear/wear_wa_armor.png",
+  "sheet": "w22",
+  "default": "separate"
+ },
+ {
+  "id": "wear_western_armor",
+  "setting": "SET_WEAR_WESTERN_ARMOR",
+  "group": "防具類",
+  "label": "防具類_西部劇の胴",
+  "source": "wear/wear_western_armor.png",
+  "sheet": "w23",
+  "default": "separate"
+ },
+ {
+  "id": "wear_modern_armor",
+  "setting": "SET_WEAR_MODERN_ARMOR",
+  "group": "防具類",
+  "label": "防具類_現代の胴",
+  "source": "wear/wear_modern_armor.png",
+  "sheet": "w24",
+  "default": "separate"
+ },
+ {
+  "id": "wear_postapoc_armor",
+  "setting": "SET_WEAR_POSTAPOC_ARMOR",
+  "group": "防具類",
+  "label": "防具類_荒野の胴",
+  "source": "wear/wear_postapoc_armor.png",
+  "sheet": "w25",
+  "default": "separate"
+ },
+ {
+  "id": "wear_sf_armor",
+  "setting": "SET_WEAR_SF_ARMOR",
+  "group": "防具類",
+  "label": "防具類_SFの胴",
+  "source": "wear/wear_sf_armor.png",
+  "sheet": "w26",
+  "default": "separate"
  }
 ]

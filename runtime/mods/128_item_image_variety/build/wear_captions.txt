@@ -2697,3 +2697,53 @@ wfa_w20_012	headgear	A black morion helmet or plumed hat with red details.
 wfa_w20_910	headgear	A black burgonet or close helmet with red details.
 wfa_w20_013	headgear	A black morion helmet or plumed hat with brown details.
 wfa_w20_911	headgear	A brown morion helmet or plumed hat with white details.
+wbd_w22_000	body_armor	A brown lamellar armor laced with brown leather cord.
+wbd_w22_001	body_armor	A black banded iron plate cuirass with white details.
+wbd_w22_002	body_armor	A red lacquered lamellar armor.
+wbd_w22_003	body_armor	A navy blue laced lamellar armor.
+wbd_w22_004	body_armor	A brown plain leather cuirass.
+wbd_w22_005	body_armor	A brown light armor woven from straw rope and leather strips with beige details.
+wbd_w22_006	body_armor	A brown lacquered leather armor with paper talismans with white details.
+wbd_w22_007	body_armor	A black chainmail shirt with white details.
+wbd_w22_008	body_armor	A brown leather armor with herbal pouches.
+wbd_w22_009	body_armor	A brown lacquered chest guard embroidered with a white heron with red details.
+wbd_w23_000	body_armor	A brown western leather vest with brass buckles.
+wbd_w23_001	body_armor	A brown riveted leather chest guard.
+wbd_w23_002	body_armor	A brown cowhide cowboy vest with beige details.
+wbd_w23_003	clothing	A brown fringed suede western vest with beige details.
+wbd_w23_004	clothing	A black sheriff vest with a star badge with white details.
+wbd_w23_005	body_armor	A brown leather vest with a bandolier.
+wbd_w23_006	body_armor	A black blackened chainmail vest with brown details.
+wbd_w23_007	clothing	A brown long oilskin duster coat.
+wbd_w23_008	clothing	A brown fur-lined leather jacket with white details.
+wbd_w23_009	clothing	A brown striped wool poncho with beige details.
+wbd_w24_000	body_armor	A black bulletproof vest.
+wbd_w24_001	body_armor	A brown plate carrier with magazine pouches.
+wbd_w24_002	clothing	An orange reflective safety vest with brown details.
+wbd_w24_003	body_armor	A black leather motorcycle jacket with shoulder armor with brown details.
+wbd_w24_004	body_armor	A brown work coveralls jacket with elbow pads with orange details.
+wbd_w24_005	clothing	A black oilskin coat with brass buttons.
+wbd_w24_006	clothing	A green puffy down jacket with gold details.
+wbd_w24_007	body_armor	A black stab-proof vest.
+wbd_w24_008	clothing	An olive military field jacket with many pockets.
+wbd_w24_009	clothing	A brown thick hooded sweatshirt.
+wbd_w25_000	body_armor	A brown scrap chest plate of corrugated tin sheets tied with wire.
+wbd_w25_001	body_armor	A brown rusted iron chest plate with bolt holes and dents.
+wbd_w25_002	body_armor	A black scrap chest armor of cut tire rubber with brown details.
+wbd_w25_003	body_armor	A brown scrap chest plate bent from a road sign with white details.
+wbd_w25_004	body_armor	A brown football shoulder pads with scrap iron plates with white details.
+wbd_w25_005	body_armor	A brown scrap chest armor hung with chains.
+wbd_w25_006	body_armor	A brown patched leather vest with bolts.
+wbd_w25_007	clothing	A brown patched military canvas hooded jacket with green details.
+wbd_w25_008	body_armor	A brown cracked hazmat suit jacket with beige details.
+wbd_w25_009	body_armor	A brown chest armor of bound bones with white details.
+wbd_w26_000	body_armor	A white sci-fi armor plate with orange hazard stripes.
+wbd_w26_001	body_armor	A black steel chest plate with welded reinforcement ribs with brown details.
+wbd_w26_002	body_armor	A grey light sealed sci-fi armor suit with white details.
+wbd_w26_003	body_armor	A black combat suit with glowing lines with blue details.
+wbd_w26_004	body_armor	A black bulletproof fiber jacket.
+wbd_w26_005	clothing	A black leather jacket with neon lines with blue details.
+wbd_w26_006	body_armor	A black sci-fi chest plate with a glowing power core with brown details.
+wbd_w26_007	body_armor	A black scratched composite chest plate.
+wbd_w26_008	body_armor	A black spacesuit torso with white details.
+wbd_w26_009	body_armor	A black corporate security body armor with white details.

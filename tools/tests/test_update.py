@@ -13,8 +13,9 @@
   同梱の既定 … 書き換えた *.default.* は手元の名前に改名して残す（111/120/132/338）。
              配った版のままなら残さない。SHIPPED_DEFAULTS は git の履歴と一致する
   配る tools … make_dist.bat の一覧にあるファイルが読む tools\\ のモジュールも一覧にある
-  落とす zip … アセットの zip の指紋が手元（runtime\\assets.json）と同じなら lite、違う・無いなら full。
-             make_dist.bat の大きいアセットの一覧はリポジトリに在り、ローダだけ・MOD だけの zip は作らない
+  落とす zip … アセットの zip の指紋が手元（runtime\\assets.json）と同じなら lite、違う・無い・2種類なら full。手元のファイルは見ない。
+             展開は指紋を最後に書く。
+             make_dist.bat の大きいアセットの一覧はリポジトリに在り、ci.yml と同じ。ローダだけ・MOD だけの zip は作らない
 """
 import json
 import os
@@ -441,11 +442,32 @@ OLD = [{"name": "InstantaleModLoader-1.16.2-full.zip", "browser_download_url": "
        {"name": "InstantaleModLoader-1.16.2.zip", "browser_download_url": "u/loader"},
        {"name": "InstantaleMods-1.16.2.zip", "browser_download_url": "u/mods"}]
 assert gui.pick_package(OLD, "44dc455def15") == {"kind": "full", "url": "u/old", "size": 0}
+# アセットの zip が2種類（前の版の消し忘れ）なら、どちらが今の版か分からないので full
+TWO = REL + [{"name": "InstantaleModLoader-9.9.8-assets-000000000000.zip", "browser_download_url": "u/a2"}]
+assert gui.pick_package(TWO, "44dc455def15")["kind"] == "full"
+assert gui.pick_package(TWO, "000000000000")["kind"] == "full"
+# 指紋（runtime/assets.json）は最後に書く。zip の並びで先にあっても、途中で落ちたら書かれていない
 with tempfile.TemporaryDirectory() as tmp:
-    manifest = os.path.join(tmp, "assets.json")
+    zpath = os.path.join(tmp, "u.zip")
+    dest = os.path.join(tmp, "dest")
+    os.makedirs(os.path.join(dest, "runtime", "blocked"))                # ファイルを書けない（同名のフォルダ）
+    with zipfile.ZipFile(zpath, "w") as z:
+        z.writestr("InstantaleModLoader-9.9.9/runtime/assets.json", '{"digest": "44dc455def15"}')
+        z.writestr("InstantaleModLoader-9.9.9/runtime/blocked", "x")
+    try:
+        gui.extract_release(zpath, dest)
+    except OSError:
+        pass
+    else:
+        raise AssertionError("書けないファイルで落ちなかった")
+    assert not os.path.exists(os.path.join(dest, "runtime", "assets.json"))
+with tempfile.TemporaryDirectory() as tmp:
+    os.makedirs(os.path.join(tmp, "runtime"))
+    manifest = os.path.join(tmp, "runtime", "assets.json")
     assert gui.local_assets_digest(manifest) is None
+    # 手元のファイルは見ない（要らない分類の絵を消した人に、更新のたびに full を落とさせない）
     with open(manifest, "w", encoding="utf-8") as f:
-        json.dump({"digest": "44dc455def15", "files": 1, "dirs": []}, f)
+        json.dump({"digest": "44dc455def15", "files": 2, "dirs": ["runtime/mods/128_x/images"]}, f)
     assert gui.local_assets_digest(manifest) == "44dc455def15"
     with open(manifest, "w", encoding="utf-8") as f:
         f.write("[]")
@@ -457,6 +479,13 @@ dirs = re.search(r'set "ASSETDIRS=([^"]+)"', script)
 assert dirs, "make_dist.bat に ASSETDIRS が無い"
 for d in dirs.group(1).split():
     assert os.path.isdir(os.path.join(ROOT, d)), "ASSETDIRS のフォルダが無い: " + d
+# ci.yml の zip の検査（$assetDirs）も同じ一覧を持つ。ずれると CI は赤くなるが、文言から原因を辿りにくい
+with open(os.path.join(ROOT, ".github", "workflows", "ci.yml"), encoding="utf-8") as f:
+    ci_dirs = re.search(r"\$assetDirs = @\(([^)]*)\)", f.read())
+assert ci_dirs, "ci.yml に $assetDirs が無い"
+assert sorted(re.findall(r"'([^']+)'", ci_dirs.group(1))) \
+    == sorted(d.replace("\\", "/") + "/" for d in dirs.group(1).split()), \
+    "ci.yml の $assetDirs と make_dist.bat の ASSETDIRS が違う"
 for name in ("-full.zip", "-lite.zip", "-assets-%DIGEST%.zip"):
     assert name in script, name
 assert "MODSNAME" not in script and "ZIPLOADER" not in script

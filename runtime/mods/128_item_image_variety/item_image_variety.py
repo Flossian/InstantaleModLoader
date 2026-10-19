@@ -80,6 +80,20 @@ USE_EXTRA_DICT = True
 #             （ダークファンタジーの「麻のチュニック」に制服、を防ぐ。銃の外見文に剣、も起きない）
 MODES = ("off", "mix", "separate")
 SET_GUN_CYBER = "separate"
+SET_GUN_CYBER2 = "separate"
+SET_GUN_CORP_WHITE = "separate"
+SET_GUN_CORP_HEAVY = "separate"
+SET_GUN_CORP_CHEAP = "separate"
+SET_GUN_CORP_BULLPUP = "separate"
+SET_GUN_CORP_LASER = "separate"
+SET_GUN_CORP_MILITARY = "separate"
+SET_GUN_CORP_RAIL = "separate"
+SET_GUN_CORP_BIO = "separate"
+SET_GUN_CORP_LUXURY = "separate"
+SET_GUN_CORP_SPACE = "separate"
+SET_GUN_CORP_PRINT = "separate"
+SET_GUN_CORP_YAKUZA = "separate"
+SET_GUN_CORP_MELEE = "separate"
 SET_GUN_FANTASY = "separate"
 SET_GUN_FUTURE = "separate"
 SET_GUN_MODERN = "separate"
@@ -97,6 +111,12 @@ SET_MED_SHIELD_ARMOR = "mix"
 SET_MAG_ONEHANDED = "mix"
 SET_MAG_TWOHANDED = "mix"
 SET_MAG_STAFF_POLEARM = "mix"
+SET_MAG_EXTRA = "mix"
+SET_MAG_SF = "separate"
+SET_MAG_CYBER = "separate"
+SET_MAG_STEAM = "separate"
+SET_MAG_WA = "separate"
+SET_MAG_POSTAPOC = "separate"
 SET_SF_ONEHANDED = "separate"
 SET_SF_TWOHANDED = "separate"
 SET_SF_POLEARM = "separate"
@@ -133,6 +153,11 @@ SET_WASTELAND_GEAR = "separate"
 SET_CREATURE_MUTANT = "mix"
 SET_TREASURE_CROWN = "mix"
 SET_TOOL_ODDITIES = "mix"
+SET_TOOL_MODERN = "separate"
+SET_TOOL_POSTAPOC = "separate"
+SET_TOOL_SF = "separate"
+SET_TOOL_WA = "separate"
+SET_TOOL_WESTERN = "separate"
 SET_WEAR_SF = "separate"
 SET_WEAR_ACCESSORY = "mix"
 SET_WEAR_CYBER1 = "separate"
@@ -155,11 +180,30 @@ SET_WEAR_MILITARY = "separate"
 SET_WEAR_EARLYMODERN_CLOTHES = "mix"
 SET_WEAR_EARLYMODERN_ARMOR = "mix"
 SET_WEAR_WIZARD = "mix"
+SET_WEAR_WA_ARMOR = "separate"
+SET_WEAR_WESTERN_ARMOR = "separate"
+SET_WEAR_MODERN_ARMOR = "separate"
+SET_WEAR_POSTAPOC_ARMOR = "separate"
+SET_WEAR_SF_ARMOR = "separate"
 
 # 分類と、その使い方の設定の名前。分類ごとに `images/<分類>` を Kivy の探し先に足し、
 # `data/<分類>/<品種>.json` を合成する。フォルダが無い分類は飛ばす。
 IMAGE_SETS = (
     ("gun_cyber", "SET_GUN_CYBER"),
+    ("gun_cyber2", "SET_GUN_CYBER2"),
+    ("gun_corp_white", "SET_GUN_CORP_WHITE"),
+    ("gun_corp_heavy", "SET_GUN_CORP_HEAVY"),
+    ("gun_corp_cheap", "SET_GUN_CORP_CHEAP"),
+    ("gun_corp_bullpup", "SET_GUN_CORP_BULLPUP"),
+    ("gun_corp_laser", "SET_GUN_CORP_LASER"),
+    ("gun_corp_military", "SET_GUN_CORP_MILITARY"),
+    ("gun_corp_rail", "SET_GUN_CORP_RAIL"),
+    ("gun_corp_bio", "SET_GUN_CORP_BIO"),
+    ("gun_corp_luxury", "SET_GUN_CORP_LUXURY"),
+    ("gun_corp_space", "SET_GUN_CORP_SPACE"),
+    ("gun_corp_print", "SET_GUN_CORP_PRINT"),
+    ("gun_corp_yakuza", "SET_GUN_CORP_YAKUZA"),
+    ("gun_corp_melee", "SET_GUN_CORP_MELEE"),
     ("gun_fantasy", "SET_GUN_FANTASY"),
     ("gun_future", "SET_GUN_FUTURE"),
     ("gun_modern", "SET_GUN_MODERN"),
@@ -177,6 +221,12 @@ IMAGE_SETS = (
     ("mag_onehanded", "SET_MAG_ONEHANDED"),
     ("mag_twohanded", "SET_MAG_TWOHANDED"),
     ("mag_staff_polearm", "SET_MAG_STAFF_POLEARM"),
+    ("mag_extra", "SET_MAG_EXTRA"),
+    ("mag_sf", "SET_MAG_SF"),
+    ("mag_cyber", "SET_MAG_CYBER"),
+    ("mag_steam", "SET_MAG_STEAM"),
+    ("mag_wa", "SET_MAG_WA"),
+    ("mag_postapoc", "SET_MAG_POSTAPOC"),
     ("sf_onehanded", "SET_SF_ONEHANDED"),
     ("sf_twohanded", "SET_SF_TWOHANDED"),
     ("sf_polearm", "SET_SF_POLEARM"),
@@ -213,6 +263,11 @@ IMAGE_SETS = (
     ("creature_mutant", "SET_CREATURE_MUTANT"),
     ("treasure_crown", "SET_TREASURE_CROWN"),
     ("tool_oddities", "SET_TOOL_ODDITIES"),
+    ("tool_modern", "SET_TOOL_MODERN"),
+    ("tool_postapoc", "SET_TOOL_POSTAPOC"),
+    ("tool_sf", "SET_TOOL_SF"),
+    ("tool_wa", "SET_TOOL_WA"),
+    ("tool_western", "SET_TOOL_WESTERN"),
     ("wear_sf", "SET_WEAR_SF"),
     ("wear_accessory", "SET_WEAR_ACCESSORY"),
     ("wear_cyber1", "SET_WEAR_CYBER1"),
@@ -235,6 +290,11 @@ IMAGE_SETS = (
     ("wear_earlymodern_clothes", "SET_WEAR_EARLYMODERN_CLOTHES"),
     ("wear_earlymodern_armor", "SET_WEAR_EARLYMODERN_ARMOR"),
     ("wear_wizard", "SET_WEAR_WIZARD"),
+    ("wear_wa_armor", "SET_WEAR_WA_ARMOR"),
+    ("wear_western_armor", "SET_WEAR_WESTERN_ARMOR"),
+    ("wear_modern_armor", "SET_WEAR_MODERN_ARMOR"),
+    ("wear_postapoc_armor", "SET_WEAR_POSTAPOC_ARMOR"),
+    ("wear_sf_armor", "SET_WEAR_SF_ARMOR"),
 )
 
 # 別扱い（separate）の分類を選んでよい類似度の下限。これに届かない外見文（日本語の文は埋め込みでは
@@ -397,7 +457,8 @@ def apply(ctx):
         values = {}
         for name in SETTING_NAMES:
             value = record.get(name) if isinstance(record, dict) else None
-            values[name] = value if value is not None and type(value) is type(base_settings[name])                 else base_settings[name]
+            values[name] = value if value is not None and type(value) is type(base_settings[name]) \
+                else base_settings[name]
         signature = (world, tuple(sorted(values.items())))
         if signature != active_settings[0]:
             globals().update(values)
@@ -477,15 +538,17 @@ def apply(ctx):
             return None
         stock, weights = genre_table()
         signature = (pool_key, GENRE_BONUS, tuple(sorted(world.items())))
-        if signature not in genre_cache["bonus"]:
+        # 引き直さず手元の値を返す（間に別のスレッドの `genre_table` がキャッシュを空にすると KeyError になる）
+        bonus = genre_cache["bonus"].get(signature)
+        if bonus is None:
             import torch
 
             def bonus_of(cat):
                 table = stock if cat == "" else weights.get(cat, {})
                 return GENRE_BONUS * max([world.get(g, 0.0) * w for g, w in table.items()] or [0.0])
             per_cat = {cat: bonus_of(cat) for cat in set(cats)}
-            genre_cache["bonus"][signature] = torch.tensor([per_cat[c] for c in cats], dtype=torch.float32)
-        return genre_cache["bonus"][signature]
+            bonus = genre_cache["bonus"][signature] = torch.tensor([per_cat[c] for c in cats], dtype=torch.float32)
+        return bonus
 
     def load_pool(sub_type):
         """素の辞書と同梱の追加辞書を合成して (keys, tensor, キー集合, 側, 分類, 署名) を返す。
@@ -587,7 +650,10 @@ def apply(ctx):
             if order:
                 top_idx = order[0]
                 top_sim = float(sims[order[0]])
-            qualified = [i for i in order if float(sims[i]) >= top_sim * SIM_FLOOR]
+            # 候補の幅は足す前の値で決め、比べるのは足した後の値（作者の決め。VERIFICATION.md §3.26）。
+            # 比を足した後の値に掛けると、全部の絵に同じだけ足す世界で幅が 0.2 × 加算だけ広がった
+            floor = top_sim - (1.0 - SIM_FLOOR) * float(raw[top_idx])
+            qualified = [i for i in order if float(sims[i]) >= floor]
 
         # 選定と割り当ては1つの錠で。錠を分けると、同時に来た別の外見文が
         # 同じ最少の絵を取り、同じ外見文なら後の1本が先の対応を別の絵で上書きする。

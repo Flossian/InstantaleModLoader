@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """防具・服・装身具の一枚絵 → ゲームの寸法の絵と追加埋め込み辞書（一枚絵ごとの分類。../categories.json）。
 
-入力は作者が画像生成 AI で作った黒背景の一枚絵（ジャンルごとに22枚）と、1品ごとの表 wear.json
+入力は作者が画像生成 AI で作った黒背景の一枚絵（ジャンルごとに27枚）と、1品ごとの表 wear.json
 （鍵・品種・一枚絵の上の箱・種類の名前）。分類は箱のある一枚絵で決まる（../categories.json）。
-一枚絵はリポジトリの assets/item_images/防具類 に置き、配布物（zip）には入れない。置き場所は引数 --sheets か環境変数 ITEM_IMAGE_ASSETS で替えられる。
+一枚絵はリポジトリの assets/item_images/wear に置き、配布物（zip）には入れない。置き場所は引数 --sheets か環境変数 ITEM_IMAGE_ASSETS で替えられる。
 
 - 箱の中にほぼ収まる塊を全部取る（左右一組の靴や耳飾り）。表の `rect` が真の箱は、隣と接していて
   塊では分けられなかったもの。箱の中の画素をそのまま取る
@@ -26,7 +26,6 @@ from PIL import Image
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import build_guns as b  # noqa: E402
-from minibert import MiniLM  # noqa: E402
 
 # 防具・服・装身具はどれも 64x64（作者の指示。1マスの品は画面で 64px に描かれるので、縮めずにそのまま出る）
 SIZES = {"headgear": (64, 64), "accessory": (64, 64), "clothing": (64, 64), "body_armor": (64, 64),
@@ -66,6 +65,9 @@ def cut(folder, sheet_files, src, rect):
 
 
 def caption_for(entry, im):
+    # 表の plain が真の品は種類の名前だけ（名前に色が入っていて、測った色と重なる品）
+    if entry.get("plain"):
+        return "%s %s." % ("An" if entry["type"][0] in "aeiou" else "A", entry["type"])
     names = b.color_names(im)
     total = max(1, sum(names.values()))
     ranked = [(COLOR.get(k[5:] if k.startswith("glow:") else k), n) for k, n in names.most_common()]
@@ -102,7 +104,7 @@ def main():
         im = cache[src_key]
         e["caption"] = caption_for(e, im)
         w, h = SIZES[e["pref"]]
-        made[e["key"]] = Image.fromarray(b.shrink(im, w, h, 32))
+        made[e["key"]] = Image.fromarray(b.shrink(im, w, h, 255))
 
     for e in entries:
         e["folder"] = e["pref"]

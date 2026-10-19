@@ -654,7 +654,8 @@ class Picker(object):
                 side = ""
         order = [i for i in ranked if sides[i] == side][:self.top_k]
         best = float(sims[order[0]])
-        qualified = [i for i in order if float(sims[i]) >= best * self.floor]
+        # 本体と同じく、候補の幅は足す前の値で決める
+        qualified = [i for i in order if float(sims[i]) >= best - (1.0 - self.floor) * float(raw[order[0]])]
         chosen = min(qualified, key=lambda i: self.usage[(detail, keys[i])])
         self.usage[(detail, keys[chosen])] += 1
         key = keys[chosen]

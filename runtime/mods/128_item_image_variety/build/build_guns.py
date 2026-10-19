@@ -3,10 +3,10 @@
 
 入力は表 weapon_asset.json（README.md の「銃の絵」）:
 
-- 作者が画像生成 AI で作った一枚絵（黒背景。8枚）。1枚ごとに 鍵・品種の希望（pref）・
+- 作者が画像生成 AI で作った一枚絵（黒背景。22枚）。1枚ごとに 鍵・品種の希望（pref）・
   一枚絵の上の箱・回転・種類の名前。品種は縦横比で決め、キャプションは種類と絵から測った色で組む。
   一枚絵はリポジトリの assets/item_images に置き、配布物（zip）には入れない。置き場所は引数 --sheets か
-  環境変数 ITEM_IMAGE_ASSETS で替えられる。銃の一枚絵は `武器/銃/`（categories.json の source）
+  環境変数 ITEM_IMAGE_ASSETS で替えられる。銃の一枚絵は `guns/`（categories.json の source）
 
 出力:
 
@@ -31,7 +31,7 @@ from collections import Counter, deque
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 HERE = Path(__file__).resolve().parent
@@ -51,7 +51,7 @@ def category_of(entry):
 
 
 def save_palette(im, path):
-    """色の数だけのパレットを持つ PNG で書く（画素はそのまま。32色に減色した絵なので 256 色に必ず収まる）。
+    """色の数だけのパレットを持つ PNG で書く（画素はそのまま。255色に減色した絵なので、透明と合わせて必ず収まる）。
     フルカラーの PNG の約3分の1の大きさになる。ゲームの Kivy（SDL2）で読むと元と同じ画素になる（VERIFICATION.md §3.26）。"""
     a = np.asarray(im.convert("RGBA"))
     colors, index = np.unique(a.reshape(-1, 4), axis=0, return_inverse=True)
@@ -95,7 +95,6 @@ def write_categories(entries, made, owned):
         counts[cid] = counts.get(cid, 0) + len(group)
     for cid in owned:
         print("%-22s %4d件" % (cid, counts.get(cid, 0)))
-EMB_DIR = Path(r"C:\Program Files\Epic Games\Instantaleq6Ve7\Data\item_embeddings")
 
 SIZES = {"small_weapon": (32, 32), "medium_weapon": (32, 64),
          "large_weapon": (32, 96), "long_weapon": (32, 128),
@@ -105,7 +104,6 @@ PREF = {"small": "small_weapon", "medium": "medium_weapon",
         "throwable": "throwable_weapon"}
 # 縦長の箱の高さに対して絵が 75% 以上に届く箱を、希望の箱から小さいほうへ探す
 FILL = 0.75
-OUTLINE = (16, 14, 18, 255)
 # 一枚絵の置き場所（リポジトリの assets/item_images。環境変数 ITEM_IMAGE_ASSETS か各道具の --sheets で替えられる）
 ASSET_ROOT = Path(os.environ.get("ITEM_IMAGE_ASSETS") or (REPO / "assets" / "item_images"))
 # 一枚絵の呼び名 → 置き場所（ASSET_ROOT の下の相対パス）。categories.json の source そのまま
@@ -155,20 +153,20 @@ RING = CROSS + ((1, 1), (1, -1), (-1, 1), (-1, -1))
 
 
 def finish(canvas):
-    """本体から離れた小さな点を消し、1px の暗い縁を付ける（ドット絵の輪郭）。"""
+    """本体から離れた小さな点を消す。
+    暗い縁は付けない（付けると太く重い絵になり、細い線と細かい陰影のゲームの素材より粗く見えた。VERIFICATION.md §3.26）。"""
     lab, n = label(canvas[..., 3] > 0)
     if n:
         sizes = np.bincount(lab.ravel())[1:]
         for i, size in enumerate(sizes, 1):
             if size < max(4, 0.08 * sizes.max()):
                 canvas[lab == i] = 0
-    m = canvas[..., 3] > 0
-    canvas[grow(m, CROSS) & ~m] = OUTLINE
     return canvas
 
 
 def shrink(im, box_w, box_h, colors):
-    """縁の分を空けて箱に収まるよう縮め、色数を落として真ん中に置く。"""
+    """縁の分を空けて箱に収まるよう縮め、輪郭を軽く立ててから色数を落とし、真ん中に置く。
+    ゲームの素材は 1枚に 200〜700 色あり、32色まで落とすと陰影が段になって粗く見えた。呼ぶ側は 255 色で呼ぶ（透明の色と合わせてパレットの 256 色に収まる）。"""
     s = min((box_w - 2) / im.width, (box_h - 2) / im.height)
     nw, nh = max(1, round(im.width * s)), max(1, round(im.height * s))
     # 透明の縁が黒く滲まないよう、色は前乗せで縮める
@@ -179,6 +177,8 @@ def shrink(im, box_w, box_h, colors):
     rgb = np.where(al[..., None] > 1e-3, sm[..., :3] / np.maximum(al[..., None], 1e-3), 0)
     alpha = al >= 0.45
     q = Image.fromarray((np.clip(rgb, 0, 1) * 255).round().astype(np.uint8))
+    # 10分の1ほどに縮めると細部が溶けるので、縮めた後に輪郭を軽く立てる（強くすると白くにじむ）
+    q = q.filter(ImageFilter.UnsharpMask(radius=1.0, percent=80, threshold=0))
     q = q.quantize(colors=colors, method=Image.MEDIANCUT).convert("RGB")
     out = np.dstack([np.asarray(q), np.where(alpha, 255, 0).astype(np.uint8)])
     out[~alpha] = 0
@@ -237,6 +237,21 @@ def extract(folder, src):
             keep |= lab == i
     rgb = rgb_all[y0:y1, x0:x1]
     return Image.fromarray(np.dstack([rgb, np.where(grow(keep, RING), 255, 0).astype(np.uint8)]))
+
+
+def extract_whole(folder, src):
+    """箱の中にほぼ収まる塊を全部取る（離れて描かれた1組の品や、本体から離れて描かれた照準器・弾倉）。
+    縁の暗い画素も 1px 取り込む。表の `whole` が真の品に使う。"""
+    name, _, box = src.partition("@")
+    x0, y0, x1, y1 = map(int, box.split(","))
+    rgb_all, lab_all, boxes = sheet_of(folder, name)
+    lab = lab_all[y0:y1, x0:x1]
+    keep = np.zeros(lab.shape, bool)
+    for i in np.unique(lab[lab > 0]):
+        cx0, cy0, cx1, cy1 = boxes[i]
+        if cx0 >= x0 - 6 and cy0 >= y0 - 6 and cx1 <= x1 + 6 and cy1 <= y1 + 6:
+            keep |= lab == i
+    return Image.fromarray(np.dstack([rgb_all[y0:y1, x0:x1], np.where(grow(keep, RING), 255, 0).astype(np.uint8)]))
 
 
 def stand_up(im, angle):
@@ -316,8 +331,10 @@ def caption_for(entry, im):
     extras = [extra] if extra else []
     body = [k for k, _ in names.most_common() if not k.startswith("glow:") and k != "wood"]
     color = body[0] if body else "black"
-    # 投げ物の茶色は瓶や紙の色で、木の部位ではない
-    if names["wood"] / total >= 0.12 and entry["pref"] != "throwable":
+    # 投げ物の茶色は瓶や紙の色で、木の部位ではない。表の `wood` が偽の品は茶色を数えない
+    # （錆びた金属の茶色を木と測る一枚絵。木の部位は種類の名前に書く）
+    wood = entry.get("wood", entry["pref"] != "throwable")
+    if wood and names["wood"] / total >= 0.12:
         extras.append("a wooden grip" if entry["pref"] == "small" else "a wooden stock")
     accent = [k for k in body[1:] if k not in ("black", "grey")
               and names[k] / total >= (0.25 if k == "white" else 0.12)]
@@ -332,13 +349,20 @@ def caption_for(entry, im):
     if extras:
         text += " with " + (extras[0] if len(extras) == 1 else ", ".join(extras[:-1]) + " and " + extras[-1])
     article = "An" if text[0] in "aeiou" else "A"
+    # 表の `melee` が真の品（企業の一揃いの警棒・刃物・大槌・クロスボウ）は銃の結びを付けない
+    if entry.get("melee"):
+        return "%s %s." % (article, text)
     # 結びの語で銃・爆発物の側に寄せる（剣の外見文と重ならないように）
     return "%s %s, %s." % (article, text, "an explosive" if entry["pref"] == "throwable" else "a gun")
 
 
 def build_sheet_entry(entry, folder_dir):
-    im = extract(folder_dir, entry["src"])
-    if "rotate" in entry:
+    im = (extract_whole if entry.get("whole") else extract)(folder_dir, entry["src"])
+    if entry.get("diag"):
+        # 縦に描かれた拳銃は、ゲームの小型と同じく銃口を右上へ 45 度に倒す（32x32 に大きく入る）
+        im = stand_up(im, entry.get("rot", 0)).rotate(-45, resample=Image.BICUBIC, expand=True)
+        im = im.crop(im.getbbox())
+    elif "rotate" in entry:
         im = stand_up(im, entry["rotate"])
     else:
         # 縦向きの絵はもともと銃口が上（依頼の決まり）。細い側で上下を決めると、
@@ -347,7 +371,7 @@ def build_sheet_entry(entry, folder_dir):
     entry["folder"] = choose_folder(entry["pref"], im)
     entry["caption"] = caption_for(entry, im)
     box_w, box_h = SIZES[entry["folder"]]
-    return Image.fromarray(shrink(im, box_w, box_h, 32))
+    return Image.fromarray(shrink(im, box_w, box_h, 255))
 
 
 # ---- 本体 ---------------------------------------------------------------
