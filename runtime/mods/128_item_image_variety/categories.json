@@ -952,5 +952,41 @@
   "source": "wear/wear_sf_armor.png",
   "sheet": "w26",
   "default": "separate"
+ },
+ {
+  "id": "wear_school_casual",
+  "setting": "SET_WEAR_SCHOOL_CASUAL",
+  "group": "防具類",
+  "label": "防具類_学園(私服と作業着)",
+  "source": "wear/wear_school_casual.png",
+  "sheet": "w27",
+  "default": "separate"
+ },
+ {
+  "id": "wear_school_dress",
+  "setting": "SET_WEAR_SCHOOL_DRESS",
+  "group": "防具類",
+  "label": "防具類_学園(ドレスと着物)",
+  "source": "wear/wear_school_dress.png",
+  "sheet": "w28",
+  "default": "separate"
+ },
+ {
+  "id": "wear_school_coat",
+  "setting": "SET_WEAR_SCHOOL_COAT",
+  "group": "防具類",
+  "label": "防具類_学園(コートとケープ)",
+  "source": "wear/wear_school_coat.png",
+  "sheet": "w29",
+  "default": "separate"
+ },
+ {
+  "id": "wear_school_uniform",
+  "setting": "SET_WEAR_SCHOOL_UNIFORM",
+  "group": "防具類",
+  "label": "防具類_学園(制服と小物)",
+  "source": "wear/wear_school_uniform.png",
+  "sheet": "w30",
+  "default": "separate"
  }
 ]

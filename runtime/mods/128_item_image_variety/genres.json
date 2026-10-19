@@ -451,6 +451,23 @@
   "wear_sf_armor": {
    "sf": 1.0,
    "cyber": 0.8
+  },
+  "wear_school_casual": {
+   "modern": 1.0,
+   "fantasy": 0.5
+  },
+  "wear_school_dress": {
+   "fantasy": 1.0,
+   "modern": 0.5,
+   "wa": 0.3
+  },
+  "wear_school_coat": {
+   "fantasy": 1.0,
+   "modern": 0.5
+  },
+  "wear_school_uniform": {
+   "modern": 1.0,
+   "fantasy": 0.5
   }
  }
 }

@@ -2747,3 +2747,363 @@ wbd_w26_006	body_armor	A black sci-fi chest plate with a glowing power core with
 wbd_w26_007	body_armor	A black scratched composite chest plate.
 wbd_w26_008	body_armor	A black spacesuit torso with white details.
 wbd_w26_009	body_armor	A black corporate security body armor with white details.
+wsc_w27_000	clothing	A black casual outfit with a jacket and trousers with brown details.
+wsc_w27_001	clothing	A black casual outfit with a jacket and trousers with white details.
+wsc_w27_002	clothing	A brown casual outfit with a jacket and trousers with red details.
+wsc_w27_003	clothing	A white casual outfit with a jacket and trousers.
+wsc_w27_004	clothing	A black casual outfit with a jacket and trousers with brown details.
+wsc_w27_005	clothing	A white casual outfit with a jacket and trousers.
+wsc_w27_006	clothing	A black casual outfit with a jacket and trousers.
+wsc_w27_007	clothing	A brown casual outfit with a jacket and trousers.
+wsc_w27_008	clothing	A black casual outfit with a jacket and trousers with red details.
+wsc_w27_009	clothing	A brown casual outfit with a jacket and trousers with white details.
+wsc_w27_010	clothing	A brown casual outfit with a jacket and trousers with red details.
+wsc_w27_011	clothing	A white casual outfit with a jacket and trousers.
+wsc_w27_012	clothing	A brown casual outfit with a jacket and trousers with white details.
+wsc_w27_013	clothing	A white casual outfit with a white shirt and suspenders.
+wsc_w27_014	clothing	A white casual outfit with a white shirt and suspenders.
+wsc_w27_015	clothing	A black casual outfit with a white shirt and suspenders with white details.
+wsc_w27_016	clothing	A black casual outfit with a white shirt and suspenders with white details.
+wsc_w27_017	clothing	A brown casual outfit with a white shirt and suspenders with white details.
+wsc_w27_018	clothing	A white casual outfit with a white shirt and suspenders with brown details.
+wsc_w27_019	clothing	A black casual outfit with a white shirt and suspenders with white details.
+wsc_w27_020	clothing	A black casual outfit with a white shirt and suspenders with white details.
+wsc_w27_021	clothing	A black casual outfit with a white shirt and suspenders with white details.
+wsc_w27_022	clothing	A red casual outfit with a white shirt and suspenders.
+wsc_w27_023	clothing	A black casual outfit with a white shirt and suspenders with white details.
+wsc_w27_024	clothing	A black casual outfit with a white shirt and suspenders with white details.
+wsc_w27_025	clothing	A grey casual outfit with a white shirt and suspenders with blue details.
+wsc_w27_026	clothing	A black work outfit with an apron or overalls with white details.
+wsc_w27_027	clothing	A black work outfit with an apron or overalls with white details.
+wsc_w27_028	clothing	A black work outfit with an apron or overalls with white details.
+wsc_w27_029	clothing	A black work outfit with an apron or overalls with brown details.
+wsc_w27_030	clothing	A brown work outfit with an apron or overalls with white details.
+wsc_w27_031	clothing	A brown work outfit with an apron or overalls with white details.
+wsc_w27_032	clothing	A grey work outfit with an apron or overalls.
+wsc_w27_033	clothing	A black work outfit with an apron or overalls with blue details.
+wsc_w27_034	clothing	A black work outfit with an apron or overalls with white details.
+wsc_w27_035	clothing	A white work outfit with an apron or overalls.
+wsc_w27_036	clothing	A black work outfit with an apron or overalls with white details.
+wsc_w27_037	clothing	A black work outfit with an apron or overalls with white details.
+wsc_w27_038	clothing	A black work outfit with an apron or overalls with white details.
+wsc_w27_039	clothing	A white casual outfit with a jacket or hoodie.
+wsc_w27_040	clothing	A black casual outfit with a jacket or hoodie with white details.
+wsc_w27_041	clothing	A red casual outfit with a jacket or hoodie with white details.
+wsc_w27_042	clothing	A grey casual outfit with a jacket or hoodie with blue details.
+wsc_w27_043	clothing	A white casual outfit with a jacket or hoodie.
+wsc_w27_044	clothing	A grey casual outfit with a jacket or hoodie with white details.
+wsc_w27_045	clothing	A black casual outfit with a jacket or hoodie with white details.
+wsc_w27_046	clothing	A red casual outfit with a jacket or hoodie.
+wsc_w27_047	clothing	A white casual outfit with a jacket or hoodie.
+wsc_w27_048	clothing	A black casual outfit with a jacket or hoodie.
+wsc_w27_049	clothing	A white casual outfit with a jacket or hoodie.
+wsc_w27_050	clothing	A brown casual outfit with a jacket or hoodie with beige details.
+wsc_w27_051	clothing	A white casual outfit with a jacket or hoodie.
+wsc_w27_052	clothing	A white casual outfit with a shirt, flannel or sweater.
+wsc_w27_053	clothing	A black casual outfit with a shirt, flannel or sweater with brown details.
+wsc_w27_054	clothing	A white casual outfit with a shirt, flannel or sweater.
+wsc_w27_055	clothing	A blue casual outfit with a shirt, flannel or sweater with white details.
+wsc_w27_056	clothing	A white casual outfit with a shirt, flannel or sweater.
+wsc_w27_057	clothing	A black casual outfit with a shirt, flannel or sweater with purple details.
+wsc_w27_058	clothing	A white casual outfit with a shirt, flannel or sweater.
+wsc_w27_059	clothing	A magenta casual outfit with a shirt, flannel or sweater with red details.
+wsc_w27_060	clothing	A red casual outfit with a shirt, flannel or sweater with white details.
+wsc_w27_061	clothing	A white casual outfit with a shirt, flannel or sweater.
+wsc_w27_062	clothing	A black casual outfit with a shirt, flannel or sweater with white details.
+wsc_w27_063	clothing	A black casual outfit with a shirt, flannel or sweater.
+wsc_w27_064	clothing	A red casual outfit with a shirt, flannel or sweater.
+wsc_w27_065	legwear	A white trousers, shorts or skirt with boots with brown details.
+wsc_w27_066	legwear	A brown trousers, shorts or skirt with boots with beige details.
+wsc_w27_067	legwear	A black trousers, shorts or skirt with boots.
+wsc_w27_068	legwear	A brown trousers, shorts or skirt with boots.
+wsc_w27_069	legwear	A black trousers, shorts or skirt with boots.
+wsc_w27_070	legwear	A blue trousers, shorts or skirt with boots.
+wsc_w27_071	legwear	A black trousers, shorts or skirt with boots with beige details.
+wsc_w27_072	legwear	A grey trousers, shorts or skirt with boots.
+wsc_w27_073	legwear	A white trousers, shorts or skirt with boots.
+wsc_w27_074	legwear	A black trousers, shorts or skirt with boots.
+wsc_w27_075	legwear	A brown trousers, shorts or skirt with boots.
+wsc_w27_076	legwear	A black trousers, shorts or skirt with boots.
+wsc_w27_077	legwear	A black trousers, shorts or skirt with boots.
+wsc_w27_078	legwear	A grey trousers, shorts or skirt with boots.
+wsc_w27_079	legwear	A red trousers, shorts or skirt with boots with white details.
+wsc_w27_080	legwear	A black trousers, shorts or skirt with boots with purple details.
+wsc_w27_081	legwear	A black trousers, shorts or skirt with boots.
+wsc_w28_000	clothing	A black frilled dress with an apron or corset with blue details.
+wsc_w28_001	clothing	A white frilled dress with an apron or corset.
+wsc_w28_002	clothing	A red frilled dress with an apron or corset.
+wsc_w28_003	clothing	A black frilled dress with an apron or corset with white details.
+wsc_w28_004	clothing	A white frilled dress with an apron or corset with blue details.
+wsc_w28_005	clothing	A black frilled dress with an apron or corset with white details.
+wsc_w28_006	clothing	A white frilled dress with an apron or corset.
+wsc_w28_007	clothing	A grey frilled dress with an apron or corset with blue details.
+wsc_w28_008	clothing	A white frilled dress with an apron or corset.
+wsc_w28_009	clothing	A black frilled dress with an apron or corset.
+wsc_w28_010	clothing	A black frilled dress with an apron or corset.
+wsc_w28_011	clothing	A white frilled dress with an apron or corset.
+wsc_w28_012	clothing	A purple frilled dress with an apron or corset with white details.
+wsc_w28_013	clothing	A white long-sleeved dress with a corset.
+wsc_w28_014	clothing	A black long-sleeved dress with a corset.
+wsc_w28_015	clothing	A grey long-sleeved dress with a corset with white details.
+wsc_w28_016	clothing	A black long-sleeved dress with a corset.
+wsc_w28_017	clothing	A black long-sleeved dress with a corset with purple details.
+wsc_w28_018	clothing	A red long-sleeved dress with a corset with white details.
+wsc_w28_019	clothing	A black long-sleeved dress with a corset with white details.
+wsc_w28_020	clothing	A black long-sleeved dress with a corset with purple details.
+wsc_w28_021	clothing	A red long-sleeved dress with a corset with magenta details.
+wsc_w28_022	clothing	A grey long-sleeved dress with a corset with blue details.
+wsc_w28_023	clothing	A black long-sleeved dress with a corset with brown details.
+wsc_w28_024	clothing	A black long-sleeved dress with a corset with white details.
+wsc_w28_025	clothing	A white long-sleeved dress with a corset.
+wsc_w28_026	clothing	A white hooded robe dress with brown details.
+wsc_w28_027	clothing	A black hooded robe dress with white details.
+wsc_w28_028	clothing	A white hooded robe dress with brown details.
+wsc_w28_029	clothing	A red hooded robe dress.
+wsc_w28_030	clothing	A grey hooded robe dress with white details.
+wsc_w28_031	clothing	A black hooded robe dress.
+wsc_w28_032	clothing	A white hooded robe dress.
+wsc_w28_033	clothing	A blue hooded robe dress.
+wsc_w28_034	clothing	A grey hooded robe dress.
+wsc_w28_035	clothing	A white hooded robe dress with brown details.
+wsc_w28_036	clothing	A red hooded robe dress with magenta details.
+wsc_w28_037	clothing	A red hooded robe dress with white details.
+wsc_w28_038	clothing	A grey hooded robe dress with purple details.
+wsc_w28_039	clothing	A white kimono-style robe dress.
+wsc_w28_040	clothing	A red kimono-style robe dress.
+wsc_w28_041	clothing	A black kimono-style robe dress with white details.
+wsc_w28_042	clothing	A grey kimono-style robe dress with blue details.
+wsc_w28_043	clothing	A white kimono-style robe dress with red details.
+wsc_w28_044	clothing	A black kimono-style robe dress with white details.
+wsc_w28_045	clothing	A white kimono-style robe dress with red details.
+wsc_w28_046	clothing	A red kimono-style robe dress.
+wsc_w28_047	clothing	A black kimono-style robe dress with white details.
+wsc_w28_048	clothing	A white kimono-style robe dress with red details.
+wsc_w28_049	clothing	A white kimono-style robe dress.
+wsc_w28_050	clothing	A red kimono-style robe dress with white details.
+wsc_w28_051	clothing	A black kimono-style robe dress with brown details.
+wsc_w28_052	clothing	A red kimono with hakama with white details.
+wsc_w28_053	clothing	A blue kimono with hakama.
+wsc_w28_054	clothing	A red kimono with hakama with white details.
+wsc_w28_055	clothing	A black kimono with hakama with brown details.
+wsc_w28_056	clothing	A black kimono with hakama with brown details.
+wsc_w28_057	clothing	A blue kimono with hakama with white details.
+wsc_w28_058	clothing	A red kimono with hakama with white details.
+wsc_w28_059	clothing	A black kimono with hakama.
+wsc_w28_060	clothing	A white kimono with hakama with brown details.
+wsc_w28_061	clothing	A black kimono with hakama with red details.
+wsc_w28_062	clothing	A black kimono with hakama.
+wsc_w28_063	clothing	A red kimono with hakama with white details.
+wsc_w28_064	clothing	A purple kimono with hakama with white details.
+wsc_w29_000	clothing	A black long coat with a belt.
+wsc_w29_001	clothing	A black long coat with a belt.
+wsc_w29_002	clothing	A brown long coat with a belt with red details.
+wsc_w29_003	clothing	A black long coat with a belt.
+wsc_w29_004	clothing	A white long coat with a belt with blue details.
+wsc_w29_005	clothing	A white long coat with a belt.
+wsc_w29_006	clothing	A black long coat with a belt with white details.
+wsc_w29_007	clothing	A red long coat with a belt with brown details.
+wsc_w29_008	clothing	A black long coat with a belt.
+wsc_w29_009	clothing	A red long coat with a belt with brown details.
+wsc_w29_010	clothing	A black long coat with a belt.
+wsc_w29_011	clothing	A brown long coat with a belt with white details.
+wsc_w29_012	clothing	A white long coat with a belt.
+wsc_w29_013	clothing	A red fur-trimmed coat or cloak with white details.
+wsc_w29_014	clothing	A white fur-trimmed coat or cloak.
+wsc_w29_015	clothing	A blue fur-trimmed coat or cloak.
+wsc_w29_016	clothing	A red fur-trimmed coat or cloak.
+wsc_w29_017	clothing	A white fur-trimmed coat or cloak with brown details.
+wsc_w29_018	clothing	A red fur-trimmed coat or cloak with brown details.
+wsc_w29_019	clothing	A black fur-trimmed coat or cloak with blue details.
+wsc_w29_020	clothing	A brown fur-trimmed coat or cloak.
+wsc_w29_021	clothing	A black fur-trimmed coat or cloak with red details.
+wsc_w29_022	clothing	A white fur-trimmed coat or cloak.
+wsc_w29_023	clothing	A red fur-trimmed coat or cloak with magenta details.
+wsc_w29_024	clothing	A black fur-trimmed coat or cloak.
+wsc_w29_025	clothing	A black fur-trimmed coat or cloak with white details.
+wsc_w29_026	clothing	A white cape or cloak.
+wsc_w29_027	clothing	A white cape or cloak.
+wsc_w29_028	clothing	A black cape or cloak with red details.
+wsc_w29_029	clothing	A white cape or cloak.
+wsc_w29_030	clothing	A red cape or cloak with magenta details.
+wsc_w29_031	clothing	A black cape or cloak.
+wsc_w29_032	clothing	A brown cape or cloak.
+wsc_w29_033	clothing	A brown cape or cloak with red details.
+wsc_w29_034	clothing	A black cape or cloak with white details.
+wsc_w29_035	clothing	A black cape or cloak with white details.
+wsc_w29_036	clothing	A white cape or cloak.
+wsc_w29_037	clothing	A red cape or cloak with brown details.
+wsc_w29_038	clothing	A black cape or cloak.
+wsc_w29_039	clothing	A black hooded cloak or cape.
+wsc_w29_040	clothing	A white hooded cloak or cape.
+wsc_w29_041	clothing	A red hooded cloak or cape.
+wsc_w29_042	clothing	A white hooded cloak or cape.
+wsc_w29_043	clothing	A blue hooded cloak or cape.
+wsc_w29_044	clothing	A white hooded cloak or cape with brown details.
+wsc_w29_045	clothing	A red hooded cloak or cape with brown details.
+wsc_w29_046	clothing	A brown hooded cloak or cape.
+wsc_w29_047	clothing	A red hooded cloak or cape.
+wsc_w29_048	clothing	A black hooded cloak or cape.
+wsc_w29_049	clothing	A red hooded cloak or cape with white details.
+wsc_w29_050	clothing	A black hooded cloak or cape.
+wsc_w29_051	clothing	A black fur-trimmed coat with a cape with white details.
+wsc_w29_052	clothing	A white fur-trimmed coat with a cape with red details.
+wsc_w29_053	clothing	A red fur-trimmed coat with a cape with white details.
+wsc_w29_054	clothing	A white fur-trimmed coat with a cape with blue details.
+wsc_w29_055	clothing	A magenta fur-trimmed coat with a cape with purple details.
+wsc_w29_056	clothing	A black fur-trimmed coat with a cape with white details.
+wsc_w29_057	clothing	A black fur-trimmed coat with a cape with white details.
+wsc_w29_058	clothing	A white fur-trimmed coat with a cape.
+wsc_w29_059	clothing	A black fur-trimmed coat with a cape with brown details.
+wsc_w29_060	clothing	A black fur-trimmed coat with a cape with red details.
+wsc_w29_061	clothing	A black fur-trimmed coat with a cape.
+wsc_w30_000	headgear	A red school beret, cap or hat with magenta details.
+wsc_w30_001	headgear	A black school beret, cap or hat with purple details.
+wsc_w30_002	headgear	A brown school beret, cap or hat.
+wsc_w30_003	headgear	A white school beret, cap or hat.
+wsc_w30_004	headgear	A brown school beret, cap or hat with beige details.
+wsc_w30_005	headgear	A blue school beret, cap or hat with red details.
+wsc_w30_006	headgear	A black school beret, cap or hat.
+wsc_w30_007	headgear	A red school beret, cap or hat.
+wsc_w30_008	headgear	A blue school beret, cap or hat with white details.
+wsc_w30_009	headgear	A white school beret, cap or hat with beige details.
+wsc_w30_010	headgear	A white school beret, cap or hat.
+wsc_w30_011	headgear	A black school beret, cap or hat.
+wsc_w30_012	headgear	A white school beret, cap or hat.
+wsc_w30_013	headgear	A black school beret, cap or hat with brown details.
+wsc_w30_014	headgear	A black headband, headphones or hair accessory with red details.
+wsc_w30_015	headgear	A red headband, headphones or hair accessory with white details.
+wsc_w30_016	headgear	A white headband, headphones or hair accessory.
+wsc_w30_017	headgear	A red headband, headphones or hair accessory with magenta details.
+wsc_w30_018	headgear	A white headband, headphones or hair accessory.
+wsc_w30_019	headgear	A white headband, headphones or hair accessory.
+wsc_w30_020	headgear	A brown headband, headphones or hair accessory with red details.
+wsc_w30_021	headgear	A white headband, headphones or hair accessory with beige details.
+wsc_w30_022	headgear	A black headband, headphones or hair accessory with white details.
+wsc_w30_023	headgear	A white headband, headphones or hair accessory.
+wsc_w30_024	headgear	A black headband, headphones or hair accessory with white details.
+wsc_w30_025	headgear	A white headband, headphones or hair accessory with red details.
+wsc_w30_026	headgear	A white headband, headphones or hair accessory.
+wsc_w30_027	headgear	A white headband, headphones or hair accessory with purple details.
+wsc_w30_028	headgear	A white headband, headphones or hair accessory with red details.
+wsc_w30_029	headgear	A red headband, headphones or hair accessory with white details.
+wsc_w30_030	clothing	A black school uniform jacket with a vest with brown details.
+wsc_w30_031	clothing	A red school uniform jacket with a vest with white details.
+wsc_w30_032	clothing	A blue school uniform jacket with a vest with purple details.
+wsc_w30_033	clothing	A black school uniform jacket with a vest with white details.
+wsc_w30_034	clothing	A red school uniform jacket with a vest with white details.
+wsc_w30_035	clothing	A black school uniform jacket with a vest.
+wsc_w30_036	clothing	A white school uniform jacket with a vest.
+wsc_w30_037	clothing	A white school uniform jacket with a vest.
+wsc_w30_038	clothing	A black school uniform jacket with a vest with white details.
+wsc_w30_039	clothing	A red school uniform jacket with a vest with white details.
+wsc_w30_040	clothing	A black school uniform jacket with a vest.
+wsc_w30_041	clothing	A red school uniform jacket with a vest with white details.
+wsc_w30_042	clothing	A white school uniform jacket with a vest.
+wsc_w30_043	clothing	A blue school uniform jacket with a vest.
+wsc_w30_044	clothing	A white school uniform jacket with a vest.
+wsc_w30_045	clothing	A beige school uniform jacket with a vest with brown details.
+wsc_w30_046	clothing	A white school uniform jacket with a vest.
+wsc_w30_047	clothing	A black school uniform jacket with a vest with white details.
+wsc_w30_048	clothing	A white school uniform jacket with a vest.
+wsc_w30_049	clothing	A red school uniform jacket with a vest with brown details.
+wsc_w30_050	clothing	A white school uniform jacket with a vest.
+wsc_w30_051	clothing	A black school uniform jacket with a vest with red details.
+wsc_w30_052	clothing	A white school uniform jacket with a vest with red details.
+wsc_w30_053	clothing	A red school uniform jacket with a vest with white details.
+wsc_w30_054	clothing	A white school uniform jacket with a vest with blue details.
+wsc_w30_055	clothing	A black school uniform jacket with a vest with white details.
+wsc_w30_056	clothing	A black school uniform jacket with a vest with white details.
+wsc_w30_057	clothing	A white school uniform jacket with a vest with red details.
+wsc_w30_058	clothing	A white school uniform jacket with a vest with purple details.
+wsc_w30_059	clothing	A black school uniform jacket with a vest with red details.
+wsc_w30_060	clothing	A red school uniform jacket with a vest with white details.
+wsc_w30_061	clothing	A red school uniform jacket with a vest with white details.
+wsc_w30_062	clothing	A blue school uniform jacket with a vest with white details.
+wsc_w30_063	clothing	A black school uniform jacket with a vest with white details.
+wsc_w30_064	clothing	A white school uniform jacket with a vest with red details.
+wsc_w30_065	clothing	A black school uniform jacket with a vest.
+wsc_w30_066	clothing	A white school uniform jacket with a vest with red details.
+wsc_w30_067	clothing	A white school uniform jacket with a vest.
+wsc_w30_068	clothing	A white school uniform jacket with a vest with brown details.
+wsc_w30_069	clothing	A black school uniform jacket with a vest with white details.
+wsc_w30_070	clothing	A purple school uniform jacket with a vest.
+wsc_w30_071	clothing	A black school uniform jacket with a vest.
+wsc_w30_072	gauntlets	A black gloves.
+wsc_w30_073	gauntlets	A black gloves.
+wsc_w30_074	gauntlets	A black gloves with white details.
+wsc_w30_075	gauntlets	A white gloves.
+wsc_w30_076	gauntlets	A brown gloves with beige details.
+wsc_w30_077	gauntlets	A white gloves.
+wsc_w30_078	gauntlets	A black gloves with magenta details.
+wsc_w30_079	gauntlets	A black gloves with red details.
+wsc_w30_080	gauntlets	A purple gloves with white details.
+wsc_w30_081	gauntlets	A black gloves.
+wsc_w30_082	gauntlets	A brown gloves.
+wsc_w30_083	gauntlets	A black gloves.
+wsc_w30_084	gauntlets	A white gloves.
+wsc_w30_085	gauntlets	A black gloves with white details.
+wsc_w30_086	gauntlets	A black gloves with white details.
+wsc_w30_087	gauntlets	A black gloves.
+wsc_w30_088	gauntlets	A white gloves.
+wsc_w30_089	gauntlets	A black gloves with white details.
+wsc_w30_090	gauntlets	A black gloves with white details.
+wsc_w30_091	gauntlets	A white gloves.
+wsc_w30_092	legwear	A blue pleated school uniform skirt with white details.
+wsc_w30_093	legwear	A red pleated school uniform skirt.
+wsc_w30_094	legwear	A white pleated school uniform skirt.
+wsc_w30_095	legwear	A black pleated school uniform skirt with purple details.
+wsc_w30_096	legwear	A black pleated school uniform skirt with white details.
+wsc_w30_097	legwear	A black pleated school uniform skirt.
+wsc_w30_098	legwear	A white pleated school uniform skirt.
+wsc_w30_099	legwear	A red pleated school uniform skirt with magenta details.
+wsc_w30_100	legwear	A black pleated school uniform skirt with white details.
+wsc_w30_101	legwear	A white pleated school uniform skirt with red details.
+wsc_w30_102	legwear	A black pleated school uniform skirt.
+wsc_w30_103	legwear	A purple pleated school uniform skirt.
+wsc_w30_104	legwear	A black pleated school uniform skirt.
+wsc_w30_105	legwear	A blue pleated school uniform skirt with white details.
+wsc_w30_106	legwear	A red pleated school uniform skirt.
+wsc_w30_107	legwear	A black school shorts or trousers.
+wsc_w30_108	legwear	A white school shorts or trousers.
+wsc_w30_109	legwear	A black school shorts or trousers.
+wsc_w30_110	legwear	A black school shorts or trousers with blue details.
+wsc_w30_111	legwear	A black school shorts or trousers with white details.
+wsc_w30_112	legwear	A red school shorts or trousers.
+wsc_w30_113	legwear	A black school shorts or trousers with blue details.
+wsc_w30_114	legwear	A black school shorts or trousers with brown details.
+wsc_w30_115	legwear	A white school shorts or trousers.
+wsc_w30_116	legwear	A black school shorts or trousers.
+wsc_w30_117	legwear	A black school shorts or trousers.
+wsc_w30_118	legwear	A red school shorts or trousers.
+wsc_w30_119	legwear	A black school shorts or trousers with white details.
+wsc_w30_120	legwear	A white school shorts or trousers with beige details.
+wsc_w30_121	legwear	A white school shorts or trousers with red details.
+wsc_w30_122	legwear	A black school shorts or trousers.
+wsc_w30_123	legwear	A black school shorts or trousers with blue details.
+wsc_w30_124	legwear	A black school shorts or trousers.
+wsc_w30_125	legwear	A black school shorts or trousers with brown details.
+wsc_w30_126	legwear	A white school shorts or trousers.
+wsc_w30_127	legwear	A brown school shorts or trousers with red details.
+wsc_w30_128	legwear	A white school shorts or trousers.
+wsc_w30_129	legwear	A black school shorts or trousers.
+wsc_w30_130	legwear	A black school shoes or boots.
+wsc_w30_131	legwear	A brown school shoes or boots with red details.
+wsc_w30_132	legwear	A black school shoes or boots with white details.
+wsc_w30_133	legwear	A red school shoes or boots with white details.
+wsc_w30_134	legwear	A black school shoes or boots with white details.
+wsc_w30_135	legwear	A black school shoes or boots with white details.
+wsc_w30_136	legwear	A white school shoes or boots.
+wsc_w30_137	legwear	A black school shoes or boots with red details.
+wsc_w30_138	legwear	A red school shoes or boots.
+wsc_w30_139	legwear	A black school shoes or boots with white details.
+wsc_w30_140	legwear	A black school shoes or boots with white details.
+wsc_w30_141	legwear	A red school shoes or boots.
+wsc_w30_142	legwear	A white school shoes or boots.
+wsc_w30_143	legwear	A black school shoes or boots with purple details.
+wsc_w30_144	legwear	A white school shoes or boots.
+wsc_w30_145	legwear	A red school shoes or boots.
+wsc_w30_146	legwear	A black school shoes or boots with white details.
+wsc_w30_147	legwear	A brown school shoes or boots with white details.
+wsc_w30_148	legwear	A black school shoes or boots.
+wsc_w30_149	legwear	A black school shoes or boots.
+wsc_w30_150	legwear	A red school shoes or boots.

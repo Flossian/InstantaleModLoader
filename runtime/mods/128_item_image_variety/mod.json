@@ -2964,6 +2964,110 @@
         "ja": "10枚",
         "en": "10 images"
       }
+    },
+    "SET_WEAR_SCHOOL_CASUAL": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：防具類",
+        "en": "Added images: Armor, clothing and jewelry"
+      },
+      "label": {
+        "ja": "防具類_学園(私服と作業着)",
+        "en": "wear_school_casual"
+      },
+      "note": {
+        "ja": "82枚",
+        "en": "82 images"
+      }
+    },
+    "SET_WEAR_SCHOOL_DRESS": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：防具類",
+        "en": "Added images: Armor, clothing and jewelry"
+      },
+      "label": {
+        "ja": "防具類_学園(ドレスと着物)",
+        "en": "wear_school_dress"
+      },
+      "note": {
+        "ja": "65枚",
+        "en": "65 images"
+      }
+    },
+    "SET_WEAR_SCHOOL_COAT": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：防具類",
+        "en": "Added images: Armor, clothing and jewelry"
+      },
+      "label": {
+        "ja": "防具類_学園(コートとケープ)",
+        "en": "wear_school_coat"
+      },
+      "note": {
+        "ja": "62枚",
+        "en": "62 images"
+      }
+    },
+    "SET_WEAR_SCHOOL_UNIFORM": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：防具類",
+        "en": "Added images: Armor, clothing and jewelry"
+      },
+      "label": {
+        "ja": "防具類_学園(制服と小物)",
+        "en": "wear_school_uniform"
+      },
+      "note": {
+        "ja": "151枚",
+        "en": "151 images"
+      }
     }
   },
   "tool": {

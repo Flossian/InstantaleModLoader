@@ -185,6 +185,10 @@ SET_WEAR_WESTERN_ARMOR = "separate"
 SET_WEAR_MODERN_ARMOR = "separate"
 SET_WEAR_POSTAPOC_ARMOR = "separate"
 SET_WEAR_SF_ARMOR = "separate"
+SET_WEAR_SCHOOL_CASUAL = "separate"
+SET_WEAR_SCHOOL_DRESS = "separate"
+SET_WEAR_SCHOOL_COAT = "separate"
+SET_WEAR_SCHOOL_UNIFORM = "separate"
 
 # 分類と、その使い方の設定の名前。分類ごとに `images/<分類>` を Kivy の探し先に足し、
 # `data/<分類>/<品種>.json` を合成する。フォルダが無い分類は飛ばす。
@@ -295,6 +299,10 @@ IMAGE_SETS = (
     ("wear_modern_armor", "SET_WEAR_MODERN_ARMOR"),
     ("wear_postapoc_armor", "SET_WEAR_POSTAPOC_ARMOR"),
     ("wear_sf_armor", "SET_WEAR_SF_ARMOR"),
+    ("wear_school_casual", "SET_WEAR_SCHOOL_CASUAL"),
+    ("wear_school_dress", "SET_WEAR_SCHOOL_DRESS"),
+    ("wear_school_coat", "SET_WEAR_SCHOOL_COAT"),
+    ("wear_school_uniform", "SET_WEAR_SCHOOL_UNIFORM"),
 )
 
 # 別扱い（separate）の分類を選んでよい類似度の下限。これに届かない外見文（日本語の文は埋め込みでは
