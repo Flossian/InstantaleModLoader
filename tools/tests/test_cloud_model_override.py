@@ -35,12 +35,16 @@ for key, spec_ in manifest["settings"].items():
     assert getattr(MOD, key) == spec_["default"], key
     if spec_["type"] == "choice":
         assert spec_["default"] in spec_["values"], key
-# モデルの一覧は、off 以外すべてに表示名（Claude Opus 5.5 / GPT-6.1 Sol の形）を付ける
-for key in ("OPENAI_MODEL", "CLAUDE_MODEL"):
-    spec_ = manifest["settings"][key]
-    named = set(spec_["value_labels"])
-    assert named == set(spec_["values"]) - {MOD.OFF}, (key, set(spec_["values"]) ^ named)
-    assert all(label.startswith(("GPT-", "Claude ")) for label in spec_["value_labels"].values()), key
+# モデルの一覧は、off 以外すべてに表示名（Claude Haiku 5.5 の形）を付ける
+spec_ = manifest["settings"]["CLAUDE_MODEL"]
+named = set(spec_["value_labels"])
+assert named == set(spec_["values"]) - {MOD.OFF}, set(spec_["values"]) ^ named
+assert all(label.startswith("Claude ") for label in spec_["value_labels"].values())
+# 一覧に載せるのはゲームの一覧（main_026）に無いモデルだけ。OpenAI の一覧は外した（全部ゲームの一覧に入った）
+GAME_CLAUDE = {"claude-sonnet-5-5", "claude-opus-5-5", "claude-fable-5-1", "claude-fable-5", "claude-sonnet-5",
+               "claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5", "claude-haiku-4-5-20251001"}
+assert not set(spec_["values"]) & GAME_CLAUDE, set(spec_["values"]) & GAME_CLAUDE
+assert "OPENAI_MODEL" not in manifest["settings"] and not hasattr(MOD, "OPENAI_MODEL")
 
 
 class Ctx(object):
@@ -88,6 +92,7 @@ assert any("cache stable" in line and "cache 5m" in line for line in ctx.lines),
 
 # ここから下の差し替えの検査は、キャッシュを切って本文の形だけを見る（キャッシュは後ろの節）
 MOD.OPENAI_CACHE, MOD.CLAUDE_CACHE = "keep", "off"
+MOD.OPENAI_CUSTOM = "gpt-6-luna"           # OpenAI は名前を書いたときだけ差し替える
 ctx = Ctx()
 MOD.apply(ctx)
 # Claude 側は差し替えもキャッシュも切っていても包む（文法が大きすぎるときの迂回）
@@ -158,16 +163,16 @@ sent = ctx.hooks[OA.POST](orig, OPENAI, "/responses",
 assert sent == {"model": "gpt-5.5", "reasoning": {"effort": "low"}}, sent
 MOD.OPENAI_EFFORT, MOD.OPENAI_CUSTOM = "keep", ""
 
-# off なら OpenAI の送信を包まない（タイトル画面の包みは、前の1行を外すために残る）。
+# 名前を書いていなければ OpenAI の送信を包まない（タイトル画面の包みは、前の1行を外すために残る）。
 # Claude は文法が大きすぎるときの迂回のために包み、型の無い要求は本文をそのまま渡す
-MOD.OPENAI_MODEL = "off"
+assert MOD.OPENAI_CUSTOM == ""
 ctx = Ctx()
 MOD.apply(ctx)
 assert OA.POST not in ctx.hooks and CL.POST in ctx.hooks, ctx.hooks
 plain = {"model": "claude-sonnet-5", "max_tokens": 10, "messages": []}
 assert ctx.hooks[CL.POST](orig, OPENAI, "/v1/messages", body=plain) == plain
 assert not any("[claude]" in line for line in ctx.lines), ctx.lines
-MOD.OPENAI_MODEL = "gpt-6-luna"
+MOD.OPENAI_CUSTOM = "gpt-6-luna"
 
 # ---------------------------------------------------------------- Claude
 MOD.CLAUDE_MODEL = "claude-opus-5-5"
@@ -351,13 +356,13 @@ assert sent["input"][0]["content"] == [
 assert sent["input"][1] == {"role": "user", "content": "やあ"}
 
 # GPT-5.5 以前へ送るときと、chat.completions の経路では触らない
-MOD.OPENAI_MODEL = "gpt-5.5"
+MOD.OPENAI_CUSTOM = "gpt-5.5"
 ctx = Ctx()
 MOD.apply(ctx)
 sent = ask(SHARED + "一回目")
 assert "prompt_cache_options" not in sent, sent
 assert OA.apply_cache({"input": []}, "gpt-6-luna", "off", PC.Prefixes(), "/chat/completions") == []
-MOD.OPENAI_MODEL, MOD.OPENAI_CACHE = "gpt-6-luna", "keep"
+MOD.OPENAI_CUSTOM, MOD.OPENAI_CACHE = "gpt-6-luna", "keep"
 
 # keep（既定）は何も足さない
 ctx = Ctx()
@@ -367,24 +372,24 @@ assert "prompt_cache_options" not in ask(SHARED + "一回目", model="gpt-6-luna
 # ---------------------------------------------------------------- タイトル画面の1行
 # 出すのは、API キーでクラウドを使っていて、そのプロバイダを差し替えているときだけ
 NAMES = MOD.model_names(folder)
-assert NAMES["claude-sonnet-5-5"] == "Claude Sonnet 5.5" and NAMES["gpt-6.1-sol"] == "GPT-6.1 Sol"
+assert NAMES == {"claude-haiku-5-5": "Claude Haiku 5.5", "claude-opus-5": "Claude Opus 5"}, NAMES
 cloud = {"inference": "cloud_api_key", "provider": "Claude API", "model": "claude-sonnet-5"}
 t = MOD.title_text(cloud, "gpt-6-luna", "claude-haiku-5-5", NAMES, claude_effort="medium")
 assert t == "LLM: Claude Haiku 5.5 / effort: medium", t
 t = MOD.title_text(cloud, "gpt-6-luna", "claude-sonnet-5-5", NAMES)
-assert t == "LLM: Claude Sonnet 5.5 / effort: ゲームのまま", t
-assert MOD.title_text(cloud, None, "claude-haiku-4-5", NAMES, claude_effort="low") ==     "LLM: Claude Haiku 4.5", "推論量を受けないモデルには付けない"
+assert t == "LLM: claude-sonnet-5-5 / effort: ゲームのまま", "一覧から外した名前は欄に書いたとき ID のまま出す"
+assert MOD.title_text(cloud, None, "claude-haiku-4-5", NAMES, claude_effort="low") ==     "LLM: claude-haiku-4-5", "推論量を受けないモデルには付けない"
 openai_cloud = dict(cloud, provider="OpenAI API", model="gpt-5.5")
 t = MOD.title_text(openai_cloud, "gpt-6-luna", None, NAMES)
-assert t == "LLM: GPT-6 Luna / effort: none", "keep ならゲームが組む値（gpt-5.5 は none）"
+assert t == "LLM: gpt-6-luna / effort: none", "keep ならゲームが組む値（gpt-5.5 は none）"
 t = MOD.title_text(openai_cloud, "gpt-6-astra", None, NAMES)
-assert t == "LLM: GPT-6 Astra / effort: low", "差し替え先の読み替え（Astra は none を断る）を通す"
+assert t == "LLM: gpt-6-astra / effort: low", "差し替え先の読み替え（Astra は none を断る）を通す"
 t = MOD.title_text(dict(openai_cloud, model="gpt-5"), "gpt-6-luna", None, NAMES)
-assert t == "LLM: GPT-6 Luna / effort: none", "gpt-5 の minimal も読み替える"
+assert t == "LLM: gpt-6-luna / effort: none", "gpt-5 の minimal も読み替える"
 t = MOD.title_text(dict(openai_cloud, model="gpt-4.1"), "gpt-6-luna", None, NAMES)
-assert t == "LLM: GPT-6 Luna", "推論量を送らない経路では付けない"
+assert t == "LLM: gpt-6-luna", "推論量を送らない経路では付けない"
 t = MOD.title_text(openai_cloud, "gpt-6-luna", None, NAMES, openai_effort="high")
-assert t == "LLM: GPT-6 Luna / effort: high", t
+assert t == "LLM: gpt-6-luna / effort: high", t
 assert MOD.title_text(cloud, "gpt-6-luna", "my-claude", NAMES, claude_effort="low") ==     "LLM: my-claude / effort: low", "一覧に無い名前はそのまま"
 assert MOD.title_text(cloud, "gpt-6-luna", None, NAMES) is None, "そのプロバイダを差し替えていなければ出さない"
 assert MOD.title_text(dict(cloud, inference="local"), "gpt-6-luna", "claude-sonnet-5-5", NAMES) is None

@@ -67,7 +67,7 @@
 | `133_ui_area_difficulty` | 移動先に難易度帯を添える | 決着 | [§3.49](verification/3.49.md) |
 | `134_balance_item_effects` | 回復アイテムが一律でスタミナを払う | 成立。残るは3点 | [§3.51](verification/3.51.md) |
 | `135_fix_inn_button_order` | 宿屋だけ `出る` が先頭（GAME.md §2.2） | 成立（6回とも並べ直し、切ると戻る）。店・部屋選び・活動の並びが変わらないことはオフラインのみ | - |
-| `136_cloud_model_override` | 一覧に無いクラウドのモデルを選べない | Luna・Sonnet 5.5・キャッシュは成立、Haiku 5.5 は検証で常用、Opus 5.5 / Haiku 4.5 は疎通。版5 で町の生成の検証エラーが 0。Astra は未 | [§3.71](verification/3.71.md) |
+| `136_cloud_model_override` | 一覧に無いクラウドのモデルを選べない | Luna・Sonnet 5.5・キャッシュは成立、Haiku 5.5 は検証で常用、Opus 5.5 / Haiku 4.5 は疎通。版5 で町の生成の検証エラーが 0。Astra は未。版6 でゲームの一覧（main_026）に入ったモデルを一覧から外した（実機は未） | [§3.71](verification/3.71.md) |
 | `137_fix_npc_skill_uses` | 使い切ったスキルを使い続ける | 使い切りを隠すのは成立。重ねがけ止めは未 | [§3.77](verification/3.77.md) / [§3.88](verification/3.88.md) |
 | `138_fix_character_image_refresh` | 再生成した立ち絵と顔が画面に出ない | 成立（立ち絵と顔の2枚） | [§2.94](verification/2.94.md) |
 | `140_fix_busy_dots_speed` | 待機中の「…」が速く流れる | 成立（1本・約3.4コマ/秒。直す前は2〜7本） | [§3.88](verification/3.88.md) |

@@ -7,42 +7,15 @@
     "ja": "クラウドモデルの差し替え"
   },
   "description": {
-    "en": "Uses an OpenAI or Claude model that is not in the game's built-in list, picked from a list. The model name is swapped on the wire just before the request goes out, and parameters the new model rejects are fixed up. Can also choose where prompt caching marks the request. Also gets quest generation through on Claude, which rejects the game's quest format as too large, and stops world generation on Claude from retrying over and over",
-    "ja": "ゲームの選択肢に無い OpenAI / Claude のモデルを、一覧から選んで使う。送信直前にモデル名を差し替え、差し替え先が受け付けない引数も直す。プロンプトキャッシュの印の置き方も選べる。Claude がゲームの依頼の型を大きすぎるとして断り、依頼が作られないのと、世界の生成が何度も送り直しになるのも直す"
+    "en": "Use Claude models the game does not list (Haiku 5.5 and others) from a list, and any other OpenAI / Claude model by typing its name. The model name is swapped right before sending, and arguments the target rejects are fixed. Prompt cache markers can be chosen too. Also fixes Claude refusing the game's quest schema as too large (no quests get made) and world generation resending over and over",
+    "ja": "ゲームの一覧に無い Claude のモデル（Haiku 5.5 など）を一覧から選び、OpenAI / Claude の一覧に無い名前は欄に書いて使う。送信直前にモデル名を差し替え、差し替え先が受け付けない引数も直す。プロンプトキャッシュの印の置き方も選べる。Claude がゲームの依頼の型を大きすぎるとして断り、依頼が作られないのと、世界の生成が何度も送り直しになるのも直す"
   },
-  "version": "5",
+  "version": "6",
   "author": "R01/Flossian",
   "settings": {
-    "OPENAI_MODEL": {
-      "type": "choice",
-      "values": [
-        "off",
-        "gpt-6-astra",
-        "gpt-6.1-sol",
-        "gpt-6-sol",
-        "gpt-6-luna",
-        "gpt-5.6-sol",
-        "gpt-5.6-terra",
-        "gpt-5.6-luna",
-        "gpt-5.5",
-        "gpt-5.4",
-        "gpt-5.4-mini",
-        "gpt-5.4-nano"
-      ],
-      "default": "gpt-6-luna",
-      "value_labels": {
-        "gpt-6-astra": "GPT-6 Astra",
-        "gpt-6.1-sol": "GPT-6.1 Sol",
-        "gpt-6-sol": "GPT-6 Sol",
-        "gpt-6-luna": "GPT-6 Luna",
-        "gpt-5.6-sol": "GPT-5.6 Sol",
-        "gpt-5.6-terra": "GPT-5.6 Terra",
-        "gpt-5.6-luna": "GPT-5.6 Luna",
-        "gpt-5.5": "GPT-5.5",
-        "gpt-5.4": "GPT-5.4",
-        "gpt-5.4-mini": "GPT-5.4 mini",
-        "gpt-5.4-nano": "GPT-5.4 nano"
-      },
+    "OPENAI_CUSTOM": {
+      "type": "str",
+      "default": "",
       "group": {
         "ja": "OpenAI API",
         "en": "OpenAI API"
@@ -52,24 +25,8 @@
         "en": "Model actually sent"
       },
       "note": {
-        "ja": "ゲームの設定画面でプロバイダを OpenAI にしているときだけ効く。モデルは OpenAI の中から何を選んでいてもよい（速い経路を組み立てる gpt-5.5 などを推奨）。off で差し替えない",
-        "en": "Only takes effect when the game's provider is OpenAI. Any OpenAI model may be selected there (gpt-5.5 or similar builds the fast path). off = no swap"
-      }
-    },
-    "OPENAI_CUSTOM": {
-      "type": "str",
-      "default": "",
-      "group": {
-        "ja": "OpenAI API",
-        "en": "OpenAI API"
-      },
-      "label": {
-        "ja": "一覧に無いモデル",
-        "en": "Model not in the list"
-      },
-      "note": {
-        "ja": "書いてあれば上の一覧より優先する。空なら一覧の選択を使う",
-        "en": "Takes priority over the list above when filled in. Empty = use the list"
+        "ja": "モデル ID を書くと、送る直前にそのモデルへ差し替える。空なら差し替えない。ゲームの設定画面でプロバイダを OpenAI にしているときだけ効く。GPT-6 系・GPT-5.6 系はゲームの一覧から選べるので、ここに書かなくてよい",
+        "en": "Write a model ID to swap to it right before sending. Empty = no swap. Only takes effect when the game's provider is OpenAI. GPT-6 and GPT-5.6 models are in the game's own list, so they need not be written here"
       }
     },
     "OPENAI_EFFORT": {
@@ -91,8 +48,8 @@
         "en": "Reasoning effort"
       },
       "note": {
-        "ja": "keep はゲームが組み立てた値のまま（gpt-5.5 などを選んでいれば none）。上げると賢くなるが応答が遅くなる。GPT-6 Astra と GPT-6.1 Sol は none を受け付けないので low に上げて送る",
-        "en": "keep = whatever the game built (none for gpt-5.5 and similar). Higher is smarter but slower. GPT-6 Astra and GPT-6.1 Sol reject none, so low is sent instead"
+        "ja": "上の欄で差し替えるときだけ効く。keep はゲームが組み立てた値のまま。上げると賢くなるが応答が遅くなる。GPT-6 Astra と GPT-6.1 Sol へ差し替えるときは、none を受け付けないので low に上げて送る",
+        "en": "Only applies when swapping with the field above. keep = whatever the game built. Higher is smarter but slower. When swapping to GPT-6 Astra or GPT-6.1 Sol, none is rejected, so low is sent instead"
       }
     },
     "OPENAI_CACHE": {
@@ -134,27 +91,13 @@
       "type": "choice",
       "values": [
         "off",
-        "claude-opus-5-5",
-        "claude-sonnet-5-5",
         "claude-haiku-5-5",
-        "claude-opus-5",
-        "claude-sonnet-5",
-        "claude-haiku-4-5",
-        "claude-fable-5-1",
-        "claude-opus-4-8",
-        "claude-sonnet-4-6"
+        "claude-opus-5"
       ],
       "default": "off",
       "value_labels": {
-        "claude-opus-5-5": "Claude Opus 5.5",
-        "claude-sonnet-5-5": "Claude Sonnet 5.5",
         "claude-haiku-5-5": "Claude Haiku 5.5",
-        "claude-opus-5": "Claude Opus 5",
-        "claude-sonnet-5": "Claude Sonnet 5",
-        "claude-haiku-4-5": "Claude Haiku 4.5",
-        "claude-fable-5-1": "Claude Fable 5.1",
-        "claude-opus-4-8": "Claude Opus 4.8",
-        "claude-sonnet-4-6": "Claude Sonnet 4.6"
+        "claude-opus-5": "Claude Opus 5"
       },
       "group": {
         "ja": "Claude API",
@@ -165,8 +108,8 @@
         "en": "Model actually sent"
       },
       "note": {
-        "ja": "ゲームの設定画面でプロバイダを Claude にし、Anthropic の API キーを入れているときだけ効く（OpenAI のままでは Claude へは送れない）。モデルは Claude の中から何を選んでいてもよい。off で差し替えない（推論量の指定も効かない）",
-        "en": "Only takes effect when the game's provider is Claude with an Anthropic API key (an OpenAI setup cannot be redirected to Claude). Any Claude model may be selected there. off = no swap (the effort setting is not applied either)"
+        "ja": "ゲームの一覧に無いモデルだけを並べる（Sonnet 5.5・Opus 5.5・Fable 5.1 などはゲームの一覧から選ぶ）。ゲームの設定画面でプロバイダを Claude にし、Anthropic の API キーを入れているときだけ効く（OpenAI のままでは Claude へは送れない）。モデルは Claude の中から何を選んでいてもよい。off で差し替えない（推論量の指定も効かない）",
+        "en": "Lists only models the game does not (pick Sonnet 5.5, Opus 5.5, Fable 5.1 and others in the game's own list). Only takes effect when the game's provider is Claude with an Anthropic API key (an OpenAI setup cannot be redirected to Claude). Any Claude model may be selected there. off = no swap (the effort setting is not applied either)"
       }
     },
     "CLAUDE_CUSTOM": {
@@ -203,8 +146,8 @@
         "en": "Effort"
       },
       "note": {
-        "ja": "Opus 5.5 / Fable 5.1 は思考を切れないので、low にしないと応答が遅い。Claude Haiku 4.5 には送らない（受け付けないため）",
-        "en": "Opus 5.5 / Fable 5.1 cannot turn thinking off, so anything above low is slow. Never sent to Claude Haiku 4.5 (it rejects it)"
+        "ja": "差し替えるときだけ効く。上げると賢くなるが応答が遅くなる。Opus 5.5 / Fable 5.1 のように思考を切れないモデルへ差し替えるなら、low にしないと応答が遅い。Claude Haiku 4.5 には送らない（受け付けないため）",
+        "en": "Only applies when swapping. Higher is smarter but slower. Models that cannot turn thinking off (Opus 5.5 / Fable 5.1) are slow above low. Never sent to Claude Haiku 4.5 (it rejects it)"
       }
     },
     "CLAUDE_CACHE": {

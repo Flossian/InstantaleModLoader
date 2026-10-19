@@ -2,7 +2,9 @@
 """ゲームが知らないクラウドモデルを使う。**送信直前にモデル名を差し替える**。
 
 OpenAI API と Claude API の両方に対応する。
-差し替え先は設定画面の一覧から選ぶ（一覧に無い名前は「一覧に無いモデル」の欄に書く）。
+差し替え先は、Claude は設定画面の一覧から選び、一覧に無い名前は「一覧に無いモデル」の欄に書く。
+一覧に載せるのは、ゲームの一覧（main_026）に無いモデルだけ（ゲームが公式に選べるモデルは外した。版6）。
+OpenAI の差し替え先はゲームの一覧に全部入ったので、欄に名前を書いたときだけ差し替える。
 
 ## ファイルの分け方
 
@@ -81,10 +83,8 @@ OFF = "off"
 # AST で突き合わせる。TECH.md §3.8.3）。
 
 # ------------------------------------------------------------------ OpenAI API
-# 実際に送るモデル。
-OPENAI_MODEL = "gpt-6-luna"
-
-# 一覧に無いモデル名。空でなければ OPENAI_MODEL より優先する。
+# 実際に送るモデル（一覧に無いモデル名）。空なら差し替えない。
+# 一覧（版5までの OPENAI_MODEL）は、差し替え先が全部ゲームの一覧（main_026）に入ったので外した。
 OPENAI_CUSTOM = ""
 
 # 推論量。"keep" はゲームが組み立てた値のまま。
@@ -96,7 +96,7 @@ OPENAI_EFFORT = "keep"
 OPENAI_CACHE = "stable"
 
 # ------------------------------------------------------------------ Claude API
-# 実際に送るモデル。既定は差し替えない（ゲームの一覧に claude-sonnet-5 が在る）。
+# 実際に送るモデル。既定は差し替えない。一覧はゲームの一覧（main_026）に無いモデルだけ。
 CLAUDE_MODEL = "off"
 
 # 一覧に無いモデル名。空でなければ CLAUDE_MODEL より優先する。
@@ -177,7 +177,7 @@ def model_names(mod_dir):
             settings = json.load(fh).get("settings") or {}
     except Exception:
         return names
-    for key in ("OPENAI_MODEL", "CLAUDE_MODEL"):
+    for key in ("CLAUDE_MODEL",):
         for model, label in ((settings.get(key) or {}).get("value_labels") or {}).items():
             text = label.get("ja") if isinstance(label, dict) else label
             if isinstance(text, str) and text:
@@ -215,7 +215,7 @@ def title_text(choice, openai_target, claude_target, names,
 
 
 def apply(ctx):
-    openai_target = _pick(OPENAI_CUSTOM, OPENAI_MODEL)
+    openai_target = _pick(OPENAI_CUSTOM, OFF)
     openai_effort = _setting(OPENAI_EFFORT, "keep")
     openai_cache = _setting(OPENAI_CACHE, "keep")
     claude_target = _pick(CLAUDE_CUSTOM, CLAUDE_MODEL)

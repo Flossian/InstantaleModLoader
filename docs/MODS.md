@@ -1614,7 +1614,8 @@ VRAM は増えない。
 
 ### `136_cloud_model_override`: クラウドのモデルを差し替える
 
-ゲームの一覧に無い OpenAI / Claude のモデルで遊ぶ。
+ゲームの一覧に無い OpenAI / Claude のモデル（Claude Haiku 5.5 など）で遊ぶ。
+Claude Sonnet 5.5・Opus 5.5・Fable 5.1 と GPT-6 系・GPT-5.6 系は、ゲーム本体の main_026 から一覧に入ったので、ゲームの設定画面で選ぶ（この MOD の一覧からは外した。版6）。
 ゲームには一覧のモデルを選ばせたまま、送る直前にモデル名を差し替える。
 差し替え先が受け付けない引数も、送る前に直す。
 プロンプトキャッシュの印の置き方も、ここで選べる。
@@ -1628,8 +1629,8 @@ OpenAI のモデルを Claude に、Claude のモデルを OpenAI に変える�
 
 | 使いたいモデル | ゲームの設定画面 | この MOD の設定 |
 | --- | --- | --- |
-| OpenAI（GPT-6 Luna など） | プロバイダは OpenAI、キーは OpenAI の API キー。モデルは OpenAI の一覧のどれでもよい（`gpt-5.5` を推奨。effort `none` の速い経路を組み立てる） | 「OpenAI API」の「実際に送るモデル」 |
-| Claude（Claude Opus 5.5 など） | プロバイダは Claude、キーは Anthropic の API キー。モデルは Claude の一覧のどれでもよい（素のゲームの既定は `claude-sonnet-5`） | 「Claude API」の「実際に送るモデル」。既定は `off` なので必ず選ぶ |
+| OpenAI（ゲームの一覧に無いモデル） | プロバイダは OpenAI、キーは OpenAI の API キー。モデルは OpenAI の一覧のどれでもよい（`gpt-5.5` を推奨。effort `none` の速い経路を組み立てる） | 「OpenAI API」の「実際に送るモデル」にモデル ID を書く |
+| Claude（Claude Haiku 5.5 / Opus 5） | プロバイダは Claude、キーは Anthropic の API キー。モデルは Claude の一覧のどれでもよい（素のゲームの既定は `claude-sonnet-5`） | 「Claude API」の「実際に送るモデル」。既定は `off` なので必ず選ぶ |
 
 ゲーム側を OpenAI にしたまま Claude の欄だけ設定しても、何も起きない。
 Claude の送信が1度も走らないため。
@@ -1644,18 +1645,17 @@ Claude の送信が1度も走らないため。
 
 | 設定 | 既定 | 意味 |
 | --- | --- | --- |
-| 実際に送るモデル | GPT-6 Luna | 一覧から選ぶ。`off` で差し替えない |
-| 一覧に無いモデル | 空 | 書けば一覧より優先 |
-| 推論量 | `keep` | `keep` はゲームの値のまま（gpt-5.5 などを選んでいれば `none`）。GPT-6 Astra と GPT-6.1 Sol へは `low` 以上で送る |
+| 実際に送るモデル | 空 | モデル ID を書くと差し替える。空なら差し替えない（版5までの一覧は、全部ゲームの一覧に入ったので外した） |
+| 推論量 | `keep` | 差し替えるときだけ効く。`keep` はゲームの値のまま（gpt-5.5 などを選んでいれば `none`）。GPT-6 Astra と GPT-6.1 Sol へ差し替えるときは `low` 以上で送る |
 | プロンプトキャッシュ | 前回と同じ所まで控える | ゲームのまま / 使わない。GPT-5.6 以降だけに効く。「プロンプトキャッシュ」の節 |
 
 ##### Claude API
 
 | 設定 | 既定 | 意味 |
 | --- | --- | --- |
-| 実際に送るモデル | `off` | 一覧から選ぶ。`off` で差し替えない |
+| 実際に送るモデル | `off` | 一覧（ゲームの一覧に無いモデルだけ）から選ぶ。`off` で差し替えない |
 | 一覧に無いモデル | 空 | 書けば一覧より優先 |
-| 推論量 | `low` | `output_config.effort`。Opus 5.5 は思考を切れず既定が `medium` なので、low にしないと応答が遅い |
+| 推論量 | `low` | `output_config.effort`。差し替えるときだけ効く。思考を切れないモデル（Opus 5.5 など）へ差し替えるなら、low にしないと応答が遅い |
 | プロンプトキャッシュ | 5分 | 前回と同じ所までをその時間だけ控えさせる。1時間 / 使わない。「プロンプトキャッシュ」の節 |
 
 ##### 共通
@@ -1665,21 +1665,16 @@ Claude の送信が1度も走らないため。
 | 差し替えをログに出す回数 | 3 | `out\modloader.log`。効いているかの確認用。応答の入力・キャッシュの書き込み・読み出しの数も同じ回数だけ出す（Claude はキャッシュを使うときだけ） |
 | タイトル画面に使うモデルを出す | オン | タイトル画面の右上に「LLM: Claude Haiku 5.5 / effort: medium」のように、実際に送っているモデルと推論量を1行出す。推論量の設定が `keep` のときは、OpenAI はゲームが組む値（gpt-5.5 などなら none）を出し、Claude は「ゲームのまま」と出す。推論量を送らないモデル（Claude Haiku 4.5 など）では付かない。ゲームが API キーでクラウドを使っていて、そのプロバイダをこの MOD で差し替えているときだけ出る（ローカルの LLM や、差し替え先が `off` のときは出ない）。`126_` の版の行がある場合は、その下に並ぶ |
 
-一覧の中身（画面には名前で出る。ログと「一覧に無いモデル」の欄はモデル ID）:
+Claude の一覧の中身（画面には名前で出る。ログと「一覧に無いモデル」の欄はモデル ID）:
 
-| OpenAI API | モデル ID | Claude API | モデル ID |
-| --- | --- | --- | --- |
-| GPT-6 Astra | `gpt-6-astra` | Claude Opus 5.5 | `claude-opus-5-5` |
-| GPT-6.1 Sol | `gpt-6.1-sol` | Claude Sonnet 5.5 | `claude-sonnet-5-5` |
-| GPT-6 Sol | `gpt-6-sol` | Claude Haiku 5.5 | `claude-haiku-5-5` |
-| GPT-6 Luna | `gpt-6-luna` | Claude Opus 5 | `claude-opus-5` |
-| GPT-5.6 Sol | `gpt-5.6-sol` | Claude Sonnet 5 | `claude-sonnet-5` |
-| GPT-5.6 Terra | `gpt-5.6-terra` | Claude Haiku 4.5 | `claude-haiku-4-5` |
-| GPT-5.6 Luna | `gpt-5.6-luna` | Claude Fable 5.1 | `claude-fable-5-1` |
-| GPT-5.5 | `gpt-5.5` | Claude Opus 4.8 | `claude-opus-4-8` |
-| GPT-5.4 | `gpt-5.4` | Claude Sonnet 4.6 | `claude-sonnet-4-6` |
-| GPT-5.4 mini | `gpt-5.4-mini` | | |
-| GPT-5.4 nano | `gpt-5.4-nano` | | |
+| 名前 | モデル ID |
+| --- | --- |
+| Claude Haiku 5.5 | `claude-haiku-5-5` |
+| Claude Opus 5 | `claude-opus-5` |
+
+一覧に載せるのは、ゲームの一覧に無いモデルだけ。
+ゲームの一覧（main_026）の Claude は Sonnet 5.5・Opus 5.5・Fable 5.1・Fable 5・Sonnet 5・Opus 4.8・Opus 4.7・Sonnet 4.6・Haiku 4.5、OpenAI は GPT-6.1 Sol・GPT-6 Sol・GPT-6 Luna・GPT-6 Astra・GPT-5.6 Sol / Terra / Luna・GPT-5.5・GPT-5.4 系・GPT-4.1 系。
+版5まではこれらも一覧に並べていた。版6 に上げると、それらを選んでいた設定は `off`（差し替えない）に戻るので、ゲームの設定画面でそのモデルを選ぶ。
 
 OpenAI 互換の別サーバー（任意互換 / Alibaba）も `openai` の SDK を通るので、
 **宛先が `api.openai.com` のときだけ**差し替える。
@@ -1816,7 +1811,8 @@ GPT-5.5 以前は書き込みの割増しが無く、頭が同じなら自動で
 | API がモデル名を知らないと返す | 一覧に無いモデルの欄の綴り。鍵の側でそのモデルが使えるかも見る |
 | Claude で「リクエストを再実行」が出たまま依頼が作られない | ログに `grammar too large; sent with` の行が出ているか。`grammar still too large` が出ていれば、置き換えても文法が大きすぎた。そのプロンプトの種類（ログの `random_quest_generator` など）を添えて報告する |
 | 400 で引数を断られる | ログの `fixed:` に何が載っているか。ゲームが新しい引数を送り始めた可能性がある。エラー文にある引数名を添えて報告する |
-| 応答が遅い | 推論量を下げる（OpenAI は `none`、Claude は `low`）。GPT-6 Astra と GPT-6.1 Sol は `none` にできないので、速さが要るなら GPT-6 Luna / GPT-6 Sol |
+| 応答が遅い | 推論量を下げる（OpenAI は `none`、Claude は `low`）。GPT-6 Astra と GPT-6.1 Sol は `none` にできないので、速さが要るならゲームの設定画面で GPT-6 Luna / GPT-6 Sol を選ぶ |
+| 版6 に上げたら差し替わらなくなった | 一覧から外したモデル（ゲームの一覧に入ったもの）を選んでいた。ゲームの設定画面でそのモデルを選ぶ。ログの `settings:` の行に、使えなくなった値が出ている |
 | ゲーム内のコスト表示が合わない | 仕様。価格はゲームが選んだモデルの単価で計算される（表示だけで、実際の課金には関わらない） |
 
 ### `112_ui_text_spacing`: 広すぎる本文の行間を詰める
