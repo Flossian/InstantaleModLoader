@@ -90,7 +90,7 @@
 | [`144_fix_hardcoded_worldview`](MODS.md#144_fix_hardcoded_worldview-プロンプトと絵の世界観の決め打ちを外す) | プロンプトと絵の世界観の決め打ちを外す | プロンプトと絵の世界観の決め打ちを外す | 6 |  |
 | [`145_fix_world_overview`](MODS.md#145_fix_world_overview-入力した世界の概要をそのまま使う) | 入力した世界の概要をそのまま使う | 入力した世界の概要をそのまま使う | 1 |  |
 | [`406_user_role_fix`](MODS.md#406_user_role_fix-クラウド-api-の-geminiclaude-でuser-role-の無い依頼が返らない断られるのを防ぐ) | Gemini・Claudeの無応答の防止 | クラウド API の Gemini・Claude で、user role の無い依頼が返らない・断られるのを防ぐ | - |  |
-| [`409_fix_crafted_item_type`](MODS.md#409_fix_crafted_item_type-クラフトで作った飲食物薬を消費で使えるようにする) | クラフトで作った飲食物・薬を「消費」で使えるようにする | クラフトで作った飲食物・薬を「消費」で使えるようにする | 1 |  |
+| [`409_fix_crafted_item_type`](MODS.md#409_fix_crafted_item_type-右クリックに消費が出ない飲食物薬を使えるようにする) | 右クリックに「消費」が出ない飲食物・薬を使えるようにする | 右クリックに「消費」が出ない飲食物・薬を使えるようにする | 1 |  |
 
 ---
 
@@ -227,7 +227,7 @@
 | [`406_user_role_fix`](MODS.md#406_user_role_fix-クラウド-api-の-geminiclaude-でuser-role-の無い依頼が返らない断られるのを防ぐ) | MoririnJP 様 | 提供者と共同 |
 | [`407_npc_starting_equipment`](MODS.md#407_npc_starting_equipment-パーティーに加わった-npc-に初期装備を一度だけ持たせる) | MoririnJP 様 | そのまま取り込み |
 | [`408_visual_changes_based_on_equipment`](MODS.md#408_visual_changes_based_on_equipment-立ち絵を再生成すると装備の見た目が描き足される) | MoririnJP 様 | そのまま取り込み |
-| [`409_fix_crafted_item_type`](MODS.md#409_fix_crafted_item_type-クラフトで作った飲食物薬を消費で使えるようにする) | わさの 様 | 提供者と共同 |
+| [`409_fix_crafted_item_type`](MODS.md#409_fix_crafted_item_type-右クリックに消費が出ない飲食物薬を使えるようにする) | わさの 様 | 提供者と共同 |
 
 ---
 
