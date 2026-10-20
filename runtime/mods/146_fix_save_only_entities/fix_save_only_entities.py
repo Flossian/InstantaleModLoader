@@ -46,6 +46,12 @@ COLOSSEUM_METHOD_TARGET = "__main__:ColosseumMatchStart.method"
 
 #: 窓口に名乗る場面の名前（`340_` などが `save_lookup.covered()` で問い合わせる）。
 SITES = ("shopping", "npc_detail", "colosseum")
+#: 場面ごとの包みの対象。全部が当たっているときだけ窓口が「直っている」と答える。
+SITE_TARGETS = {
+    "shopping": (SHOP_TARGET,),
+    "npc_detail": (NPC_DETAIL_TARGET,),
+    "colosseum": (COLOSSEUM_TARGET, COLOSSEUM_METHOD_TARGET),
+}
 
 
 def _get(obj, key, default=None):
@@ -109,10 +115,14 @@ def apply(ctx):
         return
     save_lookup.install(ctx, write)
     for site in SITES:
-        save_lookup.cover(OWNER, ctx, site)
+        save_lookup.cover(OWNER, ctx, site, SITE_TARGETS[site])
 
     def run(orig, args, kwargs, app, why, site):
         if not why:
+            return orig(*args, **kwargs)
+        # 場面の包みと保存の守りが揃っていなければ差し替えない（窓口と同じ判断。守りが無いと骨格に進みが焼かれる）。
+        if save_lookup.covered(site) != OWNER:
+            write("WARN {}: not redirected, the hooks for this scene are not all in place ({})".format(site, why))
             return orig(*args, **kwargs)
         with save_lookup.redirected(app, "{}: {}".format(site, why), write):
             return orig(*args, **kwargs)

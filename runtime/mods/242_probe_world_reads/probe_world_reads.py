@@ -319,6 +319,9 @@ def apply(ctx):
 
     store["hooks"] = {"read": lambda frame: note("read", frame),
                       "set": lambda frame: note("set", frame)}
+    #: この世代が持ち主か。注入し直しで次の世代が置き直していたら、降りるときに触らない。
+    owner = object()
+    store["owner"] = owner
 
     def ensure():
         """`app` の型を差し替える。既に差し替えてあれば何もしない。"""
@@ -339,6 +342,23 @@ def apply(ctx):
             return
         write("swapped {} (world_dict is {})".format(
             cls.__name__, type(app.__dict__.get(ATTR, None)).__name__))
+
+    def restore():
+        """降りるとき、`app` の型を元へ戻し、見張りを外す。次の世代が持ち主なら何もしない。"""
+        if store.get("owner") is not owner:
+            return
+        store["hooks"] = None
+        store["owner"] = None
+        app = ui.find_app()
+        cls = type(app) if app is not None else None
+        if cls is None or not getattr(cls, "_iml_world_reads_spy", False):
+            return
+        try:
+            object.__setattr__(app, "__class__", cls.__mro__[1])
+        except TypeError as exc:
+            write("WARN cannot restore {}: {}".format(cls.__name__, exc))
+            return
+        write("restored {}".format(cls.__name__))
 
     def flush():
         if not store["dirty"]:
@@ -438,6 +458,10 @@ def apply(ctx):
 
     def tick(_dt=None):
         if ctx.superseded():
+            try:
+                restore()
+            except Exception:
+                ctx.log_exc("probe world reads: cannot restore the app type")
             return False
         try:
             ensure()
@@ -450,6 +474,10 @@ def apply(ctx):
 
     def loop(dt):
         if ctx.superseded():
+            try:
+                restore()
+            except Exception:
+                ctx.log_exc("probe world reads: cannot restore the app type")
             return False
         try:
             ensure()

@@ -1928,10 +1928,10 @@ holdings.remove_all()                # ローダを外すときに呼ぶ
 
 ```python
 save_lookup.install(ctx, write)               # 保存の書き手の守り（1つの世代につき1組）
-save_lookup.cover(owner, ctx, site)           # 場面 site（"shopping" / "npc_detail" / "colosseum"）を直していると名乗る
+save_lookup.cover(owner, ctx, site, targets)  # 場面 site（"shopping" / "npc_detail" / "colosseum"）を直していると名乗る。targets はその場面の包みの対象
 with save_lookup.redirected(app, why, write): # その間だけ app.world_dict をセーブ側の辞書にする
     orig(...)
-save_lookup.covered(site)                     # 直している持ち主 / None（用済みの ctx は数えない）
+save_lookup.covered(site)                     # 直している持ち主 / None（用済みの ctx と、包みが当たっていない場面は数えない）
 save_lookup.in_world(app, *keys)              # 本来の世界の辞書をキーの並びでたどれるか。True / False / None（読めない）
 ```
 
@@ -1942,6 +1942,7 @@ save_lookup.in_world(app, *keys)              # 本来の世界の辞書をキ�
 | 包む名前は `save_world_json:write_obfuscated_json_file` | `scripts.save_codec` の名前は起動直後の当て直しで `save_world_json` の別名に上書きされ、包みが外れた（`242_` の実測） |
 | 差し替えは数えて入れ子にし、最後の1つが抜けたときに戻す。戻すときに辞書が入れ替わっていたら戻さない | 2つの処理が重なっても早く抜けた側が戻さない。間に読み込みが入ったとき、新しい世界を古い辞書で上書きしない |
 | `in_world` は差し替えの間も本来の世界の辞書を見る | 入れ子の判断がセーブ側を見て「ある」と答えないため |
+| `covered` は問われるたびに台帳（`ctx.patches()`）を見て、`targets` と保存の守りが全部その MOD の包みとして当たっているときだけ持ち主を返す。直す側も差し替える前に同じ `covered` を見る | `required=False` の包みは当たらなくても黙って抜ける。名乗りだけ残ると、`340_` が直っていない場面に入口を出し、素のゲームと同じ `KeyError` になる。守りが無いまま差し替えると骨格に進みが焼かれる |
 
 置き場は `sys` の属性（`_instantale_save_lookup`）。検査は `tools\tests\test_save_only_entities.py`。
 

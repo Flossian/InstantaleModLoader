@@ -22,6 +22,7 @@ import struct
 import sys
 import tempfile
 import typing
+import weakref
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
@@ -280,6 +281,21 @@ if pydantic is not None:
           len([n for n in ctx.notes if "widened vfx for referee_player_attack_new_new" in n]) == 1)
     result, seen = send("referee_x", ["msg"], NoVfx)
     check("vfx の無い型はそのまま", seen["args"][2] is NoVfx)
+
+    # 1手ごとに作られる型は、使い終えたら控えごと回収される
+    import gc
+
+    def one_turn():
+        class Turn(pydantic.BaseModel):
+            narration: str = ""
+            vfx: Literal["slash", "fire"] = "slash"
+        _, turn_seen = send("referee_player_attack_new_new", ["msg"], Turn)
+        return weakref.ref(Turn), weakref.ref(turn_seen["args"][2])
+
+    turn_ref, wide_ref = one_turn()
+    gc.collect()
+    check("使い終えた型は回収される", turn_ref() is None and wide_ref() is None,
+          (turn_ref(), wide_ref()))
 
 
 class Recorder(object):

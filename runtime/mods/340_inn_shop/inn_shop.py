@@ -127,7 +127,7 @@ def apply(ctx):
         store = {
             "entry": None,          # 店の `choices["売買する"]` の写し
             "pending": None,        # 入口がまだ写せていない間に生まれた宿屋
-            "swept": None,          # 見回った世界の id
+            "swept": None,          # 見回った世界（弱い参照。id は解放後の番地の使い回しで別の世界と一致する）
             "batch": None,          # 宿屋で品揃えを作っている間の目印
         }
         setattr(sys, STORE_ATTR, store)
@@ -218,10 +218,17 @@ def apply(ctx):
                 for facility in ui.facilities_of(node).values():
                     yield facility
 
+    def swept(world):
+        """`world` を見回り済みか。"""
+        held = store["swept"]
+        if isinstance(held, weakref.ref):
+            return held() is world
+        return held is not None and held == id(world)
+
     def sweep(app):
         """注入より前に生まれていた施設を、世界ごとに1回見回る。"""
         world = _get(app, "world")
-        if world is None or store["swept"] == id(world):
+        if world is None or swept(world):
             return
         facilities = list(all_facilities(app))
         if not facilities:
@@ -232,7 +239,10 @@ def apply(ctx):
         if store["entry"] is None:
             # 店が1軒も無い世界。次の組み直しで見直す（新しい施設は `__init__` の側が拾う）。
             return
-        store["swept"] = id(world)
+        try:
+            store["swept"] = weakref.ref(world)
+        except TypeError:
+            store["swept"] = id(world)
         added = sum(1 for facility in facilities
                     if is_game_inn(facility) and add_entry(facility))
         added += flush_pending()
@@ -252,25 +262,25 @@ def apply(ctx):
         return result
 
     def in_world_dict(app, facility):
-        """施設と主が `app.world_dict` に在るか。読めなければ None（止めない）。
+        """施設と主が世界の素データに在るか。読めなければ None（止めない）。
 
         ゲームの売買は施設と主を `world_dict` から引く。セーブエディタで足した施設は
         `save_data_dict` にしか無く、「売買する」を押すと `KeyError` でスレッドが落ちる（GAME.md §2.28）。
+        たどるのはローダの窓口 `save_lookup.in_world`（`146_` と同じ判断。差し替えの間も本来の世界を見る）。
         """
-        raw = _get(app, "world_dict")
-        if not isinstance(raw, dict) or not isinstance(raw.get("areas"), dict):
-            return None
         area = ui.current_area(app)
         found, node = ui.find_facility(area, facility_id(facility))
         node_id = modfacility.node_id_of(node)
-        if found is None or not node_id:
+        area_id = ui.area_id_of(area) if area is not None else None
+        if found is None or not node_id or not area_id:
             return None
-        try:
-            facilities = raw["areas"][ui.area_id_of(area)]["nodes"][node_id]["facilities"]
-            npcs = raw["npcs"]
-        except (KeyError, TypeError):
-            return False
-        return facility_id(facility) in facilities and str(_get(facility, "owner")) in npcs
+        here = save_lookup.in_world(app, "areas", area_id, "nodes", node_id, "facilities", facility_id(facility))
+        if here is not True:
+            return here
+        owner = _get(facility, "owner")
+        if owner is None:
+            return True
+        return save_lookup.in_world(app, "npcs", str(owner))
 
     def withdraw_entry(app, facility, buttons):
         """入口を外す（施設の `choices` と、組み直す前のボタン）。"""
@@ -414,17 +424,18 @@ def apply(ctx):
     llm.wrap_outgoing(ctx, rewrite, label="inn shop")
 
     @ctx.wrap(ITEM_TARGET, required=False, safe=True)
-    def keep_inn_goods(orig, self, item_data=None, shop_owner_instance=None,
-                       item_stock_tier=None, *args, **kwargs):
+    def keep_inn_goods(orig, self, *args, **kwargs):
+        # 引数はそのまま渡す。名前付きで受けて渡し直すと、呼び手が省いた引数を None で上書きする。
         batch = live_batch()
         if batch is not None:
+            item_data = frames.arg(args, kwargs, "item_data", 0)
             kind = category_of(item_data)
             if kind in DROP_TYPES:
                 name = _get(item_data, "item_name") or _get(item_data, "name") or "?"
                 batch["dropped"].append(name)
                 write("dropped {!r} ({}) at inn {}".format(name, kind, batch["facility"]))
                 return None
-        return orig(self, item_data, shop_owner_instance, item_stock_tier, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     ctx.log("inn shop: inns get {!r}; goods lean to food and drink; log goes to out/{}".format(
         SHOP_CHOICE, LOG_BASENAME))

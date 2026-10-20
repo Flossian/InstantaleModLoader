@@ -37,7 +37,8 @@ def open_window(app, model, *, on_dismiss=None, write=None):
         if data["note"]:
             box.add_widget(kit.label(data["note"]))
         if data["towns"]:
-            box.add_widget(kit.label("影響下の街　" + "・".join(data["towns"]), panels.META, panels.DIM))
+            # 「、」で区切る。街の名前に「・」が入ると（ルナ・ミスト）区切りと見分けられない（VERIFICATION.md §3.98）
+            box.add_widget(kit.label("影響下の街　" + "、".join(data["towns"]), panels.META, panels.DIM))
         if data["relations"]:
             pieces = [("他勢力との関係", panels.DIM)]
             for other, rel in data["relations"]:

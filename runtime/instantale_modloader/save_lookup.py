@@ -20,7 +20,7 @@ app.save_data_dict   saves\\<世界>\\savedata.json      その周回の進み�
 
 ```text
 修正する側（apply() の中）   save_lookup.install(ctx, write)            保存の書き手の守り（1つの世代につき1組）
-                             save_lookup.cover(owner, ctx, site)         この場面を直していると名乗る
+                             save_lookup.cover(owner, ctx, site, targets) この場面を直していると名乗る
                              with save_lookup.redirected(app, why): …   その間だけ引き先をセーブ側に
 読む側                       save_lookup.covered(site) -> 持ち主 / None   （`340_` の宿屋の守りを外すかの判断）
                              save_lookup.in_world(app, *keys) -> True / False / None
@@ -71,22 +71,49 @@ def _alive(ctx):
 
 
 # ---------------------------------------------------------------- 名乗りと問い合わせ
-def cover(owner, ctx, site):
-    """`owner` が場面 `site`（"shopping" / "npc_detail" / "colosseum" など）を直していると名乗る。"""
-    _store()["covers"][str(site)] = (str(owner), ctx)
+def cover(owner, ctx, site, targets=()):
+    """`owner` が場面 `site`（"shopping" / "npc_detail" / "colosseum" など）を直していると名乗る。
+
+    `targets` はその場面を直す包みの対象。問い合わせのたびに台帳を見て、全部が当たっているときだけ
+    直っていると答える（保存の書き手の守り `WRITE_TARGET` も足す）。`required=False` の包みは当たらなくても
+    黙って抜けるので、名乗りだけ残ると、直っていない場面を直っていると答える。
+    """
+    targets = tuple(targets)
+    if targets and WRITE_TARGET not in targets:
+        targets += (WRITE_TARGET,)
+    # 台帳の帰属はフォルダ名。`ctx._mod` は apply() の間だけなので、名乗った時点で控える。
+    mod = getattr(ctx, "_mod", None) or str(owner)
+    _store()["covers"][str(site)] = (str(owner), ctx, targets, mod)
 
 
 def withdraw(site):
     _store()["covers"].pop(str(site), None)
 
 
+def _landed(ctx, mod, targets):
+    """`targets` が全部 `mod` の包みとして当たっているか。台帳を読めなければ当たっているとみなす。"""
+    if not targets:
+        return True
+    patches = getattr(ctx, "patches", None)
+    if not callable(patches):
+        return True
+    try:
+        table = patches() or {}
+    except Exception:
+        return True
+    return all(mod in table.get(target, ()) for target in targets)
+
+
 def covered(site):
-    """場面 `site` を直している持ち主。誰も直していなければ None。"""
+    """場面 `site` を直している持ち主。誰も直していないか、包みが当たっていなければ None。"""
     entry = _store()["covers"].get(str(site))
     if not entry:
         return None
-    owner, ctx = entry
-    return owner if _alive(ctx) else None
+    owner, ctx = entry[0], entry[1]
+    targets, mod = (entry[2], entry[3]) if len(entry) >= 4 else ((), owner)
+    if not _alive(ctx):
+        return None
+    return owner if _landed(ctx, mod, targets) else None
 
 
 # ---------------------------------------------------------------- 世界側にあるか

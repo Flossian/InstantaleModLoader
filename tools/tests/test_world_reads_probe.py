@@ -86,8 +86,10 @@ class FakeCtx:
     def log_exc(self, msg):
         self.errors.append(msg)
 
+    alive = True
+
     def superseded(self):
-        return False
+        return not self.alive
 
     def write_json(self, path, data, *, indent=1):
         return ml.write_json(path, data, indent=indent, report=self.log_exc)
@@ -197,7 +199,24 @@ try:
     calls = []
     thook(lambda self, o: calls.append(type(app.world_dict).__name__), Facility(), "98")
     check("切っていれば写しにしない", calls == ["dict"], calls)
-    check("例外を出していない", not ctx.errors, ctx.errors)
+
+    print("降りるとき")
+    store = getattr(sys, module.STORE)
+    # 注入し直しで次の世代が置き直していたら、前の世代は型も見張りも触らない
+    newer = FakeCtx(OUT_DIR)
+    module.apply(newer)
+    ctx.alive = False
+    loop_old = CLOCK.intervals[0]
+    check("用済みの世代は Clock から外れる", loop_old(0) is False)
+    check("次の世代の差し替えはそのまま", type(app) is not InstantaleApp and store["hooks"] is not None)
+    # 次の世代も用済みになった（MOD を外して注入し直した）
+    held = app.__dict__.get("world_dict")
+    newer.alive = False
+    check("最後の世代も Clock から外れる", CLOCK.intervals[-1](0) is False)
+    check("型を元へ戻す", type(app) is InstantaleApp, type(app))
+    check("見張りを外す", store["hooks"] is None, store["hooks"])
+    check("戻した後も同じ辞書", app.world_dict is held, app.world_dict)
+    check("例外を出していない", not ctx.errors and not newer.errors, (ctx.errors, newer.errors))
 finally:
     ui.find_app = saved_find
 

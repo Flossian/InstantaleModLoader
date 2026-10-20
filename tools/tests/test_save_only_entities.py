@@ -209,6 +209,46 @@ try:
     check("世界データには本来の世界の辞書を書く", written and written[0][1] is world, written)
     check("セーブにはセーブの辞書を書く", len(written) > 1 and written[1][1] is save, written)
     check("例外を出していない", not ctx.errors, ctx.errors)
+
+    print("146: 包みが当たっていない場面は名乗らない")
+    save_lookup.reset()
+
+    class LedgerCtx(FakeCtx):
+        """台帳を持つ ctx。`landed` に入れた対象だけ、この MOD の包みとして当たっている。"""
+
+        def __init__(self, out_dir, landed):
+            FakeCtx.__init__(self, out_dir)
+            self.landed = set(landed)
+
+        def patches(self):
+            return {target: [self._mod] for target in self.landed}
+
+    every = set(t for targets in module.SITE_TARGETS.values() for t in targets) | {save_lookup.WRITE_TARGET}
+    ctx = LedgerCtx(OUT_DIR, every)
+    module.apply(ctx)
+    check("全部当たっていれば3つとも名乗る", all(save_lookup.covered(s) == module.OWNER for s in module.SITES))
+    ctx.landed.discard(module.SHOP_TARGET)
+    check("売買の包みが外れたら売買は直っていない", save_lookup.covered("shopping") is None)
+    check("ほかの場面はそのまま", save_lookup.covered("npc_detail") == module.OWNER)
+    app, world, save = make_app(world_has_shop=False)
+    ui.find_app = lambda: app
+    seen = []
+    ctx.hooks[module.SHOP_TARGET](lambda self: seen.append(app.world_dict), types.SimpleNamespace(app=app))
+    check("直っていない場面では差し替えない", seen and seen[0] is world, seen)
+    ctx.landed = every - {save_lookup.WRITE_TARGET}
+    check("保存の守りが外れたらどの場面も直っていない",
+          all(save_lookup.covered(s) is None for s in module.SITES))
+    character = types.SimpleNamespace(id="120", name="テスター")
+    app, world, save = make_app(world_has_owner=False)
+    seen = []
+    ctx.hooks[module.NPC_DETAIL_TARGET](lambda self, c: seen.append(app.world_dict), app, character)
+    check("守りが無ければ人物の詳細も差し替えない", seen and seen[0] is world, seen)
+    other = LedgerCtx(OUT_DIR, every)
+    other.patches = lambda: {target: [module.OWNER] for target in every}
+    other._mod = "別の_mod"           # 名乗ったのは別の MOD。台帳の包みは 146 のもの
+    save_lookup.cover(module.OWNER, other, "shopping", module.SITE_TARGETS["shopping"])
+    check("別の MOD の包みは数えない", save_lookup.covered("shopping") is None)
+    check("例外を出していない（台帳）", not ctx.errors, ctx.errors)
 finally:
     ui.find_app = saved_find
     save_lookup.reset()

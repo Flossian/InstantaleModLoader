@@ -177,7 +177,7 @@ def factions_block(ledger, towns):
         # 名前の後ろに括弧を付けない（LLM が「名前（種類）」の形で写して返した。2026-10-11 の実機）
         lines.append("- {}: {}。{}{}".format(
             faction["name"], faction.get("kind") or "勢力", faction.get("note") or "",
-            " 力の強い街: {}".format("・".join(held)) if held else ""))
+            " 力の強い街: {}".format("、".join(held)) if held else ""))     # 「・」は街の名前に入る
     relations = []
     by_id = {f["id"]: f["name"] for f in ledger.get("factions") or []}
     for key, row in sorted((ledger.get("relations") or {}).items()):

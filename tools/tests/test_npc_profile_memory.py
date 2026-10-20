@@ -902,10 +902,25 @@ def test_elapsed_days_reads_the_world_day():
     check(MOD.elapsed_days({MOD.DAY_KEY: True}, 130) is None, "真偽値を日数にした")
 
 
+def test_elapsed_span_rounds_the_days():
+    """経過日数は段の上限ちょうどまでその段、超えたら次の段"""
+    check(MOD.elapsed_span(1) == "前日", "1日が前日にならない")
+    check(MOD.elapsed_span(2) == "数日前", "2日が数日前にならない")
+    for limit, span in MOD.ELAPSED_SPANS:
+        check(MOD.elapsed_span(limit) == span,
+              "{}日が {} にならない".format(limit, span))
+    last = MOD.ELAPSED_SPANS[-1][0]
+    check(MOD.elapsed_span(last + 1) == MOD.ELAPSED_SPAN_LONGEST,
+          "上限を超えても最後の段にならない")
+    limits = [limit for limit, _ in MOD.ELAPSED_SPANS]
+    check(limits == sorted(limits), "段の上限が昇順でない: {}".format(limits))
+
+
 def test_elapsed_note_avoids_a_reunion():
     """但し書きは「地続きにしない」と「久しぶりにもしない」の両方を言う"""
     note = MOD.elapsed_note(90, "エリス")
-    check("90日" in note, "日数が入っていない: {}".format(note))
+    check("数か月前" in note, "経過の言い方が入っていない: {}".format(note))
+    check("90" not in note, "生の日数が漏れた: {}".format(note))
     check("エリス" in note, "相手の名が入っていない: {}".format(note))
     check("そのまま再開" in note, "地続き禁止が無い: {}".format(note))
     check("再会のようにも" in note, "久しぶり抑制が無い: {}".format(note))
@@ -929,7 +944,8 @@ def test_the_day_is_recorded_and_injected_next_time():
     run.app.world.days_elapsed = 190
     run.facilitate()
     injected = Facilitator.calls[-1]["npc"].profile
-    check("90日" in injected, "経過日数が注入されない: {!r}".format(injected))
+    check("数か月前" in injected, "経過日数が注入されない: {!r}".format(injected))
+    check("90" not in injected, "生の日数が注入された: {!r}".format(injected))
     check("再会のようにも" in injected, "久しぶり抑制が注入されない")
     return run
 
@@ -946,7 +962,8 @@ def test_elapsed_days_can_be_turned_off():
               "切っているのに日を控えた: {}".format(run.profiles()[stem]["77"]))
         run.app.world.days_elapsed = 190
         run.facilitate()
-        check("90日" not in Facilitator.calls[-1]["npc"].profile,
+        check(MOD.ELAPSED_HEADING.format(player="冒険者")
+              not in Facilitator.calls[-1]["npc"].profile,
               "切っているのに日数を注入した")
         return run
     finally:
@@ -961,7 +978,8 @@ def test_the_extractor_is_told_the_gap():
     prompt = Llm.last_prompt(MOD.MANAGER_EXTRACT)
     check("【前回の会話からの経過】" in prompt,
           "経過の欄が無い: {}".format(prompt[:400]))
-    check("60日が経っている" in prompt, "日数が違う: {}".format(prompt[:400]))
+    check("前回の会話は数か月前" in prompt, "経過が違う: {}".format(prompt[:400]))
+    check("60日" not in prompt, "生の日数を渡した: {}".format(prompt[:400]))
     return run
 
 

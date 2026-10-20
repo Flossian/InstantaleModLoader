@@ -228,6 +228,8 @@ def apply(ctx):
         write("WARN art not found, falls back to the carrier: {}".format(", ".join(missing)))
 
     # 型の差し替えの控え。送り口は1手ごとに新しい Structure を作るので、クラスを鍵に弱く持つ。
+    # 値も弱く持つ。差し替えた型は鍵の子クラスで `__bases__` から鍵を強く掴むので、
+    # 値をそのまま持つと鍵が回収されず、1手ごとに型が溜まる。
     extended = weakref.WeakKeyDictionary()
     # 差し替えの控え（resolve_battle_effect の1回ぶん）。
     pending = {"vfx": None, "carrier": None, "source": None, "sound": None, "until": 0.0,
@@ -248,9 +250,10 @@ def apply(ctx):
             if not isinstance(structure, type):
                 return orig(*args, **kwargs)
             try:
-                widened = extended.get(structure)
+                held = extended.get(structure)
             except TypeError:
-                widened = None
+                held = None
+            widened = held() if held is not None else None
             if widened is None:
                 pydantic_module = sys.modules.get("pydantic")
                 if pydantic_module is None:
@@ -259,7 +262,7 @@ def apply(ctx):
                 if widened is None:
                     return orig(*args, **kwargs)
                 try:
-                    extended[structure] = widened
+                    extended[structure] = weakref.ref(widened)
                 except TypeError:
                     pass
                 manager_name = args[0] if args else kwargs.get("manager_name")

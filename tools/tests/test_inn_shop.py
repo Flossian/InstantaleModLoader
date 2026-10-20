@@ -23,6 +23,7 @@ import os
 import shutil
 import sys
 import types
+import weakref
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
@@ -205,12 +206,23 @@ check("主が居なければ足さない", list(no_owner.choices) == ["出る"],
 guild = make_facility(ctx, "11", "guild", "6")
 check("宿屋以外には足さない", list(guild.choices) == ["出る"], guild.choices)
 
+def module_store():
+    return getattr(sys, "_instantale_inn_shop_store")
+
+
+class FakeWorld(object):
+    """ゲームの World と同じく弱い参照を取れる世界（SimpleNamespace は取れない）。"""
+
+    def __init__(self, **kw):
+        self.__dict__.update(kw)
+
+
 print("見回り（注入より前に生まれた施設）")
 module, ctx = setup()
 old_shop = make_facility(ctx, "3", "general_store", "1", hooked=False)
 old_inn = make_facility(ctx, "7", "inn", "4", hooked=False)
 area = Area("0", [old_shop, old_inn])
-world = types.SimpleNamespace(name="テスト世界", areas={"0": area}, characters={})
+world = FakeWorld(name="テスト世界", areas={"0": area}, characters={})
 player = types.SimpleNamespace(name="テストプレイヤー", current_area="0", location=old_inn)
 app = types.SimpleNamespace(world=world, player=player, buttons=[])
 refresh = ctx.hooks[REFRESH_TARGET]
@@ -219,6 +231,10 @@ check("見回りで宿屋に足す", list(old_inn.choices) == ["売買する", "
 check("見回りの記録", "sweep: 1 inn(s)" in log_text(), log_text())
 refresh(lambda self, *a, **k: "drawn", app)
 check("同じ世界は2度見回らない", log_text().count("sweep:") == 1, log_text())
+check("見回った世界は弱く持つ", isinstance(module_store()["swept"], weakref.ref), module_store()["swept"])
+app.world = FakeWorld(name="テスト世界", areas={"0": area}, characters={})
+refresh(lambda self, *a, **k: "drawn", app)
+check("別の世界に替わったら見回る", log_text().count("sweep:") == 2, log_text())
 check("例外を出していない", not ctx.errors, ctx.errors)
 
 print("素データに無い宿屋（セーブエディタで足した宿）")
@@ -275,10 +291,16 @@ player2.location = listed
 app2.buttons = []
 refresh2(lambda self, *a, **k: "drawn", app2)
 check("主が素データに無ければ外す", list(listed.choices) == ["出る"], listed.choices)
+from instantale_modloader import save_lookup  # noqa: E402
+app2.save_data_dict = {"areas": world_dict["areas"], "npcs": {"1": {}, "4": {}, "98": {}}}
+with save_lookup.redirected(app2, "test"):
+    app2.buttons = []
+    refresh2(lambda self, *a, **k: "drawn", app2)
+check("差し替えの間も本来の世界で判断する", list(listed.choices) == ["出る"], listed.choices)
+save_lookup.reset()
 check("例外を出していない（素データ）", not ctx.errors, ctx.errors)
 
 # 売買を直す MOD（146）が窓口に名乗っていれば、素データに無い宿屋でも入口を出す。
-from instantale_modloader import save_lookup  # noqa: E402
 save_lookup.reset()
 save_lookup.cover("146_fix_save_only_entities", ctx, "shopping")
 listed.choices = {"出る": MOVE_SPEC}
@@ -385,6 +407,33 @@ seen.clear()
 ctx.hooks[SHOP_TARGET](at_inn_orig, manager, "売買する")
 check("店では差し替えない", seen.get("texts") is None, seen)
 check("店では全部作る", len(made) == 6, made)
+
+print("引数はそのまま渡す")
+passed = {}
+
+
+def tier_default(self, item_data, shop_owner_instance=None, item_stock_tier=2):
+    passed["tier"] = item_stock_tier
+    passed["item"] = item_data["item_name"]
+
+
+ctx.hooks[ITEM_TARGET](tier_default, manager, item_data=item("剣", "weapon"))
+check("店で省いた段は既定のまま", passed.get("tier") == 2, passed)
+player.location = inn
+passed.clear()
+
+
+def at_inn_keyword(self, choice_text):
+    hook = ctx.hooks[ITEM_TARGET]
+    hook(tier_default, self, item_data=item("煮込み", "healing_item"))
+    hook(tier_default, self, item_data=item("剣", "weapon"))
+    return "shopping"
+
+
+ctx.hooks[SHOP_TARGET](at_inn_keyword, manager, "売買する")
+check("宿で名前付きの品も見分ける", passed.get("item") == "煮込み", passed)
+check("宿で省いた段は既定のまま", passed.get("tier") == 2, passed)
+player.location = old_shop
 check("例外を出していない（最後）", not ctx.errors, ctx.errors)
 
 if failures:
