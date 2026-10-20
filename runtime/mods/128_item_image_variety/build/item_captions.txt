@@ -2562,3 +2562,111 @@ itm_i36_r0_08	accessory	A brown open pocket watch.
 itm_i36_r0_09	tool	A brown kerosene lantern.
 itm_i36_r0_10	tool	A brown spur.
 itm_i36_r0_11	tool	A black small tobacco tin.
+itm_i37_r0_00	magical_material	A floating purple crystal with small shards.
+itm_i37_r0_01	magical_material	A cluster of pale blue hexagonal crystals.
+itm_i37_r0_02	magical_material	A golden crystal with swirling star specks inside.
+itm_i37_r0_03	magical_material	A clear bell-shaped crystal with grey mist inside.
+itm_i37_r0_04	magical_material	A black crystal cluster.
+itm_i37_r0_05	magical_material	An irregular lump of pale blue glowing stone.
+itm_i37_r0_06	magical_material	A long red crystal shard.
+itm_i37_r0_07	magical_material	A dark crystal with a green core wrapped in dried flesh.
+itm_i37_r0_08	magical_material	A smooth milky white stone with a hollow center.
+itm_i37_r0_09	magical_material	An icy pale blue spiked crystal.
+itm_i37_r0_10	magical_material	An amber crystal fragment with orange light inside.
+itm_i37_r0_11	magical_material	A small heap of broken purple crystal shards.
+itm_i38_r0_00	magical_material	A cracked red-hot spherical core.
+itm_i38_r0_01	magical_material	A glowing orb caged in a golden lattice.
+itm_i38_r0_02	magical_material	A pitch-black orb that seems to swallow light.
+itm_i38_r0_03	magical_material	A clear orb with swirling grey mist.
+itm_i38_r0_04	magical_material	A red heart-shaped crystal with pulsing veins.
+itm_i38_r0_05	magical_material	A spherical core with blue lightning inside with a faint blue glow.
+itm_i38_r0_06	magical_material	A radiant white core on a broken golden mount.
+itm_i38_r0_07	magical_material	A small sphere with purple mist sealed inside.
+itm_i38_r0_08	magical_material	A faceted blue core bound with silver bands.
+itm_i38_r0_09	magical_material	A thorn-covered core with a green glow.
+itm_i38_r0_10	magical_material	A frost-covered pale blue orb.
+itm_i38_r0_11	magical_material	A core of orange molten lava in a cracked black shell.
+itm_i39_r0_00	magical_material	A corked vial with swirling grey mist.
+itm_i39_r0_01	magical_material	A round glass flask with floating golden starlight specks.
+itm_i39_r0_02	magical_material	A tied leather pouch of glittering dust and black ash.
+itm_i39_r0_03	magical_material	A paper packet of glowing crimson powder.
+itm_i39_r0_04	magical_material	A glass beaker with grey residue at the bottom.
+itm_i39_r0_05	magical_material	A narrow-necked bottle filled with white vapor.
+itm_i39_r0_06	magical_material	A large droplet of shining silver liquid.
+itm_i39_r0_07	magical_material	A frozen clump of purple mist.
+itm_i39_r0_08	magical_material	A hourglass-shaped glass vessel with drifting blue mist with a faint blue glow.
+itm_i39_r0_09	magical_material	A horn container filled with gold dust.
+itm_i39_r0_10	magical_material	A lump of pale golden glowing beeswax.
+itm_i39_r0_11	magical_material	A bone spool wound with silver thread.
+itm_i40_r0_00	potion	A round-bottomed flask of red potion.
+itm_i40_r0_01	potion	A thin wax-sealed vial of pale green liquid with a herb.
+itm_i40_r0_02	potion	A copper canteen-shaped flask of amber liquid.
+itm_i40_r0_03	potion	A square thick glass bottle of blue liquid with a faint blue glow.
+itm_i40_r0_04	potion	A gourd-shaped bottle of murky purple liquid.
+itm_i40_r0_05	potion	A twisted-neck glass bottle of glowing golden liquid.
+itm_i40_r0_06	potion	A squat dark bottle with floating herbs.
+itm_i40_r0_07	potion	A small corked jar with two round white pills.
+itm_i40_r0_08	potion	A faceted crystal flask of silver liquid.
+itm_i40_r0_09	potion	A stoppered clay jar wrapped with a leather cord.
+itm_i40_r0_10	potion	A conical flask of steaming green liquid.
+itm_i40_r0_11	potion	A heart-shaped bottle of deep red potion.
+itm_i41_r0_00	gem	An uncut red crystal gemstone.
+itm_i41_r0_01	gem	A smooth deep purple rough gemstone.
+itm_i41_r0_02	gem	A teardrop-shaped blue gem with a faint cyan glow.
+itm_i41_r0_03	gem	A faceted green gem.
+itm_i41_r0_04	gem	An ominous black gem with a purple sheen.
+itm_i41_r0_05	ore	A rock chunk with embedded blue ore with a faint blue glow.
+itm_i41_r0_06	ore	A heavy rock with veins of gold.
+itm_i41_r0_07	ore	A rough heavy lump of iron.
+itm_i41_r0_08	metal	A silver ingot.
+itm_i41_r0_09	ore	A faintly glowing meteorite fragment.
+itm_i41_r0_10	ore	A dark dull ore chunk.
+itm_i41_r0_11	ore	A white stone with light leaking from its cracks.
+itm_i42_r0_00	creature_part	A large ominous bloodstained fang.
+itm_i42_r0_01	creature_part	A huge glossy purple fang.
+itm_i42_r0_02	creature_part	A translucent crystal-like canine tooth.
+itm_i42_r0_03	creature_part	A white horn fragment with a glowing tip.
+itm_i42_r0_04	creature_part	A twisted black horn.
+itm_i42_r0_05	creature_part	A chipped black hooked claw.
+itm_i42_r0_06	creature_part	A glowing red dragon scale.
+itm_i42_r0_07	creature_part	A dark metallic carapace fragment.
+itm_i42_r0_08	creature_part	A torn purple wing membrane with veins.
+itm_i42_r0_09	creature_part	A tuft of white fur with a pale blue sheen.
+itm_i42_r0_10	creature_part	A swollen sac filled with green liquid.
+itm_i42_r0_11	creature_part	A bone fragment with strange patterns.
+itm_i43_r0_00	magical_material	A glowing blue spherical core in a brass cage.
+itm_i43_r0_01	magical_material	A cracked stone golem core with orange light.
+itm_i43_r0_02	magical_material	A purple crystal core wrapped in copper wire.
+itm_i43_r0_03	magical_material	A red power core surrounded by small gears.
+itm_i43_r0_04	magical_material	A copper boiler-shaped core with pipes.
+itm_i43_r0_05	magical_material	A black iron core with green light leaking from cracks.
+itm_i43_r0_06	magical_material	A glass power tube of glowing liquid with metal end caps.
+itm_i43_r0_07	relic	A brass heart-shaped engine with pipes.
+itm_i43_r0_08	magical_material	A blue crystal set in a hexagonal metal frame.
+itm_i43_r0_09	relic	An ancient core of white porcelain and gold.
+itm_i43_r0_10	scrap	A burnt-out black machine core.
+itm_i43_r0_11	magical_material	A spherical core held in a three-clawed metal mount.
+itm_i44_r0_00	metal	A rusted large gear with broken teeth.
+itm_i44_r0_01	metal	A cluster of meshed brass gears.
+itm_i44_r0_02	scrap	A coiled clockwork spring.
+itm_i44_r0_03	scrap	A copper piston and cylinder.
+itm_i44_r0_04	scrap	A steam valve with a round handle.
+itm_i44_r0_05	scrap	A handful of bolts and nuts.
+itm_i44_r0_06	metal	A metal machine part with cooling fins.
+itm_i44_r0_07	metal	A scorched riveted iron plate.
+itm_i44_r0_08	other_material	A copper wire coil.
+itm_i44_r0_09	other_material	A small motor with copper windings.
+itm_i44_r0_10	relic	A mossy bronze gear carved with ancient patterns.
+itm_i44_r0_11	metal	A small golden gear.
+itm_i45_r0_00	scrap	A severed mechanical forearm with exposed wires.
+itm_i45_r0_01	scrap	A three-fingered metal hand.
+itm_i45_r0_02	scrap	A mechanical eyeball with a red glowing lens.
+itm_i45_r0_03	scrap	A cracked round lens in a brass frame.
+itm_i45_r0_04	metal	A dented riveted armor plate.
+itm_i45_r0_05	scrap	A ball-and-socket joint part.
+itm_i45_r0_06	scrap	A bundle of torn wires with connectors.
+itm_i45_r0_07	scrap	A broken mechanical leg with a spring joint.
+itm_i45_r0_08	scrap	A metal face mask with glowing eye holes.
+itm_i45_r0_09	scrap	A copper pipe section with a valve.
+itm_i45_r0_10	relic	An ancient circuit board with gold traces and burnt edges.
+itm_i45_r0_11	relic	A shard of glowing blue glass circuitry.

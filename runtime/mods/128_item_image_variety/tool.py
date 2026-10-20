@@ -40,7 +40,7 @@ FOLDER_LABELS = (
     ("long_weapon", "長物"), ("throwable_weapon", "投擲武器"), ("shield", "盾"),
     ("headgear", "頭"), ("body_armor", "胴鎧"), ("clothing", "服"), ("gauntlets", "手"),
     ("legwear", "脚と足"), ("accessory", "装身具"),
-    ("food", "食べ物"), ("drink", "飲み物"), ("medicine", "薬"), ("plant", "植物"), ("mushroom", "きのこ"), ("tool", "道具"),
+    ("food", "食べ物"), ("drink", "飲み物"), ("medicine", "薬"), ("potion", "薬瓶"), ("plant", "植物"), ("mushroom", "きのこ"), ("tool", "道具"),
     ("relic", "遺物"), ("scrap", "くず"), ("magical_material", "魔法の素材"), ("other_material", "その他の素材"),
     ("creature_part", "魔物の素材"), ("document", "文書"), ("scroll", "巻物"), ("liquid_material", "液体の素材"), ("treasure", "宝"), ("metal", "金属"), ("gem", "宝石"), ("ore", "鉱石"),
 )

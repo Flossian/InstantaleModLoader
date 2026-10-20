@@ -54,6 +54,7 @@ build/README.md）。
 """
 
 import os
+import shutil
 import sys
 import threading
 
@@ -72,6 +73,23 @@ SIM_FLOOR = 0.8
 # 同梱の追加辞書（素の辞書に無かった305枚。`data/<品種>.json`）を使うか。
 # 切ると素の辞書だけで均しをかける（切り分け用）。足した絵の分類（下の IMAGE_SETS）は別の設定。
 USE_EXTRA_DICT = True
+
+# 部位をまたいで探す。ゲームが付けた部位に合う絵が無い外見文（包帯が道具、ダイナマイトが薬瓶で来るなど）は、
+# 自分の部位でいちばん似た絵が CROSS_SLOT_BELOW 未満のときだけ、同じ 32x32 の部位（CROSS_SLOTS）も見て、
+# そちらの最良が CROSS_SLOT_MIN 以上かつ自分 + CROSS_SLOT_MARGIN 以上ならその絵にする。
+# 装備品は部位ごとに絵の寸法が違うのでまたがない。決まりの値は作者が選んだ「きつめ」（VERIFICATION.md §3.26）。
+# 絵は頼まれた部位のフォルダに `xs.<元の部位>.<鍵>` の名で写す（`state/item_image_cross/`。探し先に足す）。
+# 一度付いた絵は、設定を切っても対応表のとおり同じ絵のまま。
+CROSS_SLOT = True
+CROSS_SLOT_BELOW = 0.55
+CROSS_SLOT_MIN = 0.65
+CROSS_SLOT_MARGIN = 0.15
+CROSS_SLOTS = ("food", "drink", "medicine", "potion", "plant", "mushroom", "tool", "relic", "scrap", "magical_material",
+               "other_material", "creature_part", "document", "scroll", "liquid_material", "treasure", "metal", "gem",
+               "ore", "accessory")
+CROSS_PREFIX = "xs."
+CROSS_DIRNAME = "item_image_cross"
+IMAGE_REL = os.path.join("Assets", "images", "item_candidates_dark")
 
 # 足した絵の分類ごとの使い方。分類は作者が用意した元画像1枚ごと（`categories.json`）。
 #   off       使わない（その分類の辞書を読まない）
@@ -124,6 +142,9 @@ SET_SF_SHORT_THROWING = "separate"
 SET_SF_MELEE = "separate"
 SET_PART_SF = "separate"
 SET_PART_STEAMPUNK = "separate"
+SET_PART_MAGITECH_CORE = "mix"
+SET_PART_GEARS = "mix"
+SET_PART_BROKEN_BODY = "mix"
 SET_FOOD_RATION = "separate"
 SET_FOOD_GENERAL = "mix"
 SET_FOOD_TRAVEL = "mix"
@@ -134,8 +155,12 @@ SET_FOOD_SEASIA = "separate"
 SET_FOOD_WESTERN = "separate"
 SET_MEDIC_FANTASY = "mix"
 SET_MEDIC_MODERN = "separate"
+SET_MEDIC_POTION = "mix"
 SET_MAGIC_ESSENCE = "mix"
 SET_MAGIC_RELIC = "mix"
+SET_MAGIC_CRYSTAL = "mix"
+SET_MAGIC_CORE = "mix"
+SET_MAGIC_VESSEL = "mix"
 SET_TREASURE_COIN = "mix"
 SET_TOOL_TRAVEL = "mix"
 SET_CREATURE_MATERIAL = "mix"
@@ -151,7 +176,9 @@ SET_WA_ARMOR = "separate"
 SET_SF_ARMOR = "separate"
 SET_WASTELAND_GEAR = "separate"
 SET_CREATURE_MUTANT = "mix"
+SET_CREATURE_FANG = "mix"
 SET_TREASURE_CROWN = "mix"
+SET_TREASURE_GEM = "mix"
 SET_TOOL_ODDITIES = "mix"
 SET_TOOL_MODERN = "separate"
 SET_TOOL_POSTAPOC = "separate"
@@ -238,6 +265,9 @@ IMAGE_SETS = (
     ("sf_melee", "SET_SF_MELEE"),
     ("part_sf", "SET_PART_SF"),
     ("part_steampunk", "SET_PART_STEAMPUNK"),
+    ("part_magitech_core", "SET_PART_MAGITECH_CORE"),
+    ("part_gears", "SET_PART_GEARS"),
+    ("part_broken_body", "SET_PART_BROKEN_BODY"),
     ("food_ration", "SET_FOOD_RATION"),
     ("food_general", "SET_FOOD_GENERAL"),
     ("food_travel", "SET_FOOD_TRAVEL"),
@@ -248,8 +278,12 @@ IMAGE_SETS = (
     ("food_western", "SET_FOOD_WESTERN"),
     ("medic_fantasy", "SET_MEDIC_FANTASY"),
     ("medic_modern", "SET_MEDIC_MODERN"),
+    ("medic_potion", "SET_MEDIC_POTION"),
     ("magic_essence", "SET_MAGIC_ESSENCE"),
     ("magic_relic", "SET_MAGIC_RELIC"),
+    ("magic_crystal", "SET_MAGIC_CRYSTAL"),
+    ("magic_core", "SET_MAGIC_CORE"),
+    ("magic_vessel", "SET_MAGIC_VESSEL"),
     ("treasure_coin", "SET_TREASURE_COIN"),
     ("tool_travel", "SET_TOOL_TRAVEL"),
     ("creature_material", "SET_CREATURE_MATERIAL"),
@@ -265,7 +299,9 @@ IMAGE_SETS = (
     ("sf_armor", "SET_SF_ARMOR"),
     ("wasteland_gear", "SET_WASTELAND_GEAR"),
     ("creature_mutant", "SET_CREATURE_MUTANT"),
+    ("creature_fang", "SET_CREATURE_FANG"),
     ("treasure_crown", "SET_TREASURE_CROWN"),
+    ("treasure_gem", "SET_TREASURE_GEM"),
     ("tool_oddities", "SET_TOOL_ODDITIES"),
     ("tool_modern", "SET_TOOL_MODERN"),
     ("tool_postapoc", "SET_TOOL_POSTAPOC"),
@@ -342,7 +378,7 @@ GENRE_WEIGHTS_FILE = "weights.json"
 SETTINGS_DIRNAME = "item_image_variety"
 SETTINGS_STORE_ATTR = "_iml_item_image_world_settings"
 # 世界ごとに上書きできる設定（mod.json の settings と同じ並び）
-SETTING_NAMES = (("TOP_K", "SIM_FLOOR", "USE_EXTRA_DICT")
+SETTING_NAMES = (("TOP_K", "SIM_FLOOR", "USE_EXTRA_DICT", "CROSS_SLOT")
                  + tuple(setting for _genre, setting in GENRE_SETTINGS) + ("GENRE_BONUS",)
                  + tuple(setting for _name, setting in IMAGE_SETS))
 
@@ -407,12 +443,16 @@ def apply(ctx):
     # 分類の絵の探し先。使わない分類も足す（探し先に足すだけでは絵を読まない。
     # 既にその分類の絵が付いている品の表示を保つため）。フォルダが無い分類は足さない。
     # 選定の関数を待つより先に足す（ロード直後の所持品の表示に間に合わせる）。重ねて足しても1つ。
+    # 部位をまたいだ絵の写しの置き場も同じく足す（前の起動で写した絵の表示を保つ）
+    cross_root = ctx.state_path(CROSS_DIRNAME)
     try:
         from kivy.resources import resource_add_path
         for name, _flag in IMAGE_SETS:
             folder = os.path.join(ctx.mod_dir, "images", name)
             if os.path.isdir(folder):
                 resource_add_path(folder)
+        os.makedirs(cross_root, exist_ok=True)
+        resource_add_path(cross_root)
     except Exception as exc:
         ctx.log("item_image_variety: cannot add the image path: {!r}".format(exc))
 
@@ -508,6 +548,9 @@ def apply(ctx):
         for (folder, _text), key in images.items():
             spot = (folder, key)
             usage[spot] = usage.get(spot, 0) + 1
+            if key.startswith(CROSS_PREFIX):
+                # 写しが消えていたら置き直す（ロードしたセーブの品は選定を通らずに絵を引く）
+                place_cross(folder, key)
         state.update(world=world, file=path, images=images,
                      legacy=legacy, usage=usage)
         log("seed {!r}: {} texts mapped, legacy {} kinds".format(
@@ -613,30 +656,10 @@ def apply(ctx):
         log("pool {}: base={} merged={}".format(sub_type, n_base, len(keys)))
         return pool
 
-    @ctx.wrap("Embedding.get_similar_id:get_similar_embedding_id", safe=True)
-    def get_similar_embedding_id(orig, query_text, item_sub_type, *args, **kwargs):
-        # 世界とその個別設定を先に揃える（どの分類を候補に入れるかが決まってから辞書を組む）
-        with lock:
-            ensure_world()
-        pool = load_pool(item_sub_type)
-        if pool is None:
-            return orig(query_text, item_sub_type, *args, **kwargs)
-        keys, matrix, key_set, sides, cats, pool_key = pool
-
-        # 同じ外見文には同じ絵。埋め込みの計算より先に引けるので、再入手は速い。
-        with lock:
-            # 表の差し替えも錠の中で。外で2本が同時に読み直すと、
-            # 片方が足した対応を、もう片方が読み直した表で上書きして失う。
-            ensure_world()
-            kept = state["images"].get((item_sub_type, query_text))
-            if kept is not None and kept in key_set:
-                log("{}: kept {} for {!r}".format(
-                    item_sub_type, kept, query_text[:80]))
-                return kept
-
-        query = emb_mod.text_to_embedding(query_text)
-        query = query.detach().reshape(-1).to(dtype=matrix.dtype)
-        query = query / query.norm().clamp_min(1e-12)
+    def rank(pool, query):
+        """辞書1つの中で候補を決める（別扱いの側・ジャンルの重み・候補の幅）。
+        `top` は側を決めた後のいちばん似た絵、`qualified` は使用数で選ぶ候補（`top_sim` が 0 以下なら `top` だけ）。"""
+        keys, matrix, _key_set, sides, cats, pool_key = pool
         sims = matrix @ query
         raw = sims
         # 世界のジャンルの重みの分を足す（重みが全部 0 なら足さない）。似ていない外見文の下限は足す前の値で見る
@@ -645,13 +668,14 @@ def apply(ctx):
             sims = sims + bonus
 
         top_sim, top_idx = sims.max(dim=0)
-        top_sim = float(top_sim)
+        top_sim, top_idx = float(top_sim), int(top_idx)
+        qualified = [top_idx]
         if top_sim > 0:
             ranked = sims.argsort(descending=True).tolist()
-            side = sides[int(top_idx)]
+            side = sides[top_idx]
             if side:
                 plain = next((i for i in ranked if sides[i] == ""), None)
-                if float(raw[int(top_idx)]) < SEPARATE_MIN_SIM or (
+                if float(raw[top_idx]) < SEPARATE_MIN_SIM or (
                         plain is not None and top_sim - float(sims[plain]) < SEPARATE_MARGIN):
                     side = ""
             order = [i for i in ranked if sides[i] == side][:TOP_K]
@@ -662,41 +686,125 @@ def apply(ctx):
             # 比を足した後の値に掛けると、全部の絵に同じだけ足す世界で幅が 0.2 × 加算だけ広がった
             floor = top_sim - (1.0 - SIM_FLOOR) * float(raw[top_idx])
             qualified = [i for i in order if float(sims[i]) >= floor]
+        return {"keys": keys, "raw": raw, "bonus": bonus, "top": top_idx, "top_sim": top_sim, "qualified": qualified}
+
+    def best_other_slot(sub_type, query):
+        """ほかの 32x32 の部位で、いちばん似た絵（足す前の値）が最も高い部位とその候補。無ければ None。"""
+        best = None
+        for other in CROSS_SLOTS:
+            if other == sub_type:
+                continue
+            pool = load_pool(other)
+            if pool is None:
+                continue
+            pick = rank(pool, query)
+            if pick["top_sim"] <= 0:
+                continue
+            sim = float(pick["raw"][pick["top"]])
+            if best is None or sim > best[0]:
+                best = (sim, other, pick)
+        return None if best is None else best[1:]
+
+    def place_cross(sub_type, key):
+        """部位をまたいだ絵 `xs.<元の部位>.<鍵>` の写しを、頼まれた部位のフォルダに置く。置けたら（もうあれば）True。
+        元はゲームのフォルダ（カレント）か、分類の絵のフォルダ。"""
+        slot, _, src_key = key[len(CROSS_PREFIX):].partition(".")
+        dest = os.path.join(cross_root, IMAGE_REL, sub_type, key + ".png")
+        if os.path.isfile(dest):
+            return True
+        rel = os.path.join(IMAGE_REL, slot, src_key + ".png")
+        sources = [rel] + [os.path.join(mod_dir, "images", name, rel) for name, _setting in IMAGE_SETS]
+        src = next((path for path in sources if os.path.isfile(path)), None)
+        if src is None:
+            log("cross: no image for {} ({})".format(key, rel))
+            return False
+        try:
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            shutil.copyfile(src, dest + ".tmp")
+            os.replace(dest + ".tmp", dest)
+        except OSError as exc:
+            log("cross: cannot place {}: {!r}".format(key, exc))
+            return False
+        return True
+
+    def kept_image(sub_type, query_text, key_set):
+        """対応表にある絵（今も出せるものだけ）。部位をまたいだ絵は写しを確かめる。錠の中で呼ぶ。"""
+        kept = state["images"].get((sub_type, query_text))
+        if kept is not None and (kept in key_set or (kept.startswith(CROSS_PREFIX) and place_cross(sub_type, kept))):
+            log("{}: kept {} for {!r}".format(sub_type, kept, query_text[:80]))
+            return kept
+        return None
+
+    @ctx.wrap("Embedding.get_similar_id:get_similar_embedding_id", safe=True)
+    def get_similar_embedding_id(orig, query_text, item_sub_type, *args, **kwargs):
+        # 世界とその個別設定を先に揃える（どの分類を候補に入れるかが決まってから辞書を組む）
+        with lock:
+            ensure_world()
+        pool = load_pool(item_sub_type)
+        if pool is None:
+            return orig(query_text, item_sub_type, *args, **kwargs)
+        key_set = pool[2]
+
+        # 同じ外見文には同じ絵。埋め込みの計算より先に引けるので、再入手は速い。
+        with lock:
+            # 表の差し替えも錠の中で。外で2本が同時に読み直すと、
+            # 片方が足した対応を、もう片方が読み直した表で上書きして失う。
+            ensure_world()
+            kept = kept_image(item_sub_type, query_text, key_set)
+            if kept is not None:
+                return kept
+
+        query = emb_mod.text_to_embedding(query_text)
+        query = query.detach().reshape(-1).to(dtype=pool[1].dtype)
+        query = query / query.norm().clamp_min(1e-12)
+        own = rank(pool, query)
+        # 部位をまたぐ候補。比べる自分の値は実際に見せる絵（使用数で選ぶ）の値なので、候補の中に
+        # 0.55 未満の絵があれば先に探しておく（作者が選んだ試算と同じ比べ方。VERIFICATION.md §3.26）
+        other = None
+        if CROSS_SLOT and item_sub_type in CROSS_SLOTS and own["top_sim"] > 0 and min(
+                float(own["raw"][i]) for i in own["qualified"]) < CROSS_SLOT_BELOW:
+            other = best_other_slot(item_sub_type, query)
 
         # 選定と割り当ては1つの錠で。錠を分けると、同時に来た別の外見文が
         # 同じ最少の絵を取り、同じ外見文なら後の1本が先の対応を別の絵で上書きする。
         # 埋め込みの計算中に他のスレッドが同じ外見文を入れていれば、それを返す。
         with lock:
             ensure_world()
-            kept = state["images"].get((item_sub_type, query_text))
-            if kept is not None and kept in key_set:
-                log("{}: kept {} for {!r}".format(
-                    item_sub_type, kept, query_text[:80]))
+            kept = kept_image(item_sub_type, query_text, key_set)
+            if kept is not None:
                 return kept
-            if top_sim <= 0:
-                # 近い候補がまったく無い。広げても意味が無いので素の挙動どおり。
-                chosen = int(top_idx)
-            else:
-                chosen = min(
-                    qualified,
-                    key=lambda i: state["usage"].get((item_sub_type, keys[i]), 0))
-            key = keys[chosen]
+            # 先に試す順（部位をまたいだ候補が決まりを満たせば先頭。写しを置けなければ自分の部位へ戻る）
+            own_pick = min(own["qualified"], key=lambda i: state["usage"].get((item_sub_type, own["keys"][i]), 0))
+            own_sim = float(own["raw"][own_pick])
+            picks = [(item_sub_type, own)]
+            if other is not None and own_sim < CROSS_SLOT_BELOW and float(other[1]["raw"][other[1]["top"]]) >= max(
+                    CROSS_SLOT_MIN, own_sim + CROSS_SLOT_MARGIN):
+                picks.insert(0, other)
+            for slot, pick in picks:
+                keys = pick["keys"]
+                names = keys if slot == item_sub_type else ["{}{}.{}".format(CROSS_PREFIX, slot, k) for k in keys]
+                # 近い候補がまったく無い（top_sim が 0 以下）なら qualified は top だけ ＝ 素の挙動どおり
+                chosen = min(pick["qualified"],
+                             key=lambda i: state["usage"].get((item_sub_type, names[i]), 0))
+                key = names[chosen]
+                if slot == item_sub_type or place_cross(item_sub_type, key):
+                    break
             state["images"][(item_sub_type, query_text)] = key
             spot = (item_sub_type, key)
             state["usage"][spot] = state["usage"].get(spot, 0) + 1
             persist()
 
-        rank = 0 if top_sim <= 0 else qualified.index(chosen)
-        log("{}: chose {} (rank {} of {} qualified, sim {:.3f}{}, top1 {} {:.3f}) "
+        raw, bonus, top_idx = pick["raw"], pick["bonus"], pick["top"]
+        log("{}: chose {} (rank {} of {} qualified, sim {:.3f}{}, top1 {} {:.3f}{}) "
             "for {!r}".format(
-                item_sub_type, key, rank,
-                1 if top_sim <= 0 else len(qualified),
+                item_sub_type, key, pick["qualified"].index(chosen), len(pick["qualified"]),
                 float(raw[chosen]),
                 "" if bonus is None else " +genre {:.3f}".format(float(bonus[chosen])),
-                keys[int(top_idx)], top_sim,
+                keys[top_idx], pick["top_sim"],
+                "" if slot == item_sub_type else ", from {} over own {:.3f}".format(slot, own_sim),
                 query_text[:80]))
         return key
 
-    ctx.log("item_image_variety: installed (TOP_K={}, SIM_FLOOR={}, extra dict={}, image sets={})".format(
-        TOP_K, SIM_FLOOR, "on" if USE_EXTRA_DICT else "off",
+    ctx.log("item_image_variety: installed (TOP_K={}, SIM_FLOOR={}, extra dict={}, cross slot={}, image sets={})".format(
+        TOP_K, SIM_FLOOR, "on" if USE_EXTRA_DICT else "off", "on" if CROSS_SLOT else "off",
         ", ".join("{} {}".format(name, mode_of(setting)) for name, setting in IMAGE_SETS)))

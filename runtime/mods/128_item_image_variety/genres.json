@@ -225,6 +225,18 @@
    "fantasy": 0.3,
    "earlymodern": 1.0
   },
+  "part_magitech_core": {
+   "fantasy": 1.0,
+   "earlymodern": 0.5
+  },
+  "part_gears": {
+   "fantasy": 1.0,
+   "earlymodern": 0.5
+  },
+  "part_broken_body": {
+   "fantasy": 1.0,
+   "earlymodern": 0.5
+  },
   "food_ration": {
    "modern": 0.8,
    "sf": 1.0,
@@ -260,10 +272,22 @@
    "cyber": 1.0,
    "postapoc": 0.8
   },
+  "medic_potion": {
+   "fantasy": 1.0
+  },
   "magic_essence": {
    "fantasy": 1.0
   },
   "magic_relic": {
+   "fantasy": 1.0
+  },
+  "magic_crystal": {
+   "fantasy": 1.0
+  },
+  "magic_core": {
+   "fantasy": 1.0
+  },
+  "magic_vessel": {
    "fantasy": 1.0
   },
   "treasure_coin": {
@@ -330,7 +354,13 @@
    "fantasy": 1.0,
    "postapoc": 0.8
   },
+  "creature_fang": {
+   "fantasy": 1.0
+  },
   "treasure_crown": {
+   "fantasy": 1.0
+  },
+  "treasure_gem": {
    "fantasy": 1.0
   },
   "tool_oddities": {

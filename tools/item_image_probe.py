@@ -584,6 +584,12 @@ class Picker(object):
         self.floor = ast.literal_eval(consts["SIM_FLOOR"])
         self.min_sim = ast.literal_eval(consts["SEPARATE_MIN_SIM"])
         self.margin = ast.literal_eval(consts["SEPARATE_MARGIN"])
+        self.cross = ast.literal_eval(consts["CROSS_SLOT"])
+        self.cross_below = ast.literal_eval(consts["CROSS_SLOT_BELOW"])
+        self.cross_min = ast.literal_eval(consts["CROSS_SLOT_MIN"])
+        self.cross_margin = ast.literal_eval(consts["CROSS_SLOT_MARGIN"])
+        self.cross_slots = ast.literal_eval(consts["CROSS_SLOTS"])
+        self.cross_prefix = ast.literal_eval(consts["CROSS_PREFIX"])
         self.cats = json.load(io.open(os.path.join(MOD_128, "categories.json"), encoding="utf-8"))
         self.emb_dir = os.path.join(str(game_dir), "Data", "item_embeddings")
         self.img_dir = os.path.join(str(game_dir), "Assets", "images", "item_candidates_dark")
@@ -634,14 +640,13 @@ class Picker(object):
             self.pools[detail] = (keys, matrix, [side.get(k, "") for k in keys], cat)
         return self.pools[detail]
 
-    def pick(self, detail, text):
+    def rank(self, detail, q):
+        """辞書1つの中の候補（本体の `rank` と同じ）。辞書が無ければ None。"""
         pool = self.pool(detail)
         if pool is None:
             return None
         keys, matrix, sides, cat = pool
         np = self.np
-        q = self.model.embed(text)
-        q = q / np.linalg.norm(q)
         raw = matrix @ q
         bonus = self.bonus([cat.get(k, "stock") for k in keys])
         sims = raw if bonus is None else raw + bonus
@@ -656,13 +661,43 @@ class Picker(object):
         best = float(sims[order[0]])
         # 本体と同じく、候補の幅は足す前の値で決める
         qualified = [i for i in order if float(sims[i]) >= best - (1.0 - self.floor) * float(raw[order[0]])]
-        chosen = min(qualified, key=lambda i: self.usage[(detail, keys[i])])
-        self.usage[(detail, keys[chosen])] += 1
-        key = keys[chosen]
-        return {"key": key, "category": cat.get(key, "stock"), "sim": round(float(raw[chosen]), 3),
-                "top_sim": round(top, 3)}
+        return {"keys": keys, "cat": cat, "raw": raw, "top": order[0], "top_sim": top, "qualified": qualified}
+
+    def pick(self, detail, text):
+        np = self.np
+        q = self.model.embed(text)
+        q = q / np.linalg.norm(q)
+        own = self.rank(detail, q)
+        if own is None:
+            return None
+        # 本体と同じく、自分の部位の最良が低いときだけ、ほかの 32x32 の部位も見る（self.cross で切れる）
+        slot, pick = detail, own
+        own_keys = own["keys"]
+        own_sim = float(own["raw"][min(own["qualified"], key=lambda i: self.usage[(detail, own_keys[i])])])
+        if self.cross and detail in self.cross_slots and own["top_sim"] > 0 and own_sim < self.cross_below:
+            best = None
+            for other in self.cross_slots:
+                if other == detail:
+                    continue
+                cand = self.rank(other, q)
+                if cand is not None and cand["top_sim"] > 0:
+                    sim = float(cand["raw"][cand["top"]])
+                    if best is None or sim > best[0]:
+                        best = (sim, other, cand)
+            if best is not None and best[0] >= max(self.cross_min, own_sim + self.cross_margin):
+                slot, pick = best[1], best[2]
+        keys = pick["keys"]
+        names = keys if slot == detail else ["{}{}.{}".format(self.cross_prefix, slot, k) for k in keys]
+        chosen = min(pick["qualified"], key=lambda i: self.usage[(detail, names[i])])
+        self.usage[(detail, names[chosen])] += 1
+        return {"key": names[chosen], "category": pick["cat"].get(keys[chosen], "stock"),
+                "sim": round(float(pick["raw"][chosen]), 3), "top_sim": round(pick["top_sim"], 3),
+                "slot": slot, "own_sim": round(own_sim, 3)}
 
     def image_path(self, detail, key, category):
+        if key.startswith(self.cross_prefix):
+            # 部位をまたいだ絵は元の部位の絵（本体は頼まれた部位のフォルダに写しを置く）
+            detail, _, key = key[len(self.cross_prefix):].partition(".")
         if category in ("stock", "extra"):
             return os.path.join(self.img_dir, detail, key + ".png")
         return os.path.join(MOD_128, "images", category, "Assets", "images", "item_candidates_dark", detail, key + ".png")

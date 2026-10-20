@@ -36,7 +36,7 @@ SETS = {"medieval": ("medieval.json", "med_", ("中世の武器と防具",)), "m
 SHEETS = b.SHEETS  # 一枚絵の置き場所は categories.json から（build_guns.SHEETS）
 # 消耗品と素材の部位。ゲームの素材と同じくどれも 32x32
 ITEMS = ("food", "drink", "medicine", "plant", "mushroom", "tool", "relic", "scrap", "magical_material", "other_material",
-         "creature_part", "document", "scroll", "liquid_material", "treasure", "metal", "gem", "ore")
+         "creature_part", "document", "scroll", "liquid_material", "treasure", "metal", "gem", "ore", "potion")
 # 防具の寸法はゲームの素材と同じ（盾・胴鎧は 2x2 マスの 64x64、服と装身具は 32x32）
 SIZES = dict(b.SIZES, shield=(64, 64), body_armor=(64, 64), clothing=(32, 32), accessory=(32, 32), **{f: (32, 32) for f in ITEMS})
 SQUARE = ("shield", "body_armor", "clothing", "accessory", "headgear", "gauntlets", "legwear") + ITEMS
@@ -220,15 +220,16 @@ def main():
         rows = {}
         for e in entries:
             rows.setdefault(e["folder"], []).append(made[e["key"]])
-        step = {f: max(36, SIZES[f][0] + 4) for f in SIZES}
-        height = sum(((len(v) + cols - 1) // cols) * (SIZES[f][1] + 4) for f, v in rows.items())
+        # 箱の寸法は作った絵から取る（item の組の防具は SIZES と違う 64x64）
+        box = {f: (max(t.width for t in v), max(t.height for t in v)) for f, v in rows.items()}
+        step = {f: max(36, box[f][0] + 4) for f in box}
+        height = sum(((len(v) + cols - 1) // cols) * (box[f][1] + 4) for f, v in rows.items())
         sheet = Image.new("RGBA", (cols * 68, height), (40, 40, 40, 255))
         y = 0
-        for folder in SIZES:
-            tiles = rows.get(folder, [])
+        for folder, tiles in rows.items():
             for i, t in enumerate(tiles):
-                sheet.alpha_composite(t, ((i % cols) * step[folder] + 2, y + (i // cols) * (SIZES[folder][1] + 4) + 2))
-            y += ((len(tiles) + cols - 1) // cols) * (SIZES[folder][1] + 4)
+                sheet.alpha_composite(t, ((i % cols) * step[folder] + 2, y + (i // cols) * (box[folder][1] + 4) + 2))
+            y += ((len(tiles) + cols - 1) // cols) * (box[folder][1] + 4)
         sheet.resize((sheet.width * 2, sheet.height * 2), Image.NEAREST).save(args.preview)
     print("done")
 

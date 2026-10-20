@@ -53,7 +53,7 @@ assert with_caption >= 0.95 * total, ("キャプションの無い絵が多い",
 assert ast.literal_eval(body["SETTINGS_DIRNAME"]) == modtool.state_dirname(MOD)
 manifest = json.load(open(os.path.join(MOD, "mod.json"), encoding="utf-8"))
 genre_settings = ast.literal_eval(body["GENRE_SETTINGS"])
-names = (("TOP_K", "SIM_FLOOR", "USE_EXTRA_DICT") + tuple(setting for _g, setting in genre_settings) + ("GENRE_BONUS",)
+names = (("TOP_K", "SIM_FLOOR", "USE_EXTRA_DICT", "CROSS_SLOT") + tuple(setting for _g, setting in genre_settings) + ("GENRE_BONUS",)
          + tuple(setting for _n, setting in image_sets))
 assert list(manifest["settings"]) == list(names), "SETTING_NAMES と mod.json の settings が違う"
 assert manifest["tool"]["entry"] == "tool.py"

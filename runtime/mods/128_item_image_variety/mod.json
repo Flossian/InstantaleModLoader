@@ -10,7 +10,7 @@
     "en": "Spreads item icons across similar candidates instead of always the single best match, and adds weapon, armor, clothing, consumable and material images the stock assets lack. Per-category use and per-genre weights can be set for all worlds or per world, and event items are asked for English appearance text",
     "ja": "アイテム画像を「最も似た1枚」固定でなく似た候補から散らして選び、素材に無い武器・防具・服・消耗品・素材の絵を足す。足した絵は元画像ごとの分類で、使い方とジャンルの重みを一括とワールド個別で決められる。イベントで得る品の外見文を英語で頼む。"
   },
-  "version": "9",
+  "version": "10",
   "author": "R01/Flossian",
   "settings": {
     "TOP_K": {
@@ -59,6 +59,22 @@
       "note": {
         "ja": "素のゲームが一度も選ばない305枚（書類・魔物の素材・茸など）も候補にする",
         "en": "Also offer 305 stock images the game never picks (documents, creature parts, mushrooms)"
+      },
+      "group": {
+        "ja": "選び方",
+        "en": "How images are picked"
+      }
+    },
+    "CROSS_SLOT": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "部位をまたいで探す",
+        "en": "Search other item kinds"
+      },
+      "note": {
+        "ja": "ゲームが付けた種類に合う絵が無い品（道具として来た包帯など）は、同じ大きさのほかの種類の絵も探す。装備品はまたがない",
+        "en": "When no image of the item's kind fits (bandages sent as a tool, etc.), also search other 32x32 kinds. Equipment is never crossed"
       },
       "group": {
         "ja": "選び方",
@@ -1379,6 +1395,84 @@
         "en": "75 images"
       }
     },
+    "SET_PART_MAGITECH_CORE": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：機械部品",
+        "en": "Added images: Machine parts"
+      },
+      "label": {
+        "ja": "機械部品_魔導機械の核",
+        "en": "part_magitech_core"
+      },
+      "note": {
+        "ja": "12枚",
+        "en": "12 images"
+      }
+    },
+    "SET_PART_GEARS": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：機械部品",
+        "en": "Added images: Machine parts"
+      },
+      "label": {
+        "ja": "機械部品_歯車と部品",
+        "en": "part_gears"
+      },
+      "note": {
+        "ja": "12枚",
+        "en": "12 images"
+      }
+    },
+    "SET_PART_BROKEN_BODY": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：機械部品",
+        "en": "Added images: Machine parts"
+      },
+      "label": {
+        "ja": "機械部品_壊れた機械の体",
+        "en": "part_broken_body"
+      },
+      "note": {
+        "ja": "12枚",
+        "en": "12 images"
+      }
+    },
     "SET_FOOD_RATION": {
       "type": "choice",
       "values": [
@@ -1639,6 +1733,32 @@
         "en": "87 images"
       }
     },
+    "SET_MEDIC_POTION": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：医療品",
+        "en": "Added images: Medical supplies"
+      },
+      "label": {
+        "ja": "医療品_薬瓶",
+        "en": "medic_potion"
+      },
+      "note": {
+        "ja": "12枚",
+        "en": "12 images"
+      }
+    },
     "SET_MAGIC_ESSENCE": {
       "type": "choice",
       "values": [
@@ -1689,6 +1809,84 @@
       "note": {
         "ja": "72枚",
         "en": "72 images"
+      }
+    },
+    "SET_MAGIC_CRYSTAL": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：魔法素材",
+        "en": "Added images: Magic materials"
+      },
+      "label": {
+        "ja": "魔法素材_結晶",
+        "en": "magic_crystal"
+      },
+      "note": {
+        "ja": "12枚",
+        "en": "12 images"
+      }
+    },
+    "SET_MAGIC_CORE": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：魔法素材",
+        "en": "Added images: Magic materials"
+      },
+      "label": {
+        "ja": "魔法素材_核と宝珠",
+        "en": "magic_core"
+      },
+      "note": {
+        "ja": "12枚",
+        "en": "12 images"
+      }
+    },
+    "SET_MAGIC_VESSEL": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：魔法素材",
+        "en": "Added images: Magic materials"
+      },
+      "label": {
+        "ja": "魔法素材_霧と粉と雫",
+        "en": "magic_vessel"
+      },
+      "note": {
+        "ja": "12枚",
+        "en": "12 images"
       }
     },
     "SET_TREASURE_COIN": {
@@ -2081,6 +2279,32 @@
         "en": "93 images"
       }
     },
+    "SET_CREATURE_FANG": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：魔物素材",
+        "en": "Added images: Monster materials"
+      },
+      "label": {
+        "ja": "魔物素材_牙と角と鱗",
+        "en": "creature_fang"
+      },
+      "note": {
+        "ja": "12枚",
+        "en": "12 images"
+      }
+    },
     "SET_TREASURE_CROWN": {
       "type": "choice",
       "values": [
@@ -2105,6 +2329,32 @@
       "note": {
         "ja": "56枚",
         "en": "56 images"
+      }
+    },
+    "SET_TREASURE_GEM": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：宝物",
+        "en": "Added images: Treasures"
+      },
+      "label": {
+        "ja": "宝物_宝石と鉱石",
+        "en": "treasure_gem"
+      },
+      "note": {
+        "ja": "12枚",
+        "en": "12 images"
       }
     },
     "SET_TOOL_ODDITIES": {

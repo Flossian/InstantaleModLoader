@@ -405,6 +405,33 @@
   "default": "separate"
  },
  {
+  "id": "part_magitech_core",
+  "setting": "SET_PART_MAGITECH_CORE",
+  "group": "機械部品",
+  "label": "機械部品_魔導機械の核",
+  "source": "parts/part_magitech_core.png",
+  "sheet": "i43",
+  "default": "mix"
+ },
+ {
+  "id": "part_gears",
+  "setting": "SET_PART_GEARS",
+  "group": "機械部品",
+  "label": "機械部品_歯車と部品",
+  "source": "parts/part_gears.png",
+  "sheet": "i44",
+  "default": "mix"
+ },
+ {
+  "id": "part_broken_body",
+  "setting": "SET_PART_BROKEN_BODY",
+  "group": "機械部品",
+  "label": "機械部品_壊れた機械の体",
+  "source": "parts/part_broken_body.png",
+  "sheet": "i45",
+  "default": "mix"
+ },
+ {
   "id": "food_ration",
   "setting": "SET_FOOD_RATION",
   "group": "食料",
@@ -495,6 +522,15 @@
   "default": "separate"
  },
  {
+  "id": "medic_potion",
+  "setting": "SET_MEDIC_POTION",
+  "group": "医療品",
+  "label": "医療品_薬瓶",
+  "source": "medical/medic_potion.png",
+  "sheet": "i40",
+  "default": "mix"
+ },
+ {
   "id": "magic_essence",
   "setting": "SET_MAGIC_ESSENCE",
   "group": "魔法素材",
@@ -510,6 +546,33 @@
   "label": "魔法素材_遺物と古書",
   "source": "magic_materials/magic_relic.png",
   "sheet": "i14",
+  "default": "mix"
+ },
+ {
+  "id": "magic_crystal",
+  "setting": "SET_MAGIC_CRYSTAL",
+  "group": "魔法素材",
+  "label": "魔法素材_結晶",
+  "source": "magic_materials/magic_crystal.png",
+  "sheet": "i37",
+  "default": "mix"
+ },
+ {
+  "id": "magic_core",
+  "setting": "SET_MAGIC_CORE",
+  "group": "魔法素材",
+  "label": "魔法素材_核と宝珠",
+  "source": "magic_materials/magic_core.png",
+  "sheet": "i38",
+  "default": "mix"
+ },
+ {
+  "id": "magic_vessel",
+  "setting": "SET_MAGIC_VESSEL",
+  "group": "魔法素材",
+  "label": "魔法素材_霧と粉と雫",
+  "source": "magic_materials/magic_vessel.png",
+  "sheet": "i39",
   "default": "mix"
  },
  {
@@ -648,12 +711,30 @@
   "default": "mix"
  },
  {
+  "id": "creature_fang",
+  "setting": "SET_CREATURE_FANG",
+  "group": "魔物素材",
+  "label": "魔物素材_牙と角と鱗",
+  "source": "monster_materials/creature_fang.png",
+  "sheet": "i42",
+  "default": "mix"
+ },
+ {
   "id": "treasure_crown",
   "setting": "SET_TREASURE_CROWN",
   "group": "宝物",
   "label": "宝物_冠と宝石と指輪",
   "source": "treasure/treasure_crown.png",
   "sheet": "i30",
+  "default": "mix"
+ },
+ {
+  "id": "treasure_gem",
+  "setting": "SET_TREASURE_GEM",
+  "group": "宝物",
+  "label": "宝物_宝石と鉱石",
+  "source": "treasure/treasure_gem.png",
+  "sheet": "i41",
   "default": "mix"
  },
  {
