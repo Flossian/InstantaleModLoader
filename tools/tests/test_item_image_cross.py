@@ -4,7 +4,7 @@
     python tools/tests/test_item_image_cross.py
 
 偽のゲームのフォルダ（3次元の小さな埋め込みと絵）をカレントにして、本体の選定の関数を呼ぶ。
-torch は開発機に無いので、本体が使う分だけ numpy で真似る。
+torch は開発機に無いので、本体が使う分だけ素の Python で真似る（CI のランナーには numpy も無い）。
 見るのは、自分の部位の最良が低く、ほかの 32x32 の部位に決まりを満たす絵があるときだけ `xs.<部位>.<鍵>` を返して写しを置くこと・
 決まり（0.55 未満・0.65 以上・差 0.15 以上）の境目・装備品の部位はまたがないこと・
 一度付いた絵は写しが消えても置き直して同じ絵を返し、設定を切っても変わらないこと・
@@ -15,11 +15,11 @@ import io
 import json
 import os
 import shutil
+import struct
 import sys
 import tempfile
 import types
 
-import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
@@ -32,20 +32,50 @@ import instantale_modloader.llm as llm  # noqa: E402
 
 
 # ---- torch の代わり（本体が使う演算だけ） ----------------------------------------
+# CI のランナーには numpy も無いので素の Python で書く。値は演算のたびに float32 へ丸める
+# （本体は float32 の行列で比べる。決まりの境目の検査が 64 ビットの丸めで変わらないように）。
+def f32(x):
+    return struct.unpack("f", struct.pack("f", float(x)))[0]
+
+
+def _map(a, fn):
+    return [_map(v, fn) for v in a] if isinstance(a, list) else fn(a)
+
+
+def _zip(a, b, fn):
+    """要素ごとの演算。b が数か長さ 1 の段なら広げる（numpy の broadcast のうち本体が使う形だけ）。"""
+    if isinstance(a, list):
+        if not isinstance(b, list):
+            return [_zip(x, b, fn) for x in a]
+        if len(b) == 1:
+            return [_zip(x, b[0], fn) for x in a]
+        return [_zip(x, y, fn) for x, y in zip(a, b)]
+    return fn(a, b)
+
+
+def _dot(u, v):
+    total = 0.0
+    for x, y in zip(u, v):
+        total = f32(total + f32(x * y))
+    return total
+
+
 class T:
     def __init__(self, a):
-        self.a = np.asarray(a, dtype=np.float32)
+        self.a = _map(a, f32) if isinstance(a, list) else f32(a)
 
     dtype = "float32"
 
     def __matmul__(self, o):
-        return T(self.a @ o.a)
+        if isinstance(self.a[0], list):
+            return T([_dot(row, o.a) for row in self.a])
+        return T(_dot(self.a, o.a))
 
     def __add__(self, o):
-        return T(self.a + (o.a if isinstance(o, T) else o))
+        return T(_zip(self.a, o.a if isinstance(o, T) else o, lambda x, y: f32(x + y)))
 
     def __truediv__(self, o):
-        return T(self.a / (o.a if isinstance(o, T) else o))
+        return T(_zip(self.a, o.a if isinstance(o, T) else o, lambda x, y: f32(x / y)))
 
     def __getitem__(self, i):
         return T(self.a[i])
@@ -57,24 +87,27 @@ class T:
         return int(self.a)
 
     def norm(self, dim=None, keepdim=False):
-        return T(np.linalg.norm(self.a) if dim is None else np.linalg.norm(self.a, axis=dim, keepdims=keepdim))
+        if dim is None:
+            return T(f32(_dot(self.a, self.a) ** 0.5))
+        rows = [f32(_dot(row, row) ** 0.5) for row in self.a]
+        return T([[r] for r in rows] if keepdim else rows)
 
     def clamp_min(self, v):
-        return T(np.maximum(self.a, v))
+        return T(_map(self.a, lambda x: max(x, v)))
 
     def max(self, dim=0):
-        i = int(np.argmax(self.a))
+        i = max(range(len(self.a)), key=lambda k: (self.a[k], -k))
         return T(self.a[i]), T(i)
 
     def argsort(self, descending=False):
-        order = np.argsort(-self.a if descending else self.a, kind="stable")
-        return types.SimpleNamespace(tolist=lambda: [int(i) for i in order])
+        order = sorted(range(len(self.a)), key=lambda k: -self.a[k] if descending else self.a[k])
+        return types.SimpleNamespace(tolist=lambda: list(order))
 
     def detach(self):
         return self
 
     def reshape(self, *shape):
-        return T(self.a.reshape(*shape))
+        return T(self.a)
 
     def to(self, dtype=None):
         return self
@@ -112,7 +145,7 @@ QUERIES = {}
 
 def unit(a, b, c):
     """類似度が道具 a・遺物 b・薬 c になる外見文（長さ 1 に余りの次元で合わせる）。"""
-    return np.asarray([a, b, c, 0, (1.0 - a * a - b * b - c * c) ** 0.5], dtype=np.float32)
+    return [a, b, c, 0, (1.0 - a * a - b * b - c * c) ** 0.5]
 
 
 emb = types.ModuleType("Embedding.get_similar_id")
