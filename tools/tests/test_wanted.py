@@ -10,6 +10,8 @@
   用済み   … 登録した ctx が superseded になった登録は数えない（その MOD を切った後の注入）
   例外     … 関数が投げたら線を置かなかったものとみなし、errors に残す
   終わり   … 追手の戦闘の終わりは生きている受け手へ写しで届く。受け手が投げても残りへ届け、errors に残す
+  店の値の圧 … 誰も置かなければ (0.0, None)。いちばん大きい率（1 で止める）。None・真偽・投げた関数・用済みは数えない。
+               引き受けた持ち主は生きている間だけ返す
   316      … 追手の数え方（hunt.weight_of）が窓口の数え方と同じ
 """
 import os
@@ -107,6 +109,36 @@ def main():
           any("boom: ValueError" in row for row in wanted._store()["errors"]))
     wanted.reset()
     check("忘れたら誰にも届かない", wanted.hunt_ended(app, hunt) == [])
+
+    wanted.reset()
+    check("誰も率を置かなければ (0.0, None)", wanted.shop_pressure(app) == (0.0, None))
+    check("誰も引き受けなければ None", wanted.shop_pressure_taker() is None)
+    gone = Ctx()
+    wanted.declare_shop_pressure("a", Ctx(), lambda a: 0.1)
+    wanted.declare_shop_pressure("b", Ctx(), lambda a: 0.25)
+    wanted.declare_shop_pressure("gone", gone, lambda a: 0.9)
+    gone.old = True
+    check("率はいちばん大きいもの（用済みは数えない）", wanted.shop_pressure(app) == (0.25, "b"),
+          wanted.shop_pressure(app))
+    wanted.declare_shop_pressure("b", Ctx(), lambda a: None)
+    check("同じ持ち主は差し替え、None は置かなかったもの", wanted.shop_pressure(app) == (0.1, "a"))
+    wanted.declare_shop_pressure("c", Ctx(), lambda a: 3)
+    wanted.declare_shop_pressure("d", Ctx(), lambda a: True)
+    check("率は 1 で止め、真偽値は数えない", wanted.shop_pressure(app) == (1.0, "c"))
+
+    def broken(a):
+        raise KeyError("area")
+
+    wanted.reset()
+    wanted.declare_shop_pressure("x", Ctx(), broken)
+    check("率の関数が投げたら置かなかったもの", wanted.shop_pressure(app) == (0.0, None)
+          and any("x: KeyError" in row for row in wanted._store()["errors"]))
+    retired = Ctx()
+    wanted.take_shop_pressure("341", retired)
+    check("引き受けた持ち主", wanted.shop_pressure_taker() == "341")
+    retired.old = True
+    check("用済みの引き受けは数えない", wanted.shop_pressure_taker() is None)
+    wanted.reset()
 
     import importlib.util
     spec = importlib.util.spec_from_file_location(

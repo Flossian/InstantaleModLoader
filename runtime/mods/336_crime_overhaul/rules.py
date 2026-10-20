@@ -236,6 +236,21 @@ def free_cells(records):
     return max(0, INVENTORY_CELLS - used)
 
 
+def affinity_of(character):
+    """人物のプレイヤーへの好感度（`relationship["player"]["affinity"]`）。読めなければ None。"""
+    relationship = getattr(character, "relationship", None)
+    row = relationship.get("player") if isinstance(relationship, dict) else None
+    value = row.get("affinity") if isinstance(row, dict) else None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return value
+
+
+def keeper_unafraid(affinity, threshold):
+    """店の主が委縮しないか。好感度が `threshold` 以上なら True（読めない好感度は委縮する側）。"""
+    return affinity is not None and affinity >= threshold
+
+
 def intimidation_rate(lawfulness, per_point, cap_pct):
     """手配の重さから店の委縮の度合い（0〜1 の率）。手配されていなければ 0。
 

@@ -17,6 +17,8 @@ from instantale_modloader import state as loader_state
 
 LOG_BASENAME = "crime_overhaul.log"
 FUNCTIONS_MODULE = "scripts.functions"
+#: 人生の記録の文を作るゲーム自身の関数（`get_life_log_text`）のモジュール。
+LIFE_LOG_MODULE = "scripts.llm.context_manager"
 STATE_DIRNAME = "crime_overhaul"
 STORE_ATTR = "_instantale_crime_incentive"
 #: 押下を横取りする印（他の MOD と別のキー）。
@@ -25,6 +27,20 @@ MARK = "mod_crime_incentive_action"
 FACILITY_MARK = "MovePhaseManager"
 #: ゲーム自身の衛兵戦を起こすときに `process_choice` へ渡す文字列（GAME.md §2.20）。
 GUARD_CHOICE_TEXT = "衛兵"
+
+
+def life_log_text(app, character, limit):
+    """ゲーム自身の作り方の人生の記録を、頼みに載せる文にする。読めなければ空。`limit` 字で切る。"""
+    module = sys.modules.get(LIFE_LOG_MODULE)
+    build = getattr(module, "get_life_log_text", None)
+    try:
+        value = build(app, character) if callable(build) else None
+    except Exception:
+        value = None
+    if not value:
+        return ""
+    text = str(value)
+    return text if len(text) <= limit else text[:limit] + "…"
 
 
 def _store():

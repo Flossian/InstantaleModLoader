@@ -19,7 +19,7 @@ import time
 
 from instantale_modloader import ui
 
-from . import underworld
+from . import rules, underworld
 
 DEATH_SPEC = "ExecutionPhaseManager"
 QUEST_START_SPEC = "QuestStartManager"
@@ -44,13 +44,7 @@ BRIEF_TEXT = (
 )
 
 
-def affinity_of(character):
-    relationship = getattr(character, "relationship", None)
-    row = relationship.get("player") if isinstance(relationship, dict) else None
-    value = row.get("affinity") if isinstance(row, dict) else None
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    return value
+affinity_of = rules.affinity_of
 
 
 def rescuer_of(app, threshold):

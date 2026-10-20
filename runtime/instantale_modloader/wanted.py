@@ -13,6 +13,8 @@ MOD どうしは import しない（TECH.md §3.2.3）ので、ここで仲介�
     線を読む側                   line, by = wanted.hunted_line(app)   # 誰も置いていなければ (None, None)
     重さ                         wanted.weight_of(手配度) / wanted.total_weight(character)
     追手の戦闘の終わり           wanted.on_hunt_end(owner, ctx, fn) / wanted.hunt_ended(app, hunt)
+    手配による店の値の圧         wanted.declare_shop_pressure(owner, ctx, fn) / wanted.shop_pressure(app)
+                                 wanted.take_shop_pressure(owner, ctx) / wanted.shop_pressure_taker()
 
 線を置く MOD が入っていない（切った・適用に失敗した）ときは `(None, None)` が返り、
 全域手配というもの自体が無い扱いになる。
@@ -38,7 +40,7 @@ WANTED_BELOW = 0
 def _store():
     store = getattr(sys, STORE_ATTR, None)
     if not isinstance(store, dict):
-        store = {"hunted": {}, "hunt_end": {}, "errors": []}
+        store = {"hunted": {}, "hunt_end": {}, "pressure": {}, "taker": {}, "errors": []}
         setattr(sys, STORE_ATTR, store)
     return store
 
@@ -157,6 +159,59 @@ def hunt_ended(app, hunt):
     return reached
 
 
+# --------------------------------------------------------------------------
+# 手配による店の値の圧
+# --------------------------------------------------------------------------
+# 手配されている土地で店の値段をどれだけ動かすか（率）は、手配を数える MOD（`336_crime_overhaul`）が持つ。
+# 動かす向き（怯えて値を下げるか、足元を見て吊り上げるか）を店主ごとに決める MOD は、その率を借りたい。
+# 借りる MOD が居るときは、率を置いた MOD は自分では値段を動かさない（同じ店で二重に掛けない）。
+#
+#     率を置く側（apply() の中）     wanted.declare_shop_pressure(owner, ctx, fn)   fn(app) -> 率（0〜1）/ None
+#     率を読む側                     rate, by = wanted.shop_pressure(app)           # 誰も置いていなければ (0.0, None)
+#     率を引き受ける側（apply() の中）wanted.take_shop_pressure(owner, ctx)
+#     率を置く側が確かめる           wanted.shop_pressure_taker()                  # 引き受けた持ち主 / None
+def declare_shop_pressure(owner, ctx, fn):
+    """`owner` の店の値の圧（いま居る土地での率）を返す関数を登録する。同じ持ち主の登録は差し替える。"""
+    _store().setdefault("pressure", {})[str(owner)] = (ctx, fn)
+
+
+def shop_pressure(app):
+    """`(率, 決めた持ち主)`。率は 0〜1。誰も置いていない・どれも 0 なら `(0.0, None)`。
+
+    複数が置いたらいちばん大きい率（どれか1つの手配で店は身構える）。
+    """
+    store = _store()
+    rate, by = 0.0, None
+    for owner, (ctx, fn) in list(store.setdefault("pressure", {}).items()):
+        if not _alive(ctx):
+            continue
+        try:
+            got = fn(app)
+        except Exception as exc:
+            store["errors"].append("{}: {}: {}".format(owner, type(exc).__name__, exc))
+            del store["errors"][:-20]
+            continue
+        if isinstance(got, bool) or not isinstance(got, (int, float)):
+            continue
+        got = min(1.0, max(0.0, float(got)))
+        if got > rate:
+            rate, by = got, owner
+    return rate, by
+
+
+def take_shop_pressure(owner, ctx):
+    """店の値の圧を `owner` が引き受ける（向きを決めて値段に掛ける）。同じ持ち主の登録は差し替える。"""
+    _store().setdefault("taker", {})[str(owner)] = ctx
+
+
+def shop_pressure_taker():
+    """店の値の圧を引き受けた持ち主。居なければ None（率を置いた側が自分で掛ける）。"""
+    for owner, ctx in sorted(_store().setdefault("taker", {}).items()):
+        if _alive(ctx):
+            return owner
+    return None
+
+
 def reset():
     """全部忘れる（検査用）。"""
-    setattr(sys, STORE_ATTR, {"hunted": {}, "hunt_end": {}, "errors": []})
+    setattr(sys, STORE_ATTR, {"hunted": {}, "hunt_end": {}, "pressure": {}, "taker": {}, "errors": []})

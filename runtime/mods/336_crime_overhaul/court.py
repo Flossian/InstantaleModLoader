@@ -16,15 +16,12 @@
 メモリだけだと、払った後や裁判が始まった後にロードすると効き目が消え、ボタンがまた出た。
 介入を押した後と判決を直した後は、ゲーム自身の保存を呼ぶ（払った額・効き目・直した判決を同じ保存に入れる）。
 """
-import sys
-
 from instantale_modloader import llm, ui, wanted
 
-from . import trial
+from . import common, trial
 
 HINT_TEXT = "入力欄に書いて送った言葉が、そのまま判事への釈明になる。\nボタンを押せば、その文言が釈明になる。"
 SEND_TARGET = "scripts.llm.llm_manager:send_request"
-LIFE_LOG_MODULE = "scripts.llm.context_manager"
 #: 置き換える人生の記録の上限（字）。頼みが長くなりすぎないように。
 LIFE_LOG_LIMIT = 1500
 MARK_HEAD = "court:"
@@ -39,17 +36,8 @@ def trial_args(buttons):
 
 
 def life_log_text(app, character):
-    """ゲーム自身の作り方の人生の記録を、頼みに載せる文にする。読めなければ空。"""
-    module = sys.modules.get(LIFE_LOG_MODULE)
-    build = getattr(module, "get_life_log_text", None)
-    try:
-        value = build(app, character) if callable(build) else None
-    except Exception:
-        value = None
-    if not value:
-        return ""
-    text = str(value)
-    return text if len(text) <= LIFE_LOG_LIMIT else text[:LIFE_LOG_LIMIT] + "…"
+    """ゲーム自身の作り方の人生の記録を、頼みに載せる文にする（`common.life_log_text`）。"""
+    return common.life_log_text(app, character, LIFE_LOG_LIMIT)
 
 
 def install(env):

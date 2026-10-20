@@ -1,0 +1,64 @@
+{
+  "entry": "shopkeeper_attitude.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Shopkeepers price by personality and how they feel about you",
+    "ja": "店主の人柄と主人公との関係で売買の値段が変わる"
+  },
+  "description": {
+    "en": "When you enter a shop, the LLM reads the shopkeeper's personality, profile, relationship and feelings toward you, how often you have talked, and their life log, then decides how they deal with you. Normally they give you a discount, deal as usual, or overcharge you; with no grounds, as usual. In areas where you are wanted (with 336_crime_overhaul), they cower, stay unmoved, or gouge you, at the rate the crime mod sets. The judgment is made in the background on arrival and kept per shopkeeper for 30 days unless affinity (or the wanted level) changes. The first time it is decided, one line shows how they react",
+    "ja": "店に入ると、店主の性格・プロフィール・主人公との関係と感情・好感度・会話した回数・人生ログを LLM が読み、どう応じるかを決める。平時は値を負ける・普段どおり・ふっかけるの3通りで、根拠が無ければ普段どおり。手配中の土地では（336_crime_overhaul が入っていれば）怯える・動じない・足元を見るの3通りで、率は犯罪の MOD の設定に従う。判定は店に着いたときに裏で頼み、店主ごとに 30 日使い回す（好感度か手配度が変われば決め直す）。初めて決まったときは店主の反応が1行出る"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "settings": {
+    "USUAL_ENABLED": {
+      "type": "bool",
+      "default": true,
+      "label": {"ja": "手配されていない土地でも値段が動く", "en": "Prices move outside wanted areas too"},
+      "note": {"ja": "切ると、手配中の土地（336_crime_overhaul が率を置いたとき）だけ働く",
+               "en": "Off: works only in areas where you are wanted (when 336_crime_overhaul sets a rate)"}
+    },
+    "USUAL_PCT": {
+      "type": "int",
+      "default": 10,
+      "min": 0,
+      "max": 50,
+      "label": {"ja": "平時に負ける・ふっかける率（%）", "en": "Discount / overcharge rate (%)"},
+      "note": {"ja": "負ける店主は買値をこれだけ下げ売値を上げる。ふっかける店主は逆。手配中の率は 336_crime_overhaul の設定",
+               "en": "A discount lowers buy prices and raises sell prices by this much; overcharging does the opposite. The wanted rate comes from 336_crime_overhaul"}
+    },
+    "SELL": {
+      "type": "bool",
+      "default": true,
+      "label": {"ja": "売値も動かす", "en": "Move sell prices too"},
+      "note": {"ja": "切ると買値だけが動く", "en": "Off: only buy prices move"}
+    },
+    "NOTICE": {
+      "type": "bool",
+      "default": true,
+      "label": {"ja": "売買を押したら知らせる", "en": "Announce at the trade"},
+      "note": {"ja": "初めて決まったときは店主の反応の1文、2回目からは決まった文と値段の動きを1行。平時の普段どおりは出さない",
+               "en": "The shopkeeper's reaction the first time, then a fixed line with the price change. Nothing for an ordinary deal"}
+    },
+    "JUDGE_DAYS": {
+      "type": "int",
+      "default": 30,
+      "min": 1,
+      "max": 3650,
+      "label": {"ja": "応じ方を決め直すまでの日数", "en": "Days before the reaction is judged again"},
+      "note": {"ja": "それまでは同じ店主は同じ応じ方。好感度か手配度が変われば、日数の前でも決め直す",
+               "en": "Until then the same shopkeeper deals the same way. A change in affinity or wanted level re-judges sooner"}
+    },
+    "FRIEND_AFFINITY": {
+      "type": "int",
+      "default": 40,
+      "min": -50,
+      "max": 200,
+      "label": {"ja": "判定が無いとき手配中でも動じない好感度", "en": "Affinity that stays unmoved when not judged"},
+      "note": {"ja": "LLM が答えなかったとき、手配中の土地では店主の好感度がこれ以上なら値段は動かず、下なら怯える。平時は普段どおり。40 は「多少の好意がある」",
+               "en": "When the LLM gives no answer, in wanted areas a shopkeeper at or above this affinity keeps normal prices and below it cowers; otherwise as usual. 40 is \"somewhat fond\""}
+    }
+  }
+}

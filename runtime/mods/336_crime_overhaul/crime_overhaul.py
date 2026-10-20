@@ -43,6 +43,7 @@ INTIMIDATION_PER_POINT = 0.5  # 手配の重さ1あたりの率（%）
 INTIMIDATION_CAP = 30         # 率の上限（%）
 INTIMIDATION_SELL = True      # 売値も上げる
 INTIMIDATION_NOTICE = True    # 店に入ったときに1行出す
+INTIMIDATION_FRIEND_AFFINITY = 40  # 店の主の好感度がこれ以上なら委縮しない（40 は「多少の好意がある」）
 STATUTE_ENABLED = True        # 離れている土地の手配が時とともに戻る
 STATUTE_PERIOD_MONTHS = 3     # 戻る間隔（ゲームの月。1ヵ月30日）
 STATUTE_STEP = 10             # 1回に戻る手配度
@@ -155,11 +156,12 @@ def apply(ctx):
     choices.provide(ctx, screen, refresh=refresh, presses=dict(env.press_handlers))
 
     ctx.log("crime incentive: installed (loot {} shares {} floor {}% ceiling {}%; "
-            "intimidation {} {}%/pt cap {}% sell {}; statute {} +{} per {} month(s) up to {}, "
+            "intimidation {} {}%/pt cap {}% sell {} unafraid at affinity {}; statute {} +{} per {} month(s) up to {}, "
             "hold {} at the line from {})".format(
                 "on" if LOOT_ENABLED else "off", loot.loot_shares(env.cfg), LOOT_FLOOR_PCT,
                 LOOT_CEILING_PCT, "on" if INTIMIDATION_ENABLED else "off",
                 INTIMIDATION_PER_POINT, INTIMIDATION_CAP,
-                "on" if INTIMIDATION_SELL else "off", "on" if STATUTE_ENABLED else "off",
+                "on" if INTIMIDATION_SELL else "off", INTIMIDATION_FRIEND_AFFINITY,
+                "on" if STATUTE_ENABLED else "off",
                 STATUTE_STEP, STATUTE_PERIOD_MONTHS, STATUTE_RESTORE_TO,
                 "on" if STATUTE_HOLD_HUNTED else "off", wanted.owners() or "nobody"))

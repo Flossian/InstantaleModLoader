@@ -4,6 +4,8 @@
 ##### 店が委縮して値を下げる（手配中の土地で値段が動く）
 
 - その土地で手配されていると、店の買値が下がり、売値が上がる。率は手配の重さ × 1点あたりの率（上限あり）
+- 店の主の好感度が設定の値以上なら委縮しない（値段はそのまま。気づいたうえで応じる1行を出す）
+- 率はローダの窓口 `wanted` に置く（店の値の圧）。店主ごとに向きを決める MOD が引き受けていれば、値段と知らせはそちらが出す
 - 値段はローダの関所（`prices.adjust`）へ一時の段として置く。保存の直前には外れる（セーブへ焼き付けない）
 
 ##### 時効（離れている土地の手配が戻る）
@@ -30,6 +32,7 @@ MOVE_TARGET = "__main__:AreaMoveManager.execute"
 DAYS_PER_MONTH = 30
 SHOP_NOTICE_TEXT = "手配書の顔に気づいた店主は、怯えたように値を改めた。（買値 -{pct}%{sell}）"
 SHOP_NOTICE_SELL = "・売値 +{pct}%"
+SHOP_FRIEND_TEXT = "{name}は手配書の顔に気づいたが、いつもどおりの値で応じてくれた。"
 STATUTE_TEXT = "{area}では、騒ぎのほとぼりが冷めつつある。（手配度 {before} → {after}）"
 
 
@@ -40,16 +43,40 @@ def install(env):
     lock = threading.Lock()
 
     # -------------------------------------------------- 店が委縮して値を下げる
-    def intimidation(item, key, price):
-        """手配中の土地なら率を掛ける。触らないなら None。"""
+    # 率（手配の重さ × 1点あたり）はローダの窓口 `wanted` に置く（店の値の圧）。
+    # 店主ごとに向きを決める MOD（`341_shopkeeper_attitude`）が引き受けていれば、値段も知らせもそちらに任せる。
+    # 居なければここで掛ける。店の主の好感度が線以上なら委縮しない。
+    def keeper_of(app):
+        """いま居る施設の主（人物）。主がいなければ None。"""
+        facility = env.current_facility(app)
+        owner_id = getattr(facility, "owner", None)
+        return ui.character_of(app, str(owner_id)) if owner_id is not None else None
+
+    def friendly_keeper(app):
+        """委縮しない店の主 `(主, 好感度)`。委縮するなら None。"""
+        keeper = keeper_of(app)
+        affinity = rules.affinity_of(keeper) if keeper is not None else None
+        if rules.keeper_unafraid(affinity, cfg.INTIMIDATION_FRIEND_AFFINITY):
+            return keeper, affinity
+        return None
+
+    def pressure(app):
+        """店の値の圧（窓口 `wanted` に置く関数）。切っていれば None。"""
         if not cfg.INTIMIDATION_ENABLED:
             return None
-        app = ui.find_app()
-        if app is None:
-            return None
-        rate = rules.intimidation_rate(here_lawfulness(app), cfg.INTIMIDATION_PER_POINT,
+        return rules.intimidation_rate(here_lawfulness(app), cfg.INTIMIDATION_PER_POINT,
                                        cfg.INTIMIDATION_CAP)
-        return rules.intimidated_price(key, price, rate, cfg.INTIMIDATION_SELL)
+
+    wanted.declare_shop_pressure(owner, ctx, pressure)
+
+    def intimidation(item, key, price):
+        """手配中の土地なら率を掛ける。引き受けた MOD が居る・触らないなら None。"""
+        if not cfg.INTIMIDATION_ENABLED or wanted.shop_pressure_taker() is not None:
+            return None
+        app = ui.find_app()
+        if app is None or friendly_keeper(app) is not None:
+            return None
+        return rules.intimidated_price(key, price, pressure(app) or 0.0, cfg.INTIMIDATION_SELL)
 
     def price_layer(item, key, price):
         """関所の段（336 の1枚）。「店が委縮して値を下げる」の後に、他のファイルの段（`env.price_layers`）を順に通す。触らないなら None。"""
@@ -74,9 +101,21 @@ def install(env):
             app = getattr(self, "app", None) or ui.find_app()
             if cfg.INTIMIDATION_ENABLED and app is not None:
                 lawfulness = here_lawfulness(app)
-                rate = rules.intimidation_rate(lawfulness, cfg.INTIMIDATION_PER_POINT,
-                                               cfg.INTIMIDATION_CAP)
-                if rate > 0:
+                rate = pressure(app) or 0.0
+                taker = wanted.shop_pressure_taker() if rate > 0 else None
+                friend = friendly_keeper(app) if rate > 0 and taker is None else None
+                if taker is not None:
+                    write("shop: lawfulness {} -> rate {}% handed to {}".format(
+                        lawfulness, int(round(rate * 100)), taker))
+                elif friend is not None:
+                    keeper, affinity = friend
+                    name = getattr(keeper, "name", None) or "店主"
+                    write("shop: lawfulness {} but {} has affinity {} -> no fear".format(
+                        lawfulness, name, affinity))
+                    if cfg.INTIMIDATION_NOTICE:
+                        text = SHOP_FRIEND_TEXT.format(name=name)
+                        screen.schedule(lambda: screen.say(app, text))
+                elif rate > 0:
                     pct = int(round(rate * 100))
                     write("shop: lawfulness {} -> buy -{}%{}".format(
                         lawfulness, pct, " sell +{}%".format(pct) if cfg.INTIMIDATION_SELL else ""))
