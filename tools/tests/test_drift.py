@@ -169,13 +169,16 @@ def test_signatures(tmp):
 
     fresh()
     check("recon の比べが無ければ何も出さない", drift.check_signatures(out_dir) == [])
-    plant(datetime.datetime.now().isoformat(timespec="seconds"))
+    detected = datetime.datetime.now().isoformat(timespec="seconds")
+    plant(detected)
     hook()
     found = drift.check_signatures(out_dir)
     check("包んだ対象の変化だけを、包んだ MOD と一緒に出す",
           [(item["target"], item["mods"]) for item in found] == [("fakedrift:send", ["999_test"])], found)
     check("同じ変化は1プロセスに1回", drift.check_signatures(out_dir) == [])
     check("報告にも載る", drift.report()["signatures"] == found)
+    check("表示の期限（見つけた日時 + {} 日）が載る".format(drift.REPORT_DAYS),
+          found and found[0]["until"] == drift.report_until({"detected_at": detected}), found)
 
     fresh("gen_b")
     plant("2000-01-01T00:00:00")
@@ -207,11 +210,32 @@ def test_update_notice(tmp):
     check("中身だけの更新（関数の変化0件）でも出す",
           update and update["since"] == "main_026" and update["changed"] == 0
           and drift.report()["update"] == update, update)
+    check("表示の期限は見つけた日時 + {} 日".format(drift.REPORT_DAYS),
+          update and update["until"] == (datetime.datetime.fromisoformat(now)
+                                         + datetime.timedelta(days=drift.REPORT_DAYS)).isoformat(), update)
+    check("見つけた日時が読めなければ期限は None", drift.report_until({"detected_at": "?"}) is None
+          and drift.report_until({}) is None)
     plant(now, {"app_version": None})
     check("前の版の名前が取れなければ記録の名前から取る", drift.check_update(out_dir)["since"] == "main_026")
     plant("2000-01-01T00:00:00", {"app_version": "main_026"})
     check("{} 日を過ぎたら出さない".format(drift.REPORT_DAYS),
           drift.check_update(out_dir) is None and drift.report()["update"] is None)
+
+
+def test_gui_until():
+    print("GUI: 期限付きの警告に表示期限を出し、過ぎたら出さない")
+    import datetime
+    sys.path.insert(0, os.path.join(_ROOT, "tools"))
+    import gui
+    now = datetime.datetime(2026, 10, 20, 12, 0)
+    check("期限の前は出し、日時を添える",
+          gui.warning_until("2026-10-22T13:17:17", now) == (True, "2026-10-22 13:17 まで表示"))
+    check("期限を過ぎたら出さない（注入し直さないまま残った status.json の行）",
+          gui.warning_until("2026-10-20T11:59:59", now) == (False, ""))
+    check("期限が読めなければ出し、日時は添えない",
+          gui.warning_until(None, now) == (True, "") and gui.warning_until("?", now) == (True, ""))
+    check("期限の無い status.json は見つけた日時からローダと同じ式で補える",
+          gui.D.report_until({"detected_at": "2026-10-15T13:17:17"}) == "2026-10-22T13:17:17")
 
 
 def test_rewrites(tmp):
@@ -278,6 +302,7 @@ def main():
         test_loader_watch_rearm()
         test_signatures(tmp)
         test_update_notice(tmp)
+        test_gui_until()
         test_rewrites(tmp)
     finally:
         P.revert_all()

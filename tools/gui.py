@@ -37,6 +37,7 @@ GUI 側で条件判定を書き直すと `watch.bat` と挙動がずれるため
 
 from __future__ import annotations
 
+import datetime
 import hashlib
 import json
 import math
@@ -63,6 +64,7 @@ import logrotate                                 # noqa: E402
 import watcher                                   # noqa: E402
 import instantale_modloader as ml                # noqa: E402
 from instantale_modloader import config as C     # noqa: E402
+from instantale_modloader import drift as D      # noqa: E402
 
 RUNTIME_DIR = os.path.join(ROOT, "runtime")
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
@@ -1004,6 +1006,20 @@ def write_config(data: dict) -> None:
     """
     os.makedirs(SETTINGS_DIR, exist_ok=True)
     ml.write_json(CONFIG_PATH, data, indent=2)
+
+
+def warning_until(until, now: datetime.datetime | None = None) -> tuple[bool, str]:
+    """期限付きの警告の `(まだ出すか, 「… まで表示」)`。期限が読めなければ `(True, "")`。
+
+    ローダは期限を注入のときにしか見ないので、注入し直さないまま期限を過ぎた status.json の行もここで落とす。
+    """
+    try:
+        moment = datetime.datetime.fromisoformat(str(until))
+    except (TypeError, ValueError):
+        return True, ""
+    if (now or datetime.datetime.now()) >= moment:
+        return False, ""
+    return True, "{:%Y-%m-%d %H:%M} まで表示".format(moment)
 
 
 def update_config(**values) -> None:
@@ -2378,20 +2394,30 @@ class App(ttk.Frame):
         # 確かめて直すのは作る側なので、デバッグモードのときだけ出す（普段の遊びでは不安を煽るだけ）
         drift = (self.status.get("drift") or {}) if self.debug_mode else {}
         update = drift.get("update")
-        if update:
+        # 更新されたことと引数の変化は、recon が見つけてから期限（`drift.REPORT_DAYS`）までの表示。期限の日時も出す。
+        # `until` の無い status.json（期限を書く前のローダ）は、見つけた日時からローダと同じ式で出す
+        fallback = D.report_until(update) if update else None
+        update_shown, update_until = warning_until((update or {}).get("until") or fallback)
+        if update and update_shown:
             # 引数の変化が0件でも出す（中身だけの更新でも、前と同じに動くかを確かめる合図）
-            lines.append("ゲームが更新されました（{} から。{} に検出）。"
+            lines.append("ゲームが更新されました（{} から。{} に検出{}）。"
                          "MOD が前と同じに動くか確かめてください".format(
-                             update.get("since") or "前の版", str(update.get("detected_at") or "?")[:10]))
+                             update.get("since") or "前の版", str(update.get("detected_at") or "?")[:10],
+                             "。" + update_until if update_until else ""))
         lost = drift.get("lost") or []
         if lost:
             healed = sum(1 for item in lost if item.get("healed"))
             lines.append("遊んでいる途中でゲームが関数を差し替え、MOD の処理が外れた箇所 {} 件"
                          "（うち付け直した {} 件）".format(len(lost), healed))
-        signatures = drift.get("signatures") or []
+        signatures = [item for item in drift.get("signatures") or []
+                      if warning_until(item.get("until") or fallback)[0]]
         if signatures:
+            # 1回の注入で出る変化は同じ recon の比べから来るので、期限は揃っている。早い方を出す
+            untils = sorted(text for text in (warning_until(item.get("until") or fallback)[1]
+                                              for item in signatures) if text)
             lines.append("MOD が手を入れている箇所のうち、前の版から引数が変わった・無くなったもの {} 件"
-                         "（MOD が想定どおりに動かないおそれがあります）".format(len(signatures)))
+                         "（MOD が想定どおりに動かないおそれがあります{}）".format(
+                             len(signatures), "。" + untils[0] if untils else ""))
         rewrites = drift.get("rewrites") or []
         if rewrites:
             lines.append("前の版では効いていたプロンプトの書き換えが、今の版で効いていない MOD {} 件"

@@ -169,6 +169,15 @@ def _previous(data: dict, key: str) -> dict | None:
 # --------------------------------------------------------------------------
 # 引数の変化・対象の消失
 # --------------------------------------------------------------------------
+def report_until(changes: dict) -> str | None:
+    """この変化を出すのをやめる日時（見つけた日時 + `REPORT_DAYS` 日）。見つけた日時が読めなければ None。"""
+    try:
+        detected = datetime.datetime.fromisoformat(changes.get("detected_at"))
+    except Exception:
+        return None
+    return (detected + datetime.timedelta(days=REPORT_DAYS)).isoformat(timespec="seconds")
+
+
 def recent_update(out_dir: str) -> dict | None:
     """recon が `REPORT_DAYS` 日のうちに見つけた版の変化（`changes.json`）。無ければ None。"""
     from . import recon
@@ -176,12 +185,9 @@ def recent_update(out_dir: str) -> dict | None:
     changes = _read(path)
     if not changes:
         return None
-    try:
-        detected = datetime.datetime.fromisoformat(changes.get("detected_at"))
-        if (datetime.datetime.now() - detected).days >= REPORT_DAYS:
-            return None
-    except Exception:
-        pass
+    until = report_until(changes)
+    if until and datetime.datetime.now() >= datetime.datetime.fromisoformat(until):
+        return None
     return changes
 
 
@@ -197,6 +203,7 @@ def check_update(out_dir: str) -> dict | None:
     functions = changes.get("functions") or []
     update = {"since": since.get("app_version") or recon._snapshot_version(str(changes.get("since") or "?")),
               "detected_at": changes.get("detected_at"),
+              "until": report_until(changes),
               "identity": changes.get("identity") or [],
               "changed": sum(1 for item in functions if item.get("kind") in ("changed", "removed"))}
     if st.get("update") != update:
@@ -226,7 +233,7 @@ def check_signatures(out_dir: str) -> list:
             continue
         entry = {"target": target, "kind": item["kind"], "before": item.get("before"),
                  "now": item.get("now"), "mods": by_target.get(target, []),
-                 "since": changes.get("since")}
+                 "since": changes.get("since"), "until": report_until(changes)}
         st["signatures"].append(entry)
         reported.add(target)
         found.append(entry)

@@ -4000,6 +4000,9 @@ MOD が呼ぶ口は無い。
 | 書き換えの空振り | 頼みのたび数え、`FLUSH_SECONDS`（60秒）ごとに比べる | `llm.wrap_outgoing` の書き換えが当たった数を、MOD と頼みの種類（クラウドは `manager_name`、ローカルは `*`）ごと・版ごとに `recon_history/drift/rewrites.json` へ | 前の版で3回以上当たり、前の版の割合で5回以上当たる見込みなのに、今の版で1回も当たらなければ出す |
 
 - 出す先は `modloader.log` の `drift:` の行と `status.json` の `drift`（`update` / `lost` / `signatures` / `rewrites`）。GUI は、デバッグモードのときだけ、警告の欄に更新されたこと（前の版と見つけた日）と件数を出す（作る側が確かめるためのもので、普段の遊びでは出さない）
+- 期限のある2つ（更新されたこと・引数の変化）は、`update` と `signatures` の各項目に期限の日時 `until`（見つけた日時 + `REPORT_DAYS`。`report_until`）を載せる。
+  GUI は「… まで表示」として添える。ローダが期限を見るのは注入のときだけなので、注入し直さないまま期限を過ぎた行は GUI が落とす。
+  `until` の無い status.json（これを入れる前のローダが書いたもの）は、`update.detected_at` から同じ関数で補う
 - 包みの控えは `patch.wrap` / `patch.patch` が残す。鍵は（対象, MOD, フックのモジュール, フックの名前）で、同じ鍵で当て直すと置き換わる。
   `watch_aliases` の包み直し（§5.3）も同じ鍵で見るので、見回りと二重にならない
 - ゲーム側の事実（版の鍵 `recon.build_key`、前の版からの関数の変化）は recon が持ち、ここは MOD との突き合わせだけをする（GAME.md §1.1 の役割の表）

@@ -99,7 +99,7 @@ def clamp_stance(value):
         return None
     if isinstance(value, str) and value.strip().lstrip("-").isdigit():
         value = int(value.strip())
-    if isinstance(value, float) and value.is_integer():
+    if isinstance(value, float) and float(value).is_integer():
         value = int(value)
     return value if value in (FAVOR, NEUTRAL, AGAINST) else None
 
