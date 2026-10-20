@@ -23,6 +23,8 @@
    （その MOD が引き先をセーブ側にして売買を開けるようにする）。
    ゲームの売買は `world_dict` から引くので、押すと `KeyError` でスレッドが落ちる（GAME.md §2.28。
    2026-10-19 に実プレイの世界で踏んだ。直し方の記録は `discontinued\\906_fix_new_shop_data`）。
+   宿屋の主との会話のボタンにも、店の主との会話と同じく `売買する` を先頭に入れる
+   （ゲームは会話に足す入口を施設の種類で決め打ちしていて、宿屋は入っていない）。
 2. **宿屋で品揃えを作る間だけ、ゲームの指示文の1文を差し替える。**
    ゲームの指示文は武器と防具を必ず1つずつ作らせる
    （`shop_item_generator_ordinary` / `shop_additional_item_generator_ordinary`。exe の定数で読んだ。GAME.md §2.13.1.2）。
@@ -306,6 +308,31 @@ def apply(ctx):
         target.insert(0, {"text": SHOP_CHOICE, "spec": spec})
         write("offered {!r} on the current screen at inn {}".format(SHOP_CHOICE, facility_id(facility)))
 
+    def offer_in_conversation(app, facility, buttons):
+        """宿屋の主との会話のボタンに入口が欠けていれば、先頭に入れる。
+
+        ゲームは会話を始めるとき（`ConversationStartManager.conversation_start_method_3`）に、
+        店の主なら `売買する` を会話のボタンの先頭に足す。足す施設の種類は決め打ちで
+        （exe の定数は `general_store` / `specialty_shop` / `medical_facility`）、宿屋は入っていない。
+        店と同じく、話している相手（「会話を終了する」の `args[0]`）が今いる宿屋の主のときだけ入れる。
+        """
+        target = _get(app, "buttons")
+        target = target if isinstance(target, list) else buttons
+        if not isinstance(target, list):
+            return
+        partner, _end = ui.conversation_partner(target)
+        if partner is None or partner != str(_get(facility, "owner")):
+            return
+        if any(ui.spec_cls_name(entry) == SHOP_CLS for entry in target):
+            return
+        try:
+            spec = copy.copy(facility.choices[SHOP_CHOICE])
+        except Exception:
+            return
+        target.insert(0, {"text": SHOP_CHOICE, "spec": spec})
+        write("offered {!r} in the conversation with owner {} at inn {}".format(
+            SHOP_CHOICE, partner, facility_id(facility)))
+
     def refresh_buttons(app, buttons):
         """組み直しの前。世界が替わっていれば見回り、今いる宿屋に入口が無ければ足す。
 
@@ -326,6 +353,7 @@ def apply(ctx):
                 return
             add_entry(facility)
             offer_now(app, facility, buttons)
+            offer_in_conversation(app, facility, buttons)
         except Exception:
             ctx.log_exc("inn shop: cannot sweep the inns")
 

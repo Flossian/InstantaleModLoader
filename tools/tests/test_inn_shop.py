@@ -11,6 +11,7 @@
   見回り   … 注入より前に生まれていた施設は、選択肢の組み直しの前に世界ごとに1回見回って足す
   素データ … `world_dict` に施設か主が無い宿屋（セーブエディタで足した宿）では入口とボタンを外す。
              揃ったら足し直し、宿屋の画面のボタンに欠けていれば先頭に入れる（1度だけ）
+  会話     … 宿屋の主との会話のボタンの先頭に入れる（1度だけ）。主でない人・店の主・素データに無い宿屋の主には入れない
   指示文   … 宿屋の売買の間だけ、ゲームの指示文の2文を差し替える。店では差し替えない。
              終わったら目印を下ろす
   棚       … 宿屋の売買の間は、武器・防具・素材を作らない。食べ物・道具は作る。店では全部作る
@@ -286,6 +287,51 @@ app2.buttons = []
 refresh2(lambda self, *a, **k: "drawn", app2)
 check("直す MOD が居れば素データに無くても入口を足す", list(listed.choices) == ["売買する", "出る"], listed.choices)
 save_lookup.reset()
+
+print("宿屋の主との会話")
+module, ctx = setup()
+shop3 = make_facility(ctx, "3", "general_store", "1")
+inn3 = make_facility(ctx, "7", "inn", "4")
+area3 = Area("9", [shop3, inn3])
+world3 = types.SimpleNamespace(name="テスト世界3", areas={"9": area3}, characters={})
+world_dict3 = {"areas": {"9": {"nodes": {"0": {"facilities": {"3": {}, "7": {}}}}}},
+               "npcs": {"1": {}, "4": {}, "5": {}}}
+player3 = types.SimpleNamespace(name="テストプレイヤー", current_area="9", location=inn3)
+
+
+def talk_buttons(partner):
+    end = Spec("ConversationEndManager")
+    end.args = [partner, None, ""]
+    return [{"text": "この話から依頼を作る（テスト）", "spec": Spec("QuestFromConversation")},
+            {"text": "会話を終了する", "spec": end}]
+
+
+app3 = types.SimpleNamespace(world=world3, player=player3, world_dict=world_dict3,
+                             buttons=talk_buttons("4"))
+refresh3 = ctx.hooks[REFRESH_TARGET]
+refresh3(lambda self, *a, **k: "drawn", app3)
+check("主との会話の先頭に 売買する", [e["text"] for e in app3.buttons]
+      == ["売買する", "この話から依頼を作る（テスト）", "会話を終了する"], [e["text"] for e in app3.buttons])
+check("値は店の写し（会話）", app3.buttons[0]["spec"] == SHOP_SPEC, app3.buttons[0])
+check("会話に入れた記録", "in the conversation with owner 4 at inn 7" in log_text(), log_text())
+refresh3(lambda self, *a, **k: "drawn", app3)
+check("会話でも2度は入れない", [e["text"] for e in app3.buttons].count("売買する") == 1, app3.buttons)
+app3.buttons = talk_buttons("5")
+refresh3(lambda self, *a, **k: "drawn", app3)
+check("主でない人との会話には入れない", "売買する" not in [e["text"] for e in app3.buttons],
+      [e["text"] for e in app3.buttons])
+player3.location = shop3
+app3.buttons = talk_buttons("1")
+refresh3(lambda self, *a, **k: "drawn", app3)
+check("店の主との会話は触らない（ゲームが足す）", "売買する" not in [e["text"] for e in app3.buttons],
+      [e["text"] for e in app3.buttons])
+world_dict3["npcs"].pop("4")
+player3.location = inn3
+app3.buttons = talk_buttons("4")
+refresh3(lambda self, *a, **k: "drawn", app3)
+check("素データに無い宿屋の主との会話には入れない", "売買する" not in [e["text"] for e in app3.buttons],
+      [e["text"] for e in app3.buttons])
+check("例外を出していない（会話）", not ctx.errors, ctx.errors)
 
 print("指示文と棚")
 check("送り口に1つ登録", len(REWRITES) == 1, REWRITES)

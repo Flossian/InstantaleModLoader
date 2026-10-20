@@ -506,6 +506,9 @@ display_button_load(dt)             True を見て今の一覧を塗り、予約
 
 - `args[0]` がいま話している相手の id。
   画面のボタンを読むだけで相手が分かる（`ConversationStartManager` を追跡する必要は無い）
+- 店の主と話すと、会話のボタンの先頭に施設の入口が付く（店は `売買する`）。
+  足す施設の種類は `conversation_start_method_3` の決め打ちで、exe の定数は `general_store` / `specialty_shop` / `medical_facility` → `ShoppingStartManagerRemake`、`blacksmith` → `EquipmentReinforcementStart`。
+  施設の `choices` は見ないので、宿屋の `choices` に `売買する` を足しても会話には出ない（`340_` が自分で入れる。VERIFICATION §3.105）
 - 会話中の `app.buttons` は「会話を終了する」1個だけ。
   会話画面も施設と同じ選択肢リストを使うので、自前の選択肢はその手前に挿す
 - 会話は「状態」であって画面ではない。

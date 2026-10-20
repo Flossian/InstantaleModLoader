@@ -181,10 +181,26 @@ DAY_KEY = "day"
 # だからこちらは「地続きに再開しない」「不在明けの再会にもしない」の2つだけを言う。
 ELAPSED_HEADING = "【前に{player}と話してからの日数】"
 ELAPSED_BODY = (
-    "{days}日。前回の会話はこの日数ぶん前の出来事なので、続きをこの場で"
+    "{span}。前回の会話はそれだけ前の出来事なので、続きをこの場で"
     "そのまま再開しているかのようには話さない。ただし同じ土地に留まっている"
     "間は日々見かけているはずなので、長く離れていた相手との再会のようにも"
-    "扱わない。")
+    "扱わない。人は日数を数えていないので、何日ぶりかを具体的な数で口にしない。")
+
+# 経過日数を大まかな言い方に丸める段（上限の日数, 言い方）。
+# 生の日数を渡すと、モデルによっては「677日ぶり」とそのまま口にする。
+# 人が覚えている粒度に落としてから渡す。
+ELAPSED_SPANS = (
+    (1, "前日"),
+    (6, "数日前"),
+    (12, "1週間ほど前"),
+    (24, "半月ほど前"),
+    (45, "ひと月ほど前"),
+    (150, "数か月前"),
+    (270, "半年ほど前"),
+    (450, "1年ほど前"),
+    (1000, "1年以上前"),
+)
+ELAPSED_SPAN_LONGEST = "何年も前"
 
 # 抽出LLMに書かせる JSON の鍵。
 KEY_CHANGED = "changed"
@@ -273,12 +289,20 @@ def elapsed_days(record, today):
     return days if days > 0 else None
 
 
+def elapsed_span(days):
+    """経過日数を `ELAPSED_SPANS` の大まかな言い方にする。"""
+    for limit, span in ELAPSED_SPANS:
+        if days <= limit:
+            return span
+    return ELAPSED_SPAN_LONGEST
+
+
 def elapsed_note(days, player_name):
     """経過日数の但し書き。日数が無ければ空文字。"""
     if not days:
         return ""
     return "{}\n{}".format(ELAPSED_HEADING.format(player=player_name),
-                           ELAPSED_BODY.format(days=days))
+                           ELAPSED_BODY.format(span=elapsed_span(days)))
 
 
 def recent_facts(record):
@@ -944,9 +968,11 @@ def apply(ctx):
         # 前の会話からの経過日数。
         # これが無いと、日を跨いだ会話でも
         # `about_player` が「今しがた約束した」の口調で書かれる。
+        # 生の日数は控えに書き写されて会話へ漏れるので、会話と同じ言い方に丸める。
         gap = elapsed_days(record, snapshot.get("day"))
         if gap:
-            blocks.append("【前回の会話からの経過】\n{}日が経っている。".format(gap))
+            blocks.append("【前回の会話からの経過】\n前回の会話は{}。".format(
+                elapsed_span(gap)))
         blocks.append("【新しい会話】\n{}".format(snapshot["transcript"]))
         return [
             {"role": "user", "content": instruction + "\n\n" + "\n\n".join(blocks)},

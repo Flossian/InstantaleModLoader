@@ -10,7 +10,7 @@
     "en": "After each turn, a background LLM call updates a persistent profile formed from what conversations reveal about that NPC, plus a separate record of how that NPC sees the player. Both are appended to the NPC profile in every later conversation",
     "ja": "会話1ターンごとに裏で LLM を呼び、会話で分かったことから人物プロフィールと、その人物から見たプレイヤーの記録を更新する。どちらも以降の会話で、ゲーム本体のプロフィール欄に毎回載る"
   },
-  "version": "6",
+  "version": "7",
   "author": "yoshinari/tomotomo-y, R01/Flossian",
   "settings": {
     "CONVERSATION_TURNS": {
@@ -61,8 +61,8 @@
         "en": "Tell the NPC how long since you last talked"
       },
       "note": {
-        "ja": "宿泊などで日が飛んでも、直前の会話の続きのようには話さなくなる。同じ土地に居る間は日々見かけている前提なので、毎回「久しぶり」にはならない",
-        "en": "Stops NPCs from carrying on as if no time passed when sleeping skips days, without turning every greeting into a reunion while you stay in the same place"
+        "ja": "宿泊などで日が飛んでも、直前の会話の続きのようには話さなくなる。同じ土地に居る間は日々見かけている前提なので、毎回「久しぶり」にはならない。日数は「数か月前」「1年以上前」のような大まかな言い方で伝え、何日ぶりかを数では言わせない",
+        "en": "Stops NPCs from carrying on as if no time passed when sleeping skips days, without turning every greeting into a reunion while you stay in the same place. The gap is given as a rough span (a few months, over a year), never an exact day count"
       }
     },
     "FACT_LOG_LIMIT": {
