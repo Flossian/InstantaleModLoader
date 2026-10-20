@@ -985,10 +985,13 @@ def rewind(ledger, day):
     return True
 
 
-def trend_due(last_day, day, every):
-    """趨勢を進める日か。最初の1回は台帳を作った日から数える。"""
+def trend_due(last_day, day, every, extra=0):
+    """趨勢を進める日か。最初の1回は台帳を作った日から数える。
+
+    間隔は `every` に `extra`（情勢が動くたびに引き直すばらつき）を足した日数。`every` が 0 なら進めない。
+    """
     if day is None or every <= 0:
         return False
     if last_day is None:
         return False
-    return day - last_day >= every
+    return day - last_day >= every + max(0, extra)

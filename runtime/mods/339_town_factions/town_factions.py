@@ -18,6 +18,7 @@
 
 import json
 import os
+import random
 import sys
 
 from instantale_modloader import choices, frames, hudicons, jobs, llm, modnpc, talk_summary, ui
@@ -33,12 +34,13 @@ GAIN_PER_STEP = 5             # 会話の判定 +1 あたりに上がる点
 LOSS_PER_STEP = 8             # 会話の判定 -1 あたりに下がる点
 INCIDENT_GAIN = 10            # 338 の出来事を主人公が片付けたとき、その街の勢力に上がる点
 TREND_DAYS = 30               # 情勢を進める間隔（日）。0 で進めない
-RUMOR_DAYS = 90               # 情勢の噂を会話に足しておく日数
+TREND_SPREAD_DAYS = 15        # 間隔に足すランダムな日数の上限（情勢が動くたびに 0〜これを引き直す）
+RUMOR_DAYS = 90              # 情勢の噂を会話に足しておく日数
 ORGANIZE_NEW_WORLDS = False   # 新しく作る世界に組織を設ける（全世界共通。世界ごとの設定では効かない）
 ADD_ORGANIZATIONS = False     # 設定に勢力が無い既存の世界に組織を設ける（ワールド個別で入れる）
 
 SETTING_NAMES = ("ENABLED", "ADD_ORGANIZATIONS", "GAIN_PER_STEP", "LOSS_PER_STEP", "INCIDENT_GAIN",
-                 "TREND_DAYS", "RUMOR_DAYS")
+                 "TREND_DAYS", "TREND_SPREAD_DAYS", "RUMOR_DAYS")
 
 # ---- 設定にしない定数 ----------------------------------------------------
 OWNER = "339_town_factions"
@@ -75,6 +77,8 @@ REASON_CHARS = 80
 ICON_KEY = "town_factions"
 ICON_FILES = ("icon_flag.png", "icon_flag_hover.png", "icon_flag_click.png")
 ICON_ORDER = 20
+#: 情勢の間隔に足す日数を引く乱数。ゲームが使う `random` の並びを動かさないように別に持つ。
+RNG = random.Random()
 #: 住人の立場を1回に聞く人数（街の住人がこれより多ければ分けて聞く）。
 PEOPLE_BATCH = 20
 #: 抽出の並びの件数の上限（ローカル LLM が書き足し続けないように。139 と同じ穴）。ローカルのときだけ付ける。
@@ -307,6 +311,7 @@ def apply(ctx):
             if not first_standing(app, key, data, ledger):
                 return
             ledger["trend"]["last_day"] = day
+            ledger["trend"]["extra"] = roll_extra()
             # 台帳より前に終わった 338 の出来事は数えない（途中導入の土台が功績から出している）
             ledger["trend"]["incidents"] = ended_incidents(key)
         with worlds.lock:
@@ -438,6 +443,7 @@ def apply(ctx):
         with worlds.lock:
             ledger = load(key)
             ledger["trend"]["last_day"] = day
+            ledger["trend"]["extra"] = roll_extra()
             if answer is None:
                 worlds.save(key)
                 write("trend: day {} no answer".format(day))
@@ -711,11 +717,19 @@ def apply(ctx):
         with worlds.lock:
             ledger = load(key)
             credit_incidents(app, key, ledger)
+            trend = ledger["trend"]
+            if type(trend.get("extra")) is not int:
+                trend["extra"] = roll_extra()   # 版4 までの台帳（足す日数を持っていない）
             worlds.save(key)
-            due = rules.trend_due(ledger["trend"].get("last_day"), day, TREND_DAYS)
+            due = rules.trend_due(trend.get("last_day"), day, TREND_DAYS,
+                                  extra=min(trend["extra"], TREND_SPREAD_DAYS))
         if due:
             write("trend: day {} queued".format(day))
             worker.enqueue({"kind": "trend", "app": app, "key": key, "day": day})
+
+    def roll_extra():
+        """次の情勢までの間隔に足す日数（0〜`TREND_SPREAD_DAYS`）。ゲームの乱数の並びは動かさない。"""
+        return RNG.randint(0, max(0, int(TREND_SPREAD_DAYS)))
 
     @ctx.wrap(DAYS_TARGET, required=False, safe=True)
     def elapse_days(orig, self, *args, **kwargs):
@@ -898,7 +912,7 @@ def apply(ctx):
     ctx.on_ready(initial)
 
     ctx.log("town factions: installed (enabled {}, gain {}/step, loss {}/step, incident {}, "
-            "trend every {} day(s), rumor {} day(s), organize new worlds {}, state {})".format(
-                ENABLED, GAIN_PER_STEP, LOSS_PER_STEP, INCIDENT_GAIN, TREND_DAYS, RUMOR_DAYS,
-                ORGANIZE_NEW_WORLDS,
+            "trend every {}+0..{} day(s), rumor {} day(s), organize new worlds {}, state {})".format(
+                ENABLED, GAIN_PER_STEP, LOSS_PER_STEP, INCIDENT_GAIN, TREND_DAYS, TREND_SPREAD_DAYS,
+                RUMOR_DAYS, ORGANIZE_NEW_WORLDS,
                 worlds.dir_path()))

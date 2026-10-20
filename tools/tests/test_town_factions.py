@@ -534,6 +534,7 @@ def fresh(enable=True):
         from instantale_modloader.state import world_key
         record = settings.load(world_key(APP))
         record["ENABLED"] = True
+        record["TREND_SPREAD_DAYS"] = 0     # 間隔を決まった日数で見る（ばらつきは「情勢の間隔のばらつき」で見る）
         settings.save(world_key(APP))
     return module, ctx, APP
 
@@ -879,6 +880,55 @@ ANSWERS[module.MANAGER_TREND] = {"happened": "遺跡の扱いをめぐって口�
 ctx.hook(module.DAYS_TARGET)(lambda self, d: self.elapse_days(d), app, 30)
 check("happened に出来事の文を書いた答えも起きた回として読む", len(ledger_of(app)["events"]) == 2
       and ledger_of(app)["events"][-1]["rumor"].startswith("灰の結社と白の教団"), ledger_of(app)["events"])
+
+print("[流れ] 情勢の間隔のばらつき")
+module, ctx, app = fresh()
+from instantale_modloader.state import world_key  # noqa: E402
+settings = getattr(sys, module.SETTINGS_STORE_ATTR)
+settings.load(world_key(app))["TREND_SPREAD_DAYS"] = 10
+settings.save(world_key(app))
+ROLLS, ROLLED = [7, 3, 9], []
+
+
+class FixedRng(object):
+    def randint(self, low, high):
+        ROLLED.append((low, high))
+        return ROLLS.pop(0) if ROLLS else low
+
+
+module.RNG = FixedRng()
+ANSWERS[module.MANAGER_TREND] = {"happened": "true", "a": "灰の結社", "b": "白の教団", "direction": "+1",
+                                 "rumor": "噂", "reason": "x"}
+notes_fn()({"app": app, "npc_id": "30"})
+check("台帳を作るときに足す日数を引く", ledger_of(app)["trend"]["extra"] == 7 and ROLLED == [(0, 10)],
+      (ledger_of(app)["trend"], ROLLED))
+start = ledger_of(app)["trend"]["last_day"]
+
+
+def advance(days):
+    del ASKED[:]
+    ctx.hook(module.DAYS_TARGET)(lambda self, d: self.elapse_days(d), app, days)
+    return any(m == module.MANAGER_TREND for m, _ in ASKED)
+
+
+check("間隔＋足した日数の前は動かない", not advance(36))
+check("間隔＋足した日数で動く", advance(1) and ledger_of(app)["trend"]["last_day"] == start + 37)
+check("動いたら足す日数を引き直す", ledger_of(app)["trend"]["extra"] == 3 and len(ROLLED) == 2, ROLLED)
+check("引き直した日数で次を待つ", not advance(32) and advance(1))
+book = ledger_of(app)
+book["trend"]["extra"] = 9
+settings.load(world_key(app))["TREND_SPREAD_DAYS"] = 2
+settings.save(world_key(app))
+check("ばらつきを狭めたら、引いてある日数も狭めた幅で見る", not advance(31) and advance(1))
+book = ledger_of(app)
+del book["trend"]["extra"]
+settings.load(world_key(app))["TREND_SPREAD_DAYS"] = 10
+settings.save(world_key(app))
+ROLLS[:] = [5]
+check("足す日数を持たない台帳（版4まで）は日数が進んだときに引く", not advance(1)
+      and ledger_of(app)["trend"]["extra"] == 5, ledger_of(app)["trend"])
+check("例外が無い（ばらつき）", not ctx.errors, ctx.errors)
+module.RNG = __import__("random").Random()
 
 print("[流れ] 読み込みの包みが拾えなかったとき")
 module, ctx, app = fresh()

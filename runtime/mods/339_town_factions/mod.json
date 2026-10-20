@@ -10,7 +10,7 @@
     "en": "Factions written in the world setting get a standing toward you, and NPCs of each faction treat you with that bias. Talks move your standing, solving a town's incident pleases its faction, and relations between factions shift on their own as days pass (heard as rumors). Worlds whose setting names fewer than two factions get none. Turn it on per world",
     "ja": "世界の設定に書かれた勢力ごとに主人公の見られ方を持ち、その勢力の NPC は見られ方に応じた態度で接する。見られ方は会話の中身で動き、街の出来事を片付けるとその街の勢力に好かれる。勢力どうしの仲も日数が進むにつれて動き、噂として聞こえてくる。設定に勢力が2つ以上書かれていない世界では何もしない。世界ごとに有効にする"
   },
-  "version": "4",
+  "version": "5",
   "author": "R01/Flossian",
   "shares": [
     "town_incidents"
@@ -118,8 +118,22 @@
         "en": "Days between shifts in relations"
       },
       "note": {
-        "ja": "宿泊や移動で日数が進み、この日数が経つたびに、勢力どうしのあいだで何かが起きるかを1回決める。起きたことは噂として聞こえてくる。一度に何日進んでも1回だけ。0 で動かない",
-        "en": "Every this many days, one decision on what happens between factions; it is heard as a rumor. Once per day-advance at most. 0 turns it off"
+        "ja": "宿泊や移動で日数が進み、この日数（とばらつきの分）が経つたびに、勢力どうしのあいだで何かが起きるかを1回決める。起きたことは噂として聞こえてくる。一度に何日進んでも1回だけ。0 で動かない",
+        "en": "Every this many days (plus the spread), one decision on what happens between factions; it is heard as a rumor. Once per day-advance at most. 0 turns it off"
+      }
+    },
+    "TREND_SPREAD_DAYS": {
+      "type": "int",
+      "default": 15,
+      "min": 0,
+      "max": 3650,
+      "label": {
+        "ja": "情勢が動く間隔のばらつき（日）",
+        "en": "Spread of the days between shifts"
+      },
+      "note": {
+        "ja": "情勢が動く間隔に、0〜この日数のランダムな日数を足す。足す日数は情勢が動くたびに決め直す。0 なら毎回同じ間隔",
+        "en": "Adds a random 0 to this many days to the days between shifts, chosen again after each shift. 0 keeps the interval fixed"
       }
     },
     "RUMOR_DAYS": {
