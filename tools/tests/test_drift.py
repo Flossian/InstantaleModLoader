@@ -248,6 +248,26 @@ def test_rewrites(tmp):
     check("控えへ足すのは前回からの差分だけ", now["counts"]["prompt replace|battle_referee"] == [24, 0],
           now["counts"])
 
+    # 鍵に要素を足しただけの同じ版は比べない（main_002|200 → main_002|200|abc）。
+    fresh("gen_c")
+    drift._state()["build"] = "main_002|200"
+    for _ in range(5):
+        drift.note_rewrite("new fix", "shop", True)
+        drift.note_rewrite("new fix", "shop", False)
+    drift.flush_rewrites(out_dir)
+    fresh("gen_d")
+    drift._state()["build"] = "main_002|200|abc"
+    for _ in range(12):
+        drift.note_rewrite("new fix", "shop", False)
+    found = drift.flush_rewrites(out_dir)
+    check("鍵の書き方が変わっただけの同じ版とは比べない", found == [], found)
+    check("その先の前の版は、鍵を足す前の同じ版を飛ばして選ぶ",
+          drift._previous({"builds": [{"build": "main_001|100"}, {"build": "main_002|200"},
+                                      {"build": "main_002|200|abc"}]},
+                          "main_002|200|abc")["build"] == "main_001|100")
+    check("頭が似ているだけの別の版は除かない",
+          drift._previous({"builds": [{"build": "main_00|1"}]}, "main_002|200")["build"] == "main_00|1")
+
 
 def main():
     tmp = tempfile.mkdtemp(prefix="instantale_drift_")

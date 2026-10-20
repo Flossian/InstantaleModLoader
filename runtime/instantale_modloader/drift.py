@@ -155,8 +155,14 @@ def _entry(data: dict, key: str) -> dict:
 
 
 def _previous(data: dict, key: str) -> dict | None:
-    """`key` より前に見た、いちばん新しい別の版の控え。"""
-    others = [entry for entry in _builds(data) if entry.get("build") != key]
+    """`key` より前に見た、いちばん新しい別の版の控え。
+
+    `key` の頭に `<その鍵>|` として含まれる鍵は、同じ版を鍵の書き方が変わる前に記録したものなので除く
+    （TECH.md §5.13）。
+    """
+    others = [entry for entry in _builds(data)
+              if entry.get("build") != key
+              and not key.startswith("{}|".format(entry.get("build")))]
     return others[-1] if others else None
 
 
