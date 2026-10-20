@@ -3,8 +3,8 @@
   "api": 1,
   "kind": "fix",
   "name": {
-    "en": "Fix trading, NPC details and arena matches crashing on places and people that exist only in the save",
-    "ja": "セーブにしか無い施設や人物で、売買・人物の詳細・闘技場の試合が落ちるのを直す"
+    "en": "Fix crashes on places and people that exist only in the save",
+    "ja": "セーブにしか無い施設・人物で落ちるのを直す"
   },
   "description": {
     "en": "The game looks up the shop, the NPC being detailed and the arena in the world skeleton (world_data.json). Places and people added with a save editor exist only in the save, and those lookups raise KeyError; a crashed NPC detail leaves the save marked as detailed with the details missing. When the target is missing from the world, the lookup is pointed at the save side for that call only, and anything written goes to the save. Targets that are in the world are left to the game. Off by default (not clearly a game bug, so it is opt-in)",

@@ -89,7 +89,7 @@
 | [`143_fix_random_character`](MODS.md#143_fix_random_character-ランダムで作るキャラを世界観に合わせ作りもばらつかせる) | ランダムで作るキャラを世界観に合わせ、作りもばらつかせる | ランダムで作るキャラを世界観に合わせ、作りもばらつかせる | 6 |  |
 | [`144_fix_hardcoded_worldview`](MODS.md#144_fix_hardcoded_worldview-プロンプトと絵の世界観の決め打ちを外す) | プロンプトと絵の世界観の決め打ちを外す | プロンプトと絵の世界観の決め打ちを外す | 6 |  |
 | [`145_fix_world_overview`](MODS.md#145_fix_world_overview-入力した世界の概要をそのまま使う) | 入力した世界の概要をそのまま使う | 入力した世界の概要をそのまま使う | 1 |  |
-| [`146_fix_save_only_entities`](MODS.md#146_fix_save_only_entities-セーブにしか無い施設や人物で売買人物の詳細闘技場の試合が落ちるのを直す) | セーブにしか無い施設や人物で、売買・人物の詳細・闘技場の試合が落ちるのを直す | セーブにしか無い施設や人物で、売買・人物の詳細・闘技場の試合が落ちるのを直す | 1 |  |
+| [`146_fix_save_only_entities`](MODS.md#146_fix_save_only_entities-セーブにしか無い施設人物で落ちるのを直す) | セーブにしか無い施設・人物で落ちるのを直す | セーブにしか無い施設・人物で落ちるのを直す | 1 |  |
 | [`406_user_role_fix`](MODS.md#406_user_role_fix-クラウド-api-の-geminiclaude-でuser-role-の無い依頼が返らない断られるのを防ぐ) | Gemini・Claudeの無応答の防止 | クラウド API の Gemini・Claude で、user role の無い依頼が返らない・断られるのを防ぐ | - |  |
 | [`409_fix_crafted_item_type`](MODS.md#409_fix_crafted_item_type-右クリックに消費が出ない飲食物薬を使えるようにする) | 右クリックに「消費」が出ない飲食物・薬を使えるようにする | 右クリックに「消費」が出ない飲食物・薬を使えるようにする | 1 |  |
 
