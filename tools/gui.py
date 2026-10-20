@@ -2315,6 +2315,11 @@ class App(ttk.Frame):
         skipped = (self.status.get("patches") or {}).get("skipped") or []
         if skipped:
             msg += " ｜ この実行では通らない経路のフック {} 件".format(len(skipped))
+        # 画面を開くまで来ないモジュール宛て（ローダの `ON_DEMAND_MODULES`）。
+        # 待ちの途中ではないので「段階適用の途中」にも ⚠ にも出さず、件数だけ出す。
+        on_demand = (self.status.get("patches") or {}).get("on_demand") or []
+        if on_demand:
+            msg += " ｜ 画面を開いたときに当たるフック {} 件".format(len(on_demand))
         if self.dirty:
             msg += " ｜ 順序と有効/無効の変更は未保存"
         self._set_status(msg)

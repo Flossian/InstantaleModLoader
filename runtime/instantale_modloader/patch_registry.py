@@ -13,10 +13,12 @@
 重なること自体は正常だが、**意図しない重なり**が起きたとき、
 ログを目で追う以外の手段が無かった。
 
-記録するのは4種類:
+記録するのは5種類:
 
     applied     実際に当たった（wrap / patch）
     deferred    対象のモジュールが未 import なので見送った（後で当て直す）
+    on_demand   deferred のうち、画面を開いたときに初めて import されるモジュール宛て
+                （見張りは待ち続けるが、段階適用の待ちには数えない。TECH.md §3.4）
     skipped     待つのをやめた保留（その経路をこの実行では通らないと分かった）
     unresolved  モジュールは在るが対象が見つからない / None だった
 
@@ -42,6 +44,7 @@ _entries: list[tuple[str, str, str, str]] = []
 
 APPLIED = "applied"
 DEFERRED = "deferred"
+ON_DEMAND = "on_demand"
 SKIPPED = "skipped"
 UNRESOLVED = "unresolved"
 
@@ -106,12 +109,28 @@ def settle_deferred(modules, detail: str = "") -> int:
     wanted = set(modules)
     moved = 0
     for index, (kind, target, mod, module) in enumerate(_entries):
-        if kind != DEFERRED or module not in wanted:
+        if kind not in (DEFERRED, ON_DEMAND) or module not in wanted:
             continue
         # 元の detail（モジュール名）は捨てない。
         # 理由で上書きすると、どのモジュールを待っていたのかが台帳から読めなくなる。
         _entries[index] = (SKIPPED, target, mod,
                            "{} ({})".format(module, detail) if detail else module)
+        moved += 1
+    return moved
+
+
+def mark_on_demand(modules) -> int:
+    """このモジュール宛ての保留を `on_demand` へ移す。戻り値は移した件数。
+
+    見張りは待ち続ける（来れば当て直す）ので、`skipped` と違って降ろしたのではない。
+    種類だけ替え、detail（待つモジュール名）はそのまま残す。
+    """
+    wanted = set(modules)
+    moved = 0
+    for index, (kind, target, mod, module) in enumerate(_entries):
+        if kind != DEFERRED or module not in wanted:
+            continue
+        _entries[index] = (ON_DEMAND, target, mod, module)
         moved += 1
     return moved
 
@@ -187,6 +206,7 @@ def summary() -> dict:
             "mods": len(by_mod()),
             "conflicts": len(conflicts()),
             "deferred": len(entries(DEFERRED)),
+            "on_demand": len(entries(ON_DEMAND)),
             "skipped": len(entries(SKIPPED)),
             "unresolved": len(unresolved()),
         },
@@ -194,6 +214,7 @@ def summary() -> dict:
         "by_mod": by_mod(),
         "conflicts": conflicts(),
         "deferred": entries(DEFERRED),
+        "on_demand": entries(ON_DEMAND),
         "skipped": entries(SKIPPED),
         "unresolved": unresolved(),
     }
@@ -233,6 +254,14 @@ def format_report() -> list[str]:
         for module in sorted(groups):
             count, owners = groups[module]
             lines.append("  {}: {} hook(s) <- {}".format(module, count, ", ".join(owners)))
+
+    on_demand = entries(ON_DEMAND)
+    if on_demand:
+        # 画面を開くまで来ないもの。待ちの途中ではないので deferred と分けて出す。
+        lines.append("on demand ({}): waiting until the screen that imports it is opened".format(
+            len(on_demand)))
+        for _k, target, mod, detail in on_demand:
+            lines.append("  {} ({}) <- {}".format(target, detail or "?", mod))
 
     skipped = entries(SKIPPED)
     if skipped:

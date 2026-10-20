@@ -296,6 +296,13 @@ DEFERRED_POLL = 5.0          # sys.modules を見に行く間隔（秒）
 DEFERRED_TIMEOUT = 3600.0    # ここまで来なければ諦める（1時間）
 MAX_DEFERRED_BOOTS = 8       # 当て直しの上限。暴走よけ
 
+# 画面を開いたときに初めて import されるモジュール（TECH.md §3.4）。
+# ここ宛ての保留は段階適用の待ちに数えず（台帳の `on_demand`）、`DEFERRED_TIMEOUT` で諦めずに見張り続ける。
+ON_DEMAND_MODULES = (
+    "scripts.hud.hud_world_bulk",       # 世界の一括生成の「開始／再開」
+    "scripts.world_bulk_backend",       # 同上
+)
+
 # ローダの状態。
 # 再注入のたびに作り直される。
 # ゲーム側に残っているパッチとの対応付けは generation（下の boot を参照）で行う。
@@ -1857,9 +1864,30 @@ def _owner_modules(owners) -> list[str]:
 def _deferred_loop(out_dir: str, generation: str, pending: list,
                    owners: list = ()) -> None:
     from . import patch as _patch
+    from . import patch_registry as _registry
     owners = list(owners)
     deadline = time.monotonic() + DEFERRED_TIMEOUT
-    while time.monotonic() < deadline:
+    while True:
+        if deadline is not None and time.monotonic() >= deadline:
+            # 起動の段階適用の分は諦める。画面を開くまで来ない分（`ON_DEMAND_MODULES`）だけで見張り続ける。
+            late = [n for n in pending
+                    if sys.modules.get(n) is None and n not in ON_DEMAND_MODULES]
+            if owners:
+                # 持ち主待ちも同じ理由で降ろす。台帳を引く鍵はモジュール名（`_owner_modules`）。
+                late = late + [n for n in _owner_modules(owners) if n not in late]
+            if late:
+                log("deferred: gave up after {:.0f}s; still not resolvable: {}".format(
+                    DEFERRED_TIMEOUT, ", ".join(late)), level="WARN")
+                # 見張りが降りた以上、もう当たらない。
+                # `deferred` のまま残すと「まだ待っている」と読めてしまうので、
+                # 諦めたことを台帳に書いて status.json へ流す。
+                if _registry.settle_deferred(late, "gave up after {:.0f}s".format(DEFERRED_TIMEOUT)):
+                    write_status(out_dir)
+            pending = [n for n in pending if n in ON_DEMAND_MODULES]
+            owners = []
+            deadline = None
+            if not pending:
+                return
         time.sleep(DEFERRED_POLL)
         if _superseded(generation):
             return
@@ -1903,18 +1931,6 @@ def _deferred_loop(out_dir: str, generation: str, pending: list,
                 # 記録だけして降りる。
                 log_exc("deferred re-apply failed")
         return
-    from . import patch_registry as _registry
-    late = [n for n in pending if sys.modules.get(n) is None]
-    if owners:
-        # 持ち主待ちも同じ理由で降ろす。台帳を引く鍵はモジュール名（`_owner_modules`）。
-        late = late + [n for n in _owner_modules(owners) if n not in late]
-    log("deferred: gave up after {:.0f}s; still not resolvable: {}".format(
-        DEFERRED_TIMEOUT, ", ".join(late)), level="WARN")
-    # 見張りが降りた以上、もう当たらない。
-    # `deferred` のまま残すと「まだ待っている」と読めてしまうので、
-    # 諦めたことを台帳に書いて status.json へ流す。
-    if _registry.settle_deferred(late, "gave up after {:.0f}s".format(DEFERRED_TIMEOUT)):
-        write_status(out_dir)
 
 
 def _arm_deferred(out_dir: str, generation: str) -> None:
@@ -2318,6 +2334,8 @@ def _boot(out_dir: str) -> dict:
     # 遅れて当て直す boot では大半が同じ行だった（実測。180行ほどのうち9割以上）。
     # 今の全体は `status.json` の `patches.conflicts` にある。
     # 見出しと、保留・見送り・UNRESOLVED の節は毎回書く。
+    # 画面を開くまで来ないモジュール宛ての保留は、報告と status.json の前に分けておく（`ON_DEMAND_MODULES`）。
+    _registry.mark_on_demand(ON_DEMAND_MODULES)
     section = None
     for line in _registry.format_report():
         if not line.startswith("  "):

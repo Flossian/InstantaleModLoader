@@ -330,7 +330,7 @@ def main():
           and s["counts"]["mods"] == 2 and s["counts"]["conflicts"] == 1,
           "集計が台帳と一致: {}".format(s["counts"]))
     check(set(s) == {"counts", "by_target", "by_mod", "conflicts", "deferred",
-                     "skipped", "unresolved"},
+                     "on_demand", "skipped", "unresolved"},
           "summary の項目: {}".format(sorted(s)))
 
     print("-- 報告の見え方 --")
@@ -379,6 +379,54 @@ def main():
               "ローカル専用でない保留はクラウドでも降ろさない")
     finally:
         sys.modules.pop(cloud_mod, None)
+
+    print("=== 画面を開くまで来ないモジュールは段階適用の待ちに数えない ===")
+    # 世界の一括生成のモジュールは「開始／再開」を押すまで import されない。
+    # 待ちに数えると GUI が「段階適用の途中」と言い続け、1時間で諦めると後から開いた画面で当たらない。
+    import threading
+    import time
+    screen_mod = ml.ON_DEMAND_MODULES[0]
+    sys.modules.pop(screen_mod, None)
+    sys.modules.pop("fake_never_comes", None)
+    R._entries.append((R.DEFERRED, screen_mod + ":WorldBulkScreen.update_progress",
+                       "241_fake", screen_mod))
+    R._entries.append((R.DEFERRED, "fake_never_comes:f", "241_fake", "fake_never_comes"))
+    check(R.mark_on_demand(ml.ON_DEMAND_MODULES) == 1, "一覧のモジュール宛てだけ on_demand へ移す")
+    check(not [e for e in R.entries(R.DEFERRED) if e[3] == screen_mod],
+          "  → deferred には残らない（GUI の「段階適用の途中」に数えない）")
+    check([e[3] for e in R.entries(R.ON_DEMAND)] == [screen_mod],
+          "  → detail（待つモジュール）はそのまま: {}".format(R.entries(R.ON_DEMAND)))
+    check(R.summary()["counts"]["on_demand"] == 1, "summary に件数が出る")
+    check(any(line.startswith("on demand (1)") for line in R.format_report()),
+          "報告では deferred と別の節に出る")
+
+    saved = (ml.DEFERRED_POLL, ml.DEFERRED_TIMEOUT, ml.boot, ml._state["deferred_boots"])
+    reboots = []
+    ml.DEFERRED_POLL = 0.01
+    ml.DEFERRED_TIMEOUT = 0.05
+    ml.boot = lambda out: reboots.append(out)
+    watcher = threading.Thread(
+        target=ml._deferred_loop,
+        args=(out_dir, ml._state.get("generation"), [screen_mod, "fake_never_comes"]),
+        daemon=True)
+    try:
+        watcher.start()
+        time.sleep(0.4)
+        check(watcher.is_alive(), "時間切れの後も、画面のモジュールは見張り続ける")
+        gave_up = [e for e in R.entries(R.SKIPPED) if e[3].startswith("fake_never_comes")]
+        check(len(gave_up) == 1 and "gave up" in gave_up[0][3],
+              "起動の段階適用の分は時間切れで諦める: {}".format(gave_up))
+        check([e[3] for e in R.entries(R.ON_DEMAND)] == [screen_mod],
+              "  → 画面のモジュール宛ては諦めない")
+        sys.modules[screen_mod] = types.ModuleType(screen_mod)
+        watcher.join(5)
+        check(not watcher.is_alive() and len(reboots) == 1,
+              "画面のモジュールが来たら当て直す: {}".format(reboots))
+    finally:
+        ml.DEFERRED_POLL, ml.DEFERRED_TIMEOUT, ml.boot, ml._state["deferred_boots"] = saved
+        sys.modules.pop(screen_mod, None)
+    check(R.settle_deferred([screen_mod], "re-apply limit reached") == 1,
+          "当て直しの上限では on_demand も降ろす")
 
     print("=== MOD 専用のログ（ctx.logger）===")
     # 同じ7行が42本の MOD に写されていて、
