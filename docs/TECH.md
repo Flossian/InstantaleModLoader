@@ -151,6 +151,7 @@ runtime/instantale_modloader/
     hudicons.py   画面左下に MOD 用のボタン1つと一覧を置く窓口。MOD は行と知らせの印を足す（§3.3.15）
     panels.py     MOD の窓をゲームの画面と同じ作りで描く部品（地と枠・字の4段・札・目盛り・スクロール。§3.3.17）
     holdings.py   330 の家と 331 の施設を1つの窓「家と施設」に並べる窓口。2本は札の中身を渡すだけ（§3.3.19）
+    save_lookup.py  世界の骨格に無い施設・人物を、その処理の間だけセーブ側から引かせる窓口と、保存の書き手の守り。直す MOD が名乗り、ほかの MOD は直っているかを聞く（§3.3.20）
     sounds.py     曲の置き場所の探し方・戦闘曲の見分け方・重みの読み方（§5.10）
     imagegen.py   画像生成の方式（sdcpp の cuda / vulkan / cpu と diffusers_openvino）を隠して、人物の絵を描く関数を包む（§5.11）
     stalls.py     作業スレッドが死んだときに本文の欄へ出して待機を終える。LLM の 4xx の送り直しを早めに打ち切る（§5.12）
@@ -1866,6 +1867,32 @@ holdings.remove_all()                # ローダを外すときに呼ぶ
 
 検査は `tools\tests\test_holdings.py`（側・一覧・中身・上の欄・並べ方・知らせ）と、`test_real_estate.py`・`test_facility_investment.py` の「家と施設の窓」の項。
 
+#### 3.3.20 世界の骨格に無い対象を、その間だけセーブ側から引かせるのも窓口で（`save_lookup`）
+
+ゲームは遊んでいる最中のいくつかの処理で、いま遊んでいる施設や人物を世界の骨格（`app.world_dict`）から引く（売買・人物の詳細の生成・闘技場の試合。VERIFICATION.md §3.106）。
+セーブエディタで足した施設や人物は `app.save_data_dict` にしか無く、そこで `KeyError` になる。
+直すのは `146_fix_save_only_entities`（設定 `ENABLED`、既定は切。切っているときは包まず名乗らない）で、引き先の差し替えと保存の守りはこの窓口が持つ。
+`340_inn_shop` のように「その場面が直っているか」で振る舞いを変える MOD は、窓口に問い合わせる。
+
+```python
+save_lookup.install(ctx, write)               # 保存の書き手の守り（1つの世代につき1組）
+save_lookup.cover(owner, ctx, site)           # 場面 site（"shopping" / "npc_detail" / "colosseum"）を直していると名乗る
+with save_lookup.redirected(app, why, write): # その間だけ app.world_dict をセーブ側の辞書にする
+    orig(...)
+save_lookup.covered(site)                     # 直している持ち主 / None（用済みの ctx は数えない）
+save_lookup.in_world(app, *keys)              # 本来の世界の辞書をキーの並びでたどれるか。True / False / None（読めない）
+```
+
+| 決まり | 理由 |
+|---|---|
+| 差し替えるのは、対象が世界側に無いときだけ | 世界側にある施設や人物は、ゲームのまま品揃えの雛形・人物の詳細・闘技場の相手を世界側にも書く（本人の線引き。2026-10-20） |
+| 保存の書き手を包み、差し替えの間に `world_data*` へセーブ側の辞書が渡されたら本来の世界の辞書に取り替える | 差し替えはどのスレッドからも見える。保存がその間に走ると、主人公の進みが骨格に焼かれる |
+| 包む名前は `save_world_json:write_obfuscated_json_file` | `scripts.save_codec` の名前は起動直後の当て直しで `save_world_json` の別名に上書きされ、包みが外れた（`242_` の実測） |
+| 差し替えは数えて入れ子にし、最後の1つが抜けたときに戻す。戻すときに辞書が入れ替わっていたら戻さない | 2つの処理が重なっても早く抜けた側が戻さない。間に読み込みが入ったとき、新しい世界を古い辞書で上書きしない |
+| `in_world` は差し替えの間も本来の世界の辞書を見る | 入れ子の判断がセーブ側を見て「ある」と答えないため |
+
+置き場は `sys` の属性（`_instantale_save_lookup`）。検査は `tools\tests\test_save_only_entities.py`。
+
 ### 3.4 まだ現れていない対象を狙う（保留と当て直し）
 
 ゲームは `llama_cpp_runtime_completion` と `scripts.llm.llm_manager` を
@@ -2250,7 +2277,7 @@ GUI の1行に収めると「JSON を手で書く欄」になり、コードを�
 | `apply(ctx)` に渡る `ctx` | §3.1 / §3.6 / §3.8 / §3.11 |
 | `mod.json` の鍵 | §3.1 / §3.2 / §3.8 / §3.9 / §3.12 |
 | §5 の共通部品（`ui` / `frames` / `llm` / `state` / `jobs` / `modnpc` / `modfacility` / `prices` / `sounds` / `imagegen`） | §5 |
-| 使い方を書いた窓口（`durations` / `prices` / `combat` / `equipment` / `arrivals` / `talk_affinity` / `talk_summary` / `ids` / `npcs` / `saves` / `wanted` / `guards` / `defeat` / `board` / `confinement` / `choices` / `hudicons` / `quest_claims` / `holdings`） | §3.2.3 / §3.3 |
+| 使い方を書いた窓口（`durations` / `prices` / `combat` / `equipment` / `arrivals` / `talk_affinity` / `talk_summary` / `ids` / `npcs` / `saves` / `wanted` / `guards` / `defeat` / `board` / `confinement` / `choices` / `hudicons` / `quest_claims` / `holdings` / `save_lookup`） | §3.2.3 / §3.3 |
 
 これ以外は内部で、予告なく変わる。
 `patch.py` の `_defer_if_*` や `__init__.py` の `_order()` のような

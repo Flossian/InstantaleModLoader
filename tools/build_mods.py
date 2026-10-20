@@ -131,6 +131,7 @@ BANDS = (
         "144_fix_hardcoded_worldview",
         "143_fix_random_character",
         "145_fix_world_overview",
+        "146_fix_save_only_entities",
         "111_llm_prompt_replace",
         "117_message_text_integrity",
         "127_llm_response_speed",
@@ -188,6 +189,7 @@ BANDS = (
         "337_conversation_affinity",
         "338_town_incidents",
         "339_town_factions",
+        "340_inn_shop",
     )),
     #: 提供（4xx）は出どころの帯なので kind を固定しない（TECH.md §3.2.2）。
     (None, CONTRIB_HEAD, (

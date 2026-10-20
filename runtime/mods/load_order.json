@@ -29,6 +29,7 @@
     "144_fix_hardcoded_worldview",
     "143_fix_random_character",
     "145_fix_world_overview",
+    "146_fix_save_only_entities",
     "111_llm_prompt_replace",
     "117_message_text_integrity",
     "127_llm_response_speed",
@@ -89,6 +90,7 @@
     "313_event_ability_check",
     "315_vacation_custom",
     "327_inn_quality",
+    "340_inn_shop",
     "330_real_estate",
     "331_facility_investment",
     "334_colosseum_custom",
@@ -136,7 +138,8 @@
     "238_probe_prison",
     "239_probe_game_flags",
     "240_probe_stamina",
-    "241_probe_world_bulk"
+    "241_probe_world_bulk",
+    "242_probe_world_reads"
   ],
   "disabled": []
 }

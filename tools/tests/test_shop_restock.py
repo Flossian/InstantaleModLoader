@@ -18,6 +18,8 @@ Clock を差し込み、次を確認する。
   周回     … 世界名だけの控えは見つけた時点の主人公へ移す。同じ世界で作り直した
              主人公の初めての来店は初回の扱い（前の主人公の控えを読まない）
   安全     … 主が引けない・日数が読めない場面では何もしない（品物は無事）
+  宿屋     … 入れ替えの頼み文は食料・飲み物・酒を求め、返ってきた武器・防具も
+             雛形の武器も棚に入れない（`340_inn_shop`）
 """
 import importlib.util
 import io
@@ -745,6 +747,47 @@ def main():
           names == ["剣", "薬"], names)
     check("新規生成: 落ちた記録が残る", "WARN new stock" in read_log(module),
           read_log(module))
+
+    # -- 宿屋（340_inn_shop）は食べ物と飲み物で作り直す ------------------
+    reset_state()
+    module, ctx = fresh_mod(new_stock=True)
+    app, owner, facility = make_world(
+        days=100, goods=("剣", "薬"),
+        stock={"item_1": {"name": "剣"}, "item_2": {"name": "薬"}})
+    facility.facility_type = "inn"
+    for entry, value in zip(facility.config["goods"], (30, 31)):
+        entry["value"] = value
+    manager = ShoppingStartManagerRemake(app, rebuilds=("薬",))
+    shop(ctx, manager)
+    LLM.asked.clear()
+    app.world.days_elapsed = 200
+    shop(ctx, manager)
+    prompt = LLM.asked[0][1][0]["content"] if LLM.asked else ""
+    check("宿屋: 頼み文が食料・飲み物・酒を求める",
+          "食料・飲み物・酒" in prompt and "武器と防具をそれぞれ1つ以上" not in prompt, prompt)
+    check("宿屋: 頼み文の語彙に武器・防具・素材が無い",
+          "weapon:" not in prompt and "wearable:" not in prompt and "material:" not in prompt,
+          prompt)
+    names = sorted(v.get("name") for v in owner.inventory.values())
+    check("宿屋: 返ってきた武器と防具は棚に入れない", names == ["新作の薬"], names)
+    check("宿屋: 入れなかった記録が残る", "skipped '新作の短剣'" in read_log(module),
+          read_log(module))
+
+    # 雛形からの作り直しでも、宿屋では装備を作らない。
+    reset_state()
+    module, ctx = fresh_mod()
+    app, owner, facility = make_world(
+        days=100, goods=("剣", "薬"),
+        stock={"item_1": {"name": "剣"}, "item_2": {"name": "薬"}})
+    facility.facility_type = "inn"
+    facility.config["goods"][0]["item_type"] = "weapon"
+    manager = ShoppingStartManagerRemake(app, rebuilds=("薬",))
+    shop(ctx, manager)
+    app.world.days_elapsed = 200
+    shop(ctx, manager)
+    names = sorted(v.get("name") for v in owner.inventory.values())
+    check("宿屋: 雛形の武器は作り直さない", names == ["薬"], names)
+    check("宿屋: ゲームの入口も呼ばない", app.generated_from_dict == [], app.generated_from_dict)
 
     # -- 雛形に無い新しい品は残す ----------------------------------------
     reset_state()

@@ -8,7 +8,7 @@
 手で書き換えても次の生成で消える。
 直す先は各 MOD の `mod.json` か MODS.md の見出し。
 
-同梱 137 本（基盤 2 / 修正 48 / 追加 45 / 計測 42）。
+同梱 140 本（基盤 2 / 修正 49 / 追加 46 / 計測 43）。
 うち 14 本は外部の MOD 作者からの提供（下の「提供を受けた MOD」）。
 ほかに 3 本は自作だが、外部からの提案を取り込んでいる（下の「提案を取り込んだ MOD」）。
 
@@ -37,7 +37,7 @@
 
 ---
 
-## 修正（48本）
+## 修正（49本）
 
 ゲームのバグ・不便を直す。
 
@@ -89,12 +89,13 @@
 | [`143_fix_random_character`](MODS.md#143_fix_random_character-ランダムで作るキャラを世界観に合わせ作りもばらつかせる) | ランダムで作るキャラを世界観に合わせ、作りもばらつかせる | ランダムで作るキャラを世界観に合わせ、作りもばらつかせる | 6 |  |
 | [`144_fix_hardcoded_worldview`](MODS.md#144_fix_hardcoded_worldview-プロンプトと絵の世界観の決め打ちを外す) | プロンプトと絵の世界観の決め打ちを外す | プロンプトと絵の世界観の決め打ちを外す | 6 |  |
 | [`145_fix_world_overview`](MODS.md#145_fix_world_overview-入力した世界の概要をそのまま使う) | 入力した世界の概要をそのまま使う | 入力した世界の概要をそのまま使う | 1 |  |
+| [`146_fix_save_only_entities`](MODS.md#146_fix_save_only_entities-セーブにしか無い施設や人物で売買人物の詳細闘技場の試合が落ちるのを直す) | セーブにしか無い施設や人物で、売買・人物の詳細・闘技場の試合が落ちるのを直す | セーブにしか無い施設や人物で、売買・人物の詳細・闘技場の試合が落ちるのを直す | 1 |  |
 | [`406_user_role_fix`](MODS.md#406_user_role_fix-クラウド-api-の-geminiclaude-でuser-role-の無い依頼が返らない断られるのを防ぐ) | Gemini・Claudeの無応答の防止 | クラウド API の Gemini・Claude で、user role の無い依頼が返らない・断られるのを防ぐ | - |  |
 | [`409_fix_crafted_item_type`](MODS.md#409_fix_crafted_item_type-右クリックに消費が出ない飲食物薬を使えるようにする) | 右クリックに「消費」が出ない飲食物・薬を使えるようにする | 右クリックに「消費」が出ない飲食物・薬を使えるようにする | 1 |  |
 
 ---
 
-## 追加（45本）
+## 追加（46本）
 
 ゲームに無かった遊びを足す。
 
@@ -138,6 +139,7 @@
 | [`337_conversation_affinity`](MODS.md#337_conversation_affinity-会話による好感度の変動) | 会話による好感度の変動 | 会話による好感度の変動 | 4 |  |
 | [`338_town_incidents`](MODS.md#338_town_incidents-街に盗賊や疫病などの困り事や祝祭や豊作などの良い出来事が起き日を追って移り変わる) | 街の出来事 | 街に盗賊や疫病などの困り事や、祝祭や豊作などの良い出来事が起き、日を追って移り変わる | 17 |  |
 | [`339_town_factions`](MODS.md#339_town_factions-勢力ごとに主人公の見られ方が変わりその勢力の-npc-の態度に表れる) | 街の勢力 | 勢力ごとに主人公の見られ方が変わり、その勢力の NPC の態度に表れる | 8 |  |
+| [`340_inn_shop`](MODS.md#340_inn_shop-宿屋で食べ物飲み物酒を売り買いできる) | 宿屋で食べ物・飲み物・酒を売り買いできる | 宿屋で食べ物・飲み物・酒を売り買いできる | - |  |
 | [`401_battle_character_context`](MODS.md#401_battle_character_context-戦闘の審判へ同行者の人物と装備を見せる) | 戦闘の審判への仲間の情報補完 | 戦闘の審判へ同行者の人物と装備を見せる | - |  |
 | [`402_party_inventory_transfer`](MODS.md#402_party_inventory_transfer-仲間とアイテムを受け渡しできる) | 仲間とのアイテム受け渡し | 仲間とアイテムを受け渡しできる | - |  |
 | [`403_npc_social_memory`](MODS.md#403_npc_social_memory-npc同士がお互いを認知し関係を覚える) | NPC同士の認知と関係記憶 | NPC同士がお互いを認知し、関係を覚える | 5 |  |
@@ -148,7 +150,7 @@
 
 ---
 
-## 計測（42本）
+## 計測（43本）
 
 ゲームは変えない。`out\` にログを残すだけ。デバッグモードのときだけ読み込まれる。
 
@@ -196,6 +198,7 @@
 | `239_probe_game_flags` | ゲームの「〜の最中」の旗 7 つ（`in_battle` / `in_boss_battle` / `in_colosseum_battle` / `in_conversation` / `in_free_input` / `in_action_in_conversation` / `in_shopping`）を録る |
 | `240_probe_stamina` | 主人公と同行者のスタミナ（`physical_integrity` / `max_physical_integrity`）と疲労の旗（`exhausted`）が変わるたびに、呼び出し元の連鎖と、依頼や戦闘の最中かを録る |
 | `241_probe_world_bulk` | 世界の一括生成（main_026 から、世界→一括生成）で、残りの仕事の種類ごとの件数、仕事1件の時間と、そのうち絵を描いた時間（GPU）・CPU・待ち（主に LLM）を録る |
+| `242_probe_world_reads` | 遊んでいる最中にゲームが世界の素データ（`app.world_dict` |
 
 ---
 

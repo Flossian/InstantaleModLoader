@@ -1,0 +1,29 @@
+{
+  "entry": "fix_save_only_entities.py",
+  "api": 1,
+  "kind": "fix",
+  "name": {
+    "en": "Fix trading, NPC details and arena matches crashing on places and people that exist only in the save",
+    "ja": "セーブにしか無い施設や人物で、売買・人物の詳細・闘技場の試合が落ちるのを直す"
+  },
+  "description": {
+    "en": "The game looks up the shop, the NPC being detailed and the arena in the world skeleton (world_data.json). Places and people added with a save editor exist only in the save, and those lookups raise KeyError; a crashed NPC detail leaves the save marked as detailed with the details missing. When the target is missing from the world, the lookup is pointed at the save side for that call only, and anything written goes to the save. Targets that are in the world are left to the game. Off by default (not clearly a game bug, so it is opt-in)",
+    "ja": "ゲームは売買の店・詳細を作る人物・闘技場を世界の骨格（world_data.json）から引く。セーブエディタで足した施設や人物はセーブにしか無く、そこで KeyError になる。人物の詳細は、落ちた後のセーブが作成済みのまま中身を欠く。対象が世界側に無いときだけ、その処理の間だけ引き先をセーブ側にし、書き込みもセーブ側に入れる。世界側にある対象はゲームのまま。既定は切（明確なゲームの不具合と言い切れないため、使う人が入れる）"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "settings": {
+    "ENABLED": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "セーブにしか無い施設・人物をセーブ側から引かせる",
+        "en": "Look up save-only places and people on the save side"
+      },
+      "note": {
+        "ja": "入れると、骨格（world_data.json）に無い店・人物・闘技場のときだけ、その処理の間だけセーブ側を探させる。セーブエディタで施設や人物を足した世界向け。切っていると何もしない（素のゲームのまま落ちる）",
+        "en": "When on, only for a shop, person or arena missing from the world skeleton, the game looks it up on the save side for that call. Meant for worlds edited with a save editor. Off leaves the game as is"
+      }
+    }
+  }
+}

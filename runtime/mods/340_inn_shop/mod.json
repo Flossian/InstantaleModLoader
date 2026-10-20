@@ -1,0 +1,15 @@
+{
+  "entry": "inn_shop.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Buy and sell food and drink at inns",
+    "ja": "宿屋で食べ物・飲み物・酒を売り買いできる"
+  },
+  "description": {
+    "en": "Adds the game's own \"Trade\" to inns. The lineup is made by the game, told to stock mainly food, drinks and liquor instead of weapons and armor. Selling works as in any shop",
+    "ja": "宿屋にゲーム自身の「売買する」を足す。品揃えはゲームが作り、武器と防具の代わりに食料・飲み物・酒を中心に並べるよう指示する。売る側は店と同じ"
+  },
+  "version": "1",
+  "author": "R01/Flossian"
+}

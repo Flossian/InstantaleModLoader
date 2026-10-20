@@ -213,6 +213,11 @@ ITEM_TYPES = {
 }
 RARITIES = ("common", "rare", "magical", "epic", "legendary", "mythic")
 
+# 宿屋（`340_inn_shop` が売買の入口を足す）。入れ替えでも食べ物と飲み物で作り直し、
+# 武器・防具・素材は作らない（新しい品揃えの頼み・LLM の返り・雛形からの作り直しの3か所）。
+INN_TYPE = "inn"
+INN_DROP_TYPES = ("weapon", "wearable", "material")
+
 # 周回ごとの控えの置き場。
 # `state/` の下（消すと入れ替えの間隔が巻き戻る）。
 STATE_DIRNAME = "shop_restock"
@@ -587,6 +592,9 @@ def apply(ctx):
         entries = goods_entries(pending["facility"])
         if not entries:
             return
+        if is_inn(pending["facility"]):
+            entries = [entry for entry in entries
+                       if str(entry.get("item_type") or "").lower() not in INN_DROP_TYPES]
         app = pending["app"]
         owner = pending["owner"]
         present = {item_name(item) for item in inventory.values()}
@@ -633,6 +641,9 @@ def apply(ctx):
         return llm.create_structure(ctx, "ShopStock", {
             "items": (typing.List[item], ...)}, label="shop restock")
 
+    def is_inn(facility):
+        return frames.attr(facility, "facility_type", "") == INN_TYPE
+
     def stock_messages(pending, values):
         """入れ替え1回ぶんの頼み文。場所は施設と土地、価値は雛形の値をそのまま。"""
         app = pending["app"]
@@ -640,12 +651,16 @@ def apply(ctx):
         area = ui.current_area(app)
         old_names = sorted({item_name(i) for i in pending["snapshot"].values()}
                            - {"?"})
+        inn = is_inn(facility)
         types = "、".join("{}: {}".format(t, "/".join(subs))
-                          for t, subs in ITEM_TYPES.items())
+                          for t, subs in ITEM_TYPES.items()
+                          if not (inn and t in INN_DROP_TYPES))
+        lineup = ("ここは宿なので、食料・飲み物・酒を中心に並べる。武器・防具・素材は作らない。"
+                  if inn else "武器と防具をそれぞれ1つ以上含める。")
         text = (
             "あなたはRPGの売買イベントの管理者だ。\n【指示】\n"
             "店主が仕入れを入れ替えた。この店に新しく並ぶ商品を{n}個作れ。"
-            "前の品揃えと同じ名前の商品は作らない。武器と防具をそれぞれ1つ以上含める。\n\n"
+            "前の品揃えと同じ名前の商品は作らない。{lineup}\n\n"
             "【場所】\n世界: {world}\n土地: {area}\n{area_desc}\n"
             "店: {shop}（{kind}）\n{shop_desc}\n\n"
             "【アイテムの生成要素】\n"
@@ -659,7 +674,7 @@ def apply(ctx):
             "- rarity: {rarities} のいずれか。value が低いほど common。\n"
             "- 前の品揃え（同じ名前を作らない）: {old}\n"
         ).format(
-            n=len(values),
+            n=len(values), lineup=lineup,
             world=frames.short(frames.attr(getattr(app, "world", None), "name", ""), 60),
             area=frames.short(frames.attr(area, "name", ""), 60),
             area_desc=frames.short(frames.attr(area, "description", "") or "", 600),
@@ -732,9 +747,13 @@ def apply(ctx):
                 type(raw).__name__))
             return 0
         made = []
+        inn = is_inn(pending["facility"])
         for index, row in enumerate(rows[:len(values)]):
             fields = tidy(row, values[index])
             if fields is None:
+                continue
+            if inn and fields[2] in INN_DROP_TYPES:
+                write("new stock: skipped {!r} ({}) at an inn".format(fields[0], fields[2]))
                 continue
             before = set(inventory_of(owner) or {})
             try:

@@ -1,0 +1,16 @@
+{
+  "entry": "probe_world_reads.py",
+  "api": 1,
+  "kind": "probe",
+  "name": {
+    "en": "Probe: where the game reads the world's raw data while playing",
+    "ja": "計測: 遊んでいる最中にゲームが世界の素データを引く箇所"
+  },
+  "description": {
+    "en": "Records every place that reads app.world_dict (the world_data.json skeleton) while playing: the calling function and line, the call chain, the scene and thread the first time, and a count after that; also who writes world_data.json. Groundwork for deciding which reads are needed (world and town generation) and which could use the save side instead. Read-only: the app's type is swapped for a same-named subclass that only watches the attribute",
+    "ja": "遊んでいる最中に app.world_dict（world_data.json の骨格）を引いた箇所を、呼び出し元の関数と行・呼び出しの連鎖・初めて見たときの場面とスレッド・その後の回数で録る。world_data.json を書いた呼び出しも録る。要る読み（世界と街の生成）とセーブ側で足りる読みを分ける下調べ。読み取りだけで、app の型を同じ名前の派生クラスに替えて属性の読みを見張るだけ"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "debug": true
+}
