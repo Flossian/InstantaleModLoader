@@ -815,7 +815,8 @@ def apply(ctx):
         # `ALWAYS_RENAME` のときはそれがそのまま「昔からの知り合いが突然改名する」になるので、
         # この控えがその歯止めになっている。
         for npcs in npc_tables(app):
-            for cid, entry in npcs.items():
+            # 写しを回す。ゲームの辞書なので、種まきの間にゲームのスレッドが人物を足すと `clash_with` と同じに落ちる
+            for cid, entry in list(npcs.items()):
                 if str(cid) in known or not isinstance(entry, dict):
                     continue
                 raw = entry.get("name")

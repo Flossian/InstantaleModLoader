@@ -52,6 +52,10 @@ TAKEN_NAMES_MAX = 20
 DIFFICULTY_MAX = 76
 OPENING_TTL = 120.0
 IDLE_TIMEOUT = 60.0
+#: 呼び止めの待ちを「まだ待っている」とみなす長さ（秒）。待ちの上限に、取りやめを確かめる間のゆとりを足す
+WAITING_TTL = IDLE_TIMEOUT + 10.0
+#: 戦闘の印のうち、台帳の刺客の行にも写す鍵（起動し直し・注入し直しの後に戦闘の続きで印を立て直す）
+FIGHT_KEYS = ("npc", "faction", "area", "wanted", "faction_name", "title", "name")
 BATTLE_CLS = "BattleStartManager"
 SPECIFIC_ENEMY = "specific"
 BUSY_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle", "in_conversation",
@@ -179,6 +183,16 @@ def install(env):
     def busy(app):
         return [flag for flag in BUSY_FLAGS if getattr(app, flag, False)]
 
+    def waiting_now():
+        """呼び止めを待っている刺客の id。待っていなければ None（取りやめ・時間切れで戻らなかった印は古くなったら捨てる）。"""
+        held = state["waiting"]
+        if held is None:
+            return None
+        if _now() - held[1] > WAITING_TTL:
+            state["waiting"] = None
+            return None
+        return held[0]
+
     # ------------------------------------------------------------ 着いたとき
     def arrived(app):
         ledger = env.ensure(app)
@@ -191,6 +205,8 @@ def install(env):
         rate = rules.hunter_rate(stage, cfg["HUNTER_HOSTILE_RATE"], cfg["HUNTER_WARY_RATE"])
         if rate <= 0:
             return
+        if waiting_now() is not None:
+            return                  # 前の到着で呼び止めを待っている
         key = worlds.playthrough(app)
         day = ui.game_day(app)
         with worlds.lock:
@@ -209,9 +225,8 @@ def install(env):
             write("hunter: {} roll {} > {}% ({}, {})".format(
                 key, roll, rate, faction["name"], rules.STANDING_NAMES[stage]))
             return
-        with worlds.lock:
-            ledger["hunter_day"] = day
-            worlds.save(key)
+        # 次の刺客までの日数（`hunter_day`）は、実際に現れたとき（`launch` の `start`）に書く。
+        # ここで書くと、作るのに失敗した・呼び止めを取りやめたときも次まで待たされた
         if waiting:
             write("hunter: {} {} comes back ({})".format(key, waiting, faction["name"]))
             launch(app, waiting)
@@ -335,9 +350,15 @@ def install(env):
             write("hunter: ConversationStartManager not found")
             return
         arrivals.offer(app, owner, ARRIVAL_PRIORITY)
-        state["waiting"] = npc_id
+        state["waiting"] = (npc_id, _now())
 
         def gone():
+            reason = why_gone()
+            if reason:
+                state["waiting"] = None
+            return reason
+
+        def why_gone():
             ledger = env.ensure(app)
             row = rules.hunter_of(ledger or {}, npc_id)
             if row is None or not alive(app, npc_id):
@@ -374,6 +395,7 @@ def install(env):
                 faction = rules.faction_by_id(ledger, row.get("faction")) or {}
                 again = row.get("status") == rules.HUNTER_ESCAPED
                 row["status"] = rules.HUNTER_MET
+                ledger["hunter_day"] = ui.game_day(app)     # 次の刺客までの日数は現れた日から数える
                 worlds.save(key)
             name = row.get("name") or ui.character_name(app, npc_id)
             area = ui.current_area(app)
@@ -465,7 +487,30 @@ def install(env):
 
     # 「受けて立つ」だけにするのは `claim`。ほかの MOD の足すボタンも出ない
     # （`301_` が「依頼を受ける（話を切り上げる）」を足し、戦わずに抜けられた。実機）
-    choices.provide(ctx, screen, claim=claim, priority=CLAIM_PRIORITY, owner=owner)
+    def rearm_in_battle(app, why):
+        """戦闘中で印が無ければ、台帳から立て直す（`rearm`）。
+
+        ロードの直後（`load_game_new` を抜けた時点）には、まだ敵が戻っていない。続きの戦闘の画面では
+        `current_enemy_dict` に刺客が名前の鍵で居て、`id` は None だった。続きの戦闘の画面は組み直しを通らず、
+        読み込んですぐ「逃げる」を押すと、ゲームが敵を空にしてから戦闘を終え、決着が付かなかった（10-21 の実機）。
+        戦闘の画面でボタンが押されたとき（窓口の `intercept`。敵はまだ居る）と、組み直すときに見る。
+        """
+        if state["fight"] is not None or not getattr(app, "in_battle", None):
+            return
+        try:
+            rearm(app, why)
+        except Exception:
+            ctx.log_exc("town factions: cannot re-arm the hunter's fight ({})".format(why))
+
+    def rearm_on_refresh(app, buttons):
+        rearm_in_battle(app, "battle screen")
+
+    def rearm_on_press(app, entry, button_index):
+        rearm_in_battle(app, "press")
+        return None                     # 押下は握らない
+
+    choices.provide(ctx, screen, refresh=rearm_on_refresh, intercept=rearm_on_press, claim=claim,
+                    priority=CLAIM_PRIORITY, owner=owner)
 
     # ------------------------------------------------------------ 戦闘
     @ctx.wrap("__main__:BattleStartManager.__init__", required=False, safe=True)
@@ -494,12 +539,62 @@ def install(env):
             with worlds.lock:
                 row = rules.hunter_of(worlds.load(key), npc_id)
                 row["status"] = rules.HUNTER_FIGHTING
+                row["fight"] = {name: state["fight"][name] for name in FIGHT_KEYS}
                 worlds.save(key)
             write("hunter: {} fight armed in area {} (wanted {})".format(npc_id, area_id, state["fight"]["wanted"]))
             break
         return result
 
+    def enemy_ids(app):
+        """いまの戦闘の敵の id と名前（`current_enemy_dict`。特定の人物との戦闘では敵はその人物そのもの）。"""
+        enemies = getattr(app, "current_enemy_dict", None)
+        found = set()
+        if not isinstance(enemies, dict):
+            return found
+        for name, enemy in list(enemies.items()):
+            found.add(str(name))
+            npc_id = enemy.get("id") if isinstance(enemy, dict) else getattr(enemy, "id", None)
+            if npc_id is not None:
+                found.add(str(npc_id))
+        return found
+
+    def rearm(app, why):
+        """戦闘の印が無いのに、戦っている刺客がいまの戦闘の敵に居れば、台帳から印を立て直す。
+
+        印はメモリにしか無いので、刺客との戦闘の途中で起動し直す・注入し直すと消える。続きの戦闘はセーブのボタンから
+        始まり `BattleStartManager.__init__` を通らないので、立て直さないと決着（討った・逃げた）が付かない。
+        """
+        if state["fight"] is not None or app is None:
+            return
+        present = enemy_ids(app)
+        if not present:
+            return
+        ledger = env.ensure(app) or {}
+        for npc_id, row in list((ledger.get("hunters") or {}).items()):
+            if not isinstance(row, dict) or row.get("status") != rules.HUNTER_FIGHTING:
+                continue
+            saved = row.get("fight")
+            if not isinstance(saved, dict) or not (str(npc_id) in present or (row.get("name") or "") in present):
+                continue
+            state["fight"] = dict(saved, npc=str(npc_id))
+            write("hunter: {} fight re-armed ({}; wanted {})".format(npc_id, why, saved.get("wanted")))
+            return
+
+    @ctx.wrap("__main__:InstantaleApp.load_game_new", required=False, safe=True)
+    def after_load(orig, self, *args, **kwargs):
+        result = orig(self, *args, **kwargs)
+        state["fight"] = None             # 読み込む前の周回の印を持ち越さない
+        try:
+            rearm(self, "load")
+        except Exception:
+            ctx.log_exc("town factions: cannot re-arm the hunter's fight after the load")
+        return result
+
     def battle_end(orig, self, *args, **kwargs):
+        try:
+            rearm(getattr(self, "app", None) or ui.find_app(), "battle end")
+        except Exception:
+            ctx.log_exc("town factions: cannot re-arm the hunter's fight at the battle end")
         result = orig(self, *args, **kwargs)
         fight, state["fight"] = state["fight"], None
         if fight is not None:
@@ -541,6 +636,7 @@ def install(env):
         with worlds.lock:
             ledger = worlds.load(key)
             row = rules.hunter_of(ledger, npc_id) or {}
+            row.pop("fight", None)        # 決着が付いたら写した印は要らない
             faction = rules.faction_by_id(ledger, fight["faction"]) or {}
             if not won:
                 row["status"] = rules.HUNTER_ESCAPED

@@ -404,6 +404,17 @@ def main():
                  len(app2.buttons))[1] == len(labels))
     ok &= check("spec は無害な既存クラス",
                 all(ui.spec_cls_name(e) == ui.SAFE_CLS for e in app2.buttons))
+    from instantale_modloader import choices as choices_mod
+    painted = []
+    saved_paint = (modfacility.repaint_when_idle, choices_mod.repaint)
+    modfacility.repaint_when_idle = lambda app, screen=None: painted.append("idle")
+    choices_mod.repaint = lambda app: painted.append("now")
+    try:
+        app2.buttons = []
+        modfacility.maintain_buttons(app2)
+    finally:
+        modfacility.repaint_when_idle, choices_mod.repaint = saved_paint
+    ok &= check("足したら塗り直しを頼む（挿しただけだと画面の添字が古いまま）", len(painted) == 1)
 
     print("下位の画面: 移動のボタンが無く空でもない画面には混ぜない")
     app2.player.location = rebuilt
@@ -471,6 +482,24 @@ def main():
     ok &= check("出口はこちらの最後（`会話する` の前）",
                 texts == ["滞在する", "売上を受け取る", "外に出る", "会話する"])
     # 伏せるものが無い画面では `replaces` は効かない（その場所が無い）。
+    # 伏せた後の塗り直し（ゲームが一覧を組み直さない `choices.repaint` など）でも、代わりのボタンは伏せた場所のまま。
+    # 伏せたゲームの選択肢は一覧から消えたまま残るので、2回目には伏せる物が無い
+    modfacility.register("916_inn", facility_id=fid,
+                         choices=[{"key": "free_stay", "label": "無料で泊まる", "replaces": "DisplayVacationChoice",
+                                   "on": lambda info: None}],
+                         hide=["DisplayVacationChoice"])
+    app2.player.location = rebuilt
+    app2.buttons = [{"text": "宿泊する(3ヵ月)", "spec": PhaseSpec("DisplayVacationChoice", [3])},
+                    {"text": "売買する", "spec": PhaseSpec("ShoppingStartManagerRemake", [])},
+                    {"text": "会話する", "spec": PhaseSpec("DisplayTalkChoice", [])}]
+    modfacility.maintain_buttons(app2)
+    once = [e.get("text") for e in app2.buttons]
+    modfacility.maintain_buttons(app2)
+    twice = [e.get("text") for e in app2.buttons]
+    ok &= check("伏せた後の塗り直しでも、代わりのボタンは伏せた場所のまま",
+                once.index("無料で泊まる") < once.index("売買する") and twice == once)
+    modfacility.unregister("916_inn", fid)
+
     # 素の店の並び（売買する / 出る / 会話する）に混ぜたときは、
     # ゲームの操作の後、移動と会話の前に入る。
     app2.buttons = [{"text": "売買する", "spec": PhaseSpec("ShoppingStartManagerRemake", [])}] \

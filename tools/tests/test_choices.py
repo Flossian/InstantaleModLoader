@@ -17,6 +17,8 @@ import os
 import shutil
 import sys
 import tempfile
+import threading
+import time
 import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -725,6 +727,61 @@ check("replace はゲームのボタンの場所に出し、元のボタンは�
       and app.buttons[0]["spec"] is surrender["spec"], app.buttons)
 check("保存の前に外すと元のゲームのボタンに戻る", choices.strip(app.buttons) == ([surrender, resist], True),
       choices.strip(app.buttons))
+# 後から登録した MOD は、位置と種類をゲームの一覧で数える。先の MOD が差し替えた所もゲームのボタンとして数える
+ctx_g = Ctx("721_g", "g10")
+choices.provide(ctx_g, None, offer=lambda app, view: [
+    choices.Choice("後の at(1)", place=choices.at(1)),
+    choices.Choice("後の before", place=choices.before("TrialStartManager"))])
+app.refresh_choice_buttons()
+check("差し替えた位置も数える（at は差し替えの後ろ・before は差し替えの手前）",
+      [b["text"] for b in app.buttons] == ["後の before", "大人しく捕まる", "後の at(1)", "抵抗する！"],
+      [b["text"] for b in app.buttons])
+choices.withdraw("721_g")
+app.buttons = [surrender, resist]
+app.refresh_choice_buttons()
+
+# 保存の間は宣言型のボタンを外し、終わったら戻す。保存の間にゲームが一覧を代入していたら、それを潰さない
+save_f = ctx_f.hooks[choices.SAVE_TARGET]
+composed = app.buttons
+seen_in_save = []
+save_f(lambda self: seen_in_save.append(list(self.buttons)), app)
+check("保存の間は外し、終わったら組んだ一覧へ戻す",
+      seen_in_save == [[surrender, resist]] and app.buttons is composed, (seen_in_save, app.buttons))
+assigned = [{"text": "次の画面", "spec": Spec("MovePhaseManager")}]
+
+
+def save_while_game_assigns(self):
+    self.buttons = assigned             # ワーカーの execute が次の画面の一覧を代入した（ゲームの代入は鍵を持たない）
+
+
+save_f(save_while_game_assigns, app)
+check("保存の間にゲームが代入した一覧は潰さない", app.buttons is assigned, app.buttons)
+app.buttons = [surrender, resist]
+app.refresh_choice_buttons()
+
+# 組み直しが重なっても、それぞれの MOD 関数には自分の組み直しの引数が見える
+refresh_f = ctx_f.hooks[choices.REFRESH_TARGET]
+first_in, seen_refreshing = threading.Event(), {}
+
+
+def orig_first(self, *a, **k):
+    first_in.set()
+    time.sleep(0.3)                     # この間に後の組み直しが入ってくる
+    seen_refreshing["first"] = choices.refreshing()
+
+
+def orig_second(self, *a, **k):
+    seen_refreshing["second"] = choices.refreshing()
+
+
+runner = threading.Thread(target=lambda: refresh_f(orig_first, app, reset_page="first"))
+runner.start()
+first_in.wait(2)
+refresh_f(orig_second, app, reset_page="second")
+runner.join(5)
+check("組み直しが重なっても、引数は自分の組み直しのもの",
+      seen_refreshing.get("first") == ((), {"reset_page": "first"})
+      and seen_refreshing.get("second") == ((), {"reset_page": "second"}), seen_refreshing)
 press = ctx_f.hooks[choices.PRESS_TARGET]
 flowed = []
 press(lambda self, i: flowed.append(i), app, 0)

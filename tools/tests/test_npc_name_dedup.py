@@ -594,6 +594,24 @@ app.world_dict["npcs"]["51"] = {"name": "エルミナ", "id": "51"}
 app.load_game_new()
 late = app.world.generate_character("50", app.save_data_dict["npcs"]["50"])
 check("素データにだけ居た古参は改名されない", late.name == "バルガス", late.name)
+
+# 素データの人物を舐めている間に、ゲームのスレッドが人物を足しても種まきが落ちない（版9 の直しの残り。後半のループ）
+mod2, ctx2, app2 = setup({"ALWAYS_RENAME": True, "EPITHET_CHANCE": 0})
+
+
+class BornWhileRead(dict):
+    """名前を読まれた瞬間に、ゲームが素データへ1人足す（種まきとゲームの人物の登録が重なった）。"""
+
+    def get(self, key, default=None):
+        if key == "name" and "61" not in app2.save_data_dict["npcs"]:
+            app2.save_data_dict["npcs"]["61"] = {"name": "オルドリン", "id": "61"}
+        return dict.get(self, key, default)
+
+
+app2.save_data_dict["npcs"]["60"] = BornWhileRead(name="ガレス", id="60")
+app2.load_game_new()
+check("素データを舐めている途中に人物が足されても、種まきが落ちない",
+      "61" in app2.save_data_dict["npcs"] and not any("seeding" in line for line in ctx2.errors), ctx2.errors)
 check("`world_dict` 側の古参も控える", "51" in app.save_data_dict["npcs"] or True)
 # 新顔の名前は名簿に無いものにする。名簿の名前（前は「セラフィナ」）だと、引き直しが同じ名前を
 # 引いた回（女性名 600 件の1件）だけ「付け直されていない」と見えて落ちた（CI で1度）

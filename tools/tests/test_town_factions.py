@@ -35,7 +35,7 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml                      # noqa: E402
-from instantale_modloader import hudicons, llm, modnpc, talk_summary, ui  # noqa: E402
+from instantale_modloader import hudicons, llm, modfacility, modnpc, talk_summary, ui  # noqa: E402
 
 
 def find_mod(suffix):
@@ -1094,6 +1094,150 @@ start_hook(lambda self, *a, **k: None, Phase(app), app, "guard", None)
 end_hook(lambda self: None, Phase(app, "won"))
 check("刺客でない戦闘が後に始まれば前の印を持ち越さない", ledger_of(app)["hunters"]["91"]["status"] == "fighting")
 check("例外が無い（刺客）", not ctx.errors, ctx.errors)
+
+print("[流れ] 刺客との戦闘の途中で起動し直す")
+# 台帳（state\）は残り、印はメモリと一緒に消える。続きの戦闘はセーブのボタンから始まり `BattleStartManager` を通らない
+with store.lock:
+    book = store.load(key)
+    rules.hunters_of(book)["92"] = {"faction": "f1", "name": "ミラ", "title": "異端審問官", "town": "7",
+                                     "status": "met", "day": 100}
+    store.save(key)
+app.world.characters["92"] = Character("92", "ミラ")
+app.world.characters["92"].config = {"is_dead": False}
+app.world.characters["92"].current_hp = 300
+start_hook(lambda self, *a, **k: None, Phase(app), app, "specific", ["92"])
+check("戦闘の印を台帳の行にも写す", ledger_of(app)["hunters"]["92"].get("fight", {}).get("wanted") == -170,
+      ledger_of(app)["hunters"]["92"])
+
+
+def reapplied():
+    """起動し直した（注入し直した）後。台帳は残したまま当て直す。"""
+    again = FakeCtx()
+    module.apply(again)
+    load_hook = next(fn for fn in again.hooks["__main__:InstantaleApp.load_game_new"]
+                     if getattr(fn, "__name__", "") == "after_load")
+    return again, load_hook, again.hook("__main__:BattleEndManager.end_phase")
+
+
+ctx2, load_hook, end_hook2 = reapplied()
+app.current_enemy_dict = {"ミラ": app.world.characters["92"]}
+load_hook(lambda self, *a, **k: None, app)
+end_hook2(game_end_escaped, Phase(app, "escaped"))
+check("起動し直した後に逃げても、刺客は逃げた扱いで手配度は戦闘の前へ戻る",
+      ledger_of(app)["hunters"]["92"]["status"] == "escaped" and "fight" not in ledger_of(app)["hunters"]["92"]
+      and app.player.area_history["7"]["lawfulness"] == -170,
+      (ledger_of(app)["hunters"]["92"], app.player.area_history["7"]))
+start_hook2 = ctx2.hook("__main__:BattleStartManager.__init__")
+start_hook2(lambda self, *a, **k: None, Phase(app), app, "specific", ["92"])
+ctx3, load_hook3, end_hook3 = reapplied()
+app.current_enemy_dict = {"ミラ": app.world.characters["92"]}
+app.world.characters["92"].current_hp = 0
+end_hook3(lambda self: None, Phase(app, "won"))     # 読み込みを通らない注入し直しでも、戦闘の終わりで立て直す
+check("注入し直した後に勝っても、刺客は死ぬ", ledger_of(app)["hunters"]["92"]["status"] == "dead"
+      and app.world.characters["92"].config["is_dead"] is True, ledger_of(app)["hunters"]["92"])
+# ロードの直後にはまだ敵が戻っていない（実機）。戦闘の画面を組み直すときに立て直す。敵は名前の鍵で、id は None（実機）
+with store.lock:
+    book = store.load(key)
+    rules.hunters_of(book)["94"] = {"faction": "f1", "name": "ネロ", "title": "異端審問官", "town": "7",
+                                     "status": "met", "day": 100}
+    store.save(key)
+app.world.characters["94"] = Character("94", "ネロ")
+app.world.characters["94"].config = {"is_dead": False}
+app.world.characters["94"].current_hp = 300
+before_fight = app.player.area_history["7"]["lawfulness"]
+ctx3.hook("__main__:BattleStartManager.__init__")(lambda self, *a, **k: None, Phase(app), app, "specific", ["94"])
+ctx4, load_hook4, end_hook4 = reapplied()
+app.current_enemy_dict = {}
+load_hook4(lambda self, *a, **k: None, app)            # 読み込んだ時点では敵が居ない
+restored = Character(None, "ネロ")
+app.current_enemy_dict = {"ネロ": restored}
+app.in_battle = "normal"
+choices._store()["providers"][module.OWNER + ":hunter"]["refresh"](app, [])
+end_hook4(game_end_escaped, Phase(app, "escaped"))
+check("戦闘の画面の組み直しで立て直す（敵は名前の鍵・id は None）",
+      ledger_of(app)["hunters"]["94"]["status"] == "escaped"
+      and app.player.area_history["7"]["lawfulness"] == before_fight,
+      (ledger_of(app)["hunters"]["94"], app.player.area_history["7"]))
+# 続きの戦闘の画面は組み直しを通らない。読み込んですぐ「逃げる」を押しても、押した時点（敵はまだ居る）で立て直す
+with store.lock:
+    book = store.load(key)
+    rules.hunters_of(book)["96"] = {"faction": "f1", "name": "イーダ", "title": "異端審問官", "town": "7",
+                                     "status": "met", "day": 100}
+    store.save(key)
+app.world.characters["96"] = Character("96", "イーダ")
+app.world.characters["96"].config = {"is_dead": False}
+app.world.characters["96"].current_hp = 300
+before_fight = app.player.area_history["7"]["lawfulness"]
+ctx4.hook("__main__:BattleStartManager.__init__")(lambda self, *a, **k: None, Phase(app), app, "specific", ["96"])
+ctx5, _load_hook5, end_hook5 = reapplied()
+app.current_enemy_dict = {"イーダ": Character(None, "イーダ")}
+app.in_battle = "normal"
+check("押下は握らない", choices._store()["providers"][module.OWNER + ":hunter"]["intercept"](app, {}, 3) is None)
+app.current_enemy_dict = {}                             # ゲームは逃げると敵を空にしてから戦闘を終える
+end_hook5(game_end_escaped, Phase(app, "escaped"))
+check("戦闘の画面で押した時点で立て直す",
+      ledger_of(app)["hunters"]["96"]["status"] == "escaped"
+      and app.player.area_history["7"]["lawfulness"] == before_fight,
+      (ledger_of(app)["hunters"]["96"], app.player.area_history["7"]))
+app.in_battle = None
+check("例外が無い（起動し直し）", not ctx2.errors and not ctx3.errors and not ctx4.errors and not ctx5.errors,
+      (ctx2.errors, ctx3.errors, ctx4.errors, ctx5.errors))
+
+print("[流れ] 次の刺客までの日数は現れた日から")
+module, ctx, app = fresh()
+notes_fn()({"app": app, "npc_id": "30"})
+settings = getattr(sys, module.SETTINGS_STORE_ATTR)
+from instantale_modloader.state import world_key  # noqa: E402
+record = settings.load(world_key(app))
+record["HUNTER_HOSTILE_RATE"], record["HUNTER_WARY_RATE"], record["HUNTER_GAP_DAYS"] = 100, 100, 10
+settings.save(world_key(app))
+store = module._store()["worlds"]
+key = store.playthrough(app)
+with store.lock:
+    book = store.load(key)
+    book["towns"]["7"] = {"faction": "f1"}
+    book["standing"]["f1"]["score"] = -100
+    rules.hunters_of(book)["95"] = {"faction": "f1", "name": "ゼルダ", "title": "異端審問官", "town": "7",
+                                     "status": "escaped", "day": 90}
+    store.save(key)
+app.world.characters["95"] = Character("95", "ゼルダ")
+app.world.characters["95"].config = {"is_dead": False}
+app.player.current_area = "7"
+app.player.location = types.SimpleNamespace(id="70")
+app.buttons = []
+waits, talks = [], []
+app.process_choice = lambda phase, text: talks.append(text)
+saved_ui = (ui.Screen.when_idle, ui.cls_of, modfacility.is_top_screen)
+top = {"ok": False}
+ui.Screen.when_idle = lambda self, app_, then, **kw: waits.append((then, kw.get("cancel_if")))
+ui.cls_of = lambda name: (lambda app_, npc_id: ("phase", npc_id))
+modfacility.is_top_screen = lambda buttons: top["ok"]
+move = ctx.hook("__main__:MovePhaseManager.move_phase")
+try:
+    move(lambda self, *a, **k: None, Phase(app))
+    check("逃げた刺客も抽選が当たれば呼び止めを待つ", len(waits) == 1)
+    check("待っている間は次の刺客までの日数を書かない", "hunter_day" not in ledger_of(app), ledger_of(app).get("hunter_day"))
+    move(lambda self, *a, **k: None, Phase(app))
+    check("待っている間の次の到着では呼び止めを重ねない", len(waits) == 1)
+    waits[-1][0]()                      # 着いた先が衛兵の画面だった（取りやめ）
+    check("取りやめたら日数を使わず、逃げたまま", "hunter_day" not in ledger_of(app)
+          and ledger_of(app)["hunters"]["95"]["status"] == "escaped" and not talks, ledger_of(app)["hunters"]["95"])
+    move(lambda self, *a, **k: None, Phase(app))
+    check("取りやめの後の到着でまた呼び止めを待つ", len(waits) == 2)
+    top["ok"] = True
+    waits[-1][0]()
+    check("現れたら日数を書く", ledger_of(app).get("hunter_day") == app.world.days_elapsed
+          and ledger_of(app)["hunters"]["95"]["status"] == "met" and talks == ["ゼルダ"],
+          (ledger_of(app).get("hunter_day"), ledger_of(app)["hunters"]["95"], talks))
+    with store.lock:
+        book = store.load(key)
+        book["hunters"]["95"]["status"] = "escaped"
+        store.save(key)
+    move(lambda self, *a, **k: None, Phase(app))
+    check("現れてから日数が経つまでは、逃げた刺客も現れない", len(waits) == 2)
+finally:
+    ui.Screen.when_idle, ui.cls_of, modfacility.is_top_screen = saved_ui
+check("例外が無い（日数）", not ctx.errors, ctx.errors)
 
 print("[世界を作るとき]")
 WORLD_PROMPT = "面白そうな世界の概要を生成してください。\n【構造のルール】\n- 3層\n\n【注意】\n- 命名において…"

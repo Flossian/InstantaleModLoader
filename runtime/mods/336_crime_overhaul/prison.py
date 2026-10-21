@@ -250,10 +250,12 @@ def install(env):
 
     @ctx.wrap("__main__:GameOverManager.__init__", required=False, safe=True)
     def jail_game_over(orig, self, *args, **kwargs):
-        """ゲームオーバー（決行で倒れた・処刑・寿命）。決行と備えの控えを片付ける。
+        """ゲームオーバー（決行で倒れた・処刑・寿命）。決行と備えの控えと、牢に居る印（`custody`）を片付ける。
 
         倒れた戦闘は `BattleEndManager.end_phase` を通らない。ゲームはこの後セーブを消すので、
         控えが残るとセーブの無い周回の state にだけ残る（実機。§3.91）。
+        `custody` は牢を出る `prison_event("exit")` でしか下りないので、ここで下ろす。残すと、同じ名前で
+        作り直した周回が牢の中のまま始まる（周回の鍵は世界×主人公の名前）。
         即席の品は返さない（暗転した画面で装備の効果音が鳴る）。貸しは次のロード・新規開始でローダが捨てる。
         """
         result = orig(self, *args, **kwargs)
@@ -264,6 +266,8 @@ def install(env):
                 set_breaking(app, None)
                 set_jail_prep(app, 0)
                 write("jailbreak: game over; dropped the break-out marks")
+            if app is not None and callable(getattr(env, "set_custody", None)):
+                env.set_custody(app, False, "game over")
         except Exception:
             ctx.log_exc("crime incentive: cannot drop the jailbreak marks at the game over")
         return result

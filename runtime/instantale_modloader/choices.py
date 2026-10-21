@@ -565,7 +565,7 @@ def game_buttons(app):
 
 
 def hide_for_save(app):
-    """保存の直前。宣言型のボタンを外した一覧に差し替え、戻すための `(属性, 元の一覧)` の並びを返す。"""
+    """保存の直前。宣言型のボタンを外した一覧に差し替え、戻すための `(属性, 元の一覧, 差し替えた一覧)` の並びを返す。"""
     undo = []
     for attr in SAVED_CHOICE_ATTRS:
         value = getattr(app, attr, None)
@@ -576,7 +576,7 @@ def hide_for_save(app):
             setattr(app, attr, game)
         except Exception:
             continue
-        undo.append((attr, value))
+        undo.append((attr, value, game))
     return undo
 
 
@@ -615,6 +615,18 @@ def _choices_of(result):
         return None
 
 
+def _game_slot(entry):
+    """一覧の中でそのボタンが占めるゲームのボタン。宣言型のボタンは無し（None）、`replace` で差し替えたものは元のボタン。
+
+    呼ぶ側は位置と種類をゲームの一覧で数えるので、差し替えた所もゲームのボタンとして数える
+    （数えないと、後から `at` / `before` で置くボタンが1つ後ろか末尾へずれた。10-21 のコードレビュー）。
+    """
+    if not ours(entry):
+        return entry
+    replaced = entry[CHOICE_KEY].get("replaced")
+    return replaced if isinstance(replaced, dict) else None
+
+
 def _place(buttons, entry, place, cursors):
     """`place` に従って `entry` を挿す。同じ置き場所に続けて置くと、出した順に並ぶ。"""
     where, cls_name = place if isinstance(place, tuple) and len(place) == 2 else LAST
@@ -626,7 +638,7 @@ def _place(buttons, entry, place, cursors):
     if where == "at" and isinstance(cls_name, int) and not isinstance(cls_name, bool):
         seen = 0
         for index, existing in enumerate(buttons):
-            if ours(existing):
+            if _game_slot(existing) is None:
                 continue
             if seen == cls_name:
                 buttons.insert(index, entry)
@@ -636,7 +648,8 @@ def _place(buttons, entry, place, cursors):
         return
     if where in ("before", "after") and cls_name:
         for index, existing in enumerate(buttons):
-            if not ours(existing) and ui.spec_cls_name(existing) == cls_name:
+            game = _game_slot(existing)
+            if game is not None and ui.spec_cls_name(game) == cls_name:
                 if where == "before":
                     buttons.insert(index, entry)
                 else:
@@ -1028,10 +1041,12 @@ def install(ctx):
 
     @ctx.wrap(REFRESH_TARGET, required=False)
     def refresh_choice_buttons(orig, self, *args, **kwargs):
-        previous = store.get("refreshing")
-        store["refreshing"] = (args, kwargs)
         # 組み直しはワーカーからも来る。一覧を外して組む間に保存が割り込まないよう、保存と同じ鍵を持つ
         locked = store["lock"].acquire(timeout=LOCK_TIMEOUT)
+        # 引数は鍵を取ってから置く。先に置くと、組み直しが重なったときに前の組み直しの MOD 関数に後の引数が見え、
+        # 前が抜けるときに戻した値で後の組み直しが None を読んだ（10-21 のコードレビュー）
+        previous = store.get("refreshing")
+        store["refreshing"] = (args, kwargs)
         try:
             try:
                 on_refresh(ctx, self)
@@ -1068,19 +1083,25 @@ def install(ctx):
 
     @ctx.wrap(SAVE_TARGET, required=False, safe=True)
     def save_game(orig, self, *args, **kwargs):
-        try:
-            record_marks(ctx, self)
-        except Exception:
-            if not store.get("record_failed"):
-                store["record_failed"] = True
-                ctx.log_exc("choices: cannot record the marks before the save")
         locked = store["lock"].acquire(timeout=LOCK_TIMEOUT)
         try:
+            # 印の控えも鍵の中で。外で読むと、組み直しの途中の一覧を控えうる
+            try:
+                record_marks(ctx, self)
+            except Exception:
+                if not store.get("record_failed"):
+                    store["record_failed"] = True
+                    ctx.log_exc("choices: cannot record the marks before the save")
             undo = hide_for_save(self)
             try:
                 return orig(self, *args, **kwargs)
             finally:
-                for attr, value in reversed(undo):
+                for attr, value, hidden in reversed(undo):
+                    # 戻すのは、差し替えた一覧のままのときだけ。保存の間にゲームが新しい一覧を代入していたら
+                    # （ゲームの代入はこの鍵を持たない）、それを潰さない（10-21 のコードレビュー）
+                    if getattr(self, attr, None) is not hidden:
+                        _log(ctx, "{} was replaced during the save; left as is".format(attr))
+                        continue
                     try:
                         setattr(self, attr, value)
                     except Exception:

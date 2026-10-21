@@ -7,6 +7,7 @@
          （`get_party_leave_facility` のタプルをほどいて `move_npc_to_facility`）。1行出し、仲間欄を塗り直す
   外さない … MOD の人物・置き先の無い仲間は外さない。設定を切れば何もしない。仲間が居なければ何も出さない
   牢の印 … 立てる・下ろす。控えに持つ（ロードをまたぐ）。牢を出た知らせ（`prison_event("exit")`）で下ろす
+  ゲームオーバー … 牢の中で倒れた・処刑された・寿命を迎えたときも、ゲームオーバーの包み（`prison`）が下ろす
 """
 import importlib
 import os
@@ -176,6 +177,24 @@ try:
           env.in_custody(app) is False and "custody" not in worlds.data["W/P"], worlds.data)
     check("ログに出入り", any("custody: in (imprisonment)" in l for l in lines)
           and any("custody: out (release)" in l for l in lines), lines)
+
+    print("ゲームオーバー")
+    # 牢の中で倒れた・処刑された・寿命を迎えた。牢を出る知らせは来ないので、ゲームオーバーの包み（`prison`）が下ろす
+    prison = importlib.import_module("crime_overhaul_custody_parts.prison")
+    noop = lambda *a, **k: None     # noqa: E731
+    env.area_difficulty = env.quest_reward = env.refresh_gold = noop
+    for name in ("close_screen", "jail_screen_open", "on_labels", "on_offer", "on_screen", "open_screen",
+                 "prison_event", "screen_open", "start_ban"):
+        setattr(env, name, noop)
+    env.owner = "336_crime_overhaul"
+    screen.when_idle = screen.start_phase = noop
+    prison.install(env)
+    game_over = ctx.hooks["__main__:GameOverManager.__init__"]
+    env.set_custody(app, True, "imprisonment")
+    game_over(lambda self, *a, **k: None, types.SimpleNamespace(app=app))
+    check("ゲームオーバーで牢の印を下ろす",
+          env.in_custody(app) is False and "custody" not in worlds.data["W/P"], worlds.data)
+    check("その記録", any("custody: out (game over)" in l for l in lines), lines)
 finally:
     ui.party_member_ids, ui.find_app = saved
 

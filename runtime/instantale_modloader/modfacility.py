@@ -2202,11 +2202,13 @@ def note_blocked(app, buttons, here, reason, write=None):
 
 
 def maintain_buttons(app, screen=None, write=None):
-    """いまの一覧に建物の選択肢を組み直す（塗らない）。何度呼んでも増えない。足したら True。
+    """いまの一覧に建物の選択肢を組み直し、足したら手が空いてから窓口に組み直して塗らせる。何度呼んでも増えない。足したら True。
 
     2026-10-21 に建物の選択肢を窓口 `choices` の宣言型の口へ移した（`declared_refresh` / `declared_offer`）。
     窓口がゲームの組み直しのたびに組むので、MOD がこれを呼ぶ必要は無い。
     呼ばれれば、前に組んだ建物の選択肢を外し、組み直しの前の処理と組み立てをその場で通す（ほかの MOD のボタンは触らない）。
+    一覧に挿しただけで塗らないと、画面の添字が挿す前のまま残り、押した添字が別のボタンを指す。
+    前の版と同じく塗り直しまでする（10-21 のコードレビュー。TECH.md §3.9 で残す口）。
     """
     from . import choices
     buttons = getattr(app, "buttons", None)
@@ -2221,6 +2223,11 @@ def maintain_buttons(app, screen=None, write=None):
         entry = choices._entry_of(OWNER, choice, None)
         if entry is not None:
             choices._place(buttons, entry, choice.place, cursors)
+    if picked:
+        if _screen(screen) is not None:
+            repaint_when_idle(app, screen)
+        else:
+            choices.repaint(app)
     return bool(picked)
 
 
@@ -2271,7 +2278,18 @@ def declared_refresh(app, buttons):
         return
     _state()["blocked"] = None
     if here:
-        _state()["slots"] = drop_hidden_choices(app, buttons, here, screen=screen_of(), write=write)
+        slots = drop_hidden_choices(app, buttons, here, screen=screen_of(), write=write)
+        # 伏せたゲームの選択肢は一覧から消えたまま残るので、ゲームが組み直さない塗り直し（`choices.repaint`・
+        # ロードの後・押した後）では伏せる物が無く、位置が空になって代わりのボタンが後ろへ動いた（10-21 のコードレビュー）。
+        # 伏せた直後と同じ建物・同じ形の一覧なら、そのときの位置を使う
+        from . import choices
+        shape = [ui.spec_cls_name(entry) for entry in buttons if not choices.ours(entry)]
+        kept = _state().get("hidden_slots")
+        if slots:
+            _state()["hidden_slots"] = {"here": here, "shape": shape, "slots": dict(slots)}
+        elif isinstance(kept, dict) and kept.get("here") == here and kept.get("shape") == shape:
+            slots = dict(kept["slots"])
+        _state()["slots"] = slots
 
 
 def declared_offer(app, view):
