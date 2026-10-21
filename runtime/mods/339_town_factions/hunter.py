@@ -21,7 +21,7 @@ import random
 import sys
 import time
 
-from instantale_modloader import arrivals, choices, llm, modfacility, npcs, ui
+from instantale_modloader import arrivals, choices, combat, llm, modfacility, npcs, ui
 
 ARRIVAL_PRIORITY = 20           # 300（0）・911（10）より先に呼び止める
 CLAIM_PRIORITY = 50             # 刺客との会話は「受けて立つ」だけ（窓口 `choices` の `claim`）
@@ -49,13 +49,14 @@ COMPOSE_MAX_TOKENS = 900
 NAME_MAX = 24
 TITLE_MAX = 16
 TAKEN_NAMES_MAX = 20
+#: ゲームが人物の難易度を切る上限（`scripts.functions.clamp_npc_difficulty_value`。10-21 に実測）
 DIFFICULTY_MAX = 76
 OPENING_TTL = 120.0
 IDLE_TIMEOUT = 60.0
 #: 呼び止めの待ちを「まだ待っている」とみなす長さ（秒）。待ちの上限に、取りやめを確かめる間のゆとりを足す
 WAITING_TTL = IDLE_TIMEOUT + 10.0
 #: 戦闘の印のうち、台帳の刺客の行にも写す鍵（起動し直し・注入し直しの後に戦闘の続きで印を立て直す）
-FIGHT_KEYS = ("npc", "faction", "area", "wanted", "faction_name", "title", "name")
+FIGHT_KEYS = ("npc", "faction", "area", "wanted", "faction_name", "title", "name", "base_hp")
 BATTLE_CLS = "BattleStartManager"
 SPECIFIC_ENEMY = "specific"
 BUSY_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle", "in_conversation",
@@ -121,7 +122,7 @@ def install(env):
     screen = ui.Screen(ctx, write, tag="hunter")
     rng = getattr(env, "rng", None) or random.Random()
     owner = env.owner + ":hunter"
-    state = {"opening": None, "fight": None, "waiting": None, "making": False}
+    state = {"opening": None, "fight": None, "waiting": None, "making": False, "accepting": False}
     arrivals.install(ctx, write)
 
     # ------------------------------------------------------------ 読む
@@ -216,7 +217,9 @@ def install(env):
             # 作ってある刺客は、勢力の街に着いたらすぐに呼び止める（抽選は作るときに済んでいる）
             launch(app, waiting)
             return
-        if not rules.hunter_due(ledger.get("hunter_day"), day, cfg["HUNTER_GAP_DAYS"]):
+        gap = rules.hunter_gap_of(ledger, cfg["HUNTER_GAP_DAYS"], cfg["HUNTER_GAP_SPREAD_DAYS"],
+                                  cfg["HUNTER_GAP_MIN_DAYS"])
+        if not rules.hunter_due(ledger.get("hunter_day"), day, gap):
             return
         if state["making"]:
             return                  # 前の到着で作っている途中
@@ -263,6 +266,9 @@ def install(env):
         area = ui.world_areas(app).get(job["area"]) if isinstance(ui.world_areas(app), dict) else None
         area = area or ui.current_area(app)
         difficulty = area_difficulty(app, area)
+        level, boost, target = strength_of(app, job["area"], difficulty)
+        # 人物の詳細を作る難易度もレベルに合わせる（ゲームが人物の難易度を切る上限まで）
+        difficulty = min(DIFFICULTY_MAX, max(difficulty, level - 1))
         fields = compose(app, ledger, faction, area, difficulty)
         if fields is None:
             write("hunter: the LLM gave no usable hunter")
@@ -271,6 +277,7 @@ def install(env):
             write("hunter: {} dropped (another save was loaded while asking)".format(key))
             return False
         title = fields.pop("title")
+        fields["experience_level"] = level
         npc_id = npcs.make_npc(app, fields, job["area"], job["facility"],
                                config={"level_of_detail": 1, "difficulty_level": difficulty}, write=write)
         if npc_id is None:
@@ -283,6 +290,8 @@ def install(env):
                 detail(made)            # HP・スキル・立ち絵（埋めないまま戦闘に出すと落ちる）
             except Exception:
                 ctx.log_exc("town factions: generate_npc_detail failed for the hunter")
+        if made is not None:
+            strengthen(made, level, boost)
         name = ui.character_name(app, npc_id, fallback=fields["name"])
         with worlds.lock:
             ledger = worlds.load(key)
@@ -290,10 +299,48 @@ def install(env):
                 "faction": faction["id"], "name": name, "title": title, "town": job["area"],
                 "status": rules.HUNTER_READY, "day": ui.game_day(app)}
             worlds.save(key)
-        write("hunter: {} made {} {!r} ({}の{}) in area {} (difficulty {}, Lv {})".format(
-            key, npc_id, name, faction["name"], title, job["area"], difficulty, fields["experience_level"]))
+        write("hunter: {} made {} {!r} ({}の{}) in area {} (difficulty {}, Lv {}, target Lv {}, boost x{:.2f}; "
+              "hp {} atk {} mag {})".format(
+                  key, npc_id, name, faction["name"], title, job["area"], difficulty, level, target, boost,
+                  getattr(made, "max_hp", None), getattr(made, "attack_power", None),
+                  getattr(made, "magic_power", None)))
         launch(app, str(npc_id))
         return True
+
+    def strength_of(app, area_id, difficulty):
+        """`(付けるレベル, 強さの倍率, 目標のレベル)`。主人公のレベルとその街の手配度から決める（`rules.hunter_target_level`）。"""
+        cfg = env.cfg()
+        player = getattr(app, "player", None)
+        wanted = ui.lawfulness_of(ui.area_record(player, str(area_id)))
+        target = rules.hunter_target_level(getattr(player, "experience_level", None), wanted,
+                                           cfg["HUNTER_LEVEL_OFFSET"], cfg["HUNTER_WANTED_LEVEL"],
+                                           floor_level=exp_level_for(difficulty),
+                                           max_above=cfg["HUNTER_LEVEL_MAX_ABOVE"])
+        level, boost = rules.hunter_level_and_boost(target)
+        return level, boost, target
+
+    def strengthen(made, level, boost):
+        """作った刺客にレベルを付け、上限を超えた分の倍率を能力値と戦闘の値に掛ける。
+
+        能力値は元の能力値（`original_ability_scores`）から、HP は `original_max_hp` から組み直されるので、
+        両方に掛ける（10-21 に実測。`update_ability_scores` は元の能力値で上書きした）。
+        """
+        if getattr(made, "experience_level", None) != level:
+            write("hunter: the detail set Lv {}; set to Lv {}".format(getattr(made, "experience_level", None), level))
+            made.experience_level = level
+        if boost <= 1.0:
+            return
+        for attr in ("original_ability_scores", "ability_scores"):
+            scores = getattr(made, attr, None)
+            if isinstance(scores, dict):
+                setattr(made, attr, {k: int(round(v * boost)) if isinstance(v, (int, float)) and not isinstance(v, bool)
+                                     else v for k, v in scores.items()})
+        for attr in ("original_max_hp", "max_hp", "attack_power", "magic_power"):
+            value = getattr(made, attr, None)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                setattr(made, attr, int(round(value * boost)))
+        if isinstance(getattr(made, "max_hp", None), int):
+            made.current_hp = made.max_hp
 
     def compose(app, ledger, faction, area, difficulty):
         structure = llm.create_structure(
@@ -395,7 +442,11 @@ def install(env):
                 faction = rules.faction_by_id(ledger, row.get("faction")) or {}
                 again = row.get("status") == rules.HUNTER_ESCAPED
                 row["status"] = rules.HUNTER_MET
-                ledger["hunter_day"] = ui.game_day(app)     # 次の刺客までの日数は現れた日から数える
+                # 次の刺客までの日数は現れた日から数える。日数はここで引き直す（基準から増減し、最低の日数は空ける）
+                cfg = env.cfg()
+                ledger["hunter_day"] = ui.game_day(app)
+                ledger["hunter_gap"] = rules.roll_hunter_gap(cfg["HUNTER_GAP_DAYS"], cfg["HUNTER_GAP_SPREAD_DAYS"],
+                                                             cfg["HUNTER_GAP_MIN_DAYS"], rng)
                 worlds.save(key)
             name = row.get("name") or ui.character_name(app, npc_id)
             area = ui.current_area(app)
@@ -472,17 +523,33 @@ def install(env):
             cls = ui.cls_of(BATTLE_CLS)
             if cls is None:
                 write("hunter: BattleStartManager not found")
+                state["accepting"] = False
+                screen.busy_off(app)
                 return
             try:
                 phase = cls(app, SPECIFIC_ENEMY, [str(npc_id)])
             except Exception:
                 ctx.log_exc("town factions: cannot build the hunter's battle")
+                state["accepting"] = False
+                screen.busy_off(app)
                 return
             write("hunter: {} battle starts".format(npc_id))
+            # 待機表示を解いてから戦闘へ。元の選択肢は塗り直さない（戦闘が自分の選択肢を組む）
+            state["accepting"] = False
+            screen.busy_off(app, restore=False)
             screen.start_phase(app, phase, FIGHT_CHOICE.format(name=name))
 
-        screen.end_conversation(app, entry, fight, end_text=END_TEXT.format(name=name),
-                                on_abort=lambda reason: write("hunter: could not close the talk ({})".format(reason)))
+        def abort(reason):
+            write("hunter: could not close the talk ({})".format(reason))
+            state["accepting"] = False
+            screen.busy_off(app)
+
+        # 会話を閉じると、ゲームは会話の前の一覧（街の選択肢）を組み直す。戦闘を始めるまでの間にそれが一瞬見えた（本人）。
+        # 閉じる前から待機表示で覆い、戦闘を始めるところで解く（`301_` が掲示板へ移るときと同じ）。
+        # 会話の終了処理が選択肢を組み直して塗るときも覆い直す（`cover_after_refresh`。覆うだけでは 0.8 秒ほど見えた。実機）
+        state["accepting"] = True
+        screen.busy_on(app)
+        screen.end_conversation(app, entry, fight, end_text=END_TEXT.format(name=name), on_abort=abort)
         return None
 
     # 「受けて立つ」だけにするのは `claim`。ほかの MOD の足すボタンも出ない
@@ -505,11 +572,17 @@ def install(env):
     def rearm_on_refresh(app, buttons):
         rearm_in_battle(app, "battle screen")
 
+    def cover_after_refresh(app):
+        """受けて立ってから戦闘を始めるまでに組み直された選択肢を、待機表示で覆い直す（塗られる前のフレームで）。"""
+        if state["accepting"]:
+            screen.busy_on(app)
+
     def rearm_on_press(app, entry, button_index):
         rearm_in_battle(app, "press")
         return None                     # 押下は握らない
 
-    choices.provide(ctx, screen, refresh=rearm_on_refresh, intercept=rearm_on_press, claim=claim,
+    choices.provide(ctx, screen, refresh=rearm_on_refresh, after=cover_after_refresh, intercept=rearm_on_press,
+                    claim=claim,
                     priority=CLAIM_PRIORITY, owner=owner)
 
     # ------------------------------------------------------------ 戦闘
@@ -535,15 +608,93 @@ def install(env):
             state["fight"] = {"npc": str(npc_id), "faction": row.get("faction"), "area": area_id,
                               "wanted": ui.lawfulness_of(record), "faction_name": faction.get("name", ""),
                               "title": row.get("title") or "刺客", "name": row.get("name") or ""}
+            state["fight"].update(raise_for_party(app, npc_id))
             key = worlds.playthrough(app)
             with worlds.lock:
                 row = rules.hunter_of(worlds.load(key), npc_id)
                 row["status"] = rules.HUNTER_FIGHTING
-                row["fight"] = {name: state["fight"][name] for name in FIGHT_KEYS}
+                row["fight"] = {name: state["fight"][name] for name in FIGHT_KEYS if name in state["fight"]}
                 worlds.save(key)
             write("hunter: {} fight armed in area {} (wanted {})".format(npc_id, area_id, state["fight"]["wanted"]))
             break
         return result
+
+    def party_factor(app):
+        companions = len(list(ui.party_member_ids(app)))
+        return companions, rules.party_hp_factor(companions, env.cfg()["HUNTER_PARTY_HP_PERCENT"])
+
+    def raise_for_party(app, npc_id):
+        """戦闘の始まり。刺客の元の HP を控え、敵の体力と一撃に率を掛ける MOD が居なければ、仲間の数だけ HP を増やす。
+
+        一撃の重さは変えないので、ソロの釣り合いは崩さない。仲間がいると刺客は1〜2手で倒れていた（10-21 の試算）。
+        仲間の数は戦うたびに変わりうるので、作るときではなく戦闘の始まりに掛け、決着で戻す（`lower_after_fight`）。
+        率を掛ける MOD（`319_`）が居るときは、その MOD が窓口に率を聞いて掛ける（`hunter_hp_percent`）。
+        ここでも掛けると二重に伸びた（実機。1392 → 3480 → 8700）。
+        """
+        found = character(app, npc_id)
+        base = getattr(found, "original_max_hp", None)
+        if not isinstance(base, int) or isinstance(base, bool) or base <= 0:
+            base = getattr(found, "max_hp", None)
+        if not isinstance(base, int) or isinstance(base, bool) or base <= 0:
+            return {}
+        kept = {"base_hp": base}
+        if combat.enemy_scaler():
+            return kept
+        companions, factor = party_factor(app)
+        if factor <= 1.0:
+            return kept
+        current = getattr(found, "current_hp", base)
+        boosted = int(round(base * factor))
+        found.max_hp = boosted
+        if isinstance(current, (int, float)) and not isinstance(current, bool) and current > 0:
+            found.current_hp = max(1, int(round(boosted * min(1.0, current / float(base)))))
+        write("hunter: {} hp x{:.2f} for {} companion(s): {} -> {}".format(npc_id, factor, companions, base, boosted))
+        return kept
+
+    def lower_after_fight(found, fight, won):
+        """戦闘の間に伸ばした HP（こちらの仲間の分も、率を掛ける MOD の分も）を戻す。生き残ったら減った割合を保つ。
+
+        刺客は戦闘の後も世界に残る人物なので、率を掛ける MOD が元の HP（`original_max_hp`）まで伸ばしたまま残ると、
+        逃げた刺客は次の戦闘で伸びた値から始まる。
+        """
+        base = fight.get("base_hp")
+        if found is None or not isinstance(base, int) or isinstance(base, bool) or base <= 0:
+            return
+        current, top = getattr(found, "current_hp", None), getattr(found, "max_hp", None)
+        found.max_hp = base
+        if isinstance(getattr(found, "original_max_hp", None), int):
+            found.original_max_hp = base
+        if not won and isinstance(current, (int, float)) and not isinstance(current, bool)                 and isinstance(top, (int, float)) and top > 0:
+            found.current_hp = max(1, int(round(base * max(0.0, min(1.0, current / float(top))))))
+
+    def fighting_hunter(app, enemy):
+        """いま戦っている刺客なら True（敵の一覧の人物そのものか、名前が同じ。読み直した敵は id が None だった。実機）。"""
+        fight = state["fight"]
+        if fight is None or enemy is None:
+            return False
+        if enemy is character(app, fight["npc"]):
+            return True
+        name = enemy.get("name") if isinstance(enemy, dict) else getattr(enemy, "name", None)
+        return bool(name) and name == fight.get("name")
+
+    def hunter_hp_percent(app, enemy):
+        """窓口 `combat`: 刺客の体力の率（刺客の率 × 仲間の分）。刺客でなければ None。"""
+        if not fighting_hunter(app, enemy):
+            return None
+        companions, factor = party_factor(app)
+        percent = env.cfg()["HUNTER_HP_PERCENT"] * factor
+        write("hunter: {} hp x{:g}% ({} companion(s))".format(state["fight"]["npc"], percent, companions))
+        return percent
+
+    def hunter_damage_percent(app, enemy):
+        """窓口 `combat`: 刺客の一撃の強さの率。刺客でなければ None。"""
+        if not fighting_hunter(app, enemy):
+            return None
+        return env.cfg()["HUNTER_DAMAGE_PERCENT"]
+
+    # 窓口の持ち主は MOD のフォルダ名（ローダが起動のたびに、適用されなかった MOD の分をこの名前で外す）
+    combat.declare_enemy(combat.ENEMY_HP, hunter_hp_percent, owner=env.owner, write=write)
+    combat.declare_enemy(combat.ENEMY_DAMAGE, hunter_damage_percent, owner=env.owner, write=write)
 
     def enemy_ids(app):
         """いまの戦闘の敵の id と名前（`current_enemy_dict`。特定の人物との戦闘では敵はその人物そのもの）。"""
@@ -631,6 +782,7 @@ def install(env):
         found = character(app, npc_id)
         hp = getattr(found, "current_hp", None)
         won = end_type == "won" or (isinstance(hp, (int, float)) and not isinstance(hp, bool) and hp <= 0)
+        lower_after_fight(found, fight, won)
         key = worlds.playthrough(app)
         cfg = env.cfg()
         with worlds.lock:

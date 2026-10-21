@@ -182,7 +182,7 @@
   {"key": "mag_x8_03", "pref": "long", "src": "x8@441,77,591,867", "type": "great sword wrapped in a sacred straw rope"},
   {"key": "mag_x8_04", "pref": "long", "src": "x8@620,42,744,871", "type": "glaive with a string of magatama beads"},
   {"key": "mag_x8_05", "pref": "large", "src": "x8@786,281,924,865", "type": "spiked iron club with sutra strips and a demon mask"},
-  {"key": "mag_x8_06", "pref": "long", "src": "x8@956,86,1137,872", "type": "longbow with sacred streamers"},
+  {"key": "mag_x8_06", "pref": "long", "src": "x8@956,86,1137,872", "type": "longbow with sacred streamers", "halo": false},
   {"key": "mag_x8_07", "pref": "small", "src": "x8@1158,468,1270,841", "type": "kunai with a paper talisman", "diag": true, "rot": 180},
   {"key": "mag_x8_08", "pref": "medium", "src": "x8@1318,308,1423,839", "type": "jitte truncheon with lightning patterns"},
   {"key": "mag_x8_09", "pref": "small", "src": "x8@1438,452,1521,867", "type": "tanto with a glowing cherry blossom blade", "diag": true},

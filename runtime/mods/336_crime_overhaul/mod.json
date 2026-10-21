@@ -121,12 +121,12 @@
     },
     "INTIMIDATION_FRIEND_AFFINITY": {
       "type": "int",
-      "default": 40,
+      "default": 20,
       "min": -50,
       "max": 200,
       "label": {"ja": "委縮しない店主の好感度", "en": "Shopkeeper affinity that ignores your bounty"},
-      "note": {"ja": "店の主の好感度がこれ以上なら値段は動かない。40 は「多少の好意がある」。341_shopkeeper_attitude が入っていると、店主の応じ方はそちらが決める",
-               "en": "At or above this affinity the shopkeeper keeps normal prices. 40 is \"somewhat fond\". With 341_shopkeeper_attitude, that mod decides how shopkeepers react"}
+      "note": {"ja": "店の主の好感度がこれ以上なら値段は動かない。20 は「嫌いではない」。341_shopkeeper_attitude が入っていると、店主の応じ方はそちらが決める",
+               "en": "At or above this affinity the shopkeeper keeps normal prices. 20 is \"does not dislike you\". With 341_shopkeeper_attitude, that mod decides how shopkeepers react"}
     },
     "STATUTE_ENABLED": {
       "type": "bool",

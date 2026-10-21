@@ -132,8 +132,8 @@
         "en": "Spread of the days between shifts"
       },
       "note": {
-        "ja": "情勢が動く間隔に、0〜この日数のランダムな日数を足す。足す日数は情勢が動くたびに決め直す。0 なら毎回同じ間隔",
-        "en": "Adds a random 0 to this many days to the days between shifts, chosen again after each shift. 0 keeps the interval fixed"
+        "ja": "情勢が動く間隔を、前後にこの日数までランダムにずらす（既定なら 15〜45 日）。ずらす日数は情勢が動くたびに決め直す。間隔は1日より短くならない。0 なら毎回同じ間隔",
+        "en": "Shifts the days between shifts by a random amount up to this many days either way (15 to 45 days by default), chosen again after each shift. Never shorter than one day. 0 keeps the interval fixed"
       }
     },
     "RUMOR_DAYS": {
@@ -180,16 +180,128 @@
     },
     "HUNTER_GAP_DAYS": {
       "type": "int",
-      "default": 10,
+      "default": 45,
       "min": 0,
       "max": 3650,
       "label": {
-        "ja": "次の刺客までに空ける日数",
-        "en": "Days between hunters"
+        "ja": "次の刺客までの日数（基準）",
+        "en": "Days between hunters (base)"
       },
       "note": {
-        "ja": "刺客が現れてから、次の刺客が現れうるまでの日数（ゲーム内の日数）。逃げた刺客がまた現れるのにも数える",
-        "en": "In-game days after a hunter appears before another can. It also counts for a hunter you escaped coming back"
+        "ja": "刺客が現れてから、次の刺客が現れうるまでの日数の基準（ゲーム内の日数）。実際の日数は、刺客が現れるたびにこの基準から前後にずらして決める。逃げた刺客がまた現れるのにも数える",
+        "en": "Base in-game days after a hunter appears before another can. The actual days are shifted from this base each time a hunter appears. It also counts for a hunter you escaped coming back"
+      }
+    },
+    "HUNTER_GAP_SPREAD_DAYS": {
+      "type": "int",
+      "default": 15,
+      "min": 0,
+      "max": 3650,
+      "label": {
+        "ja": "次の刺客までの日数のばらつき（日）",
+        "en": "Spread of the days between hunters"
+      },
+      "note": {
+        "ja": "基準の日数を、前後にこの日数までランダムにずらす（既定なら 30〜60 日）。0 なら毎回基準の日数",
+        "en": "Shifts the base days by a random amount up to this many days either way (30 to 60 days by default). 0 always uses the base"
+      }
+    },
+    "HUNTER_GAP_MIN_DAYS": {
+      "type": "int",
+      "default": 30,
+      "min": 0,
+      "max": 3650,
+      "label": {
+        "ja": "次の刺客までに必ず空ける日数",
+        "en": "Minimum days between hunters"
+      },
+      "note": {
+        "ja": "ずらした日数がこれより短くなっても、少なくともこの日数は空ける。ゲームの宿泊や移動は3か月ほど進むので、既定は1か月",
+        "en": "Even when the shift makes it shorter, at least this many days pass. Stays and travel in the game skip about three months, so the default is one month"
+      }
+    },
+    "HUNTER_LEVEL_OFFSET": {
+      "type": "int",
+      "default": 0,
+      "min": -100,
+      "max": 200,
+      "label": {
+        "ja": "刺客のレベル（主人公との差）",
+        "en": "Hunter level above yours"
+      },
+      "note": {
+        "ja": "刺客のレベルは、主人公のレベルにこの値を足したもの。土地から決まる強さより弱くはならない。ゲームのレベルの上限（100）を超える分は、能力値と体力・攻撃を引き上げて同じ強さにする",
+        "en": "The hunter's level is yours plus this. Never weaker than the land's own strength. Beyond the game's level cap (100), abilities, HP and attack are raised to match"
+      }
+    },
+    "HUNTER_WANTED_LEVEL": {
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "手配度による刺客の強さ",
+        "en": "Hunter strength from your bounty"
+      },
+      "note": {
+        "ja": "その街の手配度が 10 下がるごとに、刺客のレベルにこの値を足す（手配度 -40 なら既定で +4）。0 なら手配度では変わらない",
+        "en": "For every 10 points of bounty in that town, the hunter gains this many levels (+4 at -40 by default). 0 ignores the bounty"
+      }
+    },
+    "HUNTER_LEVEL_MAX_ABOVE": {
+      "type": "int",
+      "default": 15,
+      "min": -100,
+      "max": 200,
+      "label": {
+        "ja": "刺客のレベルの上限（主人公との差）",
+        "en": "Hunter level cap above yours"
+      },
+      "note": {
+        "ja": "刺客のレベルは、主人公のレベルにこの値を足したものを超えない。手配度で上がる分も、土地から決まる強さも、ここで止まる",
+        "en": "The hunter's level never exceeds yours plus this, including the bounty bonus and the land's own strength"
+      }
+    },
+    "HUNTER_PARTY_HP_PERCENT": {
+      "type": "int",
+      "default": 75,
+      "min": 0,
+      "max": 1000,
+      "label": {
+        "ja": "仲間の数で増やす刺客の体力（％）",
+        "en": "Hunter HP per companion (%)"
+      },
+      "note": {
+        "ja": "戦闘の間だけ、仲間1人につき刺客の体力をこの割合だけ増やす（仲間2人なら既定で 2.5 倍）。一撃の重さは変わらない。0 なら増やさない",
+        "en": "During the fight only, the hunter's HP grows by this much per companion (2.5x with two by default). Its hits stay the same. 0 turns it off"
+      }
+    },
+    "HUNTER_HP_PERCENT": {
+      "type": "int",
+      "default": 125,
+      "min": 1,
+      "max": 1000,
+      "label": {
+        "ja": "刺客の体力（319 が入っているとき・％）",
+        "en": "Hunter HP with 319 (%)"
+      },
+      "note": {
+        "ja": "319_battle_tactics の「敵の体力」の代わりに、刺客にはこの率を使う。319 の既定（250％）は依頼の中の連戦向けで、1回きりの刺客には長すぎた。仲間の数で増やす分は別に掛かる。319 が無ければ使わない",
+        "en": "Used for hunters instead of 319_battle_tactics' enemy HP. 319's default (250%) suits a quest's series of fights and made a one-off hunter too long. The per-companion growth applies on top. Unused without 319"
+      }
+    },
+    "HUNTER_DAMAGE_PERCENT": {
+      "type": "int",
+      "default": 20,
+      "min": 1,
+      "max": 1000,
+      "label": {
+        "ja": "刺客の一撃（319 が入っているとき・％）",
+        "en": "Hunter hit strength with 319 (%)"
+      },
+      "note": {
+        "ja": "319_battle_tactics の「敵の一撃の強さ」の代わりに、刺客にはこの率を使う。319 の既定（12％）は依頼の中で何度も戦う消耗に合わせた値で、1回きりの刺客には軽すぎた。319 が無ければ使わない",
+        "en": "Used for hunters instead of 319_battle_tactics' enemy hit strength. 319's default (12%) suits wear across a quest's many fights and was too light for a one-off hunter. Unused without 319"
       }
     },
     "HUNTER_STANDING_LOSS": {

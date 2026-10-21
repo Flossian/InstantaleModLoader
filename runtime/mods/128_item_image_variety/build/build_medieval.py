@@ -18,6 +18,7 @@
 """
 import argparse
 import colorsys
+import functools
 import json
 import sys
 from collections import Counter
@@ -30,18 +31,14 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import build_guns as b  # noqa: E402
 
-SETS = {"medieval": ("medieval.json", "med_", ("中世の武器と防具",)), "magic": ("magic.json", "mag_", ("魔法武器",)),
-        "sf": ("sf.json", "sf_", ("SF武器",)), "item": ("items.json", "itm_", ("機械部品", "食料", "医療品", "魔法素材", "宝物", "道具", "魔物素材",
-                                         "和風", "現代とSF"))}
+# 組 → (表, 鍵の頭)。書く分類は表の品が入る分類（build_guns.owned_categories）
+SETS = {"medieval": ("medieval.json", "med_"), "magic": ("magic.json", "mag_"), "sf": ("sf.json", "sf_"), "item": ("items.json", "itm_")}
 SHEETS = b.SHEETS  # 一枚絵の置き場所は categories.json から（build_guns.SHEETS）
-# 消耗品と素材の部位。ゲームの素材と同じくどれも 32x32
+# 消耗品と素材の部位（素の絵はどれも 32x32）
 ITEMS = ("food", "drink", "medicine", "plant", "mushroom", "tool", "relic", "scrap", "magical_material", "other_material",
          "creature_part", "document", "scroll", "liquid_material", "treasure", "metal", "gem", "ore", "potion")
-# 防具の寸法はゲームの素材と同じ（盾・胴鎧は 2x2 マスの 64x64、服と装身具は 32x32）
-SIZES = dict(b.SIZES, shield=(64, 64), body_armor=(64, 64), clothing=(32, 32), accessory=(32, 32), **{f: (32, 32) for f in ITEMS})
+# 寸法は部位の素の絵の2倍（build_guns.game_size × SCALE。盾・胴鎧は 128x128、服・装身具・消耗品は 64x64）
 SQUARE = ("shield", "body_armor", "clothing", "accessory", "headgear", "gauntlets", "legwear") + ITEMS
-# 消耗品と部品の組（item）の防具は、防具類と同じく 64x64（作者の指示。中世の服だけは 32x32 のまま）
-ITEM_WEAR = {f: (64, 64) for f in ("clothing", "headgear", "gauntlets", "legwear")}
 # 刃や金属の頭を持つ種類。色を素材の言葉に直す
 METAL = ("sword", "sabre", "rapier", "axe", "hammer", "maul", "mace", "morning star", "spear", "halberd",
          "flail", "dagger", "stiletto", "knife", "cleaver", "machete", "sickle", "scythe", "trident",
@@ -176,13 +173,37 @@ def choose(entry, im):
     return b.choose_folder(entry["pref"], im)
 
 
+def make_entry(e, sheets, kind):
+    """表の1行から絵を作る（プロセスの中で動く。build_guns.parallel_map）。戻り値は (絵の配列, 部位, キャプション)。"""
+    magic, sf, item = kind == "magic", kind == "sf", kind == "item"
+    im = (b.extract_whole if e.get("whole") else b.extract)(sheets, e["src"])
+    im = im.crop(im.getbbox())  # 縦向きの絵はもともと刃が上（依頼の決まり）。斜めの絵はそのまま
+    if e.get("diag"):
+        # 縦に描かれた短い武器と投げナイフは、ゲームの小型・投擲と同じく刃先を右上へ 45 度に倒す（32x32 に大きく入る）
+        # rot があれば先に回す（逆さに描かれた苦無は rot: 180）
+        im = b.stand_up(im, e.get("rot", 0)).rotate(-45, resample=Image.BICUBIC, expand=True)
+        im = im.crop(im.getbbox())
+    elif e.get("rot"):
+        # 斜めに描かれた長い品（和風の金棒）を立てる。rot は左回りの角度で、±20 度の中で幅が最小の向きに寄せる
+        im = b.stand_up(im, e["rot"])
+    elif sf and e["pref"] != "throwable":
+        im = b.stand_up(im, 0)
+    e["folder"] = choose(e, im)
+    e["caption"] = caption_item(e, im) if item else caption_sf(e, im) if sf else caption_for(e, im, magic)
+    box_w, box_h = b.game_size(e["folder"])
+    if e["folder"] in b.SIZES and e.get("halo", True):
+        # 武器だけ（結晶や薬瓶は色の付いた暗い面が多く、はがすと削れる）
+        im = b.peel_glow(im, min((box_w - 2) / im.width, (box_h - 2) / im.height), strong=bool(e.get("glow")))
+    return b.shrink(im, box_w, box_h, 255), e["folder"], e["caption"]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--set", default="medieval", choices=sorted(SETS))
     ap.add_argument("--sheets", default=str(b.ASSET_ROOT))
     ap.add_argument("--preview")
     args = ap.parse_args()
-    table, prefix, groups = SETS[args.set]
+    table, prefix = SETS[args.set]
     magic = args.set == "magic"
     sf = args.set == "sf"
     item = args.set == "item"
@@ -193,24 +214,11 @@ def main():
     assert len(keys) == len(set(keys)), "鍵が重なっている"
     assert all(k.startswith(prefix) for k in keys), "鍵は %s で始める" % prefix
     made = {}
-    for e in entries:
-        im = (b.extract_whole if e.get("whole") else b.extract)(args.sheets, e["src"])
-        im = im.crop(im.getbbox())  # 縦向きの絵はもともと刃が上（依頼の決まり）。斜めの絵はそのまま
-        if e.get("diag"):
-            # 縦に描かれた短い武器と投げナイフは、ゲームの小型・投擲と同じく刃先を右上へ 45 度に倒す（32x32 に大きく入る）
-            # rot があれば先に回す（逆さに描かれた苦無は rot: 180）
-            im = b.stand_up(im, e.get("rot", 0)).rotate(-45, resample=Image.BICUBIC, expand=True)
-            im = im.crop(im.getbbox())
-        elif e.get("rot"):
-            # 斜めに描かれた長い品（和風の金棒）を立てる。rot は左回りの角度で、±20 度の中で幅が最小の向きに寄せる
-            im = b.stand_up(im, e["rot"])
-        elif sf and e["pref"] != "throwable":
-            im = b.stand_up(im, 0)
-        e["folder"] = choose(e, im)
-        e["caption"] = caption_item(e, im) if item else caption_sf(e, im) if sf else caption_for(e, im, magic)
-        box_w, box_h = (ITEM_WEAR.get(e["folder"]) if item else None) or SIZES[e["folder"]]
-        made[e["key"]] = Image.fromarray(b.shrink(im, box_w, box_h, 255))
-    b.write_categories(entries, made, [c["id"] for c in b.CATEGORIES if c["group"] in groups])
+    jobs = b.parallel_map(functools.partial(make_entry, sheets=args.sheets, kind=args.set), entries)
+    for e, (arr, folder, caption) in zip(entries, jobs):
+        e["folder"], e["caption"] = folder, caption
+        made[e["key"]] = Image.fromarray(arr)
+    b.write_categories(entries, made, b.owned_categories(entries))
     with open(HERE / ("%s_captions.txt" % args.set), "w", encoding="utf-8", newline="\n") as fh:
         for e in entries:
             fh.write("%s\t%s\t%s\n" % (e["key"], e["folder"], e["caption"]))
@@ -220,7 +228,7 @@ def main():
         rows = {}
         for e in entries:
             rows.setdefault(e["folder"], []).append(made[e["key"]])
-        # 箱の寸法は作った絵から取る（item の組の防具は SIZES と違う 64x64）
+        # 箱の寸法は作った絵から取る
         box = {f: (max(t.width for t in v), max(t.height for t in v)) for f, v in rows.items()}
         step = {f: max(36, box[f][0] + 4) for f in box}
         height = sum(((len(v) + cols - 1) // cols) * (box[f][1] + 4) for f, v in rows.items())

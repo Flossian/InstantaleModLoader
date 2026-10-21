@@ -35,10 +35,18 @@ GAIN_PER_STEP = 5             # 会話の判定 +1 あたりに上がる点
 LOSS_PER_STEP = 8             # 会話の判定 -1 あたりに下がる点
 INCIDENT_GAIN = 10            # 338 の出来事を主人公が片付けたとき、その街の勢力に上がる点
 TREND_DAYS = 30               # 情勢を進める間隔（日）。0 で進めない
-TREND_SPREAD_DAYS = 15        # 間隔に足すランダムな日数の上限（情勢が動くたびに 0〜これを引き直す）
+TREND_SPREAD_DAYS = 15        # 間隔を前後にずらすランダムな日数の幅（情勢が動くたびに -これ〜+これを引き直す）
 HUNTER_HOSTILE_RATE = 20       # 敵対の勢力の街に着いたとき、刺客が現れる確率（％）
 HUNTER_WARY_RATE = 0          # 緊張の勢力の街に着いたとき、刺客が現れる確率（％）。0 で現れない
-HUNTER_GAP_DAYS = 10          # 刺客が現れてから、次の刺客が現れうるまでの日数
+HUNTER_GAP_DAYS = 45          # 刺客が現れてから、次の刺客が現れうるまでの日数の基準
+HUNTER_GAP_SPREAD_DAYS = 15   # その基準を前後にずらすランダムな日数の幅（刺客が現れるたびに引き直す）
+HUNTER_GAP_MIN_DAYS = 30      # ずらしても空ける最低の日数（ゲームの宿泊・移動は3か月飛ぶので1か月は空ける）
+HUNTER_LEVEL_OFFSET = 0       # 刺客のレベルは主人公のレベルにこれを足したもの（土地から決まる強さより弱くはしない）
+HUNTER_WANTED_LEVEL = 1       # その街の手配度が 10 下がるごとに、刺客のレベルに足す分
+HUNTER_PARTY_HP_PERCENT = 75  # 仲間1人につき、その戦闘の間の刺客の HP を増やす割合（％）
+HUNTER_HP_PERCENT = 125       # 敵の体力と一撃に率を掛ける MOD（319_）が居るとき、その敵の体力の率の代わりに使う刺客の体力（％。仲間の分は別に掛かる）
+HUNTER_DAMAGE_PERCENT = 20    # 敵の体力と一撃に率を掛ける MOD（319_）が居るとき、その敵の一撃の強さの代わりに使う刺客の一撃（％）
+HUNTER_LEVEL_MAX_ABOVE = 15   # 刺客のレベルの上限（主人公のレベル + これ。土地から決まる強さより優先する）
 HUNTER_STANDING_LOSS = 10     # 刺客を討ったとき、その勢力からの見られ方が下がる量
 HUNTER_WANTED_LOSS = 10       # 刺客を討ったとき、その街の手配度が下がる量
 RUMOR_DAYS = 90              # 情勢の噂を会話に足しておく日数
@@ -47,7 +55,10 @@ ADD_ORGANIZATIONS = False     # 設定に勢力が無い既存の世界に組織
 
 SETTING_NAMES = ("ENABLED", "ADD_ORGANIZATIONS", "GAIN_PER_STEP", "LOSS_PER_STEP", "INCIDENT_GAIN",
                  "TREND_DAYS", "TREND_SPREAD_DAYS", "RUMOR_DAYS", "HUNTER_HOSTILE_RATE", "HUNTER_WARY_RATE",
-                 "HUNTER_GAP_DAYS", "HUNTER_STANDING_LOSS", "HUNTER_WANTED_LOSS")
+                 "HUNTER_GAP_DAYS", "HUNTER_GAP_SPREAD_DAYS", "HUNTER_GAP_MIN_DAYS", "HUNTER_LEVEL_OFFSET",
+                 "HUNTER_WANTED_LEVEL", "HUNTER_LEVEL_MAX_ABOVE", "HUNTER_PARTY_HP_PERCENT", "HUNTER_HP_PERCENT",
+                 "HUNTER_DAMAGE_PERCENT", "HUNTER_STANDING_LOSS",
+                 "HUNTER_WANTED_LOSS")
 
 # ---- 設定にしない定数 ----------------------------------------------------
 OWNER = "339_town_factions"
@@ -742,15 +753,21 @@ def apply(ctx):
             if type(trend.get("extra")) is not int:
                 trend["extra"] = roll_extra()   # 版4 までの台帳（足す日数を持っていない）
             worlds.save(key)
+            # 引いた後に幅を狭めたら、前後とも狭めた幅の中で見る
+            spread = max(0, int(TREND_SPREAD_DAYS))
             due = rules.trend_due(trend.get("last_day"), day, TREND_DAYS,
-                                  extra=min(trend["extra"], TREND_SPREAD_DAYS))
+                                  extra=max(-spread, min(trend["extra"], spread)))
         if due:
             write("trend: day {} queued".format(day))
             worker.enqueue({"kind": "trend", "app": app, "key": key, "day": day})
 
     def roll_extra():
-        """次の情勢までの間隔に足す日数（0〜`TREND_SPREAD_DAYS`）。ゲームの乱数の並びは動かさない。"""
-        return RNG.randint(0, max(0, int(TREND_SPREAD_DAYS)))
+        """次の情勢までの間隔をずらす日数（-`TREND_SPREAD_DAYS`〜+`TREND_SPREAD_DAYS`）。ゲームの乱数の並びは動かさない。
+
+        前は 0〜幅を足すだけで、間隔が決めた日数より短くならなかった（本人の指摘。10-21）。
+        """
+        spread = max(0, int(TREND_SPREAD_DAYS))
+        return RNG.randint(-spread, spread)
 
     @ctx.wrap(DAYS_TARGET, required=False, safe=True)
     def elapse_days(orig, self, *args, **kwargs):
@@ -933,7 +950,7 @@ def apply(ctx):
     ctx.on_ready(initial)
 
     ctx.log("town factions: installed (enabled {}, gain {}/step, loss {}/step, incident {}, "
-            "trend every {}+0..{} day(s), rumor {} day(s), organize new worlds {}, state {})".format(
+            "trend every {}+-{} day(s), rumor {} day(s), organize new worlds {}, state {})".format(
                 ENABLED, GAIN_PER_STEP, LOSS_PER_STEP, INCIDENT_GAIN, TREND_DAYS, TREND_SPREAD_DAYS,
                 RUMOR_DAYS, ORGANIZE_NEW_WORLDS,
                 worlds.dir_path()))

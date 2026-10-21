@@ -32,6 +32,7 @@ from . import incidents, window
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
 #      `tools/check_mods.py` が AST で突き合わせる）------------------------
 ROLL_DAYS = 30                 # 抽選の間隔（日）
+ROLL_SPREAD_DAYS = 15          # 抽選の間隔を前後にずらすランダムな日数の幅（抽選のたびに引き直す）
 ROLL_PERCENT = 25              # 抽選で起きる確率（%）
 MAX_ACTIVE = 3                 # 世界で同時に起きる数の上限
 REST_DAYS = 180                # 収まった街が次に起きるまでの休み（日）
@@ -577,7 +578,8 @@ def apply(ctx):
             clean_up(app, bucket)
             new = incidents.roll(
                 bucket, day, towns(app), rng, enabled_kinds(), chance_percent=ROLL_PERCENT,
-                interval_days=ROLL_DAYS, max_active=MAX_ACTIVE, by_size=SIZE_WEIGHTING)
+                interval_days=ROLL_DAYS, max_active=MAX_ACTIVE, by_size=SIZE_WEIGHTING,
+                spread_days=ROLL_SPREAD_DAYS)
             if new is not None:
                 write("roll: {} at {} ({}) day {}; asking for the text".format(
                     new.get("kind"), new.get("area_name"), new.get("area"), day))
@@ -937,7 +939,7 @@ def apply(ctx):
 
     choices.provide(ctx, screen, refresh=refresh_choice_buttons)
 
-    ctx.log("town incidents: installed ({} kind(s), roll every {} day(s) at {}%, up to {}, stage "
+    ctx.log("town incidents: installed ({} kind(s), roll every {}+-{} day(s) at {}%, up to {}, stage "
             "every {} day(s), settles {} day(s) after stage 3, text {}, state {})".format(
-                len(enabled_kinds()), ROLL_DAYS, ROLL_PERCENT, MAX_ACTIVE, STAGE_DAYS,
+                len(enabled_kinds()), ROLL_DAYS, ROLL_SPREAD_DAYS, ROLL_PERCENT, MAX_ACTIVE, STAGE_DAYS,
                 SETTLE_DAYS, "llm" if USE_LLM else "table", worlds.dir_path()))

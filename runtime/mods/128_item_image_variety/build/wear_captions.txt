@@ -362,7 +362,7 @@ wcy_w02_065	clothing	A black cyberpunk jacket with red details.
 wcy_w02_066	clothing	A purple cyberpunk jacket with white details.
 wcy_w02_067	clothing	A black cyberpunk jacket with red details.
 wcy_w02_068	clothing	A black cyberpunk jacket with white details.
-wcy_w02_069	clothing	A black cyberpunk jacket with purple details.
+wcy_w02_069	clothing	A purple cyberpunk jacket.
 wcy_w02_070	clothing	A black cyberpunk jacket with blue details.
 wcy_w02_071	clothing	A black cyberpunk jacket.
 wcy_w02_920	gauntlets	A black cyberpunk gloves with blue details.
@@ -456,7 +456,7 @@ wcy_w03_038	clothing	A black cyberpunk jacket.
 wcy_w03_039	clothing	A white cyberpunk jacket.
 wcy_w03_040	body_armor	A black cyberpunk tactical vest with white details.
 wcy_w03_041	clothing	A black cyberpunk jacket with white details.
-wcy_w03_042	clothing	A black cyberpunk jacket with white details.
+wcy_w03_042	clothing	A black cyberpunk jacket with red details.
 wcy_w03_920	clothing	A black cyberpunk jacket with red details.
 wcy_w03_043	clothing	A gold cyberpunk jacket with brown details.
 wcy_w03_921	clothing	A black cyberpunk jacket with red details.
@@ -518,8 +518,8 @@ wcy_w03_097	legwear	A white cyberpunk trousers.
 wcy_w03_098	legwear	A black cyberpunk trousers with beige details.
 wcy_w03_099	legwear	A black cyberpunk trousers.
 wcy_w03_100	legwear	A red cyberpunk trousers.
-wcy_w03_101	legwear	A black cyberpunk trousers.
-wcy_w03_102	legwear	A black cyberpunk trousers with gold details.
+wcy_w03_101	legwear	A black cyberpunk trousers with red details.
+wcy_w03_102	legwear	A black cyberpunk trousers.
 wcy_w03_103	legwear	A grey cyberpunk trousers with white details.
 wcy_w03_104	legwear	A black cyberpunk boots with blue details.
 wcy_w03_105	legwear	A black cyberpunk boots.
@@ -824,7 +824,7 @@ wfa_w06_049	clothing	A black dark fantasy long coat with red details.
 wfa_w06_050	clothing	A grey dark fantasy long coat with red details.
 wfa_w06_051	clothing	A red dark fantasy long coat.
 wfa_w06_052	clothing	A black dark fantasy long coat with white details.
-wfa_w06_053	clothing	A red dark fantasy long coat.
+wfa_w06_053	clothing	A black dark fantasy long coat with red details.
 wfa_w06_054	clothing	A black dark fantasy long coat.
 wfa_w06_055	legwear	A red dark trousers with tattered cloth.
 wfa_w06_056	legwear	A grey dark trousers with tattered cloth with white details.
@@ -1266,9 +1266,9 @@ wfa_w10_039	clothing	A white medieval surcoat or tabard with brown details.
 wfa_w10_040	clothing	A black medieval surcoat or tabard with white details.
 wfa_w10_041	body_armor	A black gambeson or mail.
 wfa_w10_042	body_armor	A black gambeson or mail.
-wfa_w10_043	body_armor	A black plate armor with white details.
+wfa_w10_043	body_armor	A black plate armor.
 wfa_w10_044	body_armor	A grey plate armor with white details.
-wfa_w10_045	body_armor	A black plate armor with white details.
+wfa_w10_045	body_armor	A grey plate armor with white details.
 wfa_w10_046	body_armor	A black plate armor with brown details.
 wfa_w10_047	body_armor	A black plate armor with blue details.
 wfa_w10_048	body_armor	A black plate armor.
@@ -1278,7 +1278,7 @@ wfa_w10_051	body_armor	A red plate armor with brown details.
 wfa_w10_052	body_armor	A black plate armor with white details.
 wfa_w10_053	clothing	A white medieval surcoat or tabard with brown details.
 wfa_w10_054	body_armor	A black plate armor with white details.
-wfa_w10_055	body_armor	A black plate armor with a cloak with brown details.
+wfa_w10_055	body_armor	A black plate armor with a cloak.
 wfa_w10_056	body_armor	A brown plate armor with a cloak.
 wfa_w10_057	body_armor	A black plate armor with a cloak.
 wfa_w10_058	clothing	A black medieval cloak with white details.
@@ -2269,7 +2269,7 @@ wml_w18_040	clothing	A black military officer's coat or ceremonial mantle with r
 wml_w18_041	clothing	A black military officer's coat or ceremonial mantle.
 wml_w18_042	clothing	A black military officer's coat or ceremonial mantle with red details.
 wml_w18_043	clothing	A black military officer's coat or ceremonial mantle with brown details.
-wml_w18_044	clothing	A black military officer's coat or ceremonial mantle with brown details.
+wml_w18_044	clothing	A black military officer's coat or ceremonial mantle.
 wml_w18_045	clothing	A red military officer's coat or ceremonial mantle with white details.
 wml_w18_046	clothing	A black military officer's coat or ceremonial mantle with white details.
 wml_w18_047	clothing	A white military officer's coat or ceremonial mantle with red details.
@@ -2388,7 +2388,7 @@ wfa_w19_038	clothing	A grey doublet, waistcoat or blouse with white details.
 wfa_w19_039	clothing	A white doublet, waistcoat or blouse.
 wfa_w19_040	clothing	A red doublet, waistcoat or blouse with white details.
 wfa_w19_041	clothing	A white doublet, waistcoat or blouse with brown details.
-wfa_w19_042	clothing	A black doublet, waistcoat or blouse with brown details.
+wfa_w19_042	clothing	A black doublet, waistcoat or blouse with white details.
 wfa_w19_043	clothing	A red doublet, waistcoat or blouse.
 wfa_w19_044	clothing	A black doublet, waistcoat or blouse with white details.
 wfa_w19_045	clothing	A black doublet, waistcoat or blouse with brown details.
@@ -2611,7 +2611,7 @@ wfa_w21_028	clothing	A white wizard robe with red details.
 wfa_w21_029	clothing	A white wizard robe with blue details.
 wfa_w21_030	clothing	A white wizard robe.
 wfa_w21_031	clothing	A red wizard robe.
-wfa_w21_032	clothing	A red wizard robe with brown details.
+wfa_w21_032	clothing	A red wizard robe.
 wfa_w21_033	clothing	A blue wizard robe with white details.
 wfa_w21_034	clothing	A black wizard robe with white details.
 wfa_w21_035	clothing	A black wizard robe with purple details.
@@ -2753,7 +2753,7 @@ wsc_w27_002	clothing	A brown casual outfit with a jacket and trousers with red d
 wsc_w27_003	clothing	A white casual outfit with a jacket and trousers.
 wsc_w27_004	clothing	A black casual outfit with a jacket and trousers with brown details.
 wsc_w27_005	clothing	A white casual outfit with a jacket and trousers.
-wsc_w27_006	clothing	A black casual outfit with a jacket and trousers.
+wsc_w27_006	clothing	A black casual outfit with a jacket and trousers with white details.
 wsc_w27_007	clothing	A brown casual outfit with a jacket and trousers.
 wsc_w27_008	clothing	A black casual outfit with a jacket and trousers with red details.
 wsc_w27_009	clothing	A brown casual outfit with a jacket and trousers with white details.
@@ -2868,7 +2868,7 @@ wsc_w28_035	clothing	A white hooded robe dress with brown details.
 wsc_w28_036	clothing	A red hooded robe dress with magenta details.
 wsc_w28_037	clothing	A red hooded robe dress with white details.
 wsc_w28_038	clothing	A grey hooded robe dress with purple details.
-wsc_w28_039	clothing	A white kimono-style robe dress.
+wsc_w28_039	clothing	A black kimono-style robe dress with white details.
 wsc_w28_040	clothing	A red kimono-style robe dress.
 wsc_w28_041	clothing	A black kimono-style robe dress with white details.
 wsc_w28_042	clothing	A grey kimono-style robe dress with blue details.
@@ -2895,7 +2895,7 @@ wsc_w28_062	clothing	A black kimono with hakama.
 wsc_w28_063	clothing	A red kimono with hakama with white details.
 wsc_w28_064	clothing	A purple kimono with hakama with white details.
 wsc_w29_000	clothing	A black long coat with a belt.
-wsc_w29_001	clothing	A black long coat with a belt.
+wsc_w29_001	clothing	A black long coat with a belt with brown details.
 wsc_w29_002	clothing	A brown long coat with a belt with red details.
 wsc_w29_003	clothing	A black long coat with a belt.
 wsc_w29_004	clothing	A white long coat with a belt with blue details.
@@ -2910,7 +2910,7 @@ wsc_w29_012	clothing	A white long coat with a belt.
 wsc_w29_013	clothing	A red fur-trimmed coat or cloak with white details.
 wsc_w29_014	clothing	A white fur-trimmed coat or cloak.
 wsc_w29_015	clothing	A blue fur-trimmed coat or cloak.
-wsc_w29_016	clothing	A red fur-trimmed coat or cloak.
+wsc_w29_016	clothing	A black fur-trimmed coat or cloak with red details.
 wsc_w29_017	clothing	A white fur-trimmed coat or cloak with brown details.
 wsc_w29_018	clothing	A red fur-trimmed coat or cloak with brown details.
 wsc_w29_019	clothing	A black fur-trimmed coat or cloak with blue details.
@@ -2926,7 +2926,7 @@ wsc_w29_028	clothing	A black cape or cloak with red details.
 wsc_w29_029	clothing	A white cape or cloak.
 wsc_w29_030	clothing	A red cape or cloak with magenta details.
 wsc_w29_031	clothing	A black cape or cloak.
-wsc_w29_032	clothing	A brown cape or cloak.
+wsc_w29_032	clothing	A brown cape or cloak with white details.
 wsc_w29_033	clothing	A brown cape or cloak with red details.
 wsc_w29_034	clothing	A black cape or cloak with white details.
 wsc_w29_035	clothing	A black cape or cloak with white details.
@@ -2938,7 +2938,7 @@ wsc_w29_040	clothing	A white hooded cloak or cape.
 wsc_w29_041	clothing	A red hooded cloak or cape.
 wsc_w29_042	clothing	A white hooded cloak or cape.
 wsc_w29_043	clothing	A blue hooded cloak or cape.
-wsc_w29_044	clothing	A white hooded cloak or cape with brown details.
+wsc_w29_044	clothing	A white hooded cloak or cape.
 wsc_w29_045	clothing	A red hooded cloak or cape with brown details.
 wsc_w29_046	clothing	A brown hooded cloak or cape.
 wsc_w29_047	clothing	A red hooded cloak or cape.

@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
 """`128_item_image_variety` の足した絵。分類の一覧・表・埋め込み・絵が揃っているか。
 
-- 分類（`categories.json`。作者の元画像1枚ごと）の並びは本体の `IMAGE_SETS` と同じで、設定の名前・既定値も一致する。
+- 分類（`categories.json`。同じ種類の元画像をまとめた単位で、元画像は `sources`）の並びは本体の `IMAGE_SETS` と同じで、設定の名前・既定値も一致する。
   既定値は本体の `MODES` のどれか。mod.json の settings にも同じ名前・既定値・選べる値で載る
 - 表（`build/weapon_asset.json`・`build/medieval.json`・`build/magic.json`・`build/sf.json`・`build/items.json`・`build/wear.json`）の
-  鍵は重ならず、1件ずつどの分類に入るかが決まる（一枚絵の名前）。胴の品は服か胴鎧の片方だけに置く
+  鍵は重ならず、1件ずつどの分類に入るかが決まる（一枚絵の名前。1枚の一枚絵は1つの分類にだけ入る）。胴の品は服か胴鎧の片方だけに置く
 - 分類ごとの辞書 `data/<分類>/<部位>.json`（まとめた形 {"index", "vectors"}、384 次元）の鍵を合わせると、
   その分類に入る表の鍵とちょうど同じ。鍵ごとに `images/<分類>/Assets/images/item_candidates_dark/<部位>/<鍵>.png` があり、
-  寸法は部位で決まる（武器は小型 32x32・中型 32x64・大型 32x96・長物 32x128・投擲 32x32、盾・胴鎧と防具類と、ほかの組の頭・服・手・脚は 64x64、
-  それ以外（中世の服と矢筒、消耗品と素材・装身具）は 32x32）。絵のフォルダに辞書に無い絵は残っていない
-- 分類ごとの元の一枚絵（`categories.json` の `source`）が `assets/item_images/` に在る
+  寸法は部位の素の絵の2倍（武器は小型 64x64・中型 64x128・大型 64x192・長物 64x256・投擲 64x64、盾・胴鎧は 128x128、
+  それ以外は 64x64）。絵のフォルダに辞書に無い絵は残っていない
+- 分類ごとの元の一枚絵（`categories.json` の `sources` の `source`）が `assets/item_images/` に在る
+- 版9 までの設定名の読み替え（本体の `OLD_SETTINGS`）は、今の設定名に無い名前から今の設定名へ
 - `images/` と `data/` の直下のフォルダは分類だけ（分類の外に置いた絵は探し先に入らない）
 - 実行時に `images/<分類>` を Kivy の探し先へ足している
 
@@ -48,7 +49,7 @@ assert "resource_add_path" in source and '"images"' in source, "images/<分類> 
 
 cats = load("categories.json")
 ASSETS = os.path.join(HERE, os.pardir, os.pardir, "assets", "item_images")
-lost = [c["source"] for c in cats if not os.path.isfile(os.path.join(ASSETS, c["source"]))]
+lost = [s["source"] for c in cats for s in c["sources"] if not os.path.isfile(os.path.join(ASSETS, s["source"]))]
 assert not lost, ("assets/item_images に元の一枚絵が無い", lost)
 assert [(c["id"], c["setting"]) for c in cats] == list(image_sets), "categories.json と IMAGE_SETS が違う"
 manifest = load("mod.json")
@@ -58,7 +59,12 @@ for c in cats:
     decl = manifest["settings"][c["setting"]]
     assert decl["default"] == c["default"] and decl["values"] == list(modes), c["setting"]
 
-by_sheet = {c["sheet"]: c["id"] for c in cats}
+sheets = [s["sheet"] for c in cats for s in c["sources"]]
+assert len(sheets) == len(set(sheets)), "1枚の一枚絵が2つの分類に入っている"
+by_sheet = {s["sheet"]: c["id"] for c in cats for s in c["sources"]}
+old_settings = ast.literal_eval(tree["OLD_SETTINGS"])
+current = {c["setting"] for c in cats}
+assert not set(old_settings) & current and set(old_settings.values()) <= current, "OLD_SETTINGS の読み替えが今の設定名と合わない"
 rows = load("build", "weapon_asset.json") + load("build", "medieval.json") \
     + load("build", "magic.json") + load("build", "sf.json") + load("build", "items.json") + load("build", "wear.json")
 keys = [e["key"] for e in rows]
@@ -97,13 +103,8 @@ for c in cats:
             assert key not in got, (cid, key)
             got.add(key)
             size = png_size(os.path.join(images, folder, key + ".png"))
-            if folder in WEAPON:
-                assert size == WEAPON[folder], (cid, key, size)
-            elif (cid.startswith("wear_") or folder in ("shield", "body_armor")
-                  or (not cid.startswith("med_") and folder in ("clothing", "headgear", "gauntlets", "legwear"))):
-                assert size == (64, 64), (cid, key, size)
-            else:
-                assert size == (32, 32), (cid, key, size)
+            game = WEAPON.get(folder) or ((64, 64) if folder in ("shield", "body_armor") else (32, 32))
+            assert size == (game[0] * 2, game[1] * 2), (cid, key, size)
     assert got == expected.get(cid, set()), (cid, sorted(got ^ expected.get(cid, set()))[:5])
 
 print("ok")

@@ -4,6 +4,7 @@
 - 画像一覧の分類（`load_categories`。`categories.json`）は本体の `IMAGE_SETS` と同じ並び（足した分類が一覧に出ない、を防ぐ）
 - `gallery_sets` は絵のある分類・部位だけを返し、枚数は `list_images` と一致する。部位の表示名が欠けていない
 - キャプションは `build/*_captions.txt` から引け、一覧に出る絵の鍵の大半に付く
+- 画像一覧の小分類（`load_sources`・`key_sheets`）: どの絵も元の一枚絵が引け、その一枚絵は絵のある分類の `sources` にある
 - ワールド個別の控えの置き場（本体の `SETTINGS_DIRNAME`）は道具の置き場（`modtool.state_dirname`）と同じ
 - 世界ごとに上書きできる設定（本体の `SETTING_NAMES`）は mod.json の settings とちょうど同じ
 - `mod.json` は `"tool"` を宣言し、道具は窓を組む関数を持つ（窓は開かない）
@@ -36,6 +37,14 @@ assert [name for name, _ in tool.load_categories(MOD)] == [name for name, _ in i
 
 sets = tool.gallery_sets(MOD)
 assert {name for name, _label, _f in sets} == {name for name, _ in image_sets}, "絵の無い分類がある"
+# 画像一覧の小分類: どの絵も元の一枚絵（作り方の表）が引け、その一枚絵は絵のある分類の sources にある
+sheet_of = tool.key_sheets(MOD)
+sources = tool.load_sources(MOD)
+for name, _label, folders in sets:
+    own = {sheet for sheet, _n in sources[name]}
+    for folder, _fl, _count in folders:
+        for key, _path in tool.list_images(MOD, name, folder):
+            assert sheet_of.get(key) in own, ("小分類の引けない絵", name, key, sheet_of.get(key))
 known = {f for f, _ in tool.FOLDER_LABELS}
 captions = tool.load_captions(MOD)
 total = with_caption = 0
@@ -82,15 +91,15 @@ for cat, table in genres["weights"].items():
     assert all(g in dict(genre_settings) and 0.0 <= w <= 1.0 for g, w in table.items()), cat
 with tempfile.TemporaryDirectory() as tmp:
     user = os.path.join(tmp, "weights.json")
-    json.dump({"stock": {"fantasy": 0.5}, "weights": {"wa_swords": {"wa": 0.2, "nope": 1, "sf": 3}, "zzz": {"wa": 1}}},
+    json.dump({"stock": {"fantasy": 0.5}, "weights": {"weapon_wa": {"wa": 0.2, "nope": 1, "sf": 3}, "zzz": {"wa": 1}}},
                open(user, "w", encoding="utf-8"))
     stock, weights = body_mod.read_genre_weights(MOD, user)
     assert stock["fantasy"] == 0.5
-    assert weights["wa_swords"]["wa"] == 0.2 and weights["wa_swords"]["sf"] == 1.0 and "nope" not in weights["wa_swords"]
+    assert weights["weapon_wa"]["wa"] == 0.2 and weights["weapon_wa"]["sf"] == 1.0 and "nope" not in weights["weapon_wa"]
     assert "zzz" not in weights
     names_g, base_stock, base_weights = tool.genre_defaults()
     assert tool.genre_diff(base_stock, base_weights, base_stock, base_weights) == {}
     assert tool.genre_diff(stock, weights, base_stock, base_weights) == {
-        "stock": {"fantasy": 0.5}, "weights": {"wa_swords": {"wa": 0.2, "sf": 1.0}}}
+        "stock": {"fantasy": 0.5}, "weights": {"weapon_wa": {"wa": 0.2, "sf": 1.0}}}
 
 print("ok")

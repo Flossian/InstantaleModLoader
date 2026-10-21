@@ -44,65 +44,13 @@
    "sf": 0.5,
    "cyber": 1.0
   },
-  "gun_cyber2": {
-   "sf": 0.5,
-   "cyber": 1.0
-  },
-  "gun_corp_white": {
+  "gun_corp": {
    "cyber": 1.0,
-   "sf": 0.8
-  },
-  "gun_corp_heavy": {
-   "cyber": 1.0,
-   "sf": 0.8,
-   "postapoc": 0.3
-  },
-  "gun_corp_cheap": {
-   "cyber": 1.0,
-   "postapoc": 0.8,
-   "modern": 0.5
-  },
-  "gun_corp_bullpup": {
-   "cyber": 1.0,
-   "sf": 0.8,
-   "modern": 0.3
-  },
-  "gun_corp_laser": {
    "sf": 1.0,
-   "cyber": 1.0
-  },
-  "gun_corp_military": {
+   "postapoc": 0.8,
    "modern": 1.0,
-   "postapoc": 0.8,
-   "sf": 0.3
-  },
-  "gun_corp_rail": {
-   "sf": 1.0,
-   "cyber": 0.5
-  },
-  "gun_corp_bio": {
-   "sf": 1.0,
-   "cyber": 0.5
-  },
-  "gun_corp_luxury": {
-   "cyber": 1.0,
-   "modern": 0.5,
-   "earlymodern": 0.3
-  },
-  "gun_corp_space": {
-   "sf": 1.0
-  },
-  "gun_corp_print": {
-   "cyber": 1.0,
-   "postapoc": 0.5
-  },
-  "gun_corp_yakuza": {
-   "cyber": 1.0,
+   "earlymodern": 0.3,
    "wa": 0.5
-  },
-  "gun_corp_melee": {
-   "cyber": 1.0,
-   "sf": 0.8
   },
   "gun_fantasy": {
    "fantasy": 1.0,
@@ -139,82 +87,86 @@
    "cyber": 0.5,
    "postapoc": 1.0
   },
-  "med_onehanded": {
-   "fantasy": 1.0
-  },
-  "med_twohanded": {
-   "fantasy": 1.0
-  },
-  "med_polearm": {
-   "fantasy": 1.0
-  },
-  "med_blunt_staff": {
-   "fantasy": 1.0
-  },
-  "med_short_throwing": {
+  "weapon_medieval": {
    "fantasy": 1.0,
    "postapoc": 0.3
   },
-  "med_bow": {
+  "weapon_magic": {
    "fantasy": 1.0
   },
-  "med_shield_armor": {
-   "fantasy": 1.0
-  },
-  "mag_onehanded": {
-   "fantasy": 1.0
-  },
-  "mag_twohanded": {
-   "fantasy": 1.0
-  },
-  "mag_staff_polearm": {
-   "fantasy": 1.0
-  },
-  "mag_extra": {
-   "fantasy": 1.0
-  },
-  "mag_sf": {
+  "weapon_magic_fusion": {
    "sf": 1.0,
-   "fantasy": 0.5
-  },
-  "mag_cyber": {
+   "fantasy": 0.5,
    "cyber": 1.0,
-   "fantasy": 0.5
-  },
-  "mag_steam": {
    "earlymodern": 1.0,
-   "fantasy": 0.5
-  },
-  "mag_wa": {
    "wa": 1.0,
-   "fantasy": 0.5
-  },
-  "mag_postapoc": {
    "postapoc": 1.0,
-   "modern": 0.5,
-   "fantasy": 0.5
+   "modern": 0.5
   },
-  "sf_onehanded": {
+  "weapon_sf": {
    "sf": 1.0,
-   "cyber": 0.8
-  },
-  "sf_twohanded": {
-   "sf": 1.0,
-   "cyber": 0.8
-  },
-  "sf_polearm": {
-   "sf": 1.0,
-   "cyber": 0.8
-  },
-  "sf_short_throwing": {
-   "sf": 1.0,
-   "cyber": 0.8
-  },
-  "sf_melee": {
+   "cyber": 0.8,
    "modern": 1.0,
-   "sf": 0.5,
+   "postapoc": 1.0
+  },
+  "weapon_wa": {
+   "wa": 1.0
+  },
+  "weapon_modern": {
+   "modern": 1.0,
+   "sf": 0.8,
    "cyber": 0.8,
    "postapoc": 1.0
+  },
+  "weapon_postapoc": {
+   "modern": 0.8,
+   "postapoc": 1.0
+  },
+  "wear_fantasy": {
+   "fantasy": 1.0,
+   "postapoc": 0.3
+  },
+  "wear_earlymodern": {
+   "fantasy": 0.5,
+   "earlymodern": 1.0
+  },
+  "wear_accessory": {},
+  "wear_school": {
+   "modern": 1.0,
+   "fantasy": 1.0,
+   "wa": 0.3
+  },
+  "wear_modern": {
+   "modern": 1.0,
+   "cyber": 0.8,
+   "postapoc": 0.8,
+   "sf": 0.5
+  },
+  "wear_cyber": {
+   "sf": 0.5,
+   "cyber": 1.0
+  },
+  "wear_sf": {
+   "sf": 1.0,
+   "cyber": 1.0,
+   "postapoc": 0.3
+  },
+  "wear_steampunk": {
+   "earlymodern": 1.0
+  },
+  "wear_postapoc": {
+   "postapoc": 1.0
+  },
+  "wear_western": {
+   "earlymodern": 1.0,
+   "postapoc": 0.5
+  },
+  "wear_japanese": {
+   "wa": 1.0
+  },
+  "wear_military": {
+   "earlymodern": 0.8,
+   "modern": 0.8
   },
   "part_sf": {
    "sf": 1.0,
@@ -225,15 +177,7 @@
    "fantasy": 0.3,
    "earlymodern": 1.0
   },
-  "part_magitech_core": {
-   "fantasy": 1.0,
-   "earlymodern": 0.5
-  },
-  "part_gears": {
-   "fantasy": 1.0,
-   "earlymodern": 0.5
-  },
-  "part_broken_body": {
+  "part_magitech": {
    "fantasy": 1.0,
    "earlymodern": 0.5
   },
@@ -243,24 +187,14 @@
    "cyber": 1.0,
    "postapoc": 1.0
   },
-  "food_general": {},
-  "food_travel": {
+  "food_basic": {
    "fantasy": 1.0,
    "wa": 0.5
   },
-  "food_sweets": {
+  "food_dishes": {
    "modern": 1.0,
-   "cyber": 0.5
-  },
-  "food_meat": {},
-  "food_seafood": {},
-  "food_seasia": {
-   "modern": 1.0,
-   "cyber": 0.8
-  },
-  "food_western": {
-   "fantasy": 0.3,
-   "modern": 1.0
+   "cyber": 0.8,
+   "fantasy": 0.3
   },
   "medic_fantasy": {
    "fantasy": 1.0,
@@ -270,234 +204,49 @@
    "modern": 1.0,
    "sf": 1.0,
    "cyber": 1.0,
-   "postapoc": 0.8
-  },
-  "medic_potion": {
-   "fantasy": 1.0
-  },
-  "magic_essence": {
-   "fantasy": 1.0
-  },
-  "magic_relic": {
-   "fantasy": 1.0
-  },
-  "magic_crystal": {
-   "fantasy": 1.0
-  },
-  "magic_core": {
-   "fantasy": 1.0
-  },
-  "magic_vessel": {
-   "fantasy": 1.0
-  },
-  "treasure_coin": {
-   "fantasy": 1.0
-  },
-  "tool_travel": {
-   "fantasy": 1.0
-  },
-  "creature_material": {
-   "fantasy": 1.0
-  },
-  "wa_swords": {
-   "wa": 1.0
-  },
-  "wa_weapons": {
-   "wa": 1.0
-  },
-  "wa_goods": {
-   "wa": 1.0
-  },
-  "modern_gear": {
-   "modern": 1.0,
-   "sf": 0.8,
-   "cyber": 0.8,
    "postapoc": 1.0
   },
-  "modern_document": {
-   "modern": 1.0,
-   "sf": 1.0,
-   "cyber": 1.0,
-   "postapoc": 0.8
+  "material_magic": {
+   "fantasy": 1.0
   },
-  "modern_medicine": {
-   "modern": 1.0,
-   "sf": 0.8,
-   "cyber": 1.0,
-   "postapoc": 1.0
-  },
-  "modern_treasure": {
-   "modern": 1.0,
-   "sf": 0.8,
-   "cyber": 0.8,
-   "postapoc": 0.8
-  },
-  "modern_industrial": {
-   "modern": 0.8,
-   "sf": 1.0,
-   "cyber": 1.0,
-   "postapoc": 1.0
-  },
-  "wa_armor": {
-   "wa": 1.0
-  },
-  "sf_armor": {
-   "sf": 1.0,
-   "cyber": 1.0,
-   "postapoc": 0.3
-  },
-  "wasteland_gear": {
-   "modern": 0.8,
-   "postapoc": 1.0
-  },
-  "creature_mutant": {
+  "material_creature": {
    "fantasy": 1.0,
    "postapoc": 0.8
   },
-  "creature_fang": {
+  "material_modern": {
+   "modern": 0.8,
+   "sf": 1.0,
+   "cyber": 1.0,
+   "postapoc": 1.0
+  },
+  "tool_fantasy": {
    "fantasy": 1.0
   },
-  "treasure_crown": {
-   "fantasy": 1.0
-  },
-  "treasure_gem": {
-   "fantasy": 1.0
-  },
-  "tool_oddities": {
-   "fantasy": 1.0
-  },
-  "tool_modern": {
+  "tool_genre": {
    "modern": 1.0,
-   "postapoc": 0.5,
-   "cyber": 0.5
-  },
-  "tool_postapoc": {
    "postapoc": 1.0,
-   "modern": 0.3
-  },
-  "tool_sf": {
+   "cyber": 1.0,
    "sf": 1.0,
-   "cyber": 1.0
-  },
-  "tool_wa": {
-   "wa": 1.0
-  },
-  "tool_western": {
-   "earlymodern": 1.0,
-   "postapoc": 0.3
-  },
-  "wear_sf": {
-   "sf": 1.0,
-   "cyber": 0.5
-  },
-  "wear_accessory": {},
-  "wear_cyber1": {
-   "sf": 0.5,
-   "cyber": 1.0
-  },
-  "wear_cyber2": {
-   "sf": 0.5,
-   "cyber": 1.0
-  },
-  "wear_steampunk": {
+   "wa": 1.0,
    "earlymodern": 1.0
   },
-  "wear_darkfantasy1": {
-   "fantasy": 1.0,
-   "postapoc": 0.3
-  },
-  "wear_darkfantasy2": {
-   "fantasy": 1.0
-  },
-  "wear_highfantasy": {
-   "fantasy": 1.0
-  },
-  "wear_postapoc": {
-   "postapoc": 1.0
-  },
-  "wear_medieval_clothes": {
-   "fantasy": 1.0
-  },
-  "wear_medieval_armor": {
-   "fantasy": 1.0
-  },
-  "wear_japanese": {
+  "tool_japanese": {
    "wa": 1.0
   },
-  "wear_school": {
-   "modern": 1.0
+  "treasure_fantasy": {
+   "fantasy": 1.0
   },
-  "wear_school_girls": {
-   "modern": 1.0
-  },
-  "wear_school_boys": {
-   "modern": 1.0
-  },
-  "wear_modern_casual": {
+  "treasure_modern": {
    "modern": 1.0,
-   "cyber": 0.5,
-   "postapoc": 0.5
-  },
-  "wear_modern_hard": {
-   "modern": 1.0,
-   "sf": 0.5,
+   "sf": 0.8,
    "cyber": 0.8,
    "postapoc": 0.8
   },
-  "wear_western": {
-   "earlymodern": 1.0,
-   "postapoc": 0.5
-  },
-  "wear_military": {
-   "earlymodern": 0.8,
-   "modern": 0.8
-  },
-  "wear_earlymodern_clothes": {
-   "fantasy": 0.5,
-   "earlymodern": 1.0
-  },
-  "wear_earlymodern_armor": {
-   "fantasy": 0.5,
-   "earlymodern": 1.0
-  },
-  "wear_wizard": {
-   "fantasy": 1.0
-  },
-  "wear_wa_armor": {
-   "wa": 1.0
-  },
-  "wear_western_armor": {
-   "earlymodern": 1.0,
-   "postapoc": 0.3
-  },
-  "wear_modern_armor": {
+  "document_modern": {
    "modern": 1.0,
-   "postapoc": 0.5,
-   "cyber": 0.3
-  },
-  "wear_postapoc_armor": {
-   "postapoc": 1.0
-  },
-  "wear_sf_armor": {
    "sf": 1.0,
-   "cyber": 0.8
-  },
-  "wear_school_casual": {
-   "modern": 1.0,
-   "fantasy": 0.5
-  },
-  "wear_school_dress": {
-   "fantasy": 1.0,
-   "modern": 0.5,
-   "wa": 0.3
-  },
-  "wear_school_coat": {
-   "fantasy": 1.0,
-   "modern": 0.5
-  },
-  "wear_school_uniform": {
-   "modern": 1.0,
-   "fantasy": 0.5
+   "cyber": 1.0,
+   "postapoc": 0.8
   }
  }
 }

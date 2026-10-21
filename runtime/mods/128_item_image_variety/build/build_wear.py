@@ -14,6 +14,7 @@
     python build_wear.py [--sheets <一枚絵のフォルダ>] [--preview <見比べ用の一覧 PNG の置き場所>]
 """
 import argparse
+import functools
 import json
 import os
 import sys
@@ -27,9 +28,8 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import build_guns as b  # noqa: E402
 
-# 防具・服・装身具はどれも 64x64（作者の指示。1マスの品は画面で 64px に描かれるので、縮めずにそのまま出る）
-SIZES = {"headgear": (64, 64), "accessory": (64, 64), "clothing": (64, 64), "body_armor": (64, 64),
-         "gauntlets": (64, 64), "legwear": (64, 64)}
+# 寸法は部位の素の絵の2倍（build_guns.game_size × SCALE）。頭・服・手・脚・装身具は 64x64、胴鎧は 2x2 マスの 128x128。
+# 1マスの品は画面で 64px に描かれるので、縮めも拡大もせずにそのまま出る
 COLOR = {"grey": "grey", "white": "white", "black": "black", "tan": "beige", "brass": "gold", "wood": "brown",
          "red": "red", "orange": "orange", "olive green": "olive", "green": "green", "blue": "blue",
          "purple": "purple", "magenta": "magenta"}
@@ -60,6 +60,7 @@ def cut(folder, sheet_files, src, rect):
             cx0, cy0, cx1, cy1 = boxes[i]
             if cx0 >= x0 - 6 and cy0 >= y0 - 6 and cx1 <= x1 + 6 and cy1 <= y1 + 6:
                 keep |= lab == i
+    keep = b.fill_enclosed(keep, rgb)
     im = Image.fromarray(np.dstack([rgb, np.where(b.grow(keep, b.RING), 255, 0).astype(np.uint8)]))
     return im.crop(im.getbbox())
 
@@ -84,6 +85,20 @@ def caption_for(entry, im):
     return "%s %s." % ("An" if text[0] in "aeiou" else "A", text)
 
 
+_cut_cache = {}
+
+
+def make_entry(e, sheets, sheet_files):
+    """表の1行から絵を作る（プロセスの中で動く。build_guns.parallel_map）。戻り値は (絵の配列, キャプション)。
+    同じ箱の切り抜きはプロセスの中で1回（同じ箱を使う行がある）。"""
+    src_key = (e["src"], bool(e.get("rect")))
+    if src_key not in _cut_cache:
+        _cut_cache[src_key] = cut(sheets, sheet_files, e["src"], e.get("rect"))
+    im = _cut_cache[src_key]
+    w, h = b.game_size(e["pref"])
+    return b.shrink(im, w, h, 255), caption_for(e, im)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sheets", default=str(b.ASSET_ROOT))
@@ -92,23 +107,19 @@ def main():
 
     entries = json.load(open(HERE / "wear.json", encoding="utf-8"))
     # 一枚絵の呼び名（w00…）→ assets/item_images の下の相対パス。categories.json の source から
-    sheet_files = {c["sheet"]: c["source"] for c in b.CATEGORIES if c["group"] == "防具類"}
+    sheet_files = dict(b.SHEETS)
     keys = [e["key"] for e in entries]
     assert len(keys) == len(set(keys)), "鍵が重なっている"
 
-    made, cache = {}, {}
-    for e in entries:
-        src_key = (e["src"], bool(e.get("rect")))
-        if src_key not in cache:
-            cache[src_key] = cut(args.sheets, sheet_files, e["src"], e.get("rect"))
-        im = cache[src_key]
-        e["caption"] = caption_for(e, im)
-        w, h = SIZES[e["pref"]]
-        made[e["key"]] = Image.fromarray(b.shrink(im, w, h, 255))
+    made = {}
+    jobs = b.parallel_map(functools.partial(make_entry, sheets=args.sheets, sheet_files=sheet_files), entries)
+    for e, (arr, caption) in zip(entries, jobs):
+        e["caption"] = caption
+        made[e["key"]] = Image.fromarray(arr)
 
     for e in entries:
         e["folder"] = e["pref"]
-    b.write_categories(entries, made, [c["id"] for c in b.CATEGORIES if c["group"] == "防具類"])
+    b.write_categories(entries, made, b.owned_categories(entries))
     with open(HERE / "wear_captions.txt", "w", encoding="utf-8", newline="\n") as fh:
         for e in entries:
             fh.write("%s\t%s\t%s\n" % (e["key"], e["pref"], e["caption"]))

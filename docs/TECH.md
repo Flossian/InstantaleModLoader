@@ -135,7 +135,7 @@ runtime/instantale_modloader/
                   日数送り（elapse_days）を包むのもここ1枚で、当てる MOD は望みを出すだけ（§3.3.3）
     prices.py     値段の2つ。ゲームが決めている額（宿屋の部屋など）の窓口と宿代の段・関所（§3.3.4）と、
                   アイテムの売買額を組む関所（式1枚＋段N枚。書く地点8つを1枚だけ包む。§5.9）
-    combat.py     戦闘の数の窓口。人物ごとの装備の攻撃力・防御力を、装備を持つ MOD が置き、戦闘を組む MOD が聞く（§3.3.5）
+    combat.py     戦闘の数の窓口。人物ごとの装備の攻撃力・防御力を、装備を持つ MOD が置き、戦闘を組む MOD が聞く。敵ごとの体力・一撃の率も（§3.3.5）
     equipment.py  装備欄の窓口。仲間の品の出し入れと身に着けている品を、装備欄を持つ MOD が答え、
                   仲間の装備を扱う MOD が聞く（§3.3.6）
     arrivals.py   施設に着いた場面で誰が話しかけるかを、会話を始める MOD どうしで分け合う窓口（§3.3.7）
@@ -1434,6 +1434,23 @@ weapon = combat.attack(app, attacker)      # 仲間の錨 = 従来 + 2×√(能�
 armor = combat.defense(app, defender)      # 仲間の防御 = 本体の値 + armor × 率
 
 ```
+
+敵ごとの体力と一撃の強さの率（％）も `combat` で受け渡す。敵の体力と一撃に率を掛ける MOD（319）が聞き、特定の敵を受け持つ MOD
+（`339_town_factions` の刺客）が答える。答えは敵ごとなので、答える MOD は何本でもよい（順に聞き、最初に数を返した答えを使う）。
+
+```python
+# 率を掛ける側（319）。率を掛けている MOD として窓口に登録し、敵ごとに率を聞く。誰も答えなければ自分の既定
+combat.declare(combat.ENEMY_SCALER, lambda app, holder: True, owner="319_battle_tactics")
+percent = combat.enemy_percent(combat.ENEMY_HP, app, enemy, ENEMY_HP)
+percent = combat.enemy_percent(combat.ENEMY_DAMAGE, app, attacker, ENEMY_DAMAGE)
+
+# 答える側（339）。受け持たない敵は None。率を掛ける MOD が居るかは enemy_scaler()（居なければ自分で HP を増やす）
+combat.declare_enemy(combat.ENEMY_HP, lambda app, enemy: ..., owner="339_town_factions")
+combat.declare_enemy(combat.ENEMY_DAMAGE, lambda app, enemy: ..., owner="339_town_factions")
+combat.enemy_scaler()                      # 率を掛けている MOD の名前 / ""
+```
+
+持ち主はどれも MOD のフォルダ名（ローダが起動のたびに、適用されなかった MOD の分をこの名前で外す）。
 
 `combat` は数だけを持つ。装備欄の出し入れと身に着けている品は `equipment`（§3.3.6）。
 

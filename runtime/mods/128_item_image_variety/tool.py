@@ -20,7 +20,7 @@ for _tools in ([os.path.join(_IML_ROOT, "tools")] if _IML_ROOT else []) + [
 import modtool  # noqa: E402
 
 def load_categories(mod_dir=MOD_DIR):
-    """[(分類, 表示名), ...]。分類は作者の元画像1枚ごと（`categories.json`）。表示名は「まとまり：元画像の名前」。"""
+    """[(分類, 表示名), ...]（`categories.json`。版10 で同じ種類の元画像を1分類にまとめた）。表示名は「まとまり：分類の名前」。"""
     import json
     try:
         with io.open(os.path.join(mod_dir, "categories.json"), encoding="utf-8") as fh:
@@ -29,8 +29,11 @@ def load_categories(mod_dir=MOD_DIR):
         return []
     out = []
     for c in found:
-        label = c["label"][4:] if c["label"].startswith("防具類_") else c["label"]
-        out.append((c["id"], "{}：{}".format(c["group"], label)))
+        # 表示名はまとまりの名前と重ねない（「銃：サイバーパンク」。分類がまとまりそのものなら「中世の武器と防具」）
+        label = c["label"]
+        if label.startswith(c["group"] + "_"):
+            label = label[len(c["group"]) + 1:]
+        out.append((c["id"], c["group"] if label == c["group"] else "{}：{}".format(c["group"], label)))
     return out
 
 
@@ -46,6 +49,9 @@ FOLDER_LABELS = (
 )
 
 COLUMNS = 10
+
+#: 画像一覧の絵の背景（表示名, 色）。ゲームの中では暗い地やレア度の色の地に載るので、縁の黒やにじみを見比べられるように切り替える
+BACKGROUNDS = (("明るい灰色", "#f0f0f2"), ("黒", "#000000"), ("ゲームの暗い緑", "#1c3a1c"))
 
 
 def image_root(mod_dir, set_name):
@@ -77,6 +83,43 @@ def list_images(mod_dir, set_name, folder):
     return [(f[:-4], os.path.join(path, f)) for f in sorted(os.listdir(path)) if f.endswith(".png")]
 
 
+def load_sources(mod_dir=MOD_DIR):
+    """{分類: [(一枚絵の呼び名, 表示名), ...]}。分類にまとめた元の一枚絵（`categories.json` の `sources`）。
+    表示名は元の分類の名前から頭のまとまりの名前を外したもの（「食料_菓子」→「菓子」）。"""
+    import json
+    try:
+        with io.open(os.path.join(mod_dir, "categories.json"), encoding="utf-8") as fh:
+            found = json.load(fh)
+    except (OSError, ValueError):
+        return {}
+    out = {}
+    for c in found:
+        out[c["id"]] = [(src["sheet"], src.get("name", src["sheet"]).split("_", 1)[-1]) for src in c.get("sources", [])]
+    return out
+
+
+def key_sheets(mod_dir=MOD_DIR):
+    """{鍵: 一枚絵の呼び名}。作り方の表（`build/*.json` の行の `src` の `@` の前）から。表が無ければ空。"""
+    import json
+    out = {}
+    build = os.path.join(mod_dir, "build")
+    if not os.path.isdir(build):
+        return out
+    for name in sorted(os.listdir(build)):
+        if not name.endswith(".json"):
+            continue
+        try:
+            with io.open(os.path.join(build, name), encoding="utf-8") as fh:
+                rows = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        if isinstance(rows, list):
+            for row in rows:
+                if isinstance(row, dict) and "key" in row and isinstance(row.get("src"), str):
+                    out[row["key"]] = row["src"].partition("@")[0]
+    return out
+
+
 def load_captions(mod_dir=MOD_DIR):
     """{鍵: キャプション}。`build/*_captions.txt`（鍵・部位・キャプションのタブ区切り）から。"""
     captions = {}
@@ -104,6 +147,8 @@ def gallery_tab(tabs, root_dir):
 
     sets = gallery_sets()
     captions = load_captions()
+    sources = load_sources()
+    sheet_of = key_sheets()
     page = ttk.Frame(tabs, padding=(6, 8, 6, 6))
     tabs.add(page, text="  画像一覧  ")
     ttk.Label(page, text="絵にマウスを載せると、選ぶときに比べる説明文が出る",
@@ -111,13 +156,21 @@ def gallery_tab(tabs, root_dir):
     picker = ttk.Frame(page)
     picker.pack(fill="x", pady=(0, 4))
     ttk.Label(picker, text="分類", style="Group.TLabel").pack(side="left", padx=(0, 8))
-    set_box = ttk.Combobox(picker, state="readonly", width=44, height=30,
+    set_box = ttk.Combobox(picker, state="readonly", width=30, height=30,
                            values=["{}（{}枚）".format(label, sum(c for _f, _l, c in folders))
                                    for _n, label, folders in sets])
     set_box.pack(side="left")
-    ttk.Label(picker, text="種類", style="Group.TLabel").pack(side="left", padx=(16, 8))
-    folder_box = ttk.Combobox(picker, state="readonly", width=22)
+    # 小分類は分類にまとめた元の一枚絵（「全て」か1枚）
+    ttk.Label(picker, text="小分類", style="Group.TLabel").pack(side="left", padx=(12, 8))
+    sub_box = ttk.Combobox(picker, state="readonly", width=24, height=20)
+    sub_box.pack(side="left")
+    ttk.Label(picker, text="種類", style="Group.TLabel").pack(side="left", padx=(12, 8))
+    folder_box = ttk.Combobox(picker, state="readonly", width=18)
     folder_box.pack(side="left")
+    ttk.Label(picker, text="背景", style="Group.TLabel").pack(side="left", padx=(12, 8))
+    bg_box = ttk.Combobox(picker, state="readonly", width=12, values=[name for name, _c in BACKGROUNDS])
+    bg_box.current(0)
+    bg_box.pack(side="left")
     bottom = ttk.Frame(page)
     bottom.pack(side="bottom", fill="x", pady=(6, 0))
     hint = ttk.Label(bottom, style="Faint.TLabel", text="")
@@ -125,60 +178,123 @@ def gallery_tab(tabs, root_dir):
     body = ttk.Frame(page, padding=(0, 0, 6, 0))
     body.pack(fill="both", expand=True)
     grid = modtool._scrollable(body)
-    shown = {"photos": []}
+    shown = {"photos": [], "cells": [], "subs": [None], "folders": []}
+
+    def background():
+        return BACKGROUNDS[max(0, bg_box.current())][1]
+
+    def on_background(_event=None):
+        # 並んでいる絵の升だけ塗り替える（並べ直さない）
+        for cell in shown["cells"]:
+            cell.configure(bg=background())
 
     def current_set():
         i = set_box.current()
         return sets[i] if 0 <= i < len(sets) else None
 
+    def picked_items(cid, folder):
+        """その分類・部位の絵のうち、選んでいる小分類（元の一枚絵）のもの。"""
+        i = sub_box.current()
+        sheet = shown["subs"][i] if 0 <= i < len(shown["subs"]) else None
+        items = list_images(MOD_DIR, cid, folder)
+        return items if sheet is None else [(k, p) for k, p in items if sheet_of.get(k) == sheet]
+
     def on_set(_event=None):
         found = current_set()
         if found is None:
             return
-        folder_box.configure(values=["全て（{}枚）".format(sum(c for _f, _l, c in found[2]))]
-                             + ["{}（{}枚）".format(flabel, count) for _f, flabel, count in found[2]])
+        counts = {}
+        for folder, _fl, _c in found[2]:
+            for key, _p in list_images(MOD_DIR, found[0], folder):
+                counts[sheet_of.get(key)] = counts.get(sheet_of.get(key), 0) + 1
+        subs = [(sheet, name) for sheet, name in sources.get(found[0], []) if counts.get(sheet)]
+        shown["subs"] = [None] + [sheet for sheet, _n in subs]
+        sub_box.configure(values=["全て（{}枚）".format(sum(c for _f, _l, c in found[2]))]
+                          + ["{}（{}枚）".format(name, counts[sheet]) for sheet, name in subs])
+        sub_box.current(0)
+        on_sub()
+
+    def on_sub(_event=None):
+        found = current_set()
+        if found is None:
+            return
+        shown["folders"] = []
+        for folder, flabel, _count in found[2]:
+            n = len(picked_items(found[0], folder))
+            if n:
+                shown["folders"].append((folder, flabel, n))
+        folder_box.configure(values=["全て（{}枚）".format(sum(c for _f, _l, c in shown["folders"]))]
+                             + ["{}（{}枚）".format(flabel, count) for _f, flabel, count in shown["folders"]])
         folder_box.current(0)
         on_folder()
 
     def on_folder(_event=None):
         found = current_set()
         j = folder_box.current()
-        if found is None or not (0 <= j <= len(found[2])):
+        if found is None or not (0 <= j <= len(shown["folders"])):
             return
         # 先頭は「全て」。部位ごとに見出しを挟んで並べる
-        parts = found[2] if j == 0 else [found[2][j - 1]]
+        parts = shown["folders"] if j == 0 else [shown["folders"][j - 1]]
         for child in grid.winfo_children():
             child.destroy()
         shown["photos"] = []
+        shown["cells"] = []
+        shown["parts"] = []
         row = total = 0
         for folder, flabel, _count in parts:
-            items = list_images(MOD_DIR, found[0], folder)
+            items = picked_items(found[0], folder)
             if len(parts) > 1:
                 ttk.Label(grid, text="{}（{}枚）".format(flabel, len(items)), style="Group.TLabel").grid(
-                    row=row, column=0, columnspan=COLUMNS, sticky="w", pady=(10 if row else 0, 2))
+                    row=row, column=0, sticky="w", pady=(10 if row else 0, 2))
                 row += 1
-            for n, (key, path) in enumerate(items):
+            # 部位ごとに枠を分ける（列の幅は枠の中の絵で決まる。盾・胴鎧の 128px と武器の 64px を同じ列に並べない）
+            frame = ttk.Frame(grid)
+            frame.grid(row=row, column=0, sticky="w")
+            row += 1
+            cells, widest = [], 0
+            for key, path in items:
                 try:
                     photo = tk.PhotoImage(file=path)
                 except tk.TclError:
                     continue
-                # 武器の絵は幅 32px。2倍にして防具（64px）と同じ大きさで見せる
+                # 幅 32px 以下の絵（素の絵と同じ寸法で作っていた版9 までの絵）は2倍にして見せる
                 if photo.width() <= 32:
                     photo = photo.zoom(2)
                 shown["photos"].append(photo)
-                cell = ttk.Label(grid, image=photo)
-                cell.grid(row=row + n // COLUMNS, column=n % COLUMNS, padx=3, pady=3, sticky="n")
+                widest = max(widest, photo.width())
+                # 背景の色を持つ升（tk.Label。ttk の Label は背景を絵ごとに塗れない）
+                cell = tk.Label(frame, image=photo, bg=background(), bd=0, padx=4, pady=4)
+                cells.append(cell)
                 text = "{}  {}".format(key, captions.get(key, ""))
                 cell.bind("<Enter>", lambda _e, t=text: hint.configure(text=t))
                 cell.bind("<Leave>", lambda _e: hint.configure(text=""))
-            row += (len(items) + COLUMNS - 1) // COLUMNS
-            total += len(items)
+            shown["cells"] += cells
+            shown["parts"].append((cells, widest))
+            total += len(cells)
+        relayout()
         hint.configure(text="{} 枚".format(total))
         # 分類や部位を替えたら一番上から見せる（`_scrollable` の枠は Canvas の中の Frame）
         grid.master.yview_moveto(0)
 
+    def relayout(_event=None):
+        """1行の枚数を、見えている幅と絵の幅から決めて並べ直す（窓を広げなくても横に見切れない）。"""
+        width = grid.master.winfo_width()
+        if width <= 1:
+            width = 900
+        if shown.get("width") == width and _event is not None:
+            return
+        shown["width"] = width
+        for cells, widest in shown.get("parts", []):
+            # 升の幅は 絵 + 内側の余白 4px×2 + 外側の余白 3px×2
+            cols = max(1, (width - 12) // (widest + 14)) if widest else COLUMNS
+            for n, cell in enumerate(cells):
+                cell.grid(row=n // cols, column=n % cols, padx=3, pady=3, sticky="n")
+
     set_box.bind("<<ComboboxSelected>>", on_set)
+    sub_box.bind("<<ComboboxSelected>>", on_sub)
     folder_box.bind("<<ComboboxSelected>>", on_folder)
+    bg_box.bind("<<ComboboxSelected>>", on_background)
+    grid.master.bind("<Configure>", relayout, add="+")
     if sets:
         set_box.current(0)
         on_set()
@@ -334,7 +450,7 @@ def extra_tabs(tabs, root_dir):
 
 
 #: 窓の頭の一言。3つの使い方の説明はここに一度だけ置く（分類ごとの欄には枚数だけ）
-BLURB = ("足した絵を、元画像ごとの分類で使い分ける。"
+BLURB = ("足した絵を、同じ種類の元画像をまとめた分類で使い分ける。"
          "「素の絵と混ぜる」はゲームの絵と同じ候補に入れ、「似ているときだけ使う」は"
          "外見文にいちばん似た絵がその分類のときだけ使う。"
          "ジャンルの重みを世界ごとに置くと、そのジャンルに合う分類の絵が選ばれやすくなる。")

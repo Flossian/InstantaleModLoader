@@ -95,6 +95,9 @@ check("hit: two rulings on one target are rebuilt from the last one's raw",
 check("hit: an enemy blow is scaled by the enemy setting",
       mod.hit_damage([("weak", 1)], 1000, 0, 10 ** 3, enemy=True)
       == round(1000 * mod.ENEMY_DAMAGE / 100.0))
+check("hit: an enemy another mod answers for uses that mod's percent (the hunter of 339)",
+      mod.hit_damage([("weak", 1)], 1000, 0, 10 ** 4, enemy=True, enemy_percent=20) == 200
+      and mod.hit_damage([("weak", 1)], 1000, 0, 10 ** 4, enemy=False, enemy_percent=20) == 1000)
 check("hit: the higher side gets the level multiplier",
       mod.hit_damage([("weak", 1)], 200, 0, 10 ** 4, attacker_level=75, defender_level=60) == 300
       and mod.hit_damage([("weak", 1)], 200, 0, 10 ** 4, attacker_level=60, defender_level=75) == 200)

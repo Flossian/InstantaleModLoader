@@ -294,6 +294,42 @@ check("確率は敵対なら敵対の値、緊張なら緊張の値、それよ�
       and rules.hunter_rate(-2, 150, 0) == 100 and rules.hunter_rate(-2, "x", 0) == 0)
 check("次の刺客までの日数", rules.hunter_due(None, 50, 10) and not rules.hunter_due(45, 50, 10)
       and rules.hunter_due(40, 50, 10) and not rules.hunter_due(40, None, 10))
+
+
+class GapRng(object):
+    def __init__(self, value):
+        self.value, self.asked = value, []
+
+    def randint(self, low, high):
+        self.asked.append((low, high))
+        return self.value
+
+
+check("次の刺客までの日数は基準から前後に引く", rules.roll_hunter_gap(45, 15, 30, GapRng(10)) == 55
+      and rules.roll_hunter_gap(45, 15, 30, GapRng(-15)) == 30)
+check("ずらしても最低の日数は空ける", rules.roll_hunter_gap(30, 15, 30, GapRng(-15)) == 30
+      and rules.roll_hunter_gap(10, 0, 30, GapRng(0)) == 30)
+check("ばらつき 0 なら乱数を引かない", (lambda rng: rules.roll_hunter_gap(45, 0, 30, rng) == 45 and not rng.asked)(GapRng(5)))
+check("刺客のレベルは主人公 + 差、手配度が 10 下がるごとに足す（平常の手配度では足さない）",
+      rules.hunter_target_level(84, 10, 5, 2) == 89 and rules.hunter_target_level(84, -40, 5, 2) == 97
+      and rules.hunter_target_level(84, -45, 5, 2) == 97 and rules.hunter_target_level(84, -170, 5, 0) == 89)
+check("土地から決まるレベルより弱くしない", rules.hunter_target_level(10, 10, 0, 2, floor_level=51) == 51
+      and rules.hunter_target_level(None, None, 5, 2) == 6)
+check("レベルは主人公 + 上限を超えない（手配度の分も土地のレベルも止まる）",
+      rules.hunter_target_level(72, -170, 5, 2, max_above=15) == 87
+      and rules.hunter_target_level(10, 10, 0, 2, floor_level=51, max_above=15) == 25
+      and rules.hunter_target_level(72, -40, 5, 2, max_above=15) == 85
+      and rules.hunter_target_level(72, -170, 5, 2) == 111)
+check("仲間の数で刺客の HP を増やす倍率", rules.party_hp_factor(0, 75) == 1.0 and rules.party_hp_factor(2, 75) == 2.5
+      and rules.party_hp_factor(2, 0) == 1.0 and rules.party_hp_factor(-1, 75) == 1.0)
+check("レベルはゲームの上限まで、超えた分は係数の比で強くする",
+      rules.hunter_level_and_boost(89) == (89, 1.0) and rules.hunter_level_and_boost(100) == (100, 1.0)
+      and rules.hunter_level_and_boost(121) == (100, 126 / 105.0))
+check("控えた日数はいまの範囲に収める（無ければ基準）",
+      rules.hunter_gap_of({"hunter_gap": 59}, 45, 15, 30) == 59
+      and rules.hunter_gap_of({"hunter_gap": 59}, 45, 5, 30) == 50
+      and rules.hunter_gap_of({"hunter_gap": 12}, 45, 15, 30) == 30
+      and rules.hunter_gap_of({}, 45, 15, 30) == 45 and rules.hunter_gap_of({}, 10, 0, 30) == 30)
 pack = {"hunters": {"91": {"faction": "f1", "status": "escaped", "day": 30},
                     "90": {"faction": "f1", "status": "dead", "day": 10},
                     "92": {"faction": "f2", "status": "ready", "day": 5},
@@ -924,7 +960,7 @@ from instantale_modloader.state import world_key  # noqa: E402
 settings = getattr(sys, module.SETTINGS_STORE_ATTR)
 settings.load(world_key(app))["TREND_SPREAD_DAYS"] = 10
 settings.save(world_key(app))
-ROLLS, ROLLED = [7, 3, 9], []
+ROLLS, ROLLED = [7, -4, 9], []
 
 
 class FixedRng(object):
@@ -937,7 +973,7 @@ module.RNG = FixedRng()
 ANSWERS[module.MANAGER_TREND] = {"happened": "true", "a": "灰の結社", "b": "白の教団", "direction": "+1",
                                  "rumor": "噂", "reason": "x"}
 notes_fn()({"app": app, "npc_id": "30"})
-check("台帳を作るときに足す日数を引く", ledger_of(app)["trend"]["extra"] == 7 and ROLLED == [(0, 10)],
+check("台帳を作るときにずらす日数を引く（前後どちらにも）", ledger_of(app)["trend"]["extra"] == 7 and ROLLED == [(-10, 10)],
       (ledger_of(app)["trend"], ROLLED))
 start = ledger_of(app)["trend"]["last_day"]
 
@@ -950,13 +986,17 @@ def advance(days):
 
 check("間隔＋足した日数の前は動かない", not advance(36))
 check("間隔＋足した日数で動く", advance(1) and ledger_of(app)["trend"]["last_day"] == start + 37)
-check("動いたら足す日数を引き直す", ledger_of(app)["trend"]["extra"] == 3 and len(ROLLED) == 2, ROLLED)
-check("引き直した日数で次を待つ", not advance(32) and advance(1))
+check("動いたらずらす日数を引き直す", ledger_of(app)["trend"]["extra"] == -4 and len(ROLLED) == 2, ROLLED)
+check("引き直した日数で次を待つ（短い方にもずれる）", not advance(25) and advance(1))
 book = ledger_of(app)
 book["trend"]["extra"] = 9
 settings.load(world_key(app))["TREND_SPREAD_DAYS"] = 2
 settings.save(world_key(app))
 check("ばらつきを狭めたら、引いてある日数も狭めた幅で見る", not advance(31) and advance(1))
+book = ledger_of(app)
+book["trend"]["extra"] = -9
+check("短い方も狭めた幅で見る", not advance(27) and advance(1))
+check("間隔は1日より短くしない", rules.trend_due(0, 1, 30, extra=-40) and not rules.trend_due(0, 0, 30, extra=-40))
 book = ledger_of(app)
 del book["trend"]["extra"]
 settings.load(world_key(app))["TREND_SPREAD_DAYS"] = 10
@@ -1042,16 +1082,32 @@ check("保存の前に外すと、ゲームの一覧（売買する・会話を�
       choices.strip(buttons) == ([app.buttons[0], end_entry], True), choices.strip(buttons))
 other = [{"text": "会話を終了する", "spec": PhaseSpec("ConversationEndManager", ["30", None, "x"])}]
 check("ほかの相手の会話は握らない", hunter_provider["claim"](app, choices.View(app, other)) is None)
-ended = []
+ended, covered = [], []
 screen_cls = ui.Screen
 original_end = screen_cls.end_conversation
-screen_cls.end_conversation = lambda self, app_, entry, follow_up, **kw: ended.append((entry, kw.get("end_text")))
+original_busy = (screen_cls.busy_on, screen_cls.busy_off)
+screen_cls.end_conversation = lambda self, app_, entry, follow_up, **kw: ended.append((entry, kw.get("end_text"), follow_up))
+screen_cls.busy_on = lambda self, app_: covered.append("on")
+screen_cls.busy_off = lambda self, app_, restore=True: covered.append(("off", restore))
 try:
     picked[0].on_press(app)
+    check("「受けて立つ」を押すと、ゲームの終了のボタンで会話を閉じてから戦う", ended
+          and ended[0][0] is end_entry and "ヴァルドの挑戦を受けて立ち" in ended[0][1], ended)
+    check("閉じる前から待機表示で覆う（会話の前の選択肢を見せない）", covered == ["on"], covered)
+    started = []
+    original_start = screen_cls.start_phase
+    screen_cls.start_phase = lambda self, app_, phase, text: started.append(text)
+    original_cls_of = ui.cls_of
+    ui.cls_of = lambda name: (lambda app_, kind, ids: ("battle", kind, ids)) if name == "BattleStartManager" else None
+    try:
+        ended[0][2](app)
+    finally:
+        screen_cls.start_phase = original_start
+        ui.cls_of = original_cls_of
+    check("戦闘を始めるところで、元の選択肢を塗らずに解く", covered[-1] == ("off", False) and started, (covered, started))
 finally:
     screen_cls.end_conversation = original_end
-check("「受けて立つ」を押すと、ゲームの終了のボタンで会話を閉じてから戦う", ended
-      and ended[0][0] is end_entry and "ヴァルドの挑戦を受けて立ち" in ended[0][1], ended)
+    screen_cls.busy_on, screen_cls.busy_off = original_busy
 text = notes_fn()({"app": app, "npc_id": "90"}) or ""
 check("刺客の会話に使命と勢力の構えを足す", "【刺客】あなたは白の教団の異端審問官" in text and "白の教団に属する者として" in text, text)
 
@@ -1183,6 +1239,78 @@ app.in_battle = None
 check("例外が無い（起動し直し）", not ctx2.errors and not ctx3.errors and not ctx4.errors and not ctx5.errors,
       (ctx2.errors, ctx3.errors, ctx4.errors, ctx5.errors))
 
+print("[流れ] 仲間の数で刺客の HP を増やす")
+with store.lock:
+    book = store.load(key)
+    rules.hunters_of(book)["98"] = {"faction": "f1", "name": "ヴィゴ", "title": "異端審問官", "town": "7",
+                                     "status": "met", "day": 100}
+    store.save(key)
+app.world.characters["98"] = Character("98", "ヴィゴ")
+app.world.characters["98"].config = {"is_dead": False}
+app.world.characters["98"].max_hp = 1000
+app.world.characters["98"].current_hp = 1000
+app.world.characters["30"] = app.world.characters.get("30") or Character("30", "カイ")
+app.world.characters["31"] = app.world.characters.get("31") or Character("31", "ルナ")
+saved_party = app.party
+app.party = ["player", "30", "31"]
+saved_ids = ui.party_member_ids
+ui.party_member_ids = lambda a: [m for m in a.party if m != "player"]
+try:
+    ctx5.hook("__main__:BattleStartManager.__init__")(lambda self, *a, **k: None, Phase(app), app, "specific", ["98"])
+    hunter98 = app.world.characters["98"]
+    check("仲間2人なら戦闘の間の HP は 2.5 倍", hunter98.max_hp == 2500 and hunter98.current_hp == 2500,
+          (hunter98.max_hp, hunter98.current_hp))
+    check("戻す値を台帳の印にも写す", ledger_of(app)["hunters"]["98"]["fight"].get("base_hp") == 1000,
+          ledger_of(app)["hunters"]["98"])
+    hunter98.current_hp = 1250
+    end_hook5(game_end_escaped, Phase(app, "escaped"))
+    check("決着で元の HP に戻し、減った割合は保つ", hunter98.max_hp == 1000 and hunter98.current_hp == 500,
+          (hunter98.max_hp, hunter98.current_hp))
+finally:
+    app.party = saved_party
+    ui.party_member_ids = saved_ids
+check("例外が無い（仲間の数）", not ctx5.errors, ctx5.errors)
+
+print("[流れ] 敵の体力と一撃に率を掛ける MOD（319）が居るとき")
+from instantale_modloader import combat as combat_window  # noqa: E402
+combat_window.declare(combat_window.ENEMY_SCALER, lambda a, h: True, owner="319_battle_tactics")
+with store.lock:
+    book = store.load(key)
+    rules.hunters_of(book)["99"] = {"faction": "f1", "name": "ウルス", "title": "異端審問官", "town": "7",
+                                     "status": "met", "day": 100}
+    store.save(key)
+hunter99 = Character("99", "ウルス")
+hunter99.config = {"is_dead": False}
+hunter99.max_hp = hunter99.original_max_hp = hunter99.current_hp = 1000
+app.world.characters["99"] = hunter99
+app.party = ["player", "30", "31"]
+saved_ids = ui.party_member_ids
+ui.party_member_ids = lambda a: [m for m in a.party if m != "player"]
+try:
+    ctx5.hook("__main__:BattleStartManager.__init__")(lambda self, *a, **k: None, Phase(app), app, "specific", ["99"])
+    check("319 が居れば自分では伸ばさない", hunter99.max_hp == 1000, hunter99.max_hp)
+    other_enemy = Character(None, "衛兵")
+    check("窓口に刺客の体力の率を答える（刺客の率 × 仲間の分）",
+          combat_window.enemy_percent(combat_window.ENEMY_HP, app, hunter99, 250) == 125 * 2.5
+          and combat_window.enemy_percent(combat_window.ENEMY_HP, app, Character(None, "ウルス"), 250) == 125 * 2.5
+          and combat_window.enemy_percent(combat_window.ENEMY_HP, app, other_enemy, 250) == 250)
+    check("窓口に刺客の一撃の率を答える（ほかの敵は 319 の既定のまま）",
+          combat_window.enemy_percent(combat_window.ENEMY_DAMAGE, app, hunter99, 12) == 20
+          and combat_window.enemy_percent(combat_window.ENEMY_DAMAGE, app, other_enemy, 12) == 12)
+    # 319 が伸ばした（元の HP まで 3 つとも）。刺客は戦闘の後も残る人物なので、決着で元へ戻す
+    hunter99.original_max_hp = hunter99.max_hp = 3125
+    hunter99.current_hp = 1250
+    end_hook5(game_end_escaped, Phase(app, "escaped"))
+    check("決着で 319 の分も戻す（元の HP まで）。減った割合は保つ",
+          (hunter99.original_max_hp, hunter99.max_hp, hunter99.current_hp) == (1000, 1000, 400),
+          (hunter99.original_max_hp, hunter99.max_hp, hunter99.current_hp))
+finally:
+    app.party = saved_party
+    ui.party_member_ids = saved_ids
+    combat_window.forget("319_battle_tactics")
+check("戦っていなければ答えない", combat_window.enemy_percent(combat_window.ENEMY_DAMAGE, app, hunter99, 12) == 12)
+check("例外が無い（319 が居るとき）", not ctx5.errors, ctx5.errors)
+
 print("[流れ] 次の刺客までの日数は現れた日から")
 module, ctx, app = fresh()
 notes_fn()({"app": app, "npc_id": "30"})
@@ -1190,6 +1318,7 @@ settings = getattr(sys, module.SETTINGS_STORE_ATTR)
 from instantale_modloader.state import world_key  # noqa: E402
 record = settings.load(world_key(app))
 record["HUNTER_HOSTILE_RATE"], record["HUNTER_WARY_RATE"], record["HUNTER_GAP_DAYS"] = 100, 100, 10
+record["HUNTER_GAP_SPREAD_DAYS"], record["HUNTER_GAP_MIN_DAYS"] = 0, 0
 settings.save(world_key(app))
 store = module._store()["worlds"]
 key = store.playthrough(app)
@@ -1229,6 +1358,8 @@ try:
     check("現れたら日数を書く", ledger_of(app).get("hunter_day") == app.world.days_elapsed
           and ledger_of(app)["hunters"]["95"]["status"] == "met" and talks == ["ゼルダ"],
           (ledger_of(app).get("hunter_day"), ledger_of(app)["hunters"]["95"], talks))
+    check("現れたら次の刺客までの日数を引いて控える（ばらつき 0・最低 0 で基準 10）",
+          ledger_of(app).get("hunter_gap") == 10, ledger_of(app).get("hunter_gap"))
     with store.lock:
         book = store.load(key)
         book["hunters"]["95"]["status"] = "escaped"

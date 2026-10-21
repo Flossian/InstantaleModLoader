@@ -103,7 +103,7 @@ med_m4_r0_05	medium_weapon	A blackened iron flail with a spiked iron ball on a c
 med_m4_r0_06	medium_weapon	A polished steel flail with a spiked iron ball on a chain, a wooden haft and blue details.
 med_m4_r0_07	medium_weapon	A blackened iron flail with a spiked iron ball on a chain.
 med_m4_r0_08	medium_weapon	A polished steel flail with a spiked iron ball on a chain and a wooden haft.
-med_m4_r0_09	medium_weapon	A red-lacquered flail with a spiked iron ball on a chain and a wooden haft.
+med_m4_r0_09	medium_weapon	A red-lacquered flail with a spiked iron ball on a chain.
 med_m4_r1_00	medium_weapon	A spiked wooden club.
 med_m4_r1_01	medium_weapon	A spiked wooden club.
 med_m4_r1_02	medium_weapon	A spiked wooden club.
@@ -225,7 +225,7 @@ med_m5_r2_08	throwable_weapon	A blue set of throwing darts with red details.
 med_m5_r2_09	throwable_weapon	A black set of throwing darts.
 med_m5_r3_00	throwable_weapon	A black bola sling with stone weights and red details.
 med_m5_r3_01	throwable_weapon	A brown bola sling with stone weights.
-med_m5_r3_02	throwable_weapon	A brown bola sling with stone weights and red details.
+med_m5_r3_02	throwable_weapon	A brown bola sling with stone weights.
 med_m5_r3_03	throwable_weapon	A black pile of iron balls.
 med_m5_r3_04	throwable_weapon	A brown pile of iron balls.
 med_m5_r3_05	throwable_weapon	A black pile of iron balls.

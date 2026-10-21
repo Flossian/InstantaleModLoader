@@ -51,8 +51,8 @@ STATE_DIRNAME = "town_incidents"
 
 #: タブごとの項目と説明。
 TABS = (
-    ("起こり方", ("ROLL_DAYS", "ROLL_PERCENT", "MAX_ACTIVE", "REST_DAYS", "SIZE_WEIGHTING"),
-     "日数が進むと、通算で抽選の間隔が経つたびに世界全体で1回だけ抽選し、当たれば1つ起きる。\n"
+    ("起こり方", ("ROLL_DAYS", "ROLL_SPREAD_DAYS", "ROLL_PERCENT", "MAX_ACTIVE", "REST_DAYS", "SIZE_WEIGHTING"),
+     "日数が進むと、通算で抽選の間隔（前後にばらつく）が経つたびに世界全体で1回だけ抽選し、当たれば1つ起きる。\n"
      "起きるのは、訪れたことがありギルドのある村・町・都市だけ。1つの街に起きるのは1つまで。"),
     ("進み方", ("STAGE_DAYS", "SETTLE_DAYS", "STEPS_PER_ELAPSE"),
      "放っておくと段階が進み（困り事は 兆し → 悪化 → 深刻、良い出来事は 兆し → 盛況 → 収束 など出来事ごと）、"

@@ -105,6 +105,23 @@ check("終わった街は休みが付く", bucket["cooldown"]["0"] == 580, bucke
 check("休みの街には起きない（空いている街が無い）",
       rules.roll(bucket, 430, TOWNS, FixedRng(0.0), kinds, **args) is None)
 check("休みが明ければ起きる", rules.roll(bucket, 600, TOWNS, FixedRng(0.0), kinds, **args) is not None)
+class CountingRng(FixedRng):
+    def __init__(self, value):
+        FixedRng.__init__(self, value)
+        self.calls = 0
+
+    def random(self):
+        self.calls += 1
+        return self.value
+
+
+check("抽選の間隔は基準から前後にずらす", rules.next_roll_in(30, 15, FixedRng(0.0)) == 15
+      and rules.next_roll_in(30, 15, FixedRng(0.999)) == 45 and rules.next_roll_in(30, 15, FixedRng(0.5)) == 30)
+check("間隔は1日より短くしない", rules.next_roll_in(5, 15, FixedRng(0.0)) == 1)
+check("幅が 0 なら乱数を引かない", (lambda rng: rules.next_roll_in(30, 0, rng) == 30 and rng.calls == 0)(CountingRng(0.0)))
+spread_bucket = rules.new_bucket()
+rules.roll(spread_bucket, 10, TOWNS, FixedRng(0.999), kinds, spread_days=15, **args)
+check("次の抽選の日もずらす", spread_bucket["next_roll_day"] == 10 + 45, spread_bucket)
 check("外れの乱数なら起きない", rules.roll(rules.new_bucket() | {"next_roll_day": 0}, 30, TOWNS,
                                 FixedRng(0.99), kinds, **dict(args, chance_percent=25)) is None)
 check("候補の街が無ければ起きない", rules.roll(rules.new_bucket() | {"next_roll_day": 0}, 30, [],

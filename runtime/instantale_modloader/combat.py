@@ -19,6 +19,15 @@ MOD どうしは import しない（TECH.md §3.2.3）ので、両者はここ�
 
 装備欄の出し入れと身に着けている品の一覧は `equipment` の窓口が持つ。ここは数だけ。
 
+敵ごとの体力と一撃の強さの率（％）も、ここで聞く。敵の体力と一撃に率を掛ける MOD（`319_battle_tactics`）が「この敵は何％」を聞き、
+特定の敵を受け持つ MOD（`339_town_factions` の刺客）が答える。答えは敵ごとなので、置く MOD は何本でもよい
+（順に聞き、最初に数を返した答えを使う。誰も答えなければ聞く側の既定の率）。
+
+    率を掛ける側   combat.declare(combat.ENEMY_SCALER, fn, owner="319_…")   # 率を掛けている MOD として登録する（fn は使わない）
+                   pct = combat.enemy_percent(combat.ENEMY_HP, app, enemy, 既定の率)
+    答える側       combat.declare_enemy(combat.ENEMY_HP, fn, owner="339_…")   # fn(app, enemy) -> ％ | None
+                   combat.enemy_scaler()                                     # 率を掛けている MOD の名前 / ""
+
 同じ種類を 2 本の MOD が置いたら後から置いたほうが勝ち、その旨をログに残す（`durations` と同じ）。
 置き場は `sys` の属性で、注入し直しをまたいで残る。
 そのため切った MOD のぶんは、ローダの `boot()` と `unload` が `durations.forget` の片付けとして外す。
@@ -32,8 +41,16 @@ from . import log_exc
 ATTACK = "attack"
 #: 装備の防御力。答えは float。
 DEFENSE = "defense"
+#: 敵の体力の率（％）。敵ごとの答え（`declare_enemy`）。
+ENEMY_HP = "enemy_hp"
+#: 敵の一撃の強さの率（％）。敵ごとの答え（`declare_enemy`）。
+ENEMY_DAMAGE = "enemy_damage"
+#: 敵の体力と一撃に率を掛けている MOD の登録（`declare` で置く。関数は呼ばない）。
+ENEMY_SCALER = "enemy_scaler"
+ENEMY_KINDS = (ENEMY_HP, ENEMY_DAMAGE)
 
 _ATTR = "_instantale_combat"
+_ENEMY_ATTR = "_instantale_combat_enemy"
 
 
 def _registry():
@@ -61,12 +78,64 @@ def declare(kind, fn, owner="", write=None):
     return before
 
 
+def _enemy_registry():
+    """`{持ち主: {種類: 関数}}`（置いた順）。`sys` に置いて注入し直しをまたぐ。"""
+    found = getattr(sys, _ENEMY_ATTR, None)
+    if not isinstance(found, dict):
+        found = {}
+        setattr(sys, _ENEMY_ATTR, found)
+    return found
+
+
+def declare_enemy(kind, fn, owner="", write=None):
+    """敵ごとの率（`ENEMY_HP` / `ENEMY_DAMAGE`）を答える関数を置く。`fn(app, enemy)` は％か、受け持たない敵なら None。"""
+    if kind not in ENEMY_KINDS:
+        raise ValueError("declare_enemy() takes ENEMY_HP or ENEMY_DAMAGE, got {!r}".format(kind))
+    if not callable(fn):
+        raise TypeError("declare_enemy() needs a callable, got {!r}".format(type(fn)))
+    _enemy_registry().setdefault(str(owner or ""), {})[kind] = fn
+    if write:
+        write("combat: {!r} answers {!r} for some enemies".format(owner, kind))
+
+
+def enemy_percent(kind, app, enemy, default):
+    """その敵の率（％）。誰も受け持たなければ `default`。"""
+    if enemy is None:
+        return default
+    for owner, kinds in list(_enemy_registry().items()):
+        fn = kinds.get(kind)
+        if fn is None:
+            continue
+        try:
+            value = fn(app, enemy)
+        except Exception:
+            log_exc("combat: {!r} by {!r} failed; treated as not answered".format(kind, owner))
+            continue
+        if value is None or isinstance(value, bool):
+            continue
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            continue
+        if value > 0:
+            return value
+    return default
+
+
+def enemy_scaler():
+    """敵の体力と一撃に率を掛けている MOD の名前。居なければ `""`。"""
+    return source_of(ENEMY_SCALER)
+
+
 def forget(owner, write=None):
     """その持ち主が置いたものを全部外す（MOD を外したとき）。外した種類を返す。"""
     registry = _registry()
     gone = [kind for kind, (who, _fn) in registry.items() if who == str(owner)]
     for kind in gone:
         registry.pop(kind, None)
+    enemy = _enemy_registry().pop(str(owner), None)
+    if enemy:
+        gone += sorted(enemy)
     if write and gone:
         write("combat: {!r} no longer decides {}".format(owner, gone))
     return gone
@@ -82,7 +151,7 @@ def owners():
     ローダの `boot()` が、今回適用されなかった MOD のぶんを外すのに使う
     （登録簿は注入をまたいで残るので、切った MOD の旧い関数に聞き続けないように）。
     """
-    return sorted({who for who, _fn in _registry().values()})
+    return sorted({who for who, _fn in _registry().values()} | set(_enemy_registry()))
 
 
 def source_of(kind):

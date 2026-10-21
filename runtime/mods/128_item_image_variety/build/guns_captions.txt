@@ -206,8 +206,8 @@ gun_cyber2_017	medium_weapon	A black submachine gun with a folding wire stock, a
 gun_cyber2_018	medium_weapon	A black submachine gun with twin magazines and magenta details, a gun.
 gun_cyber2_019	medium_weapon	A grey submachine gun with an angled bent frame, a gun.
 gun_cyber2_020	medium_weapon	A black machine pistol with a shoulder stock, a gun.
-gun_cyber2_021	medium_weapon	A black submachine gun with a helical magazine on top and red details, a gun.
-gun_cyber2_022	medium_weapon	A black submachine gun with glowing coolant tubes, blue details and glowing cyan lights, a gun.
+gun_cyber2_021	medium_weapon	A black submachine gun with a helical magazine on top, a gun.
+gun_cyber2_022	medium_weapon	A blue submachine gun with glowing coolant tubes and glowing cyan lights, a gun.
 gun_cyber2_023	medium_weapon	A black boxy smart submachine gun with a sensor, a gun.
 gun_cyber2_024	medium_weapon	A red twin-barreled submachine gun, a gun.
 gun_cyber2_025	medium_weapon	A white corporate security submachine gun, a gun.
@@ -215,8 +215,8 @@ gun_cyber2_026	medium_weapon	A black makeshift street submachine gun with expose
 gun_cyber2_027	medium_weapon	A black needle submachine gun with bundled tubes, a gun.
 gun_cyber2_028	medium_weapon	A black submachine gun with three rotating barrels, a gun.
 gun_cyber2_029	medium_weapon	A black folding box submachine gun with a carry handle, a gun.
-gun_cyber2_030	large_weapon	A black automatic shotgun with a drum magazine and blue details, a gun.
-gun_cyber2_031	large_weapon	A blue pump-action shotgun with glowing cyan lights, a gun.
+gun_cyber2_030	large_weapon	A black automatic shotgun with a drum magazine, a gun.
+gun_cyber2_031	large_weapon	A black pump-action shotgun with blue details and glowing cyan lights, a gun.
 gun_cyber2_032	large_weapon	A black revolving-cylinder shotgun, a gun.
 gun_cyber2_033	large_weapon	A black sawed-off double-barreled shotgun with red details, a gun.
 gun_cyber2_034	large_weapon	A grey boxy bullpup shotgun with blue details, a gun.
@@ -248,7 +248,7 @@ gun_cyber2_059	long_weapon	A white slim bullpup sniper rifle, a gun.
 gun_cyber2_060	long_weapon	A blue railgun rifle with twin rails and glowing blue lights, a gun.
 gun_cyber2_061	long_weapon	A black suppressed sniper rifle with a perforated shroud and blue details, a gun.
 gun_cyber2_062	long_weapon	A black bolt-action sniper rifle with a neon scope and a wooden stock, a gun.
-gun_cyber2_063	long_weapon	A blue gauss rifle with coils along the barrel, a gun.
+gun_cyber2_063	long_weapon	A black gauss rifle with coils along the barrel and blue details, a gun.
 gun_cyber2_064	long_weapon	A grey smart sniper rifle with a sensor cluster, a gun.
 gun_cyber2_065	long_weapon	A black folding takedown sniper rifle, a gun.
 gun_corpwhite_000	small_weapon	A sleek white pistol with a cyan light line, a gun.
@@ -308,7 +308,7 @@ gun_corprail_000	small_weapon	A black twin-rail railgun pistol with white detail
 gun_corprail_001	small_weapon	A black coilgun pistol with copper coils and white details, a gun.
 gun_corprail_002	medium_weapon	A black railgun submachine gun with white details, a gun.
 gun_corprail_003	medium_weapon	A black coilgun PDW with a battery and white details, a gun.
-gun_corprail_004	large_weapon	A black railgun assault rifle with white details, a gun.
+gun_corprail_004	large_weapon	A black railgun assault rifle with white details and glowing cyan lights, a gun.
 gun_corprail_005	large_weapon	A black four-rail railgun shotgun with white details and glowing cyan lights, a gun.
 gun_corprail_006	long_weapon	A black long twin-rail railgun sniper rifle with a scope, white details and glowing cyan lights, a gun.
 gun_corprail_008	large_weapon	A black large coil cannon with copper coils, a gun.
@@ -335,7 +335,7 @@ gun_corpspace_001	small_weapon	A white space distress flare pistol, a gun.
 gun_corpspace_002	medium_weapon	A white sealed space submachine gun with orange stripes, a gun.
 gun_corpspace_003	medium_weapon	A black compact shipboard PDW with white details, a gun.
 gun_corpspace_004	large_weapon	A white space military assault rifle with orange stripes, a gun.
-gun_corpspace_005	large_weapon	A white low-velocity shipboard shotgun, a gun.
+gun_corpspace_005	large_weapon	A black low-velocity shipboard shotgun with white details, a gun.
 gun_corpspace_006	long_weapon	A white space sniper rifle with a scope, a gun.
 gun_corpspace_008	medium_weapon	A white EVA cutting torch.
 gun_corpspace_009	small_weapon	A black grappling hook gun with a cable and white details, a gun.
@@ -363,13 +363,13 @@ gun_corpmelee_000	medium_weapon	A blue non-lethal electric stun baton with blue 
 gun_corpmelee_001	medium_weapon	A slim white high-frequency blade with a cyan light line and glowing cyan lights.
 gun_corpmelee_002	medium_weapon	A black non-lethal cheap taped stun baton with a tassel and orange details.
 gun_corpmelee_003	medium_weapon	A black non-lethal stun baton with a battery behind the grip and blue details.
-gun_corpmelee_004	medium_weapon	A blue non-lethal glowing neon stun baton with glowing blue lights.
+gun_corpmelee_004	medium_weapon	A black non-lethal glowing neon stun baton with blue details and glowing blue lights.
 gun_corpmelee_005	medium_weapon	A magenta sword with a blade of pink light and glowing magenta lights.
 gun_corpmelee_006	medium_weapon	A black non-lethal military rubber baton with a wrist strap and brass details.
 gun_corpmelee_007	medium_weapon	A black non-lethal plain rubber baton.
 gun_corpmelee_008	medium_weapon	A black non-lethal forked electrode stun baton with white details.
 gun_corpmelee_009	medium_weapon	A red non-lethal stinging organic tentacle whip with tan details.
-gun_corpmelee_010	medium_weapon	A white non-lethal jeweled cane stun baton with glowing blue lights.
+gun_corpmelee_010	medium_weapon	A black non-lethal jeweled cane stun baton with glowing blue lights.
 gun_corpmelee_011	medium_weapon	A white sword cane with a ruby handle.
 gun_corpmelee_012	medium_weapon	A white non-lethal space stun baton with a glowing tip and orange stripes and glowing blue lights.
 gun_corpmelee_013	medium_weapon	A red non-lethal lacquered jitte stun baton with a tassel and orange details.
@@ -666,7 +666,7 @@ gun_shotgun2_041	large_weapon	A black lever-action shotgun with a wooden stock a
 gun_shotgun2_042	large_weapon	A black lever-action shotgun, a gun.
 gun_shotgun2_043	large_weapon	A black lever-action shotgun with a wooden stock, a gun.
 gun_shotgun2_044	large_weapon	A black lever-action shotgun, a gun.
-gun_shotgun2_045	large_weapon	A white lever-action shotgun with a wooden stock and tan details, a gun.
+gun_shotgun2_045	large_weapon	A tan lever-action shotgun with a wooden stock, a gun.
 gun_shotgun2_046	large_weapon	A black lever-action shotgun, a gun.
 gun_shotgun2_047	large_weapon	A black lever-action shotgun with a wooden stock, a gun.
 gun_sniper_000	long_weapon	A black sniper rifle with a scope and a suppressor and purple details, a gun.
@@ -724,7 +724,7 @@ gun_sniper_051	long_weapon	A white futuristic sniper rifle with a scope and blue
 gun_sniper_052	long_weapon	A blue futuristic sniper rifle with a scope and purple details, a gun.
 gun_sniper_053	long_weapon	A black futuristic sniper rifle with a scope, a gun.
 gun_sniper_054	long_weapon	A blue futuristic sniper rifle with a scope and purple details, a gun.
-gun_explosive_000	throwable_weapon	A black frag hand grenade with a pull pin and a safety lever and brass details, an explosive.
+gun_explosive_000	throwable_weapon	A grey frag hand grenade with a pull pin and a safety lever and brass details, an explosive.
 gun_explosive_001	throwable_weapon	A black frag hand grenade with a pull pin and a safety lever, an explosive.
 gun_explosive_002	throwable_weapon	A grey frag hand grenade with a pull pin and a safety lever and olive green details, an explosive.
 gun_explosive_003	throwable_weapon	A black frag hand grenade with a pull pin and a safety lever, an explosive.
@@ -746,7 +746,7 @@ gun_explosive_018	throwable_weapon	A red stick of dynamite with a lit fuse, an e
 gun_explosive_019	throwable_weapon	A tan stick of dynamite with a lit fuse, an explosive.
 gun_explosive_020	throwable_weapon	A red bundle of dynamite sticks with a lit fuse, an explosive.
 gun_explosive_021	throwable_weapon	A black bundle of dynamite sticks with a lit fuse, an explosive.
-gun_explosive_022	throwable_weapon	A red bundle of dynamite sticks with a lit fuse, an explosive.
+gun_explosive_022	throwable_weapon	A black bundle of dynamite sticks with a lit fuse and red details, an explosive.
 gun_explosive_023	throwable_weapon	A red bundle of dynamite sticks with a lit fuse and magenta details, an explosive.
 gun_explosive_024	throwable_weapon	A red bundle of dynamite sticks with a lit fuse, an explosive.
 gun_explosive_025	throwable_weapon	A black satchel bomb with a lit fuse, an explosive.

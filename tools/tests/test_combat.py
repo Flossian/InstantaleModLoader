@@ -44,4 +44,31 @@ assert combat.forget("other", write=logged.append) == [combat.ATTACK]
 assert combat.attack(app, npc) is None and combat.source_of(combat.ATTACK) == ""
 assert combat.forget("912") == [combat.DEFENSE]
 
+# 敵ごとの率。受け持つ MOD は何本でもよく、最初に数を返した答えを使う。誰も答えなければ聞く側の既定
+hunter, guard = types.SimpleNamespace(name="刺客"), types.SimpleNamespace(name="衛兵")
+assert combat.enemy_percent(combat.ENEMY_HP, app, hunter, 250) == 250
+assert combat.enemy_scaler() == ""
+combat.declare_enemy(combat.ENEMY_HP, lambda a, e: None, owner="first")
+combat.declare_enemy(combat.ENEMY_HP, lambda a, e: 312.5 if e is hunter else None, owner="339")
+combat.declare_enemy(combat.ENEMY_DAMAGE, lambda a, e: 20 if e is hunter else None, owner="339")
+assert combat.enemy_percent(combat.ENEMY_HP, app, hunter, 250) == 312.5
+assert combat.enemy_percent(combat.ENEMY_HP, app, guard, 250) == 250            # 受け持たない敵は既定
+assert combat.enemy_percent(combat.ENEMY_DAMAGE, app, hunter, 12) == 20.0
+assert combat.enemy_percent(combat.ENEMY_DAMAGE, app, None, 12) == 12
+combat.declare_enemy(combat.ENEMY_DAMAGE, broken, owner="first")
+assert combat.enemy_percent(combat.ENEMY_DAMAGE, app, hunter, 12) == 20.0       # 例外の答えは飛ばす
+try:
+    combat.declare_enemy("attack", lambda a, e: 1, owner="x")
+    raise AssertionError("declare_enemy took a non-enemy kind")
+except ValueError:
+    pass
+combat.declare(combat.ENEMY_SCALER, lambda a, h: True, owner="319")
+assert combat.enemy_scaler() == "319"
+assert "339" in combat.owners() and "first" in combat.owners()
+assert sorted(combat.forget("339")) == [combat.ENEMY_DAMAGE, combat.ENEMY_HP]
+assert combat.enemy_percent(combat.ENEMY_HP, app, hunter, 250) == 250
+combat.forget("first")
+combat.forget("319")
+assert combat.enemy_scaler() == "" and combat.owners() == []
+
 print("ok")

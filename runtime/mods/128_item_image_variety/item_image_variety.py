@@ -32,7 +32,7 @@ mushroom 28 / accessory 1）の追加辞書 `data/<item_detail>.json` を実行�
 
 もう1つ、素材に無い絵を足す。銃と爆発物・中世の武器と防具・魔法武器・防具と服と装身具。
 どれも作者が画像生成 AI で作った一枚絵から起こした。
-分類は作者の元画像1枚ごと（`categories.json`。作者が意味を持って分けているので、まとめ直さない）。
+分類は同じ種類の元画像をまとめた単位（`categories.json` の `sources`。版10 で作者の指示により119分類を45分類（品の種類：ジャンル）にまとめた）。
 絵と辞書は分類ごとのフォルダに分ける（`images/<分類>/`・`data/<分類>/<品種>.json`）。
 分類ごとの設定で使い方を決める（使わない／素の絵と混ぜる／別扱い）。使わない分類は辞書を読まない。分類のフォルダを消しても動く。
 絵はゲームのフォルダには置かず、`images/<分類>/Assets/images/item_candidates_dark/<品種>/` に
@@ -91,27 +91,14 @@ CROSS_PREFIX = "xs."
 CROSS_DIRNAME = "item_image_cross"
 IMAGE_REL = os.path.join("Assets", "images", "item_candidates_dark")
 
-# 足した絵の分類ごとの使い方。分類は作者が用意した元画像1枚ごと（`categories.json`）。
+# 足した絵の分類ごとの使い方。分類は同じ種類の元画像をまとめた単位（`categories.json`）。
 #   off       使わない（その分類の辞書を読まない）
 #   mix       素の絵と同じ候補に混ぜる
 #   separate  外見文にいちばん似た絵がその分類のときだけ、その分類の中から選ぶ
 #             （ダークファンタジーの「麻のチュニック」に制服、を防ぐ。銃の外見文に剣、も起きない）
 MODES = ("off", "mix", "separate")
 SET_GUN_CYBER = "separate"
-SET_GUN_CYBER2 = "separate"
-SET_GUN_CORP_WHITE = "separate"
-SET_GUN_CORP_HEAVY = "separate"
-SET_GUN_CORP_CHEAP = "separate"
-SET_GUN_CORP_BULLPUP = "separate"
-SET_GUN_CORP_LASER = "separate"
-SET_GUN_CORP_MILITARY = "separate"
-SET_GUN_CORP_RAIL = "separate"
-SET_GUN_CORP_BIO = "separate"
-SET_GUN_CORP_LUXURY = "separate"
-SET_GUN_CORP_SPACE = "separate"
-SET_GUN_CORP_PRINT = "separate"
-SET_GUN_CORP_YAKUZA = "separate"
-SET_GUN_CORP_MELEE = "separate"
+SET_GUN_CORP = "separate"
 SET_GUN_FANTASY = "separate"
 SET_GUN_FUTURE = "separate"
 SET_GUN_MODERN = "separate"
@@ -119,122 +106,45 @@ SET_GUN_FLINTLOCK = "separate"
 SET_GUN_SHOTGUN = "separate"
 SET_GUN_SNIPER = "separate"
 SET_GUN_EXPLOSIVE = "separate"
-SET_MED_ONEHANDED = "mix"
-SET_MED_TWOHANDED = "mix"
-SET_MED_POLEARM = "mix"
-SET_MED_BLUNT_STAFF = "mix"
-SET_MED_SHORT_THROWING = "mix"
-SET_MED_BOW = "mix"
-SET_MED_SHIELD_ARMOR = "mix"
-SET_MAG_ONEHANDED = "mix"
-SET_MAG_TWOHANDED = "mix"
-SET_MAG_STAFF_POLEARM = "mix"
-SET_MAG_EXTRA = "mix"
-SET_MAG_SF = "separate"
-SET_MAG_CYBER = "separate"
-SET_MAG_STEAM = "separate"
-SET_MAG_WA = "separate"
-SET_MAG_POSTAPOC = "separate"
-SET_SF_ONEHANDED = "separate"
-SET_SF_TWOHANDED = "separate"
-SET_SF_POLEARM = "separate"
-SET_SF_SHORT_THROWING = "separate"
-SET_SF_MELEE = "separate"
+SET_WEAPON_MEDIEVAL = "mix"
+SET_WEAPON_MAGIC = "mix"
+SET_WEAPON_MAGIC_FUSION = "separate"
+SET_WEAPON_SF = "separate"
+SET_WEAPON_WA = "separate"
+SET_WEAPON_MODERN = "separate"
+SET_WEAPON_POSTAPOC = "separate"
+SET_WEAR_FANTASY = "mix"
+SET_WEAR_EARLYMODERN = "mix"
+SET_WEAR_ACCESSORY = "mix"
+SET_WEAR_SCHOOL = "separate"
+SET_WEAR_MODERN = "separate"
+SET_WEAR_CYBER = "separate"
+SET_WEAR_SF = "separate"
+SET_WEAR_STEAMPUNK = "separate"
+SET_WEAR_POSTAPOC = "separate"
+SET_WEAR_WESTERN = "separate"
+SET_WEAR_JAPANESE = "separate"
+SET_WEAR_MILITARY = "separate"
 SET_PART_SF = "separate"
 SET_PART_STEAMPUNK = "separate"
-SET_PART_MAGITECH_CORE = "mix"
-SET_PART_GEARS = "mix"
-SET_PART_BROKEN_BODY = "mix"
+SET_PART_MAGITECH = "mix"
 SET_FOOD_RATION = "separate"
-SET_FOOD_GENERAL = "mix"
-SET_FOOD_TRAVEL = "mix"
-SET_FOOD_SWEETS = "separate"
-SET_FOOD_MEAT = "separate"
-SET_FOOD_SEAFOOD = "separate"
-SET_FOOD_SEASIA = "separate"
-SET_FOOD_WESTERN = "separate"
+SET_FOOD_BASIC = "mix"
+SET_FOOD_DISHES = "separate"
 SET_MEDIC_FANTASY = "mix"
 SET_MEDIC_MODERN = "separate"
-SET_MEDIC_POTION = "mix"
-SET_MAGIC_ESSENCE = "mix"
-SET_MAGIC_RELIC = "mix"
-SET_MAGIC_CRYSTAL = "mix"
-SET_MAGIC_CORE = "mix"
-SET_MAGIC_VESSEL = "mix"
-SET_TREASURE_COIN = "mix"
-SET_TOOL_TRAVEL = "mix"
-SET_CREATURE_MATERIAL = "mix"
-SET_WA_SWORDS = "separate"
-SET_WA_WEAPONS = "separate"
-SET_WA_GOODS = "separate"
-SET_MODERN_GEAR = "separate"
-SET_MODERN_DOCUMENT = "separate"
-SET_MODERN_MEDICINE = "separate"
-SET_MODERN_TREASURE = "separate"
-SET_MODERN_INDUSTRIAL = "separate"
-SET_WA_ARMOR = "separate"
-SET_SF_ARMOR = "separate"
-SET_WASTELAND_GEAR = "separate"
-SET_CREATURE_MUTANT = "mix"
-SET_CREATURE_FANG = "mix"
-SET_TREASURE_CROWN = "mix"
-SET_TREASURE_GEM = "mix"
-SET_TOOL_ODDITIES = "mix"
-SET_TOOL_MODERN = "separate"
-SET_TOOL_POSTAPOC = "separate"
-SET_TOOL_SF = "separate"
-SET_TOOL_WA = "separate"
-SET_TOOL_WESTERN = "separate"
-SET_WEAR_SF = "separate"
-SET_WEAR_ACCESSORY = "mix"
-SET_WEAR_CYBER1 = "separate"
-SET_WEAR_CYBER2 = "separate"
-SET_WEAR_STEAMPUNK = "separate"
-SET_WEAR_DARKFANTASY1 = "mix"
-SET_WEAR_DARKFANTASY2 = "mix"
-SET_WEAR_HIGHFANTASY = "mix"
-SET_WEAR_POSTAPOC = "separate"
-SET_WEAR_MEDIEVAL_CLOTHES = "mix"
-SET_WEAR_MEDIEVAL_ARMOR = "mix"
-SET_WEAR_JAPANESE = "separate"
-SET_WEAR_SCHOOL = "separate"
-SET_WEAR_SCHOOL_GIRLS = "separate"
-SET_WEAR_SCHOOL_BOYS = "separate"
-SET_WEAR_MODERN_CASUAL = "separate"
-SET_WEAR_MODERN_HARD = "separate"
-SET_WEAR_WESTERN = "separate"
-SET_WEAR_MILITARY = "separate"
-SET_WEAR_EARLYMODERN_CLOTHES = "mix"
-SET_WEAR_EARLYMODERN_ARMOR = "mix"
-SET_WEAR_WIZARD = "mix"
-SET_WEAR_WA_ARMOR = "separate"
-SET_WEAR_WESTERN_ARMOR = "separate"
-SET_WEAR_MODERN_ARMOR = "separate"
-SET_WEAR_POSTAPOC_ARMOR = "separate"
-SET_WEAR_SF_ARMOR = "separate"
-SET_WEAR_SCHOOL_CASUAL = "separate"
-SET_WEAR_SCHOOL_DRESS = "separate"
-SET_WEAR_SCHOOL_COAT = "separate"
-SET_WEAR_SCHOOL_UNIFORM = "separate"
-
-# 分類と、その使い方の設定の名前。分類ごとに `images/<分類>` を Kivy の探し先に足し、
-# `data/<分類>/<品種>.json` を合成する。フォルダが無い分類は飛ばす。
+SET_MATERIAL_MAGIC = "mix"
+SET_MATERIAL_CREATURE = "mix"
+SET_MATERIAL_MODERN = "separate"
+SET_TOOL_FANTASY = "mix"
+SET_TOOL_GENRE = "separate"
+SET_TOOL_JAPANESE = "separate"
+SET_TREASURE_FANTASY = "mix"
+SET_TREASURE_MODERN = "separate"
+SET_DOCUMENT_MODERN = "separate"
 IMAGE_SETS = (
     ("gun_cyber", "SET_GUN_CYBER"),
-    ("gun_cyber2", "SET_GUN_CYBER2"),
-    ("gun_corp_white", "SET_GUN_CORP_WHITE"),
-    ("gun_corp_heavy", "SET_GUN_CORP_HEAVY"),
-    ("gun_corp_cheap", "SET_GUN_CORP_CHEAP"),
-    ("gun_corp_bullpup", "SET_GUN_CORP_BULLPUP"),
-    ("gun_corp_laser", "SET_GUN_CORP_LASER"),
-    ("gun_corp_military", "SET_GUN_CORP_MILITARY"),
-    ("gun_corp_rail", "SET_GUN_CORP_RAIL"),
-    ("gun_corp_bio", "SET_GUN_CORP_BIO"),
-    ("gun_corp_luxury", "SET_GUN_CORP_LUXURY"),
-    ("gun_corp_space", "SET_GUN_CORP_SPACE"),
-    ("gun_corp_print", "SET_GUN_CORP_PRINT"),
-    ("gun_corp_yakuza", "SET_GUN_CORP_YAKUZA"),
-    ("gun_corp_melee", "SET_GUN_CORP_MELEE"),
+    ("gun_corp", "SET_GUN_CORP"),
     ("gun_fantasy", "SET_GUN_FANTASY"),
     ("gun_future", "SET_GUN_FUTURE"),
     ("gun_modern", "SET_GUN_MODERN"),
@@ -242,104 +152,144 @@ IMAGE_SETS = (
     ("gun_shotgun", "SET_GUN_SHOTGUN"),
     ("gun_sniper", "SET_GUN_SNIPER"),
     ("gun_explosive", "SET_GUN_EXPLOSIVE"),
-    ("med_onehanded", "SET_MED_ONEHANDED"),
-    ("med_twohanded", "SET_MED_TWOHANDED"),
-    ("med_polearm", "SET_MED_POLEARM"),
-    ("med_blunt_staff", "SET_MED_BLUNT_STAFF"),
-    ("med_short_throwing", "SET_MED_SHORT_THROWING"),
-    ("med_bow", "SET_MED_BOW"),
-    ("med_shield_armor", "SET_MED_SHIELD_ARMOR"),
-    ("mag_onehanded", "SET_MAG_ONEHANDED"),
-    ("mag_twohanded", "SET_MAG_TWOHANDED"),
-    ("mag_staff_polearm", "SET_MAG_STAFF_POLEARM"),
-    ("mag_extra", "SET_MAG_EXTRA"),
-    ("mag_sf", "SET_MAG_SF"),
-    ("mag_cyber", "SET_MAG_CYBER"),
-    ("mag_steam", "SET_MAG_STEAM"),
-    ("mag_wa", "SET_MAG_WA"),
-    ("mag_postapoc", "SET_MAG_POSTAPOC"),
-    ("sf_onehanded", "SET_SF_ONEHANDED"),
-    ("sf_twohanded", "SET_SF_TWOHANDED"),
-    ("sf_polearm", "SET_SF_POLEARM"),
-    ("sf_short_throwing", "SET_SF_SHORT_THROWING"),
-    ("sf_melee", "SET_SF_MELEE"),
+    ("weapon_medieval", "SET_WEAPON_MEDIEVAL"),
+    ("weapon_magic", "SET_WEAPON_MAGIC"),
+    ("weapon_magic_fusion", "SET_WEAPON_MAGIC_FUSION"),
+    ("weapon_sf", "SET_WEAPON_SF"),
+    ("weapon_wa", "SET_WEAPON_WA"),
+    ("weapon_modern", "SET_WEAPON_MODERN"),
+    ("weapon_postapoc", "SET_WEAPON_POSTAPOC"),
+    ("wear_fantasy", "SET_WEAR_FANTASY"),
+    ("wear_earlymodern", "SET_WEAR_EARLYMODERN"),
+    ("wear_accessory", "SET_WEAR_ACCESSORY"),
+    ("wear_school", "SET_WEAR_SCHOOL"),
+    ("wear_modern", "SET_WEAR_MODERN"),
+    ("wear_cyber", "SET_WEAR_CYBER"),
+    ("wear_sf", "SET_WEAR_SF"),
+    ("wear_steampunk", "SET_WEAR_STEAMPUNK"),
+    ("wear_postapoc", "SET_WEAR_POSTAPOC"),
+    ("wear_western", "SET_WEAR_WESTERN"),
+    ("wear_japanese", "SET_WEAR_JAPANESE"),
+    ("wear_military", "SET_WEAR_MILITARY"),
     ("part_sf", "SET_PART_SF"),
     ("part_steampunk", "SET_PART_STEAMPUNK"),
-    ("part_magitech_core", "SET_PART_MAGITECH_CORE"),
-    ("part_gears", "SET_PART_GEARS"),
-    ("part_broken_body", "SET_PART_BROKEN_BODY"),
+    ("part_magitech", "SET_PART_MAGITECH"),
     ("food_ration", "SET_FOOD_RATION"),
-    ("food_general", "SET_FOOD_GENERAL"),
-    ("food_travel", "SET_FOOD_TRAVEL"),
-    ("food_sweets", "SET_FOOD_SWEETS"),
-    ("food_meat", "SET_FOOD_MEAT"),
-    ("food_seafood", "SET_FOOD_SEAFOOD"),
-    ("food_seasia", "SET_FOOD_SEASIA"),
-    ("food_western", "SET_FOOD_WESTERN"),
+    ("food_basic", "SET_FOOD_BASIC"),
+    ("food_dishes", "SET_FOOD_DISHES"),
     ("medic_fantasy", "SET_MEDIC_FANTASY"),
     ("medic_modern", "SET_MEDIC_MODERN"),
-    ("medic_potion", "SET_MEDIC_POTION"),
-    ("magic_essence", "SET_MAGIC_ESSENCE"),
-    ("magic_relic", "SET_MAGIC_RELIC"),
-    ("magic_crystal", "SET_MAGIC_CRYSTAL"),
-    ("magic_core", "SET_MAGIC_CORE"),
-    ("magic_vessel", "SET_MAGIC_VESSEL"),
-    ("treasure_coin", "SET_TREASURE_COIN"),
-    ("tool_travel", "SET_TOOL_TRAVEL"),
-    ("creature_material", "SET_CREATURE_MATERIAL"),
-    ("wa_swords", "SET_WA_SWORDS"),
-    ("wa_weapons", "SET_WA_WEAPONS"),
-    ("wa_goods", "SET_WA_GOODS"),
-    ("modern_gear", "SET_MODERN_GEAR"),
-    ("modern_document", "SET_MODERN_DOCUMENT"),
-    ("modern_medicine", "SET_MODERN_MEDICINE"),
-    ("modern_treasure", "SET_MODERN_TREASURE"),
-    ("modern_industrial", "SET_MODERN_INDUSTRIAL"),
-    ("wa_armor", "SET_WA_ARMOR"),
-    ("sf_armor", "SET_SF_ARMOR"),
-    ("wasteland_gear", "SET_WASTELAND_GEAR"),
-    ("creature_mutant", "SET_CREATURE_MUTANT"),
-    ("creature_fang", "SET_CREATURE_FANG"),
-    ("treasure_crown", "SET_TREASURE_CROWN"),
-    ("treasure_gem", "SET_TREASURE_GEM"),
-    ("tool_oddities", "SET_TOOL_ODDITIES"),
-    ("tool_modern", "SET_TOOL_MODERN"),
-    ("tool_postapoc", "SET_TOOL_POSTAPOC"),
-    ("tool_sf", "SET_TOOL_SF"),
-    ("tool_wa", "SET_TOOL_WA"),
-    ("tool_western", "SET_TOOL_WESTERN"),
-    ("wear_sf", "SET_WEAR_SF"),
-    ("wear_accessory", "SET_WEAR_ACCESSORY"),
-    ("wear_cyber1", "SET_WEAR_CYBER1"),
-    ("wear_cyber2", "SET_WEAR_CYBER2"),
-    ("wear_steampunk", "SET_WEAR_STEAMPUNK"),
-    ("wear_darkfantasy1", "SET_WEAR_DARKFANTASY1"),
-    ("wear_darkfantasy2", "SET_WEAR_DARKFANTASY2"),
-    ("wear_highfantasy", "SET_WEAR_HIGHFANTASY"),
-    ("wear_postapoc", "SET_WEAR_POSTAPOC"),
-    ("wear_medieval_clothes", "SET_WEAR_MEDIEVAL_CLOTHES"),
-    ("wear_medieval_armor", "SET_WEAR_MEDIEVAL_ARMOR"),
-    ("wear_japanese", "SET_WEAR_JAPANESE"),
-    ("wear_school", "SET_WEAR_SCHOOL"),
-    ("wear_school_girls", "SET_WEAR_SCHOOL_GIRLS"),
-    ("wear_school_boys", "SET_WEAR_SCHOOL_BOYS"),
-    ("wear_modern_casual", "SET_WEAR_MODERN_CASUAL"),
-    ("wear_modern_hard", "SET_WEAR_MODERN_HARD"),
-    ("wear_western", "SET_WEAR_WESTERN"),
-    ("wear_military", "SET_WEAR_MILITARY"),
-    ("wear_earlymodern_clothes", "SET_WEAR_EARLYMODERN_CLOTHES"),
-    ("wear_earlymodern_armor", "SET_WEAR_EARLYMODERN_ARMOR"),
-    ("wear_wizard", "SET_WEAR_WIZARD"),
-    ("wear_wa_armor", "SET_WEAR_WA_ARMOR"),
-    ("wear_western_armor", "SET_WEAR_WESTERN_ARMOR"),
-    ("wear_modern_armor", "SET_WEAR_MODERN_ARMOR"),
-    ("wear_postapoc_armor", "SET_WEAR_POSTAPOC_ARMOR"),
-    ("wear_sf_armor", "SET_WEAR_SF_ARMOR"),
-    ("wear_school_casual", "SET_WEAR_SCHOOL_CASUAL"),
-    ("wear_school_dress", "SET_WEAR_SCHOOL_DRESS"),
-    ("wear_school_coat", "SET_WEAR_SCHOOL_COAT"),
-    ("wear_school_uniform", "SET_WEAR_SCHOOL_UNIFORM"),
+    ("material_magic", "SET_MATERIAL_MAGIC"),
+    ("material_creature", "SET_MATERIAL_CREATURE"),
+    ("material_modern", "SET_MATERIAL_MODERN"),
+    ("tool_fantasy", "SET_TOOL_FANTASY"),
+    ("tool_genre", "SET_TOOL_GENRE"),
+    ("tool_japanese", "SET_TOOL_JAPANESE"),
+    ("treasure_fantasy", "SET_TREASURE_FANTASY"),
+    ("treasure_modern", "SET_TREASURE_MODERN"),
+    ("document_modern", "SET_DOCUMENT_MODERN"),
 )
+# 版10 で分類を「品の種類：ジャンル」にまとめた（作者の指示。元画像1枚＝1分類の119分類 → 45分類）。旧い設定名で書かれたワールド個別設定を読むための表
+OLD_SETTINGS = {
+    "SET_CREATURE_FANG": "SET_MATERIAL_CREATURE",
+    "SET_CREATURE_MATERIAL": "SET_MATERIAL_CREATURE",
+    "SET_CREATURE_MUTANT": "SET_MATERIAL_CREATURE",
+    "SET_FOOD_GENERAL": "SET_FOOD_BASIC",
+    "SET_FOOD_MEAT": "SET_FOOD_DISHES",
+    "SET_FOOD_SEAFOOD": "SET_FOOD_DISHES",
+    "SET_FOOD_SEASIA": "SET_FOOD_DISHES",
+    "SET_FOOD_SWEETS": "SET_FOOD_DISHES",
+    "SET_FOOD_TRAVEL": "SET_FOOD_BASIC",
+    "SET_FOOD_WESTERN": "SET_FOOD_DISHES",
+    "SET_GUN_CORP_BIO": "SET_GUN_CORP",
+    "SET_GUN_CORP_BULLPUP": "SET_GUN_CORP",
+    "SET_GUN_CORP_CHEAP": "SET_GUN_CORP",
+    "SET_GUN_CORP_HEAVY": "SET_GUN_CORP",
+    "SET_GUN_CORP_LASER": "SET_GUN_CORP",
+    "SET_GUN_CORP_LUXURY": "SET_GUN_CORP",
+    "SET_GUN_CORP_MELEE": "SET_GUN_CORP",
+    "SET_GUN_CORP_MILITARY": "SET_GUN_CORP",
+    "SET_GUN_CORP_PRINT": "SET_GUN_CORP",
+    "SET_GUN_CORP_RAIL": "SET_GUN_CORP",
+    "SET_GUN_CORP_SPACE": "SET_GUN_CORP",
+    "SET_GUN_CORP_WHITE": "SET_GUN_CORP",
+    "SET_GUN_CORP_YAKUZA": "SET_GUN_CORP",
+    "SET_GUN_CYBER2": "SET_GUN_CYBER",
+    "SET_MAGIC_CORE": "SET_MATERIAL_MAGIC",
+    "SET_MAGIC_CRYSTAL": "SET_MATERIAL_MAGIC",
+    "SET_MAGIC_ESSENCE": "SET_MATERIAL_MAGIC",
+    "SET_MAGIC_RELIC": "SET_MATERIAL_MAGIC",
+    "SET_MAGIC_VESSEL": "SET_MATERIAL_MAGIC",
+    "SET_MAG_CYBER": "SET_WEAPON_MAGIC_FUSION",
+    "SET_MAG_EXTRA": "SET_WEAPON_MAGIC",
+    "SET_MAG_ONEHANDED": "SET_WEAPON_MAGIC",
+    "SET_MAG_POSTAPOC": "SET_WEAPON_MAGIC_FUSION",
+    "SET_MAG_SF": "SET_WEAPON_MAGIC_FUSION",
+    "SET_MAG_STAFF_POLEARM": "SET_WEAPON_MAGIC",
+    "SET_MAG_STEAM": "SET_WEAPON_MAGIC_FUSION",
+    "SET_MAG_TWOHANDED": "SET_WEAPON_MAGIC",
+    "SET_MAG_WA": "SET_WEAPON_MAGIC_FUSION",
+    "SET_MEDIC_POTION": "SET_MEDIC_FANTASY",
+    "SET_MED_BLUNT_STAFF": "SET_WEAPON_MEDIEVAL",
+    "SET_MED_BOW": "SET_WEAPON_MEDIEVAL",
+    "SET_MED_ONEHANDED": "SET_WEAPON_MEDIEVAL",
+    "SET_MED_POLEARM": "SET_WEAPON_MEDIEVAL",
+    "SET_MED_SHIELD_ARMOR": "SET_WEAR_FANTASY",
+    "SET_MED_SHORT_THROWING": "SET_WEAPON_MEDIEVAL",
+    "SET_MED_TWOHANDED": "SET_WEAPON_MEDIEVAL",
+    "SET_MODERN_DOCUMENT": "SET_DOCUMENT_MODERN",
+    "SET_MODERN_GEAR": "SET_WEAPON_MODERN",
+    "SET_MODERN_INDUSTRIAL": "SET_MATERIAL_MODERN",
+    "SET_MODERN_MEDICINE": "SET_MEDIC_MODERN",
+    "SET_MODERN_TREASURE": "SET_TREASURE_MODERN",
+    "SET_PART_BROKEN_BODY": "SET_PART_MAGITECH",
+    "SET_PART_GEARS": "SET_PART_MAGITECH",
+    "SET_PART_MAGITECH_CORE": "SET_PART_MAGITECH",
+    "SET_SF_ARMOR": "SET_WEAR_SF",
+    "SET_SF_MELEE": "SET_WEAPON_SF",
+    "SET_SF_ONEHANDED": "SET_WEAPON_SF",
+    "SET_SF_POLEARM": "SET_WEAPON_SF",
+    "SET_SF_SHORT_THROWING": "SET_WEAPON_SF",
+    "SET_SF_TWOHANDED": "SET_WEAPON_SF",
+    "SET_TOOL_MODERN": "SET_TOOL_GENRE",
+    "SET_TOOL_ODDITIES": "SET_TOOL_FANTASY",
+    "SET_TOOL_POSTAPOC": "SET_TOOL_GENRE",
+    "SET_TOOL_SF": "SET_TOOL_GENRE",
+    "SET_TOOL_TRAVEL": "SET_TOOL_FANTASY",
+    "SET_TOOL_WA": "SET_TOOL_GENRE",
+    "SET_TOOL_WESTERN": "SET_TOOL_GENRE",
+    "SET_TREASURE_COIN": "SET_TREASURE_FANTASY",
+    "SET_TREASURE_CROWN": "SET_TREASURE_FANTASY",
+    "SET_TREASURE_GEM": "SET_TREASURE_FANTASY",
+    "SET_WASTELAND_GEAR": "SET_WEAPON_POSTAPOC",
+    "SET_WA_ARMOR": "SET_WEAR_JAPANESE",
+    "SET_WA_GOODS": "SET_TOOL_JAPANESE",
+    "SET_WA_SWORDS": "SET_WEAPON_WA",
+    "SET_WA_WEAPONS": "SET_WEAPON_WA",
+    "SET_WEAR_CYBER1": "SET_WEAR_CYBER",
+    "SET_WEAR_CYBER2": "SET_WEAR_CYBER",
+    "SET_WEAR_DARKFANTASY1": "SET_WEAR_FANTASY",
+    "SET_WEAR_DARKFANTASY2": "SET_WEAR_FANTASY",
+    "SET_WEAR_EARLYMODERN_ARMOR": "SET_WEAR_EARLYMODERN",
+    "SET_WEAR_EARLYMODERN_CLOTHES": "SET_WEAR_EARLYMODERN",
+    "SET_WEAR_HIGHFANTASY": "SET_WEAR_FANTASY",
+    "SET_WEAR_MEDIEVAL_ARMOR": "SET_WEAR_FANTASY",
+    "SET_WEAR_MEDIEVAL_CLOTHES": "SET_WEAR_FANTASY",
+    "SET_WEAR_MODERN_ARMOR": "SET_WEAR_MODERN",
+    "SET_WEAR_MODERN_CASUAL": "SET_WEAR_MODERN",
+    "SET_WEAR_MODERN_HARD": "SET_WEAR_MODERN",
+    "SET_WEAR_POSTAPOC_ARMOR": "SET_WEAR_POSTAPOC",
+    "SET_WEAR_SCHOOL_BOYS": "SET_WEAR_SCHOOL",
+    "SET_WEAR_SCHOOL_CASUAL": "SET_WEAR_SCHOOL",
+    "SET_WEAR_SCHOOL_COAT": "SET_WEAR_SCHOOL",
+    "SET_WEAR_SCHOOL_DRESS": "SET_WEAR_SCHOOL",
+    "SET_WEAR_SCHOOL_GIRLS": "SET_WEAR_SCHOOL",
+    "SET_WEAR_SCHOOL_UNIFORM": "SET_WEAR_SCHOOL",
+    "SET_WEAR_SF_ARMOR": "SET_WEAR_SF",
+    "SET_WEAR_WA_ARMOR": "SET_WEAR_JAPANESE",
+    "SET_WEAR_WESTERN_ARMOR": "SET_WEAR_WESTERN",
+    "SET_WEAR_WIZARD": "SET_WEAR_FANTASY",
+}
 
 # 別扱い（separate）の分類を選んでよい類似度の下限。これに届かない外見文（日本語の文は埋め込みでは
 # [UNK] になり、どの絵とも似ない）は素の側から選ぶ。銃の外見文の top1 は 0.55 以上（VERIFICATION.md §3.26）
@@ -503,6 +453,12 @@ def apply(ctx):
         """その世界の個別設定を一括設定に重ねて、モジュールの値にする。型の違う値は使わない。"""
         record = settings_store.load(world, fresh=True) if world != UNKNOWN_WORLD else {}
         values = {}
+        if isinstance(record, dict):
+            # 版9 までの分類ごとの設定名（OLD_SETTINGS）で書かれた値は、まとめた分類の設定として読む（新しい名前が先）
+            record = dict(record)
+            for old, new in OLD_SETTINGS.items():
+                if old in record and new not in record:
+                    record[new] = record[old]
         for name in SETTING_NAMES:
             value = record.get(name) if isinstance(record, dict) else None
             values[name] = value if value is not None and type(value) is type(base_settings[name]) \

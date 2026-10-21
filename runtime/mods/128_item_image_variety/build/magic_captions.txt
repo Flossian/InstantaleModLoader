@@ -90,7 +90,7 @@ mag_x3_r1_09	long_weapon	A fire-enchanted magic halberd with a glowing red gem.
 mag_x3_r1_10	long_weapon	A frost-enchanted magic trident with a glowing blue gem.
 mag_x3_r1_11	long_weapon	A shadow-enchanted magic spear with a crystal head and a glowing purple gem.
 mag_x4_r0_00	small_weapon	A nature-enchanted twig wand with a small gem at the tip and a glowing green gem.
-mag_x4_r0_01	small_weapon	A shadow-enchanted twisted ebony wand with a glowing magenta gem.
+mag_x4_r0_01	small_weapon	A fire-enchanted twisted ebony wand with a glowing red gem.
 mag_x4_r0_02	small_weapon	A fire-enchanted carved bone wand with a glowing red gem.
 mag_x4_r0_03	small_weapon	A frost-enchanted hexagonal crystal wand with a glowing blue gem.
 mag_x4_r0_04	small_weapon	A nature-enchanted three-pronged forked wand with a glowing green gem.

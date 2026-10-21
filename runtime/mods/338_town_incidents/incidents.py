@@ -422,21 +422,34 @@ def may_roll(bucket, day):
     return next_day is not None and day >= next_day
 
 
+def next_roll_in(interval_days, spread_days, rng):
+    """次の抽選までの日数。間隔を前後に `spread_days` までランダムにずらし、1日より短くしない。
+
+    幅が 0 なら乱数を引かない（抽選の乱数の並びは前の版と同じ）。
+    """
+    spread = max(0, int(spread_days))
+    shift = 0
+    if spread:
+        shift = min(spread, int(rng.random() * (2 * spread + 1)) - spread)
+    return max(1, int(interval_days) + shift)
+
+
 def roll(bucket, day, towns, rng, kinds, *, chance_percent, interval_days, max_active,
-         by_size=True):
+         by_size=True, spread_days=0):
     """抽選を1回する。起きたら新しい出来事（答え待ち）を台帳に入れて返す。起きなければ None。
 
     `towns` は候補の街 `[(土地 id, 名前, 規模)]`（訪れたことがあり、ギルドのある街）。
     抽選の日を数えるのはここ。1回の日数送りで何日経っても、引くのは1回だけ。
+    次の抽選の日は `interval_days` を前後に `spread_days` までずらす（`next_roll_in`）。
     """
     if day is None:
         return None
     if _int(bucket.get("next_roll_day")) is None:
-        bucket["next_roll_day"] = day + max(1, int(interval_days))
+        bucket["next_roll_day"] = day + next_roll_in(interval_days, spread_days, rng)
         return None
     if not may_roll(bucket, day):
         return None
-    bucket["next_roll_day"] = day + max(1, int(interval_days))
+    bucket["next_roll_day"] = day + next_roll_in(interval_days, spread_days, rng)
     if not kinds:
         return None
     if len([event for event in events_of(bucket) if event.get("status") in (PENDING, ACTIVE)]) \

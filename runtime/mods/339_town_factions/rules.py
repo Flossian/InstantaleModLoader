@@ -990,13 +990,14 @@ def rewind(ledger, day):
 def trend_due(last_day, day, every, extra=0):
     """趨勢を進める日か。最初の1回は台帳を作った日から数える。
 
-    間隔は `every` に `extra`（情勢が動くたびに引き直すばらつき）を足した日数。`every` が 0 なら進めない。
+    間隔は `every` に `extra`（情勢が動くたびに引き直すばらつき。前後どちらにも動く）を足した日数で、1日より短くしない。
+    `every` が 0 なら進めない。
     """
     if day is None or every <= 0:
         return False
     if last_day is None:
         return False
-    return day - last_day >= every + max(0, extra)
+    return day - last_day >= max(1, every + extra)
 
 
 # ============================================================ 刺客
@@ -1046,6 +1047,71 @@ def hunter_due(last_day, day, gap):
         return False
     last = _day(last_day)
     return last is None or day - last >= max(0, gap)
+
+
+def _whole(value, default=0):
+    return value if isinstance(value, int) and not isinstance(value, bool) else default
+
+
+def hunter_gap_range(base, spread, minimum):
+    """次の刺客までの日数の範囲 `(下, 上)`。基準を前後に `spread` までずらし、`minimum` より短くしない。"""
+    base, spread, minimum = _whole(base), max(0, _whole(spread)), max(0, _whole(minimum))
+    return max(minimum, base - spread), max(minimum, base + spread)
+
+
+def roll_hunter_gap(base, spread, minimum, rng):
+    """刺客が現れたときに引く、次の刺客までの日数。基準から増減し、最低の日数は空ける。"""
+    spread = max(0, _whole(spread))
+    shift = rng.randint(-spread, spread) if spread else 0
+    return max(max(0, _whole(minimum)), _whole(base) + shift)
+
+
+#: ゲームが人物のレベルを切る上限（`scripts.functions.clamp_character_level`。10-21 に実測）。
+LEVEL_CAP = 100
+
+
+def hunter_target_level(player_level, lawfulness, offset, per_wanted, floor_level=1, max_above=None):
+    """刺客の強さのレベル（ゲームの上限を超えてよい）。主人公のレベル + `offset`、その街の手配度が 10 下がるごとに `per_wanted`。
+
+    手配度は 0 より下（手配されている）の分だけ数える。`floor_level`（土地から決まるレベル）より弱くしない。
+    `max_above` があれば、主人公のレベル + `max_above` を超えない（土地から決まるレベルより優先する）。
+    """
+    player = _whole(player_level, 1)
+    level = player + _whole(offset)
+    wanted = _whole(lawfulness)
+    if wanted < 0:
+        level += (-wanted // 10) * _whole(per_wanted)
+    level = max(1, _whole(floor_level, 1), level)
+    if isinstance(max_above, int) and not isinstance(max_above, bool):
+        level = min(level, max(1, player + max_above))
+    return level
+
+
+def hunter_level_and_boost(target):
+    """`(付けるレベル, 強さの倍率)`。レベルはゲームの上限まで。超えた分は、超えたレベルの係数との比で能力値と戦闘の値に掛ける。
+
+    戦闘の値は「能力値 × (レベル + 5) ÷ 5」（GAME.md §2.10.4）なので、倍率は (目標 + 5) ÷ (上限 + 5)。
+    """
+    target = max(1, _whole(target, 1))
+    level = min(LEVEL_CAP, target)
+    return level, (target + 5) / float(level + 5)
+
+
+def party_hp_factor(companions, percent):
+    """仲間の数による刺客の HP の倍率。仲間1人につき `percent`％ ずつ増やす（2人・75％なら 2.5 倍）。"""
+    return 1.0 + max(0, _whole(companions)) * max(0, _whole(percent)) / 100.0
+
+
+def hunter_gap_of(ledger, base, spread, minimum):
+    """台帳に控えた次の刺客までの日数（`hunter_gap`）。無ければ基準（最低の日数は空ける）。
+
+    設定を後から変えたときは、控えた日数をいまの範囲に収める。
+    """
+    low, high = hunter_gap_range(base, spread, minimum)
+    gap = ledger.get("hunter_gap")
+    if not isinstance(gap, int) or isinstance(gap, bool):
+        return max(low, min(high, _whole(base)))
+    return max(low, min(high, gap))
 
 
 def hunter_loss(ledger, faction_id, loss):

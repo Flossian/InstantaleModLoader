@@ -110,6 +110,8 @@ _RNG = random.Random()
 
 LOG_BASENAME = "battle_tactics.log"
 LOG_TAG = "battle tactics"
+#: 窓口（`combat`）に名乗る持ち主の名前。
+OWNER = "319_battle_tactics"
 
 # 版19までの防御のボタンの印のキー。いまは窓口が組むので付けない。
 # セーブから戻った前の版の印のボタンを落とすためだけに残す（`refresh_choice_buttons`）。
@@ -325,7 +327,7 @@ def level_multiplier(gap):
 def hit_damage(entries, raw, defense, defender_max_hp,
                out_mult=1.0, in_mult=1.0,
                attacker_level=None, defender_level=None,
-               enemy=False, bonus=0.0):
+               enemy=False, bonus=0.0, enemy_percent=None):
     """1発の最終ダメージ。
 
     `entries` はその対象への `[(power, multiplier), ...]`（1手で同じ相手に複数乗ることがある）。
@@ -333,7 +335,7 @@ def hit_damage(entries, raw, defense, defender_max_hp,
     （ゲームは同じ相手の2本目で素点を上書きする）。そこから k で割り戻した基礎に、
     裁き1本ずつの k を掛けて r を作り、`multiplier × r × r ÷ (r + 防御)` を足し合わせる。
     `bonus` は基礎への上乗せ（仲間の武器。`ally_gear_bonus`）。
-    `enemy` なら敵の一撃の強さ（`ENEMY_DAMAGE`）を掛ける。
+    `enemy` なら敵の一撃の強さ（`ENEMY_DAMAGE`。その敵を受け持つ MOD の率があれば `enemy_percent`）を掛ける。
     """
     entries = list(entries) or [("normal", 1)]
     raw = max(0.0, _number(raw, 0.0))
@@ -347,7 +349,7 @@ def hit_damage(entries, raw, defense, defender_max_hp,
     damage *= level_multiplier(level_gap(attacker_level, defender_level))
     damage *= _number(out_mult, 1.0) * _number(in_mult, 1.0)
     if enemy:
-        damage *= ENEMY_DAMAGE / 100.0
+        damage *= (ENEMY_DAMAGE if enemy_percent is None else enemy_percent) / 100.0
     defender_max_hp = _number(defender_max_hp, 0.0)
     if defender_max_hp > 0:
         damage = max(damage, defender_max_hp * MIN_FRACTION)
@@ -594,6 +596,9 @@ def attribute_recipe(kind, attribute_type, power):
 
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME, tag=LOG_TAG + ":")
+    # 敵の体力と一撃に率を掛けている MOD として、ローダの窓口に登録する。特定の敵を受け持つ MOD（`339_` の刺客）は、
+    # ここが居れば自分で体力を伸ばさず、窓口に率を答える（`combat.enemy_percent`）
+    combat.declare(combat.ENEMY_SCALER, lambda _app, _holder: True, owner=OWNER, write=write)
     warn = ctx.warner(LOG_TAG)
 
     state = {
@@ -1023,11 +1028,12 @@ def apply(ctx):
                     defense = gear_defense(defense, gear)
                     gear_note += " armor={:g}".format(gear)
             enemy = action["side"] == ENEMY_SIDE
+            enemy_pct = combat.enemy_percent(combat.ENEMY_DAMAGE, app, attacker, ENEMY_DAMAGE) if enemy else None
             final = hit_damage(entries, attack, defense, defender_max,
                                out_mult=out_mult, in_mult=in_mult,
                                attacker_level=attacker_level,
                                defender_level=defender_level,
-                               enemy=enemy, bonus=bonus)
+                               enemy=enemy, bonus=bonus, enemy_percent=enemy_pct)
             guard_turn = state["guard_turn"] is not None and attacker is state["guard_turn"]
             if guard_turn:
                 final = 0
@@ -1053,7 +1059,7 @@ def apply(ctx):
                       attacker_level if attacker_level is not None else "?",
                       defender_level if defender_level is not None else "?",
                       final, final / defender_max, int(defender_max),
-                      " enemy x{}%".format(ENEMY_DAMAGE) if enemy else "",
+                      " enemy x{:g}%".format(enemy_pct) if enemy else "",
                       (" guard" if guard else "") + gear_note,
                       "" if out_mult == 1.0 and in_mult == 1.0 else
                       " mults=({:.2f},{:.2f})".format(out_mult, in_mult)))
@@ -1411,7 +1417,8 @@ def apply(ctx):
             level = frames.attr(holder, "experience_level", None)
             original = frames.attr(holder, "original_max_hp", None)
             reference = original if isinstance(original, (int, float)) else frames.attr(holder, "max_hp", None)
-            target = scaled_hp(reference, constitution, level)
+            percent = combat.enemy_percent(combat.ENEMY_HP, app, holder, ENEMY_HP)
+            target = scaled_hp(reference, constitution, level, percent)
             if target is None:
                 continue
             ratio = target / float(reference)
@@ -1419,8 +1426,8 @@ def apply(ctx):
                 value = frames.attr(holder, field, None)
                 if isinstance(value, (int, float)):
                     setattr(holder, field, max(1, int(round(value * ratio))))
-            write("enemy hp: {} {} -> {} (x{}%)".format(
-                name_of(holder, key), int(reference), frames.attr(holder, "max_hp", "?"), ENEMY_HP))
+            write("enemy hp: {} {} -> {} (x{:g}%)".format(
+                name_of(holder, key), int(reference), frames.attr(holder, "max_hp", "?"), percent))
 
     # ================================================================ 通常攻撃の頼み
     def rewrite_outgoing(texts, site):

@@ -10,7 +10,7 @@
     "en": "Bandits, epidemics and other troubles, or good events such as festivals and harvests, happen in towns as days pass. Troubles worsen in two stages and finally settle; a quest on that town's board solves them. Good events need no quest and run their own stages. Prices, conversations and scene narration reflect the situation; the mods button at the bottom left opens an overview. More kinds can be added as files",
     "ja": "日数が進むと、各地の街に盗賊や疫病などの困り事や、祝祭や豊作などの良い出来事が起きる。困り事は放っておくと 兆し → 悪化 → 深刻 と進んで最後は自然に収まり、その街の掲示板の依頼で片付けられる。良い出来事は依頼が出ず、出来事ごとの段階を進んで収まる。値段・会話・情景描写に街の様子が出る。画面左下の MOD 用のボタンから各地の出来事の一覧を見られる。出来事はファイルで足せる"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "after": [
     "405_regional_economy"
@@ -40,8 +40,22 @@
         "en": "Days between rolls"
       },
       "note": {
-        "ja": "宿泊や移動で日数が進み、通算でこの日数が経つたびに、世界全体で1回、出来事が起きるかを引く。一度に何日進んでも、引くのは1回だけ",
-        "en": "Every this many days, one roll for the whole world. One roll per day-advance at most"
+        "ja": "宿泊や移動で日数が進み、通算でこの日数（とばらつきの分）が経つたびに、世界全体で1回、出来事が起きるかを引く。一度に何日進んでも、引くのは1回だけ",
+        "en": "Every this many days (plus or minus the spread), one roll for the whole world. One roll per day-advance at most"
+      }
+    },
+    "ROLL_SPREAD_DAYS": {
+      "type": "int",
+      "default": 15,
+      "min": 0,
+      "max": 3650,
+      "label": {
+        "ja": "抽選の間隔のばらつき（日）",
+        "en": "Spread of the days between rolls"
+      },
+      "note": {
+        "ja": "抽選の間隔を、前後にこの日数までランダムにずらす（既定なら 15〜45 日）。ずらす日数は抽選のたびに決め直す。間隔は1日より短くならない。0 なら毎回同じ間隔",
+        "en": "Shifts the days between rolls by a random amount up to this many days either way (15 to 45 days by default), chosen again after each roll. Never shorter than one day. 0 keeps the interval fixed"
       }
     },
     "ROLL_PERCENT": {

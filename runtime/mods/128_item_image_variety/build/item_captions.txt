@@ -1553,10 +1553,10 @@ itm_i13_r0_03	magical_material	A brown amber core inside brass rings.
 itm_i13_r0_04	magical_material	A blue blue crystal shard core with a faint cyan glow.
 itm_i13_r0_05	magical_material	A red red crystal core in a spiked shell.
 itm_i13_r0_06	magical_material	An olive green core covered in thorns.
-itm_i13_r0_07	magical_material	A pink pink crystal core in a metal frame with a faint magenta glow.
+itm_i13_r0_07	magical_material	A brown pink crystal core in a metal frame with a faint magenta glow.
 itm_i13_r0_08	magical_material	A brown orange core inside a brass gear frame.
 itm_i13_r0_09	magical_material	A purple purple crystal core with a faint purple glow.
-itm_i13_r0_10	magical_material	A blue blue light core on a stand with a faint blue glow.
+itm_i13_r0_10	magical_material	A brown blue light core on a stand with a faint blue glow.
 itm_i13_r0_11	magical_material	An olive green core covered in thorns.
 itm_i13_r1_00	magical_material	A purple swirling purple mist in a glass vial with a faint purple glow.
 itm_i13_r1_01	magical_material	A blue white vapor in a glass vial.
@@ -1670,7 +1670,7 @@ itm_i14_r4_00	relic	A brown brass relic with a blue core.
 itm_i14_r4_01	relic	A blue blue orb inside brass machinery with a faint blue glow.
 itm_i14_r4_02	relic	A brown golden armillary with a blue light.
 itm_i14_r4_03	relic	A brown red fiery orb in a brass frame.
-itm_i14_r4_04	relic	A brown brass gear ring with a blue light.
+itm_i14_r4_04	relic	A brown brass gear ring with a blue light with a faint blue glow.
 itm_i14_r4_05	relic	A brown glowing golden cube relic.
 itm_i14_r4_06	relic	A brown golden armillary with a blue star with a faint blue glow.
 itm_i14_r4_07	relic	A brown red orb in golden rings.
@@ -1940,16 +1940,16 @@ itm_i18_r1_11	small_weapon	A black wakizashi short sword.
 itm_i18_r1_12	small_weapon	A black wakizashi short sword.
 itm_i18_r2_00	large_weapon	A white odachi great sword.
 itm_i18_r2_01	large_weapon	A white odachi great sword.
-itm_i18_r2_02	large_weapon	A black cursed odachi with red veins.
+itm_i18_r2_02	large_weapon	A brown cursed odachi with red veins.
 itm_i18_r2_03	large_weapon	A purple odachi great sword.
 itm_i18_r2_04	large_weapon	A black odachi great sword.
 itm_i18_r2_05	large_weapon	A black odachi great sword.
 itm_i18_r2_06	large_weapon	A brown notched odachi.
 itm_i18_r2_07	large_weapon	A brown odachi great sword.
 itm_i18_r2_08	large_weapon	A brown golden odachi.
-itm_i18_r2_09	large_weapon	A black cursed odachi with red veins.
+itm_i18_r2_09	large_weapon	A red cursed odachi with red veins.
 itm_i18_r2_10	large_weapon	A brown nodachi.
-itm_i18_r2_11	large_weapon	A grey nodachi.
+itm_i18_r2_11	large_weapon	A black nodachi.
 itm_i19_r0_00	long_weapon	A brown yari spear.
 itm_i19_r0_01	long_weapon	A red yari spear.
 itm_i19_r0_02	long_weapon	A brown jumonji cross spear.
@@ -2097,7 +2097,7 @@ itm_i21_r0_02	shield	A grey cracked riot shield.
 itm_i21_r0_03	shield	A black black ballistic shield with a viewport.
 itm_i21_r0_04	shield	A golden olive ballistic shield with a viewport.
 itm_i21_r0_05	shield	A black small arm shield.
-itm_i21_r0_06	shield	A black perforated steel shield.
+itm_i21_r0_06	shield	A grey perforated steel shield.
 itm_i21_r0_07	shield	A black black ballistic shield with a viewport.
 itm_i21_r0_08	shield	A brown tan armored shield.
 itm_i21_r0_09	shield	A black dark armored shield.
@@ -2371,7 +2371,7 @@ itm_i24_r3_06	tool	A red red lighter.
 itm_i24_r3_07	tool	A brown brass lighter.
 itm_i24_r3_08	tool	A brown engraved lighter.
 itm_i24_r3_09	treasure	A red ring in a red box.
-itm_i24_r3_10	treasure	A blue ring in a blue box.
+itm_i24_r3_10	treasure	A blue ring in a blue box with a faint blue glow.
 itm_i24_r3_11	treasure	A black ring in a black box.
 itm_i24_r3_12	accessory	A brown blue gem necklace with a faint blue glow.
 itm_i24_r3_13	accessory	A brown red gem necklace.
@@ -2528,7 +2528,7 @@ itm_i33_r0_10	tool	A brown improvised detonator box with wires.
 itm_i33_r0_11	tool	A brown plastic bottle canteen wrapped in cloth.
 itm_i34_r0_00	tool	A blue coiled translucent medical cable with silver connectors.
 itm_i34_r0_01	tool	A black data tablet.
-itm_i34_r0_02	tool	A grey magnetic grip tool.
+itm_i34_r0_02	tool	A black magnetic grip tool.
 itm_i34_r0_03	tool	A black hacking device with exposed wiring.
 itm_i34_r0_04	tool	A grey holo projector disc.
 itm_i34_r0_05	accessory	A black cybernetic eye.
@@ -2561,7 +2561,7 @@ itm_i36_r0_07	accessory	A brown star-shaped sheriff badge.
 itm_i36_r0_08	accessory	A brown open pocket watch.
 itm_i36_r0_09	tool	A brown kerosene lantern.
 itm_i36_r0_10	tool	A brown spur.
-itm_i36_r0_11	tool	A black small tobacco tin.
+itm_i36_r0_11	tool	A grey small tobacco tin.
 itm_i37_r0_00	magical_material	A floating purple crystal with small shards.
 itm_i37_r0_01	magical_material	A cluster of pale blue hexagonal crystals.
 itm_i37_r0_02	magical_material	A golden crystal with swirling star specks inside.
