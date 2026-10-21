@@ -115,6 +115,8 @@ def pieces_of(ledger, entry):
         lead = "{}を解決したことで、".format(entry.get("incident") or "街の出来事")
     elif kind == rules.ECHO:
         lead = "{}への働きが伝わり、".format(_name(ledger, entry.get("by")))
+    elif kind == rules.HUNTER:
+        lead = "{}を討ったことで、".format(entry.get("incident") or "刺客")
     else:
         lead = "会話により、"
     if changed:

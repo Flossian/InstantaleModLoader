@@ -10,9 +10,11 @@ MOD が選択肢にボタンを足すとき、守ることが多い（どれか1
 
 これらを MOD ごとに書くのをやめ、ここで1か所に引き受ける。MOD が登録するのは処理だけ:
 
-    choices.provide(ctx, screen, refresh=fn, after=fn2, presses={"印の頭": handler, ...}, intercept=fn3)
+    choices.provide(ctx, screen, refresh=fn, after=fn2, presses={"印の頭": handler, ...}, intercept=fn3, trim=fn4)
         refresh(app, buttons)     組み直しの前。ゲームの一覧（`app.buttons`）を直に書き換えてよい。
                                   一覧が空でも `None` でも呼ぶ（包んでいたときと同じ。見るかどうかは MOD が決める）
+        trim(app, buttons)        全部の MOD の `refresh` の後（組み直しの前）。ほかの MOD が足したボタンまで含めて
+                                  一覧を絞るとき（`339_` の刺客の会話は「受けて立つ」だけにする）。`refresh` と同じ順
         after(app)                組み直しの後（`to_display_buttons` が組み上がった後）。
                                   ゲームの組み直しに渡された引数は `choices.refreshing()`
         handler(app, action)      `screen.mark_of(entry)` が「印の頭」で始まるボタンが押された。
@@ -26,7 +28,7 @@ MOD が選択肢にボタンを足すとき、守ることが多い（どれか1
 呼ぶ順は、MOD が自分で包みを重ねていたときと同じにする（乗せ替えても並びが変わらないように）。
 包みは後から読み込んだ MOD ほど外側に重なるので、
 
-    refresh / intercept   後から登録した MOD が先
+    refresh / trim / intercept   後から登録した MOD が先
     after                 先に登録した MOD が先
 
 窓口が引き受けること:
@@ -130,11 +132,11 @@ def _owner_of(ctx, owner, fns):
     return str(id(ctx))
 
 
-def provide(ctx, screen=None, refresh=None, after=None, presses=None, intercept=None, owner=None):
+def provide(ctx, screen=None, refresh=None, after=None, presses=None, intercept=None, owner=None, trim=None):
     """`screen`（`ui.Screen`。印のキーを持つ。印を使わないなら None）で作るボタンの扱いを窓口に預ける。"""
     store = _store()
     handlers = list((presses or {}).items())
-    key = _owner_of(ctx, owner, [fn for fn in (refresh, after, intercept) if fn is not None]
+    key = _owner_of(ctx, owner, [fn for fn in (refresh, after, intercept, trim) if fn is not None]
                     + [handler for _prefix, handler in handlers])
     # その世代で初めての登録なら末尾へ付け直す。前の世代の並びを持ち越すと、注入し直しで足した・
     # 並べ替えた MOD の呼ぶ順が適用順とずれる。全部が登録し直せば、並びはこの世代の apply の順になる。
@@ -146,7 +148,7 @@ def provide(ctx, screen=None, refresh=None, after=None, presses=None, intercept=
         store["order"].append(key)
     seen[key] = generation
     store["providers"][key] = {
-        "ctx": ctx, "screen": screen, "refresh": refresh, "after": after,
+        "ctx": ctx, "screen": screen, "refresh": refresh, "after": after, "trim": trim,
         "presses": handlers, "intercept": intercept,
         "save_soon": ui.saver(ctx, getattr(screen, "write", None), getattr(screen, "tag", key)),
     }
@@ -416,6 +418,11 @@ def _call_refresh(app, buttons):
             fn(app, buttons)
         except Exception:
             _oops(provider, "{} could not add its choices".format(key))
+    for key, provider, fn in _each("trim", reverse=True):
+        try:
+            fn(app, buttons)
+        except Exception:
+            _oops(provider, "{} could not trim the choices".format(key))
 
 
 def _call_after(app):

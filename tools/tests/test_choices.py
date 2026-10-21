@@ -217,6 +217,20 @@ choices.on_refresh(ctx_a, app)
 check("用済みの ctx の登録は呼ばない", calls == ["a"], calls)
 ctx_b.dead = False
 
+
+def trim_a(app, buttons):
+    calls.append("trim-a")
+    buttons[:] = [entry for entry in buttons if entry["text"] == "出る"]
+
+
+choices.provide(ctx_a, screen_a, refresh=refresh_a, after=after_a, presses={"a:": press_a}, trim=trim_a)
+calls.clear()
+choices.on_refresh(ctx_a, app)
+check("trim は全部の MOD の refresh の後（後から登録した MOD が足したボタンまで絞れる）",
+      calls == ["b2", "a", "trim-a"] and [e["text"] for e in app.buttons] == ["出る"],
+      (calls, [e["text"] for e in app.buttons]))
+choices.provide(ctx_a, screen_a, refresh=refresh_a, after=after_a, presses={"a:": press_a})
+
 print("[押下]")
 press = ctx_a.hooks[choices.PRESS_TARGET]
 app.buttons = [{"text": "出る", "spec": Spec("MovePhaseManager")},

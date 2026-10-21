@@ -20,12 +20,13 @@ import json
 import os
 import random
 import sys
+import types
 
 from instantale_modloader import choices, frames, hudicons, jobs, llm, modnpc, talk_summary, ui
 from instantale_modloader import state as loader_state
 from instantale_modloader.state import UNKNOWN_WORLD, WorldStore, world_key
 
-from . import material, rules, view, window
+from . import hunter, material, rules, view, window
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
 #      `tools/check_mods.py` が AST で突き合わせる）------------------------
@@ -35,12 +36,18 @@ LOSS_PER_STEP = 8             # 会話の判定 -1 あたりに下がる点
 INCIDENT_GAIN = 10            # 338 の出来事を主人公が片付けたとき、その街の勢力に上がる点
 TREND_DAYS = 30               # 情勢を進める間隔（日）。0 で進めない
 TREND_SPREAD_DAYS = 15        # 間隔に足すランダムな日数の上限（情勢が動くたびに 0〜これを引き直す）
+HUNTER_HOSTILE_RATE = 20       # 敵対の勢力の街に着いたとき、刺客が現れる確率（％）
+HUNTER_WARY_RATE = 0          # 緊張の勢力の街に着いたとき、刺客が現れる確率（％）。0 で現れない
+HUNTER_GAP_DAYS = 10          # 刺客が現れてから、次の刺客が現れうるまでの日数
+HUNTER_STANDING_LOSS = 10     # 刺客を討ったとき、その勢力からの見られ方が下がる量
+HUNTER_WANTED_LOSS = 10       # 刺客を討ったとき、その街の手配度が下がる量
 RUMOR_DAYS = 90              # 情勢の噂を会話に足しておく日数
 ORGANIZE_NEW_WORLDS = False   # 新しく作る世界に組織を設ける（全世界共通。世界ごとの設定では効かない）
 ADD_ORGANIZATIONS = False     # 設定に勢力が無い既存の世界に組織を設ける（ワールド個別で入れる）
 
 SETTING_NAMES = ("ENABLED", "ADD_ORGANIZATIONS", "GAIN_PER_STEP", "LOSS_PER_STEP", "INCIDENT_GAIN",
-                 "TREND_DAYS", "TREND_SPREAD_DAYS", "RUMOR_DAYS")
+                 "TREND_DAYS", "TREND_SPREAD_DAYS", "RUMOR_DAYS", "HUNTER_HOSTILE_RATE", "HUNTER_WARY_RATE",
+                 "HUNTER_GAP_DAYS", "HUNTER_STANDING_LOSS", "HUNTER_WANTED_LOSS")
 
 # ---- 設定にしない定数 ----------------------------------------------------
 OWNER = "339_town_factions"
@@ -562,6 +569,9 @@ def apply(ctx):
         """
         if not npc_id or modnpc.is_mod_npc(npc_id) or npc_id == "player":
             return None, None
+        hunted = rules.hunter_of(ledger, npc_id)
+        if hunted is not None and hunted.get("status") in rules.HUNTER_ALIVE:
+            return hunted.get("faction"), rules.MEMBER      # 刺客はその勢力の一員（どの街で会っても）
         if npc_id in [str(x) for x in ui.party_member_ids(app)]:
             return None, None               # 仲間は主人公を個人として知っている
         home = home_town(app, npc_id)
@@ -584,6 +594,9 @@ def apply(ctx):
         player = talk_summary.player_name(app)
         lines = []
         faction_id, role = faction_for(app, ledger, npc_id)
+        mission = hunter_note(app, ledger, npc_id, player)
+        if mission:
+            lines.append(mission)
         if faction_id:
             stance = rules.stance_text(ledger, faction_id, player, role)
             if stance:
@@ -600,12 +613,20 @@ def apply(ctx):
     modnpc.install(ctx, write=write)
     modnpc.register(OWNER, modnpc.ANY, notes=notes, write=write)
 
+    # ------------------------------------------------------------ 勢力の刺客（hunter.py）
+    hunter_note = hunter.install(types.SimpleNamespace(
+        ctx=ctx, write=write, worlds=worlds, ensure=ensure, rules=rules, owner=OWNER, rng=RNG,
+        cfg=lambda: {name: globals()[name] for name in SETTING_NAMES},
+        notify=lambda key: hudicons.notify(ICON_KEY, playthrough=key)))
+
     # ------------------------------------------------------------ 会話の要約への相乗り
     def begin(talk):
         app = talk["app"]
         ledger = ensure(app)
         if not ledger or ledger.get("status") != rules.READY:
             return None
+        if rules.hunter_of(ledger, talk["npc_id"]) is not None:
+            return None             # 刺客との会話では動かさない（動くのは討ったときだけ。VERIFICATION.md §3.98「勢力の刺客」）
         faction_id, role = faction_for(app, ledger, talk["npc_id"])
         # 勢力の者として主人公を見ている相手（一員・他の勢力寄り）との会話だけが見られ方を動かす
         if not faction_id or role not in rules.JUDGING_ROLES                 or not talk_summary.player_engaged(talk["messages"]):

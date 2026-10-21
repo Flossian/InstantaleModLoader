@@ -287,6 +287,28 @@ check("足した組で情勢が動く", hand["relations"]["f1|f3"]["stage"] == -
 check("揃った台帳は直さない", rules.repair(hand) == [])
 check("作る前の台帳には触らない", rules.repair(rules.empty_ledger()) == [])
 
+print("[規則] 勢力の刺客")
+check("確率は敵対なら敵対の値、緊張なら緊張の値、それより上は 0",
+      rules.hunter_rate(-2, 20, 0) == 20 and rules.hunter_rate(-1, 20, 0) == 0
+      and rules.hunter_rate(-1, 20, 15) == 15 and rules.hunter_rate(0, 20, 15) == 0
+      and rules.hunter_rate(-2, 150, 0) == 100 and rules.hunter_rate(-2, "x", 0) == 0)
+check("次の刺客までの日数", rules.hunter_due(None, 50, 10) and not rules.hunter_due(45, 50, 10)
+      and rules.hunter_due(40, 50, 10) and not rules.hunter_due(40, None, 10))
+pack = {"hunters": {"91": {"faction": "f1", "status": "escaped", "day": 30},
+                    "90": {"faction": "f1", "status": "dead", "day": 10},
+                    "92": {"faction": "f2", "status": "ready", "day": 5},
+                    "93": {"faction": "f1", "status": "ready", "day": 40}}}
+check("待っている刺客はその勢力の生きている古い順", rules.waiting_hunter(pack, "f1", lambda i: True) == "91"
+      and rules.waiting_hunter(pack, "f1", lambda i: i != "91") == "93"
+      and rules.waiting_hunter(pack, "f3", lambda i: True) is None)
+check("討ったときの見られ方の動き", rules.hunter_loss({"standing": {"f1": {"score": -70}}}, "f1", 10)
+      == [("f1", -70, -80, rules.HUNTER)] and rules.hunter_loss({"standing": {}}, "f1", 10) == [])
+check("手配度はゲームが下げた分を重ねない", rules.wanted_after(10, 10, 10) == 0 and rules.wanted_after(10, 0, 10) == 0
+      and rules.wanted_after(10, -5, 10) == -5 and rules.wanted_after(None, 10, 10) == 10
+      and rules.wanted_after(10, 10, 0) == 10)
+check("逃げた後の手配度は戦闘の前より下げない", rules.wanted_after_escape(0, -10) == 0
+      and rules.wanted_after_escape(0, 5) == 5 and rules.wanted_after_escape(None, -10) == -10)
+
 # ================================================================ 材料
 print("[材料]")
 SAVE = {
@@ -372,6 +394,16 @@ class Character:
         self.name = name
 
 
+class PhaseSpec:
+    """ゲームの `PhaseSpec` の代わり（`ui.cls_of` は `__main__` から引く。この検査が `__main__`）。"""
+
+    def __init__(self, cls_name, args):
+        self.cls_name, self.args = cls_name, list(args)
+
+    def to_dict(self):
+        return {"cls_name": self.cls_name, "args": list(self.args)}
+
+
 class InstantaleApp:
     def __init__(self):
         self.world = World()
@@ -379,6 +411,10 @@ class InstantaleApp:
         self.save_data_dict = json.loads(json.dumps(SAVE))
         self.world_dict = self.save_data_dict
         self.party = ["player"]
+        self.texts = []
+
+    def add_text(self, text):
+        self.texts.append(text)
 
     def elapse_days(self, days):
         self.world.days_elapsed += days
@@ -569,9 +605,10 @@ def close(ctx, character, answer):
         return structure(**data)
 
     def resolver(player, messages_, life_log, character_instance, emotion, worldview):
-        # 同じ送信の境目には 339 の世界の生成の包みも載る。要約の窓口の包み（最初に載せたもの）を呼ぶ
-        return ctx.hooks[talk_summary.SEND_TARGET][0](game_send, "conversation_resolver",
-                                                      [dict(SYSTEM)] + SPOKE, Result)
+        # 同じ送信の境目には 339 の世界の生成の包みと刺客の書き換え（`llm.wrap_outgoing`）も載る。要約の窓口の包みを呼ぶ
+        summary_hook = next(fn for fn in ctx.hooks[talk_summary.SEND_TARGET]
+                            if getattr(fn, "__module__", "") == talk_summary.__name__)
+        return summary_hook(game_send, "conversation_resolver", [dict(SYSTEM)] + SPOKE, Result)
 
     return ctx.hook(talk_summary.RESOLVER_TARGET)(resolver, APP.player, SPOKE, {}, character, "", "")
 
@@ -972,6 +1009,89 @@ book = ledger_of(app)
 check("足した勢力の組でも情勢が進む", book["events"] and book["events"][-1]["a"] in ("f2", "f3")
       and book["relations"]["f2|f3"]["stage"] == -1, (book["events"], book["relations"]))
 check("例外が無い（手で直した台帳）", not ctx.errors, ctx.errors)
+
+print("[流れ] 勢力の刺客（会話のボタンと戦闘の後）")
+module, ctx, app = fresh()
+notes_fn()({"app": app, "npc_id": "30"})
+store = module._store()["worlds"]
+key = store.playthrough(app)
+with store.lock:
+    book = store.load(key)
+    rules.hunters_of(book).update({
+        "90": {"faction": "f1", "name": "ヴァルド", "title": "異端審問官", "town": "7", "status": "met", "day": 100},
+        "91": {"faction": "f1", "name": "ゼイン", "title": "異端審問官", "town": "7", "status": "met", "day": 100}})
+    before_score = book["standing"]["f1"]["score"]
+    store.save(key)
+for npc_id, name in (("90", "ヴァルド"), ("91", "ゼイン")):
+    app.world.characters[npc_id] = Character(npc_id, name)
+    app.world.characters[npc_id].config = {"is_dead": False}
+    app.world.characters[npc_id].current_hp = 300
+app.player.current_area = "7"
+end_entry = {"text": "会話を終了する", "spec": PhaseSpec("ConversationEndManager", ["90", None, "<行動: 会話を終了する>"])}
+app.buttons = [{"text": "売買する", "spec": PhaseSpec("ShoppingStartManagerRemake", [])}, end_entry]
+hunter_provider = choices._store()["providers"][module.OWNER + ":hunter"]
+hunter_provider["trim"](app, app.buttons)
+check("刺客との会話は「受けて立つ」だけになる（ゲームの終了のボタンの文言だけを変える）",
+      [b["text"] for b in app.buttons] == ["受けて立つ"] and app.buttons[0] is end_entry, app.buttons)
+# ロードの後のボタン（セーブに残るのは文言と spec だけ）
+loaded = [{"text": "受けて立つ", "spec": PhaseSpec("ConversationEndManager", ["90", None, "<行動: 会話を終了する>"])}]
+other =[{"text": "会話を終了する", "spec": PhaseSpec("ConversationEndManager", ["30", None, "x"])}]
+app.buttons = list(other)
+hunter_provider["trim"](app, app.buttons)
+check("ほかの相手の会話は変えない", [b["text"] for b in app.buttons] == ["会話を終了する"])
+check("ほかの相手の「会話を終了する」は握らない", hunter_provider["intercept"](app, other[0], 0) is False)
+ended = []
+screen_cls = ui.Screen
+original_end = screen_cls.end_conversation
+screen_cls.end_conversation = lambda self, app_, entry, follow_up, **kw: ended.append((entry, kw.get("end_text")))
+try:
+    taken = hunter_provider["intercept"](app, loaded[0], 0)
+finally:
+    screen_cls.end_conversation = original_end
+check("刺客の「受けて立つ」は握って、会話を閉じてから戦う", taken is True and ended
+      and ended[0][0] is loaded[0] and "ヴァルドの挑戦を受けて立ち" in ended[0][1], ended)
+text = notes_fn()({"app": app, "npc_id": "90"}) or ""
+check("刺客の会話に使命と勢力の構えを足す", "【刺客】あなたは白の教団の異端審問官" in text and "白の教団に属する者として" in text, text)
+
+
+class Phase(object):
+    def __init__(self, app, end_type=None):
+        self.app, self.end_type = app, end_type
+
+
+start_hook = ctx.hook("__main__:BattleStartManager.__init__")
+end_hook = ctx.hook("__main__:BattleEndManager.end_phase")
+start_hook(lambda self, *a, **k: None, Phase(app), app, "specific", ["90"])
+check("刺客との戦闘を見分ける", ledger_of(app)["hunters"]["90"]["status"] == "fighting")
+app.world.characters["90"].current_hp = 0
+end_hook(lambda self: None, Phase(app, "won"))
+book = ledger_of(app)
+check("勝ったら刺客は死ぬ", book["hunters"]["90"]["status"] == "dead"
+      and app.world.characters["90"].config["is_dead"] is True, book["hunters"]["90"])
+check("勝ったら勢力の見られ方が下がり、来歴に刺客の名", book["standing"]["f1"]["score"] == max(-100, before_score - 10)
+      and book["history"][-1]["kind"] == "hunter" and book["history"][-1]["incident"] == "白の教団の異端審問官",
+      (book["standing"]["f1"], book["history"][-1:]))
+check("勝ったら街の手配度が下がる", app.player.area_history["7"]["lawfulness"] == -170,
+      app.player.area_history["7"])
+check("勝ったら勢力に伝わることを1行出す", app.texts[-1:] == ["白の教団の異端審問官を討ったことは、白の教団の者たちにもすぐに伝わるだろう。"],
+      app.texts)
+start_hook(lambda self, *a, **k: None, Phase(app), app, "specific", ["91"])
+
+
+def game_end_escaped(self):
+    app.player.area_history["7"]["lawfulness"] -= 10      # ゲームは衛兵との戦闘として、逃げても 10 下げる
+
+
+end_hook(game_end_escaped, Phase(app, "escaped"))
+check("逃げたら刺客は生きていて、また現れる", ledger_of(app)["hunters"]["91"]["status"] == "escaped"
+      and app.world.characters["91"].config["is_dead"] is False)
+check("逃げたらゲームが下げた手配度を戦闘の前へ戻す", app.player.area_history["7"]["lawfulness"] == -170,
+      app.player.area_history["7"])
+start_hook(lambda self, *a, **k: None, Phase(app), app, "specific", ["91"])
+start_hook(lambda self, *a, **k: None, Phase(app), app, "guard", None)
+end_hook(lambda self: None, Phase(app, "won"))
+check("刺客でない戦闘が後に始まれば前の印を持ち越さない", ledger_of(app)["hunters"]["91"]["status"] == "fighting")
+check("例外が無い（刺客）", not ctx.errors, ctx.errors)
 
 print("[世界を作るとき]")
 WORLD_PROMPT = "面白そうな世界の概要を生成してください。\n【構造のルール】\n- 3層\n\n【注意】\n- 命名において…"

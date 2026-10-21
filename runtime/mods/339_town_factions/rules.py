@@ -890,6 +890,8 @@ def add_event(ledger, event):
 # ============================================================ 見られ方の来歴
 #: 来歴の種類。
 TALK, INCIDENT, ECHO, RECONCILE = "talk", "incident", "echo", "reconcile"
+#: 勢力の刺客を討った回（`incident` に刺客の呼び名）。
+HUNTER = "hunter"
 
 
 def add_history(ledger, entry):
@@ -995,3 +997,76 @@ def trend_due(last_day, day, every, extra=0):
     if last_day is None:
         return False
     return day - last_day >= every + max(0, extra)
+
+
+# ============================================================ 刺客
+#: 刺客の控え（台帳の `hunters`。`{npc_id: {faction, name, title, town, status, day}}`）の状態。
+HUNTER_READY = "ready"          # 作った。まだ呼び止めていない
+HUNTER_MET = "met"              # 呼び止めた（会話の中）
+HUNTER_FIGHTING = "fighting"    # 戦っている
+HUNTER_ESCAPED = "escaped"      # 主人公が戦闘から逃げた。生きていて、また現れる
+HUNTER_DEAD = "dead"            # 主人公が討った
+#: まだ主人公の前に現れうる状態。
+HUNTER_ALIVE = (HUNTER_READY, HUNTER_MET, HUNTER_FIGHTING, HUNTER_ESCAPED)
+
+
+def hunter_rate(stage, hostile_rate, wary_rate):
+    """その段階の勢力の街で刺客が現れる確率（％）。敵対と緊張のほかは 0。"""
+    rate = hostile_rate if stage <= -2 else wary_rate if stage == -1 else 0
+    try:
+        return max(0, min(100, int(rate)))
+    except (TypeError, ValueError):
+        return 0
+
+
+def hunters_of(ledger):
+    """台帳の刺客の控え。無ければ作って返す（版5 から）。"""
+    found = ledger.get("hunters")
+    if not isinstance(found, dict):
+        found = ledger["hunters"] = {}
+    return found
+
+
+def hunter_of(ledger, npc_id):
+    row = (ledger.get("hunters") or {}).get(str(npc_id)) if isinstance(ledger, dict) else None
+    return row if isinstance(row, dict) else None
+
+
+def waiting_hunter(ledger, faction_id, alive):
+    """その勢力のまだ現れうる刺客の id（いちばん古いもの）。`alive(npc_id)` が偽の刺客は数えない。"""
+    rows = [(row.get("day") or 0, npc_id) for npc_id, row in (ledger.get("hunters") or {}).items()
+            if isinstance(row, dict) and row.get("faction") == faction_id
+            and row.get("status") in HUNTER_ALIVE and alive(npc_id)]
+    return min(rows)[1] if rows else None
+
+
+def hunter_due(last_day, day, gap):
+    """前の刺客から `gap` 日たったか。まだ現れたことが無ければ真。"""
+    if day is None:
+        return False
+    last = _day(last_day)
+    return last is None or day - last >= max(0, gap)
+
+
+def hunter_loss(ledger, faction_id, loss):
+    """刺客を討ったときの見られ方の動き（`apply_moves` / `record_moves` の形）。勢力が無ければ空。"""
+    row = (ledger.get("standing") or {}).get(faction_id)
+    if not isinstance(row, dict) or loss <= 0:
+        return []
+    before = row.get("score", 0)
+    return [(faction_id, before, clamp_score(before - int(loss)), HUNTER)]
+
+
+def wanted_after(before, current, loss):
+    """刺客を討った後の手配度。ゲームが先に下げていれば重ねない（前から `loss` 下がった所まで）。"""
+    if before is None or loss <= 0:
+        return current
+    target = int(before) - int(loss)
+    return target if current is None or current > target else current
+
+
+def wanted_after_escape(before, current):
+    """刺客から逃げた後の手配度。ゲームが下げた分を戦闘の前へ戻す（上がっていればそのまま）。"""
+    if before is None or current is None:
+        return current
+    return max(int(before), int(current))

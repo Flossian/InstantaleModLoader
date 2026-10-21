@@ -1690,8 +1690,11 @@ why, by = confinement.why(app)        # 読む側。誰も閉じ込めていな�
 
 ```python
 screen = ui.Screen(ctx, write, tag="…", mark=MARK)        # 印のキーは MOD ごとに別（`mod_` で始める）
-choices.provide(ctx, screen, refresh=fn, after=fn2, presses={"印の頭": handler, ...}, intercept=fn3)
+choices.provide(ctx, screen, refresh=fn, after=fn2, presses={"印の頭": handler, ...}, intercept=fn3, trim=fn4)
 #   refresh(app, buttons)  組み直しの前。ゲームの一覧（`app.buttons`）を直に書き換えてよい。一覧が空でも None でも呼ぶ
+#   trim(app, buttons)     全部の MOD の refresh の後（組み直しの前）。ほかの MOD が足したボタンまで含めて一覧を絞る。
+#                          `339_` の刺客の会話は「受けて立つ」だけにする（`301_` が後から「依頼を受ける（話を切り上げる）」を足し、
+#                          戦わずに抜けられた。実機）
 #   after(app)             組み直しの後（`to_display_buttons` が組み上がった後）
 #   handler(app, action)   `screen.mark_of(entry)` が「印の頭」で始まるボタンが押された。ゲームの押下へは流さない。
 #                          True を返すと、窓口がゲーム自身の保存を呼ぶ（払った・控えを変えた）
@@ -1708,6 +1711,7 @@ choices.ready(app)         # 人物が揃っているか（ロードの途中は
 呼ぶ順は、MOD が自分で包みを重ねていたときと同じにしてある（乗せ替えても並びが変わらない）。
 包みは後から読み込んだ MOD ほど外側に重なるので、`refresh` / `intercept` は後から読み込んだ MOD が先、
 `after` は先に読み込んだ MOD が先。
+`trim` は全部の `refresh` の後で、`refresh` と同じく後から読み込んだ MOD が先。
 
 | 窓口が引き受けること | 中身 |
 |---|---|

@@ -2903,6 +2903,24 @@ BattleStartManager(app, enemy_type='guard', enemy_content=None)
   （`guard_npc_generator` の第3引数と `generate_enemy_instance_from_quest_dict` の
   最後の引数）に渡る難易度を差し替える
 
+#### 特定の人物との戦闘（`enemy_type='specific'`）
+
+`339_town_factions` の刺客で実測した（2026-10-21。VERIFICATION.md §3.98「勢力の刺客」）。
+
+```text
+BattleStartManager(app, 'specific', [<人物の id>])     # 自由行動で特定の相手と戦うときのゲーム自身の形（220_ の記録）
+```
+
+- 敵はその人物そのもの（`world.characters` の `Character`）。戦闘で HP が 0 を割ったまま残る（`-7550/680` を実測）
+- 会話を閉じてから MOD が起こすと、終わり方は依頼の外の戦闘として `BattleEndManager`（`won` / `escaped`）になり、
+  締めは `guard_battle_summarizer`。その頼みの system は「プレイヤーキャラはこのエリアで犯罪者として指名手配されている。
+  先ほど衛兵に発見されて戦闘が始まり、そして終了した。」の決め打ちで、相手が誰でも衛兵との戦闘として語る
+- 手配度は衛兵との戦闘と同じく、**勝っても逃げても 10 下がる**（実測。勝ち 10 → 0、逃げ -10 → -20）
+- 会話の発言から自由行動の GM が始めた戦闘（`FreeInputStart` の中）は `BattleEndInFreeAction` で終わり、勝ち負けの印（`end_type`）が無い。
+  手配度は締めの要約の `lawfulness_loss` 次第（実測1回で 0）。主人公が逃げても、残った仲間が戦い続けて相手を倒した
+- **勝っても相手は死なない**（`config['is_dead']` は立たない）。会話から入った戦闘の後、同じ相手を会話で雇えた（2026-10-06 の `239_` の記録）。
+  退場させるなら MOD が `is_dead` を立てる（§2.22）
+
 ### 2.21 自由生成施設のシーン記述エンジン（`scripts.free_facility`）
 
 main_023 で入ったイベント記述用の実行エンジン。JSON のステップ列を解釈してシーンを走らせる。

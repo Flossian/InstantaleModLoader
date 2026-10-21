@@ -7,8 +7,8 @@
     "ja": "街の勢力"
   },
   "description": {
-    "en": "Factions written in the world setting get a standing toward you, and NPCs of each faction treat you with that bias. Talks move your standing, solving a town's incident pleases its faction, and relations between factions shift on their own as days pass (heard as rumors). Worlds whose setting names fewer than two factions get none. Turn it on per world",
-    "ja": "世界の設定に書かれた勢力ごとに主人公の見られ方を持ち、その勢力の NPC は見られ方に応じた態度で接する。見られ方は会話の中身で動き、街の出来事を片付けるとその街の勢力に好かれる。勢力どうしの仲も日数が進むにつれて動き、噂として聞こえてくる。設定に勢力が2つ以上書かれていない世界では何もしない。世界ごとに有効にする"
+    "en": "Factions written in the world setting get a standing toward you, and NPCs of each faction treat you with that bias. Talks move your standing, solving a town's incident pleases its faction, and relations between factions shift on their own as days pass (heard as rumors). A faction that sees you as its enemy sends someone to challenge you when you walk into its towns. Worlds whose setting names fewer than two factions get none. Turn it on per world",
+    "ja": "世界の設定に書かれた勢力ごとに主人公の見られ方を持ち、その勢力の NPC は見られ方に応じた態度で接する。見られ方は会話の中身で動き、街の出来事を片付けるとその街の勢力に好かれる。勢力どうしの仲も日数が進むにつれて動き、噂として聞こえてくる。敵対している勢力の街を歩いていると、その勢力の刺客が勝負を挑んでくる。設定に勢力が2つ以上書かれていない世界では何もしない。世界ごとに有効にする"
   },
   "version": "5",
   "author": "R01/Flossian",
@@ -148,6 +148,76 @@
       "note": {
         "ja": "勢力どうしの間で起きたことを、NPC が噂として知っている日数",
         "en": "How many days NPCs know the latest rumor about the factions"
+      }
+    },
+    "HUNTER_HOSTILE_RATE": {
+      "type": "int",
+      "default": 20,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "敵対の勢力の街で刺客が現れる確率（％）",
+        "en": "Chance of a hunter in a hostile faction's town (%)"
+      },
+      "note": {
+        "ja": "見られ方が敵対の勢力が治める街に着いたとき、その勢力の刺客が呼び止めて勝負を挑んでくる確率。刺客は「受けて立つ」しか選べず、戦うことになる。0 で現れない",
+        "en": "When you arrive in a town ruled by a faction hostile to you, the chance that one of its people stops you and challenges you. The only choice is to accept and fight. 0 turns it off"
+      }
+    },
+    "HUNTER_WARY_RATE": {
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "緊張の勢力の街で刺客が現れる確率（％）",
+        "en": "Chance of a hunter in a wary faction's town (%)"
+      },
+      "note": {
+        "ja": "見られ方が緊張の勢力の街でも刺客を出すときの確率。0 なら敵対の勢力の街だけで現れる",
+        "en": "The same chance for factions that are only wary of you. 0 means hunters come only from hostile factions"
+      }
+    },
+    "HUNTER_GAP_DAYS": {
+      "type": "int",
+      "default": 10,
+      "min": 0,
+      "max": 3650,
+      "label": {
+        "ja": "次の刺客までに空ける日数",
+        "en": "Days between hunters"
+      },
+      "note": {
+        "ja": "刺客が現れてから、次の刺客が現れうるまでの日数（ゲーム内の日数）。逃げた刺客がまた現れるのにも数える",
+        "en": "In-game days after a hunter appears before another can. It also counts for a hunter you escaped coming back"
+      }
+    },
+    "HUNTER_STANDING_LOSS": {
+      "type": "int",
+      "default": 10,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "刺客を討ったときに下がる見られ方",
+        "en": "Standing lost for killing a hunter"
+      },
+      "note": {
+        "ja": "刺客を倒すと刺客は死に、その勢力からの見られ方がこれだけ下がる。見られ方は -100〜100 で、-81 以下まで落ちると会話でいくら上げても敵対のまま",
+        "en": "Killing a hunter lowers that faction's standing toward you by this much. Standing runs -100 to 100; at -81 or below it stays hostile"
+      }
+    },
+    "HUNTER_WANTED_LOSS": {
+      "type": "int",
+      "default": 10,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "刺客を討ったときに下がる手配度",
+        "en": "Lawfulness lost for killing a hunter"
+      },
+      "note": {
+        "ja": "刺客を倒した街の手配度がこれだけ下がる（NPC 1人を殺めたのと同じ既定値）。ゲームが自分で下げていれば、その分は重ねない",
+        "en": "Lawfulness of the town drops by this much (the same as killing one NPC). If the game already lowered it, that part is not added again"
       }
     }
   }
