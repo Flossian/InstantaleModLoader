@@ -146,10 +146,10 @@ SIZES = {"small_weapon": (32, 32), "medium_weapon": (32, 64),
 PREF = {"small": "small_weapon", "medium": "medium_weapon",
         "large": "large_weapon", "long": "long_weapon",
         "throwable": "throwable_weapon"}
-# 出す絵は素の絵の寸法の SCALE 倍。ゲームはマス1つを画面の約 64px（素の絵の2倍）で描くので、
-# 素の絵と同じ寸法で出すと拡大の粒が出て粗く見えた（VERIFICATION.md §3.26）。
+# 出す絵は素の絵の寸法の SCALE 倍。2倍（ゲームがマス1つを描く画面の大きさ）で作るとゲームの中で素の絵より
+# きめ細かく浮いたので、素の絵と同じ寸法（1）に戻した（作者が実機で見た。VERIFICATION.md §3.26）。
 # 呼ぶ側は素の絵の寸法（SIZES・game_size）で渡し、shrink が倍にする。占めるマスの数は品の種類で決まり、絵の寸法では変わらない
-SCALE = 2
+SCALE = 1
 GAME_SIZES = dict(SIZES, shield=(64, 64), body_armor=(64, 64))
 
 
@@ -257,8 +257,9 @@ def finish(canvas):
     return canvas
 
 
-# 埋める穴の大きさの上限（出す絵の画素数）。引き金の輪や輪の内側のような、もともと空いている所はこれより大きい
-HOLE_MAX = 6
+# 埋める穴の大きさの上限（出す絵の画素数）。2倍の寸法で決めた 6px を寸法の2乗で縮めた値。
+# 引き金の輪や輪の内側のような、もともと空いている所はこれより大きい
+HOLE_MAX = max(1, round(6 / (2 / SCALE) ** 2))
 
 
 def spread_colors(rgb, known, passes):

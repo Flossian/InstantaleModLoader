@@ -28,8 +28,8 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import build_guns as b  # noqa: E402
 
-# 寸法は部位の素の絵の2倍（build_guns.game_size × SCALE）。頭・服・手・脚・装身具は 64x64、胴鎧は 2x2 マスの 128x128。
-# 1マスの品は画面で 64px に描かれるので、縮めも拡大もせずにそのまま出る
+# 防具・服・装身具はどれも 64x64（作者の指示。1マスの品は画面で 64px に描かれるので、縮めずにそのまま出る）
+SIZE = (64, 64)
 COLOR = {"grey": "grey", "white": "white", "black": "black", "tan": "beige", "brass": "gold", "wood": "brown",
          "red": "red", "orange": "orange", "olive green": "olive", "green": "green", "blue": "blue",
          "purple": "purple", "magenta": "magenta"}
@@ -95,7 +95,7 @@ def make_entry(e, sheets, sheet_files):
     if src_key not in _cut_cache:
         _cut_cache[src_key] = cut(sheets, sheet_files, e["src"], e.get("rect"))
     im = _cut_cache[src_key]
-    w, h = b.game_size(e["pref"])
+    w, h = SIZE
     return b.shrink(im, w, h, 255), caption_for(e, im)
 
 
