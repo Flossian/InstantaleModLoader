@@ -111,6 +111,7 @@ BANDS = (
         "139_fix_quest_generation_runaway",
         "106_fix_battle_bgm_restore",
         "107_fix_battle_flag_stuck",
+        "147_fix_party_flee",
         "108_fix_shop_inventory_overflow",
         "109_fix_item_detail_autosize",
         "110_fix_character_name_path",

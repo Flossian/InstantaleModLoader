@@ -74,6 +74,9 @@ class Screen(object):
     def paint_party(self, app):
         self.painted += 1
 
+    def schedule(self, fn):
+        fn()
+
 
 class Worlds(object):
     def __init__(self):

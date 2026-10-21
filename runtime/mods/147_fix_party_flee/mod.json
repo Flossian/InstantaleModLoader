@@ -1,0 +1,15 @@
+{
+  "entry": "fix_party_flee.py",
+  "api": 1,
+  "kind": "fix",
+  "name": {
+    "en": "Party members flee with you when you flee a battle",
+    "ja": "主人公が逃げると仲間も一緒に戦闘から逃げる"
+  },
+  "description": {
+    "en": "When you flee with party members, only you leave the battle: the members keep fighting and your turn's buttons stay on screen. When you flee, the members still in the party follow you into the game's escape hold, so the game ends the battle as an escape just as it does when you are alone, and brings everyone back. A line in the text says who followed",
+    "ja": "仲間を連れて戦闘から逃げると、主人公だけが抜けて仲間が戦い続け、画面には主人公の手番のボタンが残る。主人公が逃げたら、一覧に残った仲間もゲームの逃げた者の預かりに移す。主人公1人で逃げたときと同じく、ゲームが逃走で戦闘を終え、全員を一覧へ戻す。後に続いた仲間の名前を本文に1行出す"
+  },
+  "version": "1",
+  "author": "R01/Flossian"
+}

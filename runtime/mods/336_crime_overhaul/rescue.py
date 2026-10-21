@@ -264,7 +264,11 @@ def install(env):
         if npc_id in ui.party_member_ids(app):
             return False
         character = ui.character_of(app, npc_id)
-        home = str(getattr(character, "current_area", None) or area_id)
+        # 人物の `current_area` は土地の実体のことがある（id の文字列のこともある。実機）
+        current = getattr(character, "current_area", None)
+        if current is not None and not isinstance(current, (str, int)):
+            current = ui.area_id_of(current)
+        home = str(current or area_id)
         area = ui.world_areas(app).get(home)
         if area is not None:
             # 仲間は冒険者の一覧に載っていることが前提（GAME.md §2.23）。既に載っていれば何もしない
@@ -274,7 +278,8 @@ def install(env):
             write("WARN rescue: add_party_member is not available")
             return False
         add(npc_id)
-        screen.paint_party(app)
+        # ここはワーカースレッド。塗り直しはメインスレッドへ回す（ここで塗ると顔の絵が読み込まれず、枠が空のままだった。実機）
+        screen.schedule(lambda: screen.paint_party(app))
         write("rescue: {} joined the party (enrolled at area {})".format(npc_id, home))
         return True
 

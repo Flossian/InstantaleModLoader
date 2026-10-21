@@ -74,7 +74,7 @@ def install(env):
             names.append(getattr(character, "name", None) or str(member_id))
             write("custody: {} left the party for {!r}".format(member_id, getattr(facility, "name", facility)))
         if names:
-            screen.paint_party(app)
+            screen.schedule(lambda: screen.paint_party(app))     # 裁判の段はワーカースレッド。塗るのはメインスレッド（`rescue` と同じ）
         return names
 
     @ctx.wrap(TRIAL_TARGET, required=False, safe=True)
