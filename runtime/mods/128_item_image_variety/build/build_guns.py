@@ -83,18 +83,27 @@ def write_categories(entries, made, owned):
     `owned` の分類から先に消すのは、この道具の品（鍵の頭が entries の鍵の頭と同じもの）の絵と埋め込みだけで、
     ほかの道具の品は残して書き足す（表から消した品・品種の変わった品は残らない）。"""
     mine = tuple(sorted({e["key"].split("_", 1)[0] + "_" for e in entries}))
+    # どの表にも無い鍵（表から外した一枚絵の品）も消す。鍵の頭ごと表から消えると mine では拾えなかった
+    listed = set()
+    for name in ("weapon_asset.json", "medieval.json", "magic.json", "sf.json", "items.json", "wear.json"):
+        path = HERE / name
+        if path.exists():
+            listed |= {row["key"] for row in json.load(open(path, encoding="utf-8"))}
+
+    def ours(key):
+        return key.startswith(mine) or key not in listed
     kept = {}   # (分類, 品種) -> {ほかの道具の品の鍵: ベクトル}
     for cid in owned:
         root = MOD / "images" / cid
         if root.exists():
             for png in root.rglob("*.png"):
-                if png.stem.startswith(mine):
+                if ours(png.stem):
                     png.unlink()
         data = MOD / "data" / cid
         if data.exists():
             for path in data.glob("*.json"):
                 blob = json.load(open(path, encoding="utf-8"))
-                others = {k: blob["vectors"][i] for k, i in blob["index"].items() if not k.startswith(mine)}
+                others = {k: blob["vectors"][i] for k, i in blob["index"].items() if not ours(k)}
                 if others:
                     kept[(cid, path.stem)] = others
                 path.unlink()

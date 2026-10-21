@@ -20,6 +20,7 @@ import argparse
 import colorsys
 import functools
 import json
+import re
 import sys
 from collections import Counter
 from pathlib import Path
@@ -161,7 +162,8 @@ def caption_item(entry, im):
     text = entry["type"]
     if not entry.get("plain"):
         body = [k for k, _ in names.most_common() if not k.startswith("glow:") and k in ITEM_COLOR]
-        if body:
+        # 名前に入っている色は前に重ねない（「brown brown biscuit」にしない）
+        if body and ITEM_COLOR[body[0]] not in re.findall(r"[a-z]+", text.lower()):
             text = "%s %s" % (ITEM_COLOR[body[0]], text)
     glow = [k[5:] for k, n in names.most_common() if k.startswith("glow:") and n / total >= 0.03]
     if glow and "glow" not in text:

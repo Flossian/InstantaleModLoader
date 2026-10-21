@@ -299,8 +299,8 @@
         "en": "gun_fantasy"
       },
       "note": {
-        "ja": "70枚",
-        "en": "70 images"
+        "ja": "52枚",
+        "en": "52 images"
       }
     },
     "SET_GUN_FUTURE": {
@@ -325,8 +325,8 @@
         "en": "gun_future"
       },
       "note": {
-        "ja": "91枚",
-        "en": "91 images"
+        "ja": "48枚",
+        "en": "48 images"
       }
     },
     "SET_GUN_MODERN": {
@@ -351,8 +351,8 @@
         "en": "gun_modern"
       },
       "note": {
-        "ja": "94枚",
-        "en": "94 images"
+        "ja": "52枚",
+        "en": "52 images"
       }
     },
     "SET_GUN_FLINTLOCK": {
@@ -377,8 +377,8 @@
         "en": "gun_flintlock"
       },
       "note": {
-        "ja": "75枚",
-        "en": "75 images"
+        "ja": "42枚",
+        "en": "42 images"
       }
     },
     "SET_GUN_SHOTGUN": {
@@ -403,8 +403,8 @@
         "en": "gun_shotgun"
       },
       "note": {
-        "ja": "60枚",
-        "en": "60 images"
+        "ja": "50枚",
+        "en": "50 images"
       }
     },
     "SET_GUN_SNIPER": {
@@ -429,8 +429,8 @@
         "en": "gun_sniper"
       },
       "note": {
-        "ja": "55枚",
-        "en": "55 images"
+        "ja": "38枚",
+        "en": "38 images"
       }
     },
     "SET_GUN_EXPLOSIVE": {
@@ -663,8 +663,8 @@
         "en": "wear_fantasy"
       },
       "note": {
-        "ja": "707枚",
-        "en": "707 images"
+        "ja": "126枚",
+        "en": "126 images"
       }
     },
     "SET_WEAR_EARLYMODERN": {
@@ -741,8 +741,8 @@
         "en": "wear_school"
       },
       "note": {
-        "ja": "761枚",
-        "en": "761 images"
+        "ja": "245枚",
+        "en": "245 images"
       }
     },
     "SET_WEAR_MODERN": {
@@ -767,8 +767,8 @@
         "en": "wear_modern"
       },
       "note": {
-        "ja": "264枚",
-        "en": "264 images"
+        "ja": "178枚",
+        "en": "178 images"
       }
     },
     "SET_WEAR_CYBER": {
@@ -793,8 +793,8 @@
         "en": "wear_cyber"
       },
       "note": {
-        "ja": "243枚",
-        "en": "243 images"
+        "ja": "70枚",
+        "en": "70 images"
       }
     },
     "SET_WEAR_SF": {
@@ -819,8 +819,8 @@
         "en": "wear_sf"
       },
       "note": {
-        "ja": "183枚",
-        "en": "183 images"
+        "ja": "138枚",
+        "en": "138 images"
       }
     },
     "SET_WEAR_STEAMPUNK": {
@@ -845,8 +845,8 @@
         "en": "wear_steampunk"
       },
       "note": {
-        "ja": "109枚",
-        "en": "109 images"
+        "ja": "92枚",
+        "en": "92 images"
       }
     },
     "SET_WEAR_POSTAPOC": {
@@ -923,8 +923,8 @@
         "en": "wear_japanese"
       },
       "note": {
-        "ja": "222枚",
-        "en": "222 images"
+        "ja": "150枚",
+        "en": "150 images"
       }
     },
     "SET_WEAR_MILITARY": {

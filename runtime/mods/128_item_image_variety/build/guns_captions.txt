@@ -1,97 +1,3 @@
-gun_modern_000	small_weapon	A black semi-automatic pistol with a wooden grip, a gun.
-gun_modern_001	small_weapon	A black semi-automatic pistol, a gun.
-gun_modern_002	small_weapon	A black semi-automatic pistol with white details, a gun.
-gun_modern_003	small_weapon	A black semi-automatic pistol, a gun.
-gun_modern_004	small_weapon	A black semi-automatic pistol with a wooden grip, a gun.
-gun_modern_005	small_weapon	A black semi-automatic pistol, a gun.
-gun_modern_006	small_weapon	A black semi-automatic pistol, a gun.
-gun_modern_007	small_weapon	A grey semi-automatic pistol with a wooden grip, a gun.
-gun_modern_008	small_weapon	A black semi-automatic pistol, a gun.
-gun_modern_009	small_weapon	A grey semi-automatic pistol with a wooden grip, a gun.
-gun_modern_010	small_weapon	A black semi-automatic pistol, a gun.
-gun_modern_011	small_weapon	A black semi-automatic pistol with white details, a gun.
-gun_modern_012	small_weapon	A white semi-automatic pistol with a wooden grip, a gun.
-gun_modern_013	small_weapon	A black semi-automatic pistol, a gun.
-gun_modern_014	small_weapon	A black semi-automatic pistol, a gun.
-gun_modern_015	small_weapon	A white semi-automatic pistol with a wooden grip, a gun.
-gun_modern_016	small_weapon	A black semi-automatic pistol, a gun.
-gun_modern_017	small_weapon	A grey semi-automatic pistol with a wooden grip, a gun.
-gun_modern_018	small_weapon	A grey semi-automatic pistol with a wooden grip, a gun.
-gun_modern_019	medium_weapon	A black submachine gun, a gun.
-gun_modern_020	medium_weapon	A black submachine gun, a gun.
-gun_modern_021	medium_weapon	A black submachine gun, a gun.
-gun_modern_022	medium_weapon	A black submachine gun, a gun.
-gun_modern_025	medium_weapon	A black submachine gun, a gun.
-gun_modern_026	medium_weapon	A black submachine gun, a gun.
-gun_modern_027	medium_weapon	A black submachine gun, a gun.
-gun_modern_028	medium_weapon	A grey submachine gun, a gun.
-gun_modern_029	medium_weapon	A black submachine gun, a gun.
-gun_modern_031	medium_weapon	A black submachine gun, a gun.
-gun_modern_032	medium_weapon	A black submachine gun, a gun.
-gun_modern_033	medium_weapon	A black submachine gun, a gun.
-gun_modern_034	medium_weapon	A black submachine gun, a gun.
-gun_modern_035	medium_weapon	A black submachine gun, a gun.
-gun_modern_023	medium_weapon	A black compact bullpup submachine gun, a gun.
-gun_modern_024	medium_weapon	A tan compact personal defense weapon with a wooden stock, a gun.
-gun_modern_030	medium_weapon	A grey compact personal defense weapon with white details, a gun.
-gun_modern_036	large_weapon	A black assault rifle, a gun.
-gun_modern_037	large_weapon	A black assault rifle with a wooden stock, a gun.
-gun_modern_038	large_weapon	A black assault rifle, a gun.
-gun_modern_039	large_weapon	A tan assault rifle with a wooden stock, a gun.
-gun_modern_040	large_weapon	A black assault rifle, a gun.
-gun_modern_041	large_weapon	A tan assault rifle with a wooden stock, a gun.
-gun_modern_042	large_weapon	A black assault rifle, a gun.
-gun_modern_043	large_weapon	A black assault rifle, a gun.
-gun_modern_044	large_weapon	A black assault rifle, a gun.
-gun_modern_045	large_weapon	A black assault rifle with a wooden stock, a gun.
-gun_modern_046	large_weapon	A black assault rifle, a gun.
-gun_modern_047	large_weapon	A black assault rifle, a gun.
-gun_modern_048	large_weapon	A grey assault rifle with a wooden stock, a gun.
-gun_modern_049	large_weapon	A black assault rifle, a gun.
-gun_modern_050	large_weapon	A tan assault rifle with a wooden stock, a gun.
-gun_modern_051	large_weapon	A black assault rifle, a gun.
-gun_modern_085	large_weapon	A black assault rifle, a gun.
-gun_modern_052	long_weapon	A black bolt-action rifle with a scope and a wooden stock, a gun.
-gun_modern_053	long_weapon	A black bolt-action rifle with a scope and a wooden stock, a gun.
-gun_modern_054	long_weapon	A black bolt-action rifle with a scope and a wooden stock, a gun.
-gun_modern_056	long_weapon	A grey bolt-action rifle with a scope, a wooden stock and tan details, a gun.
-gun_modern_057	long_weapon	A tan bolt-action rifle with a scope and a wooden stock, a gun.
-gun_modern_058	long_weapon	A grey bullpup sniper rifle, a gun.
-gun_modern_059	long_weapon	A tan marksman rifle with a scope and a wooden stock, a gun.
-gun_modern_073	long_weapon	A grey marksman rifle with a scope, a gun.
-gun_modern_060	long_weapon	A black sniper rifle with a scope, a gun.
-gun_modern_061	long_weapon	A black sniper rifle with a scope, a gun.
-gun_modern_062	long_weapon	A grey sniper rifle with a scope, a gun.
-gun_modern_063	long_weapon	A black sniper rifle with a scope, a gun.
-gun_modern_064	long_weapon	A white sniper rifle with a scope, a wooden stock and tan details, a gun.
-gun_modern_065	long_weapon	A black sniper rifle with a scope, a gun.
-gun_modern_066	long_weapon	A black sniper rifle with a scope, a gun.
-gun_modern_067	long_weapon	A black sniper rifle with a scope and a wooden stock, a gun.
-gun_modern_070	long_weapon	A black sniper rifle with a scope, a gun.
-gun_modern_074	long_weapon	A grey sniper rifle with a scope, a gun.
-gun_modern_055	long_weapon	A black semi-automatic rifle with a scope, a gun.
-gun_modern_068	large_weapon	A black light machine gun with an ammo belt, a gun.
-gun_modern_069	large_weapon	A black light machine gun with an ammo belt, a gun.
-gun_modern_084	large_weapon	A black light machine gun with an ammo belt, a gun.
-gun_modern_082	large_weapon	A black light machine gun, a gun.
-gun_modern_080	long_weapon	A black rocket-propelled grenade launcher with a wooden stock, a gun.
-gun_modern_071	long_weapon	A black rocket-propelled grenade launcher with a wooden stock, a gun.
-gun_modern_086	long_weapon	A black rocket-propelled grenade launcher with a wooden stock, a gun.
-gun_modern_087	long_weapon	A black rocket-propelled grenade launcher with a wooden stock, a gun.
-gun_modern_088	long_weapon	A black shoulder-fired rocket launcher with a wooden stock, a gun.
-gun_modern_089	long_weapon	A black shoulder-fired rocket launcher with a wooden stock, a gun.
-gun_modern_072	large_weapon	A grey recoilless launcher tube, a gun.
-gun_modern_090	large_weapon	A black recoilless launcher tube, a gun.
-gun_modern_081	large_weapon	A black multi-barrel minigun, a gun.
-gun_modern_091	large_weapon	A black multi-barrel minigun, a gun.
-gun_modern_092	large_weapon	A black multi-barrel minigun, a gun.
-gun_modern_075	large_weapon	A black pump-action shotgun, a gun.
-gun_modern_076	large_weapon	A black battle rifle, a gun.
-gun_modern_095	large_weapon	A black battle rifle, a gun.
-gun_modern_094	large_weapon	A black heavy anti-materiel rifle with a scope, a gun.
-gun_modern_096	large_weapon	A black heavy grenade launcher, a gun.
-gun_modern_077	large_weapon	A black futuristic rifle, a gun.
-gun_modern_098	long_weapon	A grey futuristic energy rifle with white details, a gun.
 gun_cyber_000	small_weapon	A black futuristic pistol, a gun.
 gun_cyber_001	small_weapon	A black futuristic pistol, a gun.
 gun_cyber_002	small_weapon	A white futuristic pistol, a gun.
@@ -373,357 +279,6 @@ gun_corpmelee_010	medium_weapon	A black non-lethal jeweled cane stun baton with 
 gun_corpmelee_011	medium_weapon	A white sword cane with a ruby handle.
 gun_corpmelee_012	medium_weapon	A white non-lethal space stun baton with a glowing tip and orange stripes and glowing blue lights.
 gun_corpmelee_013	medium_weapon	A red non-lethal lacquered jitte stun baton with a tassel and orange details.
-gun_future_000	small_weapon	A black futuristic pistol, a gun.
-gun_future_001	small_weapon	A blue futuristic pistol, a gun.
-gun_future_002	small_weapon	A white futuristic pistol, a gun.
-gun_future_003	small_weapon	A black futuristic pistol, a gun.
-gun_future_004	small_weapon	A grey futuristic pistol with a wooden grip, a gun.
-gun_future_005	small_weapon	A white futuristic pistol with purple details, a gun.
-gun_future_006	small_weapon	A blue futuristic pistol, a gun.
-gun_future_007	small_weapon	A red futuristic pistol with blue details, a gun.
-gun_future_008	small_weapon	A blue futuristic pistol with white details, a gun.
-gun_future_009	small_weapon	A black futuristic pistol with a wooden grip and brass details, a gun.
-gun_future_010	small_weapon	A black futuristic pistol with blue details, a gun.
-gun_future_011	small_weapon	A white futuristic pistol, a gun.
-gun_future_012	small_weapon	A black futuristic pistol, a gun.
-gun_future_013	small_weapon	A purple futuristic pistol with white details, a gun.
-gun_future_014	small_weapon	A purple futuristic pistol with blue details, a gun.
-gun_future_015	small_weapon	A magenta futuristic pistol with blue details, a gun.
-gun_future_016	small_weapon	A white futuristic pistol with purple details, a gun.
-gun_future_017	small_weapon	A blue futuristic pistol, a gun.
-gun_future_018	small_weapon	A blue futuristic pistol with white details, a gun.
-gun_future_105	small_weapon	A black compact blaster pistol with a wooden grip, a gun.
-gun_future_019	medium_weapon	A black compact futuristic submachine gun, a gun.
-gun_future_020	medium_weapon	A blue compact futuristic submachine gun with purple details, a gun.
-gun_future_021	medium_weapon	A blue compact futuristic submachine gun with purple details, a gun.
-gun_future_022	medium_weapon	A black compact futuristic submachine gun, a gun.
-gun_future_023	medium_weapon	A black compact futuristic submachine gun with blue details, a gun.
-gun_future_024	medium_weapon	A black compact futuristic submachine gun, a gun.
-gun_future_025	medium_weapon	A black compact futuristic submachine gun with blue details, a gun.
-gun_future_026	medium_weapon	A black compact futuristic submachine gun, a gun.
-gun_future_027	medium_weapon	A purple compact futuristic submachine gun with magenta details, a gun.
-gun_future_028	medium_weapon	A black compact futuristic submachine gun, a gun.
-gun_future_029	medium_weapon	A black compact futuristic submachine gun with a wooden stock and tan details, a gun.
-gun_future_030	medium_weapon	A grey compact futuristic submachine gun with purple details, a gun.
-gun_future_031	medium_weapon	A purple compact futuristic submachine gun, a gun.
-gun_future_032	medium_weapon	A blue compact futuristic submachine gun, a gun.
-gun_future_033	medium_weapon	A black compact futuristic submachine gun, a gun.
-gun_future_034	medium_weapon	A blue compact futuristic submachine gun with purple details, a gun.
-gun_future_035	medium_weapon	A black futuristic assault rifle with purple details, a gun.
-gun_future_036	medium_weapon	A black futuristic assault rifle with blue details, a gun.
-gun_future_037	medium_weapon	A grey futuristic assault rifle, a gun.
-gun_future_038	medium_weapon	A purple futuristic assault rifle, a gun.
-gun_future_039	medium_weapon	A grey futuristic assault rifle, a gun.
-gun_future_040	medium_weapon	A white futuristic assault rifle, a gun.
-gun_future_041	medium_weapon	A black futuristic assault rifle, a gun.
-gun_future_042	large_weapon	A black futuristic assault rifle with purple details, a gun.
-gun_future_043	medium_weapon	A white futuristic assault rifle, a gun.
-gun_future_044	large_weapon	A purple futuristic assault rifle, a gun.
-gun_future_045	medium_weapon	A black futuristic assault rifle, a gun.
-gun_future_046	large_weapon	A purple futuristic assault rifle with blue details, a gun.
-gun_future_047	medium_weapon	A black futuristic assault rifle, a gun.
-gun_future_048	large_weapon	A black futuristic assault rifle, a gun.
-gun_future_049	medium_weapon	A blue futuristic assault rifle with white details, a gun.
-gun_future_050	medium_weapon	A black futuristic assault rifle with a wooden stock and tan details, a gun.
-gun_future_051	medium_weapon	A white futuristic assault rifle with blue details, a gun.
-gun_future_052	large_weapon	A black futuristic assault rifle, a gun.
-gun_future_053	large_weapon	A blue futuristic assault rifle with glowing blue lights, a gun.
-gun_future_054	medium_weapon	A black futuristic assault rifle with purple details, a gun.
-gun_future_055	large_weapon	A black futuristic battle rifle, a gun.
-gun_future_056	large_weapon	A purple futuristic battle rifle with blue details and glowing purple lights, a gun.
-gun_future_057	large_weapon	A black futuristic battle rifle with white details, a gun.
-gun_future_058	large_weapon	A blue futuristic battle rifle, a gun.
-gun_future_059	medium_weapon	A white futuristic battle rifle, a gun.
-gun_future_060	large_weapon	A black futuristic battle rifle, a gun.
-gun_future_061	long_weapon	A blue futuristic marksman rifle, a gun.
-gun_future_062	long_weapon	A white futuristic marksman rifle with purple details, a gun.
-gun_future_063	long_weapon	A white futuristic marksman rifle with purple details, a gun.
-gun_future_064	long_weapon	A black futuristic sniper rifle with a scope, a gun.
-gun_future_065	long_weapon	A black futuristic sniper rifle with a scope and white details, a gun.
-gun_future_066	long_weapon	A black futuristic sniper rifle with a scope, a gun.
-gun_future_067	long_weapon	A blue futuristic sniper rifle with a scope and purple details, a gun.
-gun_future_068	long_weapon	A black futuristic sniper rifle with a scope and blue details, a gun.
-gun_future_069	long_weapon	A blue futuristic sniper rifle with a scope, a gun.
-gun_future_070	large_weapon	A blue futuristic sniper rifle with a scope and glowing cyan lights, a gun.
-gun_future_071	medium_weapon	A black heavy futuristic rifle, a gun.
-gun_future_072	medium_weapon	A white heavy futuristic rifle with blue details, a gun.
-gun_future_073	large_weapon	A black futuristic gatling gun with a wooden stock, a gun.
-gun_future_074	medium_weapon	A black futuristic gatling gun with blue details, a gun.
-gun_future_075	large_weapon	A purple futuristic gatling gun with magenta details, a gun.
-gun_future_076	large_weapon	A black futuristic gatling gun with blue details, a gun.
-gun_future_077	medium_weapon	A blue futuristic gatling gun with purple details, a gun.
-gun_future_078	large_weapon	A purple heavy energy cannon with blue details, a gun.
-gun_future_082	large_weapon	A black heavy energy cannon, a gun.
-gun_future_083	large_weapon	A grey heavy energy cannon with blue details, a gun.
-gun_future_084	large_weapon	A black heavy energy cannon, a gun.
-gun_future_080	large_weapon	A black rocket launcher, a gun.
-gun_future_081	large_weapon	A black heavy cannon, a gun.
-gun_future_079	medium_weapon	A red compact blaster with magenta details, a gun.
-gun_future_085	medium_weapon	A blue compact blaster with white details, a gun.
-gun_future_086	medium_weapon	A blue compact blaster with purple details, a gun.
-gun_future_087	medium_weapon	A purple compact blaster, a gun.
-gun_future_088	long_weapon	A purple laser rifle with blue details, a gun.
-gun_future_103	long_weapon	A grey laser rifle with purple details, a gun.
-gun_fantasy_000	small_weapon	A grey revolver with a wooden grip, a gun.
-gun_fantasy_001	small_weapon	A grey revolver with a wooden grip, a gun.
-gun_fantasy_002	small_weapon	A white revolver, a gun.
-gun_fantasy_003	small_weapon	A white revolver with a wooden grip, a gun.
-gun_fantasy_004	small_weapon	A black revolver, a gun.
-gun_fantasy_005	small_weapon	A grey revolver with a wooden grip, a gun.
-gun_fantasy_006	small_weapon	A grey revolver with a wooden grip, a gun.
-gun_fantasy_007	small_weapon	A black revolver, a gun.
-gun_fantasy_008	small_weapon	A black revolver with a wooden grip, a gun.
-gun_fantasy_009	small_weapon	A white revolver with a wooden grip, a gun.
-gun_fantasy_010	small_weapon	A white revolver with a wooden grip, a gun.
-gun_fantasy_152	small_weapon	A black revolver, a gun.
-gun_fantasy_153	small_weapon	A tan revolver with a wooden grip, a gun.
-gun_fantasy_154	small_weapon	A black revolver with a wooden grip, a gun.
-gun_fantasy_155	small_weapon	A black revolver with a wooden grip, a gun.
-gun_fantasy_156	small_weapon	A black revolver with a wooden grip, a gun.
-gun_fantasy_157	small_weapon	A black revolver with a wooden grip, a gun.
-gun_fantasy_158	small_weapon	A black revolver with white details, a gun.
-gun_fantasy_159	small_weapon	A black revolver with a wooden grip, a gun.
-gun_fantasy_160	small_weapon	A black revolver with a wooden grip and tan details, a gun.
-gun_fantasy_161	small_weapon	A grey revolver with a wooden grip, a gun.
-gun_fantasy_162	small_weapon	A grey revolver with a wooden grip, a gun.
-gun_fantasy_166	small_weapon	A black revolver with a wooden grip, a gun.
-gun_fantasy_183	small_weapon	A black revolver with a wooden grip, a gun.
-gun_fantasy_011	small_weapon	A black ornate revolver with red details, a gun.
-gun_fantasy_012	small_weapon	A red ornate revolver with a wooden grip, a gun.
-gun_fantasy_013	small_weapon	A black ornate revolver with a wooden grip, a gun.
-gun_fantasy_014	small_weapon	A magenta ornate revolver with red details, a gun.
-gun_fantasy_015	small_weapon	A grey ornate revolver with red details, a gun.
-gun_fantasy_016	small_weapon	A grey ornate revolver, a gun.
-gun_fantasy_017	small_weapon	A grey ornate revolver with red details, a gun.
-gun_fantasy_018	small_weapon	A black ornate revolver, a gun.
-gun_fantasy_019	small_weapon	A black ornate revolver with a wooden grip, a gun.
-gun_fantasy_020	small_weapon	A grey ornate revolver with a wooden grip and red details, a gun.
-gun_fantasy_105	small_weapon	A black steampunk revolver with brass fittings and a wooden grip, a gun.
-gun_fantasy_106	small_weapon	A black steampunk revolver with brass fittings, a wooden grip and tan details, a gun.
-gun_fantasy_107	small_weapon	A tan steampunk revolver with brass fittings and a wooden grip, a gun.
-gun_fantasy_108	small_weapon	A tan steampunk revolver with brass fittings and a wooden grip, a gun.
-gun_fantasy_109	small_weapon	A white steampunk revolver with brass fittings and a wooden grip, a gun.
-gun_fantasy_110	small_weapon	A grey steampunk revolver with brass fittings and a wooden grip, a gun.
-gun_fantasy_111	small_weapon	A white steampunk revolver with brass fittings, a wooden grip and tan details, a gun.
-gun_fantasy_113	small_weapon	A white steampunk revolver with brass fittings and a wooden grip, a gun.
-gun_fantasy_114	small_weapon	A black steampunk revolver with brass fittings and a wooden grip, a gun.
-gun_fantasy_118	small_weapon	A tan steampunk revolver with brass fittings and a wooden grip, a gun.
-gun_fantasy_119	small_weapon	A tan steampunk revolver with brass fittings and a wooden grip, a gun.
-gun_fantasy_116	large_weapon	A tan steampunk rifle with a wooden stock, a gun.
-gun_fantasy_140	large_weapon	A black steampunk rifle with a wooden stock, a gun.
-gun_fantasy_133	large_weapon	A black steampunk blunderbuss with a wooden stock, a gun.
-gun_fantasy_117	large_weapon	A black steampunk rifle with brass fittings and a wooden stock, a gun.
-gun_fantasy_120	long_weapon	A black steampunk rifle with brass fittings and a wooden stock, a gun.
-gun_fantasy_134	large_weapon	A grey steampunk rifle with brass fittings and a wooden stock, a gun.
-gun_fantasy_135	large_weapon	A tan steampunk gatling gun with brass fittings and a wooden stock, a gun.
-gun_fantasy_136	medium_weapon	A black steampunk carbine with a wooden stock, a gun.
-gun_fantasy_139	medium_weapon	A grey steampunk carbine with a wooden stock and tan details, a gun.
-gun_fantasy_163	long_weapon	A black hunting rifle with a scope and a wooden stock, a gun.
-gun_fantasy_187	long_weapon	A black hunting rifle with a scope, a wooden stock and red details, a gun.
-gun_fantasy_164	long_weapon	A grey lever-action rifle with a wooden stock, a gun.
-gun_fantasy_167	long_weapon	A black lever-action rifle with a wooden stock, a gun.
-gun_fantasy_168	long_weapon	A black lever-action rifle with a wooden stock, a gun.
-gun_fantasy_169	long_weapon	A black lever-action rifle with a wooden stock, a gun.
-gun_fantasy_170	long_weapon	A black lever-action rifle with a wooden stock, a gun.
-gun_fantasy_171	long_weapon	A black lever-action rifle with a wooden stock, a gun.
-gun_fantasy_172	long_weapon	A black lever-action rifle with a wooden stock, a gun.
-gun_fantasy_173	long_weapon	A black lever-action rifle with a wooden stock, a gun.
-gun_fantasy_181	long_weapon	A black hunting rifle with a wooden stock, a gun.
-gun_fantasy_182	long_weapon	A black hunting rifle with a wooden stock, a gun.
-gun_fantasy_184	long_weapon	A grey hunting rifle with a wooden stock, a gun.
-gun_fantasy_185	long_weapon	A black hunting rifle with a wooden stock, a gun.
-gun_fantasy_186	long_weapon	A black hunting rifle with a wooden stock, a gun.
-gun_fantasy_175	medium_weapon	A grey short carbine with a wooden stock, a gun.
-gun_flintlock_000	small_weapon	A white flintlock pistol with a wooden grip and red details, a gun.
-gun_flintlock_001	small_weapon	A red flintlock pistol with a wooden grip, a gun.
-gun_flintlock_002	small_weapon	A white flintlock pistol with a wooden grip, a gun.
-gun_flintlock_003	small_weapon	A black flintlock pistol with a wooden grip, a gun.
-gun_flintlock_004	small_weapon	A grey flintlock pistol with white details, a gun.
-gun_flintlock_005	small_weapon	A red flintlock pistol with a wooden grip, a gun.
-gun_flintlock_006	small_weapon	A grey flintlock pistol with a wooden grip and red details, a gun.
-gun_flintlock_007	small_weapon	A white flintlock pistol, a gun.
-gun_flintlock_008	small_weapon	A white flintlock pistol with a wooden grip, a gun.
-gun_flintlock_009	small_weapon	A black flintlock pistol, a gun.
-gun_flintlock_010	small_weapon	A red flintlock pistol with a wooden grip and magenta details, a gun.
-gun_flintlock_011	small_weapon	A white flintlock pistol with a wooden grip, a gun.
-gun_flintlock_012	small_weapon	A red flintlock pistol with a wooden grip, a gun.
-gun_flintlock_013	small_weapon	A black ornate wheellock pistol with a wooden grip, a gun.
-gun_flintlock_014	small_weapon	A black ornate wheellock pistol with a wooden grip, a gun.
-gun_flintlock_015	small_weapon	A grey ornate wheellock pistol with a wooden grip, a gun.
-gun_flintlock_016	small_weapon	A white ornate wheellock pistol with a wooden grip, a gun.
-gun_flintlock_017	small_weapon	A grey ornate wheellock pistol, a gun.
-gun_flintlock_018	small_weapon	A white ornate wheellock pistol with a wooden grip, a gun.
-gun_flintlock_019	small_weapon	A black ornate wheellock pistol with purple details, a gun.
-gun_flintlock_020	small_weapon	A white ornate wheellock pistol with a wooden grip, a gun.
-gun_flintlock_021	small_weapon	A white ornate wheellock pistol with a wooden grip and red details, a gun.
-gun_flintlock_022	small_weapon	A red ornate wheellock pistol with a wooden grip, a gun.
-gun_flintlock_023	small_weapon	A white ornate wheellock pistol with a wooden grip, a gun.
-gun_flintlock_024	small_weapon	A white ornate wheellock pistol with a wooden grip, a gun.
-gun_flintlock_025	small_weapon	A red ornate wheellock pistol with a wooden grip, a gun.
-gun_flintlock_026	long_weapon	A red matchlock arquebus with a wooden stock, a gun.
-gun_flintlock_027	long_weapon	A red matchlock arquebus with a wooden stock, a gun.
-gun_flintlock_028	long_weapon	A red matchlock arquebus with a wooden stock, a gun.
-gun_flintlock_029	long_weapon	A red matchlock arquebus with a wooden stock, a gun.
-gun_flintlock_030	long_weapon	A red matchlock arquebus, a gun.
-gun_flintlock_031	long_weapon	A red matchlock arquebus with a wooden stock, a gun.
-gun_flintlock_032	long_weapon	A black matchlock arquebus with a wooden stock, a gun.
-gun_flintlock_033	long_weapon	A white matchlock arquebus with a wooden stock, a gun.
-gun_flintlock_034	long_weapon	A red matchlock arquebus with a wooden stock and tan details, a gun.
-gun_flintlock_035	long_weapon	A white matchlock arquebus with a wooden stock, a gun.
-gun_flintlock_036	long_weapon	A grey matchlock arquebus with a wooden stock, a gun.
-gun_flintlock_037	long_weapon	A red matchlock arquebus with a wooden stock, a gun.
-gun_flintlock_038	long_weapon	A red matchlock arquebus with a wooden stock, a gun.
-gun_flintlock_039	long_weapon	A red matchlock arquebus with a wooden stock, a gun.
-gun_flintlock_040	long_weapon	A red matchlock arquebus with a wooden stock, a gun.
-gun_flintlock_041	long_weapon	A white matchlock arquebus with a wooden stock and red details, a gun.
-gun_flintlock_042	long_weapon	A red flintlock musket with a sling and a wooden stock, a gun.
-gun_flintlock_043	long_weapon	A grey flintlock musket with a sling, a wooden stock and red details, a gun.
-gun_flintlock_044	long_weapon	A red flintlock musket with a sling and a wooden stock, a gun.
-gun_flintlock_045	long_weapon	A black flintlock musket with a sling and a wooden stock, a gun.
-gun_flintlock_046	long_weapon	A white flintlock musket with a sling and a wooden stock, a gun.
-gun_flintlock_047	long_weapon	A white flintlock musket with a sling and a wooden stock, a gun.
-gun_flintlock_048	long_weapon	A black flintlock musket with a sling, a wooden stock and red details, a gun.
-gun_flintlock_049	long_weapon	A red flintlock musket with a sling and a wooden stock, a gun.
-gun_flintlock_050	long_weapon	A red flintlock musket with a sling and a wooden stock, a gun.
-gun_flintlock_051	long_weapon	A black flintlock musket with a sling and a wooden stock, a gun.
-gun_flintlock_052	long_weapon	A red flintlock musket with a sling and a wooden stock, a gun.
-gun_flintlock_053	long_weapon	A red flintlock musket with a sling and magenta details, a gun.
-gun_flintlock_054	long_weapon	A white flintlock musket with a sling and a wooden stock, a gun.
-gun_flintlock_055	long_weapon	A red flintlock musket with a sling and a wooden stock, a gun.
-gun_flintlock_056	long_weapon	A white flintlock musket with a sling, a wooden stock and blue details, a gun.
-gun_flintlock_057	long_weapon	A red flintlock musket with a sling and a wooden stock, a gun.
-gun_flintlock_058	long_weapon	A red flintlock musket with a sling and a wooden stock, a gun.
-gun_flintlock_059	long_weapon	A red flintlock musket with a sling and a wooden stock, a gun.
-gun_flintlock_060	large_weapon	A black blunderbuss with a flared muzzle and a wooden stock, a gun.
-gun_flintlock_061	large_weapon	A red blunderbuss with a flared muzzle and a wooden stock, a gun.
-gun_flintlock_062	large_weapon	A black hand cannon with a wooden stock, a gun.
-gun_flintlock_063	large_weapon	A black blunderbuss with a flared muzzle, a wooden stock and red details, a gun.
-gun_flintlock_064	large_weapon	A black blunderbuss with a flared muzzle and a wooden stock, a gun.
-gun_flintlock_065	large_weapon	A grey blunderbuss with a flared muzzle and a wooden stock, a gun.
-gun_flintlock_066	large_weapon	A black blunderbuss with a flared muzzle and a wooden stock, a gun.
-gun_flintlock_067	large_weapon	A grey blunderbuss with a flared muzzle and a wooden stock, a gun.
-gun_flintlock_068	large_weapon	A black blunderbuss with a flared muzzle and a wooden stock, a gun.
-gun_flintlock_069	large_weapon	A red blunderbuss with a flared muzzle and a wooden stock, a gun.
-gun_flintlock_070	large_weapon	A black hand cannon with a wooden stock, a gun.
-gun_flintlock_071	large_weapon	A black blunderbuss with a flared muzzle, a wooden stock and magenta details, a gun.
-gun_flintlock_072	large_weapon	A black blunderbuss with a flared muzzle, a wooden stock and red details, a gun.
-gun_flintlock_073	large_weapon	A red blunderbuss with a flared muzzle and a wooden stock, a gun.
-gun_flintlock_074	large_weapon	A black hand cannon with a wooden stock, a gun.
-gun_shotgun2_000	medium_weapon	A black sawed-off shotgun with a wooden stock, a gun.
-gun_shotgun2_000s	small_weapon	A black sawed-off shotgun with a wooden grip, a gun.
-gun_shotgun2_001	medium_weapon	A purple sawed-off shotgun with red details, a gun.
-gun_shotgun2_001s	small_weapon	A purple sawed-off shotgun with red details, a gun.
-gun_shotgun2_002	medium_weapon	A black sawed-off shotgun with purple details, a gun.
-gun_shotgun2_002s	small_weapon	A black sawed-off shotgun with purple details, a gun.
-gun_shotgun2_003	medium_weapon	A grey sawed-off shotgun with a wooden stock, a gun.
-gun_shotgun2_003s	small_weapon	A black sawed-off shotgun with a wooden grip, a gun.
-gun_shotgun2_004	medium_weapon	A red sawed-off shotgun with a wooden stock, a gun.
-gun_shotgun2_004s	small_weapon	A red sawed-off shotgun with a wooden grip and purple details, a gun.
-gun_shotgun2_005	medium_weapon	A black sawed-off shotgun, a gun.
-gun_shotgun2_005s	small_weapon	A black sawed-off shotgun, a gun.
-gun_shotgun2_006	medium_weapon	A black sawed-off shotgun with red details, a gun.
-gun_shotgun2_006s	small_weapon	A black sawed-off shotgun with red details, a gun.
-gun_shotgun2_007	medium_weapon	A red sawed-off shotgun with a wooden stock, a gun.
-gun_shotgun2_007s	small_weapon	A red sawed-off shotgun with a wooden grip, a gun.
-gun_shotgun2_008	medium_weapon	A black sawed-off shotgun with a wooden stock, a gun.
-gun_shotgun2_008s	small_weapon	A black sawed-off shotgun with a wooden grip, a gun.
-gun_shotgun2_009	medium_weapon	A black sawed-off shotgun, a gun.
-gun_shotgun2_009s	small_weapon	A black sawed-off shotgun, a gun.
-gun_shotgun2_010	medium_weapon	A black sawed-off shotgun, a gun.
-gun_shotgun2_010s	small_weapon	A black sawed-off shotgun, a gun.
-gun_shotgun2_011	medium_weapon	A red sawed-off shotgun, a gun.
-gun_shotgun2_011s	small_weapon	A red sawed-off shotgun, a gun.
-gun_shotgun2_012	large_weapon	A red double-barreled shotgun with a wooden stock, a gun.
-gun_shotgun2_013	large_weapon	A red double-barreled shotgun with a wooden stock, a gun.
-gun_shotgun2_014	large_weapon	A grey double-barreled shotgun with a wooden stock, a gun.
-gun_shotgun2_015	large_weapon	A red double-barreled shotgun with a wooden stock and purple details, a gun.
-gun_shotgun2_016	large_weapon	A red double-barreled shotgun with blue details, a gun.
-gun_shotgun2_017	large_weapon	A red double-barreled shotgun with a wooden stock, a gun.
-gun_shotgun2_018	large_weapon	A red double-barreled shotgun, a gun.
-gun_shotgun2_019	large_weapon	A black double-barreled shotgun with a wooden stock, a gun.
-gun_shotgun2_020	large_weapon	A black double-barreled shotgun with purple details, a gun.
-gun_shotgun2_021	large_weapon	A black double-barreled shotgun, a gun.
-gun_shotgun2_022	large_weapon	A black double-barreled shotgun, a gun.
-gun_shotgun2_023	large_weapon	A red double-barreled shotgun with a wooden stock, a gun.
-gun_shotgun2_024	large_weapon	A black tactical pump-action shotgun, a gun.
-gun_shotgun2_025	large_weapon	A black tactical pump-action shotgun, a gun.
-gun_shotgun2_026	large_weapon	A black tactical pump-action shotgun with a wooden stock, a gun.
-gun_shotgun2_027	large_weapon	A black tactical pump-action shotgun with purple details, a gun.
-gun_shotgun2_028	large_weapon	A blue tactical pump-action shotgun, a gun.
-gun_shotgun2_029	large_weapon	A grey tactical pump-action shotgun, a gun.
-gun_shotgun2_030	large_weapon	A black tactical pump-action shotgun, a gun.
-gun_shotgun2_031	large_weapon	A black tactical pump-action shotgun, a gun.
-gun_shotgun2_032	large_weapon	A black tactical pump-action shotgun, a gun.
-gun_shotgun2_033	large_weapon	A black tactical pump-action shotgun, a gun.
-gun_shotgun2_034	large_weapon	A black tactical pump-action shotgun with red details, a gun.
-gun_shotgun2_035	large_weapon	A black tactical pump-action shotgun, a gun.
-gun_shotgun2_036	large_weapon	A red lever-action shotgun with a wooden stock, a gun.
-gun_shotgun2_037	large_weapon	A red lever-action shotgun with a wooden stock, a gun.
-gun_shotgun2_038	large_weapon	A red lever-action shotgun with a wooden stock, a gun.
-gun_shotgun2_039	large_weapon	A grey lever-action shotgun with a wooden stock and red details, a gun.
-gun_shotgun2_040	large_weapon	A black lever-action shotgun with purple details, a gun.
-gun_shotgun2_041	large_weapon	A black lever-action shotgun with a wooden stock and red details, a gun.
-gun_shotgun2_042	large_weapon	A black lever-action shotgun, a gun.
-gun_shotgun2_043	large_weapon	A black lever-action shotgun with a wooden stock, a gun.
-gun_shotgun2_044	large_weapon	A black lever-action shotgun, a gun.
-gun_shotgun2_045	large_weapon	A tan lever-action shotgun with a wooden stock, a gun.
-gun_shotgun2_046	large_weapon	A black lever-action shotgun, a gun.
-gun_shotgun2_047	large_weapon	A black lever-action shotgun with a wooden stock, a gun.
-gun_sniper_000	long_weapon	A black sniper rifle with a scope and a suppressor and purple details, a gun.
-gun_sniper_001	long_weapon	A black sniper rifle with a scope and a suppressor and purple details, a gun.
-gun_sniper_002	long_weapon	A black sniper rifle with a scope and a suppressor and a wooden stock, a gun.
-gun_sniper_003	long_weapon	A black sniper rifle with a scope and a suppressor and a wooden stock, a gun.
-gun_sniper_004	long_weapon	A black sniper rifle with a scope and a suppressor, a gun.
-gun_sniper_005	long_weapon	A black sniper rifle with a scope and a suppressor, a gun.
-gun_sniper_006	long_weapon	A black sniper rifle with a scope and a suppressor, a gun.
-gun_sniper_007	long_weapon	A black sniper rifle with a scope and a suppressor, a gun.
-gun_sniper_008	long_weapon	A black sniper rifle with a scope and a suppressor, a gun.
-gun_sniper_009	long_weapon	A black sniper rifle with a scope and a suppressor, a gun.
-gun_sniper_010	long_weapon	A black sniper rifle with a scope and a suppressor and a wooden stock, a gun.
-gun_sniper_011	long_weapon	A black sniper rifle with a scope and a suppressor, a gun.
-gun_sniper_012	long_weapon	A black sniper rifle with a scope and a suppressor, a gun.
-gun_sniper_013	long_weapon	A black sniper rifle with a scope and a suppressor, a gun.
-gun_sniper_014	long_weapon	A black hunting rifle with a scope and a wooden stock, a gun.
-gun_sniper_015	long_weapon	A red hunting rifle with a scope and a wooden stock, a gun.
-gun_sniper_016	long_weapon	A red hunting rifle with a scope and a wooden stock, a gun.
-gun_sniper_017	long_weapon	A red hunting rifle with a scope, a gun.
-gun_sniper_018	long_weapon	A red hunting rifle with a scope, a gun.
-gun_sniper_019	long_weapon	A red hunting rifle with a scope and a wooden stock, a gun.
-gun_sniper_020	long_weapon	A black hunting rifle with a scope and a wooden stock, a gun.
-gun_sniper_021	long_weapon	A red hunting rifle with a scope and a wooden stock, a gun.
-gun_sniper_022	long_weapon	A black hunting rifle with a scope and a wooden stock, a gun.
-gun_sniper_023	long_weapon	A black hunting rifle with a scope, a wooden stock and red details, a gun.
-gun_sniper_024	long_weapon	A black hunting rifle with a scope, a wooden stock and red details, a gun.
-gun_sniper_025	long_weapon	A black hunting rifle with a scope, a gun.
-gun_sniper_026	long_weapon	A black hunting rifle with a scope, a wooden stock and red details, a gun.
-gun_sniper_027	long_weapon	A black hunting rifle with a scope and a wooden stock, a gun.
-gun_sniper_028	long_weapon	A black anti-materiel rifle with a muzzle brake and purple details, a gun.
-gun_sniper_029	long_weapon	A black anti-materiel rifle with a muzzle brake, a gun.
-gun_sniper_030	long_weapon	A black anti-materiel rifle with a muzzle brake and a wooden stock, a gun.
-gun_sniper_031	long_weapon	A black anti-materiel rifle with a muzzle brake, a gun.
-gun_sniper_032	long_weapon	A black anti-materiel rifle with a muzzle brake, a gun.
-gun_sniper_033	long_weapon	A black anti-materiel rifle with a muzzle brake and purple details, a gun.
-gun_sniper_034	long_weapon	A black anti-materiel rifle with a muzzle brake and a wooden stock, a gun.
-gun_sniper_035	long_weapon	A black anti-materiel rifle with a muzzle brake, a gun.
-gun_sniper_036	long_weapon	A black anti-materiel rifle with a muzzle brake, a gun.
-gun_sniper_037	long_weapon	A black anti-materiel rifle with a muzzle brake, a gun.
-gun_sniper_038	long_weapon	A black anti-materiel rifle with a muzzle brake, a gun.
-gun_sniper_039	long_weapon	A black anti-materiel rifle with a muzzle brake, a gun.
-gun_sniper_040	long_weapon	A grey anti-materiel rifle with a muzzle brake, a gun.
-gun_sniper_041	long_weapon	A white futuristic sniper rifle with a scope, a gun.
-gun_sniper_042	long_weapon	A black futuristic sniper rifle with a scope and purple details, a gun.
-gun_sniper_043	long_weapon	A blue futuristic sniper rifle with a scope and purple details, a gun.
-gun_sniper_044	long_weapon	A black futuristic sniper rifle with a scope, a gun.
-gun_sniper_045	long_weapon	A white futuristic sniper rifle with a scope, purple details and glowing cyan lights, a gun.
-gun_sniper_046	long_weapon	A black futuristic sniper rifle with a scope and red details, a gun.
-gun_sniper_047	long_weapon	A black futuristic sniper rifle with a scope, blue details and glowing cyan lights, a gun.
-gun_sniper_048	long_weapon	A black futuristic sniper rifle with a scope, a gun.
-gun_sniper_049	long_weapon	A grey futuristic sniper rifle with a scope, a gun.
-gun_sniper_050	long_weapon	A grey futuristic sniper rifle with a scope, a gun.
-gun_sniper_051	long_weapon	A white futuristic sniper rifle with a scope and blue details, a gun.
-gun_sniper_052	long_weapon	A blue futuristic sniper rifle with a scope and purple details, a gun.
-gun_sniper_053	long_weapon	A black futuristic sniper rifle with a scope, a gun.
-gun_sniper_054	long_weapon	A blue futuristic sniper rifle with a scope and purple details, a gun.
 gun_explosive_000	throwable_weapon	A grey frag hand grenade with a pull pin and a safety lever and brass details, an explosive.
 gun_explosive_001	throwable_weapon	A black frag hand grenade with a pull pin and a safety lever, an explosive.
 gun_explosive_002	throwable_weapon	A grey frag hand grenade with a pull pin and a safety lever and olive green details, an explosive.
@@ -760,3 +315,285 @@ gun_explosive_028	throwable_weapon	A black smoke grenade with a pull pin and col
 gun_explosive_029	throwable_weapon	A purple smoke grenade with a pull pin and colored smoke and glowing purple lights, an explosive.
 gun_explosive_034	throwable_weapon	A black canister grenade with a pull pin and blue details, an explosive.
 gun_explosive_035	throwable_weapon	A black canister grenade with a pull pin, an explosive.
+gun_gmod1_000	small_weapon	A black angular polymer semi-automatic pistol, a gun.
+gun_gmod1_001	small_weapon	A black semi-automatic pistol with a weapon light, a gun.
+gun_gmod1_002	small_weapon	A black long-slide competition pistol with a compensator, a gun.
+gun_gmod1_003	small_weapon	A black subcompact pocket pistol, a gun.
+gun_gmod1_004	small_weapon	A black large-caliber heavy pistol, a gun.
+gun_gmod1_005	small_weapon	A black machine pistol with an extended magazine, a gun.
+gun_gmod1_006	small_weapon	A black suppressed semi-automatic pistol, a gun.
+gun_gmod1_007	small_weapon	A grey old silver military pistol with a wooden grip, a gun.
+gun_gmod1_008	small_weapon	A black snub-nosed revolver with a wooden grip, a gun.
+gun_gmod1_009	small_weapon	A black long-barreled magnum revolver with a wooden grip, a gun.
+gun_gmod1_010	small_weapon	A black scoped hunting handgun with a wooden grip, a gun.
+gun_gmod1_011	small_weapon	A black machine pistol with a folding stock, a gun.
+gun_gmod2_000	medium_weapon	A black submachine gun with a collapsible stock, a gun.
+gun_gmod2_001	medium_weapon	A black compact stockless submachine gun, a gun.
+gun_gmod2_002	medium_weapon	A black integrally suppressed submachine gun, a gun.
+gun_gmod2_003	medium_weapon	A black boxy submachine gun with the magazine in the grip, a gun.
+gun_gmod2_004	medium_weapon	A black submachine gun with a vertical foregrip, a gun.
+gun_gmod2_005	medium_weapon	A black submachine gun with a top-mounted magazine, a gun.
+gun_gmod2_006	medium_weapon	A black submachine gun with a drum magazine, a gun.
+gun_gmod2_007	medium_weapon	A black compact bullpup personal defense weapon, a gun.
+gun_gmod2_008	medium_weapon	A black old submachine gun with a wooden stock and a wooden stock, a gun.
+gun_gmod2_009	medium_weapon	A black submachine gun with a folding stock and a long magazine, a gun.
+gun_gmod3_000	large_weapon	A black assault rifle with a curved magazine and wooden furniture and a wooden stock, a gun.
+gun_gmod3_001	large_weapon	A black polymer assault rifle with rails, a gun.
+gun_gmod3_002	large_weapon	A black short carbine with a collapsible stock, a gun.
+gun_gmod3_003	large_weapon	A black bullpup assault rifle, a gun.
+gun_gmod3_004	large_weapon	A black assault rifle with an underbarrel grenade launcher, a gun.
+gun_gmod3_005	large_weapon	A black assault rifle with a carry handle, a gun.
+gun_gmod3_006	large_weapon	A black designated marksman rifle with a large scope and a wooden stock, a gun.
+gun_gmod3_007	large_weapon	A black assault rifle with a skeleton stock, a gun.
+gun_gmod3_008	large_weapon	A black assault rifle with a long handguard, a gun.
+gun_gmod3_009	large_weapon	A black assault rifle with a drum magazine and a wooden stock, a gun.
+gun_gmod4_000	large_weapon	A black old battle rifle with a wooden stock and a wooden stock, a gun.
+gun_gmod4_001	large_weapon	A black light machine gun with a bipod and an ammo belt, a gun.
+gun_gmod4_002	large_weapon	A black light machine gun with an ammo box, a gun.
+gun_gmod4_003	large_weapon	A black heavy machine gun with a thick barrel, a gun.
+gun_gmod4_004	large_weapon	A black six-barreled rotary minigun with a carry handle and a wooden stock, a gun.
+gun_gmod4_005	large_weapon	A black revolver-cylinder grenade launcher, a gun.
+gun_gmod4_006	large_weapon	A black single-shot break-action grenade launcher with a wooden stock, a gun.
+gun_gmod4_007	large_weapon	A black pump-action grenade launcher, a gun.
+gun_gmod4_008	large_weapon	A black recoilless rifle tube, a gun.
+gun_gmod4_009	large_weapon	A black short heavy anti-materiel rifle, a gun.
+gun_gmod5_000	long_weapon	A black bolt-action sniper rifle with a large scope, a gun.
+gun_gmod5_001	long_weapon	A black anti-materiel rifle with a bipod, a gun.
+gun_gmod5_002	long_weapon	A black bolt-action hunting rifle with a slim wooden stock and a wooden stock, a gun.
+gun_gmod5_003	long_weapon	A black suppressed sniper rifle, a gun.
+gun_gmod5_004	long_weapon	A black bullpup sniper rifle, a gun.
+gun_gmod5_005	long_weapon	A black semi-automatic marksman rifle with a wooden stock, a gun.
+gun_gmod5_006	long_weapon	A black anti-tank rocket launcher with a warhead and a wooden stock, a gun.
+gun_gmod5_007	large_weapon	A black rocket launcher tube with a sight, a gun.
+gun_gmod5_008	long_weapon	A black disposable rocket launcher tube with brass details, a gun.
+gun_gmod5_009	long_weapon	A black long-range sniper rifle with two scopes and a wooden stock, a gun.
+gun_gfut1_000	small_weapon	A white armored ray gun with blue details, a gun.
+gun_gfut1_001	small_weapon	A black forked-muzzle shock pistol, a gun.
+gun_gfut1_002	small_weapon	A white heat ray pistol with a disc battery, a gun.
+gun_gfut1_003	small_weapon	A black slim precision laser pistol with white details, a gun.
+gun_gfut1_004	small_weapon	A white round compact ray gun, a gun.
+gun_gfut1_005	small_weapon	A white large long-barreled ray gun, a gun.
+gun_gfut1_006	small_weapon	A black pistol with rings around the barrel, white details and glowing cyan lights, a gun.
+gun_gfut1_007	small_weapon	A black military laser pistol with a small scope and white details, a gun.
+gun_gfut1_008	small_weapon	A black pistol with a glowing tube inside and white details, a gun.
+gun_gfut1_009	small_weapon	A white flat compact defense pistol, a gun.
+gun_gfut1_010	small_weapon	A black futuristic revolver, a gun.
+gun_gfut1_011	small_weapon	A white pistol with a blade under the barrel, blue details and glowing cyan lights, a gun.
+gun_gfut2_000	medium_weapon	A white streamlined futuristic submachine gun with glowing cyan lights, a gun.
+gun_gfut2_001	medium_weapon	A black submachine gun with a glowing battery on top, a gun.
+gun_gfut2_002	medium_weapon	A white compact bullpup ray gun, a gun.
+gun_gfut2_003	medium_weapon	A black triple-barreled futuristic submachine gun with white details, a gun.
+gun_gfut2_004	medium_weapon	A black boxy heat ray gun with a vertical foregrip and white details, a gun.
+gun_gfut2_005	medium_weapon	A black futuristic submachine gun with cooling fins, a gun.
+gun_gfut2_006	medium_weapon	A black futuristic submachine gun with a side cylinder magazine and white details, a gun.
+gun_gfut2_007	medium_weapon	A black light futuristic submachine gun with a ring stock and white details, a gun.
+gun_gfut2_008	medium_weapon	A black flared-muzzle scatter ray gun, a gun.
+gun_gfut2_009	medium_weapon	A white folding flat futuristic submachine gun, a gun.
+gun_gfut3_000	large_weapon	A white armored space marine rifle with white details, a gun.
+gun_gfut3_001	large_weapon	A black bullpup heat ray rifle, a gun.
+gun_gfut3_002	large_weapon	A black rifle with batteries above and below the barrel and white details, a gun.
+gun_gfut3_003	large_weapon	A black forked-barrel futuristic rifle, a gun.
+gun_gfut3_004	large_weapon	A black energy rifle with a long cooling shroud and white details, a gun.
+gun_gfut3_005	large_weapon	A black futuristic rifle with an underbarrel launcher and white details, a gun.
+gun_gfut3_006	large_weapon	A black futuristic rifle with a sensor cluster sight, a gun.
+gun_gfut3_007	large_weapon	A black rifle with a translucent shroud over glowing tubes, a gun.
+gun_gfut3_008	large_weapon	A black light skeletal futuristic rifle, a gun.
+gun_gfut3_009	large_weapon	A black futuristic rifle with a large battery pack in the stock, a gun.
+gun_gfut4_000	large_weapon	A black six-barreled rotary energy machine gun, a gun.
+gun_gfut4_001	large_weapon	A black thick plasma cannon with white details, a gun.
+gun_gfut4_002	large_weapon	A black quad rocket launcher with white details, a gun.
+gun_gfut4_003	large_weapon	A black machine gun with a disc magazine on top, a gun.
+gun_gfut4_004	large_weapon	A black electromagnetic coil cannon with blue details, a gun.
+gun_gfut4_005	large_weapon	A black futuristic flamethrower with a fuel tank, a gun.
+gun_gfut4_006	medium_weapon	A black support laser gun with a heavy bipod, blue details and glowing cyan lights, a gun.
+gun_gfut4_007	large_weapon	A black energy cannon with twin batteries, a gun.
+gun_gfut5_000	long_weapon	A slim white laser sniper rifle with blue details, a gun.
+gun_gfut5_001	long_weapon	A black twin-rail railgun, a gun.
+gun_gfut5_002	long_weapon	A black gauss rifle with coils along the barrel, a gun.
+gun_gfut5_003	long_weapon	A black precision laser sniper rifle with a large scope and white details, a gun.
+gun_gfut5_004	long_weapon	A white futuristic bullpup sniper rifle, a gun.
+gun_gfut5_005	long_weapon	A black particle rifle with a bundled tube barrel and blue details, a gun.
+gun_gfut5_006	long_weapon	A black suppressed laser sniper rifle with a perforated shroud and white details, a gun.
+gun_gfut5_007	long_weapon	A black folding-stock assassin sniper rifle, a gun.
+gun_gsnp1_000	long_weapon	A black bolt-action sniper rifle with a large scope and a bipod, a gun.
+gun_gsnp1_001	long_weapon	A suppressed black sniper rifle, a gun.
+gun_gsnp1_002	long_weapon	A black sniper rifle with a skeleton stock, a gun.
+gun_gsnp1_003	long_weapon	A black bullpup sniper rifle, a gun.
+gun_gsnp1_004	long_weapon	A black semi-automatic marksman rifle, a gun.
+gun_gsnp1_005	long_weapon	A black desert-camo sniper rifle with a wooden stock and tan details, a gun.
+gun_gsnp1_006	long_weapon	A black competition sniper rifle with an adjustable cheek rest and white details, a gun.
+gun_gsnp1_007	long_weapon	A black camouflage-wrapped sniper rifle with a wooden stock, a gun.
+gun_gsnp1_008	long_weapon	A black folding-stock sniper rifle, a gun.
+gun_gsnp1_009	long_weapon	A black long-range sniper rifle with stacked scopes, a gun.
+gun_gsnp2_000	long_weapon	A black bolt-action hunting rifle with a slim wooden stock and a wooden stock, a gun.
+gun_gsnp2_001	long_weapon	A black old scoped hunting rifle with a wooden stock, a gun.
+gun_gsnp2_002	long_weapon	A black over-under break-action hunting rifle with a wooden stock, a gun.
+gun_gsnp2_003	long_weapon	A black lever-action hunting rifle with a wooden stock, a gun.
+gun_gsnp2_004	long_weapon	A black engraved luxury hunting rifle with a wooden stock and tan details, a gun.
+gun_gsnp2_005	long_weapon	A black light mountain hunting rifle with a sling and a wooden stock, a gun.
+gun_gsnp2_006	long_weapon	A black hunting rifle with an ammo cuff on the stock and a wooden stock, a gun.
+gun_gsnp2_007	long_weapon	A black short brush hunting rifle with a wooden stock, a gun.
+gun_gsnp2_008	long_weapon	A grey noble hunting rifle with silver fittings and a wooden stock, a gun.
+gun_gsnp2_009	long_weapon	A black crude handmade hunting rifle with a wooden stock, a gun.
+gun_gsnp3_000	long_weapon	A black anti-materiel rifle with a large muzzle brake, a gun.
+gun_gsnp3_001	long_weapon	A black heavy anti-materiel rifle with a bipod and a monopod, a gun.
+gun_gsnp3_002	long_weapon	A black bullpup anti-materiel rifle, a gun.
+gun_gsnp3_003	long_weapon	A black anti-materiel rifle with a top box magazine and a wooden stock, a gun.
+gun_gsnp3_004	long_weapon	A black anti-materiel rifle with a perforated shroud, a gun.
+gun_gsnp3_005	long_weapon	A black single-shot heavy anti-materiel rifle, a gun.
+gun_gsnp3_006	long_weapon	A black anti-materiel rifle with a carry handle, a gun.
+gun_gsnp3_007	long_weapon	A black crude wasteland anti-materiel rifle with a wooden stock, a gun.
+gun_gsnp3_008	long_weapon	A black double-barreled anti-materiel rifle, a gun.
+gun_gsnp3_009	long_weapon	A black anti-materiel rifle with a cannon-thick barrel, a gun.
+gun_gsnp4_000	long_weapon	A white armored futuristic sniper rifle with blue details, a gun.
+gun_gsnp4_001	long_weapon	A black sniper rifle with glowing lines and blue details, a gun.
+gun_gsnp4_002	long_weapon	A white sniper rifle with rings around the barrel and blue details, a gun.
+gun_gsnp4_003	long_weapon	A black sniper rifle with a glowing eye sight, a gun.
+gun_gsnp4_004	long_weapon	A white sniper rifle with glowing tubes inside, blue details and glowing cyan lights, a gun.
+gun_gsnp4_005	long_weapon	A black twin-rail futuristic sniper rifle with white details, a gun.
+gun_gsnp4_006	long_weapon	A white collapsible-barrel futuristic sniper rifle, a gun.
+gun_gsnp4_007	long_weapon	A white futuristic sniper rifle with a large battery, a gun.
+gun_gflt1_000	small_weapon	A brass flintlock pistol with a wooden grip, a gun.
+gun_gflt1_001	small_weapon	A grey silver-inlaid dueling pistol with a wooden grip, a gun.
+gun_gflt1_002	small_weapon	A black iron cavalry pistol with a wooden grip, a gun.
+gun_gflt1_003	small_weapon	A tan flared-muzzle blunderbuss pistol with a wooden grip, a gun.
+gun_gflt1_004	small_weapon	A black double-barreled flintlock pistol with a wooden grip, a gun.
+gun_gflt1_005	small_weapon	A black four-barreled pepperbox pistol with a wooden grip, a gun.
+gun_gflt1_006	small_weapon	A tan wheellock pistol with a wooden grip, a gun.
+gun_gflt1_007	small_weapon	A grey long-barreled horse pistol with a wooden grip, a gun.
+gun_gflt1_008	small_weapon	A black tiny pocket pistol with a wooden grip, a gun.
+gun_gflt1_009	small_weapon	A grey flintlock pistol with a dagger blade and a wooden grip, a gun.
+gun_gflt1_010	small_weapon	A black old matchlock pistol with a wooden grip, a gun.
+gun_gflt1_011	small_weapon	A tan gold-ornamented noble pistol with a wooden grip, a gun.
+gun_gflt2_000	long_weapon	A grey soldier's flintlock musket with a sling and a wooden stock, a gun.
+gun_gflt2_001	long_weapon	A black musket with a bayonet and a wooden stock, a gun.
+gun_gflt2_002	long_weapon	A tan long musket with brass fittings and a wooden stock, a gun.
+gun_gflt2_003	long_weapon	A grey silver-inlaid hunting musket with a wooden stock, a gun.
+gun_gflt2_004	long_weapon	A grey heavy fortress musket with a wooden stock, a gun.
+gun_gflt2_005	long_weapon	A black short cavalry musket with a wooden stock, a gun.
+gun_gflt2_006	long_weapon	A black slim rifled sniper musket with a wooden stock, a gun.
+gun_gflt2_007	long_weapon	A grey double-barreled musket with a wooden stock, a gun.
+gun_gflt2_008	long_weapon	A black old musket with iron bands and a wooden stock, a gun.
+gun_gflt2_009	long_weapon	A tan gold-ornamented ceremonial musket with a wooden stock, a gun.
+gun_gflt3_000	long_weapon	A black lacquered Japanese matchlock with a wooden stock, a gun.
+gun_gflt3_001	long_weapon	A red lacquered Japanese matchlock with a wooden stock, a gun.
+gun_gflt3_002	large_weapon	A black short horseback matchlock with a wooden stock, a gun.
+gun_gflt3_003	long_weapon	A black heavy large-bore matchlock with a wooden stock and tan details, a gun.
+gun_gflt3_004	long_weapon	An orange brass-inlaid Japanese matchlock with a wooden stock, a gun.
+gun_gflt3_005	long_weapon	A grey old European arquebus with a curved stock and a wooden stock, a gun.
+gun_gflt3_006	long_weapon	A black heavy matchlock arquebus with a wooden stock, a gun.
+gun_gflt3_007	long_weapon	A black rope-wrapped plain matchlock with a wooden stock and tan details, a gun.
+gun_gflt3_008	long_weapon	A grey carved matchlock with a wooden stock, a gun.
+gun_gflt3_009	long_weapon	A black octagonal-barreled matchlock with a wooden stock and tan details, a gun.
+gun_gflt4_000	large_weapon	A brass blunderbuss with a wide flared muzzle and a wooden stock, a gun.
+gun_gflt4_001	large_weapon	A black short iron blunderbuss with a wooden stock, a gun.
+gun_gflt4_002	large_weapon	A tan double-barreled blunderbuss with a wooden stock, a gun.
+gun_gflt4_003	large_weapon	A black thick sailor's blunderbuss with a wooden stock, a gun.
+gun_gflt4_004	large_weapon	A tan old hand cannon on a pole with a wooden stock, a gun.
+gun_gflt4_005	large_weapon	A black thick bronze hand cannon with a wooden stock, a gun.
+gun_gflt4_006	large_weapon	A tan short cavalry blunderbuss with a wooden stock, a gun.
+gun_gflt4_007	large_weapon	A black oval-flared blunderbuss with a wooden stock, a gun.
+gun_gflt4_008	large_weapon	A black silver-ornamented blunderbuss with a wooden stock, a gun.
+gun_gflt4_009	large_weapon	A black plain hand cannon with iron bands, a wooden stock and tan details, a gun.
+gun_gfan1_000	small_weapon	A black worn iron revolver with a wooden grip, a gun.
+gun_gfan1_001	small_weapon	A black long-barreled revolver with a wooden grip, a gun.
+gun_gfan1_002	small_weapon	A black short revolver with a wooden grip and a wooden grip, a gun.
+gun_gfan1_003	small_weapon	A black old revolver with an octagonal barrel and a wooden grip, a gun.
+gun_gfan1_004	small_weapon	A black large-caliber heavy revolver with a wooden grip, a gun.
+gun_gfan1_005	small_weapon	A black eight-shot revolver with a large cylinder and a wooden grip, a gun.
+gun_gfan1_006	small_weapon	A black old cap-and-ball revolver with a loading lever and a wooden grip, a gun.
+gun_gfan1_007	small_weapon	A black revolver with a brass grip and a wooden grip, a gun.
+gun_gfan1_008	small_weapon	A black top-break revolver with a wooden grip, a gun.
+gun_gfan1_009	small_weapon	A black iron cavalry revolver with a wooden grip, a gun.
+gun_gfan1_010	small_weapon	A black short-barreled pocket revolver with a wooden grip, a gun.
+gun_gfan1_011	small_weapon	A black double-barreled revolver with a wooden grip, a gun.
+gun_gfan2_000	small_weapon	A tan revolver engraved with gold arabesques and a wooden grip, a gun.
+gun_gfan2_001	small_weapon	A white revolver with an ivory grip and a wooden grip, a gun.
+gun_gfan2_002	small_weapon	A black revolver set with a blue gem and a wooden grip, a gun.
+gun_gfan2_003	small_weapon	A white silver revolver with holy patterns, a gun.
+gun_gfan2_004	small_weapon	A black eerie revolver with a black bone grip and a wooden grip, a gun.
+gun_gfan2_005	small_weapon	A black revolver with glowing crystals in the cylinder, a wooden grip and blue details, a gun.
+gun_gfan2_006	small_weapon	A black revolver wrapped in a carved snake with a wooden grip, a gun.
+gun_gfan2_007	small_weapon	A white revolver with a red lacquered grip and a wooden grip, a gun.
+gun_gfan2_008	small_weapon	A white revolver with wing ornaments and a wooden grip, a gun.
+gun_gfan2_009	small_weapon	A black silver revolver with a moon ornament, a gun.
+gun_gfan2_010	small_weapon	A black revolver with thorn carvings and a wooden grip, a gun.
+gun_gfan2_011	small_weapon	A gold and black noble revolver with a wooden grip, a gun.
+gun_gfan3_000	small_weapon	A steampunk pistol wrapped in brass pipes with a wooden grip, a gun.
+gun_gfan3_001	small_weapon	A white steampunk pistol with a pressure gauge and a wooden grip, a gun.
+gun_gfan3_002	small_weapon	A tan steampunk pistol with exposed gears and a wooden grip, a gun.
+gun_gfan3_003	small_weapon	A white steampunk pistol with a small boiler and a wooden grip, a gun.
+gun_gfan3_004	small_weapon	A white steampunk pistol with three copper barrels and a wooden grip, a gun.
+gun_gfan3_005	small_weapon	A black steampunk pistol with steam tubes and a wooden grip, a gun.
+gun_gfan3_006	small_weapon	A black spring-loaded repeating steampunk pistol with a wooden grip, a gun.
+gun_gfan3_007	small_weapon	A brass steampunk pistol with a telescope and a wooden grip, a gun.
+gun_gfan3_008	small_weapon	A black steampunk pistol with a top cylinder magazine and a wooden grip, a gun.
+gun_gfan3_009	small_weapon	A white steampunk pistol with a leather grip and a brass box and a wooden grip, a gun.
+gun_gfan4_000	long_weapon	A black lever-action rifle with a wooden stock and a wooden stock, a gun.
+gun_gfan4_001	long_weapon	A black lever-action rifle with brass fittings and a wooden stock, a gun.
+gun_gfan4_002	long_weapon	A black short lever-action carbine with a wooden stock, a gun.
+gun_gfan4_003	long_weapon	A black scoped lever-action rifle with a wooden stock, a gun.
+gun_gfan4_004	long_weapon	A black octagonal-barreled hunting rifle with a wooden stock, a gun.
+gun_gfan4_005	long_weapon	A black engraved hunting rifle with a wooden stock, a gun.
+gun_gfan4_006	long_weapon	A grey double-barreled break-action rifle with a wooden stock, a gun.
+gun_gfan4_007	long_weapon	A black old hunting rifle with a sling and a wooden stock, a gun.
+gun_gfan4_008	long_weapon	A grey noble hunting rifle with silver ornaments and a wooden stock, a gun.
+gun_gfan4_009	long_weapon	A black leather-wrapped frontier hunting rifle with a wooden stock, a gun.
+gun_gfan5_000	large_weapon	A black steampunk rifle with brass pipes and a wooden stock, a gun.
+gun_gfan5_001	large_weapon	A tan steampunk rifle with pressure gauges and a wooden stock, a gun.
+gun_gfan5_002	large_weapon	A white hand-cranked multi-barrel machine gun with a wooden stock, a gun.
+gun_gfan5_003	large_weapon	A black steampunk machine gun with a cylinder magazine and a wooden stock, a gun.
+gun_gfan5_004	large_weapon	A tan flared-muzzle steampunk blunderbuss with a wooden stock, a gun.
+gun_gfan5_005	large_weapon	A black scoped steampunk sniper rifle with a wooden stock, a gun.
+gun_gfan5_006	large_weapon	A black steampunk rifle with a small boiler and a wooden stock, a gun.
+gun_gfan5_007	large_weapon	A black steampunk carbine with a gearbox under the barrel and a wooden stock, a gun.
+gun_gsht1_000	large_weapon	A black side-by-side double-barreled shotgun with a wooden stock and a wooden stock, a gun.
+gun_gsht1_001	large_weapon	A black over-under shotgun with a wooden stock, a gun.
+gun_gsht1_002	large_weapon	A white engraved luxury double-barreled shotgun with a wooden stock, a gun.
+gun_gsht1_003	large_weapon	A black long-barreled bird-hunting shotgun with a wooden stock, a gun.
+gun_gsht1_004	large_weapon	A black polymer double-barreled shotgun, a gun.
+gun_gsht1_005	large_weapon	A black old hammer double-barreled shotgun with a wooden stock, a gun.
+gun_gsht1_006	large_weapon	A black double-barreled shotgun with silver fittings and a wooden stock, a gun.
+gun_gsht1_007	large_weapon	A black double-barreled shotgun with a shell cuff and a wooden stock, a gun.
+gun_gsht1_008	large_weapon	A black rusty wasteland double-barreled shotgun with a wooden stock, a gun.
+gun_gsht1_009	large_weapon	A black triple-barreled shotgun with a wooden stock, a gun.
+gun_gsht2_000	large_weapon	A black lever-action shotgun with a wooden stock and a wooden stock, a gun.
+gun_gsht2_001	large_weapon	A black lever-action shotgun with a large loop lever and a wooden stock, a gun.
+gun_gsht2_002	large_weapon	A black iron lever-action shotgun, a gun.
+gun_gsht2_003	large_weapon	A black lever-action shotgun with brass fittings and a wooden stock, a gun.
+gun_gsht2_004	large_weapon	A black short lever-action shotgun with a wooden stock, a gun.
+gun_gsht2_005	large_weapon	A black lever-action shotgun with a long tube magazine and a wooden stock, a gun.
+gun_gsht2_006	large_weapon	A black engraved lever-action shotgun with a wooden stock, a gun.
+gun_gsht2_007	large_weapon	A black leather-wrapped lever-action shotgun with a wooden stock, a gun.
+gun_gsht2_008	large_weapon	A black rusty wasteland lever-action shotgun with a wooden stock, a gun.
+gun_gsht2_009	large_weapon	A black silver-ornamented lever-action shotgun with a wooden stock, a gun.
+gun_gsht3_000	large_weapon	A black polymer pump-action shotgun, a gun.
+gun_gsht3_001	large_weapon	A black pump-action shotgun with a wooden forend and a wooden stock, a gun.
+gun_gsht3_002	large_weapon	A black pistol-grip pump-action shotgun, a gun.
+gun_gsht3_003	large_weapon	A black tactical pump-action shotgun with a collapsible stock, a gun.
+gun_gsht3_004	large_weapon	A black pump-action shotgun with a weapon light, a gun.
+gun_gsht3_005	large_weapon	A black box-magazine automatic shotgun, a gun.
+gun_gsht3_006	large_weapon	A black drum-magazine automatic shotgun, a gun.
+gun_gsht3_007	large_weapon	A black bullpup shotgun with a wooden stock and tan details, a gun.
+gun_gsht3_008	large_weapon	A black shotgun with a perforated heat shield and a wooden stock, a gun.
+gun_gsht3_009	large_weapon	A black shotgun with twin tube magazines and a wooden stock, a gun.
+gun_gsht4_000	medium_weapon	A black sawed-off double-barreled shotgun with a wooden stock, a gun.
+gun_gsht4_001	medium_weapon	A black short pistol-grip pump shotgun, a gun.
+gun_gsht4_002	medium_weapon	A grey short over-under shotgun with a wooden stock, a gun.
+gun_gsht4_003	medium_weapon	A black cloth-wrapped wasteland sawed-off shotgun with a wooden stock, a gun.
+gun_gsht4_004	medium_weapon	A black short lever-action shotgun with a wooden stock, a gun.
+gun_gsht4_005	medium_weapon	A short black polymer shotgun, a gun.
+gun_gsht4_006	medium_weapon	A black short shotgun with brass fittings and a wooden stock, a gun.
+gun_gsht4_007	medium_weapon	A black short flared-muzzle shotgun with a wooden stock, a gun.
+gun_gsht4_008	medium_weapon	A black short rusty iron shotgun with a wooden stock, a gun.
+gun_gsht4_009	medium_weapon	A black short triple-barreled shotgun with a wooden stock, a gun.
+gun_gsht5_000	medium_weapon	A grey sawed-off side-by-side double-barreled shotgun with a wooden stock, a gun.
+gun_gsht5_001	medium_weapon	A black sawed-off over-under shotgun with a bare grip and a wooden stock, a gun.
+gun_gsht5_002	medium_weapon	A black sawed-off single-shot break-action shotgun with a wooden stock, a gun.
+gun_gsht5_003	medium_weapon	A black sawed-off pump-action shotgun with a wooden grip and a wooden stock, a gun.
+gun_gsht5_004	medium_weapon	A black cloth-wrapped wasteland sawed-off double-barreled shotgun with a wooden stock, a gun.
+gun_gsht5_005	medium_weapon	A black sawed-off double-barreled shotgun with brass bands and a wooden stock, a gun.
+gun_gsht5_006	medium_weapon	A black short shotgun with a slightly flared muzzle and a wooden stock, a gun.
+gun_gsht5_007	medium_weapon	A black rusty iron sawed-off double-barreled shotgun with a wooden stock, a gun.
+gun_gsht5_008	medium_weapon	A short black polymer automatic shotgun, a gun.
+gun_gsht5_009	medium_weapon	A black sawed-off triple-barreled shotgun with a wooden stock, a gun.

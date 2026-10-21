@@ -17,6 +17,7 @@ import argparse
 import functools
 import json
 import os
+import re
 import sys
 from collections import Counter
 from pathlib import Path
@@ -78,8 +79,10 @@ def caption_for(entry, im):
         merged[c] += n
     order = [c for c, _ in merged.most_common()]
     main = order[0] if order else "grey"
-    text = "%s %s" % (main, entry["type"])
-    accent = [c for c in order[1:] if c not in ("grey", "black", main) and merged[c] / total >= 0.12]
+    # 名前に入っている色は前に重ねない（「white white helmet」にしない）
+    named = set(re.findall(r"[a-z]+", entry["type"].lower()))
+    text = entry["type"] if main in named else "%s %s" % (main, entry["type"])
+    accent = [c for c in order[1:] if c not in ("grey", "black", main) and c not in named and merged[c] / total >= 0.12]
     if accent:
         text += " with %s details" % accent[0]
     return "%s %s." % ("An" if text[0] in "aeiou" else "A", text)
