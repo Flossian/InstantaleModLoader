@@ -64,7 +64,7 @@ NARROWED_MANAGERS = ("referee_player_any_input_new_new", "referee_player_any_inp
 GAME_HANDLED_CARRIERS = {"blow": "slash", "water": "ice"}
 RESOLVE_TARGET = "__main__:BattlePhaseManager.resolve_battle_effect"
 #: 演出を出す関数。単体の絵は effect（→ HUD の start_effect）、全体の絵は window_effect
-#: （→ start_window_effect）を通る（実機の記録。DOC.md §2）。HUD の側は app の側から呼ばれるので包まない。
+#: （→ start_window_effect）を通る（実機の記録。GAME.md §2.10.5）。HUD の側は app の側から呼ばれるので包まない。
 EFFECT_TARGETS = (
     "__main__:InstantaleApp.effect",
     "__main__:InstantaleApp.window_effect",

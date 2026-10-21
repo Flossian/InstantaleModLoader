@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """攻撃の演出の絵（コマ送りの PNG）を描き直す。
 
-    py -3.13 runtime/mods/920_attack_animations/build/make_frames.py [--sheet 見本の置き場所] [--only 名前 …]
+    py -3.13 runtime/mods/342_attack_animations/build/make_frames.py [--sheet 見本の置き場所] [--only 名前 …]
 
 一度きりのビルド用で、実行時には読まれない（実行時に読むのは `../effects/` だけ）。
 要るのは Pillow と numpy（ゲームの Python ではなく、手元の Python で走らせる）。

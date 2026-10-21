@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""920_attack_animations をゲーム抜きで通す。
+"""342_attack_animations をゲーム抜きで通す。
 
-    python tools/tests/test_wip_attack_animations.py
+    python tools/tests/test_attack_animations.py
 
   型       … 審判の型の vfx の Literal に選択肢を足した子クラスを作る。欄の並びは親のまま、
              足した値で検証が通る。vfx の無い型・slash を含まない型には触らない

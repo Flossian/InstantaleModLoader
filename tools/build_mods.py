@@ -192,6 +192,7 @@ BANDS = (
         "339_town_factions",
         "340_inn_shop",
         "341_shopkeeper_attitude",
+        "342_attack_animations",
     )),
     #: 提供（4xx）は出どころの帯なので kind を固定しない（TECH.md §3.2.2）。
     (None, CONTRIB_HEAD, (

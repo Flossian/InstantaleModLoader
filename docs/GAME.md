@@ -1176,7 +1176,7 @@ referee_enemy_new / referee_npc / referee_npc_rewrite                         �
 | `RemoveTextStatusEffect` | 名前を指した解除 |
 | `AttributeEffect` | `enhancement` / `reduction` × 6能力値（str/dex/con/wis/int/cha）× power 5段 |
 
-戻りの根は `narration` / `skill_effects` / `additional_effects` / `vfx`（8種の Literal）。
+戻りの根は `narration` / `skill_effects` / `additional_effects` / `vfx`（8種の Literal。演出の選び方は §2.10.5）。
 審判は頼まれなくても状態異常を出す
 （通常攻撃の記録で、敵の反撃として `TextStatusEffect`（拘束の状態異常、duration 3、
 毎ターン weak damage）がプレイヤーに付いた実例）。
@@ -1460,6 +1460,47 @@ NPC（敵・仲間）の魔法   2 × magic_power × k
 入力文は引数 `command` として渡り、プロンプトには積まれない。
 どんな入力が strong を引き出すかを語で数えるには、
 `referee_player_any_input_new_new` を包んで `command` を控える必要がある。
+
+#### 2.10.5 攻撃の演出と効果音（`342_attack_animations` で実測）
+
+演出は `BattlePhaseManager.resolve_battle_effect` が `battle_action["vfx"]` を読んで決める。
+exe の定数で読めた値と絵のフォルダの対応は次のとおり（`resolve_opponents` の中）。
+
+| vfx | 絵のフォルダ |
+|---|---|
+| slash | `Assets/effects/battle_dark_/slash1` |
+| blow | `Assets/effects/blow` |
+| fire / fire_aoe | `battle_dark_/fire2` / `battle_dark_/fire_aoe3` |
+| ice / ice_aoe | `battle_dark_/mix_ice_earth1` / `battle_dark_/ice_aoe1` |
+| thunder / thunder_aoe | `Thunder_480p` / `Thunder_aoe` |
+| earth | `battle_dark_/earth3` |
+| water | `485.png_(64x64)` |
+
+- 審判の型（`referee_player_attack_new_new` などの `<locals>.Structure`）の `vfx` は
+  slash / fire / fire_aoe / ice / ice_aoe / thunder / thunder_aoe / earth の8つの Literal。
+  `blow` と `water` は処理があるのに選択肢に無いので、素のゲームでは出ない。
+  `referee_member_new_new` の定数には slash / fire / fire_aoe / ice / ice_aoe の5つしか並んでいなかった（型としては未確認）
+- 自由入力の審判（`referee_player_any_input_new_new`）は、送り口に `<locals>.Structure` を渡した後、答えを関数の中の
+  `FormattedStructure`（同じ8つの Literal。局所のクラスで、モジュールの属性ではない）で作り直す（`llm_manager_battle.py:821`）。
+  送り口の型だけ広げると、足した値（`arcane`）がそこで `ValidationError` になり、手番のスレッドが落ちる（2026-10-21 の実機。`319_` の防御の手番）。
+  モジュールの `FormattedStructure` を替えても届かなかった（実機）
+- `out\*.jsonl` に残っていた審判の戻り 6230 件のうち、slash が 5415 件（87%）
+- `Assets/effects` の絵のフォルダ 75 個のうち、ゲームが使うのは上の 10 個だけ。
+  武器・体の攻撃に使える絵は slash1・slash2・blow（どれも 64x64・8〜10 コマの白い筋と粒）しか無い
+- 効果音は `SoundManager.play_sound(app, sound_src)` の2つ目に名前を渡して鳴らす。名前の表は クリック / ダメージ1〜3 / 斬撃 / 打撃 / 炎（小・大）/ 雷（小・大）/ 氷（小・大）/ 接敵（通常・ボス）/ 取引開始。
+  戦闘の絵と音は `resolve_battle_effect` の中で Clock に積まれ、少し後に出る（`235_probe_sound_effects` の呼び出し元が `<lambda>`）。
+  実測では手から約0.4秒後
+- 1体の絵は `InstantaleApp.effect(src, width=192, height=192, pos_hint={敵の位置})` → `InstanTaleHUD.start_effect`、
+  全体の絵は `InstantaleApp.window_effect` → `InstanTaleHUD.start_window_effect` を通る（全体は1手に1回）。
+  場面の切り替え（`simple_fadeout` / `frames_gyaku`）と雷の全体（`Thunder_aoe`、960x960）も window_effect
+- 絵は `NearestNeighborImage` で、フォルダのコマを名前順に約 0.07 秒ずつ出す。拡大は最近傍なので、64 の絵はドット絵のように粗く出る。
+  絶対パスのフォルダも再生できる
+- ダメージの無い手（強化・弱体化だけ）と、敵が味方を打つ手（`character_side` が `敵側`）には絵を出さない
+- 全体の絵（window_effect）は、再生が終わっても部品を外さず最後のコマを出したまま残る
+  （2026-10-21 の実機。場面の切り替えの `frames_gyaku\frame_029.png` が不透明度1のまま残っていた）。
+  ゲームが使う絵は最後のコマが空なので見えない。1体の絵の部品は再生の後に残っていなかった。
+  ゲームに在って使われていない絵のうち、`342_` が使う9つ（`fire_aoe4`、`battle/` の `wind2`・`wind_aoe2`・`thunder_aoe2`・`wisp1`・`wisp_aoe1`・`neutral_energy1`・`neutral_energy_aoe1`・`water_aoe1`）は最後のコマに絵がある。
+  `battle_dark_` の下の絵は、最後に空の `image_end.png` を置いたものが多い
 
 ### 2.11 BGM
 
