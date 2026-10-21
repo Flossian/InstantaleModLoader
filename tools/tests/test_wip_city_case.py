@@ -997,6 +997,24 @@ app.facility_screen()
 refresh()
 check("依頼元では進み具合を確かめられる",
       mod.STATUS_LABEL in app.labels(), app.labels())
+
+print("\n[窓口] ボタンはローダの窓口 `choices` が組み、セーブには残さない（版3）")
+from instantale_modloader import choices as _choices  # noqa: E402
+check("自分で組み直し・押下を包まない（窓口の包みだけ）",
+      all(getattr(ctx.hooks.get(target), "__module__", "") == _choices.__name__
+          for target in (_choices.REFRESH_TARGET, _choices.PRESS_TARGET)),
+      {t: getattr(ctx.hooks.get(t), "__module__", None) for t in (_choices.REFRESH_TARGET, _choices.PRESS_TARGET)})
+check("組んだボタンは窓口のボタン", all(_choices.ours(e) for e in app.buttons if e.get("text") in mod.OUR_LABELS),
+      app.labels())
+saved_views = []
+ctx.hooks[_choices.SAVE_TARGET](lambda self: saved_views.append([e.get("text") for e in self.buttons]), app)
+check("保存の間は自前のボタンを外す（セーブにはゲームの「出る」だけ）", saved_views == [[EXIT_TEXT]], saved_views)
+check("保存の後は元に戻る", mod.STATUS_LABEL in app.labels(), app.labels())
+# 版2までの印のボタン（窓口の印の付け直しで戻ったもの）は落として組み直す
+app.buttons.insert(0, {"text": mod.STATUS_LABEL, "spec": PhaseSpec("JustSetButtonToNormalPhase", []),
+                       mod.MARK: "status"})
+refresh()
+check("前の版の印のボタンは落とし、二重にならない", app.labels().count(mod.STATUS_LABEL) == 1, app.labels())
 app.texts[:] = []
 press(ctx, app, mod.STATUS_LABEL)
 status = [str(t) for t in app.texts]

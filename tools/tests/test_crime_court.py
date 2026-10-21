@@ -4,6 +4,7 @@
     python tools/tests/test_crime_court.py
 
   取引と無罪 … 司法取引を持ちかけて無罪放免になったら、締め出しは放免の日から数える
+               （ボタンは窓口 `choices` の宣言型の口。介入は `offer`、無罪放免の判決の画面は `claim`）
   無罪の道   … 前の送りで開いた道は、閉じた送りで控えから外す。判決の後に裁判の画面へ戻ったら判決を読み直す
   脱獄       … 決行の戦闘の最中に注入し直してメモリの控えを失っても、戦闘の終わりに牢を出た後の始末をする
 """
@@ -20,7 +21,7 @@ MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
-from instantale_modloader import llm, ui  # noqa: E402
+from instantale_modloader import choices, llm, ui  # noqa: E402
 
 matches = sorted(name for name in os.listdir(MODS_DIR) if name.endswith("_crime_overhaul"))
 if len(matches) != 1:
@@ -166,8 +167,14 @@ def make_env():
     env.worlds = Worlds()
     env.cfg = entry._Settings()
     env.refreshers, env.pressers = [], {}
+    env.offers, env.claims, env.screens, env.labels = [], [], {}, []
     env.on_refresh = env.refreshers.append
     env.on_press = lambda head, fn: env.pressers.__setitem__(head, fn)
+    env.on_offer = env.offers.append
+    env.on_claim = env.claims.append
+    env.on_screen = env.screens.__setitem__
+    env.on_labels = env.labels.append
+    env.screen_open = lambda app, name: False
     env.take_carry = lambda app: {}
     env.quest_reward = lambda difficulty: 100
     env.area_difficulty = lambda app: 10
@@ -198,9 +205,28 @@ def judge(env, plea):
 
 
 def refresh(env, buttons):
+    """組み直し（窓口と同じ順）: 今の口の refresh → claim（あればそれだけ）→ offer。並んだボタンを返す。
+
+    ボタンは `{"text", "choice"}`（宣言型の口のボタン）か、ゲームのボタンそのもの。
+    """
     for fn in env.refreshers:
         fn(APP, buttons)
-    return buttons
+    view = choices.View(APP, buttons)
+    for fn in env.claims:
+        picked = fn(APP, view)
+        if picked:
+            return [{"text": c.text, "choice": c} for c in picked]
+    shown = list(buttons)
+    for fn in env.offers:
+        for c in fn(APP, view) or ():
+            shown.append({"text": c.text, "choice": c})
+    return shown
+
+
+def press(buttons, text):
+    """並んだボタンのうち文言が `text` で始まる宣言型のボタンを押す。"""
+    found = next(b for b in buttons if "choice" in b and b["text"].startswith(text))
+    return found["choice"].on_press(APP)
 
 
 # ================================================================ 取引と無罪
@@ -210,17 +236,25 @@ prison.install(env)                     # apply と同じく prison が先（締
 court.install(env)
 key = env.worlds.playthrough(APP)
 env.worlds.load(key)["underworld_done"] = 1          # 裏の仕事を片付けたことがある（取引を持ちかけられる）
-buttons = refresh(env, trial_screen())
-check("裁判の画面に司法取引のボタン", any(b.get("mark") == court.MARK_HEAD + "plea" for b in buttons),
+game = trial_screen()
+buttons = refresh(env, game)
+check("裁判の画面に司法取引のボタン", any(b["text"] == trial.PLEA_LABEL and "choice" in b for b in buttons),
       [b.get("text") for b in buttons])
-env.pressers[court.MARK_HEAD](APP, court.MARK_HEAD + "plea")
+check("介入のボタンはゲームの一覧に足さない（窓口が組む）", len(game) == 2, [b.get("text") for b in game])
+press(buttons, trial.PLEA_LABEL)
 check("取引の締め出しは牢を出てから数える控え", env.worlds.load(key).get("underworld_ban_after") is not None)
+check("使った介入は組み直すと出ない", trial.PLEA_LABEL not in [b["text"] for b in refresh(env, trial_screen())])
 content = judge(env, "その夜は宿で寝ていて、店の主人も私を見ていないと証言している")
 check("書いた釈明で無罪の道が開く", trial.NOTE_ACQUIT in content)
-buttons = refresh(env, verdict_screen(0))
-check("0年の判決は無罪放免の1つに差し替える", [b.get("text") for b in buttons] == [trial.ACQUIT_LABEL])
+game = verdict_screen(0)
+buttons = refresh(env, game)
+check("0年の判決は無罪放免の1つだけにする（claim）", [b.get("text") for b in buttons] == [trial.ACQUIT_LABEL])
+check("ゲームの判決のボタンは書き換えない（セーブには判決のボタンが残る）",
+      [b.get("text") for b in game] == ["はい"], game)
+check("組み直しても無罪放免の1つだけ", [b.get("text") for b in refresh(env, verdict_screen(0))]
+      == [trial.ACQUIT_LABEL])
 APP.day = 120
-env.pressers[court.MARK_HEAD](APP, court.MARK_HEAD + "acquit")
+press(buttons, trial.ACQUIT_LABEL)
 bucket = env.worlds.load(key)
 check("放免の日から締め出しを数え、控えは残さない",
       bucket.get("underworld_ban") == 120 + int(env.cfg.TRIAL_PLEA_BAN_DAYS)

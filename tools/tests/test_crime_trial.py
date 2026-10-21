@@ -8,7 +8,8 @@
   改め方 … 弁護人・司法取引・買収の成功で死刑を外し、求刑に掛けた年数を上限にする。
              判事がそれより軽ければ判事のまま。露見は年数を足す。何も無ければ変えない
   頼み   … 判事への一文、情状の段、壊れた人生の記録の置き換え
-  捕まる前後 … 衛兵の買収の確率（encounter.py）、処刑場からの脱出の難易度と手引きする人（rescue.py）
+  捕まる前後 … 衛兵の買収の確率と、突き返された後の画面（encounter.py。窓口 `choices` の宣言型の口）、
+               処刑場からの脱出の難易度と手引きする人（rescue.py）
   盗品   … よその店・盗品買取商での買い取り額（rules.stolen_sell_price）、盗品買取商の台詞の割合（fence.rate_label）
 """
 import importlib
@@ -146,6 +147,98 @@ def scene_prompt():
     check("魅力15で基準の確率", trial.bribe_chance(15, 40, 3) == 40)
 
 
+class Store(object):
+    """世界×主人公の控え（`state.WorldStore` の偽物。中身はメモリだけ）。"""
+
+    def __init__(self):
+        import threading
+        self.lock = threading.RLock()
+        self.data = {}
+
+    def playthrough(self, app):
+        return "検査の世界×主人公"
+
+    def load(self, key):
+        return self.data.setdefault(key, {})
+
+    def save(self, key):
+        pass
+
+
+def install_encounter(store, roll):
+    """`encounter.install` を偽の env に載せる。`(offer, env)` を返す。"""
+    from instantale_modloader import ui
+    offers, said, carried, started = [], [], [], []
+    ctx = types.SimpleNamespace(log_exc=lambda message: said.append(("ERROR", message)))
+    env = types.SimpleNamespace(
+        ctx=ctx, write=lambda line: None, worlds=store,
+        screen=types.SimpleNamespace(
+            say=lambda app, text: said.append(text),
+            instantiate_spec=lambda app, entry: ("phase", entry),
+            start_phase=lambda app, phase, text: started.append((phase, text)) or True),
+        cfg=types.SimpleNamespace(GUARD_BRIBE_ENABLED=True, GUARD_BRIBE_PCT=100, GUARD_BRIBE_BASE_PCT=50,
+                                  GUARD_BRIBE_PER_POINT=3, GUARD_BRIBE_WANTED_PCT=0.5,
+                                  _RNG=types.SimpleNamespace(random=lambda: roll)),
+        quest_reward=lambda difficulty: 100, area_difficulty=lambda app: 10, here_lawfulness=lambda app: None,
+        refresh_gold=lambda app: None, carry=lambda app, key, value: carried.append((key, value)),
+        on_offer=offers.append, on_labels=lambda fn: None)
+    env.said, env.carried, env.started = said, carried, started
+    saver = ui.saver
+    ui.saver = lambda *a, **k: (lambda app, why=None: None)
+    try:
+        encounter.install(env)
+    finally:
+        ui.saver = saver
+    return offers[0], env
+
+
+def scene_encounter(surrender, resist):
+    """衛兵の買収: 金を握らせる → 突き返された後は「大人しく捕まる」を差し替える（ロードの後も控えから）。"""
+    from instantale_modloader import choices
+    repaints = []
+    real_repaint = choices.repaint
+    choices.repaint = lambda app: repaints.append(app)
+    try:
+        store = Store()
+        offer, env = install_encounter(store, roll=0.99)          # 99 ≥ 率 → 突き返される
+        app = types.SimpleNamespace(gold=1000, player=types.SimpleNamespace(), buttons=[surrender, resist])
+        from instantale_modloader import ui
+        gold_of, add_gold = ui.gold_of, ui.add_gold
+        ui.gold_of = lambda a: a.gold
+        ui.add_gold = lambda a, delta: setattr(a, "gold", a.gold + delta) or a.gold
+        try:
+            picked = offer(app, choices.View(app, app.buttons))
+            check("衛兵の画面に金を握らせるを足す（ゲームの一覧には足さない）",
+                  [c.text for c in picked or []] == ["金を握らせる（100G・成功率 50%）"]
+                  and app.buttons == [surrender, resist], [c.text for c in picked or []])
+            picked[0].on_press(app)
+            check("突き返されたら額を払い、組み直す", app.gold == 900 and repaints, (app.gold, repaints))
+            picked = offer(app, choices.View(app, app.buttons))
+            check("突き返された後: 金を握らせるを出さず、大人しく捕まるを差し替える",
+                  [c.text for c in picked or []] == ["大人しく捕まる"] and picked[0].replace
+                  and picked[0].base is surrender, picked)
+            offer2, env2 = install_encounter(store, roll=0.99)     # 注入し直し・ロード（メモリの旗は無い）
+            picked = offer2(app, choices.View(app, app.buttons))
+            check("ロードの後も控えから同じ形（差し替えた大人しく捕まるだけ）",
+                  [c.text for c in picked or []] == ["大人しく捕まる"] and picked[0].replace, picked)
+            picked[0].on_press(app)
+            check("差し替えた大人しく捕まるで、贈賄を裁判へ持ち越してゲームの連行を起こす",
+                  env2.carried == [("bribe", "caught")] and env2.started
+                  and env2.started[0][0] == ("phase", surrender), (env2.carried, env2.started))
+            check("連行した後は控えを消す", "encounter" not in store.load(store.playthrough(app)),
+                  store.load(store.playthrough(app)))
+            picked = offer2(app, choices.View(app, [resist]))
+            check("連行して控えを消した後は、次の衛兵の画面でまた金を握らせるを出す",
+                  [c.text for c in picked or []] == ["金を握らせる（100G・成功率 50%）"], picked)
+            picked = offer2(app, choices.View(app, [{"text": "出る", "spec": surrender["spec"].__class__(
+                "MovePhaseManager")}]))
+            check("衛兵の画面でなければ何も出さない", picked is None, picked)
+        finally:
+            ui.gold_of, ui.add_gold = gold_of, add_gold
+    finally:
+        choices.repaint = real_repaint
+
+
 class Person(object):
     def __init__(self, name, affinity=None, dead=False):
         self.name = name
@@ -167,18 +260,11 @@ def scene_capture():
 
     surrender = {"text": "大人しく捕まる", "spec": Spec("TrialStartManager", ["罪状", "出来事"])}
     resist = {"text": "抵抗する！", "spec": Spec("BattleStartManager", ["guard", None])}
-    bribe = {"text": "金を握らせる（1G・成功率 50%）", "spec": Spec("JustSetButtonToNormalPhase"),
-             "mod_crime_incentive_action": "encounter:bribe"}
-    after = encounter.refusal_buttons([surrender, resist, bribe], resist)
-    check("突き返された後: 大人しく捕まる・抵抗する！の2つだけ",
-          [e["text"] for e in after or []] == ["大人しく捕まる", "抵抗する！"], after)
-    check("突き返された後: 捕まるは写し（ゲームのボタンに印を書き込まない）",
-          after is not None and after[0] is not surrender and after[0]["spec"] is surrender["spec"])
-    check("突き返された後: 抵抗する！はゲームのボタンそのまま", after is not None and after[1] is resist)
-    check("突き返された後: 捕まるが無ければ組まない", encounter.refusal_buttons([resist, bribe], resist) is None)
-    check("突き返された後: 抵抗する！が無ければ組まない", encounter.refusal_buttons([surrender], None) is None)
-    check("脱出: 土地とレベルの高いほう ＋ 上乗せ", rescue.rescue_difficulty(76, 80, 10) == 90)
-    check("脱出: 土地の難易度が高ければそちら", rescue.rescue_difficulty(76, 40, 10) == 86)
+    scene_encounter(surrender, resist)
+    check("脱出: 土地とレベルの高いほう ＋ 上乗せ", rescue.rescue_difficulty(30, 50, 10) == 60)
+    check("脱出: 土地の難易度が高ければそちら", rescue.rescue_difficulty(56, 40, 10) == 66)
+    check("脱出: ゲームの上限で止める（既定 76）", rescue.rescue_difficulty(4, 72, 10) == 76
+          and rescue.rescue_difficulty(76, 40, 10, 80) == 80)
     check("脱出: 片方だけ読めればそれを使う", rescue.rescue_difficulty(None, 30, 10) == 40)
     check("脱出: どちらも読めなければ None", rescue.rescue_difficulty(None, None, 10) is None)
     check("好感度を読む", rescue.affinity_of(Person("a", 80)) == 80)
@@ -190,9 +276,10 @@ def scene_capture():
         "2": Person("高い", 75),
         "3": Person("もっと高いが死んだ", 99, dead=True),
         "4": Person("届く", 60),
+        "mod:5": Person("MOD の人物", 90),
     })
     app = types.SimpleNamespace(world=world)
-    check("手引きはいちばん好感度の高い生きた人", rescue.rescuer_of(app, 60) == ("2", "高い", 75),
+    check("手引きはいちばん好感度の高い生きた人（MOD の人物は選ばない）", rescue.rescuer_of(app, 60) == ("2", "高い", 75),
           rescue.rescuer_of(app, 60))
     check("線に届く人がいなければ None", rescue.rescuer_of(app, 80) is None)
 

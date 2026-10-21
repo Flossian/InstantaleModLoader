@@ -485,6 +485,8 @@ def scene_guild_list():
     check("押すとゲームの会話が始まる形",
           buttons[ids.index(npc_id)]["spec"].cls_name == "ConversationStartManager")
     check("「やめる」の手前", ids.index(npc_id) < len(ids) - 1, texts)
+    check("足したのはゲームの会話のボタン（印は付けない。セーブに残っても MOD の無い起動で話せる）",
+          set(buttons[ids.index(npc_id)]) == {"text", "spec"}, sorted(buttons[ids.index(npc_id)]))
 
     # ゲームが名簿だけで組む場合（旅の人も並んでいる）。
     buttons = open_adventurer_list(ctx, app, others + [npc_id])

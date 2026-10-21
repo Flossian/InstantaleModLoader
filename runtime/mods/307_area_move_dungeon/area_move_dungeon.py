@@ -44,11 +44,12 @@
 実測値は「どれが徒歩か」の照合にだけ使い、
 当たらなければ文字列 → 並び順の順に下がる（`world.pick_option`）。
 
-## 自前のクラス名を `PhaseSpec` に書かない
+## ボタンはローダの窓口が組む
 
-ボタンはセーブに焼かれうる（`PhaseSpec.to_dict()`）。
-無害な既存クラスを持たせ、押下は
-`on_button_press` を包んでボタン辞書の印で横取りする。
+「危険な道を行く」はローダの窓口 `choices` の宣言型の口（`offer`）に預ける（TECH.md §3.3.14）。
+確認画面が組み直されるたびに窓口が足し、押下は窓口がボタンに持たせた処理を呼ぶ。
+ボタンはセーブに残らない（窓口が保存の間だけ外す）。
+ほかの MOD が見分けられるよう、印（`MARK` = mod_road_action）を `marks` で付ける。
 印のキーは他の MOD と別にすること（`301_`=mod_action / `302_`=mod_party_action /
 `305_`=mod_mini_action / ここ=mod_road_action）。
 
@@ -122,21 +123,14 @@ STATE_BASENAME = "road_travel.json"
 # 確認画面に足すボタンの文字列。
 ROAD_LABEL = "危険な道を行く"
 
-# セーブから復元された残骸を見分けるための、
-# こちらのラベル一覧（`ui.Screen.prune_stale`）。
-# `PhaseSpec.to_dict()` は text と spec しか書かないので印は落ちる。
-# 落ちたものは下の印による重複判定をすり抜け、
-# 同じボタンが2つ並んで復元された方は押しても無反応になる（`301_` で実際に起きた）。
-# ここは実機で観測した症状ではなく、保険。
-# `301_` / `309_` が踏んだのは `refresh_choice_buttons`（ゲームが組んだ一覧を塗り直すだけ）で、
-# こちらは徒歩・馬車が並び終えた後。
-# 確認画面がそのつど一覧を組み直すビルドなら残骸はゲーム自身が消している。
-# 組み直さないビルドがあっても壊れないよう、同じ掃除を通しておく。
+# 版5までがセーブに焼いた自前のボタンの文言（ローダの窓口 `choices` の `labels`。無害な spec で印の無いものを外す）。
+# 版5までは自前のボタンを一覧に物として置いていたので、セーブに文言と spec が残りえた。
 # 掃除に使う文言はこちらにしか無いものだけ（汎用語を入れると他
 # MOD やゲームのボタンを巻き込む。`302_` の項を参照）。
 OUR_LABELS = (ROAD_LABEL,)
 
-# 押下を横取りするための印。
+# 「危険な道を行く」に付ける印（ほかの MOD が見分けるため。窓口 `choices` の `marks`）。
+# 押下の振り分けには使わない（窓口がボタンに持たせた処理を呼ぶ）。
 # 他の MOD と別のキーにすること。
 MARK = "mod_road_action"
 
@@ -405,8 +399,8 @@ def apply(ctx):
             screen.say(app, REFUSE_TEXT)
             screen.say(app, refusal)
             # 確認画面はそのまま残っている。
-            # 塗り直して徒歩・馬車を選べる状態に戻す。
-            screen.apply_buttons(app, None, "refused")
+            # 組み直して塗り、徒歩・馬車を選べる状態に戻す。
+            choices.repaint(app)
             return
 
         options = state["options"] or world.move_options(getattr(app, "buttons", None))
@@ -711,61 +705,28 @@ def apply(ctx):
         arrived_check(app)
 
     # ================================================================ フック
-    @ctx.wrap("__main__:AreaMoveCofirmation.update_button_display", required=False)
-    def confirmation_buttons(orig, self, *args, **kwargs):
-        """徒歩・馬車が並び終えた後に「危険な道を行く」を1つ足す。
+    def offer(app, view):
+        """移動の確認画面に「危険な道を行く」を1つ出す（窓口 `choices` の `offer`。組み直しのたびに呼ばれる）。
 
         ゲームが作った移動のボタンには一切触らない。
-        読むだけ（`args` を控える）。
+        読むだけ（`args` を控える）。置くのは「やめる」の手前。無ければ末尾。
         """
-        result = orig(self, *args, **kwargs)
-        try:
-            app = getattr(self, "app", None) or ui.find_app()
-            if app is None:
-                return result
-            buttons = getattr(app, "buttons", None)
-            if not isinstance(buttons, list):
-                write("confirm: app.buttons is {}; leaving it alone".format(
-                    type(buttons).__name__))
-                return result
-            options = world.move_options(buttons)
-            if not options:
-                return result       # 移動の確認画面ではない（or 構成が変わった）
-            write("confirm: options {}".format(
-                [(entry.get("text"), opts) for entry, opts in options]))
-            state["options"] = options
-            # **印を失った自前ボタンの残骸を先に落とす**（`ui.Screen.prune_stale`）。
-            # 移動の確認画面だと分かってから（`options` が取れてから）呼ぶ。
-            screen.prune_stale(buttons, OUR_LABELS)
-            if any(screen.mark_of(entry) for entry in buttons):
-                return result       # 既に在る（開き直しても二重にしない）
-            entry = screen.button(ROAD_LABEL, mark="road")
-            if entry is None:
-                write("confirm: cannot build the button (PhaseSpec unavailable)")
-                return result
-            # 「やめる」の手前。
-            # 無ければ末尾。
-            at = len(buttons)
-            for index, item in enumerate(buttons):
-                if ui.spec_cls_name(item) == ui.SAFE_CLS:
-                    at = index
-                    break
-            buttons.insert(at, entry)
-            # ここはゲームが並べ終えた直後。
-            # 描画はもう済んでいるので、次のフレームで塗り直す（`app.buttons` は直接いじったので
-            # entries=None）。
-            screen.apply_buttons(app, None, "confirm")
-        except Exception:
-            ctx.log_exc("road travel: cannot add the road button")
-        return result
+        options = world.move_options(view.buttons)
+        if not options:
+            return None             # 移動の確認画面ではない（or 構成が変わった）
+        seen = [(entry.get("text"), opts) for entry, opts in options]
+        if state.get("offered") != seen:
+            state["offered"] = seen
+            write("confirm: options {}".format(seen))
+        state["options"] = options
+        return [choices.Choice(ROAD_LABEL, place=choices.before(ui.SAFE_CLS), marks={MARK: "road"},
+                               on_press=on_press)]
 
-    def on_button_press(self, action):
-        """自前のボタンが押された（窓口 `choices` の `presses`）。"""
-        entry = choices.pressed()
-        text = (entry.get("text") if isinstance(entry, dict) else None) or ROAD_LABEL
-        write("pressed {!r} ({})".format(text, action))
-        screen.start_phase(self, RoadPhase(self), text,
-                           fallback=lambda: start_road(self, text))
+    def on_press(app):
+        """「危険な道を行く」が押された（窓口がボタンに持たせる処理）。"""
+        write("pressed {!r}".format(ROAD_LABEL))
+        screen.start_phase(app, RoadPhase(app), ROAD_LABEL,
+                           fallback=lambda: start_road(app, ROAD_LABEL))
         return None
 
     def refresh_choice_buttons(self, _buttons):
@@ -799,8 +760,9 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("road travel: cannot start the pending move")
 
-    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
-    choices.provide(ctx, screen, refresh=refresh_choice_buttons, presses={"": on_button_press})
+    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14 の宣言型の口）に預ける。
+    # 「危険な道を行く」は `offer`。集落に戻ったときの移動の起こし直しは状態の更新なので `refresh`
+    choices.provide(ctx, screen, refresh=refresh_choice_buttons, offer=offer, labels=OUR_LABELS)
 
     @ctx.wrap("__main__:QuestStartManager.__init__", required=False)
     def quest_start(orig, self, app, quest_type, quest_id, *args, **kwargs):

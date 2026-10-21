@@ -407,7 +407,8 @@ app.press("訓練する")
 check("luxury: activities again", app.labels() == ["訓練する", "休養をとる", "まだ宿泊する", "宿泊を終える"], app.labels())
 entry = app.buttons[0]
 check("luxury: copied game spec", entry["spec"].to_dict() == {"cls_name": "VacationTrainManager", "args": [1, "luxury_suite"]}, entry["spec"].to_dict())
-check("luxury: marked as ours", entry.get(module.MARK) == "again")
+# 写し直した活動はゲームのボタン（spec はゲームのまま）。印は付けない（セーブに残っても MOD の無い起動で選べる）
+check("luxury: copied as a game button (no mark)", set(entry) == {"text", "spec"}, sorted(entry))
 app.press("休養をとる")
 check("luxury: third activity offered", app.labels()[:2] == ["訓練する", "休養をとる"], app.labels())
 app.press("訓練する")

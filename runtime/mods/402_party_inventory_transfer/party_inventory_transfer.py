@@ -11,11 +11,11 @@
 
 ## 選択肢
 
-`301_quest_from_conversation` と同じ safe spec ＋ MOD 印 ＋ prune_stale 方式。
-mod.json の `after` で 301 より後に読み込み、ゲームと 301 が選択肢を組んだ後に
-「会話を終了する」（`ConversationEndManager`）の直前へ差す。
-タイトル→ロードで印が落ちても、`ConversationEndManager` の spec から会話相手を復元し、
-今も仲間なら同じ位置へ差し直す。旧版の文言の残骸も掃除する。
+ボタンはローダの窓口 `choices` の宣言型の口（`offer`。TECH.md §3.3.14）に預ける。
+組み直しのたびに、会話相手が仲間なら「会話を終了する」（`ConversationEndManager`）の直前へ出す。
+mod.json の `after` で 301 より後に読み込むので、301 の依頼の2つの後ろに並ぶ。
+保存の間は窓口が外すのでセーブに残らず、ロードの後は `ConversationEndManager` の spec から会話相手を引いて組み直す。
+旧版の文言の残骸は窓口が `labels` で、印の付いた残骸は組み直しの前に外す。
 
 ## 受け渡しの同期
 
@@ -62,11 +62,11 @@ from instantale_modloader.ids import claim
 
 #: 会話に足す選択肢の文言。
 LABEL = "＜アイテムの受け渡し＞"
-#: この MOD（と旧版）が作った選択肢の文言。印を失った残骸を文言で見分けて掃除する
-#: （`screen.prune_stale`）。旧版の2つは今は作らないが、古いセーブに残り得る。
+#: この MOD（と旧版）が作った選択肢の文言。前の版がセーブに焼いた残骸を窓口が文言で見分けて外す
+#: （窓口 `choices` の `labels`）。旧版の2つは今は作らないが、古いセーブに残り得る。
 OUR_LABELS = (LABEL, "アイテムを受け渡す", "装備を変更する")
-#: 選択肢の dict に付ける印のキー。値が "transfer" なら受け渡しボタン。
-#: 404_party_talk はこのキーを見て、パーティー会話の間だけこのボタンを隠す。
+#: 選択肢に付ける印のキー（窓口 `choices` の `marks`）。値が "transfer" なら受け渡しボタン。
+#: 押下の振り分けには使わない（窓口がボタンに持たせた処理を呼ぶ）。ほかの MOD が見分けるための印。
 MARK = "mod_party_inventory_transfer_equipment"
 
 #: `out/` に置くこの MOD のログ。移動・保存・装備の書き換えが1件ずつ残る。
@@ -77,13 +77,13 @@ LOG_BASENAME = "party_inventory_transfer.log"
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
 
-    # ローダ共通の画面部品。選択肢の生成（`button`）・印の読み取り（`mark_of`）・
-    # 残骸掃除（`prune_stale`）・Clock への予約（`schedule`）・描き直し（`refresh`）を担う。
-    screen = ui.Screen(ctx, write, tag="party inventory transfer", mark=MARK)
+    # ローダ共通の画面部品。Clock への予約（`schedule`）を担う。選択肢は窓口 `choices` が組む。
+    screen = ui.Screen(ctx, write, tag="party inventory transfer")
 
     # apply() の外へ持ち出さない控え。
     state = {
         "npc_id": None,                  # 今の会話相手の id。会話開始で控え、終了で消す
+        "offered": None,                 # 受け渡しを出した相手（ログを相手が替わったときだけ書く）
         "player": None,                  # 受け渡しの窓の左側（同一instanceで見分ける）
         "npc": None,                     # 同じく右側。この2人の間の移動だけ同期する（店の売買には触らない）
         "save_generation": 0,            # 遅延保存の世代番号。予約のたびに増やし、古い予約は走らない
@@ -646,53 +646,31 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 会話の選択肢
     # 会話の選択肢は `app.buttons` の list（1件が dict。`spec` に押したときの処理）。
-    # 本体の「会話を終了する」は spec が ConversationEndManager。その直前へ差す。
+    # 本体の「会話を終了する」は spec が ConversationEndManager。その直前へ出す（窓口 `choices` の `offer`）。
 
-    def has_transfer_button(buttons):
-        """受け渡しボタンが既に並んでいるか（印で見る）。"""
-        return any(
-            isinstance(entry, dict) and screen.mark_of(entry) == "transfer"
-            for entry in buttons
-        )
-
-    def conversation_slot(buttons):
-        """差し込む位置 = 「会話を終了する」の index。会話画面でなければ None。"""
-        for index, entry in enumerate(buttons):
-            if spec_cls_name(entry) == "ConversationEndManager":
-                return index
-        return None
-
-    def insert_transfer_button(app, buttons):
-        """条件が揃っていれば受け渡しボタンを差す。差したら True。
-
-        残骸掃除 → 既に在れば何もしない → 相手が仲間でなければ出さない →
-        会話画面でなければ出さない、の順に見る。
-        """
-        if not isinstance(buttons, list):
-            return False
-
-        screen.prune_stale(buttons, OUR_LABELS)
-
-        if has_transfer_button(buttons):
-            return False
-
+    def offer(app, view):
+        """会話相手が仲間なら「＜アイテムの受け渡し＞」を出す（窓口が組み直しのたびに呼ぶ）。"""
+        if view.end_entry is None:
+            return None                     # 会話画面ではない
         npc = current_party_npc(app)
         if npc is None:
-            return False
+            return None
+        if state.get("offered") != state["npc_id"]:
+            state["offered"] = state["npc_id"]
+            write("offering {!r} to {!r}".format(
+                LABEL, frames.short(character_name(npc, str(state["npc_id"])), 60)))
+        return [choices.Choice(LABEL, place=choices.before("ConversationEndManager"),
+                               marks={MARK: "transfer"}, on_press=on_press)]
 
-        at = conversation_slot(buttons)
-        if at is None:
-            return False
-
-        entry = screen.button(LABEL, mark="transfer")
-        if entry is None:
-            return False
-
-        buttons.insert(max(0, min(at, len(buttons))), entry)
-        write("added {!r} for {!r}".format(
-            LABEL, frames.short(character_name(npc, str(state["npc_id"])), 60)
-        ))
-        return True
+    def drop_old_marks(app, buttons):
+        """組み直しの前（窓口の `refresh`）。前の版の印の付いた受け渡しボタン（窓口が印を付け直したもの）を外す。"""
+        if not isinstance(buttons, list):
+            return
+        old = [entry for entry in buttons
+               if isinstance(entry, dict) and MARK in entry and not choices.ours(entry)]
+        if old:
+            buttons[:] = [entry for entry in buttons if not any(entry is o for o in old)]
+            write("dropped {} transfer button(s) with the older mark".format(len(old)))
 
     # ------------------------------------------------------------ 見出しの描き替え
 
@@ -814,45 +792,13 @@ def apply(ctx):
         state["npc_id"] = None
         return orig(self, *args, **kwargs)
 
-    def refresh_choice_buttons(self):
-        """選択肢を描き直すたびに呼ばれる本体の関数。ここで受け渡しボタンを維持する。
-
-        本体は `app.buttons` を組んでからこの関数で画面に並べる。ロード直後・
-        選択肢を押した後・ページ送りなど、描き直しのたびに通るので、
-        毎回「在るべきなら在る、無いべきなら無い」に揃える。
-        """
-        # ゲーム本体＋このhookより内側のMODに先に一覧を組ませる。
-        # mod.json の after=["301_quest_from_conversation"] により、
-        # 301の会話選択肢が先に存在する状態を狙う。
-
-        try:
-            buttons = getattr(self, "buttons", None)
-            if not isinstance(buttons, list):
-                return
-
-            # タイトル→ロードで印を失った旧402/403/現行ボタンの残骸を掃除。
-            screen.prune_stale(buttons, OUR_LABELS)
-
-            # 現在の会話相手がparty memberでなければ出さない。
-            if current_party_npc(self) is None:
-                return
-
-            # insert_transfer_button は ConversationEndManager を探し、
-            # その直前へ入れる。301の依頼系ボタンが既に並んでいれば自然にその下になる。
-            if insert_transfer_button(self, buttons):
-                write("inserted {!r} after existing conversation actions".format(LABEL))
-                screen.refresh(self)
-        except Exception:
-            ctx.log_exc("party inventory/equipment: cannot maintain transfer button")
-
-
-    def on_button_press(self, action):
-        """受け渡しボタンが押された（窓口 `choices` の `presses`）。本体へ渡さず窓を開く。"""
-        open_transfer(self)
+    def on_press(app):
+        """受け渡しボタンが押された（窓口がボタンに持たせた処理）。本体へ渡さず窓を開く。"""
+        open_transfer(app)
         return None
 
-    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
-    choices.provide(ctx, screen, after=refresh_choice_buttons, presses={"transfer": on_button_press})
+    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14 の宣言型の口）に預ける。
+    choices.provide(ctx, screen, refresh=drop_old_marks, offer=offer, labels=OUR_LABELS)
 
     @ctx.wrap(
         "scripts.hud.new_hud:InventoryItem.change_inventory",

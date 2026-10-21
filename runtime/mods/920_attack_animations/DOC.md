@@ -52,6 +52,8 @@
 |---|---|
 | 新しい演出が一度も出ない | `out\attack_animations.log` に `widened vfx for` の行があるかを見る。無ければ審判に選択肢が届いていない |
 | 選ばれたのに斬撃や炎の絵のまま | 同じログで、その演出の行に `no art` か `NOTE … no … effect call` が出ていないかを見る |
+| 戦闘で自由入力の行動（入力欄に書いた行動・`319_` の防御）をしたら手番が止まった | 版2で直した。自由入力の審判はゲームの元の型で答えを作り直していて、足した値が通らなかった |
+| 魔力や光の全体の演出の後、絵が画面に残った | 版2で直した。ゲームの絵は最後のコマが空で、残った絵は見えない作りだった。空のコマを足した写しを `out\attack_animations\art\` に作って出す。消しても次の起動で作り直す |
 
 ---
 
@@ -74,6 +76,10 @@
   slash / fire / fire_aoe / ice / ice_aoe / thunder / thunder_aoe / earth の8つの Literal。
   `blow` と `water` は処理があるのに選択肢に無いので、素のゲームでは出ない。
   `referee_member_new_new` の定数には slash / fire / fire_aoe / ice / ice_aoe の5つしか並んでいなかった（型としては未確認）
+- 自由入力の審判（`referee_player_any_input_new_new`）は、送り口に `<locals>.Structure` を渡した後、答えを関数の中の
+  `FormattedStructure`（同じ8つの Literal。局所のクラスで、モジュールの属性ではない）で作り直す（`llm_manager_battle.py:821`）。
+  送り口の型だけ広げると、足した値（`arcane`）がそこで `ValidationError` になり、手番のスレッドが落ちる（2026-10-21 の実機。`319_` の防御の手番）。
+  モジュールの `FormattedStructure` を替えても届かなかった（実機）
 - `out\*.jsonl` に残っていた審判の戻り 6230 件のうち、slash が 5415 件（87%）
 - `Assets/effects` の絵のフォルダ 75 個のうち、ゲームが使うのは上の 10 個だけ。
   武器・体の攻撃に使える絵は slash1・slash2・blow（どれも 64x64・8〜10 コマの白い筋と粒）しか無い
@@ -86,6 +92,11 @@
 - 絵は `NearestNeighborImage` で、フォルダのコマを名前順に約 0.07 秒ずつ出す。拡大は最近傍なので、64 の絵はドット絵のように粗く出る。
   絶対パスのフォルダも再生できる
 - ダメージの無い手（強化・弱体化だけ）と、敵が味方を打つ手（`character_side` が `敵側`）には絵を出さない
+- 全体の絵（window_effect）は、再生が終わっても部品を外さず最後のコマを出したまま残る
+  （2026-10-21 の実機。場面の切り替えの `frames_gyaku\frame_029.png` が不透明度1のまま残っていた）。
+  ゲームが使う絵は最後のコマが空なので見えない。1体の絵の部品は再生の後に残っていなかった。
+  ゲームに在って使われていない絵のうち、この MOD が使う9つ（`fire_aoe4`、`battle/` の `wind2`・`wind_aoe2`・`thunder_aoe2`・`wisp1`・`wisp_aoe1`・`neutral_energy1`・`neutral_energy_aoe1`・`water_aoe1`）は最後のコマに絵がある。
+  `battle_dark_` の下の絵は、最後に空の `image_end.png` を置いたものが多い
 
 ---
 
@@ -102,10 +113,24 @@
 | 全体の差し替え（fire_aoe の運び手） | 成立。earth_aoe が window_effect で1回差し替わった |
 | 効果音の差し替え | 成立。斬撃 → 雷（小） |
 
+版2（2026-10-21）: 自由入力の審判（`NARROWED_MANAGERS`）の答えだけ、送り口から返る所で足した値を運び手（ゲームが描ける `blow` / `water` は slash / ice）に置き換えて控え、
+`resolve_battle_effect` の入口で控えから元の値に戻すようにした（控えは使い切り、`PENDING_SECONDS` で捨てる）。
+`tools\tests\test_wip_attack_animations.py` に7件（pydantic のある環境で）。
+実機（テストワールド、衛兵との戦闘）: 直す前は `319_` の防御の手番で `arcane` が元の型に落ち、敵の手番に進まなかった。
+直した後は防御の答えの `blow` が `slash` に置き換わって返り（`goes back to the game's choices`）、演出を決める所で `blow` に戻ってゲームが描き、手番が進んで戦闘が終わった。`stall guard` の行は出ていない。
+
+同じ日の午後（テストワールド、Claude）: 入力欄に直に書いた魔法の行動で、自由入力の審判が `arcane_aoe` を返した。
+`fire_aoe` に置き換えて返り、演出を決める所で戻して、絵（`battle/neutral_energy_aoe1`）と音（炎（大）→ 雷（大））を差し替えた。
+その絵の最後のコマが次の全体の演出まで画面に残った（本人の指摘。上の「分かったこと」）。
+空のコマを足した写しを渡すようにした後は、全体の部品が `image_end.png` で止まり、写真にも残っていない。
+`tools\tests\test_wip_attack_animations.py` に写しの8件を足した。
+仲間の手で `blow` を選んだ回は、`blow: the game draws it` の後にゲームの `InstantaleApp.effect` が `Assets/effects/blow` で呼ばれた（記録だけ。写真は撮っていない）。
+
 | 未確認 | 確かめ方 |
 |---|---|
 | ローカル LLM（grammar）で足した値を選ぶ | ローカルで戦闘をして、ログの `carries it` の行 |
-| `blow` / `water` をゲームが描く | 味方の手で選ばれたときの画面（敵の手では描かれない） |
+| `blow` / `water` をゲームが描く画面（`blow` は記録で描く関数が呼ばれたところまで。`water` は未） | 味方の手で選ばれたときの画面（敵の手では描かれない） |
+| 最後のコマに絵が残る9つの絵のうち、`arcane_aoe` 以外の写しで画面に残らないか | 選ばれたときに、全体の部品の `source` が `image_end.png` で止まるか |
 | 10-20 夕方に足した6種（光の刃・鞭・連射・衝撃波・毒・毒の全体）を審判が選ぶか | 実機の戦闘のログ。毒の全体は 128x128 の絵を全体の大きさで出す（他の新規追加絵は 64x64） |
 | 控えめの画風の実機での見え方（実機で見たのは、はっきりの銃撃・投擲だけ） | 設定を控えめのまま戦闘をして撮る |
 | 新規追加絵のうち、銃撃・投擲以外の見え方 | 選ばれたときの画面。絵の再生は約 0.07 秒ずつなので、外からの写真ではなくゲームの中で `NearestNeighborImage` の `source` を見張って撮る |

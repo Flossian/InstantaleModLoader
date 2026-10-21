@@ -35,9 +35,9 @@ mod を入れずに次回起動すると `getattr(__main__, ...)` が失敗す�
 注入はプロセスと一緒に消える（TECH.md §2）以上、これは必ず起きる状況。
 
 そこで**自前のボタンには無害な既存クラス（`JustSetButtonToNormalPhase`）を持たせ**、
-押下は `InstantaleApp.on_button_press` を包んで**文字列ではなくボタン辞書に付けた印
-`mod_action` で**横取りする。
-mod が無ければ、残骸のボタンは「選択肢を元に戻す」だけの無害な動作になる。
+ボタンはローダの窓口 `choices` の宣言型の口に預ける（TECH.md §3.3.14）。
+窓口が組み直しのたびに作り、押下はボタンに持たせた処理を呼ぶ。保存の間は窓口が外すので、セーブには残らない。
+mod が無ければ、前の版の残骸のボタンは「選択肢を元に戻す」だけの無害な動作になる。
 
 ## 会話内容からの生成
 
@@ -123,6 +123,8 @@ CLIENTS_BASENAME = "quest_clients.json"
 
 # 会話から開いた掲示板を、その NPC 発の依頼だけに絞る。
 FILTER_BY_NPC = True
+# 掲示板のゲームの「クエストを探す」の spec。依頼が0件でも掲示板にはこれがあるので、掲示板かどうかの見分けに使う。
+SEARCH_CLS = "QuestSearchManager"
 
 # ボタンの文字列。
 OFFER_LABEL = "依頼を受ける"
@@ -133,8 +135,8 @@ CONVERSATION_OFFER_LABEL = "依頼を受ける（話を切り上げる）"
 GENERATE_LABEL = "この話から依頼を作る"
 CANCEL_LABEL = "やめる"
 
-# セーブから復元された残骸を見分けるための、こちらのラベル一覧。
-# 生成ボタンは「この話から依頼を作る（NPC名）」と後ろが変わるので前方一致で照合する（`ui.Screen.prune_stale`）。
+# 版6までがセーブに焼いたボタンの文言（ローダの窓口 `choices` が、無害な spec で印の無いものを外す）。
+# 生成ボタンは「この話から依頼を作る（NPC名）」と後ろが変わるので前方一致で照合する。
 OUR_LABELS = (OFFER_LABEL, CONVERSATION_OFFER_LABEL, GENERATE_LABEL)
 
 # 会話を終わらせてから掲示板を開くまでの待ち。
@@ -202,11 +204,12 @@ CONVERSATION_CHARS = 2500
 # テキストの流し込みを待つ。
 SETTLE = 0.4
 
-# 押下を横取りするための印。
-# ボタン辞書に足す（ゲームは text と spec しか見ない）。
-# **`302_` とは別のキーにすること**（共有すると、
-# 向こうの `on_button_press` がこちらの action を知らずに握り潰す）。
+# 版6までの自前のボタンに付けていた印のキー（いまは窓口が組むので付けない）。
+# セーブから戻った前の版の印のボタンを片付けるためだけに残す（`refresh_choice_buttons`）。
 MARK = "mod_action"
+
+# 自前の一覧（`LIST_MODE = "mod"`）の画面の名前（窓口 `choices` の MOD だけの画面）。
+MOD_LIST_SCREEN = "mod list"
 
 # 仲間になっている NPC を依頼人から外すか。
 # 外すと、パーティに居る相手との会話には
@@ -281,7 +284,7 @@ def apply(ctx):
     log_path = ctx.out_path(LOG_BASENAME)
     clients_path = ctx.state_path(CLIENTS_BASENAME)
     state = {
-        "saved_buttons": None,   # 一覧を出す前のボタン。やめる で戻す
+        "owner": None,           # 窓口 `choices` の持ち主の名前（`provide` が返す）
         "npc_id": None,          # 会話の開始で控えた相手。相手の引き方は talking_partner
         "generating": False,
         "inject": None,          # random_quest_generator に渡す会話の書き起こし
@@ -298,6 +301,9 @@ def apply(ctx):
         # 依頼が0件だと依頼ボタンの有無では掲示板だと判定できないので、印で持つ。
         # 何か押されたら降りる（押せばその画面からは離れる）。
         "board_open": False,
+        # 絞り込みを掛けてから、ゲームが組んだ掲示板（依頼か「クエストを探す」のある一覧）を見たか。
+        # 見る前に掲示板でない一覧が来たら、ゲームが受注を断った（疲労など）と見る。
+        "board_seen": False,
         # 直前の押下が依頼ボタンだったか。次の画面（受ける / やめとく）の押下では絞り込みを残す。
         "quest_pressed": False,
         # 会話への注入の結末。同じ結末が続く間はログに書かない。
@@ -384,10 +390,6 @@ def apply(ctx):
             open_quest_board(app, choice_text)
         elif action == "generate":
             generate_from_conversation(app)
-        elif action == "cancel":
-            restore_buttons(app)
-        # "busy"（待機表示の「…」）は何もしない。
-        # 押しても無反応にするのが仕事。
 
     # ------------------------------------------------------------ 依頼の候補
     # 現在地は **エリアのオブジェクトとは限らない**（NPC 側のセーブでは
@@ -781,8 +783,6 @@ def apply(ctx):
             clear_busy(app)
             say(app, "（今は依頼の話を切り出せない）")
             return
-        # 会話が閉じるので、会話中のボタンへ戻る道は捨てる。
-        state["saved_buttons"] = None
         screen.end_conversation(
             app, entry, follow_up, end_text=END_TEXT,
             on_abort=lambda _reason: (clear_busy(app),
@@ -843,9 +843,9 @@ def apply(ctx):
                 _t, filter_id, filter_name = current_talk(app)
             if filter_id or filter_name:
                 state["filter_npc"] = {"npc_id": filter_id, "npc_name": filter_name}
+                state["board_seen"] = False
                 write("open board: filtering for {!r} (id={!r})".format(
                     filter_name, filter_id))
-        state["saved_buttons"] = list(getattr(app, "buttons", []) or [])
         # 待機表示を出したまま来ている場合はここで解く。
         # 掲示板が自分で並べ直すので、
         # こちらの点のアニメーションが上から塗ってしまわないよう掲示板を起こす前に止める。
@@ -861,35 +861,37 @@ def apply(ctx):
             say(app, "（依頼の一覧を開けなかった）")
 
     def show_mod_quest_list(app):
-        """自前で一覧を組む。`QUEST_TYPE_FOR_CHOICE` が実測済みのときだけ通る。"""
-        entries = []
-        listed = 0
+        """自前で一覧を組む。`QUEST_TYPE_FOR_CHOICE` が実測済みのときだけ通る。
+
+        一覧は窓口 `choices` の MOD だけの画面（`mod_list_screen`）。下の施設の選択肢は窓口が残すので、
+        「やめる」で閉じれば施設の選択肢に戻る。依頼を押すとゲームの受注画面へ進み、窓口が一覧を閉じる。
+        """
+        if not mod_list_choices(app):
+            say(app, "いま受けられる依頼は無いようだ。")
+            write("mod list: nothing to show")
+            return
+        choices.open_screen(app, state["owner"], MOD_LIST_SCREEN)
+        write("mod list: opened with quest_type={!r}".format(QUEST_TYPE_FOR_CHOICE))
+
+    def mod_list_choices(app):
+        """自前の一覧の依頼のボタン（ゲームの `QuestChoiceManager` の写し。押すとゲームへ流す）。"""
+        out = []
         for qid, quest in candidate_quests(app):
-            if listed >= MAX_LISTED:
+            if len(out) >= MAX_LISTED:
                 break
             entry = button(quest_label(quest), cls_name="QuestChoiceManager",
                            args=[QUEST_TYPE_FOR_CHOICE, qid])
             if entry is not None:
-                entries.append(entry)
-                listed += 1
-        if not entries:
-            say(app, "いま受けられる依頼は無いようだ。")
-            write("mod list: nothing to show")
-            return
-        cancel = button(CANCEL_LABEL, mark="cancel")
-        if cancel is not None:
-            entries.append(cancel)
-        state["saved_buttons"] = list(getattr(app, "buttons", []) or [])
-        apply_buttons(app, entries, "mod list")
-        write("mod list: {} quest(s) with quest_type={!r}".format(
-            listed, QUEST_TYPE_FOR_CHOICE))
+                out.append(choices.Choice(entry["text"], base=entry))
+        return out
 
-    def restore_buttons(app):
-        saved = state["saved_buttons"]
-        state["saved_buttons"] = None
-        if saved is None:
-            return
-        apply_buttons(app, saved, "restore")
+    def mod_list_screen(app, view, _data):
+        """自前の一覧（窓口の MOD だけの画面）。受けられる依頼が無くなったら閉じる（None）。"""
+        quests = mod_list_choices(app)
+        if not quests:
+            return None
+        return quests + [choices.Choice(CANCEL_LABEL,
+                                        on_press=lambda app: choices.close_screen(app, state["owner"]))]
 
     # ======================================================= 会話から生成する
     def wait_state(app):
@@ -1083,6 +1085,17 @@ def apply(ctx):
         """
         target = state["filter_npc"] if FILTER_BY_NPC else None
         if target is None or not isinstance(buttons, list):
+            return False
+        if any(quest_id_of_button(entry) is not None
+               or spec_cls_name(entry) == SEARCH_CLS for entry in buttons):
+            state["board_seen"] = True
+        elif not state["board_seen"]:
+            # 掲示板を見る前に掲示板でない一覧が来た（疲労でゲームが受注を断り、施設のボタンのままのときなど）。
+            # 間引くと施設のボタンが「やめる」1つになるので触らず、絞り込みも解く。
+            # 見た後なら、間引き終えた掲示板（依頼が0件で戻り道だけ）
+            write("filter cleared: the game did not open the board ({})".format(
+                [entry.get("text") if isinstance(entry, dict) else entry for entry in buttons]))
+            state["filter_npc"] = None
             return False
         npc_id = target.get("npc_id")
         npc_name = target.get("npc_name")
@@ -1364,9 +1377,6 @@ def apply(ctx):
         return orig(*args, **kwargs)
 
     # ================================================================ フック
-    def has_offer_button(buttons):
-        return any(isinstance(b, dict) and b.get(MARK) == "offer" for b in buttons)
-
     def offer_slot(buttons):
         """「依頼を受ける」を挿す位置と、そこがどの画面かを返す。
 
@@ -1382,125 +1392,89 @@ def apply(ctx):
         """
         for index, entry in enumerate(buttons):
             name = spec_cls_name(entry)
-            if name == "ConversationEndManager" and "conversation" in OFFER_SITES:
+            if name == "ConversationEndManager" and ("conversation" in OFFER_SITES or "action_menu" in OFFER_SITES):
                 return index, "conversation"
             if name == "DisplayTalkChoice" and "facility" in OFFER_SITES:
                 return index + 1, "facility"
         return None, None
 
-    def insert_generate_button(app, buttons, at, npc_name):
-        """「この話から依頼を作る」を会話画面に直接置く。
-
-        掲示板を経由しない ＝ 会話を閉じずに生成できる。
-        掲示板を開くには会話を閉じるしかないが、生成するだけならその必要が無い。
-        依頼は世界に登録されるので、受注は後から掲示板でできる。
-        """
-        if not ENABLE_GENERATION:
-            return False
-        if any(isinstance(b, dict) and screen.mark_of(b) == "generate" for b in buttons):
-            return False
-        label = "{}（{}）".format(GENERATE_LABEL, npc_name) if npc_name else GENERATE_LABEL
-        entry = button(label, mark="generate")
-        if entry is None:
-            return False
-        buttons.insert(max(0, min(at, len(buttons))), entry)
-        return True
-
-    def insert_offer_button(buttons, at, where):
-        # 会話中は押すと会話が終わる。
-        # 文言でそれが分かるようにする。
-        label = CONVERSATION_OFFER_LABEL if where == "conversation" else OFFER_LABEL
-        entry = button(label, mark="offer")
-        if entry is None:
-            return False
-        buttons.insert(max(0, min(at, len(buttons))), entry)
-        return True
-
     def refresh_choice_buttons(self, _buttons):
-        """施設の選択肢に「依頼を受ける」を「会話する」の隣へ足す（ローダの窓口 `choices` から、組み直しの前に呼ばれる）。
+        """会話から開いた掲示板を、組み直しのたびに間引き直す（ローダの窓口 `choices` から、組み直しの前に呼ばれる）。
 
-        会話中の「行動」への切り替えが画面のどこにあるか未確認なので、
-        必ず見える経路をもう1本用意する。
-        ボタンが並び直されるたびに通るので、どの画面から戻ってきても居続ける。
-
-        施設のルートメニューかどうかは**文字列ではなく spec で**判定する。
-        「`DisplayTalkChoice` を呼ぶボタンがある」＝ 会話相手を選べる場所＝ 施設のルートメニュー。
-        「会話する」という表記に依存しないので言語設定が変わっても効く。
-        依頼一覧そのもの（`QuestChoiceManager` が並ぶ）には
-        `DisplayTalkChoice` が無いので、入れ子にはならない。
+        **ボタンを出したい MOD は必ず描画経路を通る**ので、
+        読み込み順が後ろで（＝こちらより外側で）足されたものもここで落ちる。
+        掲示板かどうかは依頼ボタンの有無で見る。
+        受注画面（受ける/やめとく）には依頼ボタンが無いので、そちらは巻き込まない。
         """
         try:
             buttons = getattr(self, "buttons", None)
-            # 会話から開いた掲示板なら、ここでも間引きを掛け直す。
-            # **ボタンを出したい MOD は必ず描画経路を通る**ので、
-            # 読み込み順が後ろで（＝こちらより外側で）足されたものもここで落ちる。
-            # 掲示板かどうかは依頼ボタンの有無で見る。
-            # 受注画面（受ける/やめとく）には依頼ボタンが無いので、
-            # そちらは巻き込まない。
             on_board = state["board_open"] or (
                 isinstance(buttons, list)
                 and any(quest_id_of_button(b) is not None for b in buttons))
-            if isinstance(buttons, list) and state["filter_npc"] is not None                     and on_board:
+            if isinstance(buttons, list) and state["filter_npc"] is not None and on_board:
                 if restrict_board(self, buttons):
                     screen.schedule(lambda: apply_buttons(self, None,
                                                           "quest board recheck"), 0)
-            if isinstance(buttons, list) and not state["generating"]:
-                # 印を失った自前ボタンの残骸を先に落とす。
-                # セーブに焼かれるのは text と spec だけで印は落ちるので、
-                # タイトルへ戻る・ロード・再注入のあとは「自分のものと見なせない自分のボタン」が並んでいる。
-                # 落としてから差し直すことで、
-                # 二重化も「押しても無反応」も同時に消える。
-                screen.prune_stale(buttons, OUR_LABELS)
-                at, where = offer_slot(buttons)
-                # 同行している相手には出さない。
-                # 相手は画面の「会話を終了する」から読む（`302_` の手。`ui.conversation_partner`）。
-                # `state["npc_id"]` でも引けるが、
-                # いま並んでいるボタンから読む方が画面と食い違わない。
-                confined, by = confinement.why(self)
-                if confined:
-                    # 主人公が閉じ込められている（牢の中の会話など。ローダの窓口 `confinement`）。
-                    # 依頼を受ければ牢から出られてしまうので、どちらも出さない。
-                    at = None
-                    stale = [b for b in buttons
-                             if isinstance(b, dict) and b.get(MARK) in ("offer", "generate")]
-                    if stale:
-                        buttons[:] = [b for b in buttons if not any(b is d for d in stale)]
-                    note_skip("confined by {} ({}): no quest offer".format(by, confined))
-                elif where == "conversation":
-                    partner, _entry = ui.conversation_partner(buttons)
-                    # ロードの途中は人物も名簿もまだ揃わず、仲間かどうかも相手の名前も引けない。
-                    # 揃うまでは出さない（揃った後の組み直しは窓口 `choices` がする。VERIFICATION.md §3.102）
-                    waiting = not choices.ready(self)
-                    if waiting or is_party_member(self, partner):
-                        if waiting:
-                            note_skip("{}: the characters are not loaded yet".format(partner))
-                        else:
-                            note_skip("party member {!r} ({}): not a client".format(
-                                ui.character_name(self, partner), partner))
-                        at = None
-                        # セーブから戻った依頼の選択肢（窓口が印を付け直す）も、仲間と分かった・まだ見分けられない間は落とす
-                        stale = [b for b in buttons
-                                 if isinstance(b, dict) and b.get(MARK) in ("offer", "generate")]
-                        if stale:
-                            buttons[:] = [b for b in buttons if not any(b is d for d in stale)]
-                            write("dropped {} offer button(s): {}".format(
-                                len(stale), "the characters are not loaded yet" if waiting
-                                else "{!r} is a party member".format(ui.character_name(self, partner))))
-                if at is not None:
-                    # 会話画面には「この話から依頼を作る」も置く。
-                    # 掲示板を経由しないので会話を閉じずに生成できる。
-                    if where == "conversation":
-                        _t, _id, npc_name = current_talk(self)
-                        if _t and insert_generate_button(self, buttons, at, npc_name):
-                            write("added {!r} to the conversation menu".format(
-                                buttons[at].get("text")))
-                            at += 1
-                    if not has_offer_button(buttons) and \
-                            insert_offer_button(buttons, at, where):
-                        write("added {!r} to the {} menu ({} buttons now)".format(
-                            buttons[at].get("text"), where, len(buttons)))
+            if isinstance(buttons, list):
+                # 版6までの印の付いた自前のボタン（窓口が印を付け直したもの）。いまは窓口が組むので落とす
+                old = [b for b in buttons if isinstance(b, dict) and MARK in b and not choices.ours(b)]
+                if old:
+                    buttons[:] = [b for b in buttons if not any(b is d for d in old)]
+                    write("dropped {} offer button(s) with the older mark: {}".format(
+                        len(old), [b.get("text") for b in old]))
         except Exception:
-            ctx.log_exc("quest offer: cannot add offer button")
+            ctx.log_exc("quest offer: cannot restrict the quest board")
+
+    def offer(app, view):
+        """会話に「この話から依頼を作る」と「依頼を受ける（話を切り上げる）」を出す（窓口 `choices` が組み直しのたびに呼ぶ）。
+
+        会話画面か施設のルートメニューかは**文字列ではなく spec で**判定する（`offer_slot`）。
+        人物が揃うまで（ロードの途中）は窓口がこの関数を呼ばないので、仲間かどうかを見誤らない（VERIFICATION.md §3.102）。
+        """
+        at, where = offer_slot(view.buttons)
+        if at is None:
+            return None
+        confined, by = confinement.why(app)
+        if confined:
+            # 主人公が閉じ込められている（牢の中の会話など。ローダの窓口 `confinement`）。
+            # 依頼を受ければ牢から出られてしまうので、どちらも出さない。
+            note_skip("confined by {} ({}): no quest offer".format(by, confined))
+            return None
+        if where == "conversation" and is_party_member(app, view.partner):
+            # 同行している相手には出さない。相手は画面の「会話を終了する」から読む（`ui.conversation_partner`）。
+            note_skip("party member {!r} ({}): not a client".format(
+                ui.character_name(app, view.partner), view.partner))
+            return None
+        if where == "conversation":
+            place = choices.before("ConversationEndManager")     # 会話終了は最後に置きたい
+            label = CONVERSATION_OFFER_LABEL
+        else:
+            place = choices.after("DisplayTalkChoice")           # 「会話する」の隣
+            label = OFFER_LABEL
+        out = []
+        if where == "conversation" and ENABLE_GENERATION:
+            # 会話画面には「この話から依頼を作る」も置く。
+            # 掲示板を経由しないので会話を閉じずに生成できる。依頼は世界に登録されるので、受注は後から掲示板でできる。
+            transcript, _id, npc_name = current_talk(app)
+            if transcript:
+                generate = "{}（{}）".format(GENERATE_LABEL, npc_name) if npc_name else GENERATE_LABEL
+                out.append(choices.Choice(generate, place=place,
+                                          on_press=lambda app: press(app, "generate", generate)))
+        out.append(choices.Choice(label, place=place, on_press=lambda app: press(app, "offer", label)))
+        shown = (where, tuple(choice.text for choice in out))
+        if state.get("last_offer") != shown:
+            state["last_offer"] = shown
+            write("offering {} in the {} menu".format(list(shown[1]), where))
+        return out
+
+    def press(app, action, text):
+        """自前のボタンが押された（窓口が押されたボタンの処理として呼ぶ）。"""
+        write("pressed {!r} ({})".format(text, action))
+        # 直接やらずにゲームの経路（process_choice）に乗せる。
+        # でないと画面が塗り替わらない。
+        # OfferPhase の説明を参照。
+        start_phase(app, action, text)
+        return None
 
     def look_at_press(self, entry, _button_index):
         """どのボタンが押されても先に通る（窓口の `intercept`）。押下は握らない。"""
@@ -1508,6 +1482,8 @@ def apply(ctx):
         # 掲示板の印はここで降ろす（受注画面まで間引きを持ち込まないため）。
         state["board_open"] = False
         action = entry.get(MARK) if isinstance(entry, dict) else None
+        if action is None and choices.ours(entry):
+            action = "declared"          # 窓口が組んだこの MOD のボタン（会話の依頼の2つ）
         after_quest = state["quest_pressed"]
         state["quest_pressed"] = False
         if action is None:
@@ -1526,58 +1502,28 @@ def apply(ctx):
                 state["filter_npc"] = None
         return False
 
-    def on_button_press(self, action):
-        """自前のボタンが押された（窓口の `presses`）。判定は文字列ではなくボタン辞書に付けた印。"""
-        entry = choices.pressed() or {}
-        if action == "busy":
-            # 待機表示の「…」。
-            # 押されても何もしない ＝ 生成中は操作させない。
-            write("pressed the busy placeholder; ignored")
-            return None
-        text = entry.get("text") or OFFER_LABEL
-        write("pressed {!r} ({})".format(text, action))
-        # 直接やらずにゲームの経路（process_choice）に乗せる。
-        # でないと画面が塗り替わらない。
-        # OfferPhase の説明を参照。
-        start_phase(self, action, text)
-        return None
-
     # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
-    choices.provide(ctx, screen, refresh=refresh_choice_buttons, presses={"": on_button_press},
-                    intercept=look_at_press)
+    # 会話の依頼の2つは宣言型の口（`offer`）、自前の一覧は MOD だけの画面（`screens`）。
+    # 掲示板の間引きはゲームのボタンを間引くので `refresh` のまま
+    state["owner"] = choices.provide(ctx, screen, refresh=refresh_choice_buttons, intercept=look_at_press,
+                                     offer=offer, screens={MOD_LIST_SCREEN: mod_list_screen},
+                                     labels=OUR_LABELS)
 
     @ctx.wrap("__main__:InstantaleApp.toggle_to_action_in_conversation", required=False)
     def toggle_to_action(orig, self, *args, **kwargs):
-        """会話中の「行動」メニューが開いたら「依頼を受ける」を足す。
+        """会話中の「行動」メニューが開いたら組み直す（「依頼を受ける」は窓口が `offer` で組む）。
 
-        ゲームがボタンを組み終えた後に足す。
-        先に足すと組み直しで消える。
         この経路は切り替えが画面のどこにあるか未確認なので、
         出れば儲けものという位置づけ。
-        確実な経路は施設側（`refresh_choice_buttons`）。
+        確実な経路は会話画面（`offer`）。
         """
         result = orig(self, *args, **kwargs)
         if "action_menu" not in OFFER_SITES:
             return result
         try:
-            buttons = getattr(self, "buttons", None)
-            if not isinstance(buttons, list):
-                write("toggle_to_action: app.buttons is {}; not adding".format(
-                    type(buttons).__name__))
-                return result
-            if has_offer_button(buttons):
-                return result
-            partner, _entry = ui.conversation_partner(buttons)
-            if is_party_member(self, partner):
-                note_skip("party member {!r} ({}): not a client".format(
-                    ui.character_name(self, partner), partner))
-                return result
-            if insert_offer_button(buttons, len(buttons) - 1, "conversation"):
-                refresh(self)
-                write("added {!r} to the in-conversation action menu "
-                      "({} buttons)".format(CONVERSATION_OFFER_LABEL, len(buttons)))
+            refresh(self)
         except Exception:
-            ctx.log_exc("quest offer: cannot add offer button (action menu)")
+            ctx.log_exc("quest offer: cannot refresh the action menu")
         return result
 
     @ctx.wrap("__main__:ConversationStartManager.__init__", required=False)
@@ -1603,7 +1549,6 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("quest offer: cannot remember the talk")
         state["npc_id"] = None
-        state["saved_buttons"] = None
         return orig(self, *args, **kwargs)
 
     @ctx.wrap("__main__:MovePhaseManager.move_phase", required=False)

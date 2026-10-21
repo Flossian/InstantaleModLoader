@@ -31,23 +31,19 @@
 
 ## ボタンの出し方
 
-ローダの窓口 `choices`（TECH.md §3.3.14）の組み直しの前（`refresh`）で、**ゲームが選択肢を組み終える前に** 自前のボタンを1つ差し込む。
+ボタンはローダの窓口 `choices` の宣言型の口に預ける（TECH.md §3.3.14）。
+「罰金を納める」は組み直しのたびに窓口が呼ぶ `offer` が、いまの手配から作る。
 役場の選択肢そのものはゲームが持っているので、こちらは足すだけで組み直さない。
-差し込む条件は全部揃ったときだけ:
+出す条件は全部揃ったときだけ:
 
     いま居る施設が administrative_office／その土地の手配度が閾値未満／
     その画面に移動（`MovePhaseManager`）のボタンがある＝施設の選択肢である／
-    戦闘・会話・ポップアップの最中ではない／まだ足していない
+    戦闘・会話・ポップアップの最中ではない
 
-最後の「まだ足していない」は文字列ではなく印（`MARK`）で見る。
-これが無いと、こちらが塗り直すたびにボタンが増えていく。
-
-## 自前のクラス名を `PhaseSpec` に書かない
-
-ボタンはセーブに焼かれうる（`PhaseSpec.to_dict()`）。
-無害な既存クラスを持たせ、押下は窓口 `choices` が印で振り分けて渡す。
-印のキーは他の MOD と別にすること（`301_`=mod_action / `302_`=mod_party_action /
-`305_`=mod_mini_action / `307_`=mod_road_action / ここ=mod_pardon_action）。
+確認の画面（納める／やめておく）は MOD だけの画面（`open_screen`）で、下の役場の選択肢は窓口が書き換えずに残す。
+確認の画面で保存して読み直しても、確認の画面に戻る。
+押下は窓口がボタンに持たせた処理を呼ぶ。ボタンはセーブに残らない（窓口が保存の間だけ外す）。
+「罰金を納める」には印（`MARK`）を `marks` で付ける（ほかの MOD が見分けるための印。押下の振り分けには使わない）。
 
 ## セーブはこちらから書かない
 
@@ -69,9 +65,12 @@ LOG_BASENAME = "office_pardon.log"
 #: 役場の `facility_type`（実セーブで確認。GAME.md §2.7）。
 OFFICE_FACILITY_TYPE = "administrative_office"
 
-#: 押下を横取りするための印。
+#: 「罰金を納める」に付ける印（ほかの MOD が見分けるため。窓口 `choices` の `marks`）。
 #: 他の MOD と別のキーにすること。
 MARK = "mod_pardon_action"
+
+#: 確認の画面の名前（窓口 `choices` の MOD だけの画面）。
+CONFIRM_SCREEN = "confirm"
 
 # ---------------------------------------------------------------- 設定（mod.json）
 # ここの定数だけが
@@ -108,16 +107,11 @@ CLEARED_TEXT = "{area}での手配は取り消された。"
 BROKE_TEXT = "「その額を持たない者に、書き換える帳面はありません」"
 BROKE_DETAIL = "（罰金 {price}ゴールド ／ 手持ち {gold}ゴールド）"
 
-# セーブから復元された残骸を見分けるための、
-# こちらのラベル一覧（`ui.Screen.prune_stale`）。
-# `PhaseSpec.to_dict()` は text と spec しか書かないので印は落ちる。
-# 落ちたものは `insert_button()` の印による重複判定をすり抜けるので、
-# 役場でセーブ → タイトル → ロードのあと同じボタンが2つ並び、
-# 復元された方は押しても無反応になる（`301_` で実際に起きた壊れ方）。
+# 版3までがセーブに焼いた自前のボタンの文言（窓口 `choices` の `labels`。無害な spec で印の無いものを外す）。
+# 版3までは自前のボタンを一覧に物として置いていたので、セーブに文言と spec が残った。
 # 金額つきのラベルは `{price}` の手前までを見る（照合は前方一致）。
 # `PAY_LABEL` / `CANCEL_LABEL` は入れない。
-# 確認画面は一瞬しか出ないうえ、「やめておく」は `302_` も出す文言で、
-# こちらのものだと言い切れない。
+# 「やめておく」は `302_` も出す文言で、こちらのものだと言い切れない。
 OUR_LABELS = (BUTTON_LABEL.split("(")[0], BUTTON_LABEL_FREE)
 GONE_TEXT = "（手配はもう残っていない）"
 FAILED_TEXT = "（帳面は書き換えられなかった）"
@@ -159,9 +153,8 @@ def apply(ctx):
     screen = ui.Screen(ctx, write, tag="office pardon", mark=MARK)
 
     state = {
-        # 確認画面を出す前の選択肢。
-        # 「やめておく」で元に戻すために控える。
-        "saved": None,
+        # 窓口 `choices` の持ち主の名前（`provide` が返す）。
+        "owner": None,
         # 手配を知らせた場所（エリア id, 施設 id）。
         # 同じ場所で言い直さないため。
         "announced": None,
@@ -213,66 +206,41 @@ def apply(ctx):
                 str(getattr(facility, "id", "")))
 
     # ------------------------------------------------------------ ボタンを足す
-    def insert_button(app):
-        """役場の選択肢に「罰金を納める」を1つ足す。足したら `True`。
+    def offer(app, view):
+        """役場の選択肢に「罰金を納める」を1つ出す（窓口 `choices` の `offer`。組み直しのたびに呼ばれる）。
 
-        **ゲームが組んだ一覧に挿すだけ**で、組み直さない。
-        呼ばれるのは `refresh_choice_buttons` の中（`orig` の前）なので、
-        ここで挿せばゲーム自身がそのまま画面まで運ぶ。
-        こちらから塗り直す必要がない。
+        ゲームが組んだ一覧に足すだけで、組み直さない。
         """
-        buttons = getattr(app, "buttons", None)
-        if not isinstance(buttons, list) or not buttons:
-            return False
-        if not is_facility_screen(buttons):
-            return False
-        # **印を失った自前ボタンの残骸を先に落とす**（`ui.Screen.prune_stale`）。
-        # 施設の選択肢だと分かってから呼ぶので、他の画面には手を出さない。
-        # 落とした分は下で新しい印つきに差し直されるため、
-        # 残骸は「消える」のではなく「生き返る」。
-        screen.prune_stale(buttons, OUR_LABELS)
-        if any(screen.mark_of(entry) for entry in buttons):
-            return False        # 既に在る（塗り直しで増やさない）
+        buttons = view.buttons
+        if not buttons or not is_facility_screen(buttons):
+            return None
         if not at_office(app):
             state["announced"] = None   # 役場を出たら、次に入ったときに知らせ直す
-            return False
-        blocked = busy(app)
-        if blocked:
-            return False
+            return None
+        if busy(app):
+            return None
         found = wanted_here(app)
         if found is None:
-            return False
+            return None
         area_name, _entry, wanted, price = found
-
         label = (coins(BUTTON_LABEL.format(price=money(price))) if price > 0
                  else BUTTON_LABEL_FREE)
-        entry = screen.button(label, mark="open")
-        if entry is None:
-            write("cannot build the button (PhaseSpec unavailable)")
-            return False
-
-        # 移動（出口）の手前に置く。
-        # 役場でできることを先に、その場を離れる選択肢を後に、
-        # という並びはゲーム自身の施設の選択肢と同じ。
-        at = len(buttons)
-        for index, item in enumerate(buttons):
-            if ui.spec_cls_name(item) == FACILITY_MARK:
-                at = index
-                break
-        buttons.insert(at, entry)
-        write("offer: {!r} wanted={} price={} label={!r}".format(
-            area_name, wanted, price, label))
-
         if ANNOUNCE_ON_ARRIVAL:
             key = facility_key(app)
             if state["announced"] != key:
                 state["announced"] = key
+                write("offer: {!r} wanted={} price={} label={!r}".format(
+                    area_name, wanted, price, label))
                 screen.say(app, ANNOUNCE_TEXT.format(area=area_name))
-        return True
+        # 移動（出口）の手前に置く。
+        # 役場でできることを先に、その場を離れる選択肢を後に、
+        # という並びはゲーム自身の施設の選択肢と同じ。
+        return [choices.Choice(label, place=choices.before(FACILITY_MARK), marks={MARK: "open"},
+                               on_press=_press("open", label))]
 
     # ------------------------------------------------------------ 確認画面
     def open_confirm(app):
-        """「罰金を納めて手配を解く」が押されたとき。金額を出して確認を取る。"""
+        """「罰金を納めて手配を解く」が押されたとき。金額を出して確認を取る（確認の画面を開く）。"""
         found = wanted_here(app)
         if found is None:
             # 押すまでの間に手配が消えている（別経路で戻された等）。
@@ -282,36 +250,32 @@ def apply(ctx):
             return
         area_name, _entry, wanted, price = found
         gold = ui.gold_of(app)
-
-        state["saved"] = [item for item in (getattr(app, "buttons", None) or [])
-                          if not screen.mark_of(item)]
         screen.say(app, coins(CONFIRM_TEXT.format(
             area=area_name, price=money(price))))
         screen.say(app, coins(CONFIRM_DETAIL.format(
             wanted=wanted, gold=money(gold) if gold is not None else "?")))
-
-        pay = screen.button(coins(PAY_LABEL.format(price=money(price))),
-                            mark="pay")
-        cancel = screen.button(CANCEL_LABEL, mark="cancel")
-        if pay is None or cancel is None:
-            write("confirm: cannot build the confirmation buttons")
-            restore(app, "no buttons")
-            return
         write("confirm: {!r} wanted={} price={} gold={}".format(
             area_name, wanted, price, gold))
-        screen.apply_buttons(app, [pay, cancel], "confirm")
+        choices.open_screen(app, state["owner"], CONFIRM_SCREEN)
+
+    def confirm_screen(app, view, _data):
+        """確認の画面のボタン（組み直しのたびに、いまの手配から組む）。役場に居ない・手配が無いなら閉じる（None）。"""
+        found = wanted_here(app) if at_office(app) else None
+        if found is None:
+            return None
+        pay_label = coins(PAY_LABEL.format(price=money(found[3])))
+        return [choices.Choice(pay_label, on_press=_press("pay", pay_label)),
+                choices.Choice(CANCEL_LABEL, on_press=_press("cancel", CANCEL_LABEL))]
 
     def restore(app, why):
-        """役場の選択肢に戻す。
+        """確認の画面を閉じて役場の選択肢に戻す（下の選択肢は窓口が書き換えずに残している）。
 
-        控えからは自前のボタンを外してある。
-        まだ手配が残っていれば `refresh_choice_buttons` のフックが足し直すので、
-        ここで足さない（「今どうなっているか」の判断を1箇所に閉じておく）。
+        まだ手配が残っていれば窓口の組み直しで `offer` が足し直すので、ここで足さない
+        （「今どうなっているか」の判断を1箇所に閉じておく）。
         """
-        saved, state["saved"] = state["saved"], None
-        write("restore: {} ({} entries)".format(
-            why, len(saved) if saved is not None else "keep"))
-        screen.apply_buttons(app, saved, "restore")
+        write("restore: {}".format(why))
+        if not choices.close_screen(app, state["owner"]):
+            choices.repaint(app)
 
     # ------------------------------------------------------------ 支払う
     def pay(app):
@@ -390,32 +354,18 @@ def apply(ctx):
                 ctx.log_exc("office pardon: phase failed ({})".format(self.action))
 
     # ================================================================ フック
-    def refresh_choice_buttons(self, _buttons):
-        """役場の選択肢が組まれるたびに、条件が揃っていればボタンを1つ足す。
+    def _press(action, text):
+        """自前のボタンの押下（窓口がボタンに持たせる処理）。ゲームと同じ経路（`process_choice`）で動かす。"""
+        def on_press(app):
+            write("pressed {!r} ({})".format(text, action))
+            screen.start_phase(app, PardonPhase(app, action), text,
+                               fallback=lambda: ACTIONS[action](app))
+            return None
+        return on_press
 
-        `orig` の前に挿すので、ゲーム自身がそのまま
-        `to_display_buttons` を組んで画面まで運ぶ。
-        こちらから塗り直さないぶん、押下と同じ流れの中で差し替えたときの「見えているものと押されるものが食い違う」（TECH.md
-        §5）も起きない。
-
-        **自分が挿したものは印で見分ける**ので、何度呼ばれても増えない。
-        """
-        try:
-            insert_button(self)
-        except Exception:
-            ctx.log_exc("office pardon: cannot offer the pardon")
-
-    def on_button_press(self, action):
-        """自前のボタンが押された（窓口 `choices` の `presses`。印で振り分けた後に呼ばれる）。"""
-        entry = choices.pressed()
-        text = (entry.get("text") if isinstance(entry, dict) else None) or action
-        write("pressed {!r} ({})".format(text, action))
-        screen.start_phase(self, PardonPhase(self, action), text,
-                           fallback=lambda: ACTIONS[action](self))
-        return None
-
-    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
-    choices.provide(ctx, screen, refresh=refresh_choice_buttons, presses=dict.fromkeys(ACTIONS, on_button_press))
+    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14 の宣言型の口）に預ける。
+    state["owner"] = choices.provide(ctx, screen, offer=offer, screens={CONFIRM_SCREEN: confirm_screen},
+                                     labels=OUR_LABELS)
 
     ctx.log("office pardon: {}G per point, threshold {}, restore to {}, log={}"
             .format(PRICE_PER_POINT, WANTED_THRESHOLD, RESTORE_TO, log_path))

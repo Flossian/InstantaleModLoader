@@ -155,7 +155,7 @@ import copy
 import datetime
 import sys
 
-from instantale_modloader import (choices, durations, frames, holdings, llm, modfacility,
+from instantale_modloader import (choices, confinement, durations, frames, holdings, llm, modfacility,
                                   modnpc, npcs, prices, ui)
 from instantale_modloader.state import (UNKNOWN_WORLD, WorldStore, playthrough_key,
                                         playthrough_key_of_dict)
@@ -182,9 +182,8 @@ STATE_STORE_ATTR = "__instantale_real_estate_store__"
 #: 押下を横取りするための印。他の MOD と別のキーにすること。
 MARK = "mod_real_estate"
 
-#: ボタンに載せる契約の種類（`mod_` で始めるのは、他の MOD の掃除に
-#: 「印の無いボタン」と見なされないため。TECH.md §5.1.1）。
-KIND_KEY = "mod_real_estate_kind"
+#: 役場の窓口の画面の名前（窓口 `choices` の MOD だけの画面）。
+OFFICE_SCREEN = "office"
 
 #: 役場の `facility_type`（実セーブで確認。GAME.md §2.7）。
 OFFICE_FACILITY_TYPE = "administrative_office"
@@ -317,6 +316,8 @@ KEEPER_TEXT = "{keeper}が{role}として鍵を預かっている。"
 RENEWED_TEXT = "{name}の家賃 {price}G を納めた。"
 NOTICE_TEXT = "{name}の契約はあと{days}日で切れる。"
 LAPSED_TEXT = "家賃を払えず、{area}の{name}を引き払うことになった。"
+#: 閉じ込められている間（牢の中など。ローダの窓口 `confinement`）に借りている家があったとき。
+CONFINED_TEXT = "身動きが取れないうちに、{area}の{name}の契約は打ち切られた。"
 SEIZED_TEXT = "保管庫にあった{count}点は役場が預かっている。"
 RELEASED_TEXT = "{area}の{name}を引き払った。"
 RECLAIMED_TEXT = "役場から{count}点を引き取った。"
@@ -414,8 +415,8 @@ def apply(ctx):
                 "storage": None,
                 # 取り壊しを待っている契約（プレイヤーが中に居た）。
                 "pending_demolish": [],
-                # 自前の画面を出す前の選択肢（`やめる` で戻すために控える）。
-                "saved": None,
+                # 窓口 `choices` の持ち主の名前（`provide` が返す）。
+                "owner": None,
                 # 一度書いた WARN の覚え。選択肢が組まれるたびに当て直すので、
                 # 同じ理由をそのたび書くとログが選択肢の回数だけ伸びる。
                 "warned": set(),
@@ -1223,12 +1224,12 @@ def apply(ctx):
         write("seized: {} item(s) from {!r}".format(moved, record.get("name")))
         return moved
 
-    def lapse(app, record, idle=False):
-        """家賃を払えなかった契約を切る。"""
+    def lapse(app, record, idle=False, text=LAPSED_TEXT):
+        """家賃を払えなかった（閉じ込められて払いに行けなかった）契約を切る。"""
         record["lapsed"] = True
         count = seize(app, record)
         standing = take_down(app, record, "lapse")
-        lines = [_fmt(LAPSED_TEXT, area=record.get("area_name") or "その土地",
+        lines = [_fmt(text, area=record.get("area_name") or "その土地",
                       name=record.get("name") or "家")]
         if count:
             lines.append(_fmt(SEIZED_TEXT, count=count))
@@ -1272,6 +1273,9 @@ def apply(ctx):
     def check_leases(app, why, idle=False):
         """期限の来た契約を精算する。日付が進んだときと画面が組まれたときに呼ぶ。
 
+        **閉じ込められている間（ローダの窓口 `confinement`）は、借りている家の契約を打ち切る。**
+        牢の中から家賃は払いに行けない。建売は残す。
+
         **滞在の最中は精算しない。**
         自分の家の滞在では `VacationStartManager.execute` の中で暦が進むので、
         ここで引くと宿代の前払いと同じ区間で金が動く
@@ -1286,6 +1290,15 @@ def apply(ctx):
         宿代を変える MOD の前払いで膨らんだ額で判定してしまうこともある。
         `execute` を抜けたら `vacation_start` が1回呼び直す。
         """
+        confined, by = confinement.why(app)
+        if confined:
+            # 牢の中などで閉じ込められている間は家賃を引き続けず、借りている家の契約をその場で打ち切る
+            # （2026-10-21。服役の年ごとに家賃が引かれていた）。建売は残す。
+            for record in list(contracts_of(current_key(app))):
+                if _is_lease(record) and not record.get("lapsed"):
+                    write("rent: ended {!r} while confined ({}; {})".format(record.get("name"), confined, by))
+                    lapse(app, record, idle=idle, text=CONFINED_TEXT)
+            return
         if staying_home(app) is not None or state.get("inn_stay"):
             if not state.get("rent_pending"):
                 state["rent_pending"] = True
@@ -1350,47 +1363,39 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 画面
     def show_office(app):
-        """役場の窓口（家を借りる・買う）。"""
-        area = ui.current_area(app)
-        area_name = frames.short(getattr(area, "name", ""), 40) or "この土地"
+        """役場の窓口（家を借りる・買う）を開く。ボタンは窓口 `choices` の MOD だけの画面（`office_screen`）が組む。
+
+        下の役場の選択肢は窓口が書き換えずに残すので、戻す先を控えない。
+        窓口の画面で保存して読み直しても、窓口の画面に戻る。
+        """
+        if contract_here(app) is None:
+            area = ui.current_area(app)
+            area_name = frames.short(getattr(area, "name", ""), 40) or "この土地"
+            screen.say(app, "{}で借りられる家と、買い取れる家。".format(
+                area_name))
+        choices.open_screen(app, state["owner"], OFFICE_SCREEN)
+
+    def office_screen(app, view, _data):
+        """役場の窓口のボタン（組み直しのたびに、いまの契約から組む）。役場に居なければ閉じる（None）。"""
+        if not landlord.at_facility_type(app, OFFICE_FACILITY_TYPE):
+            return None
+        out = []
         record = contract_here(app)
-        # 戻すための控え。自前のボタンは外しておく（戻した後に足し直されるのは
-        # `refresh_choice_buttons` のフックの仕事。`309_` と同じ持ち方）。
-        state["saved"] = [item for item in (getattr(app, "buttons", None) or [])
-                          if not screen.mark_of(item)]
-        entries = []
         if record is None:
             texts = (("rent", RENT_LABEL.format(ui.money(_price_of("rent")),
                                                 lease_days(app))),
                      ("owned", BUY_LABEL.format(ui.money(_price_of("owned")))))
             for kind, label in texts:
-                entry = screen.button(ui.rewrite_coins(label), mark="sign",
-                                      extra={KIND_KEY: kind})
-                if entry is not None:
-                    entries.append(entry)
-            screen.say(app, "{}で借りられる家と、買い取れる家。".format(
-                area_name))
+                text = ui.rewrite_coins(label)
+                out.append(choices.Choice(text, on_press=_press("sign", kind, text)))
         else:
-            entry = screen.button(STATUS_LABEL, mark="status")
-            if entry is not None:
-                entries.append(entry)
-            entry = screen.button(RELEASE_LABEL, mark="release")
-            if entry is not None:
-                entries.append(entry)
-        seized = seized_of(app)
-        if seized:
-            entry = screen.button(
-                ui.rewrite_coins(RECLAIM_LABEL.format(ui.money(int(RECLAIM_FEE)))),
-                mark="reclaim")
-            if entry is not None:
-                entries.append(entry)
-        cancel = screen.button(CANCEL_LABEL, mark="cancel")
-        if cancel is not None:
-            entries.append(cancel)
-        if not entries:
-            write("WARN office: could not build the desk")
-            return
-        screen.apply_buttons(app, entries, "office")
+            out.append(choices.Choice(STATUS_LABEL, on_press=_press("status", None, STATUS_LABEL)))
+            out.append(choices.Choice(RELEASE_LABEL, on_press=_press("release", None, RELEASE_LABEL)))
+        if seized_of(app):
+            text = ui.rewrite_coins(RECLAIM_LABEL.format(ui.money(int(RECLAIM_FEE))))
+            out.append(choices.Choice(text, on_press=_press("reclaim", None, text)))
+        out.append(choices.Choice(CANCEL_LABEL, on_press=_press("cancel", None, CANCEL_LABEL)))
+        return out
 
     def show_status(app):
         """契約の中身を1行で出して、元の画面へ戻す。"""
@@ -1416,17 +1421,13 @@ def apply(ctx):
         back(app, "status")
 
     def back(app, why="back"):
-        """自前の画面から役場の選択肢へ戻す。
+        """役場の窓口の画面を閉じて役場の選択肢へ戻す（下の選択肢は窓口 `choices` が書き換えずに残している）。
 
-        `refresh_choice_buttons` は `to_display_buttons` を組み直すだけで、
-        施設の選択肢そのものは作らない（GAME.md §2.3）。
-        だから戻す先は**開く前に控えたもの**で、窓口のボタンは
-        塗り直しの中でフックが足し直す（`309_` と同じ形）。
+        窓口のボタンは、組み直しの中で窓口が足し直す。
         """
-        saved, state["saved"] = state["saved"], None
-        write("back: {} ({} entries)".format(
-            why, len(saved) if saved is not None else "keep"))
-        screen.apply_buttons(app, saved, "back")
+        write("back: {}".format(why))
+        if not choices.close_screen(app, state["owner"]):
+            choices.repaint(app)
 
     def reclaim(app):
         """役場の預かり品を引き取る。"""
@@ -1910,84 +1911,24 @@ def apply(ctx):
         write("stay menu: uncovered ({})".format(why))
         screen.schedule(lambda: screen.busy_off(app))
 
-    def our_labels(app):
-        """残骸の掃除に使う文言（`prune_stale`）。
-
-        印はセーブに焼かれないので、ロードや再注入のあと**印を失った自分のボタン**が
-        画面に戻っている。文言でしか見分けられない（TECH.md §6.2）。
-        ここに並ぶのは役場の窓口とその確認画面のぶんだけで、
-        建物の名前と中の選択肢はローダが自分の印で掃除する（TECH.md §5.8）。
-        """
-        return list(OUR_LABEL_PREFIXES)
-
     def is_facility_screen(buttons):
         """施設の選択肢の画面か（移動のボタンが1つでもある）。"""
         if not isinstance(buttons, list):
             return False
         return any(ui.spec_cls_name(entry) == MOVE_CLS for entry in buttons)
 
-    def add_office_button(app, buttons):
-        entry = screen.button(OFFICE_LABEL, mark="office")
-        if entry is None:
-            return False
-        buttons.insert(max(len(buttons) - 1, 0), entry)
-        return True
-
-    def retry_when_idle(app):
-        """流し込みの最中に来た足し直しを、手が空いてからやり直す。
-
-        `maintain_buttons` は本文が流れている間は何もしない（GAME.md §2.6）。
-        ところが**自前の画面から戻す塗り直しは、いつも `screen.say` の直後**に走る。
-        そこで黙って戻ると、次にゲームが選択肢を組み直すまで出番が来ない。
-        役場に立ったままではそれが来ず、解約・契約・引き取りの後に
-        窓口のボタンが消えたままになる（VERIFICATION.md §3.62）。
-
-        見張りは同時に1つだけ立てる。塗り直しは1手に何度も走るので、
-        素直に立てると同じ見張りがその回数だけ並ぶ。
-        """
-        if state.get("retry"):
-            return
-        state["retry"] = True
-
-        def again():
-            state["retry"] = False
-            try:
-                maintain_buttons(app)
-            except Exception:
-                ctx.log_exc("real estate: cannot maintain the choices (idle)")
-
-        screen.when_idle(app, again, proceed_on_timeout=True, tag="retry")
-
-    def maintain_buttons(app):
-        """役場の窓口を足す。何度呼んでも増えない。
+    def offer(app, view):
+        """役場の窓口のボタン（窓口 `choices` の `offer`。組み直しのたびに呼ばれる）。
 
         建物の中の選択肢・出口・建物への道は**ローダが出す**（TECH.md §5.8）。
         ここに残るのは、ゲームの施設（役場）に足す1つだけ。
         """
-        buttons = getattr(app, "buttons", None)
-        if not isinstance(buttons, list):
-            return
-        # 宿屋の部屋の選択肢が出ていれば、そこから宿泊の月数を覚える。
-        # 読むだけなので、本文が流れていても構わない。
-        note_inn_months(app, buttons)
-        if ui.busy_signals(app):
-            # 本文が流れている最中は触らない。手が空いてからやり直す。
-            retry_when_idle(app)
-            return
-        if state.get("free_stay") is not None:
-            # 滞在の最中。並んでいるのはゲームの活動の選択肢（休養・訓練・労働…）で、
-            # 自分の家では出さない活動をここで落とす。
-            if drop_unwanted_activities(app, buttons):
-                screen.apply_buttons(app, None, "stay menu")
-            return
-        if not is_facility_screen(buttons):
-            return
-        screen.prune_stale(buttons, our_labels(app))
-        if any(screen.mark_of(entry) for entry in buttons):
-            return
-        if landlord.at_facility_type(app, OFFICE_FACILITY_TYPE) \
-                and add_office_button(app, buttons):
-            screen.apply_buttons(app, None, "office")
+        if state.get("free_stay") is not None or not is_facility_screen(view.buttons):
+            return None
+        if not landlord.at_facility_type(app, OFFICE_FACILITY_TYPE):
+            return None
+        return [choices.Choice(OFFICE_LABEL, place=choices.at(max(len(view.buttons) - 1, 0)),
+                               on_press=_press("office", None, OFFICE_LABEL))]
 
     # ------------------------------------------------------------ 自前のフェーズ
     class EstatePhase(object):
@@ -2034,28 +1975,34 @@ def apply(ctx):
             write("WARN unknown action {!r}".format(action))
 
     # ================================================================ フック
-    def refresh_choice_buttons(self):
-        """選択肢が組み直されるたびに、建物を当て直して自前のボタンを足す。
+    def refresh_choices(self, buttons):
+        """組み直しの前（窓口 `choices` の `refresh`）。建物を当て直し、滞在中は自分の家で出さない活動を落とす。
 
-        最後にローダの塗り直しをもう一度呼ぶ。
-        あちらの関所も同じ場面を包んでいるが、**どちらが内側かは適用順で変わる**
-        （フレームワークどうしは順序を約束しない。TECH.md §5.8）。
-        先に走られると、建物を当て直す前の画面で判断されてしまう。
-        二度呼んでも増えない作りなので、ここで順序を確かめる。
+        建物の当て直しは、建物の選択肢を組む前に済ませる（窓口は `refresh` の後に `offer` を呼ぶ。
+        ローダの建物の選択肢も同じ組み直しで組まれる。TECH.md §5.8）。
         """
-        try:
-            cover_after_activity(self)
-        except Exception:
-            ctx.log_exc("real estate: cannot cover the choices after the activity")
         try:
             apply_contracts(self, getattr(self, "world", None), current_key(self),
                             "screen")
             check_leases(self, "screen")
             flush_demolitions(self)
-            maintain_buttons(self)
-            modfacility.maintain_buttons(self, write=write)
         except Exception:
-            ctx.log_exc("real estate: cannot maintain the choices")
+            ctx.log_exc("real estate: cannot apply the contracts")
+        if not isinstance(buttons, list):
+            return
+        # 宿屋の部屋の選択肢が出ていれば、そこから宿泊の月数を覚える。
+        note_inn_months(self, buttons)
+        if state.get("free_stay") is not None:
+            # 滞在の最中。並んでいるのはゲームの活動の選択肢（休養・訓練・労働…）で、
+            # 自分の家では出さない活動をここで落とす（ゲームの一覧から落とす）。
+            drop_unwanted_activities(self, buttons)
+
+    def after_refresh(self):
+        """組み直しの後（窓口の `after`）。活動を1つ終えた後の選択肢を待機表示で覆う。"""
+        try:
+            cover_after_activity(self)
+        except Exception:
+            ctx.log_exc("real estate: cannot cover the choices after the activity")
 
     def flush_demolitions(app):
         """中に居たせいで残っていた取り壊しを、外に出た後で片付ける。"""
@@ -2091,22 +2038,22 @@ def apply(ctx):
             write("{}: swept {} lapsed contract(s)".format(why, done))
         return done
 
-    def on_button_press(self, action):
-        """自前のボタンが押された（窓口 `choices` の `presses`。印で振り分けた後に呼ばれる）。"""
-        entry = choices.pressed()
-        if state["acting"]:
-            write("ignored {!r}: the previous press is still running".format(
-                entry.get("text") if isinstance(entry, dict) else None))
+    def _press(action, kind, text):
+        """自前のボタンの押下（窓口がボタンに持たせる処理）。ゲームと同じ経路（`process_choice`）で動かす。"""
+        def on_press(app):
+            if state["acting"]:
+                write("ignored {!r}: the previous press is still running".format(text))
+                return None
+            write("pressed {!r} ({} kind={})".format(text, action, kind))
+            screen.start_phase(app, EstatePhase(app, action, kind), text,
+                               fallback=lambda: run_action(app, action, kind))
             return None
-        text = (entry.get("text") if isinstance(entry, dict) else None) or OFFICE_LABEL
-        kind = entry.get(KIND_KEY) if isinstance(entry, dict) else None
-        write("pressed {!r} ({} kind={})".format(text, action, kind))
-        screen.start_phase(self, EstatePhase(self, action, kind), text,
-                           fallback=lambda: run_action(self, action, kind))
-        return None
+        return on_press
 
-    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
-    choices.provide(ctx, screen, after=refresh_choice_buttons, presses={"": on_button_press})
+    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14 の宣言型の口）に預ける。
+    # 役場の窓口のボタンは `offer`、窓口の画面は MOD だけの画面（`office_screen`）
+    state["owner"] = choices.provide(ctx, screen, refresh=refresh_choices, after=after_refresh, offer=offer,
+                                     screens={OFFICE_SCREEN: office_screen}, labels=OUR_LABEL_PREFIXES)
 
     @ctx.wrap("__main__:World.__init__", required=False, safe=True)
     def world_loaded(orig, self, save_data_dict, app, *args, **kwargs):

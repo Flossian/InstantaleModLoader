@@ -130,6 +130,8 @@ class World:
     def __init__(self, areas):
         self.areas = areas
         self.name = "テスト世界"
+        # 人物が揃った世界（窓口 `choices` は人物が 0 人の間をロードの途中と見て MOD の選択肢を組まない）
+        self.characters = {"1": object()}
 
 
 class Player:
@@ -216,6 +218,10 @@ class InstantaleApp:
 
     def labels(self):
         return [entry.get("text") for entry in self.buttons]
+
+    def save_game(self):
+        # セーブに焼かれるのは、そのときの選択肢（`game_variables["buttons"]`）
+        self.saved_buttons = [entry.get("text") for entry in self.buttons]
 
 
 BASES = {"app": InstantaleApp}
@@ -312,6 +318,24 @@ class FakeCtx:
             return func
         return decorator
 
+    # 控えの置き場（窓口 `choices` が開いた画面を世界×主人公の控えに持つ）
+    @property
+    def state_dir(self):
+        return os.path.join(self.out_dir, "state")
+
+    def state_path(self, *parts):
+        path = os.path.join(self.state_dir, *parts)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        return path
+
+    def read_json(self, path, default=None):
+        import instantale_modloader as _ml
+        return _ml.read_json(path, default)
+
+    def write_json(self, path, data, indent=1):
+        import instantale_modloader as _ml
+        return _ml.write_json(path, data, indent=indent)
+
 
 def load_mod(path=MOD, name="office_pardon_mod"):
     """本番と同じ形（**パッケージとして**）読み込む。
@@ -394,6 +418,11 @@ def setup(configure=None, lawfulness=-3, gold=100000, facility_type=OFFICE_TYPE,
                          "lawfulness": -5}}
     player = Player(here, office, history, gold)
 
+    choices.reset()                       # 前の検査の確認の画面を持ち越さない
+    folder = os.path.join(OUT_DIR, "state", choices.STATE_DIRNAME)
+    if os.path.isdir(folder):
+        for name in os.listdir(folder):
+            os.remove(os.path.join(folder, name))
     module = load_mod()
     if configure is not None:
         configure(module)
@@ -403,6 +432,7 @@ def setup(configure=None, lawfulness=-3, gold=100000, facility_type=OFFICE_TYPE,
         ("__main__:InstantaleApp.refresh_choice_buttons", app_cls,
          "refresh_choice_buttons"),
         ("__main__:InstantaleApp.on_button_press", app_cls, "on_button_press"),
+        ("__main__:InstantaleApp.save_game", app_cls, "save_game"),
     ))
     app = app_cls(world, player)
     main.test_app = app
@@ -420,6 +450,7 @@ def pardon_label(app):
 
 
 MARK_KEY = "mod_pardon_action"
+from instantale_modloader import choices  # noqa: E402
 
 
 # ================================================================== 設置
@@ -493,6 +524,7 @@ check("確認の選択肢は2つ", len(app.buttons) == 2, app.labels())
 check("金額つきの支払いボタンが出る",
       any("3,000ゴールドを納める" == text for text in app.labels()), app.labels())
 check("やめる選択肢が出る", "やめておく" in app.labels(), app.labels())
+check("確認画面は窓口のボタン", all(choices.ours(e) for e in app.buttons), app.buttons)
 check("確認画面も自前のクラス名を書かない",
       all(e["spec"].to_dict()["cls_name"] == "JustSetButtonToNormalPhase"
           for e in app.buttons),
@@ -510,6 +542,33 @@ check("手配が残っていればボタンも戻る", pardon_label(app) is not 
 check("所持金は動かない", app.player.gold == 100000, app.player.gold)
 check("手配度は動かない", app.player.area_history["0"]["lawfulness"] == -3,
       app.player.area_history["0"])
+
+# ============================================================ 保存と読み直し
+print("\n[保存] 確認の画面で保存して読み直す")
+module, ctx, app = setup()
+game_office = [e for e in app.buttons if not e.get(MARK_KEY)]
+app.press(pardon_label(app))
+CLOCK.settle()
+confirm = app.labels()
+app.save_game()
+check("確認の画面で保存すると、セーブには役場のゲームの選択肢だけが残る",
+      app.saved_buttons == [e.get("text") for e in game_office], (app.saved_buttons, confirm))
+check("保存の後も確認の画面のまま", app.labels() == confirm, app.labels())
+app.buttons = [dict(e) for e in game_office]       # ロード: セーブの一覧が戻り、メモリの控えは消えた
+choices._store()["opened"].clear()
+app.refresh_choice_buttons(reset_page=True)
+CLOCK.settle()
+check("読み直しても確認の画面に戻る", app.labels() == confirm, app.labels())
+app.press("やめておく")
+CLOCK.settle()
+check("やめておくで役場の選択肢に戻る（戻り先を失わない）",
+      pardon_label(app) is not None and EXIT_TEXT in app.labels(), app.labels())
+app.press(pardon_label(app))
+CLOCK.settle()
+app.player.area_history["0"]["lawfulness"] = 10      # 押してから手配が消えた（別経路で戻された）
+app.refresh_choice_buttons(reset_page=True)
+CLOCK.settle()
+check("手配が消えたら確認の画面は閉じる", pardon_label(app) is None and EXIT_TEXT in app.labels(), app.labels())
 
 # ================================================================== 支払
 print("\n[支払] 罰金を納める")
@@ -695,8 +754,8 @@ app.refresh_choice_buttons()
 CLOCK.settle()
 same = [e for e in app.buttons if e.get("text") == label]
 check("復元された残骸が二重にならない", len(same) == 1, app.labels())
-check("残った1枚は印を持つ（押せば効く）",
-      bool(same and same[0].get(MARK_KEY)), same)
+check("残った1枚は窓口のボタン（押せば効く）",
+      bool(same and choices.ours(same[0])), same)
 check("ゲーム側のボタンは1枚も減っていない",
       len([e for e in app.buttons if e.get("text") != label])
       == len([e for e in before if e.get("text") != label]),

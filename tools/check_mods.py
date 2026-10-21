@@ -182,6 +182,50 @@ def check_flag_reads(path):
     return problems
 
 
+#: 選択肢の組み直しと押下。MOD は自分で包まず、ローダの窓口 `choices` に預ける（TECH.md §3.3.14）。
+CHOICE_TARGETS = ("__main__:InstantaleApp.refresh_choice_buttons", "__main__:InstantaleApp.on_button_press")
+#: 窓口の古い口。働きは v2.0.0 まで残るが、宣言型の口（offer / screens / claim）へ移す（TECH.md §3.9）。
+OLDER_CHOICE_WAYS = ("presses", "trim")
+
+
+def check_choice_ways(path):
+    """選択肢の組み直し・押下を自分で包んでいないか、窓口の古い口を使っていないか。
+
+    自分で包む MOD は、窓口が組んだボタンを外せず（`claim` でも残る）、塗り直しも2度走る。
+    古い口（印で振り分ける `presses`、ほかの MOD のボタンまで絞る `trim`）は、印がロードで落ちた。
+    捕まえるのは包みの対象の文字列（`ctx.wrap(...)` と、包む関数へ渡す文字列）、素の関数を
+    `unwrap` で引く呼び出し、`choices.provide` の `presses=` / `trim=`。
+    計測 MOD（`"debug": true`）は観察が仕事なので、呼び出し側で外す。
+    """
+    tree, _problem = _parse(path)
+    if tree is None:
+        return []
+    problems = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and node.value in CHOICE_TARGETS:
+            problems.append((path, "line {}".format(node.lineno),
+                             "{!r} を自分で包んでいる。ローダの窓口 choices.provide（offer / screens / claim。"
+                             "ボタンを足さない合図なら after）に預ける（TECH.md §3.3.14）".format(node.value)))
+        elif isinstance(node, ast.Call):
+            func = node.func
+            name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
+            if name == "unwrap" and any(
+                    isinstance(sub, ast.Attribute) and sub.attr in ("refresh_choice_buttons", "on_button_press")
+                    for arg in node.args for sub in ast.walk(arg)):
+                problems.append((path, "line {}".format(node.lineno),
+                                 "素の組み直し・押下を unwrap で引いている。窓口 choices の宣言型の口"
+                                 "（claim / offer）で組む（TECH.md §3.3.14）"))
+            elif name == "provide" and isinstance(func, ast.Attribute) \
+                    and isinstance(func.value, ast.Name) and func.value.id == "choices":
+                for keyword in node.keywords:
+                    if keyword.arg in OLDER_CHOICE_WAYS:
+                        problems.append((path, "line {}".format(node.lineno),
+                                         "choices.provide の {}= は古い口（v2.0.0 で外す）。"
+                                         "ボタンは offer / screens / claim と choices.Choice の on_press で組む"
+                                         "（TECH.md §3.3.14）".format(keyword.arg)))
+    return problems
+
+
 def _mod_files(name):
     """mod フォルダの中の .py を全て返す（入口 + 分割した中身）。
 
@@ -597,6 +641,8 @@ def main():
             mod_problems += check_file(path)
             if not probe:
                 mod_problems += check_flag_reads(path)
+                # 選択肢を自分で包む・古い口を使うのは note（`--strict` の CI では問題に数える）
+                mod_notes += check_choice_ways(path)
         # 開発中の mod（9xx。TECH.md §2.6）は**見るが、赤にはしない**。
         # 配布物にも `load_order.json` にも入らないものなので、
         # 書きかけの一本で CI が止まると、リリースする側の検査が使えなくなる。

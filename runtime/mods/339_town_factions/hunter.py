@@ -24,6 +24,7 @@ import time
 from instantale_modloader import arrivals, choices, llm, modfacility, npcs, ui
 
 ARRIVAL_PRIORITY = 20           # 300（0）・911（10）より先に呼び止める
+CLAIM_PRIORITY = 50             # 刺客との会話は「受けて立つ」だけ（窓口 `choices` の `claim`）
 FIGHT_LABEL = "受けて立つ"
 FIGHT_CHOICE = "{name}の挑戦を受けて立つ"
 END_TEXT = "<行動: {name}の挑戦を受けて立ち、戦いになった>"
@@ -416,10 +417,12 @@ def install(env):
         return NOTE.format(faction=faction.get("name", ""), title=row.get("title") or "刺客", player=player)
 
     # ------------------------------------------------------------ 「会話を終了する」を「受けて立つ」に
-    # ゲームの「会話を終了する」のボタン（spec はそのまま）の文言だけを変え、押下を `intercept` で握る。
-    # 自前のボタンに差し替えると、セーブに残るのは文言と spec だけで、ロードの後に印と相手が消え、
-    # 押すとゲームが素の spec（JustSetButtonToNormalPhase）を動かして会話が半端に抜けた（実機）。
-    # ゲームのボタンなら spec の args[0] が相手なので、ロードの後でも見分けられる
+    # 刺客との会話は、ゲームの「会話を終了する」（spec はそのまま）を「受けて立つ」の文言で出すだけにする
+    # （窓口 `choices` の `claim`。TECH.md §3.3.14）。ほかの MOD のボタンも窓口が出さない。
+    # 窓口はゲームのボタンを書き換えないので、セーブには「会話を終了する」が残り、ロードの後は組み直しで
+    # 「受けて立つ」に戻る。MOD の無い起動では普通に会話が閉じる。
+    # 自前の無害な spec のボタンにした版は、ロードの後に印と相手が消え、押すとゲームが素の spec
+    # （JustSetButtonToNormalPhase）を動かして会話が半端に抜けた（実機）
     def hunter_partner(app, entry):
         """そのボタンが生きている刺客との会話の「会話を終了する」なら相手の id。"""
         if ui.spec_cls_name(entry) != "ConversationEndManager":
@@ -431,21 +434,15 @@ def install(env):
         row = rules.hunter_of(env.ensure(app) or {}, partner)
         return partner if row is not None and row.get("status") in rules.HUNTER_ALIVE else None
 
-    def trim(app, _buttons):
-        buttons = getattr(app, "buttons", None)
-        if not isinstance(buttons, list):
-            return
-        _partner, end_entry = ui.conversation_partner(buttons)
-        if end_entry is None or hunter_partner(app, end_entry) is None:
-            return
-        end_entry["text"] = FIGHT_LABEL
-        # 雇うのような会話のボタンも外す（受けて立つほかに道を残さない）
-        buttons[:] = [end_entry]
-
-    def intercept(app, entry, _index):
-        npc_id = hunter_partner(app, entry)
+    def claim(app, view):
+        end_entry = view.end_entry
+        npc_id = hunter_partner(app, end_entry) if end_entry is not None else None
         if npc_id is None:
-            return False
+            return None
+        # 雇うのような会話のボタンも出さない（受けて立つほかに道を残さない）
+        return [choices.Choice(FIGHT_LABEL, on_press=lambda app: accept(app, npc_id, end_entry), base=end_entry)]
+
+    def accept(app, npc_id, entry):
         name = ui.character_name(app, npc_id)
         write("hunter: {} accepted the challenge".format(npc_id))
 
@@ -464,10 +461,11 @@ def install(env):
 
         screen.end_conversation(app, entry, fight, end_text=END_TEXT.format(name=name),
                                 on_abort=lambda reason: write("hunter: could not close the talk ({})".format(reason)))
-        return True
+        return None
 
-    # 絞るのはほかの MOD がボタンを足し終えた後（`301_` が「依頼を受ける（話を切り上げる）」を足し、戦わずに抜けられた。実機）
-    choices.provide(ctx, screen, trim=trim, intercept=intercept, owner=owner)
+    # 「受けて立つ」だけにするのは `claim`。ほかの MOD の足すボタンも出ない
+    # （`301_` が「依頼を受ける（話を切り上げる）」を足し、戦わずに抜けられた。実機）
+    choices.provide(ctx, screen, claim=claim, priority=CLAIM_PRIORITY, owner=owner)
 
     # ------------------------------------------------------------ 戦闘
     @ctx.wrap("__main__:BattleStartManager.__init__", required=False, safe=True)

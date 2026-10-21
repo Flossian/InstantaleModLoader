@@ -428,6 +428,32 @@ check("改名後の名前も重複していない",
 check("素データの名前も書き換わる",
       app.save_data_dict["npcs"]["11"]["name"] == second.name,
       app.save_data_dict["npcs"]["11"])
+
+# 突き合わせで控えを舐めている間に、別の人物の登録が控えに書き足しても落ちない（版9。起動の当て直しの種まきと
+# ゲームのスレッドの人物の登録が重なり、`dictionary changed size during iteration` で種まきが落ちた。実機）
+real_too_close = mod.too_close
+interleaved = {"done": False}
+
+
+def too_close_while_someone_is_born(left, right):
+    if not interleaved["done"]:
+        interleaved["done"] = True
+        born(app, "12", "オルドリン", category="old man")     # 舐めている途中に控えへ1人足す
+    return real_too_close(left, right)
+
+
+mod.too_close = too_close_while_someone_is_born
+try:
+    raised = None
+    try:
+        third = born(app, "13", "セラフィナ", category="young woman")
+    except RuntimeError as exc:
+        raised = exc
+finally:
+    mod.too_close = real_too_close
+check("控えを舐めている途中に書き足されても落ちない（人物の生成の包みで握られる例外も出ない）",
+      raised is None and interleaved["done"] and not any("'13'" in line for line in ctx.errors),
+      (raised, ctx.errors))
 check("項目の並びは動かない",
       list(app.save_data_dict["npcs"]["11"]) == ["name", "id", "category"],
       list(app.save_data_dict["npcs"]["11"]))

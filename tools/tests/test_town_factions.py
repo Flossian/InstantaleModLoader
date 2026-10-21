@@ -1030,26 +1030,28 @@ app.player.current_area = "7"
 end_entry = {"text": "会話を終了する", "spec": PhaseSpec("ConversationEndManager", ["90", None, "<行動: 会話を終了する>"])}
 app.buttons = [{"text": "売買する", "spec": PhaseSpec("ShoppingStartManagerRemake", [])}, end_entry]
 hunter_provider = choices._store()["providers"][module.OWNER + ":hunter"]
-hunter_provider["trim"](app, app.buttons)
-check("刺客との会話は「受けて立つ」だけになる（ゲームの終了のボタンの文言だけを変える）",
-      [b["text"] for b in app.buttons] == ["受けて立つ"] and app.buttons[0] is end_entry, app.buttons)
-# ロードの後のボタン（セーブに残るのは文言と spec だけ）
-loaded = [{"text": "受けて立つ", "spec": PhaseSpec("ConversationEndManager", ["90", None, "<行動: 会話を終了する>"])}]
-other =[{"text": "会話を終了する", "spec": PhaseSpec("ConversationEndManager", ["30", None, "x"])}]
-app.buttons = list(other)
-hunter_provider["trim"](app, app.buttons)
-check("ほかの相手の会話は変えない", [b["text"] for b in app.buttons] == ["会話を終了する"])
-check("ほかの相手の「会話を終了する」は握らない", hunter_provider["intercept"](app, other[0], 0) is False)
+picked = hunter_provider["claim"](app, choices.View(app, app.buttons))
+check("刺客との会話は「受けて立つ」だけ（ゲームの終了のボタンの spec のまま文言だけ変えて出す）",
+      [c.text for c in picked or []] == ["受けて立つ"] and picked[0].base is end_entry, picked)
+buttons = list(app.buttons)
+choices.compose(app, buttons)
+check("窓口が組むと「受けて立つ」だけが並び、ゲームのボタンは書き換えない",
+      [b["text"] for b in buttons] == ["受けて立つ"] and buttons[0]["spec"] is end_entry["spec"]
+      and end_entry["text"] == "会話を終了する", buttons)
+check("保存の前に外すと、ゲームの一覧（売買する・会話を終了する）に戻る",
+      choices.strip(buttons) == ([app.buttons[0], end_entry], True), choices.strip(buttons))
+other = [{"text": "会話を終了する", "spec": PhaseSpec("ConversationEndManager", ["30", None, "x"])}]
+check("ほかの相手の会話は握らない", hunter_provider["claim"](app, choices.View(app, other)) is None)
 ended = []
 screen_cls = ui.Screen
 original_end = screen_cls.end_conversation
 screen_cls.end_conversation = lambda self, app_, entry, follow_up, **kw: ended.append((entry, kw.get("end_text")))
 try:
-    taken = hunter_provider["intercept"](app, loaded[0], 0)
+    picked[0].on_press(app)
 finally:
     screen_cls.end_conversation = original_end
-check("刺客の「受けて立つ」は握って、会話を閉じてから戦う", taken is True and ended
-      and ended[0][0] is loaded[0] and "ヴァルドの挑戦を受けて立ち" in ended[0][1], ended)
+check("「受けて立つ」を押すと、ゲームの終了のボタンで会話を閉じてから戦う", ended
+      and ended[0][0] is end_entry and "ヴァルドの挑戦を受けて立ち" in ended[0][1], ended)
 text = notes_fn()({"app": app, "npc_id": "90"}) or ""
 check("刺客の会話に使命と勢力の構えを足す", "【刺客】あなたは白の教団の異端審問官" in text and "白の教団に属する者として" in text, text)
 

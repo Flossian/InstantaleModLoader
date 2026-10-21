@@ -50,6 +50,7 @@ sys.modules["kivy.clock"] = clock
 
 import instantale_modloader as ml            # noqa: E402
 from instantale_modloader import llm         # noqa: E402
+from instantale_modloader import choices, ui  # noqa: E402
 
 
 def find_mod(suffix):
@@ -309,6 +310,7 @@ def fresh():
     main.APP = APP           # ui.find_app() が __main__ の属性から拾う
     if hasattr(sys, MOD.STORE):
         delattr(sys, MOD.STORE)
+    choices.reset()          # 窓口の置き場（開いた画面・印の控え）は `sys` に在って検査をまたぐ
     ctx = Ctx(tempfile.mkdtemp(prefix="party_talk_test_"))
     MOD.apply(ctx)
     return ctx
@@ -644,36 +646,40 @@ print("パーティー会話中の他 MOD の選択肢")
 ctx = fresh()
 store = getattr(sys, MOD.STORE)
 store.update({"active": True, "anchor": "8"})
+end_entry = {"text": "会話を終了する", "spec": Spec("ConversationEndManager", ["8"])}
+family = {"text": "家族になろう", "spec": Spec("ConversationPhaseManager", ["家族になろう"])}
 APP.buttons = [
+    family,
     {"text": "ここで別れる", "spec": Spec("JustSetButtonToNormalPhase"), "mod_party_action": "confirm"},
     {"text": "＜アイテムの受け渡し＞", "spec": Spec("JustSetButtonToNormalPhase"),
      "mod_party_inventory_transfer_equipment": "transfer"},
-    {"text": "会話を終了する", "spec": Spec("ConversationEndManager", ["8"])},
+    end_entry,
 ]
-raw_calls = []
-InstantaleApp.refresh_choice_buttons = lambda self, reset_page=False: raw_calls.append(reset_page)
-
-
-def inner_like_402(self, reset_page=False):
-    # 402 は orig の後に差してくる。ここでは既に並んでいる前提で何もしない。
-    return "REFRESHED"
-
-
-check("302 / 402 の選択肢を落とし、素の refresh で描き直す（reset_page はそのまま渡す）",
-      ctx.hooks[REFRESH](inner_like_402, APP, False) == "REFRESHED"
-      and [e["text"] for e in APP.buttons] == ["話し合いを終了する"] and raw_calls == [False],
-      ([e["text"] for e in APP.buttons], raw_calls))
-raw_calls[:] = []
-ctx.hooks[REFRESH](inner_like_402, APP)
-check("落とすものが無ければ描き直さない", raw_calls == [])
+game_list = list(APP.buttons)
+ctx.hooks[REFRESH](lambda self, reset_page=False: None, APP)
+check("パーティー会話の画面はゲームのボタンの写しと「話し合いを終了する」だけ（ほかの MOD のボタンは出さない）",
+      [e["text"] for e in APP.buttons] == ["家族になろう", MOD.END_LABEL]
+      and all(choices.ours(e) for e in APP.buttons), [e["text"] for e in APP.buttons])
+check("写しの spec はゲームのボタンのまま（押すとゲームへ流れる）",
+      APP.buttons[1]["spec"] is end_entry["spec"] and APP.buttons[0]["spec"] is family["spec"])
+check("ゲームのボタンの文言は書き換えない（セーブには「会話を終了する」が残る）",
+      end_entry["text"] == "会話を終了する" and choices.strip(APP.buttons)[0] == game_list,
+      (end_entry["text"], choices.strip(APP.buttons)))
+PRESS = "__main__:InstantaleApp.on_button_press"
+pressed = []
+ctx.hooks[PRESS](lambda self, i: pressed.append(i), APP, 1)
+check("「話し合いを終了する」を押すとゲームの押下へ流れる", pressed == [1], pressed)
 store["active"] = False
 APP.buttons = [{"text": "ここで別れる", "spec": Spec("JustSetButtonToNormalPhase"), "mod_party_action": "confirm"},
                {"text": "会話を終了する", "spec": Spec("ConversationEndManager", ["8"])}]
-ctx.hooks[REFRESH](inner_like_402, APP)
+ctx.hooks[REFRESH](lambda self, reset_page=False: None, APP)
 check("普通の会話では触らない", [e["text"] for e in APP.buttons] == ["ここで別れる", "会話を終了する"])
+APP.buttons = [{"text": MOD.END_LABEL, "spec": Spec("ConversationEndManager", ["8"])}]
+ctx.hooks[REFRESH](lambda self, reset_page=False: None, APP)
+check("前の版がセーブに残した「話し合いを終了する」はゲームの文言へ戻す",
+      [e["text"] for e in APP.buttons] == ["会話を終了する"], [e["text"] for e in APP.buttons])
 
 print("NPC 不在の根のメニュー")
-PRESS = "__main__:InstantaleApp.on_button_press"
 
 
 def own_talk(names, in_conversation=None):
@@ -721,21 +727,46 @@ pressed = []
 check("自前の「会話する」は本体へ渡さない",
       ctx.hooks[PRESS](lambda self, i: pressed.append(i), APP, 2) is None and pressed == [])
 FakeClock.run_all()
+ctx.hooks[REFRESH](lambda self, reset_page=False: None, APP)    # ゲームの組み直し（偽物の素の関数は包まれていない）
 labels = [e.get("text") for e in APP.buttons]
-check("押すと「パーティーメンバーと話す」と「やめる」だけの一覧になる",
-      labels == [MOD.START_LABEL, MOD.BACK_LABEL], labels)
-check("「やめる」は印の無い無害 spec（本体が根のメニューへ戻す）",
-      APP.buttons[1].get(MOD.MARK_KEY) is None and APP.buttons[1]["spec"].cls_name == "JustSetButtonToNormalPhase")
+check("押すと「パーティーメンバーと話す」と「やめる」だけの一覧になる（MOD だけの画面）",
+      labels == [MOD.START_LABEL, MOD.BACK_LABEL] and choices.opened(APP) is not None, labels)
+check("一覧の間も下の根のメニューは残る（保存の間は根のメニューに戻る）",
+      [ui.spec_cls_name(e) for e in choices.strip(APP.buttons)[0]] == ["MovePhaseManager", "MovePhaseManager"],
+      choices.strip(APP.buttons)[0])
 ctx.hooks[REFRESH](lambda self, reset_page=False: None, APP)
 check("その一覧を描き直しても増えない", [e.get("text") for e in APP.buttons] == [MOD.START_LABEL, MOD.BACK_LABEL])
-store = getattr(sys, MOD.STORE)
-APP.buttons = [{"text": n, "spec": Spec(n)} for n in ("MovePhaseManager",)]
+ctx.hooks[PRESS](lambda self, i: pressed.append(i), APP, 1)
+FakeClock.run_all()
 ctx.hooks[REFRESH](lambda self, reset_page=False: None, APP)
-check("「やめる」で根のメニューに戻ると旗が下り、自前の「会話する」が付き直す",
-      store["talk_list"] is False and [e.get("text") for e in APP.buttons][-1] == MOD.TALK_LABEL)
+check("「やめる」で根のメニューに戻り、自前の「会話する」が付き直す",
+      choices.opened(APP) is None and [e.get("text") for e in APP.buttons][-1] == MOD.TALK_LABEL,
+      [e.get("text") for e in APP.buttons])
 pressed = []
 ctx.hooks[PRESS](lambda self, button_index: pressed.append(button_index), APP, button_index=0)
 check("本体の引数名のキーワードで押されても二重に渡さず、本体へ届く", pressed == [0], pressed)
+
+# 自前の一覧から始めたパーティー会話を閉じたら、その一覧に戻る（版11。ゲームは閉じる処理の中で組み直すが、
+# まだ会話中の旗が残っていて自前の「会話する」が組まれないまま止まった。実機）
+ctx, at = own_talk(("MovePhaseManager", "MovePhaseManager"))
+APP.display_button_map = [0, 1, 2]
+ctx.hooks[PRESS](lambda self, i: None, APP, 2)                  # 自前の「会話する」
+FakeClock.run_all()
+ctx.hooks[REFRESH](lambda self, reset_page=False: None, APP)
+ctx.hooks[PRESS](lambda self, i: None, APP, 0)                  # 「パーティーメンバーと話す」
+check("一覧から始めると一覧を閉じて、どこから始めたかを覚える",
+      choices.opened(APP) is None and getattr(sys, MOD.STORE).get("from_own_list") is True,
+      (choices.opened(APP), getattr(sys, MOD.STORE).get("from_own_list")))
+getattr(sys, MOD.STORE)["active"] = True                        # パーティー会話の最中（開始の処理は偽物で通さない）
+APP.buttons = [{"text": n, "spec": Spec(n)} for n in ("MovePhaseManager", "MovePhaseManager")]
+FakeClock.scheduled = []
+ctx.hooks["__main__:ConversationEndManager.finish_conversation"](lambda self, *a, **k: None,
+                                                                 types.SimpleNamespace(app=APP))
+FakeClock.run_all()
+FakeClock.run_all()
+ctx.hooks[REFRESH](lambda self, reset_page=False: None, APP)
+check("閉じた後、手が空いてから自前の一覧に戻る", (choices.opened(APP) or {}).get("name") == MOD.TALK_LIST_SCREEN
+      and [e.get("text") for e in APP.buttons] == [MOD.START_LABEL, MOD.BACK_LABEL], [e.get("text") for e in APP.buttons])
 
 print()
 if failures:

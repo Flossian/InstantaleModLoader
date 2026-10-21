@@ -21,6 +21,7 @@ import shutil
 import struct
 import sys
 import tempfile
+import types
 import typing
 import weakref
 
@@ -298,6 +299,7 @@ if pydantic is not None:
           (turn_ref(), wide_ref()))
 
 
+
 class Recorder(object):
     def __init__(self):
         self.calls = []
@@ -316,6 +318,35 @@ def resolve(vfx, side="味方側"):
         return "resolved"
     ctx.hooks[RESOLVE](original, "manager", "player", side, action, [])
     return seen["vfx"], action
+
+
+# 自由入力の審判は、送り口の答えを関数の中の元の型（8択）で作り直す（足した値が来ると落ちた。実機）。
+# その審判の答えだけ、足した値を運び手に置き換えて返し、演出を決める所で元の値に戻す
+if pydantic is not None:
+    def ask(manager, answer):
+        return ctx.hooks[SEND](lambda *a, **k: answer, manager, ["msg"], Structure)
+
+    answer = ask("referee_player_any_input_new_new", {"actor": "主人公", "vfx": "arcane"})
+    check("自由入力の審判の答えは、足した値を運び手に置き換えて返す（元の型で作り直せる）",
+          answer["vfx"] == MOD.VFX["arcane"][0], answer)
+    carried, action = resolve(answer["vfx"])
+    check("演出を決める所で元の値に戻し、ほかの審判と同じく差し替える",
+          carried == MOD.VFX["arcane"][0] and any("arcane" in n and "carries it" in n for n in ctx.notes),
+          (carried, ctx.notes[-3:]))
+    answer = ask("referee_player_any_input_new_new", {"battle_action": [{"vfx": "blow"}, {"vfx": "slash"}]})
+    check("入れ子の答えも置き換える（ゲームが描ける値も元の型の値に）",
+          [row["vfx"] for row in answer["battle_action"]] == ["slash", "slash"], answer)
+    carried, action = resolve("slash")
+    check("ゲームが描ける値は、演出を決める所で元の値に戻してゲームに描かせる", carried == "blow", carried)
+    carried, action = resolve("slash")
+    check("控えは1つずつ使い切る（元から slash の手はそのまま）", carried == "slash", carried)
+    answer = ask("referee_player_attack_new_new", {"vfx": "arcane"})
+    check("作り直さない審判の答えはそのまま", answer["vfx"] == "arcane", answer)
+    ask("referee_player_any_input_new_new", {"vfx": "arcane"})
+    CLOCK.now += MOD.PENDING_SECONDS + 1
+    carried, action = resolve(MOD.VFX["arcane"][0])
+    check("古い控えは使わない（時間切れ）", carried == MOD.VFX["arcane"][0]
+          and not any("arcane" in n and "carries it" in n for n in ctx.notes[-1:]), ctx.notes[-2:])
 
 
 def effect(src, target=APP_EFFECT, **kwargs):
@@ -406,6 +437,42 @@ check("敵の手は絵が出なくても NOTE を残さない",
       not any("NOTE bite" in n for n in ctx.notes), ctx.notes[-3:])
 CLOCK.now += MOD.PENDING_SECONDS + 1
 check("例外を残さない", ctx.errors == [], ctx.errors)
+
+# 最後のコマに絵が残るゲームの絵は、空のコマを足した写しを渡す
+print("空のコマを足した写し")
+tail_game = os.path.join(work, "tail_game")
+aoe = os.path.join(tail_game, "Assets", "effects", "battle", "neutral_energy_aoe1")
+os.makedirs(aoe)
+for row in (1, 2):
+    for col in (1, 2):
+        with open(os.path.join(aoe, "image_({}-{}).png".format(row, col)), "wb") as fh:
+            fh.write(MOD.BLANK_PNG)
+os.makedirs(os.path.join(tail_game, "Assets", "effects", "battle", "earth_aoe2"))
+tail_root = os.path.join(work, "out_tail", "art")
+found, _missing = MOD.resolve_sources(MOD_DIR, tail_game, "soft", tail_root=tail_root)
+copy = found.get("arcane_aoe")
+check("最後のコマに絵が残る絵は写しの絶対パスで渡す",
+      copy == os.path.join(tail_root, "Assets", "effects", "battle", "neutral_energy_aoe1"), copy)
+frames = MOD.frames_of(copy) if copy and os.path.isdir(copy) else []
+check("写しは元のコマの後ろに空のコマが来る",
+      frames == ["image_(1-1).png", "image_(1-2).png", "image_(2-1).png", "image_(2-2).png",
+                 "image_end.png"], frames)
+check("足したコマは透明", frames and open(os.path.join(copy, frames[-1]), "rb").read() == MOD.BLANK_PNG)
+check("最後のコマが空の絵は写さない",
+      found.get("earth_aoe") == "Assets/effects/battle/earth_aoe2", found.get("earth_aoe"))
+stamp = os.path.getmtime(os.path.join(copy, "image_end.png"))
+again, _missing = MOD.resolve_sources(MOD_DIR, tail_game, "soft", tail_root=tail_root)
+check("写しが揃っていれば作り直さない",
+      again.get("arcane_aoe") == copy and os.path.getmtime(os.path.join(copy, "image_end.png")) == stamp)
+check("frame_ の並びには frame_end.png を足す",
+      MOD.end_frame_name(["frame_000.png", "frame_019.png"]) == "frame_end.png")
+with open(os.path.join(aoe, "image_(3-1).png"), "wb") as fh:
+    fh.write(MOD.BLANK_PNG)
+again, _missing = MOD.resolve_sources(MOD_DIR, tail_game, "soft", tail_root=tail_root)
+check("元のコマが変われば写し直す", "image_(3-1).png" in MOD.frames_of(copy), MOD.frames_of(copy))
+none, _missing = MOD.resolve_sources(MOD_DIR, tail_game, "soft")
+check("写しの置き場が無ければ元の絵のまま",
+      none.get("arcane_aoe") == "Assets/effects/battle/neutral_energy_aoe1", none.get("arcane_aoe"))
 shutil.rmtree(work, ignore_errors=True)
 
 

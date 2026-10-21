@@ -450,6 +450,7 @@ def setup(history=None, partner="62", in_conversation=True,
     main.JustSetButtonToNormalPhase = JustSetButtonToNormalPhase
     main.PhaseSpec = PhaseSpec
 
+    choices.reset()
     mod = load_mod()
     ctx = FakeCtx(os.path.join(HERE, os.pardir, os.pardir, "out", "test"))
     mod.apply(ctx)
@@ -491,16 +492,20 @@ def setup(history=None, partner="62", in_conversation=True,
     return mod, ctx, app
 
 
-def index_of(app, mark):
+def index_of(app, action):
+    """窓口が組んだこの MOD のボタンの位置（offer=依頼を受ける / generate=この話から依頼を作る）。"""
+    label = {"offer": LABELS.OFFER_LABEL, "generate": LABELS.GENERATE_LABEL}[action]
     for i, entry in enumerate(app.buttons):
-        if entry.get(MARK) == mark:
+        if choices.ours(entry) and str(entry.get("text") or "").startswith(label):
             return i
     return -1
 
 
 HUD = install_fake_hud()
 clock = install_fake_kivy()
-MARK = load_mod().MARK
+from instantale_modloader import choices  # noqa: E402
+LABELS = load_mod()
+MARK = LABELS.MARK
 
 # ============================================================ 設置
 print("=== ボタンの設置 ===")
@@ -608,7 +613,7 @@ app.refresh_choice_buttons()
 # 「この話から依頼を作る」が出るのは**会話画面**。
 # 掲示板ではない会話画面に置けば会話を閉じずに生成でき、
 # 掲示板は「既にある依頼を選ぶ場所」に徹せる。
-generate = [b for b in app.buttons if b.get(MARK) == "generate"]
+generate = [b for b in app.buttons if choices.ours(b) and b["text"].startswith(LABELS.GENERATE_LABEL)]
 check("会話メニューに「この話から依頼を作る」が出る", generate,
       [b["text"] for b in app.buttons])
 check("依頼人の名前が文言に入る",
@@ -622,7 +627,7 @@ quest_buttons = [b for b in app.buttons
 check("会話から開くと、その NPC 発でない依頼は間引かれる", not quest_buttons,
       [b["text"] for b in app.buttons])
 check("掲示板には「この話から依頼を作る」を出さない",
-      not any(b.get(MARK) == "generate" for b in app.buttons),
+      index_of(app, "generate") < 0,
       [b["text"] for b in app.buttons])
 check("掲示板をいじった後も HUD を塗り直す", app.hud.painted, app.hud.painted)
 
@@ -655,7 +660,7 @@ app.refresh_choice_buttons()
 app.on_button_press(index_of(app, "offer"))
 clock.settle()
 check("会話が無ければ「この話から依頼を作る」は出さない",
-      all(b.get(MARK) != "generate" for b in app.buttons),
+      index_of(app, "generate") < 0,
       [b["text"] for b in app.buttons])
 
 # ゲーム本来の掲示板（DisplayQuestChoice を直接押した）なら1件も間引かない。
@@ -670,6 +675,30 @@ texts = [b["text"] for b in app.buttons]
 check("ゲーム本来の掲示板では「クエストを探す」も残る",
       "クエストを探す" in texts, texts)
 check("ゲーム本来の掲示板では他 MOD のボタンも残る", "掲示板メモ" in texts, texts)
+
+# ゲームが受注を断った（疲労）。掲示板は並ばず、施設のボタンのまま並べ直される。
+clock = install_fake_kivy()
+mod, ctx, app = setup(history=history)
+app.refresh_choice_buttons()
+board_cls = sys.modules["__main__"].DisplayQuestChoice
+refused = board_cls.update_button_display
+board_cls.update_button_display = lambda self: (
+    setattr(self.app, "buttons", facility_buttons()),
+    self.app.refresh_choice_buttons(reset_page=True))
+try:
+    app.on_button_press(index_of(app, "offer"))
+    clock.settle()
+    texts = [b["text"] for b in app.buttons]
+    check("掲示板でなければ施設のボタンを間引かない",
+          texts == [b["text"] for b in facility_buttons()], texts)
+finally:
+    board_cls.update_button_display = refused
+# 絞り込みが残っていると、次に開いた掲示板まで会話の相手で絞られる。
+board_cls(app).update_button_display()
+clock.settle()
+kept = [b for b in app.buttons if b["spec"].cls_name == "QuestChoiceManager"]
+check("掲示板でなければ絞り込みを解く（次の掲示板は全件）", len(kept) == 2,
+      [b["text"] for b in app.buttons])
 
 # ============================================================ 依頼 id の読み取り
 print("=== spec からの読み取り（語彙を知らずに済ませる） ===")
@@ -704,8 +733,8 @@ check("残骸と合わせて二重にならない",
       texts.count("依頼を受ける（話を切り上げる）") == 1, texts)
 check("生成ボタンも二重にならない",
       len([t for t in texts if t.startswith("この話から依頼を作る")]) == 1, texts)
-check("残った方は印がある（押せば効く）",
-      all(mod.MARK in b for b in app.buttons
+check("残った方は窓口のボタン（押せば効く）",
+      all(choices.ours(b) for b in app.buttons
           if b["text"].startswith(("依頼を受ける", "この話から依頼を作る"))), texts)
 check("会話を終了するは残る", "会話を終了する" in texts, texts)
 
@@ -741,8 +770,7 @@ check("印の無い残骸は marked_by_a_mod に引っかからない",
 # ============================================================ 302_ との共存
 print("=== 302_ との共存 ===")
 
-party_mark = load_mod(PARTY_MOD, "party_leave_mod_probe").MARK
-check("印のキーが 302_ と違う", MARK != party_mark, (MARK, party_mark))
+party_mark = "mod_party_action"            # 版4までの 302_ の印（ほかの MOD の印の付いたボタン）
 
 mod, ctx, app = setup()
 app.buttons = talk_buttons("62") + [{"text": "ここで別れる",
@@ -751,6 +779,34 @@ app.buttons = talk_buttons("62") + [{"text": "ここで別れる",
 app.on_button_press(len(app.buttons) - 1)
 check("302_ のボタンはこちらでは素通しになる",
       app.pressed_by_game == ["ここで別れる"], app.pressed_by_game)
+
+# ============================================================ 自前の一覧（LIST_MODE = "mod"）
+# 既定では使わない形。窓口 `choices` の MOD だけの画面で出し、下の画面は窓口が残す。
+print("=== 自前の一覧（MOD だけの画面） ===")
+clock = install_fake_kivy()
+mod, ctx, app = setup(history=history)
+list_mode, quest_type = mod.LIST_MODE, mod.QUEST_TYPE_FOR_CHOICE
+try:
+    mod.LIST_MODE, mod.QUEST_TYPE_FOR_CHOICE = "mod", "*verified*"
+    app.refresh_choice_buttons()
+    app.on_button_press(index_of(app, "offer"))
+    clock.settle()
+    texts = [b["text"] for b in app.buttons]
+    check("自前の一覧は依頼2件と「やめる」", len(texts) == 3 and texts[-1] == mod.CANCEL_LABEL
+          and all(choices.ours(b) for b in app.buttons), texts)
+    check("依頼のボタンはゲームの QuestChoiceManager の写し",
+          [mlui.spec_cls_name(b) for b in app.buttons[:2]] == ["QuestChoiceManager"] * 2,
+          [mlui.spec_cls_name(b) for b in app.buttons])
+    check("保存の間は下のゲームの一覧に戻る（一覧のボタンはセーブに残らない）",
+          [b["text"] for b in choices.strip(app.buttons)[0]] == ["会話を終了する"],
+          choices.strip(app.buttons)[0])
+    app.on_button_press(len(app.buttons) - 1)
+    clock.settle()
+    check("「やめる」で一覧を閉じて下の画面に戻る",
+          choices.opened(app) is None and mod.CANCEL_LABEL not in [b["text"] for b in app.buttons],
+          [b["text"] for b in app.buttons])
+finally:
+    mod.LIST_MODE, mod.QUEST_TYPE_FOR_CHOICE = list_mode, quest_type
 
 # ============================================================ 311_ の人物像
 # mod どうしは import せず**同じファイルを読む**ことで繋がる（TECH.md §3.2.3）。
@@ -1298,7 +1354,7 @@ check("人物が揃う前は「依頼を受ける」を出さない", index_of(a
       [b.get("text") for b in app.buttons])
 check("人物が揃う前は「この話から依頼を作る」も出さない", index_of(app, "generate") < 0,
       [b.get("text") for b in app.buttons])
-check("落とした理由が残る", "the characters are not loaded yet" in log_since(ctx, mark),
+check("前の版の印の付いた依頼のボタンは落とした記録が残る", "with the older mark" in log_since(ctx, mark),
       log_since(ctx, mark)[-200:])
 app.world.characters = loading
 app.game_variables["party"] = ["player", "62"]
@@ -1343,7 +1399,7 @@ print("=== ロードで再開した会話の相手 ===")
 
 
 def generate_label(app_obj):
-    entry = [b for b in app_obj.buttons if b.get(MARK) == "generate"]
+    entry = [b for b in app_obj.buttons if choices.ours(b) and b["text"].startswith(LABELS.GENERATE_LABEL)]
     return entry[0]["text"] if entry else None
 
 

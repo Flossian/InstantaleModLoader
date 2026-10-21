@@ -12,8 +12,8 @@ Clock を差し込み、次を確認する。
   例外   … 置き場所が無い土地では外さない／ゲームが自分で置いたら二重に置かない
            ／`remove_party_member` が名簿を残したらこちらで落とす
 
-`301_` と印のキーが衝突していないことも見る（衝突すると向こうの
-`on_button_press` がこちらのボタンを握り潰す）。
+ボタンはローダの窓口 `choices` の宣言型の口が組む（TECH.md §3.3.14）。
+確認の画面で保存するとセーブには会話のボタンが残り、ロードの後も確認の画面に戻ることも見る。
 
 ゲームが起動していなくても走るので、mod を編集したらまずこれを通すこと。
 """
@@ -370,7 +370,8 @@ def install(hooks, cls):
             ("__main__:InstantaleApp.move_npc_to_facility", "move_npc_to_facility"),
             ("__main__:InstantaleApp.add_party_member", "add_party_member"),
             ("__main__:InstantaleApp.process_party_member_choice",
-             "process_party_member_choice")):
+             "process_party_member_choice"),
+            ("__main__:InstantaleApp.save_game", "save_game")):
         hook = hooks.get(target)
         if hook is None:
             continue
@@ -410,6 +411,7 @@ def setup(party=("player", "63"), partner="63", shape="shared"):
     app_cls = type("InstantaleApp", (BASES["app"],), {})
     sys.modules["__main__"].InstantaleApp = app_cls
 
+    choices.reset()                       # 前の検査の確認の画面を持ち越さない
     mod = load_mod()
     ctx = FakeCtx(os.path.join(HERE, os.pardir, os.pardir, "out", "test"))
     mod.apply(ctx)
@@ -454,16 +456,20 @@ def facility_in(app, area_id, facility_id):
     return node_of(app, area_id).facilities.get(facility_id)
 
 
-def index_of(app, mark):
+def index_of(app, action):
+    """窓口が組んだこの MOD のボタンの位置（confirm=ここで別れる / leave=確認 / cancel=やめておく）。"""
+    label = {"confirm": MOD_LABELS.LEAVE_LABEL, "leave": MOD_LABELS.CONFIRM_LABEL,
+             "cancel": MOD_LABELS.CANCEL_LABEL}[action]
     for i, entry in enumerate(app.buttons):
-        if entry.get(app_mark) == mark:
+        if choices.ours(entry) and entry.get("text") == label:
             return i
     return -1
 
 
 HUD = install_fake_hud()
 clock = install_fake_kivy()
-app_mark = load_mod().MARK
+from instantale_modloader import choices  # noqa: E402
+MOD_LABELS = load_mod()
 
 # ============================================================ 設置
 print("=== ボタンの設置 ===")
@@ -478,6 +484,8 @@ check("「会話を終了する」の手前に入る",
 check("自前ボタンの spec は無害な既存クラス",
       app.buttons[index_of(app, "confirm")]["spec"].cls_name
       == "JustSetButtonToNormalPhase")
+check("404_ が見分ける印（mod_party_action）が付く",
+      app.buttons[index_of(app, "confirm")].get("mod_party_action") == "confirm")
 before = len(app.buttons)
 app.refresh_choice_buttons()
 check("並べ直しても増えない", len(app.buttons) == before, len(app.buttons))
@@ -570,6 +578,37 @@ clock.run_onces()
 check("やめると元のボタンに戻る", [b["text"] for b in app.buttons] ==
       [b["text"] for b in saved], [b["text"] for b in app.buttons])
 check("やめたら外れていない", app.removed == [] and "63" in app.party)
+
+# 確認の画面で保存した（ゲームは行動のたびに保存する）。セーブには下の会話のボタンが残る。
+mod, ctx, app = setup()
+app.refresh_choice_buttons()
+game_list = [b for b in app.buttons if not choices.ours(b)]
+app.on_button_press(index_of(app, "confirm"))
+clock.run_onces()
+written = []
+save_hook = ctx.hooks["__main__:InstantaleApp.save_game"]
+save_hook(lambda self: written.append([b["text"] for b in self.buttons]), app)
+check("確認の画面で保存すると、セーブには会話のボタンだけが残る",
+      written == [["会話を終了する"]], written)
+check("保存の後は確認の画面のまま", [b["text"] for b in app.buttons] == [mod.CONFIRM_LABEL, mod.CANCEL_LABEL],
+      [b["text"] for b in app.buttons])
+# ロード: ゲームはセーブの一覧（会話を終了する）を戻して組み直す
+app.buttons = [dict(b) for b in game_list]
+app.refresh_choice_buttons()
+check("ロードの後も確認の画面に戻る", [b["text"] for b in app.buttons] == [mod.CONFIRM_LABEL, mod.CANCEL_LABEL],
+      [b["text"] for b in app.buttons])
+app.on_button_press(index_of(app, "cancel"))
+clock.run_onces()
+check("やめておくで会話のボタンに戻る（戻り先を失わない）",
+      [b["text"] for b in app.buttons] == [mod.LEAVE_LABEL, "会話を終了する"], [b["text"] for b in app.buttons])
+mod, ctx, app = setup()
+app.refresh_choice_buttons()
+app.on_button_press(index_of(app, "confirm"))
+clock.run_onces()
+app.buttons = talk_buttons("70")              # 別の相手との会話（確認の画面の前提が崩れた）
+app.refresh_choice_buttons()
+check("その仲間との会話でなくなったら確認の画面を閉じる", [b["text"] for b in app.buttons] == ["会話を終了する"]
+      and choices.opened(app) is None, [b["text"] for b in app.buttons])
 
 # ============================================================ 別れる
 print("=== 実行 ===")
@@ -858,15 +897,13 @@ for line in quest_src.splitlines():
     if line.startswith("MARK = "):
         quest_mark = line.split("=", 1)[1].strip().strip('"')
         break
-check("印のキーが 301_ と違う", quest_mark is not None and quest_mark != app_mark,
-      (quest_mark, app_mark))
 
 mod, ctx, app = setup()
 app.refresh_choice_buttons()
 # 301_ の押下ハンドラは「自分の印が無ければ素通し」。
 # こちらのボタンがそのまま通ることを、同じ判定で確かめる。
 entry = app.buttons[index_of(app, "confirm")]
-check("301_ の判定ではこちらのボタンは素通しになる", entry.get(quest_mark) is None)
+check("301_ の判定ではこちらのボタンは素通しになる", quest_mark is not None and entry.get(quest_mark) is None)
 
 # 押した位置と buttons の添字がずれる場合（ページ送り）。
 mod, ctx, app = setup()
@@ -922,18 +959,14 @@ check("印の無い「やめておく」も消さない（掃除の対象にし�
 check("掃除に使う文言はこちらにしか無いものだけ",
       mod.CANCEL_LABEL not in mod.OUR_LABELS, mod.OUR_LABELS)
 
-# 掃除そのものは効いたままであること（セーブから戻った印無しの自前ボタン）。
+# 版4までがセーブに焼いた自前のボタン（印の落ちた「ここで別れる」）は外して組み直す。
 mod, ctx, app = setup()
+app.buttons = [{"text": mod.LEAVE_LABEL, "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}] + talk_buttons("63")
 app.refresh_choice_buttons()
-live = [b for b in app.buttons if b.get(app_mark)][0]
-app.buttons = [{"text": live["text"],           # 印の落ちた復元ぶん
-                "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}] + \
-    [b for b in app.buttons if not b.get(app_mark)]
-app.refresh_choice_buttons()
-same = [b for b in app.buttons if b["text"] == live["text"]]
-check("セーブから戻った自分の残骸は今までどおり差し直す", len(same) == 1,
+same = [b for b in app.buttons if b["text"] == mod.LEAVE_LABEL]
+check("前の版がセーブに焼いた自前のボタンは外して組み直す（二重にならない）", len(same) == 1,
       [b["text"] for b in app.buttons])
-check("差し直した1枚は印を持つ", bool(same and same[0].get(app_mark)), same)
+check("組み直した1枚は窓口のボタン", bool(same and choices.ours(same[0])), same)
 
 print()
 if failures:

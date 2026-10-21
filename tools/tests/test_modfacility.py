@@ -571,7 +571,7 @@ def main():
                 isinstance(getattr(app2, "started", (None,))[0], MovePhaseManager))
     ok &= check("印の無いボタンは素通し",
                 not modfacility.press(app2, 0, screen=screen)
-                if app2.buttons and not screen.mark_of(app2.buttons[0])
+                if app2.buttons and not modfacility._ours(app2.buttons[0])
                 else True)
 
     print("文言: 層の文言が変われば、在るボタンの文言も更新する")
@@ -887,7 +887,7 @@ def main():
     app2.buttons = game_buttons(("宿屋", "2"))
     modfacility.maintain_buttons(app2, screen=screen)
     ok &= check("施設の画面には道を足す",
-                any(screen.mark_of(e) for e in app2.buttons))
+                any(modfacility._ours(e) for e in app2.buttons))
     app2.buttons = [dict(e) for e in talk_list]
     modfacility.maintain_buttons(app2, screen=screen)
     ok &= check("会話相手の一覧に道を混ぜない",
@@ -942,7 +942,7 @@ def main():
     app2.buttons = [dict(e) for e in arena_top]
     modfacility.maintain_buttons(app2, screen=screen)
     exits = [e for e in app2.buttons
-             if str(screen.mark_of(e) or "").startswith("exit	")]
+             if modfacility._ours(e) and e.get("text") == modfacility.DEFAULT_EXIT_LABEL]
     ok &= check("敵が居なければ出口が出る（残骸）", bool(exits))
     ok &= check("旗そのものは下ろさない", app2.in_colosseum_battle is True)
     ok &= check("旗の名前はそのまま読める",

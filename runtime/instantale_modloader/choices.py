@@ -14,7 +14,7 @@ MOD が選択肢にボタンを足すとき、守ることが多い（どれか1
         refresh(app, buttons)     組み直しの前。ゲームの一覧（`app.buttons`）を直に書き換えてよい。
                                   一覧が空でも `None` でも呼ぶ（包んでいたときと同じ。見るかどうかは MOD が決める）
         trim(app, buttons)        全部の MOD の `refresh` の後（組み直しの前）。ほかの MOD が足したボタンまで含めて
-                                  一覧を絞るとき（`339_` の刺客の会話は「受けて立つ」だけにする）。`refresh` と同じ順
+                                  一覧を絞るとき。`refresh` と同じ順（画面を自分のボタンだけにするなら、宣言型の口の `claim`）
         after(app)                組み直しの後（`to_display_buttons` が組み上がった後）。
                                   ゲームの組み直しに渡された引数は `choices.refreshing()`
         handler(app, action)      `screen.mark_of(entry)` が「印の頭」で始まるボタンが押された。
@@ -47,8 +47,33 @@ MOD が選択肢にボタンを足すとき、守ることが多い（どれか1
 登録は持ち主ごとに1つ。注入し直すと同じ持ち主の登録を差し替える。
 登録した `ctx` が用済み（`ctx.superseded()`）で、差し替えられていない登録は呼ばない。
 置き場は `sys` の属性（`_instantale_choices`）。注入し直しをまたいで残る。
+
+宣言型の口（2026-10-21〜。TECH.md §3.3.14「宣言型の口」）。ボタンを一覧に物として置いて印で覚えるのをやめ、
+組み直しのたびに MOD の状態から作り直す:
+
+    choices.provide(ctx, screen, offer=fn, claim=fn2, screens={"名前": fn3}, labels=(...), priority=0)
+        offer(app, view)          いまの画面に足す `Choice` の並び。組み直しのたびに呼ぶ
+        claim(app, view)          この画面を自分のボタンだけにするなら `Choice` の並び（しないなら None）。
+                                  ほかの MOD のボタンもゲームのボタンも出さない。`priority` の大きい登録が勝つ
+        screens[名前](app, view, data)
+                                  `open_screen` で開いた MOD だけの画面の `Choice` の並び。None を返すと閉じる
+        labels                    前の版がセーブに焼いた自前のボタンの文言（無害な spec で印の無いものを外す）
+
+    choices.Choice(text, on_press=fn, place=choices.before("ConversationEndManager"), base=None)
+        on_press(app)             押された。True を返すと窓口がゲーム自身の保存を呼ぶ
+        base                      ゲームのボタン。その spec のまま文言だけ変えて出す（MOD が無い起動では元のボタンとして働く）
+    choices.open_screen(app, owner, name, data) / close_screen(app, owner) / opened(app)
+
+窓口が引き受けること:
+
+5. 組み直しのたびに、前に組んだ宣言型のボタンを全部外してから作る。印には頼らない（押下はボタンに持たせた
+   `Choice` をそのまま呼ぶ）。人物が揃うまで（`ready`）は MOD の関数を呼ばない
+6. ゲームの保存の間だけ、宣言型のボタンを一覧（`buttons` / `buttons_backup` / `buttons_backup_for_shopping`）
+   から外す。セーブにはゲームのボタンだけが残る。`claim` と MOD だけの画面の下のゲームの一覧もそのまま残る
+7. MOD だけの画面は「いまどの MOD のどの画面か」を世界×主人公の控えに持ち、ロードの後もその画面を組む
 """
 import sys
+import threading
 import weakref
 
 from . import ui
@@ -67,6 +92,14 @@ PARTY_TICKS = 12
 #: 戦闘の1手は審判を待つ間ずっと待機中なので、長めに待つ。次の組み直しが来れば差し替わる。
 FOLD_POLL = 0.1
 FOLD_TICKS = 300
+#: 宣言型の口で窓口が組んだボタンの印のキー。値は窓口だけが読む辞書（`Choice` と下の一覧）で、
+#: 印の持ち越し（`record_marks`）は値が辞書の印を控えない。セーブの前には外す（`strip`）。
+CHOICE_KEY = "mod_choices"
+#: セーブに焼かれる、選択肢と同じ形の器（`modfacility` / `modnpc` と同じ3つ）。
+SAVED_CHOICE_ATTRS = ("buttons", "buttons_backup", "buttons_backup_for_shopping")
+#: 組み直しと保存が一覧を取り合わないための鍵の待ち（秒）。待ち切ったら鍵なしで進む（ゲームを止めない）。
+LOCK_TIMEOUT = 2.0
+OPENED_KEY = "opened"
 
 
 def _store():
@@ -76,6 +109,8 @@ def _store():
                  "restore": None, "after": {"token": None}, "worlds": None, "log": []}
         setattr(sys, STORE_ATTR, store)
     store.setdefault("fold", {"token": None})     # 前の版のローダが作った入れ物にも足す
+    store.setdefault("lock", threading.RLock())
+    store.setdefault("opened", {})
     return store
 
 
@@ -132,12 +167,18 @@ def _owner_of(ctx, owner, fns):
     return str(id(ctx))
 
 
-def provide(ctx, screen=None, refresh=None, after=None, presses=None, intercept=None, owner=None, trim=None):
-    """`screen`（`ui.Screen`。印のキーを持つ。印を使わないなら None）で作るボタンの扱いを窓口に預ける。"""
+def provide(ctx, screen=None, refresh=None, after=None, presses=None, intercept=None, owner=None, trim=None,
+            offer=None, claim=None, screens=None, labels=(), priority=0):
+    """`screen`（`ui.Screen`。印のキーを持つ。印を使わないなら None）で作るボタンの扱いを窓口に預ける。
+
+    `offer` / `claim` / `screens` / `labels` / `priority` は宣言型の口（モジュールの説明）。
+    """
     store = _store()
+    _warn_older_ways(ctx, owner, presses=presses, trim=trim)
     handlers = list((presses or {}).items())
-    key = _owner_of(ctx, owner, [fn for fn in (refresh, after, intercept, trim) if fn is not None]
-                    + [handler for _prefix, handler in handlers])
+    screens = dict(screens or {})
+    key = _owner_of(ctx, owner, [fn for fn in (refresh, after, intercept, trim, offer, claim) if fn is not None]
+                    + [handler for _prefix, handler in handlers] + list(screens.values()))
     # その世代で初めての登録なら末尾へ付け直す。前の世代の並びを持ち越すと、注入し直しで足した・
     # 並べ替えた MOD の呼ぶ順が適用順とずれる。全部が登録し直せば、並びはこの世代の apply の順になる。
     generation = getattr(ctx, "generation", None)
@@ -150,10 +191,35 @@ def provide(ctx, screen=None, refresh=None, after=None, presses=None, intercept=
     store["providers"][key] = {
         "ctx": ctx, "screen": screen, "refresh": refresh, "after": after, "trim": trim,
         "presses": handlers, "intercept": intercept,
+        "offer": offer, "claim": claim, "screens": screens,
+        "labels": labels if callable(labels)
+        else tuple(label for label in (labels or ()) if isinstance(label, str) and label),
+        "priority": priority if isinstance(priority, (int, float)) and not isinstance(priority, bool) else 0,
         "save_soon": ui.saver(ctx, getattr(screen, "write", None), getattr(screen, "tag", key)),
     }
     install(ctx)
     return key
+
+
+#: 古い口（印で振り分ける押下・ほかの MOD のボタンまで絞る `trim`）を使う登録に出す WARN。v2.0.0 で外す（TECH.md §3.9）。
+OLDER_WAYS_DEPRECATED = (
+    "{mod} gives choices.provide the older way ({ways}); it keeps working until v2.0.0. "
+    "Declare the buttons with offer / screens / claim instead (choices.Choice; TECH.md §3.3.14): "
+    "the window rebuilds them on every refresh and keeps them out of the save, so no mark has to survive a load.")
+
+
+def _warn_older_ways(ctx, owner, presses=None, trim=None):
+    """古い口で登録した MOD に、宣言型の口への移行を促す（登録のたびに1行。登録は1回の当て直しに1度）。"""
+    ways = [name for name, value in (("presses=", presses), ("trim=", trim)) if value]
+    log = getattr(ctx, "log", None)
+    if not ways or not callable(log):
+        return
+    message = OLDER_WAYS_DEPRECATED.format(mod=owner or getattr(ctx, "_mod", None) or "a mod",
+                                           ways=", ".join(ways))
+    try:
+        log(message, level="WARN")
+    except TypeError:
+        log("WARN " + message)        # level を受けない ctx（検査の偽物など）
 
 
 def withdraw(owner):
@@ -236,7 +302,10 @@ def _worlds(ctx):
 def record_marks(ctx, app):
     """保存の直前に呼ぶ。印の付いたボタンを控える（無ければ控えを消す）。"""
     rows = []
-    for entry in list(getattr(app, "buttons", None) or []):
+    # 宣言型のボタンはセーブに残さず、ロードの後に組み直す。控えるのはセーブに残る一覧
+    # （MOD だけの画面と `claim` の下のゲームの一覧）の印と並び
+    game, _changed = strip(getattr(app, "buttons", None))
+    for entry in list(game or []):
         marks = _marks_of(entry)
         if marks:
             text, cls_name, args = _entry_key(entry)
@@ -249,7 +318,7 @@ def record_marks(ctx, app):
         bucket = worlds.load(playthrough)
         if rows:
             bucket["marks"] = rows
-            bucket["screen"] = _screen_of(getattr(app, "buttons", None))
+            bucket["screen"] = _screen_of(game)
         elif "marks" not in bucket:
             return rows
         else:
@@ -309,7 +378,8 @@ def arm_after_load(ctx, app):
 
     def check(_dt):
         # 用済みの世代でも降りない（降りると、新しい世代はロードの途中の組み直しを見ていないので誰も組み直さない。実機）。
-        if after["token"] is not token:
+        # 置き場が作り直された（`reset`）後の見張りも降りる（前の置き場の app を組み直さない）
+        if after["token"] is not token or _store()["after"] is not after:
             return False
         left["wait"] -= 1
         if left["wait"] <= 0:
@@ -337,7 +407,11 @@ def arm_after_load(ctx, app):
             return False
         try:
             before = list(getattr(app, "to_display_buttons", []) or [])
-            app.refresh_choice_buttons()
+            _store()["watcher_refreshing"] = True
+            try:
+                app.refresh_choice_buttons()
+            finally:
+                _store()["watcher_refreshing"] = False
             after_texts = list(getattr(app, "to_display_buttons", []) or [])
             done = ui.paint_choices(app, after_texts, getattr(ctx, "log_exc", None))
             _log(ctx, "after load: refreshed {} -> {} via {}".format(
@@ -369,7 +443,7 @@ def arm_fold(ctx, app):
     left = {"ticks": FOLD_TICKS}
 
     def check(_dt):
-        if fold["token"] is not token:
+        if fold["token"] is not token or _store()["fold"] is not fold:
             return False
         left["ticks"] -= 1
         if left["ticks"] <= 0:
@@ -393,6 +467,412 @@ def arm_fold(ctx, app):
         fold["token"] = None
         return False
     return True
+
+
+# ---------------------------------------------------------------- 宣言型の口
+FIRST = ("first", None)
+LAST = ("last", None)
+
+
+def before(cls_name):
+    """その spec のゲームのボタンの手前に置く（無ければ末尾）。"""
+    return ("before", cls_name)
+
+
+def after(cls_name):
+    """その spec のゲームのボタンの後ろに置く（無ければ末尾）。"""
+    return ("after", cls_name)
+
+
+def at(index):
+    """ゲームのボタンの `index` 番目（0 から。宣言型のボタンは数えない）の手前に置く。越えれば末尾。"""
+    return ("at", index)
+
+
+class Choice(object):
+    """宣言型の口で出すボタン1つ。窓口が組み直しのたびに一覧へ置き、押されたら `on_press(app)` を呼ぶ。
+
+    `on_press` が None なら押下を握るだけ（`base` があればゲームの押下へ流す）。
+    `base` はゲームのボタン。その spec をそのまま使い、文言だけを `text` にする。
+    `replace` を真にすると、`base` のゲームのボタンの場所に出し、元のボタンは出さない（ゲームの一覧からは外さない。
+    保存の間は元のボタンに戻る）。`place` は使わない。`base` が一覧に無ければ出さない。
+    `marks` はほかの MOD が印のキーでこのボタンを見分けるときの印（`{"mod_…": 値}`）。
+    押下の振り分けには使わず、印の持ち越しもしない（`404_` がパーティー会話の間 `302_` のボタンを落とす印）。
+    """
+
+    __slots__ = ("text", "on_press", "place", "base", "marks", "replace")
+
+    def __init__(self, text, on_press=None, place=LAST, base=None, marks=None, replace=False):
+        self.text = str(text)
+        self.on_press = on_press
+        self.place = place
+        self.base = base if isinstance(base, dict) else None
+        self.replace = bool(replace) and self.base is not None
+        self.marks = {key: value for key, value in (marks or {}).items()
+                      if isinstance(key, str) and key.startswith(ui.MARK_PREFIX) and key != CHOICE_KEY}
+
+    def __repr__(self):
+        return "Choice({!r})".format(self.text)
+
+
+class View(object):
+    """MOD の関数に渡す、いまの画面。`buttons` はゲームの一覧（宣言型のボタンを外した後。書き換えない）。"""
+
+    def __init__(self, app, buttons):
+        self.app = app
+        self.buttons = list(buttons or [])
+        self.partner, self.end_entry = ui.conversation_partner(self.buttons)
+        self.from_save = from_save()
+        self.refreshing = refreshing()
+
+    def find(self, cls_name):
+        """その spec のゲームのボタン（最初の1つ）。無ければ None。"""
+        return ui.find_spec_button(self.buttons, cls_name)
+
+
+def ours(entry):
+    """窓口が宣言型の口で組んだボタンか。"""
+    return isinstance(entry, dict) and isinstance(entry.get(CHOICE_KEY), dict)
+
+
+def strip(entries):
+    """宣言型のボタンを外した一覧と、外したかを返す（`entries` は書き換えない）。
+
+    `claim` と MOD だけの画面では、ボタンが下のゲームの一覧を持っているので、それを返す。
+    """
+    if not isinstance(entries, list):
+        return entries, False
+    mine = [entry for entry in entries if ours(entry)]
+    if not mine:
+        return entries, False
+    for entry in mine:
+        under = entry[CHOICE_KEY].get("under")
+        if isinstance(under, list):
+            return list(under), True
+    game = []
+    for entry in entries:
+        if not ours(entry):
+            game.append(entry)
+        elif isinstance(entry[CHOICE_KEY].get("replaced"), dict):
+            game.append(entry[CHOICE_KEY]["replaced"])      # `replace` で差し替えた元のゲームのボタン
+    return game, True
+
+
+def game_buttons(app):
+    """いまのゲームの一覧（宣言型のボタンを外し、`claim` と MOD だけの画面の下の一覧に戻したもの）。"""
+    game, _changed = strip(getattr(app, "buttons", None))
+    return list(game) if isinstance(game, list) else []
+
+
+def hide_for_save(app):
+    """保存の直前。宣言型のボタンを外した一覧に差し替え、戻すための `(属性, 元の一覧)` の並びを返す。"""
+    undo = []
+    for attr in SAVED_CHOICE_ATTRS:
+        value = getattr(app, attr, None)
+        game, changed = strip(value)
+        if not changed:
+            continue
+        try:
+            setattr(app, attr, game)
+        except Exception:
+            continue
+        undo.append((attr, value))
+    return undo
+
+
+def _safe_spec():
+    spec_cls = ui.cls_of("PhaseSpec")
+    if spec_cls is None:
+        return None
+    try:
+        return spec_cls(ui.SAFE_CLS, [])
+    except Exception:
+        return None
+
+
+def _entry_of(owner, choice, under):
+    if choice.base is not None:
+        entry = {key: value for key, value in choice.base.items() if key in ("text", "spec")}
+    else:
+        spec = _safe_spec()
+        if spec is None:
+            return None
+        entry = {"spec": spec}
+    entry["text"] = choice.text
+    entry.update(choice.marks)
+    entry[CHOICE_KEY] = {"owner": owner, "choice": choice, "under": under}
+    return entry
+
+
+def _choices_of(result):
+    if result is None:
+        return None
+    if isinstance(result, Choice):
+        result = [result]
+    try:
+        return [choice for choice in result if isinstance(choice, Choice)]
+    except TypeError:
+        return None
+
+
+def _place(buttons, entry, place, cursors):
+    """`place` に従って `entry` を挿す。同じ置き場所に続けて置くと、出した順に並ぶ。"""
+    where, cls_name = place if isinstance(place, tuple) and len(place) == 2 else LAST
+    if where == "first":
+        index = cursors.get("first", 0)
+        cursors["first"] = index + 1
+        buttons.insert(index, entry)
+        return
+    if where == "at" and isinstance(cls_name, int) and not isinstance(cls_name, bool):
+        seen = 0
+        for index, existing in enumerate(buttons):
+            if ours(existing):
+                continue
+            if seen == cls_name:
+                buttons.insert(index, entry)
+                return
+            seen += 1
+        buttons.append(entry)
+        return
+    if where in ("before", "after") and cls_name:
+        for index, existing in enumerate(buttons):
+            if not ours(existing) and ui.spec_cls_name(existing) == cls_name:
+                if where == "before":
+                    buttons.insert(index, entry)
+                else:
+                    slot = index + 1 + cursors.get(("after", cls_name), 0)
+                    cursors[("after", cls_name)] = cursors.get(("after", cls_name), 0) + 1
+                    buttons.insert(slot, entry)
+                return
+    buttons.append(entry)
+
+
+def _labels(app=None):
+    store = _store()
+    found = []
+    for key in providers():
+        provider = store["providers"][key]
+        labels = provider.get("labels")
+        if callable(labels):
+            try:
+                labels = labels(app)
+            except Exception:
+                _oops(provider, "{} could not list its labels".format(key))
+                labels = ()
+        found.extend(label for label in (labels or ()) if isinstance(label, str) and label)
+    return found
+
+
+def prune_remnants(buttons, labels=None, app=None):
+    """前の版がセーブに焼いた自前のボタン（無害な spec・印なし・登録した文言）を外す。外した文言を返す。"""
+    labels = _labels(app) if labels is None else labels
+    if not isinstance(buttons, list) or not labels:
+        return []
+    removed, kept = [], []
+    for entry in buttons:
+        text = entry.get("text") if isinstance(entry, dict) else None
+        if (isinstance(text, str) and ui.spec_cls_name(entry) == ui.SAFE_CLS
+                and not ui.Screen.marked_by_a_mod(entry)
+                and any(text == label or text.startswith(label) for label in labels)):
+            removed.append(text)
+            continue
+        kept.append(entry)
+    if removed:
+        buttons[:] = kept
+    return removed
+
+
+def _call_builder(key, provider, what, fn, *args):
+    try:
+        return _choices_of(fn(*args))
+    except Exception:
+        _oops(provider, "{} could not build its {}".format(key, what))
+        return None
+
+
+def _exclusive(app, view):
+    """MOD だけの画面か `claim`。`(持ち主, Choice の並び)`、無ければ None。"""
+    store = _store()
+    row = opened(app)
+    if row is not None:
+        provider = store["providers"].get(row.get("owner"))
+        fn = (provider.get("screens") or {}).get(row.get("name")) if provider is not None else None
+        changed = row.get("game") is not None and signature(view.buttons) != row["game"]
+        if callable(fn) and _alive(provider["ctx"]) and changed:
+            # 下のゲームの一覧が替わった（ゲームが別の画面へ進んだ）。MOD だけの画面はもう前提が無い
+            close_screen(app, row["owner"], repaint_now=False)
+            _log(provider["ctx"], "closed the screen {!r} of {} (the game moved on: {} -> {})".format(
+                row["name"], row["owner"], row["game"], signature(view.buttons)))
+        elif callable(fn) and _alive(provider["ctx"]):
+            found = _call_builder(row["owner"], provider, "screen {!r}".format(row["name"]), fn,
+                                  app, view, row.get("data"))
+            if found:
+                return row["owner"], found
+            close_screen(app, row["owner"], repaint_now=False)
+            _log(provider["ctx"], "closed the screen {!r} of {} (nothing to show)".format(row["name"], row["owner"]))
+    claims = [(key, provider, fn) for key, provider, fn in _each("claim", reverse=False)]
+    # `priority` の大きい登録が勝つ。同じなら先に登録した MOD
+    claims.sort(key=lambda item: -item[1].get("priority", 0))
+    for key, provider, fn in claims:
+        found = _call_builder(key, provider, "claim", fn, app, view)
+        if found:
+            return key, found
+    return None
+
+
+def compose(app, buttons):
+    """宣言型のボタンを組んで `buttons`（ゲームの一覧。外した後）へ置く。人物が揃うまでは何もしない。"""
+    if not isinstance(buttons, list) or not ready(app):
+        return 0
+    view = View(app, buttons)
+    found = _exclusive(app, view)
+    if found is not None:
+        key, picked = found
+        under = list(buttons)
+        entries = [entry for entry in (_entry_of(key, choice, under) for choice in picked) if entry is not None]
+        if entries:
+            buttons[:] = entries
+            return len(entries)
+    cursors, placed = {}, 0
+    for key, provider, fn in _each("offer", reverse=False):
+        for choice in _call_builder(key, provider, "choices", fn, app, view) or ():
+            entry = _entry_of(key, choice, None)
+            if entry is None:
+                continue
+            if choice.replace:
+                index = next((i for i, existing in enumerate(buttons) if existing is choice.base), None)
+                if index is None:
+                    continue                 # 差し替える元のボタンが一覧に無い（ほかの MOD が先に差し替えた）
+                entry[CHOICE_KEY]["replaced"] = choice.base
+                buttons[index] = entry
+            else:
+                _place(buttons, entry, choice.place, cursors)
+            placed += 1
+    return placed
+
+
+def _press_ours(app, entry):
+    """宣言型のボタンの押下。握ったら True（`base` を持ち `on_press` の無いボタンはゲームへ流す）。"""
+    store = _store()
+    info = entry[CHOICE_KEY]
+    choice = info.get("choice")
+    provider = store["providers"].get(info.get("owner"))
+    if provider is None or not _alive(provider["ctx"]) or not isinstance(choice, Choice):
+        # 持ち主が居ない（切った・注入し直しの途中）。無害な spec をゲームに渡すと会話の途中でも
+        # 素の画面へ戻るので、握って組み直す
+        _log(_any_ctx(), "pressed {!r} of {} that is gone; refreshed".format(entry.get("text"), info.get("owner")))
+        repaint(app)
+        return True
+    if choice.on_press is None:
+        return choice.base is None
+    changed = None
+    try:
+        changed = choice.on_press(app)
+    except Exception:
+        _oops(provider, "{} could not handle {!r}".format(info["owner"], choice.text))
+    if changed is True:
+        provider["save_soon"](app, "{} {}".format(info["owner"], choice.text))
+    return True
+
+
+# ---------------------------------------------------------------- MOD だけの画面
+def _any_ctx():
+    """いま生きている登録の ctx（ログと控えの置き場に使う）。無ければ None。"""
+    store = _store()
+    for key in providers():
+        return store["providers"][key]["ctx"]
+    return None
+
+
+def _opened_store(app):
+    """`(控えの置き場, 鍵)`。置き場が無い（ゲーム抜きの検査）なら `(None, None)`。"""
+    store = _store()
+    for key in providers():
+        worlds = _worlds(store["providers"][key]["ctx"])
+        if worlds is not None:
+            return worlds, worlds.playthrough(app)
+    return None, None
+
+
+def opened(app):
+    """いま開いている MOD だけの画面 `{"owner", "name", "data"}`。無ければ None。"""
+    memory = _store()["opened"]
+    worlds, key = _opened_store(app)
+    if worlds is None:
+        return memory.get(None)
+    if key not in memory:
+        with worlds.lock:
+            row = worlds.load(key).get(OPENED_KEY)
+        memory[key] = row if isinstance(row, dict) and row.get("owner") and row.get("name") else None
+    return memory.get(key)
+
+
+def _write_opened(app, row):
+    memory = _store()["opened"]
+    worlds, key = _opened_store(app)
+    memory[key] = row
+    if worlds is None:
+        return
+    with worlds.lock:
+        bucket = worlds.load(key)
+        if row is None and OPENED_KEY not in bucket:
+            return
+        if row is None:
+            bucket.pop(OPENED_KEY, None)
+        else:
+            bucket[OPENED_KEY] = row
+        worlds.save(key)
+
+
+def signature(buttons):
+    """ゲームの一覧の形（ゲーム自身のボタンの spec のクラス名の並び）。
+
+    MOD の印の付いたボタンと無害な spec のボタンは数えない（印はロードで落ち、MOD のボタンも無害な spec を使う）。
+    """
+    return [ui.spec_cls_name(entry) or "" for entry in (buttons or [])
+            if isinstance(entry, dict) and not ours(entry) and not ui.Screen.marked_by_a_mod(entry)
+            and ui.spec_cls_name(entry) != ui.SAFE_CLS]
+
+
+def open_screen(app, owner, name, data=None, repaint_now=True):
+    """MOD だけの画面を開く（`provide(screens=)` の名前）。`data` は JSON にできる値（控えに書く）。
+
+    閉じるまで、組み直しのたびにその画面の関数がボタンを組む。下のゲームの一覧は触らない。
+    下のゲームの一覧の形（`signature`）を控え、ゲームがそれを替えたら（別の画面へ進んだら）閉じる。
+    """
+    _write_opened(app, {"owner": str(owner), "name": str(name), "data": data,
+                        "game": signature(game_buttons(app))})
+    if repaint_now:
+        repaint(app)
+
+
+def close_screen(app, owner=None, repaint_now=True):
+    """MOD だけの画面を閉じる（`owner` を渡すと、その持ち主の画面のときだけ）。閉じたら True。"""
+    row = opened(app)
+    if row is None or (owner is not None and row.get("owner") != str(owner)):
+        return False
+    _write_opened(app, None)
+    if repaint_now:
+        repaint(app)
+    return True
+
+
+def repaint(app):
+    """次のフレームで組み直して塗る（押下の流れの中で塗ってもゲームが古い一覧で塗り直すため）。"""
+    def run(_dt):
+        try:
+            app.refresh_choice_buttons(reset_page=True)
+            ui.paint_choices(app, list(getattr(app, "to_display_buttons", None) or []))
+        except Exception:
+            log_exc = getattr(_any_ctx(), "log_exc", None)
+            if callable(log_exc):
+                log_exc("choices: cannot repaint the choices")
+    try:
+        from kivy.clock import Clock
+    except Exception:
+        run(0)
+        return
+    Clock.schedule_once(run, 0)
 
 
 # ---------------------------------------------------------------- 配る
@@ -450,6 +930,8 @@ def _dispatch_press(app, entry, button_index):
                 return True
         except Exception:
             _oops(provider, "{} could not look at the press".format(key))
+    if ours(entry):
+        return _press_ours(app, entry)
     store = _store()
     for key in providers():
         provider = store["providers"][key]
@@ -477,6 +959,15 @@ def on_refresh(ctx, app):
     """組み直しの包みの前半（`orig` の前）。検査からも直に呼ぶ。"""
     store = _store()
     buttons = getattr(app, "buttons", None)
+    # 前の組み直しで置いた宣言型のボタンを外してゲームの一覧に戻す。前の版がセーブに焼いた自前のボタンも、
+    # 印の付け直しより前に外す（付け直すと、前の版の印で宣言型のボタンと二重に並ぶ）
+    if isinstance(buttons, list):
+        game, changed = strip(buttons)
+        if changed:
+            buttons[:] = game
+        removed = prune_remnants(buttons, app=app)
+        if removed:
+            _log(ctx, "dropped {} button(s) the older versions left in the save: {}".format(len(removed), removed))
     world = getattr(app, "world", None)
     if world is not None and not _same_world(store["world"], world):
         store["world"] = _world_mark(world)
@@ -501,11 +992,23 @@ def on_refresh(ctx, app):
     store["from_save"] = bool(store.get("save_pending"))
     try:
         _call_refresh(app, buttons)
+        try:
+            compose(app, buttons)
+        except Exception:
+            log_exc = getattr(ctx, "log_exc", None)
+            if callable(log_exc):
+                log_exc("choices: cannot compose the declared choices")
     finally:
         store["from_save"] = False
     if store.get("save_pending") and ready(app):
         store["save_pending"] = False
     if isinstance(buttons, list) and buttons and not ready(app):
+        arm_after_load(ctx, app)
+    elif loaded and isinstance(buttons, list) and buttons and not ui.party_member_ids(app)             and not store.get("watcher_refreshing"):
+        # 人物は揃ったが名簿がまだ戻っていない、ロードの後の最初の組み直し。名簿を見て組む宣言型のボタン
+        # （`404_` の自前の「会話する」）は、ここでは組まれず、次の組み直しまで出なかった（実機）。
+        # 前の版の印の付け直しでは、セーブの残骸に印が戻って出ていた。名簿を少し待って1度組み直す
+        # （見張り自身の組み直しは名簿を待った後なので、仕掛け直さない）
         arm_after_load(ctx, app)
 
 
@@ -527,6 +1030,8 @@ def install(ctx):
     def refresh_choice_buttons(orig, self, *args, **kwargs):
         previous = store.get("refreshing")
         store["refreshing"] = (args, kwargs)
+        # 組み直しはワーカーからも来る。一覧を外して組む間に保存が割り込まないよう、保存と同じ鍵を持つ
+        locked = store["lock"].acquire(timeout=LOCK_TIMEOUT)
         try:
             try:
                 on_refresh(ctx, self)
@@ -544,6 +1049,8 @@ def install(ctx):
             return result
         finally:
             store["refreshing"] = previous
+            if locked:
+                store["lock"].release()
 
     @ctx.wrap(PRESS_TARGET, required=False)
     def on_button_press(orig, self, button_index, *args, **kwargs):
@@ -567,9 +1074,43 @@ def install(ctx):
             if not store.get("record_failed"):
                 store["record_failed"] = True
                 ctx.log_exc("choices: cannot record the marks before the save")
-        return orig(self, *args, **kwargs)
+        locked = store["lock"].acquire(timeout=LOCK_TIMEOUT)
+        try:
+            undo = hide_for_save(self)
+            try:
+                return orig(self, *args, **kwargs)
+            finally:
+                for attr, value in reversed(undo):
+                    try:
+                        setattr(self, attr, value)
+                    except Exception:
+                        ctx.log_exc("choices: cannot put {} back after the save".format(attr))
+        finally:
+            if locked:
+                store["lock"].release()
 
     _log(ctx, "installed (generation {})".format(generation))
+    return True
+
+
+def settle(ctx=None):
+    """当て直しの終わりにローダが呼ぶ。宣言型の口の登録があり、遊ぶ画面なら、次のフレームで1度組み直して塗る。
+
+    当て直し（起動直後の boot #2 など）の途中は、まだ登録し直していない MOD の登録が用済みの世代のもので呼ばれない。
+    その間に来た組み直し（ロードの後の見張りの組み直しを含む）では、その MOD のボタンが組まれず、
+    次の組み直しまで出なかった（実機。`404_` の自前の「会話する」）。組み直したら True。
+    """
+    store = _store()
+    declared = any(store["providers"][key].get(field) for key in providers()
+                   for field in ("offer", "claim", "screens"))
+    app = ui.find_app()
+    hud = ui.find_hud(app) if app is not None else None
+    if not declared or hud is None or getattr(hud, "parent", None) is None:
+        return False                     # 宣言型の登録が無い・題の画面（遊ぶ画面の HUD が付いていない）
+    if not isinstance(getattr(app, "buttons", None), list) or getattr(app, "is_button_enabled", None) is False:
+        return False                     # 待機中。待機の終わりにゲームが組み直す
+    _log(ctx, "settled after the injection; refreshing the choices once")
+    repaint(app)
     return True
 
 

@@ -98,7 +98,7 @@ LOG_BASENAME = "npc_travel.log"
 STATE_DIRNAME = "npc_travel"          # state\ 直下のフォルダ。MOD専用の名前
 STORE_ATTR = "_instantale_npc_travel"  # 世代をまたぐ入れ物（sys の属性）
 GUILD_TYPE = "guild"
-MARK = "mod_travel_list"              # 自前ボタンの印（MODごとに別の文字列）
+MARK = "mod_travel_list"              # ui.Screen の印のキー（版2までは足した会話のボタンに付けていた。いまは付けない）
 LOCAL_CATCHUP_MAX = 30                # 街中の移動をまとめて引く日数の上限
 CONVERSATION_SPEC = "ConversationStartManager"
 
@@ -967,8 +967,9 @@ def apply(ctx):
                             and entry.get("text") != label):
                         entry["text"] = label
                 continue
-            entry = screen.button(label, mark="talk:" + npc_id,
-                                  cls_name=CONVERSATION_SPEC, args=[npc_id])
+            # ゲームの会話のボタン（spec はゲームの `ConversationStartManager`）として足す。
+            # セーブに残っても、MOD の無い起動でもその人と話せる。印は付けない（誰も読まない）
+            entry = screen.button(label, cls_name=CONVERSATION_SPEC, args=[npc_id])
             if entry is None:
                 continue
             buttons.insert(at, entry)

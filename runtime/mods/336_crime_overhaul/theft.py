@@ -15,7 +15,7 @@ from instantale_modloader import frames, items, ui
 
 from . import rules
 
-#: 外した施設の選択肢。セーブに焼かれた残骸を `prune_stale` で消すためだけに残す。
+#: 外した施設の選択肢。セーブに焼かれた残骸を窓口 `choices` の `labels` で消すためだけに残す（`office`）。
 THEFT_LABEL = "盗みを働く"
 #: 店だと見なす選択肢（`Facility.choices` の鍵。GAME.md §2.20 の役場の項）。
 SHOP_CHOICE = "売買する"

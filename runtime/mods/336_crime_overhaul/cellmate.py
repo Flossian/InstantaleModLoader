@@ -19,12 +19,11 @@
 """
 import sys
 
-from instantale_modloader import confinement, frames, llm, modnpc, npcs, ui
+from instantale_modloader import choices, confinement, frames, llm, modnpc, npcs, ui
 
 from . import jailbreak
 
 TALK_LABEL = "{name}と話す"
-MARK = "mate:talk"
 MANAGER_NAME = "mod_crime_cellmate"
 COMPOSE_TIMEOUT = 90.0
 COMPOSE_MAX_TOKENS = 900
@@ -44,8 +43,7 @@ NO_ACTION_TEXT = "（牢の中では、話すことしかできない）"
 HIRE_TEXT = "雇いたい"
 CONFINED_TEXT = "牢の中で同房の囚人と話している"
 JAIL_SCREEN_TEXT = "牢の中で脱獄の備えを選んでいる"
-#: 脱獄の画面のボタンの印の頭（`prison`）。
-JAIL_MARK_PREFIX = "jail:"
+CUSTODY_TEXT = "牢に入っている"
 ASSIST_TEXT = "{name}が隣で身を起こした。置いていくなと言わんばかりに、拳を固めている。"
 ASSIST_FREE_TEXT = "{name}も共に牢を抜け出した。"
 ASSIST_DEAD_TEXT = "{name}は看守たちの刃に倒れ、もう起き上がらなかった。"
@@ -357,12 +355,9 @@ def install(env):
         return found is not None and str(getattr(app, "in_conversation", "")) == found[0]
 
     def jail_screen(app):
-        """脱獄の画面（「脱獄を試みる」の一覧）が出ているか。一覧にはゲームの服役のボタンが無い。"""
-        for entry in getattr(app, "buttons", None) or []:
-            action = screen.mark_of(entry)
-            if isinstance(action, str) and action.startswith(JAIL_MARK_PREFIX):
-                return True
-        return False
+        """脱獄の画面（「脱獄を試みる」の一覧。窓口の MOD だけの画面）が出ているか（`prison` が置く口）。"""
+        is_open = getattr(env, "jail_screen_open", None)
+        return bool(is_open(app)) if callable(is_open) else False
 
     def confined(app):
         """ローダの窓口 `confinement` に置く。
@@ -370,51 +365,60 @@ def install(env):
         牢の中の会話の間は、他の MOD も場を動かす選択肢を足さない（`301_`）。
         脱獄の一覧の間も牢の中だと知らせる。一覧はゲームの服役のボタンを持たないので、
         知らせないと選択肢から服役中と読む MOD（`316_` の追手）が牢の外と取り違える。
+        服役の始まりから牢を出るまで（処刑場からの脱出の最中も）も牢の中だと知らせる（`custody`）。
+        借りている家の家賃を引き続ける MOD（`330_`）が、ここで契約を打ち切る。
         """
         if talking_in_cell(app):
             return CONFINED_TEXT
-        return JAIL_SCREEN_TEXT if jail_screen(app) else None
+        if jail_screen(app):
+            return JAIL_SCREEN_TEXT
+        in_custody = getattr(env, "in_custody", None)
+        return CUSTODY_TEXT if callable(in_custody) and in_custody(app) else None
 
     confinement.declare(env.owner, ctx, confined)
 
     def on_refresh(app, buttons):
-        """服役の毎年の画面に「〈名前〉と話す」を足す。牢の中の会話からはゲームの「雇いたい」を外す。"""
+        """牢の中の会話からはゲームの「雇いたい」を外す（ゲームの一覧の間引き）。"""
         if talking_in_cell(app):
             kept = [entry for entry in buttons
                     if not (isinstance(entry, dict) and entry.get("text") == HIRE_TEXT)]
             if len(kept) != len(buttons):
                 buttons[:] = kept
                 write("cellmate: removed {!r} from the conversation in the cell".format(HIRE_TEXT))
-            return
-        buttons[:] = [entry for entry in buttons if screen.mark_of(entry) != MARK]
-        if not cfg.CELLMATE_ENABLED or not any(ui.spec_cls_name(entry) == jailbreak.SERVE_SPEC
-                                                for entry in buttons):
-            return
+
+    def offer(app, view):
+        """服役の毎年の画面に「〈名前〉と話す」を足す。"""
+        if talking_in_cell(app) or not cfg.CELLMATE_ENABLED \
+                or not any(ui.spec_cls_name(entry) == jailbreak.SERVE_SPEC for entry in view.buttons):
+            return None
         found = jailed(app)
         if found is None:
-            return
-        npc_id, mate = found
-        screen.prune_stale(buttons, (TALK_LABEL.format(name=mate.get("name")),))
-        entry = screen.button(TALK_LABEL.format(name=mate.get("name")), mark=MARK)
-        if entry is not None:
-            buttons.append(entry)
+            return None
+        _npc_id, mate = found
+        return [choices.Choice(TALK_LABEL.format(name=mate.get("name")), on_press=press)]
 
-    def press(app, action):
+    def labels(app):
+        """前の版が焼いた「〈名前〉と話す」（名前は同房の囚人の控えから）。"""
+        found = jailed(app) if app is not None else None
+        return (TALK_LABEL.format(name=found[1].get("name")),) if found is not None else ()
+
+    def press(app):
         found = jailed(app)
         cls = ui.cls_of(CONVERSATION_SPEC)
         if found is None or cls is None:
             write("WARN cellmate: nobody to talk to ({})".format(found))
-            screen.apply_buttons(app, None, "cellmate")
-            return
+            choices.repaint(app)
+            return None
         npc_id, mate = found
         write("cellmate: talk with {} ({})".format(npc_id, mate.get("name")))
         try:
             phase = cls(app, npc_id)
         except Exception:
             ctx.log_exc("crime incentive: cannot build the conversation with the cellmate")
-            screen.apply_buttons(app, None, "cellmate")
-            return
+            choices.repaint(app)
+            return None
         screen.start_phase(app, phase, mate.get("name") or "")
+        return None
 
     @ctx.wrap("__main__:InstantaleApp.toggle_to_action_in_conversation", required=False, safe=True)
     def action_menu(orig, self, *args, **kwargs):
@@ -521,6 +525,7 @@ def install(env):
         screen.when_idle(app, lambda: screen.say(app, line), proceed_on_timeout=True, tag="cellmate exit")
 
     env.on_refresh(on_refresh)
-    env.on_press(MARK, press)
+    env.on_offer(offer)
+    env.on_labels(labels)
     env.on_prison("break", on_break)
     env.on_prison("exit", on_exit)

@@ -686,8 +686,12 @@ def apply(ctx):
         return touched
 
     def clash_with(key, cid, roster=None):
-        """名簿（既定は今の世界の控え `known`）の中で `key` と同じ人に見える相手。無ければ None。"""
-        for other_id, (other_key, other_name) in (known if roster is None else roster).items():
+        """名簿（既定は今の世界の控え `known`）の中で `key` と同じ人に見える相手。無ければ None。
+
+        舐めるのは写し。起動の当て直しの種まき（ワーカーのスレッド）が舐めている間に、ゲームのスレッドの
+        人物の登録が `remember` で書き足し、`dictionary changed size during iteration` で種まきが落ちた（実機）。
+        """
+        for other_id, (other_key, other_name) in list((known if roster is None else roster).items()):
             if str(other_id) == str(cid):
                 continue
             if too_close(key, other_key):

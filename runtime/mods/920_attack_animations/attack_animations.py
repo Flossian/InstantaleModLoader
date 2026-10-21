@@ -17,6 +17,10 @@ thunder / thunder_aoe / earth だけで、記録では8割強が slash だった
 子クラスは `vfx` だけを上書きするので、欄の並び（LLM が書く順）は親のまま
 （pydantic v2 は上書きした欄を親の位置に残す）。返ってきた値の検証も子クラスが通す。
 送り口は「開始する」のたびに置き直されるので、`llm.watch_aliases` で包む（TECH.md §3.4）。
+自由入力の審判（`referee_player_any_input_new_new`）は、送り口の答えを関数の中の元の型（8択）で作り直す。
+足した値（`arcane` など）はそこで落ちた（実機。`319_` の防御の手番）。局所の型は外から替えられないので、
+この審判の答えだけは、送り口から返る所で足した値を運び手に置き換えて控え（`NARROWED_MANAGERS`）、
+`resolve_battle_effect` の入口で控えから元の値に戻して、ほかの審判と同じく絵と音を差し替える。
 
 足すのは、ゲームが処理を持っている `blow` / `water` と、この MOD が絵を差し替える値（`VFX`）。
 
@@ -41,6 +45,7 @@ thunder / thunder_aoe / earth だけで、記録では8割強が slash だった
 """
 
 import os
+import shutil
 import sys
 import time
 import typing
@@ -52,6 +57,11 @@ LOG_BASENAME = "attack_animations.log"
 
 #: 返却型を差し替える送り口。返却型を取らない `send_request_with_no_structure` は見ない。
 BATTLE_SEND_TARGETS = ("scripts.llm.llm_manager_battle:send_request",)
+#: 送り口の答えを、関数の中の元の型（8択の Literal）で作り直す審判（送り口の最初の引数の名前）。
+#: 足した値が来るとそこで落ちる（実機。自由入力の審判）。答えの足した値を運び手に置き換え、元の値を控える。
+NARROWED_MANAGERS = ("referee_player_any_input_new_new", "referee_player_any_input_new_new_with_skill")
+#: ゲームが描ける足した値（`GAME_HANDLED`）を元の型に通すときの運び手。
+GAME_HANDLED_CARRIERS = {"blow": "slash", "water": "ice"}
 RESOLVE_TARGET = "__main__:BattlePhaseManager.resolve_battle_effect"
 #: 演出を出す関数。単体の絵は effect（→ HUD の start_effect）、全体の絵は window_effect
 #: （→ start_window_effect）を通る（実機の記録。DOC.md §2）。HUD の側は app の側から呼ばれるので包まない。
@@ -113,6 +123,24 @@ VFX = {
     "water_aoe": ("fire_aoe", "Assets/effects/battle/water_aoe1", "氷（小）"),
     "earth_aoe": ("fire_aoe", "Assets/effects/battle/earth_aoe2", "打撃"),
 }
+
+#: 最後のコマに絵が残るゲームの絵（VFX で使う分。ゲームが使う絵は最後のコマが空）。
+#: 全体の演出は再生の後も部品が最後のコマを出したまま残るので、そのままだと次の全体の演出まで画面に残った（実機）。
+ENDLESS_ART = frozenset((
+    "Assets/effects/fire_aoe4",
+    "Assets/effects/battle/wind2",
+    "Assets/effects/battle/wind_aoe2",
+    "Assets/effects/battle/thunder_aoe2",
+    "Assets/effects/battle/wisp1",
+    "Assets/effects/battle/wisp_aoe1",
+    "Assets/effects/battle/neutral_energy1",
+    "Assets/effects/battle/neutral_energy_aoe1",
+    "Assets/effects/battle/water_aoe1",
+))
+#: 足す空のコマ（1x1 の透明な PNG）。
+BLANK_PNG = bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+    "0000000d49444154789c6360606060000000050001a5f645400000000049454e44ae426082")
 
 #: 足した選択肢の手引き。型の `vfx` の説明に足す（クラウドの構造化出力と、ローカルの埋め込みの型の文に載る）。
 #: 世界観によらないよう、武器の仕組みと当たり方だけを書く。
@@ -183,6 +211,45 @@ def extend_structure(structure, pydantic_module):
         structure.__name__, __base__=structure, vfx=(widened, field))
 
 
+def carrier_of(vfx):
+    """足した値の運び手（ゲームの元の8択の値）。足した値でなければ None。"""
+    if vfx in VFX:
+        return VFX[vfx][0]
+    return GAME_HANDLED_CARRIERS.get(vfx)
+
+
+def narrow_answer(answer, found=None, depth=0):
+    """答え（辞書・並び・pydantic のモデル）の `vfx` の足した値を運び手に置き換える。`(運び手, 元の値)` の並びを返す。"""
+    found = [] if found is None else found
+    if depth > 8:
+        return found
+    if isinstance(answer, dict):
+        items = list(answer.items())
+    elif isinstance(answer, (list, tuple)):
+        for item in answer:
+            narrow_answer(item, found, depth + 1)
+        return found
+    elif hasattr(answer, "model_fields") and hasattr(answer, "__dict__"):
+        items = list(vars(answer).items())
+    else:
+        return found
+    for key, value in items:
+        if key == "vfx" and isinstance(value, str):
+            carrier = carrier_of(value)
+            if carrier is not None:
+                if isinstance(answer, dict):
+                    answer[key] = carrier
+                else:
+                    try:
+                        setattr(answer, key, carrier)
+                    except Exception:
+                        continue
+                found.append((carrier, value))
+        else:
+            narrow_answer(value, found, depth + 1)
+    return found
+
+
 def same_folder(a, b):
     """絵のフォルダが同じか（区切りと末尾の / の違いは見ない）。"""
     def norm(path):
@@ -190,11 +257,50 @@ def same_folder(a, b):
     return norm(a) == norm(b)
 
 
-def resolve_sources(mod_dir, game_dir, style):
+def frames_of(folder):
+    """フォルダの絵のコマ（名前順）。"""
+    return sorted(name for name in os.listdir(folder) if name.lower().endswith(".png"))
+
+
+def end_frame_name(frames):
+    """コマの後ろに足す空のコマの名前。ゲームの絵の `image_end.png` に倣い、名前順で最後に来るものにする。"""
+    prefix = ""
+    for char in os.path.splitext(frames[-1])[0] if frames else "":
+        if not (char.isalpha() or char == "_"):
+            break
+        prefix += char
+    name = (prefix or "frame_") + "end.png"
+    return name if sorted(frames + [name])[-1] == name else "zzzz_end.png"
+
+
+def tailed_copy(src, dst):
+    """`src` のコマに空のコマを1枚足した写しを `dst` に作る（在れば作り直さない）。作れなければ None。"""
+    try:
+        frames = frames_of(src)
+        if not frames:
+            return None
+        end = end_frame_name(frames)
+        if os.path.isdir(dst) and frames_of(dst) == sorted(frames + [end]):
+            return dst
+        os.makedirs(dst, exist_ok=True)
+        for name in frames_of(dst):
+            os.remove(os.path.join(dst, name))
+        for name in frames:
+            shutil.copyfile(os.path.join(src, name), os.path.join(dst, name))
+        with open(os.path.join(dst, end), "wb") as handle:
+            handle.write(BLANK_PNG)
+        return dst
+    except OSError:
+        return None
+
+
+def resolve_sources(mod_dir, game_dir, style, tail_root=None):
     """VFX の絵を、ゲームへ渡すフォルダに直す。無いものは入れない（運び手の絵のまま出る）。
 
     戻り値は (値 → フォルダ, 見つからなかった値の一覧)。
     MOD の絵は `effects/<style>/` の絶対パス、ゲームの絵はゲームが自分で使うのと同じ相対パスで渡す。
+    最後のコマに絵が残るゲームの絵（`ENDLESS_ART`）は、`tail_root` の下に空のコマを足した写しを作って絶対パスで渡す
+    （作れなければ元の絵のまま）。
     """
     sources, missing = {}, []
     for name, (_carrier, art, _sound) in VFX.items():
@@ -204,6 +310,9 @@ def resolve_sources(mod_dir, game_dir, style):
         else:
             folder = art
             ok = os.path.isdir(os.path.join(game_dir, art)) if game_dir else False
+            if ok and tail_root and art in ENDLESS_ART:
+                folder = tailed_copy(os.path.join(game_dir, art),
+                                     os.path.join(tail_root, *art.split("/"))) or art
         if ok:
             sources[name] = folder
         else:
@@ -223,7 +332,8 @@ def battle_action_of(args, kwargs):
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME, tag="attack animations:")
     style = ART_STYLE if ART_STYLE in ART_STYLES else ART_STYLES[0]
-    sources, missing = resolve_sources(ctx.mod_dir, ctx.game_dir, style)
+    sources, missing = resolve_sources(ctx.mod_dir, ctx.game_dir, style,
+                                       tail_root=ctx.out_path("attack_animations", "art", ""))
     if missing:
         write("WARN art not found, falls back to the carrier: {}".format(", ".join(missing)))
 
@@ -236,6 +346,8 @@ def apply(ctx):
                "art": False, "heard": False, "side": None}
     effect_seen = {}
     widened_for = set()
+    # 運び手に置き換えて返した足した値（`NARROWED_MANAGERS` の答え）。`resolve_battle_effect` が元に戻す。
+    narrowed = []
 
     # ------------------------------------------------------------ 1. 審判の選択肢
     def install_send(target):
@@ -275,7 +387,15 @@ def apply(ctx):
                 kwargs["structure"] = widened
             else:
                 args = args[:2] + (widened,) + tuple(args[3:])
-            return orig(*args, **kwargs)
+            answer = orig(*args, **kwargs)
+            manager_name = args[0] if args else kwargs.get("manager_name")
+            if manager_name in NARROWED_MANAGERS:
+                for carrier, value in narrow_answer(answer):
+                    narrowed.append({"carrier": carrier, "vfx": value,
+                                     "until": time.monotonic() + PENDING_SECONDS})
+                    write("{}: {} goes back to the game's choices as {} (the answer is rebuilt "
+                          "with the original type)".format(manager_name, value, carrier))
+            return answer
 
     llm.watch_aliases(ctx, list(BATTLE_SEND_TARGETS), install_send, label="attack animations")
 
@@ -297,6 +417,15 @@ def apply(ctx):
         pending["vfx"] = None
         action = battle_action_of(args, kwargs)
         vfx = action.get("vfx") if isinstance(action, dict) else None
+        now = time.monotonic()
+        narrowed[:] = [row for row in narrowed if row["until"] > now]
+        back = next((row for row in narrowed if row["carrier"] == vfx), None) if isinstance(vfx, str) else None
+        if back is not None:
+            # 作り直しの前に運び手に置き換えた答え（`NARROWED_MANAGERS`）。元の値に戻して扱う
+            narrowed.remove(back)
+            vfx = back["vfx"]
+            if vfx in GAME_HANDLED:
+                action["vfx"] = vfx
         spec = VFX.get(vfx) if isinstance(vfx, str) else None
         if spec is not None:
             carrier, _art, sound = spec

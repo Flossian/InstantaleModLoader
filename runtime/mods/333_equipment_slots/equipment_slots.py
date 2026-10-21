@@ -24,7 +24,7 @@ import os
 import re
 import sys
 
-from instantale_modloader import combat, equipment, frames, state, ui
+from instantale_modloader import choices, combat, equipment, frames, state, ui
 
 from . import slots as rules
 
@@ -1751,15 +1751,21 @@ def apply(ctx):
     equipment.declare(equipment.GEAR, worn_of, owner=owner, write=write)
 
     def restore_buttons_after(orig, self, *args, **kwargs):
-        """選択肢の組み直し・ロード・タイトルへ戻るの後で、隠した選択肢を戻す。"""
+        """ロード・タイトルへ戻るの後で、隠したアイコンのボタンを戻す。"""
         result = orig(self, *args, **kwargs)
         app = ui.find_app()
         if app is not None:
             schedule(lambda: ensure_buttons(app))
         return result
 
-    for _target in ("refresh_choice_buttons", "load_game_new", "return_to_title"):
+    for _target in ("load_game_new", "return_to_title"):
         ctx.wrap("__main__:InstantaleApp." + _target, required=False, safe=True)(restore_buttons_after)
+
+    def after_refresh(app):
+        """選択肢の組み直しの後（ローダの窓口 `choices` の `after`。組み直しは自分で包まない。TECH.md §3.3.14）。"""
+        schedule(lambda: ensure_buttons(app))
+
+    choices.provide(ctx, None, after=after_refresh)
 
     @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.toggle_center_inventory_visibility", safe=True)
     def toggle_inventory(orig, self, *args, **kwargs):

@@ -395,13 +395,15 @@ def apply(ctx):
                 activities = [e for e in buttons
                               if ui.spec_cls_name(e) in ACTIVITY_CLASSES]
                 if activities:
-                    if not any(screen.mark_of(e) for e in activities):
-                        state["menu"] = [(e.get("text"), ui.spec_cls_name(e),
-                                          ui.spec_args(e) or []) for e in activities]
+                    # 写し直した活動も同じ並びなので、どれを写しても一覧は同じ
+                    state["menu"] = [(e.get("text"), ui.spec_cls_name(e),
+                                      ui.spec_args(e) or []) for e in activities]
                 elif state["stay"] and state["stay"]["left"] > 0 \
                         and state["menu"] \
                         and ui.find_spec_button(buttons, END_CLASS) is not None:
-                    entries = [screen.button(text, mark="again", cls_name=cls, args=argv)
+                    # ゲームの活動のボタン（spec はゲームのまま）を写し直す。押下はゲームが受ける。
+                    # セーブに残っても、MOD の無い起動でそのまま活動を選べる。印は付けない
+                    entries = [screen.button(text, cls_name=cls, args=argv)
                                for text, cls, argv in state["menu"]]
                     entries = [e for e in entries if e is not None]
                     buttons[0:0] = entries

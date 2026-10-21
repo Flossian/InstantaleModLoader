@@ -35,6 +35,7 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml            # noqa: E402
+from instantale_modloader import choices    # noqa: E402
 
 
 # ---------------------------------------------------------------- 偽 Kivy
@@ -151,6 +152,28 @@ class InstantaleApp(object):
         self.opened.append((left, right, title, situation))
 
 
+class PhaseSpec(object):
+    """ボタンの spec の代わり（窓口 `choices` が自前のボタンの無害な spec を組むのに `__main__.PhaseSpec` を引く）。"""
+
+    def __init__(self, cls_name, args=()):
+        self.cls_name, self.args = cls_name, list(args)
+
+    def to_dict(self):
+        return {"cls_name": self.cls_name, "args": list(self.args)}
+
+
+def talk_buttons(partner="80"):
+    """会話画面のゲームの選択肢（「会話を終了する」の args[0] が相手）。"""
+    return [{"text": "会話を終了する", "spec": PhaseSpec("ConversationEndManager", [partner])}]
+
+
+def press_label(ctx, app, label):
+    """窓口に組み直させてから、その文言のボタンを押す（印ではなく窓口のボタンを押す）。"""
+    ctx.hooks[REFRESH](lambda self, *a, **k: None, app)
+    index = [b.get("text") for b in app.buttons].index(label)
+    return ctx.hooks[PRESS](lambda self, index: "orig", app, index)
+
+
 class Ctx(object):
     """ローダの `ctx` の代わり。`wrap` は対象ごとに関数を控えるだけ。"""
 
@@ -204,6 +227,7 @@ MOD = load_mod()
 
 START = "__main__:ConversationStartManager.__init__"
 PRESS = "__main__:InstantaleApp.on_button_press"
+REFRESH = "__main__:InstantaleApp.refresh_choice_buttons"
 CHANGE = "scripts.hud.new_hud:InventoryItem.change_inventory"
 
 APP = None   # __main__ の属性として ui.find_app() に見つけてもらう
@@ -219,15 +243,16 @@ def open_window():
 
     out_dir = tempfile.mkdtemp(prefix="party_transfer_test_")
     ctx = Ctx(out_dir)
+    choices.reset()
     MOD.apply(ctx)
 
     # 会話が始まると mod が相手の id を控える。
     ctx.hooks[START](lambda self, a, cid: None, object(), app, "80")
 
-    # 「＜アイテムの受け渡し＞」を押す。印はボタン辞書の側に付く。
-    app.buttons = [{"text": MOD.LABEL, "spec": None, MOD.MARK: "transfer"}]
+    # 「＜アイテムの受け渡し＞」を押す（窓口が会話画面に組んだボタン）。
+    app.buttons = talk_buttons("80")
     FakeClock.scheduled = []
-    ctx.hooks[PRESS](lambda self, index: "orig", app, 0)
+    press_label(ctx, app, MOD.LABEL)
     FakeClock.run_all()          # rename_right_header の予約を片付ける
     return ctx, app, out_dir
 
@@ -458,15 +483,16 @@ ctx, app, out_dir = open_window()
 blacksmith = [{"text": "装備の強化", "spec": Spec("EquipmentReinforcementStart")},
               {"text": "出る", "spec": Spec("MovePhaseManager", ["34", "200", "5"])},
               {"text": "会話する", "spec": Spec("DisplayTalkChoice")}]
-talk = [{"text": "ここで別れる", "spec": Spec("JustSetButtonToNormalPhase")},
-        {"text": MOD.LABEL, "spec": None, MOD.MARK: "transfer"},
-        {"text": "会話を終了する", "spec": Spec("ConversationEndManager", ["80"])}]
-app.buttons = list(talk)
+app.buttons = [{"text": "ここで別れる", "spec": Spec("JustSetButtonToNormalPhase")}] + talk_buttons("80")
 app.buttons_backup_for_shopping = list(blacksmith)
 app.in_conversation = "80"
 FakeClock.scheduled = []
-ctx.hooks[PRESS](lambda self, index: "orig", app, 1)
+press_label(ctx, app, MOD.LABEL)
+talk = list(app.buttons)
 FakeClock.run_all()
+check("会話画面には「会話を終了する」の手前に受け渡しが出る",
+      [b["text"] for b in talk] == ["ここで別れる", MOD.LABEL, "会話を終了する"], [b["text"] for b in talk])
+check("404 が見分ける印が付く", talk[1].get(MOD.MARK) == "transfer", talk[1])
 check("開く前に会話の選択肢を退避へ入れる",
       [b["text"] for b in app.buttons_backup_for_shopping] == [b["text"] for b in talk],
       app.buttons_backup_for_shopping)
@@ -520,6 +546,36 @@ check("渡した品は台帳から採った鍵に入る",
 check("台帳を進める", app.save_data_dict["index"]["item"] == 51, app.save_data_dict)
 FakeClock.run_all()
 check("例外を残さない（鍵の重なり）", ctx.errors == [], ctx.errors)
+shutil.rmtree(out_dir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------- 窓口が組むボタン
+print("\n[窓口が組む受け渡しのボタン]")
+ctx, app, out_dir = open_window()
+app.buttons = talk_buttons("99")                       # 仲間でない相手との会話
+ctx.hooks[START](lambda self, a, cid: None, object(), app, "99")
+app.world.characters["99"] = Character("99", "通りすがり")
+ctx.hooks[REFRESH](lambda self, *a, **k: None, app)
+check("仲間でない相手との会話には出ない", MOD.LABEL not in [b["text"] for b in app.buttons],
+      [b["text"] for b in app.buttons])
+ctx.hooks[START](lambda self, a, cid: None, object(), app, "80")
+app.buttons = talk_buttons("80")
+ctx.hooks[REFRESH](lambda self, *a, **k: None, app)
+before = [b["text"] for b in app.buttons]
+ctx.hooks[REFRESH](lambda self, *a, **k: None, app)
+check("組み直しても増えない", [b["text"] for b in app.buttons] == before == [MOD.LABEL, "会話を終了する"],
+      [b["text"] for b in app.buttons])
+check("保存の間は外れる（セーブに残らない）",
+      [b["text"] for b in choices.strip(app.buttons)[0]] == ["会話を終了する"], choices.strip(app.buttons))
+# 前の版のセーブ: 印の無い残骸（文言）と、窓口が印を付け直した残骸
+app.buttons = ([{"text": MOD.LABEL, "spec": PhaseSpec("JustSetButtonToNormalPhase")},
+                {"text": MOD.LABEL, "spec": PhaseSpec("JustSetButtonToNormalPhase"), MOD.MARK: "transfer"}]
+               + talk_buttons("80"))
+ctx.hooks[REFRESH](lambda self, *a, **k: None, app)
+check("前の版の残骸（印の有無とも）は外して1つだけ組み直す",
+      [b["text"] for b in app.buttons] == [MOD.LABEL, "会話を終了する"] and choices.ours(app.buttons[0]),
+      [b["text"] for b in app.buttons])
+check("例外を残さない（窓口のボタン）", ctx.errors == [], ctx.errors)
 shutil.rmtree(out_dir, ignore_errors=True)
 
 

@@ -2065,17 +2065,6 @@ def _parse_press(value):
     return parts[0] or None, parts[1], parts[2]
 
 
-def _already(buttons, value, screen):
-    """同じ印のボタンが既に画面に在るか。
-
-    ふだんは塗り直しのたびにゲームが選択肢を組み直すので自前のボタンは消えているが、
-    組み直しを伴わない呼ばれ方（手が空いてからのやり直し）でも増えないようにする。
-    """
-    if screen is None:
-        return False
-    return any(screen.mark_of(entry) == value for entry in buttons)
-
-
 def can_add_here(app, buttons):
     """この画面に自前の選択肢を足してよいか。
 
@@ -2166,175 +2155,6 @@ def drop_hidden_choices(app, buttons, facility_id, screen=None, write=None):
     return slots
 
 
-def add_inside_buttons(app, buttons, facility_id, screen=None, write=None):
-    """建物の中の選択肢を足す。**出口もここで出す**。
-
-    ゲームは自分で足した施設の `connections` を読まないので、
-    中に立っても選択肢が1つも出ない。出口が無いと建物から出られなくなる。
-    """
-    screen = _screen(screen)
-    if screen is None:
-        return False
-    if not is_top_screen(buttons):
-        # 施設の画面ではない。部屋選び・会話相手の一覧・活動の選択肢のような
-        # **ゲームの下位の画面**にこちらの選択肢を混ぜない（実機。
-        # `inn` 型の建物ではゲーム自身が施設の選択肢を出し、その先の画面にも
-        # 「泊まる」「売上を受け取る」が並んでいた）。
-        # 見分けを移動のボタンだけにすると、ゲームが出口を作らないこの施設では
-        # 最初の画面（`宿泊する` / `会話する`）まで下位と読んで**出口が出ず、
-        # 外に出られなくなった**（同日）。入口の種類でも見る（`TOP_ENTRY_CLASSES`）。
-        return False
-    # 伏せるのは自前の選択肢を足す前（`at` を残りの並びから決めるため）。
-    slots = drop_hidden_choices(app, buttons, facility_id, screen=screen,
-                                write=write)
-    # 自前のボタンはゲームが後ろに置く選択肢（移動・会話）の手前に入れる。
-    # 素の施設が 操作 → 出る → 会話する の順なので、MOD の建物もそれに揃える。
-    at = len(buttons)
-    for index, item in enumerate(buttons):
-        if ui.spec_cls_name(item) in TAIL_CLASSES:
-            at = index
-            break
-    added = False
-    for choice in choices_of(app, facility_id, screen=screen, write=write):
-        kind = PRESS_EXIT if choice["key"] == PRESS_EXIT else PRESS_DO
-        if kind == PRESS_EXIT and is_facility_screen(buttons):
-            # ゲームの移動が並んでいる画面。出る道はもうあるので足さない。
-            continue
-        value = _press_value(kind, facility_id, choice["key"])
-        # 伏せたゲームの選択肢の代わりなら、**その選択肢が居た場所**に出す
-        # （`replaces`）。自分の宿の `無料で泊まる` はゲームの `宿泊する` と
-        # 同じ並びで出す。宣言が無ければ `at`（移動・会話の手前）に足す。
-        # 居た場所が `at` と同じでも、その場所に出す
-        # （`<` にしていたら、ゲームの並びが `会話する` → `宿泊する` のとき後ろへ落ちた）。
-        slot = slots.get(str(choice.get("replaces") or "")) if choice.get("replaces") \
-            else None
-        if slot is not None and slot > at:
-            slot = None
-        target = at if slot is None else slot
-        if _already(buttons, value, screen):
-            # 既に在る。文言だけ層の今の値に更新する（売上の額のように、押した後に変わる。
-            # 実機：受け取っても「売上を受け取る(N G)」のままだった）。
-            for present in buttons:
-                if screen.mark_of(present) == value and isinstance(present, dict) \
-                        and present.get("text") != choice["label"]:
-                    present["text"] = choice["label"]
-                    added = True
-            # 入る場所より後ろに居るなら、そこへ動かす。
-            # 塗り直しは1手に何度も走り、ゲームは組み直しの途中でも選択肢を足す。
-            # 先の塗り直しで（まだ会話も伏せるものも無く）後ろに足された自前のボタンは、
-            # 次の塗り直しでそれが現れても `_already` で素通りし、
-            # 後ろに残ったままだった（実機。宿泊を終えた直後の自分の宿で
-            # `会話する` → `無料で泊まる` の順になった）。
-            index = next((i for i, present in enumerate(buttons)
-                          if screen.mark_of(present) == value), None)
-            if index is not None and index > target:
-                buttons.insert(target, buttons.pop(index))
-                if index > at:
-                    # `at` に居たゲームの選択肢が1つ後ろへずれた。
-                    at += 1
-                added = True
-            continue
-        entry = screen.button(choice["label"], mark=value)
-        if entry is None:
-            continue
-        buttons.insert(target, entry)
-        at += 1
-        added = True
-    return added or bool(slots)
-
-
-def add_exit_button(app, buttons, facility_id="", screen=None, force=False):
-    """出口だけ足す。取り残されたときと、中の選択肢を出さない建物のため。
-
-    ふだんはゲームの移動が1つでもあれば足さない（出る道はもうある）。
-    取り残されたときだけ `force` で押し通す。
-    `330_` が実機で踏んだ画面には**選択肢が4つ残っていた**が、そこから街へは戻れなかった。
-    残っている選択肢が出口かどうかは当てにできない。
-    """
-    screen = _screen(screen)
-    if screen is None or (not force and is_facility_screen(buttons)):
-        return False
-    value = _press_value(PRESS_EXIT, facility_id)
-    if _already(buttons, value, screen):
-        return False
-    # 層が残っていればその文言で出す（壊した後の取り残しでは層ごと消えている）。
-    label = DEFAULT_EXIT_LABEL
-    for layer in layers_for(facility_id):
-        if layer.get("exit_label"):
-            label = layer["exit_label"]
-    entry = screen.button(label, mark=value)
-    if entry is None:
-        return False
-    buttons.insert(max(len(buttons) - 1, 0), entry)
-    return True
-
-
-def add_move_buttons(app, buttons, screen=None, write=None):
-    """いま立っている場所から入れる MOD の施設への道を足す。
-
-    ゲームはこの施設を一覧に出さないので、道はこちらが出す。
-    ボタンの spec は無害な既存クラスにして、押下は印で横取りする
-    （`MovePhaseManager` を spec に書くと、焼かれた後に MOD の無い環境で押せてしまう）。
-    """
-    screen = _screen(screen)
-    area = ui.current_area(app)
-    here = player_facility_id(app)
-    if screen is None or area is None or not here:
-        return False
-    facility, _node = ui.find_facility(area, here)
-    if facility is None:
-        return False
-    area_id = ui.area_id_of(area)
-    added = False
-    for target in connections_of(facility):
-        if not is_mod_facility(target):
-            continue
-        record = registry().get(str(target))
-        spot = (record or {}).get("placed") if isinstance(record, dict) else None
-        if not spot or str(spot[0]) != str(area_id):
-            continue
-        if any(ui.spec_cls_name(e) == MOVE_CLS
-               and len(ui.spec_args(e) or ()) > 1
-               and str(ui.spec_args(e)[1]) == str(target) for e in buttons):
-            continue
-        value = _press_value(PRESS_ENTER, target)
-        if _already(buttons, value, screen):
-            continue
-        name = Fac(app, target).name or str(target)
-        entry = screen.button(name, mark=value)
-        if entry is None:
-            continue
-        buttons.insert(max(len(buttons) - 1, 0), entry)
-        added = True
-    return added
-
-
-def retry_when_idle(app, screen=None, write=None):
-    """流し込みの最中に来た足し直しを、手が空いてからやり直す。
-
-    `maintain_buttons` は本文が流れている間は何もしない（GAME.md §2.6）。
-    ところが**自前の画面から戻す塗り直しは、いつも `add_text` の直後**に走る。
-    そこで黙って戻ると、次にゲームが選択肢を組み直すまで出番が来ない
-    （`330_` が実機で踏んだ。窓口が消えたままになった）。
-
-    見張りは同時に1つだけ立てる。塗り直しは1手に何度も走るので、
-    素直に立てると同じ見張りがその回数だけ並ぶ。
-    """
-    screen = _screen(screen)
-    if screen is None or _state().get("retry"):
-        return
-    _state()["retry"] = True
-
-    def again():
-        _state()["retry"] = False
-        try:
-            maintain_buttons(app, screen=screen, write=write)
-        except Exception:
-            log_exc("modfacility: cannot maintain the choices (idle)")
-
-    screen.when_idle(app, again, proceed_on_timeout=True, tag="retry")
-
-
 def note_place(app, buttons, here, lost, write=None):
     """立っている場所が変わったら1行だけ書く（変わらないあいだは黙る）。
 
@@ -2382,61 +2202,226 @@ def note_blocked(app, buttons, here, reason, write=None):
 
 
 def maintain_buttons(app, screen=None, write=None):
-    """いまの画面に応じて自前のボタンを足す。何度呼んでも増えない。"""
-    screen = _screen(screen)
+    """いまの一覧に建物の選択肢を組み直す（塗らない）。何度呼んでも増えない。足したら True。
+
+    2026-10-21 に建物の選択肢を窓口 `choices` の宣言型の口へ移した（`declared_refresh` / `declared_offer`）。
+    窓口がゲームの組み直しのたびに組むので、MOD がこれを呼ぶ必要は無い。
+    呼ばれれば、前に組んだ建物の選択肢を外し、組み直しの前の処理と組み立てをその場で通す（ほかの MOD のボタンは触らない）。
+    """
+    from . import choices
     buttons = getattr(app, "buttons", None)
-    if screen is None or not isinstance(buttons, list):
+    if not isinstance(buttons, list):
         return False
-    if ui.busy_signals(app):
-        # 本文が流れている最中は触らない。手が空いてからやり直す。
-        # ここでは何も書かない（やり直しでも足せなければ、そちらで理由が1行残る）。
-        retry_when_idle(app, screen=screen, write=write)
-        return False
-    screen.prune_stale(buttons, our_labels(app))
+    buttons[:] = [entry for entry in buttons if not _ours(entry)]
+    choices.prune_remnants(buttons, our_labels(app))
+    declared_refresh(app, buttons)
+    picked = declared_offer(app, choices.View(app, buttons)) or []
+    cursors = {}
+    for choice in picked:
+        entry = choices._entry_of(OWNER, choice, None)
+        if entry is not None:
+            choices._place(buttons, entry, choice.place, cursors)
+    return bool(picked)
+
+
+def _ours(entry):
+    from . import choices
+    return choices.ours(entry) and entry[choices.CHOICE_KEY].get("owner") == OWNER
+
+
+# --------------------------------------------------------------------------
+# 窓口 `choices` の宣言型の口（2026-10-21〜。TECH.md §3.3.14・§5.8）
+# --------------------------------------------------------------------------
+#: 窓口での持ち主の名前。ローダの部品なので MOD のフォルダ名を使わない。
+OWNER = "loader:modfacility"
+
+
+def _write():
+    return _state().get("write")
+
+
+def declared_refresh(app, buttons):
+    """組み直しの前（窓口の `refresh`）。素データの写しの同期・居場所の記録・ゲームの選択肢を伏せる。
+
+    伏せたゲームの選択肢の位置（`replaces` の行き先）は、続けて呼ばれる `declared_offer` が読む。
+    伏せるのはゲームの一覧そのもの（その建物では成り立たない選択肢なので、セーブにも残さない）。
+    """
+    write = _write()
+    _state()["slots"] = {}
+    if not isinstance(buttons, list):
+        return
     here = inside(app)
     try:
         sync_plain(app, here, write=write)
     except Exception:
         log_exc("modfacility: cannot sync the plain data")
-    lost = (not here) and stranded(app)
-    note_place(app, buttons, here, lost, write=write)
-    addable = can_add_here(app, buttons)
-    # 絵には触らない。建物へ入る移動でゲームが自分で描く（名前で引き、無ければ生成して保存する）。
-    # こちらから頼むと、その1回が移動の描画と重なって2枚になる（実機。宿屋で二重表示）。
     if not here:
         _state()["entered"] = None
+    lost = (not here) and stranded(app)
+    note_place(app, buttons, here, lost, write=write)
     if lost:
-        # 取り残された（立っている施設が街に無い）。ここだけは画面を選ばない ―
-        # 出口を出さないと、その世界はもう開けない（`stranded`）。
-        touched = add_exit_button(app, buttons, player_facility_id(app),
-                                  screen=screen, force=True)
-    elif not addable:
-        # 足してよい画面ではない。掃除（`prune_stale`）と写しの同期は済ませてあるので、
-        # 足すところだけ降りる。画面が組み直されれば、その塗り直しでまた足される。
-        # **MOD 側は自分の進行中の旗で画面を判断しない。** ここが唯一の判定
-        # （331 の宿泊で、終える処理の中の組み直しに MOD の旗が間に合わず2つだけになった）。
+        return
+    if not can_add_here(app, buttons):
         busy = game_is_busy(app)
         note_blocked(app, buttons, here,
                      "the game is busy ({}{})".format(
                          ", ".join(busy),
-                         "; enemies are present" if any(
-                             flag in BATTLE_FLAGS for flag in busy) else "")
+                         "; enemies are present" if any(flag in BATTLE_FLAGS for flag in busy) else "")
                      if busy else "not a top screen", write=write)
-        return False
-    elif here:
-        touched = add_inside_buttons(app, buttons, here, screen=screen, write=write)
-    else:
-        touched = add_move_buttons(app, buttons, screen=screen, write=write)
-    if touched:
-        _state()["blocked"] = None
-        # **差し込んだら必ず塗り直す。** ここは `refresh_choice_buttons` の後ろで走るので、
-        # `app.buttons` を変えただけでは `to_display_buttons` と `display_button_map` が
-        # 差し込む前のまま ― 画面には出ず、出ても押した添字が別のボタンを指す
-        # （実機。道が「一度だけ現れ」、中に入っても出口しか見えなかった）。
-        # 塗り直しは次のフレームで、その中の `refresh_choice_buttons` でここへ戻ってくるが、
-        # 同じ印のボタンは足さない（`_already`）ので二度目は何も起きず、輪にはならない。
-        screen.apply_buttons(app, None, "modfacility")
-    return bool(touched)
+        return
+    _state()["blocked"] = None
+    if here:
+        _state()["slots"] = drop_hidden_choices(app, buttons, here, screen=screen_of(), write=write)
+
+
+def declared_offer(app, view):
+    """いまの画面に足す建物の選択肢（窓口の `offer`）。何度呼んでも同じものを返す。
+
+    判定は `can_add_here` の1か所（下位の画面・会話中・戦闘中には足さない）。
+    取り残された（立っている施設が街に無い）ときは、画面を選ばず出口だけ出す（`stranded`）。
+    """
+    from . import choices
+    buttons = view.buttons
+    here = inside(app)
+    if not here and stranded(app):
+        facility_id = player_facility_id(app)
+        label = DEFAULT_EXIT_LABEL
+        for layer in layers_for(facility_id):
+            if layer.get("exit_label"):
+                label = layer["exit_label"]
+        return [choices.Choice(label, place=choices.at(max(len(buttons) - 1, 0)),
+                               on_press=_on_press(PRESS_EXIT, facility_id, ""))]
+    if not can_add_here(app, buttons):
+        return None
+    if here:
+        return _inside_choices(app, buttons, here)
+    return _move_choices(app, buttons)
+
+
+def _inside_choices(app, buttons, facility_id):
+    """建物の中の選択肢と出口。ゲームが後ろに置く選択肢（移動・会話）の手前に出す。
+
+    素の施設が 操作 → 出る → 会話する の順なので、MOD の建物もそれに揃える。
+    伏せたゲームの選択肢の代わり（`replaces`）は、その選択肢が居た場所に出す
+    （自分の宿の `無料で泊まる` はゲームの `宿泊する` と同じ並び）。
+    """
+    from . import choices
+    tail = next((index for index, item in enumerate(buttons) if ui.spec_cls_name(item) in TAIL_CLASSES),
+                len(buttons))
+    slots = _state().get("slots") or {}
+    out = []
+    for choice in choices_of(app, facility_id, screen=screen_of(), write=_write()):
+        kind = PRESS_EXIT if choice["key"] == PRESS_EXIT else PRESS_DO
+        if kind == PRESS_EXIT and is_facility_screen(buttons):
+            continue                # ゲームの移動が並んでいる画面。出る道はもうある
+        slot = slots.get(str(choice.get("replaces") or "")) if choice.get("replaces") else None
+        if slot is not None and slot > tail:
+            slot = None
+        out.append(choices.Choice(choice["label"], place=choices.at(tail if slot is None else slot),
+                                  on_press=_on_press(kind, facility_id, choice["key"])))
+    return out
+
+
+def _move_choices(app, buttons):
+    """いま立っている場所から入れる MOD の施設への道（ゲームはこの施設を一覧に出さない）。"""
+    from . import choices
+    area = ui.current_area(app)
+    here = player_facility_id(app)
+    if area is None or not here:
+        return None
+    facility, _node = ui.find_facility(area, here)
+    if facility is None:
+        return None
+    area_id = ui.area_id_of(area)
+    out = []
+    for target in connections_of(facility):
+        if not is_mod_facility(target):
+            continue
+        record = registry().get(str(target))
+        spot = (record or {}).get("placed") if isinstance(record, dict) else None
+        if not spot or str(spot[0]) != str(area_id):
+            continue
+        if any(ui.spec_cls_name(e) == MOVE_CLS and len(ui.spec_args(e) or ()) > 1
+               and str(ui.spec_args(e)[1]) == str(target) for e in buttons):
+            continue                # ゲームが自分で道を出している
+        out.append(choices.Choice(Fac(app, target).name or str(target),
+                                  place=choices.at(max(len(buttons) - 1, 0)),
+                                  on_press=_on_press(PRESS_ENTER, target, "")))
+    return out
+
+
+def _on_press(kind, facility_id, key):
+    def on_press(app):
+        from . import choices
+        entry = choices.pressed()
+        text = (entry.get("text") if isinstance(entry, dict) else None) or key
+        act(app, kind, facility_id, key, text)
+        return None
+    return on_press
+
+
+def act(app, kind, facility_id, key, text, screen=None, write=None):
+    """自前の選択肢の押下（入る・出る・建物の中の選択肢）。二重の押下は握るだけ。"""
+    screen = _screen(screen)
+    write = write or _write()
+    if _state().get("acting"):
+        if write:
+            write("modfacility: ignored a press; the previous one is still running")
+        return
+    if write:
+        write("modfacility: pressed {!r} ({} {} {})".format(text, kind, facility_id, key))
+    _state()["acting"] = True
+    try:
+        if kind == PRESS_ENTER:
+            enter(app, facility_id, screen=screen, write=write)
+            return
+        if kind == PRESS_EXIT:
+            leave(app, facility_id, screen=screen, write=write)
+            return
+        for choice in choices_of(app, facility_id, screen=screen, write=write):
+            if str(choice.get("key")) != str(key) or not callable(choice.get("on")):
+                continue
+            info = {"site": "press", "app": app, "facility_id": facility_id,
+                    "facility": facility_of(app, facility_id), "choice": choice,
+                    "text": text, "screen": screen, "owner": choice.get("owner")}
+            try:
+                choice["on"](info)
+            except Exception:
+                log_exc("modfacility: the press of {} on {} failed".format(
+                    choice.get("owner"), facility_id))
+                if write:
+                    write("WARN modfacility: the press of {} on {} failed".format(
+                        choice.get("owner"), facility_id))
+            # 押した結果で文言が変わる（売上の額）。ハンドラはフェーズで非同期に走るので、
+            # 手が空いてから組み直す
+            repaint_when_idle(app, screen=screen)
+            return
+    finally:
+        _state()["acting"] = False
+
+
+def repaint_when_idle(app, screen=None):
+    """手が空いてから窓口に組み直して塗らせる。見張りは同時に1つだけ立てる。"""
+    from . import choices
+    screen = _screen(screen)
+    if screen is None or _state().get("retry"):
+        return
+    _state()["retry"] = True
+
+    def again():
+        _state()["retry"] = False
+        choices.repaint(app)
+
+    screen.when_idle(app, again, proceed_on_timeout=True, tag="retry")
+
+
+def provide_choices(ctx, write=None):
+    """窓口 `choices` に建物の選択肢を預ける（`install` が呼ぶ）。"""
+    from . import choices
+    _state()["write"] = write
+    _state()["ctx"] = ctx
+    return choices.provide(ctx, screen_of(), owner=OWNER, refresh=declared_refresh,
+                           offer=declared_offer, labels=our_labels)
 
 
 # --------------------------------------------------------------------------
@@ -2515,10 +2500,20 @@ def leave(app, facility_id=None, screen=None, write=None):
 
 def press(app, button_index, screen=None, write=None):
     """自前のボタンを横取りする。横取りしたら True（呼ぶ側は素通ししない）。"""
+    from . import choices
+    entry = ui.pressed_entry(app, button_index)
+    if _ours(entry):
+        # 窓口の押下と同じく、ボタンに持たせた処理を呼ぶ（窓口が配るときは `choices` の包みから来る）
+        store = choices._store()
+        store["pressed"] = entry
+        try:
+            entry[choices.CHOICE_KEY]["choice"].on_press(app)
+        finally:
+            store["pressed"] = None
+        return True
     screen = _screen(screen)
     if screen is None:
         return False
-    entry = ui.pressed_entry(app, button_index)
     kind, facility_id, key = _parse_press(screen.mark_of(entry))
     if kind is None:
         if entry is None and write:
@@ -2527,43 +2522,9 @@ def press(app, button_index, screen=None, write=None):
                 button_index, getattr(app, "display_button_map", None),
                 len(getattr(app, "buttons", None) or ())))
         return False
-    if _state().get("acting"):
-        if write:
-            write("modfacility: ignored a press; the previous one is still running")
-        return True
     text = (entry.get("text") if isinstance(entry, dict) else None) or key
-    if write:
-        write("modfacility: pressed {!r} ({} {} {})".format(
-            text, kind, facility_id, key))
-    _state()["acting"] = True
-    try:
-        if kind == PRESS_ENTER:
-            enter(app, facility_id, screen=screen, write=write)
-            return True
-        if kind == PRESS_EXIT:
-            leave(app, facility_id, screen=screen, write=write)
-            return True
-        for choice in choices_of(app, facility_id, screen=screen, write=write):
-            if str(choice.get("key")) != key or not callable(choice.get("on")):
-                continue
-            info = {"site": "press", "app": app, "facility_id": facility_id,
-                    "facility": facility_of(app, facility_id), "choice": choice,
-                    "text": text, "screen": screen, "owner": choice.get("owner")}
-            try:
-                choice["on"](info)
-            except Exception:
-                log_exc("modfacility: the press of {} on {} failed".format(
-                    choice.get("owner"), facility_id))
-                if write:
-                    write("WARN modfacility: the press of {} on {} failed".format(
-                        choice.get("owner"), facility_id))
-            # 押した結果で文言が変わる（売上の額）。ハンドラはフェーズで非同期に走るので、
-            # 手が空いてから足し直す（既に在る選択肢は文言だけ更新される）。
-            retry_when_idle(app, screen=screen, write=write)
-            return True
-        return True
-    finally:
-        _state()["acting"] = False
+    act(app, kind, facility_id, key, text, screen=screen, write=write)
+    return True
 
 
 # --------------------------------------------------------------------------
@@ -2766,26 +2727,10 @@ def _install(ctx, write):
         return orig(file_path, cleaned, *args, **kwargs)
     targets.append(WRITE_TARGET)
 
-    @ctx.wrap(REFRESH_TARGET, required=False, safe=True)
-    def refresh_choice_buttons(orig, self, reset_page=False, *args, **kwargs):
-        """選択肢が組み直されるたびに、自前のボタンを足し直す。"""
-        result = orig(self, reset_page, *args, **kwargs)
-        try:
-            maintain_buttons(self, write=write)
-        except Exception:
-            log_exc("modfacility: cannot maintain the choices")
-        return result
+    # 選択肢の組み直しと押下は包まない。窓口 `choices` の宣言型の口に預ける（2026-10-21。TECH.md §5.8）。
+    # 自分で包んでいた頃は `orig` の後に足して塗り直していたので、窓口の `claim` で外せず、塗り直しが2度走った
+    provide_choices(ctx, write)
     targets.append(REFRESH_TARGET)
-
-    @ctx.wrap(PRESS_TARGET, required=False)
-    def on_button_press(orig, self, button_index, *args, **kwargs):
-        """自前のボタンだけ横取りする。印が無ければ必ず素通し。"""
-        try:
-            if press(self, button_index, write=write):
-                return None
-        except Exception:
-            log_exc("modfacility: the press hook failed")
-        return orig(self, button_index, *args, **kwargs)
     targets.append(PRESS_TARGET)
 
     @ctx.wrap(BG_CURRENT_TARGET, required=False, safe=True)
@@ -2826,12 +2771,13 @@ def _install(ctx, write):
     def maintain_after(target):
         @ctx.wrap(target, required=False, safe=True)
         def phase_end(orig, self, *args, **kwargs):
-            """場面が終わった。施設の画面ならこちらの選択肢と絵を足し直す。"""
+            """場面が終わった。ゲームは場面の中で組み直した後は組み直さないので、窓口に組み直して塗らせる。"""
             result = orig(self, *args, **kwargs)
             try:
                 app = getattr(self, "app", None) or ui.find_app()
                 if app is not None:
-                    maintain_buttons(app, write=write)
+                    from . import choices
+                    choices.repaint(app)
             except Exception:
                 log_exc("modfacility: cannot maintain the choices after {}".format(target))
             return result

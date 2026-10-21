@@ -3,9 +3,12 @@
 
 服役の流れは GAME.md §2.20「逮捕・裁判・服役」（`238_probe_prison` の実機）。
 """
-from instantale_modloader import combat, equipment, guards, items, ui
+from instantale_modloader import choices, combat, equipment, guards, items, ui
 
 from . import common, jailbreak
+
+#: 「脱獄を試みる」の一覧（ローダの窓口 `choices` の MOD だけの画面）の名前。
+JAIL_SCREEN = "jailbreak menu"
 
 
 def install(env):
@@ -23,9 +26,9 @@ def install(env):
     #         倒れたらゲーム自身のゲームオーバー（2026-10-05。前は死なせず牢へ戻していた）。
     #         戦闘のあいだは即席の武器・防具で戦う（2026-10-08。ローダの窓口 `equipment` の貸し）。
     # 備えの数は世界×主人公の控え（`jail`）。刑期の残りはゲームのボタンが持つので控えない。
-    #: `battle` は決行の戦闘、`serve` は一覧を開いたときの「服役する」のボタン（引数を持つ）、
-    #: `year` は一覧を開く前の年ごとの画面の選択肢（「やめる」で戻す）。
-    jail = {"battle": None, "serve": None, "year": None}
+    # 一覧は窓口の MOD だけの画面（`JAIL_SCREEN`）。下の年ごとの画面（「服役する」と、その引数）は窓口が残す。
+    #: `battle` は決行の戦闘。
+    jail = {"battle": None}
     guards.install(ctx)
     equipment.install(ctx)
 
@@ -128,18 +131,16 @@ def install(env):
         cost = jailbreak.bribe_cost(quest_reward(area_difficulty(app)), cfg.JAILBREAK_BRIBE_PCT)
         return prep, detect, chances, cost
 
-    def insert_jail_buttons(app, buttons):
-        """「服役する」の後ろに「脱獄を試みる」を1つ足す。"""
+    def jail_menu_choice(app, buttons):
+        """「服役する」の後ろに出す「脱獄を試みる」。出さないなら None。"""
         serve = serve_entry(buttons)
         if not cfg.JAILBREAK_ENABLED or serve is None \
                 or jailbreak.serve_args(ui.spec_args(serve)) is None:
-            return
-        entry = screen.button(jailbreak.MENU_LABEL.format(prep=jail_prep(app), max=cfg.JAILBREAK_PREP_MAX),
-                              mark="jail:menu")
-        if entry is not None:
-            buttons.insert(buttons.index(serve) + 1, entry)
+            return None
+        return choices.Choice(jailbreak.MENU_LABEL.format(prep=jail_prep(app), max=cfg.JAILBREAK_PREP_MAX),
+                              place=choices.after(jailbreak.SERVE_SPEC), on_press=lambda app: press(app, "menu"))
 
-    def menu_entries(app):
+    def menu_choices(app):
         """「脱獄を試みる」の一覧。備え（上限なら出さない）・決行・やめる。"""
         prep, detect, chances, cost = jail_odds(app)
         texts = []
@@ -156,28 +157,27 @@ def install(env):
                         chance=chances[prep_def["key"]], detect=detect)))
         texts.append(("break", jailbreak.BREAK_LABEL.format(prep=prep, max=cfg.JAILBREAK_PREP_MAX)))
         texts.append(("back", jailbreak.BACK_LABEL))
-        entries = [screen.button(text, mark="jail:" + key) for key, text in texts]
-        return [entry for entry in entries if entry is not None]
+        return [choices.Choice(text, on_press=lambda app, key=key: press(app, key)) for key, text in texts]
+
+    def jail_screen(app, view, _data):
+        """一覧（窓口の MOD だけの画面）。下に年ごとの画面（「服役する」）が無くなっていたら閉じる（None）。"""
+        if serve_entry(view.buttons) is None:
+            return None
+        return menu_choices(app)
 
     def open_menu(app):
-        """一覧を出す。「服役する」の引数と年ごとの画面の選択肢を控える（一覧には「服役する」が無い）。"""
-        buttons = list(getattr(app, "buttons", None) or [])
-        serve = serve_entry(buttons)
-        if serve is None:
+        """一覧を開く。年ごとの画面は窓口が下に残す（「やめる」で戻る。一覧で保存して読み直しても一覧に戻る）。"""
+        if serve_entry(choices.game_buttons(app)) is None:
             write("WARN jailbreak: no serve button to open the menu from")
             return False
-        jail.update(serve=dict(serve), year=[dict(entry) if isinstance(entry, dict) else entry
-                                             for entry in buttons])
-        screen.apply_buttons(app, menu_entries(app), "jailbreak menu")
+        env.open_screen(app, JAIL_SCREEN, {})
         return True
 
     def close_menu(app):
         """年ごとの画面に戻す。"""
-        year = jail.get("year")
-        if not year:
-            write("WARN jailbreak: no year screen to go back to")
-            return False
-        screen.apply_buttons(app, year, "jailbreak back")
+        if not env.close_screen(app):
+            write("WARN jailbreak: the menu was not open")
+            choices.repaint(app)
         return True
 
     def serve_year(app, args):
@@ -299,12 +299,14 @@ def install(env):
             return open_menu(app)
         if key == "back":
             return close_menu(app)
-        # 一覧には「服役する」が無いので、一覧を開いたときに控えたボタンから引数を読む。
-        serve = serve_entry(getattr(app, "buttons", None)) or jail.get("serve")
+        # 一覧には「服役する」が無い。下の年ごとの画面（窓口が残している）から引数を読む。
+        serve = serve_entry(choices.game_buttons(app))
         args = jailbreak.serve_args(ui.spec_args(serve)) if serve is not None else None
         if args is None:
             write("WARN jailbreak: no serve button to follow ({})".format(key))
             return False
+        # 備えも決行もゲームの画面へ進む。一覧は先に閉じる（服役の次の年の画面は同じ形なので、閉じないと一覧が残る）
+        env.close_screen(app, repaint=False)
         if key == "break":
             return break_out(app, args)
         if key in jailbreak.PREP_BY_KEY:
@@ -390,13 +392,14 @@ def install(env):
 
     @ctx.wrap("__main__:ImprisonmentStartManager.execute", required=False, safe=True)
     def imprisonment_start(orig, self, *args, **kwargs):
-        """新しい刑期。前の服役の備えは持ち越さない。"""
+        """新しい刑期。前の服役の備えは持ち越さない。牢に入った印を立てる。"""
         try:
             app = getattr(self, "app", None) or ui.find_app()
             if app is not None and jail_prep(app):
                 set_jail_prep(app, 0)
             if app is not None:
                 set_breaking(app, None)
+                env.set_custody(app, True, "imprisonment")     # 牢を出るまで閉じ込めている（`custody`）
         except Exception:
             ctx.log_exc("crime incentive: cannot reset the jailbreak preparation")
         return orig(self, *args, **kwargs)
@@ -437,18 +440,18 @@ def install(env):
     # 無罪放免（`court`）も牢を出たのと同じに数える（司法取引で事務所を売った事実は、無罪でも消えない）
     env.start_ban = start_ban
 
-    def on_refresh(app, buttons):
+    def offer(app, view):
         """服役の画面なら「脱獄を試みる」を足す。"""
-        if serve_entry(buttons) is not None:
-            screen.prune_stale(buttons, jailbreak.LABEL_HEADS)
-            if not any(screen.mark_of(entry) for entry in buttons):
-                insert_jail_buttons(app, buttons)
+        found = jail_menu_choice(app, view.buttons)
+        return [found] if found is not None else None
 
-    def press(app, action):
-        key = action[len("jail:"):]
+    def press(app, key):
         write("pressed the jailbreak {!r}".format(key))
         if not press_jail(app, key):
-            screen.apply_buttons(app, None, "jailbreak failed")
+            choices.repaint(app)
+        return None
 
-    env.on_refresh(on_refresh)
-    env.on_press("jail:", press)
+    env.on_offer(offer)
+    env.on_screen(JAIL_SCREEN, jail_screen)
+    env.on_labels(lambda app: jailbreak.LABEL_HEADS)
+    env.jail_screen_open = lambda app: env.screen_open(app, JAIL_SCREEN)

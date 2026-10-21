@@ -90,10 +90,9 @@ STATE_STORE_ATTR = "__instantale_facility_investment_store__"
 #: 押下を横取りするための印。他の MOD と別のキーにすること。
 MARK = "mod_facility_investment"
 
-#: ボタンに載せる種類・等級（`mod_` で始めるのは、他の MOD の掃除に
-#: 「印の無いボタン」と見なされないため。TECH.md §5.1.1）。
-KIND_KEY = "mod_facility_investment_kind"
-TIER_KEY = "mod_facility_investment_tier"
+#: 窓口 `choices` の MOD だけの画面の名前（出資の窓口・等級を選ぶ画面）。
+DESK_SCREEN = "desk"
+TIERS_SCREEN = "tiers"
 
 #: 帳簿の1件に立てる「主人の好感度を初期値まで上げた」印（`heal_keeper`）。
 WARMED_KEY = "keeper_warmed"
@@ -310,17 +309,13 @@ def apply(ctx):
             "state": {
                 # 自前のフェーズが動いている間の旗。連打の2発目を捨てる。
                 "acting": False,
-                # 自前の画面を出す前の選択肢（`やめる` で戻すために控える）。
-                "saved": None,
-                # 窓口で選んだ種類（等級を選ぶ画面へ持ち回る）。
-                "choosing": None,
+                # 窓口 `choices` の持ち主の名前（`provide` が返す）。
+                "owner": None,
                 # 自分の宿屋での宿泊。`{"facility": id, "name": …, "quality": …}`。
                 # 宿代を前払いする部屋を覚える。
                 "own_stay": None,
                 # 一度書いた WARN の覚え。
                 "warned": set(),
-                # 手が空くのを待っているボタンの足し直し。
-                "retry": False,
                 # 主人の姿を書いた建物（訪ねるたびに1度）。
                 "noted": None,
             },
@@ -1101,43 +1096,28 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 窓口
     def show_desk(app):
-        """役場の出資の窓口。建てられる種類を並べ、**全部の種類の条件**を本文に出す。
+        """役場の出資の窓口を開く。**全部の種類の条件**を本文に出す。
 
         建てられないときに「いま建てられるものは無い」だけだと、規模が足りないのか
         軒数が埋まっているのかが分からない（村で出た）。
+        ボタンは窓口 `choices` の MOD だけの画面（`desk_screen`）が組む。下の役場の選択肢は窓口が残す。
         """
         area = ui.current_area(app)
         area_name = frames.short(getattr(area, "name", ""), 40) or "この土地"
-        state["saved"] = [item for item in (getattr(app, "buttons", None) or [])
-                          if not screen.mark_of(item)]
-        state["choosing"] = None
-        entries = []
         lines = []
         buildable = 0
         no_hub = False
         size = area_size(app, ui.area_id_of(area)) if area is not None else None
         for kind in catalog.enabled_kinds():
-            spec = catalog.kind_of(kind)
             ok, why = room_for(app, area, kind) if area is not None else (False, "size")
             no_hub = no_hub or why == "hub"
             if ok:
-                entry = screen.button(BUILD_LABEL.format(spec["label"]), mark="kind",
-                                      extra={KIND_KEY: kind})
-                if entry is not None:
-                    entries.append(entry)
-                    buildable += 1
+                buildable += 1
             # 本文に出すのは**建たない種類の条件だけ**。
             # 建つ種類の値札は選択肢を押した先（等級の画面）で出る。
             line = catalog.requirement_text(kind, size, min_size_of(kind))
             if line:
                 lines.append(line)
-        if holdings_of(app):
-            entry = screen.button(STATUS_LABEL, mark="status")
-            if entry is not None:
-                entries.append(entry)
-        cancel = screen.button(CANCEL_LABEL, mark="cancel")
-        if cancel is not None:
-            entries.append(cancel)
         if size is None:
             screen.say(app, _fmt(DESK_NO_SIZE_TEXT, area=area_name))
         else:
@@ -1151,35 +1131,54 @@ def apply(ctx):
             screen.say(app, "\n".join([head] + lines))
         write("desk: {} kind(s) offered in area {!r} ({})".format(
             buildable, ui.area_id_of(area) if area is not None else None, size))
-        screen.apply_buttons(app, entries, "desk")
+        choices.open_screen(app, state["owner"], DESK_SCREEN)
+
+    def desk_screen(app, view, _data):
+        """出資の窓口のボタン（組み直しのたびに、いまの街の空きから組む）。役場に居なければ閉じる（None）。"""
+        if not at_office(app):
+            return None
+        area = ui.current_area(app)
+        out = []
+        for kind in catalog.enabled_kinds():
+            ok, _why = room_for(app, area, kind) if area is not None else (False, "size")
+            if ok:
+                text = BUILD_LABEL.format(catalog.kind_of(kind)["label"])
+                out.append(choices.Choice(text, on_press=_press("kind", kind, None, text)))
+        if holdings_of(app):
+            out.append(choices.Choice(STATUS_LABEL, on_press=_press("status", None, None, STATUS_LABEL)))
+        out.append(choices.Choice(CANCEL_LABEL, on_press=_press("cancel", None, None, CANCEL_LABEL)))
+        return out
 
     def show_tiers(app, kind):
-        """等級を選ぶ。値札は今の街の規模で計算する。"""
+        """等級を選ぶ画面を開く。値札は今の街の規模で計算する（`tiers_screen`）。"""
         area = ui.current_area(app)
         spec = catalog.kind_of(kind)
         if area is None or spec is None:
             back(app, "no area")
             return
         size = area_size(app, ui.area_id_of(area))
-        state["choosing"] = kind
-        entries = []
-        for tier in catalog.TIERS:
-            price = cost_of(kind, tier, size)
-            if price is None:
-                continue
-            label = TIER_LABEL.format(catalog.TIER_LABEL[tier], ui.money(price))
-            entry = screen.button(ui.rewrite_coins(label), mark="tier",
-                                  extra={KIND_KEY: kind, TIER_KEY: tier})
-            if entry is not None:
-                entries.append(entry)
-        cancel = screen.button(CANCEL_LABEL, mark="cancel")
-        if cancel is not None:
-            entries.append(cancel)
         income = [income_of(kind, t, size) for t in catalog.TIERS]
         screen.say(app, ui.rewrite_coins(
             "{}の等級を選ぶ。1日の売上は 並 {}G / 上等 {}G / 最上 {}G の見込み。".format(
                 spec["label"], *[ui.money(v) for v in income])))
-        screen.apply_buttons(app, entries, "tiers")
+        choices.open_screen(app, state["owner"], TIERS_SCREEN, {"kind": kind})
+
+    def tiers_screen(app, view, data):
+        """等級のボタン。選んだ種類は画面の控え（`data`）に持つ（ロードの後も同じ種類の画面に戻る）。"""
+        kind = (data or {}).get("kind")
+        area = ui.current_area(app)
+        if not at_office(app) or area is None or catalog.kind_of(kind) is None:
+            return None
+        size = area_size(app, ui.area_id_of(area))
+        out = []
+        for tier in catalog.TIERS:
+            price = cost_of(kind, tier, size)
+            if price is None:
+                continue
+            text = ui.rewrite_coins(TIER_LABEL.format(catalog.TIER_LABEL[tier], ui.money(price)))
+            out.append(choices.Choice(text, on_press=_press("tier", kind, tier, text)))
+        out.append(choices.Choice(CANCEL_LABEL, on_press=_press("cancel", None, None, CANCEL_LABEL)))
+        return out
 
     def show_status(app):
         lines = []
@@ -1200,11 +1199,10 @@ def apply(ctx):
         back(app, "status")
 
     def back(app, why="back"):
-        """自前の画面から役場の選択肢へ戻す（窓口のボタンは塗り直しの中で足し直される）。"""
-        saved, state["saved"] = state["saved"], None
-        state["choosing"] = None
-        write("back: {} ({} entries)".format(why, len(saved) if saved is not None else "keep"))
-        screen.apply_buttons(app, saved, "back")
+        """出資の窓口の画面を閉じて役場の選択肢へ戻す（下の選択肢は窓口 `choices` が残している）。"""
+        write("back: {}".format(why))
+        if not choices.close_screen(app, state["owner"]):
+            choices.repaint(app)
 
     # ------------------------------------------------------------ 自前のフェーズ
     class InvestPhase(object):
@@ -1266,75 +1264,46 @@ def apply(ctx):
             return False
         return ui.facility_type_of(location) == OFFICE_FACILITY_TYPE
 
-    def retry_when_idle(app):
-        if state.get("retry"):
-            return
-        state["retry"] = True
-
-        def again():
-            state["retry"] = False
-            try:
-                maintain_buttons(app)
-            except Exception:
-                ctx.log_exc("investment: cannot maintain the choices (idle)")
-
-        screen.when_idle(app, again, proceed_on_timeout=True, tag="retry")
-
-    def maintain_buttons(app):
-        """役場に「出資する」を足す。建物の中はローダが出す。何度呼んでも増えない。"""
-        buttons = getattr(app, "buttons", None)
-        if not isinstance(buttons, list):
-            return
-        if ui.busy_signals(app):
-            retry_when_idle(app)
-            return
-        if not is_facility_screen(buttons):
-            return
-        if modfacility.game_is_busy(app):
+    def offer(app, view):
+        """役場に「出資する」を出す（窓口 `choices` の `offer`）。建物の中はローダが出す。"""
+        if not is_facility_screen(view.buttons) or modfacility.game_is_busy(app):
             # 会話・戦闘・自由入力の最中は足さない（建物の選択肢と同じ判定。TECH.md §5.8）。
-            return
-        screen.prune_stale(buttons, list(OUR_LABEL_PREFIXES))
-        if any(screen.mark_of(entry) for entry in buttons):
-            return
+            return None
         if not at_office(app):
-            return
-        entry = screen.button(DESK_LABEL, mark="desk")
-        if entry is None:
-            return
-        buttons.insert(max(len(buttons) - 1, 0), entry)
-        screen.apply_buttons(app, None, "office")
+            return None
+        return [choices.Choice(DESK_LABEL, place=choices.at(max(len(view.buttons) - 1, 0)),
+                               on_press=_press("desk", None, None, DESK_LABEL))]
 
     # ================================================================ フック
-    def refresh_choice_buttons(self):
-        """選択肢が組み直されるたびに、建物を当て直して自前のボタンを足す。
+    def refresh_choices(self, _buttons):
+        """組み直しの前（窓口 `choices` の `refresh`）。建物を当て直す。
 
-        最後にローダの塗り直しをもう一度呼ぶ（どちらの関所が内側かは適用順で変わる）。
+        建物の当て直しは、建物の選択肢を組む前に済ませる（窓口は `refresh` の後に `offer` を呼ぶ。
+        ローダの建物の選択肢も同じ組み直しで組まれる。TECH.md §5.8）。
         """
         try:
             apply_holdings(self, getattr(self, "world", None), current_key(self), "screen")
             notice_full(self)
-            maintain_buttons(self)
-            modfacility.maintain_buttons(self, write=write)
         except Exception:
-            ctx.log_exc("investment: cannot maintain the choices")
+            ctx.log_exc("investment: cannot apply the holdings")
 
-    def on_button_press(self, action):
-        """自前のボタンが押された（窓口 `choices` の `presses`。印で振り分けた後に呼ばれる）。"""
-        entry = choices.pressed()
-        if state["acting"]:
-            write("ignored {!r}: the previous press is still running".format(
-                entry.get("text") if isinstance(entry, dict) else None))
+    def _press(action, kind, tier, text):
+        """自前のボタンの押下（窓口がボタンに持たせる処理）。ゲームと同じ経路（`process_choice`）で動かす。"""
+        def on_press(app):
+            if state["acting"]:
+                write("ignored {!r}: the previous press is still running".format(text))
+                return None
+            write("pressed {!r} ({} kind={} tier={})".format(text, action, kind, tier))
+            screen.start_phase(app, InvestPhase(app, action, kind, tier), text,
+                               fallback=lambda: run_action(app, action, kind, tier))
             return None
-        text = (entry.get("text") if isinstance(entry, dict) else None) or DESK_LABEL
-        kind = entry.get(KIND_KEY) if isinstance(entry, dict) else None
-        tier = entry.get(TIER_KEY) if isinstance(entry, dict) else None
-        write("pressed {!r} ({} kind={} tier={})".format(text, action, kind, tier))
-        screen.start_phase(self, InvestPhase(self, action, kind, tier), text,
-                           fallback=lambda: run_action(self, action, kind, tier))
-        return None
+        return on_press
 
-    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
-    choices.provide(ctx, screen, after=refresh_choice_buttons, presses={"": on_button_press})
+    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14 の宣言型の口）に預ける。
+    # 役場の「出資する」は `offer`、出資の窓口と等級の画面は MOD だけの画面
+    state["owner"] = choices.provide(ctx, screen, refresh=refresh_choices, offer=offer,
+                                     screens={DESK_SCREEN: desk_screen, TIERS_SCREEN: tiers_screen},
+                                     labels=list(OUR_LABEL_PREFIXES))
 
     def register_before_load(app, key):
         """読む周回の持ち株の層を、`World.__init__` の orig より前に積む。積んだ鍵を返す。
@@ -1381,8 +1350,6 @@ def apply(ctx):
                     worlds.forget(key)
                     keepers_registered.clear()
                 state["own_stay"] = None
-                state["saved"] = None
-                state["choosing"] = None
                 state["warned"] = set()
                 state["key_override"] = key
                 try:

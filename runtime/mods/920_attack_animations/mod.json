@@ -10,7 +10,7 @@
     "en": "The battle referee picks the attack animation from only 8 choices, so most attacks show the same sword cut. Adds 30 choices: guns (shot, burst, spread, sniper), bows, thrown weapons, energy beams and blades, whips, thrusts, heavy and cross cuts, blows, claws, bites, shockwaves and poison (new art in the game's style, subdued or bright), plus explosions, wind, light, dark, arcane magic and area water/earth (art the game ships but never uses). The sound follows the animation",
     "ja": "戦闘の審判 LLM が選べる攻撃の演出は8通りしかなく、ほとんどの攻撃で同じ斬撃の絵が出る。銃（単発・連射・散弾・狙撃）・弓・投擲・光線・光の刃・鞭・突き・重い一撃・十字斬り・打撃・爪・噛みつき・衝撃波・毒（ゲームの絵柄に揃えて描いた絵。控えめ／はっきりを選べる）と、爆発・風・光・闇・魔力・全体の水と土（ゲームに入っているのに使われていない絵）の30通りを足す。効果音も演出に合わせる"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "after": ["401_battle_character_context"],
   "settings": {

@@ -2314,6 +2314,12 @@ def _boot(out_dir: str) -> dict:
         _hudicons.settle()
     except BaseException:
         log_exc("cannot settle the hud icons")
+    try:
+        # 当て直しの途中に来た選択肢の組み直しには、まだ登録し直していない MOD のボタンが無い。揃ったので組み直させる
+        from . import choices as _choices
+        _choices.settle(ctx)
+    except BaseException:
+        log_exc("cannot settle the choices")
 
     ok = sum(1 for v in results.values() if v == "ok")
     log("-" * 70)

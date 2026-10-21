@@ -1972,7 +1972,7 @@ _AFTER_LOAD_ATTR = "_instantale_after_load"
 AFTER_LOAD_DEPRECATED = (
     "ui.refresh_choices_after_load is kept only for backward compatibility (called by {mod}). "
     "Register the choices with the loader window `choices` instead "
-    "(choices.provide(ctx, screen, refresh=..., presses=...); TECH.md §3.3.14). "
+    "(choices.provide(ctx, screen, offer=..., screens=...) with choices.Choice; TECH.md §3.3.14). "
     "The window refreshes once the characters have arrived after a load, "
     "and does not rely on the load_game_new wrap, which may miss a load that began before it was installed.")
 

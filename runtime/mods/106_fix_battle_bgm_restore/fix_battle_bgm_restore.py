@@ -50,7 +50,7 @@ pygame に直接聞く。
 import sys
 import time
 
-from instantale_modloader import sounds, ui
+from instantale_modloader import choices, sounds, ui
 
 LOG_BASENAME = "battle_bgm.log"      # 207_ の計測と同じログに時系列で並べる
 
@@ -178,7 +178,7 @@ def apply(ctx):
                           "no battle has started in this process".format(
                               short(music_src)))
                     arm("battle track outside a battle", force=True,
-                        trust_end=True, prefer_area=True)
+                        trust_end=True, prefer_area=True, keep_live=True)
             else:
                 state["restore"] = music_src
             if not owned:
@@ -285,8 +285,11 @@ def apply(ctx):
             ctx.log_exc("bgm restore: channel scan failed")
         return found
 
-    def sweep(reason, trust_end=False, armed_at=0.0, prefer_area=False):
+    def sweep(reason, trust_end=False, armed_at=0.0, prefer_area=False, keep_live=False):
         """後始末。`trust_end` は「戦闘終了マネージャを抜けた直後」という意味。
+
+        `keep_live` はロードの直後に鳴った戦闘曲の掃除。戦闘の最中のセーブを読んで戦闘の続きに
+        戻ったときは本物の戦闘なので止めない（見分けは並んだボタン。GAME.md §2.10「戦闘の最中のセーブ」）。
 
         フラグが当てにならない（`battle_running` 参照）ので、**戦闘が終わったという事実はフックそのものから取る**。
         予約してから実際に見に行くまでの間に次の戦闘が始まっていないかだけ、
@@ -294,6 +297,10 @@ def apply(ctx):
         """
         app = find_app()
         if app is None:
+            return
+        if keep_live and ui.battle_on_screen(app):
+            state["battle_active"] = True
+            write("{}: the battle goes on (the battle buttons are back); leaving it".format(reason))
             return
         if trust_end:
             if state.get("battle_started_at", 0.0) > armed_at:
@@ -305,7 +312,7 @@ def apply(ctx):
             # フェード中に切ると不自然に途切れる。
             # 少し待ってからやり直す。
             arm(reason + " (retry after fade)", force=True, trust_end=trust_end,
-                prefer_area=prefer_area)
+                prefer_area=prefer_area, keep_live=keep_live)
             return
 
         # 注入以降に鳴らした曲は Sound から src を引ける。
@@ -385,7 +392,7 @@ def apply(ctx):
         if done:
             write("sweep after {}: {}".format(reason, "; ".join(done)))
 
-    def arm(reason, force=False, trust_end=False, prefer_area=False):
+    def arm(reason, force=False, trust_end=False, prefer_area=False, keep_live=False):
         now = time.monotonic()
         if not force and now - state.get("armed_at", 0.0) < ARM_INTERVAL:
             return
@@ -398,11 +405,11 @@ def apply(ctx):
         # pygame を触るのはメインスレッドに寄せる。
         # 戦闘処理は別スレッドで走る。
         Clock.schedule_once(
-            lambda _dt: _guarded(reason, trust_end, now, prefer_area), RESTORE_DELAY)
+            lambda _dt: _guarded(reason, trust_end, now, prefer_area, keep_live), RESTORE_DELAY)
 
-    def _guarded(reason, trust_end, armed_at, prefer_area):
+    def _guarded(reason, trust_end, armed_at, prefer_area, keep_live=False):
         try:
-            sweep(reason, trust_end, armed_at, prefer_area)
+            sweep(reason, trust_end, armed_at, prefer_area, keep_live)
         except Exception:
             ctx.log_exc("bgm restore: sweep failed")
 
@@ -456,8 +463,16 @@ def apply(ctx):
 
     on_back_to_world("__main__:InstantaleApp.set_buttons_to_normal",
                      "set_buttons_to_normal")
-    on_back_to_world("__main__:InstantaleApp.refresh_choice_buttons",
-                     "refresh_choice_buttons")
+
+    def after_refresh(app):
+        """選択肢の組み直しの後（ローダの窓口 `choices` の `after`。組み直しは自分で包まない。TECH.md §3.3.14）。"""
+        try:
+            if not battle_running(app) and needs_sweep(app):
+                arm("refresh_choice_buttons")
+        except Exception:
+            ctx.log_exc("bgm restore: arm failed")
+
+    choices.provide(ctx, None, after=after_refresh)
 
     # ------------------------------------------- 注入前に鳴り始めた戦闘曲の置換
     def heal_after_load(reason):

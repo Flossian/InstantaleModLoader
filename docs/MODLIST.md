@@ -135,7 +135,7 @@
 | [`333_equipment_slots`](MODS.md#333_equipment_slots-インベントリに装備枠を追加) | インベントリに装備枠を追加 | インベントリに装備枠を追加 | 4 |  |
 | [`334_colosseum_custom`](MODS.md#334_colosseum_custom-闘技場の相手の強さと懸賞金を決める) | 闘技場のカスタマイズ | 闘技場の相手の強さと懸賞金を決める | 13 |  |
 | [`335_player_portrait_regenerate`](MODS.md#335_player_portrait_regenerate-人物欄から主人公の立ち絵を描き直せる) | 人物欄から主人公の立ち絵を描き直せる | 人物欄から主人公の立ち絵を描き直せる | - |  |
-| [`336_crime_overhaul`](MODS.md#336_crime_overhaul-犯罪まわりの全面改修) | 犯罪まわりの全面改修 | 犯罪まわりの全面改修 | 79 |  |
+| [`336_crime_overhaul`](MODS.md#336_crime_overhaul-犯罪まわりの全面改修) | 犯罪まわりの全面改修 | 犯罪まわりの全面改修 | 80 |  |
 | [`337_conversation_affinity`](MODS.md#337_conversation_affinity-会話による好感度の変動) | 会話による好感度の変動 | 会話による好感度の変動 | 4 |  |
 | [`338_town_incidents`](MODS.md#338_town_incidents-街に盗賊や疫病などの困り事や祝祭や豊作などの良い出来事が起き日を追って移り変わる) | 街の出来事 | 街に盗賊や疫病などの困り事や、祝祭や豊作などの良い出来事が起き、日を追って移り変わる | 17 |  |
 | [`339_town_factions`](MODS.md#339_town_factions-勢力ごとに主人公の見られ方が変わりその勢力の-npc-の態度に表れる) | 街の勢力 | 勢力ごとに主人公の見られ方が変わり、その勢力の NPC の態度に表れる | 14 |  |

@@ -42,9 +42,9 @@ MOD 専用プロンプトで LLM を1回だけ呼ぶ。返答のうちアンカ�
   真のまま残るので見ない（`300_` の註）。
 - パーティー会話の間は `302_`（ここで別れる）と `402_`（アイテムの受け渡し）の選択肢を落とす。
   どちらも「相手が仲間なら」で差してくるが、全員と話している場面では相手が1人に定まらない。
-  302 / 402 より後に読み込む（mod.json の `after`）。ローダの窓口 `choices` は、組み直しの前の処理を
-  後から読み込んだ MOD から、後の処理を先に読み込んだ MOD から呼ぶので、この MOD の前の処理は一番先、
-  後の処理（402 が後から差した選択肢を落とす）は一番後に走る（包みを重ねていたときの一番外側と同じ）。
+  選択肢はローダの窓口 `choices` の宣言型の口に預ける（TECH.md §3.3.14）。パーティー会話の画面は `claim` で、
+  ゲームのボタンの写しと「会話を終了する」の写し（文言だけ「話し合いを終了する」）だけを出すので、
+  ほかの MOD のボタンは窓口が出さない。ゲームのボタンの文言は書き換えないので、セーブには「会話を終了する」が残る。
 
 もとは MoririnJP 氏の `404_party_talk` v6（提供元の README.txt は work フォルダ）。
 """
@@ -92,10 +92,14 @@ START_MARK = "start"
 TALK_MARK = "talk"
 # 自前の「会話する」の文言（本体と同じ）。
 TALK_LABEL = "会話する"
-# 自前の一覧の戻る選択肢（本体と同じ文言・同じ無害 spec）。
+# 自前の一覧の戻る選択肢（本体と同じ文言）。
 BACK_LABEL = "やめる"
-# この MOD（と旧版）が作った選択肢の文言。印を失った残骸を文言で見分けて掃除する（`screen.prune_stale`）。
+# この MOD（と旧版）が作った選択肢の文言。前の版がセーブに焼いた残骸を窓口が文言で見分けて外す（`labels`）。
 OUR_LABELS = (START_LABEL, "＜パーティーメンバーと話す＞", TALK_LABEL)
+# 自前の「会話する」から開く一覧の画面の名前（窓口 `choices` の MOD だけの画面）。
+TALK_LIST_SCREEN = "talk list"
+# パーティー会話の画面を自分のボタンだけにする強さ（窓口の `claim`。336 の 40・339 の刺客の 50 より下）。
+CLAIM_PRIORITY = 30
 # 自前の立ち絵の枠に付ける印と、本体の相手枠に控える元の位置（ui.added_by_a_mod の接頭辞）。
 PORTRAIT_ATTR = ui.MOD_WIDGET_PREFIX + "party_talk_portrait"
 ORIGIN_ATTR = ui.MOD_WIDGET_PREFIX + "party_talk_origin"
@@ -126,11 +130,6 @@ RAW_FIELDS = ("name", "category", "description", "personality", "profile",
 # `320_` と同じく `DisplayTalkChoice.execute` を包んで旗を立て、別の画面の目印が見えたら下ろす。
 OTHER_SCREEN_SPECS = ("ConversationEndManager", "MovePhaseManager", "DisplayTalkChoice",
                       "DisplayAdventurerTalkChoice", "DisplayQuestChoice", "QuestChoiceManager")
-# パーティー会話の間は出さない他 MOD の選択肢（印のキーで見分ける。値は問わない）。
-#   302_leave_party_in_conversation  「ここで別れる」（mod_party_action）
-#   402_party_inventory_transfer     「＜アイテムの受け渡し＞」（mod_party_inventory_transfer_equipment）
-# どちらも「会話相手が仲間なら」で差してくるので、全員と話している場面では相手が1人に定まらず筋が合わない。
-HIDDEN_MARK_KEYS = ("mod_party_action", "mod_party_inventory_transfer_equipment")
 
 RULES = """【全体の指示】あなたはRPGの会話イベントにおける、現在この場にいるパーティーメンバーのNPCたちとしての振る舞いを再現します。対話ログはuser/assistantの入出力として記録されています。user roleがプレイヤーキャラの発言で、assistant roleがあなたの演じるNPCたちの発言です。現在の文脈に合わせ、相応しい次の発言を生成して下さい。personalityや感情の記述にかなり強く従って下さい。嫌いなら口を聞くことも嫌がるでしょうし、恐れていたり軽蔑していたらそれは口調に現れるはず。不自然に友好的になることも、プレイヤーキャラに興味を持ったり質問をすることもありません。AIアシスタントとしてのあなたの性格はさておき、ただキャラのロールプレイとして振舞ってください。
 「」や発言者名は不要です。行動描写は（）の中に記述する。
@@ -847,7 +846,8 @@ def apply(ctx):
     # ------------------------------------------------------------ 開始と終了
     def clear(reason):
         """パーティー会話の状態を畳む。枠の片付けも予約する。何度呼んでも害は無い。"""
-        if st["active"]:
+        ended = st["active"]
+        if ended:
             write("party talk end: " + reason)
         st["active"] = False
         st["anchor"] = None
@@ -857,6 +857,26 @@ def apply(ctx):
         if st["frames"] or SIDE_BY_SIDE:
             app = ui.find_app()
             screen.schedule(lambda: remove_portraits(app), 0)
+        if ended:
+            back_after_talk(ui.find_app())
+
+    def back_after_talk(app):
+        """パーティー会話を閉じた後の画面。手が空いてから、始めた画面へ戻す。
+
+        ゲームは会話を閉じる処理の中で前の選択肢を戻して組み直すが、そのときはまだ会話中の旗が残っていて、
+        自前の「会話する」が組まれないまま止まった（実機）。自前の一覧から始めたならその一覧を開き直し
+        （前の版と同じ戻り方）、ほかは窓口に組み直させる。
+        """
+        from_list, st["from_own_list"] = st.get("from_own_list"), False
+        if app is None:
+            return
+
+        def back():
+            if from_list and safe_normal(app) and enough_members(app):
+                open_own_talk_list(app)
+            else:
+                choices.repaint(app)
+        screen.when_idle(app, back, proceed_on_timeout=True, tag="party talk back")
 
     def safe_normal(app):
         """選択肢を出してよい平時か。会話中・依頼中・戦闘中・パーティー会話中は False。"""
@@ -898,21 +918,22 @@ def apply(ctx):
                 write("own {!r} withheld: {}".format(TALK_LABEL, ", ".join(busy)))
             return False
         st["busy_noted"] = None
-        return not any(isinstance(e, dict) and screen.mark_of(e) == TALK_MARK for e in buttons)
+        return True
 
     def open_own_talk_list(app):
         """自前の「会話する」から開く一覧。「パーティーメンバーと話す」と「やめる」だけ。
 
-        「やめる」は本体と同じ無害 spec（`JustSetButtonToNormalPhase`）で印を付けない。
-        押せば本体が根のメニューへ戻す。
+        窓口 `choices` の MOD だけの画面（`talk_list_screen`）。下の根のメニューは窓口が残すので、
+        「やめる」で閉じれば根のメニューに戻る。
         """
-        start = screen.button(START_LABEL, mark=START_MARK)
-        back = screen.button(BACK_LABEL)
-        if start is None or back is None:
-            write("WARN cannot build the party talk list")
-            return
-        st["talk_list"] = True
-        screen.apply_buttons(app, [start, back], "party talk list")
+        choices.open_screen(app, owner["key"], TALK_LIST_SCREEN)
+
+    def talk_list_screen(app, _view, _data):
+        """自前の一覧のボタン。平時でなくなった・仲間が減ったら閉じる（None）。"""
+        if not safe_normal(app) or not enough_members(app):
+            return None
+        return [choices.Choice(START_LABEL, marks={MARK_KEY: START_MARK}, on_press=press_start),
+                choices.Choice(BACK_LABEL, on_press=lambda app: choices.close_screen(app, owner["key"]))]
 
     def open_talk(app):
         """「パーティーメンバーと話す」を押した後。アンカーを選び、本体の会話に入る。
@@ -965,99 +986,84 @@ def apply(ctx):
         st["talk_list"] = False
         return orig(self, choice_text, *args, **kwargs)
 
-    def refresh(self, _buttons):
-        """ゲームが並べ終えたボタンを、描く前に整える（`320_` と同じ順。窓口 `choices` から、組み直しの前に）。
+    def refresh(self, buttons):
+        """組み直しの前（窓口 `choices` の `refresh`）。ボタンは足さず、ゲームの一覧と状態だけ整える。
 
-        パーティー会話の最中: 「会話を終了する」を END_LABEL に描き替え、立ち絵の並べ直しを予約。
-        それ以外: 残骸を掃除し、相手一覧なら「やめる」の手前に START_LABEL を差す。
-        相手一覧でない根のメニューで、NPC が居なくて本体の「会話する」が無ければ自前の
-        「会話する」を末尾に足す。本体が描いた後、302 / 402 の選択肢を落とす。
+        パーティー会話の最中: 会話画面が組まれた合図で、立ち絵の並べ直しを予約する。
+        それ以外: 前の版がセーブに残した「話し合いを終了する」（ゲームのボタンの文言を書き換えていた）を
+        ゲームの文言へ戻し、前の版の印の付いた自前のボタン（窓口が印を付け直したもの）を外す。
         """
         try:
-            buttons = getattr(self, "buttons", None)
-            if isinstance(buttons, list):
-                if st["active"]:
-                    _partner, end_entry = ui.conversation_partner(buttons)
-                    if isinstance(end_entry, dict):
-                        # 会話画面が組まれた合図。立ち絵はこのタイミング以降に並べる。
-                        schedule_layout(self)
-                        end_entry["text"] = END_LABEL
-                else:
-                    # ボタンはセーブに残る。パーティー会話の途中でロードすると、1対1で再開した会話の
-                    # 「会話を終了する」が END_LABEL のまま残るので、ゲームの文言へ戻す
-                    _partner, end_entry = ui.conversation_partner(buttons)
-                    if isinstance(end_entry, dict) and end_entry.get("text") == END_LABEL:
-                        end_entry["text"] = GAME_END_LABEL
-                        write("restored {!r} to {!r} (not a party talk)".format(END_LABEL, GAME_END_LABEL))
-                    screen.prune_stale(buttons, OUR_LABELS)
-                    at = talk_list_slot(buttons)
-                    if (at is not None and safe_normal(self) and enough_members(self)
-                            and not any(isinstance(e, dict) and screen.mark_of(e) == START_MARK
-                                        for e in buttons)):
-                        entry = screen.button(START_LABEL, mark=START_MARK)
-                        if entry is not None:
-                            buttons.insert(at, entry)
-                            write("added {!r} to the talk list; buttons={}".format(
-                                START_LABEL, len(buttons)))
-                    elif safe_normal(self) and enough_members(self) and wants_own_talk_choice(self, buttons):
-                        entry = screen.button(TALK_LABEL, mark=TALK_MARK)
-                        if entry is not None:
-                            buttons.append(entry)      # 本体も「会話する」は末尾に足す（GAME.md §2.21）
-                            write("added own {!r} (no NPC here); buttons={}".format(
-                                TALK_LABEL, len(buttons)))
+            if not isinstance(buttons, list):
+                return
+            _partner, end_entry = ui.conversation_partner(buttons)
+            if st["active"]:
+                if isinstance(end_entry, dict):
+                    schedule_layout(self)
+                return
+            if isinstance(end_entry, dict) and end_entry.get("text") == END_LABEL:
+                end_entry["text"] = GAME_END_LABEL
+                write("restored {!r} to {!r} (not a party talk)".format(END_LABEL, GAME_END_LABEL))
+            old = [entry for entry in buttons
+                   if isinstance(entry, dict) and MARK_KEY in entry and not choices.ours(entry)]
+            if old:
+                buttons[:] = [entry for entry in buttons if not any(entry is o for o in old)]
+                write("dropped {} button(s) with the older mark".format(len(old)))
         except Exception:
             ctx.log_exc("party talk: refresh failed")
 
-    def after_refresh(self):
-        """組み直しの後（窓口 `choices` の `after`。404 は 402 より後に読み込むので、402 の後ろの処理より後に走る）。"""
-        if st["active"]:
-            args, kwargs = choices.refreshing() or ((), {})
-            reset_page = kwargs.get("reset_page", args[0] if args else False)
-            try:
-                hide_other_party_choices(self, reset_page)
-            except Exception:
-                ctx.log_exc("party talk: cannot hide the other party choices")
-
-    def hide_other_party_choices(app, reset_page):
-        """パーティー会話の間、302 / 402 の選択肢を外す。
-
-        302 は `orig` の前に、402 は `orig` の後に差してくるので、こちらは一番外側で
-        `orig` が返った後に落とす。落としたら**素の** `refresh_choice_buttons` を呼び直して
-        表示（`to_display_buttons` / `display_button_map`）を組み直す。包んだ連鎖を通すと
-        402 がまた差すので、`patch.unwrap` で底の関数を取る。
-        302 / 402 は次の描き直しでも差してくるが、そのたびにここで落ちる（両方のログに
-        `added` が1行ずつ残る。パーティー会話中に限る）。
-        """
-        buttons = getattr(app, "buttons", None)
-        if not isinstance(buttons, list):
-            return
-        kept = [e for e in buttons
-                if not (isinstance(e, dict) and any(k in e for k in HIDDEN_MARK_KEYS))]
-        if len(kept) == len(buttons):
-            return
-        buttons[:] = kept
-        from instantale_modloader import patch as _patch
-        raw = _patch.unwrap(type(app).refresh_choice_buttons)[0]
-        raw(app, reset_page)
-        write("hid the party-only choices of other mods ({} left)".format(len(buttons)))
-
-    def press(self, action):
-        """自前の選択肢が押された（窓口 `choices` の `presses`）。
-
-        会話の開始は次のフレームへ予約する（押下の処理の中で phase を切り替えると
-        本体が同じ押下の後始末で上書きするため）。
-        """
-        if action == TALK_MARK:
-            write("pressed own {!r}".format(TALK_LABEL))
-            open_own_talk_list(self)
+    def offer(app, view):
+        """相手一覧に「パーティーメンバーと話す」、NPC 不在の根のメニューに自前の「会話する」（窓口の `offer`）。"""
+        if st["active"] or not safe_normal(app) or not enough_members(app):
             return None
-        write("pressed {!r}".format(START_LABEL))
-        screen.schedule(lambda: open_talk(self), 0)
+        at = talk_list_slot(view.buttons)
+        if at is not None:
+            return [choices.Choice(START_LABEL, place=choices.at(at), marks={MARK_KEY: START_MARK},
+                                   on_press=press_start)]
+        if wants_own_talk_choice(app, view.buttons):
+            # 本体も「会話する」は末尾に足す（GAME.md §2.21）
+            return [choices.Choice(TALK_LABEL, marks={MARK_KEY: TALK_MARK}, on_press=press_talk)]
         return None
 
-    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
-    choices.provide(ctx, screen, refresh=refresh, after=after_refresh,
-                    presses={TALK_MARK: press, START_MARK: press})
+    def claim(app, view):
+        """パーティー会話の画面（窓口の `claim`）。ゲームのボタンの写しだけを出し、ほかの MOD のボタンは出さない。
+
+        302 の「ここで別れる」と 402 の受け渡しは「会話相手が仲間なら」で出てくるが、
+        全員と話している場面では相手が1人に定まらない。「会話を終了する」は写しの文言を END_LABEL にする
+        （ゲームのボタンは書き換えない）。写しはどれも押すとゲームへ流れる。
+        """
+        if not st["active"] or view.end_entry is None:
+            return None
+        out = []
+        for entry in view.buttons:
+            if not isinstance(entry, dict) or ui.Screen.marked_by_a_mod(entry):
+                continue                    # 今の口の MOD のボタン（印つき）は出さない
+            text = END_LABEL if entry is view.end_entry else str(entry.get("text") or "")
+            out.append(choices.Choice(text, base=entry))
+        return out
+
+    def press_talk(app):
+        """自前の「会話する」が押された（窓口がボタンに持たせた処理）。"""
+        write("pressed own {!r}".format(TALK_LABEL))
+        open_own_talk_list(app)
+        return None
+
+    def press_start(app):
+        """「パーティーメンバーと話す」が押された。会話の開始は次のフレームへ予約する
+        （押下の処理の中で phase を切り替えると本体が同じ押下の後始末で上書きするため）。
+        """
+        write("pressed {!r}".format(START_LABEL))
+        opened = choices.opened(app) or {}
+        st["from_own_list"] = opened.get("owner") == owner["key"] and opened.get("name") == TALK_LIST_SCREEN
+        choices.close_screen(app, owner["key"], repaint_now=False)
+        screen.schedule(lambda: open_talk(app), 0)
+        return None
+
+    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14 の宣言型の口）に預ける。
+    owner = {"key": None}
+    owner["key"] = choices.provide(ctx, screen, refresh=refresh, offer=offer, claim=claim,
+                                   priority=CLAIM_PRIORITY, screens={TALK_LIST_SCREEN: talk_list_screen},
+                                   labels=OUR_LABELS)
 
     @ctx.wrap("scripts.llm.llm_manager:conversation_facilitator", required=False)
     def facilitator(orig, *args, **kwargs):

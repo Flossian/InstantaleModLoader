@@ -42,6 +42,7 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml                      # noqa: E402
+from instantale_modloader import choices              # noqa: E402
 
 
 def find_mod(suffix):
@@ -101,6 +102,8 @@ class World:
         self.areas = areas
         self.quests = quests
         self.name = "テスト世界"
+        # 人物が揃った世界（窓口 `choices` は人物が 0 人の間をロードの途中と見て MOD の選択肢を組まない）
+        self.characters = {"1": object()}
 
 
 class Player:
@@ -620,6 +623,7 @@ def setup(configure=None, levels=None, keep_state=False, mod=None):
 
     install_fake_functions(levels if levels is not None else AREA_LEVELS)
 
+    choices.reset()                       # 前の検査の窓口の登録を持ち越さない
     module = mod if mod is not None else load_mod()
     if configure is not None:
         configure(module)
@@ -759,9 +763,13 @@ entry = road_entry(app)
 check("自前のクラス名を PhaseSpec に書かない",
       entry["spec"].to_dict()["cls_name"] == "JustSetButtonToNormalPhase",
       entry["spec"].to_dict())
-check("印はこの mod のもの", entry.get("mod_road_action") == "road", entry)
-check("画面も塗り直す", app.hud.painted and "危険な道を行く" in app.hud.painted[-1],
-      app.hud.painted[-1:])
+check("窓口のボタン（押下は窓口がボタンに持たせた処理を呼ぶ）", choices.ours(entry), entry)
+check("ほかの MOD が見分ける印はこの mod のもの", entry.get("mod_road_action") == "road", entry)
+check("ゲームの組み直しの中で組む（画面へ運ぶ一覧に出る）", "危険な道を行く" in app.to_display_buttons,
+      app.to_display_buttons)
+check("保存の前に外すと確認画面のゲームのボタンだけになる",
+      [e.get("text") for e in choices.strip(app.buttons)[0]] == [WALK_TEXT, CARRIAGE_TEXT, "やめる"],
+      choices.strip(app.buttons))
 show_confirmation(app, confirm_cls)
 check("開き直しても二重にならない",
       [t for t in [e.get("text") for e in app.buttons]
@@ -778,8 +786,12 @@ restored = [{"text": mod.ROAD_LABEL,
              "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}]
 check("印の落ちた自前ボタンを残骸として掴む",
       screen.prune_stale(restored, mod.OUR_LABELS) == [mod.ROAD_LABEL], restored)
-check("確認画面の掃除が仕掛けてある",
-      "prune_stale(buttons, OUR_LABELS)" in open(MOD, encoding="utf-8").read())
+check("前の版の残骸の文言を窓口に渡している",
+      list(mod.OUR_LABELS) == list(choices._labels()), choices._labels())
+app.buttons = restored + [{"text": "やめる", "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}]
+app.refresh_choice_buttons(reset_page=True)
+check("組み直しで前の版の残骸を外す", [e.get("text") for e in app.buttons] == ["やめる"],
+      [e.get("text") for e in app.buttons])
 
 # 他 MOD の生きているボタン（印のキーだけが違う）を巻き込まないこと。
 foreign = [{"text": mod.ROAD_LABEL, "mod_pardon_action": "open",

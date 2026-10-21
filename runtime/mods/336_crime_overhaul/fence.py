@@ -18,12 +18,11 @@
   2つに絞ったまま残った（実機）
 - 司法取引で裏の事務所を売った締め出しの間は出さない（`office`）
 """
-from instantale_modloader import ui
+from instantale_modloader import choices, ui
 
 from . import common, office
 
 LABEL = "盗品を売る"
-MARK = "fence:open"
 #: 売買の窓の左の見出し。ゲームは短い語しか出さない（主の名前を渡すと末尾だけが出た。実機）。
 WINDOW_LABEL = "買取"
 WINDOW_SITUATION = "shop"
@@ -105,25 +104,22 @@ def install(env):
             len(gone), getattr(broker, "name", None), names))
 
     def on_refresh(app, buttons):
+        """窓が閉じていれば、売った品を主の持ち物から片付ける（閉じる前にゲームが落ちた回の控えも）。"""
         if not window_open(app) and not env.fence.get("opening"):
             with worlds.lock:
                 pending = worlds.load(worlds.playthrough(app)).get("fence")
             if env.fence.get("broker") or pending is not None:
                 clear_bought(app)
-        buttons[:] = [entry for entry in buttons if screen.mark_of(entry) != MARK]
-        screen.prune_stale(buttons, (LABEL,))
-        if not common.is_facility_screen(buttons) or getattr(app, "in_conversation", False):
-            return              # 施設の最初の画面だけ（入ったときの話しかけの選択肢には足さない。実機）
+
+    def offer(app, view):
+        """事務所の最初の画面に「盗品を売る」を出す（「出る」の手前）。"""
+        if not common.is_facility_screen(view.buttons) or getattr(app, "in_conversation", False):
+            return None         # 施設の最初の画面だけ（入ったときの話しかけの選択肢には足さない。実機）
         if not cfg.FENCE_ENABLED or not in_office(app) or env.underworld_banned(app):
-            return
+            return None
         if not holds_stolen(app):
-            return
-        entry = screen.button(LABEL, mark=MARK)
-        if entry is None:
-            return
-        at = next((index for index, item in enumerate(buttons)
-                   if ui.spec_cls_name(item) == common.FACILITY_MARK), len(buttons))
-        buttons.insert(at, entry)
+            return None
+        return [choices.Choice(LABEL, place=choices.before(common.FACILITY_MARK), on_press=press)]
 
     class FencePhase(object):
         """自前のフェーズ。ゲームの店（`ShoppingStartManagerRemake`）と同じく `process_choice` を通して開く。
@@ -174,15 +170,15 @@ def install(env):
         if callable(normal):
             normal()
         else:
-            screen.apply_buttons(app, None, "fence")
+            choices.repaint(app)
 
-    def press(app, action):
+    def press(app):
         found = broker_here(app)
         if found is None or getattr(app, "player", None) is None or getattr(app, "in_conversation", False):
             write("WARN fence: no broker here or in a conversation ({})".format(
                 getattr(app, "in_conversation", None)))
-            screen.apply_buttons(app, None, "fence")
-            return
+            choices.repaint(app)
+            return None
         broker_id, broker = found
         playthrough = worlds.playthrough(app)
         with worlds.lock:
@@ -193,13 +189,14 @@ def install(env):
         # 窓を開いている間は「出る」「会話する」（と、組み直しで付く「盗品を売る」）だけにする。
         # 事務所の選択肢は左の4つに収まらず、塗り直すと右の欄が窓の上に開く（GAME.md §2.2）。
         # 閉じたら `restore_choices` で事務所の選択肢に戻す（ゲームの後始末は、この開き方では選択肢を戻さなかった。実機）。
-        app.buttons = [entry for entry in (getattr(app, "buttons", None) or [])
+        app.buttons = [entry for entry in choices.game_buttons(app)
                        if ui.spec_cls_name(entry) in KEEP_WHILE_OPEN]
         app.buttons_backup_for_shopping = list(app.buttons)
         if not screen.start_phase(app, FencePhase(app, broker_id), LABEL):
             env.fence["opening"] = False
             clear_bought(app)
             restore_choices(app)
+        return None
 
     @ctx.wrap("__main__:InstantaleApp.on_close_window", required=False, safe=True)
     def on_close_window(orig, self, *args, **kwargs):
@@ -235,4 +232,5 @@ def install(env):
         return None
 
     env.on_refresh(on_refresh)
-    env.on_press(MARK, press)
+    env.on_offer(offer)
+    env.on_labels(lambda app: (LABEL,))

@@ -18,6 +18,7 @@
 | `court` | 裁判の改修（釈明の知らせ・弁護人・司法取引・判事の買収・情状）。決まりは `trial` |
 | `encounter` | 衛兵に見つかった場面での、衛兵の買収 |
 | `rescue` | 死刑の判決の後の、処刑場からの脱出（ダンジョン） |
+| `custody` | 身柄の拘束（捕まったら仲間を解散させる・牢に居る間は閉じ込めていると窓口へ） |
 | `common` | 共有の土台（ゲームの値の読み方・控え・画面の部品・振り分け） |
 | `rules` | 数の決まり（ゲームに触らない） |
 """
@@ -26,7 +27,7 @@ import random
 
 from instantale_modloader import choices, wanted
 
-from . import cellmate, common, court, encounter, fence, law, loot, office, prison, rescue, theft
+from . import cellmate, common, court, custody, encounter, fence, law, loot, office, prison, rescue, theft
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
 #      `tools/check_mods.py` が AST で突き合わせる）------------------------
@@ -109,6 +110,10 @@ RESCUE_ENABLED = True         # 死刑の判決の後、好感度の高い人物
 RESCUE_AFFINITY = 60          # 手引きしてくれる好感度（60 は「仲間だと感じている」）
 RESCUE_DIFFICULTY_PLUS = 10   # 脱出の難易度。土地の難易度とパーティの平均レベルの高いほうに足す
 RESCUE_LOSS = 30              # 脱出したとき、捕まった土地で下がる手配度
+CUSTODY_DISBAND = True        # 捕まったら（裁判の前に）仲間と引き離し、パーティを解散させる
+
+#: 窓口 `choices` の `claim`（無罪放免の判決の画面）の優先度。`339_` の刺客の会話（50）より低い。
+CLAIM_PRIORITY = 40
 
 #: 盗み・脱獄の判定の乱数。グローバルの `random` から引くとゲーム自身の乱数列がずれる（TECH.md §6.1）。
 #: 機能のファイルは `env.cfg._RNG` をその場で読む（確かめるときにここを差し替えられる）。
@@ -131,7 +136,7 @@ class _Settings(object):
 def apply(ctx):
     env = common.Env(ctx, _Settings())
     screen = env.screen
-    for feature in (loot, law, theft, office, fence, prison, cellmate, court, rescue, encounter):
+    for feature in (custody, loot, law, theft, office, fence, prison, cellmate, court, rescue, encounter):
         feature.install(env)
 
     # ---- ゲームの入口は1枚だけ包み、機能へ配る ------------------------------------------
@@ -145,15 +150,47 @@ def apply(ctx):
         return orig(self, context, *args, **kwargs)
 
     # ---- 選択肢と押下は、ローダの窓口 `choices`（TECH.md §3.3.14）に預ける ---------------------
-    # 組み直しへの差し込み、押下の振り分け、セーブで落ちた印の付け直し、ロードの後の組み直し
-    # （人物が揃ってから）は窓口が1か所で引き受ける。ここは機能の処理を読み込んだ順に渡すだけ。
+    # 自前のボタンは宣言型の口で、組み直しのたびに機能の状態から作る（押下は窓口がボタンの処理を呼ぶ。
+    # セーブには残らず、ロードの後も人物が揃ってから組み直す）。ゲームの一覧を直す処理だけ `refresh` に残す。
+    # ここは機能の処理を読み込んだ順に渡すだけ。
     def refresh(app, buttons):
         if not isinstance(buttons, list) or not buttons:
             return
+        dropped = common.drop_old_marks(buttons)
+        if dropped:
+            env.write("dropped the older version's marks on {}".format(dropped))
         for handler in env.refresh_handlers:
             handler(app, buttons)
 
-    choices.provide(ctx, screen, refresh=refresh, presses=dict(env.press_handlers))
+    def gather(handlers, what, *args):
+        """機能ごとの宣言を呼ぶ。1つが落ちても、ほかの機能のボタンは出す。"""
+        for handler in handlers:
+            try:
+                yield handler(*args)
+            except Exception:
+                ctx.log_exc("crime incentive: a feature could not build its {}".format(what))
+
+    def offer(app, view):
+        out = []
+        for found in gather(env.offer_handlers, "choices", app, view):
+            out.extend(found or ())
+        return out
+
+    def claim(app, view):
+        for found in gather(env.claim_handlers, "claim", app, view):
+            if found:
+                return found
+        return None
+
+    def labels(app):
+        out = []
+        for found in gather(env.label_handlers, "labels", app):
+            out.extend(found or ())
+        return out
+
+    env.choices_owner = choices.provide(
+        ctx, screen, refresh=refresh, offer=offer, claim=claim,
+        screens=dict(env.screen_builders), labels=labels, priority=CLAIM_PRIORITY)
 
     ctx.log("crime incentive: installed (loot {} shares {} floor {}% ceiling {}%; "
             "intimidation {} {}%/pt cap {}% sell {} unafraid at affinity {}; statute {} +{} per {} month(s) up to {}, "

@@ -47,6 +47,7 @@ if RUNTIME_DIR not in sys.path:
 
 import instantale_modloader as ml                              # noqa: E402
 from instantale_modloader import durations, modfacility, modnpc  # noqa: E402
+from instantale_modloader import choices                # noqa: E402
 from instantale_modloader import holdings as holdings_window, hudicons  # noqa: E402
 from instantale_modloader import state as loader_state          # noqa: E402
 
@@ -251,6 +252,9 @@ class World:
         self.areas = {}
         self.days_elapsed = 100
         self.characters = {}
+        # 人物が揃った世界にする（窓口 `choices` は人物が 0 人の間を読み込みの途中と見て MOD の選択肢を組まない）
+        if getattr(app, "player", None) is not None:
+            self.characters["player"] = app.player
         for area_id, area_data in ((save_data_dict or {}).get("areas") or {}).items():
             area = Area(str(area_id), area_data.get("name") or "")
             for node_id, node_data in (area_data.get("nodes") or {}).items():
@@ -635,8 +639,10 @@ def setup(keep_state=False, extra_in_village=(), gold=500000, configure=None):
     os.makedirs(OUT_DIR, exist_ok=True)
     if os.path.exists(LOG_PATH):
         os.remove(LOG_PATH)
+    # 窓口 `choices` の置き場（開いた画面・印の控え）は `sys` に在って注入をまたぐ。前の検査の画面を持ち越さない
+    choices.reset()
     if not keep_state:
-        for folder in (STATE_DIR,
+        for folder in (STATE_DIR, os.path.join(OUT_DIR, "state", choices.STATE_DIRNAME),
                        os.path.join(OUT_DIR, "state", modfacility.STATE_DIRNAME),
                        os.path.join(OUT_DIR, "state", modnpc.STATE_DIRNAME)):
             if os.path.isdir(folder):
@@ -868,6 +874,19 @@ check("村では宿屋だけが並ぶ", app.has("宿屋を建てる") and not ap
 check("まだ持っていないので一覧は出ない", not app.has(module.STATUS_LABEL), app.labels())
 app.press(module.CANCEL_LABEL)
 check("「やめる」で役場の選択肢に戻る", app.has(EXIT_TEXT) and not app.has("宿屋を建てる"),
+      app.labels())
+
+print("[等級の画面で保存して読み直す]")
+game_office = [e for e in app.buttons if e.get("text") != module.DESK_LABEL]
+app.press(module.DESK_LABEL)
+app.press("宿屋を建てる")
+tiers = app.labels()
+app.buttons = [dict(e) for e in game_office]           # ロード: セーブの一覧が戻り、メモリの控えは消えた
+choices._store()["opened"].clear()
+app.facility_screen()
+check("読み直しても同じ種類の等級の画面に戻る（選んだ種類は画面の控えに持つ）", app.labels() == tiers, app.labels())
+app.press(module.CANCEL_LABEL)
+check("やめると役場の選択肢に戻る", app.has(module.DESK_LABEL) and not app.has(cat.TIER_LABEL["basic"]),
       app.labels())
 
 print("[出資]")

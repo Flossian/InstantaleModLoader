@@ -43,6 +43,7 @@ if RUNTIME_DIR not in sys.path:
 
 import instantale_modloader as ml                      # noqa: E402
 from instantale_modloader.npcs import NPC_FIELD_ORDER  # noqa: E402
+from instantale_modloader import choices               # noqa: E402
 
 
 def find_mod(suffix):
@@ -503,8 +504,22 @@ def main():
     run_refresh(ctx, app)
     marked = [entry for entry in app.buttons
               if entry.get("text") == module.RECRUIT_LABEL]
-    check("残骸: 印の無い復元ボタンは落として差し直す",
-          len(marked) == 1 and marked[0].get(module.MARK) is not None, marked)
+    check("残骸: 印の無い復元ボタンは落として差し直す（窓口 `choices` が組んだボタン1つ）",
+          len(marked) == 1 and choices.ours(marked[0]), marked)
+    saved = []
+    ctx.hooks["__main__:InstantaleApp.save_game"](
+        lambda self: saved.append([entry.get("text") for entry in self.buttons]), app)
+    check("保存: 募集ボタンはセーブに残らない（窓口が保存の間だけ外す）",
+          saved and module.RECRUIT_LABEL not in saved[0] and module.RECRUIT_LABEL in button_texts(app),
+          (saved, button_texts(app)))
+    app.buttons = [entry for entry in app.buttons if not choices.ours(entry)]
+    app.buttons.insert(len(app.buttons) - 1,
+                       {"text": module.RECRUIT_LABEL, module.MARK: "recruit",
+                        "spec": PhaseSpec("JustSetButtonToNormalPhase", [])})
+    run_refresh(ctx, app)
+    marked = [entry for entry in app.buttons if entry.get("text") == module.RECRUIT_LABEL]
+    check("残骸: 前の版の印が付け直されたボタンも落として組み直す",
+          len(marked) == 1 and choices.ours(marked[0]) and not marked[0].get(module.MARK), marked)
 
     # -- 募集 ------------------------------------------------------------
     module, ctx = fresh_mod()

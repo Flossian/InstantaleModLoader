@@ -623,21 +623,60 @@ finally:
 check("evasion: enemies do not dodge by default", "evasion rolled" not in _log(), _log())
 
 # 防御ボタンの連打。2発目は捨て、次のスキル一覧が出たらまた押せる（実機で 0.18 秒差の2発が1巡を2回走らせた）。
+# 防御のボタンは窓口 `choices` の宣言型の口（`offer`）が組み、押下は窓口がボタンに持たせた処理を呼ぶ。
+from instantale_modloader import choices as _choices          # noqa: E402
+
+
+
+class _PhaseSpec(object):
+    """窓口が自前のボタンに載せる無害な spec を組むのに使う（ゲームの `PhaseSpec` の代役）。"""
+
+    def __init__(self, cls_name, args):
+        self.cls_name, self.args = cls_name, list(args)
+
+
+if not isinstance(getattr(sys.modules["__main__"], "PhaseSpec", None), type):
+    sys.modules["__main__"].PhaseSpec = _PhaseSpec
+
 _ctx = _fresh()
 _chosen = []
+_cancel = {"text": "やめる", "spec": types.SimpleNamespace(cls_name=mod.CANCEL_MANAGER_CLS, args=[])}
 _guard_app = types.SimpleNamespace(
-    player=_hero, current_enemy_dict={}, add_text=lambda text: None,
-    buttons=[{"text": "防御", mod.MARK: "guard"}], display_button_map=None,
+    player=_hero, current_enemy_dict={"灰の王": object()}, in_battle=True, add_text=lambda text: None,
+    buttons=[_cancel], display_button_map=None,
     function_correspond_to_input=None,
     process_choice=lambda manager, text: _chosen.append(text))
+_provider = _choices._store()["providers"][_Ctx._mod]
+
+
+def _guard_screen():
+    """スキル一覧を開いた形にして、窓口が組む並び（防御・やめる）を作る。"""
+    _ctx.hooks["__main__:SkillChoicePhaseManager.display_skill_choices"](lambda self: None, object())
+    picked = _provider["offer"](_guard_app, _choices.View(_guard_app, [_cancel])) or []
+    buttons = [_cancel]
+    for choice in picked:
+        _choices._place(buttons, _choices._entry_of(_Ctx._mod, choice, None), choice.place, {})
+    _guard_app.buttons = buttons
+    return [entry.get("text") for entry in buttons]
+
+
+check("guard: the skill list gets the guard before the cancel",
+      _guard_screen() == [mod.GUARD_BUTTON_LABEL, "やめる"], _guard_app.buttons)
 _press = _ctx.hooks["__main__:InstantaleApp.on_button_press"]
 _press(lambda *a, **k: None, _guard_app, 0)
 _press(lambda *a, **k: None, _guard_app, 0)
 check("guard: a second press while the turn runs is ignored",
       "guard button ignored" in _log() and _log().count("guard button pressed") == 1, _log())
-_ctx.hooks["__main__:SkillChoicePhaseManager.display_skill_choices"](lambda self: None, object())
+check("guard: no guard once a button was pressed (the skill list is over)",
+      not (_provider["offer"](_guard_app, _choices.View(_guard_app, [_cancel])) or []))
+_guard_screen()
 _press(lambda *a, **k: None, _guard_app, 0)
 check("guard: the next skill list lets it be pressed again", _log().count("guard button pressed") == 2, _log())
+old = [{"text": mod.GUARD_BUTTON_LABEL, "spec": types.SimpleNamespace(cls_name=_ui.SAFE_CLS, args=[]),
+        mod.MARK: "guard"}, _cancel]
+_guard_app.buttons = old
+_provider["refresh"](_guard_app, old)
+check("guard: a guard button with the older mark is dropped", _guard_app.buttons == [_cancel], _guard_app.buttons)
 
 # 防御ボタンの手番は、審判が出したダメージを入れない（敵の攻撃を描いて主人公の手の結果にすることがある。実機）。
 _ctx = _fresh()

@@ -54,6 +54,8 @@ GROUPS = (
      "裏の事務所の「裏の依頼掲示板」から、手配の重さに応じた裏の仕事を受ける"),
     ("guard", "衛兵の買収", "GUARD_BRIBE_ENABLED", ("GUARD_BRIBE_",),
      "衛兵に見つかったとき、金を握らせて見逃してもらう"),
+    ("custody", "捕まったとき", "CUSTODY_DISBAND", ("CUSTODY_",),
+     "捕まったら裁判の前に仲間と引き離し、パーティを解散させる"),
     ("trial", "裁判の改修", None, ("TRIAL_",),
      "釈明の知らせ・情状・弁護人・司法取引・袖の下・釈明しだいで無罪。手ごとに入切がある"),
     ("jailbreak", "脱獄", "JAILBREAK_ENABLED", ("JAILBREAK_",),

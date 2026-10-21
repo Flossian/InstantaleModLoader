@@ -76,8 +76,8 @@ k は審判の power で決まる（weak 1.0 〜 extreme 約 2.45）。
     押すと自由入力と同じ経路（`function_correspond_to_input` の `PhaseSpec`）に
     防御の文を流すので、**1手をちゃんと消費して**敵の手番が来る。
     経路が読めない画面では、構えだけ付けてその旨をログに残す
-    （ボタンの作法は GAME.md §2.2。無害な `JustSetButtonToNormalPhase` を spec に
-    持たせ、押下は `on_button_press` で印を見て横取りする。
+    （ボタンはローダの窓口 `choices` の宣言型の口が組む。TECH.md §3.3.14。
+    押下は窓口がボタンに持たせた処理を呼び、セーブには残らない。
     改名した text はセーブに焼かれうるが、MOD 無しで読んでも押せば普通に
     スキル一覧が開き、次の画面の組み直しで素の名前に戻る）
 
@@ -111,7 +111,8 @@ _RNG = random.Random()
 LOG_BASENAME = "battle_tactics.log"
 LOG_TAG = "battle tactics"
 
-# ボタン辞書に付ける印のキー。mod ごとに別の文字列にする（TECH.md §3.3）。
+# 版19までの防御のボタンの印のキー。いまは窓口が組むので付けない。
+# セーブから戻った前の版の印のボタンを落とすためだけに残す（`refresh_choice_buttons`）。
 MARK = "mod_battle_tactics"
 
 ENEMY_SIDE = "enemy"
@@ -1278,11 +1279,20 @@ def apply(ctx):
         return orig(self, *args, **kwargs)
 
     def refresh_choice_buttons(self, _buttons):
+        """組み直しの前（窓口 `choices` の `refresh`）。戦闘の画面のスキルのボタンを「スキル・防御」に改名する。
+
+        防御のボタンは `offer` が出す。ここはゲームのボタンの文言と場面の旗だけ。
+        """
         if GUARD_BUTTON:
             try:
                 buttons = getattr(self, "buttons", None)
                 if isinstance(buttons, list):
-                    screen.prune_stale(buttons, (GUARD_BUTTON_LABEL,))
+                    # 版19までの印の付いた防御のボタン（窓口が印を付け直したもの）。いまは窓口が組むので落とす
+                    old = [entry for entry in buttons if isinstance(entry, dict) and entry.get(MARK)
+                           and ui.spec_cls_name(entry) == ui.SAFE_CLS]
+                    if old:
+                        buttons[:] = [entry for entry in buttons if not any(entry is d for d in old)]
+                        write("dropped {} guard button(s) with the older mark".format(len(old)))
                     if not in_battle_screen(self):
                         state["skill_screen"] = False
                         state["input_spec_logged"] = False
@@ -1295,41 +1305,28 @@ def apply(ctx):
                         if skill_entry is not None \
                                 and skill_entry.get("text") != SKILL_MENU_LABEL:
                             skill_entry["text"] = SKILL_MENU_LABEL
-                        # スキル一覧: 「やめる」の手前に防御を入れる
-                        # （スキル1・（スキル2）・防御・やめる の並び）。
-                        # 「やめる」が見つからなければ末尾。
-                        if state["skill_screen"] \
-                                and not any(screen.mark_of(entry)
-                                            for entry in buttons):
-                            entry = screen.button(GUARD_BUTTON_LABEL,
-                                                  mark="guard")
-                            if entry is not None:
-                                at = len(buttons)
-                                for index, existing in enumerate(buttons):
-                                    if ui.spec_cls_name(existing) \
-                                            == CANCEL_MANAGER_CLS:
-                                        at = index
-                                        break
-                                buttons.insert(at, entry)
-                                write("guard into the skill list at {}: {}"
-                                      .format(at,
-                                              [(e.get("text"),
-                                                ui.spec_cls_name(e))
-                                               for e in buttons
-                                               if isinstance(e, dict)]))
-                            if not state["input_spec_logged"]:
-                                # 自由入力の流し先を1戦闘1回だけ写す。
-                                # ボタンが1手を消費できない画面が来たとき、
-                                # この行が原因の切り分けになる。
-                                state["input_spec_logged"] = True
-                                spec = getattr(self,
-                                               "function_correspond_to_input",
-                                               None)
-                                write("battle input spec: {} {}".format(
-                                    ui.spec_cls_name({"spec": spec}),
-                                    ui.spec_args({"spec": spec})))
             except Exception:
-                ctx.log_exc("battle tactics: cannot place the guard button")
+                ctx.log_exc("battle tactics: cannot relabel the skill button")
+
+    def offer(app, view):
+        """スキル一覧の「やめる」の手前に防御を出す（窓口 `choices` の `offer`）。
+
+        スキル1・（スキル2）・防御・やめる の並び。「やめる」が見つからなければ末尾。
+        """
+        if not GUARD_BUTTON or not state["skill_screen"] or not in_battle_screen(app):
+            return None
+        if not state["input_spec_logged"]:
+            # 自由入力の流し先を1戦闘1回だけ写す。
+            # ボタンが1手を消費できない画面が来たとき、
+            # この行が原因の切り分けになる。
+            state["input_spec_logged"] = True
+            spec = getattr(app, "function_correspond_to_input", None)
+            write("battle input spec: {} {}".format(
+                ui.spec_cls_name({"spec": spec}), ui.spec_args({"spec": spec})))
+            write("guard into the skill list: {}".format(
+                [(e.get("text"), ui.spec_cls_name(e)) for e in view.buttons if isinstance(e, dict)]))
+        return [choices.Choice(GUARD_BUTTON_LABEL, place=choices.before(CANCEL_MANAGER_CLS),
+                               on_press=on_button_press)]
 
     def look_at_press(self, entry, _button_index):
         """どのボタンが押されても先に通る（窓口 `choices` の `intercept`）。押下は握らない。"""
@@ -1338,8 +1335,8 @@ def apply(ctx):
         state["skill_screen"] = False
         return False
 
-    def on_button_press(self, action):
-        """自前のボタンが押された（窓口 `choices` の `presses`）。"""
+    def on_button_press(self):
+        """防御のボタンが押された（窓口がボタンに持たせた処理として呼ぶ）。"""
         if state["guard_pending"]:
             # 前の押下の手番がまだ動いている。ゲームのボタンは本体が連打を止めるが、
             # 防御は本体を通さないので自前で捨てる（0.18 秒差の2発で1巡が丸ごと2回走り、
@@ -1372,8 +1369,10 @@ def apply(ctx):
             ctx.log_exc("battle tactics: the guard button failed")
         return None
 
-    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
-    choices.provide(ctx, screen, refresh=refresh_choice_buttons, presses={"guard": on_button_press}, intercept=look_at_press)
+    # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14 の宣言型の口）に預ける。
+    # 防御のボタンは `offer`。どのボタンでもスキル一覧の場面を降ろすのは `intercept`（押下の処理より先に呼ばれる）
+    choices.provide(ctx, screen, refresh=refresh_choice_buttons, offer=offer, intercept=look_at_press,
+                    labels=(GUARD_BUTTON_LABEL,))
 
     # ---------------------------------------------------------------- 節目
     @ctx.wrap("__main__:BattleStartManager.start_battle", required=False, safe=True)

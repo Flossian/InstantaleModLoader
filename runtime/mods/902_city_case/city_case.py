@@ -74,7 +74,7 @@ import sys
 import threading
 import time
 
-from instantale_modloader import frames, ui
+from instantale_modloader import choices, frames, ui
 from instantale_modloader import state as loader_state
 
 from . import case as case_mod
@@ -107,7 +107,9 @@ CAST_SUFFIX = ".cast.json"
 #: 控えを載せておくプロセス側の棚（`apply()` をまたいで持つ。TECH.md §3.5）。
 STORE_ATTR = "_instantale_city_case_stores"
 
-#: 押下を横取りするための印。
+#: 自前のボタンに付ける印（ローダの窓口 `choices` の `Choice(marks=...)`）。押下の振り分けには使わない
+#: （窓口がボタンに持たせた処理を呼ぶ）。ほかの MOD と検査が、材料の id を持つボタンを見分けるための印。
+#: 版2までは押下を印で振り分けていたので、セーブから戻った前の版の印のボタンを片付けるのにも使う。
 #: **他の MOD と別のキーにすること**（`301_` mod_action / `302_` mod_party_action /
 #: `903_`（旧 `305_`）mod_mini_action / `309_` mod_pardon_action）。
 MARK = "mod_city_case_action"
@@ -202,8 +204,7 @@ ACCUSE_TEXT = "誰の仕業だったのかを告げる。"
 #: 特徴を必ず添える。
 #: 集めた事実と突き合わせるのがプレイヤーの仕事なので、一覧と同じ書き方にする。
 #: **決まった接頭辞を付けること**（`ACCUSE_ONE_PREFIX`）。
-#: ボタンはセーブに焼かれることがあり、
-#: そのとき印は落ちる（`ui.Screen.prune_stale`）。
+#: 版2まではボタンがセーブに焼かれ、そのとき印が落ちた。
 #: 残骸を見分ける手段は文言しかないが、
 #: 容疑者の名前は事件ごとに変わるので名前だけでは照合できない。
 #: 固定の頭を付けておけば前方一致で拾える。
@@ -430,7 +431,7 @@ ACCUSE_PREFIX = "accuse_"
 PICK_MARK_PREFIX = "pick_"
 
 #: この MOD が出すボタンの文言。
-#: 残骸の掃除に使う（`ui.Screen.prune_stale`）。
+#: 版2までがセーブに焼いた残骸の掃除に使う（窓口 `choices` の `labels`）。
 #: セーブに焼かれたボタンは印を失うので、文言で見分けるしかない。
 OUR_LABELS = (START_LABEL, ACCUSE_LABEL, STATUS_LABEL,
               ACCUSE_ONE_PREFIX, PICK_PREFIX, SUBMIT_LABEL, RESELECT_LABEL,
@@ -498,7 +499,7 @@ def apply(ctx):
     # 事件を跨いで残るものではないし、途中で閉じたら白紙からでよい。
     state = {"accusing": False, "accused": None, "picks": set(),
              "asking": None, "app": None, "swept": None,
-             "deadline": None, "stash": None, "patterns": None,
+             "deadline": None, "patterns": None,
              "declined": None, "ignored": None,
              "axes": None, "words": None, "facts": None,
              "hints": None, "looks": None, "shorts": None,
@@ -1834,18 +1835,15 @@ def apply(ctx):
         `refresh_choice_buttons` を呼ぶだけでは足りない。
         押下と同じ流れの中で差し替えると `app.buttons` は変わるのに画面は古いままになり、
         見えているものと押せるものが食い違う（GAME.md §2.3）。
-        `ui.Screen.apply_buttons` は次のフレーム・メインスレッドで「組み直す→塗る」までやる。
-
-        `entries=None` は「いま `app.buttons` に入っているものを塗り直す」。
-        中で `refresh_choice_buttons` が走り、
-        そこで `offer` が `state['accusing']` を見て並べ直す。
+        窓口の `choices.repaint` は次のフレーム・メインスレッドで「組み直す→塗る」までやる。
+        組み直しの中で、窓口が `claim` / `offer` を呼び、`state['accusing']` を見て並べ直す。
 
         `Clock` の無い環境（`tools/` のオフライン検証）では予約が効かないので、
         その場で組み直す。
         **押した結果が画面に出ないより出るほうがよい**。
         """
         if has_clock():
-            screen.apply_buttons(app, None, tag)
+            choices.repaint(app)
         else:
             screen.refresh(app)
 
@@ -1921,55 +1919,6 @@ def apply(ctx):
             return False
         return any(ui.spec_cls_name(entry) == FACILITY_MARK for entry in buttons)
 
-    def exclusive(app, buttons, wanted):
-        """この画面はこちらのものだけにする。ゲームの選択肢は預かる。
-
-        施設の選択肢に混ぜると、誰を告発するかを選ぶ場面なのに「出る」や「会話する」が並んで、
-        いま何をしている画面なのか分からなくなる。
-
-        元の並びは預かっておいて、抜けるときに返す。
-        捨ててしまうと、`refresh_choice_buttons` は `app.buttons` を組み直さない（組むのは施設の側）ので、
-        やめて戻ったときに選択肢が消えたままになる。
-        """
-        if state.get("stash") is None:
-            # 自前のボタンは預からない（戻ったら組み直すので）。
-            state["stash"] = [entry for entry in buttons
-                              if not screen.mark_of(entry)]
-        fresh = []
-        for label, action in wanted:
-            entry = screen.button(label, mark=action)
-            if entry is None:
-                write("cannot build the button (PhaseSpec unavailable)")
-                continue
-            fresh.append(entry)
-        if not fresh:
-            return False
-        if [entry.get("text") for entry in buttons] == \
-                [entry.get("text") for entry in fresh]:
-            return False                    # もう出ている。触らない
-        buttons[:] = fresh
-        return True
-
-    def restore_stash(buttons):
-        """預かっていたゲームの選択肢を戻す。戻したら `True`。
-
-        いま出ているのが自分の画面のときだけ戻す。
-        告発の途中で施設を出るなどしてゲームが別の画面を組んだ場合、
-        そこへ預かり物を書き戻すと関係の無い画面に古い選択肢が生える。
-        その場合は黙って捨てる。
-        ゲームが自分で組み直した後なので、戻す相手がもう居ない。
-        """
-        stash = state.get("stash")
-        if stash is None:
-            return False
-        state["stash"] = None
-        if not buttons or any(screen.mark_of(entry) is None for entry in buttons):
-            write("city case: the screen changed while accusing; "
-                  "dropping the buttons we were holding")
-            return False
-        buttons[:] = list(stash)
-        return True
-
     def decline(app, why, buttons=None):
         """ボタンを出さなかった理由を残す。同じ理由は繰り返さない。
 
@@ -2022,130 +1971,141 @@ def apply(ctx):
             return []
         return flags
 
-    def offer(app):
-        """条件が揃っていれば選択肢を足す。並びが変わったら `True`。
-
-        同じ画面でも並べるものが変わる。
-        告発の相手を選んでいる最中は容疑者が並び、
-        それ以外は「気になる噂を聞く」などが並ぶ。
-        だから「自分のボタンが既に在るなら何もしない」では足りない。
-        在るものと出したいものを見比べて、違うときだけ差し替える。
-        （見比べずに毎回差し替えると、画面を塗り直すたびにボタンが作り直されて押下を取りこぼす。逆に見比べずに何もしないと、
-        告発を押しても容疑者が出てこない。実際に後者を踏んだ）
-        """
-        buttons = getattr(app, "buttons", None)
-        if not isinstance(buttons, list) or not buttons:
-            return False
-        # 自分が画面を預かっている間は、施設の目印が消えている。
-        # `exclusive` がゲームの選択肢を退けたので `FACILITY_MARK` も無い。
-        # ここで弾くと、やめても元の並びに戻せなくなる（実際に踏んだ）。
-        if state.get("stash") is None and not is_facility_screen(buttons):
+    def gate(app, buttons):
+        """自前の選択肢を出してよい画面か。だめなら理由を1行残して False。"""
+        if not is_facility_screen(buttons):
             return decline(app, "not a facility screen", buttons)
-        # **印を失った自前ボタンの残骸を先に落とす**（`ui.Screen.prune_stale`）。
-        # `PhaseSpec.to_dict()` はセーブに `text` と `spec` しか書かないので、
-        # ロードや再注入の後に「印の無い自分のボタン」が復元されている。
-        # 落としておかないと重複判定をすり抜けて同じボタンが2つ並び、
-        # しかも復元された方は押しても無反応になる（`301_` / `302_` が踏んだ）。
-        screen.prune_stale(buttons, OUR_LABELS)
         stuck = busy_reasons(app, buttons)
         if stuck:
             return decline(app, "busy: {}".format(stuck), buttons)
-        if state.get("writing"):
+        # 書かせている間（`busy_on` の待機表示）も同じものを出す。並びを組み替えないので、
+        # 解けた瞬間に古い並びが見えない。押下はゲームの待機表示と `start` の旗が止める
+        return True
+
+    def accusing_here(app, found, kind):
+        """告発の画面を出す場面か（事件の町の、告発を受け付ける施設で、告発の途中）。"""
+        return bool(state.get("accusing")) and kind == START_FACILITY_TYPE \
+            and case_mod.is_active(found) and found.get("area") == game.area_id(app)
+
+    def settle_state(app, buttons):
+        """組み直しの前（窓口 `choices` の `refresh`）。掃除・期限の点検・告発の畳み・前の版の印の片付け。
+
+        ボタンは足さない（`claim` / `offer` が状態から組む）。
+        """
+        state["app"] = app
+        # 置き去りの掃除は世界ごとに1回だけ。
+        # ここを通るのは画面を塗り直すたびだが、
+        # `sweep` は世界名で番をしていて2度は走らない。
+        try:
+            sweep(app)
+        except Exception:
+            ctx.log_exc("city case: cannot sweep leftover cast")
+        if state.get("writing") and overdue():
             # 期限を過ぎていないか、ここでも見る。
             # `Clock` の予約だけに頼ると、それが飛ばなかったときにロックが残る（実機で 15:28 に飛ぶはずの見張りが飛ばず、
-            # 押せないまま止まった）。
-            # この経路は画面を塗り直すたびに必ず通るので、取りこぼしが無い。
-            if overdue():
-                give_up(app)
-                return False
-            # 待機表示の最中。
-            # 選択肢に触らない。
-            # `busy_on` が全枠に `...` を出しているので、
-            # ここで組み替えても見えないうえ、解けた瞬間に一瞬だけ古い並びが見える。
-            return False
+            # 押せないまま止まった）。この経路は画面を塗り直すたびに必ず通るので、取りこぼしが無い。
+            give_up(app)
+        if not isinstance(buttons, list):
+            return
+        # 版2までの印の付いた自前のボタン（窓口が印を付け直したもの）。いまは窓口が組むので落とす
+        old = [entry for entry in buttons if isinstance(entry, dict) and entry.get(MARK) is not None
+               and not choices.ours(entry)]
+        if old:
+            buttons[:] = [entry for entry in buttons if not any(entry is gone for gone in old)]
+            write("dropped {} button(s) with the older mark: {}".format(
+                len(old), [entry.get("text") for entry in old]))
+        if not is_facility_screen(buttons) or busy_reasons(app, buttons) or state.get("writing"):
+            return
+        # 告発の画面から出たら畳む。**施設を移ったときも告発は畳む**。
+        # 別の場所で告発の途中が生き残っていると、戻ってきたときに何をしていたか分からない。
+        if state.get("accusing") and not accusing_here(app, current(app), game.facility_type(app)):
+            leave_accusation()
 
+    def as_choices(wanted, place=None):
+        out = []
+        for label, action in wanted:
+            kwargs = {"place": place} if place is not None else {}
+            # 印は押下の振り分けには使わない（窓口がボタンに持たせた処理を呼ぶ）。
+            # ほかの MOD と検査が、材料の id を持つボタンを見分けるための印
+            out.append(choices.Choice(label, on_press=act(action), marks={MARK: action}, **kwargs))
+        return out
+
+    def act(action):
+        def on_press(app):
+            fn = action_for(action)
+            if fn is None:
+                write("WARN no action for {!r}".format(action))
+                return None
+            try:
+                fn(app)
+            except Exception:
+                ctx.log_exc("city case: action failed ({})".format(action))
+            return None
+        return on_press
+
+    def claim(app, view):
+        """告発は専用の画面にする（窓口 `choices` の `claim`。ゲームの選択肢は窓口が下に残す）。
+
+        施設の選択肢に混ぜて並べると、誰を告発するかを選ぶ場面なのに「出る」や「会話する」が並んでいて、
+        いま何をしている画面なのか分からない。
+
+        同じ画面でも2段ある。
+        相手をまだ選んでいなければ容疑者、選んだ後は根拠の材料が並ぶ。
+        ボタンは組み直しのたびに控えた状態から作るので、在るものと見比べなくても増えず、
+        押下を取りこぼさない。
+        """
+        found = current(app)
+        if not accusing_here(app, found, game.facility_type(app)) or not gate(app, view.buttons):
+            return None
+        wanted = []
+        if not state.get("accused"):
+            for suspect in found.get("suspects", []):
+                wanted.append((
+                    ACCUSE_ONE_LABEL.format(
+                        name=game.name_of(app, suspect["id"]),
+                        tell=suspect.get("tell", "")),
+                    ACCUSE_PREFIX + str(suspect["id"])))
+        else:
+            picks = state.get("picks") or set()
+            for item in case_mod.evidence(found):
+                on = item["id"] in picks
+                shape = PICK_ON_LABEL if on else PICK_OFF_LABEL
+                wanted.append((shape.format(text=pick_text(app, item)),
+                               PICK_MARK_PREFIX + item["id"]))
+            # 1つも挙げていないうちは告発できない。
+            # 根拠ゼロの告発は `judge` でも必ず `THIN` になるので、
+            # 出しても押せる意味が無い（容疑者が1人の事件は組まない）。
+            if picks:
+                wanted.append((SUBMIT_LABEL, "submit"))
+            wanted.append((RESELECT_LABEL, "reselect"))
+        wanted.append((LEAVE_LABEL, "cancel"))
+        wanted.append((GIVE_UP_LABEL, "abandon"))
+        return as_choices(wanted)
+
+    def offer(app, view):
+        """条件が揃っていれば施設の選択肢に足す（窓口 `choices` の `offer`。組み直しのたびに呼ばれる）。
+
+        ゲームの「出る」（`FACILITY_MARK`）の手前に置く。告発の途中は `claim` が画面を持つ。
+        """
+        if not gate(app, view.buttons):
+            return None
         found = current(app)
         kind = game.facility_type(app)
-        # 告発の画面から出たら、預かっていたゲームの選択肢を先に戻す。
-        # **施設を移ったときも告発は畳む**。
-        # 別の場所で告発の途中が生き残っていると、
-        # 戻ってきたときに何をしていたか分からない。
-        if not (state.get("accusing") and kind == START_FACILITY_TYPE):
-            leave_accusation()
-            restore_stash(buttons)
+        if accusing_here(app, found, kind):
+            return None
         wanted = []
         if not case_mod.is_active(found):
-            leave_accusation()
             if kind == START_FACILITY_TYPE:
                 wanted.append((START_LABEL, "start"))
         elif found.get("area") != game.area_id(app):
-            leave_accusation()              # 町を出たら告発の途中もやめる
-            return False                    # 事件の町の外では出さない
-        elif state.get("accusing") and kind == START_FACILITY_TYPE:
-            # 告発は専用の画面にする。
-            # 施設の選択肢に混ぜて並べると、誰を告発するかを選ぶ場面なのに「出る」や「会話する」が並んでいて、
-            # いま何をしている画面なのか分からない。
-            # ここだけはゲームの選択肢を退けて、こちらのものだけを出す。
-            #
-            # 同じ画面でも2段ある。
-            # 相手をまだ選んでいなければ容疑者、選んだ後は根拠の材料が並ぶ。
-            if not state.get("accused"):
-                for suspect in found.get("suspects", []):
-                    wanted.append((
-                        ACCUSE_ONE_LABEL.format(
-                            name=game.name_of(app, suspect["id"]),
-                            tell=suspect.get("tell", "")),
-                        ACCUSE_PREFIX + str(suspect["id"])))
-            else:
-                picks = state.get("picks") or set()
-                for item in case_mod.evidence(found):
-                    on = item["id"] in picks
-                    shape = PICK_ON_LABEL if on else PICK_OFF_LABEL
-                    wanted.append((shape.format(text=pick_text(app, item)),
-                                   PICK_MARK_PREFIX + item["id"]))
-                # 1つも挙げていないうちは告発できない。
-                # 根拠ゼロの告発は `judge` でも必ず `THIN` になるので、
-                # 出しても押せる意味が無い（容疑者が1人の事件は組まない）。
-                if picks:
-                    wanted.append((SUBMIT_LABEL, "submit"))
-                wanted.append((RESELECT_LABEL, "reselect"))
-            wanted.append((LEAVE_LABEL, "cancel"))
-            wanted.append((GIVE_UP_LABEL, "abandon"))
-            return exclusive(app, buttons, wanted)
-        else:
-            if kind == START_FACILITY_TYPE:
-                # いつでも告発できる。
-                # 揃うまで待たせると、絞り込んだことに意味が無くなる（設計の選択）。
-                wanted.append((ACCUSE_LABEL, "accuse"))
-                # 進み具合はいつでも見返せる（忘れても取り戻せるように）。
-                wanted.append((STATUS_LABEL, "status"))
-        # いま出ている自分のボタンと見比べる。
-        # 同じなら触らない。
-        mine = [entry for entry in buttons if screen.mark_of(entry)]
-        if [entry.get("text") for entry in mine] == [text for text, _m in wanted]:
-            return False
-        if mine:
-            # 同一性で外す。
-            # 中身が同じ辞書が他にも在りうるので、値の比較で消すと巻き添えが出る。
-            ours = {id(entry) for entry in mine}
-            buttons[:] = [entry for entry in buttons if id(entry) not in ours]
-        if not wanted:
-            return bool(mine)           # 引き上げただけでも並びは変わった
-
-        at = len(buttons)
-        for index, item in enumerate(buttons):
-            if ui.spec_cls_name(item) == FACILITY_MARK:
-                at = index
-                break
-        added = 0
-        for label, action in wanted:
-            entry = screen.button(label, mark=action)
-            if entry is None:
-                write("cannot build the button (PhaseSpec unavailable)")
-                continue
-            buttons.insert(at + added, entry)
-            added += 1
-        return added > 0
+            return None                     # 事件の町の外では出さない
+        elif kind == START_FACILITY_TYPE:
+            # いつでも告発できる。
+            # 揃うまで待たせると、絞り込んだことに意味が無くなる（設計の選択）。
+            wanted.append((ACCUSE_LABEL, "accuse"))
+            # 進み具合はいつでも見返せる（忘れても取り戻せるように）。
+            wanted.append((STATUS_LABEL, "status"))
+        return as_choices(wanted, place=choices.before(FACILITY_MARK))
 
     def start(app):
         """依頼を受ける。描写を書かせるあいだ画面を止めない。
@@ -2304,35 +2264,9 @@ def apply(ctx):
         return None
 
     # ================================================================ フック
-    @ctx.wrap("__main__:InstantaleApp.refresh_choice_buttons", required=False)
-    def refresh_choice_buttons(orig, self, reset_page=False, *args, **kwargs):
-        state["app"] = self
-        # 置き去りの掃除は世界ごとに1回だけ。
-        # ここを通るのは画面を塗り直すたびだが、
-        # `sweep` は世界名で番をしていて2度は走らない。
-        try:
-            sweep(self)
-        except Exception:
-            ctx.log_exc("city case: cannot sweep leftover cast")
-        try:
-            offer(self)
-        except Exception:
-            ctx.log_exc("city case: cannot offer the button")
-        return orig(self, reset_page, *args, **kwargs)
-
-    @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False)
-    def on_button_press(orig, self, button_index, *args, **kwargs):
-        """自前のボタンだけ横取りする。印が無ければ必ず素通し。"""
-        entry = ui.pressed_entry(self, button_index)
-        mark = screen.mark_of(entry)
-        action = action_for(mark)
-        if action is None:
-            return orig(self, button_index, *args, **kwargs)
-        try:
-            action(self)
-        except Exception:
-            ctx.log_exc("city case: action failed ({})".format(mark))
-        return None
+    # 選択肢の組み直しと押下は包まない。ローダの窓口 `choices`（TECH.md §3.3.14 の宣言型の口）に預ける。
+    # 告発の画面は `claim`、施設の選択肢に足すものは `offer`、掃除と状態の畳みは組み直しの前（`refresh`）
+    choices.provide(ctx, screen, refresh=settle_state, claim=claim, offer=offer, labels=OUR_LABELS)
 
     @ctx.wrap("scripts.llm.llm_manager:conversation_starter", required=False)
     def conversation_starter(orig, messages, *args, **kwargs):

@@ -382,6 +382,48 @@ check("会話の相手が居れば揃っている", choices.ready(app) is True, 
 app.in_conversation = False
 app.party[:] = ["player"]
 
+# 人物は揃っているが名簿がまだ戻っていない、ロードの後の最初の組み直し（名簿を見て組むボタンが出なかった。実機）
+FakeClock.intervals[:] = []
+choices._store()["after"]["token"] = None
+app.world = World({"1": object(), "2": object()})
+app.party[:] = ["player"]
+app.buttons = [{"text": "出る", "spec": Spec("MovePhaseManager")}]
+choices.on_refresh(ctx_a, app)
+check("ロードの後の最初の組み直しで名簿が空なら、人物が揃っていても見張りを仕掛ける", len(FakeClock.intervals) == 1,
+      FakeClock.intervals)
+app.party.append("95")
+before = app.refreshed
+for _ in range(4):
+    FakeClock.tick()
+check("名簿が戻ったら1度だけ組み直す", app.refreshed == before + 1 and not FakeClock.intervals,
+      (app.refreshed, FakeClock.intervals))
+choices.on_refresh(ctx_a, app)
+check("世界が替わっていない組み直しでは仕掛けない", not FakeClock.intervals, FakeClock.intervals)
+app.party[:] = ["player"]
+
+print("[当て直しの終わり]")
+real_find_app, real_find_hud = ui.find_app, ui.find_hud
+playing_hud = types.SimpleNamespace(parent=object())
+try:
+    ui.find_app, ui.find_hud = (lambda: app), (lambda _app: playing_hud)
+    choices.provide(ctx_a, None, offer=lambda app, view: None, owner="709_settle")
+    FakeClock.onces[:] = []
+    before = app.refreshed
+    app.is_button_enabled = True
+    check("宣言型の登録があり遊ぶ画面なら、当て直しの終わりに1度組み直す", choices.settle(ctx_a) is True)
+    FakeClock.tick()
+    check("組み直しは次のフレーム", app.refreshed == before + 1, app.refreshed)
+    playing_hud.parent = None
+    check("題の画面（HUD が付いていない）では組み直さない", choices.settle(ctx_a) is False)
+    playing_hud.parent = object()
+    app.is_button_enabled = False
+    check("待機中は組み直さない（待機の終わりにゲームが組み直す）", choices.settle(ctx_a) is False)
+    app.is_button_enabled = True
+finally:
+    ui.find_app, ui.find_hud = real_find_app, real_find_hud
+    choices.withdraw("709_settle")
+    FakeClock.onces[:] = []
+
 print("[包み]")
 ctx_c = Ctx("700_a", "g2")
 choices.provide(ctx_c, screen_a, refresh=refresh_a, presses={"a:": press_a})
@@ -462,6 +504,259 @@ check("新しい組み直しが前の見張りを差し替える", first.loads =
 check("偽の HUD に右の欄が無ければ見張らない",
       choices.arm_fold(ctx_p, types.SimpleNamespace(root=InstanTaleHUD())) is False)
 FakeClock.intervals[:] = []
+
+print("[宣言型の口]")
+choices.reset()
+FakeClock.onces[:] = []
+ctx_d = Ctx("710_d", "g9")
+ctx_e = Ctx("711_e", "g9")
+pressed = []
+
+
+def end_button(partner="95"):
+    return {"text": "会話を終了する", "spec": Spec("ConversationEndManager", [partner, "user", "x"])}
+
+
+def offer_d(app, view):
+    pressed.append(("offer-d", view.partner))
+    if view.partner != "95":
+        return None
+    return [choices.Choice("Dの1", on_press=lambda app: pressed.append("d1"), place=choices.before("ConversationEndManager")),
+            choices.Choice("Dの2", on_press=lambda app: pressed.append("d2") or True,
+                           place=choices.before("ConversationEndManager"))]
+
+
+def offer_e(app, view):
+    return [choices.Choice("Eの頭", place=choices.FIRST), choices.Choice("Eの尻", marks={"mod_e_action": "tail"})]
+
+
+def legacy_refresh(app, buttons):
+    if not any(b.get("text") == "古い口" for b in buttons):
+        buttons.append({"text": "古い口", "spec": Spec("JustSetButtonToNormalPhase"), "mod_old_action": "x"})
+
+
+choices.provide(ctx_d, None, offer=offer_d, labels=("Dの",))
+choices.provide(ctx_e, None, offer=offer_e, refresh=legacy_refresh)
+app = make_app()
+ctx_a = ctx_d                                  # make_app の組み直しは ctx_a の包みを通る
+app.in_conversation = False
+app.world.characters["95"] = object()
+game = [{"text": "売買する", "spec": Spec("ShoppingStartManagerRemake")}, end_button()]
+app.buttons = list(game)
+app.refresh_choice_buttons()
+texts = [b["text"] for b in app.buttons]
+check("offer は置き場所に従って並ぶ（先に登録した MOD が先・同じ置き場所は出した順）",
+      texts == ["Eの頭", "売買する", "Dの1", "Dの2", "会話を終了する", "古い口", "Eの尻"], texts)
+app.refresh_choice_buttons()
+check("組み直しても増えない（前に組んだものを外してから作る）",
+      [b["text"] for b in app.buttons] == texts, [b["text"] for b in app.buttons])
+check("ゲームのボタンは同じ物のまま（書き換えない）", app.buttons[1] is game[0] and app.buttons[4] is game[1])
+check("組んだボタンの spec は無害な既存クラス",
+      ui.spec_cls_name(app.buttons[2]) == "JustSetButtonToNormalPhase" and choices.ours(app.buttons[2]))
+press = ctx_d.hooks[choices.PRESS_TARGET]
+flowed = []
+saves = app.saves
+press(lambda self, i: flowed.append(i), app, 2)
+check("押すとボタンの処理を呼び、ゲームへ流さない", pressed[-1] == "d1" and not flowed, (pressed, flowed))
+press(lambda self, i: flowed.append(i), app, 3)
+FakeClock.tick()
+check("処理が True を返したらゲーム自身の保存を呼ぶ", pressed[-1] == "d2" and app.saves == saves + 1, app.saves)
+press(lambda self, i: flowed.append(i), app, 4)
+check("ゲームのボタンは素通し", flowed == [4], flowed)
+save = ctx_d.hooks[choices.SAVE_TARGET]
+written = []
+app.buttons_backup = list(app.buttons)
+save(lambda self: written.append(([b["text"] for b in self.buttons], [b["text"] for b in self.buttons_backup])), app)
+check("保存の間は宣言型のボタンを外す（buttons_backup も）",
+      written == [(["売買する", "会話を終了する", "古い口"], ["売買する", "会話を終了する", "古い口"])], written)
+check("保存の後は元に戻る", [b["text"] for b in app.buttons] == texts, [b["text"] for b in app.buttons])
+check("marks はほかの MOD が見分ける印としてボタンに付く", app.buttons[-1].get("mod_e_action") == "tail", app.buttons[-1])
+rows = choices._worlds(ctx_d).load(choices._worlds(ctx_d).playthrough(app)).get("marks") or []
+check("宣言型のボタンの印は持ち越しに控えない（古い口の印だけ）", [r["text"] for r in rows] == ["古い口"], rows)
+app.buttons_backup = None
+# 前の版がセーブに焼いた自前のボタン（無害な spec・印なし・登録した文言）
+app.buttons = [{"text": "Dの1", "spec": Spec("JustSetButtonToNormalPhase")},
+               {"text": "Dの1", "spec": Spec("DisplayTalkChoice")}] + list(game)
+app.refresh_choice_buttons()
+texts = [b["text"] for b in app.buttons]
+check("前の版の残骸は外して組み直す（spec の違うゲームのボタンは残す）",
+      texts.count("Dの1") == 2 and ui.spec_cls_name(app.buttons[1]) == "DisplayTalkChoice"
+      and choices.ours(app.buttons[texts.index("Dの1", 2)]), texts)
+# 人物が揃う前（ロードの途中）は MOD の関数を呼ばない
+pressed[:] = []
+characters, app.world.characters = app.world.characters, {}
+app.buttons = list(game)
+app.refresh_choice_buttons()
+check("人物が揃う前は offer を呼ばない", not pressed and [b["text"] for b in app.buttons]
+      == ["売買する", "会話を終了する", "古い口"], (pressed, [b["text"] for b in app.buttons]))
+app.world.characters = characters
+FakeClock.intervals[:] = []
+choices._store()["after"]["token"] = None
+choices._store()["restore"] = None
+
+
+def claim_e(app, view):
+    if view.partner != "95":
+        return None
+    return [choices.Choice("受けて立つ", on_press=lambda app: pressed.append("fight"), base=view.end_entry)]
+
+
+def claim_low(app, view):
+    return [choices.Choice("負ける方")]
+
+
+choices.provide(Ctx("712_low", "g9"), None, claim=claim_low, priority=1)
+choices.provide(ctx_e, None, claim=claim_e, priority=50, refresh=legacy_refresh)
+app.buttons = list(game)
+app.refresh_choice_buttons()
+check("claim は priority の大きい登録が勝ち、その画面はそのボタンだけ（ほかの MOD・古い口のボタンも出さない）",
+      [b["text"] for b in app.buttons] == ["受けて立つ"], [b["text"] for b in app.buttons])
+check("base のボタンは spec をそのまま使い、ゲームのボタンの文言は変えない",
+      app.buttons[0]["spec"] is game[1]["spec"] and game[1]["text"] == "会話を終了する")
+written = []
+save(lambda self: written.append([b["text"] for b in self.buttons]), app)
+check("claim の下のゲームの一覧がセーブに残る", written == [["売買する", "会話を終了する", "古い口"]], written)
+press(lambda self, i: flowed.append(i), app, 0)
+check("claim のボタンはその処理を呼ぶ", pressed[-1] == "fight", pressed)
+app.buttons = [game[0], end_button("30")]
+app.refresh_choice_buttons()
+check("claim しない画面は低い claim へ", [b["text"] for b in app.buttons] == ["負ける方"],
+      [b["text"] for b in app.buttons])
+choices.withdraw("712_low")
+choices.provide(ctx_e, None, offer=offer_e, refresh=legacy_refresh)
+
+print("[MOD だけの画面]")
+
+
+def confirm_screen(app, view, data):
+    if view.partner != data.get("partner"):
+        return None
+    return [choices.Choice("はい", on_press=lambda app: pressed.append("yes")),
+            choices.Choice("やめる", on_press=lambda app: choices.close_screen(app, "710_d"))]
+
+
+choices.provide(ctx_d, None, offer=offer_d, labels=("Dの",), screens={"confirm": confirm_screen})
+app.buttons = list(game)
+app.refresh_choice_buttons()
+FakeClock.onces[:] = []
+InstanTaleHUD.painted[:] = []
+choices.open_screen(app, "710_d", "confirm", {"partner": "95"})
+FakeClock.tick()
+check("開くと次のフレームで組み直して塗る（その画面のボタンだけ）",
+      [b["text"] for b in app.buttons] == ["はい", "やめる"]
+      and InstanTaleHUD.painted and InstanTaleHUD.painted[-1] == ["はい", "やめる"],
+      ([b["text"] for b in app.buttons], InstanTaleHUD.painted))
+check("下のゲームの一覧は書き換えない", choices.game_buttons(app)[:2] == game, choices.game_buttons(app))
+written = []
+save(lambda self: written.append([b["text"] for b in self.buttons]), app)
+check("MOD だけの画面で保存すると、セーブには下のゲームの一覧が残る",
+      written == [["売買する", "会話を終了する", "古い口"]], written)
+# ロード: 世界が入れ替わり、セーブの一覧（ゲームのボタン）が戻る。メモリの控えは消えた（起動し直した）形
+app.world = World(dict(characters))
+app.buttons = [dict(b) for b in game]
+choices._store()["opened"].clear()
+app.refresh_choice_buttons()
+check("ロードの後も控えから同じ画面を組む", [b["text"] for b in app.buttons] == ["はい", "やめる"],
+      [b["text"] for b in app.buttons])
+press(lambda self, i: flowed.append(i), app, 1)
+FakeClock.tick()
+check("閉じるとゲームの一覧に戻る（戻り先を失わない）",
+      [b["text"] for b in app.buttons] == ["Eの頭", "売買する", "Dの1", "Dの2", "会話を終了する", "古い口", "Eの尻"]
+      and choices.opened(app) is None, [b["text"] for b in app.buttons])
+choices.open_screen(app, "710_d", "confirm", {"partner": "95"}, repaint_now=False)
+app.buttons = [game[0], end_button("30")]
+app.refresh_choice_buttons()
+check("画面の関数が None を返したら閉じる", choices.opened(app) is None
+      and "はい" not in [b["text"] for b in app.buttons], [b["text"] for b in app.buttons])
+# 持ち主の居ないボタン（切った・注入し直しの途中）は握って組み直す
+app.buttons = list(game)
+app.refresh_choice_buttons()
+choices.withdraw("710_d")
+flowed[:] = []
+refreshed = app.refreshed
+press(lambda self, i: flowed.append(i), app, 2)
+FakeClock.tick()
+check("持ち主の居ないボタンはゲームへ流さず、組み直す", not flowed and app.refreshed > refreshed
+      and "Dの1" not in [b["text"] for b in app.buttons], [b["text"] for b in app.buttons])
+
+print("[古い口の WARN]")
+choices.reset()
+ctx_w = Ctx("730_w", "g11")
+choices.provide(ctx_w, None, refresh=lambda app, buttons: None, presses={"x": lambda app, action: None},
+                trim=lambda app, buttons: None)
+check("presses= / trim= を渡した登録は WARN で移行を促す（持ち主と移行先）",
+      any("730_w" in line and "presses=, trim=" in line and "offer / screens / claim" in line for line in ctx_w.logs),
+      ctx_w.logs)
+ctx_w.logs[:] = []
+choices.provide(ctx_w, None, refresh=lambda app, buttons: None, offer=lambda app, view: None)
+check("宣言型の口と refresh だけなら WARN は出ない", not any("older way" in line for line in ctx_w.logs), ctx_w.logs)
+
+print("[差し替え・位置・文言の関数・画面の替わり]")
+choices.reset()
+FakeClock.onces[:] = []
+ctx_f = Ctx("720_f", "g10")
+ctx_a = ctx_f
+surrender = {"text": "大人しく捕まる", "spec": Spec("TrialStartManager")}
+resist = {"text": "抵抗する！", "spec": Spec("BattleStartManager", ["guard"])}
+state_f = {"refused": False}
+
+
+def offer_f(app, view):
+    found = next((b for b in view.buttons if ui.spec_cls_name(b) == "TrialStartManager"), None)
+    if found is None:
+        return None
+    if state_f["refused"]:
+        return [choices.Choice("大人しく捕まる", base=found, replace=True,
+                               on_press=lambda app: pressed.append("surrender"))]
+    return [choices.Choice("金を握らせる", place=choices.at(1), on_press=lambda app: pressed.append("bribe"))]
+
+
+choices.provide(ctx_f, None, offer=offer_f, labels=lambda app: ["動く文言"])
+app = make_app()
+app.in_conversation = False
+app.buttons = [surrender, resist]
+app.refresh_choice_buttons()
+check("at(n) はゲームのボタンの n 番目の手前", [b["text"] for b in app.buttons] == ["大人しく捕まる", "金を握らせる", "抵抗する！"],
+      [b["text"] for b in app.buttons])
+state_f["refused"] = True
+app.refresh_choice_buttons()
+check("replace はゲームのボタンの場所に出し、元のボタンは出さない",
+      [b["text"] for b in app.buttons] == ["大人しく捕まる", "抵抗する！"] and choices.ours(app.buttons[0])
+      and app.buttons[0]["spec"] is surrender["spec"], app.buttons)
+check("保存の前に外すと元のゲームのボタンに戻る", choices.strip(app.buttons) == ([surrender, resist], True),
+      choices.strip(app.buttons))
+press = ctx_f.hooks[choices.PRESS_TARGET]
+flowed = []
+press(lambda self, i: flowed.append(i), app, 0)
+check("差し替えたボタンはその処理を呼ぶ（ゲームの TrialStartManager へ流さない）",
+      pressed[-1] == "surrender" and not flowed, (pressed, flowed))
+app.buttons = [surrender, {"text": "動く文言（12G）", "spec": Spec("JustSetButtonToNormalPhase")}, resist]
+app.refresh_choice_buttons()
+check("labels は関数でもよい（前の版の残骸を外す）", "動く文言（12G）" not in [b["text"] for b in app.buttons],
+      [b["text"] for b in app.buttons])
+
+
+def menu_f(app, view, data):
+    return [choices.Choice("備える"), choices.Choice("やめる", on_press=lambda app: choices.close_screen(app, "720_f"))]
+
+
+choices.provide(ctx_f, None, offer=offer_f, screens={"menu": menu_f})
+year = [{"text": "服役する", "spec": Spec("PrisonManager", [3])}, {"text": "他の MOD", "spec": Spec(
+    "JustSetButtonToNormalPhase"), "mod_other_action": "x"}]
+app.buttons = list(year)
+app.refresh_choice_buttons()
+choices.open_screen(app, "720_f", "menu", {})
+FakeClock.tick()
+check("画面を開いたときのゲームの一覧の形を控える（MOD の印と無害な spec は数えない）",
+      choices.opened(app)["game"] == ["PrisonManager"], choices.opened(app))
+app.buttons = [{"text": "服役する", "spec": Spec("PrisonManager", [2])}]
+app.refresh_choice_buttons()
+check("同じ形の一覧なら画面を続ける（年数のような引数が変わっても）", [b["text"] for b in app.buttons] == ["備える", "やめる"],
+      [b["text"] for b in app.buttons])
+app.buttons = [{"text": "外へ出る", "spec": Spec("MovePhaseManager")}]
+app.refresh_choice_buttons()
+check("ゲームが一覧の形を替えたら（別の画面へ進んだら）閉じる",
+      choices.opened(app) is None and [b["text"] for b in app.buttons] == ["外へ出る"], [b["text"] for b in app.buttons])
 
 choices.reset()
 shutil.rmtree(STATE, ignore_errors=True)
