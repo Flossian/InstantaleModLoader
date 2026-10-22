@@ -580,6 +580,23 @@ for _ in range(5):
 check("DIFFICULTY_LIMIT が天井になる", difficulties(app, "0")[0] == [30, 30, 30],
       difficulties(app, "0")[0])
 
+# 上限は設定で 100 まで上げられる（ゲームの定数 76 は天井にしない。76 を超えた依頼もゲームはそのまま使う）
+reset()
+module, ctx = fresh(fixed(10, MAX_BONUS=76, DIFFICULTY_LIMIT=100))
+app = make_world([("1", "0", 70, "incomplete"), ("2", "0", 74, "incomplete")])
+end_quest(ctx, app, "1")
+check("上限を上げれば 76 を超える", difficulties(app, "0")[0] == [80, 84], difficulties(app, "0")[0])
+for _ in range(4):
+    end_quest(ctx, app, "1")
+check("100 で止まる", difficulties(app, "0")[0] == [100, 100], difficulties(app, "0")[0])
+
+reset()
+module, ctx = fresh(fixed(10, MAX_BONUS=76, DIFFICULTY_LIMIT=150))
+app = make_world([("1", "0", 74, "incomplete")])
+for _ in range(5):
+    end_quest(ctx, app, "1")
+check("設定を 100 より上にしても 100 で止まる", difficulties(app, "0")[0] == [100], difficulties(app, "0")[0])
+
 # -- 範囲 -----------------------------------------------------------------
 reset()
 module, ctx = fresh(fixed(5, SCOPE="incomplete"))

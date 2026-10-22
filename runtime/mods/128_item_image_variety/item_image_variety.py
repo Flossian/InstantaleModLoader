@@ -90,6 +90,8 @@ CROSS_SLOTS = ("food", "drink", "medicine", "potion", "plant", "mushroom", "tool
 CROSS_PREFIX = "xs."
 CROSS_DIRNAME = "item_image_cross"
 IMAGE_REL = os.path.join("Assets", "images", "item_candidates_dark")
+# 外した絵の付け替え先の表（`data/` の下。build/build_retired.py が書く）
+RETIRED_FILE = "retired.json"
 
 # 足した絵の分類ごとの使い方。分類は同じ種類の元画像をまとめた単位（`categories.json`）。
 #   off       使わない（その分類の辞書を読まない）
@@ -409,6 +411,56 @@ def apply(ctx):
     # イベントで入手する品の外見文を英語で頼む（選定の関数とは別の経路なので、待たずに先に掛ける）
     from instantale_modloader.llm import wrap_outgoing
     wrap_outgoing(ctx, event_item_note, label="item image: event appearance")
+
+    # 外した絵の付け替え。描き直しで外した鍵の絵は消えるので、その絵の付いた品（セーブに相対パスで残る）は
+    # 白い枠になる。品が作られるとき（セーブの読み込みも通る）に絵が見つからなければ、
+    # `data/retired.json`（build_retired.py が書く。外した鍵 → 同じ品種のいちばん近い今の絵）で付け替える。
+    # 書き換えた `image_src` は次の保存でセーブに残る。選定の関数を待たずに掛ける（ロード直後の所持品に間に合わせる）
+    retired = ctx.read_json(os.path.join(ctx.mod_dir, "data", RETIRED_FILE), default=None)
+    retired = retired if isinstance(retired, dict) else {}
+    retire_log = ctx.logger("item_image.log")
+    seen = {}
+
+    def visible(src):
+        """絵が引けるか（ゲームのフォルダか探し先に在るか）。パスごとに1回だけ確かめる。"""
+        if src not in seen:
+            found = os.path.isfile(src)
+            if not found:
+                try:
+                    from kivy.resources import resource_find
+                    found = resource_find(src) is not None
+                except Exception:
+                    found = False
+            seen[src] = found
+        return seen[src]
+
+    def replacement(src):
+        """見つからない絵のパスの付け替え先（同じ書き方のパス）。表に無ければ None。"""
+        norm = src.replace("\\", "/")
+        marker = IMAGE_REL.replace(os.sep, "/") + "/"
+        at = norm.find(marker)
+        if at < 0 or not norm.endswith(".png"):
+            return None
+        slot, _, key = norm[at + len(marker):-4].partition("/")
+        if key.startswith(CROSS_PREFIX):
+            # 部位をまたいだ絵の写し `xs.<元の部位>.<鍵>`。元の部位の今の絵を直に指す
+            slot, _, key = key[len(CROSS_PREFIX):].partition(".")
+        new = retired.get("{}/{}".format(slot, key))
+        return None if new is None else "{}{}/{}.png".format(norm[:at + len(marker)], slot, new)
+
+    @ctx.wrap("scripts.items:Item.__init__", required=False, safe=True)
+    def item_init(orig, self, *args, **kwargs):
+        result = orig(self, *args, **kwargs)
+        src = getattr(self, "image_src", None)
+        if isinstance(src, str) and IMAGE_REL.replace(os.sep, "/") in src.replace("\\", "/") and not visible(src):
+            new = replacement(src)
+            if new is not None and visible(new):
+                self.image_src = new
+                retire_log("retired: {} -> {}".format(src, new))
+            elif seen.get(("missing", src)) is None:
+                seen[("missing", src)] = True
+                retire_log("retired: no image for {}".format(src))
+        return result
 
     # 無ければローダの保留に積んで降りる（`patch.await_module`）。来たらローダが当て直す。
     # `sys.modules` を見て自分で降りると保留に載らず、ほかに保留が無い構成ではその起動で一度も当たらない。

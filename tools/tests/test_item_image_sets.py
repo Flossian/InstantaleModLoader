@@ -11,6 +11,7 @@
   （`build/build_guns.py`）倍で端数は四捨五入。消耗品・素材などのアイテム類は 32x32 の `ITEM_SCALE` 倍。盾・胴鎧は 64x64、防具類の表の品と消耗品の表の頭・服・手・脚は 64x64、それ以外は 32x32）。絵のフォルダに辞書に無い絵は残っていない
 - 分類ごとの元の一枚絵（`categories.json` の `sources` の `source`）が `assets/item_images/` に在る
 - 版9 までの設定名の読み替え（本体の `OLD_SETTINGS`）は、今の設定名に無い名前から今の設定名へ
+- 外した絵の付け替え先の表（`data/retired.json`）の外した鍵は今の辞書に無く、付け替え先は同じ品種の今ある絵
 - `images/` と `data/` の直下のフォルダは分類だけ（分類の外に置いた絵は探し先に入らない）
 - 実行時に `images/<分類>` を Kivy の探し先へ足している
 
@@ -121,5 +122,16 @@ for c in cats:
                 game = (64, 64) if folder in ("shield", "body_armor") else (32, 32)
             assert size == game, (cid, key, size)
     assert got == expected.get(cid, set()), (cid, sorted(got ^ expected.get(cid, set()))[:5])
+
+# 外した絵の付け替え先の表（`data/retired.json`）: 外した鍵は今の辞書に無く、付け替え先は同じ品種の今ある絵
+retired = load("data", "retired.json")
+now = {}
+for c in cats:
+    for fname in os.listdir(os.path.join(MOD, "data", c["id"])):
+        now.setdefault(fname[:-5], set()).update(load("data", c["id"], fname)["index"])
+for label, new in retired.items():
+    slot, _, old = label.partition("/")
+    assert old not in now.get(slot, set()), ("外した鍵が今の辞書にある", label)
+    assert new in now.get(slot, set()), ("付け替え先が今の辞書に無い", label, new)
 
 print("ok")

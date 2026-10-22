@@ -8,7 +8,7 @@
 
 この MOD が動かすのは1つの数だけ:
 
-    world.quests[id].difficulty          その依頼の難易度（0..76）
+    world.quests[id].difficulty          その依頼の難易度（0..上限。上限は既定 76、設定で 100 まで）
 
 ゲーム自身の項目なので、セーブに MOD 独自の鍵は増えない（TECH.md §6.4）。
 
@@ -141,10 +141,12 @@ _RNG = random.Random()
 #: 生成が始まらなかった回の印を、次の生成が拾わないための時限。
 INJECT_TTL = 300.0
 
-#: ゲーム自身の難易度の上限（`scripts.functions.QUEST_DIFFICULTY_VALUE_MAX`）。
-#: 引けなかったときの落とし先で、引ければそちらが優先。
-GAME_DIFFICULTY_MAX = 76
+#: ゲーム自身の難易度の下限（`scripts.functions.QUEST_DIFFICULTY_VALUE_MIN`）。引けなかったときの落とし先。
 GAME_DIFFICULTY_MIN = 0
+#: 設定の上限で上げられる天井。難易度 100 で敵のレベルがゲームの上限（Lv101。`get_enemy_exp_lvl`）に届く。
+#: ゲーム自身の定数（`QUEST_DIFFICULTY_VALUE_MAX` = 76）は天井にしない。76 を超えた依頼もゲームはそのまま使い、
+#: 敵だけが強くなる（報酬・才能点・品の値段と強さは 76 の値で止まる。VERIFICATION.md §3.112）。
+DIFFICULTY_CEILING = 100
 
 #: `QuestChoiceManager(app, quest_type, quest_id)` が `world.quests` を引く `quest_type`。
 #: 掲示板の通常依頼はこれで来る（GAME.md §2.9.1）。
@@ -211,15 +213,12 @@ def apply(ctx):
         return max(0, min(max_bonus(), record["bonus"]))
 
     def limits():
-        """難易度の下限・上限。ゲームの値と設定の低いほうを採る。"""
+        """難易度の下限・上限。下限はゲームの値、上限は設定（`DIFFICULTY_CEILING` まで）。"""
         functions = sys.modules.get("scripts.functions")
         low = getattr(functions, "QUEST_DIFFICULTY_VALUE_MIN", None) if functions else None
-        high = getattr(functions, "QUEST_DIFFICULTY_VALUE_MAX", None) if functions else None
         if not isinstance(low, int) or isinstance(low, bool):
             low = GAME_DIFFICULTY_MIN
-        if not isinstance(high, int) or isinstance(high, bool):
-            high = GAME_DIFFICULTY_MAX
-        return low, min(high, max(low, int(DIFFICULTY_LIMIT)))
+        return low, min(DIFFICULTY_CEILING, max(low, int(DIFFICULTY_LIMIT)))
 
     # ------------------------------------------------------------ 控え
     #

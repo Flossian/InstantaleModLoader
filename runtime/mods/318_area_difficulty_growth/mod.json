@@ -10,7 +10,7 @@
     "en": "Clearing a quest raises the difficulty of the quests that land offers. Every clear draws a random step and adds it, up to a cap. Nothing else is touched: the game already derives the shop stock, the item prices, the enemies, the rewards and the talent points from that one number, so they all follow. A land raised to 23 produced level 24 enemies, and its shop stocked items of a value the plain save cannot produce",
     "ja": "依頼を1つ片付けるたびに、その土地で受けられる依頼の難易度が上がる。上がる量は毎回ランダムで、上限まで積み上がる。触るのはその1つの数だけで、店の在庫・値段・敵・報酬・才能はゲーム自身がそこから決めているので後から付いてくる。難易度を23まで上げた土地ではレベル24の敵が出て、その土地の店に素のセーブからは出ない value 33 の品が並んだ"
   },
-  "version": "5",
+  "version": "6",
   "author": "R01/Flossian",
   "after": [
     "307_area_move_dungeon",
@@ -63,14 +63,14 @@
       "type": "int",
       "default": 76,
       "min": 1,
-      "max": 76,
+      "max": 100,
       "label": {
         "ja": "難易度の上限",
         "en": "Difficulty ceiling"
       },
       "note": {
-        "ja": "既定 76 はゲーム自身の上限（scripts.functions.QUEST_DIFFICULTY_VALUE_MAX）。下げると世界全体の天井が下がる。上げることはできない",
-        "en": "Default 76 is the game's own ceiling (scripts.functions.QUEST_DIFFICULTY_VALUE_MAX). Lower it to cap the whole world; it cannot go higher"
+        "ja": "既定 76 はゲームが依頼の難易度に使う上限。100 まで上げられる（敵のレベルが 101 まで上がる）。76 を超えた分は敵だけが強くなり、報酬・才能点・店の品は 76 のときのまま増えない。下げると世界全体の天井が下がる",
+        "en": "Default 76 is the ceiling the game uses for quest difficulty. It can go up to 100 (enemies up to level 101). Above 76 only the enemies get stronger; rewards, talent points and shop goods stay as at 76. Lower it to cap the whole world"
       }
     },
     "SCOPE": {
