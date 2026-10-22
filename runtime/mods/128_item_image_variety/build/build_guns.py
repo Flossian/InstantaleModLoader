@@ -548,6 +548,29 @@ def color_names(im):
     return names
 
 
+# 金や真鍮は茶色、銀は黒や白に測られる。名前にこの語がある品は、測った色を前に付けない（「brown gold ring」にしない）。
+# 「gold-trimmed」のように語の一部のときは飾りの色なので、本体の色は付ける
+METAL_COLOR = {"gold", "golden", "gilded", "gilt", "silver", "silvery", "brass", "bronze", "copper", "platinum"}
+
+
+def names_metal_color(name):
+    return bool(METAL_COLOR & set(name.lower().split()))
+
+
+# 名前がこの色の語で始まる品（「red velvet coat」「navy beret」）も、測った色を前に付けない（「brown red velvet coat」にしない）。
+# 色の語の前の light・dark などは飛ばす。「red-wrapped」のように語の一部のときは飾りの色なので数えない
+COLOR_WORDS = {"grey", "gray", "white", "black", "beige", "tan", "brown", "red", "crimson", "scarlet", "orange", "yellow", "olive",
+               "green", "teal", "cyan", "blue", "navy", "purple", "violet", "magenta", "pink", "khaki", "ivory"}
+
+
+def names_own_color(name):
+    """名前が自分の色を持つ品か（金属の色の語を含むか、色の語で始まる）。"""
+    words = name.lower().split()
+    while words and words[0] in ("light", "dark", "pale", "deep", "bright"):
+        words = words[1:]
+    return names_metal_color(name) or bool(words and words[0] in COLOR_WORDS)
+
+
 def caption_for(entry, im):
     """種類の名前と測った色から、ゲームの外見文と同じ形の英語一文を組む。"""
     names = color_names(im)
@@ -572,7 +595,7 @@ def caption_for(entry, im):
     if glows and (glow_wanted or names[glows[0]] / total >= 0.02):
         extras.append("glowing %s lights" % glows[0][5:])
     # 種類の名前に色の語があれば、本体の色は付けない
-    colored = any(w in noun.split() for w in ("brass", "black", "grey", "white", "tan", "red", "blue"))
+    colored = any(w in noun.split() for w in ("black", "grey", "white", "tan", "red", "blue")) or names_own_color(noun)
     text = noun if colored else "%s %s" % (color, noun)
     if extras:
         text += " with " + (extras[0] if len(extras) == 1 else ", ".join(extras[:-1]) + " and " + extras[-1])

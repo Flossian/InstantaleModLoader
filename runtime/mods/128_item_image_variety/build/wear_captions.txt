@@ -8,7 +8,7 @@ wbd_w22_006	body_armor	A brown lacquered leather armor with paper talismans with
 wbd_w22_007	body_armor	A black chainmail shirt with white details.
 wbd_w22_008	body_armor	A brown leather armor with herbal pouches.
 wbd_w22_009	body_armor	A brown lacquered chest guard embroidered with a white heron with red details.
-wbd_w23_000	body_armor	A brown western leather vest with brass buckles.
+wbd_w23_000	body_armor	A western leather vest with brass buckles.
 wbd_w23_001	body_armor	A brown riveted leather chest guard.
 wbd_w23_002	body_armor	A brown cowhide cowboy vest with beige details.
 wbd_w23_003	clothing	A brown fringed suede western vest with beige details.
@@ -23,7 +23,7 @@ wbd_w24_001	body_armor	A brown plate carrier with magazine pouches.
 wbd_w24_002	clothing	An orange reflective safety vest with brown details.
 wbd_w24_003	body_armor	A black leather motorcycle jacket with shoulder armor with brown details.
 wbd_w24_004	body_armor	A brown work coveralls jacket with elbow pads with orange details.
-wbd_w24_005	clothing	A black oilskin coat with brass buttons.
+wbd_w24_005	clothing	An oilskin coat with brass buttons.
 wbd_w24_006	clothing	A green puffy down jacket with gold details.
 wbd_w24_007	body_armor	A black stab-proof vest.
 wbd_w24_008	clothing	An olive military field jacket with many pockets.
@@ -62,8 +62,8 @@ wrf_wf1_010	headgear	A brown fur-trimmed hood with beige details.
 wrf_wf1_011	headgear	A black dark rag hood with brown details.
 wrf_wf2_000	headgear	A black crooked wizard hat with brown details.
 wrf_wf2_001	headgear	A blue star-embroidered wizard hat with brown details.
-wrf_wf2_002	headgear	A brown golden crown with red details.
-wrf_wf2_003	headgear	A grey slim silver circlet with white details.
+wrf_wf2_002	headgear	A golden crown with red details.
+wrf_wf2_003	headgear	A slim silver circlet with white details.
 wrf_wf2_004	headgear	A brown jeweled diadem.
 wrf_wf2_005	headgear	A brown wide-brimmed feathered hat with red details.
 wrf_wf2_006	headgear	A brown fur hat with beige details.
@@ -90,8 +90,8 @@ wrf_wf4_004	clothing	A blue star-embroidered wizard robe with brown details.
 wrf_wf4_005	clothing	A long black robe.
 wrf_wf4_006	clothing	A brown plain monk's robe.
 wrf_wf4_007	clothing	A brown gold-threaded priest's vestment with white details.
-wrf_wf4_008	clothing	A brown green hunter's jacket with olive details.
-wrf_wf4_009	clothing	A brown red velvet noble coat.
+wrf_wf4_008	clothing	A green hunter's jacket with olive details.
+wrf_wf4_009	clothing	A red velvet noble coat.
 wrf_wf4_010	clothing	A brown coat with a fur mantle.
 wrf_wf4_011	clothing	A black long dark leather coat with brown details.
 wrf_wf5_000	clothing	A brown plain linen tunic with white details.
@@ -103,7 +103,7 @@ wrf_wf5_005	clothing	A red laced bodice dress with brown details.
 wrf_wf5_006	clothing	A blue long-sleeved noble lady's gown with brown details.
 wrf_wf5_007	clothing	A black tattered dark dress with brown details.
 wrf_wf5_008	clothing	A brown thick fur-collared coat with white details.
-wrf_wf5_009	clothing	A black blue velvet bard's doublet with brown details.
+wrf_wf5_009	clothing	A blue velvet bard's doublet with brown details.
 wrf_wf5_010	clothing	A brown gold-trimmed royal outfit with white details.
 wrf_wf5_011	clothing	A brown patched peasant clothes.
 wrf_wf6_000	gauntlets	A black plate gauntlets with white details.
@@ -158,13 +158,13 @@ wrf_wj2_000	headgear	A brown deep woven straw hat with red details.
 wrf_wj2_001	headgear	A brown conical sugegasa straw hat with beige details.
 wrf_wj2_002	headgear	A brown traveler's sandogasa hat.
 wrf_wj2_003	headgear	A brown komuso basket hat.
-wrf_wj2_004	headgear	A magenta purple zukin hood.
+wrf_wj2_004	headgear	A purple zukin hood.
 wrf_wj2_005	headgear	A black ninja zukin hood.
 wrf_wj2_006	headgear	A white tenugui cloth head wrap.
 wrf_wj2_007	headgear	A black eboshi court cap.
 wrf_wj2_008	headgear	A black court kanmuri cap.
 wrf_wj2_009	headgear	A brown hair ornament with flower kanzashi with red details.
-wrf_wj4_000	clothing	A blue navy haori jacket.
+wrf_wj4_000	clothing	A navy haori jacket.
 wrf_wj4_001	clothing	A black formal haori.
 wrf_wj4_002	clothing	A red furisode kimono with brown details.
 wrf_wj4_003	clothing	A white kosode kimono.
@@ -176,8 +176,8 @@ wrf_wj4_008	clothing	A shrine maiden's white robe and red hakama.
 wrf_wj4_009	clothing	A red jinbaori surcoat with brown details.
 wrf_wj4_010	clothing	A blue indigo samue top.
 wrf_wj4_011	clothing	A brown traveler's straw raincoat.
-wrf_wj5_000	accessory	A brown gold brocade obi sash.
-wrf_wj5_001	accessory	A black navy kaku obi sash.
+wrf_wj5_000	accessory	A gold brocade obi sash.
+wrf_wj5_001	accessory	A navy kaku obi sash.
 wrf_wj5_002	accessory	A red heko obi sash.
 wrf_wj5_003	accessory	A white tenugui towel with brown details.
 wrf_wj5_004	accessory	A brown straw mino cape.
@@ -226,8 +226,8 @@ wrf_wm4_000	clothing	A black camouflage field jacket with many pockets with brow
 wrf_wm4_001	clothing	A black softshell jacket.
 wrf_wm4_002	clothing	A green hooded rain jacket.
 wrf_wm4_003	clothing	A black work coveralls top.
-wrf_wm4_004	clothing	A black navy security guard uniform jacket.
-wrf_wm4_005	clothing	A black olive flight jacket.
+wrf_wm4_004	clothing	A navy security guard uniform jacket.
+wrf_wm4_005	clothing	An olive flight jacket.
 wrf_wm4_006	clothing	A brown desert camouflage shirt with beige details.
 wrf_wm4_007	clothing	An olive high-visibility safety vest.
 wrf_wm4_008	clothing	A brown thick fleece jacket.
@@ -236,7 +236,7 @@ wrf_wm4_010	clothing	A black tactical shirt.
 wrf_wm4_011	clothing	A white cold weather parka.
 wrf_wm5_000	body_armor	A black bulletproof vest.
 wrf_wm5_001	body_armor	A brown plate carrier with magazine pouches with gold details.
-wrf_wm5_002	body_armor	A gold olive bulletproof vest with green details.
+wrf_wm5_002	body_armor	An olive bulletproof vest with green details.
 wrf_wm5_003	body_armor	A black bulletproof vest with shoulder and collar guards.
 wrf_wm5_004	body_armor	A brown desert tan equipment vest with beige details.
 wrf_wm5_005	body_armor	A black police stab-proof vest.
@@ -268,7 +268,7 @@ wrf_wm7_008	legwear	A blue work coveralls bottoms.
 wrf_wm7_009	legwear	A red plaid pleated skirt with brown details.
 wrf_wm7_010	legwear	A black pencil skirt.
 wrf_wm7_011	legwear	A blue denim skirt.
-wrf_wm8_000	legwear	A grey white sneakers.
+wrf_wm8_000	legwear	A white sneakers.
 wrf_wm8_001	legwear	A white high-top sneakers.
 wrf_wm8_002	legwear	A black running shoes with white details.
 wrf_wm8_003	legwear	A black leather shoes.
@@ -310,32 +310,32 @@ wrf_wj7_008	legwear	A brown straw waraji sandals with beige details.
 wrf_wj7_009	legwear	A white tabi socks with brown details.
 wrf_wj7_010	legwear	A black leather tabi with brown details.
 wrf_wj7_011	legwear	A black legs wrapped in kyahan gaiters with brown details.
-wrf_ws1_000	headgear	A blue navy beret.
+wrf_ws1_000	headgear	A navy beret.
 wrf_ws1_001	headgear	A white beret with a small headset.
 wrf_ws1_002	headgear	A large red ribbon with magenta details.
 wrf_ws1_003	headgear	A black headband with blue details.
 wrf_ws1_004	headgear	A white headphones with blue details.
 wrf_ws1_005	headgear	A black cat ear headband with blue details.
-wrf_ws1_006	headgear	A blue navy peaked school cap.
+wrf_ws1_006	headgear	A navy peaked school cap.
 wrf_ws1_007	headgear	A blue short-brimmed school cap with goggles.
 wrf_ws1_008	headgear	A white flower hair clip.
 wrf_ws1_009	headgear	A light blue scrunchie with white details.
 wrf_ws1_010	headgear	A plain white helmet.
 wrf_ws1_011	headgear	A black horn headband with red details.
 wrf_ws2_000	clothing	A white school blazer.
-wrf_ws2_001	clothing	A blue navy school blazer.
-wrf_ws2_002	clothing	A blue navy sailor school uniform.
+wrf_ws2_001	clothing	A navy school blazer.
+wrf_ws2_002	clothing	A navy sailor school uniform.
 wrf_ws2_003	clothing	A white summer sailor uniform with blue details.
-wrf_ws2_004	clothing	A white light blue short-sleeved summer uniform.
-wrf_ws2_005	clothing	A blue black school blazer with an armband.
+wrf_ws2_004	clothing	A light blue short-sleeved summer uniform.
+wrf_ws2_005	clothing	A black school blazer with an armband.
 wrf_ws2_006	clothing	A white shirt with a red necktie.
-wrf_ws2_007	clothing	A white pale pink school cardigan.
-wrf_ws2_008	clothing	A red crimson school jacket with magenta details.
+wrf_ws2_007	clothing	A pale pink school cardigan.
+wrf_ws2_008	clothing	A crimson school jacket with magenta details.
 wrf_ws2_009	clothing	An oversized white hoodie.
 wrf_ws2_010	clothing	A white high-collared student council jacket.
 wrf_ws2_011	clothing	A grey bolero jacket with white details.
 wrf_ws3_000	body_armor	A white light bulletproof vest.
-wrf_ws3_001	body_armor	A blue navy bulletproof vest.
+wrf_ws3_001	body_armor	A navy bulletproof vest.
 wrf_ws3_002	body_armor	A white chest rig with light blue trim.
 wrf_ws3_003	body_armor	A blue slim cross-body harness.
 wrf_ws3_004	body_armor	A white medic vest.
@@ -343,7 +343,7 @@ wrf_ws3_005	body_armor	A white light vest with a pale pink pouch with magenta de
 wrf_ws3_006	body_armor	A short grey bulletproof jacket with blue details.
 wrf_ws3_007	body_armor	A white vest with a ribbon with blue details.
 wrf_ws3_008	body_armor	A thin black chest plate.
-wrf_ws3_009	body_armor	A blue navy waist-length equipment vest.
+wrf_ws3_009	body_armor	A navy waist-length equipment vest.
 wrf_ws4_000	accessory	A blue gun sling with purple details.
 wrf_ws4_001	accessory	A blue belt with a holster with purple details.
 wrf_ws4_002	accessory	A red school armband with magenta details.
@@ -356,43 +356,43 @@ wrf_ws4_008	accessory	A white omamori charm pouch with magenta details.
 wrf_ws4_009	accessory	A grey small radio with blue details.
 wrf_ws4_010	accessory	A white scarf.
 wrf_ws4_011	accessory	A blue wristwatch with white details.
-wrf_ws5_000	legwear	A blue navy pleated skirt.
+wrf_ws5_000	legwear	A navy pleated skirt.
 wrf_ws5_001	legwear	A white pleated skirt.
 wrf_ws5_002	legwear	A blue plaid pleated skirt.
 wrf_ws5_003	legwear	A black pencil skirt.
-wrf_ws5_004	legwear	A white light blue pleated skirt.
-wrf_ws5_005	legwear	A red crimson pleated skirt with magenta details.
+wrf_ws5_004	legwear	A light blue pleated skirt.
+wrf_ws5_005	legwear	A crimson pleated skirt with magenta details.
 wrf_ws5_006	legwear	A grey pleated skirt with a stripe.
-wrf_ws5_007	legwear	A white pale pink pleated skirt with magenta details.
-wrf_ws5_008	legwear	A blue navy pleated skirt with a thigh holster.
+wrf_ws5_007	legwear	A pale pink pleated skirt with magenta details.
+wrf_ws5_008	legwear	A navy pleated skirt with a thigh holster.
 wrf_ws5_009	legwear	A white pleated skirt with a belt pouch.
-wrf_ws6_000	legwear	A blue navy school trousers.
+wrf_ws6_000	legwear	A navy school trousers.
 wrf_ws6_001	legwear	A grey slacks.
 wrf_ws6_002	legwear	A white track pants.
 wrf_ws6_003	legwear	A blue plaid school trousers.
-wrf_ws6_004	legwear	A white beige trousers.
+wrf_ws6_004	legwear	A beige trousers.
 wrf_ws6_005	legwear	A black school trousers with blue details.
 wrf_ws6_006	legwear	A blue shorts.
 wrf_ws6_007	legwear	A blue shorts with tights.
-wrf_ws6_008	legwear	A blue navy trousers with knee pads.
+wrf_ws6_008	legwear	A navy trousers with knee pads.
 wrf_ws6_009	legwear	A black trousers with a thigh pouch with blue details.
-wrf_ws7_000	legwear	A blue black loafers.
-wrf_ws7_001	legwear	A black brown loafers with red details.
+wrf_ws7_000	legwear	A black loafers.
+wrf_ws7_001	legwear	A brown loafers with red details.
 wrf_ws7_002	legwear	A white sneakers.
-wrf_ws7_003	legwear	A white pale pink sneakers.
+wrf_ws7_003	legwear	A pale pink sneakers.
 wrf_ws7_004	legwear	A black laced ankle boots with brown details.
 wrf_ws7_005	legwear	A black combat boots with blue details.
 wrf_ws7_006	legwear	A white school indoor shoes with red toes.
 wrf_ws7_007	legwear	A white knee socks.
-wrf_ws7_008	legwear	A blue navy knee socks.
+wrf_ws7_008	legwear	A navy knee socks.
 wrf_ws7_009	legwear	A black thigh-high socks with blue details.
 wrf_ws7_010	legwear	A black platform boots with blue details.
 wrf_ws7_011	legwear	A white ankle socks with loafers.
 wrf_ws8_000	gauntlets	A white gloves.
 wrf_ws8_001	gauntlets	A black fingerless gloves with white details.
-wrf_ws8_002	gauntlets	A white pale pink fingerless gloves with magenta details.
-wrf_ws8_003	gauntlets	A white light blue fingerless gloves.
-wrf_ws8_004	gauntlets	A blue navy knit gloves.
+wrf_ws8_002	gauntlets	A pale pink fingerless gloves with magenta details.
+wrf_ws8_003	gauntlets	A light blue fingerless gloves.
+wrf_ws8_004	gauntlets	A navy knit gloves.
 wrf_ws8_005	gauntlets	A white gloves with wrist ribbons with blue details.
 wrf_ws8_006	gauntlets	A black shooting gloves with blue details.
 wrf_ws8_007	gauntlets	A grey gloves with white details.
@@ -537,23 +537,23 @@ wsc_w12_135	legwear	A black school shoes with white details.
 wsc_w12_136	legwear	A black school shoes with red details.
 wsc_w12_137	legwear	A black school shoes.
 wsc_w12_138	legwear	A black school shoes with red details.
-wrf_ws9_001	body_armor	A blue navy bulletproof vest with a sailor collar.
+wrf_ws9_001	body_armor	A navy bulletproof vest with a sailor collar.
 wrf_ws9_002	body_armor	A black chest rig with light blue trim.
-wrf_ws9_005	body_armor	A white pale pink plate carrier with pouches with magenta details.
+wrf_ws9_005	body_armor	A pale pink plate carrier with pouches with magenta details.
 wrf_ws9_006	body_armor	A black heavy armored vest with blue details.
 wrf_ws9_007	body_armor	A short grey bulletproof jacket with a vest with blue details.
-wrf_ws9_008	body_armor	A black olive plate carrier.
+wrf_ws9_008	body_armor	An olive plate carrier.
 wrf_ws10_000	clothing	A white blazer uniform with a utility belt with blue details.
-wrf_ws10_001	clothing	A blue navy sailor uniform with an armband.
+wrf_ws10_001	clothing	A navy sailor uniform with an armband.
 wrf_ws10_002	clothing	A light blue summer uniform with a skirt with white details.
-wrf_ws10_003	clothing	A blue black blazer uniform with shoulder armor.
+wrf_ws10_003	clothing	A black blazer uniform with shoulder armor.
 wrf_ws10_004	clothing	A white shirt uniform with a red necktie and a holster with blue details.
-wrf_ws10_005	clothing	A white pale pink cardigan uniform with magenta details.
-wrf_ws10_006	clothing	A magenta crimson jacket uniform with blue details.
+wrf_ws10_005	clothing	A pale pink cardigan uniform with magenta details.
+wrf_ws10_006	clothing	A crimson jacket uniform with blue details.
 wrf_ws10_007	clothing	A white hoodie uniform with a harness with blue details.
 wrf_ws10_008	clothing	A white high-collared uniform with a holster belt.
 wrf_ws10_009	clothing	A grey sailor uniform with a chest plate with blue details.
-wrf_ws10_010	clothing	A blue black school jacket uniform with a tactical belt with white details.
+wrf_ws10_010	clothing	A black school jacket uniform with a tactical belt with white details.
 wrf_ws10_011	clothing	A grey bolero uniform with a skirt with white details.
 wrf_wc1_000	headgear	A black helmet with a mirrored blue visor.
 wrf_wc1_001	headgear	A black neon headset with magenta details.
@@ -572,7 +572,7 @@ wrf_wc2_001	clothing	A black high-collared synthetic leather long coat with red 
 wrf_wc2_002	clothing	A black sleeveless top with glowing lines with green details.
 wrf_wc2_003	clothing	A grey translucent raincoat with white details.
 wrf_wc2_004	clothing	A black bomber jacket with wiring with brown details.
-wrf_wc2_005	clothing	A grey white chrome corporate jacket.
+wrf_wc2_005	clothing	A white chrome corporate jacket.
 wrf_wc2_006	clothing	A black glowing hooded parka with blue details.
 wrf_wc2_007	clothing	A black short jacket with shoulder guards with red details.
 wrf_wc2_008	clothing	A black neon coat with a fur collar with magenta details.
@@ -581,7 +581,7 @@ wrf_wc2_010	clothing	A black courier jacket with many pockets with brown details
 wrf_wc2_011	clothing	A black jacket with a mechanical left arm.
 wrf_wc3_000	body_armor	A black bulletproof vest with glowing lines with blue details.
 wrf_wc3_001	body_armor	A black carbon fiber chest plate.
-wrf_wc3_002	body_armor	A black grey corporate security body armor.
+wrf_wc3_002	body_armor	A grey corporate security body armor.
 wrf_wc3_003	body_armor	A black handmade vest wrapped in wiring with brown details.
 wrf_wc3_004	body_armor	A black armor plates from shoulder to chest with white details.
 wrf_wc3_005	gauntlets	A black gloves with mechanical fingers.
@@ -605,7 +605,7 @@ wrf_wc5_005	legwear	A black shorts with thigh pouches.
 wrf_wc5_006	legwear	A white chrome corporate shorts.
 wrf_wc5_007	legwear	A ripped black denim shorts with a chain.
 wrf_wc6_000	legwear	A black boots with glowing platform soles with magenta details.
-wrf_wc6_001	legwear	A grey white platform sneakers with pink accents with magenta details.
+wrf_wc6_001	legwear	A white platform sneakers with pink accents with magenta details.
 wrf_wc6_002	legwear	A black high-top sneakers with blue laces.
 wrf_wc6_003	legwear	A black knee-high synthetic leather boots.
 wrf_wc6_004	legwear	A black work boots with metal toes with brown details.
@@ -624,7 +624,7 @@ wrf_wc7_004	gauntlets	A white corporate gloves.
 wrf_wc7_005	gauntlets	A black gloves with metal knuckle guards with white details.
 wrf_wc7_006	gauntlets	A black glowing forearm bands with magenta details.
 wrf_wc7_007	gauntlets	A black armored forearm bracers.
-wrf_wc7_009	gauntlets	A black silver prosthetic-style metal gloves with white details.
+wrf_wc7_009	gauntlets	A silver prosthetic-style metal gloves with white details.
 wrf_wm9_000	headgear	A brown high-cut tactical helmet with side rails.
 wrf_wm9_001	headgear	A brown helmet with a desert camouflage cover with beige details.
 wrf_wm9_002	headgear	A black tanker's leather helmet with brown details.
@@ -641,13 +641,13 @@ wrf_wm10_000	clothing	A brown combat shirt with camouflage sleeves with beige de
 wrf_wm10_001	clothing	A brown multicam combat uniform jacket with beige details.
 wrf_wm10_002	clothing	A white snow camouflage smock.
 wrf_wm10_003	clothing	A black combat shirt.
-wrf_wm10_004	clothing	A black navy police tactical jacket with blue details.
+wrf_wm10_004	clothing	A navy police tactical jacket with blue details.
 wrf_wm10_005	clothing	A gold ghillie suit top with brown details.
 wrf_wm10_006	clothing	A black tanker coverall top.
-wrf_wm10_007	clothing	A black grey urban camouflage jacket.
+wrf_wm10_007	clothing	A grey urban camouflage jacket.
 wrf_wm10_008	clothing	A brown hooded desert camouflage jacket with beige details.
 wrf_wm10_009	clothing	A black waterproof camouflage smock with gold details.
-wrf_wm10_010	clothing	A gold olive commando sweater with shoulder patches with green details.
+wrf_wm10_010	clothing	An olive commando sweater with shoulder patches with green details.
 wrf_wm10_011	clothing	A white cold weather tactical jacket.
 wrf_wm11_000	body_armor	A black heavy special forces armor with neck and groin guards.
 wrf_wm11_001	body_armor	A brown slick single-plate carrier with gold details.
@@ -657,28 +657,28 @@ wrf_wm11_004	body_armor	A brown plate carrier with medical pouches with beige de
 wrf_wm11_005	body_armor	A gold vest with grenade loops with brown details.
 wrf_wm11_006	body_armor	A gold old military flak vest with brown details.
 wrf_wm11_007	body_armor	A black heavy bulletproof vest with arm guards.
-wrf_wm11_008	body_armor	A brown light tan chest rig with beige details.
+wrf_wm11_008	body_armor	A light tan chest rig with beige details.
 wrf_wm11_009	body_armor	A black police bulletproof vest.
 wrf_wm12_000	gauntlets	A black hard-knuckle tactical gloves.
 wrf_wm12_001	gauntlets	A brown thin tan flight gloves with beige details.
 wrf_wm12_002	gauntlets	A black thick cold weather tactical mittens.
 wrf_wm12_003	gauntlets	A black reinforced shooting gloves with brown details.
-wrf_wm12_004	gauntlets	A gold olive work gloves with brown details.
-wrf_wm12_005	gauntlets	A black grey gloves with rubber armor.
+wrf_wm12_004	gauntlets	An olive work gloves with brown details.
+wrf_wm12_005	gauntlets	A grey gloves with rubber armor.
 wrf_wm12_006	gauntlets	A white police traffic gloves.
-wrf_wm12_007	gauntlets	A black grey cut-resistant gloves.
+wrf_wm12_007	gauntlets	A grey cut-resistant gloves.
 wrf_wm12_008	gauntlets	A brown rappelling gloves with thick palms.
 wrf_wm12_009	gauntlets	A brown camouflage gloves with gold details.
 wrf_wm13_000	legwear	A brown multicam trousers with knee pads with gold details.
 wrf_wm13_001	legwear	A black woodland camouflage trousers with gold details.
-wrf_wm13_002	legwear	A black grey urban camouflage trousers with white details.
+wrf_wm13_002	legwear	A grey urban camouflage trousers with white details.
 wrf_wm13_003	legwear	A black tactical trousers.
-wrf_wm13_004	legwear	A gold olive field trousers.
+wrf_wm13_004	legwear	An olive field trousers.
 wrf_wm13_005	legwear	A brown desert tan trousers with beige details.
-wrf_wm13_006	legwear	A black white snow camouflage trousers.
+wrf_wm13_006	legwear	A white snow camouflage trousers.
 wrf_wm13_007	legwear	A gold ghillie suit trousers with brown details.
-wrf_wm13_008	legwear	A brown tan trousers with thigh pockets with beige details.
-wrf_wm13_009	legwear	A black navy police tactical trousers.
+wrf_wm13_008	legwear	A tan trousers with thigh pockets with beige details.
+wrf_wm13_009	legwear	A navy police tactical trousers.
 wrf_wm14_000	legwear	A brown jungle boots with canvas sides with gold details.
 wrf_wm14_001	legwear	A brown tall desert boots with beige details.
 wrf_wm14_002	legwear	A black police boots with a side zip.
@@ -716,17 +716,17 @@ wrf_wsf2_001	clothing	A black officer's uniform with a diagonal sash with brown 
 wrf_wsf2_002	clothing	A black mechanic's jacket with orange stripes with brown details.
 wrf_wsf2_003	clothing	A tight black shipboard suit.
 wrf_wsf2_004	clothing	A white space force uniform with hard shoulder plates.
-wrf_wsf2_005	clothing	A grey white lab coat.
+wrf_wsf2_005	clothing	A white lab coat.
 wrf_wsf2_006	clothing	A light blue medical jacket with white details.
 wrf_wsf2_007	clothing	A blue high-collared captain's coat with brown details.
-wrf_wsf2_008	clothing	A black grey work jacket.
+wrf_wsf2_008	clothing	A grey work jacket.
 wrf_wsf2_009	clothing	A grey vest over a black shirt with white details.
 wrf_wsf2_010	clothing	A white uniform with glowing lights on both shoulders.
-wrf_wsf2_011	clothing	A grey green colonist shirt with white details.
+wrf_wsf2_011	clothing	A green colonist shirt with white details.
 wrf_wsf3_000	clothing	A long white coat.
 wrf_wsf3_001	clothing	A grey hooded cloak.
 wrf_wsf3_002	clothing	A short black jacket with shoulder plates.
-wrf_wsf3_003	clothing	A blue navy long coat with a high collar.
+wrf_wsf3_003	clothing	A navy long coat with a high collar.
 wrf_wsf3_004	clothing	A white jacket with a cinched waist.
 wrf_wsf3_005	clothing	A black jacket with a small screen on the sleeve.
 wrf_wsf3_006	clothing	A white puffy winter jacket.
@@ -734,9 +734,9 @@ wrf_wsf3_007	clothing	A beige sand-colored colonist poncho with brown details.
 wrf_wsf3_008	clothing	A grey translucent rain cloak with white details.
 wrf_wsf3_009	clothing	A black jacket with armor on one shoulder with blue details.
 wrf_wsf3_010	clothing	A black jacket with a diagonal belt.
-wrf_wsf3_011	clothing	A blue navy coat with a fur collar.
+wrf_wsf3_011	clothing	A navy coat with a fur collar.
 wrf_wsf4_000	body_armor	A smooth white chest plate.
-wrf_wsf4_001	body_armor	A blue navy armor covering chest and belly.
+wrf_wsf4_001	body_armor	A navy armor covering chest and belly.
 wrf_wsf4_002	body_armor	A grey armor from shoulders to chest with white details.
 wrf_wsf4_003	body_armor	A seamless black armored suit torso.
 wrf_wsf4_004	body_armor	A grey light chest plate with glowing lines with white details.
@@ -746,7 +746,7 @@ wrf_wsf4_007	body_armor	A white security guard protective vest.
 wrf_wsf4_008	body_armor	A black colonist's layered plate chest armor with brown details.
 wrf_wsf4_009	body_armor	A light white medical armor.
 wrf_wsf5_000	gauntlets	A white spacesuit gloves.
-wrf_wsf5_001	gauntlets	A black grey armored gloves with hard fingertips with white details.
+wrf_wsf5_001	gauntlets	A grey armored gloves with hard fingertips with white details.
 wrf_wsf5_002	gauntlets	A black gloves with glowing dots on the back with blue details.
 wrf_wsf5_003	gauntlets	A white elbow-length gloves.
 wrf_wsf5_004	gauntlets	A brown thick mechanic's work gloves.
@@ -756,18 +756,18 @@ wrf_wsf5_007	gauntlets	A white space marine gloves with knuckle plates.
 wrf_wsf5_008	gauntlets	A white clear protective gloves.
 wrf_wsf5_009	gauntlets	A black gloves with magnetic palm plates with white details.
 wrf_wsf6_000	legwear	A white and navy crew uniform trousers.
-wrf_wsf6_001	legwear	A black grey trousers with knee plates.
+wrf_wsf6_001	legwear	A grey trousers with knee plates.
 wrf_wsf6_002	legwear	A tight black shipboard suit trousers.
-wrf_wsf6_003	legwear	A blue navy trousers with glowing side stripes.
+wrf_wsf6_003	legwear	A navy trousers with glowing side stripes.
 wrf_wsf6_004	legwear	A black mechanic's coverall bottoms with brown details.
 wrf_wsf6_005	legwear	A white trousers with thigh armor plates.
 wrf_wsf6_006	legwear	A brown baggy sand-colored colonist trousers with beige details.
 wrf_wsf6_007	legwear	A black heavy space marine leg armor with white details.
 wrf_wsf6_008	legwear	A white researcher's slacks.
-wrf_wsf6_009	legwear	A black grey trousers with belt pouches.
+wrf_wsf6_009	legwear	A grey trousers with belt pouches.
 wrf_wsf7_000	legwear	A white spacesuit boots.
 wrf_wsf7_001	legwear	A white boots with glowing soles.
-wrf_wsf7_002	legwear	A black grey magnetic work boots.
+wrf_wsf7_002	legwear	A grey magnetic work boots.
 wrf_wsf7_003	legwear	A blue knee-high navy armored boots.
 wrf_wsf7_004	legwear	A light black shipboard shoes.
 wrf_wsf7_005	legwear	A black boots with small ankle thrusters with white details.
@@ -781,16 +781,16 @@ wrf_wsp1_000	headgear	A black top hat with brass goggles with brown details.
 wrf_wsp1_001	headgear	A brown top hat with a gear ornament.
 wrf_wsp1_002	headgear	A brown leather aviator cap with goggles.
 wrf_wsp1_003	headgear	A small red lady's hat with a feather and a gear with brown details.
-wrf_wsp1_004	headgear	A brown brass spectacles with a magnifying lens.
-wrf_wsp1_005	headgear	A brown round brass goggles.
-wrf_wsp1_006	headgear	A brown leather gas mask with a copper canister.
-wrf_wsp1_007	headgear	A brown brass diving helmet with round windows.
-wrf_wsp1_008	headgear	A brown riveted copper helmet.
+wrf_wsp1_004	headgear	A brass spectacles with a magnifying lens.
+wrf_wsp1_005	headgear	A round brass goggles.
+wrf_wsp1_006	headgear	A leather gas mask with a copper canister.
+wrf_wsp1_007	headgear	A brass diving helmet with round windows.
+wrf_wsp1_008	headgear	A riveted copper helmet.
 wrf_wsp1_009	headgear	A brown leather flat cap.
 wrf_wsp1_010	headgear	A brown leather cap with ear flaps with beige details.
 wrf_wsp1_011	headgear	A black lady's hat with a veil.
 wrf_wsp2_000	clothing	A brown leather coat with brass buttons.
-wrf_wsp2_001	clothing	A black green double-breasted jacket with brass buttons with brown details.
+wrf_wsp2_001	clothing	A green double-breasted jacket with brass buttons with brown details.
 wrf_wsp2_002	clothing	A brown coat with a short shoulder cape.
 wrf_wsp2_003	clothing	A black tailcoat.
 wrf_wsp2_004	clothing	A brown aviator leather jacket with many belts.
@@ -800,39 +800,39 @@ wrf_wsp2_007	clothing	A high-collared black coat with brown details.
 wrf_wsp2_008	clothing	A brown leather jacket with a small pressure gauge on the sleeve.
 wrf_wsp2_009	clothing	A brown aviator coat with a fur collar with beige details.
 wrf_wsp2_010	clothing	A brown cream linen coat with beige details.
-wrf_wsp2_011	clothing	A brown short lady's jacket with copper clasps.
+wrf_wsp2_011	clothing	A short lady's jacket with copper clasps.
 wrf_wsp3_000	clothing	A brown vest with brass buttons over a white shirt.
-wrf_wsp3_001	clothing	A brown black vest with a pocket watch chain with white details.
-wrf_wsp3_002	clothing	A brown green vest with gear embroidery with white details.
+wrf_wsp3_001	clothing	A black vest with a pocket watch chain with white details.
+wrf_wsp3_002	clothing	A green vest with gear embroidery with white details.
 wrf_wsp3_003	clothing	A brown rolled-sleeve shirt with leather suspenders with white details.
-wrf_wsp3_004	clothing	A brown white blouse with a frilled collar.
+wrf_wsp3_004	clothing	A white blouse with a frilled collar.
 wrf_wsp3_005	clothing	A brown leather corset over a blouse with white details.
 wrf_wsp3_006	clothing	A red bustle dress with brown details.
 wrf_wsp3_007	clothing	A black lace dress.
 wrf_wsp3_008	clothing	A brown engineer's work shirt with a leather apron.
 wrf_wsp3_009	clothing	A brown striped shirt with sleeve garters with white details.
-wrf_wsp3_010	clothing	A black navy uniform jacket with many buttons with brown details.
-wrf_wsp3_011	clothing	A brown cream dress with copper gear clasps with white details.
-wrf_wsp4_000	body_armor	A brown brass plate breastplate.
-wrf_wsp4_001	body_armor	A brown riveted copper cuirass.
+wrf_wsp3_010	clothing	A navy uniform jacket with many buttons with brown details.
+wrf_wsp3_011	clothing	A cream dress with copper gear clasps with white details.
+wrf_wsp4_000	body_armor	A brass plate breastplate.
+wrf_wsp4_001	body_armor	A riveted copper cuirass.
 wrf_wsp4_002	body_armor	A brown armor with a small steam tank on the back.
-wrf_wsp4_003	body_armor	A brown layered leather and brass armor.
+wrf_wsp4_003	body_armor	A layered leather and brass armor.
 wrf_wsp4_004	body_armor	A brown iron breastplate with a gear.
 wrf_wsp4_005	body_armor	A brown heavy armor with a pressure gauge on the chest.
-wrf_wsp4_006	body_armor	A brown leather vest with sewn-on brass plates.
+wrf_wsp4_006	body_armor	A leather vest with sewn-on brass plates.
 wrf_wsp4_007	body_armor	A brown thick leather aviator torso guard.
-wrf_wsp4_008	body_armor	A brown brass breastplate over chainmail.
-wrf_wsp4_009	body_armor	A brown copper diving suit torso with a round window.
+wrf_wsp4_008	body_armor	A brass breastplate over chainmail.
+wrf_wsp4_009	body_armor	A copper diving suit torso with a round window.
 wrf_wsp5_000	gauntlets	A brown leather gloves with brass fingertips.
 wrf_wsp5_001	gauntlets	An elbow-length brown leather gloves.
 wrf_wsp5_002	gauntlets	A brown clockwork gauntlets with gears.
 wrf_wsp5_003	gauntlets	A brown thick engineer's work gloves with beige details.
 wrf_wsp5_004	gauntlets	A white lady's long gloves with brown details.
 wrf_wsp5_005	gauntlets	A brown gloves with a small pressure gauge on the wrist.
-wrf_wsp5_006	gauntlets	A brown copper plate gauntlets.
+wrf_wsp5_006	gauntlets	A copper plate gauntlets.
 wrf_wsp5_007	gauntlets	A black leather riding gloves.
 wrf_wsp5_008	gauntlets	A brown riveted iron gauntlets.
-wrf_wsp5_009	gauntlets	A brown gloves with brass rings on the knuckles.
+wrf_wsp5_009	gauntlets	A gloves with brass rings on the knuckles.
 wrf_wsp6_000	legwear	A brown striped trousers.
 wrf_wsp6_001	legwear	A brown leather trousers with knee pads.
 wrf_wsp6_002	legwear	A brown riding breeches with beige details.
@@ -844,134 +844,134 @@ wrf_wsp6_007	legwear	A red high-low skirt with brown details.
 wrf_wsp6_008	legwear	A brown skirt with a leather belt.
 wrf_wsp6_009	legwear	A long black skirt with lace trim.
 wrf_wsp6_010	legwear	A brown knee-length leather culottes.
-wrf_wsp6_011	legwear	A brown armored legs with brass thigh and knee plates.
+wrf_wsp6_011	legwear	An armored legs with brass thigh and knee plates.
 wrf_wsp7_000	legwear	A knee-high brown leather boots.
 wrf_wsp7_001	legwear	A black boots with brass buckles with brown details.
 wrf_wsp7_002	legwear	A brown lace-up boots with gear ornaments.
 wrf_wsp7_003	legwear	A brown riveted engineer's work boots.
 wrf_wsp7_004	legwear	A black lady's heeled lace-up boots with brown details.
 wrf_wsp7_005	legwear	A brown fur-trimmed aviator boots.
-wrf_wsp7_006	legwear	A brown copper plate armored boots.
-wrf_wsp7_007	legwear	A brown black and white shoes with beige details.
+wrf_wsp7_006	legwear	A copper plate armored boots.
+wrf_wsp7_007	legwear	A black and white shoes with beige details.
 wrf_wsp7_008	legwear	A brown shoes with cloth spats with beige details.
-wrf_wsp7_009	legwear	A brown heavy copper diving boots.
+wrf_wsp7_009	legwear	A heavy copper diving boots.
 wrf_wsp7_010	legwear	A brown cream button-up lady's boots with beige details.
 wrf_wsp7_011	legwear	A brown heavy boots with iron soles.
 wrf_wsp8_000	accessory	A brown wide leather belt with gears.
 wrf_wsp8_001	accessory	A brown leather belt with tools.
 wrf_wsp8_002	accessory	A brown leather belt with pouches.
 wrf_wsp8_003	accessory	A white cravat with brown details.
-wrf_wsp8_004	accessory	A brown black ascot tie with a brass pin.
+wrf_wsp8_004	accessory	A black ascot tie with a brass pin.
 wrf_wsp8_005	accessory	A white lace collar with brown details.
 wrf_wsp8_006	accessory	A red bow tie with brown details.
-wrf_wsp8_007	accessory	A brown brass pocket watch with white details.
-wrf_wsp8_008	accessory	A brown brass gear brooch with beige details.
+wrf_wsp8_007	accessory	A brass pocket watch with white details.
+wrf_wsp8_008	accessory	A brass gear brooch with beige details.
 wrf_wsp8_009	accessory	A brown leather shoulder bag.
-wrf_wsp8_010	accessory	A brown choker with a brass gear.
+wrf_wsp8_010	accessory	A choker with a brass gear.
 wrf_wsp8_011	accessory	A brown leather holster belt with a pistol.
-wrf_wac1_000	accessory	A brown gold ring with a large red gem.
-wrf_wac1_001	accessory	A black silver ring with three small blue stones with brown details.
+wrf_wac1_000	accessory	A gold ring with a large red gem.
+wrf_wac1_001	accessory	A silver ring with three small blue stones with brown details.
 wrf_wac1_002	accessory	A black thick plain iron ring.
-wrf_wac1_003	accessory	A black silver ring shaped like a coiled snake with white details.
-wrf_wac1_004	accessory	A brown copper ring with a green stone.
-wrf_wac1_005	accessory	A brown gold signet ring with a carved flat face.
-wrf_wac1_006	accessory	A black silver ring of two intertwined bands with brown details.
-wrf_wac1_007	accessory	A brown gold ring with a square black stone.
-wrf_wac1_008	accessory	A brown gold ring set with small pearls with white details.
-wrf_wac1_009	accessory	A black silver ring with a large purple stone held by claws.
+wrf_wac1_003	accessory	A silver ring shaped like a coiled snake with white details.
+wrf_wac1_004	accessory	A copper ring with a green stone.
+wrf_wac1_005	accessory	A gold signet ring with a carved flat face.
+wrf_wac1_006	accessory	A silver ring of two intertwined bands with brown details.
+wrf_wac1_007	accessory	A gold ring with a square black stone.
+wrf_wac1_008	accessory	A gold ring set with small pearls with white details.
+wrf_wac1_009	accessory	A silver ring with a large purple stone held by claws.
 wrf_wac1_010	accessory	A brown carved white bone ring with beige details.
 wrf_wac1_011	accessory	A brown wooden ring wrapped with thread.
-wrf_wac2_000	accessory	A black silver skull ring with white details.
-wrf_wac2_001	accessory	A brown gold winged ring with beige details.
-wrf_wac2_002	accessory	A brown gold ring with small stones set like a flower with white details.
-wrf_wac2_003	accessory	A black wide engraved silver ring with white details.
-wrf_wac2_004	accessory	A brown thin gold ring with a round light blue stone.
-wrf_wac2_005	accessory	A brown gold ring with alternating red and blue stones.
+wrf_wac2_000	accessory	A silver skull ring with white details.
+wrf_wac2_001	accessory	A gold winged ring with beige details.
+wrf_wac2_002	accessory	A gold ring with small stones set like a flower with white details.
+wrf_wac2_003	accessory	A wide engraved silver ring with white details.
+wrf_wac2_004	accessory	A thin gold ring with a round light blue stone.
+wrf_wac2_005	accessory	A gold ring with alternating red and blue stones.
 wrf_wac2_006	accessory	A black iron ring with spikes.
-wrf_wac2_007	accessory	A black silver ring with a crescent moon with white details.
-wrf_wac2_008	accessory	A brown gold ring with an eye-shaped gem.
-wrf_wac2_009	accessory	A brown twisted copper wire ring.
-wrf_wac2_010	accessory	A grey silver ring with a large clear stone with white details.
-wrf_wac2_011	accessory	A brown stacked gold and silver rings with white details.
-wrf_wac3_000	accessory	A brown gold necklace with a red gem.
-wrf_wac3_001	accessory	A black silver chain with a blue teardrop stone with white details.
+wrf_wac2_007	accessory	A silver ring with a crescent moon with white details.
+wrf_wac2_008	accessory	A gold ring with an eye-shaped gem.
+wrf_wac2_009	accessory	A twisted copper wire ring.
+wrf_wac2_010	accessory	A silver ring with a large clear stone with white details.
+wrf_wac2_011	accessory	A stacked gold and silver rings with white details.
+wrf_wac3_000	accessory	A gold necklace with a red gem.
+wrf_wac3_001	accessory	A silver chain with a blue teardrop stone with white details.
 wrf_wac3_002	accessory	A brown leather cord necklace with fangs with beige details.
-wrf_wac3_003	accessory	A brown necklace with small gold discs with orange details.
+wrf_wac3_003	accessory	A necklace with small gold discs with orange details.
 wrf_wac3_004	accessory	A white pearl necklace with brown details.
 wrf_wac3_005	accessory	A brown wooden bead necklace.
-wrf_wac3_006	accessory	A brown silver necklace with three green stones with white details.
-wrf_wac3_007	accessory	A black round silver locket with white details.
-wrf_wac3_008	accessory	A brown thick gold chain.
+wrf_wac3_006	accessory	A silver necklace with three green stones with white details.
+wrf_wac3_007	accessory	A round silver locket with white details.
+wrf_wac3_008	accessory	A thick gold chain.
 wrf_wac3_009	accessory	A brown seashell necklace with beige details.
 wrf_wac3_010	accessory	A brown leather cord necklace with feathers with white details.
 wrf_wac3_011	accessory	A brown cloth choker with a black stone.
-wrf_wac4_000	accessory	A black silver star amulet with white details.
+wrf_wac4_000	accessory	A silver star amulet with white details.
 wrf_wac4_001	accessory	A blue charm with an eye pattern.
 wrf_wac4_002	accessory	A brown necklace with a small vial.
-wrf_wac4_003	accessory	A brown gold crescent amulet.
+wrf_wac4_003	accessory	A gold crescent amulet.
 wrf_wac4_004	accessory	A brown charm of black feathers and bone with white details.
 wrf_wac4_005	accessory	A brown necklace with a small scroll case.
-wrf_wac4_006	accessory	A black silver ring amulet around a red stone with white details.
+wrf_wac4_006	accessory	A silver ring amulet around a red stone with white details.
 wrf_wac4_007	accessory	A brown carved wooden animal charm with beige details.
 wrf_wac4_008	accessory	A brown woven thread charm with blue details.
 wrf_wac4_009	accessory	A brown small hourglass necklace.
-wrf_wac4_010	accessory	A brown green four-leaf amulet.
+wrf_wac4_010	accessory	A green four-leaf amulet.
 wrf_wac4_011	accessory	A brown necklace with a small bell.
-wrf_wac5_000	accessory	A brown pair of gold hoop earrings.
+wrf_wac5_000	accessory	A pair of gold hoop earrings.
 wrf_wac5_001	accessory	A brown pair of red teardrop earrings.
 wrf_wac5_002	accessory	A brown pair of pearl drop earrings with white details.
-wrf_wac5_003	accessory	A grey pair of silver feather earrings with white details.
+wrf_wac5_003	accessory	A pair of silver feather earrings with white details.
 wrf_wac5_004	accessory	A brown pair of long dangling chain earrings with beige details.
 wrf_wac5_005	accessory	A pair of square blue stone earrings with brown details.
 wrf_wac5_006	accessory	A brown pair of small fang earrings with white details.
-wrf_wac5_007	accessory	A brown pair of gold crescent earrings with beige details.
-wrf_wac5_008	accessory	A black pair of silver flower earrings with white details.
-wrf_wac5_009	accessory	A brown pair of copper spiral earrings.
+wrf_wac5_007	accessory	A pair of gold crescent earrings with beige details.
+wrf_wac5_008	accessory	A pair of silver flower earrings with white details.
+wrf_wac5_009	accessory	A pair of copper spiral earrings.
 wrf_wac5_010	accessory	A brown pair of green stone tassel earrings with white details.
-wrf_wac5_011	accessory	A brown gold ear cuff with a chain with beige details.
-wrf_wac6_000	accessory	A brown gold brooch with a red gem.
-wrf_wac6_001	accessory	A brown silver flower brooch with white details.
+wrf_wac5_011	accessory	A gold ear cuff with a chain with beige details.
+wrf_wac6_000	accessory	A gold brooch with a red gem.
+wrf_wac6_001	accessory	A silver flower brooch with white details.
 wrf_wac6_002	accessory	A brown butterfly hair clip.
-wrf_wac6_003	accessory	A black silver hair clip with a blue stone with white details.
+wrf_wac6_003	accessory	A silver hair clip with a blue stone with white details.
 wrf_wac6_004	accessory	A brown feathered hair ornament with white details.
 wrf_wac6_005	accessory	A brown thin comb lined with pearls with white details.
 wrf_wac6_006	accessory	A red ribbon hair bow with brown details.
-wrf_wac6_007	accessory	A brown copper leaf brooch with beige details.
-wrf_wac6_008	accessory	A brown round gold cloak pin with beige details.
+wrf_wac6_007	accessory	A copper leaf brooch with beige details.
+wrf_wac6_008	accessory	A round gold cloak pin with beige details.
 wrf_wac6_009	accessory	A brown pair of thin hairpins with red details.
 wrf_wac6_010	accessory	A brown oval green stone brooch.
-wrf_wac6_011	accessory	A black silver star hair clip with white details.
-wrf_wac7_000	accessory	A brown thick gold bracelet.
-wrf_wac7_001	accessory	A black three stacked thin silver bangles with brown details.
+wrf_wac6_011	accessory	A silver star hair clip with white details.
+wrf_wac7_000	accessory	A thick gold bracelet.
+wrf_wac7_001	accessory	A three stacked thin silver bangles with brown details.
 wrf_wac7_002	accessory	A brown studded leather bracelet.
-wrf_wac7_003	accessory	A brown gold bracelet with green stones.
+wrf_wac7_003	accessory	A gold bracelet with green stones.
 wrf_wac7_004	accessory	A brown wooden bead bracelet.
-wrf_wac7_005	accessory	A brown gold snake bracelet.
+wrf_wac7_005	accessory	A gold snake bracelet.
 wrf_wac7_006	accessory	A brown braided thread bracelet.
-wrf_wac7_007	accessory	A brown wide engraved copper bracelet.
-wrf_wac7_008	accessory	A black silver chain bracelet with small charms with white details.
+wrf_wac7_007	accessory	A wide engraved copper bracelet.
+wrf_wac7_008	accessory	A silver chain bracelet with small charms with white details.
 wrf_wac7_009	accessory	A brown leather bracelet with a blue stone.
 wrf_wac7_010	accessory	A brown bone bead bracelet with beige details.
 wrf_wac7_011	accessory	A brown anklet chain with small bells.
 wrf_wac8_000	accessory	A red knitted scarf with brown details.
 wrf_wac8_001	accessory	A black long striped scarf with white details.
 wrf_wac8_002	accessory	A brown fur stole with beige details.
-wrf_wac8_003	accessory	A grey light purple silk scarf with white details.
-wrf_wac8_004	accessory	A black grey cloth bandana.
+wrf_wac8_003	accessory	A light purple silk scarf with white details.
+wrf_wac8_004	accessory	A grey cloth bandana.
 wrf_wac8_005	accessory	A red gold-trimmed shawl with brown details.
 wrf_wac8_006	accessory	A brown fringed shawl with white details.
 wrf_wac8_007	accessory	A brown plaid wool shawl.
 wrf_wac8_008	accessory	A white lace shawl with brown details.
 wrf_wac8_009	accessory	A long black scarf.
-wrf_wac8_010	accessory	A brown yellow neckerchief with orange details.
+wrf_wac8_010	accessory	A yellow neckerchief with orange details.
 wrf_wac8_011	accessory	A long blue gauze scarf.
-wrf_wac9_000	accessory	A brown leather belt with a gold buckle.
+wrf_wac9_000	accessory	A leather belt with a gold buckle.
 wrf_wac9_001	accessory	A brown wide jeweled sash.
-wrf_wac9_002	accessory	A black silver chain belt with brown details.
+wrf_wac9_002	accessory	A silver chain belt with brown details.
 wrf_wac9_003	accessory	A brown leather belt with two pouches.
 wrf_wac9_004	accessory	A black knotted cloth waist sash with white details.
 wrf_wac9_005	accessory	A brown small leather drawstring pouch.
-wrf_wac9_006	accessory	A brown pouch bulging with gold coins.
+wrf_wac9_006	accessory	A pouch bulging with gold coins.
 wrf_wac9_007	accessory	A brown iron ring with a bunch of keys.
 wrf_wac9_008	accessory	A brown leather belt holding small vials.
 wrf_wac9_009	accessory	A brown waist cord with bells with blue details.
@@ -992,32 +992,32 @@ wrf_wwe1_011	headgear	A knotted red bandana.
 wrf_wwe2_000	clothing	A white collarless cream shirt with brown suspenders.
 wrf_wwe2_001	clothing	A red plaid cotton shirt.
 wrf_wwe2_002	clothing	A brown fringed suede jacket.
-wrf_wwe2_003	clothing	A blue navy double-breasted cavalry jacket.
+wrf_wwe2_003	clothing	A navy double-breasted cavalry jacket.
 wrf_wwe2_004	clothing	A gambler's black coat with a red vest.
 wrf_wwe2_005	clothing	A black denim work jacket.
 wrf_wwe2_006	clothing	A thick red and black plaid wool jacket with brown details.
 wrf_wwe2_007	clothing	A white ruffled shirt with a black string tie.
-wrf_wwe2_008	clothing	A brown short leather bolero with silver ornaments.
+wrf_wwe2_008	clothing	A short leather bolero with silver ornaments.
 wrf_wwe2_009	clothing	A grey wool band-collar shirt.
-wrf_wwe2_010	clothing	A black green striped shirt with sleeve garters with olive details.
+wrf_wwe2_010	clothing	A green striped shirt with sleeve garters with olive details.
 wrf_wwe2_011	clothing	A brown short black coat with a star badge.
 wrf_wwe3_000	gauntlets	A brown leather work gloves.
 wrf_wwe3_001	gauntlets	A brown long-cuffed riding gauntlets.
 wrf_wwe3_002	gauntlets	A brown fringed leather gloves.
 wrf_wwe3_003	gauntlets	A black leather gunslinger gloves.
 wrf_wwe3_004	gauntlets	A white lady's gloves with beige details.
-wrf_wwe3_005	gauntlets	A brown leather gloves with silver studs.
+wrf_wwe3_005	gauntlets	A leather gloves with silver studs.
 wrf_wwe3_006	gauntlets	A brown thin suede gloves.
 wrf_wwe3_007	gauntlets	A brown thick sheepskin-lined gloves with beige details.
 wrf_wwe3_008	gauntlets	A white cream gloves with visible stitching with beige details.
 wrf_wwe3_009	gauntlets	A black gloves with silver conchos at the wrist.
-wrf_wwe4_000	legwear	A black blue denim jeans.
+wrf_wwe4_000	legwear	A blue denim jeans.
 wrf_wwe4_001	legwear	A fringed brown leather chaps.
 wrf_wwe4_002	legwear	A black striped wool trousers.
 wrf_wwe4_003	legwear	A brown work trousers with suspenders.
-wrf_wwe4_004	legwear	A brown black leather chaps.
+wrf_wwe4_004	legwear	A black leather chaps.
 wrf_wwe4_005	legwear	A brown trousers with patched knees.
-wrf_wwe4_006	legwear	A blue navy cavalry trousers with a yellow stripe with brown details.
+wrf_wwe4_006	legwear	A navy cavalry trousers with a yellow stripe with brown details.
 wrf_wwe4_007	legwear	A brown suede trousers.
 wrf_wwe4_008	legwear	A long brown riding skirt.
 wrf_wwe4_009	legwear	A red ruffled skirt.
@@ -1034,18 +1034,18 @@ wrf_wwe5_007	legwear	A brown lace-up work boots.
 wrf_wwe5_008	legwear	A brown worn low leather boots with beige details.
 wrf_wwe5_009	legwear	A black boots with white stitching.
 wrf_wwe5_010	legwear	A brown fringed boots.
-wrf_wwe5_011	legwear	A black short boots with silver ornaments.
+wrf_wwe5_011	legwear	A short boots with silver ornaments.
 wrf_wwe6_000	accessory	A brown gun belt with one holster.
 wrf_wwe6_001	accessory	A brown gun belt with two holsters.
 wrf_wwe6_002	accessory	A brown bandolier worn across the shoulder.
 wrf_wwe6_003	accessory	A red bandana with brown details.
-wrf_wwe6_004	accessory	A blue navy polka-dot bandana.
-wrf_wwe6_005	accessory	A black bolo tie with a silver clasp with white details.
+wrf_wwe6_004	accessory	A navy polka-dot bandana.
+wrf_wwe6_005	accessory	A bolo tie with a silver clasp with white details.
 wrf_wwe6_006	accessory	A thin black string tie in a bow.
 wrf_wwe6_007	accessory	A brown dust goggles.
-wrf_wwe6_008	accessory	A brown belt with a large silver buckle.
+wrf_wwe6_008	accessory	A belt with a large silver buckle.
 wrf_wwe6_009	accessory	A brown belt with a knife sheath.
-wrf_wwe6_010	accessory	A brown leather band with silver conchos with white details.
+wrf_wwe6_010	accessory	A leather band with silver conchos with white details.
 wrf_wwe6_011	accessory	A brown pair of leather arm guards.
 wrf_wwe7_000	clothing	A brown floral long-sleeved prairie dress with beige details.
 wrf_wwe7_001	clothing	A red saloon dress with layered ruffles with brown details.
@@ -1053,10 +1053,10 @@ wrf_wwe7_002	clothing	A white blouse with a brown skirt.
 wrf_wwe7_003	clothing	A grey plaid apron dress with white details.
 wrf_wwe7_004	clothing	A black long-sleeved mourning dress.
 wrf_wwe7_005	clothing	A brown fringed suede dress.
-wrf_wwe7_006	clothing	A black green velvet dress with brown details.
+wrf_wwe7_006	clothing	A green velvet dress with brown details.
 wrf_wwe7_007	clothing	A brown cream cotton work dress with a white apron with beige details.
-wrf_wwe7_008	clothing	A blue navy riding jacket and skirt.
-wrf_wwe7_009	clothing	A grey purple dress with bows with magenta details.
+wrf_wwe7_008	clothing	A navy riding jacket and skirt.
+wrf_wwe7_009	clothing	A purple dress with bows with magenta details.
 wrf_wpa1_000	headgear	A brown leather aviator cap with goggles.
 wrf_wpa1_001	headgear	A brown old gas mask with a filter canister with beige details.
 wrf_wpa1_002	headgear	A brown rusty helmet wrapped in cloth.
@@ -1077,10 +1077,10 @@ wrf_wpa2_004	clothing	A brown work jacket with iron plates on the shoulders.
 wrf_wpa2_005	clothing	A brown tattered sand-colored poncho with beige details.
 wrf_wpa2_006	clothing	A black denim jacket with rusty studs with brown details.
 wrf_wpa2_007	clothing	A brown faded red winter jacket.
-wrf_wpa2_008	clothing	A brown black leather coat with many belts.
+wrf_wpa2_008	clothing	A black leather coat with many belts.
 wrf_wpa2_009	clothing	A brown long grey coat with a torn hem.
 wrf_wpa2_010	clothing	A brown layered stitched cloth wrap with beige details.
-wrf_wpa2_011	clothing	A brown olive jacket with a cloth around the neck.
+wrf_wpa2_011	clothing	An olive jacket with a cloth around the neck.
 wrf_wpa3_000	body_armor	A brown chest plate cut from a rusty car door.
 wrf_wpa3_001	body_armor	A brown leather vest with sewn-on chainmail.
 wrf_wpa3_002	body_armor	A brown chest guard of layered wire mesh.
@@ -1106,7 +1106,7 @@ wrf_wpa5_001	legwear	A brown trousers with iron plates strapped to the knees.
 wrf_wpa5_002	legwear	A brown torn camouflage trousers with gold details.
 wrf_wpa5_003	legwear	A brown cargo pants with leather patches.
 wrf_wpa5_004	legwear	A black jeans patched with duct tape with brown details.
-wrf_wpa5_005	legwear	A brown black trousers with many belts.
+wrf_wpa5_005	legwear	A black trousers with many belts.
 wrf_wpa5_006	legwear	A brown baggy sand-colored trousers with beige details.
 wrf_wpa5_007	legwear	A black trousers with tire rubber on the shins with brown details.
 wrf_wpa5_008	legwear	A brown trousers with sewn-on pockets with beige details.
@@ -1119,68 +1119,68 @@ wrf_wpa6_002	legwear	A brown work shoes wrapped in duct tape.
 wrf_wpa6_003	legwear	A black combat boots with holes with brown details.
 wrf_wpa6_004	legwear	A brown shoes with tire rubber soles.
 wrf_wpa6_005	legwear	A brown simple cloth-wrapped shoes with beige details.
-wrf_wpa6_006	legwear	A brown black boots with rusty studs.
+wrf_wpa6_006	legwear	A black boots with rusty studs.
 wrf_wpa6_007	legwear	A brown boots laced with wire.
 wrf_wpa6_008	legwear	A brown tall boots wrapped in cloth to the knee with beige details.
 wrf_wpa6_009	legwear	A brown mismatched pair of boots.
 wrf_wpa6_010	legwear	A brown fur-wrapped winter boots with beige details.
 wrf_wpa6_011	legwear	A brown scavenged thick-soled sneakers.
-wrf_wmi1_000	headgear	A blue navy peaked cap with gold cords with brown details.
-wrf_wmi1_001	headgear	A gold khaki peaked cap with a black visor with brown details.
+wrf_wmi1_000	headgear	A navy peaked cap with gold cords with brown details.
+wrf_wmi1_001	headgear	A khaki peaked cap with a black visor with brown details.
 wrf_wmi1_002	headgear	A red beret.
 wrf_wmi1_003	headgear	A brown tall shako with tassels with red details.
 wrf_wmi1_004	headgear	A white ceremonial helmet with a plume with brown details.
 wrf_wmi1_005	headgear	A black tall fur bearskin cap with red details.
 wrf_wmi1_006	headgear	A black wide-brimmed cavalry hat with a plume with brown details.
 wrf_wmi1_007	headgear	A brown gold-trimmed bicorne.
-wrf_wmi1_008	headgear	A black grey side cap.
+wrf_wmi1_008	headgear	A grey side cap.
 wrf_wmi1_009	headgear	A brown leather spiked helmet.
-wrf_wmi1_010	headgear	A brown dark green mountain hat with a feather with olive details.
+wrf_wmi1_010	headgear	A dark green mountain hat with a feather with olive details.
 wrf_wmi1_011	headgear	A white-topped sailor cap.
-wrf_wmi2_000	clothing	A blue navy dress uniform jacket with two rows of gold buttons with brown details.
-wrf_wmi2_001	clothing	A brown crimson jacket with cords across the chest with red details.
+wrf_wmi2_000	clothing	A navy dress uniform jacket with two rows of gold buttons with brown details.
+wrf_wmi2_001	clothing	A crimson jacket with cords across the chest with red details.
 wrf_wmi2_002	clothing	A black high-collared uniform jacket with brown details.
-wrf_wmi2_003	clothing	A gold khaki field uniform jacket with many pockets with brown details.
+wrf_wmi2_003	clothing	A khaki field uniform jacket with many pockets with brown details.
 wrf_wmi2_004	clothing	A white dress jacket with large epaulettes with brown details.
 wrf_wmi2_005	clothing	A brown fur-trimmed hussar jacket with white details.
-wrf_wmi2_006	clothing	A brown dark green jacket with gold-embroidered cuffs with olive details.
-wrf_wmi2_007	clothing	A black grey belted uniform jacket with brown details.
+wrf_wmi2_006	clothing	A dark green jacket with gold-embroidered cuffs with olive details.
+wrf_wmi2_007	clothing	A grey belted uniform jacket with brown details.
 wrf_wmi2_008	clothing	A white sailor jacket with a collar.
-wrf_wmi2_009	clothing	A black navy uniform jacket with medals with brown details.
+wrf_wmi2_009	clothing	A navy uniform jacket with medals with brown details.
 wrf_wmi2_010	clothing	A white jacket with a diagonal sash with brown details.
 wrf_wmi2_011	clothing	A brown short black cavalry jacket with red details.
 wrf_wmi3_000	clothing	A grey double-breasted greatcoat.
-wrf_wmi3_001	clothing	A blue navy greatcoat with a fur collar with brown details.
-wrf_wmi3_002	clothing	An olive dark green greatcoat with a short cape with brown details.
+wrf_wmi3_001	clothing	A navy greatcoat with a fur collar with brown details.
+wrf_wmi3_002	clothing	A dark green greatcoat with a short cape with brown details.
 wrf_wmi3_003	clothing	A black cloak with a red lining.
 wrf_wmi3_004	clothing	A white ceremonial cloak with gold clasps with brown details.
 wrf_wmi3_005	clothing	A gold belted khaki greatcoat with brown details.
 wrf_wmi3_006	clothing	A single-breasted black greatcoat with brown details.
-wrf_wmi3_007	clothing	A blue navy greatcoat with epaulettes with brown details.
-wrf_wmi3_008	clothing	A red crimson cloak with tassels with brown details.
+wrf_wmi3_007	clothing	A navy greatcoat with epaulettes with brown details.
+wrf_wmi3_008	clothing	A crimson cloak with tassels with brown details.
 wrf_wmi3_009	clothing	A white hooded snow coat with brown details.
 wrf_wmi4_000	gauntlets	A white ceremonial gloves.
 wrf_wmi4_001	gauntlets	A long-cuffed black leather cavalry gloves.
 wrf_wmi4_002	gauntlets	A brown leather gloves.
 wrf_wmi4_003	gauntlets	A white gloves with gold-embroidered cuffs with brown details.
-wrf_wmi4_004	gauntlets	A black grey wool gloves.
+wrf_wmi4_004	gauntlets	A grey wool gloves.
 wrf_wmi4_005	gauntlets	A black gloves with reinforced fingertips with brown details.
 wrf_wmi4_006	gauntlets	A brown gloves with tasseled cuffs with red details.
 wrf_wmi4_007	gauntlets	A thick brown winter gloves.
-wrf_wmi4_008	gauntlets	An olive dark green wool gloves.
+wrf_wmi4_008	gauntlets	A dark green wool gloves.
 wrf_wmi4_009	gauntlets	A long white gloves with gold buttons.
-wrf_wmi5_000	legwear	A blue navy trousers with a red stripe.
-wrf_wmi5_001	legwear	A brown black trousers with a gold stripe.
+wrf_wmi5_000	legwear	A navy trousers with a red stripe.
+wrf_wmi5_001	legwear	A black trousers with a gold stripe.
 wrf_wmi5_002	legwear	A white ceremonial trousers.
-wrf_wmi5_003	legwear	A brown khaki riding breeches.
-wrf_wmi5_004	legwear	A black grey uniform trousers.
+wrf_wmi5_003	legwear	A khaki riding breeches.
+wrf_wmi5_004	legwear	A grey uniform trousers.
 wrf_wmi5_005	legwear	A gold field uniform trousers with many pockets.
-wrf_wmi5_006	legwear	A red crimson riding breeches with brown details.
+wrf_wmi5_006	legwear	A crimson riding breeches with brown details.
 wrf_wmi5_007	legwear	A white bell-bottom sailor trousers.
-wrf_wmi5_008	legwear	A brown black riding breeches.
-wrf_wmi5_009	legwear	An olive dark green uniform trousers.
-wrf_wmi5_010	legwear	A black grey trousers with a white stripe.
-wrf_wmi5_011	legwear	A gold khaki trousers with wrapped shins with brown details.
+wrf_wmi5_008	legwear	A black riding breeches.
+wrf_wmi5_009	legwear	A dark green uniform trousers.
+wrf_wmi5_010	legwear	A grey trousers with a white stripe.
+wrf_wmi5_011	legwear	A khaki trousers with wrapped shins with brown details.
 wrf_wmi6_000	legwear	A knee-high black riding boots.
 wrf_wmi6_001	legwear	A brown boots with spurs.
 wrf_wmi6_002	legwear	A black laced combat boots with brown details.
@@ -1188,20 +1188,20 @@ wrf_wmi6_003	legwear	A polished black dress shoes.
 wrf_wmi6_004	legwear	A white ceremonial shoes with brown details.
 wrf_wmi6_005	legwear	A brown shoes with wrapped shins with white details.
 wrf_wmi6_006	legwear	A black boots with turned-down tops.
-wrf_wmi6_007	legwear	A red crimson boots with metal fittings with brown details.
+wrf_wmi6_007	legwear	A crimson boots with metal fittings with brown details.
 wrf_wmi6_008	legwear	A brown fur-lined winter boots with white details.
-wrf_wmi6_009	legwear	A brown black shoes with gaiters with beige details.
+wrf_wmi6_009	legwear	A black shoes with gaiters with beige details.
 wrf_wmi6_010	legwear	A brown leather lace-up boots.
 wrf_wmi6_011	legwear	A black shoes with white spats with brown details.
-wrf_wmi7_000	accessory	A brown leather belt with a brass buckle.
+wrf_wmi7_000	accessory	A leather belt with a brass buckle.
 wrf_wmi7_001	accessory	A brown belt with a cross strap.
-wrf_wmi7_002	accessory	A brown gold aiguillette.
-wrf_wmi7_003	accessory	A brown pair of gold fringed epaulettes.
-wrf_wmi7_004	accessory	A brown crimson sash with red details.
-wrf_wmi7_005	accessory	A brown white leather cartridge belt.
+wrf_wmi7_002	accessory	A gold aiguillette.
+wrf_wmi7_003	accessory	A pair of gold fringed epaulettes.
+wrf_wmi7_004	accessory	A crimson sash with red details.
+wrf_wmi7_005	accessory	A white leather cartridge belt.
 wrf_wmi7_006	accessory	A brown gold-buckled ceremonial belt.
 wrf_wmi7_007	accessory	A brown leather sword hanger.
-wrf_wmi7_008	accessory	A brown silver aiguillette with white details.
+wrf_wmi7_008	accessory	A silver aiguillette with white details.
 wrf_wmi7_009	accessory	A red silk waist sash with brown details.
 wrf_wmi7_010	accessory	A brown leather map case shoulder bag.
 wrf_wmi7_011	accessory	A brown cord with a whistle.
@@ -1227,82 +1227,82 @@ wrf_wem1_006	headgear	A white linen lady's cap with brown details.
 wrf_wem1_007	headgear	A brown straw lady's bonnet with a ribbon with beige details.
 wrf_wem1_008	headgear	A brown fur-trimmed hat with white details.
 wrf_wem1_009	headgear	A blue sailor's knit cap.
-wrf_wem1_010	headgear	A grey white hat with many plumes.
+wrf_wem1_010	headgear	A white hat with many plumes.
 wrf_wem1_011	headgear	A red tasseled cloth cap with brown details.
 wrf_wem2_000	headgear	A black steel morion with upturned sides with brown details.
 wrf_wem2_001	headgear	A black pointed steel cabasset.
 wrf_wem2_002	headgear	A black burgonet with cheek guards with brown details.
 wrf_wem2_003	headgear	A black close helmet with a visor with brown details.
 wrf_wem2_004	headgear	A black helmet with a lobster-tail neck guard with brown details.
-wrf_wem2_005	headgear	A brown black morion with gold lines.
+wrf_wem2_005	headgear	A black morion with gold lines.
 wrf_wem2_006	headgear	A brown polished steel helmet with plumes with white details.
 wrf_wem2_007	headgear	A black round brimmed iron kettle hat with white details.
 wrf_wem2_008	headgear	A black helmet with cheek guards and a nasal bar with brown details.
 wrf_wem2_009	headgear	A brown light iron cap helmet with a leather lining.
 wrf_wem3_000	clothing	A slashed red doublet with brown details.
-wrf_wem3_001	clothing	A blue navy doublet with gold buttons with brown details.
+wrf_wem3_001	clothing	A navy doublet with gold buttons with brown details.
 wrf_wem3_002	clothing	A brown long embroidered green waistcoat with white details.
 wrf_wem3_003	clothing	A linen shirt with a white lace collar and cuffs with brown details.
 wrf_wem3_004	clothing	A white cream blouse with puffed sleeves with brown details.
-wrf_wem3_005	clothing	A brown black velvet doublet with a white ruff.
+wrf_wem3_005	clothing	A black velvet doublet with a white ruff.
 wrf_wem3_006	clothing	A brown striped silk waistcoat with white details.
 wrf_wem3_007	clothing	A brown leather jerkin.
-wrf_wem3_008	clothing	A red crimson waistcoat with many buttons with brown details.
+wrf_wem3_008	clothing	A crimson waistcoat with many buttons with brown details.
 wrf_wem3_009	clothing	A brown laced bodice over a blouse with white details.
 wrf_wem3_010	clothing	A white sailor shirt with a large collar with brown details.
-wrf_wem3_011	clothing	A brown short black jacket with gold embroidery.
-wrf_wem4_000	clothing	A brown crimson coat with gold buttons with red details.
-wrf_wem4_001	clothing	A blue navy coat with wide turned-back cuffs with brown details.
+wrf_wem3_011	clothing	A short black jacket with gold embroidery.
+wrf_wem4_000	clothing	A crimson coat with gold buttons with red details.
+wrf_wem4_001	clothing	A navy coat with wide turned-back cuffs with brown details.
 wrf_wem4_002	clothing	A brown richly embroidered green coat with olive details.
-wrf_wem4_003	clothing	A brown black cloak with a short shoulder cape.
+wrf_wem4_003	clothing	A black cloak with a short shoulder cape.
 wrf_wem4_004	clothing	A blue tabard with a simple border with brown details.
 wrf_wem4_005	clothing	A brown coat with fur trim with white details.
-wrf_wem4_006	clothing	A brown white coat with gold trim with beige details.
+wrf_wem4_006	clothing	A white coat with gold trim with beige details.
 wrf_wem4_007	clothing	A blue short navy sailor jacket with brown details.
-wrf_wem4_008	clothing	A brown red fringed shoulder cloak.
+wrf_wem4_008	clothing	A red fringed shoulder cloak.
 wrf_wem4_009	clothing	A grey wool traveling cloak with brown details.
 wrf_wem4_010	clothing	A brown short black velvet cape.
 wrf_wem4_011	clothing	A brown coat with a striped lining.
-wrf_wem5_000	clothing	A brown blue silk dress with a full skirt with beige details.
-wrf_wem5_001	clothing	A brown crimson dress with gold embroidery with red details.
-wrf_wem5_002	clothing	A brown black dress with a white lace collar.
-wrf_wem5_003	clothing	A brown green townswoman's dress with a laced bodice with beige details.
+wrf_wem5_000	clothing	A blue silk dress with a full skirt with beige details.
+wrf_wem5_001	clothing	A crimson dress with gold embroidery with red details.
+wrf_wem5_002	clothing	A black dress with a white lace collar.
+wrf_wem5_003	clothing	A green townswoman's dress with a laced bodice with beige details.
 wrf_wem5_004	clothing	A brown cream floral dress with beige details.
-wrf_wem5_005	clothing	A magenta purple dress open over an underskirt with brown details.
+wrf_wem5_005	clothing	A purple dress open over an underskirt with brown details.
 wrf_wem5_006	clothing	A brown work dress with a linen apron with beige details.
-wrf_wem5_007	clothing	A brown pink dress with rows of ribbons with beige details.
-wrf_wem5_008	clothing	A black grey dress with silver embroidery with white details.
-wrf_wem5_009	clothing	A brown red winter dress with fur trim with beige details.
+wrf_wem5_007	clothing	A pink dress with rows of ribbons with beige details.
+wrf_wem5_008	clothing	A grey dress with silver embroidery with white details.
+wrf_wem5_009	clothing	A red winter dress with fur trim with beige details.
 wrf_wem6_000	body_armor	A black polished steel breastplate with brown details.
 wrf_wem6_001	body_armor	A black steel breastplate with a center ridge with brown details.
 wrf_wem6_002	body_armor	A black breastplate and backplate with pauldrons with brown details.
 wrf_wem6_003	body_armor	A brown brigandine with rows of rivets.
 wrf_wem6_004	body_armor	A brown half armor with tassets.
 wrf_wem6_005	body_armor	A brown thick ochre leather buff coat.
-wrf_wem6_006	body_armor	A brown black breastplate with gold lines.
+wrf_wem6_006	body_armor	A black breastplate with gold lines.
 wrf_wem6_007	body_armor	A black breastplate with a bullet dent with brown details.
 wrf_wem6_008	body_armor	A breastplate worn over red cloth with brown details.
 wrf_wem6_009	body_armor	A brown light leather musketeer's torso guard.
 wrf_wem7_000	gauntlets	A brown ochre leather gloves with long cuffs.
 wrf_wem7_001	gauntlets	A white gloves with embroidered cuffs with brown details.
-wrf_wem7_002	gauntlets	A brown black leather riding gloves.
+wrf_wem7_002	gauntlets	A black leather riding gloves.
 wrf_wem7_003	gauntlets	A brown elbow-length steel gauntlets with white details.
 wrf_wem7_004	gauntlets	A brown fingered steel gauntlets with white details.
 wrf_wem7_005	gauntlets	A brown leather gloves with fringed cuffs.
-wrf_wem7_006	gauntlets	A red crimson gloves with gold embroidery with brown details.
+wrf_wem7_006	gauntlets	A crimson gloves with gold embroidery with brown details.
 wrf_wem7_007	gauntlets	A long white silk lady's gloves with brown details.
 wrf_wem7_008	gauntlets	A brown single steel gauntlet for the left hand with white details.
 wrf_wem7_009	gauntlets	A thick brown work gloves.
-wrf_wem8_000	legwear	A black navy breeches gathered at the knee with blue details.
-wrf_wem8_001	legwear	A red crimson breeches with gold buttons with brown details.
+wrf_wem8_000	legwear	A navy breeches gathered at the knee with blue details.
+wrf_wem8_001	legwear	A crimson breeches with gold buttons with brown details.
 wrf_wem8_002	legwear	A brown puffed slashed breeches with red details.
-wrf_wem8_003	legwear	A brown black breeches with white stockings with beige details.
+wrf_wem8_003	legwear	A black breeches with white stockings with beige details.
 wrf_wem8_004	legwear	A brown leather breeches.
 wrf_wem8_005	legwear	A black striped sailor trousers with beige details.
 wrf_wem8_006	legwear	A brown steel thigh plates.
-wrf_wem8_007	legwear	An olive green velvet breeches with brown details.
+wrf_wem8_007	legwear	A green velvet breeches with brown details.
 wrf_wem8_008	legwear	A white loose cream linen trousers with brown details.
-wrf_wem8_009	legwear	A brown grey breeches with a sash with red details.
+wrf_wem8_009	legwear	A grey breeches with a sash with red details.
 wrf_wem9_000	legwear	A black cavalry boots folded above the knee with brown details.
 wrf_wem9_001	legwear	A brown bucket-top boots.
 wrf_wem9_002	legwear	A black shoes with square silver buckles with brown details.
@@ -1314,7 +1314,7 @@ wrf_wem9_007	legwear	A black boots with steel shin guards with brown details.
 wrf_wem9_008	legwear	A brown wooden-soled townsman's shoes.
 wrf_wem9_009	legwear	A brown short soft leather boots.
 wrf_wem9_010	legwear	A red tasseled slippers with brown details.
-wrf_wem9_011	legwear	A brown white silk lady's shoes.
+wrf_wem9_011	legwear	A white silk lady's shoes.
 wrf_wem10_000	accessory	A brown baldric worn across the shoulder.
 wrf_wem10_001	accessory	A red silk waist sash with brown details.
 wrf_wem10_002	accessory	A brown musketeer's bandolier of small flasks.
@@ -1322,8 +1322,20 @@ wrf_wem10_003	accessory	A white ruff collar with brown details.
 wrf_wem10_004	accessory	A white lace jabot with brown details.
 wrf_wem10_005	accessory	A white cloth cravat with brown details.
 wrf_wem10_006	accessory	A black steel gorget with brown details.
-wrf_wem10_007	accessory	A brown leather belt with a gold buckle.
-wrf_wem10_008	accessory	A brown blue sash with gold tassels.
+wrf_wem10_007	accessory	A leather belt with a gold buckle.
+wrf_wem10_008	accessory	A blue sash with gold tassels.
 wrf_wem10_009	accessory	A brown leather belt with a pouch.
 wrf_wem10_010	accessory	A white pair of lace cuffs with brown details.
 wrf_wem10_011	accessory	A black ribbon necklace with brown details.
+wrf_wmi8_000	accessory	A gold star medal on a red ribbon.
+wrf_wmi8_001	accessory	A silver eight-pointed star medal on a blue ribbon with white details.
+wrf_wmi8_002	accessory	A round gold medal on a striped ribbon with red details.
+wrf_wmi8_003	accessory	A flower-shaped medal on a white ribbon with brown details.
+wrf_wmi8_004	accessory	A brown ribbon bar with red details.
+wrf_wmi8_005	accessory	A gold winged badge.
+wrf_wmi8_006	accessory	A silver laurel wreath badge with white details.
+wrf_wmi8_007	accessory	A round bronze medal with a ribbon bow with red details.
+wrf_wmi8_008	accessory	A large gold neck order with red details.
+wrf_wmi8_009	accessory	A gold insignia with three stars with beige details.
+wrf_wmi8_010	accessory	A silver swallow badge with white details.
+wrf_wmi8_011	accessory	A gold tasseled ornamental clasp with beige details.

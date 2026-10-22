@@ -318,11 +318,6 @@
     "name": "中世武器_片手武器"
    },
    {
-    "sheet": "m2",
-    "source": "medieval_weapons/med_twohanded.png",
-    "name": "中世武器_両手武器"
-   },
-   {
     "sheet": "m3",
     "source": "medieval_weapons/med_polearm.png",
     "name": "中世武器_長柄武器"
@@ -346,6 +341,21 @@
     "sheet": "i31c",
     "source": "tools/tool_oddities.png",
     "name": "道具_銛と杖と錨"
+   },
+   {
+    "sheet": "mtw1",
+    "source": "medieval_weapons/med_greatswords.png",
+    "name": "中世武器_両手剣（描き直し）"
+   },
+   {
+    "sheet": "mtw2",
+    "source": "medieval_weapons/med_greataxes.png",
+    "name": "中世武器_大斧（描き直し）"
+   },
+   {
+    "sheet": "mtw3",
+    "source": "medieval_weapons/med_mauls.png",
+    "name": "中世武器_鎚と棍棒（描き直し）"
    }
   ]
  },
@@ -425,11 +435,6 @@
     "name": "SF武器_片手武器"
    },
    {
-    "sheet": "s2",
-    "source": "sf_weapons/sf_twohanded.png",
-    "name": "SF武器_両手武器"
-   },
-   {
     "sheet": "s3",
     "source": "sf_weapons/sf_polearm.png",
     "name": "SF武器_長柄武器"
@@ -443,6 +448,26 @@
     "sheet": "s5",
     "source": "sf_weapons/sf_melee.png",
     "name": "SF武器_近接武器"
+   },
+   {
+    "sheet": "stw1",
+    "source": "sf_weapons/sf_energy_greatswords.png",
+    "name": "SF武器_光の大剣（描き直し）"
+   },
+   {
+    "sheet": "stw2",
+    "source": "sf_weapons/sf_heavy_greatswords.png",
+    "name": "SF武器_重い大剣と鎖鋸の剣（描き直し）"
+   },
+   {
+    "sheet": "stw3",
+    "source": "sf_weapons/sf_power_hammers.png",
+    "name": "SF武器_動力の鎚と斧（描き直し）"
+   },
+   {
+    "sheet": "stw4",
+    "source": "sf_weapons/sf_greatswords_extra.png",
+    "name": "SF武器_大剣の追加（描き直し）"
    }
   ]
  },
@@ -459,11 +484,6 @@
     "name": "和風_刀剣"
    },
    {
-    "sheet": "i19",
-    "source": "japanese/wa_weapons.png",
-    "name": "和風_長柄と飛び道具"
-   },
-   {
     "sheet": "iwa1",
     "source": "japanese/wa_long_blades.png",
     "name": "和風_長い刀（描き直し）"
@@ -472,6 +492,31 @@
     "sheet": "iwa2",
     "source": "japanese/wa_cleavers.png",
     "name": "和風_鉈と斧と農具（描き直し）"
+   },
+   {
+    "sheet": "iwa3",
+    "source": "japanese/wa_spears.png",
+    "name": "和風_槍と薙刀（描き直し）"
+   },
+   {
+    "sheet": "iwa4",
+    "source": "japanese/wa_bows.png",
+    "name": "和風_和弓（描き直し）"
+   },
+   {
+    "sheet": "iwa5",
+    "source": "japanese/wa_daggers.png",
+    "name": "和風_短刀と苦無（描き直し）"
+   },
+   {
+    "sheet": "iwa6",
+    "source": "japanese/wa_shuriken.png",
+    "name": "和風_手裏剣と鉄扇（描き直し）"
+   },
+   {
+    "sheet": "iwa7",
+    "source": "japanese/wa_clubs.png",
+    "name": "和風_金棒と十手（描き直し）"
    }
   ]
  },
@@ -1198,6 +1243,11 @@
     "sheet": "wmi7",
     "source": "wear/wear_military_v2_7.png",
     "name": "防具類_軍服・儀礼服（描き直し7）"
+   },
+   {
+    "sheet": "wmi8",
+    "source": "wear/wear_military_v2_8.png",
+    "name": "防具類_軍服・儀礼服（描き直し8）"
    }
   ]
  },

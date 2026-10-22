@@ -139,7 +139,9 @@ def caption_sf(entry, im):
     if glow:
         extras.append("a glowing %s %s" % (glow[0], part))
     else:
-        main = next((k for k in body if k in SF_MATERIAL or k == "wood"), "grey")
+        # 茶色を木と読むのはバットと棍棒だけ（錆びた刃・橙の縁・赤いバールの茶色を wooden と書かない）
+        wood_ok = any(w in typ.split() for w in ("bat", "club"))
+        main = next((k for k in body if k in SF_MATERIAL or (k == "wood" and wood_ok)), "grey")
         word = "wooden" if main == "wood" or (main == "tan" and "bat" in typ) else SF_MATERIAL[main]
         extras.append("a %s %s" % (word, part))
     accent = [k for k in body if k in ("red", "orange", "brass", "blue", "green", "purple") and names[k] / total >= 0.04
@@ -162,8 +164,8 @@ def caption_item(entry, im):
     text = entry["type"]
     if not entry.get("plain"):
         body = [k for k, _ in names.most_common() if not k.startswith("glow:") and k in ITEM_COLOR]
-        # 名前に入っている色は前に重ねない（「brown brown biscuit」にしない）
-        if body and ITEM_COLOR[body[0]] not in re.findall(r"[a-z]+", text.lower()):
+        # 名前に入っている色・金属の色・名前の頭の色は前に重ねない（「brown brown biscuit」「brown gold bar」「brown red oni mask」にしない）
+        if body and ITEM_COLOR[body[0]] not in re.findall(r"[a-z]+", text.lower()) and not b.names_own_color(text):
             text = "%s %s" % (ITEM_COLOR[body[0]], text)
     glow = [k[5:] for k, n in names.most_common() if k.startswith("glow:") and n / total >= 0.03]
     if glow and "glow" not in text:

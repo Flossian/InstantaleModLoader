@@ -229,7 +229,7 @@ gun_gmod1_003	small_weapon	A black subcompact pocket pistol, a gun.
 gun_gmod1_004	small_weapon	A black large-caliber heavy pistol, a gun.
 gun_gmod1_005	small_weapon	A black machine pistol with an extended magazine, a gun.
 gun_gmod1_006	small_weapon	A black suppressed semi-automatic pistol, a gun.
-gun_gmod1_007	small_weapon	A grey old silver military pistol with a wooden grip, a gun.
+gun_gmod1_007	small_weapon	An old silver military pistol with a wooden grip, a gun.
 gun_gmod1_008	small_weapon	A black snub-nosed revolver with a wooden grip, a gun.
 gun_gmod1_009	small_weapon	A black long-barreled magnum revolver with a wooden grip, a gun.
 gun_gmod1_010	small_weapon	A black scoped hunting handgun with a wooden grip, a gun.
@@ -397,7 +397,7 @@ gun_gflt4_001	large_weapon	A black short iron blunderbuss with a wooden stock, a
 gun_gflt4_002	large_weapon	A tan double-barreled blunderbuss with a wooden stock, a gun.
 gun_gflt4_003	large_weapon	A black thick sailor's blunderbuss with a wooden stock, a gun.
 gun_gflt4_004	large_weapon	A tan old hand cannon on a pole with a wooden stock, a gun.
-gun_gflt4_005	large_weapon	A black thick bronze hand cannon with a wooden stock, a gun.
+gun_gflt4_005	large_weapon	A thick bronze hand cannon with a wooden stock, a gun.
 gun_gflt4_006	large_weapon	A tan short cavalry blunderbuss with a wooden stock, a gun.
 gun_gflt4_007	large_weapon	A black oval-flared blunderbuss with a wooden stock, a gun.
 gun_gflt4_008	large_weapon	A black silver-ornamented blunderbuss with a wooden stock, a gun.
@@ -417,13 +417,13 @@ gun_gfan1_011	small_weapon	A black double-barreled revolver with a wooden grip, 
 gun_gfan2_000	small_weapon	A tan revolver engraved with gold arabesques and a wooden grip, a gun.
 gun_gfan2_001	small_weapon	A white revolver with an ivory grip and a wooden grip, a gun.
 gun_gfan2_002	small_weapon	A black revolver set with a blue gem and a wooden grip, a gun.
-gun_gfan2_003	small_weapon	A white silver revolver with holy patterns, a gun.
+gun_gfan2_003	small_weapon	A silver revolver with holy patterns, a gun.
 gun_gfan2_004	small_weapon	A black eerie revolver with a black bone grip and a wooden grip, a gun.
 gun_gfan2_005	small_weapon	A black revolver with glowing crystals in the cylinder, a wooden grip and blue details, a gun.
 gun_gfan2_006	small_weapon	A black revolver wrapped in a carved snake with a wooden grip, a gun.
 gun_gfan2_007	small_weapon	A white revolver with a red lacquered grip and a wooden grip, a gun.
 gun_gfan2_008	small_weapon	A white revolver with wing ornaments and a wooden grip, a gun.
-gun_gfan2_009	small_weapon	A black silver revolver with a moon ornament, a gun.
+gun_gfan2_009	small_weapon	A silver revolver with a moon ornament, a gun.
 gun_gfan2_010	small_weapon	A black revolver with thorn carvings and a wooden grip, a gun.
 gun_gfan2_011	small_weapon	A gold and black noble revolver with a wooden grip, a gun.
 gun_gfan3_000	small_weapon	A steampunk pistol wrapped in brass pipes with a wooden grip, a gun.
@@ -510,7 +510,7 @@ gun_gcy1_002	small_weapon	A black large pistol with a front grip, a gun.
 gun_gcy1_003	small_weapon	A black pistol with a small screen on the slide, a wooden grip and glowing cyan lights, a gun.
 gun_gcy1_004	small_weapon	A compact black pistol with red lines, a gun.
 gun_gcy1_005	small_weapon	A black shock pistol with glowing electrodes at the muzzle and blue details, a gun.
-gun_gcy1_006	small_weapon	A grey small silver pocket pistol, a gun.
+gun_gcy1_006	small_weapon	A small silver pocket pistol, a gun.
 gun_gcy1_007	small_weapon	A black makeshift pistol with wiring wrapped around the grip, a wooden grip and red details, a gun.
 gun_gcy1_008	small_weapon	A white streamlined corporate security pistol, a gun.
 gun_gcy1_009	small_weapon	A black machine pistol with a magazine in front of the trigger, a gun.

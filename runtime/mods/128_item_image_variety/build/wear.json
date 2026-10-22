@@ -1327,5 +1327,17 @@
   {"src": "wem10@1375,256,1568,471", "type": "blue sash with gold tassels", "key": "wrf_wem10_008", "pref": "accessory"},
   {"src": "wem10@1577,264,1781,426", "type": "leather belt with a pouch", "key": "wrf_wem10_009", "pref": "accessory"},
   {"src": "wem10@1792,270,2022,441", "type": "pair of lace cuffs", "key": "wrf_wem10_010", "pref": "accessory"},
-  {"src": "wem10@2035,261,2151,458", "type": "black ribbon necklace", "key": "wrf_wem10_011", "pref": "accessory"}
+  {"src": "wem10@2035,261,2151,458", "type": "black ribbon necklace", "key": "wrf_wem10_011", "pref": "accessory"},
+  {"src": "wmi8@25,244,154,475", "type": "gold star medal on a red ribbon", "key": "wrf_wmi8_000", "pref": "accessory"},
+  {"src": "wmi8@182,244,311,476", "type": "silver eight-pointed star medal on a blue ribbon", "key": "wrf_wmi8_001", "pref": "accessory"},
+  {"src": "wmi8@348,244,451,461", "type": "round gold medal on a striped ribbon", "key": "wrf_wmi8_002", "pref": "accessory"},
+  {"src": "wmi8@487,244,606,470", "type": "flower-shaped medal on a white ribbon", "key": "wrf_wmi8_003", "pref": "accessory"},
+  {"src": "wmi8@624,319,805,399", "type": "ribbon bar", "key": "wrf_wmi8_004", "pref": "accessory"},
+  {"src": "wmi8@819,310,1060,415", "type": "gold winged badge", "key": "wrf_wmi8_005", "pref": "accessory"},
+  {"src": "wmi8@1070,289,1221,448", "type": "silver laurel wreath badge", "key": "wrf_wmi8_006", "pref": "accessory"},
+  {"src": "wmi8@1248,272,1380,454", "type": "round bronze medal with a ribbon bow", "key": "wrf_wmi8_007", "pref": "accessory"},
+  {"src": "wmi8@1407,223,1604,482", "type": "large gold neck order", "key": "wrf_wmi8_008", "pref": "accessory"},
+  {"src": "wmi8@1597,312,1783,408", "type": "gold insignia with three stars", "key": "wrf_wmi8_009", "pref": "accessory"},
+  {"src": "wmi8@1804,274,1972,435", "type": "silver swallow badge", "key": "wrf_wmi8_010", "pref": "accessory"},
+  {"src": "wmi8@1996,278,2151,459", "type": "gold tasseled ornamental clasp", "key": "wrf_wmi8_011", "pref": "accessory"}
 ]

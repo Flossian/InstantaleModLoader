@@ -79,9 +79,9 @@ def caption_for(entry, im):
         merged[c] += n
     order = [c for c, _ in merged.most_common()]
     main = order[0] if order else "grey"
-    # 名前に入っている色は前に重ねない（「white white helmet」にしない）
+    # 名前に入っている色・金属の色・名前の頭の色は前に重ねない（「white white helmet」「brown gold ring」「brown red velvet coat」にしない）
     named = set(re.findall(r"[a-z]+", entry["type"].lower()))
-    text = entry["type"] if main in named else "%s %s" % (main, entry["type"])
+    text = entry["type"] if main in named or b.names_own_color(entry["type"]) else "%s %s" % (main, entry["type"])
     accent = [c for c in order[1:] if c not in ("grey", "black", main) and c not in named and merged[c] / total >= 0.12]
     if accent:
         text += " with %s details" % accent[0]

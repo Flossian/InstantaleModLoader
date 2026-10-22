@@ -473,7 +473,7 @@ itm_i5_r5_09	tool	A black stone mortar and pestle.
 itm_i5_r5_10	tool	A black metal medicine scoop.
 itm_i5_r5_11	tool	A brown leather instrument roll.
 itm_i5_r5_12	tool	A brown surgical chain hook.
-itm_i5_r5_13	tool	A black brass syringe.
+itm_i5_r5_13	tool	A brass syringe.
 itm_i6_r0_00	medicine	A black first aid kit.
 itm_i6_r0_01	medicine	A red first aid kit.
 itm_i6_r0_02	medicine	A brown first aid kit.
@@ -644,7 +644,7 @@ itm_i7_r5_11	food	A brown twine-tied food pack.
 itm_i7_r5_12	food	A brown cloth-wrapped bread roll.
 itm_i7_r6_00	food	An olive leaf-wrapped food.
 itm_i7_r6_01	food	A brown paper-wrapped food bundle.
-itm_i7_r6_02	food	A black blue cloth-wrapped bundle.
+itm_i7_r6_02	food	A blue cloth-wrapped bundle.
 itm_i7_r6_03	food	A brown sandwich in a paper wrap.
 itm_i7_r6_04	food	An olive leaf-wrapped food.
 itm_i7_r6_05	food	A brown paper-wrapped dried meat.
@@ -654,15 +654,15 @@ itm_i7_r6_08	food	An olive leaf-wrapped rice.
 itm_i7_r6_09	food	A brown paper-wrapped bundle.
 itm_i7_r6_10	food	A brown leaf-wrapped food pack.
 itm_i7_r6_11	food	A brown paper-wrapped rice roll.
-itm_i26_r0_00	body_armor	A brown red lacquered samurai do armor.
-itm_i26_r0_01	body_armor	A brown black lamellar samurai do armor.
+itm_i26_r0_00	body_armor	A red lacquered samurai do armor.
+itm_i26_r0_01	body_armor	A black lamellar samurai do armor.
 itm_i26_r0_02	body_armor	A brown okegawa do armor.
 itm_i26_r0_03	body_armor	A red lacquered samurai do armor.
-itm_i26_r0_04	body_armor	A brown navy laced samurai do armor.
+itm_i26_r0_04	body_armor	A navy laced samurai do armor.
 itm_i26_r0_05	body_armor	A brown plain leather samurai do armor.
-itm_i26_r0_06	body_armor	A brown black and gold samurai do armor.
-itm_i26_r0_07	body_armor	A brown red lacquered samurai do armor.
-itm_i26_r0_08	body_armor	A blue navy laced samurai do armor.
+itm_i26_r0_06	body_armor	A black and gold samurai do armor.
+itm_i26_r0_07	body_armor	A red lacquered samurai do armor.
+itm_i26_r0_08	body_armor	A navy laced samurai do armor.
 itm_i26_r0_09	body_armor	A brown worn leather samurai do armor.
 itm_i26_r1_00	gauntlets	A brown pair of chain kote gauntlets.
 itm_i26_r1_01	gauntlets	A brown pair of red lacquered kote gauntlets.
@@ -672,70 +672,70 @@ itm_i26_r1_04	gauntlets	A brown pair of iron kote gauntlets.
 itm_i26_r1_05	gauntlets	A brown pair of laced kote gauntlets.
 itm_i26_r1_06	legwear	A brown iron suneate shin guard.
 itm_i26_r1_07	legwear	A brown iron suneate shin guard.
-itm_i26_r1_08	legwear	A brown black suneate shin guard.
+itm_i26_r1_08	legwear	A black suneate shin guard.
 itm_i26_r1_09	legwear	A brown leather suneate shin guard.
 itm_i26_r1_10	legwear	A pair of red suneate shin guards.
 itm_i26_r2_00	headgear	A brown horned samurai kabuto helmet.
 itm_i26_r2_01	headgear	A red kabuto helmet with a demon mask.
-itm_i26_r2_02	headgear	A brown blue kabuto helmet with golden crest.
+itm_i26_r2_02	headgear	A blue kabuto helmet with golden crest.
 itm_i26_r2_03	headgear	A brown plain iron kabuto helmet.
 itm_i26_r2_04	headgear	A brown kabuto helmet with a red face mask.
-itm_i26_r2_05	headgear	A brown blue and gold kabuto helmet.
-itm_i26_r2_06	headgear	A brown red kabuto helmet with antler crest.
+itm_i26_r2_05	headgear	A blue and gold kabuto helmet.
+itm_i26_r2_06	headgear	A red kabuto helmet with antler crest.
 itm_i26_r2_07	headgear	A brown iron menpo face mask.
-itm_i26_r2_08	headgear	A brown red oni mask.
-itm_i26_r2_09	headgear	A brown white fox mask.
+itm_i26_r2_08	headgear	A red oni mask.
+itm_i26_r2_09	headgear	A white fox mask.
 itm_i26_r2_10	headgear	A brown jingasa conical helmet.
 itm_i27_r0_00	gauntlets	A black sci-fi gauntlet with glowing blue conduits.
 itm_i27_r0_01	gauntlets	A white sci-fi gauntlet.
 itm_i27_r0_02	gauntlets	A red gauntlet with a power core.
-itm_i27_r0_03	gauntlets	A brown yellow utility gauntlet with tools.
+itm_i27_r0_03	gauntlets	A yellow utility gauntlet with tools.
 itm_i27_r0_04	gauntlets	A white armored gauntlet.
 itm_i27_r0_05	gauntlets	A black gauntlet with red lights.
-itm_i27_r0_06	gauntlets	A brown olive work gauntlet.
+itm_i27_r0_06	gauntlets	An olive work gauntlet.
 itm_i27_r0_07	gauntlets	A blue gauntlet with a power core with a faint cyan glow.
-itm_i27_r0_08	gauntlets	A brown white and orange gauntlet.
-itm_i27_r0_09	gauntlets	A brown yellow magnetic gauntlet.
+itm_i27_r0_08	gauntlets	A white and orange gauntlet.
+itm_i27_r0_09	gauntlets	A yellow magnetic gauntlet.
 itm_i27_r1_00	gauntlets	A black chrome prosthetic arm.
 itm_i27_r1_01	gauntlets	A black prosthetic arm with cyan lights.
 itm_i27_r1_02	gauntlets	A red combat prosthetic arm.
 itm_i27_r1_03	gauntlets	A red skeletal prosthetic arm with exposed wires.
 itm_i27_r1_04	gauntlets	A white prosthetic arm with blue lights.
 itm_i27_r1_05	gauntlets	A purple neon prosthetic arm.
-itm_i27_r1_06	gauntlets	A brown golden skeletal prosthetic arm.
+itm_i27_r1_06	gauntlets	A golden skeletal prosthetic arm.
 itm_i27_r1_07	gauntlets	A black prosthetic arm with orange lights.
 itm_i27_r1_08	gauntlets	A white prosthetic arm.
 itm_i27_r1_09	gauntlets	A red clawed prosthetic arm.
-itm_i27_r2_00	body_armor	A brown black composite armor vest.
-itm_i27_r2_01	body_armor	A brown white armor vest with blue lights.
-itm_i27_r2_02	body_armor	A brown olive tactical armor vest.
+itm_i27_r2_00	body_armor	A black composite armor vest.
+itm_i27_r2_01	body_armor	A white armor vest with blue lights.
+itm_i27_r2_02	body_armor	An olive tactical armor vest.
 itm_i27_r2_03	body_armor	A brown hazard striped armor vest.
 itm_i27_r2_04	body_armor	A brown scratched composite armor vest.
-itm_i27_r2_05	body_armor	A brown red hexagonal armor vest.
+itm_i27_r2_05	body_armor	A red hexagonal armor vest.
 itm_i27_r2_06	body_armor	A blue hexagonal armor vest.
-itm_i27_r2_07	body_armor	A grey white power armor chestplate.
-itm_i27_r2_08	body_armor	A brown tan tactical armor vest.
+itm_i27_r2_07	body_armor	A white power armor chestplate.
+itm_i27_r2_08	body_armor	A tan tactical armor vest.
 itm_i27_r2_09	body_armor	A black armor vest with red lights.
-itm_i27_r3_00	clothing	A brown orange jumpsuit with utility harness.
-itm_i27_r3_01	clothing	A blue navy crew jumpsuit.
+itm_i27_r3_00	clothing	An orange jumpsuit with utility harness.
+itm_i27_r3_01	clothing	A navy crew jumpsuit.
 itm_i27_r3_02	clothing	A white pressure suit.
 itm_i27_r3_03	clothing	A black jumpsuit with harness.
 itm_i27_r3_04	clothing	A black and red bodysuit.
-itm_i27_r3_05	clothing	A black olive work jumpsuit.
+itm_i27_r3_05	clothing	An olive work jumpsuit.
 itm_i27_r3_06	clothing	A blue crew jumpsuit with harness.
-itm_i27_r3_07	clothing	A brown yellow work jumpsuit with harness.
+itm_i27_r3_07	clothing	A yellow work jumpsuit with harness.
 itm_i27_r3_08	clothing	A black ballistic long coat.
 itm_i27_r3_09	clothing	A white ballistic long coat.
 itm_i27_r4_00	headgear	A white helmet with blue visor.
 itm_i27_r4_01	headgear	A black helmet with red visor and respirator.
 itm_i27_r4_02	headgear	A brown night vision helmet.
-itm_i27_r4_03	headgear	A brown orange visor helmet.
+itm_i27_r4_03	headgear	An orange visor helmet.
 itm_i27_r4_04	headgear	A black gas mask helmet.
-itm_i27_r4_05	headgear	A grey white helmet with blue visor.
+itm_i27_r4_05	headgear	A white helmet with blue visor.
 itm_i27_r4_06	headgear	A red helmet with goggles and respirator.
 itm_i27_r4_07	headgear	A brown hooded mask with yellow goggles.
 itm_i27_r4_08	headgear	A black helmet with green night vision lenses.
-itm_i27_r4_09	headgear	A brown white helmet with gold visor.
+itm_i27_r4_09	headgear	A white helmet with gold visor.
 itm_i28_r0_00	long_weapon	A black pipe spear.
 itm_i28_r0_01	long_weapon	A brown pipe spear with cloth wrapping.
 itm_i28_r0_02	long_weapon	A black pipe spear.
@@ -758,7 +758,7 @@ itm_i28_r1_03	large_weapon	A brown spiked pipe mace.
 itm_i28_r1_04	medium_weapon	A brown scrap hammer.
 itm_i28_r1_05	medium_weapon	A brown engine block hammer.
 itm_i28_r1_06	medium_weapon	A brown saw blade hammer.
-itm_i28_r1_07	medium_weapon	A brown red sign hammer.
+itm_i28_r1_07	medium_weapon	A red sign hammer.
 itm_i28_r1_08	medium_weapon	A brown chain-wrapped saw axe.
 itm_i28_r1_09	medium_weapon	A brown chain-wrapped scrap hammer.
 itm_i28_r1_10	medium_weapon	A red sign axe.
@@ -792,31 +792,31 @@ itm_i28_r3_07	tool	A blue key card.
 itm_i28_r3_08	tool	A brown keys on a carabiner.
 itm_i28_r3_09	tool	A brown padlock.
 itm_i28_r3_10	tool	A keys with a red tag.
-itm_i28_r3_11	tool	A brown yellow key tag.
+itm_i28_r3_11	tool	A yellow key tag.
 itm_i28_r3_12	tool	A keys with a blue tag.
-itm_i28_r3_13	tool	A brown brass padlock.
+itm_i28_r3_13	tool	A brass padlock.
 itm_i28_r3_14	tool	A brown keys on a chain.
 itm_i28_r3_15	tool	A brown steel padlock.
 itm_i28_r4_00	tool	A brown flashlight.
-itm_i28_r4_01	tool	A brown olive flashlight.
-itm_i28_r4_02	tool	A brown red flashlight.
+itm_i28_r4_01	tool	An olive flashlight.
+itm_i28_r4_02	tool	A red flashlight.
 itm_i28_r4_03	tool	A black metal lantern.
-itm_i28_r4_04	tool	A brown red multi-tool.
+itm_i28_r4_04	tool	A red multi-tool.
 itm_i28_r4_05	tool	A brown folding knife multi-tool.
 itm_i28_r4_06	tool	A brown multi-tool.
-itm_i28_r4_07	tool	A brown red dot scope.
-itm_i28_r4_08	tool	A brown brass scope.
+itm_i28_r4_07	tool	A red dot scope.
+itm_i28_r4_08	tool	A brass scope.
 itm_i28_r4_09	tool	A brown gas mask filter.
 itm_i28_r4_10	tool	A brown water filter cartridge.
 itm_i28_r4_11	tool	A black handheld radio.
 itm_i28_r4_12	tool	A black handheld radio.
 itm_i28_r4_13	tool	A brown handheld radio.
 itm_i28_r4_14	tool	A brown field radio.
-itm_i29_r0_00	creature_part	A brown purple chitin plate.
+itm_i29_r0_00	creature_part	A purple chitin plate.
 itm_i29_r0_01	creature_part	A brown scaled plate.
 itm_i29_r0_02	creature_part	A brown dark chitin plate.
 itm_i29_r0_03	creature_part	A brown spiked chitin plate.
-itm_i29_r0_04	creature_part	A brown green chitin plate.
+itm_i29_r0_04	creature_part	A green chitin plate.
 itm_i29_r0_05	creature_part	A red chitin plate.
 itm_i29_r0_06	creature_part	A brown spiked green carapace.
 itm_i29_r0_07	creature_part	A spiked purple carapace.
@@ -825,9 +825,9 @@ itm_i29_r0_09	creature_part	A black dark scale plate.
 itm_i29_r0_10	creature_part	A brown spiked red carapace.
 itm_i29_r0_11	creature_part	A brown perforated chitin plate.
 itm_i29_r0_12	creature_part	A brown iridescent chitin plate.
-itm_i29_r1_00	creature_part	A brown yellow stinger.
-itm_i29_r1_01	creature_part	A brown red pincer.
-itm_i29_r1_02	creature_part	A brown black mandible.
+itm_i29_r1_00	creature_part	A yellow stinger.
+itm_i29_r1_01	creature_part	A red pincer.
+itm_i29_r1_02	creature_part	A black mandible.
 itm_i29_r1_03	creature_part	A red stinger.
 itm_i29_r1_04	creature_part	A brown mandible skull.
 itm_i29_r1_05	creature_part	A brown stinger.
@@ -835,148 +835,148 @@ itm_i29_r1_06	creature_part	A brown stinger.
 itm_i29_r1_07	creature_part	A brown spiked tail tip.
 itm_i29_r1_08	creature_part	A red mandible.
 itm_i29_r1_09	creature_part	A brown segmented scorpion tail.
-itm_i29_r1_10	creature_part	A brown green scorpion stinger.
+itm_i29_r1_10	creature_part	A green scorpion stinger.
 itm_i29_r1_11	creature_part	A brown spiked stinger.
-itm_i29_r1_12	creature_part	A brown red pincer.
-itm_i29_r1_13	creature_part	A brown black scorpion tail.
+itm_i29_r1_12	creature_part	A red pincer.
+itm_i29_r1_13	creature_part	A black scorpion tail.
 itm_i29_r1_14	creature_part	A purple stinger.
-itm_i29_r1_15	creature_part	A brown orange hairy stinger.
-itm_i29_r1_16	creature_part	A brown red spiked horn.
+itm_i29_r1_15	creature_part	An orange hairy stinger.
+itm_i29_r1_16	creature_part	A red spiked horn.
 itm_i29_r2_00	creature_part	A white glowing blue fang.
 itm_i29_r2_01	creature_part	A brown bone horn.
 itm_i29_r2_02	creature_part	A brown bone spike.
 itm_i29_r2_03	creature_part	A brown twisted horn.
 itm_i29_r2_04	creature_part	A purple glowing horn.
-itm_i29_r2_05	creature_part	A brown olive horn.
-itm_i29_r2_06	creature_part	A brown black horn.
+itm_i29_r2_05	creature_part	An olive horn.
+itm_i29_r2_06	creature_part	A black horn.
 itm_i29_r2_07	creature_part	A brown bone spike.
 itm_i29_r2_08	creature_part	A brown spiral horn.
-itm_i29_r2_09	creature_part	A brown green glowing fang.
+itm_i29_r2_09	creature_part	A green glowing fang.
 itm_i29_r2_10	creature_part	A brown bone spike.
 itm_i29_r2_11	creature_part	A black twisted horn.
-itm_i29_r2_12	creature_part	A brown red horn.
+itm_i29_r2_12	creature_part	A red horn.
 itm_i29_r2_13	creature_part	A brown pale horn.
-itm_i29_r2_14	creature_part	A brown green glowing fang.
+itm_i29_r2_14	creature_part	A green glowing fang.
 itm_i29_r2_15	creature_part	A brown small fang.
 itm_i29_r2_16	creature_part	A brown curved fang.
 itm_i29_r2_17	creature_part	A brown fungus-covered lump.
 itm_i29_r3_00	creature_part	A brown iridescent insect wing.
 itm_i29_r3_01	creature_part	A blue insect wing.
 itm_i29_r3_02	creature_part	A brown beetle wing.
-itm_i29_r3_03	creature_part	A golden black beetle wing.
-itm_i29_r3_04	creature_part	A brown red beetle wing.
+itm_i29_r3_03	creature_part	A black beetle wing.
+itm_i29_r3_04	creature_part	A red beetle wing.
 itm_i29_r3_05	creature_part	A brown butterfly wing.
 itm_i29_r3_06	creature_part	A blue dragonfly wing.
 itm_i29_r3_07	creature_part	A brown jointed insect leg.
-itm_i29_r3_08	creature_part	A brown purple insect leg.
-itm_i29_r3_09	creature_part	A brown golden insect leg.
-itm_i29_r3_10	creature_part	A brown red insect leg.
+itm_i29_r3_08	creature_part	A purple insect leg.
+itm_i29_r3_09	creature_part	A golden insect leg.
+itm_i29_r3_10	creature_part	A red insect leg.
 itm_i29_r3_11	creature_part	A brown spider leg.
 itm_i29_r3_12	creature_part	A purple spider leg.
-itm_i29_r3_13	creature_part	A brown green beetle wing.
-itm_i29_r3_14	creature_part	A brown black spider leg.
+itm_i29_r3_13	creature_part	A green beetle wing.
+itm_i29_r3_14	creature_part	A black spider leg.
 itm_i29_r3_15	creature_part	A blue membrane wing.
 itm_i29_r4_00	creature_part	A red jelly flesh lump.
 itm_i29_r4_01	creature_part	A brown cluster of purple eggs.
 itm_i29_r4_02	creature_part	A brown cluster of translucent eggs.
 itm_i29_r4_03	creature_part	A brown hive pod.
-itm_i29_r4_04	creature_part	A pink purple egg cluster.
-itm_i29_r4_05	creature_part	A red orange egg cluster.
+itm_i29_r4_04	creature_part	A purple egg cluster.
+itm_i29_r4_05	creature_part	An orange egg cluster.
 itm_i29_r4_06	creature_part	A brown mud flesh lump.
-itm_i29_r4_07	creature_part	A brown red egg cluster.
-itm_i29_r4_08	creature_part	A golden green egg cluster.
+itm_i29_r4_07	creature_part	A red egg cluster.
+itm_i29_r4_08	creature_part	A green egg cluster.
 itm_i29_r4_09	creature_part	A brown cluster of clear eggs.
 itm_i29_r4_10	creature_part	A brown spiked fungal pod.
 itm_i29_r4_11	creature_part	A purple egg cluster.
 itm_i29_r4_12	creature_part	A brown fungus-covered lump.
-itm_i29_r5_00	creature_part	A brown pouch of silver flakes.
+itm_i29_r5_00	creature_part	A pouch of silver flakes.
 itm_i29_r5_01	creature_part	A jar of blue scale dust with a faint blue glow.
 itm_i29_r5_02	creature_part	A brown iridescent shell shard.
 itm_i29_r5_03	creature_part	A brown iridescent shell fragment.
 itm_i29_r5_04	creature_part	A brown jar of glowing amber dust.
 itm_i29_r5_05	creature_part	A purple iridescent scales with a faint blue glow.
-itm_i29_r5_06	creature_part	A brown golden shell shard.
+itm_i29_r5_06	creature_part	A golden shell shard.
 itm_i29_r5_07	creature_part	A blue jar of teal scale dust with a faint cyan glow.
 itm_i29_r5_08	creature_part	A blue shell shard with a faint blue glow.
-itm_i29_r5_09	creature_part	A brown golden cocoon.
+itm_i29_r5_09	creature_part	A golden cocoon.
 itm_i29_r5_10	creature_part	An olive jar of green scale dust.
-itm_i29_r5_11	creature_part	A brown purple shell.
+itm_i29_r5_11	creature_part	A purple shell.
 itm_i29_r5_12	creature_part	A jar of purple scale dust with a faint purple glow.
 itm_i29_r5_13	creature_part	A blue shell fragment.
-itm_i29_r5_14	creature_part	A brown golden cocoon.
-itm_i29_r5_15	creature_part	A brown jar of golden scale dust.
+itm_i29_r5_14	creature_part	A golden cocoon.
+itm_i29_r5_15	creature_part	A jar of golden scale dust.
 itm_i30_r0_00	headgear	A brown iron crown.
 itm_i30_r0_01	headgear	A black obsidian crown.
 itm_i30_r0_02	headgear	A white crown of light.
-itm_i30_r0_03	headgear	A grey tarnished silver crown.
-itm_i30_r0_04	headgear	A brown golden jeweled crown.
+itm_i30_r0_03	headgear	A tarnished silver crown.
+itm_i30_r0_04	headgear	A golden jeweled crown.
 itm_i30_r0_05	headgear	A brown crown of thorns.
 itm_i30_r0_06	headgear	A brown ash-covered crown.
 itm_i30_r0_07	headgear	A purple dark amethyst crown.
-itm_i30_r0_08	headgear	A brown golden crown.
+itm_i30_r0_08	headgear	A golden crown.
 itm_i30_r0_09	headgear	A brown broken stone crown.
 itm_i30_r1_00	headgear	A brown royal crown.
-itm_i30_r1_01	headgear	A brown golden laurel wreath.
-itm_i30_r1_02	headgear	A brown golden circlet.
-itm_i30_r1_03	headgear	A grey silver moon circlet.
+itm_i30_r1_01	headgear	A golden laurel wreath.
+itm_i30_r1_02	headgear	A golden circlet.
+itm_i30_r1_03	headgear	A silver moon circlet.
 itm_i30_r1_04	headgear	A brown horned crown.
 itm_i30_r1_05	headgear	A brown bone crown.
 itm_i30_r1_06	headgear	A brown flower circlet.
-itm_i30_r1_07	headgear	A brown golden gem circlet.
-itm_i30_r1_08	headgear	A grey silver pearl tiara.
+itm_i30_r1_07	headgear	A golden gem circlet.
+itm_i30_r1_08	headgear	A silver pearl tiara.
 itm_i30_r1_09	headgear	A purple dark amethyst tiara.
 itm_i30_r2_00	gem	A white misty pearl.
-itm_i30_r2_01	gem	A purple black pearl.
+itm_i30_r2_01	gem	A black pearl.
 itm_i30_r2_02	gem	A blue sapphire with a faint blue glow.
 itm_i30_r2_03	gem	A red ruby.
 itm_i30_r2_04	gem	A green emerald.
 itm_i30_r2_05	gem	A purple amethyst with a faint purple glow.
 itm_i30_r2_06	gem	A brown topaz.
 itm_i30_r2_07	gem	A blue teardrop sapphire with a faint blue glow.
-itm_i30_r2_08	gem	A red pink gem.
+itm_i30_r2_08	gem	A pink gem.
 itm_i30_r2_09	gem	A green gem.
 itm_i30_r2_10	gem	A blue galaxy sapphire orb.
 itm_i30_r2_11	gem	A dark red gem.
 itm_i30_r3_00	gem	A grey clear crystal cluster.
 itm_i30_r3_01	gem	A red crystal cluster.
 itm_i30_r3_02	gem	A blue crystal cluster with a faint blue glow.
-itm_i30_r3_03	gem	A brown golden crystal cluster.
+itm_i30_r3_03	gem	A golden crystal cluster.
 itm_i30_r3_04	gem	A purple crystal cluster.
 itm_i30_r3_05	gem	A pale blue crystal cluster with a faint blue glow.
-itm_i30_r3_06	gem	An olive green crystal cluster.
-itm_i30_r3_07	gem	A brown orange crystal cluster.
+itm_i30_r3_06	gem	A green crystal cluster.
+itm_i30_r3_07	gem	An orange crystal cluster.
 itm_i30_r3_08	gem	A brown pouch of crystal dust.
-itm_i30_r3_09	gem	A brown pouch of gold dust.
+itm_i30_r3_09	gem	A pouch of gold dust.
 itm_i30_r3_10	gem	A pile of black crystal dust.
 itm_i30_r3_11	gem	A blue iridescent crystal.
 itm_i30_r4_00	accessory	A brown plain iron ring.
-itm_i30_r4_01	accessory	A brown silver ring with a sapphire.
-itm_i30_r4_02	accessory	A brown gold ring with a ruby.
-itm_i30_r4_03	accessory	A grey silver ring with an amethyst.
+itm_i30_r4_01	accessory	A silver ring with a sapphire.
+itm_i30_r4_02	accessory	A gold ring with a ruby.
+itm_i30_r4_03	accessory	A silver ring with an amethyst.
 itm_i30_r4_04	accessory	A brown ring with a pearl.
-itm_i30_r4_05	accessory	A brown gold ring with a sapphire.
+itm_i30_r4_05	accessory	A gold ring with a sapphire.
 itm_i30_r4_06	accessory	A brown ring with a broken red gem.
 itm_i30_r4_07	accessory	A brown bone ring.
-itm_i30_r4_08	accessory	A brown gold ring with an opal.
-itm_i30_r4_09	accessory	A brown silver moon earring.
-itm_i30_r4_10	accessory	A brown golden sun earring.
+itm_i30_r4_08	accessory	A gold ring with an opal.
+itm_i30_r4_09	accessory	A silver moon earring.
+itm_i30_r4_10	accessory	A golden sun earring.
 itm_i30_r4_11	accessory	A purple amethyst earring with a faint purple glow.
 itm_i31_r0_00	body_armor	A brown glowing ember breastplate.
 itm_i31_r0_01	body_armor	A brown star-studded breastplate.
-itm_i31_r0_02	body_armor	A brown holy silver breastplate.
+itm_i31_r0_02	body_armor	A holy silver breastplate.
 itm_i31_r0_03	body_armor	A grey fish scale breastplate.
-itm_i31_r0_04	body_armor	A brown brass gear breastplate.
+itm_i31_r0_04	body_armor	A brass gear breastplate.
 itm_i31_r0_05	body_armor	A brown spiked dark breastplate.
-itm_i31_r0_06	body_armor	A brown golden sun breastplate.
-itm_i31_r0_07	body_armor	A blue teal scale breastplate.
-itm_i31_r0_08	body_armor	A brown dark gold breastplate.
-itm_i31_r0_09	body_armor	A brown red holy breastplate.
+itm_i31_r0_06	body_armor	A golden sun breastplate.
+itm_i31_r0_07	body_armor	A teal scale breastplate.
+itm_i31_r0_08	body_armor	A dark gold breastplate.
+itm_i31_r0_09	body_armor	A red holy breastplate.
 itm_i31_r0_10	body_armor	A brown bone breastplate.
 itm_i31_r0_11	body_armor	A purple gravity void breastplate.
 itm_i31_r1_00	medium_weapon	A brown anchor.
 itm_i31_r1_01	long_weapon	A brown harpoon.
 itm_i31_r1_02	large_weapon	A brown shepherd crook.
-itm_i31_r1_03	medium_weapon	A brown blue anchor.
+itm_i31_r1_03	medium_weapon	A blue anchor.
 itm_i31_r1_04	long_weapon	A brown shepherd crook.
 itm_i31_r1_05	large_weapon	A blue harpoon.
 itm_i31_r1_06	long_weapon	A brown hook staff with a chain.
@@ -992,29 +992,29 @@ itm_i31_r2_00	long_weapon	A brown longsword.
 itm_i31_r2_01	long_weapon	A blue rapier crackling with lightning.
 itm_i31_r2_02	long_weapon	A brown rusted longsword.
 itm_i31_r2_03	long_weapon	A brown longsword.
-itm_i31_r2_04	long_weapon	A brown broken silver longsword.
+itm_i31_r2_04	long_weapon	A broken silver longsword.
 itm_i31_r2_05	long_weapon	A rapier crackling with purple lightning.
 itm_i31_r2_06	long_weapon	A brown notched longsword.
 itm_i31_r2_07	long_weapon	A brown blood-stained longsword.
-itm_i31_r2_08	long_weapon	A grey silver longsword.
-itm_i31_r2_09	long_weapon	A brown red longsword.
+itm_i31_r2_08	long_weapon	A silver longsword.
+itm_i31_r2_09	long_weapon	A red longsword.
 itm_i31_r2_10	long_weapon	A brown longsword.
 itm_i31_r2_11	long_weapon	A brown blood-stained longsword.
 itm_i31_r2_12	long_weapon	A purple misty longsword.
-itm_i31_r2_13	large_weapon	A brown golden longsword.
-itm_i31_r2_14	large_weapon	A brown silver longsword.
+itm_i31_r2_13	large_weapon	A golden longsword.
+itm_i31_r2_14	large_weapon	A silver longsword.
 itm_i31_r2_15	long_weapon	A brown blood-stained longsword.
 itm_i31_r2_16	long_weapon	A purple longsword.
-itm_i31_r3_00	tool	A white silver flute.
+itm_i31_r3_00	tool	A silver flute.
 itm_i31_r3_01	tool	A brown horn.
 itm_i31_r3_02	tool	A brown war horn.
 itm_i31_r3_03	tool	A brown lyre.
 itm_i31_r3_04	tool	A brown lyre.
-itm_i31_r3_05	tool	A brown golden lyre.
+itm_i31_r3_05	tool	A golden lyre.
 itm_i31_r3_06	tool	A brown bell with a tassel.
-itm_i31_r3_07	tool	A brown red drum.
+itm_i31_r3_07	tool	A red drum.
 itm_i31_r3_08	tool	A brown cluster of bells.
-itm_i31_r3_09	tool	A brown brass bell.
+itm_i31_r3_09	tool	A brass bell.
 itm_i31_r3_10	tool	A brown drum.
 itm_i31_r3_11	tool	A brown string of bells.
 itm_i31_r3_12	tool	A brown bells with tassels.
@@ -1024,32 +1024,32 @@ itm_i31_r3_15	tool	A beige tambourine drum.
 itm_i31_r4_00	other_material	A brown jar of mud.
 itm_i31_r4_01	other_material	A black jar of sludge.
 itm_i31_r4_02	other_material	A brown clay jar.
-itm_i31_r4_03	other_material	A brown dark blue jar.
-itm_i31_r4_04	other_material	A brown black urn.
+itm_i31_r4_03	other_material	A dark blue jar.
+itm_i31_r4_04	other_material	A black urn.
 itm_i31_r4_05	other_material	A grey mud-soaked cloth.
 itm_i31_r4_06	other_material	A black dark cloth.
-itm_i31_r4_07	other_material	A brown red embroidered cloth.
-itm_i31_r4_08	other_material	A black grey rag.
+itm_i31_r4_07	other_material	A red embroidered cloth.
+itm_i31_r4_08	other_material	A grey rag.
 itm_i31_r4_09	other_material	A brown torn rag.
-itm_i31_r4_10	other_material	A brown grey folded cloth.
+itm_i31_r4_10	other_material	A grey folded cloth.
 itm_i31_r4_11	other_material	A brown clay urn.
 itm_i31_r4_12	other_material	A red folded cloth.
 itm_i31_r4_13	other_material	A purple cloth.
 itm_i31_r5_00	relic	A brown orb of liquid fire in a cage.
 itm_i31_r5_01	relic	A blue humming machine core.
-itm_i31_r5_02	relic	A brown golden armillary core.
+itm_i31_r5_02	relic	A golden armillary core.
 itm_i31_r5_03	relic	A blue cube core with a faint blue glow.
-itm_i31_r5_04	relic	A brown golden geometric relic.
+itm_i31_r5_04	relic	A golden geometric relic.
 itm_i31_r5_05	relic	A purple orb in a cage.
 itm_i31_r5_06	relic	A blue orbiting crystal core.
-itm_i31_r5_07	relic	A blue black orb with rings.
+itm_i31_r5_07	relic	A black orb with rings.
 itm_i31_r5_08	relic	A brown carved divine fragment.
 itm_i31_r5_09	relic	A blue floating crystal fragments.
 itm_i31_r5_10	relic	A blue machine core.
 itm_i31_r5_11	tool	A brown training mannequin head.
 itm_i31_r5_12	tool	A white training mannequin head.
-itm_i31_r5_13	relic	A brown golden jeweled orb.
-itm_i31_r5_14	relic	A brown red core ring.
+itm_i31_r5_13	relic	A golden jeweled orb.
+itm_i31_r5_14	relic	A red core ring.
 itm_i8_r0_00	food	A slice of strawberry shortcake.
 itm_i8_r0_01	food	A slice of chocolate cake.
 itm_i8_r0_02	food	A slice of cheesecake.
@@ -1512,32 +1512,32 @@ itm_i12_r8_09	food	A panna cotta.
 itm_i12_r8_10	drink	A glass of red wine.
 itm_i12_r8_11	drink	A glass of white wine.
 itm_i12_r8_12	drink	A mug of beer.
-itm_i13_r0_00	magical_material	A brown magical core in a golden cage.
+itm_i13_r0_00	magical_material	A magical core in a golden cage.
 itm_i13_r0_01	magical_material	A blue crystal core in a silver setting with a faint blue glow.
 itm_i13_r0_02	magical_material	A purple core in a spiked shell with a faint purple glow.
-itm_i13_r0_03	magical_material	A brown amber core inside brass rings.
+itm_i13_r0_03	magical_material	An amber core inside brass rings.
 itm_i13_r0_04	magical_material	A blue crystal shard core with a faint cyan glow.
 itm_i13_r0_05	magical_material	A red crystal core in a spiked shell.
-itm_i13_r0_06	magical_material	An olive green core covered in thorns.
-itm_i13_r0_07	magical_material	A brown pink crystal core in a metal frame with a faint magenta glow.
-itm_i13_r0_08	magical_material	A brown orange core inside a brass gear frame.
+itm_i13_r0_06	magical_material	A green core covered in thorns.
+itm_i13_r0_07	magical_material	A pink crystal core in a metal frame with a faint magenta glow.
+itm_i13_r0_08	magical_material	An orange core inside a brass gear frame.
 itm_i13_r0_09	magical_material	A purple crystal core with a faint purple glow.
-itm_i13_r0_10	magical_material	A brown blue light core on a stand with a faint blue glow.
-itm_i13_r0_11	magical_material	An olive green core covered in thorns.
+itm_i13_r0_10	magical_material	A blue light core on a stand with a faint blue glow.
+itm_i13_r0_11	magical_material	A green core covered in thorns.
 itm_i13_r1_00	magical_material	A swirling purple mist in a glass vial with a faint purple glow.
-itm_i13_r1_01	magical_material	A blue white vapor in a glass vial.
+itm_i13_r1_01	magical_material	A white vapor in a glass vial.
 itm_i13_r1_02	magical_material	A red mist in a glass vial.
-itm_i13_r1_03	magical_material	A brown golden sparkling dust in a glass vial.
+itm_i13_r1_03	magical_material	A golden sparkling dust in a glass vial.
 itm_i13_r1_04	magical_material	A blue magical mist in a glass vial with a faint blue glow.
 itm_i13_r1_05	magical_material	A green mist in a glass vial with a faint green glow.
 itm_i13_r1_06	magical_material	A pink swirling mist in a glass vial with a faint magenta glow.
-itm_i13_r1_07	magical_material	A brown orange mist in a glass vial.
-itm_i13_r1_08	magical_material	A black grey smoke in a glass vial.
+itm_i13_r1_07	magical_material	An orange mist in a glass vial.
+itm_i13_r1_08	magical_material	A grey smoke in a glass vial.
 itm_i13_r1_09	magical_material	A purple starry mist in a glass vial with a faint purple glow.
-itm_i13_r1_10	magical_material	A blue cyan mist in a glass vial with a faint cyan glow.
-itm_i13_r1_11	magical_material	A brown golden swirling pollen in a glass vial.
+itm_i13_r1_10	magical_material	A cyan mist in a glass vial with a faint cyan glow.
+itm_i13_r1_11	magical_material	A golden swirling pollen in a glass vial.
 itm_i13_r2_00	magical_material	A crystal ball with a blue light with a faint blue glow.
-itm_i13_r2_01	magical_material	A brown crystal ball with golden flames.
+itm_i13_r2_01	magical_material	A crystal ball with golden flames.
 itm_i13_r2_02	magical_material	A crystal ball with purple mist with a faint purple glow.
 itm_i13_r2_03	magical_material	A blue crystal on a pedestal with a faint blue glow.
 itm_i13_r2_04	magical_material	A green crystal ball.
@@ -1545,8 +1545,8 @@ itm_i13_r2_05	magical_material	A red orb in a brass cage.
 itm_i13_r2_06	magical_material	A grey crystal ball with a swirling galaxy.
 itm_i13_r2_07	magical_material	A pink crystal with a faint magenta glow.
 itm_i13_r2_08	magical_material	A blue crystal ball with a swirl with a faint blue glow.
-itm_i13_r2_09	magical_material	A brown golden crystal cluster.
-itm_i13_r2_10	magical_material	An olive green crystal ball.
+itm_i13_r2_09	magical_material	A golden crystal cluster.
+itm_i13_r2_10	magical_material	A green crystal ball.
 itm_i13_r2_11	magical_material	A purple crystal ball with a faint purple glow.
 itm_i13_r3_00	magical_material	A black jar of green slime.
 itm_i13_r3_01	magical_material	A jar of red slime.
@@ -1562,17 +1562,17 @@ itm_i13_r3_10	magical_material	A brown clay pot of mossy mud.
 itm_i13_r3_11	magical_material	A jar of purple starry liquid.
 itm_i13_r4_00	magical_material	A pouch of red glowing dust.
 itm_i13_r4_01	magical_material	A pouch of blue glowing dust.
-itm_i13_r4_02	magical_material	A brown pouch of golden dust.
+itm_i13_r4_02	magical_material	A pouch of golden dust.
 itm_i13_r4_03	magical_material	A brown pouch of white ash.
 itm_i13_r4_04	magical_material	A pouch of purple glowing dust.
 itm_i13_r4_05	magical_material	A brown pouch of black ash.
-itm_i13_r4_06	magical_material	A brown pouch of golden dust.
+itm_i13_r4_06	magical_material	A pouch of golden dust.
 itm_i13_r4_07	magical_material	A red pouch of crimson dust.
 itm_i13_r4_08	magical_material	A black pouch of pale green dust.
 itm_i13_r4_09	magical_material	A purple pouch of violet dust with a faint purple glow.
 itm_i13_r4_10	magical_material	A brown pouch of orange dust.
 itm_i13_r4_11	magical_material	A black pouch of pale blue dust.
-itm_i13_r5_00	magical_material	A brown bundle of golden glowing silk threads.
+itm_i13_r5_00	magical_material	A bundle of golden glowing silk threads.
 itm_i13_r5_01	magical_material	A bundle of blue glowing silk threads.
 itm_i13_r5_02	magical_material	A bundle of red silk threads.
 itm_i13_r5_03	magical_material	A blue bundle of pale glowing silk threads.
@@ -1580,171 +1580,171 @@ itm_i13_r5_04	magical_material	A black bundle of dark green threads.
 itm_i13_r5_05	creature_part	A white iridescent scale with a faint blue glow.
 itm_i13_r5_06	creature_part	A red scale.
 itm_i13_r5_07	creature_part	A blue scale with a faint blue glow.
-itm_i13_r5_08	creature_part	A brown golden scale.
+itm_i13_r5_08	creature_part	A golden scale.
 itm_i13_r5_09	magical_material	A blue fragment of frozen mist.
-itm_i13_r5_10	creature_part	A purple black scale.
+itm_i13_r5_10	creature_part	A black scale.
 itm_i13_r5_11	creature_part	A pearly white scale.
 itm_i14_r0_00	relic	A white crystal shard.
 itm_i14_r0_01	relic	A black crystal shard that bends the light.
-itm_i14_r0_02	relic	A brown golden crystal shard.
+itm_i14_r0_02	relic	A golden crystal shard.
 itm_i14_r0_03	relic	A blue crystal shard with a faint blue glow.
 itm_i14_r0_04	relic	A red crystal shard.
 itm_i14_r0_05	relic	A purple crystal shard with a faint purple glow.
-itm_i14_r0_06	relic	A brown golden light crystal.
-itm_i14_r0_07	relic	A black dark grey crystal shard.
-itm_i14_r0_08	relic	A blue teal crystal shard with a faint cyan glow.
+itm_i14_r0_06	relic	A golden light crystal.
+itm_i14_r0_07	relic	A dark grey crystal shard.
+itm_i14_r0_08	relic	A teal crystal shard with a faint cyan glow.
 itm_i14_r0_09	relic	A white clear crystal with a light inside.
-itm_i14_r0_10	relic	A brown golden crystal cluster.
+itm_i14_r0_10	relic	A golden crystal cluster.
 itm_i14_r0_11	relic	A white iridescent crystal shard with a faint blue glow.
 itm_i14_r1_00	relic	A white marble fragment glowing blue.
 itm_i14_r1_01	relic	A purple glowing stone fragment.
 itm_i14_r1_02	relic	A red stone fragment.
-itm_i14_r1_03	relic	A white grey stone fragment with faint runes.
+itm_i14_r1_03	relic	A grey stone fragment with faint runes.
 itm_i14_r1_04	relic	A blue glowing crystal stone.
-itm_i14_r1_05	relic	A blue dark green stone fragment with a faint cyan glow.
+itm_i14_r1_05	relic	A dark green stone fragment with a faint cyan glow.
 itm_i14_r1_06	relic	A purple crystal stone with a faint purple glow.
-itm_i14_r1_07	relic	A brown cracked grey stone with golden veins.
+itm_i14_r1_07	relic	A cracked grey stone with golden veins.
 itm_i14_r1_08	relic	A red crystal stone.
 itm_i14_r1_09	relic	A white marble fragment with blue veins with a faint cyan glow.
 itm_i14_r1_10	relic	A dark stone with a purple glow.
-itm_i14_r1_11	relic	A brown stone fragment with a golden sigil.
-itm_i14_r2_00	relic	A red crystal heart in a golden cage.
+itm_i14_r1_11	relic	A stone fragment with a golden sigil.
+itm_i14_r2_00	relic	A crystal heart in a golden cage.
 itm_i14_r2_01	relic	A blue crystal heart with a faint blue glow.
 itm_i14_r2_02	relic	A purple crystal heart with a faint purple glow.
-itm_i14_r2_03	relic	A brown golden heart-shaped engine.
-itm_i14_r2_04	relic	A brown blue crystal heart in a brass frame with a faint blue glow.
+itm_i14_r2_03	relic	A golden heart-shaped engine.
+itm_i14_r2_04	relic	A blue crystal heart in a brass frame with a faint blue glow.
 itm_i14_r2_05	relic	A red crystal heart with spikes.
-itm_i14_r2_06	relic	A brown purple heart in a dark cage with a faint purple glow.
-itm_i14_r2_07	relic	A brown golden glowing heart.
-itm_i14_r2_08	relic	A brown teal crystal in a brass frame.
-itm_i14_r2_09	relic	A brown red crystal heart in brass.
-itm_i14_r2_10	relic	A brown blue glowing brass organ.
-itm_i14_r2_11	relic	A brown green crystal heart in brass.
-itm_i14_r3_00	relic	A brown golden divine crystal fragments.
-itm_i14_r3_01	relic	A brown broken golden sword with divine engravings.
-itm_i14_r3_02	relic	A black silver shield fragment with a holy emblem.
-itm_i14_r3_03	relic	A brown broken golden sun wheel.
-itm_i14_r3_04	relic	A brown golden light fragment.
-itm_i14_r3_05	relic	A brown golden divine shards.
-itm_i14_r3_06	relic	A brown golden ancient dial fragment.
-itm_i14_r3_07	relic	A brown broken golden arc relic.
-itm_i14_r3_08	relic	A brown golden cross-shaped sword fragment.
-itm_i14_r3_09	relic	A brown white stone tablet with a golden sun.
-itm_i14_r3_10	relic	A brown broken silver shield with a holy emblem.
-itm_i14_r3_11	relic	A brown golden sun shard.
-itm_i14_r4_00	relic	A brown brass relic with a blue core.
+itm_i14_r2_06	relic	A purple heart in a dark cage with a faint purple glow.
+itm_i14_r2_07	relic	A golden glowing heart.
+itm_i14_r2_08	relic	A teal crystal in a brass frame.
+itm_i14_r2_09	relic	A red crystal heart in brass.
+itm_i14_r2_10	relic	A blue glowing brass organ.
+itm_i14_r2_11	relic	A green crystal heart in brass.
+itm_i14_r3_00	relic	A golden divine crystal fragments.
+itm_i14_r3_01	relic	A broken golden sword with divine engravings.
+itm_i14_r3_02	relic	A silver shield fragment with a holy emblem.
+itm_i14_r3_03	relic	A broken golden sun wheel.
+itm_i14_r3_04	relic	A golden light fragment.
+itm_i14_r3_05	relic	A golden divine shards.
+itm_i14_r3_06	relic	A golden ancient dial fragment.
+itm_i14_r3_07	relic	A broken golden arc relic.
+itm_i14_r3_08	relic	A golden cross-shaped sword fragment.
+itm_i14_r3_09	relic	A white stone tablet with a golden sun.
+itm_i14_r3_10	relic	A broken silver shield with a holy emblem.
+itm_i14_r3_11	relic	A golden sun shard.
+itm_i14_r4_00	relic	A brass relic with a blue core.
 itm_i14_r4_01	relic	A blue orb inside brass machinery with a faint blue glow.
-itm_i14_r4_02	relic	A brown golden armillary with a blue light.
-itm_i14_r4_03	relic	A brown red fiery orb in a brass frame.
-itm_i14_r4_04	relic	A brown brass gear ring with a blue light with a faint blue glow.
-itm_i14_r4_05	relic	A brown glowing golden cube relic.
-itm_i14_r4_06	relic	A brown golden armillary with a blue star with a faint blue glow.
-itm_i14_r4_07	relic	A brown red orb in golden rings.
-itm_i14_r4_08	relic	A brown purple glowing brass relic.
-itm_i14_r4_09	relic	A brown golden gear wheel relic.
-itm_i14_r4_10	relic	A brown blue crystal in a golden cage with a faint blue glow.
-itm_i14_r4_11	relic	A brown brass cylinder with a blue light with a faint blue glow.
+itm_i14_r4_02	relic	A golden armillary with a blue light.
+itm_i14_r4_03	relic	A red fiery orb in a brass frame.
+itm_i14_r4_04	relic	A brass gear ring with a blue light with a faint blue glow.
+itm_i14_r4_05	relic	A glowing golden cube relic.
+itm_i14_r4_06	relic	A golden armillary with a blue star with a faint blue glow.
+itm_i14_r4_07	relic	A red orb in golden rings.
+itm_i14_r4_08	relic	A purple glowing brass relic.
+itm_i14_r4_09	relic	A golden gear wheel relic.
+itm_i14_r4_10	relic	A blue crystal in a golden cage with a faint blue glow.
+itm_i14_r4_11	relic	A brass cylinder with a blue light with a faint blue glow.
 itm_i14_r5_00	document	A blue stone tablet with glowing cyan runes.
-itm_i14_r5_01	document	A brown golden metal tablet with geometric patterns.
+itm_i14_r5_01	document	A golden metal tablet with geometric patterns.
 itm_i14_r5_02	document	A grey crystal tablet with a swirling galaxy.
 itm_i14_r5_03	document	A blue tablet with a star map with a faint blue glow.
-itm_i14_r5_04	document	A brown golden engraved tome.
+itm_i14_r5_04	document	A golden engraved tome.
 itm_i14_r5_05	document	A brown leather tome with a blue gem.
 itm_i14_r5_06	document	A brown chained ancient book.
 itm_i14_r5_07	document	A red holy book.
-itm_i14_r5_08	document	A brown green engraved tome.
+itm_i14_r5_08	document	A green engraved tome.
 itm_i14_r5_09	document	A purple tome with a swirling galaxy.
-itm_i14_r5_10	document	A brown white holy book with a golden cross.
-itm_i14_r5_11	document	A brown dark tome with a silver sigil.
+itm_i14_r5_10	document	A white holy book with a golden cross.
+itm_i14_r5_11	document	A dark tome with a silver sigil.
 itm_i15_r0_00	relic	A brown ancient coin with green patina.
-itm_i15_r0_01	relic	A grey silver coin with a star.
-itm_i15_r0_02	relic	A brown golden coin with a star.
-itm_i15_r0_03	relic	A brown bronze coin with a hole.
-itm_i15_r0_04	relic	A brown silver coin with an eagle.
-itm_i15_r0_05	relic	A brown golden coin with a lily.
-itm_i15_r0_06	relic	A black green patina coin with a star.
-itm_i15_r0_07	relic	A brown chipped silver coin.
-itm_i15_r0_08	relic	A brown copper coin with a sun.
-itm_i15_r0_09	relic	A brown golden coin with ornate engravings.
-itm_i15_r0_10	relic	A brown golden coin with ornate engravings.
-itm_i15_r0_11	relic	A grey silver coin with a tower.
+itm_i15_r0_01	relic	A silver coin with a star.
+itm_i15_r0_02	relic	A golden coin with a star.
+itm_i15_r0_03	relic	A bronze coin with a hole.
+itm_i15_r0_04	relic	A silver coin with an eagle.
+itm_i15_r0_05	relic	A golden coin with a lily.
+itm_i15_r0_06	relic	A green patina coin with a star.
+itm_i15_r0_07	relic	A chipped silver coin.
+itm_i15_r0_08	relic	A copper coin with a sun.
+itm_i15_r0_09	relic	A golden coin with ornate engravings.
+itm_i15_r0_10	relic	A golden coin with ornate engravings.
+itm_i15_r0_11	relic	A silver coin with a tower.
 itm_i15_r0_12	relic	A black ancient coin with green patina.
-itm_i15_r1_00	relic	A brown golden eagle medal with a faint blue glow.
-itm_i15_r1_01	relic	A brown golden star medal with a ribbon.
+itm_i15_r1_00	relic	A golden eagle medal with a faint blue glow.
+itm_i15_r1_01	relic	A golden star medal with a ribbon.
 itm_i15_r1_02	relic	A star medal with a purple gem.
-itm_i15_r1_03	relic	A brown golden gear medal.
-itm_i15_r1_04	relic	A brown bronze cross medal with a red gem.
-itm_i15_r1_05	relic	A grey silver star medal.
-itm_i15_r1_06	relic	A brown golden laurel medal.
-itm_i15_r1_07	relic	A brown golden star medal with a purple gem.
-itm_i15_r1_08	relic	A brown golden gear medal.
-itm_i15_r1_09	relic	A brown bronze gear medal.
+itm_i15_r1_03	relic	A golden gear medal.
+itm_i15_r1_04	relic	A bronze cross medal with a red gem.
+itm_i15_r1_05	relic	A silver star medal.
+itm_i15_r1_06	relic	A golden laurel medal.
+itm_i15_r1_07	relic	A golden star medal with a purple gem.
+itm_i15_r1_08	relic	A golden gear medal.
+itm_i15_r1_09	relic	A bronze gear medal.
 itm_i15_r1_10	relic	A brown winged medal with a green gem.
 itm_i15_r1_11	relic	A brown star medal with a red gem.
-itm_i15_r1_12	relic	A brown golden cross medal.
-itm_i15_r2_00	relic	A brown golden shield emblem with an eagle.
-itm_i15_r2_01	relic	A black silver shield emblem with a griffin.
-itm_i15_r2_02	relic	A brown red shield emblem with a lion.
-itm_i15_r2_03	relic	A brown blue round emblem with a griffin.
-itm_i15_r2_04	relic	A brown golden star emblem.
+itm_i15_r1_12	relic	A golden cross medal.
+itm_i15_r2_00	relic	A golden shield emblem with an eagle.
+itm_i15_r2_01	relic	A silver shield emblem with a griffin.
+itm_i15_r2_02	relic	A red shield emblem with a lion.
+itm_i15_r2_03	relic	A blue round emblem with a griffin.
+itm_i15_r2_04	relic	A golden star emblem.
 itm_i15_r2_05	relic	A black iron shield emblem with a tower.
-itm_i15_r2_06	relic	A brown bronze lion head emblem.
-itm_i15_r2_07	relic	A black silver crescent moon emblem.
-itm_i15_r2_08	relic	A brown silver star emblem with a blue gem.
-itm_i15_r2_09	relic	A brown golden winged emblem with a red gem.
-itm_i15_r2_10	relic	A brown bronze stag head emblem.
-itm_i15_r2_11	relic	A black silver cross shield emblem.
-itm_i15_r3_00	accessory	A brown red signet ring.
-itm_i15_r3_01	accessory	A brown green signet ring.
-itm_i15_r3_02	accessory	A brown blue signet ring.
-itm_i15_r3_03	accessory	A brown silver signet ring.
-itm_i15_r3_04	document	A brown silver eagle tag on a chain.
+itm_i15_r2_06	relic	A bronze lion head emblem.
+itm_i15_r2_07	relic	A silver crescent moon emblem.
+itm_i15_r2_08	relic	A silver star emblem with a blue gem.
+itm_i15_r2_09	relic	A golden winged emblem with a red gem.
+itm_i15_r2_10	relic	A bronze stag head emblem.
+itm_i15_r2_11	relic	A silver cross shield emblem.
+itm_i15_r3_00	accessory	A red signet ring.
+itm_i15_r3_01	accessory	A green signet ring.
+itm_i15_r3_02	accessory	A blue signet ring.
+itm_i15_r3_03	accessory	A silver signet ring.
+itm_i15_r3_04	document	A silver eagle tag on a chain.
 itm_i15_r3_05	document	A black iron tag with a star.
-itm_i15_r3_06	document	A brown golden tag with a star.
+itm_i15_r3_06	document	A golden tag with a star.
 itm_i15_r3_07	document	A black iron tag with a wheel.
-itm_i15_r3_08	document	A brown bronze tag with a star.
-itm_i15_r3_09	document	A grey silver tag with a crescent moon.
-itm_i15_r3_10	document	A brown golden tag with a cross.
-itm_i15_r3_11	document	A grey silver tag with a cross.
+itm_i15_r3_08	document	A bronze tag with a star.
+itm_i15_r3_09	document	A silver tag with a crescent moon.
+itm_i15_r3_10	document	A golden tag with a cross.
+itm_i15_r3_11	document	A silver tag with a cross.
 itm_i15_r3_12	document	A brown rusted round tag with a star.
-itm_i15_r4_00	accessory	A brown silver ring with a red gem.
-itm_i15_r4_01	accessory	A brown golden ring with a blue gem.
+itm_i15_r4_00	accessory	A silver ring with a red gem.
+itm_i15_r4_01	accessory	A golden ring with a blue gem.
 itm_i15_r4_02	accessory	A black dark ring with a purple gem.
-itm_i15_r4_03	accessory	A brown plain bronze band.
-itm_i15_r4_04	accessory	A brown golden ring with a green gem.
-itm_i15_r4_05	accessory	A black silver ring with a blue gem.
-itm_i15_r4_06	accessory	A brown golden ring with a red gem.
-itm_i15_r4_07	accessory	A brown bronze ring with a pearl.
-itm_i15_r4_08	accessory	A brown silver ring with a purple gem with a faint purple glow.
-itm_i15_r4_09	accessory	A brown golden ring with a star.
+itm_i15_r4_03	accessory	A plain bronze band.
+itm_i15_r4_04	accessory	A golden ring with a green gem.
+itm_i15_r4_05	accessory	A silver ring with a blue gem.
+itm_i15_r4_06	accessory	A golden ring with a red gem.
+itm_i15_r4_07	accessory	A bronze ring with a pearl.
+itm_i15_r4_08	accessory	A silver ring with a purple gem with a faint purple glow.
+itm_i15_r4_09	accessory	A golden ring with a star.
 itm_i15_r4_10	accessory	A brown patina ring with a green gem.
 itm_i15_r4_11	accessory	A brown small chain ring.
-itm_i15_r4_12	accessory	A brown golden ring with a pearl.
-itm_i15_r5_00	accessory	A brown golden star brooch with a blue gem.
-itm_i15_r5_01	accessory	A black silver crescent moon brooch.
-itm_i15_r5_02	accessory	A brown golden sun brooch with a red gem.
+itm_i15_r4_12	accessory	A golden ring with a pearl.
+itm_i15_r5_00	accessory	A golden star brooch with a blue gem.
+itm_i15_r5_01	accessory	A silver crescent moon brooch.
+itm_i15_r5_02	accessory	A golden sun brooch with a red gem.
 itm_i15_r5_03	accessory	A purple crystal flower brooch with a faint purple glow.
-itm_i15_r5_04	accessory	A grey silver feather brooch.
-itm_i15_r5_05	accessory	A brown golden leaf brooch with pearls.
-itm_i15_r5_06	accessory	A brown white flower brooch with a pearl.
+itm_i15_r5_04	accessory	A silver feather brooch.
+itm_i15_r5_05	accessory	A golden leaf brooch with pearls.
+itm_i15_r5_06	accessory	A white flower brooch with a pearl.
 itm_i15_r5_07	accessory	A red crystal flower brooch.
-itm_i15_r5_08	tool	A brown small brass candlestick.
+itm_i15_r5_08	tool	A small brass candlestick.
 itm_i15_r5_09	accessory	A brown lantern pendant with a blue crystal with a faint blue glow.
-itm_i15_r5_10	accessory	A brown red gem pendant.
+itm_i15_r5_10	accessory	A red gem pendant.
 itm_i15_r5_11	accessory	A brown winged pendant with a blue gem.
-itm_i15_r5_12	tool	A black small silver bell.
+itm_i15_r5_12	tool	A small silver bell.
 itm_i16_r0_00	tool	A grey whetstone.
 itm_i16_r0_01	tool	A brown tinderbox with a striker.
-itm_i16_r0_02	tool	A brown brass oil lamp.
-itm_i16_r0_03	tool	A brown candle in a brass holder.
+itm_i16_r0_02	tool	A brass oil lamp.
+itm_i16_r0_03	tool	A candle in a brass holder.
 itm_i16_r0_04	tool	A grey hand mirror.
-itm_i16_r0_05	tool	A black silver bell.
-itm_i16_r0_06	tool	A brown brass compass.
+itm_i16_r0_05	tool	A silver bell.
+itm_i16_r0_06	tool	A brass compass.
 itm_i16_r0_07	tool	A brown leather pouch.
-itm_i16_r0_08	tool	A brown brass spyglass.
-itm_i16_r0_09	tool	A brown brass pocket watch.
+itm_i16_r0_08	tool	A brass spyglass.
+itm_i16_r0_09	tool	A brass pocket watch.
 itm_i16_r0_10	tool	A brown wooden spyglass.
-itm_i16_r0_11	tool	A brown red cloth pouch.
+itm_i16_r0_11	tool	A red cloth pouch.
 itm_i16_r1_00	tool	A neatly folded white cloth.
 itm_i16_r1_01	tool	A golden folded oilcloth.
 itm_i16_r1_02	tool	A brown rolled blanket.
@@ -1755,18 +1755,18 @@ itm_i16_r1_06	tool	A brown linen cloth bundle.
 itm_i16_r1_07	tool	A brown muddy green cloth.
 itm_i16_r1_08	tool	A brown folded red cloth.
 itm_i16_r1_09	tool	A brown dark folded cloth.
-itm_i16_r1_10	tool	A brown white cloth bundle tied with rope.
+itm_i16_r1_10	tool	A white cloth bundle tied with rope.
 itm_i16_r1_11	tool	A brown rolled striped blanket.
 itm_i16_r2_00	tool	A brown rune spike with a blue gem with a faint blue glow.
 itm_i16_r2_01	tool	A dark rune spike with a red gem.
 itm_i16_r2_02	tool	A brown hand mirror reflecting strange colors with a faint blue glow.
-itm_i16_r2_03	tool	A blue teal rune spike.
-itm_i16_r2_04	tool	A brown silver bell that absorbs light.
-itm_i16_r2_05	tool	A brown blue crystal in a brass cage with a faint blue glow.
+itm_i16_r2_03	tool	A teal rune spike.
+itm_i16_r2_04	tool	A silver bell that absorbs light.
+itm_i16_r2_05	tool	A blue crystal in a brass cage with a faint blue glow.
 itm_i16_r2_06	tool	A purple orb in a brass cage with a faint purple glow.
-itm_i16_r2_07	tool	A brown golden geometric object.
-itm_i16_r2_08	tool	A brown blue crystal lantern with a faint blue glow.
-itm_i16_r2_09	tool	A brown golden sun relic with a pearl.
+itm_i16_r2_07	tool	A golden geometric object.
+itm_i16_r2_08	tool	A blue crystal lantern with a faint blue glow.
+itm_i16_r2_09	tool	A golden sun relic with a pearl.
 itm_i16_r2_10	tool	A brown rune vial with a green crystal.
 itm_i16_r2_11	tool	A brown spiked red gem relic.
 itm_i16_r3_00	scrap	A grey stone fragment with faint runes.
@@ -1779,26 +1779,26 @@ itm_i16_r3_06	scrap	A white marble fragment with blue runes.
 itm_i16_r3_07	scrap	A black mossy stone with green runes.
 itm_i16_r3_08	scrap	A white marble fragment glowing blue.
 itm_i16_r3_09	scrap	A red rune stone.
-itm_i16_r3_10	scrap	A brown golden rune stone.
+itm_i16_r3_10	scrap	A golden rune stone.
 itm_i16_r3_11	scrap	A purple crystal rune stone with a faint purple glow.
 itm_i16_r4_00	scrap	A brown rusted broken sword fragment.
 itm_i16_r4_01	scrap	A black notched steel blade fragment.
 itm_i16_r4_02	scrap	A brown rusted broken knife.
 itm_i16_r4_03	scrap	A brown rusted iron helmet fragment.
 itm_i16_r4_04	scrap	A brown dented iron armor piece.
-itm_i16_r4_05	scrap	A brown dented golden armor piece.
+itm_i16_r4_05	scrap	A dented golden armor piece.
 itm_i16_r4_06	scrap	A brown piece of chainmail.
 itm_i16_r4_07	scrap	A brown broken red shield fragment.
-itm_i16_r4_08	scrap	A brown broken golden sword hilt.
+itm_i16_r4_08	scrap	A broken golden sword hilt.
 itm_i16_r4_09	scrap	A brown dented iron vambrace.
 itm_i16_r4_10	scrap	A brown torn red armor piece.
-itm_i16_r4_11	scrap	A brown golden armor fragment.
+itm_i16_r4_11	scrap	A golden armor fragment.
 itm_i16_r5_00	scrap	A brown rusted gear with missing teeth.
-itm_i16_r5_01	scrap	A brown brass spring with oil stains.
-itm_i16_r5_02	scrap	A brown bent silver fishhook.
+itm_i16_r5_01	scrap	A brass spring with oil stains.
+itm_i16_r5_02	scrap	A bent silver fishhook.
 itm_i16_r5_03	scrap	A brown old leather collar.
 itm_i16_r5_04	scrap	A brown broken ship rudder wheel.
-itm_i16_r5_05	scrap	A brown brass key part.
+itm_i16_r5_05	scrap	A brass key part.
 itm_i16_r5_06	scrap	A brown iron gear.
 itm_i16_r5_07	scrap	A brown coiled iron spring.
 itm_i16_r5_08	scrap	A brown broken iron shackle.
@@ -1806,20 +1806,20 @@ itm_i16_r5_09	scrap	A brown corroded green metal fitting.
 itm_i16_r5_10	scrap	A black iron hook.
 itm_i16_r5_11	scrap	A brown broken wooden wheel.
 itm_i17_r0_00	creature_part	A brown glowing orange dragon scale.
-itm_i17_r0_01	creature_part	A brown golden scale.
+itm_i17_r0_01	creature_part	A golden scale.
 itm_i17_r0_02	creature_part	A white iridescent scale.
-itm_i17_r0_03	creature_part	A brown dark grey scale.
-itm_i17_r0_04	creature_part	A black silver scale.
+itm_i17_r0_03	creature_part	A dark grey scale.
+itm_i17_r0_04	creature_part	A silver scale.
 itm_i17_r0_05	creature_part	A red and black scale.
 itm_i17_r0_06	creature_part	A blue scale with a faint blue glow.
-itm_i17_r0_07	creature_part	A golden green scale.
+itm_i17_r0_07	creature_part	A green scale.
 itm_i17_r0_08	creature_part	A brown bone-white scale.
 itm_i17_r0_09	creature_part	A purple scale with a faint purple glow.
-itm_i17_r0_10	creature_part	A grey black scale.
-itm_i17_r0_11	creature_part	A brown golden bronze scale.
+itm_i17_r0_10	creature_part	A black scale.
+itm_i17_r0_11	creature_part	A golden bronze scale.
 itm_i17_r1_00	creature_part	A pulsing red organ.
 itm_i17_r1_01	creature_part	An olive sac of green fluid.
-itm_i17_r1_02	creature_part	A red purple fleshy mass.
+itm_i17_r1_02	creature_part	A purple fleshy mass.
 itm_i17_r1_03	creature_part	A brown glowing orange sac.
 itm_i17_r1_04	creature_part	A brown pale coiled organ.
 itm_i17_r1_05	creature_part	A red dark veined organ.
@@ -1829,7 +1829,7 @@ itm_i17_r1_08	creature_part	A red beating heart.
 itm_i17_r1_09	creature_part	An olive pair of green sacs.
 itm_i17_r1_10	creature_part	A brown pale spotted egg cluster.
 itm_i17_r1_11	creature_part	A pink dark fleshy mass.
-itm_i17_r2_00	creature_part	An olive green poison needle.
+itm_i17_r2_00	creature_part	A green poison needle.
 itm_i17_r2_01	creature_part	A brown curved fang.
 itm_i17_r2_02	creature_part	A brown large curved claw.
 itm_i17_r2_03	creature_part	A brown spiked horn.
@@ -1839,7 +1839,7 @@ itm_i17_r2_06	creature_part	A brown large fang.
 itm_i17_r2_07	creature_part	A brown hooked claw.
 itm_i17_r2_08	creature_part	A blue crystal stinger with a faint blue glow.
 itm_i17_r2_09	creature_part	A spiked brown horn.
-itm_i17_r2_10	creature_part	A brown ivory fang.
+itm_i17_r2_10	creature_part	An ivory fang.
 itm_i17_r2_11	creature_part	A red spiked tail.
 itm_i17_r3_00	creature_part	A brown spool of spider silk.
 itm_i17_r3_01	creature_part	A grey bundle of white silk threads.
@@ -1847,11 +1847,11 @@ itm_i17_r3_02	creature_part	A lock of red hair.
 itm_i17_r3_03	creature_part	A patch of brown fur.
 itm_i17_r3_04	creature_part	A blue feathers with a faint blue glow.
 itm_i17_r3_05	creature_part	A brown patch of cream fur.
-itm_i17_r3_06	creature_part	A brown red fur.
-itm_i17_r3_07	creature_part	A pink purple fur.
-itm_i17_r3_08	creature_part	A brown tan fur pelt.
-itm_i17_r3_09	creature_part	An olive green fur.
-itm_i17_r3_10	creature_part	A grey white fur.
+itm_i17_r3_06	creature_part	A red fur.
+itm_i17_r3_07	creature_part	A purple fur.
+itm_i17_r3_08	creature_part	A tan fur pelt.
+itm_i17_r3_09	creature_part	A green fur.
+itm_i17_r3_10	creature_part	A white fur.
 itm_i17_r3_11	creature_part	A dark red feather.
 itm_i17_r4_00	creature_part	A cracked vial of grey liquid.
 itm_i17_r4_01	creature_part	An olive vial of green poison.
@@ -1865,18 +1865,18 @@ itm_i17_r4_08	creature_part	A green vial of teal fluid.
 itm_i17_r4_09	creature_part	A brown vial of orange eggs.
 itm_i17_r4_10	creature_part	A brown vial of black blood.
 itm_i17_r4_11	creature_part	A vial of purple glowing fluid.
-itm_i17_r5_00	creature_part	An olive green thorned core.
+itm_i17_r5_00	creature_part	A green thorned core.
 itm_i17_r5_01	creature_part	A red crystal cluster.
-itm_i17_r5_02	creature_part	A brown black magic stone in bone.
+itm_i17_r5_02	creature_part	A black magic stone in bone.
 itm_i17_r5_03	creature_part	A blue crystal cluster with a faint blue glow.
 itm_i17_r5_04	creature_part	A brown fiery red core.
 itm_i17_r5_05	creature_part	A purple gem in bone with a faint purple glow.
-itm_i17_r5_06	creature_part	A brown blue gem in a bone cage.
+itm_i17_r5_06	creature_part	A blue gem in a bone cage.
 itm_i17_r5_07	creature_part	A red crystal in a dark shell.
-itm_i17_r5_08	creature_part	An olive green glowing core.
-itm_i17_r5_09	creature_part	A brown blue gem in bone with a faint blue glow.
+itm_i17_r5_08	creature_part	A green glowing core.
+itm_i17_r5_09	creature_part	A blue gem in bone with a faint blue glow.
 itm_i17_r5_10	creature_part	A red crystal core.
-itm_i17_r5_11	creature_part	A brown purple gem in a bone ring with a faint purple glow.
+itm_i17_r5_11	creature_part	A purple gem in a bone ring with a faint purple glow.
 itm_i18_r0_00	medium_weapon	A white katana.
 itm_i18_r0_01	medium_weapon	A white katana.
 itm_i18_r0_02	medium_weapon	A white katana.
@@ -1912,67 +1912,10 @@ itm_i18_r2_04	large_weapon	A black odachi great sword.
 itm_i18_r2_05	large_weapon	A black odachi great sword.
 itm_i18_r2_06	large_weapon	A brown notched odachi.
 itm_i18_r2_07	large_weapon	A brown odachi great sword.
-itm_i18_r2_08	large_weapon	A brown golden odachi.
+itm_i18_r2_08	large_weapon	A golden odachi.
 itm_i18_r2_09	large_weapon	A cursed odachi with red veins.
 itm_i18_r2_10	large_weapon	A brown nodachi.
 itm_i18_r2_11	large_weapon	A black nodachi.
-itm_i19_r0_00	long_weapon	A brown yari spear.
-itm_i19_r0_01	long_weapon	A red yari spear.
-itm_i19_r0_02	long_weapon	A brown jumonji cross spear.
-itm_i19_r0_03	long_weapon	A blue yari spear.
-itm_i19_r0_04	long_weapon	A red jumonji cross spear.
-itm_i19_r0_05	long_weapon	A brown naginata.
-itm_i19_r0_06	long_weapon	A red yari spear.
-itm_i19_r0_07	long_weapon	A brown naginata.
-itm_i19_r0_08	long_weapon	A red jumonji cross spear.
-itm_i19_r0_09	long_weapon	A brown yari spear.
-itm_i19_r0_10	long_weapon	A brown kama yari sickle spear.
-itm_i19_r0_11	long_weapon	A brown naginata.
-itm_i19_r0_12	long_weapon	A brown yari spear.
-itm_i19_r0_13	long_weapon	A red naginata.
-itm_i19_r0_14	long_weapon	A brown jumonji cross spear.
-itm_i19_r0_15	long_weapon	A brown yari spear.
-itm_i19_r0_16	long_weapon	A brown naginata.
-itm_i19_r1_00	long_weapon	A brown japanese yumi longbow.
-itm_i19_r1_01	long_weapon	A brown japanese yumi longbow.
-itm_i19_r1_02	long_weapon	A brown japanese yumi longbow.
-itm_i19_r1_03	long_weapon	A brown japanese yumi longbow.
-itm_i19_r1_04	long_weapon	A brown japanese yumi longbow.
-itm_i19_r1_05	long_weapon	A brown japanese yumi longbow.
-itm_i19_r1_06	long_weapon	A brown japanese yumi longbow.
-itm_i19_r1_07	long_weapon	A brown japanese yumi longbow.
-itm_i19_r1_08	long_weapon	A brown japanese yumi longbow.
-itm_i19_r1_09	long_weapon	A brown japanese yumi longbow.
-itm_i19_r1_10	long_weapon	A brown japanese yumi longbow.
-itm_i19_r1_11	long_weapon	A brown japanese yumi longbow.
-itm_i19_r2_00	small_weapon	A red tanto dagger.
-itm_i19_r2_01	small_weapon	A white tanto dagger.
-itm_i19_r2_02	small_weapon	A brown kaiken dagger.
-itm_i19_r2_03	small_weapon	A red kunai.
-itm_i19_r2_04	small_weapon	A black kunai.
-itm_i19_r2_05	small_weapon	A black tanto dagger.
-itm_i19_r2_06	small_weapon	A brown kaiken dagger.
-itm_i19_r2_07	small_weapon	A brown kunai.
-itm_i19_r2_08	small_weapon	A blue tanto dagger.
-itm_i19_r2_09	small_weapon	A brown kunai.
-itm_i19_r2_10	small_weapon	A brown kunai.
-itm_i19_r2_11	small_weapon	A brown kaiken dagger.
-itm_i19_r3_00	throwable_weapon	A black four-pointed shuriken.
-itm_i19_r3_01	throwable_weapon	A black four-pointed shuriken.
-itm_i19_r3_02	throwable_weapon	A brown eight-pointed shuriken.
-itm_i19_r3_03	throwable_weapon	A black eight-pointed shuriken.
-itm_i19_r3_04	throwable_weapon	A grey bo shuriken throwing spike.
-itm_i19_r3_05	throwable_weapon	A black throwing spike.
-itm_i19_r3_06	throwable_weapon	A black four-pointed shuriken.
-itm_i19_r3_07	throwable_weapon	A brown eight-pointed shuriken.
-itm_i19_r3_08	medium_weapon	A brown kanabo iron club.
-itm_i19_r3_09	medium_weapon	A brown kanabo iron club.
-itm_i19_r3_10	medium_weapon	A black kanabo iron club.
-itm_i19_r3_11	medium_weapon	A brown kanabo iron club.
-itm_i19_r3_12	throwable_weapon	A black four-pointed shuriken.
-itm_i19_r3_13	small_weapon	A red iron war fan tessen.
-itm_i19_r3_14	small_weapon	A brown folded iron war fan.
-itm_i19_r3_15	small_weapon	A brown iron war fan tessen.
 itm_i20_r0_00	accessory	A beige paper ofuda talisman.
 itm_i20_r0_01	accessory	A brown paper talisman with a bell.
 itm_i20_r0_02	accessory	A brown wooden talisman plaque.
@@ -1983,32 +1926,32 @@ itm_i20_r0_06	accessory	A brown paper ofuda talisman.
 itm_i20_r0_07	accessory	A brown omamori charm bag.
 itm_i20_r0_08	accessory	A brown paper ofuda talisman.
 itm_i20_r0_09	accessory	A pink omamori charm bag.
-itm_i20_r0_10	accessory	A brown golden omamori charm bag.
+itm_i20_r0_10	accessory	A golden omamori charm bag.
 itm_i20_r0_11	accessory	A brown paper ofuda talisman.
 itm_i20_r0_12	accessory	A brown omamori charm bag.
 itm_i20_r1_00	accessory	A brown wooden prayer beads.
 itm_i20_r1_01	accessory	A grey crystal prayer beads.
 itm_i20_r1_02	accessory	A green jade prayer beads.
 itm_i20_r1_03	accessory	A purple prayer beads.
-itm_i20_r1_04	accessory	A brown black prayer beads with a skull.
+itm_i20_r1_04	accessory	A black prayer beads with a skull.
 itm_i20_r1_05	accessory	A grey jade magatama.
 itm_i20_r1_06	accessory	A red magatama.
-itm_i20_r1_07	accessory	A brown white magatama.
+itm_i20_r1_07	accessory	A white magatama.
 itm_i20_r1_08	accessory	A green magatama.
-itm_i20_r1_09	accessory	A red black magatama.
-itm_i20_r1_10	accessory	A brown white magatama.
+itm_i20_r1_09	accessory	A black magatama.
+itm_i20_r1_10	accessory	A white magatama.
 itm_i20_r1_11	accessory	A brown jade magatama.
 itm_i20_r1_12	accessory	A brown dark magatama.
 itm_i20_r2_00	scroll	A brown japanese handscroll.
 itm_i20_r2_01	scroll	A brown japanese scroll with a tassel.
 itm_i20_r2_02	scroll	A brown letter tied with red cord.
 itm_i20_r2_03	scroll	A brown rolled letters.
-itm_i20_r2_04	scroll	A brown blue japanese handscroll.
-itm_i20_r2_05	scroll	A brown green japanese handscroll.
+itm_i20_r2_04	scroll	A blue japanese handscroll.
+itm_i20_r2_05	scroll	A green japanese handscroll.
 itm_i20_r2_06	scroll	A brown scroll and letter tied with red cord.
 itm_i20_r2_07	scroll	A white folded letter tied with cord.
-itm_i20_r2_08	scroll	A brown blue bound scroll.
-itm_i20_r2_09	scroll	A brown red wrapped letter.
+itm_i20_r2_08	scroll	A blue bound scroll.
+itm_i20_r2_09	scroll	A red wrapped letter.
 itm_i20_r2_10	scroll	A beige folded paper letter.
 itm_i20_r2_11	scroll	A brown scroll with a talisman.
 itm_i20_r2_12	scroll	A brown letter tied with red cord.
@@ -2016,29 +1959,29 @@ itm_i20_r3_00	accessory	A brown lacquered inro case.
 itm_i20_r3_01	accessory	A brown cat netsuke.
 itm_i20_r3_02	accessory	A brown oni mask netsuke.
 itm_i20_r3_03	accessory	A brown gourd netsuke.
-itm_i20_r3_04	accessory	A brown red folding fan.
-itm_i20_r3_05	accessory	A brown blue folding fan.
-itm_i20_r3_06	accessory	A brown black folding fan.
+itm_i20_r3_04	accessory	A red folding fan.
+itm_i20_r3_05	accessory	A blue folding fan.
+itm_i20_r3_06	accessory	A black folding fan.
 itm_i20_r3_07	tool	A brown kiseru tobacco pipe.
 itm_i20_r3_08	tool	A brown kiseru tobacco pipe.
 itm_i20_r3_09	accessory	A black hand mirror.
-itm_i20_r3_10	accessory	A brown bronze hand mirror.
+itm_i20_r3_10	accessory	A bronze hand mirror.
 itm_i20_r3_11	accessory	A brown hand mirror.
 itm_i20_r3_12	accessory	A brown lacquered comb.
-itm_i20_r3_13	accessory	A brown golden comb.
+itm_i20_r3_13	accessory	A golden comb.
 itm_i20_r4_00	creature_part	A red oni horn.
 itm_i20_r4_01	creature_part	A brown large fang.
 itm_i20_r4_02	creature_part	A brown demon claw.
 itm_i20_r4_03	creature_part	A brown bone horn.
 itm_i20_r4_04	creature_part	A brown spiked demon horn.
 itm_i20_r4_05	creature_part	A brown tengu feather.
-itm_i20_r4_06	creature_part	A brown red tengu feather.
-itm_i20_r4_07	creature_part	A black blue tengu feather.
+itm_i20_r4_06	creature_part	A red tengu feather.
+itm_i20_r4_07	creature_part	A blue tengu feather.
 itm_i20_r4_08	creature_part	A brown fox tail fur.
 itm_i20_r4_09	creature_part	A black fox tail fur.
 itm_i20_r4_10	creature_part	A black serpent scales.
-itm_i20_r4_11	creature_part	A brown blue serpent scales.
-itm_i20_r4_12	creature_part	A brown red serpent scales.
+itm_i20_r4_11	creature_part	A blue serpent scales.
+itm_i20_r4_12	creature_part	A red serpent scales.
 itm_i20_r4_13	creature_part	A brown kappa plate.
 itm_i20_r4_14	creature_part	A brown broken blue scale.
 itm_i20_r4_15	creature_part	A brown woven straw bundle.
@@ -2061,11 +2004,11 @@ itm_i21_r0_00	shield	A blue clear riot shield.
 itm_i21_r0_01	shield	A black ballistic shield with a viewport.
 itm_i21_r0_02	shield	A grey cracked riot shield.
 itm_i21_r0_03	shield	A black ballistic shield with a viewport.
-itm_i21_r0_04	shield	A golden olive ballistic shield with a viewport.
+itm_i21_r0_04	shield	An olive ballistic shield with a viewport.
 itm_i21_r0_05	shield	A black small arm shield.
 itm_i21_r0_06	shield	A grey perforated steel shield.
 itm_i21_r0_07	shield	A black ballistic shield with a viewport.
-itm_i21_r0_08	shield	A brown tan armored shield.
+itm_i21_r0_08	shield	A tan armored shield.
 itm_i21_r0_09	shield	A black dark armored shield.
 itm_i21_r0_10	shield	A black steel shield with a mesh window.
 itm_i21_r1_00	shield	A blue energy barrier shield with a faint blue glow.
@@ -2113,13 +2056,13 @@ itm_i21_r4_09	small_weapon	A brown folding knife.
 itm_i21_r4_10	small_weapon	A black folding knife.
 itm_i21_r4_11	small_weapon	A brown karambit knife.
 itm_i21_r4_12	small_weapon	A black folding knife.
-itm_i21_r4_13	small_weapon	A brown brass knuckles.
+itm_i21_r4_13	small_weapon	A brass knuckles.
 itm_i21_r4_14	small_weapon	A black brass knuckles.
-itm_i21_r4_15	small_weapon	A red spiked brass knuckles.
-itm_i21_r4_16	small_weapon	A grey spiked brass knuckles.
+itm_i21_r4_15	small_weapon	A spiked brass knuckles.
+itm_i21_r4_16	small_weapon	A spiked brass knuckles.
 itm_i22_r0_00	document	A grey data chip.
 itm_i22_r0_01	document	A black glowing data chip.
-itm_i22_r0_02	document	A black green data chip.
+itm_i22_r0_02	document	A green data chip.
 itm_i22_r0_03	document	A blue memory card.
 itm_i22_r0_04	document	A red memory card.
 itm_i22_r0_05	document	A black usb flash drive.
@@ -2130,18 +2073,18 @@ itm_i22_r0_09	document	A brown glowing data module.
 itm_i22_r0_10	document	A black cassette tape.
 itm_i22_r0_11	document	A black tape reel.
 itm_i22_r1_00	document	A grey id card.
-itm_i22_r1_01	document	A white red id card.
+itm_i22_r1_01	document	A red id card.
 itm_i22_r1_02	document	A grey worn id card.
 itm_i22_r1_03	document	A grey id card.
 itm_i22_r1_04	document	A black key card.
 itm_i22_r1_05	document	A brown military insignia badge.
-itm_i22_r1_06	document	A brown golden star badge.
+itm_i22_r1_06	document	A golden star badge.
 itm_i22_r1_07	document	A red skull gang badge.
 itm_i22_r1_08	document	A black dog tag.
-itm_i22_r1_09	document	A brown golden badge.
-itm_i22_r1_10	document	A brown bronze badge.
+itm_i22_r1_09	document	A golden badge.
+itm_i22_r1_10	document	A bronze badge.
 itm_i22_r1_11	document	A brown gear emblem badge.
-itm_i22_r1_12	document	A brown red shield badge.
+itm_i22_r1_12	document	A red shield badge.
 itm_i22_r2_00	document	A grey crumpled paper.
 itm_i22_r2_01	document	A white torn note.
 itm_i22_r2_02	document	A brown torn note.
@@ -2172,7 +2115,7 @@ itm_i22_r4_01	document	A black spiral notebook.
 itm_i22_r4_02	document	A red notebook.
 itm_i22_r4_03	document	A brown paper folder.
 itm_i22_r4_04	document	A brown spiral notebook.
-itm_i22_r4_05	document	A brown green notebook.
+itm_i22_r4_05	document	A green notebook.
 itm_i22_r4_06	document	A brown clipboard.
 itm_i22_r4_07	document	A brown paper folder.
 itm_i22_r4_08	document	A blue notebook.
@@ -2187,9 +2130,9 @@ itm_i22_r5_03	document	A blue glowing tablet.
 itm_i22_r5_04	document	A brown rugged tablet.
 itm_i22_r5_05	document	A red tablet.
 itm_i22_r5_06	document	A blue holographic disc with a faint blue glow.
-itm_i22_r5_07	document	A brown orange holographic disc.
+itm_i22_r5_07	document	An orange holographic disc.
 itm_i22_r5_08	document	A blue data capsule with a faint cyan glow.
-itm_i22_r5_09	document	A brown orange data capsule.
+itm_i22_r5_09	document	An orange data capsule.
 itm_i22_r5_10	document	A brown spherical recorder.
 itm_i22_r5_11	document	A red black box.
 itm_i22_r5_12	document	A blue black box with a faint blue glow.
@@ -2277,21 +2220,21 @@ itm_i23_r5_02	liquid_material	A glowing green fluid cartridge.
 itm_i23_r5_03	liquid_material	A white glowing blue fluid cartridge.
 itm_i23_r5_04	liquid_material	A white glowing fluid cartridge.
 itm_i23_r5_05	other_material	A red coolant canister.
-itm_i23_r5_06	other_material	An olive green fuel jerrycan.
+itm_i23_r5_06	other_material	A green fuel jerrycan.
 itm_i23_r5_07	other_material	A brown hazard fuel jerrycan.
-itm_i23_r5_08	other_material	A brown grey fuel jerrycan.
+itm_i23_r5_08	other_material	A grey fuel jerrycan.
 itm_i23_r5_09	other_material	A golden glowing fuel cell.
 itm_i23_r5_10	other_material	A red fuel jerrycan.
-itm_i23_r5_11	other_material	A brown olive fuel jerrycan.
+itm_i23_r5_11	other_material	An olive fuel jerrycan.
 itm_i23_r5_12	other_material	A red fuel canister.
-itm_i23_r5_13	other_material	A brown yellow fuel jerrycan.
+itm_i23_r5_13	other_material	A yellow fuel jerrycan.
 itm_i23_r5_14	other_material	A brown fuel canister.
 itm_i24_r0_00	treasure	A brown stack of banknotes.
 itm_i24_r0_01	treasure	A brown rolled banknotes.
 itm_i24_r0_02	treasure	A brown rolled banknotes.
 itm_i24_r0_03	treasure	A brown roll of coins.
 itm_i24_r0_04	treasure	A brown rolled banknotes.
-itm_i24_r0_05	treasure	A brown bag of gold coins.
+itm_i24_r0_05	treasure	A bag of gold coins.
 itm_i24_r0_06	treasure	A brown bundle of banknotes.
 itm_i24_r0_07	treasure	A brown bundle of banknotes.
 itm_i24_r0_08	treasure	A brown rolled banknotes.
@@ -2306,50 +2249,50 @@ itm_i24_r1_02	treasure	A black data vault with a faint blue glow.
 itm_i24_r1_03	treasure	A red credit card.
 itm_i24_r1_04	treasure	A brown hexagonal tokens.
 itm_i24_r1_05	treasure	A brown data safe cube.
-itm_i24_r1_06	treasure	A brown golden credit card.
+itm_i24_r1_06	treasure	A golden credit card.
 itm_i24_r1_07	treasure	A blue glowing credit card.
 itm_i24_r1_08	treasure	A brown hexagonal tokens.
 itm_i24_r1_09	treasure	A brown credit vault with a faint blue glow.
 itm_i24_r1_10	treasure	A blue glowing credit card.
 itm_i24_r1_11	treasure	A brown credit vault with a faint blue glow.
-itm_i24_r1_12	treasure	A black red hexagonal tokens.
-itm_i24_r2_00	treasure	A brown gold bar.
-itm_i24_r2_01	treasure	A brown bag of gold dust.
-itm_i24_r2_02	treasure	A brown gold nugget.
-itm_i24_r2_03	treasure	A brown gold nugget.
-itm_i24_r2_04	treasure	A grey silver ore nugget.
-itm_i24_r2_05	treasure	A brown silver bar.
-itm_i24_r2_06	treasure	A brown gold nugget.
-itm_i24_r2_07	treasure	A grey platinum bar.
-itm_i24_r2_08	treasure	A brown gold nugget.
+itm_i24_r1_12	treasure	A red hexagonal tokens.
+itm_i24_r2_00	treasure	A gold bar.
+itm_i24_r2_01	treasure	A bag of gold dust.
+itm_i24_r2_02	treasure	A gold nugget.
+itm_i24_r2_03	treasure	A gold nugget.
+itm_i24_r2_04	treasure	A silver ore nugget.
+itm_i24_r2_05	treasure	A silver bar.
+itm_i24_r2_06	treasure	A gold nugget.
+itm_i24_r2_07	treasure	A platinum bar.
+itm_i24_r2_08	treasure	A gold nugget.
 itm_i24_r2_09	treasure	A blue iridescent ore chunk.
-itm_i24_r2_10	treasure	A brown gold bar.
-itm_i24_r2_11	treasure	A black silver nugget.
-itm_i24_r2_12	treasure	A brown copper nugget.
-itm_i24_r2_13	treasure	A black silver bar.
+itm_i24_r2_10	treasure	A gold bar.
+itm_i24_r2_11	treasure	A silver nugget.
+itm_i24_r2_12	treasure	A copper nugget.
+itm_i24_r2_13	treasure	A silver bar.
 itm_i24_r3_00	accessory	A brown wristwatch.
 itm_i24_r3_01	accessory	A black wristwatch.
-itm_i24_r3_02	accessory	A brown golden wristwatch.
+itm_i24_r3_02	accessory	A golden wristwatch.
 itm_i24_r3_03	accessory	A brown pocket watch.
 itm_i24_r3_04	tool	A black steel lighter.
-itm_i24_r3_05	tool	A brown brass lighter.
+itm_i24_r3_05	tool	A brass lighter.
 itm_i24_r3_06	tool	A red lighter.
-itm_i24_r3_07	tool	A brown brass lighter.
+itm_i24_r3_07	tool	A brass lighter.
 itm_i24_r3_08	tool	A brown engraved lighter.
 itm_i24_r3_09	treasure	A ring in a red box.
 itm_i24_r3_10	treasure	A ring in a blue box with a faint blue glow.
 itm_i24_r3_11	treasure	A ring in a black box.
-itm_i24_r3_12	accessory	A brown blue gem necklace with a faint blue glow.
-itm_i24_r3_13	accessory	A brown red gem necklace.
-itm_i24_r3_14	accessory	A brown red gem pendant.
+itm_i24_r3_12	accessory	A blue gem necklace with a faint blue glow.
+itm_i24_r3_13	accessory	A red gem necklace.
+itm_i24_r3_14	accessory	A red gem pendant.
 itm_i24_r3_15	accessory	A brown fang necklace.
-itm_i24_r3_16	accessory	A brown blue gem pendant.
+itm_i24_r3_16	accessory	A blue gem pendant.
 itm_i24_r3_17	accessory	A brown tech pendant on a chain.
 itm_i24_r4_00	treasure	A brown string of bottle caps.
 itm_i24_r4_01	treasure	A red string of bottle caps.
 itm_i24_r4_02	relic	A brown old war medal.
 itm_i24_r4_03	relic	A brown old star medal.
-itm_i24_r4_04	relic	A brown old silver medal.
+itm_i24_r4_04	relic	An old silver medal.
 itm_i24_r4_05	food	A brown stack of canned food.
 itm_i24_r4_06	food	A brown open can of food.
 itm_i24_r4_07	other_material	A brown ammo box.
@@ -2362,28 +2305,28 @@ itm_i24_r4_13	medicine	A brown jar of pills.
 itm_i24_r4_14	medicine	A brown bottle of pills.
 itm_i24_r5_00	relic	A brown alien artifact orb.
 itm_i24_r5_01	relic	A blue crystal core.
-itm_i24_r5_02	relic	A blue purple crystal cluster.
+itm_i24_r5_02	relic	A purple crystal cluster.
 itm_i24_r5_03	relic	A red crystal core.
-itm_i24_r5_04	relic	A brown golden pyramid relic.
-itm_i24_r5_05	relic	A brown golden armillary relic.
+itm_i24_r5_04	relic	A golden pyramid relic.
+itm_i24_r5_05	relic	A golden armillary relic.
 itm_i24_r5_06	relic	A brown glowing tech cube.
 itm_i24_r5_07	relic	A blue crystal capsule with a faint blue glow.
-itm_i24_r5_08	relic	A brown orange crystal capsule.
+itm_i24_r5_08	relic	An orange crystal capsule.
 itm_i24_r5_09	relic	A red sealed case.
 itm_i24_r5_10	relic	A blue artifact in a glass case.
 itm_i24_r5_11	relic	A brown ancient tech pillar.
-itm_i24_r5_12	relic	A brown black orb relic.
+itm_i24_r5_12	relic	A black orb relic.
 itm_i24_r5_13	relic	A brown ornate metal egg.
 itm_i24_r5_14	relic	A brown angel statuette trophy.
 itm_i25_r0_00	metal	A grey bent alloy plate.
 itm_i25_r0_01	metal	A grey steel plate with bolt holes.
 itm_i25_r0_02	metal	A brown scorched armor plate.
 itm_i25_r0_03	metal	A red painted car body panel.
-itm_i25_r0_04	metal	A brown olive painted metal plate.
+itm_i25_r0_04	metal	An olive painted metal plate.
 itm_i25_r0_05	metal	A brown rusted steel plate.
 itm_i25_r0_06	metal	A brown riveted steel plate.
 itm_i25_r0_07	metal	A blue painted metal panel.
-itm_i25_r0_08	metal	A brown yellow painted metal plate.
+itm_i25_r0_08	metal	A yellow painted metal plate.
 itm_i25_r0_09	metal	A black steel plate with slots.
 itm_i25_r0_10	metal	A black hexagonal armor plate.
 itm_i25_r0_11	metal	A grey perforated steel plate.
@@ -2397,80 +2340,80 @@ itm_i25_r1_05	metal	A black threaded rebar.
 itm_i25_r1_06	metal	A grey steel pipe.
 itm_i25_r1_07	metal	A brown rusted steel pipe.
 itm_i25_r1_08	metal	A white steel pipe.
-itm_i25_r1_09	metal	A brown bronze pipe.
+itm_i25_r1_09	metal	A bronze pipe.
 itm_i25_r1_10	metal	A brown lump of molten metal.
-itm_i25_r1_11	metal	A brown lump of molten gold.
-itm_i25_r1_12	metal	A grey lump of silver metal.
-itm_i25_r1_13	metal	A brown lump of molten copper.
+itm_i25_r1_11	metal	A lump of molten gold.
+itm_i25_r1_12	metal	A lump of silver metal.
+itm_i25_r1_13	metal	A lump of molten copper.
 itm_i25_r1_14	metal	A lump of black slag.
 itm_i25_r2_00	scrap	A brown engine piston.
 itm_i25_r2_01	scrap	A brown rusted engine piston.
 itm_i25_r2_02	scrap	A black crankshaft.
 itm_i25_r2_03	scrap	A black hydraulic joint.
-itm_i25_r2_04	scrap	A brown bronze hydraulic coupling.
+itm_i25_r2_04	scrap	A bronze hydraulic coupling.
 itm_i25_r2_05	scrap	A brown heavy gearbox part.
 itm_i25_r2_06	scrap	A brown metal gearbox.
 itm_i25_r2_07	scrap	A black steel gearbox.
 itm_i25_r2_08	scrap	A brown rusted gearbox.
-itm_i25_r2_09	scrap	A brown black coil spring.
+itm_i25_r2_09	scrap	A black coil spring.
 itm_i25_r2_10	scrap	A brown dark coil spring.
 itm_i25_r2_11	scrap	A red coil spring.
 itm_i25_r2_12	scrap	A black steel coil spring.
-itm_i25_r2_13	scrap	A brown brass coil spring.
+itm_i25_r2_13	scrap	A brass coil spring.
 itm_i25_r3_00	scrap	A black gun barrel.
 itm_i25_r3_01	scrap	A black gun barrel with a muzzle brake.
 itm_i25_r3_02	scrap	A black perforated gun barrel.
 itm_i25_r3_03	scrap	A black gun barrel.
 itm_i25_r3_04	scrap	A black rifle receiver.
 itm_i25_r3_05	scrap	A black rifle magazine.
-itm_i25_r3_06	scrap	A white tan rifle magazine.
+itm_i25_r3_06	scrap	A tan rifle magazine.
 itm_i25_r3_07	scrap	A black steel magazine.
 itm_i25_r3_08	scrap	A black drum magazine.
 itm_i25_r3_09	scrap	A grey rifle scope.
-itm_i25_r3_10	scrap	A black red dot sight.
+itm_i25_r3_10	scrap	A red dot sight.
 itm_i25_r3_11	scrap	A black scope sight.
-itm_i25_r3_12	scrap	A black green holographic sight.
+itm_i25_r3_12	scrap	A green holographic sight.
 itm_i25_r3_13	other_material	A brown open ammo box.
-itm_i25_r3_14	other_material	A brown green ammo crate.
+itm_i25_r3_14	other_material	A green ammo crate.
 itm_i25_r3_15	other_material	A brown open case of bullets.
 itm_i25_r3_16	other_material	A black ammo box.
-itm_i25_r3_17	other_material	A brown yellow ammo box.
+itm_i25_r3_17	other_material	A yellow ammo box.
 itm_i25_r4_00	other_material	A brown spool of black cable.
 itm_i25_r4_01	other_material	A spool of red cable.
 itm_i25_r4_02	other_material	A spool of blue cable with a faint blue glow.
-itm_i25_r4_03	other_material	A brown bundle of copper wire.
+itm_i25_r4_03	other_material	A bundle of copper wire.
 itm_i25_r4_04	other_material	A brown bundle of frayed wire.
 itm_i25_r4_05	other_material	A brown coil of rope cable.
 itm_i25_r4_06	other_material	A coil of black cable.
 itm_i25_r4_07	other_material	A black steel chain.
 itm_i25_r4_08	other_material	A brown rusted chain.
-itm_i25_r4_09	other_material	A brown brass chain.
+itm_i25_r4_09	other_material	A brass chain.
 itm_i25_r4_10	other_material	A brown heavy steel chain.
 itm_i25_r4_11	other_material	A black coil of steel wire rope.
 itm_i25_r4_12	other_material	A coil of red hose.
 itm_i25_r4_13	other_material	A coil of blue hose with a faint blue glow.
-itm_i25_r4_14	other_material	A brown black flexible hose.
-itm_i25_r4_15	other_material	A brown black flexible hose.
-itm_i25_r5_00	other_material	A brown orange fuel rod.
+itm_i25_r4_14	other_material	A black flexible hose.
+itm_i25_r4_15	other_material	A black flexible hose.
+itm_i25_r5_00	other_material	An orange fuel rod.
 itm_i25_r5_01	other_material	A blue fuel rod with a faint blue glow.
 itm_i25_r5_02	other_material	A red fuel rod.
-itm_i25_r5_03	other_material	An olive green fuel rod.
+itm_i25_r5_03	other_material	A green fuel rod.
 itm_i25_r5_04	other_material	A red fuel jerrycan.
-itm_i25_r5_05	other_material	A golden olive fuel jerrycan.
+itm_i25_r5_05	other_material	An olive fuel jerrycan.
 itm_i25_r5_06	other_material	A blue coolant canister with a faint cyan glow.
-itm_i25_r5_07	other_material	A black silver coolant canister.
+itm_i25_r5_07	other_material	A silver coolant canister.
 itm_i25_r5_08	magical_material	A blue crystal chunk with a faint blue glow.
 itm_i25_r5_09	magical_material	A red crystal chunk.
 itm_i25_r5_10	magical_material	A purple crystal chunk with a faint purple glow.
-itm_i25_r5_11	magical_material	A brown golden crystal chunk.
+itm_i25_r5_11	magical_material	A golden crystal chunk.
 itm_i25_r5_12	magical_material	A black crystal chunk.
 itm_i25_r5_13	other_material	A grey bundle of carbon fiber rods.
 itm_i25_r5_14	other_material	A black bundle of carbon fiber tubes.
-itm_i25_r5_15	other_material	A brown orange resin block.
+itm_i25_r5_15	other_material	An orange resin block.
 itm_i25_r5_16	other_material	A blue resin block with a faint blue glow.
 itm_i32_r0_00	tool	A black binoculars with a leather strap.
 itm_i32_r0_01	tool	A black folded umbrella.
-itm_i32_r0_02	tool	A brown brass compass with cracked glass.
+itm_i32_r0_02	tool	A brass compass with cracked glass.
 itm_i32_r0_03	tool	A black flashlight.
 itm_i32_r0_04	tool	A black handheld radio with an antenna.
 itm_i32_r0_05	tool	A grey adjustable wrench.
@@ -2492,7 +2435,7 @@ itm_i33_r0_08	tool	A brown makeshift cloth torch.
 itm_i33_r0_09	tool	A black cracked welding mask.
 itm_i33_r0_10	tool	A brown improvised detonator box with wires.
 itm_i33_r0_11	tool	A brown plastic bottle canteen wrapped in cloth.
-itm_i34_r0_00	tool	A blue coiled translucent medical cable with silver connectors.
+itm_i34_r0_00	tool	A coiled translucent medical cable with silver connectors.
 itm_i34_r0_01	tool	A black data tablet.
 itm_i34_r0_02	tool	A black magnetic grip tool.
 itm_i34_r0_03	tool	A black hacking device with exposed wiring.
@@ -2516,11 +2459,11 @@ itm_i35_r0_08	tool	A brown wooden bucket.
 itm_i35_r0_09	tool	A brown sickle.
 itm_i35_r0_10	tool	A brown pair of straw sandals.
 itm_i35_r0_11	tool	A blue cloth-wrapped bundle.
-itm_i36_r0_00	tool	A brown leather pouch bulging with gold coins.
+itm_i36_r0_00	tool	A leather pouch bulging with gold coins.
 itm_i36_r0_01	tool	A brown leather pouch branded with a bull skull.
-itm_i36_r0_02	accessory	A grey silver earring with turquoise.
-itm_i36_r0_03	accessory	A brown silver pendant with bone and turquoise on a braided cord.
-itm_i36_r0_04	accessory	A brown red stone amulet carved with a sun.
+itm_i36_r0_02	accessory	A silver earring with turquoise.
+itm_i36_r0_03	accessory	A silver pendant with bone and turquoise on a braided cord.
+itm_i36_r0_04	accessory	A red stone amulet carved with a sun.
 itm_i36_r0_05	tool	A brown coiled lasso.
 itm_i36_r0_06	tool	A black horseshoe.
 itm_i36_r0_07	accessory	A brown star-shaped sheriff badge.
@@ -2656,3 +2599,49 @@ itm_iwa2_06	medium_weapon	A black one-handed hatchet.
 itm_iwa2_07	medium_weapon	A brown large masakari broad axe.
 itm_iwa2_08	medium_weapon	A brown rice-harvesting kama sickle.
 itm_iwa2_09	medium_weapon	A brown tobiguchi fire hook.
+itm_iwa3_00	long_weapon	A black straight-bladed su yari spear.
+itm_iwa3_01	long_weapon	A black jumonji cross spear.
+itm_iwa3_02	long_weapon	A brown katakama yari single-branch spear.
+itm_iwa3_03	long_weapon	A black omi yari long-bladed spear.
+itm_iwa3_04	long_weapon	A red lacquered yari spear.
+itm_iwa3_05	long_weapon	A brown rusted old yari spear.
+itm_iwa3_06	long_weapon	A brown kama yari sickle spear.
+itm_iwa3_07	long_weapon	A grey deeply curved naginata.
+itm_iwa3_08	long_weapon	A black broad tomoe naginata.
+itm_iwa3_09	long_weapon	A naginata with gold fittings.
+itm_iwa4_00	long_weapon	A black lacquered yumi longbow.
+itm_iwa4_01	long_weapon	A brown plain wooden yumi longbow.
+itm_iwa4_02	long_weapon	A brown rattan-wrapped yumi longbow.
+itm_iwa4_03	long_weapon	A red lacquered yumi longbow.
+itm_iwa4_04	long_weapon	A brown old yumi longbow with a broken string.
+itm_iwa4_05	long_weapon	A brown short hankyu bow.
+itm_iwa4_06	long_weapon	A ceremonial yumi longbow with gold ornaments.
+itm_iwa4_07	long_weapon	A brown yumi longbow with a purple-wrapped grip.
+itm_iwa5_00	small_weapon	A beige tanto in a plain wooden shirasaya scabbard.
+itm_iwa5_01	small_weapon	A tanto dagger with a black lacquered hilt.
+itm_iwa5_02	small_weapon	A grey thick-bladed yoroidoshi dagger.
+itm_iwa5_03	small_weapon	A white slim kaiken dagger.
+itm_iwa5_04	small_weapon	A white kaiken dagger with a red-wrapped hilt.
+itm_iwa5_05	small_weapon	A black ring-pommel kunai.
+itm_iwa5_06	small_weapon	A black kunai with a cloth-wrapped grip.
+itm_iwa5_07	small_weapon	A black broad-bladed kunai.
+itm_iwa5_08	small_weapon	A brown rusted kunai.
+itm_iwa5_09	small_weapon	A black thin bo shuriken throwing spike.
+itm_iwa6_00	throwable_weapon	A black four-pointed shuriken.
+itm_iwa6_01	throwable_weapon	A black eight-pointed shuriken.
+itm_iwa6_02	throwable_weapon	A black six-pointed shuriken.
+itm_iwa6_03	throwable_weapon	A black three-pointed shuriken.
+itm_iwa6_04	throwable_weapon	A black curved pinwheel shuriken.
+itm_iwa6_05	throwable_weapon	A brown rusted four-pointed shuriken.
+itm_iwa6_06	small_weapon	An open black lacquered iron war fan.
+itm_iwa6_07	small_weapon	A brown open gold-leaf iron war fan.
+itm_iwa6_08	throwable_weapon	A black handful of makibishi caltrops.
+itm_iwa6_09	throwable_weapon	A brown horoku clay bomb with a rope.
+itm_iwa7_00	medium_weapon	A brown studded kanabo iron club.
+itm_iwa7_01	medium_weapon	A black hexagonal kanabo iron club.
+itm_iwa7_02	medium_weapon	A red lacquered kanabo iron club.
+itm_iwa7_03	medium_weapon	A brown rusted kanabo with missing studs.
+itm_iwa7_04	medium_weapon	A black thick kanabo with a cloth-wrapped grip.
+itm_iwa7_05	small_weapon	A black hooked jitte truncheon.
+itm_iwa7_06	small_weapon	A closed black iron war fan.
+itm_iwa7_07	medium_weapon	A brown oak club with iron bands.
