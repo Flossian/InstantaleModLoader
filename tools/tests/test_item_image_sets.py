@@ -7,8 +7,8 @@
   鍵は重ならず、1件ずつどの分類に入るかが決まる（一枚絵の名前。1枚の一枚絵は1つの分類にだけ入る）。胴の品は服か胴鎧の片方だけに置く
 - 分類ごとの辞書 `data/<分類>/<部位>.json`（まとめた形 {"index", "vectors"}、384 次元）の鍵を合わせると、
   その分類に入る表の鍵とちょうど同じ。鍵ごとに `images/<分類>/Assets/images/item_candidates_dark/<部位>/<鍵>.png` があり、
-  寸法は × 作り方の道具の `SCALE`（`build/build_guns.py`）で、部位で決まる（武器は小型 32x32・中型 32x64・大型 32x96・長物 32x128・
-  投擲 32x32、盾・胴鎧は 64x64、防具類の表の品と消耗品の表の頭・服・手・脚は 64x64、それ以外は 32x32）。絵のフォルダに辞書に無い絵は残っていない
+  寸法は部位で決まる（武器は小型 32x32・中型 32x64・大型 32x96・長物 32x128・投擲 32x32 の、作り方の道具の `SCALE`
+  （`build/build_guns.py`）倍で端数は四捨五入。消耗品・素材などのアイテム類は 32x32 の `ITEM_SCALE` 倍。盾・胴鎧は 64x64、防具類の表の品と消耗品の表の頭・服・手・脚は 64x64、それ以外は 32x32）。絵のフォルダに辞書に無い絵は残っていない
 - 分類ごとの元の一枚絵（`categories.json` の `sources` の `source`）が `assets/item_images/` に在る
 - 版9 までの設定名の読み替え（本体の `OLD_SETTINGS`）は、今の設定名に無い名前から今の設定名へ
 - `images/` と `data/` の直下のフォルダは分類だけ（分類の外に置いた絵は探し先に入らない）
@@ -48,6 +48,11 @@ modes = ast.literal_eval(tree["MODES"])
 builder = {node.targets[0].id: node.value for node in ast.parse(open(os.path.join(MOD, "build", "build_guns.py"), encoding="utf-8").read()).body
            if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name)}
 SCALE = ast.literal_eval(builder["SCALE"])
+ITEM_SCALE = ast.literal_eval(builder["ITEM_SCALE"])
+ITEMS = ("food", "drink", "medicine", "plant", "mushroom", "tool", "relic", "scrap", "magical_material", "other_material",
+         "creature_part", "document", "scroll", "liquid_material", "treasure", "metal", "gem", "ore", "potion")
+wear_keys = {e["key"] for e in load("build", "wear.json")}
+item_keys = {e["key"] for e in load("build", "items.json")}
 assert "resource_add_path" in source and '"images"' in source, "images/<分類> を探し先に足していない"
 
 cats = load("categories.json")
@@ -71,8 +76,6 @@ assert not set(old_settings) & current and set(old_settings.values()) <= current
 rows = load("build", "weapon_asset.json") + load("build", "medieval.json") \
     + load("build", "magic.json") + load("build", "sf.json") + load("build", "items.json") + load("build", "wear.json")
 keys = [e["key"] for e in rows]
-wear_keys = {e["key"] for e in load("build", "wear.json")}
-item_keys = {e["key"] for e in load("build", "items.json")}
 assert len(keys) == len(set(keys)), "鍵が重なっている"
 torso = {}
 for e in rows:
@@ -108,11 +111,15 @@ for c in cats:
             assert key not in got, (cid, key)
             got.add(key)
             size = png_size(os.path.join(images, folder, key + ".png"))
-            if key in wear_keys or (key in item_keys and folder in ("clothing", "headgear", "gauntlets", "legwear")):
+            if folder in WEAPON:
+                game = (int(round(WEAPON[folder][0] * SCALE)), int(round(WEAPON[folder][1] * SCALE)))
+            elif folder in ITEMS:
+                game = (int(round(32 * ITEM_SCALE)),) * 2
+            elif key in wear_keys or (key in item_keys and folder in ("clothing", "headgear", "gauntlets", "legwear")):
                 game = (64, 64)
             else:
-                game = WEAPON.get(folder) or ((64, 64) if folder in ("shield", "body_armor") else (32, 32))
-            assert size == (game[0] * SCALE, game[1] * SCALE), (cid, key, size)
+                game = (64, 64) if folder in ("shield", "body_armor") else (32, 32)
+            assert size == game, (cid, key, size)
     assert got == expected.get(cid, set()), (cid, sorted(got ^ expected.get(cid, set()))[:5])
 
 print("ok")

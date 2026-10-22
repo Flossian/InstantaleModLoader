@@ -198,7 +198,9 @@ def make_entry(e, sheets, kind):
     if e["folder"] in b.SIZES and e.get("halo", True):
         # 武器だけ（結晶や薬瓶は色の付いた暗い面が多く、はがすと削れる）
         im = b.peel_glow(im, min((box_w - 2) / im.width, (box_h - 2) / im.height), strong=bool(e.get("glow")))
-    return b.shrink(im, box_w, box_h, 255), e["folder"], e["caption"]
+    # 武器は SCALE 倍、消耗品・素材などのアイテム類は ITEM_SCALE 倍（作者の指示）。盾・防具・装身具は素の寸法
+    scale = b.SCALE if e["folder"] in b.SIZES else b.ITEM_SCALE if e["folder"] in ITEMS else 1
+    return b.shrink(im, box_w, box_h, 255, scale), e["folder"], e["caption"]
 
 
 def main():

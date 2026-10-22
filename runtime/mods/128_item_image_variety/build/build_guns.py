@@ -155,16 +155,25 @@ SIZES = {"small_weapon": (32, 32), "medium_weapon": (32, 64),
 PREF = {"small": "small_weapon", "medium": "medium_weapon",
         "large": "large_weapon", "long": "long_weapon",
         "throwable": "throwable_weapon"}
-# 出す絵は素の絵の寸法の SCALE 倍。2倍（ゲームがマス1つを描く画面の大きさ）で作るとゲームの中で素の絵より
-# きめ細かく浮いたので、素の絵と同じ寸法（1）に戻した（作者が実機で見た。VERIFICATION.md §3.26）。
-# 呼ぶ側は素の絵の寸法（SIZES・game_size）で渡し、shrink が倍にする。占めるマスの数は品の種類で決まり、絵の寸法では変わらない
-SCALE = 1
+# 武器の絵は素の絵の寸法の SCALE 倍。2倍（ゲームがマス1つを描く画面の大きさ）で作るとゲームの中で素の絵より
+# きめ細かく浮き、素の絵と同じ寸法（1）では 64x64 の防具類よりきめが粗く見えたので、間の 1.5 倍にした（作者の指示。VERIFICATION.md §3.26）。
+# 防具類と消耗品は倍にしない。呼ぶ側は素の絵の寸法（SIZES・game_size）と倍率を渡し、shrink が倍にする。
+# 占めるマスの数は品の種類で決まり、絵の寸法では変わらない
+SCALE = 1.5
+# 消耗品・素材などのアイテム類（build_medieval.ITEMS の部位）の倍率。武器と同じ 1.5 倍を試す（作者の指示。VERIFICATION.md §3.26）。
+# 1 に戻すと素の絵と同じ寸法になる。防具類・盾・装身具は倍にしない
+ITEM_SCALE = 1.5
 GAME_SIZES = dict(SIZES, shield=(64, 64), body_armor=(64, 64))
 
 
 def game_size(folder):
     """その部位の素の絵の寸法（武器は SIZES、盾と胴鎧は 64x64、ほかは 32x32）。"""
     return GAME_SIZES.get(folder, (32, 32))
+
+
+def scaled(n, scale=SCALE):
+    """素の絵の寸法 n の、倍率 scale で出す絵での画素数（端数は四捨五入）。"""
+    return int(round(n * scale))
 
 
 # 縦長の箱の高さに対して絵が 75% 以上に届く箱を、希望の箱から小さいほうへ探す
@@ -266,9 +275,10 @@ def finish(canvas):
     return canvas
 
 
-# 埋める穴の大きさの上限（出す絵の画素数）。2倍の寸法で決めた 6px を寸法の2乗で縮めた値。
-# 引き金の輪や輪の内側のような、もともと空いている所はこれより大きい
-HOLE_MAX = max(1, round(6 / (2 / SCALE) ** 2))
+def hole_max(scale):
+    """埋める穴の大きさの上限（出す絵の画素数）。2倍の寸法で決めた 6px を寸法の2乗で縮めた値（1倍で 2px、1.5 倍で 3px）。
+    引き金の輪や輪の内側のような、もともと空いている所はこれより大きい。"""
+    return max(1, round(6 / (2 / scale) ** 2))
 
 
 def spread_colors(rgb, known, passes):
@@ -304,12 +314,12 @@ def small_holes(opaque, limit):
     return holes
 
 
-def shrink(im, box_w, box_h, colors):
+def shrink(im, box_w, box_h, colors, scale=1):
     """縁の分を空けて箱に収まるよう縮め、輪郭を軽く立ててから色数を落とし、真ん中に置く。
-    box_w・box_h は素の絵の寸法で、出す絵はその SCALE 倍。
+    box_w・box_h は素の絵の寸法で、出す絵はその scale 倍（武器は SCALE、ほかは 1）。
     ゲームの素材は 1枚に 200〜700 色あり、32色まで落とすと陰影が段になって粗く見えた。呼ぶ側は 255 色で呼ぶ（透明の色と合わせてパレットの 256 色に収まる）。"""
-    box_w, box_h = box_w * SCALE, box_h * SCALE
-    s = min((box_w - 2 * SCALE) / im.width, (box_h - 2 * SCALE) / im.height)
+    box_w, box_h = scaled(box_w, scale), scaled(box_h, scale)
+    s = min((box_w - 2 * scale) / im.width, (box_h - 2 * scale) / im.height)
     nw, nh = max(1, round(im.width * s)), max(1, round(im.height * s))
     # 透明の縁が黒く滲まないよう、色は前乗せで縮める
     a = np.asarray(im).astype(np.float32) / 255
@@ -321,7 +331,7 @@ def shrink(im, box_w, box_h, colors):
     # 透明の色を不透明な隣の色で外へ広げる。黒のままだと、輪郭を立てたときに縁と黒の差を強めて白い粒が並んだ
     rgb = np.where(alpha[..., None], rgb, spread_colors(rgb, alpha, 4))
     # 外とつながらない小さな透明の穴（一枚絵の真っ黒に近い影を背景とみなした跡）を埋める。2倍の寸法で点の抜けとして見えた
-    alpha = alpha | small_holes(alpha, HOLE_MAX)
+    alpha = alpha | small_holes(alpha, hole_max(scale))
     q = Image.fromarray((rgb * 255).round().astype(np.uint8))
     # 10分の1ほどに縮めると細部が溶けるので、縮めた後に輪郭を軽く立てる（強くすると白くにじむ）
     q = q.filter(ImageFilter.UnsharpMask(radius=1.0, percent=80, threshold=0))
@@ -591,7 +601,7 @@ def build_sheet_entry(entry, folder_dir):
     box_w, box_h = SIZES[entry["folder"]]
     if entry.get("halo", True):
         im = peel_glow(im, min((box_w - 2) / im.width, (box_h - 2) / im.height), strong=bool(entry.get("glow")))
-    return Image.fromarray(shrink(im, box_w, box_h, 255))
+    return Image.fromarray(shrink(im, box_w, box_h, 255, SCALE))
 
 
 def sheet_entry_job(entry, sheets):
@@ -618,7 +628,7 @@ def main():
         made[e["key"]] = Image.fromarray(arr)
     for e in entries:
         w, h = SIZES[e["folder"]]
-        assert made[e["key"]].size == (w * SCALE, h * SCALE), (e["key"], made[e["key"]].size)
+        assert made[e["key"]].size == (scaled(w), scaled(h)), (e["key"], made[e["key"]].size)
     write_categories(entries, made, owned_categories(entries))
     # 見直し用にキャプションの一覧を書く（配布物の外で見るためのもの）
     with open(HERE / "guns_captions.txt", "w", encoding="utf-8", newline="\n") as fh:
@@ -630,15 +640,15 @@ def main():
         rows = {}
         for e in entries:
             rows.setdefault(e["folder"], []).append(made[e["key"]])
-        step = 32 * SCALE + 4
-        height = sum(((len(v) + cols - 1) // cols) * (SIZES[f][1] * SCALE + 4) for f, v in rows.items())
+        step = scaled(32) + 4
+        height = sum(((len(v) + cols - 1) // cols) * (scaled(SIZES[f][1]) + 4) for f, v in rows.items())
         sheet = Image.new("RGBA", (cols * step, height), (40, 40, 40, 255))
         y = 0
         for folder in SIZES:
             tiles = rows.get(folder, [])
             for i, t in enumerate(tiles):
-                sheet.alpha_composite(t, ((i % cols) * step + 2, y + (i // cols) * (SIZES[folder][1] * SCALE + 4) + 2))
-            y += ((len(tiles) + cols - 1) // cols) * (SIZES[folder][1] * SCALE + 4)
+                sheet.alpha_composite(t, ((i % cols) * step + 2, y + (i // cols) * (scaled(SIZES[folder][1]) + 4) + 2))
+            y += ((len(tiles) + cols - 1) // cols) * (scaled(SIZES[folder][1]) + 4)
         sheet.save(args.preview)
     print("done")
 

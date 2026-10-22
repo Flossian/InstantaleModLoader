@@ -686,40 +686,6 @@ itm_i26_r2_07	headgear	A brown iron menpo face mask.
 itm_i26_r2_08	headgear	A brown red oni mask.
 itm_i26_r2_09	headgear	A brown white fox mask.
 itm_i26_r2_10	headgear	A brown jingasa conical helmet.
-itm_i26_r3_00	long_weapon	A brown tachi long sword.
-itm_i26_r3_01	long_weapon	A black tachi long sword.
-itm_i26_r3_02	long_weapon	A brown tachi long sword.
-itm_i26_r3_03	long_weapon	A brown tachi long sword.
-itm_i26_r3_04	long_weapon	A black rusted tachi long sword.
-itm_i26_r3_05	long_weapon	A red blood-stained tachi long sword.
-itm_i26_r3_06	long_weapon	A brown tachi long sword.
-itm_i26_r3_07	long_weapon	A white tachi long sword with a wavy hamon.
-itm_i26_r3_08	long_weapon	A brown blood-stained tachi long sword.
-itm_i26_r3_09	long_weapon	A black tachi long sword.
-itm_i26_r3_10	long_weapon	A brown tachi long sword.
-itm_i26_r3_11	long_weapon	A brown tachi long sword.
-itm_i26_r3_12	long_weapon	A brown tachi long sword.
-itm_i26_r3_13	long_weapon	A brown rusted tachi long sword.
-itm_i26_r3_14	long_weapon	A white blood-stained tachi long sword.
-itm_i26_r3_15	long_weapon	A brown tachi long sword with a frost hamon.
-itm_i26_r3_16	long_weapon	A brown tachi long sword.
-itm_i26_r3_17	long_weapon	A brown rusted tachi long sword.
-itm_i26_r3_18	long_weapon	A grey tachi long sword.
-itm_i26_r4_00	medium_weapon	A brown nata cleaver.
-itm_i26_r4_01	medium_weapon	A brown nata cleaver.
-itm_i26_r4_02	medium_weapon	A brown yamagatana machete.
-itm_i26_r4_03	medium_weapon	A brown wrapped nata cleaver.
-itm_i26_r4_04	medium_weapon	A black nata cleaver.
-itm_i26_r4_05	medium_weapon	A brown sheathed nata cleaver.
-itm_i26_r4_06	medium_weapon	A brown yamagatana machete.
-itm_i26_r4_07	medium_weapon	A black broad nata cleaver.
-itm_i26_r4_08	medium_weapon	A brown broad nata cleaver.
-itm_i26_r4_09	medium_weapon	A black nata cleaver.
-itm_i26_r4_10	medium_weapon	A brown yamagatana machete.
-itm_i26_r4_11	medium_weapon	A brown woodcutter ono axe.
-itm_i26_r4_12	medium_weapon	A black woodcutter ono axe.
-itm_i26_r4_13	medium_weapon	A brown hatchet.
-itm_i26_r4_14	medium_weapon	A brown woodcutter ono axe.
 itm_i27_r0_00	gauntlets	A black sci-fi gauntlet with glowing blue conduits.
 itm_i27_r0_01	gauntlets	A white sci-fi gauntlet.
 itm_i27_r0_02	gauntlets	A red gauntlet with a power core.
@@ -751,15 +717,15 @@ itm_i27_r2_07	body_armor	A grey white power armor chestplate.
 itm_i27_r2_08	body_armor	A brown tan tactical armor vest.
 itm_i27_r2_09	body_armor	A black armor vest with red lights.
 itm_i27_r3_00	clothing	A brown orange jumpsuit with utility harness.
-itm_i27_r3_01	clothing	A black navy crew jumpsuit.
-itm_i27_r3_02	clothing	A brown white pressure suit.
-itm_i27_r3_03	clothing	A brown black jumpsuit with harness.
+itm_i27_r3_01	clothing	A blue navy crew jumpsuit.
+itm_i27_r3_02	clothing	A white pressure suit.
+itm_i27_r3_03	clothing	A black jumpsuit with harness.
 itm_i27_r3_04	clothing	A black and red bodysuit.
-itm_i27_r3_05	clothing	A brown olive work jumpsuit.
+itm_i27_r3_05	clothing	A black olive work jumpsuit.
 itm_i27_r3_06	clothing	A blue crew jumpsuit with harness.
 itm_i27_r3_07	clothing	A brown yellow work jumpsuit with harness.
 itm_i27_r3_08	clothing	A black ballistic long coat.
-itm_i27_r3_09	clothing	A brown white ballistic long coat.
+itm_i27_r3_09	clothing	A white ballistic long coat.
 itm_i27_r4_00	headgear	A white helmet with blue visor.
 itm_i27_r4_01	headgear	A black helmet with red visor and respirator.
 itm_i27_r4_02	headgear	A brown night vision helmet.
@@ -2670,3 +2636,23 @@ itm_i45_r0_08	scrap	A metal face mask with glowing eye holes.
 itm_i45_r0_09	scrap	A copper pipe section with a valve.
 itm_i45_r0_10	relic	An ancient circuit board with gold traces and burnt edges.
 itm_i45_r0_11	relic	A shard of glowing blue glass circuitry.
+itm_iwa1_00	long_weapon	A brown gold-mounted deeply curved tachi.
+itm_iwa1_01	long_weapon	A brown rusted tachi.
+itm_iwa1_02	long_weapon	A brown blood-stained tachi.
+itm_iwa1_03	long_weapon	A grey tachi with a wavy hamon.
+itm_iwa1_04	long_weapon	A white frost-covered tachi.
+itm_iwa1_05	long_weapon	A brown long-hilted nagamaki.
+itm_iwa1_06	long_weapon	A black ancient straight sword.
+itm_iwa1_07	long_weapon	A white shirasaya tachi with a plain wooden hilt.
+itm_iwa1_08	long_weapon	A brown tachi with a black lacquered scabbard.
+itm_iwa1_09	long_weapon	A black slim tachi with a red-wrapped hilt.
+itm_iwa2_00	medium_weapon	A black square-tipped nata cleaver.
+itm_iwa2_01	medium_weapon	A black broad nata cleaver.
+itm_iwa2_02	medium_weapon	A brown nata cleaver with a cloth-wrapped blade.
+itm_iwa2_03	medium_weapon	A brown nata cleaver in a wooden sheath.
+itm_iwa2_04	medium_weapon	A grey long yamagatana machete.
+itm_iwa2_05	medium_weapon	A brown woodcutter's axe.
+itm_iwa2_06	medium_weapon	A black one-handed hatchet.
+itm_iwa2_07	medium_weapon	A brown large masakari broad axe.
+itm_iwa2_08	medium_weapon	A brown rice-harvesting kama sickle.
+itm_iwa2_09	medium_weapon	A brown tobiguchi fire hook.

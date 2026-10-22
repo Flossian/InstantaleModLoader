@@ -1,96 +1,3 @@
-gun_cyber_000	small_weapon	A black futuristic pistol, a gun.
-gun_cyber_001	small_weapon	A black futuristic pistol, a gun.
-gun_cyber_002	small_weapon	A white futuristic pistol, a gun.
-gun_cyber_003	small_weapon	A black futuristic pistol with blue details, a gun.
-gun_cyber_004	small_weapon	A black futuristic pistol with blue details, a gun.
-gun_cyber_005	small_weapon	A black futuristic pistol with blue details, a gun.
-gun_cyber_006	small_weapon	A black futuristic pistol, a gun.
-gun_cyber_007	small_weapon	A blue futuristic pistol with a wooden grip, a gun.
-gun_cyber_008	small_weapon	A black futuristic pistol, a gun.
-gun_cyber_009	small_weapon	A black futuristic pistol with blue details, a gun.
-gun_cyber_010	small_weapon	A blue futuristic pistol with purple details, a gun.
-gun_cyber_011	small_weapon	A grey futuristic pistol with blue details, a gun.
-gun_cyber_012	small_weapon	A black futuristic pistol with a wooden grip, a gun.
-gun_cyber_013	small_weapon	A grey futuristic pistol with a wooden grip, a gun.
-gun_cyber_014	small_weapon	A black futuristic pistol with blue details, a gun.
-gun_cyber_015	small_weapon	A white futuristic pistol with red details, a gun.
-gun_cyber_016	small_weapon	A black futuristic pistol, a gun.
-gun_cyber_017	small_weapon	A black futuristic pistol, a gun.
-gun_cyber_018	small_weapon	A white futuristic pistol, a gun.
-gun_cyber_103	small_weapon	A blue futuristic blaster pistol with glowing blue lights, a gun.
-gun_cyber_019	medium_weapon	A black futuristic submachine gun with glowing cyan lights, a gun.
-gun_cyber_020	medium_weapon	A black futuristic submachine gun with blue details and glowing cyan lights, a gun.
-gun_cyber_021	medium_weapon	A white futuristic submachine gun, a gun.
-gun_cyber_022	medium_weapon	A black futuristic submachine gun, a gun.
-gun_cyber_023	medium_weapon	A black futuristic submachine gun, a gun.
-gun_cyber_024	medium_weapon	A black futuristic submachine gun with blue details and glowing cyan lights, a gun.
-gun_cyber_025	medium_weapon	A white futuristic submachine gun with blue details and glowing cyan lights, a gun.
-gun_cyber_026	medium_weapon	A black futuristic submachine gun with blue details and glowing cyan lights, a gun.
-gun_cyber_027	medium_weapon	A black futuristic submachine gun, a gun.
-gun_cyber_028	medium_weapon	A black futuristic submachine gun with blue details and glowing blue lights, a gun.
-gun_cyber_029	medium_weapon	A black futuristic submachine gun with a wooden stock and orange details, a gun.
-gun_cyber_030	medium_weapon	A black futuristic submachine gun with blue details and glowing cyan lights, a gun.
-gun_cyber_031	medium_weapon	A white futuristic submachine gun with glowing blue lights, a gun.
-gun_cyber_032	medium_weapon	A blue futuristic submachine gun with glowing blue lights, a gun.
-gun_cyber_033	medium_weapon	A black futuristic submachine gun with white details, a gun.
-gun_cyber_034	medium_weapon	A black futuristic submachine gun, a gun.
-gun_cyber_035	medium_weapon	A black futuristic submachine gun with olive green details and glowing blue lights, a gun.
-gun_cyber_036	medium_weapon	A purple futuristic submachine gun with blue details, a gun.
-gun_cyber_037	large_weapon	A black futuristic assault rifle, a gun.
-gun_cyber_038	large_weapon	A black futuristic assault rifle with blue details and glowing cyan lights, a gun.
-gun_cyber_039	large_weapon	A black futuristic assault rifle with blue details and glowing cyan lights, a gun.
-gun_cyber_040	large_weapon	A black futuristic assault rifle with a wooden stock and blue details, a gun.
-gun_cyber_041	large_weapon	A black futuristic assault rifle, a gun.
-gun_cyber_042	large_weapon	A black futuristic assault rifle, a gun.
-gun_cyber_043	large_weapon	A white futuristic assault rifle with blue details and glowing cyan lights, a gun.
-gun_cyber_044	large_weapon	A purple futuristic assault rifle with blue details and glowing blue lights, a gun.
-gun_cyber_045	large_weapon	A black futuristic assault rifle with glowing cyan lights, a gun.
-gun_cyber_046	large_weapon	A blue futuristic assault rifle with glowing blue lights, a gun.
-gun_cyber_047	large_weapon	A black futuristic assault rifle with a wooden stock, a gun.
-gun_cyber_048	large_weapon	A black futuristic assault rifle, a gun.
-gun_cyber_049	large_weapon	A black futuristic assault rifle, a gun.
-gun_cyber_050	large_weapon	A white futuristic assault rifle with glowing cyan lights, a gun.
-gun_cyber_051	large_weapon	A black futuristic assault rifle with a wooden stock, a gun.
-gun_cyber_052	large_weapon	A black futuristic assault rifle, a gun.
-gun_cyber_053	large_weapon	A black futuristic assault rifle, a gun.
-gun_cyber_054	large_weapon	A black futuristic assault rifle with glowing cyan lights, a gun.
-gun_cyber_055	large_weapon	A black futuristic battle rifle with a scope and blue details, a gun.
-gun_cyber_056	large_weapon	A black futuristic battle rifle with a scope, blue details and glowing magenta lights, a gun.
-gun_cyber_057	large_weapon	A black futuristic battle rifle with a scope, blue details and glowing cyan lights, a gun.
-gun_cyber_058	large_weapon	A grey futuristic battle rifle with a scope, a gun.
-gun_cyber_059	large_weapon	A blue futuristic battle rifle with a scope, purple details and glowing magenta lights, a gun.
-gun_cyber_060	large_weapon	A black futuristic battle rifle with a scope and glowing cyan lights, a gun.
-gun_cyber_061	large_weapon	A black futuristic battle rifle with a scope, a gun.
-gun_cyber_062	large_weapon	A blue futuristic battle rifle with a scope and glowing blue lights, a gun.
-gun_cyber_063	large_weapon	A black futuristic battle rifle with a scope and glowing blue lights, a gun.
-gun_cyber_064	large_weapon	A black futuristic battle rifle with a scope and white details, a gun.
-gun_cyber_065	large_weapon	A black futuristic battle rifle with a scope and red details, a gun.
-gun_cyber_066	large_weapon	A black futuristic battle rifle with a scope, blue details and glowing cyan lights, a gun.
-gun_cyber_067	large_weapon	A black futuristic battle rifle with a scope and glowing cyan lights, a gun.
-gun_cyber_068	large_weapon	A black futuristic battle rifle with a scope and a wooden stock, a gun.
-gun_cyber_069	large_weapon	A black futuristic battle rifle with a scope, a gun.
-gun_cyber_070	large_weapon	A grey futuristic battle rifle with a scope, blue details and glowing blue lights, a gun.
-gun_cyber_071	large_weapon	A white futuristic battle rifle with a scope and glowing cyan lights, a gun.
-gun_cyber_072	large_weapon	A grey futuristic battle rifle with a scope, blue details and glowing blue lights, a gun.
-gun_cyber_073	long_weapon	A grey futuristic sniper rifle with blue details and glowing cyan lights, a gun.
-gun_cyber_074	long_weapon	A blue futuristic sniper rifle with glowing blue lights, a gun.
-gun_cyber_075	long_weapon	A blue futuristic sniper rifle with glowing cyan lights, a gun.
-gun_cyber_076	long_weapon	A purple futuristic sniper rifle with blue details and glowing blue lights, a gun.
-gun_cyber_077	long_weapon	A blue futuristic sniper rifle with white details and glowing blue lights, a gun.
-gun_cyber_078	long_weapon	A black futuristic sniper rifle, a gun.
-gun_cyber_079	long_weapon	A blue futuristic sniper rifle with white details and glowing blue lights, a gun.
-gun_cyber_080	long_weapon	A grey futuristic sniper rifle, a gun.
-gun_cyber_081	large_weapon	A black futuristic sniper rifle, a gun.
-gun_cyber_082	long_weapon	A blue railgun rifle, a gun.
-gun_cyber_087	large_weapon	A black railgun rifle with blue details, a gun.
-gun_cyber_089	long_weapon	A black twin-barrel railgun with magenta details, a gun.
-gun_cyber_084	medium_weapon	A black plasma rocket launcher with blue details and glowing magenta lights, a gun.
-gun_cyber_085	large_weapon	A blue plasma rocket launcher, a gun.
-gun_cyber_086	large_weapon	A black heavy plasma cannon with blue details, a gun.
-gun_cyber_088	large_weapon	A blue energy rifle with glowing coils and glowing blue lights, a gun.
-gun_cyber_090	large_weapon	A blue futuristic minigun with purple details, a gun.
-gun_cyber_091	large_weapon	A blue futuristic minigun with purple details, a gun.
-gun_cyber_092	large_weapon	A blue futuristic launcher, a gun.
 gun_cyber2_000	small_weapon	A black heavy futuristic pistol with blue details and glowing cyan lights, a gun.
 gun_cyber2_001	small_weapon	A black slim pistol with a neon strip along the slide and glowing magenta lights, a gun.
 gun_cyber2_002	small_weapon	A black heavy revolver with a large glowing cylinder, a gun.
@@ -597,3 +504,25 @@ gun_gsht5_006	medium_weapon	A black short shotgun with a slightly flared muzzle 
 gun_gsht5_007	medium_weapon	A black rusty iron sawed-off double-barreled shotgun with a wooden stock, a gun.
 gun_gsht5_008	medium_weapon	A short black polymer automatic shotgun, a gun.
 gun_gsht5_009	medium_weapon	A black sawed-off triple-barreled shotgun with a wooden stock, a gun.
+gun_gcy1_000	small_weapon	A black angular pistol with twin neon lines on the slide and glowing cyan lights, a gun.
+gun_gcy1_001	small_weapon	A black pistol with a glowing battery under the barrel, a wooden grip and glowing cyan lights, a gun.
+gun_gcy1_002	small_weapon	A black large pistol with a front grip, a gun.
+gun_gcy1_003	small_weapon	A black pistol with a small screen on the slide, a wooden grip and glowing cyan lights, a gun.
+gun_gcy1_004	small_weapon	A compact black pistol with red lines, a gun.
+gun_gcy1_005	small_weapon	A black shock pistol with glowing electrodes at the muzzle and blue details, a gun.
+gun_gcy1_006	small_weapon	A grey small silver pocket pistol, a gun.
+gun_gcy1_007	small_weapon	A black makeshift pistol with wiring wrapped around the grip, a wooden grip and red details, a gun.
+gun_gcy1_008	small_weapon	A white streamlined corporate security pistol, a gun.
+gun_gcy1_009	small_weapon	A black machine pistol with a magazine in front of the trigger, a gun.
+gun_gcy1_010	small_weapon	A black heavy pistol with cooling grooves along the barrel, a gun.
+gun_gcy1_011	small_weapon	A black pistol with gold ornaments and a wooden grip, a gun.
+gun_gcy2_000	large_weapon	A black battle rifle with a large scope and neon side lines, a gun.
+gun_gcy2_001	large_weapon	A black battle rifle with a glowing battery in the stock and glowing cyan lights, a gun.
+gun_gcy2_002	large_weapon	A black designated marksman rifle with a long magazine, a gun.
+gun_gcy2_003	large_weapon	A black old battle rifle with a wooden stock and an added scope and a wooden stock, a gun.
+gun_gcy2_004	large_weapon	A black rifle with two scopes in a row, a gun.
+gun_gcy2_005	large_weapon	A black rifle with a shotgun tube under the barrel and a wooden stock, a gun.
+gun_gcy2_006	large_weapon	A white streamlined corporate marksman rifle, a gun.
+gun_gcy2_007	large_weapon	A black makeshift rifle with exposed wiring and a wooden stock, a gun.
+gun_gcy2_008	large_weapon	A black energy rifle with glowing rings around the barrel, blue details and glowing cyan lights, a gun.
+gun_gcy2_009	large_weapon	A black slim bullpup rifle with the magazine in the stock and a wooden stock, a gun.

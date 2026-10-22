@@ -257,7 +257,7 @@ def gallery_tab(tabs, root_dir):
                     photo = tk.PhotoImage(file=path)
                 except tk.TclError:
                     continue
-                # 幅 32px 以下の絵（素の絵と同じ寸法で作っていた版9 までの絵）は2倍にして見せる
+                # 幅 32px 以下の絵（素の絵と同じ寸法で作っていた絵）は2倍にして見せる
                 if photo.width() <= 32:
                     photo = photo.zoom(2)
                 shown["photos"].append(photo)
