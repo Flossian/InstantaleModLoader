@@ -871,7 +871,8 @@ def aiming_of(claims, quest):
 
 
 def view_lines(events, day, claims, *, stage_days, settle_days, ended_days, in_words=False,
-               quest_status=None, effects=EFFECTS_NUMBER, strength_percent=100, guild_names=None):
+               quest_status=None, effects=EFFECTS_NUMBER, strength_percent=100, guild_names=None,
+               quest_title=None):
     """状況を見る窓の行。進行中（答え待ちは出さない）と、`ended_days` 日以内に終わったもの。
 
     `claims` は依頼を狙っている・片付けた冒険者（`aiming_of` を参照）。
@@ -915,7 +916,7 @@ def view_lines(events, day, claims, *, stage_days, settle_days, ended_days, in_w
         elif quest_status is not None and quest_status(quest) is None:
             lines.append("依頼: 掲示板から消えている。")
         else:
-            lines.append("依頼: 掲示板に出ている。")
+            lines.append("依頼: {}".format(posted_text(quest, quest_title)))
         lines.append("")
     ended = [event for event in events_of({"events": events}, ENDED)
              if day is None or day - _int(event.get("ended"), day) <= ended_days]
@@ -940,9 +941,17 @@ def view_lines(events, day, claims, *, stage_days, settle_days, ended_days, in_w
 QUEST_PLAIN, QUEST_PENDING, QUEST_RIVAL, QUEST_GONE = "plain", "pending", "rival", "gone"
 
 
+def posted_text(quest, quest_title=None):
+    """掲示板に出ている依頼の行。題が引ければ添える（掲示板のボタンには `QUEST_MARK` が付く）。"""
+    title = quest_title(quest) if callable(quest_title) else None
+    if isinstance(title, str) and title.strip():
+        return "掲示板に出ている（「{}」）。".format(title.strip())
+    return "掲示板に出ている。"
+
+
 def view_model(events, day, claims, *, stage_days, settle_days, ended_days, in_words=False,
                quest_status=None, effects=EFFECTS_NUMBER, strength_percent=100, guild_names=None,
-               here=None):
+               here=None, quest_title=None):
     """各地の出来事の窓の中身。`view_lines` と同じ材料・同じ設定から、札の形に組む（ゲームにも Kivy にも触らない）。
 
     返す形:
@@ -982,7 +991,7 @@ def view_model(events, day, claims, *, stage_days, settle_days, ended_days, in_w
         elif quest_status is not None and quest_status(quest) is None:
             line = ("掲示板から消えている。", QUEST_GONE)
         else:
-            line = ("掲示板に出ている。", QUEST_PLAIN)
+            line = (posted_text(quest, quest_title), QUEST_PLAIN)
         summary = text_of(event, "summary")
         kind = kind_of(event)
         names = list(kind["stages"]) if kind else [STAGE_NAMES[s] for s in STAGES]

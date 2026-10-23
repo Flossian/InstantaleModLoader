@@ -52,6 +52,11 @@ WINDOW_EFFECTS = "数字"        # 窓に出す値段の影響（数字／言葉
 
 # ---- 文（ゲーム画面の文は常体）--------------------------------------------
 BOARD_TEXT = "掲示板に、{name}にまつわる依頼が新しく貼り出されている。"
+#: 掲示板で出来事の依頼のボタンの題の後ろに付ける印（写しの文言だけ。セーブには素の題が残る）。
+#: 題は同じになることがあるので、どれを片付ければ出来事が終わるかはこの印で見分ける（VERIFICATION.md §3.97）。
+QUEST_MARK = "（街の出来事）"
+#: 掲示板の依頼のボタンが呼ぶクラス（`QuestChoiceManager(app, quest_type, quest_id)`。GAME.md §2.9）。
+QUEST_CHOICE_CLS = "QuestChoiceManager"
 SOLVED_TEXT = "{town}の{name}は、これで収まるだろう。"
 RIVAL_SOLVED_TEXT = "{town}の{name}は、冒険者の{rival}が片付けたらしい。"
 OUTBREAK_TEXT = "{line}"
@@ -892,7 +897,9 @@ def apply(ctx):
                                      in_words=(WINDOW_DAYS == incidents.DAYS_VAGUE),
                                      quest_status=lambda qid: quest_status(app, qid),
                                      effects=WINDOW_EFFECTS, strength_percent=PRICE_STRENGTH_PERCENT,
-                                     here=here)
+                                     here=here,
+                                     quest_title=lambda qid: ui.quest_value(ui.quest_of(app, str(qid)),
+                                                                            "quest_title", None))
         area = areas.get(str(here)) if here is not None else None
         model["here_name"] = str(getattr(area, "name", "") or "") if area is not None else ""
         return model
@@ -956,7 +963,28 @@ def apply(ctx):
                 except Exception:
                     ctx.log_exc("town incidents: reconcile failed")
 
-    choices.provide(ctx, screen, refresh=refresh_choice_buttons)
+    def offer(app, view):
+        """掲示板で、出来事の依頼のボタンに印を付ける（窓口 `choices` の `offer`。組み直しのたびに呼ばれる）。
+
+        ゲームのボタンは書き換えず、同じ spec の写し（`replace`）を出す。押下はゲームへ流す（`on_press` 無し）。
+        """
+        rows = [(entry, ui.spec_args(entry)) for entry in view.buttons
+                if ui.spec_cls_name(entry) == QUEST_CHOICE_CLS]
+        if not rows:
+            return None
+        with worlds.lock:
+            _key, bucket = ledger(app)
+            ours = {str(event.get("quest")) for event in incidents.events_of(bucket)
+                    if event.get("quest") and not incidents.is_good(event)}
+        out = []
+        for entry, args in rows:
+            quest_id = str(args[1]) if isinstance(args, (list, tuple)) and len(args) >= 2 else None
+            text = entry.get("text") or ""
+            if quest_id in ours and not text.endswith(QUEST_MARK):
+                out.append(choices.Choice(text + QUEST_MARK, base=entry, replace=True))
+        return out or None
+
+    choices.provide(ctx, screen, refresh=refresh_choice_buttons, offer=offer)
 
     ctx.log("town incidents: installed ({} kind(s), roll every {}+-{} day(s) at {}%, up to {}, stage "
             "every {} day(s), settles {} day(s) after stage 3, text {}, state {})".format(

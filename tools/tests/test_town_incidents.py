@@ -709,6 +709,31 @@ check("掲示板の一言", any("依頼が新しく貼り出されている" in 
 check("作らせた回は続きを呼ばず、同じボタンで開き直す", result is None
       and getattr(app, "chosen", []) == [("DisplayQuestChoice", "クエスト掲示板")],
       (result, getattr(app, "chosen", None)))
+# 掲示板では、出来事の依頼のボタンに印を付けた写しを出す（題は同じになることがあるので印で見分ける）
+import types  # noqa: E402
+from instantale_modloader import choices as loader_choices  # noqa: E402
+
+
+class BoardSpec:
+    def __init__(self, cls_name, args):
+        self.cls_name, self.args = cls_name, list(args)
+
+
+offer = next(row["offer"] for key, row in loader_choices._store()["providers"].items()
+             if row.get("offer") and "town_incidents" in str(key))
+posted = {"text": "【25】依頼50", "spec": BoardSpec("QuestChoiceManager", ["settlement_quest", "50"])}
+other = {"text": "【25】依頼50", "spec": BoardSpec("QuestChoiceManager", ["settlement_quest", "49"])}
+back = {"text": "戻る", "spec": BoardSpec("JustSetButtonToNormalPhase", [])}
+marked = offer(app, types.SimpleNamespace(buttons=[other, posted, back])) or []
+check("出来事の依頼のボタンだけ、題の後ろに印を付けた写しを出す（押下はゲームへ）",
+      [(c.text, c.base is posted, c.replace, c.on_press) for c in marked]
+      == [("【25】依頼50" + module.QUEST_MARK, True, True, None)],
+      [(c.text, c.base is posted, c.replace) for c in marked])
+check("印の付いた文言には重ねない",
+      not offer(app, types.SimpleNamespace(buttons=[dict(posted, text="【25】依頼50" + module.QUEST_MARK)])))
+model_lines = rules.view_lines(bucket["events"], 100, {}, stage_days=30, settle_days=30, ended_days=360,
+                               quest_title=lambda qid: "依頼" + str(qid))
+check("出来事の一覧の依頼の行に題を添える", any("掲示板に出ている（「依頼50」）" in l for l in model_lines), model_lines)
 result = board(lambda self, *a: self.execute(*a), DisplayQuestChoice(app), "クエスト掲示板")
 check("開き直した回はゲームの掲示板がそのまま出る", result == "board", result)
 board(lambda self, *a: self.execute(*a), DisplayQuestChoice(app), "クエスト掲示板")
