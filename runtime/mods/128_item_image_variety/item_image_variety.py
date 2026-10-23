@@ -32,7 +32,7 @@ mushroom 28 / accessory 1）の追加辞書 `data/<item_detail>.json` を実行�
 
 もう1つ、素材に無い絵を足す。銃と爆発物・中世の武器と防具・魔法武器・防具と服と装身具。
 どれも作者が画像生成 AI で作った一枚絵から起こした。
-分類は同じ種類の元画像をまとめた単位（`categories.json` の `sources`。版10 で作者の指示により119分類を45分類（品の種類：ジャンル）にまとめ、防具：ファンタジーを中世・ファンタジー・ハイファンタジー・ダークファンタジーに分けて48分類）。
+分類は同じ種類の元画像をまとめた単位（`categories.json` の `sources`。版10 で作者の指示により119分類を45分類（品の種類：ジャンル）にまとめ、防具：ファンタジーを中世・ファンタジー・ハイファンタジー・ダークファンタジーに分け、防具：魔法とSF を足して49分類）。
 絵と辞書は分類ごとのフォルダに分ける（`images/<分類>/`・`data/<分類>/<品種>.json`）。
 分類ごとの設定で使い方を決める（使わない／素の絵と混ぜる／別扱い）。使わない分類は辞書を読まない。分類のフォルダを消しても動く。
 絵はゲームのフォルダには置かず、`images/<分類>/Assets/images/item_candidates_dark/<品種>/` に
@@ -119,6 +119,7 @@ SET_WEAR_MEDIEVAL = "mix"
 SET_WEAR_FANTASY = "mix"
 SET_WEAR_HIGHFANTASY = "mix"
 SET_WEAR_DARKFANTASY = "mix"
+SET_WEAR_MAGIC_SF = "separate"
 SET_WEAR_EARLYMODERN = "mix"
 SET_WEAR_ACCESSORY = "mix"
 SET_WEAR_SCHOOL = "separate"
@@ -168,6 +169,7 @@ IMAGE_SETS = (
     ("wear_fantasy", "SET_WEAR_FANTASY"),
     ("wear_highfantasy", "SET_WEAR_HIGHFANTASY"),
     ("wear_darkfantasy", "SET_WEAR_DARKFANTASY"),
+    ("wear_magic_sf", "SET_WEAR_MAGIC_SF"),
     ("wear_earlymodern", "SET_WEAR_EARLYMODERN"),
     ("wear_accessory", "SET_WEAR_ACCESSORY"),
     ("wear_school", "SET_WEAR_SCHOOL"),

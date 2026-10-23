@@ -799,6 +799,32 @@
         "en": "233 images"
       }
     },
+    "SET_WEAR_MAGIC_SF": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：防具",
+        "en": "Added images: Armor, clothing and jewelry"
+      },
+      "label": {
+        "ja": "魔法とSF",
+        "en": "wear_magic_sf"
+      },
+      "note": {
+        "ja": "24枚",
+        "en": "24 images"
+      }
+    },
     "SET_WEAR_EARLYMODERN": {
       "type": "choice",
       "values": [

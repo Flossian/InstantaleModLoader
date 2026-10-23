@@ -2615,3 +2615,27 @@ wrf_wmd2_008	clothing	A white hazmat suit.
 wrf_wmd2_009	clothing	A white medical garment woven with glowing crystal fibers.
 wrf_wmd2_010	accessory	A grey dust mask with round filters with white details.
 wrf_wmd2_011	legwear	A white nurse shoes with blue details.
+wrf_wms1_000	accessory	A silver bracelet with flowing glowing circuit lines with blue details.
+wrf_wms1_001	accessory	A white alloy ring set with a blue mana crystal.
+wrf_wms1_002	accessory	A black bracelet with a crystal power cell with blue details.
+wrf_wms1_003	accessory	A grey wide bracelet with three crystals in a row with white details.
+wrf_wms1_004	accessory	A black mechanical ring with a purple crystal in claws with white details.
+wrf_wms1_005	accessory	A black alloy ring dotted with starlight with blue details.
+wrf_wms1_006	accessory	A ring wrapped in silver vine-like wiring with white details.
+wrf_wms1_007	accessory	A black wide gauntlet-like bracelet with a small gauge with white details.
+wrf_wms1_008	accessory	A black ring and bracelet linked by a glowing line with blue details.
+wrf_wms1_009	accessory	A blue ring circling a small floating core with white details.
+wrf_wms1_010	accessory	A white flowing liquid-metal bracelet with blue details.
+wrf_wms1_011	accessory	A white double ring with offset bands.
+wrf_wms2_000	accessory	A silver amulet with circuit patterns with white details.
+wrf_wms2_001	accessory	A blue alloy pendant holding a crystal core with white details.
+wrf_wms2_002	accessory	A blue cylinder pendant holding a small mana reactor with white details.
+wrf_wms2_003	accessory	A white alloy choker with a blue crystal.
+wrf_wms2_004	accessory	A blue pair of crystal earrings in alloy frames with white details.
+wrf_wms2_005	accessory	A black amulet necklace with a hanging data chip with blue details.
+wrf_wms2_006	accessory	A blue mechanical feather hair ornament with white details.
+wrf_wms2_007	accessory	A white brooch device set with a crystal orb with blue details.
+wrf_wms2_008	accessory	A black cord necklace woven with glowing lines with white details.
+wrf_wms2_009	accessory	A blue pendant circled by small orbiting rings with white details.
+wrf_wms2_010	accessory	A blue necklace with a glass tube of glowing liquid with white details.
+wrf_wms2_011	accessory	A grey metal butterfly brooch with glowing lines with white details.

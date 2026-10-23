@@ -675,6 +675,25 @@
   ]
  },
  {
+  "id": "wear_magic_sf",
+  "setting": "SET_WEAR_MAGIC_SF",
+  "group": "防具",
+  "label": "防具_魔法とSF",
+  "default": "separate",
+  "sources": [
+   {
+    "sheet": "wms1",
+    "source": "wear/wear_magic_sf_1.png",
+    "name": "防具類_魔法とSFの腕輪と指輪"
+   },
+   {
+    "sheet": "wms2",
+    "source": "wear/wear_magic_sf_2.png",
+    "name": "防具類_魔法とSFの首飾りと護符"
+   }
+  ]
+ },
+ {
   "id": "wear_earlymodern",
   "setting": "SET_WEAR_EARLYMODERN",
   "group": "防具",

@@ -156,6 +156,11 @@
    "darkfantasy": 1.0,
    "fantasy": 0.5
   },
+  "wear_magic_sf": {
+   "sf": 1.0,
+   "cyber": 0.8,
+   "fantasy": 0.5
+  },
   "wear_earlymodern": {
    "medieval": 0.5,
    "fantasy": 0.5,
