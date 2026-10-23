@@ -1069,6 +1069,9 @@ def roll_hunter_gap(base, spread, minimum, rng):
 #: ゲームが人物のレベルを切る上限（`scripts.functions.clamp_character_level`。10-21 に実測）。
 LEVEL_CAP = 100
 
+#: 土地の記録が無いとき（一度も手配度が付いていない）の手配度。ゲームの素の平常値（GAME.md §2.20）。
+NORMAL_LAWFULNESS = 10
+
 
 def hunter_target_level(player_level, lawfulness, offset, per_wanted, floor_level=1, max_above=None):
     """刺客の強さのレベル（ゲームの上限を超えてよい）。主人公のレベル + `offset`、その街の手配度が 10 下がるごとに `per_wanted`。
@@ -1076,7 +1079,9 @@ def hunter_target_level(player_level, lawfulness, offset, per_wanted, floor_leve
     手配度は 0 より下（手配されている）の分だけ数える。`floor_level`（土地から決まるレベル）より弱くしない。
     `max_above` があれば、主人公のレベル + `max_above` を超えない（土地から決まるレベルより優先する）。
     """
-    player = _whole(player_level, 1)
+    # レベルは float で来ても切り捨てて使う（`area_difficulty` と揃える）。読めなければ 1
+    player = int(player_level) if isinstance(player_level, (int, float)) and not isinstance(player_level, bool) \
+        and player_level >= 1 else 1
     level = player + _whole(offset)
     wanted = _whole(lawfulness)
     if wanted < 0:

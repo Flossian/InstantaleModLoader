@@ -76,7 +76,7 @@ r"""闘技場の相手の強さと懸賞金を設定で決める。
 import sys
 import time
 
-from instantale_modloader import choices, defeat, frames, llm, ui
+from instantale_modloader import choices, defeat, frames, llm, loads, ui
 
 LOG_BASENAME = "colosseum_custom.log"
 MARK = "_mod_colosseum_custom"
@@ -623,27 +623,27 @@ def apply(ctx):
     defeat.declare(OWNER, ctx, spare)
 
     # ---------------------------------------------- 負けて手配されないように
-    def after_load(orig, self, *args, **kwargs):
+    def before_load(call):
         """ロード（と新しく始めたとき）。試合ごとの控えを作り直す。
 
         試合の途中のセーブから再開すると `ColosseumMatchStart.execute` を通らない（§3.63 #10e の実機）。
         前の試合の控えが残ると、負けの切り上げを済ませた印で次の負けをゲームオーバーにしたり、
-        前の世界の手配度を書き戻したりした。闘技場の戦闘の途中なら、ここで手配度を控え直す。
+        前の世界の手配度を書き戻したりした。闘技場の戦闘の途中なら、ロードの後に手配度を控え直す。
+        前後ともローダの窓口 `loads` から呼ばれる（TECH.md §3.3.21）。
         """
         state["survived"] = False
         state["fallen"].clear()
         state["lawful_guard"] = None
         close_window()
-        result = orig(self, *args, **kwargs)
+
+    def after_load(call):
         try:
-            if getattr(self, "in_colosseum_battle", False):
-                guard_lawfulness(self)
+            if getattr(call.obj, "in_colosseum_battle", False):
+                guard_lawfulness(call.obj)
         except Exception:
             ctx.log_exc("colosseum: cannot keep the lawfulness after the load")
-        return result
 
-    for _target in ("__main__:InstantaleApp.load_game_new", "__main__:InstantaleApp.start_game"):
-        ctx.wrap(_target, required=False, safe=True)(after_load)
+    loads.on(OWNER, ctx, (loads.LOAD, loads.NEW_GAME), before=before_load, after=after_load, write=write)
 
     def guard_lawfulness(app):
         """申し込んだ時点のこの土地の手配度を控える（逃げて終わったら、下がった分を戻すため）。

@@ -880,7 +880,7 @@ def apply(ctx):
             say(action["app"], "\n".join(notes))
         if action is not None and state["evasion"] and state["evasion"]["actor"] is action["attacker"]:
             state["evasion"] = None
-        if action is not None and state["guard_turn"] is not None                 and state["guard_turn"] is action["attacker"]:
+        if action is not None and state["guard_turn"] is not None and state["guard_turn"] is action["attacker"]:
             state["guard_turn"] = None
         # 構えを立てた手が閉じた。ここから次の自分の手まで構えが生きる。
         if action is not None:

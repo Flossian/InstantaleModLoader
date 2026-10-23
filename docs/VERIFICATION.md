@@ -38,10 +38,10 @@
 | `105_fix_schema_compact` | COMPACT | 決着（2,803 件で 73.3% 減） | [§2.3](verification/2.3.md) |
 | `139_fix_quest_generation_runaway` | 依頼の生成で敵の一覧が窓を使い切る | オフラインで成立（上限なし 12 回中 8 回失敗、上限あり 40 回とも型どおり）。ゲームの中でも1回成立 | [§3.81](verification/3.81.md) |
 | `106_fix_battle_bgm_restore` | 戦闘後に BGM が戻らない | 決着（3つの起点が発火）〔main_024〕。版3 で組み直しの包みを窓口の `after` に移した。戦闘の最中のセーブを読むと戦闘曲を止めていたのを直し、実機で成立（[§3.109](verification/3.109.md)） | [§2.5](verification/2.5.md) / [§3.1](verification/3.1.md) |
-| `107_fix_battle_flag_stuck` | 戦闘・闘技場・売買の旗が残る | 決着（版4まで成立、撤退の後の依頼の戦闘も）。版6 の `in_shopping` は3か所とも成立。版7 のロードの見分けも成立 | [§3.73](verification/3.73.md) / [§3.86](verification/3.86.md) / [§3.91](verification/3.91.md) |
+| `107_fix_battle_flag_stuck` | 戦闘・闘技場・売買の旗が残る | 決着（版4まで成立、撤退の後の依頼の戦闘も）。版6 の `in_shopping` は3か所とも成立。版7 のロードの見分けも成立。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） | [§3.73](verification/3.73.md) / [§3.86](verification/3.86.md) / [§3.91](verification/3.91.md) |
 | `108_fix_shop_inventory_overflow` | 売買画面の `IndexError` | 修正済だが救済経路が一度も発火せず、起こせない。main_024 で直り `superseded` | [§2.16](verification/2.16.md) / [§3.8](verification/3.8.md) |
 | `109_fix_item_detail_autosize` | アイテム説明欄が固定サイズ | 決着（縦 500→1300、横 324→405） | [§2.17](verification/2.17.md) / [§3.9](verification/3.9.md) |
-| `110_fix_character_name_path` | 名前の `"` で画像が生成できない | 決着〔main_024〕 | [§2.14](verification/2.14.md) / [§2.15](verification/2.15.md) / [§3.7](verification/3.7.md) |
+| `110_fix_character_name_path` | 名前の `"` で画像が生成できない | 決着〔main_024〕。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） | [§2.14](verification/2.14.md) / [§2.15](verification/2.15.md) / [§3.7](verification/3.7.md) |
 | `111_llm_prompt_replace` | プロンプトの置換ルール | 決着（ローカル + Gemini / OpenAI / Claude の4経路で発火。同梱 26 グループ） | [§2.24](verification/2.24.md) / [§2.43](verification/2.43.md) |
 | `112_ui_text_spacing` | 本文の行間が広い | 決着（1.8 → 1.44、退行2件も） | [§2.25](verification/2.25.md) / [§2.32](verification/2.32.md) |
 | `113_ui_text_expand` | 本文の表示域が狭い | 成立（6回外して直した） | [§2.26](verification/2.26.md) / [§2.33](verification/2.33.md) |
@@ -51,10 +51,10 @@
 | `117_message_text_integrity` | 長い本文をゲームが切る | 発火（`len=1020` で頭打ち）。見え方は未評価、`prefix` の持ち越しに穴 | [§2.34](verification/2.34.md) / [§3.29](verification/3.29.md) |
 | `118_batch_message_render` | 本文の出し方と灰色化 | 成立（打ち切りは5回外した） | [§2.45](verification/2.45.md) / [§3.20](verification/3.20.md) |
 | `119_fix_crime_attribution` | 第三者の犯罪が主人公の扱いになる | 発火（帳消し4件）。v2 でクラウド経路も発火 | [§2.41](verification/2.41.md) / [§2.49](verification/2.49.md) |
-| `120_fix_npc_name_collision` | NPC の名前が重複する | 発火（改名10件）。誤検出3件を直した。`ALWAYS_RENAME` は未。版9 で起動の種まきが別のスレッドの登録と重なって落ちた（`dictionary changed size during iteration`。10-19〜10-21 に3回）のを直した。直した後の実機は未 | [§2.35](verification/2.35.md) / [§3.30](verification/3.30.md) / [§3.109](verification/3.109.md) |
+| `120_fix_npc_name_collision` | NPC の名前が重複する | 発火（改名10件）。誤検出3件を直した。`ALWAYS_RENAME` は未。版9 で起動の種まきが別のスレッドの登録と重なって落ちた（`dictionary changed size during iteration`。10-19〜10-21 に3回）のを直した。直した後の実機は未。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） | [§2.35](verification/2.35.md) / [§3.30](verification/3.30.md) / [§3.109](verification/3.109.md) |
 | `121_ui_character_sheet` | 人物欄の右半分が空 | 成立（1度外した）。残るのは窓の追従・プレイヤー以外の人物欄・長い二つ名 | [§2.46](verification/2.46.md) / [§3.77](verification/3.77.md) |
 | `122_ui_conversation_log` | 流れた本文が読み返せない | 成立（3世界・壊れ行0） | [§3.21](verification/3.21.md) |
-| `123_fix_new_character_level` | 新規キャラが経験値0のままレベル60 | 本体が main_025 で取込、`superseded`。既存セーブの修復は未 | [§2.36](verification/2.36.md) |
+| `123_fix_new_character_level` | 新規キャラが経験値0のままレベル60 | 本体が main_025 で取込、`superseded`。既存セーブの修復は未。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） | [§2.36](verification/2.36.md) |
 | `124_ui_craft_window_fit` | 「作成」と矢印がグリッドと重なる | ボタン側は成立、矢印側も座標では解けた。残るのは目視 | [§3.22](verification/3.22.md) |
 | `125_balance_charisma_impression` | 魅力に振ると全員から最上段で見られる | 決着（確認5件。閾値 8/11/14/17/20） | [§3.23](verification/3.23.md) |
 | `126_ui_title_version` | MOD が効いているか画面から分からない | 決着 | [§2.47](verification/2.47.md) / [§3.24](verification/3.24.md) |
@@ -73,7 +73,7 @@
 | `140_fix_busy_dots_speed` | 待機中の「…」が速く流れる | 成立（1本・約3.4コマ/秒。直す前は2〜7本） | [§3.88](verification/3.88.md) |
 | `141_ui_free_input_echo` | 会話の外で送った文が本文に出ない | 自由行動・戦闘・会話は成立。裁判・値切り・依頼の中は未 | [§3.90](verification/3.90.md) |
 | `142_balance_quest_stamina` | クリアでスタミナが上限の半分減る | 成立（10-08。難易度76 の依頼2回で 49→31、掲示板も開いた）。最大 HP の半分を超える被弾はオフラインのみ | GAME.md §2.19 |
-| `143_fix_random_character` | さいころが世界を渡さず、どの世界でも傭兵 | 世界と年齢は成立。才能点の目安は守られない（手当てしない） | [§3.93](verification/3.93.md) |
+| `143_fix_random_character` | さいころが世界を渡さず、どの世界でも傭兵 | 世界と年齢は成立。才能点の目安は守られない（手当てしない）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） | [§3.93](verification/3.93.md) |
 | `144_fix_hardcoded_worldview` | 頼み文と絵がダークファンタジーに決め打ち | 成立（5つの世界観で立ち絵も） | [§3.95](verification/3.95.md) |
 | `145_fix_world_overview` | 入力した概要が書き直しに差し替わる | 成立 | [§3.96](verification/3.96.md) |
 | `146_fix_save_only_entities` | セーブにしか無い施設や人物で、売買・人物の詳細・闘技場の試合が落ちる | 既定は切（設定 `ENABLED`）。入れた状態で売買（宿屋）・闘技場・人物の詳細（会話）は実機で成立。訓練場の入口は未 | [§3.107](verification/3.107.md) |
@@ -88,8 +88,8 @@
 
 | mod | 状態 |
 | --- | --- |
-| `300_event_facility_arrival` | 成立（両モード。[§2.8](verification/2.8.md)）。版3 で同じ到着の会話をほかの MOD に譲る形は未（[§3.80](verification/3.80.md)） |
-| `301_quest_from_conversation` | 成立（[§2.13](verification/2.13.md) / [§2.62](verification/2.62.md)）。版3 のロード後の組み直しも成立。自由入力の経路は未発火（[§3.2](verification/3.2.md)）。仲間を依頼人から外す設定はログで発火。版6 の人物が揃う前は出さない形は実機で成立（[§3.102](verification/3.102.md)）。版7 の宣言型の口への乗せ替えは実機で成立。「この話から依頼を作る」の押下も成立。疲労で受注を断られたときに一覧を「やめる」1つにしていたのを直した（[§3.109](verification/3.109.md)） |
+| `300_event_facility_arrival` | 成立（両モード。[§2.8](verification/2.8.md)）。版3 で同じ到着の会話をほかの MOD に譲る形は未（[§3.80](verification/3.80.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
+| `301_quest_from_conversation` | 成立（[§2.13](verification/2.13.md) / [§2.62](verification/2.62.md)）。版3 のロード後の組み直しも成立。自由入力の経路は未発火（[§3.2](verification/3.2.md)）。仲間を依頼人から外す設定はログで発火。版6 の人物が揃う前は出さない形は実機で成立（[§3.102](verification/3.102.md)）。版7 の宣言型の口への乗せ替えは実機で成立。「この話から依頼を作る」の押下も成立。疲労で受注を断られたときに一覧を「やめる」1つにしていたのを直した（[§3.109](verification/3.109.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
 | `302_leave_party_in_conversation` | 成立。土地を跨いで別れる経路も 10-06 に成立（[§3.88](verification/3.88.md)）。版2 のロード後も成立。版5 の宣言型の口への乗せ替え（確認の画面で保存しても戻れる）は実機で成立（[§3.109](verification/3.109.md)） |
 | `303_quest_end_party_to_guild` | 発火。置く側は未発火（`304_` が仲間を残すため。[§2.50](verification/2.50.md) / [§3.3](verification/3.3.md)） |
 | `304_quest_end_keep_party` | 成立（[§2.50](verification/2.50.md)） |
@@ -97,37 +97,37 @@
 | `307_area_move_dungeon` | 実機3回で成立。体力不足の断りと 0 日は 10-07 に成立（[§3.88](verification/3.88.md)）。放棄の経路と、暦が止まる経路を消した形は未（[§3.13](verification/3.13.md)）。日数はローダの関所で成立（[§3.60](verification/3.60.md)）。版6 の宣言型の口への乗せ替えは実機で成立（確認画面に出る・保存と読み直し）（[§3.109](verification/3.109.md)） |
 | `308_battle_damage_display` | 成立（出どころ行も）。版4 で `319_` の外側へ（[§3.77](verification/3.77.md)）。残るのはコロシアムと味方が倒れた／逃げた場合（[§3.14](verification/3.14.md)） |
 | `309_office_pardon` | 成立（版3 も [§3.88](verification/3.88.md)）。残るのは投獄・市民権との関係（[§3.15](verification/3.15.md)）。版4 の宣言型の口への乗せ替えは実機で成立（確認の画面の保存と読み直し・納める）（[§3.109](verification/3.109.md)） |
-| `311_npc_profile_memory` | 発火（3世界）。受け答えが変わったかは未評価（[§2.38](verification/2.38.md)） |
+| `311_npc_profile_memory` | 発火（3世界）。受け答えが変わったかは未評価（[§2.38](verification/2.38.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
 | `312_shop_restock` | 前提・売り切れを保つ（版3）・生成が落ちた店（版5）は成立。版6 の外見文を英語で頼む直しはゲーム抜きで成立し、10-18 にローカル LLM の入れ替え（12品とも英語）でも成立（[§3.26](verification/3.26.md)）。残るのは偏りと品数が痩せないか（[§3.16](verification/3.16.md) / [§3.52](verification/3.52.md) / [§3.94](verification/3.94.md)）。版7 の宿屋の分岐は実機で成立（[§3.105](verification/3.105.md)） |
 | `313_event_ability_check` | 自由入力は加点まで成立（[§3.18](verification/3.18.md)）、フィールドイベントも23件発火（[§3.17](verification/3.17.md)） |
-| `314_area_move_custom` | 成立（往復4移動・前払い3回・所持金0・距離補正）。残るのは「設定額以上・1000G未満」の帯と、開いた道を徒歩で行く1回（[§3.27](verification/3.27.md)）。ワールド個別（版2）は未（[§3.57](verification/3.57.md)）。日数は関所で成立（[§3.60](verification/3.60.md)）。版6 の差し替えの写しは実機で成立（セーブには素の文言・読み直し）。切って読む・運賃の断りは未（[§3.109](verification/3.109.md)） |
+| `314_area_move_custom` | 成立（往復4移動・前払い3回・所持金0・距離補正）。残るのは「設定額以上・1000G未満」の帯と、開いた道を徒歩で行く1回（[§3.27](verification/3.27.md)）。ワールド個別（版2）は未（[§3.57](verification/3.57.md)）。日数は関所で成立（[§3.60](verification/3.60.md)）。版6 の差し替えの写しは実機で成立（セーブには素の文言・読み直し）。切って読む・運賃の断りは未（[§3.109](verification/3.109.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
 | `315_vacation_custom` | 実機3回で成立。残るのは年齢加算 ON と犬小屋の宿代変更（[§3.28](verification/3.28.md)）。日数は関所で成立（[§3.60](verification/3.60.md)） |
-| `316_bounty_hunter` | 成立（[§2.58](verification/2.58.md) / [§2.60](verification/2.60.md)、前金も [§3.35](verification/3.35.md)）。残るのは既定の設定での出方（#8）と、移動で読み込みが延びた回の重なり（#9）（[§3.35](verification/3.35.md)）。版4 の右の欄は成立（[§3.91](verification/3.91.md)） |
-| `317_reputation` | オフラインと偏り 240 回は済（[§2.63](verification/2.63.md)）、人物欄は決着。残るのは編纂の質と据え置き（[§3.36](verification/3.36.md)） |
-| `318_area_difficulty_growth` | 成立（版2。[§2.67](verification/2.67.md)）。版4 は未（[§3.78](verification/3.78.md)） |
+| `316_bounty_hunter` | 成立（[§2.58](verification/2.58.md) / [§2.60](verification/2.60.md)、前金も [§3.35](verification/3.35.md)）。残るのは既定の設定での出方（#8）と、移動で読み込みが延びた回の重なり（#9）（[§3.35](verification/3.35.md)）。版4 の右の欄は成立（[§3.91](verification/3.91.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
+| `317_reputation` | オフラインと偏り 240 回は済（[§2.63](verification/2.63.md)）、人物欄は決着。残るのは編纂の質と据え置き（[§3.36](verification/3.36.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
+| `318_area_difficulty_growth` | 成立（版2。[§2.67](verification/2.67.md)）。版4 は未（[§3.78](verification/3.78.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
 | `319_battle_tactics` | 版18 の式・回避・見切りは成立。レベル相応の装備での釣り合いは未（[§3.77](verification/3.77.md)）。版17 までの経緯は [§2.69](verification/2.69.md)〜[§2.71](verification/2.71.md) / [§3.45](verification/3.45.md)。版20 の防御のボタンは実機で成立。最初はその手番の審判が `342_`（当時 920）の足した演出の値で落ちたが、その版2 で直した後は手番が進んで戦闘が終わった。防御の次の手番の一覧も成立（[§3.109](verification/3.109.md)） |
 | `320_guild_adventurer_recruit` | 決着（[§2.73](verification/2.73.md) / [§2.74](verification/2.74.md)）。採番の衝突の直しは未（[§3.39](verification/3.39.md)）。版5 の宣言型の口への乗せ替えは実機で成立（出る・保存と読み直し）。押す（生成）も成立（[§3.109](verification/3.109.md)） |
-| `321_area_chronicle` | 成立（[§2.75](verification/2.75.md) / [§2.76](verification/2.76.md)）。残るのは言及率の前後比較（[§3.40](verification/3.40.md)） |
+| `321_area_chronicle` | 成立（[§2.75](verification/2.75.md) / [§2.76](verification/2.76.md)）。残るのは言及率の前後比較（[§3.40](verification/3.40.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
 | `322_battle_bgm` | 成立（[§2.79](verification/2.79.md)）。残るのはロード直後（[§3.42](verification/3.42.md)） |
-| `323_npc_carryover` | 成立（5体。[§2.81](verification/2.81.md)、版3 の死亡と同行中も [§3.88](verification/3.88.md)）。残るのは `403_` の社会関係（[§3.44](verification/3.44.md)） |
-| `324_place_bgm` | 一部成立（[§2.83](verification/2.83.md)）。施設の段・見張り・覚えた曲の再訪・戦闘後は未（[§3.48](verification/3.48.md)） |
-| `325_road_opening` | 成立（3経路）。連打の門だけ未発火（[§3.50](verification/3.50.md)）。日数は関所で成立（[§3.60](verification/3.60.md)）。版7 の宣言型の口への乗せ替えは実機で成立（探す・候補・手段の画面の保存と読み直し）。委託・切り拓くも成立（[§3.109](verification/3.109.md)） |
-| `326_npc_travel` | 出発・旅先・帰還まで成立。残るは延期・セーブとロード・片付け（[§3.53](verification/3.53.md)）。版3 で印を外した（実機は未。街の中の外出が起きなかった）（[§3.109](verification/3.109.md)） |
-| `327_inn_quality` | 実機3回で活動の数・常連・社交の相手が成立。残るは感情の反映・簡易寝台・#6〜#9（[§3.54](verification/3.54.md)）。版5 で印を外した。活動の一覧の保存と読み直しは実機で成立（[§3.109](verification/3.109.md)） |
+| `323_npc_carryover` | 成立（5体。[§2.81](verification/2.81.md)、版3 の死亡と同行中も [§3.88](verification/3.88.md)）。残るのは `403_` の社会関係（[§3.44](verification/3.44.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
+| `324_place_bgm` | 一部成立（[§2.83](verification/2.83.md)）。施設の段・見張り・覚えた曲の再訪・戦闘後は未（[§3.48](verification/3.48.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
+| `325_road_opening` | 成立（3経路）。連打の門だけ未発火（[§3.50](verification/3.50.md)）。日数は関所で成立（[§3.60](verification/3.60.md)）。版7 の宣言型の口への乗せ替えは実機で成立（探す・候補・手段の画面の保存と読み直し）。委託・切り拓くも成立（[§3.109](verification/3.109.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
+| `326_npc_travel` | 出発・旅先・帰還まで成立。残るは延期・セーブとロード・片付け（[§3.53](verification/3.53.md)）。版3 で印を外した（実機は未。街の中の外出が起きなかった）（[§3.109](verification/3.109.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
+| `327_inn_quality` | 実機3回で活動の数・常連・社交の相手が成立。残るは感情の反映・簡易寝台・#6〜#9（[§3.54](verification/3.54.md)）。版5 で印を外した。活動の一覧の保存と読み直しは実機で成立（[§3.109](verification/3.109.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
 | `328_quest_from_world` | #1・#2・#4 は成立。残るは `301_` の会話から作る依頼（#3）（[§3.55](verification/3.55.md)） |
-| `329_area_move_with_party` | 版3 で成立。残るは所持金不足と `326_` との併用（[§3.56](verification/3.56.md)） |
-| `330_real_estate` | 管理人まで成立。残るは4件と別件1つ、家と施設の窓（一部実機）（[§3.62](verification/3.62.md)）。版45 の宣言型の口への乗せ替えは実機で成立（窓口の画面の保存と読み直し・家の出入り。[§3.109](verification/3.109.md)） |
-| `331_facility_investment` | 6種類とも成立。残るは無料の宿泊の前払いの食い違い・#11a・#14・手放す経路・家と施設の窓（一部実機）（[§3.63](verification/3.63.md)）。版46 の宣言型の口への乗せ替えは実機で成立（等級の画面の保存と読み直し・店の出入りと売上。[§3.109](verification/3.109.md)） |
+| `329_area_move_with_party` | 版3 で成立。残るは所持金不足と `326_` との併用（[§3.56](verification/3.56.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
+| `330_real_estate` | 管理人まで成立。残るは4件と別件1つ、家と施設の窓（一部実機）（[§3.62](verification/3.62.md)）。版45 の宣言型の口への乗せ替えは実機で成立（窓口の画面の保存と読み直し・家の出入り。[§3.109](verification/3.109.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
+| `331_facility_investment` | 6種類とも成立。残るは無料の宿泊の前払いの食い違い・#11a・#14・手放す経路・家と施設の窓（一部実機）（[§3.63](verification/3.63.md)）。版46 の宣言型の口への乗せ替えは実機で成立（等級の画面の保存と読み直し・店の出入りと売上。[§3.109](verification/3.109.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
 | `332_training_custom` | 代金・期間・倍率・表示・文言・頼み文・再訓練は成立。残るはワールド個別（#8）と #14（[§3.64](verification/3.64.md)） |
-| `333_equipment_slots` | 成立（版17〜25）。版26 の自由枠2つ（入る・数えない・ロード・仲間）も成立。残るのは所持品が満杯のとき（[§3.70](verification/3.70.md) / [§3.77](verification/3.77.md) / [§3.91](verification/3.91.md)）。版27 で組み直しの包みを窓口の `after` に移した。所持品の窓を開いたまま会話に入っても右の選択肢が戻るのは実機で成立（[§3.109](verification/3.109.md)） |
-| `334_colosseum_custom` | 15項目とも成立（危ない側の口上は 10-07。[§3.69](verification/3.69.md) / [§3.88](verification/3.88.md)） |
+| `333_equipment_slots` | 成立（版17〜25）。版26 の自由枠2つ（入る・数えない・ロード・仲間）も成立。残るのは所持品が満杯のとき（[§3.70](verification/3.70.md) / [§3.77](verification/3.77.md) / [§3.91](verification/3.91.md)）。版27 で組み直しの包みを窓口の `after` に移した。所持品の窓を開いたまま会話に入っても右の選択肢が戻るのは実機で成立（[§3.109](verification/3.109.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
+| `334_colosseum_custom` | 15項目とも成立（危ない側の口上は 10-07。[§3.69](verification/3.69.md) / [§3.88](verification/3.88.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
 | `335_player_portrait_regenerate` | 一通り成立（`408_` から切り出した。[§2.94](verification/2.94.md)） |
-| `336_crime_overhaul` | 大半が成立。残りは [§3.84](verification/3.84.md) の冒頭（[§2.88](verification/2.88.md) / [§3.91](verification/3.91.md)）。8機能の宣言型の口への乗せ替えは衛兵の買収・裁判の介入・脱獄の一覧・同房の囚人が実機で成立、裏の事務所・無罪放免・死刑の判決と処刑場からの脱出（クリアまで）も成立（[§3.109](verification/3.109.md)） |
+| `336_crime_overhaul` | 大半が成立。残りは [§3.84](verification/3.84.md) の冒頭（[§2.88](verification/2.88.md) / [§3.91](verification/3.91.md)）。8機能の宣言型の口への乗せ替えは衛兵の買収・裁判の介入・脱獄の一覧・同房の囚人が実機で成立、裏の事務所・無罪放免・死刑の判決と処刑場からの脱出（クリアまで）も成立（[§3.109](verification/3.109.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
 | `337_conversation_affinity` | 10項目とも成立。版2 の窓口 `talk_summary` も成立（[§3.89](verification/3.89.md) / [§2.91](verification/2.91.md)） |
-| `338_town_incidents` | 版2 まで成立。#10 の引き直しと #1 の手のマウスは未（[§3.97](verification/3.97.md) / [§2.92](verification/2.92.md)） |
-| `339_town_factions` | 13項目と窓（#14・#15）は成立。#16 は未。住人の立場（版3）は #17 が成立、#18 は口ぶりが未。勢力の刺客（版5）は #21〜#26 が成立（[§3.98](verification/3.98.md) / [§2.93](verification/2.93.md)）。刺客の会話を窓口の `claim` に乗せ替えた形は実機で成立（保存・読み直し・MOD を切った読み込み。[§3.109](verification/3.109.md)） |
+| `338_town_incidents` | 版2 まで成立。#10 の引き直しと #1 の手のマウスは未（[§3.97](verification/3.97.md) / [§2.92](verification/2.92.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
+| `339_town_factions` | 13項目と窓（#14・#15）は成立。#16 は未。住人の立場（版3）は #17 が成立、#18 は口ぶりが未。勢力の刺客（版5）は #21〜#26 が成立（[§3.98](verification/3.98.md) / [§2.93](verification/2.93.md)）。刺客の会話を窓口の `claim` に乗せ替えた形は実機で成立（保存・読み直し・MOD を切った読み込み。[§3.109](verification/3.109.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
 | `340_inn_shop` | 入口・品揃え・売買・盗み・宿泊と会話・ロード・宿屋の主との会話からの売買は実機で成立。セーブにしか無い宿屋は `146_` の設定を入れていれば売買が開く（[§3.107](verification/3.107.md)）。売買のたびに足す品は呼ばれる場面が未（[§3.105](verification/3.105.md)） |
-| `341_shopkeeper_attitude` | 平時の判定・値段・知らせ・待ちは実機で成立。手配中は 336 に置いていた形で2回成立。宿屋に着いた時の頼みと 336 からの受け渡しは未（[§3.108](verification/3.108.md)） |
+| `341_shopkeeper_attitude` | 平時の判定・値段・知らせ・待ちは実機で成立。手配中は 336 に置いていた形で2回成立。宿屋に着いた時の頼みと 336 からの受け渡しは未（[§3.108](verification/3.108.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
 | `342_attack_animations` | 型が届く・拳銃で銃撃・1体と全体の差し替え・効果音・自由入力の審判は実機で成立。ローカル LLM・10-20 夕方に足した6種・控えめの絵・`water` の画面は未（[§3.111](verification/3.111.md)） |
 
 ### 提供（400番台）
@@ -136,11 +136,11 @@
 | --- | --- |
 | `401_battle_character_context` | 成立（版8 で主人公 3 部位・仲間 2 部位、追記 1101 字）。版10 も成立（[§3.77](verification/3.77.md) / [§3.88](verification/3.88.md)） |
 | `402_party_inventory_transfer` | 版19 の右クリックの装備と窓口経由・ドラッグは成立（[§3.70](verification/3.70.md)）。版25 も成立（[§3.88](verification/3.88.md)）。版21 の会話の選択肢へ戻るのは未（[§3.72](verification/3.72.md)）。版26 の宣言型の口への乗せ替えは実機で成立（並び・窓の開け閉め・保存と読み直し）（[§3.109](verification/3.109.md)） |
-| `403_npc_social_memory` | オフラインのみ（33件）。実機は `404_` の回の `changed: false` と、`323_` が書いた関係の読み返しまで（[§2.78](verification/2.78.md) / [§3.44](verification/3.44.md)） |
+| `403_npc_social_memory` | オフラインのみ（33件）。実機は `404_` の回の `changed: false` と、`323_` が書いた関係の読み返しまで（[§2.78](verification/2.78.md) / [§3.44](verification/3.44.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
 | `404_party_talk` | 実機6回で決着（[§2.78](verification/2.78.md)）。レビューで直した9点は未（[§3.41](verification/3.41.md)）。版10 のロードの戻りは成立（[§3.88](verification/3.88.md)）。版11 の宣言型の口への乗せ替えは実機で成立（パーティー会話・閉じた後の戻り・保存と読み直し）（[§3.109](verification/3.109.md)） |
-| `405_regional_economy` | 成立（19 / 19。[§3.19](verification/3.19.md)） |
+| `405_regional_economy` | 成立（19 / 19。[§3.19](verification/3.19.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
 | `406_user_role_fix` | 版3 の Claude の店は成立（[§3.94](verification/3.94.md)）。Gemini は実機の記録が無い（`inserted user role for <manager>` を見る） |
-| `407_npc_starting_equipment` | 成立（仲間3人、窓口 `equipment.equip`、起動し直しても残る）。ロード後の戦闘の数は `333_` で直して成立（[§3.77](verification/3.77.md) / [§3.88](verification/3.88.md)） |
+| `407_npc_starting_equipment` | 成立（仲間3人、窓口 `equipment.equip`、起動し直しても残る）。ロード後の戦闘の数は `333_` で直して成立（[§3.77](verification/3.77.md) / [§3.88](verification/3.88.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
 | `408_visual_changes_based_on_equipment` | 一通り成立（仲間と `335_` の描き直しに装備の語）。取り込みと切り出しの経緯は [§2.94](verification/2.94.md) |
 | `409_fix_crafted_item_type` | 店の `consumable` の品に「消費」が出て使えた。鍵を足した品を `134_` 抜きで使うのとクラフトの経路は未（[§3.104](verification/3.104.md)） |
 
@@ -154,6 +154,7 @@
 | `modfacility` の背景 | 実機2回で成立。書き出しの直前に網 | [§3.61](verification/3.61.md) |
 | 選択肢の窓口 `choices` | 21 本を乗せ替え、押下まで成立。宣言型の口（段階1〜4）と `check_mods` の決まりも成立。残るのは v2.0.0 での古い口の撤去 | [§3.85](verification/3.85.md) / [§2.90](verification/2.90.md) / [§3.109](verification/3.109.md) |
 | 犯罪まわりの窓口 `wanted` / `guards` / `defeat` / `board` / `confinement` | 成立 | [§3.81](verification/3.81.md)〜[§3.84](verification/3.84.md) |
+| ロード・日数・到着の前後を1枚だけ包む窓口（`loads` / `durations.on_days` / `arrivals.on`）と、会話の相手への差し込みの `modnpc` の notes への寄せ | 31 本を乗せ替え、オフラインで通過。実機は未 | [§3.113](verification/3.113.md) |
 | 当てにならない旗（`in_shopping` を `ui.BUSY_FLAGS` から外した） | 7つの旗を実機で測った。残るのはボス戦と逮捕の経路 | [§3.86](verification/3.86.md) |
 
 ### 計測待機中（発生すれば自動で原因が確定する）
@@ -328,11 +329,12 @@ crash_log.txt の 114 件のうち、35件が `llama-server` 起動失敗、40�
 - [3.105 宿屋で食べ物・飲み物・酒を売り買いできる（`340_inn_shop`）と、312 の宿屋の分岐（版7）: #1〜#8 は実機で成立（10-19）・宿屋の主との会話からの売買（#10）も実機で成立（10-20）・売買のたびに足す品（#9）は呼ばれる場面が未確認・セーブエディタで足した宿屋で落ちたのを直した（実機で成立）](verification/3.105.md)
 - [3.106 遊んでいる最中に世界の素データを引く箇所（`242_probe_world_reads`）: 箇所と段を実測・世界側に無い人物の詳細の生成が落ちてセーブが欠けると分かった・訓練場でも詳細の生成が落ちる・闘技場の試合も落ちる・奴隷市場・一括生成・新たな道を探すは落ちない](verification/3.106.md)
 - [3.107 セーブにしか無い施設や人物で落ちる3か所を直す（`146_fix_save_only_entities`・ローダの窓口 `save_lookup`）: 既定は切・入れた状態で売買・宿屋の売買・闘技場・人物の詳細は実機で成立・ふだんの経路は変わらない](verification/3.107.md)
-- [3.108 店主の人柄と主人公との関係で売買の値段が変わる（`341_shopkeeper_attitude`）と、窓口 `wanted` の店の値の圧: 平時の判定・値段・知らせ・待ちは実機で成立（宿屋の中から始めた回）・手配中は 336 に置いていた形で2回・着いた時の宿屋と 336 からの受け渡しは未](verification/3.108.md)
+- [3.108 店主の人柄と主人公との関係で売買の値段が変わる（`341_shopkeeper_attitude`）と、窓口 `wanted` の店の値の圧: 平時の判定・値段・知らせ・待ちは実機で成立（宿屋の中から始めた回）・手配中は 336 に置いていた形で2回・336 からの受け渡しは実機で成立（10-22）・着いた時の宿屋は未](verification/3.108.md)
 - [3.109 選択肢のボタンを組み直しのたびに作り直す宣言型の口（窓口 `choices`）: 段階1〜4（同梱の MOD で古い口と自前の包みが無くなった）と `120_` 版9。実機は段階1で9項目・段階2で4項目・段階3で8項目、残りの確認で12項目成立。`920_` の2件・`301_`・`106_` の不具合を見つけて直した。残るのは `326_`・`902_` の実機](verification/3.109.md)
-- [3.110 主人公が逃げると仲間も一緒に戦闘から逃げる（`147_fix_party_flee`）: 依頼の戦闘で実機1回成立・衛兵戦・会話からの戦闘・闘技場は未](verification/3.110.md)
+- [3.110 主人公が逃げると仲間も一緒に戦闘から逃げる（`147_fix_party_flee`）: 依頼の戦闘・衛兵戦・闘技場（仲間2人）で実機成立・会話からの戦闘は仲間が加わらず出番が無い・逃げる手での勝ちは未](verification/3.110.md)
 - [3.111 攻撃の演出を武器と属性に合わせる（`342_attack_animations`）: 型が届く・銃撃・1体と全体の差し替え・音・自由入力の審判は実機で成立・ローカル LLM と10-20 夕方に足した6種と控えめの絵は未](verification/3.111.md)
 - [3.112 依頼の難易度の上限を 100 まで上げられるようにする（`318_area_difficulty_growth` 版6）: 76 を超えた依頼のクリア・訓練・店の品揃えまで実機で成立](verification/3.112.md)
+- [3.113 何本もの MOD が自分で包んでいたロード・日数・到着・会話の相手への差し込みを、ローダの窓口へ寄せる（`loads` / `durations.on_days` / `arrivals.on` / `modnpc` の notes）: 31 本を乗せ替え、オフラインの検査は通過・ロード・世界・日数・到着・会話の相手の経路は実機で成立（10-23）・338/339/911 の日数と到着・新規開始は未](verification/3.113.md)
 <!-- verification-index: end -->
 
 ---

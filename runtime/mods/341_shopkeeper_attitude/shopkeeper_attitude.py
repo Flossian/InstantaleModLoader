@@ -16,7 +16,7 @@ import os
 import sys
 import threading
 
-from instantale_modloader import llm, prices, ui, wanted
+from instantale_modloader import arrivals, llm, prices, ui, wanted
 from instantale_modloader import state as loader_state
 
 from . import attitude
@@ -26,13 +26,12 @@ USUAL_PCT = 10         # 平時に負ける・ふっかけるときの率（%）
 SELL = True            # 売値も動かす（切ると買値だけ）
 NOTICE = True          # 売買を押したときに1行出す
 JUDGE_DAYS = 30        # 同じ店主の応じ方を使い回す日数
-FRIEND_AFFINITY = 40   # 判定が無いとき、手配中でもこの好感度以上なら動じない（40 は「多少の好意がある」）
+FRIEND_AFFINITY = 20   # 判定が無いとき、手配中でもこの好感度以上なら動じない（20 は「嫌いではない」。336 の線と同じ）
 
 LOG_BASENAME = "shopkeeper_attitude.log"
 STATE_DIRNAME = "shopkeeper_attitude"
 STORE_ATTR = "_instantale_shopkeeper_attitude"
 MARK = "mod_shopkeeper_attitude"
-MOVE_PHASE_TARGET = "__main__:MovePhaseManager.move_phase"
 SHOP_TARGET = "__main__:ShoppingStartManagerRemake.execute"
 #: 店の選択肢の印（`340_inn_shop` が宿屋に足すのも同じ）と、MOD の人物の id の頭。
 SHOP_CHOICE = "売買する"
@@ -148,10 +147,10 @@ def apply(ctx):
         playthrough = worlds.playthrough(app)
         with worlds.lock:
             bucket = worlds.load(playthrough)
-            for key in list(bucket):
+            # 日数が読めない（ロードの途中など）ときは掃除しない。読めないまま比べると全部の控えを消す
+            for key in (list(bucket) if isinstance(day, int) else ()):
                 old = bucket[key]
-                if not (isinstance(old, dict) and isinstance(day, int) and isinstance(old.get("day"), int)
-                        and 0 <= day - old["day"] < days):
+                if not (isinstance(old, dict) and isinstance(old.get("day"), int) and 0 <= day - old["day"] < days):
                     del bucket[key]
             if entry is not None:
                 bucket[keeper_id] = entry
@@ -218,16 +217,14 @@ def apply(ctx):
             return "stored"
         with lock:
             done = judging.get(stance_key(app, keeper_id))
-        screen.busy_on(app)
-        try:
-            if done is not None:
-                if not done.wait(WAIT_SECONDS):
-                    write("gave up waiting for {} after {}s".format(keeper_id, WAIT_SECONDS))
-                return "waited"
-            ask(app, mode, keeper_id, keeper)
-            return "asked"
-        finally:
-            screen.busy_off(app)
+        # 待機表示は出さない。ここはゲーム自身の `execute` の中で、ゲームが旗を下ろして点を送っている（TECH.md §5.1.3）。
+        # `busy_on` を重ねると下ろされた旗を覚え、`busy_off` がそれを書き戻す
+        if done is not None:
+            if not done.wait(WAIT_SECONDS):
+                write("gave up waiting for {} after {}s".format(keeper_id, WAIT_SECONDS))
+            return "waited"
+        ask(app, mode, keeper_id, keeper)
+        return "asked"
 
     def stance_here(app, mode):
         """いまの店の `(応じ方, 控えの判定)`。判定が無ければ決まった決め方で、控えは None。"""
@@ -254,17 +251,19 @@ def apply(ctx):
     prices.adjust(owner, layer, temporary=True, write=write)
 
     # -------------------------------------------------- 入口
-    @ctx.wrap(MOVE_PHASE_TARGET, required=False, safe=True)
-    def arrive(orig, self, *args, **kwargs):
-        """店に着いたら、選択肢が組み上がるのを待って、裏で応じ方を頼む（売買を押すまでに済ませる）。"""
-        result = orig(self, *args, **kwargs)
+    def arrive(call):
+        """店に着いたら、選択肢が組み上がるのを待って、裏で応じ方を頼む（売買を押すまでに済ませる）。
+
+        施設に着いた後はローダの窓口 `arrivals` から呼ばれる（TECH.md §3.3.21）。
+        """
         try:
             app = ui.find_app()
             if app is not None and scene(app)[0] is not None:
                 screen.when_idle(app, lambda: begin(app), proceed_on_timeout=True, tag="shopkeeper attitude")
         except Exception:
             ctx.log_exc("shopkeeper attitude: cannot plan the judgment")
-        return result
+
+    arrivals.on(owner, ctx, (arrivals.FACILITY,), after=arrive, write=write)
 
     def begin(app):
         mode, _rate = scene(app)

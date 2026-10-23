@@ -33,6 +33,7 @@ import json
 import os
 import sys
 import time
+import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
@@ -48,6 +49,7 @@ import instantale_modloader as ml                                   # noqa: E402
 from instantale_modloader import llm as llm_module                  # noqa: E402
 from instantale_modloader import state as state_module              # noqa: E402
 from instantale_modloader import ui as ui_module                    # noqa: E402
+from instantale_modloader import gates, modnpc                      # noqa: E402
 
 CONV = "scripts.llm.llm_manager:"
 CONVERSATION_TARGETS = (
@@ -63,6 +65,26 @@ SHEET_TOGGLE = ("scripts.hud.new_hud:"
 ELAPSE = "__main__:InstantaleApp.elapse_days"
 AREA_MOVE = "__main__:AreaMoveManager.execute"
 MOVE_PHASE = "__main__:MovePhaseManager.move_phase"
+
+
+def install_fake_llm_manager():
+    """会話5関数を持つ `scripts.llm.llm_manager` を差し込む。
+
+    会話への注入はローダの `modnpc` の関所が受け持ち、関所はいま差し込まれている素の関数の
+    署名で引数を名前に直す。モジュールが無いと素通りするので、先頭4引数の並び
+    （GAME.md §2.25）だけ揃えて置く。
+    """
+    name = "scripts.llm.llm_manager"
+    module = sys.modules.get(name) or types.ModuleType(name)
+    for target in CONVERSATION_TARGETS:
+        def site(messages, character_life_log, player, character_instance,
+                 *args, **kwargs):
+            return "返答"
+        setattr(module, target.split(":", 1)[1], site)
+    sys.modules[name] = module
+
+
+install_fake_llm_manager()
 
 
 def find_mod(suffix):
@@ -104,6 +126,9 @@ class Character(object):
     """プレイヤーも NPC も同じ `Character`（GAME.md §2.20）。"""
 
     def __init__(self, name, area_history=None, current_area=None, profile=""):
+        # `modnpc` の関所は相手を id で引く（名簿に居なければ `.id`）。
+        # id が引けない相手は素通しになるので、名前を id にしておく。
+        self.id = name
         self.name = name
         self.area_history = area_history
         self.current_area = current_area
@@ -243,6 +268,11 @@ def fresh_mod(app, replies=(), **settings):
     if hasattr(sys, module.STATE_STORE_ATTR):
         delattr(sys, module.STATE_STORE_ATTR)
     ui_module.find_app = lambda: app     # material も同じモジュールを見ている
+    # 関所（日数・着いた後の窓口、modnpc の頼み文の包み）は1つの世代に1枚なので、
+    # ctx を作り直すたびに忘れさせる（残すと2回目の ctx に包みが渡らない）。
+    gates.reset_all()
+    if hasattr(sys, modnpc.INSTALLED_ATTR):
+        delattr(sys, modnpc.INSTALLED_ATTR)
     ctx = FakeCtx()
     module.apply(ctx)
     return module, ctx
@@ -266,7 +296,11 @@ def trigger(module, ctx, app, target=ELAPSE):
 
 
 def call_conv(ctx, target, npc, use_kwargs=False, args_before=3):
-    """会話関数を1回呼ぶ。本体が受け取った NPC と、呼ばれた回数を返す。"""
+    """会話関数を `modnpc` の関所越しに1回呼ぶ。本体が受け取った NPC と、呼ばれた回数を返す。
+
+    関所は素の関数の署名で引数を組み直して本体へ渡すので、
+    キーワードで渡した `character_instance` も位置で届くことがある（両方を見る）。
+    """
     seen = {}
 
     def orig(*args, **kwargs):
@@ -280,7 +314,8 @@ def call_conv(ctx, target, npc, use_kwargs=False, args_before=3):
         result = ctx.hooks[target](orig, *head, character_instance=npc,
                                    area_achievements=["成した事"],
                                    area_residency={"total_days": 3})
-        got = seen["kwargs"].get("character_instance")
+        got = seen["kwargs"].get("character_instance",
+                                  seen["args"][3] if len(seen["args"]) > 3 else None)
     else:
         result = ctx.hooks[target](orig, *head, npc, "worldview")
         got = seen["args"][3]

@@ -226,6 +226,36 @@ def check_choice_ways(path):
     return problems
 
 
+#: ローダの関所が1枚だけ包む対象と、代わりに使う窓口（TECH.md §3.3.21）。
+#: MOD が自分で包むと、ゲームの更新で名前や引数が変わったときに直す所が MOD の数だけ増える。
+GATE_TARGETS = {
+    "__main__:InstantaleApp.load_game_new": "loads.on(owner, ctx, (loads.LOAD,), ...)",
+    "__main__:InstantaleApp.start_game": "loads.on(owner, ctx, (loads.NEW_GAME,), ...)",
+    "__main__:World.__init__": "loads.on(owner, ctx, (loads.WORLD,), ...)",
+    "__main__:InstantaleApp.elapse_days": "durations.on_days(owner, ctx, ...)（日数を変えるなら claim_days）",
+    "__main__:MovePhaseManager.move_phase": "arrivals.on(owner, ctx, (arrivals.FACILITY,), ...)",
+    "__main__:AreaMoveManager.execute": "arrivals.on(owner, ctx, (arrivals.AREA,), ...)",
+}
+
+
+def check_gate_targets(path):
+    """ローダの関所が包む対象を、MOD が自分で包んでいないか。
+
+    捕まえるのは対象の文字列そのもの（`ctx.wrap(...)` に渡す文字列・対象の定数）。
+    計測 MOD（`"debug": true`）は観察が仕事なので、呼び出し側で外す。
+    """
+    tree, _problem = _parse(path)
+    if tree is None:
+        return []
+    problems = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and node.value in GATE_TARGETS:
+            problems.append((path, "line {}".format(node.lineno),
+                             "{!r} を自分で包んでいる。ローダの窓口 {} に前後の処理を預ける"
+                             "（TECH.md §3.3.21）".format(node.value, GATE_TARGETS[node.value])))
+    return problems
+
+
 def _mod_files(name):
     """mod フォルダの中の .py を全て返す（入口 + 分割した中身）。
 
@@ -643,6 +673,8 @@ def main():
                 mod_problems += check_flag_reads(path)
                 # 選択肢を自分で包む・古い口を使うのは note（`--strict` の CI では問題に数える）
                 mod_notes += check_choice_ways(path)
+                # ローダの関所が包む対象を自分で包むのも同じ扱い
+                mod_notes += check_gate_targets(path)
         # 開発中の mod（9xx。TECH.md §2.6）は**見るが、赤にはしない**。
         # 配布物にも `load_order.json` にも入らないものなので、
         # 書きかけの一本で CI が止まると、リリースする側の検査が使えなくなる。

@@ -95,7 +95,7 @@ import os
 import random
 import sys
 
-from instantale_modloader import sounds, ui
+from instantale_modloader import arrivals, sounds, ui
 from instantale_modloader.state import WorldStore, world_key
 
 # GUI から変えられる値。mod.json の "settings" と同じ名前・同じ既定値。
@@ -766,12 +766,14 @@ def apply(ctx):
             return
         Clock.schedule_once(lambda _dt: reconcile_guarded(why, app), 0)
 
-    @ctx.wrap("__main__:MovePhaseManager.move_phase", required=False, safe=True)
-    def move_phase(orig, self, *args, **kwargs):
-        result = orig(self, *args, **kwargs)
-        # マネージャは app を持っている（`__init__(self, app)`）。走っている app を探すより確か。
-        schedule("move_phase", getattr(self, "app", None))
-        return result
+    def after_move(call):
+        """施設に着いた後（ローダの窓口 `arrivals`。TECH.md §3.3.21）。
+
+        `call.app` はマネージャの app（`__init__(self, app)`）。走っている app を探すより確か。
+        """
+        schedule("move_phase", call.app)
+
+    arrivals.on(os.path.basename(getattr(ctx, "mod_dir", "") or "") or "324_place_bgm", ctx, (arrivals.FACILITY,), after=after_move, write=write)
 
     # ----------------------------------------------------- 見張り
     def start_poll():

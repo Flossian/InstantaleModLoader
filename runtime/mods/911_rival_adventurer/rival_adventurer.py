@@ -37,7 +37,7 @@ import re
 import sys
 import time
 
-from instantale_modloader import (arrivals, choices, frames, jobs, llm, modfacility, modnpc,
+from instantale_modloader import (arrivals, choices, durations, frames, jobs, llm, loads, modfacility, modnpc,
                                   quest_claims, state as loader_state, talk_affinity, ui)
 from instantale_modloader import board as quest_board   # 包みの関数 `board`（掲示板を開く）と名前が重なるので別名
 from instantale_modloader.npcs import npc_stores, save_npcs
@@ -124,8 +124,8 @@ PROFILE_CHARS = 300                    # 頼み文に渡す人物の素性の上
 BUSY_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle",
               "in_conversation", "in_free_input", "in_action_in_conversation")
 
-LOAD_TARGETS = ("__main__:InstantaleApp.load_game_new",
-                "__main__:InstantaleApp.start_game")
+#: ロードの入口（ローダの窓口 `loads`。TECH.md §3.3.21）。
+LOAD_KINDS = (loads.LOAD, loads.NEW_GAME)
 
 #: 声をかける場所（施設の種類）と、ローダの窓口 `arrivals` での優先度（`300_` は 0）。
 GUILD_TYPE = "guild"
@@ -1079,15 +1079,14 @@ def apply(ctx):
                 ask_intro(app, key, rival.get("id"))
 
     # ================================================================ フック
-    @ctx.wrap("__main__:InstantaleApp.elapse_days", required=False, safe=True)
-    def elapse_days(orig, self, *args, **kwargs):
-        """日が進んだ後に見回る。日数の進め方には触らない。"""
-        result = orig(self, *args, **kwargs)
+    def after_days(call):
+        """日が進んだ後に見回る（ローダの日数の関所 `durations.on_days`）。日数の進め方には触らない。"""
         try:
-            tick(self, "days")
+            tick(call.app, "days")
         except Exception:
             ctx.log_exc("rival adventurer: tick after elapse_days failed")
-        return result
+
+    durations.on_days(OWNER, ctx, after=after_days, write=write)
 
     @ctx.wrap("__main__:DisplayQuestChoice.__init__", required=False, safe=True)
     def board(orig, self, app, *args, **kwargs):
@@ -1176,15 +1175,14 @@ def apply(ctx):
             ctx.log_exc("rival adventurer: cannot score the quest end")
         return result
 
-    @ctx.wrap("__main__:MovePhaseManager.move_phase", required=False, safe=True)
-    def move_phase(orig, self, *args, **kwargs):
-        """施設に着いた後。ギルドならライバルの声かけを段取りする。"""
-        result = orig(self, *args, **kwargs)
+    def after_move(call):
+        """施設に着いた後（ローダの窓口 `arrivals`）。ギルドならライバルの声かけを段取りする。"""
         try:
-            decide_approach(getattr(self, "app", None) or ui.find_app())
+            decide_approach(call.app)
         except Exception:
             ctx.log_exc("rival adventurer: cannot arrange the approach")
-        return result
+
+    arrivals.on(OWNER, ctx, (arrivals.FACILITY,), after=after_move, write=write)
 
     @ctx.wrap(STARTER_TARGET, required=False, safe=True)
     def conversation_starter(orig, *args, **kwargs):
@@ -1218,21 +1216,12 @@ def apply(ctx):
         spend_topic(mark)
         return result
 
-    def make_load(target):
-        label = target.rsplit(".", 1)[-1]
+    def on_load(call):
+        worlds.forget()
+        store["reconcile"] = True
+        write("{}: reconcile armed".format(call.label))
 
-        @ctx.wrap(target, required=False, safe=True)
-        def on_load(orig, self, *args, **kwargs):
-            result = orig(self, *args, **kwargs)
-            worlds.forget()
-            store["reconcile"] = True
-            write("{}: reconcile armed".format(label))
-            return result
-
-        return on_load
-
-    for target in LOAD_TARGETS:
-        make_load(target)
+    loads.on(OWNER, ctx, LOAD_KINDS, after=on_load, write=write)
 
     def refresh_choice_buttons(self, _buttons):
         """ロードの後の突き合わせと、掲示板の手当て。"""

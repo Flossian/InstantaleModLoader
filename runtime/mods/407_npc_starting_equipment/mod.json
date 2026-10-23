@@ -2,7 +2,7 @@
   "entry": "npc_starting_equipment.py",
   "api": 1,
   "kind": "feature",
-  "version": "3",
+  "version": "4",
   "author": "MoririnJP",
   "name": {
     "ja": "NPC初期装備",

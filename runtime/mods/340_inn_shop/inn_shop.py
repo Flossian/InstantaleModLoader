@@ -233,6 +233,8 @@ def apply(ctx):
         facilities = list(all_facilities(app))
         if not facilities:
             return
+        # 写しは世界ごとに取り直す（別のセーブを読んだ後に、前の世界の店から写した値を使わない）
+        store["entry"] = None
         for facility in facilities:
             if learn_entry(facility):
                 break

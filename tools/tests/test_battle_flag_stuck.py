@@ -29,6 +29,7 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml                      # noqa: E402
+from instantale_modloader import gates, loads          # noqa: E402
 
 failures = []
 
@@ -114,6 +115,8 @@ def fresh(app):
     module, manifest = load_mod()
     module.ui = FakeUI(app, ml.ui)
     ctx = FakeCtx(OUT_DIR)
+    # ロードの関所はローダの窓口 `loads` が1つの世代に1枚だけ包む。偽の ctx を作り直すたびに忘れさせる
+    gates.reset_all()
     module.apply(ctx)
     return module, ctx, manifest
 
@@ -136,10 +139,12 @@ check("in_boss_battle は記録だけ", module.REPORT_FLAGS == ("in_boss_battle"
       module.REPORT_FLAGS)
 for target in ("__main__:BattleEndManager.end_phase",
                "__main__:BattleEndInFreeAction.end_phase",
-               "__main__:BattleEndInColosseum.end_phase",
-               "__main__:InstantaleApp.load_game_new",
-               "__main__:InstantaleApp.start_game"):
+               "__main__:BattleEndInColosseum.end_phase"):
     check("包む: " + target, target in ctx.hooks, sorted(ctx.hooks))
+# ロードと新規開始の後は自分で包まず、ローダの窓口 `loads` に登録する
+for kind in (loads.LOAD, loads.NEW_GAME):
+    check("窓口 loads に登録する: " + kind,
+          "107_fix_battle_flag_stuck" in loads.owners(kind), loads.owners(kind))
 
 print("闘技場から撤退した後（BattleEndManager）")
 app = App(battle=0, colosseum=1)       # in_battle はゲームが下ろし、闘技場の印だけ残る
@@ -162,8 +167,10 @@ check("立っていない印は書かない",
 print("勝った試合（ゲームが既に下ろしている）")
 app = App(battle=0, colosseum=0)
 module, ctx, _manifest = fresh(app)
+# 注入の時点の行（窓口 loads が関所を立てた1行）は数えない。見るのは試合の後に書いた行
+before = lines()
 ctx.hooks["__main__:BattleEndInColosseum.end_phase"](lambda self: None, Manager(app))
-check("1行も書かない（正しい経路には触れない）", not lines(), lines())
+check("1行も書かない（正しい経路には触れない）", lines() == before, lines()[len(before):])
 
 print("ボス戦の印")
 app = App(battle=1, boss=1)

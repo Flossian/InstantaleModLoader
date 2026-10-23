@@ -1045,7 +1045,7 @@ def wrap_outgoing(ctx, rewrite, *, label="llm", local=True, cloud=True,
             try:
                 if not previous:
                     site = provider_of(orig) + ("_ns" if ns else "")
-                    manager = args[0] if args and isinstance(args[0], str)                         else kwargs.get("manager_name")
+                    manager = args[0] if args and isinstance(args[0], str) else kwargs.get("manager_name")
                     pass_local.manager = manager if isinstance(manager, str) else None
                     try:
                         args, kwargs = safely(

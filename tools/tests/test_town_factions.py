@@ -35,7 +35,7 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml                      # noqa: E402
-from instantale_modloader import hudicons, llm, modfacility, modnpc, talk_summary, ui  # noqa: E402
+from instantale_modloader import durations, hudicons, llm, loads, modfacility, modnpc, talk_summary, ui  # noqa: E402
 
 
 def find_mod(suffix):
@@ -320,6 +320,9 @@ check("レベルは主人公 + 上限を超えない（手配度の分も土地�
       and rules.hunter_target_level(10, 10, 0, 2, floor_level=51, max_above=15) == 25
       and rules.hunter_target_level(72, -40, 5, 2, max_above=15) == 85
       and rules.hunter_target_level(72, -170, 5, 2) == 111)
+check("主人公のレベルが float でも切り捨てて使う（1 に倒さない）",
+      rules.hunter_target_level(72.0, -40, 0, 1, max_above=15) == 76
+      and rules.hunter_target_level(72.9, 10, 0, 1) == 72 and rules.hunter_target_level(True, 10, 0, 1) == 1)
 check("仲間の数で刺客の HP を増やす倍率", rules.party_hp_factor(0, 75) == 1.0 and rules.party_hp_factor(2, 75) == 2.5
       and rules.party_hp_factor(2, 0) == 1.0 and rules.party_hp_factor(-1, 75) == 1.0)
 check("レベルはゲームの上限まで、超えた分は係数の比で強くする",
@@ -918,7 +921,7 @@ ANSWERS[module.MANAGER_TREND] = {"happened": "true", "a": "灰の結社", "b": "
                                  "rumor": "白の教団と灰の結社が遺跡の扱いで話し合いを始めたらしい", "reason": "疫病"}
 before = ledger_of(app)["standing"]["f2"]["score"]
 del ASKED[:]
-ctx.hook(module.DAYS_TARGET)(lambda self, d: self.elapse_days(d), app, 10)
+ctx.hook(durations.DAYS_TARGET)(lambda self, d: self.elapse_days(d), app, 10)
 book = ledger_of(app)
 check("片付けた出来事の街の勢力が上がる", book["standing"]["f2"]["score"] == before + 10, book["standing"])
 check("出来事の来歴に街と出来事の名前", book["history"][-2]["kind"] == "incident"
@@ -926,10 +929,10 @@ check("出来事の来歴に街と出来事の名前", book["history"][-2]["kind
       book["history"][-2:])
 check("終わった出来事を数えた印に残す（進行中は残さない）",
       book["trend"]["incidents"] == {"1": "player", "3": "natural"}, book["trend"]["incidents"])
-ctx.hook(module.DAYS_TARGET)(lambda self, d: self.elapse_days(d), app, 1)
+ctx.hook(durations.DAYS_TARGET)(lambda self, d: self.elapse_days(d), app, 1)
 check("二度は上げない", ledger_of(app)["standing"]["f2"]["score"] == before + 10)
 check("間隔の前は情勢を進めない", not any(m == module.MANAGER_TREND for m, _ in ASKED))
-ctx.hook(module.DAYS_TARGET)(lambda self, d: self.elapse_days(d), app, 30)
+ctx.hook(durations.DAYS_TARGET)(lambda self, d: self.elapse_days(d), app, 30)
 book = ledger_of(app)
 trend_prompt = [msg for m, msg in ASKED if m == module.MANAGER_TREND]
 check("間隔が来たら情勢を1回", len(trend_prompt) == 1, [m for m, _ in ASKED])
@@ -945,12 +948,12 @@ app.world.days_elapsed += 200
 check("日が経てば噂は消える", "各地の噂" not in (notes({"app": app, "npc_id": "30"}) or ""))
 ANSWERS[module.MANAGER_TREND] = {"happened": "false", "a": "", "b": "", "direction": "0",
                                  "rumor": "", "reason": ""}
-ctx.hook(module.DAYS_TARGET)(lambda self, d: self.elapse_days(d), app, 1)
+ctx.hook(durations.DAYS_TARGET)(lambda self, d: self.elapse_days(d), app, 1)
 check("何も起きない回", len(ledger_of(app)["events"]) == 1 and ledger_of(app)["trend"]["last_day"] == 343)
 ANSWERS[module.MANAGER_TREND] = {"happened": "遺跡の扱いをめぐって口論になったが、最後は握手して別れた。",
                                  "a": "灰の結社", "b": "白の教団", "direction": "+1",
                                  "rumor": "灰の結社と白の教団が握手したらしい", "reason": "x"}
-ctx.hook(module.DAYS_TARGET)(lambda self, d: self.elapse_days(d), app, 30)
+ctx.hook(durations.DAYS_TARGET)(lambda self, d: self.elapse_days(d), app, 30)
 check("happened に出来事の文を書いた答えも起きた回として読む", len(ledger_of(app)["events"]) == 2
       and ledger_of(app)["events"][-1]["rumor"].startswith("灰の結社と白の教団"), ledger_of(app)["events"])
 
@@ -980,7 +983,7 @@ start = ledger_of(app)["trend"]["last_day"]
 
 def advance(days):
     del ASKED[:]
-    ctx.hook(module.DAYS_TARGET)(lambda self, d: self.elapse_days(d), app, days)
+    ctx.hook(durations.DAYS_TARGET)(lambda self, d: self.elapse_days(d), app, days)
     return any(m == module.MANAGER_TREND for m, _ in ASKED)
 
 
@@ -1044,7 +1047,7 @@ with io.open(store.path(key), encoding="utf-8") as fh:
     check("書き戻したファイルは BOM なしで揃っている", sorted(json.load(fh)["relations"]) == ["f1|f2", "f1|f3", "f2|f3"])
 ANSWERS[module.MANAGER_TREND] = {"happened": "true", "a": "黒鉄の商会", "b": "灰の結社", "direction": "-1",
                                  "rumor": "黒鉄の商会が灰の結社との取引を絞ったらしい", "reason": "x"}
-ctx.hook(module.DAYS_TARGET)(lambda self, d: self.elapse_days(d), app, 40)
+ctx.hook(durations.DAYS_TARGET)(lambda self, d: self.elapse_days(d), app, 40)
 book = ledger_of(app)
 check("足した勢力の組でも情勢が進む", book["events"] and book["events"][-1]["a"] in ("f2", "f3")
       and book["relations"]["f2|f3"]["stage"] == -1, (book["events"], book["relations"]))
@@ -1170,8 +1173,10 @@ def reapplied():
     """起動し直した（注入し直した）後。台帳は残したまま当て直す。"""
     again = FakeCtx()
     module.apply(again)
-    load_hook = next(fn for fn in again.hooks["__main__:InstantaleApp.load_game_new"]
-                     if getattr(fn, "__name__", "") == "after_load")
+    # ロードの後はローダの窓口 `loads` に預けてある（包むのはローダの1枚。刺客の after_load もそこに乗る）
+    check("起動し直すと刺客もロードの窓口に登録し直す",
+          module.OWNER + ":hunter" in loads.owners(loads.LOAD), loads.owners(loads.LOAD))
+    load_hook = again.hook(loads.TARGETS[loads.LOAD])
     return again, load_hook, again.hook("__main__:BattleEndManager.end_phase")
 
 
@@ -1238,6 +1243,55 @@ check("戦闘の画面で押した時点で立て直す",
 app.in_battle = None
 check("例外が無い（起動し直し）", not ctx2.errors and not ctx3.errors and not ctx4.errors and not ctx5.errors,
       (ctx2.errors, ctx3.errors, ctx4.errors, ctx5.errors))
+
+# 名前だけの一致は、戦った街に居るときに限る（別の戦闘の同じ名前の敵に印を立てない）
+with store.lock:
+    book = store.load(key)
+    rules.hunters_of(book)["91"] = {"faction": "f1", "name": "ユナ", "title": "異端審問官", "town": "7",
+                                     "status": "met", "day": 100}
+    store.save(key)
+app.world.characters["91"] = Character("91", "ユナ")
+app.world.characters["91"].config = {"is_dead": False}
+app.world.characters["91"].current_hp = 300
+ctx5.hook("__main__:BattleStartManager.__init__")(lambda self, *a, **k: None, Phase(app), app, "specific", ["91"])
+ctx6, _load_hook6, end_hook6 = reapplied()
+app.player.current_area = "1"
+app.current_enemy_dict = {"ユナ": Character(None, "ユナ")}
+app.in_battle = "normal"
+choices._store()["providers"][module.OWNER + ":hunter"]["refresh"](app, [])
+end_hook6(game_end_escaped, Phase(app, "escaped"))
+check("別の街の戦闘の同じ名前の敵では立て直さない", ledger_of(app)["hunters"]["91"]["status"] == "fighting",
+      ledger_of(app)["hunters"]["91"])
+app.player.current_area = "7"
+app.current_enemy_dict = {"ユナ": Character(None, "ユナ")}
+choices._store()["providers"][module.OWNER + ":hunter"]["refresh"](app, [])
+end_hook6(game_end_escaped, Phase(app, "escaped"))
+check("戦った街に居れば名前の一致で立て直す", ledger_of(app)["hunters"]["91"]["status"] == "escaped",
+      ledger_of(app)["hunters"]["91"])
+
+# 手配度の記録が無い街。戦闘でゲームが記録を作って下げても、逃げた後は素の平常値（10）へ戻す
+app.player.current_area = "0"
+app.player.area_history.pop("0", None)
+with store.lock:
+    book = store.load(key)
+    rules.hunters_of(book)["90"] = {"faction": "f1", "name": "セラ", "title": "異端審問官", "town": "0",
+                                     "status": "met", "day": 100}
+    store.save(key)
+app.world.characters["90"] = Character("90", "セラ")
+app.world.characters["90"].config = {"is_dead": False}
+app.world.characters["90"].current_hp = 300
+start6 = ctx6.hook("__main__:BattleStartManager.__init__")
+start6(lambda self, *a, **k: None, Phase(app), app, "specific", ["90"])
+app.player.area_history["0"] = {"lawfulness": 0, "achievements": []}     # ゲームが逃走で作って 10 下げた形
+app.current_enemy_dict = {}
+end_hook6(game_end_escaped, Phase(app, "escaped"))
+check("記録の無い街から逃げたら手配度を素の平常値へ戻す", app.player.area_history["0"]["lawfulness"] == 10,
+      app.player.area_history["0"])
+app.player.area_history.pop("0", None)
+app.player.current_area = "7"
+app.in_battle = None
+check("例外が無い（街と記録）", not ctx6.errors, ctx6.errors)
+ctx5, end_hook5 = ctx6, end_hook6       # 後ろの節は ctx5 の包みを呼ぶ。当て直した今の世代に付け替える（窓口の答えは今の世代のもの）
 
 print("[流れ] 仲間の数で刺客の HP を増やす")
 with store.lock:
@@ -1523,7 +1577,7 @@ for fn in ctx.ready:
     fn()
 check("同じ読み込みの間は聞き直さない", len(ASKED) == 1)
 ANSWERS[module.MANAGER_EXTRACT] = EXTRACT_ANSWER
-ctx.hook(module.LOAD_TARGETS[0])(lambda self: None, app)
+ctx.hook(loads.TARGETS[loads.LOAD])(lambda self: None, app)
 check("読み込み直したらすぐもう一度試す", ledger_of(app)["status"] == rules.READY)
 check("例外が無い", not ctx.errors, ctx.errors)
 
@@ -1604,7 +1658,7 @@ record = settings.load(world_key(app))
 record["ADD_ORGANIZATIONS"] = True
 settings.save(world_key(app))
 del ASKED[:]
-ctx.hook(module.LOAD_TARGETS[0])(lambda self: None, app)
+ctx.hook(loads.TARGETS[loads.LOAD])(lambda self: None, app)
 check("設定を入れて読み込み直したら設計を聞く", [m for m, _ in ASKED] == [
     module.MANAGER_EXTRACT, module.MANAGER_DESIGN], [m for m, _ in ASKED])
 check("設計が答えなければ「勢力なし」で固めず、失敗の印", ledger_of(app)["status"] == rules.FAILED)
@@ -1613,7 +1667,7 @@ ANSWERS[module.MANAGER_DESIGN] = {"factions": [
     {"name": "潮騒商会", "kind": "商会", "note": "港を握る", "towns": ["7"]}],
     "relations": [], "peaceful": "false"}
 ANSWERS[module.MANAGER_STANDING] = {"standings": []}
-ctx.hook(module.LOAD_TARGETS[0])(lambda self: None, app)
+ctx.hook(loads.TARGETS[loads.LOAD])(lambda self: None, app)
 check("読み込み直したら試し直して組織を設ける", ledger_of(app)["status"] == rules.READY
       and [f["name"] for f in ledger_of(app)["factions"]] == ["灯守の会", "潮騒商会"], ledger_of(app))
 ANSWERS[module.MANAGER_DESIGN] = {"factions": [], "relations": [], "peaceful": "false"}
@@ -1627,7 +1681,7 @@ settings.save(world_key(app))
 for fn in ctx.ready:
     fn()
 del ASKED[:]
-ctx.hook(module.LOAD_TARGETS[0])(lambda self: None, app)
+ctx.hook(loads.TARGETS[loads.LOAD])(lambda self: None, app)
 check("設計を聞いて組織が2つに満たなければ、読み込み直しても聞き直さない",
       ledger_of(app)["status"] == rules.NONE and ledger_of(app)["organize_asked"] and not ASKED, ASKED)
 
@@ -1644,14 +1698,14 @@ for fn in ctx.ready:
 before = ledger_of(app)["standing"]["f2"]["score"]
 check("作ったときに、終わっている出来事を数えた印に入れる",
       ledger_of(app)["trend"]["incidents"] == {"1": "player", "3": "natural"}, ledger_of(app)["trend"])
-ctx.hook(module.DAYS_TARGET)(lambda self, d: self.elapse_days(d), app, 1)
+ctx.hook(durations.DAYS_TARGET)(lambda self, d: self.elapse_days(d), app, 1)
 check("最初の日数送りでまとめて上げない", ledger_of(app)["standing"]["f2"]["score"] == before
       and not [h for h in ledger_of(app)["history"] if h["kind"] == "incident"], ledger_of(app)["history"])
 revived = json.loads(json.dumps(INCIDENTS))
 revived["events"][0].update(status="active", ended=None, end_by=None)
 with io.open(os.path.join(incidents_dir, key + ".json"), "w", encoding="utf-8") as fh:
     json.dump(revived, fh, ensure_ascii=False)
-ctx.hook(module.DAYS_TARGET)(lambda self, d: self.elapse_days(d), app, 1)
+ctx.hook(durations.DAYS_TARGET)(lambda self, d: self.elapse_days(d), app, 1)
 check("古いセーブで進行中へ戻った出来事は、数えた印を外す（もう一度片付けたら数える）",
       "1" not in ledger_of(app)["trend"]["incidents"], ledger_of(app)["trend"]["incidents"])
 
@@ -1671,7 +1725,7 @@ app.save_data_dict["player_data"]["name"] = "検査の主人公"
 check("前の周回の台帳を、いまの app の主人公と日付で書かない", ledger_of(app)["status"] is None
       and module.MANAGER_STANDING not in [m for m, _ in ASKED], ledger_of(app)["status"])
 ANSWERS[module.MANAGER_EXTRACT] = EXTRACT_ANSWER
-ctx.hook(module.LOAD_TARGETS[0])(lambda self: None, app)
+ctx.hook(loads.TARGETS[loads.LOAD])(lambda self: None, app)
 check("その周回を読み込み直したら作る", ledger_of(app)["status"] == rules.READY)
 
 print("[流れ] 世界の生成が途中で止まった後に、別の世界を遊ぶ")
@@ -1695,6 +1749,7 @@ ctx.hook(module.WORLD_SAVE_TARGET)(lambda file_path, data: None, "C:/x/worlds/�
 check("設定を切って作った次の新しい世界にも、前の印を持ち越さない",
       settings.load("次の世界", fresh=True).get("ENABLED") is not True)
 check("例外が無い（後から足した場面）", not ctx.errors, ctx.errors)
+
 
 print()
 if failures:

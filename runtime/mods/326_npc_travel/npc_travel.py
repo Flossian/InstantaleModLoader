@@ -65,12 +65,12 @@
 ロードのフックの中では動かさず、旗だけ立てる。
 """
 
-import copy
+import os
 import random
 import re
 import sys
 
-from instantale_modloader import choices, state as loader_state, ui
+from instantale_modloader import arrivals, choices, durations, loads, modnpc, state as loader_state, ui
 from instantale_modloader.npcs import npc_stores, save_npcs
 
 from . import travel
@@ -111,20 +111,12 @@ OTHER_SCREEN_SPECS = ("ConversationEndManager", "MovePhaseManager",
                       "QuestChoiceManager")
 
 #: ロードの入口。新規と続きの両方（名前では決められない。GAME.md §1.3）。
-LOAD_TARGETS = ("__main__:InstantaleApp.load_game_new",
-                "__main__:InstantaleApp.start_game")
+#: 包むのはローダの窓口 `loads`（TECH.md §3.3.21）。
+LOAD_KINDS = (loads.LOAD, loads.NEW_GAME)
 
-#: 会話の返答を作る LLM 呼び出し（`403_` と同じ5本）。
-#: 第4引数（index 3）か `character_instance` が会話相手の Character。
-CONVERSATION_TARGETS = (
-    ("scripts.llm.llm_manager:conversation_facilitator", "facilitator"),
-    ("scripts.llm.llm_manager:conversation_facilitator_after_retrieval",
-     "facilitator[retrieval]"),
-    ("scripts.llm.llm_manager:conversation_facilitator_in_quest",
-     "facilitator[quest]"),
-    ("scripts.llm.llm_manager:conversation_starter", "starter"),
-    ("scripts.llm.llm_manager:conversation_starter_in_quest", "starter[quest]"),
-)
+#: 会話の相手の `profile` に旅の文を足す順（ローダの `modnpc` の notes。小さいほど先）。
+#: 自分で包んでいたときの重なり（外側から 321・317・403・311・326・301）を保つ。TECH.md §3.3.21。
+NOTES_PRIORITY = -2
 
 
 def _store():
@@ -300,6 +292,7 @@ def area_name(area, area_id):
 # ============================================================ 本体
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
+    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "326_npc_travel"
     store = _store()
     if store["worlds"] is None:
         store["worlds"] = loader_state.WorldStore(
@@ -838,51 +831,28 @@ def apply(ctx):
         template = AWAY_CONTEXT if trip.get("kind") == travel.AWAY else LOCAL_CONTEXT
         return travel.format_context(template, **fields)
 
-    def with_context(label, args, kwargs):
-        """会話相手が旅の途中なら、`profile` に1文足した浅い複製を渡す（`403_` と同じ手）。"""
-        npc = kwargs.get("character_instance")
-        if npc is None and len(args) >= 4:
-            npc = args[3]
-        app = ui.find_app()
+    def travel_notes(info):
+        """会話相手が旅の途中なら、`profile` に足す1文。
+
+        ローダの `modnpc` の notes から呼ばれる（複製と差し替えは関所が1回だけ行う。TECH.md §5.7）。
+        `profile` が `None`（まだ細部の生成されていない個体）でも足す（関所が空欄と同じに扱う）。
+        """
+        app = info.get("app") or ui.find_app()
+        npc = info.get("character")
         if npc is None or app is None:
-            return args, kwargs
-        npc_id = id_of(npc)
+            return None
+        npc_id = id_of(npc) or str(info.get("npc_id") or "")
         if not npc_id:
             current = getattr(app, "in_conversation", None)
             npc_id = str(current) if current is not None else ""
         _key, trips = ledger(app)
         trip = trips.get(npc_id)
         if not isinstance(trip, dict):
-            return args, kwargs
+            return None
         note = travel_note(app, npc_id, trip)
-        if not note:
-            return args, kwargs
-        base = getattr(npc, "profile", "")
-        if base is None:
-            # まだ細部の生成されていない個体（`level_of_detail` が低い）。
-            # 空欄と同じに扱う（`None` で切ると、初対面の旅人にだけ文脈が付かない）。
-            base = ""
-        if not isinstance(base, str):
-            write("context[{}]: profile is {}; left alone".format(
-                label, type(base).__name__))
-            return args, kwargs
-        clone = copy.copy(npc)
-        clone.profile = (base.rstrip() + "\n\n" + note) if base.strip() else note
-        write("context[{}]: {} +{} chars".format(label, trip.get("name"), len(note)))
-        if "character_instance" in kwargs:
-            new_kwargs = dict(kwargs)
-            new_kwargs["character_instance"] = clone
-            return args, new_kwargs
-        new_args = list(args)
-        new_args[3] = clone
-        return tuple(new_args), kwargs
-
-    def inject(orig, label, args, kwargs):
-        try:
-            args, kwargs = with_context(label, args, kwargs)
-        except Exception:
-            ctx.log_exc("npc travel: injection failed")
-        return orig(*args, **kwargs)
+        if note:
+            write("context[{}]: {} +{} chars".format(info.get("site"), trip.get("name"), len(note)))
+        return note or None
 
     # ------------------------------------------------------------ ギルドの一覧
     # 同じ街の中に出ている人が一覧から漏れていたら足す。
@@ -994,52 +964,33 @@ def apply(ctx):
         listing["armed"] = False
         return orig(self, choice_text, *args, **kwargs)
 
-    @ctx.wrap("__main__:InstantaleApp.elapse_days", required=False, safe=True)
-    def elapse_days(orig, self, days, *args, **kwargs):
-        """日が進んだ後に見回る。日数の進め方には触らない。
+    def after_days(call):
+        """日が進んだ後に見回る（ローダの日数の関所 `durations.on_days`）。日数の進め方には触らない。
 
-        数えるのは暦の前後の差。この包みは日数送りの関所より外側に載るので、引数の `days` は
-        他の MOD（`307_` / `314_` / `315_` / `325_`）が差し替える前の素の値（`316_` と同じ理由）。
+        数えるのは暦の前後の差（`call.moved`。暦が読めなければ関所が渡した日数）。
         """
-        before = ui.game_day(self)
-        result = orig(self, days, *args, **kwargs)
         try:
-            after = ui.game_day(self)
-            if before is not None and after is not None:
-                count = max(0, int(after) - int(before))
-            else:
-                count = int(days) if isinstance(days, (int, float)) and not isinstance(days, bool) else 0
-            patrol(self, max(0, count), "days elapsed")
+            patrol(call.app, call.moved, "days elapsed")
         except Exception:
             ctx.log_exc("npc travel: patrol after elapse_days failed")
-        return result
 
-    @ctx.wrap("__main__:MovePhaseManager.move_phase", required=False, safe=True)
-    def move_phase(orig, self, *args, **kwargs):
-        """プレイヤーが施設を移った後。待たせていた帰還があれば果たす。"""
-        result = orig(self, *args, **kwargs)
+    durations.on_days(owner, ctx, after=after_days, write=write)
+
+    def after_move(call):
+        """プレイヤーが施設を移った後（ローダの窓口 `arrivals`）。待たせていた帰還があれば果たす。"""
         try:
-            app = getattr(self, "app", None) or ui.find_app()
-            patrol(app, 0, "player moved")
+            patrol(call.app, 0, "player moved")
         except Exception:
             ctx.log_exc("npc travel: patrol after move failed")
-        return result
 
-    def make_load(target):
-        label = target.rsplit(".", 1)[-1]
+    arrivals.on(owner, ctx, (arrivals.FACILITY,), after=after_move, write=write)
 
-        @ctx.wrap(target, required=False, safe=True)
-        def on_load(orig, self, *args, **kwargs):
-            result = orig(self, *args, **kwargs)
-            worlds.forget()
-            store["reconcile"] = True
-            write("{}: reconcile armed".format(label))
-            return result
+    def on_load(call):
+        worlds.forget()
+        store["reconcile"] = True
+        write("{}: reconcile armed".format(call.label))
 
-        return on_load
-
-    for target in LOAD_TARGETS:
-        make_load(target)
+    loads.on(owner, ctx, LOAD_KINDS, after=on_load, write=write)
 
     def refresh_choice_buttons(self, _buttons):
         """ロードの後の突き合わせと、冒険者の一覧の手当て。"""
@@ -1062,15 +1013,10 @@ def apply(ctx):
     # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
     choices.provide(ctx, screen, refresh=refresh_choice_buttons)
 
-    def make_conversation(target, label):
-        @ctx.wrap(target, required=False)
-        def conversation(orig, *args, **kwargs):
-            return inject(orig, label, args, kwargs)
-
-        return conversation
-
-    for target, label in CONVERSATION_TARGETS:
-        make_conversation(target, label)
+    # 会話の5関数へ足す文は、ローダの `modnpc` の notes に預ける（自分で包まない）。
+    # 足す順は前に自分で包んでいたときの重なりと同じ（`NOTES_PRIORITY`）。
+    modnpc.install(ctx, write=write)
+    modnpc.register(owner, modnpc.ANY, notes=travel_notes, priority=NOTES_PRIORITY, write=write)
 
     ctx.log("npc travel: installed (chance {}%/month, stay {}, affinity >= {}, "
             "away {}..{} days, local {} days, rest {} days, state {})".format(

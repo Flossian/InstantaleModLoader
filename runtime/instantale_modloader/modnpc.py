@@ -475,6 +475,7 @@ def register(owner, npc_id=None, *, key=None, fields=None, prompt=None,
     差し替える」手順を4本とも自前で持っていて（確認済み）、
     外側の層から順に複製の複製ができ、繋ぐ順は `load_order.json` の並びでしか決まらなかった。
     ここに寄せると複製は1つ、順は宣言、ログは1行になる。
+    2026-10-22 に `301_` / `326_` を含む6本をここへ乗せ替えた（TECH.md §3.3.21）。
 
     同じ `(owner, npc_id)` の層は差し替える。
     注入し直すたびに `apply()` が走る（TECH.md §3.5）ので、
@@ -2103,15 +2104,22 @@ def apply_notes(info, stack, write=None):
     if not text:
         return 0, []
     character = info.get("character")
+    base = getattr(character, "profile", "")
+    if base is None:
+        # まだ細部の生成されていない個体（`level_of_detail` が低い）。空欄と同じに扱う
+        base = ""
+    if not isinstance(base, str):
+        # 読めない形の素性は捨てずに素通しする（文だけに置き換えると元の素性が頼み文から消える。
+        # 乗せ替える前の 301 / 311 / 317 / 321 / 326 / 403 も足さずに渡していた。TECH.md §3.3.21）
+        _warn_once(info.get("site"), "the profile of {} is {}; notes dropped".format(
+            info.get("npc_id"), type(base).__name__), write)
+        return 0, []
     try:
         clone = copy.copy(character)
     except Exception as exc:
         _warn_once(info.get("site"), "cannot copy {} ({}); notes dropped".format(
             type(character).__name__, type(exc).__name__), write)
         return 0, []
-    base = getattr(character, "profile", "")
-    if not isinstance(base, str):
-        base = ""
     clone.profile = (base.rstrip() + "\n\n" + text) if base.strip() else text
     args = info.get("args")
     if isinstance(args, dict):

@@ -132,13 +132,15 @@ runtime/instantale_modloader/
     modnpc.py     MOD だけが持つ NPC と、正規 NPC への層（§5.7）
     modfacility.py  MOD だけが持つ施設（街に建てて MOD が管理する。§5.8）
     durations.py  ゲームの期間（宿泊1回の長さなど）の窓口。変える MOD が答えを置き、合わせたい MOD が聞く（§3.3.2）。
-                  日数送り（elapse_days）を包むのもここ1枚で、当てる MOD は望みを出すだけ（§3.3.3）
+                  日数送り（elapse_days）を包むのもここ1枚で、当てる MOD は望みを出すだけ（§3.3.3）。日数が進んだ前後の処理もここで呼ぶ（on_days。§3.3.21）
     prices.py     値段の2つ。ゲームが決めている額（宿屋の部屋など）の窓口と宿代の段・関所（§3.3.4）と、
                   アイテムの売買額を組む関所（式1枚＋段N枚。書く地点8つを1枚だけ包む。§5.9）
     combat.py     戦闘の数の窓口。人物ごとの装備の攻撃力・防御力を、装備を持つ MOD が置き、戦闘を組む MOD が聞く。敵ごとの体力・一撃の率も（§3.3.5）
     equipment.py  装備欄の窓口。仲間の品の出し入れと身に着けている品を、装備欄を持つ MOD が答え、
                   仲間の装備を扱う MOD が聞く（§3.3.6）
-    arrivals.py   施設に着いた場面で誰が話しかけるかを、会話を始める MOD どうしで分け合う窓口（§3.3.7）
+    arrivals.py   施設に着いた場面で誰が話しかけるかを、会話を始める MOD どうしで分け合う窓口（§3.3.7）。施設・街に着いた前後の処理もここで呼ぶ（§3.3.21）
+    loads.py      ロード・新規開始・世界の組み立ての前後の処理を、1枚だけ包んで呼ぶ窓口（§3.3.21）
+    gates.py      関所（1枚だけ包み、MOD の前後の処理を順に呼ぶ）の共通部品。loads / durations / arrivals が使う（§3.3.21）
     talk_affinity.py  会話で上げられる好感度の上限の窓口。相手を持つ MOD が狭め、会話で好感度を動かす MOD が聞く（§3.3.8）
     talk_summary.py  会話を閉じるときのゲームの要約の頼みに、MOD の判定の項目を相乗りさせる窓口。包みはここ1組（§3.3.16）
     wanted.py     手配の重さの数え方と、全域手配の線・追手の戦闘の終わり・店の値の圧の窓口。追手を出す MOD が線を置いて終わりを知らせ、手配を動かす MOD が聞く。手配を数える MOD が店の値の率を置き、店主の応じ方を決める MOD が引き受ける（§3.3.9）
@@ -1352,8 +1354,9 @@ def days_note(app, days, granted):     # 決まった後に必ず来る（勝っ
 | `orig` は必ず呼ぶ | 日数以外の後始末（日次処理）まで落とさない |
 | 決まった1行は**望みを出した MOD のログ**へ | `days: 90 -> 14 (307_… decided 14; 314_… wanted 30)` |
 
-日数が進んだ**後**の処理（`325_` の、期日が来た委託を開く）は関所では肩代わりできない。
-そこだけは MOD が自分で `elapse_days` を包む（日数には触らない）。
+日数が進んだ**前後**の処理（`325_` の、期日が来た委託を開く・`330_` の家賃の精算など）も同じ関所の中で呼ぶ。
+MOD は `durations.on_days(owner, ctx, before=fn, after=fn)` で渡し、`elapse_days` を自分で包まない（§3.3.21）。
+前の処理は日数を決める前に、後の処理は `orig` の後に来る。後の処理は `call.granted`（実際に渡した日数）と `call.moved`（暦の前後の差）を読める。
 
 計測（200番台）は関所より後＝外側に当たるので、
 **MOD が差し替える前の生の日数**が録れる性質は変わらない（`217_` / `218_` / `231_`）。
@@ -1557,6 +1560,9 @@ arrivals.withdraw(app, owner)                # 始める前に取りやめたと
 申し出る MOD は必ず `install` も呼ぶこと（包みの印は前の世代のものも残るので、`offer` だけだと番号が進まず、申し出が次の到着へ持ち越される）。
 優先する側が会話を諦めたとき（手が空くのを待ちきれなかったなど）は `withdraw` で下げる。下げないと、譲った側もその到着で話さない。
 
+着いた**前後の処理**（施設なら `move_phase`、街なら `AreaMoveManager.execute`）も、この窓口が1枚だけ包んで呼ぶ（§3.3.21）。
+`arrivals.on(owner, ctx, (arrivals.FACILITY,), after=fn)` で登録すると番号の包みも立つ（`install` を呼んだのと同じ）。
+
 #### 3.3.8 会話で上げられる好感度の上限も窓口で分け合う（`talk_affinity`）
 
 会話の中身で好感度を上下させる MOD は、全員に同じ上限を使う。
@@ -1595,6 +1601,9 @@ rate, by = wanted.shop_pressure(app)        # 率を読む側。誰も置いて�
 wanted.take_shop_pressure(owner, ctx)       # 率を引き受けて値段に掛ける側。apply() の中
 taker = wanted.shop_pressure_taker()        # 率を置いた側が確かめる。引き受けた持ち主 / None
 ```
+
+引き受ける持ち主が2つ以上あるときは、持ち主の名前の並び（`sorted`）で先頭の、まだ生きているものが引き受ける。
+同梱で引き受けるのは `341_` だけ。
 
 `hunt` は `{"by", "outcome", "difficulty", "here", "total"}`。
 `outcome` はゲームの `BattleEndManager(app, end_type)` の `end_type`（勝ち `'won'`・逃げ `'escaped'`。GAME.md §2.10）をそのまま渡す。
@@ -1735,6 +1744,9 @@ choices.ready(app)         # 人物が揃っているか（ロードの途中は
 包みは後から読み込んだ MOD ほど外側に重なるので、`refresh` / `intercept` は後から読み込んだ MOD が先、
 `after` は先に読み込んだ MOD が先。
 `trim` は全部の `refresh` の後で、`refresh` と同じく後から読み込んだ MOD が先。
+ローダの部品（持ち主が `loader:` で始まる。`loader:modfacility`）は、どの起動でも MOD より先に読み込んだものとして並ぶ。
+`modfacility` は1回目の起動では MOD（330・331）の apply の中から、2回目からは MOD の前の関所の立て直し（§3.5）から預けられるので、
+末尾に付けると起動ごとに呼ぶ順が変わっていた（v1.18.0 のレビュー）。
 
 | 窓口が引き受けること | 中身 |
 |---|---|
@@ -2056,6 +2068,49 @@ save_lookup.in_world(app, *keys)              # 本来の世界の辞書をキ�
 | `covered` は問われるたびに台帳（`ctx.patches()`）を見て、`targets` と保存の守りが全部その MOD の包みとして当たっているときだけ持ち主を返す。直す側も差し替える前に同じ `covered` を見る | `required=False` の包みは当たらなくても黙って抜ける。名乗りだけ残ると、`340_` が直っていない場面に入口を出し、素のゲームと同じ `KeyError` になる。守りが無いまま差し替えると骨格に進みが焼かれる |
 
 置き場は `sys` の属性（`_instantale_save_lookup`）。検査は `tools\tests\test_save_only_entities.py`。
+
+#### 3.3.21 何本もの MOD が前後に処理を挟む関数は、ローダが1枚だけ包む（`loads` / `durations.on_days` / `arrivals.on`）
+
+ロードの後・日数が進んだ後・施設や街に着いた後に処理を挟む MOD は十数本あり、どれも同じ関数を自分で包んでいた
+（2026-10-22 の台帳で `elapse_days` 13本・`load_game_new` 12本・`move_phase` 10本・`World.__init__` 9本。VERIFICATION.md §3.113）。
+ゲームの更新で名前や引数が変わると、直す所が包む MOD の数だけある。
+包むのはローダの1枚にし、MOD は前後の処理だけを渡す。仕組みの共通部品は `instantale_modloader/gates.py`。
+
+```python
+loads.on(owner, ctx, (loads.LOAD, loads.NEW_GAME), after=fn)        # ロードと新規開始の後
+loads.on(owner, ctx, (loads.WORLD,), before=fn, after=fn)           # 世界を組み立てる前後（call.save_data）
+durations.on_days(owner, ctx, before=fn, after=fn)                  # 日数が進む前後（call.granted / call.moved）
+arrivals.on(owner, ctx, (arrivals.FACILITY,), after=fn)             # 施設に着いた後
+arrivals.on(owner, ctx, (arrivals.AREA,), before=fn, after=fn, always=True)   # 街を移る前後
+fn(call)    # gates.Call: call.app / call.obj（包んだ関数の self）/ call.args / call.result / call.error / call.memo
+```
+
+| 種類 | 包む関数 | 載る所 |
+|---|---|---|
+| `loads.LOAD` / `NEW_GAME` / `WORLD` | `InstantaleApp.load_game_new` / `start_game` / `World.__init__` | 新しい窓口 `loads` |
+| 日数 | `InstantaleApp.elapse_days` | 日数送りの関所（§3.3.3）。前の処理は日数を決める前、後の処理は `orig` の後 |
+| `arrivals.FACILITY` | `MovePhaseManager.move_phase` | 到着の番号を数える包み（§3.3.7）。前後の処理の時点で番号は進んでいる |
+| `arrivals.AREA` | `AreaMoveManager.execute` | 窓口 `arrivals` |
+
+| 決まり | 理由 |
+|---|---|
+| 包みは1つの世代につき1枚。登録は持ち主ごとに1つ（同じ持ち主は差し替える） | 注入し直すたびに `apply()` が走る |
+| `before` は登録の新しい順、`after` は古い順（登録は `apply()` の順） | MOD が自分で包んでいたときの重なりと同じ。後から当てた MOD ほど外側に載っていた |
+| `before` の戻り値は同じ持ち主の `after` に `call.memo` で渡る | 前の暦・前の土地・開いた窓のように、前後で控えを受け渡す形が多かった |
+| `after` は `orig` が返ったときだけ。`always=True` なら投げたときも来る（`call.error`） | `try/finally` で包んでいた形（ロード中の印・移動中の窓・関係の一時値） |
+| 前後の処理の例外は握って記録し、残りの MOD と `orig` を止めない | 前は `safe=True` で包む MOD と包まない MOD が混ざっていた |
+| 前後の処理は引数も戻り値も変えない | 変えるものは用途ごとの窓口で決める（日数は `claim_days`、値段は `prices`）。素通しでない包み（`random_quest_generator` の差し込みなど）は MOD に残す |
+| 登録した ctx が用済み（`ctx.superseded()`）なら呼ばない | 切った MOD・前の世代の登録が `sys` に残っても効かない |
+
+同じ関数を probe（200番台）が包むのはそのまま（観察が仕事なので外側から直に見る）。
+`tools/check_mods.py` は、probe 以外の MOD がこれらの対象を自分で包んでいたら note を出す（CI の `--strict` では問題）。
+
+偽の ctx を作り直して `apply()` し直す検査は、2回目の ctx に包みが渡らない（1世代に1枚のため）。
+`apply()` の前に `gates.reset_all()` を呼ぶ。本番は1回の boot に ctx が1つなので、世代と ctx は同じ意味になる。
+
+会話の5関数で相手の `profile` に文を足す形（301 / 311 / 317 / 321 / 326 / 403）も、同じ理由で `modnpc` の `notes` へ寄せた（§5.7）。
+複製は関所が1回だけ作る。足す順は自分で包んでいたときの重なり（外側から 321・317・403・311・326・301）を、各 MOD の `NOTES_PRIORITY`（−6〜−1）で宣言している。
+既存の `notes`（336 / 338 / 339 / 911。優先度 0）はその後に続く。
 
 ### 3.4 まだ現れていない対象を狙う（保留と当て直し）
 
@@ -2457,7 +2512,7 @@ GUI の1行に収めると「JSON を手で書く欄」になり、コードを�
 | `apply(ctx)` に渡る `ctx` | §3.1 / §3.6 / §3.8 / §3.11 |
 | `mod.json` の鍵 | §3.1 / §3.2 / §3.8 / §3.9 / §3.12 |
 | §5 の共通部品（`ui` / `frames` / `llm` / `state` / `jobs` / `modnpc` / `modfacility` / `prices` / `sounds` / `imagegen`） | §5 |
-| 使い方を書いた窓口（`durations` / `prices` / `combat` / `equipment` / `arrivals` / `talk_affinity` / `talk_summary` / `ids` / `npcs` / `saves` / `wanted` / `guards` / `defeat` / `board` / `confinement` / `choices` / `hudicons` / `quest_claims` / `holdings` / `save_lookup`） | §3.2.3 / §3.3 |
+| 使い方を書いた窓口（`durations` / `prices` / `combat` / `equipment` / `arrivals` / `loads` / `talk_affinity` / `talk_summary` / `ids` / `npcs` / `saves` / `wanted` / `guards` / `defeat` / `board` / `confinement` / `choices` / `hudicons` / `quest_claims` / `holdings` / `save_lookup`） | §3.2.3 / §3.3 |
 
 これ以外は内部で、予告なく変わる。
 `patch.py` の `_defer_if_*` や `__init__.py` の `_order()` のような
@@ -3731,12 +3786,13 @@ MOD の NPC の素データは保存の直前に隠すので、加入したま�
 - **`unload` は剥がす前に MOD の NPC を降ろす**（§3.10）。関所だけ消えると次の保存で焼かれる。降ろすと登録簿は空になるので、読み直さずに注入し直したときは `spawn` がこの周回の控えの写しから組む（宣言時の初期値に戻さない）
 
 `npc_id` に `modnpc.ANY`（`"*"`）を渡すと**誰と話していても効く層**になる。
-`311_` / `317_` / `321_` / `403_` は「相手を複製して `profile` に足し、引数を差し替える」手順を
-4本とも自前で持っている（確認済み。外側の層から複製の複製ができ、繋ぐ順は
-`load_order.json` の並びでしか決まらない）。`notes` はその手順を関所に寄せるための口で、
+`301_` / `311_` / `317_` / `321_` / `326_` / `403_` は「相手を複製して `profile` に足し、引数を差し替える」手順を
+それぞれ自前で持っていた（外側の層から複製の複製ができ、繋ぐ順は適用順でしか決まらなかった）。
+`notes` はその手順を関所に寄せるための口で、6本とも乗せ替えた（§3.3.21）。
 順は `priority`（小さいほど先。同じなら id 指定 → `ANY` → 積んだ順）、同じ文章が2本から来たら1つに畳み、
-足すのは会話の5関数（`NOTES_SITES`。要約や雇用の頼み文には足さない。層ごとに `sites=` で変えられる）。
-4本の移行は別作業で、**`notes` の口はオフラインでしか通していない**。
+足すのは会話の5関数（`NOTES_SITES`。要約や雇用の頼み文には足さない。層ごとに `sites=` で変えられる。`321_` は第一声だけ）。
+乗せ替えた6本の順は、自分で包んでいたときの重なりを `NOTES_PRIORITY`（−6〜−1）で保っている。
+`notes` で層を積む MOD は、先に `modnpc.install(ctx, write=write)` を呼ぶ（関所を立てる MOD がほかに無い構成でも効くように）。
 
 フックは `fn(info)` の1つ形で、`info` は `{"site", "app", "npc_id", "character", "args", "owner"}`。
 戻り値に意味があるのは2つだけで、`detail` は `True` で本体へ通し、`image` は `False` で本体を止める。

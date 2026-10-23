@@ -649,14 +649,15 @@ def apply(ctx):
     # ------------------------------------------------------------------ フック
     arrivals.install(ctx, write)
 
-    @ctx.wrap("__main__:MovePhaseManager.move_phase", required=False)
-    def move_phase(orig, self, *args, **kwargs):
+    # 施設を移る前後はローダの窓口 `arrivals` から呼ばれる（TECH.md §3.3.21）。
+    def before_move(call):
         state["move_count"] += 1
         if EVENT_MODE == "narration":
             # 情景描写は move_phase の *内側* で呼ばれる。
             # だから印は先に置く。
             state["pending"] = {"at": time.monotonic(), "move_no": state["move_count"]}
-        result = orig(self, *args, **kwargs)
+
+    def after_move(call):
         state["pending"] = None
         if EVENT_MODE == "conversation":
             try:
@@ -668,7 +669,8 @@ def apply(ctx):
             except Exception:
                 # イベントの失敗で移動そのものを巻き添えにしない。
                 ctx.log_exc("arrival event: launch failed")
-        return result
+
+    arrivals.on(ARRIVAL_OWNER, ctx, (arrivals.FACILITY,), before=before_move, after=after_move, write=write)
 
     @ctx.wrap("scripts.llm.llm_manager:narrator", required=False)
     def narrator(orig, *args, **kwargs):
@@ -808,7 +810,7 @@ def apply(ctx):
             app = frames.arg(args, kwargs, "app", 0) or find_app()
             _partner, entry = ui.conversation_partner(getattr(app, "buttons", None))
             native = ui.spec_args(entry) if entry is not None else None
-            if isinstance(end_text, str) and native and len(native) >= 3                     and end_text != native[2]:
+            if isinstance(end_text, str) and native and len(native) >= 3 and end_text != native[2]:
                 setattr(self, MOD_CLOSE_ATTR, True)
         except Exception:
             pass

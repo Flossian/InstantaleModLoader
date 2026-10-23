@@ -3,7 +3,7 @@
 
 服役の流れは GAME.md §2.20「逮捕・裁判・服役」（`238_probe_prison` の実機）。
 """
-from instantale_modloader import choices, combat, equipment, guards, items, ui
+from instantale_modloader import choices, combat, equipment, guards, items, loads, ui
 
 from . import common, jailbreak
 
@@ -272,16 +272,19 @@ def install(env):
             ctx.log_exc("crime incentive: cannot drop the jailbreak marks at the game over")
         return result
 
-    @ctx.wrap("__main__:InstantaleApp.load_game_new", required=False, safe=True)
-    def jail_after_load(orig, self, *args, **kwargs):
-        """ロード。決行の戦闘の最中のセーブで戦闘の続きに戻ったら、即席の品を持たせ直し、始末を待つ。"""
-        jail["battle"] = None                   # 前の周回の決行は持ち越さない
-        result = orig(self, *args, **kwargs)
+    def jail_before_load(call):
+        """ロードの前と後（ローダの窓口 `loads`。TECH.md §3.3.21）。前の周回の決行は持ち越さない。"""
+        jail["battle"] = None
+
+    def jail_after_load(call):
+        """決行の戦闘の最中のセーブで戦闘の続きに戻ったら、即席の品を持たせ直し、始末を待つ。"""
         try:
-            resume_break(self)
+            resume_break(call.obj)
         except Exception:
             ctx.log_exc("crime incentive: cannot resume the break out after the load")
-        return result
+
+    loads.on(env.owner + ":prison", ctx, (loads.LOAD,), before=jail_before_load,
+             after=jail_after_load, write=write)
 
     def resume_break(app):
         saved = breaking(app)

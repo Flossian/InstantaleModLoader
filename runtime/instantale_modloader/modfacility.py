@@ -2748,8 +2748,6 @@ def _install(ctx, write):
     # 選択肢の組み直しと押下は包まない。窓口 `choices` の宣言型の口に預ける（2026-10-21。TECH.md §5.8）。
     # 自分で包んでいた頃は `orig` の後に足して塗り直していたので、窓口の `claim` で外せず、塗り直しが2度走った
     provide_choices(ctx, write)
-    targets.append(REFRESH_TARGET)
-    targets.append(PRESS_TARGET)
 
     @ctx.wrap(BG_CURRENT_TARGET, required=False, safe=True)
     def background_current(orig, self, *args, **kwargs):

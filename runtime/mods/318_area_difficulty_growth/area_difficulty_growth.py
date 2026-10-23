@@ -123,12 +123,13 @@
 世界名だけの控えは、見つかったときに遊んでいる主人公の周回へ移す（ローダの `adopt`）。
 """
 
+import os
 import random
 import sys
 import threading
 import time
 
-from instantale_modloader import ui
+from instantale_modloader import loads, ui
 from instantale_modloader.state import UNKNOWN_WORLD, WorldStore
 
 LOG_BASENAME = "area_difficulty.log"
@@ -491,8 +492,7 @@ def apply(ctx):
         return None
 
     # ------------------------------------------------------------ フック
-    @ctx.wrap("__main__:World.__init__", required=False, safe=True)
-    def world_loaded(orig, self, save_data_dict, app, *args, **kwargs):
+    def world_loaded(call):
         """セーブを読み込んだ。**その場で世界じゅうの土地を寄せ直す。**
 
         難易度はセーブに残らないので、ここが素へ戻った状態の始点になる。
@@ -502,7 +502,7 @@ def apply(ctx):
         世界の鍵はセーブの辞書から取る。
         この時点では `app.world` がまだ埋まっていない（いま作っている最中）。
         """
-        result = orig(self, save_data_dict, app, *args, **kwargs)
+        self, save_data_dict, app = call.obj, call.save_data, call.app
         try:
             key = worlds.playthrough(app, save_data_dict)
             if key and key != UNKNOWN_WORLD:
@@ -510,7 +510,8 @@ def apply(ctx):
                 write("load: 周回 {!r} を寄せ直した（{}件）".format(key, touched))
         except Exception:
             ctx.log_exc("area difficulty: ロード直後に寄せ直せなかった")
-        return result
+
+    loads.on(os.path.basename(getattr(ctx, "mod_dir", "") or "") or "318_area_difficulty_growth", ctx, (loads.WORLD,), after=world_loaded, write=write)
 
     @ctx.wrap("__main__:QuestEndManager.execute", required=False, safe=True)
     def quest_end(orig, self, *args, **kwargs):

@@ -21,7 +21,7 @@ import random
 import sys
 import time
 
-from instantale_modloader import arrivals, choices, combat, llm, modfacility, npcs, ui
+from instantale_modloader import arrivals, choices, combat, llm, loads, modfacility, npcs, ui
 
 ARRIVAL_PRIORITY = 20           # 300（0）・911（10）より先に呼び止める
 CLAIM_PRIORITY = 50             # 刺客との会話は「受けて立つ」だけ（窓口 `choices` の `claim`）
@@ -605,8 +605,12 @@ def install(env):
             area_id = str(ui.area_id_of(area))
             record = ui.area_record(getattr(app, "player", None), area_id)
             faction = rules.faction_by_id(ledger, row.get("faction")) or {}
+            wanted = ui.lawfulness_of(record)
+            if wanted is None:
+                # 記録が無い街。戦闘でゲームが記録を作って下げても、逃げた後に素の平常値へ戻せるように控える
+                wanted = rules.NORMAL_LAWFULNESS
             state["fight"] = {"npc": str(npc_id), "faction": row.get("faction"), "area": area_id,
-                              "wanted": ui.lawfulness_of(record), "faction_name": faction.get("name", ""),
+                              "wanted": wanted, "faction_name": faction.get("name", ""),
                               "title": row.get("title") or "刺客", "name": row.get("name") or ""}
             state["fight"].update(raise_for_party(app, npc_id))
             key = worlds.playthrough(app)
@@ -664,7 +668,7 @@ def install(env):
         found.max_hp = base
         if isinstance(getattr(found, "original_max_hp", None), int):
             found.original_max_hp = base
-        if not won and isinstance(current, (int, float)) and not isinstance(current, bool)                 and isinstance(top, (int, float)) and top > 0:
+        if not won and isinstance(current, (int, float)) and not isinstance(current, bool) and isinstance(top, (int, float)) and top > 0:
             found.current_hp = max(1, int(round(base * max(0.0, min(1.0, current / float(top))))))
 
     def fighting_hunter(app, enemy):
@@ -721,25 +725,30 @@ def install(env):
         if not present:
             return
         ledger = env.ensure(app) or {}
+        here = str(ui.area_id_of(ui.current_area(app)))
         for npc_id, row in list((ledger.get("hunters") or {}).items()):
             if not isinstance(row, dict) or row.get("status") != rules.HUNTER_FIGHTING:
                 continue
             saved = row.get("fight")
-            if not isinstance(saved, dict) or not (str(npc_id) in present or (row.get("name") or "") in present):
+            if not isinstance(saved, dict):
+                continue
+            # 名前だけの一致は、戦った街に居るときに限る（別の戦闘の同じ名前の敵に印を立てない）
+            by_name = (row.get("name") or "") in present and str(saved.get("area")) == here
+            if not (str(npc_id) in present or by_name):
                 continue
             state["fight"] = dict(saved, npc=str(npc_id))
             write("hunter: {} fight re-armed ({}; wanted {})".format(npc_id, why, saved.get("wanted")))
             return
 
-    @ctx.wrap("__main__:InstantaleApp.load_game_new", required=False, safe=True)
-    def after_load(orig, self, *args, **kwargs):
-        result = orig(self, *args, **kwargs)
+    def after_load(call):
+        """ロードの後（ローダの窓口 `loads`。TECH.md §3.3.21）。"""
         state["fight"] = None             # 読み込む前の周回の印を持ち越さない
         try:
-            rearm(self, "load")
+            rearm(call.obj, "load")
         except Exception:
             ctx.log_exc("town factions: cannot re-arm the hunter's fight after the load")
-        return result
+
+    loads.on(owner, ctx, (loads.LOAD,), after=after_load, write=write)
 
     def battle_end(orig, self, *args, **kwargs):
         try:
@@ -824,16 +833,15 @@ def install(env):
             env.notify(key)
         screen.say(app, WIN_TEXT.format(faction=faction.get("name", ""), title=row.get("title") or "刺客"))
 
-    @ctx.wrap("__main__:MovePhaseManager.move_phase", required=False, safe=True)
-    def move_phase(orig, self, *args, **kwargs):
-        result = orig(self, *args, **kwargs)
+    def after_move(call):
+        """施設に着いた後（ローダの窓口 `arrivals`。TECH.md §3.3.21）。"""
         try:
-            app = getattr(self, "app", None) or ui.find_app()
-            if app is not None:
-                arrived(app)
+            if call.app is not None:
+                arrived(call.app)
         except Exception:
             ctx.log_exc("town factions: hunter arrival failed")
-        return result
+
+    arrivals.on(owner, ctx, (arrivals.FACILITY,), after=after_move, write=write)
 
     return note
 

@@ -1507,7 +1507,7 @@ def lawfulness_of(entry):
     """
     if entry is None:
         return None
-    value = entry.get(LAWFULNESS_KEY) if isinstance(entry, dict)         else getattr(entry, LAWFULNESS_KEY, None)
+    value = entry.get(LAWFULNESS_KEY) if isinstance(entry, dict) else getattr(entry, LAWFULNESS_KEY, None)
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
     return int(value)

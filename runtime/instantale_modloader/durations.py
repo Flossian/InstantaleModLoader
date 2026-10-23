@@ -21,6 +21,12 @@ MOD ごとに `elapse_days` を包むのをやめ、ローダが1枚だけ包ん
     当てる側            durations.install(ctx, write)
                         durations.claim_days(owner, wish, note=fn, write=write)
 
+日数が進んだ**前後の処理**（家賃の精算・見回り・手配の時効など）も、同じ関所の中で呼ぶ
+（十数本の MOD が `elapse_days` を各自で包んでいた。TECH.md §3.3.3・§3.3.21）。
+
+    前後の処理          durations.on_days(owner, ctx, before=fn, after=fn)
+                        fn(call)   # call.granted（実際に渡した日数）/ call.moved（暦の進み）…
+
 同じ種類を2本の MOD が置いたら、後から置いたほうが勝ち、その旨をログに残す
 （§3.3.1 と同じ「後勝ち」。順序は適用順で決まるが、どちらも変えるつもりで
 入れているなら、それは両方入れた結果でしかない）。
@@ -32,7 +38,7 @@ MOD ごとに `elapse_days` を包むのをやめ、ローダが1枚だけ包ん
 """
 import sys
 
-from . import log_exc
+from . import gates, log_exc
 
 
 #: 関所を立てた行を最後に書いた中身。同じなら繰り返さない。
@@ -352,6 +358,59 @@ DAYS_TARGET = "__main__:InstantaleApp.elapse_days"
 _CLAIMS_ATTR = "_instantale_durations_claims"
 _GATE_ATTR = "_instantale_durations_gate"
 
+#: 日数が進んだ前後の処理（`on_days`）。包みは日数の関所と同じ1枚で、登録簿だけ別に持つ。
+DAYS = "days"
+DAYS_HOOKS = gates.Gate("durations.days", DAYS_TARGET, "_instantale_durations_days_hooks")
+gates.track_install_attr(_GATE_ATTR)
+
+
+def on_days(owner, ctx, before=None, after=None, always=False, write=None):
+    """日数が進む前後の処理を登録し、関所を立てる。`apply()` の中で呼ぶ。同じ持ち主の登録は差し替える。
+
+    `fn(call)` に渡る `call`（`gates.Call`）の属性:
+
+    | 属性 | |
+    |---|---|
+    | `call.app` / `call.obj` | app |
+    | `call.days` | ゲームが渡した日数（素の値。徒歩 90 など） |
+    | `call.granted` | 関所が決めて `orig` へ渡した日数（`claim_days` の望みが無ければ `days` のまま） |
+    | `call.day_before` / `call.day_after` | 前後の暦（`ui.game_day`）。読めなければ None |
+    | `call.moved` | 暦が実際に進んだ日数（前後の差。暦が読めなければ `granted`。0 以上） |
+
+    `before` は日数を決める前（`claim_days` の望みより先）に、`after` は `orig` が返った後に来る。
+    前後の処理は日数を変えない（変えるなら `claim_days`）。
+    """
+    DAYS_HOOKS.on(owner, ctx, before=before, after=after, always=always, write=write)
+    return install(ctx, write)
+
+
+def off_days(owner):
+    """日数の前後の処理の登録を下げる。"""
+    return DAYS_HOOKS.withdraw(owner)
+
+
+def _game_day(app):
+    try:
+        from . import ui
+        return ui.game_day(app)
+    except Exception:
+        return None
+
+
+def _measure(call):
+    """`orig` の後の暦と、進んだ日数を `call` に書く。"""
+    call.day_after = _game_day(call.app)
+    before, after = call.day_before, call.day_after
+    if before is not None and after is not None:
+        try:
+            call.moved = max(0, int(after) - int(before))
+            return
+        except (TypeError, ValueError):
+            pass
+    granted = call.granted
+    number = isinstance(granted, (int, float)) and not isinstance(granted, bool)
+    call.moved = max(0, int(granted)) if number else 0
+
 
 def _claims():
     """`{持ち主: {"wish", "note", "write", "seq"}}`。`sys` に置いて注入し直しをまたぐ。"""
@@ -511,16 +570,29 @@ def install(ctx, write=None):
         渡す数を差し替えるだけで、暦の進め方も日次処理もゲームのまま
         （`orig` は必ず呼ぶ。呼ばずに戻ると日数以外の後始末まで落とす）。
         0 以下の回は誰にも聞かない（ゲームが 0 を渡した回に日数を作らない）。
+        前後の処理（`on_days`）は、日数を決める前と `orig` の後に呼ぶ。
         """
-        granted = days
-        try:
-            if _claims() and isinstance(days, (int, float)) \
-                    and not isinstance(days, bool) and int(days) > 0:
-                granted = resolve_days(self, int(days), write=write)
-        except Exception:
-            log_exc("durations: cannot decide the days")
+        hooked = bool(DAYS_HOOKS.entries())
+        call = gates.Call(DAYS, self, (days,) + args, kwargs, app=self, days=days,
+                          granted=days, day_before=_game_day(self) if hooked else None,
+                          day_after=None, moved=0)
+
+        def invoke():
             granted = days
-        return orig(self, granted, *args, **kwargs)
+            try:
+                if _claims() and isinstance(days, (int, float)) \
+                        and not isinstance(days, bool) and int(days) > 0:
+                    granted = resolve_days(self, int(days), write=write)
+            except Exception:
+                log_exc("durations: cannot decide the days")
+                granted = days
+            call.granted = granted
+            result = orig(self, granted, *args, **kwargs)
+            if hooked:
+                _measure(call)
+            return result
+
+        return DAYS_HOOKS.run(call, invoke)
 
     ctx.wrap(DAYS_TARGET, required=False)(elapse_days)
     setattr(sys, _GATE_ATTR, {"generation": generation, "targets": [DAYS_TARGET]})

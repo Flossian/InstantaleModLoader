@@ -155,7 +155,7 @@ import copy
 import datetime
 import sys
 
-from instantale_modloader import (choices, confinement, durations, frames, holdings, llm, modfacility,
+from instantale_modloader import (choices, confinement, durations, frames, holdings, llm, loads, modfacility,
                                   modnpc, npcs, prices, ui)
 from instantale_modloader.state import (UNKNOWN_WORLD, WorldStore, playthrough_key,
                                         playthrough_key_of_dict)
@@ -2055,10 +2055,9 @@ def apply(ctx):
     state["owner"] = choices.provide(ctx, screen, refresh=refresh_choices, after=after_refresh, offer=offer,
                                      screens={OFFICE_SCREEN: office_screen}, labels=OUR_LABEL_PREFIXES)
 
-    @ctx.wrap("__main__:World.__init__", required=False, safe=True)
-    def world_loaded(orig, self, save_data_dict, app, *args, **kwargs):
+    def world_loaded(call):
         """セーブを読み込んだ直後、契約中の建物をこの世界へ建て直す。"""
-        result = orig(self, save_data_dict, app, *args, **kwargs)
+        self, save_data_dict, app = call.obj, call.save_data, call.app
         try:
             key = playthrough_key_of_dict(save_data_dict, None) or playthrough_key(app)
             if key and key != UNKNOWN_WORLD:
@@ -2082,7 +2081,8 @@ def apply(ctx):
                     key, len(bucket_of(key).get("contracts") or [])))
         except Exception:
             ctx.log_exc("real estate: cannot rebuild the buildings on load")
-        return result
+
+    loads.on(OWNER, ctx, (loads.WORLD,), after=world_loaded, write=write)
 
     def quiet_shopping_flag(app):
         """保管庫を開いたまま保存するときは、売買中の旗を下ろして保存する。
@@ -2153,19 +2153,19 @@ def apply(ctx):
                 except Exception:
                     ctx.log_exc("real estate: cannot restore in_shopping")
 
-    @ctx.wrap("__main__:InstantaleApp.elapse_days", required=False)
-    def elapse_days(orig, self, days, *args, **kwargs):
-        """日付が進んだら家賃を精算する。日付を動かすのはここ1箇所（GAME.md §2.16）。
+    def after_days(call):
+        """日付が進んだら家賃を精算する。日付を動かすのは `elapse_days` の1箇所（GAME.md §2.16）。
 
+        ローダの日数の関所（`durations.on_days`。TECH.md §3.3.21）から呼ばれる。
         滞在の最中に進んだぶんは `check_leases` が見送る（精算は `end_stay` で1回）。
         宿屋の宿泊の最中も見送る（精算は `vacation_start` が `execute` を抜けてから1回）。
         """
-        result = orig(self, days, *args, **kwargs)
         try:
-            check_leases(self, "elapse", idle=True)
+            check_leases(call.app, "elapse", idle=True)
         except Exception:
             ctx.log_exc("real estate: cannot settle the rent")
-        return result
+
+    durations.on_days(OWNER, ctx, after=after_days, write=write)
 
     # ------------------------------------------------------ 滞在の描写
     def player_name(app):

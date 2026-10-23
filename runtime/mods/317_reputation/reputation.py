@@ -90,14 +90,13 @@ NPC がどう感じるかは NPC の側（性格・手配度との関係）が�
 この MOD は `World.__init__` を包まないので、鍵は `app` から引いてよい。
 """
 
-import copy
 import datetime
 import os
 import random
 import sys
 import time
 
-from instantale_modloader import frames, jobs, llm, ui
+from instantale_modloader import arrivals, durations, frames, jobs, llm, modnpc, ui
 from instantale_modloader.state import WorldStore, world_filename
 
 from . import material
@@ -108,6 +107,9 @@ USE_EPITHET = True        # 二つ名を編纂し、注入にも載せるか
 EPITHET_CHARS = 8         # 二つ名の上限（全角）。既定8は実機の所感（MODS.md `317_reputation` の「二つ名が編み直される契機」）
 EPITHET_RANDOM_LENGTH = True  # 編纂のたびに狙う長さを揺らすか（下限3〜上限）
 IN_CONVERSATION = True    # 会話5関数に注入するか
+#: 会話の相手の `profile` に評判を足す順（ローダの `modnpc` の notes。小さいほど先）。
+#: 自分で包んでいたときの重なり（外側から 321・317・403・311・326・301）を保つ。TECH.md §3.3.21。
+NOTES_PRIORITY = -5
 IN_NARRATION = False      # 情景描写（narrator）に注入するか
 MIN_DEEDS = 2             # 評判が立つ最低件数（achievements ＋ 完了した依頼）
 INJECT_DETAIL = "brief"   # 注入の長さ。brief=1文 / detailed=3文まで
@@ -682,6 +684,7 @@ def apply(ctx):
     state = store["state"]
 
     write = ctx.logger(LOG_BASENAME)
+    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "317_reputation"
     worlds = store["worlds"].rebind(ctx, write)
     data_lock = worlds.lock
 
@@ -1039,99 +1042,46 @@ def apply(ctx):
         return reputation_block(record, material.player_name(app),
                                 material.area_name(app, area_id), epithet)
 
-    def describe_area_args(args, kwargs):
+    def describe_area_args(arguments):
         """ゲームが会話に渡している `area_*` の形（1回だけ記録する）。
 
         「ゲームは既に `area_achievements` を渡している」を実機で確かめるための1行。
-        値は長いので形だけ出す。
+        値は長いので形だけ出す。`arguments` は modnpc の関所が名前で束ねた引数（`info["args"]`）。
         """
         parts = []
         for name in ("area_residency", "area_achievements"):
             parts.append("{}={}".format(
-                name, frames.repr_value(kwargs.get(name))[:80]))
-        parts.append("位置引数{}個".format(len(args)))
+                name, frames.repr_value(arguments.get(name))[:80]))
         return " / ".join(parts)
 
-    def with_reputation(label, args, kwargs):
-        """会話5関数の第4引数（NPC）を浅く複製し、`profile` に評判を足す。
+    def reputation_notes(info):
+        """会話5関数の相手の `profile` に足す評判。
 
+        ローダの `modnpc` の notes から呼ばれる（複製と差し替えは関所が1回だけ行う。TECH.md §5.7）。
         素通りするときも黙らない。
         理由がログに残らないと、効いていないことに気付けない（`311_` と同じ）。
         """
-        npc = kwargs.get("character_instance")
-        if npc is None and len(args) >= 4:
-            npc = args[3]
-        if npc is None:
-            note_inject("{}: character_instance が無い（args={}, kwargs={}）".format(
-                label, len(args), sorted(kwargs)))
-            return args, kwargs
-        app = ui.find_app()
+        if not IN_CONVERSATION:
+            return None
+        label = info.get("site")
+        app = info.get("app") or ui.find_app()
         if app is None:
             note_inject("{}: app が見つからない".format(label))
-            return args, kwargs
+            return None
         if LOG_MATERIAL:
-            note_once("args:" + label,
-                      "{} の素材引数: {}".format(label,
-                                                describe_area_args(args, kwargs)))
+            note_once("args:{}".format(label),
+                      "{} の素材引数: {}".format(label, describe_area_args(info.get("args") or {})))
         addition = block_for(app)
         if not addition:
             note_inject("{}: この土地の評判はまだ無い".format(label))
-            return args, kwargs
-        base = getattr(npc, "profile", "")
-        if base is None:
-            base = ""
-        if not isinstance(base, str):
-            note_inject("{}: profile が {} なので足せない".format(
-                label, type(base).__name__))
-            return args, kwargs
-        try:
-            clone = copy.copy(npc)
-        except Exception as exc:
-            note_inject("{}: {} を複製できない（{}）".format(
-                label, type(npc).__name__, type(exc).__name__))
-            return args, kwargs
-        clone.profile = (base.rstrip() + "\n\n" + addition
-                         if base.strip() else addition)
+            return None
         note_inject("{}: profile に{}字を足した".format(label, len(addition)))
-        if "character_instance" in kwargs:
-            merged = dict(kwargs)
-            merged["character_instance"] = clone
-            return args, merged
-        merged = list(args)
-        merged[3] = clone
-        return tuple(merged), kwargs
+        return addition
 
-    def inject(orig, label, args, kwargs):
-        """引数を組み直してから元の関数へ。元の関数は必ず1回だけ呼ぶ。"""
-        if IN_CONVERSATION:
-            try:
-                args, kwargs = with_reputation(label, args, kwargs)
-            except Exception:
-                ctx.log_exc("reputation: 会話への注入に失敗した")
-        return orig(*args, **kwargs)
-
-    @ctx.wrap("scripts.llm.llm_manager:conversation_starter", required=False)
-    def conversation_starter(orig, *args, **kwargs):
-        return inject(orig, "starter", args, kwargs)
-
-    @ctx.wrap("scripts.llm.llm_manager:conversation_starter_in_quest",
-              required=False)
-    def conversation_starter_in_quest(orig, *args, **kwargs):
-        return inject(orig, "starter[quest]", args, kwargs)
-
-    @ctx.wrap("scripts.llm.llm_manager:conversation_facilitator", required=False)
-    def conversation_facilitator(orig, *args, **kwargs):
-        return inject(orig, "facilitator", args, kwargs)
-
-    @ctx.wrap("scripts.llm.llm_manager:conversation_facilitator_after_retrieval",
-              required=False)
-    def conversation_facilitator_after_retrieval(orig, *args, **kwargs):
-        return inject(orig, "facilitator[retrieval]", args, kwargs)
-
-    @ctx.wrap("scripts.llm.llm_manager:conversation_facilitator_in_quest",
-              required=False)
-    def conversation_facilitator_in_quest(orig, *args, **kwargs):
-        return inject(orig, "facilitator[quest]", args, kwargs)
+    # 会話5関数へ足す文は、ローダの `modnpc` の notes に預ける（自分で包まない）。
+    # 足す順は前に自分で包んでいたときの重なりと同じ（`NOTES_PRIORITY`）。
+    modnpc.install(ctx, write=write)
+    modnpc.register(owner, modnpc.ANY, notes=reputation_notes, priority=NOTES_PRIORITY, write=write)
 
     # ---------------------------------------------------------- 情景描写（任意）
     @ctx.wrap("scripts.llm.llm_manager:narrator", required=False)
@@ -1168,23 +1118,21 @@ def apply(ctx):
         return orig(*args, **kwargs)
 
     # -------------------------------------------------- 素材を照合する場面（3つ）
-    @ctx.wrap("__main__:AreaMoveManager.execute", required=False, safe=True)
-    def area_arrival(orig, self, choice_text=None, *args, **kwargs):
-        result = orig(self, choice_text, *args, **kwargs)
+    # 着いた後・日数が進んだ後はローダの窓口（`arrivals` / `durations.on_days`。TECH.md §3.3.21）
+    def area_arrival(call):
         try:
-            check(getattr(self, "app", None) or ui.find_app(), "到着(土地)")
+            check(call.app, "到着(土地)")
         except Exception:
             ctx.log_exc("reputation: 土地への到着で失敗した")
-        return result
 
-    @ctx.wrap("__main__:MovePhaseManager.move_phase", required=False, safe=True)
-    def facility_arrival(orig, self, *args, **kwargs):
-        result = orig(self, *args, **kwargs)
+    def facility_arrival(call):
         try:
-            check(getattr(self, "app", None) or ui.find_app(), "到着(施設)")
+            check(call.app, "到着(施設)")
         except Exception:
             ctx.log_exc("reputation: 施設への到着で失敗した")
-        return result
+
+    arrivals.on(owner, ctx, (arrivals.AREA,), after=area_arrival, write=write)
+    arrivals.on(owner, ctx, (arrivals.FACILITY,), after=facility_arrival, write=write)
 
     @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.toggle_character_sheet_visibility",
               required=False, safe=True)
@@ -1199,14 +1147,13 @@ def apply(ctx):
             ctx.log_exc("reputation: 人物欄の開閉で失敗した")
         return result
 
-    @ctx.wrap("__main__:InstantaleApp.elapse_days", required=False, safe=True)
-    def elapse_days(orig, self, days=None, *args, **kwargs):
-        result = orig(self, days, *args, **kwargs)
+    def after_days(call):
         try:
-            check(self, "日数経過")
+            check(call.app, "日数経過")
         except Exception:
             ctx.log_exc("reputation: 日数の経過で失敗した")
-        return result
+
+    durations.on_days(owner, ctx, after=after_days, write=write)
 
     ctx.log("reputation: installed (会話={} 情景描写={} 二つ名={} 最低件数={} 長さ={})"
             .format(IN_CONVERSATION, IN_NARRATION, USE_EPITHET, MIN_DEEDS,

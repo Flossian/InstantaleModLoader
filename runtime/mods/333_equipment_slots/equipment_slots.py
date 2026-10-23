@@ -24,7 +24,7 @@ import os
 import re
 import sys
 
-from instantale_modloader import choices, combat, equipment, frames, state, ui
+from instantale_modloader import choices, combat, equipment, frames, loads, state, ui
 
 from . import slots as rules
 
@@ -1515,9 +1515,8 @@ def apply(ctx):
     for _target in ("ItemEquipManager.equip_item", "ItemUnequipManager.unequip_item"):
         ctx.wrap("__main__:" + _target, required=False, safe=True)(resync_after_native)
 
-    @ctx.wrap("__main__:World.__init__", required=False, safe=True)
-    def world_loaded(orig, self, save_data_dict=None, *args, **kwargs):
-        """ロード・新規開始。前の周回の装備欄の品を必ず捨てる。
+    def world_loaded(call):
+        """ロード・新規開始。前の周回の装備欄の品を必ず捨てる（世界を組み立てた後。ローダの窓口 `loads`）。
 
         装備中の品は装備欄の辞書にしか居ないが、セーブには書き出しの時点で合流済み。
         同じ世界・同じ主人公のロードでも捨てる。残すと、セーブの後で手に入れて装備した品を
@@ -1526,7 +1525,7 @@ def apply(ctx):
         ここでは `app` から周回の鍵を引かない（`app` の辞書と `player` はまだ前の周回を指していることがある）。
         鍵は次に窓を組むときに `refresh_container` が引く。
         """
-        result = orig(self, save_data_dict, *args, **kwargs)
+        save_data_dict = call.save_data
         count = forget_containers()
         # 印は次に窓を組むときに今の周回で立て直す（空の辞書を合流させても何も足さない）
         setattr(sys, CONTAINER_ATTR + "_playthrough", None)
@@ -1534,7 +1533,8 @@ def apply(ctx):
         if count:
             write("load ({!r}): dropped {} item(s) of the previous play".format(
                 state.playthrough_key_of_dict(save_data_dict, None), count))
-        return result
+
+    loads.on(owner, ctx, (loads.WORLD,), after=world_loaded, write=write)
 
     @ctx.wrap("scripts.save_codec:write_obfuscated_json_file", safe=True)
     def write_save(orig, file_path, data, *args, **kwargs):
@@ -1750,16 +1750,20 @@ def apply(ctx):
     equipment.declare(equipment.EQUIPPED, npc_equipped, owner=owner, write=write)
     equipment.declare(equipment.GEAR, worn_of, owner=owner, write=write)
 
-    def restore_buttons_after(orig, self, *args, **kwargs):
-        """ロード・タイトルへ戻るの後で、隠したアイコンのボタンを戻す。"""
-        result = orig(self, *args, **kwargs)
+    def buttons_back(_call=None):
         app = ui.find_app()
         if app is not None:
             schedule(lambda: ensure_buttons(app))
+
+    def restore_buttons_after(orig, self, *args, **kwargs):
+        """タイトルへ戻るの後で、隠したアイコンのボタンを戻す。"""
+        result = orig(self, *args, **kwargs)
+        buttons_back()
         return result
 
-    for _target in ("load_game_new", "return_to_title"):
-        ctx.wrap("__main__:InstantaleApp." + _target, required=False, safe=True)(restore_buttons_after)
+    ctx.wrap("__main__:InstantaleApp.return_to_title", required=False, safe=True)(restore_buttons_after)
+    # ロードの後はローダの窓口 `loads` から（TECH.md §3.3.21）
+    loads.on(owner + ":buttons", ctx, (loads.LOAD,), after=buttons_back, write=write)
 
     def after_refresh(app):
         """選択肢の組み直しの後（ローダの窓口 `choices` の `after`。組み直しは自分で包まない。TECH.md §3.3.14）。"""

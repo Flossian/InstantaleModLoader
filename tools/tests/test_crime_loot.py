@@ -19,7 +19,7 @@ MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
-from instantale_modloader import llm, ui  # noqa: E402
+from instantale_modloader import llm, loads, ui  # noqa: E402
 
 
 def load_loot():
@@ -70,7 +70,9 @@ class App(object):
 app = App()
 lines = []
 ctx = FakeCtx()
-env = types.SimpleNamespace(ctx=ctx, write=lines.append, screen=None, cfg=Cfg(),
+# owner は本物の env（common.py）と同じく MOD のフォルダ名。窓口への登録の持ち主に使う
+env = types.SimpleNamespace(ctx=ctx, owner="336_crime_overhaul",
+                            write=lines.append, screen=None, cfg=Cfg(),
                             area_difficulty=lambda a: 1, quest_reward=lambda d: 100,
                             refresh_gold=lambda a: None)
 saved = (ui.find_app, ui.gold_of, llm.watch_aliases)
@@ -82,6 +84,9 @@ try:
     facilitator = next(fn for target, fn in ctx.hooks.items()
                        if target.endswith(loot.FACILITATOR_TARGETS[0]))
     shop = ctx.hooks["__main__:ShoppingStartManagerRemake.execute"]
+    # ロードは自分で包まず、ローダの窓口 `loads` に登録する。ここで呼ぶのは窓口の関所
+    check("ロードの前の処理を窓口 loads に登録する",
+          "336_crime_overhaul:loot" in loads.owners(loads.LOAD), loads.owners(loads.LOAD))
     load = ctx.hooks["__main__:InstantaleApp.load_game_new"]
 
     print("閉じ忘れ")

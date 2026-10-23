@@ -72,8 +72,9 @@ instantale.py:885   physical_integrity              = get_max_physical_integrity
 見えていない経路を推測で書き換えないため。
 """
 
+import os
 
-from instantale_modloader import frames, patch, ui
+from instantale_modloader import frames, loads, patch, ui
 
 LOG_BASENAME = "new_character_level.log"
 
@@ -256,30 +257,30 @@ def apply(ctx):
     # 直さない。
     # 見えていない経路を推測で書き換えると、
     # 次に読む人がどちらが効いたのか分からなくなる。
-    @ctx.wrap("__main__:InstantaleApp.start_game", required=False, safe=True)
-    def start_game(orig, self, *args, **kwargs):
+    # 開始処理の後はローダの窓口 `loads` から呼ばれる（`always=True`。前は try/finally。TECH.md §3.3.21）。
+    def after_start(call):
         try:
-            return orig(self, *args, **kwargs)
-        finally:
-            try:
-                player = frames.attr(self, "player")
-                if player in (None, frames.MISSING):
-                    player = frames.attr(ui.find_app(), "player")
-                level = frames.attr(player, "experience_level")
-                point = frames.attr(player, "experience_point")
-                stamina = frames.attr(player, "max_physical_integrity")
-                if (isinstance(level, int) and level > level_min
-                        and point in (0, None, 0.0) and stamina == stamina_at_min):
-                    write("WARN after start_game the player is still level {} "
-                          "(experience_point={}, max_physical_integrity={}). "
-                          "Something sets the level after __init__ - report this "
-                          "line".format(level, point, stamina))
-                else:
-                    write("after start_game: level={} experience_point={} "
-                          "max_hp={} max_physical_integrity={} (fixed {} so far)"
-                          .format(frames.repr_value(level),
-                                  frames.repr_value(point),
-                                  frames.repr_value(frames.attr(player, "max_hp")),
-                                  frames.repr_value(stamina), state["fixed"]))
-            except Exception:
-                ctx.log_exc("new character level: post-start check failed")
+            player = frames.attr(call.obj, "player")
+            if player in (None, frames.MISSING):
+                player = frames.attr(ui.find_app(), "player")
+            level = frames.attr(player, "experience_level")
+            point = frames.attr(player, "experience_point")
+            stamina = frames.attr(player, "max_physical_integrity")
+            if (isinstance(level, int) and level > level_min
+                    and point in (0, None, 0.0) and stamina == stamina_at_min):
+                write("WARN after start_game the player is still level {} "
+                      "(experience_point={}, max_physical_integrity={}). "
+                      "Something sets the level after __init__ - report this "
+                      "line".format(level, point, stamina))
+            else:
+                write("after start_game: level={} experience_point={} "
+                      "max_hp={} max_physical_integrity={} (fixed {} so far)"
+                      .format(frames.repr_value(level),
+                              frames.repr_value(point),
+                              frames.repr_value(frames.attr(player, "max_hp")),
+                              frames.repr_value(stamina), state["fixed"]))
+        except Exception:
+            ctx.log_exc("new character level: post-start check failed")
+
+    loads.on(os.path.basename(getattr(ctx, "mod_dir", "") or "") or "123_fix_new_character_level", ctx, (loads.NEW_GAME,),
+             after=after_start, always=True, write=write)

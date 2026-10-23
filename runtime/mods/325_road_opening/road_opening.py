@@ -106,7 +106,7 @@ import random
 import sys
 import time
 
-from instantale_modloader import choices, durations, ui
+from instantale_modloader import choices, durations, loads, ui
 from instantale_modloader.state import UNKNOWN_WORLD, WorldStore
 
 
@@ -475,6 +475,7 @@ def apply(ctx):
 
     log_path = ctx.out_path(LOG_BASENAME)
     write = ctx.logger(LOG_BASENAME)
+    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "road_opening"
     worlds = store["worlds"].rebind(ctx, write)
     screen = ui.Screen(ctx, write, tag="road opening", mark=MARK)
     save_soon = ui.saver(ctx, write, "road opening")
@@ -1376,10 +1377,9 @@ def apply(ctx):
             return None
         return on_press
 
-    @ctx.wrap("__main__:World.__init__", required=False, safe=True)
-    def world_loaded(orig, self, save_data_dict, app, *args, **kwargs):
+    def world_loaded(call):
         """セーブを読み込んだ直後、開いた道をこの世界へ当て直す（`318_` / `321_` と同型）。"""
-        result = orig(self, save_data_dict, app, *args, **kwargs)
+        self, save_data_dict, app = call.obj, call.save_data, call.app
         try:
             key = worlds.playthrough(app, save_data_dict)
             if key and key != UNKNOWN_WORLD:
@@ -1387,7 +1387,8 @@ def apply(ctx):
                 apply_roads(self, key, "load")
         except Exception:
             ctx.log_exc("road opening: cannot re-apply the roads on load")
-        return result
+
+    loads.on(owner, ctx, (loads.WORLD,), after=world_loaded, write=write)
 
     def refresh_choice_buttons(self, _buttons):
         """集落の選択肢に戻ったら、待っている移動を起こす（保険の経路。`307_` と同じ）。"""
@@ -1558,23 +1559,20 @@ def apply(ctx):
         write("road: the road to {!r} takes {} day(s)".format(
             record.get("target_name"), granted))
 
-    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "road_opening"
     durations.claim_days(owner, days_wish, note=days_note, write=write)
     durations.install(ctx, write)
 
-    @ctx.wrap("__main__:InstantaleApp.elapse_days", required=False)
-    def elapse_days(orig, self, days, *args, **kwargs):
+    def after_days(call):
         """日数が進んだ後に、期日が来た委託を開く（`check_commissions`）。
 
-        日数そのものには触らない（それは関所の仕事）。
-        後処理は `orig` の**後**にしか置けないので、この包みだけは残る。
+        日数そのものには触らない（それは関所の `claim_days`）。後処理は同じ関所の `on_days` に預ける。
         """
-        result = orig(self, days, *args, **kwargs)
         try:
-            check_commissions(self, "days")
+            check_commissions(call.app, "days")
         except Exception:
             ctx.log_exc("road opening: cannot check the commissions")
-        return result
+
+    durations.on_days(owner, ctx, after=after_days, write=write)
 
     @ctx.wrap("scripts.llm.llm_manager_world_generate:random_quest_generator",
               required=False)

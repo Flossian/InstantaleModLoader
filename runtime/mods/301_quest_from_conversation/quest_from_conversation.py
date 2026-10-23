@@ -94,13 +94,12 @@ mod を import はしない。
 どちらが外側でも成り立つように作る（`talking_npc_id` が相手の id の引き方を持つ）。
 """
 
-import copy
 import os
 import sys
 import threading
 import time
 
-from instantale_modloader import choices, confinement, frames, ui
+from instantale_modloader import arrivals, choices, confinement, frames, modnpc, ui
 from instantale_modloader.state import (PLAYTHROUGH_SEP, UNKNOWN_WORLD, other_playthroughs,
                                         playthrough_key, world_filename, world_key)
 
@@ -248,6 +247,10 @@ NPC_MEMORY_CHARS = 800
 # 切ると、片付けた後でも依頼人は「まだ出発していないのか」と言い続ける。
 TELL_COMPLETED_QUESTS = True
 
+#: 会話の相手の `profile` に片付いた依頼を足す順（ローダの `modnpc` の notes。小さいほど先）。
+#: 自分で包んでいたときの重なり（外側から 321・317・403・311・326・301）を保つ。TECH.md §3.3.21。
+NOTES_PRIORITY = -1
+
 # 一度に伝える件数。新しいものから数える。
 # プロンプトは実測で既に 6,200〜8,100 字ある（GAME.md §2.25）ので、
 # 依頼の履歴でそこを埋めない。
@@ -315,6 +318,7 @@ def apply(ctx):
     INJECT_TTL = 300.0
 
     write = ctx.logger(LOG_BASENAME)
+    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "301_quest_from_conversation"
 
     # 選択肢・spec の読み取り・画面の塗り替え・会話の閉じ方は
     # `instantale_modloader.ui` に集約してある（`300_` / `302_` と共有）。
@@ -1109,7 +1113,7 @@ def apply(ctx):
                 else:
                     dropped.append(entry.get("text"))
                 continue
-            if back is None and is_native_button(entry)                     and spec_cls_name(entry) == ui.SAFE_CLS:
+            if back is None and is_native_button(entry) and spec_cls_name(entry) == ui.SAFE_CLS:
                 back = entry               # ゲーム自身の「やめる」
                 continue
             dropped.append(entry.get("text") if isinstance(entry, dict) else entry)
@@ -1304,29 +1308,21 @@ def apply(ctx):
     #: ボタンを出さなかった理由。同じ理由が続く間は書かない。
     note_skip = ctx.logger(LOG_BASENAME, dedup=True, tag="no offer:")
 
-    def with_quest_facts(label, args, kwargs):
-        """NPC の浅い複製の `profile` に、片付いた依頼の事実を足した引数を組み直す。
+    def quest_notes(info):
+        """会話5関数の相手の `profile` に足す、片付いた依頼の事実。
 
-        会話5関数は先頭4引数の並びが同じなので、ここ1つで足りる（GAME.md §2.25）。
-
-        **複製するのは受け取ったオブジェクト**で、控えておいた元の人物ではない。
-        `311_` が外側に居ると、届くのはあちらが人物像を足した複製になる。
-        元から組み直すと、その層を捨てることになる。
-
+        ローダの `modnpc` の notes から呼ばれる（複製と差し替えは関所が1回だけ行う。TECH.md §5.7）。
         素通りするときも黙っては降りない。
         理由が残らないと、注入が効いていないことに気付けない。
         """
-        npc = kwargs.get("character_instance")
-        if npc is None and len(args) >= 4:
-            npc = args[3]
-        if npc is None:
-            note_inject("{}: no character_instance (args={}, kwargs={})".format(
-                label, len(args), sorted(kwargs)))
-            return args, kwargs
-        app = find_app()
+        if not TELL_COMPLETED_QUESTS:
+            return None
+        label = info.get("site")
+        npc = info.get("character")
+        app = info.get("app") or find_app()
         if app is None:
             note_inject("{}: no running app".format(label))
-            return args, kwargs
+            return None
         npc_id = talking_npc_id(app, npc)
         # 名前の切り詰めは 40 字に揃える。
         # `remember_client` が控える名前も `current_talk` 経由で 40 字なので、
@@ -1337,44 +1333,15 @@ def apply(ctx):
         if not npc_id and not npc_name:
             note_inject("{}: cannot name the character ({})".format(
                 label, type(npc).__name__))
-            return args, kwargs
+            return None
         addition = completed_block(app, npc_id, npc_name)
         if not addition:
             note_inject("{}: no completed quest for {!r} ({})".format(
                 label, npc_name, npc_id))
-            return args, kwargs
-        base = getattr(npc, "profile", "")
-        if base is None:
-            base = ""
-        if not isinstance(base, str):
-            note_inject("{}: profile is {}".format(label, type(base).__name__))
-            return args, kwargs
-        try:
-            clone = copy.copy(npc)
-        except Exception as exc:
-            note_inject("{}: cannot copy {} ({})".format(
-                label, type(npc).__name__, type(exc).__name__))
-            return args, kwargs
-        clone.profile = (base.rstrip() + "\n\n" + addition
-                         if base.strip() else addition)
+            return None
         note_inject("{}: {!r} ({}) +{} chars into profile".format(
             label, npc_name, npc_id, len(addition)))
-        if "character_instance" in kwargs:
-            merged = dict(kwargs)
-            merged["character_instance"] = clone
-            return args, merged
-        merged = list(args)
-        merged[3] = clone
-        return tuple(merged), kwargs
-
-    def inject(orig, label, args, kwargs):
-        """引数を組み直してから元の関数へ。元の関数は必ず1回だけ呼ぶ。"""
-        if TELL_COMPLETED_QUESTS:
-            try:
-                args, kwargs = with_quest_facts(label, args, kwargs)
-            except Exception:
-                ctx.log_exc("quest offer: cannot tell the completed quests")
-        return orig(*args, **kwargs)
+        return addition
 
     # ================================================================ フック
     def offer_slot(buttons):
@@ -1482,8 +1449,8 @@ def apply(ctx):
         # 掲示板の印はここで降ろす（受注画面まで間引きを持ち込まないため）。
         state["board_open"] = False
         action = entry.get(MARK) if isinstance(entry, dict) else None
-        if action is None and choices.ours(entry):
-            action = "declared"          # 窓口が組んだこの MOD のボタン（会話の依頼の2つ）
+        if action is None and choices.ours(entry) and entry[choices.CHOICE_KEY].get("owner") == state["owner"]:
+            action = "declared"          # 窓口が組んだこの MOD のボタン（会話の依頼の2つ）。ほかの MOD のは素の押下と同じに扱う
         after_quest = state["quest_pressed"]
         state["quest_pressed"] = False
         if action is None:
@@ -1551,8 +1518,8 @@ def apply(ctx):
         state["npc_id"] = None
         return orig(self, *args, **kwargs)
 
-    @ctx.wrap("__main__:MovePhaseManager.move_phase", required=False)
-    def move_phase(orig, self, *args, **kwargs):
+    def before_move(call):
+        """施設を移る前（ローダの窓口 `arrivals`。TECH.md §3.3.21）。"""
         # 控えた会話は数手で忘れる。
         # 何十手も前の立ち話から依頼が生えると因果が繋がらないため。
         # 移動したら絞り込みは解く。
@@ -1565,7 +1532,8 @@ def apply(ctx):
             if last["moves"] <= 0:
                 write("forgot the talk with {!r}".format(last["npc_name"]))
                 state["last_talk"] = None
-        return orig(self, *args, **kwargs)
+
+    arrivals.on(owner, ctx, (arrivals.FACILITY,), before=before_move, write=write)
 
     # ------------------------------------- 生成プロンプトへ会話を差し込む
     @ctx.wrap("scripts.llm.llm_manager_world_generate:random_quest_generator",
@@ -1638,28 +1606,10 @@ def apply(ctx):
     #
     # `master_ai_facilitator_from_conversation` はこの5本を通らないので、
     # そちらには届かない（GAME.md §2.25。`311_` と同じ限界）。
-    @ctx.wrap("scripts.llm.llm_manager:conversation_facilitator", required=False)
-    def conversation_facilitator(orig, *args, **kwargs):
-        return inject(orig, "facilitator", args, kwargs)
-
-    @ctx.wrap("scripts.llm.llm_manager:conversation_facilitator_after_retrieval",
-              required=False)
-    def conversation_facilitator_after_retrieval(orig, *args, **kwargs):
-        return inject(orig, "facilitator[retrieval]", args, kwargs)
-
-    @ctx.wrap("scripts.llm.llm_manager:conversation_facilitator_in_quest",
-              required=False)
-    def conversation_facilitator_in_quest(orig, *args, **kwargs):
-        return inject(orig, "facilitator[quest]", args, kwargs)
-
-    @ctx.wrap("scripts.llm.llm_manager:conversation_starter", required=False)
-    def conversation_starter(orig, *args, **kwargs):
-        return inject(orig, "starter", args, kwargs)
-
-    @ctx.wrap("scripts.llm.llm_manager:conversation_starter_in_quest",
-              required=False)
-    def conversation_starter_in_quest(orig, *args, **kwargs):
-        return inject(orig, "starter[quest]", args, kwargs)
+    # 足すのはローダの `modnpc` の notes（自分で包まない）。足す順は前に自分で包んでいたときの
+    # 重なりと同じ（`NOTES_PRIORITY`）。
+    modnpc.install(ctx, write=write)
+    modnpc.register(owner, modnpc.ANY, notes=quest_notes, priority=NOTES_PRIORITY, write=write)
 
     ctx.log("quest from conversation: sites={} list={} generation={} "
             "completed_note={} log={}".format(

@@ -21,13 +21,11 @@
 """
 import threading
 
-from instantale_modloader import prices, ui, wanted
+from instantale_modloader import arrivals, durations, prices, ui, wanted
 
 from . import rules
 
 SHOP_TARGET = "__main__:ShoppingStartManagerRemake.execute"
-ELAPSE_TARGET = "__main__:InstantaleApp.elapse_days"
-MOVE_TARGET = "__main__:AreaMoveManager.execute"
 #: ゲームの1ヵ月（`elapse_days(months * 30)`。GAME.md §2.17）。
 DAYS_PER_MONTH = 30
 SHOP_NOTICE_TEXT = "手配書の顔に気づいた店主は、怯えたように値を改めた。（買値 -{pct}%{sell}）"
@@ -135,15 +133,17 @@ def install(env):
     #: エリア移動の最中か。移動の日数は出発地からも目的地からも離れている日数として数える。
     moving = {"depth": 0}
 
-    @ctx.wrap(MOVE_TARGET, required=False, safe=True)
-    def area_move(orig, self, *args, **kwargs):
+    # 街の移動の前後はローダの窓口 `arrivals`（`always=True`。前は try/finally。TECH.md §3.3.21）。
+    def area_move_begin(call):
         with lock:
             moving["depth"] += 1
-        try:
-            return orig(self, *args, **kwargs)
-        finally:
-            with lock:
-                moving["depth"] -= 1
+
+    def area_move_end(call):
+        with lock:
+            moving["depth"] -= 1
+
+    arrivals.on(owner + ":law", ctx, (arrivals.AREA,), before=area_move_begin,
+                after=area_move_end, always=True, write=write)
 
     def cool_down(app, before, here_before):
         after = ui.game_day(app)
@@ -203,20 +203,24 @@ def install(env):
                     screen.say(app, line)
             screen.schedule(show)
 
-    @ctx.wrap(ELAPSE_TARGET, required=False, safe=True)
-    def elapse_days(orig, self, *args, **kwargs):
-        """日数が進んだ後に、離れている土地の手配を戻す（日数には触らない）。"""
+    # 日数が進んだ前後はローダの日数の関所（`durations.on_days`。TECH.md §3.3.21）。
+    # 前の暦は関所が読む（`call.day_before`）。ここで控えるのは日数が進む前に居た土地だけ。
+    def days_begin(call):
         if not cfg.STATUTE_ENABLED:
-            return orig(self, *args, **kwargs)
-        before, here_before = None, ""
+            return None
         try:
-            before = ui.game_day(self)
-            here_before = ui.area_id_of(ui.current_area(self))
+            return {"here": ui.area_id_of(ui.current_area(call.app))}
         except Exception:
-            ctx.log_exc("crime incentive: cannot read the day before")
-        result = orig(self, *args, **kwargs)
+            ctx.log_exc("crime incentive: cannot read the area before the days")
+            return {"here": ""}
+
+    def days_end(call):
+        """日数が進んだ後に、離れている土地の手配を戻す（日数には触らない）。"""
+        if call.memo is None:
+            return
         try:
-            cool_down(self, before, here_before)
+            cool_down(call.app, call.day_before, call.memo["here"])
         except Exception:
             ctx.log_exc("crime incentive: cannot cool down the wanted areas")
-        return result
+
+    durations.on_days(owner + ":law", ctx, before=days_begin, after=days_end, write=write)

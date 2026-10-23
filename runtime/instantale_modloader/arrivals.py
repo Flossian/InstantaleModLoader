@@ -11,6 +11,17 @@ MOD どうしは import しない（TECH.md §3.2.3）ので、ここで仲介�
     会話を始める直前        if arrivals.winner(app) not in (None, owner): 譲る
     始める前に取りやめた    arrivals.withdraw(app, owner)
 
+着いた**前後の処理**（施設に着いた後の見回り・街を移った後の知らせなど）もここで預かる。
+十数本の MOD が `move_phase` / `AreaMoveManager.execute` を各自で包んでいた（TECH.md §3.3.21）。
+施設は上の番号を数える包みと同じ1枚、街は `AreaMoveManager.execute` を1枚だけ包む。
+
+    arrivals.on(owner, ctx, (arrivals.FACILITY,), after=fn)          # 施設に着いた後
+    arrivals.on(owner, ctx, (arrivals.AREA,), before=fn, after=fn, always=True)   # 街を移る前後
+    fn(call)    # call.app / call.obj（マネージャ）/ call.args …（gates.Call）
+
+`call.app` はマネージャの `app`（無ければ走っている app）。前後の処理は引数も戻り値も変えない。
+`FACILITY` の `after` の時点では、この到着の番号は進んでいる（`offer` は同じ到着に入る）。
+
 申し出は移動の直後（`MovePhaseManager.move_phase` の復帰後）、会話を始めるのは手が空いてから
 （`ui.Screen.when_idle`）なので、始める直前に見るときには同じ到着の申し出がそろっている。
 `winner` はいちばん優先度の高い申し出の持ち主。同じ優先度なら先に申し出た方。
@@ -34,12 +45,73 @@ MOD どうしは import しない（TECH.md §3.2.3）ので、ここで仲介�
 import sys
 import time
 
+from . import gates
+
 #: 包みが立っていないときに、同じ到着とみなす秒数（最初の申し出から）。
 WINDOW_SECONDS = 20.0
 
 MOVE_TARGET = "__main__:MovePhaseManager.move_phase"
+AREA_TARGET = "__main__:AreaMoveManager.execute"
 STORE_ATTR = "_instantale_arrivals"
 _GATE_ATTR = "_instantale_arrivals_gate"
+
+#: 前後の処理の種類。施設に着いた（`move_phase`）と、街を移った（`AreaMoveManager.execute`）。
+FACILITY = "facility"
+AREA = "area"
+KINDS = (FACILITY, AREA)
+HOOKS = {
+    FACILITY: gates.Gate("arrivals.facility", MOVE_TARGET, "_instantale_arrivals_facility_hooks"),
+    AREA: gates.Gate("arrivals.area", AREA_TARGET, "_instantale_arrivals_area_hooks"),
+}
+gates.track_install_attr(_GATE_ATTR)
+
+
+def _kinds_of(kinds):
+    if isinstance(kinds, str):
+        kinds = (kinds,)
+    kinds = tuple(kinds or ())
+    if not kinds or any(kind not in HOOKS for kind in kinds):
+        raise ValueError("arrivals: kinds must be among {}, got {!r}".format(KINDS, kinds))
+    return kinds
+
+
+def _app_of(manager):
+    app = getattr(manager, "app", None)
+    if app is not None:
+        return app
+    try:
+        from . import ui
+        return ui.find_app()
+    except Exception:
+        return None
+
+
+def on(owner, ctx, kinds, before=None, after=None, always=False, write=None):
+    """着いた前後の処理を登録し、包みを立てる。`apply()` の中で呼ぶ。同じ持ち主の登録は差し替える。"""
+    for kind in _kinds_of(kinds):
+        HOOKS[kind].on(owner, ctx, before=before, after=after, always=always, write=write)
+        if kind == FACILITY:
+            install(ctx, write)
+        else:
+            _install_area(ctx, write)
+
+
+def off(owner, kinds=KINDS):
+    """前後の処理の登録を下げる。"""
+    for kind in _kinds_of(kinds):
+        HOOKS[kind].withdraw(owner)
+
+
+def owners(kind):
+    """前後の処理を登録している持ち主（登録の古い順）。"""
+    return HOOKS[_kinds_of(kind)[0]].owners()
+
+
+def _install_area(ctx, write=None):
+    def area_move(orig, self, *args, **kwargs):
+        call = gates.Call(AREA, self, args, kwargs, app=_app_of(self))
+        return HOOKS[AREA].run(call, lambda: orig(self, *args, **kwargs))
+    return HOOKS[AREA].install(ctx, area_move, write)
 
 
 def _store():
@@ -68,9 +140,13 @@ def install(ctx, write=None):
         return list(done.get("targets") or [])
 
     def move_phase(orig, self, *args, **kwargs):
-        """番号を進めてから `orig` を呼ぶ。引数は受け取ったまま渡す。"""
+        """番号を進めてから `orig` を呼ぶ。引数は受け取ったまま渡す。前後の処理（`FACILITY`）はその前後。"""
         _store()["serial"] += 1
-        return orig(self, *args, **kwargs)
+        hooks = HOOKS[FACILITY]
+        if not hooks.entries():
+            return orig(self, *args, **kwargs)
+        call = gates.Call(FACILITY, self, args, kwargs, app=_app_of(self))
+        return hooks.run(call, lambda: orig(self, *args, **kwargs))
 
     ctx.wrap(MOVE_TARGET, required=False)(move_phase)
     setattr(sys, _GATE_ATTR, {"generation": generation, "targets": [MOVE_TARGET]})
@@ -147,3 +223,5 @@ def reset():
     setattr(sys, STORE_ATTR, {"serial": 0, "key": None, "at": 0.0, "offers": []})
     if hasattr(sys, _GATE_ATTR):
         delattr(sys, _GATE_ATTR)
+    for hooks in HOOKS.values():
+        hooks.reset()

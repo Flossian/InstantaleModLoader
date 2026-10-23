@@ -33,6 +33,7 @@ if RUNTIME_DIR not in sys.path:
 
 import instantale_modloader as ml            # noqa: E402
 from instantale_modloader import llm         # noqa: E402
+from instantale_modloader import modnpc      # noqa: E402
 
 
 # ---------------------------------------------------------------- 偽 Kivy
@@ -256,6 +257,12 @@ def fresh(app):
     APP = app
     if hasattr(sys, MOD.STORE_ATTR):
         delattr(sys, MOD.STORE_ATTR)
+    # 会話への注入はローダの `modnpc` の関所が1つの世代に1枚だけ包み、層の登録簿は `sys` に残る。
+    # 当て直すたびに新しい ctx へ関所を渡し直し、前の筋書きの層を持ち越さない
+    for attr in (modnpc.INSTALLED_ATTR, modnpc.STORE_ATTR):
+        if hasattr(sys, attr):
+            delattr(sys, attr)
+    modnpc.registry().clear()
     out_dir = tempfile.mkdtemp(prefix="npc_social_test_")
     ctx = Ctx(out_dir)
     MOD.apply(ctx)
@@ -481,6 +488,14 @@ def facilitator(messages, life_log, player, character_instance, *args, **kwargs)
 
 messages = [{"role": "user", "content": "こんばんは"}]
 npc = app.world.characters["80"]
+# 足すのはローダの `modnpc` の関所（この MOD は notes の層を積むだけ）。
+# 関所は差し込まれている素の関数の署名で引数を名前に直すので、会話関数の置き場に代役を置く
+llm_manager = types.ModuleType("scripts.llm.llm_manager")
+llm_manager.conversation_facilitator = facilitator
+sys.modules["scripts.llm.llm_manager"] = llm_manager
+check("modnpc に notes の層を積む",
+      any(layer.get("owner") == "403_npc_social_memory" and callable(layer.get("notes"))
+          for layer in modnpc.layers_for("80")), modnpc.layers_for("80"))
 ctx.hooks[FACILITATOR](facilitator, messages, [], app.player, npc)
 
 check("会話に足すのは複製で、世界の NPC 本体は触らない",
@@ -498,6 +513,7 @@ ctx.hooks[FACILITATOR](facilitator, messages, [], app.player, npc)
 check("311 が書き換えたら読み直す",
       "戦働きしか知らない" in seen["npc"].profile, seen["npc"].profile)
 check("例外を残さない", ctx.errors == [], ctx.errors)
+sys.modules.pop("scripts.llm.llm_manager", None)
 shutil.rmtree(out_dir, ignore_errors=True)
 
 

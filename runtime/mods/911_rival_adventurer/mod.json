@@ -10,7 +10,7 @@
     "en": "After you clear a couple of quests, one guild adventurer may become your rival (an LLM-written entrance; uses the 317 epithet if any). The rival marks a quest on the board: clear it first or it is gone when the days run out. The rival starts out scornful and softens as you beat them or grow closer",
     "ja": "依頼をいくつか片付けると、ギルドの冒険者の1人がライバルとして現れることがある（登場の語りは LLM。317 の二つ名があれば使う）。ライバルは掲示板の依頼に狙いを付け、期限までに先に片付けなければ掲示板から消える。最初は見下しているが、先を越したり親しくなったりすると態度が和らぐ"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "tool": {
     "entry": "tool.py",

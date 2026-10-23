@@ -37,6 +37,7 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 sys.path.insert(0, os.path.join(_ROOT, "runtime"))
 
 import instantale_modloader as ml                      # noqa: E402
+from instantale_modloader import modnpc                # noqa: E402
 
 MODS_DIR = os.path.join(_ROOT, "runtime", "mods")
 
@@ -384,7 +385,8 @@ class Ctx(object):
     def read_json(self, path, default=None):
         return ml.read_json(path, default, report=self.log_exc)
 
-    def wrap(self, target, required=True):
+    def wrap(self, target, required=True, **kw):
+        # ローダの `modnpc` の関所は `safe=True` を渡して包む
         def decorate(fn):
             self.hooks[target] = fn
             return fn
@@ -442,6 +444,9 @@ def bind_function(ctx, target, module, name):
     def patched(*args, **kwargs):
         return hook(original, *args, **kwargs)
 
+    # ローダの包みと同じく元の関数を指す。`modnpc` の頼み文の関所は、
+    # いま差し込まれている物から `__original__` をたどった素の関数の署名で引数を名前に直す
+    patched.__original__ = original
     setattr(module, name, patched)
 
 
@@ -462,6 +467,12 @@ def reset_mod_store():
     """`sys` に置かれた mod の共有一式を落とす（筋書きごとの独立を保つ）。"""
     if hasattr(sys, MOD.STATE_STORE_ATTR):
         delattr(sys, MOD.STATE_STORE_ATTR)
+    # 会話5関数への注入はローダの `modnpc` の関所が1つの世代に1枚だけ包み、層の登録簿は `sys` に残る。
+    # 筋書きごとに新しい ctx へ関所を渡し直し、前の筋書きの層を持ち越さない
+    for attr in (modnpc.INSTALLED_ATTR, modnpc.STORE_ATTR):
+        if hasattr(sys, attr):
+            delattr(sys, attr)
+    modnpc.registry().clear()
 
 
 class Run(object):
@@ -1172,11 +1183,31 @@ def test_all_five_conversation_hooks_inject_profile():
         seen.append(kwargs.get("character_instance") or args[3])
         return "ok"
 
-    for target in targets:
-        hook = run.ctx.hooks.get(target)
-        check(hook is not None, "フックが未登録: {}".format(target))
-        if hook is not None:
-            hook(capture, [], {}, run.app.player, run.npc)
+    # 足すのはローダの `modnpc` の関所（この MOD は notes の層を積むだけ）。
+    # 関所は差し込まれている素の関数の署名で引数を名前に直すので、
+    # 5つとも先頭4引数が本物と同じ並びの代役を置き、検査の後で戻す
+    def stand_in(messages, character_life_log, player, character_instance, *rest, **kw):
+        return "ok"
+
+    names = [target.rsplit(":", 1)[-1] for target in targets]
+    kept = {name: getattr(llm_manager, name, None) for name in names}
+    check(any(layer.get("owner") == "311_npc_profile_memory"
+              for layer in modnpc.layers_for("77")),
+          "modnpc に notes の層が無い: {}".format(modnpc.layers_for("77")))
+    try:
+        for target, name in zip(targets, names):
+            setattr(llm_manager, name, stand_in)
+            hook = run.ctx.hooks.get(target)
+            check(hook is not None, "関所の包みが未登録: {}".format(target))
+            if hook is not None:
+                hook(capture, [], {}, run.app.player, run.npc)
+    finally:
+        for name, original in kept.items():
+            if original is None:
+                if hasattr(llm_manager, name):
+                    delattr(llm_manager, name)
+            else:
+                setattr(llm_manager, name, original)
     check(len(seen) == len(targets), "全経路を通らない: {}".format(len(seen)))
     check(all(MOD.PROFILE_HEADING in npc.profile for npc in seen),
           "追加プロフィールが無い経路がある")

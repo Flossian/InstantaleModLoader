@@ -815,6 +815,24 @@ app.refresh_choice_buttons()
 check("ゲームが一覧の形を替えたら（別の画面へ進んだら）閉じる",
       choices.opened(app) is None and [b["text"] for b in app.buttons] == ["外へ出る"], [b["text"] for b in app.buttons])
 
+print("[ローダの部品の並び]")
+choices.reset()
+gen1 = [Ctx("301_x", 1), Ctx("330_y", 1), Ctx("402_z", 1)]
+choices.provide(gen1[0], screen_a, refresh=refresh_a)
+choices.provide(gen1[1], screen_a, refresh=refresh_a)
+choices.provide(gen1[1], screen_a, refresh=refresh_a, owner="loader:modfacility")   # 1回目: 330 の apply の中から
+choices.provide(gen1[2], screen_a, refresh=refresh_a)
+first = choices.providers()
+gen2 = [Ctx("loader", 2), Ctx("301_x", 2), Ctx("330_y", 2), Ctx("402_z", 2)]
+choices.provide(gen2[0], screen_a, refresh=refresh_a, owner="loader:modfacility")   # 2回目: MOD の前の立て直しから
+for c in gen2[1:]:
+    choices.provide(c, screen_a, refresh=refresh_a)
+second = choices.providers()
+check("ローダの部品は MOD より先（1回目の起動）", first == ["loader:modfacility", "301_x", "330_y", "402_z"], first)
+check("2回目の起動でも同じ並び", second == first, second)
+choices.provide(Ctx("prices", 2), screen_a, refresh=refresh_a, owner="prices:inn")
+check("`loader:` で始まらない持ち主は今までどおり末尾", choices.providers()[-1] == "prices:inn", choices.providers())
+
 choices.reset()
 shutil.rmtree(STATE, ignore_errors=True)
 print()

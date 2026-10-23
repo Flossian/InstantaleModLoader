@@ -84,7 +84,7 @@ import random
 import sys
 
 import instantale_modloader as loader
-from instantale_modloader import choices, frames, npcs, state as loader_state, ui
+from instantale_modloader import choices, frames, loads, npcs, state as loader_state, ui
 from instantale_modloader.npcs import make_npc
 
 from . import carryover
@@ -103,8 +103,8 @@ LOG_BASENAME = "npc_carryover.log"
 _rng = random.Random()
 
 #: ロードの入口。新規と続きの両方（名前では決められない。GAME.md §1.3）。
-LOAD_TARGETS = ("__main__:InstantaleApp.load_game_new",
-                "__main__:InstantaleApp.start_game")
+#: 包むのはローダの窓口 `loads`（TECH.md §3.3.21）。
+LOAD_KINDS = (loads.LOAD, loads.NEW_GAME)
 
 #: 置けないエリアの `size`。
 DUNGEON_SIZE = "dungeon"
@@ -622,30 +622,22 @@ def apply(ctx):
             pending_words.extend(words)
 
     # ================================================== フック
-    def make_load(target):
-        label = target.rsplit(".", 1)[-1]
+    def on_load(call):
+        self, label = call.obj, call.label
+        try:
+            app = (self if getattr(self, "world_dict", None) is not None
+                   else ui.find_app())
+            if app is not None:
+                world = loader_state.world_key(app)
+                if world and world != loader_state.UNKNOWN_WORLD:
+                    run(app, world, label)
+                else:
+                    write("{}: the world has no name yet; "
+                          "nothing brought in".format(label))
+        except Exception:
+            ctx.log_exc("npc carryover: the load hook failed")
 
-        @ctx.wrap(target, required=False, safe=True)
-        def on_load(orig, self, *args, **kwargs):
-            result = orig(self, *args, **kwargs)
-            try:
-                app = (self if getattr(self, "world_dict", None) is not None
-                       else ui.find_app())
-                if app is not None:
-                    world = loader_state.world_key(app)
-                    if world and world != loader_state.UNKNOWN_WORLD:
-                        run(app, world, label)
-                    else:
-                        write("{}: the world has no name yet; "
-                              "nothing brought in".format(label))
-            except Exception:
-                ctx.log_exc("npc carryover: the load hook failed")
-            return result
-
-        return on_load
-
-    for target in LOAD_TARGETS:
-        make_load(target)
+    loads.on(os.path.basename(getattr(ctx, "mod_dir", "") or "") or "323_npc_carryover", ctx, LOAD_KINDS, after=on_load, write=write)
 
     @ctx.wrap(SAVE_TARGET, required=False, safe=True)
     def save_game(orig, self, *args, **kwargs):

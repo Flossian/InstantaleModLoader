@@ -37,6 +37,7 @@ if RUNTIME_DIR not in sys.path:
 
 import instantale_modloader as ml                      # noqa: E402
 from instantale_modloader import equipment             # noqa: E402
+from instantale_modloader import gates                 # noqa: E402
 
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 
@@ -320,6 +321,9 @@ def fresh(keep_state=False):
     LLM.asked = []
     LLM.replies = [{"items": [weapon(), wearable()]}]
     ctx = FakeCtx(OUT_DIR, STATE_DIR)
+    # ロードと世界の組み立ての前後はローダの窓口 `loads` が1つの世代に1枚だけ包む。
+    # 当て直すたびに前の登録と包みの印を忘れさせ、この ctx に包みを渡す
+    gates.reset_all()
     module.apply(ctx)
     npc = Character(NPC_ID, "寡黙なガルド")
     app = InstantaleApp(World({NPC_ID: npc}))

@@ -60,10 +60,11 @@
 遊び方の説明は DOC.md、検証の経過は VERIFICATION.md §3.54。
 """
 
+import os
 import random
 import sys
 
-from instantale_modloader import choices, frames, llm, ui
+from instantale_modloader import choices, durations, frames, llm, loads, ui
 from instantale_modloader.state import WorldStore
 
 LOG_BASENAME = "inn_quality.log"
@@ -235,6 +236,7 @@ def life_log_dict(app, character):
 
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
+    mod_owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "327_inn_quality"
     screen = ui.Screen(ctx, write, tag="inn quality", mark=MARK)
 
     # 置き場は `sys`（`315_` と同じ理由。当て直しが宿泊の最中に挟まっても窓と残りが消えない）。
@@ -286,12 +288,13 @@ def apply(ctx):
             except Exception:
                 ctx.log_exc("inn quality: cannot open the stay")
 
-    @ctx.wrap("__main__:InstantaleApp.elapse_days", required=False)
-    def elapse_days(orig, self, days=None, *args, **kwargs):
+    def days_begin(call):
+        """日数が進む前（ローダの日数の関所 `durations.on_days`。TECH.md §3.3.21）。"""
         window = state["window"]
         if window is not None:
             window["elapsed"] = True
-        return orig(self, days, *args, **kwargs)
+
+    durations.on_days(mod_owner, ctx, before=days_begin, write=write)
 
     def install_counter(cls_name):
         @ctx.wrap("__main__:{}.execute".format(cls_name), required=False)
@@ -478,17 +481,19 @@ def apply(ctx):
                 ctx.log_exc("inn quality: cannot write the records after the save")
         return result
 
-    @ctx.wrap("__main__:World.__init__", required=False, safe=True)
-    def world_init(orig, self, *args, **kwargs):
-        """ロードと新規開始。まだ書いていない記録を捨て、次に引くときに `state\\` から読み直す。"""
-        result = orig(self, *args, **kwargs)
+    def world_init(call):
+        """ロードと新規開始（世界を組み立てた後。ローダの窓口 `loads`）。
+
+        まだ書いていない記録を捨て、次に引くときに `state\\` から読み直す。
+        """
         with worlds.lock:
             dropped = sorted(pending)
             pending.clear()
             worlds.forget()
         if dropped:
             write("load: unsaved records of {} dropped".format(dropped))
-        return result
+
+    loads.on(mod_owner, ctx, (loads.WORLD,), after=world_init, write=write)
 
     def rewrite_outgoing(texts, site):
         if not REGULAR_MEMORY or not texts:

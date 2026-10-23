@@ -38,6 +38,7 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml                      # noqa: E402
+from instantale_modloader import gates                 # noqa: E402
 
 
 def find_mod(suffix):
@@ -282,6 +283,8 @@ def fresh(settings=None):
     module = load_mod()
     for name, value in (settings or {}).items():
         setattr(module, name, value)
+    # 窓口の包みは1つの世代に1枚なので、偽の ctx を作り直すたびに忘れさせる
+    gates.reset_all()
     ctx = FakeCtx(OUT_DIR, STATE_DIR)
     module.apply(ctx)
     return module, ctx

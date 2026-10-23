@@ -22,7 +22,7 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml  # noqa: E402
-from instantale_modloader import ui  # noqa: E402
+from instantale_modloader import gates, ui  # noqa: E402
 
 folder = os.path.join(MODS_DIR, [n for n in os.listdir(MODS_DIR)
                                  if n.endswith("_area_move_with_party")][0])
@@ -85,6 +85,7 @@ def make_app(*members):
 def run(members, gold_ok=True, family_passes=True, save_in_branch=False, errors=None):
     """偽の本体。戻り値は (辿り着いたか, 判定時に見えた配列の一覧, 拒否回数, セーブ側)。"""
     ctx = FakeCtx(tempfile.mkdtemp())
+    gates.reset_all()   # 窓口の包みは1つの世代に1枚。偽の ctx を作り直すたびに忘れさせる
     MOD.apply(ctx)
     app = make_app(*members)
     seen = {"tags": [], "rejected": 0, "days": []}

@@ -217,9 +217,19 @@ def install(env):
         town = getattr(area, "name", None) or "この街"
         screen.busy_on(app)
         screen.say(app, OFFER_TEXT.format(name=name))
-        if join(app, npc_id, area_id):
+        joined = join(app, npc_id, area_id)
+        if joined:
             screen.say(app, JOIN_TEXT.format(name=name))
+        was_in_custody = env.in_custody(app)
         env.set_custody(app, True, "rescue")        # 外へ逃れるまで牢の中（`custody`）
+
+        def undo(why):
+            """依頼を作れなかった・始められなかったとき、入れた手引き役と牢の印を戻す。"""
+            if joined and env.send_back(app, npc_id) is not None:
+                screen.schedule(lambda: screen.paint_party(app))
+            if not was_in_custody:
+                env.set_custody(app, False, why)
+
         difficulty = rescue_difficulty(env.area_difficulty(app), party_level(app),
                                        cfg.RESCUE_DIFFICULTY_PLUS, difficulty_max())
         env.quest_inject.update(brief=BRIEF_TEXT.format(name=name, town=town),
@@ -236,6 +246,7 @@ def install(env):
         screen.busy_off(app, restore=False)
         if not added:
             write("rescue: no quest was generated")
+            undo("rescue not generated")
             screen.say(app, FAILED_TEXT)
             choices.repaint(app)
             return
@@ -254,6 +265,7 @@ def install(env):
             except Exception:
                 ctx.log_exc("crime incentive: QuestStartManager failed for the rescue")
                 save_rescue(app, None)
+                undo("rescue not started")
                 choices.repaint(app)
                 return
             screen.start_phase(app, phase, "受ける")

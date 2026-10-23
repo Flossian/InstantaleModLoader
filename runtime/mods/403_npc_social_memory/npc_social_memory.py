@@ -29,12 +29,12 @@
 自前の manager_name（`MANAGER_EXTRACT`）を付けるので、
 抽出のプロンプトも `output_data/` に残る（GAME.md §2.12）。
 """
-import copy
 import datetime
+import os
 import sys
 import typing
 
-from instantale_modloader import frames, jobs, llm, ui
+from instantale_modloader import frames, jobs, llm, modnpc, ui
 from instantale_modloader.state import WorldStore, world_key
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
@@ -53,6 +53,10 @@ INJECT_PARTY_PROFILE = True
 
 # 1回の関係抽出で扱うNPCの上限
 MAX_PARTICIPANTS = 6
+
+#: 会話の相手の `profile` に関係の記録を足す順（ローダの `modnpc` の notes。小さいほど先）。
+#: 自分で包んでいたときの重なり（外側から 321・317・403・311・326・301）を保つ。TECH.md §3.3.21。
+NOTES_PRIORITY = -4
 
 LOG_BASENAME = "npc_social_memory.log"
 
@@ -224,6 +228,7 @@ def parse_result(result, allowed_ids):
 def apply(ctx):
     state_dir = ctx.state_path(STATE_DIRNAME)
     write = ctx.logger(LOG_BASENAME)
+    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "403_npc_social_memory"
     # ここでは Clock への予約（`screen.schedule`）にだけ使う。選択肢は作らない。
     screen = ui.Screen(ctx, write, tag="npc social memory")
 
@@ -541,58 +546,25 @@ def apply(ctx):
                 "ただし存在・発言・既知の関係は認識してよい。\n"
                 + "\n".join(blocks))
 
-    def with_context(label, args, kwargs):
-        """会話関数に渡すNPCを、社会記録を足した**浅い複製**に差し替える。
+    def social_notes(info):
+        """会話の相手の `profile` に足す、同行者との関係の記録。
 
-        本体のNPCには書かない。書くと世界の人物像そのものが伸び続ける。
-        会話関数（conversation_facilitator など）は第4引数（index 3）または
-        keyword `character_instance` で会話相手の Character を受け取る。
-        その `profile` の末尾に `social_block` を足した複製を同じ位置へ戻す。
+        ローダの `modnpc` の notes から呼ばれ、関所が**浅い複製**の `profile` の末尾に足す
+        （本体の NPC には書かない。書くと世界の人物像そのものが伸び続ける。TECH.md §5.7）。
         """
-        npc = kwargs.get("character_instance")
-        if npc is None and len(args) >= 4:
-            npc = args[3]
-        app = ui.find_app()
-        if npc is None or app is None:
-            return args, kwargs
-
-        observer_id = npc_id_of(app, npc)
+        app = info.get("app") or ui.find_app()
+        if app is None:
+            return None
+        observer_id = str(info.get("npc_id") or "") or npc_id_of(app, info.get("character"))
         if not observer_id:
-            return args, kwargs
-
+            return None
         block = social_block(app, observer_id)
         if not block:
-            note_inject(label + ": no party social context")
-            return args, kwargs
-
-        try:
-            clone = copy.copy(npc)
-        except Exception:
-            ctx.log_exc("npc social memory: cannot copy NPC")
-            return args, kwargs
-
-        base = getattr(npc, "profile", "")
-        if not isinstance(base, str):
-            return args, kwargs
-        clone.profile = (base.rstrip() + "\n\n" + block) if base.strip() else block
+            note_inject("{}: no party social context".format(info.get("site")))
+            return None
         note_inject("{}: {} +{} social chars".format(
-            label, ui.character_name(app, observer_id), len(block)))
-
-        if "character_instance" in kwargs:
-            new_kwargs = dict(kwargs)
-            new_kwargs["character_instance"] = clone
-            return args, new_kwargs
-        new_args = list(args)
-        new_args[3] = clone
-        return tuple(new_args), kwargs
-
-    def inject(orig, label, args, kwargs):
-        """会話系の包みの共通部。差し替えに失敗しても本体は元の引数で必ず呼ぶ。"""
-        try:
-            args, kwargs = with_context(label, args, kwargs)
-        except Exception:
-            ctx.log_exc("npc social memory: injection failed")
-        return orig(*args, **kwargs)
+            info.get("site"), ui.character_name(app, observer_id), len(block)))
+        return block
 
     # ------------------------------------------------------------ 抽出の材料
 
@@ -918,27 +890,9 @@ changed=falseならrelations=[]。""".format(player_name=player_name,
             ctx.log_exc("npc social memory: cannot schedule extraction")
         return result
 
-    @ctx.wrap("scripts.llm.llm_manager:conversation_facilitator", required=False)
-    def facilitator(orig, *args, **kwargs):
-        return inject(orig, "facilitator", args, kwargs)
-
-    @ctx.wrap("scripts.llm.llm_manager:conversation_facilitator_after_retrieval",
-              required=False)
-    def facilitator_after_retrieval(orig, *args, **kwargs):
-        return inject(orig, "facilitator[retrieval]", args, kwargs)
-
-    @ctx.wrap("scripts.llm.llm_manager:conversation_facilitator_in_quest",
-              required=False)
-    def facilitator_in_quest(orig, *args, **kwargs):
-        return inject(orig, "facilitator[quest]", args, kwargs)
-
-    @ctx.wrap("scripts.llm.llm_manager:conversation_starter", required=False)
-    def starter(orig, *args, **kwargs):
-        return inject(orig, "starter", args, kwargs)
-
-    @ctx.wrap("scripts.llm.llm_manager:conversation_starter_in_quest",
-              required=False)
-    def starter_in_quest(orig, *args, **kwargs):
-        return inject(orig, "starter[quest]", args, kwargs)
+    # 会話5関数へ足す文は、ローダの `modnpc` の notes に預ける（自分で包まない）。
+    # 足す順は前に自分で包んでいたときの重なりと同じ（`NOTES_PRIORITY`）。
+    modnpc.install(ctx, write=write)
+    modnpc.register(owner, modnpc.ANY, notes=social_notes, priority=NOTES_PRIORITY, write=write)
 
     ctx.log("npc social memory: state={}/ (311 state read only)".format(state_dir))

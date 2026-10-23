@@ -72,7 +72,7 @@ import re
 import sys
 import time
 
-from instantale_modloader import choices, durations, ui
+from instantale_modloader import arrivals, choices, durations, ui
 from instantale_modloader.state import UNKNOWN_WORLD, WorldStore, playthrough_key, world_key
 
 LOG_BASENAME = "area_move_custom.log"
@@ -643,9 +643,11 @@ def apply(ctx):
                   "leaving it as is (arrived={})".format(
                       after, prepaid, expected, arrived))
 
-    @ctx.wrap("__main__:AreaMoveManager.execute", required=False)
-    def area_move_execute(orig, self, choice_text=None, *args, **kwargs):
+    def area_move_begin(call):
         """移動の間だけ窓を開ける。日数と文言の差し替えはこの窓の中だけ。
+
+        前後ともローダの窓口 `arrivals` から呼ばれる（後は `always=True`。前は try/finally。TECH.md §3.3.21）。
+        開いた窓を返し、後の処理が `call.memo` で受け取る。
 
         料金を変えているときは、ゲームが引き落とす前に「素の運賃
         − 設定額」のぶんだけ所持金をずらしておく（前払い調整）。
@@ -654,7 +656,7 @@ def apply(ctx):
         引いてから返す方式だと、支払い直後の所持金表示が1000引かれた値のまま残る）。
         ずらした直後に描画は走らないので、増えた瞬間が画面に見えることもない。
         """
-        app = getattr(self, "app", None) or ui.find_app()
+        self, app = call.obj, call.app
         refresh_world(app)
         window = None
         try:
@@ -692,15 +694,18 @@ def apply(ctx):
                               int(window["fare"])))
             except Exception:
                 ctx.log_exc("area move custom: cannot pre-adjust the fare")
-        try:
-            return orig(self, choice_text, *args, **kwargs)
-        finally:
-            state["window"] = None
-            if window is not None:
-                try:
-                    settle_fare(app, window)
-                except Exception:
-                    ctx.log_exc("area move custom: cannot settle the fare")
+        return window
+
+    def area_move_end(call):
+        state["window"] = None
+        if call.memo is not None:
+            try:
+                settle_fare(call.app, call.memo)
+            except Exception:
+                ctx.log_exc("area move custom: cannot settle the fare")
+
+    arrivals.on(owner, ctx, (arrivals.AREA,), before=area_move_begin, after=area_move_end,
+                always=True, write=write)
 
     # ============================================================ 日数
     # `elapse_days` はこちらでは包まない。包むのはローダの関所1枚だけで、

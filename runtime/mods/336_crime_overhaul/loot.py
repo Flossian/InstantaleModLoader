@@ -10,7 +10,7 @@
 """
 import threading
 
-from instantale_modloader import llm, state, ui
+from instantale_modloader import llm, loads, state, ui
 
 from . import rules
 
@@ -157,14 +157,15 @@ def install(env):
                 ctx.log_exc("crime incentive: cannot close the action")
         return orig(self, *args, **kwargs)
 
-    @ctx.wrap("__main__:InstantaleApp.load_game_new", required=False, safe=True)
-    def load_closes_action(orig, self, *args, **kwargs):
+    def load_closes_action(call):
+        """ロードの前（ローダの窓口 `loads`。TECH.md §3.3.21）。"""
         if cfg.LOOT_ENABLED:
             try:
                 drop_open_action("a save was loaded")
             except Exception:
                 ctx.log_exc("crime incentive: cannot close the action")
-        return orig(self, *args, **kwargs)
+
+    loads.on(env.owner + ":loot", ctx, (loads.LOAD,), before=load_closes_action, write=write)
 
     def wrap_facilitator(name):
         @ctx.wrap("{}:{}".format(MANAGER, name), required=False, safe=True)

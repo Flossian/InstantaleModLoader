@@ -53,12 +53,12 @@
     },
     "FRIEND_AFFINITY": {
       "type": "int",
-      "default": 40,
+      "default": 20,
       "min": -50,
       "max": 200,
       "label": {"ja": "判定が無いとき手配中でも動じない好感度", "en": "Affinity that stays unmoved when not judged"},
-      "note": {"ja": "LLM が答えなかったとき、手配中の土地では店主の好感度がこれ以上なら値段は動かず、下なら怯える。平時は普段どおり。40 は「多少の好意がある」",
-               "en": "When the LLM gives no answer, in wanted areas a shopkeeper at or above this affinity keeps normal prices and below it cowers; otherwise as usual. 40 is \"somewhat fond\""}
+      "note": {"ja": "LLM が答えなかったとき、手配中の土地では店主の好感度がこれ以上なら値段は動かず、下なら怯える。平時は普段どおり。20 は「嫌いではない」（336 の委縮しない好感度と同じ）",
+               "en": "When the LLM gives no answer, in wanted areas a shopkeeper at or above this affinity keeps normal prices and below it cowers; otherwise as usual. 20 is \"does not dislike you\" (the same line as 336)"}
     }
   }
 }

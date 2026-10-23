@@ -160,8 +160,8 @@
         "en": "Chance of a hunter in a hostile faction's town (%)"
       },
       "note": {
-        "ja": "見られ方が敵対の勢力が治める街に着いたとき、その勢力の刺客が呼び止めて勝負を挑んでくる確率。刺客は「受けて立つ」しか選べず、戦うことになる。0 で現れない",
-        "en": "When you arrive in a town ruled by a faction hostile to you, the chance that one of its people stops you and challenges you. The only choice is to accept and fight. 0 turns it off"
+        "ja": "見られ方が敵対の勢力が治める街の中で移動するたび（街に着く・施設に入る・施設を出る）に、その勢力の刺客が呼び止めて勝負を挑んでくる確率。前の刺客から決めた日数が経つまでは引かない。刺客は「受けて立つ」しか選べず、戦うことになる。0 で現れない",
+        "en": "Each time you move inside a town ruled by a faction hostile to you (arriving, entering or leaving a facility), the chance that one of its people stops you and challenges you. Not rolled until the days since the last hunter have passed. The only choice is to accept and fight. 0 turns it off"
       }
     },
     "HUNTER_WARY_RATE": {

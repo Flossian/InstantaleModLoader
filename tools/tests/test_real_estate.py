@@ -47,6 +47,7 @@ if RUNTIME_DIR not in sys.path:
 
 import instantale_modloader as ml                      # noqa: E402
 from instantale_modloader import durations            # noqa: E402
+from instantale_modloader import gates                # noqa: E402
 from instantale_modloader import holdings as holdings_window, hudicons  # noqa: E402
 from instantale_modloader import llm as loader_llm    # noqa: E402
 from instantale_modloader import modfacility            # noqa: E402
@@ -957,6 +958,9 @@ def setup(configure=None, keep_state=False, gold=100000):
                  modnpc.INSTALLED_ATTR, modnpc.STORE_ATTR):
         if hasattr(sys, attr):
             delattr(sys, attr)
+    # 窓口の関所（日数・ロード・着いた後）も1つの世代に1枚なので、ctx を作り直すたびに忘れさせる
+    # （残すと2回目の ctx に包みが渡らず、日数の後の精算が呼ばれない）。
+    gates.reset_all()
 
     module = load_mod()
     if configure is not None:

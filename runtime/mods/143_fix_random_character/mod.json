@@ -10,7 +10,7 @@
     "en": "The dice on the character creation screen sends no world information to the LLM and always lands on similar talent spending and age. This adds the world's name, overview and situation to the dice request, the portrait-tag request and the skill and trait generation on that screen, and adds a talent budget, age and strongest/weakest abilities rolled for each press",
     "ja": "キャラを作る画面のランダム作成は、LLM に世界の情報を渡さず、才能点の使い方と年齢もいつも似たところに落ちる。ランダム作成・立ち絵の要素・作成画面のスキルと特質の生成のプロンプトに世界の名前・概要・情勢を足し、押すたびに引いた才能点・年齢・高い能力値と低い能力値の目安を渡す"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "after": [
     "144_fix_hardcoded_worldview"

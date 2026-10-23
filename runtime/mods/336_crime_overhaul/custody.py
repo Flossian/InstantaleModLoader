@@ -42,37 +42,42 @@ def install(env):
     env.in_custody = in_custody
     env.set_custody = set_custody
 
-    def disband(app):
-        """仲間を解散させる。外した名前を返す。"""
+    def send_back(app, member_id):
+        """仲間1人をゲーム自身の手順で外し、雇われた場所へ置く。外した名前を返す（外せなければ None）。塗り直さない。"""
         remove = getattr(app, "remove_party_member", None)
         leave_to = getattr(app, "get_party_leave_facility", None)
         mover = getattr(app, "move_npc_to_facility", None)
         if not (callable(remove) and callable(leave_to) and callable(mover)):
             write("WARN custody: the game's party removal is not available")
-            return []
-        names = []
-        for member_id in list(ui.party_member_ids(app)):
-            character = ui.character_of(app, member_id)
-            if character is None or str(member_id).startswith(MOD_NPC_PREFIX):
-                write("custody: kept {} in the party (no place to send)".format(member_id))
-                continue
-            try:
-                found = leave_to(character)
-            except Exception:
-                ctx.log_exc("crime incentive: get_party_leave_facility failed for {}".format(member_id))
-                continue
-            # タプル `(施設, ノード)` で返る（そのまま渡すと落ちる。GAME.md §2.4）
-            facility, node = found if isinstance(found, tuple) and len(found) == 2 else (found, None)
-            if facility is None:
-                write("custody: kept {} in the party (no facility to return to)".format(member_id))
-                continue        # 置き先を決めずに外さない（世界のどこにも居なくなる）
-            remove(member_id)
-            try:
-                mover(member_id, character, facility, node)
-            except Exception:
-                ctx.log_exc("crime incentive: move_npc_to_facility failed for {}".format(member_id))
-            names.append(getattr(character, "name", None) or str(member_id))
-            write("custody: {} left the party for {!r}".format(member_id, getattr(facility, "name", facility)))
+            return None
+        character = ui.character_of(app, member_id)
+        if character is None or str(member_id).startswith(MOD_NPC_PREFIX):
+            write("custody: kept {} in the party (no place to send)".format(member_id))
+            return None
+        try:
+            found = leave_to(character)
+        except Exception:
+            ctx.log_exc("crime incentive: get_party_leave_facility failed for {}".format(member_id))
+            return None
+        # タプル `(施設, ノード)` で返る（そのまま渡すと落ちる。GAME.md §2.4）
+        facility, node = found if isinstance(found, tuple) and len(found) == 2 else (found, None)
+        if facility is None:
+            write("custody: kept {} in the party (no facility to return to)".format(member_id))
+            return None         # 置き先を決めずに外さない（世界のどこにも居なくなる）
+        remove(member_id)
+        try:
+            mover(member_id, character, facility, node)
+        except Exception:
+            ctx.log_exc("crime incentive: move_npc_to_facility failed for {}".format(member_id))
+        write("custody: {} left the party for {!r}".format(member_id, getattr(facility, "name", facility)))
+        return getattr(character, "name", None) or str(member_id)
+
+    env.send_back = send_back
+
+    def disband(app):
+        """仲間を解散させる。外した名前を返す。"""
+        names = [name for name in (send_back(app, member_id) for member_id in list(ui.party_member_ids(app)))
+                 if name is not None]
         if names:
             screen.schedule(lambda: screen.paint_party(app))     # 裁判の段はワーカースレッド。塗るのはメインスレッド（`rescue` と同じ）
         return names

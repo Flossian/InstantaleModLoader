@@ -63,18 +63,21 @@
 既定 OFF ＝ 素の挙動が既定。
 """
 
-import copy
 import datetime
+import os
 import sys
 import time
 
-from instantale_modloader import frames, jobs, llm, ui
+from instantale_modloader import arrivals, durations, frames, jobs, llm, loads, modnpc, ui
 from instantale_modloader.state import WorldStore
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
 #      `tools/check_mods.py` が AST で突き合わせる）------------------------
 RECENT_DEEDS = 5          # 1回の編纂に渡す新しい功績の上限
 MENTION_IN_STARTER = False  # 会話の第一声に「近況に触れてよい」を差すか
+#: 第一声の相手の `profile` に足す順（ローダの `modnpc` の notes。小さいほど先）。
+#: 自分で包んでいたときの重なり（外側から 321・317・403・311・326・301）を保つ。TECH.md §3.3.21。
+NOTES_PRIORITY = -6
 MENTION_TEXT = "この土地の近況は【土地情報】に書かれているとおりで、あなたも見聞きしている。会話の中で自然に触れてよい。"
 LOG_MATERIAL = True       # descriptions の実行時の形を1回だけログに残すか
 
@@ -278,6 +281,7 @@ def apply(ctx):
     state = store["state"]
 
     write = ctx.logger(LOG_BASENAME)
+    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "321_area_chronicle"
     worlds = store["worlds"].rebind(ctx, write)
     data_lock = worlds.lock
 
@@ -540,60 +544,37 @@ def apply(ctx):
         ctx, compile_area, write, on_drop=note_dropped)
 
     # ---------------------------------------------------- 第一声への差し込み
-    def with_mention(args, kwargs):
-        """第4引数の NPC を浅く複製し、`profile` に近況の断りを足す。
+    def mention_notes(info):
+        """第一声の相手の `profile` に足す近況の断り。
 
-        注入の位置は `317_` と同じ（浅い複製。ゲーム世界の NPC 本体は触らない）。
+        ローダの `modnpc` の notes から、第一声（`conversation_starter`）でだけ呼ばれる
+        （複製と差し替えは関所が1回だけ行う。ゲーム世界の NPC 本体は触らない。TECH.md §5.7）。
         足すのは**この土地の年代記が在るときだけ** ―
         何も変わっていない土地で近況を促すと、無いものへの言及を招く。
         """
+        if not MENTION_IN_STARTER:
+            return None
         text = MENTION_TEXT.strip() if isinstance(MENTION_TEXT, str) else ""
         if not text:
-            return args, kwargs
-        npc = kwargs.get("character_instance")
-        if npc is None and len(args) >= 4:
-            npc = args[3]
-        if npc is None:
-            note_inject("starter: character_instance が無い（args={}, kwargs={}）"
-                        .format(len(args), sorted(kwargs)))
-            return args, kwargs
-        app = ui.find_app()
+            return None
+        app = info.get("app") or ui.find_app()
         if app is None:
             note_inject("starter: app が見つからない")
-            return args, kwargs
+            return None
         area_id = ui.area_id_of(ui.current_area(app))
         if not area_id or record_of(worlds.playthrough(app), area_id) is None:
             note_inject("starter: この土地の年代記はまだ無い")
-            return args, kwargs
-        base = getattr(npc, "profile", "") or ""
-        if not isinstance(base, str):
-            note_inject("starter: profile が {} なので足せない".format(
-                type(base).__name__))
-            return args, kwargs
-        try:
-            clone = copy.copy(npc)
-        except Exception as exc:
-            note_inject("starter: {} を複製できない（{}）".format(
-                type(npc).__name__, type(exc).__name__))
-            return args, kwargs
-        clone.profile = (base.rstrip() + "\n\n" + text) if base.strip() else text
+            return None
         note_inject("starter: profile に近況の断り{}字を足した".format(len(text)))
-        if "character_instance" in kwargs:
-            merged = dict(kwargs)
-            merged["character_instance"] = clone
-            return args, merged
-        merged = list(args)
-        merged[3] = clone
-        return tuple(merged), kwargs
+        return text
 
-    @ctx.wrap("scripts.llm.llm_manager:conversation_starter", required=False)
-    def conversation_starter(orig, *args, **kwargs):
-        if MENTION_IN_STARTER:
-            try:
-                args, kwargs = with_mention(args, kwargs)
-            except Exception:
-                ctx.log_exc("area chronicle: 第一声への差し込みに失敗した")
-        return orig(*args, **kwargs)
+    if MENTION_IN_STARTER:
+        modnpc.install(ctx, write=write)
+        modnpc.register(owner, modnpc.ANY, notes=mention_notes, sites=("conversation_starter",),
+                        priority=NOTES_PRIORITY, write=write)
+    else:
+        # 切のときは関所を立てない。前の世代で入にしていた層は外す（登録簿は注入をまたいで残る）
+        modnpc.unregister(owner, modnpc.ANY)
 
     # ------------------------------------------------------------------ フック
     @ctx.wrap("__main__:QuestEndManager.execute", required=False, safe=True)
@@ -623,15 +604,14 @@ def apply(ctx):
             ctx.log_exc("area chronicle: クリアで予約できなかった")
         return result
 
-    @ctx.wrap("__main__:World.__init__", required=False, safe=True)
-    def world_loaded(orig, self, save_data_dict, app, *args, **kwargs):
+    def world_loaded(call):
         """セーブを読み込んだ。控えのある土地の案内文を当て直す。
 
         差し替えはセーブに残らないので、ここが素へ戻った状態の始点になる
         （`318_` と同型）。世界の鍵はセーブの辞書から取る ―
         この時点では `app.world` がまだ埋まっていない。
         """
-        result = orig(self, save_data_dict, app, *args, **kwargs)
+        self, save_data_dict, app = call.obj, call.save_data, call.app
         try:
             key = worlds.playthrough(app, save_data_dict)
             if key:
@@ -641,25 +621,25 @@ def apply(ctx):
                         key, applied))
         except Exception:
             ctx.log_exc("area chronicle: ロード直後に当て直せなかった")
-        return result
 
-    @ctx.wrap("__main__:AreaMoveManager.execute", required=False, safe=True)
-    def area_arrival(orig, self, choice_text=None, *args, **kwargs):
-        result = orig(self, choice_text, *args, **kwargs)
+    loads.on(owner, ctx, (loads.WORLD,), after=world_loaded, write=write)
+
+    # 街に着いた後・日数が進んだ後はローダの窓口（`arrivals` / `durations.on_days`。TECH.md §3.3.21）
+    def area_arrival(call):
         try:
-            check(getattr(self, "app", None) or ui.find_app(), "到着")
+            check(call.app, "到着")
         except Exception:
             ctx.log_exc("area chronicle: 土地への到着で失敗した")
-        return result
 
-    @ctx.wrap("__main__:InstantaleApp.elapse_days", required=False, safe=True)
-    def elapse_days(orig, self, days=None, *args, **kwargs):
-        result = orig(self, days, *args, **kwargs)
+    arrivals.on(owner, ctx, (arrivals.AREA,), after=area_arrival, write=write)
+
+    def after_days(call):
         try:
-            check(self, "日数経過")
+            check(call.app, "日数経過")
         except Exception:
             ctx.log_exc("area chronicle: 日数の経過で失敗した")
-        return result
+
+    durations.on_days(owner, ctx, after=after_days, write=write)
 
     # ------------------------------------------------------------ 注入直後
     def initial_apply():

@@ -8,6 +8,7 @@
   外さない … MOD の人物・置き先の無い仲間は外さない。設定を切れば何もしない。仲間が居なければ何も出さない
   牢の印 … 立てる・下ろす。控えに持つ（ロードをまたぐ）。牢を出た知らせ（`prison_event("exit")`）で下ろす
   ゲームオーバー … 牢の中で倒れた・処刑された・寿命を迎えたときも、ゲームオーバーの包み（`prison`）が下ろす
+  手引き … 処刑の場面で手引き役を入れた後に依頼が作られなければ、手引き役を雇われた場所へ戻し、牢の外から始めたなら印も戻す
 """
 import importlib
 import os
@@ -195,6 +196,61 @@ try:
     check("ゲームオーバーで牢の印を下ろす",
           env.in_custody(app) is False and "custody" not in worlds.data["W/P"], worlds.data)
     check("その記録", any("custody: out (game over)" in l for l in lines), lines)
+
+    print("手引きに賭けて依頼が作られない")
+    # 処刑の判決の画面で手引き役をパーティに入れてから依頼を作る。作れなければ手引き役と牢の印を戻す
+    rescue = importlib.import_module("crime_overhaul_custody_parts.rescue")
+    offers, phases = [], []
+    env.on_offer = lambda fn: offers.append(fn)
+    env.on_text = env.on_refresh = noop
+    env.prison_event = noop
+    env.area_difficulty = lambda a: 20
+    env.quest_inject = types.SimpleNamespace(update=lambda **k: None)
+    Cfg.RESCUE_ENABLED, Cfg.RESCUE_AFFINITY, Cfg.RESCUE_DIFFICULTY_PLUS, Cfg.RESCUE_LOSS = True, 60, 10, 10
+    screen.busy_on = screen.busy_off = noop
+    screen.start_phase = lambda a, phase, *args, **kw: phases.append(phase)
+    helper = Person("ミナ")
+    helper.relationship = {"player": {"affinity": 90}}
+    helper.config = {"is_dead": False}
+    app.world.characters["21"] = helper
+    app.party = ["player"]
+    app.add_party_member = lambda member_id: app.party.append(member_id)
+    del app.removed[:], app.moved[:]
+
+    class Board(object):
+        def __init__(self, app_):
+            pass
+
+        def generate_random_quest(self):
+            pass                                   # 生成が1件も作らなかった
+
+    patched = (ui.cls_of, ui.current_area, ui.world_areas, ui.quest_ids, rescue.choices.repaint)
+    ui.cls_of = lambda name: {"DisplayQuestChoice": Board, rescue.QUEST_START_SPEC: object}.get(name)
+    ui.current_area = lambda a: types.SimpleNamespace(id="7", name="試しの街")
+    ui.world_areas = lambda a: {}
+    ui.quest_ids = lambda a: []
+    rescue.choices.repaint = noop
+    try:
+        rescue.install(env)
+        view = types.SimpleNamespace(buttons=[{"text": "嫌だ！", "spec": types.SimpleNamespace(
+            cls_name=rescue.DEATH_SPEC, args=[])}])
+        made = [choice for fn in offers for choice in (fn(app, view) or [])]
+        check("処刑の判決の画面に手引きの選択肢が出る", len(made) == 1 and "ミナ" in made[0].text,
+              [getattr(c, "text", c) for c in made])
+        env.set_custody(app, False, "before")
+        made[0].on_press(app)
+        phases[-1].execute("x")
+        check("依頼が作られなければ手引き役を外して雇われた場所へ戻す",
+              app.party == ["player"] and app.removed == ["21"] and app.moved == [("21", "ミナの宿", "node")],
+              (app.party, app.removed, app.moved))
+        check("牢の外から始めたなら牢の印も戻す", env.in_custody(app) is False, worlds.data.get("W/P"))
+        env.set_custody(app, True, "imprisonment")
+        del app.removed[:], app.moved[:]
+        phases[-1].execute("x")
+        check("牢の中から始めたなら牢の印は残す（服役中のまま）",
+              env.in_custody(app) is True and app.party == ["player"], (worlds.data.get("W/P"), app.party))
+    finally:
+        ui.cls_of, ui.current_area, ui.world_areas, ui.quest_ids, rescue.choices.repaint = patched
 finally:
     ui.party_member_ids, ui.find_app = saved
 

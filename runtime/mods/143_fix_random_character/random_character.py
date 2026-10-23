@@ -44,7 +44,7 @@ import sys
 import threading
 import time
 
-from instantale_modloader import frames, saves, state, ui
+from instantale_modloader import frames, loads, saves, state, ui
 from instantale_modloader.llm import wrap_outgoing
 
 LOG_BASENAME = "random_character.log"
@@ -433,12 +433,13 @@ def apply(ctx):
                 record()
         return result
 
-    @ctx.wrap("__main__:InstantaleApp.load_game_new", required=False, safe=True)
-    def load_game_new(orig, self, *args, **kwargs):
+    def before_load(call):
+        """ロードの前（ローダの窓口 `loads`。TECH.md §3.3.21）。"""
         if creation_world() is not None:
             forget_world()
             note("[SCREEN] load: 作成画面の世界の控えを捨てた")
-        return orig(self, *args, **kwargs)
+
+    loads.on(os.path.basename(getattr(ctx, "mod_dir", "") or "") or "143_fix_random_character", ctx, (loads.LOAD,), before=before_load)
 
     def run(texts, site):
         """ローダから、1回の推論で出ていく本文の並びとして呼ばれる。変えなければ None。"""

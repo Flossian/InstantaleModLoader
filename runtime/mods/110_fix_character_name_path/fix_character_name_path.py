@@ -75,9 +75,10 @@ Windows 上に存在し得ない**（不正文字を含むディレクトリを�
 世界名の入口は未調査なので触らない（発生すれば `001_` が同じ形で捕まえる）。
 """
 
+import os
 import sys
 
-from instantale_modloader import frames, ui
+from instantale_modloader import frames, loads, ui
 
 LOG_BASENAME = "character_name.log"
 
@@ -226,20 +227,17 @@ def apply(ctx):
         return fixed
 
     if SWEEP_ON_LOAD:
-        def on_load(target, label):
-            @ctx.wrap(target, required=False)
-            def _load(orig, self, *args, **kwargs):
-                result = orig(self, *args, **kwargs)
-                try:
-                    sweep(self if frames.attr(self, "world", None) is not None
-                          else find_app(), label)
-                except Exception:
-                    ctx.log_exc("character name: sweep failed")
-                return result
-            return _load
+        # ロードと新規開始の後はローダの窓口 `loads` から呼ばれる（TECH.md §3.3.21）。
+        def after_load(call):
+            self = call.obj
+            try:
+                sweep(self if frames.attr(self, "world", None) is not None
+                      else find_app(), call.label)
+            except Exception:
+                ctx.log_exc("character name: sweep failed")
 
-        on_load("__main__:InstantaleApp.load_game_new", "load_game_new")
-        on_load("__main__:InstantaleApp.start_game", "start_game")
+        loads.on(os.path.basename(getattr(ctx, "mod_dir", "") or "") or "110_fix_character_name_path", ctx, (loads.LOAD, loads.NEW_GAME),
+                 after=after_load, write=write)
 
     if SWEEP_ON_BOOT:
         try:

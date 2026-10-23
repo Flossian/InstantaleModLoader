@@ -8,7 +8,7 @@
   頼み     … 店に着くと手が空いてから裏で1回頼む。手配中は窓口 `wanted` の率で手配の頼み、無ければ平時の頼み。
              店でない施設・MOD の人物・平時を切った回では頼まない。頼みに店主の性格・関係・感情・人生ログが載る
   売買     … 判定の向きで値段が動き、初めての回だけ LLM の1文。平時の普段どおりは何も出さない。
-             場面・好感度・手配度が変わるか日数が過ぎると頼み直す。頼んでいない店主はその場で頼む（待機表示）
+             場面・好感度・手配度が変わるか日数が過ぎると頼み直す。頼んでいない店主はその場で頼む（待機表示は重ねない）
   窓口     … 店の値の圧を引き受けたと名乗る
 """
 import importlib
@@ -24,7 +24,7 @@ MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
-from instantale_modloader import llm, prices, ui, wanted  # noqa: E402
+from instantale_modloader import arrivals, llm, prices, ui, wanted  # noqa: E402
 from instantale_modloader import state as loader_state  # noqa: E402
 
 
@@ -219,7 +219,8 @@ try:
     worlds = sys.modules[mod.__name__]._store()["worlds"]
     layer = layers[0]
     shop = ctx.hooks[mod.SHOP_TARGET]
-    arrive = ctx.hooks[mod.MOVE_PHASE_TARGET]
+    # 着いた後はローダの窓口 `arrivals` に預ける（包むのはローダの1枚）
+    arrive = ctx.hooks[arrivals.MOVE_TARGET]
     check("店の値の圧を引き受けたと名乗る", wanted.shop_pressure_taker() == "341_shopkeeper_attitude")
     wanted.declare_shop_pressure("336_crime_overhaul", FakeCtx(), lambda a: here["pressure"])
 
@@ -286,7 +287,7 @@ try:
     here["pressure"] = 0.2
     answers.append({"reason": "罪が重く怖い", "stance": 0, "line": ""})
     press_shop()
-    check("手配度が変わると売買の時にその場で頼む（待機表示）", len(asked) == 4 and screen.busy == ["on", "off"],
+    check("手配度が変わると売買の時にその場で頼む（待機表示は重ねない。ゲームの execute の中）", len(asked) == 4 and screen.busy == [],
           (len(asked), screen.busy))
     check("怯える値段（20%）と決まった文", prices_now() == (800, 1200)
           and screen.said == ["手配書の顔に気づいた店主は、怯えたように値を改めた。（買値 -20%・売値 +20%）"],
@@ -320,11 +321,22 @@ try:
     print("頼めない")
     here["pressure"] = 0.1
     here["lawfulness"] = -20
-    keeper.relationship["player"]["affinity"] = 39
+    keeper.relationship["player"]["affinity"] = 19
     press_shop()
-    check("LLM が答えなければ手配中は好感度の線（39 は怯える）", prices_now() == (900, 1100)
+    check("LLM が答えなければ手配中は好感度の線（既定 20。19 は怯える）", mod.FRIEND_AFFINITY == 20 and prices_now() == (900, 1100)
           and any("cowed [fallback]" in l for l in lines), lines)
     check("答えが読めなかったことをログに残す", any("no usable answer" in l for l in lines), lines)
+
+    print("日数が読めない")
+    worlds.data["W/P"]["99"] = {"mode": "usual", "stance": 1, "lawfulness": None, "affinity": 0, "day": 131,
+                                "line": "", "told": True}
+    here["day"] = None
+    answers.append({"reason": "読み込みの途中", "stance": 1, "line": ""})
+    before_asks = len(asked)
+    come(Facility("7"))
+    check("日数が読めない間に答えが返っても、ほかの店主の控えを消さない",
+          len(asked) == before_asks + 1 and "99" in worlds.data["W/P"] and "7" in worlds.data["W/P"],
+          (len(asked) - before_asks, sorted(worlds.data["W/P"])))
 finally:
     (prices.install, prices.adjust, ui.find_app, ui.game_day, ui.current_area, ui.find_facility,
      ui.area_id_of, ui.area_record, ui.lawfulness_of, ui.Screen, llm.ask, llm.create_structure,

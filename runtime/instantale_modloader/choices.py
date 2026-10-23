@@ -95,6 +95,8 @@ FOLD_TICKS = 300
 #: 宣言型の口で窓口が組んだボタンの印のキー。値は窓口だけが読む辞書（`Choice` と下の一覧）で、
 #: 印の持ち越し（`record_marks`）は値が辞書の印を控えない。セーブの前には外す（`strip`）。
 CHOICE_KEY = "mod_choices"
+#: ローダの部品が窓口に預けるときの持ち主の頭。並びは MOD より先（`provide`）。
+LOADER_OWNER_PREFIX = "loader:"
 #: セーブに焼かれる、選択肢と同じ形の器（`modfacility` / `modnpc` と同じ3つ）。
 SAVED_CHOICE_ATTRS = ("buttons", "buttons_backup", "buttons_backup_for_shopping")
 #: 組み直しと保存が一覧を取り合わないための鍵の待ち（秒）。待ち切ったら鍵なしで進む（ゲームを止めない）。
@@ -186,7 +188,13 @@ def provide(ctx, screen=None, refresh=None, after=None, presses=None, intercept=
     if key not in store["order"] or (generation is not None and seen.get(key) != generation):
         if key in store["order"]:
             store["order"].remove(key)
-        store["order"].append(key)
+        if key.startswith(LOADER_OWNER_PREFIX):
+            # ローダの部品（`loader:modfacility`）は MOD より先。1回目の起動は MOD の apply の中から、
+            # 2回目からは MOD より前の関所の立て直しから預けられるので、末尾へ付けると起動ごとに並びが変わる
+            at = sum(1 for other in store["order"] if other.startswith(LOADER_OWNER_PREFIX))
+            store["order"].insert(at, key)
+        else:
+            store["order"].append(key)
     seen[key] = generation
     store["providers"][key] = {
         "ctx": ctx, "screen": screen, "refresh": refresh, "after": after, "trim": trim,
@@ -1017,7 +1025,7 @@ def on_refresh(ctx, app):
         store["save_pending"] = False
     if isinstance(buttons, list) and buttons and not ready(app):
         arm_after_load(ctx, app)
-    elif loaded and isinstance(buttons, list) and buttons and not ui.party_member_ids(app)             and not store.get("watcher_refreshing"):
+    elif loaded and isinstance(buttons, list) and buttons and not ui.party_member_ids(app) and not store.get("watcher_refreshing"):
         # 人物は揃ったが名簿がまだ戻っていない、ロードの後の最初の組み直し。名簿を見て組む宣言型のボタン
         # （`404_` の自前の「会話する」）は、ここでは組まれず、次の組み直しまで出なかった（実機）。
         # 前の版の印の付け直しでは、セーブの残骸に印が戻って出ていた。名簿を少し待って1度組み直す

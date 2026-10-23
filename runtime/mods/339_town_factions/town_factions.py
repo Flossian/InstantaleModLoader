@@ -22,7 +22,7 @@ import random
 import sys
 import types
 
-from instantale_modloader import choices, frames, hudicons, jobs, llm, modnpc, talk_summary, ui
+from instantale_modloader import choices, durations, frames, hudicons, jobs, llm, loads, modnpc, talk_summary, ui
 from instantale_modloader import state as loader_state
 from instantale_modloader.state import UNKNOWN_WORLD, WorldStore, world_key
 
@@ -36,8 +36,8 @@ LOSS_PER_STEP = 8             # 会話の判定 -1 あたりに下がる点
 INCIDENT_GAIN = 10            # 338 の出来事を主人公が片付けたとき、その街の勢力に上がる点
 TREND_DAYS = 30               # 情勢を進める間隔（日）。0 で進めない
 TREND_SPREAD_DAYS = 15        # 間隔を前後にずらすランダムな日数の幅（情勢が動くたびに -これ〜+これを引き直す）
-HUNTER_HOSTILE_RATE = 20       # 敵対の勢力の街に着いたとき、刺客が現れる確率（％）
-HUNTER_WARY_RATE = 0          # 緊張の勢力の街に着いたとき、刺客が現れる確率（％）。0 で現れない
+HUNTER_HOSTILE_RATE = 20       # 敵対の勢力の街の中で移動するたび（着く・施設に入る・出る）に、刺客が現れる確率（％）
+HUNTER_WARY_RATE = 0          # 緊張の勢力の街での同じ確率（％）。0 で現れない
 HUNTER_GAP_DAYS = 45          # 刺客が現れてから、次の刺客が現れうるまでの日数の基準
 HUNTER_GAP_SPREAD_DAYS = 15   # その基準を前後にずらすランダムな日数の幅（刺客が現れるたびに引き直す）
 HUNTER_GAP_MIN_DAYS = 30      # ずらしても空ける最低の日数（ゲームの宿泊・移動は3か月飛ぶので1か月は空ける）
@@ -77,7 +77,6 @@ MANAGER_STANDING = "mod_town_factions_standing"
 MANAGER_TREND = "mod_town_factions_trend"
 MANAGER_DESIGN = "mod_town_factions_design"
 MANAGER_PEOPLE = "mod_town_factions_people"
-DAYS_TARGET = "__main__:InstantaleApp.elapse_days"
 SEND_TARGET = "scripts.llm.llm_manager:send_request"
 # 世界の生成の頼みは `llm_manager_world_generate` から送られる。main_026 から部品ごとに別の関数になり、
 # `llm_manager` だけを包む形では届かなくなった（VERIFICATION.md §3.100）。同じ関数なら二重には包まない（llm.watch_aliases）。
@@ -85,7 +84,8 @@ GENERATE_TARGETS = (SEND_TARGET, "scripts.llm.llm_manager_world_generate:send_re
 WORLD_MANAGER = "create_world_overview"       # 世界の生成の頼み（概要の有無によらずこの名前。GAME.md §2.27）
 WORLD_SAVE_TARGET = "save_world_json:write_obfuscated_json_file"
 WORLD_FILE = "world_data.json"
-LOAD_TARGETS = ("__main__:InstantaleApp.load_game_new",)
+#: ロードの入口（ローダの窓口 `loads`。TECH.md §3.3.21）。
+LOAD_KINDS = (loads.LOAD,)
 TIMEOUT = 300
 CHANGE_FIELD = "faction_change"
 REASON_FIELD = "faction_reason"
@@ -640,7 +640,7 @@ def apply(ctx):
             return None             # 刺客との会話では動かさない（動くのは討ったときだけ。VERIFICATION.md §3.98「勢力の刺客」）
         faction_id, role = faction_for(app, ledger, talk["npc_id"])
         # 勢力の者として主人公を見ている相手（一員・他の勢力寄り）との会話だけが見られ方を動かす
-        if not faction_id or role not in rules.JUDGING_ROLES                 or not talk_summary.player_engaged(talk["messages"]):
+        if not faction_id or role not in rules.JUDGING_ROLES or not talk_summary.player_engaged(talk["messages"]):
             return None
         faction = rules.faction_by_id(ledger, faction_id)
         if faction is None:
@@ -769,14 +769,14 @@ def apply(ctx):
         spread = max(0, int(TREND_SPREAD_DAYS))
         return RNG.randint(-spread, spread)
 
-    @ctx.wrap(DAYS_TARGET, required=False, safe=True)
-    def elapse_days(orig, self, *args, **kwargs):
-        result = orig(self, *args, **kwargs)
+    def days_end(call):
+        """日数が進んだ後（ローダの日数の関所 `durations.on_days`。TECH.md §3.3.21）。"""
         try:
-            after_days(self)
+            after_days(call.app)
         except Exception:
             ctx.log_exc("town factions: after elapse_days failed")
-        return result
+
+    durations.on_days(OWNER, ctx, after=days_end, write=write)
 
     # ------------------------------------------------------------ 勢力と情勢の窓
     # 絵のパスは apply() の間に組む（`ctx.mod_dir` はフックの中では読めない）。
@@ -837,26 +837,20 @@ def apply(ctx):
                  write=write, visible=listed)
 
     # ------------------------------------------------------------ ロード
-    def make_load(target):
-        @ctx.wrap(target, required=False, safe=True)
-        def on_load(orig, self, *args, **kwargs):
-            result = orig(self, *args, **kwargs)
-            worlds.forget()
-            store["failed"].clear()         # 作れなかった台帳は、読み込み直したらもう一度試す
-            store.setdefault("people_failed", set()).clear()    # 答えの無かった街の住人も聞き直す
-            store["people_checked"] = None
-            store["checked"] = None
-            store["listed"] = None          # 一覧の行を出すかは、次に聞かれたときに読み直す
-            try:
-                close_view()
-                ensure(self)                # 読み込んだらすぐ作り始める（会話や日数の経過を待たない）
-            except Exception:
-                ctx.log_exc("town factions: cannot check the ledger after loading")
-            return result
-        return on_load
+    def on_load(call):
+        worlds.forget()
+        store["failed"].clear()         # 作れなかった台帳は、読み込み直したらもう一度試す
+        store.setdefault("people_failed", set()).clear()    # 答えの無かった街の住人も聞き直す
+        store["people_checked"] = None
+        store["checked"] = None
+        store["listed"] = None          # 一覧の行を出すかは、次に聞かれたときに読み直す
+        try:
+            close_view()
+            ensure(call.obj)            # 読み込んだらすぐ作り始める（会話や日数の経過を待たない）
+        except Exception:
+            ctx.log_exc("town factions: cannot check the ledger after loading")
 
-    for target in LOAD_TARGETS:
-        make_load(target)
+    loads.on(OWNER, ctx, LOAD_KINDS, after=on_load, write=write)
 
     def refresh_choice_buttons(app, _buttons):
         """読み込みの包みが読み込みを拾えなかったときの保険。

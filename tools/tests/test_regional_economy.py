@@ -464,9 +464,15 @@ def main():
     import types as _types
 
     class GenCtx(Ctx):
+        #: 作るたびに次の世代にする。ローダの窓口の関所（`arrivals` など）は1つの世代に1枚で、
+        #: 同じ世代の2つ目の ctx には包みが渡らない（本番の注入し直しは世代が進む）。
+        _last_generation = [Ctx.generation]
+
         def __init__(self):
             Ctx.__init__(self)
             self.gone = False
+            GenCtx._last_generation[0] += 1
+            self.generation = GenCtx._last_generation[0]
 
         def superseded(self):
             return self.gone

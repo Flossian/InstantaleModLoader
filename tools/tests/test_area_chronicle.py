@@ -36,7 +36,9 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml                                   # noqa: E402
+from instantale_modloader import gates                              # noqa: E402
 from instantale_modloader import llm as llm_module                  # noqa: E402
+from instantale_modloader import modnpc                             # noqa: E402
 from instantale_modloader import ui as ui_module                    # noqa: E402
 from instantale_modloader.state import PLAYTHROUGH_SEP            # noqa: E402
 
@@ -44,7 +46,6 @@ QUEST_END = "__main__:QuestEndManager.execute"
 WORLD_INIT = "__main__:World.__init__"
 AREA_MOVE = "__main__:AreaMoveManager.execute"
 ELAPSE = "__main__:InstantaleApp.elapse_days"
-STARTER = "scripts.llm.llm_manager:conversation_starter"
 
 
 def find_mod(suffix):
@@ -210,6 +211,11 @@ def fresh_mod(app, replies=(), **settings):
     if hasattr(sys, module.STATE_STORE_ATTR):
         delattr(sys, module.STATE_STORE_ATTR)
     ui_module.find_app = lambda: app
+    # 窓口の包みは1つの世代に1枚なので、偽の ctx を作り直すたびに忘れさせる（gates.reset_all）。
+    # modnpc の関所の印も同じ理由で落とす
+    gates.reset_all()
+    if hasattr(sys, modnpc.INSTALLED_ATTR):
+        delattr(sys, modnpc.INSTALLED_ATTR)
     ctx = FakeCtx()
     module.apply(ctx)
     return module, ctx
@@ -463,30 +469,50 @@ def run():
         seen["times"] = seen.get("times", 0) + 1
         return "第一声"
 
+    def starter(site="conversation_starter"):
+        """ローダの modnpc の頼み文の関所（`_wrap_prompt`）が引数を束ねた後の手順をなぞる。
+
+        本物の関所は `scripts.llm.llm_manager` の署名で引数を束ねるので、ゲーム抜きでは素通りする。
+        ここでは束ねた結果（`character_instance`）から先、層の notes を繋いで複製へ足すところを通す。
+        """
+        args = {"character_instance": npc}
+        stack = modnpc.layers_for("npc-1")
+        if stack:
+            info = {"site": site, "app": app2, "npc_id": "npc-1",
+                    "character": npc, "args": args}
+            modnpc.apply_notes(info, stack)
+        return orig(**args)
+
+    def mine():
+        return [layer for layer in modnpc.layers_for("npc-1")
+                if layer["owner"] == "321_area_chronicle"]
+
     # 既定 OFF（controls は前の検査の控えが残ったまま＝年代記は在る）
     module, ctx = fresh_mod(app2)
-    ctx.hooks[STARTER](orig, "messages", "log", "player", npc, "relationship")
-    check("既定 OFF では触らない", seen["args"][3] is npc)
+    check("既定 OFF では modnpc に層を積まない", not mine(), mine())
+    starter()
+    check("既定 OFF では触らない", seen["kwargs"]["character_instance"] is npc)
     # ON ＋ 年代記あり
     module, ctx = fresh_mod(app2, MENTION_IN_STARTER=True)
-    ctx.hooks[STARTER](orig, "messages", "log", "player", npc, "relationship")
-    got = seen["args"][3]
+    check("ON なら modnpc に誰にでも効く層（ANY）を積む",
+          len(mine()) == 1 and callable(mine()[0]["notes"]), mine())
+    starter()
+    got = seen["kwargs"]["character_instance"]
     check("複製の profile に1行が足される",
           got is not npc and got.profile.endswith(module.MENTION_TEXT)
           and got.profile.startswith("口の固い店主。"))
     check("本体の NPC は変わらない", npc.profile == "口の固い店主。")
-    ctx.hooks[STARTER](orig, "messages", "log", "player",
-                       character_instance=npc)
-    check("キーワード渡しでも複製に足す",
-          seen["kwargs"]["character_instance"] is not npc
-          and seen["kwargs"]["character_instance"].profile.endswith(
-              module.MENTION_TEXT))
+    starter("conversation_facilitator")
+    check("第一声以外の頼み文には足さない",
+          seen["kwargs"]["character_instance"] is npc)
     # ON ＋ 年代記なし
     clear_cache(module)
     module, ctx = fresh_mod(app2, MENTION_IN_STARTER=True)
-    ctx.hooks[STARTER](orig, "messages", "log", "player", npc, "relationship")
-    check("年代記の無い土地では足さない", seen["args"][3] is npc)
+    starter()
+    check("年代記の無い土地では足さない", seen["kwargs"]["character_instance"] is npc)
     check("本体は必ず1回だけ呼ばれる", seen["times"] == 4)
+    # 後の検査に層を残さない（登録簿は sys に残る）
+    modnpc.unregister("321_area_chronicle", modnpc.ANY)
 
     print("名乗り")
     with io.open(os.path.join(MOD_DIR, "mod.json"), encoding="utf-8") as fh:

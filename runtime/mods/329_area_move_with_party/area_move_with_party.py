@@ -18,7 +18,9 @@ GAME.md §2.18、`217_` の `out\\area_move.log` で `days=[] texts=1`）。
 外れの検知: 置いた後も `area_move_rejector` が呼ばれたら `WARN rejected:` を書く。
 """
 
-from instantale_modloader import ui
+import os
+
+from instantale_modloader import arrivals, durations, ui
 
 LOG_BASENAME = "area_move_party.log"
 
@@ -92,29 +94,29 @@ def apply(ctx):
             write("lift: {} ({}) relationship {!r} -> {!r}".format(
                 npc_id, ui.character_name(app, npc_id), before, FAMILY))
 
-    def app_of(self):
-        return getattr(self, "app", None) or ui.find_app()
+    # 街の移動の前後・日数が進む前はローダの窓口（`arrivals` / `durations.on_days`。TECH.md §3.3.21）。
+    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "329_area_move_with_party"
 
-    @ctx.wrap("__main__:AreaMoveManager.execute", required=False)
-    def execute(orig, self, choice_text=None, *args, **kwargs):
-        app = app_of(self)
+    def move_begin(call):
         state["rejected"] = False
         try:
-            lift(app)
+            lift(call.app)
         except Exception:
             ctx.log_exc("area move party: cannot lift relationship")
-        try:
-            return orig(self, choice_text, *args, **kwargs)
-        finally:
-            restore(app, "execute done")
-            if state["rejected"]:
-                write("WARN rejected: the game refused the move although every companion "
-                      "had relationship {!r}; the check reads something else (VERIFICATION.md §3.56)".format(FAMILY))
 
-    @ctx.wrap("__main__:InstantaleApp.elapse_days", required=False, safe=True)
-    def elapse_days(orig, self, days, *args, **kwargs):
-        restore(self, "elapse_days({})".format(days))
-        return orig(self, days, *args, **kwargs)
+    def move_end(call):
+        # `always=True`。移動が投げても戻す（前は try/finally）。
+        restore(call.app, "execute done")
+        if state["rejected"]:
+            write("WARN rejected: the game refused the move although every companion "
+                  "had relationship {!r}; the check reads something else (VERIFICATION.md §3.56)".format(FAMILY))
+
+    arrivals.on(owner, ctx, (arrivals.AREA,), before=move_begin, after=move_end, always=True, write=write)
+
+    def days_begin(call):
+        restore(call.app, "elapse_days({})".format(call.days))
+
+    durations.on_days(owner, ctx, before=days_begin, write=write)
 
     @ctx.wrap("__main__:InstantaleApp.save_game", required=False, safe=True)
     def save_game(orig, self, *args, **kwargs):

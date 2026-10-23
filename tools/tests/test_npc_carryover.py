@@ -44,6 +44,7 @@ RUNTIME_DIR = os.path.join(ROOT, "runtime")
 MOD_DIR = os.path.join(RUNTIME_DIR, "mods", "323_npc_carryover")
 sys.path.insert(0, RUNTIME_DIR)
 
+from instantale_modloader import gates, loads                # noqa: E402
 from instantale_modloader import npcs as npc_tools          # noqa: E402
 
 failures = []
@@ -482,9 +483,13 @@ try:
     ctx = FakeCtx(out_dir, state_dir)
     mod = load("npc_carryover_mod", os.path.join(MOD_DIR, "npc_carryover.py"),
                package_dir=MOD_DIR)
+    # ローダの窓口 `loads` の包みは1つの世代に1枚。この偽の ctx に包みを渡すため、前の登録を忘れさせる
+    gates.reset_all()
     mod.apply(ctx)
-    check("ロードのフックが2つ当たる",
-          all(t in ctx.hooks for t in mod.LOAD_TARGETS), sorted(ctx.hooks))
+    check("ロードと新規開始の両方で窓口 loads に登録する",
+          all("323_npc_carryover" in loads.owners(kind) for kind in mod.LOAD_KINDS)
+          and all(loads.TARGETS[kind] in ctx.hooks for kind in mod.LOAD_KINDS),
+          ([loads.owners(kind) for kind in mod.LOAD_KINDS], sorted(ctx.hooks)))
 
     app = build_app(target, index={"npc": 1, "item": 5})
     app.world_dict["world_data"] = {"world_name": "アルカディア"}
@@ -494,7 +499,7 @@ try:
     # ローダ側の `npc_stores` の仕事だが、ここを空にしておかないと
     # その経路を通らない。
     app.world.characters.clear()
-    hook = ctx.hooks[mod.LOAD_TARGETS[1]]
+    hook = ctx.hooks[loads.TARGETS[loads.NEW_GAME]]
     hook(lambda _self, *a, **k: None, app)
 
     made = [npc_id for npc_id in app.save_data_dict["npcs"] if npc_id != "0"]
@@ -912,7 +917,7 @@ try:
         for node in area.nodes.values():
             for facility in node.facilities.values():
                 facility.__dict__.pop("name", None)
-    ctx.hooks[mod.LOAD_TARGETS[1]](lambda _self, *a, **k: None, plain)
+    ctx.hooks[loads.TARGETS[loads.NEW_GAME]](lambda _self, *a, **k: None, plain)
     ctx.hooks["__main__:InstantaleApp.refresh_choice_buttons"](
         lambda _self, *a, **k: None, plain)
     plain_said = [text for text in plain.said if "流れて来た" in (text or "")]

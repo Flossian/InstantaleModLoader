@@ -117,12 +117,12 @@ mod どうしは同じ場所を読むことで繋がる。
 この mod を切っていても、まだ一度も会話していなくても成立する。
 """
 
-import copy
 import datetime
+import os
 import sys
 import threading
 
-from instantale_modloader import frames, jobs, llm, ui
+from instantale_modloader import frames, jobs, llm, modnpc, ui
 from instantale_modloader.state import WorldStore, world_key
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
@@ -132,6 +132,10 @@ INJECT_CHARS = 1200        # 抽出LLMへの目標長（要約で収める。保
 RECORD_PLAYER_MEMORY = True   # 「その人物から見たプレイヤー」を別欄で覚えるか
 FACT_LOG_LIMIT = 200       # 判明した事実の追記専用ログの上限件数（0 で記録しない）
 TELL_ELAPSED_DAYS = True   # 前に話してからのゲーム内日数を会話に伝えるか
+
+#: 会話の相手の `profile` に控えを足す順（ローダの `modnpc` の notes。小さいほど先）。
+#: 自分で包んでいたときの重なり（外側から 321・317・403・311・326・301）を保つ。TECH.md §3.3.21。
+NOTES_PRIORITY = -3
 
 LOG_BASENAME = "npc_profile.log"
 
@@ -450,6 +454,7 @@ def apply(ctx):
     log_lock = store["log_lock"]
 
     write = ctx.logger(LOG_BASENAME)
+    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "311_npc_profile_memory"
     worlds = store["worlds"].rebind(ctx, write)
     data_lock = worlds.lock
 
@@ -718,67 +723,32 @@ def apply(ctx):
             blocks.append(note)
         return "\n\n".join(blocks)
 
-    def with_profile(label, args, kwargs):
-        """NPC の浅い複製の `profile` に控えを足した引数を組み直す。
+    def profile_notes(info):
+        """会話5関数の相手の `profile` に足す控え。
 
-        5つの会話関数は先頭4引数の並びが同じなので、ここ1つで足りる。
-        複製できない・引数が短いならそのまま返す。
-        ただし黙っては降りない。
+        ローダの `modnpc` の notes から呼ばれる（複製と差し替えは関所が1回だけ行う。TECH.md §5.7）。
+        素通りするときも黙っては降りない。
         素通りした理由がログに残らないと、注入が効いていないことに気付けない。
         """
-        npc = kwargs.get("character_instance")
-        if npc is None and len(args) >= 4:
-            npc = args[3]
-        if npc is None:
-            note_inject("{}: no character_instance (args={}, kwargs={})".format(
-                label, len(args), sorted(kwargs)))
-            return args, kwargs
-        app = ui.find_app()
+        label = info.get("site")
+        app = info.get("app") or ui.find_app()
         if app is None:
             note_inject("{}: no running app".format(label))
-            return args, kwargs
-        npc_id = npc_id_of(app, npc)
+            return None
+        npc_id = str(info.get("npc_id") or "") or npc_id_of(app, info.get("character"))
         if not npc_id:
             note_inject("{}: cannot name the character ({})".format(
-                label, type(npc).__name__))
-            return args, kwargs
+                label, type(info.get("character")).__name__))
+            return None
         addition = memory_block(record_of(app, npc_id), player_name_of(app),
                                 game_day(app))
         if not addition:
             note_inject("{}: nothing recorded for {!r} ({})".format(
                 label, name_of(app, npc_id), npc_id))
-            return args, kwargs
-        try:
-            clone = copy.copy(npc)
-        except Exception as exc:
-            note_inject("{}: cannot copy {} ({})".format(
-                label, type(npc).__name__, type(exc).__name__))
-            return args, kwargs
-        base = getattr(npc, "profile", "")
-        if base is None:
-            base = ""
-        if not isinstance(base, str):
-            note_inject("{}: profile is {}".format(label, type(base).__name__))
-            return args, kwargs
-        clone.profile = (base.rstrip() + "\n\n" + addition
-                         if base.strip() else addition)
+            return None
         note_inject("{}: {!r} ({}) +{} chars into profile".format(
             label, name_of(app, npc_id), npc_id, len(addition)))
-        if "character_instance" in kwargs:
-            merged = dict(kwargs)
-            merged["character_instance"] = clone
-            return args, merged
-        merged = list(args)
-        merged[3] = clone
-        return tuple(merged), kwargs
-
-    def inject(orig, label, args, kwargs):
-        """引数を組み直してから元の関数へ。元の関数は必ず1回だけ呼ぶ。"""
-        try:
-            args, kwargs = with_profile(label, args, kwargs)
-        except Exception:
-            ctx.log_exc("npc profile: injection failed")
-        return orig(*args, **kwargs)
+        return addition
 
     # ------------------------------------------------------------ LLM 呼び出し
     def ask(manager_name, messages):
@@ -1071,27 +1041,9 @@ def apply(ctx):
             ctx.log_exc("npc profile: cannot schedule extraction")
         return result
 
-    @ctx.wrap("scripts.llm.llm_manager:conversation_facilitator", required=False)
-    def conversation_facilitator(orig, *args, **kwargs):
-        return inject(orig, "facilitator", args, kwargs)
-
-    @ctx.wrap("scripts.llm.llm_manager:conversation_facilitator_after_retrieval",
-              required=False)
-    def conversation_facilitator_after_retrieval(orig, *args, **kwargs):
-        return inject(orig, "facilitator[retrieval]", args, kwargs)
-
-    @ctx.wrap("scripts.llm.llm_manager:conversation_facilitator_in_quest",
-              required=False)
-    def conversation_facilitator_in_quest(orig, *args, **kwargs):
-        return inject(orig, "facilitator[quest]", args, kwargs)
-
-    @ctx.wrap("scripts.llm.llm_manager:conversation_starter", required=False)
-    def conversation_starter(orig, *args, **kwargs):
-        return inject(orig, "starter", args, kwargs)
-
-    @ctx.wrap("scripts.llm.llm_manager:conversation_starter_in_quest",
-              required=False)
-    def conversation_starter_in_quest(orig, *args, **kwargs):
-        return inject(orig, "starter[quest]", args, kwargs)
+    # 会話5関数へ足す文は、ローダの `modnpc` の notes に預ける（自分で包まない）。
+    # 足す順は前に自分で包んでいたときの重なりと同じ（`NOTES_PRIORITY`）。
+    modnpc.install(ctx, write=write)
+    modnpc.register(owner, modnpc.ANY, notes=profile_notes, priority=NOTES_PRIORITY, write=write)
 
     ctx.log("npc profile memory: state={}/".format(state_dir))

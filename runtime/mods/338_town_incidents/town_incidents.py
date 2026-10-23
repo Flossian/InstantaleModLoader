@@ -24,8 +24,8 @@ import re
 import sys
 import time
 
-from instantale_modloader import (choices, hudicons, jobs, llm, modnpc, prices, quest_claims,
-                                  state as loader_state, ui)
+from instantale_modloader import (arrivals, choices, durations, hudicons, jobs, llm, loads, modnpc, prices,
+                                  quest_claims, state as loader_state, ui)
 
 from . import incidents, window
 
@@ -82,7 +82,8 @@ SIZES = ("village", "town", "city")
 GUILD_TYPE = "guild"
 COMPLETED = "completed"
 SHOP_TARGET = "__main__:ShoppingStartManagerRemake.execute"
-LOAD_TARGETS = ("__main__:InstantaleApp.load_game_new",)
+#: ロードの入口（ローダの窓口 `loads`。TECH.md §3.3.21）。
+LOAD_KINDS = (loads.LOAD,)
 BUSY_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle", "in_conversation")
 #: 窓のアイコン（注意の標識）。普段・乗せた時・押した時。描き方は `tools\make_town_incidents_icon.py`。
 ICON_FILES = ("icon_caution.png", "icon_caution_hover.png", "icon_caution_click.png")
@@ -794,22 +795,20 @@ def apply(ctx):
             ctx.log_exc("town incidents: cannot settle the quest end")
         return result
 
-    @ctx.wrap("__main__:InstantaleApp.elapse_days", required=False, safe=True)
-    def elapse_days(orig, self, *args, **kwargs):
-        """日が進んだ後に見回る。日数の進め方には触らない（ローダの関所の外側の後処理）。"""
-        result = orig(self, *args, **kwargs)
+    def after_days(call):
+        """日が進んだ後に見回る。日数の進め方には触らない（ローダの日数の関所 `durations.on_days`）。"""
         try:
-            tick(self)
+            tick(call.app)
         except Exception:
             ctx.log_exc("town incidents: tick after elapse_days failed")
-        return result
+
+    durations.on_days(OWNER, ctx, after=after_days, write=write)
 
     # ------------------------------------------------------------ 着いた・店に入った
-    @ctx.wrap("__main__:AreaMoveManager.execute", required=False, safe=True)
-    def area_arrival(orig, self, *args, **kwargs):
-        result = orig(self, *args, **kwargs)
+    def area_arrival(call):
+        """街に着いた後（ローダの窓口 `arrivals`。TECH.md §3.3.21）。"""
         try:
-            app = getattr(self, "app", None) or ui.find_app()
+            app = call.app
             here = here_id(app)
             if store.get("here") != here:
                 store["here"] = here
@@ -831,7 +830,8 @@ def apply(ctx):
             say_when_idle(app, lines, "arrival")
         except Exception:
             ctx.log_exc("town incidents: cannot tell the arrival")
-        return result
+
+    arrivals.on(OWNER, ctx, (arrivals.AREA,), after=area_arrival, write=write)
 
     @ctx.wrap(SHOP_TARGET, required=False, safe=True)
     def shop_start(orig, self, *args, **kwargs):
@@ -915,17 +915,11 @@ def apply(ctx):
         store["here"] = here_id(app)
         prices.refresh("town incidents load")
 
-    def make_load(target):
-        @ctx.wrap(target, required=False, safe=True)
-        def on_load(orig, self, *args, **kwargs):
-            result = orig(self, *args, **kwargs)
-            worlds.forget()
-            store["reconcile"] = True
-            return result
-        return on_load
+    def on_load(call):
+        worlds.forget()
+        store["reconcile"] = True
 
-    for target in LOAD_TARGETS:
-        make_load(target)
+    loads.on(OWNER, ctx, LOAD_KINDS, after=on_load, write=write)
 
     def refresh_choice_buttons(self, _buttons):
         if store["reconcile"]:

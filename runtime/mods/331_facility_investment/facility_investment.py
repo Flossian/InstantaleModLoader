@@ -68,7 +68,7 @@ r"""機能追加: 街に施設を建てる（出資する）。
 import datetime
 import sys
 
-from instantale_modloader import (choices, durations, frames, holdings, llm, modfacility,
+from instantale_modloader import (choices, durations, frames, holdings, llm, loads, modfacility,
                                   modnpc, prices, ui)
 from instantale_modloader.state import (UNKNOWN_WORLD, WorldStore, playthrough_key,
                                         playthrough_key_of_dict)
@@ -1329,18 +1329,17 @@ def apply(ctx):
             state["key_override"] = None
         return key
 
-    @ctx.wrap("__main__:World.__init__", required=False, safe=True)
-    def world_loaded(orig, self, save_data_dict, app, *args, **kwargs):
-        """セーブを読んだ直後。前の世界の覚えを捨て、持ち株を当て直す。
-
-        層だけは orig の前に積む（`register_before_load`）。
-        """
-        early = None
+    def world_loading(call):
+        """世界を組み立てる前（ローダの窓口 `loads`）。主人の層だけは先に積む（`register_before_load`）。"""
         try:
-            early = register_before_load(app, playthrough_key_of_dict(save_data_dict, None))
+            return register_before_load(call.app, playthrough_key_of_dict(call.save_data, None))
         except Exception:
             ctx.log_exc("investment: cannot register the holdings before the load")
-        result = orig(self, save_data_dict, app, *args, **kwargs)
+            return None
+
+    def world_loaded(call):
+        """セーブを読んだ直後。前の世界の覚えを捨て、持ち株を当て直す。"""
+        self, save_data_dict, app, early = call.obj, call.save_data, call.app, call.memo
         try:
             key = playthrough_key_of_dict(save_data_dict, None) or playthrough_key(app)
             if app is not None and key and key != UNKNOWN_WORLD:
@@ -1368,7 +1367,8 @@ def apply(ctx):
                 later(lambda: notice_full(app), delay=1.0)
         except Exception:
             ctx.log_exc("investment: cannot rebuild the holdings on load")
-        return result
+
+    loads.on(OWNER, ctx, (loads.WORLD,), before=world_loading, after=world_loaded, write=write)
 
     @ctx.wrap("__main__:VacationStartManager.execute", required=False)
     def vacation_start(orig, self, choice_text="", *args, **kwargs):

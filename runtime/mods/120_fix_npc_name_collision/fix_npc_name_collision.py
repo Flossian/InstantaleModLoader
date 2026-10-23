@@ -220,7 +220,7 @@ import sys
 import threading
 import unicodedata
 
-from instantale_modloader import frames, ui
+from instantale_modloader import frames, loads, ui
 
 LOG_BASENAME = "npc_name.log"
 
@@ -869,36 +869,37 @@ def apply(ctx):
         return result
 
     # ------------------------------------------ 世界が変わったら控え直す
-    def on_load(target, label):
-        @ctx.wrap(target, required=False)
-        def _load(orig, self, *args, **kwargs):
-            # ロードの最中に組み立てられる NPC も、その後の控え直しも、
-            # どちらも「既に世界に居る人」として裁く。
-            # 外側の1回で前の世界の控えを捨てる。
-            # 残すと、ロードの最中に組まれる NPC を別の世界の名前と突き合わせ、
-            # `FIX_EXISTING` では居もしない相手との衝突で改名してしまう。
-            # 入れ子（start_game の中の load_game_new）では、外側が控えた分を消さない。
-            if loading["depth"] == 0:
-                known.clear()
-            loading["depth"] += 1
-            try:
-                result = orig(self, *args, **kwargs)
+    # ロードと新規開始の前後はローダの窓口 `loads` から呼ばれる（TECH.md §3.3.21）。
+    def before_load(call):
+        # ロードの最中に組み立てられる NPC も、その後の控え直しも、
+        # どちらも「既に世界に居る人」として裁く。
+        # 外側の1回で前の世界の控えを捨てる。
+        # 残すと、ロードの最中に組まれる NPC を別の世界の名前と突き合わせ、
+        # `FIX_EXISTING` では居もしない相手との衝突で改名してしまう。
+        # 入れ子（start_game の中の load_game_new）では、外側が控えた分を消さない。
+        if loading["depth"] == 0:
+            known.clear()
+        loading["depth"] += 1
+
+    def after_load(call):
+        # `always=True`。ロードが投げても深さは戻す（前は try/finally で包んでいた）。
+        try:
+            if call.error is None:
                 try:
+                    self = call.obj
                     app = (self if frames.attr(self, "world", None) is not None
                            else find_app())
-                    fixed = seed(app, label)
+                    fixed = seed(app, call.label)
                     if fixed:
                         ctx.log("npc name: renamed {} duplicate(s) already in the world; "
                                 "see out/{}".format(fixed, LOG_BASENAME))
                 except Exception:
                     ctx.log_exc("npc name: seeding the roster failed")
-                return result
-            finally:
-                loading["depth"] -= 1
-        return _load
+        finally:
+            loading["depth"] -= 1
 
-    on_load("__main__:InstantaleApp.load_game_new", "load_game_new")
-    on_load("__main__:InstantaleApp.start_game", "start_game")
+    loads.on(os.path.basename(getattr(ctx, "mod_dir", "") or "") or "120_fix_npc_name_collision", ctx, (loads.LOAD, loads.NEW_GAME),
+             before=before_load, after=after_load, always=True, write=write)
 
     # ------------------------------------- 一括生成で書かれる住人（版8。docstring の節）
     bulk = {"depth": 0}
@@ -915,8 +916,10 @@ def apply(ctx):
     def fix_written(npcs, before, area_id):
         """`npcs` に新しく増えた住人を、その世界の住人と突き合わせて直す。直した数。"""
         roster = {}
-        fresh_ids = [cid for cid in npcs if cid not in before]
-        for cid, entry in npcs.items():
+        # 写しを回す（ゲームの辞書。ほかの2か所と同じく、回している間にゲームのスレッドが人物を足すと落ちる）
+        rows = list(npcs.items())
+        fresh_ids = [cid for cid, _entry in rows if cid not in before]
+        for cid, entry in rows:
             if cid in fresh_ids or not isinstance(entry, dict):
                 continue
             name = entry.get("name")

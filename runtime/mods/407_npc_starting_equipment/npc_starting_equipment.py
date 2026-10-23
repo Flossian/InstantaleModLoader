@@ -24,11 +24,12 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import threading
 import typing
 
-from instantale_modloader import equipment, frames, ids, items, jobs, llm, npcs, state, ui
+from instantale_modloader import equipment, frames, ids, items, jobs, llm, loads, npcs, state, ui
 
 
 # ---- MOD固有の設定 ---------------------------------------------------------
@@ -531,8 +532,10 @@ def apply(ctx):
                 ctx.log_exc("npc starting equipment: cannot write the marks after the save")
         return result
 
-    @ctx.wrap("__main__:World.__init__", required=False, safe=True)
-    def world_init(orig, self, *args, **kwargs):
+    # ロード・新規開始・世界の組み立ての前後はローダの窓口 `loads` から呼ばれる（TECH.md §3.3.21）。
+    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "407_npc_starting_equipment"
+
+    def world_init_begin(call):
         """ロードと新規開始。LLM待ちの仕事と、保存されなかった印を捨てる。"""
         with runtime["lock"]:
             runtime["generation"] += 1
@@ -542,19 +545,21 @@ def apply(ctx):
             marks.clear()
         if dropped:
             write("load: unsaved marks dropped: {}".format(dropped))
-        result = orig(self, *args, **kwargs)
-        worlds.forget()
-        return result
 
-    @ctx.wrap("__main__:InstantaleApp.load_game_new", required=False, safe=True)
-    def load_game_new(orig, self, *args, **kwargs):
+    def world_init_end(call):
+        worlds.forget()
+
+    loads.on(owner, ctx, (loads.WORLD,), before=world_init_begin, after=world_init_end, write=write)
+
+    def load_begin(call):
         # セーブのロードで既存の仲間を加入扱いにしない。
         with runtime["lock"]:
             runtime["suppress"] += 1
-        try:
-            return orig(self, *args, **kwargs)
-        finally:
-            with runtime["lock"]:
-                runtime["suppress"] = max(0, runtime["suppress"] - 1)
+
+    def load_end(call):
+        with runtime["lock"]:
+            runtime["suppress"] = max(0, runtime["suppress"] - 1)
+
+    loads.on(owner + ":load", ctx, (loads.LOAD,), before=load_begin, after=load_end, always=True, write=write)
 
     ctx.log("npc starting equipment: installed; waiting for party joins")

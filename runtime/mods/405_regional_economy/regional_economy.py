@@ -97,7 +97,7 @@ import sys
 import threading
 import typing
 
-from instantale_modloader import frames, llm, prices, ui
+from instantale_modloader import arrivals, frames, llm, prices, ui
 from instantale_modloader.state import (world_filename, world_key,
                                         world_key_of_dict)
 
@@ -2067,18 +2067,16 @@ def apply(ctx):
                                    "405_regional_economy"),
                   regional_for, temporary=True, write=write_adjust)
 
-    @ctx.wrap("__main__:MovePhaseManager.move_phase",
-              required=False, safe=True)
-    def move_phase(orig, self, *args, **kwargs):
-        """エリア到達。プロフィール生成の唯一の入口。
+    def after_move(call):
+        """エリア到達。プロフィール生成の唯一の入口（施設に着いた後。ローダの窓口 `arrivals`）。
 
         ロードと店開始でも積んでいたが、一度きりの仕事に入口が3つ要らない。
         町に着いてから店に入るまでには間があるので、ここで積めば間に合う。
         ロード直後に店へ直行した場合は売買画面の側が拾う。
         """
-        result = orig(self, *args, **kwargs)
-        schedule_current(getattr(self, "app", None), "area arrival")
-        return result
+        schedule_current(call.app, "area arrival")
+
+    arrivals.on(os.path.basename(getattr(ctx, "mod_dir", "") or "") or "405_regional_economy", ctx, (arrivals.FACILITY,), after=after_move, write=write)
 
     @ctx.wrap("__main__:ShoppingStartManagerRemake.execute",
               required=False, safe=True)

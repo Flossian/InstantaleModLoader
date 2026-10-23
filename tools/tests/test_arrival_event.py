@@ -263,6 +263,10 @@ def setup(mode="conversation", override=1.0, reply="「いらっしゃい」", *
         setattr(mod, name, value)
     ctx = FakeCtx(os.path.join(HERE, os.pardir, os.pardir, "out", "test"))
     calls = install_fake_llm(reply)
+    # 施設の移動はローダの窓口 `arrivals` が1つの世代に1枚だけ包む。
+    # 偽の ctx を作り直すたびに忘れさせないと、2回目の ctx に包みが渡らない
+    from instantale_modloader import gates
+    gates.reset_all()
     mod.apply(ctx)
     hooks = {
         "move": ctx.hooks["__main__:MovePhaseManager.move_phase"],

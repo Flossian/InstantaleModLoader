@@ -182,6 +182,9 @@ def setup(characters=None, player=None):
 
     mod = load_mod()
     ctx = FakeCtx(os.path.join(HERE, os.pardir, os.pardir, "out", "test"))
+    # ロードと新規開始はローダの窓口 `loads` が1つの世代に1枚だけ包む。偽の ctx を作り直すたびに忘れさせる
+    from instantale_modloader import gates
+    gates.reset_all()
     mod.apply(ctx)
     install(ctx.hooks, char_cls, app_cls)
     return mod, ctx, char_cls, app

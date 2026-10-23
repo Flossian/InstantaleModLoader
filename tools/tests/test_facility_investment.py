@@ -46,7 +46,7 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml                              # noqa: E402
-from instantale_modloader import durations, modfacility, modnpc  # noqa: E402
+from instantale_modloader import durations, gates, modfacility, modnpc  # noqa: E402
 from instantale_modloader import choices                # noqa: E402
 from instantale_modloader import holdings as holdings_window, hudicons  # noqa: E402
 from instantale_modloader import state as loader_state          # noqa: E402
@@ -669,6 +669,8 @@ def setup(keep_state=False, extra_in_village=(), gold=500000, configure=None):
     # （この MOD だけなら `modfacility` が先）。建物より前に主人を置こうとする**厳しい側**で、
     # 実機で主人が会話の一覧から消えたのはこの順序のとき（DOC.md §3.2 の5回目）。
     modnpc.install(ctx, write=lambda *a: None)
+    # ローダの窓口（`loads` ほか）の包みは1つの世代に1枚。偽の ctx を作り直すたびに忘れさせる
+    gates.reset_all()
     module.apply(ctx)
     install(ctx.hooks, (
         ("__main__:InstantaleApp.refresh_choice_buttons", classes["app"],

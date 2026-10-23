@@ -38,7 +38,7 @@ STATE_DIR = os.path.join(OUT_DIR, "state")
 if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
-from instantale_modloader import confinement, guards  # noqa: E402
+from instantale_modloader import arrivals, confinement, durations, gates, guards  # noqa: E402
 
 TARGETS = (
     "scripts.llm.llm_manager:guard_npc_generator",
@@ -46,6 +46,7 @@ TARGETS = (
     "__main__:BattleStartManager.__init__",
     "__main__:BattleStartManager.start_battle",
     "__main__:BattleEndManager.end_phase",
+    # 着いた後・日数が進んだ後はローダの窓口（`arrivals` / `durations.on_days`）が包む。
     "__main__:AreaMoveManager.execute",
     "__main__:MovePhaseManager.move_phase",
     "__main__:InstantaleApp.elapse_days",
@@ -56,6 +57,12 @@ TARGETS = (
     # ローダの窓口 `choices`（組み直しの後の合図を預けた）が、押下と保存も包む。
     "__main__:InstantaleApp.on_button_press",
     "__main__:InstantaleApp.save_game",
+)
+#: TARGETS のうち、この MOD ではなくローダの窓口が包む対象
+WINDOW_TARGETS = (
+    "__main__:AreaMoveManager.execute",
+    "__main__:MovePhaseManager.move_phase",
+    "__main__:InstantaleApp.elapse_days",
 )
 
 LOG_NAME = "bounty_hunter_send.log"
@@ -307,6 +314,8 @@ def fresh_mod(app, screen_cls=FakeScreen, **settings):
     for name, value in settings.items():
         setattr(module, name, value)
     ctx = FakeCtx(OUT_DIR)
+    # 窓口（arrivals / durations）の包みは1つの世代に1枚。偽の ctx を作り直すたびに忘れさせる
+    gates.reset_all()
     module.apply(ctx)
     return module, ctx
 
@@ -427,6 +436,14 @@ def main():
     module, ctx = fresh_mod(app, CHANCE_PERCENT=100)
     check("対象が全部登録される",
           sorted(ctx.hooks) == sorted(TARGETS), set(TARGETS) ^ set(ctx.hooks))
+    own = set(TARGETS) - set(WINDOW_TARGETS)
+    check("着いた後・日数の後は窓口に登録する（自分では包まない）",
+          module.OWNER in arrivals.owners(arrivals.AREA)
+          and module.OWNER in arrivals.owners(arrivals.FACILITY)
+          and module.OWNER in durations.DAYS_HOOKS.owners()
+          and own <= set(ctx.hooks),
+          (arrivals.owners(arrivals.AREA), arrivals.owners(arrivals.FACILITY),
+           durations.DAYS_HOOKS.owners()))
     returned, times = arrive(ctx, app)
     check("土地に着くと追手が出る", BattleStartManager.built == [("guard", None)],
           BattleStartManager.built)

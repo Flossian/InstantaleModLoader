@@ -94,7 +94,7 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("party flee: add_text failed")
 
-    @ctx.wrap(RESOLVE_TARGET, required=False)
+    @ctx.wrap(RESOLVE_TARGET, required=False, safe=True)
     def resolve_battle_effect(orig, self, *args, **kwargs):
         app = getattr(self, "app", None) or ui.find_app()
         escaped = getattr(app, "escaped_member_in_battle", None)
@@ -116,13 +116,13 @@ def apply(ctx):
             ctx.log_exc("party flee: cannot move the party after the player")
         return result
 
-    @ctx.wrap(HANDLE_TARGET, required=False)
+    @ctx.wrap(HANDLE_TARGET, required=False, safe=True)
     def handle_battle_situation(orig, self, *args, **kwargs):
         result = orig(self, *args, **kwargs)
         say_pending(getattr(self, "app", None) or ui.find_app())
         return result
 
-    @ctx.wrap(CHECK_TARGET, required=False)
+    @ctx.wrap(CHECK_TARGET, required=False, safe=True)
     def check_battle_end(orig, self, *args, **kwargs):
         # 1手ぶんの包みを通らない経路でも、終わり方の本文より先に出す
         say_pending(getattr(self, "app", None) or ui.find_app())
@@ -155,7 +155,7 @@ def apply(ctx):
             write("{}: the party is back ({})".format(where, [member_id for member_id, _v in moved]))
 
     def on_end(target, label):
-        @ctx.wrap(target, required=False)
+        @ctx.wrap(target, required=False, safe=True)
         def _end(orig, self, *args, **kwargs):
             result = orig(self, *args, **kwargs)
             try:

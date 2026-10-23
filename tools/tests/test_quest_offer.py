@@ -39,6 +39,7 @@ if RUNTIME_DIR not in sys.path:
 
 import instantale_modloader as ml                      # noqa: E402
 from instantale_modloader import ui as mlui            # noqa: E402
+from instantale_modloader import gates, modnpc         # noqa: E402
 
 
 def find_mod(suffix):
@@ -451,6 +452,11 @@ def setup(history=None, partner="62", in_conversation=True,
     main.PhaseSpec = PhaseSpec
 
     choices.reset()
+    # 関所（窓口の包み・modnpc の頼み文の包み）は1つの世代に1枚なので、
+    # ctx を作り直すたびに忘れさせる（残すと2回目の ctx に包みが渡らない）。
+    gates.reset_all()
+    if hasattr(sys, modnpc.INSTALLED_ATTR):
+        delattr(sys, modnpc.INSTALLED_ATTR)
     mod = load_mod()
     ctx = FakeCtx(os.path.join(HERE, os.pardir, os.pardir, "out", "test"))
     mod.apply(ctx)
@@ -700,6 +706,28 @@ kept = [b for b in app.buttons if b["spec"].cls_name == "QuestChoiceManager"]
 check("掲示板でなければ絞り込みを解く（次の掲示板は全件）", len(kept) == 2,
       [b["text"] for b in app.buttons])
 
+# 会話から開いた掲示板で依頼を押し、受注画面から戻ると、絞り込みは残っている（受注画面の押下では解かない）。
+# その後でほかの MOD が窓口で組んだボタン（302 の「ここで別れる」など）を押した。
+# この MOD のボタンと取り違えると絞り込みが解けず、次の掲示板が会話の相手で絞られる。
+clock = install_fake_kivy()
+mod, ctx, app = setup(history=history)
+app.refresh_choice_buttons()
+app.on_button_press(index_of(app, "offer"))
+clock.settle()
+app.buttons = [{"text": "【39】水底の警備", "spec": PhaseSpec("QuestChoiceManager", ["*unknown*", "39"])}]
+app.on_button_press(0)                                   # 掲示板の依頼を押した
+app.buttons = [{"text": "やめる", "spec": PhaseSpec("JustSetButtonToNormalPhase", [])}]
+app.on_button_press(0)                                   # 受注画面の「やめる」
+app.buttons = talk_buttons("62") + [{"text": "ここで別れる", "spec": PhaseSpec("JustSetButtonToNormalPhase", []),
+                                     choices.CHOICE_KEY: {"owner": "302_party_action", "choice": None, "under": None}}]
+app.on_button_press(len(app.buttons) - 1)
+board_cls = sys.modules["__main__"].DisplayQuestChoice
+board_cls(app).update_button_display()
+clock.settle()
+kept = [b for b in app.buttons if b["spec"].cls_name == "QuestChoiceManager"]
+check("ほかの MOD の窓口のボタンを押しても絞り込みを解く（次の掲示板は全件）", len(kept) == 2,
+      [b["text"] for b in app.buttons])
+
 # ============================================================ 依頼 id の読み取り
 print("=== spec からの読み取り（語彙を知らずに済ませる） ===")
 
@@ -943,6 +971,25 @@ CONV_TARGETS = (
     "scripts.llm.llm_manager:conversation_starter_in_quest")
 
 
+def install_fake_llm_manager():
+    """会話5関数を持つ `scripts.llm.llm_manager` を差し込む。
+
+    ローダの `modnpc` の関所は、いま差し込まれている素の関数の署名で引数を名前に直す。
+    モジュールが無いと素通りするので、先頭4引数の並び（GAME.md §2.25）だけ揃えて置く。
+    """
+    name = "scripts.llm.llm_manager"
+    module = sys.modules.get(name) or types.ModuleType(name)
+    for target in CONV_TARGETS:
+        def site(messages, character_life_log, player, character_instance,
+                 *args, **kwargs):
+            return "返答"
+        setattr(module, target.split(":", 1)[1], site)
+    sys.modules[name] = module
+
+
+install_fake_llm_manager()
+
+
 def clients_path(ctx_obj):
     return os.path.join(ctx_obj.state_dir, mod.CLIENTS_BASENAME)
 
@@ -980,7 +1027,7 @@ def add_quest(app_obj, quest_id, title, status, client_name="名も無い誰か"
 
 
 def talk_once(ctx_obj, app_obj, npc, target=CONV_TARGETS[0], as_kwarg=False):
-    """会話5関数の1本を mod のフック越しに1回呼ぶ。
+    """会話5関数の1本をローダの `modnpc` の関所越しに1回呼ぶ。
 
     先頭4引数の並びは5本とも同じ（GAME.md §2.25）。
     返すのは「元の関数に何が渡ったか」と「何回呼ばれたか」。
@@ -1005,9 +1052,15 @@ def profile_seen(seen):
     return getattr(seen["npc"], "profile", "") or ""
 
 
-check("会話5関数すべてを包む",
+mod, ctx, app = setup()
+check("会話5関数すべてに modnpc の関所が立つ",
       all(target in ctx.hooks for target in CONV_TARGETS),
       [t for t in CONV_TARGETS if t not in ctx.hooks])
+check("会話の notes を modnpc の全員向けの層に登録する",
+      any(layer.get("owner") == "301_quest_from_conversation"
+          and callable(layer.get("notes"))
+          for layer in modnpc.layers_for("any-id")),
+      [layer.get("owner") for layer in modnpc.layers_for("any-id")])
 
 # -- 片付いた依頼が載る。未完了と、別の相手の依頼は載らない。
 mod, ctx, app = setup()

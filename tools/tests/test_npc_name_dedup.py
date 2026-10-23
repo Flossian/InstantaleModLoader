@@ -201,6 +201,10 @@ def setup(settings=None, mod_dir=MOD_DIR):
     for key, value in (settings or {}).items():
         setattr(mod, key, value)
     ctx = FakeCtx(os.path.join(HERE, os.pardir, os.pardir, "out", "test"), mod_dir)
+    # ロードと新規開始の前後はローダの窓口 `loads` が1つの世代に1枚だけ包む。
+    # 偽の ctx を作り直すたびに前の登録と包みの印を忘れさせ、この ctx に包みを渡す
+    from instantale_modloader import gates
+    gates.reset_all()
     mod.apply(ctx)
     install(ctx.hooks, char_cls, world_cls, app_cls)
     return mod, ctx, app
