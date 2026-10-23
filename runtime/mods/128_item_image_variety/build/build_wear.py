@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """防具・服・装身具の一枚絵 → ゲームの寸法の絵と追加埋め込み辞書（一枚絵ごとの分類。../categories.json）。
 
-入力は作者が画像生成 AI で作った黒背景の一枚絵（ジャンルごとに31枚）と、1品ごとの表 wear.json
+入力は画像生成 AI で作った黒背景の一枚絵（ジャンルごとに31枚）と、1品ごとの表 wear.json
 （鍵・品種・一枚絵の上の箱・種類の名前）。分類は箱のある一枚絵で決まる（../categories.json）。
 一枚絵はリポジトリの assets/item_images/wear に置き、配布物（zip）には入れない。置き場所は引数 --sheets か環境変数 ITEM_IMAGE_ASSETS で替えられる。
 
@@ -29,7 +29,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import build_guns as b  # noqa: E402
 
-# 防具・服・装身具はどれも 64x64（作者の指示。1マスの品は画面で 64px に描かれるので、縮めずにそのまま出る）
+# 防具・服・装身具はどれも 64x64（1マスの品は画面で 64px に描かれるので、縮めずにそのまま出る）
 SIZE = (64, 64)
 COLOR = {"grey": "grey", "white": "white", "black": "black", "tan": "beige", "brass": "gold", "wood": "brown",
          "red": "red", "orange": "orange", "olive green": "olive", "green": "green", "blue": "blue",

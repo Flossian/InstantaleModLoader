@@ -57,7 +57,7 @@ KIND_OF = {
 }
 
 
-#: 能力値（本体に渡す1つ・合算・窓口 `combat`）に数える部位。自由枠は着けるだけで数えない（作者の決め）。
+#: 能力値（本体に渡す1つ・合算・窓口 `combat`）に数える部位。自由枠は着けるだけで数えない。
 STAT_REGIONS = tuple(name for name in REGIONS if KIND_OF[name] != FREE)
 
 

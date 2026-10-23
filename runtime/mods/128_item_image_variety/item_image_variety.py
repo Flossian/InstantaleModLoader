@@ -31,8 +31,8 @@ mushroom 28 / accessory 1）の追加辞書 `data/<item_detail>.json` を実行�
 作り方は build/README.md）。
 
 もう1つ、素材に無い絵を足す。銃と爆発物・中世の武器と防具・魔法武器・防具と服と装身具。
-どれも作者が画像生成 AI で作った一枚絵から起こした。
-分類は同じ種類の元画像をまとめた単位（`categories.json` の `sources`。版10 で作者の指示により119分類を45分類（品の種類：ジャンル）にまとめ、防具：ファンタジーを中世・ファンタジー・ハイファンタジー・ダークファンタジーに分け、防具：魔法とSF を足して49分類）。
+どれも画像生成 AI で作った一枚絵から起こした。
+分類は同じ種類の元画像をまとめた単位（`categories.json` の `sources`。版10 で119分類を45分類（品の種類：ジャンル）にまとめ、防具：ファンタジーを中世・ファンタジー・ハイファンタジー・ダークファンタジーに分け、防具：魔法とSF を足して49分類）。
 絵と辞書は分類ごとのフォルダに分ける（`images/<分類>/`・`data/<分類>/<品種>.json`）。
 分類ごとの設定で使い方を決める（使わない／素の絵と混ぜる／別扱い）。使わない分類は辞書を読まない。分類のフォルダを消しても動く。
 絵はゲームのフォルダには置かず、`images/<分類>/Assets/images/item_candidates_dark/<品種>/` に
@@ -77,7 +77,7 @@ USE_EXTRA_DICT = True
 # 部位をまたいで探す。ゲームが付けた部位に合う絵が無い外見文（包帯が道具、ダイナマイトが薬瓶で来るなど）は、
 # 自分の部位でいちばん似た絵が CROSS_SLOT_BELOW 未満のときだけ、同じ 32x32 の部位（CROSS_SLOTS）も見て、
 # そちらの最良が CROSS_SLOT_MIN 以上かつ自分 + CROSS_SLOT_MARGIN 以上ならその絵にする。
-# 装備品は部位ごとに絵の寸法が違うのでまたがない。決まりの値は作者が選んだ「きつめ」（VERIFICATION.md §3.26）。
+# 装備品は部位ごとに絵の寸法が違うのでまたがない。決まりの値は選んだ「きつめ」（VERIFICATION.md §3.26）。
 # 絵は頼まれた部位のフォルダに `xs.<元の部位>.<鍵>` の名で写す（`state/item_image_cross/`。探し先に足す）。
 # 一度付いた絵は、設定を切っても対応表のとおり同じ絵のまま。
 CROSS_SLOT = True
@@ -199,7 +199,7 @@ IMAGE_SETS = (
     ("treasure_modern", "SET_TREASURE_MODERN"),
     ("document_modern", "SET_DOCUMENT_MODERN"),
 )
-# 版10 で分類を「品の種類：ジャンル」にまとめた（作者の指示。元画像1枚＝1分類の119分類 → 45分類）。旧い設定名で書かれたワールド個別設定を読むための表
+# 版10 で分類を「品の種類：ジャンル」にまとめた（元画像1枚＝1分類の119分類 → 45分類）。旧い設定名で書かれたワールド個別設定を読むための表
 OLD_SETTINGS = {
     "SET_CREATURE_FANG": "SET_MATERIAL_CREATURE",
     "SET_CREATURE_MATERIAL": "SET_MATERIAL_CREATURE",
@@ -703,7 +703,7 @@ def apply(ctx):
             if order:
                 top_idx = order[0]
                 top_sim = float(sims[order[0]])
-            # 候補の幅は足す前の値で決め、比べるのは足した後の値（作者の決め。VERIFICATION.md §3.26）。
+            # 候補の幅は足す前の値で決め、比べるのは足した後の値（VERIFICATION.md §3.26）。
             # 比を足した後の値に掛けると、全部の絵に同じだけ足す世界で幅が 0.2 × 加算だけ広がった
             floor = top_sim - (1.0 - SIM_FLOOR) * float(raw[top_idx])
             qualified = [i for i in order if float(sims[i]) >= floor]
@@ -780,7 +780,7 @@ def apply(ctx):
         query = query / query.norm().clamp_min(1e-12)
         own = rank(pool, query)
         # 部位をまたぐ候補。比べる自分の値は実際に見せる絵（使用数で選ぶ）の値なので、候補の中に
-        # 0.55 未満の絵があれば先に探しておく（作者が選んだ試算と同じ比べ方。VERIFICATION.md §3.26）
+        # 0.55 未満の絵があれば先に探しておく（選んだ試算と同じ比べ方。VERIFICATION.md §3.26）
         other = None
         if CROSS_SLOT and item_sub_type in CROSS_SLOTS and own["top_sim"] > 0 and min(
                 float(own["raw"][i]) for i in own["qualified"]) < CROSS_SLOT_BELOW:

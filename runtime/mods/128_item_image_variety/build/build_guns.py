@@ -3,7 +3,7 @@
 
 入力は表 weapon_asset.json（README.md の「銃の絵」）:
 
-- 作者が画像生成 AI で作った一枚絵（黒背景。22枚）。1枚ごとに 鍵・品種の希望（pref）・
+- 画像生成 AI で作った一枚絵（黒背景。22枚）。1枚ごとに 鍵・品種の希望（pref）・
   一枚絵の上の箱・回転・種類の名前。品種は縦横比で決め、キャプションは種類と絵から測った色で組む。
   一枚絵はリポジトリの assets/item_images に置き、配布物（zip）には入れない。置き場所は引数 --sheets か
   環境変数 ITEM_IMAGE_ASSETS で替えられる。銃の一枚絵は `guns/`（categories.json の source）
@@ -156,11 +156,11 @@ PREF = {"small": "small_weapon", "medium": "medium_weapon",
         "large": "large_weapon", "long": "long_weapon",
         "throwable": "throwable_weapon"}
 # 武器の絵は素の絵の寸法の SCALE 倍。2倍（ゲームがマス1つを描く画面の大きさ）で作るとゲームの中で素の絵より
-# きめ細かく浮き、素の絵と同じ寸法（1）では 64x64 の防具類よりきめが粗く見えたので、間の 1.5 倍にした（作者の指示。VERIFICATION.md §3.26）。
+# きめ細かく浮き、素の絵と同じ寸法（1）では 64x64 の防具類よりきめが粗く見えたので、間の 1.5 倍にした（VERIFICATION.md §3.26）。
 # 防具類と消耗品は倍にしない。呼ぶ側は素の絵の寸法（SIZES・game_size）と倍率を渡し、shrink が倍にする。
 # 占めるマスの数は品の種類で決まり、絵の寸法では変わらない
 SCALE = 1.5
-# 消耗品・素材などのアイテム類（build_medieval.ITEMS の部位）の倍率。武器と同じ 1.5 倍を試す（作者の指示。VERIFICATION.md §3.26）。
+# 消耗品・素材などのアイテム類（build_medieval.ITEMS の部位）の倍率。武器と同じ 1.5 倍を試す（VERIFICATION.md §3.26）。
 # 1 に戻すと素の絵と同じ寸法になる。防具類・盾・装身具は倍にしない
 ITEM_SCALE = 1.5
 GAME_SIZES = dict(SIZES, shield=(64, 64), body_armor=(64, 64))
@@ -400,7 +400,7 @@ def muzzle_up(im):
     return im.rotate(180) if a[:q].sum() > a[-q:].sum() else im
 
 
-# ---- 作者が画像生成 AI で作った一枚絵 -----------------------------------------------
+# ---- 画像生成 AI で作った一枚絵 -----------------------------------------------
 
 _big = {}
 

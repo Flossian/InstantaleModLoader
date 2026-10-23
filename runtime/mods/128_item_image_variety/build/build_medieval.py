@@ -11,7 +11,7 @@
 - 防具（盾・胴鎧・服・装身具）の寸法も扱う
 - 表の `whole` が真の品は、箱の中の塊を全部取る（2〜3本の投げナイフや矢の束のように、離れて描かれた1組）
 
-入力はリポジトリの assets/item_images の下の一枚絵（作者が画像生成 AI で作ったもの。場所は categories.json の source）と、
+入力はリポジトリの assets/item_images の下の一枚絵（画像生成 AI で作ったもの。場所は categories.json の source）と、
 1枚ごとの 鍵・品種の希望・一枚絵の上の箱・種類の名前を書いた表（medieval.json / magic.json / sf.json）。
 
     python build_medieval.py [--set medieval|magic|sf|item] [--sheets <一枚絵のフォルダ>] [--preview <見比べ用の一覧 PNG>]
@@ -40,7 +40,7 @@ ITEMS = ("food", "drink", "medicine", "plant", "mushroom", "tool", "relic", "scr
          "creature_part", "document", "scroll", "liquid_material", "treasure", "metal", "gem", "ore", "potion")
 # 寸法は部位の素の絵と同じ（build_guns.game_size。盾・胴鎧は 2x2 マスの 64x64、服・装身具・消耗品は 32x32）
 SQUARE = ("shield", "body_armor", "clothing", "accessory", "headgear", "gauntlets", "legwear") + ITEMS
-# 消耗品と部品の組（item）の頭・服・手・脚・装身具は、防具類と同じく 64x64（作者の指示。中世の服は 32x32 のまま）。
+# 消耗品と部品の組（item）の頭・服・手・脚・装身具は、防具類と同じく 64x64（中世の服は 32x32 のまま）。
 # 装身具は中世の組（矢筒）でも 64x64。1マスの品は画面で 64px に描かれ、32x32 だと2倍に引き伸ばされて粗く見えた
 ITEM_WEAR = {f: (64, 64) for f in ("clothing", "headgear", "gauntlets", "legwear", "accessory")}
 # 刃や金属の頭を持つ種類。色を素材の言葉に直す
@@ -207,7 +207,7 @@ def make_entry(e, sheets, kind):
     if e["folder"] in b.SIZES and e.get("halo", True):
         # 武器だけ（結晶や薬瓶は色の付いた暗い面が多く、はがすと削れる）
         im = b.peel_glow(im, min((box_w - 2) / im.width, (box_h - 2) / im.height), strong=bool(e.get("glow")))
-    # 武器は SCALE 倍、消耗品・素材などのアイテム類は ITEM_SCALE 倍（作者の指示）。盾・防具・装身具は素の寸法
+    # 武器は SCALE 倍、消耗品・素材などのアイテム類は ITEM_SCALE 倍。盾・防具・装身具は素の寸法
     scale = b.SCALE if e["folder"] in b.SIZES else b.ITEM_SCALE if e["folder"] in ITEMS else 1
     return b.shrink(im, box_w, box_h, 255, scale), e["folder"], e["caption"]
 

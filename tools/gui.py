@@ -179,7 +179,7 @@ def _vtuple(ver: str) -> tuple[int, ...]:
 def local_assets_digest(path: str = ASSETS_MANIFEST) -> str | None:
     """手元のアセットの指紋（`runtime\\assets.json` の digest）。無い・読めないなら None。
 
-    手元のファイルは数えも測りもしない（作者の決め）。`128_` は要らない分類の絵と辞書を消してよいことにしていて、
+    手元のファイルは数えも測りもしない。`128_` は要らない分類の絵と辞書を消してよいことにしていて、
     手元を見ると、消した人が更新のたびに full を落とす（消した絵も戻る）。
     絵が欠けて戻したいときは `assets.json` を消せば、次の更新は full になる（README §3.6）。
     """

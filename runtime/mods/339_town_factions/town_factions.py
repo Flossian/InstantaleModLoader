@@ -764,7 +764,7 @@ def apply(ctx):
     def roll_extra():
         """次の情勢までの間隔をずらす日数（-`TREND_SPREAD_DAYS`〜+`TREND_SPREAD_DAYS`）。ゲームの乱数の並びは動かさない。
 
-        前は 0〜幅を足すだけで、間隔が決めた日数より短くならなかった（本人の指摘。10-21）。
+        前は 0〜幅を足すだけで、間隔が決めた日数より短くならなかった（10-21）。
         """
         spread = max(0, int(TREND_SPREAD_DAYS))
         return RNG.randint(-spread, spread)
