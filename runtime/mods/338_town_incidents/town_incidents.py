@@ -22,6 +22,7 @@ import os
 import random
 import re
 import sys
+import threading
 import time
 
 from instantale_modloader import (arrivals, choices, durations, hudicons, jobs, llm, loads, modnpc, prices,
@@ -164,6 +165,8 @@ def _store():
                  "rng": random.Random(), "inject": {}, "view": None, "here": None}
         setattr(sys, STORE_ATTR, store)
     store.setdefault("urgent", {})
+    # 掲示板で出来事の依頼を作らせている間の錠。押下ごとに別スレッドで `execute` が走るので、2つ目は作らせない
+    store.setdefault("making_quest", threading.Lock())
     return store
 
 
@@ -694,8 +697,7 @@ def apply(ctx):
                 return None                 # 表から消した出来事（次の日数送りで片付く）
             brief = BRIEF.format(name=name_of(event), stage=stage_name(event), what=kind["what"],
                                  quest=incidents.text_of(event, "quest").rstrip("。"))
-        # 掲示板の `execute` の中なので、待機の表示はゲームが出している（GAME.md §2.4）。
-        # `screen.busy_on` / `busy_off` は重ねない（VERIFICATION.md §3.97「依頼を作らせる間の待機の表示はゲームに任せる」）。
+        # 待機の表示と押下の止め方は呼ぶ側（`board`）。掲示板の `execute` ではゲームは旗を下ろさない（VERIFICATION.md §3.97）
         inject.update(brief=brief, at=time.monotonic())
         before = set(ui.quest_ids(app))
         try:
@@ -721,8 +723,18 @@ def apply(ctx):
 
     @ctx.wrap("__main__:DisplayQuestChoice.execute", required=False, safe=True)
     def board(orig, self, *args, **kwargs):
-        """掲示板を開いた。この街で出来事が起きていて依頼がまだ無ければ、先に作らせる（ゲームの待機表示の中で）。"""
+        """掲示板を開いた。この街で出来事が起きていて依頼がまだ無ければ、先に作らせる。
+
+        掲示板の `execute` ではゲームは旗を下ろさず点も送らない（押した直後も `is_button_enabled` は真）。
+        依頼を作らせる数秒の間はこちらで待機表示を出して押せなくする。作っている最中に届いた押下
+        （表示を出す前の一瞬に押された分）は作らせずに捨てる（VERIFICATION.md §3.97）。
+        """
         app = getattr(self, "app", None) or ui.find_app()
+        making = store["making_quest"]
+        if not making.acquire(False):
+            write("quest: a quest is being made; ignored another press of the board")
+            return None
+        busy = False
         try:
             if app is not None and ui.game_day(app) is not None:
                 with worlds.lock:
@@ -733,16 +745,29 @@ def apply(ctx):
                     event = incidents.live_in(bucket, here_id(app))
                     target = event.get("id") if event is not None and needs_quest(app, event) else None
                     name = name_of(event) if event is not None else ""
-                if target is not None and make_quest(app, target) is not None:
-                    # 作らせた回は、この掲示板の続き（`orig`）を呼ばず、手が空いてから開き直す（VERIFICATION.md §3.97「依頼を作らせる間の待機の表示はゲームに任せる」）。
-                    screen.say(app, BOARD_TEXT.format(name=name))
-                    reopen = getattr(self, "__class__", None)
-                    choice = args[0] if args else kwargs.get("choice_text", "")
-                    screen.when_idle(app, lambda: app.process_choice(reopen(app), choice),
-                                     proceed_on_timeout=True, tag="town incidents board")
-                    return None
+                if target is not None:
+                    # 旗がもう下りていれば（ゲームが待機を出している）重ねない。重ねると `busy_off` が下りた旗を書き戻す
+                    if getattr(app, "is_button_enabled", True) is not False:
+                        screen.busy_on(app)
+                        busy = True
+                    made = make_quest(app, target)
+                    if made is not None:
+                        # 作らせた回は、この掲示板の続き（`orig`）を呼ばず、手が空いてから開き直す。
+                        # 選択肢は塗らずに解く（開き直した掲示板が塗る。塗ると一瞬だけ前の画面が見える）
+                        screen.busy_off(app, restore=False)
+                        busy = False
+                        screen.say(app, BOARD_TEXT.format(name=name))
+                        reopen = getattr(self, "__class__", None)
+                        choice = args[0] if args else kwargs.get("choice_text", "")
+                        screen.when_idle(app, lambda: app.process_choice(reopen(app), choice),
+                                         proceed_on_timeout=True, tag="town incidents board")
+                        return None
         except Exception:
             ctx.log_exc("town incidents: cannot prepare the quest on the board")
+        finally:
+            if busy:
+                screen.busy_off(app, restore=False)     # 作れなかった。この後の `orig` が掲示板を塗る
+            making.release()
         return orig(self, *args, **kwargs)
 
     @ctx.wrap("scripts.llm.llm_manager_world_generate:random_quest_generator", required=False)

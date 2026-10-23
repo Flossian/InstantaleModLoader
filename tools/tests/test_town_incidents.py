@@ -576,8 +576,9 @@ class FakeCtx:
 ui.Screen.when_idle = lambda self, app, then, **kw: then()
 ui.Screen.say = lambda self, app, text: app.texts.append(text)
 ui.Screen.schedule = lambda self, fn, delay=0.0: fn()
-ui.Screen.busy_on = lambda self, app: None
-ui.Screen.busy_off = lambda self, app, restore=True: None
+BUSY = []
+ui.Screen.busy_on = lambda self, app: BUSY.append("on")
+ui.Screen.busy_off = lambda self, app, restore=True: BUSY.append(("off", restore))
 ui.find_app = lambda: APP
 ui.cls_of = lambda name: DisplayQuestChoice if name == "DisplayQuestChoice" else None
 
@@ -678,10 +679,30 @@ check("情景描写の素材に情勢を足す", "【この土地の情勢】" i
 print("[流れ] 掲示板を開くと依頼を作らせ、片付けると終わる")
 board = ctx.hook("__main__:DisplayQuestChoice.execute")
 DisplayQuestChoice.prompts = []
-result = board(lambda self, *a: self.execute(*a), DisplayQuestChoice(app), "クエスト掲示板")
+# 作らせている最中に、もう一度掲示板が押された（押下ごとに別スレッドで `execute` が走る。待機表示を出す前の一瞬）
+pressed_again = []
+plain_generate = DisplayQuestChoice.generate_random_quest
+
+
+def generate_with_another_press(self):
+    if not pressed_again:
+        pressed_again.append(board(lambda s, *a: s.execute(*a), DisplayQuestChoice(self.app), "クエスト掲示板"))
+    plain_generate(self)
+
+
+DisplayQuestChoice.generate_random_quest = generate_with_another_press
+del BUSY[:]
+app.is_button_enabled = True
+try:
+    result = board(lambda self, *a: self.execute(*a), DisplayQuestChoice(app), "クエスト掲示板")
+finally:
+    DisplayQuestChoice.generate_random_quest = plain_generate
 bucket = bucket_of(module, app)
 ev = rules.live_in(bucket, "0")
 check("依頼を作らせた", ev["quest"] == "50" and "50" in app.world.quests, ev)
+check("作らせている間に届いた押下は作らせずに捨てる（依頼は1つ）",
+      pressed_again == [None] and app.next_quest == 51, (pressed_again, app.next_quest))
+check("作らせる間は待機表示を出し、選択肢を塗らずに解く", BUSY == ["on", ("off", False)], BUSY)
 check("頼み文に出来事の説明を足した", "人の流入" in DisplayQuestChoice.prompts[-1],
       DisplayQuestChoice.prompts)
 check("掲示板の一言", any("依頼が新しく貼り出されている" in t for t in app.texts), app.texts)
