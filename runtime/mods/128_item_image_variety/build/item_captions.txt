@@ -2727,3 +2727,75 @@ itm_i54c_03	document	A sealed wooden chest with a faded town crest.
 itm_i54c_04	metal	A bronze badge with crossed spears and a falcon.
 itm_i54c_05	scroll	A rolled certificate with a wax seal.
 itm_i54c_08	document	A gold-bordered letter of appointment.
+itm_i55_00	potion	A teardrop-shaped vial of pale blue potion with a faint cyan glow.
+itm_i55_01	potion	A round bottle of yellow potion with a star stopper.
+itm_i55_02	potion	A slender test tube of green potion tied with string.
+itm_i55_03	potion	A flat disc-shaped bottle of orange potion.
+itm_i55_04	potion	A bottle of layered red and blue potion with a faint blue glow.
+itm_i55_05	potion	A bottle of glowing white potion in a golden net.
+itm_i55_06	potion	A skull-shaped bottle of toxic green potion.
+itm_i55_07	potion	A bottle of three stacked purple spheres.
+itm_i55_08	potion	A thick amber potion bottle with a leather-tied stopper.
+itm_i55_09	potion	A pale blue potion bottle with a feather stopper with a faint cyan glow.
+itm_i55_10	potion	A small barrel-shaped potion bottle.
+itm_i55_11	potion	A red potion vial on a neck chain.
+itm_i56_00	potion	A bottle of bubbling green poison with a faint green glow.
+itm_i56_01	potion	A bottle with a small flame burning inside.
+itm_i56_02	potion	A frozen bottle with a floating snowflake with a faint cyan glow.
+itm_i56_03	potion	A bottle with lightning crackling inside with a faint blue glow.
+itm_i56_04	potion	A bottle of swirling black smoke.
+itm_i56_05	potion	A navy bottle of glittering stardust.
+itm_i56_06	potion	A bottle of rainbow liquid with a faint blue glow.
+itm_i56_07	potion	A winged bottle of golden holy water.
+itm_i56_08	potion	A dark red potion bottle with a fang stopper.
+itm_i56_09	potion	An eerie bottle with a floating eyeball.
+itm_i56_10	potion	A pink potion bottle with floating petals with a faint magenta glow.
+itm_i56_11	potion	A bottle of silver liquid with rising bubbles.
+itm_i57_00	potion	A large handled jug of red healing potion.
+itm_i57_01	potion	A rack of three potion test tubes.
+itm_i57_02	potion	A leather belt of small potion vials.
+itm_i57_03	potion	A wooden crate of small potion bottles.
+itm_i57_04	potion	A stoppered medicine gourd.
+itm_i57_05	potion	A ceramic medicine flask.
+itm_i57_06	potion	A glass potion pourer with a spout with a faint cyan glow.
+itm_i57_07	potion	A round-bottomed flask of purple potion on a stand with a faint purple glow.
+itm_i57_08	medicine	A two small glass ampoules with a faint cyan glow.
+itm_i57_09	medicine	A lidded tin of ointment.
+itm_i57_10	potion	A small dropper bottle of purple liquid with a faint purple glow.
+itm_i57_11	medicine	A three small wax-sealed medicine jars.
+itm_i58_00	gem	A round brilliant-cut clear diamond.
+itm_i58_01	gem	A square step-cut aquamarine with a faint cyan glow.
+itm_i58_02	gem	A heart-shaped red garnet.
+itm_i58_03	gem	A star-shaped yellow gem.
+itm_i58_04	gem	A rectangular yellow citrine.
+itm_i58_05	gem	An octagonal lime green peridot.
+itm_i58_06	gem	A triangular purple gem with a faint purple glow.
+itm_i58_07	gem	A marquise-cut pink gem with a faint magenta glow.
+itm_i58_08	gem	A round iridescent opal with a faint blue glow.
+itm_i58_09	gem	A black and white banded onyx.
+itm_i58_10	gem	A pale blue oval moonstone with a faint blue glow.
+itm_i58_11	gem	An oval lapis lazuli with gold flecks with a faint blue glow.
+itm_i59_00	ore	A geode lined with purple crystals.
+itm_i59_01	ore	A white quartz with gold veins.
+itm_i59_02	gem	An amber lump with a trapped insect.
+itm_i59_03	ore	A rough pink rose quartz with a faint magenta glow.
+itm_i59_04	ore	A sharp obsidian shard.
+itm_i59_05	ore	A banded green malachite stone with a faint green glow.
+itm_i59_06	ore	A rock with red crystals.
+itm_i59_07	gem	A turquoise stone with a faint cyan glow.
+itm_i59_08	ore	A golden cubic pyrite crystals.
+itm_i59_09	ore	An iridescent stepped bismuth crystal with a faint cyan glow.
+itm_i59_10	ore	A rough lapis lazuli with a faint blue glow.
+itm_i59_11	gem	A round dark green jade stone.
+itm_i60_00	gem	A red gem with a flame flickering inside.
+itm_i60_01	gem	A navy gem with a trapped star with a faint blue glow.
+itm_i60_02	gem	A yellow gem with lightning inside.
+itm_i60_03	gem	A frosted pale blue gem with a faint cyan glow.
+itm_i60_04	gem	A golden gem with an eye-like pattern.
+itm_i60_05	gem	A gem split red and blue with a faint blue glow.
+itm_i60_06	gem	A white gem leaking light from its cracks.
+itm_i60_07	gem	A gem holding black mist.
+itm_i60_08	gem	A large green gem on a golden claw mount with a faint green glow.
+itm_i60_09	gem	A silver crescent moon gem.
+itm_i60_10	gem	A pale blue feather-shaped gem with a faint cyan glow.
+itm_i60_11	gem	A pink gem with a small flower blooming inside with a faint magenta glow.

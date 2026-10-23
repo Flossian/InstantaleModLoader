@@ -1182,6 +1182,21 @@
     "sheet": "i52",
     "source": "medical/medic_herbal_tea.png",
     "name": "医療品_薬草茶と煎じ薬"
+   },
+   {
+    "sheet": "i55",
+    "source": "medical/potion_shapes.png",
+    "name": "医療品_いろいろな形の薬瓶"
+   },
+   {
+    "sheet": "i56",
+    "source": "medical/potion_magic.png",
+    "name": "医療品_魔法と毒の薬"
+   },
+   {
+    "sheet": "i57",
+    "source": "medical/potion_containers.png",
+    "name": "医療品_大きさや入れ物の違う薬"
    }
   ]
  },
@@ -1384,6 +1399,21 @@
     "sheet": "i54c",
     "source": "modern_sf/documents_badges.png",
     "name": "宝物_町の証書と記章（中世）"
+   },
+   {
+    "sheet": "i58",
+    "source": "treasure/gem_cut.png",
+    "name": "宝物_カットした宝石"
+   },
+   {
+    "sheet": "i59",
+    "source": "treasure/gem_rough.png",
+    "name": "宝物_原石と鉱物"
+   },
+   {
+    "sheet": "i60",
+    "source": "treasure/gem_magic.png",
+    "name": "宝物_魔法の宝石"
    }
   ]
  },
