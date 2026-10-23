@@ -40,8 +40,9 @@ ITEMS = ("food", "drink", "medicine", "plant", "mushroom", "tool", "relic", "scr
          "creature_part", "document", "scroll", "liquid_material", "treasure", "metal", "gem", "ore", "potion")
 # 寸法は部位の素の絵と同じ（build_guns.game_size。盾・胴鎧は 2x2 マスの 64x64、服・装身具・消耗品は 32x32）
 SQUARE = ("shield", "body_armor", "clothing", "accessory", "headgear", "gauntlets", "legwear") + ITEMS
-# 消耗品と部品の組（item）の頭・服・手・脚は、防具類と同じく 64x64（作者の指示。中世の服は 32x32 のまま）
-ITEM_WEAR = {f: (64, 64) for f in ("clothing", "headgear", "gauntlets", "legwear")}
+# 消耗品と部品の組（item）の頭・服・手・脚・装身具は、防具類と同じく 64x64（作者の指示。中世の服は 32x32 のまま）。
+# 装身具は中世の組（矢筒）でも 64x64。1マスの品は画面で 64px に描かれ、32x32 だと2倍に引き伸ばされて粗く見えた
+ITEM_WEAR = {f: (64, 64) for f in ("clothing", "headgear", "gauntlets", "legwear", "accessory")}
 # 刃や金属の頭を持つ種類。色を素材の言葉に直す
 METAL = ("sword", "sabre", "rapier", "axe", "hammer", "maul", "mace", "morning star", "spear", "halberd",
          "flail", "dagger", "stiletto", "knife", "cleaver", "machete", "sickle", "scythe", "trident",
@@ -202,7 +203,7 @@ def make_entry(e, sheets, kind):
         im = b.stand_up(im, 0)
     e["folder"] = choose(e, im)
     e["caption"] = caption_item(e, im) if item else caption_sf(e, im) if sf else caption_for(e, im, magic)
-    box_w, box_h = (ITEM_WEAR.get(e["folder"]) if item else None) or b.game_size(e["folder"])
+    box_w, box_h = (ITEM_WEAR.get(e["folder"]) if item or e["folder"] == "accessory" else None) or b.game_size(e["folder"])
     if e["folder"] in b.SIZES and e.get("halo", True):
         # 武器だけ（結晶や薬瓶は色の付いた暗い面が多く、はがすと削れる）
         im = b.peel_glow(im, min((box_w - 2) / im.width, (box_h - 2) / im.height), strong=bool(e.get("glow")))

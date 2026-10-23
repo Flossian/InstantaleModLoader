@@ -606,49 +606,39 @@
     "name": "中世武器_盾と胴鎧"
    },
    {
-    "sheet": "wf1",
-    "source": "wear/wear_fantasy_v2_1.png",
-    "name": "防具類_ファンタジー（描き直し1）"
+    "sheet": "w05",
+    "source": "wear/wear_darkfantasy1.png",
+    "name": "防具類_ダークファンタジー1"
    },
    {
-    "sheet": "wf2",
-    "source": "wear/wear_fantasy_v2_2.png",
-    "name": "防具類_ファンタジー（描き直し2）"
+    "sheet": "w06",
+    "source": "wear/wear_darkfantasy2.png",
+    "name": "防具類_ダークファンタジー2"
    },
    {
-    "sheet": "wf3",
-    "source": "wear/wear_fantasy_v2_3.png",
-    "name": "防具類_ファンタジー（描き直し3）"
+    "sheet": "w07",
+    "source": "wear/wear_highfantasy.png",
+    "name": "防具類_ハイファンタジー"
    },
    {
-    "sheet": "wf4",
-    "source": "wear/wear_fantasy_v2_4.png",
-    "name": "防具類_ファンタジー（描き直し4）"
+    "sheet": "w09",
+    "source": "wear/wear_medieval_clothes.png",
+    "name": "防具類_中世服装"
    },
    {
-    "sheet": "wf5",
-    "source": "wear/wear_fantasy_v2_5.png",
-    "name": "防具類_ファンタジー（描き直し5）"
+    "sheet": "w10",
+    "source": "wear/wear_medieval_armor.png",
+    "name": "防具類_中世防具"
    },
    {
-    "sheet": "wf6",
-    "source": "wear/wear_fantasy_v2_6.png",
-    "name": "防具類_ファンタジー（描き直し6）"
+    "sheet": "w21",
+    "source": "wear/wear_wizard.png",
+    "name": "防具類_魔法使い"
    },
    {
-    "sheet": "wf7",
-    "source": "wear/wear_fantasy_v2_7.png",
-    "name": "防具類_ファンタジー（描き直し7）"
-   },
-   {
-    "sheet": "wf8",
-    "source": "wear/wear_fantasy_v2_8.png",
-    "name": "防具類_ファンタジー（描き直し8）"
-   },
-   {
-    "sheet": "ibp1",
-    "source": "tools/myth_breastplates.png",
-    "name": "道具_神話の胸当て（描き直し）"
+    "sheet": "i31b",
+    "source": "tools/tool_oddities.png",
+    "name": "道具_神話の胸当て"
    }
   ]
  },
@@ -660,54 +650,14 @@
   "default": "mix",
   "sources": [
    {
-    "sheet": "wem1",
-    "source": "wear/wear_earlymodern_v2_1.png",
-    "name": "防具類_近世（描き直し1）"
+    "sheet": "w19",
+    "source": "wear/wear_earlymodern_clothes.png",
+    "name": "防具類_近世服装"
    },
    {
-    "sheet": "wem2",
-    "source": "wear/wear_earlymodern_v2_2.png",
-    "name": "防具類_近世（描き直し2）"
-   },
-   {
-    "sheet": "wem3",
-    "source": "wear/wear_earlymodern_v2_3.png",
-    "name": "防具類_近世（描き直し3）"
-   },
-   {
-    "sheet": "wem4",
-    "source": "wear/wear_earlymodern_v2_4.png",
-    "name": "防具類_近世（描き直し4）"
-   },
-   {
-    "sheet": "wem5",
-    "source": "wear/wear_earlymodern_v2_5.png",
-    "name": "防具類_近世（描き直し5）"
-   },
-   {
-    "sheet": "wem6",
-    "source": "wear/wear_earlymodern_v2_6.png",
-    "name": "防具類_近世（描き直し6）"
-   },
-   {
-    "sheet": "wem7",
-    "source": "wear/wear_earlymodern_v2_7.png",
-    "name": "防具類_近世（描き直し7）"
-   },
-   {
-    "sheet": "wem8",
-    "source": "wear/wear_earlymodern_v2_8.png",
-    "name": "防具類_近世（描き直し8）"
-   },
-   {
-    "sheet": "wem9",
-    "source": "wear/wear_earlymodern_v2_9.png",
-    "name": "防具類_近世（描き直し9）"
-   },
-   {
-    "sheet": "wem10",
-    "source": "wear/wear_earlymodern_v2_10.png",
-    "name": "防具類_近世（描き直し10）"
+    "sheet": "w20",
+    "source": "wear/wear_earlymodern_armor.png",
+    "name": "防具類_近世防具"
    }
   ]
  },
@@ -719,49 +669,9 @@
   "default": "mix",
   "sources": [
    {
-    "sheet": "wac1",
-    "source": "wear/wear_accessory_v2_1.png",
-    "name": "防具類_アクセサリー（描き直し1）"
-   },
-   {
-    "sheet": "wac2",
-    "source": "wear/wear_accessory_v2_2.png",
-    "name": "防具類_アクセサリー（描き直し2）"
-   },
-   {
-    "sheet": "wac3",
-    "source": "wear/wear_accessory_v2_3.png",
-    "name": "防具類_アクセサリー（描き直し3）"
-   },
-   {
-    "sheet": "wac4",
-    "source": "wear/wear_accessory_v2_4.png",
-    "name": "防具類_アクセサリー（描き直し4）"
-   },
-   {
-    "sheet": "wac5",
-    "source": "wear/wear_accessory_v2_5.png",
-    "name": "防具類_アクセサリー（描き直し5）"
-   },
-   {
-    "sheet": "wac6",
-    "source": "wear/wear_accessory_v2_6.png",
-    "name": "防具類_アクセサリー（描き直し6）"
-   },
-   {
-    "sheet": "wac7",
-    "source": "wear/wear_accessory_v2_7.png",
-    "name": "防具類_アクセサリー（描き直し7）"
-   },
-   {
-    "sheet": "wac8",
-    "source": "wear/wear_accessory_v2_8.png",
-    "name": "防具類_アクセサリー（描き直し8）"
-   },
-   {
-    "sheet": "wac9",
-    "source": "wear/wear_accessory_v2_9.png",
-    "name": "防具類_アクセサリー（描き直し9）"
+    "sheet": "w01",
+    "source": "wear/wear_accessory.png",
+    "name": "防具類_アクセサリー"
    }
   ]
  },
@@ -842,89 +752,19 @@
     "name": "防具類_現代の胴"
    },
    {
-    "sheet": "wm1",
-    "source": "wear/wear_modern_v2_1.png",
-    "name": "防具類_現代（描き直し1）"
-   },
-   {
-    "sheet": "wm2",
-    "source": "wear/wear_modern_v2_2.png",
-    "name": "防具類_現代（描き直し2）"
-   },
-   {
-    "sheet": "wm3",
-    "source": "wear/wear_modern_v2_3.png",
-    "name": "防具類_現代（描き直し3）"
-   },
-   {
-    "sheet": "wm4",
-    "source": "wear/wear_modern_v2_4.png",
-    "name": "防具類_現代（描き直し4）"
-   },
-   {
-    "sheet": "wm5",
-    "source": "wear/wear_modern_v2_5.png",
-    "name": "防具類_現代（描き直し5）"
-   },
-   {
-    "sheet": "wm6",
-    "source": "wear/wear_modern_v2_6.png",
-    "name": "防具類_現代（描き直し6）"
-   },
-   {
-    "sheet": "wm7",
-    "source": "wear/wear_modern_v2_7.png",
-    "name": "防具類_現代（描き直し7）"
-   },
-   {
-    "sheet": "wm8",
-    "source": "wear/wear_modern_v2_8.png",
-    "name": "防具類_現代（描き直し8）"
-   },
-   {
-    "sheet": "wm9",
-    "source": "wear/wear_modern_v2_9.png",
-    "name": "防具類_現代(硬派)（描き直し9）"
-   },
-   {
-    "sheet": "wm10",
-    "source": "wear/wear_modern_v2_10.png",
-    "name": "防具類_現代(硬派)（描き直し10）"
-   },
-   {
-    "sheet": "wm11",
-    "source": "wear/wear_modern_v2_11.png",
-    "name": "防具類_現代(硬派)（描き直し11）"
-   },
-   {
-    "sheet": "wm12",
-    "source": "wear/wear_modern_v2_12.png",
-    "name": "防具類_現代(硬派)（描き直し12）"
-   },
-   {
-    "sheet": "wm13",
-    "source": "wear/wear_modern_v2_13.png",
-    "name": "防具類_現代(硬派)（描き直し13）"
-   },
-   {
-    "sheet": "wm14",
-    "source": "wear/wear_modern_v2_14.png",
-    "name": "防具類_現代(硬派)（描き直し14）"
-   },
-   {
-    "sheet": "wm15",
-    "source": "wear/wear_modern_v2_15.png",
-    "name": "防具類_現代(硬派)（描き直し15）"
-   },
-   {
-    "sheet": "wcom",
-    "source": "wear/wear_coats_mix.png",
-    "name": "防具類_外套の描き直し（現代）"
-   },
-   {
     "sheet": "i21b",
     "source": "modern_sf/modern_gear.png",
     "name": "現代とSF_盾"
+   },
+   {
+    "sheet": "w15",
+    "source": "wear/wear_modern_casual.png",
+    "name": "防具類_現代(カジュアル)"
+   },
+   {
+    "sheet": "w16",
+    "source": "wear/wear_modern_hard.png",
+    "name": "防具類_現代(硬派)"
    }
   ]
  },
@@ -936,44 +776,14 @@
   "default": "separate",
   "sources": [
    {
-    "sheet": "wc1",
-    "source": "wear/wear_cyber_v2_1.png",
-    "name": "防具類_サイバーパンク（描き直し1）"
+    "sheet": "w02",
+    "source": "wear/wear_cyber1.png",
+    "name": "防具類_サイバーパンク1"
    },
    {
-    "sheet": "wc2",
-    "source": "wear/wear_cyber_v2_2.png",
-    "name": "防具類_サイバーパンク（描き直し2）"
-   },
-   {
-    "sheet": "wc3",
-    "source": "wear/wear_cyber_v2_3.png",
-    "name": "防具類_サイバーパンク（描き直し3）"
-   },
-   {
-    "sheet": "wc4",
-    "source": "wear/wear_cyber_v2_4.png",
-    "name": "防具類_サイバーパンク（描き直し4）"
-   },
-   {
-    "sheet": "wc5",
-    "source": "wear/wear_cyber_v2_5.png",
-    "name": "防具類_サイバーパンク（描き直し5）"
-   },
-   {
-    "sheet": "wc6",
-    "source": "wear/wear_cyber_v2_6.png",
-    "name": "防具類_サイバーパンク（描き直し6）"
-   },
-   {
-    "sheet": "wc7",
-    "source": "wear/wear_cyber_v2_7.png",
-    "name": "防具類_サイバーパンク（描き直し7）"
-   },
-   {
-    "sheet": "wcoc",
-    "source": "wear/wear_coats_mix.png",
-    "name": "防具類_外套の描き直し（サイバーパンク）"
+    "sheet": "w03",
+    "source": "wear/wear_cyber2.png",
+    "name": "防具類_サイバーパンク2"
    }
   ]
  },
@@ -995,44 +805,9 @@
     "name": "現代とSF_籠手と装甲"
    },
    {
-    "sheet": "wsf1",
-    "source": "wear/wear_sf_v2_1.png",
-    "name": "防具類_SF（描き直し1）"
-   },
-   {
-    "sheet": "wsf2",
-    "source": "wear/wear_sf_v2_2.png",
-    "name": "防具類_SF（描き直し2）"
-   },
-   {
-    "sheet": "wsf3",
-    "source": "wear/wear_sf_v2_3.png",
-    "name": "防具類_SF（描き直し3）"
-   },
-   {
-    "sheet": "wsf4",
-    "source": "wear/wear_sf_v2_4.png",
-    "name": "防具類_SF（描き直し4）"
-   },
-   {
-    "sheet": "wsf5",
-    "source": "wear/wear_sf_v2_5.png",
-    "name": "防具類_SF（描き直し5）"
-   },
-   {
-    "sheet": "wsf6",
-    "source": "wear/wear_sf_v2_6.png",
-    "name": "防具類_SF（描き直し6）"
-   },
-   {
-    "sheet": "wsf7",
-    "source": "wear/wear_sf_v2_7.png",
-    "name": "防具類_SF（描き直し7）"
-   },
-   {
-    "sheet": "wjs",
-    "source": "wear/wear_jumpsuits.png",
-    "name": "防具類_つなぎと防弾外套（描き直し）"
+    "sheet": "w00",
+    "source": "wear/wear_sf.png",
+    "name": "防具類_SF"
    }
   ]
  },
@@ -1044,49 +819,9 @@
   "default": "separate",
   "sources": [
    {
-    "sheet": "wsp1",
-    "source": "wear/wear_steampunk_v2_1.png",
-    "name": "防具類_スチームパンク（描き直し1）"
-   },
-   {
-    "sheet": "wsp2",
-    "source": "wear/wear_steampunk_v2_2.png",
-    "name": "防具類_スチームパンク（描き直し2）"
-   },
-   {
-    "sheet": "wsp3",
-    "source": "wear/wear_steampunk_v2_3.png",
-    "name": "防具類_スチームパンク（描き直し3）"
-   },
-   {
-    "sheet": "wsp4",
-    "source": "wear/wear_steampunk_v2_4.png",
-    "name": "防具類_スチームパンク（描き直し4）"
-   },
-   {
-    "sheet": "wsp5",
-    "source": "wear/wear_steampunk_v2_5.png",
-    "name": "防具類_スチームパンク（描き直し5）"
-   },
-   {
-    "sheet": "wsp6",
-    "source": "wear/wear_steampunk_v2_6.png",
-    "name": "防具類_スチームパンク（描き直し6）"
-   },
-   {
-    "sheet": "wsp7",
-    "source": "wear/wear_steampunk_v2_7.png",
-    "name": "防具類_スチームパンク（描き直し7）"
-   },
-   {
-    "sheet": "wsp8",
-    "source": "wear/wear_steampunk_v2_8.png",
-    "name": "防具類_スチームパンク（描き直し8）"
-   },
-   {
-    "sheet": "wcos",
-    "source": "wear/wear_coats_mix.png",
-    "name": "防具類_外套の描き直し（スチームパンク）"
+    "sheet": "w04",
+    "source": "wear/wear_steampunk.png",
+    "name": "防具類_スチームパンク"
    }
   ]
  },
@@ -1103,39 +838,9 @@
     "name": "防具類_荒野の胴"
    },
    {
-    "sheet": "wpa1",
-    "source": "wear/wear_postapoc_v2_1.png",
-    "name": "防具類_ポストアポカリプス（描き直し1）"
-   },
-   {
-    "sheet": "wpa2",
-    "source": "wear/wear_postapoc_v2_2.png",
-    "name": "防具類_ポストアポカリプス（描き直し2）"
-   },
-   {
-    "sheet": "wpa3",
-    "source": "wear/wear_postapoc_v2_3.png",
-    "name": "防具類_ポストアポカリプス（描き直し3）"
-   },
-   {
-    "sheet": "wpa4",
-    "source": "wear/wear_postapoc_v2_4.png",
-    "name": "防具類_ポストアポカリプス（描き直し4）"
-   },
-   {
-    "sheet": "wpa5",
-    "source": "wear/wear_postapoc_v2_5.png",
-    "name": "防具類_ポストアポカリプス（描き直し5）"
-   },
-   {
-    "sheet": "wpa6",
-    "source": "wear/wear_postapoc_v2_6.png",
-    "name": "防具類_ポストアポカリプス（描き直し6）"
-   },
-   {
-    "sheet": "wpa7",
-    "source": "wear/wear_postapoc_v2_7.png",
-    "name": "防具類_ポストアポカリプス（描き直し7）"
+    "sheet": "w08",
+    "source": "wear/wear_postapoc.png",
+    "name": "防具類_ポストアポカリプス"
    }
   ]
  },
@@ -1152,44 +857,9 @@
     "name": "防具類_西部劇の胴"
    },
    {
-    "sheet": "wwe1",
-    "source": "wear/wear_western_v2_1.png",
-    "name": "防具類_西部劇（描き直し1）"
-   },
-   {
-    "sheet": "wwe2",
-    "source": "wear/wear_western_v2_2.png",
-    "name": "防具類_西部劇（描き直し2）"
-   },
-   {
-    "sheet": "wwe3",
-    "source": "wear/wear_western_v2_3.png",
-    "name": "防具類_西部劇（描き直し3）"
-   },
-   {
-    "sheet": "wwe4",
-    "source": "wear/wear_western_v2_4.png",
-    "name": "防具類_西部劇（描き直し4）"
-   },
-   {
-    "sheet": "wwe5",
-    "source": "wear/wear_western_v2_5.png",
-    "name": "防具類_西部劇（描き直し5）"
-   },
-   {
-    "sheet": "wwe6",
-    "source": "wear/wear_western_v2_6.png",
-    "name": "防具類_西部劇（描き直し6）"
-   },
-   {
-    "sheet": "wcow",
-    "source": "wear/wear_coats_mix.png",
-    "name": "防具類_外套の描き直し（西部劇）"
-   },
-   {
-    "sheet": "wwe7",
-    "source": "wear/wear_western_v2_7.png",
-    "name": "防具類_西部劇（描き直し7）"
+    "sheet": "w17",
+    "source": "wear/wear_western.png",
+    "name": "防具類_西部劇"
    }
   ]
  },
@@ -1206,54 +876,14 @@
     "name": "防具類_和風の胴"
    },
    {
-    "sheet": "wj1",
-    "source": "wear/wear_japanese_v2_1.png",
-    "name": "防具類_和風（描き直し1）"
+    "sheet": "w11",
+    "source": "wear/wear_japanese.png",
+    "name": "防具類_和風"
    },
    {
-    "sheet": "wj2",
-    "source": "wear/wear_japanese_v2_2.png",
-    "name": "防具類_和風（描き直し2）"
-   },
-   {
-    "sheet": "wj4",
-    "source": "wear/wear_japanese_v2_4.png",
-    "name": "防具類_和風（描き直し4）"
-   },
-   {
-    "sheet": "wj5",
-    "source": "wear/wear_japanese_v2_5.png",
-    "name": "防具類_和風（描き直し5）"
-   },
-   {
-    "sheet": "wj3",
-    "source": "wear/wear_japanese_v2_3.png",
-    "name": "防具類_和風（描き直し3）"
-   },
-   {
-    "sheet": "wj6",
-    "source": "wear/wear_japanese_v2_6.png",
-    "name": "防具類_和風（描き直し6）"
-   },
-   {
-    "sheet": "wj7",
-    "source": "wear/wear_japanese_v2_7.png",
-    "name": "防具類_和風（描き直し7）"
-   },
-   {
-    "sheet": "iwr1",
-    "source": "japanese/wa_do.png",
-    "name": "和風_胴（描き直し）"
-   },
-   {
-    "sheet": "iwr2",
-    "source": "japanese/wa_kote_suneate.png",
-    "name": "和風_籠手と脛当て（描き直し）"
-   },
-   {
-    "sheet": "iwr3",
-    "source": "japanese/wa_kabuto.png",
-    "name": "和風_兜と面（描き直し）"
+    "sheet": "i26",
+    "source": "japanese/wa_armor.png",
+    "name": "和風_防具と面"
    }
   ]
  },
@@ -1265,44 +895,9 @@
   "default": "separate",
   "sources": [
    {
-    "sheet": "wmi1",
-    "source": "wear/wear_military_v2_1.png",
-    "name": "防具類_軍服・儀礼服（描き直し1）"
-   },
-   {
-    "sheet": "wmi2",
-    "source": "wear/wear_military_v2_2.png",
-    "name": "防具類_軍服・儀礼服（描き直し2）"
-   },
-   {
-    "sheet": "wmi3",
-    "source": "wear/wear_military_v2_3.png",
-    "name": "防具類_軍服・儀礼服（描き直し3）"
-   },
-   {
-    "sheet": "wmi4",
-    "source": "wear/wear_military_v2_4.png",
-    "name": "防具類_軍服・儀礼服（描き直し4）"
-   },
-   {
-    "sheet": "wmi5",
-    "source": "wear/wear_military_v2_5.png",
-    "name": "防具類_軍服・儀礼服（描き直し5）"
-   },
-   {
-    "sheet": "wmi6",
-    "source": "wear/wear_military_v2_6.png",
-    "name": "防具類_軍服・儀礼服（描き直し6）"
-   },
-   {
-    "sheet": "wmi7",
-    "source": "wear/wear_military_v2_7.png",
-    "name": "防具類_軍服・儀礼服（描き直し7）"
-   },
-   {
-    "sheet": "wmi8",
-    "source": "wear/wear_military_v2_8.png",
-    "name": "防具類_軍服・儀礼服（描き直し8）"
+    "sheet": "w18",
+    "source": "wear/wear_military.png",
+    "name": "防具類_軍服・儀礼服"
    }
   ]
  },
@@ -1438,6 +1033,11 @@
     "sheet": "ifd11",
     "source": "food/food_drinks_herbs_v2.png",
     "name": "食料_飲み物と香草（描き直し）"
+   },
+   {
+    "sheet": "i4",
+    "source": "food/food_general.png",
+    "name": "食料_食材と料理"
    }
   ]
  },

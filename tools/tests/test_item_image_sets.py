@@ -8,7 +8,7 @@
 - 分類ごとの辞書 `data/<分類>/<部位>.json`（まとめた形 {"index", "vectors"}、384 次元）の鍵を合わせると、
   その分類に入る表の鍵とちょうど同じ。鍵ごとに `images/<分類>/Assets/images/item_candidates_dark/<部位>/<鍵>.png` があり、
   寸法は部位で決まる（武器は小型 32x32・中型 32x64・大型 32x96・長物 32x128・投擲 32x32 の、作り方の道具の `SCALE`
-  （`build/build_guns.py`）倍で端数は四捨五入。消耗品・素材などのアイテム類は 32x32 の `ITEM_SCALE` 倍。盾・胴鎧は 64x64、防具類の表の品と消耗品の表の頭・服・手・脚は 64x64、それ以外は 32x32）。絵のフォルダに辞書に無い絵は残っていない
+  （`build/build_guns.py`）倍で端数は四捨五入。消耗品・素材などのアイテム類は 32x32 の `ITEM_SCALE` 倍。盾・胴鎧は 64x64、防具類の表の品と消耗品の表の頭・服・手・脚と、どの表の装身具も 64x64、それ以外は 32x32）。絵のフォルダに辞書に無い絵は残っていない
 - 分類ごとの元の一枚絵（`categories.json` の `sources` の `source`）が `assets/item_images/` に在る
 - 版9 までの設定名の読み替え（本体の `OLD_SETTINGS`）は、今の設定名に無い名前から今の設定名へ
 - 外した絵の付け替え先の表（`data/retired.json`）の外した鍵は今の辞書に無く、付け替え先は同じ品種の今ある絵
@@ -116,7 +116,7 @@ for c in cats:
                 game = (int(round(WEAPON[folder][0] * SCALE)), int(round(WEAPON[folder][1] * SCALE)))
             elif folder in ITEMS:
                 game = (int(round(32 * ITEM_SCALE)),) * 2
-            elif key in wear_keys or (key in item_keys and folder in ("clothing", "headgear", "gauntlets", "legwear")):
+            elif key in wear_keys or folder == "accessory" or (key in item_keys and folder in ("clothing", "headgear", "gauntlets", "legwear")):
                 game = (64, 64)
             else:
                 game = (64, 64) if folder in ("shield", "body_armor") else (32, 32)

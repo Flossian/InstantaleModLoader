@@ -550,16 +550,6 @@ itm_i27_r2_06	body_armor	A blue hexagonal armor vest.
 itm_i27_r2_07	body_armor	A white power armor chestplate.
 itm_i27_r2_08	body_armor	A tan tactical armor vest.
 itm_i27_r2_09	body_armor	A black armor vest with red lights.
-itm_i27_r3_00	clothing	An orange jumpsuit with utility harness.
-itm_i27_r3_01	clothing	A navy crew jumpsuit.
-itm_i27_r3_02	clothing	A white pressure suit.
-itm_i27_r3_03	clothing	A black jumpsuit with harness.
-itm_i27_r3_04	clothing	A black and red bodysuit.
-itm_i27_r3_05	clothing	An olive work jumpsuit.
-itm_i27_r3_06	clothing	A blue crew jumpsuit with harness.
-itm_i27_r3_07	clothing	A yellow work jumpsuit with harness.
-itm_i27_r3_08	clothing	A black ballistic long coat.
-itm_i27_r3_09	clothing	A white ballistic long coat.
 itm_i27_r4_00	headgear	A white helmet with blue visor.
 itm_i27_r4_01	headgear	A black helmet with red visor and respirator.
 itm_i27_r4_02	headgear	A brown night vision helmet.
@@ -2440,52 +2430,6 @@ itm_ipa3_06	medium_weapon	A brown spiked pipe.
 itm_ipa3_07	medium_weapon	A brown hooked pipe.
 itm_ipa3_08	medium_weapon	A brown cleaver on a pipe.
 itm_ipa3_09	medium_weapon	A brown barbed wire bat.
-itm_iwr1_00	body_armor	A red lacquered samurai do armor.
-itm_iwr1_01	body_armor	A black lamellar samurai do armor.
-itm_iwr1_02	body_armor	A brown okegawa do armor.
-itm_iwr1_03	body_armor	A navy laced samurai do armor.
-itm_iwr1_04	body_armor	A brown plain leather samurai do armor.
-itm_iwr1_05	body_armor	A black and gold samurai do armor.
-itm_iwr1_06	body_armor	A brown worn leather samurai do armor.
-itm_iwr1_07	body_armor	A white laced samurai do armor.
-itm_iwr1_08	body_armor	A black iron plate samurai do armor.
-itm_iwr1_09	body_armor	A brown gold-trimmed general's do armor.
-itm_iwr2_00	gauntlets	A brown chain kote gauntlets.
-itm_iwr2_01	gauntlets	A red lacquered kote gauntlets.
-itm_iwr2_02	gauntlets	A brown leather kote gauntlets.
-itm_iwr2_03	gauntlets	A black kote gauntlets.
-itm_iwr2_04	gauntlets	A black iron kote gauntlets.
-itm_iwr2_05	gauntlets	A brown laced kote gauntlets.
-itm_iwr2_06	legwear	A black iron suneate shin guards.
-itm_iwr2_07	legwear	A black suneate shin guards.
-itm_iwr2_08	legwear	A brown leather suneate shin guards.
-itm_iwr2_09	legwear	A red suneate shin guards.
-itm_iwr2_10	legwear	A brown chain suneate shin guards.
-itm_iwr2_11	legwear	A brown gold-trimmed suneate shin guards.
-itm_iwr3_00	headgear	A brown horned samurai kabuto helmet.
-itm_iwr3_01	headgear	A red kabuto helmet with a demon mask.
-itm_iwr3_02	headgear	A blue kabuto helmet with a golden crest.
-itm_iwr3_03	headgear	A black plain iron kabuto helmet.
-itm_iwr3_04	headgear	A brown kabuto helmet with a red face mask.
-itm_iwr3_05	headgear	A red kabuto helmet with an antler crest.
-itm_iwr3_06	headgear	A black and gold kabuto helmet.
-itm_iwr3_07	headgear	A black iron menpo face mask.
-itm_iwr3_08	headgear	A red oni mask.
-itm_iwr3_09	headgear	A white fox mask.
-itm_iwr3_10	headgear	A black jingasa conical helmet.
-itm_iwr3_11	headgear	A black hachigane headband.
-itm_ibp1_00	body_armor	A brown glowing ember breastplate.
-itm_ibp1_01	body_armor	A navy star-studded breastplate.
-itm_ibp1_02	body_armor	A holy silver breastplate.
-itm_ibp1_03	body_armor	A brown fish scale breastplate.
-itm_ibp1_04	body_armor	A brass gear breastplate.
-itm_ibp1_05	body_armor	A black spiked breastplate.
-itm_ibp1_06	body_armor	A golden sun breastplate.
-itm_ibp1_07	body_armor	A teal scale breastplate.
-itm_ibp1_08	body_armor	A black and gold breastplate.
-itm_ibp1_09	body_armor	A brown red-draped paladin breastplate.
-itm_ibp1_10	body_armor	A brown bone breastplate.
-itm_ibp1_11	body_armor	A black void vortex breastplate.
 itm_ifd1_00	food	A loaf of bread.
 itm_ifd1_01	food	A slice of bread.
 itm_ifd1_02	food	A round loaf of bread.
@@ -2614,3 +2558,64 @@ itm_ifd11_04	plant	A sprig of parsley.
 itm_ifd11_05	plant	A basil leaves.
 itm_ifd11_06	plant	A mint leaves.
 itm_ifd11_07	food	A bowl of black olives.
+itm_i26_r0_00	body_armor	A red lacquered samurai do armor.
+itm_i26_r0_01	body_armor	A black lamellar samurai do armor.
+itm_i26_r0_02	body_armor	A brown okegawa do armor.
+itm_i26_r0_03	body_armor	A red lacquered samurai do armor.
+itm_i26_r0_04	body_armor	A navy laced samurai do armor.
+itm_i26_r0_05	body_armor	A brown plain leather samurai do armor.
+itm_i26_r0_06	body_armor	A black and gold samurai do armor.
+itm_i26_r0_07	body_armor	A red lacquered samurai do armor.
+itm_i26_r0_08	body_armor	A navy laced samurai do armor.
+itm_i26_r0_09	body_armor	A brown worn leather samurai do armor.
+itm_i26_r1_00	gauntlets	A brown pair of chain kote gauntlets.
+itm_i26_r1_01	gauntlets	A brown pair of red lacquered kote gauntlets.
+itm_i26_r1_02	gauntlets	A brown pair of leather kote gauntlets.
+itm_i26_r1_03	gauntlets	A pair of black kote gauntlets.
+itm_i26_r1_04	gauntlets	A brown pair of iron kote gauntlets.
+itm_i26_r1_05	gauntlets	A brown pair of laced kote gauntlets.
+itm_i26_r1_06	legwear	A brown iron suneate shin guard.
+itm_i26_r1_07	legwear	A brown iron suneate shin guard.
+itm_i26_r1_08	legwear	A black suneate shin guard.
+itm_i26_r1_09	legwear	A brown leather suneate shin guard.
+itm_i26_r1_10	legwear	A pair of red suneate shin guards.
+itm_i26_r2_00	headgear	A brown horned samurai kabuto helmet.
+itm_i26_r2_01	headgear	A red kabuto helmet with a demon mask.
+itm_i26_r2_02	headgear	A blue kabuto helmet with golden crest.
+itm_i26_r2_03	headgear	A brown plain iron kabuto helmet.
+itm_i26_r2_04	headgear	A brown kabuto helmet with a red face mask.
+itm_i26_r2_05	headgear	A blue and gold kabuto helmet.
+itm_i26_r2_06	headgear	A red kabuto helmet with antler crest.
+itm_i26_r2_07	headgear	A brown iron menpo face mask.
+itm_i26_r2_08	headgear	A red oni mask.
+itm_i26_r2_09	headgear	A white fox mask.
+itm_i26_r2_10	headgear	A brown jingasa conical helmet.
+itm_i31_r0_00	body_armor	A brown glowing ember breastplate.
+itm_i31_r0_01	body_armor	A brown star-studded breastplate.
+itm_i31_r0_02	body_armor	A holy silver breastplate.
+itm_i31_r0_03	body_armor	A grey fish scale breastplate.
+itm_i31_r0_04	body_armor	A brass gear breastplate.
+itm_i31_r0_05	body_armor	A brown spiked dark breastplate.
+itm_i31_r0_06	body_armor	A golden sun breastplate.
+itm_i31_r0_07	body_armor	A teal scale breastplate.
+itm_i31_r0_08	body_armor	A dark gold breastplate.
+itm_i31_r0_09	body_armor	A red holy breastplate.
+itm_i31_r0_10	body_armor	A brown bone breastplate.
+itm_i31_r0_11	body_armor	A purple gravity void breastplate.
+itm_i4_r0_11	food	A quiche.
+itm_i4_r1_04	food	A lime.
+itm_i4_r1_09	food	A blueberries.
+itm_i4_r3_08	food	A celery.
+itm_i4_r4_03	food	A raw chicken drumsticks.
+itm_i4_r5_11	food	A clams.
+itm_i4_r6_07	food	A bowl of cream.
+itm_i27_r3_00	clothing	An orange jumpsuit with utility harness.
+itm_i27_r3_01	clothing	A navy crew jumpsuit.
+itm_i27_r3_02	clothing	A white pressure suit.
+itm_i27_r3_03	clothing	A black jumpsuit with harness.
+itm_i27_r3_04	clothing	A black and red bodysuit.
+itm_i27_r3_05	clothing	An olive work jumpsuit.
+itm_i27_r3_06	clothing	A blue crew jumpsuit with harness.
+itm_i27_r3_07	clothing	A yellow work jumpsuit with harness.
+itm_i27_r3_08	clothing	A black ballistic long coat.
+itm_i27_r3_09	clothing	A white ballistic long coat.
