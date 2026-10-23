@@ -376,6 +376,21 @@
     "sheet": "mbw3",
     "source": "medieval_weapons/med_quivers.png",
     "name": "中世武器_矢筒（描き直し）"
+   },
+   {
+    "sheet": "msw1",
+    "source": "medieval_weapons/med_swords_onehanded.png",
+    "name": "中世武器_片手の剣（型の違う剣）"
+   },
+   {
+    "sheet": "msw2",
+    "source": "medieval_weapons/med_swords_greatswords.png",
+    "name": "中世武器_両手剣と大剣（型の違う剣）"
+   },
+   {
+    "sheet": "msw3",
+    "source": "medieval_weapons/med_daggers_types.png",
+    "name": "中世武器_短剣と小剣（型の違う剣）"
    }
   ]
  },
@@ -420,6 +435,16 @@
     "sheet": "mst2",
     "source": "magic_weapons/mag_polearms.png",
     "name": "魔法武器_長柄武器（描き直し）"
+   },
+   {
+    "sheet": "xsw1",
+    "source": "magic_weapons/mag_swords_refined.png",
+    "name": "魔法武器_片手の魔法剣"
+   },
+   {
+    "sheet": "xsw2",
+    "source": "magic_weapons/mag_greatswords_refined.png",
+    "name": "魔法武器_魔法の大剣と伝説の剣"
    }
   ]
  },
@@ -454,6 +479,11 @@
     "sheet": "x9",
     "source": "magic_weapons/mag_postapoc.png",
     "name": "魔法武器_魔法とポストアポカリプス"
+   },
+   {
+    "sheet": "xsw3",
+    "source": "magic_weapons/mag_katanas.png",
+    "name": "魔法武器_魔法の刀"
    }
   ]
  },
@@ -503,6 +533,41 @@
     "sheet": "stw4",
     "source": "sf_weapons/sf_greatswords_extra.png",
     "name": "SF武器_大剣の追加（描き直し）"
+   },
+   {
+    "sheet": "stw5",
+    "source": "sf_weapons/sf_rugged_greatswords_1.png",
+    "name": "SF武器_無骨な長大な刀1"
+   },
+   {
+    "sheet": "stw6",
+    "source": "sf_weapons/sf_rugged_greatswords_2.png",
+    "name": "SF武器_無骨な長大な刀2"
+   },
+   {
+    "sheet": "stw7",
+    "source": "sf_weapons/sf_rugged_daggers.png",
+    "name": "SF武器_無骨な小太刀と短刀"
+   },
+   {
+    "sheet": "stw8",
+    "source": "sf_weapons/sf_rugged_swords.png",
+    "name": "SF武器_無骨な片手の刀と剣"
+   },
+   {
+    "sheet": "stw9",
+    "source": "sf_weapons/sf_rugged_polearms.png",
+    "name": "SF武器_無骨な槍と長柄"
+   },
+   {
+    "sheet": "stw10",
+    "source": "sf_weapons/sf_rugged_heavy.png",
+    "name": "SF武器_無骨な大槌と大斧と大鎌"
+   },
+   {
+    "sheet": "stw11",
+    "source": "sf_weapons/sf_rugged_throw_fist.png",
+    "name": "SF武器_無骨な投げる武器と拳の武器"
    }
   ]
  },
@@ -638,6 +703,11 @@
     "sheet": "i31b",
     "source": "tools/tool_oddities.png",
     "name": "道具_神話の胸当て"
+   },
+   {
+    "sheet": "wla2",
+    "source": "wear/wear_light_magic_armor.png",
+    "name": "防具類_魔法を帯びた軽い鎧"
    }
   ]
  },
@@ -652,6 +722,11 @@
     "sheet": "w07",
     "source": "wear/wear_highfantasy.png",
     "name": "防具類_ハイファンタジー"
+   },
+   {
+    "sheet": "wla1",
+    "source": "wear/wear_light_armor.png",
+    "name": "防具類_軽い鎧"
    }
   ]
  },

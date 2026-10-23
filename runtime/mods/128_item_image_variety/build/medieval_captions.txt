@@ -226,3 +226,39 @@ med_mbw3_04	accessory	A leather wooden slat quiver.
 med_mbw3_05	accessory	A leather quiver wrapped in red cloth.
 med_mbw3_06	accessory	A leather quiver with metal fittings.
 med_mbw3_07	accessory	A leather hip quiver on a belt.
+med_msw1_00	medium_weapon	A steel plain one-handed sword with a leather-wrapped grip.
+med_msw1_01	medium_weapon	A polished steel gold-guarded knight's broadsword with a leather-wrapped grip.
+med_msw1_02	medium_weapon	A steel broad single-edged falchion sword with a leather-wrapped grip.
+med_msw1_03	medium_weapon	A steel deeply curved scimitar sword with a leather-wrapped grip and red details.
+med_msw1_04	medium_weapon	A polished steel shell-guarded pirate cutlass sword with a leather-wrapped grip.
+med_msw1_05	medium_weapon	A blackened iron cup-hilted slender rapier.
+med_msw1_06	medium_weapon	A steel short broad gladius sword with a leather-wrapped grip.
+med_msw1_07	medium_weapon	A steel hand-and-a-half bastard sword.
+med_msw1_08	medium_weapon	A blackened iron sickle-curved shotel sword.
+med_msw1_09	medium_weapon	A polished steel comb-toothed sword with a leather-wrapped grip.
+med_msw1_10	medium_weapon	A polished steel fork-tipped sword with a leather-wrapped grip.
+med_msw1_11	medium_weapon	A polished steel jeweled royal sword with a leather-wrapped grip.
+med_msw2_00	large_weapon	A polished steel claymore with a forward-angled guard.
+med_msw2_01	large_weapon	A polished steel zweihander sword with a ricasso spike and a leather-wrapped grip.
+med_msw2_02	large_weapon	A steel huge slab-like hero's greatsword.
+med_msw2_03	large_weapon	A steel triple-fullered greatsword with a leather-wrapped grip.
+med_msw2_04	large_weapon	A polished steel winged-guard knight's greatsword with a leather-wrapped grip.
+med_msw2_05	large_weapon	A steel spiked-guard dark greatsword with red details.
+med_msw2_06	large_weapon	A polished steel cross-guarded two-handed longsword with a leather-wrapped grip.
+med_msw2_07	large_weapon	A steel flared single-edged greatsword with a leather-wrapped grip.
+med_msw2_08	large_weapon	A polished steel bone-hilted barbarian greatsword with a leather-wrapped grip.
+med_msw2_09	large_weapon	A steel two-handed curved great sabre with a leather-wrapped grip.
+med_msw2_10	large_weapon	A polished steel greatsword with round holes in the blade and a leather-wrapped grip.
+med_msw2_11	large_weapon	A steel stepped broad greatsword with a leather-wrapped grip.
+med_msw3_00	small_weapon	A steel straight double-edged dagger with a leather-wrapped grip.
+med_msw3_01	small_weapon	A polished steel thin stiletto dagger with a leather-wrapped grip.
+med_msw3_02	small_weapon	A polished steel basket-hilted main gauche dagger with a leather-wrapped grip.
+med_msw3_03	small_weapon	A steel inward-curved kukri knife with a leather-wrapped grip and red details.
+med_msw3_04	small_weapon	A steel triple-blade parrying dagger with a leather-wrapped grip and red details.
+med_msw3_05	small_weapon	A steel guardless hunter's knife with a leather-wrapped grip and red details.
+med_msw3_06	small_weapon	A steel short crescent dagger with a leather-wrapped grip.
+med_msw3_07	small_weapon	A polished steel wavy-bladed dagger with a leather-wrapped grip.
+med_msw3_08	small_weapon	A steel saw-backed dagger with red details.
+med_msw3_09	small_weapon	A steel broad leaf-shaped dagger.
+med_msw3_10	small_weapon	A polished steel ring-pommel dagger with a leather-wrapped grip.
+med_msw3_11	small_weapon	A polished steel bone-hilted ritual dagger with a leather-wrapped grip and red details.

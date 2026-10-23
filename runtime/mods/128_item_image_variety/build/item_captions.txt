@@ -136,7 +136,7 @@ itm_i2_r3_09	other_material	A brass pressure tank with a gauge.
 itm_i2_r3_10	other_material	An iron steam engine block.
 itm_i2_r3_11	other_material	A brass steam cylinder.
 itm_i2_r4_00	tool	A brass camera lens.
-itm_i2_r4_01	tool	A brass binoculars.
+itm_i2_r4_01	tool	A pair of brass binoculars.
 itm_i2_r4_02	tool	A brass spyglass.
 itm_i2_r4_03	tool	A brass spyglass.
 itm_i2_r4_04	tool	A brass bellows camera.
@@ -328,7 +328,7 @@ itm_i5_r4_12	plant	A brown bundle of dried herbs.
 itm_i5_r4_13	plant	A golden bundle of dried herbs.
 itm_i5_r5_00	small_weapon	A brown surgical scalpel.
 itm_i5_r5_01	small_weapon	A brown surgical scalpel.
-itm_i5_r5_02	tool	A brown surgical scissors.
+itm_i5_r5_02	tool	A pair of brown surgical scissors.
 itm_i5_r5_03	tool	A black tweezers.
 itm_i5_r5_04	tool	A brown bone saw.
 itm_i5_r5_05	tool	A black surgical forceps.
@@ -527,7 +527,7 @@ itm_i27_r0_03	gauntlets	A yellow utility gauntlet with tools.
 itm_i27_r0_04	gauntlets	A white armored gauntlet.
 itm_i27_r0_05	gauntlets	A black gauntlet with red lights.
 itm_i27_r0_06	gauntlets	An olive work gauntlet.
-itm_i27_r0_07	gauntlets	A blue gauntlet with a power core with a faint cyan glow.
+itm_i27_r0_07	gauntlets	A blue gauntlet with a power core and a faint cyan glow.
 itm_i27_r0_08	gauntlets	A white and orange gauntlet.
 itm_i27_r0_09	gauntlets	A yellow magnetic gauntlet.
 itm_i27_r1_00	gauntlets	A black chrome prosthetic arm.
@@ -1271,15 +1271,15 @@ itm_i13_r1_08	magical_material	A grey smoke in a glass vial.
 itm_i13_r1_09	magical_material	A purple starry mist in a glass vial with a faint purple glow.
 itm_i13_r1_10	magical_material	A cyan mist in a glass vial with a faint cyan glow.
 itm_i13_r1_11	magical_material	A golden swirling pollen in a glass vial.
-itm_i13_r2_00	magical_material	A crystal ball with a blue light with a faint blue glow.
+itm_i13_r2_00	magical_material	A crystal ball with a blue light and a faint blue glow.
 itm_i13_r2_01	magical_material	A crystal ball with golden flames.
-itm_i13_r2_02	magical_material	A crystal ball with purple mist with a faint purple glow.
+itm_i13_r2_02	magical_material	A crystal ball with purple mist and a faint purple glow.
 itm_i13_r2_03	magical_material	A blue crystal on a pedestal with a faint blue glow.
 itm_i13_r2_04	magical_material	A green crystal ball.
 itm_i13_r2_05	magical_material	A red orb in a brass cage.
 itm_i13_r2_06	magical_material	A grey crystal ball with a swirling galaxy.
 itm_i13_r2_07	magical_material	A pink crystal with a faint magenta glow.
-itm_i13_r2_08	magical_material	A blue crystal ball with a swirl with a faint blue glow.
+itm_i13_r2_08	magical_material	A blue crystal ball with a swirl and a faint blue glow.
 itm_i13_r2_09	magical_material	A golden crystal cluster.
 itm_i13_r2_10	magical_material	A green crystal ball.
 itm_i13_r2_11	magical_material	A purple crystal ball with a faint purple glow.
@@ -1340,7 +1340,7 @@ itm_i14_r1_05	relic	A dark green stone fragment with a faint cyan glow.
 itm_i14_r1_06	relic	A purple crystal stone with a faint purple glow.
 itm_i14_r1_07	relic	A cracked grey stone with golden veins.
 itm_i14_r1_08	relic	A red crystal stone.
-itm_i14_r1_09	relic	A white marble fragment with blue veins with a faint cyan glow.
+itm_i14_r1_09	relic	A white marble fragment with blue veins and a faint cyan glow.
 itm_i14_r1_10	relic	A dark stone with a purple glow.
 itm_i14_r1_11	relic	A stone fragment with a golden sigil.
 itm_i14_r2_00	relic	A crystal heart in a golden cage.
@@ -1371,18 +1371,18 @@ itm_i14_r4_00	relic	A brass relic with a blue core.
 itm_i14_r4_01	relic	A blue orb inside brass machinery with a faint blue glow.
 itm_i14_r4_02	relic	A golden armillary with a blue light.
 itm_i14_r4_03	relic	A red fiery orb in a brass frame.
-itm_i14_r4_04	relic	A brass gear ring with a blue light with a faint blue glow.
+itm_i14_r4_04	relic	A brass gear ring with a blue light and a faint blue glow.
 itm_i14_r4_05	relic	A glowing golden cube relic.
-itm_i14_r4_06	relic	A golden armillary with a blue star with a faint blue glow.
+itm_i14_r4_06	relic	A golden armillary with a blue star and a faint blue glow.
 itm_i14_r4_07	relic	A red orb in golden rings.
 itm_i14_r4_08	relic	A purple glowing brass relic.
 itm_i14_r4_09	relic	A golden gear wheel relic.
 itm_i14_r4_10	relic	A blue crystal in a golden cage with a faint blue glow.
-itm_i14_r4_11	relic	A brass cylinder with a blue light with a faint blue glow.
+itm_i14_r4_11	relic	A brass cylinder with a blue light and a faint blue glow.
 itm_i14_r5_00	document	A blue stone tablet with glowing cyan runes.
 itm_i14_r5_01	document	A golden metal tablet with geometric patterns.
 itm_i14_r5_02	document	A grey crystal tablet with a swirling galaxy.
-itm_i14_r5_03	document	A blue tablet with a star map with a faint blue glow.
+itm_i14_r5_03	document	A blue tablet with a star map and a faint blue glow.
 itm_i14_r5_04	document	A golden engraved tome.
 itm_i14_r5_05	document	A brown leather tome with a blue gem.
 itm_i14_r5_06	document	A brown chained ancient book.
@@ -1450,7 +1450,7 @@ itm_i15_r4_04	accessory	A golden ring with a green gem.
 itm_i15_r4_05	accessory	A silver ring with a blue gem.
 itm_i15_r4_06	accessory	A golden ring with a red gem.
 itm_i15_r4_07	accessory	A bronze ring with a pearl.
-itm_i15_r4_08	accessory	A silver ring with a purple gem with a faint purple glow.
+itm_i15_r4_08	accessory	A silver ring with a purple gem and a faint purple glow.
 itm_i15_r4_09	accessory	A golden ring with a star.
 itm_i15_r4_10	accessory	A brown patina ring with a green gem.
 itm_i15_r4_11	accessory	A brown small chain ring.
@@ -1464,7 +1464,7 @@ itm_i15_r5_05	accessory	A golden leaf brooch with pearls.
 itm_i15_r5_06	accessory	A white flower brooch with a pearl.
 itm_i15_r5_07	accessory	A red crystal flower brooch.
 itm_i15_r5_08	tool	A small brass candlestick.
-itm_i15_r5_09	accessory	A brown lantern pendant with a blue crystal with a faint blue glow.
+itm_i15_r5_09	accessory	A brown lantern pendant with a blue crystal and a faint blue glow.
 itm_i15_r5_10	accessory	A red gem pendant.
 itm_i15_r5_11	accessory	A brown winged pendant with a blue gem.
 itm_i15_r5_12	tool	A small silver bell.
@@ -1492,7 +1492,7 @@ itm_i16_r1_08	tool	A brown folded red cloth.
 itm_i16_r1_09	tool	A brown dark folded cloth.
 itm_i16_r1_10	tool	A white cloth bundle tied with rope.
 itm_i16_r1_11	tool	A brown rolled striped blanket.
-itm_i16_r2_00	tool	A brown rune spike with a blue gem with a faint blue glow.
+itm_i16_r2_00	tool	A brown rune spike with a blue gem and a faint blue glow.
 itm_i16_r2_01	tool	A dark rune spike with a red gem.
 itm_i16_r2_02	tool	A brown hand mirror reflecting strange colors with a faint blue glow.
 itm_i16_r2_03	tool	A teal rune spike.
@@ -1791,10 +1791,10 @@ itm_i21_r4_09	small_weapon	A brown folding knife.
 itm_i21_r4_10	small_weapon	A black folding knife.
 itm_i21_r4_11	small_weapon	A brown karambit knife.
 itm_i21_r4_12	small_weapon	A black folding knife.
-itm_i21_r4_13	small_weapon	A brass knuckles.
-itm_i21_r4_14	small_weapon	A black brass knuckles.
-itm_i21_r4_15	small_weapon	A spiked brass knuckles.
-itm_i21_r4_16	small_weapon	A spiked brass knuckles.
+itm_i21_r4_13	small_weapon	A pair of brass knuckles.
+itm_i21_r4_14	small_weapon	A pair of black brass knuckles.
+itm_i21_r4_15	small_weapon	A pair of spiked brass knuckles.
+itm_i21_r4_16	small_weapon	A pair of spiked brass knuckles.
 itm_i22_r0_00	document	A grey data chip.
 itm_i22_r0_01	document	A black glowing data chip.
 itm_i22_r0_02	document	A green data chip.
@@ -1869,8 +1869,8 @@ itm_i22_r5_07	document	An orange holographic disc.
 itm_i22_r5_08	document	A blue data capsule with a faint cyan glow.
 itm_i22_r5_09	document	An orange data capsule.
 itm_i22_r5_10	document	A brown spherical recorder.
-itm_i22_r5_11	document	A red black box.
-itm_i22_r5_12	document	A blue black box with a faint blue glow.
+itm_i22_r5_11	document	A red and black box.
+itm_i22_r5_12	document	A blue and black box with a faint blue glow.
 itm_i23_r0_00	medicine	A red syringe.
 itm_i23_r0_01	medicine	A brown auto-injector.
 itm_i23_r0_02	medicine	A brown syringe.
@@ -2146,7 +2146,7 @@ itm_i25_r5_13	other_material	A grey bundle of carbon fiber rods.
 itm_i25_r5_14	other_material	A black bundle of carbon fiber tubes.
 itm_i25_r5_15	other_material	An orange resin block.
 itm_i25_r5_16	other_material	A blue resin block with a faint blue glow.
-itm_i32_r0_00	tool	A black binoculars with a leather strap.
+itm_i32_r0_00	tool	A pair of black binoculars with a leather strap.
 itm_i32_r0_01	tool	A black folded umbrella.
 itm_i32_r0_02	tool	A brass compass with cracked glass.
 itm_i32_r0_03	tool	A black flashlight.
@@ -2158,7 +2158,7 @@ itm_i32_r0_08	tool	A grey roll of cloth tape.
 itm_i32_r0_09	tool	A black metal lighter.
 itm_i32_r0_10	tool	A brown padlock with keys.
 itm_i32_r0_11	tool	A black smartphone with a dark screen.
-itm_i33_r0_00	tool	A brown rusty binoculars with cracked lenses.
+itm_i33_r0_00	tool	A pair of brown rusty binoculars with cracked lenses.
 itm_i33_r0_01	tool	A black rubber gas mask with twin filter canisters.
 itm_i33_r0_02	tool	A brown geiger counter.
 itm_i33_r0_03	tool	A black hand-crank radio.
@@ -2192,7 +2192,7 @@ itm_i35_r0_06	tool	A golden bamboo water flask.
 itm_i35_r0_07	tool	A black small iron pot.
 itm_i35_r0_08	tool	A brown wooden bucket.
 itm_i35_r0_09	tool	A brown sickle.
-itm_i35_r0_10	tool	A brown pair of straw sandals.
+itm_i35_r0_10	tool	A pair of brown pair of straw sandals.
 itm_i35_r0_11	tool	A blue cloth-wrapped bundle.
 itm_i36_r0_00	tool	A leather pouch bulging with gold coins.
 itm_i36_r0_01	tool	A brown leather pouch branded with a bull skull.
@@ -2223,7 +2223,7 @@ itm_i38_r0_01	magical_material	A glowing orb caged in a golden lattice.
 itm_i38_r0_02	magical_material	A pitch-black orb that seems to swallow light.
 itm_i38_r0_03	magical_material	A clear orb with swirling grey mist.
 itm_i38_r0_04	magical_material	A red heart-shaped crystal with pulsing veins.
-itm_i38_r0_05	magical_material	A spherical core with blue lightning inside with a faint blue glow.
+itm_i38_r0_05	magical_material	A spherical core with blue lightning inside and a faint blue glow.
 itm_i38_r0_06	magical_material	A radiant white core on a broken golden mount.
 itm_i38_r0_07	magical_material	A small sphere with purple mist sealed inside.
 itm_i38_r0_08	magical_material	A faceted blue core bound with silver bands.
@@ -2238,7 +2238,7 @@ itm_i39_r0_04	magical_material	A glass beaker with grey residue at the bottom.
 itm_i39_r0_05	magical_material	A narrow-necked bottle filled with white vapor.
 itm_i39_r0_06	magical_material	A large droplet of shining silver liquid.
 itm_i39_r0_07	magical_material	A frozen clump of purple mist.
-itm_i39_r0_08	magical_material	A hourglass-shaped glass vessel with drifting blue mist with a faint blue glow.
+itm_i39_r0_08	magical_material	A hourglass-shaped glass vessel with drifting blue mist and a faint blue glow.
 itm_i39_r0_09	magical_material	A horn container filled with gold dust.
 itm_i39_r0_10	magical_material	A lump of pale golden glowing beeswax.
 itm_i39_r0_11	magical_material	A bone spool wound with silver thread.
@@ -2259,7 +2259,7 @@ itm_i41_r0_01	gem	A smooth deep purple rough gemstone.
 itm_i41_r0_02	gem	A teardrop-shaped blue gem with a faint cyan glow.
 itm_i41_r0_03	gem	A faceted green gem.
 itm_i41_r0_04	gem	An ominous black gem with a purple sheen.
-itm_i41_r0_05	ore	A rock chunk with embedded blue ore with a faint blue glow.
+itm_i41_r0_05	ore	A rock chunk with embedded blue ore and a faint blue glow.
 itm_i41_r0_06	ore	A heavy rock with veins of gold.
 itm_i41_r0_07	ore	A rough heavy lump of iron.
 itm_i41_r0_08	metal	A silver ingot.
@@ -2398,7 +2398,7 @@ itm_ian2_04	long_weapon	A broken silver longsword.
 itm_ian2_05	long_weapon	A red-bladed longsword.
 itm_ian2_06	long_weapon	A blue misty longsword.
 itm_ian2_07	long_weapon	A golden longsword.
-itm_ian2_08	long_weapon	A rapier crackling with purple lightning with a faint purple glow.
+itm_ian2_08	long_weapon	A rapier crackling with purple lightning and a faint purple glow.
 itm_ian2_09	long_weapon	A brown rapier crackling with yellow lightning.
 itm_ipa1_00	long_weapon	A grey angle-cut pipe spear.
 itm_ipa1_01	long_weapon	A grey cloth-wrapped pipe spear.
@@ -2568,12 +2568,12 @@ itm_i26_r0_06	body_armor	A black and gold samurai do armor.
 itm_i26_r0_07	body_armor	A red lacquered samurai do armor.
 itm_i26_r0_08	body_armor	A navy laced samurai do armor.
 itm_i26_r0_09	body_armor	A brown worn leather samurai do armor.
-itm_i26_r1_00	gauntlets	A brown pair of chain kote gauntlets.
-itm_i26_r1_01	gauntlets	A brown pair of red lacquered kote gauntlets.
-itm_i26_r1_02	gauntlets	A brown pair of leather kote gauntlets.
+itm_i26_r1_00	gauntlets	A pair of brown pair of chain kote gauntlets.
+itm_i26_r1_01	gauntlets	A pair of brown pair of red lacquered kote gauntlets.
+itm_i26_r1_02	gauntlets	A pair of brown pair of leather kote gauntlets.
 itm_i26_r1_03	gauntlets	A pair of black kote gauntlets.
-itm_i26_r1_04	gauntlets	A brown pair of iron kote gauntlets.
-itm_i26_r1_05	gauntlets	A brown pair of laced kote gauntlets.
+itm_i26_r1_04	gauntlets	A pair of brown pair of iron kote gauntlets.
+itm_i26_r1_05	gauntlets	A pair of brown pair of laced kote gauntlets.
 itm_i26_r1_06	legwear	A brown iron suneate shin guard.
 itm_i26_r1_07	legwear	A brown iron suneate shin guard.
 itm_i26_r1_08	legwear	A black suneate shin guard.
@@ -2620,16 +2620,16 @@ itm_i27_r3_07	clothing	A yellow work jumpsuit with harness.
 itm_i27_r3_08	clothing	A black ballistic long coat.
 itm_i27_r3_09	clothing	A white ballistic long coat.
 itm_i46_00	magical_material	A glowing red liquid power flask with a brass cap.
-itm_i46_01	magical_material	A power cell board with three green mana stones with a faint green glow.
-itm_i46_02	magical_material	A wind mana stone engine with a small fan wheel with a faint cyan glow.
-itm_i46_03	magical_material	A small iron furnace with a blue flame inside with a faint blue glow.
-itm_i46_04	magical_material	A glass sphere of trapped lightning with copper electrodes with a faint blue glow.
+itm_i46_01	magical_material	A power cell board with three green mana stones and a faint green glow.
+itm_i46_02	magical_material	A wind mana stone engine with a small fan wheel and a faint cyan glow.
+itm_i46_03	magical_material	A small iron furnace with a blue flame inside and a faint blue glow.
+itm_i46_04	magical_material	A glass sphere of trapped lightning with copper electrodes and a faint blue glow.
 itm_i46_05	magical_material	A white light orb floating in a gear ring.
 itm_i46_06	magical_material	A frosted cooling cylinder holding an ice mana stone with a faint blue glow.
 itm_i46_07	magical_material	A hourglass-shaped mana reservoir.
 itm_i46_08	magical_material	An orange light core with a golden fan wheel.
 itm_i46_09	magical_material	A cracked hexagonal power crystal in metal clamps with a faint cyan glow.
-itm_i46_10	magical_material	A pocket-watch-shaped controller set with a mana stone with a faint blue glow.
+itm_i46_10	magical_material	A pocket-watch-shaped controller set with a mana stone and a faint blue glow.
 itm_i46_11	magical_material	A purple light pendulum core hanging on a chain with a faint purple glow.
 itm_i47_00	scrap	An iron gear with glowing grooves.
 itm_i47_01	magical_material	A brass gear set with a blue crystal.
@@ -2659,7 +2659,7 @@ itm_i49_00	relic	A small stand with a floating glowing orb.
 itm_i49_01	relic	A magitech lantern holding a light crystal.
 itm_i49_02	relic	A brass telescope with a crystal lens.
 itm_i49_03	relic	A gear-work box with a mana stone on the lid.
-itm_i49_04	relic	A disc device set with a blue crystal with a faint blue glow.
+itm_i49_04	relic	A disc device set with a blue crystal and a faint blue glow.
 itm_i49_05	relic	A small still heated by a mana stone flame.
 itm_i49_06	relic	A clockwork brass bird.
 itm_i49_07	relic	A compass with a glowing needle.
@@ -2668,7 +2668,7 @@ itm_i49_09	relic	A brass rack of glowing liquid vials.
 itm_i49_10	relic	A clockwork lock with visible gears.
 itm_i49_11	relic	A disc projecting a glowing map.
 itm_i50_00	tool	A black control module with burnt circuit traces and a red indicator.
-itm_i50_01	relic	A small black cube with a blue circuit pattern with a faint blue glow.
+itm_i50_01	relic	A small black cube with a blue circuit pattern and a faint blue glow.
 itm_i50_02	relic	A black data chip with gold contacts.
 itm_i50_03	scrap	A cracked optical sensor with dangling wires.
 itm_i50_04	scrap	A small grey thruster with a cracked nozzle.
@@ -2683,7 +2683,7 @@ itm_i51_00	relic	A chrome robot head with a cracked optic.
 itm_i51_01	scrap	A heat-discolored cooling fin assembly.
 itm_i51_02	scrap	A black thruster with glowing blue vents.
 itm_i51_03	scrap	A cracked cylindrical water filter cartridge.
-itm_i51_04	tool	A cybernetic goggles with a cracked lens.
+itm_i51_04	tool	A pair of cybernetic goggles with a cracked lens.
 itm_i51_05	scrap	A green circuit board with dangling antenna wires.
 itm_i51_06	scrap	A cylinder part wound with magnetic coils.
 itm_i51_07	scrap	A warning-striped canister with exposed copper coils.
@@ -2707,7 +2707,7 @@ itm_i53_00	medicine	A white nano-suture kit case with a blue cross.
 itm_i53_01	medicine	A white case with silver thread spools and an auto-injector.
 itm_i53_02	medicine	A clear tube of green synthetic gel.
 itm_i53_03	medicine	A silver oxygen canister with a green valve.
-itm_i53_04	medicine	A IV drip bag with tubing.
+itm_i53_04	medicine	An IV drip bag with tubing.
 itm_i53_05	tool	A digital thermometer.
 itm_i53_06	tool	A stethoscope.
 itm_i53_07	tool	A handheld diagnostic device with a screen.
@@ -2736,20 +2736,20 @@ itm_i55_05	potion	A bottle of glowing white potion in a golden net.
 itm_i55_06	potion	A skull-shaped bottle of toxic green potion.
 itm_i55_07	potion	A bottle of three stacked purple spheres.
 itm_i55_08	potion	A thick amber potion bottle with a leather-tied stopper.
-itm_i55_09	potion	A pale blue potion bottle with a feather stopper with a faint cyan glow.
+itm_i55_09	potion	A pale blue potion bottle with a feather stopper and a faint cyan glow.
 itm_i55_10	potion	A small barrel-shaped potion bottle.
 itm_i55_11	potion	A red potion vial on a neck chain.
 itm_i56_00	potion	A bottle of bubbling green poison with a faint green glow.
 itm_i56_01	potion	A bottle with a small flame burning inside.
-itm_i56_02	potion	A frozen bottle with a floating snowflake with a faint cyan glow.
-itm_i56_03	potion	A bottle with lightning crackling inside with a faint blue glow.
+itm_i56_02	potion	A frozen bottle with a floating snowflake and a faint cyan glow.
+itm_i56_03	potion	A bottle with lightning crackling inside and a faint blue glow.
 itm_i56_04	potion	A bottle of swirling black smoke.
 itm_i56_05	potion	A navy bottle of glittering stardust.
 itm_i56_06	potion	A bottle of rainbow liquid with a faint blue glow.
 itm_i56_07	potion	A winged bottle of golden holy water.
 itm_i56_08	potion	A dark red potion bottle with a fang stopper.
 itm_i56_09	potion	An eerie bottle with a floating eyeball.
-itm_i56_10	potion	A pink potion bottle with floating petals with a faint magenta glow.
+itm_i56_10	potion	A pink potion bottle with floating petals and a faint magenta glow.
 itm_i56_11	potion	A bottle of silver liquid with rising bubbles.
 itm_i57_00	potion	A large handled jug of red healing potion.
 itm_i57_01	potion	A rack of three potion test tubes.
@@ -2757,7 +2757,7 @@ itm_i57_02	potion	A leather belt of small potion vials.
 itm_i57_03	potion	A wooden crate of small potion bottles.
 itm_i57_04	potion	A stoppered medicine gourd.
 itm_i57_05	potion	A ceramic medicine flask.
-itm_i57_06	potion	A glass potion pourer with a spout with a faint cyan glow.
+itm_i57_06	potion	A glass potion pourer with a spout and a faint cyan glow.
 itm_i57_07	potion	A round-bottomed flask of purple potion on a stand with a faint purple glow.
 itm_i57_08	medicine	A two small glass ampoules with a faint cyan glow.
 itm_i57_09	medicine	A lidded tin of ointment.
@@ -2774,7 +2774,7 @@ itm_i58_07	gem	A marquise-cut pink gem with a faint magenta glow.
 itm_i58_08	gem	A round iridescent opal with a faint blue glow.
 itm_i58_09	gem	A black and white banded onyx.
 itm_i58_10	gem	A pale blue oval moonstone with a faint blue glow.
-itm_i58_11	gem	An oval lapis lazuli with gold flecks with a faint blue glow.
+itm_i58_11	gem	An oval lapis lazuli with gold flecks and a faint blue glow.
 itm_i59_00	ore	A geode lined with purple crystals.
 itm_i59_01	ore	A white quartz with gold veins.
 itm_i59_02	gem	An amber lump with a trapped insect.
@@ -2788,7 +2788,7 @@ itm_i59_09	ore	An iridescent stepped bismuth crystal with a faint cyan glow.
 itm_i59_10	ore	A rough lapis lazuli with a faint blue glow.
 itm_i59_11	gem	A round dark green jade stone.
 itm_i60_00	gem	A red gem with a flame flickering inside.
-itm_i60_01	gem	A navy gem with a trapped star with a faint blue glow.
+itm_i60_01	gem	A navy gem with a trapped star and a faint blue glow.
 itm_i60_02	gem	A yellow gem with lightning inside.
 itm_i60_03	gem	A frosted pale blue gem with a faint cyan glow.
 itm_i60_04	gem	A golden gem with an eye-like pattern.
@@ -2798,7 +2798,7 @@ itm_i60_07	gem	A gem holding black mist.
 itm_i60_08	gem	A large green gem on a golden claw mount with a faint green glow.
 itm_i60_09	gem	A silver crescent moon gem.
 itm_i60_10	gem	A pale blue feather-shaped gem with a faint cyan glow.
-itm_i60_11	gem	A pink gem with a small flower blooming inside with a faint magenta glow.
+itm_i60_11	gem	A pink gem with a small flower blooming inside and a faint magenta glow.
 itm_i61_00	drink	A wooden tankard of frothy ale.
 itm_i61_01	drink	A ceramic ale jug with a handle.
 itm_i61_02	drink	A drinking horn of mead.

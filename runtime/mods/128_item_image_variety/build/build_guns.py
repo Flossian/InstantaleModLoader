@@ -27,6 +27,7 @@ import functools
 import io
 import json
 import os
+import re
 import sys
 from collections import Counter, deque
 from pathlib import Path
@@ -571,6 +572,35 @@ def names_own_color(name):
     return names_metal_color(name) or bool(words and words[0] in COLOR_WORDS)
 
 
+# 対で数える品（名前の頭の最後の語）。「A brown leather gloves」にせず「A pair of brown leather gloves」にする
+PAIRED = {"gloves", "gauntlets", "boots", "shoes", "sandals", "slippers", "greaves", "sabatons", "bracers", "vambraces", "cuisses", "chausses",
+          "trousers", "pants", "breeches", "leggings", "shorts", "tights", "earrings", "glasses", "goggles", "spectacles", "binoculars",
+          "scissors", "tongs", "pliers", "knuckles", "manacles", "guards", "socks", "stockings", "chopsticks"}
+# 冠詞を付けない複数の品（「Patched peasant clothes.」）
+UNCOUNTED = {"clothes", "robes", "garments", "rags"}
+# 母音字で始まっても子音で読む語（「A one-piece axe」）
+CONSONANT_SOUND = ("one", "uni", "use", "usu", "eu", "ure", "ura")
+
+
+def sentence(text):
+    """外見文と同じ形の英文（冠詞＋本文、句点は付けない）。対の品は A pair of、数えない品は冠詞なし。"""
+    head = text.split(" with ")[0].lower()
+    words = head.split()
+    if not re.match(r"(pair|pairs|set|bundle|pile|stack|handful|bunch|sack|string|cluster|row) of ", head) and words:
+        if words[-1] in PAIRED:
+            return "A pair of " + text
+        if words[-1] in UNCOUNTED:
+            return text[0].upper() + text[1:]
+    low = text.lower()
+    vowel = low[0] in "aeiou" and not low.startswith(CONSONANT_SOUND)
+    return ("An " if vowel else "A ") + text
+
+
+def add_with(text, phrase):
+    """本文に「with …」を足す。本文にもう with があれば and でつなぐ（「with purple mist with a faint glow」にしない）。"""
+    return text + (" and " if " with " in text else " with ") + phrase
+
+
 def caption_for(entry, im):
     """種類の名前と測った色から、ゲームの外見文と同じ形の英語一文を組む。"""
     names = color_names(im)
@@ -599,12 +629,11 @@ def caption_for(entry, im):
     text = noun if colored else "%s %s" % (color, noun)
     if extras:
         text += " with " + (extras[0] if len(extras) == 1 else ", ".join(extras[:-1]) + " and " + extras[-1])
-    article = "An" if text[0] in "aeiou" else "A"
     # 表の `melee` が真の品（企業の一揃いの警棒・刃物・大槌・クロスボウ）は銃の結びを付けない
     if entry.get("melee"):
-        return "%s %s." % (article, text)
+        return "%s." % sentence(text)
     # 結びの語で銃・爆発物の側に寄せる（剣の外見文と重ならないように）
-    return "%s %s, %s." % (article, text, "an explosive" if entry["pref"] == "throwable" else "a gun")
+    return "%s, %s." % (sentence(text), "an explosive" if entry["pref"] == "throwable" else "a gun")
 
 
 def build_sheet_entry(entry, folder_dir):

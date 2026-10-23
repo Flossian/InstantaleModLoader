@@ -64,6 +64,9 @@ def join(parts):
 
 
 def caption_for(entry, im, magic):
+    # 表の plain が真の品は種類の名前だけ（名前で見た目を言い切った品。測った色から足す宝石や属性が絵と合わない）
+    if entry.get("plain"):
+        return "%s." % b.sentence(entry["type"])
     names = b.color_names(im)
     total = max(1, sum(names.values()))
     body = [k for k, _ in names.most_common() if not k.startswith("glow:") and k != "wood"]
@@ -93,8 +96,9 @@ def caption_for(entry, im, magic):
         words = re.findall(r"[a-z]+", typ)
         element = next((el for w, el in NAMED_ELEMENT if w in words), element)
         word = element if element in words else "%s-enchanted" % element
+        # 宝石の有無は測れないので、光の色だけを書く（宝石の無い剣に「a glowing blue gem」と書かない）
         if color:
-            extras.append("a glowing %s gem" % color)
+            extras.append("a faint %s glow" % color)
     elif names["wood"] / total >= 0.12 and not wooden and word not in ("brown", "leather"):
         if any(w in typ for w in ARMOR):
             extras.append("leather straps")
@@ -111,7 +115,7 @@ def caption_for(entry, im, magic):
     text = "%s %s" % (word, typ) if word not in typ else typ
     if extras:
         text += " with " + join(extras)
-    return "%s %s." % ("An" if text[0] in "aeiou" else "A", text)
+    return "%s." % b.sentence(text)
 
 
 SF_MATERIAL = {"grey": "steel", "white": "polished alloy", "black": "black alloy", "tan": "bronze", "brass": "gold-plated"}
@@ -155,8 +159,8 @@ def caption_sf(entry, im):
               and k not in glow[:1] and not (glow[:1] == ["cyan"] and k == "blue")]
     if accent:
         extras.append("%s details" % {"brass": "yellow"}.get(accent[0], accent[0]))
-    text = "%s with %s" % (typ, join(extras))
-    return "%s %s." % ("An" if text[0] in "aeiou" else "A", text)
+    text = b.add_with(typ, join(extras))
+    return "%s." % b.sentence(text)
 
 
 ITEM_COLOR = {"grey": "grey", "white": "white", "black": "black", "tan": "beige", "brass": "golden", "wood": "brown",
@@ -176,8 +180,8 @@ def caption_item(entry, im):
             text = "%s %s" % (ITEM_COLOR[body[0]], text)
     glow = [k[5:] for k, n in names.most_common() if k.startswith("glow:") and n / total >= 0.03]
     if glow and "glow" not in text:
-        text += " with a faint %s glow" % glow[0]
-    return "%s %s." % ("An" if text[0] in "aeiou" else "A", text)
+        text = b.add_with(text, "a faint %s glow" % glow[0])
+    return "%s." % b.sentence(text)
 
 
 def choose(entry, im):

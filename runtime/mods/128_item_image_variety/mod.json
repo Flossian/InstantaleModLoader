@@ -535,8 +535,8 @@
         "en": "weapon_medieval"
       },
       "note": {
-        "ja": "216枚",
-        "en": "216 images"
+        "ja": "252枚",
+        "en": "252 images"
       }
     },
     "SET_WEAPON_MAGIC": {
@@ -561,8 +561,8 @@
         "en": "weapon_magic"
       },
       "note": {
-        "ja": "143枚",
-        "en": "143 images"
+        "ja": "168枚",
+        "en": "168 images"
       }
     },
     "SET_WEAPON_MAGIC_FUSION": {
@@ -587,8 +587,8 @@
         "en": "weapon_magic_fusion"
       },
       "note": {
-        "ja": "50枚",
-        "en": "50 images"
+        "ja": "62枚",
+        "en": "62 images"
       }
     },
     "SET_WEAPON_SF": {
@@ -613,8 +613,8 @@
         "en": "weapon_sf"
       },
       "note": {
-        "ja": "193枚",
-        "en": "193 images"
+        "ja": "280枚",
+        "en": "280 images"
       }
     },
     "SET_WEAPON_WA": {
@@ -743,8 +743,8 @@
         "en": "wear_fantasy"
       },
       "note": {
-        "ja": "124枚",
-        "en": "124 images"
+        "ja": "140枚",
+        "en": "140 images"
       }
     },
     "SET_WEAR_HIGHFANTASY": {
@@ -769,8 +769,8 @@
         "en": "wear_highfantasy"
       },
       "note": {
-        "ja": "116枚",
-        "en": "116 images"
+        "ja": "130枚",
+        "en": "130 images"
       }
     },
     "SET_WEAR_DARKFANTASY": {

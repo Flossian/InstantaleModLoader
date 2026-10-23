@@ -69,7 +69,7 @@ def cut(folder, sheet_files, src, rect):
 def caption_for(entry, im):
     # 表の plain が真の品は種類の名前だけ（名前に色が入っていて、測った色と重なる品）
     if entry.get("plain"):
-        return "%s %s." % ("An" if entry["type"][0] in "aeiou" else "A", entry["type"])
+        return "%s." % b.sentence(entry["type"])
     names = b.color_names(im)
     total = max(1, sum(names.values()))
     ranked = [(COLOR.get(k[5:] if k.startswith("glow:") else k), n) for k, n in names.most_common()]
@@ -84,8 +84,8 @@ def caption_for(entry, im):
     text = entry["type"] if main in named or b.names_own_color(entry["type"]) else "%s %s" % (main, entry["type"])
     accent = [c for c in order[1:] if c not in ("grey", "black", main) and c not in named and merged[c] / total >= 0.12]
     if accent:
-        text += " with %s details" % accent[0]
-    return "%s %s." % ("An" if text[0] in "aeiou" else "A", text)
+        text = b.add_with(text, "%s details" % accent[0])
+    return "%s." % b.sentence(text)
 
 
 _cut_cache = {}

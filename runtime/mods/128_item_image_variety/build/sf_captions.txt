@@ -140,7 +140,7 @@ sf_s5_r2_10	medium_weapon	A steel pry bar with a black alloy shaft and orange de
 sf_s5_r2_11	medium_weapon	A hooked pry bar with a black alloy shaft.
 sf_s5_r3_00	medium_weapon	A steel sledgehammer with a black alloy head.
 sf_s5_r3_01	medium_weapon	A spiked steel mace with a black alloy head.
-sf_s5_r3_02	medium_weapon	A baseball bat studded with nails with a wooden shaft.
+sf_s5_r3_02	medium_weapon	A baseball bat studded with nails and a wooden shaft.
 sf_s5_r3_03	medium_weapon	A baseball bat wrapped in barbed wire with a wooden shaft.
 sf_s5_r3_04	medium_weapon	A steel pipe club with a black alloy shaft.
 sf_s5_r3_05	medium_weapon	A red crowbar with a black alloy shaft and orange details.
@@ -191,3 +191,90 @@ sf_stw4_06	large_weapon	An energy-lined futuristic greatsword with a glowing red
 sf_stw4_07	large_weapon	A wide-guard futuristic greatsword with a polished alloy blade.
 sf_stw4_08	large_weapon	A thruster-pommel futuristic greatsword with a steel blade.
 sf_stw4_09	large_weapon	An armor-plated futuristic greatsword with a black alloy blade.
+sf_stw5_00	long_weapon	An angle-cut broad black futuristic greatsword with a black alloy blade.
+sf_stw5_01	long_weapon	A blunt-tipped grey futuristic greatsword with a steel blade.
+sf_stw5_02	long_weapon	A stepped white plate futuristic greatsword with a polished alloy blade.
+sf_stw5_03	long_weapon	A grooved black futuristic greatsword with a black alloy blade.
+sf_stw5_04	long_weapon	A flat-tipped iron slab futuristic greatsword with a steel blade.
+sf_stw5_05	long_weapon	An offset double-plate futuristic greatsword with a steel blade.
+sf_stw5_06	long_weapon	A slightly curved black steel futuristic greatsword with a black alloy blade.
+sf_stw5_07	long_weapon	A square-holed grey futuristic greatsword with a steel blade.
+sf_stw5_08	long_weapon	A long-hilted ribbed white futuristic greatsword with a polished alloy blade.
+sf_stw5_09	long_weapon	A slim white futuristic greatsword with a polished alloy blade.
+sf_stw5_10	long_weapon	A glow-edged black futuristic greatsword with a black alloy blade and blue details.
+sf_stw5_11	long_weapon	A guardless one-piece futuristic greatsword with a black alloy blade.
+sf_stw5_12	long_weapon	A cleaver-like heavy futuristic greatsword with a steel blade.
+sf_stw6_00	long_weapon	A spine-braced black futuristic greatsword with a black alloy blade.
+sf_stw6_01	long_weapon	A triangle-tipped white futuristic greatsword with a polished alloy blade.
+sf_stw6_02	long_weapon	A waisted grey futuristic greatsword with a steel blade.
+sf_stw6_03	long_weapon	A notched black futuristic greatsword with a black alloy blade.
+sf_stw6_04	long_weapon	A ring-collared white futuristic greatsword with a polished alloy blade.
+sf_stw6_05	long_weapon	A very slender black futuristic greatsword with a black alloy blade.
+sf_stw6_06	long_weapon	A needle-thin futuristic greatsword with a black alloy blade.
+sf_stw6_07	long_weapon	A double-stepped white futuristic greatsword with a polished alloy blade.
+sf_stw6_08	long_weapon	A pommel-weighted grey futuristic greatsword with a steel blade.
+sf_stw6_09	long_weapon	A step-lined iron futuristic greatsword with a steel blade.
+sf_stw6_10	long_weapon	A cross-guard black futuristic greatsword with a black alloy blade.
+sf_stw6_11	long_weapon	A round-tipped white futuristic greatsword with a polished alloy blade.
+sf_stw6_12	long_weapon	A tapered single-edged black futuristic greatsword with a black alloy blade.
+sf_stw7_00	small_weapon	An angle-cut black futuristic short sword with a black alloy blade.
+sf_stw7_01	small_weapon	A grooved grey futuristic dagger with a steel blade.
+sf_stw7_02	small_weapon	A guardless white plate futuristic dagger with a polished alloy blade.
+sf_stw7_03	small_weapon	A square-holed black futuristic short sword with a black alloy blade.
+sf_stw7_04	small_weapon	A curved iron futuristic dagger with a steel blade.
+sf_stw7_05	small_weapon	A broad blunt-tipped futuristic dagger with a steel blade.
+sf_stw7_06	small_weapon	A pommel-weighted black futuristic dagger with a black alloy blade.
+sf_stw7_07	small_weapon	An offset double-plate white futuristic short sword with a polished alloy blade.
+sf_stw7_08	small_weapon	A glow-edged black futuristic dagger with a glowing blue blade.
+sf_stw7_09	small_weapon	A ring-collared grey futuristic short sword with a steel blade.
+sf_stw7_10	small_weapon	A needle-thin black futuristic stiletto dagger with a black alloy blade.
+sf_stw7_11	small_weapon	A round-tipped white futuristic dagger with a polished alloy blade.
+sf_stw8_00	medium_weapon	An angle-cut black futuristic sword with a black alloy blade.
+sf_stw8_01	medium_weapon	A straight double-edged grey futuristic sword with a polished alloy blade.
+sf_stw8_02	medium_weapon	A stepped white futuristic sword with a polished alloy blade.
+sf_stw8_03	medium_weapon	A grooved black futuristic sword with a black alloy blade.
+sf_stw8_04	medium_weapon	A flat-tipped cleaver futuristic sword with a steel blade.
+sf_stw8_05	medium_weapon	A curved iron futuristic sword with a steel blade.
+sf_stw8_06	medium_weapon	A notched grey futuristic sword with a steel blade.
+sf_stw8_07	medium_weapon	A notched white futuristic sword with a polished alloy blade.
+sf_stw8_08	medium_weapon	A cross-guard black futuristic sword with a black alloy blade.
+sf_stw8_09	medium_weapon	A glow-edged white futuristic sword with a glowing blue blade.
+sf_stw8_10	medium_weapon	A waisted black futuristic sword with a black alloy blade.
+sf_stw8_11	medium_weapon	A hand-and-a-half grey futuristic sword with a steel blade.
+sf_stw8_12	medium_weapon	A double-stepped white futuristic sword with a polished alloy blade.
+sf_stw9_00	long_weapon	A slim plate-headed black futuristic spear with a black alloy head.
+sf_stw9_01	long_weapon	An angle-cut grey futuristic spear with a steel head.
+sf_stw9_02	long_weapon	A broad single-edged white futuristic glaive with a polished alloy core.
+sf_stw9_03	long_weapon	A square-holed black futuristic spear with a black alloy head.
+sf_stw9_04	long_weapon	A forked grey futuristic spear with a steel head and blue details.
+sf_stw9_05	long_weapon	A cleaver-bladed black futuristic polearm with a black alloy core.
+sf_stw9_06	long_weapon	An angular hook-bladed grey futuristic polearm with a polished alloy core.
+sf_stw9_07	long_weapon	A glow-edged black futuristic spear with a black alloy head and blue details.
+sf_stw9_08	long_weapon	A double-ended white futuristic spear with a polished alloy head.
+sf_stw9_09	long_weapon	An axe-bladed black futuristic halberd with a steel head.
+sf_stw9_10	long_weapon	A needle-thin iron futuristic spear with a black alloy head.
+sf_stw9_11	long_weapon	A banded white futuristic spear with a polished alloy head.
+sf_stw10_00	large_weapon	A block-headed black futuristic maul with a black alloy core.
+sf_stw10_01	large_weapon	A wedge-backed grey futuristic hammer with a steel head.
+sf_stw10_02	large_weapon	A cylinder-headed white futuristic hammer with a polished alloy head.
+sf_stw10_03	large_weapon	A square-holed black futuristic hammer with a black alloy head.
+sf_stw10_04	large_weapon	A slab-bladed black futuristic axe with a black alloy head.
+sf_stw10_05	large_weapon	An angular single-bladed grey futuristic axe with a steel head.
+sf_stw10_06	large_weapon	A symmetric double-bladed white futuristic axe with a polished alloy head.
+sf_stw10_07	large_weapon	A glow-edged black futuristic axe with a black alloy head and blue details.
+sf_stw10_08	large_weapon	An angular black futuristic scythe with a black alloy head.
+sf_stw10_09	large_weapon	A bent-bladed grey futuristic scythe with a polished alloy head.
+sf_stw10_10	large_weapon	A triple-banded white futuristic hammer with a polished alloy head.
+sf_stw10_11	large_weapon	A one-piece slab black futuristic axe with a black alloy head.
+sf_stw11_00	throwable_weapon	A square plate futuristic throwing blade with a black alloy edge.
+sf_stw11_01	throwable_weapon	A triangular futuristic throwing blade with a steel edge.
+sf_stw11_02	throwable_weapon	A holed white futuristic throwing disc with a polished alloy edge.
+sf_stw11_03	throwable_weapon	A cross-plate futuristic shuriken with a black alloy core.
+sf_stw11_04	throwable_weapon	A bundle of three futuristic throwing knives with a steel core.
+sf_stw11_05	throwable_weapon	A glow-edged futuristic throwing disc with a glowing blue edge.
+sf_stw11_06	small_weapon	A plate futuristic knuckle duster with a black alloy core.
+sf_stw11_07	small_weapon	A bladed futuristic knuckle duster with a steel core.
+sf_stw11_08	small_weapon	A plated white futuristic gauntlet with a polished alloy core.
+sf_stw11_09	small_weapon	A short-bladed futuristic gauntlet with a black alloy core.
+sf_stw11_10	small_weapon	A plate-fingered futuristic gauntlet with a steel core.
+sf_stw11_11	medium_weapon	A long-bladed futuristic arm gauntlet with a black alloy core.
