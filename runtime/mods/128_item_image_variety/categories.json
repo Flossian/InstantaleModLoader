@@ -594,32 +594,12 @@
   ]
  },
  {
-  "id": "wear_fantasy",
-  "setting": "SET_WEAR_FANTASY",
+  "id": "wear_medieval",
+  "setting": "SET_WEAR_MEDIEVAL",
   "group": "防具",
-  "label": "防具_ファンタジー",
+  "label": "防具_中世",
   "default": "mix",
   "sources": [
-   {
-    "sheet": "m7",
-    "source": "medieval_weapons/med_shield_armor.png",
-    "name": "中世武器_盾と胴鎧"
-   },
-   {
-    "sheet": "w05",
-    "source": "wear/wear_darkfantasy1.png",
-    "name": "防具類_ダークファンタジー1"
-   },
-   {
-    "sheet": "w06",
-    "source": "wear/wear_darkfantasy2.png",
-    "name": "防具類_ダークファンタジー2"
-   },
-   {
-    "sheet": "w07",
-    "source": "wear/wear_highfantasy.png",
-    "name": "防具類_ハイファンタジー"
-   },
    {
     "sheet": "w09",
     "source": "wear/wear_medieval_clothes.png",
@@ -631,6 +611,25 @@
     "name": "防具類_中世防具"
    },
    {
+    "sheet": "m7",
+    "source": "medieval_weapons/med_shield_armor.png",
+    "name": "中世武器_盾と胴鎧"
+   },
+   {
+    "sheet": "wmd1",
+    "source": "wear/wear_medical_medieval.png",
+    "name": "防具類_中世とファンタジーの医療の装い"
+   }
+  ]
+ },
+ {
+  "id": "wear_fantasy",
+  "setting": "SET_WEAR_FANTASY",
+  "group": "防具",
+  "label": "防具_ファンタジー",
+  "default": "mix",
+  "sources": [
+   {
     "sheet": "w21",
     "source": "wear/wear_wizard.png",
     "name": "防具類_魔法使い"
@@ -639,6 +638,39 @@
     "sheet": "i31b",
     "source": "tools/tool_oddities.png",
     "name": "道具_神話の胸当て"
+   }
+  ]
+ },
+ {
+  "id": "wear_highfantasy",
+  "setting": "SET_WEAR_HIGHFANTASY",
+  "group": "防具",
+  "label": "防具_ハイファンタジー",
+  "default": "mix",
+  "sources": [
+   {
+    "sheet": "w07",
+    "source": "wear/wear_highfantasy.png",
+    "name": "防具類_ハイファンタジー"
+   }
+  ]
+ },
+ {
+  "id": "wear_darkfantasy",
+  "setting": "SET_WEAR_DARKFANTASY",
+  "group": "防具",
+  "label": "防具_ダークファンタジー",
+  "default": "mix",
+  "sources": [
+   {
+    "sheet": "w05",
+    "source": "wear/wear_darkfantasy1.png",
+    "name": "防具類_ダークファンタジー1"
+   },
+   {
+    "sheet": "w06",
+    "source": "wear/wear_darkfantasy2.png",
+    "name": "防具類_ダークファンタジー2"
    }
   ]
  },
@@ -765,6 +797,11 @@
     "sheet": "w16",
     "source": "wear/wear_modern_hard.png",
     "name": "防具類_現代(硬派)"
+   },
+   {
+    "sheet": "wmd2",
+    "source": "wear/wear_medical_modern.png",
+    "name": "防具類_現代とSFの医療の装い"
    }
   ]
  },
@@ -912,6 +949,16 @@
     "sheet": "i1",
     "source": "parts/part_sf.png",
     "name": "機械部品_SF"
+   },
+   {
+    "sheet": "i50",
+    "source": "parts/part_sf_modules.png",
+    "name": "機械部品_SFの部品とモジュール"
+   },
+   {
+    "sheet": "i51",
+    "source": "parts/part_sf_machines.png",
+    "name": "機械部品_SFの機械の体と装置"
    }
   ]
  },
@@ -950,6 +997,26 @@
     "sheet": "i45",
     "source": "parts/part_broken_body.png",
     "name": "機械部品_壊れた機械の体"
+   },
+   {
+    "sheet": "i46",
+    "source": "parts/part_magitech_power.png",
+    "name": "機械部品_魔導機械の動力と核"
+   },
+   {
+    "sheet": "i47",
+    "source": "parts/part_magitech_parts.png",
+    "name": "機械部品_魔導機械の部品"
+   },
+   {
+    "sheet": "i48",
+    "source": "parts/part_magitech_body.png",
+    "name": "機械部品_自動人形とゴーレムの体"
+   },
+   {
+    "sheet": "i49",
+    "source": "parts/part_magitech_devices.png",
+    "name": "機械部品_小さな魔導の装置"
    }
   ]
  },
@@ -1091,6 +1158,11 @@
     "sheet": "i40",
     "source": "medical/medic_potion.png",
     "name": "医療品_薬瓶"
+   },
+   {
+    "sheet": "i52",
+    "source": "medical/medic_herbal_tea.png",
+    "name": "医療品_薬草茶と煎じ薬"
    }
   ]
  },
@@ -1110,6 +1182,11 @@
     "sheet": "i23",
     "source": "modern_sf/modern_medicine.png",
     "name": "現代とSF_薬と飲み物"
+   },
+   {
+    "sheet": "i53",
+    "source": "medical/medic_modern_devices.png",
+    "name": "医療品_現代とSFの医療品と器具"
    }
   ]
  },
@@ -1240,6 +1317,11 @@
     "sheet": "i28b",
     "source": "modern_sf/wasteland_gear.png",
     "name": "現代とSF_荒野の小道具"
+   },
+   {
+    "sheet": "i54b",
+    "source": "modern_sf/documents_badges.png",
+    "name": "道具_鉄道と通行の証（近世）"
    }
   ]
  },
@@ -1278,6 +1360,11 @@
     "sheet": "i41",
     "source": "treasure/treasure_gem.png",
     "name": "宝物_宝石と鉱石"
+   },
+   {
+    "sheet": "i54c",
+    "source": "modern_sf/documents_badges.png",
+    "name": "宝物_町の証書と記章（中世）"
    }
   ]
  },
@@ -1306,6 +1393,11 @@
     "sheet": "i22",
     "source": "modern_sf/modern_document.png",
     "name": "現代とSF_文書と記録媒体"
+   },
+   {
+    "sheet": "i54",
+    "source": "modern_sf/documents_badges.png",
+    "name": "文書_書類と証書（現代）"
    }
   ]
  }

@@ -2619,3 +2619,111 @@ itm_i27_r3_06	clothing	A blue crew jumpsuit with harness.
 itm_i27_r3_07	clothing	A yellow work jumpsuit with harness.
 itm_i27_r3_08	clothing	A black ballistic long coat.
 itm_i27_r3_09	clothing	A white ballistic long coat.
+itm_i46_00	magical_material	A glowing red liquid power flask with a brass cap.
+itm_i46_01	magical_material	A power cell board with three green mana stones with a faint green glow.
+itm_i46_02	magical_material	A wind mana stone engine with a small fan wheel with a faint cyan glow.
+itm_i46_03	magical_material	A small iron furnace with a blue flame inside with a faint blue glow.
+itm_i46_04	magical_material	A glass sphere of trapped lightning with copper electrodes with a faint blue glow.
+itm_i46_05	magical_material	A white light orb floating in a gear ring.
+itm_i46_06	magical_material	A frosted cooling cylinder holding an ice mana stone with a faint blue glow.
+itm_i46_07	magical_material	A hourglass-shaped mana reservoir.
+itm_i46_08	magical_material	An orange light core with a golden fan wheel.
+itm_i46_09	magical_material	A cracked hexagonal power crystal in metal clamps with a faint cyan glow.
+itm_i46_10	magical_material	A pocket-watch-shaped controller set with a mana stone with a faint blue glow.
+itm_i46_11	magical_material	A purple light pendulum core hanging on a chain with a faint purple glow.
+itm_i47_00	scrap	An iron gear with glowing grooves.
+itm_i47_01	magical_material	A brass gear set with a blue crystal.
+itm_i47_02	scrap	A rotor disc of small blades.
+itm_i47_03	metal	A brass bellows pipe.
+itm_i47_04	scrap	A clawed cradle part holding a mana stone.
+itm_i47_05	scrap	A three-way pipe joint with glowing liquid.
+itm_i47_06	scrap	A copper birdcage-shaped part.
+itm_i47_07	metal	A large wind-up key.
+itm_i47_08	relic	A round mana gauge with a needle.
+itm_i47_09	scrap	A brass tube of stacked lenses.
+itm_i47_10	metal	A shaft threaded with many small gears.
+itm_i47_11	scrap	A small mana stone switch box with a lever.
+itm_i48_00	scrap	A porcelain automaton hand with visible joints.
+itm_i48_01	other_material	A cracked mossy stone golem hand.
+itm_i48_02	scrap	A bare brass wing frame.
+itm_i48_03	scrap	A mechanical bird head.
+itm_i48_04	relic	A small clockwork heart with visible gears.
+itm_i48_05	other_material	A mossy stone golem head with glowing eye holes.
+itm_i48_06	scrap	A hollow brass cage torso.
+itm_i48_07	scrap	A mechanical spider leg.
+itm_i48_08	scrap	A segmented mechanical tail.
+itm_i48_09	scrap	A small three-clawed mechanical foot.
+itm_i48_10	scrap	A spring-loaded neck joint.
+itm_i48_11	scrap	A wind-up key and disc back part.
+itm_i49_00	relic	A small stand with a floating glowing orb.
+itm_i49_01	relic	A magitech lantern holding a light crystal.
+itm_i49_02	relic	A brass telescope with a crystal lens.
+itm_i49_03	relic	A gear-work box with a mana stone on the lid.
+itm_i49_04	relic	A disc device set with a blue crystal with a faint blue glow.
+itm_i49_05	relic	A small still heated by a mana stone flame.
+itm_i49_06	relic	A clockwork brass bird.
+itm_i49_07	relic	A compass with a glowing needle.
+itm_i49_08	relic	A small fan turned by a mana stone.
+itm_i49_09	relic	A brass rack of glowing liquid vials.
+itm_i49_10	relic	A clockwork lock with visible gears.
+itm_i49_11	relic	A disc projecting a glowing map.
+itm_i50_00	tool	A black control module with burnt circuit traces and a red indicator.
+itm_i50_01	relic	A small black cube with a blue circuit pattern with a faint blue glow.
+itm_i50_02	relic	A black data chip with gold contacts.
+itm_i50_03	scrap	A cracked optical sensor with dangling wires.
+itm_i50_04	scrap	A small grey thruster with a cracked nozzle.
+itm_i50_05	scrap	A four-jointed drone leg with white casing.
+itm_i50_06	metal	A drill arm segment with alloy teeth.
+itm_i50_07	metal	An oil-stained hydraulic cylinder.
+itm_i50_08	ore	A worn drill tip with severed cable.
+itm_i50_09	scrap	A chrome oscillator wrapped in copper coil.
+itm_i50_10	metal	A cracked energy cell with orange indicator lights.
+itm_i50_11	metal	A small power core with an amber casing.
+itm_i51_00	relic	A chrome robot head with a cracked optic.
+itm_i51_01	scrap	A heat-discolored cooling fin assembly.
+itm_i51_02	scrap	A black thruster with glowing blue vents.
+itm_i51_03	scrap	A cracked cylindrical water filter cartridge.
+itm_i51_04	tool	A cybernetic goggles with a cracked lens.
+itm_i51_05	scrap	A green circuit board with dangling antenna wires.
+itm_i51_06	scrap	A cylinder part wound with magnetic coils.
+itm_i51_07	scrap	A warning-striped canister with exposed copper coils.
+itm_i51_08	scrap	A connector box with many plugged cables.
+itm_i51_09	scrap	A small battery pack.
+itm_i51_10	scrap	A broken security camera.
+itm_i51_11	scrap	A mechanical finger joint part.
+itm_i52_00	drink	A porcelain cup of herbal tea with silver bell flowers.
+itm_i52_01	drink	A clay teapot and a cup of herbal tea.
+itm_i52_02	drink	A clay cup of herbal decoction with a white lily.
+itm_i52_03	plant	A bundle of roasted tea leaves tied with glowing thread.
+itm_i52_04	plant	A paper packet of dried herbs and petals.
+itm_i52_05	plant	A small jar of dried herbs tied with a white cord.
+itm_i52_06	drink	A clay tankard of glowing mead.
+itm_i52_07	drink	A bowl of clear broth with glowing herbs.
+itm_i52_08	drink	A crystal decanter of pearly glowing liquid.
+itm_i52_09	plant	A piece of dark bark with glowing veins.
+itm_i52_10	medicine	A small wax-sealed medicine pot.
+itm_i52_11	medicine	A silver medicine flask engraved with healing patterns.
+itm_i53_00	medicine	A white nano-suture kit case with a blue cross.
+itm_i53_01	medicine	A white case with silver thread spools and an auto-injector.
+itm_i53_02	medicine	A clear tube of green synthetic gel.
+itm_i53_03	medicine	A silver oxygen canister with a green valve.
+itm_i53_04	medicine	A IV drip bag with tubing.
+itm_i53_05	tool	A digital thermometer.
+itm_i53_06	tool	A stethoscope.
+itm_i53_07	tool	A handheld diagnostic device with a screen.
+itm_i53_08	medicine	A small cooler case of medicine vials.
+itm_i53_09	medicine	An oxygen mask with tubing.
+itm_i53_10	medicine	A blue inhaler with a faint cyan glow.
+itm_i53_11	medicine	A tourniquet with a faint blue glow.
+itm_i54_00	document	A stack of blueprints with red handwritten marks.
+itm_i54_06	document	A leather identity booklet.
+itm_i54_09	tool	A locked leather document briefcase.
+itm_i54_10	document	A ledger books bound with a strap.
+itm_i54_11	document	An official envelope with a wax seal.
+itm_i54b_01	document	A folded company contract with a wax seal.
+itm_i54b_02	document	A brass railway company badge.
+itm_i54b_07	document	A branded wooden travel permit tag.
+itm_i54c_03	document	A sealed wooden chest with a faded town crest.
+itm_i54c_04	metal	A bronze badge with crossed spears and a falcon.
+itm_i54c_05	scroll	A rolled certificate with a wax seal.
+itm_i54c_08	document	A gold-bordered letter of appointment.

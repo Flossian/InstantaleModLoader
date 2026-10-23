@@ -205,9 +205,9 @@ GENRES = [
 
 
 #: `--genre-preset` で置く世界のジャンルの重み（遊ぶ側がワールド個別設定で置く想定の値）。event は置かない
-GENRE_PRESET = {"dark": {"fantasy": 1.0}, "sf": {"sf": 1.0, "cyber": 0.5}, "modern": {"modern": 1.0},
+GENRE_PRESET = {"dark": {"darkfantasy": 1.0, "medieval": 1.0, "fantasy": 1.0}, "sf": {"sf": 1.0, "cyber": 0.5}, "modern": {"modern": 1.0},
                 "postapoc": {"postapoc": 1.0, "modern": 0.5}, "cyber": {"cyber": 1.0, "sf": 0.5}, "wa": {"wa": 1.0},
-                "high": {"fantasy": 1.0}, "medieval": {"fantasy": 1.0}, "steam": {"earlymodern": 1.0, "fantasy": 0.3},
+                "high": {"highfantasy": 1.0, "medieval": 1.0, "fantasy": 1.0}, "medieval": {"medieval": 1.0}, "steam": {"earlymodern": 1.0, "medieval": 0.3},
                 "western": {"earlymodern": 1.0, "postapoc": 0.3}}
 
 

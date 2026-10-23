@@ -32,7 +32,7 @@ mushroom 28 / accessory 1）の追加辞書 `data/<item_detail>.json` を実行�
 
 もう1つ、素材に無い絵を足す。銃と爆発物・中世の武器と防具・魔法武器・防具と服と装身具。
 どれも作者が画像生成 AI で作った一枚絵から起こした。
-分類は同じ種類の元画像をまとめた単位（`categories.json` の `sources`。版10 で作者の指示により119分類を45分類（品の種類：ジャンル）にまとめた）。
+分類は同じ種類の元画像をまとめた単位（`categories.json` の `sources`。版10 で作者の指示により119分類を45分類（品の種類：ジャンル）にまとめ、防具：ファンタジーを中世・ファンタジー・ハイファンタジー・ダークファンタジーに分けて48分類）。
 絵と辞書は分類ごとのフォルダに分ける（`images/<分類>/`・`data/<分類>/<品種>.json`）。
 分類ごとの設定で使い方を決める（使わない／素の絵と混ぜる／別扱い）。使わない分類は辞書を読まない。分類のフォルダを消しても動く。
 絵はゲームのフォルダには置かず、`images/<分類>/Assets/images/item_candidates_dark/<品種>/` に
@@ -115,7 +115,10 @@ SET_WEAPON_SF = "separate"
 SET_WEAPON_WA = "separate"
 SET_WEAPON_MODERN = "separate"
 SET_WEAPON_POSTAPOC = "separate"
+SET_WEAR_MEDIEVAL = "mix"
 SET_WEAR_FANTASY = "mix"
+SET_WEAR_HIGHFANTASY = "mix"
+SET_WEAR_DARKFANTASY = "mix"
 SET_WEAR_EARLYMODERN = "mix"
 SET_WEAR_ACCESSORY = "mix"
 SET_WEAR_SCHOOL = "separate"
@@ -161,7 +164,10 @@ IMAGE_SETS = (
     ("weapon_wa", "SET_WEAPON_WA"),
     ("weapon_modern", "SET_WEAPON_MODERN"),
     ("weapon_postapoc", "SET_WEAPON_POSTAPOC"),
+    ("wear_medieval", "SET_WEAR_MEDIEVAL"),
     ("wear_fantasy", "SET_WEAR_FANTASY"),
+    ("wear_highfantasy", "SET_WEAR_HIGHFANTASY"),
+    ("wear_darkfantasy", "SET_WEAR_DARKFANTASY"),
     ("wear_earlymodern", "SET_WEAR_EARLYMODERN"),
     ("wear_accessory", "SET_WEAR_ACCESSORY"),
     ("wear_school", "SET_WEAR_SCHOOL"),
@@ -236,7 +242,7 @@ OLD_SETTINGS = {
     "SET_MED_BOW": "SET_WEAPON_MEDIEVAL",
     "SET_MED_ONEHANDED": "SET_WEAPON_MEDIEVAL",
     "SET_MED_POLEARM": "SET_WEAPON_MEDIEVAL",
-    "SET_MED_SHIELD_ARMOR": "SET_WEAR_FANTASY",
+    "SET_MED_SHIELD_ARMOR": "SET_WEAR_MEDIEVAL",
     "SET_MED_SHORT_THROWING": "SET_WEAPON_MEDIEVAL",
     "SET_MED_TWOHANDED": "SET_WEAPON_MEDIEVAL",
     "SET_MODERN_DOCUMENT": "SET_DOCUMENT_MODERN",
@@ -270,13 +276,12 @@ OLD_SETTINGS = {
     "SET_WA_WEAPONS": "SET_WEAPON_WA",
     "SET_WEAR_CYBER1": "SET_WEAR_CYBER",
     "SET_WEAR_CYBER2": "SET_WEAR_CYBER",
-    "SET_WEAR_DARKFANTASY1": "SET_WEAR_FANTASY",
-    "SET_WEAR_DARKFANTASY2": "SET_WEAR_FANTASY",
+    "SET_WEAR_DARKFANTASY1": "SET_WEAR_DARKFANTASY",
+    "SET_WEAR_DARKFANTASY2": "SET_WEAR_DARKFANTASY",
     "SET_WEAR_EARLYMODERN_ARMOR": "SET_WEAR_EARLYMODERN",
     "SET_WEAR_EARLYMODERN_CLOTHES": "SET_WEAR_EARLYMODERN",
-    "SET_WEAR_HIGHFANTASY": "SET_WEAR_FANTASY",
-    "SET_WEAR_MEDIEVAL_ARMOR": "SET_WEAR_FANTASY",
-    "SET_WEAR_MEDIEVAL_CLOTHES": "SET_WEAR_FANTASY",
+    "SET_WEAR_MEDIEVAL_ARMOR": "SET_WEAR_MEDIEVAL",
+    "SET_WEAR_MEDIEVAL_CLOTHES": "SET_WEAR_MEDIEVAL",
     "SET_WEAR_MODERN_ARMOR": "SET_WEAR_MODERN",
     "SET_WEAR_MODERN_CASUAL": "SET_WEAR_MODERN",
     "SET_WEAR_MODERN_HARD": "SET_WEAR_MODERN",
@@ -304,7 +309,10 @@ SEPARATE_MARGIN = 0.05
 # 絵の類似度に「世界のジャンルの重み × 分類のジャンル内の重み × GENRE_BONUS」を足してから選ぶ
 # （ジャンルが複数当たるときは一番大きい値）。分類のジャンル内の重みの既定は `genres.json`、
 # 変えた値は `state/item_image_genres/weights.json`（設定画面の「ジャンル内の重み」タブ。既定と違う値だけ）
+GENRE_MEDIEVAL = 0.0
 GENRE_FANTASY = 0.0
+GENRE_HIGHFANTASY = 0.0
+GENRE_DARKFANTASY = 0.0
 GENRE_WA = 0.0
 GENRE_EARLYMODERN = 0.0
 GENRE_MODERN = 0.0
@@ -312,7 +320,10 @@ GENRE_SF = 0.0
 GENRE_CYBER = 0.0
 GENRE_POSTAPOC = 0.0
 GENRE_SETTINGS = (
+    ("medieval", "GENRE_MEDIEVAL"),
     ("fantasy", "GENRE_FANTASY"),
+    ("highfantasy", "GENRE_HIGHFANTASY"),
+    ("darkfantasy", "GENRE_DARKFANTASY"),
     ("wa", "GENRE_WA"),
     ("earlymodern", "GENRE_EARLYMODERN"),
     ("modern", "GENRE_MODERN"),

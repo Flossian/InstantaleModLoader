@@ -81,6 +81,24 @@
         "en": "How images are picked"
       }
     },
+    "GENRE_MEDIEVAL": {
+      "type": "float",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "label": {
+        "ja": "中世",
+        "en": "Medieval"
+      },
+      "note": {
+        "ja": "魔法の無い中世の武器・防具・服・食べ物。ゲームの素の絵はここ",
+        "en": "Medieval"
+      },
+      "group": {
+        "ja": "ジャンルの重み",
+        "en": "Genre weights"
+      }
+    },
     "GENRE_FANTASY": {
       "type": "float",
       "default": 0.0,
@@ -91,8 +109,44 @@
         "en": "Fantasy"
       },
       "note": {
-        "ja": "剣と魔法の中世。ゲームの素の絵はここ",
+        "ja": "魔法の要素がある品（魔法武器・魔法の素材・魔法使いの装い）。ゲームの素の絵もここ",
         "en": "Fantasy"
+      },
+      "group": {
+        "ja": "ジャンルの重み",
+        "en": "Genre weights"
+      }
+    },
+    "GENRE_HIGHFANTASY": {
+      "type": "float",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "label": {
+        "ja": "ハイファンタジー",
+        "en": "High fantasy"
+      },
+      "note": {
+        "ja": "白銀と金と宝石の華やかな防具",
+        "en": "High fantasy"
+      },
+      "group": {
+        "ja": "ジャンルの重み",
+        "en": "Genre weights"
+      }
+    },
+    "GENRE_DARKFANTASY": {
+      "type": "float",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "label": {
+        "ja": "ダークファンタジー",
+        "en": "Dark fantasy"
+      },
+      "note": {
+        "ja": "黒鉄・骨・血の暗く重い防具",
+        "en": "Dark fantasy"
       },
       "group": {
         "ja": "ジャンルの重み",
@@ -641,6 +695,32 @@
         "en": "30 images"
       }
     },
+    "SET_WEAR_MEDIEVAL": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：防具",
+        "en": "Added images: Armor, clothing and jewelry"
+      },
+      "label": {
+        "ja": "中世",
+        "en": "wear_medieval"
+      },
+      "note": {
+        "ja": "258枚",
+        "en": "258 images"
+      }
+    },
     "SET_WEAR_FANTASY": {
       "type": "choice",
       "values": [
@@ -663,8 +743,60 @@
         "en": "wear_fantasy"
       },
       "note": {
-        "ja": "719枚",
-        "en": "719 images"
+        "ja": "124枚",
+        "en": "124 images"
+      }
+    },
+    "SET_WEAR_HIGHFANTASY": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：防具",
+        "en": "Added images: Armor, clothing and jewelry"
+      },
+      "label": {
+        "ja": "ハイファンタジー",
+        "en": "wear_highfantasy"
+      },
+      "note": {
+        "ja": "116枚",
+        "en": "116 images"
+      }
+    },
+    "SET_WEAR_DARKFANTASY": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：防具",
+        "en": "Added images: Armor, clothing and jewelry"
+      },
+      "label": {
+        "ja": "ダークファンタジー",
+        "en": "wear_darkfantasy"
+      },
+      "note": {
+        "ja": "233枚",
+        "en": "233 images"
       }
     },
     "SET_WEAR_EARLYMODERN": {
@@ -767,8 +899,8 @@
         "en": "wear_modern"
       },
       "note": {
-        "ja": "295枚",
-        "en": "295 images"
+        "ja": "307枚",
+        "en": "307 images"
       }
     },
     "SET_WEAR_CYBER": {
@@ -975,8 +1107,8 @@
         "en": "part_sf"
       },
       "note": {
-        "ja": "88枚",
-        "en": "88 images"
+        "ja": "112枚",
+        "en": "112 images"
       }
     },
     "SET_PART_STEAMPUNK": {
@@ -1027,8 +1159,8 @@
         "en": "part_magitech"
       },
       "note": {
-        "ja": "36枚",
-        "en": "36 images"
+        "ja": "84枚",
+        "en": "84 images"
       }
     },
     "SET_FOOD_RATION": {
@@ -1131,8 +1263,8 @@
         "en": "medic_fantasy"
       },
       "note": {
-        "ja": "98枚",
-        "en": "98 images"
+        "ja": "110枚",
+        "en": "110 images"
       }
     },
     "SET_MEDIC_MODERN": {
@@ -1157,8 +1289,8 @@
         "en": "medic_modern"
       },
       "note": {
-        "ja": "180枚",
-        "en": "180 images"
+        "ja": "192枚",
+        "en": "192 images"
       }
     },
     "SET_MATERIAL_MAGIC": {
@@ -1287,8 +1419,8 @@
         "en": "tool_genre"
       },
       "note": {
-        "ja": "91枚",
-        "en": "91 images"
+        "ja": "94枚",
+        "en": "94 images"
       }
     },
     "SET_TOOL_JAPANESE": {
@@ -1339,8 +1471,8 @@
         "en": "treasure_fantasy"
       },
       "note": {
-        "ja": "145枚",
-        "en": "145 images"
+        "ja": "149枚",
+        "en": "149 images"
       }
     },
     "SET_TREASURE_MODERN": {
@@ -1391,8 +1523,8 @@
         "en": "document_modern"
       },
       "note": {
-        "ja": "76枚",
-        "en": "76 images"
+        "ja": "81枚",
+        "en": "81 images"
       }
     }
   },

@@ -2591,3 +2591,27 @@ wfa_w20_910	headgear	A black burgonet or close helmet with red details.
 wfa_w20_013	headgear	A black morion helmet or plumed hat with brown details.
 wfa_w20_911	headgear	A brown morion helmet or plumed hat with white details.
 wbd_w23_007	clothing	A brown long oilskin duster coat.
+wrf_wmd1_000	clothing	A brown stained canvas medical apron with white details.
+wrf_wmd1_001	clothing	A brown canvas apron with many pockets.
+wrf_wmd1_002	body_armor	A black heavy rubberized apron with brown details.
+wrf_wmd1_003	clothing	A white linen apothecary coat with brown details.
+wrf_wmd1_004	clothing	A black waxed plague doctor coat with brown details.
+wrf_wmd1_005	headgear	A black beaked plague doctor mask with brown details.
+wrf_wmd1_006	headgear	A wide-brimmed black leather hat with brown details.
+wrf_wmd1_007	clothing	A white nursing nun's habit with brown details.
+wrf_wmd1_008	headgear	A grey apothecary hood with white details.
+wrf_wmd1_009	gauntlets	A white linen gloves.
+wrf_wmd1_010	gauntlets	A brown elbow-length leather gloves.
+wrf_wmd1_011	clothing	A white cape sewn with glowing blue thread.
+wrf_wmd2_000	clothing	A white lab coat.
+wrf_wmd2_001	clothing	A blue surgical scrub top.
+wrf_wmd2_002	legwear	A blue surgical scrub pants.
+wrf_wmd2_003	headgear	A blue surgical cap.
+wrf_wmd2_004	accessory	A white face mask.
+wrf_wmd2_005	gauntlets	A blue rubber medical gloves.
+wrf_wmd2_006	clothing	A red reflective paramedic jacket.
+wrf_wmd2_007	clothing	A white nurse uniform.
+wrf_wmd2_008	clothing	A white hazmat suit.
+wrf_wmd2_009	clothing	A white medical garment woven with glowing crystal fibers.
+wrf_wmd2_010	accessory	A grey dust mask with round filters with white details.
+wrf_wmd2_011	legwear	A white nurse shoes with blue details.

@@ -148,11 +148,11 @@ med_m5_r3_10	throwable_weapon	A brown cloth smoke bomb pouch.
 med_m5_r3_11	throwable_weapon	A black cloth smoke bomb pouch.
 med_m5_r3_12	throwable_weapon	A brown cloth smoke bomb pouch.
 med_m5_r3_13	throwable_weapon	A black cloth smoke bomb pouch.
-med_mtw1_00	large_weapon	A steel broad-bladed two-handed greatsword.
+med_mtw1_00	large_weapon	A steel broad-bladed two-handed claymore.
 med_mtw1_01	large_weapon	A blackened iron greatsword with a leather-wrapped ricasso and a leather-wrapped grip.
 med_mtw1_02	large_weapon	A blackened iron wavy-bladed flamberge greatsword.
 med_mtw1_03	large_weapon	A steel round-tipped executioner's sword.
-med_mtw1_04	large_weapon	A steel chipped greatsword with a rusted blade and a leather-wrapped grip.
+med_mtw1_04	large_weapon	A steel claymore with a rusted chipped blade and a leather-wrapped grip.
 med_mtw1_05	large_weapon	A polished steel greatsword with a swept crossguard and a leather-wrapped grip.
 med_mtw1_06	large_weapon	A blackened iron greatsword with a deep fuller.
 med_mtw1_07	large_weapon	A steel greatsword with a large ball pommel and a leather-wrapped grip.

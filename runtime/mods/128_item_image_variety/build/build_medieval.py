@@ -44,7 +44,7 @@ SQUARE = ("shield", "body_armor", "clothing", "accessory", "headgear", "gauntlet
 # 装身具は中世の組（矢筒）でも 64x64。1マスの品は画面で 64px に描かれ、32x32 だと2倍に引き伸ばされて粗く見えた
 ITEM_WEAR = {f: (64, 64) for f in ("clothing", "headgear", "gauntlets", "legwear", "accessory")}
 # 刃や金属の頭を持つ種類。色を素材の言葉に直す
-METAL = ("sword", "sabre", "rapier", "axe", "hammer", "maul", "mace", "morning star", "spear", "halberd",
+METAL = ("sword", "claymore", "sabre", "rapier", "axe", "hammer", "maul", "mace", "morning star", "spear", "halberd",
          "flail", "dagger", "stiletto", "knife", "cleaver", "machete", "sickle", "scythe", "trident",
          "hauberk", "cuirass", "scale armor", "brigandine", "breastplate", "kite shield", "tower shield")
 # 柄が木のことが多い種類。茶色はここでは木の柄、刀剣では革巻きの握り

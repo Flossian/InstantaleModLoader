@@ -1,9 +1,24 @@
 {
  "genres": [
   {
+   "id": "medieval",
+   "label": "中世",
+   "note": "魔法の無い中世の武器・防具・服・食べ物。ゲームの素の絵はここ"
+  },
+  {
    "id": "fantasy",
    "label": "ファンタジー",
-   "note": "剣と魔法の中世。ゲームの素の絵はここ"
+   "note": "魔法の要素がある品（魔法武器・魔法の素材・魔法使いの装い）"
+  },
+  {
+   "id": "highfantasy",
+   "label": "ハイファンタジー",
+   "note": "白銀と金と宝石の華やかな防具"
+  },
+  {
+   "id": "darkfantasy",
+   "label": "ダークファンタジー",
+   "note": "黒鉄・骨・血の暗く重い防具"
   },
   {
    "id": "wa",
@@ -37,6 +52,7 @@
   }
  ],
  "stock": {
+  "medieval": 1.0,
   "fantasy": 1.0
  },
  "weights": {
@@ -66,6 +82,7 @@
    "postapoc": 0.8
   },
   "gun_flintlock": {
+   "medieval": 0.5,
    "fantasy": 0.5,
    "wa": 0.3,
    "earlymodern": 1.0
@@ -88,6 +105,7 @@
    "postapoc": 1.0
   },
   "weapon_medieval": {
+   "medieval": 1.0,
    "fantasy": 1.0,
    "postapoc": 0.3
   },
@@ -122,11 +140,24 @@
    "modern": 0.8,
    "postapoc": 1.0
   },
-  "wear_fantasy": {
+  "wear_medieval": {
+   "medieval": 1.0,
    "fantasy": 1.0,
    "postapoc": 0.3
   },
+  "wear_fantasy": {
+   "fantasy": 1.0
+  },
+  "wear_highfantasy": {
+   "highfantasy": 1.0,
+   "fantasy": 0.5
+  },
+  "wear_darkfantasy": {
+   "darkfantasy": 1.0,
+   "fantasy": 0.5
+  },
   "wear_earlymodern": {
+   "medieval": 0.5,
    "fantasy": 0.5,
    "earlymodern": 1.0
   },
@@ -174,6 +205,7 @@
    "postapoc": 0.5
   },
   "part_steampunk": {
+   "medieval": 0.3,
    "fantasy": 0.3,
    "earlymodern": 1.0
   },
@@ -188,15 +220,18 @@
    "postapoc": 1.0
   },
   "food_basic": {
+   "medieval": 1.0,
    "fantasy": 1.0,
    "wa": 0.5
   },
   "food_dishes": {
+   "medieval": 0.3,
    "modern": 1.0,
    "cyber": 0.8,
    "fantasy": 0.3
   },
   "medic_fantasy": {
+   "medieval": 0.5,
    "fantasy": 1.0,
    "wa": 0.5
   },
@@ -220,6 +255,7 @@
    "postapoc": 1.0
   },
   "tool_fantasy": {
+   "medieval": 1.0,
    "fantasy": 1.0
   },
   "tool_genre": {
@@ -234,6 +270,7 @@
    "wa": 1.0
   },
   "treasure_fantasy": {
+   "medieval": 1.0,
    "fantasy": 1.0
   },
   "treasure_modern": {
