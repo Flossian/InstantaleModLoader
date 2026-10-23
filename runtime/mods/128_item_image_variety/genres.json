@@ -235,6 +235,11 @@
    "cyber": 0.8,
    "fantasy": 0.3
   },
+  "food_earlymodern": {
+   "earlymodern": 1.0,
+   "medieval": 0.5,
+   "postapoc": 0.3
+  },
   "medic_fantasy": {
    "medieval": 0.5,
    "fantasy": 1.0,

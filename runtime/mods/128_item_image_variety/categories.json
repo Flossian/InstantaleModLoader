@@ -1124,6 +1124,21 @@
     "sheet": "i4",
     "source": "food/food_general.png",
     "name": "食料_食材と料理"
+   },
+   {
+    "sheet": "i61",
+    "source": "food/drink_medieval.png",
+    "name": "食料_酒場と中世の酒"
+   },
+   {
+    "sheet": "i63",
+    "source": "food/meal_medieval_soup.png",
+    "name": "食料_中世のスープと粥と煮込み"
+   },
+   {
+    "sheet": "i64",
+    "source": "food/meal_medieval_table.png",
+    "name": "食料_中世の食卓と焼き物"
    }
   ]
  },
@@ -1158,6 +1173,25 @@
     "sheet": "i12",
     "source": "food/food_western.png",
     "name": "食料_西洋料理"
+   }
+  ]
+ },
+ {
+  "id": "food_earlymodern",
+  "setting": "SET_FOOD_EARLYMODERN",
+  "group": "食料",
+  "label": "食料_近世",
+  "default": "separate",
+  "sources": [
+   {
+    "sheet": "i62",
+    "source": "food/drink_earlymodern.png",
+    "name": "食料_近世の酒と蒸留酒"
+   },
+   {
+    "sheet": "i65",
+    "source": "food/meal_earlymodern.png",
+    "name": "食料_近世の食事"
    }
   ]
  },

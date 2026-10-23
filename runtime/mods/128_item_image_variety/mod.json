@@ -1237,8 +1237,8 @@
         "en": "food_basic"
       },
       "note": {
-        "ja": "228枚",
-        "en": "228 images"
+        "ja": "264枚",
+        "en": "264 images"
       }
     },
     "SET_FOOD_DISHES": {
@@ -1265,6 +1265,32 @@
       "note": {
         "ja": "462枚",
         "en": "462 images"
+      }
+    },
+    "SET_FOOD_EARLYMODERN": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "separate",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：食料",
+        "en": "Added images: Food"
+      },
+      "label": {
+        "ja": "近世",
+        "en": "food_earlymodern"
+      },
+      "note": {
+        "ja": "24枚",
+        "en": "24 images"
       }
     },
     "SET_MEDIC_FANTASY": {

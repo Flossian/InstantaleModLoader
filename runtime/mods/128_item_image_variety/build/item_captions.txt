@@ -2799,3 +2799,63 @@ itm_i60_08	gem	A large green gem on a golden claw mount with a faint green glow.
 itm_i60_09	gem	A silver crescent moon gem.
 itm_i60_10	gem	A pale blue feather-shaped gem with a faint cyan glow.
 itm_i60_11	gem	A pink gem with a small flower blooming inside with a faint magenta glow.
+itm_i61_00	drink	A wooden tankard of frothy ale.
+itm_i61_01	drink	A ceramic ale jug with a handle.
+itm_i61_02	drink	A drinking horn of mead.
+itm_i61_03	drink	A leather wineskin.
+itm_i61_04	drink	A green wine bottle with a cork.
+itm_i61_05	drink	A large wicker-wrapped wine bottle.
+itm_i61_06	drink	A pewter goblet of red wine.
+itm_i61_07	drink	A silver cup of white wine.
+itm_i61_08	drink	A small ale keg with a tap.
+itm_i61_09	drink	A ceramic tankard of dark stout.
+itm_i61_10	drink	A clay bottle of cider.
+itm_i61_11	drink	A glass of mulled wine with spices and an orange slice.
+itm_i62_00	drink	A square bottle of amber whiskey.
+itm_i62_01	drink	A short glass of whiskey on ice.
+itm_i62_02	drink	A dark rum bottle.
+itm_i62_03	drink	A brandy snifter.
+itm_i62_04	drink	A clear gin bottle.
+itm_i62_05	drink	A champagne bottle with gold foil.
+itm_i62_06	drink	A glass of green absinthe with a slotted spoon.
+itm_i62_07	drink	A barrel-shaped sailor's rum bottle.
+itm_i62_08	drink	A tall bottle of herbal liqueur.
+itm_i62_09	drink	A crystal decanter of red wine.
+itm_i62_10	drink	A small glass of port wine.
+itm_i62_11	drink	A lidded pewter beer stein.
+itm_i63_00	food	A stew in a hollowed bread bowl.
+itm_i63_01	food	A three-legged iron pot of bean stew.
+itm_i63_02	food	A wooden bowl of barley porridge.
+itm_i63_03	food	A bowl of milk porridge with honey.
+itm_i63_04	food	A bowl of green pea soup.
+itm_i63_05	food	A dish of salt pork and cabbage stew.
+itm_i63_06	food	An iron pot of fisherman's fish and shellfish soup.
+itm_i63_07	food	A clay pot of hare stew.
+itm_i63_08	food	A ceramic bowl of clear root vegetable soup.
+itm_i63_09	food	A wooden bowl of barley and herb soup.
+itm_i63_10	food	A small iron pot of mushroom and onion stew.
+itm_i63_11	food	A bowl of soup with soaked black bread.
+itm_i64_00	food	A roast pig with an apple in its mouth.
+itm_i64_01	food	A whole chicken roasted on a spit.
+itm_i64_02	food	A roast venison joint.
+itm_i64_03	food	A roasted turkey leg.
+itm_i64_04	food	A large pie topped with a bird ornament.
+itm_i64_05	food	A farmer's platter of cheese, bread and apples.
+itm_i64_06	food	A grilled sausages and mustard on a board.
+itm_i64_07	food	A boiled eggs and black bread on a plate.
+itm_i64_08	food	A small barrel of salted herring.
+itm_i64_09	food	A ham joint with a dagger.
+itm_i64_10	food	A baked apple.
+itm_i64_11	food	A honey-glazed hard pastries.
+itm_i65_00	food	A boiled potatoes and sausages.
+itm_i65_01	food	A roast beef with yorkshire pudding.
+itm_i65_02	food	A fish and potato pie.
+itm_i65_03	food	A roast pork leg with baked apples.
+itm_i65_04	food	An iron skillet of baked beans.
+itm_i65_05	food	A tin plate of smoked beef and beans.
+itm_i65_06	food	A soldier's bread and soup in tin bowls.
+itm_i65_07	food	A sailor's hardtack and salt meat on a tin plate.
+itm_i65_08	drink	A tin coffee pot.
+itm_i65_09	food	An iron skillet of cornbread.
+itm_i65_10	food	A deep dish of chicken and dumplings.
+itm_i65_11	food	A tin plate of beans and bacon.

@@ -32,7 +32,7 @@ mushroom 28 / accessory 1）の追加辞書 `data/<item_detail>.json` を実行�
 
 もう1つ、素材に無い絵を足す。銃と爆発物・中世の武器と防具・魔法武器・防具と服と装身具。
 どれも画像生成 AI で作った一枚絵から起こした。
-分類は同じ種類の元画像をまとめた単位（`categories.json` の `sources`。版10 で119分類を45分類（品の種類：ジャンル）にまとめ、防具：ファンタジーを中世・ファンタジー・ハイファンタジー・ダークファンタジーに分け、防具：魔法とSF を足して49分類）。
+分類は同じ種類の元画像をまとめた単位（`categories.json` の `sources`。版10 で119分類を45分類（品の種類：ジャンル）にまとめ、防具：ファンタジーを中世・ファンタジー・ハイファンタジー・ダークファンタジーに分け、防具：魔法とSF と食料：近世を足して50分類）。
 絵と辞書は分類ごとのフォルダに分ける（`images/<分類>/`・`data/<分類>/<品種>.json`）。
 分類ごとの設定で使い方を決める（使わない／素の絵と混ぜる／別扱い）。使わない分類は辞書を読まない。分類のフォルダを消しても動く。
 絵はゲームのフォルダには置かず、`images/<分類>/Assets/images/item_candidates_dark/<品種>/` に
@@ -137,6 +137,7 @@ SET_PART_MAGITECH = "mix"
 SET_FOOD_RATION = "separate"
 SET_FOOD_BASIC = "mix"
 SET_FOOD_DISHES = "separate"
+SET_FOOD_EARLYMODERN = "separate"
 SET_MEDIC_FANTASY = "mix"
 SET_MEDIC_MODERN = "separate"
 SET_MATERIAL_MAGIC = "mix"
@@ -187,6 +188,7 @@ IMAGE_SETS = (
     ("food_ration", "SET_FOOD_RATION"),
     ("food_basic", "SET_FOOD_BASIC"),
     ("food_dishes", "SET_FOOD_DISHES"),
+    ("food_earlymodern", "SET_FOOD_EARLYMODERN"),
     ("medic_fantasy", "SET_MEDIC_FANTASY"),
     ("medic_modern", "SET_MEDIC_MODERN"),
     ("material_magic", "SET_MATERIAL_MAGIC"),
