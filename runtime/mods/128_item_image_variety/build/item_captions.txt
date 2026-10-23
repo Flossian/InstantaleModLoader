@@ -254,140 +254,6 @@ itm_i3_r5_15	drink	A black drink cartridge.
 itm_i3_r5_16	drink	A green drink cartridge.
 itm_i3_r5_17	drink	A brown drink cartridge.
 itm_i3_r5_18	drink	A red drink cartridge.
-itm_i4_r0_00	food	A loaf of bread.
-itm_i4_r0_01	food	A sliced bread.
-itm_i4_r0_02	food	A round loaf of bread.
-itm_i4_r0_03	food	A baguette.
-itm_i4_r0_04	food	A croissant.
-itm_i4_r0_05	food	A bread rolls.
-itm_i4_r0_06	food	A burger bun.
-itm_i4_r0_07	food	A pretzel.
-itm_i4_r0_08	food	A blueberry muffin.
-itm_i4_r0_09	food	A stack of pancakes.
-itm_i4_r0_10	food	A pie.
-itm_i4_r0_11	food	A quiche.
-itm_i4_r0_12	food	A pizza.
-itm_i4_r1_00	food	A red apple.
-itm_i4_r1_01	food	A green apple.
-itm_i4_r1_02	food	An orange.
-itm_i4_r1_03	food	A lemon.
-itm_i4_r1_04	food	A lime.
-itm_i4_r1_05	food	A bunch of bananas.
-itm_i4_r1_06	food	A bunch of purple grapes.
-itm_i4_r1_07	food	A bunch of green grapes.
-itm_i4_r1_08	food	A strawberries.
-itm_i4_r1_09	food	A blueberries.
-itm_i4_r1_10	food	A cherries.
-itm_i4_r1_11	food	A peach.
-itm_i4_r1_12	food	A pear.
-itm_i4_r1_13	food	A pomegranate.
-itm_i4_r2_00	food	A tomato.
-itm_i4_r2_01	food	A cherry tomatoes on the vine.
-itm_i4_r2_02	food	An onion.
-itm_i4_r2_03	food	A red onion.
-itm_i4_r2_04	food	A garlic bulb.
-itm_i4_r2_05	food	A potatoes.
-itm_i4_r2_06	food	A carrots.
-itm_i4_r2_07	food	A daikon radish.
-itm_i4_r2_08	food	A cabbage.
-itm_i4_r2_09	food	A lettuce.
-itm_i4_r2_10	food	A broccoli.
-itm_i4_r2_11	food	A red bell pepper.
-itm_i4_r2_12	food	A yellow bell pepper.
-itm_i4_r2_13	food	An eggplant.
-itm_i4_r3_00	mushroom	A brown mushrooms.
-itm_i4_r3_01	mushroom	A white mushrooms.
-itm_i4_r3_02	mushroom	An oyster mushrooms.
-itm_i4_r3_03	mushroom	An enoki mushrooms.
-itm_i4_r3_04	food	A spinach.
-itm_i4_r3_05	food	A napa cabbage.
-itm_i4_r3_06	food	An asparagus.
-itm_i4_r3_07	food	An ear of corn.
-itm_i4_r3_08	food	A celery.
-itm_i4_r3_09	food	A leek.
-itm_i4_r3_10	food	A ginger root.
-itm_i4_r3_11	plant	A sprig of parsley.
-itm_i4_r3_12	plant	A basil leaves.
-itm_i4_r3_13	plant	A mint leaves.
-itm_i4_r4_00	food	A raw beef steak.
-itm_i4_r4_01	food	A raw marbled beef.
-itm_i4_r4_02	food	A raw pork shoulder.
-itm_i4_r4_03	food	A raw chicken drumsticks.
-itm_i4_r4_04	food	A raw whole chicken.
-itm_i4_r4_05	food	A ground meat.
-itm_i4_r4_06	food	A ring sausage.
-itm_i4_r4_07	food	A sausages.
-itm_i4_r4_08	food	A raw bacon strips.
-itm_i4_r4_09	food	A raw lamb chops.
-itm_i4_r4_10	food	A raw beef slab.
-itm_i4_r5_00	food	A raw mackerel.
-itm_i4_r5_01	food	A raw red sea bream.
-itm_i4_r5_02	food	A raw saury.
-itm_i4_r5_03	food	A salmon steak.
-itm_i4_r5_04	food	A raw flatfish.
-itm_i4_r5_05	food	A tuna block.
-itm_i4_r5_06	food	A squid.
-itm_i4_r5_07	food	An octopus.
-itm_i4_r5_08	food	A shrimp.
-itm_i4_r5_09	food	A crab.
-itm_i4_r5_10	food	A scallop.
-itm_i4_r5_11	food	A clams.
-itm_i4_r5_12	food	An oyster.
-itm_i4_r6_00	drink	A jug of milk.
-itm_i4_r6_01	drink	A glass of milk.
-itm_i4_r6_02	food	A wedge of cheese.
-itm_i4_r6_03	food	A block of butter.
-itm_i4_r6_04	food	A wheel of soft cheese.
-itm_i4_r6_05	food	A wedge of blue cheese.
-itm_i4_r6_06	food	A jar of yogurt.
-itm_i4_r6_07	food	A bowl of cream.
-itm_i4_r6_08	food	A brown egg.
-itm_i4_r6_09	food	A white egg.
-itm_i4_r6_10	food	A quail eggs.
-itm_i4_r6_11	food	A jar of honey.
-itm_i4_r6_12	food	A green olives.
-itm_i4_r6_13	food	A black olives.
-itm_i4_r6_14	food	A bottle of olive oil.
-itm_i4_r7_00	food	A bowl of rice.
-itm_i4_r7_01	food	A bowl of barley.
-itm_i4_r7_02	food	A bowl of oats.
-itm_i4_r7_03	food	A sack of flour.
-itm_i4_r7_04	food	An ears of wheat.
-itm_i4_r7_05	food	A bowl of red beans.
-itm_i4_r7_06	food	A bowl of soybeans.
-itm_i4_r7_07	food	A bowl of lentils.
-itm_i4_r7_08	food	A bowl of peppercorns.
-itm_i4_r7_09	food	A bowl of salt.
-itm_i4_r7_10	food	A bowl of brown sugar.
-itm_i4_r7_11	food	A block of chocolate.
-itm_i4_r7_12	food	A scoop of salt.
-itm_i4_r8_00	food	A bowl of salad.
-itm_i4_r8_01	food	A bowl of stew.
-itm_i4_r8_02	food	A curry and rice.
-itm_i4_r8_03	food	A plate of spaghetti.
-itm_i4_r8_04	food	A plate of pasta.
-itm_i4_r8_05	food	A bowl of soup.
-itm_i4_r8_06	food	A bowl of beef stew.
-itm_i4_r8_07	food	A bowl of vegetable stew.
-itm_i4_r8_08	food	A grilled fish.
-itm_i4_r8_09	food	A grilled steak plate.
-itm_i4_r8_10	food	An omelette rice.
-itm_i4_r8_11	food	A sandwich.
-itm_i4_r8_12	food	A rice ball.
-itm_i4_r9_00	food	A custard pudding.
-itm_i4_r9_01	food	A slice of strawberry shortcake.
-itm_i4_r9_02	food	A slice of chocolate cake.
-itm_i4_r9_03	food	A cream puff.
-itm_i4_r9_04	food	A pink frosted donut with a faint magenta glow.
-itm_i4_r9_05	food	A chocolate chip cookies.
-itm_i4_r9_06	food	A macarons.
-itm_i4_r9_07	food	A strawberry parfait.
-itm_i4_r9_08	food	An ice cream sundae.
-itm_i4_r9_09	food	A skewered dumplings.
-itm_i4_r9_10	drink	A cup of coffee.
-itm_i4_r9_11	drink	A cup of tea.
-itm_i4_r9_12	drink	A mug of beer.
-itm_i4_r9_13	drink	A glass of red wine.
 itm_i5_r0_00	medicine	A white rolled linen bandage.
 itm_i5_r0_01	medicine	A black rolled linen bandage.
 itm_i5_r0_02	medicine	A brown rolled linen bandage.
@@ -654,38 +520,6 @@ itm_i7_r6_08	food	An olive leaf-wrapped rice.
 itm_i7_r6_09	food	A brown paper-wrapped bundle.
 itm_i7_r6_10	food	A brown leaf-wrapped food pack.
 itm_i7_r6_11	food	A brown paper-wrapped rice roll.
-itm_i26_r0_00	body_armor	A red lacquered samurai do armor.
-itm_i26_r0_01	body_armor	A black lamellar samurai do armor.
-itm_i26_r0_02	body_armor	A brown okegawa do armor.
-itm_i26_r0_03	body_armor	A red lacquered samurai do armor.
-itm_i26_r0_04	body_armor	A navy laced samurai do armor.
-itm_i26_r0_05	body_armor	A brown plain leather samurai do armor.
-itm_i26_r0_06	body_armor	A black and gold samurai do armor.
-itm_i26_r0_07	body_armor	A red lacquered samurai do armor.
-itm_i26_r0_08	body_armor	A navy laced samurai do armor.
-itm_i26_r0_09	body_armor	A brown worn leather samurai do armor.
-itm_i26_r1_00	gauntlets	A brown pair of chain kote gauntlets.
-itm_i26_r1_01	gauntlets	A brown pair of red lacquered kote gauntlets.
-itm_i26_r1_02	gauntlets	A brown pair of leather kote gauntlets.
-itm_i26_r1_03	gauntlets	A pair of black kote gauntlets.
-itm_i26_r1_04	gauntlets	A brown pair of iron kote gauntlets.
-itm_i26_r1_05	gauntlets	A brown pair of laced kote gauntlets.
-itm_i26_r1_06	legwear	A brown iron suneate shin guard.
-itm_i26_r1_07	legwear	A brown iron suneate shin guard.
-itm_i26_r1_08	legwear	A black suneate shin guard.
-itm_i26_r1_09	legwear	A brown leather suneate shin guard.
-itm_i26_r1_10	legwear	A pair of red suneate shin guards.
-itm_i26_r2_00	headgear	A brown horned samurai kabuto helmet.
-itm_i26_r2_01	headgear	A red kabuto helmet with a demon mask.
-itm_i26_r2_02	headgear	A blue kabuto helmet with golden crest.
-itm_i26_r2_03	headgear	A brown plain iron kabuto helmet.
-itm_i26_r2_04	headgear	A brown kabuto helmet with a red face mask.
-itm_i26_r2_05	headgear	A blue and gold kabuto helmet.
-itm_i26_r2_06	headgear	A red kabuto helmet with antler crest.
-itm_i26_r2_07	headgear	A brown iron menpo face mask.
-itm_i26_r2_08	headgear	A red oni mask.
-itm_i26_r2_09	headgear	A white fox mask.
-itm_i26_r2_10	headgear	A brown jingasa conical helmet.
 itm_i27_r0_00	gauntlets	A black sci-fi gauntlet with glowing blue conduits.
 itm_i27_r0_01	gauntlets	A white sci-fi gauntlet.
 itm_i27_r0_02	gauntlets	A red gauntlet with a power core.
@@ -736,51 +570,6 @@ itm_i27_r4_06	headgear	A red helmet with goggles and respirator.
 itm_i27_r4_07	headgear	A brown hooded mask with yellow goggles.
 itm_i27_r4_08	headgear	A black helmet with green night vision lenses.
 itm_i27_r4_09	headgear	A white helmet with gold visor.
-itm_i28_r0_00	long_weapon	A black pipe spear.
-itm_i28_r0_01	long_weapon	A brown pipe spear with cloth wrapping.
-itm_i28_r0_02	long_weapon	A black pipe spear.
-itm_i28_r0_03	long_weapon	A brown knife-tied spear.
-itm_i28_r0_04	long_weapon	A brown pipe spear.
-itm_i28_r0_05	long_weapon	A brown taped pipe spear.
-itm_i28_r0_06	long_weapon	A brown road sign spear.
-itm_i28_r0_07	long_weapon	A brown rebar spear.
-itm_i28_r0_08	long_weapon	A brown pipe spear.
-itm_i28_r0_09	long_weapon	A brown taped pipe spear.
-itm_i28_r0_10	long_weapon	A black pipe spear.
-itm_i28_r0_11	long_weapon	A brown barbed wire spear.
-itm_i28_r0_12	long_weapon	A brown taped pipe spear.
-itm_i28_r0_13	long_weapon	A brown pipe spear.
-itm_i28_r0_14	long_weapon	A brown rebar spear.
-itm_i28_r1_00	medium_weapon	A brown chain-wrapped sledgehammer.
-itm_i28_r1_01	medium_weapon	A brown road sign axe.
-itm_i28_r1_02	medium_weapon	A brown striped sign axe.
-itm_i28_r1_03	large_weapon	A brown spiked pipe mace.
-itm_i28_r1_04	medium_weapon	A brown scrap hammer.
-itm_i28_r1_05	medium_weapon	A brown engine block hammer.
-itm_i28_r1_06	medium_weapon	A brown saw blade hammer.
-itm_i28_r1_07	medium_weapon	A red sign hammer.
-itm_i28_r1_08	medium_weapon	A brown chain-wrapped saw axe.
-itm_i28_r1_09	medium_weapon	A brown chain-wrapped scrap hammer.
-itm_i28_r1_10	medium_weapon	A red sign axe.
-itm_i28_r1_11	medium_weapon	A brown saw blade wheel hammer.
-itm_i28_r1_12	medium_weapon	A brown spiked scrap hammer.
-itm_i28_r1_13	medium_weapon	A brown chained sign hammer.
-itm_i28_r2_00	medium_weapon	A brown nail-studded club.
-itm_i28_r2_01	medium_weapon	A brown nail-studded bat.
-itm_i28_r2_02	medium_weapon	A brown wrench club.
-itm_i28_r2_03	medium_weapon	A brown saw blade club.
-itm_i28_r2_04	medium_weapon	A red pipe wrench axe.
-itm_i28_r2_05	medium_weapon	A brown pipe axe.
-itm_i28_r2_06	medium_weapon	A brown pipe hatchet.
-itm_i28_r2_07	medium_weapon	A brown spiked pipe club.
-itm_i28_r2_08	medium_weapon	A brown saw blade club.
-itm_i28_r2_09	medium_weapon	A brown saw blade club.
-itm_i28_r2_10	medium_weapon	A brown nail-studded club.
-itm_i28_r2_11	medium_weapon	A brown hooked pipe club.
-itm_i28_r2_12	medium_weapon	A brown cleaver on a pipe.
-itm_i28_r2_13	medium_weapon	A brown spiked pipe.
-itm_i28_r2_14	medium_weapon	A brown pipe axe.
-itm_i28_r2_15	medium_weapon	A brown cleaver on a pipe.
 itm_i28_r3_00	tool	A brown bunch of keys.
 itm_i28_r3_01	tool	A black keys with tags.
 itm_i28_r3_02	tool	A brown bunch of keys with tags.
@@ -961,50 +750,6 @@ itm_i30_r4_08	accessory	A gold ring with an opal.
 itm_i30_r4_09	accessory	A silver moon earring.
 itm_i30_r4_10	accessory	A golden sun earring.
 itm_i30_r4_11	accessory	A purple amethyst earring with a faint purple glow.
-itm_i31_r0_00	body_armor	A brown glowing ember breastplate.
-itm_i31_r0_01	body_armor	A brown star-studded breastplate.
-itm_i31_r0_02	body_armor	A holy silver breastplate.
-itm_i31_r0_03	body_armor	A grey fish scale breastplate.
-itm_i31_r0_04	body_armor	A brass gear breastplate.
-itm_i31_r0_05	body_armor	A brown spiked dark breastplate.
-itm_i31_r0_06	body_armor	A golden sun breastplate.
-itm_i31_r0_07	body_armor	A teal scale breastplate.
-itm_i31_r0_08	body_armor	A dark gold breastplate.
-itm_i31_r0_09	body_armor	A red holy breastplate.
-itm_i31_r0_10	body_armor	A brown bone breastplate.
-itm_i31_r0_11	body_armor	A purple gravity void breastplate.
-itm_i31_r1_00	medium_weapon	A brown anchor.
-itm_i31_r1_01	long_weapon	A brown harpoon.
-itm_i31_r1_02	large_weapon	A brown shepherd crook.
-itm_i31_r1_03	medium_weapon	A blue anchor.
-itm_i31_r1_04	long_weapon	A brown shepherd crook.
-itm_i31_r1_05	large_weapon	A blue harpoon.
-itm_i31_r1_06	long_weapon	A brown hook staff with a chain.
-itm_i31_r1_07	long_weapon	A brown shepherd crook.
-itm_i31_r1_08	long_weapon	A brown boat hook.
-itm_i31_r1_09	medium_weapon	A brown anchor with a bell.
-itm_i31_r1_10	long_weapon	A brown harpoon with a chain.
-itm_i31_r1_11	large_weapon	A brown shepherd crook.
-itm_i31_r1_12	medium_weapon	A brown anchor.
-itm_i31_r1_13	long_weapon	A brown shepherd crook.
-itm_i31_r1_14	medium_weapon	A grey anchor.
-itm_i31_r2_00	long_weapon	A brown longsword.
-itm_i31_r2_01	long_weapon	A blue rapier crackling with lightning.
-itm_i31_r2_02	long_weapon	A brown rusted longsword.
-itm_i31_r2_03	long_weapon	A brown longsword.
-itm_i31_r2_04	long_weapon	A broken silver longsword.
-itm_i31_r2_05	long_weapon	A rapier crackling with purple lightning.
-itm_i31_r2_06	long_weapon	A brown notched longsword.
-itm_i31_r2_07	long_weapon	A brown blood-stained longsword.
-itm_i31_r2_08	long_weapon	A silver longsword.
-itm_i31_r2_09	long_weapon	A red longsword.
-itm_i31_r2_10	long_weapon	A brown longsword.
-itm_i31_r2_11	long_weapon	A brown blood-stained longsword.
-itm_i31_r2_12	long_weapon	A purple misty longsword.
-itm_i31_r2_13	large_weapon	A golden longsword.
-itm_i31_r2_14	large_weapon	A silver longsword.
-itm_i31_r2_15	long_weapon	A brown blood-stained longsword.
-itm_i31_r2_16	long_weapon	A purple longsword.
 itm_i31_r3_00	tool	A silver flute.
 itm_i31_r3_01	tool	A brown horn.
 itm_i31_r3_02	tool	A brown war horn.
@@ -2645,3 +2390,227 @@ itm_iwa7_04	medium_weapon	A black thick kanabo with a cloth-wrapped grip.
 itm_iwa7_05	small_weapon	A black hooked jitte truncheon.
 itm_iwa7_06	small_weapon	A closed black iron war fan.
 itm_iwa7_07	medium_weapon	A brown oak club with iron bands.
+itm_ian1_00	long_weapon	A brown barbed iron harpoon.
+itm_ian1_01	long_weapon	A black harpoon with a chain.
+itm_ian1_02	long_weapon	A black three-pronged fishing harpoon.
+itm_ian1_03	long_weapon	A brown small anchor on a long pole.
+itm_ian1_04	long_weapon	A brown anchor staff with a bell.
+itm_ian1_05	long_weapon	A blue-painted anchor staff.
+itm_ian1_06	long_weapon	A brown spiral-topped shepherd crook.
+itm_ian1_07	long_weapon	A black boat hook.
+itm_ian1_08	long_weapon	A brown hook staff wrapped in chain.
+itm_ian1_09	long_weapon	A brown driftwood staff.
+itm_ian2_00	long_weapon	A brown rusted longsword.
+itm_ian2_01	long_weapon	A grey notched longsword.
+itm_ian2_02	long_weapon	A red blood-stained longsword.
+itm_ian2_03	long_weapon	A silver longsword.
+itm_ian2_04	long_weapon	A broken silver longsword.
+itm_ian2_05	long_weapon	A red-bladed longsword.
+itm_ian2_06	long_weapon	A blue misty longsword.
+itm_ian2_07	long_weapon	A golden longsword.
+itm_ian2_08	long_weapon	A rapier crackling with purple lightning with a faint purple glow.
+itm_ian2_09	long_weapon	A brown rapier crackling with yellow lightning.
+itm_ipa1_00	long_weapon	A grey angle-cut pipe spear.
+itm_ipa1_01	long_weapon	A grey cloth-wrapped pipe spear.
+itm_ipa1_02	long_weapon	A brown knife-tied spear.
+itm_ipa1_03	long_weapon	A black taped pipe spear.
+itm_ipa1_04	long_weapon	A brown road sign spear.
+itm_ipa1_05	long_weapon	A brown bent rebar spear.
+itm_ipa1_06	long_weapon	A brown barbed wire spear.
+itm_ipa1_07	long_weapon	A grey kitchen knife spear.
+itm_ipa1_08	long_weapon	A brown shovel spear.
+itm_ipa1_09	long_weapon	A brown pitchfork spear.
+itm_ipa2_00	large_weapon	A black chain-wrapped sledgehammer.
+itm_ipa2_01	large_weapon	A brown road sign axe.
+itm_ipa2_02	medium_weapon	A brown engine block hammer.
+itm_ipa2_03	large_weapon	A brown saw blade hammer.
+itm_ipa2_04	medium_weapon	A brown spiked pipe mace.
+itm_ipa2_05	large_weapon	A red sign axe.
+itm_ipa2_06	large_weapon	A brown scrap iron block hammer.
+itm_ipa2_07	large_weapon	A brown chain-wrapped saw axe.
+itm_ipa2_08	large_weapon	A brown wheel-headed hammer.
+itm_ipa2_09	large_weapon	A brown welded junk hammer.
+itm_ipa3_00	medium_weapon	A brown nail-studded wooden club.
+itm_ipa3_01	medium_weapon	A brown nail-studded bat.
+itm_ipa3_02	medium_weapon	A brown wrench club.
+itm_ipa3_03	medium_weapon	A brown saw blade club.
+itm_ipa3_04	medium_weapon	A brown pipe wrench axe.
+itm_ipa3_05	medium_weapon	A black pipe hatchet.
+itm_ipa3_06	medium_weapon	A brown spiked pipe.
+itm_ipa3_07	medium_weapon	A brown hooked pipe.
+itm_ipa3_08	medium_weapon	A brown cleaver on a pipe.
+itm_ipa3_09	medium_weapon	A brown barbed wire bat.
+itm_iwr1_00	body_armor	A red lacquered samurai do armor.
+itm_iwr1_01	body_armor	A black lamellar samurai do armor.
+itm_iwr1_02	body_armor	A brown okegawa do armor.
+itm_iwr1_03	body_armor	A navy laced samurai do armor.
+itm_iwr1_04	body_armor	A brown plain leather samurai do armor.
+itm_iwr1_05	body_armor	A black and gold samurai do armor.
+itm_iwr1_06	body_armor	A brown worn leather samurai do armor.
+itm_iwr1_07	body_armor	A white laced samurai do armor.
+itm_iwr1_08	body_armor	A black iron plate samurai do armor.
+itm_iwr1_09	body_armor	A brown gold-trimmed general's do armor.
+itm_iwr2_00	gauntlets	A brown chain kote gauntlets.
+itm_iwr2_01	gauntlets	A red lacquered kote gauntlets.
+itm_iwr2_02	gauntlets	A brown leather kote gauntlets.
+itm_iwr2_03	gauntlets	A black kote gauntlets.
+itm_iwr2_04	gauntlets	A black iron kote gauntlets.
+itm_iwr2_05	gauntlets	A brown laced kote gauntlets.
+itm_iwr2_06	legwear	A black iron suneate shin guards.
+itm_iwr2_07	legwear	A black suneate shin guards.
+itm_iwr2_08	legwear	A brown leather suneate shin guards.
+itm_iwr2_09	legwear	A red suneate shin guards.
+itm_iwr2_10	legwear	A brown chain suneate shin guards.
+itm_iwr2_11	legwear	A brown gold-trimmed suneate shin guards.
+itm_iwr3_00	headgear	A brown horned samurai kabuto helmet.
+itm_iwr3_01	headgear	A red kabuto helmet with a demon mask.
+itm_iwr3_02	headgear	A blue kabuto helmet with a golden crest.
+itm_iwr3_03	headgear	A black plain iron kabuto helmet.
+itm_iwr3_04	headgear	A brown kabuto helmet with a red face mask.
+itm_iwr3_05	headgear	A red kabuto helmet with an antler crest.
+itm_iwr3_06	headgear	A black and gold kabuto helmet.
+itm_iwr3_07	headgear	A black iron menpo face mask.
+itm_iwr3_08	headgear	A red oni mask.
+itm_iwr3_09	headgear	A white fox mask.
+itm_iwr3_10	headgear	A black jingasa conical helmet.
+itm_iwr3_11	headgear	A black hachigane headband.
+itm_ibp1_00	body_armor	A brown glowing ember breastplate.
+itm_ibp1_01	body_armor	A navy star-studded breastplate.
+itm_ibp1_02	body_armor	A holy silver breastplate.
+itm_ibp1_03	body_armor	A brown fish scale breastplate.
+itm_ibp1_04	body_armor	A brass gear breastplate.
+itm_ibp1_05	body_armor	A black spiked breastplate.
+itm_ibp1_06	body_armor	A golden sun breastplate.
+itm_ibp1_07	body_armor	A teal scale breastplate.
+itm_ibp1_08	body_armor	A black and gold breastplate.
+itm_ibp1_09	body_armor	A brown red-draped paladin breastplate.
+itm_ibp1_10	body_armor	A brown bone breastplate.
+itm_ibp1_11	body_armor	A black void vortex breastplate.
+itm_ifd1_00	food	A loaf of bread.
+itm_ifd1_01	food	A slice of bread.
+itm_ifd1_02	food	A round loaf of bread.
+itm_ifd1_03	food	A baguette.
+itm_ifd1_04	food	A croissant.
+itm_ifd1_05	food	A pile of bread rolls.
+itm_ifd1_06	food	A burger bun.
+itm_ifd1_07	food	A pretzel.
+itm_ifd1_08	food	A blueberry muffin.
+itm_ifd1_09	food	A stack of pancakes.
+itm_ifd1_10	food	A round pie.
+itm_ifd1_11	food	A pizza.
+itm_ifd2_00	food	A red apple.
+itm_ifd2_01	food	A green apple.
+itm_ifd2_02	food	An orange.
+itm_ifd2_03	food	A lemon.
+itm_ifd2_04	food	A bunch of bananas.
+itm_ifd2_05	food	A bunch of purple grapes.
+itm_ifd2_06	food	A bunch of green grapes.
+itm_ifd2_07	food	A pile of strawberries.
+itm_ifd2_08	food	A pair of cherries.
+itm_ifd2_09	food	A peach.
+itm_ifd2_10	food	A pear.
+itm_ifd2_11	food	A split pomegranate.
+itm_ifd3_00	food	A tomato.
+itm_ifd3_01	food	A cherry tomatoes on the vine.
+itm_ifd3_02	food	An onion.
+itm_ifd3_03	food	A red onion with a faint magenta glow.
+itm_ifd3_04	food	A garlic bulb.
+itm_ifd3_05	food	A pile of potatoes.
+itm_ifd3_06	food	A bunch of carrots.
+itm_ifd3_07	food	A daikon radish.
+itm_ifd3_08	food	A cabbage.
+itm_ifd3_09	food	A lettuce.
+itm_ifd3_10	food	A broccoli.
+itm_ifd3_11	food	An eggplant.
+itm_ifd4_00	food	A red bell pepper.
+itm_ifd4_01	food	A yellow bell pepper.
+itm_ifd4_02	food	A bunch of spinach.
+itm_ifd4_03	food	A napa cabbage.
+itm_ifd4_04	food	A bunch of asparagus.
+itm_ifd4_05	food	An ear of corn in its husk.
+itm_ifd4_06	food	A leek.
+itm_ifd4_07	food	A ginger root.
+itm_ifd4_08	mushroom	A cluster of brown mushrooms.
+itm_ifd4_09	mushroom	A white button mushrooms.
+itm_ifd4_10	mushroom	An oyster mushrooms.
+itm_ifd4_11	mushroom	A bunch of enoki mushrooms.
+itm_ifd5_00	food	A raw beef steak.
+itm_ifd5_01	food	A raw marbled beef.
+itm_ifd5_02	food	A raw pork shoulder.
+itm_ifd5_03	food	A raw chicken thighs.
+itm_ifd5_04	food	A raw whole chicken.
+itm_ifd5_05	food	A plate of ground meat.
+itm_ifd5_06	food	A ring sausage.
+itm_ifd5_07	food	A bunch of sausages.
+itm_ifd5_08	food	A raw bacon strips.
+itm_ifd5_09	food	A raw lamb chops.
+itm_ifd5_10	food	A raw beef slab.
+itm_ifd5_11	food	A large meat on the bone.
+itm_ifd6_00	food	A raw mackerel.
+itm_ifd6_01	food	A raw red sea bream.
+itm_ifd6_02	food	A raw saury.
+itm_ifd6_03	food	A salmon steak.
+itm_ifd6_04	food	A raw flatfish.
+itm_ifd6_05	food	A tuna block.
+itm_ifd6_06	food	A squid.
+itm_ifd6_07	food	An octopus.
+itm_ifd6_08	food	A shrimp.
+itm_ifd6_09	food	A crab.
+itm_ifd6_10	food	A scallop.
+itm_ifd6_11	food	An oyster.
+itm_ifd7_00	drink	A bottle of milk.
+itm_ifd7_01	drink	A glass of milk.
+itm_ifd7_02	food	A wedge of cheese.
+itm_ifd7_03	food	A block of butter.
+itm_ifd7_04	food	A wheel of soft cheese.
+itm_ifd7_05	food	A wedge of blue cheese.
+itm_ifd7_06	food	A jar of yogurt.
+itm_ifd7_07	food	A brown egg.
+itm_ifd7_08	food	A white egg.
+itm_ifd7_09	food	A pile of quail eggs.
+itm_ifd7_10	food	A honey pot.
+itm_ifd7_11	food	A bottle of olive oil.
+itm_ifd8_00	food	A wooden bowl of rice.
+itm_ifd8_01	food	A sack of barley.
+itm_ifd8_02	food	A scoop of oats.
+itm_ifd8_03	food	A sack of flour.
+itm_ifd8_04	food	A bundle of wheat ears.
+itm_ifd8_05	food	A small bowl of red beans.
+itm_ifd8_06	food	A sack of soybeans.
+itm_ifd8_07	food	A dish of lentils.
+itm_ifd8_08	food	A jar of peppercorns.
+itm_ifd8_09	food	A salt pot.
+itm_ifd8_10	food	A lumps of brown sugar.
+itm_ifd8_11	food	A bowl of green olives.
+itm_ifd9_00	food	A bowl of salad.
+itm_ifd9_01	food	A stew in a clay pot.
+itm_ifd9_02	food	A curry and rice.
+itm_ifd9_03	food	A plate of spaghetti.
+itm_ifd9_04	food	A plate of penne.
+itm_ifd9_05	food	A cup of soup.
+itm_ifd9_06	food	A pot of beef stew.
+itm_ifd9_07	food	A wooden bowl of vegetable stew.
+itm_ifd9_08	food	A grilled fish on a long plate.
+itm_ifd9_09	food	A steak on a sizzling plate.
+itm_ifd9_10	food	An omelette rice.
+itm_ifd9_11	food	A sandwich.
+itm_ifd10_00	food	A rice ball.
+itm_ifd10_01	food	A custard pudding.
+itm_ifd10_02	food	A slice of strawberry shortcake.
+itm_ifd10_03	food	A slice of chocolate cake.
+itm_ifd10_04	food	A cream puff.
+itm_ifd10_05	food	A pink frosted donut.
+itm_ifd10_06	food	A pile of chocolate chip cookies.
+itm_ifd10_07	food	A three macarons.
+itm_ifd10_08	food	A strawberry parfait.
+itm_ifd10_09	food	An ice cream sundae.
+itm_ifd10_10	food	A skewered dumplings.
+itm_ifd10_11	food	A chocolate bar.
+itm_ifd11_00	drink	A cup of coffee.
+itm_ifd11_01	drink	A cup of tea.
+itm_ifd11_02	drink	A mug of beer.
+itm_ifd11_03	drink	A glass of red wine.
+itm_ifd11_04	plant	A sprig of parsley.
+itm_ifd11_05	plant	A basil leaves.
+itm_ifd11_06	plant	A mint leaves.
+itm_ifd11_07	food	A bowl of black olives.

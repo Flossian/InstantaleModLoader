@@ -53,6 +53,9 @@ WOODISH = ("staff", "bow", "club", "shield")
 ARMOR = ("hauberk", "cuirass", "scale armor", "brigandine", "breastplate", "gambeson", "tunic", "jerkin")
 ELEMENT = {"red": "fire", "orange": "fire", "blue": "frost", "cyan": "frost", "purple": "shadow",
            "magenta": "shadow", "green": "nature"}
+# 名前の語 → 属性（魔法武器の名前に書いた属性を、測った色より先に使う）
+NAMED_ELEMENT = (("holy", "holy"), ("burning", "fire"), ("flame", "fire"), ("fire", "fire"), ("lava", "fire"), ("molten", "fire"),
+                 ("ice", "frost"), ("frost", "frost"), ("shadow", "shadow"), ("void", "shadow"), ("vine", "nature"), ("root", "nature"))
 
 
 def join(parts):
@@ -85,7 +88,10 @@ def caption_for(entry, im, magic):
                   if (k.startswith("glow:") or k in ELEMENT) and n / total >= 0.03]
         color = next((c for c in colors if c in ELEMENT), None)
         element = ELEMENT.get(color) or ("holy" if names["brass"] + names["white"] > 0.2 * total else "arcane")
-        word = "%s-enchanted" % element
+        # 名前に属性の語があればそれに従う（金の聖剣の金を橙と測って fire にしない）。属性の語そのものが名前にあれば前に重ねない
+        words = re.findall(r"[a-z]+", typ)
+        element = next((el for w, el in NAMED_ELEMENT if w in words), element)
+        word = element if element in words else "%s-enchanted" % element
         if color:
             extras.append("a glowing %s gem" % color)
     elif names["wood"] / total >= 0.12 and not wooden and word not in ("brown", "leather"):

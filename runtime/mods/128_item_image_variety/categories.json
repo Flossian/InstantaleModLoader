@@ -318,11 +318,6 @@
     "name": "中世武器_片手武器"
    },
    {
-    "sheet": "m3",
-    "source": "medieval_weapons/med_polearm.png",
-    "name": "中世武器_長柄武器"
-   },
-   {
     "sheet": "m4",
     "source": "medieval_weapons/med_blunt_staff.png",
     "name": "中世武器_打撃武器と杖"
@@ -331,16 +326,6 @@
     "sheet": "m5",
     "source": "medieval_weapons/med_short_throwing.png",
     "name": "中世武器_短い武器と投げ物"
-   },
-   {
-    "sheet": "m6",
-    "source": "medieval_weapons/med_bow.png",
-    "name": "中世武器_弓とクロスボウ"
-   },
-   {
-    "sheet": "i31c",
-    "source": "tools/tool_oddities.png",
-    "name": "道具_銛と杖と錨"
    },
    {
     "sheet": "mtw1",
@@ -356,6 +341,41 @@
     "sheet": "mtw3",
     "source": "medieval_weapons/med_mauls.png",
     "name": "中世武器_鎚と棍棒（描き直し）"
+   },
+   {
+    "sheet": "ian1",
+    "source": "tools/anchors_harpoons.png",
+    "name": "道具_銛と錨と杖（描き直し）"
+   },
+   {
+    "sheet": "ian2",
+    "source": "tools/longswords.png",
+    "name": "道具_長剣（描き直し）"
+   },
+   {
+    "sheet": "mpl1",
+    "source": "medieval_weapons/med_spears.png",
+    "name": "中世武器_槍（描き直し）"
+   },
+   {
+    "sheet": "mpl2",
+    "source": "medieval_weapons/med_polearms.png",
+    "name": "中世武器_斧槍と長柄武器（描き直し）"
+   },
+   {
+    "sheet": "mbw1",
+    "source": "medieval_weapons/med_longbows.png",
+    "name": "中世武器_長弓（描き直し）"
+   },
+   {
+    "sheet": "mbw2",
+    "source": "medieval_weapons/med_crossbows.png",
+    "name": "中世武器_クロスボウ（描き直し）"
+   },
+   {
+    "sheet": "mbw3",
+    "source": "medieval_weapons/med_quivers.png",
+    "name": "中世武器_矢筒（描き直し）"
    }
   ]
  },
@@ -372,19 +392,34 @@
     "name": "魔法武器_片手武器"
    },
    {
-    "sheet": "x2",
-    "source": "magic_weapons/mag_twohanded.png",
-    "name": "魔法武器_両手武器"
-   },
-   {
-    "sheet": "x3",
-    "source": "magic_weapons/mag_staff_polearm.png",
-    "name": "魔法武器_杖と長柄武器"
-   },
-   {
     "sheet": "x4",
     "source": "magic_weapons/mag_extra.png",
     "name": "魔法武器_追加"
+   },
+   {
+    "sheet": "mgt1",
+    "source": "magic_weapons/mag_greatswords.png",
+    "name": "魔法武器_大剣（描き直し）"
+   },
+   {
+    "sheet": "mgt2",
+    "source": "magic_weapons/mag_greataxes_scythes.png",
+    "name": "魔法武器_大斧と大鎌（描き直し）"
+   },
+   {
+    "sheet": "mgt3",
+    "source": "magic_weapons/mag_mauls.png",
+    "name": "魔法武器_大槌（描き直し）"
+   },
+   {
+    "sheet": "mst1",
+    "source": "magic_weapons/mag_staves.png",
+    "name": "魔法武器_杖（描き直し）"
+   },
+   {
+    "sheet": "mst2",
+    "source": "magic_weapons/mag_polearms.png",
+    "name": "魔法武器_長柄武器（描き直し）"
    }
   ]
  },
@@ -542,9 +577,19 @@
   "default": "separate",
   "sources": [
    {
-    "sheet": "i28",
-    "source": "modern_sf/wasteland_gear.png",
-    "name": "現代とSF_荒野の手製の武器"
+    "sheet": "ipa1",
+    "source": "modern_sf/wasteland_spears.png",
+    "name": "現代とSF_荒野の手製の槍（描き直し）"
+   },
+   {
+    "sheet": "ipa2",
+    "source": "modern_sf/wasteland_hammers.png",
+    "name": "現代とSF_荒野の手製の大槌と大斧（描き直し）"
+   },
+   {
+    "sheet": "ipa3",
+    "source": "modern_sf/wasteland_clubs.png",
+    "name": "現代とSF_荒野の手製の棍棒と手斧（描き直し）"
    }
   ]
  },
@@ -601,9 +646,9 @@
     "name": "防具類_ファンタジー（描き直し8）"
    },
    {
-    "sheet": "i31b",
-    "source": "tools/tool_oddities.png",
-    "name": "道具_神話の胸当て"
+    "sheet": "ibp1",
+    "source": "tools/myth_breastplates.png",
+    "name": "道具_神話の胸当て（描き直し）"
    }
   ]
  },
@@ -1161,11 +1206,6 @@
     "name": "防具類_和風の胴"
    },
    {
-    "sheet": "i26",
-    "source": "japanese/wa_armor.png",
-    "name": "和風_防具と面"
-   },
-   {
     "sheet": "wj1",
     "source": "wear/wear_japanese_v2_1.png",
     "name": "防具類_和風（描き直し1）"
@@ -1199,6 +1239,21 @@
     "sheet": "wj7",
     "source": "wear/wear_japanese_v2_7.png",
     "name": "防具類_和風（描き直し7）"
+   },
+   {
+    "sheet": "iwr1",
+    "source": "japanese/wa_do.png",
+    "name": "和風_胴（描き直し）"
+   },
+   {
+    "sheet": "iwr2",
+    "source": "japanese/wa_kote_suneate.png",
+    "name": "和風_籠手と脛当て（描き直し）"
+   },
+   {
+    "sheet": "iwr3",
+    "source": "japanese/wa_kabuto.png",
+    "name": "和風_兜と面（描き直し）"
    }
   ]
  },
@@ -1325,14 +1380,64 @@
   "default": "mix",
   "sources": [
    {
-    "sheet": "i4",
-    "source": "food/food_general.png",
-    "name": "食料_食材と料理"
-   },
-   {
     "sheet": "i7",
     "source": "food/food_travel.png",
     "name": "食料_旅の食料"
+   },
+   {
+    "sheet": "ifd1",
+    "source": "food/food_breads_v2.png",
+    "name": "食料_パンと焼き物（描き直し）"
+   },
+   {
+    "sheet": "ifd2",
+    "source": "food/food_fruits_v2.png",
+    "name": "食料_果物（描き直し）"
+   },
+   {
+    "sheet": "ifd3",
+    "source": "food/food_vegetables_v2.png",
+    "name": "食料_野菜（描き直し）"
+   },
+   {
+    "sheet": "ifd4",
+    "source": "food/food_greens_mushrooms_v2.png",
+    "name": "食料_野菜ときのこ（描き直し）"
+   },
+   {
+    "sheet": "ifd5",
+    "source": "food/food_meat_v2.png",
+    "name": "食料_肉（描き直し）"
+   },
+   {
+    "sheet": "ifd6",
+    "source": "food/food_seafood_v2.png",
+    "name": "食料_魚介（描き直し）"
+   },
+   {
+    "sheet": "ifd7",
+    "source": "food/food_dairy_v2.png",
+    "name": "食料_乳と卵と油（描き直し）"
+   },
+   {
+    "sheet": "ifd8",
+    "source": "food/food_grains_v2.png",
+    "name": "食料_穀物と豆と調味料（描き直し）"
+   },
+   {
+    "sheet": "ifd9",
+    "source": "food/food_dishes_meals_v2.png",
+    "name": "食料_料理（描き直し）"
+   },
+   {
+    "sheet": "ifd10",
+    "source": "food/food_sweets_v2.png",
+    "name": "食料_菓子（描き直し）"
+   },
+   {
+    "sheet": "ifd11",
+    "source": "food/food_drinks_herbs_v2.png",
+    "name": "食料_飲み物と香草（描き直し）"
    }
   ]
  },

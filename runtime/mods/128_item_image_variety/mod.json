@@ -481,8 +481,8 @@
         "en": "weapon_medieval"
       },
       "note": {
-        "ja": "239枚",
-        "en": "239 images"
+        "ja": "216枚",
+        "en": "216 images"
       }
     },
     "SET_WEAPON_MAGIC": {
@@ -507,8 +507,8 @@
         "en": "weapon_magic"
       },
       "note": {
-        "ja": "147枚",
-        "en": "147 images"
+        "ja": "143枚",
+        "en": "143 images"
       }
     },
     "SET_WEAPON_MAGIC_FUSION": {
@@ -637,8 +637,8 @@
         "en": "weapon_postapoc"
       },
       "note": {
-        "ja": "45枚",
-        "en": "45 images"
+        "ja": "30枚",
+        "en": "30 images"
       }
     },
     "SET_WEAR_FANTASY": {
@@ -923,8 +923,8 @@
         "en": "wear_japanese"
       },
       "note": {
-        "ja": "116枚",
-        "en": "116 images"
+        "ja": "118枚",
+        "en": "118 images"
       }
     },
     "SET_WEAR_MILITARY": {
@@ -1079,8 +1079,8 @@
         "en": "food_basic"
       },
       "note": {
-        "ja": "227枚",
-        "en": "227 images"
+        "ja": "221枚",
+        "en": "221 images"
       }
     },
     "SET_FOOD_DISHES": {

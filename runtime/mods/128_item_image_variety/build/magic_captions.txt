@@ -35,60 +35,6 @@ mag_x1_r2_08	medium_weapon	A shadow-enchanted magic war hammer with a glowing pu
 mag_x1_r2_09	medium_weapon	A nature-enchanted magic war hammer with a glowing green gem.
 mag_x1_r2_10	medium_weapon	A frost-enchanted magic mace with a crystal head and a glowing blue gem.
 mag_x1_r2_11	medium_weapon	A shadow-enchanted magic mace with a crystal head and a glowing purple gem.
-mag_x2_r0_00	large_weapon	A frost-enchanted magic greatsword with a glowing blue gem.
-mag_x2_r0_01	large_weapon	A fire-enchanted magic greatsword with a glowing red gem.
-mag_x2_r0_02	large_weapon	A holy-enchanted magic greatsword.
-mag_x2_r0_03	large_weapon	A frost-enchanted magic greatsword with a glowing blue gem.
-mag_x2_r0_04	large_weapon	A fire-enchanted magic greatsword with a glowing red gem.
-mag_x2_r0_05	large_weapon	A shadow-enchanted magic greatsword with a glowing purple gem.
-mag_x2_r0_06	large_weapon	An arcane-enchanted magic greatsword.
-mag_x2_r0_07	large_weapon	A frost-enchanted magic greatsword with a glowing blue gem.
-mag_x2_r0_08	large_weapon	A fire-enchanted magic greatsword with a glowing red gem.
-mag_x2_r0_09	large_weapon	A shadow-enchanted magic greatsword with a glowing purple gem.
-mag_x2_r1_00	large_weapon	A fire-enchanted magic great axe with a glowing red gem.
-mag_x2_r1_01	large_weapon	A frost-enchanted magic great axe with a glowing blue gem.
-mag_x2_r1_02	large_weapon	A fire-enchanted magic great axe with a glowing red gem.
-mag_x2_r1_03	medium_weapon	A fire-enchanted magic scythe with a glowing red gem.
-mag_x2_r1_04	medium_weapon	A shadow-enchanted magic scythe with a glowing purple gem.
-mag_x2_r1_05	medium_weapon	A fire-enchanted magic scythe with a glowing red gem.
-mag_x2_r1_06	large_weapon	An arcane-enchanted magic great axe.
-mag_x2_r1_07	medium_weapon	A nature-enchanted magic scythe with a glowing green gem.
-mag_x2_r1_08	medium_weapon	A fire-enchanted magic scythe with a glowing red gem.
-mag_x2_r1_09	medium_weapon	A frost-enchanted magic scythe with a glowing blue gem.
-mag_x2_r2_00	large_weapon	A frost-enchanted magic maul with a crystal head and a glowing blue gem.
-mag_x2_r2_01	large_weapon	A fire-enchanted magic maul with a crystal head and a glowing red gem.
-mag_x2_r2_02	large_weapon	A frost-enchanted magic maul with a crystal head and a glowing blue gem.
-mag_x2_r2_03	large_weapon	A shadow-enchanted magic maul with a crystal head and a glowing purple gem.
-mag_x2_r2_04	medium_weapon	A nature-enchanted magic maul with a crystal head and a glowing green gem.
-mag_x2_r2_05	large_weapon	A frost-enchanted magic maul with a crystal head and a glowing blue gem.
-mag_x2_r2_06	large_weapon	A fire-enchanted magic maul with a crystal head and a glowing red gem.
-mag_x2_r2_07	medium_weapon	A frost-enchanted magic maul with a crystal head and a glowing blue gem.
-mag_x2_r2_08	medium_weapon	A nature-enchanted magic maul with a crystal head and a glowing green gem.
-mag_x2_r2_09	medium_weapon	A shadow-enchanted magic maul with a crystal head and a glowing purple gem.
-mag_x3_r0_00	long_weapon	A fire-enchanted magic staff with a glowing orb and a glowing red gem.
-mag_x3_r0_01	long_weapon	A frost-enchanted magic staff with a glowing orb and a glowing blue gem.
-mag_x3_r0_02	long_weapon	A frost-enchanted magic staff with a glowing orb and a glowing blue gem.
-mag_x3_r0_03	long_weapon	A shadow-enchanted magic staff with a glowing orb and a glowing purple gem.
-mag_x3_r0_04	long_weapon	A nature-enchanted magic staff with a glowing orb and a glowing green gem.
-mag_x3_r0_05	long_weapon	A fire-enchanted magic staff with a glowing orb and a glowing red gem.
-mag_x3_r0_06	long_weapon	A fire-enchanted magic staff with a glowing orb and a glowing red gem.
-mag_x3_r0_07	long_weapon	A frost-enchanted magic staff with a glowing orb and a glowing blue gem.
-mag_x3_r0_08	long_weapon	A shadow-enchanted magic staff with a glowing orb and a glowing purple gem.
-mag_x3_r0_09	long_weapon	A holy-enchanted magic staff with a glowing orb.
-mag_x3_r0_10	long_weapon	A frost-enchanted magic staff with a glowing orb and a glowing blue gem.
-mag_x3_r0_11	long_weapon	A shadow-enchanted magic staff with a glowing orb and a glowing purple gem.
-mag_x3_r1_00	long_weapon	A frost-enchanted magic spear with a crystal head and a glowing blue gem.
-mag_x3_r1_01	long_weapon	A fire-enchanted magic spear with a crystal head and a glowing red gem.
-mag_x3_r1_02	long_weapon	A frost-enchanted magic spear with a crystal head and a glowing blue gem.
-mag_x3_r1_03	long_weapon	A frost-enchanted magic spear with a crystal head and a glowing blue gem.
-mag_x3_r1_04	long_weapon	A shadow-enchanted magic halberd with a glowing purple gem.
-mag_x3_r1_05	long_weapon	A nature-enchanted magic spear with a crystal head and a glowing green gem.
-mag_x3_r1_06	long_weapon	A fire-enchanted magic halberd with a glowing red gem.
-mag_x3_r1_07	long_weapon	A frost-enchanted magic trident with a glowing blue gem.
-mag_x3_r1_08	long_weapon	A frost-enchanted magic halberd with a glowing blue gem.
-mag_x3_r1_09	long_weapon	A fire-enchanted magic halberd with a glowing red gem.
-mag_x3_r1_10	long_weapon	A frost-enchanted magic trident with a glowing blue gem.
-mag_x3_r1_11	long_weapon	A shadow-enchanted magic spear with a crystal head and a glowing purple gem.
 mag_x4_r0_00	small_weapon	A nature-enchanted twig wand with a small gem at the tip and a glowing green gem.
 mag_x4_r0_01	small_weapon	A fire-enchanted twisted ebony wand with a glowing red gem.
 mag_x4_r0_02	small_weapon	A fire-enchanted carved bone wand with a glowing red gem.
@@ -195,3 +141,53 @@ mag_x9_06	small_weapon	A shadow-enchanted makeshift pistol loaded with a magic s
 mag_x9_07	large_weapon	A fire-enchanted chainsaw with glowing runes and a glowing red gem.
 mag_x9_08	large_weapon	A fire-enchanted shotgun with a welded cross and a glowing red gem.
 mag_x9_09	long_weapon	A fire-enchanted spear with a hanging cursed doll and a glowing red gem.
+mag_mgt1_00	large_weapon	A fire-enchanted burning magic greatsword with a glowing red gem.
+mag_mgt1_01	large_weapon	A frost-enchanted ice-bladed magic greatsword with a glowing blue gem.
+mag_mgt1_02	large_weapon	A shadow magic greatsword with a glowing purple gem.
+mag_mgt1_03	large_weapon	A holy magic greatsword with a glowing orange gem.
+mag_mgt1_04	large_weapon	A nature-enchanted vine-wrapped magic greatsword with a glowing green gem.
+mag_mgt1_05	large_weapon	A frost-enchanted lightning-veined magic greatsword with a glowing blue gem.
+mag_mgt1_06	large_weapon	A fire-enchanted blood-red magic greatsword with a glowing red gem.
+mag_mgt1_07	large_weapon	A frost-enchanted starry black magic greatsword with a glowing blue gem.
+mag_mgt1_08	large_weapon	A frost-enchanted crystal-bladed magic greatsword with a glowing blue gem.
+mag_mgt1_09	large_weapon	A shadow-enchanted cursed bone-hilted magic greatsword with a glowing magenta gem.
+mag_mgt2_00	large_weapon	A fire-enchanted burning magic great axe with a glowing red gem.
+mag_mgt2_01	large_weapon	A frost-enchanted ice-bladed magic great axe with a glowing blue gem.
+mag_mgt2_02	large_weapon	A shadow magic great axe with a glowing purple gem.
+mag_mgt2_03	large_weapon	A holy magic great axe with a glowing orange gem.
+mag_mgt2_04	large_weapon	A shadow-enchanted black-bladed magic scythe with a glowing magenta gem.
+mag_mgt2_05	large_weapon	A frost-enchanted crescent magic scythe with a glowing blue gem.
+mag_mgt2_06	large_weapon	A nature-enchanted green-glowing magic scythe with a glowing green gem.
+mag_mgt2_07	large_weapon	A shadow-enchanted bone magic scythe with a glowing magenta gem.
+mag_mgt2_08	large_weapon	A fire-enchanted red crystal magic scythe with a glowing red gem.
+mag_mgt2_09	medium_weapon	A shadow-enchanted purple mist magic scythe with a glowing purple gem.
+mag_mgt3_00	large_weapon	A frost-enchanted blue crystal magic maul with a glowing blue gem.
+mag_mgt3_01	large_weapon	A fire-enchanted red crystal magic maul with a glowing red gem.
+mag_mgt3_02	large_weapon	A frost-enchanted lightning-veined magic maul with a glowing blue gem.
+mag_mgt3_03	large_weapon	A frost-enchanted ice block magic maul with a glowing blue gem.
+mag_mgt3_04	large_weapon	A fire-enchanted molten lava magic maul with a glowing red gem.
+mag_mgt3_05	large_weapon	A holy magic maul with a glowing orange gem.
+mag_mgt3_06	large_weapon	A shadow-enchanted obsidian magic maul with a glowing purple gem.
+mag_mgt3_07	large_weapon	A nature-enchanted green gem magic maul with a glowing green gem.
+mag_mgt3_08	large_weapon	A frost-enchanted starry magic maul with a glowing blue gem.
+mag_mgt3_09	large_weapon	A shadow-enchanted bone-headed magic maul with a glowing purple gem.
+mag_mst1_00	long_weapon	A frost-enchanted magic staff with a blue orb and a glowing blue gem.
+mag_mst1_01	long_weapon	A fire-enchanted magic staff with a red orb and a glowing red gem.
+mag_mst1_02	long_weapon	A nature-enchanted root-wrapped magic staff with a green orb and a glowing green gem.
+mag_mst1_03	long_weapon	A shadow-enchanted magic staff with a purple orb and a glowing purple gem.
+mag_mst1_04	long_weapon	A frost-enchanted twisted wooden magic staff with a glowing stone and a glowing blue gem.
+mag_mst1_05	long_weapon	A frost-enchanted crescent moon magic staff with a glowing blue gem.
+mag_mst1_06	long_weapon	A frost-enchanted bone magic staff with a glowing blue gem.
+mag_mst1_07	long_weapon	An arcane-enchanted magic staff with hanging rings.
+mag_mst1_08	long_weapon	A frost-enchanted crystal cluster magic staff with a glowing blue gem.
+mag_mst1_09	long_weapon	A frost-enchanted star-topped magic staff with a glowing blue gem.
+mag_mst2_00	long_weapon	A frost-enchanted magic spear with a blue crystal head and a glowing blue gem.
+mag_mst2_01	long_weapon	A fire-enchanted magic spear with a red crystal head and a glowing red gem.
+mag_mst2_02	long_weapon	A nature-enchanted magic spear with a broad green crystal head and a glowing green gem.
+mag_mst2_03	long_weapon	A holy magic halberd with a glowing orange gem.
+mag_mst2_04	long_weapon	A shadow-enchanted purple-bladed magic halberd with a glowing purple gem.
+mag_mst2_05	long_weapon	A frost-enchanted ice-bladed magic halberd with a glowing blue gem.
+mag_mst2_06	long_weapon	A frost-enchanted silver magic trident with a glowing blue gem.
+mag_mst2_07	long_weapon	A fire-enchanted dark magic trident with a glowing red gem.
+mag_mst2_08	long_weapon	A frost-enchanted lightning magic spear with a glowing blue gem.
+mag_mst2_09	long_weapon	A holy-enchanted bone-tipped magic spear.

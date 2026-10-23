@@ -38,32 +38,6 @@ med_m1_r2_08	medium_weapon	A bronze spiked mace with a wooden haft.
 med_m1_r2_09	medium_weapon	A steel war hammer with a wooden haft.
 med_m1_r2_10	medium_weapon	A blackened iron spiked mace with a wooden haft.
 med_m1_r2_11	medium_weapon	A blackened iron war hammer with a wooden haft and blue details.
-med_m3_r0_00	long_weapon	A bronze spear with a leaf-shaped head and a wooden haft.
-med_m3_r0_01	long_weapon	A blackened iron spear with a leaf-shaped head and a wooden haft.
-med_m3_r0_02	long_weapon	A blackened iron spear with a leaf-shaped head and a wooden haft.
-med_m3_r0_03	long_weapon	A bronze spear with a leaf-shaped head and a wooden haft.
-med_m3_r0_04	long_weapon	A blackened iron spear with a leaf-shaped head, a wooden haft and red details.
-med_m3_r0_05	long_weapon	A blackened iron spear with a leaf-shaped head, a wooden haft and red details.
-med_m3_r0_06	long_weapon	A polished steel spear with a leaf-shaped head, a wooden haft and red details.
-med_m3_r0_07	long_weapon	A blued steel spear with a leaf-shaped head and a wooden haft.
-med_m3_r0_08	long_weapon	A blackened iron spear with a leaf-shaped head, a wooden haft and red details.
-med_m3_r0_09	long_weapon	A polished steel spear with a leaf-shaped head, a wooden haft and red details.
-med_m3_r0_10	long_weapon	A blackened iron spear with a leaf-shaped head and a wooden haft.
-med_m3_r0_11	long_weapon	A polished steel spear with a leaf-shaped head, a wooden haft and blue details.
-med_m3_r0_12	long_weapon	A polished steel spear with a leaf-shaped head, a wooden haft and red details.
-med_m3_r1_00	long_weapon	A steel halberd with a wooden haft and red details.
-med_m3_r1_01	long_weapon	A blackened iron halberd with a wooden haft.
-med_m3_r1_02	long_weapon	A blackened iron halberd with a wooden haft.
-med_m3_r1_03	long_weapon	A bronze halberd with a wooden haft and red details.
-med_m3_r1_04	long_weapon	A blackened iron halberd with a wooden haft.
-med_m3_r1_05	long_weapon	A red-lacquered halberd with a wooden haft.
-med_m3_r1_06	long_weapon	A blackened iron halberd with a wooden haft.
-med_m3_r1_07	long_weapon	A blackened iron halberd with a wooden haft.
-med_m3_r1_08	long_weapon	A blackened iron halberd with a wooden haft and red details.
-med_m3_r1_09	long_weapon	A polished steel halberd with a wooden haft and red details.
-med_m3_r1_10	long_weapon	A blackened iron halberd with a wooden haft.
-med_m3_r1_11	long_weapon	A polished steel halberd with a wooden haft and red details.
-med_m3_r1_12	long_weapon	A polished steel halberd with a wooden haft and red details.
 med_m4_r0_00	medium_weapon	A blackened iron flail with a spiked iron ball on a chain, a wooden haft and red details.
 med_m4_r0_01	medium_weapon	A blackened iron flail with a spiked iron ball on a chain.
 med_m4_r0_02	medium_weapon	A blackened iron flail with a spiked iron ball on a chain and a wooden haft.
@@ -94,39 +68,6 @@ med_m4_r2_06	long_weapon	A wooden plain quarterstaff.
 med_m4_r2_07	long_weapon	A wooden plain quarterstaff.
 med_m4_r2_08	long_weapon	A wooden plain quarterstaff.
 med_m4_r2_09	long_weapon	A wooden wizard's staff with an ornate head and blue details.
-med_m6_r0_00	long_weapon	A wooden strung longbow.
-med_m6_r0_01	long_weapon	A wooden strung longbow.
-med_m6_r0_02	long_weapon	A wooden strung longbow.
-med_m6_r0_03	long_weapon	A wooden strung longbow.
-med_m6_r0_04	long_weapon	A wooden strung longbow with gold fittings.
-med_m6_r0_05	long_weapon	A red strung longbow.
-med_m6_r0_06	long_weapon	A black strung longbow.
-med_m6_r0_07	long_weapon	A black strung longbow with blue details.
-med_m6_r0_08	long_weapon	A wooden strung longbow with blue details.
-med_m6_r0_09	long_weapon	A wooden strung longbow.
-med_m6_r0_10	long_weapon	A red strung longbow.
-med_m6_r0_11	long_weapon	A wooden strung longbow with red details.
-med_m6_r0_12	long_weapon	A wooden strung longbow.
-med_m6_r1_00	medium_weapon	A wooden crossbow.
-med_m6_r1_01	medium_weapon	A wooden crossbow.
-med_m6_r1_02	medium_weapon	A wooden crossbow.
-med_m6_r1_03	medium_weapon	A black crossbow.
-med_m6_r1_04	medium_weapon	A wooden crossbow.
-med_m6_r1_05	medium_weapon	A wooden crossbow.
-med_m6_r1_06	medium_weapon	A wooden crossbow.
-med_m6_r1_07	medium_weapon	A wooden crossbow.
-med_m6_r1_08	medium_weapon	A wooden crossbow.
-med_m6_r1_09	medium_weapon	A wooden crossbow.
-med_m6_r2_00	accessory	A leather quiver full of arrows.
-med_m6_r2_01	accessory	A leather quiver full of arrows.
-med_m6_r2_02	accessory	A leather quiver full of arrows.
-med_m6_r2_03	accessory	A leather quiver full of arrows.
-med_m6_r2_04	accessory	A leather quiver full of arrows with blue details.
-med_m6_r2_05	accessory	A leather quiver full of arrows.
-med_m6_r2_06	accessory	A leather quiver full of arrows.
-med_m6_r2_07	accessory	A leather quiver full of arrows.
-med_m6_r2_08	accessory	A leather quiver full of arrows.
-med_m6_r2_09	accessory	A leather quiver full of arrows.
 med_m7_r0_00	shield	A round wooden shield with an iron boss.
 med_m7_r0_01	shield	A round wooden shield with an iron boss.
 med_m7_r0_02	shield	A round wooden shield with an iron boss and red details.
@@ -237,3 +178,51 @@ med_mtw3_06	large_weapon	A polished steel ornate ceremonial war hammer with a wo
 med_mtw3_07	large_weapon	A steel maul with a rusted head and a wooden haft.
 med_mtw3_08	large_weapon	A wooden boulder-headed club.
 med_mtw3_09	large_weapon	A wooden thick club bound with iron bands.
+med_mpl1_00	long_weapon	A blackened iron leaf-bladed spear with a wooden haft.
+med_mpl1_01	long_weapon	A blackened iron long thin spear with a wooden haft.
+med_mpl1_02	long_weapon	A blackened iron broad-bladed spear with a wooden haft.
+med_mpl1_03	long_weapon	A steel winged spear with a wooden haft.
+med_mpl1_04	long_weapon	A blackened iron barbed hunting spear with a wooden haft.
+med_mpl1_05	long_weapon	A steel tasseled spear with a wooden haft and red details.
+med_mpl1_06	long_weapon	A blackened iron old spear with a rusted head and a wooden haft.
+med_mpl1_07	long_weapon	A blackened iron banded spear with a wooden haft.
+med_mpl1_08	long_weapon	A brown cavalry lance.
+med_mpl1_09	long_weapon	A steel short triangular-headed spear with a wooden haft.
+med_mpl2_00	long_weapon	A steel halberd with an axe blade and hook and a wooden haft.
+med_mpl2_01	long_weapon	A blackened iron crescent-bladed halberd with a wooden haft.
+med_mpl2_02	long_weapon	A grey broad-bladed glaive.
+med_mpl2_03	large_weapon	A steel scythe-bladed polearm with a wooden haft.
+med_mpl2_04	long_weapon	A brown cross-bladed polearm.
+med_mpl2_05	long_weapon	A grey hooked bill polearm.
+med_mpl2_06	long_weapon	A blackened iron hammer-headed polearm with a wooden haft.
+med_mpl2_07	long_weapon	A brown three-pronged fork polearm.
+med_mpl2_08	long_weapon	A grey wavy-bladed polearm.
+med_mpl2_09	long_weapon	A blackened iron double-axe halberd with a wooden haft.
+med_mbw1_00	long_weapon	A plain wooden longbow.
+med_mbw1_01	long_weapon	A wooden leather-gripped longbow.
+med_mbw1_02	long_weapon	A black wooden longbow.
+med_mbw1_03	long_weapon	A white wooden longbow.
+med_mbw1_04	long_weapon	A wooden horn-tipped composite bow.
+med_mbw1_05	long_weapon	A wooden recurve bow.
+med_mbw1_06	long_weapon	A wooden old bow with a broken string.
+med_mbw1_07	long_weapon	A wooden iron-fitted bow.
+med_mbw1_08	long_weapon	A wooden carved ceremonial bow.
+med_mbw1_09	long_weapon	A wooden short hunting bow.
+med_mbw2_00	medium_weapon	A plain wooden crossbow.
+med_mbw2_01	medium_weapon	A wooden iron-armed crossbow.
+med_mbw2_02	medium_weapon	A wooden heavy crossbow with a winch.
+med_mbw2_03	medium_weapon	A wooden small one-handed crossbow.
+med_mbw2_04	medium_weapon	A wooden dark-stained crossbow.
+med_mbw2_05	medium_weapon	A wooden brass-trimmed crossbow.
+med_mbw2_06	medium_weapon	A wooden double-bolt crossbow.
+med_mbw2_07	medium_weapon	A wooden wide siege crossbow.
+med_mbw2_08	medium_weapon	A wooden leather-wrapped crossbow.
+med_mbw2_09	medium_weapon	A wooden old crossbow with a rusted bow.
+med_mbw3_00	accessory	A brown leather quiver.
+med_mbw3_01	accessory	A black leather quiver.
+med_mbw3_02	accessory	A studded leather quiver.
+med_mbw3_03	accessory	A leather fur-trimmed quiver.
+med_mbw3_04	accessory	A leather wooden slat quiver.
+med_mbw3_05	accessory	A leather quiver wrapped in red cloth.
+med_mbw3_06	accessory	A leather quiver with metal fittings.
+med_mbw3_07	accessory	A leather hip quiver on a belt.
