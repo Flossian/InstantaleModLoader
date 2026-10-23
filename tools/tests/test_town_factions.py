@@ -709,16 +709,17 @@ check("端にいるときは溝が深まった", rumors[2]["follow"]
 history = model["history"]
 check("来歴は新しい順", [h["when"] for h in history] == ["2日前", "3日前", "60日前", "60日前"], history)
 check("縛りが解けた来歴", history[0]["pieces"] == [("説得が実り、霧の船団の敵意に和らぐ余地が生まれたようだ。", None)])
-check("会話で段階が変わった来歴は段階の色と理由", history[1]["pieces"]
-      == [("会話により、霧の船団の態度は", None), ("敵対", -2), ("となった。", None)]
+check("会話で段階が変わった来歴は前と後の段階を段階の色で、理由も", history[1]["pieces"]
+      == [("会話により、霧の船団の態度は", None), ("緊張", -1), ("から", None), ("敵対", -2), ("となった。", None)]
       and history[1]["reason"] == "掟を嘲った", history[1])
-check("響きの来歴", history[2]["pieces"] == [("黄金商会への働きが伝わり、霧の船団の態度は", None), ("敵対", -2),
-                                            ("となった。", None)], history[2])
+check("響きの来歴", history[2]["pieces"] == [("黄金商会への働きが伝わり、霧の船団の態度は", None), ("緊張", -1),
+                                            ("から", None), ("敵対", -2), ("となった。", None)], history[2])
 check("出来事の来歴（段階が変わったとき）", history[3]["pieces"]
-      == [("オーラムの疫病を解決したことで、黄金商会の態度は", None), ("友好", 1), ("となった。", None)], history[3])
-check("段階が変わらなければ評価が上がった・下がった",
+      == [("オーラムの疫病を解決したことで、黄金商会の態度は", None), ("中立", 0), ("から", None), ("友好", 1),
+          ("となった。", None)], history[3])
+check("段階が変わらなければ評価が上がった・下がったと、今の段階",
       view.pieces_of(LEDGER, {"faction": "f2", "before": 40, "after": 45, "kind": "talk"})
-      == [("会話により、黄金商会の評価が上がった。", None)])
+      == [("会話により、黄金商会の評価が上がった（", None), ("友好", 1), ("のまま）。", None)])
 check("作っている途中・勢力が無い・作れなかったときは一文", [view.build({"status": st})["message"]
                                                      for st in (None, rules.NONE, rules.FAILED)]
       == [view.MESSAGES[None], view.MESSAGES[rules.NONE], view.MESSAGES[rules.FAILED]])

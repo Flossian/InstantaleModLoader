@@ -103,11 +103,12 @@ def follow_of(ledger, event):
 
 
 def pieces_of(ledger, entry):
-    """来歴の一文。段階が変わったときは段階の名前を段階の色で書く。"""
+    """来歴の一文。段階が変わったときは前と後の段階の名前を、変わらないときは今の段階を、段階の色で書く。"""
     name = _name(ledger, entry.get("faction"))
     before, after = entry.get("before", 0), entry.get("after", 0)
     stage = rules.standing_stage(after)
-    changed = rules.standing_stage(before) != stage
+    was = rules.standing_stage(before)
+    changed = was != stage
     kind = entry.get("kind")
     if kind == rules.RECONCILE:
         return [("説得が実り、{}の敵意に和らぐ余地が生まれたようだ。".format(name), None)]
@@ -120,9 +121,10 @@ def pieces_of(ledger, entry):
     else:
         lead = "会話により、"
     if changed:
-        return [("{}{}の態度は".format(lead, name), None), (rules.STANDING_NAMES[stage], stage),
-                ("となった。", None)]
-    return [("{}{}の評価が{}。".format(lead, name, "上がった" if after > before else "下がった"), None)]
+        return [("{}{}の態度は".format(lead, name), None), (rules.STANDING_NAMES[was], was), ("から", None),
+                (rules.STANDING_NAMES[stage], stage), ("となった。", None)]
+    return [("{}{}の評価が{}（".format(lead, name, "上がった" if after > before else "下がった"), None),
+            (rules.STANDING_NAMES[stage], stage), ("のまま）。", None)]
 
 
 def build(ledger, *, day=None, here=None, area_names=None, laws=None):
