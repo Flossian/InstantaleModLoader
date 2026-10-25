@@ -434,7 +434,45 @@ def install(env):
             rescue = bucket.get("rescue")
         if isinstance(rescue, dict) and rescue.get("quest") is not None:
             ids.append(str(rescue["quest"]))
+        ids.extend(older_jobs(app, set(ids)))
         return ids
+
+    def office_owners(app):
+        """世界の裏の事務所の主の `{名前: 人物の id}`。"""
+        owners = {}
+        for area in ui.world_areas(app).values():
+            for node in ui.nodes_of(area):
+                for facility in ui.facilities_of(node).values():
+                    if ui.facility_type_of(facility) != OFFICE_FACILITY_TYPE:
+                        continue
+                    owner_id = getattr(facility, "owner", None)
+                    name = getattr(ui.character_of(app, str(owner_id)), "name", None) if owner_id else None
+                    if isinstance(name, str) and name.strip():
+                        owners[name.strip()] = str(owner_id)
+        return owners
+
+    def older_jobs(app, known):
+        """控えに無い、片付いた裏の仕事 `{依頼の id: 事務所の主の id}`（版3までに片付けた分）。
+
+        版3までは片付けると控えから消し、`kept_past` も無かった。
+        裏の仕事の依頼人の欄は最初の版から事務所の主の名前にさせている（`underworld.BRIEF_TEXT`）ので、それで見分ける。
+        片付いた分だけを数える（進行中の仕事は控えに在る）。VERIFICATION.md §3.115。
+        """
+        owners = office_owners(app)
+        if not owners:
+            return {}
+        found = {}
+        for quest_id in ui.quest_ids(app):
+            if str(quest_id) in known:
+                continue
+            quest = ui.quest_of(app, quest_id)
+            config = ui.quest_value(quest, "config", None) if quest is not None else None
+            if not isinstance(config, dict) or config.get("status") != "completed":
+                continue
+            client = ui.quest_value(quest, "client_name", "")
+            if isinstance(client, str) and client.strip() in owners:
+                found[str(quest_id)] = owners[client.strip()]
+        return found
 
     #: 依頼人の行の写し（周回の鍵ごと）。錠が取れなかったときはこれで答える。
     clients_copy = {}
@@ -461,6 +499,8 @@ def install(env):
             worlds.lock.release()
         if isinstance(rescue, dict) and rescue.get("quest") is not None and (rescue.get("client") or rescue.get("name")):
             rows.append({"quest": rescue["quest"], "npc_id": rescue.get("client"), "npc_name": rescue.get("name")})
+        rows.extend({"quest": quest_id, "npc_id": owner_id}
+                    for quest_id, owner_id in older_jobs(app, {str(row["quest"]) for row in rows}).items())
         clients_copy[playthrough] = [dict(row) for row in rows]
         return rows
 

@@ -285,7 +285,13 @@ check("片付いた依頼の控えに題と依頼人を残す",
       bucket[common.PAST_KEY]["78"] == {"title": "済んだ密輸", "client": "1", "name": ""}, bucket.get(common.PAST_KEY))
 app.world.quests = {"77": types.SimpleNamespace(quest_title="密輸の仕事", config={"status": "incomplete"}),
                     "78": types.SimpleNamespace(quest_title="済んだ密輸", config={"status": "completed"}),
-                    "79": types.SimpleNamespace(quest_title="別の依頼", config={"status": "completed"})}
+                    "79": types.SimpleNamespace(quest_title="別の依頼", config={"status": "completed"}),
+                    # 版3までに片付けた裏の仕事（控えに無い）。依頼人の欄は事務所の主（人物 1「誰か」）の名前
+                    "81": types.SimpleNamespace(quest_title="古い密輸", client_name="誰か", config={"status": "completed"}),
+                    "82": types.SimpleNamespace(quest_title="表の依頼", client_name="別人", config={"status": "completed"}),
+                    "83": types.SimpleNamespace(quest_title="受けていない依頼", client_name="誰か",
+                                                config={"status": "incomplete"})}
+app.world.areas = {"6": types.SimpleNamespace(nodes={"1": types.SimpleNamespace(facilities={"9": facility})})}
 ui_quest_of = ui.quest_of
 ui.quest_of = lambda a, qid: a.world.quests.get(str(qid))
 try:
@@ -299,7 +305,12 @@ try:
     hidden = loader_board.kept_off(app)
     check("片付いた裏の仕事も掲示板に出さない依頼に数える", {"76", "77", "78", "80"} <= hidden and "79" not in hidden,
           sorted(hidden))
+    check("控えに無い片付いた古い仕事（依頼人の欄が事務所の主）も数える", "81" in hidden, sorted(hidden))
+    check("依頼人の欄がほかの人物の依頼と、片付いていない依頼は数えない", "82" not in hidden and "83" not in hidden,
+          sorted(hidden))
+    check("古い仕事の依頼人は事務所の主", rows.get("81", {}).get("npc_id") == "1", rows)
 finally:
+    del app.world.areas
     ui.quest_of = ui_quest_of
     with common._store()["worlds"].lock:
         for name in ("underworld", "rescue", common.PAST_KEY):

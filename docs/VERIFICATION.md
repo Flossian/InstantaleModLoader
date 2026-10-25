@@ -89,7 +89,7 @@
 | mod | 状態 |
 | --- | --- |
 | `300_event_facility_arrival` | 成立（両モード。[§2.8](verification/2.8.md)）。版3 で同じ到着の会話をほかの MOD に譲る形は未（[§3.80](verification/3.80.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
-| `301_quest_from_conversation` | 成立（[§2.13](verification/2.13.md) / [§2.62](verification/2.62.md)）。版3 のロード後の組み直しも成立。自由入力の経路は未発火（[§3.2](verification/3.2.md)）。仲間を依頼人から外す設定はログで発火。版6 の人物が揃う前は出さない形は実機で成立（[§3.102](verification/3.102.md)）。版7 の宣言型の口への乗せ替えは実機で成立。「この話から依頼を作る」の押下も成立。疲労で受注を断られたときに一覧を「やめる」1つにしていたのを直した（[§3.109](verification/3.109.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)）。依頼人の一覧と街の噂は、ゲーム抜きで成立・実機は未（[§3.115](verification/3.115.md)） |
+| `301_quest_from_conversation` | 成立（[§2.13](verification/2.13.md) / [§2.62](verification/2.62.md)）。版3 のロード後の組み直しも成立。自由入力の経路は未発火（[§3.2](verification/3.2.md)）。仲間を依頼人から外す設定はログで発火。版6 の人物が揃う前は出さない形は実機で成立（[§3.102](verification/3.102.md)）。版7 の宣言型の口への乗せ替えは実機で成立。「この話から依頼を作る」の押下も成立。疲労で受注を断られたときに一覧を「やめる」1つにしていたのを直した（[§3.109](verification/3.109.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)）。依頼人の一覧と街の噂は、ボタンの出し分けと噂の差し込みが実機で成立（Haiku 5.5。[§3.115](verification/3.115.md)） |
 | `302_leave_party_in_conversation` | 成立。土地を跨いで別れる経路も 10-06 に成立（[§3.88](verification/3.88.md)）。版2 のロード後も成立。版5 の宣言型の口への乗せ替え（確認の画面で保存しても戻れる）は実機で成立（[§3.109](verification/3.109.md)） |
 | `303_quest_end_party_to_guild` | 発火。置く側は未発火（`304_` が仲間を残すため。[§2.50](verification/2.50.md) / [§3.3](verification/3.3.md)） |
 | `304_quest_end_keep_party` | 成立（[§2.50](verification/2.50.md)） |
@@ -122,7 +122,7 @@
 | `333_equipment_slots` | 成立（版17〜25）。版26 の自由枠2つ（入る・数えない・ロード・仲間）も成立。残るのは所持品が満杯のとき（[§3.70](verification/3.70.md) / [§3.77](verification/3.77.md) / [§3.91](verification/3.91.md)）。版27 で組み直しの包みを窓口の `after` に移した。所持品の窓を開いたまま会話に入っても右の選択肢が戻るのは実機で成立（[§3.109](verification/3.109.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
 | `334_colosseum_custom` | 15項目とも成立（危ない側の口上は 10-07。[§3.69](verification/3.69.md) / [§3.88](verification/3.88.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
 | `335_player_portrait_regenerate` | 一通り成立（`408_` から切り出した。[§2.94](verification/2.94.md)） |
-| `336_crime_overhaul` | 大半が成立。残りは [§3.84](verification/3.84.md) の冒頭（[§2.88](verification/2.88.md) / [§3.91](verification/3.91.md)）。8機能の宣言型の口への乗せ替えは衛兵の買収・裁判の介入・脱獄の一覧・同房の囚人が実機で成立、裏の事務所・無罪放免・死刑の判決と処刑場からの脱出（クリアまで）も成立（[§3.109](verification/3.109.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)）。裏の仕事と脱出の依頼人を窓口 `quest_clients` に置く形は、ゲーム抜きで成立・実機は未（[§3.115](verification/3.115.md)） |
+| `336_crime_overhaul` | 大半が成立。残りは [§3.84](verification/3.84.md) の冒頭（[§2.88](verification/2.88.md) / [§3.91](verification/3.91.md)）。8機能の宣言型の口への乗せ替えは衛兵の買収・裁判の介入・脱獄の一覧・同房の囚人が実機で成立、裏の事務所・無罪放免・死刑の判決と処刑場からの脱出（クリアまで）も成立（[§3.109](verification/3.109.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)）。裏の仕事と脱出の依頼人を窓口 `quest_clients` に置く形は、裏の仕事を正規に片付けた後まで実機で成立。版3までに片付けた仕事を事務所の主の名前で見分ける形を足した。脱出は未（[§3.115](verification/3.115.md)） |
 | `337_conversation_affinity` | 10項目とも成立。版2 の窓口 `talk_summary` も成立（[§3.89](verification/3.89.md) / [§2.91](verification/2.91.md)） |
 | `338_town_incidents` | 版2 まで成立。#10 の引き直しと #1 の手のマウスは未（[§3.97](verification/3.97.md) / [§2.92](verification/2.92.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
 | `339_town_factions` | 13項目と窓（#14・#15）は成立。#16 は未。住人の立場（版3）は #17 が成立、#18 は口ぶりが未。勢力の刺客（版5）は #21〜#26 が成立（[§3.98](verification/3.98.md) / [§2.93](verification/2.93.md)）。刺客の会話を窓口の `claim` に乗せ替えた形は実機で成立（保存・読み直し・MOD を切った読み込み。[§3.109](verification/3.109.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
@@ -336,7 +336,7 @@ crash_log.txt の 114 件のうち、35件が `llama-server` 起動失敗、40�
 - [3.112 依頼の難易度の上限を 100 まで上げられるようにする（`318_area_difficulty_growth` 版6）: 76 を超えた依頼のクリア・訓練・店の品揃えまで実機で成立](verification/3.112.md)
 - [3.113 何本もの MOD が自分で包んでいたロード・日数・到着・会話の相手への差し込みを、ローダの窓口へ寄せる（`loads` / `durations.on_days` / `arrivals.on` / `modnpc` の notes）: 31 本を乗せ替え、オフラインの検査は通過・ロード・世界・日数・到着・会話の相手の経路は実機で成立（10-23）・338/339/911 の日数と到着・新規開始は未](verification/3.113.md)
 - [3.114 宿屋と鍛冶屋の売買と、店の種類ごとの品揃えの傾向（`340_shop_lineup`。旧 `340_inn_shop`）・窓口 `shop_lineup`: 鍛冶屋の入口と会話・鍛冶屋と診療所の傾向・312 の入れ替えの傾向は実機で成立・雑貨屋と専門店と一括生成は実機が未](verification/3.114.md)
-- [3.115 依頼人の一覧と街の噂（`301_quest_from_conversation`・`336_crime_overhaul`）・窓口 `quest_clients`: ゲーム抜きで成立・実機は未](verification/3.115.md)
+- [3.115 依頼人の一覧と街の噂（`301_quest_from_conversation`・`336_crime_overhaul`）・窓口 `quest_clients`: ボタンの出し分けと噂の差し込みは実機で成立（Haiku 5.5）・裏の仕事も正規の経路で成立・処刑場からの脱出は未](verification/3.115.md)
 <!-- verification-index: end -->
 
 ---
