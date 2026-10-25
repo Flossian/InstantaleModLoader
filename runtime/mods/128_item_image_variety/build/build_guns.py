@@ -575,7 +575,8 @@ def names_own_color(name):
 # 対で数える品（名前の頭の最後の語）。「A brown leather gloves」にせず「A pair of brown leather gloves」にする
 PAIRED = {"gloves", "gauntlets", "boots", "shoes", "sandals", "slippers", "greaves", "sabatons", "bracers", "vambraces", "cuisses", "chausses",
           "trousers", "pants", "breeches", "leggings", "shorts", "tights", "earrings", "glasses", "goggles", "spectacles", "binoculars",
-          "scissors", "tongs", "pliers", "knuckles", "manacles", "guards", "socks", "stockings", "chopsticks"}
+          "scissors", "tongs", "pliers", "knuckles", "manacles", "guards", "socks", "stockings", "chopsticks",
+          "headphones", "earmuffs", "earphones"}
 # 冠詞を付けない複数の品（「Patched peasant clothes.」）
 UNCOUNTED = {"clothes", "robes", "garments", "rags"}
 # 母音字で始まっても子音で読む語（「A one-piece axe」）

@@ -33,7 +33,7 @@ STATE_DIRNAME = "shopkeeper_attitude"
 STORE_ATTR = "_instantale_shopkeeper_attitude"
 MARK = "mod_shopkeeper_attitude"
 SHOP_TARGET = "__main__:ShoppingStartManagerRemake.execute"
-#: 店の選択肢の印（`340_inn_shop` が宿屋に足すのも同じ）と、MOD の人物の id の頭。
+#: 店の選択肢の印（`340_shop_lineup` が宿屋と鍛冶屋に足すのも同じ）と、MOD の人物の id の頭。
 SHOP_CHOICE = "売買する"
 MOD_NPC_PREFIX = "mod:"
 #: 品の値段の鍵（ローダの関所が渡す。`買価` は店の品、`売価` は売りに出した品）。
@@ -217,14 +217,19 @@ def apply(ctx):
             return "stored"
         with lock:
             done = judging.get(stance_key(app, keeper_id))
-        # 待機表示は出さない。ここはゲーム自身の `execute` の中で、ゲームが旗を下ろして点を送っている（TECH.md §5.1.3）。
-        # `busy_on` を重ねると下ろされた旗を覚え、`busy_off` がそれを書き戻す
-        if done is not None:
-            if not done.wait(WAIT_SECONDS):
-                write("gave up waiting for {} after {}s".format(keeper_id, WAIT_SECONDS))
-            return "waited"
-        ask(app, mode, keeper_id, keeper)
-        return "asked"
+        # 待つ間は待機表示を出す。ここは `execute` の入口で、ゲームが点を出すのはこの後の
+        # `shopping_start_method_1` の中（2026-10-23 の実測。押してから点まで、ここで待った分だけ選択肢が見えていた）。
+        # 旗はまだ下ろされていないので、`busy_off` が戻すのは押せる旗。解いた後はすぐゲームが点を出すので塗り直さない
+        screen.busy_on(app)
+        try:
+            if done is not None:
+                if not done.wait(WAIT_SECONDS):
+                    write("gave up waiting for {} after {}s".format(keeper_id, WAIT_SECONDS))
+                return "waited"
+            ask(app, mode, keeper_id, keeper)
+            return "asked"
+        finally:
+            screen.busy_off(app, restore=False)
 
     def stance_here(app, mode):
         """いまの店の `(応じ方, 控えの判定)`。判定が無ければ決まった決め方で、控えは None。"""

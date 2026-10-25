@@ -423,6 +423,14 @@ def main():
     mod.apply(ctx)
     check("色付きで当てても例外が出ない", not ctx.errors, ctx.errors)
 
+    # 品を並べ終えた直後にも検品する（売買画面を開く手前で待たない。VERIFICATION.md §3.114）。
+    laid = "__main__:ShoppingStartManagerRemake.set_item_from_world_data"
+    check("品を並べ終えた直後の入口を包む", laid in ctx.hooks, sorted(ctx.hooks))
+    if laid in ctx.hooks:
+        got = ctx.hooks[laid](lambda self, *a, **k: "laid", object(), None, 1)
+        check("並べる処理の戻り値はそのまま（店が引けなくても）", got == "laid", got)
+        check("引けない場面でも例外を出さない", not ctx.errors, ctx.errors)
+
     check("得と損で別の色", mod.GAIN_MARK_COLOR != mod.LOSS_MARK_COLOR)
     check("色は6桁のHTML色",
           all(len(c) == 7 and c.startswith("#")

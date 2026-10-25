@@ -11,6 +11,12 @@
 まとめて裏で検品し、完了してから元の売買画面を開く。結果は世界の控え（state）にも
 書き足し、起動をまたいで使い回す（`_save_classifications`）。
 
+検品するのは、店の開始（`execute` の入口。そのとき棚にある品）と、品を並べ終えた直後
+（`set_item_from_world_data` の後。ゲームが選択肢を戻す前で、ゲーム自身の待機表示が出ている間）の2か所。
+売買画面を開く手前（`toggle_twin_inventory_window`）の検品は、それでも残った品の予備。
+そこで待つと、ゲームが選択肢を戻してから待機表示を出すまでの間に元のメニューが見え、
+素のゲームには無い2度目の待機表示になる（2026-10-24 の実機。VERIFICATION.md §3.114）。
+
 ゲーム側の補助分類は参考資料として渡すが、自由生成される商品に対応するため、
 名前と説明文を最重視する。ゲーム側に存在する `herb` や専用画像の有無に関する
 調査記録は残すが、405の特産品生成許可分類からは外す。
@@ -1936,7 +1942,7 @@ def apply(ctx):
               " world={!r} area={!r}".format(
                   count, changed, scope[0], scope[1]))
 
-    def classify_shop(manager, stock_only=False):
+    def classify_shop(manager, stock_only=False, busy=True):
         """店と手持ちの品をまとめて検品する。
 
         ここはゲーム自身が LLM を待つワーカースレッド（`execute`）で、
@@ -2019,6 +2025,11 @@ def apply(ctx):
                 with state["classification_lock"]:
                     state["classification_pending"].discard(pending_key)
 
+        if not busy:
+            # ゲーム自身の待機表示の最中（品を並べ終えた直後）。重ねると下ろされた旗を覚え、
+            # 解いたときに書き戻す（TECH.md §5.1.3）。後始末はゲームの画面の組み直しに任せる。
+            run()
+            return
         screen.busy_on(app)
         # `restore=False`。この後ゲームが店の画面を組み直すので、
         # ここで塗ると一瞬だけ古い選択肢が見える（`312_` と同じ形）。
@@ -2100,6 +2111,24 @@ def apply(ctx):
             with state["specialty_lock"]:
                 if state.get("stock_batch") is batch:
                     state["stock_batch"] = previous
+
+    @ctx.wrap("__main__:ShoppingStartManagerRemake.set_item_from_world_data",
+              required=False, safe=True)
+    def classify_laid_stock(orig, self, *args, **kwargs):
+        """品を並べ終えた直後に、新しく並んだ品を検品する（売買画面を開く前に済ませる）。
+
+        初めて開いた店・312 の入れ替えの後は、棚の品が全部ここで並ぶ。売買画面を開く手前で聞くと、
+        ゲームが選択肢を戻してから待機表示を出すまでの間に元のメニューが見える。
+        ここはまだゲームの待機表示の中（`shopping_start_method_1` のワーカースレッド）なので、
+        待機表示は重ねずにそのまま聞く。`340_shop_lineup` が同じ場所で足す品も、
+        405 が外側に重なるので一緒に聞ける。
+        """
+        result = orig(self, *args, **kwargs)
+        try:
+            classify_shop(self, busy=False)
+        except Exception:
+            ctx.log_exc("regional economy: classification after the stock was laid failed")
+        return result
 
     @ctx.wrap("__main__:ShoppingStartManagerRemake.generate_item_in_shopping",
               required=False, safe=True)

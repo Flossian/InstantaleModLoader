@@ -154,6 +154,7 @@ runtime/instantale_modloader/
     panels.py     MOD の窓をゲームの画面と同じ作りで描く部品（地と枠・字の4段・札・目盛り・スクロール。§3.3.17）
     holdings.py   330 の家と 331 の施設を1つの窓「家と施設」に並べる窓口。2本は札の中身を渡すだけ（§3.3.19）
     save_lookup.py  世界の骨格に無い施設・人物を、その処理の間だけセーブ側から引かせる窓口と、保存の書き手の守り。直す MOD が名乗り、ほかの MOD は直っているかを聞く（§3.3.20）
+    shop_lineup.py  店の品揃えの傾向の一文の窓口。傾向を決める MOD が出し、品揃えを作り直す MOD が聞く（§3.3.22）
     sounds.py     曲の置き場所の探し方・戦闘曲の見分け方・重みの読み方（§5.10）
     imagegen.py   画像生成の方式（sdcpp の cuda / vulkan / cpu と diffusers_openvino）を隠して、人物の絵を描く関数を包む（§5.11）
     stalls.py     作業スレッドが死んだときに本文の欄へ出して待機を終える。LLM の 4xx の送り直しを早めに打ち切る（§5.12）
@@ -2047,7 +2048,7 @@ holdings.remove_all()                # ローダを外すときに呼ぶ
 ゲームは遊んでいる最中のいくつかの処理で、いま遊んでいる施設や人物を世界の骨格（`app.world_dict`）から引く（売買・人物の詳細の生成・闘技場の試合。VERIFICATION.md §3.106）。
 セーブエディタで足した施設や人物は `app.save_data_dict` にしか無く、そこで `KeyError` になる。
 直すのは `146_fix_save_only_entities`（設定 `ENABLED`、既定は切。切っているときは包まず名乗らない）で、引き先の差し替えと保存の守りはこの窓口が持つ。
-`340_inn_shop` のように「その場面が直っているか」で振る舞いを変える MOD は、窓口に問い合わせる。
+`340_shop_lineup` のように「その場面が直っているか」で振る舞いを変える MOD は、窓口に問い合わせる。
 
 ```python
 save_lookup.install(ctx, write)               # 保存の書き手の守り（1つの世代につき1組）
@@ -2111,6 +2112,28 @@ fn(call)    # gates.Call: call.app / call.obj（包んだ関数の self）/ call
 会話の5関数で相手の `profile` に文を足す形（301 / 311 / 317 / 321 / 326 / 403）も、同じ理由で `modnpc` の `notes` へ寄せた（§5.7）。
 複製は関所が1回だけ作る。足す順は自分で包んでいたときの重なり（外側から 321・317・403・311・326・301）を、各 MOD の `NOTES_PRIORITY`（−6〜−1）で宣言している。
 既存の `notes`（336 / 338 / 339 / 911。優先度 0）はその後に続く。
+
+#### 3.3.22 店の品揃えの傾向も窓口で分け合う（`shop_lineup`）
+
+ゲームの品揃えはどの店にも同じプロンプトで作られ、「武器と防具を1つずつ必ず作る」と頼んでいる（GAME.md §2.13.1.2）。
+店の種類ごとの傾向を決めるのは `340_shop_lineup`（ゲームの売買の間にプロンプトの1文を差し替える）で、
+品揃えを自分の頼みで作り直すのは `312_shop_restock`（入れ替え）。
+`instantale_modloader/shop_lineup.py` で、傾向の一文を作る側へ渡す。
+
+```python
+shop_lineup.provide(owner, ctx, fn, exclude=fn2)   # 傾向を決める側。apply() の中。fn(facility) -> 傾向の一文 / None、fn2(facility) -> 並べない品の種類 / None
+text, by = shop_lineup.lineup_of(facility)         # 品を作る側。頼みを組むとき。誰も口を出さなければ (None, None)
+kinds = shop_lineup.excluded_of(facility)          # 並べない品の種類（小文字の item_type の tuple）。誰も口を出さなければ空
+```
+
+| 決まり | 理由 |
+|---|---|
+| 登録の新しいものから聞き、最初に文を返した登録を使う（`by` はその持ち主） | 傾向は1つの文で、混ぜると矛盾した頼みになる。後から当てた MOD が上書きできるようにする |
+| 誰も口を出さなければ、作る側は自分の既定の文を使う（312 はゲームと同じく武器と防具を含めさせる） | 340 が無くても入れ替えは動く |
+| 並べない種類は、作る側が頼みの語彙・返ってきた品・雛形からの作り直しの全部で外す | 頼みで止めても LLM は返すことがある。雛形に残った品を作り直すと、入れ替えのたびに戻ってくる |
+| 登録は持ち主ごとに1つ。登録した ctx が用済みなら聞かない。`fn` が投げたら口を出さなかったものとみなす（`errors` に残す） | `talk_affinity`（§3.3.8）と同じ |
+
+置き場は `sys` の属性（`_instantale_shop_lineup`）。検査は `tools\tests\test_shop_lineup.py` と `test_shop_restock.py`。
 
 ### 3.4 まだ現れていない対象を狙う（保留と当て直し）
 
@@ -2512,7 +2535,7 @@ GUI の1行に収めると「JSON を手で書く欄」になり、コードを�
 | `apply(ctx)` に渡る `ctx` | §3.1 / §3.6 / §3.8 / §3.11 |
 | `mod.json` の鍵 | §3.1 / §3.2 / §3.8 / §3.9 / §3.12 |
 | §5 の共通部品（`ui` / `frames` / `llm` / `state` / `jobs` / `modnpc` / `modfacility` / `prices` / `sounds` / `imagegen`） | §5 |
-| 使い方を書いた窓口（`durations` / `prices` / `combat` / `equipment` / `arrivals` / `loads` / `talk_affinity` / `talk_summary` / `ids` / `npcs` / `saves` / `wanted` / `guards` / `defeat` / `board` / `confinement` / `choices` / `hudicons` / `quest_claims` / `holdings` / `save_lookup`） | §3.2.3 / §3.3 |
+| 使い方を書いた窓口（`durations` / `prices` / `combat` / `equipment` / `arrivals` / `loads` / `talk_affinity` / `talk_summary` / `ids` / `npcs` / `saves` / `wanted` / `guards` / `defeat` / `board` / `confinement` / `choices` / `hudicons` / `quest_claims` / `holdings` / `save_lookup` / `shop_lineup`） | §3.2.3 / §3.3 |
 
 これ以外は内部で、予告なく変わる。
 `patch.py` の `_defer_if_*` や `__init__.py` の `_order()` のような
@@ -2994,7 +3017,7 @@ screen.paint(app) / screen.paint_party(app) / screen.refresh(app) / screen.say(a
 | `start_phase` | 自前フェーズを `PhaseSpec` に載せずに起こす。待機中なら回っている点送りを外してから（`process_choice` が自分で1本始めるので、残すと2本になる。GAME.md §2.4） |
 | `end_conversation` | 画面のボタンの args を写し `end_text` だけ差し替えて閉じ、閉じ終わってから続きを実行 |
 | `when_idle` | `is_adding_text` / `is_button_enabled` / `is_popup_window_opened` を見張る |
-| `busy_on` / `busy_off` | LLM を待つ間の待機表示（ゲーム自身と同じ形。GAME.md §2.4）。点はゲームが送る。こちらは旗を下ろし、回っていなければ1回だけ回し始める。枠に点が出ていればその点を一覧に書く（ゲームが待機を終えた直後の塗りも点になる）。直に触るのは旗と一覧だけなので、ワーカースレッドからも呼べる。`busy_off(restore=False)` は「この後すぐ別の画面を出す」経路用。ゲーム自身の `execute` の中（押された選択肢の処理の途中）では重ねない。ゲームが旗を下ろして点を送っている最中なので、`busy_on` は下ろされた旗を覚え、`busy_off` がそれを戻し、画面が出た後も選択肢が押せないまま残る（`918_` の DOC.md §2.5） |
+| `busy_on` / `busy_off` | LLM を待つ間の待機表示（ゲーム自身と同じ形。GAME.md §2.4）。点はゲームが送る。こちらは旗を下ろし、回っていなければ1回だけ回し始める。枠に点が出ていればその点を一覧に書く（ゲームが待機を終えた直後の塗りも点になる）。直に触るのは旗と一覧だけなので、ワーカースレッドからも呼べる。`busy_off(restore=False)` は「この後すぐ別の画面を出す」経路用。ゲーム自身の `execute` の中（押された選択肢の処理の途中）では、ゲームが点を出した後に重ねない。ゲームが旗を下ろして点を送っている最中なので、`busy_on` は下ろされた旗を覚え、`busy_off` がそれを戻し、画面が出た後も選択肢が押せないまま残る（`918_` の DOC.md §2.5）。ゲームが点を出す前に待つ包みは出す。売買の `execute` の入口がそうで、ゲームの点は中の `shopping_start_method_1` から出るので、入口で LLM を待つ間は選択肢がそのまま見えていた（`341_`。VERIFICATION.md §3.114） |
 
 `Screen` の操作はゲームのスレッド（Kivy のメインスレッド）から呼ぶこと。
 `when_idle` は1回目の状態確認を、`end_conversation` は `app.process_choice` を、呼んだスレッドでその場で行う

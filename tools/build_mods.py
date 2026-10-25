@@ -190,7 +190,7 @@ BANDS = (
         "337_conversation_affinity",
         "338_town_incidents",
         "339_town_factions",
-        "340_inn_shop",
+        "340_shop_lineup",
         "341_shopkeeper_attitude",
         "342_attack_animations",
     )),

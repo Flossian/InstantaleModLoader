@@ -915,6 +915,11 @@
     "sheet": "w03",
     "source": "wear/wear_cyber2.png",
     "name": "防具類_サイバーパンク2"
+   },
+   {
+    "sheet": "wch1",
+    "source": "wear/wear_cyber_headgear_redo.png",
+    "name": "防具類_サイバーパンクの頭（描き直し）"
    }
   ]
  },

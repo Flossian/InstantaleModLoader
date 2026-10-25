@@ -508,7 +508,7 @@ display_button_load(dt)             True を見て今の一覧を塗り、予約
   画面のボタンを読むだけで相手が分かる（`ConversationStartManager` を追跡する必要は無い）
 - 店の主と話すと、会話のボタンの先頭に施設の入口が付く（店は `売買する`）。
   足す施設の種類は `conversation_start_method_3` の決め打ちで、exe の定数は `general_store` / `specialty_shop` / `medical_facility` → `ShoppingStartManagerRemake`、`blacksmith` → `EquipmentReinforcementStart`。
-  施設の `choices` は見ないので、宿屋の `choices` に `売買する` を足しても会話には出ない（`340_` が自分で入れる。VERIFICATION §3.105）
+  施設の `choices` は見ないので、宿屋と鍛冶屋の `choices` に `売買する` を足しても会話には出ない（`340_` が自分で入れる。VERIFICATION §3.105 / §3.114）
 - 会話中の `app.buttons` は「会話を終了する」1個だけ。
   会話画面も施設と同じ選択肢リストを使うので、自前の選択肢はその手前に挿す
 - 会話は「状態」であって画面ではない。
@@ -3622,7 +3622,7 @@ LLM はローカル（Fenrir-X-26B-A4B、llama-server の `--parallel 1`）、�
 | `area` | 2 | 44秒 | 0 | 0 | 集落の詳細と依頼。1件で残りが約60件増える（背景・モンスター・人物・店） |
 | `story` | 5 | 15秒 | 0 | 0 | 固定の依頼。1件で背景5件・モンスター4〜6件増える |
 | `npc` | 71 | 1.5秒 | 0 | 0 | 人物の詳細 |
-| `shop` | 60 | 3.1秒 | 0 | 0 | 店の品。1軒を `(1/3)`〜`(3/3)` の3件に分ける |
+| `shop` | 60 | 3.1秒 | 0 | 0 | 店の品。1軒を `(1/3)`〜`(3/3)` の3件に分ける。仕事の `ids` は `(エリア, ノード, 施設, 段)`。頼みは売買と同じ `shop_item_generator_ordinary` / `shop_additional_item_generator_ordinary`（exe の定数。`340_` が店の種類で差し替える。VERIFICATION §3.114） |
 | `portrait` | 71 | 12.0秒 | 9.0秒 | 2枚（素描 1.9秒・仕上げ 7.7秒） | 人物の立ち絵。5件は絵を描かずに済んだ |
 | `background` | 316 | 7.2秒 | 6.3秒 | 1枚 | 背景 |
 | `monster` | 107 | 14.3秒 | 10.3秒 | 1枚 | モンスターの絵 |

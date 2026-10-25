@@ -463,19 +463,45 @@ def apply(ctx):
         new = retired.get("{}/{}".format(slot, key))
         return None if new is None else "{}{}/{}.png".format(norm[:at + len(marker)], slot, new)
 
+    def remapped(src, where):
+        """足した絵のパスが見つからなければ、付け替え先のパス。付け替えないなら None。"""
+        if not (isinstance(src, str) and IMAGE_REL.replace(os.sep, "/") in src.replace("\\", "/")) or visible(src):
+            return None
+        new = replacement(src)
+        if new is not None and visible(new):
+            retire_log("retired: {} -> {}{}".format(src, new, where))
+            return new
+        if seen.get(("missing", src)) is None:
+            seen[("missing", src)] = True
+            retire_log("retired: no image for {}".format(src))
+        return None
+
     @ctx.wrap("scripts.items:Item.__init__", required=False, safe=True)
     def item_init(orig, self, *args, **kwargs):
         result = orig(self, *args, **kwargs)
-        src = getattr(self, "image_src", None)
-        if isinstance(src, str) and IMAGE_REL.replace(os.sep, "/") in src.replace("\\", "/") and not visible(src):
-            new = replacement(src)
-            if new is not None and visible(new):
-                self.image_src = new
-                retire_log("retired: {} -> {}".format(src, new))
-            elif seen.get(("missing", src)) is None:
-                seen[("missing", src)] = True
-                retire_log("retired: no image for {}".format(src))
+        new = remapped(getattr(self, "image_src", None), "")
+        if new is not None:
+            self.image_src = new
         return result
+
+    # 品の絵を描く所（所持品・装備欄・売買・クラフトの窓が同じ部品を組む）でも付け替える。
+    # 読み込みが起動直後の当て直しの最中に重なると `Item.__init__` の包みが抜けていて、
+    # 品は外した鍵のまま作られる（10-23 にテストワールドで白い枠が残った。VERIFICATION.md §3.26）。
+    # 描く前に直せば、どの入れ物の品でも、読み込みの時刻によらず白い枠にならない。品の `image_src` も直すので次の保存で残る
+    @ctx.wrap("scripts.hud.new_hud:InventoryItem.__init__", required=False, safe=True)
+    def inventory_item_init(orig, self, *args, **kwargs):
+        # InventoryItem.__init__(self, width_slots, height_slots, image_src, rarity, text, item_id, item_instance, inventory)
+        src = args[2] if len(args) > 2 else kwargs.get("image_src")
+        new = remapped(src, " (shown)")
+        if new is not None:
+            if len(args) > 2:
+                args = args[:2] + (new,) + tuple(args[3:])
+            else:
+                kwargs = dict(kwargs, image_src=new)
+            item = args[6] if len(args) > 6 else kwargs.get("item_instance")
+            if item is not None and getattr(item, "image_src", None) == src:
+                item.image_src = new
+        return orig(self, *args, **kwargs)
 
     # 無ければローダの保留に積んで降りる（`patch.await_module`）。来たらローダが当て直す。
     # `sys.modules` を見て自分で降りると保留に載らず、ほかに保留が無い構成ではその起動で一度も当たらない。

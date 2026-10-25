@@ -1,15 +1,29 @@
 {
-  "entry": "inn_shop.py",
+  "entry": "shop_lineup.py",
   "api": 1,
   "kind": "feature",
   "name": {
-    "en": "Buy and sell food and drink at inns",
-    "ja": "宿屋で食べ物・飲み物・酒を売り買いできる"
+    "en": "Trade at inns and blacksmiths, and give each shop type its own lineup",
+    "ja": "宿屋と鍛冶屋でも売買でき、店の種類ごとに品揃えの傾向が付く"
   },
   "description": {
-    "en": "Adds the game's own \"Trade\" to inns. The lineup is made by the game, told to stock mainly food, drinks and liquor instead of weapons and armor. Selling works as in any shop",
-    "ja": "宿屋にゲーム自身の「売買する」を足す。品揃えはゲームが作り、武器と防具の代わりに食料・飲み物・酒を中心に並べるよう指示する。売る側は店と同じ"
+    "en": "Adds the game's own \"Trade\" to inns and blacksmiths, on the facility screen and when talking to the owner. The lineup is made by the game; instead of always asking for a weapon and a piece of armor, the request leans by shop type: general stores stock a bit of everything, blacksmiths mainly weapons and armor, inns mainly food and drink with a few healing items, clinics mainly healing items and medicine, specialty shops what their sign says. Other items may still mix in (weapons and armor at inns and clinics can be turned off). Selling works as in any shop",
+    "ja": "宿屋と鍛冶屋に、ゲーム自身の「売買する」を足す（施設の画面と、主との会話）。品揃えはゲームが作り、どの店にも武器と防具を1つずつ作らせる指示を、店の種類ごとの傾向に替える。雑貨屋は幅広く、鍛冶屋は武器・防具、宿屋は料理・飲み物・酒に回復薬を少し、診療所は回復薬・薬、専門店は看板に合う品が中心。ほかの品が混じるのは止めない（宿屋と診療所の武器・防具は設定で止められる）。売る側は店と同じ"
   },
   "version": "1",
-  "author": "R01/Flossian"
+  "author": "R01/Flossian",
+  "settings": {
+    "MIXED_GEAR": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "店の種類に合わない武器・防具も並べる",
+        "en": "Let off-type weapons and armor mix in"
+      },
+      "note": {
+        "ja": "ゲームはどの店にも武器と防具を1つずつ作らせる。切ると、宿屋と診療所では武器・防具を作らない（頼みで止め、返ってきても棚に入れない。312 の入れ替えでも同じ）。初めて開いた店で外したときは、その店の傾向の品を2〜6品足す。すでに棚にある品はそのまま",
+        "en": "The game asks every shop for one weapon and one piece of armor. When off, inns and clinics make no weapons or armor (the request says so, and any that still come back stay off the shelf, also in 312's restock). When a first-opened shop loses gear this way, 2 to 6 items of its kind are added. Items already on the shelf stay"
+      }
+    }
+  }
 }

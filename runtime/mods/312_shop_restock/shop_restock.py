@@ -174,7 +174,7 @@ id は採番台帳から採る（`ids.claim`）。
 import sys
 import typing
 
-from instantale_modloader import frames, ids, llm, ui
+from instantale_modloader import frames, ids, llm, shop_lineup, ui
 from instantale_modloader.state import WorldStore
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
@@ -213,10 +213,9 @@ ITEM_TYPES = {
 }
 RARITIES = ("common", "rare", "magical", "epic", "legendary", "mythic")
 
-# 宿屋（`340_inn_shop` が売買の入口を足す）。入れ替えでも食べ物と飲み物で作り直し、
-# 武器・防具・素材は作らない（新しい品揃えの頼み・LLM の返り・雛形からの作り直しの3か所）。
-INN_TYPE = "inn"
-INN_DROP_TYPES = ("weapon", "wearable", "material")
+# 店の種類ごとの品揃えの傾向（`340_shop_lineup` がローダの窓口 `shop_lineup` に出す一文）。
+# 誰も口を出さなければ、ゲームのプロンプトと同じく武器と防具を含めさせる。
+DEFAULT_LINEUP = "武器と防具をそれぞれ1つ以上含める。"
 
 # 周回ごとの控えの置き場。
 # `state/` の下（消すと入れ替えの間隔が巻き戻る）。
@@ -592,9 +591,10 @@ def apply(ctx):
         entries = goods_entries(pending["facility"])
         if not entries:
             return
-        if is_inn(pending["facility"]):
-            entries = [entry for entry in entries
-                       if str(entry.get("item_type") or "").lower() not in INN_DROP_TYPES]
+        # 窓口が「並べない」とした種類（340 の設定で、宿屋と診療所の武器・防具）は雛形からも作り直さない。
+        excluded = shop_lineup.excluded_of(pending["facility"])
+        entries = [entry for entry in entries
+                   if str(entry.get("item_type") or "").lower() not in excluded]
         app = pending["app"]
         owner = pending["owner"]
         present = {item_name(item) for item in inventory.values()}
@@ -641,8 +641,13 @@ def apply(ctx):
         return llm.create_structure(ctx, "ShopStock", {
             "items": (typing.List[item], ...)}, label="shop restock")
 
-    def is_inn(facility):
-        return frames.attr(facility, "facility_type", "") == INN_TYPE
+    def lineup_of(facility):
+        """その店の品揃えの傾向の一文。窓口に誰も居なければ既定の文。"""
+        text, by = shop_lineup.lineup_of(facility)
+        if text:
+            write("new stock: lineup of {} from {}".format(
+                frames.attr(facility, "facility_type", ""), by))
+        return text or DEFAULT_LINEUP
 
     def stock_messages(pending, values):
         """入れ替え1回ぶんの頼み文。場所は施設と土地、価値は雛形の値をそのまま。"""
@@ -651,12 +656,10 @@ def apply(ctx):
         area = ui.current_area(app)
         old_names = sorted({item_name(i) for i in pending["snapshot"].values()}
                            - {"?"})
-        inn = is_inn(facility)
+        excluded = shop_lineup.excluded_of(facility)
         types = "、".join("{}: {}".format(t, "/".join(subs))
-                          for t, subs in ITEM_TYPES.items()
-                          if not (inn and t in INN_DROP_TYPES))
-        lineup = ("ここは宿なので、食料・飲み物・酒を中心に並べる。武器・防具・素材は作らない。"
-                  if inn else "武器と防具をそれぞれ1つ以上含める。")
+                          for t, subs in ITEM_TYPES.items() if t not in excluded)
+        lineup = lineup_of(facility)
         text = (
             "あなたはRPGの売買イベントの管理者だ。\n【指示】\n"
             "店主が仕入れを入れ替えた。この店に新しく並ぶ商品を{n}個作れ。"
@@ -747,13 +750,13 @@ def apply(ctx):
                 type(raw).__name__))
             return 0
         made = []
-        inn = is_inn(pending["facility"])
+        excluded = shop_lineup.excluded_of(pending["facility"])
         for index, row in enumerate(rows[:len(values)]):
             fields = tidy(row, values[index])
             if fields is None:
                 continue
-            if inn and fields[2] in INN_DROP_TYPES:
-                write("new stock: skipped {!r} ({}) at an inn".format(fields[0], fields[2]))
+            if fields[2] in excluded:
+                write("new stock: skipped {!r} ({}) excluded by the shop lineup".format(fields[0], fields[2]))
                 continue
             before = set(inventory_of(owner) or {})
             try:

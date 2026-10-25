@@ -269,6 +269,33 @@ check("世界を読み直すと写しを置き直す", os.path.isfile(copy_of("t
 table = json.load(io.open(os.path.join(STATE, "item_image", os.listdir(os.path.join(STATE, "item_image"))[0]), encoding="utf-8"))
 check("対応表に頼まれた部位で残る", table["images"].get("tool/bandage") == "xs.medicine.5", table)
 
+# 品の絵を描く所でも、外した鍵の絵を付け替える（読み込みが当て直しの最中に重なり、品は外した鍵のまま作られた形）
+retired_table = json.load(io.open(os.path.join(MOD_DIR, "data", "retired.json"), encoding="utf-8"))
+gone, now_key = next(iter(retired_table.items()))
+slot, _, gone_key = gone.partition("/")
+gone_src = "Assets/images/item_candidates_dark/{}/{}.png".format(slot, gone_key)
+new_src = "Assets/images/item_candidates_dark/{}/{}.png".format(slot, now_key)
+game_dir = tempfile.mkdtemp()
+here = os.getcwd()
+os.chdir(game_dir)                                   # ゲームは自分のフォルダを起点に相対パスで絵を引く
+try:
+    os.makedirs(os.path.dirname(new_src))
+    io.open(new_src, "wb").write(b"png")
+    shown_ctx = FakeCtx()
+    mod.apply(shown_ctx)
+    shown = shown_ctx.hooks["scripts.hud.new_hud:InventoryItem.__init__"]
+    drawn = []
+    item = types.SimpleNamespace(image_src=gone_src)
+    shown(lambda self, *a, **k: drawn.append(a[2]), object(), 1, 1, gone_src, "common", "品", "item_1", item, None)
+    check("描く所で外した鍵の絵を付け替える", drawn == [new_src], drawn)
+    check("品の image_src も直す（次の保存で残る）", item.image_src == new_src, item.image_src)
+    kept = types.SimpleNamespace(image_src=new_src)
+    shown(lambda self, *a, **k: drawn.append(a[2]), object(), 1, 1, new_src, "common", "品", "item_2", kept, None)
+    check("見つかる絵は変えない", drawn[-1] == new_src and kept.image_src == new_src, drawn)
+finally:
+    os.chdir(here)
+    shutil.rmtree(game_dir, ignore_errors=True)
+
 shutil.rmtree(GAME, ignore_errors=True)
 print("")
 print("%d failed" % len(failures) if failures else "all passed")

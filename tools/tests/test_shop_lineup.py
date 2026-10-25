@@ -1,20 +1,21 @@
 # -*- coding: utf-8 -*-
-"""340_inn_shop をゲーム抜きで通す。
+"""340_shop_lineup をゲーム抜きで通す。
 
-    python tools/tests/test_inn_shop.py
+    python tools/tests/test_shop_lineup.py
 
 確認するもの:
 
-  入口     … 店の `choices["売買する"]` を写し、ゲームの宿屋の `choices` の先頭に足す（`出る` は残る）。
+  入口     … 店の `choices["売買する"]` を写し、ゲームの宿屋と鍛冶屋の `choices` の先頭に足す（`出る` は残る）。
              施設ごとに別の dict にする。店より先に生まれた宿屋は、店が生まれた時点で足す
-  除外     … MOD が建てた宿（`mod:` の施設・主が `mod:` の NPC）と、宿屋以外には足さない
+  除外     … MOD が建てた施設（`mod:` の施設・主が `mod:` の NPC）と、宿屋・鍛冶屋以外には足さない
   見回り   … 注入より前に生まれていた施設は、選択肢の組み直しの前に世界ごとに1回見回って足す
   素データ … `world_dict` に施設か主が無い宿屋（セーブエディタで足した宿）では入口とボタンを外す。
-             揃ったら足し直し、宿屋の画面のボタンに欠けていれば先頭に入れる（1度だけ）
-  会話     … 宿屋の主との会話のボタンの先頭に入れる（1度だけ）。主でない人・店の主・素データに無い宿屋の主には入れない
-  指示文   … 宿屋の売買の間だけ、ゲームの指示文の2文を差し替える。店では差し替えない。
-             終わったら目印を下ろす
-  棚       … 宿屋の売買の間は、武器・防具・素材を作らない。食べ物・道具は作る。店では全部作る
+             揃ったら足し直し、施設の画面のボタンに欠けていれば先頭に入れる（1度だけ）。鍛冶屋の画面にも入れる
+  会話     … 宿屋・鍛冶屋の主との会話のボタンの先頭に入れる（1度だけ）。主でない人・店の主・素データに無い宿屋の主には入れない
+  傾向     … 店の売買の間だけ、ゲームのプロンプトの2文を店の種類ごとの文へ差し替える。
+             雑貨屋の2文目と、店でない施設・MOD の施設は差し替えない。終わったら目印を下ろす。
+             品は種類で落とさない（混入は可）
+  窓口     … 傾向の一文を窓口 `shop_lineup` に出す（312 の入れ替えが聞く）
 """
 import importlib.util
 import io
@@ -28,7 +29,7 @@ import weakref
 HERE = os.path.dirname(os.path.abspath(__file__))
 RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
-OUT_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "out", "test", "inn_shop"))
+OUT_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "out", "test", "shop_lineup"))
 
 if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
@@ -48,7 +49,6 @@ def check(name, cond, detail=""):
 
 FACILITY_INIT = "__main__:Facility.__init__"
 SHOP_TARGET = "__main__:ShoppingStartManagerRemake.execute"
-ITEM_TARGET = "__main__:ShoppingStartManagerRemake.generate_item_in_shopping"
 REFRESH_TARGET = "__main__:InstantaleApp.refresh_choice_buttons"
 
 class PhaseSpec:
@@ -111,7 +111,7 @@ class Area:
 
 
 class FakeCtx:
-    _mod = "340_inn_shop"
+    _mod = "340_shop_lineup"
 
     def __init__(self, out_dir):
         self.out_dir = out_dir
@@ -151,10 +151,10 @@ def fake_wrap_outgoing(ctx, rewrite, **kw):
 def setup():
     shutil.rmtree(OUT_DIR, ignore_errors=True)
     os.makedirs(OUT_DIR, exist_ok=True)
-    folder = os.path.join(MODS_DIR, "340_inn_shop")
+    folder = os.path.join(MODS_DIR, "340_shop_lineup")
     with io.open(os.path.join(folder, "mod.json"), encoding="utf-8") as fh:
         entry = json.load(fh)["entry"]
-    spec = importlib.util.spec_from_file_location("inn_shop_mod", os.path.join(folder, entry))
+    spec = importlib.util.spec_from_file_location("shop_lineup_mod", os.path.join(folder, entry))
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     if hasattr(sys, module.STORE_ATTR):
@@ -170,7 +170,7 @@ def setup():
 
 
 def log_text():
-    path = os.path.join(OUT_DIR, "inn_shop.log")
+    path = os.path.join(OUT_DIR, "shop_lineup.log")
     if not os.path.exists(path):
         return ""
     with io.open(path, encoding="utf-8") as fh:
@@ -204,10 +204,12 @@ check("主が MOD の NPC なら足さない", list(mod_owner.choices) == ["出�
 no_owner = make_facility(ctx, "10", "inn", None)
 check("主が居なければ足さない", list(no_owner.choices) == ["出る"], no_owner.choices)
 guild = make_facility(ctx, "11", "guild", "6")
-check("宿屋以外には足さない", list(guild.choices) == ["出る"], guild.choices)
+check("宿屋・鍛冶屋以外には足さない", list(guild.choices) == ["出る"], guild.choices)
+smith = make_facility(ctx, "12", "blacksmith", "7")
+check("鍛冶屋にも足す", list(smith.choices) == ["売買する", "出る"], smith.choices)
 
 def module_store():
-    return getattr(sys, "_instantale_inn_shop_store")
+    return getattr(sys, "_instantale_shop_lineup_store")
 
 
 class FakeWorld(object):
@@ -228,7 +230,7 @@ app = types.SimpleNamespace(world=world, player=player, buttons=[])
 refresh = ctx.hooks[REFRESH_TARGET]
 refresh(lambda self, *a, **k: "drawn", app)
 check("見回りで宿屋に足す", list(old_inn.choices) == ["売買する", "出る"], old_inn.choices)
-check("見回りの記録", "sweep: 1 inn(s)" in log_text(), log_text())
+check("見回りの記録", "sweep: '売買する' added to {'inn': 1}" in log_text(), log_text())
 refresh(lambda self, *a, **k: "drawn", app)
 check("同じ世界は2度見回らない", log_text().count("sweep:") == 1, log_text())
 check("見回った世界は弱く持つ", isinstance(module_store()["swept"], weakref.ref), module_store()["swept"])
@@ -355,86 +357,277 @@ check("素データに無い宿屋の主との会話には入れない", "売買
       [e["text"] for e in app3.buttons])
 check("例外を出していない（会話）", not ctx.errors, ctx.errors)
 
-print("指示文と棚")
+print("鍛冶屋の画面と主との会話")
+module, ctx = setup()
+shop4 = make_facility(ctx, "3", "general_store", "1")
+smith4 = make_facility(ctx, "20", "blacksmith", "9")
+area4 = Area("5", [shop4, smith4])
+world4 = types.SimpleNamespace(name="テスト世界4", areas={"5": area4}, characters={})
+world_dict4 = {"areas": {"5": {"nodes": {"0": {"facilities": {"3": {}, "20": {}}}}}},
+               "npcs": {"1": {}, "9": {}}}
+player4 = types.SimpleNamespace(name="テストプレイヤー", current_area="5", location=smith4)
+app4 = types.SimpleNamespace(world=world4, player=player4, world_dict=world_dict4,
+                             buttons=[{"text": "装備の強化", "spec": Spec("EquipmentReinforcementStart")},
+                                      {"text": "出る", "spec": Spec("MovePhaseManager")},
+                                      {"text": "会話する", "spec": Spec("DisplayTalkChoice")}])
+refresh4 = ctx.hooks[REFRESH_TARGET]
+refresh4(lambda self, *a, **k: "drawn", app4)
+check("鍛冶屋の画面の先頭に 売買する", [e["text"] for e in app4.buttons] == ["売買する", "装備の強化", "出る", "会話する"],
+      [e["text"] for e in app4.buttons])
+check("鍛冶屋の画面に入れた記録", "on the current screen at blacksmith 20" in log_text(), log_text())
+app4.buttons = talk_buttons("9")
+refresh4(lambda self, *a, **k: "drawn", app4)
+check("鍛冶屋の主との会話の先頭に 売買する", app4.buttons[0]["text"] == "売買する",
+      [e["text"] for e in app4.buttons])
+check("例外を出していない（鍛冶屋）", not ctx.errors, ctx.errors)
+
+print("品揃えの傾向")
 check("送り口に1つ登録", len(REWRITES) == 1, REWRITES)
 rewrite = REWRITES[0]
-prompt = "【指示】\n" + GAME_SENTENCE_1 + "\n【エリアの構造】"
+prompt = "【指示】\n" + GAME_SENTENCE_1 + "\n【現在地】\nテスト{kind}"
 prompt_2 = "【指示】\n" + GAME_SENTENCE_2 + "\n【エリアの構造】"
 check("売買の外では差し替えない", rewrite([prompt], "chat") is None)
-
-made = []
 
 
 class Manager:
     def __init__(self, app):
         self.app = app
 
-    def generate_item_in_shopping(self, item_data, shop_owner_instance, item_stock_tier):
-        made.append(item_data["item_name"])
-
-
-def item(name, kind):
-    return {"item_name": name, "item_category": {"type": kind, "sub_type": "x"}, "value": 3}
-
 
 seen = {}
 
 
-def at_inn_orig(self, choice_text):
-    seen["texts"] = rewrite([prompt, prompt_2, "関係の無い頼み"], "chat")
-    hook = ctx.hooks[ITEM_TARGET]
-    for name, kind in (("剣", "weapon"), ("胸当て", "wearable"), ("鉄くず", "material"),
-                       ("煮込み", "healing_item"), ("麦酒", "consumable"), ("燭台", "utility")):
-        hook(Manager.generate_item_in_shopping, self, item(name, kind), None, 1)
-    return "shopping"
+def make_orig(kind):
+    def orig(self, choice_text):
+        seen["texts"] = rewrite([prompt.format(kind=kind), prompt_2, "関係の無い頼み"], "chat")
+        return "shopping"
+    return orig
 
 
-manager = Manager(app)
-result = ctx.hooks[SHOP_TARGET](at_inn_orig, manager, "売買する")
-texts = seen.get("texts") or ["", "", ""]
+def shop_at(kind, facility_id="30", owner="8"):
+    facility = make_facility(ctx, facility_id, kind, owner, hooked=False)
+    facility.config = {"goods": [{"item_category": {"type": "weapon"}}, {"item_category": {"type": "healing_item"}}]}
+    app5 = types.SimpleNamespace(world=world4, player=types.SimpleNamespace(location=facility, current_area="5"))
+    seen.clear()
+    result = ctx.hooks[SHOP_TARGET](make_orig(kind), Manager(app5), "売買する")
+    return result, seen.get("texts")
+
+
+result, texts = shop_at("inn")
 check("orig の戻り値をそのまま返す", result == "shopping", result)
-check("1文目を差し替える", GAME_SENTENCE_1 not in texts[0] and "食料・飲み物・酒" in texts[0], texts[0])
-check("2文目を差し替える", GAME_SENTENCE_2 not in texts[1] and "料理" in texts[1], texts[1])
+check("宿屋: 1文目を料理・飲み物・酒の文へ", GAME_SENTENCE_1 not in texts[0] and "料理・飲み物・酒" in texts[0]
+      and "回復薬" in texts[0], texts[0])
+check("宿屋: 2文目も差し替える", GAME_SENTENCE_2 not in texts[1] and "料理" in texts[1], texts[1])
 check("ほかの文はそのまま", texts[2] == "関係の無い頼み", texts[2])
-check("武器・防具・素材は作らない", made == ["煮込み", "麦酒", "燭台"], made)
-check("棚の記録", "dropped '剣'" in log_text() and "done at inn 7" in log_text(), log_text())
+check("終わりの記録（種類の内訳）", "done at inn 30: rewrites=2 dropped=0 goods=2" in log_text(), log_text())
+check("店の名前がプロンプトに載っていたかの記録", "shop name in prompt: yes" in log_text(), log_text())
 check("終わったら目印を下ろす", rewrite([prompt], "chat") is None)
+_r, texts = shop_at("blacksmith")
+check("鍛冶屋: 武器と防具が中心", "武器と防具が中心" in texts[0] and GAME_SENTENCE_1 not in texts[0], texts[0])
+check("鍛冶屋: 混入は可と頼む", "混じってもよい" in texts[0], texts[0])
+_r, texts = shop_at("medical_facility")
+check("診療所: 回復薬・ポーション・薬", "回復薬・ポーション・薬" in texts[0], texts[0])
+_r, texts = shop_at("specialty_shop")
+check("専門店: 看板に合う品", "店の名前と説明に合う" in texts[0] and "看板に合う品を二つ" in texts[1], texts)
+_r, texts = shop_at("general_store")
+check("雑貨屋: 幅広く", "幅広く" in texts[0] and GAME_SENTENCE_1 not in texts[0], texts[0])
+check("雑貨屋: 2文目はゲームのまま", texts[1] == prompt_2, texts[1])
+_r, texts = shop_at("guild")
+check("店でない施設は差し替えない", texts is None, texts)
+_r, texts = shop_at("blacksmith", facility_id="mod:331_facility_investment:smith")
+check("MOD の施設は差し替えない", texts is None, texts)
 
-print("店では素のまま")
-made.clear()
-player.location = old_shop
+print("世界の一括生成の店の仕事")
+BULK_TARGET = "scripts.world_bulk_backend:GameGenerationBackend.generate"
+bulk_world = {"areas": {"0": {"nodes": {"0": {"facilities": {
+    "5": {"name": "テスト診療所", "facility_type": "medical_facility", "owner": "8", "config": {}},
+    "6": {"name": "テスト役場", "facility_type": "administrative_office", "owner": "9", "config": {}}}}}}}}
+
+
+def bulk_orig(kind):
+    def orig(self, task, world):
+        seen["texts"] = rewrite([prompt.format(kind=kind), prompt_2], "chat")
+        world["areas"]["0"]["nodes"]["0"]["facilities"][task.ids[2]]["config"]["goods"] = [
+            {"item_category": {"type": "healing_item"}}]
+        return "made"
+    return orig
+
+
 seen.clear()
-ctx.hooks[SHOP_TARGET](at_inn_orig, manager, "売買する")
-check("店では差し替えない", seen.get("texts") is None, seen)
-check("店では全部作る", len(made) == 6, made)
+task = types.SimpleNamespace(kind="shop", ids=("0", "0", "5", 1), label="テスト診療所 (1/3)")
+result = ctx.hooks[BULK_TARGET](bulk_orig("診療所"), object(), task, bulk_world)
+check("一括生成: orig の戻り値をそのまま返す", result == "made", result)
+check("一括生成: 診療所の傾向へ差し替える", "回復薬・ポーション・薬" in (seen.get("texts") or [""])[0], seen)
+check("一括生成: 終わりの記録", "bulk done at medical_facility 5 'テスト診療所 (1/3)': rewrites=2 dropped=0 goods=1" in log_text(),
+      log_text())
+check("一括生成: 終わったら目印を下ろす", rewrite([prompt], "chat") is None)
+seen.clear()
+ctx.hooks[BULK_TARGET](bulk_orig("役場"), object(), types.SimpleNamespace(kind="shop", ids=("0", "0", "6", 1)), bulk_world)
+check("一括生成: 店でない施設は差し替えない", seen.get("texts") is None, seen)
+seen.clear()
+ctx.hooks[BULK_TARGET](lambda self, task, world: "npc", object(), types.SimpleNamespace(kind="npc", ids=("3",)), bulk_world)
+check("一括生成: 店の仕事でなければ触らない", seen.get("texts") is None and not ctx.errors, (seen, ctx.errors))
 
-print("引数はそのまま渡す")
-passed = {}
-
-
-def tier_default(self, item_data, shop_owner_instance=None, item_stock_tier=2):
-    passed["tier"] = item_stock_tier
-    passed["item"] = item_data["item_name"]
-
-
-ctx.hooks[ITEM_TARGET](tier_default, manager, item_data=item("剣", "weapon"))
-check("店で省いた段は既定のまま", passed.get("tier") == 2, passed)
-player.location = inn
-passed.clear()
-
-
-def at_inn_keyword(self, choice_text):
-    hook = ctx.hooks[ITEM_TARGET]
-    hook(tier_default, self, item_data=item("煮込み", "healing_item"))
-    hook(tier_default, self, item_data=item("剣", "weapon"))
-    return "shopping"
+print("合わない武器・防具（設定 MIXED_GEAR）")
+ITEM_TARGET = "__main__:ShoppingStartManagerRemake.generate_item_in_shopping"
+made = []
 
 
-ctx.hooks[SHOP_TARGET](at_inn_keyword, manager, "売買する")
-check("宿で名前付きの品も見分ける", passed.get("item") == "煮込み", passed)
-check("宿で省いた段は既定のまま", passed.get("tier") == 2, passed)
-player.location = old_shop
+def gear_orig(kind):
+    def orig(self, choice_text):
+        seen["texts"] = rewrite([prompt.format(kind=kind), prompt_2], "chat")
+        hook = ctx.hooks[ITEM_TARGET]
+        for name, cat in (("剣", "weapon"), ("胸当て", "wearable"), ("煮込み", "healing_item"), ("鉄くず", "material")):
+            hook(lambda s, item_data, *a, **k: made.append(item_data["item_name"]), self,
+                 {"item_name": name, "item_category": {"type": cat}}, None, 1)
+        return "shopping"
+    return orig
+
+
+def gear_shop(kind):
+    facility = make_facility(ctx, "40", kind, "8", hooked=False)
+    facility.config = {}
+    app6 = types.SimpleNamespace(world=world4, player=types.SimpleNamespace(location=facility, current_area="5"))
+    seen.clear()
+    del made[:]
+    ctx.hooks[SHOP_TARGET](gear_orig(kind), Manager(app6), "売買する")
+    return facility
+
+
+check("既定は混ぜる", module.MIXED_GEAR is True)
+gear_shop("inn")
+check("既定: 宿屋でも武器・防具を作る", made == ["剣", "胸当て", "煮込み", "鉄くず"], made)
+check("既定: 作らないとは頼まない", "武器と防具は作らない" not in seen["texts"][0], seen["texts"][0])
+module.MIXED_GEAR = False
+inn6 = gear_shop("inn")
+check("切: 宿屋は武器と防具を作らないと頼む", "武器と防具は作らない" in seen["texts"][0]
+      and "武器と防具は作らない" in seen["texts"][1], seen["texts"])
+check("切: 宿屋で返ってきた武器・防具は作らない（素材は残す）", made == ["煮込み", "鉄くず"], made)
+check("切: 外した記録", "dropped '剣' (weapon) at inn 40" in log_text() and "dropped=2" in log_text(), log_text())
+TEMPLATE_TARGET = "__main__:ShoppingStartManagerRemake.set_item_from_world_data"
+keeper = types.SimpleNamespace(inventory=types.SimpleNamespace(inventory={"old": types.SimpleNamespace(name="前の剣", item_type="weapon")}))
+
+
+def template_orig(kind):
+    def orig(self, choice_text):
+        def lay(s, shop_owner_instance, next_tier):
+            stock = shop_owner_instance.inventory.inventory
+            for key, name, cat in (("n1", "短剣", "weapon"), ("n2", "胸当て", "wearable"), ("n3", "薬草", "healing_item")):
+                stock[key] = types.SimpleNamespace(name=name, item_type=cat)
+        ctx.hooks[TEMPLATE_TARGET](lay, self, keeper, 1)
+        return "shopping"
+    return orig
+
+
+def template_shop(kind):
+    facility = make_facility(ctx, "41", kind, "8", hooked=False)
+    facility.config = {}
+    app7 = types.SimpleNamespace(world=world4, player=types.SimpleNamespace(location=facility, current_area="5"))
+    keeper.inventory.inventory = {"old": types.SimpleNamespace(name="前の剣", item_type="weapon")}
+    ctx.hooks[SHOP_TARGET](template_orig(kind), Manager(app7), "売買する")
+    return sorted(keeper.inventory.inventory)
+
+
+check("切: 雛形から並べた武器・防具も外す（前からの品は残す）", template_shop("medical_facility") == ["n3", "old"],
+      template_shop("medical_facility"))
+check("切: 雛形から外した記録", "dropped '短剣' (weapon) from the stock template at medical_facility 41" in log_text(),
+      log_text())
+check("切: 鍛冶屋の雛形は外さない", template_shop("blacksmith") == ["n1", "n2", "n3", "old"], keeper.inventory.inventory)
+
+# 棚が空から並べた回（初めて開いた店）で武器・防具を外したら、傾向の品を 2〜6 品足す。
+asked_fill = []
+
+
+def fake_ask(ctx_, manager, messages, **kw):
+    asked_fill.append(messages[0]["content"])
+    return {"items": [
+        {"item_name": "足した薬", "description": "", "item_type": "healing_item", "item_sub_type": "medicine",
+         "value": 99, "item_appearance": "a jar", "rarity": "common"},
+        {"item_name": "足した剣", "description": "", "item_type": "weapon", "item_sub_type": "small",
+         "value": 30, "item_appearance": "a sword", "rarity": "common"},
+        {"item_name": "足した札", "description": "", "item_type": "consumable", "item_sub_type": "nope",
+         "value": "x", "item_appearance": "a charm", "rarity": "odd"},
+        {"item_name": "足した茶", "description": "", "item_type": "healing_item", "item_sub_type": "drink",
+         "value": 20, "item_appearance": "tea", "rarity": "rare"},
+        {"item_name": "足した包帯", "description": "", "item_type": "utility", "item_sub_type": "tool",
+         "value": 20, "item_appearance": "bandage", "rarity": "common"},
+        {"item_name": "足した軟膏", "description": "", "item_type": "healing_item", "item_sub_type": "medicine",
+         "value": 20, "item_appearance": "salve", "rarity": "common"}]}
+
+
+built = []
+
+
+def fill_shop(kind, start_empty=True):
+    facility = make_facility(ctx, "42", kind, "8", hooked=False)
+    facility.config = {"goods": [{"value": 31, "stock_tier": 1, "item_type": "weapon"}, {"value": 33, "stock_tier": 1, "item_type": "healing_item", "name": "雛形の湿布"}, {"value": 50, "stock_tier": 2}]}
+    stock = {} if start_empty else {"old": types.SimpleNamespace(name="前の薬", item_type="healing_item")}
+
+    def maker(*fields):
+        built.append(fields)
+        fields[-1].inventory.inventory["m{}".format(len(built))] = types.SimpleNamespace(name=fields[0], item_type=fields[2])
+    app8 = types.SimpleNamespace(world=world4, player=types.SimpleNamespace(location=facility, current_area="5"),
+                                 generate_item_from_item_data=maker)
+    keeper.inventory.inventory = stock
+
+    def orig(self, choice_text):
+        def lay(s, shop_owner_instance, next_tier):
+            for key, name, cat in (("n1", "短剣", "weapon"), ("n3", "薬草", "healing_item")):
+                shop_owner_instance.inventory.inventory[key] = types.SimpleNamespace(name=name, item_type=cat)
+        ctx.hooks[TEMPLATE_TARGET](lay, self, keeper, 1)
+        return "shopping"
+    del asked_fill[:]
+    del built[:]
+    ctx.hooks[SHOP_TARGET](orig, Manager(app8), "売買する")
+
+
+saved_ask, saved_structure, saved_randint = llm.ask, llm.create_structure, module.random.randint
+llm.ask = fake_ask
+llm.create_structure = lambda *a, **k: object()
+module.random.randint = lambda lo, hi: hi
+try:
+    fill_shop("medical_facility")
+    names = sorted(item.name for item in keeper.inventory.inventory.values())
+    check("足す: 初めての棚で武器を外したら傾向の品を足す", "足した薬" in names and "足した茶" in names and "短剣" not in names, names)
+    check("足す: 頼みは 2〜6 の上限の数・段の値・傾向・棚の品", asked_fill and "あと6個" in asked_fill[0]
+          and "[31, 33, 31, 33, 31, 33]" in asked_fill[0] and "回復薬・ポーション" in asked_fill[0]
+          and "武器と防具は作らない" in asked_fill[0] and "雛形の湿布" in asked_fill[0], asked_fill)
+    check("足す: 頼みの語彙に武器・防具が無い", asked_fill and "weapon:" not in asked_fill[0] and "wearable:" not in asked_fill[0])
+    check("足す: 返ってきた武器は作らない", all(f[2] != "weapon" for f in built), built)
+    check("足す: 外れた値は寄せる（価値 1〜70・段の値・細分・希少度）",
+          built[0][4] == 70 and built[1][3] == "food" and built[1][4] == 31 and built[1][6] == "common", built)
+    check("足す: 記録", "filled 5 of 6 item(s) at medical_facility 42" in log_text(), log_text())
+    fill_shop("medical_facility", start_empty=False)
+    check("足す: 前から品のある棚には足さない", asked_fill == [] and built == [], (asked_fill, built))
+    module.MIXED_GEAR = True
+    fill_shop("medical_facility")
+    check("足す: 混ぜる設定なら足さない", asked_fill == [] and built == [], (asked_fill, built))
+    module.MIXED_GEAR = False
+finally:
+    llm.ask, llm.create_structure, module.random.randint = saved_ask, saved_structure, saved_randint
+gear_shop("medical_facility")
+check("切: 診療所も外す", made == ["煮込み", "鉄くず"], made)
+gear_shop("blacksmith")
+check("切: 鍛冶屋は外さない", made == ["剣", "胸当て", "煮込み", "鉄くず"], made)
+gear_shop("specialty_shop")
+check("切: 専門店は外さない（看板が武器のこともある）", made == ["剣", "胸当て", "煮込み", "鉄くず"], made)
+from instantale_modloader import shop_lineup  # noqa: E402
+check("切: 窓口が宿屋の武器・防具を並べない種類として出す", shop_lineup.excluded_of(inn6) == ("weapon", "wearable"),
+      shop_lineup.excluded_of(inn6))
+check("切: 窓口の傾向にも一文が入る", "武器と防具は作らない" in (shop_lineup.lineup_of(inn6)[0] or ""))
+module.MIXED_GEAR = True
+check("入: 雛形の武器・防具も外さない", template_shop("medical_facility") == ["n1", "n2", "n3", "old"], keeper.inventory.inventory)
+check("入: 窓口は並べない種類を出さない", shop_lineup.excluded_of(inn6) == (), shop_lineup.excluded_of(inn6))
+check("例外を出していない（武器・防具）", not ctx.errors, ctx.errors)
+
+print("窓口 shop_lineup")
+from instantale_modloader import shop_lineup  # noqa: E402
+inn5 = make_facility(ctx, "31", "inn", "8", hooked=False)
+text, by = shop_lineup.lineup_of(inn5)
+check("宿屋の傾向を出す", text == module.LINEUPS["inn"]["tendency"] and by == "340_shop_lineup", (text, by))
+check("店でない施設には口を出さない", shop_lineup.lineup_of(make_facility(ctx, "32", "guild", "8", hooked=False)) == (None, None))
 check("例外を出していない（最後）", not ctx.errors, ctx.errors)
+shop_lineup.reset()
 
 if failures:
     print("FAILED: " + ", ".join(failures))
