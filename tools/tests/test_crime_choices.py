@@ -270,6 +270,41 @@ try:
 finally:
     office.underworld.unlocked = unlocked
 
+print("[事務所] 依頼人の窓口と、片付いた依頼の控え")
+from instantale_modloader import board as loader_board  # noqa: E402
+from instantale_modloader import quest_clients  # noqa: E402
+with common._store()["worlds"].lock:
+    key = common._store()["worlds"].playthrough(app)
+    bucket = common._store()["worlds"].load(key)
+    bucket["underworld"] = {"77": {"kind": "smuggle", "area": "", "client": "1"},
+                            "76": {"kind": "smuggle", "area": ""}}           # 版3までの控え（依頼人の id が無い）
+    bucket["rescue"] = {"quest": "80", "area": "", "name": "手引き役", "title": "処刑場からの脱出", "client": "5"}
+    common.remember_past(bucket, "78", "済んだ密輸", client="1")
+    common.remember_past(bucket, "79", "前の周回の題", client="1")
+check("片付いた依頼の控えに題と依頼人を残す",
+      bucket[common.PAST_KEY]["78"] == {"title": "済んだ密輸", "client": "1", "name": ""}, bucket.get(common.PAST_KEY))
+app.world.quests = {"77": types.SimpleNamespace(quest_title="密輸の仕事", config={"status": "incomplete"}),
+                    "78": types.SimpleNamespace(quest_title="済んだ密輸", config={"status": "completed"}),
+                    "79": types.SimpleNamespace(quest_title="別の依頼", config={"status": "completed"})}
+ui_quest_of = ui.quest_of
+ui.quest_of = lambda a, qid: a.world.quests.get(str(qid))
+try:
+    rows = {row["quest"]: row for row in quest_clients.clients(app)}
+    check("進行中の裏の仕事の依頼人（事務所の主）を置く", rows.get("77", {}).get("npc_id") == "1", rows)
+    check("依頼人の id が無い控えは置かない", "76" not in rows, rows)
+    check("処刑場からの脱出の手引き役を置く",
+          rows.get("80", {}).get("npc_id") == "5" and rows["80"].get("npc_name") == "手引き役", rows)
+    check("片付いた依頼の依頼人も置く", rows.get("78", {}).get("npc_id") == "1", rows)
+    check("題の変わった id（作り直した周回）は置かない", "79" not in rows, rows)
+    hidden = loader_board.kept_off(app)
+    check("片付いた裏の仕事も掲示板に出さない依頼に数える", {"76", "77", "78", "80"} <= hidden and "79" not in hidden,
+          sorted(hidden))
+finally:
+    ui.quest_of = ui_quest_of
+    with common._store()["worlds"].lock:
+        for name in ("underworld", "rescue", common.PAST_KEY):
+            bucket.pop(name, None)
+
 # ================================================================ 前の版
 print("[前の版] セーブから戻った前の版の印")
 app.player.location = None

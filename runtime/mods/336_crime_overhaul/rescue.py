@@ -23,7 +23,7 @@ import time
 
 from instantale_modloader import choices, npcs, ui
 
-from . import rules, underworld
+from . import common, rules, underworld
 
 DEATH_SPEC = "ExecutionPhaseManager"
 #: MOD の人物の id の頭。パーティに入れられないので手引き役に選ばない。
@@ -253,7 +253,8 @@ def install(env):
         quest_id = added[-1]
         write_difficulty(app, quest_id, difficulty, "generated")
         title = ui.quest_value(ui.quest_of(app, quest_id), "quest_title", "")
-        save_rescue(app, {"quest": quest_id, "area": area_id, "name": name, "title": title})
+        save_rescue(app, {"quest": quest_id, "area": area_id, "name": name, "title": title,
+                          "client": str(npc_id)})
         write("rescue: {} (affinity {}) leads the escape; quest {} {!r} difficulty {}".format(
             name, affinity, quest_id, ui.quest_value(ui.quest_of(app, quest_id), "quest_title", ""),
             difficulty))
@@ -338,6 +339,12 @@ def install(env):
         if isinstance(before_gold, int) and isinstance(after_gold, int) and after_gold > before_gold:
             ui.add_gold(app, before_gold - after_gold)
         save_rescue(app, None)
+        playthrough = worlds.playthrough(app)
+        with worlds.lock:
+            # 片付いた後も、手引き役と表に出さない依頼の印を残す（`office` の `client_rows` / `kept_off`）。
+            common.remember_past(worlds.load(playthrough), rescue.get("quest"), rescue.get("title"),
+                                 client=rescue.get("client"), name=rescue.get("name"))
+            worlds.save(playthrough)
         lines = [FREE_TEXT.format(name=rescue.get("name") or "誰か"), NO_REWARD_TEXT]
         area_id = str(rescue.get("area") or "")
         entry = ui.area_record(getattr(app, "player", None), area_id)

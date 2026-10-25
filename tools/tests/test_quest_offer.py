@@ -433,8 +433,12 @@ def facility_buttons():
 
 
 def setup(history=None, partner="62", in_conversation=True,
-          party=()):
-    """mod を適用し、NPC 62 と会話している状態の app を返す。"""
+          party=(), own_quest=True):
+    """mod を適用し、NPC 62 と会話している状態の app を返す。
+
+    `own_quest` が真なら、NPC 62 が出した未完了の依頼（50）をこの町に置く。
+    「依頼を受ける」は相手の依頼が掲示板に在るときだけ出る。
+    """
     # クラスは毎回作り直す。
     # `__main__` に載せるのは mod が
     # `getattr(__main__, 名前)` で引くため（本番と同じ形）。
@@ -475,6 +479,9 @@ def setup(history=None, partner="62", in_conversation=True,
                           client_name="名も無い誰か", neighboring_settlement_id="7"),
               "43": Quest(id="43", quest_title="霧の追跡", difficulty=43,
                           client_name="名も無い誰か", neighboring_settlement_id="7")}
+    if own_quest:
+        quests["50"] = Quest(id="50", quest_title="書類の配達", difficulty=50,
+                             client_name="テストNPC D", neighboring_settlement_id="7")
     # `profile` を持たせる。
     # 片付いた依頼の注入は、この素のプロフィールの後ろへ足す形になる。
     characters = {"62": Character(id="62", name="テストNPC D",
@@ -820,7 +827,7 @@ try:
     app.on_button_press(index_of(app, "offer"))
     clock.settle()
     texts = [b["text"] for b in app.buttons]
-    check("自前の一覧は依頼2件と「やめる」", len(texts) == 3 and texts[-1] == mod.CANCEL_LABEL
+    check("自前の一覧は依頼3件と「やめる」", len(texts) == 4 and texts[-1] == mod.CANCEL_LABEL
           and all(choices.ours(b) for b in app.buttons), texts)
     check("依頼のボタンはゲームの QuestChoiceManager の写し",
           [mlui.spec_cls_name(b) for b in app.buttons[:2]] == ["QuestChoiceManager"] * 2,
@@ -1052,6 +1059,14 @@ def profile_seen(seen):
     return getattr(seen["npc"], "profile", "") or ""
 
 
+def client_part(body):
+    """プロフィールのうち、依頼人として伝える節（噂の節より前）。"""
+    if LABELS.COMPLETED_HEADING not in body:
+        return ""
+    part = body[body.index(LABELS.COMPLETED_HEADING):]
+    return part.split("\n\n", 1)[0]
+
+
 mod, ctx, app = setup()
 check("会話5関数すべてに modnpc の関所が立つ",
       all(target in ctx.hooks for target in CONV_TARGETS),
@@ -1078,7 +1093,7 @@ try:
     check("片付いた依頼が会話のプロフィールに載る",
           mod.COMPLETED_HEADING in body and "瘴霧の夜警" in body, body)
     check("未完了の依頼は載せない", "水路の見張り" not in body, body)
-    check("別の相手が出した依頼は載せない", "鍛冶場の火事" not in body, body)
+    check("別の相手が出した依頼は依頼人の節に載せない", "鍛冶場の火事" not in client_part(body), body)
     check("元のプロフィールを残す", "堅実な町の事務官。" in body, body)
     check("元の関数は1回だけ呼ぶ", seen["calls"] == 1, seen["calls"])
     check("渡すのは複製で、世界の人物そのものではない",
@@ -1117,15 +1132,14 @@ try:
     # 相手を変えると、その相手の依頼だけになる（取り違えの裏返し）。
     body = profile_seen(talk_once(ctx, app, app.world.characters["63"]))
     check("相手が変わればその相手の依頼だけが載る",
-          "鍛冶場の火事" in body and "瘴霧の夜警" not in body, body)
+          "鍛冶場の火事" in client_part(body) and "瘴霧の夜警" not in client_part(body), body)
 
     # 依頼をひとつも出していない相手。
     stranger = Character(id="64", name="通りすがり", profile="旅の商人。")
     app.world.characters["64"] = stranger
     seen = talk_once(ctx, app, stranger)
-    check("依頼を出していない相手には何も足さない",
-          mod.COMPLETED_HEADING not in profile_seen(seen)
-          and seen["npc"] is stranger, profile_seen(seen))
+    check("依頼を出していない相手には依頼人の節を足さない",
+          mod.COMPLETED_HEADING not in profile_seen(seen), profile_seen(seen))
     check("エラーを出していない", not ctx.errors, ctx.errors)
 finally:
     clear_clients(ctx)
@@ -1252,7 +1266,7 @@ try:
     app.player.name = "前の主人公"
     body = profile_seen(talk_once(ctx, app, app.world.characters["62"]))
     check("別の主人公は前の主人公の依頼人の控えを引かない",
-          "古井戸の調べ" not in body, body)
+          "古井戸の調べ" not in client_part(body), body)
 finally:
     clear_clients(ctx)
 
@@ -1263,7 +1277,7 @@ try:
     data = read_clients(ctx)
     check("控えに別の主人公の周回が在れば移さない",
           data.get(MOVE_WORLD) == MOVE_OLD and MOVE_MINE not in data, data)
-    check("移さなかった世界名だけの分は引かない", "古井戸の調べ" not in body, body)
+    check("移さなかった世界名だけの分は引かない", "古井戸の調べ" not in client_part(body), body)
 finally:
     clear_clients(ctx)
 
@@ -1521,6 +1535,124 @@ for world_name, expect in (("テスト世界", True), ("別のテスト世界", 
     written = log_since(ctx, mark)
     check("控えた話で絞るのは同じ世界だけ（{}）".format(world_name),
           ("filtering for" in written) == expect, written[-200:])
+
+print("=== 「依頼を受ける」は相手の依頼が掲示板に在るときだけ ===")
+from instantale_modloader import board as loader_board  # noqa: E402
+from instantale_modloader import quest_claims as loader_claims  # noqa: E402
+from instantale_modloader import quest_clients as loader_clients  # noqa: E402
+
+
+class LiveCtx:
+    def superseded(self):
+        return False
+
+
+def reset_windows():
+    loader_board.reset()
+    loader_claims.reset()
+    loader_clients.reset()
+
+
+def offer_shown(app_obj):
+    app_obj.refresh_choice_buttons()
+    return index_of(app_obj, "offer") >= 0
+
+
+reset_windows()
+clock = install_fake_kivy()
+mod, ctx, app = setup(history=history, own_quest=False)
+clear_clients(ctx)
+check("相手の依頼が無ければ「依頼を受ける」を出さない", not offer_shown(app), [b["text"] for b in app.buttons])
+check("相手の依頼が無くても「この話から依頼を作る」は出す", index_of(app, "generate") >= 0,
+      [b["text"] for b in app.buttons])
+
+mod, ctx, app = setup(history=history)
+check("相手の依頼がこの町の掲示板に在れば出す", offer_shown(app), [b["text"] for b in app.buttons])
+app.world.quests["50"].config = {"status": "completed"}
+check("相手の依頼が片付いていれば出さない", not offer_shown(app), [b["text"] for b in app.buttons])
+mod, ctx, app = setup(history=history)
+app.world.quests["50"].neighboring_settlement_id = "8"
+check("相手の依頼がほかの町の掲示板なら出さない", not offer_shown(app), [b["text"] for b in app.buttons])
+mod, ctx, app = setup(history=history)
+loader_board.declare_kept_off("336_test", LiveCtx(), lambda a: ["50"])
+check("掲示板に出さない依頼（窓口 board）しか無ければ出さない", not offer_shown(app),
+      [b["text"] for b in app.buttons])
+reset_windows()
+
+# ほかの MOD が依頼人を置いた依頼（窓口 quest_clients）。押した先の絞り込みも同じ依頼を残す。
+clock = install_fake_kivy()
+mod, ctx, app = setup(history=history, own_quest=False)
+loader_clients.declare("336_test", LiveCtx(), lambda a: [{"quest": 39, "npc_id": 62}])
+check("ほかの MOD が依頼人を置いた依頼でも出す", offer_shown(app), [b["text"] for b in app.buttons])
+app.on_button_press(index_of(app, "offer"))
+clock.settle()
+kept = [ui_spec_args[1] for ui_spec_args in
+        (b["spec"].args for b in app.buttons if b["spec"].cls_name == "QuestChoiceManager")]
+check("絞り込んだ掲示板にもその依頼が残る", kept == ["39"], [b["text"] for b in app.buttons])
+reset_windows()
+
+print("=== 街で片付けた依頼を噂として伝える ===")
+mod, ctx, app = setup(own_quest=False)
+clear_clients(ctx)
+add_quest(app, 70, "灯台の修理", "completed")
+app.world.quests["70"].request_summary = "港の灯台が嵐で壊れた。直してほしい。\n詳しくは灯台守に。"
+add_quest(app, 71, "黒羽屋の金庫", "completed")
+app.world.quests["71"].request_summary = "商家の金庫から帳簿を持ち出してほしい。\n\n【裏の仕事：強盗】報酬は表の相場の8倍。"
+add_quest(app, 72, "隣町の護衛", "completed")
+app.world.quests["72"].neighboring_settlement_id = "8"
+add_quest(app, 73, "ライバルの獲物", "completed")
+add_quest(app, 74, "まだの依頼", "incomplete")
+loader_board.declare_kept_off("336_test", LiveCtx(), lambda a: ["71"])
+loader_claims.declare("911_test", LiveCtx(), lambda a: [
+    {"quest": "73", "area": "7", "title": "ライバルの獲物", "by": "ガラン", "state": loader_claims.DONE, "day": 1}])
+town_heading = mod.TOWN_HEADING.format(player="テストプレイヤー")
+
+
+def section(body, heading):
+    if heading not in body:
+        return ""
+    return body[body.index(heading):].split("\n\n", 1)[0]
+
+
+body = profile_seen(talk_once(ctx, app, app.world.characters["63"]))
+town, secret = section(body, town_heading), section(body, mod.SECRET_HEADING)
+check("街で片付いた依頼を噂の節に載せる", "灯台の修理" in town, body)
+check("要約の頭の1行を添える", "港の灯台が嵐で壊れた。直してほしい。" in town and "灯台守" not in town, town)
+check("掲示板に出さない依頼は誰の仕業かを伏せた節に載せる", "黒羽屋の金庫" in secret and "黒羽屋" not in town, body)
+check("伏せる節の頭には主人公の名前を出さない", "テストプレイヤー" not in mod.SECRET_HEADING, mod.SECRET_HEADING)
+check("MOD が足した【…】の注記は載せない", "裏の仕事" not in body and "8倍" not in body, body)
+check("ほかの町の依頼は載せない", "隣町の護衛" not in body, body)
+check("主人公以外が片付けた依頼（窓口 quest_claims）は載せない", "ライバルの獲物" not in body, body)
+check("未完了の依頼は載せない", "まだの依頼" not in body, body)
+check("依頼人の節は足さない（この相手の依頼は無い）", mod.COMPLETED_HEADING not in body, body)
+
+# 裏の仕事の依頼人（窓口 quest_clients）は、依頼人として知っている。噂の側には回さない。
+loader_clients.declare("336_test", LiveCtx(), lambda a: [{"quest": "71", "npc_id": "63"}])
+body = profile_seen(talk_once(ctx, app, app.world.characters["63"]))
+check("裏の仕事の依頼人には依頼人の節で伝える",
+      "黒羽屋の金庫" in client_part(body) and mod.SECRET_HEADING not in body, body)
+loader_clients.reset()
+
+app.game_variables["party"] = ["player", "63"]
+body = profile_seen(talk_once(ctx, app, app.world.characters["63"]))
+check("同行している相手には噂を足さない", town_heading not in body and mod.SECRET_HEADING not in body, body)
+app.game_variables["party"] = ["player"]
+
+add_quest(app, 75, "橋の補修", "completed")
+mod.MAX_TOWN_TOLD = 1
+try:
+    body = profile_seen(talk_once(ctx, app, app.world.characters["63"]))
+    town = section(body, town_heading)
+    check("件数の上限まで、新しいものから載せる", "橋の補修" in town and "灯台の修理" not in town, town)
+finally:
+    mod.MAX_TOWN_TOLD = 3
+mod.TELL_TOWN_QUESTS = False
+try:
+    body = profile_seen(talk_once(ctx, app, app.world.characters["63"]))
+    check("設定を切ると噂を足さない", town_heading not in body and mod.SECRET_HEADING not in body, body)
+finally:
+    mod.TELL_TOWN_QUESTS = True
+reset_windows()
 
 print()
 if failures:

@@ -13,6 +13,17 @@
   "version": "2",
   "author": "R01/Flossian",
   "after": ["401_battle_character_context"],
+  "tool": {
+    "entry": "tool.py",
+    "label": {
+      "ja": "攻撃の演出の設定と見本",
+      "en": "Attack animations settings and samples"
+    },
+    "note": {
+      "ja": "描き足した絵の見え方（控えめ・はっきり）を選び、17種の演出の両方の見本を戦闘と同じ速さで動かして見比べる",
+      "en": "Pick how the added art looks (subdued or bright) and compare animated samples of both styles for the 17 added effects"
+    }
+  },
   "settings": {
     "ART_STYLE": {
       "type": "choice",

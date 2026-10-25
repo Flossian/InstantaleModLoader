@@ -92,6 +92,9 @@ mod を import はしない。
 `mod.json` に `"before"` を書くと、`_sort_dependencies` の報告は
 `problems` に積まれるので、相手を切っただけでこちらに問題が出る。
 どちらが外側でも成り立つように作る（`talking_npc_id` が相手の id の引き方を持つ）。
+
+依頼人のいない依頼（ゲームが作る依頼の多く）は、依頼の街の住人に噂として伝える（`town_quests_of`）。
+掲示板に出さない依頼（ローダの窓口 `board`）は誰の仕業かを伏せる。VERIFICATION.md §3.115。
 """
 
 import os
@@ -99,7 +102,8 @@ import sys
 import threading
 import time
 
-from instantale_modloader import arrivals, choices, confinement, frames, modnpc, ui
+from instantale_modloader import (arrivals, board, choices, confinement, frames, modnpc, quest_claims,
+                                  quest_clients, ui)
 from instantale_modloader.state import (PLAYTHROUGH_SEP, UNKNOWN_WORLD, other_playthroughs,
                                         playthrough_key, world_filename, world_key)
 
@@ -274,6 +278,30 @@ COMPLETED_BODY = (
     "片付いているという事実の方を正しいものとして話す。"
     "ただし、この話題を自分から切り出す必要は無い。")
 
+# ------------------------------------ 街で片付けた依頼を住人との会話に伝える
+# ゲームが作る依頼の依頼人は実在の人物と結びついていない（GAME.md §2.9）。
+# 名前の一部で照らすと同名の別人を拾うので（VERIFICATION.md §3.115）、依頼人としては伝えず、
+# 依頼の街に居る人物に噂として伝える。
+TELL_TOWN_QUESTS = True
+
+# 一度に伝える件数。新しいものから数える。上の依頼人の分とは別に数える。
+MAX_TOWN_TOLD = 3
+
+# 依頼の要約から添える字数。題だけでは何があったのかが伝わらない。
+TOWN_SUMMARY_CHARS = 80
+
+TOWN_HEADING = "【この街で{player}が片付けたと噂になっている依頼】"
+TOWN_ITEM = "・{title}：{summary}"
+TOWN_BODY = (
+    "この人物はこれらを街の噂として聞いている。依頼人本人ではないので、頼んだ側として話さない。"
+    "ただし、この話題を自分から切り出す必要は無い。")
+
+# 掲示板に出さない依頼（`336_` の裏の仕事・処刑場からの脱出。ローダの窓口 `board`）は、誰の仕業かを伏せる。
+SECRET_HEADING = "【この街で最近あったらしい出来事（誰の仕業かは知られていない）】"
+SECRET_BODY = (
+    "この人物はこれらが起きたらしいと噂で聞いているだけで、誰がやったかは知らず、{player}の仕業だとは思っていない。"
+    "ただし、この話題を自分から切り出す必要は無い。")
+
 # 自前ボタンに持たせる無害な spec は `ui.SAFE_CLS`（`JustSetButtonToNormalPhase`）。
 # mod 無しで押されても選択肢が戻るだけ。
 
@@ -401,16 +429,8 @@ def apply(ctx):
     # `ui.current_area` は id でもオブジェクトでも引き当てる。
     current_area = ui.current_area
 
-    def candidate_quests(app):
-        """この土地で受注できる依頼を (id, Quest) で返す。
-
-        判定は `neighboring_settlement_id == 現在エリアの id` と
-        `config['status'] == 'incomplete'`。
-        セーブの実データで、依頼は集落ごとに
-        3 件ずつこのキーで束ねられていることを確認済み。
-        ゲーム自身の `get_quest_difficulties(area, world)` と突き合わせて、
-        食い違ったら記録する（こちらの当て推量が外れた合図）。
-        """
+    def quests_here(app):
+        """この土地の未完了の依頼を (id, Quest) で返す。照合も記録もしない（組み直しのたびに呼ぶ）。"""
         world = getattr(app, "world", None)
         quests = getattr(world, "quests", None)
         area = current_area(app)
@@ -426,6 +446,21 @@ def apply(ctx):
                 continue
             found.append((str(qid), quest))
         found.sort(key=lambda pair: _difficulty_of(pair[1]))
+        return found
+
+    def candidate_quests(app):
+        """この土地で受注できる依頼を (id, Quest) で返す。
+
+        判定は `neighboring_settlement_id == 現在エリアの id` と
+        `config['status'] == 'incomplete'`。
+        セーブの実データで、依頼は集落ごとに
+        3 件ずつこのキーで束ねられていることを確認済み。
+        ゲーム自身の `get_quest_difficulties(area, world)` と突き合わせて、
+        食い違ったら記録する（こちらの当て推量が外れた合図）。
+        """
+        world = getattr(app, "world", None)
+        area = current_area(app)
+        found = quests_here(app)
 
         # ゲーム自身の答えと照合する。
         # ずれていれば設計の前提が間違っている。
@@ -732,20 +767,28 @@ def apply(ctx):
             write("WARN could not remember the client of quest {!r} "
                   "(the offer will look like nobody's)".format(quest_id))
 
-    def quest_belongs_to(app, quest_id, npc_id, npc_name):
+    def other_clients(app):
+        """ほかの MOD が依頼人を知っている依頼。`{依頼の id: 行}`（ローダの窓口 `quest_clients`）。"""
+        return {row["quest"]: row for row in quest_clients.clients(app)}
+
+    def quest_belongs_to(app, quest_id, npc_id, npc_name, others=None):
         """この依頼はこの NPC のものか。
 
-        2つの根拠を使う:
+        3つの根拠を使う:
 
         1. mod の控え: 会話から生成した依頼。
            これが本命で確実
-        2. **`client_name` の一致**: 元から世界にあった依頼のうち、
+        2. ほかの MOD の控え（ローダの窓口 `quest_clients`）: `336_` の裏の仕事と処刑場からの脱出。
+           `others` を渡せばそれを使う（依頼を何件も判じるときに、窓口へ1回だけ聞く）
+        3. **`client_name` の完全な一致**: 元から世界にあった依頼のうち、
            たまたま依頼人がこの NPC である場合を拾う。
            ゲームが生成する依頼人名は実在 NPC と結びついていないことが多いので、
-           あくまで補助
+           あくまで補助。名前の一部では照らさない（同名の別人を拾う。VERIFICATION.md §3.115）
         """
         key = clients_key(app)
         record = load_clients().get(key, {}).get(str(quest_id))
+        if not isinstance(record, dict):
+            record = (other_clients(app) if others is None else others).get(str(quest_id))
         if isinstance(record, dict):
             if npc_id and record.get("npc_id") == str(npc_id):
                 return True
@@ -1271,9 +1314,10 @@ def apply(ctx):
         `config` を持たない形で入っている依頼は黙って飛ばす
         （読めないものを完了扱いにしない）。
         """
-        if MAX_COMPLETED_TOLD <= 0:
+        if not TELL_COMPLETED_QUESTS or MAX_COMPLETED_TOLD <= 0:
             return []
         found = []
+        others = other_clients(app)
         for quest_id in quest_ids(app):
             quest = quest_of(app, quest_id)
             if quest is None:
@@ -1281,7 +1325,7 @@ def apply(ctx):
             config = quest_value(quest, "config", None)
             if not isinstance(config, dict) or config.get("status") != "completed":
                 continue
-            if not quest_belongs_to(app, quest_id, npc_id, npc_name):
+            if not quest_belongs_to(app, quest_id, npc_id, npc_name, others):
                 continue
             found.append((quest_id,
                           frames.short(quest_value(quest, "quest_title", "依頼"), 60)))
@@ -1292,15 +1336,72 @@ def apply(ctx):
         found.sort(key=lambda pair: ui.id_sort_key(pair[0]))
         return [title for _qid, title in found[-MAX_COMPLETED_TOLD:]]
 
+    def town_quests_of(app, npc_id, npc_name):
+        """いまいる街で片付いた依頼のうち、この NPC のものでない分を `(表に出る分, 伏せる分)` で返す。
+
+        どちらも新しいものから `MAX_TOWN_TOLD` 件まで、`(題, 要約)` の並び。
+        街は依頼の `neighboring_settlement_id`（掲示板と同じ。`quests_here`）。
+        伏せる分は掲示板に出さない依頼（ローダの窓口 `board`）。
+        主人公以外が片付けた依頼（ローダの窓口 `quest_claims`）は数えない。
+        """
+        if not TELL_TOWN_QUESTS or MAX_TOWN_TOLD <= 0:
+            return [], []
+        area_id = ui.area_id_of(current_area(app))
+        if not area_id:
+            return [], []
+        others = other_clients(app)
+        hidden = board.kept_off(app)
+        done_by_others = {row["quest"] for row in quest_claims.claims(app, quest_claims.DONE)}
+        public, secret = [], []
+        for quest_id in quest_ids(app):
+            quest = quest_of(app, quest_id)
+            if quest is None or str(quest_value(quest, "neighboring_settlement_id", "")) != area_id:
+                continue
+            config = quest_value(quest, "config", None)
+            if not isinstance(config, dict) or config.get("status") != "completed":
+                continue
+            if str(quest_id) in done_by_others or quest_belongs_to(app, quest_id, npc_id, npc_name, others):
+                continue
+            (secret if str(quest_id) in hidden else public).append((quest_id, quest))
+
+        def newest(rows):
+            rows.sort(key=lambda pair: ui.id_sort_key(pair[0]))
+            return [(frames.short(quest_value(quest, "quest_title", "依頼"), 60), summary_of(quest))
+                    for _qid, quest in rows[-MAX_TOWN_TOLD:]]
+        return newest(public), newest(secret)
+
+    def summary_of(quest):
+        """依頼の要約の頭の1行。MOD が足した【…】の注記（`336_` の裏の仕事の倍率など）は落とす。"""
+        text = quest_value(quest, "request_summary", "")
+        if not isinstance(text, str):
+            return ""
+        line = text.strip().split("\n", 1)[0]
+        while "【" in line and "】" in line[line.index("【"):]:
+            start = line.index("【")
+            line = line[:start] + line[line.index("】", start) + 1:]
+        return frames.short(line.strip(), TOWN_SUMMARY_CHARS)
+
     def completed_block(app, npc_id, npc_name):
         """プロフィール欄に足す本文。言うことが無ければ空文字。"""
+        player = player_name_of(app)
+        parts = []
         titles = completed_quests_of(app, npc_id, npc_name)
-        if not titles:
-            return ""
-        return "{}\n{}\n{}".format(
-            COMPLETED_HEADING,
-            "\n".join(COMPLETED_ITEM.format(title=title) for title in titles),
-            COMPLETED_BODY.format(player=player_name_of(app)))
+        if titles:
+            parts.append("{}\n{}\n{}".format(
+                COMPLETED_HEADING,
+                "\n".join(COMPLETED_ITEM.format(title=title) for title in titles),
+                COMPLETED_BODY.format(player=player)))
+        # 同行している相手は噂で聞く側ではない（その場に居たことがある）。
+        if not is_party_member(app, npc_id):
+            public, secret = town_quests_of(app, npc_id, npc_name)
+            for rows, heading, body in ((public, TOWN_HEADING, TOWN_BODY), (secret, SECRET_HEADING, SECRET_BODY)):
+                if rows:
+                    parts.append("{}\n{}\n{}".format(
+                        heading.format(player=player),
+                        "\n".join(TOWN_ITEM.format(title=title, summary=summary).rstrip("：")
+                                  for title, summary in rows),
+                        body.format(player=player)))
+        return "\n\n".join(parts)
 
     #: 注入の結末。直前と同じ内容なら書かない（会話は1ターンに何度も回る）。
     note_inject = ctx.logger(LOG_BASENAME, dedup=True)
@@ -1315,7 +1416,7 @@ def apply(ctx):
         素通りするときも黙っては降りない。
         理由が残らないと、注入が効いていないことに気付けない。
         """
-        if not TELL_COMPLETED_QUESTS:
+        if not TELL_COMPLETED_QUESTS and not TELL_TOWN_QUESTS:
             return None
         label = info.get("site")
         npc = info.get("character")
@@ -1427,12 +1528,34 @@ def apply(ctx):
                 generate = "{}（{}）".format(GENERATE_LABEL, npc_name) if npc_name else GENERATE_LABEL
                 out.append(choices.Choice(generate, place=place,
                                           on_press=lambda app: press(app, "generate", generate)))
-        out.append(choices.Choice(label, place=place, on_press=lambda app: press(app, "offer", label)))
+        if where == "conversation" and FILTER_BY_NPC and not quests_of_partner(app, view.partner):
+            # 絞り込んだ掲示板が「やめる」だけになる相手には出さない。
+            note_skip("{!r} ({}) has no quest on the board here".format(
+                ui.character_name(app, view.partner), view.partner))
+        else:
+            out.append(choices.Choice(label, place=place, on_press=lambda app: press(app, "offer", label)))
+        if not out:
+            return None
         shown = (where, tuple(choice.text for choice in out))
         if state.get("last_offer") != shown:
             state["last_offer"] = shown
             write("offering {} in the {} menu".format(list(shown[1]), where))
         return out
+
+    def quests_of_partner(app, npc_id):
+        """会話の相手が出した、この土地の掲示板に出る未完了の依頼の id。
+
+        掲示板の絞り込み（`restrict_board`）と同じ `quest_belongs_to` で判じる。
+        相手の名前は押したときの絞り込みと同じく 40 字で切る（`current_talk`）。
+        掲示板に出さない依頼（ローダの窓口 `board`）は数えない。押しても一覧に出ない。
+        """
+        if not npc_id:
+            return []
+        npc_name = frames.short(getattr(npc_of(app, npc_id), "name", ""), 40)
+        hidden = board.kept_off(app)
+        others = other_clients(app)
+        return [qid for qid, _quest in quests_here(app)
+                if qid not in hidden and quest_belongs_to(app, qid, npc_id, npc_name, others)]
 
     def press(app, action, text):
         """自前のボタンが押された（窓口が押されたボタンの処理として呼ぶ）。"""

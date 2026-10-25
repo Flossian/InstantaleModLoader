@@ -45,6 +45,41 @@ def life_log_text(app, character, limit):
     return text if len(text) <= limit else text[:limit] + "…"
 
 
+#: 片付いた裏の仕事と処刑場からの脱出の控え（`state\` の周回の鍵の下）。
+#: 進行中の控え（`underworld` / `rescue`）は片付くと消すので、依頼人と「表に出さない依頼」の印はこちらに残す。
+PAST_KEY = "kept_past"
+
+
+def remember_past(bucket, quest_id, title, client="", name=""):
+    """片付いた依頼を `PAST_KEY` に残す。呼び側が錠を持ち、保存する。"""
+    past = bucket.get(PAST_KEY)
+    if not isinstance(past, dict):
+        past = bucket[PAST_KEY] = {}
+    past[str(quest_id)] = {"title": title or "", "client": str(client or ""), "name": name or ""}
+
+
+def past_of(app, bucket):
+    """`PAST_KEY` のうち、いまのセーブに同じ題で残っている依頼。`{依頼の id: 控え}`。
+
+    依頼の id は作り直した周回で使い回されうるので、題も見る（`rescue.is_ours` と同じ）。
+    """
+    past = bucket.get(PAST_KEY)
+    if not isinstance(past, dict):
+        return {}
+    found = {}
+    for quest_id, record in past.items():
+        if not isinstance(record, dict):
+            continue
+        quest = ui.quest_of(app, str(quest_id))
+        if quest is None:
+            continue
+        title = record.get("title")
+        if title and ui.quest_value(quest, "quest_title", "") != title:
+            continue
+        found[str(quest_id)] = record
+    return found
+
+
 def _store():
     """世代をまたぐ入れ物。プロセスに1つ（TECH.md §3.5）。"""
     store = getattr(sys, STORE_ATTR, None)

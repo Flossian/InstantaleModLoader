@@ -7,8 +7,8 @@
     "ja": "会話から依頼を受ける"
   },
   "description": {
-    "en": "Accept quests from conversation, or generate one from what you just talked about. Finished quests are told to the NPC who asked for them",
-    "ja": "会話から依頼を受注できる。いま話した内容から依頼を1件生成することもできる。片付けた依頼はその依頼人との会話にも伝わる"
+    "en": "Accept quests from conversation, or generate one from what you just talked about. Finished quests are told to the NPC who asked for them, and rumored among the townsfolk",
+    "ja": "会話から依頼を受注できる。いま話した内容から依頼を1件生成することもできる。片付けた依頼はその依頼人との会話に伝わり、街の住人にも噂として伝わる"
   },
   "version": "7",
   "author": "R01/Flossian",
@@ -118,6 +118,32 @@
       "note": {
         "ja": "新しいものから数える。増やすほど会話のプロンプトが伸びる。0 でも伝わらなくなる",
         "en": "Newest first. More means a longer conversation prompt. 0 also disables it"
+      }
+    },
+    "TELL_TOWN_QUESTS": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "街で片付けた依頼を住人との会話に噂として伝える",
+        "en": "Tell townsfolk about quests finished in their town"
+      },
+      "note": {
+        "ja": "依頼人がいない依頼（ゲームが作った依頼の多く）も、その街の人物が噂として知る。裏の仕事は誰の仕業かを伏せた噂になる",
+        "en": "Townsfolk hear of quests finished in their town as rumors. Underworld jobs are rumored without naming who did them"
+      }
+    },
+    "MAX_TOWN_TOLD": {
+      "type": "int",
+      "default": 3,
+      "min": 0,
+      "max": 10,
+      "label": {
+        "ja": "噂として伝える依頼の件数",
+        "en": "Town rumors mentioned"
+      },
+      "note": {
+        "ja": "新しいものから数える。表の依頼と裏の仕事を別々に数える。0 でも伝わらなくなる",
+        "en": "Newest first, counted separately for public quests and underworld jobs. 0 also disables it"
       }
     }
   }

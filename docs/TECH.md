@@ -146,8 +146,9 @@ runtime/instantale_modloader/
     wanted.py     手配の重さの数え方と、全域手配の線・追手の戦闘の終わり・店の値の圧の窓口。追手を出す MOD が線を置いて終わりを知らせ、手配を動かす MOD が聞く。手配を数える MOD が店の値の率を置き、店主の応じ方を決める MOD が引き受ける（§3.3.9）
     guards.py     ゲームの衛兵の戦闘を MOD が起こす窓口。組んだ戦闘の強さ（難易度）だけを差し替える（§3.3.10）
     defeat.py     倒れた戦闘を死なせずに逃走と同じ終わり方で終える窓口。倒れても続けたい戦闘を持つ MOD が引き受けを登録する（§3.3.11）
-    board.py      ギルドの掲示板に出さない依頼の窓口。隠す MOD が置き、掲示板の依頼を拾う MOD が外す（§3.3.12）
+    board.py      ギルドの掲示板に出さない依頼の窓口。隠す MOD が置き、掲示板の依頼を拾う MOD が外す。会話に依頼を伝える MOD は誰の仕業かを伏せる（§3.3.12）
     quest_claims.py  主人公以外が狙い・片付けた依頼と、急ぎの依頼の窓口。片付ける人物を持つ MOD と出来事を持つ MOD が置き、互いに聞く（§3.3.18）
+    quest_clients.py  依頼の依頼人（実在の人物）の窓口。依頼を作った MOD が置き、依頼人との会話を扱う MOD が聞く（§3.3.23）
     confinement.py  主人公が閉じ込められている（牢の中など）ことの窓口。閉じ込める MOD が置き、選択肢を足す MOD が引く（§3.3.13）
     choices.py    選択肢のボタンの窓口。組み直しと押下の包み、印の持ち越し、ロードの後の組み直し、押した後の保存、宣言型の口（§3.3.14）
     hudicons.py   画面左下に MOD 用のボタン1つと一覧を置く窓口。MOD は行と知らせの印を足す（§3.3.15）
@@ -1689,6 +1690,7 @@ board.kept_off(app)                      # 読む側。文字列の id の集合
 |---|---|
 | 読む側は、置かれた依頼を狙わない・自分の都合で隠さない・未完了の数から引かない | 掲示板から隠すのも数を引くのも置いた MOD がやる。両方がやると二重に引く |
 | 登録は持ち主ごとに1つ。登録した ctx が用済みなら数えない。`fn` が投げたら何も置かなかったものとみなす | `wanted`（§3.3.9）と同じ |
+| 片付いた依頼も置いてよい（`336_` は片付いた裏の仕事も置く） | `301_quest_from_conversation` が、掲示板に出ない依頼を誰の仕業かを伏せた噂にする（§3.3.23）。掲示板は片付いた依頼を出さないので、隠す側の数には響かない |
 
 #### 3.3.13 主人公が閉じ込められていることも窓口で（`confinement`）
 
@@ -2135,6 +2137,31 @@ kinds = shop_lineup.excluded_of(facility)          # 並べない品の種類（
 
 置き場は `sys` の属性（`_instantale_shop_lineup`）。検査は `tools\tests\test_shop_lineup.py` と `test_shop_restock.py`。
 
+#### 3.3.23 依頼の依頼人も窓口で分け合う（`quest_clients`）
+
+依頼のデータには依頼人の id が無く、`client_name` は名前の文字列だけ（GAME.md §2.9）。
+ゲームが作る依頼の依頼人は実在の人物と結びついておらず、名前の一部で照らすと同名の別人を拾う（VERIFICATION.md §3.115）。
+依頼人が実在の人物だと分かっているのは、その依頼を作った MOD だけ（`336_crime_overhaul` の裏の仕事と処刑場からの脱出）。
+依頼人との会話を扱うのは `301_quest_from_conversation`（依頼を受けるボタンと、片付いた依頼を伝える差し込み）。
+`instantale_modloader/quest_clients.py` で、依頼人を作った側から聞く側へ渡す。
+
+```python
+quest_clients.declare(owner, ctx, fn)       # 置く側。apply() の中。fn(app) -> [{"quest", "npc_id", "npc_name"}]
+rows = quest_clients.clients(app)           # 読む側。行に持ち主（owner）を足して返す
+row = quest_clients.client_of(app, quest_id)   # その依頼の行か None
+```
+
+| 決まり | 理由 |
+|---|---|
+| 依頼の id と人物の id は文字列にそろえる。依頼の id か依頼人（id と名前のどちらか）の無い行は捨てる | id の型の違いで取りこぼさない |
+| 置く側は片付いた依頼の行も置き続ける | 片付いた依頼を依頼人に伝えるのが読む側の用途。進行中の控えを片付けで消す MOD は、片付いた分を別に残す（`336_` の `kept_past`） |
+| 依頼の状況（未了・済み）は行に持たせない。読む側がセーブから読む | 写すとゲームの状況とずれる |
+| 置く関数は控えの錠を待たない。待たずに取れたときだけ控えを読み、写しを残す | 読む側は会話の組み立ての最中に聞きに来る。`quest_claims`（§3.3.18）と同じ |
+| 登録は持ち主ごとに1つ。登録した ctx が用済みなら数えない。`fn` が投げたら何も置かなかったものとみなす（`errors` に残す） | `board`（§3.3.12）・`quest_claims` と同じ |
+
+誰の仕業かを伏せる依頼かは、この窓口ではなく `board` の「掲示板に出さない依頼」で見る（掲示板に出ない依頼は表に知られていない）。
+置き場は `sys` の属性（`_instantale_quest_clients`）。検査は `tools\tests\test_quest_clients.py`。
+
 ### 3.4 まだ現れていない対象を狙う（保留と当て直し）
 
 ゲームは `llama_cpp_runtime_completion` と `scripts.llm.llm_manager` を
@@ -2535,7 +2562,7 @@ GUI の1行に収めると「JSON を手で書く欄」になり、コードを�
 | `apply(ctx)` に渡る `ctx` | §3.1 / §3.6 / §3.8 / §3.11 |
 | `mod.json` の鍵 | §3.1 / §3.2 / §3.8 / §3.9 / §3.12 |
 | §5 の共通部品（`ui` / `frames` / `llm` / `state` / `jobs` / `modnpc` / `modfacility` / `prices` / `sounds` / `imagegen`） | §5 |
-| 使い方を書いた窓口（`durations` / `prices` / `combat` / `equipment` / `arrivals` / `loads` / `talk_affinity` / `talk_summary` / `ids` / `npcs` / `saves` / `wanted` / `guards` / `defeat` / `board` / `confinement` / `choices` / `hudicons` / `quest_claims` / `holdings` / `save_lookup` / `shop_lineup`） | §3.2.3 / §3.3 |
+| 使い方を書いた窓口（`durations` / `prices` / `combat` / `equipment` / `arrivals` / `loads` / `talk_affinity` / `talk_summary` / `ids` / `npcs` / `saves` / `wanted` / `guards` / `defeat` / `board` / `confinement` / `choices` / `hudicons` / `quest_claims` / `quest_clients` / `holdings` / `save_lookup` / `shop_lineup`） | §3.2.3 / §3.3 |
 
 これ以外は内部で、予告なく変わる。
 `patch.py` の `_defer_if_*` や `__init__.py` の `_order()` のような

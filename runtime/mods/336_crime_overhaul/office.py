@@ -15,7 +15,7 @@
 """
 import time
 
-from instantale_modloader import board, choices, ui, wanted
+from instantale_modloader import board, choices, quest_clients, ui, wanted
 
 from . import common, theft, underworld
 
@@ -253,7 +253,8 @@ def install(env):
         loss = underworld.scaled(kind["loss"], cfg.UNDERWORLD_LOSS_PCT)
         with worlds.lock:
             playthrough, jobs = jobs_of(app)
-            jobs[quest_id] = {"kind": kind["key"], "area": area_id, "mult": mult, "loss": loss}
+            jobs[quest_id] = {"kind": kind["key"], "area": area_id, "mult": mult, "loss": loss,
+                              "client": str(getattr(_facility, "owner", "") or "")}
             worlds.save(playthrough)
         quest = ui.quest_of(app, quest_id)
         summary = ui.quest_value(quest, "request_summary", "") or ""
@@ -370,8 +371,11 @@ def install(env):
         with worlds.lock:
             playthrough, jobs = jobs_of(app)
             jobs.pop(quest_id, None)
-            # 片付けた数。裁判で司法取引（裏の事務所を売る）を持ちかけられるかに使う（`court`）。
             bucket = worlds.load(playthrough)
+            # 片付いた後も、依頼人と表に出さない依頼の印を残す（`client_rows` / `kept_off`）。
+            common.remember_past(bucket, quest_id, ui.quest_value(ui.quest_of(app, quest_id), "quest_title", ""),
+                                 client=job.get("client"))
+            # 片付けた数。裁判で司法取引（裏の事務所を売る）を持ちかけられるかに使う（`court`）。
             done = bucket.get("underworld_done")
             bucket["underworld_done"] = (done if isinstance(done, int) else 0) + 1
             worlds.save(playthrough)
@@ -419,19 +423,49 @@ def install(env):
         return None
 
     def kept_off(app):
-        """ギルドの掲示板に出さない依頼（裏の仕事と処刑場からの脱出）。ローダの窓口 `board` に置く。
+        """ギルドの掲示板に出さない依頼（裏の仕事と処刑場からの脱出。片付いた分も）。ローダの窓口 `board` に置く。
 
         掲示板の依頼を拾う MOD（`911_` のライバル）が、裏の仕事を自分の獲物にしないように（実機で起きた）。
         """
         with worlds.lock:
             bucket = worlds.load(worlds.playthrough(app))
             ids = [str(quest_id) for quest_id in (bucket.get("underworld") or {})]
+            ids.extend(common.past_of(app, bucket))
             rescue = bucket.get("rescue")
         if isinstance(rescue, dict) and rescue.get("quest") is not None:
             ids.append(str(rescue["quest"]))
         return ids
 
+    #: 依頼人の行の写し（周回の鍵ごと）。錠が取れなかったときはこれで答える。
+    clients_copy = {}
+
+    def client_rows(app):
+        """裏の仕事と処刑場からの脱出の依頼人。ローダの窓口 `quest_clients` に置く（TECH.md §3.3.23）。
+
+        依頼人は裏の事務所の主と手引き役で、依頼の行方を知っている。
+        錠は待たない。読む側（`301_`）は会話の組み立ての最中に聞きに来る（`quest_claims` と同じ決まり）。
+        """
+        playthrough = worlds.playthrough(app)
+        if not worlds.lock.acquire(blocking=False):
+            return [dict(row) for row in clients_copy.get(playthrough) or []]
+        try:
+            bucket = worlds.load(playthrough)
+            rows = [{"quest": quest_id, "npc_id": job.get("client")}
+                    for quest_id, job in (bucket.get("underworld") or {}).items()
+                    if isinstance(job, dict) and job.get("client")]
+            rows.extend({"quest": quest_id, "npc_id": record.get("client"), "npc_name": record.get("name")}
+                        for quest_id, record in common.past_of(app, bucket).items()
+                        if record.get("client") or record.get("name"))
+            rescue = bucket.get("rescue")
+        finally:
+            worlds.lock.release()
+        if isinstance(rescue, dict) and rescue.get("quest") is not None and (rescue.get("client") or rescue.get("name")):
+            rows.append({"quest": rescue["quest"], "npc_id": rescue.get("client"), "npc_name": rescue.get("name")})
+        clients_copy[playthrough] = [dict(row) for row in rows]
+        return rows
+
     board.declare_kept_off(env.owner, ctx, kept_off)
+    quest_clients.declare(env.owner, ctx, client_rows)
     env.underworld_banned = banned
     env.on_refresh(on_refresh)
     env.on_offer(offer)
