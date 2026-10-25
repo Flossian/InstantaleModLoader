@@ -194,7 +194,7 @@ BUSY_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle",
 # 「買い物中か」の信号としては当てにならない。
 # これを見ていると店系の施設でイベントがほとんど出なくなる。
 # 買い物窓が開いている状態は
-# `is_popup_window_opened`（会話を始める直前に見る）で弾ける。
+# `is_popup_window_opened`（待っている間と会話を始める直前に見る。`gone`）で弾ける。
 
 LANGUAGE_NAMES = {"japanese": "日本語", "english": "英語"}
 
@@ -461,6 +461,9 @@ def apply(ctx):
             busy = [flag for flag in BUSY_FLAGS if getattr(app, flag, False)]
             if busy:
                 return "became busy {}".format(busy)
+            # 待っている間に売買の窓が開いた＝着いた後にもう手を付けている。閉じた後に声をかけても場面に合わない。
+            if "is_popup_window_opened" in ui.busy_signals(app):
+                return "a window was opened"
             # 手が空くまでの間に、衛兵のような別の画面に変わっていることもある。
             other = off_the_first_screen(app)
             if other:

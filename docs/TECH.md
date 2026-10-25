@@ -3043,7 +3043,7 @@ screen.paint(app) / screen.paint_party(app) / screen.refresh(app) / screen.say(a
 | `paint_party` | 仲間欄を塗り直す。パーティを増減させたら最後に呼ぶ |
 | `start_phase` | 自前フェーズを `PhaseSpec` に載せずに起こす。待機中なら回っている点送りを外してから（`process_choice` が自分で1本始めるので、残すと2本になる。GAME.md §2.4） |
 | `end_conversation` | 画面のボタンの args を写し `end_text` だけ差し替えて閉じ、閉じ終わってから続きを実行 |
-| `when_idle` | `is_adding_text` / `is_button_enabled` / `is_popup_window_opened` を見張る |
+| `when_idle` | `is_adding_text` / `is_button_enabled` / `is_popup_window_opened` を見張る。手が空いてから `settle` 待つ間もプレイヤーは押せるので、走らせる直前にもう一度見て、塞がっていれば見張りに戻り、`cancel_if` が理由を返せば取り消す。見ずに走らせていた頃、`300_` が売買の窓の上から会話を始め、窓を閉じると窓を開く前の選択肢が戻って、会話が閉じられないまま「出る」で立ち絵が付いてきた |
 | `busy_on` / `busy_off` | LLM を待つ間の待機表示（ゲーム自身と同じ形。GAME.md §2.4）。点はゲームが送る。こちらは旗を下ろし、回っていなければ1回だけ回し始める。枠に点が出ていればその点を一覧に書く（ゲームが待機を終えた直後の塗りも点になる）。直に触るのは旗と一覧だけなので、ワーカースレッドからも呼べる。`busy_off(restore=False)` は「この後すぐ別の画面を出す」経路用。ゲーム自身の `execute` の中（押された選択肢の処理の途中）では、ゲームが点を出した後に重ねない。ゲームが旗を下ろして点を送っている最中なので、`busy_on` は下ろされた旗を覚え、`busy_off` がそれを戻し、画面が出た後も選択肢が押せないまま残る（`918_` の DOC.md §2.5）。ゲームが点を出す前に待つ包みは出す。売買の `execute` の入口がそうで、ゲームの点は中の `shopping_start_method_1` から出るので、入口で LLM を待つ間は選択肢がそのまま見えていた（`341_`。VERIFICATION.md §3.114） |
 
 `Screen` の操作はゲームのスレッド（Kivy のメインスレッド）から呼ぶこと。

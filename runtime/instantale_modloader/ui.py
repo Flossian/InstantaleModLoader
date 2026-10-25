@@ -2742,8 +2742,20 @@ class Screen(object):
 
         既に手が空いているなら見張りは立てず、
         その場で予約する（無駄に 1ポーリング分待たないため）。
+
+        `settle` の間もプレイヤーは押せるので、`then` の直前にもう一度見る。
+        塞がっていれば見張りに戻り、`cancel_if` が理由を返せば取り消す。
+        見ずに走らせていた頃、`300_` が「売買する」で開いた売買の窓の上から会話を始め、
+        窓を閉じると窓を開く前の選択肢が戻って、会話が閉じられないまま立ち絵が付いてきた（実機）。
         """
         deadline = time.monotonic() + timeout
+
+        def settled():
+            if not self._others_busy(app) and not (cancel_if is not None and cancel_if()):
+                then()
+                return
+            if tick(0.0) is not False:
+                self._interval(tick, poll)
 
         def tick(_dt):
             try:
@@ -2754,7 +2766,7 @@ class Screen(object):
                         return False
                 busy = self._others_busy(app)
                 if not busy:
-                    self.schedule(then, settle)
+                    self.schedule(settled, settle)
                     return False
                 if time.monotonic() > deadline:
                     if proceed_on_timeout:

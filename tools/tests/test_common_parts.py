@@ -892,6 +892,42 @@ def test_clock_guard(root):
     with_fake_kivy(body)
 
 
+def test_when_idle_rechecks(root):
+    print("Screen.when_idle（settle の後、走らせる直前にもう一度見る）")
+    ctx = FakeCtx(root)
+
+    def body(clock, window):
+        screen = ui.Screen(ctx, lambda line: None, tag="idle test")
+        app = types.SimpleNamespace(is_adding_text=False, is_button_enabled=True,
+                                    is_popup_window_opened=False)
+        ran = []
+        screen.when_idle(app, lambda: ran.append(1), timeout=30)
+        check("手が空いていれば settle の後に予約する", len(clock.once) == 1 and not clock.intervals,
+              (clock.once, clock.intervals))
+        # settle の間に「売買する」が押され、売買の窓が開いた（`300_` の実機）。
+        app.is_popup_window_opened = True
+        clock.step()
+        check("塞がっていれば走らせない", not ran, ran)
+        check("見張りに戻る", len(clock.intervals) == 1, clock.intervals)
+        app.is_popup_window_opened = False
+        clock.intervals = [cb for cb in clock.intervals if cb(0.3) is not False]
+        clock.step()
+        check("空いたら走らせる", ran == [1], ran)
+
+        del clock.once[:]
+        del clock.intervals[:]
+        ran = []
+        reasons = []
+        screen.when_idle(app, lambda: ran.append(1),
+                         cancel_if=lambda: reasons[0] if reasons else None)
+        reasons.append("left")
+        clock.step()
+        check("settle の間に前提が崩れたら取り消す", not ran and not clock.intervals and not clock.once,
+              (ran, clock.intervals, clock.once))
+
+    with_fake_kivy(body)
+
+
 def test_watch_aliases_superseded():
     print("llm.watch_aliases（注入し直されて降りるときも1行残す）")
     lines = []
@@ -1063,6 +1099,7 @@ def main():
         test_sys_world_store(root)
         test_gold()
         test_clock_guard(root)
+        test_when_idle_rechecks(root)
         test_watch_aliases_superseded()
         test_rebuild_hook()
     finally:

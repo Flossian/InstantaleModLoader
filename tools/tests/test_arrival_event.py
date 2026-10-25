@@ -358,6 +358,23 @@ clock.run_onces()
 check("押さない", not app.process_choice_calls, app.process_choice_calls)
 app.in_conversation = False
 
+print("4b. 手が空いてから押すまでの間に売買の窓が開いたら取り消す")
+# 押すのは手が空いてから settle 後。その間に「売買する」が押されると、窓の上から会話が始まり、
+# 窓を閉じると窓を開く前の選択肢が戻って会話が閉じられないまま「出る」で立ち絵が付いてきた（実機）。
+clock = install_fake_kivy()
+mod, ctx, calls, hooks = setup()
+app.process_choice_calls = []
+do_move(hooks)
+check("押す処理が予約される", len(clock.onces) == 1, len(clock.onces))
+app.is_popup_window_opened = True
+clock.run_onces()
+check("窓の上からは押さない", not app.process_choice_calls, app.process_choice_calls)
+check("見張りにも戻らない", not clock.intervals and not clock.onces, (clock.intervals, clock.onces))
+app.is_popup_window_opened = False
+clock.tick()
+clock.run_onces()
+check("窓を閉じた後も押さない", not app.process_choice_calls, app.process_choice_calls)
+
 print("5. いつまでも手が空かなければ諦める")
 clock = install_fake_kivy()
 mod, ctx, calls, hooks = setup()

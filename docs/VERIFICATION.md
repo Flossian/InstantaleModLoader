@@ -88,7 +88,7 @@
 
 | mod | 状態 |
 | --- | --- |
-| `300_event_facility_arrival` | 成立（両モード。[§2.8](verification/2.8.md)）。版3 で同じ到着の会話をほかの MOD に譲る形は未（[§3.80](verification/3.80.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
+| `300_event_facility_arrival` | 成立（両モード。[§2.8](verification/2.8.md)）。版3 で同じ到着の会話をほかの MOD に譲る形は未（[§3.80](verification/3.80.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)）。着いた直後に売買の窓を開くと窓の上から会話が始まり、店を出ても立ち絵が残る不具合を直した。検査で成立、実機は未（[§3.116](verification/3.116.md)） |
 | `301_quest_from_conversation` | 成立（[§2.13](verification/2.13.md) / [§2.62](verification/2.62.md)）。版3 のロード後の組み直しも成立。自由入力の経路は未発火（[§3.2](verification/3.2.md)）。仲間を依頼人から外す設定はログで発火。版6 の人物が揃う前は出さない形は実機で成立（[§3.102](verification/3.102.md)）。版7 の宣言型の口への乗せ替えは実機で成立。「この話から依頼を作る」の押下も成立。疲労で受注を断られたときに一覧を「やめる」1つにしていたのを直した（[§3.109](verification/3.109.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)）。依頼人の一覧と街の噂は、ボタンの出し分けと噂の差し込みが実機で成立（Haiku 5.5。[§3.115](verification/3.115.md)） |
 | `302_leave_party_in_conversation` | 成立。土地を跨いで別れる経路も 10-06 に成立（[§3.88](verification/3.88.md)）。版2 のロード後も成立。版5 の宣言型の口への乗せ替え（確認の画面で保存しても戻れる）は実機で成立（[§3.109](verification/3.109.md)） |
 | `303_quest_end_party_to_guild` | 発火。置く側は未発火（`304_` が仲間を残すため。[§2.50](verification/2.50.md) / [§3.3](verification/3.3.md)） |
@@ -337,6 +337,7 @@ crash_log.txt の 114 件のうち、35件が `llama-server` 起動失敗、40�
 - [3.113 何本もの MOD が自分で包んでいたロード・日数・到着・会話の相手への差し込みを、ローダの窓口へ寄せる（`loads` / `durations.on_days` / `arrivals.on` / `modnpc` の notes）: 31 本を乗せ替え、オフラインの検査は通過・ロード・世界・日数・到着・会話の相手の経路は実機で成立（10-23）・338/339/911 の日数と到着・新規開始は未](verification/3.113.md)
 - [3.114 宿屋と鍛冶屋の売買と、店の種類ごとの品揃えの傾向（`340_shop_lineup`。旧 `340_inn_shop`）・窓口 `shop_lineup`: 鍛冶屋の入口と会話・鍛冶屋と診療所の傾向・312 の入れ替えの傾向は実機で成立・雑貨屋と専門店と一括生成は実機が未](verification/3.114.md)
 - [3.115 依頼人の一覧と街の噂（`301_quest_from_conversation`・`336_crime_overhaul`）・窓口 `quest_clients`: ボタンの出し分けと噂の差し込みは実機で成立（Haiku 5.5）・裏の仕事も正規の経路で成立・処刑場からの脱出は未](verification/3.115.md)
+- [3.116 到着の会話が売買の窓の上から始まり、店を出ても立ち絵が残る（`300_event_facility_arrival`・ローダの `when_idle`）: 原因はログで特定・直しは検査で成立・実機は未](verification/3.116.md)
 <!-- verification-index: end -->
 
 ---
