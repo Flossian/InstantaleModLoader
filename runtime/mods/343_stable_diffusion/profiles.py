@@ -23,7 +23,7 @@ MALE_WHEN = "man/boy/male/!woman/!girl/!female/!lady"
 FEMALE_WHEN = "woman/girl/female/lady"
 
 #: タグに無い言い方を、意味の合うタグへ置き換える。
-#: `plate mail` は `plate`（皿）と読まれて足元に料理が描かれた（実機。DOC.md §3）。
+#: `plate mail` は `plate`（皿）と読まれて足元に料理が描かれた（実機。VERIFICATION.md §3.65）。
 WORDS = (("plate mail", "plate armor"), ("chain mail", "chainmail"))
 
 #: どの雛形でも、ゲームの前置きから外す語。
@@ -41,13 +41,13 @@ def _rows(quality, negative_quality, game_quality):
     """Danbooru 系の雛形の行。画質の印だけが系統で違う。"""
     rows = {
         # 読み違えられる言い方を、意味の合うタグへ置き換える（版26。`rules.py`）。
-        # タグとの照合（alias）は入れない。試した範囲で絵の良し悪しの差が見えなかった（DOC.md §3）。
+        # タグとの照合（alias）は入れない。試した範囲で絵の良し悪しの差が見えなかった（VERIFICATION.md §3.65）。
         "words": [{"kind": "any", "target": "prompt", "from": a, "to": b} for a, b in WORDS],
         "remove": [
             {"kind": "portrait", "target": "prompt",
              "text": "full-body, {}, {}".format(game_quality, PORTRAIT_DROP)},
             # 敵の前置きの `creature` は Danbooru では小さな生き物のタグで、
-            # 人の敵の横にも小動物が描かれた（実機。DOC.md §3）。
+            # 人の敵の横にも小動物が描かれた（実機。VERIFICATION.md §3.65）。
             {"kind": "enemy", "target": "prompt", "text": "{}, creature".format(game_quality)},
             # 敵の否定にはゲームが `anime` を入れている。アニメ調のモデルでは画風ごと遠ざける。
             {"kind": "enemy", "target": "negative", "text": "anime"},

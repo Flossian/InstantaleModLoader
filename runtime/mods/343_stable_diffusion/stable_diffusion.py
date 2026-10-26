@@ -5,7 +5,7 @@ r"""Stable Diffusion の解像度・サンプラー・モデル・プロンプ�
 立ち絵を 256x512 で描いてから 512x1024 で描き直し、背景を 1024x512 で描く。
 この MOD は**どのバックエンドでも通る1つの出口**でその値を書き換える。
 
-ゲームの側の読み方は GAME.md §2.33、残っている確認は DOC.md §3。
+ゲームの側の読み方は GAME.md §2.33、残っている確認は VERIFICATION.md §3.65。
 
     種類（解像度）  立ち絵 / 敵・モンスター / 背景
     段（サンプラー） 1段目（txt2img） / 2段目（img2img） / 背景
@@ -54,7 +54,7 @@ MARKS = threading.local()
 FAMILY = {"name": None, "path": None}
 
 #: `sys.meta_path` に置いた観測者の目印（入れ直しで積み上げないため）。
-OBSERVER_MARK = "_mod_916_stable_diffusion"
+OBSERVER_MARK = "_mod_343_stable_diffusion"
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること）------------
 # 既定はすべてゲームの実測値。同じ値のままなら触らない。
@@ -92,7 +92,7 @@ LCM_CFG = 1.0
 LCM_SCHEDULER = "default"
 
 #: チェックポイント・TAESD・VAE・LoRA の置き場。**空でゲームのまま**。
-#: SDXL のモデルへ移るときはここを指す（系統は揃えること。DOC.md §1）。
+#: SDXL のモデルへ移るときはここを指す（系統は揃えること。DOC.md）。
 CHECKPOINT_PATH = ""
 TAESD_PATH = ""
 VAE_PATH = ""
@@ -112,14 +112,14 @@ DISABLE_VAE = False
 #: プロンプトから**ゲームが入れた** `<lora:...>` を外す。**既定は切**（ゲームのまま）。
 #: ゲームは背景・敵・（画質が低い設定のとき）立ち絵に SD1.5 用の LCM LoRA を入れる。
 #: 系統の違うモデル（SDXL）に当たると**プロセスごと落ちる**ので、
-#: モデルを差し替えるときはこちらも入にする（DOC.md §3）。
+#: モデルを差し替えるときはこちらも入にする（VERIFICATION.md §3.65）。
 #: 規則（付け替え・追加）で足したタグは外さない。
 STRIP_LORA = False
 
 #: diffusers 系（`diffusers_openvino` など）でも寸法を変える。
 #: **既定は切**。この一族は形を固定して変換したモデルを回すので、
 #: 寸法を変えると作り直しが走り、実機では 64GB の RAM を使い切って
-#: SSD へページングを始めた（DOC.md §3）。sdcpp 系には関係しない。
+#: SSD へページングを始めた（VERIFICATION.md §3.65）。sdcpp 系には関係しない。
 DIFFUSERS_RESIZE = False
 
 # ------------------------------------------------------------------------
@@ -133,7 +133,7 @@ EXIT_METHODS = ("generate_image", "__call__")
 EARLY_EXIT_METHOD = "generate_image"
 
 #: いちばん新しい apply() の `attach`。用済みになった apply() の包みが、
-#: 建て終わった後の当て直しをこちらへ渡す（版26。DOC.md §3）。
+#: 建て終わった後の当て直しをこちらへ渡す（版26。VERIFICATION.md §3.65）。
 #: 注入のたびにモジュールは作り直されるので、渡す相手は `sys.modules` の今の同名モジュールから引く。
 HANDOFF = {"attach": None}
 
@@ -247,7 +247,7 @@ class _ImportObserver(object):
     自分では読み込まない。
     他の finder に spec を作らせて、その `loader` だけを1件ぶん包む。
 
-    外すのは次の apply() だけなので、916 を切って注入し直しても残る。
+    外すのは次の apply() だけなので、343 を切って注入し直しても残る。
     `stale()` が真になった後は何も包まずに素通しする（名前が合うモジュールは数百あり、
     用済みの観測者がそのローダを包み続けないため）。
     `find_spec` の中で `sys.meta_path` から自分を抜くと、走査中の一覧がずれて次の finder が飛ばされる。
@@ -320,7 +320,7 @@ def apply(ctx):
                  if str(ctx.setting(name) or "").strip()]
 
     #: diffusers 系で実際に当てた寸法。2つ以上になったら知らせる
-    #: （寸法ごとにモデルが作り直され、ゲームを閉じるまで残る。DOC.md §3）。
+    #: （寸法ごとにモデルが作り直され、ゲームを閉じるまで残る。VERIFICATION.md §3.65）。
     diffusers_sizes = set()
     no_taesd = bool(ctx.setting("DISABLE_TAESD"))
     no_vae = bool(ctx.setting("DISABLE_VAE"))
@@ -444,7 +444,7 @@ def apply(ctx):
                     changes[name] = value
         add_safety(stage, params, changes)
         # 検証の道具だけが使う口。そのスレッドに種の印があれば種を固定する
-        # （ゲームは種 -1 で毎回変わるので、プロンプトの差だけを見比べるため。DOC.md §3）。
+        # （ゲームは種 -1 で毎回変わるので、プロンプトの差だけを見比べるため。VERIFICATION.md §3.65）。
         seed = frames.attr(MARKS, "seed", None)
         if seed is not None and "seed" in params:
             changes["seed"] = seed
@@ -474,7 +474,7 @@ def apply(ctx):
     def add_safety(stage, params, changes):
         """モデルの系統と食い違う指定を、壊れない側へ寄せる。
 
-        今日の実機で踏んだ2つの壊れ方をそのまま塞ぐ（DOC.md §3）。
+        今日の実機で踏んだ2つの壊れ方をそのまま塞ぐ（VERIFICATION.md §3.65）。
         SDXL に SD1.5 用の LoRA が当たるとプロセスごと落ち、
         SDXL を LCM の設定（5 steps / cfg 1.0）で回すとマゼンタに潰れる。
         設定で明示された値は動かさない（**寄せるのは素のままの項目だけ**）。
@@ -601,7 +601,7 @@ def apply(ctx):
                 continue
             if name in ("width", "height"):
                 # 形を固定して変換したモデルなので、寸法を変えると作り直しが走る。
-                # 実機では RAM を使い切ってページングに入った（DOC.md §3）。
+                # 実機では RAM を使い切ってページングに入った（VERIFICATION.md §3.65）。
                 if live.diffusers_resize:
                     out[name] = value
                     if name == "width":
@@ -708,7 +708,7 @@ def apply(ctx):
             # 建つ前でも、manager が持っているクラスから出口を包む。
             # 起動直後の注入し直し（boot #2）が建てている途中に入ると、
             # 建て終わってから包むまでの間にゲームが描き始め、
-            # SD1.5 用の LoRA が SDXL に当たって落ちた（実機 2026-10-26。DOC.md §3）。
+            # SD1.5 用の LoRA が SDXL に当たって落ちた（実機 2026-10-26。VERIFICATION.md §3.65）。
             early = [value for value in list(frames.attr(mod, "__dict__", {}).values())
                      if isinstance(value, type)
                      and owner_of(value, EARLY_EXIT_METHOD) is not None]
@@ -878,4 +878,4 @@ def apply(ctx):
         Clock.schedule_interval(poll, 5.0)
 
     ctx.on_ready(start_poll,
-                 key="916_stable_diffusion:poll:{}".format(ctx.generation))
+                 key="343_stable_diffusion:poll:{}".format(ctx.generation))

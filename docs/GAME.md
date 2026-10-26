@@ -3616,7 +3616,7 @@ scripts.llm.batch_worker（RequestWorker / batch_requests）   送信の失敗�
 説明文は「Propagate provider worker errors to non-interactive generation jobs」で、遊んでいるときの再試行ボタンの代わりに、失敗を一括生成へ投げる。
 
 2026-10-15 夜に、検証ワールド3 の残りを最後まで流した。
-LLM はローカル（Fenrir-X-26B-A4B、llama-server の `--parallel 1`）、絵は手元の sdcpp_cuda で、`916_stable_diffusion` の解像度とサンプラーの上書きが効いている。
+LLM はローカル（Fenrir-X-26B-A4B、llama-server の `--parallel 1`）、絵は手元の sdcpp_cuda で、`343_stable_diffusion`（当時 916）の解像度とサンプラーの上書きが効いている。
 21:11〜22:40 の 89 分で 632 件。失敗は0件。
 
 | 仕事 | 件数 | 1件 | うち絵（GPU） | 絵の枚数 | 1件で何が起きるか |

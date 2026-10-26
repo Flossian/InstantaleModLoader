@@ -3,7 +3,7 @@ r"""Danbooru のタグ一覧（版26）。規則の「タグの照合」が引�
 
 Illustrious・NoobAI・Pony は Danbooru のタグで学習しているので、
 タグに無い言い方は効きが弱く、タグの語が紛れた言い方はタグの意味で描かれる
-（`battle-worn plate mail` の `plate` が皿になった。DOC.md §3）。
+（`battle-worn plate mail` の `plate` が皿になった。VERIFICATION.md §3.65）。
 
 一覧は a1111-sd-webui-tagcomplete の `tags/danbooru.csv`（MIT）。
 1行が `タグ,種類,件数,"別名,別名"`。種類は 0 一般・1 絵師・3 作品・4 キャラ・5 メタ。

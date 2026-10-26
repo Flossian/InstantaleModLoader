@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 r"""画像生成の設定の画面。元 `InstantaleStableDiffusionMod` の GUI を写した形。
 
-    python runtime/mods/916_stable_diffusion/tool.py           窓を開く
-    python runtime/mods/916_stable_diffusion/tool.py --dump    窓を開かず、状態を標準出力に出す
+    python runtime/mods/343_stable_diffusion/tool.py           窓を開く
+    python runtime/mods/343_stable_diffusion/tool.py --dump    窓を開かず、状態を標準出力に出す
 
 TECH.md §3.12 の契約で動く（`131_sharp_portrait` の道具と同じ）。
 ローダの設定画面（`tools/gui.py`）が `mod.json` の `"tool"` を見てこのファイルを
@@ -552,7 +552,7 @@ def build_window(rules_in=None, settings_in=None, note=""):
         for button in fetch_buttons:
             button.state(["disabled"])
         assets_note.configure(text="{} をダウンロードしています…".format(entry["label"]))
-        threading.Thread(target=work, name="916 download", daemon=True).start()
+        threading.Thread(target=work, name="343 download", daemon=True).start()
         assets_note.after(200, finish)
 
     row = ttk.Frame(box)

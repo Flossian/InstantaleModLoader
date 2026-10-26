@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""916_stable_diffusion をゲーム抜きで通す。
+"""343_stable_diffusion をゲーム抜きで通す。
 
-    python tools/tests/test_wip_stable_diffusion.py
+    python tools/tests/test_stable_diffusion.py
 
 見ているのは、この MOD が自分で決めている所だけ。
 
@@ -30,7 +30,7 @@ if RUNTIME_DIR not in sys.path:
 
 import instantale_modloader as ml            # noqa: E402
 
-MOD_DIR = os.path.join(MODS_DIR, "916_stable_diffusion")
+MOD_DIR = os.path.join(MODS_DIR, "343_stable_diffusion")
 MANIFEST_PATH = os.path.join(MOD_DIR, "mod.json")
 with io.open(MANIFEST_PATH, encoding="utf-8") as fh:
     MANIFEST = json.load(fh)
@@ -1291,7 +1291,7 @@ check("最初は既定のまま", (got["width"], got["height"]) == (256, 512), g
 store = _config.store_path(ctx_hot.runtime_dir)
 os.makedirs(os.path.dirname(store), exist_ok=True)
 io.open(store, "w", encoding="utf-8").write(json.dumps(
-    {"916_stable_diffusion": {"PORTRAIT_SHORT": 832, "PORTRAIT_MAX_LONG": 1664,
+    {"343_stable_diffusion": {"PORTRAIT_SHORT": 832, "PORTRAIT_MAX_LONG": 1664,
                            "STAGE1_STEPS": "28"}}))
 got = hot_hook(Pipe.generate_image, pipe, prompt="p", width=256, height=512)
 check("設定ファイルを書き換えると次の生成から効く（注入し直し不要）",
@@ -1307,7 +1307,7 @@ check("変わっていなければ読み直さない（ログも増えない）"
       not any(note.startswith("reloaded") for note in ctx_hot.notes[notes_before:]))
 
 io.open(store, "w", encoding="utf-8").write(json.dumps(
-    {"916_stable_diffusion": {"PORTRAIT_SHORT": 832, "PORTRAIT_MAX_LONG": 1664,
+    {"343_stable_diffusion": {"PORTRAIT_SHORT": 832, "PORTRAIT_MAX_LONG": 1664,
                            "STAGE1_STEPS": "not a number"}}))
 got = hot_hook(Pipe.generate_image, pipe, prompt="p", width=256, height=512)
 check("読めない値は既定に倒れ、他の項目は生きたまま",
@@ -1339,7 +1339,7 @@ check("関係の無い import は素通し（spec を作らない）",
 check("フックの中で例外が出ていない", not ctx.errors, ctx.errors)
 
 print("用済みの観測者は包まない")
-# 観測者を外すのは次の apply() だけ。916 を切って注入し直しても残るので、
+# 観測者を外すのは次の apply() だけ。343 を切って注入し直しても残るので、
 # 用済みになった後は名前が合うモジュールでも他の finder に聞かず素通しする。
 import importlib.machinery  # noqa: E402
 

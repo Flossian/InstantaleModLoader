@@ -3,7 +3,7 @@ r"""モデルの置き場と、TAESD デコーダのダウンロード。
 
 ゲームのフォルダを触らずに SDXL へ移るには、チェックポイント・TAESD・VAE・LoRA を
 **ゲームの外**に置く必要がある（ゲーム内の選択は `runtime\models\sd15\checkpoints\`
-の中しか見ないため。DOC.md §1）。その置き場をここで決める。
+の中しか見ないため。DOC.md）。その置き場をここで決める。
 
     state\models\sd15\checkpoints\  taesd\  vae\  lora\
     state\models\sdxl\checkpoints\  taesd\  vae\  lora\

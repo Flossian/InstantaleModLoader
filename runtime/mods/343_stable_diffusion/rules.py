@@ -47,7 +47,7 @@ Illustrious と Pony はどちらも SDXL で中身の形が同じなので、�
     tags    Danbooru のタグ一覧（`tagbook.py`）と照らす。`mode` は `alias`
             （一般のタグの別名を正しいタグへ直す）だけ
             タグでも別名でもない区画を外す `drop` は試して外した。
-            ゲームの要素の9割近くがタグでない言い方で、外すと人物も場所も別物になった（DOC.md §3）
+            ゲームの要素の9割近くがタグでない言い方で、外すと人物も場所も別物になった（VERIFICATION.md §3.65）
 
 当てる順は 語の置き換え → タグの照合 → 除去 → 置換 → 付け替え → 追加。
 """
@@ -380,7 +380,7 @@ def check_tags(body, book, mode):
     """Danbooru のタグ一覧と照らす。`book` は `tagbook.Book`。
 
     `alias`: 一般のタグの別名を正しいタグへ直す（`outdoor` -> `outdoors`）。
-    タグでない区画は触らない（タグでない言い方も絵に効いている。DOC.md §3）。
+    タグでない区画は触らない（タグでない言い方も絵に効いている。VERIFICATION.md §3.65）。
     `<lora:...>` と、重みの括弧の飾りは保つ。変えなければ本文をそのまま返す。
     """
     if book is None or mode not in TAG_MODES:
