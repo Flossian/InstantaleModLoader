@@ -863,6 +863,42 @@ check("プリセットの値は全部 mod.json に宣言がある",
       all(name in MANIFEST["settings"] for name in sdxl_values),
       [name for name in sdxl_values if name not in MANIFEST["settings"]])
 
+print("カスタムプリセット（版26）")
+custom_dir = tempfile.mkdtemp(prefix="stable_diffusion_custom_")
+check("無ければ空", PR.load_custom(custom_dir) == [])
+ckpt = fake_checkpoint(["conditioner.embedders.1.model.x"], ".safetensors")
+ok1 = PR.save_custom(custom_dir, "WAI 1段", {"CHECKPOINT_PATH": ckpt, "PORTRAIT_SHORT": 704,
+                                            "STRIP_LORA": True}, now="t1")
+ok2 = PR.save_custom(custom_dir, "SD1.5", {"CHECKPOINT_PATH": "", "PORTRAIT_SHORT": 832}, now="t2")
+ok3 = PR.save_custom(custom_dir, "WAI 1段", {"CHECKPOINT_PATH": ckpt, "PORTRAIT_SHORT": 768,
+                                            "STRIP_LORA": True}, now="t3")
+rows = PR.load_custom(custom_dir)
+check("名前を付けて残し、同じ名前は並びの位置を保って置き換える",
+      ok1 and ok2 and ok3 and [r["name"] for r in rows] == ["WAI 1段", "SD1.5"]
+      and rows[0]["values"]["PORTRAIT_SHORT"] == 768 and rows[0]["saved"] == "t3", rows)
+check("型は保つ（数は数、真偽は真偽）",
+      isinstance(rows[0]["values"]["PORTRAIT_SHORT"], int) and rows[0]["values"]["STRIP_LORA"] is True)
+check("名前が空なら残さない", PR.save_custom(custom_dir, "  ", {}) is False)
+got, notes = PR.custom_values(PR.find_custom(custom_dir, "WAI 1段"),
+                              ["CHECKPOINT_PATH", "PORTRAIT_SHORT", "STRIP_LORA", "LCM_STEPS"])
+check("いまの項目だけ入れ、無い項目はいまの値のまま（注記する）",
+      set(got) == {"CHECKPOINT_PATH", "PORTRAIT_SHORT", "STRIP_LORA"}
+      and any("LCM_STEPS" in note for note in notes), (got, notes))
+got, notes = PR.custom_values({"name": "x", "values": {"OLD_KEY": 1, "CHECKPOINT_PATH": ckpt}},
+                              ["CHECKPOINT_PATH"])
+check("いまの版に無い項目は入れない（注記する）",
+      got == {"CHECKPOINT_PATH": ckpt} and any("OLD_KEY" in note for note in notes), notes)
+gone = os.path.join(custom_dir, "nowhere", "missing.safetensors")
+got, notes = PR.custom_values({"name": "x", "values": {"CHECKPOINT_PATH": gone, "TAESD_PATH": ""}},
+                              ["CHECKPOINT_PATH", "TAESD_PATH"])
+check("見当たらないチェックポイントは注記する（入れることは止めない）",
+      got["CHECKPOINT_PATH"] == gone and any("見つかりません" in note for note in notes), notes)
+check("消す", PR.delete_custom(custom_dir, "SD1.5")
+      and [r["name"] for r in PR.load_custom(custom_dir)] == ["WAI 1段"])
+check("無い名前は消せない", PR.delete_custom(custom_dir, "SD1.5") is False)
+io.open(PR.custom_path(custom_dir), "w", encoding="utf-8").write("{壊れた")
+check("壊れたファイルは空として読む", PR.load_custom(custom_dir) == [])
+
 print("元 MOD の ini の取り込み")
 _spec = _ilu.spec_from_file_location("iniimport_under_test",
                                      os.path.join(MOD_DIR, "iniimport.py"))

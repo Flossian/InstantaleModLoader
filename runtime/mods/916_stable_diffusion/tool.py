@@ -22,7 +22,7 @@ TECH.md §3.12 の契約で動く（`131_sharp_portrait` の道具と同じ）�
 
 | 元 GUI | ここ | 違い |
 |---|---|---|
-| 導入 / 管理 | 状態 / モデル | 導入・原状復帰は無い（DLL を差し替えないため）。状態とモデルの差し替えを置く |
+| 導入 / 管理 | 状態 / モデル | 導入・原状復帰は無い（DLL を差し替えないため）。状態とモデルの差し替えを置く。版26 でカスタムプリセット（`presets.py` の後半）を足した |
 | 解像度 | 解像度 | 種類が縦長 / 横長 / 正方形ではなく 立ち絵 / 敵 / 背景（呼び手で分かるため） |
 | LoRA 付替 | LoRA 付替 | 同じ |
 | プロンプト追加 | プロンプト追加 | 同じ |
@@ -580,7 +580,7 @@ def build_window(rules_in=None, settings_in=None, note=""):
             if name in entries:
                 entries[name].set(value)
         preset_note.configure(text=chr(10).join(
-            ["{} を入れました。内容を見て「保存」を押してください。".format(
+            ["{} を読み込みました。内容を確認して「保存」を押してください。".format(
                 presets.by_key(key)["label"])] + ["※ " + note for note in notes]))
 
     row = ttk.Frame(box)
@@ -594,6 +594,109 @@ def build_window(rules_in=None, settings_in=None, note=""):
                   text="{}: {}".format(preset["label"], preset["about"])).pack(
             anchor="w", pady=(4, 0))
     preset_note.pack(anchor="w", pady=(6, 0))
+
+    # カスタムプリセット（版26。`presets.py` の後半）。組み込みのプリセットと同じく、
+    # 読み込むのは欄までで、反映するのは下の「保存」。
+    box = group(tab, "カスタムプリセット")
+    ttk.Label(box, style="Faint.TLabel", wraplength=740, justify="left",
+              text=("現在の設定（チェックポイント・TAESD・VAE・LoRA の置き場・解像度・サンプラー・"
+                    "LoRA タグの除去など）を名前を付けてプリセットとして保存し、あとで読み込める。"
+                    "SD1.5 と SDXL の切り替えなどに使う。"
+                    "読み込んだだけでは反映されない（内容を確認して下の「保存」を押す）。"
+                    "プロンプトの規則はモデル別の行で切り替わるため、プリセットには含めない。"
+                    r"保存先は state\stable_diffusion\presets.json。")).pack(anchor="w")
+    custom_name = tk.StringVar()
+    custom_new = tk.StringVar()
+    line = ttk.Frame(box)
+    line.pack(anchor="w", pady=(8, 0))
+    ttk.Label(line, text="プリセット").pack(side="left")
+    custom_box = ttk.Combobox(line, textvariable=custom_name, state="readonly", width=34)
+    custom_box.pack(side="left", padx=(8, 8))
+    custom_detail = ttk.Label(box, text="", justify="left")
+    custom_note = ttk.Label(box, text="", justify="left")
+
+    def show_custom(*_args):
+        entry = presets.find_custom(state_dir, custom_name.get())
+        if entry is None:
+            custom_detail.configure(text="保存したプリセットはまだない")
+            return
+        got = entry["values"]
+        custom_detail.configure(text=chr(10).join([
+            describe_family(got, game_dir),
+            "TAESD デコーダ: {}".format(
+                os.path.basename(str(got.get("TAESD_PATH") or "")) or "差し替えなし"),
+            "立ち絵 {}/{}・敵 {}/{}・背景 {}/{}".format(
+                got.get("PORTRAIT_SHORT"), got.get("PORTRAIT_MAX_LONG"),
+                got.get("ENEMY_SHORT"), got.get("ENEMY_MAX_LONG"),
+                got.get("BACKGROUND_SHORT"), got.get("BACKGROUND_MAX_LONG")),
+            "LCM の段 {} / {} / {} / {}".format(
+                got.get("LCM_METHOD"), got.get("LCM_STEPS"), got.get("LCM_CFG"),
+                got.get("LCM_SCHEDULER")),
+            "保存日時: {}".format(str(entry.get("saved") or "不明").replace("T", " "))]))
+
+    def list_custom(select=None):
+        names = [row["name"] for row in presets.load_custom(state_dir)]
+        custom_box.configure(values=names)
+        if select in names:
+            custom_name.set(select)
+        elif custom_name.get() not in names:
+            custom_name.set(names[0] if names else "")
+        show_custom()
+
+    def use_custom():
+        entry = presets.find_custom(state_dir, custom_name.get())
+        if entry is None:
+            return
+        got, notes = presets.custom_values(entry, list(entries))
+        for name, value in got.items():
+            var = entries[name]
+            var.set(bool(value) if isinstance(var, tk.BooleanVar) else value)
+        custom_note.configure(text=chr(10).join(
+            ["「{}」を読み込みました。内容を確認して「保存」を押してください。".format(entry["name"]),
+             "チェックポイント・TAESD・VAE・LoRA の置き場の変更は、ゲームを再起動すると反映されます。"]
+            + ["※ " + note for note in notes]))
+
+    def keep_custom():
+        name = custom_new.get().strip() or custom_name.get().strip()
+        if not name:
+            messagebox.showerror("プリセット名がありません", "プリセット名を入力してください。")
+            return
+        got, bad = modtool.coerce_all(MOD_DIR, current(), root_dir)
+        if bad:
+            messagebox.showerror("設定を確かめてください", bad)
+            return
+        if presets.find_custom(state_dir, name) is not None and not messagebox.askyesno(
+                "上書きの確認", "「{}」は既にあります。現在の設定で上書きしますか？".format(name)):
+            return
+        if not presets.save_custom(state_dir, name, got):
+            messagebox.showerror("保存できませんでした",
+                                 "{} に書き込めませんでした。".format(presets.custom_path(state_dir)))
+            return
+        custom_new.set("")
+        list_custom(select=name)
+        custom_note.configure(text="現在の設定を「{}」として保存しました。".format(name))
+
+    def drop_custom():
+        name = custom_name.get().strip()
+        if not name or not messagebox.askyesno("削除の確認", "「{}」を削除しますか？".format(name)):
+            return
+        presets.delete_custom(state_dir, name)
+        list_custom()
+        custom_note.configure(text="「{}」を削除しました。".format(name))
+
+    ttk.Button(line, text="読み込む", command=use_custom).pack(side="left", padx=(0, 8))
+    ttk.Button(line, text="削除", command=drop_custom).pack(side="left")
+    line = ttk.Frame(box)
+    line.pack(anchor="w", pady=(6, 0))
+    ttk.Label(line, text="プリセット名").pack(side="left")
+    ttk.Entry(line, textvariable=custom_new, width=36).pack(side="left", padx=(8, 8))
+    ttk.Button(line, text="プリセットとして保存", command=keep_custom).pack(side="left")
+    ttk.Label(box, style="Faint.TLabel", wraplength=740, justify="left",
+              text="プリセット名が空のときは、選択中のプリセットを上書きする。").pack(anchor="w", pady=(2, 0))
+    custom_detail.pack(anchor="w", pady=(6, 0))
+    custom_note.pack(anchor="w", pady=(6, 0))
+    custom_name.trace_add("write", show_custom)
+    list_custom()
 
     box = group(tab, "元 MOD（DLL 版）の設定を取り込む")
     ttk.Label(box, style="Faint.TLabel", wraplength=740, justify="left",
@@ -699,7 +802,7 @@ def build_window(rules_in=None, settings_in=None, note=""):
         tables["words"].replace_rows(got["words"])
         tables["tags"].replace_rows(got["tags"])
         profile_note.configure(text=(
-            "{} を「モデル = {}」で入れました。内容を見て「保存」を押してください。".format(
+            "{} の行を「モデル = {}」で追加しました。内容を確認して「保存」を押してください。".format(
                 profiles.by_key(key)["label"], model)))
 
     row = ttk.Frame(box)

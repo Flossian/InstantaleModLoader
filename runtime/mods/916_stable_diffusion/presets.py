@@ -20,7 +20,21 @@ SD1.5 に 1024x2048 を 24 steps で描かせることになり、
 
 元 MOD の `portrait_*` はこちらの1段目と2段目の両方に写す（`iniimport` と同じ）。
 元 MOD の `square`（敵）は `portrait` と同じ値を使っていたので、敵も同じにする。
+
+##### カスタムプリセット（版26）
+
+道具画面の設定をまるごと名前を付けて保存し、あとで欄へ読み込める。
+置き場は `state\stable_diffusion\presets.json`（規則の `prompt_rules.json` の隣）。
+残すのは設定（`mod.json` の項目）だけで、規則は持たない。規則は「モデル別」の行でモデルごとに切り替わる。
+
+    {"presets": [{"name": "WAI Mature 1段", "saved": "2026-10-26T14:10:00",
+                  "values": {"CHECKPOINT_PATH": "...", "PORTRAIT_SHORT": 704, ...}}]}
 """
+import io
+import json
+import os
+import time
+
 import assets  # noqa: E402  自分の隣（モデルの置き場）
 
 #: 段のサンプラーの設定名。
@@ -101,4 +115,102 @@ def resolve(key, state_dir):
         else:
             notes.append("{}: {} に無いので空のまま。置くか「参照」で指す".format(
                 label, assets.dir_of(state_dir, family, kind)))
+    return values, notes
+
+
+
+# ---------------------------------------------------------- カスタムプリセット
+
+CUSTOM_DIRNAME = "stable_diffusion"
+CUSTOM_NAME = "presets.json"
+
+
+def custom_path(state_dir):
+    return os.path.join(state_dir, CUSTOM_DIRNAME, CUSTOM_NAME)
+
+
+def load_custom(state_dir):
+    """カスタムプリセットの並び（保存した順）。無い・壊れているなら空。"""
+    try:
+        with io.open(custom_path(state_dir), encoding="utf-8") as fh:
+            data = json.load(fh)
+    except Exception:
+        return []
+    rows = data.get("presets") if isinstance(data, dict) else None
+    return [row for row in rows or []
+            if isinstance(row, dict) and str(row.get("name") or "").strip()
+            and isinstance(row.get("values"), dict)]
+
+
+def _write_custom(state_dir, rows):
+    path = custom_path(state_dir)
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + ".tmp"
+        with io.open(tmp, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(json.dumps({"presets": rows}, ensure_ascii=False, indent=1))
+        os.replace(tmp, path)
+        return True
+    except Exception:
+        return False
+
+
+def find_custom(state_dir, name):
+    name = str(name or "").strip()
+    for row in load_custom(state_dir):
+        if row["name"] == name:
+            return row
+    return None
+
+
+def save_custom(state_dir, name, values, now=None):
+    """名前を付けて残す。同じ名前は置き換える（並びの位置は保つ）。書けたかを返す。"""
+    name = str(name or "").strip()
+    if not name:
+        return False
+    entry = {"name": name, "saved": now or time.strftime("%Y-%m-%dT%H:%M:%S"),
+             "values": dict(values)}
+    rows = load_custom(state_dir)
+    for index, row in enumerate(rows):
+        if row["name"] == name:
+            rows[index] = entry
+            break
+    else:
+        rows.append(entry)
+    return _write_custom(state_dir, rows)
+
+
+def delete_custom(state_dir, name):
+    """名前のプリセットを消す。消せたかを返す（無ければ False）。"""
+    rows = load_custom(state_dir)
+    kept = [row for row in rows if row["name"] != str(name or "").strip()]
+    if len(kept) == len(rows):
+        return False
+    return _write_custom(state_dir, kept)
+
+
+def custom_values(entry, known):
+    """欄へ入れる値と、画面に出す注記。
+
+    `known` はいまの設定の項目名。知らない項目（版が変わって無くなったもの）は落とし、
+    プリセットに無い項目（後から足された設定）はいまの値のまま残す。
+    差し替えるファイルが見当たらなければ注記する（入れることは止めない）。
+    """
+    values = dict((key, value) for key, value in (entry.get("values") or {}).items()
+                  if key in known)
+    notes = []
+    dropped = sorted(set(entry.get("values") or {}) - set(known))
+    if dropped:
+        notes.append("現在の版にない項目は読み込みませんでした: {}".format(", ".join(dropped)))
+    missing = sorted(set(known) - set(entry.get("values") or {}))
+    if missing:
+        notes.append("プリセットにない項目は現在の値のままです: {}".format(", ".join(missing)))
+    for key, label in (("CHECKPOINT_PATH", "チェックポイント"), ("TAESD_PATH", "TAESD デコーダ"),
+                       ("VAE_PATH", "VAE")):
+        path = str(values.get(key) or "").strip()
+        if path and os.path.isabs(path) and not os.path.isfile(path):
+            notes.append("{}が見つかりません: {}".format(label, path))
+    path = str(values.get("LORA_DIR") or "").strip()
+    if path and os.path.isabs(path) and not os.path.isdir(path):
+        notes.append("LoRA の置き場が見つかりません: {}".format(path))
     return values, notes
