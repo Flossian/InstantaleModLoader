@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """品の外見文（`item_appearance`）を LLM に書かせ、`128_` の選び方でどの絵が付くかをゲーム抜きで録る。
 
-    python tools\\item_image_probe.py --backend claude                 # Haiku 5.5（work\\key の鍵）
+    python tools\\item_image_probe.py --backend claude                 # Haiku 5.5（鍵は ANTHROPIC_API_KEY）
     python tools\\item_image_probe.py --backend local                  # config.json のローカルモデル（Gemma4 系）
     python tools\\item_image_probe.py --backend local --sources restock --genres sf,modern
     python tools\\item_image_probe.py --sheet out\\item_image_probe_<時刻>_claude.jsonl   # 一覧の画像だけ作り直す
@@ -30,8 +30,6 @@
 - Claude: `136_` の送信口を通して API へ直接送る（モデルは `claude-haiku-5-5`、推論量は `136_` の既定）。
   system は頼み文、型は `output_config.format`。ゲームの店の頼みは user が無いので `＜取引＞` を置く
   （ゲームが Claude へ送る本文の形は測っていない）
-
-ゲームと LLM サーバは止めておくこと（ローカル）。鍵は `work\\key`（git 管理外）。
 
 ## 出力
 
@@ -406,7 +404,9 @@ class ClaudeSender(object):
         sys.modules["cmo_probe"] = mod
         spec.loader.exec_module(mod)
         side = sys.modules["cmo_probe.claude_side"]
-        self.key = io.open(os.path.join(ROOT, "work", "key"), encoding="utf-8").read().strip()
+        self.key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+        if not self.key:
+            raise SystemExit("鍵が無い: 環境変数 ANTHROPIC_API_KEY")
         mod.CLAUDE_MODEL, mod.CLAUDE_CUSTOM, mod.CLAUDE_CACHE = CLAUDE_MODEL, "", "off"
 
         sender = self
