@@ -35,7 +35,8 @@ KIND_BY_KEY = {kind["key"]: kind for kind in KINDS}
 
 #: 依頼の概要の末尾に足す1行の目印。何度足しても二重にしない。
 NOTE_MARK = "【裏の仕事："
-NOTE_TEXT = "\n\n【裏の仕事：{name}】報酬は表の相場の{mult}倍。片付ければ{town}で手配される（手配度 -{loss}）。"
+NOTE_TEXT = ("\n\n【裏の仕事：{name}】報酬は表の相場の{mult}倍。片付ければ{town}で手配される（手配度 -{loss}）。"
+             "持ち込まれてから{days}日で取り下げられる。")
 
 BRIEF_TEXT = (
     "\n\n【裏の仕事】この依頼はギルドを通さない裏社会の依頼として作ること。"
@@ -81,10 +82,10 @@ def brief(kind, town, broker):
                              enemies=kind["enemies"], boss=kind["boss"])
 
 
-def note(kind, town, mult, loss):
-    """依頼の概要の末尾に足す1行。"""
+def note(kind, town, mult, loss, days):
+    """依頼の概要の末尾に足す1行。`days` は受注期限（日）。"""
     return NOTE_TEXT.format(name=kind["name"], mult=mult_text(mult),
-                            town=town or "この街", loss=loss)
+                            town=town or "この街", loss=loss, days=days)
 
 
 def reward_amount(text):

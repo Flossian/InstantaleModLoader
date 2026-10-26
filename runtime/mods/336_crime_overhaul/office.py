@@ -6,6 +6,7 @@
   手配の重さの合計で解禁され、ゲーム自身の依頼の生成に種類ごとの指示を差し込んで作る
 - 報酬は種類ごとの倍率（5〜10倍）、片付けると依頼の街の手配度が下がる。ギルドの掲示板からは隠し、
   掲示板に出さない依頼としてローダの窓口 `board` に置く（他の MOD が掲示板の依頼として拾わないように）
+- 作ってから `DEADLINE_DAYS` 日で取り下げる（受注期限）。見回りは日数が進んだ後と、事務所の一覧を組むとき
 - 公式の「裏の依頼掲示板」（`NotImplementedManager`）と同じ役割なので、公式が未実装のあいだだけ枠を乗っ取る
   （方針の例外。はじめは別のボタンだったが、選択肢が増えたので枠を使う形にした）。
   ローダの窓口 `choices` の `replace` で同じ場所に差し替えるだけで、ゲームのボタン（spec は公式のまま）は書き換えない。
@@ -15,7 +16,7 @@
 """
 import time
 
-from instantale_modloader import board, choices, quest_clients, ui, wanted
+from instantale_modloader import board, choices, durations, quest_clients, ui, wanted
 
 from . import common, theft, underworld
 
@@ -42,6 +43,8 @@ QUEST_TYPE = "settlement_quest"
 QUEST_CHOICE_SPEC = "QuestChoiceManager"
 #: 生成の頼み文へ差し込む印の寿命（秒）。`307_` と同じ。
 INJECT_TTL = 300.0
+#: 裏の仕事の受注期限（ゲームの日数）。作ってからこの日数が経つと、受けている最中でなければ取り下げる（2026-10-25。版4）。
+DEADLINE_DAYS = 30
 LOOKING_TEXT = "{broker}が帳面をめくり、回せる仕事を探している……"
 JOB_FOUND_TEXT = "「{name}の仕事だ。報酬は表の相場の{mult}倍。下手を打てば{town}には居られなくなる」{broker}が声を潜めた。"
 NO_JOB_TEXT = "「今は回せる仕事が無い」"
@@ -58,7 +61,7 @@ def install(env):
     # -------------------------------------------------- 裏の仕事
     # 裏の事務所の「裏の依頼掲示板」の一覧に「裏の仕事を探す」を出す。押すとゲーム自身の依頼の生成（`generate_random_quest`）を
     # 呼び、その内側の `random_quest_generator` の頼み文へ種類ごとの指示を差し込む（`307_` と同じ形）。
-    # 依頼の id は控え（`state\` の `underworld`）に持ち、依頼の辞書には鍵を足さない（GAME.md §2.9）。
+    # 依頼の id と作った日は控え（`state\` の `underworld`）に持ち、依頼の辞書には鍵を足さない（GAME.md §2.9）。
     # ギルドの掲示板からは隠し、帰還のときに報酬へ倍率を掛け、依頼の街の手配度を下げる。
     inject = env.quest_inject
     #: 公式の枠が実装されたことを1度だけ記録するための印。`board` は最後に記録した一覧の並び。
@@ -80,9 +83,47 @@ def install(env):
         status = config.get("status") if isinstance(config, dict) else None
         return quest is not None and status == "incomplete"
 
-    def open_jobs_here(app, area_id):
-        """この街の、まだ片付いていない裏の仕事の id（古い順）。片付いた控えはここで捨てる。"""
+    def withdraw_stale(app):
+        """作ってから `DEADLINE_DAYS` 日経った裏の仕事を取り下げる（`ui.remove_quest` で世界から片付ける）。
+
+        受けている最中の仕事は帰還を待つ（次の見回りで取り下げる）。版3までの控えには作った日が無いので、初めて見た日を作った日とする。
+        """
+        day = ui.game_day(app)
+        if day is None:
+            return
         with worlds.lock:
+            playthrough, jobs = jobs_of(app)
+            changed = False
+            for quest_id, job in list(jobs.items()):
+                if not isinstance(job, dict):
+                    continue
+                made = job.get("day")
+                if isinstance(made, bool) or not isinstance(made, int):
+                    job["day"] = day
+                    changed = True
+                    continue
+                if day - made < DEADLINE_DAYS or not job_open(app, quest_id) \
+                        or ui.current_quest_id(app) == str(quest_id):
+                    continue
+                gone = ui.remove_quest(app, quest_id)
+                if not gone:
+                    continue
+                jobs.pop(quest_id, None)
+                changed = True
+                write("underworld: withdrew job {} made on day {} (day {}; removed from {})".format(
+                    quest_id, made, day, gone))
+            if changed:
+                worlds.save(playthrough)
+
+    def open_jobs_here(app, area_id, sweep=True):
+        """この街の、まだ片付いていない裏の仕事の id（古い順）。片付いた控えはここで捨てる。
+
+        `sweep` なら先に期限の過ぎた仕事を取り下げる。ゲームが依頼を数えた後（`active_quest_count`）では取り下げない
+        （数えた後に消すと、引く数が合わなくなる）。
+        """
+        with worlds.lock:
+            if sweep:
+                withdraw_stale(app)
             playthrough, jobs = jobs_of(app)
             gone = [qid for qid in jobs if not job_open(app, qid)]
             for qid in gone:
@@ -254,13 +295,13 @@ def install(env):
         with worlds.lock:
             playthrough, jobs = jobs_of(app)
             jobs[quest_id] = {"kind": kind["key"], "area": area_id, "mult": mult, "loss": loss,
-                              "client": str(getattr(_facility, "owner", "") or "")}
+                              "client": str(getattr(_facility, "owner", "") or ""), "day": ui.game_day(app)}
             worlds.save(playthrough)
         quest = ui.quest_of(app, quest_id)
         summary = ui.quest_value(quest, "request_summary", "") or ""
         if isinstance(summary, str) and underworld.NOTE_MARK not in summary:
             ui.set_quest_value(app, quest_id, "request_summary",
-                               summary + underworld.note(kind, town, mult, loss))
+                               summary + underworld.note(kind, town, mult, loss, DEADLINE_DAYS))
         write("underworld: made job {} {!r} kind {} x{} loss {} (weight {})".format(
             quest_id, ui.quest_value(quest, "quest_title", ""), kind["name"], mult, loss,
             wanted.total_weight(player)))
@@ -299,7 +340,7 @@ def install(env):
         if isinstance(result, bool) or not isinstance(result, int):
             return result
         app = getattr(self, "app", None) or ui.find_app()
-        hidden = len(open_jobs_here(app, ui.area_id_of(ui.current_area(app)))) if app else 0
+        hidden = len(open_jobs_here(app, ui.area_id_of(ui.current_area(app)), sweep=False)) if app else 0
         return max(0, result - hidden) if hidden else result
 
     # 帰還の報酬に倍率を掛ける（`334_` の懸賞金と同じ形）。窓は `QuestEndManager.execute` の間だけ。
@@ -504,6 +545,14 @@ def install(env):
         clients_copy[playthrough] = [dict(row) for row in rows]
         return rows
 
+    def after_days(call):
+        """日数が進んだ後に、期限の過ぎた裏の仕事を取り下げる（ローダの日数の関所 `durations.on_days`。TECH.md §3.3.21）。"""
+        try:
+            withdraw_stale(call.app)
+        except Exception:
+            ctx.log_exc("crime incentive: cannot withdraw the stale underworld jobs")
+
+    durations.on_days(env.owner + ":underworld", ctx, after=after_days, write=write)
     board.declare_kept_off(env.owner, ctx, kept_off)
     quest_clients.declare(env.owner, ctx, client_rows)
     env.underworld_banned = banned

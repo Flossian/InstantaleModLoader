@@ -10,7 +10,7 @@
     "en": "Factions written in the world setting get a standing toward you, and NPCs of each faction treat you with that bias. Talks move your standing, solving a town's incident pleases its faction, and relations between factions shift on their own as days pass (heard as rumors). A faction that sees you as its enemy sends someone to challenge you when you walk into its towns. Worlds whose setting names fewer than two factions get none. Turn it on per world",
     "ja": "世界の設定に書かれた勢力ごとに主人公の見られ方を持ち、その勢力の NPC は見られ方に応じた態度で接する。見られ方は会話の中身で動き、街の出来事を片付けるとその街の勢力に好かれる。勢力どうしの仲も日数が進むにつれて動き、噂として聞こえてくる。敵対している勢力の街を歩いていると、その勢力の刺客が勝負を挑んでくる。設定に勢力が2つ以上書かれていない世界では何もしない。世界ごとに有効にする"
   },
-  "version": "5",
+  "version": "6",
   "author": "R01/Flossian",
   "shares": [
     "town_incidents"
@@ -152,7 +152,7 @@
     },
     "HUNTER_HOSTILE_RATE": {
       "type": "int",
-      "default": 20,
+      "default": 10,
       "min": 0,
       "max": 100,
       "label": {
@@ -180,7 +180,7 @@
     },
     "HUNTER_GAP_DAYS": {
       "type": "int",
-      "default": 45,
+      "default": 90,
       "min": 0,
       "max": 3650,
       "label": {
@@ -194,7 +194,7 @@
     },
     "HUNTER_GAP_SPREAD_DAYS": {
       "type": "int",
-      "default": 15,
+      "default": 30,
       "min": 0,
       "max": 3650,
       "label": {
@@ -202,13 +202,13 @@
         "en": "Spread of the days between hunters"
       },
       "note": {
-        "ja": "基準の日数を、前後にこの日数までランダムにずらす（既定なら 30〜60 日）。0 なら毎回基準の日数",
-        "en": "Shifts the base days by a random amount up to this many days either way (30 to 60 days by default). 0 always uses the base"
+        "ja": "基準の日数を、前後にこの日数までランダムにずらす（既定なら 60〜120 日）。0 なら毎回基準の日数",
+        "en": "Shifts the base days by a random amount up to this many days either way (60 to 120 days by default). 0 always uses the base"
       }
     },
     "HUNTER_GAP_MIN_DAYS": {
       "type": "int",
-      "default": 30,
+      "default": 60,
       "min": 0,
       "max": 3650,
       "label": {
@@ -216,8 +216,8 @@
         "en": "Minimum days between hunters"
       },
       "note": {
-        "ja": "ずらした日数がこれより短くなっても、少なくともこの日数は空ける。ゲームの宿泊や移動は3か月ほど進むので、既定は1か月",
-        "en": "Even when the shift makes it shorter, at least this many days pass. Stays and travel in the game skip about three months, so the default is one month"
+        "ja": "ずらした日数がこれより短くなっても、少なくともこの日数は空ける。宿屋の1泊で30日、移動で3か月ほど進むので、既定は2か月",
+        "en": "Even when the shift makes it shorter, at least this many days pass. A stay at the inn skips 30 days and travel about three months, so the default is two months"
       }
     },
     "HUNTER_LEVEL_OFFSET": {

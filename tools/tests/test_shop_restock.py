@@ -212,7 +212,10 @@ class ShoppingStartManagerRemake:
         if isinstance(location, str):
             location = self.app.world.areas["0"].nodes["0"].facilities.get(location)
         owner = self.app.world.characters.get(getattr(location, "owner", None))
-        if owner is not None and not owner.inventory and self.refills:
+        # 雛形がまだ無い店は、主が品を持っていても品揃えを作る（2026-10-26 の実機。
+        # 品を1つ持っていた鍛冶屋の主で `goods None -> 12`）。
+        no_goods = not (getattr(location, "config", None) or {}).get("goods")
+        if owner is not None and (not owner.inventory or no_goods) and self.refills:
             if self.defer:
                 CLOCK.schedule_once(
                     lambda dt: self.set_item_from_world_data(owner, self.tier), 0)
@@ -882,6 +885,24 @@ def main():
     owner.inventory.clear()                 # その後に買い占めた
     shop(ctx, manager)
     check("生成が落ちた店: 雛形ができた後の買い占めは空のまま", owner.inventory == {},
+          owner.inventory)
+
+    # -- 雛形がまだ無い店の主が、売買の前から品を持っている ----------------
+    # （`340_` が売買を足した鍛冶屋の主が1品持っていた。版7は作られた品揃えを全部外した）
+    reset_state()
+    module, ctx = fresh_mod()
+    app, owner, facility = make_world(days=100, stock={"item_325": {"name": "前から持っていた品"}})
+    facility.config = {"level_of_detail": 1}    # 作る前の施設には雛形の鍵が無い
+    manager = ShoppingStartManagerRemake(app)
+    shop(ctx, manager)
+    check("品を持つ主の初回: 作られた品揃えを外さない", len(owner.inventory) == 4, owner.inventory)
+    check("品を持つ主の初回: 前から持っていた品も残る", "item_325" in owner.inventory, owner.inventory)
+    check("品を持つ主の初回: 外した記録は出ない",
+          "kept sold out" not in read_log(module), read_log(module))
+    made = [key for key in owner.inventory if key != "item_325"]
+    del owner.inventory[made[0]]            # 1つ買った
+    shop(ctx, manager)
+    check("品を持つ主の初回: 雛形ができた後は買った品を作り直させない", len(owner.inventory) == 3,
           owner.inventory)
 
     # -- 一度開いた店を買い占めたら空のまま ------------------------------

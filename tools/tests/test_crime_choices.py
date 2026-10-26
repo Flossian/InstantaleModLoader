@@ -9,7 +9,8 @@
            読み直しても一覧に戻る。「やめる」で年ごとの画面に戻る。年ごとの画面が替われば一覧は閉じる。
            一覧の間は牢の中だと窓口 `confinement` に知らせる
   事務所 … 公式の「裏の依頼掲示板」の枠を同じ場所で差し替える（ゲームのボタンは書き換えない。保存の間は元に戻る）。
-           押すと裏の仕事の一覧（MOD だけの画面）。依頼のボタンの押下はゲームへ流す
+           押すと裏の仕事の一覧（MOD だけの画面）。依頼のボタンの押下はゲームへ流す。
+           作ってから 30 日経った仕事は、日数が進んだ後に取り下げる（受けている最中と片付けた仕事は除く）
   前の版 … 前の版の印（`mod_crime_incentive_action`）のボタンは、自前のものは外し、ゲームのボタンからは印だけ外す
 """
 import importlib
@@ -269,6 +270,56 @@ try:
     choices.close_screen(app)
 finally:
     office.underworld.unlocked = unlocked
+
+print("[事務所] 受注期限（作ってから {} 日で取り下げる）".format(office.DEADLINE_DAYS))
+from instantale_modloader import durations  # noqa: E402
+
+
+def days_after():
+    """日数が進んだ後の処理（ローダの日数の関所に置いた 336 の登録）を呼ぶ。"""
+    entry = next(entry for owner, entry in durations.DAYS_HOOKS.entries() if owner.endswith(":underworld"))
+    entry["after"](types.SimpleNamespace(app=app, memo=None))
+
+
+with common._store()["worlds"].lock:
+    key = common._store()["worlds"].playthrough(app)
+    bucket = common._store()["worlds"].load(key)
+    bucket["underworld"] = {"90": {"kind": "smuggle", "area": "", "day": 100},       # 期限に届く
+                            "91": {"kind": "smuggle", "area": "", "day": 101},       # 1日足りない
+                            "92": {"kind": "smuggle", "area": "", "day": 100},       # 受けている最中
+                            "93": {"kind": "smuggle", "area": ""}}                    # 版3までの控え（作った日が無い）
+app.world.quests = {qid: types.SimpleNamespace(id=qid, quest_title="仕事" + qid, config={"status": "incomplete"})
+                    for qid in ("90", "91", "92", "93")}
+app.save_data_dict["quests"] = {qid: {"id": qid} for qid in app.world.quests}
+app.world.days_elapsed = 130
+app.current_quest_data = {"id": "92"}
+ui_quest_of = ui.quest_of
+ui.quest_of = lambda a, qid: a.world.quests.get(str(qid))
+try:
+    days_after()
+    jobs = common._store()["worlds"].load(key)["underworld"]
+    check("{} 日経った仕事は世界から片付け、控えからも外す".format(office.DEADLINE_DAYS),
+          "90" not in jobs and "90" not in app.world.quests and "90" not in app.save_data_dict["quests"],
+          (sorted(jobs), sorted(app.world.quests)))
+    check("期限に届いていない仕事は残る", "91" in jobs and "91" in app.world.quests, sorted(jobs))
+    check("受けている最中の仕事は取り下げない", "92" in jobs and "92" in app.world.quests, sorted(jobs))
+    check("作った日の無い控えは、見た日を作った日にする", jobs.get("93", {}).get("day") == 130, jobs.get("93"))
+    app.current_quest_data = None
+    days_after()
+    check("帰還した後の見回りで、期限の過ぎた仕事を取り下げる", "92" not in jobs and "92" not in app.world.quests
+          and "91" in jobs and "93" in jobs, sorted(jobs))
+    app.world.quests["91"].config["status"] = "completed"
+    app.world.days_elapsed = 200
+    days_after()
+    check("片付けた仕事は取り下げない（帰還の側で片付く）", "91" in app.world.quests and "93" not in app.world.quests,
+          sorted(app.world.quests))
+finally:
+    ui.quest_of = ui_quest_of
+    app.current_quest_data = None
+    del app.world.days_elapsed
+    app.save_data_dict.pop("quests", None)
+    with common._store()["worlds"].lock:
+        common._store()["worlds"].load(key).pop("underworld", None)
 
 print("[事務所] 依頼人の窓口と、片付いた依頼の控え")
 from instantale_modloader import board as loader_board  # noqa: E402
