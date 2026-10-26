@@ -642,6 +642,11 @@ def build_window(rules_in=None, settings_in=None, note=""):
         elif custom_name.get() not in names:
             custom_name.set(names[0] if names else "")
         show_custom()
+        for listener in preset_listeners:
+            listener(names)
+
+    #: カスタムプリセットの一覧が変わったときに知らせる先（種類ごとのプリセットのプルダウン）。
+    preset_listeners = []
 
     def use_custom():
         entry = presets.find_custom(state_dir, custom_name.get())
@@ -697,6 +702,120 @@ def build_window(rules_in=None, settings_in=None, note=""):
     custom_note.pack(anchor="w", pady=(6, 0))
     custom_name.trace_add("write", show_custom)
     list_custom()
+
+    # 種類ごとのプリセット（版26。上級者向け）。既定は畳んで隠し、使うときは注意を確かめてから。
+    kind_rows = (("PORTRAIT_PRESET", "立ち絵"), ("ENEMY_PRESET", "敵・モンスター"),
+                 ("BACKGROUND_PRESET", "背景"))
+    kind_same = "（この画面の設定）"
+    entries["KIND_PRESETS"] = tk.BooleanVar(value=bool(values.get("KIND_PRESETS")))
+    for key, _label in kind_rows:
+        entries[key] = tk.StringVar(value=str(values.get(key) or ""))
+    kind_outer = ttk.Frame(tab)
+    kind_outer.pack(fill="x", pady=(0, 10))
+    kind_head = ttk.Button(kind_outer)
+    kind_head.pack(anchor="w")
+    kind_body = ttk.LabelFrame(kind_outer, padding=8)
+    kind_open = {"value": False}
+    # 画面の説明は常体、確かめのダイアログは丁寧語（道具画面の通知の決まり）。
+    ttk.Label(kind_body, wraplength=740, justify="left",
+              text="立ち絵・敵・背景を、それぞれ別のカスタムプリセットで描き分ける。").pack(anchor="w")
+    ttk.Label(kind_body, wraplength=740, justify="left", text="\n".join([
+        "注意",
+        "・ゲームのモデルとは別に、もう1つモデルを読み込む。そのぶん VRAM を多く使う。",
+        "・VRAM が足りないと、絵の生成がとても遅くなるか、ゲームが落ちる。"
+        "ローカルの LLM を同じ GPU で動かしているときは特に気をつける。",
+        "・プリセットのチェックポイントと TAESD は同じ系統（SD1.5 同士・SDXL 同士）にしておく。違うと絵が崩れる。",
+        "・種類ごとの最初の1枚は、モデルを読み込むぶん数秒遅くなる。",
+    ])).pack(anchor="w", pady=(6, 0))
+    kind_confirm = "\n".join([
+        "立ち絵・敵・背景を別のプリセットで描くため、ゲームのモデルとは別にもう1つモデルを読み込みます。",
+        "",
+        "VRAM が足りないと、絵の生成がとても遅くなったり、ゲームが落ちたりします。",
+        "ローカルの LLM を同じ GPU で動かしている場合は、特にご注意ください。",
+        "",
+        "使いますか？",
+    ])
+    kind_check = ttk.Checkbutton(kind_body, text="種類ごとのプリセットを使う",
+                                 variable=entries["KIND_PRESETS"])
+    kind_check.pack(anchor="w", pady=(8, 4))
+    kind_grid = ttk.Frame(kind_body)
+    kind_grid.pack(anchor="w", fill="x")
+    kind_note = ttk.Label(kind_body, text="", justify="left")
+    kind_note.pack(anchor="w", pady=(6, 0))
+    kind_boxes = {}
+
+    def kind_title():
+        state = "使用中" if entries["KIND_PRESETS"].get() else "未使用"
+        kind_head.configure(text="{} 種類ごとのプリセット（上級者向け・{}）".format(
+            "▼" if kind_open["value"] else "▶", state))
+
+    def toggle_kind():
+        kind_open["value"] = not kind_open["value"]
+        if kind_open["value"]:
+            kind_body.pack(fill="x", pady=(6, 0))
+        else:
+            kind_body.pack_forget()
+        kind_title()
+
+    kind_head.configure(command=toggle_kind)
+
+    def kind_lists(names=None):
+        """プルダウンの中身を組み直す。割り当てた名前が一覧に無ければ知らせる。"""
+        if names is None:
+            names = [row["name"] for row in presets.load_custom(state_dir)]
+        missing = []
+        for key, (box, shown) in kind_boxes.items():
+            now = entries[key].get()
+            choices = [kind_same] + list(names)
+            if now and now not in names:
+                choices.append(now)
+                missing.append(now)
+            box.configure(values=choices)
+            shown.set(now or kind_same)
+        kind_note.configure(text="".join(
+            "※ 割り当てたプリセット「{}」が見つかりません。この画面の設定で描きます。\n".format(name)
+            for name in sorted(set(missing))).rstrip())
+
+    def kind_states(*_args):
+        state = "readonly" if entries["KIND_PRESETS"].get() else "disabled"
+        for box, _shown in kind_boxes.values():
+            box.configure(state=state)
+        kind_title()
+
+    def confirm_kind():
+        """使うに切り替えるときは、注意を見せて確かめる。"""
+        if entries["KIND_PRESETS"].get() and not messagebox.askokcancel(
+                "種類ごとのプリセットを使いますか？", kind_confirm):
+            entries["KIND_PRESETS"].set(False)
+        kind_states()
+
+    kind_check.configure(command=confirm_kind)
+    for row_index, (key, label) in enumerate(kind_rows):
+        ttk.Label(kind_grid, text=label).grid(row=row_index, column=0, sticky="w",
+                                              padx=(0, 10), pady=2)
+        shown = tk.StringVar()
+        box = ttk.Combobox(kind_grid, textvariable=shown, state="readonly", width=34)
+        box.grid(row=row_index, column=1, sticky="w", pady=2)
+        kind_boxes[key] = (box, shown)
+
+        def picked(*_args, _key=key, _shown=shown):
+            want = "" if _shown.get() == kind_same else _shown.get()
+            if entries[_key].get() != want:
+                entries[_key].set(want)
+
+        def followed(*_args, _key=key, _shown=shown):
+            want = entries[_key].get() or kind_same
+            if _shown.get() != want:
+                _shown.set(want)
+
+        shown.trace_add("write", picked)
+        entries[key].trace_add("write", followed)
+    entries["KIND_PRESETS"].trace_add("write", kind_states)
+    preset_listeners.append(kind_lists)
+    kind_lists()
+    kind_states()
+    if entries["KIND_PRESETS"].get():
+        toggle_kind()                    # 使っている間は畳まずに見せる
 
     box = group(tab, "元 MOD（DLL 版）の設定を取り込む")
     ttk.Label(box, style="Faint.TLabel", wraplength=740, justify="left",

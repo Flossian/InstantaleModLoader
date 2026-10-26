@@ -37,7 +37,12 @@ HOT_NAMES = ("PORTRAIT_SHORT", "PORTRAIT_MAX_LONG",
              "STAGE1_METHOD", "STAGE1_STEPS", "STAGE1_CFG", "STAGE1_SCHEDULER",
              "STAGE2_METHOD", "STAGE2_STEPS", "STAGE2_CFG", "STAGE2_SCHEDULER",
              "LCM_METHOD", "LCM_STEPS", "LCM_CFG", "LCM_SCHEDULER",
-             "STRIP_LORA", "MODEL_SAFETY", "DIFFUSERS_RESIZE")
+             "STRIP_LORA", "MODEL_SAFETY", "DIFFUSERS_RESIZE",
+             "KIND_PRESETS", "PORTRAIT_PRESET", "ENEMY_PRESET", "BACKGROUND_PRESET")
+
+#: 種類ごとに割り当てるカスタムプリセットの設定名（版26）。
+KIND_PRESET_NAMES = (("portrait", "PORTRAIT_PRESET"), ("enemy", "ENEMY_PRESET"),
+                     ("background", "BACKGROUND_PRESET"))
 
 
 def stamp_of(path):
@@ -71,6 +76,11 @@ def derive(values):
         "strip_lora": bool(values["STRIP_LORA"]),
         "safety": str(values["MODEL_SAFETY"] or "auto"),
         "diffusers_resize": bool(values["DIFFUSERS_RESIZE"]),
+        # プリセットの値から組むときは無い項目なので get で読む（空 = この画面の設定）。
+        # 使う設定（`KIND_PRESETS`）が切なら、割り当てが残っていても使わない。
+        "kind_presets": dict((kind, str(values.get(name) or "").strip()
+                              if values.get("KIND_PRESETS") else "")
+                             for kind, name in KIND_PRESET_NAMES),
     }
 
 
@@ -118,6 +128,7 @@ class Live(object):
         self.strip_lora = got["strip_lora"]
         self.safety = got["safety"]
         self.diffusers_resize = got["diffusers_resize"]
+        self.kind_presets = got["kind_presets"]
 
     def hot(self):
         """読み直しができる状態か（場所が控えられていて、宣言も読めた）。"""

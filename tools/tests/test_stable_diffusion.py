@@ -666,6 +666,182 @@ check("用済みの包みが建て終えたら、いちばん新しい apply() �
 cleanup("image_generation.fake5.stable_diffusion_manager",
         "image_generation.fake5.image_generation_creature")
 
+print("種類ごとのプリセット（版26）")
+
+
+class KindSD(object):
+    """sdcpp の部品の代わり。建てた数と、どの材料で建ったかを返す。"""
+    built = 0
+
+    def __init__(self, model_path="", taesd_path="", vae_path="", lora_model_dir="",
+                 vae_tiling=False, diffusion_flash_attn=False):
+        KindSD.built += 1
+        self.model_path, self.taesd_path = model_path, taesd_path
+        self.vae_path, self.lora_model_dir = vae_path, lora_model_dir
+        self.flash = diffusion_flash_attn
+
+    @property
+    def model(self):
+        # sdcpp の部品はモデルが読めていないと、ここで AssertionError になる（実機 2026-10-26）
+        assert self.model_path and "broken" not in self.model_path
+        return self.model_path
+
+    def generate_image(self, prompt, negative_prompt="", width=512, height=512,
+                       cfg_scale=7.0, scheduler="default", sample_method="euler_a",
+                       sample_steps=20, seed=-1):
+        return {"model": self.model_path, "taesd": self.taesd_path, "flash": self.flash,
+                "width": width, "height": height, "cfg_scale": cfg_scale,
+                "scheduler": scheduler, "sample_method": sample_method,
+                "sample_steps": sample_steps, "prompt": prompt}
+
+
+KindSD.__module__ = "fake_kind.stable_diffusion"
+GAME_SOTE = "runtime/models/sd15/checkpoints/sote.safetensors"
+GAME_INIT = {"model_path": GAME_SOTE, "taesd_path": "runtime/models/sd15/taesd/t.safetensors",
+             "vae_path": "runtime/models/sd15/vae/v.safetensors",
+             "lora_model_dir": "runtime/models/sd15/lora", "diffusion_flash_attn": True}
+kind_mod, _ = fake_backend("image_generation.fake6.stable_diffusion_manager",
+                           "image_generation.fake6.image_generation_creature", pipe=None)
+kind_mod.StableDiffusion = KindSD
+kind_mod.txt2img_pipe = KindSD(**GAME_INIT)
+setattr(kind_mod, MOD.GAME_ATTR, {"model_path_anime": GAME_SOTE,
+                                   "taesd_path": GAME_INIT["taesd_path"],
+                                   "vae_path": GAME_INIT["vae_path"],
+                                   "lora_dir": GAME_INIT["lora_model_dir"]})
+kind_dir = tempfile.mkdtemp(prefix="stable_diffusion_kind_")
+MOD.presets.save_custom(kind_dir, "XL", {"CHECKPOINT_PATH": sdxl_path, "TAESD_PATH": "xl_taesd.safetensors",
+                                "PORTRAIT_SHORT": 704, "PORTRAIT_MAX_LONG": 1408,
+                                "LCM_METHOD": "dpmpp2m", "LCM_STEPS": 25, "LCM_CFG": 6.0,
+                                "LCM_SCHEDULER": "karras", "STRIP_LORA": True})
+MOD.presets.save_custom(kind_dir, "SAME", {"CHECKPOINT_PATH": "", "TAESD_PATH": "", "VAE_PATH": "",
+                                  "LORA_DIR": "", "LCM_STEPS": 30})
+os.makedirs(os.path.join(kind_dir, RB.STATE_DIRNAME), exist_ok=True)
+RB.save(kind_dir, {"add": [{"enabled": True, "kind": "any", "target": "prompt", "model": "sdxl",
+                            "text": "xl rule"}]})
+ctx_kind = fresh(_state_dir=kind_dir, KIND_PRESETS=True, PORTRAIT_PRESET="XL",
+                 ENEMY_PRESET="SAME", BACKGROUND_PRESET="")
+ctx_kind.game_dir = os.path.dirname(sd15_path)
+kind_exit = "fake_kind.stable_diffusion:KindSD.generate_image"
+kind_init = "fake_kind.stable_diffusion:KindSD.__init__"
+check("部品の作りを控えるために __init__ も包む", kind_init in ctx_kind.hooks,
+      sorted(t for t in ctx_kind.hooks if "fake_kind" in t))
+game_pipe = kind_mod.txt2img_pipe
+ctx_kind.hooks[kind_init](lambda self, **kw: None, game_pipe, **GAME_INIT)
+check("ゲームが建てたときの引数を部品のクラスに控える",
+      getattr(KindSD, MOD.INIT_ATTR, None) == GAME_INIT, getattr(KindSD, MOD.INIT_ATTR, None))
+MOD.MARKS.building = True
+ctx_kind.hooks[kind_init](lambda self, **kw: None, game_pipe, model_path="other")
+MOD.MARKS.building = False
+check("343 が自分で建てる部品は控えを上書きしない",
+      getattr(KindSD, MOD.INIT_ATTR, None) == GAME_INIT)
+MOD.FAMILY.update({"name": "sd15", "path": GAME_SOTE})
+built_before = KindSD.built
+try:
+    MOD.MARKS.kind, MOD.MARKS.func = "portrait", "generate_image_real_lcm"
+    got = ctx_kind.hooks[kind_exit](KindSD.generate_image, game_pipe,
+                                    prompt="young man, <lora:LCM_LoRA_Weights_SD15:1>",
+                                    width=512, height=1024)
+    check("割り当てた種類はプリセットのチェックポイントの部品で描く",
+          got["model"] == sdxl_path and got["taesd"] == "xl_taesd.safetensors", got)
+    check("部品はゲームと同じ作り（控えた引数）で建てる", got["flash"] is True, got)
+    check("寸法とサンプラーはプリセットの値",
+          (got["width"], got["height"]) == (704, 1408)
+          and (got["sample_method"], got["sample_steps"], got["cfg_scale"], got["scheduler"])
+          == ("dpmpp2m", 25, 6.0, "karras"), got)
+    check("LoRA タグの除去はプリセットの値（SDXL でゲームの LCM LoRA を外す）",
+          "<lora:" not in got["prompt"], got["prompt"])
+    check("規則のモデルの条件は描く部品のモデルで選ぶ（sdxl の行が当たる）",
+          got["prompt"].endswith("xl rule"), got["prompt"])
+    ctx_kind.hooks[kind_exit](KindSD.generate_image, game_pipe, prompt="again",
+                              width=512, height=1024)
+    check("部品は1回だけ建てて使い回す", KindSD.built == built_before + 1,
+          (KindSD.built, built_before))
+    MOD.MARKS.kind = "background"
+    got = ctx_kind.hooks[kind_exit](KindSD.generate_image, game_pipe, prompt="castle",
+                                    width=1024, height=512)
+    check("割り当てが無い種類はゲームの部品とこの画面の設定で描く",
+          got["model"] == GAME_SOTE and (got["width"], got["height"]) == (1024, 512)
+          and got["prompt"] == "castle", got)
+    MOD.MARKS.kind = "enemy"
+    got = ctx_kind.hooks[kind_exit](KindSD.generate_image, game_pipe, prompt="wolf",
+                                    width=512, height=512)
+    check("材料がゲームと同じプリセットはゲームの部品で描く（建てない）",
+          got["model"] == GAME_SOTE and KindSD.built == built_before + 1, (got, KindSD.built))
+    check("材料が同じでも値はプリセットのもの", got["sample_steps"] == 30, got)
+    ctx_kind.settings["PORTRAIT_PRESET"] = "NOPE"
+    ctx_missing = fresh(_state_dir=kind_dir, KIND_PRESETS=True, PORTRAIT_PRESET="NOPE")
+    MOD.MARKS.kind = "portrait"
+    got = ctx_missing.hooks[kind_exit](KindSD.generate_image, game_pipe, prompt="p",
+                                       width=512, height=1024)
+    check("プリセットが見つからなければ、この画面の設定で描いて知らせる",
+          got["model"] == GAME_SOTE
+          and any(key.startswith("kind-preset-missing") for key, _m in ctx_missing.warnings),
+          (got, ctx_missing.warnings))
+    ctx_off = fresh(_state_dir=kind_dir, KIND_PRESETS=False, PORTRAIT_PRESET="XL")
+    got = ctx_off.hooks[kind_exit](KindSD.generate_image, game_pipe, prompt="p",
+                                   width=512, height=1024)
+    check("使う設定が切なら、割り当てが残っていても使わない",
+          got["model"] == GAME_SOTE and (got["width"], got["height"]) == (512, 1024), got)
+    MOD.presets.save_custom(kind_dir, "XL2", {"CHECKPOINT_PATH": sd15_path,
+                                               "TAESD_PATH": "other_taesd.safetensors"})
+    ctx_swap = fresh(_state_dir=kind_dir, KIND_PRESETS=True, PORTRAIT_PRESET="XL2")
+    got = ctx_swap.hooks[kind_exit](KindSD.generate_image, game_pipe, prompt="p",
+                                    width=512, height=1024)
+    cache = KindSD.__dict__.get(MOD.PIPES_ATTR) or {}
+    check("割り当てを替えると、どこにも割り当てられていない部品は外す",
+          got["model"] == sd15_path and len(cache) == 1
+          and [os.path.basename(k[0]) for k in cache] == [os.path.basename(sd15_path)],
+          [k[0] for k in cache])
+    # ゲームのモデルが分からないまま（控えが空）なら建てない
+    setattr(kind_mod, MOD.GAME_ATTR, {})
+    MOD.presets.save_custom(kind_dir, "EMPTY", {"CHECKPOINT_PATH": "", "TAESD_PATH": "x.safetensors"})
+    built_now = KindSD.built
+    ctx_empty = fresh(_state_dir=kind_dir, KIND_PRESETS=True, BACKGROUND_PRESET="EMPTY")
+    MOD.MARKS.kind = "background"
+    got = ctx_empty.hooks[kind_exit](KindSD.generate_image, game_pipe, prompt="p",
+                                     width=1024, height=512)
+    check("チェックポイントが空でゲームのモデルも分からなければ、建てずにこの画面の設定で描く",
+          got["model"] == GAME_SOTE and KindSD.built == built_now
+          and any(key.startswith("kind-preset-no-model") for key, _m in ctx_empty.warnings),
+          (got, KindSD.built, ctx_empty.warnings))
+    # 建てた部品にモデルが入っていなければ使わない
+    broken = os.path.join(kind_dir, "broken_model.safetensors")
+    io.open(broken, "wb").write(b"x")
+    MOD.presets.save_custom(kind_dir, "BROKEN", {"CHECKPOINT_PATH": broken})
+    ctx_broken = fresh(_state_dir=kind_dir, KIND_PRESETS=True, BACKGROUND_PRESET="BROKEN")
+    got = ctx_broken.hooks[kind_exit](KindSD.generate_image, game_pipe, prompt="p",
+                                      width=1024, height=512)
+    cache = KindSD.__dict__.get(MOD.PIPES_ATTR) or {}
+    check("建てた部品にモデルが入っていなければ使わず、この画面の設定で描く",
+          got["model"] == GAME_SOTE and not any("broken" in k[0] for k in cache)
+          and any(key.startswith("kind-preset-build") for key, _m in ctx_broken.warnings),
+          (got, [k[0] for k in cache], ctx_broken.warnings))
+finally:
+    MOD.FAMILY.update({"name": None, "path": None})
+    MOD.MARKS.kind, MOD.MARKS.func = None, None
+cleanup("image_generation.fake6.stable_diffusion_manager",
+        "image_generation.fake6.image_generation_creature")
+
+print("ゲームの元のモデルの控え（版26）")
+ctrl_mod, _ = fake_backend("image_generation.fake7.stable_diffusion_manager",
+                           "image_generation.fake7.image_generation_creature", pipe=None)
+ctrl_mod.model_path_anime = ""              # 読み込まれた直後は空
+ctx_ctrl = fresh(CHECKPOINT_PATH=sdxl_path)
+build7 = "image_generation.fake7.stable_diffusion_manager:load_sd_pipeline"
+ctx_ctrl.hooks[build7](lambda: None)
+kept = getattr(ctrl_mod, MOD.GAME_ATTR, {})
+check("空の値は控えない", "model_path_anime" not in kept, kept)
+ctrl_mod.model_path_anime = GAME_SOTE        # ゲームが建てる直前に設定のモデルを入れる
+ctx_ctrl.hooks[build7](lambda: None)
+kept = getattr(ctrl_mod, MOD.GAME_ATTR, {})
+check("ゲームが入れた値は、343 が書き換える前に控える",
+      kept.get("model_path_anime") == GAME_SOTE and ctrl_mod.model_path_anime == sdxl_path, kept)
+ctx_ctrl.hooks[build7](lambda: None)
+check("343 の値は控えにしない（ゲームの値のまま）",
+      getattr(ctrl_mod, MOD.GAME_ATTR, {}).get("model_path_anime") == GAME_SOTE)
+cleanup("image_generation.fake7.stable_diffusion_manager",
+        "image_generation.fake7.image_generation_creature")
+
 print("差し替えが届いていないと知らせる（既に建っている回）")
 
 

@@ -36,10 +36,12 @@ import inspect
 import os
 import sys
 import threading
+import time
 
 from instantale_modloader import frames
 
 from . import live as hot
+from . import presets
 from . import rules as rulebook
 from . import sizes
 from . import tagbook
@@ -131,6 +133,26 @@ EXIT_METHODS = ("generate_image", "__call__")
 #: モジュール変数に持つので、パイプラインが無くてもクラスから包める（版26）。
 #: `__call__` は名前がありふれているので、生きたパイプラインの型からしか包まない。
 EARLY_EXIT_METHOD = "generate_image"
+
+#: 種類ごとに割り当てるカスタムプリセットの名前（版26）。空ならこの画面の設定で描く。
+#: 割り当てた種類は、そのプリセットのチェックポイントで建てた別の部品と、そのプリセットの
+#: 寸法・サンプラー・LoRA タグの除去・安全弁で描く（VERIFICATION.md §3.65）。
+#: 使うかどうか。上級者向けなので既定は切（もう1つモデルを載せるぶん VRAM を使う）。
+KIND_PRESETS = False
+PORTRAIT_PRESET = ""
+ENEMY_PRESET = ""
+BACKGROUND_PRESET = ""
+
+#: ゲームが部品を建てたときの引数。種類ごとの部品を同じ作りで建てるために控える。
+#: 部品のクラスに持たせる（注入のたびにモジュールは作り直されるが、クラスは同じ）。
+INIT_ATTR = "_mod343_init_kwargs"
+
+#: 種類ごとに建てた部品の置き場（部品のクラスに持たせる。注入し直しても二重に建てない）。
+PIPES_ATTR = "_mod343_kind_pipes"
+
+#: 343 が書き換える前のゲームの材料（manager のモジュールに持たせる）。
+#: プリセットのチェックポイントが空のとき（ゲームのまま）に使う。
+GAME_ATTR = "_mod343_game_materials"
 
 #: いちばん新しい apply() の `attach`。用済みになった apply() の包みが、
 #: 建て終わった後の当て直しをこちらへ渡す（版26。VERIFICATION.md §3.65）。
@@ -404,16 +426,18 @@ def apply(ctx):
 
     # -------------------------------------------------------------- 出口で当てる
 
-    def wanted(kind, stage, params):
+    def wanted(kind, stage, params, route=None):
         """この1回で書き換える引数。触らないなら空の辞書。
 
         `params` は名前で引ける今の引数。
         サンプラーは**設定が既定と同じ項目には触らない**。
+        `route` はその種類に割り当てたプリセット（`kind_route`）。在ればその値とモデルで決める。
         """
         changes = {}
-        scales, samplers, rules = live.scales, live.samplers, live.rules
-        # 規則の `model` で絞る相手（建てるときに見分けた系統とチェックポイント）。
-        model = (FAMILY.get("name"), FAMILY.get("path"))
+        conf = route["cfg"] if route else main_cfg()
+        scales, samplers, rules = conf["scales"], conf["samplers"], live.rules
+        # 規則の `model` で絞る相手（描く部品の系統とチェックポイント）。
+        model = route["model"] if route else (FAMILY.get("name"), FAMILY.get("path"))
         scale = scales.get(kind, 1.0)
         if rulebook.skip_upscale(rules, kind, params.get("prompt"), model):
             scale = 1.0
@@ -430,7 +454,7 @@ def apply(ctx):
                 changes[name] = got
             if target == "prompt" and book is not None:
                 note_tags(rulebook.game_text(rules, kind, target, body, model, book), book)
-        if live.strip_lora:
+        if conf["strip_lora"]:
             drop_game_lora(params, changes)
         if stage in samplers:
             method, steps, cfg, scheduler = samplers[stage]
@@ -442,7 +466,7 @@ def apply(ctx):
                     (scheduler, game[3], "scheduler")):
                 if value != game_value:
                     changes[name] = value
-        add_safety(stage, params, changes)
+        add_safety(stage, params, changes, conf, model[0])
         # 検証の道具だけが使う口。そのスレッドに種の印があれば種を固定する
         # （ゲームは種 -1 で毎回変わるので、プロンプトの差だけを見比べるため。VERIFICATION.md §3.65）。
         seed = frames.attr(MARKS, "seed", None)
@@ -471,7 +495,12 @@ def apply(ctx):
         changes["prompt"] = got
         return True
 
-    def add_safety(stage, params, changes):
+    def main_cfg():
+        """この画面の設定（`live`）を、プリセットの値と同じ形で。"""
+        return {"scales": live.scales, "samplers": live.samplers,
+                "strip_lora": live.strip_lora, "safety": live.safety}
+
+    def add_safety(stage, params, changes, conf, family):
         """モデルの系統と食い違う指定を、壊れない側へ寄せる。
 
         今日の実機で踏んだ2つの壊れ方をそのまま塞ぐ（VERIFICATION.md §3.65）。
@@ -479,9 +508,8 @@ def apply(ctx):
         SDXL を LCM の設定（5 steps / cfg 1.0）で回すとマゼンタに潰れる。
         設定で明示された値は動かさない（**寄せるのは素のままの項目だけ**）。
         """
-        family = FAMILY.get("name")
-        samplers = live.samplers
-        if live.safety != "auto" or family is None:
+        samplers = conf["samplers"]
+        if conf["safety"] != "auto" or family is None:
             return
         # 寸法: その系統で無理の無い画素数へ寄せる。
         width = changes.get("width", params.get("width"))
@@ -565,7 +593,7 @@ def apply(ctx):
     #: 規則を読み直すと `live.rules` は別の物になるので、書き換えた規則でもう1回出る。
     shown = set()
 
-    def show_prompts(kind, stage, params, changes):
+    def show_prompts(kind, stage, params, changes, which=None):
         """書き換えたプロンプトの前後を全文で出す。種類・段・モデル・規則の組ごとに最初の1回だけ。
 
         ふだんの行は字数だけなので、規則が思った形に当たっているかはここで見る。
@@ -573,7 +601,7 @@ def apply(ctx):
         """
         if "prompt" not in changes and "negative_prompt" not in changes:
             return
-        key = (kind, stage, FAMILY.get("path"), id(live.rules))
+        key = (kind, stage, which or FAMILY.get("path"), id(live.rules))
         if key in shown:
             return
         shown.add(key)
@@ -625,7 +653,145 @@ def apply(ctx):
                      "{} はこの一族には当てられない（同じ口が無い）".format(name))
         return out
 
+    # ------------------------------------------- 種類ごとのプリセット（版26）
+
+    #: 置き場（`ctx` の値は apply() の間しか当てにならないので控える）。
+    state_dir = ctx.state_dir
+    game_dir = ctx.game_dir
+
+    #: チェックポイントの系統（ヘッダを毎回読まないため）と、知らせ済みの振り分け。
+    families = {}
+    routed = set()
+
+    def full_path(path):
+        path = str(path or "")
+        return path if not path or os.path.isabs(path) else os.path.join(game_dir, path)
+
+    def family_at(path):
+        full = full_path(path)
+        if full not in families:
+            families[full] = sizes.family_of(full) if full else None
+        return families[full]
+
+    def game_materials():
+        """343 が書き換える前のゲームの材料（manager のモジュールに控えたもの）。"""
+        for name in managers():
+            got = frames.attr(sys.modules.get(name), GAME_ATTR, None)
+            if got:
+                return got
+        return {}
+
+    def kind_route(kind):
+        """その種類に割り当てたプリセット。割り当てが無い・プリセットが無いなら None。
+
+        値はこの画面の設定にプリセットの値を重ねたもの（版の違いで欠けた項目はいまの値）。
+        """
+        name = live.kind_presets.get(kind) or ""
+        if not name:
+            return None
+        entry = presets.find_custom(state_dir, name)
+        if entry is None:
+            warn("kind-preset-missing-" + name,
+                 "{} に割り当てたプリセット「{}」が見つからない。この画面の設定で描く".format(kind, name))
+            return None
+        got = entry["values"]
+        merged = dict(live.values)
+        merged.update((key, value) for key, value in got.items() if key in merged)
+        game = game_materials()
+        checkpoint = str(got.get("CHECKPOINT_PATH") or "") or game.get("model_path_anime", "")
+        taesd = "" if got.get("DISABLE_TAESD") else (
+            str(got.get("TAESD_PATH") or "") or game.get("taesd_path", ""))
+        vae = "" if got.get("DISABLE_VAE") else (
+            str(got.get("VAE_PATH") or "") or game.get("vae_path", ""))
+        lora = str(got.get("LORA_DIR") or "") or game.get("lora_dir", "")
+        return {"name": name, "cfg": hot.derive(merged),
+                "model": (family_at(checkpoint), checkpoint),
+                "materials": {"model_path": checkpoint, "taesd_path": taesd,
+                              "vae_path": vae, "lora_model_dir": lora}}
+
+    def pipe_key(mats):
+        """部品を見分ける鍵（チェックポイント・TAESD・VAE・LoRA の置き場）。"""
+        norm = lambda path: os.path.normcase(os.path.normpath(full_path(path))) if path else ""
+        return tuple(norm(mats.get(name, "")) for name in ("model_path", "taesd_path", "vae_path",
+                                                           "lora_model_dir"))
+
+    def route_pipe(pipe, route):
+        """その種類を描く部品。ゲームの部品と同じ材料ならゲームの部品。建てられなければ None。
+
+        ゲームが建てた引数（`INIT_ATTR`）の材料だけを差し替えて、同じ作りで建てる。
+        建てた部品はクラスに置いて使い回す（描くたびに読み込まない）。
+        """
+        cls = type(pipe)
+        init = frames.attr(cls, INIT_ATTR, None)
+        if not init:
+            warn("kind-preset-no-init",
+                 "ゲームが部品を建てたときの引数が控えられていない（注入より先に建っていた）。"
+                 "種類ごとのプリセットはゲームを起動し直すと効く。この画面の設定で描く")
+            return None
+        key = pipe_key(route["materials"])
+        if key == pipe_key(init):
+            return pipe
+        checkpoint = full_path(route["materials"]["model_path"])
+        if not checkpoint or not os.path.isfile(checkpoint):
+            warn("kind-preset-no-model-" + route["name"],
+                 "プリセット「{}」のチェックポイントが見つからない（{}）。この画面の設定で描く".format(
+                     route["name"], checkpoint or "空。ゲームのモデルがまだ分からない"))
+            return None
+        cache = cls.__dict__.get(PIPES_ATTR)
+        if cache is None:
+            cache = {}
+            setattr(cls, PIPES_ATTR, cache)
+        if key not in cache:
+            # どの種類にも割り当てられていない部品は外す（割り当てを変えるたびに VRAM に溜めない）。
+            wanted_keys = set(pipe_key(other["materials"]) for other in
+                              (kind_route(kind) for kind in ("portrait", "enemy", "background"))
+                              if other is not None)
+            for old in [old for old in cache if old not in wanted_keys]:
+                cache.pop(old, None)
+                write("kind pipe: 割り当てから外れた部品を外した（{}）".format(
+                    os.path.basename(old[0]) or "ゲームのまま"))
+            kwargs = dict(init)
+            kwargs.update(route["materials"])
+            started = time.time()
+            MARKS.building = True            # 控えの引数を自分の部品で上書きしない
+            try:
+                built = cls(**kwargs)
+                # モデルが入っていない部品は描くところで落ちる（`model` が AssertionError）。
+                # 建てた時点で読んで確かめ、入っていなければ使わない。
+                check = getattr(type(built), "model", None)
+                if isinstance(check, property):
+                    check.fget(built)
+                cache[key] = built
+            except Exception:
+                ctx.log_exc("image quality: building the pipe for preset failed")
+                warn("kind-preset-build-" + route["name"],
+                     "プリセット「{}」の部品を建てられなかった。この画面の設定で描く".format(route["name"]))
+                return None
+            finally:
+                MARKS.building = False
+            write("kind pipe: プリセット「{}」の部品を建てた（{}・{}、{:.1f} 秒。ゲームの部品のほかに {} 個）".format(
+                route["name"], route["model"][0] or "系統不明",
+                os.path.basename(kwargs["model_path"]), time.time() - started, len(cache)))
+        return cache[key]
+
+    def make_init_hook(sig):
+        """ゲームが部品を建てたときの引数を、部品のクラスに控える。"""
+        def hook(orig, self, *args, **kwargs):
+            result = orig(self, *args, **kwargs)
+            if not frames.attr(MARKS, "building", False):
+                try:
+                    bound = sig.bind_partial(self, *args, **kwargs)
+                    got = dict(bound.arguments)
+                    got.pop(next(iter(sig.parameters)), None)
+                    setattr(type(self), INIT_ATTR, got)
+                except Exception:
+                    ctx.log_exc("image quality: recording the pipe init failed")
+            return result
+        return hook
+
     def make_exit_hook(label, sig, diffusers):
+        self_name = next(iter(sig.parameters)) if sig is not None else "self"
+
         def hook(orig, self, *args, **kwargs):
             live.refresh()                 # 設定と規則が変わっていれば読み直す
             kind = kind_now()
@@ -637,20 +803,32 @@ def apply(ctx):
                 bound = sig.bind_partial(self, *args, **kwargs)
                 bound.apply_defaults()
                 params = dict(bound.arguments)
-            changes = wanted(kind, stage, params)
+            # 種類にプリセットを割り当てていれば、その部品と値で描く（sdcpp だけ）。
+            route = kind_route(kind) if (kind and not diffusers and sig is not None) else None
+            target = self
+            if route is not None:
+                target = route_pipe(self, route)
+                if target is None:          # 建てられなかった。この画面の設定で描く
+                    target, route = self, None
+            changes = wanted(kind, stage, params, route)
             if diffusers:
                 changes = for_diffusers(changes, params)
             # その一族の出口に無い引数は落とす（名前を新設しない）。
             changes = {name: value for name, value in changes.items()
                        if name in params or name in ("width", "height")}
+            if target is not self:
+                bound.arguments[self_name] = target
             if not changes:
+                if target is not self:
+                    return orig(*bound.args, **bound.kwargs)
                 return orig(self, *args, **kwargs)
-            write("{} [{}/{}] {}{}".format(
+            write("{} [{}/{}]{} {}{}".format(
                 label, kind, stage,
+                " <{}>".format(route["name"]) if route else "",
                 " ".join("{}: {}".format(name, brief_change(name, params, value))
                          for name, value in sorted(changes.items())),
                 pixels_note(params, changes)))
-            show_prompts(kind, stage, params, changes)
+            show_prompts(kind, stage, params, changes, route["model"][1] if route else None)
             if bound is None:
                 if not set(changes) <= set(kwargs):
                     warn(label, "{}: 署名が読めず、位置引数は触れない".format(label))
@@ -727,6 +905,18 @@ def apply(ctx):
                         sig = None
                     diffusers = method == "__call__"
                     added += install(target, make_exit_hook(target, sig, diffusers))
+                # 部品を建てたときの引数を控える（種類ごとのプリセットで同じ作りの部品を建てる）。
+                base = owner_of(cls, "__init__")
+                if base is not None and EARLY_EXIT_METHOD in methods:
+                    try:
+                        init_sig = inspect.signature(unwrapped(base.__dict__.get("__init__")))
+                    except Exception:
+                        init_sig = None
+                    if init_sig is not None:
+                        added += install("{}:{}.__init__".format(
+                            frames.attr(base, "__module__", "?"),
+                            frames.attr(base, "__qualname__", base.__name__)),
+                            make_init_hook(init_sig))
         if added:
             ctx.refresh_status()
         return added
@@ -742,6 +932,18 @@ def apply(ctx):
 
         同じ値なら書かない（建てるたびに呼ばれるので、ログが毎回出ないように）。
         """
+        # ゲームの値を控える。読み込まれた直後の manager は空で、ゲームは建てる直前に
+        # 設定のモデル名から値を入れる（実機 2026-10-26。空を控えて空のモデルの部品を建て、
+        # 描くところで AssertionError になった）。空でも 343 の値でもない値が見えるたびに更新する。
+        kept = frames.attr(module, GAME_ATTR, None)
+        if kept is None:
+            kept = {}
+            setattr(module, GAME_ATTR, kept)
+        ours = dict(materials)
+        for _name, attr in MATERIALS:
+            now = frames.attr(module, attr, None)
+            if isinstance(now, str) and now and now != ours.get(attr):
+                kept[attr] = now
         for attr, value in materials:
             now = frames.attr(module, attr, None)
             if now is None or now == value:

@@ -35,7 +35,10 @@ import json
 import os
 import time
 
-import assets  # noqa: E402  自分の隣（モデルの置き場）
+try:                      # MOD 本体からはパッケージの隣、道具と検査からは素の名前で
+    from . import assets
+except ImportError:
+    import assets  # noqa: E402  自分の隣（モデルの置き場）
 
 #: 段のサンプラーの設定名。
 _STAGE = ("METHOD", "STEPS", "CFG", "SCHEDULER")

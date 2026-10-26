@@ -433,6 +433,54 @@
         "ja": "チェックポイントの中身（safetensors のヘッダに並ぶテンソルの名前）から SD1.5 か SDXL かを見分け、壊れると分かっている組み合わせだけを直す。名前でもファイルの大きさでも判定しない。SDXL のときに直すのは2つ。1つは、ゲームが入れる SD1.5 用の LoRA タグを外すこと（当たるとプロセスごと落ちる。規則で足したタグは残す）。もう1つは、素のままの LCM の段の設定を euler_a / 24 / cfg 5.0 にすること（そのままだとマゼンタに潰れる。1段目・2段目は触らない）。寸法は学習の寸法から離れていても警告を出すだけで、値は動かさない。off で何もしない",
         "en": "Reads the tensor names in the checkpoint's safetensors header to tell SD1.5 from SDXL, then fixes only the combinations known to break. Neither the file name nor its size is used. With SDXL it strips the SD1.5 LoRA tags the game inserts (which crash the process; tags added by your rules stay) and replaces an untouched LCM-stage sampler with euler_a / 24 / cfg 5.0 (without which images collapse into magenta; the first and second stages are left alone). Sizes far from the family's training resolution only produce a warning and are left alone. off does nothing"
       }
+    },
+    "KIND_PRESETS": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "種類ごとのプリセットを使う（上級者向け）",
+        "en": "Use presets per image kind (advanced)"
+      },
+      "note": {
+        "ja": "入にすると、下の3つで割り当てたプリセットで立ち絵・敵・背景を描き分ける。ゲームのモデルとは別にもう1つモデルを読み込むので VRAM を多く使い、足りないと絵の生成がとても遅くなるかゲームが落ちる。切なら割り当ては残したまま使わない",
+        "en": "When on, portraits, enemies and backgrounds are drawn with the presets assigned below. It loads another model next to the game's, so it uses much more VRAM; without enough, generation slows down badly or the game crashes. Off keeps the assignments but does not use them"
+      }
+    },
+    "PORTRAIT_PRESET": {
+      "type": "str",
+      "default": "",
+      "label": {
+        "ja": "立ち絵に使うプリセット",
+        "en": "Preset for portraits"
+      },
+      "note": {
+        "ja": "空ならこの画面の設定で描く。カスタムプリセットの名前を入れると、立ち絵だけそのプリセットのチェックポイント・TAESD・解像度・サンプラー・LoRA タグの除去で描く。ゲームのモデルとは別にもう1つモデルを読み込むので、そのぶん VRAM を使う",
+        "en": "Empty draws with the settings on this screen. A custom preset name draws only portraits with that preset's checkpoint, TAESD, resolution, sampler and LoRA tag removal. It loads a second model besides the game's, which uses more VRAM."
+      }
+    },
+    "ENEMY_PRESET": {
+      "type": "str",
+      "default": "",
+      "label": {
+        "ja": "敵・モンスターに使うプリセット",
+        "en": "Preset for enemies and monsters"
+      },
+      "note": {
+        "ja": "空ならこの画面の設定で描く。カスタムプリセットの名前を入れると、敵・モンスターだけそのプリセットのチェックポイント・TAESD・解像度・サンプラー・LoRA タグの除去で描く。ゲームのモデルとは別にもう1つモデルを読み込むので、そのぶん VRAM を使う",
+        "en": "Empty draws with the settings on this screen. A custom preset name draws only enemies and monsters with that preset's checkpoint, TAESD, resolution, sampler and LoRA tag removal. It loads a second model besides the game's, which uses more VRAM."
+      }
+    },
+    "BACKGROUND_PRESET": {
+      "type": "str",
+      "default": "",
+      "label": {
+        "ja": "背景に使うプリセット",
+        "en": "Preset for backgrounds"
+      },
+      "note": {
+        "ja": "空ならこの画面の設定で描く。カスタムプリセットの名前を入れると、背景だけそのプリセットのチェックポイント・TAESD・解像度・サンプラー・LoRA タグの除去で描く。ゲームのモデルとは別にもう1つモデルを読み込むので、そのぶん VRAM を使う",
+        "en": "Empty draws with the settings on this screen. A custom preset name draws only backgrounds with that preset's checkpoint, TAESD, resolution, sampler and LoRA tag removal. It loads a second model besides the game's, which uses more VRAM."
+      }
     }
   },
   "tool": {

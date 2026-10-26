@@ -143,7 +143,7 @@
 | [`340_shop_lineup`](MODS.md#340_shop_lineup-宿屋と鍛冶屋でも売買でき店の種類ごとに品揃えの傾向が付く) | 宿屋と鍛冶屋でも売買でき、店の種類ごとに品揃えの傾向が付く | 宿屋と鍛冶屋でも売買でき、店の種類ごとに品揃えの傾向が付く | 1 |  |
 | [`341_shopkeeper_attitude`](MODS.md#341_shopkeeper_attitude-店主の人柄と主人公との関係で売買の値段が変わる) | 店主の人柄と主人公との関係で売買の値段が変わる | 店主の人柄と主人公との関係で売買の値段が変わる | 6 |  |
 | [`342_attack_animations`](MODS.md#342_attack_animations-攻撃の演出が武器と属性に合ったものになる) | 攻撃の演出が武器と属性に合ったものになる | 攻撃の演出が武器と属性に合ったものになる | 1 |  |
-| [`343_stable_diffusion`](MODS.md#343_stable_diffusion-stable-diffusion-の解像度サンプラーモデルプロンプトを差し替える) | Stable Diffusionの各種差し替え | Stable Diffusion の解像度・サンプラー・モデル・プロンプトを差し替える | 27 |  |
+| [`343_stable_diffusion`](MODS.md#343_stable_diffusion-stable-diffusion-の解像度サンプラーモデルプロンプトを差し替える) | Stable Diffusionの各種差し替え | Stable Diffusion の解像度・サンプラー・モデル・プロンプトを差し替える | 31 |  |
 | [`401_battle_character_context`](MODS.md#401_battle_character_context-戦闘の審判へ同行者の人物と装備を見せる) | 戦闘の審判への仲間の情報補完 | 戦闘の審判へ同行者の人物と装備を見せる | - |  |
 | [`402_party_inventory_transfer`](MODS.md#402_party_inventory_transfer-仲間とアイテムを受け渡しできる) | 仲間とのアイテム受け渡し | 仲間とアイテムを受け渡しできる | - |  |
 | [`403_npc_social_memory`](MODS.md#403_npc_social_memory-npc同士がお互いを認知し関係を覚える) | NPC同士の認知と関係記憶 | NPC同士がお互いを認知し、関係を覚える | 5 |  |
