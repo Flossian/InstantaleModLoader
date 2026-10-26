@@ -30,6 +30,7 @@ TECH.md §3.12 の契約で動く（`131_sharp_portrait` の道具と同じ）�
 | タグ除去 | タグ除去 | 同じ |
 | 完全置き換え | 完全置き換え | 同じ |
 | サンプラー | サンプラー | 種類ではなく段（1段目 / 2段目 / LCM の段）で持つ |
+| （無し） | モデル別 | 版26。`model` の付いた行と、モデルの系統に合わせたプロンプトの雛形（`profiles.py`） |
 
 一覧の行は「選択行を削除」ではなく行ごとの `×` で消す（Tk の表に合わせた）。
 
@@ -60,8 +61,10 @@ import assets     # noqa: E402  自分の隣（モデルの置き場とダウン
 import iniimport  # noqa: E402  自分の隣（元 MOD の ini の取り込み）
 import modtool  # noqa: E402
 import presets   # noqa: E402  自分の隣（SD1.5 / SDXL のプリセット）
+import profiles  # noqa: E402  自分の隣（モデルの系統に合わせたプロンプトの雛形）
 import rules as rulebook  # noqa: E402  自分の隣（本体と共通の規則）
 import sizes    # noqa: E402  自分の隣（本体と共通の計算）
+import tagbook  # noqa: E402  自分の隣（Danbooru のタグ一覧）
 
 MOD_NAME = modtool.mod_name(MOD_DIR)
 SETTING_DEFAULTS = modtool.defaults(MOD_DIR)
@@ -131,6 +134,14 @@ BLURBS = {
     "完全置き換え": ("記入した種類は (ネガティブ) プロンプトが丸ごとここの内容になる。"
                      "{prompt} と書いた位置にゲーム本来のプロンプトが埋め込まれる。"
                      "{prompt} 無しだと、その種類の画像は毎回ほぼ同じ絵になる。"),
+    "モデル別": ("モデルを指定した規則。ここの行は「モデル」に当たるチェックポイントで描くときだけ効く。"
+                 "sd15 / sdxl は中身から見分けた系統、ほかの語はチェックポイントのファイル名の一部（例: novaAnimeXL）。"
+                 "「/」でどれか 1 つ、!語 で除く。Illustrious と Pony はどちらも sdxl なのでファイル名で分ける。"
+                 "雛形のボタンは、いまのチェックポイントのファイル名を「モデル」にした行を入れる"
+                 "（同じ雛形を入れ直すと前の行を置き換える）。ほかのタブの行はどのモデルでも効く。"
+                 "下の2つの表は、ゲームの本文の語を Danbooru のタグへ寄せる。"
+                 "語の置き換えは読み違えられる言い方を直す（plate mail が皿と読まれた）。"
+                 "タグとの照合（alias）は別名を正しいタグへ直すが、試した範囲では絵の良し悪しの差は見えていない。"),
     "サンプラー": ("段ごとにサンプラーを上書きする。ゲームの値のままなら書き込まない。"
                    "lcm は LCM LoRA 専用（4〜8 steps・cfg 1〜2）で、LoRA を外したまま使うと破綻する。"),
 }
@@ -193,16 +204,50 @@ def preview_lines(values):
     return lines
 
 
-def find_row(rows, section, kind, target):
-    """固定行に出す1件。条件つきの行（`when` 在り）は一覧のタブが持つので外す。"""
+def by_model(row):
+    """「モデル別」のタブが持つ行か（`model` か雛形の印が付いている）。"""
+    return bool(str(row.get("model") or "").strip() or row.get("profile"))
+
+
+#: 「モデル別」の規則の一覧が持つ節（語の置き換えとタグの照合は別の表）。
+MODEL_TAB_SECTIONS = ("remove", "replace", "add", "skip_upscale")
+
+
+def model_rows(rules_in):
+    """「モデル別」のタブに出す行。節の名前を `section` に入れて1列に並べる。"""
+    out = []
+    for section in MODEL_TAB_SECTIONS:
+        for row in rules_in.get(section) or []:
+            if by_model(row):
+                got = dict(row)
+                got["section"] = section
+                out.append(got)
+    return out
+
+
+def split_model_rows(rows):
+    """`model_rows` の逆。節ごとの辞書へ戻す（`section` は落とす）。"""
+    got = dict((section, []) for section in MODEL_TAB_SECTIONS)
     for row in rows:
+        row = dict(row)
+        section = row.pop("section", None) or "add"
+        if section in got:
+            got[section].append(row)
+    return got
+
+
+def find_row(rows, section, kind, target):
+    """固定行に出す1件。条件つきの行（`when` 在り）とモデル別の行は一覧のタブが持つので外す。"""
+    for row in rows:
+        if by_model(row):
+            continue
         if str(row.get("kind") or "any") != kind:
             continue
         if section == "skip_upscale":
             return row
         if str(row.get("target") or "prompt") != target:
             continue
-        if section == "add" and str(row.get("when") or "").strip():
+        if section in ("add", "replace") and str(row.get("when") or "").strip():
             continue
         return row
     return None
@@ -258,6 +303,7 @@ class _ListTable(object):
         from tkinter import ttk
 
         self.columns = columns
+        self.keys = set(key for key, _label, _width in columns)
         self.rows = []
         self._tk, self._ttk = tk, ttk
         head = ttk.Frame(parent)
@@ -276,7 +322,9 @@ class _ListTable(object):
         tk, ttk = self._tk, self._ttk
         line = ttk.Frame(self.body)
         line.pack(fill="x", pady=1)
-        state = {"vars": {}}
+        # 欄の無い項目（雛形の印 `profile` など）は持ったまま保存へ戻す。
+        state = {"vars": {}, "extra": dict((key, value) for key, value in row.items()
+                                           if key not in self.keys and key != "enabled")}
         enabled = tk.BooleanVar(value=bool(row.get("enabled", True)))
         ttk.Checkbutton(line, variable=enabled, width=3).pack(side="left")
         state["enabled"] = enabled
@@ -290,6 +338,14 @@ class _ListTable(object):
                 var = tk.StringVar(value=value or "prompt")
                 ttk.Combobox(line, textvariable=var, values=list(rulebook.TARGETS),
                              state="readonly", width=width).pack(side="left", padx=(4, 0))
+            elif key == "section":
+                var = tk.StringVar(value=value or "add")
+                ttk.Combobox(line, textvariable=var, values=list(MODEL_TAB_SECTIONS),
+                             state="readonly", width=width).pack(side="left", padx=(4, 0))
+            elif key == "mode":
+                var = tk.StringVar(value=value or "alias")
+                ttk.Combobox(line, textvariable=var, values=list(rulebook.TAG_MODES),
+                             state="readonly", width=width).pack(side="left", padx=(4, 0))
             else:
                 var = tk.StringVar(value=value)
                 ttk.Entry(line, textvariable=var, width=width).pack(side="left", padx=(4, 0))
@@ -300,7 +356,16 @@ class _ListTable(object):
             self.rows.remove(state)
 
         ttk.Button(line, text="×", width=3, command=drop).pack(side="left", padx=(6, 0))
+        state["line"] = line
         self.rows.append(state)
+
+    def replace_rows(self, rows):
+        """行を全部入れ替える（雛形を入れたとき）。"""
+        for state in list(self.rows):
+            state["line"].destroy()
+        self.rows = []
+        for row in rows:
+            self.add(row)
 
     def get(self):
         """書ける形の行。選択欄しか入っていない行は落とす。"""
@@ -308,10 +373,12 @@ class _ListTable(object):
         for state in self.rows:
             row = dict((key, state["vars"][key].get().strip()) for key in state["vars"])
             if not any(value for key, value in row.items()
-                       if key not in ("kind", "target")):
+                       if key not in ("kind", "target", "section", "mode")):
                 continue
-            row["enabled"] = bool(state["enabled"].get())
-            out.append(row)
+            got = dict(state["extra"])
+            got.update(row)
+            got["enabled"] = bool(state["enabled"].get())
+            out.append(got)
         return out
 
 
@@ -577,7 +644,8 @@ def build_window(rules_in=None, settings_in=None, note=""):
     # ----------------------------------------------------------- LoRA 付替
     tab = page("LoRA 付替")
     tables["lora_map"] = _ListTable(
-        tab, (("from", "ゲーム内の名前", 28), ("to", "実ファイル名[:強度] / off", 30)),
+        tab, (("from", "ゲーム内の名前", 28), ("to", "実ファイル名[:強度] / off", 30),
+              ("model", "モデル (空 = 全部)", 16)),
         rules_now.get("lora_map") or [])
 
     # ----------------------------------------------------- プロンプト追加
@@ -596,7 +664,7 @@ def build_window(rules_in=None, settings_in=None, note=""):
               ("target", "対象", 9), ("when", "条件 (語1/語2/!語3)", 24),
               ("text", "追加内容", 28)),
         [row for row in (rules_now.get("add") or [])
-         if str(row.get("when") or "").strip()])
+         if str(row.get("when") or "").strip() and not by_model(row)])
 
     # ----------------------------------------------------------- タグ除去
     tab = page("タグ除去")
@@ -615,6 +683,75 @@ def build_window(rules_in=None, settings_in=None, note=""):
     box = group(tab, "ネガティブプロンプトの置き換え")
     fixed.append(_FixedRows(box, RULE_LABELS, "replace", "negative",
                             rules_now.get("replace") or []))
+
+    # ----------------------------------------------------------- モデル別
+    tab = page("モデル別")
+    box = group(tab, "プロンプトの雛形（モデルの学習の書き方に合わせる）")
+    profile_note = ttk.Label(box, text="", justify="left")
+
+    def use_profile(key):
+        model = profiles.model_condition(entries["CHECKPOINT_PATH"].get())
+        now = split_model_rows(tables["by_model"].get())
+        now["words"] = tables["words"].get()
+        now["tags"] = tables["tags"].get()
+        got = profiles.put(now, key, model)
+        tables["by_model"].replace_rows(model_rows(got))
+        tables["words"].replace_rows(got["words"])
+        tables["tags"].replace_rows(got["tags"])
+        profile_note.configure(text=(
+            "{} を「モデル = {}」で入れました。内容を見て「保存」を押してください。".format(
+                profiles.by_key(key)["label"], model)))
+
+    row = ttk.Frame(box)
+    row.pack(anchor="w", pady=(4, 0))
+    for profile in profiles.PROFILES:
+        ttk.Button(row, text=profile["label"],
+                   command=lambda k=profile["key"]: use_profile(k)).pack(side="left",
+                                                                         padx=(0, 8))
+    for profile in profiles.PROFILES:
+        ttk.Label(box, style="Faint.TLabel", wraplength=740, justify="left",
+                  text="{}: {}".format(profile["label"], profile["about"])).pack(
+            anchor="w", pady=(4, 0))
+    profile_note.pack(anchor="w", pady=(6, 0))
+    box = group(tab, "モデル別の規則")
+    tables["by_model"] = _ListTable(
+        box, (("section", "節", 11), ("model", "モデル", 16), ("kind", "種類", 10),
+              ("target", "対象", 8), ("when", "条件", 14), ("text", "内容", 30)),
+        model_rows(rules_now))
+    box = group(tab, "語の置き換え（ゲームの本文の語句。置換先が空なら消す。モデル空 = 全部）")
+    tables["words"] = _ListTable(
+        box, (("from", "語句", 22), ("to", "置換先", 22), ("model", "モデル", 16),
+              ("kind", "種類", 10), ("target", "対象", 8)),
+        rules_now.get("words") or [])
+    box = group(tab, "Danbooru のタグとの照合（alias = 別名を正しいタグへ直す）")
+    tables["tags"] = _ListTable(
+        box, (("mode", "方法", 8), ("model", "モデル", 16), ("kind", "種類", 10),
+              ("target", "対象", 8)),
+        rules_now.get("tags") or [])
+    tag_note = ttk.Label(box, text="", justify="left")
+    tag_note.pack(anchor="w", pady=(6, 0))
+
+    def refresh_tags():
+        book = tagbook.load(state_dir)
+        tag_note.configure(text=(
+            "タグ一覧: {}（一般とメタのタグ {} 件・別名 {} 件）".format(
+                tagbook.path_of(state_dir), len(book.tags), len(book.alias))
+            if book is not None else
+            "タグ一覧がまだ無い（{}）。照合の行は一覧が無いあいだ何もしない".format(
+                tagbook.path_of(state_dir))))
+
+    def fetch_tags():
+        tag_note.configure(text="ダウンロードしています…")
+
+        def work():
+            done, message = assets.download(tagbook.URL, tagbook.path_of(state_dir))
+            window.after(0, lambda: (refresh_tags(), messagebox.showinfo(
+                "タグ一覧", message) if not done else None))
+        threading.Thread(target=work, daemon=True).start()
+
+    ttk.Button(box, text="Danbooru のタグ一覧を取る（{}）".format(tagbook.LICENSE),
+               command=fetch_tags).pack(anchor="w", pady=(6, 0))
+    refresh_tags()
 
     # --------------------------------------------------------- サンプラー
     tab = page("サンプラー")
@@ -655,6 +792,10 @@ def build_window(rules_in=None, settings_in=None, note=""):
             got[rows.section].extend(rows.get())
         got["lora_map"] = tables["lora_map"].get()
         got["add"].extend(tables["add_if"].get())
+        for section, rows in split_model_rows(tables["by_model"].get()).items():
+            got[section].extend(rows)
+        got["words"] = tables["words"].get()
+        got["tags"] = tables["tags"].get()
         return got
 
     def save():

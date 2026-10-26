@@ -34,11 +34,32 @@ r"""プロンプトの書き換え規則。MOD 本体と道具画面で共有す
 `kind` は `portrait` / `enemy` / `background` / `any`。
 元 MOD は縦横比から `portrait` / `landscape` / `square` を推測していたが、
 こちらは呼び手で分かる（GAME.md §2.33）。
+
+どの行にも `model`（効かせるモデル）を書ける（版26）。空ならどのモデルでも当たる。
+`sd15` / `sdxl` は中身から見分けた系統、それ以外の語はチェックポイントのファイル名の一部で、
+書式は `when` と同じく `/` でどれか1つ、`!` で除く（`sdxl/!pony`）。
+Illustrious と Pony はどちらも SDXL で中身の形が同じなので、系統では分けられずファイル名で分ける。
+置換（`replace`）にも `when` を書ける（版26。追加と同じく書き換える前の本文で判定）。
+
+版26 で2つ足した。どちらも**ゲームの本文だけ**に当て、規則が足す語（画質の印など）は見ない。
+
+    words   区画の中の語句を置き換える（`plate mail` -> `plate armor`。`to` が空なら消す）
+    tags    Danbooru のタグ一覧（`tagbook.py`）と照らす。`mode` は `alias`
+            （一般のタグの別名を正しいタグへ直す）だけ
+            タグでも別名でもない区画を外す `drop` は試して外した。
+            ゲームの要素の9割近くがタグでない言い方で、外すと人物も場所も別物になった（DOC.md §3）
+
+当てる順は 語の置き換え → タグの照合 → 除去 → 置換 → 付け替え → 追加。
 """
 import io
 import json
 import os
 import re
+
+try:                      # MOD 本体からはパッケージの隣、道具と検査からは素の名前で
+    from . import tagbook
+except ImportError:
+    import tagbook
 
 #: 規則の置き場（`state\` の下。`322_battle_bgm` の playlist と同じ持ち方）。
 STATE_DIRNAME = "stable_diffusion"
@@ -48,12 +69,23 @@ RULES_NAME = "prompt_rules.json"
 KINDS = ("any", "portrait", "enemy", "background")
 TARGETS = ("prompt", "negative")
 SECTIONS = {
-    "lora_map": ("from", "to"),
-    "remove": ("kind", "target", "text"),
-    "replace": ("kind", "target", "text"),
-    "add": ("kind", "target", "when", "text"),
-    "skip_upscale": ("kind", "when"),
+    "words": ("from", "to", "kind", "target", "model"),
+    "tags": ("mode", "kind", "target", "model"),
+    "lora_map": ("from", "to", "model"),
+    "remove": ("kind", "target", "text", "model"),
+    "replace": ("kind", "target", "when", "text", "model"),
+    "add": ("kind", "target", "when", "text", "model"),
+    "skip_upscale": ("kind", "when", "model"),
 }
+
+#: タグの照合の方法。知らない方法の行（外した `drop` など）は何もしない。
+TAG_MODES = ("alias",)
+
+#: 消す区画の目印（`remove_tags` に渡して括弧の対応を保ったまま落とす）。
+_GONE = "\x00gone"
+
+#: `model` の条件で系統を指す語。ほかの語はチェックポイントのファイル名の一部として比べる。
+FAMILY_WORDS = ("sd15", "sdxl")
 
 #: `<lora:名前:重み>` のタグ。名前だけ・重みつきの両方が来る。
 LORA_TAG = re.compile(r"<lora:([^:>]+)(:[^>]*)?>")
@@ -106,9 +138,13 @@ def save(state_dir, data):
 #: そのときは `any` の行だけが当たる（分からない回に立ち絵専用の置換を当てないため）。
 ALL_KINDS = object()
 
+#: 「モデルで絞らない」を表す番人（道具画面の一覧など）。
+#: 生成の出口は `(系統, チェックポイントのパス)` を渡す。
+ALL_MODELS = object()
 
-def active(rules, name, kind=ALL_KINDS, target=None):
-    """効いている行だけ。`kind` と `target` で絞る（`any` の行は全部に当たる）。
+
+def active(rules, name, kind=ALL_KINDS, target=None, model=ALL_MODELS):
+    """効いている行だけ。`kind`・`target`・`model` で絞る（`any` の行は全部に当たる）。
 
     `kind` が `None`（入口の印が無く種類が分からない回）なら `any` の行だけ。
     """
@@ -121,7 +157,38 @@ def active(rules, name, kind=ALL_KINDS, target=None):
                 continue
         if target is not None and str(row.get("target") or "prompt") != target:
             continue
+        if model is not ALL_MODELS and not model_matches(row.get("model"), model):
+            continue
         yield row
+
+
+def model_matches(condition, model):
+    """行の `model` が、いま建っているモデルに当たるか。
+
+    `model` は `(系統, チェックポイントのパス)`。系統は `sd15` / `sdxl` / `None`（読めない）。
+    `sd15` / `sdxl` の語は系統と比べ、ほかの語はファイル名（拡張子抜き）の部分一致で比べる。
+    大文字小文字は見ない。`/` と `!` は `matches` と同じ（`!` は全部満たす必要がある）。
+    条件が空なら常に成立。
+    """
+    words = [w.strip() for w in str(condition or "").split("/") if w.strip()]
+    if not words:
+        return True
+    family, path = model if isinstance(model, tuple) else (None, None)
+    family = str(family or "").lower()
+    name = os.path.splitext(os.path.basename(str(path or "")))[0].lower()
+
+    def hit(word):
+        word = word.lower()
+        if word in FAMILY_WORDS:
+            return family == word
+        return bool(name) and word in name
+
+    wanted, unwanted = [], []
+    for word in words:
+        (unwanted if word.startswith("!") else wanted).append(word.lstrip("!").strip())
+    if any(word and hit(word) for word in unwanted):
+        return False
+    return not wanted or any(word and hit(word) for word in wanted)
 
 
 def matches(condition, text):
@@ -272,10 +339,102 @@ def join(parts):
     return tidy(", ".join(part.strip() for part in parts if str(part).strip()))
 
 
-def rewrite(rules, kind, target, body, original):
+def _rebuild(chunks):
+    """区画を繋ぎ直し、消す印の付いた区画を括弧の対応を保ったまま落とす。"""
+    joined = ", ".join(chunks)
+    return remove_tags(joined, _GONE) if _GONE in joined else joined
+
+
+def replace_words(body, pairs):
+    """区画の中の語句を置き換える。単語境界つき・大文字小文字を問わない。
+
+    `to` が空なら語句を消し、区画が空になればその区画ごと落とす。
+    `<lora:...>` の区画は触らない。変えなければ本文をそのまま返す。
+    """
+    pairs = [(str(a or "").strip(), str(b or "").strip()) for a, b in pairs]
+    pairs = [(a, b) for a, b in pairs if a]
+    if not pairs:
+        return body
+    chunks, hit = [], False
+    for tag in split_tags(body):
+        if not tag:
+            continue
+        opening, core, closing = bare(tag)
+        if "<lora:" in core:
+            chunks.append(tag)
+            continue
+        new = core
+        for want, to in pairs:
+            new = re.sub(r"(?<!\w)" + re.escape(want) + r"(?!\w)",
+                         lambda _m, to=to: to, new, flags=re.IGNORECASE)
+        new = re.sub(r"\s+", " ", new).strip()
+        if new == core:
+            chunks.append(tag)
+            continue
+        hit = True
+        chunks.append(opening + (new or _GONE) + closing)
+    return _rebuild(chunks) if hit else body
+
+
+def check_tags(body, book, mode):
+    """Danbooru のタグ一覧と照らす。`book` は `tagbook.Book`。
+
+    `alias`: 一般のタグの別名を正しいタグへ直す（`outdoor` -> `outdoors`）。
+    タグでない区画は触らない（タグでない言い方も絵に効いている。DOC.md §3）。
+    `<lora:...>` と、重みの括弧の飾りは保つ。変えなければ本文をそのまま返す。
+    """
+    if book is None or mode not in TAG_MODES:
+        return body
+    chunks, hit = [], False
+    for tag in split_tags(body):
+        if not tag:
+            continue
+        opening, core, closing = bare(tag)
+        if "<lora:" in core:
+            chunks.append(tag)
+            continue
+        found = book.lookup(core)
+        if found and found[0] == "alias":
+            hit = True
+            chunks.append(opening + tagbook.display(found[1]) + closing)
+        else:
+            chunks.append(tag)
+    return _rebuild(chunks) if hit else body
+
+
+def tag_notes(body, book):
+    """タグでない区画のうち、よく使われる1語のタグが紛れているもの。`[(区画, [語])]`。
+
+    `battle-worn plate mail` の `plate`（皿）のような取り違えの手掛かり。
+    """
+    if book is None:
+        return []
+    got = []
+    for tag in split_tags(body):
+        core = bare(tag)[1] if tag else ""
+        if not core or "<lora:" in core or book.lookup(core):
+            continue
+        words = book.hidden(core)
+        if words:
+            got.append((core, words))
+    return got
+
+
+def game_text(rules, kind, target, body, model=ALL_MODELS, book=None):
+    """語の置き換えとタグの照合だけを当てた本文（ゲームの本文に当てる段）。"""
+    now = replace_words(body, [(row.get("from"), row.get("to"))
+                               for row in active(rules, "words", kind, target, model)])
+    for row in active(rules, "tags", kind, target, model):
+        now = check_tags(now, book, str(row.get("mode") or "alias"))
+    return now
+
+
+def rewrite(rules, kind, target, body, original, model=ALL_MODELS, book=None):
     """1本ぶんの書き換え。変えないなら `None`。
 
     `body` はいまの本文、`original` は**ゲーム本来の**本文（条件の判定に使う）。
+    `model` はいま建っているモデル（`model_matches`）。行の `model` で絞る。
+    `book` は Danbooru のタグ一覧（`tagbook.Book`）。無ければタグの照合は飛ばす。
     """
     now = body if isinstance(body, str) else ""
     was = now
@@ -285,27 +444,31 @@ def rewrite(rules, kind, target, body, original):
     #: （実機: 規則0行で 227字 -> 231字。ゲームの本文はカンマの後に空白が無い）。
     touched = False
 
-    for row in active(rules, "remove", kind, target):
+    got = game_text(rules, kind, target, now, model, book)
+    if got != now:
+        now, touched = got, True
+
+    for row in active(rules, "remove", kind, target, model):
         got = remove_tags(now, row.get("text"))
         if got != now:                      # 当たった規則だけを「触った」に数える
             now, touched = got, True
 
-    for row in active(rules, "replace", kind, target):
+    for row in active(rules, "replace", kind, target, model):
         text = str(row.get("text") or "")
-        if text:
+        if text and matches(row.get("when"), original):
             now = text.replace(PLACEHOLDER, now)
             touched = True
 
     if target == "prompt":
         pairs = [(row.get("from"), row.get("to"))
-                 for row in active(rules, "lora_map")]
+                 for row in active(rules, "lora_map", model=model)]
         if pairs:
             got = remap_lora(now, pairs)
             if got != now:
                 now, touched = got, True
 
     additions = [str(row.get("text") or "")
-                 for row in active(rules, "add", kind, target)
+                 for row in active(rules, "add", kind, target, model)
                  if matches(row.get("when"), original)]
     if additions:
         now = join([now] + additions)
@@ -317,9 +480,9 @@ def rewrite(rules, kind, target, body, original):
     return None if now == was else now
 
 
-def skip_upscale(rules, kind, original):
+def skip_upscale(rules, kind, original, model=ALL_MODELS):
     """この生成で寸法を触らないか（元 MOD の `skip_if`）。"""
-    for row in active(rules, "skip_upscale", kind):
+    for row in active(rules, "skip_upscale", kind, model=model):
         if matches(row.get("when"), original or ""):
             return True
     return False

@@ -42,6 +42,7 @@ from instantale_modloader import frames
 from . import live as hot
 from . import rules as rulebook
 from . import sizes
+from . import tagbook
 
 LOG_BASENAME = "stable_diffusion.log"
 
@@ -125,6 +126,16 @@ DIFFUSERS_RESIZE = False
 
 #: 出口の候補。生きたパイプラインの型が自分の MRO の中に持つものだけ包む。
 EXIT_METHODS = ("generate_image", "__call__")
+
+#: 建つ前でも包める出口。sdcpp の一族は manager がクラス（`StableDiffusion`）を
+#: モジュール変数に持つので、パイプラインが無くてもクラスから包める（版26）。
+#: `__call__` は名前がありふれているので、生きたパイプラインの型からしか包まない。
+EARLY_EXIT_METHOD = "generate_image"
+
+#: いちばん新しい apply() の `attach`。用済みになった apply() の包みが、
+#: 建て終わった後の当て直しをこちらへ渡す（版26。DOC.md §3）。
+#: 注入のたびにモジュールは作り直されるので、渡す相手は `sys.modules` の今の同名モジュールから引く。
+HANDOFF = {"attach": None}
 
 #: パイプラインを建てる関数（manager のモジュール関数）。
 #: 建てる直前に材料を書き直す口。import の観測（`_ImportObserver`）は
@@ -401,8 +412,10 @@ def apply(ctx):
         """
         changes = {}
         scales, samplers, rules = live.scales, live.samplers, live.rules
+        # 規則の `model` で絞る相手（建てるときに見分けた系統とチェックポイント）。
+        model = (FAMILY.get("name"), FAMILY.get("path"))
         scale = scales.get(kind, 1.0)
-        if rulebook.skip_upscale(rules, kind, params.get("prompt")):
+        if rulebook.skip_upscale(rules, kind, params.get("prompt"), model):
             scale = 1.0
         new = sizes.scaled(params.get("width"), params.get("height"), scale)
         if new is not None:
@@ -411,9 +424,12 @@ def apply(ctx):
             body = params.get(name)
             if not isinstance(body, str):
                 continue
-            got = rulebook.rewrite(rules, kind, target, body, body)
+            book = tag_book(rules, kind, target, model)
+            got = rulebook.rewrite(rules, kind, target, body, body, model, book)
             if got is not None:
                 changes[name] = got
+            if target == "prompt" and book is not None:
+                note_tags(rulebook.game_text(rules, kind, target, body, model, book), book)
         if live.strip_lora:
             drop_game_lora(params, changes)
         if stage in samplers:
@@ -427,6 +443,11 @@ def apply(ctx):
                 if value != game_value:
                     changes[name] = value
         add_safety(stage, params, changes)
+        # 検証の道具だけが使う口。そのスレッドに種の印があれば種を固定する
+        # （ゲームは種 -1 で毎回変わるので、プロンプトの差だけを見比べるため。DOC.md §3）。
+        seed = frames.attr(MARKS, "seed", None)
+        if seed is not None and "seed" in params:
+            changes["seed"] = seed
         return changes
 
     def drop_game_lora(params, changes):
@@ -509,6 +530,58 @@ def apply(ctx):
                 note += " lora 足した {}".format(sorted(after - before))
         return note
 
+    #: タグの一覧の置き場（`ctx` の値は apply() の間しか確かでないので控える）。
+    state_dir = ctx.state_dir
+
+    #: 知らせ済みの、タグでない言い方。1プロセスに1回ずつ。
+    noted = set()
+
+    def tag_book(rules, kind, target, model):
+        """この回にタグの照合か語の置き換えの行が効くなら、タグの一覧。無ければ None。
+
+        語の置き換えだけの回も引くのは、タグに無い言い方の知らせ（`note_tags`）が
+        次の置き換えを足す手掛かりだから。一覧が無いと知らせるのは照合の行がある回だけ。
+        """
+        tags_on = any(True for _row in rulebook.active(rules, "tags", kind, target, model))
+        words_on = any(True for _row in rulebook.active(rules, "words", kind, target, model))
+        if not (tags_on or words_on):
+            return None
+        book = tagbook.load(state_dir)
+        if book is None and tags_on:
+            warn("tagbook-missing",
+                 "タグの照合の行があるのに Danbooru のタグ一覧が無い（{}）。"
+                 "道具画面の「モデル別」から取る".format(tagbook.path_of(state_dir)))
+        return book
+
+    def note_tags(body, book):
+        """タグでない言い方に、よく使われるタグの語が紛れていたら知らせる（語の置き換えの手掛かり）。"""
+        for core, words in rulebook.tag_notes(body, book):
+            if core.lower() in noted:
+                continue
+            noted.add(core.lower())
+            write("danbooru: タグに無い言い方 '{}'（中のタグの語: {}）".format(core, ", ".join(words)))
+
+    #: 全文を出した (種類, 段, チェックポイント, 規則の世代)。
+    #: 規則を読み直すと `live.rules` は別の物になるので、書き換えた規則でもう1回出る。
+    shown = set()
+
+    def show_prompts(kind, stage, params, changes):
+        """書き換えたプロンプトの前後を全文で出す。種類・段・モデル・規則の組ごとに最初の1回だけ。
+
+        ふだんの行は字数だけなので、規則が思った形に当たっているかはここで見る。
+        敵の絵はゲームが prompts.json を残さないので、送った文はここでしか見えない。
+        """
+        if "prompt" not in changes and "negative_prompt" not in changes:
+            return
+        key = (kind, stage, FAMILY.get("path"), id(live.rules))
+        if key in shown:
+            return
+        shown.add(key)
+        for name in ("prompt", "negative_prompt"):
+            if name in changes:
+                write("  {} [{}/{}] 前: {}".format(name, kind, stage, params.get(name)))
+                write("  {} [{}/{}] 後: {}".format(name, kind, stage, changes[name]))
+
     def pixels_note(params, changes):
         """画素数が何倍になるか。時間とメモリはここで効くので1行に添える。"""
         if "width" not in changes or "height" not in changes:
@@ -577,6 +650,7 @@ def apply(ctx):
                 " ".join("{}: {}".format(name, brief_change(name, params, value))
                          for name, value in sorted(changes.items())),
                 pixels_note(params, changes)))
+            show_prompts(kind, stage, params, changes)
             if bound is None:
                 if not set(changes) <= set(kwargs):
                     warn(label, "{}: 署名が読めず、位置引数は触れない".format(label))
@@ -631,22 +705,28 @@ def apply(ctx):
                 added += install("{}:{}".format(name, PIPELINE_FUNC),
                                  make_pipeline_hook(name))
             pipe = frames.attr(mod, "txt2img_pipe", None)
-            if pipe is None:
-                continue
-            cls = type(pipe)
-            for method in EXIT_METHODS:
-                base = owner_of(cls, method)
-                if base is None:
-                    continue
-                target = "{}:{}.{}".format(
-                    frames.attr(base, "__module__", "?"),
-                    frames.attr(base, "__qualname__", base.__name__), method)
-                try:
-                    sig = inspect.signature(unwrapped(base.__dict__.get(method)))
-                except Exception:
-                    sig = None
-                diffusers = method == "__call__"
-                added += install(target, make_exit_hook(target, sig, diffusers))
+            # 建つ前でも、manager が持っているクラスから出口を包む。
+            # 起動直後の注入し直し（boot #2）が建てている途中に入ると、
+            # 建て終わってから包むまでの間にゲームが描き始め、
+            # SD1.5 用の LoRA が SDXL に当たって落ちた（実機 2026-10-26。DOC.md §3）。
+            early = [value for value in list(frames.attr(mod, "__dict__", {}).values())
+                     if isinstance(value, type)
+                     and owner_of(value, EARLY_EXIT_METHOD) is not None]
+            for cls, methods in ([(type(pipe), EXIT_METHODS)] if pipe is not None else []) + \
+                    [(cls, (EARLY_EXIT_METHOD,)) for cls in early]:
+                for method in methods:
+                    base = owner_of(cls, method)
+                    if base is None:
+                        continue
+                    target = "{}:{}.{}".format(
+                        frames.attr(base, "__module__", "?"),
+                        frames.attr(base, "__qualname__", base.__name__), method)
+                    try:
+                        sig = inspect.signature(unwrapped(base.__dict__.get(method)))
+                    except Exception:
+                        sig = None
+                    diffusers = method == "__call__"
+                    added += install(target, make_exit_hook(target, sig, diffusers))
         if added:
             ctx.refresh_status()
         return added
@@ -710,7 +790,14 @@ def apply(ctx):
                 return orig(*args, **kwargs)
             finally:
                 # 組み直しで別のクラスになっていることがあるので包み直す。
-                attach()
+                # 建てている間に注入し直されたら、この apply() は用済みで何もしないので、
+                # いちばん新しい apply() に包ませる（そちらは建つ前に見たのでまだ包めていない）。
+                if ctx.superseded():
+                    newest = getattr(sys.modules.get(__name__), "HANDOFF", {})
+                    if callable(newest.get("attach")):
+                        newest["attach"]()
+                else:
+                    attach()
         return hook
 
     def detect_family(module):
@@ -768,6 +855,7 @@ def apply(ctx):
         sys.meta_path[:] = [observer] + kept
 
     install_observer()
+    HANDOFF["attach"] = attach
     attach()
 
     def start_poll():

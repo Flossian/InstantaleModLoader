@@ -126,7 +126,7 @@ class Pipe(object):
         return {"width": width, "height": height, "cfg_scale": cfg_scale,
                 "scheduler": scheduler, "sample_method": sample_method,
                 "sample_steps": sample_steps, "prompt": prompt,
-                "negative_prompt": negative_prompt}
+                "negative_prompt": negative_prompt, "seed": seed}
 
 
 class OVPipe(object):
@@ -618,6 +618,54 @@ ctx_again.hooks[build_target](lambda: built.append(again.model_path_anime))
 check("建てる直前に材料が書き換わっている（import は走っていない）",
       built == ["runtime/models/sdxl/checkpoints/second.safetensors"], built)
 
+print("建つ前に出口を包む・建てている間の注入し直し（版26）")
+
+
+class EarlySD(object):
+    """sdcpp の manager がモジュール変数に持つクラスの代わり。"""
+
+    def generate_image(self, prompt, negative_prompt="", width=512, height=512,
+                       cfg_scale=7.0, scheduler="default", sample_method="euler_a",
+                       sample_steps=20, seed=-1):
+        return {"width": width, "height": height, "prompt": prompt}
+
+
+class LatePipe(object):
+    """建ってから初めて型が分かる出口（diffusers 系の `__call__`）。"""
+
+    def __call__(self, prompt, negative_prompt="", width=512, height=512,
+                 num_inference_steps=5, guidance_scale=1.0):
+        return {"width": width, "height": height, "prompt": prompt}
+
+
+EarlySD.__module__ = LatePipe.__module__ = "fake_sdcpp.stable_diffusion"
+cleanup("image_generation.fake2.stable_diffusion_manager",
+        "image_generation.fake2.image_generation_creature")
+early_mod, _ = fake_backend("image_generation.fake5.stable_diffusion_manager",
+                            "image_generation.fake5.image_generation_creature", pipe=None)
+early_mod.txt2img_pipe = None
+early_mod.StableDiffusion = EarlySD
+ctx_early = fresh(PORTRAIT_SHORT=832, PORTRAIT_MAX_LONG=1664)
+early_target = "fake_sdcpp.stable_diffusion:EarlySD.generate_image"
+check("パイプラインが無くても manager のクラスから出口を包む", early_target in ctx_early.hooks,
+      sorted(t for t in ctx_early.hooks if "fake_sdcpp" in t))
+check("ありふれた __call__ はクラスからは包まない",
+      not any(t.endswith(".__call__") for t in ctx_early.hooks if "fake_sdcpp" in t))
+MOD.MARKS.kind, MOD.MARKS.func = "portrait", "generate_image_anime"
+got = ctx_early.hooks[early_target](EarlySD.generate_image, EarlySD(), prompt="p", width=256, height=512)
+check("建つ前に包んだ出口でも寸法が当たる", (got["width"], got["height"]) == (448, 832), got)
+
+ctx_new = fresh()                          # 建てている間に注入し直した
+ctx_early.superseded = lambda: True
+late_target = "fake_sdcpp.stable_diffusion:LatePipe.__call__"
+early_build = "image_generation.fake5.stable_diffusion_manager:load_sd_pipeline"
+ctx_early.hooks[early_build](lambda: setattr(early_mod, "txt2img_pipe", LatePipe()))
+check("用済みの包みが建て終えたら、いちばん新しい apply() が出口を包む",
+      late_target in ctx_new.hooks and late_target not in ctx_early.hooks,
+      (late_target in ctx_new.hooks, late_target in ctx_early.hooks))
+cleanup("image_generation.fake5.stable_diffusion_manager",
+        "image_generation.fake5.image_generation_creature")
+
 print("差し替えが届いていないと知らせる（既に建っている回）")
 
 
@@ -925,6 +973,271 @@ _shown = [(section, row["text"]) for section in ("add", "remove", "replace")
 check("取り込んだ any の行は固定行に出る（保存で消えない）",
       sorted(_shown) == [("add", "bad hands"), ("remove", "nsfw"),
                          ("replace", "{prompt}, x")], _shown)
+
+print("モデルで絞る（版26）")
+NOVA = ("sdxl", os.path.join("state", "models", "sdxl", "checkpoints", "novaAnimeXL_ilV190.safetensors"))
+PONY = ("sdxl", os.path.join("x", "ponyDiffusionV6XL.safetensors"))
+SOTE = ("sd15", os.path.join("runtime", "models", "sd15", "checkpoints", "sotemix_v30.safetensors"))
+check("空のモデルの条件はいつも成立", RB.model_matches("", SOTE) is True)
+check("sdxl は系統で比べる", RB.model_matches("sdxl", NOVA) and not RB.model_matches("sdxl", SOTE))
+check("ほかの語はファイル名の部分一致（大文字小文字を問わない）",
+      RB.model_matches("novaanime", NOVA) and not RB.model_matches("novaanime", PONY))
+check("! で除く", RB.model_matches("sdxl/!pony", NOVA) and not RB.model_matches("sdxl/!pony", PONY))
+check("系統が読めない回は sdxl に当たらない", RB.model_matches("sdxl", (None, None)) is False)
+check("系統が読めない回も ! だけの条件は成立", RB.model_matches("!sdxl", (None, None)) is True)
+check("拡張子は比べない", RB.model_matches("safetensors", NOVA) is False)
+MODEL_RULES = {
+    "add": [{"enabled": True, "kind": "any", "target": "prompt", "model": "sdxl", "text": "xl"},
+            {"enabled": True, "kind": "any", "target": "prompt", "text": "all"}],
+    "replace": [{"enabled": True, "kind": "portrait", "target": "prompt",
+                 "when": "woman", "text": "1girl, {prompt}"}],
+}
+check("モデルの付いた行はそのモデルのときだけ",
+      RB.rewrite(MODEL_RULES, "enemy", "prompt", "a", "a", NOVA) == "a, xl, all"
+      and RB.rewrite(MODEL_RULES, "enemy", "prompt", "a", "a", SOTE) == "a, all")
+check("モデルを渡さなければ絞らない（道具画面の一覧）",
+      RB.rewrite(MODEL_RULES, "enemy", "prompt", "a", "a") == "a, xl, all")
+check("置換にも when が効く",
+      RB.rewrite(MODEL_RULES, "portrait", "prompt", "young woman", "young woman", SOTE)
+      == "1girl, young woman, all"
+      and RB.rewrite(MODEL_RULES, "portrait", "prompt", "young man", "young man", SOTE)
+      == "young man, all")
+check("skip もモデルで絞る",
+      RB.skip_upscale({"skip_upscale": [{"enabled": True, "kind": "any", "model": "sd15",
+                                         "when": "sprite"}]}, "portrait", "sprite", NOVA) is False)
+
+print("プロンプトの雛形（版26）")
+import profiles as PF  # noqa: E402
+GAME_PORTRAIT = ("full-body, masterpiece,high quality, detailed face, watercolor, standing,"
+                 " middle-aged man, graying hair, empty background,black background,wallpaper")
+GAME_BG = "masterpiece, best quality, watercolor, highly detailed, indoor, dark stone prison cell"
+check("雛形の行の項目は規則の書式に在る",
+      all(set(row) <= set(RB.SECTIONS[section]) | {"enabled", "profile"}
+          for profile in PF.PROFILES for section, row in PF.rows_of(profile["key"], "m")),
+      [(section, row) for profile in PF.PROFILES for section, row in PF.rows_of(profile["key"], "m")
+       if not set(row) <= set(RB.SECTIONS[section]) | {"enabled", "profile"}])
+check("モデルの条件はチェックポイントのファイル名（無ければ sdxl）",
+      PF.model_condition(NOVA[1]) == "novaAnimeXL_ilV190" and PF.model_condition("") == "sdxl")
+ill = PF.put(RB.empty(), "illustrious", "novaAnimeXL_ilV190")
+check("入れ直しても行は増えない",
+      PF.put(ill, "illustrious", "novaAnimeXL_ilV190") == ill)
+both = PF.put(ill, "illustrious", "otherXL")
+check("別のモデルに入れた同じ雛形は残る",
+      len(both["add"]) == 2 * len(ill["add"]), (len(both["add"]), len(ill["add"])))
+check("元の規則は書き換えない", RB.empty()["add"] == [])
+got = RB.rewrite(ill, "portrait", "prompt", GAME_PORTRAIT, GAME_PORTRAIT, NOVA)
+check("Illustrious: 画質の印が頭に来る",
+      got.startswith("masterpiece, best quality, amazing quality, very aesthetic, absurdres, full body, 1boy"),
+      got)
+check("Illustrious: wallpaper と empty background と full-body を外す",
+      all(tag not in RB.split_tags(got) for tag in ("wallpaper", "empty background", "full-body",
+                                                   "high quality")), got)
+check("Illustrious: 画材のタグは括弧を逃がして足す", got.endswith(r"watercolor \(medium\)"), got)
+got = RB.rewrite(ill, "portrait", "prompt", "young woman, watercolor", "young woman, watercolor", NOVA)
+check("Illustrious: 女性は 1girl（1boy は付かない）", "1girl" in got and "1boy" not in got, got)
+got = RB.rewrite(ill, "background", "prompt", GAME_BG, GAME_BG, NOVA)
+check("Illustrious: 背景に no humans, scenery、indoor は indoors に",
+      "no humans, scenery" in got and "indoors" in RB.split_tags(got)
+      and "indoor" not in RB.split_tags(got), got)
+check("Illustrious: 別のモデルでは当たらない",
+      RB.rewrite(ill, "portrait", "prompt", GAME_PORTRAIT, GAME_PORTRAIT, SOTE) is None)
+pony = PF.put(RB.empty(), "pony", "ponyDiffusionV6XL")
+got = RB.rewrite(pony, "portrait", "prompt", GAME_PORTRAIT, GAME_PORTRAIT, PONY)
+check("Pony: 画質の印は score_9 の形", got.startswith("score_9, score_8_up, score_7_up, source_anime"), got)
+got = RB.rewrite(pony, "enemy", "negative", "worst quality", "worst quality", PONY)
+check("Pony: 否定に score_6 以下", "score_6, score_5, score_4" in got, got)
+
+print("雛形がフック越しに効く（全文は1回だけ出す）")
+prof_dir = tempfile.mkdtemp(prefix="stable_diffusion_profile_")
+os.makedirs(os.path.join(prof_dir, RB.STATE_DIRNAME))
+RB.save(prof_dir, ill)
+ctx_prof = fresh(_state_dir=prof_dir)
+MOD.FAMILY.update({"name": "sdxl", "path": NOVA[1]})
+try:
+    MOD.MARKS.kind, MOD.MARKS.func = "portrait", "generate_image_anime"
+    got = ctx_prof.hooks[exit_target](Pipe.generate_image, pipe, prompt=GAME_PORTRAIT,
+                                      width=256, height=512)
+    check("出口で雛形が当たる", got["prompt"].startswith("masterpiece, best quality"), got["prompt"])
+    ctx_prof.hooks[exit_target](Pipe.generate_image, pipe, prompt=GAME_PORTRAIT,
+                                width=256, height=512)
+    shown = [line for line in ctx_prof.notes if line.startswith("  prompt [portrait/stage1] 前:")]
+    check("書き換えの前後の全文は種類と段ごとに1回だけ", len(shown) == 1, shown)
+    MOD.FAMILY.update({"name": "sd15", "path": SOTE[1]})
+    got = ctx_prof.hooks[exit_target](Pipe.generate_image, pipe, prompt=GAME_PORTRAIT,
+                                      width=256, height=512)
+    check("SD1.5 に戻すと雛形は当たらない", got["prompt"] == GAME_PORTRAIT, got["prompt"])
+finally:
+    MOD.FAMILY.update({"name": None, "path": None})
+
+print("道具画面のモデル別の行（窓抜き）")
+mixed = PF.put({"add": [{"enabled": True, "kind": "portrait", "target": "prompt", "text": "plain"}],
+                "remove": [], "replace": [], "skip_upscale": [], "lora_map": []},
+               "illustrious", "novaAnimeXL_ilV190")
+check("固定行はモデル別の行を拾わない",
+      TOOL.find_row(mixed["add"], "add", "portrait", "prompt")["text"] == "plain")
+check("固定行は when 付きの置換を拾わない",
+      TOOL.find_row(ill["replace"], "replace", "portrait", "prompt") is None)
+rows = TOOL.model_rows(mixed)
+check("モデル別のタブは雛形の行だけを持つ",
+      len(rows) == sum(len(ill[name]) for name in TOOL.MODEL_TAB_SECTIONS)
+      and all(row["section"] in TOOL.MODEL_TAB_SECTIONS for row in rows), len(rows))
+back = TOOL.split_model_rows(rows)
+check("タブの行は節へ戻せる（印も残る）",
+      all(back[name] == [row for row in mixed[name] if TOOL.by_model(row)]
+          for name in TOOL.MODEL_TAB_SECTIONS))
+
+print("語の置き換えと Danbooru のタグとの照合（版26）")
+import tagbook as TB  # noqa: E402
+TAG_CSV = "\n".join([
+    'plate,0,44749,"dish,plates"',
+    'plate_armor,0,2580,',
+    'armor,0,210293,armour',
+    'outdoors,0,537892,"outdoor,outside"',
+    'watercolor_(medium),5,14950,"watercolor,watercolour"',
+    'wolf,0,90000,wolves',
+    'black_background,0,80815,/blackbg',
+    'standing,0,900000,',
+    'shengtian,4,1000,quiet',
+    'some_artist,1,500,ink',
+])
+BOOK = TB.parse(io.StringIO(TAG_CSV))
+check("一般とメタのタグだけを数える（絵師とキャラは外す）",
+      "plate" in BOOK.tags and "watercolor_(medium)" in BOOK.tags
+      and "shengtian" not in BOOK.tags and "some_artist" not in BOOK.tags)
+check("キャラの別名は通さない（quiet はタグにならない）", BOOK.lookup("quiet") is None)
+check("別名は正しいタグへ", BOOK.lookup("Outdoor") == ("alias", "outdoors"))
+check("空白と下線と括弧の逃がしを同じに見る",
+      BOOK.lookup(r"watercolor \(medium\)") == ("tag", "watercolor_(medium)")
+      and BOOK.lookup("plate armor") == ("tag", "plate_armor"))
+check("書く形は空白と逃がした括弧", TB.display("watercolor_(medium)") == r"watercolor \(medium\)")
+check("紛れた語は複数語の言い方の中のよく使われるタグだけ",
+      BOOK.hidden("battle-worn plate mail") == ["plate"] and BOOK.hidden("plate") == [])
+
+WORDS = [("plate mail", "plate armor"), ("chain mail", "chainmail")]
+check("語句を区画の中で置き換える（大文字小文字を問わない）",
+      RB.replace_words("young man, battle-worn Plate Mail, grim", WORDS)
+      == "young man, battle-worn plate armor, grim")
+check("単語境界つき（breastplate mail には当たらない）",
+      RB.replace_words("breastplate mail", WORDS) == "breastplate mail")
+check("置換先が空なら語句を消し、空の区画は括弧の対応を保って落とす",
+      RB.replace_words("a, (plate mail:1.2), b", [("plate mail", "")]) == "a, b"
+      and RB.replace_words("(x, plate mail:1.2), b", [("plate mail", "")]) == "(x:1.2), b",
+      (RB.replace_words("a, (plate mail:1.2), b", [("plate mail", "")]),
+       RB.replace_words("(x, plate mail:1.2), b", [("plate mail", "")])))
+check("当たらなければ本文をそのまま返す（カンマを均さない）",
+      RB.replace_words("a,b", WORDS) == "a,b")
+check("LoRA のタグは触らない",
+      RB.replace_words("<lora:plate mail:1>", WORDS) == "<lora:plate mail:1>")
+ENEMY = "full body,creature,(wolf:1.1), a huge grey dire wolf,(plain background,black background:1.1), <lora:X:1>"
+check("alias は別名だけ直す",
+      RB.check_tags("outdoor, watercolor, dark foggy path", BOOK, "alias")
+      == r"outdoors, watercolor \(medium\), dark foggy path")
+check("alias はタグでない区画を外さず、括弧と LoRA も保つ",
+      RB.check_tags("outdoor," + ENEMY, BOOK, "alias") == "outdoors, " + ENEMY.replace(",", ", ").replace(",  ", ", "),
+      RB.check_tags("outdoor," + ENEMY, BOOK, "alias"))
+check("drop は外した（知らない方法の行は何もしない）",
+      "drop" not in RB.TAG_MODES and RB.check_tags("outdoor," + ENEMY, BOOK, "drop") == "outdoor," + ENEMY)
+check("一覧が無ければ何もしない", RB.check_tags("outdoor", None, "alias") == "outdoor")
+check("紛れた語の知らせ",
+      RB.tag_notes("standing, battle-worn plate mail", BOOK) == [("battle-worn plate mail", ["plate"])])
+TAG_RULES = {"words": [{"enabled": True, "kind": "any", "target": "prompt",
+                        "from": "plate mail", "to": "plate armor"}],
+             "tags": [{"enabled": True, "kind": "any", "target": "prompt", "mode": "alias",
+                       "model": "sdxl"}],
+             "replace": [{"enabled": True, "kind": "any", "target": "prompt",
+                          "text": "masterpiece, very aesthetic, outdoor, {prompt}"}]}
+got = RB.rewrite(TAG_RULES, "portrait", "prompt", "standing, outdoor, battle-worn plate mail",
+                 "standing, outdoor, battle-worn plate mail", NOVA, BOOK)
+check("照合はゲームの本文だけ（規則が足す語は直さない）",
+      got == "masterpiece, very aesthetic, outdoor, standing, outdoors, battle-worn plate armor", got)
+got = RB.rewrite(TAG_RULES, "portrait", "prompt", "standing, outdoor", "standing, outdoor", SOTE, BOOK)
+check("照合の行もモデルで絞る（SD1.5 では直さない）",
+      got == "masterpiece, very aesthetic, outdoor, standing, outdoor", got)
+got = RB.rewrite(TAG_RULES, "portrait", "prompt", "standing, outdoor", "standing, outdoor", NOVA, None)
+check("一覧が無ければ照合は飛ばす", got.endswith("standing, outdoor"), got)
+ill_tags = PF.put(RB.empty(), "illustrious", "novaAnimeXL_ilV190")
+check("Illustrious の雛形は語の置き換えを持ち、照合（alias）は持たない",
+      [r["from"] for r in ill_tags["words"]] == ["plate mail", "chain mail"]
+      and ill_tags["tags"] == [])
+got = RB.rewrite(ill_tags, "portrait", "prompt", GAME_PORTRAIT + ", battle-worn plate mail",
+                 GAME_PORTRAIT + ", battle-worn plate mail", NOVA, BOOK)
+check("雛形で plate mail が plate armor になる", "battle-worn plate armor" in got
+      and "plate mail" not in got, got)
+
+print("タグの照合がフック越しに効く（知らせは1回だけ）")
+tag_dir = tempfile.mkdtemp(prefix="stable_diffusion_tags_")
+os.makedirs(os.path.join(tag_dir, RB.STATE_DIRNAME))
+hook_rules = dict(ill_tags, tags=[{"enabled": True, "kind": "any", "target": "prompt",
+                                   "mode": "alias", "model": "sdxl"}])
+RB.save(tag_dir, hook_rules)
+io.open(TB.path_of(tag_dir), "w", encoding="utf-8").write(TAG_CSV)
+ctx_tags = fresh(_state_dir=tag_dir)
+MOD.FAMILY.update({"name": "sdxl", "path": NOVA[1]})
+try:
+    MOD.MARKS.kind, MOD.MARKS.func = "enemy", "generate_image_real_lcm"
+    for _ in range(2):
+        got = ctx_tags.hooks[exit_target](
+            Pipe.generate_image, pipe, prompt="outdoor, battle-worn plate mail, a big wolf pack",
+            width=512, height=512)
+    check("出口で語の置き換えと alias が当たる",
+          "outdoors" in got["prompt"] and "plate armor" in got["prompt"], got["prompt"])
+    notes = [line for line in ctx_tags.notes if line.startswith("danbooru:")]
+    check("タグに無い言い方の知らせは言い方ごとに1回", len(notes) == 2, notes)
+finally:
+    MOD.FAMILY.update({"name": None, "path": None})
+words_dir = tempfile.mkdtemp(prefix="stable_diffusion_words_")
+os.makedirs(os.path.join(words_dir, RB.STATE_DIRNAME))
+RB.save(words_dir, ill_tags)                 # 雛形のまま（語の置き換えだけ、照合なし）
+io.open(TB.path_of(words_dir), "w", encoding="utf-8").write(TAG_CSV)
+ctx_words = fresh(_state_dir=words_dir)
+MOD.FAMILY.update({"name": "sdxl", "path": NOVA[1]})
+try:
+    MOD.MARKS.kind, MOD.MARKS.func = "enemy", "generate_image_real_lcm"
+    got = ctx_words.hooks[exit_target](
+        Pipe.generate_image, pipe, prompt="outdoor, battle-worn plate mail, a big wolf pack",
+        width=512, height=512)
+    check("雛形のままなら置き換えだけ当たり、別名は直さない",
+          "plate armor" in got["prompt"] and "outdoors" not in got["prompt"], got["prompt"])
+    check("置き換えだけの回もタグに無い言い方を知らせる",
+          len([line for line in ctx_words.notes if line.startswith("danbooru:")]) == 2, ctx_words.notes)
+finally:
+    MOD.FAMILY.update({"name": None, "path": None})
+os.remove(TB.path_of(words_dir))
+ctx_words2 = fresh(_state_dir=words_dir)
+MOD.FAMILY.update({"name": "sdxl", "path": NOVA[1]})
+try:
+    MOD.MARKS.kind, MOD.MARKS.func = "enemy", "generate_image_real_lcm"
+    got = ctx_words2.hooks[exit_target](Pipe.generate_image, pipe, prompt="battle-worn plate mail",
+                                        width=512, height=512)
+    check("一覧が無くても置き換えは当たり、無いという知らせは出さない",
+          "plate armor" in got["prompt"]
+          and not any(key == "tagbook-missing" for key, _m in ctx_words2.warnings), ctx_words2.warnings)
+finally:
+    MOD.FAMILY.update({"name": None, "path": None})
+os.remove(TB.path_of(tag_dir))
+ctx_none = fresh(_state_dir=tag_dir)
+MOD.FAMILY.update({"name": "sdxl", "path": NOVA[1]})
+try:
+    MOD.MARKS.kind, MOD.MARKS.func = "enemy", "generate_image_real_lcm"
+    got = ctx_none.hooks[exit_target](Pipe.generate_image, pipe, prompt="outdoor",
+                                      width=512, height=512)
+    check("一覧が無ければ alias は当たらず、知らせが出る",
+          "outdoors" not in got["prompt"]
+          and any(key == "tagbook-missing" for key, _m in ctx_none.warnings), ctx_none.warnings)
+finally:
+    MOD.FAMILY.update({"name": None, "path": None})
+
+print("検証の種の印（版26）")
+ctx_seed = fresh()
+MOD.MARKS.kind, MOD.MARKS.func = "portrait", "generate_image_anime"
+MOD.MARKS.seed = 1234
+try:
+    got = ctx_seed.hooks[exit_target](Pipe.generate_image, pipe, prompt="p", width=256, height=512)
+    check("種の印があればその種で描く", got.get("seed") == 1234, got)
+finally:
+    MOD.MARKS.seed = None
+got = ctx_seed.hooks[exit_target](Pipe.generate_image, pipe, prompt="p", width=256, height=512, seed=-1)
+check("印が無ければゲームの種のまま", got.get("seed", -1) == -1, got)
 
 print("生成のたびに読み直す（ホットリロード）")
 from instantale_modloader import config as _config  # noqa: E402
