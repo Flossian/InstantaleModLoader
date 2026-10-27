@@ -2,7 +2,7 @@
 """人物欄の主人公の立ち絵の左上にボタンを置き、主人公の立ち絵を描き直す（DOC.md）。
 
 主人公は英語の外見プロンプトをセーブに持たない（日本語の look_description だけ）。
-本体が主人公作成時に使う ``create_look`` で英語の要素を作ってから描く
+LLM に英語の短いタグを頼み（頼めなければ本体の ``create_look``）、それで描く
 （DOC.md「英語の外見」）。
 描き終えた絵を画面へ出し直すのは 138_fix_character_image_refresh。
 装備の見た目を足すのは 408_visual_changes_based_on_equipment（入っていれば）。
@@ -294,12 +294,23 @@ def _ask_tags(ctx, write, desc):
     return _sd_items(tags)[:MAX_TAGS]
 
 
-def _player_look(store, write, app, player, ask=None):
+def _shift_held():
+    """Shift を押しているか。ゲームの外（検査）では False。"""
+    try:
+        from kivy.core.window import Window
+
+        return "shift" in (Window.modifiers or ())
+    except Exception:
+        return False
+
+
+def _player_look(store, write, app, player, ask=None, fresh=False):
     """主人公の英語の外見プロンプト。外見文が同じ間は控えを使う。
 
     look_description（日本語）をそのまま SD1.5 へ渡さない。
     `ask`（外見文 -> 要素）が渡されればまずそれで作り、空ならゲームの `create_look` で作る。
-    作れなければ None（描き直しは止める）。
+    `fresh` なら控えがあっても作り直す（Shift を押しながらボタンを押したとき）。
+    作り直せなければ控えを使う。控えも無ければ None（描き直しは止める）。
     """
     desc = _text(player, "look_description")
     if not desc:
@@ -308,15 +319,26 @@ def _player_look(store, write, app, player, ask=None):
     source = hashlib.sha256(desc.encode("utf-8")).hexdigest()
     playthrough = store.playthrough(app)
     bucket = store.load(playthrough)
-    words = _cached_look(bucket, source)
-    if words:
-        return words
+    kept = _cached_look(bucket, source)
+    if kept and not fresh:
+        return kept
+    if fresh:
+        write("rebuilding look on request")
+    words = _make_look(write, player, desc, ask)
+    if not words:
+        if kept:
+            write("rebuild failed; using the kept look")
+        return kept or None
+    _keep_look(bucket, source, words)
+    store.save(playthrough)
+    return words
 
+
+def _make_look(write, player, desc, ask):
+    """外見文から英語の要素を作る。作れなければ None。"""
     if ask is not None:
         words = ask(desc)
         if words:
-            _keep_look(bucket, source, words)
-            store.save(playthrough)
             write("look prepared ({} tag(s))".format(len(words)))
             return words
         write("tags unavailable; falling back to create_look")
@@ -355,8 +377,6 @@ def _player_look(store, write, app, player, ask=None):
     if not words:
         write("skipped: create_look returned {!r}".format(repr(got)[:200]))
         return None
-    _keep_look(bucket, source, words)
-    store.save(playthrough)
     write("look prepared ({} item(s))".format(len(words)))
     return words
 
@@ -464,7 +484,8 @@ def apply(ctx):
             write("skipped: image module unavailable")
             return
         words = _player_look(store, write, app, player,
-                             ask=lambda desc: _ask_tags(ctx, write, desc))
+                             ask=lambda desc: _ask_tags(ctx, write, desc),
+                             fresh=bool(job.get("fresh")))
         if not words:
             return
         if not _wait_idle(runtime):
@@ -509,14 +530,16 @@ def apply(ctx):
             return
         if not _portrait_shows_player(app, _value(hud, PORTRAIT_WIDGET)):
             return
+        # Shift を押しながら押したら、控えの要素を使わずに作り直す（DOC.md「英語の外見」）。
+        fresh = _shift_held()
         runtime["busy"] = True
         ui.show_widget(button, False)
         key = state.playthrough_key(app) + ":player"
-        if not worker.enqueue({"app": app, "key": key}):
+        if not worker.enqueue({"app": app, "key": key, "fresh": fresh}):
             runtime["busy"] = False
             place_button(hud, button)
             return
-        write("regeneration requested")
+        write("regeneration requested" + (" (rebuild look)" if fresh else ""))
 
     def rebind(button, attr, target, events, callback):
         """target の events に callback を結ぶ。前の注入が結んだものは外す。

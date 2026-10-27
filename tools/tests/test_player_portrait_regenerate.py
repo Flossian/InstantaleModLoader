@@ -164,6 +164,21 @@ legacy.buckets["w|p"] = {"look": {"source": __import__("hashlib").sha256("説明
 check("版3 の控え（look）も読む",
       mod._player_look(legacy, write, None, dict(player, look_description="説明D"),
                        ask=lambda desc: ["new tag"]) == ["old tag"])
+fresh_store = FakeStore()
+pf = dict(player, look_description="説明F")
+mod._player_look(fresh_store, write, None, pf, ask=lambda desc: ["old tag"])
+got_f = mod._player_look(fresh_store, write, None, pf, ask=lambda desc: ["new tag"], fresh=True)
+check("fresh なら記録があっても頼み直し、記録を置き換える",
+      got_f == ["new tag"] and mod._player_look(fresh_store, write, None, pf, ask=None) == ["new tag"],
+      (got_f, fresh_store.buckets))
+fake.create_look = lambda *a: {"image_generation_prompt": ["全部日本語"]}
+got_keep = mod._player_look(fresh_store, write, None, pf, ask=lambda desc: [], fresh=True)
+check("作り直せなければ記録で描く", got_keep == ["new tag"]
+      and any("using the kept look" in str(line) for line in logs), got_keep)
+check("記録が無く作れなければ None",
+      mod._player_look(FakeStore(), write, None, pf, ask=lambda desc: [], fresh=True) is None)
+fake.create_look = lambda *a: look_calls.append(a) or {"image_generation_prompt": ["from create look"]}
+check("ゲームの外では Shift は押されていない扱い", mod._shift_held() is False)
 many = FakeStore()
 for i in range(mod.MAX_LOOKS + 3):
     mod._player_look(many, write, None, dict(player, look_description="多{}".format(i)),
@@ -481,8 +496,21 @@ check("押すと仕事を積み、描いている間は隠す",
       (captured.get("jobs"), mod._runtime()["busy"], button.opacity))
 portrait.fire("pos")
 check("描いている間は置き直しても隠れたまま", button.opacity == 0.0)
+check("Shift 無しは作り直さない", captured["jobs"][-1].get("fresh") is False, captured["jobs"][-1])
 captured["done"]({"app": app})
 check("描き終えたら戻す", not mod._runtime()["busy"] and button.opacity == 1.0)
+mod._shift_held = lambda: True
+button.fire("on_release")
+check("Shift を押しながらなら作り直しを積む", captured["jobs"][-1].get("fresh") is True, captured["jobs"][-1])
+captured["done"]({"app": app})
+hook_store.buckets.clear()
+sys.modules[image_module.__name__] = image_module
+captured["run"]({"app": app, "key": "k"})
+kept_words = list(seen[-1][0][3]) if seen else None
+look_module.create_look = lambda *a: {"image_generation_prompt": ["silver hair"]}
+captured["run"]({"app": app, "key": "k", "fresh": True})
+check("作り直しの仕事は記録を使わない", seen and seen[-1][0][3] == ["silver hair"] and kept_words != ["silver hair"],
+      (kept_words, seen[-1] if seen else None))
 check("例外なし", not any(str(line).startswith("EXC") for line in logs),
       [line for line in logs if str(line).startswith("EXC")])
 
